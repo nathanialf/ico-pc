@@ -948,8 +948,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   one such draw at least over the list at each setting, SHADOW0..2 and WORK2_PAD the same bytes,
   DISPLAY and PRESENT measured (`png_level_diff.py --channels RGB`) and printed per dump
   (`lowres measure: <setting> <dump> <png>: P pixels apart (x %), largest L levels`) with each
-  setting's maxima at the end (`lowres maxima: ...`), FAILING above VD-32's bound (48 levels on at
-  most 60 % of a picture's pixels, the first, hand-derived bound); at Enhanced 1x every PNG the
+  setting's maxima at the end (`lowres maxima: ...`), FAILING above VD-32's bound (8 levels on at
+  most 3 % of a picture's pixels: the owner's acceptance, not a measurement); at Enhanced 1x every PNG the
   same bytes and no draw on WORK2's own depth (nothing changes by construction); at the phone's
   setting `...+lowres` against `...+lowres+fillhold` every PNG the same bytes with as many crack
   fills held at least (one more over the list), and `...+lowres+fillhold` against it under

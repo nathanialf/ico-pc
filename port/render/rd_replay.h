@@ -551,6 +551,9 @@ void rd__fades_fold_screen(const Replay *r, const RdDrawPass *dp, const DrawSetu
 /* rd_lamps.h RD_LAMPS_LOWRES: a draw into WORK2 above 1x takes WORK2's own
  * depth (prepareDrawEx, after rd__late_pass_join) */
 void rd__lamps_lowres_depth(Replay *r, DrawSetup *ds);
+/* blurAbove1xSteps: src is WORK2 at the GS size under LOWRES with SCENE
+ * scaled, so its reduction keeps the above-1x box over the GS footprint */
+bool rd__lamps_lowres_box(const RdTargetRec *src);
 void rd__fades_fold_end(void);
 bool rd__fades_fold_exact(int mode, uint32_t usage, bool rgba8);
 bool rd__fades_fold_present(uint32_t ord, bool take, RdFadesFold *out);

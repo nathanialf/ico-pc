@@ -5315,9 +5315,10 @@ bool rd__a1x_gs_keep(void)
 static uint32_t blurAbove1xSteps(const RdTargetRec *tc, const RdTargetRec *src, const float uv[4],
                                  const float rect[4], int linear)
 {
-    if (!src || (tc->sx == 1.0f && tc->sy == 1.0f && src->sx == 1.0f && src->sy == 1.0f) ||
-        rd__work_class(src)) {
-        return 0;
+    if (!src || (((tc->sx == 1.0f && tc->sy == 1.0f && src->sx == 1.0f && src->sy == 1.0f) ||
+                  rd__work_class(src)) &&
+                 !rd__lamps_lowres_box(src))) {
+        return 0; /* rd__lamps_lowres_box: the GS-size WORK2's box (rd_lamps.c) */
     }
     const double dx = fabs((double)rect[2] - (double)rect[0]);
     const double dy = fabs((double)rect[3] - (double)rect[1]);

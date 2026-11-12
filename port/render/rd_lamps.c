@@ -1327,6 +1327,15 @@ bool rd__lamps_lowres_on(void)
     return s_lr.on == 1;
 }
 
+bool rd__lamps_lowres_box(const RdTargetRec *src)
+{
+    if (s_lr.on != 1 || !src || src != rd__target_rec(idOf(RD_TARGET_WORK2))) {
+        return false;
+    }
+    const RdTargetRec *sc = rd__target_rec(idOf(RD_TARGET_SCENE));
+    return sc && (sc->sx != 1.0f || sc->sy != 1.0f) && (src->tw != sc->tw || src->th != sc->th);
+}
+
 bool rd__lamps_own_depth(uint32_t did)
 {
     return s_lr.on == 1 && did != 0u && did == idOf(RD_TARGET_WORK2);

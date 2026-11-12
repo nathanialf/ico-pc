@@ -63,21 +63,17 @@ endforeach()
 list(REMOVE_DUPLICATES dumps)
 list(LENGTH dumps ndumps)
 
-# The bound (DIVERGENCES.md VD-32, first form): the change is WORK2's
-# resolution alone; every pass after the reduction WORK2 -> WORK0 is the
-# same code on the same sizes (WORK0, WORK1 and WORK3 are work buffers at
-# every scale).  A WORK0 texel's difference is that of two normalised
-# averages of the mask and lamps over one footprint (the above-1x box of the
-# scaled WORK2 against the GS bilinear of the GS-size one), at most 255; the
-# ten blur pairs spread it before the paste (each pass a two-tap bilinear
-# average per axis, at most 1/2 of a texel's weight per pass and axis), so a
-# lone texel's difference reaches WORK3 at a few levels and a long lamp edge
-# (a run of texels apart the same way) at most about a third of it.  The paste
-# adds WORK3 once (FIX 128).  Hence 48 levels on any picture pixel, on at most
-# 60 per cent of the picture (the paste's reach over the lit region): loose
-# on purpose until the measured maxima tighten it.
-set(lowresLevels 48)
-set(lowresPct 60)
+# The bound (DIVERGENCES.md VD-32): the owner's rule, identical to the eye,
+# as a number: a few levels on a small part of the picture, inside the
+# glow's soft light.  The first measurement (2026-11-12, before the fixes of
+# depth_down_ps's farthest depth and the reduction's box) was 190 levels on
+# 15.4 % (issue 163's gate: its lamp failed every depth test) and 24 on 3.4 %
+# (the title's lamps: the GS bilinear's reach); with both fixed the change
+# is WORK2's resolution inside the same box footprints, and lamp edges a GS
+# pixel apart are what remains.  8 levels on 3 %: the acceptance, not a
+# measurement; above it the change stays off.
+set(lowresLevels 8)
+set(lowresPct 3)
 
 set(common ICO_RD_VU_PREPASS=0)
 set(lampsOff "ICO_RD_LAMPS=pad+owed+wholepad")

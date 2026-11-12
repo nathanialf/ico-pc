@@ -531,11 +531,18 @@ VD-32). Above 1x WORK2 is the GS frame's size (848 x 448 at the phone's Auto, no
 work buffer (`rd_core.c` `sceneClass`), with a depth of its own (`namedTargetDesc`): the glow's fill,
 the sun's fans, the mask (SCENE's alpha box-averaged over each GS pixel, the scene-to-work-buffer
 rule of [RENDER.md](RENDER.md#the-replay)) and the lamps' meshes are drawn at the PS2's own
-resolution, and the reduction WORK2 -> WORK0 reads it through the GS bilinear, as at 1x. A draw
+resolution, and the reduction WORK2 -> WORK0 keeps the above-1x box over each WORK0 texel's GS
+footprint (`rd__lamps_lowres_box`, from `blurAbove1xSteps`: 2 x 4 GS texels, the footprint the box
+of the scaled WORK2 covered; the PS2's own bilinear at 1x reads only part of it, and a lamp a few
+pixels across then shows or vanishes by where it falls: 24 levels apart on the title's lamps). A draw
 into WORK2 on SCENE's depth takes WORK2's own (`rd__lamps_lowres_depth`, from `prepareDrawEx`):
 before the first such draw of a replay, and again after any draw that wrote SCENE's depth, a
-depth-only pass of WORK2's size writes every texel with SCENE's depth at the texel holding the GS
-pixel's centre (`depth_down_ps`, `port/shaders/blit.hlsl`: `floor((p + 0.5) * scale - crop)`,
+depth-only pass of WORK2's size writes every texel with the farthest of SCENE's depths under the
+GS pixel (`depth_down_ps`, `port/shaders/blit.hlsl`: the smallest over the texels whose centres
+the pixel covers; the lamps test GEQUAL). A point sample failed issue 163's gate: its lamp is the
+gate's own plane drawn again, an equality at the scaled size, and a sample elsewhere in the
+footprint than the lamp's own centre can lie in front of it (on that gate every lamp pixel failed:
+190 levels on 15 % of the picture);
 SCENE's depth sampled in place outside any pass, a copy only where the device cannot sample a
 depth: the fog path's copy on the local read is for reads beside SCENE's own pass), so lamp against lamp and
 lamp against the scene order as the PS2 orders them at its resolution. The fans' and lamps' depth
