@@ -145,7 +145,10 @@ foreach(index IN LISTS indices)
       if(w EQUAL 0)
         set(sw ICO_RD_FILL11=0)
       else()
-        set(sw ${on_${s}})
+        # what a tile-based GPU leaves undefined made garbage on lavapipe
+        # (rd_fill11.h ICO_RD_FILL11_POISON): an unwritten texel or a draw
+        # that depends on the scratch depth shows
+        set(sw ${on_${s}} ICO_RD_FILL11_POISON=1)
       endif()
       execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${common} ${env_${s}} ${sw}
                               "${TOOL}" "${dump}" - --pass-dump "${dir}" --stats ${args_${s}}

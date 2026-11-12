@@ -1851,6 +1851,12 @@ pipeline keys it adds to the start-up set (`rd_pipeline.c` `rd__enumerate_reacha
 `rd__fill11_enumerate`, where it may be tried): the depth twins of the four fill keys, `FILL`,
 `FILL | RGB`, `FILL1`, `FILL1 | RGB` (four; two without the reach-1 shader). No shader changes.
 
+The tests run it with `ICO_RD_FILL11_POISON=1` ([TESTING.md](TESTING.md)): lavapipe keeps a
+DONT_CARE load's old bytes where a tile-based GPU leaves them undefined (black or garbage), so a
+texel the fill does not write, or a draw that depends on the scratch depth's contents, would pass
+a byte test there and show on a phone; the poison clears the merged pass's and the held fill's own
+pass's DONT_CARE colour to magenta and the scratch to depth 0.5, stencil 0x5A.
+
 State that survives `rd_shutdown` is freed there (`rd__crack_fill_shutdown` calls
 `rd__fill11_shutdown`): the scratch depth destroyed and its handle forgotten, the self-test's verdict
 and the merged pass's serial reset (the next renderer starts its replay counter again).

@@ -46,16 +46,15 @@ if(ICO_RUN_TESTS AND TARGET rd_crack_test)
                      "-DEXPECT=${_f11_on}"
                      "-DDENY=rd: crack fill: drawn as the first draw of list 11's pass"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_crack.cmake")
+    # every run with ICO_RD_FILL11_POISON=1 (rd_fill11.h): lavapipe keeps a
+    # DONT_CARE load's old bytes, a tile-based GPU does not
     set_tests_properties(rd_crack_fill11 rd_crack_fill11_later PROPERTIES
-                         SKIP_REGULAR_EXPRESSION "SKIP:")
+                         SKIP_REGULAR_EXPRESSION "SKIP:"
+                         ENVIRONMENT "${_dc_env};ICO_RD_FILL11_POISON=1")
     set_tests_properties(rd_crack_fill11_tiler PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
-                         ENVIRONMENT "${_dc_env};ICO_VK_FAKE_LIMITS=moltenvk;ICO_RD_PASS_AREA=0")
+                         ENVIRONMENT "${_dc_env};ICO_VK_FAKE_LIMITS=moltenvk;ICO_RD_PASS_AREA=0;ICO_RD_FILL11_POISON=1")
     set_tests_properties(rd_crack_fill11_area PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
-                         ENVIRONMENT "${_dc_env};ICO_VK_FAKE_LIMITS=moltenvk")
-    if(_dc_env)
-        set_tests_properties(rd_crack_fill11 rd_crack_fill11_later PROPERTIES
-                             ENVIRONMENT "${_dc_env}")
-    endif()
+                         ENVIRONMENT "${_dc_env};ICO_VK_FAKE_LIMITS=moltenvk;ICO_RD_FILL11_POISON=1")
 endif()
 
 # rd_fill11_ab (test/rd_fill11_ab.cmake): the dumps of tools/fill11_dumps.txt

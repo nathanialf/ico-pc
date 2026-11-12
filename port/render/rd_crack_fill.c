@@ -1309,6 +1309,11 @@ void rd__crack_fill11_own(Replay *r, int why)
     memset(&p, 0, sizeof(p));
     p.color[0].texture = tc->color;
     p.color[0].load = s_f11.swap ? RHI_LOAD_DONT_CARE : RHI_LOAD_LOAD;
+    if (s_f11.swap && rd__fill11_poison()) {
+        /* the tests (rd_fill11.h): a texel the fill leaves unwritten shows */
+        p.color[0].load = RHI_LOAD_CLEAR;
+        p.color[0].clear[0] = p.color[0].clear[2] = p.color[0].clear[3] = 1.0f;
+    }
     p.colorCount = 1;
     p.width = w;
     p.height = h;

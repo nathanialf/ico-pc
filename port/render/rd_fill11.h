@@ -79,6 +79,13 @@ bool rd__fill11_may(void);
 bool rd__fill11_on(void);
 int rd__fill11_test(void);
 void rd__fill11_force(int on);
+/* ICO_RD_FILL11_POISON=1 (the tests only): what this code leaves undefined is
+ * made garbage on lavapipe, which keeps a DONT_CARE load's old bytes where a
+ * tile-based GPU does not: the merged pass's and the held fill's own pass's
+ * colour loaded DONT_CARE are cleared to magenta (every texel must be
+ * written by the fill), the scratch depth and stencil cleared to 0.5 and
+ * 0x5A (no draw may depend on them) */
+bool rd__fill11_poison(void);
 
 /* rd_crack_fill.c rd__crack_fill_init (rd_init) and rd__crack_fill_shutdown
  * (rd_shutdown: the scratch depth destroyed, the self-test forgotten: a

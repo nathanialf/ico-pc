@@ -199,6 +199,16 @@ static bool tried(void)
     return envSwitch() >= 0 || (RD_FILL11_DEFAULT != 0 && classOk() != 0);
 }
 
+bool rd__fill11_poison(void)
+{
+    static int s_env = -1;
+    if (s_env < 0) {
+        const char *e = getenv("ICO_RD_FILL11_POISON"); /* the tests only: no config key */
+        s_env = e && strcmp(e, "1") == 0;
+    }
+    return s_env == 1;
+}
+
 bool rd__fill11_may(void)
 {
     const int e = envSwitch();
@@ -391,6 +401,11 @@ static bool testDraw(RhiCommandList cl, RhiTexture src, RhiTexture dst, RhiState
     p.depth.stencilLoad = RHI_LOAD_DONT_CARE;
     p.depth.store = RHI_STORE_DONT_CARE;
     p.depth.stencilStore = RHI_STORE_DONT_CARE;
+    if (rd__fill11_poison()) {
+        p.depth.depthLoad = p.depth.stencilLoad = RHI_LOAD_CLEAR;
+        p.depth.clearDepth = 0.5f;
+        p.depth.clearStencil = 0x5A;
+    }
     p.width = T_W;
     p.height = T_H;
     rhi_cmd_begin_render_pass(cl, &p);
@@ -857,6 +872,17 @@ static void land(Replay *r, const DrawSetup *ds)
     p.depth.stencilLoad = RHI_LOAD_DONT_CARE;
     p.depth.store = RHI_STORE_DONT_CARE;
     p.depth.stencilStore = RHI_STORE_DONT_CARE;
+    if (rd__fill11_poison()) {
+        /* the tests: what a tile-based GPU leaves undefined made garbage */
+        static const float kMagenta[4] = {1.0f, 0.0f, 1.0f, 1.0f};
+        if (p.color[0].load == RHI_LOAD_DONT_CARE) {
+            p.color[0].load = RHI_LOAD_CLEAR;
+            memcpy(p.color[0].clear, kMagenta, sizeof(kMagenta));
+        }
+        p.depth.depthLoad = p.depth.stencilLoad = RHI_LOAD_CLEAR;
+        p.depth.clearDepth = 0.5f;
+        p.depth.clearStencil = 0x5A;
+    }
     p.width = tc->tw;
     p.height = tc->th;
     /* counted as a pass without a depth the plan holds (its pass counter) */
