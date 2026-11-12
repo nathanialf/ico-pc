@@ -177,6 +177,10 @@ foreach(t sched fiber fps_counter arena diag hotkeys pace_policy pace_loop perf_
         add_test(NAME ${t} COMMAND ${t}_test)
     endif()
 endforeach()
+# display_rate.c rounds a rate with floor: the math library where it is separate
+if(UNIX)
+    target_link_libraries(display_rate_test PRIVATE m)
+endif()
 # diag_test's own link map beside it: its crash cases check the symbol
 # lines against it, as a player's ico_pc.map is read beside ico_pc
 if(NOT APPLE AND NOT WIN32)

@@ -118,7 +118,8 @@ static int runSwapchain(void)
                                  RHI_LOAD_CLEAR,
                                  {(float)r / 255.0f, (float)g / 255.0f, (float)bl / 255.0f, 1.0f},
                                  RHI_STORE_STORE,
-                                 false};
+                                 false,
+                                 {0}};
         rp.colorCount = 1;
         rp.width = w;
         rp.height = h;
