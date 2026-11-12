@@ -288,6 +288,10 @@ ico_add_shader(fog_lut_local_ps fog_lut.hlsl fog_lut_ps fragment
 ico_add_shader(date_clear_ps sprite.hlsl date_clear_ps fragment)
 ico_add_shader(date_stencil_ps sprite.hlsl date_stencil_ps fragment DEFINES ICO_DATE_STENCIL=1)
 ico_add_shader(fx_blur2_ps fx_sprite.hlsl fx_blur2_ps fragment)
+# two staticBlur pairs in one pass (port/render/rd_replay_tiler.c, the lamps' RD_LAMPS_FOLD4):
+# Vulkan only in use (rd_replay.c makes the module on Vulkan alone), its DXIL and GLSL plain
+# builds, never used
+ico_add_shader(fx_blur4_ps fx_sprite.hlsl fx_blur4_ps fragment)
 # Motion blur: Smooth's accumulator (port/render/rd_blur_smooth.c): its step
 # and its resolve into the RGBA8 target the motion blur's sprite reads, behind
 # blit_vs; used on both backends

@@ -3320,6 +3320,13 @@ typedef struct RdPerfRecord {
     /* the last lamp whose screen box was not known this replay: why
      * (RD_LAMPS_BOX_*, rd_lamps.h; 0 none) */
     uint32_t lampsBoxWhy;
+    /* round 3 (rd_lamps.h RD_LAMPS_OWED, RD_LAMPS_FOLD4): WORK0's alpha
+     * sprites a DARK chain left a lazy clear (lampsOwed: a pass fewer each);
+     * the passes that drew two staticBlur pairs (lampsFold4: fx_blur4_ps,
+     * one pass where two fx_blur2_ps passes were: a pass fewer each) and the
+     * last reason a pair that could have gone with the next was drawn alone
+     * (lampsFold4Why, RD_LAMPS_F4_*; 0 none) */
+    uint32_t lampsOwed, lampsFold4, lampsFold4Why;
 } RdPerfRecord;
 
 /* The oldest finished record not yet popped (a queue of 64; the oldest are

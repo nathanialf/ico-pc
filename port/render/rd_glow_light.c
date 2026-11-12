@@ -182,6 +182,7 @@ static struct {
      * after the chain began: its clear cannot wait for a sprite to draw it */
     bool unhooked[LZ_COUNT];
     bool w1Before, w1After; /* WORK1 written outside the chain before it, after it */
+    bool w0Seen, w0After;   /* WORK0's alpha sprite scanned; a command after it touches WORK0 */
     bool w1Cleared;         /* cleared to 0 before the chain, nothing written since */
     bool chainSeen;         /* the chain's first command was walked */
     float p1Rect[4];        /* the first blur pass's rect (12.4), its target's GS width */
@@ -712,6 +713,7 @@ bool rd__glow_light_scan_begin(const RdFrame *f)
         s_passOn[k] = s_clearOn[k] = 0;
     }
     s_gl.w1Before = s_gl.w1After = s_gl.w1Cleared = s_gl.chainSeen = s_gl.spanOpen = false;
+    s_gl.w0Seen = s_gl.w0After = false;
     s_gl.preCount = 0;
     s_gl.chainBegun = false;
     s_gl.p1GsW = 0;
@@ -998,9 +1000,19 @@ void rd__glow_light_scan_cmd(const RdFrame *f, const RdCmd *c, const RdStateBloc
     noteFirst(f, c, st);
     const uint32_t n0 = s_gl.n;
     const bool before = !s_gl.chainSeen;
+    if (s_gl.w0Seen) {
+        /* a command after WORK0's alpha sprite that touches WORK0 (the
+         * aura's sprite into it, a copy, its texture): the sprite keeps its
+         * clear at the chain's place (rd_lamps.c RD_LAMPS_OWED) */
+        const uint32_t w0 = idOf(RD_TARGET_WORK0);
+        if (readsTarget(c, st, w0) || writesTarget(c, st, w0) || st->depth == w0) {
+            s_gl.w0After = true;
+        }
+    }
     scanStep(f, c, st, ord);
     if (s_gl.n > n0) {
         s_gl.chainSeen = true;
+        s_gl.w0Seen = s_gl.w0Seen || s_gl.cmd[s_gl.n - 1].el == E_W0;
         return; /* one of the chain's commands */
     }
     if (writesTarget(c, st, idOf(RD_TARGET_WORK1))) {
@@ -1109,6 +1121,12 @@ static void planActs(uint8_t plan)
              * undrawn until the sprite takes its colour (rd_pass_cut.c) */
             e->act = ACT_CLEAR;
             e->target = w0;
+            if (!s_gl.w0After && !s_gl.unhooked[LZ_W0] && rd__lamps_owed_on()) {
+                /* nothing later in the frame touches WORK0 (the opening's
+                 * frames: no aura): a lazy clear of the same colour, drawn
+                 * where something reads WORK0 (rd_lamps.c RD_LAMPS_OWED) */
+                e->act = ACT_LAZY;
+            }
             break;
         case E_HOLD:
         case E_LAMP:
@@ -1602,9 +1620,34 @@ static void lazyTouch(Replay *r, const RdFrame *f, const RdCmd *c)
     }
 }
 
+/* under the WHOLE plan WORK2_PAD's band (read by nothing, rd.h) left a
+ * lazy clear as under DARK and LAMPS (rd_lamps.c RD_LAMPS_WHOLEPAD): the
+ * band sprite of this replay's chain that covers its target, nothing
+ * outside the sprite hook touching the band after the chain began */
+static bool wholePad(Replay *r, const RdCmd *c)
+{
+    if (s_gl.replay != g_rd.replayCounter || s_gl.plan != RD_GLOW_LIGHT_WHOLE ||
+        s_gl.unhooked[LZ_PAD] || !rd__lamps_wholepad_on()) {
+        return false;
+    }
+    for (uint32_t i = 0; i < s_gl.n; i++) {
+        const GlCmd *e = &s_gl.cmd[i];
+        if (e->c == c && e->ord == g_rdStoreOrd && e->el == E_PAD && e->cover &&
+            lazyNote(e->target, e->col)) {
+            r->writeSerial++; /* as the sprite's draw */
+            rd__lamps_pad_noted();
+            return true;
+        }
+    }
+    return false;
+}
+
 bool rd__glow_light_sprite(Replay *r, const RdFrame *f, const RdCmd *c)
 {
     GlCmd *e = find(c);
+    if (!e && wholePad(r, c)) {
+        return true;
+    }
     s_gl.inRepeat = false;
     if (e && e == &s_gl.cmd[0] && !s_gl.spanOpen) {
         s_gl.spanOpen = true; /* the chain's passes counted from here */
@@ -1653,7 +1696,9 @@ bool rd__glow_light_sprite(Replay *r, const RdFrame *f, const RdCmd *c)
     case ACT_LAZY:
         if (lazyNote(e->target, e->col)) {
             r->writeSerial++;
-            if (s_gl.plan == RD_GLOW_LIGHT_LAMPS) {
+            if (e->el == E_W0) {
+                rd__lamps_owed_noted(); /* WORK0's alpha sprite owed (rd_lamps.c) */
+            } else if (s_gl.plan == RD_GLOW_LIGHT_LAMPS) {
                 rd__lamps_pad_noted(); /* the band under the lamps' plan (rd_lamps.c) */
             }
             return true;

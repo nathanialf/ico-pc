@@ -36,6 +36,7 @@
  * aura's paste does in play (else the plan refuses: SCENE's alpha not
  * rewritten).  At 1x the same plans and the same rules: the plan applies at
  * every scale (Original's 1x included, the owner's choice). */
+#include "rd_lamps.h" /* RD_LAMPS_OWED: WORK0's clear owed under DARK */
 
 static uint8_t *s_glBuf[2][RD_TARGET_COUNT];
 static size_t s_glSize[2][RD_TARGET_COUNT];
@@ -283,9 +284,16 @@ static void glFrame(const char *cfg, int k, int model, int above1x)
         CHECK(onPad == 0 && onW2 == 0 && onW3 == 0,
               "%s: passes on WORK2_PAD %u, WORK2 %u, WORK3 %u under DARK (want none): %s", what,
               onPad, onW2, onW3, rd__glow_light_debug());
-        CHECK(k == GL_AURA ? onW0Clear >= 1u : onW0Clear == 1u,
+        /* without the aura nothing after the alpha sprite touches WORK0: its
+         * clear is owed instead (rd_lamps.c RD_LAMPS_OWED), drawn by the
+         * reads above */
+        const uint32_t w0Want = rd__lamps_owed_on() ? 0u : 1u;
+        CHECK(k == GL_AURA ? onW0Clear >= 1u : onW0Clear == w0Want,
               "%s: %u of %u passes on WORK0 clear it (want %s: its alpha sprite's clear%s)", what,
-              onW0Clear, onW0, k == GL_AURA ? "at least 1" : "1",
+              onW0Clear, onW0,
+              k == GL_AURA ? "at least 1"
+              : w0Want     ? "1"
+                           : "0, owed",
               k == GL_AURA ? ", and any the aura's own sprites make" : "");
         /* again with the plan: the same (WORK1's region zero, from the
            frame's clear and the replay before) */

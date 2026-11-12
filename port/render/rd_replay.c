@@ -113,7 +113,7 @@ static const char *const s_fsNames[RD_FS_COUNT] = {
     "vu_texa_np_ps", "fx_frame_ps", "fx_local_ps", "fx_acc_ps", "fx_acc_resolve_ps",
     "crack_fill_ps", "crack_count_ps", "shadow_count_ps", "crack_fill1_ps", "fx_aura_rows_ps",
     "fx_aura_sum_ps", "shadow_count_load_ps", "fsr1_easu_ps", "fsr1_rcas_ps", "vu_pre_cs",
-    "blit_scene_ps", "shadow_tile_mask_ps", "shadow_tile_mark_ps"};
+    "blit_scene_ps", "shadow_tile_mask_ps", "shadow_tile_mark_ps", "fx_blur4_ps"};
 
 const char *rd__fs_name(uint8_t fs)
 {
@@ -351,8 +351,8 @@ bool rd__gpu_init(void *sdlWindow)
         if (i >= RD_FS_OPTIONAL_FIRST && !optionalBuilt(s_fsNames[i])) {
             continue;
         }
-        /* the shadow tiles need DATE's stencil bit: Vulkan's alone */
-        if ((i == RD_FS_SHADOW_TILE_MASK || i == RD_FS_SHADOW_TILE_MARK) &&
+        /* Vulkan's alone: the shadow tiles (DATE's stencil bit), two blur pairs a pass */
+        if ((i == RD_FS_SHADOW_TILE_MASK || i == RD_FS_SHADOW_TILE_MARK || i == RD_FS_FX_BLUR4) &&
             rhi_backend() != RHI_BACKEND_VULKAN) {
             continue;
         }

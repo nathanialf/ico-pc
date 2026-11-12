@@ -655,7 +655,13 @@ frame F)` naming the draw; `another command writes WORK2 in the frame`; `the lam
 Many whole pictures for one of the last three in a steady lamps room name a frame the player's F12
 dump can replay (`rd_replay_tool --stats` prints `stats: lamps ...`). The `perf classes` line's
 glow class shows the change: its depth loaded and colour cleared and stored fall by about the
-share of WORK2 outside the lamps' tiles.
+share of WORK2 outside the lamps' tiles. The same line counts the round-3 cuts: `B bands left lazy` (lamps and
+whole pictures), `O WORK0 alpha sprites owed (dark pictures: a pass fewer each)`, `F blur passes of
+two pairs (a pass fewer each), P pairs drawn alone (k <why>)` (about one `the chain's last pair
+next` a chain is expected; any other reason says what kept two pairs apart); the start lines `rd:
+blur fold: two pairs a pass: self-test passed (...)` (or `failed at texel N` / `not run (...)`,
+then one pair a pass) say whether that fold is in force. Whether it paid shows in `GPU top
+passes`: `glow WORK0 ... N passes ... ms` falls by about four passes a lamps picture.
 
 ### The crack fill's snapshot by the swap
 

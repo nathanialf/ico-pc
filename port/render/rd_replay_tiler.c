@@ -8,9 +8,11 @@
  * draw the bytes the passes they replace draw.  The replay's own helpers come through rd_replay.h
  * (rd__replay_*, each rd_replay.c's function named beside it). */
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "rd_lamps.h"
 #include "rd_replay.h"
 
 static int32_t floorDiv16(int32_t v)
@@ -486,6 +488,457 @@ static uint32_t blurFoldAhead(Replay *q, uint32_t from)
     return i;
 }
 
+/* The fold's DrawCB for the pair (a pass 1, b its pass 2) under st, as
+ * fx_blur2_ps reads it (fx_sprite.hlsl; shader_consts.h IcoDrawCB.aux0) */
+static void foldCb(IcoDrawCB *cb, const BlurFoldPass *a, const BlurFoldPass *b,
+                   const RdStateBlock *st)
+{
+    memset(cb, 0, sizeof(*cb));
+    memcpy(cb->col, (const uint32_t[4]){b->p.rgba[0], b->p.rgba[1], b->p.rgba[2], b->p.rgba[3]},
+           sizeof(cb->col));
+    cb->mode[0] = b->flags;
+    cb->mode[1] = b->mode1;
+    cb->mode[2] = st->ds.test.atst | ((uint32_t)(st->ds.test.ate != 0) << 8) |
+                  ((uint32_t)st->ds.test.afail << 16);
+    /* no alpha test here (blurFoldPass), so not AREF: pass 1's first drawn
+     * WORK1 column, which a tap left of it reads (the glow's edge strip;
+     * with first == cx0 only taps of weight 0 lie there) */
+    cb->mode[3] = (uint32_t)a->cx0;
+    cb->blend[0] =
+        rd__alpha_register(st->ds.blend < RD_BLEND_COUNT ? st->ds.blend : RD_BLEND_LERP_AS);
+    cb->blend[1] = st->ds.blendFix;
+    cb->blend[2] = st->ds.colclamp;
+    cb->blend[3] = b->p.z;
+    memcpy(cb->uvRect, b->uv, sizeof(cb->uvRect));
+    cb->tex[0] = b->p.scalar[0];
+    cb->tex[1] = b->p.scalar[1];
+    cb->tex[2] = (float)b->src->tw; /* pass 2's t1: WORK1 */
+    cb->tex[3] = (float)b->src->th;
+    cb->scale[0] = 1.0f;
+    cb->scale[1] = 1.0f;
+    memcpy(cb->param, b->p.rect, sizeof(cb->param));
+    rd__replay_blur_aux1(cb);         /* pass 2's reciprocals and fx_texel's size (scale[0..1] 1) */
+    cb->scale[0] = (float)a->src->tw; /* pass 1's t1: WORK0, its fetch's clamp */
+    cb->scale[1] = (float)a->src->th;
+    /* pass 1: its rect and UVs as 16-bit pairs, its colour in scale.zw */
+    cb->aux0[0] = (uint32_t)a->p.rect[0] | ((uint32_t)a->p.rect[1] << 16);
+    cb->aux0[1] = (uint32_t)a->p.rect[2] | ((uint32_t)a->p.rect[3] << 16);
+    cb->aux0[2] = (uint32_t)a->uv[0] | ((uint32_t)a->uv[1] << 16);
+    cb->aux0[3] = (uint32_t)a->uv[2] | ((uint32_t)a->uv[3] << 16);
+    cb->scale[2] = (float)(a->p.rgba[0] + 256u * a->p.rgba[1]);
+    cb->scale[3] = (float)(a->p.rgba[2] + 256u * a->p.rgba[3]);
+}
+
+/* fx_blur4_ps's pair A in g_blend (no blend in a fold; fx_sprite.hlsl
+ * fx_blur4_ps): pass 1A's x0, x1, y1, pass 2A's u0, u1, v1 and pass 1A's
+ * first drawn WORK1 column; the rest of pair A is pair B's (fold4Pair) */
+static void fold4Cb(IcoDrawCB *cb, const BlurFoldPass *a1, const BlurFoldPass *a2)
+{
+    cb->blend[0] = (uint32_t)a1->p.rect[0] | ((uint32_t)a1->p.rect[2] << 16);
+    cb->blend[1] = (uint32_t)a1->p.rect[3] | ((uint32_t)a2->uv[0] << 16);
+    cb->blend[2] = (uint32_t)a2->uv[2] | ((uint32_t)a2->uv[3] << 16);
+    cb->blend[3] = (uint32_t)a1->cx0;
+}
+
+/* the poison's magenta over WORK0's swapped-in colour (the tests) */
+static void fold4Poison(RhiCommandList cl, RdTargetRec *tc)
+{
+    const bool readable = rd__pass_wants_readable(tc);
+    rd__transition(cl, tc->color, &tc->colorState,
+                   readable ? RHI_STATE_RENDER_TARGET_READ : RHI_STATE_RENDER_TARGET);
+    RhiRenderPassDesc q;
+    memset(&q, 0, sizeof(q));
+    q.color[0].texture = tc->color;
+    q.color[0].load = RHI_LOAD_CLEAR;
+    q.color[0].readable = readable;
+    q.color[0].clear[0] = 1.0f;
+    q.color[0].clear[2] = 1.0f;
+    q.color[0].clear[3] = 1.0f;
+    q.colorCount = 1;
+    q.width = tc->tw;
+    q.height = tc->th;
+    rhi_cmd_begin_render_pass(cl, &q);
+    rhi_cmd_end_render_pass(cl);
+}
+
+/* one axis of the two pairs for rd__lamps_fold4_axis: c0 .. c1 pass 2B's
+ * covered pixels, the passes' rect and UV on the axis (index 0 x, 1 y) */
+static void fold4Axis(RdFold4Axis *ax, int k, const BlurFoldPass *a1, const BlurFoldPass *a2,
+                      const BlurFoldPass *b1, const BlurFoldPass *b2)
+{
+    memset(ax, 0, sizeof(*ax));
+    ax->o = k ? b2->oy : b2->ox;
+    ax->c0 = k ? b2->cy0 : b2->cx0;
+    ax->c1 = k ? b2->cy1 : b2->cx1;
+    ax->b2x0 = (int32_t)b2->p.rect[k];
+    ax->b2x1 = (int32_t)b2->p.rect[k + 2];
+    ax->b2u0 = (int32_t)b2->uv[k];
+    ax->b2u1 = (int32_t)b2->uv[k + 2];
+    ax->b1x0 = (int32_t)b1->p.rect[k];
+    ax->b1x1 = (int32_t)b1->p.rect[k + 2];
+    ax->b1u0 = (int32_t)b1->uv[k];
+    ax->b1u1 = (int32_t)b1->uv[k + 2];
+    ax->a2u0 = (int32_t)a2->uv[k];
+    ax->a2u1 = (int32_t)a2->uv[k + 2];
+    ax->a1x0 = (int32_t)a1->p.rect[k];
+    ax->a1x1 = (int32_t)a1->p.rect[k + 2];
+    ax->lsz = (int32_t)rintf(b2->p.scalar[k]);
+    ax->w0 = (int32_t)(k ? b1->src->th : b1->src->tw);
+    ax->w1 = (int32_t)(k ? b2->src->th : b2->src->tw);
+    ax->loB = k ? 0 : b1->cx0;
+    ax->loA = k ? 0 : a1->cx0;
+}
+
+/* the two pairs' DrawCB holds: pair A differs from pair B only in the six
+ * values fold4Cb packs, each a 16-bit integer (blurFoldPass checked that) */
+static bool fold4Form(const BlurFoldPass *a1, const BlurFoldPass *a2, const BlurFoldPass *b1,
+                      const BlurFoldPass *b2)
+{
+    return a1->tc == b1->tc && a1->src == b1->src && a2->tc == b2->tc && a2->src == b2->src &&
+           a1->flags == b1->flags && a1->flags == b2->flags && a2->flags == b2->flags &&
+           a1->mode1 == b1->mode1 && a2->mode1 == b2->mode1 && a1->mode1 == a2->mode1 &&
+           a1->ox == b2->ox && a1->oy == b2->oy && a2->ox == b2->ox && a2->oy == b2->oy &&
+           a1->p.rect[1] == b1->p.rect[1] && memcmp(a1->uv, b1->uv, sizeof(a1->uv)) == 0 &&
+           memcmp(a1->p.rgba, b1->p.rgba, sizeof(a1->p.rgba)) == 0 &&
+           memcmp(a2->p.rect, b2->p.rect, sizeof(a2->p.rect)) == 0 && a2->uv[1] == b2->uv[1] &&
+           memcmp(a2->p.rgba, b2->p.rgba, sizeof(a2->p.rgba)) == 0 &&
+           a2->p.scalar[0] == b2->p.scalar[0] && a2->p.scalar[1] == b2->p.scalar[1] &&
+           a2->cx0 == b2->cx0 && a2->cy0 == b2->cy0 && a2->cx1 == b2->cx1 && a2->cy1 == b2->cy1;
+}
+
+/* Pair A (p1, p2: folding as one pass) and the pair after it (B: p3, its
+ * pass 1, and the pass 2 after it) as one pass of fx_blur4_ps: pair B folds
+ * as a pair does (blurFoldPair, no glow edge strip after its pass 2,
+ * blurFoldOk, the pair after it, C, holding pass 1B's texels or more),
+ * the DrawCB's form (fold4Form), the windows (rd__lamps_fold4_axis on each
+ * axis).  True: *p4 pass 2B, *q4 the state after it, *i4 its command */
+static bool fold4Pair(const RdCmd *c, const RdFrame *f, const BlurFoldPass *p1,
+                      const BlurFoldPass *p2, const BlurFoldPass *p3, const Replay *q3, uint32_t i3,
+                      BlurFoldPass *p4, Replay *q4, uint32_t *i4)
+{
+    if (!(rd__lamps_bits() & RD_LAMPS_FOLD4) || !g_rd.fs[RD_FS_FX_BLUR4].id ||
+        rd__blur_fold4_test_state(NULL) != 1) {
+        return false;
+    }
+    int why = RD_LAMPS_F4_PAIR;
+    *q4 = *q3;
+    const uint32_t j4 = blurFoldAhead(q4, i3);
+    if (j4 < s_loop.count && blurFoldPass(q4, f, &s_loop.cmds[j4], p4) &&
+        s_loop.cmds[j4].b[0] == c->b[0] && blurFoldPair(p3, p4)) {
+        why = RD_LAMPS_F4_STRIP;
+        if (rd__replay_glow_edge_columns(q4, f, &s_loop.cmds[j4]) == 0) {
+            why = RD_LAMPS_F4_PAIR;
+            if (blurFoldOk(p3, p4)) {
+                why = RD_LAMPS_F4_LAST;
+                static Replay q5;
+                q5 = *q4;
+                const uint32_t j5 = blurFoldAhead(&q5, j4);
+                BlurFoldPass p5;
+                if (j5 < s_loop.count && blurFoldPass(&q5, f, &s_loop.cmds[j5], &p5) &&
+                    s_loop.cmds[j5].b[0] == c->b[0] && p5.tc == p3->tc && p5.src == p3->src) {
+                    blurFoldFirst(&q5, f, &s_loop.cmds[j5], &p5);
+                    if (p5.first <= p3->first && p5.cx1 >= p3->cx1 && p5.cy0 <= p3->cy0 &&
+                        p5.cy1 >= p3->cy1) {
+                        why = RD_LAMPS_F4_FORM;
+                        if (fold4Form(p1, p2, p3, p4)) {
+                            why = RD_LAMPS_F4_WINDOW;
+                            RdFold4Axis ax, ay;
+                            int32_t w2 = 0, w1 = 0;
+                            fold4Axis(&ax, 0, p1, p2, p3, p4);
+                            fold4Axis(&ay, 1, p1, p2, p3, p4);
+                            if (rd__lamps_fold4_axis(&ax, &w2, &w1) &&
+                                rd__lamps_fold4_axis(&ay, &w2, &w1)) {
+                                *i4 = j4;
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    rd__lamps_fold4_refused(why);
+    return false;
+}
+
+/* ---------------------------------------------- the fold of two pairs' self-test
+ * (rd_lamps.h rd__blur_fold4_selftest): pair A and pair B of the chain's
+ * shrink form on a 64 x 32 WORK0 and a 64 x 64 WORK1 of WORK0's usage, a
+ * random WORK0 (a fixed seed), drawn as two fx_blur2_ps passes and as one
+ * fx_blur4_ps pass, read back and compared texel for texel */
+#define F4_W 64u
+#define F4_H 32u
+
+static struct {
+    int state; /* 0 not run, 1 passed, 2 failed or not run */
+    char words[160];
+} s_f4;
+
+int rd__blur_fold4_test_state(const char **words)
+{
+    if (words) {
+        *words = s_f4.words[0] ? s_f4.words : "not run";
+    }
+    return s_f4.state;
+}
+
+static void f4Pass(BlurFoldPass *p, RdTargetRec *tc, RdTargetRec *src, int one, int b)
+{
+    memset(p, 0, sizeof(*p));
+    p->tc = tc;
+    p->src = src;
+    p->ox = 16 * (2048 - (int32_t)(F4_W / 2u));
+    p->oy = 16 * (2048 - (int32_t)(F4_H / 2u));
+    const float ox = (float)p->ox, oy = (float)p->oy;
+    /* the chain's shrink (staticBlur.c blur(n), list 7:114 to 7:304): pass 1
+     * draws a rect a sixteenth narrower and shorter each pair, pass 2 reads
+     * UVs a sixteenth less each pair */
+    if (one) {
+        p->p.rect[0] = ox;
+        p->p.rect[1] = oy;
+        p->p.rect[2] = ox + 16.0f * F4_W - 16.0f - (float)b;
+        p->p.rect[3] = oy + 16.0f * F4_H - 16.0f - (float)b;
+        p->uv[0] = 8.0f;
+        p->uv[1] = 8.0f;
+        p->uv[2] = 8.0f + 16.0f * F4_W;
+        p->uv[3] = 8.0f + 16.0f * F4_H;
+        p->p.rgba[0] = p->p.rgba[1] = p->p.rgba[2] = 128;
+    } else {
+        p->p.rect[0] = ox;
+        p->p.rect[1] = oy;
+        p->p.rect[2] = ox + 16.0f * F4_W;
+        p->p.rect[3] = oy + 16.0f * F4_H;
+        p->uv[0] = 8.0f;
+        p->uv[1] = 8.0f;
+        p->uv[2] = 16.0f * F4_W - 8.0f - (float)b;
+        p->uv[3] = 16.0f * F4_H - 8.0f - (float)b;
+        p->p.rgba[0] = 139;
+        p->p.rgba[1] = 136;
+        p->p.rgba[2] = 132;
+    }
+    p->p.scalar[0] = (float)F4_W;
+    p->p.scalar[1] = (float)F4_H;
+    p->flags = RD_FXF_TEXTURED | (2u << RD_FXF_TFX_SHIFT) | RD_FXF_TCC | RD_FXF_LINEAR |
+               RD_FXF_CLAMP_S | RD_FXF_CLAMP_T;
+    p->mode1 = 0;
+    const int32_t x0 = (int32_t)p->p.rect[0], x1 = (int32_t)p->p.rect[2];
+    const int32_t y0 = (int32_t)p->p.rect[1], y1 = (int32_t)p->p.rect[3];
+    p->cx0 = ceilDiv16(x0 - p->ox);
+    p->cx1 = ceilDiv16(x1 - p->ox) - 1;
+    p->cy0 = ceilDiv16(y0 - p->oy);
+    p->cy1 = ceilDiv16(y1 - p->oy) - 1;
+    p->cx1 = p->cx1 < (int32_t)tc->tw - 1 ? p->cx1 : (int32_t)tc->tw - 1;
+    p->cy1 = p->cy1 < (int32_t)tc->th - 1 ? p->cy1 : (int32_t)tc->th - 1;
+    p->first = p->cx0;
+}
+
+static uint8_t f4Level(uint32_t i)
+{
+    uint32_t x = i * 2654435761u + 0x9E3779B9u;
+    x ^= x >> 15;
+    x *= 2246822519u;
+    x ^= x >> 13;
+    return (uint8_t)(x >> 24);
+}
+
+/* one fold pass (two of fx_blur2_ps's or one of fx_blur4_ps's) from src into dst */
+static bool f4Draw(RhiCommandList cl, RhiTexture srcTex, RhiTexture dst, RhiState *dstState,
+                   const BlurFoldPass *a1, const BlurFoldPass *a2, const BlurFoldPass *b1,
+                   const BlurFoldPass *b2, RhiFormat fmt)
+{
+    RdStateBlock st;
+    rd__reset_state_block(&st);
+    st.ds.colorMask = 0xF;
+    st.ds.test = rd_test_from_gs(RD_TEST_Z_ALWAYS);
+    st.ds.zwrite = RD_ZWRITE_OFF;
+    RdPipeKeyInt key = rd__blur_fold_key(&st, fmt);
+    if (b1) {
+        key.fs = RD_FS_FX_BLUR4;
+    }
+    const RhiPipeline pipe = rd__get_pipeline(&key);
+    if (!pipe.id) {
+        return false;
+    }
+    rd__transition(cl, dst, dstState, RHI_STATE_RENDER_TARGET);
+    RhiRenderPassDesc p;
+    memset(&p, 0, sizeof(p));
+    p.color[0].texture = dst;
+    p.color[0].load = RHI_LOAD_CLEAR; /* every texel then written by the draw */
+    p.colorCount = 1;
+    p.width = F4_W;
+    p.height = F4_H;
+    rhi_cmd_begin_render_pass(cl, &p);
+    const RhiViewport vp = {0.0f, 0.0f, (float)F4_W, (float)F4_H, 0.0f, 1.0f};
+    rhi_cmd_set_viewport(cl, &vp);
+    const RhiRect all = {0, 0, F4_W, F4_H};
+    rhi_cmd_set_scissor(cl, &all);
+    IcoDrawCB cb;
+    foldCb(&cb, b1 ? b1 : a1, b1 ? b2 : a2, &st);
+    if (b1) {
+        fold4Cb(&cb, a1, a2);
+    }
+    RhiBinding bd[3];
+    memset(bd, 0, sizeof(bd));
+    bd[0].slot = 1;
+    bd[0].type = RHI_BIND_SAMPLED_TEXTURE;
+    bd[0].texture = srcTex;
+    bd[0].aspect = RHI_ASPECT_COLOR;
+    bd[1].slot = 1;
+    bd[1].type = RHI_BIND_SAMPLER;
+    bd[1].sampler = rd__sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    bd[2].slot = 2;
+    bd[2].type = RHI_BIND_SAMPLED_TEXTURE;
+    bd[2].texture = g_rd.dummy;
+    bd[2].aspect = RHI_ASPECT_COLOR;
+    const RhiBindGroup g = rd__replay_bind_group(g_rd.layoutTex, bd, 3);
+    if (g.id) {
+        rd__set_pipeline(cl, pipe, &key);
+        rd__bind_uniform(
+            cl, 0,
+            rd__frame_group(F4_W, F4_H, (float)(2048u - F4_W / 2u), (float)(2048u - F4_H / 2u)));
+        rd__bind_uniform(cl, 1, rd__draw_group(&cb));
+        rhi_cmd_set_bind_group(cl, 2, g);
+        rhi_cmd_draw(cl, 3, 0, 1);
+    }
+    rhi_cmd_end_render_pass(cl);
+    return g.id != 0;
+}
+
+bool rd__blur_fold4_selftest(void)
+{
+    s_f4.state = 0;
+    s_f4.words[0] = '\0';
+    if (!g_rd.inited || !g_rd.hasDevice || !(rd__lamps_wanted() & RD_LAMPS_FOLD4) ||
+        rhi_backend() != RHI_BACKEND_VULKAN || !g_rd.fs[RD_FS_FX_BLUR4].id ||
+        !g_rd.fs[RD_FS_FX_BLUR2].id) {
+        return true; /* not asked here: nothing to check */
+    }
+    s_f4.state = 2;
+    const RhiFormat fmt = RHI_FMT_RGBA8_UNORM;
+    const uint32_t usage = RHI_TEX_RENDER_TARGET | RHI_TEX_SAMPLED | RHI_TEX_COPY_SRC |
+                           RHI_TEX_COPY_DST | rd__dst_target_usage(fmt, NULL);
+    const uint32_t a = rhi_limits()->copyRowPitchAlign ? rhi_limits()->copyRowPitchAlign : 1u;
+    const uint32_t pitch = (F4_W * 4u + a - 1u) / a * a;
+    RhiTexture tex[4];
+    for (int k = 0; k < 4; k++) {
+        tex[k] = rhi_create_texture(
+            &(RhiTextureDesc){F4_W, F4_H, 1, fmt, usage, "rd blur fold4 test", 0});
+    }
+    RhiBuffer up = rhi_create_buffer(&(RhiBufferDesc){(uint64_t)pitch * F4_H, RHI_BUF_COPY_SRC,
+                                                      RHI_MEM_UPLOAD, "rd blur fold4 test"});
+    uint8_t *m = up.id ? (uint8_t *)rhi_map_buffer(up) : NULL;
+    const char *why = NULL;
+    int bad = -1;
+    uint8_t got[4] = {0}, want[4] = {0};
+    /* the passes' records: WORK0 64 x 32 (tex), WORK1 64 x 64 (sizes only:
+     * the folds never read or write it) */
+    static RdTargetRec w0, w1;
+    memset(&w0, 0, sizeof(w0));
+    memset(&w1, 0, sizeof(w1));
+    w0.w = w0.tw = F4_W;
+    w0.h = w0.th = F4_H;
+    w1.w = w1.tw = F4_W;
+    w1.h = w1.th = 2u * F4_H;
+    w0.sx = w0.sy = w1.sx = w1.sy = 1.0f;
+    BlurFoldPass a1, a2, b1, b2;
+    f4Pass(&a1, &w1, &w0, 1, 0);
+    f4Pass(&a2, &w0, &w1, 0, 0);
+    f4Pass(&b1, &w1, &w0, 1, 1);
+    f4Pass(&b2, &w0, &w1, 0, 1);
+    RdFold4Axis ax, ay;
+    int32_t ww2 = 0, ww1 = 0;
+    fold4Axis(&ax, 0, &a1, &a2, &b1, &b2);
+    fold4Axis(&ay, 1, &a1, &a2, &b1, &b2);
+    if (!tex[0].id || !tex[1].id || !tex[2].id || !tex[3].id || !m) {
+        why = "no memory for its textures";
+    } else if (!fold4Form(&a1, &a2, &b1, &b2) || !rd__lamps_fold4_axis(&ax, &ww2, &ww1) ||
+               !rd__lamps_fold4_axis(&ay, &ww2, &ww1)) {
+        why = "its pairs refused by the fold's own rules";
+    } else {
+        for (uint32_t y = 0; y < F4_H; y++) {
+            for (uint32_t x = 0; x < F4_W * 4u; x++) {
+                m[(size_t)y * pitch + x] = f4Level(y * F4_W * 4u + x);
+            }
+        }
+        rhi_unmap_buffer(up);
+        m = NULL;
+        RhiCommandList cl =
+            rd__begin_own_frame(64u * 1024u) ? rhi_begin_commands() : (RhiCommandList){0};
+        if (!cl.id) {
+            why = "no command list";
+        } else {
+            rd__upload_textures(cl);
+            RhiState ss[4] = {RHI_STATE_UNDEFINED, RHI_STATE_UNDEFINED, RHI_STATE_UNDEFINED,
+                              RHI_STATE_UNDEFINED};
+            rd__transition(cl, tex[0], &ss[0], RHI_STATE_COPY_DST);
+            rhi_cmd_copy_buffer_to_texture(cl, up, 0, pitch, tex[0], 0,
+                                           (RhiRect){0, 0, F4_W, F4_H});
+            rd__transition(cl, tex[0], &ss[0], RHI_STATE_SHADER_READ);
+            /* two fx_blur2_ps passes (A into tex 1, B into tex 2), one
+             * fx_blur4_ps pass (A and B into tex 3) */
+            bool drawn = f4Draw(cl, tex[0], tex[1], &ss[1], &a1, &a2, NULL, NULL, fmt);
+            rd__transition(cl, tex[1], &ss[1], RHI_STATE_SHADER_READ);
+            drawn = drawn && f4Draw(cl, tex[1], tex[2], &ss[2], &b1, &b2, NULL, NULL, fmt);
+            drawn = drawn && f4Draw(cl, tex[0], tex[3], &ss[3], &a1, &a2, &b1, &b2, fmt);
+            rd__transition(cl, tex[2], &ss[2], RHI_STATE_COPY_SRC);
+            rd__transition(cl, tex[3], &ss[3], RHI_STATE_COPY_SRC);
+            rhi_end_commands(cl);
+            rhi_submit(cl);
+            rhi_wait_idle();
+            if (!drawn) {
+                why = "its pipelines missing";
+            }
+        }
+        static uint8_t back[2][F4_W * F4_H * 4u + 4096u];
+        uint32_t rp[2] = {0, 0};
+        for (int t = 0; t < 2 && !why; t++) {
+            if (!rhi_readback_texture(tex[2 + t], RHI_ASPECT_COLOR, back[t], sizeof(back[t]),
+                                      &rp[t]) ||
+                rp[t] < F4_W * 4u || (size_t)rp[t] * F4_H > sizeof(back[t])) {
+                why = "its readback failed";
+            }
+        }
+        for (uint32_t i = 0; !why && i < F4_W * F4_H && bad < 0; i++) {
+            const uint32_t x = i % F4_W, y = i / F4_W;
+            memcpy(want, back[0] + (size_t)y * rp[0] + x * 4u, 4);
+            memcpy(got, back[1] + (size_t)y * rp[1] + x * 4u, 4);
+            if (memcmp(got, want, 4) != 0) {
+                bad = (int)i;
+            }
+        }
+    }
+    if (m) {
+        rhi_unmap_buffer(up);
+    }
+    rhi_wait_idle();
+    for (int k = 0; k < 4; k++) {
+        if (tex[k].id) {
+            rhi_destroy_texture(tex[k]);
+        }
+    }
+    if (up.id) {
+        rhi_destroy_buffer(up);
+    }
+    if (!why && bad < 0) {
+        s_f4.state = 1;
+        snprintf(s_f4.words, sizeof(s_f4.words), "passed");
+        rd__log(
+            "blur fold: two pairs a pass: self-test passed (two of the chain's pairs on a %ux%u "
+            "WORK0 of random bytes: one fx_blur4_ps pass the bytes of two fx_blur2_ps "
+            "passes, windows %d and %d texels)",
+            F4_W, F4_H, (int)ww2, (int)ww1);
+    } else if (why) {
+        snprintf(s_f4.words, sizeof(s_f4.words), "not run: %s", why);
+        rd__log("blur fold: two pairs a pass: self-test not run (%s): one pair a pass", why);
+    } else {
+        snprintf(s_f4.words, sizeof(s_f4.words), "failed at texel %d", bad);
+        rd__log("blur fold: two pairs a pass: self-test failed at texel %d: %02X%02X%02X%02X for "
+                "%02X%02X%02X%02X: one pair a pass",
+                bad, got[0], got[1], got[2], got[3], want[0], want[1], want[2], want[3]);
+    }
+    return s_f4.state == 1;
+}
+
 /* blur(n)'s pair at its pass 1 (c, the command the loop replays) as one
  * pass, when the profile folds and the pair takes it (the module, no pass
  * window: the loss bisect counts the passes as recorded).  True: drawn, the
@@ -539,33 +992,53 @@ bool rd__replay_blur_fold(Replay *r, const RdFrame *f, const RdCmd *c)
         blurFoldRefused(r, &p1, "the next pair's pass 1 leaves its bytes in fewer WORK1 texels");
         return false;
     }
-    RdPipeKeyInt key = rd__blur_fold_key(&q.st, p2.tc->format);
+    /* two pairs in one pass where the lamps' FOLD4 is on and pair B (the
+     * next one) folds as well (rd_lamps.c RD_LAMPS_FOLD4) */
+    static Replay q4;
+    BlurFoldPass p4;
+    uint32_t i4 = 0;
+    const bool four = fold4Pair(c, f, &p1, &p2, &p3, &q3, i3, &p4, &q4, &i4);
+    const Replay *qd = four ? &q4 : &q;
+    const BlurFoldPass *pa = four ? &p3 : &p1, *pb = four ? &p4 : &p2;
+    const uint32_t id = four ? i4 : i2;
+    RdPipeKeyInt key = rd__blur_fold_key(&qd->st, pb->tc->format);
+    if (four) {
+        key.fs = RD_FS_FX_BLUR4;
+    }
     RhiPipeline pipe = rd__get_pipeline(&key);
     if (!pipe.id) {
         return false;
     }
-    /* pass 2's state from here (the loop's as it would have been) */
-    r->st = q.st;
-    r->halfAdded = q.halfAdded;
-    r->perfTargetEffect = q.perfTargetEffect;
-    /* the effect pass 2's POST_STUB sets in the loop (the glow), not the
-     * WORK0 target's (none): the folded pass is begun and timed as the
+    /* the last pass's state from here (the loop's as it would have been) */
+    r->st = qd->st;
+    r->halfAdded = qd->halfAdded;
+    r->perfTargetEffect = qd->perfTargetEffect;
+    /* the effect the last pass's POST_STUB sets in the loop (the glow), not
+     * the WORK0 target's (none): the folded pass is begun and timed as the
      * effect's, so the glow pass count and the effect timings stay true */
-    const int post2 = rd__perf_post_of_kind(s_loop.cmds[i2].b[0]);
-    r->perfPost = post2 >= 0 ? post2 : q.perfPost;
-    s_loop.skip = i2 - s_loop.index;
+    const int post2 = rd__perf_post_of_kind(s_loop.cmds[id].b[0]);
+    r->perfPost = post2 >= 0 ? post2 : qd->perfPost;
+    s_loop.skip = id - s_loop.index;
     rd__replay_perf_post(r, r->perfPost);
-    RdTargetRec *tc = p2.tc;
+    RdTargetRec *tc = pb->tc;
     /* WORK0 is read (pass 1's source) and written: its snapshot, by the
      * swap where the fold covers the whole target (as doBlurSpriteDraw
      * swaps), else a copy */
     const RdPipeKeyInt fxKey = rd__blur_key(&r->st, tc->format, RHI_FMT_UNKNOWN, NULL, 0);
-    if (rd__replay_blur_covers(r, tc, &p2.p, &r->st.ds, &fxKey, 0)) {
+    bool swapped = false;
+    if (rd__replay_blur_covers(r, tc, &pb->p, &r->st.ds, &fxKey, 0)) {
         if (!rd__replay_blur_swap(r, tc)) {
             return true; /* consumed: as doBlurSpriteDraw, nothing drawn */
         }
+        swapped = true;
     } else if (!rd__replay_take_snap(r, tc, (RhiRect){0, 0, tc->tw, tc->th})) {
         return true;
+    }
+    RhiCommandList cl = rd__replay_cl();
+    if (four && swapped && rd__lamps_poison()) {
+        /* the tests: the swapped-in colour magenta before the pass, so a
+         * texel the fold of two pairs does not write shows */
+        fold4Poison(cl, tc);
     }
     DrawSetup ds;
     memset(&ds, 0, sizeof(ds));
@@ -581,52 +1054,23 @@ bool rd__replay_blur_fold(Replay *r, const RdFrame *f, const RdCmd *c)
     if (!g2.id) {
         return true;
     }
-    RhiCommandList cl = rd__replay_cl();
     IcoDrawCB cb;
-    memset(&cb, 0, sizeof(cb));
-    memcpy(cb.col, (const uint32_t[4]){p2.p.rgba[0], p2.p.rgba[1], p2.p.rgba[2], p2.p.rgba[3]},
-           sizeof(cb.col));
-    cb.mode[0] = p2.flags;
-    cb.mode[1] = p2.mode1;
-    cb.mode[2] = r->st.ds.test.atst | ((uint32_t)(r->st.ds.test.ate != 0) << 8) |
-                 ((uint32_t)r->st.ds.test.afail << 16);
-    /* no alpha test here (blurFoldPass), so not AREF: pass 1's first drawn
-     * WORK1 column, which a tap left of it reads (the glow's edge strip;
-     * with first == cx0 only taps of weight 0 lie there) */
-    cb.mode[3] = (uint32_t)p1.cx0;
-    cb.blend[0] =
-        rd__alpha_register(r->st.ds.blend < RD_BLEND_COUNT ? r->st.ds.blend : RD_BLEND_LERP_AS);
-    cb.blend[1] = r->st.ds.blendFix;
-    cb.blend[2] = r->st.ds.colclamp;
-    cb.blend[3] = p2.p.z;
-    memcpy(cb.uvRect, p2.uv, sizeof(cb.uvRect));
-    cb.tex[0] = p2.p.scalar[0];
-    cb.tex[1] = p2.p.scalar[1];
-    cb.tex[2] = (float)p2.src->tw; /* pass 2's t1: WORK1 */
-    cb.tex[3] = (float)p2.src->th;
-    cb.scale[0] = 1.0f;
-    cb.scale[1] = 1.0f;
-    memcpy(cb.param, p2.p.rect, sizeof(cb.param));
-    rd__replay_blur_aux1(&cb);       /* pass 2's reciprocals and fx_texel's size (scale[0..1] 1) */
-    cb.scale[0] = (float)p1.src->tw; /* pass 1's t1: WORK0, its fetch's clamp */
-    cb.scale[1] = (float)p1.src->th;
-    /* pass 1 (fx_sprite.hlsl fx_blur2_ps; shader_consts.h IcoDrawCB.aux0):
-     * its rect and UVs as 16-bit pairs, its colour in scale.zw */
-    cb.aux0[0] = (uint32_t)p1.p.rect[0] | ((uint32_t)p1.p.rect[1] << 16);
-    cb.aux0[1] = (uint32_t)p1.p.rect[2] | ((uint32_t)p1.p.rect[3] << 16);
-    cb.aux0[2] = (uint32_t)p1.uv[0] | ((uint32_t)p1.uv[1] << 16);
-    cb.aux0[3] = (uint32_t)p1.uv[2] | ((uint32_t)p1.uv[3] << 16);
-    cb.scale[2] = (float)(p1.p.rgba[0] + 256u * p1.p.rgba[1]);
-    cb.scale[3] = (float)(p1.p.rgba[2] + 256u * p1.p.rgba[3]);
+    foldCb(&cb, pa, pb, &r->st);
+    if (four) {
+        fold4Cb(&cb, &p1, &p2);
+    }
     rd__set_pipeline(cl, pipe, &key);
     rd__bind_uniform(cl, 0, r->frameBG);
     rd__bind_uniform(cl, 1, rd__draw_group(&cb));
     rhi_cmd_set_bind_group(cl, 2, g2);
     rd__replay_draw(cl, 3, 0, 1);
     rd__stats_here()->draws++;
-    g_rdPerf.blurFolds++;
-    r->writeSerial += 2; /* the two passes' alpha writes */
-    static bool logged;  /* once a run: the count is the --stats line's and the profile's */
+    g_rdPerf.blurFolds += four ? 2u : 1u;
+    r->writeSerial += four ? 4u : 2u; /* the passes' alpha writes */
+    if (four) {
+        rd__lamps_fold4_noted();
+    }
+    static bool logged; /* once a run: the count is the --stats line's and the profile's */
     if (!logged) {
         logged = true;
         rd__log("blur fold: on (%s): each staticBlur pair but a chain's last drawn as one pass "
