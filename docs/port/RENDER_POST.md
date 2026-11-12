@@ -1085,9 +1085,14 @@ volumes and resolve read them, and the next window resets them first (DATE's set
 pairs write bit 6 alone). The next DATE draw takes its own snapshot or set-up (the write serial
 moved), from the alpha as it is. No `DIVERGENCES.md` row.
 
-**Where.** On by default on the PowerVR class and MoltenVK under Vulkan, where a pass's load and
-store cost; off on the Mali and Adreno classes (issues 123, 179, 211: their pass structure stays as
-it shipped), Direct3D, OpenGL and the desktop. Not taken where a composite's DATE would take the R8
+**Where.** Off by default on every device (`RD_NO_VOLUME_DEFAULT` 0 in
+`port/render/rd_no_volume.c`): with it on, two release candidates on the owner's PowerVR phone
+flickered black over the right part of the picture at the title and on the pause menu, the
+pictures where such windows are taken; the cause is not found (lavapipe gives the same bytes on the
+pause menu's F12 frame, also under `ICO_RD_STORE_POISON=1`, the stencil outside the window and the
+validation layer's synchronisation checks). With the constant 1 it is on for the PowerVR class and
+MoltenVK under Vulkan, off on the Mali and Adreno classes (issues 123, 179, 211), Direct3D, OpenGL
+and the desktop. Not taken where a composite's DATE would take the R8
 snapshot or the shader's read (DATE's passes without the depth,
 [WORK_BUFFERS.md](WORK_BUFFERS.md#dates-passes-without-the-depth), predict their runs from the
 composites), under MSAA, the tool's pass window, the exact blend or GS state as shader data.

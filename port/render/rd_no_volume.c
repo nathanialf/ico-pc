@@ -48,13 +48,17 @@
  * takes its own snapshot or stencil set-up from the alpha as it is (a
  * retake reads the same alpha; nothing it would have reused was written).
  *
- * Which device classes (the gate, rd_nv_gate): on by default where a pass
- * ends and begins at a cost, the tile-based classes under Vulkan whose
- * composites take DATE through the stencil bit: the PowerVR class (the
- * owner's phone) and MoltenVK; off on the Mali and Adreno classes (issues
- * 123, 179, 211: their pass structure stays as it shipped), on D3D, OpenGL
- * and the desktop (an immediate-mode GPU pays nothing for a pass's load and
- * store).  Refused where a composite's DATE would take the R8 snapshot
+ * Which device classes (the gate, rd_nv_gate): off by default on every
+ * device in this release (RD_NO_VOLUME_DEFAULT 0 in classOn: rc14 and rc15
+ * on the owner's PowerVR phone flickered black over the right part of the
+ * picture at the title and on the pause menu, where windows with no volume
+ * are taken; the cause is not found: lavapipe gives the same bytes on the
+ * pause menu's F12 frame, with the store poison, the stencil cut and the
+ * validation layer's sync checks too).  With the constant 1 it would be on
+ * where a pass ends and begins at a cost, the tile-based classes under
+ * Vulkan whose composites take DATE through the stencil bit: the PowerVR
+ * class and MoltenVK; off on the Mali and Adreno classes (issues 123, 179,
+ * 211), on D3D, OpenGL and the desktop.  Refused where a composite's DATE would take the R8 snapshot
  * (DATE's passes without the depth, rd_date_cut.c, predict their runs from
  * those composites), under MSAA (the count in the epoch), the tool's pass
  * window, the exact blend and GS state as shader data.  ICO_RD_NO_VOLUME=0|1
@@ -516,7 +520,8 @@ void rd__no_volume_scan_end(void)
                 "bytes",
                 s_nv.gate == RD_NV_WHY_COUNT ? "on" : "off",
                 s_nv.gate == RD_NV_WHY_COUNT
-                    ? (envOf() == 1 ? "ICO_RD_NO_VOLUME=1" : "the PowerVR or MoltenVK class")
+                    ? (envOf() == 1 ? "ICO_RD_NO_VOLUME=1"
+                                    : "the PowerVR or MoltenVK class, RD_NO_VOLUME_DEFAULT 1")
                     : rd_nv_why_words(s_nv.gate));
     }
     if (s_nv.result == RD_NV_RES_VOLUME) {

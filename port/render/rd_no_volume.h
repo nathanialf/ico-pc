@@ -67,7 +67,8 @@ enum {
 /* why a window was not taken (RdPerfRecord.noVolumeWhy) */
 enum {
     RD_NV_WHY_OFF = 0, /* ICO_RD_NO_VOLUME=0 (tests) */
-    RD_NV_WHY_CLASS,   /* not a class it is on for (PowerVR, MoltenVK, under Vulkan) */
+    RD_NV_WHY_CLASS,   /* off by default (RD_NO_VOLUME_DEFAULT 0 in rd_no_volume.c), or not a
+                          class it would be on for (PowerVR, MoltenVK, under Vulkan) */
     RD_NV_WHY_DATE,    /* a composite's DATE by the R8 snapshot (or the shader's read) */
     RD_NV_WHY_SETTING, /* MSAA, the tool's pass window, the exact blend, GS state as shader data */
     RD_NV_WHY_FORM,    /* the window's commands: a draw inside it, a second window, a resolve

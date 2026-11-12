@@ -344,7 +344,8 @@ and `noVolumeWhy[]` (`RD_NV_WHY_*`, `port/render/rd_no_volume.h`); the window's 
 and the tool's `stats: no volume ...` line read them. On the corpus title frame rd-00400 at the
 phone's recipe the window it takes is 4 passes and about 44 MB of attachment traffic a picture in
 the design's `--nop` measurement (a pass less with the four zero clears the code records: see the
-section); the owner's phone has not measured it.
+section). Off by default in this release (the PowerVR phone flickered with it on, cause not
+found); its saving on the phone was not measured.
 
 ### Performance notes
 

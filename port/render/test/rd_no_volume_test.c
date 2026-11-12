@@ -18,8 +18,10 @@
  *   5. SHADOW0 cleared before the window (a pending clear would land after
  *      the zero): not taken;
  *   6. no window;
- *   7. the gate: ICO_RD_NO_VOLUME=0 and =1, the class, MSAA, the pass
- *      window, the exact blend, GS state as shader data, DATE;
+ *   7. the gate: ICO_RD_NO_VOLUME=0 and =1, the class (its default off in
+ *      this release lives in rd_no_volume.c classOn, the words checked
+ *      here), MSAA, the pass window, the exact blend, GS state as shader
+ *      data, DATE;
  *   8. the 10 s clause and the --stats words from made-up records. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -271,6 +273,9 @@ static void testNone(void)
     CHECK(rd_nv_skip_kind(&s, 1) == RD_NV_NONE, "no window: a skip");
 }
 
+/* the gate is pure: classOn is its argument.  The device default lives in
+ * rd_no_volume.c classOn (RD_NO_VOLUME_DEFAULT 0 in this release: every
+ * device's classOn is false, so unset gives RD_NV_WHY_CLASS everywhere) */
 static void testGate(void)
 {
     CHECK(rd_nv_gate(-1, true, false, false, false, false, true) == RD_NV_WHY_COUNT,
@@ -289,6 +294,10 @@ static void testGate(void)
           "GS state as shader data");
     CHECK(rd_nv_gate(1, true, false, false, false, false, false) == RD_NV_WHY_DATE,
           "DATE by the snapshot");
+    CHECK(strcmp(rd_nv_why_words(RD_NV_WHY_CLASS),
+                 "the default in this release: the PowerVR phone flickered black with it on, "
+                 "cause not found") == 0,
+          "the class words: %s", rd_nv_why_words(RD_NV_WHY_CLASS));
     CHECK(strcmp(rd_nv_why_words(RD_NV_WHY_DATE),
                  "the composites' DATE by the R8 snapshot or the shader's read") == 0,
           "the DATE words: %s", rd_nv_why_words(RD_NV_WHY_DATE));

@@ -752,24 +752,25 @@ hash is 8 bytes a step since this release).
 
 ### A shadow window with no volume
 
-On the PowerVR class (and MoltenVK) a shadow window with no volume keeps SCENE's pass open and the
-count and levels are written as zero clears
-([RENDER_POST.md](RENDER_POST.md#a-shadow-window-with-no-volume)). What the log shows:
+Off by default on every device in this release (the PowerVR phone flickered black with it on,
+cause not found: [RENDER_POST.md](RENDER_POST.md#a-shadow-window-with-no-volume)); with it on a
+shadow window with no volume keeps SCENE's pass open and the count and levels are written as zero
+clears. What the log shows:
 
-- once a renderer, at the first replay with a window: `rd: shadows: no volume: on (the PowerVR or
-  MoltenVK class): ...` (or `off (not the PowerVR or MoltenVK class under Vulkan)`, `off (the
-  composites' DATE by the R8 snapshot or the shader's read)`, ...);
+- once a renderer, at the first replay with a window: `rd: shadows: no volume: off (the default in
+  this release: the PowerVR phone flickered black with it on, cause not found): ...` (with it on:
+  `on (the PowerVR or MoltenVK class, RD_NO_VOLUME_DEFAULT 1)`, `on (ICO_RD_NO_VOLUME=1)`; refused:
+  `off (the composites' DATE by the R8 snapshot or the shader's read)`, ...);
 - once: `rd: shadows: no volume: frame F, the window at commands R..S has no volume: its count
   (the reduced count) and levels owed as zero clears, SCENE's pass kept open (the same bytes;
   reported once)`;
 - a window not taken: `rd: shadows: no volume: a window not taken in frame F (reset at command
   N): <why>`, the first 8 then every 100th;
 - in each 10 s block's `window: per replay` line, after the shadow tiles' clause: `; no volume:
-  0.9 windows a replay without a volume kept SCENE's pass open (0.9 with it open, up to 39.4 MB not
-  stored and loaded again), 0.1 with volumes, 0.0 not taken` at the title (made-up figures: the
-  owner's phone has not run it); the share of title pictures with volumes was not known before
-  (the design's A1.5); the `perf classes` line's list 3 and the passes per replay show what it
-  saved.
+  0.0 windows a replay without a volume kept SCENE's pass open (...), 0.1 with volumes, 0.9 not
+  taken (class 0.9)` at the title by default (the windows it would take counted under `class`).
+  With it on, a release candidate's title block read `1.0 windows a replay ... kept SCENE's pass open (1.0 with it
+  open, up to 42.9 MB ...)`, the pause menu's `0.8`.
 
 ### The stencil outside the shadow window (the PowerVR phone)
 
