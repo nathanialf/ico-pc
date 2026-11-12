@@ -41,6 +41,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "rd_glow_blur.h"
 #include "rd_lamps.h"
 #include "rd_vis.h"
 
