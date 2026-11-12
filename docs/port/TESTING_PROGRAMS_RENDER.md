@@ -1175,7 +1175,13 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   every glow dump on the maintainer's machine; a listed dump that is absent fails), each replayed
   twice with `--pass-dump --stats` at the PowerVR phone's profile on lavapipe
   (`ICO_VK_FAKE_LIMITS=moltenvk ICO_RD_VU_PREPASS=0`, 2364x1080, Full height, Full pixel,
-  presented at 2364x1080), at Original 4:3 and at Enhanced 2x 4:3 presented at 1280x960: every
+  presented at 2364x1080), at Original 4:3 and at Enhanced 2x 4:3 presented at 1280x960, each pair
+  with the other packages' pass-dependent switches pinned off in both runs (`ICO_RD_LATE_PASS`,
+  `ICO_RD_AURA_PASTE`, `ICO_RD_CRACK_SWAP`, `ICO_RD_PRESENT_SCENE`, `ICO_RD_SHADOW_BOX`,
+  `ICO_RD_STENCIL_PACKED` = 0: without the glow's chain another pass is open at list 11, so the late
+  pass's join, VD-31, would apply in one run and not the other), plus the phone's setting with every
+  switch at its default, where SCENE, DISPLAY and PRESENT may differ within VD-31's bound (3 levels,
+  800 pixels) and every other target's RGB not at all: every
   PNG's RGB 0 levels apart (`png_level_diff.py --channels RGB`), the alpha 0 levels on DISPLAY,
   PRESENT and every target but WORK1, WORK2, WORK3, WORK3_HELD and SCENE, and on those too where
   the whole run's WORK2 holds no alpha 192 (`--count-alpha 192`: no fill the mask kept); at

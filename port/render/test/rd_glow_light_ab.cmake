@@ -18,6 +18,8 @@
 #     marked background, --count-alpha 192), the only place the plan may
 #     change an alpha (rd_glow_light.c's header);
 #   - at orig every PNG the same bytes and the plan said off.
+# A fourth row, phonedef, the phone's setting with every other package's
+# switch at its default (above: the late pass's join, VD-31, within its bound).
 # The stats ("glow N passes", "glow: light plan on: <plan>; N passes in the
 # chain"): a dark run's chain begins at most one pass (WORK1's zero draw over
 # the first blur pass's rect, its strip and the sun's shrink: a fresh
@@ -55,7 +57,28 @@ endif()
 list(REMOVE_DUPLICATES dumps)
 list(LENGTH dumps ndumps)
 
-set(settings phone orig enh2x43)
+set(settings phone orig enh2x43 phonedef)
+# The plan alone: every run but phonedef pins the other packages' switches
+# whose work depends on which pass is open or which passes the frame has, off
+# in both runs.  Without the glow's chain (the dark plan) another pass is open
+# at list 11, so the late pass (rd_late_pass.c, VD-31) joins list 11's draws
+# that use no depth into it in one run and not in the other: its own accepted
+# difference (up to 3 levels on menu text) would show here as the plan's.
+# Measured on v1881 at the phone's setting (2026-11-12, the int tool): 105
+# SCENE pixels 1-2 levels apart with the defaults, every one inside list 11's
+# text sprites, none with ICO_RD_LATE_PASS=0.  The aura's paste, the crack
+# fill's swap, the present from SCENE, the shadow box and the packed stencil
+# are pinned for the same reason (each plans by the passes around it).
+set(pins ICO_RD_LATE_PASS=0 ICO_RD_AURA_PASTE=0 ICO_RD_CRACK_SWAP=0 ICO_RD_PRESENT_SCENE=0
+         ICO_RD_SHADOW_BOX=0 ICO_RD_STENCIL_PACKED=0)
+# phonedef: the phone's setting with every switch at its default, the
+# interaction itself pinned: SCENE, DISPLAY and PRESENT within VD-31's bound
+# (at most 3 levels on at most 800 pixels), every other target's RGB the same
+set(args_phonedef ${args_phone})
+set(env_phonedef ${env_phone})
+set(defMaxLevel 3)
+set(defMaxPixels 800)
+set(defTargets SCENE.png DISPLAY.png PRESENT.png)
 set(args_phone --enhanced --resolution 2364x1080 --full-height --full-pixel --present 2364x1080)
 set(env_phone ICO_VK_FAKE_LIMITS=moltenvk ICO_RD_VU_PREPASS=0)
 set(args_orig --aspect 4:3)
@@ -72,6 +95,7 @@ set(runs 0)
 set(dark_phone 0)
 set(dark_enh2x43 0)
 set(dark_orig 0)
+set(dark_phonedef 0)
 set(lamps 0)
 set(whole 0)
 
@@ -101,7 +125,11 @@ foreach(dump IN LISTS dumps)
     set(dirP "${OUT}/${name}-${s}-plan")
     file(REMOVE_RECURSE "${dirW}" "${dirP}")
     file(MAKE_DIRECTORY "${dirW}" "${dirP}")
-    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_GLOW_LIGHT=0 ${env_${s}} "${TOOL}"
+    set(pin ${pins})
+    if(s STREQUAL "phonedef")
+      set(pin "")
+    endif()
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_GLOW_LIGHT=0 ${pin} ${env_${s}} "${TOOL}"
                             "${dump}" "${dirW}/out.png" --pass-dump "${dirW}" --stats
                             ${args_${s}}
                     RESULT_VARIABLE rc OUTPUT_VARIABLE wout ERROR_VARIABLE werr)
@@ -109,7 +137,7 @@ foreach(dump IN LISTS dumps)
       message(STATUS "SKIP: no device: ${werr}")
       return()
     endif()
-    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${env_${s}} "${TOOL}" "${dump}"
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${pin} ${env_${s}} "${TOOL}" "${dump}"
                             "${dirP}/out.png" --pass-dump "${dirP}" --stats ${args_${s}}
                     RESULT_VARIABLE prc OUTPUT_VARIABLE pout ERROR_VARIABLE perr)
     if(NOT rc EQUAL 0 OR NOT prc EQUAL 0)
@@ -204,6 +232,15 @@ foreach(dump IN LISTS dumps)
         continue()
       endif()
       level_diff("${dirW}/${png}" "${dirP}/${png}" RGB lv px)
+      list(FIND defTargets "${png}" isDef)
+      if(s STREQUAL "phonedef" AND NOT isDef EQUAL -1 AND px GREATER -1 AND
+         NOT px GREATER defMaxPixels AND NOT lv GREATER defMaxLevel)
+        if(px GREATER 0)
+          message(STATUS "${name} ${s}: ${png}: RGB ${px} pixels within ${lv} levels (the late "
+                         "pass's join, VD-31)")
+        endif()
+        set(px 0)
+      endif()
       if(NOT px EQUAL 0)
         message(SEND_ERROR "${name} ${s}: ${png}: RGB ${px} pixels differ, largest ${lv} levels")
         math(EXPR failures "${failures} + 1")
