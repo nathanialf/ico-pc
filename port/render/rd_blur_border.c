@@ -178,6 +178,11 @@ const RdBorderBlocks *rd__scene_border_blocks(void)
     return &s_blocks;
 }
 
+bool rd__scene_border_repeat_pending(void)
+{
+    return s_armed != 0 && s_armed == g_rd.replayCounter && s_blocks.replay != g_rd.replayCounter;
+}
+
 /* tmp's block [m, m + cw) (column 2's or W - 3's texels) copied to dst at
  * x, cut to dst's texels [d0, d1); base the SCENE column tmp's m holds.
  * cl 0: counted (n) only.  Each block copied is recorded in s_blocks

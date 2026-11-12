@@ -434,9 +434,12 @@ static void countFree(void)
     s_cf.pending = false;
 }
 
+static void stripFree(void);
+
 void rd__crack_fill_shutdown(void)
 {
     countFree();
+    stripFree(); /* FILLPASTE's border strips */
     memset(&s_f11, 0, sizeof(s_f11));
     rd__fill11_shutdown(); /* its scratch depth and self-test (rd_fill11.c) */
 }
@@ -815,6 +818,73 @@ static void fillDraw(Replay *r, RdTargetRec *tc, RhiPipeline pFill, const RdPipe
  * any other texel keeps the copy, the source's colour.  RGB alone (after
  * the glow's alpha): the alpha is the copy's either way.  Without a repeat
  * since the snapshot, the fill as fillDraw draws it */
+/* FILLPASTE: SCENE's outer columns as they were at the fill's place (a
+ * border repeat between the place and the landing overwrites them, and the
+ * fill near the border reads them): K texels a side, put back into the
+ * snapshot where the deferred fill takes it */
+static struct {
+    RhiTexture tex;
+    RhiState state;
+    uint32_t k, tw, th;
+    bool saved;
+} s_strip;
+
+static void stripFree(void)
+{
+    if (s_strip.tex.id && g_rd.hasDevice) {
+        rd__retire_texture(s_strip.tex);
+    }
+    memset(&s_strip, 0, sizeof(s_strip));
+}
+
+static bool stripSave(RhiCommandList cl, RdTargetRec *tc)
+{
+    s_strip.saved = false;
+    const uint32_t k0 = (uint32_t)ceilf(2.0f * tc->sx) + 4u;
+    const uint32_t k = k0 * 4u < tc->tw ? k0 : tc->tw / 4u;
+    if (!k) {
+        return false;
+    }
+    if (!s_strip.tex.id || s_strip.k != k || s_strip.th != tc->th) {
+        stripFree();
+        s_strip.tex = rhi_create_texture(
+            &(RhiTextureDesc){2u * k, tc->th, 1, RHI_FMT_RGBA8_UNORM,
+                              RHI_TEX_SAMPLED | RHI_TEX_COPY_SRC | RHI_TEX_COPY_DST,
+                              "rd crack fill border strips", 0});
+        if (!s_strip.tex.id) {
+            return false;
+        }
+        s_strip.k = k;
+        s_strip.th = tc->th;
+    }
+    s_strip.tw = tc->tw;
+    rd__transition(cl, tc->color, &tc->colorState, RHI_STATE_COPY_SRC);
+    rd__transition(cl, s_strip.tex, &s_strip.state, RHI_STATE_COPY_DST);
+    rhi_cmd_copy_texture(cl, tc->color, (RhiRect){0, 0, k, tc->th}, s_strip.tex, 0, 0);
+    rhi_cmd_copy_texture(cl, tc->color, (RhiRect){(int32_t)(tc->tw - k), 0, k, tc->th}, s_strip.tex,
+                         k, 0);
+    rd__transition(cl, tc->color, &tc->colorState, RHI_STATE_RENDER_TARGET);
+    s_strip.saved = true;
+    return true;
+}
+
+/* the strips back into the snapshot the deferred fill reads (outside any
+ * pass; the snapshot left in SHADER_READ) */
+static void stripRestore(RhiCommandList cl, RdTargetRec *tc)
+{
+    if (!s_strip.saved || s_strip.tw != tc->tw || s_strip.th != tc->th || !tc->snap.id) {
+        return;
+    }
+    const uint32_t k = s_strip.k;
+    rd__transition(cl, s_strip.tex, &s_strip.state, RHI_STATE_COPY_SRC);
+    rd__transition(cl, tc->snap, &tc->snapState, RHI_STATE_COPY_DST);
+    rhi_cmd_copy_texture(cl, s_strip.tex, (RhiRect){0, 0, k, tc->th}, tc->snap, 0, 0);
+    rhi_cmd_copy_texture(cl, s_strip.tex, (RhiRect){(int32_t)k, 0, k, tc->th}, tc->snap, tc->tw - k,
+                         0);
+    rd__transition(cl, tc->snap, &tc->snapState, RHI_STATE_SHADER_READ);
+    s_strip.saved = false;
+}
+
 /* FILLPASTE: the fill whose snapshot was deferred is being drawn (landed or
  * flushed), and its snapshot taken by the swap: SCENE's border blocks repeated
  * since the fill's place are on the snapshot's texture, not SCENE's */
@@ -1052,6 +1122,9 @@ static bool fillWork(Replay *r, RdTargetRec *tc, RhiPipeline pFill, const RdPipe
         return false;
     }
     s_drawSwapped = swap;
+    if (s_drawDeferred) {
+        stripRestore(cl, tc); /* the border as it was at the fill's place */
+    }
     const uint32_t w = tc->tw, h = tc->th, scene = RD_TARGET_SCENE + 1u;
     rd__transition(cl, tc->color, &tc->colorState, RHI_STATE_RENDER_TARGET);
     rd__perf_pass(cl, RD_PERF_PASS_RENDER, scene, w, h, RD_PERF_POST_CRACK);
@@ -1482,7 +1555,20 @@ static bool takeHeld(Replay *r, bool msaaOpen)
      * depth) nothing between writes SCENE's colour or depth (the hold's
      * class flushes at any that does): the snapshot is taken where the fill
      * lands or is flushed, from the same SCENE */
-    if (rd__lamps_fillpaste_on() && rd__glow_light_plan() == RD_GLOW_LIGHT_LAMPS) {
+    if (rd__lamps_fillpaste_on() && !(rd__lamps_bits() & RD_LAMPS_FILLHOLD)) {
+        if (rd__glow_light_plan() != RD_GLOW_LIGHT_LAMPS) {
+            /* the hold passed the lamps for FILLPASTE alone: another plan
+             * would only hold it by a copy; drawn here, as without the hold */
+            return false; /* the caller draws it at its place */
+        }
+        /* SCENE's outer columns saved here: a border repeat before the
+         * snapshot overwrites them, and the fill near the border reads them
+         * (the title's lamps frame: SCENE, DISPLAY and PRESENT apart without,
+         * round 20); put back into the snapshot where it is taken */
+        rd__replay_end_pass_for(r, tc->color.id);
+        if (!stripSave(rd__replay_cl(), tc)) {
+            return false; /* drawn at its place */
+        }
         s_late.deferred = true;
         s_late.repeats = rd__scene_border_repeat_count();
         return true;
@@ -1718,6 +1804,9 @@ void rd__crack_fill_in_pass(Replay *r, uint32_t tdId)
         rd__replay_perf_post(r, post);
         if (!taken) {
             return;
+        }
+        if (deferred) {
+            stripRestore(rd__replay_cl(), tc); /* the border as it was at the fill's place */
         }
     }
     /* FILLPASTE under ICO_RD_LAMPS_POISON: the pass not loaded cleared to

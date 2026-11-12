@@ -2758,6 +2758,9 @@ enum { RD_BORDER_CLOSED = 0, RD_BORDER_OPEN, RD_BORDER_CROPPED, RD_BORDER_WINDOW
 int rd__scene_border_state(const RdTargetRec *scene);
 void rd__set_scene_border_repeat(bool on);
 uint64_t rd__scene_border_repeat_count(void);
+/* the fog asked for SCENE's border repeat this replay and it has not run
+ * yet (rd_blur_border.c): it falls before the next sprite that samples SCENE */
+bool rd__scene_border_repeat_pending(void);
 void rd__scene_border_free(void);
 
 /* True for the kinds drawn by the GS sprite model (rd__blur_post_sprite): the

@@ -11,12 +11,14 @@
 #   poison  ...+fillpaste with ICO_RD_LAMPS_POISON=1 (the merged pass's
 #           colour cleared to magenta where it loads nothing)
 # Each on run against off: every PNG the same bytes; the stats' "lamps
-# fillpaste on" with L fills drawn in the paste's pass; passes exactly L
-# fewer; colour loaded never more than off (and fewer by about L SCENE
+# fillpaste on" with L fills drawn in the paste's pass; per landing one pass
+# fewer (no aura) or the snapshot copy gone and at least 9 MB less colour
+# loaded (in an aura's paste pass, which the fill shared already); colour loaded never more than off (and fewer by about L SCENE
 # textures, printed).  At least
-# one fill drawn in the paste's pass over the list, and on every corpus title
-# lamps frame (boot rd-00400: the fill lands in the glow paste drawn early at
-# list 11's first draw).  No device: SKIP (77).
+# one fill drawn in the paste's pass over the list (issue 163's gate).  The
+# corpus title's lamps frame cannot land (a sprite reads SCENE before its
+# aura's paste: the fill must precede it): it must stay byte-equal and cost
+# no more.  No device: SKIP (77).
 # -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
 set(failures 0)
 set(dumps "")
@@ -83,10 +85,28 @@ foreach(dump IN LISTS dumps)
   endforeach()
   message(STATUS "${dump}: passes ${passes_off} -> ${passes_on} (${landed_on} fills in the paste's "
                  "pass), colour loaded ${load_off} -> ${load_on} MB")
-  math(EXPR want "${passes_off} - ${landed_on}")
-  if(NOT passes_on EQUAL want OR NOT landed_off EQUAL 0)
+  # per frame kind, a fill landed in the paste's pass:
+  #   no aura (the title: the glow paste drawn early at list 11's first draw):
+  #     the fill's own pass gone: one pass fewer;
+  #   an aura (issue 163's gate): the fill already shared the aura's paste
+  #     pass with the word off, by a snapshot copy: the passes equal, the copy
+  #     gone and SCENE's colour no longer loaded there (at least 9 MB less);
+  # each landing one or the other
+  set(lessLoad 0)
+  if(NOT load_on STREQUAL "?" AND NOT load_off STREQUAL "?")
+    string(REGEX REPLACE "[.]" "" a0 "${load_off}")
+    string(REGEX REPLACE "[.]" "" a1 "${load_on}")
+    math(EXPR lessLoad "${a0} - ${a1}")
+  endif()
+  math(EXPR fewer "${passes_off} - ${passes_on}")
+  math(EXPR copyKind "${landed_on} - ${fewer}")
+  math(EXPR needLess "${copyKind} * 900")
+  if(NOT landed_off EQUAL 0 OR fewer LESS 0 OR fewer GREATER landed_on OR
+     lessLoad LESS needLess)
     message(SEND_ERROR "${dump}: ${passes_on} passes with fillpaste, ${passes_off} without, "
-                       "${landed_on} fills in the paste's pass: exactly that many fewer expected")
+                       "${landed_on} fills in the paste's pass, colour loaded ${load_off} -> "
+                       "${load_on} MB: each landing one pass fewer (no aura) or 9 MB of colour "
+                       "less loaded (an aura's paste pass)")
     math(EXPR failures "${failures} + 1")
   endif()
   # never worse: colour loaded with the word on at most what it is off
@@ -102,14 +122,6 @@ foreach(dump IN LISTS dumps)
     endif()
   endif()
   math(EXPR landedTotal "${landedTotal} + ${landed_on}")
-  # the corpus title's lamps (no aura): the hold ends at list 11's first
-  # draw into SCENE, where the deferred glow paste is drawn early: the fill
-  # must land in that paste's pass (rc30's opening has the same shape)
-  if(dump MATCHES "/boot/rd-00400[.]rddump$" AND landed_on LESS 1)
-    message(SEND_ERROR "${dump}: no crack fill drawn in the paste's pass: the title's lamps "
-                       "frame must land")
-    math(EXPR failures "${failures} + 1")
-  endif()
   foreach(arm on poison)
     file(GLOB pngs RELATIVE "${OUT}/${index}-off" "${OUT}/${index}-off/*.png")
     foreach(png IN LISTS pngs)

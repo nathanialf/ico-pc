@@ -1511,10 +1511,12 @@ bool rd__lamps_own_depth(uint32_t did)
 
 bool rd__lamps_fill_hold_ok(uint32_t color, uint32_t depth)
 {
-    /* FILLHOLD by its word; FILLPASTE where it is in force under the lamps
-     * plan (it takes the fill's snapshot where it lands: elsewhere the hold
-     * would only copy it, which costs more than drawing it at its place) */
-    const bool paste = rd__lamps_fillpaste_on() && rd__glow_light_plan() == RD_GLOW_LIGHT_LAMPS;
+    /* FILLHOLD by its word; FILLPASTE where it is in force.  Not the light
+     * plan here: the late pass's scan runs before the plan is decided (the
+     * title's lamps: the hold refused at the lamps, round 19); the walk's
+     * take (rd_crack_fill.c takeHeld) holds a FILLPASTE fill under the lamps
+     * plan alone and draws it at its place otherwise */
+    const bool paste = rd__lamps_fillpaste_on();
     if (s_lr.on != 1 || !((wanted() & RD_LAMPS_FILLHOLD) || paste) ||
         color != idOf(RD_TARGET_WORK2)) {
         return false;
