@@ -1215,6 +1215,85 @@ the presents waited half a refresh or more in K asks (the fence of the picture b
 in J...); the asks' means: ...`, the inputs' means over the asks. So a reporter's log says which
 test held each picture, by how much, and which wait set it.
 
+**Asked with the render thread idle.** With the render thread on, on the timer path (every
+mode but the vsync lock and Frame rate Original), a further present is asked of the rule only
+while no picture is in progress (`port/platform/pace_policy.h` (`pace_rt_fill`,
+`PACE_FILL_DEFAULT`), `port/platform/window_present.c` (`window_present_pace`)). With a picture
+in progress the pace waits for the render thread's jobs to end (`ico_render_thread_wait_idle`, at
+most to the step's deadline: not idle by then, no further present that step) and asks again, so
+the rule plans a post at the time it is made and the hand-over never waits in its drain. Before
+this the rule planned the post at the picture in progress's typical whole job, and with the frame
+slots' wait ahead (`rd_thread.c` `slotAhead`: a picture's job ends by waiting for the next
+picture's frame slot, the GPU's end of the picture before it) that job is the GPU's time when the
+GPU is full and the reads alone when a hold drained it: on the owner's Pixel 10 Pro Fold in the
+opening (its log in `build-host/tmp/v0115/evidence/`, the second one of the day; 120 Hz, vsync
+off, uncapped, a GPU of 20.5-22.7 ms a picture) the typical job
+was 19-23 ms, a picture was planned to start 2.9 ms past the next step's due time where the
+pipe's fence said its slot was free 3.7 ms before it (that log's :814), and the presents ran up
+to 12.7 ms past a step's start when a job ran longer (:820). Those misses began the back-offs:
+98 to 290 of a block's 600 steps planned at the whole period (:769-:1340); the block with 98
+made 42.2 presented fps with the GPU busy 94 % of the time (its rate 45), the one with 290 made
+35.8 at 78 %. The parts:
+- The pipe at an ask with the render thread idle (`pace_rt_pipe_idle`): what has ended is not
+  predicted later. The picture before's reads ended with its job; with the slot ahead, a job that
+  ended by its wait (it blocked 0.2 ms or more, `ICO_RT_FENCE_WAIT_NS`) sets the GPU's end of the
+  picture before it to that time and the next one's to at least a GPU picture later
+  (`IcoRtPlan.endNs`, `byFence`; `rd_thread_take_ahead_ns`). The pipe predicts by typical times
+  and drifts: the log's :853 held a picture by the submit thread free at +1.7 ms with the render
+  thread idle.
+- The pipe's GPU time a picture is the larger of the 8 records' median and their mean
+  (`pace_rt_fill_gpu_ns`): a full GPU makes its pictures at the mean, and the phone's ran over the
+  median (:884: median 20.5 ms, mean 21.9, worst 37).
+- With the slot ahead (`PaceRtAsk.slotAhead`, `rd_thread_slot_ahead_on`) the further picture's job
+  is planned to end at the later of its reads' end and the GPU's end of the picture before it, at
+  the GPU's typical time (`PaceStepEst.gpuTyp`), or at its longest lately (`pace_rt_gpu_long`,
+  falling a 32nd of the way a record) when a frame's own pictures fill the GPU (two periods
+  shorter than the typical picture and a slow picture's excess). A new frame's present waits for
+  that job, and the next new frame's for the GPU's end of the further picture at its longest
+  lately; the steps between frames after them must start within their slack, else the further
+  present is held (`PACE_RT_TEST_GPU`). A GPU nearly full with the frames' own pictures otherwise
+  carries a further picture into the frames after it and the next slow GPU picture lands on a
+  step.
+- The guard against a further present past the deadline reads the hand-over's own time, less its
+  drain (`WindowPres.handCost`).
+
+The model (`pace_loop_test` `testFill`: the opening's load, a closing step of 3.5-5.8 ms, the
+step between 0.3-0.7 ms with no renderer call, reads with a deviation of 2.7 ms of which 3 ms the
+interpolation, the submit thread's job 10 ms, the GPU starting 5 ms into it, the slot ahead, 100 s
+on a 120 Hz mailbox, the GPU as the phone's: a mean 6 % over the median, at most 1.47 times it
+in a second and 1.76 times it once in 200 pictures) gives these presented fps, now (before):
+
+| GPU a picture | reads 6 ms | 9 ms | 12 ms | 15 ms |
+|---|---|---|---|---|
+| 13 ms | 70.5 (70.7) | 66.2 (64.0) | 59.6 (59.2) | 52.3 (51.9) |
+| 17 ms | 55.1 (55.5) | 54.2 (54.4) | 52.0 (51.1) | 47.0 (44.9) |
+| 21 ms | 44.5 (45.0) | 44.0 (44.2) | 42.9 (42.1) | 40.5 (37.2) |
+| 25 ms | 37.3 (37.4) | 36.7 (36.7) | 35.3 (35.1) | 31.1 (32.7) |
+| 30 ms | 31.2 (31.5) | 30.9 (31.4) | 30.4 (30.9) | 30.0 (30.2) |
+| 40 ms | 23.7 (23.7) | 23.7 (23.7) | 23.7 (23.7) | 23.7 (23.7) |
+
+At 21 ms and 9 ms reads the GPU is busy 98 % of the time either way; the steps planned at the
+whole period go from 960 to 0 in 100 s, the misses over the floor from 23 to 0 and the latest step
+start from 18.8 to 13.2 ms. Over the model's grid up to 30 ms (both displays, a steady and the
+phone's GPU) the misses over the floor go from 534 to 161 and the steps at the whole period from
+11637 to 216, and the latest start is never later than before (0.5 ms of rounding). The model
+reaches the GPU's rate before too at 9 ms reads; it does not reproduce the phone's 36-42 fps,
+which came with the back-offs above. Where it gives fewer pictures: 25 ms with 15 ms reads
+(31.1 against 32.7, the GPU-full plan), 30 ms (up to 0.5 fewer), 6 ms reads (up to 0.5 fewer);
+40 ms is unchanged. A steady GPU at 21 ms with 15 ms reads gives 44.5 where the rule before gave
+39.8. The 60 Hz mailbox gives the same within 1.6 fps a cell. The 10 s sum line (`window: step
+rule: in 10 s ...`) ends with `; N more held by the GPU's ends behind the next new frames'
+pictures, by X ms on average` and `; asked with the render thread idle: W waits for it before an
+ask (X ms on average; L not idle by the step's deadline, none asked), the pipe's ends corrected
+by what had ended in K asks (Y ms on average)`, and a hold by the GPU test has its trace `...; its
+job would end at +A (a new frame's picture after it waits for that), the GPU end it at +B at its
+longest lately (G ms a picture; ...): the steps between frames after them may start by +C and +D;
+held: past them by E ms` (`pace_rt_trace_text`). A build with `-DPACE_FILL_DEFAULT=0` asks as
+before. On a phone the check is the block's `the GPU's work X ms a picture of the Y ms between
+presents (Z %)` (93 % or more where the GPU is the limit), the presented fps near `1000 /` the
+GPU's mean, the game thread's `N steps planned at the whole period` near 0 and its `steps that
+missed their period` and `latest` no higher than before.
+
 **Vsync off, uncapped.** With vsync off and the frame rate uncapped (the timer path, no FIFO lock,
 the render thread on: `pace_rt_as_made`) the pictures go as they are made, as on a PC with vsync
 off: the [present allowance](#the-present-allowance) refuses nothing (it stays as a measurement,

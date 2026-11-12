@@ -1070,7 +1070,20 @@ that stops again writing its own line without the retry mark); a stop at the fre
   plan made one back-off of 29 steps (before 120); 20 ms pictures varying 13-29 ms for 2 s the
   back-off ended 38 steps after them (before 83); sustained, every back-off at its limit, 2209
   presents in 40 s (before 2222); a GPU varying 9.1-19.4 ms about 13.5 2751 in 40 s (before 2529);
-  the game's clock within a refresh of the rule before's in every cell (`pace_loop`).
+  the game's clock within a refresh of the rule before's in every cell; `testFill`: further presents
+  asked with the render thread idle (`pace_rt_fill`, `pace_rt_pipe_idle`, `PaceRtAsk.slotAhead`,
+  the GPU test `PACE_RT_TEST_GPU`; `s_rtGame.slotAhead`: a job ends waiting for the next picture's
+  frame slot, `s_rtGame.fill`) against the rule before them, both with the slot ahead, at the
+  phone's opening load (its log's 10 s blocks: a closing step of 3.5-5.8 ms, the step between 0.3-0.7 ms, reads of
+  6 / 9 / 12 / 15 ms with a 2.7 ms deviation, the submit thread's job 10 ms) over 100 s on a 120
+  Hz and a 60 Hz mailbox, a steady GPU and the phone's (the mean 6 % over the median, one
+  picture in 200 at 1.76 times it), GPU times of 13 / 17 / 21 / 25 / 30 / 40 ms: each cell's
+  presents within 3 of the table `s_fillWant`, every frame shown, no resync, at least 94 % of the
+  rule before's presents, the same at 40 ms; per GPU time up to 30 ms the latest step start no
+  later than before, the misses over the floor at most 6 more, the steps at the whole period no
+  more; over that grid the misses over the floor at most half (161 against 534) and the steps at
+  the whole period at most a tenth (216 against 11637); at 21 ms with 9 and 12 ms reads on the
+  phone's GPU the GPU busy 95 % or more and no step at the whole period (`pace_loop`).
 - `cpu_place_test.c`: which core a thread runs on (`port/platform/cpu_place.h`): the histogram
   (by core, out of range and -1 as not known, the most-run core with the lowest on a tie, the take
   emptying it, the share on a mask), the cores' speeds from a fake sysfs under the build folder on
@@ -1207,7 +1220,14 @@ that stops again writing its own line without the retry mark); a stop at the fre
   span, the `window: GPU between replays` part word for word, a short buffer; issue 123: gaps
   timed across untimed replays counted, the gaps after the presents that blocked listed, one
   stall, the first 8 of 11 kept; the longest text fits the window's `PACE_GPU_GAP_TEXT_MAX` buffer
-  whole) (`pace_policy`).
+  whole); `testFillParts`: the idle ask's parts, `pace_rt_fill`'s three answers, the GPU's
+  longest lately (`pace_rt_gpu_long`: up at once, a 32nd of the way down, 20 ms over 5.5-5.7 ms
+  over 40 records on), the pipe's GPU time (`pace_rt_fill_gpu_ns`: the larger of the median and
+  the mean), `pace_step_est_gpu`'s typical and longest, `pace_rt_pipe_idle` (the job's end by
+  the slot ahead's wait or by its reads, no end known, the submit thread's job before the next
+  picture, what it returns), the GPU test's ends and limits to the nanosecond with the next step
+  closing a frame and between frames, its trace and the block's line word for word, the block's
+  line with waits and no ask (`pace_policy`).
 - `perf_block_test.c`: a block of replays by phase: sums, maxes, the replays over a threshold, the
   longest phase (`perf_block`).
 - `present_fallback_test.c`: the FIFO fallback's decision (`present_fallback.h`): the stock
