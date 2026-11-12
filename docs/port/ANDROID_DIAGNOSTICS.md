@@ -1234,12 +1234,93 @@ to cores 2-7: ico render`); one run kept it on core 7 (`kept to core 7: ico rend
 change between those builds. So core 7's clock is the render thread's clock only in a run whose
 threads line says `kept to core 7`; in the others the render thread's clock is that of cores 2-6,
 which ran at 650-850 MHz on average in those runs' blocks. Read
-the threads line first, then the cores the session's threads are on.
+the threads line first, then the cores the session's threads are on. The keeper asks
+for core 7 again after the start ([below](#the-threads-cores-after-the-start)): its block line
+says where the threads were.
 
 The start line says which calls the phone has (`API N`, `GPU durations reported yes|no`), the
 threads' ids (the same ids the `window: threads:` line counts), the target and its basis, the game
 mode, and the system's update rate; `off (...)` names why there is no session (an Android 12 or
 older phone, a phone without hint support), and then the port runs exactly as before.
+
+## The threads' cores after the start
+
+The start pins the render thread to the fastest core alone (`window: render thread: the high
+priority granted ...; kept to the fastest core 7 alone ...` or `could not be kept ...: the system
+said yes and keeps it to cores 2-7`, [PLATFORM.md](PLATFORM.md#the-render-thread)). On the owner's
+Pixel 10 Pro Fold (`0-1 2.2 GHz, 2-6 3.1 GHz, 7 3.8 GHz`) the kernel read back 2-7 in 20 of 25
+starts; in the four starts that kept core 7 the old bridge's reads were
+6.0-6.4 ms and it ran 67-71 fps with no back-off, against 8.3-8.6 ms and 48-59 fps otherwise. In
+one of those (core 7 kept) the cage's slow steps were the game thread's own, 9-14 ms with the camera
+moving, on whichever of cores 2-6 it landed, shared with the submit thread.
+
+So the keeper (`port/platform/cpu_keep.h`, driven by `render_thread.c` from the log thread's
+once-a-second tick) keeps three threads apart after the start, by the cores' top speeds only:
+
+| on the Pixel | render thread | game thread (`ico-main`) | submit thread | every other thread of the game's |
+|---|---|---|---|---|
+| core 7 kept (the ideal) | 7 alone | 6 alone | 2-5 | 0-5 |
+| core 7 refused alone | 6 alone | 5 alone | 2-4, 7 | 0-4, 7 |
+| 7 not allowed (cpuset 0-6) | 6 alone | 5 alone | 2-4 | 0-4 |
+| one-core pins widened (the pair) | 6-7 | 5 alone, or 0-5 when every one-core pin is widened | 2-4 | 0-4 |
+| a pair widened too (the start's rule) | 2-7 | 0-7 | 2-6 | 0-7 |
+
+A Helio G85 (`0-5 1.8 GHz, 6-7 2.0 GHz`): the render thread on 7 alone, the game thread on 6
+alone, the submit thread with the others on 0-5 (at the start both on 6-7, the submit thread free).
+A 4 + 3 + 1 phone: 7, 6, 4-5. With one core faster than the slowest, or one speed, the keeper is off
+and the start's placement stands. The game thread is SDL's `ico-main` thread, not Android's UI
+thread: the touches, keys and the activity's lifecycle arrive on the UI thread, which is never
+moved, and are queued for the game thread to take. Threads the game or render thread makes start
+on their creator's cores (pthread_create(3)); the workers put themselves back on the others' cores
+at their entry and are moved when those change, and a thread found on the render or game thread's
+core alone (a driver's thread: `kept to core 7: ico render (2)` in the threads line) is moved off it
+at the next thread list (every 10 s).
+
+The keeper reads, once a second: the process's cores (`sched_getaffinity` of the process id), the
+render thread's cpuset (`/proc/self/task/<tid>/cpuset`, its cores from `/dev/cpuset<set>/cpus`),
+its utilisation clamps (`sched_getattr`), and the render and game threads' cores. It asks again
+(the render thread's ideal core first, never a core the process or the cpuset forbids) at the
+start, when a 3D scene begins, on focus gained, back from the background, when the cpuset or the
+allowed cores change, when the system changed a thread's cores, when the submit thread starts,
+and every 10 s while the render thread is not on the ideal core alone. Each pin is judged by the
+cores read back after it.
+
+When a try's outcome differs from the last one written (the first 32 such lines, then every
+100th):
+
+```
+window: render thread cores: asked 7, read back 2-7, cpuset /top-app (cores 0-7), clamps 0-1024, the process may run on 0-7; re-pin refused (the system said yes and keeps it to cores 2-7); on 6 alone instead (kept); the game thread on 5 alone (kept), the submit thread on 2-4, 7 (kept), every other thread on 0-4, 7; why: the start
+```
+
+Every 10 s block:
+
+```
+window: render thread cores: in 10 s: now on 7 alone (the ideal), the game thread on 6 alone, the submit thread on 2-5, every other thread on 0-5; read back as set at 10 of 10 reads; tries in the block 1 (the ideal kept in 1), since the start 3 (kept in 1); changed by the system 0 times in the block, 1 since the start (the last: the render thread's from 7 to 2-7); cpuset /top-app (cores 0-7), clamps 0-1024; threads moved off the kept cores 9 since the start (0 had ended); the game thread's step 4.6 ms (CPU 4.1 ms of it) (the log thread's, up to 1 s old)
+```
+
+and the game thread line's cores part gains each thread's samples by core (one a step, a picture,
+a submit job, from the thread's own `getcpu`): `the samples by core: G 6:100 %, R 7:100 %, S 2:24
+3:26 4:25 5:25 %`.
+
+How to read them:
+- `re-pin kept` at the start and `now on 7 alone (the ideal)` in every block: the pin holds; the
+  step rule's reads should be those of the starts that kept core 7 (6-7 ms on the bridge).
+- `re-pin refused (the system said yes and keeps it to cores 2-7)` with `why: the start` and later
+  `re-pin kept` with `why: a 3D scene began`, `focus gained` or `back from the background`: the
+  widening depends on the moment (the cpuset's or the window's state); the `cpuset` part of both
+  lines says whether the set changed between them (`/foreground` to `/top-app`).
+- Refused at every try with the same cpuset and `the 10 s retry` counting up: the kernel widens a
+  one-core pin to core 7 whatever the moment (a vendor rule); the render thread is then on 6
+  alone, which the next `samples by core` part shows as `R 6:100 %`.
+- `changed by the system N times`, with `the last: the render thread's from 7 to 2-7`: the pin held
+  and the system widened it later. Read the start lines and the `window: performance hints:` line
+  around it (the session's `setThreads`, a cpuset move) for what happened then.
+- `clamps` other than `0-1024`: the system (the hint session, a game mode) set a utilisation
+  clamp on the render thread.
+- `cpuset not readable (errno 13)`: SELinux keeps the cpuset file from the app; the keeper still
+  works from the process's cores.
+- The game thread's step beside its cores: a step that stays long (9-14 ms in the cage) on its
+  own core is the game's work at that core's clock, not a shared core.
 
 ## The thermal state and screen recording
 

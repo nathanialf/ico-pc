@@ -101,6 +101,7 @@ struct tags are CamelCase (`IcoVfsEntry`, `RdFrame`); macros and enum constants 
 | `ui_`, `ui__`, `lt_ext_`, `gallery_` | `port/ui`: the menus, the layout extension, the gallery |
 | `pace_` | the frame pacing policy (`port/platform/pace_policy.c`) |
 | `fm_` | the render thread's hand-over (`port/platform/frame_mailbox.c`) |
+| `cpu_keep_` | the render, game and submit threads' cores kept after the start (`port/platform/cpu_keep.c`) |
 | `cpu_place_` | which core a thread runs on, the cores' speeds, a thread's priority and allowed cores (`port/platform/cpu_place.c`) |
 
 Names the game defines keep their spelling, including the host hooks the game files define for

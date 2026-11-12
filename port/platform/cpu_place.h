@@ -113,11 +113,41 @@ size_t cpu_place_mask_text(uint64_t mask, char *out, size_t cap);
 size_t cpu_place_part(char *out, size_t cap, const CpuPlaceHist *g, const CpuPlaceHist *r,
                       const CpuPlaceHist *s, uint64_t slow);
 
+/* The block's samples by core for each thread (the share of each
+   thread's samples on each core; with cpu_place_part's most-run core it
+   says where a thread spread): "the samples by core: G 2:25 3:23 4:21
+   5:16 6:13 %, R 7:100 %, S 2:22 3:21 4:20 5:19 6:18 %", cores with no
+   sample left out, the samples with no core known as "?", a thread with
+   none "G -"; s NULL leaves S out; the length written */
+size_t cpu_place_shares_text(char *out, size_t cap, const CpuPlaceHist *g, const CpuPlaceHist *r,
+                             const CpuPlaceHist *s);
+
 /* the calling thread kept to the cores of mask; false with why set (not
    Linux, an empty mask, the system's refusal: "errno N: its words") */
 bool cpu_place_pin(uint64_t mask, char *why, size_t cap);
 /* the cores the calling thread may run on; 0 when not known */
 uint64_t cpu_place_allowed(void);
+/* the same for a thread of this process by its id (0: the calling thread;
+   the process's id: its first thread, the cores the system gives the
+   process): sched_setaffinity / sched_getaffinity on that id (Linux and
+   Android; elsewhere false / 0).  The window's keeper (cpu_keep.h) places
+   the render, submit and game threads by id from the log thread */
+bool cpu_place_pin_tid(long tid, uint64_t mask, char *why, size_t cap);
+uint64_t cpu_place_allowed_tid(long tid);
+
+/* A thread's cpuset as the kernel has it: its path from
+   <taskRoot>/<tid>/cpuset (taskRoot NULL: /proc/self/task; "/top-app",
+   "/foreground", "/" ...) into path, and the cores of that set from
+   <cpusetRoot><path>/cpus (cpusetRoot NULL: /dev/cpuset, Android's mount;
+   "effective_cpus" when "cpus" is not there) into *cpus (0 when not read).
+   0, or the errno of the path's read (ENOENT where the kernel has no
+   cpuset file); Linux and Android (elsewhere ENOSYS) */
+int cpu_place_cpuset_read(const char *taskRoot, const char *cpusetRoot, long tid, char *path,
+                          size_t cap, uint64_t *cpus);
+/* A thread's utilisation clamps (sched_getattr: util_min and util_max,
+   0-1024); false where the kernel does not say (no call, no clamp
+   support) */
+bool cpu_place_uclamp_read(long tid, unsigned *utilMin, unsigned *utilMax);
 
 /* What a pin came to, by the call's answer and the cores read back after
    it (cpu_place_allowed): a phone's kernel may answer yes and keep the
@@ -152,6 +182,18 @@ CpuPinResult cpu_place_pin_checked(uint64_t mask, uint64_t *got, char *why, size
    0 forgets (nothing is reset); the mask kept, 0 with none */
 void cpu_place_keep_free(uint64_t mask);
 uint64_t cpu_place_free_mask(void);
+
+/* The threads that put themselves on the kept cores since the start (a
+   cpu_place_thread_free with a mask kept registers the calling thread's
+   id; at most CPU_FREE_TIDS) moved to mask by id, those in skip left
+   alone (the render, submit and game threads, which the keeper places
+   itself) and those already on mask not touched; the count moved, the
+   ended ones (their slots freed) in *ended.  The keeper's (cpu_keep.h):
+   when the cores it keeps for the render and game threads change, the
+   texture decode pool, the pipeline workers, the performance-hint thread
+   and the rest leave them */
+#define CPU_FREE_TIDS 64
+unsigned cpu_place_refree(uint64_t mask, const long *skip, int nSkip, unsigned *ended);
 
 typedef enum CpuFreeResult {
     CPU_FREE_NONE = 0, /* no mask kept (no pin in this process), or not Linux */

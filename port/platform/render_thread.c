@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "config.h"
+#include "cpu_keep.h"
 #include "cpu_place.h"
 #include "diag_host.h"
 #include "ico_thread.h" /* ico_thread_now_ms */
@@ -22,6 +23,10 @@
 #include "sys_cell.h"
 #include "thread_stat.h"
 #include "window_lines.h" /* window_log_cost_mark */
+
+#if defined(__linux__)
+#include <unistd.h> /* getpid */
+#endif
 
 static struct {
     SDL_Thread *thread;
@@ -188,9 +193,192 @@ static long stat_tid(int i)
                     : __atomic_load_n(&s_place.submitTid, __ATOMIC_ACQUIRE);
 }
 
+/* The keeper (cpu_keep.h): the render, game and submit threads' cores
+ * after the start, on the log thread's tick (Android, the rule on, two or
+ * more cores faster than the slowest).  The owner's Pixel answered yes to
+ * the render thread on core 7 alone and read back 2-7 in 20 of 25 starts;
+ * the keeper asks again when a 3D scene begins, on focus gained, back
+ * from the background, when the system changes the threads' cores or the
+ * cores it allows, and every 10 s while not on the ideal core.  Its lines
+ * are made on the log thread (it must not write to the pipe it drains)
+ * and written by the game thread: a try's line when its outcome changed
+ * (ico_render_thread_note_game_core, a load and a compare a step), the
+ * block's with the 10 s lines.  The requests from the other threads are
+ * bits in s_keepWhy */
+static CpuKeep s_keep; /* the log thread's */
+static int s_keepOn;   /* __atomic: the keeper runs (set before the threads start) */
+static unsigned s_keepWhy;
+static uint32_t s_keepTaken; /* __atomic: the block lines the game thread took */
+
+static struct {
+    SDL_SpinLock lock;
+    uint32_t tryGen; /* under lock (and read alone by the game thread's step) */
+    char tryText[1024];
+    char blockText[1024];
+} s_keepOut;
+
+static unsigned s_keepMoved, s_keepEnded; /* the log thread's: threads moved off the kept cores */
+
+static void keep_request(unsigned why)
+{
+    if (__atomic_load_n(&s_keepOn, __ATOMIC_ACQUIRE)) {
+        (void)__atomic_fetch_or(&s_keepWhy, why, __ATOMIC_RELAXED);
+    }
+}
+
+static bool keep_pin(void *u, long tid, uint64_t mask, int *err)
+{
+    char why[128];
+    const bool ok = cpu_place_pin_tid(tid, mask, why, sizeof(why));
+
+    (void)u;
+    *err = 0;
+    if (!ok && sscanf(why, "errno %d", err) != 1) {
+        *err = -1;
+    }
+    return ok;
+}
+
+static uint64_t keep_read(void *u, long tid)
+{
+    (void)u;
+    return cpu_place_allowed_tid(tid);
+}
+
+/* the free mask for the threads made from now, and the registered ones
+   moved to it (cpu_place_refree), the three picture threads left to the
+   keeper */
+static void keep_free(void *u, uint64_t mask)
+{
+    const long skip[3] = {s_place.gameTid, stat_tid(1), stat_tid(2)};
+    unsigned ended = 0;
+
+    (void)u;
+    cpu_place_keep_free(mask);
+    s_keepMoved += cpu_place_refree(mask, skip, 3, &ended);
+    s_keepEnded += ended;
+}
+
+/* the log thread's part of the tick: the system's view of the render
+   thread (the process's cores, its cpuset, its clamps), the keeper's tick,
+   on a list tick the threads that inherited a kept core alone moved off
+   it, the lines made */
+static void keep_tick(const CpuThreads *list)
+{
+    static const CpuKeepOps ops = {NULL, keep_pin, keep_read, keep_free};
+    static char s_lastPath[64];
+    static uint32_t s_tryHash, s_taken;
+    static bool s_said;
+    const long rtid = stat_tid(1);
+    char path[64], sys[256], text[1024], m[96];
+    uint64_t proc = 0, cs = 0, allowed;
+    unsigned why = __atomic_exchange_n(&s_keepWhy, 0u, __ATOMIC_RELAXED);
+    unsigned umin = 0, umax = 0;
+    int e = ENOENT;
+    size_t n = 0;
+
+#if defined(__linux__)
+    proc = cpu_place_allowed_tid((long)getpid());
+#endif
+    path[0] = '\0';
+    if (rtid > 0) {
+        e = cpu_place_cpuset_read(NULL, NULL, rtid, path, sizeof(path), &cs);
+    }
+    allowed = proc != 0 && cs != 0 && (proc & cs) != 0 ? proc & cs : (proc != 0 ? proc : cs);
+    if (e == 0 && s_lastPath[0] != '\0' && strcmp(path, s_lastPath) != 0) {
+        why |= CPU_KEEP_WHY_ALLOWED; /* moved to another cpuset (foreground, top-app) */
+    }
+    if (e == 0) {
+        snprintf(s_lastPath, sizeof(s_lastPath), "%s", path);
+    }
+    {
+        const uint32_t taken = __atomic_load_n(&s_keepTaken, __ATOMIC_ACQUIRE);
+
+        if (taken != s_taken) {
+            s_taken = taken;
+            cpu_keep_block_reset(&s_keep);
+        }
+    }
+    const bool tried = cpu_keep_tick(&s_keep, &ops, ico_thread_now_ms(), why, allowed, rtid,
+                                     stat_tid(2), s_place.gameTid);
+
+    if (list != NULL && s_keep.have) {
+        /* a thread the render or game thread made starts on its creator's
+           cores (pthread_create(3)): a driver's thread made by the render
+           thread kept to its core alone ("kept to core 7: ico render (2)",
+           rc9, rc12) shares that core with it; moved to the others' */
+        const CpuKeepSets *ks = &s_keep.sets;
+
+        for (int i = 0; i < list->n; i++) {
+            const CpuThread *t = &list->t[i];
+            const bool alone =
+                (ks->level == CPU_KEEP_ALONE && t->mask == ks->render) ||
+                (ks->game != 0 && (ks->game & (ks->game - 1)) == 0 && t->mask == ks->game);
+            char w[96];
+
+            if (alone && t->tid != rtid && t->tid != stat_tid(2) && t->tid != s_place.gameTid &&
+                cpu_place_pin_tid(t->tid, ks->others, w, sizeof(w))) {
+                s_keepMoved++;
+            }
+        }
+    }
+    /* the system's view of the render thread */
+    if (e == 0) {
+        (void)cpu_place_mask_text(cs, m, sizeof(m));
+        n = (size_t)snprintf(sys, sizeof(sys), "cpuset %s (cores %s)", path,
+                             cs != 0 ? m : "not read");
+    } else {
+        n = (size_t)snprintf(sys, sizeof(sys), "cpuset not readable (errno %d)", e);
+    }
+    if (rtid > 0 && cpu_place_uclamp_read(rtid, &umin, &umax) && n < sizeof(sys)) {
+        n += (size_t)snprintf(sys + n, sizeof(sys) - n, ", clamps %u-%u", umin, umax);
+    }
+    if (tried) {
+        uint32_t h = 2166136261u; /* FNV-1a: the same outcome is not written again */
+
+        (void)cpu_keep_try_text(&s_keep, sys, text, sizeof(text));
+        for (const char *c = text; *c != '\0'; c++) {
+            h = (h ^ (uint8_t)*c) * 16777619u;
+        }
+        if (!s_said || h != s_tryHash) {
+            s_said = true;
+            s_tryHash = h;
+            SDL_LockSpinlock(&s_keepOut.lock);
+            memcpy(s_keepOut.tryText, text, sizeof(text));
+            __atomic_store_n(&s_keepOut.tryGen, s_keepOut.tryGen + 1u, __ATOMIC_RELEASE);
+            SDL_UnlockSpinlock(&s_keepOut.lock);
+        }
+    }
+    n = cpu_keep_block_text(&s_keep, sys, text, sizeof(text));
+    if (n < sizeof(text)) {
+        snprintf(text + n, sizeof(text) - n,
+                 "; threads moved off the kept cores %u since the start (%u had ended)",
+                 s_keepMoved, s_keepEnded);
+    }
+    SDL_LockSpinlock(&s_keepOut.lock);
+    memcpy(s_keepOut.blockText, text, sizeof(text));
+    SDL_UnlockSpinlock(&s_keepOut.lock);
+}
+
+void ico_render_thread_place_scene(bool play)
+{
+    static bool s_play;
+
+    if (play && !s_play) {
+        keep_request(CPU_KEEP_WHY_SCENE);
+    }
+    s_play = play;
+}
+
+void ico_render_thread_place_focus(void)
+{
+    keep_request(CPU_KEEP_WHY_FOCUS);
+}
+
 void ico_render_thread_tick(void)
 {
     static uint32_t s_ticks;
+    const CpuThreads *list = NULL;
     for (int i = 0; i < 3; i++) {
         ThreadStat now;
         const long tid = stat_tid(i);
@@ -202,12 +390,18 @@ void ico_render_thread_tick(void)
     }
     if (s_ticks++ % TICK_LIST_EVERY == 0u) {
         static char text[1024]; /* the log thread's alone */
-        if (cpu_place_threads_text(NULL, s_place.gameTid, text, sizeof(text)) > 0) {
+        static CpuThreads s_threads;
+        (void)cpu_place_threads_read(NULL, &s_threads);
+        list = &s_threads;
+        if (cpu_place_threads_format(&s_threads, s_place.gameTid, text, sizeof(text)) > 0) {
             SDL_LockSpinlock(&s_list.lock);
             memcpy(s_list.text, text, sizeof(text));
             s_list.gen++;
             SDL_UnlockSpinlock(&s_list.lock);
         }
+    }
+    if (__atomic_load_n(&s_keepOn, __ATOMIC_ACQUIRE)) {
+        keep_tick(list);
     }
     __atomic_store_n(&s_tickOn, 1, __ATOMIC_RELEASE);
 }
@@ -368,6 +562,12 @@ static void place_init(void)
     } else {
         s_place.pin = true;
         s_place.pinSubmit = s_place.plan.submit != 0;
+        if (cpu_keep_applies(&s_place.classes)) {
+            /* the render, game and submit threads kept after the start
+               (cpu_keep.h), from the log thread's first tick */
+            cpu_keep_init(&s_keep, &s_place.classes);
+            __atomic_store_n(&s_keepOn, 1, __ATOMIC_RELEASE);
+        }
     }
 #else
     s_place.noPin = "only on Android";
@@ -1018,6 +1218,7 @@ void ico_render_thread_unpark(void)
     if (s_rt.thread == NULL) {
         return;
     }
+    keep_request(CPU_KEEP_WHY_RESUME); /* back from the background: the cores asked again */
     SDL_LockMutex(s_rt.lock);
     fm_unpark(&s_rt.mb);
     SDL_BroadcastCondition(s_rt.cond);
@@ -1136,7 +1337,21 @@ void ico_render_thread_tids(long *render, long *submit)
 
 void ico_render_thread_note_game_core(void)
 {
+    static uint32_t s_tryPrinted;
+
     cpu_place_note(&s_place.game, cpu_place_now());
+    if (__atomic_load_n(&s_keepOut.tryGen, __ATOMIC_ACQUIRE) != s_tryPrinted) {
+        /* the keeper's try with a new outcome (the log thread's text) */
+        char text[1024];
+
+        SDL_LockSpinlock(&s_keepOut.lock);
+        s_tryPrinted = s_keepOut.tryGen;
+        memcpy(text, s_keepOut.tryText, sizeof(text));
+        SDL_UnlockSpinlock(&s_keepOut.lock);
+        text[sizeof(text) - 1] = '\0';
+        ico_log_limited_n("window: render thread cores", 32u, 100u,
+                          "window: render thread cores: %s", text);
+    }
 }
 
 void ico_render_thread_block_line(double stepMs, double stepCpuMs, double pictureCpuMs,
@@ -1158,7 +1373,7 @@ void ico_render_thread_block_line(double stepMs, double stepCpuMs, double pictur
     RdSubmitBlock sb;
     unsigned closes;
     double closeMs, closeMaxMs;
-    char rt[1536], st[384], cores[640];
+    char rt[1536], st[384], cores[1024];
     CpuPlaceHist gc, rc, sc;
 
     s_rt.held = s_rt.heldMiss = s_rt.heldOverrun = s_rt.heldBehind = 0;
@@ -1174,6 +1389,18 @@ void ico_render_thread_block_line(double stepMs, double stepCpuMs, double pictur
     rd_thread_submit_take_cores(&sc);
     (void)cpu_place_part(cores, sizeof(cores), &gc, &rc, rd_thread_submit_on() ? &sc : NULL,
                          s_place.slowMask);
+#if defined(__ANDROID__)
+    {
+        /* each thread's samples by core (one a step, a picture, a submit
+           job: the thread's own getcpu, no file read), where the most-run
+           core alone does not say how a thread spread */
+        char sh[400];
+        const size_t at = strlen(cores);
+
+        (void)cpu_place_shares_text(sh, sizeof(sh), &gc, &rc, rd_thread_submit_on() ? &sc : NULL);
+        snprintf(cores + at, sizeof(cores) - at, "; %s", sh);
+    }
+#endif
     if (cpu_place_free_mask() != 0) {
         /* the threads made by a kept thread and put back on every core at
            their entry since the start (cpu_place_thread_free) */
@@ -1311,6 +1538,27 @@ void ico_render_thread_block_line(double stepMs, double stepCpuMs, double pictur
         fprintf(stderr, "window: step rule: %s\n", ask);
     }
     memset(&s_rt.asks, 0, sizeof(s_rt.asks));
+    if (__atomic_load_n(&s_keepOn, __ATOMIC_ACQUIRE) &&
+        __atomic_load_n(&s_tickOn, __ATOMIC_ACQUIRE)) {
+        /* the keeper's block (the log thread's text, up to a second old),
+           with the game thread's own step: the cores it is kept to beside
+           the time it took (rc12's cage: 9-14 ms steps on cores 2-6) */
+        char kt[1024], kc[48];
+
+        (void)cpu_place_cpu_text(stepCpuMs, kc, sizeof(kc));
+        SDL_LockSpinlock(&s_keepOut.lock);
+        memcpy(kt, s_keepOut.blockText, sizeof(kt));
+        SDL_UnlockSpinlock(&s_keepOut.lock);
+        kt[sizeof(kt) - 1] = '\0';
+        if (kt[0] != '\0') {
+            fprintf(
+                stderr,
+                "window: render thread cores: in 10 s: %s; the game thread's step %.1f ms%s%s%s "
+                "(the log thread's, up to 1 s old)\n",
+                kt, stepMs, kc[0] != '\0' ? " (" : "", kc, kc[0] != '\0' ? ")" : "");
+        }
+        (void)__atomic_fetch_add(&s_keepTaken, 1u, __ATOMIC_RELEASE);
+    }
     window_log_cost_mark("the game thread line");
     place_threads_line(); /* again only when the threads or their cores changed */
     window_log_cost_mark("the thread list");

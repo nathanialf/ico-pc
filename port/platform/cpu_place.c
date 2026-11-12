@@ -4,6 +4,7 @@
 #endif
 #include "cpu_place.h"
 
+#include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,7 +18,6 @@
    reachable by name; the kernel's interface is the same on glibc and
    Android's bionic */
 #include <dirent.h>
-#include <errno.h>
 #include <sys/resource.h>
 #include <sys/syscall.h>
 #include <unistd.h>
@@ -375,6 +375,11 @@ size_t cpu_place_part(char *out, size_t cap, const CpuPlaceHist *g, const CpuPla
 
 bool cpu_place_pin(uint64_t mask, char *why, size_t cap)
 {
+    return cpu_place_pin_tid(0, mask, why, cap);
+}
+
+bool cpu_place_pin_tid(long tid, uint64_t mask, char *why, size_t cap)
+{
     if (cap > 0) {
         why[0] = '\0';
     }
@@ -393,7 +398,7 @@ bool cpu_place_pin(uint64_t mask, char *why, size_t cap)
                 set[i / (8 * sizeof(unsigned long))] |= 1ul << (i % (8 * sizeof(unsigned long)));
             }
         }
-        if (syscall(SYS_sched_setaffinity, 0, sizeof(set), set) != 0) {
+        if (syscall(SYS_sched_setaffinity, (pid_t)tid, sizeof(set), set) != 0) {
             const int e = errno;
 
             snprintf(why, cap, "errno %d: %s", e, strerror(e));
@@ -402,12 +407,18 @@ bool cpu_place_pin(uint64_t mask, char *why, size_t cap)
         return true;
     }
 #else
+    (void)tid;
     snprintf(why, cap, "not on this system");
     return false;
 #endif
 }
 
 uint64_t cpu_place_allowed(void)
+{
+    return cpu_place_allowed_tid(0);
+}
+
+uint64_t cpu_place_allowed_tid(long tid)
 {
 #if defined(__linux__)
     /* the kernel writes as many bytes as its own mask has (refusing a
@@ -417,7 +428,7 @@ uint64_t cpu_place_allowed(void)
     uint64_t m = 0;
 
     memset(set, 0, sizeof(set));
-    if (syscall(SYS_sched_getaffinity, 0, sizeof(set), set) <= 0) {
+    if (syscall(SYS_sched_getaffinity, (pid_t)tid, sizeof(set), set) <= 0) {
         return 0;
     }
     for (int i = 0; i < CPU_PLACE_MAX; i++) {
@@ -427,8 +438,48 @@ uint64_t cpu_place_allowed(void)
     }
     return m;
 #else
+    (void)tid;
     return 0;
 #endif
+}
+
+static void shares_one(char *out, size_t cap, size_t *len, const char *who, const CpuPlaceHist *h)
+{
+    const uint32_t total = cpu_place_total(h);
+
+    if (total == 0) {
+        put(out, cap, len, "%s -", who);
+        return;
+    }
+    put(out, cap, len, "%s", who);
+    for (int i = 0; i < CPU_PLACE_MAX; i++) {
+        if (h->n[i] != 0) {
+            put(out, cap, len, " %d:%u", i, (unsigned)((h->n[i] * 100ull + total / 2) / total));
+        }
+    }
+    if (h->unknown != 0) {
+        put(out, cap, len, " ?:%u", (unsigned)((h->unknown * 100ull + total / 2) / total));
+    }
+    put(out, cap, len, " %%");
+}
+
+size_t cpu_place_shares_text(char *out, size_t cap, const CpuPlaceHist *g, const CpuPlaceHist *r,
+                             const CpuPlaceHist *s)
+{
+    size_t len = 0;
+
+    if (cap > 0) {
+        out[0] = '\0';
+    }
+    put(out, cap, &len, "the samples by core: ");
+    shares_one(out, cap, &len, "G", g);
+    put(out, cap, &len, ", ");
+    shares_one(out, cap, &len, "R", r);
+    if (s != NULL) {
+        put(out, cap, &len, ", ");
+        shares_one(out, cap, &len, "S", s);
+    }
+    return done(out, cap, len);
 }
 
 CpuPinResult cpu_place_pin_result(bool called, uint64_t asked, uint64_t readBack)
@@ -482,6 +533,68 @@ size_t cpu_place_priority_text(char *out, size_t cap)
 static uint64_t s_freeMask;
 static unsigned s_freeResets, s_freeFailures;
 
+/* the threads that put themselves on the kept cores (cpu_place_thread_free
+   with a mask kept: Android's rule on), by id, for cpu_place_refree: a slot
+   is claimed by a compare-and-swap on 0, cleared by the refree when its
+   thread has ended */
+static long s_freeTids[CPU_FREE_TIDS];
+
+static void free_register(void)
+{
+#if defined(__linux__)
+    const long tid = syscall(SYS_gettid);
+
+    for (int i = 0; i < CPU_FREE_TIDS; i++) {
+        if (__atomic_load_n(&s_freeTids[i], __ATOMIC_ACQUIRE) == tid) {
+            return; /* already known (a second call at the thread's start) */
+        }
+    }
+    for (int i = 0; i < CPU_FREE_TIDS; i++) {
+        long zero = 0;
+
+        if (__atomic_compare_exchange_n(&s_freeTids[i], &zero, tid, false, __ATOMIC_ACQ_REL,
+                                        __ATOMIC_ACQUIRE)) {
+            return;
+        }
+    }
+#endif
+}
+
+unsigned cpu_place_refree(uint64_t mask, const long *skip, int nSkip, unsigned *ended)
+{
+    unsigned moved = 0, gone = 0;
+
+    for (int i = 0; mask != 0 && i < CPU_FREE_TIDS; i++) {
+        const long tid = __atomic_load_n(&s_freeTids[i], __ATOMIC_ACQUIRE);
+        bool skipIt = tid <= 0;
+        char why[96];
+
+        for (int k = 0; !skipIt && k < nSkip; k++) {
+            skipIt = skip[k] == tid;
+        }
+        if (skipIt) {
+            continue;
+        }
+        if (cpu_place_allowed_tid(tid) == mask) {
+            continue;
+        }
+        if (cpu_place_pin_tid(tid, mask, why, sizeof(why))) {
+            moved++;
+        } else if (cpu_place_allowed_tid(tid) == 0) {
+            /* the thread has ended (ESRCH): its slot free again */
+            long was = tid;
+
+            (void)__atomic_compare_exchange_n(&s_freeTids[i], &was, 0L, false, __ATOMIC_ACQ_REL,
+                                              __ATOMIC_ACQUIRE);
+            gone++;
+        }
+    }
+    if (ended != NULL) {
+        *ended = gone;
+    }
+    return moved;
+}
+
 void cpu_place_keep_free(uint64_t mask)
 {
     __atomic_store_n(&s_freeMask, mask, __ATOMIC_RELEASE);
@@ -503,6 +616,7 @@ CpuFreeResult cpu_place_thread_free(void)
     if (keep == 0) {
         return CPU_FREE_NONE;
     }
+    free_register();
     now = cpu_place_allowed();
     if (now == 0) {
         return CPU_FREE_NONE; /* not Linux, or nothing read */
@@ -642,11 +756,97 @@ static bool read_small(const char *path, char *buf, size_t cap)
     return got > 0;
 }
 
+int cpu_place_cpuset_read(const char *taskRoot, const char *cpusetRoot, long tid, char *path,
+                          size_t cap, uint64_t *cpus)
+{
+    char file[512], buf[256];
+    FILE *f;
+    size_t got;
+
+    *cpus = 0;
+    if (cap > 0) {
+        path[0] = '\0';
+    }
+    snprintf(file, sizeof(file), "%s/%ld/cpuset", taskRoot != NULL ? taskRoot : "/proc/self/task",
+             tid);
+    f = fopen(file, "r");
+    if (f == NULL) {
+        return errno != 0 ? errno : ENOENT;
+    }
+    got = fread(buf, 1, sizeof(buf) - 1, f);
+    fclose(f);
+    buf[got] = '\0';
+    buf[strcspn(buf, "\r\n")] = '\0';
+    if (buf[0] != '/') {
+        return EINVAL;
+    }
+    snprintf(path, cap, "%.*s", (int)(cap > 0 ? cap - 1 : 0), buf);
+    for (int k = 0; k < 2 && *cpus == 0; k++) {
+        /* "/" is the root set: <root>/cpus */
+        snprintf(file, sizeof(file), "%s%s/%s", cpusetRoot != NULL ? cpusetRoot : "/dev/cpuset",
+                 strcmp(buf, "/") == 0 ? "" : buf, k == 0 ? "cpus" : "effective_cpus");
+        if (read_small(file, buf + 128, 128)) {
+            *cpus = cpu_place_list_parse(buf + 128);
+        }
+    }
+    return 0;
+}
+
+bool cpu_place_uclamp_read(long tid, unsigned *utilMin, unsigned *utilMax)
+{
+#if defined(SYS_sched_getattr)
+    /* the kernel's struct sched_attr (include/uapi/linux/sched/types.h):
+       size, policy, flags, nice, priority, runtime, deadline, period, then
+       util_min and util_max (the 56-byte version 1) */
+    struct {
+        uint32_t size, policy;
+        uint64_t flags;
+        int32_t nice;
+        uint32_t priority;
+        uint64_t runtime, deadline, period;
+        uint32_t utilMin, utilMax;
+    } a;
+
+    memset(&a, 0, sizeof(a));
+    if (syscall(SYS_sched_getattr, (pid_t)tid, &a, (unsigned)sizeof(a), 0u) != 0 ||
+        a.size < sizeof(a)) {
+        return false;
+    }
+    *utilMin = a.utilMin;
+    *utilMax = a.utilMax;
+    return true;
+#else
+    (void)tid;
+    *utilMin = *utilMax = 0;
+    return false;
+#endif
+}
+
 static int by_tid(const void *a, const void *b)
 {
     const long x = ((const CpuThread *)a)->tid, y = ((const CpuThread *)b)->tid;
 
     return x < y ? -1 : x > y;
+}
+#else
+int cpu_place_cpuset_read(const char *taskRoot, const char *cpusetRoot, long tid, char *path,
+                          size_t cap, uint64_t *cpus)
+{
+    (void)taskRoot;
+    (void)cpusetRoot;
+    (void)tid;
+    *cpus = 0;
+    if (cap > 0) {
+        path[0] = '\0';
+    }
+    return ENOSYS;
+}
+
+bool cpu_place_uclamp_read(long tid, unsigned *utilMin, unsigned *utilMax)
+{
+    (void)tid;
+    *utilMin = *utilMax = 0;
+    return false;
 }
 #endif
 
