@@ -95,6 +95,7 @@
 #include "upscale_pictures.h"
 #if ICO_RC_TOOLS && defined(__ANDROID__)
 #include "share_report.h" /* an rc build's Share a bug report (settings.h) */
+#include "window_capture.h"
 #include "strings.h"
 #endif
 
@@ -2658,6 +2659,7 @@ open_window:
 #if ICO_RC_TOOLS && defined(__ANDROID__)
     /* Main > Share a bug report, below it: an rc build on a phone alone */
     ui_settings_set_share_report_handler(share_report_arm);
+    window_capture_start(); /* and the opening's frames saved by themselves */
 #endif
 #ifdef __ANDROID__
     /* the Graphics driver page, and "Quit game" for the
@@ -3183,7 +3185,7 @@ static int device_lost_quit(void)
    (GitHub takes a .zip, not an .rddump; the PNGs stay loose). The loose
    .rddump is deleted once the zip is written, kept when it fails. With
    --console there is no log file. forReport: Settings' bug-report row
-   (the pictures go into the zip too) */
+   (the pictures go into the zip too); 2 an rc build's capture (window_capture.h), no bundle */
 static void frame_dump(int forReport)
 {
     char pref[ICO_PATH_MAX], dir[ICO_PATH_MAX], dump[ICO_PATH_MAX], png[ICO_PATH_MAX],
@@ -3240,7 +3242,7 @@ static void frame_dump(int forReport)
                                 sizeof(why));
     }
     s_pres.presentDumpPrev = havePrev && zr >= 0;
-    if (forReport && zr >= 0) {
+    if (forReport == 1 && zr >= 0) {
         /* the run's automatic zips still on disk, so one attachment brings
            them (the slow-scene and skin-check zips stay on a phone) */
         char bl[320];
@@ -3287,6 +3289,12 @@ static void report_picture_arm(void)
 
 static void report_picture_pump(void)
 {
+#if ICO_RC_TOOLS && defined(__ANDROID__)
+    if (window_capture_due()) {
+        frame_dump(2);
+        window_capture_taken();
+    }
+#endif
     if (s_reportDumpAt == 0 || SDL_GetTicksNS() < s_reportDumpAt) {
         return;
     }
@@ -3298,8 +3306,8 @@ static void report_picture_pump(void)
 #if ICO_RC_TOOLS && defined(__ANDROID__)
 /* Settings > Share a bug report (the Main page, an rc build's row alone:
    ICO_RC_TOOLS; settings.h ui_settings_set_share_report_handler): the
-   report's files (share_report.h: the log, the run before's, the newest
-   dump zip and presented picture, the newest report zip) to the system's
+   report's files (share_report.h: the log, the run before's, this run's
+   dump zips and the newest presented picture, the newest report zip) to the system's
    share menu (host_android.c ico_android_share_files), from the pump on
    SDL's main thread, whose JNI environment the call takes.  The files
    folder is out of reach on a phone without a computer.  The line naming
@@ -3329,7 +3337,7 @@ static void share_report_pump(void)
     if (ico_path_join(dumps, sizeof(dumps), pref, "dumps") != 0) {
         dumps[0] = '\0';
     }
-    ico_share_report_collect(logs, dumps, &s_files);
+    ico_share_report_collect_run(logs, dumps, window_capture_run_start(), &s_files);
     ico_share_report_names(&s_files, names, sizeof(names));
     fprintf(stderr, "window: share: %d files offered (%s)\n", s_files.count, names);
     if (s_files.count == 0) {
@@ -4792,6 +4800,9 @@ static void perf_drain(void)
     slow_scene_poll();
     window_perf_hint_tick(); /* the hints' target and threads */
     while (rd_perf_pop(&r)) {
+#if ICO_RC_TOOLS && defined(__ANDROID__)
+        window_capture_picture(&r);
+#endif
         window_perf_hint_picture(&r);
         auto_res_sample(&r);
         if (r.presented && r.gpuValid) {

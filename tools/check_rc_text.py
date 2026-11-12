@@ -86,6 +86,82 @@ def check(expect, files):
     return 1 if bad else 0
 
 
+def code_lines(text):
+    """(line number, text) of text with its /* */ comments blanked (string
+    and character literals kept, so a "/*" inside one is no comment)."""
+    out, i, n, mode = [], 0, len(text), None
+    while i < n:
+        c = text[i]
+        if mode is None:
+            if text.startswith("/*", i):
+                end = text.find("*/", i + 2)
+                end = n if end < 0 else end + 2
+                out.append("".join("\n" if ch == "\n" else " " for ch in text[i:end]))
+                i = end
+                continue
+            if c in "\"'":
+                mode = c
+        elif c == "\\":
+            out.append(text[i:i + 2])
+            i += 2
+            continue
+        elif c == mode or c == "\n":
+            mode = None
+        out.append(c)
+        i += 1
+    return list(enumerate("".join(out).split("\n"), 1))
+
+
+def rc_outside(text, pattern, all_code):
+    """The line numbers of the C text's lines matching pattern that are not
+    inside an #if naming ICO_RC_TOOLS (without "!" or "||"; its #elif and
+    #else parts are outside). all_code: every code line but the directives
+    and the file's own header's #include."""
+    stack, bad = [], []
+    for ln, line in code_lines(text):
+        m = re.match(r"\s*#\s*(\w+)(.*)", line)
+        if m:
+            kw, cond = m.group(1), m.group(2)
+            if kw in ("if", "ifdef", "ifndef"):
+                stack.append(kw == "if" and re.search(r"\bICO_RC_TOOLS\b", cond) is not None
+                             and "!" not in cond and "||" not in cond)
+            elif kw in ("elif", "else") and stack:
+                stack[-1] = False
+            elif kw == "endif" and stack:
+                stack.pop()
+            continue
+        if not line.strip() or (all_code and not stack and
+                                re.match(r'\s*#\s*include\s+"window_capture\.h"', line)):
+            continue
+        if re.search(pattern, line) and not any(stack):
+            bad.append(ln)
+    return bad
+
+
+def cmake_outside_rc(text, names, strict=True):
+    """strict: the line numbers naming one of names outside an
+    if(ICO_RC_TOOLS AND ANDROID) block (its else part outside), except the
+    test program add_executable(capture_trigger_test ...) line; not strict:
+    the lines naming them inside such a block."""
+    stack, bad, inside = [], [], []
+    for ln, line in enumerate(text.split("\n"), 1):
+        code = line.split("#", 1)[0]
+        if re.match(r"\s*if\s*\(", code):
+            stack.append(re.match(r"\s*if\s*\(\s*ICO_RC_TOOLS\s+AND\s+ANDROID\s*\)", code)
+                         is not None)
+        elif re.match(r"\s*(else|elseif)\s*\(", code) and stack:
+            stack[-1] = False
+        elif re.match(r"\s*endif\s*\(", code) and stack:
+            stack.pop()
+        if not any(re.search(r"(^|[\s/])%s\b" % re.escape(nm), code) for nm in names):
+            continue
+        if any(stack):
+            inside.append(ln)
+        elif not re.match(r"\s*add_executable\(capture_trigger_test\s", code):
+            bad.append(ln)
+    return bad if strict else inside
+
+
 def selftest():
     fails = []
 
@@ -177,6 +253,33 @@ def selftest():
            % (script, flag))
         ok(re.search(r"ICO_RC_TOOLS=(ON|1)|icoRcTools=true", s) is None,
            "tools/%s never turns the rc tooling on by itself" % script)
+    # the frames of the opening an rc build saves by itself
+    # (port/platform/window_capture.h): compiled on Android with
+    # ICO_RC_TOOLS on alone, every call in window_host.c inside the #if
+    for rel, pat in [("port/platform/window_host.c", r"\bwindow_capture_\w+\s*\("),
+                     ("port/platform/window_capture.h", r"\bwindow_capture_\w+\s*\("),
+                     ("port/platform/window_capture.c", r"\S")]:
+        text = read(rel)
+        seen = [ln for ln, _ in code_lines(text) if re.search(pat, _)]
+        outside = rc_outside(text, pat, rel.endswith("window_capture.c"))
+        ok(seen != [], "%s names window_capture" % rel)
+        ok(outside == [], "%s: lines %s outside #if ICO_RC_TOOLS" % (rel, outside))
+    for rel in ["CMakeLists.txt", "port/platform/CMakeLists.txt"]:
+        bad = cmake_outside_rc(read(rel), ("window_capture.c", "capture_trigger.c"))
+        ok(bad == [], "%s: the capture's sources outside if(ICO_RC_TOOLS AND ANDROID) at %s"
+           % (rel, bad))
+    ok(cmake_outside_rc(read("CMakeLists.txt"), ("window_capture.c",), strict=False) != [],
+       "CMakeLists.txt adds window_capture.c (inside the rc block)")
+    sample = ("#include \"a.h\"\n#if ICO_RC_TOOLS && defined(__ANDROID__)\nint f(void);\n"
+              "#else\nint g(void);\n#endif\n/* f(\n */ int h; \"/*\" ;\n#if !ICO_RC_TOOLS\n"
+              "int k;\n#endif\n")
+    ok(rc_outside(sample, r"\bint\b", False) == [5, 8, 10], "rc_outside's own case %s"
+       % rc_outside(sample, r"\bint\b", False))
+    cm = ("if(ICO_RC_TOOLS AND ANDROID)\n  x window_capture.c\nelse()\n  window_capture.c\n"
+          "endif()\nadd_executable(capture_trigger_test t.c capture_trigger.c)\n")
+    ok(cmake_outside_rc(cm, ("window_capture.c", "capture_trigger.c")) == [4],
+       "cmake_outside_rc's own case %s" % cmake_outside_rc(cm, ("window_capture.c",
+                                                                "capture_trigger.c")))
     for f in fails:
         print("check_rc_text: selftest FAIL: %s" % f)
     print("check_rc_text: selftest %s" % ("ok" if not fails else "%d failures" % len(fails)))

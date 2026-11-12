@@ -1102,6 +1102,61 @@ causes in it, each on its own lines. The lines to read, in the log's order:
   ...)` (first 8, then every 100th). A restart at every stall is more evidence for a power-state
   change of the GPU at the stall (a hypothesis; the kernel nodes are unreadable there).
 
+## The opening's frames in a release candidate
+
+An rc build (`ICO_RC_TOOLS`, on Android alone; [BUILDING.md](../BUILDING.md#release-candidate-tools))
+saves frames of the game's opening by itself, because the opening plays for about 80 s before the
+title menu and cannot be paused, so the player cannot ask for a bug-report picture there. A release
+has none of this.
+
+- **When.** In the opening alone: `stage_no` 1 with the disc's scene layout in front
+  (`ico_region_cur()->layout_scene`: the log's `menu screen 7 -> 55` on the European disc, 51 or 52
+  on the others). Each replay's record (`rd_perf_pop`, read on the window's thread in `perf_drain`)
+  carries its glow light plan (`RdPerfRecord.glowLight`, the 10 s line's `window: glow: light (every
+  scale): N dark, L lamps, K whole`). Three moments, each once a run: **the lamps picture**, the
+  first LAMPS picture after at least 60 LAMPS pictures in a row; **the sun picture**, the first WHOLE
+  picture after at least 20 in a row (the sun's fans); **the later picture**, the first DARK picture
+  after at least 60 DARK pictures in a row counted after the lamps picture was taken. A picture with
+  no plan of the same frame as the one before (a later present of that tick) is passed over; of a
+  new frame, or a picture outside the opening, it ends the count. The rc logs show about 38 replays
+  a second in the opening, so 60 in a row is about 1.6 s.
+- **How.** A moment arms the dump; the window's next pump takes it (`window_capture_due` at the top
+  of `report_picture_pump`), so the picture that met the moment is drawn as usual and the dump is of
+  the last closed frame at that pump. It waits while an earlier picture's presented PNG is still
+  owed, and is dropped (to be armed again) if the opening ended first. Dumps are at least 2 s apart,
+  counted from the end of the one before; at most 3 a run; a dump that fails is logged and not tried
+  again.
+- **What is written.** The Settings bug-report picture's dump (`frame_dump(2)`): `frame-<stamp>-
+  v<vsync>.zip` in the dumps folder with the frame's `.rddump`, the tick before's `-prev.rddump`,
+  the log, the next present's `-blended.rddump` when it is drawn between the ticks, and the
+  presented picture (`-present.png`, at most 1920 px wide), added at the next presents as for the
+  Settings picture. It does not carry the run's slow-scene or skin-check zips (the Settings
+  picture's bundle; Share a bug report sends the newest slow-scene zip itself). The whole-frame PNG
+  `frame-<stamp>-v<vsync>.png` and the `-present.png` stay loose in the folder, as for every
+  Settings picture. **Share a bug report** sends every zip of the run (up to four).
+- **The lines.** Once at the start: `window: capture: on (a release candidate): frames of the opening
+  are saved by themselves (a lamps picture, a sun picture, a later picture) into the dumps folder
+  and sent with "Share a bug report"`. For each dump, after the Settings picture's own `window: F12
+  at vsync ...` and `window: bug report: ...` lines: `window: capture: the lamps picture (dump 1 of 3
+  this run, after 60 lamps pictures in a row): frame 1234, frame-20261112-101010-v900.zip` (`the
+  sun picture ... after 20 sun pictures (the glow drawn whole) in a row`, `the later picture ...
+  after 60 dark pictures in a row after the lamps picture`; the count is the run when the moment was
+  met). A dump whose zip is not in the dumps folder: `... frame N not saved (no zip; the lines above
+  say why); the capture goes on`. No line names a moment that never came (a run with no WHOLE
+  stretch has no sun picture); the 10 s glow line says which plans the run had.
+- **Size.** The one phone dump on the build machine (a pause-menu picture,
+  `frame-20261111-194104-v9031.zip`) is 5,808,167 bytes: three frames of 15,366,089 bytes each
+  (the frame, the tick before, the blended present), a 646,832-byte log and the 5,052,850-byte
+  presented picture, 51.8 MB unpacked. The opening's frames are not measured; the same order (about
+  6 MB a zip, about 18 MB for three, plus the loose PNGs) is expected. Nothing prunes the dumps
+  folder, so each rc run adds its three.
+- **Cost.** The dump is the Settings picture's, on the game thread. In that phone's run the dump was
+  followed by `the game step was late by 738 ms ... the sound was held back for 648 ms`, and the
+  presented picture and the blended frame going into the zip a few presents later by `late by 722
+  ms ... 848 ms`: about 1.5 s of hitches a dump, the sound held back with them. The frame saved is
+  the one before the hitch, and the next moment cannot be met within 2 s of the dump's end, so no
+  saved frame follows a hitch directly.
+
 ## Issue 123's present stalls: what the mechanisms predict
 
 The reporter's run (Adreno 740, Qualcomm's own driver, Frame rate Original, a 120 Hz display that

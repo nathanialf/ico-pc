@@ -410,6 +410,16 @@ if(ICO_RUN_TESTS)
     add_test(NAME share_report COMMAND share_report_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
+# An rc build's frames of the opening: when they are taken (capture_trigger.c,
+# compiled into the program only with ICO_RC_TOOLS on Android), over made-up
+# sequences of glow light plans, frames, times and the opening; tested in
+# every build
+add_executable(capture_trigger_test test/capture_trigger_test.c capture_trigger.c)
+target_compile_options(capture_trigger_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+if(ICO_RUN_TESTS)
+    add_test(NAME capture_trigger COMMAND capture_trigger_test)
+endif()
+
 # game_data_range: the game data ranges (game_data_range.c) over a stand-in
 # game library that gets ico_game's section treatment
 # (cmake/IcoStateSections.cmake) and the game's semantics options: the

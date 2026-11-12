@@ -759,7 +759,12 @@ text search in a plain file and in a zip's inflated entries (UTF-8; UTF-16 for t
 `--label`, `--expect`, `--cmake-flag` and `--gradle-flag`, `strings_en.c`'s row text inside `#if
 ICO_RC_TOOLS`, `CMakeLists.txt`'s and `build.gradle`'s defaults and release-label refusals, the
 manifest's provider enabled by the placeholder, and each `tools/package_*.sh` taking its switch from
-the checker and checking its program with `--label`, never turning the tooling on itself.
+the checker and checking its program with `--label`, never turning the tooling on itself, and the
+opening's capture compiled in an rc build on Android alone: every `window_capture_*` call in
+`window_host.c` and every code line of `window_capture.c` and `.h` inside `#if ICO_RC_TOOLS`
+(not its `#else`; comments blanked, string literals kept), and `window_capture.c` and
+`capture_trigger.c` named in `CMakeLists.txt` inside `if(ICO_RC_TOOLS AND ANDROID)` alone (the
+test program `capture_trigger_test` apart), with the scanners' own cases.
 `rc_tools_binary` runs `tools/check_rc_text.py --expect absent` on this build's `ico_pc` (`present`
 in a window build with `ICO_RC_TOOLS` on; not on Android or a cross build)
 ([BUILDING.md](../BUILDING.md#release-candidate-tools)).

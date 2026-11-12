@@ -12,7 +12,9 @@
 
 #include <stddef.h>
 
-#define ICO_SHARE_REPORT_MAX 7
+/* this run's dump zips at most (ico_share_report_collect_run) */
+#define ICO_SHARE_REPORT_RUN_ZIPS 4
+#define ICO_SHARE_REPORT_MAX (6 + ICO_SHARE_REPORT_RUN_ZIPS)
 #define ICO_SHARE_REPORT_PATH 1024
 
 typedef struct IcoShareReport {
@@ -39,6 +41,16 @@ typedef struct IcoShareReport {
    "newest": the latest modification time, then the greatest name.  NULL or
    "" folders are skipped.  The count (out->count). */
 int ico_share_report_collect(const char *logs_dir, const char *dumps_dir, IcoShareReport *out);
+
+/* ico_share_report_collect with this run's dump zips in place of the
+   newest one: every dumps_dir *.zip modified at run_start (Unix seconds)
+   or later, the newest ICO_SHARE_REPORT_RUN_ZIPS of them, listed oldest
+   first (the time, then the name), so the frames an rc build saved by
+   itself in the opening (window_capture.h) and the player's own pictures
+   of the run go together; when the run has none, the newest zip as
+   before.  run_start below 0: ico_share_report_collect exactly. */
+int ico_share_report_collect_run(const char *logs_dir, const char *dumps_dir, long long run_start,
+                                 IcoShareReport *out);
 
 /* The files' names (no folder) joined with ", " into out ("none" for no
    file), cut to size. */

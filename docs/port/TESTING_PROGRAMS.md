@@ -683,8 +683,23 @@ that stops again writing its own line without the retry mark); a stop at the fre
   folder: the log, the run before's when there, the newest dump zip by modification time (a loss
   zip included, an `.rddump` left out), the newest `-present.png`, the newest `report-*.zip` (not
   another `report-` file), the newest skin check capture `vu-skin-fail-*.bin` and the newest
-  slow-scene zip `slow-*.zip` last (seven files at most), a tie in time
-  to the greater name, missing folders skipped, the names line and a short buffer (`share_report`).
+  slow-scene zip `slow-*.zip` last, a tie in time
+  to the greater name, missing folders skipped, the names line and a short buffer; with the run's
+  start (`ico_share_report_collect_run`), every zip of dumps modified since in place of the newest
+  (three, then the newest four of five, oldest first, the count at ten), a start at a zip's own
+  second counting it, the newest zip when the run has none, a start below 0 the plain collect, and
+  the run's zips without a logs folder (`share_report`).
+- `capture_trigger_test.c`: an rc build's frames of the opening (`capture_trigger.h`) over
+  made-up sequences of glow light plans, frames and times, in the opening or not: the lamps moment
+  on the 61st LAMPS picture in a row (not the 60th) and once a run, a run broken by another plan
+  starting again, the sun moment on the 21st WHOLE picture without a lamps dump, the later moment
+  on the 61st DARK picture counted from the lamps dump's take (none without it, none counted while
+  the lamps dump is armed, the count ended by a LAMPS picture), a later present of the same frame
+  with no plan passed over and one of a new frame (or an unknown plan) ending the run, a picture
+  outside the opening ending it, an arm dropped out of the opening (nothing used, armable again)
+  and kept while busy, the 2 s from the dump's end and not its take (the arm at exactly 2 s after
+  it), the three dumps and the cap on its own, a clock that went back, a new run, and the start
+  text, the three names and the dump lines word for word with a short buffer (`capture_trigger`).
 - `backup_test.c`: Options > Extras' backup and restore (`backup.h`) on a user folder of its own
   under the build folder: the names a backup may hold (no `..`, no absolute or drive path, no `\`,
   no empty part, the places only); a backup holding the card folders, `states/`, `config.toml`,

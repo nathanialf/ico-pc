@@ -9,7 +9,10 @@
  * time goes to the greater name; missing folders and files are skipped;
  * the names line for the log; the newest skin check capture of logs last
  * (vu-skin-fail-*.bin, issue 123) and the slow-scene zip (slow-*.zip, issue
- * 179: the newest, the count at ICO_SHARE_REPORT_MAX).
+ * 179: the newest); with the run's start (ico_share_report_collect_run),
+ * every zip of dumps modified since in place of the newest, the newest four
+ * oldest first (the count at ICO_SHARE_REPORT_MAX), the newest zip when the
+ * run has none.
  * argv[1]: a folder the test may write in (the build folder).
  */
 #include <stdio.h>
@@ -95,7 +98,8 @@ int main(int argc, char **argv)
         "frame-20261023-100000-v1.zip",      "frame-20261023-110000-v2.zip",
         "loss-20261023-103000.zip",          "frame-20261023-100000-present.png",
         "frame-20261023-110000-present.png", "rd-00001.rddump",
-        "frame-20261023-120000-v3.zip",      "frame-20261023-115959-v3.zip"};
+        "frame-20261023-120000-v3.zip",      "frame-20261023-115959-v3.zip",
+        "frame-20261023-130000-v4.zip",      "frame-20261023-140000-v5.zip"};
     for (unsigned i = 0; i < sizeof(kOldDumps) / sizeof(kOldDumps[0]); i++) {
         char p[1200];
         snprintf(p, sizeof(p), "%s/%s", s_dumps, kOldDumps[i]);
@@ -182,8 +186,9 @@ int main(int argc, char **argv)
                                            "slow-20261106-120000.zip"};
         ico_share_report_collect(s_logs, s_dumps, &r);
         expect(&r, want, 7, "with the slow-scene zip");
-        CHECK(r.count == ICO_SHARE_REPORT_MAX, "every kind fits (%d of %d)", r.count,
-              ICO_SHARE_REPORT_MAX);
+        /* every kind, one zip: the run's other zips have room left */
+        CHECK(r.count == ICO_SHARE_REPORT_MAX - ICO_SHARE_REPORT_RUN_ZIPS + 1,
+              "every kind fits (%d of %d)", r.count, ICO_SHARE_REPORT_MAX);
     }
 
     /* no logs folder: the dumps alone; no dumps folder: the logs alone */
@@ -201,6 +206,69 @@ int main(int argc, char **argv)
                                            "vu-skin-fail-10-0-611.bin", "slow-20261106-120000.zip"};
         ico_share_report_collect(s_logs, missing, &r);
         expect(&r, want, 5, "a missing dumps folder");
+    }
+
+    /* this run's zips (an rc build's frames of the opening, capture_trigger.h):
+       every zip modified at the run's start or later, oldest first (a tie in
+       time by name), in place of the newest one */
+    {
+        static const char *const want[] = {"ico-pc.log",
+                                           "ico-pc-previous.log",
+                                           "frame-20261023-115959-v3.zip",
+                                           "frame-20261023-120000-v3.zip",
+                                           "loss-20261023-103000.zip",
+                                           "frame-20261023-110000-present.png",
+                                           "report-20261021-101010.zip",
+                                           "vu-skin-fail-10-0-611.bin",
+                                           "slow-20261106-120000.zip"};
+        ico_share_report_collect_run(s_logs, s_dumps, 2500, &r);
+        expect(&r, want, 9, "this run's three zips");
+    }
+    /* five of the run's: the newest four, oldest first, the count at
+       ICO_SHARE_REPORT_MAX */
+    put(s_dumps, "frame-20261023-130000-v4.zip", 4000);
+    put(s_dumps, "frame-20261023-140000-v5.zip", 5000);
+    {
+        static const char *const want[] = {"ico-pc.log",
+                                           "ico-pc-previous.log",
+                                           "frame-20261023-120000-v3.zip",
+                                           "loss-20261023-103000.zip",
+                                           "frame-20261023-130000-v4.zip",
+                                           "frame-20261023-140000-v5.zip",
+                                           "frame-20261023-110000-present.png",
+                                           "report-20261021-101010.zip",
+                                           "vu-skin-fail-10-0-611.bin",
+                                           "slow-20261106-120000.zip"};
+        ico_share_report_collect_run(s_logs, s_dumps, 2500, &r);
+        expect(&r, want, 10, "the run's newest four zips");
+        CHECK(r.count == ICO_SHARE_REPORT_MAX, "every kind and four zips fit (%d of %d)", r.count,
+              ICO_SHARE_REPORT_MAX);
+    }
+    /* the run's start at a zip's own second counts it; a run with none
+       falls back to the newest zip; a start below 0 is the plain collect */
+    {
+        static const char *const want[] = {"ico-pc.log",
+                                           "ico-pc-previous.log",
+                                           "frame-20261023-140000-v5.zip",
+                                           "frame-20261023-110000-present.png",
+                                           "report-20261021-101010.zip",
+                                           "vu-skin-fail-10-0-611.bin",
+                                           "slow-20261106-120000.zip"};
+        ico_share_report_collect_run(s_logs, s_dumps, 5000, &r);
+        expect(&r, want, 7, "the run's start at the zip's second");
+        ico_share_report_collect_run(s_logs, s_dumps, 5001, &r);
+        expect(&r, want, 7, "no zip this run: the newest");
+        ico_share_report_collect_run(s_logs, s_dumps, -1, &r);
+        expect(&r, want, 7, "no run start");
+        ico_share_report_collect(s_logs, s_dumps, &r);
+        expect(&r, want, 7, "the plain collect");
+    }
+    {
+        static const char *const want[] = {"frame-20261023-130000-v4.zip",
+                                           "frame-20261023-140000-v5.zip",
+                                           "frame-20261023-110000-present.png"};
+        ico_share_report_collect_run(NULL, s_dumps, 4000, &r);
+        expect(&r, want, 3, "the run's zips without a logs folder");
     }
 
     /* a short names buffer is cut, never overrun */
