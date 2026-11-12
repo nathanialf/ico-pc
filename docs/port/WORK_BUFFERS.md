@@ -313,8 +313,10 @@ with its new-target clear pending, after a replay that writes WORK2 any other wa
 plan's fill, mask and lamps or the dark plan's undrawn chain, at any other render pass on
 WORK2's colour, under the replay tool's pass window, and when the planned pass does not begin
 with the fill's clear to (0, 0, 0, 0) and a colour store. The dark plan's lazy clear of WORK2 is
-(0, 0, 0, 0), so drawn or not it keeps the rule. Under the lamps plan WORK2_PAD's band is a lazy
-clear of its colour (0, 0, 0, 192) as under the dark plan (the table above).
+(0, 0, 0, 0), so drawn or not it keeps the rule. Under the lamps and the whole plans WORK2_PAD's band
+is a lazy clear of its colour (0, 0, 0, 192) as under the dark plan (the table above), and under the
+dark plan, where no later command of the frame touches WORK0, WORK0's (0, 0, 0, A) a lazy clear
+too instead of a clear at the chain's place.
 
 ## The work clear
 

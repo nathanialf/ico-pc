@@ -468,6 +468,9 @@ target:
   outside a replay), not a pass of its own: on every class and backend, where the dark plan's
   lazy clears already run.
 
+- **the band under the whole plan** (`RD_LAMPS_WHOLEPAD`): WORK2_PAD's band left a lazy clear in
+  whole pictures too (the sun's fans), the same argument (nothing reads it; drawn where something
+  does): one small pass fewer each;
 - **WORK0's alpha sprite owed** (`RD_LAMPS_OWED`, the dark plan): `pasteWork0ToFB` (Cs * 0 + Cd:
   WORK0's RGB kept, alpha A) is under the dark plan the clear (0, 0, 0, A), drawn at the chain's
   place as a small pass of its own (the aura's WORK0 sprite blends over WORK0 in play, and a lazy

@@ -1620,9 +1620,34 @@ static void lazyTouch(Replay *r, const RdFrame *f, const RdCmd *c)
     }
 }
 
+/* under the WHOLE plan WORK2_PAD's band (read by nothing, rd.h) left a
+ * lazy clear as under DARK and LAMPS (rd_lamps.c RD_LAMPS_WHOLEPAD): the
+ * band sprite of this replay's chain that covers its target, nothing
+ * outside the sprite hook touching the band after the chain began */
+static bool wholePad(Replay *r, const RdCmd *c)
+{
+    if (s_gl.replay != g_rd.replayCounter || s_gl.plan != RD_GLOW_LIGHT_WHOLE ||
+        s_gl.unhooked[LZ_PAD] || !rd__lamps_wholepad_on()) {
+        return false;
+    }
+    for (uint32_t i = 0; i < s_gl.n; i++) {
+        const GlCmd *e = &s_gl.cmd[i];
+        if (e->c == c && e->ord == g_rdStoreOrd && e->el == E_PAD && e->cover &&
+            lazyNote(e->target, e->col)) {
+            r->writeSerial++; /* as the sprite's draw */
+            rd__lamps_pad_noted();
+            return true;
+        }
+    }
+    return false;
+}
+
 bool rd__glow_light_sprite(Replay *r, const RdFrame *f, const RdCmd *c)
 {
     GlCmd *e = find(c);
+    if (!e && wholePad(r, c)) {
+        return true;
+    }
     s_gl.inRepeat = false;
     if (e && e == &s_gl.cmd[0] && !s_gl.spanOpen) {
         s_gl.spanOpen = true; /* the chain's passes counted from here */
