@@ -63,7 +63,7 @@ extern "C" {
  * words of its own (a build variant's choice); 0 (v0.11.5): by the word
  * glowblur alone, until the owner has seen it */
 #ifndef RD_GLOW_BLUR_DEFAULT
-#define RD_GLOW_BLUR_DEFAULT 0
+#define RD_GLOW_BLUR_DEFAULT 1
 #endif
 
 /* the taps a position (fx_glowblur.hlsl GB_TAPS: the same number) */

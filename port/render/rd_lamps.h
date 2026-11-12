@@ -126,7 +126,7 @@ extern "C" {
  * (ICO_RD_LAMPS=noglowblur does the same for a tool run) */
 void rd__lamps_glowblur_pin(bool off);
 #ifndef RD_LAMPS_FILLPASTE_DEFAULT
-#define RD_LAMPS_FILLPASTE_DEFAULT 0
+#define RD_LAMPS_FILLPASTE_DEFAULT 1
 #endif
 /* lowresms where ICO_RD_LAMPS names no words of its own: 1 (v0.11.5) on
  * the PowerVR class under Vulkan alone, where the checks and the self-test
