@@ -73,9 +73,11 @@
 #include "rd_shadow_tile.h" /* rd__profile_tile_class */
 #include "rd_upscale.h"     /* rd__upscale_point_on */
 
-/* Off by default in this release: on the owner's PowerVR phone (rc14, DXT-48-1536) the right
- * part of the title's picture flickered black from the first picture the fill landed in list
- * 11's pass, and the cause was not found by reading (docs/port/RENDER_POST.md).
+/* Off by default in this release: on the owner's PowerVR phone (DXT-48-1536) the build with
+ * this alone on (rc17f, the no-volume shadow window off) drew the bottom right quarter of the
+ * picture wrong; the cause was not found by reading (docs/port/RENDER_POST.md). The black
+ * flicker of rc14 and rc15 at the title was the no-volume shadow window's (rd_no_volume.c),
+ * not this.
  * ICO_RD_FILL11=1 turns it on for the tests; 1 here would put it back on the PowerVR and desktop
  * classes where the self-test passes */
 #define RD_FILL11_DEFAULT 0
@@ -248,10 +250,11 @@ static void note(void)
         snprintf(line, sizeof(line), "crack fill: with list 11: off (%s%s; self-test %s)", src,
                  s_sw.force >= 0 ? "" : "=0", s_sw.test ? s_sw.words : "not run");
     } else if (e < 0 && RD_FILL11_DEFAULT == 0) {
-        snprintf(line, sizeof(line),
-                 "crack fill: with list 11: off (the default in this release: the PowerVR "
-                 "phone's title flickered black with it on, cause not found; ICO_RD_FILL11=1 "
-                 "turns it on for the tests)");
+        snprintf(
+            line, sizeof(line),
+            "crack fill: with list 11: off (the default in this release: the PowerVR "
+            "phone drew a quarter of the picture wrong with it on, cause not found; ICO_RD_FILL11=1 "
+            "turns it on for the tests)");
     } else if (!rd__fill11_may()) {
         snprintf(line, sizeof(line),
                  "crack fill: with list 11: off (not the PowerVR or a desktop class: off on the "
