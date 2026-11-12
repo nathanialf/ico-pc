@@ -284,17 +284,16 @@ static void glFrame(const char *cfg, int k, int model, int above1x)
         CHECK(onPad == 0 && onW2 == 0 && onW3 == 0,
               "%s: passes on WORK2_PAD %u, WORK2 %u, WORK3 %u under DARK (want none): %s", what,
               onPad, onW2, onW3, rd__glow_light_debug());
-        /* without the aura nothing after the alpha sprite touches WORK0: its
-         * clear is owed instead (rd_lamps.c RD_LAMPS_OWED), drawn by the
-         * reads above */
+        /* nothing after the alpha sprite touches WORK0, with the aura too
+         * (this frame's aura draws into AURA_WORK and AURA_TAP, not WORK0:
+         * no pass on WORK0 follows the chain's first command): its clear is
+         * owed (rd_lamps.c RD_LAMPS_OWED), drawn by the reads above.  The
+         * aura case's old "at least 1" was met only by clearAll's head clear
+         * of WORK0 until the counts began at the chain (639c76369) */
         const uint32_t w0Want = rd__lamps_owed_on() ? 0u : 1u;
-        CHECK(k == GL_AURA ? onW0Clear >= 1u : onW0Clear == w0Want,
-              "%s: %u of %u passes on WORK0 clear it (want %s: its alpha sprite's clear%s)", what,
-              onW0Clear, onW0,
-              k == GL_AURA ? "at least 1"
-              : w0Want     ? "1"
-                           : "0, owed",
-              k == GL_AURA ? ", and any the aura's own sprites make" : "");
+        CHECK(onW0Clear == w0Want,
+              "%s: %u of %u passes on WORK0 clear it (want %s: its alpha sprite's clear)", what,
+              onW0Clear, onW0, w0Want ? "1" : "0, owed");
         /* again with the plan: the same (WORK1's region zero, from the
            frame's clear and the replay before) */
         rhi_wait_idle();
