@@ -36,6 +36,13 @@
 # Enhanced 2x (the phone's own frame v3677 among them).  No device: SKIP (77).
 # -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DPY=<python3>
 # -DDIFF=<png_level_diff.py> -DOUT=<a folder the test may write>
+# The lists name dumps of the build machine alone (the owner's rule there: a
+# listed dump that is absent FAILS). A machine without that folder has none of
+# them: the test is skipped as the older dump tests are.
+if(NOT IS_DIRECTORY "/primary/dev/ico-dumps")
+  message(STATUS "SKIP: no dump folder on this machine (/primary/dev/ico-dumps): the list's dumps are the build machine's")
+  return()
+endif()
 set(dumps "")
 set(failures 0)
 if(NOT "${LIST}" STREQUAL "" AND EXISTS "${LIST}")

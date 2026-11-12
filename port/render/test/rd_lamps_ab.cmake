@@ -40,6 +40,13 @@
 # -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
 # -DBACKEND=vulkan|opengl (the sequences' rd-00200 and rd-00600 beside the
 # list's corpus/dumps/boot/rd-00400.rddump)
+# The lists name dumps of the build machine alone (the owner's rule there: a
+# listed dump that is absent FAILS). A machine without that folder has none of
+# them: the test is skipped as the older dump tests are.
+if(NOT IS_DIRECTORY "/primary/dev/ico-dumps")
+  message(STATUS "SKIP: no dump folder on this machine (/primary/dev/ico-dumps): the list's dumps are the build machine's")
+  return()
+endif()
 set(failures 0)
 set(dumps "")
 if(NOT "${LIST}" STREQUAL "" AND EXISTS "${LIST}")
