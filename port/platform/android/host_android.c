@@ -812,6 +812,104 @@ int ico_android_game_mode(void)
     return mode;
 }
 
+/* --- the display's modes and rate (the frame rate pin) -------------------- */
+
+/* IcoActivity.displayModes ()[F, called as ico_host_vibrate calls its
+   method: on SDL's main thread, the method id looked up once (a failed
+   lookup is remembered), local references deleted, a pending exception
+   cleared */
+int ico_android_display_modes(float *out, int cap)
+{
+    static jmethodID s_mid;
+    static int s_failed;
+    JNIEnv *env;
+    jobject act;
+    jclass cls;
+    int got = -1;
+
+    if (s_failed || out == NULL || cap <= 0) {
+        return -1;
+    }
+    env = (JNIEnv *)SDL_GetAndroidJNIEnv();
+    act = env != NULL ? (jobject)SDL_GetAndroidActivity() : NULL;
+    if (env == NULL || act == NULL) {
+        return -1;
+    }
+    cls = (*env)->GetObjectClass(env, act);
+    if (cls != NULL) {
+        if (s_mid == NULL) {
+            s_mid = (*env)->GetStaticMethodID(env, cls, "displayModes", "()[F");
+            if (s_mid == NULL) {
+                s_failed = 1;
+            }
+        }
+        if (s_mid != NULL) {
+            jfloatArray arr = (jfloatArray)(*env)->CallStaticObjectMethod(env, cls, s_mid);
+
+            if (!(*env)->ExceptionCheck(env) && arr != NULL) {
+                const jsize len = (*env)->GetArrayLength(env, arr);
+                const jsize n = len < (jsize)cap ? len : (jsize)cap;
+
+                (*env)->GetFloatArrayRegion(env, arr, 0, n, (jfloat *)out);
+                got = (*env)->ExceptionCheck(env) ? -1 : (int)n;
+            }
+            if (arr != NULL) {
+                (*env)->DeleteLocalRef(env, arr);
+            }
+        }
+        if ((*env)->ExceptionCheck(env)) {
+            (*env)->ExceptionClear(env);
+            got = -1;
+        }
+        (*env)->DeleteLocalRef(env, cls);
+    } else if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionClear(env);
+    }
+    (*env)->DeleteLocalRef(env, act);
+    return got;
+}
+
+/* the last rate the activity's display listener pushed (its float's bits),
+   the pushes so far and SDL's ticks at the last */
+static SDL_AtomicU32 s_displayHzBits;
+static SDL_AtomicInt s_displaySerial;
+static SDL_AtomicU32 s_displayMs;
+
+float ico_android_display_hz(int *serial, unsigned *ms)
+{
+    const Uint32 bits = SDL_GetAtomicU32(&s_displayHzBits);
+    float hz;
+
+    if (serial != NULL) {
+        *serial = SDL_GetAtomicInt(&s_displaySerial);
+    }
+    if (ms != NULL) {
+        *ms = (unsigned)SDL_GetAtomicU32(&s_displayMs);
+    }
+    memcpy(&hz, &bits, sizeof hz);
+    return hz;
+}
+
+/* IcoActivity.nativeDisplayRate (a static native method): the display the
+   activity is on has this refresh rate now, or its mode list changed
+   (DisplayManager.DisplayListener.onDisplayChanged, filtered on the Java
+   side to a change of the rate or the list), on the activity's thread.
+   Counted; the window's pump applies the video settings again and the 10 s
+   refresh line writes the change (window_display_rate.c). */
+JNIEXPORT void JNICALL Java_com_defnf_icopc_IcoActivity_nativeDisplayRate(JNIEnv *env, jclass cls,
+                                                                          jfloat hz)
+{
+    const float f = (float)hz;
+    Uint32 bits;
+
+    (void)env;
+    (void)cls;
+    memcpy(&bits, &f, sizeof bits);
+    SDL_SetAtomicU32(&s_displayMs, (Uint32)SDL_GetTicks());
+    SDL_SetAtomicU32(&s_displayHzBits, bits);
+    (void)SDL_AddAtomicInt(&s_displaySerial, 1);
+}
+
 /* IcoActivity.nativeThermalStatus (a static native method): the system's
    thermal status changed (PowerManager.OnThermalStatusChangedListener,
    Android 10 and later), on the activity's thread. Logged at once. */

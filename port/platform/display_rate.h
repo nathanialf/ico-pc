@@ -19,11 +19,19 @@
  * The pin (Android only, through the NDK's ANativeWindow_setFrameRate; the
  * window glue asks and logs): while the Frame rate row is a number the
  * game asks the system for that rate as a fixed source, so a panel that
- * changes its refresh rate with the load holds one; Uncapped and "Original"
- * release it, as does leaving the game.  [dev] frame_rate_pin = auto (the
- * default) or off.  One line each time the ask changes:
+ * changes its refresh rate with the load holds one; under Uncapped the game
+ * asks for the highest rate the display's own mode list offers at the
+ * current mode's size (Android 12 and later only, where the call takes the
+ * seamless-only change strategy; read from Display.getSupportedModes at run
+ * time, never a written rate); "Original" releases it, as does leaving the
+ * game.  [dev] frame_rate_pin = auto (the default) or off (every ask off,
+ * Uncapped's too).  One line each time the ask changes:
  *     window: frame rate pin: asked 60 Hz (fixed source; the Frame rate row
  *     is 60) with ANativeWindow_setFrameRateWithChangeStrategy: returned 0
+ *     window: frame rate pin: asked 120 Hz (fixed source; the display's
+ *     highest of 60, 120 at 1080x2364; the Frame rate row is Uncapped) with
+ *     ANativeWindow_setFrameRateWithChangeStrategy: returned 0
+ * and one line when Uncapped asks for nothing (display_pin_skip_text).
  */
 #ifndef ICO_PLATFORM_DISPLAY_RATE_H
 #define ICO_PLATFORM_DISPLAY_RATE_H
@@ -76,6 +84,7 @@ typedef struct DisplayPin {
     int asked;           /* the rate asked of the system now, 0 none */
     const void *surface; /* the native window the ask was made on */
     int again;           /* the ask was lost with its surface: the next SET says so */
+    int uncapped;        /* the ask now is Uncapped's (the display's highest) */
 } DisplayPin;
 
 typedef enum DisplayPinAct {
@@ -100,6 +109,11 @@ int display_pin_surface(DisplayPin *p, const void *surface, int resumed);
    the call is never asked.  A SET after display_pin_surface lost the ask is
    DISPLAY_PIN_SET_AGAIN. */
 DisplayPinAct display_pin_next(DisplayPin *p, int want, int deviceOffers);
+/* The same with whether want is Uncapped's ask (display_pin_want): the
+   same rate asked for the other reason (the row 120 and then Uncapped at a
+   highest of 120) is a new ask, so the line says which.  display_pin_next
+   is this with uncapped 0. */
+DisplayPinAct display_pin_next_uncapped(DisplayPin *p, int want, int uncapped, int deviceOffers);
 /* The system refused the ask (the call's return was not 0): the state keeps
    none, so the next change tries again */
 void display_pin_failed(DisplayPin *p);
@@ -114,5 +128,72 @@ int display_pin_text(DisplayPinAct act, int rate, int framerate, const char *cal
    the callbacks are reachable with the first and either of the others.
    The line without "window: " */
 int display_choreo_text(int getInstance, int frame64, int vsync, char *buf, size_t size);
+
+/* --- the pin under Uncapped: the display's highest rate ----------------- */
+
+/* One mode of the display's list (Display.Mode: its physical width and
+   height and its refresh rate in Hz) */
+typedef struct DisplayModeRate {
+    int w, h;
+    double hz;
+} DisplayModeRate;
+
+enum { DISPLAY_TOP_RATES = 32 };
+
+typedef struct DisplayTop {
+    int listed;                      /* the modes read; -1: the list could not be read */
+    int w, h;                        /* the current mode's size */
+    int nRates;                      /* the distinct rates at w x h (at most DISPLAY_TOP_RATES) */
+    double rates[DISPLAY_TOP_RATES]; /* those rates, lowest first */
+    double hz;                       /* the highest of them, 0 none */
+} DisplayTop;
+
+/* The rates the display offers at the current mode's size curW x curH:
+   modes NULL or n < 0 is a list that could not be read (listed -1).  A
+   mode of another size, or with a rate of 0 or less or above 1000 Hz, is
+   not counted; a rate within 0.05 Hz of one already counted is the same
+   rate (the first one's value is kept), so 59.94 and 60.00 are two rates
+   and 120.00 and 120.02 one.  More than DISPLAY_TOP_RATES distinct rates:
+   the first DISPLAY_TOP_RATES met are kept and hz is the highest of those. */
+void display_top_rate(const DisplayModeRate *modes, int n, int curW, int curH, DisplayTop *out);
+
+/* Why the ask under Uncapped is or is not made */
+typedef enum DisplayTopSkip {
+    DISPLAY_TOP_ASK = 0,      /* asked: the display's highest rate */
+    DISPLAY_TOP_NOT_UNCAPPED, /* the row is a number or Original: display_pin_rate's rule */
+    DISPLAY_TOP_PIN_OFF,      /* [dev] frame_rate_pin = off: nothing asked */
+    DISPLAY_TOP_NO_SEAMLESS,  /* no ANativeWindow_setFrameRateWithChangeStrategy */
+    DISPLAY_TOP_NO_LIST,      /* the display's modes could not be read */
+    DISPLAY_TOP_NO_SIZE,      /* no mode of the list has the current mode's size */
+    DISPLAY_TOP_ONE_RATE,     /* one rate at the current size: nothing to choose */
+    DISPLAY_TOP_REFUSED,      /* the system refused an Uncapped ask this run */
+    DISPLAY_TOP_UNFOCUSED     /* the window has no input focus: no new ask */
+} DisplayTopSkip;
+
+/* The rate to ask for the Frame rate row's value (ico_video_framerate) with
+   Uncapped's rule: a number or Original is display_pin_rate's answer (skip
+   DISPLAY_TOP_NOT_UNCAPPED).  Uncapped (framerate < 0), checked in this
+   order: 0 (ask for none, today's behaviour) with the reason in *skip when
+   the pin is off, the device has no seamless-only call (seamless 0), an
+   Uncapped ask was refused this run (refused), the list could not be read,
+   no mode has the current size, or the current size has one rate; when the
+   window has no input focus (focused 0) the ask Uncapped already holds is
+   kept (p's) and no new one is made; else the highest rate rounded to whole
+   Hz (the state's unit; the call is made with top->hz itself), skip
+   DISPLAY_TOP_ASK.  p may be NULL (nothing held); skip may be NULL. */
+int display_pin_want(int framerate, DisplayPinMode mode, const DisplayTop *top, int seamless,
+                     int refused, int focused, const DisplayPin *p, DisplayTopSkip *skip);
+/* The line of an Uncapped ask (act DISPLAY_PIN_SET or _SET_AGAIN) without
+   "window: ": the rate asked, the rates it was chosen from at the size
+   (the highest 8 when there are more), the call and its return
+   ("(refused)" when not 0); "" for another act */
+int display_pin_top_text(DisplayPinAct act, const DisplayTop *top, const char *call, int ret,
+                         char *buf, size_t size);
+/* The line when Uncapped asks for nothing (skip DISPLAY_TOP_NO_SEAMLESS to
+   _UNFOCUSED) without "window: "; ret the refused call's return for
+   DISPLAY_TOP_REFUSED; "" (returns 0) for DISPLAY_TOP_ASK, _NOT_UNCAPPED
+   and _PIN_OFF (the pin's first line already says it is off) */
+int display_pin_skip_text(DisplayTopSkip skip, const DisplayTop *top, int ret, char *buf,
+                          size_t size);
 
 #endif /* ICO_PLATFORM_DISPLAY_RATE_H */

@@ -130,6 +130,23 @@ ThermalState ico_host_thermal(const char **why);
    ico_host_vibrate. */
 int ico_android_game_mode(void);
 
+/* The display the activity is on (IcoActivity.displayModes, Android 11 and
+   later), for the frame rate pin under Uncapped (window_display_rate.c):
+   up to cap floats into out, the current mode's physical width and
+   height, the display's refresh rate (Display.getRefreshRate, the rate
+   SDL's Java side reads), then each supported mode's width, height and
+   rate.
+   Returns the floats copied (the array's length when it fits), -1 when the
+   list could not be read (before Android 11, no method, a Java exception,
+   no display).  On SDL's main thread, as ico_host_vibrate. */
+int ico_android_display_modes(float *out, int cap);
+/* The refresh rate the activity's display listener last reported
+   (IcoActivity.watchDisplay: at the start of each visible stretch and at
+   every change of the display's rate or mode list), 0 before the first;
+   *serial (when not NULL) the reports so far, *ms (when not NULL) SDL's
+   ticks in ms (SDL_GetTicks) at the last.  Any thread. */
+float ico_android_display_hz(int *serial, unsigned *ms);
+
 /* The screen as the activity last reported it (IcoActivity.sendScreen,
    from the system's window-layout callbacks and every configuration
    change): densityDpi is the screen's density in dots per inch; fold is

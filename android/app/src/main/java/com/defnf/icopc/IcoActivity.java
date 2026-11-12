@@ -165,6 +165,121 @@ public class IcoActivity extends SDLActivity {
         return -2;
     }
 
+    // The display the activity is on, for the frame rate pin under Uncapped
+    // (host_android.c ico_android_display_modes, window_display_rate.c): the
+    // current mode's physical width and height, the display's refresh rate
+    // as SDL reads it (Display.getRefreshRate, which follows a frame rate
+    // override the system gives the app), then each supported mode's width,
+    // height and rate (Display.getSupportedModes); null before Android 11
+    // (Activity.getDisplay is API 30) or when the system gives none. Read
+    // only: nothing here asks for a mode.
+    public static float[] displayModes() {
+        if (Build.VERSION.SDK_INT < 30 || sInstance == null) {
+            return null;
+        }
+        try {
+            android.view.Display d = sInstance.getDisplay();
+            if (d == null) {
+                return null;
+            }
+            android.view.Display.Mode cur = d.getMode();
+            android.view.Display.Mode[] modes = d.getSupportedModes();
+            if (cur == null || modes == null) {
+                return null;
+            }
+            float[] out = new float[3 + 3 * modes.length];
+            out[0] = cur.getPhysicalWidth();
+            out[1] = cur.getPhysicalHeight();
+            out[2] = d.getRefreshRate();
+            for (int i = 0; i < modes.length; i++) {
+                out[3 + 3 * i] = modes[i].getPhysicalWidth();
+                out[4 + 3 * i] = modes[i].getPhysicalHeight();
+                out[5 + 3 * i] = modes[i].getRefreshRate();
+            }
+            return out;
+        } catch (RuntimeException | LinkageError e) {
+            // no answer is the answer
+        }
+        return null;
+    }
+
+    // The display's refresh rate to the native side at the start of each
+    // visible stretch and at every change of its rate or mode list
+    // (host_android.c nativeDisplayRate): SDL's Java side passes the rate
+    // only in SDLSurface.surfaceChanged, and a panel that switches rates
+    // (the frame rate pin's ask, or the system's own choice) does not
+    // resize the surface, so SDL's mode keeps the old rate. Android 11 and
+    // later (displayModes); the listener field is an Object, as the thermal
+    // listener's is, and any failure only means SDL's rate is used.
+    private static native void nativeDisplayRate(float hz);
+    private Object mDisplayListener;
+    private float[] mDisplaySent;
+
+    private void sendDisplay() {
+        float[] modes = displayModes();
+        if (modes == null || SDLActivity.mBrokenLibraries
+                || java.util.Arrays.equals(modes, mDisplaySent)) {
+            return;
+        }
+        mDisplaySent = modes;
+        try {
+            nativeDisplayRate(modes[2]);
+        } catch (UnsatisfiedLinkError e) {
+            // libmain.so without the method
+        }
+    }
+
+    private void startDisplayWatch() {
+        if (Build.VERSION.SDK_INT < 30 || mDisplayListener != null) {
+            return;
+        }
+        try {
+            android.hardware.display.DisplayManager dm = (android.hardware.display.DisplayManager)
+                    getSystemService(Context.DISPLAY_SERVICE);
+            if (dm != null) {
+                android.hardware.display.DisplayManager.DisplayListener l =
+                        new android.hardware.display.DisplayManager.DisplayListener() {
+                            @Override
+                            public void onDisplayAdded(int displayId) {
+                            }
+
+                            @Override
+                            public void onDisplayRemoved(int displayId) {
+                            }
+
+                            @Override
+                            public void onDisplayChanged(int displayId) {
+                                sendDisplay();
+                            }
+                        };
+                dm.registerDisplayListener(l,
+                        new android.os.Handler(android.os.Looper.getMainLooper()));
+                mDisplayListener = l;
+            }
+        } catch (RuntimeException | LinkageError e) {
+            mDisplayListener = null;
+        }
+        mDisplaySent = null;
+        sendDisplay();
+    }
+
+    private void stopDisplayWatch() {
+        if (mDisplayListener == null) {
+            return;
+        }
+        try {
+            android.hardware.display.DisplayManager dm = (android.hardware.display.DisplayManager)
+                    getSystemService(Context.DISPLAY_SERVICE);
+            if (dm != null) {
+                dm.unregisterDisplayListener(
+                        (android.hardware.display.DisplayManager.DisplayListener) mDisplayListener);
+            }
+        } catch (RuntimeException | LinkageError e) {
+            // already gone
+        }
+        mDisplayListener = null;
+    }
+
     private void pushThermalStatus(int status) {
         if (!SDLActivity.mBrokenLibraries) {
             try {
@@ -247,6 +362,7 @@ public class IcoActivity extends SDLActivity {
         super.onStart();
         applyTaskIcon();
         startThermalWatch();
+        startDisplayWatch();
         try {
             if (mLayoutTracker == null) {
                 mLayoutTracker = new WindowInfoTrackerCallbackAdapter(
@@ -267,6 +383,7 @@ public class IcoActivity extends SDLActivity {
     @Override
     protected void onStop() {
         stopThermalWatch();
+        stopDisplayWatch();
         if (mLayoutTracker != null) {
             try {
                 mLayoutTracker.removeWindowLayoutInfoListener(mLayoutListener);

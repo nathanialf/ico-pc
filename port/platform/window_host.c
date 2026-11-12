@@ -318,9 +318,12 @@ Uint64 window_refresh_ns(Uint64 fallback)
 {
     const SDL_DisplayMode *dm =
         s_window != NULL ? SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(s_window)) : NULL;
+    /* Android: the activity's report when SDL's mode is older (window_display_rate.h) */
+    const double hz = s_window != NULL
+                          ? window_display_refresh_hz(dm != NULL ? (double)dm->refresh_rate : 0.0)
+                          : 0.0;
 
-    return dm != NULL && dm->refresh_rate > 1.0f ? (Uint64)(1e9 / (double)dm->refresh_rate)
-                                                 : fallback;
+    return hz > 1.0 ? (Uint64)(1e9 / hz) : fallback;
 }
 
 static void video_settings(RdSettings *rs, int w, int h)
@@ -4023,6 +4026,9 @@ int ico_window_pump(void)
         static int s_screenGen;
         const int gen = ico_android_screen(NULL);
 
+        if (window_display_rate_pushed()) {
+            video_apply(1); /* the display's rate or modes changed, as SDL's mode event */
+        }
         if (gen != s_screenGen) {
             s_screenGen = gen;
             touch_layout_update();

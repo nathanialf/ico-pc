@@ -28,7 +28,18 @@
  *            asks and says nothing; a device without the call is never asked;
  *   text     the pin's line for a set (rate, row, call, return, "(refused)"
  *            for a return other than 0), a set again for a new surface and
- *            a release.
+ *            a release;
+ *   top      Uncapped's ask, the display's highest rate at the current
+ *            mode's size: two rates (60, 120), ties (a rate listed twice,
+ *            120.00 and 120.02 one rate), one mode, none, a list that could
+ *            not be read, other sizes not counted (144 Hz at another size),
+ *            fractional rates (59.94, 119.88: asked as 119.88, 120 in the
+ *            state), invalid rates, more than DISPLAY_TOP_RATES rates;
+ *            display_pin_want's order (a number and Original as before, the
+ *            pin off, no seamless-only call, refused, the list, focus with
+ *            and without a held ask); the state: the row 120 then Uncapped
+ *            at 120 is a new ask, a release clears it, a lost surface asks
+ *            again; every line word for word and a small buffer.
  */
 #include <stdio.h>
 #include <string.h>
@@ -199,10 +210,244 @@ static void testPin(void)
           strstr(line, "AChoreographer_postVsyncCallback yes)") != NULL);
 }
 
+static void testTop(void)
+{
+    static const char call[] = "ANativeWindow_setFrameRateWithChangeStrategy";
+    const int W = 1080, H = 2364;
+    DisplayTop t;
+    DisplayTopSkip skip = DISPLAY_TOP_ASK;
+    char line[400];
+
+    /* the Pixel 10 Pro Fold's kind of list: 60 and 120 at one size */
+    {
+        const DisplayModeRate m[] = {{W, H, 60.0}, {W, H, 120.0}};
+
+        display_top_rate(m, 2, W, H, &t);
+        CHECK(t.listed == 2 && t.nRates == 2 && t.rates[0] == 60.0 && t.rates[1] == 120.0);
+        CHECK(t.hz == 120.0 && t.w == W && t.h == H);
+        CHECK(display_pin_want(-1, DISPLAY_PIN_AUTO, &t, 1, 0, 1, NULL, &skip) == 120);
+        CHECK(skip == DISPLAY_TOP_ASK);
+        display_pin_top_text(DISPLAY_PIN_SET, &t, call, 0, line, sizeof line);
+        CHECK_STR(line, "frame rate pin: asked 120 Hz (fixed source; the display's highest of 60, "
+                        "120 at 1080x2364; the Frame rate row is Uncapped) with "
+                        "ANativeWindow_setFrameRateWithChangeStrategy: returned 0");
+        display_pin_top_text(DISPLAY_PIN_SET_AGAIN, &t, call, 0, line, sizeof line);
+        CHECK_STR(line, "frame rate pin: asked again for a new surface: 120 Hz (fixed source; the "
+                        "display's highest of 60, 120 at 1080x2364; the Frame rate row is "
+                        "Uncapped) with ANativeWindow_setFrameRateWithChangeStrategy: returned 0");
+        display_pin_top_text(DISPLAY_PIN_SET, &t, call, -22, line, sizeof line);
+        CHECK(strstr(line, "returned -22 (refused)") != NULL);
+        display_pin_top_text(DISPLAY_PIN_SET, &t, NULL, -1000, line, sizeof line);
+        CHECK(strstr(line, "with (no call): returned -1000 (refused)") != NULL);
+        display_pin_top_text(DISPLAY_PIN_RELEASE, &t, call, 0, line, sizeof line);
+        CHECK_STR(line, "");
+        display_pin_top_text(DISPLAY_PIN_NOTHING, &t, call, 0, line, sizeof line);
+        CHECK_STR(line, "");
+        {
+            char small[16];
+
+            display_pin_top_text(DISPLAY_PIN_SET, &t, call, 0, small, sizeof small);
+            CHECK(strlen(small) == 15);
+        }
+
+        /* the order of the rule */
+        CHECK(display_pin_want(60, DISPLAY_PIN_AUTO, &t, 1, 0, 1, NULL, &skip) == 60 &&
+              skip == DISPLAY_TOP_NOT_UNCAPPED);
+        CHECK(display_pin_want(0, DISPLAY_PIN_AUTO, &t, 1, 0, 1, NULL, &skip) == 0 &&
+              skip == DISPLAY_TOP_NOT_UNCAPPED);
+        CHECK(display_pin_want(60, DISPLAY_PIN_OFF, &t, 1, 0, 1, NULL, &skip) == 0 &&
+              skip == DISPLAY_TOP_NOT_UNCAPPED);
+        CHECK(display_pin_want(-1, DISPLAY_PIN_OFF, &t, 1, 0, 1, NULL, &skip) == 0 &&
+              skip == DISPLAY_TOP_PIN_OFF);
+        CHECK(display_pin_want(-1, DISPLAY_PIN_AUTO, &t, 0, 0, 1, NULL, &skip) == 0 &&
+              skip == DISPLAY_TOP_NO_SEAMLESS);
+        CHECK(display_pin_want(-1, DISPLAY_PIN_AUTO, &t, 1, 1, 1, NULL, &skip) == 0 &&
+              skip == DISPLAY_TOP_REFUSED);
+        CHECK(display_pin_want(-1, DISPLAY_PIN_AUTO, &t, 1, 0, 0, NULL, &skip) == 0 &&
+              skip == DISPLAY_TOP_UNFOCUSED);
+        CHECK(display_pin_want(-1, DISPLAY_PIN_AUTO, &t, 1, 0, 1, NULL, NULL) == 120);
+        {
+            DisplayPin held = {0};
+
+            held.asked = 120;
+            held.uncapped = 1;
+            CHECK(display_pin_want(-1, DISPLAY_PIN_AUTO, &t, 1, 0, 0, &held, &skip) == 120 &&
+                  skip == DISPLAY_TOP_UNFOCUSED);
+            held.uncapped = 0; /* the row 120's ask is not Uncapped's to keep */
+            CHECK(display_pin_want(-1, DISPLAY_PIN_AUTO, &t, 1, 0, 0, &held, &skip) == 0);
+        }
+        CHECK(display_pin_want(-1, DISPLAY_PIN_AUTO, NULL, 1, 0, 1, NULL, &skip) == 0 &&
+              skip == DISPLAY_TOP_NO_LIST);
+    }
+
+    /* ties: a rate listed twice (two modes of one size and rate) is one;
+       120.00 and 120.02 are one rate, the first value kept */
+    {
+        const DisplayModeRate m[] = {
+            {W, H, 120.0}, {W, H, 60.0}, {W, H, 120.0}, {W, H, 60.0}, {W, H, 120.02}};
+
+        display_top_rate(m, 5, W, H, &t);
+        CHECK(t.listed == 5 && t.nRates == 2 && t.rates[0] == 60.0 && t.hz == 120.0);
+    }
+    /* one mode: nothing to choose, today's behaviour */
+    {
+        const DisplayModeRate m[] = {{W, H, 60.0}};
+
+        display_top_rate(m, 1, W, H, &t);
+        CHECK(t.nRates == 1 && t.hz == 60.0);
+        CHECK(display_pin_want(-1, DISPLAY_PIN_AUTO, &t, 1, 0, 1, NULL, &skip) == 0 &&
+              skip == DISPLAY_TOP_ONE_RATE);
+        CHECK(display_pin_skip_text(skip, &t, 0, line, sizeof line) > 0);
+        CHECK_STR(line, "frame rate pin: Uncapped asks for no rate: the display offers one rate "
+                        "at 1080x2364 (60 Hz, 1 mode listed); the system chooses the refresh "
+                        "rate as before");
+    }
+    /* two modes of one rate are one rate */
+    {
+        const DisplayModeRate m[] = {{W, H, 90.0}, {W, H, 90.0}};
+
+        display_top_rate(m, 2, W, H, &t);
+        CHECK(t.nRates == 1);
+        display_pin_skip_text(DISPLAY_TOP_ONE_RATE, &t, 0, line, sizeof line);
+        CHECK(strstr(line, "(90 Hz, 2 modes listed)") != NULL);
+    }
+    /* none: an empty list, and a list with no mode of the current size */
+    {
+        const DisplayModeRate m[] = {{H, W, 60.0}, {H, W, 120.0}};
+
+        display_top_rate(m, 0, W, H, &t);
+        CHECK(t.listed == 0 && t.nRates == 0 && t.hz == 0.0);
+        CHECK(display_pin_want(-1, DISPLAY_PIN_AUTO, &t, 1, 0, 1, NULL, &skip) == 0 &&
+              skip == DISPLAY_TOP_NO_SIZE);
+        display_pin_skip_text(skip, &t, 0, line, sizeof line);
+        CHECK_STR(line, "frame rate pin: Uncapped asks for no rate: the display lists no mode at "
+                        "the current mode's size 1080x2364 (0 modes listed); the system chooses "
+                        "the refresh rate as before");
+        display_top_rate(m, 2, W, H, &t); /* the other orientation's size is another size */
+        CHECK(t.listed == 2 && t.nRates == 0);
+        CHECK(display_pin_want(-1, DISPLAY_PIN_AUTO, &t, 1, 0, 1, NULL, &skip) == 0 &&
+              skip == DISPLAY_TOP_NO_SIZE);
+        display_pin_skip_text(skip, &t, 0, line, sizeof line);
+        CHECK(strstr(line, "(2 modes listed)") != NULL);
+    }
+    /* a list that could not be read */
+    {
+        display_top_rate(NULL, 3, W, H, &t);
+        CHECK(t.listed == -1 && t.nRates == 0);
+        display_top_rate(NULL, -1, 0, 0, &t);
+        CHECK(t.listed == -1);
+        CHECK(display_pin_want(-1, DISPLAY_PIN_AUTO, &t, 1, 0, 1, NULL, &skip) == 0 &&
+              skip == DISPLAY_TOP_NO_LIST);
+        display_pin_skip_text(skip, &t, 0, line, sizeof line);
+        CHECK_STR(line, "frame rate pin: Uncapped asks for no rate: the display's modes could not "
+                        "be read; the system chooses the refresh rate as before");
+    }
+    /* other resolutions are not counted: 144 Hz at another size */
+    {
+        const DisplayModeRate m[] = {{720, 1580, 144.0},
+                                     {W, H, 60.0},
+                                     {2208, 1840, 120.0},
+                                     {W, H, 120.0},
+                                     {720, 1580, 60.0}};
+
+        display_top_rate(m, 5, W, H, &t);
+        CHECK(t.listed == 5 && t.nRates == 2 && t.hz == 120.0);
+        CHECK(display_pin_want(-1, DISPLAY_PIN_AUTO, &t, 1, 0, 1, NULL, &skip) == 120);
+    }
+    /* fractional rates: asked as listed, whole Hz in the state */
+    {
+        const DisplayModeRate m[] = {{W, H, 119.88}, {W, H, 59.94}};
+
+        display_top_rate(m, 2, W, H, &t);
+        CHECK(t.nRates == 2 && t.rates[0] == 59.94 && t.hz == 119.88);
+        CHECK(display_pin_want(-1, DISPLAY_PIN_AUTO, &t, 1, 0, 1, NULL, &skip) == 120);
+        display_pin_top_text(DISPLAY_PIN_SET, &t, call, 0, line, sizeof line);
+        CHECK_STR(line, "frame rate pin: asked 119.88 Hz (fixed source; the display's highest of "
+                        "59.94, 119.88 at 1080x2364; the Frame rate row is Uncapped) with "
+                        "ANativeWindow_setFrameRateWithChangeStrategy: returned 0");
+    }
+    /* 59.94 and 60.00 are two rates (0.06 Hz apart) */
+    {
+        const DisplayModeRate m[] = {{W, H, 60.0}, {W, H, 59.94}};
+
+        display_top_rate(m, 2, W, H, &t);
+        CHECK(t.nRates == 2 && t.rates[0] == 59.94 && t.hz == 60.0);
+        CHECK(display_pin_want(-1, DISPLAY_PIN_AUTO, &t, 1, 0, 1, NULL, &skip) == 60);
+    }
+    /* invalid rates are not counted */
+    {
+        const DisplayModeRate m[] = {{W, H, 0.0}, {W, H, -1.0}, {W, H, 1001.0}, {W, H, 90.0}};
+
+        display_top_rate(m, 4, W, H, &t);
+        CHECK(t.listed == 4 && t.nRates == 1 && t.hz == 90.0);
+    }
+    /* more rates than kept: the first DISPLAY_TOP_RATES met, the line names
+       the highest 8 */
+    {
+        DisplayModeRate m[40];
+
+        for (int i = 0; i < 40; i++) {
+            m[i].w = W;
+            m[i].h = H;
+            m[i].hz = (double)(i + 1);
+        }
+        display_top_rate(m, 40, W, H, &t);
+        CHECK(t.nRates == DISPLAY_TOP_RATES && t.hz == (double)DISPLAY_TOP_RATES);
+        display_pin_top_text(DISPLAY_PIN_SET, &t, call, 0, line, sizeof line);
+        CHECK(strstr(line, "asked 32 Hz (fixed source; the display's highest of 32 rates, the "
+                           "highest 8: 25, 26, 27, 28, 29, 30, 31, 32 at 1080x2364;") != NULL);
+    }
+
+    /* the other reasons' lines; none for an ask, a number or the pin off */
+    display_pin_skip_text(DISPLAY_TOP_NO_SEAMLESS, NULL, 0, line, sizeof line);
+    CHECK_STR(line, "frame rate pin: Uncapped asks for no rate: the device has no "
+                    "ANativeWindow_setFrameRateWithChangeStrategy (Android 12 and later), the only "
+                    "call Uncapped's ask is made with (it allows seamless switches only); the "
+                    "system chooses the refresh rate as before");
+    display_pin_skip_text(DISPLAY_TOP_REFUSED, NULL, -22, line, sizeof line);
+    CHECK_STR(line, "frame rate pin: Uncapped asks for no rate: the system refused the ask "
+                    "(returned -22), so it is not made again this run; the system chooses the "
+                    "refresh rate as before");
+    display_pin_skip_text(DISPLAY_TOP_UNFOCUSED, NULL, 0, line, sizeof line);
+    CHECK_STR(line, "frame rate pin: Uncapped's ask waits for the window's focus (no new ask "
+                    "while the window has none)");
+    CHECK(display_pin_skip_text(DISPLAY_TOP_ASK, NULL, 0, line, sizeof line) == 0);
+    CHECK_STR(line, "");
+    CHECK(display_pin_skip_text(DISPLAY_TOP_NOT_UNCAPPED, NULL, 0, line, sizeof line) == 0);
+    CHECK(display_pin_skip_text(DISPLAY_TOP_PIN_OFF, NULL, 0, line, sizeof line) == 0);
+
+    /* the state: the same rate for the other reason is a new ask */
+    {
+        DisplayPin q = {0};
+        int a = 1, b = 2;
+
+        CHECK(display_pin_surface(&q, &a, 0) == 0);
+        CHECK(display_pin_next_uncapped(&q, 120, 0, 1) == DISPLAY_PIN_SET && q.uncapped == 0);
+        CHECK(display_pin_next_uncapped(&q, 120, 1, 1) == DISPLAY_PIN_SET && q.uncapped == 1);
+        CHECK(display_pin_next_uncapped(&q, 120, 1, 1) == DISPLAY_PIN_NOTHING);
+        CHECK(display_pin_next(&q, 120, 1) == DISPLAY_PIN_SET && q.uncapped == 0);
+        CHECK(display_pin_next_uncapped(&q, 120, 1, 1) == DISPLAY_PIN_SET);
+        /* Original: released, the flag with it */
+        CHECK(display_pin_next_uncapped(&q, 0, 1, 1) == DISPLAY_PIN_RELEASE && q.asked == 0 &&
+              q.uncapped == 0);
+        CHECK(display_pin_next_uncapped(&q, 0, 0, 1) == DISPLAY_PIN_NOTHING);
+        /* a device without the call is never asked */
+        CHECK(display_pin_next_uncapped(&q, 120, 1, 0) == DISPLAY_PIN_NOTHING && q.asked == 0);
+        /* a lost surface: asked again, said so */
+        CHECK(display_pin_next_uncapped(&q, 120, 1, 1) == DISPLAY_PIN_SET);
+        CHECK(display_pin_surface(&q, &b, 1) == 1 && q.asked == 0 && q.uncapped == 0);
+        CHECK(display_pin_next_uncapped(&q, 120, 1, 1) == DISPLAY_PIN_SET_AGAIN && q.uncapped == 1);
+        /* refused: none held */
+        display_pin_failed(&q);
+        CHECK(q.asked == 0 && q.uncapped == 0);
+    }
+}
+
 int main(void)
 {
     testWatch();
     testPin();
+    testTop();
     printf("display_rate_test: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }
