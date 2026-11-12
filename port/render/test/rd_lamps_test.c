@@ -208,8 +208,11 @@ int main(void)
     /* every class (FILLHOLD by its word alone) */
     const uint32_t ev = RD_LAMPS_PAD | RD_LAMPS_OWED | RD_LAMPS_WHOLEPAD |
                         (RD_LAMPS_LOWRES_DEFAULT ? RD_LAMPS_LOWRES : 0u);
-    CHECK(rd__lamps_default_bits(1, false, true, true, true) == (ev | RD_LAMPS_AREA), "PowerVR");
-    CHECK(rd__lamps_default_bits(1, true, true, true, true) == (ev | RD_LAMPS_AREA),
+    /* the 4-sample lamps on the PowerVR class under Vulkan alone */
+    const uint32_t pv = RD_LAMPS_MS_DEFAULT ? (RD_LAMPS_LOWRES | RD_LAMPS_LOWRESMS) : 0u;
+    CHECK(rd__lamps_default_bits(1, false, true, true, true) == (ev | pv | RD_LAMPS_AREA),
+          "PowerVR");
+    CHECK(rd__lamps_default_bits(1, true, true, true, true) == (ev | pv | RD_LAMPS_AREA),
           "PowerVR, a phone");
     CHECK(rd__lamps_default_bits(2, false, true, true, true) == (ev | RD_LAMPS_AREA),
           "a desktop, pass area (the fold of two pairs by the switch alone)");
@@ -217,8 +220,9 @@ int main(void)
     CHECK(rd__lamps_default_bits(2, true, true, true, true) == ev, "a faked phone vendor");
     CHECK(rd__lamps_default_bits(0, true, true, true, true) == ev, "Arm, Qualcomm, Apple");
     CHECK(rd__lamps_default_bits(1, false, false, true, true) == ev, "not Vulkan");
-    CHECK(rd__lamps_default_bits(1, false, true, false, false) == ev, "no pass area, no fold");
-    CHECK(rd__lamps_default_bits(1, false, true, true, false) == (ev | RD_LAMPS_AREA),
+    CHECK(rd__lamps_default_bits(1, false, true, false, false) == (ev | pv),
+          "no pass area, no fold");
+    CHECK(rd__lamps_default_bits(1, false, true, true, false) == (ev | pv | RD_LAMPS_AREA),
           "PowerVR without the blur fold");
     /* t3 */
     const RhiRect e = {0, 0, 0, 0}, a = {10, 20, 30, 40}, c = {100, 5, 10, 10};

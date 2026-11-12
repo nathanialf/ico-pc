@@ -6,6 +6,7 @@
 - Phone speed. The game now skips the glow in rooms where it adds no light (at every resolution, the Original one included), draws several screen effects together instead of one by one, and leaves out graphics memory work it does not need. Measured on a Pixel 10 Pro Fold (Enhanced, native resolution, no frame limit): the cage room went from about 32 ms a picture (about 28 pictures a second) on v0.11.4 to about 13 ms (about 60 to 70 pictures a second), and the old bridge from about 19 ms to about 13 to 14.5 ms. The picture looks the same.
 - Other phones and PCs get the changes that apply to them. Nothing was measured on Arm Mali or Qualcomm Adreno phones, on Windows, Linux or macOS, or over a long session (heat), so how much they gain is not known.
 - On Android, the game now keeps its main threads on the phone's fastest processor cores and asks for them again if the phone moves them. On Android 13 and later, the game also tells the phone how long each picture may take and how long it took, so the phone can set its speed for the game's work. The picture, the resolution and the frame rate are not changed by either.
+- On phones with PowerVR graphics, such as the Pixel 10 Pro Fold, rooms with lamps in view take less work to draw above the Original resolution. The lamps' glow looks the same.
 - On phones and some PCs, the menus and the pause screen are drawn together with the effects before them. A few pixels of menu text can differ by up to 3 shades.
 - The log file now has a line naming the Android version and the phone, so a report shows them.
 

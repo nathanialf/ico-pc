@@ -300,6 +300,13 @@ uint32_t rd__lamps_default_bits(int tileClass, bool tilePhone, bool vulkan, bool
      * with the snapshot copy back: a loss */
     uint32_t b = RD_LAMPS_PAD | RD_LAMPS_OWED | RD_LAMPS_WHOLEPAD |
                  (RD_LAMPS_LOWRES_DEFAULT ? RD_LAMPS_LOWRES : 0u);
+    /* the lamps' 4-sample pass (LOWRESMS) on the PowerVR class under Vulkan
+     * alone: the form the owner accepted on the phone (rc28); every other
+     * class keeps today's full-size path (rd__lamps_lowres_on decides, its
+     * checks and self-test too) */
+    if (tileClass == 1 && vulkan && RD_LAMPS_MS_DEFAULT) {
+        b |= RD_LAMPS_LOWRES | RD_LAMPS_LOWRESMS;
+    }
     const bool cls = tileClass == 1 || (tileClass == 2 && !tilePhone);
     if (cls && vulkan && passArea) {
         b |= RD_LAMPS_AREA;
@@ -1345,13 +1352,14 @@ static bool lampsPassArea(RhiRenderPassDesc *p, uint32_t cid, bool ms, bool stor
 /* RD_LAMPS_LOWRES (rd_lamps.h): WORK2 at the GS frame's size, its own depth
  * SCENE's taken down to it before the chain's first draw on it */
 static struct {
-    int on;          /* -1 unread, 0 off, 1 on (read once: WORK2's size) */
-    bool box;        /* the reduction the box (lowresbox, lowres2x), else the GS bilinear */
-    bool ss;         /* WORK2 at twice the GS size (lowres2x) */
-    int depthForm;   /* depth_down_ps's: 0 bilinear, 1 bias, 2 four taps, 3 a point, 4 hybrid */
-    const char *src; /* who decided: ICO_RD_LAMPS or the build's default */
-    uint32_t replay; /* the replay whose SCENE depth WORK2's holds */
-    bool fresh;      /* and no draw has written SCENE's depth since */
+    int on;             /* -1 unread, 0 off, 1 on (read once: WORK2's size) */
+    bool box;           /* the reduction the box (lowresbox, lowres2x), else the GS bilinear */
+    bool ss;            /* WORK2 at twice the GS size (lowres2x) */
+    int depthForm;      /* depth_down_ps's: 0 bilinear, 1 bias, 2 four taps, 3 a point, 4 hybrid */
+    const char *src;    /* who decided: ICO_RD_LAMPS or the build's default */
+    const char *offWhy; /* why the default leaves it off (the start line) */
+    uint32_t replay;    /* the replay whose SCENE depth WORK2's holds */
+    bool fresh;         /* and no draw has written SCENE's depth since */
     RdDepthCopy copy;
     bool saidOn, saidDrop;
     uint64_t draws, fills, dropped;                 /* since rd_init */
@@ -1392,8 +1400,20 @@ bool rd__lamps_lowres_on(void)
         s_lr.src = s_sw.env == 1 ? "ICO_RD_LAMPS" : "the build's default";
         /* the multisampled form: only where everything it needs is there,
          * else LOWRES off (today's full-size path, never the aliased one) */
-        const bool msAsked =
-            s_sw.env == 1 ? (s_sw.envBits & RD_LAMPS_LOWRESMS) != 0u : RD_LAMPS_MS_DEFAULT != 0;
+        /* by default on the PowerVR class under Vulkan alone (the build's
+         * RD_LAMPS_MS_DEFAULT; rd__lamps_default_bits), any eligible class
+         * by the tests' word */
+        const RhiLimits *dl = g_rd.hasDevice ? rhi_limits() : NULL;
+        const bool powervr =
+            dl && rd__profile_tile_class() == 1 && rhi_backend() == RHI_BACKEND_VULKAN;
+        const bool msAsked = s_sw.env == 1 ? (s_sw.envBits & RD_LAMPS_LOWRESMS) != 0u
+                                           : RD_LAMPS_MS_DEFAULT != 0 && powervr;
+        if (s_sw.env != 1 && !msAsked && !s_lr.on) {
+            s_lr.offWhy = !RD_LAMPS_MS_DEFAULT ? "the build's RD_LAMPS_MS_DEFAULT is 0"
+                          : !dl                ? "no device when WORK2 is made"
+                                               : "not the PowerVR class under Vulkan: today's "
+                                                 "full-size lamps";
+        }
         if (msAsked) {
             s_lmsN = s_sw.env == 1 && (s_sw.envBits & RD_LAMPS_LOWRESMS8) != 0u ? 8u : 4u;
             s_lr.ss = false;
@@ -1450,30 +1470,6 @@ bool rd__lamps_fill_hold_ok(uint32_t color, uint32_t depth)
         sumAdd(&s_lr.sHold, 1);
     }
     return true;
-}
-
-/* the start line: which form is on and who decided */
-static void lowresNote(void)
-{
-    if (!g_rd.hasDevice) {
-        return;
-    }
-    const bool on = rd__lamps_lowres_on();
-    static const char *const kDepth[5] = {
-        "the texel at a whole-number sample point, else bilinear",
-        "the texel at a whole-number sample point, else the slope bias (lowresbias)",
-        "the farthest of four texels (lowres4)", "a point compare (lowresp)",
-        "the texel at a whole-number sample point, else bilinear on a plane (lowreshy)"};
-    rd__log("lamps: low resolution %s (%s; RD_LAMPS_LOWRES_DEFAULT %d)%s%s%s%s", on ? "on" : "off",
-            s_lr.src, RD_LAMPS_LOWRES_DEFAULT,
-            on ? (s_lr.ss ? ": above 1x WORK2 at twice the GS frame's size (lowres2x) with its own "
-                            "depth ("
-                          : ": above 1x WORK2 at the GS frame's size with its own depth (")
-               : "",
-            on ? kDepth[s_lr.depthForm] : "", on ? "), its reduction " : "",
-            on ? (s_lr.box ? "the box (lowresbox; DIVERGENCES.md VD-32)"
-                           : "the GS bilinear (DIVERGENCES.md VD-32)")
-               : "");
 }
 
 void rd__lamps_lowres_counts(uint64_t *draws, uint64_t *fills, uint64_t *dropped)
@@ -2074,6 +2070,44 @@ void rd__lamps_pass_begun(Replay *r)
     rd__stats_here()->draws++;
     s_lr.fills++;
     sumAdd(&s_lr.sFills, 1);
+}
+
+/* the start line: which form is on and who decided */
+static void lowresNote(void)
+{
+    if (!g_rd.hasDevice) {
+        return;
+    }
+    const bool on = rd__lamps_lowres_on();
+    static const char *const kDepth[5] = {
+        "the texel at a whole-number sample point, else bilinear",
+        "the texel at a whole-number sample point, else the slope bias (lowresbias)",
+        "the farthest of four texels (lowres4)", "a point compare (lowresp)",
+        "the texel at a whole-number sample point, else bilinear on a plane (lowreshy)"};
+    if (!on) {
+        /* off: why (the 4-sample form refused, or the default's class) */
+        rd__log("lamps: low resolution off (%s; RD_LAMPS_MS_DEFAULT %d, RD_LAMPS_LOWRES_DEFAULT "
+                "%d): %s: the lamps' glow at the scene's size",
+                s_lr.src, RD_LAMPS_MS_DEFAULT, RD_LAMPS_LOWRES_DEFAULT,
+                s_lms.state == 2 ? s_lms.why
+                : s_lr.offWhy    ? s_lr.offWhy
+                : s_sw.env == 1  ? "not asked by ICO_RD_LAMPS"
+                                 : "not asked");
+        return;
+    }
+    char form[64];
+    if (s_lms.state == 1) {
+        snprintf(form, sizeof(form), "%u samples resolved in the pass (lowresms)", s_lmsN);
+    } else {
+        snprintf(form, sizeof(form), "%s",
+                 s_lr.ss ? "twice the GS size, single-sampled (lowres2x; shimmers less)"
+                         : "single-sampled (lowres: the GS-size raster shimmers)");
+    }
+    rd__log("lamps: low resolution on (%s; RD_LAMPS_MS_DEFAULT %d, RD_LAMPS_LOWRES_DEFAULT %d): "
+            "above 1x WORK2 at the GS frame's size with its own depth (%s), %s, its reduction "
+            "%s (DIVERGENCES.md VD-32)",
+            s_lr.src, RD_LAMPS_MS_DEFAULT, RD_LAMPS_LOWRES_DEFAULT, kDepth[s_lr.depthForm], form,
+            s_lr.box ? "the box" : "the GS bilinear");
 }
 
 void rd__lamps_lowres_depth(Replay *r, DrawSetup *ds)

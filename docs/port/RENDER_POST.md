@@ -633,13 +633,16 @@ that cannot take WORK2's depth (its DATE on SCENE's stencil, no pipeline, no cop
 MB, SCENE's depth (12.8 MB loaded by the lamps' pass) is sampled at 380,000 texels into WORK2's 1.9
 MB depth, the mask's and lamps' fragments 6.7 times fewer; about 33 MB of attachment traffic less a
 lamps picture for one small pass more (the depth fill), about 3 ms at the phone's 1 ms per 10 MB.
-Off by default (`RD_LAMPS_LOWRES_DEFAULT` 0 in `rd_lamps.h`, a build define: 1 turns it on with
-the GS bilinear wherever `ICO_RD_LAMPS` does not name its own words; a variant build or a later
-release flips it), and asked for by its word (not in `ICO_RD_LAMPS=1`): WORK2's size is fixed when
-the target is made, so it is read once (`rd__lamps_lowres_on`); the start line `rd: lamps: low
-resolution on|off (ICO_RD_LAMPS|the build's default; RD_LAMPS_LOWRES_DEFAULT N): ..., its
-reduction the GS bilinear|the box` says which form is on. It ships on every class and backend only
-inside VD-32's acceptance. `ICO_RD_LAMPS_POISON=1` clears WORK2's depth to
+**What ships**: `lowresms` with 4 samples by default on the PowerVR class under Vulkan
+alone, where its checks and self-test pass (`RD_LAMPS_MS_DEFAULT` 1 in `rd_lamps.h`,
+`rd__lamps_default_bits`): the owner accepted it on the phone (2026-11-12: no shimmer seen, lamps pictures
+22.7 to 24.0 ms against 25 to 26.5). Every other class, desktop included, keeps today's full-size
+lamps (it never ran on desktop hardware); the tests' word gives any eligible class the form. The plain
+`lowres` (single-sampled: it shimmers), `lowres2x` (little saving on the phone), `lowresms8` and the
+depth and reduction variants stay off by default (`RD_LAMPS_LOWRES_DEFAULT` 0: 1 would turn the plain
+form on everywhere). Every form is read once (`rd__lamps_lowres_on`: WORK2's size is fixed when the
+target is made); the start line `rd: lamps: low resolution on|off (<who>; RD_LAMPS_MS_DEFAULT N,
+RD_LAMPS_LOWRES_DEFAULT N): ...` says which form is in force or why none is. `ICO_RD_LAMPS_POISON=1` clears WORK2's depth to
 0.375 before the fill writes it. Lines: once `rd: lamps: low resolution: WORK2 WxH (the GS frame's
 size) under SCENE SWxSH: ...`, once `rd: lamps: low resolution: a draw into WORK2 WxH drawn without
 a depth (<why>; ...)`, the 10 s `window: lamps low resolution: N pictures with WORK2 WxH under SCENE

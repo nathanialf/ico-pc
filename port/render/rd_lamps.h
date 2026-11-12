@@ -108,10 +108,12 @@ extern "C" {
 #define RD_LAMPS_LOWRESMS 8192u
 /* lowresms8: the same with 8 samples (the standard 8-sample locations) */
 #define RD_LAMPS_LOWRESMS8 16384u
-/* lowresms where ICO_RD_LAMPS names no words of its own: 0 no (the
- * release), 1 yes (a variant build) */
+/* lowresms where ICO_RD_LAMPS names no words of its own: 1 (v0.11.5) on
+ * the PowerVR class under Vulkan alone, where the checks and the self-test
+ * pass (rd__lamps_default_bits, rd__lamps_lowres_on; every other class keeps
+ * today's full-size lamps: it never ran on desktop hardware), 0 nowhere */
 #ifndef RD_LAMPS_MS_DEFAULT
-#define RD_LAMPS_MS_DEFAULT 0
+#define RD_LAMPS_MS_DEFAULT 1
 #endif
 /* LOWRES's form where the build's default turns it on: 0 the GS size, 1
  * twice it (lowres2x) */
@@ -129,8 +131,9 @@ extern "C" {
 #define RD_LAMPS_BIAS_REACH 0.0625f
 /* and a constant, in GS Z units (the depth format's rounding) */
 #define RD_LAMPS_BIAS_UNITS 4.0f
-/* LOWRES where ICO_RD_LAMPS does not name it (unset, or words it does not
- * understand): 0 off, 1 on (with the GS bilinear).  A build define: a
+/* the plain LOWRES (single-sampled, the GS-size raster: it shimmers) where
+ * ICO_RD_LAMPS does not name it and the 4-sample form is not taken: 0 off
+ * (v0.11.5), 1 on everywhere (with the GS bilinear).  A build define: a
  * variant build or a release flips it; ICO_RD_LAMPS=... with or without
  * lowres still decides for the tests */
 #ifndef RD_LAMPS_LOWRES_DEFAULT

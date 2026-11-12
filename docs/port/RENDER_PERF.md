@@ -585,6 +585,19 @@ own pass holds SCENE's colour alone, or it is the first draw of the aura's paste
 tiler, compare the sum of the
 lists, not one list or effect (the log's GPU top passes and GPU ms per replay lines now say so).
 
+### The lamps' glow on the PowerVR phone
+
+What was tried for the issue 163 rooms' lamps (`port/render/rd_lamps.c`, [RENDER_POST.md](RENDER_POST.md#the-lamps-glow-for-less)) and what the owner's PowerVR phone measured (lamps pictures, GPU ms, 25 to 26.5 without):
+
+| form | phone | state |
+| --- | --- | --- |
+| the lamps' area on WORK2 (`area`) | no measurable gain | on on the PowerVR class (exact) |
+| two blur pairs a pass (`fold4`) | 28.3 to 30.9: slower (a small pass costs about 0.27 ms, the folded shader's 64 loads a texel more) | off |
+| WORK2 at the GS size (`lowres`) | 22.8 to 24.5, but the glow shimmers | off |
+| the crack fill's hold past the lamps (`fillhold`) | a loss: flushed by a later draw, the snapshot copy back | off |
+| WORK2 at the GS size from 4 samples resolved in the pass (`lowresms`) | 22.7 to 24.0, no shimmer seen | on on the PowerVR class (VD-32) |
+| the crack fill drawn in the glow's paste pass (`fillpaste`) | not built | the next release |
+
 ### Culling
 
 **What the game culls.** Each object's box, then each part's box, goes through `gsb_ClipBox` against

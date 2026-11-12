@@ -50,7 +50,7 @@ size per 512 columns of the frame (`port/render/rd_core.c` (`namedTargetDesc`)):
 | WORK3_HELD | (none: the host's) | W / 2 x 128, WORK3's |
 | WORK2_PAD | 256 x 64 | W / 2 x 64 |
 | SHADOW2 | 64 x 64 | W / 8 x 64 |
-| WORK2, AURA_WORK, DATE_SNAPSHOT | the frame | W x H, the scene's scale (WORK2 the GS size with its own depth under the tests' `ICO_RD_LAMPS=...+lowres`, [RENDER_POST.md](RENDER_POST.md#the-lamps-glow-for-less)) |
+| WORK2, AURA_WORK, DATE_SNAPSHOT | the frame | W x H, the scene's scale (WORK2 the GS size with its own depth on the PowerVR class above 1x: the resolve of a 4-sample colour and depth, transient, that live in the lamps' pass only, [RENDER_POST.md](RENDER_POST.md#the-lamps-glow-for-less)) |
 
 At 848 the W / 2 buffers are 424 wide and the W / 4 ones 212. A sprite into a buffer B GS pixels
 wide covers pixel x when `x0 <= o + 16 x < x1` with `o = 16 (2048 - B / 2)` (12.4 units), and
