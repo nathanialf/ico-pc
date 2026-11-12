@@ -186,6 +186,8 @@ int main(void)
     CHECK(rd__lamps_parse("lowresb2+lowres4", &b) == 1 &&
               b == (RD_LAMPS_LOWRES | RD_LAMPS_LOWRESB2 | RD_LAMPS_LOWRES4),
           "lowresb2, lowres4 imply lowres: %u", b);
+    CHECK(rd__lamps_parse("lowresp", &b) == 1 && b == (RD_LAMPS_LOWRES | RD_LAMPS_LOWRESP),
+          "lowresp implies lowres: %u", b);
     CHECK(strcmp(rd__lamps_bits_text(RD_LAMPS_PAD | RD_LAMPS_LOWRES), "pad+lowres") == 0,
           "lowres's word: %s", rd__lamps_bits_text(RD_LAMPS_PAD | RD_LAMPS_LOWRES));
     b = 77;

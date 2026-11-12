@@ -207,8 +207,9 @@ const char *rd__lamps_box_why_text(int why)
 
 const char *rd__lamps_bits_text(uint32_t bits)
 {
-    static const char *const kWord[10] = {"area",   "pad",      "owed",      "wholepad", "fold4",
-                                          "lowres", "fillhold", "lowresbox", "lowresb2", "lowres4"};
+    static const char *const kWord[11] = {"area",     "pad",     "owed",     "wholepad",
+                                          "fold4",    "lowres",  "fillhold", "lowresbox",
+                                          "lowresb2", "lowres4", "lowresp"};
     static char s_text[8][112];
     static unsigned s_next;
     bits &= RD_LAMPS_ALL | RD_LAMPS_FILLHOLD | RD_LAMPS_LOWRES_ANY;
@@ -218,7 +219,7 @@ const char *rd__lamps_bits_text(uint32_t bits)
     char *t = s_text[s_next++ & 7u]; /* a ring: a few calls in one expression */
     t[0] = '\0';
     size_t at = 0;
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 11; i++) {
         if (bits & (1u << i)) {
             const int m = snprintf(t + at, sizeof(s_text[0]) - at, "%s%s", at ? "+" : "", kWord[i]);
             at += m > 0 && (size_t)m < sizeof(s_text[0]) - at ? (size_t)m : 0;
@@ -270,6 +271,8 @@ int rd__lamps_parse(const char *e, uint32_t *bits)
             b |= RD_LAMPS_LOWRES | RD_LAMPS_LOWRESB2;
         } else if (n == 7 && strncmp(s, "lowres4", 7) == 0) {
             b |= RD_LAMPS_LOWRES | RD_LAMPS_LOWRES4;
+        } else if (n == 7 && strncmp(s, "lowresp", 7) == 0) {
+            b |= RD_LAMPS_LOWRES | RD_LAMPS_LOWRESP;
         } else {
             return -1;
         }
@@ -1321,7 +1324,7 @@ bool rd__lamps_pass(RhiRenderPassDesc *p, uint32_t cid, bool ms, bool storage)
 static struct {
     int on;          /* -1 unread, 0 off, 1 on (read once: WORK2's size) */
     bool box;        /* the reduction the box (lowresbox), else the GS bilinear */
-    int depthForm;   /* 0 the slope bias, 1 twice it (lowresb2), 2 four taps (lowres4) */
+    int depthForm;   /* 0 the slope bias, 1 twice it, 2 four taps, 3 a point (lowresp) */
     const char *src; /* who decided: ICO_RD_LAMPS or the build's default */
     uint32_t replay; /* the replay whose SCENE depth WORK2's holds */
     bool fresh;      /* and no draw has written SCENE's depth since */
@@ -1343,7 +1346,8 @@ bool rd__lamps_lowres_on(void)
         if (s_sw.env == 1) {
             s_lr.on = (s_sw.envBits & RD_LAMPS_LOWRES_ANY) != 0u ? 1 : 0;
             s_lr.box = (s_sw.envBits & RD_LAMPS_LOWRESBOX) != 0u;
-            s_lr.depthForm = (s_sw.envBits & RD_LAMPS_LOWRES4)    ? 2
+            s_lr.depthForm = (s_sw.envBits & RD_LAMPS_LOWRESP)    ? 3
+                             : (s_sw.envBits & RD_LAMPS_LOWRES4)  ? 2
                              : (s_sw.envBits & RD_LAMPS_LOWRESB2) ? 1
                                                                   : 0;
         } else {
@@ -1394,8 +1398,9 @@ static void lowresNote(void)
         return;
     }
     const bool on = rd__lamps_lowres_on();
-    static const char *const kDepth[3] = {"the slope bias", "twice the slope bias (lowresb2)",
-                                          "the farthest of four texels (lowres4)"};
+    static const char *const kDepth[4] = {"the slope bias", "twice the slope bias (lowresb2)",
+                                          "the farthest of four texels (lowres4)",
+                                          "a point compare (lowresp)"};
     rd__log("lamps: low resolution %s (%s; RD_LAMPS_LOWRES_DEFAULT %d)%s%s%s%s", on ? "on" : "off",
             s_lr.src, RD_LAMPS_LOWRES_DEFAULT,
             on ? ": above 1x WORK2 at the GS frame's size with its own depth (" : "",
@@ -1508,7 +1513,7 @@ static bool lowresFill(Replay *r, RdTargetRec *w2, RdTargetRec *sc)
     /* the form (depth_down_ps): x 0 the slope bias, 1 the four taps; y the
      * mismatch past half a texel (GS pixels); z the bias's factor; w its
      * constant in depth (GS Z units times SCENE's Z scale) */
-    cb.uvRect[0] = s_lr.depthForm == 2 ? 1.0f : 0.0f;
+    cb.uvRect[0] = s_lr.depthForm == 2 ? 1.0f : s_lr.depthForm == 3 ? 2.0f : 0.0f;
     cb.uvRect[1] = RD_LAMPS_BIAS_REACH;
     cb.uvRect[2] = s_lr.depthForm == 1 ? 2.0f : 1.0f;
     cb.uvRect[3] = RD_LAMPS_BIAS_UNITS * rd__target_z_scale(idOf(RD_TARGET_SCENE));

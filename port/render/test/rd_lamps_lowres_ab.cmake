@@ -13,9 +13,10 @@
 #   enh43   Enhanced 2x at 4:3, presented at 1280x960, the same fakes;
 #   enh3x   Enhanced 3x at 4:3, presented at 1920x1440;
 #   enh4x   Enhanced 4x at 4:3, presented at 2560x1920;
-#   phonebox, phoneb2, phone4  the phone's setting with lowresbox (the
-#           reduction the box), lowresb2 (twice the slope bias), lowres4 (the
-#           farthest of four texels): printed only;
+#   phonebox, phoneb2, phone4, phonep  the phone's setting with lowresbox
+#           (the reduction the box), lowresb2 (twice the slope bias), lowres4
+#           (the farthest of four texels), lowresp (a point compare): printed
+#           only;
 #   x1      Enhanced 1x, presented at 2364x1080: nothing changes by
 #           construction (WORK2 and SCENE of one size, the draws keep SCENE's
 #           depth): every PNG the same bytes, no draw on WORK2's own depth;
@@ -85,6 +86,7 @@ set(lampsOn "ICO_RD_LAMPS=pad+owed+wholepad+lowres+fillhold")
 set(lampsBox "ICO_RD_LAMPS=pad+owed+wholepad+lowresbox+fillhold")
 set(lampsB2 "ICO_RD_LAMPS=pad+owed+wholepad+lowresb2+fillhold")
 set(lamps4 "ICO_RD_LAMPS=pad+owed+wholepad+lowres4+fillhold")
+set(lampsP "ICO_RD_LAMPS=pad+owed+wholepad+lowresp+fillhold")
 set(lampsNoHold "ICO_RD_LAMPS=pad+owed+wholepad+lowres")
 set(args_phone --enhanced --resolution 2364x1080 --full-height --full-pixel --present 2364x1080)
 set(args_enh43 --enhanced --resolution 2x --aspect 1.3333 --present 1280x960)
@@ -96,12 +98,13 @@ set(args_hold ${args_phone})
 set(args_phonebox ${args_phone})
 set(args_phoneb2 ${args_phone})
 set(args_phone4 ${args_phone})
+set(args_phonep ${args_phone})
 # Original 1x of the dump (no --enhanced): WORK3, the glow the paste adds, is
 # the same size at every scale; each form's WORK3 is printed against it
 set(args_orig --present 2364x1080)
 set(fake ICO_VK_FAKE_LIMITS=moltenvk)
-set(settings phone phonebox phoneb2 phone4 enh43 enh3x enh4x x1 hold poison)
-set(measured phone phonebox phoneb2 phone4 enh43 enh3x enh4x)
+set(settings phone phonebox phoneb2 phone4 phonep enh43 enh3x enh4x x1 hold poison)
+set(measured phone phonebox phoneb2 phone4 phonep enh43 enh3x enh4x)
 set(asserted phone enh43 enh3x enh4x)
 
 set(lowresRe "stats: lamps lowres (on|off): WORK2 ([0-9]+)x([0-9]+) under SCENE ([0-9]+)x([0-9]+), ([0-9]+) draws into WORK2 on its own depth, ([0-9]+) depth fills, ([0-9]+) draws without a depth")
@@ -148,6 +151,8 @@ foreach(dump IN LISTS dumps)
         list(APPEND env "${lampsB2}")
       elseif(s STREQUAL "phone4" AND arm EQUAL 1)
         list(APPEND env "${lamps4}")
+      elseif(s STREQUAL "phonep" AND arm EQUAL 1)
+        list(APPEND env "${lampsP}")
       elseif(arm EQUAL 1)
         list(APPEND env "${lampsOn}")
       else()

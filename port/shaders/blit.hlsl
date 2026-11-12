@@ -362,22 +362,24 @@ float depth_upsample_ps(BlitVSOut i) : SV_Depth
 
 // depth_down_ps: SCENE's depth (t1, a scaled target) at the GS frame's own size, into the
 // lamps' WORK2 depth above 1x (port/render/rd_lamps.c RD_LAMPS_LOWRES), a depth-only pass.
-// GS pixel p's sample point lies at SCENE texel index position at = (p + 0.5) * scale - crop
-// - 0.5 (g_param.xy SCENE's scale, g_param.z its Full pixel crop ox; g_tex.xy SCENE's size).
-// The lamps test GEQUAL (a larger depth is nearer: gs_z_to_depth), so a smaller depth passes
-// more.  g_uvRect.x picks the form:
-//   0  the slope bias: SCENE's depth at the texel nearest the sample point, less the most a
-//      plane through it can differ there from its value at the lamp's own sample point: per
-//      axis the plane's slope (the smaller of the forward and backward differences, so an
-//      edge beside the texel does not count, in depth per GS pixel) times the reach (half a
-//      SCENE texel, 0.5 / scale GS pixels, plus g_uvRect.y GS pixels for the sample points'
-//      measured mismatch), all times g_uvRect.z, plus g_uvRect.w (a few GS Z units in depth).
-//      A lamp drawn over the very surface it lights (issue 163's gate, its own plane drawn
-//      again) passes; an occluder in front of a lamp hides it unless it lies within that
-//      bias of the lamp's depth;
-//   1  the farthest of the four texels around the sample point (the bilinear's taps): it
-//      passes the gate only where those taps reach the mismatch (at 2x) and lets lamps
-//      through occluders a texel away.
+// The GS samples pixel p at its integer coordinate; the port draws a GS integer coordinate
+// on a pixel's centre at 1x and on the centre of its block's first texel on a scaled target
+// (rd_replay.c rd__frame_group_ex: origin 0.5 / scale), so GS pixel p's sample point is
+// SCENE texel index at = p * scale - crop (g_param.xy SCENE's scale, g_param.z its Full pixel
+// crop ox; g_tex.xy SCENE's size): an integer at an integer scale, the very sample the 1x
+// lamp is drawn at.  (Round 7 took (p + 0.5) * scale - 0.5: (0.5 - 0.5 / scale) GS pixels off,
+// 0.25 at 2x, 0.375 at 4x.)  The lamps test GEQUAL (a larger depth is nearer:
+// gs_z_to_depth), so a smaller depth passes more.  g_uvRect.x picks the form:
+//   0  the slope bias: the depth at the texel nearest at, less per axis the surface's slope
+//      there (the smaller of the forward and backward differences, so an edge beside the
+//      texel does not count, in depth per GS pixel) times the reach (the nearest texel's
+//      distance from at, at most half a texel: 0.5 / scale GS pixels, plus g_uvRect.y GS
+//      pixels for the rasteriser's sub-pixel snap), all times g_uvRect.z, plus g_uvRect.w
+//      (a few GS Z units in depth).  A lamp drawn over the very surface it lights (issue
+//      163's gate, its own plane drawn again) passes; an occluder in front of a lamp hides
+//      it unless it lies within that bias of the lamp's depth;
+//   1  the farthest of the four texels around at (the bilinear's taps);
+//   2  the depth at the texel nearest at, less g_uvRect.w alone (a point compare).
 float depth_down_load(int2 t, int2 size)
 {
     return g_ssDepth.Load(int3(clamp(t, int2(0, 0), size - 1), 0));
@@ -385,10 +387,10 @@ float depth_down_load(int2 t, int2 size)
 
 float depth_down_ps(BlitVSOut i) : SV_Depth
 {
-    const float2 c = floor(i.pos.xy) + 0.5;
-    const float2 at = float2(c.x * g_param.x - g_param.z, c.y * g_param.y) - 0.5;
+    const float2 p = floor(i.pos.xy);
+    const float2 at = float2(p.x * g_param.x - g_param.z, p.y * g_param.y);
     const int2 size = int2(g_tex.xy);
-    if (g_uvRect.x != 0.0) {
+    if (g_uvRect.x == 1.0) {
         const int2 t0 = clamp(int2(floor(at)), int2(0, 0), size - 1);
         const int2 t1 = min(t0 + 1, size - 1);
         const float a = depth_down_load(t0, size);
@@ -399,11 +401,14 @@ float depth_down_ps(BlitVSOut i) : SV_Depth
     }
     const int2 t = clamp(int2(floor(at + 0.5)), int2(0, 0), size - 1);
     const float z = depth_down_load(t, size);
+    if (g_uvRect.x == 2.0) {
+        return max(z - g_uvRect.w, 0.0);
+    }
     const float gx = min(abs(depth_down_load(t + int2(1, 0), size) - z),
                          abs(z - depth_down_load(t - int2(1, 0), size))) * g_param.x;
     const float gy = min(abs(depth_down_load(t + int2(0, 1), size) - z),
                          abs(z - depth_down_load(t - int2(0, 1), size))) * g_param.y;
-    const float2 reach = 0.5 / g_param.xy + g_uvRect.y;
+    const float2 reach = abs(float2(t) - at) / g_param.xy + g_uvRect.y;
     const float bias = (gx * reach.x + gy * reach.y) * g_uvRect.z + g_uvRect.w;
     return max(z - bias, 0.0);
 }

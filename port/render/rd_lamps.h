@@ -75,20 +75,24 @@ extern "C" {
  * above-1x box over each WORK0 texel's GS footprint instead (the scaled
  * WORK2's kernel), for the measurement */
 #define RD_LAMPS_LOWRESBOX 128u
-/* LOWRES's depth (depth_down_ps, rd_lamps.c lowresFill): by default SCENE's
+/* LOWRES's depth (depth_down_ps, rd_lamps.c lowresFill; see lowresp below): by default SCENE's
  * depth at the texel nearest each GS pixel's sample point less the slope
  * bias (the most a plane can differ over the sample points' mismatch);
  * lowresb2 twice that bias, lowres4 the farthest of the four texels around
  * the point (round 6's); each implies lowres, for the measurement */
 #define RD_LAMPS_LOWRESB2 256u
 #define RD_LAMPS_LOWRES4 512u
+/* lowresp: the depth at the texel nearest the sample point, no slope bias
+ * (a point compare: exact at an integer scale, where that texel's centre
+ * is the 1x lamp's own sample point) */
+#define RD_LAMPS_LOWRESP 1024u
 #define RD_LAMPS_LOWRES_ANY                                                                        \
-    (RD_LAMPS_LOWRES | RD_LAMPS_LOWRESBOX | RD_LAMPS_LOWRESB2 | RD_LAMPS_LOWRES4)
-/* the sample points' mismatch the slope bias covers past half a SCENE
- * texel, in GS pixels: the gate's lamp passed the farthest of four taps
- * whose reach on one side was 0.25 GS pixels (2x) and failed it at 0.125
- * (4x) and 0 (3x), so the mismatch lies between; the bias takes its top */
-#define RD_LAMPS_BIAS_REACH 0.25f
+    (RD_LAMPS_LOWRES | RD_LAMPS_LOWRESBOX | RD_LAMPS_LOWRESB2 | RD_LAMPS_LOWRES4 | RD_LAMPS_LOWRESP)
+/* the slope bias's reach past the nearest texel's own distance from the
+ * sample point, in GS pixels: the rasteriser's sub-pixel snap (the GS's
+ * 1/16).  (Round 7's 0.25 covered a sample point taken (0.5 - 0.5 / scale)
+ * GS pixels off, now corrected in depth_down_ps.) */
+#define RD_LAMPS_BIAS_REACH 0.0625f
 /* and a constant, in GS Z units (the depth format's rounding) */
 #define RD_LAMPS_BIAS_UNITS 4.0f
 /* LOWRES where ICO_RD_LAMPS does not name it (unset, or words it does not

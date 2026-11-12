@@ -943,8 +943,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   `tools/glow_light_dumps.txt` (machine-local; a listed dump that is absent FAILS),
   `ICO_RD_LAMPS=pad+owed+wholepad` against `...+lowres+fillhold`, `--pass-dump --stats`,
   `ICO_RD_VU_PREPASS=0`, `ICO_VK_FAKE_LIMITS=moltenvk`, at the phone's Resolution Auto
-  (2364x1080, Full height and pixel; again with `lowresbox`, `lowresb2` and `lowres4`, printed
-  only) and Enhanced 2x, 3x and 4x at 4:3, and each dump once at Original 1x: the stats line
+  (2364x1080, Full height and pixel; again with `lowresbox`, `lowresb2`, `lowres4` and `lowresp`,
+  printed only) and Enhanced 2x, 3x and 4x at 4:3, and each dump once at Original 1x: the stats line
   `lamps lowres on|off`, no draw into WORK2 without a depth, a depth fill where a draw took
   WORK2's own, one such draw at least over the list at each setting, SHADOW0..2 and WORK2_PAD the
   same bytes; WORK3 (the glow the paste adds, one size at every scale) against Original 1x's
