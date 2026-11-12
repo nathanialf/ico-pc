@@ -1,14 +1,17 @@
-/* rd_rebase.c: the alpha re-based to the hand-over (rd_rebase.h).
+/* rd_rebase.c: the alpha from the hand-over (rd_rebase.h).
  *
- * Bounds, from the code: |shift| <= tick / 4; within one frame the value
- * never goes back (the hold); the present clock's moment stays within 7/16
- * of a tick of the time it was asked at (rd_present_clock.c), so the
- * re-based moment stays within 7/16 + 1/4 = 11/16 of a tick of it, and
- * over any span the content's speed is real time's within 11/8 of a tick
- * over the span.  With the drain d and the clock's lead L (clock - ask),
- * the content's moment is ask + L + d - mean, the hand-over ask + d: the
- * content's distance to the hand-over is mean - L, which the drain no
- * longer moves (before: d - L). */
+ * Bounds, from the code, with the measured ask as raw: the content's
+ * moment is the hand-over less the drain's mean before this present
+ * (ask + d - mean), the shift held to a quarter of a tick; within one frame
+ * the value never goes back (the hold).  Between two presents the moment
+ * moves by the hand-overs' interval less the mean's change, which is at
+ * most (the largest drain - the smallest) / 16: the content follows real
+ * time picture to picture, not a smoothed estimate of it.  The window asks
+ * a frame's presents only between its close (never before the deadline
+ * tickAt) and the next closing step's deadline (tickAt + tick), so the
+ * measured ask is in [0, 1) of the tick and only the shift can reach a
+ * clamp: below 0 by at most the mean drain, above 0.999 by at most the
+ * drain less the mean. */
 #include "rd_rebase.h"
 
 #include <math.h>

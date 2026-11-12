@@ -71,7 +71,16 @@ int main(void)
     rd_even_clock_note(0.3, -1, 7.5);
     rd_even_rebase_note(5.0, 3.0, 2.0, false);
     rd_even_rebase_note(1.0, 3.25, -2.25, true);
+    /* the content against the hand-overs: a step equal to its gap, two
+       repeats in a row, a step over twice its gap */
+    rd_even_content_note(100.0, 200.0);
+    rd_even_content_note(116.0, 216.0);
+    rd_even_content_note(116.0, 232.0);
+    rd_even_content_note(116.0, 248.0);
+    rd_even_content_note(150.0, 264.0);
     rd_even_take(&s_w);
+    CHECK(s_w.pairs == 4 && s_w.repeats == 2 && s_w.runs == 1 && s_w.runMax == 2 &&
+          s_w.outside == 3 && s_w.ratioMinMil == 1 && s_w.ratioMaxMil == 2125);
     CHECK(s_w.rebN == 2 && s_w.rebHeld == 1 && s_w.rebBefore[42] == 1 && s_w.rebBefore[34] == 1 &&
           s_w.rebAfter[38] == 2 && s_w.rebShift[36] == 1 && s_w.rebShift[27] == 1);
     CHECK(s_w.pictures == 10 && s_w.steps == 8 && s_w.breaks == 1 && s_w.bound == 1 &&
@@ -104,7 +113,9 @@ int main(void)
         "average over 4); re-based to the hand-over: 2 pictures (the shift 10th -2.25, "
         "median -2.25, 90th 2.25 ms; 1 held at the frame's last value), the content's "
         "moment to the hand-over 10th 3.25, median 3.25, 90th 3.25 ms (at the sample 10th "
-        "1.25, median 1.25, 90th 5.25)");
+        "1.25, median 1.25, 90th 5.25); the content drawn against the hand-overs over 4 "
+        "pairs: 2 repeats (the same moment as the picture before) in 1 runs, the longest "
+        "2; the step over the real gap from 0.000 to 2.125, outside 0.5-2.0 in 3");
     /* a short buffer: cut, still terminated */
     char small[16];
     CHECK(rd_even_format(&s_w, 8.0, small, sizeof small) && strlen(small) == 15);

@@ -3440,6 +3440,12 @@ void rd_cpu_phase_line(void);
 /* the pictures' evenness: "window: evenness in 10 s: ..." (rd_even.c); refreshMs the
  * display's refresh, 0 unknown */
 void rd_even_line(double refreshMs);
+/* the window's presents are pictures as made (vsync off, uncapped, the
+ * render thread on: pace_policy.h pace_rt_as_made), set at every step: the
+ * handed-over present's alpha is then the measured hand-over less the
+ * drain's running mean, not the present clock's (rd_thread.c presentRebase,
+ * rd_rebase.h; docs/port/DISPLAY.md "The alpha") */
+void rd_present_as_made(bool on);
 /* the plan's switch: on, ICO_RD_GLOW_LIGHT=0 off (the tests' A/B, no config
  * key); rd__glow_light_force sets it (-1 the environment's) and forgets the
  * plan's off and the plan frame before */

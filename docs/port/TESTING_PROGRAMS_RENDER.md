@@ -1043,7 +1043,9 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   resets forward and back): the sums and the line word for word; a short buffer cut and
   terminated; taken twice: no line; one more present with the refresh unknown, word for word; the
   hand-over's stamps taken once; the steps over gaps not on the grid (2: mean 0.375, deviation
-  0.125) and two re-base notes (the shift, the hold, both spreads) in the line.
+  0.125) and two re-base notes (the shift, the hold, both spreads) in the line; five content notes (a step
+  equal to its gap, two repeats in a row, a step over twice its gap: 4 pairs, 2 repeats in 1 run,
+  ratios 0 to 2.125, 3 outside 0.5 to 2).
 - `rd_cpu_phase_test.c` (`rd_cpu_phase`, CPU): the render thread's CPU phases (`rd_cpu_phase.c`):
   two pictures of one frame folded (2 pictures, 1 tick, 1 hashed, 6 clock reads, the look-ups
   folded once and `g_rdCpu` emptied), taken twice (empty), no line without a picture, and the
@@ -1668,14 +1670,16 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   presents (a quarter 2 to 4 ms apart, the rest 12 to 20): no step back within a pair, the clock
   within 7/16 of a tick of the measured time, a step at most its interval plus 7/8 of a tick, over
   every span of a second or more the content within 7/8 of a tick of real time; time gone back in a
-  pair: the clock at the measured time. The alpha re-based to the hand-over (`testPresentRebase`,
-  `rd_rebase.c`): presents every 14.8 ms with drains of 1.6 ms at a tick's first and 7.1 ms at a
-  further one: the content's moment to the hand-over spreads at most 1.2 ms over 2000 presents
-  (at the sample 5.5 ms), nothing held; 30 s of bursty presents with drains of 1.6 to 7.1 ms and
-  one in a hundred 40 ms: no step back within a frame, the content within 11/16 of a tick of the
-  time asked and over every span of a second or more within 11/8 of a tick of real time; the
-  edges (no clock value unchanged, a drain over a tick and the quarter-tick cap, the hold, the
-  clamp). The ticks' eyes
+  pair: the clock at the measured time. The alpha from the hand-over with pictures as made
+  (`testPresentRebase`, `rd_rebase.c`): a 30 s model of the window's loop (a frame every 33.37 ms,
+  its closing step 0 to 12 ms late and 7 ms long, presents only between that close and the next
+  closing deadline, hand-overs every 13 to 20 ms, drains of 1 to 2.2 ms before a frame's first
+  picture and 5 to 9 ms before a further one): no step back within a frame, no repeat, between two
+  unclamped pictures the content's step within (the largest drain - the smallest) / 16 of the
+  hand-overs' interval (across a frame's switch too), with a clamp within that plus twice the
+  largest drain, over every span of a second or more within the drains' range plus that; the
+  present clock's alpha over the same asks printed beside it; the edges (no clock value unchanged,
+  a drain over a tick and the quarter-tick cap, the hold, the clamp). The ticks' eyes
   (`testEyeTicks`, on a device): alpha 0 carries the ticks' cameras as every present between the
   ticks, alpha 1 none.
 - `rd_layout_test.c`: the layout frame from the game's layout calls (`rd_layout`).

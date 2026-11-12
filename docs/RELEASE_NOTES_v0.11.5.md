@@ -18,5 +18,5 @@
 - After a few slow pictures, the game now lowers its picture rate for at most about 2 seconds, and goes back sooner once the pictures fit again. Before, it could stay lowered for several seconds (seen on the old bridge on a phone).
 - On phones with an Adreno graphics chip, the game's own check of how the characters are drawn does less extra drawing in the first minutes of play.
 - Motion between game frames no longer steps backward for a moment after a few quick pictures.
-- Motion between game frames is now timed from when each picture starts being drawn, not from when it was asked for.
+- With vsync off and no frame rate limit, motion between game frames is now timed from when each picture starts being drawn, not from a smoothed estimate.
 - On phones whose screen changes its refresh rate by itself, Uncapped now asks the screen for its highest rate instead of being held lower on some starts (Android 12 and later; the phone can still say no).

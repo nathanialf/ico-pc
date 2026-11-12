@@ -75,6 +75,19 @@ void rd_even_clock_note(double raw, int reset, double heldMs);
 #define RD_EVEN_REB_FROM_MS (-16.0) /* the first bin's start; the ends catch the rest */
 void rd_even_rebase_note(double beforeMs, double afterMs, double shiftMs, bool held);
 
+/* the content drawn by a handed-over present on the timer path (rd's ms
+ * clock: its moment, one tick behind the frame's close) and its hand-over
+ * (rd_thread.c presentRebase, the poster's thread): a repeat is a present
+ * whose content moved under RD_EVEN_REPEAT_MS while the hand-over moved
+ * more than RD_EVEN_GAP_MIN_MS; the step over the real gap is the content's
+ * step over the hand-overs' (ratios in thousandths); a gap over a second
+ * or not positive restarts the chain */
+#define RD_EVEN_REPEAT_MS 0.001
+#define RD_EVEN_GAP_MIN_MS 1.0
+#define RD_EVEN_RATIO_LO 0.5
+#define RD_EVEN_RATIO_HI 2.0
+void rd_even_content_note(double contentMs, double handMs);
+
 /* the hand-over's stamps for the picture about to be made on this thread
  * (rd_thread.c presentJob before rd_present, 0 and 0 after it), taken by
  * the replay's record (rd_perf.c rd__perf_begin: 0 and 0 when none) */
@@ -106,6 +119,9 @@ typedef struct RdEvenWindow {
     /* the re-base's */
     uint32_t rebBefore[RD_EVEN_REB_BINS], rebAfter[RD_EVEN_REB_BINS], rebShift[RD_EVEN_REB_BINS];
     uint64_t rebN, rebHeld;
+    /* the content drawn against the hand-overs */
+    uint64_t pairs, repeats, runs, outside;
+    uint32_t runMax, ratioMinMil, ratioMaxMil; /* ratioMinMil: 1000000 + none */
 } RdEvenWindow;
 
 void rd_even_take(RdEvenWindow *w);

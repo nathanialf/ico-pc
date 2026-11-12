@@ -993,8 +993,15 @@ double rd__thread_clock(double gap[2])
  * waited, no other read) */
 static double s_drainAtMs, s_drainEndMs;
 
-/* the alpha re-based to the hand-over (rd_rebase.h): the poster's state */
+/* the alpha re-based to the hand-over (rd_rebase.h): the poster's state,
+ * and whether the window presents pictures as made (rd_present_as_made) */
 static RdRebase s_rebase;
+static bool s_asMade;
+
+void rd_present_as_made(bool on)
+{
+    s_asMade = on;
+}
 
 /* the handed-over present's alpha moved by its drain's difference from the
  * drain's running mean, on the timer path only (the clock timed it: raw not
@@ -1002,26 +1009,37 @@ static RdRebase s_rebase;
  * figures into the evenness line.  No clock read: the drain's stamps */
 static void presentRebase(PresentArgs *p, uint32_t frame)
 {
-    if (isnan(p->raw) || rd__s2_legacy()) {
+    const double tick = p->gap[1];
+    if (isnan(p->raw) || rd__s2_legacy() || !(tick > 0.0)) {
         s_rebase.have = false;
         return;
     }
     const double drain = s_drainEndMs - s_drainAtMs;
     const double lead = rd__present_clock_lead_ms();
-    double shift = 0.0;
-    bool held = false;
-    const double in = p->raw;
-    const double raw = rd_rebase_raw(&s_rebase, in, p->gap[1], drain, frame, &shift, &held);
-    if (isnan(raw) || !(p->gap[1] > 0.0)) {
-        return;
+    /* the measured ask against the frame's close, in ticks: the clock's
+       value less its lead over the time it was asked at */
+    const double atAsk = p->raw - lead / tick;
+    double raw = p->raw;
+    if (s_asMade) {
+        /* pictures as made: the measured hand-over less the drain's
+           running mean (rd_rebase.h), not the clock's smoothed moment */
+        double shift = 0.0;
+        bool held = false;
+        raw = rd_rebase_raw(&s_rebase, atAsk, tick, drain, frame, &shift, &held);
+        p->raw = raw;
+        p->alpha = rd_rebase_alpha(raw);
+        /* the content's moment to the hand-over: at the clock's moment
+           d - L, now d less the shift (or the hold's) */
+        rd_even_rebase_note(drain - lead, drain - (raw - atAsk) * tick, shift, held);
+    } else {
+        s_rebase.have = false;
     }
-    p->raw = raw;
-    p->alpha = rd_rebase_alpha(raw);
-    /* the content's moment to the hand-over: at the sample d - L (the
-       clock's lead L over the ask), re-based d - L less what the value
-       moved (the shift, or the hold's) */
-    const double moved = (raw - in) * p->gap[1];
-    rd_even_rebase_note(drain - lead, drain - lead - moved, shift, held);
+    /* the content drawn on rd's clock against the hand-over (the frame's
+       close at the drain's start less the ask's ticks; the content one tick
+       behind it, at the clamped alpha), for the line's repeats and its step
+       over the real gap */
+    const double closeAt = s_drainAtMs - atAsk * tick;
+    rd_even_content_note(closeAt - tick + (double)rd_rebase_alpha(raw) * tick, s_drainEndMs);
 }
 
 static void presentDrain(bool fresh)

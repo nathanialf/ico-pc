@@ -1,16 +1,19 @@
-/* rd_rebase.h: the alpha re-based to the hand-over (rd_rebase.c;
- * docs/port/DISPLAY.md "The alpha").
+/* rd_rebase.h: the alpha from the hand-over when pictures are made as fast
+ * as the GPU allows (rd_rebase.c; docs/port/DISPLAY.md "The alpha").
  *
  * On the timer path the window takes the alpha from the present clock at
  * the ask, and rd_present_post then waits for the picture before (the
  * drain) before it hands this one over: about 1.6 ms before a tick's first
- * picture and 7 ms before a further one on the owner's 120 Hz phone.  The
- * picture's work starts at the hand-over, so its content is moved by the
- * drain's difference from its running mean: content = the clock's moment +
- * (drain - mean drain).  The mean alpha stays where the clock puts it; each
- * picture's content keeps a steady distance from the moment its work
- * starts.  The clock itself (its step, resets, holds) is untouched: the
- * re-base is applied after it, to the value handed over. */
+ * picture and 7 ms before a further one on the owner's 120 Hz phone.  When
+ * the window presents pictures as made (vsync off, uncapped, the render
+ * thread on: rd.h rd_present_as_made) a picture reaches the screen after
+ * its GPU work, which starts at the hand-over, and the present clock's
+ * smoothed moment was up to 7/16 of a tick off the real time there (its
+ * resets at up to a fifth of the presents on that phone).  So there the
+ * handed-over value is the measured ask plus (drain - the drain's running
+ * mean): the hand-over less the mean drain.  Elsewhere the clock's alpha is
+ * kept.  The clock itself (its step, resets, holds) runs as before: this is
+ * applied after it, to the value handed over. */
 #ifndef ICO_RD_REBASE_H
 #define ICO_RD_REBASE_H
 
@@ -32,8 +35,9 @@ typedef struct RdRebase {
     double lastRaw; /* its re-based value */
 } RdRebase;
 
-/* raw: the present clock's value before the clamp ((clock - tickAt) /
- * tick, NAN when the clock did not time this present); tickMs the tick;
+/* raw: the value against the frame's close in ticks ((t - tickAt) / tick:
+ * the measured ask in the window's use; NAN when the clock did not time
+ * this present); tickMs the tick;
  * drainMs the wait before the hand-over; frame the newer frame's number
  * (the pair: tickAt changes when it does).  Returns the re-based value,
  * raw + shift / tick, never below the last re-based value of the same

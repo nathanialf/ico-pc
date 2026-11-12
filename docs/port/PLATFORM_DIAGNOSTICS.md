@@ -937,7 +937,7 @@ prints after the CPU phases' line (`port/render/rd_even.c`, `rd_even.h`; `port/p
 (`perf_log`)):
 
 ```
-window: evenness in 10 s: P pictures; the GPU's ends apart (E with both ends exact, B with a bound at one, U without a GPU end) by refreshes of R ms: under half a refresh N0, 1 refresh N1, 2 refreshes N2, 3 refreshes N3, 4 or more N4; the content's step over them in ticks (mean, deviation): under half a refresh M0 (D0), 1 refresh M1 (D1), 2 refreshes M2 (D2), 3 refreshes M3 (D3), 4 or more M4 (D4); every step (S): mean M (deviation D), the largest L, back K times (the most X), C chain restarts; the alpha clamped at 0 Z times (the most A below), at 0.999 T times (the most H above); the present clock: N samples, resets F forward and K back, H held instead of going back within a frame pair (the most X ms); the alpha's sample to the GPU's end over N pictures: 10th A, median B, 90th C ms, the hand-over to it 10th A, median B, 90th C ms (the drain before the hand-over D ms on average over N); re-based to the hand-over: N pictures (the shift 10th A, median B, 90th C ms; H held at the frame's last value), the content's moment to the hand-over 10th A, median B, 90th C ms (at the sample 10th A, median B, 90th C)
+window: evenness in 10 s: P pictures; the GPU's ends apart (E with both ends exact, B with a bound at one, U without a GPU end) by refreshes of R ms: under half a refresh N0, 1 refresh N1, 2 refreshes N2, 3 refreshes N3, 4 or more N4; the content's step over them in ticks (mean, deviation): under half a refresh M0 (D0), 1 refresh M1 (D1), 2 refreshes M2 (D2), 3 refreshes M3 (D3), 4 or more M4 (D4); every step (S): mean M (deviation D), the largest L, back K times (the most X), C chain restarts; the alpha clamped at 0 Z times (the most A below), at 0.999 T times (the most H above); the present clock: N samples, resets F forward and K back, H held instead of going back within a frame pair (the most X ms); the alpha's sample to the GPU's end over N pictures: 10th A, median B, 90th C ms, the hand-over to it 10th A, median B, 90th C ms (the drain before the hand-over D ms on average over N); re-based to the hand-over: N pictures (the shift 10th A, median B, 90th C ms; H held at the frame's last value), the content's moment to the hand-over 10th A, median B, 90th C ms (at the sample 10th A, median B, 90th C); the content drawn against the hand-overs over P pairs: R repeats (the same moment as the picture before) in U runs, the longest L; the step over the real gap from A to B, outside 0.5-2.0 in N
 ```
 
 `every step` also says, when some steps are over gaps the line cannot put on the grid (a bound or
@@ -985,11 +985,19 @@ no GPU end at one side), `, U of them over gaps not on the grid: mean M (deviati
   those gaps are the large ones (about twice the classed steps on the owner's phone), and they make
   `every step`'s deviation far larger than the classes'. They are not classed because their gap
   is not measured; read their mean apart from the classed ones.
-- **Re-based to the hand-over** (the timer path with the render thread; [DISPLAY.md](DISPLAY.md)
-  "The alpha"): the presents whose alpha was moved by their drain's difference from its running
-  mean, the shift's spread, the presents held at the frame's last value, and the distance from
-  the content's moment to the hand-over after the re-base and at the sample (the drain less the
-  clock's lead). The re-based spread narrower than the sample's is the re-base doing its work.
+- **Re-based to the hand-over** (pictures as made only: vsync off, uncapped, the render thread on;
+  [DISPLAY.md](DISPLAY.md) "The alpha"): the presents whose alpha was taken at the hand-over less
+  the drain's running mean, the shift's spread, the presents held at the frame's last value, and
+  the distance from the content's moment to the hand-over: with the re-base, the drain less the
+  shift (about the mean drain, a ms or so of spread); `at the sample`, the drain less the present
+  clock's lead over the ask, which is the clock's own error against real time (up to 7/16 of a tick
+  each way).
+- **The content drawn against the hand-overs** (every handed-over present on the timer path): the
+  pairs of consecutive presents more than a ms apart, the repeats (a present whose content moved
+  under a microsecond: the same moment as the picture before, which the eye sees as a stutter),
+  their runs and the longest, and the least and largest ratio of the content's step to the
+  hand-overs' interval, with the count outside 0.5 to 2. A ratio of 1 is content following real
+  time picture to picture.
   The `alpha clamped` counts are the clock's value's; the `interp:` alpha line counts the alpha
   drawn.
 

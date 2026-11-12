@@ -175,6 +175,54 @@ void rd_even_rebase_note(double beforeMs, double afterMs, double shiftMs, bool h
     }
 }
 
+/* the content chain, on the poster's thread */
+static struct {
+    bool have;
+    double content, hand;
+    uint32_t run;
+} s_cont;
+
+/* the smaller of *at and v, 0 at *at meaning none yet */
+static void keepMin(uint32_t *at, uint32_t v)
+{
+    uint32_t cur = __atomic_load_n(at, __ATOMIC_RELAXED);
+    while ((cur == 0u || v < cur) &&
+           !__atomic_compare_exchange_n(at, &cur, v, true, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {}
+}
+
+void rd_even_content_note(double contentMs, double handMs)
+{
+    const double gap = handMs - s_cont.hand;
+    if (s_cont.have && gap > 0.0 && gap <= 1000.0) {
+        const double step = contentMs - s_cont.content;
+        if (gap > RD_EVEN_GAP_MIN_MS) {
+            add(&s_sum.pairs, 1u);
+            if (fabs(step) < RD_EVEN_REPEAT_MS) {
+                add(&s_sum.repeats, 1u);
+                if (s_cont.run++ == 0u) {
+                    add(&s_sum.runs, 1u);
+                }
+                keepMax(&s_sum.runMax, s_cont.run);
+            } else {
+                s_cont.run = 0u;
+            }
+            const double ratio = step / gap;
+            const double mil = floor((ratio < 0.0 ? 0.0 : ratio) * 1000.0 + 0.5);
+            const uint32_t m = mil >= 4.0e9 ? 4000000000u : (uint32_t)mil;
+            keepMax(&s_sum.ratioMaxMil, m);
+            keepMin(&s_sum.ratioMinMil, m + 1u); /* 0 is "none" after the take */
+            if (ratio < RD_EVEN_RATIO_LO || ratio > RD_EVEN_RATIO_HI) {
+                add(&s_sum.outside, 1u);
+            }
+        }
+    } else {
+        s_cont.run = 0u;
+    }
+    s_cont.have = true;
+    s_cont.content = contentMs;
+    s_cont.hand = handMs;
+}
+
 void rd_even_hand_note(double askMs, double handMs)
 {
     t_askMs = askMs;
@@ -221,6 +269,13 @@ void rd_even_take(RdEvenWindow *w)
     }
     w->rebN = take(&s_sum.rebN);
     w->rebHeld = take(&s_sum.rebHeld);
+    w->pairs = take(&s_sum.pairs);
+    w->repeats = take(&s_sum.repeats);
+    w->runs = take(&s_sum.runs);
+    w->outside = take(&s_sum.outside);
+    w->runMax = take32(&s_sum.runMax);
+    w->ratioMaxMil = take32(&s_sum.ratioMaxMil);
+    w->ratioMinMil = take32(&s_sum.ratioMinMil);
     w->pictures = take(&s_sum.pictures);
     w->bound = take(&s_sum.bound);
     w->noEnd = take(&s_sum.noEnd);
@@ -406,6 +461,17 @@ bool rd_even_format(const RdEvenWindow *w, double refreshMs, char *out, size_t s
             REB(w->rebAfter, 0.5), REB(w->rebAfter, 0.9), REB(w->rebBefore, 0.1),
             REB(w->rebBefore, 0.5), REB(w->rebBefore, 0.9));
 #undef REB
+    }
+    if (w->pairs) {
+        /* ratioMinMil holds the least ratio plus one thousandth (0: none) */
+        const double lo = w->ratioMinMil ? (double)(w->ratioMinMil - 1u) / 1000.0 : 0.0;
+        put(&o,
+            "; the content drawn against the hand-overs over %llu pairs: %llu repeats (the same "
+            "moment as the picture before) in %llu runs, the longest %u; the step over the real "
+            "gap from %.3f to %.3f, outside %.1f-%.1f in %llu",
+            (unsigned long long)w->pairs, (unsigned long long)w->repeats,
+            (unsigned long long)w->runs, w->runMax, lo, (double)w->ratioMaxMil / 1000.0,
+            RD_EVEN_RATIO_LO, RD_EVEN_RATIO_HI, (unsigned long long)w->outside);
     }
     return true;
 }

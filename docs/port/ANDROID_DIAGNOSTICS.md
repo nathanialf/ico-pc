@@ -1475,10 +1475,13 @@ two causes the logs before it could not:
 Read it beside the presented rate and the step rule's lines: a block whose rate swings with the
 back-off (the section above) is the rate's unevenness, not the glass grid's.
 
-The re-base clause shows the alpha moved to the hand-over: on the owner's phone in the cage the
-sample's distance to the GPU's end spread 12 ms (10th to 90th) where the hand-over's spread 5 ms,
-so the re-based `content's moment to the hand-over` should spread about a ms where `at the sample`
-spreads the drain's 5 ms.
+With pictures as made (vsync off, uncapped) the alpha is taken at the hand-over less the mean
+drain, not from the present clock: the `re-based` clause's `content's moment to the hand-over`
+should spread about a ms, where `at the sample` shows the clock's own error (18 to 20 ms of spread on
+the owner's phone with the clock's alpha, which reset at up to a fifth of the presents and clamped a
+quarter of them at 0). The `content drawn against the hand-overs` clause counts the repeats (the
+picture before shown again) and the step's ratio to its real gap: repeats near 0 and ratios near 1
+are content following real time.
 
 ## The refresh rate under Uncapped
 

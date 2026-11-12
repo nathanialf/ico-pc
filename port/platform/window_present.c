@@ -926,6 +926,7 @@ void window_present_pace(int hz)
                 (unsigned)RHI_FRAMES_IN_FLIGHT);
     }
     s_pres.budget.asMade = asMade ? (unsigned)RHI_FRAMES_IN_FLIGHT : 0u;
+    rd_present_as_made(asMade); /* the alpha from the hand-over (rd_rebase.h) */
     s_pres.budget.presents = 0; /* the step's presents (pace_budget_step) */
     s_pres.budget.optional = 0;
     /* paced by the GPU's time: vsync off or mailbox in use (pace_policy.h) */
