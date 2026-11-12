@@ -3297,15 +3297,16 @@ int main(int argc, char **argv)
             printf("%s: stats: lamps %s (self-test %s): %u passes with the lamps' area (%ux%u at "
                    "%d,%d of %ux%u: %u of %u texels; %u bytes not cleared, %u colour bytes not "
                    "stored, %u depth bytes not loaded, %u not stored), %u whole%s%s%s; %u bands "
-                   "left lazy (WORK2_PAD %ux%u)\n",
+                   "left lazy (WORK2_PAD %ux%u)%s%s\n",
                    dump, rd__lamps_bits_text(rd__lamps_bits()), tw, pr->lampsAreas, pr->lampsAreaW,
                    pr->lampsAreaH, pr->lampsAreaX, pr->lampsAreaY, w2 ? w2->tw : 0u,
                    w2 ? w2->th : 0u, pr->lampsAreaTexels, pr->lampsTexels, pr->lampsSavedClear,
                    pr->lampsSavedColorStore, pr->lampsSavedDepthLoad, pr->lampsSavedDepthStore,
                    pr->lampsWhole, pr->lampsWhole ? " (" : "",
                    pr->lampsWhole ? rd__lamps_why_text((int)pr->lampsWhy) : "",
-                   pr->lampsWhole ? ")" : "", pr->lampsPads, pad ? pad->tw : 0u,
-                   pad ? pad->th : 0u);
+                   pr->lampsWhole ? ")" : "", pr->lampsPads, pad ? pad->tw : 0u, pad ? pad->th : 0u,
+                   pr->lampsBoxWhy ? "; a lamp's box not known: " : "",
+                   pr->lampsBoxWhy ? rd__lamps_box_why_text((int)pr->lampsBoxWhy) : "");
         }
         /* the aura's paste as the alpha alone (rd_aura_paste.c) */
         printf("%s: stats: aura paste %s: %u split (%u rows as the alpha alone, %u band rows), %u "

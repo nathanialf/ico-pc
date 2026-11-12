@@ -432,10 +432,19 @@ target:
 
 - **the area** (`RD_LAMPS_AREA`): the lamps' pass gets a render area, the union of the lamps'
   screen boxes and of the region the last lamps frame left lit, aligned out to 32 x 32 tiles.
-  A lamp's box is the occlusion test's samples' box of its stream's bound through its matrix
-  (`rd_vis_hiz.c rd__vis_hiz_occludee`: every corner in front of the eye, inside the GS region),
-  padded by two GS pixels and taken through the target's texel scale and Full pixel's crop; the
-  RHI cuts every scissor to the area. Outside it WORK2 already holds (0, 0, 0, 0): the tracker
+  A lamp's box is the hull of its stream's vertices through its matrix, each one projected
+  (`rd__lamps_vertex_box`: every vertex in front of the eye by the shader's float error, its x / w
+  and y / w bounded over that error; the points the GPU draws of a triangle whose corners are in
+  front lie in that hull, clipped or not), widened by the occlusion test's margins and two GS
+  pixels and taken through the target's texel scale and Full pixel's crop (past a budget of
+  16,384 vertices a picture the occlusion test's box of the stream's bound instead; code 34's
+  draws only where no corner can wrap); the RHI cuts every scissor to the area. (The first
+  version took the occlusion test's box of the bound's eight corners alone: on the phone's
+  opening it refused 214 to 338 lamps pictures in 10 s and took 11, a mesh across the picture
+  near the eye putting a corner of its bound behind it.) A lamp whose box is not known names its
+  part once (`rd: lamps: a lamp's screen box not known: <why> (command type T at ordinal O, mesh
+  "N" of V vertices, program P code C clip mode M, B vertices behind the eye; frame F) ...`) and
+  in the 10 s line's last clause (`boxes not known: k <why>, ...`). Outside it WORK2 already holds (0, 0, 0, 0): the tracker
   holds the region a confirmed lamps pass may have lit (its lamps' boxes), every other texel
   stored as (0, 0, 0, 0) by that pass, and the area covers that region, so the texels it leaves
   are the fill's colour before and after. SCENE's depth outside the area is untouched by the

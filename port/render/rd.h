@@ -3317,6 +3317,9 @@ typedef struct RdPerfRecord {
     int32_t lampsAreaX, lampsAreaY;
     uint32_t lampsAreaW, lampsAreaH, lampsAreaTexels, lampsTexels;
     uint32_t lampsSavedClear, lampsSavedColorStore, lampsSavedDepthLoad, lampsSavedDepthStore;
+    /* the last lamp whose screen box was not known this replay: why
+     * (RD_LAMPS_BOX_*, rd_lamps.h; 0 none) */
+    uint32_t lampsBoxWhy;
 } RdPerfRecord;
 
 /* The oldest finished record not yet popped (a queue of 64; the oldest are
