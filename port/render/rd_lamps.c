@@ -1,0 +1,1018 @@
+/* rd_lamps.c: the lamps' glow frames for less (rd_lamps.h;
+ * docs/port/RENDER_POST.md, "The lamps' glow for less"; docs/port/WORK_BUFFERS.md,
+ * "WORK2 under the lamps' area").
+ *
+ * The frames.  At the title (stage 1's castle) and in issue 163's rooms the
+ * glow's light plan (rd_glow_light.c) is LAMPS: WORK2's fill is drawn as
+ * (0, 0, 0, 0), the mask is not drawn, and the lamps' meshes (list 7,
+ * RDC_MESH into WORK2 under a GEQUAL test of SCENE's depth, writing it) are
+ * the only light the chain carries.  On the PowerVR phone (its log's first
+ * three 10 s blocks of the opening) the pass that draws them is WORK2 at
+ * 2366 x 1080: its colour cleared (the fill, a pending clear taken as the
+ * pass's load op: 9.7 MB cleared) and stored (9.7 MB), SCENE's depth loaded
+ * (9.6 MB) for the lamps' Z test, for a dozen small draws.
+ *
+ * RD_LAMPS_AREA.  That pass gets a render area (RhiRenderPassDesc.area): the
+ * union of the lamps' screen boxes and of the region of WORK2 the last
+ * lamps frame left lit, aligned out to 32 x 32 tiles.  The Vulkan rule
+ * (VkRenderingInfo / VkRenderPassBeginInfo renderArea: "the effects of
+ * attachment load, store, and multisample resolve operations are
+ * restricted to the pixels whose x and y coordinates fall within the render
+ * area"; rhi.h: "a CLEAR load clears the area alone") leaves every texel
+ * outside it as memory holds it, and the RHI cuts every scissor to it
+ * (vk_cmd.c rhi_cmd_set_scissor).  The bytes are the whole pass's when:
+ *   - every fragment of the pass lies inside the area: a lamp's box is
+ *     rd_vis_hiz.c rd__vis_hiz_occludee's samples' box of its stream's
+ *     bound through its matrix (VU memory 16..19), the bound the occlusion
+ *     test skips draws by (every corner in front of the eye, the box inside
+ *     the GS region: else no area), padded by two GS pixels (the frame
+ *     head's half line, the snap, a texel's reach at Full pixel) through
+ *     the target's texel scale and crop (rd__gs_rect_texels); the sun's fans
+ *     a LAMPS frame draws (off the target: the plan's rule) by their
+ *     vertices' box (rd__screen_area); anything else drawn into WORK2 in the
+ *     frame and the pass is whole;
+ *   - outside the area WORK2 already holds what the whole pass would leave
+ *     there: (0, 0, 0, 0), the fill's colour, the lamps having drawn nothing
+ *     there.  The tracker (s_w2) holds the region a confirmed lamps pass may
+ *     have lit (the union of its lamps' boxes): every texel of WORK2 outside
+ *     it holds (0, 0, 0, 0), stored by that pass (its colour STORE, the
+ *     whole target cleared or the rest kept from the frame before under the
+ *     same rule), and the area holds that region, so the texels the area
+ *     leaves were zero before and are zero after;
+ *   - SCENE's depth outside the area: loaded and stored unchanged by the
+ *     whole pass (the lamps draw nothing there), left as memory holds it by
+ *     the area pass; where the store plan drops the depth's store
+ *     (DONT_CARE: nothing reads it) the whole pass leaves it undefined, the
+ *     area pass as it was: nothing reads it either way.
+ * The tracker forgets the region (the next lamps pass whole) at rd_init, at
+ * WORK2's new texture (its id, size, or the new target's pending clear),
+ * after a replay that writes WORK2 any other way (the scan: a command into
+ * WORK2 that is not the LAMPS plan's fill, mask or lamps or the DARK plan's
+ * undrawn chain; a WHOLE frame's mask), at any render pass on WORK2's
+ * colour that is not the planned one, when the planned pass does not begin
+ * with the fill's CLEAR to (0, 0, 0, 0) and a colour STORE, and under the
+ * replay tool's pass window.  The DARK plan's frames keep it: their chain
+ * draws nothing into WORK2 (a lazy clear of (0, 0, 0, 0), the mask and the
+ * fans skipped).  So the first lamps frame after anything else is drawn
+ * whole, and the area from the second on.
+ *
+ * Where.  A CLEAR over a render area smaller than the attachment is a form
+ * no other pass takes (rd_pass_area.c gives no area to a pass that clears),
+ * so it is on only where the start-up self-test passed (rd__lamps_selftest:
+ * a 64 x 64 RGBA8 target and a D32F_S8 depth cleared whole and stored, then
+ * a pass over a 32 x 32 area with the colour cleared to 0 and the depth
+ * loaded: read back, the area 0 and the rest the first clear's, the depth
+ * the first clear's everywhere), on the PowerVR and desktop classes under
+ * Vulkan where the profile's pass area is on (rd_lamps.h); never on the
+ * Arm, Qualcomm and Apple classes (issues 123, 179, 211: only less of a
+ * kind of work already drawn there).
+ *
+ * RD_LAMPS_PAD.  WORK2_PAD's band (fillWork2's 256 x 64 sprite, rd.h "never
+ * read") is left a lazy clear in a LAMPS frame as the DARK plan leaves it
+ * (rd_glow_light.c planActs: drawn when something reads WORK2_PAD, at a
+ * later replay's begin or a read outside the replay): one small pass fewer
+ * a picture.  The DARK plan's lazy clears run on every class and backend,
+ * so this does too.
+ *
+ * The lines: the state when it changes ("lamps: area on|off (...); band
+ * lazy on|off"), the self-test's verdict, the first area pass and each
+ * reason a pass was whole once a run; the 10 s "window: lamps: ..."
+ * (rd_lamps_line) and rd_replay_tool --stats "stats: lamps ..."
+ * (RdPerfRecord.lamps*). */
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "rd_lamps.h"
+#include "rd_mesh.h"
+#include "rd_replay.h"
+#include "rd_shadow_tile.h"
+#include "rd_vis.h"
+#include "rhi_traffic.h"
+
+/* the WORK2 writes a frame's scan keeps (past it: the pass whole) */
+#define LAMPS_MAX 128u
+/* GS pixels round a lamp's samples' box (rd_lamps.h rd__lamps_box_texels) */
+#define LAMPS_PAD 2
+/* the self-test's target and its area */
+#define TEST_W 64u
+#define TEST_H 64u
+#define TEST_AX 32
+#define TEST_AW 32u
+#define TEST_AH 32u
+
+static struct {
+    int force; /* rd__lamps_force: -1 none */
+    int env;   /* -1 unread, 0 unset, 1 set (envBits), 2 not understood */
+    uint32_t envBits;
+    uint32_t def; /* the class's (rd__lamps_init) */
+    char said[200];
+} s_sw = {.force = -1, .env = -1};
+
+static struct {
+    int state; /* 0 not run, 1 passed, 2 failed or not run */
+    char words[200];
+} s_test;
+
+/* WORK2's lit region: every texel outside lit holds (0, 0, 0, 0) */
+static struct {
+    bool valid;
+    uint32_t tex, tw, th;
+    RhiRect lit;
+} s_w2;
+
+typedef struct W2Write {
+    uint32_t ord;
+    uint8_t type;
+    bool ok;     /* box known */
+    RhiRect box; /* the texels it can touch (w 0: none) */
+} W2Write;
+
+static struct {
+    bool on;
+    uint32_t replay, w2;
+    bool overflow;
+    uint32_t n;
+    W2Write w[LAMPS_MAX];
+    /* scan end: the planned pass */
+    bool want, confirmed, area;
+    RhiRect areaRect, box;
+    uint32_t fillOrd, redOrd;
+    int why;
+} s_scan;
+
+/* the 10 s sums (the window thread reads them) */
+static struct {
+    uint64_t areas, whole, pads, areaTexels, texels, clear, store, dload, dstore;
+    uint64_t why[RD_LAMPS_WHY_COUNT];
+} s_sum;
+
+static uint64_t s_totAreas, s_totWhole, s_totPads;
+static bool s_saidWhy[RD_LAMPS_WHY_COUNT], s_saidArea;
+
+static void sumAdd(uint64_t *v, uint64_t n)
+{
+    if (n) {
+        __atomic_add_fetch(v, n, __ATOMIC_RELAXED);
+    }
+}
+
+static const char *const kWhy[RD_LAMPS_WHY_COUNT] = {
+    [RD_LAMPS_WHY_NONE] = "-",
+    [RD_LAMPS_WHY_OFF] = "switched off by ICO_RD_LAMPS",
+    [RD_LAMPS_WHY_CLASS] = "not the PowerVR or a desktop class under Vulkan with the pass area",
+    [RD_LAMPS_WHY_TEST] = "its self-test not passed",
+    [RD_LAMPS_WHY_FIRST] = "the WORK2 an earlier frame left not known",
+    [RD_LAMPS_WHY_BOX] = "a lamp whose screen box is not known",
+    [RD_LAMPS_WHY_OTHER] = "another command writes WORK2 in the frame",
+    [RD_LAMPS_WHY_LARGE] = "the lamps and the lit region cover WORK2",
+    [RD_LAMPS_WHY_EMPTY] = "no lamp on WORK2 and nothing lit there",
+    [RD_LAMPS_WHY_FORM] = "the pass not begun as planned",
+    [RD_LAMPS_WHY_WINDOW] = "the replay tool's pass window",
+};
+
+const char *rd__lamps_why_text(int why)
+{
+    return why >= 0 && why < RD_LAMPS_WHY_COUNT && kWhy[why] ? kWhy[why] : "unknown";
+}
+
+const char *rd__lamps_bits_text(uint32_t bits)
+{
+    switch (bits & RD_LAMPS_ALL) {
+    case RD_LAMPS_ALL:
+        return "area+pad";
+    case RD_LAMPS_AREA:
+        return "area";
+    case RD_LAMPS_PAD:
+        return "pad";
+    default:
+        return "off";
+    }
+}
+
+/* ------------------------------------------------------- pure helpers */
+
+int rd__lamps_parse(const char *e, uint32_t *bits)
+{
+    if (!e || !e[0]) {
+        return 0;
+    }
+    if (strcmp(e, "0") == 0 || strcmp(e, "off") == 0) {
+        *bits = 0;
+        return 1;
+    }
+    if (strcmp(e, "1") == 0 || strcmp(e, "all") == 0 || strcmp(e, "on") == 0) {
+        *bits = RD_LAMPS_ALL;
+        return 1;
+    }
+    uint32_t b = 0;
+    const char *s = e;
+    while (*s) {
+        const char *t = s;
+        while (*t && *t != ',' && *t != '+') {
+            t++;
+        }
+        const size_t n = (size_t)(t - s);
+        if (n == 4 && strncmp(s, "area", 4) == 0) {
+            b |= RD_LAMPS_AREA;
+        } else if (n == 3 && strncmp(s, "pad", 3) == 0) {
+            b |= RD_LAMPS_PAD;
+        } else {
+            return -1;
+        }
+        s = *t ? t + 1 : t;
+    }
+    *bits = b;
+    return 1;
+}
+
+uint32_t rd__lamps_default_bits(int tileClass, bool tilePhone, bool vulkan, bool passArea)
+{
+    uint32_t b = RD_LAMPS_PAD;
+    const bool cls = tileClass == 1 || (tileClass == 2 && !tilePhone);
+    if (cls && vulkan && passArea) {
+        b |= RD_LAMPS_AREA;
+    }
+    return b;
+}
+
+RhiRect rd__lamps_union(RhiRect a, RhiRect b)
+{
+    if (!b.w || !b.h) {
+        return a;
+    }
+    if (!a.w || !a.h) {
+        return b;
+    }
+    const int64_t x0 = a.x < b.x ? a.x : b.x, y0 = a.y < b.y ? a.y : b.y;
+    const int64_t ax1 = (int64_t)a.x + a.w, bx1 = (int64_t)b.x + b.w;
+    const int64_t ay1 = (int64_t)a.y + a.h, by1 = (int64_t)b.y + b.h;
+    const int64_t x1 = ax1 > bx1 ? ax1 : bx1, y1 = ay1 > by1 ? ay1 : by1;
+    return (RhiRect){(int32_t)x0, (int32_t)y0, (uint32_t)(x1 - x0), (uint32_t)(y1 - y0)};
+}
+
+RhiRect rd__lamps_tile_align(RhiRect r, uint32_t tile, uint32_t w, uint32_t h)
+{
+    const int64_t t = tile ? (int64_t)tile : 1;
+    int64_t x0 = r.x > 0 ? r.x : 0, y0 = r.y > 0 ? r.y : 0;
+    int64_t x1 = (int64_t)r.x + r.w, y1 = (int64_t)r.y + r.h;
+    x0 = x0 / t * t;
+    y0 = y0 / t * t;
+    x1 = (x1 + t - 1) / t * t;
+    y1 = (y1 + t - 1) / t * t;
+    x1 = x1 < (int64_t)w ? x1 : (int64_t)w;
+    y1 = y1 < (int64_t)h ? y1 : (int64_t)h;
+    if (x1 <= x0 || y1 <= y0) {
+        return (RhiRect){0, 0, 0, 0};
+    }
+    return (RhiRect){(int32_t)x0, (int32_t)y0, (uint32_t)(x1 - x0), (uint32_t)(y1 - y0)};
+}
+
+bool rd__lamps_box_texels(const RdTargetRec *tc, uint32_t gsW, uint32_t gsH, double x0, double y0,
+                          double x1, double y1, int32_t pad, RhiRect *out)
+{
+    if (!tc || !out || !(x0 <= x1) || !(y0 <= y1) || !isfinite(x0) || !isfinite(x1) ||
+        !isfinite(y0) || !isfinite(y1)) {
+        return false;
+    }
+    /* the target's GS pixels from its origin: pixel p holds the samples of
+     * [p, p + 1); the box's first and last pixels padded */
+    const double ox = 2048.0 - (double)(gsW >> 1), oy = 2048.0 - (double)(gsH >> 1);
+    const double a = floor(x0 - ox) - pad, b = floor(y0 - oy) - pad;
+    const double c = ceil(x1 - ox) + pad, d = ceil(y1 - oy) + pad;
+    if (a > 1e6 || b > 1e6 || c < -1e6 || d < -1e6) {
+        return false; /* nowhere near the target */
+    }
+    const double lo = -1e6, hi = 1e6;
+    return rd__gs_rect_texels(tc, (int32_t)(a < lo ? lo : a), (int32_t)(b < lo ? lo : b),
+                              (int32_t)(c > hi ? hi : c), (int32_t)(d > hi ? hi : d), 0, out);
+}
+
+int rd__lamps_area_pick(bool litKnown, RhiRect lit, RhiRect box, uint32_t tw, uint32_t th,
+                        RhiRect *area)
+{
+    if (!litKnown) {
+        return RD_LAMPS_WHY_FIRST;
+    }
+    const RhiRect u = rd__lamps_union(lit, box);
+    if (!u.w || !u.h) {
+        return RD_LAMPS_WHY_EMPTY;
+    }
+    const RhiRect a = rd__lamps_tile_align(u, RD_PASS_AREA_TILE, tw, th);
+    if (!a.w || !a.h || (a.w + RD_PASS_AREA_TILE > tw && a.h + RD_PASS_AREA_TILE > th)) {
+        return RD_LAMPS_WHY_LARGE; /* not a tile column or row narrower */
+    }
+    *area = a;
+    return RD_LAMPS_WHY_NONE;
+}
+
+/* ------------------------------------------------------------- the switch */
+
+static void envRead(void)
+{
+    if (s_sw.env >= 0) {
+        return;
+    }
+    const char *e = getenv("ICO_RD_LAMPS"); /* the tests only: no config key */
+    uint32_t b = 0;
+    const int k = rd__lamps_parse(e, &b);
+    s_sw.env = k == 1 ? 1 : k == 0 ? 0 : 2;
+    s_sw.envBits = b;
+    if (k < 0) {
+        rd__log("lamps: ICO_RD_LAMPS=%.24s is not 0, 1, area or pad: the class's default", e);
+    }
+}
+
+/* the bits asked for, before the self-test and the backend */
+static uint32_t wanted(void)
+{
+    if (s_sw.force >= 0) {
+        return (uint32_t)s_sw.force & RD_LAMPS_ALL;
+    }
+    envRead();
+    return s_sw.env == 1 ? s_sw.envBits : s_sw.def;
+}
+
+uint32_t rd__lamps_bits(void)
+{
+    uint32_t b = wanted();
+    if ((b & RD_LAMPS_AREA) &&
+        (s_test.state != 1 || !g_rd.hasDevice || rhi_backend() != RHI_BACKEND_VULKAN)) {
+        b &= ~RD_LAMPS_AREA;
+    }
+    return b;
+}
+
+/* why AREA is not in force (NONE: it is) */
+static int areaWhy(void)
+{
+    const uint32_t w = wanted();
+    if (!(w & RD_LAMPS_AREA)) {
+        const bool asked = s_sw.force >= 0 || s_sw.env == 1;
+        return asked ? RD_LAMPS_WHY_OFF : RD_LAMPS_WHY_CLASS;
+    }
+    if (!g_rd.hasDevice || rhi_backend() != RHI_BACKEND_VULKAN) {
+        return RD_LAMPS_WHY_CLASS;
+    }
+    return s_test.state == 1 ? RD_LAMPS_WHY_NONE : RD_LAMPS_WHY_TEST;
+}
+
+static void note(void)
+{
+    if (!g_rd.hasDevice) {
+        return;
+    }
+    char line[sizeof(s_sw.said)];
+    const uint32_t b = rd__lamps_bits();
+    const int why = areaWhy();
+    const char *src = s_sw.force >= 0 ? "the tests' switch" : s_sw.env == 1 ? "ICO_RD_LAMPS" : "";
+    snprintf(line, sizeof(line), "lamps: area %s (%s%s%s); band lazy %s%s%s%s",
+             (b & RD_LAMPS_AREA) ? "on" : "off",
+             why == RD_LAMPS_WHY_NONE                        ? "self-test passed"
+             : why == RD_LAMPS_WHY_TEST && s_test.state == 0 ? "its self-test not run yet"
+                                                             : rd__lamps_why_text(why),
+             src[0] ? ", " : "", src, (b & RD_LAMPS_PAD) ? "on" : "off", src[0] ? " (" : "", src,
+             src[0] ? ")" : "");
+    if (strcmp(line, s_sw.said) != 0) {
+        snprintf(s_sw.said, sizeof(s_sw.said), "%s", line);
+        rd__log("%s: the lamps' pass on WORK2 loads, clears and stores only their tiles and "
+                "those an earlier lamps frame lit; WORK2_PAD's band a lazy clear (the same "
+                "bytes)",
+                line);
+    }
+}
+
+void rd__lamps_init(void)
+{
+    const RhiLimits *lim = g_rd.hasDevice ? rhi_limits() : NULL;
+    s_sw.def = rd__lamps_default_bits(rd__profile_tile_class(), lim && lim->tilePhone,
+                                      g_rd.hasDevice && rhi_backend() == RHI_BACKEND_VULKAN,
+                                      rd__pass_area_on());
+    memset(&s_w2, 0, sizeof(s_w2));
+    memset(&s_scan, 0, sizeof(s_scan));
+    /* the self-test again for this renderer (rd__lamps_selftest: its first
+     * rd_fog_selftest, or rd_replay_tool after rd_init); off until then */
+    memset(&s_test, 0, sizeof(s_test));
+    note();
+}
+
+void rd__lamps_force(int bits)
+{
+    s_sw.force = bits < 0 ? -1 : (int)((uint32_t)bits & RD_LAMPS_ALL);
+    memset(&s_w2, 0, sizeof(s_w2));
+    note();
+}
+
+int rd__lamps_test_state(const char **words)
+{
+    if (words) {
+        *words = s_test.words[0] ? s_test.words : "not run";
+    }
+    return s_test.state;
+}
+
+bool rd__lamps_poison(void)
+{
+    static int s_env = -1;
+    if (s_env < 0) {
+        const char *e = getenv("ICO_RD_LAMPS_POISON"); /* the tests only: no config key */
+        s_env = e && strcmp(e, "1") == 0;
+    }
+    return s_env == 1;
+}
+
+bool rd__lamps_pad_on(void)
+{
+    return (rd__lamps_bits() & RD_LAMPS_PAD) != 0;
+}
+
+void rd__lamps_pad_noted(void)
+{
+    g_rdPerf.lampsPads++;
+    s_totPads++;
+    sumAdd(&s_sum.pads, 1);
+}
+
+void rd__lamps_counts(uint64_t *areas, uint64_t *whole, uint64_t *pads)
+{
+    if (areas) {
+        *areas = s_totAreas;
+    }
+    if (whole) {
+        *whole = s_totWhole;
+    }
+    if (pads) {
+        *pads = s_totPads;
+    }
+}
+
+/* ---------------------------------------------------------- the self-test */
+
+static const uint8_t kTestColour[4] = {51, 102, 153, 204}; /* 0.2, 0.4, 0.6, 0.8 */
+
+static bool testPass(RhiCommandList cl, RhiTexture col, RhiTexture dep, bool readable, bool second)
+{
+    RhiRenderPassDesc p;
+    memset(&p, 0, sizeof(p));
+    p.color[0].texture = col;
+    p.color[0].load = RHI_LOAD_CLEAR;
+    p.color[0].readable = readable;
+    if (!second) {
+        for (int i = 0; i < 4; i++) {
+            p.color[0].clear[i] = (float)kTestColour[i] / 255.0f;
+        }
+    }
+    p.colorCount = 1;
+    p.depth.texture = dep;
+    p.depth.depthLoad = second ? RHI_LOAD_LOAD : RHI_LOAD_CLEAR;
+    p.depth.stencilLoad = second ? RHI_LOAD_LOAD : RHI_LOAD_CLEAR;
+    p.depth.clearDepth = 0.25f;
+    p.depth.clearStencil = 0x33;
+    p.width = TEST_W;
+    p.height = TEST_H;
+    if (second) {
+        p.area = (RhiRect){TEST_AX, 0, TEST_AW, TEST_AH};
+    }
+    rhi_cmd_begin_render_pass(cl, &p);
+    rhi_cmd_end_render_pass(cl);
+    return true;
+}
+
+bool rd__lamps_selftest(void)
+{
+    if (!g_rd.inited || !g_rd.hasDevice || !(wanted() & RD_LAMPS_AREA) ||
+        rhi_backend() != RHI_BACKEND_VULKAN) {
+        return true; /* not asked here: nothing to check */
+    }
+    s_test.state = 2;
+    const RhiFormat fmt = RHI_FMT_RGBA8_UNORM;
+    uint8_t dstUsage = 0;
+    const uint32_t usage = RHI_TEX_RENDER_TARGET | RHI_TEX_SAMPLED | RHI_TEX_COPY_SRC |
+                           rd__dst_target_usage(fmt, &dstUsage);
+    /* readable as WORK2's passes are (rd_uber.c rd__pass_wants_readable:
+     * DATE's local read on an RGBA8 target made for it) */
+    const bool readable = g_rd.profile.dateStencil && (dstUsage & RD_DST_USAGE_LOCAL_DATE) != 0;
+    RhiTexture col = rhi_create_texture(
+        &(RhiTextureDesc){TEST_W, TEST_H, 1, fmt, usage, "rd lamps area test", 0});
+    RhiTexture dep = rhi_create_texture(&(RhiTextureDesc){TEST_W, TEST_H, 1, RHI_FMT_D32F_S8,
+                                                          RHI_TEX_DEPTH_STENCIL | RHI_TEX_COPY_SRC,
+                                                          "rd lamps area test depth", 0});
+    const char *why = NULL;
+    int bad = -1;
+    uint8_t got[4] = {0}, want[4] = {0};
+    float gotD = 0.0f;
+    if (!col.id || !dep.id) {
+        why = "no memory for its textures";
+    } else {
+        RhiCommandList cl =
+            rd__begin_own_frame(64u * 1024u) ? rhi_begin_commands() : (RhiCommandList){0};
+        if (!cl.id) {
+            why = "no command list";
+        } else {
+            RhiState cs = RHI_STATE_UNDEFINED, ds = RHI_STATE_UNDEFINED;
+            rd__transition(cl, col, &cs,
+                           readable ? RHI_STATE_RENDER_TARGET_READ : RHI_STATE_RENDER_TARGET);
+            rd__transition(cl, dep, &ds, RHI_STATE_DEPTH_WRITE);
+            (void)testPass(cl, col, dep, readable, false);
+            (void)testPass(cl, col, dep, readable, true);
+            rd__transition(cl, col, &cs, RHI_STATE_COPY_SRC);
+            rd__transition(cl, dep, &ds, RHI_STATE_COPY_SRC);
+            rhi_end_commands(cl);
+            rhi_submit(cl);
+            rhi_wait_idle();
+        }
+        static uint8_t back[TEST_W * TEST_H * 4u + 4096u];
+        uint32_t rp = 0;
+        if (!why && (!rhi_readback_texture(col, RHI_ASPECT_COLOR, back, sizeof(back), &rp) ||
+                     rp < TEST_W * 4u || (size_t)rp * TEST_H > sizeof(back))) {
+            why = "its readback failed";
+        }
+        for (uint32_t i = 0; !why && i < TEST_W * TEST_H && bad < 0; i++) {
+            const uint32_t x = i % TEST_W, y = i / TEST_W;
+            const bool in =
+                x >= (uint32_t)TEST_AX && x < (uint32_t)TEST_AX + TEST_AW && y < TEST_AH;
+            for (uint32_t ch = 0; ch < 4u; ch++) {
+                got[ch] = back[(size_t)y * rp + x * 4u + ch];
+                want[ch] = in ? 0u : kTestColour[ch];
+            }
+            if (memcmp(got, want, 4) != 0) {
+                bad = (int)i;
+            }
+        }
+        /* the depth loaded and stored inside the area, kept outside it:
+         * 0.25 everywhere (where the device reads depth back) */
+        const RhiLimits *lim = rhi_limits();
+        if (!why && bad < 0 && lim && lim->depthReadback) {
+            static float backD[TEST_W * TEST_H + 1024u];
+            uint32_t dp = 0;
+            if (rhi_readback_texture(dep, RHI_ASPECT_DEPTH, backD, sizeof(backD), &dp) &&
+                dp >= TEST_W * 4u && (size_t)dp * TEST_H <= sizeof(backD)) {
+                for (uint32_t i = 0; i < TEST_W * TEST_H && bad < 0; i++) {
+                    const uint32_t x = i % TEST_W, y = i / TEST_W;
+                    float v;
+                    memcpy(&v, (const uint8_t *)backD + (size_t)y * dp + x * 4u, sizeof(v));
+                    if (v != 0.25f) {
+                        bad = (int)(TEST_W * TEST_H + i);
+                        gotD = v;
+                    }
+                }
+            }
+        }
+    }
+    rhi_wait_idle();
+    if (col.id) {
+        rhi_destroy_texture(col);
+    }
+    if (dep.id) {
+        rhi_destroy_texture(dep);
+    }
+    if (!why && bad < 0) {
+        s_test.state = 1;
+        snprintf(s_test.words, sizeof(s_test.words), "passed");
+        rd__log("lamps: area self-test passed: a %ux%u colour target cleared over a %ux%u render "
+                "area kept the rest as stored, its depth loaded there kept everywhere%s",
+                TEST_W, TEST_H, TEST_AW, TEST_AH, readable ? " (readable passes)" : "");
+    } else if (why) {
+        snprintf(s_test.words, sizeof(s_test.words), "not run: %s", why);
+        rd__log("lamps: area self-test not run (%s): the lamps' pass drawn whole", why);
+    } else if (bad >= (int)(TEST_W * TEST_H)) {
+        snprintf(s_test.words, sizeof(s_test.words), "failed at depth texel %d", bad);
+        rd__log("lamps: area self-test failed: depth texel %d read %g for 0.25: the lamps' pass "
+                "drawn whole",
+                bad - (int)(TEST_W * TEST_H), (double)gotD);
+    } else {
+        snprintf(s_test.words, sizeof(s_test.words), "failed at texel %d", bad);
+        rd__log("lamps: area self-test failed at texel %d: %02X%02X%02X%02X for %02X%02X%02X%02X: "
+                "the lamps' pass drawn whole",
+                bad, got[0], got[1], got[2], got[3], want[0], want[1], want[2], want[3]);
+    }
+    note();
+    return s_test.state == 1;
+}
+
+/* --------------------------------------------------------------- the scan */
+
+static void whyOnce(int why);
+
+static uint32_t idOf(int named)
+{
+    return rd_target((RdTargetId)named).id;
+}
+
+/* command c under st writes target id (rd_glow_light.c writesTarget's
+ * rule: a command it does not know writes every target) */
+static bool writesW2(const RdCmd *c, const RdStateBlock *st, uint32_t id)
+{
+    switch (c->type) {
+    case RDC_NOP:
+    case RDC_OVERLAY_TEXT:
+        return false;
+    case RDC_CLEAR:
+        return c->u[0] == id;
+    case RDC_UPSCALE_POINT:
+        return c->u[1] == id;
+    case RDC_COPY:
+    case RDC_EXACT_BLEND:
+        return c->u[1] == id || c->u[0] == id;
+    case RDC_SCREEN:
+    case RDC_MESH:
+    case RDC_SKINNED:
+    case RDC_GRID:
+    case RDC_PARTICLES:
+    case RDC_POST_STUB:
+    case RDC_SHADOW_RESET:
+    case RDC_SHADOW_STRIP:
+    case RDC_SHADOW_RESOLVE:
+    case RDC_WORLD_PRIMS:
+        return st->color == id;
+    default:
+        return true;
+    }
+}
+
+/* a mesh draw's texels on tc: its stream's bound through VU memory 16..19
+ * (rd_vis.c cmdVerdict's reading of the payload), the occlusion test's
+ * samples' box (rd__vis_hiz_occludee) */
+static bool meshBox(const RdFrame *f, const RdCmd *c, const RdStateBlock *st, const RdTargetRec *tc,
+                    RhiRect *box)
+{
+    const uint64_t after = sizeof(RdVuPayload) + sizeof(RdVuBlock);
+    if (!f->payload || c->u[2] < after || (uint64_t)c->u[1] + c->u[2] > f->payloadSize) {
+        return false;
+    }
+    const uint8_t *pay = f->payload + c->u[1];
+    RdVuPayload p;
+    memcpy(&p, pay, sizeof(p));
+    if ((p.clip != RD_VU_CLIP_REGION && p.clip != RD_VU_CLIP_SCISSOR) || p.prog > RD_PROG_REFLECT) {
+        return false; /* code 34 wraps X and Y; not a mesh program */
+    }
+    const RdMeshRec *m = rd__mesh_rec(c->u[0]);
+    if (!m || !m->vu || !m->stream || !m->vertexCount || !m->qwPerVertex ||
+        p.firstBatch >= m->batchCount) {
+        return false;
+    }
+    float mem[36][4];
+    memcpy(mem, pay + sizeof(RdVuPayload), sizeof(mem));
+    RdVisBox b;
+    if (!rd__vis_box((const float (*)[4])m->stream, m->vertexCount, m->qwPerVertex, &b) || !b.n) {
+        return false;
+    }
+    RdVisHizBox hb;
+    if (!rd__vis_hiz_occludee((const float (*)[4]) & mem[16], &b, p.clip == RD_VU_CLIP_SCISSOR,
+                              &hb)) {
+        return false; /* a corner behind the eye, or past the GS region */
+    }
+    if (!rd__lamps_box_texels(tc, st->gsW, st->gsH, hb.x0, hb.y0, hb.x1, hb.y1, LAMPS_PAD, box)) {
+        *box = (RhiRect){0, 0, 0, 0}; /* off the target: nothing drawn on it */
+    }
+    return true;
+}
+
+/* a screen-prim command's texels on tc (rd_pass_area.c screenKind's
+ * reading: its vertices' box padded, through the UI flip either way) */
+static bool screenBox(const RdFrame *f, const RdCmd *c, const RdStateBlock *st,
+                      const RdTargetRec *tc, RhiRect *box)
+{
+    *box = (RhiRect){0, 0, 0, 0};
+    const uint32_t n = c->u[1];
+    if (rd__wrap_applies(st) || st->ds.test.date != RD_DATE_OFF ||
+        (c->b[1] == RD_SPACE_FULLFRAME && c->b[0] == RD_PRIM_SPRITES)) {
+        return false;
+    }
+    if (n == 0) {
+        return true;
+    }
+    if (!f->payload || (uint64_t)c->u[0] + (uint64_t)n * sizeof(RdScreenVtx) > f->payloadSize) {
+        return false;
+    }
+    const RdScreenVtx *v = (const RdScreenVtx *)(f->payload + c->u[0]);
+    const int aa1 = st->aa1 != 0;
+    RhiRect a = {0, 0, 0, 0}, b = {0, 0, 0, 0};
+    if (!rd__screen_area(tc, st, v, n, 0, aa1, &a)) {
+        a = (RhiRect){0, 0, 0, 0};
+    }
+    if (c->b[1] == RD_SPACE_UI && rd__screen_area(tc, st, v, n, 1, aa1, &b)) {
+        a = rd__lamps_union(a, b);
+    }
+    *box = a;
+    return true;
+}
+
+void rd__lamps_scan_begin(const RdFrame *f)
+{
+    s_scan.on = f != NULL && g_rd.hasDevice;
+    s_scan.replay = g_rd.replayCounter;
+    s_scan.w2 = idOf(RD_TARGET_WORK2);
+    s_scan.overflow = false;
+    s_scan.n = 0;
+    s_scan.want = s_scan.confirmed = s_scan.area = false;
+    s_scan.areaRect = s_scan.box = (RhiRect){0, 0, 0, 0};
+    s_scan.fillOrd = s_scan.redOrd = UINT32_MAX;
+    s_scan.why = RD_LAMPS_WHY_NONE;
+}
+
+void rd__lamps_scan_cmd(const RdFrame *f, const RdCmd *c, const RdStateBlock *st, bool state,
+                        uint32_t ord)
+{
+    if (!s_scan.on || state || !writesW2(c, st, s_scan.w2)) {
+        return;
+    }
+    if (s_scan.n >= LAMPS_MAX) {
+        s_scan.overflow = true;
+        return;
+    }
+    W2Write *w = &s_scan.w[s_scan.n++];
+    w->ord = ord;
+    w->type = (uint8_t)c->type;
+    w->box = (RhiRect){0, 0, 0, 0};
+    const RdTargetRec *tc = rd__target_rec(st->color);
+    w->ok = false;
+    if (tc && st->color == s_scan.w2 && c->type == RDC_MESH) {
+        w->ok = meshBox(f, c, st, tc, &w->box);
+    } else if (tc && st->color == s_scan.w2 && c->type == RDC_SCREEN) {
+        w->ok = screenBox(f, c, st, tc, &w->box);
+    }
+}
+
+/* WORK2's texture still the tracker's */
+static bool sameTexture(const RdTargetRec *t)
+{
+    return s_w2.valid && t && t->color.id && t->color.id == s_w2.tex && t->tw == s_w2.tw &&
+           t->th == s_w2.th && !t->clearPending;
+}
+
+void rd__lamps_scan_end(void)
+{
+    if (!s_scan.on || s_scan.replay != g_rd.replayCounter) {
+        s_w2.valid = false;
+        return;
+    }
+    const int plan = rd__glow_light_plan();
+    const RdTargetRec *t2 = rd__target_rec(s_scan.w2);
+    bool other = s_scan.overflow, boxOk = true;
+    RhiRect box = {0, 0, 0, 0};
+    for (uint32_t i = 0; i < s_scan.n; i++) {
+        const W2Write *w = &s_scan.w[i];
+        const int role = rd__glow_light_role(w->ord);
+        if (plan == RD_GLOW_LIGHT_LAMPS &&
+            (role == RD_GLOW_ROLE_FILL || role == RD_GLOW_ROLE_MASK_SKIPPED)) {
+            continue; /* the fill as (0, 0, 0, 0), the mask not drawn */
+        }
+        if (plan == RD_GLOW_LIGHT_LAMPS &&
+            (role == RD_GLOW_ROLE_LAMP || role == RD_GLOW_ROLE_FAN)) {
+            boxOk = boxOk && w->ok;
+            box = rd__lamps_union(box, w->box);
+            continue;
+        }
+        if (plan == RD_GLOW_LIGHT_DARK &&
+            (role == RD_GLOW_ROLE_FILL || role == RD_GLOW_ROLE_MASK_SKIPPED ||
+             role == RD_GLOW_ROLE_FAN_SKIPPED)) {
+            continue; /* (0, 0, 0, 0) or nothing drawn */
+        }
+        other = true;
+    }
+    if (plan != RD_GLOW_LIGHT_LAMPS) {
+        if (other || g_rdWin.first || !sameTexture(t2)) {
+            s_w2.valid = false;
+        }
+        return;
+    }
+    s_scan.fillOrd = rd__glow_light_role_ord(RD_GLOW_ROLE_FILL);
+    s_scan.redOrd = rd__glow_light_role_ord(RD_GLOW_ROLE_REDUCTION);
+    const int aw = areaWhy();
+    int why = RD_LAMPS_WHY_NONE;
+    if (aw != RD_LAMPS_WHY_NONE) {
+        why = aw;
+    } else if (g_rdWin.first) {
+        why = RD_LAMPS_WHY_WINDOW;
+    } else if (other) {
+        why = RD_LAMPS_WHY_OTHER;
+    } else if (!boxOk) {
+        why = RD_LAMPS_WHY_BOX;
+    } else if (!t2 || !t2->color.id || s_scan.fillOrd == UINT32_MAX ||
+               s_scan.redOrd == UINT32_MAX || s_scan.redOrd < s_scan.fillOrd) {
+        why = RD_LAMPS_WHY_FORM;
+    }
+    const bool known = sameTexture(t2);
+    s_w2.valid = false; /* until the planned pass confirms the new region */
+    s_scan.why = why;
+    if (why != RD_LAMPS_WHY_NONE) {
+        /* the pass as before, and nothing learned: the next lamps frame
+         * whole too; counted here, once for the replay (any pass on WORK2
+         * in it then only forgets) */
+        g_rdPerf.lampsWhole++;
+        g_rdPerf.lampsWhy = (uint32_t)why;
+        s_totWhole++;
+        sumAdd(&s_sum.whole, 1);
+        sumAdd(&s_sum.why[why], 1);
+        if (aw == RD_LAMPS_WHY_NONE) {
+            whyOnce(why); /* the state line names the switch's, the class's and the test's */
+        }
+        return;
+    }
+    s_scan.want = true;
+    s_scan.box = box;
+    RhiRect a = {0, 0, 0, 0};
+    const int pick = rd__lamps_area_pick(known, s_w2.lit, box, t2->tw, t2->th, &a);
+    s_scan.area = pick == RD_LAMPS_WHY_NONE;
+    s_scan.areaRect = a;
+    s_scan.why = pick;
+    /* the region as of now, for the area: kept in areaRect; the tracker
+     * learns the new one when the pass begins as planned */
+}
+
+/* ------------------------------------------------------------ the pass */
+
+static void forget(int why)
+{
+    s_w2.valid = false;
+    if (s_scan.want && s_scan.replay == g_rd.replayCounter && !s_scan.confirmed) {
+        s_scan.want = false;
+        g_rdPerf.lampsWhole++;
+        g_rdPerf.lampsWhy = (uint32_t)why;
+        s_totWhole++;
+        sumAdd(&s_sum.whole, 1);
+        sumAdd(&s_sum.why[why], 1);
+    }
+}
+
+static void whyOnce(int why)
+{
+    if (why > RD_LAMPS_WHY_NONE && why < RD_LAMPS_WHY_COUNT && !s_saidWhy[why]) {
+        s_saidWhy[why] = true;
+        rd__log("lamps: the lamps' pass on WORK2 drawn whole: %s (reported once for this "
+                "reason)",
+                kWhy[why]);
+    }
+}
+
+/* the poison's magenta over the whole of WORK2's colour, before a planned
+ * pass that clears it whole (the tests: a pass that should not rely on
+ * WORK2's earlier contents but did would show it) */
+static void poisonWhole(const RhiRenderPassDesc *p)
+{
+    RhiRenderPassDesc q;
+    memset(&q, 0, sizeof(q));
+    q.color[0].texture = p->color[0].texture;
+    q.color[0].load = RHI_LOAD_CLEAR;
+    q.color[0].readable = p->color[0].readable;
+    q.color[0].clear[0] = 1.0f;
+    q.color[0].clear[2] = 1.0f;
+    q.color[0].clear[3] = 1.0f;
+    q.colorCount = 1;
+    q.width = p->width;
+    q.height = p->height;
+    const RhiCommandList cl = rd__replay_cl();
+    rhi_cmd_begin_render_pass(cl, &q);
+    rhi_cmd_end_render_pass(cl);
+}
+
+/* the traffic the area saves: the whole pass's figures less the area's */
+static void savedTraffic(const RhiRenderPassDesc *p)
+{
+    RhiTrafficFmt cf[RHI_MAX_COLOR_TARGETS];
+    memset(cf, 0, sizeof(cf));
+    (void)rhi_traffic_format_of(p->color[0].texture, &cf[0]);
+    RhiTrafficFmt df;
+    memset(&df, 0, sizeof(df));
+    if (p->depth.texture.id) {
+        (void)rhi_traffic_format_of(p->depth.texture, &df);
+    }
+    RhiRenderPassDesc whole = *p;
+    whole.area = (RhiRect){0, 0, 0, 0};
+    RhiTrafficPass a, b;
+    rhi_traffic_pass_sum(&whole, cf, df, &a);
+    rhi_traffic_pass_sum(p, cf, df, &b);
+    const uint32_t clear = (uint32_t)(a.clear - b.clear),
+                   store = (uint32_t)(a.colorStore - b.colorStore);
+    const uint32_t dload = (uint32_t)(a.depthLoad - b.depthLoad);
+    const uint32_t dstore = (uint32_t)(a.depthStore - b.depthStore);
+    g_rdPerf.lampsSavedClear += clear;
+    g_rdPerf.lampsSavedColorStore += store;
+    g_rdPerf.lampsSavedDepthLoad += dload;
+    g_rdPerf.lampsSavedDepthStore += dstore;
+    g_rdPerf.lampsAreaTexels += (uint32_t)b.pixels;
+    g_rdPerf.lampsTexels += (uint32_t)a.pixels;
+    sumAdd(&s_sum.clear, clear);
+    sumAdd(&s_sum.store, store);
+    sumAdd(&s_sum.dload, dload);
+    sumAdd(&s_sum.dstore, dstore);
+    sumAdd(&s_sum.areaTexels, b.pixels);
+    sumAdd(&s_sum.texels, a.pixels);
+}
+
+bool rd__lamps_pass(RhiRenderPassDesc *p, uint32_t cid, bool ms, bool storage)
+{
+    const uint32_t w2 = idOf(RD_TARGET_WORK2);
+    const RdTargetRec *t2 = rd__target_rec(w2);
+    if (!p || p->colorCount == 0 || !t2 || !t2->color.id ||
+        p->color[0].texture.id != t2->color.id) {
+        return false; /* not on WORK2's colour */
+    }
+    const bool planned = s_scan.want && s_scan.replay == g_rd.replayCounter;
+    const uint32_t ord = g_rdStoreOrd;
+    const bool inRange = planned && cid == w2 && cid == s_scan.w2 && ord >= s_scan.fillOrd &&
+                         ord <= s_scan.redOrd && !ms && !storage;
+    const float *k = p->color[0].clear;
+    const bool clear0 = p->color[0].load == RHI_LOAD_CLEAR && k[0] == 0.0f && k[1] == 0.0f &&
+                        k[2] == 0.0f && k[3] == 0.0f && p->color[0].store == RHI_STORE_STORE &&
+                        p->colorCount == 1;
+    if (inRange && clear0 && !s_scan.confirmed) {
+        /* the planned pass: WORK2 cleared to (0, 0, 0, 0) where it is not
+         * already, the lamps drawn inside their box, stored */
+        s_scan.confirmed = true;
+        const RhiRect area = s_scan.areaRect;
+        const bool known = s_scan.area;
+        s_w2.valid = true;
+        s_w2.tex = t2->color.id;
+        s_w2.tw = t2->tw;
+        s_w2.th = t2->th;
+        s_w2.lit = s_scan.box;
+        const RdTargetRec *sc = rd__target_rec(idOf(RD_TARGET_SCENE));
+        const bool depthOk = !p->depth.texture.id || (sc && p->depth.texture.id == sc->depth.id &&
+                                                      p->depth.depthLoad != RHI_LOAD_CLEAR &&
+                                                      p->depth.stencilLoad != RHI_LOAD_CLEAR);
+        if (known && depthOk) {
+            p->area = area;
+            savedTraffic(p);
+            g_rdPerf.lampsAreas++;
+            g_rdPerf.lampsAreaX = area.x;
+            g_rdPerf.lampsAreaY = area.y;
+            g_rdPerf.lampsAreaW = area.w;
+            g_rdPerf.lampsAreaH = area.h;
+            s_totAreas++;
+            sumAdd(&s_sum.areas, 1);
+            if (!s_saidArea) {
+                s_saidArea = true;
+                rd__log("lamps: WORK2's lamps pass loads, clears and stores %ux%u at %d,%d of "
+                        "%ux%u (the lamps' tiles and those the frame before lit; the rest of "
+                        "WORK2 holds the fill's (0, 0, 0, 0) already; reported once)",
+                        area.w, area.h, area.x, area.y, t2->tw, t2->th);
+            }
+            return true;
+        }
+        const int why = !depthOk ? RD_LAMPS_WHY_FORM : s_scan.why;
+        g_rdPerf.lampsWhole++;
+        g_rdPerf.lampsWhy = (uint32_t)why;
+        s_totWhole++;
+        sumAdd(&s_sum.whole, 1);
+        sumAdd(&s_sum.why[why], 1);
+        whyOnce(why);
+        if (rd__lamps_poison()) {
+            poisonWhole(p);
+        }
+        return false;
+    }
+    if (inRange && s_scan.confirmed && p->color[0].load == RHI_LOAD_LOAD &&
+        p->color[0].store == RHI_STORE_STORE) {
+        return false; /* the lamps after their clear's own pass: inside the box */
+    }
+    forget(RD_LAMPS_WHY_FORM);
+    if (planned) {
+        whyOnce(RD_LAMPS_WHY_FORM);
+    }
+    return false;
+}
+
+/* ------------------------------------------------------------ the line */
+
+void rd_lamps_line(void)
+{
+    uint64_t v[9];
+    uint64_t *const src[9] = {&s_sum.areas,      &s_sum.whole,  &s_sum.pads,
+                              &s_sum.areaTexels, &s_sum.texels, &s_sum.clear,
+                              &s_sum.store,      &s_sum.dload,  &s_sum.dstore};
+    for (int i = 0; i < 9; i++) {
+        v[i] = __atomic_exchange_n(src[i], 0, __ATOMIC_RELAXED);
+    }
+    uint64_t w[RD_LAMPS_WHY_COUNT];
+    for (int i = 0; i < RD_LAMPS_WHY_COUNT; i++) {
+        w[i] = __atomic_exchange_n(&s_sum.why[i], 0, __ATOMIC_RELAXED);
+    }
+    if (v[0] + v[1] + v[2] == 0) {
+        return;
+    }
+    char why[512] = "";
+    size_t at = 0;
+    for (int i = 1; i < RD_LAMPS_WHY_COUNT; i++) {
+        if (!w[i]) {
+            continue;
+        }
+        const int m = snprintf(why + at, sizeof(why) - at, "%s%llu %s", at ? ", " : " (",
+                               (unsigned long long)w[i], kWhy[i]);
+        if (m < 0 || (size_t)m >= sizeof(why) - at) {
+            break;
+        }
+        at += (size_t)m;
+    }
+    const double mb = 1.0 / 1048576.0;
+    fprintf(stderr,
+            "window: lamps: %llu lamps passes on WORK2 with an area (%.1f %% of their texels "
+            "loaded and stored; %.1f MB not cleared, %.1f MB of colour and %.1f MB of depth "
+            "not stored, %.1f MB of depth not loaded), %llu whole%s%s; %llu bands left lazy "
+            "(WORK2_PAD: a pass fewer each)\n",
+            (unsigned long long)v[0], v[4] ? 100.0 * (double)v[3] / (double)v[4] : 0.0,
+            (double)v[5] * mb, (double)v[6] * mb, (double)v[8] * mb, (double)v[7] * mb,
+            (unsigned long long)v[1], why, at ? ")" : "", (unsigned long long)v[2]);
+}

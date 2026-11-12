@@ -302,6 +302,22 @@ more or once less (`uploadUniformBytes`, the ring's bytes). No `DIVERGENCES.md` 
 an estimate (about 0.3 to 0.7 ms a picture in the cage at the phone's 700-800 MHz, the design's
 C.2) until the CPU phases' line below measures the walk.
 
+The lamps' pass on WORK2 under the glow's lamps plan ([RENDER_POST.md](RENDER_POST.md#the-lamps-glow-for-less))
+loads, clears and stores only the lamps' tiles and those the frame before lit. Its records: the
+10 s `window: lamps: N lamps passes on WORK2 with an area (P % of their texels loaded and stored;
+X MB not cleared, Y MB of colour and Z MB of depth not stored, W MB of depth not loaded), M whole
+(why); B bands left lazy`, `RdPerfRecord.lampsAreas`, `lampsWhole`, `lampsWhy`, `lampsPads`, the
+area (`lampsAreaX`, `Y`, `W`, `H`, `lampsAreaTexels` of `lampsTexels`) and the bytes it saved
+(`lampsSavedClear`, `lampsSavedColorStore`, `lampsSavedDepthLoad`, `lampsSavedDepthStore`:
+`rhi_traffic_pass_sum` of the pass whole less of the pass with its area, the figures the `perf
+scene` line's traffic sums), and `rd_replay_tool --stats` `stats: lamps ...`. On the boot corpus's
+title frame (`rd-00400`, 512 x 512 GS at the phone's 2364 x 1080, replayed on lavapipe by the
+int-built tool of 2026-11-12 before this change) the lamps lit 14,550 texels of WORK2, in 240 of
+its 2,516 tiles, all in rows 0 to 363: the bounding box of those tiles is 888 tiles (35 %), a
+lower bound of the area the code takes (its boxes are the meshes' bounds, not their coverage).
+At that share a lamps picture moves about 65 % less of WORK2's 9.74 MB clear and 9.74 MB store and
+of SCENE's 9.74 MB depth load, about 19 MB, before the measurement on the phone.
+
 ### The CPU phases
 
 The 10 s line `window: N replays: CPU ...` splits a picture's render-thread time into interp, upload,

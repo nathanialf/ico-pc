@@ -147,6 +147,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "rd_lamps.h"
 #include "rd_replay.h"
 #include "rd_upscale.h"
 
@@ -1753,6 +1754,7 @@ bool rd__crack_swap_selftest(void)
 {
     const bool ok = swapSelftest();
     (void)rd__fill11_selftest(); /* the fill's depth twins (rd_fill11.c), logged there */
+    (void)rd__lamps_selftest();  /* the lamps' pass area (rd_lamps.c), logged there */
     return ok;
 }
 

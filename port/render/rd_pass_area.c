@@ -128,6 +128,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "rd_lamps.h"
 #include "rd_replay.h"
 
 static int32_t floorDiv16(int32_t v)
@@ -356,6 +357,7 @@ void rd__pass_area_init(void)
     memset(s_pa.whyRun, 0, sizeof(s_pa.whyRun));
     s_pa.nSaid = 0;
     note();
+    rd__lamps_init(); /* the lamps' pass area, which reads this one's switch (rd_lamps.c) */
 }
 
 bool rd__pass_area_on(void)
@@ -759,6 +761,10 @@ void rd__pass_area_begin(RhiRenderPassDesc *p, const RdTargetRec *c, uint32_t ci
     }
     s_pa.open = s_pa.ended = false;
     p->area = (RhiRect){0, 0, 0, 0};
+    if (rd__lamps_pass(p, cid, ms, storage)) {
+        rd__perf_pass_area(&p->area); /* the lamps' pass on WORK2 (rd_lamps.c) */
+        return;
+    }
     if (!s_pa.on || !c || !c->withDepth || !c->depth.id) {
         return; /* off, or a target without its own depth: whole, not counted */
     }

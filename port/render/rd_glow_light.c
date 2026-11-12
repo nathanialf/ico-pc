@@ -98,6 +98,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "rd_lamps.h"
 #include "rd_replay.h"
 
 /* what the replay does with a chain command */
@@ -1069,6 +1070,8 @@ static void planActs(uint8_t plan)
                 e->act = ACT_ALPHA0;
             } else if (e->el == E_MASK) {
                 e->act = ACT_SKIP;
+            } else if (e->el == E_PAD && e->cover && !s_gl.unhooked[LZ_PAD] && rd__lamps_pad_on()) {
+                e->act = ACT_LAZY; /* the band as the DARK plan leaves it (rd_lamps.c) */
             }
             continue;
         }
@@ -1256,6 +1259,54 @@ bool rd__glow_light_planned(void)
 int rd__glow_light_plan(void)
 {
     return s_gl.replay == g_rd.replayCounter ? (int)s_gl.plan : RD_GLOW_LIGHT_NONE;
+}
+
+/* rd_lamps.h: the role of a chain command by its ordinal, and the first
+ * ordinal of a role, after this replay's scan (the acts planActs gave) */
+static int roleOf(const GlCmd *e)
+{
+    switch (e->el) {
+    case E_PAD:
+        return RD_GLOW_ROLE_PAD;
+    case E_FILL:
+        return RD_GLOW_ROLE_FILL;
+    case E_FAN:
+        return e->act == ACT_SKIP ? RD_GLOW_ROLE_FAN_SKIPPED : RD_GLOW_ROLE_FAN;
+    case E_MASK:
+        return e->act == ACT_SKIP ? RD_GLOW_ROLE_MASK_SKIPPED : RD_GLOW_ROLE_MASK;
+    case E_LAMP:
+        return RD_GLOW_ROLE_LAMP;
+    case E_RED:
+        return RD_GLOW_ROLE_REDUCTION;
+    default:
+        return RD_GLOW_ROLE_OTHER;
+    }
+}
+
+int rd__glow_light_role(uint32_t ord)
+{
+    if (!s_gl.scanned || s_gl.scanReplay != g_rd.replayCounter) {
+        return RD_GLOW_ROLE_NONE;
+    }
+    for (uint32_t i = 0; i < s_gl.n; i++) {
+        if (s_gl.cmd[i].ord == ord) {
+            return roleOf(&s_gl.cmd[i]);
+        }
+    }
+    return RD_GLOW_ROLE_NONE;
+}
+
+uint32_t rd__glow_light_role_ord(int role)
+{
+    if (!s_gl.scanned || s_gl.scanReplay != g_rd.replayCounter) {
+        return UINT32_MAX;
+    }
+    for (uint32_t i = 0; i < s_gl.n; i++) {
+        if (roleOf(&s_gl.cmd[i]) == role) {
+            return s_gl.cmd[i].ord;
+        }
+    }
+    return UINT32_MAX;
 }
 
 /* --------------------------------------------------------- the replay's */
@@ -1602,6 +1653,9 @@ bool rd__glow_light_sprite(Replay *r, const RdFrame *f, const RdCmd *c)
     case ACT_LAZY:
         if (lazyNote(e->target, e->col)) {
             r->writeSerial++;
+            if (s_gl.plan == RD_GLOW_LIGHT_LAMPS) {
+                rd__lamps_pad_noted(); /* the band under the lamps' plan (rd_lamps.c) */
+            }
             return true;
         }
         drawClear(r, f, c, e, &p); /* no texture to hold it: drawn as the clear */

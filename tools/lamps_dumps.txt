@@ -1,0 +1,20 @@
+# Dump list for rd_lamps_ab (port/render/test/rd_lamps_ab.cmake: the lamps'
+# pass area on WORK2 and WORK2_PAD's band left lazy against both off,
+# ICO_RD_LAMPS=0, at the phone's setting, a desktop one, the Mali fakes and
+# OpenGL).
+# MACHINE-LOCAL: these are paths on the maintainer's machine; the dumps
+# themselves are never committed.  The glow dumps on this machine whose light
+# plan is LAMPS (tools/glow_light_dumps.txt's; rd_glow_light.c), present on
+# 2026-11-12.  A listed dump that is absent FAILS the test (the owner's rule
+# for v0.11.5: use what exists, never list what does not).  The boot corpus's
+# title frames are 512 x 512 GS (the phone's title is 848 x 448: the same
+# castle and lamps, a narrower frame and another texel scale).
+#
+# the issue 163 frames (the lamps' meshes drawn into WORK2 after the mask)
+/primary/dev/ico-dumps/163/blended-750-a200.rddump
+/primary/dev/ico-dumps/163/frame-20261105-195124-v6171-blended.rddump
+# the title's castle with its lamps (stage 1, 512 x 512 GS)
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/boot/rd-00400.rddump
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps.pre-rpost/boot/rd-00400.rddump
+/primary/dev/ico-pc/build-host/tmp/e2e/run-title-off/dumps/rd-00400.rddump
+/primary/dev/ico-pc/build-host/tmp/e2e/run-title-on/dumps/rd-00400.rddump

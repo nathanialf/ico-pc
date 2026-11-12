@@ -635,6 +635,25 @@ classes` line's crack fill class loses its pass (its colour copy stays). Dark ro
 `drawn early` say a command the hold did not expect; the player's F12 dump replays it
 (`rd_replay_tool --stats` prints `late pass on: N crack fills held ..., M drawn early (<why>)`).
 
+### The lamps' glow for less
+
+In a lamps room (the title's castle; `window: glow: light: ... L lamps`) the pass that draws the
+lamps into WORK2 takes only the lamps' tiles and those the picture before lit, and WORK2_PAD's band
+is no pass of its own ([RENDER_POST.md](RENDER_POST.md#the-lamps-glow-for-less)). The start lines
+`rd: lamps: area on (self-test passed); band lazy on: ...` and `rd: lamps: area self-test passed:
+...` say it is in force (`area off (not the PowerVR or a desktop class ...)` on the Arm, Qualcomm
+and Apple phones, where only the band is; `area off (its self-test not passed)` with the
+self-test's line naming the texel). The 10 s block's `window: lamps: N lamps passes on WORK2 with
+an area (P % of their texels loaded and stored; X MB not cleared, ...), M whole (<why>); B bands
+left lazy` counts the pictures that saved the traffic (N) and those drawn whole by reason (`the
+WORK2 an earlier frame left not known`: the first lamps picture after a whole or other one, about
+one a room entry; `a lamp whose screen box is not known`: a lamp behind the eye or past the GS
+region; `another command writes WORK2 in the frame`; `the lamps and the lit region cover WORK2`).
+Many whole pictures for one of the last three in a steady lamps room name a frame the player's F12
+dump can replay (`rd_replay_tool --stats` prints `stats: lamps ...`). The `perf classes` line's
+glow class shows the change: its depth loaded and colour cleared and stored fall by about the
+share of WORK2 outside the lamps' tiles.
+
 ### The crack fill's snapshot by the swap
 
 The crack fill's start-up check prints `rd: crack fill: swap: on (self-test: 256 levels a channel

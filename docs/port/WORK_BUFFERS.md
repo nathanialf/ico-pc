@@ -301,6 +301,21 @@ tests; `rd_pass_cut.c rd__clear_skip_readback`). A replay that covers it first f
 texture or renderer holds none. The alphas differ from the chain's only where WORK2 kept the fill
 (VD-30), and nothing reads them before they are written again.
 
+## WORK2 under the lamps' area
+
+Under the lamps plan the pass that draws the lamps into WORK2 loads, clears and stores only the
+tiles of the lamps' screen boxes and of the region the last lamps frame lit
+([RENDER_POST.md](RENDER_POST.md#the-lamps-glow-for-less), `port/render/rd_lamps.c`). What it
+keeps across frames: WORK2's texture (id and size) and the texel rect a confirmed lamps pass may
+have lit; every other texel of WORK2 holds (0, 0, 0, 0), the fill's colour, stored by that pass.
+The rect is forgotten (the next lamps pass whole) at `rd_init`, at a new WORK2 texture or one
+with its new-target clear pending, after a replay that writes WORK2 any other way than the lamps
+plan's fill, mask and lamps or the dark plan's undrawn chain, at any other render pass on
+WORK2's colour, under the replay tool's pass window, and when the planned pass does not begin
+with the fill's clear to (0, 0, 0, 0) and a colour store. The dark plan's lazy clear of WORK2 is
+(0, 0, 0, 0), so drawn or not it keeps the rule. Under the lamps plan WORK2_PAD's band is a lazy
+clear of its colour (0, 0, 0, 192) as under the dark plan (the table above).
+
 ## The work clear
 
 `ICO_RD_WORK_CLEAR=RRGGBB` in the environment (the game), or `rd_replay_tool --work-clear RRGGBB`,

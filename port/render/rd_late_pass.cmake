@@ -133,3 +133,6 @@ endif()
 
 # the aura's paste split (rd_aura_paste.c in ico_render) and its tests
 include(rd_aura_paste.cmake)
+
+# the lamps' glow for less (rd_lamps.c in ico_render) and its tests
+include(rd_lamps.cmake)
