@@ -287,7 +287,8 @@ const char *rd_nv_why_words(int why)
     case RD_NV_WHY_OFF:
         return "ICO_RD_NO_VOLUME=0";
     case RD_NV_WHY_CLASS:
-        return "not the PowerVR or MoltenVK class under Vulkan";
+        return "the default in this release: the PowerVR phone flickered black with it on, cause not "
+               "found";
     case RD_NV_WHY_DATE:
         return "the composites' DATE by the R8 snapshot or the shader's read";
     case RD_NV_WHY_SETTING:
@@ -349,11 +350,17 @@ static int envOf(void)
     return s_nv.env;
 }
 
-/* the classes it is on for by default: PowerVR and MoltenVK under Vulkan */
+/* off by default in this release (rc14 and rc15 on the PowerVR phone: the right part of
+   the picture flickered black at the title and on the pause menu, the pictures where a
+   window has no volume; cause not found; lavapipe shows the same bytes). The classes it
+   was on for: PowerVR and MoltenVK under Vulkan. ICO_RD_NO_VOLUME=1 turns it on (tests) */
+#define RD_NO_VOLUME_DEFAULT 0
+
 static bool classOn(void)
 {
     const RhiLimits *lim = g_rd.hasDevice ? rhi_limits() : NULL;
-    return lim && rhi_backend() == RHI_BACKEND_VULKAN && (lim->moltenvk || rd__profile_powervr());
+    return RD_NO_VOLUME_DEFAULT && lim && rhi_backend() == RHI_BACKEND_VULKAN &&
+           (lim->moltenvk || rd__profile_powervr());
 }
 
 static int gateNow(void)
