@@ -526,6 +526,16 @@ Measured or worked out, not done:
   ([The crack fill's snapshot by the swap](RENDER_POST.md#the-crack-fills-snapshot-by-the-swap)).
   `build-host/tmp/v098/evidence/perf/crack-pass.sh` measures the pass structure with and without
   the fill on lavapipe under the PowerVR and the Qualcomm-driver profiles.
+- **The crack fill in list 11's pass** (the same bytes,
+  [RENDER_POST.md](RENDER_POST.md#the-crack-fill-in-list-11s-pass)). The PowerVR phone's title
+  (the owner's log of 2026-11-12, stage 1: 333 of 505 pictures under the glow's DARK plan) drew the fill in its own
+  pass (1.0 a picture, 1.23 ms, 9.6 MB stored) and list 11 in another (2.69 ms, 9.6 MB loaded and
+  9.8 stored). Where nothing between touches SCENE the fill's draw is held to list 11's first pass,
+  drawn there over a scratch depth: one pass and about 19.5 MB of colour (the fill's store, list
+  11's load) fewer a DARK title picture at 2366 x 1080, and list 11's depth load. Not measured on
+  the phone (no dump of its current title on this machine; the corpus title's motion blur draws
+  into SCENE before list 11); `rd_fill11_ab` asserts the passes and bytes on lavapipe from the
+  code. On the PowerVR and desktop classes only: off on the Arm and Qualcomm phones this release.
 - **The fog's cost per frame.** On lavapipe the fog of the Mac frame costs several times the
   title frame's at under three times the pixels; the fog pass count (`rd__fog_plan`) and its
   depth source (`rd__fog_source`) are where to look before its shader, which is about 60

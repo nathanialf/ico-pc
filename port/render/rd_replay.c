@@ -2739,6 +2739,7 @@ static bool prepareDrawEx(Replay *r, DrawSetup *ds, const RhiRect *dateArea, boo
     ds->texCrop = texCropOf(r, ds->tex);
     replacementUv(r->st.tex, ds);
     ds->gsLevels = drawGsLevels(r, ds);
+    rd__fill11_draw(r, ds); /* a held crack fill's landing (rd_fill11.c) */
     return true;
 }
 

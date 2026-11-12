@@ -65,12 +65,23 @@
  * place pinned to the start of list 7 (rd__crack_fill_set_place, the
  * place the fill had before) has SCENE's colour and depth the same bytes and
  * more render passes (checkPlace).
+ * With fill11 (the crack fill in list 11's pass, rd_fill11.c, its self-test
+ * run first and the switch forced on): the glow's cleanUpFB, a sprite into
+ * WORK0 (the fill's place: its snapshot there) and list 11's two sprites into
+ * SCENE under Z ALWAYS without a Z write: the fill drawn as the first draw of
+ * list 11's pass over the scratch depth (one render pass fewer than with the
+ * switch off, no fill pass of its own, SCENE's colour and depth the same
+ * bytes: checkFill11); with fill11 area (on the tile class's fakes, the pass
+ * area on: list 11's pass would hold its sprites' tiles alone) or fill11z
+ * (a third sprite of list 11 with a Z write) the held fill is drawn in a pass
+ * of its own at list 11 instead, the same passes and bytes.
  * The log lines are matched by test/rd_crack.cmake. */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "rd_fill11.h"
 #include "rd_internal.h"
 #include "rd_late_pass.h"
 #include "vk/rhi_vk.h"
@@ -129,9 +140,34 @@ static bool s_backdrop; /* the far plane first (argv[2] backdrop) */
 
 /* argv[2] glow or aura: after the fog the glow's cleanUpFB (list 7) or the
  * aura's paste (list 8) as staticBlur.c draws them */
-enum { AFTER_NONE, AFTER_GLOW, AFTER_AURA, AFTER_HELD, AFTER_JOIN, AFTER_HELDGLOW, AFTER_DEFER };
+enum {
+    AFTER_NONE,
+    AFTER_GLOW,
+    AFTER_AURA,
+    AFTER_HELD,
+    AFTER_JOIN,
+    AFTER_HELDGLOW,
+    AFTER_DEFER,
+    AFTER_FILL11,
+    AFTER_FILL11Z
+};
 
 static int s_after;
+
+/* fill11's expectation (argv[3] area: the pass area refuses the landing) */
+enum { F11_LAND, F11_LATER, F11_AREA };
+
+static int s_f11Want = F11_LAND;
+
+static bool fill11(void)
+{
+    return s_after == AFTER_FILL11 || s_after == AFTER_FILL11Z;
+}
+
+static bool fill11Lands(void)
+{
+    return fill11() && s_f11Want == F11_LAND;
+}
 
 /* held, heldglow or defer: the late pass holds the fill (rd_late_pass.c) */
 static bool held(void)
@@ -213,6 +249,47 @@ static void recordAfter(RdTarget scene)
     rd_fba(0);
     rd_z_write(0);
     rd_gouraud(0);
+    if (fill11()) {
+        /* fill11: cleanUpFB's two sprites (the fill after them, RGB alone),
+         * a sprite into WORK0 (another target after the glow's alpha: the
+         * fill's place, its snapshot there), then list 11: two commands of an
+         * untextured blended sprite into SCENE under Z ALWAYS without a Z
+         * write, SCENE's depth bound, right of the slit (the join's); fill11z
+         * a third with the Z written */
+        static const uint8_t kMenu[4] = {180, 170, 40, 0x40};
+        rd_set_target(scene, scene, GW, GH, 0);
+        rd_abe(1);
+        rd_blend_func(RD_BLEND_CS_AS_ADD_CD, 0);
+        rd_test_gs(RD_TEST_Z_ALWAYS);
+        blurSprite(RD_POST_FLARE, GW, GH, kNone, 0, 0.0f, 0.0f);
+        rd_test_gs(RD_TEST_Z_GEQUAL);
+        blurSprite(RD_POST_FLARE, GW, GH, kMark, 1, 0.0f, 0.0f);
+        rd_set_target(rd_target(RD_TARGET_WORK0), (RdTarget){0}, 256, 128, 0);
+        rd_texture_off();
+        rd_abe(0);
+        rd_test_gs(RD_TEST_Z_ALWAYS);
+        blurSprite(RD_POST_FLARE, 256, 128, kFeed, 0, 0.0f, 0.0f);
+        rd_select_list(11);
+        rd_set_target(scene, scene, GW, GH, 0);
+        rd_texture_off();
+        rd_pabe(0);
+        rd_fba(0);
+        rd_z_write(0);
+        rd_test_gs(RD_TEST_Z_ALWAYS);
+        rd_abe(1);
+        rd_blend_func(RD_BLEND_LERP_AS, 0);
+        RdScreenVtx m[2] = {vtx(605.0, 50.0, 0, kMenu), vtx(620.0, 90.0, 0, kMenu)};
+        rd_screen_prims(RD_PRIM_SPRITES, m, 2, RD_SPACE_WORLD, 1, 0);
+        RdScreenVtx n[2] = {vtx(610.0, 100.0, 0, kMenu), vtx(630.0, 130.0, 0, kMenu)};
+        rd_screen_prims(RD_PRIM_SPRITES, n, 2, RD_SPACE_WORLD, 1, 0);
+        if (s_after == AFTER_FILL11Z) {
+            rd_z_write(1);
+            RdScreenVtx z[2] = {vtx(605.0, 140.0, 0x00F00000u, kMenu),
+                                vtx(630.0, 160.0, 0x00F00000u, kMenu)};
+            rd_screen_prims(RD_PRIM_SPRITES, z, 2, RD_SPACE_WORLD, 1, 0);
+        }
+        return;
+    }
     if (s_after == AFTER_GLOW || held()) {
         rd_set_target(scene, scene, GW, GH, 0);
         rd_abe(1);
@@ -428,6 +505,9 @@ typedef struct Picture {
     uint32_t held, glowHeld, early, joined, joinPasses, deferred, deferEarly;
     /* FILLSWAP and CRACKTAP: snapshots by the swap, copied ones, early-leave draws */
     uint32_t swaps, swapCopied, tap2;
+    /* FILL11 (rd_fill11.c): fills drawn in list 11's pass, held fills drawn
+     * in a pass of their own (the last one's why) */
+    uint32_t landed, f11Flushed, f11Why;
 } Picture;
 
 static bool replay(bool fill, Picture *p)
@@ -448,6 +528,11 @@ static bool replay(bool fill, Picture *p)
     p->swaps = g_rdPerf.crackSwaps;
     p->swapCopied = g_rdPerf.crackSwapCopied;
     p->tap2 = g_rdPerf.crackTap2;
+    RdFill11Counts fc;
+    rd__fill11_replay(&fc);
+    p->landed = fc.landed;
+    p->f11Flushed = fc.flushed;
+    p->f11Why = fc.why;
     rhi_wait_idle();
     const RdTargetRec *t = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
     if (!t) {
@@ -640,6 +725,52 @@ static void checkJoin(const Picture *on)
     free(un.z);
 }
 
+/* fill11: the frame against the switch off (rd__fill11_force(0)): its
+ * self-test passed; SCENE's colour and depth byte for byte; with the landing,
+ * one fill drawn in list 11's pass, none held and drawn apart, one render
+ * pass fewer and no fill pass of its own (the switch off: one); refused (the
+ * pass area, a later draw with a Z write), one held fill drawn in its own pass
+ * for that reason, the same passes */
+static void checkFill11(const Picture *on)
+{
+    CHECK(rd__fill11_test() == 1, "the fill11 self-test: %d (1 passed)", rd__fill11_test());
+    rd__fill11_force(0);
+    Picture un;
+    memset(&un, 0, sizeof(un));
+    const bool ok = replay(true, &un) && un.w == on->w && un.h == on->h;
+    rd__fill11_force(1);
+    CHECK(ok, "SCENE readback with fill11 off");
+    size_t dPx = 0, dZ = 0;
+    for (size_t i = 0; ok && i < (size_t)on->w * on->h; i++) {
+        dPx += memcmp(&un.px[i * 4], &on->px[i * 4], 4) != 0;
+        dZ += on->z && un.z && memcmp(&un.z[i], &on->z[i], sizeof(float)) != 0;
+    }
+    const int fewer = (int)un.passes - (int)on->passes;
+    printf("  fill11: %u fills in list 11's pass, %u held fills in their own pass (why %u), fill "
+           "passes %u (off: %u, %u, %u); against the switch off %zu texels' colour and %zu depths "
+           "differ, %u render passes against %u (%d fewer)\n",
+           on->landed, on->f11Flushed, on->f11Why, on->fills, un.landed, un.f11Flushed, un.fills,
+           dPx, dZ, on->passes, un.passes, fewer);
+    CHECK(dPx == 0 && dZ == 0, "fill11 against off: %zu colours, %zu depths differ", dPx, dZ);
+    CHECK(un.landed == 0 && un.f11Flushed == 0 && un.fills == 1,
+          "the switch off: %u landed, %u held, %u fill passes (0, 0, 1 expected)", un.landed,
+          un.f11Flushed, un.fills);
+    if (s_f11Want == F11_LAND) {
+        CHECK(on->landed == 1 && on->f11Flushed == 0 && on->fills == 0 && fewer == 1,
+              "%u landed, %u held apart, %u fill passes, %d passes fewer: 1, 0, 0, 1 expected",
+              on->landed, on->f11Flushed, on->fills, fewer);
+    } else {
+        const uint32_t why = s_f11Want == F11_AREA ? RD_FILL11_WHY_AREA : RD_FILL11_WHY_LATER;
+        CHECK(on->landed == 0 && on->f11Flushed == 1 && on->f11Why == why && on->fills == 1 &&
+                  fewer == 0,
+              "%u landed, %u held apart (why %u, %u expected), %u fill passes, %d passes fewer: "
+              "0, 1, 1, 0 expected",
+              on->landed, on->f11Flushed, on->f11Why, why, on->fills, fewer);
+    }
+    free(un.px);
+    free(un.z);
+}
+
 /* one replay of the frame with the swap and the early leave forced (-1 the
  * environment's) and the general shader forced or not: the counts' change */
 static bool workReplay(int swap, int tap2, bool general, Picture *p, uint64_t *pixels)
@@ -745,7 +876,7 @@ int main(int argc, char **argv)
     printf("rd_crack_test\n");
     if (argc < 2) {
         printf("usage: rd_crack_test 2|4|1|frac|original "
-               "[msaa|backdrop|fold|glow|aura|held|heldglow|defer|join]\n");
+               "[msaa|backdrop|fold|glow|aura|held|heldglow|defer|join|fill11 [area]|fill11z]\n");
         return 2;
     }
     const bool original = strcmp(argv[1], "original") == 0;
@@ -759,7 +890,12 @@ int main(int argc, char **argv)
               : argc > 2 && strcmp(argv[2], "heldglow") == 0 ? AFTER_HELDGLOW
               : argc > 2 && strcmp(argv[2], "defer") == 0    ? AFTER_DEFER
               : argc > 2 && strcmp(argv[2], "join") == 0     ? AFTER_JOIN
+              : argc > 2 && strcmp(argv[2], "fill11") == 0   ? AFTER_FILL11
+              : argc > 2 && strcmp(argv[2], "fill11z") == 0  ? AFTER_FILL11Z
                                                              : AFTER_NONE;
+    s_f11Want = s_after == AFTER_FILL11Z                               ? F11_LATER
+                : argc > 3 && fill11() && strcmp(argv[3], "area") == 0 ? F11_AREA
+                                                                       : F11_LAND;
     if (held()) {
         /* the late pass's hold whatever the glow's plan (this frame holds
          * no chain the light plan reads; rd_late_pass.c) */
@@ -809,6 +945,14 @@ int main(int argc, char **argv)
     rd_begin_frame(); /* logs the probe */
     rd_end_frame(0);
     rd__crack_fill_counts(&c0);
+    if (fill11() && envOn) {
+        /* the self-test (rd_crack_test runs no rd_fog_selftest: it runs
+         * with the swap's), then the switch on whatever the class */
+        rd__crack_fill_set_enabled(true);
+        (void)rd__crack_swap_selftest();
+        rd__fill11_force(1);
+        rd__crack_fill_counts(&c0);
+    }
     const RdTargetRec *t = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
     CHECK(t != NULL, "no SCENE");
     if (!t) {
@@ -901,7 +1045,8 @@ int main(int argc, char **argv)
                     /* after the glow the crack's alpha is its own (cleanUpFB's
                        Z-tested mark): its RGB the neighbour's */
                     if (memcmp(&off.px[q * 4], ref, 4) != 0 &&
-                        memcmp(&on.px[q * 4], b, s_after == AFTER_GLOW || held() ? 3 : 4) == 0) {
+                        memcmp(&on.px[q * 4], b,
+                               s_after == AFTER_GLOW || held() || fill11() ? 3 : 4) == 0) {
                         from = true;
                     }
                 }
@@ -939,7 +1084,9 @@ int main(int argc, char **argv)
               "%d filled texels not a neighbour's colour, %d with their depth changed", badFrom,
               badDepth);
         /* in the aura's paste pass: no pass of its own */
-        CHECK(on.fills == (s_after == AFTER_AURA || held() || s_after == AFTER_JOIN ? 0u : 1u),
+        CHECK(on.fills == (s_after == AFTER_AURA || held() || s_after == AFTER_JOIN || fill11Lands()
+                               ? 0u
+                               : 1u),
               "%u fill passes", on.fills);
         CHECK(c1.counted - c0.counted == 1 && c1.filled - c0.filled == 1 &&
                   c1.pixels - c0.pixels == (uint64_t)changed,
@@ -1045,6 +1192,9 @@ int main(int argc, char **argv)
         checkHeld(&on, active);
     } else if (s_after == AFTER_JOIN) {
         checkJoin(&on);
+    } else if (fill11()) {
+        CHECK(active, "the filler does not draw here");
+        checkFill11(&on);
     } else if (s_after != AFTER_NONE) {
         checkPlace(&on, c0, c1, active);
     }

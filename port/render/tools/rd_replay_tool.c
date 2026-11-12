@@ -539,6 +539,7 @@
 #include "rd_layer.h"
 #include "rd_aura_paste.h"       /* --stats: the aura's paste split */
 #include "rd_late_pass.h"        /* --stats: the late passes on SCENE */
+#include "rd_fill11.h"           /* --stats: the crack fill in list 11's pass */
 #include "rd_present_scene.h"    /* --stats: the present from SCENE */
 #include "rd_stencil_selftest.h" /* --stats: the stencil outside the shadow window */
 #include "rd_shadow_box.h"       /* --stats: the shadows over the volumes' box */
@@ -3448,6 +3449,12 @@ int main(int argc, char **argv)
                 pr->crackSwapCopied ? " (last: " : "",
                 pr->crackSwapCopied ? rd__crack_swap_why_text(pr->crackSwapWhy) : "",
                 pr->crackSwapCopied ? ")" : "", rd__crack_tap2_on() ? "on" : "off", pr->crackTap2);
+        }
+        /* FILL11: the fill drawn in list 11's pass (rd_fill11.c) */
+        {
+            char f11[1024];
+            rd__fill11_stats(f11, sizeof(f11));
+            printf("%s: stats: %s\n", dump, f11);
         }
         /* the scene draws' visibility test (rd_vis.c rd__vis_frame): the VU
          * draw commands walked, those replayed as NOPs, and those it did not

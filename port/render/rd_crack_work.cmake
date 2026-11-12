@@ -39,3 +39,7 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
                              ENVIRONMENT "ICO_RHI_BACKEND=opengl;LIBGL_ALWAYS_SOFTWARE=1;SDL_VIDEO_DRIVER=offscreen")
     endif()
 endif()
+
+# the crack fill and list 11 in one pass on SCENE (rd_fill11.c in ico_render) and
+# its tests
+include(rd_fill11.cmake)

@@ -1,0 +1,34 @@
+# Dump list for rd_fill11_ab and rd_fill11_gl (port/render/test/rd_fill11_ab.cmake:
+# the crack fill and list 11 in one pass on SCENE, ICO_RD_FILL11=0 against the
+# switch on, byte for byte).
+# MACHINE-LOCAL: these are paths on the maintainer's machine; the dumps
+# themselves are never committed.  A listed dump that is absent FAILS the test
+# (a '*' glob that matches nothing too).  Relative paths are relative to this
+# file.  Optional fields after the path: phoneN, deskN, glN (one replay's fills
+# drawn in list 11's pass at that setting) and last "nop SPEC" (rd_replay_tool's
+# --nop, given to both runs of every setting); without a count, no expectation
+# but the pair's arithmetic.
+#
+# the title (stage 1) of the 2026-10-06 corpus, 512 GS pixels wide: the sun's
+# fans (WHOLE: they write SCENE's depth), the lamps (LAMPS: WORK2 drawn with
+# SCENE's depth bound), DARK with the motion blur drawn into SCENE before list 11
+# (the held fill drawn before it); no fill in list 11's pass at any setting
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/boot/rd-00200.rddump phone0 desk0 gl0
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/boot/rd-00400.rddump phone0 desk0 gl0
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/boot/rd-00600.rddump phone0 desk0 gl0
+# the DARK title frame with its motion blur (7:356) a NOP: the phone's title,
+# which draws none (rc13: motion blur 0.00 ms).  At 4:3 (the PS2's border, no
+# repeat) the fill is drawn in list 11's pass; at the phone's Full pixel on a
+# frame of its exact width SCENE's border repeat at the glow's mask (skipped by
+# the plan, its repeat not) draws the held fill in its own pass first (the
+# phone's own 848 GS pixel title is cropped: no repeat there)
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/boot/rd-00600.rddump phone0 desk1 gl1 nop 7:356
+# the title's menus (e2e, the New Game item and the settings)
+/primary/dev/ico-pc/build-host/tmp/e2e/run-title-on/dumps/rd-00300.rddump
+/primary/dev/ico-pc/build-host/tmp/e2e/run-title-on/dumps/rd-00550.rddump
+# gameplay, where nothing may change: the PowerVR phone's rc2 bridge (the aura's
+# paste) and its v0.11.4 F12 frame (the cage under DARK with the aura), issue
+# 164's paused frame (the pause menu in list 11 after the aura's paste)
+/primary/dev/ico-pc/build-host/tmp/v0115/evidence/rc2/x/frame-20261111-113349-v4761/frame-20261111-113349-v4761.rddump phone0
+/primary/dev/ico-pc/build-host/tmp/v0115/evidence/datecut/pixel/frame-20261110-194925-v3677.rddump phone0
+/primary/dev/ico-dumps/164/frame-20261030-091938-v5836.rddump phone0

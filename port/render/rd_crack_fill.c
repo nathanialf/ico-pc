@@ -278,6 +278,27 @@ static struct {
 /* CRACKTAP: ICO_RD_CRACK_TAP2=0 the general shader's early leave off */
 static int s_tap2 = -1, s_tap2Force = -1;
 
+/* FILL11 (rd_fill11.c): a fill drawn where it is due (fillAt's place)
+ * whose snapshot is taken there and whose draw is held to list 11's first
+ * screen draw on SCENE, the first draw of that pass over a scratch depth
+ * (kTwin, pTwin: its key's depth twin), or drawn in a pass of its own after
+ * all (kPlain, pPlain: the key it would have been drawn with); swap the
+ * snapshot taken by the swap, alpha and resolved s_late's at the take.
+ * s_at: the place fillAt asks rd__crack_fill_late to draw at (list -1:
+ * another caller), its frame and command */
+static struct {
+    bool pending, swap, alpha, resolved;
+    uint32_t replay;
+    RdPipeKeyInt kPlain, kTwin;
+    RhiPipeline pPlain, pTwin;
+} s_f11;
+
+static struct {
+    int list;
+    const RdFrame *f;
+    const RdCmd *c;
+} s_at = {-1, NULL, NULL};
+
 uint32_t rd__crack_fill_reach(float scale)
 {
     if (!(scale > 1.0f)) {
@@ -344,6 +365,8 @@ void rd__crack_fill_init(void)
     memset(&s_place, 0, sizeof(s_place));
     memset(&s_late, 0, sizeof(s_late));
     s_cf.said1 = -1;
+    memset(&s_f11, 0, sizeof(s_f11));
+    rd__fill11_init();   /* the fill in list 11's pass (rd_fill11.c) */
     s_cf.countTex = tex; /* freed by rd__crack_fill_shutdown */
     s_cf.buf = buf;
     s_cf.countAll = countAll;
@@ -366,6 +389,7 @@ void rd__crack_fill_init(void)
 void rd__crack_fill_scene_made(void)
 {
     s_cf.pending = false; /* a count at the old size is dropped */
+    s_f11.pending = false;
     note();
 }
 
@@ -406,6 +430,8 @@ static void countFree(void)
 void rd__crack_fill_shutdown(void)
 {
     countFree();
+    memset(&s_f11, 0, sizeof(s_f11));
+    rd__fill11_shutdown(); /* its scratch depth and self-test (rd_fill11.c) */
 }
 
 /* the count of a replay the GPU is past (now: the caller waited for it) */
@@ -535,6 +561,7 @@ void rd__crack_fill_block(void)
     s_place.bPasted = s_place.bAlpha = s_place.bBorder = 0;
     s_cf.bMax = 0;
     memset(s_cf.bSkip, 0, sizeof(s_cf.bSkip));
+    rd__fill11_block(); /* the fills drawn in list 11's pass (rd_fill11.c) */
 }
 
 static void skip(int why, const RdTargetRec *tc)
@@ -955,14 +982,22 @@ static bool fillTakeSwap(Replay *r, RdTargetRec *tc, RhiPipeline pCount, const R
     return true;
 }
 
-/* whether this fill swaps (counted): not held, allowed, its pipeline there */
-static bool swapDecide(const RdTargetRec *tc, bool held, const RdPipeKeyInt *kFill,
-                       RdPipeKeyInt *kS, RhiPipeline *pS)
+/* why this fill does not swap (SWAP_WHY_NONE: it does): not held, allowed,
+ * its pipeline there */
+static int swapChoice(bool held, const RdPipeKeyInt *kFill, RdPipeKeyInt *kS, RhiPipeline *pS)
 {
     int why = held ? SWAP_WHY_HELD : swapWhyNot();
     if (why == SWAP_WHY_NONE && !swapPipe(kFill, kS, pS)) {
         why = SWAP_WHY_PIPE;
     }
+    return why;
+}
+
+/* whether this fill swaps (counted) */
+static bool swapDecide(const RdTargetRec *tc, bool held, const RdPipeKeyInt *kFill,
+                       RdPipeKeyInt *kS, RhiPipeline *pS)
+{
+    const int why = swapChoice(held, kFill, kS, pS);
     swapCounted(why, tc);
     return why == SWAP_WHY_NONE;
 }
@@ -1112,8 +1147,20 @@ static void fillCounted(bool pasted)
     }
 }
 
+static bool fill11Take(Replay *r, RdTargetRec *tc, RhiPipeline pFill, const RdPipeKeyInt *kFill,
+                       RhiPipeline pCount, const RdPipeKeyInt *kCount, int list, const RdFrame *f,
+                       const RdCmd *c);
+
 void rd__crack_fill_late(Replay *r, bool msaaOpen)
 {
+    /* the place fillAt names (another caller: none) */
+    const int atList = s_at.list;
+    const RdFrame *atF = s_at.f;
+    const RdCmd *atC = s_at.c;
+    s_at.list = -1;
+    if (rd__crack_fill11_pending()) {
+        rd__crack_fill11_own(r, RD_FILL11_WHY_END); /* a fill held for list 11's pass first */
+    }
     if (!s_late.armed) {
         return;
     }
@@ -1145,12 +1192,136 @@ void rd__crack_fill_late(Replay *r, bool msaaOpen)
     const int post = r->perfPost;
     r->perfPost = RD_PERF_POST_CRACK;
     rd__replay_perf_post(r, RD_PERF_POST_CRACK);
-    const bool drawn = fillWork(r, tc, pFill, &kFill, pCount, &kCount, held);
+    /* FILL11: the snapshot here, the draw held to list 11's pass
+     * (rd_fill11.c), counted when drawn */
+    const bool kept =
+        !held && atList >= 0 && fill11Take(r, tc, pFill, &kFill, pCount, &kCount, atList, atF, atC);
+    const bool drawn = !kept && fillWork(r, tc, pFill, &kFill, pCount, &kCount, held);
     r->perfPost = post;
     rd__replay_perf_post(r, post);
     if (drawn) {
         fillCounted(false);
     }
+}
+
+/* FILL11's take: where rd__fill11_take lets the draw wait and its depth twin
+ * is there, the snapshot (by the swap where allowed, counted) and the count
+ * as fillWork takes them, the draw held (true; also when the snapshot could
+ * not be taken: not drawn, as fillWork) */
+static bool fill11Take(Replay *r, RdTargetRec *tc, RhiPipeline pFill, const RdPipeKeyInt *kFill,
+                       RhiPipeline pCount, const RdPipeKeyInt *kCount, int list, const RdFrame *f,
+                       const RdCmd *c)
+{
+    if (!rd__fill11_take(r, f, c, list, tc)) {
+        return false;
+    }
+    RdPipeKeyInt kS;
+    RhiPipeline pS = {0};
+    const int why = swapChoice(false, kFill, &kS, &pS);
+    const bool swap = why == SWAP_WHY_NONE;
+    const RdPipeKeyInt kTwin = rd__fill11_twin(swap ? &kS : kFill);
+    const RhiPipeline pTwin = rd__get_pipeline(&kTwin);
+    if (!pTwin.id) {
+        rd__fill11_refused(RD_FILL11_NOT_PIPE);
+        return false;
+    }
+    swapCounted(why, tc);
+    if (swap ? !fillTakeSwap(r, tc, pCount, kCount) : !fillTake(r, tc, pCount, kCount)) {
+        return true;
+    }
+    s_f11.pending = true;
+    s_f11.replay = g_rd.replayCounter;
+    s_f11.swap = swap;
+    s_f11.alpha = s_late.alpha;
+    s_f11.resolved = s_late.resolved;
+    s_f11.kPlain = swap ? kS : *kFill;
+    s_f11.pPlain = swap ? pS : pFill;
+    s_f11.kTwin = kTwin;
+    s_f11.pTwin = pTwin;
+    return true;
+}
+
+bool rd__crack_fill11_pending(void)
+{
+    return s_f11.pending && s_f11.replay == g_rd.replayCounter;
+}
+
+bool rd__crack_fill11_copy(void)
+{
+    return s_f11.swap;
+}
+
+/* the held fill's DrawCB.mode, as fillWork sets it for its key */
+static uint32_t fill11Mode(void)
+{
+    return tapMode(&s_f11.kPlain) |
+           (s_f11.swap ? CRACK_MODE_COPY | (s_f11.alpha ? CRACK_MODE_KEEP_A : 0u) : 0u);
+}
+
+/* fillCounted under the take's s_late.alpha and resolved */
+static void fill11Counted(void)
+{
+    const bool alpha = s_late.alpha, resolved = s_late.resolved;
+    s_late.alpha = s_f11.alpha;
+    s_late.resolved = s_f11.resolved;
+    fillCounted(false);
+    s_late.alpha = alpha;
+    s_late.resolved = resolved;
+}
+
+void rd__crack_fill11_land(Replay *r)
+{
+    RdTargetRec *tc = sceneRec();
+    if (!rd__crack_fill11_pending() || !tc) {
+        s_f11.pending = false;
+        return;
+    }
+    s_f11.pending = false;
+    s_mode = fill11Mode();
+    fillDraw(r, tc, s_f11.pTwin, &s_f11.kTwin); /* the open pass: list 11's, its first draw */
+    s_mode = 0;
+    fill11Counted();
+}
+
+void rd__crack_fill11_own(Replay *r, int why)
+{
+    RdTargetRec *tc = sceneRec();
+    if (!rd__crack_fill11_pending() || !tc || !tc->color.id || !tc->depth.id) {
+        s_f11.pending = false;
+        return;
+    }
+    s_f11.pending = false;
+    /* fillWork's pass, its snapshot taken at the fill's place: the open
+     * pass (on another target: nothing since touched SCENE) ended, a clear
+     * pending on another target kept for its next pass (the clear carry) */
+    const int post = r->perfPost;
+    r->perfPost = RD_PERF_POST_CRACK;
+    rd__replay_perf_post(r, RD_PERF_POST_CRACK);
+    RhiCommandList cl = rd__replay_cl();
+    rd__replay_end_pass_for(r, tc->color.id);
+    rd__transition(cl, tc->depth, &tc->depthState, RHI_STATE_DEPTH_READ);
+    const uint32_t w = tc->tw, h = tc->th, scene = RD_TARGET_SCENE + 1u;
+    rd__transition(cl, tc->color, &tc->colorState, RHI_STATE_RENDER_TARGET);
+    rd__perf_pass(cl, RD_PERF_PASS_RENDER, scene, w, h, RD_PERF_POST_CRACK);
+    rhi_cmd_checkpoint(
+        cl, rd__replay_pass_push(RD_PASSK_PASS, scene, w, h, 0, 0, 0, 0, RD_PERF_POST_CRACK));
+    RhiRenderPassDesc p;
+    memset(&p, 0, sizeof(p));
+    p.color[0].texture = tc->color;
+    p.color[0].load = s_f11.swap ? RHI_LOAD_DONT_CARE : RHI_LOAD_LOAD;
+    p.colorCount = 1;
+    p.width = w;
+    p.height = h;
+    rhi_cmd_begin_render_pass(cl, &p);
+    s_mode = fill11Mode();
+    fillDraw(r, tc, s_f11.pPlain, &s_f11.kPlain);
+    s_mode = 0;
+    rhi_cmd_end_render_pass(cl);
+    g_rdPerf.crackFillPasses++;
+    r->perfPost = post;
+    rd__replay_perf_post(r, post);
+    fill11Counted();
+    rd__fill11_flushed(why);
 }
 
 /* the paste's pass cannot take the fill: why (NULL: it can).  The pass the
@@ -1331,6 +1502,9 @@ void rd__crack_fill_snap(Replay *r, const RdTargetRec *tc)
     if (s_swap.swapping) {
         return; /* the fill's own swap (FILLSWAP) */
     }
+    if (tc && tc == sceneRec() && rd__crack_fill11_pending()) {
+        rd__crack_fill11_own(r, RD_FILL11_WHY_SNAP); /* FILL11's held fill first */
+    }
     if (s_late.armed && s_late.taken && tc && tc == sceneRec()) {
         rd__crack_fill_flush_held(r, RD_LATE_WHY_SNAP);
     }
@@ -1353,6 +1527,7 @@ void rd__crack_fill_at(Replay *r, const RdFrame *f, const RdCmd *c, int list, bo
     rd__late_pass_cmd(c); /* the command walked (rd_late_pass.c's list 11 join) */
     fillAt(r, f, c, list, msaaOpen);
     if (list >= RD_CRACK_LATE_LIST) {
+        rd__fill11_at(r, f, c, list);    /* a held fill waits, lands or is drawn (rd_fill11.c) */
         rd__late_pass_defer_at(r, f, c); /* the deferred glow paste, after the fill */
     }
 }
@@ -1408,6 +1583,10 @@ static void fillAt(Replay *r, const RdFrame *f, const RdCmd *c, int list, bool m
         }
         notPasted(why);
     }
+    /* drawn before c: or its draw held to list 11's pass (rd_fill11.c) */
+    s_at.list = list;
+    s_at.f = f;
+    s_at.c = c;
     rd__crack_fill_late(r, msaaOpen);
 }
 
@@ -1563,7 +1742,16 @@ static bool swapDraw(RhiCommandList cl, RhiTexture src, RhiTexture dst, RhiState
     return g.id != 0;
 }
 
+static bool swapSelftest(void);
+
 bool rd__crack_swap_selftest(void)
+{
+    const bool ok = swapSelftest();
+    (void)rd__fill11_selftest(); /* the fill's depth twins (rd_fill11.c), logged there */
+    return ok;
+}
+
+static bool swapSelftest(void)
 {
     s_swap.test = 0;
     const RdTargetRec *tc = sceneRec();

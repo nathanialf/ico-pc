@@ -1759,6 +1759,115 @@ commands after the aura's paste), `rd_late_pass_ab` and `rd_late_pass_gl` (dumps
 `rd_crack_tiler_fold_mali`), `rd_replay_tool_crack` and `rd_crack_late_ab` check it
 ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
 
+### The crack fill in list 11's pass
+
+`port/render/rd_fill11.c` (`rd_fill11.h`; the held draw in `rd_crack_fill.c`): on the title's
+pictures without glow (the light plan's DARK) and without an aura, the crack fill had a full-size pass
+of its own on SCENE (SCENE's colour alone, not loaded by the swap, stored: 9.75 MB at 2366 x 1080)
+and list 11 another (SCENE's colour loaded and stored, SCENE's depth attached for draws under Z ALWAYS
+without a Z write). Where nothing that runs on the GPU reads or writes SCENE's colour, its depth or
+its snapshot between the fill's place and list 11's first screen draw on SCENE, the fill's snapshot
+(by the swap where allowed) and its count are taken at its place as before and its draw is held to
+that draw, which begins one pass on SCENE's colour with a **scratch depth** attached in place of
+SCENE's ([WORK_BUFFERS.md](WORK_BUFFERS.md#the-crack-fills-scratch-depth)): the fill is its first draw,
+list 11's draws follow with their own pipelines. The fill's own store and list 11's load go: 19.5 MB a
+DARK title picture at 2366 x 1080. This is not list 11's join (VD-31): list 11 keeps drawing with a
+depth attachment and the pipelines it has today.
+
+Why the bytes are the same: the fill reads the snapshot and SCENE's depth it read at its place
+(nothing between touched them) and writes the same texels; its pipeline is its own with a D32F_S8
+depth attachment, Z ALWAYS and no Z write (`rd__fill11_twin`: no test can fail, nothing is written to
+the depth, the shader does not read it), checked on the device by a start-up self-test; list 11's
+draws keep their pipelines (the scratch has SCENE's depth format, size and one sample) and their
+FrameCB (their depth target stays SCENE's for the Z scale), and each one neither tests nor writes the
+depth (Z test off or ALWAYS, no Z write, no DATE by the stencil, the snapshot or the shader's read, no
+PRIM.AA1, no shadow window live on SCENE's depth, not the COLCLAMP 0 wrap path), so its colour does
+not depend on what the attached depth holds. SCENE's depth is not attached to the merged pass: it keeps
+what its last pass stored (the store plan keeps that store for the fill's read at its place; no pass
+between binds it); the fill samples it as in its own pass (`rhi.h` forbids sampling a depth bound
+read-only, hence the scratch). The pass is whole, single-sampled, not a storage pass, its colour
+readable as `beginPass` would begin list 11's.
+
+The walk (`rd__fill11_take`, `rd__fill11_at`, `rd__fill11_draw`):
+
+- **The take.** Where `rd__crack_fill_place` draws the fill in a pass of its own before command c of
+  lists 7 to 11 (the late pass holds nothing there: no paste in the frame takes it), the draw is held
+  when the switch is on (below), no MSAA epoch is wanted, the fixed-function blend draws (no exact
+  blend, no GS state as shader data), the upscaler's split is off, no pass window and no deferred glow
+  paste, c itself is waited past or is the landing, the scratch can be made and the fill's depth twin
+  exists. Else the fill is drawn where it is due, as before (counted, `RD_FILL11_NOT_*`).
+- **The wait.** Each later command (`classOf`): waited past are state (not the upscale point), NOPs,
+  overlay text, a screen draw the replay does not draw (deferred text, a fan the light plan skips, a
+  sprite the fades fold applies at the reduction), a sprite the light plan leaves undrawn
+  (`rd__glow_light_undrawn`: skipped, or a lazy clear of its target), and what `rd__late_pass_class`
+  waits past that also binds no SCENE depth at all (a pass that binds it may drop its store) and
+  samples no SCENE in any form (the swap left SCENE's colour texture undefined until the fill: the
+  glow's mask in its alpha-only form is not waited past here, unlike the late pass's hold). SCENE's
+  border repeat (`rd_blur_border.c` `sceneRepeat`, at the first sprite that samples SCENE, drawn or
+  not) draws the held fill first (`rd__fill11_border`): on a frame of the PS2's 512 GS pixels with the
+  border open (Full pixel at its exact width) the title's mask brings it; the PowerVR phone's own
+  title is 848 GS pixels wide and cropped, whose repeat copies nothing, and a 4:3 frame with the
+  border closed repeats nothing.
+- **The landing.** List 11's first screen draw on SCENE with SCENE's depth bound whose state
+  qualifies, where `rd_pass_area.c` would not give list 11's pass an area, and where the look ahead
+  (`laterOk`) finds every later command up to the one that ends list 11's pass anyway (a draw, sprite
+  or copy on another target, the reduction, the walk's end) to be state, a NOP, overlay text, an
+  undrawn screen draw or a qualifying screen draw of list 11 on SCENE (a clear, any other draw on
+  SCENE, any other command: today's passes kept). In `prepareDrawEx`, after the draw's texture is
+  resolved, its draw qualifying at its own level too (no DATE through the stencil or the shader, no
+  shadow tile), the open pass ends (its pending clears recorded as `beginPass` records them), the
+  merged pass begins (`r->passDepth` SCENE's id, so `bindDrawEx` keeps list 11's draws in it) and the
+  fill is drawn first. The merged pass holds state, NOPs, overlay text and list 11's screen draws on
+  SCENE; before any other command it ends, which the look ahead makes the command that ends list 11's
+  pass today; a draw in it on SCENE with its depth that does not qualify ends it first (counted;
+  never in the dumps' forms).
+- **Drawn in its own pass after all** (`rd_crack_fill.c` `rd__crack_fill11_own`, why
+  `RD_FILL11_WHY_*`): before the first command not waited past, before SCENE's border repeat, before
+  SCENE's snapshot taken again, at a landing refused (the pass area, a later draw that uses SCENE's
+  depth, the draw itself) and at the walk's end; the pass the fill would have had (`endPassFor`: a
+  clear pending on another target keeps its carry), the same bytes as at its place.
+
+The switch: on where the start-up self-test passed and the device's class is the PowerVR phone's or a
+desktop one (`rd__profile_tile_class` 1, or 2 on a GPU that is not a tile-based phone's,
+`RhiLimits.tilePhone`: Vulkan, OpenGL, Direct3D 11 and 12 on a PC); off on the Arm, Qualcomm and
+Apple classes and other tile-based phones in this release (issues 123, 179, 211: no new kind of GPU
+work there). `ICO_RD_FILL11=0|1` (the tests only, [TESTING.md](TESTING.md); no config key) keeps it
+off or tries it on any class (the self-test still decides); `rd__fill11_force` is the tests'. On
+OpenGL it is on where the self-test passes (llvmpipe: `rd_fill11_gl`), as on the other desktop
+classes; the saving there is the passes' work, not tile memory.
+
+The self-test (`rd__fill11_selftest`, from `rd__crack_swap_selftest`, once a renderer from
+`rd_fog_selftest`; where the class or `ICO_RD_FILL11` lets it be tried): a 256 x 2 source of every
+level in every channel (the swap's) drawn through each of the four depth twins in a pass with a
+scratch D32F_S8 depth attached, loaded and stored DONT_CARE: the general and the reach-1 fill with
+COPY (every texel written: the source read back), and each with RGB alone without COPY over a target
+loaded with another pattern (every texel discarded: that pattern read back); compared texel for
+texel. The dummy texture is uploaded on its own command list first (as the swap's self-test). The
+pipeline keys it adds to the start-up set (`rd_pipeline.c` `rd__enumerate_reachable_fog` through
+`rd__fill11_enumerate`, where it may be tried): the depth twins of the four fill keys, `FILL`,
+`FILL | RGB`, `FILL1`, `FILL1 | RGB` (four; two without the reach-1 shader). No shader changes.
+
+State that survives `rd_shutdown` is freed there (`rd__crack_fill_shutdown` calls
+`rd__fill11_shutdown`): the scratch depth destroyed and its handle forgotten, the self-test's verdict
+and the merged pass's serial reset (the next renderer starts its replay counter again).
+
+The lines: `rd: crack fill: with list 11: on (self-test passed: 4 draws of 512 texels through the
+fill's depth twins read back unchanged; the PowerVR class|a desktop class|ICO_RD_FILL11=1): ...` or
+`... off (<why>)` (start, a change); once `rd: crack fill: with list 11: the scratch depth made
+(WxH, D32F_S8, X MB; never loaded or stored)` and `rd: crack fill: drawn as the first draw of list
+11's pass on SCENE over a scratch depth (frame F) ...`; the 10 s `rd: crack fill: with list 11: N
+drawn in list 11's pass over the scratch depth (X MB of colour not loaded and as many not stored), K
+held and drawn in a pass of their own after all (<why counts>), J kept in their own pass (<why
+counts>); S merged passes ended by a draw that uses SCENE's depth` (after the crack fill's own 10 s
+line, when any); `--stats`: `<dump>: stats: crack fill with list 11 on|off (self-test
+passed|failed|not run): N drawn in list 11's pass (X MB of colour not loaded and as many not
+stored), K drawn in a pass of their own (<why counts>), J kept in their own pass (<why counts>); S
+merged passes ended by a draw that uses SCENE's depth`. The merged pass's GPU time is list 11's
+class (the crack fill's effect time falls by the fill's pass). `rd_crack_fill11`,
+`rd_crack_fill11_later`, `rd_crack_fill11_tiler`, `rd_crack_fill11_area` (`rd_crack_test`),
+`rd_fill11_ab` and `rd_fill11_gl` (dumps) check it
+([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)). No DIVERGENCES.md row: the same bytes.
+
 ### The aura's paste as its constant part
 
 `port/render/rd_aura_paste.c` (`rd_aura_paste.h`): in a room with no aura object on screen AURA_WORK

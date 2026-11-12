@@ -905,6 +905,41 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   fewer by the swapped snapshots' MB (within 0.02), the rest the same; the marked dumps' swaps
   (`swapN`: the bridge 1, a held fill 0) and early-leave draws (`tapN`) at the phone's setting; at
   least one of each over the list. No device: SKIP.
+- `rd_crack_fill11`, `rd_crack_fill11_later`, `rd_crack_fill11_tiler`, `rd_crack_fill11_area`
+  (`rd_crack_test 2 fill11`, `2 fill11z`, `2 fill11` under `ICO_VK_FAKE_LIMITS=moltenvk
+  ICO_RD_PASS_AREA=0`, `2 fill11 area` under `ICO_VK_FAKE_LIMITS=moltenvk`; `rd_fill11.cmake`): the
+  crack fill in list 11's pass (`rd_fill11.c`; the self-test's ctest twin). The fill's depth twins'
+  start-up self-test is run (`rd__crack_swap_selftest` runs it) and must pass (its state line
+  matched), then with the switch forced on (`rd__fill11_force(1)`) the frame draws the glow's
+  `cleanUpFB`, a sprite into WORK0 (the fill's place, its snapshot there) and list 11's two blended
+  sprites into SCENE under Z ALWAYS without a Z write (`fill11z`: a third with a Z write). Against the
+  switch off: SCENE's colour and depth byte for byte, the off run with one fill pass and nothing held;
+  `fill11` (lavapipe's desktop profile, and the tile class's fakes without the pass area): one fill
+  drawn in list 11's pass (`RdFill11Counts.landed`), no fill pass of its own, one render pass fewer,
+  the once line `drawn as the first draw of list 11's pass` matched; `fill11z` and `fill11 area`
+  (the pass area on: list 11's pass would hold its sprites' tiles alone): the held fill drawn in a pass
+  of its own at list 11's first draw (`RD_FILL11_WHY_LATER`, `RD_FILL11_WHY_AREA`), the same passes,
+  the once line absent. Every `rd_crack_test` check of the filler holds too (the cracks filled, the
+  count, the swap's `checkWork`).
+- `rd_fill11_ab.cmake` (`rd_fill11_ab`, `rd_fill11_gl`; `rd_fill11.cmake`): the dumps of
+  `tools/fill11_dumps.txt` (machine-local; a listed dump that is absent FAILS, a glob that matches none
+  too; a line may give `phoneN`, `deskN`, `glN` and `nop SPEC`, the tool's `--nop` for both runs)
+  with `ICO_RD_FILL11=0` against the switch on, `--pass-dump --stats`, `ICO_RD_VU_PREPASS=0`: at the
+  PowerVR phone's Resolution Auto (2364x1080, Full height and pixel) under `ICO_VK_FAKE_LIMITS=moltenvk
+  ICO_RD_LATE_PASS=1` (Apple's class to the profile: the on run sets `ICO_RD_FILL11=1`), at Enhanced
+  2x 4:3 on lavapipe's own profile (a desktop class: on by default), and at the phone's setting on a
+  Mali-G68's limits and an Arm phone's vendor (`ICO_VK_FAKE_LIMITS=mali ICO_VK_FAKE_VENDOR=0x13B5`: a
+  tile-based phone, off by default: the on run sets nothing and must draw no fill in list 11's pass,
+  its self-test not run); the `_gl` twin Enhanced 2x 4:3 on OpenGL (llvmpipe: a desktop class, on by
+  default). Each pair: every PNG byte for byte, the same draws, the passes and the crack fill's own
+  passes each fewer by the fills drawn in list 11's pass exactly, the colour MB loaded and stored each
+  fewer by the MB the stats name for them (within 0.02), the depth and stencil MB not more, the copies
+  the same, the off run drawing and holding nothing, the self-test passed in every run that ran it;
+  the marked dumps' counts (the corpus title's DARK frame with its motion blur a NOP: one at 4:3 and
+  on OpenGL, none at the phone's Full pixel, whose border repeat at the mask draws the held fill
+  first; the title's WHOLE, LAMPS and motion-blurred DARK frames and the gameplay dumps none at the
+  settings marked); at least one fill drawn in list 11's pass over the list (desk or gl). No device:
+  SKIP.
 - `rd_date_cut_ab.cmake` (`rd_date_cut_ab`, `rd_date_cut_ab_gl`): the dumps of
   `tools/date_cut_dumps.txt` (machine-local; a listed dump that is absent FAILS, a glob that matches
   none too) with `ICO_RD_DATE_CUT=0` and `1`, `--pass-dump --stats`, under `ICO_RD_BLEND=fixed`,

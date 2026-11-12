@@ -429,6 +429,23 @@ loop: a texel with no neighbour in front at distance 1 can still be a crack of 2
 the early exit does not hold at a reach above 1. `rd_crack_test` replays the frame with
 `rd__crack_fill_force_general` and compares every byte of colour and depth.
 
+### The crack fill's scratch depth
+
+`port/render/rd_fill11.c` ([RENDER_POST.md](RENDER_POST.md#the-crack-fill-in-list-11s-pass)): where the
+crack fill's draw is held to list 11's first pass on SCENE, that pass binds SCENE's colour and, in
+place of SCENE's depth (which the fill samples, and which `rhi.h` forbids sampling while it is
+bound read-only), the **scratch depth**: one D32F_S8 texture of SCENE's texture size
+(`RHI_TEX_DEPTH_STENCIL` alone, "rd fill11 depth"), loaded and stored DONT_CARE in depth and stencil
+on every use, so its contents are never read and nothing moves to or from memory for it on a
+tile-based GPU (the attachment bytes counted, `rhi_traffic.c`: none). Made at the first held fill
+(logged once, `rd: crack fill: with list 11: the scratch depth made (WxH, D32F_S8, X MB; never loaded
+or stored)`: 12.2 MB at 2366 x 1080, its memory held from then on; the RHI has no lazily allocated
+memory to put it in) and made again at another size of SCENE; destroyed and its handle forgotten at
+`rd_shutdown` (`rd__fill11_shutdown`, through `rd__crack_fill_shutdown`), so a later renderer never
+binds an earlier device's handle. List 11's draws in that pass neither test nor write the depth, the
+fill's depth twin neither (Z ALWAYS, no Z write); a draw that would is drawn in a pass with SCENE's
+own depth. Off on the Arm, Qualcomm and Apple classes, where the texture is never made.
+
 ## The desktop's local read and its probe
 
 The three local-read paths (the fog's depth read inside the scene pass, `fogLocal`; DATE through
