@@ -43,7 +43,18 @@ extern "C" {
 
 #define RD_LAMPS_AREA 1u
 #define RD_LAMPS_PAD 2u
-#define RD_LAMPS_ALL (RD_LAMPS_AREA | RD_LAMPS_PAD)
+/* round 3 (docs/port/RENDER_POST.md, "The lamps' glow for less"):
+ *   RD_LAMPS_OWED      under the DARK plan WORK0's alpha sprite (pasteWork0ToFB,
+ *                      the clear (0, 0, 0, A) there) left a lazy clear where no
+ *                      later command of the frame touches WORK0, not a pass
+ *   RD_LAMPS_WHOLEPAD  WORK2_PAD's band a lazy clear under the WHOLE plan too
+ *   RD_LAMPS_FOLD4     two staticBlur pairs (four passes) in one WORK0 pass
+ *                      (fx_blur4_ps), behind its start-up self-test */
+#define RD_LAMPS_OWED 4u
+#define RD_LAMPS_WHOLEPAD 8u
+#define RD_LAMPS_FOLD4 16u
+#define RD_LAMPS_ALL                                                                               \
+    (RD_LAMPS_AREA | RD_LAMPS_PAD | RD_LAMPS_OWED | RD_LAMPS_WHOLEPAD | RD_LAMPS_FOLD4)
 
 /* why a LAMPS frame's pass on WORK2 was drawn over the whole target */
 enum {
@@ -106,10 +117,12 @@ uint32_t rd__glow_light_role_ord(int role);
  * "1", "all", or "area" and "pad" joined by ',' or '+'), 0 when e is
  * unset or empty, -1 when it names something else (*bits untouched) */
 int rd__lamps_parse(const char *e, uint32_t *bits);
-/* the bits on by default: PAD everywhere, AREA on tile class 1 (PowerVR)
- * or 2 (a desktop class) that is not a tile-based phone, under Vulkan,
- * where the profile's pass area is on */
-uint32_t rd__lamps_default_bits(int tileClass, bool tilePhone, bool vulkan, bool passArea);
+/* the bits on by default: PAD, OWED and WHOLEPAD everywhere; AREA on tile
+ * class 1 (PowerVR) or 2 (a desktop class) that is not a tile-based phone,
+ * under Vulkan, where the profile's pass area is on; FOLD4 on the same
+ * classes under Vulkan where the profile's blur fold is on */
+uint32_t rd__lamps_default_bits(int tileClass, bool tilePhone, bool vulkan, bool passArea,
+                                bool blurFold);
 /* the union of a and b (an empty rect, w or h 0, adds nothing) */
 RhiRect rd__lamps_union(RhiRect a, RhiRect b);
 /* r aligned out to whole tiles of tile texels, clamped to w x h */
@@ -173,6 +186,12 @@ bool rd__lamps_poison(void);
 bool rd__lamps_pad_on(void);
 /* a band left so (rd_glow_light.c rd__glow_light_sprite) */
 void rd__lamps_pad_noted(void);
+/* DARK's WORK0 alpha sprite left a lazy clear (RD_LAMPS_OWED; rd_glow_light.c
+ * planActs), and one left so (rd__glow_light_sprite) */
+bool rd__lamps_owed_on(void);
+void rd__lamps_owed_noted(void);
+/* WORK2_PAD's band left a lazy clear under WHOLE (RD_LAMPS_WHOLEPAD) */
+bool rd__lamps_wholepad_on(void);
 
 /* the scan (rd_store_plan.c's one walk; rd__lamps_scan_end after
  * rd__glow_light_scan_end) */

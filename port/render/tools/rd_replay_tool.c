@@ -3294,10 +3294,11 @@ int main(int argc, char **argv)
             (void)rd__lamps_test_state(&tw);
             const RdTargetRec *w2 = rd__target_rec(rd_target(RD_TARGET_WORK2).id);
             const RdTargetRec *pad = rd__target_rec(rd_target(RD_TARGET_WORK2_PAD).id);
+            const RdTargetRec *w0 = rd__target_rec(rd_target(RD_TARGET_WORK0).id);
             printf("%s: stats: lamps %s (self-test %s): %u passes with the lamps' area (%ux%u at "
                    "%d,%d of %ux%u: %u of %u texels; %u bytes not cleared, %u colour bytes not "
                    "stored, %u depth bytes not loaded, %u not stored), %u whole%s%s%s; %u bands "
-                   "left lazy (WORK2_PAD %ux%u)%s%s\n",
+                   "left lazy (WORK2_PAD %ux%u); %u WORK0 alpha sprites owed (WORK0 %ux%u)%s%s\n",
                    dump, rd__lamps_bits_text(rd__lamps_bits()), tw, pr->lampsAreas, pr->lampsAreaW,
                    pr->lampsAreaH, pr->lampsAreaX, pr->lampsAreaY, w2 ? w2->tw : 0u,
                    w2 ? w2->th : 0u, pr->lampsAreaTexels, pr->lampsTexels, pr->lampsSavedClear,
@@ -3305,6 +3306,7 @@ int main(int argc, char **argv)
                    pr->lampsWhole, pr->lampsWhole ? " (" : "",
                    pr->lampsWhole ? rd__lamps_why_text((int)pr->lampsWhy) : "",
                    pr->lampsWhole ? ")" : "", pr->lampsPads, pad ? pad->tw : 0u, pad ? pad->th : 0u,
+                   pr->lampsOwed, w0 ? w0->tw : 0u, w0 ? w0->th : 0u,
                    pr->lampsBoxWhy ? "; a lamp's box not known: " : "",
                    pr->lampsBoxWhy ? rd__lamps_box_why_text((int)pr->lampsBoxWhy) : "");
         }

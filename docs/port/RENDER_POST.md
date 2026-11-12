@@ -468,14 +468,28 @@ target:
   outside a replay), not a pass of its own: on every class and backend, where the dark plan's
   lazy clears already run.
 
+- **WORK0's alpha sprite owed** (`RD_LAMPS_OWED`, the dark plan): `pasteWork0ToFB` (Cs * 0 + Cd:
+  WORK0's RGB kept, alpha A) is under the dark plan the clear (0, 0, 0, A), drawn at the chain's
+  place as a small pass of its own (the aura's WORK0 sprite blends over WORK0 in play, and a lazy
+  clear drawn at that sprite would flush AURA_WORK's own pending clear). Where the scan sees no
+  later command of the frame touching WORK0 (the opening's frames, which have no aura), it is
+  left a lazy clear of the same colour in WORK0's slot instead: drawn first by a later replay
+  whose first touch of WORK0 does not cover it, or by a read outside a replay; the next frame's
+  reduction covers WORK0 first and drops it. The bytes are the clear's wherever anything reads
+  them. One pass fewer each dark picture of the opening; every class and backend (the dark plan's
+  lazy clears run there). Under the lamps plan the sprite keeps WORK0's RGB, so it is no clear:
+  drawn as before (an owed draw would need the sprite drawn outside a replay for a read there).
+
 The lamps' writes into WORK2 make the crack fill's hold impossible in these frames (the late
 passes above: the fill reads SCENE's depth at its draw and the lamps write it, so a fill moved
 past them would read other depths; `rd: late pass: ... N fills not held (no paste in the frame
 takes them)`), and the glow's paste already shares list 11's pass (drawn early there, list 11's
 draws joined to it).
 
-`ICO_RD_LAMPS=0|1|area|pad` (the tests only, [TESTING.md](TESTING.md#environment-switches)) turns
-both off, both on, or one on whatever the class (the self-test still decides the area);
+`ICO_RD_LAMPS=0|1|area|pad|owed|wholepad|fold4` (the tests only,
+[TESTING.md](TESTING.md#environment-switches); words joined by `,` or `+`) turns every part off,
+every part on, or the parts named on whatever the class (the self-tests still decide the area and
+the fold of two pairs);
 `ICO_RD_LAMPS_POISON=1` clears WORK2 to magenta before every lamps pass drawn whole, so a pass
 that relied on WORK2's earlier contents where it should not would show it (`rd_lamps_ab`). Lines:
 `rd: lamps: area on|off (<why>); band lazy on|off: ...` when it changes, `rd: lamps: area

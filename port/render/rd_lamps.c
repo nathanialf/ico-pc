@@ -148,7 +148,7 @@ static struct {
 
 /* the 10 s sums (the window thread reads them) */
 static struct {
-    uint64_t areas, whole, pads, areaTexels, texels, clear, store, dload, dstore;
+    uint64_t areas, whole, pads, areaTexels, texels, clear, store, dload, dstore, owed;
     uint64_t why[RD_LAMPS_WHY_COUNT];
 } s_sum;
 
@@ -206,16 +206,21 @@ const char *rd__lamps_box_why_text(int why)
 
 const char *rd__lamps_bits_text(uint32_t bits)
 {
-    switch (bits & RD_LAMPS_ALL) {
-    case RD_LAMPS_ALL:
-        return "area+pad";
-    case RD_LAMPS_AREA:
-        return "area";
-    case RD_LAMPS_PAD:
-        return "pad";
-    default:
+    static const char *const kWord[5] = {"area", "pad", "owed", "wholepad", "fold4"};
+    static char s_text[32][48];
+    bits &= RD_LAMPS_ALL;
+    if (!bits) {
         return "off";
     }
+    char *t = s_text[bits & 31u];
+    size_t at = 0;
+    for (int i = 0; i < 5; i++) {
+        if (bits & (1u << i)) {
+            const int m = snprintf(t + at, sizeof(s_text[0]) - at, "%s%s", at ? "+" : "", kWord[i]);
+            at += m > 0 && (size_t)m < sizeof(s_text[0]) - at ? (size_t)m : 0;
+        }
+    }
+    return t;
 }
 
 /* ------------------------------------------------------- pure helpers */
@@ -245,6 +250,12 @@ int rd__lamps_parse(const char *e, uint32_t *bits)
             b |= RD_LAMPS_AREA;
         } else if (n == 3 && strncmp(s, "pad", 3) == 0) {
             b |= RD_LAMPS_PAD;
+        } else if (n == 4 && strncmp(s, "owed", 4) == 0) {
+            b |= RD_LAMPS_OWED;
+        } else if (n == 8 && strncmp(s, "wholepad", 8) == 0) {
+            b |= RD_LAMPS_WHOLEPAD;
+        } else if (n == 5 && strncmp(s, "fold4", 5) == 0) {
+            b |= RD_LAMPS_FOLD4;
         } else {
             return -1;
         }
@@ -254,12 +265,16 @@ int rd__lamps_parse(const char *e, uint32_t *bits)
     return 1;
 }
 
-uint32_t rd__lamps_default_bits(int tileClass, bool tilePhone, bool vulkan, bool passArea)
+uint32_t rd__lamps_default_bits(int tileClass, bool tilePhone, bool vulkan, bool passArea,
+                                bool blurFold)
 {
-    uint32_t b = RD_LAMPS_PAD;
+    uint32_t b = RD_LAMPS_PAD | RD_LAMPS_OWED | RD_LAMPS_WHOLEPAD;
     const bool cls = tileClass == 1 || (tileClass == 2 && !tilePhone);
     if (cls && vulkan && passArea) {
         b |= RD_LAMPS_AREA;
+    }
+    if (cls && vulkan && blurFold) {
+        b |= RD_LAMPS_FOLD4;
     }
     return b;
 }
@@ -485,7 +500,7 @@ void rd__lamps_init(void)
     const RhiLimits *lim = g_rd.hasDevice ? rhi_limits() : NULL;
     s_sw.def = rd__lamps_default_bits(rd__profile_tile_class(), lim && lim->tilePhone,
                                       g_rd.hasDevice && rhi_backend() == RHI_BACKEND_VULKAN,
-                                      rd__pass_area_on());
+                                      rd__pass_area_on(), g_rd.profile.blurFold);
     memset(&s_w2, 0, sizeof(s_w2));
     memset(&s_scan, 0, sizeof(s_scan));
     /* the self-test again for this renderer (rd__lamps_selftest: its first
@@ -529,6 +544,22 @@ void rd__lamps_pad_noted(void)
     g_rdPerf.lampsPads++;
     s_totPads++;
     sumAdd(&s_sum.pads, 1);
+}
+
+bool rd__lamps_owed_on(void)
+{
+    return (rd__lamps_bits() & RD_LAMPS_OWED) != 0;
+}
+
+void rd__lamps_owed_noted(void)
+{
+    g_rdPerf.lampsOwed++;
+    sumAdd(&s_sum.owed, 1);
+}
+
+bool rd__lamps_wholepad_on(void)
+{
+    return (rd__lamps_bits() & RD_LAMPS_WHOLEPAD) != 0;
 }
 
 void rd__lamps_counts(uint64_t *areas, uint64_t *whole, uint64_t *pads)
@@ -1157,7 +1188,8 @@ void rd_lamps_line(void)
     for (int i = 0; i < RD_LAMPS_WHY_COUNT; i++) {
         w[i] = __atomic_exchange_n(&s_sum.why[i], 0, __ATOMIC_RELAXED);
     }
-    if (v[0] + v[1] + v[2] == 0) {
+    const uint64_t owed = __atomic_exchange_n(&s_sum.owed, 0, __ATOMIC_RELAXED);
+    if (v[0] + v[1] + v[2] + owed == 0) {
         return;
     }
     char why[512] = "";
@@ -1193,8 +1225,10 @@ void rd_lamps_line(void)
             "window: lamps: %llu lamps passes on WORK2 with an area (%.1f %% of their texels "
             "loaded and stored; %.1f MB not cleared, %.1f MB of colour and %.1f MB of depth "
             "not stored, %.1f MB of depth not loaded), %llu whole%s%s; %llu bands left lazy "
-            "(WORK2_PAD: a pass fewer each)%s\n",
+            "(WORK2_PAD: a pass fewer each); %llu WORK0 alpha sprites owed (dark pictures: a "
+            "pass fewer each)%s\n",
             (unsigned long long)v[0], v[4] ? 100.0 * (double)v[3] / (double)v[4] : 0.0,
             (double)v[5] * mb, (double)v[6] * mb, (double)v[8] * mb, (double)v[7] * mb,
-            (unsigned long long)v[1], why, at ? ")" : "", (unsigned long long)v[2], box);
+            (unsigned long long)v[1], why, at ? ")" : "", (unsigned long long)v[2],
+            (unsigned long long)owed, box);
 }

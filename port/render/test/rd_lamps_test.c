@@ -161,23 +161,34 @@ int main(void)
     CHECK(rd__lamps_parse("all", &b) == 1 && b == RD_LAMPS_ALL, "all: %u", b);
     CHECK(rd__lamps_parse("area", &b) == 1 && b == RD_LAMPS_AREA, "area: %u", b);
     CHECK(rd__lamps_parse("pad", &b) == 1 && b == RD_LAMPS_PAD, "pad: %u", b);
-    CHECK(rd__lamps_parse("area,pad", &b) == 1 && b == RD_LAMPS_ALL, "area,pad: %u", b);
-    CHECK(rd__lamps_parse("pad+area", &b) == 1 && b == RD_LAMPS_ALL, "pad+area: %u", b);
+    CHECK(rd__lamps_parse("area,pad", &b) == 1 && b == (RD_LAMPS_AREA | RD_LAMPS_PAD),
+          "area,pad: %u", b);
+    CHECK(rd__lamps_parse("pad+area", &b) == 1 && b == (RD_LAMPS_AREA | RD_LAMPS_PAD),
+          "pad+area: %u", b);
+    CHECK(rd__lamps_parse("owed", &b) == 1 && b == RD_LAMPS_OWED, "owed: %u", b);
+    CHECK(rd__lamps_parse("wholepad,fold4", &b) == 1 && b == (RD_LAMPS_WHOLEPAD | RD_LAMPS_FOLD4),
+          "wholepad,fold4: %u", b);
     b = 77;
     CHECK(rd__lamps_parse("lamps", &b) == -1 && b == 77, "an unknown word");
     CHECK(rd__lamps_parse("area,x", &b) == -1 && b == 77, "an unknown second word");
-    CHECK(strcmp(rd__lamps_bits_text(RD_LAMPS_ALL), "area+pad") == 0 &&
+    CHECK(strcmp(rd__lamps_bits_text(RD_LAMPS_ALL), "area+pad+owed+wholepad+fold4") == 0 &&
+              strcmp(rd__lamps_bits_text(RD_LAMPS_AREA | RD_LAMPS_PAD), "area+pad") == 0 &&
               strcmp(rd__lamps_bits_text(0), "off") == 0,
           "the bits' words");
     /* t2 */
-    CHECK(rd__lamps_default_bits(1, false, true, true) == RD_LAMPS_ALL, "PowerVR");
-    CHECK(rd__lamps_default_bits(1, true, true, true) == RD_LAMPS_ALL, "PowerVR, a phone");
-    CHECK(rd__lamps_default_bits(2, false, true, true) == RD_LAMPS_ALL, "a desktop, pass area");
-    CHECK(rd__lamps_default_bits(2, false, true, false) == RD_LAMPS_PAD, "a desktop, no area");
-    CHECK(rd__lamps_default_bits(2, true, true, true) == RD_LAMPS_PAD, "a faked phone vendor");
-    CHECK(rd__lamps_default_bits(0, true, true, true) == RD_LAMPS_PAD, "Arm, Qualcomm, Apple");
-    CHECK(rd__lamps_default_bits(1, false, false, true) == RD_LAMPS_PAD, "not Vulkan");
-    CHECK(rd__lamps_default_bits(1, false, true, false) == RD_LAMPS_PAD, "no pass area");
+    const uint32_t ev = RD_LAMPS_PAD | RD_LAMPS_OWED | RD_LAMPS_WHOLEPAD; /* every class */
+    CHECK(rd__lamps_default_bits(1, false, true, true, true) == RD_LAMPS_ALL, "PowerVR");
+    CHECK(rd__lamps_default_bits(1, true, true, true, true) == RD_LAMPS_ALL, "PowerVR, a phone");
+    CHECK(rd__lamps_default_bits(2, false, true, true, true) == RD_LAMPS_ALL,
+          "a desktop, pass area");
+    CHECK(rd__lamps_default_bits(2, false, true, false, true) == (ev | RD_LAMPS_FOLD4),
+          "a desktop, no area");
+    CHECK(rd__lamps_default_bits(2, true, true, true, true) == ev, "a faked phone vendor");
+    CHECK(rd__lamps_default_bits(0, true, true, true, true) == ev, "Arm, Qualcomm, Apple");
+    CHECK(rd__lamps_default_bits(1, false, false, true, true) == ev, "not Vulkan");
+    CHECK(rd__lamps_default_bits(1, false, true, false, false) == ev, "no pass area, no fold");
+    CHECK(rd__lamps_default_bits(1, false, true, true, false) == (ev | RD_LAMPS_AREA),
+          "PowerVR without the blur fold");
     /* t3 */
     const RhiRect e = {0, 0, 0, 0}, a = {10, 20, 30, 40}, c = {100, 5, 10, 10};
     RhiRect u = rd__lamps_union(e, a);
