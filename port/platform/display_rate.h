@@ -107,5 +107,12 @@ void display_pin_failed(DisplayPin *p);
    return; framerate the row's value */
 int display_pin_text(DisplayPinAct act, int rate, int framerate, const char *call, int ret,
                      char *buf, size_t size);
+/* Android's display timing on offer, read only, for the evenness line's
+   next design (port/render/rd_even.h): whether libandroid.so has
+   AChoreographer_getInstance, AChoreographer_postFrameCallback64 and
+   AChoreographer_postVsyncCallback (looked up with dlsym, none called);
+   the callbacks are reachable with the first and either of the others.
+   The line without "window: " */
+int display_choreo_text(int getInstance, int frame64, int vsync, char *buf, size_t size);
 
 #endif /* ICO_PLATFORM_DISPLAY_RATE_H */

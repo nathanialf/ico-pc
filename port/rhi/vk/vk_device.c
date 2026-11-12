@@ -1838,12 +1838,23 @@ static void vkr_offer_line(float queuePriority)
                      : gpKhr        ? "KHR offered"
                      : gpExt        ? "EXT offered"
                                     : "not offered";
+    /* the means of knowing when a picture reached the screen, for the
+       evenness line's next design (rd_even.h): offered or not, nothing
+       enabled for them here (the present wait is enabled only with
+       ICO_VK_PRESENT_WAIT=1, vkr_create_device) */
+    const char *const dt[4] = {"VK_GOOGLE_display_timing", "VK_EXT_present_timing",
+                               "VK_KHR_present_id", "VK_KHR_present_wait"};
+    bool dtHas[4];
+    for (int i = 0; i < 4; i++) {
+        dtHas[i] = vkr_device_has_ext(g_vkr.phys, dt[i]);
+    }
     VKR_LOG("offered (read only, nothing enabled for it): calibrated time domains %s; global "
             "queue priority %s%s (the game's queue family %u's priorities: %s); the game's one "
             "queue made at priority %.1f with no global priority asked (the driver's default, "
-            "medium)",
+            "medium); display timing: %s %s, %s %s, %s %s, %s %s",
             dom, gp, gpQuery ? ", its query too" : "", g_vkr.queueFamily, fam,
-            (double)queuePriority);
+            (double)queuePriority, dt[0], dtHas[0] ? "yes" : "no", dt[1], dtHas[1] ? "yes" : "no",
+            dt[2], dtHas[2] ? "yes" : "no", dt[3], dtHas[3] ? "yes" : "no");
 }
 
 static bool vkr_create_device(void)

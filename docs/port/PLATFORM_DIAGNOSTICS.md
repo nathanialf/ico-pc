@@ -929,3 +929,55 @@ bounds (SDL's error lines: 64 and 1000), its line saying them the same way; the 
 evaluated and the line formatted only when it is written. At the end of a run, normal or fatal, one
 line counts every key: `ico_pc: limited lines (key, count, written): rd: interp snap 412 (11
 written); ...` (`port/platform/main_host.c` (`summary`, `fatal_summary`)).
+
+## The evenness line
+
+When the motion does not look as smooth as the presented rate says, read the 10 s line the window
+prints after the CPU phases' line (`port/render/rd_even.c`, `rd_even.h`; `port/platform/window_host.c`
+(`perf_log`)):
+
+```
+window: evenness in 10 s: P pictures; the GPU's ends apart (E with both ends exact, B with a bound at one, U without a GPU end) by refreshes of R ms: under half a refresh N0, 1 refresh N1, 2 refreshes N2, 3 refreshes N3, 4 or more N4; the content's step over them in ticks (mean, deviation): under half a refresh M0 (D0), 1 refresh M1 (D1), 2 refreshes M2 (D2), 3 refreshes M3 (D3), 4 or more M4 (D4); every step (S): mean M (deviation D), the largest L, back K times (the most X), C chain restarts; the alpha clamped at 0 Z times (the most A below), at 0.999 T times (the most H above); the present clock: N samples, resets F forward and K back, H held instead of going back within a frame pair (the most X ms); the alpha's sample to the GPU's end over N pictures: 10th A, median B, 90th C ms, the hand-over to it 10th A, median B, 90th C ms (the drain before the hand-over D ms on average over N)
+```
+
+- **The pictures** are the presents whose GPU record was collected in the block (each frame slot's
+  record, two pictures after it was made). A picture's content is its frame number plus its alpha,
+  in ticks (one tick a game frame, 33.4 ms at NTSC's 30 frames a second).
+- **The GPU's ends apart.** A picture's GPU end on the CPU's clock is the end of the frame slot's
+  fence wait when that wait blocked 0.05 ms or more (exact), its start when it blocked less (a
+  bound), and none when the work had finished before the wait (the GPU ahead of the CPU: usual on a
+  desktop GPU with time to spare). Only gaps with both ends exact are put on the refresh grid, by
+  their quarter-of-a-ms bin's middle over the display's refresh R rounded to a whole number. On a
+  120 Hz panel at 60 to 73 pictures a second most gaps are 1 or 2 refreshes; without a refresh
+  (the display reports none) the line says `the refresh not known, not put on its grid`. A GPU end
+  is not the moment the picture reached the glass: the compositor shows it at a later refresh, so
+  the grid here is the GPU's cadence, not the display's.
+- **The content's step over them.** The mean step for the gaps of each class. Equal steps over
+  1-refresh and 2-refresh gaps mean the 1-refresh pictures move twice as fast as the 2-refresh ones
+  on a panel that holds each picture until its next refresh; steps in proportion (the 2-refresh
+  mean twice the 1-refresh one) mean the content follows the pictures' own spacing.
+- **Every step.** All steps between consecutive presents (any GPU end): the mean, its deviation,
+  the largest, and the steps that went back (a later picture showing an earlier moment) with the
+  largest. A frame number that went back or moved on by more than 8 restarts the chain (a load, a
+  new run) and is not a step.
+- **The alpha clamped** at 0 (the present clock still before the newer frame's close: the picture
+  shows the frame before exactly, and the content jumps on by the amount at the next one) and at
+  0.999 (the clock past the newer frame), with the largest amount in ticks.
+- **The present clock** (the timer path only; under the vsync lock the clock is not used and its
+  samples are 0): the presents it timed, its resets that moved it forward (or kept it) and those
+  that would have moved it back, and the presents where it was held at its last value within a
+  frame pair instead of going back, with the largest amount it would have gone back. See
+  [DISPLAY.md](DISPLAY.md) "The alpha".
+- **The alpha's sample to the GPU's end**: for presents handed over to the render thread with an
+  exact GPU end, the time from the drain's start (the alpha is taken just before it) to the GPU's
+  end, by the 1 ms bin's middle; the drain is the wait for the picture before, after the alpha and
+  before the hand-over (the game thread's `slot waits` split, fresh and further). A wide 10th to
+  90th spread is latency that varies picture to picture: content sampled at even times reaches the
+  GPU's end at uneven ones. The hand-over to the GPU's end is the same without the drain: a spread
+  much narrower than the sample's says the drain is what varies, and that an alpha taken at the
+  hand-over would reach the GPU's end at steadier latencies.
+
+No clock is read for the line: the stamps are the ones the drain, the slot wait and the present
+clock already take. The render thread adds about a dozen relaxed atomic additions a picture, the
+present clock one to three a present (a compare-and-swap only when a maximum grows), and the window
+formats one line every 10 s.

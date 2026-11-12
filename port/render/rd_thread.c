@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "ico_thread.h"
+#include "rd_even.h"
 #include "rd_internal.h"
 #include "rd_submit.h"
 #include "rd_submit_thread.h"
@@ -96,6 +97,9 @@ typedef struct PresentArgs {
     double raw;
     double gap[2]; /* rd__present_clock_take's */
     bool ok;
+    /* the drain's start (the alpha's sample) and end (the hand-over) for
+     * the evenness line (rd_even.h), 0 when not handed over */
+    double askMs, handMs;
 } PresentArgs;
 
 static PresentArgs s_picPresent;
@@ -958,7 +962,9 @@ static void presentJob(void *arg)
     t_raw = p->raw;
     t_gap[0] = p->gap[0];
     t_gap[1] = p->gap[1];
+    rd_even_hand_note(p->askMs, p->handMs); /* for the replay's record */
     p->ok = rd_present(p->alpha);
+    rd_even_hand_note(0.0, 0.0);
     t_rawSet = set;
     t_raw = raw;
     t_gap[0] = gap0;
@@ -980,11 +986,17 @@ double rd__thread_clock(double gap[2])
 
 /* rd_present_post's wait for the picture before: counted as
  * rd__thread_picture_begin does, and by whose it is, a new frame's present
- * (fresh) or a further one's */
+ * (fresh) or a further one's; its start and end for the evenness line
+ * (s_drainAtMs, s_drainEndMs: the clock read it makes and the time it
+ * waited, no other read) */
+static double s_drainAtMs, s_drainEndMs;
+
 static void presentDrain(bool fresh)
 {
     const double d0 = rd__now_ms();
     const uint64_t ns = renderDrain(); /* the submit thread's job may go on */
+    s_drainAtMs = d0;
+    s_drainEndMs = d0 + (double)ns / 1e6;
     s_waitedNs += ns;
     noteRoomDrain(d0, ns);
     if (ns != 0) {
@@ -1024,7 +1036,7 @@ bool rd_present_post(float alpha)
      * callbacks share port/ui's font state with the step's own text
      * (rd_present.c s_pre) */
     rd__overlay_hand_over();
-    s_picPresent = (PresentArgs){alpha, 0.0, {0.0, 0.0}, false};
+    s_picPresent = (PresentArgs){alpha, 0.0, {0.0, 0.0}, false, s_drainAtMs, s_drainEndMs};
     s_picPresent.raw = rd__present_clock_take(s_picPresent.gap);
     s_picTramp = (Tramp){presentJob, &s_picPresent, !wait, NULL};
     if (!wait) {

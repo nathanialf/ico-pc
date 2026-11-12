@@ -82,3 +82,6 @@ include(rd_hash.cmake)
 
 # the render thread's CPU phases (rd_cpu_phase.c in ico_render) and its test
 include(rd_cpu_phase.cmake)
+
+# the pictures' evenness (rd_even.c in ico_render) and its test
+include(rd_even.cmake)

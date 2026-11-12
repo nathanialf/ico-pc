@@ -2249,7 +2249,18 @@ most four steps or four nominals (a tick without a nominal), whichever is more (
 pause and keeps the step), so a rate slower than four nominals is learnt at one reset (a 120 Hz FIFO
 at 25 presented fps: one reset, then none). A reset that took a doubled present's 0.5 ms as the step
 would hold it there, every later present being over four steps apart and resetting without learning
-one (issue 193: Motion blur: Smooth read 64 presents a tick)
+one (issue 193: Motion blur: Smooth read 64 presents a tick). Within one frame pair (the same
+`tickAt` and `tick`) the clock never goes back: a reset, or a pull with the clock more than seven
+steps ahead of the measured time, that would put it below its last value keeps that value, so a
+picture shows the same moment as the one before it or a later one, never an earlier one (two quick
+presents after a steady cadence: the first pulls the clock ahead, the second's error is over half
+a tick, and a reset to the measured time would show a moment up to a tenth of a tick earlier on the
+owner's 120 Hz phone). Time going backwards still resets it. The clock stays within 7/16 of a tick
+of the measured time (a pull keeps 7/8 of an error of at most half a tick, a reset puts it on the
+measured time, a held clock's lead only shrinks), so over any span the content's speed is real
+time's within 7/8 of a tick over the span; no present is moved, held back or added, and the rate
+is the same. The holds are counted in the 10 s `window: evenness` line
+([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#the-evenness-line))
 (`port/render/rd.h` (`RdPresentClock`); `port/render/rd_present_clock.c` (`rd_present_clock_alpha`);
 `port/platform/window_present.c` (`pace`)). `ICO_RD_S2_LEGACY=1` takes the raw measured time instead
 and turns off the finer blending (`port/render/rd_internal.h` (`rd__s2_legacy`)). Under the lock the

@@ -251,3 +251,119 @@ static void testPresentClockSlow(void)
               cases[n].nominal, cases[n].fast, cases[n].slow, c.stepMs, c.resets - r0);
     }
 }
+
+/* The present clock within a frame pair (v0.11.5, the owner's 120 Hz
+ * phone uncapped under mailbox: the nominal 15/16 of a refresh, 7.8125 ms):
+ * the clock never goes back while tickAt and tick stay, and over any span
+ * its content moves at real time's speed within the bound the code gives,
+ * a rate, not a sequence of values.
+ *   (1) the shape behind rc14's step back (frame 2096 at alpha 0.78 then
+ *       0.68): a steady 14.8 ms cadence, then two presents 2.5 ms apart in
+ *       one pair; the first pulls the clock 10.09 ms ahead of the measured
+ *       time (an error of -11.53 ms, 7/8 of it kept), the second's error of
+ *       -20.9 ms is over half a tick and resets: before, to the measured
+ *       time, 7.59 ms back; now held at its value, counted (the clock's
+ *       held, the evenness line's held and its largest, its reset back);
+ *   (2) 30 s of bursty presents (a quarter of them 2 to 4 ms after the one
+ *       before, the rest 12 to 20 ms): within a pair the clock never goes
+ *       back; at every present it is within 7/16 of a tick of the measured
+ *       time (a pull keeps 7/8 of an error of at most half a tick, a reset
+ *       puts it on the measured time, a held clock's lead only shrinks);
+ *       so a step is at most its interval plus 7/8 of a tick and over every
+ *       span of a second or more the content's speed is within 7/8 of a
+ *       tick over the span of real time's;
+ *   (3) time gone back within a pair: reset to the measured time as
+ *       before (no hold). */
+#include "rd_even.h"
+
+static RdEvenWindow s_evenW;
+
+static void testPresentClockPair(void)
+{
+    const double tick = 33.3667, nominal = 7.8125;
+    RdPresentClock c;
+    memset(&c, 0, sizeof(c));
+    rd_even_take(&s_evenW); /* the tests before noted into it */
+    double now = 1000.0;
+    for (int i = 0; i < 200; i++, now += 14.8) {
+        (void)rd_present_clock_alpha(&c, now, floor(now / tick) * tick, tick, nominal);
+    }
+    now -= 14.8; /* the last present's time */
+    const double atA = floor((now + 2.5) / tick) * tick;
+    const float aA = rd_present_clock_alpha(&c, now + 2.5, atA, tick, nominal);
+    const double clockA = c.clockMs, leadA = c.clockMs - (now + 2.5);
+    const uint32_t resetsA = c.resets;
+    const float aB = rd_present_clock_alpha(&c, now + 5.0, atA, tick, nominal);
+    const double clockB = c.clockMs;
+    (void)rd__present_clock_take(NULL);
+    rd_even_take(&s_evenW);
+    CHECK(leadA > 10.0 && leadA < 10.2 && c.resets == resetsA + 1u && clockB == clockA &&
+              aB >= aA && c.held == 1u && s_evenW.held == 1u && s_evenW.heldMaxUs >= 7500u &&
+              s_evenW.heldMaxUs <= 7700u && s_evenW.resetBack == 1u,
+          "present clock: a reset in a frame pair %.3f ms ahead of the measured time: the clock "
+          "%.3f then %.3f (alpha %.4f then %.4f), %u held (%u in the evenness line, the most "
+          "%u us), %llu resets back",
+          leadA, clockA, clockB, aA, aB, c.held, (unsigned)s_evenW.held,
+          (unsigned)s_evenW.heldMaxUs, (unsigned long long)s_evenW.resetBack);
+
+    /* (2) bursty presents */
+    memset(&c, 0, sizeof(c));
+    uint32_t seed = 115u;
+    now = 5000.0;
+    double lastClock = 0.0, lastAt = -1.0, lastNow = 0.0, worstLead = 0.0, worstStep = -1e9;
+    double worstRate = 0.0;
+    int back = 0, n = 0;
+    static double s_now[4096], s_clock[4096];
+    while (now < 35000.0 && n < 4096) {
+        seed = seed * 1664525u + 1013904223u;
+        const double u = (double)(seed >> 8) / 16777216.0;
+        seed = seed * 1664525u + 1013904223u;
+        const double v = (double)(seed >> 8) / 16777216.0;
+        now += u < 0.25 ? 2.0 + 2.0 * v : 12.0 + 8.0 * v;
+        const double at = floor(now / tick) * tick;
+        (void)rd_present_clock_alpha(&c, now, at, tick, nominal);
+        const double lead = fabs(c.clockMs - now);
+        worstLead = lead > worstLead ? lead : worstLead;
+        if (n > 0) {
+            if (at == lastAt && c.clockMs < lastClock) {
+                back++;
+            }
+            const double over = (c.clockMs - lastClock) - (now - lastNow);
+            worstStep = over > worstStep ? over : worstStep;
+        }
+        s_now[n] = now;
+        s_clock[n] = c.clockMs;
+        for (int j = n - 1; j >= 0; j--) {
+            if (now - s_now[j] >= 1000.0) {
+                /* the latest present a second or more before this one */
+                const double rate = (c.clockMs - s_clock[j]) / (now - s_now[j]);
+                const double dev = fabs(rate - 1.0) * (now - s_now[j]);
+                worstRate = dev > worstRate ? dev : worstRate;
+                break;
+            }
+        }
+        lastClock = c.clockMs;
+        lastAt = at;
+        lastNow = now;
+        n++;
+    }
+    (void)rd__present_clock_take(NULL);
+    CHECK(back == 0 && worstLead <= 7.0 / 16.0 * tick + 1e-9 &&
+              worstStep <= 7.0 / 8.0 * tick + 1e-9 && worstRate <= 7.0 / 8.0 * tick + 1e-9 &&
+              n > 1500,
+          "present clock: %d bursty presents over 30 s: %d steps back within a pair, the clock "
+          "at most %.3f ms from the measured time (bound %.3f), a step at most %.3f ms over its "
+          "interval, over a second or more the content %.3f ms from real time at most (bound "
+          "%.3f), %u resets, %u held",
+          n, back, worstLead, 7.0 / 16.0 * tick, worstStep, worstRate, 7.0 / 8.0 * tick, c.resets,
+          c.held);
+
+    /* (3) time gone back in a pair: today's reset to the measured time */
+    const double at = c.pairAtMs, then = c.lastMs - 3.0;
+    (void)rd_present_clock_alpha(&c, then, at, tick, nominal);
+    (void)rd__present_clock_take(NULL);
+    CHECK(c.clockMs == then, "present clock: time gone back 3 ms: the clock at the measured time "
+                             "(%.3f, want %.3f)",
+          c.clockMs, then);
+    rd_even_take(&s_evenW);
+}

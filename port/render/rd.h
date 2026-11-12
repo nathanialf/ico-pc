@@ -1221,12 +1221,20 @@ bool rd_display_probe(uint8_t rgba[RD_DISPLAY_PROBE_POINTS][4]);
  * error over half a tick, a pause of more than four steps or time going
  * backwards resets it to the measured time.  alpha = (clock - tickAtMs) /
  * tickMs in [0, 0.999], tickAtMs the simulated time the last frame closed
- * (never a measured close time).  nominalMs: the intended interval (the
+ * (never a measured close time).  While tickAtMs and tickMs stay the same
+ * (one frame pair) the clock never goes back: a reset or the pull that
+ * would move it below its last value keeps that value instead, unless time
+ * went backwards.  nominalMs: the intended interval (the
  * frame rate cap, half a refresh in mailbox), 0 when unknown. */
 typedef struct RdPresentClock {
     double clockMs, stepMs, lastMs;
     uint32_t presents; /* since the last reset; 0 = reset on the next call */
     uint32_t resets;
+    /* the frame pair of the last call (its tickAtMs and tickMs; paired 0
+     * before the first): within a pair the clock never goes back (a reset
+     * or the pull that would move it back holds it, counted in held) */
+    double pairAtMs, pairTickMs;
+    uint32_t paired, held;
 } RdPresentClock;
 
 float rd_present_clock_alpha(RdPresentClock *c, double nowMs, double tickAtMs, double tickMs,
@@ -2818,6 +2826,10 @@ typedef struct RdPerfRecord {
     double startMs;      /* the replay's start (rd's monotonic ms clock) */
     float alpha;         /* rd_present's alpha; -1 for a replay that is not one */
     uint8_t firstOfTick; /* the first present of its frame */
+    /* a present handed over to the render thread: the alpha's sample (its
+     * drain's start) and the hand-over (the drain's end), startMs's clock;
+     * 0 and 0 for one made where it was asked (rd_even.h) */
+    double evenAskMs, evenHandMs;
     /* the replay changed effect more often than there were timestamps:
        the later changes were not timed apart (their time stayed with the
        effect, or the scene, before them) */
@@ -3398,6 +3410,9 @@ void rd_late_pass_line(void);
 void rd_aura_paste_line(void);
 /* the CPU phases a picture: "window: CPU phases ms a picture ..." (rd_cpu_phase.c) */
 void rd_cpu_phase_line(void);
+/* the pictures' evenness: "window: evenness in 10 s: ..." (rd_even.c); refreshMs the
+ * display's refresh, 0 unknown */
+void rd_even_line(double refreshMs);
 /* the plan's switch: on, ICO_RD_GLOW_LIGHT=0 off (the tests' A/B, no config
  * key); rd__glow_light_force sets it (-1 the environment's) and forgets the
  * plan's off and the plan frame before */
