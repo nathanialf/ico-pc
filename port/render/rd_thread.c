@@ -1,12 +1,14 @@
 /* rd_thread.c: the renderer on the window's render thread (rd_thread.h). */
 #include "rd_thread.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "ico_thread.h"
 #include "rd_even.h"
 #include "rd_internal.h"
+#include "rd_rebase.h"
 #include "rd_submit.h"
 #include "rd_submit_thread.h"
 
@@ -991,6 +993,37 @@ double rd__thread_clock(double gap[2])
  * waited, no other read) */
 static double s_drainAtMs, s_drainEndMs;
 
+/* the alpha re-based to the hand-over (rd_rebase.h): the poster's state */
+static RdRebase s_rebase;
+
+/* the handed-over present's alpha moved by its drain's difference from the
+ * drain's running mean, on the timer path only (the clock timed it: raw not
+ * NAN; not under ICO_RD_S2_LEGACY=1, whose alpha is the raw time); its
+ * figures into the evenness line.  No clock read: the drain's stamps */
+static void presentRebase(PresentArgs *p, uint32_t frame)
+{
+    if (isnan(p->raw) || rd__s2_legacy()) {
+        s_rebase.have = false;
+        return;
+    }
+    const double drain = s_drainEndMs - s_drainAtMs;
+    const double lead = rd__present_clock_lead_ms();
+    double shift = 0.0;
+    bool held = false;
+    const double in = p->raw;
+    const double raw = rd_rebase_raw(&s_rebase, in, p->gap[1], drain, frame, &shift, &held);
+    if (isnan(raw) || !(p->gap[1] > 0.0)) {
+        return;
+    }
+    p->raw = raw;
+    p->alpha = rd_rebase_alpha(raw);
+    /* the content's moment to the hand-over: at the sample d - L (the
+       clock's lead L over the ask), re-based d - L less what the value
+       moved (the shift, or the hold's) */
+    const double moved = (raw - in) * p->gap[1];
+    rd_even_rebase_note(drain - lead, drain - lead - moved, shift, held);
+}
+
 static void presentDrain(bool fresh)
 {
     const double d0 = rd__now_ms();
@@ -1038,6 +1071,7 @@ bool rd_present_post(float alpha)
     rd__overlay_hand_over();
     s_picPresent = (PresentArgs){alpha, 0.0, {0.0, 0.0}, false, s_drainAtMs, s_drainEndMs};
     s_picPresent.raw = rd__present_clock_take(s_picPresent.gap);
+    presentRebase(&s_picPresent, cur->number);
     s_picTramp = (Tramp){presentJob, &s_picPresent, !wait, NULL};
     if (!wait) {
         handOver();

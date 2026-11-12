@@ -37,6 +37,7 @@
 
 #include "rd_even.h"
 #include "rd_internal.h"
+#include "rd_rebase.h"
 
 /* the step's lower bound without a nominal interval: a tick over this */
 #define CLOCK_STEPS_A_TICK_MAX 64.0
@@ -54,6 +55,15 @@ static double s_clockTickMs, s_clockStepMs;
 /* the clock's resets since rd__present_clock_resets_take (the poster's
  * thread counts, the render thread's block line takes) */
 static uint32_t s_clockResets;
+
+/* the clock's lead over the time asked at, its last timed call (the
+ * re-base's evenness figures, rd_rebase.h) */
+static double s_clockLeadMs;
+
+double rd__present_clock_lead_ms(void)
+{
+    return s_clockLeadMs;
+}
 
 double rd__present_clock_raw(void)
 {
@@ -187,6 +197,7 @@ float rd_present_clock_alpha(RdPresentClock *c, double nowMs, double tickAtMs, d
     s_clockStepMs = c->stepMs;
     s_clockSinceMs = since; /* and its weight for this present */
     s_clockSinceTickMs = tickMs;
+    s_clockLeadMs = c->clockMs - nowMs;
     double a = (c->clockMs - tickAtMs) / tickMs;
     s_clockRaw = a; /* before the clamp: the alpha histogram's "clamped from below" */
     /* the evenness line (rd_even.h): the clamps, the resets (forward unless

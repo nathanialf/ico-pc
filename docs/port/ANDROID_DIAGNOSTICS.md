@@ -1466,6 +1466,11 @@ two causes the logs before it could not:
 Read it beside the presented rate and the step rule's lines: a block whose rate swings with the
 back-off (the section above) is the rate's unevenness, not the glass grid's.
 
+The re-base clause shows the alpha moved to the hand-over: on the owner's phone in the cage the
+sample's distance to the GPU's end spread 12 ms (10th to 90th) where the hand-over's spread 5 ms,
+so the re-based `content's moment to the hand-over` should spread about a ms where `at the sample`
+spreads the drain's 5 ms.
+
 ## The thermal state and screen recording
 
 The thermal state and screen recording come from the app's Java side (issue 123;

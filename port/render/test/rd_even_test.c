@@ -69,7 +69,11 @@ int main(void)
     rd_even_clock_note(-0.25, 0, 0.0);
     rd_even_clock_note(1.2, -1, 0.0);
     rd_even_clock_note(0.3, -1, 7.5);
+    rd_even_rebase_note(5.0, 3.0, 2.0, false);
+    rd_even_rebase_note(1.0, 3.25, -2.25, true);
     rd_even_take(&s_w);
+    CHECK(s_w.rebN == 2 && s_w.rebHeld == 1 && s_w.rebBefore[42] == 1 && s_w.rebBefore[34] == 1 &&
+          s_w.rebAfter[38] == 2 && s_w.rebShift[36] == 1 && s_w.rebShift[27] == 1);
     CHECK(s_w.pictures == 10 && s_w.steps == 8 && s_w.breaks == 1 && s_w.bound == 1 &&
           s_w.noEnd == 1 && s_w.latN == 4 && s_w.drainN == 4 && s_w.drainUs == 5000);
     CHECK(s_w.gap[32] == 2 && s_w.gap[64] == 1 && s_w.gap[96] == 1 && s_w.gap[8] == 1 &&
@@ -83,20 +87,24 @@ int main(void)
           s_w.clampHiMax == 2010 && s_w.resetFwd == 1 && s_w.resetBack == 2 && s_w.held == 1 &&
           s_w.heldMaxUs == 7500);
     CHECK(rd_even_format(&s_w, 8.0, out, sizeof out));
-    CHECK_STR(out,
-              "evenness in 10 s: 10 pictures; the GPU's ends apart (6 with both ends exact, 1 "
-              "with a bound at one, 1 without a GPU end) by refreshes of 8.00 ms: under half a "
-              "refresh 1, 1 refresh 2, 2 refreshes 1, 3 refreshes 1, 4 or more 1; the content's "
-              "step over them in ticks (mean, deviation): under half a refresh -0.125 (0.000), 1 "
-              "refresh 0.250 (0.000), 2 refreshes 0.250 (0.000), 3 refreshes 0.500 (0.000), 4 or "
-              "more 0.875 (0.000); every step (8): mean 0.344 (deviation 0.271), the largest "
-              "0.875, back 1 times (the most 0.125), 1 chain restarts; the alpha clamped at 0 2 "
-              "times (the most 0.250 below), at 0.999 1 times (the most 0.201 above); the "
-              "present clock: 5 samples, resets 1 forward and 2 back, 1 held instead of going "
-              "back within a frame pair (the most 7.50 ms); the alpha's sample to the "
-              "GPU's end over 4 pictures: 10th 10.5, median 18.5, 90th 28.5 ms, the hand-over to "
-              "it 10th 9.5, median 16.5, 90th 27.5 ms (the drain before the hand-over 1.25 ms on "
-              "average over 4)");
+    CHECK_STR(
+        out,
+        "evenness in 10 s: 10 pictures; the GPU's ends apart (6 with both ends exact, 1 "
+        "with a bound at one, 1 without a GPU end) by refreshes of 8.00 ms: under half a "
+        "refresh 1, 1 refresh 2, 2 refreshes 1, 3 refreshes 1, 4 or more 1; the content's "
+        "step over them in ticks (mean, deviation): under half a refresh -0.125 (0.000), 1 "
+        "refresh 0.250 (0.000), 2 refreshes 0.250 (0.000), 3 refreshes 0.500 (0.000), 4 or "
+        "more 0.875 (0.000); every step (8): mean 0.344 (deviation 0.271), 2 of them over "
+        "gaps not on the grid: mean 0.375 (deviation 0.125), the largest 0.875, back 1 times (the most 0.125), 1 chain restarts; the alpha clamped at 0 2 "
+        "times (the most 0.250 below), at 0.999 1 times (the most 0.201 above); the "
+        "present clock: 5 samples, resets 1 forward and 2 back, 1 held instead of going "
+        "back within a frame pair (the most 7.50 ms); the alpha's sample to the "
+        "GPU's end over 4 pictures: 10th 10.5, median 18.5, 90th 28.5 ms, the hand-over to "
+        "it 10th 9.5, median 16.5, 90th 27.5 ms (the drain before the hand-over 1.25 ms on "
+        "average over 4); re-based to the hand-over: 2 pictures (the shift 10th -2.25, "
+        "median -2.25, 90th 2.25 ms; 1 held at the frame's last value), the content's "
+        "moment to the hand-over 10th 3.25, median 3.25, 90th 3.25 ms (at the sample 10th "
+        "1.25, median 1.25, 90th 5.25)");
     /* a short buffer: cut, still terminated */
     char small[16];
     CHECK(rd_even_format(&s_w, 8.0, small, sizeof small) && strlen(small) == 15);
@@ -104,7 +112,7 @@ int main(void)
     /* 2. taken again: empty */
     rd_even_take(&s_w);
     CHECK(s_w.pictures == 0 && s_w.samples == 0 && s_w.steps == 0 && s_w.gap[32] == 0 &&
-          s_w.lat[10] == 0 && s_w.stepMax == 0);
+          s_w.rebN == 0 && s_w.rebAfter[38] == 0 && s_w.lat[10] == 0 && s_w.stepMax == 0);
     CHECK(!rd_even_format(&s_w, 8.0, out, sizeof out) && out[0] == '\0');
 
     /* 3. the chain goes on from the last present (frame 3 at 0.75, its end

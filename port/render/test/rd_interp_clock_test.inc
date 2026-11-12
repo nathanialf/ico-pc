@@ -367,3 +367,129 @@ static void testPresentClockPair(void)
           c.clockMs, then);
     rd_even_take(&s_evenW);
 }
+
+/* The alpha re-based to the hand-over (rd_rebase.h), after the present
+ * clock, on the owner's 120 Hz phone's numbers (the 7.8125 ms nominal, the
+ * drain about 1.6 ms before a tick's first picture and 7.1 ms before a
+ * further one).  Bounds and rates only:
+ *   (1) presents every 14.8 ms (2 or 3 a 33.37 ms tick), the drain 1.6 ms
+ *       at a tick's first and 7.1 ms at a further one: from the content's
+ *       moment to the hand-over, the spread over 2000 presents is at most
+ *       1.2 ms (it is the drain's running mean less the clock's lead, and
+ *       the mean of 1.6 and 7.1 at two or three a tick stays between the
+ *       two patterns' extremes, 4.26 and 5.38 ms); at the sample it is the
+ *       drain's own 5.5 ms; nothing held;
+ *   (2) 30 s of bursty presents with drains 1.6 to 7.1 ms and one in a
+ *       hundred 40 ms (over a tick: the shift held to a quarter of one):
+ *       within a frame the value never goes back; the content's moment
+ *       within 11/16 of a tick of the time asked (the clock's 7/16 and the
+ *       shift's 1/4); over every span of a second or more the content's
+ *       advance within 11/8 of a tick of the real time's;
+ *   (3) the edges: no clock value (the vsync lock) unchanged and the pair
+ *       forgotten; a drain over a tick taken as a tick and its shift held to
+ *       a quarter; a value below the frame's last held; the alpha's clamp. */
+#include "rd_rebase.h"
+
+static void testPresentRebase(void)
+{
+    const double tick = 33.3667, nominal = 7.8125;
+    RdPresentClock c;
+    RdRebase r;
+    double shift;
+    bool held;
+    memset(&c, 0, sizeof(c));
+    memset(&r, 0, sizeof(r));
+    double now = 1000.0, lastAt = -1.0, aMin = 1e9, aMax = -1e9, bMin = 1e9, bMax = -1e9;
+    int holds = 0, counted = 0;
+    for (int i = 0; i < 2200; i++, now += 14.8) {
+        const double at = floor(now / tick) * tick;
+        const double drain = at != lastAt ? 1.6 : 7.1;
+        (void)rd_present_clock_alpha(&c, now, at, tick, nominal);
+        const double raw = rd_rebase_raw(&r, (c.clockMs - at) / tick, tick, drain,
+                                         (uint32_t)(at / tick + 0.5), &shift, &held);
+        holds += held ? 1 : 0;
+        if (i >= 200 && raw >= 0.0 && raw <= 0.999) {
+            const double hand = now + drain;
+            const double after = hand - (at + raw * tick), before = hand - c.clockMs;
+            aMin = after < aMin ? after : aMin;
+            aMax = after > aMax ? after : aMax;
+            bMin = before < bMin ? before : bMin;
+            bMax = before > bMax ? before : bMax;
+            counted++;
+        }
+        lastAt = at;
+    }
+    (void)rd__present_clock_take(NULL);
+    CHECK(counted > 1000 && aMax - aMin <= 1.2 && bMax - bMin >= 5.0 && holds == 0,
+          "re-base: the content's moment to the hand-over over %d presents spreads %.3f ms "
+          "(%.3f to %.3f; at the sample %.3f), %d held",
+          counted, aMax - aMin, aMin, aMax, bMax - bMin, holds);
+
+    /* (2) bursty, drains varying */
+    memset(&c, 0, sizeof(c));
+    memset(&r, 0, sizeof(r));
+    uint32_t seed = 116u;
+    now = 5000.0;
+    lastAt = -1.0;
+    double lastRaw = 0.0, worstLead = 0.0, worstSpan = 0.0;
+    int back = 0, n = 0;
+    static double s_rNow[4096], s_rCont[4096];
+    while (now < 35000.0 && n < 4096) {
+        seed = seed * 1664525u + 1013904223u;
+        const double u = (double)(seed >> 8) / 16777216.0;
+        seed = seed * 1664525u + 1013904223u;
+        const double v = (double)(seed >> 8) / 16777216.0;
+        seed = seed * 1664525u + 1013904223u;
+        const double w = (double)(seed >> 8) / 16777216.0;
+        now += u < 0.25 ? 2.0 + 2.0 * v : 12.0 + 8.0 * v;
+        const double at = floor(now / tick) * tick;
+        const double drain = w < 0.01 ? 40.0 : 1.6 + 5.5 * w;
+        (void)rd_present_clock_alpha(&c, now, at, tick, nominal);
+        const double raw = rd_rebase_raw(&r, (c.clockMs - at) / tick, tick, drain,
+                                         (uint32_t)(at / tick + 0.5), &shift, &held);
+        const double cont = at + raw * tick;
+        if (n > 0 && at == lastAt && raw < lastRaw) {
+            back++;
+        }
+        worstLead = fabs(cont - now) > worstLead ? fabs(cont - now) : worstLead;
+        s_rNow[n] = now;
+        s_rCont[n] = cont;
+        for (int j = n - 1; j >= 0; j--) {
+            if (now - s_rNow[j] >= 1000.0) {
+                const double dev = fabs((cont - s_rCont[j]) - (now - s_rNow[j]));
+                worstSpan = dev > worstSpan ? dev : worstSpan;
+                break;
+            }
+        }
+        lastRaw = raw;
+        lastAt = at;
+        n++;
+    }
+    (void)rd__present_clock_take(NULL);
+    CHECK(n > 1500 && back == 0 && worstLead <= 11.0 / 16.0 * tick + 1e-9 &&
+              worstSpan <= 11.0 / 8.0 * tick + 1e-9,
+          "re-base: %d bursty presents: %d steps back within a frame, the content at most %.3f "
+          "ms from the time asked (bound %.3f), over a second or more %.3f ms from real time "
+          "(bound %.3f)",
+          n, back, worstLead, 11.0 / 16.0 * tick, worstSpan, 11.0 / 8.0 * tick);
+
+    /* (3) the edges */
+    memset(&r, 0, sizeof(r));
+    const double same = rd_rebase_raw(&r, NAN, tick, 3.0, 1u, &shift, &held);
+    CHECK(isnan(same) && r.n == 0 && !r.have && shift == 0.0,
+          "re-base: no clock value: unchanged, nothing folded");
+    (void)rd_rebase_raw(&r, 0.2, tick, 2.0, 1u, &shift, &held); /* the mean 2 ms */
+    const double big = rd_rebase_raw(&r, 0.3, tick, 500.0, 1u, &shift, &held);
+    CHECK(fabs(shift - 0.25 * tick) < 1e-9 && fabs(big - 0.55) < 1e-9 && !held &&
+              fabs(r.meanMs - (2.0 + (tick - 2.0) / 16.0)) < 1e-9,
+          "re-base: a 500 ms drain taken as a tick, its shift held to a quarter (%.4f ms), "
+          "%.4f",
+          shift, big);
+    const double low = rd_rebase_raw(&r, 0.1, tick, r.meanMs, 1u, &shift, &held);
+    CHECK(held && low == big, "re-base: below the frame's last value: held (%.4f)", low);
+    (void)rd_rebase_raw(&r, 0.1, tick, r.meanMs, 2u, &shift, &held);
+    CHECK(!held, "re-base: a new frame: not held");
+    CHECK(rd_rebase_alpha(-0.2) == 0.0f && rd_rebase_alpha(1.4) == 0.999f &&
+              rd_rebase_alpha(0.5) == 0.5f && rd_rebase_alpha(NAN) == 0.0f,
+          "re-base: the alpha clamped to [0, 0.999]");
+}

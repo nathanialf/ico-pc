@@ -66,6 +66,15 @@ void rd_even_picture(const RdEvenPic *p);
  * within a frame pair instead of going back that much (0 otherwise) */
 void rd_even_clock_note(double raw, int reset, double heldMs);
 
+/* the re-base to the hand-over (rd_thread.c presentRebase, rd_rebase.h):
+ * the content's moment to the hand-over at the sample (beforeMs, the drain
+ * less the clock's lead) and after the re-base (afterMs), the shift, and
+ * whether the value was held at the frame's last one */
+#define RD_EVEN_REB_BIN_MS 0.5
+#define RD_EVEN_REB_BINS 128
+#define RD_EVEN_REB_FROM_MS (-16.0) /* the first bin's start; the ends catch the rest */
+void rd_even_rebase_note(double beforeMs, double afterMs, double shiftMs, bool held);
+
 /* the hand-over's stamps for the picture about to be made on this thread
  * (rd_thread.c presentJob before rd_present, 0 and 0 after it), taken by
  * the replay's record (rd_perf.c rd__perf_begin: 0 and 0 when none) */
@@ -94,6 +103,9 @@ typedef struct RdEvenWindow {
     uint64_t samples, clampLo, clampHi, resetFwd, resetBack, held;
     uint32_t clampLoMax, clampHiMax; /* RD_EVEN_UNITS */
     uint32_t heldMaxUs;              /* the largest hold, us */
+    /* the re-base's */
+    uint32_t rebBefore[RD_EVEN_REB_BINS], rebAfter[RD_EVEN_REB_BINS], rebShift[RD_EVEN_REB_BINS];
+    uint64_t rebN, rebHeld;
 } RdEvenWindow;
 
 void rd_even_take(RdEvenWindow *w);

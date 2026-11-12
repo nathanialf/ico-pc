@@ -1027,7 +1027,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   ms, the hand-over to it 9, 16, 19 and 27, drains of 1, 2, 1 and 1 ms) and five present-clock notes (clamps below 0 and above 0.999,
   resets forward and back): the sums and the line word for word; a short buffer cut and
   terminated; taken twice: no line; one more present with the refresh unknown, word for word; the
-  hand-over's stamps taken once.
+  hand-over's stamps taken once; the steps over gaps not on the grid (2: mean 0.375, deviation
+  0.125) and two re-base notes (the shift, the hold, both spreads) in the line.
 - `rd_cpu_phase_test.c` (`rd_cpu_phase`, CPU): the render thread's CPU phases (`rd_cpu_phase.c`):
   two pictures of one frame folded (2 pictures, 1 tick, 1 hashed, 6 clock reads, the look-ups
   folded once and `g_rdCpu` emptied), taken twice (empty), no line without a picture, and the
@@ -1652,7 +1653,14 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   presents (a quarter 2 to 4 ms apart, the rest 12 to 20): no step back within a pair, the clock
   within 7/16 of a tick of the measured time, a step at most its interval plus 7/8 of a tick, over
   every span of a second or more the content within 7/8 of a tick of real time; time gone back in a
-  pair: the clock at the measured time. The ticks' eyes
+  pair: the clock at the measured time. The alpha re-based to the hand-over (`testPresentRebase`,
+  `rd_rebase.c`): presents every 14.8 ms with drains of 1.6 ms at a tick's first and 7.1 ms at a
+  further one: the content's moment to the hand-over spreads at most 1.2 ms over 2000 presents
+  (at the sample 5.5 ms), nothing held; 30 s of bursty presents with drains of 1.6 to 7.1 ms and
+  one in a hundred 40 ms: no step back within a frame, the content within 11/16 of a tick of the
+  time asked and over every span of a second or more within 11/8 of a tick of real time; the
+  edges (no clock value unchanged, a drain over a tick and the quarter-tick cap, the hold, the
+  clamp). The ticks' eyes
   (`testEyeTicks`, on a device): alpha 0 carries the ticks' cameras as every present between the
   ticks, alpha 1 none.
 - `rd_layout_test.c`: the layout frame from the game's layout calls (`rd_layout`).

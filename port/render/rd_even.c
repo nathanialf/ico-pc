@@ -158,6 +158,23 @@ void rd_even_clock_note(double raw, int reset, double heldMs)
     }
 }
 
+static int rebBin(double ms)
+{
+    const double b = floor((ms - RD_EVEN_REB_FROM_MS) / RD_EVEN_REB_BIN_MS);
+    return b <= 0.0 ? 0 : (b >= (double)(RD_EVEN_REB_BINS - 1) ? RD_EVEN_REB_BINS - 1 : (int)b);
+}
+
+void rd_even_rebase_note(double beforeMs, double afterMs, double shiftMs, bool held)
+{
+    add32(&s_sum.rebBefore[rebBin(beforeMs)], 1u);
+    add32(&s_sum.rebAfter[rebBin(afterMs)], 1u);
+    add32(&s_sum.rebShift[rebBin(shiftMs)], 1u);
+    add(&s_sum.rebN, 1u);
+    if (held) {
+        add(&s_sum.rebHeld, 1u);
+    }
+}
+
 void rd_even_hand_note(double askMs, double handMs)
 {
     t_askMs = askMs;
@@ -197,6 +214,13 @@ void rd_even_take(RdEvenWindow *w)
         w->lat[b] = take32(&s_sum.lat[b]);
         w->latHand[b] = take32(&s_sum.latHand[b]);
     }
+    for (int b = 0; b < RD_EVEN_REB_BINS; b++) {
+        w->rebBefore[b] = take32(&s_sum.rebBefore[b]);
+        w->rebAfter[b] = take32(&s_sum.rebAfter[b]);
+        w->rebShift[b] = take32(&s_sum.rebShift[b]);
+    }
+    w->rebN = take(&s_sum.rebN);
+    w->rebHeld = take(&s_sum.rebHeld);
     w->pictures = take(&s_sum.pictures);
     w->bound = take(&s_sum.bound);
     w->noEnd = take(&s_sum.noEnd);
@@ -277,10 +301,14 @@ bool rd_even_format(const RdEvenWindow *w, double refreshMs, char *out, size_t s
     }
     Out o = {out, size, 0};
     uint64_t exact = 0;
+    int64_t exactSum = 0;
+    double exactSum2 = 0.0;
     uint64_t cn[GRID_CLASSES] = {0};
     double cs[GRID_CLASSES] = {0.0}, cs2[GRID_CLASSES] = {0.0};
     for (int b = 0; b < RD_EVEN_GAP_BINS; b++) {
         exact += w->gap[b];
+        exactSum += w->gapStep[b];
+        exactSum2 += (double)w->gapStep2[b];
         if (refreshMs > 0.0 && w->gap[b] != 0) {
             const double mid = ((double)b + 0.5) * RD_EVEN_GAP_BIN_MS;
             const double k = floor(mid / refreshMs + 0.5);
@@ -318,12 +346,20 @@ bool rd_even_format(const RdEvenWindow *w, double refreshMs, char *out, size_t s
     {
         double m, d;
         meanDev(w->steps, (double)w->stepSum, (double)w->stepSum2, &m, &d);
-        put(&o,
-            "; every step (%llu): mean %.3f (deviation %.3f), the largest %.3f, back %llu times "
-            "(the most %.3f), %llu chain restarts",
-            (unsigned long long)w->steps, m, d, (double)w->stepMax / RD_EVEN_UNITS,
-            (unsigned long long)w->back, (double)w->backMax / RD_EVEN_UNITS,
-            (unsigned long long)w->breaks);
+        /* the steps over gaps not put on the grid (a bound or no GPU end
+           at one side): every step's sums less the exact gaps' */
+        const uint64_t un = w->steps > exact ? w->steps - exact : 0u;
+        double um, ud;
+        meanDev(un, (double)(w->stepSum - exactSum), (double)w->stepSum2 - exactSum2, &um, &ud);
+        put(&o, "; every step (%llu): mean %.3f (deviation %.3f)", (unsigned long long)w->steps, m,
+            d);
+        if (un) {
+            put(&o, ", %llu of them over gaps not on the grid: mean %.3f (deviation %.3f)",
+                (unsigned long long)un, um, ud);
+        }
+        put(&o, ", the largest %.3f, back %llu times (the most %.3f), %llu chain restarts",
+            (double)w->stepMax / RD_EVEN_UNITS, (unsigned long long)w->back,
+            (double)w->backMax / RD_EVEN_UNITS, (unsigned long long)w->breaks);
     }
     put(&o,
         "; the alpha clamped at 0 %llu times (the most %.3f below), at 0.999 %llu times (the "
@@ -355,6 +391,21 @@ bool rd_even_format(const RdEvenWindow *w, double refreshMs, char *out, size_t s
     if (w->drainN) {
         put(&o, " (the drain before the hand-over %.2f ms on average over %llu)",
             (double)w->drainUs / 1000.0 / (double)w->drainN, (unsigned long long)w->drainN);
+    }
+    if (w->rebN) {
+        /* the bins' middles from RD_EVEN_REB_FROM_MS */
+#define REB(h, p)                                                                                  \
+    (share((h), RD_EVEN_REB_BINS, w->rebN, RD_EVEN_REB_BIN_MS, (p)) + RD_EVEN_REB_FROM_MS)
+        put(&o,
+            "; re-based to the hand-over: %llu pictures (the shift 10th %.2f, median %.2f, 90th "
+            "%.2f ms; %llu held at the frame's last value), the content's moment to the "
+            "hand-over 10th %.2f, median %.2f, 90th %.2f ms (at the sample 10th %.2f, median "
+            "%.2f, 90th %.2f)",
+            (unsigned long long)w->rebN, REB(w->rebShift, 0.1), REB(w->rebShift, 0.5),
+            REB(w->rebShift, 0.9), (unsigned long long)w->rebHeld, REB(w->rebAfter, 0.1),
+            REB(w->rebAfter, 0.5), REB(w->rebAfter, 0.9), REB(w->rebBefore, 0.1),
+            REB(w->rebBefore, 0.5), REB(w->rebBefore, 0.9));
+#undef REB
     }
     return true;
 }

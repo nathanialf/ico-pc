@@ -2260,7 +2260,23 @@ of the measured time (a pull keeps 7/8 of an error of at most half a tick, a res
 measured time, a held clock's lead only shrinks), so over any span the content's speed is real
 time's within 7/8 of a tick over the span; no present is moved, held back or added, and the rate
 is the same. The holds are counted in the 10 s `window: evenness` line
-([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#the-evenness-line))
+([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#the-evenness-line)). With the render thread a
+present's alpha is then re-based to its hand-over (`port/render/rd_rebase.c`, `rd_thread.c`
+(`presentRebase`)): `rd_present_post` waits for the picture before (the drain) after the alpha was
+taken, about 1.6 ms before a tick's first picture and 7 ms before a further one on the owner's 120
+Hz phone, so the content of the further pictures sat about 5 ms further from the start of their
+work than the first ones'. The value handed over is the clock's plus (drain - the drain's running
+mean, a sixteenth of the difference a present) over the tick, the shift held to a quarter of a tick
+each way and a drain over a tick taken as a tick; within a frame it never goes below the frame's
+last handed-over value; the clamp to [0, 0.999] is the clock's. The content keeps a steady distance
+from the moment its picture's work starts (the drain's mean less the clock's lead), the mean alpha
+is the clock's, and the content stays within 11/16 of a tick of the time asked (the clock's 7/16
+and the shift's 1/4), so over any span it moves at real time's speed within 11/8 of a tick over the
+span. The clock itself (its step, resets and holds, Motion blur: Smooth's interval and presents a
+tick, FSR's step) and every pacing input (the step rule's asks, holds and estimates) are untouched:
+the re-base changes only the alpha the render thread draws at, its value in the `interp:` alpha
+line and in the present's record. Not under the vsync lock (no clock value), not under
+`ICO_RD_S2_LEGACY=1`, not without the render thread (no drain)
 (`port/render/rd.h` (`RdPresentClock`); `port/render/rd_present_clock.c` (`rd_present_clock_alpha`);
 `port/platform/window_present.c` (`pace`)). `ICO_RD_S2_LEGACY=1` takes the raw measured time instead
 and turns off the finer blending (`port/render/rd_internal.h` (`rd__s2_legacy`)). Under the lock the

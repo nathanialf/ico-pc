@@ -4,7 +4,7 @@
 # window's "window: evenness in 10 s: ..." line), included from
 # rd_perf_clock.cmake after ico_render (port/render/CMakeLists.txt is at the
 # 256 KiB cap, tools/check_no_rom.sh).
-target_sources(ico_render PRIVATE rd_even.c)
+target_sources(ico_render PRIVATE rd_even.c rd_rebase.c)
 
 # rd_even_test: CPU only: ten made-up presents (GPU ends a quarter of a ms
 # bin's middle apart, 1 to 5 refreshes and under half of one, one a bound,

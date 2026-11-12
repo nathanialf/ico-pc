@@ -937,8 +937,11 @@ prints after the CPU phases' line (`port/render/rd_even.c`, `rd_even.h`; `port/p
 (`perf_log`)):
 
 ```
-window: evenness in 10 s: P pictures; the GPU's ends apart (E with both ends exact, B with a bound at one, U without a GPU end) by refreshes of R ms: under half a refresh N0, 1 refresh N1, 2 refreshes N2, 3 refreshes N3, 4 or more N4; the content's step over them in ticks (mean, deviation): under half a refresh M0 (D0), 1 refresh M1 (D1), 2 refreshes M2 (D2), 3 refreshes M3 (D3), 4 or more M4 (D4); every step (S): mean M (deviation D), the largest L, back K times (the most X), C chain restarts; the alpha clamped at 0 Z times (the most A below), at 0.999 T times (the most H above); the present clock: N samples, resets F forward and K back, H held instead of going back within a frame pair (the most X ms); the alpha's sample to the GPU's end over N pictures: 10th A, median B, 90th C ms, the hand-over to it 10th A, median B, 90th C ms (the drain before the hand-over D ms on average over N)
+window: evenness in 10 s: P pictures; the GPU's ends apart (E with both ends exact, B with a bound at one, U without a GPU end) by refreshes of R ms: under half a refresh N0, 1 refresh N1, 2 refreshes N2, 3 refreshes N3, 4 or more N4; the content's step over them in ticks (mean, deviation): under half a refresh M0 (D0), 1 refresh M1 (D1), 2 refreshes M2 (D2), 3 refreshes M3 (D3), 4 or more M4 (D4); every step (S): mean M (deviation D), the largest L, back K times (the most X), C chain restarts; the alpha clamped at 0 Z times (the most A below), at 0.999 T times (the most H above); the present clock: N samples, resets F forward and K back, H held instead of going back within a frame pair (the most X ms); the alpha's sample to the GPU's end over N pictures: 10th A, median B, 90th C ms, the hand-over to it 10th A, median B, 90th C ms (the drain before the hand-over D ms on average over N); re-based to the hand-over: N pictures (the shift 10th A, median B, 90th C ms; H held at the frame's last value), the content's moment to the hand-over 10th A, median B, 90th C ms (at the sample 10th A, median B, 90th C)
 ```
+
+`every step` also says, when some steps are over gaps the line cannot put on the grid (a bound or
+no GPU end at one side), `, U of them over gaps not on the grid: mean M (deviation D)`.
 
 - **The pictures** are the presents whose GPU record was collected in the block (each frame slot's
   record, two pictures after it was made). A picture's content is its frame number plus its alpha,
@@ -976,6 +979,19 @@ window: evenness in 10 s: P pictures; the GPU's ends apart (E with both ends exa
   GPU's end at uneven ones. The hand-over to the GPU's end is the same without the drain: a spread
   much narrower than the sample's says the drain is what varies, and that an alpha taken at the
   hand-over would reach the GPU's end at steadier latencies.
+- **The steps over gaps not on the grid.** A picture has no GPU end when its frame slot's work had
+  finished before the CPU waited for it: the GPU was idle before the next picture, which happens
+  after a picture between frames was held (the step rule) or the presents paused. The steps over
+  those gaps are the large ones (about twice the classed steps on the owner's phone), and they make
+  `every step`'s deviation far larger than the classes'. They are not classed because their gap
+  is not measured; read their mean apart from the classed ones.
+- **Re-based to the hand-over** (the timer path with the render thread; [DISPLAY.md](DISPLAY.md)
+  "The alpha"): the presents whose alpha was moved by their drain's difference from its running
+  mean, the shift's spread, the presents held at the frame's last value, and the distance from
+  the content's moment to the hand-over after the re-base and at the sample (the drain less the
+  clock's lead). The re-based spread narrower than the sample's is the re-base doing its work.
+  The `alpha clamped` counts are the clock's value's; the `interp:` alpha line counts the alpha
+  drawn.
 
 No clock is read for the line: the stamps are the ones the drain, the slot wait and the present
 clock already take. The render thread adds about a dozen relaxed atomic additions a picture, the
