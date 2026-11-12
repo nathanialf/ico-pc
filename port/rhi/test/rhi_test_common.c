@@ -2601,10 +2601,11 @@ int rhi_test_run_cells(const RhiTestConfig *cfg)
                                  RHI_LOAD_CLEAR,
                                  {64.0f / 255.0f, 64.0f / 255.0f, 64.0f / 255.0f, 64.0f / 255.0f},
                                  RHI_STORE_STORE,
-                                 false};
+                                 false,
+                                 {0}};
         rp.colorCount = 1;
-        rp.depth = (RhiDepthAttachment){depth, RHI_LOAD_CLEAR,  RHI_LOAD_CLEAR,  0.0f,  0,
-                                        false, RHI_STORE_STORE, RHI_STORE_STORE, false, {0}};
+        rp.depth = (RhiDepthAttachment){depth, RHI_LOAD_CLEAR,  RHI_LOAD_CLEAR,  0.0f, 0,
+                                        false, RHI_STORE_STORE, RHI_STORE_STORE, false};
         rp.width = W;
         rp.height = H;
         rhi_cmd_begin_label(cl, "scene");
