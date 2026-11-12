@@ -4063,9 +4063,10 @@ static RtRun rtEvidenceRun(unsigned steps, const RtLoad *L, int rule, const uint
       / 590 / 502 / 401 (the GPU makes 1112 / 834 / 741 / 588 / 500 / 400);
       v0.11.4's back-off gives the same counts (a back-off in the first
       second at 17 and 25 ms: 121 and 124 steps planned at the whole
-      period, where v0.11.4's doubling planned 241 and 484), no step
-      missing its period after the first second, no step later than the
-      slack and the margin past its due time.
+      period, where v0.11.4's doubling planned 241 and 484), no miss over
+      the floor after the first second, no step later than the slack and
+      the margin past its due time (at 20 ms a refresh more, v0.11.4's
+      the same).
    2. 13.5 ms with one picture in 20 at 2.5x (33.75 ms; the GPU's mean
       14.51 ms), 100 s: 6896 presents, what those pictures cost (the steady
       13.5 ms run's 7416 times 13.5 / 14.5125: 6898), every miss over the
@@ -4089,7 +4090,7 @@ static RtRun rtEvidenceRun(unsigned steps, const RtLoad *L, int rule, const uint
       normal plan either), 1466 of the 1800 steps at the whole period, the
       rate the GPU's: 2209 presents in 40 s where v0.11.4 gave 2222.
    6. A GPU whose time a picture varies as rc11's submit table about 13.5
-      ms everywhere (8.9-19.4 ms, under 7/4 of the median: no outliers,
+      ms everywhere (9.1-19.4 ms, under 7/4 of the median: no outliers,
       rc11's bridge median 13.5 against a mean of 14.5), 40 s: 2751
       presents where v0.11.4 gave 2529, 953 steps at the whole period
       where it planned 1858 (28 of the 33 back-offs ended by the evidence).
@@ -4118,8 +4119,8 @@ static void testBackoffEvidence(void)
         snprintf(what, sizeof what, "the back-off's evidence: %.1f ms GPU pictures",
                  (double)g / 1e6);
         rtPrint(what, &now);
-        printf("  v0.11.4's back-off: %u presents, %u steps at the whole period\n", before.presents,
-               before.strict);
+        printf("  v0.11.4's back-off: %u presents, %u steps at the whole period, the lag %.1f ms\n",
+               before.presents, before.strict, (double)before.lateMax / 1e6);
         CHECK(now.presents + 3u >= rate[i] && now.presents <= rate[i] + 3u);
         CHECK(now.presents == before.presents && now.strict <= before.strict);
         /* what the GPU makes (two a step at most), never more */
