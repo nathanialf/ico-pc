@@ -3803,6 +3803,9 @@ static void pump_pad_event(const SDL_Event *e, const char *name)
    gamepads have input_sdl.c's line) */
 static void pump_event_line(const SDL_Event *e, const char *name)
 {
+    if (e->type == SDL_EVENT_WINDOW_FOCUS_GAINED) {
+        ico_render_thread_place_focus(); /* the threads' cores asked again (render_thread.h) */
+    }
     switch (e->type) {
     case SDL_EVENT_WINDOW_FOCUS_GAINED:
     case SDL_EVENT_WINDOW_FOCUS_LOST:
@@ -5413,6 +5416,7 @@ static void scene_note_step(double ms)
 
     window_scene_note(&s_sceneShare, k, (uint64_t)(ms * 1e6));
     window_perf_rank_step(k, stage_no, (uint64_t)(ms * 1e6));
+    ico_render_thread_place_scene(k == SCENE_PLAY); /* a 3D scene: the cores asked again */
 }
 
 /* Presents and frames per second, every 10 s of real time, in both

@@ -163,4 +163,12 @@ void ico_render_thread_block_line(double stepMs, double stepCpuMs, double pictur
    list, which the 10 s block then reads instead of the files */
 void ico_render_thread_tick(void);
 
+/* The keeper's requests (cpu_keep.h; Android, nothing elsewhere): the
+   game thread at each step says whether the game is in its play layout (a
+   3D scene begun asks the threads' cores again), and at the window's
+   focus gained; back from the background is asked by
+   ico_render_thread_unpark itself.  A bit set, no call to the system */
+void ico_render_thread_place_scene(bool play);
+void ico_render_thread_place_focus(void);
+
 #endif /* ICO_PLATFORM_RENDER_THREAD_H */
