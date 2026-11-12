@@ -644,6 +644,29 @@ failed at texel N: ... for ...)` and the fill copies SCENE as before
 `; N snapshots by the swap, M copied (K <why>)` says how often the copy was saved; in a dark glow
 room the late pass holds the fill and the copy stays (`the draw held past the snapshot`).
 
+### The crack fill in list 11's pass
+
+On the PowerVR phone (and desktop GPUs) the crack fill of a picture with no glow and no aura (the
+title's dark pictures) is drawn as the first draw of list 11's pass, over a scratch depth, instead
+of a pass of its own ([RENDER_POST.md](RENDER_POST.md#the-crack-fill-in-list-11s-pass)). The start
+line `rd: crack fill: with list 11: on (self-test passed: ...; the PowerVR class)` (or `off
+(<why>)`: `not the PowerVR or a desktop class` on the Arm and Qualcomm phones, where it is off this
+release, or the self-test's failure) says whether it is in force; once `rd: crack fill: with list
+11: the scratch depth made (...)` and `rd: crack fill: drawn as the first draw of list 11's pass
+...`. The 10 s line `rd: crack fill: with list 11: N drawn in list 11's pass over the scratch depth
+(X MB of colour not loaded and as many not stored), K held and drawn in a pass of their own after
+all (<why>), J kept in their own pass (<why>); S merged passes ended by a draw that uses SCENE's
+depth` counts the pictures it saved a pass in (N), those where something before list 11 touched
+SCENE after the fill was held (K: `a command that reads or writes SCENE`, `SCENE's depth bound,
+written or DATE`, `SCENE's border repeat`, `list 11's pass holding a part of the picture`, `a later
+draw of list 11 that uses SCENE's depth`, ...) and those not held at all (J: `the next command
+reads or writes SCENE`, the usual reason in gameplay, `due after list 11`, ...). S is 0 unless a
+draw the look ahead did not expect came into the merged pass. With it on, the `perf classes` line's
+crack fill class loses the title's fill pass and list 11's class keeps one pass on SCENE; the
+crack fill's own 10 s line still counts the fills (`after the glow's alpha`, `snapshots by the
+swap`). The player's F12 dump replays it (`rd_replay_tool --stats` prints `crack fill with list 11
+on|off (self-test ...): N drawn in list 11's pass ...`).
+
 ### The aura's paste as its constant part
 
 In a room with no aura object on screen the aura's paste is drawn as the alpha alone over all but a

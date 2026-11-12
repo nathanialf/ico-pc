@@ -76,6 +76,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rd_cache_name.h"
+#include "rd_fill11.h"
 #include "rd_made_outside.h"
 #include "rd_internal.h"
 #include "rd_passring.h"
@@ -4156,6 +4157,8 @@ uint32_t rd__enumerate_reachable_fog(RdPipeKeyInt *out, uint32_t max, uint32_t n
             const RdPipeKeyInt k = rd__crack_fill_key(kKinds[c]);
             n = rd__add_pipe_key(out, max, n, &k);
         }
+        /* the fills' depth twins for list 11's pass (rd_fill11.c) */
+        n = rd__fill11_enumerate(out, max, n);
     }
     /* the MSAA epoch's single-sampled resolves into SCENE (rd_replay.c
      * msaaEnd): the colour and depth together, the depth alone */

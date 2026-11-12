@@ -260,6 +260,7 @@ static void sceneRepeat(Replay *r)
     if (rd__win_muted()) {
         return;
     }
+    rd__fill11_border(r); /* a fill held for list 11's pass drawn first (rd_fill11.c) */
     const uint32_t th = t->th;
     if (!colsEnsure((uint32_t)(cwL + cwR), th, t->format)) {
         return;

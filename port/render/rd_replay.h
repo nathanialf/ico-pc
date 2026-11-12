@@ -11,6 +11,7 @@
 #include "shader_consts.h"
 #include "rd_present_scene.h" /* rd_replay.c and rd_blur_border.c call its hooks */
 #include "rd_late_pass.h"     /* rd_crack_fill.c, rd_store_plan.c and rd_replay.c call it */
+#include "rd_fill11.h"        /* rd_crack_fill.c, rd_replay.c and rd_blur_border.c call it */
 #include "rd_aura_paste.h"    /* rd_fx_plan.c calls it */
 
 /* Consecutive screen-prim commands that bind the same things are one draw

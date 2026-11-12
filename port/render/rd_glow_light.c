@@ -1314,6 +1314,18 @@ static bool lazyNote(uint32_t id, const uint8_t col[4])
     return true;
 }
 
+/* rd_fill11.h: c skipped, or a lazy clear lazyNote can hold (drawn by a
+ * later reader of its target, if any): no GPU work at c */
+bool rd__glow_light_undrawn(const RdCmd *c)
+{
+    const GlCmd *e = find(c);
+    if (!e) {
+        return false;
+    }
+    const RdTargetRec *t = e->act == ACT_LAZY ? rd__target_rec(e->target) : NULL;
+    return e->act == ACT_SKIP || (t && t->color.id && lazySlot(e->target) >= 0);
+}
+
 /* lazy clear k recorded on cl as the pass a clear of its own begins */
 static void lazyRecord(RhiCommandList cl, int k)
 {
