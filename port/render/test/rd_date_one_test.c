@@ -29,11 +29,18 @@
  * a rectangle's volume (two triangles in front), resolves it, blurs it into
  * SHADOW0 (one 2:1 sprite, vertex alpha shadowDepth) and composites SHADOW0
  * three times into SCENE under TEST 0x3400D (vertex alphas the blends);
- * list 4 a Z GEQUAL sprite:
+ * list 4 a Z GEQUAL sprite over SCENE's bottom eighth (below the volume's
+ * rectangle, so the composites' pixels stay in SCENE: a sprite over the
+ * whole frame drew over every pixel they wrote and hid a wrong share):
  *   d1  shadowDepth 72, blends 40, 80, 120, one DATE set-up off against on
  *       (rd__date_one_force): SCENE byte for byte; snapshots 3 (1 the first,
  *       2 an alpha write since) against 1 (the first), 2 shared, 0 refused;
- *       render passes 4 fewer (two R8 passes and two SCENE passes); 2 R8
+ *       render passes 4 fewer (two R8 passes and two SCENE passes); draws 4
+ *       fewer: 2 R8 draws, and 2 because the three composites, now in one
+ *       pass with one snapshot, join one screen run (rd_replay.c joinsRun:
+ *       this frame's composites all read SHADOW0, so key, texture, DrawCB,
+ *       scissor, state and snapshot are the same; the game's read SHADOW2, 1
+ *       and 0 and stay three draws): the same screen commands, 2 screen
  *       draws fewer; the DATE cut's passes without the depth 2 off (the
  *       first two composites' runs) and 0 on (the run from the first
  *       composite goes on to list 4's Z GEQUAL sprite), none begun again;
@@ -347,7 +354,8 @@ static bool texture(RdFrame *f, int list, uint32_t tex)
  * resolve; SHADOW0 drawn from the count (2:1, vertex alpha depth); the three
  * composites of SHADOW0 into SCENE under 0x3400D, vertex alphas blend[0..2]
  * and three vertex colours (the force run's wrong share shows); list 4 a Z
- * GEQUAL sprite over SCENE */
+ * GEQUAL sprite over SCENE's bottom eighth (rows 7h/8..h: outside the
+ * rectangle h/4..3h/4, so it overwrites none of the composites' pixels) */
 static bool buildFrame(RdFrame *f, uint32_t number, uint32_t scene, uint32_t count, uint32_t w,
                        uint32_t h, bool volume, uint8_t depth, const uint8_t blend[3])
 {
@@ -417,7 +425,7 @@ static bool buildFrame(RdFrame *f, uint32_t number, uint32_t scene, uint32_t cou
     }
     ok = ok && target(f, 4, scene, scene, w, h) && rd__st_push(f, 4, RDC_TEXTURE_OFF) &&
          state(f, 4, RD_TEST_Z_GEQUAL, RD_ZWRITE_ON, false) &&
-         sprite(f, 4, w, h, 0, 0, w, h, 0x800, kLate, false, 0, 0);
+         sprite(f, 4, w, h, 0, 7 * h / 8, w, h, 0x800, kLate, false, 0, 0);
     return ok;
 }
 
@@ -501,9 +509,15 @@ static void testDevice(uint32_t w, uint32_t h)
               on.r.dateOneShared == 2 && on.r.dateOneRefused == 0 && on.r.dateSnapReused == 2,
           "d1 on: %u snapshots, %u shared, %u refused, %u reused: 1, 2, 0, 2 expected",
           on.r.dateSnapshots, on.r.dateOneShared, on.r.dateOneRefused, on.r.dateSnapReused);
-    CHECK(on.r.renderPasses + 4u == off.r.renderPasses && on.r.draws + 2u == off.r.draws,
-          "d1: passes %u -> %u, draws %u -> %u: 4 and 2 fewer expected", off.r.renderPasses,
+    /* the draws: off 11 (list 0's sprite, the volume, the count's one draw,
+     * the level, 3 R8 snapshots, 3 composites, list 4's sprite); on 7: 2 R8
+     * snapshots fewer, and the composites one screen run (2 draws fewer) */
+    CHECK(on.r.renderPasses + 4u == off.r.renderPasses && on.r.draws + 4u == off.r.draws,
+          "d1: passes %u -> %u, draws %u -> %u: 4 and 4 fewer expected", off.r.renderPasses,
           on.r.renderPasses, off.r.draws, on.r.draws);
+    CHECK(on.r.screenCmds == off.r.screenCmds && on.r.screenDraws + 2u == off.r.screenDraws,
+          "d1: screen commands %u -> %u, screen draws %u -> %u: the same and 2 fewer expected",
+          off.r.screenCmds, on.r.screenCmds, off.r.screenDraws, on.r.screenDraws);
     CHECK(off.r.dateCutPasses == 2 && on.r.dateCutPasses == 0 && off.r.dateCutAgain == 0 &&
               on.r.dateCutAgain == 0,
           "d1: the DATE cut's passes %u off, %u on (2 and 0), begun again %u/%u",

@@ -1098,9 +1098,12 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   device (`ICO_RD_DATE_PATH=snapshot`, `ICO_RD_BLEND=fixed`, `ICO_RD_STORE_POISON=1`, 1x, 512x448)
   frames in the shadow's shape built by hand (list 0 SCENE's depth and the alpha's top bit over its
   left half; list 3 a reset, a rectangle's volume, the resolve, SHADOW0 from the count, three
-  composites of SHADOW0 under 0x3400D; list 4 a Z GEQUAL sprite): d1 (shadowDepth 72, blends 40/80/120)
+  composites of SHADOW0 under 0x3400D; list 4 a Z GEQUAL sprite over the bottom eighth, clear of
+  the composites' pixels): d1 (shadowDepth 72, blends 40/80/120)
   off against on (`rd__date_one_force`): SCENE byte for byte, snapshots 3 (1 first, 2 written) against
-  1 with 2 shared and 2 reused, 4 render passes and 2 draws fewer, the DATE cut's passes 2 against 0,
+  1 with 2 shared and 2 reused, 4 render passes and 4 draws fewer (2 R8 draws; the three composites,
+  here all reading SHADOW0, one screen run once no snapshot ends their pass: 2 screen draws fewer),
+  the DATE cut's passes 2 against 0,
   none begun again, the shared texels 2 x SCENE's; d2 (128 x 128): on refuses both (3 snapshots, 2
   refused, SCENE byte for byte), forced past the bound 2 shared, 1 snapshot and SCENE different (the
   test sees a wrong share); d3 (no volume, one DATE set-up off) the empty composites off against on
