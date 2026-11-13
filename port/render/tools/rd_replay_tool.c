@@ -383,6 +383,14 @@
  *                         after its size, rd_pass_area.c), then
  *                         the window's top-passes text over that replay and
  *                         its passes by kind
+ *   --bench K             after the picture is written, the rc bench over
+ *                         the frame (rd_bench_run.h rd_bench_tool: every
+ *                         variant, W 1 and K timed replays a block, one
+ *                         round; its "bench: " lines and CSV rows on
+ *                         stdout; a baseline's presented picture after it
+ *                         against the one before it); needs --present,
+ *                         not --interp; exit 1 when a variant did not run
+ *                         or the pictures differ
  *   --time N              after the picture is written, the frame replayed
  *                         N more times (with --interp the presenter's frame
  *                         built again before each, rd__interp_frame: the
@@ -553,6 +561,7 @@
 #include "rd_upscale.h"
 #include "rd_upscale_capture.h" /* --fsr3-dump */
 #include "rd_velocity.h"
+#include "rd_bench_run.h" /* --bench: the rc bench over the frame */
 #include "rd_mesh.h"
 #include "rd_vis.h"
 #include "rd_vu_rec_early.h" /* ICO_RD_EARLY_PREPARE=1 */
@@ -2193,7 +2202,7 @@ int main(int argc, char **argv)
                 "[--gpu-repeat K] "
                 "[--region-stats] [--region-png FILE] [--region-out FILE] [--region-mask FILE] "
                 "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--pass-times] "
-                "[--time N] [--keys] "
+                "[--time N] [--bench K] [--keys] "
                 "[--pass-dump DIR] "
                 "[--velocity] [--velocity-dump PNG] "
                 "[--prev DUMP]... [--no-half] [--interp T PREV [--interp-any] [--no-reproject] "
@@ -2218,6 +2227,7 @@ int main(int argc, char **argv)
     RdSettings s;
     bool list = false, overlay = false, stats = false, passTimes = false;
     int timeN = 0;                   /* --time N */
+    int benchK = 0;                  /* --bench K */
     int gpuRepeat = 1;               /* --gpu-repeat K */
     bool occlusion = false;          /* --occlusion */
     const char *occlusionOut = NULL; /* --occlusion-out FILE */
@@ -2461,6 +2471,12 @@ int main(int argc, char **argv)
                 return 1;
             }
             timeN = (int)n;
+        } else if (strcmp(argv[i], "--bench") == 0 && i + 1 < argc) {
+            benchK = atoi(argv[++i]);
+            if (benchK < 1 || benchK > ICO_BENCH_K_MAX) {
+                fprintf(stderr, "bad --bench (timed replays a block, 1..%d)\n", ICO_BENCH_K_MAX);
+                return 1;
+            }
         } else if (strcmp(argv[i], "--no-aa1") == 0) {
             noAa1 = true;
         } else if (strcmp(argv[i], "--velocity") == 0) {
@@ -3808,6 +3824,9 @@ int main(int argc, char **argv)
     }
     if (rc == 0 && timeN > 0 && !timeReplays(dump, &pf, &f, rf, timeN, pw != 0)) {
         rc = 1;
+    }
+    if (rc == 0 && benchK > 0 && (interpPrev || rd_bench_tool(&f, benchK, pw != 0) != 0)) {
+        rc = 1; /* the rc bench (rd_bench_run.h); not over an --interp frame */
     }
     if (occFailed || regionFailed || skinFailed || velFailed || fsr3Failed) {
         rc = 1;

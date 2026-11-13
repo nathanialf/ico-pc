@@ -169,6 +169,8 @@ int ico_share_report_collect_run(const char *logs_dir, const char *dumps_dir, lo
         add_newest(out, logs_dir, "vu-skin-fail-", ".bin");
         /* the slow-scene dump (window_host.c slow_scene_dump, issue 179) */
         add_newest(out, logs_dir, "slow-", ".zip");
+        /* the rc bench's tables (window_bench.h) */
+        add_newest(out, logs_dir, "bench-", ".csv");
     }
     return out->count;
 }

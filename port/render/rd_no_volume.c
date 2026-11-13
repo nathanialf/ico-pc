@@ -101,6 +101,7 @@
 #include <string.h>
 
 #include "attempt_ledger.h"
+#include "rd_bench.h" /* the bench's switch below */
 #include "rd_date_one.h"
 #include "rd_no_volume.h"
 #include "rd_replay.h"
@@ -1041,4 +1042,32 @@ void rd__no_volume_stats(const RdPerfRecord *rec, char *out, size_t size)
     if (at < size) {
         rd__date_one_stats(rec, out + at, size - at);
     }
+}
+
+/* ------------------------------------------------ the bench's switch */
+
+/* rc builds' bench (rd_bench.c, rd_bench.h): the two words as the tests'
+ * environment would set them, -1 each read from the environment again */
+void rd__no_volume_bench_force(int open, int brk)
+{
+    if (open < 0) {
+        s_nv.envRead = false;
+    } else {
+        s_nv.env = open ? 1 : 0;
+        s_nv.envRead = true;
+    }
+    if (brk < 0) {
+        s_nv.envBreakRead = false;
+    } else {
+        s_nv.envBreak = brk ? 1 : 0;
+        s_nv.envBreakRead = true;
+    }
+}
+
+int rd__no_volume_bench_mode(void)
+{
+    if (gateOf(breakEnvOf(), breakClassOn()) == RD_NV_WHY_COUNT) {
+        return 1;
+    }
+    return gateOf(envOf(), classOn()) == RD_NV_WHY_COUNT ? 2 : 0;
 }

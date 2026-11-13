@@ -1,0 +1,14 @@
+# Dump list for rd_bench_ab (port/render/test/rd_bench_ab.cmake: the rc
+# bench over a dump through rd_replay_tool --bench, every variant run and the
+# picture after it byte for byte the one before).  MACHINE-LOCAL: paths on
+# the maintainer's machine; the dumps are never committed.  Where
+# /primary/dev/ico-dumps exists a listed dump that is absent fails the test
+# (no folder: SKIP).  Each line: the dump, then the variant lines its run
+# must hold ("|"-separated names, as the tool prints them), from the dump's
+# own command listing (rd_replay_tool --list --no-device).
+#
+# the PowerVR phone's opening (v0.11.5 rc34): v746 lamps without a volume
+# (list 7's WORK2 meshes, the WORK0/WORK1 chain, the paste of WORK3 into
+# SCENE, list 4's fog), v2278 the sun with volumes (list 3's strips)
+/primary/dev/ico-dumps/v0115-opening/frame-20261112-110824-v746.zip|without the lamps' meshes|without the blur chain|without the glow paste|without the fog (and the crack fill it arms)
+/primary/dev/ico-dumps/v0115-opening/frame-20261112-110852-v2278.zip|without the shadow volumes' draws|without the shadow composites

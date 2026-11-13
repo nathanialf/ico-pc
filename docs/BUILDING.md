@@ -862,7 +862,7 @@ gh release create <tag> dist/ico-pc-<tag>-win.zip dist/ico-pc-<tag>-win-portable
 ## Release candidate tools
 
 A release candidate (a label ending in `-rcN`) carries tooling a release never does. Today that is
-two things, both on Android alone:
+three things, all on Android alone:
 
 - Settings > Main > **Share a bug report**, directly below Save a picture for a bug report, which
   opens the system's share menu with `logs/ico-pc.log`, `logs/ico-pc-previous.log`, every
@@ -879,6 +879,13 @@ two things, both on Android alone:
   (`port/platform/capture_trigger.c` decides, `window_capture.c` takes it; the lines and the cost
   are in [ANDROID_DIAGNOSTICS.md](port/ANDROID_DIAGNOSTICS.md#the-openings-frames-in-a-release-candidate)).
   Share a bug report then sends all of them.
+- **The bench** (off unless the build's `WINDOW_BENCH_DEFAULT` is 1, a variant's define): four
+  frames of the opening and a paused picture kept and drawn again and again at the title or the
+  pause with parts of them left out, to rank what each part of a picture costs on the phone
+  (`port/platform/window_bench.c`, `bench_plan.c`, `port/render/rd_bench_run.c`,
+  `port/render/rd_bench.c`; the lines, the variants and the time in
+  [ANDROID_DIAGNOSTICS.md](port/ANDROID_DIAGNOSTICS.md#the-bench-in-a-release-candidate)). Share a
+  bug report sends its `logs/bench-*.csv`.
 
 The gate is mechanical at every step:
 
@@ -894,7 +901,8 @@ The gate is mechanical at every step:
 - After the build, each script runs `tools/check_rc_text.py --label <label>` on what it built (the
   Linux and Windows program, the unsigned APK with every entry inflated, the macOS and iOS
   executables): for a release label the row's English text, "Share a bug report", must be absent
-  (UTF-8 and UTF-16), for an rc label present; the script fails otherwise. CI's debug APK is
+  (UTF-8 and UTF-16), and so must the bench's line marks `window: bench: ` and `bench: frame `;
+  for an rc label the row's text must be present; the script fails otherwise. CI's debug APK is
   checked the same way with the label `ci`.
 - In the sources, the row, its strings in all seven tables, the host's handler and the JNI call are
   inside `#if ICO_RC_TOOLS` (`port/ui/settings.h` and `strings.h` default it to 0);
@@ -902,13 +910,17 @@ The gate is mechanical at every step:
   opening's capture is all inside `#if ICO_RC_TOOLS && defined(__ANDROID__)` (`window_capture.c`
   and `.h`, and each of its calls in `window_host.c`), and `CMakeLists.txt` adds
   `window_capture.c` and `capture_trigger.c` to the program inside `if(ICO_RC_TOOLS AND ANDROID)`
-  alone; its start line holds the row's text, so the binary check covers it too.
+  alone; its start line holds the row's text, so the binary check covers it too. The bench the
+  same: `window_bench.c` and `.h` and its calls in `window_host.c` inside that `#if`,
+  `window_bench.c`, `bench_plan.c` and `rd_bench_run.c` added inside that `if()` (`rd_bench.c` is in
+  the renderer's library, which a release program links only for what it calls: nothing of it).
 - ctests: `rc_tools_gate` (the checker's own cases, and the scripts, `CMakeLists.txt`,
   `build.gradle` and the manifest using it), `rc_tools_binary` (this build's `ico_pc` holds the text
   exactly when `ICO_RC_TOOLS` is on), `settings_extra` (`testShareReport`: at 0 the Main page has
   its sixteen rows and no string is the row's text), `share_report` (the files picked) and
-  `capture_trigger` (the capture's moments); `rc_tools_gate` also scans the capture's sources and
-  CMake lines for anything outside the rc conditions.
+  `capture_trigger` (the capture's moments), `bench_plan`, `rd_bench` and `rd_bench_ab` (the
+  bench); `rc_tools_gate` also scans the capture's and the bench's sources and CMake lines for
+  anything outside the rc conditions.
 
 The other settings tests pin the Main page's sixteen rows of the default build; ctest is run on a
 build with `ICO_RC_TOOLS` off.

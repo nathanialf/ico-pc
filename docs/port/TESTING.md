@@ -782,8 +782,11 @@ the checker and checking its program with `--label`, never turning the tooling o
 opening's capture compiled in an rc build on Android alone: every `window_capture_*` call in
 `window_host.c` and every code line of `window_capture.c` and `.h` inside `#if ICO_RC_TOOLS`
 (not its `#else`; comments blanked, string literals kept), and `window_capture.c` and
-`capture_trigger.c` named in `CMakeLists.txt` inside `if(ICO_RC_TOOLS AND ANDROID)` alone (the
-test program `capture_trigger_test` apart), with the scanners' own cases.
+`capture_trigger.c` named in `CMakeLists.txt` inside `if(ICO_RC_TOOLS AND ANDROID)` alone (a
+test program's `add_executable(<name>_test ...)` apart), with the scanners' own cases; the bench
+the same (`window_bench_*` calls, `window_bench.c` and `.h`; `window_bench.c`, `bench_plan.c` and
+`rd_bench_run.c` in that `if()`), and the absent check looking for the bench's line marks
+`window: bench: ` and `bench: frame ` too.
 `rc_tools_binary` runs `tools/check_rc_text.py --expect absent` on this build's `ico_pc` (`present`
 in a window build with `ICO_RC_TOOLS` on; not on Android or a cross build)
 ([BUILDING.md](../BUILDING.md#release-candidate-tools)).

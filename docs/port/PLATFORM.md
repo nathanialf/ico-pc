@@ -1778,8 +1778,9 @@ The window build's diagnostic keys are free of SDL so a unit test checks them
   `logs/ico-pc-previous.log`, up to four `dumps/*.zip` written since the run started
   (`ICO_SHARE_REPORT_RUN_ZIPS`, oldest first; the newest `dumps/*.zip` of any age when this run
   has written none), the newest `dumps/*-present.png`, the newest `logs/report-*.zip`, the newest
-  `logs/vu-skin-fail-*.bin` and the newest `logs/slow-*.zip`, newest by modification time then
-  name, each skipped when missing), logs `window: share:
+  `logs/vu-skin-fail-*.bin`, the newest `logs/slow-*.zip` and the newest `logs/bench-*.csv` (the
+  rc bench's tables, `window_bench.h`), newest by modification time then name, each skipped when
+  missing), logs `window: share:
   N files offered (name, name, ...)`, flushes the log and calls `ico_android_share_files`
   (`host_android.c`), which calls the static `IcoActivity.shareReport(String title, String[]
   paths)`: content URIs of the app's `FileProvider` (authority `<package>.reports`,
