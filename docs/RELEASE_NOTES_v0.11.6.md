@@ -19,4 +19,5 @@
 - The macOS and iOS packages build again (v0.11.5 had none).
 - Phones with only one or two fast processor cores give the game and its picture a fast core each, and run the sound and background work on the other cores, instead of all of them sharing the fast ones.
 - The automatic capture of a slow scene for bug reports interrupts the game for less time.
+- A safety setting that older versions of the game could leave switched on for good after a graphics crash, making the graphics chip check every read of the 3D scenery, is now switched off by the game itself at the first start; the game still switches it back on by itself if the graphics driver crashes again.
 - Phones and tablets with a Qualcomm Adreno chip on Qualcomm's own driver now set up each drawing step the driver's longest-standing way, an attempt at the short freezes seen on the Adreno 740 and 710 (the picture is exactly the same).
