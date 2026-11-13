@@ -107,7 +107,7 @@ each file's header comment):
 | `vu_lit.hlsl` | `vu_lit_vs`, `vu_lit_spec_vs`, `vu_reflect_vs` and their `_pre_vs` | `normal_l` (codes 32/36, 34, 38) |
 | `vu_skin.hlsl` | `vu_skin_vs`, `vu_skin_spec_vs`, `vu_skin_debug_vs` and their `_pre_vs` | `cluster`, skinned (codes 20, 22, 24) |
 | `vu_grid.hlsl` | `vu_grid_vs`, `vu_grid_lit_vs`, `vu_grid_spec_vs` and their `_pre_vs` | `mesh`, the procedural grids (codes 20, 22, 24) |
-| `vu_tri.hlsl` | `vu_main_vs`, `vu_tri_rule_pre_vs`, `vu_tri_tick_pre_vs`, `vu_tri_planes_pre_vs`, `vu_pre_ps` (and the tests' twins `vu_all_main_vs`, `vu_merge_all_main_vs`, `ICO_VU_FLAT0=0`) | the main vertex shader of every mesh program, the triangle pre-pass's record stages and the record targets' pixel shader ([RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)) |
+| `vu_tri.hlsl` | `vu_main_vs`, `vu_tri_rule_pre_vs`, `vu_tri_tick_pre_vs`, `vu_tri_planes_pre_vs`, `vu_pre_ps`, `vu_tri_keep_cs` (and the tests' twins `vu_all_main_vs`, `vu_merge_all_main_vs`, `ICO_VU_FLAT0=0`) | the main vertex shader of every mesh program, the triangle pre-pass's record stages, the record targets' pixel shader and the index compaction's keep stage ([RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes), [the index compaction](PIPELINES.md#the-index-compaction)) |
 | `vu_velocity.hlsl` | `vu_velocity_main_vs`, `velocity_ps` | the velocity pass ([RENDER.md](RENDER.md#velocity)): `vu_main_vs`'s position, the corner's motion from its two vertex records (this picture's and the VuPrevCB's, previous less current in NDC, every lane written: no `OpUndef`) as one noperspective float4; the motion in texels of the target, current to previous, +y down, into VELOCITY (RGBA16F). Made by `rd_velocity.c` only while the temporal upscaler's switch is on; no `RdVsId` / `RdFsId` |
 | `vu_particle.hlsl` | `vu_particle_vs`, `vu_particle_pre_vs`, `vu_particle_main_vs` | `particle`, six vertices a particle, non-indexed; the sprite's record stage and main shader |
 | `common.hlsli`, `gs_math.hlsli`, `sheet_text.hlsli`, `tone.hlsli`, `vu_common.hlsli` | none | included headers, below |
@@ -846,6 +846,14 @@ build's flags): `vu_prelit_compute_pre_cs` 2,229, `vu_lit_compute_pre_cs` 2,631,
 `vu_tri_planes_compute_pre_cs` 4,311, `vu_particle_compute_pre_cs` 8,939; the batch compute builds
 2,296 to 17,589 (`vu_tri_rule_batch_compute_pre_cs`), each about 130 words over its store twin. The
 store and targets builds are unchanged byte for byte.
+
+The index compaction's keep stage (`vu_tri_keep_compute_cs`, entry `vu_tri_keep_cs` of
+`vu_tri.hlsl` with `ICO_VU_REC_COMPUTE`; [PIPELINES.md](PIPELINES.md#the-index-compaction)) is a
+compute entry of its own, 64 invocations a workgroup, one a triangle: the same sets and slots as
+the compute builds (FrameCB; t0 the stream's buffer, where it reads the draw's index list, b1 the
+DrawCB's `g_aux0` and `g_aux1`, b2 VuCB, u6 the record it reads slots A and C and the vertices
+from and writes the fourth plane's lists and counts into), no atomics on a buffer (one on a
+groupshared count), 15,360 words of `VS_PLAIN_BUDGET`, class `compute`, 0 findings; no GLSL.
 
 The draw merge's builds (`ICO_VU_MERGE`: `vu_X_merge_vs` and `vu_X_merge_plain_vs` of the seven
 mesh and grid programs but the skinned ones, `vu_merge_main_vs`;

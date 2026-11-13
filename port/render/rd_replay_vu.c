@@ -15,6 +15,7 @@
 #include "rd_perf_hooks.h"
 #include "rd_replay.h"
 #include "rd_velocity.h"
+#include "rd_vu_compact.h"
 #include "rd_vu_flat0.h"
 #include "rd_vu_rec_early.h"
 #include "rd_vu_record.h"
@@ -114,10 +115,11 @@ static bool s_groupPre;
 static RhiBuffer recStoreBuffer(void);
 static void recDrawGap(void);
 
-/* the bytes of a record buffer of rows rows (its three planes) */
+/* the bytes of a record buffer of rows rows (its three planes, and the
+   index compaction's fourth where it may run: rd_vu_compact.h) */
 static uint64_t recBytes(uint32_t rows)
 {
-    return (uint64_t)rows * ICO_VU_REC_W * ICO_VU_REC_BYTES;
+    return (uint64_t)rows * ICO_VU_REC_W * (ICO_VU_REC_BYTES + (rd__vu_compact_plane() ? 16u : 0u));
 }
 
 /* the record buffer group 1 binds in this replay's frame slot, and its
@@ -195,12 +197,18 @@ static bool recEnsure(uint32_t rows)
         }
     }
     if (s_recRows < rows) {
+        const uint32_t before = s_recRows;
         s_recRows = rows;
         /* made at start-up, or grown in play (past what start-up made) */
         char when[96] = "";
         if (s_recEarlyNow) {
             snprintf(when, sizeof(when), "; made at start-up, before play");
-        } else if (s_recEarlyRows != 0u) {
+        } else if (before != 0u) {
+            /* a record that existed grown (not the first, the self-test's
+               16 rows): counted for the memory line and the attempt ledger */
+            rd__vu_rec_grew();
+        }
+        if (!s_recEarlyNow && s_recEarlyRows != 0u) {
             snprintf(when, sizeof(when), "; grown in play past the %u rows made at start-up",
                      s_recEarlyRows);
         }
@@ -218,8 +226,12 @@ static bool recEnsure(uint32_t rows)
         if (s_recBuf[i].id) {
             rhi_destroy_buffer(s_recBuf[i]); /* deferred past the frames that read it */
         }
-        const uint32_t use = RHI_BUF_STORAGE_READ | RHI_BUF_COPY_DST |
-                             (buffered ? (uint32_t)RHI_BUF_STORAGE_WRITE : 0u);
+        /* the index compaction's fourth plane is the draws' index list and
+           its counters are copied out (rd_vu_compact.h) */
+        const uint32_t use =
+            RHI_BUF_STORAGE_READ | RHI_BUF_COPY_DST |
+            (buffered ? (uint32_t)RHI_BUF_STORAGE_WRITE : 0u) |
+            (rd__vu_compact_plane() ? (uint32_t)(RHI_BUF_INDEX | RHI_BUF_COPY_SRC) : 0u);
         s_recBuf[i] = rhi_create_buffer(
             &(RhiBufferDesc){recBytes(rows), use, RHI_MEM_DEVICE, "rd vu record"});
         s_recBufRows[i] = s_recBuf[i].id ? rows : 0u;
@@ -648,6 +660,11 @@ struct VuIdx {
     uint64_t off;
     const uint32_t *cpu;
     uint32_t gridBatches, gridVpb;
+    /* the index compaction's list (rd_vu_compact.h): buf the slot's record
+       buffer, off its fourth plane's lists, the draw's first index the
+       call's at; its values raised by the call's raise (NULL: the list as
+       above) */
+    const RdVuCmpCall *cmp;
 };
 
 typedef struct VuRunDraw {
@@ -687,7 +704,9 @@ static uint32_t maxIndexValue(void)
  * draw's index list */
 static void vuSpanOf(const VuIdx *ix)
 {
-    if (ix->cpu) {
+    if (ix->cmp) {
+        rd__span_range(ix->cmp->lo + ix->cmp->raise, ix->cmp->hi + ix->cmp->raise);
+    } else if (ix->cpu) {
         rd__span_idx(ix->cpu);
     } else if (ix->gridVpb >= 3u && ix->gridBatches > 0u) {
         rd__span_range(ICO_VU_INDEX(2u, 0u), ICO_VU_INDEX(ix->gridBatches * ix->gridVpb - 1u, 2u));
@@ -702,7 +721,11 @@ static void vuRunRange(VuRunDraw *d)
     if (d->ranged) {
         return;
     }
-    if (d->ix.cpu) {
+    if (d->ix.cmp) {
+        /* the compaction's values: raised by the plan (rd_vu_compact.h) */
+        d->lo = d->ix.cmp->lo + d->ix.cmp->raise;
+        d->hi = d->ix.cmp->hi + d->ix.cmp->raise;
+    } else if (d->ix.cpu) {
         uint32_t lo = UINT32_MAX, hi = 0;
         const uint32_t *v = d->ix.cpu + d->first;
         for (uint32_t i = 0; i < d->count; i++) {
@@ -792,10 +815,18 @@ void rd__replay_vu_flush(Replay *r)
         if (k == 0) {
             vOff0 = vOff;
         }
-        uint32_t add = 0;
+        /* the index compaction's lists: their values raised by the plan,
+           each draw's raise its own (rd_vu_compact.h) */
+        uint32_t add = d->ix.cmp ? d->ix.cmp->raise : 0u;
         if (n > 1) {
             vuRunRange(d); /* every draw of a run of two or more was ranged (vuRunTake) */
-            if (k == 0) {
+            if (d->ix.cmp) {
+                /* raised already, one range after the other (vuRunTake) */
+                if (k > 0) {
+                    tab[k][0] = d->lo;
+                }
+                next = d->hi + 1u;
+            } else if (k == 0) {
                 next = d->hi + 1u;
             } else {
                 add = next - d->lo;
@@ -816,7 +847,14 @@ void rd__replay_vu_flush(Replay *r)
     RhiBuffer ib = d0->ix.buf;
     uint64_t ibOff = d0->ix.off;
     uint32_t first = d0->first, count = d0->count;
-    if (n > 1) {
+    if (n > 1 && d0->ix.cmp) {
+        /* the index compaction's lists, one after the other in the record's
+           fourth plane (vuRunTake): the run's list as it lies */
+        count = total;
+        rd__span_range(d0->lo, next - 1u);
+        g_rdPerf.vuMergeIn += n;
+        g_rdPerf.vuMergeGpu++;
+    } else if (n > 1) {
         const uint64_t iOff = rd__ring_alloc((uint64_t)total * 4u, 16);
         if (iOff == ~0ull) {
             vuRunLost(n, "the ring full");
@@ -894,6 +932,8 @@ static bool vuRunTake(Replay *r, uint32_t np, const RdPipeKeyInt *key, const Rhi
         same = s_run.p[i].id == p[i].id && memcmp(&s_run.key[i], &key[i], sizeof(key[i])) == 0 &&
                memcmp(&s_run.cb[i], &cb[i], sizeof(cb[i])) == 0;
     }
+    /* the index compaction's lists join only each other (rd_vu_compact.h) */
+    same = same && (nd.ix.cmp != NULL) == (s_run.d[0].ix.cmp != NULL);
     if (same) {
         /* raised past the run's values, within the device's */
         if (s_run.n == 1) {
@@ -901,11 +941,24 @@ static bool vuRunTake(Replay *r, uint32_t np, const RdPipeKeyInt *key, const Rhi
             s_run.top = (uint64_t)s_run.d[0].hi + 1u;
         }
         vuRunRange(&nd);
-        const uint64_t last = s_run.top + (nd.hi - nd.lo);
-        if (last <= maxIndexValue()) {
-            s_run.d[s_run.n++] = nd;
-            s_run.top = last + 1u;
-            return true;
+        if (nd.ix.cmp) {
+            /* raised by the plan already: joins where its list follows the
+               run's in the plane and its values lie past the run's (the
+               plan's order, which is the walk's) */
+            const VuRunDraw *e = &s_run.d[s_run.n - 1u];
+            if (nd.ix.buf.id == e->ix.buf.id && nd.ix.off == e->ix.off &&
+                nd.first == e->first + e->count && (uint64_t)nd.lo >= s_run.top) {
+                s_run.d[s_run.n++] = nd;
+                s_run.top = (uint64_t)nd.hi + 1u;
+                return true;
+            }
+        } else {
+            const uint64_t last = s_run.top + (nd.hi - nd.lo);
+            if (last <= maxIndexValue()) {
+                s_run.d[s_run.n++] = nd;
+                s_run.top = last + 1u;
+                return true;
+            }
         }
     }
     rd__replay_vu_flush(r);
@@ -1151,11 +1204,29 @@ static int vuFuseVerdict(const Replay *r, const RdStateBlock *fan, const DrawSet
  * With the draw merge (g_rd.vuMerge) a draw that can merge is held in the
  * run (vuRunTake); any other draws the run first, then itself, a table of
  * one where a pass goes through a merge build. */
+/* the index compaction's lists (rd_vu_compact.h): the slot's record
+ * buffer, its plane's bytes, the fourth plane's first byte (the lists'
+ * first value) */
+static RhiBuffer cmpIndexBuffer(void)
+{
+    return s_recBuf[rd__ring_slot()];
+}
+
+static uint64_t cmpPlaneBytes(void)
+{
+    return (uint64_t)s_recBufRows[rd__ring_slot()] * ICO_VU_REC_W * 16u;
+}
+
+static uint64_t cmpIndexOffset(void)
+{
+    return 3u * cmpPlaneBytes();
+}
+
 static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBindGroup g2,
                    uint8_t prog, uint8_t vs, uint8_t progVs, RhiBuffer streamBuf,
                    uint64_t streamBufSize, uint64_t streamOff, uint64_t streamSize,
                    const IcoVuCB *vcb0, uint64_t bonesOff, const VuIdx *ix, uint32_t first,
-                   uint32_t count)
+                   uint32_t count, const RdVuCmpCall *cd)
 {
     if (count == 0) {
         return;
@@ -1218,6 +1289,21 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
             g_rdPerf.vuPreFallbacks++;
             own = true;
         }
+    }
+    /* the index compaction's list (rd_vu_compact.h): every pass through
+     * the main shader, a merge build wherever its values are raised (the
+     * table's raise); not for the skin check's draws (their twins read the
+     * mesh's own list) nor the loss bisect's window.  Its triangles the
+     * draw's own, in their order, those that draw nothing a clipped filler */
+    bool cmpOk = cd != NULL && indexed && !own && !g_rdSkinArm && !g_rdSkinTwin && !g_rdWin.first;
+    for (int i = 0; cmpOk && i < np; i++) {
+        cmpOk = !pipes[i].id || cd->raise == 0u || (g_rd.vuMerge && g_rd.vsMerge[keys[i].vs].id);
+    }
+    VuIdx cix;
+    if (cmpOk) {
+        cix = (VuIdx){cmpIndexBuffer(), cmpIndexOffset(), NULL, 0, 0, cd};
+        ix = &cix;
+        first = cd->at;
     }
     /* the passes a merged draw takes: one, or the no-dual pair; a
      * destination read only under GS state as shader data (rd_uber.c: the
@@ -1282,7 +1368,8 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
         return;
     }
     if (table) {
-        uint32_t t[4] = {1u, 0u, 0u, 0u};
+        /* w the raise of the compaction's list (rd_vu_compact.h), else 0 */
+        uint32_t t[4] = {1u, 0u, 0u, ix->cmp ? ix->cmp->raise : 0u};
         if (!ringIndex(vOff, sizeof(IcoVuCB), &t[1]) ||
             !ringIndex(bonesOff, sizeof(IcoVuBoneCB), &t[2])) {
             vuRunLost(1, "a VuCB past t5");
@@ -1748,6 +1835,11 @@ typedef struct VuPre {
      * draw's own must be the same (doVuDraw) */
     RdUniform frame;
     uint32_t frameKey[6];
+    /* the list it is in, and the index compaction's planned draws of it
+     * (rd_vu_compact.h: calls [cmpFirst, cmpFirst + cmpN) of this
+     * replay's plan; cmpN 0: none, its draws read their own lists) */
+    uint8_t list;
+    uint32_t cmpFirst, cmpN;
 } VuPre;
 
 static VuPre *s_pre;
@@ -1956,6 +2048,10 @@ void rd__vu_prepass(const RdFrame *f, int keep)
         (void)rd__vu_record_fall_back("the store passes' throwaway targets could not be made");
     }
     s_preRunning = true;
+    /* the index compaction's counters this slot's last copy read back (its
+       frame done: the slot came round; rd_vu_compact.h) */
+    rd__vu_compact_slot_begin(rd__ring_slot());
+    g_rdPerf.vuTrisLeftOut = rd__vu_compact_last_left_out(); /* that picture's (rd.h) */
     vuPrepassRun(f, keep);
     s_preRunning = false;
 }
@@ -2744,6 +2840,170 @@ static void vuVelMaybe(Replay *r)
     vuVelPass(r);
 }
 
+/* Whether command e's index list can be read by the keep stage through t0
+ * (vu_stream): its stream's group binds the whole buffer from its start
+ * (vuGroup's shared form: the stream 16-byte aligned within the device's
+ * storage range), the list in the same buffer, 4-byte aligned, wholly in
+ * that range; *u its first value in uint units */
+static bool cmpSource(const VuPre *e, uint32_t *u)
+{
+    const VuSource *src = &e->src;
+    const RdMeshRec *m = src->m;
+    if (m == NULL || m->index == NULL || src->indexBuf.id != src->streamBuf.id ||
+        (src->indexOff & 3u) != 0u) {
+        return false;
+    }
+    uint64_t range = src->streamBufSize;
+    const uint64_t maxRange = rhi_limits()->maxStorageRange;
+    if (maxRange && range > maxRange) {
+        range = maxRange & ~(uint64_t)15u;
+    }
+    if (src->streamOff + (src->streamSize ? src->streamSize : 16) > range ||
+        (src->streamOff & 15u) || src->streamOff / 16u > UINT32_MAX) {
+        return false; /* a group of its own at the stream: the list not in it */
+    }
+    const uint64_t end = src->indexOff + (uint64_t)m->indexCount * 4u;
+    if (end > range || src->indexOff / 4u > UINT32_MAX - m->indexCount) {
+        return false;
+    }
+    *u = (uint32_t)(src->indexOff / 4u);
+    return true;
+}
+
+/* Pass K, the index compaction (rd_vu_compact.h): the plan of this
+ * replay's mesh draws (each recorded mesh or skinned command's draws as
+ * doVuDraw makes them: one over its batches, or a code 36 command's cut and
+ * kick draws a batch, the sheets' ends as rd__vu_sheet_end gives them),
+ * then a dispatch of the keep stage a planned draw, outside render passes
+ * in the compute bracket, and the counters copied for the readback.  The
+ * draws find their call by (pass, first, count) (cmpCall); one without
+ * reads its own list */
+static void vuCompactPass(void)
+{
+    if (!rd__vu_compact_active()) {
+        return;
+    }
+    const uint32_t slot = rd__ring_slot();
+    const RhiBuffer rec = s_recBuf[slot];
+    if (!rec.id || s_recBufRows[slot] == 0u) {
+        return;
+    }
+    const uint64_t plane = (uint64_t)s_recBufRows[slot] * ICO_VU_REC_W; /* texels */
+    const uint64_t capValues = plane * 4u; /* the fourth plane's uint values */
+    /* the values raised where the main shader's merge build reads the
+       table (vu_merge_entry subtracts w); else as they are */
+    const bool raise = g_rd.vuMerge && g_rd.vsMerge[RD_VS_VU_MAIN].id != 0;
+    const RdVuCmpPlan *plan =
+        rd__vu_compact_plan_begin(capValues > UINT32_MAX ? UINT32_MAX : (uint32_t)capValues, raise);
+    const bool extended = rd__vu_extended();
+    uint32_t srcU = 0;
+    for (uint32_t i = 0; i < s_preN; i++) {
+        VuPre *e = &s_pre[i];
+        e->cmpFirst = plan->calls;
+        e->cmpN = 0;
+        if (!e->rec || e->particle || (e->cmd->type != RDC_MESH && e->cmd->type != RDC_SKINNED) ||
+            (e->src.vcb.draw[2] & ICO_VU_PROBE) != 0u || !cmpSource(e, &srcU)) {
+            continue;
+        }
+        const RdMeshRec *m = e->src.m;
+        const RdVuPayload *p = &e->src.p;
+        uint32_t last = p->firstBatch + p->batchCount;
+        if (last > m->batchCount || p->batchCount == 0) {
+            last = m->batchCount;
+        }
+        const uint8_t list0 = e->list == 0u ? 1u : 0u;
+        if (p->clip != RD_VU_CLIP_SCISSOR) {
+            const RdVuBatchRec *b0 = &m->batches[p->firstBatch], *b1 = &m->batches[last - 1];
+            const uint32_t end = rd__vu_sheet_end(m, b1->firstIndex + b1->indexCount, extended);
+            if (end > b0->firstIndex) {
+                (void)rd__vu_compact_add(m->index, b0->firstIndex, end - b0->firstIndex,
+                                         RD_VU_CMP_WHOLE, list0);
+            }
+        } else {
+            for (uint32_t b = p->firstBatch; b < last; b++) {
+                const RdVuBatchRec *br = &m->batches[b];
+                const uint32_t end = rd__vu_sheet_end(m, br->firstIndex + br->indexCount, extended);
+                if (end <= br->firstIndex) {
+                    continue;
+                }
+                (void)rd__vu_compact_add(m->index, br->firstIndex, end - br->firstIndex,
+                                         RD_VU_CMP_CUT, list0);
+                (void)rd__vu_compact_add(m->index, br->firstIndex, end - br->firstIndex,
+                                         RD_VU_CMP_KICK, list0);
+            }
+        }
+        e->cmpN = plan->calls - e->cmpFirst;
+    }
+    if (plan->calls == 0u) {
+        return;
+    }
+    const RhiCommandList cl = rd__replay_cl();
+    const uint64_t ua = rhi_limits()->uniformAlign;
+    const RhiPipeline pipe = rd__vu_compact_pipeline();
+    /* the fourth plane's first value and the counts' first texel, from the
+       record's start */
+    const uint32_t head = (uint32_t)(3u * plane * 4u);
+    const uint32_t counts = (uint32_t)(3u * plane) + rd_vu_cmp_counts_base(plan);
+    /* the lists into the slot's own buffer even under the self-test's STALE
+       sabotage (which stores pass V's and T's records into the sink): a
+       stale record then draws an earlier picture, never a value outside
+       the draws' own lists */
+    const int sabotage = s_preSabotage;
+    s_preSabotage = RD_VU_SABOTAGE_OFF;
+    vuRecPassBegin(0, 0); /* the compute bracket: after pass T's stores */
+    bool all = true;      /* every planned command dispatched (its counts written) */
+    for (uint32_t i = 0; i < s_preN; i++) {
+        VuPre *e = &s_pre[i];
+        if (e->cmpN == 0u || !cmpSource(e, &srcU)) {
+            continue;
+        }
+        IcoVuCB vcb = e->src.vcb;
+        vuPreRecord(e, &vcb);
+        const RhiBindGroup g1 = vuGroup(e->src.streamBuf, e->src.streamBufSize, e->src.streamOff,
+                                        e->src.streamSize, &vcb.draw[0]);
+        const uint64_t vOff = cbCopy(&vcb, sizeof(vcb), ua);
+        bool ok = g1.id != 0 && vOff != ~0ull;
+        for (uint32_t k = 0; ok && k < e->cmpN; k++) {
+            const RdVuCmpCall *c = rd__vu_compact_call(e->cmpFirst + k);
+            IcoDrawCB cb = s_preDrawCB;
+            cb.aux0[0] = srcU + c->first;
+            cb.aux0[1] = head + c->at;
+            cb.aux0[2] = c->count / 3u;
+            cb.aux0[3] = c->raise;
+            cb.aux1[0] = c->pass == RD_VU_CMP_CUT    ? (uint32_t)ICO_VU_CUT_ONLY
+                         : c->pass == RD_VU_CMP_KICK ? (uint32_t)ICO_VU_KICK_ONLY
+                                                     : 0u;
+            cb.aux1[1] = counts + c->group;
+            cb.aux1[2] = c->list0;
+            cb.aux1[3] = rd__vu_compact_sabotage() ? 1u : 0u; /* the tests' */
+            const uint64_t dOff = cbCopy(&cb, sizeof(cb), ua);
+            ok = dOff != ~0ull;
+            if (ok) {
+                const uint32_t offs[3] = {(uint32_t)dOff, (uint32_t)vOff,
+                                          (uint32_t)e->src.bonesOff};
+                recDrawGap(); /* under the validation layer: a bracket a dispatch */
+                rd__set_pipeline(cl, pipe, NULL);
+                rd__bind_uniform(cl, 0, e->frame);
+                rhi_cmd_set_bind_group_offsets(cl, 1, g1, offs, 3);
+                rhi_cmd_dispatch(cl, (c->count / 3u + 63u) / 64u, 1, 1);
+            }
+        }
+        if (!ok) {
+            /* a block not in the ring: the command's draws read their own
+               lists (the stage did not write them) */
+            e->cmpN = 0;
+            all = false;
+        }
+    }
+    vuRecPassEnd(0, 0, false);
+    s_preSabotage = sabotage;
+    /* every planned workgroup's counts texel; none where a command was not
+       dispatched (its texels hold an earlier picture's, or nothing) */
+    if (all) {
+        rd__vu_compact_readback(cl, slot, rec, (uint64_t)counts * 16u, plan->groups);
+    }
+}
+
 static void vuPrepassRun(const RdFrame *f, int keep)
 {
     /* 1. every mesh, grid and particle command: its source, its vertices
@@ -2787,6 +3047,7 @@ static void vuPrepassRun(const RdFrame *f, int keep)
             }
             e->cmd = c;
             e->slotC = ~0u;
+            e->list = (uint8_t)l;
             const uint32_t picture = (uint32_t)c->b[3] | ((uint32_t)c->b[6] << 8);
             const uint32_t fk[6] = {st.color, st.depth, st.gsW, st.gsH, st.useOffset, picture};
             if (memcmp(fk, frameKey, sizeof(fk)) != 0) {
@@ -2849,6 +3110,19 @@ static void vuPrepassRun(const RdFrame *f, int keep)
         nv = v;
         nt = t;
         taken = i + 1u;
+    }
+    /* the memory line's figures (rd_vu_rec_early.h rd_vu_record_memory):
+       this picture's need, the rows held as it begins, the upload rings */
+    {
+        uint64_t ring = 0;
+        for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
+            ring += g_rd.ringCap[i];
+        }
+        rd__vu_rec_note(vuRows(nv) + vuRows(nt), s_recRows,
+                        s_recRows ? recBytes(s_recRows) * RHI_FRAMES_IN_FLIGHT +
+                                        (rd__vu_record_buffered() ? 0u : recBytes(s_recTexRows))
+                                  : 0u,
+                        ring);
     }
     if (nv == 0) {
         return;
@@ -3187,6 +3461,9 @@ static void vuPrepassRun(const RdFrame *f, int keep)
         }
         vuRecPassEnd(rowsV, usedT, muted || s_preSabotage == RD_VU_SABOTAGE_STALE);
         passes++;
+        /* 6. pass K: the index compaction (rd_vu_compact.h), its own
+         * bracket after pass T's (the stage reads slots A and C) */
+        vuCompactPass();
     }
     g_rd.passSamples = samples;
     g_rdPerf.vuPrePasses = passes;
@@ -3212,7 +3489,8 @@ void rd__vu_prepass_shutdown(void)
     recFree();
     rd__vu_rec_sink_free(); /* the store passes' throwaway target */
     s_groupPre = false;
-    rd__vu_record_shutdown(); /* the store builds and their layout */
+    rd__vu_compact_shutdown(); /* its pipeline before the store layout (rd_vu_compact.h) */
+    rd__vu_record_shutdown();  /* the store builds and their layout */
     for (int v = 0; v < RD_VS_COUNT; v++) {
         if (g_rd.vsBatch[v].id) {
             rhi_destroy_shader(g_rd.vsBatch[v]);
@@ -3564,6 +3842,13 @@ void rd__vu_prepass_init(const RhiLimits *lim)
     rd__vu_record_shaders(); /* the store or compute builds (rd_vu_record.h) */
     vuMergeInit();           /* the draw merge's modules (the fallback's variant is chosen) */
     rd__vu_flat0_init();     /* the main shader's flat outputs: the line (rd_vu_flat0.h) */
+    if (s_recRows != 0u) {
+        /* a record made before (an init without the shutdown): made again
+           at the fourth plane's size the compaction now fixes (the
+           destroys are deferred past the frames that read it) */
+        recFree();
+    }
+    rd__vu_compact_init(lim); /* the index compaction (rd_vu_compact.h) */
     if (g_rd.vuPrepass) {
         rd__log("VU pre-pass: on: each mesh and grid vertex and triangle and each sprite "
                 "evaluated once before the lists (two passes), %u bytes a record slot in %u "
@@ -3599,6 +3884,17 @@ void rd__replay_vu(Replay *r, const RdFrame *f, const RdCmd *c)
     doVuDraw(r, f, c);
     s_velArm = NULL;
     r->picture = 0;
+}
+
+/* the index compaction's planned draw for command e's draw over [first,
+ * first + count) with pass rule pass (rd_vu_compact.h; vuCompactPass), NULL
+ * where none was planned this replay (the draw reads its own list) */
+static const RdVuCmpCall *cmpCall(const VuPre *e, uint8_t pass, uint32_t first, uint32_t count)
+{
+    if (e == NULL || !e->rec || e->cmpN == 0u || !rd__vu_compact_active()) {
+        return NULL;
+    }
+    return rd__vu_compact_find(e->cmpFirst, e->cmpN, pass, first, count);
 }
 
 static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
@@ -3705,7 +4001,7 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
          * uncached memory): ICO_VU_INDEX(2, 0) to ICO_VU_INDEX(the last
          * batch's last vertex, 2) (vuSpanOf); the merge rewrites the list
          * from the shape too (vuRunWrite) */
-        const VuIdx gix = {g_rd.ring[rd__ring_slot()], iOff, NULL, p.batchCount, vpb};
+        const VuIdx gix = {g_rd.ring[rd__ring_slot()], iOff, NULL, p.batchCount, vpb, NULL};
         for (uint32_t b = 0, k = 0; b < p.batchCount; b++) {
             for (uint32_t v = 2; v < vpb; v++) {
                 for (uint32_t cc = 0; cc < 3; cc++) {
@@ -3718,7 +4014,7 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
             return;
         }
         vuDraw(r, &r->st, &ds, g2, p.prog, vs, progVs, streamBuf, streamBufSize, streamOff,
-               streamSize, &vcb, bonesOff, &gix, 0, ni);
+               streamSize, &vcb, bonesOff, &gix, 0, ni, NULL);
         return;
     }
     if (c->type == RDC_PARTICLES) {
@@ -3726,9 +4022,9 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
         if (!g2.id) {
             return;
         }
-        const VuIdx none = {{0}, 0, NULL, 0, 0}; /* not indexed */
+        const VuIdx none = {{0}, 0, NULL, 0, 0, NULL}; /* not indexed */
         vuDraw(r, &r->st, &ds, g2, p.prog, vs, progVs, streamBuf, streamBufSize, streamOff,
-               streamSize, &vcb, bonesOff, &none, 0, 6 * p.vertsPerBatch);
+               streamSize, &vcb, bonesOff, &none, 0, 6 * p.vertsPerBatch, NULL);
         return;
     }
     /* static and skinned meshes: the device's list, the same on the CPU */
@@ -3736,7 +4032,7 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     if (!g2.id) {
         return;
     }
-    const VuIdx mix = {indexBuf, indexOff, m->index, 0, 0};
+    const VuIdx mix = {indexBuf, indexOff, m->index, 0, 0, NULL};
     uint32_t last = p.firstBatch + p.batchCount;
     if (last > m->batchCount || p.batchCount == 0) {
         last = m->batchCount;
@@ -3752,7 +4048,8 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
         }
         if (end > b0->firstIndex) {
             vuDraw(r, &r->st, &ds, g2, p.prog, vs, progVs, streamBuf, streamBufSize, streamOff,
-                   streamSize, &vcb, bonesOff, &mix, b0->firstIndex, end - b0->firstIndex);
+                   streamSize, &vcb, bonesOff, &mix, b0->firstIndex, end - b0->firstIndex,
+                   cmpCall(pre, RD_VU_CMP_WHOLE, b0->firstIndex, end - b0->firstIndex));
         }
         return;
     }
@@ -3785,8 +4082,10 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
             g_rdPerf.vuFuseKept[fuse]++;
         }
         vuDraw(r, &fan, &ds, g2, p.prog, vs, progVs, streamBuf, streamBufSize, streamOff,
-               streamSize, &cut, bonesOff, &mix, br->firstIndex, end - br->firstIndex);
+               streamSize, &cut, bonesOff, &mix, br->firstIndex, end - br->firstIndex,
+               cmpCall(pre, RD_VU_CMP_CUT, br->firstIndex, end - br->firstIndex));
         vuDraw(r, kickSt, &ds, g2, p.prog, vs, progVs, streamBuf, streamBufSize, streamOff,
-               streamSize, &kick, bonesOff, &mix, br->firstIndex, end - br->firstIndex);
+               streamSize, &kick, bonesOff, &mix, br->firstIndex, end - br->firstIndex,
+               cmpCall(pre, RD_VU_CMP_KICK, br->firstIndex, end - br->firstIndex));
     }
 }

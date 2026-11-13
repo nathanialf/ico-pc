@@ -62,6 +62,7 @@ typedef struct RdPerfMore {
     double listTris[RD_LIST_COUNT];
     uint32_t listTargetPx[RD_LIST_COUNT]; /* the last seen */
     double preVerts, drawInv;
+    double leftOut; /* RdPerfRecord.vuTrisLeftOut summed */
     /* GPU ms over the gpuN records with GPU times */
     double gpuMs, uploadMs, prepassMs, presentMs, listMs[RD_LIST_COUNT];
     double postMs[RD_PERF_POST_COUNT];
@@ -76,6 +77,11 @@ void rd_perf_more_add(RdPerfMore *b, const RdPerfRecord *r, bool prepass);
    pre-pass (vu_main_vs, no vertex reuse: index kick * 4 + corner), 9
    without (window_scene.h) */
 uint64_t rd_perf_more_draw_invocations(uint64_t tris, bool prepass);
+/* the same after the index compaction (rd_vu_compact.h): leftOut of the
+   tris a filler of one invocation (the GPU reusing an index within a
+   triangle), the others 3: 3 tris - 2 leftOut with the pre-pass (leftOut
+   at most tris), 9 a triangle without */
+uint64_t rd_perf_more_draw_invocations_left(uint64_t tris, uint64_t leftOut, bool prepass);
 
 /* The two lines' texts (after "window: "); the length written, as
    snprintf's but cut at cap - 1.  The costs line is "" with no record;

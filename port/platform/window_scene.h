@@ -174,9 +174,14 @@ size_t window_scene_threads_text(char *out, size_t cap, double threadsMs, unsign
      the draws' vu_main_vs 28k more (3 a triangle; never summed with the pre-pass's)"
    (with the pre-pass the draws run vu_main_vs three times a triangle, index
    kick * 4 + corner, no vertex reuse: named beside the pre-pass's figure,
-   never added to it) */
+   never added to it); leftOut of the triangles the index compaction left
+   out (RdPerfRecord.vuTrisLeftOut, port/render/rd_vu_compact.h), one
+   invocation each where the GPU reuses an index within a triangle:
+     "... the draws' vu_main_vs 23k more (3 a triangle, after the index
+     compaction 1 a triangle it left out: 2.5k of 9.2k; never summed with
+     the pre-pass's)" */
 size_t window_scene_vu_text(char *out, size_t cap, uint64_t draws, uint64_t tris,
-                            uint64_t preVertices, unsigned n, int prepass);
+                            uint64_t preVertices, unsigned n, int prepass, uint64_t leftOut);
 
 /* The skin check's twins in a replay, averaged over replays (n): the draws
    they added and their vertex invocations (issue 123: what the check costs

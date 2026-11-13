@@ -116,6 +116,9 @@ typedef struct WindowMemBlock {
     unsigned underFloor, reads;
     long lo[4], hi[4];
     double heapMb, mappedMb;
+    /* VmSwap's least and most (MB; -1 not read): the process's pages the
+       kernel moved out, which leave the resident figures above */
+    long swapLo, swapHi;
 } WindowMemBlock;
 
 bool window_stall_memory_block(WindowMemBlock *b);

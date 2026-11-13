@@ -638,6 +638,16 @@ int main(void)
             failures++;
         }
     }
+    /* the index compaction's keep stage (vu_tri.hlsl vu_tri_keep_cs,
+       port/render/rd_vu_compact.c): compute, entry vu_tri_keep_cs */
+    {
+        const IcoShaderBlob *k = ico_find_shader("vu_tri_keep_compute_cs");
+        if (!k || k->stage != ICO_SHADER_STAGE_COMPUTE || strcmp(k->entry, "vu_tri_keep_cs") != 0) {
+            printf("FAIL vu_tri_keep_compute_cs: not in the table, not compute or not entry "
+                   "vu_tri_keep_cs\n");
+            failures++;
+        }
+    }
     const size_t nMerge = sizeof(expectedMerge) / sizeof(expectedMerge[0]);
     for (size_t i = 0; i < nMerge; i++) {
         if (!ico_find_shader(expectedMerge[i])) {

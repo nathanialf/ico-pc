@@ -970,6 +970,37 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   today's + 4 (every scale takes it, Original 1x included); the poison every PNG the
   same bytes; a chain in two passes over the list at each measured setting. `rd_glow_blur_gl`:
   the phone's setting on OpenGL (llvmpipe). No device: SKIP.
+- `rd_vu_compact_test.c` (`rd_vu_compact`; `rd_vu_compact.cmake`, CPU): the index compaction's pure
+  parts (`rd_vu_compact.c`): the plan's places (two calls one after the other in the plane, their
+  workgroups), its raises (the first call's values from 0, the next one's past them, mod 2^32),
+  its refusals (an empty list, a count not of triangles, no list, the plane's room for the lists
+  and a counts texel a workgroup, the device's largest index value raised and not), 65 triangles
+  two workgroups, the counts' base (the texel after the lists); the counts summed by list
+  (`w` 1 list 0) and a picture with no workgroup; the window's line word for word, cut in a short
+  buffer, 0 % with nothing judged; `ICO_RD_VU_COMPACT` unset, 0, `off`, 1, `on` and another word.
+- `rd_vu_compact.cmake`'s self-test rows (`rd_vuprepass_selftest_compact`, `_compact_refused`,
+  `_compact_mali`, `_compact_stores`; `test/rd_vuprepass_selftest.cmake`, lavapipe): the start-up
+  self-test with the record by compute (`ICO_RD_VU_RECORD=compute`) passes with the compaction, the
+  frame's copy of the prelit mesh past the target's right edge named in the verdict and the
+  compaction's line `on: passed its start-up self-test`; with `ICO_RD_VU_COMPACT_SABOTAGE=1` the run
+  with it fails, the run without it passes and the compaction is refused, the pre-pass on with the
+  compute record; under the phone's limits and Arm's vendor id (`ICO_VK_FAKE_LIMITS=mali
+  ICO_VK_FAKE_VENDOR=0x13B5`, synchronisation validation with the submit-time checks) it passes as
+  the Arm class; with the vertex stores the compaction is not applicable and the frame has no copy.
+- `rd_vu_compact_ab.cmake` (`rd_vu_compact_ab`, `rd_vu_compact_ab_pixel`; `rd_vu_compact.cmake`):
+  the index compaction ([PIPELINES.md](PIPELINES.md#the-index-compaction)) on against off,
+  `ICO_RD_VU_COMPACT=1` against `=0`, the record by compute in both (`ICO_RD_VU_RECORD=compute`),
+  `--pass-dump --stats`, on every dump of `tools/vu_flat0_dumps.txt` (a listed dump that is absent
+  FAILS where `/primary/dev/ico-dumps` exists): the corpus profile (Original 4:3 at 1x, Enhanced
+  16:9 at 2x, at 16:9 with MSAA 4x, at 16:9 and 1280x720), the Arm fakes on issue 179's four
+  Mali-G52 dumps at their settings, the Pixel's three opening dumps at its setting; with the draw
+  merge, and without it at the first two corpus settings and the phones'. Every target's PNG the
+  same bytes, the off run's `stats: VU index compaction off by default: not run`, the on run's
+  `stats: VU index compaction on: N of M list 0 triangles left out (drop D, outside O)` with M above
+  0 on the phones' dumps and N above 0 on the Mali's; the counts matched where
+  `tools/vu_compact_counts.txt` has a line for the dump, profile, setting and merge, printed
+  (`rd_vu_compact_ab: count ...`) where it has none. `rd_vu_compact_ab_pixel`: rd_pixel's frames,
+  the corpus profile. No device: SKIP.
 - `rd_vu_flat0_test.c` (`rd_vu_flat0`; `rd_vu_flat0.cmake`, CPU): the main vertex shader's flat
   outputs at the provoking corner, its pure parts (`rd_vu_flat0.c`): `ICO_RD_VU_FLAT0` unset, empty
   and 1 the shipped build, 0 the twins, any other word the shipped build and named; the start line
@@ -1909,13 +1940,28 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   a desktop without a measure (1,024 rows and the chunk), half of Direct3D's free video memory,
   the targets' larger rows, under the floor, at it, 1 MB above it and after the system's signal
   (nothing), the pre-pass off (the chunk alone), the chunk made already, a record already at its
-  largest. `rd_vu_rec_early_ab`, `rd_vu_rec_early_ab_compute`, `rd_vu_rec_early_ab_targets`
+  largest; the record's size from need (`rd_early_start_rows`: 512 rows without the tick cameras
+  and the velocity, 1,024 with either or both, the minimum and maximum held), the plan held to it
+  (issue 179's Mali at its last report's start, 1175 MB available, floor 641 MB: the bound alone
+  1,024 rows, the need's 512 and the chunk, 80 MB; without a need 128 MB as before; a bound under the
+  need keeps the bound's; a record already at the need makes none) and the window's
+  `VU record memory` line word for word and cut short. `rd_vu_rec_early_ab`,
+  `rd_vu_rec_early_ab_compute`, `rd_vu_rec_early_ab_targets`
   (`rd_early.cmake`, through `test/rd_vu_env_ab.cmake`): the dumps of `tools/vustage_dumps.txt`
   with the record grown by the frame (`ICO_RD_EARLY_PREPARE=0`) and made at start at 1,024 rows
-  with the arena's chunk (`=1`: the replay tool calls `rd_vu_record_prepare` as the game window
-  does and prints `early: record 1024 rows, arena made`), under lavapipe's own record write, the
-  compute dispatches and the render targets: every named target byte for byte at Original 4:3 1x
-  and Enhanced 16:9 2x; a frame without a pre-pass is skipped.
+  with the arena's chunk (`=1` with `ICO_RD_EARLY_ROWS=1024`: the replay tool calls
+  `rd_vu_record_prepare` as the game window does and prints `early: record 1024 rows, arena
+  made`), under lavapipe's own record write, the compute dispatches and the render targets: every
+  named target byte for byte at Original 4:3 1x and Enhanced 16:9 2x; a frame without a pre-pass
+  is skipped. `rd_vu_rec_size_ab`, `rd_vu_rec_size_ab_mali` (`rd_early.cmake`): the dumps of
+  `tools/vu_rec_size_dumps.txt` (issue 179's four Mali dumps, the Pixel's three opening dumps, the
+  corpus's largest pre-pass record) with the record made at start at 1,024 rows
+  (`ICO_RD_EARLY_PREPARE=1`, `ICO_RD_EARLY_ROWS=1024`) against the run's need (`=1` alone: `early:
+  record 512 rows`): every named target byte for byte at the two settings, and no `grown in play
+  past` line in the need's run (`FORBID_B`); `_mali` under the Arm fakes and the compute record.
+  A listed dump that is absent fails where the dumps are (`LIST_STRICT`).
+  `ICO_RD_EARLY_ROWS=N` (a power of two from 16 to 1,024; anything else is said and ignored) takes
+  N as the run's need at start-up; tests only.
 - `rd_log_line_test.c` (ctest `rd_log_line`, `rd_early.cmake`): a log line handed to an
   unbuffered stream in one write (`rd_log_line.c`, `rd__log`; [RENDER_POST.md](RENDER_POST.md#start-up)),
   pure: a short line, one with `rd__log_once`'s suffix, one of 10,000 characters (formatted on the
@@ -2280,7 +2326,9 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   first-use stall (`firstUseLine`), never a wrong picture. The union of the asked keys is left in
   `rd_replay_tool_keys/keys-<config>-<size>.txt` (`rd_replay_tool_keys`).
 - `rd_perf_clock_test.c`: a replay's GPU clock against the CPU's (`port/render/rd_perf_clock.h`, issue 123), from made-up slot clocks: the issue 123 stall (the previous use's stamps at the wait's start, nothing for 250 ms, the replay's stamps written and reset again, a restarted counter, the calibrated clocks: 296.0 ms after its first submit) word for word; a trace point of the replay's own names its last stamp; without calibration the start from the wait's end (297.0 ms); calibrated clocks older than the stamps fall back to it; with no wait either, not placed; two recorded stamps unwritten (the first named, with the last written before it), none written; a list with stamps recorded and never submitted (its stamps not recorded, `listsUnsubmitted` said apart, none unwritten); a replay that had finished with an index the backend did not record (no line due); the single submission wait's long wait (340 ms, no trace) reported with its work done 378.0 ms after its last submit, word for word, a 30 ms one not reported and in the old words, a wait that found the work finished bounded by the wait's start (38.0 ms); a short buffer; the two limiters (eight idle restarts, then a stalled replay still written as its kind's first; the stalls' 32 then every 10th, the restarts' 8 then every 100th, each on its own count; a 150 ms wait a stall, a restart alone not) (`rd_perf_clock`).
-- `rd_perf_more_test.c`: the cost counters' block sums and lines (`port/render/rd_perf_more.h`,
+- `rd_perf_more_test.c`: the cost counters' block sums and lines (`port/render/rd_perf_more.h`;
+  the draws' invocations after the index compaction: 3 a triangle, 1 a triangle it left out, at
+  most every triangle, 9 a triangle without the pre-pass,
   issue 179): the breaks of SCENE's pass by the first piece between (a DATE snapshot, the shadow
   count and a level, a shadow reset's stencil pass, the aura, the reduction, the crack fill, the
   glow, a lamps work buffer, a snapshot, the present, another pass; the words), a VU draw's screen

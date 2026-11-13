@@ -119,6 +119,9 @@ typedef struct RdPerfRankBlock {
     /* the VU triangles drawn (RdPerfRecord.vuTris): the draws' own vertex
        shader invocations beside the pre-pass's (the scene line) */
     double vuTris;
+    /* of them the index compaction's left out (RdPerfRecord.vuTrisLeftOut):
+       one invocation each where the GPU reuses an index */
+    double vuLeftOut;
     double colorLoad, colorStore, depthLoad, depthStore, clear, texels, copy, untracked;
     /* the slot wait: records with a blocking wait, their wait; those with
        a done time, its sum and the longest */

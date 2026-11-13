@@ -1949,9 +1949,11 @@ thread can make it, hot paths included. The rows and where their states are set:
 | no-volume break | `rd_no_volume.c` at each replay's scan: `off by default (off by default until a phone rc shows the PowerVR phone's title and pause menu clean with it)` on the PowerVR and MoltenVK class, `not applicable here (not the PowerVR or MoltenVK class under Vulkan)` elsewhere, or the other gates' reason (the DATE path, MSAA ...) with the class allowed | the window, from `noVolumeBreak` |
 | Qualcomm passes as VkRenderPass objects | `window_perf_rank.c` every block (`ico_attempt_decide_pass_objects`: on with `RhiLimits.passObjectsRow`'s reason while Qualcomm's row holds the device's passes, `not applicable here (not Qualcomm's own driver)` otherwise) | the block's growth of `RhiStats.passObjects`, only while the row holds |
 | Adreno attempt B | `not in this build` (one Adreno attempt was built) | none |
-| subpass read, blend constant, index compaction | `not in this build` from the start (left out of the block line) | none |
+| subpass read, blend constant | `not in this build` from the start (left out of the block line) | none |
+| index compaction | `rd_vu_compact.c` at the pre-pass's start and after the record's self-test (`ico_attempt_decide_compaction`): `on` on the compute record where the class's define allows and the self-test passed (`its start-up self-test passed`, or `the Arm class, ...`; before the self-test or where none ran, `the compute record; the start-up self-test decides where it runs`), `refused by its self-test` when the record's test failed with it and passed without it, `off by default` by the define or `ICO_RD_VU_COMPACT=0`, `not applicable here` with the record path that holds (`record path stores: vertex shader stores`, `record path targets: render targets`, `the VU pre-pass is off`) | the triangles left out (drop and outside, every list), from the counts read back when the frame slot comes round |
 | VU record by compute on the PowerVR | `rd_vu_record.c` at the record's start (`ico_attempt_decide_vu_compute`): `off by default` on the PowerVR class under Vulkan with both stores, `on` by the tests' switch or the define flipped, `refused by its self-test` when the compute record failed it (the vertex stores then), `not applicable here` elsewhere (no vertex stores, no compute stores, another class, a `[dev] vu_record` by name) | `rd_vu_record.c` `rd__replay_dispatch`: the dispatches |
 | turn in the present's blit | `rd_present.c` at each present (`ico_attempt_decide_turn_fold`): `not applicable here` without a pre-rotated swapchain, `off by default` until the define is flipped or with its self-test not run, `refused by its self-test`, `on` with it passed | `rd_turn_fold.c`: the presents folded (the second count: those on a turned swapchain that kept the turn pass) |
+| VU record sized from need | `rd_vu_rec_early.c` at the start-up preparation (`ico_attempt_decide_rec_need`: on where the run's need made a smaller record than the memory bound allowed; not applicable with the pre-pass off, nothing made at start-up, or a bound no larger than the need) | the record's growths in play (`rd_replay_vu.c` recEnsure, a record that existed grown) |
 
 The shadow cuts' counts come from the replay's record where the window reads it
 (`window_perf_rank_record`), not from the cuts' hot paths.
@@ -2090,19 +2092,63 @@ different draws (315 and 410) and different list 0 and before-list-0 parts (76.4
 
 ### The memory in a block
 
-On Android, the log thread reads `/proc/self/status`'s `RssAnon`, `RssFile` and `RssShmem` and the
-C heap's `mallinfo` once a second, and keeps the block's extremes. The window prints them after
-the memory line, and the next block starts from the next read:
+On Android, the log thread reads `/proc/self/status`'s `RssAnon`, `RssFile`, `RssShmem` and
+`VmSwap` and the C heap's `mallinfo` once a second, and keeps the block's extremes. The window
+prints them after the memory line, and the next block starts from the next read:
 
 `window: memory in the block: the device's least 501 MB available against the floor 641 MB (under
 it at 8 of 10 reads); the process 538-1067 MB resident: anonymous 410-520 MB, file-backed 120-540 MB,
-shared 5-5 MB (/proc/self/status, once a second); the C heap 380 MB in use and 60 MB mapped (at the
-last read); beside them the graphics allocations 335 MB, the dumps' capture blocks 0.0 MB`
+shared 5-5 MB (/proc/self/status, once a second); swapped out 0-310 MB (VmSwap: still allocated);
+the C heap 380 MB in use and 60 MB mapped (at the last read); beside them the graphics allocations
+335 MB, the dumps' capture blocks 0.0 MB, the loss dump's frame copies 13.0 MB`
 
-The numbers in this example are made up. A swing in the file-backed part is the game data's
-mapped pages being read in and dropped by the system. A swing in the anonymous part is the
-process's own allocations. Texture copies held by the renderer and audio buffers are not counted
-apart.
+The numbers in this example are made up. The line's values pass through a last-value cell
+(`sys_cell.h`) that once held 6 of its 14, which cut them, so the window never printed it; the
+cell holds 16 now. How to read a swing:
+- **Swapped out rising as anonymous falls:** the kernel moved the process's pages to swap (zram
+  on a phone) under memory pressure. The memory is still the process's; nothing was freed. Touching
+  those pages again (a stage load, a cutscene's data) reads them back, and the GPU's work can wait
+  for it.
+- **File-backed swinging:** mapped files' pages (the program's own code, the graphics driver's
+  libraries) dropped by the system and read back. The game data is read with `fread`, never
+  mapped, so its pages are not in the process's figures.
+- **Anonymous swinging with swapped out flat:** the process's own allocations. The largest the code
+  makes are the frame ring (3 frames, 7-13 MB each on the Mali), the renderer's texture and mesh
+  copies (a stage's), the loss dump's frame copies (at most 4 of 16 MiB, held while the GPU is
+  behind; the line names them), the slow-scene capture's block (the capture blocks) and, during a
+  pipeline batch, the driver's compiler (about 70 MB a thread, given back after the batch).
+  Without a texture pack nothing of the port's own moves hundreds of MB in a block.
+
+Every block, on every platform, the VU pre-pass's record follows:
+
+`window: VU record memory: 512 rows held (48 MB over the frame slots; 512 rows made at start-up); a
+picture of the block needed at most 214 rows (248 in the run); 0 growths in play in the run; the
+upload rings 128 MB`
+
+The rows held as the last replay began and their bytes (every frame slot, and the three render
+targets where the record is drawn into them), what the start-up made, the most rows a picture of
+the block needed (pass V's and pass T's) and of the run, the record's growths in play, and the two
+frame slots' upload rings. A block whose pictures need more than the rows held grows the record
+(its own `the record holds` line); a run whose need stays far under the held rows is memory the
+record holds for nothing.
+
+Every block where the index compaction ran (the compute record; [PIPELINES.md](PIPELINES.md#the-index-compaction)):
+
+`window: index compaction: triangles left out as drawing nothing, a picture: 9866 of 22169 in list
+0 (44.5 %), by class: the game's drops 3370, outside the target or the depth range 6496; the other
+lists 1200 of 30000 (4.0 %) (25 pictures read back, two frame slots behind)`
+
+The triangles the keep stage judged a picture (each code 36 triangle twice: its cut and its kick
+draw), those it left out by class, list 0 apart, from the counts each workgroup stores and a copy
+reads back when the frame slot comes round. The draws' invocation figures (`window: VU: ...`,
+`perf scene`, `compare`) count a left-out triangle as one invocation (its filler) and say so:
+`3 a triangle, after the index compaction 1 a triangle it left out: A of B`.
+The start lines: `rd: VU index compaction: on where its start-up self-test passes: ... (<the
+ledger's why>; RD_VU_COMPACT_DEFAULT 1, the Arm class's RD_VU_COMPACT_ARM_DEFAULT 1; this device
+is of the Arm class)` at the pre-pass's start, then `rd: VU index compaction: on: passed its
+start-up self-test with the record's (...)` or `rd: VU index compaction: refused by its start-up
+self-test (the record's test with it: <the difference>; without it the test passed): every draw
+reads its own index list`.
 
 ### The pipeline set's cores
 

@@ -109,6 +109,7 @@
 
 #include "rd_internal.h"
 #include "rd_mesh.h"
+#include "rd_vu_compact.h"
 #include "rd_vu_record.h"
 #include "rd_vu_skin_check.h"
 
@@ -308,8 +309,10 @@ static void tickCams(int replay, float out[2][16])
 
 /* mesh i's command: RdVuPayload, its VU memory and, for the cluster, the
  * bones (rd_mesh.h's payload; no card verdicts); ticks: the prelit mesh
- * through the blended camera, its draw RD_VU_TICK_CAMERAS */
-static bool pushMesh(RdFrame *f, int i, RdMesh mesh, bool ticks, int replay)
+ * through the blended camera, its draw RD_VU_TICK_CAMERAS; shiftX GS
+ * pixels added to every vertex's X (the index compaction's copy past the
+ * target's right edge, 0 elsewhere) */
+static bool pushMesh(RdFrame *f, int i, RdMesh mesh, bool ticks, int replay, float shiftX)
 {
     uint8_t buf[sizeof(RdVuPayload) + sizeof(RdVuBlock) + sizeof(s_bones)];
     RdVuPayload p;
@@ -322,6 +325,7 @@ static bool pushMesh(RdFrame *f, int i, RdMesh mesh, bool ticks, int replay)
     p.boneQw = i == M_SKIN ? 8u : 0u;
     p.qwPerVertex = kQpv[i];
     sceneBlock(&vu);
+    vu.mem[6][0] += shiftX; /* x' = 16 x + (2048 + shiftX) z: GS X moved by shiftX */
     if (ticks) {
         double cam[4][4];
         tickCam(replay, cam);
@@ -347,7 +351,7 @@ static bool pushMesh(RdFrame *f, int i, RdMesh mesh, bool ticks, int replay)
     c->u[1] = off;
     c->u[2] = size;
     c->u[3] = ticks ? RD_VU_TICK_CAMERAS : 0u;
-    c->keyLo = (uint32_t)i + 1u + (ticks ? 8u : 0u);
+    c->keyLo = (uint32_t)i + 1u + (ticks ? 8u : 0u) + (shiftX != 0.0f ? 4u : 0u);
     return true;
 }
 
@@ -402,6 +406,15 @@ static bool fallbackPlain(void)
     return g_rd.vuFallbackPlain; /* rd_pipeline.c rd__vu_policy_init */
 }
 
+/* the index compaction runs in this test's replays (rd_vu_compact.h): the
+ * frame gets the copy past the target's edge whose triangles it leaves
+ * out.  Read as the frames are built (the compaction is held off for the
+ * whole run once refused, rd__vu_compact_refuse) */
+static bool cullCopy(void)
+{
+    return rd__vu_compact_active();
+}
+
 static bool buildFrame(RdFrame *f, uint32_t scene, uint32_t w, uint32_t h, const RdMesh *m,
                        int replay)
 {
@@ -426,12 +439,23 @@ static bool buildFrame(RdFrame *f, uint32_t scene, uint32_t w, uint32_t h, const
          rd__st_push1(f, 0, RDC_PABE, 0) && rd__st_push1(f, 0, RDC_COLCLAMP, 1) &&
          rd__st_push1(f, 0, RDC_SHADE, 1);
     for (int i = 0; i < M_COUNT && ok; i++) {
-        ok = pushMesh(f, i, m[i], false, replay);
+        ok = pushMesh(f, i, m[i], false, replay, 0.0f);
     }
     if (ok && !fallbackPlain()) {
         f->hasTickCams = 1;
         tickCams(replay, f->tickCams);
-        ok = pushMesh(f, M_PRELIT, m[M_PRELIT], true, replay);
+        ok = pushMesh(f, M_PRELIT, m[M_PRELIT], true, replay, 0.0f);
+    }
+    if (ok && cullCopy()) {
+        /* the index compaction's copy: the prelit mesh moved right by the
+         * frame's GS width, its strips' GS X 2048 + w - 112 .. 2048 + w - 4
+         * (the strips 8 (x0 + 2.4 col) GS pixels off the centre, x0 -14, the
+         * moves 2 pixels a replay): wholly right of the target's edge at
+         * 2048 + w / 2 by w / 2 - 112 GS pixels, at least 16 (w >= ST_W):
+         * every triangle left out as a clipped filler, nothing in the
+         * picture; after the ticks copy with the same pipeline, so the
+         * draw merge joins their lists in one draw */
+        ok = pushMesh(f, M_PRELIT, m[M_PRELIT], false, replay, (float)w);
     }
     return ok && pushSprites(f);
 }
@@ -544,7 +568,7 @@ typedef struct PreRun {
 
 /* the verdict of the four replays against their references */
 static void judge(Verdict *v, const PreRun *run, const uint8_t *ref, const uint8_t *pre,
-                  size_t size, uint32_t wantDraws, bool ticks)
+                  size_t size, uint32_t wantDraws, bool ticks, bool cmp)
 {
     for (int k = 0; k < ST_REPLAYS; k++) {
         const RdPerfRecord *r = &run[k].r;
@@ -602,10 +626,11 @@ static void judge(Verdict *v, const PreRun *run, const uint8_t *ref, const uint8
     const RdPerfRecord *r = &run[0].r;
     v->pass = true;
     snprintf(v->text, sizeof v->text,
-             "self-test: prelit, lit, skin%s and particles byte for byte over %d replays in %s, "
+             "self-test: prelit, lit, skin%s%s and particles byte for byte over %d replays in %s, "
              "%u vertices and %u sprites in %u pre-pass draws (%u passes, %u triangle slots), "
              "%zu of %zu pixels drawn",
-             ticks ? ", the tick cameras" : "", ST_REPLAYS,
+             ticks ? ", the tick cameras" : "",
+             cmp ? ", the index compaction (a copy past the target's edge)" : "", ST_REPLAYS,
              both ? "both frame slots" : "one frame slot", r->vuPreVertices, r->vuPreSprites,
              r->vuPreDraws, r->vuPrePasses, r->vuTriSlots, drawn, size / 4u);
 }
@@ -614,6 +639,7 @@ static void runSelftest(RdTargetRec *t, Verdict *v)
 {
     v->on = true;
     v->pass = false;
+    const bool cmpCopy = cullCopy(); /* the frames' copy past the edge (buildFrame) */
     sceneBones();
     RdMesh m[ST_REPLAYS][M_COUNT];
     bool made = true;
@@ -687,15 +713,16 @@ static void runSelftest(RdTargetRec *t, Verdict *v)
          * stages a mesh and the tick stage's two for the ticks copy, counted
          * one an entry and stage whatever the batches merged them into
          * (g_rd.vuPreBatch: r.vuPreDraws the draws made) */
-        const uint32_t meshes = M_COUNT + (fallbackPlain() ? 0u : 1u);
-        const uint32_t wantDraws = meshes + 2u + 2u * meshes + (meshes > M_COUNT ? 2u : 0u);
+        const bool ticksCopy = !fallbackPlain();
+        const uint32_t meshes = M_COUNT + (ticksCopy ? 1u : 0u) + (cmpCopy ? 1u : 0u);
+        const uint32_t wantDraws = meshes + 2u + 2u * meshes + (ticksCopy ? 2u : 0u);
         g_rd.msaaBlocked = wasBlocked;
         if (!refOk || !preOk) {
             v->on = false;
             snprintf(v->text, sizeof v->text, "the device failed in the replays %s the pre-pass",
                      refOk ? "with" : "without");
         } else {
-            judge(v, run, ref, pre, size, wantDraws, meshes > M_COUNT);
+            judge(v, run, ref, pre, size, wantDraws, ticksCopy, cmpCopy);
         }
     }
     free(ref);
@@ -757,7 +784,18 @@ bool rd_vuprepass_selftest(void)
     g_rdRec.minHeld = true;
     s_vtRunning = true;
     const size_t failed0 = strlen(g_rdRec.failed); /* rungs given up before (a build) */
+    const bool cmpTried = rd__vu_compact_active(); /* the index compaction in the replays */
     runSelftest(t, &v);
+    if (!v.on && cmpTried) {
+        /* the index compaction judged with the record (rd_vu_compact.h): a
+         * failure with it is run again without it before the record's own
+         * rungs; a pass then refuses it for the run */
+        rd__log("VU pre-pass: the record with the index compaction failed the self-test (%s) in "
+                "%.1f ms: the self-test again without it",
+                v.text, rd__now_ms() - t0);
+        rd__vu_compact_refuse(v.text);
+        runSelftest(t, &v);
+    }
     while (!v.on && rd__vu_record_buffered()) {
         const bool compute = rd__vu_record_compute();
         rd__log("VU pre-pass: the record %s failed the self-test (%s) in %.1f ms: the "
@@ -771,6 +809,7 @@ bool rd_vuprepass_selftest(void)
     }
     s_vtRunning = false;
     g_rdRec.minHeld = false;
+    rd__vu_compact_selftest_done(v.on); /* its row and its line */
     if (!v.on) {
         g_rd.vuPrepass = false;
         snprintf(g_rd.vuPrepassWhy, sizeof g_rd.vuPrepassWhy, "by its self-test");

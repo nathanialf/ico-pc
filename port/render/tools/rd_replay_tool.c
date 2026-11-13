@@ -545,6 +545,7 @@
 #include "rd_fill11.h"           /* --stats: the crack fill in list 11's pass */
 #include "rd_present_scene.h"    /* --stats: the present from SCENE */
 #include "rd_stencil_selftest.h" /* --stats: the stencil outside the shadow window */
+#include "rd_vu_compact.h"       /* --stats: the index compaction's counts */
 #include "rd_shadow_box.h"       /* --stats: the shadows over the volumes' box */
 #include "rd_shadow_tile.h"      /* --stats: the shadow composites over the tile mask */
 #include "rd_no_volume.h"        /* --stats: a shadow window with no volume */
@@ -3426,6 +3427,24 @@ int main(int argc, char **argv)
             printf("%s: stats: VU record %s: %s; pre-pass skipped %u frames under %u slots "
                    "(the largest %u)\n",
                    dump, rd_vu_record_mode(), g_rdRec.why, skipped, minSlots, maxSlots);
+        }
+        /* the index compaction (rd_vu_compact.h): every copy's counts after a
+         * full wait, the replays so far (the A/B's counts, rd_vu_compact_ab) */
+        {
+            RdVuCmpCounts cc;
+            if (rd_vu_compact_counts_now(&cc)) {
+                printf("%s: stats: VU index compaction %s: %llu of %llu list 0 triangles left "
+                       "out (drop %llu, outside %llu); the other lists %llu of %llu; %u "
+                       "pictures\n",
+                       dump, rd_vu_compact_state(),
+                       (unsigned long long)(cc.drop[0] + cc.outside[0]),
+                       (unsigned long long)(cc.drop[0] + cc.outside[0] + cc.kept[0]),
+                       (unsigned long long)cc.drop[0], (unsigned long long)cc.outside[0],
+                       (unsigned long long)(cc.drop[1] + cc.outside[1]),
+                       (unsigned long long)(cc.drop[1] + cc.outside[1] + cc.kept[1]), cc.pictures);
+            } else {
+                printf("%s: stats: VU index compaction %s: not run\n", dump, rd_vu_compact_state());
+            }
         }
         /* the region rule's mode: under region_rule = ps2 the side bands
          * (rd_replay_vu.c vuDropMode, vuSource): the draws that had them and

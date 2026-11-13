@@ -112,6 +112,7 @@ void rd_perf_rank_add_record(RdPerfRankBlock *b, const RdPerfRecord *r, double v
     b->texUploads += r->textureUploads;
     b->vuInv += vuInvocations;
     b->vuTris += (double)r->vuTris;
+    b->vuLeftOut += (double)(r->vuTrisLeftOut < r->vuTris ? r->vuTrisLeftOut : r->vuTris);
     b->colorLoad += (double)r->colorLoadBytes;
     b->colorStore += (double)r->colorStoreBytes;
     b->depthLoad += (double)r->depthLoadBytes;
@@ -681,8 +682,18 @@ int rd_perf_rank_scene_text(const RdPerfRankBlock *b, const RdPerfRankInfo *in,
     if (in->prepass && b->vuTris > 0.0) {
         /* the figure above is the pre-pass's (window_scene.h); the draws run
            vu_main_vs three times a triangle besides it */
-        put(&o, " (the VU pre-pass's; the draws' own %.0fk more, 3 a triangle)",
-            3.0 * b->vuTris / N / 1000.0);
+        if (b->vuLeftOut > 0.0) {
+            /* after the index compaction (rd_vu_compact.h): a triangle it
+               left out one invocation (its filler), the others three */
+            put(&o,
+                " (the VU pre-pass's; the draws' own %.0fk more, 3 a triangle, after the index "
+                "compaction 1 a triangle it left out: %.1fk of %.1fk)",
+                (3.0 * b->vuTris - 2.0 * b->vuLeftOut) / N / 1000.0, b->vuLeftOut / N / 1000.0,
+                b->vuTris / N / 1000.0);
+        } else {
+            put(&o, " (the VU pre-pass's; the draws' own %.0fk more, 3 a triangle)",
+                3.0 * b->vuTris / N / 1000.0);
+        }
     }
     put(&o, ", %.0f KB uploaded (%.1f textures), %.1f DATE snapshots", b->uploadBytes / N / 1024.0,
         b->texUploads / N, b->dateSnaps / N);

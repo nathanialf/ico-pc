@@ -124,21 +124,28 @@ int main(void)
     }
 
     /* the VU work: totals over 10 replays, a replay's average */
-    window_scene_vu_text(b, sizeof(b), 11820, 610000, 0, 10, 0);
+    window_scene_vu_text(b, sizeof(b), 11820, 610000, 0, 10, 0, 0);
     CHECK(text_is(
         b, "VU: 1182 draws, 61k triangles, 549k vertex invocations (pre-pass off: 9 a triangle)"));
-    window_scene_vu_text(b, sizeof(b), 2500, 92000, 41000, 10, 1);
+    window_scene_vu_text(b, sizeof(b), 2500, 92000, 41000, 10, 1, 0);
     CHECK(text_is(b, "VU: 250 draws, 9.2k triangles, 4.1k vertex invocations (pre-pass: each "
                      "vertex once); the draws' vu_main_vs 28k more (3 a triangle; never summed "
                      "with the pre-pass's)"));
-    window_scene_vu_text(b, sizeof(b), 100, 2000000, 0, 1, 0);
+    /* after the index compaction: 25k of the 92k left out, one invocation
+       each: (3 x 92000 - 2 x 25000) / 10 = 22.6k */
+    window_scene_vu_text(b, sizeof(b), 2500, 92000, 41000, 10, 1, 25000);
+    CHECK(text_is(b, "VU: 250 draws, 9.2k triangles, 4.1k vertex invocations (pre-pass: each "
+                     "vertex once); the draws' vu_main_vs 23k more (3 a triangle, after the index "
+                     "compaction 1 a triangle it left out: 2.5k of 9.2k; never summed with the "
+                     "pre-pass's)"));
+    window_scene_vu_text(b, sizeof(b), 100, 2000000, 0, 1, 0, 0);
     CHECK(strstr(b, "2.0M triangles, 18.0M vertex") != NULL);
-    window_scene_vu_text(b, sizeof(b), 0, 0, 0, 0, 0);
+    window_scene_vu_text(b, sizeof(b), 0, 0, 0, 0, 0, 0);
     CHECK(
         text_is(b, "VU: 0 draws, 0 triangles, 0 vertex invocations (pre-pass off: 9 a triangle)"));
     {
         char t[16];
-        const size_t n = window_scene_vu_text(t, sizeof(t), 100, 200, 0, 1, 0);
+        const size_t n = window_scene_vu_text(t, sizeof(t), 100, 200, 0, 1, 0, 0);
 
         CHECK(n < sizeof(t) && strlen(t) == n);
     }

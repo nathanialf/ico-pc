@@ -3106,6 +3106,12 @@ typedef struct RdPerfRecord {
      * vertex shader does where the pre-pass is off (9 invocations a
      * triangle; window_scene.h) */
     uint32_t vuDraws, vuTris;
+    /* of vuTris, the triangles the index compaction left out as drawing
+     * nothing (rd_vu_compact.h: written as a filler, one vertex invocation
+     * where the GPU reuses an index within a triangle), as the counters
+     * last read back in the replay's frame slot gave them (the picture two
+     * frame slots back; 0 without the compaction) */
+    uint32_t vuTrisLeftOut;
     /* the skin check's twins (rd_vu_skin_check.c twinDraw, issue 123): the
      * draws they added (A, B and C each one) and their vertex invocations,
      * 9 a triangle (the twins never read the pre-pass record): what the

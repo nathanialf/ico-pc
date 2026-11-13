@@ -147,8 +147,75 @@ static void testParts(void)
     CHECK(p.rows == 0);
 }
 
+/* the record's size from need (rd_early_start_rows): the largest recorded
+   scene's rows (83 + 165 = 248; 330 with the tick cameras' third slot, 331
+   with the velocity's second record, 413 with both), to the power of two
+   the record grows by, doubled; and the plan held to it */
+static void testNeed(void)
+{
+    CHECK(rd_early_start_rows(false, false, 16, 1024, 1024) == 512);
+    CHECK(rd_early_start_rows(true, false, 16, 1024, 1024) == 1024);
+    CHECK(rd_early_start_rows(false, true, 16, 1024, 1024) == 1024);
+    CHECK(rd_early_start_rows(true, true, 16, 1024, 1024) == 1024);
+    CHECK(rd_early_start_rows(false, false, 16, 256, 1024) == 256);
+    CHECK(rd_early_start_rows(false, false, 0, 1024, 1024) == 0);
+    CHECK(rd_early_start_rows(false, false, 16, 1024, 0) == 0);
+
+    /* issue 179's Mali at v0.11.5's start (evidence/179 ico-pc.log:233:
+       1175 MB available, floor 641 MB): the bound alone 1024 rows (half of
+       534 MB is 267 MB, 96 MB of record), the need 512 rows: 48 MB of
+       record and the arena's chunk, 80 MB; 48 MB less than v0.11.5 made */
+    RdEarlyPlan p;
+    RdEarlyIn in = base(RD_EARLY_MEM_OK, 1175, 641, 2 * ROW);
+    in.startRows = 512;
+    rd_early_plan(&in, &p);
+    CHECK(p.boundRows == 1024);
+    CHECK(p.rows == 512);
+    CHECK(p.arena);
+    CHECK(p.bytes == 80 * MB);
+    in.startRows = 0; /* no need given: v0.11.5's plan */
+    rd_early_plan(&in, &p);
+    CHECK(p.rows == 1024 && p.boundRows == 1024 && p.bytes == 128 * MB);
+
+    /* the bound under the need: the bound's (the v0.11.3 report's 815 MB) */
+    in = base(RD_EARLY_MEM_OK, 815, 641, 2 * ROW);
+    in.startRows = 1024;
+    rd_early_plan(&in, &p);
+    CHECK(p.rows == 512 && p.boundRows == 512);
+
+    /* a record already at the need: nothing for it */
+    in = base(RD_EARLY_MEM_UNKNOWN, 0, 0, 2 * ROW);
+    in.haveRows = 512;
+    in.startRows = 512;
+    rd_early_plan(&in, &p);
+    CHECK(p.rows == 0 && p.boundRows == 1024 && p.arena);
+
+    /* the window's line */
+    RdVuRecMem m;
+    memset(&m, 0, sizeof(m));
+    m.heldRows = 512;
+    m.heldBytes = 48 * MB;
+    m.earlyRows = 512;
+    m.blockNeedRows = 214;
+    m.runNeedRows = 248;
+    m.ringBytes = 128 * MB;
+    char t[400];
+    const size_t len = rd_vu_record_memory_text(t, sizeof t, &m);
+    CHECK(len == strlen(t));
+    CHECK(strcmp(t, "window: VU record memory: 512 rows held (48 MB over the frame slots; 512 rows "
+                    "made at start-up); a picture of the block needed at most 214 rows (248 in the "
+                    "run); 0 growths in play in the run; the upload rings 128 MB") == 0);
+    m.earlyRows = 0;
+    (void)rd_vu_record_memory_text(t, sizeof t, &m);
+    CHECK(strstr(t, "(48 MB over the frame slots; nothing made at start-up)") != NULL);
+    char s8[8];
+    CHECK(rd_vu_record_memory_text(s8, sizeof s8, &m) == 7 && strlen(s8) == 7);
+    CHECK(rd_vu_record_memory_text(s8, 0, &m) == 0);
+}
+
 int main(void)
 {
+    testNeed();
     testPhones();
     testDesktop();
     testFloor();

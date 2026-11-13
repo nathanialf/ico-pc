@@ -2065,7 +2065,7 @@ if(ICO_RUN_TESTS)
     # record goes wrong) the pictures differ and it is turned off before the
     # set; with it off by the settings (ICO_RD_VU_PREPASS=0) nothing runs
     set(_vst "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vuprepass_selftest.cmake")
-    set(_vst_on "on \\(self-test: prelit, lit, skin(, the tick cameras)? and particles byte for byte over 4 replays in both frame slots, [0-9]+ vertices and 4 sprites in [0-9]+ pre-pass draws \\(2 passes, [0-9]+ triangle slots\\), [0-9]+ of [0-9]+ pixels drawn\\) on SCENE [0-9]+x[0-9]+ at [0-9]+x[0-9]+ texels in [0-9.]+ ms")
+    set(_vst_on "on \\(self-test: prelit, lit, skin(, the tick cameras)?(, the index compaction \\(a copy past the target's edge\\))? and particles byte for byte over 4 replays in both frame slots, [0-9]+ vertices and 4 sprites in [0-9]+ pre-pass draws \\(2 passes, [0-9]+ triangle slots\\), [0-9]+ of [0-9]+ pixels drawn\\) on SCENE [0-9]+x[0-9]+ at [0-9]+x[0-9]+ texels in [0-9.]+ ms")
     set(_vst_off "off \\(self-test: the pictures differ: in replay [1-4] of 4 \\(frame slot [01]\\), [0-9]+ of [0-9]+ bytes, the first at texel [0-9]+,[0-9]+: [0-9,]+ want [0-9,]+\\) on SCENE")
     # a stale record (ICO_RD_VU_PREPASS_SABOTAGE=stale: the record's copies
     # left out from the second replay on, so a replay reads what an earlier
@@ -3703,3 +3703,4 @@ include(rd_early.cmake)
 include(rd_vu_flat0.cmake) # the main shader's flat outputs at the provoking corner
 include(rd_pass_objects.cmake) # Qualcomm's passes as VkRenderPass objects (issue 123)
 include(rd_smallcuts.cmake) # the turn in the present's blit, the VU record by compute on the PowerVR
+include(rd_vu_compact.cmake) # the index compaction (issue 179)

@@ -82,9 +82,13 @@ enum {
     /* a second Adreno attempt: not built (not in this build) */
     ICO_ATT_ADRENO_B,
     /* the other exact cuts planned for the tile-based phones: the subpass
-       read, the blend constant, the index compaction */
+       read, the blend constant (not in this build) */
     ICO_ATT_SUBPASS,
     ICO_ATT_BLEND_CONST,
+    /* rd_vu_compact.c: the index compaction (the compute record's mesh
+       triangles that draw nothing written as a clipped filler in each
+       draw's list); state from ico_attempt_decide_compaction, count the
+       triangles left out a block (the counters read back) */
     ICO_ATT_COMPACTION,
     /* rd_vu_class.c (rd_vu_record.c): the VU record by compute dispatches
        in place of the vertex stores on the PowerVR class; count the
@@ -94,6 +98,10 @@ enum {
        swapchain was drawn by the box blit itself (no turn pass); second
        count the presents on a turned swapchain that kept the turn pass */
     ICO_ATT_TURN_FOLD,
+    /* rd_vu_rec_early.c: the VU record made at start-up at the run's need
+       (rd_early_start_rows) instead of the largest the memory bound
+       allowed; count the record's growths in play (rd__vu_rec_grew) */
+    ICO_ATT_REC_NEED,
     ICO_ATT_COUNT
 };
 
@@ -160,6 +168,12 @@ void ico_attempt_decide_empty_skip(int box, int mode);
    device's RhiLimits.passObjectsRow (its reason while Qualcomm's row holds
    the passes; NULL otherwise, and on the other backends) */
 void ico_attempt_decide_pass_objects(const char *row);
+/* the record sized from need (rd_vu_rec_early.c rd_vu_record_prepare, once
+   at start-up): wanted the pre-pass is on, made the rows made at start-up
+   (0 none), bound the rows the memory bound alone allowed, need the run's
+   need (rd_early_start_rows; 0 none): on where the need's size made less
+   than the bound allowed, else not applicable with the reason */
+void ico_attempt_decide_rec_need(int wanted, uint32_t made, uint32_t bound, uint32_t need);
 void ico_attempt_decide_no_volume_break(int env, int classOk, int defaultOn, const char *gateWhy);
 /* the VU record by compute on the PowerVR class (rd_vu_class.c, at the
    record's start): byName a [dev] vu_record asked for by name, stores auto
@@ -177,5 +191,15 @@ int ico_attempt_decide_vu_compute(int byName, int stores, int compute, int power
    failed, 1 passed).  1 when the fold may run (each present still checks
    its draws), else 0 */
 int ico_attempt_decide_turn_fold(int turned, int env, int defaultOn, int selftest);
+/* the index compaction (rd_vu_compact.c, at the pre-pass's start and after
+   the record's self-test): compute the record is written by compute
+   dispatches with the pre-pass on (else notWhy, the record path that
+   holds: not applicable), arm the Arm class under Vulkan (the Mali-G52),
+   env the tests' switch (ICO_RD_VU_COMPACT: -1 unset, 0, 1), defaultOn
+   RD_VU_COMPACT_DEFAULT, armDefaultOn RD_VU_COMPACT_ARM_DEFAULT, selftest
+   the record's start-up self-test with it (-1 not run, 0 refused it, 1
+   passed).  1 when the compaction runs (the row on), else 0 */
+int ico_attempt_decide_compaction(int compute, const char *notWhy, int arm, int env, int defaultOn,
+                                  int armDefaultOn, int selftest);
 
 #endif

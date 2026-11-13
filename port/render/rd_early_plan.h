@@ -49,6 +49,10 @@ typedef struct RdEarlyIn {
     bool recordWanted;         /* the pre-pass is on */
     bool arenaHave;            /* the arena's first chunk is made already */
     uint64_t arenaBytes;       /* RD_MESH_CHUNK */
+    /* the record's size from need (rd_early_start_rows): the plan's rows
+       at most this; 0 no such limit (the bound and RD_VU_REC_ROWS_MAX
+       alone) */
+    uint32_t startRows;
 } RdEarlyIn;
 
 typedef struct RdEarlyPlan {
@@ -56,10 +60,52 @@ typedef struct RdEarlyPlan {
     bool arena;      /* the arena's first chunk now */
     uint64_t budget; /* the bound in bytes, UINT64_MAX none */
     uint64_t bytes;  /* what the plan makes: rows * rowBytes and the chunk */
-    char why[192];   /* the bound's words, for the start-up line */
+    /* the rows the bound alone allowed (as rows, before startRows), so the
+       line can say what the need's size saved */
+    uint32_t boundRows;
+    char why[192]; /* the bound's words, for the start-up line */
 } RdEarlyPlan;
 
 /* the plan for in (out zeroed first) */
 void rd_early_plan(const RdEarlyIn *in, RdEarlyPlan *out);
+
+/* The record's size from need (issue 179: the Mali-G52 held 1024 rows, 96
+ * MB over its two frame slots, with the device under its free-memory floor
+ * all run, while no picture it drew needed more than 256): the largest
+ * pre-pass record of every dump of the corpus, the issue 179 Mali dumps
+ * and the Pixel's opening dumps (measured with rd_replay_tool --stats over
+ * those 57 dumps on 2026-11-13: build-host/tmp/v0116/handbacks/MEMCULL.md),
+ * corpus/dumps/plain/rd-00300: RD_EARLY_NEED_VERTS vertices and
+ * RD_EARLY_NEED_KICKS triangles, no sprite, in the record's slot rule
+ * (rd_replay_vu.c vuPreVSlots, vuPreTSlots): a vertex one slot (two under
+ * the velocity's second record), a triangle two (three under the tick
+ * cameras); its rows (pass V's and pass T's, ICO_VU_REC_W slots a row)
+ * rounded up to the power of two the record grows by, then doubled: the
+ * margin of one growth step, for a live picture heavier than any recorded
+ * (issue 179's Mali grew to 512 rows in v0.11.2's stage 42).  ticks: the
+ * presents are interpolated (rd_interpolation_active), vel: the velocity's
+ * record (rd__velocity_on); minRows..maxRows as RdEarlyIn's, rowW
+ * ICO_VU_REC_W.  Without either: 83 + 165 = 248 rows, 256, so 512; with
+ * either: 330 or 331 rows, 512, so 1024 */
+/* The record's memory as the window's line reads it (rd_vu_rec_early.h
+ * rd_vu_record_memory): the rows held as the last replay began and their
+ * bytes over every frame slot (and the targets' textures), the most rows a
+ * picture needed in the block and in the run, the growths in play in the
+ * run, the rows made at start-up (0 none), the upload rings' bytes */
+typedef struct RdVuRecMem {
+    uint32_t heldRows, blockNeedRows, runNeedRows, grownInPlay, earlyRows;
+    uint64_t heldBytes, ringBytes;
+} RdVuRecMem;
+
+/* "window: VU record memory: 512 rows held (48 MB over the frame slots;
+ * 512 rows made at start-up); a picture of the block needed at most 214
+ * rows (248 in the run); 0 growths in play in the run; the upload rings
+ * 128 MB" into out (cap bytes, cut there); the length written */
+size_t rd_vu_record_memory_text(char *out, size_t cap, const RdVuRecMem *m);
+
+#define RD_EARLY_NEED_VERTS 84649u
+#define RD_EARLY_NEED_KICKS 84161u
+uint32_t rd_early_start_rows(bool ticks, bool vel, uint32_t minRows, uint32_t maxRows,
+                             uint32_t rowW);
 
 #endif

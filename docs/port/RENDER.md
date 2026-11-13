@@ -1392,6 +1392,19 @@ first mesh would make (`rd_vu_rec_early_ab*`, byte for byte). One line:
 `rd: start-up: made before play in T ms: the VU pre-pass's record at R rows (...), the mesh arena's
 first chunk (32 MB); M MB in all; the bound: ...`.
 
+Within the bound the record is made at the run's need, not at its largest
+(`rd_early_start_rows`): the largest pre-pass record of the corpus, issue 179's Mali dumps and
+the Pixel's opening dumps (`corpus/dumps/plain/rd-00300`: 84,649 vertices and 84,161 triangles,
+248 rows) in the run's slot rule (a third slot a triangle when the presents are interpolated, a
+second a vertex under the temporal upscaler's velocity), rounded up to the power of two the record
+grows by and doubled: 512 rows at the Original frame rate without the velocity, else 1,024. On
+issue 179's Mali-G52 (Original frame rate, under its free-memory floor all run, its heaviest
+picture 214 rows) that is 48 MB less than the 96 MB the bound allowed. A picture that needs more
+grows the record at its start, as on every device whose bound allowed less, logged (`; grown in
+play past the R rows made at start-up`) and counted (the attempt ledger's `VU record sized from
+need` row, the window's `VU record memory` line). The line adds `; the run's need N rows (...),
+the bound alone B rows`. The same picture at any size (`rd_vu_rec_size_ab`).
+
 ## Pipelines
 
 The pipeline key, the blend paths, the start-up set, the fallback entries and the vertex and triangle pre-passes have their own page: [PIPELINES.md](PIPELINES.md).
@@ -1637,6 +1650,7 @@ immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan. OpenGL and Direct3
 | the late pass's fill hold and deferred paste (`rd_late_pass.c`, `RhiLimits.tiler` under Vulkan), shot late (`rd_present.c`, `RhiLimits.tiler`) | off | off | on | on | on | on | on for Apple silicon; off on an Intel or AMD Mac |
 | the VU record by compute in place of the vertex stores (`rd_vu_class.c`; [RENDER_POST.md](RENDER_POST.md#the-vu-record-by-compute-on-the-powervr-class-off-by-default-until-a-phone-rc)) | off | off | off | off | off (no vertex stores: auto's compute already) | off on the PowerVR (`RD_VU_COMPUTE_CLASS_DEFAULT` 0 until a phone rc; Imagination's vendor id only, not the other tile-based) | off |
 | the turn in the present's blit (`rd_turn_fold.c`; [RENDER_POST.md](RENDER_POST.md#the-turn-in-the-presents-blit-off-by-default-until-a-phone-rc)) | no turned swapchain | no turned swapchain | off (`RD_TURN_FOLD_DEFAULT` 0 until a phone rc) | off, the same | off, the same | off, the same | no turned swapchain on a Mac |
+| the index compaction (`rd_vu_compact.c`; [PIPELINES.md](PIPELINES.md#the-index-compaction)) | not applicable (the vertex stores) | not applicable (no compute record) | not applicable (the vertex stores) | not applicable, the same | on where the start-up self-test passes (the compute record; `RD_VU_COMPACT_ARM_DEFAULT` 1) | not applicable (the vertex stores; on with the PowerVR rule's compute record, `RD_VU_COMPACT_DEFAULT` 1) | not applicable where the vertex stores are offered |
 
 Two meanings of "tile-based" meet in this table. The flags from `auraBox` to `sheetBake2x` follow
 the profile's class (every class but desktop Vulkan, D3D12, OpenGL and Direct3D 11, so an Intel or

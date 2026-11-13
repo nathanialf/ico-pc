@@ -128,6 +128,10 @@ bool stall_pressure_parse(const char *buf, size_t len, double *some10, double *f
 /* /proc/self/status's RssAnon, RssFile and RssShmem (kB); false unless
    all three are there */
 bool stall_status_parse(const char *buf, size_t len, long *anonKb, long *fileKb, long *shmemKb);
+/* /proc/self/status's VmSwap (kB): the process's anonymous pages the
+   kernel moved out to swap (zram on Android), which leave VmRSS while
+   still allocated; false where the line is not there */
+bool stall_status_swap(const char *buf, size_t len, long *swapKb);
 /* a thread name like the graphics driver's (mali-..., kgsl..., adreno...,
    QGL..., pvr..., IMG..., gpu..., Turnip's tu_...): the threads the moment
    names (the process's own threads and SDL's are not) */
