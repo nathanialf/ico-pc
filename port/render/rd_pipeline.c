@@ -88,6 +88,7 @@
 #include "rd_pipe_finish.h"
 #include "rd_present_scene.h"
 #include "rd_shadow_tile.h"
+#include "rd_volume_fs.h"
 #include "rd_vu_record.h"
 #include "rd_vu_rec_sink.h"
 #include "rd_vu_skin_check.h"
@@ -4373,7 +4374,9 @@ uint32_t rd__enumerate_reachable_date(RdPipeKeyInt *out, uint32_t max, uint32_t 
 
 /* --------------------------------------------------------------- shadows */
 
-RdPipeKeyInt rd__shadow_volume_key(const RdStateBlock *s, RhiFormat colorFmt, int decr)
+/* the volume pipeline as the state asks for it: sprite_world_vs with
+ * sprite_ps (the start-up set's and the self-test's general form) */
+static RdPipeKeyInt shadowVolumeGeneral(const RdStateBlock *s, RhiFormat colorFmt, int decr)
 {
     RdPipeKeyInt k;
     memset(&k, 0, sizeof(k));
@@ -4392,6 +4395,15 @@ RdPipeKeyInt rd__shadow_volume_key(const RdStateBlock *s, RhiFormat colorFmt, in
     k.colorFmt = (uint8_t)colorFmt;
     k.depthFmt = RHI_FMT_D32F_S8;
     return k;
+}
+
+/* the volume draw's key (rd_replay.c doShadowStripIn): the general form, or
+ * its twin by date_clear_ps where the stencil-only entry is taken
+ * (rd_volume_fs.c: no colour output and no discard, the same stencil) */
+RdPipeKeyInt rd__shadow_volume_key(const RdStateBlock *s, RhiFormat colorFmt, int decr)
+{
+    const RdPipeKeyInt k = shadowVolumeGeneral(s, colorFmt, decr);
+    return rd__volume_fs_turn(&k, decr);
 }
 
 /* The box reduction of the scaled count to the GS size
@@ -4434,9 +4446,15 @@ uint32_t rd__enumerate_reachable_shadow(RdPipeKeyInt *out, uint32_t max, uint32_
     RdStateBlock s;
     rd__reset_state_block(&s);
     s.ds.test = rd_test_from_gs(RD_TEST_Z_GEQUAL); /* shadow_Reset's TEST 0x50000 */
+    /* the volumes' keys of both Z tests (the game's GEQUAL, the self-tests'
+     * ALWAYS) by sprite_ps, and their date_clear_ps twins where the
+     * stencil-only entry is offered (rd_volume_fs.c) */
+    RdPipeKeyInt vol[4];
+    uint32_t nv = 0;
     for (int decr = 0; decr < 2; decr++) {
-        const RdPipeKeyInt k = rd__shadow_volume_key(&s, RHI_FMT_RGBA8_UNORM, decr);
+        const RdPipeKeyInt k = shadowVolumeGeneral(&s, RHI_FMT_RGBA8_UNORM, decr);
         n = rd__add_pipe_key(out, max, n, &k);
+        vol[nv++] = k;
     }
     for (int p = 0; p < RD_SHADOW_RESOLVE_PASSES; p++) {
         const RdPipeKeyInt k = rd__shadow_resolve_key(p, 4);
@@ -4471,11 +4489,19 @@ uint32_t rd__enumerate_reachable_shadow(RdPipeKeyInt *out, uint32_t max, uint32_
         rd__reset_state_block(&sa);
         sa.ds.test = rd_test_from_gs(RD_TEST_Z_ALWAYS);
         for (int decr = 0; decr < 2; decr++) {
-            const RdPipeKeyInt kt = rd__shadow_volume_key(&sa, RHI_FMT_RGBA8_UNORM, decr);
+            const RdPipeKeyInt kt = shadowVolumeGeneral(&sa, RHI_FMT_RGBA8_UNORM, decr);
             n = rd__add_pipe_key(out, max, n, &kt);
         }
     }
-    return n;
+    /* the twins: the game's GEQUAL pair and the ALWAYS pair the volumes'
+     * own self-test draws (its frame, rd_shadow_selftest.c, under both) */
+    RdStateBlock sz;
+    rd__reset_state_block(&sz);
+    sz.ds.test = rd_test_from_gs(RD_TEST_Z_ALWAYS);
+    for (int decr = 0; decr < 2; decr++) {
+        vol[nv++] = shadowVolumeGeneral(&sz, RHI_FMT_RGBA8_UNORM, decr);
+    }
+    return rd__volume_fs_keys(out, max, n, vol, nv);
 }
 
 uint32_t rd__enumerate_reachable_screen(RdPipeKeyInt *out, uint32_t max)

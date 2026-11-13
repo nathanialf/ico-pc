@@ -91,6 +91,7 @@
 #include "rd_replay.h"
 #include "rd_shadow_tile.h"
 #include "rd_vis.h"
+#include "rd_volume_fs.h"
 #include "rhi_traffic.h"
 
 /* the WORK2 writes a frame's scan keeps (past it: the pass whole) */
@@ -603,6 +604,7 @@ void rd__lamps_init(void)
     lowresNote();
     rd__glow_blur_init();  /* the glow's blur in two passes (rd_glow_blur.c) */
     rd__paste_spec_init(); /* the glow's paste by its own entry (rd_paste_spec.c) */
+    rd__volume_fs_init();  /* the volumes' stencil-only entry: this renderer's (rd_volume_fs.c) */
 }
 
 void rd__lamps_force(int bits)
@@ -2324,6 +2326,7 @@ void rd_lamps_line(void)
     lowresLine();
     rd__glow_blur_line();  /* the glow's blur in two passes (rd_glow_blur.c) */
     rd__paste_spec_line(); /* the glow's paste by its own entry (rd_paste_spec.c) */
+    rd__volume_fs_line();  /* the volumes' stencil-only entry (rd_volume_fs.c) */
     uint64_t v[9];
     uint64_t *const src[9] = {&s_sum.areas,      &s_sum.whole,  &s_sum.pads,
                               &s_sum.areaTexels, &s_sum.texels, &s_sum.clear,

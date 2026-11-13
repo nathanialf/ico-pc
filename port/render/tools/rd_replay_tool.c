@@ -550,6 +550,7 @@
 #include "rd_lamps.h"            /* --stats: the lamps' glow for less */
 #include "rd_glow_blur.h"        /* --stats: the glow blur in two passes */
 #include "rd_paste_spec.h"       /* --stats: the glow's paste by its own entry */
+#include "rd_volume_fs.h"        /* --stats: the shadow volumes' stencil-only entry */
 #include "rd_turn_fold.h"        /* the turn in the present's blit's self-test */
 #include "rd_fill11.h"           /* --stats: the crack fill in list 11's pass */
 #include "rd_present_scene.h"    /* --stats: the present from SCENE */
@@ -2769,6 +2770,12 @@ int main(int argc, char **argv)
          * rd_fog_selftest, which the tool does not run) */
         (void)rd__crack_swap_selftest();
         (void)rd__turn_fold_selftest(); /* where ICO_RD_TURN_FOLD asks (rd_turn_fold.c) */
+        /* the volumes' stencil-only entry where ICO_RD_VOLUME_FS asks
+         * (rd_volume_fs.c: the game runs it with rd_fog_selftest; its replays
+         * of the shadow count's frame are left out of every other test's run) */
+        if (getenv("ICO_RD_VOLUME_FS") != NULL) {
+            (void)rd__volume_fs_selftest();
+        }
     }
     if (!noDevice && getenv("ICO_RD_EARLY_PREPARE") != NULL &&
         strcmp(getenv("ICO_RD_EARLY_PREPARE"), "1") == 0) {
@@ -3398,6 +3405,23 @@ int main(int argc, char **argv)
                    (unsigned long long)ps, pt < ps ? ", last kept on fx_frame_ps: " : "",
                    pt < ps ? rd__paste_spec_why_text(pw) : "");
         }
+        /* the shadow volumes' stencil-only entry (rd_volume_fs.c): this
+         * replay's volume draws by date_clear_ps of those seen; the run's,
+         * and the last reason one kept sprite_ps */
+        {
+            uint64_t vt = 0, vs = 0;
+            int vw = 0;
+            uint32_t rt = 0, rs = 0;
+            const char *vtw = NULL;
+            rd__volume_fs_counts(&vt, &vs, &vw);
+            rd__volume_fs_replay(&rt, &rs);
+            (void)rd__volume_fs_test_state(&vtw);
+            printf("%s: stats: volume fs %s (self-test %s): %u volume draws by date_clear_ps of "
+                   "%u; the run: %llu of %llu%s%s\n",
+                   dump, rd__volume_fs_on() ? "on" : "off", vtw, rt, rs, (unsigned long long)vt,
+                   (unsigned long long)vs, vt < vs ? ", last kept on sprite_ps: " : "",
+                   vt < vs ? rd__volume_fs_why_text(vw) : "");
+        }
         /* the aura's paste as the alpha alone (rd_aura_paste.c) */
         printf("%s: stats: aura paste %s: %u split (%u rows as the alpha alone, %u band rows), %u "
                "drawn whole%s%s%s\n",
@@ -3688,6 +3712,9 @@ int main(int argc, char **argv)
             rd__set_not_implemented_fatal(false);
             (void)rd__crack_swap_selftest(); /* the new renderer's (rd_crack_fill.c) */
             (void)rd__turn_fold_selftest();  /* the new renderer's (rd_turn_fold.c) */
+            if (getenv("ICO_RD_VOLUME_FS") != NULL) {
+                (void)rd__volume_fs_selftest(); /* the new renderer's (rd_volume_fs.c) */
+            }
             if (overlay) {
                 rd_set_present_overlay(overlayTest, NULL);
             }

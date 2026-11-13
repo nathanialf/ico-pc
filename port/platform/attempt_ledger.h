@@ -127,6 +127,11 @@ enum {
        folded texel would recompute about 14 and 28 taps where the passes
        load 8 and 7: v0.11.5's FOLD4, which the phone measured slower) */
     ICO_ATT_CHAIN3,
+    /* rd_volume_fs.c: the shadow volumes drawn by date_clear_ps (no colour
+       output, no discard) in place of sprite_ps, behind its start-up
+       self-test; count the volume draws by it, second count the volume
+       draws that kept sprite_ps where it is offered */
+    ICO_ATT_VOLUME_FS,
     ICO_ATT_COUNT
 };
 
@@ -260,5 +265,12 @@ void ico_attempt_decide_as_made_timer(int asMade, int on);
    start-up self-test (-1 not run, 0 failed, 1 passed).  1 when the paste
    may take it (each draw still passes its gate), else 0 */
 int ico_attempt_decide_paste_spec(int module, int env, int defaultOn, int selftest);
+/* the shadow volumes' stencil-only entry (rd_volume_fs.c, at start-up and
+   after its self-test): module a Vulkan device with date_clear_ps's module
+   (0 on the other backends), env the tests' switch (ICO_RD_VOLUME_FS: -1
+   unset, 0, 1; its sabotage counts as 1), defaultOn RD_VOLUME_FS_DEFAULT,
+   selftest its start-up self-test (-1 not run, 0 failed, 1 passed).  1 when
+   the volumes may take it (each draw still passes its gate), else 0 */
+int ico_attempt_decide_volume_fs(int module, int env, int defaultOn, int selftest);
 
 #endif

@@ -61,11 +61,18 @@
 #include <string.h>
 
 #include "rd_internal.h"
+#include "rd_volume_fs.h" /* the frame and its replay, for the volumes' self-test */
 
 #define SB_BANDS 70
 
-/* GS TEST: ZTE, ZTST ALWAYS: every face counts */
+/* GS TEST: ZTE, ZTST ALWAYS: every face counts.  The volumes' own self-test
+ * (rd_volume_fs.c) builds the frame under the game's Z GEQUAL too: then the
+ * frame clears SCENE's depth to GS Z SB_ZCLEAR first, and the odd bands'
+ * rectangles lie at Z 0 (behind it: they fail the test and count nothing)
+ * while the even bands' lie at SB_ZFRONT (they pass) */
 #define SB_TEST RD_TEST_Z_ALWAYS
+#define SB_ZCLEAR 0x8000u
+#define SB_ZFRONT 0x10000u
 
 /* a GS pixel coordinate in 1/16 pixels on a w x h frame (XYOFFSET at
  * 2048 - w / 2) */
@@ -104,7 +111,8 @@ static void quad(RdScreenVtx *o, int32_t x0, int32_t y0, int32_t x1, int32_t y1)
     }
 }
 
-static bool buildFrame(RdFrame *f, uint32_t scene, uint32_t w, uint32_t h, uint32_t step)
+static bool buildFrame(RdFrame *f, uint32_t scene, uint32_t w, uint32_t h, uint32_t step,
+                       uint64_t test)
 {
     memset(f, 0, sizeof(*f));
     rd__reset_state_block(&f->startState);
@@ -114,10 +122,20 @@ static bool buildFrame(RdFrame *f, uint32_t scene, uint32_t w, uint32_t h, uint3
      * (rd_internal.h RDC_SHADOW_RESET) */
     const uint8_t b0 = (uint8_t)(step == 8 ? 8 : 0);
     RdCmd *rc = NULL;
-    bool ok = rd__st_target(f, 3, scene, w, h) && rd__st_push(f, 3, RDC_TEXTURE_OFF) &&
-              rd__st_push1(f, 3, RDC_ABE, 0) && rd__st_test(f, 3, SB_TEST) &&
-              rd__st_push1(f, 3, RDC_ZWRITE, RD_ZWRITE_OFF) &&
-              (rc = rd__st_push(f, 3, RDC_SHADOW_RESET)) != NULL;
+    const bool zt = test != SB_TEST; /* the Z GEQUAL frame (above) */
+    bool ok = rd__st_target(f, 3, scene, w, h);
+    if (ok && zt) {
+        RdCmd *cl = rd__st_push(f, 3, RDC_CLEAR); /* colour 0, depth SB_ZCLEAR */
+        if (cl) {
+            cl->u[0] = scene;
+            cl->b[4] = 1;
+            cl->u[1] = SB_ZCLEAR;
+        }
+        ok = cl != NULL;
+    }
+    ok = ok && rd__st_push(f, 3, RDC_TEXTURE_OFF) && rd__st_push1(f, 3, RDC_ABE, 0) &&
+         rd__st_test(f, 3, test) && rd__st_push1(f, 3, RDC_ZWRITE, RD_ZWRITE_OFF) &&
+         (rc = rd__st_push(f, 3, RDC_SHADOW_RESET)) != NULL;
     if (rc) {
         rc->b[0] = b0;
     }
@@ -134,6 +152,14 @@ static bool buildFrame(RdFrame *f, uint32_t scene, uint32_t w, uint32_t h, uint3
         quad(&v[(k - 1) * 6], left, top, right, bottom);
         quad(&v[inc + (k - 1) * 12], left, mid, right, bottom);
         quad(&v[inc + (k - 1) * 12 + 6], left, mid, right, bottom);
+        if (zt) {
+            const uint32_t z = (k & 1) ? 0u : SB_ZFRONT;
+            for (int i = 0; i < 6; i++) {
+                v[(k - 1) * 6 + i].z = z;
+                v[inc + (k - 1) * 12 + i].z = z;
+                v[inc + (k - 1) * 12 + 6 + i].z = z;
+            }
+        }
     }
     const uint32_t off = rd__frame_payload(f, v, (inc + dec) * (uint32_t)sizeof(*v));
     free(v);
@@ -168,6 +194,18 @@ static bool run(const RdFrame *f, uint32_t scene, uint8_t *px, size_t size, uint
     }
     return rd__replay_frame(f, 0, false) && rd__shadow_count_read(scene, px, size, &rw, &rh) &&
            rw == w && rh == h;
+}
+
+bool rd__shadow_selftest_frame(RdFrame *f, uint32_t scene, uint32_t w, uint32_t h, uint32_t step,
+                               uint64_t test)
+{
+    return buildFrame(f, scene, w, h, step, test);
+}
+
+bool rd__shadow_selftest_replay(const RdFrame *f, uint32_t scene, uint8_t *px, size_t size,
+                                uint32_t w, uint32_t h)
+{
+    return run(f, scene, px, size, w, h);
 }
 
 /* the band centres the one draw got right: band k's centre column, the
@@ -233,7 +271,7 @@ bool rd__shadow_selftest(void)
     uint8_t *one = malloc(size), *load = malloc(size), *seven = malloc(size);
     static RdFrame f;
     const uint32_t step = rd__shadow_disc_step();
-    if (!one || !load || !seven || !buildFrame(&f, scene, w, h, step)) {
+    if (!one || !load || !seven || !buildFrame(&f, scene, w, h, step, SB_TEST)) {
         free(one);
         free(load);
         free(seven);
