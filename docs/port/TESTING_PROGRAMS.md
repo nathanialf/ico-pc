@@ -1764,7 +1764,7 @@ The renderer's test programs have a page of their own:
   AMD and Qualcomm keep dynamic rendering; the reason names the driver and `vkCmdBeginRendering`;
   the `[dev] legacy_passes` words (`1`, `true`, `on`, `yes` in any case; `0`, `false`, `off`, `no`;
   anything else, empty and NULL none) (`rhi_vk_pass_row`). Qualcomm's row (issue 123): vendor 0x5143
-  with Qualcomm's driver id (8) or no id takes `VkRenderPass` objects; Turnip's id (18) and another id
+  with Qualcomm's driver id (8) or no id takes `VkRenderPass` objects on an Android build (not elsewhere: both ids with `android` 0 keep dynamic rendering); Turnip's id (18) and another id
   on the same vendor, Qualcomm's id on Arm's vendor, Arm, Intel and Imagination with no id keep
   dynamic rendering; neither row answers for the other's driver; the reason names Qualcomm, the issue
   and `vkCmdBeginRendering`. On lavapipe (`rhi_vk_test`): `rhi_vk_qcom_passes` every cell with the

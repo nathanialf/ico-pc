@@ -54,9 +54,12 @@ const char *rhi_vk_pass_row(uint32_t vendorId, uint32_t driverId, uint32_t apiVe
  * path as a cause with the same attachments, ops, layouts and barriers, so
  * the same picture.  Unlike the Intel row it does not move the VU record's
  * store passes onto a colour target (RhiLimits.storePassTarget stays the
- * Intel row's).  NULL when the device keeps dynamic rendering; else the
+ * Intel row's).  Android's alone (android nonzero on an Android build):
+ * both reporters' devices are Android ones, so Qualcomm's driver on
+ * Windows on Snapdragon keeps dynamic rendering (vk_device.c says so where
+ * it would match).  NULL when the device keeps dynamic rendering; else the
  * reason, a phrase for the device line. */
-const char *rhi_vk_pass_row_qualcomm(uint32_t vendorId, uint32_t driverId);
+const char *rhi_vk_pass_row_qualcomm(uint32_t vendorId, uint32_t driverId, int android);
 
 /* The override's value: -1 none (NULL, empty, "auto" or anything else), 0
  * ("0", "false", "no", "off"), 1 ("1", "true", "yes", "on"); case does not

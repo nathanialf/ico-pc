@@ -1660,11 +1660,22 @@ static void vkr_pass_row_apply(void)
        alone) puts any device on Qualcomm's row, nothing else of it faked */
     const char *fakeRow = getenv("ICO_VK_FAKE_PASS_ROW");
     const bool fakeQcom = fakeRow && strcmp(fakeRow, "qualcomm") == 0;
+#ifdef __ANDROID__
+    const int android = 1;
+#else
+    const int android = 0;
+#endif
     const char *qcomRow =
         intelRow ? NULL
         : fakeQcom
-            ? rhi_vk_pass_row_qualcomm(RHI_VENDOR_QUALCOMM, RHI_DRIVER_ID_QUALCOMM_PROPRIETARY)
-            : rhi_vk_pass_row_qualcomm(g_vkr.props.vendorID, g_vkr.driverID);
+            ? rhi_vk_pass_row_qualcomm(RHI_VENDOR_QUALCOMM, RHI_DRIVER_ID_QUALCOMM_PROPRIETARY, 1)
+            : rhi_vk_pass_row_qualcomm(g_vkr.props.vendorID, g_vkr.driverID, android);
+    if (!intelRow && !qcomRow && !android &&
+        rhi_vk_pass_row_qualcomm(g_vkr.props.vendorID, g_vkr.driverID, 1) != NULL) {
+        VKR_LOG("render passes: dynamic rendering on Qualcomm's own driver: its row (VkRenderPass "
+                "objects, issue 123) is Android's alone, its evidence the Adreno 740 and 710 "
+                "there");
+    }
     const char *row = intelRow ? intelRow : qcomRow;
     g_vkr.passRowHit = intelRow != NULL;
     if (g_vkr.legacyPasses) {

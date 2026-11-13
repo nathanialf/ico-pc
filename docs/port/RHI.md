@@ -1555,7 +1555,7 @@ crashed in the first picture after a live switch from 1x to 2x: issue 123's Inte
 `igvk64.dll+0x5cfab9` reading 0x68, and other ports' reports on the same drivers) and by any device
 with `[dev] legacy_passes = true` (`ICO_VK_LEGACY_PASSES=1`); `legacy_passes = false` (`0`) keeps
 dynamic rendering wherever the device offers it (`vk_device.c` (`vkr_pass_row_apply`)). A second
-row (`rhi_vk_pass_row_qualcomm`, issue 123) takes it on Qualcomm's own driver (vendor 0x5143 with
+row (`rhi_vk_pass_row_qualcomm`, issue 123; on Android alone, its evidence's platform: on Windows on Snapdragon the driver keeps dynamic rendering and the device start says `render passes: dynamic rendering on Qualcomm's own driver: its row (VkRenderPass objects, issue 123) is Android's alone, ...`) takes it on Qualcomm's own driver (vendor 0x5143 with
 `VK_DRIVER_ID_QUALCOMM_PROPRIETARY` or no driver id; every Adreno, every version; Turnip keeps
 dynamic rendering): the Adreno 740 of issue 123 and the Adreno 710 of issue 211 hang inside a pass
 about once in 500 pictures, every such run on dynamic rendering, and the `VkRenderPass` path removes

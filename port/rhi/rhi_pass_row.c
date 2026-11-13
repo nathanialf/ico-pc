@@ -21,11 +21,12 @@ const char *rhi_vk_pass_row(uint32_t vendorId, uint32_t driverId, uint32_t apiVe
            "gen graphics crash in vkCmdBeginRendering)";
 }
 
-const char *rhi_vk_pass_row_qualcomm(uint32_t vendorId, uint32_t driverId)
+const char *rhi_vk_pass_row_qualcomm(uint32_t vendorId, uint32_t driverId, int android)
 {
     /* rhi_driver_is_qualcomm_proprietary's rule (rhi_driver_version.h),
-       written out: this file links alone into its test */
-    if (vendorId != RHI_VENDOR_QUALCOMM ||
+       written out: this file links alone into its test; Android's alone
+       (the evidence) */
+    if (!android || vendorId != RHI_VENDOR_QUALCOMM ||
         (driverId != RHI_DRIVER_ID_QUALCOMM_PROPRIETARY && driverId != 0)) {
         return NULL;
     }
