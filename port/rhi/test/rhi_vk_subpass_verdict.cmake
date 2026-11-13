@@ -74,7 +74,10 @@ set(classEnv "ICO_VK_SUBPASS_PROBE_CLASS=1")
 run(1 log)
 need("${log}" "render passes: the subpass read: [^\n]*no verdict for this device and driver yet"
      "1 (no file)")
-need("${log}" "device and driver ([0-9a-f]+:[0-9a-f]+:[0-9a-f]+)" "1 (the key)")
+# the key matched here: CMAKE_MATCH_1 set inside need() stays in its scope
+if(NOT log MATCHES "device and driver ([0-9a-f]+:[0-9a-f]+:[0-9a-f]+)")
+  message(FATAL_ERROR "1 (the key): no \"device and driver K\" in:\n${log}")
+endif()
 set(key "${CMAKE_MATCH_1}")
 need("${log}" "its mark taken away, the next start probes" "1 (the mark)")
 if(EXISTS "${FILE}")
