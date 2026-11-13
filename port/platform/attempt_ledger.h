@@ -81,9 +81,15 @@ enum {
     ICO_ATT_ADRENO_A,
     /* a second Adreno attempt: not built (not in this build) */
     ICO_ATT_ADRENO_B,
-    /* the other exact cuts planned for the tile-based phones: the subpass
-       read, the blend constant, the index compaction */
+    /* the subpass read (port/rhi/rhi_subpass_verdict.h,
+       port/render/rd_subpass_probe.c): DATE's stencil set-up inside the
+       scene's pass on a VkRenderPass path without local read; count the
+       set-ups drawn through it (window_perf_rank.c, RdPerfRecord
+       .dateStencilTakes where RhiLimits.localReadSubpass) */
     ICO_ATT_SUBPASS,
+    /* the other exact cuts planned for the tile-based phones: the blend
+       constant (measured: no draw of the Mali's pictures to convert, not
+       built), the index compaction */
     ICO_ATT_BLEND_CONST,
     ICO_ATT_COMPACTION,
     /* rd_vu_class.c (rd_vu_record.c): the VU record by compute dispatches
@@ -177,5 +183,13 @@ int ico_attempt_decide_vu_compute(int byName, int stores, int compute, int power
    failed, 1 passed).  1 when the fold may run (each present still checks
    its draws), else 0 */
 int ico_attempt_decide_turn_fold(int turned, int env, int defaultOn, int selftest);
+/* the subpass read (rd_subpass_probe.c, at DATE's self-test and after its
+   probe): route the device's passes are VkRenderPass objects without local
+   read (RhiLimits.subpassRoute), on the read in force for DATE (the device
+   made its shape and DATE's self-test and the probe kept it), refused this
+   start's self-test or probe, or an earlier start's verdict, refused it;
+   why the decision's words (a string that outlives the row: the device's
+   RhiLimits.subpassWhy or the probe's verdict) */
+void ico_attempt_decide_subpass(int route, int on, int refused, const char *why);
 
 #endif

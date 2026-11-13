@@ -57,6 +57,11 @@ typedef struct DeviceClass {
        (turned): the facts as rd_vu_record.c and rd_turn_fold.c have them */
     int vuStores, vuPowervr, turned;
     IcoAttemptState wantVu, wantTurn;
+    /* the subpass read (rd_subpass_probe.c): RhiLimits.subpassRoute, the
+       read in force, refused, the device's or the probe's words */
+    int spRoute, spOn, spRefused;
+    const char *spWhy;
+    IcoAttemptState wantSubpass;
 } DeviceClass;
 
 static void test_classes(void)
@@ -82,7 +87,13 @@ static void test_classes(void)
          0,
          1,
          ICO_ATT_NA,
-         ICO_ATT_OFF_DEFAULT},
+         ICO_ATT_OFF_DEFAULT,
+         1,
+         1,
+         0,
+         "no verdict for this device and driver yet: on for this start's probe (DATE's "
+         "self-test, then the read timed against the R8 snapshot)",
+         ICO_ATT_ON},
         {"Pixel (PowerVR D, 1 + 5 over 2)",
          6,
          1,
@@ -104,7 +115,12 @@ static void test_classes(void)
          1,
          1,
          ICO_ATT_OFF_DEFAULT,
-         ICO_ATT_OFF_DEFAULT},
+         ICO_ATT_OFF_DEFAULT,
+         0,
+         0,
+         0,
+         NULL,
+         ICO_ATT_NA},
         {"PowerVR B (no local read)",
          2,
          1,
@@ -125,7 +141,12 @@ static void test_classes(void)
          1,
          1,
          ICO_ATT_OFF_DEFAULT,
-         ICO_ATT_OFF_DEFAULT},
+         ICO_ATT_OFF_DEFAULT,
+         1,
+         0,
+         0,
+         "no GPU timestamps: the probe cannot time it, so DATE keeps its R8 snapshot",
+         ICO_ATT_NA},
         {"Adreno 740 on Qualcomm's driver (4 + 3 + 1)",
          4,
          1,
@@ -146,7 +167,13 @@ static void test_classes(void)
          0,
          1,
          ICO_ATT_NA,
-         ICO_ATT_OFF_DEFAULT},
+         ICO_ATT_OFF_DEFAULT,
+         1,
+         0,
+         1,
+         "refused by the probe of an earlier start (DATE's self-test on the read: stencil "
+         "fail 1 at sample 4)",
+         ICO_ATT_REFUSED},
         {"Adreno 740 on Turnip",
          4,
          1,
@@ -167,7 +194,12 @@ static void test_classes(void)
          0,
          1,
          ICO_ATT_NA,
-         ICO_ATT_OFF_DEFAULT},
+         ICO_ATT_OFF_DEFAULT,
+         0,
+         0,
+         0,
+         NULL,
+         ICO_ATT_NA},
         {"desktop with MSAA",
          0,
          0,
@@ -188,6 +220,11 @@ static void test_classes(void)
          0,
          0,
          ICO_ATT_NA,
+         ICO_ATT_NA,
+         0,
+         0,
+         0,
+         NULL,
          ICO_ATT_NA},
         {"a Mac (MoltenVK), the break forced",
          0,
@@ -209,6 +246,11 @@ static void test_classes(void)
          0,
          0,
          ICO_ATT_NA,
+         ICO_ATT_NA,
+         0,
+         0,
+         0,
+         NULL,
          ICO_ATT_NA},
     };
     for (size_t c = 0; c < sizeof k / sizeof k[0]; c++) {
@@ -223,6 +265,7 @@ static void test_classes(void)
         ico_attempt_decide_pass_objects(d->passRow);
         CHECK(ico_attempt_decide_vu_compute(0, d->vuStores, 1, d->vuPowervr, -1, 0) == 0);
         CHECK(ico_attempt_decide_turn_fold(d->turned, -1, 0, -1) == 0);
+        ico_attempt_decide_subpass(d->spRoute, d->spOn, d->spRefused, d->spWhy);
         for (int i = 0; i < ICO_ATT_COUNT; i++) {
             if (ico_attempt_state_of(i) == ICO_ATT_NOT_SET) {
                 printf("FAIL %s: %s not reported\n", d->name, ico_attempt_name(i));
@@ -234,6 +277,23 @@ static void test_classes(void)
         CHECK(ico_attempt_state_of(ICO_ATT_NO_VOLUME_BREAK) == d->wantNoVolume);
         CHECK(ico_attempt_state_of(ICO_ATT_ADRENO_A) == (d->passRow ? ICO_ATT_ON : ICO_ATT_NA));
         CHECK(ico_attempt_state_of(ICO_ATT_ADRENO_B) == ICO_ATT_NOT_BUILT);
+        CHECK(ico_attempt_state_of(ICO_ATT_BLEND_CONST) == ICO_ATT_NOT_BUILT);
+        if (ico_attempt_state_of(ICO_ATT_SUBPASS) != d->wantSubpass) {
+            printf("FAIL %s: subpass read %s\n", d->name,
+                   ico_attempt_state_word(ico_attempt_state_of(ICO_ATT_SUBPASS)));
+            failures++;
+        }
+        /* the row's why: the owner's words on the route, the fixed words off it */
+        {
+            const char *w = ico_attempt_why_of(ICO_ATT_SUBPASS);
+            const char *want = d->spRoute ? d->spWhy
+                                          : "not a VkRenderPass path without local read (dynamic "
+                                            "rendering's local read, or another backend)";
+            if (w == NULL || strcmp(w, want) != 0) {
+                printf("FAIL %s: subpass read why %s\n", d->name, w ? w : "(none)");
+                failures++;
+            }
+        }
         if (ico_attempt_state_of(ICO_ATT_VU_COMPUTE_CLASS) != d->wantVu ||
             ico_attempt_state_of(ICO_ATT_TURN_FOLD) != d->wantTurn) {
             printf("FAIL %s: VU compute %s, turn fold %s\n", d->name,
@@ -303,7 +363,10 @@ int main(void)
     CHECK(starts(b, "attempts at the start: few-cores rule not reported; pipeline set on every "
                     "core not reported; "));
     CHECK(strstr(b, "; index compaction not in this build") != NULL);
-    CHECK(ico_attempt_state_of(ICO_ATT_SUBPASS) == ICO_ATT_NOT_BUILT);
+    CHECK(ico_attempt_state_of(ICO_ATT_SUBPASS) == ICO_ATT_NOT_SET);
+    CHECK(ico_attempt_state_of(ICO_ATT_BLEND_CONST) == ICO_ATT_NOT_BUILT);
+    CHECK(strstr(b, "; subpass read not reported") != NULL);
+    CHECK(strstr(b, "; blend constant not in this build") != NULL);
     /* and the block line is empty, with no stalls asked */
     CHECK(ico_attempt_block_text(b, sizeof(b), -1) == 0 && b[0] == '\0');
     CHECK(ico_attempt_block_text(b, sizeof(b), 0) > 0 &&

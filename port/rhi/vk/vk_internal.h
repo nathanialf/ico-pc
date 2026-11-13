@@ -598,6 +598,14 @@ typedef struct VkrState {
      * colour is not one of its textures (none by construction) */
     bool subpassRead;
     uint32_t subpassPasses, subpassSkipped, subpassMisfit;
+    /* its decision (rhi_subpass_verdict.h, RhiLimits.subpassRoute ...):
+     * the route (VkRenderPass objects without local read), the read on for
+     * this start's probe, the decision's words, the verdict file and the
+     * device and driver's key in it */
+    bool subpassRoute, subpassProbe;
+    char subpassWhy[256];
+    char subpassFile[1100];
+    char subpassKey[32];
     bool validationOn;
     bool storageBarriers;
     uint32_t validationErrors;
@@ -1133,6 +1141,9 @@ void vkr_release_all_objects(void);
  * saved to the file and destroyed before the device goes */
 void vkr_pipeline_cache_init(void);
 void vkr_pipeline_cache_shutdown(void);
+/* the path rhi_set_pipeline_cache_path kept ("" none): the subpass read's
+ * verdict file lives beside it (vk_device.c, rhi_subpass_verdict.h) */
+const char *vkr_pipeline_cache_path(void);
 /* vk_pipeline.c, issue 188: on a driver whose compiler is not thread-safe
  * (rhi_driver_version.h rhi_driver_compiler_serial, RhiLimits.
  * serialPipelines) one compile thread and one lock that

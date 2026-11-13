@@ -124,6 +124,11 @@ void rhi_set_pipeline_cache_path(const char *path)
     }
 }
 
+const char *vkr_pipeline_cache_path(void)
+{
+    return s_cachePath;
+}
+
 /* ------------------------------------------------ the other shader sets' caches
  * The window names the file pipelines-<key>.vkcache, the key a hash of the
  * embedded SPIR-V modules and the pipeline format (port/render/rd_cache_name.h),
