@@ -48,6 +48,24 @@
  * takes its own snapshot or stencil set-up from the alpha as it is (a
  * retake reads the same alpha; nothing it would have reused was written).
  *
+ * The break mode (v0.11.6, RD_NO_VOLUME_BREAK_DEFAULT 0, ICO_RD_NO_VOLUME_BREAK
+ * for the tests): the same window, but the reset is recorded as before (the
+ * merged pass's stencil store armed as before: rd__no_volume_owns says no)
+ * and the resolve ends the open pass as the count's draw ends it
+ * (rd_shadow_one.c rd__replay_end_pass: the reset's pending stencil clear
+ * recorded as before) and closes the shadow window as doShadowResolve does
+ * after the count; the levels and composites are skipped and the zeros owed
+ * as above.  So SCENE's pass ends where it ends today and is begun again by
+ * its next draw with LOAD, as the first composite began it; what is left out
+ * is the count's pass, the levels' passes and the composites' DATE set-ups.
+ * A target that holds zero already is owed no clear: the zero clears the
+ * replay before recorded and the targets it found holding zero (s_zero) are
+ * read by the next replay alone (the replay counter one more: no own frame
+ * or other replay between), for a target no command before its window's
+ * resolve names (zeroTouch), whose texture is the same and in SHADER_READ as
+ * the clear's pass left it (heldZero).  ICO_RD_NO_VOLUME_POISON=1 (tests):
+ * the owed clears magenta and none left out, so a reader shows.
+ *
  * Which device classes (the gate, rd_nv_gate): off by default on every
  * device in this release (RD_NO_VOLUME_DEFAULT 0 in classOn: rc14 and rc15
  * on the owner's PowerVR phone flickered black over the right part of the
@@ -82,6 +100,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "rd_date_one.h"
 #include "rd_no_volume.h"
 #include "rd_replay.h"
 #include "rd_shadow_box.h"
@@ -338,11 +357,109 @@ static struct {
 
     unsigned nOwed;
     bool flushing;
+    /* the break mode (rd_no_volume.h): the window taken with SCENE's pass
+     * ended at the resolve and the reset and the merged stencil store as
+     * they are without it (gateBreak its gate, brk taken so this replay) */
+    int envBreak;
+    bool envBreakRead;
+    int gateBreak;
+    bool brk;
     /* the lines */
     bool saidGate, saidKept;
     int saidGateWhy;
     uint32_t refusals;
-} s_nv = {.env = -1, .saidGateWhy = -2};
+} s_nv = {.env = -1, .envBreak = -1, .saidGateWhy = -2};
+
+/* The targets that hold (0, 0, 0, 0): the zero clears the last replay
+ * recorded (rd__no_volume_flush) and the ones it found holding zero, each
+ * a target's colour (target) or the reduced count (red), its texture and
+ * size.  Read by the next replay alone (zeroPrev: the replay counter one
+ * more), and by it only for a target no command before its window's resolve
+ * names (the scan marks those: dirty), whose texture is the same and still
+ * in SHADER_READ as the clear's pass left it: the break mode then owes it no
+ * clear (it holds the zero the clear would write) */
+typedef struct NvZero {
+    uint32_t target;
+    RhiTexture *red;
+    uint32_t tex, w, h;
+    bool dirty;
+} NvZero;
+
+static struct {
+    uint32_t replay;
+    unsigned n;
+    NvZero z[RD_NV_CHAIN];
+} s_zero, s_zeroPrev;
+
+static void zeroAdd(uint32_t target, RhiTexture *red, uint32_t tex, uint32_t w, uint32_t h)
+{
+    for (unsigned i = 0; i < s_zero.n; i++) {
+        if (s_zero.z[i].target == target && s_zero.z[i].red == red) {
+            s_zero.z[i].tex = tex;
+            s_zero.z[i].w = w;
+            s_zero.z[i].h = h;
+            return;
+        }
+    }
+    if (s_zero.n < RD_NV_CHAIN) {
+        s_zero.z[s_zero.n++] = (NvZero){target, red, tex, w, h, false};
+    }
+}
+
+/* the scan before the window's resolve: a command naming a target that held
+ * zero (its colour, its depth, a texture, a clear, a copy, a post record's) */
+static void zeroTouch(const RdNvCmd *c)
+{
+    for (unsigned i = 0; i < s_zeroPrev.n; i++) {
+        const uint32_t t = s_zeroPrev.z[i].target;
+        if (!t) {
+            continue; /* the reduced count: only a resolve writes it, and the window's is the
+                         first of the replay (the scan refuses one before it) */
+        }
+        bool named = c->color == t || c->depth == t;
+        for (int k = 0; k < RD_NV_NAMES && !named; k++) {
+            named = c->names[k] == t;
+        }
+        s_zeroPrev.z[i].dirty = s_zeroPrev.z[i].dirty || named;
+    }
+}
+
+/* ICO_RD_NO_VOLUME_POISON=1 (the tests only): the owed clears write magenta,
+ * and none is left out for a target that held zero, so any reader of the
+ * count or a level the walk does not draw shows in the picture */
+static bool poisonOn(void)
+{
+    static int s_env = -1;
+    if (s_env < 0) {
+        const char *e = getenv("ICO_RD_NO_VOLUME_POISON");
+        s_env = e && strcmp(e, "1") == 0;
+    }
+    return s_env == 1;
+}
+
+/* the break mode only: the target (or the reduced count) holds zero from the
+ * replay before, nothing has named it since, and its texture is the one the
+ * zero was written into, in the state the clear's pass left it */
+static bool heldZero(uint32_t target, RhiTexture *red, const RhiState *redState, uint32_t w,
+                     uint32_t h)
+{
+    if (!s_nv.brk || poisonOn()) {
+        return false;
+    }
+    for (unsigned i = 0; i < s_zeroPrev.n; i++) {
+        const NvZero *z = &s_zeroPrev.z[i];
+        if (z->dirty || z->target != target || z->red != red || z->w != w || z->h != h) {
+            continue;
+        }
+        if (red) {
+            return red->id && red->id == z->tex && redState && *redState == RHI_STATE_SHADER_READ;
+        }
+        const RdTargetRec *t = rd__target_rec(target);
+        return t && t->color.id && t->color.id == z->tex &&
+               t->colorState == RHI_STATE_SHADER_READ && t->tw == w && t->th == h;
+    }
+    return false;
+}
 
 static int envOf(void)
 {
@@ -360,17 +477,55 @@ static int envOf(void)
    was on for: PowerVR and MoltenVK under Vulkan. ICO_RD_NO_VOLUME=1 turns it on (tests) */
 #define RD_NO_VOLUME_DEFAULT 0
 
-static bool classOn(void)
+/* The break mode (v0.11.6): the same window taken with SCENE's pass ended at
+ * the resolve as the count's draw ends it, the reset and the merged stencil
+ * store as without it; off by default until a phone rc shows the PowerVR
+ * phone's title and pause menu clean with it (a relative of the open mode,
+ * which flickered there): the user decides.  Its classes are the open
+ * mode's.  ICO_RD_NO_VOLUME_BREAK=1 turns it on (tests) */
+#define RD_NO_VOLUME_BREAK_DEFAULT 0
+
+/* the classes the window's passes end and begin at a cost: the tile-based
+ * classes under Vulkan whose composites take DATE through the stencil bit */
+static bool classBase(void)
 {
     const RhiLimits *lim = g_rd.hasDevice ? rhi_limits() : NULL;
-    return RD_NO_VOLUME_DEFAULT && lim && rhi_backend() == RHI_BACKEND_VULKAN &&
-           (lim->moltenvk || rd__profile_powervr());
+    return lim && rhi_backend() == RHI_BACKEND_VULKAN && (lim->moltenvk || rd__profile_powervr());
 }
 
+static bool classOn(void)
+{
+    return RD_NO_VOLUME_DEFAULT && classBase();
+}
+
+static bool breakClassOn(void)
+{
+    return RD_NO_VOLUME_BREAK_DEFAULT && classBase();
+}
+
+static int breakEnvOf(void)
+{
+    if (!s_nv.envBreakRead) {
+        const char *e = getenv("ICO_RD_NO_VOLUME_BREAK");
+        s_nv.envBreak = e && strcmp(e, "0") == 0 ? 0 : e && strcmp(e, "1") == 0 ? 1 : -1;
+        s_nv.envBreakRead = true;
+    }
+    return s_nv.envBreak;
+}
+
+static int gateOf(int env, bool cls)
+{
+    return rd_nv_gate(env, cls, rd_aa_samples(rd__aa_mode()) > 1u, g_rdWin.first != 0,
+                      g_rd.dstMode != RD_BLEND_EXACT_OFF, rd__uber_on(), g_rd.profile.dateStencil);
+}
+
+/* the window's gate: the break mode's when it holds (it goes first), else
+ * the open mode's (its why when neither holds) */
 static int gateNow(void)
 {
-    return rd_nv_gate(envOf(), classOn(), rd_aa_samples(rd__aa_mode()) > 1u, g_rdWin.first != 0,
-                      g_rd.dstMode != RD_BLEND_EXACT_OFF, rd__uber_on(), g_rd.profile.dateStencil);
+    s_nv.gateBreak = gateOf(breakEnvOf(), breakClassOn());
+    const int open = gateOf(envOf(), classOn());
+    return s_nv.gateBreak == RD_NV_WHY_COUNT ? RD_NV_WHY_COUNT : open;
 }
 
 static bool here(void)
@@ -385,8 +540,17 @@ void rd__no_volume_scan_begin(const RdFrame *f, int keep)
     s_nv.replay = g_rd.replayCounter;
     s_nv.frame = f ? f->number : 0;
     s_nv.result = RD_NV_RES_NONE;
-    s_nv.owns = s_nv.active = s_nv.resolved = false;
+    s_nv.owns = s_nv.active = s_nv.resolved = s_nv.brk = false;
     s_nv.nOwed = 0; /* every zero owed was recorded at the last replay's end */
+    /* the zeros the replay before left: this replay's to read only if no
+     * other replay (an own frame, a self-test's) came between */
+    if (s_zero.replay + 1u == g_rd.replayCounter && s_zero.replay != 0) {
+        s_zeroPrev = s_zero;
+    } else {
+        s_zeroPrev.n = 0;
+    }
+    s_zero.n = 0;
+    s_zero.replay = g_rd.replayCounter;
 }
 
 /* the target a state's texture is a view of, else 0; enabledOnly: a
@@ -494,6 +658,9 @@ void rd__no_volume_scan_cmd(const RdFrame *f, const RdCmd *c, const RdStateBlock
         e.kind = RD_NV_UNKNOWN;
         break;
     }
+    if (s_nv.scan.phase < 2) {
+        zeroTouch(&e); /* before the window's resolve (after it the scan refuses any touch) */
+    }
     rd_nv_scan_step(&s_nv.scan, &e);
 }
 
@@ -511,18 +678,30 @@ void rd__no_volume_scan_end(void)
     if (s_nv.result == RD_NV_RES_NONE) {
         return;
     }
-    if (!s_nv.saidGate || s_nv.saidGateWhy != s_nv.gate) {
+    const bool brk = s_nv.gate == RD_NV_WHY_COUNT && s_nv.gateBreak == RD_NV_WHY_COUNT;
+    const int said = s_nv.gate + (brk ? 100 : 0);
+    if (!s_nv.saidGate || s_nv.saidGateWhy != said) {
         /* once a renderer, and again when the decision changes */
         s_nv.saidGate = true;
-        s_nv.saidGateWhy = s_nv.gate;
-        rd__log("shadows: no volume: %s (%s): a shadow window without a volume keeps SCENE's "
-                "pass open, its count and levels written as zero clears outside it; the same "
-                "bytes",
-                s_nv.gate == RD_NV_WHY_COUNT ? "on" : "off",
-                s_nv.gate == RD_NV_WHY_COUNT
-                    ? (envOf() == 1 ? "ICO_RD_NO_VOLUME=1"
-                                    : "the PowerVR or MoltenVK class, RD_NO_VOLUME_DEFAULT 1")
-                    : rd_nv_why_words(s_nv.gate));
+        s_nv.saidGateWhy = said;
+        if (brk) {
+            rd__log("shadows: no volume: on with SCENE's pass ended at the resolve (%s): a shadow "
+                    "window without a volume draws no count, levels or composites, the count "
+                    "and levels written as zero clears (none where they hold zero already), "
+                    "the reset and the stencil's store as before; the same bytes",
+                    breakEnvOf() == 1 ? "ICO_RD_NO_VOLUME_BREAK=1"
+                                      : "the PowerVR or MoltenVK class, "
+                                        "RD_NO_VOLUME_BREAK_DEFAULT 1");
+        } else {
+            rd__log("shadows: no volume: %s (%s): a shadow window without a volume keeps "
+                    "SCENE's pass open, its count and levels written as zero clears outside "
+                    "it; the same bytes",
+                    s_nv.gate == RD_NV_WHY_COUNT ? "on" : "off",
+                    s_nv.gate == RD_NV_WHY_COUNT
+                        ? (envOf() == 1 ? "ICO_RD_NO_VOLUME=1"
+                                        : "the PowerVR or MoltenVK class, RD_NO_VOLUME_DEFAULT 1")
+                        : rd_nv_why_words(s_nv.gate));
+        }
     }
     if (s_nv.result == RD_NV_RES_VOLUME) {
         g_rdPerf.noVolumeWith++;
@@ -533,6 +712,7 @@ void rd__no_volume_scan_end(void)
                                                      : -1;
     if (why < 0) {
         s_nv.owns = true;
+        s_nv.brk = brk;
         return;
     }
     whyCount(why);
@@ -549,7 +729,8 @@ void rd__no_volume_scan_end(void)
 
 bool rd__no_volume_owns(uint32_t ord)
 {
-    return s_nv.owns && here() && ord == s_nv.scan.resetOrd;
+    /* the break mode keeps the reset and its stencil store */
+    return s_nv.owns && !s_nv.brk && here() && ord == s_nv.scan.resetOrd;
 }
 
 /* ------------------------------------------------------------- the walk */
@@ -557,11 +738,11 @@ bool rd__no_volume_owns(uint32_t ord)
 bool rd__no_volume_reset(Replay *r)
 {
     (void)r;
-    if (!rd__no_volume_owns(g_rdStoreOrd)) {
+    if (!s_nv.owns || !here() || g_rdStoreOrd != s_nv.scan.resetOrd) {
         return false;
     }
     s_nv.active = true;
-    return true;
+    return !s_nv.brk; /* the break mode: the reset recorded as before */
 }
 
 bool rd__no_volume_active(void)
@@ -571,6 +752,12 @@ bool rd__no_volume_active(void)
 
 static void owe(uint32_t target, RhiTexture *red, RhiState *redState, uint32_t w, uint32_t h)
 {
+    if (heldZero(target, red, redState, w, h)) {
+        /* the break mode: it holds the zero a clear would write */
+        zeroAdd(target, red, red ? red->id : rd__target_rec(target)->color.id, w, h);
+        g_rdPerf.noVolumeHeld++;
+        return;
+    }
     for (unsigned i = 0; i < s_nv.nOwed; i++) {
         if (s_nv.owed[i].target == target && s_nv.owed[i].red == red) {
             return; /* owed already: one clear */
@@ -592,11 +779,34 @@ void rd__no_volume_resolve(Replay *r, RdTargetRec *tc, RhiTexture *red, RhiState
 {
     s_nv.resolved = true;
     s_nv.countFor = r->st.color;
+    if (s_nv.brk) {
+        /* the pass ends where the count's draw ends it (rd_shadow_one.c
+         * rd__replay_end_pass: the reset's stencil clear and the merged
+         * pass's stencil store recorded as before), and the shadow window
+         * closes as doShadowResolve closes it after the count */
+        rd__replay_end_pass(r);
+        const RdTargetRec *td = rd__target_rec(r->st.depth);
+        if (td && td->withDepth && td->depth.id) {
+            rd__stencil_close(rd__replay_stencil(), td->depth.id);
+        }
+        g_rdPerf.noVolumeBreak++;
+    }
     r->writeSerial++; /* as the count's draw moved it */
     if (red) {
         owe(0, red, redState, tc->w, tc->h); /* the reduced count at the GS size */
     } else {
         owe(r->st.color, NULL, NULL, tc->tw, tc->th);
+    }
+    if (s_nv.brk) {
+        if (!s_nv.saidKept) {
+            s_nv.saidKept = true;
+            rd__log("shadows: no volume: frame %u, the window at commands %u..%u has no volume: "
+                    "SCENE's pass ended at the resolve, its count%s and levels owed as zero "
+                    "clears or holding zero already (the same bytes; reported once)",
+                    s_nv.frame, s_nv.scan.resetOrd, s_nv.scan.resolveOrd,
+                    red ? " (the reduced count)" : "");
+        }
+        return;
     }
     g_rdPerf.noVolumeKept++;
     const RdTargetRec *pc = r->passOpen ? rd__target_rec(r->passColor) : NULL;
@@ -618,12 +828,20 @@ void rd__no_volume_resolve(Replay *r, RdTargetRec *tc, RhiTexture *red, RhiState
 
 bool rd__no_volume_skip(Replay *r)
 {
-    if (!s_nv.resolved || !here()) {
-        return false;
-    }
-    const int kind = rd_nv_skip_kind(&s_nv.scan, g_rdStoreOrd);
+    const int kind =
+        s_nv.resolved && here() ? rd_nv_skip_kind(&s_nv.scan, g_rdStoreOrd) : RD_NV_NONE;
     if (kind == RD_NV_NONE) {
-        return false;
+        /* a composite whose level the volumes' box leaves empty draws
+         * nothing (rd_shadow_box.c): skipped with its DATE snapshot or
+         * set-up; the write serial moves, so the next DATE draw takes its own
+         * set-up from the alpha as it is, as after the drawn one */
+        if (!rd__shadow_box_empty_skip(&r->st)) {
+            return false;
+        }
+        rd__replay_flush_run(r);
+        r->writeSerial++;
+        rd__date_one_passed(r->writeSerial); /* the group's set-up still holds */
+        return true;
     }
     rd__replay_flush_run(r); /* the run's draws keep their place */
     r->writeSerial++;        /* as a drawn level's or composite's may */
@@ -672,6 +890,13 @@ void rd__no_volume_flush(void)
         p.color[0].texture = tex;
         p.color[0].load = RHI_LOAD_CLEAR; /* clear[] zeroed: (0, 0, 0, 0) */
         p.color[0].store = RHI_STORE_STORE;
+        if (poisonOn()) {
+            static const float kMagenta[4] = {1.0f, 0.0f, 1.0f, 1.0f};
+            memcpy(p.color[0].clear, kMagenta, sizeof(kMagenta)); /* a reader would show */
+        } else {
+            zeroAdd(s_nv.owed[i].red ? 0u : id, s_nv.owed[i].red, tex.id, s_nv.owed[i].w,
+                    s_nv.owed[i].h);
+        }
         p.colorCount = 1;
         p.width = w;
         p.height = h;
@@ -691,7 +916,7 @@ void rd__no_volume_flush(void)
 /* ------------------------------------------------------------ the lines */
 
 static struct {
-    uint64_t kept, open, with, why[RD_NO_VOLUME_WHYS], bytes;
+    uint64_t kept, open, with, why[RD_NO_VOLUME_WHYS], bytes, brk, clears, held;
     uint32_t replays;
 } s_sum;
 
@@ -713,6 +938,9 @@ void rd__no_volume_pop(const RdPerfRecord *rec)
         s_sum.why[k] += rec->noVolumeWhy[k];
     }
     s_sum.bytes += keptBytes(rec);
+    s_sum.brk += rec->noVolumeBreak;
+    s_sum.clears += rec->noVolumeBreak ? rec->noVolumeClears : 0u;
+    s_sum.held += rec->noVolumeHeld;
     s_sum.replays++;
 }
 
@@ -741,7 +969,8 @@ void rd__no_volume_text(char *out, size_t size, size_t *at)
     for (int i = 0; i < RD_NO_VOLUME_WHYS; i++) {
         k += s_sum.why[i];
     }
-    if (s_sum.replays == 0 || (s_sum.kept == 0 && s_sum.with == 0 && k == 0) || *at >= size) {
+    if (s_sum.replays == 0 || (s_sum.kept == 0 && s_sum.with == 0 && k == 0 && s_sum.brk == 0) ||
+        *at >= size) {
         memset(&s_sum, 0, sizeof(s_sum));
         return;
     }
@@ -756,6 +985,15 @@ void rd__no_volume_text(char *out, size_t size, size_t *at)
                            (double)s_sum.bytes / n / 1048576.0, (double)s_sum.with / n,
                            (double)k / n, why[0] ? " (" : "", why, why[0] ? ")" : "");
     *at += w > 0 && (size_t)w < size - *at ? (size_t)w : 0;
+    if (s_sum.brk && *at < size) {
+        /* the break mode's windows (RD_NO_VOLUME_BREAK_DEFAULT, ICO_RD_NO_VOLUME_BREAK) */
+        const int b =
+            snprintf(out + *at, size - *at,
+                     ", %.1f with SCENE's pass ended at the resolve (%.1f zero clears, "
+                     "%.1f targets holding zero already)",
+                     (double)s_sum.brk / n, (double)s_sum.clears / n, (double)s_sum.held / n);
+        *at += b > 0 && (size_t)b < size - *at ? (size_t)b : 0;
+    }
     memset(&s_sum, 0, sizeof(s_sum));
 }
 
@@ -768,11 +1006,29 @@ void rd__no_volume_stats(const RdPerfRecord *rec, char *out, size_t size)
     }
     char words[160];
     whyText(words, sizeof words, why, 1.0, false);
-    snprintf(out, size,
-             "no volume %s: %u kept (%u with the pass open over %ux%u, depth %s; %u zero "
-             "clears, %u level texels; %u draws not drawn), %u with volumes, %llu not taken%s%s%s",
-             s_nv.gate == RD_NV_WHY_COUNT ? "on" : "off", rec->noVolumeKept, rec->noVolumeOpen,
-             rec->noVolumePassW, rec->noVolumePassH, rec->noVolumePassDepth ? "yes" : "no",
-             rec->noVolumeClears, rec->noVolumeLevelTexels, rec->noVolumeSkipped, rec->noVolumeWith,
-             (unsigned long long)k, words[0] ? " (" : "", words, words[0] ? ")" : "");
+    int w = snprintf(out, size,
+                     "no volume %s: %u kept (%u with the pass open over %ux%u, depth %s; %u zero "
+                     "clears, %u level texels; %u draws not drawn), %u with volumes, %llu not "
+                     "taken%s%s%s",
+                     s_nv.gate == RD_NV_WHY_COUNT ? "on" : "off", rec->noVolumeKept,
+                     rec->noVolumeOpen, rec->noVolumePassW, rec->noVolumePassH,
+                     rec->noVolumePassDepth ? "yes" : "no", rec->noVolumeClears,
+                     rec->noVolumeLevelTexels, rec->noVolumeSkipped, rec->noVolumeWith,
+                     (unsigned long long)k, words[0] ? " (" : "", words, words[0] ? ")" : "");
+    size_t at = w > 0 && (size_t)w < size ? (size_t)w : (size ? size - 1 : 0);
+    /* the shadow window's other cuts, on the same line: the break mode, the
+     * empty composites (rd_shadow_box.c), one DATE set-up (rd_date_one.c) */
+    if (at < size) {
+        const int m = rd__shadow_box_empty_mode();
+        w = snprintf(out + at, size - at,
+                     "; break %s: %u taken (%u zero clears, %u targets holding zero); empty "
+                     "composites %s: %u skipped (%u with DATE); ",
+                     s_nv.gateBreak == RD_NV_WHY_COUNT ? "on" : "off", rec->noVolumeBreak,
+                     rec->noVolumeBreak ? rec->noVolumeClears : 0u, rec->noVolumeHeld,
+                     m ? "on" : "off", rec->emptySkipped, rec->emptySkippedDate);
+        at += w > 0 && (size_t)w < size - at ? (size_t)w : 0;
+    }
+    if (at < size) {
+        rd__date_one_stats(rec, out + at, size - at);
+    }
 }

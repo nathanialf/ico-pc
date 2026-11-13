@@ -124,22 +124,27 @@ void rd__no_volume_scan_cmd(const struct RdFrame *f, const struct RdCmd *c,
                             const struct RdStateBlock *st, bool state, uint32_t ord);
 void rd__no_volume_scan_end(void);
 /* rd_shadow_merge.c: the reset at ordinal ord is this replay's window with
- * no volume (its stencil needs no store: nothing reads it) */
+ * no volume (its stencil needs no store: nothing reads it); never in the
+ * break mode, which keeps the reset and its store */
 bool rd__no_volume_owns(uint32_t ord);
 
 /* --------------------------------------------- the walk (rd_replay.c) */
 /* doShadowReset: true when the reset is the window's: nothing recorded, the
- * open pass kept */
+ * open pass kept (the break mode: the window's resolve is taken, but false:
+ * the reset recorded as before) */
 bool rd__no_volume_reset(struct Replay *r);
 /* doShadowResolve: the window's resolve is to be taken (no pass ended) */
 bool rd__no_volume_active(void);
 /* the resolve taken: the count's zero owed to red (the count at its GS size
  * above 1x, NULL at scale 1 or when it could not be made) or else to the
- * count target tc */
+ * count target tc; in the break mode the open pass ended first and the
+ * shadow window closed, and no zero owed to a target that holds it */
 void rd__no_volume_resolve(struct Replay *r, struct RdTargetRec *tc, RhiTexture *red,
                            RhiState *redState);
 /* doScreen: true for a level (its target owed a zero) or a composite of the
- * window: the walk draws nothing for it */
+ * window, or any composite whose level's box is empty (rd_shadow_box.c
+ * rd__shadow_box_empty_skip, the empty composites): the walk draws nothing
+ * for it, its DATE set-up neither */
 bool rd__no_volume_skip(struct Replay *r);
 /* endPass, after the pending clears: the owed zeros recorded, each a pass
  * with a CLEAR (0, 0, 0, 0) load and no draw, outside every pass */

@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "rd_date_one.h"
 #include "rd_glow_blur.h"
 #include "rd_lamps.h"
 #include "rd_replay.h"
@@ -53,9 +54,15 @@ bool rd__replay_date_take(Replay *r, const DrawSetup *ds)
     RdTargetRec *tc = ds->tc;
     RhiRect take;
     const bool samePass = r->dateStPass == r->passSerial && r->dateStFor != 0;
-    if (!rd__date_retake(samePass ? r->dateStFor : 0, r->dateStSerial, &r->dateStArea, r->st.color,
+    /* a shadow composite after one that cannot set the alpha's top bit: the
+     * bit holds what a set-up now would write (rd_date_one.c) */
+    const uint32_t held = rd__date_one_held(samePass ? r->dateStFor : 0, r->dateStSerial,
+                                            r->st.color, r->writeSerial, true);
+    const uint64_t texels = (uint64_t)tc->tw * tc->th;
+    if (!rd__date_retake(samePass ? r->dateStFor : 0, held, &r->dateStArea, r->st.color,
                          r->writeSerial, ds->dateWantAll ? NULL : &ds->dateWant, tc->tw, tc->th,
                          &take)) {
+        rd__date_one_took(r->st.color, r->writeSerial, true, true, texels);
         return true; /* the bit holds the area's alpha */
     }
     if (take.w == 0 || take.h == 0) {
@@ -118,6 +125,7 @@ bool rd__replay_date_take(Replay *r, const DrawSetup *ds)
     r->dateStSerial = r->writeSerial;
     r->dateStArea = take;
     r->dateStPass = r->passSerial;
+    rd__date_one_took(r->st.color, r->writeSerial, true, false, texels);
     return true;
 }
 

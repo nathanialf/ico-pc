@@ -16,7 +16,8 @@
  * command in it is a state command or draws nothing.  The commands that end
  * the pass for certain: a draw on another colour target (its own pass), and
  * a DATE draw on the run's target after a draw of the run wrote alpha (its
- * snapshot is retaken: rd__date_retake, the write serial moved).  Anything
+ * snapshot is retaken: rd__date_retake, the write serial moved), unless it
+ * shares the snapshot before it (rd_date_one.h: then it is in the run).  Anything
  * else (a copy, a clear, a post sprite, the fog, the shadow commands, a VU
  * draw on the target, a draw that uses the depth) ends the run undecided:
  * not depth-free, its passes as before.  The replay's end closes a run.
@@ -48,6 +49,10 @@ typedef struct RdDateCutCmd {
         depthFree; /* a screen prim that neither tests nor writes the depth, no AA1, no depth view */
     bool alpha;    /* it writes the target's alpha (the colour mask's A) */
     bool hasDepth; /* the state's depth is a depth target (a pass would attach it) */
+    /* a DATE draw that shares the set-up of the DATE draw before it
+     * (rd_date_one.h: a shadow composite after one that cannot set the
+     * alpha's top bit): its snapshot is not retaken, the pass goes on */
+    bool shared;
 } RdDateCutCmd;
 
 typedef struct RdDateCutScan {
@@ -76,7 +81,7 @@ static inline int rd_date_cut_step(RdDateCutScan *s, const RdDateCutCmd *c, uint
         if (!here && (c->kind == RD_DC_SCREEN || c->kind == RD_DC_DRAW)) {
             did = RD_DC_STEP_FREE; /* a draw on another target: its own pass */
         } else if (here && c->kind == RD_DC_SCREEN && c->depthFree) {
-            if (c->date && s->alpha) {
+            if (c->date && s->alpha && !c->shared) {
                 did = RD_DC_STEP_FREE; /* the snapshot retaken: the pass ends */
             } else {
                 s->alpha = s->alpha || c->alpha; /* in the run */

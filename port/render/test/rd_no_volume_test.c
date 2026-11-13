@@ -22,7 +22,12 @@
  *      this release lives in rd_no_volume.c classOn, the words checked
  *      here), MSAA, the pass window, the exact blend, GS state as shader
  *      data, DATE;
- *   8. the 10 s clause and the --stats words from made-up records. */
+ *   8. the 10 s clause and the --stats words from made-up records (the
+ *      stats line also carries the break mode's, the empty composites' and
+ *      one DATE set-up's clauses: rd_shadow_box.c, rd_date_one.c, their
+ *      switches unset: the break mode off, the other two on); the break
+ *      mode's 10 s words (a window taken with SCENE's pass ended at the
+ *      resolve, its zero clears and the targets holding zero). */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -329,7 +334,9 @@ static void testLines(void)
 
     rd__no_volume_stats(&rec, out, sizeof out);
     want = "no volume off: 1 kept (1 with the pass open over 2364x1080, depth yes; 4 zero "
-           "clears, 86016 level texels; 6 draws not drawn), 0 with volumes, 0 not taken";
+           "clears, 86016 level texels; 6 draws not drawn), 0 with volumes, 0 not taken; break "
+           "off: 0 taken (0 zero clears, 0 targets holding zero); empty composites on: 0 skipped "
+           "(0 with DATE); DATE one set-up on: 0 shared (0 texels), 0 kept their own";
     CHECK(strcmp(out, want) == 0, "the stats words:\n  %s\nexpected\n  %s", out, want);
 
     memset(&rec, 0, sizeof(rec));
@@ -349,8 +356,40 @@ static void testLines(void)
 
     rd__no_volume_stats(&rec, out, sizeof out);
     want = "no volume off: 0 kept (0 with the pass open over 0x0, depth no; 0 zero clears, 0 "
-           "level texels; 0 draws not drawn), 0 with volumes, 1 not taken (class 1)";
+           "level texels; 0 draws not drawn), 0 with volumes, 1 not taken (class 1); break off: "
+           "0 taken (0 zero clears, 0 targets holding zero); empty composites on: 0 skipped (0 "
+           "with DATE); DATE one set-up on: 0 shared (0 texels), 0 kept their own";
     CHECK(strcmp(out, want) == 0, "the stats words, refused:\n  %s\nexpected\n  %s", out, want);
+
+    /* the break mode: a window taken with SCENE's pass ended at the resolve,
+     * four zero clears recorded (the reduced count's and three levels'), the
+     * next replay's four found holding zero */
+    memset(&rec, 0, sizeof(rec));
+    rec.noVolumeBreak = 1;
+    rec.noVolumeClears = 4;
+    rec.noVolumeSkipped = 6;
+    rd__no_volume_pop(&rec);
+    memset(&rec, 0, sizeof(rec));
+    rec.noVolumeBreak = 1;
+    rec.noVolumeHeld = 4;
+    rec.noVolumeSkipped = 6;
+    rd__no_volume_pop(&rec);
+    at = 0;
+    out[0] = '\0';
+    rd__no_volume_text(out, sizeof out, &at);
+    want = "; no volume: 0.0 windows a replay without a volume kept SCENE's pass open (0.0 with "
+           "it open, up to 0.0 MB not stored and loaded again), 0.0 with volumes, 0.0 not "
+           "taken, 1.0 with SCENE's pass ended at the resolve (2.0 zero clears, 2.0 targets "
+           "holding zero already)";
+    CHECK(strcmp(out, want) == 0, "the 10 s clause, the break mode:\n  %s\nexpected\n  %s", out,
+          want);
+    rd__no_volume_stats(&rec, out, sizeof out);
+    want = "no volume off: 0 kept (0 with the pass open over 0x0, depth no; 0 zero clears, 0 "
+           "level texels; 6 draws not drawn), 0 with volumes, 0 not taken; break off: 1 taken (0 "
+           "zero clears, 4 targets holding zero); empty composites on: 0 skipped (0 with DATE); "
+           "DATE one set-up on: 0 shared (0 texels), 0 kept their own";
+    CHECK(strcmp(out, want) == 0, "the stats words, the break mode:\n  %s\nexpected\n  %s", out,
+          want);
 
     /* nothing counted: no clause */
     memset(&rec, 0, sizeof(rec));

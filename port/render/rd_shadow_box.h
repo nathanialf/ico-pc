@@ -122,6 +122,17 @@ void rd__shadow_box_drawn(const RhiRect *all, const RhiRect *boxed);
 bool rd__shadow_box_composite(uint32_t *src);
 unsigned rd__shadow_box_composite_sources(uint32_t fromOrd, uint32_t *out, unsigned max);
 
+/* The empty composites (rd_no_volume.c rd__no_volume_skip, at the top of
+ * doScreen): true, counted (RdPerfRecord.emptySkipped), when the command
+ * being replayed is a composite whose level's box this replay is empty, so
+ * that doScreen would draw nothing (its scissor empty): the caller skips it
+ * whole, its DATE snapshot or stencil set-up with it.  The mode:
+ * ICO_RD_EMPTY_SKIP=0|1 (the tests), 1 by default */
+bool rd__shadow_box_empty_skip(const struct RdStateBlock *st);
+int rd__shadow_box_empty_mode(void);
+/* the tests: 0 off, 1 on, -1 the switch's own */
+void rd__shadow_box_empty_force(int mode);
+
 /* ------------------------------------------------------------ the lines */
 void rd__shadow_box_pop(const struct RdPerfRecord *rec);
 void rd__shadow_box_text(char *out, size_t size, size_t *at);

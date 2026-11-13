@@ -1,0 +1,30 @@
+# Dump list for rd_date_one_ab, rd_empty_skip_ab and rd_no_volume_break_ab
+# (port/render/test/rd_shadow_cuts_ab.cmake: one DATE set-up for the shadow
+# composites, the empty composites skipped, a shadow window with no volume taken
+# with SCENE's pass ended at the resolve; each off against on, byte for byte).
+# The test reads this list first, then tools/date_cut_dumps.txt,
+# tools/shadow_box_dumps.txt and tools/no_volume_dumps.txt (their dumps too).
+# MACHINE-LOCAL: these are paths on the maintainer's machine; the dumps
+# themselves are never committed.  A listed dump that is absent FAILS the test
+# (a '*' glob that matches nothing too).  Relative paths are relative to this
+# file.  The second field: "volume" (one shadow window with volumes, the three
+# retail composites: two shared at every setting, nothing skipped, no window
+# taken) or "novolume" (one window without a volume, the three composites: two
+# shared with the empty composites off, three skipped with them on, one window
+# taken at the stencil settings).  An optional third field: the passes fewer at
+# the Mali setting with the empty composites on (three R8 passes and three
+# SCENE passes of no draw, the next pass begun by the fog).
+#
+# issue 179's Mali-G52 on v0.11.5 (moto g24 power): three slow-scene captures
+# (stages 42, 43, 45) and the manual F12 frame (stage 3), all with volumes
+# (DATEPROOF: 3 snapshots each, the top bit kept at every composite)
+/primary/dev/ico-dumps/v0116-mali179/slow-20261112-195541.zip volume
+/primary/dev/ico-dumps/v0116-mali179/slow-20261112-195621.zip volume
+/primary/dev/ico-dumps/v0116-mali179/slow-20261112-195651.zip volume
+/primary/dev/ico-dumps/v0116-mali179/frame-20261112-195947-v17565.zip volume
+# the Pixel 10 Pro Fold's opening on v0.11.5: the lamps view without a volume
+# (v746: reset 3:6, resolve 3:13, composites 3:42/47/52), the dark room and the
+# sun with volumes
+/primary/dev/ico-dumps/v0115-opening/frame-20261112-110824-v746.zip novolume 6
+/primary/dev/ico-dumps/v0115-opening/frame-20261112-110838-v1545.zip volume
+/primary/dev/ico-dumps/v0115-opening/frame-20261112-110852-v2278.zip volume

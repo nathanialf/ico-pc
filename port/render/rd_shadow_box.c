@@ -56,14 +56,31 @@
  * (tests): everything whole.
  *
  * The DATE cut (rd_date_cut.c) predicts its runs from the composites in the
- * scan, not from their areas; a composite with nothing left to draw still
- * takes its DATE snapshot (bindDrawEx) and moves the write serial, as the
- * whole draw did, so its pass ends where the cut predicted. */
+ * scan, not from their areas; a composite whose scissor alone leaves nothing
+ * to draw still takes its DATE snapshot (bindDrawEx) and moves the write
+ * serial, as the whole draw did, so its pass ends where the cut predicted.
+ *
+ * The empty composites (v0.11.6, rd__shadow_box_empty_skip, from
+ * rd_no_volume.c rd__no_volume_skip at the top of doScreen): a composite
+ * whose level's box this replay is empty draws nothing whatever its scissor
+ * (every sprite's box is empty), so it is skipped whole, its DATE snapshot or
+ * stencil set-up with it, the write serial moved (the next DATE draw takes
+ * its own set-up from the alpha as it is: the R8 snapshot is read only at a
+ * DATE draw's own texels inside the area its retake copies, the stencil's
+ * bit 6 only inside its own set-up's area; a cut run then ends at the next
+ * composite's retake instead, never a byte).  ICO_RD_EMPTY_SKIP=0|1 (tests).
+ *
+ * The scan also hands one DATE set-up for the composites (rd_date_one.c)
+ * every command, the composites with their level's largest alpha (the
+ * count's 0x80 through the levels' vertex alphas, cand.lmax) and their own
+ * vertices' largest; the replay checks the vertices it draws are no brighter
+ * (rd__shadow_box_screen). */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "rd_date_one.h"
 #include "rd_internal.h"
 #include "rd_shadow_box.h"
 
@@ -232,6 +249,10 @@ static struct {
     struct {
         uint32_t ord, src, prod;
         uint8_t role, why;
+        /* a level or composite: its source's largest alpha (rd_date_one.h:
+         * the count's 0x80, a level's by its own vertices) and its own
+         * vertices' largest alpha */
+        uint16_t level, vertex;
     } role[SB_ROLES];
 
     unsigned nRole;
@@ -239,6 +260,7 @@ static struct {
 
     struct {
         uint32_t target, ord;
+        uint16_t lmax; /* the largest alpha it holds (rd_date_one.h) */
     } cand[SB_CANDS];
 
     unsigned nCand;
@@ -269,7 +291,7 @@ static struct {
     uint8_t qRole, qWhy;
     uint32_t qDst;
     RdSbBox qBox;
-    bool said;
+    bool said, saidEmpty;
     uint32_t refusals;
 } s_rep;
 
@@ -283,23 +305,25 @@ static void candDrop(uint32_t target)
     }
 }
 
-static bool candFind(uint32_t target, uint32_t *ord)
+static bool candFind(uint32_t target, uint32_t *ord, uint16_t *lmax)
 {
     for (unsigned i = 0; i < s_scan.nCand; i++) {
         if (s_scan.cand[i].target == target) {
             *ord = s_scan.cand[i].ord;
+            *lmax = s_scan.cand[i].lmax;
             return true;
         }
     }
     return false;
 }
 
-static void candAdd(uint32_t target, uint32_t ord)
+static void candAdd(uint32_t target, uint32_t ord, uint16_t lmax)
 {
     candDrop(target);
     if (s_scan.nCand < SB_CANDS) {
         s_scan.cand[s_scan.nCand].target = target;
         s_scan.cand[s_scan.nCand].ord = ord;
+        s_scan.cand[s_scan.nCand].lmax = lmax;
         s_scan.nCand++;
     }
     for (unsigned i = 0; i < s_scan.nChain; i++) {
@@ -322,7 +346,8 @@ static bool inChain(uint32_t target)
     return false;
 }
 
-static void roleAdd(uint32_t ord, uint8_t role, uint32_t src, uint32_t prod, uint8_t why)
+static void roleAdd(uint32_t ord, uint8_t role, uint32_t src, uint32_t prod, uint8_t why,
+                    uint16_t level, uint16_t vertex)
 {
     if (s_scan.nRole >= SB_ROLES) {
         s_scan.roleFull = true; /* the rest: no role, drawn as they are */
@@ -333,6 +358,8 @@ static void roleAdd(uint32_t ord, uint8_t role, uint32_t src, uint32_t prod, uin
     s_scan.role[s_scan.nRole].src = src;
     s_scan.role[s_scan.nRole].prod = prod;
     s_scan.role[s_scan.nRole].why = why;
+    s_scan.role[s_scan.nRole].level = level;
+    s_scan.role[s_scan.nRole].vertex = vertex;
     s_scan.nRole++;
 }
 
@@ -349,19 +376,69 @@ int rd__shadow_box_role(uint32_t ord, uint32_t *src)
     return ROLE_NONE;
 }
 
+/* the empty composites' switch (ICO_RD_EMPTY_SKIP=0|1, the tests only):
+ * on on every device (fewer passes and draws of the kinds drawn today) */
+#define RD_EMPTY_SKIP_DEFAULT 1
+
+static int s_emptyForce = -1; /* rd__shadow_box_empty_force: -1 the switch's own */
+
+void rd__shadow_box_empty_force(int mode)
+{
+    s_emptyForce = mode < 0 ? -1 : mode != 0;
+}
+
+int rd__shadow_box_empty_mode(void)
+{
+    static int s_env = -1;
+    if (s_emptyForce >= 0) {
+        return s_emptyForce;
+    }
+    if (s_env < 0) {
+        const char *e = getenv("ICO_RD_EMPTY_SKIP");
+        s_env = e && strcmp(e, "0") == 0 ? 0 : e && strcmp(e, "1") == 0 ? 1 : RD_EMPTY_SKIP_DEFAULT;
+    }
+    return s_env;
+}
+
 bool rd__shadow_box_scan_begin(const RdFrame *f)
 {
-    (void)f;
     const char *e = getenv("ICO_RD_SHADOW_BOX");
     s_scan.env = e && strcmp(e, "0") == 0 ? 0 : 1;
     s_scan.nRole = s_scan.nCand = s_scan.nChain = 0;
     s_scan.roleFull = false;
+    rd__date_one_scan_begin(f); /* rd_date_one.c reads the composites found here */
+    static int s_said = -1;
+    const int skip = s_scan.env ? rd__shadow_box_empty_mode() : 0;
+    if (s_said != skip) {
+        s_said = skip;
+        rd__log("shadows: empty composites: %s",
+                skip ? "on: a composite whose level the volumes' box leaves empty draws nothing "
+                       "and is skipped with its DATE snapshot or stencil set-up (the same picture)"
+                : s_scan.env ? "off (ICO_RD_EMPTY_SKIP=0)"
+                             : "off (ICO_RD_SHADOW_BOX=0: no box)");
+    }
     return true;
 }
 
 void rd__shadow_box_scan_end(void)
 {
     s_scan.nCand = 0;
+}
+
+/* the largest vertex alpha of a screen command's payload (255 when its
+ * vertices are not all in the payload) */
+static uint16_t payloadAlpha(const RdFrame *f, const RdCmd *c)
+{
+    const uint32_t n = c->u[1];
+    if (n == 0 || (uint64_t)c->u[0] + (uint64_t)n * sizeof(RdScreenVtx) > f->payloadSize) {
+        return 255;
+    }
+    const RdScreenVtx *v = (const RdScreenVtx *)(f->payload + c->u[0]);
+    uint16_t m = 0;
+    for (uint32_t i = 0; i < n; i++) {
+        m = v[i].rgba[3] > m ? v[i].rgba[3] : m;
+    }
+    return m;
 }
 
 /* the target a draw samples through its RGBA view, RGBA32 texels; else 0 */
@@ -424,8 +501,8 @@ static bool compositeForm(const RdCmd *c, const RdStateBlock *st)
            st->ds.zwrite == RD_ZWRITE_OFF;
 }
 
-void rd__shadow_box_scan_cmd(const RdFrame *f, const RdCmd *c, const RdStateBlock *st, bool state,
-                             uint32_t ord)
+static void boxScanCmd(const RdFrame *f, const RdCmd *c, const RdStateBlock *st, bool state,
+                       uint32_t ord)
 {
     if (state) {
         return;
@@ -434,8 +511,10 @@ void rd__shadow_box_scan_cmd(const RdFrame *f, const RdCmd *c, const RdStateBloc
     case RDC_NOP:
         return;
     case RDC_SHADOW_RESOLVE:
-        candAdd(st->color, ord);
-        roleAdd(ord, ROLE_RESOLVE, st->color, ord, RD_SB_WHY_COUNT);
+        /* the count: 0x80 or 0 a texel on every path (rd_shadow_one.c's
+         * table, the seven draws' A pass; the box reduce averages them) */
+        candAdd(st->color, ord, 0x80);
+        roleAdd(ord, ROLE_RESOLVE, st->color, ord, RD_SB_WHY_COUNT, 0x80, 0);
         return;
     case RDC_SHADOW_RESET:
     case RDC_SHADOW_STRIP:
@@ -458,17 +537,37 @@ void rd__shadow_box_scan_cmd(const RdFrame *f, const RdCmd *c, const RdStateBloc
     }
     const uint32_t src = rgbaSource(st);
     uint32_t prod = 0;
-    if (src && candFind(src, &prod)) {
+    uint16_t lmax = 255;
+    if (src && candFind(src, &prod, &lmax)) {
+        const uint16_t va = payloadAlpha(f, c);
         if (levelForm(f, c, st, src)) {
-            roleAdd(ord, ROLE_LEVEL, src, prod, RD_SB_WHY_COUNT);
-            candAdd(st->color, ord); /* the level: a source from here */
+            roleAdd(ord, ROLE_LEVEL, src, prod, RD_SB_WHY_COUNT, lmax, va);
+            /* the level: a source from here, its alpha at most its source's
+             * through its own vertex alpha (the filters are convex) */
+            candAdd(st->color, ord,
+                    (uint16_t)rd_date_one_alpha(lmax, va, st->ds.texFn == RD_TEXFN_DECAL));
             return;
         }
-        roleAdd(ord, compositeForm(c, st) ? ROLE_COMPOSITE : ROLE_WHOLE, src, prod, RD_SB_WHY_FORM);
+        roleAdd(ord, compositeForm(c, st) ? ROLE_COMPOSITE : ROLE_WHOLE, src, prod, RD_SB_WHY_FORM,
+                lmax, va);
     } else if (src && inChain(src)) {
-        roleAdd(ord, ROLE_WHOLE, src, 0, RD_SB_WHY_CHAIN);
+        roleAdd(ord, ROLE_WHOLE, src, 0, RD_SB_WHY_CHAIN, 255, 255);
     }
     candDrop(st->color); /* another write to a source's target */
+}
+
+void rd__shadow_box_scan_cmd(const RdFrame *f, const RdCmd *c, const RdStateBlock *st, bool state,
+                             uint32_t ord)
+{
+    const unsigned before = s_scan.nRole;
+    boxScanCmd(f, c, st, state, ord);
+    /* one DATE set-up for the composites (rd_date_one.c): every command, the
+     * composites with their level's and their own vertices' largest alpha */
+    const bool composite =
+        s_scan.nRole > before && s_scan.role[s_scan.nRole - 1].role == ROLE_COMPOSITE;
+    rd__date_one_scan_cmd(c, st, state, ord, composite,
+                          composite ? s_scan.role[s_scan.nRole - 1].level : 255u,
+                          composite ? s_scan.role[s_scan.nRole - 1].vertex : 255u);
 }
 
 /* ----------------------------------------------------------- the replay */
@@ -682,9 +781,19 @@ bool rd__shadow_box_screen(const RdStateBlock *st, const RdCmd *c, const RdScree
         return false;
     }
     uint32_t prod = 0;
+    uint16_t scanned = 255;
     for (unsigned i = 0; i < s_scan.nRole; i++) {
         if (s_scan.role[i].ord == g_rdStoreOrd) {
             prod = s_scan.role[i].prod;
+            scanned = s_scan.role[i].vertex;
+        }
+    }
+    /* the vertices replayed (a keep frame's held ones, rd_layer.c) brighter
+     * than the payload the scan read: the DATE set-ups stay their own */
+    for (uint32_t i = 0; i < n; i++) {
+        if (v[i].rgba[3] > scanned) {
+            rd__date_one_replay_bad();
+            break;
         }
     }
     RdSbBox sb = {0, 0, 0, 0, 1};
@@ -761,6 +870,50 @@ unsigned rd__shadow_box_composite_sources(uint32_t fromOrd, uint32_t *out, unsig
     return n;
 }
 
+bool rd__shadow_box_empty_skip(const RdStateBlock *st)
+{
+    if (!s_scan.env || rd__shadow_box_empty_mode() == 0) {
+        return false;
+    }
+    uint32_t src = 0, prod = 0;
+    bool found = false;
+    for (unsigned i = 0; i < s_scan.nRole; i++) {
+        if (s_scan.role[i].ord == g_rdStoreOrd && s_scan.role[i].role == ROLE_COMPOSITE) {
+            src = s_scan.role[i].src;
+            prod = s_scan.role[i].prod;
+            found = true;
+        }
+    }
+    if (!found) {
+        return false;
+    }
+    /* what rd__shadow_box_screen would find: the level's box held this
+     * replay (its producer drawn at the ordinal the scan named, nothing
+     * written since: madeFind) and empty, the destination at a scale of 1 or
+     * more, a source of a known size (sprites: an unknown one is
+     * "everything"); then every sprite's box is empty and doScreen's scissor
+     * empty, so the composite draws nothing */
+    RdSbBox b;
+    if (madeFind(src, prod, &b) != RD_SB_WHY_COUNT || !b.empty) {
+        return false;
+    }
+    const RdTargetRec *tc = rd__target_rec(st->color), *ts = rd__target_rec(src);
+    if (!tc || tc->sx < 1.0f || tc->sy < 1.0f || !ts || ts->w == 0 || ts->h == 0 ||
+        rd__wrap_applies(st)) {
+        return false; /* (COLCLAMP 0's wrap draw takes no box: drawn as today) */
+    }
+    g_rdPerf.emptySkipped++;
+    g_rdPerf.emptySkippedDate += st->ds.test.date != RD_DATE_OFF;
+    if (!s_rep.saidEmpty) {
+        s_rep.saidEmpty = true;
+        rd__log("shadows: empty composites: the first skipped (command %u, its level's box "
+                "empty): no draw, %s; the same picture (reported once)",
+                g_rdStoreOrd,
+                st->ds.test.date != RD_DATE_OFF ? "no DATE snapshot or set-up" : "no DATE in it");
+    }
+    return true;
+}
+
 void rd__shadow_box_drawn(const RhiRect *all, const RhiRect *boxed)
 {
     if (s_rep.qOrd != g_rdStoreOrd || s_rep.qRole == ROLE_NONE) {
@@ -782,6 +935,7 @@ void rd__shadow_box_drawn(const RhiRect *all, const RhiRect *boxed)
 
 static struct {
     uint64_t counts, composites, empty, texels, all, why[RD_SHADOW_BOX_WHYS];
+    uint64_t skipped, skippedDate;
     uint32_t replays;
 } s_sum;
 
@@ -795,6 +949,8 @@ void rd__shadow_box_pop(const RdPerfRecord *rec)
     for (int k = 0; k < RD_SHADOW_BOX_WHYS; k++) {
         s_sum.why[k] += rec->shadowBoxWhy[k];
     }
+    s_sum.skipped += rec->emptySkipped;
+    s_sum.skippedDate += rec->emptySkippedDate;
     s_sum.replays++;
 }
 
@@ -823,7 +979,8 @@ void rd__shadow_box_text(char *out, size_t size, size_t *at)
     for (int i = 0; i < RD_SHADOW_BOX_WHYS; i++) {
         k += s_sum.why[i];
     }
-    if (s_sum.replays == 0 || (s_sum.counts == 0 && s_sum.composites == 0 && k == 0) ||
+    if (s_sum.replays == 0 ||
+        (s_sum.counts == 0 && s_sum.composites == 0 && k == 0 && s_sum.skipped == 0) ||
         *at >= size) {
         memset(&s_sum, 0, sizeof(s_sum));
         return;
@@ -838,6 +995,14 @@ void rd__shadow_box_text(char *out, size_t size, size_t *at)
                            s_sum.all ? 100.0 * (double)s_sum.texels / (double)s_sum.all : 0.0,
                            (double)k / n, why[0] ? " (" : "", why, why[0] ? ")" : "");
     *at += w > 0 && (size_t)w < size - *at ? (size_t)w : 0;
+    if (s_sum.skipped && *at < size) {
+        /* the empty composites (rd__shadow_box_empty_skip) */
+        const int e = snprintf(out + *at, size - *at,
+                               "; empty composites: %.1f a replay skipped (%.1f with their DATE "
+                               "set-up)",
+                               (double)s_sum.skipped / n, (double)s_sum.skippedDate / n);
+        *at += e > 0 && (size_t)e < size - *at ? (size_t)e : 0;
+    }
     memset(&s_sum, 0, sizeof(s_sum));
 }
 
