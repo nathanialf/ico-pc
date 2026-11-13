@@ -286,6 +286,32 @@ void rd_pace_screen_fit(RdPaceScreen *m)
     f->measured = (m->opts & RD_PS_OPT_MEASURED) && f->lead && f->errN >= RD_PS_MEAS_MIN;
 }
 
+bool rd_pace_screen_even_latch(RdPaceScreen *m, double nowMs, double *xMs)
+{
+    if (m->dirty) {
+        rd_pace_screen_fit(m);
+    }
+    const RdPaceScreenFit *f = &m->fit;
+    *xMs = 0.0;
+    if (m->sN < RD_PS_MIN || !f->grid || nowMs - m->newestEndMs > RD_PS_STALE_MS) {
+        return false;
+    }
+    if (f->lead && f->errN >= RD_PS_MEAS_MIN) {
+        double v[RD_PS_WIN];
+        const uint32_t n = f->errN > RD_PS_WIN ? RD_PS_WIN : f->errN;
+        memcpy(v, f->err, n * sizeof v[0]);
+        sortD(v, n);
+        const double med = n % 2u ? v[n / 2u] : 0.5 * (v[n / 2u - 1u] + v[n / 2u]);
+        *xMs = f->leadMs + med;
+        return true;
+    }
+    if (f->latch) {
+        *xMs = f->xMs;
+        return true;
+    }
+    return false;
+}
+
 static void chainReset(RdPaceScreen *m)
 {
     m->have = false;

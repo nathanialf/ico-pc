@@ -71,10 +71,9 @@ static void gather(double nowMs, double untilDeadlineMs, double tickMs, RdPaceEv
 {
     memset(in, 0, sizeof(*in));
     in->nowMs = nowMs;
-    const RdPaceScreenFit *f = rd_pace_screen_live_fit(nowMs, &in->fit);
+    const RdPaceScreenFit *f = rd_pace_screen_live_fit(nowMs, &in->fit, &in->xMs);
     in->anchorMs = f->anchorMs;
     in->periodMs = f->periodMs;
-    in->xMs = f->xMs;
     (void)rd_pace_gpu_figures(&in->gMs, &in->dMs, &in->prevEndMs);
     in->stepEndMs = untilDeadlineMs > 0.0 ? nowMs + untilDeadlineMs : 0.0;
     in->tickMs = tickMs;

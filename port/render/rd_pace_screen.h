@@ -225,6 +225,15 @@ double rd_pace_screen_expect(double t, double a, double p, double w, double *har
    agree with (sample i: x in (d[i] - p, d[i]]), prefer the range nearest
    prev (NAN none); *hits how many agree */
 double rd_pace_screen_latch(const double *d, uint32_t n, double p, double prev, uint32_t *hits);
+/* the latch the even cadence aims by (rd_pace_even.h), at nowMs: false
+   where the fit cannot be used (fewer than RD_PS_MIN shown pictures, not one
+   grid, the newest over RD_PS_STALE_MS behind, neither latch fitted); *xMs
+   the exact GPU end's latch plus the median of the exact ends' measured
+   errors where those are fitted (RdPaceScreenFit.measured: the GPU end and
+   the compositor's lead are each measured, so this does not need the
+   pictures' phases to spread over a refresh), else the predicted end's
+   latch X.  The fit made first where the window changed */
+bool rd_pace_screen_even_latch(RdPaceScreen *m, double nowMs, double *xMs);
 /* how many of d agree with x (d[i] - p < x <= d[i]) */
 uint32_t rd_pace_screen_cover(const double *d, uint32_t n, double p, double x);
 /* the expected time on the glass from the measured errors: the mean of the
@@ -288,9 +297,9 @@ void rd_pace_screen_step(const RdPaceScreenIn *in, RdPaceScreenPlace *out);
 void rd_pace_screen_paced(void);
 /* the poster's thread: the shown pictures taken (each new one to the even
    cadence, rd_pace_even_seen), the fit made where they changed; *fit
-   whether the grid and the latch can be used at nowMs (enough shown
-   pictures, not stale, one grid, a latch); the fit itself */
-const RdPaceScreenFit *rd_pace_screen_live_fit(double nowMs, bool *fit);
+   whether the grid and a latch can be used at nowMs and *xMs the latch to
+   aim by (rd_pace_screen_even_latch); the fit itself */
+const RdPaceScreenFit *rd_pace_screen_live_fit(double nowMs, bool *fit, double *xMs);
 /* 1 a shown picture's time came back this run, 0 none after 600 pictures
    as made, -1 not known yet */
 int rd_pace_screen_times_state(void);

@@ -366,6 +366,9 @@ typedef struct Out {
     uint32_t aimed, lateAims, earlyHand, changes, notAimed, nMin, nMax, nLast, shownOff,
         nAt[RD_PE_N_MAX + 1];
     double fpsShown; /* shown pictures a second (after WARM) */
+    uint32_t heldUnfit,
+        maxRounds;     /* holds without a usable fit; the most holds before one hand-over */
+    double firstAimMs; /* the run's time of its first aimed picture (0 none) */
 } Out;
 
 /* the display's refresh at or after t (rd's clock) */
@@ -381,17 +384,13 @@ static double gridAt(double t, double phase, double pd, double changeAt)
 /* the even cadence's inputs from the two models at rd's time now */
 static void evenIn(RdPaceScreen *sc, const RdPaceGpu *m, double now, RdPaceEvenIn *in)
 {
-    if (sc->dirty) {
-        rd_pace_screen_fit(sc);
-    }
-    const RdPaceScreenFit *f = &sc->fit;
     memset(in, 0, sizeof(*in));
+    in->fit = rd_pace_screen_even_latch(sc, now, &in->xMs);
+    const RdPaceScreenFit *f = &sc->fit;
     in->nowMs = now;
     in->tickMs = TICK;
-    in->fit = sc->sN >= RD_PS_MIN && f->grid && f->latch && now - sc->newestEndMs <= RD_PS_STALE_MS;
     in->anchorMs = f->anchorMs;
     in->periodMs = f->periodMs;
-    in->xMs = f->xMs;
     (void)rd_pace_gpu_model_figures(m, &in->gMs, &in->dMs, &in->prevEndMs);
 }
 
@@ -429,7 +428,7 @@ static void run(const Cfg *c, const Mode *md, Out *o)
     } Pend;
 
     static Pend pend[SIMN];
-    uint32_t pendN = 0, pendAt = 0, lastN = 0;
+    uint32_t pendN = 0, pendAt = 0, lastN = 0, rounds = 0;
     bool keptRun = false;
     int runLeft = 0;
     for (uint32_t k = 0; k < TICKS && n < SIMN - 8; k++) {
@@ -493,11 +492,18 @@ static void run(const Cfg *c, const Mode *md, Out *o)
                     RdPaceEvenPlan pl;
                     rd_pace_even_plan(&ev, &ei, &pl);
                     o->earlyHand += pl.early && pl.holdMs > 0.01 && n >= WARM ? 1u : 0u;
+                    if (pl.holdMs > 0.01 && (pl.how != RD_PE_AIMED || !ei.fit)) {
+                        o->heldUnfit++;
+                    }
                     if (pl.how == RD_PE_AIMED && pl.holdMs > 0.01) {
                         if (x + pl.holdMs + 0.3 > pe + 1e-9) {
                             break; /* asked again in the next step */
                         }
-                        x += pl.holdMs;
+                        /* the pacer's sleep overshoots (SDL_DelayPrecise on
+                           the phone: by a fraction of a ms) */
+                        x += pl.holdMs + U(0.05, 0.8);
+                        rounds++;
+                        o->maxRounds = rounds > o->maxRounds ? rounds : o->maxRounds;
                         continue; /* the times back and the step rule again at the new time */
                     }
                 }
@@ -565,6 +571,10 @@ static void run(const Cfg *c, const Mode *md, Out *o)
                     }
                     p->aimed = target > 0.0;
                     p->late = late;
+                    rounds = 0;
+                    if (p->aimed && o->firstAimMs == 0.0) {
+                        o->firstAimMs = x - 1000.0;
+                    }
                     if (n >= WARM) {
                         o->aimed += p->aimed ? 1u : 0u;
                         o->notAimed += !p->aimed && !kept ? 1u : 0u;
@@ -1179,6 +1189,26 @@ static void testEven(void)
         CHECK(fabs(e->fpsShown - 1000.0 / (4.0 * pd)) < 0.3 && statDev(&e->glass[3]) < 0.05);
         CHECK(e->nLast == 4u);
     }
+    /* every regime: nothing held without a usable fit, never more than two
+       waits before a hand-over (the refresh committed at the first ask: a
+       sleep's overshoot does not move it on), the first aimed picture by
+       a second, or by the time RD_PS_MIN + 8 pictures were made at the
+       screen's rule's rate where that is longer (the fit's 32 shown
+       pictures first, as made, each time back three refreshes late: 1.33 s
+       at 30 a second) */
+    for (size_t i = 0; i < N; i++) {
+        CHECK(even[i].heldUnfit == 0u && even[i].maxRounds <= 2u);
+        /* (not the sacrifice scene: it starts in a run of kept frames) */
+        const double slow = (double)(RD_PS_MIN + 8u) * 1000.0 / rule[i].fps;
+        const double by = slow > 1000.0 ? slow : 1000.0;
+        if (!(all[i] == &kR5Sac || (even[i].firstAimMs > 0.0 && even[i].firstAimMs < by))) {
+            printf("FAIL first aim %s: %.0f ms\n", all[i]->name, even[i].firstAimMs);
+            failures++;
+        }
+    }
+    printf("  the first aimed picture at %.0f ms (play), %.0f ms (the opening); the most waits "
+           "before a hand-over %u, %u\n",
+           even[0].firstAimMs, even[2].firstAimMs, even[0].maxRounds, even[2].maxRounds);
     /* the cage (a tail of slow pictures): evener by .05 or more (simulated
        .319 to .241, at two refreshes, 59.4 shown a second) */
     CHECK(statDev(&even[1].glass[3]) < statDev(&rule[1].glass[3]) - 0.05);

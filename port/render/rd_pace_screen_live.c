@@ -80,15 +80,11 @@ static uint32_t take(void)
     return n;
 }
 
-const RdPaceScreenFit *rd_pace_screen_live_fit(double nowMs, bool *fit)
+const RdPaceScreenFit *rd_pace_screen_live_fit(double nowMs, bool *fit, double *xMs)
 {
     (void)take();
-    if (s_m.dirty) {
-        rd_pace_screen_fit(&s_m);
-    }
-    const RdPaceScreenFit *f = &s_m.fit;
-    *fit = s_m.sN >= RD_PS_MIN && f->grid && f->latch && nowMs - s_m.newestEndMs <= RD_PS_STALE_MS;
-    return f;
+    *fit = rd_pace_screen_even_latch(&s_m, nowMs, xMs);
+    return &s_m.fit;
 }
 
 int rd_pace_screen_times_state(void)

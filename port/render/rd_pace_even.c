@@ -123,7 +123,16 @@ void rd_pace_even_plan(RdPaceEven *e, const RdPaceEvenIn *in, RdPaceEvenPlan *ou
     const double early = earliestEnd(in);
     double r;
     bool late = false;
-    if (e->lastTargetMs > 0.0) {
+    if (e->planned) {
+        /* asked again after the pacer's wait: the refresh committed at the
+           first ask, never a new one (a sleep that overshoots by a fraction
+           of a ms would otherwise round the aim up a refresh at every ask,
+           and the hand-over chase its target a refresh at a time: the
+           phone's first even rc held 61-70 pictures a block 7-8.6 ms each
+           and aimed none); a hand-over past its time goes at once and the
+           take says whether it still makes the refresh */
+        r = e->planTargetMs;
+    } else if (e->lastTargetMs > 0.0) {
         /* the one before's + N refreshes, on the grid as fitted now */
         r = in->anchorMs + floor((e->lastTargetMs + (double)e->n * p - in->anchorMs) / p + 0.5) * p;
         if (early + in->xMs > r + (double)(4u * e->n) * p) {
@@ -138,7 +147,7 @@ void rd_pace_even_plan(RdPaceEven *e, const RdPaceEvenIn *in, RdPaceEvenPlan *ou
     } else {
         r = 0.0;
     }
-    if (!(r > 0.0)) {
+    if (!e->planned && !(r > 0.0)) {
         /* the first refresh whose aim the earliest end makes */
         r = in->anchorMs +
             ceil((early + in->xMs + RD_PE_AIM * p + e->biasMs - in->anchorMs) / p) * p;
