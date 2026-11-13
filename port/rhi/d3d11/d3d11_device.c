@@ -1676,6 +1676,12 @@ void rhi_present_desire(uint64_t desiredNs)
     (void)desiredNs;
 }
 
+/* rhi.h: no display times on this backend */
+void rhi_present_glass_use(bool on)
+{
+    (void)on;
+}
+
 int rhi_present_timing_next(uint64_t *id, uint64_t *ns)
 {
     (void)id;

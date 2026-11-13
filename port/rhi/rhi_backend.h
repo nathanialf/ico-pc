@@ -124,6 +124,7 @@
     X(present_timing_next)                                                                         \
     X(present_glass)                                                                               \
     X(present_desire)                                                                              \
+    X(present_glass_use)                                                                           \
     X(present_statistics)                                                                          \
     X(set_pipeline_cache_path)                                                                     \
     X(pipeline_cache_loaded)                                                                       \

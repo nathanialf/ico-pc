@@ -1,8 +1,14 @@
 /* vk_glass.c: the display's own times of past presents, read back (rhi.h
  * rhi_present_glass; VK_GOOGLE_display_timing).
  *
- * Where the device offers VK_GOOGLE_display_timing on a window, the
- * extension is enabled and every present chains one VkPresentTimeGOOGLE:
+ * Where the device offers VK_GOOGLE_display_timing on a window on Android
+ * (the one platform whose screen's rule and on-glass line use the times:
+ * rd_pace_screen_live.c, rd_as_made_timer.c; elsewhere the extension is
+ * not enabled and the driver's present path is v0.11.5's), the extension
+ * is enabled, and while the renderer presents pictures as made
+ * (rhi_present_glass_use: vsync off, Uncapped, the render thread on; every
+ * other mode keeps v0.11.5's present exactly) every present chains one
+ * VkPresentTimeGOOGLE:
  * an id (1, 2, ...) and a desiredPresentTime of 0 unless the even cadence
  * asked one for that present (rhi_present_desire: the time of the refresh
  * it was aimed at less half a refresh, on the clock actualPresentTime is
@@ -36,9 +42,11 @@
 
 #define GLASS_RING 256u /* power of two */
 
-static bool s_want; /* asked of the device: the extension enabled */
-static bool s_on;   /* the entry points found: ids chained */
-static int s_fake;  /* the test's stand-in */
+static bool s_want;          /* asked of the device: the extension enabled */
+static const char *s_whyOff; /* the start line's reason where not asked */
+static int s_use;            /* __atomic: rhi_present_glass_use (pictures as made) */
+static bool s_on;            /* the entry points found: ids chained */
+static int s_fake;           /* the test's stand-in */
 static VkDevice s_dev;
 static PFN_vkGetPastPresentationTimingGOOGLE s_past;
 static PFN_vkGetRefreshCycleDurationGOOGLE s_refresh;
@@ -62,6 +70,7 @@ void vkr_glass_device_exts(bool offered, bool surface, const char **exts, uint32
 {
     s_want = false;
     s_on = false;
+    s_whyOff = "no window";
     if (!surface) {
         return;
     }
@@ -69,9 +78,27 @@ void vkr_glass_device_exts(bool offered, bool surface, const char **exts, uint32
         VKR_LOG("display timing (read back): a test's stand-in (no extension)");
         return;
     }
+#ifdef __ANDROID__
+    s_whyOff = "VK_GOOGLE_display_timing not offered";
     if (offered && *count < 40u) {
         exts[(*count)++] = VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME;
         s_want = true;
+    }
+#else
+    /* the times serve the screen's rule and the on-glass line, Android's
+       alone: the extension is not enabled, nothing chained */
+    (void)exts;
+    (void)count;
+    s_whyOff = offered ? "not on this platform: VK_GOOGLE_display_timing is offered but used on "
+                         "Android only, not enabled"
+                       : "not on this platform (Android only)";
+#endif
+}
+
+void rhi_present_glass_use(bool on)
+{
+    if (__atomic_load_n(&s_use, __ATOMIC_RELAXED) != (int)on) {
+        __atomic_store_n(&s_use, (int)on, __ATOMIC_RELAXED);
     }
 }
 
@@ -87,8 +114,7 @@ void vkr_glass_device_made(VkDevice dev)
         return;
     }
     if (!s_want) {
-        VKR_LOG("display timing (read back): off (VK_GOOGLE_display_timing not offered, or no "
-                "window)");
+        VKR_LOG("display timing (read back): off (%s)", s_whyOff ? s_whyOff : "not asked");
         return;
     }
     s_past = (PFN_vkGetPastPresentationTimingGOOGLE)vkGetDeviceProcAddr(
@@ -97,9 +123,10 @@ void vkr_glass_device_made(VkDevice dev)
         dev, "vkGetRefreshCycleDurationGOOGLE");
     s_on = s_past != NULL && s_refresh != NULL;
     VKR_LOG("display timing (read back): %s",
-            s_on ? "VK_GOOGLE_display_timing on (read only: each present an id and a desired "
-                   "time of 0, \"any time\"; the past presents' times read after each present, "
-                   "no wait)"
+            s_on ? "VK_GOOGLE_display_timing on (read only, while pictures are presented as "
+                   "made: each present an id and a desired time of 0, \"any time\"; the past "
+                   "presents' times read after each present, no wait; in every other mode "
+                   "nothing chained, nothing read)"
                  : "off (VK_GOOGLE_display_timing's entry points not found)");
 }
 
@@ -116,8 +143,9 @@ const void *vkr_glass_chain(VkPresentTimesInfoGOOGLE *info, VkPresentTimeGOOGLE 
                             const void *next, uint32_t *id)
 {
     *id = 0;
-    if (!s_on) {
-        return next;
+    if (!s_on || !__atomic_load_n(&s_use, __ATOMIC_RELAXED)) {
+        t_desire = 0; /* never carried over to a present that chains one */
+        return next;  /* v0.11.5's present: nothing chained */
     }
     if (++s_nextId == 0) {
         s_nextId = 1; /* 0 is "none" */
@@ -157,8 +185,8 @@ void rhi_present_desire(uint64_t desiredNs)
 void vkr_glass_presented(VkSwapchainKHR sc, uint32_t id, bool shown)
 {
     t_lastId = shown ? id : 0u;
-    if (!s_on || sc == VK_NULL_HANDLE) {
-        return;
+    if (!s_on || sc == VK_NULL_HANDLE || id == 0u) {
+        return; /* no id chained (not as made): nothing read */
     }
     if (s_fake) {
         /* every third present not reported (as one replaced) */

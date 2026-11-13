@@ -959,6 +959,13 @@ void rhi_present_desire(uint64_t desiredNs)
     }
 }
 
+void rhi_present_glass_use(bool on)
+{
+    if (s_up) {
+        be()->present_glass_use(on);
+    }
+}
+
 bool rhi_present_statistics(uint64_t *presentCount, uint64_t *presentRefresh, uint64_t *syncRefresh,
                             uint64_t *syncNs)
 {

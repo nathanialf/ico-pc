@@ -2146,6 +2146,14 @@ uint32_t rhi_present_glass(uint64_t *lastId, uint64_t *refreshNs, RhiGlassTime *
  * the compositor does not show the picture before that time.  Elsewhere,
  * and on Vulkan without the extension: nothing. */
 void rhi_present_desire(uint64_t desiredNs);
+/* The display's times in use (the renderer's rd_present_as_made: pictures
+ * presented as made, vsync off with Uncapped and the render thread on, the
+ * one mode the screen's rule and the on-glass line serve): while off,
+ * Vulkan chains nothing into the presents and reads no past times (every
+ * capped or vsync mode presents as v0.11.5 did); the extension itself is
+ * enabled on Android alone.  Any thread (one atomic flag; each present
+ * reads it once, its id says which way it went).  Elsewhere: nothing. */
+void rhi_present_glass_use(bool on);
 /* The swapchain's own count of the pictures it showed, read after each
  * present (D3D12: IDXGISwapChain::GetFrameStatistics; diagnostics for the
  * window's log): *presentCount the present count of the last picture

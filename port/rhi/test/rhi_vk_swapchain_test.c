@@ -895,7 +895,9 @@ static int presentWaitHang(SDL_Window *win)
    VK_GOOGLE_display_timing (lavapipe's headless surface may not: then
    nothing to check but that no id is given).  Each present's id one more
    than the one before; the times taken oldest first, their ids presented
-   ones, increasing; no validation error with the struct chained */
+   ones, increasing; no validation error with the struct chained; before
+   rhi_present_glass_use(true) no id and no time.  Off Android the driver's
+   extension is not enabled (vk_glass.c): fake 0 then gives no id */
 static int glassTimes(SDL_Window *win, int fake)
 {
     RhiDeviceDesc dd = {win, true, true, "rhi_vk_swapchain_test", NULL};
@@ -911,6 +913,21 @@ static int glassTimes(SDL_Window *win, int fake)
     const RhiFormat fmt = rhi_swapchain_format();
     uint64_t prev = 0, refresh = 0;
     uint32_t taken = 0, lastTaken = 0;
+    /* not in use (rhi_present_glass_use false: not as made): no id, no
+       time read, as v0.11.5's present */
+    rhi_present_glass_use(false);
+    for (int n = 0; n < 3 && !failures; n++) {
+        failures += frame(win, fmt, 50 + n);
+        uint64_t id = 7;
+        RhiGlassTime t[4];
+        const uint32_t k = rhi_present_glass(&id, &refresh, t, 4);
+        if (id != 0 || k != 0) {
+            printf("FAIL glass: not in use, present %d carried id %llu, %u times read\n", n,
+                   (unsigned long long)id, k);
+            failures++;
+        }
+    }
+    rhi_present_glass_use(true);
     for (int n = 0; n < 12 && !failures; n++) {
         failures += frame(win, fmt, 60 + n);
         uint64_t id = 0;
@@ -944,6 +961,7 @@ static int glassTimes(SDL_Window *win, int fake)
                (unsigned long long)refresh);
         failures++;
     }
+    rhi_present_glass_use(false);
     rhi_wait_idle();
     rhi_shutdown();
     vkr_test_fake_glass(0);

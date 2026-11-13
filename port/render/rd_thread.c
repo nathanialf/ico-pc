@@ -1034,6 +1034,10 @@ double rd_present_even_hold(double untilDeadlineMs, double tickMs, double untilR
 void rd_present_as_made(bool on)
 {
     s_asMade = on;
+    /* the display's times chained and read only as made (rhi.h: the one
+       mode the screen's rule and the on-glass line serve; capped and vsync
+       presents as v0.11.5's) */
+    rhi_present_glass_use(on);
     if (!on) {
         rd_pace_gpu_paced();   /* the GPU queue's model off (rd_pace_gpu.h) */
         rd_pace_rules_paced(); /* and the own timer (rd_pace_rules.h) */

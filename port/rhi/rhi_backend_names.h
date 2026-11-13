@@ -120,6 +120,7 @@
 #define rhi_present_timing_next  RHI__NAME(present_timing_next)
 #define rhi_present_glass        RHI__NAME(present_glass)
 #define rhi_present_desire       RHI__NAME(present_desire)
+#define rhi_present_glass_use    RHI__NAME(present_glass_use)
 #define rhi_present_statistics   RHI__NAME(present_statistics)
 #define rhi_set_pipeline_cache_path RHI__NAME(set_pipeline_cache_path)
 #define rhi_pipeline_cache_loaded RHI__NAME(pipeline_cache_loaded)

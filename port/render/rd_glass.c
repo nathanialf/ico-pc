@@ -377,6 +377,16 @@ void rd_glass_line(void)
     static RdPaceScreenWindow sw;
     static RdPaceEvenWindow ew;
     static char line[6144];
+#ifndef __ANDROID__
+    /* VK_GOOGLE_display_timing is enabled on Android alone (vk_glass.c):
+       said once, so a desktop or Mac log answers why the line is absent */
+    static bool s_said;
+    if (!s_said) {
+        s_said = true;
+        fprintf(stderr, "window: on the glass: not on this platform (the display's own times "
+                        "are read on Android alone, for the screen's rule)\n");
+    }
+#endif
     rd_glass_take(&w);
     rd_pace_screen_take(&sw);
     rd_pace_even_take_window(&ew);
