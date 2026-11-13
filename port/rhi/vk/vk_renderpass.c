@@ -493,6 +493,7 @@ bool vkr_pass_begin(VkrCmdList *c, const VkrPassDesc *d)
         rhi_pass_crumb_phase(RHI_PASS_CRUMB_BEGINNING);
         vkCmdBeginRenderPass(c->cb, &bi, VK_SUBPASS_CONTENTS_INLINE);
         rhi_pass_crumb_phase(RHI_PASS_CRUMB_BEGUN);
+        g_vkr.stats.passObjects++; /* of renderPasses (vk_cmd.c), the attempt's count */
         return true;
     }
     /* zeroed, and no pointer without an attachment: a driver that reads

@@ -1693,6 +1693,45 @@ shows nowhere in the log. Lines: `ico_pc: thermal status changed: MODERATE (2) -
 time 212.4 s)` (the first one, at registration, is from `UNKNOWN (-1)`), `ico_pc: screen recording:
 visible (run time 40.1 s)`, and the window's, in [DISPLAY.md](DISPLAY.md#the-stats-lines).
 
+## Issue 123: the hang detector and the pass path
+
+What the issue 123 tablet's logs (Adreno 740, Qualcomm's driver 512.676; the newest with 12 stalls
+in 308 s) and issue 211's (Adreno 710, 512.800) say together, and the attempt that follows from
+them. The analysis with every row is `build-host/tmp/v0116/design/ADRENO123_v0116.md` (not in the
+repository).
+
+- **The stall's length fits the kernel driver's hardware hang detector.** Qualcomm's kernel GPU
+  driver arms the hang interrupt on the Adreno 7xx with `hang_detect_cycles = 0xcfffff`, units of
+  16 cycles (`gen7_start()`, adreno_gen7.c, and adreno-gpulist.h in
+  android.googlesource.com/kernel/msm-modules/graphics): 218,103,792 cycles. At the 710's 1010 MHz
+  (its `kernel GPU driver` line before the hang) that is 216 ms; its polled trace measured "nothing
+  changed for 211.8 ms" and "208.0 ms". The 740's stalls are 336-415 ms, nearly constant within one
+  log at any load; its clock is not readable. The other detectors do not fit: the dispatcher's soft
+  timer looks every 200 ms, a preemption that never completes is caught at 10 s
+  (`ADRENO_PREEMPT_TIMEOUT`, adreno.h). So the GPU itself stops making progress inside the pass and
+  the kernel resets it, skipping the rest of that submission (an inference with a measured fit on
+  the 710).
+- **Where.** Inside list 0's pass, 12 of 12 in the newest log (`the first: list 0's end`, with a
+  later stamp written each time), in stage 12 and in stage 1's opening alike, with a list 0 of 3
+  prelit pipelines as with stage 12's full one, no pipeline rare in its block, nothing created, in two
+  of them nothing uploaded before it. Every such run began that pass with `vkCmdBeginRendering`,
+  with robust access on or off, the VU pre-pass on (the 710) or off (the 740). So the hang follows
+  the scene's first pass of a submission, not what it draws or the load.
+- **The attempt (on for this class).** On Qualcomm's own driver every render pass is a
+  `VkRenderPass` object (`rhi_pass_row.h` `rhi_vk_pass_row_qualcomm`; [RHI.md](RHI.md#vulkan),
+  **Render passes**): the same attachments, ops, layouts, barriers and waits, the same picture
+  (`rd_pass_objects_ab`), the driver's oldest way of beginning a pass in place of dynamic rendering's.
+  Another hypothesis stays untouched: a power transition at the start of the first heavy pass after
+  the GPU's idle gap before each replay, which no app can change.
+- **Reading the next log.** The device line says `render passes legacy (Qualcomm's own driver
+  ...)` and the start line `rhi_vk: render passes: VkRenderPass objects, not dynamic rendering:
+  Qualcomm's own driver (...)`. Then the stalls (`rd: GPU clock: ... (stall line N of the run)`,
+  `window: present stalls:`, the attempt ledger's `stalls N in the block`) against the newest log's
+  12 in 308 s: about as many with the same `list 0's end` says the pass path is not the trigger; none
+  in a comparable session says it was; a different first unwritten stamp says the hang moved with
+  the path. `RhiStats.passObjects` (the passes begun as `VkRenderPass` objects) and
+  `RhiLimits.passObjectsRow` (the row's reason) are the attempt's counter and state for the ledger.
+
 ## The stall and logging lines (issues 123 and 179)
 
 What the logs of issues 123 (Adreno 740) and 179 (Mali-G52) on the barrier and wait defaults could

@@ -714,9 +714,12 @@ typedef struct VkrState {
      * legacy_passes / ICO_VK_LEGACY_PASSES), for the device line; NULL
      * otherwise */
     const char *legacyWhy;
-    /* the device is on the driver row (rhi_pass_row.h), whatever the
+    /* the device is on Intel's driver row (rhi_pass_row.h), whatever the
      * override made of the path (RhiLimits.storePassTarget) */
     bool passRowHit;
+    /* legacyPasses is on by Qualcomm's row (rhi_pass_row.h, issue 123):
+     * RhiLimits.passObjectsRow gives its reason to the attempt's line */
+    bool passRowQcom;
     /* the crash report's breadcrumb (rhi_pass_crumb.h): the passes begun,
      * and the last marker rhi_cmd_checkpoint was given (the renderer's
      * pass ring sequence number), kept with the checkpoints off too */

@@ -13,3 +13,4 @@
 - The macOS and iOS packages build again (v0.11.5 had none).
 - Phones with only one or two fast processor cores give the game and its picture a fast core each, and run the sound and background work on the other cores, instead of all of them sharing the fast ones.
 - The automatic capture of a slow scene for bug reports interrupts the game for less time.
+- Phones and tablets with a Qualcomm Adreno chip on Qualcomm's own driver now set up each drawing step the driver's longest-standing way, an attempt at the short freezes seen on the Adreno 740 and 710 (the picture is exactly the same).

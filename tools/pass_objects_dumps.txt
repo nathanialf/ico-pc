@@ -1,0 +1,23 @@
+# Dump list for rd_pass_objects_ab (port/render/test/rd_pass_objects_ab.cmake:
+# Qualcomm's driver row, every render pass as a VkRenderPass object against
+# dynamic rendering, byte for byte; issue 123).
+# MACHINE-LOCAL: these are paths on the maintainer's machine; the dumps
+# themselves are never committed.  A listed dump that is absent FAILS the test
+# (a '*' glob that matches nothing too).  Relative paths are relative to this
+# file.
+#
+# stage 12 on the issue 123 tablet (Adreno 740, v0.10.4 under Turnip; F12 and
+# the blended present), where every stall of v0.11.1-v0.11.4 fell: list 0's
+# meshes, Ico and Yorda skinned, the grids, the torches' particles, the
+# shadow volumes
+/primary/dev/ico-dumps/163/frame-20261106-080033-v3910-blended.rddump
+/primary/dev/ico-dumps/163/frame-20261105-195124-v6171-blended.rddump
+# the Pixel's opening (lamps, dark, sun) and issue 179's phone (stages 42, 43,
+# 45 and 3)
+/primary/dev/ico-dumps/v0115-opening/frame-20261112-110824-v746.zip
+/primary/dev/ico-dumps/v0115-opening/frame-20261112-110838-v1545.zip
+/primary/dev/ico-dumps/v0115-opening/frame-20261112-110852-v2278.zip
+/primary/dev/ico-dumps/v0116-mali179/slow-20261112-195541.zip
+/primary/dev/ico-dumps/v0116-mali179/slow-20261112-195621.zip
+/primary/dev/ico-dumps/v0116-mali179/slow-20261112-195651.zip
+/primary/dev/ico-dumps/v0116-mali179/frame-20261112-195947-v17565.zip

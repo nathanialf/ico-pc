@@ -21,6 +21,19 @@ const char *rhi_vk_pass_row(uint32_t vendorId, uint32_t driverId, uint32_t apiVe
            "gen graphics crash in vkCmdBeginRendering)";
 }
 
+const char *rhi_vk_pass_row_qualcomm(uint32_t vendorId, uint32_t driverId)
+{
+    /* rhi_driver_is_qualcomm_proprietary's rule (rhi_driver_version.h),
+       written out: this file links alone into its test */
+    if (vendorId != RHI_VENDOR_QUALCOMM ||
+        (driverId != RHI_DRIVER_ID_QUALCOMM_PROPRIETARY && driverId != 0)) {
+        return NULL;
+    }
+    return "Qualcomm's own driver (issue 123: its GPU hangs inside a pass begun with "
+           "vkCmdBeginRendering; VkRenderPass objects are the driver's oldest path, the same "
+           "picture)";
+}
+
 static int word_is(const char *v, const char *w)
 {
     size_t i = 0;

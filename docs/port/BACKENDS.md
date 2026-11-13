@@ -253,6 +253,12 @@ The OpenGL runs of the renderer's suite are the `_gl` tests ([TESTING.md](TESTIN
   (`rd_display_change_2x_legacy`, `ICO_VK_LEGACY_PASSES=1`), the row's choice in
   `rhi_vk_pass_row`; no Intel GPU on that driver has run it, and the crash it avoids (inside
   `vkCmdBeginRendering` after a live switch to 2x) is not reproduced anywhere here.
+- The Qualcomm driver row on Vulkan (`rhi_pass_row.h` `rhi_vk_pass_row_qualcomm`, issue 123:
+  Qualcomm's own driver takes `VkRenderPass` objects): the path's pictures are the dynamic
+  path's byte for byte on lavapipe (`rd_pass_objects_ab`, the row faked by
+  `ICO_VK_FAKE_PASS_ROW=qualcomm`), the row's choice in `rhi_vk_pass_row`; no Adreno on
+  Qualcomm's driver has run it, and whether it changes the hangs it is aimed at is for the next
+  reporter log to say.
 - Direct3D 11: nothing has run on Windows; the profile text, the pre-pass line and the robust
   words are from the limits `d3d11_device.c` reports.
 - The VU vertex pre-pass on Direct3D 11 on hardware: CI's WARP job runs its self-test (batched,
