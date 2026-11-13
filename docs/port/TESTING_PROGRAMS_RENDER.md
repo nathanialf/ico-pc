@@ -1244,7 +1244,9 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   set-ups and 2 D draws fewer, the passes the same or one fewer (a "novolume" dump the same, and
   its traffic); "novolume" dumps skip 3, "volume" none; novolbreak: the listed windows taken at the
   stencil settings, none by the snapshot; a taken window: the passes off's less 4 a window plus the
-  zero clears it recorded, the set-ups 3 fewer a "novolume" window, at `--repeat 2` no clear and
+  zero clears it recorded, at lavapipe 1x one fewer again (its fog reads the depth outside the pass:
+  list 3's SCENE pass of the skipped composites is begun by nothing), the set-ups 3 fewer a
+  "novolume" window, at `--repeat 2` no clear and
   the targets holding zero counted, none counted in a first replay; nothing taken: the same passes
   and traffic. Each item does something over the dumps. No device: SKIP.
 - `rd_shadow_tile_test.c` (`rd_shadow_tile` with `frames`, `rd_shadow_tile_selftest` with
@@ -1370,8 +1372,10 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   (llvmpipe: not taken). Each pair: every PNG byte for byte; `=0` off with none kept; where nothing
   is taken the same passes and traffic figures; where a window is taken, from the code: a pass less
   a window at the phone setting (the count's, the three levels' and list 3's SCENE pass not begun,
-  four zero clears begun) and two at the stencil row (the reset's own stencil pass too), the colour
-  stored down by the kept pass's W x H x 4, the colour loaded by that and the levels' texels x 4,
+  four zero clears begun) and two at the stencil row (the reset's own stencil pass too) less one a
+  window whose composites `=0` skips as empty too (its fog reads the depth outside the pass: list
+  3's SCENE pass begun in neither run), the colour stored down by the kept pass's W x H x 4 (not
+  for those windows), the colour loaded by that and the levels' texels x 4,
   at the phone setting the cleared up by the levels' and the depth and stencil each way down by W x
   H x 5 (the Apple class loads and stores the stencil with the depth), each within the 0.01 MB
   rounding of two printed figures; the phone setting takes at least one window. No device: SKIP.

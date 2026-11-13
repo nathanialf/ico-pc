@@ -30,10 +30,22 @@
 #     others), from rd_replay.c and rd_no_volume.c: the pass count falls by
 #     K at phone (the count's pass, the three levels' and list 3's pass on
 #     SCENE not begun, four zero clears begun: the reduced count's and the
-#     three levels') and by 2K at dstencil (the shadow reset's own stencil
+#     three levels') and by 2K - S at dstencil (the shadow reset's own stencil
 #     clear pass not begun either: the volumes' merge is the tile-based
-#     classes' only); the colour stored falls by the kept pass's colour
-#     (W x H x 4: list 0's store of SCENE) and the colour loaded by that and
+#     classes' only).  S: the windows every composite of which the =0 run
+#     skipped already (the empty composites, rd_shadow_box.c, on by default:
+#     a window with no volume leaves each level's box empty), the composites
+#     counted as the =1 run's draws not drawn less its levels (its zero
+#     clears less one count a window) and the =0 run's skips as its empty
+#     composites less the =1 run's.  At dstencil the fog reads the depth
+#     outside the pass (not the local read: rd_replay.c's fog ends the pass
+#     and begins its own), so where the composites were skipped list 3's
+#     SCENE pass is begun in neither run and SCENE's pass ends at the fog in
+#     both; at phone the fog's local read joins the pass the open mode keeps
+#     (one pass the =0 run begins either way), so S takes nothing off there.
+#     The colour stored falls by the kept pass's colour (W x H x 4, a store
+#     of SCENE) for K windows at phone and K - S at dstencil, and the colour
+#     loaded by that and
 #     the levels' (list 3's load of SCENE, and each level's pass loaded its
 #     target; the zero clears load nothing), at phone the cleared bytes rise
 #     by the levels' (the reduced count's CLEAR stands for the boxed count's;
@@ -124,6 +136,11 @@ set(takes_dstencil TRUE)
 set(drop_dstencil 2)
 set(depthB_dstencil 0)
 set(cleared_dstencil FALSE)
+# whether list 3's SCENE pass of the composites is one the open mode alone
+# leaves out (1: the fog's depth read after it begins its own pass, so where
+# the =0 run skipped the composites that pass was gone there too)
+set(composites_phone 0)
+set(composites_dstencil 1)
 if("${BACKEND}" STREQUAL "opengl")
   set(settings gl)
 else()
@@ -137,6 +154,8 @@ set(colourRe "stats: traffic: colour ([0-9]+)\\.([0-9][0-9]) MB loaded ([0-9]+)\
 set(depthRe "MB stored, depth and stencil ([0-9]+)\\.([0-9][0-9])/([0-9]+)\\.([0-9][0-9]) MB loaded/stored, ([0-9]+)\\.([0-9][0-9]) MB cleared")
 set(nvRe "stats: no volume (on|off): ([0-9]+) kept \\(([0-9]+) with the pass open over ([0-9]+)x([0-9]+), depth (yes|no)[;,] [0-9]+ zero clears, ([0-9]+) level texels[;,] [0-9]+ draws not drawn\\), [0-9]+ with volumes, [0-9]+ not taken")
 set(nvTailRe "stats: no volume [onf]+: [^\n]* draws not drawn\\), ([0-9]+) with volumes, ([0-9]+) not taken")
+set(nvDrawsRe "stats: no volume [onf]+: [^\n]*[;,] ([0-9]+) zero clears, [0-9]+ level texels[;,] ([0-9]+) draws not drawn\\)")
+set(emptyRe "empty composites (on|off): ([0-9]+) skipped")
 
 # hundredths of a MB from the integer and fraction a figure printed
 function(nv_hundredths out i f)
@@ -195,7 +214,8 @@ foreach(dump IN LISTS dumps)
       endif()
       string(REPLACE ";" "," flat "${out}")
       if(NOT flat MATCHES "${drawsRe}" OR NOT flat MATCHES "${trafficRe}" OR
-         NOT flat MATCHES "${nvRe}")
+         NOT flat MATCHES "${nvRe}" OR NOT flat MATCHES "${nvDrawsRe}" OR
+         NOT flat MATCHES "${emptyRe}")
         message(SEND_ERROR "${dump} ${s} nv ${nv}: no draws, traffic or no volume line:\n${out}")
         math(EXPR failures "${failures} + 1")
         set(skipped TRUE)
@@ -228,10 +248,17 @@ foreach(dump IN LISTS dumps)
       string(REGEX MATCH "${nvTailRe}" m "${flat}")
       set(with_${nv} "${CMAKE_MATCH_1}")
       set(refused_${nv} "${CMAKE_MATCH_2}")
+      string(REGEX MATCH "${nvDrawsRe}" m "${flat}")
+      set(zero_${nv} "${CMAKE_MATCH_1}")
+      set(notDrawn_${nv} "${CMAKE_MATCH_2}")
+      string(REGEX MATCH "${emptyRe}" m "${flat}")
+      set(empty_${nv} "${CMAKE_MATCH_2}")
       message(STATUS "${dump} ${s} nv ${nv}: ${passes_${nv}} passes; no volume ${word_${nv}}: "
                      "${kept_${nv}} kept (${open_${nv}} open over ${pw_${nv}}x${ph_${nv}}, "
                      "${levels_${nv}} level texels), ${with_${nv}} with volumes, "
-                     "${refused_${nv}} not taken; ${traffic_${nv}}")
+                     "${refused_${nv}} not taken; ${zero_${nv}} zero clears, "
+                     "${notDrawn_${nv}} draws not drawn; ${empty_${nv}} empty composites "
+                     "skipped; ${traffic_${nv}}")
     endforeach()
     if(skipped)
       continue()
@@ -267,14 +294,33 @@ foreach(dump IN LISTS dumps)
         math(EXPR phoneKept "${phoneKept} + ${kept_1}")
       endif()
       set(nvFail FALSE)
-      math(EXPR wantPasses "${passes_0} - ${kept_1} * ${drop_${s}}")
-      if(NOT passes_1 EQUAL wantPasses OR NOT open_1 EQUAL kept_1)
-        message(SEND_ERROR "${dump} ${s}: ${passes_1} passes taken (${passes_0} drawn as "
-                           "before: ${wantPasses} expected), ${open_1} of ${kept_1} with the "
-                           "pass open")
+      # the taken windows' composites: the draws not drawn less the levels
+      # (the zero clears less the windows' counts, one each); those the =0
+      # run skipped with their level's box empty (the =1 run skips them as
+      # the window's own, not as empty: the windows not taken skip the same
+      # in both runs)
+      math(EXPR comps "${notDrawn_1} - (${zero_1} - ${kept_1})")
+      math(EXPR skippedOff "${empty_0} - ${empty_1}")
+      if(skippedOff EQUAL comps)
+        set(S "${kept_1}") # list 3's composites' pass begun in neither run
+      elseif(skippedOff EQUAL 0 OR kept_1 EQUAL 1)
+        set(S 0) # a composite drawn at =0 begins list 3's pass
+      else()
+        message(SEND_ERROR "${dump} ${s}: ${skippedOff} of the ${kept_1} windows' ${comps} "
+                           "composites skipped at =0: which windows kept list 3's pass is "
+                           "not known")
+        set(S 0)
         set(nvFail TRUE)
       endif()
-      math(EXPR colour "${kept_1} * ${pw_1} * ${ph_1} * 4")
+      math(EXPR S "${S} * ${composites_${s}}")
+      math(EXPR wantPasses "${passes_0} - ${kept_1} * ${drop_${s}} + ${S}")
+      if(NOT passes_1 EQUAL wantPasses OR NOT open_1 EQUAL kept_1)
+        message(SEND_ERROR "${dump} ${s}: ${passes_1} passes taken (${passes_0} drawn as "
+                           "before: ${wantPasses} expected, ${S} of the windows' composites' "
+                           "passes gone at =0), ${open_1} of ${kept_1} with the pass open")
+        set(nvFail TRUE)
+      endif()
+      math(EXPR colour "(${kept_1} - ${S}) * ${pw_1} * ${ph_1} * 4")
       math(EXPR levels "${levels_1} * 4")
       math(EXPR loaded "${colour} + ${levels}")
       nv_delta("${dump} ${s}: colour stored" "${cs_0}" "${cs_1}" "${colour}")

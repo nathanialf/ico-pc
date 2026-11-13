@@ -74,9 +74,17 @@
 #               composites' DATE by the snapshot): a taken window draws no count
 #               pass and no level passes (4 passes fewer) and records its zero
 #               clears (C, its clause), so the passes are off's less 4 W plus
-#               C; the set-ups 3 fewer a window ("novolume"); at phonerepeat
-#               no clear (C 0) and the targets found holding zero counted; a
-#               setting that takes none: the same passes and traffic.
+#               C, and at dstencil less W more: off draws the window's
+#               composites (the empty composites pinned off) in list 3's SCENE
+#               pass, the break mode skips them, and the fog after them reads
+#               the depth outside the pass there (not the local read:
+#               rd_replay.c's fog ends the pass and begins its own), so that
+#               pass is begun by nothing; at the phone settings the fog's local
+#               read draws in list 3's pass, begun by it instead (one pass
+#               either way); the set-ups 3 fewer a window ("novolume"); at
+#               phonerepeat no clear (C 0) and the targets found holding zero
+#               counted; a setting that takes none: the same passes and
+#               traffic.
 # Over the dumps the item does something at least once.  No device: SKIP (77).
 # -DTOOL=<rd_replay_tool> -DLISTS=<list|list...> -DOUT=<a folder the test may
 # write> -DBACKEND=vulkan|opengl -DITEM=dateone|emptyskip|novolbreak
@@ -183,6 +191,9 @@ set(stencil_phonerepeat TRUE)
 set(integer_mali TRUE)
 set(integer_adreno TRUE)
 set(integer_gl TRUE)
+# the settings whose fog reads the depth outside the pass (list 3's SCENE pass
+# of the composites is the window's own there)
+set(fogown_dstencil TRUE)
 
 if(ITEM STREQUAL "dateone")
   set(var ICO_RD_DATE_ONE)
@@ -459,6 +470,9 @@ foreach(dump IN LISTS dumps)
       if(W GREATER 0)
         math(EXPR acted "${acted} + 1")
         math(EXPR wantPasses "${passes_0} - 4 * ${W} + ${clears_1}")
+        if(fogown_${s})
+          math(EXPR wantPasses "${wantPasses} - ${W}") # list 3's composites' pass
+        endif()
         if(NOT passes_1 EQUAL wantPasses OR setups_1 GREATER setups_0)
           message(SEND_ERROR "${dump} ${s}: ${passes_1} passes, ${wantPasses} expected (${W} "
                              "windows, ${clears_1} zero clears); set-ups ${setups_0} -> "
