@@ -19,7 +19,7 @@
  * and at each 10 s block, beside the attempt ledger:
  *   stalls by what coincided: 3 in the block (a core wait over 100 ms 1,
  *     memory under the floor 3, memory pressure rising 0, the GPU clock
- *     low 0 (not readable), none of these 0)
+ *     low 0 (not readable), the GPU's own sign of a reset 0, none of these 0)
  * The rules, the medians, the parsers and the texts are pure
  * (port/platform/test/stall_coincide_test.c).
  */
@@ -60,6 +60,10 @@ double stall_medians_add(StallMedians *m, uint32_t key, double ms);
 /* a pass that is a stall: over STALL_PASS_TIMES its median (known, above
    0) and over STALL_PASS_MS */
 bool stall_pass_spike(double ms, double median);
+/* the GPU's sign of a reset in one replay's record: stamps unwritten after
+   its work was signalled finished, its first list run twice, or the
+   timestamp counter gone back */
+bool stall_reset_sign(unsigned stampsMissing, bool ranTwice, uint64_t clockBackNs);
 
 /* What the samples said at a stall: -1 (or < 0) where not known */
 #define STALL_WAIT_THREADS 5 /* game, render, submit, SDL audio, system audio */
@@ -80,6 +84,14 @@ typedef struct StallMoment {
     double some10, full10, some10Before;
     double headroom;       /* < 0 not known */
     int gpuMhz, gpuMaxMhz; /* < 0 not readable */
+    /* the GPU's own sign of a reset (rd_perf_clock.h, the record of the
+       stalled replay or the two before it): its recorded stamps came back
+       unwritten after its work was signalled finished (stampsMissing of
+       them), it ran its first list twice, or the GPU's timestamp counter went
+       back (restarted); resetReplay the replay that showed it, 0 none */
+    uint32_t resetReplay;
+    unsigned stampsMissing;
+    bool ranTwice, clockBack;
 } StallMoment;
 
 /* the moment's coincidence classes (bits 1 << STALL_CLASS_*);
@@ -89,6 +101,7 @@ enum {
     STALL_CLASS_MEMORY,   /* memory under the floor */
     STALL_CLASS_PRESSURE, /* memory pressure rising (some avg10 above the second before's) */
     STALL_CLASS_GPU,      /* the GPU clock under STALL_GPU_LOW of its fastest, where readable */
+    STALL_CLASS_RESET,    /* the GPU's own sign of a reset (resetReplay set: issue 123's hangs) */
     STALL_CLASS_NONE,
     STALL_CLASSES
 };

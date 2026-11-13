@@ -1155,10 +1155,12 @@ that stops again writing its own line without the retry mark); a stop at the fre
   moving on a change only, the block line's counts taken per block (the next block from 0), a
   static row, rows not reported left out (their counts kept for when they are), the stalls clause
   with no Adreno row, with one not applicable (`off`) and one on, out-of-range ids ignored, a short
-  buffer cut and terminated; the deciders as six device classes' owners call them (the Mali-G52,
-  the Pixel, a PowerVR B, an Adreno 740, a desktop with MSAA, a Mac with the break forced): no row
-  but the two Adreno ones left `not reported`, the rows not built `not in this build`, the cores'
-  rows and the no-volume break's state with its reason in the start line (CPU only).
+  buffer cut and terminated; the deciders as seven device classes' owners call them (the
+  Mali-G52, the Pixel, a PowerVR B, an Adreno 740 on Qualcomm's driver and on Turnip, a desktop
+  with MSAA, a Mac with the break forced): no row at all left `not reported`, the rows not built
+  (the second Adreno row among them) `not in this build`, the cores' rows, the no-volume break's
+  state with its reason in the start line, the Qualcomm passes row on only on Qualcomm's driver,
+  its count and the stalls clause `(the Adreno attempt on|off)` (CPU only).
 - `core_share_test.c` (ctest `core_share`): the share of run time on the faster cores of the
   threads that do not sample their own core (`port/platform/core_share.h`, issue 179): ten seconds
   of the Helio G85's submit, SDL audio and driver threads and two pipeline workers under one name,
@@ -1169,7 +1171,9 @@ that stops again writing its own line without the retry mark); a stop at the fre
   the ring's last 64, a full key table), the spike rule at its bounds (5.9x not, 8.3x and 40.1 ms
   yes, 40.0 ms not, no median not), the classes of issue 179's moment (memory under the floor;
   with a 150 ms render wait and pressure rising; none; the GPU clock at 300 of 950 MHz), the
-  moment and tally lines word for word, a short buffer, the pressure and status parsers, the
+  moment and tally lines word for word, issue 123's Adreno 740 stall (19 stamps unwritten, memory
+  under Qualcomm's floor: memory and the GPU's own sign of a reset) and the reset's other signs, a
+  short buffer, the pressure and status parsers, the
   driver's thread names (CPU only).
 - `thread_stat_test.c`: `schedstat` parsed and read from a fake `/proc/self/task`, the block's
   difference, its words (`thread_stat`).

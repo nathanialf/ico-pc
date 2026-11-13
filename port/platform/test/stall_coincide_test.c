@@ -115,8 +115,8 @@ int main(void)
     (void)stall_tally_text(&ty, t, sizeof t);
     text_is(t,
             "stalls by what coincided: 3 in the block (a core wait over 100 ms 1, memory under "
-            "the floor 2, memory pressure rising 1, the GPU clock low 0 (not readable), none of "
-            "these 1)",
+            "the floor 2, memory pressure rising 1, the GPU clock low 0 (not readable), the GPU's "
+            "own sign of a reset 0, none of these 1)",
             __LINE__);
     /* the GPU clock where readable */
     m.gpuMhz = 300;
@@ -141,6 +141,40 @@ int main(void)
         const size_t n = stall_moment_text(&m, s, sizeof s);
         CHECK(n == strlen(s) && n == sizeof s - 1u);
     }
+
+    /* issue 123's Adreno 740 (v0.11.5 log, replay 689: 19 of 24 stamps
+       unwritten after its work was signalled finished, the present of 690
+       blocked 402 ms): KGSL not readable, memory under Qualcomm's floor all
+       run, so the reset's own class is what tells these stalls apart */
+    memset(&m, 0, sizeof m);
+    m.gameCore = 6;
+    m.gameMhz = 1920;
+    m.renderCore = -1;
+    m.availMb = 1716;
+    m.floorMb = 1947;
+    m.pressure = -1;
+    m.some10Before = -1.0;
+    m.headroom = 0.65;
+    m.gpuMhz = m.gpuMaxMhz = -1;
+    m.resetReplay = 689;
+    m.stampsMissing = 19;
+    CHECK(stall_classes(&m) == ((1u << STALL_CLASS_MEMORY) | (1u << STALL_CLASS_RESET)));
+    (void)stall_moment_text(&m, t, sizeof t);
+    text_is(t,
+            "the game thread on core 6 (1920 MHz); the core waits not sampled; memory 1716 MB "
+            "available against the floor 1947 MB (under it); thermal headroom 0.65; the GPU's own "
+            "sign of a reset at replay 689: 19 stamps came back unwritten after its work was "
+            "signalled finished; coincided with: memory under the floor, the GPU's own sign of a "
+            "reset",
+            __LINE__);
+    m.stampsMissing = 0;
+    m.ranTwice = true;
+    m.clockBack = true;
+    (void)stall_moment_text(&m, t, sizeof t);
+    CHECK(strstr(t, "reset at replay 689: its first list ran twice, the GPU's clock restarted;") !=
+          NULL);
+    CHECK(stall_reset_sign(19, false, 0) && stall_reset_sign(0, true, 0) &&
+          stall_reset_sign(0, false, 800000) && !stall_reset_sign(0, false, 0));
 
     /* the parsers */
     double some = -1, full = -1;

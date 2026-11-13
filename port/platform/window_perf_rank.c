@@ -150,6 +150,24 @@ static void ledger_lines(void)
            fallbacks counted by the capture, window_dump_auto.c) */
         ico_attempt_decide_capture();
     }
+    {
+        /* the Adreno attempt (rhi_pass_row.h): its state from the device's
+           row, every block (a switch of the graphics API makes a device
+           again); its count the block's growth of the passes begun as
+           VkRenderPass objects, only while the row holds (the counters
+           start from 0 when the backend is made again) */
+        static uint64_t s_passLast;
+        const char *row = rhi_limits()->passObjectsRow;
+        RhiStats st;
+        rhi_get_stats(&st);
+        ico_attempt_decide_pass_objects(row);
+        if (row != NULL) {
+            ico_attempt_fire(ICO_ATT_ADRENO_A, st.passObjects >= s_passLast
+                                                   ? st.passObjects - s_passLast
+                                                   : st.passObjects);
+        }
+        s_passLast = st.passObjects;
+    }
     const uint32_t serial = ico_attempt_serial();
     if (!s_said || serial != s_serial) {
         s_serial = serial;
