@@ -36,7 +36,9 @@
 
 /* The bytes rd_dump_retained_frame_mem would make of the retained frame
    `number` (the same drain of the render thread and settle of the decode
-   pool first; nothing copied): false (0) when the ring does not hold it */
+   pool first; nothing copied): false (0) when the ring does not hold it
+   or the frame is over the memory dump's 192 MiB bound (logged, as
+   rd_dump_retained_frame_mem's) */
 bool rd_dump_retained_frame_bytes(uint32_t number, size_t *bytes);
 
 typedef enum RdDumpInto {

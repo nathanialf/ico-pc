@@ -628,6 +628,12 @@ bool rd_dump_retained_frame_bytes(uint32_t number, size_t *bytes)
     if (!dumpFrame(f, &out)) {
         return false;
     }
+    if (out.len > RD_DUMP_MEM_MAX) {
+        /* the memory dump's bound, as dumpFrameMemMax's */
+        rd__log("dump: the frame did not fit in memory (%zu bytes, the limit %zu)", out.len,
+                (size_t)RD_DUMP_MEM_MAX);
+        return false;
+    }
     *bytes = out.len;
     return true;
 }
