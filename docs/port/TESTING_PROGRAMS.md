@@ -1160,7 +1160,10 @@ that stops again writing its own line without the retry mark); a stop at the fre
   with MSAA, a Mac with the break forced): no row at all left `not reported`, the rows not built
   (the second Adreno row among them) `not in this build`, the cores' rows, the no-volume break's
   state with its reason in the start line, the Qualcomm passes row on only on Qualcomm's driver,
-  its count and the stalls clause `(the Adreno attempt on|off)` (CPU only).
+  its count and the stalls clause `(the Adreno attempt on|off)`; the VU record sized from need
+  per class (on where the need's size made less than the memory bound allowed: the Mali-G52 and a
+  desktop at the Original frame rate; not applicable where the bound allowed no more, under the
+  floor or with the pre-pass off) and its growths in play in the start and block lines (CPU only).
 - `core_share_test.c` (ctest `core_share`): the share of run time on the faster cores of the
   threads that do not sample their own core (`port/platform/core_share.h`, issue 179): ten seconds
   of the Helio G85's submit, SDL audio and driver threads and two pipeline workers under one name,
@@ -1173,8 +1176,12 @@ that stops again writing its own line without the retry mark); a stop at the fre
   with a 150 ms render wait and pressure rising; none; the GPU clock at 300 of 950 MHz), the
   moment and tally lines word for word, issue 123's Adreno 740 stall (19 stamps unwritten, memory
   under Qualcomm's floor: memory and the GPU's own sign of a reset) and the reset's other signs, a
-  short buffer, the pressure and status parsers, the
-  driver's thread names (CPU only).
+  short buffer, the pressure and status parsers (`VmSwap` read past `RssShmem`, absent from a
+  status without it), the driver's thread names (CPU only).
+- `sys_cell_test.c` (ctest `sys_cell`): the log thread's last-value cell (`port/platform/
+  sys_cell.h`): read back whole with its time and cost, the memory block's 16 values whole (a cell
+  of 6 cut the 14-value `memory in the block` line, which then never printed), a write in
+  progress read as nothing, a writer thread against a reader (CPU only).
 - `thread_stat_test.c`: `schedstat` parsed and read from a fake `/proc/self/task`, the block's
   difference, its words (`thread_stat`).
 - `fps_counter_test.c`: the Frame rate counter's number (`port/platform/fps_counter.h`): 0 before
