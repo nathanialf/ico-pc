@@ -646,6 +646,12 @@ static void test_summary_and_mode(void)
           "the line's shape: %s", line);
     CHECK(callbacks == 3 && frames == 3 * PULL_FRAMES, "%llu callbacks, %llu frames", callbacks,
           frames);
+    /* the sound chip's emulation per callback (issue 179): the three
+       renders, against the device's period */
+    CHECK(strstr(line, "; the sound chip's emulation ") != NULL &&
+              strstr(line, " a callback on average (longest ") != NULL &&
+              strstr(line, "; 3 renders) against the device's period of ") != NULL,
+          "the emulation's clause: %s", line);
     /* the game steps what each pull takes: the take and the lead ahead, no
        hold, no trim */
     CHECK(held_ms == 0 && ahead_ms == 2 * PULL_FRAMES * 1000 / RATE && slowed == 0.0,

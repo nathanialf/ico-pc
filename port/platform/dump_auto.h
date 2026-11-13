@@ -46,6 +46,12 @@ typedef struct IcoDumpJob {
     /* the worker's time making the job's block beforehand
        (ico_dump_auto_prepare), 0 none: added to the result's worker time */
     double prepMs;
+    /* the slow-scene dump's game-thread parts apart (the capture line,
+       docs/port/ANDROID_DIAGNOSTICS.md): the measure at the pick and the
+       copy at the later picture, each without its drain (-1 not made);
+       how the frame was copied ("" not said: the skin check's) */
+    double measureMs, copyMs;
+    char how[64];
 } IcoDumpJob;
 
 typedef struct IcoDumpDone {
@@ -55,15 +61,20 @@ typedef struct IcoDumpDone {
     char why[160];
     int result; /* 0 both, 1 without the log, -1 not written */
     double gameMs, workerMs;
-    double drainMs;     /* IcoDumpJob.drainMs */
-    double prepMs;      /* IcoDumpJob.prepMs (part of workerMs, made before the job) */
-    double workerEndMs; /* the worker's end, ico_thread_now_ms */
-    size_t bytes;       /* the dump's bytes */
+    double drainMs;           /* IcoDumpJob.drainMs */
+    double prepMs;            /* IcoDumpJob.prepMs (part of workerMs, made before the job) */
+    double measureMs, copyMs; /* IcoDumpJob's */
+    char how[64];             /* IcoDumpJob.how */
+    double workerEndMs;       /* the worker's end, ico_thread_now_ms */
+    size_t bytes;             /* the dump's bytes */
 } IcoDumpDone;
 
 /* 1 when a job is being written or its result is not yet picked up: the
    caller skips the snapshot (and logs, ico_dump_auto_dropped) */
 int ico_dump_auto_busy(void);
+/* The bytes the dumps hold for captures now: a block asked for, being made,
+   made or taken, and a job's frames being written (the memory line); 0 with none */
+size_t ico_dump_auto_held_bytes(void);
 /* Takes the job (copied; the dump blocks become the worker's): 0; or -1
    when busy, -2 when no thread could be made, the blocks still the
    caller's. Either failure is a drop: one line (the first 8, then every

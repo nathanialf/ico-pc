@@ -2528,7 +2528,9 @@ open_window:
            set after the batch in flight and ends the run */
         ico_diag_step("window: start: the pipeline set");
         rd_set_pipeline_progress(pipeline_progress, &screen);
+        ico_render_thread_pipeline_set(true); /* its workers' cores (render_thread.h) */
         rd_precreate_pipelines();
+        ico_render_thread_pipeline_set(false);
         rd_set_pipeline_progress(NULL, NULL);
         rd_set_display_progress(display_progress, &screen);
         ico_diag_set_pipelines(0, 0, 0);
@@ -2818,7 +2820,9 @@ int ico_window_reopen(const char *backend, bool backendExplicit)
         ico_diag_step("window: switch to %s: the pipeline set", backend);
         s_pipeTitle = "Changing the graphics";
         rd_set_pipeline_progress(pipeline_progress, &screen);
+        ico_render_thread_pipeline_set(true); /* its workers' cores (render_thread.h) */
         rd_precreate_pipelines();
+        ico_render_thread_pipeline_set(false);
         rd_set_pipeline_progress(NULL, NULL);
         rd_set_display_progress(display_progress, &screen);
         s_pipeTitle = "Starting ICO";

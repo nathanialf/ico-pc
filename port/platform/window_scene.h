@@ -170,7 +170,11 @@ size_t window_scene_threads_text(char *out, size_t cap, double threadsMs, unsign
    Off, every triangle shades 3 corners three times (a tiler's vertex shader
    runs for position then for varyings per index: 9 invocations a triangle).
      "VU: 1182 draws, 61k triangles, 550k vertex invocations (pre-pass off: 9 a triangle)"
-     "VU: 250 draws, 9.2k triangles, 4.1k vertex invocations (pre-pass: each vertex once)" */
+     "VU: 250 draws, 9.2k triangles, 4.1k vertex invocations (pre-pass: each vertex once);
+     the draws' vu_main_vs 28k more (3 a triangle; never summed with the pre-pass's)"
+   (with the pre-pass the draws run vu_main_vs three times a triangle, index
+   kick * 4 + corner, no vertex reuse: named beside the pre-pass's figure,
+   never added to it) */
 size_t window_scene_vu_text(char *out, size_t cap, uint64_t draws, uint64_t tris,
                             uint64_t preVertices, unsigned n, int prepass);
 

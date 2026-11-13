@@ -103,7 +103,18 @@ enum {
     GPU_SYSFS_MALI_UTIL, /* the Mali driver's utilization, a percentage */
     GPU_SYSFS_GED_UTIL,  /* MediaTek GED's gpu_utilization: its first number */
     GPU_SYSFS_GED_FREQ,  /* GED's current_freqency: its last number, kHz */
-    GPU_SYSFS_DF_MAX,    /* the devfreq entry's max_freq, Hz, once */
+    /* where GED is EACCES (issue 179): the kernel's
+       /sys/kernel/gpu nodes some vendors give (a clock in MHz, a busy
+       percentage), sampled when readable; formats not verified on a
+       device (the open line quotes their first text) */
+    GPU_SYSFS_KGPU_CLOCK, /* /sys/kernel/gpu/gpu_clock, MHz */
+    GPU_SYSFS_KGPU_BUSY,  /* /sys/kernel/gpu/gpu_busy, a percentage */
+    GPU_SYSFS_DF_MAX,     /* the devfreq entry's max_freq, Hz, once */
+    /* read once and quoted, never sampled: the Mali driver's description
+       and MediaTek's newer frequency table, whether an app may read them
+       (the next device log says) */
+    GPU_SYSFS_MALI_GPUINFO, /* /sys/class/misc/mali0/device/gpuinfo */
+    GPU_SYSFS_MTK_GPUFREQ,  /* /proc/gpufreqv2/gpufreq_status */
     GPU_SYSFS_NODES
 };
 

@@ -128,8 +128,9 @@ int main(void)
     CHECK(text_is(
         b, "VU: 1182 draws, 61k triangles, 549k vertex invocations (pre-pass off: 9 a triangle)"));
     window_scene_vu_text(b, sizeof(b), 2500, 92000, 41000, 10, 1);
-    CHECK(text_is(
-        b, "VU: 250 draws, 9.2k triangles, 4.1k vertex invocations (pre-pass: each vertex once)"));
+    CHECK(text_is(b, "VU: 250 draws, 9.2k triangles, 4.1k vertex invocations (pre-pass: each "
+                     "vertex once); the draws' vu_main_vs 28k more (3 a triangle; never summed "
+                     "with the pre-pass's)"));
     window_scene_vu_text(b, sizeof(b), 100, 2000000, 0, 1, 0);
     CHECK(strstr(b, "2.0M triangles, 18.0M vertex") != NULL);
     window_scene_vu_text(b, sizeof(b), 0, 0, 0, 0, 0);

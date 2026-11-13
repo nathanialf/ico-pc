@@ -25,7 +25,11 @@ static const char *const s_names[GPU_SYSFS_NODES] = {"gpuclk",
                                                      "/sys/class/misc/mali0/device/utilization",
                                                      "/sys/kernel/ged/hal/gpu_utilization",
                                                      "/sys/kernel/ged/hal/current_freqency",
-                                                     "max_freq"};
+                                                     "/sys/kernel/gpu/gpu_clock",
+                                                     "/sys/kernel/gpu/gpu_busy",
+                                                     "max_freq",
+                                                     "/sys/class/misc/mali0/device/gpuinfo",
+                                                     "/proc/gpufreqv2/gpufreq_status"};
 
 const char *gpu_sysfs_node_name(int node)
 {
@@ -34,7 +38,8 @@ const char *gpu_sysfs_node_name(int node)
 
 bool gpu_sysfs_node_absolute(int node)
 {
-    return node >= GPU_SYSFS_MALI_UTIL && node <= GPU_SYSFS_GED_FREQ;
+    return (node >= GPU_SYSFS_MALI_UTIL && node <= GPU_SYSFS_KGPU_BUSY) ||
+           node == GPU_SYSFS_MALI_GPUINFO || node == GPU_SYSFS_MTK_GPUFREQ;
 }
 
 bool gpu_sysfs_node_in(int kind, int node)
@@ -57,7 +62,7 @@ bool gpu_sysfs_node_in(int kind, int node)
 bool gpu_sysfs_node_sampled(int node)
 {
     return (node >= GPU_SYSFS_GPUCLK && node <= GPU_SYSFS_TEMP) ||
-           (node >= GPU_SYSFS_DF_CUR && node <= GPU_SYSFS_GED_FREQ);
+           (node >= GPU_SYSFS_DF_CUR && node <= GPU_SYSFS_KGPU_BUSY);
 }
 
 /* the name holds word, whatever the case */

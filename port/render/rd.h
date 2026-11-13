@@ -2747,6 +2747,32 @@ enum { RD_PRESENT_ELSEWHERE = 0, RD_PRESENT_ON_SUBMIT = 1, RD_PRESENT_IN_STEP = 
 /* the reasons rd_no_volume.c counts (RdPerfRecord.noVolumeWhy) */
 #define RD_NO_VOLUME_WHYS 8
 
+/* Why SCENE's render pass ended mid-picture and was begun again
+ * (RdPerfRecord.breakN; rd_perf_hooks.c, the first other piece of GPU work
+ * between the two: rd_perf_more.h rd_perf_break_of; docs/port/
+ * ANDROID_DIAGNOSTICS.md "The cost counters"): DATE a DATE snapshot,
+ * SHADOW the shadow count, its levels or a shadow reset's stencil pass,
+ * AURA the aura's passes, REDUCTION the reduction, CRACK the crack fill,
+ * GLOW the glow's passes, LAMPS a work buffer's pass outside the glow's
+ * effect (the lamps), COPY a copy, a snapshot, the fog's depth read, the
+ * exact blend's or MSAA's copies, PRESENT the present, AGAIN SCENE begun
+ * again with no piece between (a pass split for another reason: a
+ * destination-read switch, a depth change), OTHER another pass */
+enum {
+    RD_BREAK_DATE = 0,
+    RD_BREAK_SHADOW,
+    RD_BREAK_AURA,
+    RD_BREAK_REDUCTION,
+    RD_BREAK_CRACK,
+    RD_BREAK_GLOW,
+    RD_BREAK_LAMPS,
+    RD_BREAK_COPY,
+    RD_BREAK_PRESENT,
+    RD_BREAK_AGAIN,
+    RD_BREAK_OTHER,
+    RD_BREAK_COUNT
+};
+
 typedef struct RdPerfRecord {
     uint32_t replay; /* 1, 2, ... */
     uint32_t frame;  /* the replayed frame's number */
@@ -3339,6 +3365,32 @@ typedef struct RdPerfRecord {
      * last reason a pair that could have gone with the next was drawn alone
      * (lampsFold4Why, RD_LAMPS_F4_*; 0 none) */
     uint32_t lampsOwed, lampsFold4, lampsFold4Why;
+    /* The cost counters (rd_perf_hooks.c; docs/port/ANDROID_DIAGNOSTICS.md
+     * "The cost counters"; issue 179).  The two-pass blend (no dual-source
+     * blending, rd__expand_no_dual): noDualPairs the draws drawn twice (a
+     * colour pass, then an alpha pass), noDualColour those drawn once
+     * through the colour pass alone (the mask without A), noDualTris the
+     * triangles of the VU draws drawn twice (their vertex work done twice);
+     * counted as the passes are filled (rd_fx_plan.c rd__sprite_above1x's
+     * head, every drawn pass of a 2D draw) and per VU draw (rd_replay_vu.c
+     * vuDraw); 0 with dual-source blending */
+    uint32_t noDualPairs, noDualColour, noDualTris;
+    /* SCENE's pass ended and begun again in the replay, by why (RD_BREAK_*),
+     * and the KB each moved: the stores of SCENE's pass ended and the loads
+     * of the one begun again (colour and depth-stencil, rhi_traffic.h) */
+    uint16_t breakN[RD_BREAK_COUNT];
+    uint32_t breakKB[RD_BREAK_COUNT];
+    /* Per list: the screen boxes of the VU draw commands the culler kept
+     * (rd_vis.c cmdVerdict: the bound of the batches the draw reads under
+     * its VU matrix), GS pixels clipped to the target (listBoxPx), those
+     * commands (listBoxDraws), those with no box (listBoxNone: no bound, a
+     * skinned draw, particles are not counted), the target's GS area
+     * (listBoxTargetPx, the last); 0 everywhere with [dev] cull off.  The
+     * VU triangles drawn per list (vuListTris; vuTris by list) */
+    uint64_t listBoxPx[RD_LIST_COUNT];
+    uint16_t listBoxDraws[RD_LIST_COUNT], listBoxNone[RD_LIST_COUNT];
+    uint32_t listBoxTargetPx[RD_LIST_COUNT];
+    uint32_t vuListTris[RD_LIST_COUNT];
 } RdPerfRecord;
 
 /* The oldest finished record not yet popped (a queue of 64; the oldest are

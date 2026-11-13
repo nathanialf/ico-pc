@@ -9,11 +9,14 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "attempt_ledger.h"
 #include "ico_gamestate.h"
 #include "log_cost.h"
+#include "rd_perf_more.h"
 #include "rd_perf_rank.h"
 #include "rhi.h"
 #include "window_lines.h" /* window_log_cost_part */
+#include "window_stall.h" /* window_stall_tally_take */
 
 /* the window's thread and the lifecycle's (SDL's posting thread) both
    reach the block and the run: every entry point holds the lock */
@@ -43,10 +46,14 @@ static uint32_t s_lastN, s_lastSubN;
 static float s_stamped[STAMP_SPANS], s_plain[STAMP_SPANS];
 static uint32_t s_stampedN, s_plainN;
 
+/* the cost counters' block (rd_perf_more.h): the costs and compare lines */
+static RdPerfMore s_more;
+
 void window_perf_rank_record(const RdPerfRecord *r, double vuInvocations)
 {
     SDL_LockSpinlock(&s_lock);
     rd_perf_rank_add_record(&s_block, r, vuInvocations);
+    rd_perf_more_add(&s_more, r, rd_vu_prepass_on());
     if (r->presented && r->gpuValid && !r->keep) {
         if (r->passTimed && s_stampedN < STAMP_SPANS) {
             s_stamped[s_stampedN++] = (float)r->gpuMs;
@@ -123,10 +130,49 @@ static void profile(const char *why, bool partial)
 
 static void window_perf_rank_block_lines(const WindowPerfBlock *in);
 
+/* The attempt ledger (attempt_ledger.h): its start line at the first
+   block and again when a state changed (the first 8 changes, then every
+   100th), its block line and the stalls' tally (stall_coincide.h) every
+   block */
+static void ledger_lines(void)
+{
+    static uint32_t s_serial;
+    static unsigned s_starts;
+    static int s_said;
+    static char text[2048];
+    if (!s_said) {
+        /* the slow-scene capture in two steps runs on every platform (its
+           fallbacks counted by the capture, window_dump_auto.c) */
+        ico_attempt_state(ICO_ATT_CAPTURE_TWO_STEP, ICO_ATT_ON,
+                          "the copy into a block the dump worker made");
+    }
+    const uint32_t serial = ico_attempt_serial();
+    if (!s_said || serial != s_serial) {
+        s_serial = serial;
+        s_said = 1;
+        const unsigned n = ++s_starts;
+        if (n <= 8u || n % 100u == 0u) {
+            (void)ico_attempt_start_text(text, sizeof text);
+            fprintf(stderr, "window: %s%s\n", text, n > 1u ? " (a state changed)" : "");
+        }
+    }
+    char tally[512];
+    const int stalls = window_stall_tally_take(tally, sizeof tally);
+    if (ico_attempt_block_text(text, sizeof text, stalls) > 0) {
+        fprintf(stderr, "window: %s\n", text);
+    }
+    if (tally[0] != '\0') {
+        fprintf(stderr, "window: %s\n", tally);
+    }
+}
+
 void window_perf_rank_block(const WindowPerfBlock *in)
 {
     window_log_cost_mark("the display and slow scene lines"); /* before it (log_cost.h) */
     window_perf_rank_block_lines(in);
+    if (in != NULL) {
+        ledger_lines();
+    }
     window_log_cost_part(LOG_COST_RANK);
 }
 
@@ -135,6 +181,7 @@ static void window_perf_rank_block_lines(const WindowPerfBlock *in)
     SDL_LockSpinlock(&s_lock);
     if (in == NULL || s_block.n == 0) {
         rd_perf_rank_block_reset(&s_block);
+        rd_perf_more_reset(&s_more);
         window_scene_reset(&s_share);
         s_stampedN = s_plainN = 0;
         s_lastN = s_lastSubN = 0;
@@ -183,6 +230,15 @@ static void window_perf_rank_block_lines(const WindowPerfBlock *in)
         /* every block below the rate: the 10 s summaries are the rate limit */
         fprintf(stderr, "window: %s\n", ranked);
     }
+    /* the costs a device's next change would cut, and the fields two logs
+       of one scene are compared by (rd_perf_more.h) */
+    if (rd_perf_more_cost_text(&s_more, line, sizeof line) > 0) {
+        fprintf(stderr, "window: %s\n", line);
+    }
+    (void)rd_perf_more_compare_text(&s_more, scene, info.tiler, rhi_limits()->robustText, line,
+                                    sizeof line);
+    fprintf(stderr, "window: %s\n", line);
+    rd_perf_more_reset(&s_more);
     rd_perf_rank_run_add(&s_run, &s_block, &info, &v, in->seconds, ranked);
     s_lastInfo = info;
     s_lastInfo.scene = NULL; /* the block's own buffer */

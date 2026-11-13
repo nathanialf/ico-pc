@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include "audio_host.h"
 #include "diag_host.h"
+#include "dump_auto.h" /* ico_dump_auto_held_bytes */
 #include "ico_thread.h"
 #include "log_cost.h"
 #include "pace_policy.h"
@@ -99,6 +100,34 @@ void window_slow_replay_line(const RdPerfRecord *r, unsigned vsync, const char *
 /* the graphics allocations against the device's limit (a phone GPU allows
    4096) and the process's memory (a phone ends a process that holds too
    much without a word) */
+/* The block's memory extremes (Android, the log thread's once-a-second
+   reads; issue 179's process swung 538-1067 MB with the
+   graphics steady at 335 MB): what holds the process's memory, so a swing
+   can be put down to its part ("window: memory in the block: ..."; none
+   where the log thread does not read them) */
+static void memory_block_line(const RhiStats *st)
+{
+    WindowMemBlock b;
+    if (!window_stall_memory_block(&b)) {
+        return;
+    }
+    char floorText[96] = "";
+    if (b.minAvailMb >= 0 && b.floorMb > 0) {
+        snprintf(floorText, sizeof floorText,
+                 " against the floor %ld MB (under it at %u of %u reads)", b.floorMb, b.underFloor,
+                 b.reads);
+    }
+    fprintf(stderr,
+            "window: memory in the block: the device's least %ld MB available%s; the process "
+            "%ld-%ld MB resident: anonymous %ld-%ld MB, file-backed %ld-%ld MB, shared %ld-%ld MB "
+            "(/proc/self/status, once a second); the C heap %.0f MB in use and %.0f MB mapped "
+            "(at the last read); beside them the graphics allocations %.0f MB, the dumps' capture "
+            "blocks %.1f MB\n",
+            b.minAvailMb, floorText, b.lo[0], b.hi[0], b.lo[1], b.hi[1], b.lo[2], b.hi[2], b.lo[3],
+            b.hi[3], b.heapMb, b.mappedMb, (double)st->memoryLiveBytes / 1048576.0,
+            (double)ico_dump_auto_held_bytes() / 1048576.0);
+}
+
 void window_memory_line(void)
 {
     /* the graphics allocations against the device's limit (a
@@ -163,6 +192,7 @@ void window_memory_line(void)
     } else {
         fprintf(stderr, "window: memory: %s%s%s\n", gfx, pipes, vmem);
     }
+    memory_block_line(&st);
 }
 
 /* a step this late past its period with sound held back is named */

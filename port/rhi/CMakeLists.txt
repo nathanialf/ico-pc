@@ -744,6 +744,12 @@ if(_ico_have_vk)
         add_test(NAME rhi_vk_offer_timing COMMAND rhi_vk_test clock)
         set_tests_properties(rhi_vk_offer_timing PROPERTIES SKIP_RETURN_CODE 77 PASS_REGULAR_EXPRESSION
                              "rhi_vk: offered \\(read only, nothing enabled for it\\): calibrated time domains [^;]+; global queue priority [^;]+; the game's one queue made at priority [^;]+; display timing: VK_GOOGLE_display_timing (yes|no), VK_EXT_present_timing (yes|no), VK_KHR_present_id (yes|no), VK_KHR_present_wait (yes|no)")
+        # rhi_vk_pipeline_stats: the device start's read-only line whether
+        # the device offers pipeline statistics queries (vk_device.c, issue
+        # 179: list 0's vertex against fragment work; nothing enabled)
+        add_test(NAME rhi_vk_pipeline_stats COMMAND rhi_vk_test clock)
+        set_tests_properties(rhi_vk_pipeline_stats PROPERTIES SKIP_RETURN_CODE 77 PASS_REGULAR_EXPRESSION
+                             "rhi_vk: pipeline statistics: (offered|not offered) \\(read only, nothing enabled")
         # VK_EXT_memory_budget's numbers in rhi_get_stats (videoMem*):
         # rhi_vk_budget on lavapipe (consistent; a budget where offered),
         # rhi_vk_budget_phone with Arm's phone GPU faked: none (not asked)

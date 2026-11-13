@@ -290,6 +290,15 @@ static void names(void)
     CHECK(!gpu_sysfs_node_in(GPU_SYSFS_KIND_NONE, GPU_SYSFS_DF_CUR));
     CHECK(!gpu_sysfs_node_in(GPU_SYSFS_KIND_NONE, GPU_SYSFS_NODES));
     CHECK(gpu_sysfs_node_sampled(GPU_SYSFS_DF_LOAD) && !gpu_sysfs_node_sampled(GPU_SYSFS_DF_MAX));
+    /* /sys/kernel/gpu sampled, the two text nodes read once */
+    CHECK(gpu_sysfs_node_sampled(GPU_SYSFS_KGPU_CLOCK) &&
+          gpu_sysfs_node_sampled(GPU_SYSFS_KGPU_BUSY));
+    CHECK(!gpu_sysfs_node_sampled(GPU_SYSFS_MALI_GPUINFO) &&
+          !gpu_sysfs_node_sampled(GPU_SYSFS_MTK_GPUFREQ));
+    CHECK(gpu_sysfs_node_absolute(GPU_SYSFS_MTK_GPUFREQ) &&
+          gpu_sysfs_node_in(GPU_SYSFS_KIND_NONE, GPU_SYSFS_KGPU_CLOCK) &&
+          gpu_sysfs_node_in(GPU_SYSFS_KIND_DEVFREQ, GPU_SYSFS_MALI_GPUINFO) &&
+          !gpu_sysfs_node_in(GPU_SYSFS_KIND_KGSL, GPU_SYSFS_KGPU_BUSY));
     CHECK(gpu_sysfs_node_absolute(GPU_SYSFS_GED_FREQ) &&
           !gpu_sysfs_node_absolute(GPU_SYSFS_DF_CUR));
     CHECK(strcmp(gpu_sysfs_node_name(GPU_SYSFS_GED_FREQ), "/sys/kernel/ged/hal/current_freqency") ==
@@ -320,7 +329,9 @@ static void open_devfreq(void)
     CHECK(text_is(line, "kernel GPU driver: /sys/class/devfreq/13040000.mali: readable cur_freq, "
                         "max_freq; not present load, /sys/class/misc/mali0/device/utilization, "
                         "/sys/kernel/ged/hal/gpu_utilization, "
-                        "/sys/kernel/ged/hal/current_freqency; the fastest clock 950 MHz; CPU "
+                        "/sys/kernel/ged/hal/current_freqency, /sys/kernel/gpu/gpu_clock, "
+                        "/sys/kernel/gpu/gpu_busy, /sys/class/misc/mali0/device/gpuinfo, "
+                        "/proc/gpufreqv2/gpufreq_status; the fastest clock 950 MHz; CPU "
                         "clocks of cores 0-7 sampled with it; sampled every 250 ms"));
     CHECK(gpu_sysfs_any_readable(&info) && gpu_sysfs_any_sampled(&info));
     /* load readable, its first text quoted; GED's denied */
@@ -332,7 +343,9 @@ static void open_devfreq(void)
                         "load (\"45@650000000Hz\"), max_freq; not readable "
                         "/sys/kernel/ged/hal/gpu_utilization (EACCES); not present "
                         "/sys/class/misc/mali0/device/utilization, "
-                        "/sys/kernel/ged/hal/current_freqency; the fastest clock 950 MHz; CPU "
+                        "/sys/kernel/ged/hal/current_freqency, /sys/kernel/gpu/gpu_clock, "
+                        "/sys/kernel/gpu/gpu_busy, /sys/class/misc/mali0/device/gpuinfo, "
+                        "/proc/gpufreqv2/gpufreq_status; the fastest clock 950 MHz; CPU "
                         "clocks of cores 0-7 sampled with it; sampled every 250 ms"));
     /* every node denied: each said (no one word for all off KGSL) */
     devfreq_info(&info);
@@ -344,7 +357,10 @@ static void open_devfreq(void)
                         "cur_freq (EACCES), load (EACCES), "
                         "/sys/class/misc/mali0/device/utilization (EACCES), "
                         "/sys/kernel/ged/hal/gpu_utilization (EACCES), "
-                        "/sys/kernel/ged/hal/current_freqency (EACCES), max_freq (EACCES)"));
+                        "/sys/kernel/ged/hal/current_freqency (EACCES), "
+                        "/sys/kernel/gpu/gpu_clock (EACCES), /sys/kernel/gpu/gpu_busy (EACCES), "
+                        "max_freq (EACCES), /sys/class/misc/mali0/device/gpuinfo (EACCES), "
+                        "/proc/gpufreqv2/gpufreq_status (EACCES)"));
     CHECK(!gpu_sysfs_any_sampled(&info));
     /* no devfreq entry: the candidates alone, the CPU clocks on their own */
     memset(&info, 0, sizeof info);
@@ -356,7 +372,9 @@ static void open_devfreq(void)
                         "/sys/class/devfreq; not present "
                         "/sys/class/misc/mali0/device/utilization, "
                         "/sys/kernel/ged/hal/gpu_utilization, "
-                        "/sys/kernel/ged/hal/current_freqency; CPU clocks of cores 0-7 sampled "
+                        "/sys/kernel/ged/hal/current_freqency, /sys/kernel/gpu/gpu_clock, "
+                        "/sys/kernel/gpu/gpu_busy, /sys/class/misc/mali0/device/gpuinfo, "
+                        "/proc/gpufreqv2/gpufreq_status; CPU clocks of cores 0-7 sampled "
                         "every 250 ms"));
     CHECK(!gpu_sysfs_any_readable(&info) && gpu_sysfs_any_sampled(&info));
     info.state[GPU_SYSFS_GED_UTIL] = 1;
@@ -366,7 +384,9 @@ static void open_devfreq(void)
     CHECK(text_is(line, "kernel GPU driver: /sys/class/kgsl/kgsl-3d0 not present, no GPU entry in "
                         "/sys/class/devfreq; readable /sys/kernel/ged/hal/gpu_utilization "
                         "(\"37\"); not present /sys/class/misc/mali0/device/utilization, "
-                        "/sys/kernel/ged/hal/current_freqency; CPU clocks of cores 0-5, 7 "
+                        "/sys/kernel/ged/hal/current_freqency, /sys/kernel/gpu/gpu_clock, "
+                        "/sys/kernel/gpu/gpu_busy, /sys/class/misc/mali0/device/gpuinfo, "
+                        "/proc/gpufreqv2/gpufreq_status; CPU clocks of cores 0-5, 7 "
                         "sampled with it; sampled every 250 ms"));
     /* KGSL missing (the old reading) with the CPU clocks denied */
     memset(&info, 0, sizeof info);

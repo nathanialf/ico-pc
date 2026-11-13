@@ -116,6 +116,9 @@ typedef struct RdPerfRankBlock {
     double listMs[RD_LIST_COUNT], postMs[RD_PERF_POST_COUNT];
     /* counts summed over every record */
     double draws, pipeBinds, groupBinds, passes, dateSnaps, uploadBytes, texUploads, vuInv;
+    /* the VU triangles drawn (RdPerfRecord.vuTris): the draws' own vertex
+       shader invocations beside the pre-pass's (the scene line) */
+    double vuTris;
     double colorLoad, colorStore, depthLoad, depthStore, clear, texels, copy, untracked;
     /* the slot wait: records with a blocking wait, their wait; those with
        a done time, its sum and the longest */

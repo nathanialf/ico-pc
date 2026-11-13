@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "attempt_ledger.h"
 #include "rd_internal.h"
 #include "rd_vu_flat0.h"
 
@@ -89,4 +90,7 @@ void rd__vu_flat0_init(void)
     char line[512];
     (void)rd_vu_flat0_line(line, sizeof(line), on || missing != NULL, missing);
     rd__log("%s", line);
+    ico_attempt_state(ICO_ATT_FLAT0, on || missing != NULL ? ICO_ATT_ON : ICO_ATT_OFF_DEFAULT,
+                      on || missing != NULL ? "every device and backend"
+                                            : "ICO_RD_VU_FLAT0=0: the tests' twins");
 }

@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "attempt_ledger.h"
 #include "diag_host.h"
 #include "dump_auto.h"
 #include "dump_zip.h"
@@ -88,6 +89,7 @@ static struct {
     SlowSceneBlock b;
     double work, meanWork;
     double gameMs, drainMs; /* the first step's */
+    double measureMs;       /* of gameMs, the measure (without its drain) */
     double t0Ms;            /* the first step, ico_thread_now_ms */
     size_t asked;           /* the block's size */
     void *block;            /* the worker's block once taken (NULL before) */
@@ -126,6 +128,7 @@ static void skin_capture(const char *sidecar)
 
     memset(j, 0, sizeof(*j));
     j->drainMs = -1.0;
+    j->measureMs = j->copyMs = -1.0;
     snprintf(j->tag, sizeof(j->tag), "skin-check capture");
     stamp_now(stamp, sizeof(stamp));
     ico_host_pref_dir(pref, sizeof(pref));
@@ -207,6 +210,7 @@ int window_dump_auto_slow(uint32_t frame, const SlowSceneBlock *b, double work, 
 
     memset(j, 0, sizeof(*j));
     j->drainMs = -1.0;
+    j->measureMs = j->copyMs = -1.0;
     snprintf(j->tag, sizeof(j->tag), "slow-scene dump");
     if (ico_dump_auto_busy()) {
         (void)ico_dump_auto_submit(j); /* the drop line, counted */
@@ -242,13 +246,19 @@ int window_dump_auto_slow(uint32_t frame, const SlowSceneBlock *b, double work, 
     /* room for the frame's textures to change before the copy: an eighth
        more and 1 MiB */
     const size_t want = bytes + bytes / 8u + ((size_t)1 << 20);
+    const double measured = ms_since(t0) - j->drainMs;
     if (ico_dump_auto_prepare(want) != 0) {
         /* no worker thread (or busy since the check): the old way, the
            copy grown here; the submit says why when it fails too */
+        const Uint64 t1 = SDL_GetTicksNS();
         if (!rd_dump_retained_frame_mem(frame, &j->dump, &j->dumpLen, &got)) {
             fprintf(stderr, "window: slow scene: frame %u not written\n", (unsigned)frame);
             return 0;
         }
+        j->measureMs = measured;
+        j->copyMs = ms_since(t1);
+        snprintf(j->how, sizeof(j->how), "grown here: the worker could not be asked");
+        ico_attempt_fire2(ICO_ATT_CAPTURE_TWO_STEP, 1);
         return slow_submit(j, b, got, work, meanWork, stamp, ms_since(t0));
     }
     {
@@ -265,6 +275,7 @@ int window_dump_auto_slow(uint32_t frame, const SlowSceneBlock *b, double work, 
     s_slow.meanWork = meanWork;
     s_slow.gameMs = ms_since(t0);
     s_slow.drainMs = j->drainMs;
+    s_slow.measureMs = measured;
     s_slow.t0Ms = ico_thread_now_ms();
     s_slow.asked = want;
     snprintf(s_slow.stamp, sizeof(s_slow.stamp), "%s", stamp);
@@ -339,9 +350,14 @@ static void slow_pump(void)
 
     j->drainMs = s_slow.drainMs + drain;
     j->prepMs = s_slow.prepMs;
+    j->measureMs = s_slow.measureMs;
     if (into == RD_DUMP_INTO_OK) {
         j->dump = block;
         j->dumpLen = len;
+        j->copyMs = ms_since(t1) - drain;
+        snprintf(j->how, sizeof(j->how), "two steps: frame %u copied into the worker's block",
+                 (unsigned)frame);
+        ico_attempt_fire(ICO_ATT_CAPTURE_TWO_STEP, 1);
     } else {
         /* the frame grew past the block (or could not be read): the block
            given up, the old way */
@@ -355,6 +371,10 @@ static void slow_pump(void)
             fprintf(stderr, "window: slow scene: frame %u not written\n", (unsigned)frame);
             return;
         }
+        j->copyMs = ms_since(t1) - drain;
+        snprintf(j->how, sizeof(j->how), "grown here: frame %u %s the worker's block",
+                 (unsigned)frame, into == RD_DUMP_INTO_SMALL ? "had grown past" : "missed");
+        ico_attempt_fire2(ICO_ATT_CAPTURE_TWO_STEP, 1);
     }
     (void)slow_submit(j, &s_slow.b, got, work, s_slow.meanWork, s_slow.stamp,
                       s_slow.gameMs + ms_since(t1));
@@ -382,6 +402,14 @@ static void report_one(const IcoDumpDone *d)
             "into %s%s)\n",
             d->tag, d->gameMs, drain, d->workerMs, d->bytes, base_of(d->zip),
             d->result == 1 ? "; the log could not be read" : "");
+    if (d->how[0] != '\0') {
+        /* the steps apart (issue 179's question: which of them costs the
+           game thread, and which way the frame went) */
+        fprintf(stderr,
+                "window: %s: the game thread's parts: the measure %.1f ms, the copy %.1f ms (each "
+                "without its drain); the worker's block made in %.0f ms; %s\n",
+                d->tag, d->measureMs, d->copyMs, d->prepMs, d->how);
+    }
     if (d->why[0] != '\0') {
         fprintf(stderr, "window: %s: %s\n", d->tag, d->why);
     }

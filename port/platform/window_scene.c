@@ -190,9 +190,21 @@ size_t window_scene_vu_text(char *out, size_t cap, uint64_t draws, uint64_t tris
     }
     count_words((double)tris / d, t, sizeof(t));
     count_words(inv, v, sizeof(v));
-    w = snprintf(out, cap, "VU: %.0f draws, %s triangles, %s vertex invocations (%s)",
-                 (double)draws / d, t, v,
-                 prepass ? "pre-pass: each vertex once" : "pre-pass off: 9 a triangle");
+    if (prepass) {
+        /* the pre-pass's figure, and the draws' own vu_main_vs beside it
+           (index kick * 4 + corner: 3 a triangle, no vertex reuse; issue
+           179: list 0's vertex work was not in the log) */
+        char dv[24];
+        count_words(3.0 * (double)tris / d, dv, sizeof(dv));
+        w = snprintf(out, cap,
+                     "VU: %.0f draws, %s triangles, %s vertex invocations (pre-pass: each vertex "
+                     "once); the draws' vu_main_vs %s more (3 a triangle; never summed with the "
+                     "pre-pass's)",
+                     (double)draws / d, t, v, dv);
+    } else {
+        w = snprintf(out, cap, "VU: %.0f draws, %s triangles, %s vertex invocations (%s)",
+                     (double)draws / d, t, v, "pre-pass off: 9 a triangle");
+    }
     if (w < 0) {
         return 0;
     }

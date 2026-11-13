@@ -86,6 +86,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "rd_perf_hooks.h"
 #include "rd_replay.h"
 
 /* gs_math.hlsli gs_blend_term / gs_blend_factor: 0 Cs, 1 Cd, 2 (and 3) 0;
@@ -940,6 +941,7 @@ uint32_t rd__a1x_sprite_steps(const Replay *r, const DrawSetup *ds, const IcoSpr
  * before.  The first such composite logs its line once. */
 int rd__sprite_above1x(const Replay *r, const RdDrawPass *dp, const DrawSetup *ds, uint32_t redId)
 {
+    rd__perf_nodual_pass(dp->flags, dp->key.fs); /* the two-pass blend's count (rd_perf_hooks.h) */
     const RdDrawState *d = &r->st.ds;
     if (r->a1xGs || !ds->textured || !d->texEnabled || ds->gsLevels || ds->replacement || !ds->tc ||
         d->magFilter != RD_FILTER_LINEAR || d->minFilter != RD_FILTER_LINEAR ||

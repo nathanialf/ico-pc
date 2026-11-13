@@ -873,8 +873,75 @@ static void test_refree(void)
 }
 #endif
 
+/* The pipeline set made while the few-cores rule is in force
+   (cpu_keep_set_cores): on the 2 + 6 and 1 + 7 layouts a worker starting
+   while the set runs keeps every core (the process's, or every core with a
+   speed when not known), once the set is done the rule's own (0); under the
+   rule for three or more (the Pixel) and with the keeper off, the rule's
+   own throughout.  The sweep leaves the set's workers (their ids in the
+   skip list while it runs) on every core and moves one after.  The line
+   word for word in its three modes */
+static void test_pipe_set(void)
+{
+    CpuClasses c;
+    CpuKeep k;
+    char t[640];
+
+    classes(&c, 8, HELIO);
+    cpu_keep_init(&k, &c);
+    CHECK(k.on && k.few);
+    CHECK(cpu_keep_set_cores(&k, true, 0xff) == 0xff);
+    CHECK(cpu_keep_set_cores(&k, true, 0) == 0xff); /* every core with a speed */
+    CHECK(cpu_keep_set_cores(&k, true, 0x3f) == 0x3f);
+    CHECK(cpu_keep_set_cores(&k, false, 0xff) == 0);
+    classes(&c, 8, ONE7);
+    cpu_keep_init(&k, &c);
+    CHECK(k.few && cpu_keep_set_cores(&k, true, 0xff) == 0xff);
+    classes(&c, 8, PIXEL);
+    cpu_keep_init(&k, &c);
+    CHECK(k.on && !k.few && cpu_keep_set_cores(&k, true, 0xff) == 0);
+    classes(&c, 8, SAME8);
+    cpu_keep_init(&k, &c);
+    CHECK(!k.on && cpu_keep_set_cores(&k, true, 0xff) == 0);
+
+    {
+        /* the 2 + 6 sweep: a worker (300) on every core is skipped while
+           the set runs, moved once it is done; the audio thread (200) on
+           the held cores moved either way */
+        const long ids[3] = {300, 200, 101};
+        const uint64_t masks[3] = {0xff, 0xc0, 0x80};
+        const long during[5] = {101, 102, 100, 50, 300};
+        long out[3];
+        int m = cpu_place_sweep_pick(ids, masks, 3, 0xc0, during, 5, out, 3);
+        CHECK(m == 1 && out[0] == 200);
+        m = cpu_place_sweep_pick(ids, masks, 3, 0xc0, during, 4, out, 3);
+        CHECK(m == 2 && out[0] == 300 && out[1] == 200);
+    }
+
+    (void)cpu_keep_set_text(t, sizeof(t), 1, 7, 0xff, 0x3f, 12.34, 61.7);
+    CHECK_STR(t, "made in 12.3 s; its 7 workers on every core 0-7 while it ran (the few-cores "
+                 "rule's exception: the set is made before the game and render threads have "
+                 "steady work); the process's CPU time 61.7 s over it (5.0 cores busy on "
+                 "average); pipeline workers made from here (lazy compiles, the background "
+                 "finisher) run on 0-5");
+    (void)cpu_keep_set_text(t, sizeof(t), 0, 0, 0, 0, 51.2, -1.0);
+    CHECK_STR(t, "made in 51.2 s with no cores' rule in force (nothing pinned: its workers ran "
+                 "on any core the system gave them)");
+    (void)cpu_keep_set_text(t, sizeof(t), 2, 4, 0x3f, 0x3f, 2.0, 3.0);
+    CHECK_STR(t, "made in 2.0 s; its 4 workers on the free cores 0-5 (the cores' rule in "
+                 "force); the process's CPU time 3.0 s over it (1.5 cores busy on average); "
+                 "pipeline workers made from here (lazy compiles, the background finisher) "
+                 "run on 0-5");
+    {
+        char s[20];
+        const size_t n = cpu_keep_set_text(s, sizeof(s), 1, 7, 0xff, 0x3f, 1.0, 1.0);
+        CHECK(n == strlen(s) && n < sizeof(s));
+    }
+}
+
 int main(int argc, char **argv)
 {
+    test_pipe_set();
     test_choose();
     test_keep_all_kept();
     test_keep_widened();

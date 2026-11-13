@@ -17,11 +17,18 @@
 #include "rhi.h"
 #include "thermal_text.h"
 #include "log_cost.h"
+#include "memory_floor.h"
+#include "stall_coincide.h"
 #include "window_lines.h"   /* window_log_cost_present */
 #include "window_present.h" /* window_refresh_ns */
 #include "sys_cell.h"
+#include <errno.h>
+#include <stdlib.h>
 #ifdef __ANDROID__
+#include <fcntl.h>
+#include <malloc.h>
 #include <sys/system_properties.h>
+#include <unistd.h>
 #include "gpu_sysfs_android.h"
 #include "host_android.h"
 #endif
@@ -100,6 +107,13 @@ static double display_hz_now(void)
 
 static void arm_block_end(void); /* the bounded pass timing, below */
 
+/* What a stall coincided with (stall_coincide.h): the block's pass
+   medians, its tally, the GPU's fastest clock (the open line's, -1 not
+   known) */
+static StallMedians s_med;
+static StallTally s_tally;
+static int s_gpuMaxMhz = -1;
+
 /* the block's stall line and its join into the run's sums; clock the
    kernel driver's GPU clock in the block, NULL when not read */
 static void stall_block_close(const StallBlockClock *clock)
@@ -117,6 +131,7 @@ static void stall_block_close(const StallBlockClock *clock)
     s_stallT0 = now;
     rd_perf_rare_block_end(); /* a stalled replay's rare pipelines: counted per block */
     arm_block_end();
+    stall_medians_reset(&s_med); /* the passes' medians are the block's */
 }
 
 void window_stall_run_summary(void)
@@ -155,6 +170,15 @@ static void around_queue(const RdPerfRecord *r)
  * answers and their age.  Without the log thread they are asked where they
  * were, on the game thread (never both: ico_host_thermal keeps statics). */
 static SysCell s_thermalCell, s_memoryCell;
+/* the log thread's other reads (stall_coincide.h, window_lines.c's
+   memory line): /proc/pressure/memory's avg10s (some, full, the some of
+   the read before; ok 1, or 0 with its errno), and the block's memory
+   extremes since the window last took them (the device's least available,
+   the reads under the floor of all, the process's resident range and its
+   anonymous, file-backed and shared parts' ranges, the C heap in use and
+   mapped at the last read) */
+static SysCell s_pressureCell, s_memBlockCell;
+static uint32_t s_memBlockGen; /* __atomic: the window took the block's extremes */
 #ifdef __ANDROID__
 static const char *s_thermalWhy; /* __atomic: a static string (Android's asks only) */
 #endif
@@ -162,6 +186,91 @@ static int s_asksOn;     /* the tick is set: the game thread asks nothing */
 static uint32_t s_asksN; /* __atomic: the tick's runs since the window took them */
 
 #ifdef __ANDROID__
+/* a small file's text into buf (NUL-ended): its length, or -errno */
+static int read_small(const char *path, char *buf, size_t cap)
+{
+    const int fd = open(path, O_RDONLY | O_CLOEXEC);
+    if (fd < 0) {
+        return -errno;
+    }
+    const ssize_t n = read(fd, buf, cap - 1u);
+    const int e = errno;
+    close(fd);
+    if (n < 0) {
+        return -e;
+    }
+    buf[n] = '\0';
+    return (int)n;
+}
+
+/* the floor as the start-up set reads it (window_pipe_finish.c's), MB */
+static long floor_mb(long totalMb)
+{
+    long setting = ico_memory_floor_setting(getenv("ICO_PIPELINE_MEMORY_FLOOR_MB"));
+    if (setting == -2) {
+        setting = -1;
+    }
+    return ico_memory_floor_mb(totalMb, setting, ico_diag_memory_floor_driver());
+}
+
+/* the log thread's: the pressure, the status's parts, the C heap and the
+   block's extremes (asks_tick, after the memory figures) */
+static void asks_more(long rssKb, long availKb, long totalKb, bool haveDev, double atMs)
+{
+    static double s_some = -1.0;
+    static uint32_t s_gen;
+    static double ext[14];
+    static bool s_have;
+    char buf[1024];
+    double some = 0.0, full = 0.0;
+    const int n = read_small("/proc/pressure/memory", buf, sizeof buf);
+    if (n > 0 && stall_pressure_parse(buf, (size_t)n, &some, &full)) {
+        const double pv[4] = {some, full, s_some, 1.0};
+        sys_cell_put(&s_pressureCell, atMs, 0.0, pv, 4);
+        s_some = some;
+    } else {
+        const double pv[4] = {0.0, 0.0, -1.0, (double)(n < 0 ? n : -EINVAL)};
+        sys_cell_put(&s_pressureCell, atMs, 0.0, pv, 4);
+    }
+    long anon = -1, file = -1, shmem = -1;
+    const int m = read_small("/proc/self/status", buf, sizeof buf);
+    if (m <= 0 || !stall_status_parse(buf, (size_t)m, &anon, &file, &shmem)) {
+        anon = file = shmem = -1;
+    }
+    const struct mallinfo mi = mallinfo(); /* bionic: size_t fields */
+    const uint32_t gen = __atomic_load_n(&s_memBlockGen, __ATOMIC_ACQUIRE);
+    const double avail = haveDev ? (double)availKb : -1.0;
+    const double underFloor =
+        haveDev && totalKb > 0 && availKb / 1024 < floor_mb(totalKb / 1024) ? 1.0 : 0.0;
+    const double now[6] = {avail, (double)rssKb, (double)anon, (double)file, (double)shmem, 0.0};
+    if (!s_have || gen != s_gen) {
+        /* a new block: from this read */
+        s_gen = gen;
+        s_have = true;
+        ext[0] = now[0];
+        for (int i = 0; i < 4; i++) {
+            ext[2 + 2 * i] = ext[3 + 2 * i] = now[1 + i];
+        }
+        ext[10] = ext[11] = 0.0;
+    }
+    if (now[0] >= 0.0 && (ext[0] < 0.0 || now[0] < ext[0])) {
+        ext[0] = now[0];
+    }
+    ext[1] = floor_mb(totalKb / 1024);
+    for (int i = 0; i < 4; i++) {
+        if (now[1 + i] >= 0.0) {
+            ext[2 + 2 * i] =
+                ext[2 + 2 * i] < 0.0 || now[1 + i] < ext[2 + 2 * i] ? now[1 + i] : ext[2 + 2 * i];
+            ext[3 + 2 * i] = now[1 + i] > ext[3 + 2 * i] ? now[1 + i] : ext[3 + 2 * i];
+        }
+    }
+    ext[10] += underFloor;
+    ext[11] += 1.0;
+    ext[12] = (double)mi.uordblks / 1048576.0;
+    ext[13] = (double)mi.hblkhd / 1048576.0;
+    sys_cell_put(&s_memBlockCell, atMs, 0.0, ext, 14);
+}
+
 static void asks_tick(void)
 {
     if (ico_diag_watchdog_paused()) {
@@ -181,6 +290,7 @@ static void asks_tick(void)
     t1 = ico_thread_now_ms();
     const double mv[5] = {(double)rss, (double)peak, (double)avail, (double)total, dev};
     sys_cell_put(&s_memoryCell, t1, t1 - t0, mv, 5);
+    asks_more(rss, avail, total, dev != 0.0, t1);
     ico_render_thread_tick(); /* the threads' schedstat and list (render_thread.h) */
     __atomic_fetch_add(&s_asksN, 1u, __ATOMIC_RELAXED);
 }
@@ -219,6 +329,27 @@ static ThermalState thermal_now(const char **why, double *ageMs)
 }
 #endif
 
+bool window_stall_memory_block(WindowMemBlock *b)
+{
+    double v[14], at;
+    memset(b, 0, sizeof(*b));
+    if (!s_asksOn || sys_cell_get(&s_memBlockCell, v, 14, &at, NULL) != 14) {
+        return false;
+    }
+    __atomic_fetch_add(&s_memBlockGen, 1u, __ATOMIC_RELEASE); /* the next block from here */
+    b->minAvailMb = v[0] >= 0.0 ? (long)(v[0] / 1024.0) : -1;
+    b->floorMb = (long)v[1];
+    for (int i = 0; i < 4; i++) {
+        b->lo[i] = v[2 + 2 * i] >= 0.0 ? (long)(v[2 + 2 * i] / 1024.0) : -1;
+        b->hi[i] = v[3 + 2 * i] >= 0.0 ? (long)(v[3 + 2 * i] / 1024.0) : -1;
+    }
+    b->underFloor = (unsigned)v[10];
+    b->reads = (unsigned)v[11];
+    b->heapMb = v[12];
+    b->mappedMb = v[13];
+    return true;
+}
+
 int window_stall_memory(long *rss, long *peak, long *avail, long *total, double *ageMs)
 {
     double v[5], at;
@@ -248,6 +379,111 @@ static const char *around_suffix(void)
 #else
     return "";
 #endif
+}
+
+/* a core's clock at [t0Ms, t1Ms] from the kernel sampler's ring (the
+   lowest during it, else the last before; -1 not known), and the GPU's */
+static int core_mhz(double t0Ms, double t1Ms, int core, int *gpuMhz)
+{
+#ifdef __ANDROID__
+    GpuSysfsAround a;
+    if (core < 0 || !gpu_sysfs_android_around(t0Ms, t1Ms, core, &a)) {
+        return -1;
+    }
+    if (gpuMhz != NULL) {
+        *gpuMhz = a.during > 0 && a.duringClockMin > 0   ? a.duringClockMin
+                  : a.hasBefore && a.before.clockMhz > 0 ? a.before.clockMhz
+                                                         : -1;
+    }
+    if (a.during > 0 && a.duringCpuMin > 0) {
+        return a.duringCpuMin;
+    }
+    return a.hasBefore && core < GPU_SYSFS_CPUS && a.before.cpuMhz[core] != 0
+               ? (int)a.before.cpuMhz[core]
+               : -1;
+#else
+    (void)t0Ms;
+    (void)t1Ms;
+    (void)core;
+    (void)gpuMhz;
+    return -1;
+#endif
+}
+
+/* the moment of a stall over [t0Ms, t1Ms] from the last samples (no file
+   read here: the log thread's cells, the sampler's ring) */
+static void moment_now(StallMoment *m, double t0Ms, double t1Ms)
+{
+    memset(m, 0, sizeof(*m));
+    m->gameCore = cpu_place_now();
+    m->renderCore = ico_render_thread_render_core();
+    m->gpuMhz = m->gpuMaxMhz = -1;
+    m->gameMhz = core_mhz(t0Ms, t1Ms, m->gameCore, &m->gpuMhz);
+    m->renderMhz = core_mhz(t0Ms, t1Ms, m->renderCore, NULL);
+    m->gpuMaxMhz = s_gpuMaxMhz;
+    m->haveWaits = ico_render_thread_last_second(m->waitMs, NULL);
+    m->drivers = ico_render_thread_driver_threads(m->driverName, m->driverRunMs, m->driverWaitMs,
+                                                  STALL_DRIVERS);
+    long rss, peak, avail = -1, total = -1;
+    double age;
+    m->availMb = m->floorMb = -1;
+    if (window_stall_memory(&rss, &peak, &avail, &total, &age) == 0 && avail >= 0) {
+        m->availMb = avail / 1024;
+#ifdef __ANDROID__
+        m->floorMb = floor_mb(total / 1024);
+#endif
+    }
+    m->pressure = -1;
+    m->some10Before = -1.0;
+    m->headroom = -1.0;
+#ifdef __ANDROID__
+    double pv[4], at;
+    if (s_asksOn && sys_cell_get(&s_pressureCell, pv, 4, &at, NULL) == 4) {
+        m->pressure = pv[3] > 0.0 ? 1 : 0;
+        m->pressureErr = pv[3] > 0.0 ? 0 : -(int)pv[3];
+        m->some10 = pv[0];
+        m->full10 = pv[1];
+        m->some10Before = pv[2];
+    }
+    {
+        const ThermalState t = thermal_now(NULL, &age);
+        m->headroom = t.headroom >= 0.0 ? t.headroom : -1.0;
+    }
+#endif
+}
+
+static void stall_event(const char *what, double t0Ms, double t1Ms)
+{
+    StallMoment m;
+    char text[1280];
+    moment_now(&m, t0Ms, t1Ms);
+    stall_tally_add(&s_tally, &m);
+    (void)stall_moment_text(&m, text, sizeof text);
+    ico_log_limited("window: stall", "window: stall: %s; at that moment: %s", what, text);
+}
+
+int window_stall_tally_take(char *out, size_t cap)
+{
+    static int s_driversSaid;
+    if (!s_driversSaid) {
+        char names[512];
+        if (ico_render_thread_driver_names(names, sizeof names) > 0) {
+            s_driversSaid = 1;
+            fprintf(stderr,
+                    "window: threads named like the graphics driver's: %s (the first %d are "
+                    "named at a stall with their run and wait times)\n",
+                    names, STALL_DRIVERS);
+        }
+    }
+    const int n = (int)s_tally.stalls;
+    if (cap > 0) {
+        out[0] = '\0';
+        if (n > 0) {
+            (void)stall_tally_text(&s_tally, out, cap);
+        }
+    }
+    memset(&s_tally, 0, sizeof(s_tally));
+    return n;
 }
 
 void window_stall_poll(void)
@@ -283,7 +519,7 @@ void window_stall_gpu_open(void)
 #ifdef __ANDROID__
     static int s_said;
     GpuSysfsInfo info;
-    char text[512];
+    char text[1024];
 
     gpu_sysfs_android_start(&info); /* the sampler thread (again after a close) */
     if (s_said) {
@@ -315,6 +551,7 @@ void window_stall_gpu_open(void)
                 "log thread; the 10 s lines read the last answers\n");
     }
     s_gpuOn = gpu_sysfs_any_sampled(&info); /* the GPU's nodes or the CPU clocks */
+    s_gpuMaxMhz = info.maxMhz > 0 ? (int)info.maxMhz : -1;
     s_gpuBlockMs = ico_thread_now_ms();
 #endif
 }
@@ -424,6 +661,18 @@ static void arm_block_end(void)
 void window_stall_blocked(const RdPerfRecord *r)
 {
     around_queue(r);
+    if (r->presentMs > STALL_PRESENT_MS) {
+        char what[320];
+        snprintf(
+            what, sizeof what,
+            "a present of %.0f ms (replay %u: its acquire %.1f ms, the swapchain lock %.1f ms, "
+            "the driver's present call %.1f ms, the surface poll %.1f ms; the replay's GPU "
+            "span %.1f ms%s)",
+            r->presentMs, r->replay, r->acquireMs, r->presentLockMs, r->presentCallMs,
+            r->presentPollMs, r->gpuValid ? r->gpuMs : 0.0, r->gpuValid ? "" : ", not timed yet");
+        const double t1 = r->presentEndMs > 0.0 ? r->presentEndMs : ico_thread_now_ms();
+        stall_event(what, t1 - r->presentMs, t1);
+    }
     if (r->presentEndMs > 0.0) {
         window_log_cost_present(r->presentEndMs - r->presentMs, r->presentEndMs);
     }
@@ -491,6 +740,37 @@ void window_stall_passes(const RdPerfRecord *r, const RdPerfPassAgg *agg, const 
                          uint32_t n, unsigned blockGpuN, double blockGpuMs)
 {
     char text[1024];
+
+    {
+        /* a pass over 8 times its block median and 40 ms (stall_coincide.h):
+           the replay's largest such one */
+        int best = -1;
+        double bestMs = 0.0, bestMed = 0.0;
+        for (uint32_t i = 0; i < n; i++) {
+            if (p[i].gpuUs < 0.0f) {
+                continue;
+            }
+            const double ms = (double)p[i].gpuUs / 1000.0;
+            const uint32_t key = (uint32_t)p[i].kind | (uint32_t)p[i].target << 8 |
+                                 (uint32_t)(uint8_t)(p[i].list + 1) << 16;
+            const double med = stall_medians_add(&s_med, key, ms);
+            if (stall_pass_spike(ms, med) && ms > bestMs) {
+                best = (int)i;
+                bestMs = ms;
+                bestMed = med;
+            }
+        }
+        if (best >= 0) {
+            char label[64], what[200];
+            (void)rd_perf_pass_label(&p[best], label, sizeof label);
+            snprintf(what, sizeof what,
+                     "%s %ux%u %.1f ms against the block's median %.1f ms (replay %u, GPU span "
+                     "%.1f ms)",
+                     label, (unsigned)p[best].w, (unsigned)p[best].h, bestMs, bestMed, r->replay,
+                     r->gpuValid ? r->gpuMs : 0.0);
+            stall_event(what, r->startMs, r->startMs + r->totalMs + (r->gpuValid ? r->gpuMs : 0.0));
+        }
+    }
 
     if (!r->presented || !present_stall_lines(r->presentMs)) {
         return;
