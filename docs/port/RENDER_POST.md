@@ -1060,7 +1060,7 @@ rd: present: turn in the blit: the 2364x1080 picture's box blit drawn turned 90 
 rd: present: turn in the blit: a present keeps the turn pass: the port's overlay or the deferred text drawn (reported once for each reason)
 ```
 
-The attempt ledger's row `turn in the blit` counts the presents folded and those that kept the turn
+The attempt ledger's row `turn in the present's blit` counts the presents folded and those that kept the turn
 pass in each 10 s block ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-attempt-ledger)).
 Tests: `rd_smallcuts` (the turned rects against the table, the reasons) and `rd_turn_fold_ab` (the
 headless twin, every PNG byte for byte).
