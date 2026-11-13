@@ -358,6 +358,18 @@ bool rd__volume_fs_selftest(void)
         stateNote();
         return false;
     }
+    /* the targets still owed their first clear (rd_upload.c
+     * rd__clear_new_targets): the self-test's first replay would take that
+     * clear for them, so the first replay after it (the game's first frame,
+     * the replay tool's dump) would begin and store fewer passes than with
+     * the self-test off; they are owed it again afterwards (each still holds
+     * the zero that clear wrote: the frame draws SCENE alone), so the replay
+     * after the self-test moves the same passes and bytes either way */
+    static uint32_t owed[RD_MAX_TARGETS];
+    for (int i = 0; i < RD_MAX_TARGETS; i++) {
+        const RdTargetRec *o = &g_rd.targets[i];
+        owed[i] = o->live && o->clearPending ? o->color.id : 0u;
+    }
     const uint32_t w = t->w, h = t->h;
     const size_t texels = (size_t)w * h, size = texels * 4u;
     uint8_t *px[2][2] = {{malloc(size), malloc(size)}, {malloc(size), malloc(size)}};
@@ -398,6 +410,12 @@ bool rd__volume_fs_selftest(void)
     g_rd.msaaBlocked = wasBlocked;
     rd__shadow_count_forget(); /* the count's target was SCENE */
     t->clearPending = 1;       /* the next replay starts SCENE from its clear */
+    for (int i = 0; i < RD_MAX_TARGETS; i++) {
+        RdTargetRec *o = &g_rd.targets[i];
+        if (owed[i] && o->live && o->color.id == owed[i]) {
+            o->clearPending = 1; /* owed its first clear again (above) */
+        }
+    }
 
     size_t nd[2] = {0, 0}, first[2] = {0, 0}, zFirst = 0;
     int bad = -1;
