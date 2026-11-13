@@ -211,6 +211,25 @@ static void test_classes(void)
          ICO_ATT_NA,
          ICO_ATT_NA},
     };
+
+    /* the record sized from need, k's classes in order: rows made at
+       start-up, the memory bound's, the run's need (rd_early_start_rows),
+       the row's state.  The Mali at v0.11.5's start (1175 MB available,
+       floor 641 MB: 1024 rows within the bound, Original frame rate: 512);
+       the Pixel interpolated (1024 = 1024); the PowerVR B's bound 256 under
+       its need; the Adreno 740 under its floor (nothing made); the desktop
+       Original frame rate; the Mac interpolated */
+    static const struct {
+        uint32_t made, bound, need;
+        IcoAttemptState want;
+    } kRec[] = {
+        {512, 1024, 512, ICO_ATT_ON},   {1024, 1024, 1024, ICO_ATT_NA},
+        {256, 256, 512, ICO_ATT_NA},    {0, 0, 512, ICO_ATT_NA},
+        {0, 0, 1024, ICO_ATT_NA},       {512, 1024, 512, ICO_ATT_ON},
+        {1024, 1024, 1024, ICO_ATT_NA},
+    };
+
+    CHECK(sizeof kRec / sizeof kRec[0] == sizeof k / sizeof k[0]);
     for (size_t c = 0; c < sizeof k / sizeof k[0]; c++) {
         const DeviceClass *d = &k[c];
         ico_attempt_reset();
@@ -223,6 +242,7 @@ static void test_classes(void)
         ico_attempt_decide_pass_objects(d->passRow);
         CHECK(ico_attempt_decide_vu_compute(0, d->vuStores, 1, d->vuPowervr, -1, 0) == 0);
         CHECK(ico_attempt_decide_turn_fold(d->turned, -1, 0, -1) == 0);
+        ico_attempt_decide_rec_need(1, kRec[c].made, kRec[c].bound, kRec[c].need);
         for (int i = 0; i < ICO_ATT_COUNT; i++) {
             if (ico_attempt_state_of(i) == ICO_ATT_NOT_SET) {
                 printf("FAIL %s: %s not reported\n", d->name, ico_attempt_name(i));
@@ -241,6 +261,7 @@ static void test_classes(void)
                    ico_attempt_state_word(ico_attempt_state_of(ICO_ATT_TURN_FOLD)));
             failures++;
         }
+        CHECK(ico_attempt_state_of(ICO_ATT_REC_NEED) == kRec[c].want);
         char b[2048], want[256];
         (void)ico_attempt_start_text(b, sizeof b);
         snprintf(want, sizeof want, "; no-volume break %s (%s)",
@@ -289,6 +310,20 @@ static void test_classes(void)
     CHECK(ico_attempt_decide_turn_fold(0, 1, 1, 1) == 0);
     CHECK(ico_attempt_state_of(ICO_ATT_TURN_FOLD) == ICO_ATT_NA);
     CHECK(ico_attempt_why_of(ICO_ATT_COUNT) == NULL);
+    /* the record's row: the pre-pass off; on with its growths counted */
+    ico_attempt_decide_rec_need(0, 512, 1024, 512);
+    CHECK(ico_attempt_state_of(ICO_ATT_REC_NEED) == ICO_ATT_NA);
+    ico_attempt_decide_rec_need(1, 512, 1024, 512);
+    CHECK(ico_attempt_state_of(ICO_ATT_REC_NEED) == ICO_ATT_ON);
+    ico_attempt_fire(ICO_ATT_REC_NEED, 2);
+    {
+        char b[2048];
+        (void)ico_attempt_start_text(b, sizeof b);
+        CHECK(strstr(b, "; VU record sized from need on (made at the run's need, less than the "
+                        "memory bound allowed)") != NULL);
+        (void)ico_attempt_block_text(b, sizeof b, -1);
+        CHECK(strstr(b, "; VU record sized from need on 2 growths in play") != NULL);
+    }
     ico_attempt_reset();
 }
 

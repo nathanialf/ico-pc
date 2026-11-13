@@ -32,6 +32,7 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
     [ICO_ATT_COMPACTION] = {"index compaction", "triangles dropped", NULL},
     [ICO_ATT_VU_COMPUTE_CLASS] = {"VU record by compute on the PowerVR", "dispatches", NULL},
     [ICO_ATT_TURN_FOLD] = {"turn in the present's blit", "presents", "kept the turn pass"},
+    [ICO_ATT_REC_NEED] = {"VU record sized from need", "growths in play", NULL},
 };
 
 /* the rows' live values (__atomic), and the block text's last counts (the
@@ -297,6 +298,23 @@ void ico_attempt_decide_no_volume_break(int env, int classOk, int defaultOn, con
                           "pause menu clean with it");
     } else {
         ico_attempt_state(ICO_ATT_NO_VOLUME_BREAK, ICO_ATT_ON, "the PowerVR or MoltenVK class");
+    }
+}
+
+void ico_attempt_decide_rec_need(int wanted, uint32_t made, uint32_t bound, uint32_t need)
+{
+    if (!wanted) {
+        ico_attempt_state(ICO_ATT_REC_NEED, ICO_ATT_NA, "the VU pre-pass is off");
+    } else if (made == 0u) {
+        ico_attempt_state(ICO_ATT_REC_NEED, ICO_ATT_NA,
+                          "nothing made at start-up: under the free-memory floor, after the "
+                          "system's low-memory signal or no row within the bound");
+    } else if (need != 0u && made != 0u && made < bound) {
+        ico_attempt_state(ICO_ATT_REC_NEED, ICO_ATT_ON,
+                          "made at the run's need, less than the memory bound allowed");
+    } else {
+        ico_attempt_state(ICO_ATT_REC_NEED, ICO_ATT_NA,
+                          "the memory bound allowed no more than the run's need");
     }
 }
 

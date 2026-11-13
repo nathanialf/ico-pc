@@ -17,6 +17,7 @@
 #include "pace_policy.h"
 #include "host_loop.h"
 #include "rd_tex.h"
+#include "rd_vu_rec_early.h" /* rd_vu_record_memory, rd_loss_keep_held_bytes */
 #include "rhi.h"
 #ifdef __ANDROID__
 #include "host_android.h"
@@ -105,6 +106,23 @@ void window_slow_replay_line(const RdPerfRecord *r, unsigned vsync, const char *
    graphics steady at 335 MB): what holds the process's memory, so a swing
    can be put down to its part ("window: memory in the block: ..."; none
    where the log thread does not read them) */
+/* The VU record's memory every block, every platform (issue 179: 1024 rows
+   held, 96 MB over two frame slots, on a phone under its free-memory floor
+   whose pictures needed at most 256): what it holds, what the block's
+   pictures needed, its growths in play, the upload rings beside it (the
+   words: rd_early_plan.h rd_vu_record_memory_text) */
+static void window_vu_record_line(void)
+{
+    RdVuRecMem m;
+    rd_vu_record_memory(&m);
+    if (m.heldRows == 0 && m.runNeedRows == 0) {
+        return; /* no pre-pass ran yet */
+    }
+    char line[400];
+    (void)rd_vu_record_memory_text(line, sizeof line, &m);
+    fprintf(stderr, "%s\n", line);
+}
+
 static void memory_block_line(const RhiStats *st)
 {
     WindowMemBlock b;
@@ -117,15 +135,21 @@ static void memory_block_line(const RhiStats *st)
                  " against the floor %ld MB (under it at %u of %u reads)", b.floorMb, b.underFloor,
                  b.reads);
     }
+    char swapText[96] = "; swapped out not read";
+    if (b.swapLo >= 0) {
+        snprintf(swapText, sizeof swapText, "; swapped out %ld-%ld MB (VmSwap: still allocated)",
+                 b.swapLo, b.swapHi);
+    }
     fprintf(stderr,
             "window: memory in the block: the device's least %ld MB available%s; the process "
             "%ld-%ld MB resident: anonymous %ld-%ld MB, file-backed %ld-%ld MB, shared %ld-%ld MB "
-            "(/proc/self/status, once a second); the C heap %.0f MB in use and %.0f MB mapped "
+            "(/proc/self/status, once a second)%s; the C heap %.0f MB in use and %.0f MB mapped "
             "(at the last read); beside them the graphics allocations %.0f MB, the dumps' capture "
-            "blocks %.1f MB\n",
+            "blocks %.1f MB, the loss dump's frame copies %.1f MB\n",
             b.minAvailMb, floorText, b.lo[0], b.hi[0], b.lo[1], b.hi[1], b.lo[2], b.hi[2], b.lo[3],
-            b.hi[3], b.heapMb, b.mappedMb, (double)st->memoryLiveBytes / 1048576.0,
-            (double)ico_dump_auto_held_bytes() / 1048576.0);
+            b.hi[3], swapText, b.heapMb, b.mappedMb, (double)st->memoryLiveBytes / 1048576.0,
+            (double)ico_dump_auto_held_bytes() / 1048576.0,
+            (double)rd_loss_keep_held_bytes() / 1048576.0);
 }
 
 void window_memory_line(void)
@@ -193,6 +217,7 @@ void window_memory_line(void)
         fprintf(stderr, "window: memory: %s%s%s\n", gfx, pipes, vmem);
     }
     memory_block_line(&st);
+    window_vu_record_line();
 }
 
 /* a step this late past its period with sound held back is named */

@@ -94,6 +94,10 @@ enum {
        swapchain was drawn by the box blit itself (no turn pass); second
        count the presents on a turned swapchain that kept the turn pass */
     ICO_ATT_TURN_FOLD,
+    /* rd_vu_rec_early.c: the VU record made at start-up at the run's need
+       (rd_early_start_rows) instead of the largest the memory bound
+       allowed; count the record's growths in play (rd__vu_rec_grew) */
+    ICO_ATT_REC_NEED,
     ICO_ATT_COUNT
 };
 
@@ -160,6 +164,12 @@ void ico_attempt_decide_empty_skip(int box, int mode);
    device's RhiLimits.passObjectsRow (its reason while Qualcomm's row holds
    the passes; NULL otherwise, and on the other backends) */
 void ico_attempt_decide_pass_objects(const char *row);
+/* the record sized from need (rd_vu_rec_early.c rd_vu_record_prepare, once
+   at start-up): wanted the pre-pass is on, made the rows made at start-up
+   (0 none), bound the rows the memory bound alone allowed, need the run's
+   need (rd_early_start_rows; 0 none): on where the need's size made less
+   than the bound allowed, else not applicable with the reason */
+void ico_attempt_decide_rec_need(int wanted, uint32_t made, uint32_t bound, uint32_t need);
 void ico_attempt_decide_no_volume_break(int env, int classOk, int defaultOn, const char *gateWhy);
 /* the VU record by compute on the PowerVR class (rd_vu_class.c, at the
    record's start): byName a [dev] vu_record asked for by name, stores auto

@@ -1906,13 +1906,28 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   a desktop without a measure (1,024 rows and the chunk), half of Direct3D's free video memory,
   the targets' larger rows, under the floor, at it, 1 MB above it and after the system's signal
   (nothing), the pre-pass off (the chunk alone), the chunk made already, a record already at its
-  largest. `rd_vu_rec_early_ab`, `rd_vu_rec_early_ab_compute`, `rd_vu_rec_early_ab_targets`
+  largest; the record's size from need (`rd_early_start_rows`: 512 rows without the tick cameras
+  and the velocity, 1,024 with either or both, the minimum and maximum held), the plan held to it
+  (issue 179's Mali at its last report's start, 1175 MB available, floor 641 MB: the bound alone
+  1,024 rows, the need's 512 and the chunk, 80 MB; without a need 128 MB as before; a bound under the
+  need keeps the bound's; a record already at the need makes none) and the window's
+  `VU record memory` line word for word and cut short. `rd_vu_rec_early_ab`,
+  `rd_vu_rec_early_ab_compute`, `rd_vu_rec_early_ab_targets`
   (`rd_early.cmake`, through `test/rd_vu_env_ab.cmake`): the dumps of `tools/vustage_dumps.txt`
   with the record grown by the frame (`ICO_RD_EARLY_PREPARE=0`) and made at start at 1,024 rows
-  with the arena's chunk (`=1`: the replay tool calls `rd_vu_record_prepare` as the game window
-  does and prints `early: record 1024 rows, arena made`), under lavapipe's own record write, the
-  compute dispatches and the render targets: every named target byte for byte at Original 4:3 1x
-  and Enhanced 16:9 2x; a frame without a pre-pass is skipped.
+  with the arena's chunk (`=1` with `ICO_RD_EARLY_ROWS=1024`: the replay tool calls
+  `rd_vu_record_prepare` as the game window does and prints `early: record 1024 rows, arena
+  made`), under lavapipe's own record write, the compute dispatches and the render targets: every
+  named target byte for byte at Original 4:3 1x and Enhanced 16:9 2x; a frame without a pre-pass
+  is skipped. `rd_vu_rec_size_ab`, `rd_vu_rec_size_ab_mali` (`rd_early.cmake`): the dumps of
+  `tools/vu_rec_size_dumps.txt` (issue 179's four Mali dumps, the Pixel's three opening dumps, the
+  corpus's largest pre-pass record) with the record made at start at 1,024 rows
+  (`ICO_RD_EARLY_PREPARE=1`, `ICO_RD_EARLY_ROWS=1024`) against the run's need (`=1` alone: `early:
+  record 512 rows`): every named target byte for byte at the two settings, and no `grown in play
+  past` line in the need's run (`FORBID_B`); `_mali` under the Arm fakes and the compute record.
+  A listed dump that is absent fails where the dumps are (`LIST_STRICT`).
+  `ICO_RD_EARLY_ROWS=N` (a power of two from 16 to 1,024; anything else is said and ignored) takes
+  N as the run's need at start-up; tests only.
 - `rd_log_line_test.c` (ctest `rd_log_line`, `rd_early.cmake`): a log line handed to an
   unbuffered stream in one write (`rd_log_line.c`, `rd__log`; [RENDER_POST.md](RENDER_POST.md#start-up)),
   pure: a short line, one with `rd__log_once`'s suffix, one of 10,000 characters (formatted on the

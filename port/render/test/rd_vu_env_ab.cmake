@@ -14,6 +14,8 @@
 # [-DDUMP=<dump>] [-DLIST=<dump list>] [-DSKIP_UNLESS=<regex>: a dump whose
 # first run prints no line matching it is skipped, not compared (the list's
 # frames without VU commands: 0 pre-passes, nothing for a floor to skip)]
+# [-DFORBID_B=<regex>: the B run's output must have no line matching it
+# (rd_vu_rec_size_ab: no growth in play past the record made at start-up)]
 # [-DLIST_STRICT=1: on a machine where any of the list's entries exists,
 # each entry that names no file (or a glob no file matches) is an error;
 # without it, or where none exists (CI), a missing entry is reported only]
@@ -115,6 +117,10 @@ foreach(dump IN LISTS dumps)
     endif()
     if(NOT flatB MATCHES "${REQ_B}")
       message(SEND_ERROR "${dump} ${s}: the ${ENV_B} run has no line matching \"${REQ_B}\":\n${outB}")
+      math(EXPR failures "${failures} + 1")
+    endif()
+    if(FORBID_B AND flatB MATCHES "${FORBID_B}")
+      message(SEND_ERROR "${dump} ${s}: the ${ENV_B} run has a line matching \"${FORBID_B}\"")
       math(EXPR failures "${failures} + 1")
     endif()
     file(GLOB pngs RELATIVE "${dirA}" "${dirA}/*.png")

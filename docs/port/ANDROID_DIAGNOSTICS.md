@@ -1952,6 +1952,7 @@ thread can make it, hot paths included. The rows and where their states are set:
 | subpass read, blend constant, index compaction | `not in this build` from the start (left out of the block line) | none |
 | VU record by compute on the PowerVR | `rd_vu_record.c` at the record's start (`ico_attempt_decide_vu_compute`): `off by default` on the PowerVR class under Vulkan with both stores, `on` by the tests' switch or the define flipped, `refused by its self-test` when the compute record failed it (the vertex stores then), `not applicable here` elsewhere (no vertex stores, no compute stores, another class, a `[dev] vu_record` by name) | `rd_vu_record.c` `rd__replay_dispatch`: the dispatches |
 | turn in the present's blit | `rd_present.c` at each present (`ico_attempt_decide_turn_fold`): `not applicable here` without a pre-rotated swapchain, `off by default` until the define is flipped or with its self-test not run, `refused by its self-test`, `on` with it passed | `rd_turn_fold.c`: the presents folded (the second count: those on a turned swapchain that kept the turn pass) |
+| VU record sized from need | `rd_vu_rec_early.c` at the start-up preparation (`ico_attempt_decide_rec_need`: on where the run's need made a smaller record than the memory bound allowed; not applicable with the pre-pass off, nothing made at start-up, or a bound no larger than the need) | the record's growths in play (`rd_replay_vu.c` recEnsure, a record that existed grown) |
 
 The shadow cuts' counts come from the replay's record where the window reads it
 (`window_perf_rank_record`), not from the cuts' hot paths.
@@ -2090,19 +2091,45 @@ different draws (315 and 410) and different list 0 and before-list-0 parts (76.4
 
 ### The memory in a block
 
-On Android, the log thread reads `/proc/self/status`'s `RssAnon`, `RssFile` and `RssShmem` and the
-C heap's `mallinfo` once a second, and keeps the block's extremes. The window prints them after
-the memory line, and the next block starts from the next read:
+On Android, the log thread reads `/proc/self/status`'s `RssAnon`, `RssFile`, `RssShmem` and
+`VmSwap` and the C heap's `mallinfo` once a second, and keeps the block's extremes. The window
+prints them after the memory line, and the next block starts from the next read:
 
 `window: memory in the block: the device's least 501 MB available against the floor 641 MB (under
 it at 8 of 10 reads); the process 538-1067 MB resident: anonymous 410-520 MB, file-backed 120-540 MB,
-shared 5-5 MB (/proc/self/status, once a second); the C heap 380 MB in use and 60 MB mapped (at the
-last read); beside them the graphics allocations 335 MB, the dumps' capture blocks 0.0 MB`
+shared 5-5 MB (/proc/self/status, once a second); swapped out 0-310 MB (VmSwap: still allocated);
+the C heap 380 MB in use and 60 MB mapped (at the last read); beside them the graphics allocations
+335 MB, the dumps' capture blocks 0.0 MB, the loss dump's frame copies 13.0 MB`
 
-The numbers in this example are made up. A swing in the file-backed part is the game data's
-mapped pages being read in and dropped by the system. A swing in the anonymous part is the
-process's own allocations. Texture copies held by the renderer and audio buffers are not counted
-apart.
+The numbers in this example are made up. The line's values pass through a last-value cell
+(`sys_cell.h`) that once held 6 of its 14, which cut them, so the window never printed it; the
+cell holds 16 now. How to read a swing:
+- **Swapped out rising as anonymous falls:** the kernel moved the process's pages to swap (zram
+  on a phone) under memory pressure. The memory is still the process's; nothing was freed. Touching
+  those pages again (a stage load, a cutscene's data) reads them back, and the GPU's work can wait
+  for it.
+- **File-backed swinging:** mapped files' pages (the program's own code, the graphics driver's
+  libraries) dropped by the system and read back. The game data is read with `fread`, never
+  mapped, so its pages are not in the process's figures.
+- **Anonymous swinging with swapped out flat:** the process's own allocations. The largest the code
+  makes are the frame ring (3 frames, 7-13 MB each on the Mali), the renderer's texture and mesh
+  copies (a stage's), the loss dump's frame copies (at most 4 of 16 MiB, held while the GPU is
+  behind; the line names them), the slow-scene capture's block (the capture blocks) and, during a
+  pipeline batch, the driver's compiler (about 70 MB a thread, given back after the batch).
+  Without a texture pack nothing of the port's own moves hundreds of MB in a block.
+
+Every block, on every platform, the VU pre-pass's record follows:
+
+`window: VU record memory: 512 rows held (48 MB over the frame slots; 512 rows made at start-up); a
+picture of the block needed at most 214 rows (248 in the run); 0 growths in play in the run; the
+upload rings 128 MB`
+
+The rows held as the last replay began and their bytes (every frame slot, and the three render
+targets where the record is drawn into them), what the start-up made, the most rows a picture of
+the block needed (pass V's and pass T's) and of the run, the record's growths in play, and the two
+frame slots' upload rings. A block whose pictures need more than the rows held grows the record
+(its own `the record holds` line); a run whose need stays far under the held rows is memory the
+record holds for nothing.
 
 ### The pipeline set's cores
 

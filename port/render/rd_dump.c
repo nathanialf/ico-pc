@@ -150,6 +150,7 @@
 #include "rd_dump_mem.h"
 #include "rd_tex.h"
 #include "rd_velocity.h"
+#include "rd_vu_rec_early.h" /* rd_loss_keep_held_bytes */
 #include "shader_consts.h"
 
 #define MAX_REFS 4096
@@ -1411,6 +1412,15 @@ static struct {
 static int s_keepStop, s_keepBusy; /* __atomic: the loss dump's flag, a recycle at work */
 static bool s_keepGone;            /* the loss dump did not wait: the copies left alone */
 
+/* keepBytes as last set, for the window's memory line (another thread:
+   __atomic; rd_vu_rec_early.h rd_loss_keep_held_bytes) */
+static uint64_t s_keepHeld;
+
+uint64_t rd_loss_keep_held_bytes(void)
+{
+    return __atomic_load_n(&s_keepHeld, __ATOMIC_RELAXED);
+}
+
 static size_t keepBytes(void)
 {
     size_t n = 0;
@@ -1428,6 +1438,7 @@ static void keepFree(int i)
     s_keep.len[i] = 0;
     s_keep.frame[i] = 0;
     s_keep.freed++;
+    __atomic_store_n(&s_keepHeld, (uint64_t)keepBytes(), __ATOMIC_RELAXED);
 }
 
 /* the copy of f into a new slot (s_keepBusy held) */
@@ -1460,6 +1471,7 @@ static void keepTake(const RdFrame *f, const RhiGpuProgress *p)
     s_keep.len[slot] = len;
     s_keep.frame[slot] = f->number;
     s_keep.taken++;
+    __atomic_store_n(&s_keepHeld, (uint64_t)keepBytes(), __ATOMIC_RELAXED);
     if (keepBytes() > s_keep.maxBytes) {
         s_keep.maxBytes = keepBytes();
     }

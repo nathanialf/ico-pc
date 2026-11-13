@@ -45,6 +45,16 @@ int main(void)
     CHECK(sys_cell_get(&c, v, 6, &at, &took) == 2 && v[0] == 0.42 && v[1] == 3.0 && at == 1000.0 &&
           took == 1.5);
     CHECK(sys_cell_get(&c, v, 1, NULL, NULL) == 1 && v[0] == 0.42);
+    /* the memory block's 16 values (window_stall.c asks_more) whole */
+    {
+        double many[16], back[16];
+        for (int i = 0; i < 16; i++) {
+            many[i] = (double)i + 0.5;
+        }
+        sys_cell_put(&c, 2000.0, 0.0, many, 16);
+        CHECK(sys_cell_get(&c, back, 16, NULL, NULL) == 16 && back[15] == 15.5 && back[0] == 0.5);
+        sys_cell_put(&c, 1000.0, 1.5, w, 2);
+    }
     c.seq |= 1u; /* a write in progress */
     CHECK(sys_cell_get(&c, v, 2, &at, &took) == 0);
 

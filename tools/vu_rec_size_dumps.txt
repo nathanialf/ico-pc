@@ -1,0 +1,22 @@
+# Dump list for rd_vu_rec_size_ab and rd_vu_rec_size_ab_mali
+# (port/render/rd_early.cmake: the VU record made at start-up at the run's
+# need, 512 rows, against 1024 rows, byte for byte, and no growth in play
+# past the 512).  MACHINE-LOCAL: these are paths on the maintainer's
+# machine; the dumps themselves are never committed.  Where
+# /primary/dev/ico-dumps exists, a listed dump that is absent fails the
+# test; elsewhere (CI) it is skipped.
+#
+# issue 179's Mali-G52 (moto g24 power, v0.11.5): the three slow-scene
+# captures (stages 42, 43, 45: the first the heaviest pre-pass record of
+# the four, 214 rows) and the manual frame (stage 3)
+/primary/dev/ico-dumps/v0116-mali179/slow-20261112-195541.zip
+/primary/dev/ico-dumps/v0116-mali179/slow-20261112-195621.zip
+/primary/dev/ico-dumps/v0116-mali179/slow-20261112-195651.zip
+/primary/dev/ico-dumps/v0116-mali179/frame-20261112-195947-v17565.zip
+# the Pixel 10 Pro Fold's opening (lamps, dark, sun)
+/primary/dev/ico-dumps/v0115-opening/frame-20261112-110824-v746.zip
+/primary/dev/ico-dumps/v0115-opening/frame-20261112-110838-v1545.zip
+/primary/dev/ico-dumps/v0115-opening/frame-20261112-110852-v2278.zip
+# the corpus's largest pre-pass record (rd_early_plan.h RD_EARLY_NEED_VERTS,
+# RD_EARLY_NEED_KICKS: 84649 vertices, 168322 triangle slots, 248 rows)
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/plain/rd-00300.rddump

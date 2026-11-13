@@ -20,7 +20,9 @@
 
 #include <stdint.h>
 
-#define SYS_CELL_VALUES 6
+/* 16: the memory block's cell (window_stall.c asks_more) holds 16 values;
+   a put of more is cut to this, so its get must ask no more */
+#define SYS_CELL_VALUES 16
 
 typedef struct SysCell {
     uint32_t seq;  /* odd while written */

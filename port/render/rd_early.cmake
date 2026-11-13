@@ -34,7 +34,8 @@ if(ICO_RUN_TESTS)
     # rd_vu_rec_early_ab, _compute, _targets (test/rd_vu_env_ab.cmake): the
     # dumps of tools/vustage_dumps.txt with the record grown by the frame as
     # in play (ICO_RD_EARLY_PREPARE=0) and made at start at its largest, 1024
-    # rows, with the mesh arena's first chunk (=1: the replay tool calls
+    # rows (ICO_RD_EARLY_ROWS=1024: the run's need would be 512 there), with
+    # the mesh arena's first chunk (=1: the replay tool calls
     # rd_vu_record_prepare as the game window does, without a memory
     # function): every named target byte for byte at Original 4:3 1x and
     # Enhanced 16:9 2x; the record's three writes (lavapipe's own, the
@@ -50,12 +51,12 @@ if(ICO_RUN_TESTS)
             set(_early_name rd_vu_rec_early_ab)
             set(_early_dir vu_rec_early_ab)
             set(_early_a "ICO_RD_EARLY_PREPARE=0")
-            set(_early_b "ICO_RD_EARLY_PREPARE=1")
+            set(_early_b "ICO_RD_EARLY_PREPARE=1|ICO_RD_EARLY_ROWS=1024")
         else()
             set(_early_name rd_vu_rec_early_ab_${_early})
             set(_early_dir vu_rec_early_ab_${_early})
             set(_early_a "ICO_RD_VU_RECORD=${_early}|ICO_RD_EARLY_PREPARE=0")
-            set(_early_b "ICO_RD_VU_RECORD=${_early}|ICO_RD_EARLY_PREPARE=1")
+            set(_early_b "ICO_RD_VU_RECORD=${_early}|ICO_RD_EARLY_PREPARE=1|ICO_RD_EARLY_ROWS=1024")
         endif()
         add_test(NAME ${_early_name}
                  COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
@@ -70,6 +71,48 @@ if(ICO_RUN_TESTS)
                                                        TIMEOUT 3600)
         if(_env)
             set_tests_properties(${_early_name} PROPERTIES ENVIRONMENT "${_env}")
+        endif()
+    endforeach()
+
+    # rd_vu_rec_size_ab, _mali (test/rd_vu_env_ab.cmake): the record made at
+    # start-up at the run's need (rd_early_plan.h rd_early_start_rows: 512
+    # rows, the tool's presents not interpolated, no velocity) against
+    # v0.11.5's 1024 rows (ICO_RD_EARLY_ROWS=1024), over tools/
+    # vu_rec_size_dumps.txt (issue 179's four Mali dumps, the Pixel's three
+    # opening dumps, the corpus's largest pre-pass record): every named
+    # target byte for byte at Original 4:3 1x and Enhanced 16:9 2x, and no
+    # growth in play past the 512 rows (the need's margin holds on every
+    # listed dump); _mali under the Arm fakes and the compute record (the
+    # reporter's write).  A listed dump that is absent fails where
+    # /primary/dev/ico-dumps exists (LIST_STRICT); no dump or no device: SKIP
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vu_rec_size_ab"
+         "${CMAKE_CURRENT_BINARY_DIR}/vu_rec_size_ab_mali")
+    foreach(_size IN ITEMS "" mali)
+        if(_size STREQUAL "")
+            set(_size_name rd_vu_rec_size_ab)
+            set(_size_dir vu_rec_size_ab)
+            set(_size_env "")
+        else()
+            set(_size_name rd_vu_rec_size_ab_mali)
+            set(_size_dir vu_rec_size_ab_mali)
+            set(_size_env "ICO_VK_FAKE_LIMITS=mali|ICO_VK_FAKE_VENDOR=0x13B5|ICO_RD_VU_RECORD=compute|")
+        endif()
+        add_test(NAME ${_size_name}
+                 COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                         -DNAME=${_size_name}
+                         "-DLIST=${CMAKE_SOURCE_DIR}/tools/vu_rec_size_dumps.txt" -DLIST_STRICT=1
+                         "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/${_size_dir}"
+                         "-DSKIP_UNLESS=stats: VU pre-pass on: [1-9][0-9]* passes"
+                         "-DENV_A=${_size_env}ICO_RD_EARLY_PREPARE=1|ICO_RD_EARLY_ROWS=1024"
+                         "-DENV_B=${_size_env}ICO_RD_EARLY_PREPARE=1"
+                         "-DREQ_A=early: record 1024 rows.*stats: VU pre-pass on: [1-9][0-9]* passes"
+                         "-DREQ_B=early: record 512 rows.*stats: VU pre-pass on: [1-9][0-9]* passes"
+                         "-DFORBID_B=grown in play past"
+                         -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_env_ab.cmake")
+        set_tests_properties(${_size_name} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                                      TIMEOUT 3600)
+        if(_env)
+            set_tests_properties(${_size_name} PROPERTIES ENVIRONMENT "${_env}")
         endif()
     endforeach()
 endif()
