@@ -78,12 +78,16 @@
 #ifndef ICO_RD_PACE_SCREEN_H
 #define ICO_RD_PACE_SCREEN_H
 
-/* On by default (v0.11.6: the release candidates on the owner's phone were
-   steadiest with it, the own timer as its fall-back); it can draw only where
-   the display gives its times back (today Android's swapchain through
-   VK_GOOGLE_display_timing), elsewhere every picture is the moment drawn
-   otherwise to the bit with the reason counted.  ICO_RD_PACE_SCREEN=0 (the
-   tests' switch) keeps it computed and reported only (the on-glass line) */
+/* 1: drawn by default on Android only (rd_pace_screen_decide; v0.11.6: the
+   release candidates on the owner's phone were steadiest with it, the own
+   timer as its fall-back; it was measured on Android phones only).  Where
+   drawn it can place only where the display gives its times back; every
+   picture it does not place is the moment drawn otherwise to the bit with
+   the reason counted.  Off a non-Android build (a desktop, a Mac or an
+   iPhone, even where the driver offers VK_GOOGLE_display_timing) it is
+   computed and reported on the on-glass line as a what-if, never drawn, so
+   the drawn moment is v0.11.5's there.  ICO_RD_PACE_SCREEN=0/1 (the tests'
+   switch) over it on every platform */
 #ifndef RD_PACE_SCREEN_DEFAULT
 #define RD_PACE_SCREEN_DEFAULT 1
 #endif
@@ -291,7 +295,15 @@ size_t rd_pace_screen_start_text(bool measured, bool drawn, const char *why, cha
 
 /* ----------------------------------------------- the renderer's side */
 
-/* RD_PACE_SCREEN_DEFAULT, ICO_RD_PACE_SCREEN=0/1 over it (read once) */
+/* the decision, pure: env the tests' switch (ICO_RD_PACE_SCREEN: -1 unset,
+   0, 1), defaultOn RD_PACE_SCREEN_DEFAULT, android the build is Android's.
+   True where the rule is drawn; *why (never NULL) its words for the start
+   line and the attempt ledger's row */
+bool rd_pace_screen_decide(int env, bool defaultOn, bool android, const char **why);
+/* rd_pace_screen_decide with ICO_RD_PACE_SCREEN, the define and the
+   platform (read once, the poster's thread); rd_pace_screen_why its words */
+const char *rd_pace_screen_why(void);
+/* RD_PACE_SCREEN_DEFAULT on Android, ICO_RD_PACE_SCREEN=0/1 over it */
 bool rd_pace_screen_on(void);
 /* the poster's thread, a picture as made (rd_pace_rules.c): the samples
    taken, the ledger's row decided, the picture placed and tallied */

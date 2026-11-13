@@ -24,14 +24,34 @@
    RD_PACE_GPU_NO_CLOCK) */
 #define NO_TIMES 600u
 
+static int s_on = -1;
+static const char *s_why = "";
+
+static void read_switch(void)
+{
+    if (s_on >= 0) {
+        return;
+    }
+    const char *e = getenv("ICO_RD_PACE_SCREEN");
+    const int env = e != NULL && e[0] != '\0' ? (e[0] != '0' ? 1 : 0) : -1;
+#ifdef __ANDROID__
+    const bool android = true;
+#else
+    const bool android = false;
+#endif
+    s_on = rd_pace_screen_decide(env, RD_PACE_SCREEN_DEFAULT != 0, android, &s_why) ? 1 : 0;
+}
+
 bool rd_pace_screen_on(void)
 {
-    static int s_on = -1;
-    if (s_on < 0) {
-        const char *e = getenv("ICO_RD_PACE_SCREEN");
-        s_on = e != NULL && e[0] != '\0' ? (e[0] != '0') : RD_PACE_SCREEN_DEFAULT;
-    }
+    read_switch();
     return s_on != 0;
+}
+
+const char *rd_pace_screen_why(void)
+{
+    read_switch();
+    return s_why;
 }
 
 /* the poster's */
@@ -56,7 +76,8 @@ static void decide(bool asMade)
         return;
     }
     s_state = st;
-    ico_attempt_decide_pace_screen(asMade ? 1 : 0, clock, times, rd_pace_screen_on() ? 1 : 0);
+    ico_attempt_decide_pace_screen(asMade ? 1 : 0, clock, times, rd_pace_screen_on() ? 1 : 0,
+                                   rd_pace_screen_why());
     const uint32_t k = s_changes++;
     if (k < 8u || k % 100u == 0u) {
         char line[2048];

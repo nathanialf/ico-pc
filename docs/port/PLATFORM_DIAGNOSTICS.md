@@ -1048,9 +1048,9 @@ window: on the glass in 10 s: P pictures with a display id, S shown with the dis
   driver's refresh) the classes show whether the long steps are the content's or the display's.
 - **The rules**: `drawn` names the rule the pictures were drawn by (the hand-over, the GPU's
   predicted end, the own timer, the screen's predicted refresh, or the present clock in paced
-  modes). By default with pictures as made it is the screen's predicted refresh where the display
-  gives its times back and the rule placed the picture, otherwise the own timer on Android and the
-  hand-over elsewhere ([DISPLAY.md](DISPLAY.md#interpolation-between-ticks)). With pictures as made the
+  modes). By default with pictures as made on Android it is the screen's predicted refresh where
+  the rule placed the picture, otherwise the own timer; on every other build the hand-over (the
+  screen's rule and the own timer reported as `not drawn`) ([DISPLAY.md](DISPLAY.md#interpolation-between-ticks)). With pictures as made the
   three rules are computed at every picture (`port/render/rd_pace_rules.c`) and each gets the same
   measures (its own alpha, clamped as drawn, without the frame's hold), so one run compares them on
   the glass; the drawn one's figures equal its `drawn` figures.

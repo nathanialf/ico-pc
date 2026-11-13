@@ -369,7 +369,7 @@ void ico_attempt_decide_as_made_timer(int asMade, int on, const char *why)
     }
 }
 
-void ico_attempt_decide_pace_screen(int asMade, int clock, int times, int on)
+void ico_attempt_decide_pace_screen(int asMade, int clock, int times, int on, const char *why)
 {
     if (!asMade) {
         ico_attempt_state(ICO_ATT_PACE_SCREEN, ICO_ATT_NA,
@@ -384,12 +384,12 @@ void ico_attempt_decide_pace_screen(int asMade, int clock, int times, int on)
                           "desktop, OpenGL, Direct3D): the moment drawn otherwise kept");
     } else if (times == 1 && clock == 1 && !on) {
         ico_attempt_state(ICO_ATT_PACE_SCREEN, ICO_ATT_OFF_DEFAULT,
-                          "ICO_RD_PACE_SCREEN=0 or RD_PACE_SCREEN_DEFAULT 0: computed and "
-                          "reported on the on-glass line, not drawn");
+                          why != NULL ? why : "computed and reported on the on-glass line");
     } else if (times == 1 && clock == 1) {
         ico_attempt_state(ICO_ATT_PACE_SCREEN, ICO_ATT_ON,
-                          "each picture drawn for the refresh the screen is predicted to show it "
-                          "at");
+                          why != NULL ? why
+                                      : "each picture drawn for the refresh the screen is "
+                                        "predicted to show it at");
     }
 }
 

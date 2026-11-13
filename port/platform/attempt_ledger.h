@@ -286,12 +286,14 @@ void ico_attempt_decide_as_made_timer(int asMade, int on, const char *why);
    clock the GPU model's slot clock (rd_pace_gpu_clock_state: 1 yes, 0 none
    after its wait, -1 not known), times the display's own times (1 one came
    back, 0 none after 600 pictures as made, -1 not known), on the rule is
-   drawn (RD_PACE_SCREEN_DEFAULT 1, ICO_RD_PACE_SCREEN=0 over it).  Not
-   paced: not applicable; no slot clock: not applicable (no GPU end to
-   predict from); no display times: not applicable (desktop, no
-   VK_GOOGLE_display_timing); both: on, or off by default with the tests'
-   switch (computed and reported, not drawn); else the row left as it was */
-void ico_attempt_decide_pace_screen(int asMade, int clock, int times, int on);
+   drawn, why the words of its decision (rd_pace_screen.h
+   rd_pace_screen_decide: RD_PACE_SCREEN_DEFAULT on Android only,
+   ICO_RD_PACE_SCREEN over it; NULL: fixed words).  Not paced: not
+   applicable; no slot clock: not applicable (no GPU end to predict from);
+   no display times: not applicable (desktop, no VK_GOOGLE_display_timing);
+   both: on, or off by default (computed and reported, not drawn: a
+   non-Android build, the tests' switch); else the row left as it was */
+void ico_attempt_decide_pace_screen(int asMade, int clock, int times, int on, const char *why);
 /* the even cadence for pictures as made (rd_pace_even_live.c, the poster's
    thread at each change): asMade, clock and times as
    ico_attempt_decide_pace_screen's, on it is used (RD_PACE_EVEN_DEFAULT,

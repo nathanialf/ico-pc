@@ -18,10 +18,10 @@ target_sources(ico_render PRIVATE rd_pace_gpu.c rd_pace_gpu_live.c rd_pace_rules
 # steps, against the GPU's ends, never back, no repeat, the mean moment within
 # its derived tolerance, the same pictures; the rc1 log's three runs; the
 # renderer's side (the measurements' ring, the ledger's row, the start line
-# and the evenness clause word for word); the desktop's defaults (no display
-# times, not Android: the screen's rule places nothing, the own timer not
-# drawn): presentRebase's path with the model, the timer and the screen's rule
-# computed gives v0.11.5's value to the bit
+# and the evenness clause word for word); the shipped defaults off Android
+# (the screen's rule and the own timer not drawn), with no display times and
+# with them faked on (the screen's rule placing pictures it does not draw):
+# presentRebase's path gives v0.11.5's value to the bit both times
 add_executable(rd_pace_gpu_test test/rd_pace_gpu_test.c rd_pace_gpu.c rd_pace_gpu_live.c
                                 rd_rebase.c rd_pace_rules.c rd_as_made_timer.c rd_pace_screen.c
                                 rd_pace_screen_live.c rd_pace_even.c rd_pace_even_live.c)

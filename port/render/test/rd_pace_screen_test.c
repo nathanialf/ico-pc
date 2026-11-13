@@ -1644,18 +1644,46 @@ static void testLive(void)
     double would;
     (void)rd_pace_gpu_shift(1010.0, 1, &would);
     CHECK(rd_pace_gpu_clock_state() == 1);
-    /* a shown picture's time back: the row decided (on by default); the
-       value drawn the one otherwise (too few shown pictures) */
+    /* a shown picture's time back: the row decided; the value drawn the one
+       otherwise (too few shown pictures) */
     const RdPaceScreenSample s = {1027.0, 6000.0, REP, 1027.0};
     rd_pace_screen_seen(&s);
     RdPaceScreenPlace o;
     const RdPaceScreenIn in = {1030.0, 1, 1010.0, TICK, 1060.0, 0.4, false, 0.0};
     rd_pace_screen_step(&in, &o);
     CHECK(o.how == RD_PS_FEW && o.raw == 0.4);
-    /* the default on: the row on with the display's times and a slot clock */
-    CHECK(rd_pace_screen_on() == (RD_PACE_SCREEN_DEFAULT != 0));
+    /* the decision, pure: drawn by default on Android only (measured on
+       Android phones only), the tests' switch over it */
+    {
+        const char *why = NULL;
+        CHECK(rd_pace_screen_decide(-1, true, true, &why) &&
+              strcmp(why, "Android: each picture drawn for the refresh the screen is predicted "
+                          "to show it at (measured on Android phones only)") == 0);
+        CHECK(!rd_pace_screen_decide(-1, true, false, &why) &&
+              strcmp(why, "not Android: measured on Android phones only; computed and reported "
+                          "on the on-glass line as a what-if") == 0);
+        CHECK(!rd_pace_screen_decide(-1, false, true, &why) &&
+              strcmp(why, "RD_PACE_SCREEN_DEFAULT 0: computed and reported on the on-glass "
+                          "line") == 0);
+        CHECK(rd_pace_screen_decide(1, false, false, &why) &&
+              strcmp(why, "ICO_RD_PACE_SCREEN=1: the tests' switch") == 0);
+        CHECK(!rd_pace_screen_decide(0, true, true, &why) &&
+              strcmp(why, "ICO_RD_PACE_SCREEN=0: the tests' switch; computed and reported on "
+                          "the on-glass line") == 0);
+#ifdef __ANDROID__
+        const bool android = true;
+#else
+        const bool android = false;
+#endif
+        CHECK(rd_pace_screen_on() ==
+              rd_pace_screen_decide(-1, RD_PACE_SCREEN_DEFAULT != 0, android, &why));
+        CHECK(strcmp(rd_pace_screen_why(), why) == 0);
+    }
+    /* the row with the display's times and a slot clock: on where drawn,
+       off by default (computed and reported) elsewhere, with the words */
     CHECK(ico_attempt_state_of(ICO_ATT_PACE_SCREEN) ==
-          (RD_PACE_SCREEN_DEFAULT ? ICO_ATT_ON : ICO_ATT_OFF_DEFAULT));
+          (rd_pace_screen_on() ? ICO_ATT_ON : ICO_ATT_OFF_DEFAULT));
+    CHECK(strcmp(ico_attempt_why_of(ICO_ATT_PACE_SCREEN), rd_pace_screen_why()) == 0);
     RdPaceScreenWindow w;
     rd_pace_screen_take(&w);
     CHECK(w.how[RD_PS_FEW] == 1u);

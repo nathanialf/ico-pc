@@ -364,13 +364,16 @@ static void test_classes(void)
                                                                   : ICO_ATT_OFF_DEFAULT));
         /* the screen's refresh: every as-made class here gives the display's
            times back (Android's swapchain and MoltenVK offer
-           VK_GOOGLE_display_timing), so it follows the GPU model's row: on
-           by default where that row is off by default, not applicable where
-           paced or without a slot clock */
+           VK_GOOGLE_display_timing), so it follows the GPU model's row; as
+           shipped it is drawn on Android only: on there where that row is
+           off by default, off by default on the Mac (computed and reported),
+           not applicable where paced or without a slot clock */
         ico_attempt_decide_pace_screen(kPace[c].asMade,
-                                       kPace[c].clock ? 1 : (kPace[c].waited ? 0 : -1), 1, 1);
+                                       kPace[c].clock ? 1 : (kPace[c].waited ? 0 : -1), 1,
+                                       kShip[c].android, NULL);
         CHECK(ico_attempt_state_of(ICO_ATT_PACE_SCREEN) ==
-              (kPace[c].want == ICO_ATT_OFF_DEFAULT ? ICO_ATT_ON : kPace[c].want));
+              (kPace[c].want == ICO_ATT_OFF_DEFAULT && kShip[c].android ? ICO_ATT_ON
+                                                                        : kPace[c].want));
         /* the even cadence: the same classes as the screen's rule (it aims
            by its fit), off by default with the reason */
         ico_attempt_decide_pace_even(kPace[c].asMade,
@@ -589,13 +592,17 @@ static void test_classes(void)
     }
     CHECK(strstr(ico_attempt_why_of(ICO_ATT_PACE_GPU), "no GPU span or slot clock") != NULL);
     /* the screen's refresh: no display times; then on with its counts */
-    ico_attempt_decide_pace_screen(1, 1, 0, 0);
+    ico_attempt_decide_pace_screen(1, 1, 0, 0, NULL);
     CHECK(ico_attempt_state_of(ICO_ATT_PACE_SCREEN) == ICO_ATT_NA &&
           strstr(ico_attempt_why_of(ICO_ATT_PACE_SCREEN), "gives no times back") != NULL);
-    ico_attempt_decide_pace_screen(1, 0, 1, 1);
+    ico_attempt_decide_pace_screen(1, 0, 1, 1, NULL);
     CHECK(ico_attempt_state_of(ICO_ATT_PACE_SCREEN) == ICO_ATT_NA &&
           strstr(ico_attempt_why_of(ICO_ATT_PACE_SCREEN), "no GPU end") != NULL);
-    ico_attempt_decide_pace_screen(1, 1, 1, 1);
+    ico_attempt_decide_pace_screen(1, 1, 1, 0, "not Android: measured on Android phones only");
+    CHECK(ico_attempt_state_of(ICO_ATT_PACE_SCREEN) == ICO_ATT_OFF_DEFAULT &&
+          strcmp(ico_attempt_why_of(ICO_ATT_PACE_SCREEN),
+                 "not Android: measured on Android phones only") == 0);
+    ico_attempt_decide_pace_screen(1, 1, 1, 1, NULL);
     CHECK(ico_attempt_state_of(ICO_ATT_PACE_SCREEN) == ICO_ATT_ON);
     ico_attempt_fire(ICO_ATT_PACE_SCREEN, 700);
     ico_attempt_fire2(ICO_ATT_PACE_SCREEN, 2);
@@ -606,7 +613,7 @@ static void test_classes(void)
                         "held at their frame's edges)") != NULL);
     }
     /* not known yet (no display time and under 600 pictures): left as it was */
-    ico_attempt_decide_pace_screen(1, 1, -1, 1);
+    ico_attempt_decide_pace_screen(1, 1, -1, 1, NULL);
     CHECK(ico_attempt_state_of(ICO_ATT_PACE_SCREEN) == ICO_ATT_ON);
     /* the even cadence: paced, no display times, no clock, on with its
        counts, not known */

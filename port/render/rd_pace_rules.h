@@ -10,9 +10,9 @@
  *                  default, ICO_RD_AS_MADE_TIMER=0/1 over it; over the GPU
  *                  end);
  *   RD_RULE_SCREEN the time the screen will show the picture (rd_pace_screen.h:
- *                  drawn by default, over the others, where the display
- *                  gives its times back; where it cannot predict, the value
- *                  of the rule drawn otherwise);
+ *                  drawn by default on Android only, over the others; where
+ *                  it cannot predict, the value of the rule drawn
+ *                  otherwise);
  *   RD_RULE_CLOCK  the present clock or the lock's grid: paced modes (the
  *                  others not computed).
  *

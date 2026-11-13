@@ -1201,7 +1201,8 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   row as it was, on with the tests' switch, its pictures placed and held at the bound in the start
   and block lines; the own timer's row not applicable where paced, on as made on the Android classes and off by
   default as made on the Mac (the shipped decision), off by default with a given reason, on with its
-  counts in the block line; the screen's refresh row on where the GPU model's row is off by default;
+  counts in the block line; the screen's refresh row on for the Android classes where the GPU
+  model's row is off by default, off by default on the Mac, and off by default with a given reason;
   the even cadence's row off by default with its reason (`three phone rcs did not land pictures on
   their refresh`); the no-volume break on for the Pixel (`the PowerVR D-Series DXT-48-1536`) and off
   by default for the rest of its class with its reason; at the reset the compaction's row `not reported`, the blend
