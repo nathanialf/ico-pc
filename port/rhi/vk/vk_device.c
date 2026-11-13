@@ -9,6 +9,7 @@
 #include "../rhi_pass_crumb.h"
 #include "../rhi_tile_rule.h"
 #include "../rhi_bind_cache.h"
+#include "../rhi_subpass_verdict.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -1701,51 +1702,154 @@ static void vkr_pass_row_apply(void)
  * allows, all of it Vulkan 1.0 core, so DATE's stencil setup
  * (port/render/rd_replay_tiler.c) no longer ends the scene's pass for an
  * R8 snapshot on a device without dynamic rendering (issue 179's
- * Mali-G52 on Vulkan 1.1).  An experiment, off by default on every
- * device: its cost on a phone is not measured (every RGBA8 render target
- * of the device would be in GENERAL with the input-attachment usage, and a
- * driver may then keep its framebuffer compression off), so by default
- * nothing of it exists: no usage, no layout, no self-dependency, and the
- * snapshot path as before v0.11.3.  [dev] subpass_read = on
- * (ICO_VK_SUBPASS_READ=1) tries it on any VkRenderPass path (the device's
- * own, the Intel driver row's, [dev] legacy_passes'), but not under
- * ICO_VK_FAKE_NO_DST; = off (=0) says so.  One line either way.  Even on,
- * the renderer turns each read on only where its own self-test passes on
- * the device (port/render/rd_date_selftest.c); a failure keeps the
- * snapshot path, the shape staying (pictures as before). */
+ * Mali-G52 on Vulkan 1.1; the Adreno 740 under Qualcomm's row, the Intel
+ * driver row).  Its shape is the device's for the run: every RGBA8 render
+ * target in GENERAL with the input-attachment usage, which a driver may
+ * answer by keeping its framebuffer compression off, and a new kind of GPU
+ * work on drivers that lost the device before.  So it is decided here per
+ * device and driver (../rhi_subpass_verdict.h): an earlier start's probe's
+ * verdict, kept in a file beside the pipeline cache file, or, with none,
+ * on for this start's probe (DATE's self-test, then the read timed against
+ * the R8 snapshot and a plain pass on a target of the shape timed against
+ * one without it: port/render/rd_subpass_probe.c), the mark "probing"
+ * written first so a start that ends inside it (a loss, a GPU hang, a
+ * crash) leaves the read refused for good.  Off without a probe where it
+ * cannot decide: no GPU timestamps (the PowerVR B-Series), no file (the
+ * tools and the tests; ICO_VK_SUBPASS_VERDICT=<file> names one for the
+ * tests).  [dev] subpass_read = on (ICO_VK_SUBPASS_READ=1) forces it on
+ * any VkRenderPass path without the probe (DATE's self-test still
+ * decides), = off (=0) forces it off; ICO_VK_FAKE_NO_DST keeps it off.
+ * One line either way. */
 static void vkr_subpass_read_decide(void)
 {
     g_vkr.subpassRead = false;
+    g_vkr.subpassRoute = g_vkr.subpassProbe = g_vkr.subpassOffDefault = false;
     g_vkr.subpassPasses = g_vkr.subpassSkipped = g_vkr.subpassMisfit = 0;
+    g_vkr.subpassWhy[0] = g_vkr.subpassFile[0] = g_vkr.subpassKey[0] = '\0';
     if (!g_vkr.legacyPasses) {
         return;
     }
+    g_vkr.subpassRoute = !g_vkr.localRead;
     const char *env = getenv("ICO_VK_SUBPASS_READ");
     const int ask = env && env[0] ? (env[0] != '0' ? 1 : 0) : -1;
     const char *noDst = getenv("ICO_VK_FAKE_NO_DST");
     const bool fake = noDst && noDst[0] && noDst[0] != '0';
-    const char *why = NULL;
-    if (ask == 0) {
-        why = "[dev] subpass_read = off (ICO_VK_SUBPASS_READ=0)";
-    } else if (ask != 1) {
-        why = "the default; [dev] subpass_read = on tries it";
-    } else if (fake) {
-        why = "ICO_VK_FAKE_NO_DST, over [dev] subpass_read = on";
+    /* the verdict file: the tests' name, else beside the pipeline cache */
+    const char *named = getenv("ICO_VK_SUBPASS_VERDICT");
+    if (named && named[0]) {
+        snprintf(g_vkr.subpassFile, sizeof g_vkr.subpassFile, "%s", named);
+    } else if (!rhi_subpass_verdict_path(g_vkr.subpassFile, sizeof g_vkr.subpassFile,
+                                         vkr_pipeline_cache_path())) {
+        g_vkr.subpassFile[0] = '\0';
     }
-    g_vkr.subpassRead = why == NULL;
+    rhi_subpass_verdict_key(g_vkr.subpassKey, sizeof g_vkr.subpassKey, g_vkr.props.vendorID,
+                            g_vkr.props.deviceID, g_vkr.props.driverVersion);
+    /* GPU timestamps on the game's queue (rhi_init reads them again for
+       g_vkr.timestamps after the device is made) */
+    bool stamps = false;
+    {
+        uint32_t qn = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(g_vkr.phys, &qn, NULL);
+        VkQueueFamilyProperties *qp = calloc(qn ? qn : 1, sizeof(*qp));
+        if (qp) {
+            vkGetPhysicalDeviceQueueFamilyProperties(g_vkr.phys, &qn, qp);
+            stamps = g_vkr.queueFamily < qn && qp[g_vkr.queueFamily].timestampValidBits > 0 &&
+                     g_vkr.props.limits.timestampPeriod > 0.0f;
+            free(qp);
+        }
+    }
+    char text[RHI_SUBPASS_VERDICT_MAX], prevWhy[RHI_SUBPASS_VERDICT_MAX];
+    const bool haveFile = g_vkr.subpassFile[0] != '\0';
+    const RhiSubpassVerdict prev =
+        haveFile && ask < 0 && rhi_subpass_verdict_read(g_vkr.subpassFile, text, sizeof text)
+            ? rhi_subpass_verdict_parse(text, g_vkr.subpassKey, prevWhy, sizeof prevWhy)
+            : RHI_SUBPASS_NONE;
+    if (prev == RHI_SUBPASS_NONE) {
+        prevWhy[0] = '\0';
+    }
+    /* the device's class (rhi_subpass_verdict.h: the probe's default this
+       release); ICO_VK_FAKE_VENDOR names the vendor for the tests' fakes */
+    uint32_t vendor = g_vkr.props.vendorID;
+    {
+        const char *fv = getenv("ICO_VK_FAKE_VENDOR");
+        char *end = NULL;
+        const unsigned long v = fv && fv[0] ? strtoul(fv, &end, 0) : 0ul;
+        if (fv && fv[0] && end != fv && *end == '\0' && v <= 0xFFFFFFFFul) {
+            vendor = (uint32_t)v;
+        }
+    }
+    const RhiSubpassClass cls =
+        g_vkr.passRowHit ? RHI_SUBPASS_CLASS_INTEL
+        : g_vkr.passRowQcom || rhi_driver_is_qualcomm_proprietary(vendor, g_vkr.driverID)
+            ? RHI_SUBPASS_CLASS_QCOM
+        : vendor == 0x13B5u ? RHI_SUBPASS_CLASS_ARM
+                            : RHI_SUBPASS_CLASS_OTHER;
+    const char *ce = getenv("ICO_VK_SUBPASS_PROBE_CLASS");
+    const int classEnv = ce && ce[0] ? (ce[0] != '0' ? 1 : 0) : -1;
+    RhiSubpassWrite write = RHI_SUBPASS_WRITE_NOTHING;
+    const RhiSubpassDecision d =
+        rhi_subpass_decide(ask, g_vkr.subpassRoute, fake, haveFile, stamps, cls, classEnv, prev,
+                           prevWhy, g_vkr.subpassWhy, sizeof g_vkr.subpassWhy, &write);
+    g_vkr.subpassOffDefault = d == RHI_SUBPASS_OFF_DEFAULT;
+    if (write != RHI_SUBPASS_WRITE_NOTHING) {
+        char line[RHI_SUBPASS_VERDICT_MAX];
+        if (write == RHI_SUBPASS_WRITE_PROBING) {
+            (void)rhi_subpass_verdict_line(line, sizeof line, g_vkr.subpassKey, RHI_SUBPASS_PROBING,
+                                           "the read's shape on from the device's start");
+        } else {
+            (void)rhi_subpass_verdict_line(line, sizeof line, g_vkr.subpassKey, RHI_SUBPASS_REFUSED,
+                                           "the start that probed it ended before its verdict");
+        }
+        if (!rhi_subpass_verdict_write(g_vkr.subpassFile, line)) {
+            /* a mark that cannot be kept: no probe (an end inside it would
+               not be known at the next start) */
+            if (write == RHI_SUBPASS_WRITE_PROBING) {
+                snprintf(g_vkr.subpassWhy, sizeof g_vkr.subpassWhy,
+                         "its probe's mark could not be written to %s, so no probe",
+                         g_vkr.subpassFile);
+                g_vkr.subpassRead = false;
+                VKR_LOG("render passes: the subpass read off (%s): a read of a pass's own colour "
+                        "ends the pass for a copy (DATE's snapshot)",
+                        g_vkr.subpassWhy);
+                return;
+            }
+            VKR_LOG("render passes: the subpass read's verdict could not be written to %s",
+                    g_vkr.subpassFile);
+        }
+    }
+    g_vkr.subpassRead = d == RHI_SUBPASS_ON || d == RHI_SUBPASS_PROBE;
+    g_vkr.subpassProbe = d == RHI_SUBPASS_PROBE;
     if (g_vkr.subpassRead) {
         VKR_LOG("render passes: the subpass read: a pass of one RGBA8 colour target and a depth "
                 "target names its colour as its subpass's input attachment 0, in GENERAL, with "
                 "a by-region self-dependency (Vulkan 1.0), so a read of the pass's own colour "
-                "(DATE's stencil setup) does not end the pass ([dev] subpass_read = on, "
-                "ICO_VK_SUBPASS_READ=1: an experiment; DATE's self-test still decides)%s",
+                "(DATE's stencil setup) does not end the pass (%s; device and driver %s)%s",
+                g_vkr.subpassWhy, g_vkr.subpassKey,
                 g_vkr.legacyWhy ? "; on VkRenderPass objects the driver row or [dev] "
                                   "legacy_passes chose"
                                 : "");
     } else {
-        VKR_LOG("render passes: the subpass read off (%s): a read of a pass's own colour ends "
-                "the pass for a copy (DATE's snapshot)",
-                why);
+        VKR_LOG("render passes: the subpass read off%s (%s; device and driver %s): a read of a "
+                "pass's own colour ends the pass for a copy (DATE's snapshot)",
+                g_vkr.subpassOffDefault ? " by default" : "", g_vkr.subpassWhy, g_vkr.subpassKey);
+    }
+}
+
+/* At rhi_shutdown: a start that made the read's shape for its probe and
+ * never wrote the verdict (the game quit before the self-tests, a tool)
+ * takes its mark away, so the next start probes again; after a device loss
+ * the mark stays (the next start refuses the read for good) */
+static void vkr_subpass_probe_unmark(void)
+{
+    if (!g_vkr.subpassProbe || g_vkr.deviceLost || !g_vkr.subpassFile[0]) {
+        return;
+    }
+    char text[RHI_SUBPASS_VERDICT_MAX], why[RHI_SUBPASS_VERDICT_MAX];
+    if (rhi_subpass_verdict_read(g_vkr.subpassFile, text, sizeof text) &&
+        rhi_subpass_verdict_parse(text, g_vkr.subpassKey, why, sizeof why) == RHI_SUBPASS_PROBING) {
+        (void)rhi_subpass_verdict_write(g_vkr.subpassFile, NULL);
+        VKR_LOG("render passes: the subpass read's probe did not run at this start (no verdict): "
+                "its mark taken away, the next start probes");
     }
 }
 
@@ -3269,6 +3373,13 @@ static void vkr_fill_limits(void)
      * the colour of a pass with a depth target only) */
     o->localRead = VKR_PASS_READ;
     o->localReadSubpass = g_vkr.subpassRead && !g_vkr.localRead;
+    /* its decision (vkr_subpass_read_decide, rhi.h) */
+    o->subpassRoute = g_vkr.subpassRoute;
+    o->subpassProbe = g_vkr.subpassProbe && o->localReadSubpass;
+    o->subpassOffDefault = g_vkr.subpassOffDefault;
+    o->subpassWhy = g_vkr.subpassWhy[0] ? g_vkr.subpassWhy : NULL;
+    o->subpassVerdictFile = g_vkr.subpassFile[0] ? g_vkr.subpassFile : NULL;
+    o->subpassVerdictKey = g_vkr.subpassKey[0] ? g_vkr.subpassKey : NULL;
     o->vendorId = g_vkr.props.vendorID;
     o->dynamicDepth = g_vkr.dynDepth;
     o->dynamicBlend = g_vkr.dynBlend;
@@ -3492,6 +3603,7 @@ bool vkr_test_props2(void)
 
 void rhi_shutdown(void)
 {
+    vkr_subpass_probe_unmark();
     if (g_vkr.device) {
         vkDeviceWaitIdle(g_vkr.device);
         vkr_present_wait_shutdown(); /* the thread waiting on presents */

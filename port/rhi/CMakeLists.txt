@@ -166,6 +166,23 @@ if(ICO_RUN_TESTS)
     add_test(NAME rhi_vk_pass_row COMMAND rhi_vk_pass_row_test)
 endif()
 
+# --- The subpass read's decision and verdict (CPU only, every target) --------
+# rhi_subpass_verdict.h: what a Vulkan start on VkRenderPass objects decides
+# for the subpass read (the [dev] key, the route, the file, the timestamps,
+# the verdict an earlier start's probe kept), the verdict file's line, its
+# path beside the pipeline cache file, and a write, read and remove in the
+# test's folder (vk_device.c vkr_subpass_read_decide,
+# port/render/rd_subpass_probe.c).
+add_executable(rhi_subpass_verdict_test test/rhi_subpass_verdict_test.c)
+target_include_directories(rhi_subpass_verdict_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(rhi_subpass_verdict_test PRIVATE ${ICO_SEMANTIC_OPTIONS}
+                       ${ICO_PORT_WARNINGS})
+if(ICO_RUN_TESTS)
+    add_test(NAME rhi_subpass_verdict COMMAND rhi_subpass_verdict_test)
+    set_tests_properties(rhi_subpass_verdict PROPERTIES WORKING_DIRECTORY
+                         "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
 # --- The tile-based phones' rule (CPU only, every target) --------------------
 # rhi_tile_rule.c: the barrier scopes and the submission wait a Vulkan start
 # runs (a tile-based phone GPU, the lost starts in a row before it, the tests'
@@ -799,7 +816,21 @@ if(_ico_have_vk)
             set_tests_properties(rhi_vk_subpass${_spn} PROPERTIES SKIP_RETURN_CODE 77
                                  ENVIRONMENT "${_spe}")
         endforeach()
-        foreach(_spn _vk11 _vk11_off _mali_vk11)
+        # rhi_vk_subpass_verdict (test/rhi_vk_subpass_verdict.cmake): the
+        # read decided by its verdict file on the 1.1 profile with no [dev]
+        # key (ICO_VK_SUBPASS_VERDICT names the file the game keeps beside
+        # its pipeline cache): none, on for the probe with the mark written
+        # and taken away again at a clean shutdown that never probed; kept,
+        # on without a probe; the mark of a start that ended inside its
+        # probe, off and refused for good in the file; refused, off; another
+        # driver's verdict, the probe again
+        add_test(NAME rhi_vk_subpass_verdict
+                 COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rhi_vk_test>
+                         "-DFILE=${CMAKE_CURRENT_BINARY_DIR}/rhi_vk_subpass_verdict.txt"
+                         -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rhi_vk_subpass_verdict.cmake")
+        set_tests_properties(rhi_vk_subpass_verdict PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                             ENVIRONMENT "${_ico_vk_scopes11_env}")
+        foreach(_spn _vk11 _vk11_off _mali_vk11 _verdict)
             get_test_property(rhi_vk_subpass${_spn} LABELS _ico_sp_labels)
             set_tests_properties(rhi_vk_subpass${_spn} PROPERTIES LABELS "${_ico_sp_labels};vk11")
         endforeach()

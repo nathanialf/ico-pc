@@ -1816,6 +1816,13 @@ static int act_prev_stall;
    thread not waiting for the GPU (ico_diag_startup_prev_watchdog) */
 static char act_wd_path[1024 + 16];
 static int act_prev_wd;
+/* "-probe.txt": the mark of a run whose device ran a first-start probe (the
+   subpass read's, ico_diag_set_probe): set from the device's start until
+   the probe's verdict; the previous run's, read by begin */
+static char act_probe_path[1024 + 16];
+static int act_prev_probe;
+static char act_prev_probe_line[200];
+static volatile int act_probe_on;
 static char act_prev_stall_note[sizeof activity];
 /* the previous run's mark (ico_diag_startup_activity_begin) */
 static int act_prev_background;
@@ -2718,7 +2725,63 @@ static void watchdog_mark_read(void)
 
 int ico_diag_startup_prev_watchdog(void)
 {
-    return act_prev_wd;
+    /* a watchdog end inside a probe is the probe's (ico_diag_set_probe) */
+    return act_prev_wd && !act_prev_probe;
+}
+
+/* ico_diag_startup_activity_begin: the probe's mark read and deleted */
+static void probe_mark_read(void)
+{
+    char buf[sizeof act_version + 1 + 256];
+    FILE *f = act_probe_path[0] != '\0' ? ico_fopen(act_probe_path, "rb") : NULL;
+    if (f == NULL) {
+        return;
+    }
+    const size_t k = fread(buf, 1, sizeof buf - 1, f);
+    fclose(f);
+    buf[k] = '\0';
+    (void)ico_remove(act_probe_path);
+    const char *nl = strchr(buf, '\n');
+    const int vlen = nl != NULL ? (int)(nl - buf) : (int)strcspn(buf, "\r");
+    snprintf(act_prev_probe_line, sizeof act_prev_probe_line, "%.*s",
+             nl != NULL ? (int)strcspn(nl + 1, "\r\n") : 0, nl != NULL ? nl + 1 : "");
+    act_prev_probe = 1;
+    ico_diag_log("ico_pc: the previous run (version %.*s) ended while %s was running: its end "
+                 "is not counted on the loss ladder, the robust step or the watchdog's mark "
+                 "(the graphics backend keeps that read off on this driver)",
+                 vlen, buf, act_prev_probe_line[0] != '\0' ? act_prev_probe_line : "a probe");
+}
+
+int ico_diag_startup_prev_probe(void)
+{
+    return act_prev_probe;
+}
+
+void ico_diag_set_probe(const char *name)
+{
+    FILE *f;
+    if (name == NULL) {
+        if (act_probe_on) {
+            act_probe_on = 0;
+            if (act_probe_path[0] != '\0') {
+                (void)ico_remove(act_probe_path);
+            }
+        }
+        return;
+    }
+    act_probe_on = 1;
+    if (act_probe_path[0] == '\0' || (f = ico_fopen(act_probe_path, "wb")) == NULL) {
+        return;
+    }
+    fprintf(f, "%s\n%.180s\n", act_version, name);
+    (void)fflush(f);
+#ifndef _WIN32
+    (void)fsync(fileno(f));
+#endif
+    (void)fclose(f);
+    ico_diag_log("ico_pc: %s runs at this start: a device loss, GPU hang or end before its "
+                 "verdict counts on no loss step",
+                 name);
 }
 
 /* the watchdog mark written (the watchdog's thread, a main-thread end) */
@@ -2775,6 +2838,9 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     act_prev_stall = 0;
     act_wd_path[0] = '\0';
     act_prev_wd = 0;
+    act_probe_path[0] = '\0';
+    act_prev_probe = 0;
+    act_prev_probe_line[0] = '\0';
     if (path == NULL || strlen(path) >= sizeof act_path) {
         return 0;
     }
@@ -2785,6 +2851,8 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     stall_read();
     act_sibling(act_wd_path, sizeof act_wd_path, "-watchdog.txt");
     watchdog_mark_read();
+    act_sibling(act_probe_path, sizeof act_probe_path, "-probe.txt");
+    probe_mark_read();
     /* the previous run's background mark: its line, and the system's lines
        that came there (logged below unless the activity file has them) */
     static char bgbuf[ACT_BG_TEXT];
@@ -2898,7 +2966,8 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     snprintf(act_prev, sizeof act_prev, "%.*s", (int)(sizeof act_prev - 1), prev);
     act_remove();
     ends_count_prev(prev, relaunched);
-    loss_count_prev(loss != NULL &&
+    /* a loss inside a probe is the probe's (ico_diag_set_probe): no step */
+    loss_count_prev(!act_prev_probe && loss != NULL &&
                         (strcmp(loss, act_loss_none) == 0 ||
                          strncmp(loss, act_loss_prefix, sizeof act_loss_prefix - 1) == 0 ||
                          strcmp(loss, act_loss_hang_none) == 0 ||
@@ -2930,7 +2999,12 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     } else if (loss != NULL && strncmp(loss, act_loss_prefix, sizeof act_loss_prefix - 1) == 0 &&
                loss[sizeof act_loss_prefix - 1] != '\0') {
         const char *zip = loss + sizeof act_loss_prefix - 1;
-        if (strcmp(ver, act_version) != 0) {
+        if (act_prev_probe) {
+            /* lost inside a probe: no game frame to replay */
+            ico_diag_log("ico_pc: the previous run lost the graphics device inside %s; its loss "
+                         "dump %s is not replayed",
+                         act_prev_probe_line[0] != '\0' ? act_prev_probe_line : "a probe", zip);
+        } else if (strcmp(ver, act_version) != 0) {
             /* the bisect replays the dump on the renderer that lost it */
             ico_diag_log("ico_pc: the previous run (version %s) lost the graphics device; its "
                          "loss dump %s is not replayed on %s",
@@ -3312,6 +3386,9 @@ int ico_diag_startup_end_persist(int kind, const char *table, int (*persist)(voi
 
 void ico_diag_startup_activity_exit(void)
 {
+    if (act_loss[0] == '\0') {
+        ico_diag_set_probe(NULL); /* an exit without a loss: no probe ended the run */
+    }
     if (act_mode == ICO_DIAG_ACTIVITY_LAZY) {
         /* the file keeps a line saying the run exited lazy (for this
            start only: the next tries the start-up set again) */
@@ -4342,6 +4419,15 @@ int ico_diag_device_lost_restart(int blend_was_fixed)
         .backendName = retry_backend,
     };
     loss_value[0] = '\0';
+    if (act_probe_on && run.canRelaunch) {
+        /* a loss inside a first-start probe (ico_diag_set_probe): the game
+           starts again as a fresh start, no loss step (the probe's verdict
+           keeps the read off on this driver) */
+        plain_restart = 1;
+        ico_diag_log("ico_pc: the graphics card stopped responding while a first-start probe "
+                     "was running; the game starts again as a fresh start, with no loss step");
+        return 1;
+    }
     if (retry_trial[0] != '\0') {
         ico_diag_log("ico_pc: the graphics card stopped responding on the %s renderer applied "
                      "from the menu and not kept yet: the game does not start again; the next "

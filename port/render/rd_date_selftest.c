@@ -50,12 +50,17 @@
  * rd__date_sabotaged; ctest rd_date_selftest_sabotage), so the failure
  * path runs.  ICO_RD_DATE_PATH=stencil ([dev]
  * date_path) keeps the stencil whatever it finds ("kept by [dev]
- * date_path").  Where the profile has the snapshot nothing runs. */
+ * date_path").  Where the profile has the snapshot nothing runs.
+ * On a device that made the subpass read's shape for its first-start probe
+ * (RhiLimits.subpassProbe, port/rhi/rhi_subpass_verdict.h) this self-test
+ * is the probe's first step: rd_subpass_probe.c reads its result, times
+ * the read where it passed and writes the device's verdict. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "rd_internal.h"
+#include "rd_subpass_probe.h"
 
 #define DT_SAMPLES 5
 
@@ -245,12 +250,21 @@ static void result(char *out, size_t size, bool done, bool ran, bool perPrim, in
 bool rd_date_selftest(void)
 {
     const bool uber = g_rd.uberDate && rd__uber_on(); /* DATE in the shader (rd_uber.c) */
-    if (!g_rd.inited || !g_rd.hasDevice || (!g_rd.profile.dateStencil && !uber)) {
+    if (!g_rd.inited || !g_rd.hasDevice) {
+        return true;
+    }
+    /* the subpass read's row from the device's decision, and its probe
+       after the self-test where the device asks for one
+       (rd_subpass_probe.c) */
+    rd__subpass_probe_report();
+    if (!g_rd.profile.dateStencil && !uber) {
+        rd__subpass_probe_after_selftest(0, false, NULL);
         return true; /* the snapshot draws DATE: nothing to check */
     }
     RdTargetRec *t = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
     if (!t || !t->withDepth || !t->color.id || !t->depth.id || t->format != RHI_FMT_RGBA8_UNORM) {
         rd__log("DATE: self-test: no SCENE target to run it on");
+        rd__subpass_probe_after_selftest(0, false, NULL);
         return false;
     }
     static RdFrame f;
@@ -302,6 +316,7 @@ bool rd_date_selftest(void)
                 "texels",
                 g_rd.profile.dateStencil ? "stencil" : "snapshot", rs, rn,
                 !passed && kept ? "; kept by [dev] date_path" : "", t->w, t->h, t->tw, t->th);
+        rd__subpass_probe_after_selftest(stencil ? 1 : 0, passed, rs);
         return passed;
     }
     result(ru, sizeof ru, doneU, ranU, true, okU, badU, gotU, t);
@@ -319,5 +334,6 @@ bool rd_date_selftest(void)
             : stencil && !passed && kept ? "; kept by [dev] date_path"
                                          : "",
             t->w, t->h, t->tw, t->th);
+    rd__subpass_probe_after_selftest(stencil ? 1 : 0, passed, rs);
     return passedU;
 }

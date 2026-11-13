@@ -1889,6 +1889,7 @@ static void window_attach(int mode)
     /* the replay, the present and the FMV picture run on the host stack in
        the host FP mode, not on the game's 256 KB fiber stacks */
     rd_set_host_call(ico_sched_call_on_host);
+    rd_set_probe_fn(ico_diag_set_probe); /* a probe's loss counts on no loss step */
     rd_set_replay_gate(orig_gate);
     /* the Vulkan pipeline cache in the per-user folder: a later start of a
        build with the same shaders creates the renderer's pipelines from it

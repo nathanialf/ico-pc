@@ -59,6 +59,11 @@ void window_perf_rank_record(const RdPerfRecord *r, double vuInvocations)
     ico_attempt_fire2(ICO_ATT_DATE_ONE, r->dateOneRefused);
     ico_attempt_fire(ICO_ATT_EMPTY_SKIP, r->emptySkipped);
     ico_attempt_fire(ICO_ATT_NO_VOLUME_BREAK, r->noVolumeBreak);
+    /* the subpass read's DATE set-ups (rd_subpass_probe.c): the stencil
+       bit's set-ups are the read's own only where the row is on */
+    if (ico_attempt_state_of(ICO_ATT_SUBPASS) == ICO_ATT_ON) {
+        ico_attempt_fire(ICO_ATT_SUBPASS, r->dateStencilTakes);
+    }
     if (r->presented && r->gpuValid && !r->keep) {
         if (r->passTimed && s_stampedN < STAMP_SPANS) {
             s_stamped[s_stampedN++] = (float)r->gpuMs;

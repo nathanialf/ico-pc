@@ -27,7 +27,7 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
     [ICO_ATT_NO_VOLUME_BREAK] = {"no-volume break", "pictures", NULL},
     [ICO_ATT_ADRENO_A] = {"Qualcomm passes as VkRenderPass objects", "passes", NULL},
     [ICO_ATT_ADRENO_B] = {"Adreno attempt B", "fired", NULL},
-    [ICO_ATT_SUBPASS] = {"subpass read", "passes", NULL},
+    [ICO_ATT_SUBPASS] = {"subpass read", "DATE set-ups in the pass", NULL},
     [ICO_ATT_BLEND_CONST] = {"blend constant", "draws", NULL},
     [ICO_ATT_COMPACTION] = {"index compaction", "triangles left out", NULL},
     [ICO_ATT_VU_COMPUTE_CLASS] = {"VU record by compute on the PowerVR", "dispatches", NULL},
@@ -44,16 +44,13 @@ static struct {
     uint64_t lastN, lastN2;
 } s_att[ICO_ATT_COUNT] = {
     [ICO_ATT_ADRENO_B] = {ICO_ATT_NOT_BUILT, NULL, 0, 0, 0, 0},
-    [ICO_ATT_SUBPASS] = {ICO_ATT_NOT_BUILT, NULL, 0, 0, 0, 0},
     [ICO_ATT_BLEND_CONST] = {ICO_ATT_NOT_BUILT, NULL, 0, 0, 0, 0},
 };
 
 /* a row's state at the start */
 static int startState(int i)
 {
-    return i == ICO_ATT_ADRENO_B || i == ICO_ATT_SUBPASS || i == ICO_ATT_BLEND_CONST
-               ? ICO_ATT_NOT_BUILT
-               : ICO_ATT_NOT_SET;
+    return i == ICO_ATT_ADRENO_B || i == ICO_ATT_BLEND_CONST ? ICO_ATT_NOT_BUILT : ICO_ATT_NOT_SET;
 }
 
 static uint32_t s_serial; /* __atomic */
@@ -415,4 +412,20 @@ int ico_attempt_decide_compaction(int compute, const char *notWhy, int arm, int 
     }
     ico_attempt_state(ICO_ATT_COMPACTION, st, why);
     return on;
+}
+
+void ico_attempt_decide_subpass(int route, int on, int refused, int offDefault, const char *why)
+{
+    IcoAttemptState st = ICO_ATT_NA;
+    if (!route) {
+        why = "not a VkRenderPass path without local read (dynamic rendering's local read, or "
+              "another backend)";
+    } else if (on) {
+        st = ICO_ATT_ON;
+    } else if (refused) {
+        st = ICO_ATT_REFUSED;
+    } else if (offDefault) {
+        st = ICO_ATT_OFF_DEFAULT;
+    }
+    ico_attempt_state(ICO_ATT_SUBPASS, st, why);
 }
