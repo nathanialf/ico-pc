@@ -210,6 +210,51 @@ static void testFile(void)
     out = robust_persist_strip("[dev]\r\ngpu_robust = true\r\nx = 1\r\n");
     CHECK(out != NULL && strcmp(out, "[dev]\r\nx = 1\r\n") == 0);
     free(out);
+    /* the root's dotted form (read as [dev]'s): both lines out, blanks
+       around the dot too; the dotted key under another header stays */
+    out = robust_persist_strip("dev.gpu_robust = true\ndev . gpu_robust_by = \"x\"\nversion = 1\n"
+                               "[audio]\ndev.gpu_robust = true\n");
+    CHECK(out != NULL && strcmp(out, "version = 1\n[audio]\ndev.gpu_robust = true\n") == 0);
+    t = ico_toml_parse(out != NULL ? out : "");
+    CHECK(t != NULL && ico_toml_get_bool(t, "dev.gpu_robust", 0) == 0);
+    ico_toml_free(t);
+    free(out);
+    t = ico_toml_parse("dev.gpu_robust = true\n");
+    CHECK(t != NULL && ico_toml_get_bool(t, "dev.gpu_robust", 0) == 1);
+    ico_toml_free(t);
+    /* forms the strip leaves (a quoted key, an inline table): what the
+       parser reads before it, it reads after it, so window_robust.c's
+       check after the strip (dev.gpu_robust still true: nothing written,
+       robust_unremovable_line) sees every form file_on sees */
+    {
+        static const char *const kForms[] = {
+            "[dev]\n\"gpu_robust\" = true\n",
+            "dev = { gpu_robust = true }\n",
+            "\"dev\".gpu_robust = true\n",
+            "[\"dev\"]\ngpu_robust = true\n",
+        };
+        for (size_t i = 0; i < sizeof kForms / sizeof kForms[0]; i++) {
+            IcoToml *before = ico_toml_parse(kForms[i]);
+            out = robust_persist_strip(kForms[i]);
+            IcoToml *after = ico_toml_parse(out != NULL ? out : "");
+            const int on = ico_toml_get_bool(before, "dev.gpu_robust", 0);
+            const int still = ico_toml_get_bool(after, "dev.gpu_robust", 0);
+            CHECK(out != NULL && still <= on);
+            printf("strip: form %zu read %s, %s\n", i, on ? "on" : "off",
+                   !on     ? "nothing to do"
+                   : still ? "still on after the strip: refused"
+                           : "taken out");
+            ico_toml_free(before);
+            ico_toml_free(after);
+            free(out);
+        }
+    }
+    {
+        char line[512];
+        CHECK(robust_unremovable_line(line, sizeof line, "config.toml") == 0 &&
+              strstr(line, "stays on") != NULL && strstr(line, "delete that line by hand") != NULL);
+        CHECK(robust_unremovable_line(line, 16, "config.toml") == -1);
+    }
 }
 
 static void testLines(void)

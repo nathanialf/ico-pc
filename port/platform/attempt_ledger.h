@@ -349,9 +349,11 @@ int ico_attempt_decide_comp_spec(int module, int device, int env, int defaultOn,
 /* the old robust-access line (window_robust.c window_robust_start, the
    window's first start): found config.toml held [dev] gpu_robust = true
    without the game's mark, removed it was taken off (0: the file could not
-   be written, robust access stays on and the next start tries again).
-   Found and removed: on; found, not removed: refused (by the file);
-   not found: not applicable */
+   be written, robust access stays on and the next start tries again; -1:
+   the line is in a hand-written form the strip cannot take out, nothing
+   written, to be deleted by hand).  Found and removed: on; found, not
+   removed: refused (by the file, or by its form); not found: not
+   applicable */
 void ico_attempt_decide_robust_line(int found, int removed);
 
 #endif

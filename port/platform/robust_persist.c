@@ -172,6 +172,18 @@ int robust_ini_line(char *out, size_t size, const char *iniName)
     return n > 0 && (size_t)n < size ? 0 : -1;
 }
 
+int robust_unremovable_line(char *out, size_t size, const char *cfgName)
+{
+    const int n = snprintf(out, size,
+                           "ico_pc: robust access stays on: gpu_robust = true in %s is written in "
+                           "a form the game does not write and could not take out (a quoted key "
+                           "or an inline table, by hand): nothing was changed in the file; "
+                           "delete that line by hand to turn it off",
+                           cfgName != NULL ? cfgName : "config.toml");
+
+    return n > 0 && (size_t)n < size ? 0 : -1;
+}
+
 /* the key of a `key = value` line, trimmed, into out ("" when the line has
    no '=' or is a comment or a header) */
 static void line_key(const char *line, size_t len, char *out, size_t size)
@@ -230,13 +242,27 @@ static int line_header(const char *line, size_t len, char *out, size_t size)
     return 1;
 }
 
+/* a dotted key with the blanks around its dots dropped ("dev . x" is
+   "dev.x"), in place */
+static void key_undot(char *key)
+{
+    size_t w = 0;
+    for (size_t r = 0; key[r] != '\0'; r++) {
+        if (key[r] == ' ' || key[r] == '\t') {
+            continue; /* a bare key has no blank: only those around a dot */
+        }
+        key[w++] = key[r];
+    }
+    key[w] = '\0';
+}
+
 char *robust_persist_strip(const char *text)
 {
     const size_t total = strlen(text);
     char *out = malloc(total + 1);
     size_t w = 0;
     const char *p = text;
-    int inDev = 0;
+    int inDev = 0, inRoot = 1;
 
     if (out == NULL) {
         return NULL;
@@ -249,9 +275,16 @@ char *robust_persist_strip(const char *text)
 
         if (line_header(p, len, name, sizeof(name))) {
             inDev = strcmp(name, "dev") == 0;
+            inRoot = 0;
         } else if (inDev) {
             line_key(p, len, key, sizeof(key));
             drop = strcmp(key, "gpu_robust") == 0 || strcmp(key, "gpu_robust_by") == 0;
+        } else if (inRoot) {
+            /* the root's dotted form (dev.gpu_robust = true before any
+               header), which the parsed file reads as [dev]'s */
+            line_key(p, len, key, sizeof(key));
+            key_undot(key);
+            drop = strcmp(key, "dev.gpu_robust") == 0 || strcmp(key, "dev.gpu_robust_by") == 0;
         }
         if (!drop) {
             memcpy(out + w, p, len);

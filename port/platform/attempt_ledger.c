@@ -653,6 +653,11 @@ void ico_attempt_decide_robust_line(int found, int removed)
     if (!found) {
         ico_attempt_state(ICO_ATT_ROBUST_LINE, ICO_ATT_NA,
                           "no [dev] gpu_robust = true without the game's mark in config.toml");
+    } else if (removed < 0) {
+        ico_attempt_state(ICO_ATT_ROBUST_LINE, ICO_ATT_REFUSED,
+                          "gpu_robust = true in config.toml is in a hand-written form the game "
+                          "cannot take out (a quoted key or an inline table): nothing written, "
+                          "robust access stays on; delete the line by hand");
     } else if (!removed) {
         ico_attempt_state(ICO_ATT_ROBUST_LINE, ICO_ATT_REFUSED,
                           "config.toml could not be written: robust access stays on, the next "

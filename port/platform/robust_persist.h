@@ -105,8 +105,18 @@ int robust_persist_line(char *out, size_t size, const RobustStep *step, const Ro
    too small */
 int robust_ini_line(char *out, size_t size, const char *iniName);
 
-/* The file text without its [dev] gpu_robust and gpu_robust_by lines,
-   everything else byte for byte; malloc'd, NULL on out of memory */
+/* The start's log line when config.toml's dev.gpu_robust = true is in a form
+   the strip cannot take out (still on after it): nothing written, delete the
+   line by hand; 0, or -1 when out is too small */
+int robust_unremovable_line(char *out, size_t size, const char *cfgName);
+
+/* The file text without its [dev] gpu_robust and gpu_robust_by lines (and
+   the root's dotted dev.gpu_robust / dev.gpu_robust_by lines, before any
+   header), everything else byte for byte; malloc'd, NULL on out of memory.
+   Other hand-written forms (a quoted key, a key the parser joins another
+   way) are left: window_robust.c parses the result as config.toml is read
+   and, where dev.gpu_robust is still true, writes nothing and says so
+   (robust_unremovable_line) */
 char *robust_persist_strip(const char *text);
 
 #endif

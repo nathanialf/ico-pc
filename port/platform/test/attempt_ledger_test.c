@@ -772,6 +772,11 @@ static void test_robust_line(void)
     CHECK(strcmp(ico_attempt_why_of(ICO_ATT_ROBUST_LINE),
                  "config.toml could not be written: robust access stays on, the next start "
                  "tries again") == 0);
+    /* a hand-written form the strip cannot take out: refused, nothing
+       written, to be deleted by hand */
+    ico_attempt_decide_robust_line(1, -1);
+    CHECK(ico_attempt_state_of(ICO_ATT_ROBUST_LINE) == ICO_ATT_REFUSED);
+    CHECK(strstr(ico_attempt_why_of(ICO_ATT_ROBUST_LINE), "delete the line by hand") != NULL);
     const uint32_t s0 = ico_attempt_serial();
     ico_attempt_decide_robust_line(1, 1);
     CHECK(ico_attempt_serial() == s0 + 1u);

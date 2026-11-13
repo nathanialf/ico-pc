@@ -52,11 +52,15 @@ static int mark_write(const RobustMark *mark)
                : -1;
 }
 
-/* both keys removed from the file, the copy in memory read again */
+/* both keys removed from the file, the copy in memory read again: 0; -1
+   the file could not be read or written; 1 dev.gpu_robust still true in
+   the text without the lines the strip knows (a hand-written form it does
+   not see, parsed as config.toml is read): nothing written */
 static int keys_remove(void)
 {
     const char *path = ico_config_toml_path();
     char *text, *stripped;
+    IcoToml *after;
     int r;
 
     if (path == NULL || (text = ico_toml_read_text(path)) == NULL) {
@@ -66,6 +70,17 @@ static int keys_remove(void)
     free(text);
     if (stripped == NULL) {
         return -1;
+    }
+    after = ico_toml_parse(stripped);
+    if (after == NULL) {
+        free(stripped);
+        return -1;
+    }
+    r = ico_toml_get_bool(after, KEY_ON, 0) != 0;
+    ico_toml_free(after);
+    if (r) {
+        free(stripped);
+        return 1; /* not claimed as removed */
     }
     r = ico_toml_write_text(stripped, path);
     free(stripped);
@@ -128,7 +143,15 @@ void window_robust_start(const char *cfgName)
             ico_diag_log("ico_pc: the count of clean starts could not be written to %s", cfg);
         }
     } else if (step.action != ROBUST_NONE) {
-        if (keys_remove() != 0) {
+        const int removed = keys_remove();
+        if (removed > 0) {
+            if (robust_unremovable_line(line, sizeof(line), cfg) == 0) {
+                ico_diag_log("%s", line);
+            }
+            ledger_row(1, -1); /* refused, a marked key's too */
+            return;
+        }
+        if (removed != 0) {
             ico_diag_log("ico_pc: robust access could not be turned off in %s; it stays on", cfg);
             ledger_row(step.action == ROBUST_OFF_UNMARKED, 0);
             return;

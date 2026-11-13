@@ -297,6 +297,13 @@ static char *read_text(const char *path)
         got = fread(text + len, 1, cap - len - 1, f);
         len += got;
     } while (got != 0);
+    if (ferror(f)) {
+        /* a read error mid-file: no text (a caller that rewrites the file
+           must not write back a cut copy) */
+        free(text);
+        fclose(f);
+        return NULL;
+    }
     fclose(f);
     text[len] = '\0';
     return text;
