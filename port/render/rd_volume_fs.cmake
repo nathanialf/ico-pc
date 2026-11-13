@@ -24,6 +24,42 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_volume_fs COMMAND rd_volume_fs_test)
 endif()
 
+# rd_volume_fs_selftest, rd_volume_fs_selftest_sabotage (test/rd_shadow_selftest.cmake
+# through rd_fog_selftest_test, whose fog self-test's first run runs the volumes' own
+# after the shadow count's): the self-test passed on the device (both frames' counts
+# the same both ways, the Z GEQUAL frame apart from the Z ALWAYS one) and the entry on
+# by the build's default; sabotaged (ICO_RD_VOLUME_FS=sabotage: each increment drawn
+# as a decrement), the Z ALWAYS frame's count differs and the entry stays off.  The
+# shadow count's own lines as rd_shadow_selftest expects them.  No device: SKIP.
+if(ICO_RUN_TESTS AND TARGET rd_fog_selftest_test)
+    set(_vf_st_env "")
+    if(ICO_SANITIZE MATCHES "address")
+        list(APPEND _vf_st_env "ASAN_OPTIONS=detect_leaks=0")
+    endif()
+    add_test(NAME rd_volume_fs_selftest
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_fog_selftest_test>
+                     "-DPATH=(one|seven) draws?"
+                     "-DRESULTS=[^)]*"
+                     "-DEXTRA=shadow volumes: the stencil-only entry \\(self-test: the count the same at [0-9]+ texels of [0-9]+x[0-9]+ at [0-9]+x[0-9]+ texels under Z ALWAYS and Z GEQUAL, step [48]; the Z GEQUAL frame differs from the Z ALWAYS one at [1-9][0-9]* texels\\): the same bytes"
+                     "-DEXTRA2=no colour output, no discard\\): on \\(the build's default; self-test passed: "
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_shadow_selftest.cmake")
+    add_test(NAME rd_volume_fs_selftest_sabotage
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_fog_selftest_test>
+                     "-DPATH=(one|seven) draws?"
+                     "-DRESULTS=[^)]*"
+                     "-DEXTRA=shadow volumes: self-test failed: the Z ALWAYS frame's count differs at [1-9][0-9]* of [0-9]+ texels"
+                     "-DEXTRA2=no colour output, no discard\\): off until its self-test passes \\(ICO_RD_VOLUME_FS=sabotage; self-test failed at texel "
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_shadow_selftest.cmake")
+    set_tests_properties(rd_volume_fs_selftest rd_volume_fs_selftest_sabotage
+                         PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
+    if(_vf_st_env)
+        set_tests_properties(rd_volume_fs_selftest PROPERTIES ENVIRONMENT "${_vf_st_env}")
+    endif()
+    set(_vf_st_sab ${_vf_st_env})
+    list(APPEND _vf_st_sab "ICO_RD_VOLUME_FS=sabotage")
+    set_tests_properties(rd_volume_fs_selftest_sabotage PROPERTIES ENVIRONMENT "${_vf_st_sab}")
+endif()
+
 # rd_volume_fs_ab (test/rd_volume_fs_ab.cmake): every dump of tools/shadow_cuts_dumps.txt,
 # tools/date_cut_dumps.txt, tools/shadow_box_dumps.txt, tools/no_volume_dumps.txt and
 # tools/lamps_dumps.txt (machine-local; a listed dump that is absent fails where

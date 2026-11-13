@@ -1847,7 +1847,7 @@ rd: shadow volumes: a volume draw kept sprite_ps: <why> (frame F, S samples; rep
 window: shadow volumes: V volume draws by the stencil-only entry of W, K kept on sprite_ps (counts by why)
 ```
 
-`rd_replay_tool --stats`: `stats: volume fs on|off (self-test <words>): V volume draws by date_clear_ps of W; the run: ...`. The attempt ledger's row `the shadow volumes by the stencil-only entry` counts the volume draws by it and those kept on `sprite_ps` where it is offered, in each 10 s block ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-attempt-ledger)). The rc bench has a variant for it each way (`the shadow volumes by sprite_ps (not the stencil-only entry)`), and one for the glow's paste by its own entry (`the glow paste by fx_frame_ps (not its own entry)`). Tests: `rd_volume_fs`, `rd_volume_fs_ab`, `rd_volume_fs_sabotage` ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
+`rd_replay_tool --stats`: `stats: volume fs on|off (self-test <words>): V volume draws by date_clear_ps of W; the run: ...`. The attempt ledger's row `the shadow volumes by the stencil-only entry` counts the volume draws by it and those kept on `sprite_ps` where it is offered, in each 10 s block ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-attempt-ledger)). The rc bench has a variant for it each way (`the shadow volumes by sprite_ps (not the stencil-only entry)`), and one for the glow's paste by its own entry (`the glow paste by fx_frame_ps (not its own entry)`). Tests: `rd_volume_fs`, `rd_volume_fs_selftest`, `rd_volume_fs_selftest_sabotage`, `rd_volume_fs_ab`, `rd_volume_fs_sabotage` ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
 
 ## Water and render-to-texture blocks
 
