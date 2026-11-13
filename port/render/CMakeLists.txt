@@ -3705,3 +3705,4 @@ include(rd_pass_objects.cmake) # Qualcomm's passes as VkRenderPass objects (issu
 include(rd_smallcuts.cmake) # the turn in the present's blit, the VU record by compute on the PowerVR
 include(rd_vu_compact.cmake) # the index compaction (issue 179)
 include(rd_subpass_probe.cmake) # the subpass read's first-start probe
+include(rd_bench.cmake) # the rc-only bench: kept frames measured part by part

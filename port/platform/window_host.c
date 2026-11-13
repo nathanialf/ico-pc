@@ -95,6 +95,7 @@
 #include "upscale_pictures.h"
 #if ICO_RC_TOOLS && defined(__ANDROID__)
 #include "share_report.h" /* an rc build's Share a bug report (settings.h) */
+#include "window_bench.h"
 #include "window_capture.h"
 #include "strings.h"
 #endif
@@ -2663,6 +2664,7 @@ open_window:
     /* Main > Share a bug report, below it: an rc build on a phone alone */
     ui_settings_set_share_report_handler(share_report_arm);
     window_capture_start(); /* and the opening's frames saved by themselves */
+    window_bench_start();   /* and measured (window_bench.h) */
 #endif
 #ifdef __ANDROID__
     /* the Graphics driver page, and "Quit game" for the
@@ -4052,6 +4054,7 @@ int ico_window_pump(void)
     window_dump_auto_skin_pump();
     window_bones_pump(); /* issue 123's ladder (window_bones.c) */
 #if ICO_RC_TOOLS && defined(__ANDROID__)
+    window_bench_pump(); /* the bench holds the pump while it runs */
     share_report_pump();
 #endif
     /* the Settings menu's changes; forced when the
@@ -4807,6 +4810,7 @@ static void perf_drain(void)
     while (rd_perf_pop(&r)) {
 #if ICO_RC_TOOLS && defined(__ANDROID__)
         window_capture_picture(&r);
+        window_bench_picture(&r);
 #endif
         window_perf_hint_picture(&r);
         auto_res_sample(&r);

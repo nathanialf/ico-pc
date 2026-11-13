@@ -590,10 +590,14 @@ if(TARGET ico_pc AND NOT ICO_HEADLESS)
                                   port/platform/app_icon_window.c)
     if(ICO_RC_TOOLS AND ANDROID)
         # an rc build's Share a bug report: the files it offers (share_report.h),
-        # and the frames of the opening it saves by itself (window_capture.h)
+        # the frames of the opening it saves by itself (window_capture.h) and
+        # the bench that measures kept frames (window_bench.h)
         target_sources(ico_pc PRIVATE port/platform/share_report.c
                                       port/platform/window_capture.c
-                                      port/platform/capture_trigger.c)
+                                      port/platform/capture_trigger.c
+                                      port/platform/window_bench.c
+                                      port/platform/bench_plan.c
+                                      port/render/rd_bench_run.c)
     endif()
     # The display's vblanks for the vsync lock's log (display_clock.h): a
     # DXGI output's on Windows, none elsewhere

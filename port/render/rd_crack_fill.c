@@ -147,6 +147,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "rd_bench.h" /* the bench's switch below */
 #include "rd_lamps.h"
 #include "rd_replay.h"
 #include "rd_upscale.h"
@@ -2053,4 +2054,19 @@ static bool swapSelftest(void)
                 bad, got[0], got[1], got[2], got[3], want[0], want[1], want[2], want[3]);
     }
     return s_swap.test == 1;
+}
+
+/* rc builds' bench (rd_bench.c, rd_bench.h): the switch as it stands
+ * (the forced word, enabled, why), and back to it */
+uint32_t rd__crack_fill_bench_save(void)
+{
+    return (uint32_t)(s_forced + 1) | (s_cf.enabled ? 4u : 0u) | ((uint32_t)s_cf.why << 3);
+}
+
+void rd__crack_fill_bench_restore(uint32_t saved)
+{
+    s_forced = (int)(saved & 3u) - 1;
+    s_cf.enabled = (saved & 4u) != 0;
+    s_cf.why = (int)(saved >> 3);
+    note();
 }

@@ -462,6 +462,20 @@ if(ICO_RUN_TESTS)
     add_test(NAME capture_trigger COMMAND capture_trigger_test)
 endif()
 
+# The rc bench's pure parts (bench_plan.c, compiled into the program only
+# with ICO_RC_TOOLS on Android, and into rd_replay_tool): the picks of the
+# opening's frames, the schedule, the statistics, the lines and the CSV,
+# over made-up records and samples; tested in every build
+add_executable(bench_plan_test test/bench_plan_test.c bench_plan.c)
+target_compile_options(bench_plan_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_include_directories(bench_plan_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(UNIX)
+    target_link_libraries(bench_plan_test PRIVATE m)
+endif()
+if(ICO_RUN_TESTS)
+    add_test(NAME bench_plan COMMAND bench_plan_test)
+endif()
+
 # game_data_range: the game data ranges (game_data_range.c) over a stand-in
 # game library that gets ico_game's section treatment
 # (cmake/IcoStateSections.cmake) and the game's semantics options: the
