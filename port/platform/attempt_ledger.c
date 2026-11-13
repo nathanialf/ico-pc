@@ -37,6 +37,8 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
                           "at the bound"},
     [ICO_ATT_AS_MADE_TIMER] = {"in-between pictures on their own timer", "pictures timed",
                                "held in their frame's tick"},
+    [ICO_ATT_PACE_SCREEN] = {"in-between pictures for the screen's refresh", "pictures placed",
+                             "held at their frame's edges"},
     [ICO_ATT_PASTE_SPEC] = {"the glow's paste by its own entry", "pastes",
                             "kept on the general entry"},
     [ICO_ATT_CHAIN3] = {"the glow chain in three passes", "chains", NULL},
@@ -355,6 +357,30 @@ void ico_attempt_decide_as_made_timer(int asMade, int on)
     } else {
         ico_attempt_state(ICO_ATT_AS_MADE_TIMER, ICO_ATT_ON,
                           "each picture's moment from its own timer");
+    }
+}
+
+void ico_attempt_decide_pace_screen(int asMade, int clock, int times, int on)
+{
+    if (!asMade) {
+        ico_attempt_state(ICO_ATT_PACE_SCREEN, ICO_ATT_NA,
+                          "the pictures are paced here: the present clock's moment");
+    } else if (clock == 0) {
+        ico_attempt_state(ICO_ATT_PACE_SCREEN, ICO_ATT_NA,
+                          "no GPU end to predict from on this backend (no GPU span or slot "
+                          "clock): the moment drawn otherwise kept");
+    } else if (times == 0) {
+        ico_attempt_state(ICO_ATT_PACE_SCREEN, ICO_ATT_NA,
+                          "the display gives no times back (no VK_GOOGLE_display_timing: "
+                          "desktop, OpenGL, Direct3D): the moment drawn otherwise kept");
+    } else if (times == 1 && clock == 1 && !on) {
+        ico_attempt_state(ICO_ATT_PACE_SCREEN, ICO_ATT_OFF_DEFAULT,
+                          "off by default until a phone rc shows it to the owner's eye; computed "
+                          "and reported on the on-glass line");
+    } else if (times == 1 && clock == 1) {
+        ico_attempt_state(ICO_ATT_PACE_SCREEN, ICO_ATT_ON,
+                          "each picture drawn for the refresh the screen is predicted to show it "
+                          "at");
     }
 }
 

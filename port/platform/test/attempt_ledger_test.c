@@ -343,6 +343,13 @@ static void test_classes(void)
         ico_attempt_decide_as_made_timer(kPace[c].asMade, 0);
         CHECK(ico_attempt_state_of(ICO_ATT_AS_MADE_TIMER) ==
               (kPace[c].asMade ? ICO_ATT_OFF_DEFAULT : ICO_ATT_NA));
+        /* the screen's refresh: every as-made class here gives the display's
+           times back (Android's swapchain and MoltenVK offer
+           VK_GOOGLE_display_timing), so it follows the GPU model's row: off
+           by default, not applicable where paced or without a slot clock */
+        ico_attempt_decide_pace_screen(kPace[c].asMade,
+                                       kPace[c].clock ? 1 : (kPace[c].waited ? 0 : -1), 1, 0);
+        CHECK(ico_attempt_state_of(ICO_ATT_PACE_SCREEN) == kPace[c].want);
         /* the glow's paste by its own entry: every class here is a Vulkan
            device (the module made) whose self-test passed (rd_paste_spec.c) */
         CHECK(ico_attempt_decide_paste_spec(1, -1, 1, 1) == 1);
@@ -526,6 +533,26 @@ static void test_classes(void)
                         "in their frame's tick)") != NULL);
     }
     CHECK(strstr(ico_attempt_why_of(ICO_ATT_PACE_GPU), "no GPU span or slot clock") != NULL);
+    /* the screen's refresh: no display times; then on with its counts */
+    ico_attempt_decide_pace_screen(1, 1, 0, 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_PACE_SCREEN) == ICO_ATT_NA &&
+          strstr(ico_attempt_why_of(ICO_ATT_PACE_SCREEN), "gives no times back") != NULL);
+    ico_attempt_decide_pace_screen(1, 0, 1, 1);
+    CHECK(ico_attempt_state_of(ICO_ATT_PACE_SCREEN) == ICO_ATT_NA &&
+          strstr(ico_attempt_why_of(ICO_ATT_PACE_SCREEN), "no GPU end") != NULL);
+    ico_attempt_decide_pace_screen(1, 1, 1, 1);
+    CHECK(ico_attempt_state_of(ICO_ATT_PACE_SCREEN) == ICO_ATT_ON);
+    ico_attempt_fire(ICO_ATT_PACE_SCREEN, 700);
+    ico_attempt_fire2(ICO_ATT_PACE_SCREEN, 2);
+    {
+        char b[2048];
+        (void)ico_attempt_block_text(b, sizeof b, -1);
+        CHECK(strstr(b, "; in-between pictures for the screen's refresh on 700 pictures placed (2 "
+                        "held at their frame's edges)") != NULL);
+    }
+    /* not known yet (no display time and under 600 pictures): left as it was */
+    ico_attempt_decide_pace_screen(1, 1, -1, 1);
+    CHECK(ico_attempt_state_of(ICO_ATT_PACE_SCREEN) == ICO_ATT_ON);
     /* the record's row: the pre-pass off; on with its growths counted */
     ico_attempt_decide_rec_need(0, 512, 1024, 512);
     CHECK(ico_attempt_state_of(ICO_ATT_REC_NEED) == ICO_ATT_NA);

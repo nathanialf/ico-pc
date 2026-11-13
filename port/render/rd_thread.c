@@ -1127,13 +1127,8 @@ bool rd_present_post(float alpha)
      * callbacks share port/ui's font state with the step's own text
      * (rd_present.c s_pre) */
     rd__overlay_hand_over();
-    s_picPresent = (PresentArgs){alpha,
-                                 0.0,
-                                 {0.0, 0.0},
-                                 false,
-                                 s_drainAtMs,
-                                 s_drainEndMs,
-                                 {{-1.0f, -1.0f, -1.0f}, RD_RULE_CLOCK, 0.0}};
+    s_picPresent =
+        (PresentArgs){alpha, 0.0, {0.0, 0.0}, false, s_drainAtMs, s_drainEndMs, RD_RULE_NOTE_NONE};
     s_picPresent.raw = rd__present_clock_take(s_picPresent.gap);
     presentRebase(&s_picPresent, cur->number);
     s_picTramp = (Tramp){presentJob, &s_picPresent, !wait, NULL};

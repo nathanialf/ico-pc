@@ -2863,12 +2863,16 @@ typedef struct RdPerfRecord {
      * 0 and 0 for one made where it was asked (rd_even.h) */
     double evenAskMs, evenHandMs;
     /* the on-glass line (rd_glass.h): the moment's alpha by each rule (the
-     * hand-over, the GPU's predicted end, the own timer: rd_pace_rules.h; -1
-     * not computed), the rule drawn (RD_RULE_CLOCK: paced), the tick, and
-     * the display-times id its present carried (rhi_present_glass; 0 none) */
-    float ruleAlpha[3];
+     * hand-over, the GPU's predicted end, the own timer, the screen's
+     * refresh: rd_pace_rules.h RD_RULE_COUNT; -1 not computed), the rule
+     * drawn (RD_RULE_CLOCK: paced), the tick, the screen's prediction (the
+     * GPU end it came from, rd's clock, and the refresh predicted, the
+     * display's clock: rd_pace_screen.h; 0 none), and the display-times id
+     * its present carried (rhi_present_glass; 0 none) */
+    float ruleAlpha[4];
     uint8_t rule;
     double ruleTickMs;
+    double screenEndMs, screenAtMs;
     uint32_t glassId;
     /* the replay changed effect more often than there were timestamps:
        the later changes were not timed apart (their time stayed with the

@@ -18,6 +18,7 @@
 
 #include "rd_glass.h"
 #include "rd_pace_rules.h"
+#include "rd_pace_screen.h"
 
 static int failures;
 #define CHECK(cond)                                                                                \
@@ -40,8 +41,9 @@ static int failures;
 static RdGlassPic pic(uint32_t id, uint32_t frame, float hand, float gpu, float timer,
                       double handMs, double endMs)
 {
-    const RdGlassPic p = {id,   frame,  hand,  {hand, gpu, timer}, RD_RULE_HAND,
-                          32.0, handMs, endMs, endMs > 0.0};
+    const RdGlassPic p = {id,           frame, hand,   {hand, gpu, timer, -1.0f},
+                          RD_RULE_HAND, 32.0,  handMs, endMs,
+                          endMs > 0.0,  0.0,   0.0};
     return p;
 }
 
@@ -98,10 +100,10 @@ static void testJoin(void)
     RdGlassPic p4 = pic(4, 11, 0.7f, 0.7f, 0.7f, 150.0, 178.0);
     rd_glass_join(&p1);
     rd_glass_join(&p2);
-    rd_glass_time(1, 1000 * MS, REF);
-    rd_glass_time(2, 1016 * MS, REF);
+    rd_glass_time(1, 1000 * MS, REF, 0, 0);
+    rd_glass_time(2, 1016 * MS, REF, 0, 0);
     rd_glass_join(&p3);
-    rd_glass_time(4, 1048 * MS, REF);
+    rd_glass_time(4, 1048 * MS, REF, 0, 0);
     rd_glass_join(&p4);
     /* a picture with no id: not counted */
     RdGlassPic p0 = pic(0, 11, 0.7f, 0.7f, 0.7f, 150.0, 178.0);
@@ -149,12 +151,55 @@ static void testLine(void)
     CHECK(rd_glass_format(&w, small, sizeof small) && strlen(small) == 15);
 }
 
+/* the screen's rule: its alpha a fifth measure, its prediction scored at
+   the join (on it, one late, one early, further) and sent to its model;
+   the display's own figures (presentMargin, earliestPresentTime) */
+static void testScreen(void)
+{
+    rd_glass_reset();
+    rd_pace_screen_drop();
+    RdGlassWindow w;
+    /* refresh 8 ms; predicted at 1000, 1008, 1016, 1040 ms; shown at 1000
+       (on it), 1016 (one late), 1016 + 8 = 1024 for a prediction of 1032
+       (one early) and 1064 for 1040 (three: further) */
+    static const double kPred[4] = {1000.0, 1008.0, 1032.0, 1040.0};
+    static const uint64_t kShown[4] = {1000, 1016, 1024, 1064};
+    for (uint32_t i = 0; i < 4; i++) {
+        RdGlassPic p = pic(i + 1u, 10 + i / 2u, 0.25f + 0.5f * (float)(i % 2u), 0.2f, 0.2f,
+                           100.0 + 8.0 * i, 0.0);
+        p.alpha[3] = 0.25f + 0.25f * (float)i;
+        p.screenEndMs = 900.0 + 8.0 * i;
+        p.screenAtMs = kPred[i];
+        rd_glass_join(&p);
+        rd_glass_time(i + 1u, kShown[i] * MS, REF, i == 3u ? (kShown[i] - 8) * MS : kShown[i] * MS,
+                      2 * MS);
+    }
+    rd_glass_take(&w);
+    CHECK(w.scored == 4 && w.hit == 1 && w.late == 1 && w.early == 1 && w.further == 1);
+    CHECK(w.marginN == 4 && w.marginSumUs == 8000 && w.earlyN == 1 && w.earlySumUs == 8000);
+    /* the screen's measure (1 + RD_RULE_SCREEN): 1000 -> 1016 a quarter
+       tick (8 ms) over 16 ms */
+    CHECK(w.glass[1 + RD_RULE_SCREEN][5].n == 3 && w.glass[1 + RD_RULE_SCREEN][2].sum == 5000);
+    /* each shown picture with a predicted end went to the model's ring */
+    RdPaceScreen m;
+    rd_pace_screen_reset(&m);
+    CHECK(rd_pace_screen_drain(&m) == 4u && m.sN == 4u && m.s[0].endPredMs == 900.0 &&
+          m.s[0].actualMs == 1000.0 && m.s[0].refreshMs == 8.0);
+    char out[4096];
+    CHECK(rd_glass_format(&w, out, sizeof out));
+    CHECK(strstr(out, "; by the screen's predicted refresh (not drawn): ") != NULL);
+    CHECK(strstr(out, "; the display's own figures over 4 shown: present margin 2.00 ms on "
+                      "average, earliest present half a refresh or more before the time shown 1 "
+                      "(by 8.00 ms on average)") != NULL);
+}
+
 int main(void)
 {
     printf("rd_glass_test\n");
     testPair();
     testJoin();
     testLine();
+    testScreen();
     if (failures) {
         printf("rd_glass_test: %d failures\n", failures);
         return 1;

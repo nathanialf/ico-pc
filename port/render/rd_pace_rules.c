@@ -6,6 +6,7 @@
 #include "attempt_ledger.h"
 #include "rd_as_made_timer.h"
 #include "rd_pace_gpu.h"
+#include "rd_pace_screen.h"
 #include "rd_rebase.h"
 
 /* the poster's */
@@ -52,12 +53,26 @@ double rd_pace_rules_pick(double raw, double appliedMs, double wouldMs, double c
     note->alpha[RD_RULE_GPU] = rd_rebase_alpha(rawGpu);
     note->alpha[RD_RULE_TIMER] = rd_rebase_alpha(rawTimer);
     note->tickMs = tickMs;
-    if (rd_as_made_timer_on()) {
-        note->rule = RD_RULE_TIMER;
-        return rawTimer;
+    /* the value drawn otherwise: the timer's where it is on, else the one
+       presentRebase made, untouched */
+    const bool timer = rd_as_made_timer_on();
+    const double rawOther = timer ? rawTimer : raw;
+    const uint8_t ruleOther =
+        timer ? RD_RULE_TIMER : (rd_pace_gpu_on() ? RD_RULE_GPU : RD_RULE_HAND);
+    /* the screen's rule over it (rd_pace_screen.h): computed at every
+       picture as made, drawn where it is on and could predict */
+    const RdPaceScreenIn in = {handMs, frame, closeAtMs, tickMs, rd_pace_gpu_pred_end(), rawOther};
+    RdPaceScreenPlace sp;
+    rd_pace_screen_step(&in, &sp);
+    note->alpha[RD_RULE_SCREEN] = rd_rebase_alpha(sp.raw);
+    note->screenEndMs = in.endPredMs > 0.0 ? in.endPredMs : 0.0; /* the model's samples */
+    note->screenAtMs = sp.how == RD_PS_PLACED ? sp.hardMs : 0.0;
+    if (rd_pace_screen_on() && sp.how == RD_PS_PLACED) {
+        note->rule = RD_RULE_SCREEN;
+        return sp.raw;
     }
-    note->rule = rd_pace_gpu_on() ? RD_RULE_GPU : RD_RULE_HAND;
-    return raw; /* the value presentRebase made, untouched */
+    note->rule = ruleOther;
+    return rawOther;
 }
 
 void rd_pace_rules_paced(void)
@@ -66,6 +81,7 @@ void rd_pace_rules_paced(void)
         rd_as_made_timer_reset(&s_timer);
     }
     decide(false);
+    rd_pace_screen_paced();
 }
 
 static _Thread_local RdRuleNote t_note;
@@ -84,7 +100,7 @@ void rd_pace_rules_take(RdRuleNote *out)
     if (t_have) {
         *out = t_note;
     } else {
-        *out = (RdRuleNote){{-1.0f, -1.0f, -1.0f}, RD_RULE_CLOCK, 0.0};
+        *out = (RdRuleNote)RD_RULE_NOTE_NONE;
     }
     t_have = false;
 }

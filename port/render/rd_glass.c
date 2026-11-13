@@ -9,6 +9,11 @@
 #include <string.h>
 
 #include "rd_pace_rules.h"
+#include "rd_pace_screen.h"
+
+_Static_assert(RD_GLASS_RULES == 1 + RD_RULE_COUNT, "the drawn measure and one a rule");
+_Static_assert(sizeof(((RdGlassPic *)0)->alpha) / sizeof(float) == RD_RULE_COUNT,
+               "a picture's alpha for every rule");
 
 #define DEFAULT_TICK_MS 33.3667
 
@@ -84,7 +89,7 @@ static struct {
     uint32_t id;
     bool pic, time;
     RdGlassPic p;
-    uint64_t ns, refreshNs;
+    uint64_t ns, refreshNs, earliestNs, marginNs;
 } s_slot[JOIN];
 
 static struct {
@@ -108,10 +113,36 @@ static void unlock(void)
     __atomic_store_n(&s_spin, 0, __ATOMIC_RELEASE);
 }
 
-/* a slot with both in: paired with the shown picture before */
+/* a slot with both in: paired with the shown picture before; the screen's
+   prediction scored and the picture sent to its model */
 static void done(uint32_t i)
 {
+    const RdGlassPic *p = &s_slot[i].p;
+    const double actualMs = (double)s_slot[i].ns / 1e6;
+    const double refMs = (double)s_slot[i].refreshNs / 1e6;
+    if (p->screenEndMs > 0.0) {
+        const RdPaceScreenSample smp = {p->screenEndMs, actualMs, refMs,
+                                        p->gpuExact ? p->gpuEndMs : 0.0};
+        rd_pace_screen_seen(&smp);
+    }
     lock();
+    if (p->screenAtMs > 0.0 && refMs > 0.0) {
+        const int k = rd_pace_screen_score(p->screenAtMs, actualMs, refMs);
+        s_sum.scored++;
+        s_sum.hit += k == 0 ? 1u : 0u;
+        s_sum.late += k == 1 ? 1u : 0u;
+        s_sum.early += k == -1 ? 1u : 0u;
+        s_sum.further += k > 1 || k < -1 ? 1u : 0u;
+    }
+    if (s_slot[i].marginNs != 0 || s_slot[i].earliestNs != 0) {
+        s_sum.marginN++;
+        s_sum.marginSumUs += (int64_t)(s_slot[i].marginNs / 1000u);
+        if (s_slot[i].earliestNs != 0 && s_slot[i].earliestNs < s_slot[i].ns &&
+            2u * (s_slot[i].ns - s_slot[i].earliestNs) >= s_slot[i].refreshNs) {
+            s_sum.earlyN++;
+            s_sum.earlySumUs += (int64_t)((s_slot[i].ns - s_slot[i].earliestNs) / 1000u);
+        }
+    }
     s_sum.shown++;
     if (s_last.have && s_slot[i].id > s_last.p.id) {
         s_sum.unseen += s_slot[i].id - s_last.p.id - 1u;
@@ -151,7 +182,8 @@ void rd_glass_join(const RdGlassPic *p)
     }
 }
 
-void rd_glass_time(uint32_t id, uint64_t actualNs, uint64_t refreshNs)
+void rd_glass_time(uint32_t id, uint64_t actualNs, uint64_t refreshNs, uint64_t earliestNs,
+                   uint64_t marginNs)
 {
     if (id == 0) {
         return;
@@ -159,6 +191,8 @@ void rd_glass_time(uint32_t id, uint64_t actualNs, uint64_t refreshNs)
     const uint32_t i = slotOf(id);
     s_slot[i].ns = actualNs;
     s_slot[i].refreshNs = refreshNs;
+    s_slot[i].earliestNs = earliestNs;
+    s_slot[i].marginNs = marginNs;
     s_slot[i].time = true;
     if (s_slot[i].pic) {
         done(i);
@@ -231,6 +265,8 @@ static const char *ruleName(int r)
         return "the GPU's predicted end";
     case RD_RULE_TIMER:
         return "the own timer";
+    case RD_RULE_SCREEN:
+        return "the screen's predicted refresh";
     default:
         return "the present clock";
     }
@@ -301,15 +337,36 @@ bool rd_glass_format(const RdGlassWindow *w, char *out, size_t size)
             measure(&o, w, 1 + r);
         }
     }
+    if (w->marginN) {
+        put(&o,
+            "; the display's own figures over %llu shown: present margin %.2f ms on average, "
+            "earliest present half a refresh or more before the time shown %llu",
+            (unsigned long long)w->marginN, (double)w->marginSumUs / 1000.0 / (double)w->marginN,
+            (unsigned long long)w->earlyN);
+        if (w->earlyN) {
+            put(&o, " (by %.2f ms on average)", (double)w->earlySumUs / 1000.0 / (double)w->earlyN);
+        }
+    }
     return true;
 }
 
 void rd_glass_line(void)
 {
     static RdGlassWindow w;
-    static char line[4096];
+    static RdPaceScreenWindow sw;
+    static char line[6144];
     rd_glass_take(&w);
-    if (rd_glass_format(&w, line, sizeof line)) {
+    rd_pace_screen_take(&sw);
+    const bool any = rd_glass_format(&w, line, sizeof line);
+    if (!any) {
+        /* no picture with a display id (no VK_GOOGLE_display_timing): the
+           screen's rule's fall-backs alone, where it ran */
+        (void)snprintf(line, sizeof line, "on the glass in 10 s: no picture with a display id");
+    }
+    const size_t at = strlen(line);
+    if (rd_pace_screen_format(&sw, w.scored, w.hit, w.late, w.early, w.further, line + at,
+                              sizeof line - at) ||
+        any) {
         fprintf(stderr, "window: %s\n", line);
     }
 }

@@ -801,7 +801,8 @@ static void testLive(void)
    v0.11.5) to the bit, the note's drawn rule the hand-over's */
 static void testOffBitIdentical(void)
 {
-    if (getenv("ICO_RD_PACE_GPU") != NULL || getenv("ICO_RD_AS_MADE_TIMER") != NULL) {
+    if (getenv("ICO_RD_PACE_GPU") != NULL || getenv("ICO_RD_AS_MADE_TIMER") != NULL ||
+        getenv("ICO_RD_PACE_SCREEN") != NULL) {
         printf(" off-by-default check skipped: a tests' switch is set\n");
         return;
     }

@@ -189,6 +189,15 @@ bool rd_pace_gpu_on(void);
    present as made that the clock did not time (or ICO_RD_S2_LEGACY=1) is
    not re-based and leaves the model as it is */
 void rd_pace_gpu_paced(void);
+/* the poster's thread: the GPU end the last rd_pace_gpu_shift predicted for
+   its picture (RdPaceGpuPlace.predEndMs: 0 before a span and a lead are
+   known, and after rd_pace_gpu_paced), for the screen's rule
+   (rd_pace_screen.h) */
+double rd_pace_gpu_pred_end(void);
+/* the poster's thread: 1 a GPU span and first submit came back this run, 0
+   RD_PACE_GPU_NO_CLOCK measurements came back without one first, -1 not
+   known yet (the ledger's rows) */
+int rd_pace_gpu_clock_state(void);
 
 /* the 10 s sums, taken (and emptied) by rd_pace_gpu_take */
 #define RD_PACE_GPU_SHIFT_BIN_MS 0.5
