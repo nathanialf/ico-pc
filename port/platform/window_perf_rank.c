@@ -149,7 +149,11 @@ static void ledger_lines(void)
     static uint32_t s_serial;
     static unsigned s_starts;
     static int s_said;
-    static char text[2048];
+    /* the start line is over 2 KB on every device class with v0.11.6's
+       rows and their reasons (2054 to 2391 bytes measured over
+       attempt_ledger_test's seven classes before the old robust-access
+       row): a 2 KB buffer cut its last rows */
+    static char text[4096];
     if (!s_said) {
         /* the slow-scene capture in two steps runs on every platform (its
            fallbacks counted by the capture, window_dump_auto.c) */

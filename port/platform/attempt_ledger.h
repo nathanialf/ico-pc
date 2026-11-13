@@ -149,6 +149,11 @@ enum {
        start-up self-test; count the draws by it, second count the draws of
        their forms that kept sprite_ps where it is offered */
     ICO_ATT_COMP_SPEC,
+    /* window_robust.c (robust_persist.h ROBUST_OFF_UNMARKED): a [dev]
+       gpu_robust = true without the game's mark (issue 179's: written by
+       v0.7.10 to v0.10.1, or by hand) removed from config.toml at the
+       start, robust access off from that start; static, no count */
+    ICO_ATT_ROBUST_LINE,
     ICO_ATT_COUNT
 };
 
@@ -317,5 +322,12 @@ int ico_attempt_decide_volume_fs(int module, int env, int defaultOn, int selftes
    failed, 1 passed).  1 when the draws may take it (each still passes its
    gate), else 0 */
 int ico_attempt_decide_comp_spec(int module, int device, int env, int defaultOn, int selftest);
+/* the old robust-access line (window_robust.c window_robust_start, the
+   window's first start): found config.toml held [dev] gpu_robust = true
+   without the game's mark, removed it was taken off (0: the file could not
+   be written, robust access stays on and the next start tries again).
+   Found and removed: on; found, not removed: refused (by the file);
+   not found: not applicable */
+void ico_attempt_decide_robust_line(int found, int removed);
 
 #endif

@@ -364,6 +364,19 @@ static void test_classes(void)
         /* the shadow composites' own entry: likewise a dual-source Vulkan
            device whose self-test passed (rd_comp_spec.c) */
         CHECK(ico_attempt_decide_comp_spec(1, 1, -1, 1, 1) == 1);
+        /* the old robust-access line: the Mali-G52 reporter's config.toml
+           held [dev] gpu_robust = true without the mark (issue 179's v0.11.5
+           log, line 15), removed at the start; no other class's did */
+        ico_attempt_decide_robust_line(c == 0, 1);
+        CHECK(ico_attempt_state_of(ICO_ATT_ROBUST_LINE) == (c == 0 ? ICO_ATT_ON : ICO_ATT_NA));
+        /* the whole start line fits the window's 4 KB buffer
+           (window_perf_rank.c ledger_lines), its last row included */
+        {
+            char big[4096];
+            const size_t n = ico_attempt_start_text(big, sizeof big);
+            CHECK(n + 1u < sizeof big);
+            CHECK(strstr(big, "; the old robust-access line taken off ") != NULL);
+        }
         for (int i = 0; i < ICO_ATT_COUNT; i++) {
             if (ico_attempt_state_of(i) == ICO_ATT_NOT_SET) {
                 printf("FAIL %s: %s not reported\n", d->name, ico_attempt_name(i));
@@ -663,9 +676,41 @@ static void test_classes(void)
     ico_attempt_reset();
 }
 
+/* the old robust-access row's three states, its start words and its
+   block words (a static row) */
+static void test_robust_line(void)
+{
+    char b[4096];
+
+    ico_attempt_reset();
+    ico_attempt_decide_robust_line(0, 1);
+    CHECK(ico_attempt_state_of(ICO_ATT_ROBUST_LINE) == ICO_ATT_NA);
+    (void)ico_attempt_start_text(b, sizeof b);
+    CHECK(strstr(b, "; the old robust-access line taken off not applicable here (no [dev] "
+                    "gpu_robust = true without the game's mark in config.toml)") != NULL);
+    ico_attempt_decide_robust_line(1, 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_ROBUST_LINE) == ICO_ATT_REFUSED);
+    CHECK(strcmp(ico_attempt_why_of(ICO_ATT_ROBUST_LINE),
+                 "config.toml could not be written: robust access stays on, the next start "
+                 "tries again") == 0);
+    const uint32_t s0 = ico_attempt_serial();
+    ico_attempt_decide_robust_line(1, 1);
+    CHECK(ico_attempt_serial() == s0 + 1u);
+    CHECK(ico_attempt_state_of(ICO_ATT_ROBUST_LINE) == ICO_ATT_ON);
+    (void)ico_attempt_start_text(b, sizeof b);
+    CHECK(strstr(b, "; the old robust-access line taken off on ([dev] gpu_robust = true without "
+                    "the game's mark removed from config.toml: robust access off from this "
+                    "start)") != NULL);
+    (void)ico_attempt_block_text(b, sizeof b, -1);
+    CHECK(text_is(b, "attempts: the old robust-access line taken off on (static)"));
+    ico_attempt_reset();
+    CHECK(ico_attempt_state_of(ICO_ATT_ROBUST_LINE) == ICO_ATT_NOT_SET);
+}
+
 int main(void)
 {
     test_classes();
+    test_robust_line();
     char b[2048];
 
     ico_attempt_reset();
