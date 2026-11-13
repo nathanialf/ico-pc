@@ -9,9 +9,13 @@
  *     that never reached the game leaves it, another version turns it off
  *     at once, no mark does nothing;
  *   - the mark through the config text (ico_toml set, render, parse) and
- *     the keys' removal leaving every other line byte for byte, a
- *     player's gpu_robust (no mark) included in what the removal is not
- *     asked to touch;
+ *     the keys' removal leaving every other line byte for byte;
+ *   - a gpu_robust = true without the mark (issue 179's, written by
+ *     v0.7.10 to v0.10.1 or by hand) through config fixtures as the window
+ *     reads them: removed at the first start of a new version by the same
+ *     removal, after a lost start too, the loss ladder's marked key after
+ *     it counted and dropped as any; a marked key unchanged; false and
+ *     ico-pc.ini's line never touched; a desktop's file the same;
  *   - the log lines word for word.
  */
 #include <stdio.h>
@@ -212,7 +216,7 @@ static void testLines(void)
 {
     RobustMark old;
     RobustStep s;
-    char line[512];
+    char line[1024];
 
     memset(&old, 0, sizeof(old));
     snprintf(old.version, sizeof(old.version), "0.10.1");
@@ -242,14 +246,146 @@ static void testLines(void)
     CHECK(robust_persist_line(line, sizeof(line), &s, &old, "0.10.2", NULL) == -1);
     s = robust_persist_step(&old, "0.10.1", 0, 0);
     CHECK(robust_persist_line(line, 20, &s, &old, "0.10.1", NULL) == -1);
-    /* an unmarked true (the player's, or an older build's) is said, never dropped */
-    CHECK(robust_unmarked_line(line, sizeof(line), "/x/config.toml") == 0);
-    CHECK(strstr(line, "/x/config.toml has no gpu_robust_by mark") != NULL);
-    CHECK(strstr(line, "never dropped") != NULL);
-    CHECK(strstr(line, "bounds checks on every 3D load") != NULL);
-    CHECK(robust_unmarked_line(line, 20, NULL) == -1);
     CHECK(robust_mark_parse("by hand", &old) == -1);
     CHECK(robust_mark_parse("", &old) == -1);
+    /* a key without the mark: removed at once, said once (the next start
+       has no key) */
+    s = robust_start_step(1, NULL, "0.11.6", 0, 0);
+    CHECK(s.action == ROBUST_OFF_UNMARKED);
+    CHECK(robust_persist_line(line, sizeof(line), &s, NULL, "0.11.6",
+                              "/storage/emulated/0/Android/data/com.defnf.icopc/files/"
+                              "config.toml") == 0);
+    CHECK(strcmp(line, "ico_pc: robust access turned off ([dev] gpu_robust = true in "
+                       "/storage/emulated/0/Android/data/com.defnf.icopc/files/config.toml had "
+                       "no gpu_robust_by mark: written after 2 lost starts by a game that wrote "
+                       "no mark, or by hand): taken as the game's own from another version, so "
+                       "it is removed now as a marked one is after an update, with no clean "
+                       "starts left to count; a lost start turns robust access on for the next "
+                       "start, and two lost starts in a row write it again with the mark") == 0);
+    CHECK(robust_persist_line(line, 40, &s, NULL, "0.11.6", NULL) == -1);
+    /* ico-pc.ini's line: said every start, never removed */
+    CHECK(robust_ini_line(line, sizeof(line), "C:\\ico\\x64\\ico-pc.ini") == 0);
+    CHECK(strcmp(line, "ico_pc: robust access on by gpu_robust in C:\\ico\\x64\\ico-pc.ini (a line "
+                       "for a bug report: the game never writes or removes it); it costs bounds "
+                       "checks on every 3D load (delete the line to turn it off)") == 0);
+    CHECK(robust_ini_line(line, sizeof(line), NULL) == 0 &&
+          strstr(line, " in ico-pc.ini (") != NULL);
+    CHECK(robust_ini_line(line, 20, NULL) == -1);
+}
+
+/* the window's reading of a config.toml (window_robust.c file_on: the
+   file's own [dev] gpu_robust as a bool and its gpu_robust_by), then
+   robust_start_step */
+static RobustStep fileStart(const char *text, const char *version, int lost, int ended)
+{
+    IcoToml *t = ico_toml_parse(text);
+    RobustStep s;
+
+    CHECK(t != NULL);
+    s = robust_start_step(t != NULL && ico_toml_get_bool(t, "dev.gpu_robust", 0),
+                          t != NULL ? ico_toml_get(t, "dev.gpu_robust_by") : NULL, version, lost,
+                          ended);
+    ico_toml_free(t);
+    return s;
+}
+
+/* the reporter's file (issue 179, v0.11.5 log lines 9 and 15: the key kept
+   from an earlier start, no mark) */
+static const char k_moto[] = "version = 1\n"
+                             "[video]\n"
+                             "aspect = \"21:9\"\n"
+                             "[dev]\n"
+                             "gpu_robust = true\n"
+                             "[audio]\n"
+                             "volume = 1.0\n";
+
+static void testUnmarked(void)
+{
+    char *out;
+    RobustStep s;
+    IcoToml *t;
+    RobustMark m;
+    char value[96], *text;
+    int lost, ended, i;
+
+    /* unmarked true on a new version: off at once, whatever the previous
+       start's end, as a mark of another version is (the version rule) */
+    for (lost = 0; lost <= 1; lost++) {
+        for (ended = 0; ended <= 1; ended++) {
+            memset(&m, 0, sizeof(m));
+            snprintf(m.version, sizeof(m.version), "0.10.1");
+            CHECK(robust_persist_step(&m, "0.11.6", lost, ended).action == ROBUST_OFF_VERSION);
+            CHECK(fileStart(k_moto, "0.11.6", lost, ended).action == ROBUST_OFF_UNMARKED);
+            CHECK(fileStart(k_moto, "dev", lost, ended).action == ROBUST_OFF_UNMARKED);
+        }
+    }
+    /* a gpu_robust_by that is not the game's (by hand) is no mark */
+    CHECK(fileStart("[dev]\ngpu_robust = true\ngpu_robust_by = \"by hand\"\n", "0.11.6", 0, 0)
+              .action == ROBUST_OFF_UNMARKED);
+    /* the removal is the marked key's (robust_persist_strip): both [dev]
+       lines, the rest byte for byte; the next start finds nothing */
+    out = robust_persist_strip(k_moto);
+    CHECK(out != NULL && strcmp(out, "version = 1\n[video]\naspect = \"21:9\"\n[dev]\n[audio]\n"
+                                     "volume = 1.0\n") == 0);
+    CHECK(out != NULL && fileStart(out, "0.11.6", 0, 0).action == ROBUST_NONE);
+    free(out);
+    out = robust_persist_strip("[dev]\ngpu_robust = true\ngpu_robust_by = \"by hand\"\nx = 1\n");
+    CHECK(out != NULL && strcmp(out, "[dev]\nx = 1\n") == 0);
+    free(out);
+
+    /* unmarked true, then a loss: the line removed at the first start; two
+       lost starts in a row then write the key with this version's mark
+       (window_robust_persist: clean 0, "-"), which counts as any marked
+       key: a loss keeps it, three clean starts take it off */
+    out = robust_persist_strip(k_moto);
+    CHECK(out != NULL);
+    t = ico_toml_parse(out != NULL ? out : "");
+    memset(&m, 0, sizeof(m));
+    snprintf(m.version, sizeof(m.version), "0.11.6");
+    CHECK(robust_mark_format(value, sizeof(value), &m) == 0);
+    CHECK(ico_toml_set_bool(t, "dev.gpu_robust", 1) == 0);
+    CHECK(ico_toml_set_string(t, "dev.gpu_robust_by", value) == 0);
+    text = ico_toml_render(t, out != NULL ? out : "");
+    ico_toml_free(t);
+    free(out);
+    CHECK(text != NULL);
+    s = fileStart(text, "0.11.6", 1, 0); /* the start after the write: a loss again */
+    CHECK(s.action == ROBUST_STAYS && s.mark.clean == 0);
+    m = s.mark;
+    for (i = 1; i <= 3; i++) {
+        m.running = 1; /* each start reached the game */
+        s = robust_persist_step(&m, "0.11.6", 0, 0);
+        CHECK(s.action == (i < 3 ? ROBUST_STAYS : ROBUST_OFF_CLEAN));
+        m = s.mark;
+    }
+    free(text);
+
+    /* a marked key: unchanged (robust_persist_step's) */
+    s = fileStart("[dev]\ngpu_robust = true\ngpu_robust_by = \"losses; 0.11.6; 1; run\"\n",
+                  "0.11.6", 0, 0);
+    CHECK(s.action == ROBUST_STAYS && s.mark.clean == 2);
+    s = fileStart("[dev]\ngpu_robust = true\ngpu_robust_by = \"losses; 0.11.5; 1; run\"\n",
+                  "0.11.6", 0, 0);
+    CHECK(s.action == ROBUST_OFF_VERSION);
+
+    /* false: never removed (robust access stays off; the loss ladder
+       writes nothing over it), with or without a mark beside it */
+    CHECK(fileStart("[dev]\ngpu_robust = false\n", "0.11.6", 1, 0).action == ROBUST_NONE);
+    CHECK(fileStart("[dev]\ngpu_robust = false\ngpu_robust_by = \"losses; 0.11.6; 0; -\"\n",
+                    "0.11.6", 0, 0)
+              .action == ROBUST_NONE);
+    CHECK(fileStart("[dev]\nslow_step_ms = 8.0\n", "0.11.6", 1, 1).action == ROBUST_NONE);
+    /* outside [dev]: not the key */
+    CHECK(fileStart("gpu_robust = true\n[dev]\nx = 1\n", "0.11.6", 0, 0).action == ROBUST_NONE);
+
+    /* a desktop's file (the key set by hand after a crash: the game writes
+       it on Android alone): the same rule on every platform; ico-pc.ini's
+       gpu_robust is not in this file, so it is never what is removed */
+    CHECK(fileStart("version = 1\n[video]\nbackend = \"vulkan\"\n[dev]\ngpu_robust = true\n",
+                    "0.11.6", 0, 0)
+              .action == ROBUST_OFF_UNMARKED);
+    CHECK(fileStart("version = 1\n[video]\nbackend = \"vulkan\"\n", "0.11.6", 0, 0).action ==
+          ROBUST_NONE);
 }
 
 int main(void)
@@ -258,6 +394,7 @@ int main(void)
     testRule();
     testFile();
     testLines();
+    testUnmarked();
     if (g_fail) {
         return 1;
     }

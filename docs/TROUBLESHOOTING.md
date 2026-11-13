@@ -715,9 +715,8 @@ after it, the game keeps the checks on and writes `gpu_robust = true`
 (with a `gpu_robust_by` line beside it) into `config.toml`. The game turns
 them off again by itself, and removes both lines, after three starts in a
 row that end without the graphics driver stopping, or at once after an
-update; the log says how many of the three have passed. A `gpu_robust`
-line you wrote yourself, without the `gpu_robust_by` line, is never
-removed; delete the lines yourself to turn the checks off sooner. If it happens every time at the same place, report it and attach
+update; the log says how many of the three have passed.
+A `gpu_robust = true` line without the `gpu_robust_by` line beside it (left by an older copy of the game, or written by hand) is removed at the next start, so the checks are off from then on, and the game turns them back on by itself as above if the graphics driver stops again. Delete the lines yourself to turn the checks off sooner. If it happens every time at the same place, report it and attach
 the newest file in `logs` that starts with `report-` (the message names
 it; it shows what was being drawn) and say which disc you play, the
 European or the Japanese.

@@ -18,8 +18,18 @@
  * set (full or careful), and after the self-tests on a run that makes
  * them on first use (lazy: the setting, an end while preparing them, a
  * low-memory stop, a restart), the phones that lost the device being
- * often the same ones whose set failed.  A gpu_robust the
- * player wrote has no such mark and is never touched.
+ * often the same ones whose set failed.
+ *
+ * A [dev] gpu_robust = true in config.toml without the mark (Android's
+ * v0.7.10 to v0.10.1 wrote it after two lost starts with no mark, issue
+ * 179's reporter carried one; or written by hand) is taken as the game's
+ * own from another version: the version rule below removes it at once,
+ * both lines by the same removal (robust_start_step, ROBUST_OFF_UNMARKED).
+ * A device loss turns robust access on again by itself (the next start
+ * only, and two lost starts in a row write the key with the mark).  The
+ * key's false is never removed (robust access stays off and the loss
+ * ladder writes nothing), and ico-pc.ini's gpu_robust (the line a bug
+ * report asks for) is not this file's: neither is touched.
  *
  * Every start with the mark reads the previous start's end:
  *   - the previous start lost the device, or ended while preparing the
@@ -48,10 +58,11 @@ typedef struct RobustMark {
 } RobustMark;
 
 typedef enum RobustAction {
-    ROBUST_NONE = 0,   /* no mark: nothing here is the game's */
-    ROBUST_STAYS,      /* robust access stays on; the new mark is to be written */
-    ROBUST_OFF_CLEAN,  /* clean starts in a row: remove both keys */
-    ROBUST_OFF_VERSION /* another version of the game: remove both keys */
+    ROBUST_NONE = 0,    /* no mark: nothing here is the game's */
+    ROBUST_STAYS,       /* robust access stays on; the new mark is to be written */
+    ROBUST_OFF_CLEAN,   /* clean starts in a row: remove both keys */
+    ROBUST_OFF_VERSION, /* another version of the game: remove both keys */
+    ROBUST_OFF_UNMARKED /* true without the game's mark: another version's, remove both keys */
 } RobustAction;
 
 typedef struct RobustStep {
@@ -72,16 +83,27 @@ int robust_mark_format(char *out, size_t size, const RobustMark *mark);
 RobustStep robust_persist_step(const RobustMark *old, const char *version, int prevLost,
                                int prevEnded);
 
+/* What this start does with config.toml's own [dev] keys (the file's, not
+   ico-pc.ini's): fileOn the file says gpu_robust = true, byValue its
+   gpu_robust_by (NULL none).  Not true: ROBUST_NONE.  A mark of the game's:
+   robust_persist_step.  True without one: ROBUST_OFF_UNMARKED whatever the
+   previous start's end, as robust_persist_step gives ROBUST_OFF_VERSION for
+   a mark of another version (no version that wrote a key without the mark
+   is a version that reads this) */
+RobustStep robust_start_step(int fileOn, const char *byValue, const char *version, int prevLost,
+                             int prevEnded);
+
 /* The start's log line for a step other than ROBUST_NONE (cfgName names
-   config.toml); 0, or -1 when out is too small */
+   config.toml; old may be NULL for ROBUST_OFF_UNMARKED); 0, or -1 when out
+   is too small */
 int robust_persist_line(char *out, size_t size, const RobustStep *step, const RobustMark *old,
                         const char *version, const char *cfgName);
 
-/* The start's log line for a [dev] gpu_robust = true that has no mark of
-   the game's (the player's, or written by a build before the mark): it is
-   never dropped, and every start says what it costs; 0, or -1 when out is
+/* The start's log line for robust access on by ico-pc.ini's gpu_robust
+   (iniName names it): the line a bug report asks for, which the game never
+   writes or removes; every start says what it costs; 0, or -1 when out is
    too small */
-int robust_unmarked_line(char *out, size_t size, const char *cfgName);
+int robust_ini_line(char *out, size_t size, const char *iniName);
 
 /* The file text without its [dev] gpu_robust and gpu_robust_by lines,
    everything else byte for byte; malloc'd, NULL on out of memory */

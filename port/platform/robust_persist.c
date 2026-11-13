@@ -95,6 +95,28 @@ RobustStep robust_persist_step(const RobustMark *old, const char *version, int p
     return s;
 }
 
+RobustStep robust_start_step(int fileOn, const char *byValue, const char *version, int prevLost,
+                             int prevEnded)
+{
+    RobustMark mark;
+    RobustStep s;
+
+    if (!fileOn) {
+        memset(&s, 0, sizeof(s));
+        return s;
+    }
+    if (robust_mark_parse(byValue, &mark) == 0) {
+        return robust_persist_step(&mark, version, prevLost, prevEnded);
+    }
+    /* the key with no mark: the version rule, first in robust_persist_step
+       and blind to the previous start's end, for a mark whose version is
+       none of the game's; the losses that wrote it (if the game did) were
+       on v0.10.1 or older */
+    memset(&s, 0, sizeof(s));
+    s.action = ROBUST_OFF_UNMARKED;
+    return s;
+}
+
 int robust_persist_line(char *out, size_t size, const RobustStep *step, const RobustMark *old,
                         const char *version, const char *cfgName)
 {
@@ -123,20 +145,29 @@ int robust_persist_line(char *out, size_t size, const RobustStep *step, const Ro
                      "row turn it on again",
                      old->version, version != NULL ? version : "", cfg);
         break;
+    case ROBUST_OFF_UNMARKED:
+        n = snprintf(out, size,
+                     "ico_pc: robust access turned off ([dev] gpu_robust = true in %s had no "
+                     "gpu_robust_by mark: written after 2 lost starts by a game that wrote no "
+                     "mark, or by hand): taken as the game's own from another version, so it is "
+                     "removed now as a marked one is after an update, with no clean starts left "
+                     "to count; a lost start turns robust access on for the next start, and two "
+                     "lost starts in a row write it again with the mark",
+                     cfg);
+        break;
     default:
         return -1;
     }
     return n > 0 && (size_t)n < size ? 0 : -1;
 }
 
-int robust_unmarked_line(char *out, size_t size, const char *cfgName)
+int robust_ini_line(char *out, size_t size, const char *iniName)
 {
-    const int n =
-        snprintf(out, size,
-                 "ico_pc: [dev] gpu_robust = true in %s has no gpu_robust_by mark: set by "
-                 "hand (or left by a game that wrote no mark), so it is never dropped; it costs "
-                 "bounds checks on every 3D load (delete the line to turn it off)",
-                 cfgName != NULL ? cfgName : "config.toml");
+    const int n = snprintf(out, size,
+                           "ico_pc: robust access on by gpu_robust in %s (a line for a bug "
+                           "report: the game never writes or removes it); it costs bounds "
+                           "checks on every 3D load (delete the line to turn it off)",
+                           iniName != NULL ? iniName : "ico-pc.ini");
 
     return n > 0 && (size_t)n < size ? 0 : -1;
 }

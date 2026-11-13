@@ -9,6 +9,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "attempt_ledger.h"
 #include "config.h"
 #include "diag_host.h"
 #include "host_config.h"
@@ -74,42 +75,80 @@ static int keys_remove(void)
     return r;
 }
 
+/* config.toml's own [dev] gpu_robust (ico-pc.ini's gpu_robust left out:
+   ico_config reads the ini over the file) and gpu_robust_by into *by
+   (NULL none); 1 when the file says true.  t is the caller's to free */
+static int file_on(IcoToml **t, const char **by)
+{
+    const char *path = ico_config_toml_path();
+
+    *t = path != NULL ? ico_toml_load(path) : NULL;
+    *by = *t != NULL ? ico_toml_get(*t, KEY_BY) : NULL;
+    return *t != NULL && ico_toml_get_bool(*t, KEY_ON, 0);
+}
+
+/* the attempt ledger's row (attempt_ledger.h ICO_ATT_ROBUST_LINE): the
+   first start of the window says, and a later one (the window made again)
+   only when it found a key without the mark, so the row that took one off
+   is not turned to "not applicable" by the start after it */
+static void ledger_row(int found, int removed)
+{
+    static bool s_said;
+
+    if (!s_said || found) {
+        s_said = true;
+        ico_attempt_decide_robust_line(found, removed);
+    }
+}
+
 void window_robust_start(const char *cfgName)
 {
-    RobustMark old;
+    RobustMark old = {0};
     RobustStep step;
-    char line[512];
+    IcoToml *t;
+    const char *by;
+    char line[1024];
+    const char *cfg = cfgName != NULL ? cfgName : "config.toml";
     const int lost = ico_diag_startup_end_count(ICO_DIAG_END_LOSS) > 0;
     /* an end while preparing the graphics, or a watchdog end (the game
        stopped responding; a GPU hang is a loss above): not clean */
     const int ended = ico_diag_startup_end_count(ICO_DIAG_END_PIPELINES) > 0 ||
                       ico_diag_startup_end_count(ICO_DIAG_END_VU_PRE) > 0 ||
                       ico_diag_startup_prev_watchdog();
+    const int on = file_on(&t, &by);
+    const int marked = on && robust_mark_parse(by, &old) == 0;
 
-    if (mark_read(&old) != 0) {
-        /* robust access on with no mark of the game's: set by hand, or by a
-           game that wrote no mark: never touched, said every start */
-        if (ico_config_get_bool(KEY_ON, 0) &&
-            robust_unmarked_line(line, sizeof(line), cfgName) == 0) {
-            ico_diag_log("%s", line);
-        }
-        return;
-    }
-    step = robust_persist_step(&old, game_version(), lost, ended);
+    /* a key without the game's mark (issue 179: written by v0.7.10 to
+       v0.10.1 after two lost starts, or by hand) is another version's: off
+       at once by the same removal as a marked key's */
+    step = robust_start_step(on, by, game_version(), lost, ended);
+    ico_toml_free(t);
     if (step.action == ROBUST_STAYS) {
         if (mark_write(&step.mark) != 0) {
-            ico_diag_log("ico_pc: the count of clean starts could not be written to %s",
-                         cfgName != NULL ? cfgName : "config.toml");
+            ico_diag_log("ico_pc: the count of clean starts could not be written to %s", cfg);
         }
     } else if (step.action != ROBUST_NONE) {
         if (keys_remove() != 0) {
-            ico_diag_log("ico_pc: robust access could not be turned off in %s; it stays on",
-                         cfgName != NULL ? cfgName : "config.toml");
+            ico_diag_log("ico_pc: robust access could not be turned off in %s; it stays on", cfg);
+            ledger_row(step.action == ROBUST_OFF_UNMARKED, 0);
             return;
         }
-        set_env_empty();
+        /* robust access off for this start too, unless ico-pc.ini's line
+           asks for it (the copy in memory read again: the ini alone) */
+        if (!ico_config_get_bool(KEY_ON, 0)) {
+            set_env_empty();
+        }
     }
-    if (robust_persist_line(line, sizeof(line), &step, &old, game_version(), cfgName) == 0) {
+    ledger_row(step.action == ROBUST_OFF_UNMARKED, 1);
+    if (step.action != ROBUST_NONE &&
+        robust_persist_line(line, sizeof(line), &step, marked ? &old : NULL, game_version(), cfg) ==
+            0) {
+        ico_diag_log("%s", line);
+    }
+    /* on with no mark of the game's in config.toml: ico-pc.ini's line (a
+       bug report's), never touched, said every start */
+    if (step.action != ROBUST_STAYS && ico_config_get_bool(KEY_ON, 0) &&
+        robust_ini_line(line, sizeof(line), ico_config_ini_path()) == 0) {
         ico_diag_log("%s", line);
     }
 }

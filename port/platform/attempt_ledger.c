@@ -48,6 +48,7 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
                            "kept on sprite_ps"},
     [ICO_ATT_COMP_SPEC] = {"the shadow composites by their own entry", "draws",
                            "kept on sprite_ps"},
+    [ICO_ATT_ROBUST_LINE] = {"the old robust-access line taken off", NULL, NULL},
 };
 
 /* the rows' live values (__atomic), and the block text's last counts (the
@@ -619,4 +620,20 @@ int ico_attempt_decide_comp_spec(int module, int device, int env, int defaultOn,
     }
     ico_attempt_state(ICO_ATT_COMP_SPEC, st, why);
     return on;
+}
+
+void ico_attempt_decide_robust_line(int found, int removed)
+{
+    if (!found) {
+        ico_attempt_state(ICO_ATT_ROBUST_LINE, ICO_ATT_NA,
+                          "no [dev] gpu_robust = true without the game's mark in config.toml");
+    } else if (!removed) {
+        ico_attempt_state(ICO_ATT_ROBUST_LINE, ICO_ATT_REFUSED,
+                          "config.toml could not be written: robust access stays on, the next "
+                          "start tries again");
+    } else {
+        ico_attempt_state(ICO_ATT_ROBUST_LINE, ICO_ATT_ON,
+                          "[dev] gpu_robust = true without the game's mark removed from "
+                          "config.toml: robust access off from this start");
+    }
 }
