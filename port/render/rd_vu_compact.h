@@ -53,7 +53,8 @@
  * rd_vu_class.h); every other device on the compute record is off by
  * default ("measured on the Mali-G52 only").  Tried by the start-up
  * self-test, run only on its pass: a self-test that never ran keeps it off
- * (attempt_ledger.c ico_attempt_decide_compaction).  The tests' switch ICO_RD_VU_COMPACT=0|1 (no
+ * (attempt_ledger.c ico_attempt_decide_compaction), the fourth plane given
+ * up with any verdict of off.  The tests' switch ICO_RD_VU_COMPACT=0|1 (no
  * ini key; 1 runs it without a self-test).  Logged once at the record's start and after the self-test
  * ("rd: VU index compaction: ..."), counted in the attempt ledger's row
  * (triangles dropped a block) and in the window's 10 s line
@@ -177,7 +178,8 @@ const char *rd_vu_compact_state(void);
    start line; whether the record carries the fourth plane is fixed here */
 void rd__vu_compact_init(const RhiLimits *lim);
 void rd__vu_compact_shutdown(void);
-/* the record buffers carry the fourth plane (fixed at rd__vu_compact_init) */
+/* the record buffers carry the fourth plane (from rd__vu_compact_init where
+   the compaction is to be tried; given up with a verdict of off) */
 bool rd__vu_compact_plane(void);
 /* this replay plans and draws the compaction: on, not refused, the compute
    record, the pre-pass on, the pipeline made, outside the loss bisect's
@@ -218,7 +220,7 @@ uint32_t rd__vu_compact_last_left_out(void);
    and the line */
 void rd__vu_compact_refuse(const char *why);
 /* the self-test returned before it ran (why: its words): the row off (but
-   under the tests' switch), the line */
+   under the tests' switch), the fourth plane given up, the line */
 void rd__vu_compact_selftest_not_run(const char *why);
 void rd__vu_compact_selftest_done(bool on);
 #endif

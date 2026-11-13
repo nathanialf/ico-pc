@@ -11,6 +11,7 @@
 #include "rd_vu_compact.h"
 #include "rd_vu_class.h"
 #include "rd_stencil_selftest.h" /* rd__profile_powervr */
+#include "rd_vu_rec_early.h"     /* rd__vu_rec_release */
 #include "rd_vu_record.h"
 #include "rd_vu_skin_check.h" /* rd__vu_prepass_selftest_running */
 
@@ -172,7 +173,7 @@ int rd_vu_cmp_class(const char *name, uint32_t vendor, bool moltenvk, bool dxt, 
 /* ------------------------------------------------------------ the state */
 
 static struct {
-    bool plane;      /* the record's fourth plane (fixed at init) */
+    bool plane;      /* the record's fourth plane (from init; dropped with a verdict of off) */
     int cls;         /* ICO_ATT_CMP_*: the device's class */
     uint32_t vendor; /* RhiLimits.vendorId, for the line */
     char name[96];   /* the Vulkan device name, for the line */
@@ -270,6 +271,17 @@ static void startLine(const char *what)
                  s_cmp.name, (unsigned)s_cmp.vendor);
     }
     rd__log("VU index compaction: %s (%s; %s)", what, why ? why : "", cls);
+}
+
+/* the fourth plane given up (the verdict is off): the record made again
+   without it at the next replay's growth (rd_replay_vu.c rd__vu_rec_release:
+   the destroys deferred past the frames that read it) */
+static void dropPlane(void)
+{
+    if (s_cmp.plane) {
+        s_cmp.plane = false;
+        rd__vu_rec_release();
+    }
 }
 
 void rd__vu_compact_init(const RhiLimits *lim)
@@ -536,6 +548,9 @@ void rd__vu_compact_selftest_not_run(const char *why)
         return;
     }
     s_cmp.runs = decide() && !s_cmp.refused; /* the row: not run, but under the tests' switch */
+    if (!s_cmp.runs) {
+        dropPlane();
+    }
     char what[200];
     snprintf(what, sizeof what, "%s: the start-up self-test did not run (%s)",
              s_cmp.runs ? "on by the tests' switch" : "off", why ? why : "");
@@ -544,6 +559,7 @@ void rd__vu_compact_selftest_not_run(const char *why)
 
 void rd__vu_compact_refuse(const char *why)
 {
+    dropPlane(); /* the test again without it: the record without the plane */
     s_cmp.refused = true;
     s_cmp.selftest = 0;
     snprintf(s_cmp.why, sizeof(s_cmp.why), "%s", why ? why : "");
@@ -566,6 +582,9 @@ void rd__vu_compact_selftest_done(bool on)
     }
     const bool runs = decide() && !s_cmp.refused;
     s_cmp.runs = runs;
+    if (!runs) {
+        dropPlane(); /* nothing reads it for the run */
+    }
     if (s_cmp.refused && compute) {
         rd__log("VU index compaction: refused by its start-up self-test (the record's test with "
                 "it: %s; without it the test passed): every draw reads its own index list",

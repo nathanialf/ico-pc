@@ -68,6 +68,10 @@ uint64_t rd__vu_rec_row_bytes(void);
  * so; false: one could not be made, the record freed (play grows it as
  * before) */
 bool rd__vu_rec_presize(uint32_t rows);
+/* the record freed (the index compaction's fourth plane given up,
+ * rd_vu_compact.c): the next replay grows it at the size without the plane
+ * (the destroys deferred past the frames that read it) */
+void rd__vu_rec_release(void);
 /* the replay's pre-pass (rd_replay_vu.c vuPrepassRun): the rows its picture
  * needs (pass V's and pass T's), the rows held as it began, the upload
  * rings' bytes; and a growth in play */

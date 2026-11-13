@@ -264,6 +264,11 @@ uint64_t rd__vu_rec_row_bytes(void)
     return recBytes(1u) * (RHI_FRAMES_IN_FLIGHT + (rd__vu_record_buffered() ? 0u : 1u));
 }
 
+void rd__vu_rec_release(void)
+{
+    recFree(); /* the destroys deferred past the frames that read it */
+}
+
 bool rd__vu_rec_presize(uint32_t rows)
 {
     if (rows < RD_VU_REC_ROWS_MIN || rows > RD_VU_REC_ROWS_MAX || (rows & (rows - 1u)) != 0u) {

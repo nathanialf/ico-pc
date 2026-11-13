@@ -1394,7 +1394,7 @@ of the prelit mesh past the target's right edge (merged with the ticks copy); a 
 test again without it, and a pass then refuses it for the run (`refused by its self-test`). The
 tests' switch `ICO_RD_VU_COMPACT=0|1`; `ICO_RD_VU_COMPACT_SABOTAGE=1` writes every triangle as a
 filler. The fourth plane is one more plane of the record (16 bytes a row's texel): on the Mali at
-512 rows, 8 MB a frame slot. `rd_vu_compact_ab` compares every target with it on and off.
+512 rows, 8 MB a frame slot; it is allocated only where the compaction is to be tried and given up (the record made again without it) when the self-test refuses it or does not run. `rd_vu_compact_ab` compares every target with it on and off.
 
 #### The record stores' restart rung
 
