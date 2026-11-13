@@ -1054,6 +1054,16 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   of its own at list 11's first draw (`RD_FILL11_WHY_LATER`, `RD_FILL11_WHY_AREA`), the same passes,
   the once line absent. Every `rd_crack_test` check of the filler holds too (the cracks filled, the
   count, the swap's `checkWork`).
+- `rd_pass_objects_ab.cmake` (`rd_pass_objects_ab`; `rd_pass_objects.cmake`): the dumps of
+  `tools/pass_objects_dumps.txt` (machine-local; a listed dump that is absent FAILS, a glob that
+  matches none too: stage 12 on the issue 123 tablet, the Pixel's opening, issue 179's four dumps)
+  replayed with `--pass-dump --stats` twice: dynamic rendering (`ICO_VK_LEGACY_PASSES=0`) and lavapipe
+  put on Qualcomm's driver row (`ICO_VK_FAKE_PASS_ROW=qualcomm`: every pass a `VkRenderPass` object),
+  at the 123 tablet's setting (Enhanced 3x, Full height, Full pixel, 3048x2032; `ICO_VK_FAKE_VENDOR=
+  0x5143`, `ICO_RD_VU_PREPASS=0`) and the 179 phone's (1x at 21:9, 2400x1080; the Arm fakes): every
+  PNG byte for byte, the same draws and passes, each run's device line naming its path (`render
+  passes dynamic`, `render passes legacy (Qualcomm's own driver`); a dump drawn narrower than a
+  setting's aspect is skipped there; at least one target compared. No device: SKIP.
 - `rd_fill11_ab.cmake` (`rd_fill11_ab`, `rd_fill11_gl`; `rd_fill11.cmake`): the dumps of
   `tools/fill11_dumps.txt` (machine-local; a listed dump that is absent FAILS, a glob that matches none
   too; a line may give `phoneN`, `deskN`, `glN` and `nop SPEC`, the tool's `--nop` for both runs)

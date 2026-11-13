@@ -1679,7 +1679,14 @@ The renderer's test programs have a page of their own:
   and 1.4, Mesa's ANV on the same GPU, an Intel GPU on a non-Windows build without an id, NVIDIA,
   AMD and Qualcomm keep dynamic rendering; the reason names the driver and `vkCmdBeginRendering`;
   the `[dev] legacy_passes` words (`1`, `true`, `on`, `yes` in any case; `0`, `false`, `off`, `no`;
-  anything else, empty and NULL none) (`rhi_vk_pass_row`).
+  anything else, empty and NULL none) (`rhi_vk_pass_row`). Qualcomm's row (issue 123): vendor 0x5143
+  with Qualcomm's driver id (8) or no id takes `VkRenderPass` objects; Turnip's id (18) and another id
+  on the same vendor, Qualcomm's id on Arm's vendor, Arm, Intel and Imagination with no id keep
+  dynamic rendering; neither row answers for the other's driver; the reason names Qualcomm, the issue
+  and `vkCmdBeginRendering`. On lavapipe (`rhi_vk_test`): `rhi_vk_qcom_passes` every cell with the
+  device put on the row alone (`ICO_VK_FAKE_PASS_ROW=qualcomm`), failing if the device line says
+  `render passes dynamic;`; `rhi_vk_qcom_passes_off` the clock cell with `ICO_VK_LEGACY_PASSES=0`
+  over the row, failing if it says `render passes legacy`.
 - `rhi_vk_tile_rule_test.c`: the barrier scopes and the submission wait a Vulkan start runs
   (`port/rhi/rhi_tile_rule.c`, pure; issues 179 and 211): which devices are tile-based phone GPUs
   (`rhi_tile_phone`: the Android branch whatever the vendor, iOS through MoltenVK, a faked
