@@ -159,6 +159,31 @@ static void filled(RdPaceScreen *m, double newestEnd)
     }
 }
 
+/* the reported refresh changed (a 120 Hz screen pinned to 60 without a new
+   swapchain): the samples start again from the changed one, the change
+   counted; a report within RD_PS_PERIOD_TOL, or one not known (0), keeps
+   them */
+static void testRefreshChange(void)
+{
+    RdPaceScreen m;
+    filled(&m, 6000.0);
+    CHECK(m.sN == RD_PS_WIN && m.refreshChanged == 0u);
+    {
+        const RdPaceScreenSample same = {6100.0, 6104.0, REP * (1.0 + 0.5 * RD_PS_PERIOD_TOL), 0.0};
+        rd_pace_screen_add(&m, &same);
+        CHECK(m.sN == RD_PS_WIN && m.refreshChanged == 0u);
+        const RdPaceScreenSample unknown = {6110.0, 6114.0, 0.0, 0.0};
+        rd_pace_screen_add(&m, &unknown);
+        CHECK(m.sN == RD_PS_WIN && m.refreshChanged == 0u);
+        const RdPaceScreenSample halved = {6120.0, 6124.0, 2.0 * REP, 0.0};
+        rd_pace_screen_add(&m, &halved);
+        CHECK(m.sN == 1u && m.refreshChanged == 1u && m.s[0].refreshMs == 2.0 * REP);
+        m.dirty = true;
+        rd_pace_screen_fit(&m);
+        CHECK(!m.fit.grid && !m.fit.latch); /* one sample: no fit yet */
+    }
+}
+
 static void testPlace(void)
 {
     RdPaceScreen m;
@@ -1720,6 +1745,7 @@ static void testEvenOff(void)
 
 int main(void)
 {
+    testRefreshChange();
     printf("rd_pace_screen_test\n");
     testParts();
     testPlace();

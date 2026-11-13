@@ -172,6 +172,20 @@ void rd_pace_screen_add(RdPaceScreen *m, const RdPaceScreenSample *s)
     if (!(s->endPredMs > 0.0) || !(s->actualMs > 0.0)) {
         return;
     }
+    if (s->refreshMs > 0.0) {
+        /* the display's reported refresh changed (vk_glass.c re-reads it
+           every second): the grid and the latch fitted on the old one
+           start again from this sample; the lag's chain is the content's
+           and stays */
+        const double was = m->lastRefreshMs;
+        if (m->sN != 0u && was > 0.0 && fabs(s->refreshMs - was) > RD_PS_PERIOD_TOL * was) {
+            m->sN = 0;
+            m->sAt = 0;
+            memset(&m->fit, 0, sizeof(m->fit));
+            m->refreshChanged++;
+        }
+        m->lastRefreshMs = s->refreshMs;
+    }
     m->s[m->sAt] = *s;
     m->sAt = (m->sAt + 1u) % RD_PS_WIN;
     if (m->sN < RD_PS_WIN) {
@@ -532,6 +546,13 @@ void rd_pace_screen_tally_drop(void)
     add(&s_sum.dropped, true);
 }
 
+void rd_pace_screen_tally_refresh(uint32_t n)
+{
+    if (n != 0u) {
+        __atomic_add_fetch(&s_sum.refreshChanged, (uint64_t)n, __ATOMIC_RELAXED);
+    }
+}
+
 static uint64_t take(uint64_t *at)
 {
     return __atomic_exchange_n(at, 0u, __ATOMIC_RELAXED);
@@ -549,6 +570,7 @@ void rd_pace_screen_take(RdPaceScreenWindow *w)
     w->replaced = take(&s_sum.replaced);
     w->measured = take(&s_sum.measured);
     w->dropped = take(&s_sum.dropped);
+    w->refreshChanged = take(&s_sum.refreshChanged);
     /* the last fit stays for the next block's line */
     w->grid = __atomic_load_n(&s_sum.grid, __ATOMIC_RELAXED);
     w->latch = __atomic_load_n(&s_sum.latch, __ATOMIC_RELAXED);
@@ -647,6 +669,10 @@ bool rd_pace_screen_format(const RdPaceScreenWindow *w, uint64_t scored, uint64_
         (unsigned long long)w->replaced);
     if (w->measured) {
         put(&o, "; %llu by the exact ends' measured errors", (unsigned long long)w->measured);
+    }
+    if (w->refreshChanged) {
+        put(&o, "; the display's refresh changed %llu times (the grid and the latch fitted again)",
+            (unsigned long long)w->refreshChanged);
     }
     if (scored) {
         put(&o,

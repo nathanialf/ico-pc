@@ -91,6 +91,10 @@ static void decide(bool asMade)
 static uint32_t take(void)
 {
     const uint32_t n = rd_pace_screen_drain(&s_m);
+    if (s_m.refreshChanged != 0u) {
+        rd_pace_screen_tally_refresh(s_m.refreshChanged); /* the reason counted */
+        s_m.refreshChanged = 0;
+    }
     if (n != 0u) {
         s_times = true;
         const uint32_t k = n < s_m.sN ? n : s_m.sN;

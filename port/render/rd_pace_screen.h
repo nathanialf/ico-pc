@@ -175,6 +175,12 @@ typedef struct RdPaceScreen {
     double hand, content, lag, lastHardMs;
     double y[RD_PS_LAG_WIN]; /* g - the frame's close */
     uint32_t yN, yAt;
+    /* the display's reported refresh changed since the last take (a sample's
+       refreshMs further than RD_PS_PERIOD_TOL from the newest known one: a rate pin or an LTPO screen's own change without a new
+       swapchain): the samples and the fit started again from that sample
+       (rd_pace_screen_add); the live side counts them into the 10 s sums */
+    uint32_t refreshChanged;
+    double lastRefreshMs; /* the newest known report (0 none yet) */
 } RdPaceScreen;
 
 /* how a picture's moment was decided */
@@ -272,6 +278,7 @@ int rd_pace_screen_score(double predictedMs, double actualMs, double refreshMs);
 typedef struct RdPaceScreenWindow {
     uint64_t how[RD_PS_HOW_COUNT];
     uint64_t restarts, heldLo, heldHi, heldBack, replaced, dropped, measured;
+    uint64_t refreshChanged; /* the fit started again: the reported refresh changed */
     /* the last fit (the poster's, at its last placement) */
     uint32_t grid, latch, lead;
     uint32_t periodNs, reportedNs, hits, n, leadHits, leadN, offGrid;
@@ -281,6 +288,7 @@ typedef struct RdPaceScreenWindow {
 /* into the sums (the poster's thread) and taken by the window's */
 void rd_pace_screen_tally(const RdPaceScreenPlace *p, const RdPaceScreenFit *f);
 void rd_pace_screen_tally_drop(void);
+void rd_pace_screen_tally_refresh(uint32_t n); /* RdPaceScreen.refreshChanged taken */
 void rd_pace_screen_take(RdPaceScreenWindow *w);
 /* "; the screen's predicted refresh: ..." appended at out (the on-glass
    line's clause after the rules); false and "" when no picture was placed

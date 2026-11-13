@@ -25,7 +25,9 @@
  * externally synchronized), the past presents' times the driver has are
  * read without a wait (the call returns what it has) into a ring the
  * renderer takes from (rhi_present_glass); the refresh
- * (vkGetRefreshCycleDurationGOOGLE) once per swapchain.  A present the
+ * (vkGetRefreshCycleDurationGOOGLE) for each new swapchain and again every
+ * second (a failed read tried again 100 ms later, the period known before
+ * kept; a change logged).  A present the
  * display never showed (replaced in mailbox mode) has no time reported.
  *
  * VK_EXT_present_timing is not used: its present-time requests and its
@@ -41,6 +43,13 @@
 #include "vk_internal.h"
 
 #define GLASS_RING 256u /* power of two */
+/* the refresh read again this often (a rate pin, ANativeWindow_setFrameRate,
+   or an LTPO screen changes it without a new swapchain), and after a failed
+   read this soon: one vkGetRefreshCycleDurationGOOGLE a second at most on
+   the presenting thread, against the up to four past-time reads of every
+   present */
+#define GLASS_REFRESH_EVERY_NS 1000000000ull
+#define GLASS_REFRESH_RETRY_NS 100000000ull
 
 static bool s_want;          /* asked of the device: the extension enabled */
 static const char *s_whyOff; /* the start line's reason where not asked */
@@ -50,9 +59,11 @@ static int s_fake;           /* the test's stand-in */
 static VkDevice s_dev;
 static PFN_vkGetPastPresentationTimingGOOGLE s_past;
 static PFN_vkGetRefreshCycleDurationGOOGLE s_refresh;
-static uint32_t s_nextId;          /* under the swapchain's lock */
-static VkSwapchainKHR s_refreshSc; /* the swapchain the refresh was read for */
-static uint64_t s_refreshNs;       /* __atomic */
+static uint32_t s_nextId;                         /* under the swapchain's lock */
+static VkSwapchainKHR s_refreshSc;                /* the swapchain the refresh was last read for */
+static uint64_t s_refreshNext;                    /* vkr_now_ns from which it is read again */
+static uint32_t s_refreshFails, s_refreshChanges; /* for the lines */
+static uint64_t s_refreshNs;                      /* __atomic */
 static _Thread_local uint32_t t_lastId;
 static _Thread_local uint64_t t_desire; /* the next present's desired time (rhi_present_desire) */
 
@@ -107,6 +118,7 @@ void vkr_glass_device_made(VkDevice dev)
     s_dev = dev;
     s_nextId = 0;
     s_refreshSc = VK_NULL_HANDLE;
+    s_refreshNext = 0;
     __atomic_store_n(&s_refreshNs, 0u, __ATOMIC_RELAXED);
     __atomic_store_n(&s_tail, __atomic_load_n(&s_head, __ATOMIC_ACQUIRE), __ATOMIC_RELEASE);
     if (s_fake) {
@@ -198,12 +210,37 @@ void vkr_glass_presented(VkSwapchainKHR sc, uint32_t id, bool shown)
         __atomic_store_n(&s_refreshNs, 8333333u, __ATOMIC_RELAXED);
         return;
     }
-    if (sc != s_refreshSc) {
+    const uint64_t now = vkr_now_ns();
+    if (sc != s_refreshSc || now >= s_refreshNext) {
+        /* a new swapchain, a second since the last read, or a retry: a read
+           that fails keeps the period known before and is tried again
+           GLASS_REFRESH_RETRY_NS later (the renderer's screen model starts
+           its fit again on a changed period, rd_pace_screen.c) */
         VkRefreshCycleDurationGOOGLE rc = {0};
-        if (s_refresh(s_dev, sc, &rc) == VK_SUCCESS) {
-            __atomic_store_n(&s_refreshNs, rc.refreshDuration, __ATOMIC_RELAXED);
-        }
+        const VkResult rr = s_refresh(s_dev, sc, &rc);
         s_refreshSc = sc;
+        if (rr == VK_SUCCESS && rc.refreshDuration != 0u) {
+            const uint64_t was = __atomic_load_n(&s_refreshNs, __ATOMIC_RELAXED);
+            __atomic_store_n(&s_refreshNs, rc.refreshDuration, __ATOMIC_RELAXED);
+            s_refreshNext = now + GLASS_REFRESH_EVERY_NS;
+            if (was != 0u && was != rc.refreshDuration) {
+                const uint32_t k = s_refreshChanges++;
+                if (k < 8u || k % 100u == 0u) {
+                    VKR_LOG("display timing (read back): the display's refresh is now %.4f ms (was "
+                            "%.4f ms; change %u)",
+                            (double)rc.refreshDuration / 1e6, (double)was / 1e6, k + 1u);
+                }
+            }
+        } else {
+            s_refreshNext = now + GLASS_REFRESH_RETRY_NS;
+            const uint32_t k = s_refreshFails++;
+            if (k < 8u || k % 100u == 0u) {
+                VKR_LOG("display timing (read back): the display's refresh could not be read "
+                        "(VkResult %d, %llu ns; failure %u): the period known before kept, read "
+                        "again in 100 ms",
+                        (int)rr, (unsigned long long)rc.refreshDuration, k + 1u);
+            }
+        }
     }
     VkPastPresentationTimingGOOGLE past[16];
     for (int round = 0; round < 4; round++) {

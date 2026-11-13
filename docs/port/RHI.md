@@ -1407,7 +1407,7 @@ the extension is enabled and, while the renderer presents pictures as made (`rhi
 display the image at any time"), so which pictures are shown and when is as without it, in every
 present mode (in every other mode nothing is chained and nothing read: capped and vsync presents are v0.11.5's); after each present that carried an id, on the presenting thread under the swapchain's lock,
 `vkGetPastPresentationTimingGOOGLE` (no wait: it returns what the driver has) fills a 256-time ring
-and `vkGetRefreshCycleDurationGOOGLE` gives the refresh once per swapchain; `rhi_present_glass`
+and `vkGetRefreshCycleDurationGOOGLE` gives the refresh for each new swapchain and again every second (a rate pin or an LTPO screen changes it without a new swapchain; a failed read keeps the period known before and is tried again 100 ms later, `display timing (read back): the display's refresh could not be read (VkResult R, N ns; failure K): ...`; a change is logged, `display timing (read back): the display's refresh is now P ms (was Q ms; change K)`, both the first 8 then every 100th, and the screen's model starts its grid and latch again from the first sample with the new period, counted on the on-glass line); `rhi_present_glass`
 gives the calling thread's last present's id and takes the times (`port/rhi/vk/vk_glass.c`; the
 start line `rhi_vk: display timing (read back): VK_GOOGLE_display_timing on (read only: ...)` or
 `off (...)`). A swapchain made again by the present itself is not read after it is destroyed.
