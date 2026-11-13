@@ -22,6 +22,18 @@
 // of being written in an entry.
 #include "vu_common.hlsli"
 
+// ICO_VU_FLAT0 (vu_main_vs; docs/port/PIPELINES.md, "Flat outputs at the
+// provoking corner"): 1, the shipped build, computes the flat outputs (the
+// planes, VuVSOut a0 .. r) at corner 0 alone, the triangle's provoking
+// vertex on every backend, and reads the later bias's own corner from the
+// corner's record already read; 0 (the twins vu_all_main_vs and
+// vu_merge_all_main_vs, made only under the tests' ICO_RD_VU_FLAT0=0,
+// port/render/rd_vu_flat0.c) is the shader before, every corner computing
+// them.  The picture is the same byte for byte (rd_vu_flat0_ab).
+#ifndef ICO_VU_FLAT0
+#define ICO_VU_FLAT0 1
+#endif
+
 // --------------------------------------------------- the record stages
 
 // slot A: the flags (vu_common.hlsli VU_TF_*), the anchor's colour and
@@ -281,15 +293,46 @@ VuVSOut vu_main_vs(uint vid : SV_VertexID)
         }
         if ((f & VU_TF_LATER) != 0u) {
             // vu_later_out (its condition is the flag's)
+#if ICO_VU_FLAT0
+            // the corner's own vertex is me, read from the same record
+            // texels (vu_rec_vertex of kick - 2 + corner): the same words,
+            // so the same VuVtx; the other two read here, each in its branch
+            VuVtx a = me;
+            VuVtx b = me;
+            VuVtx c = me;
+            if (corner != 0u) {
+                a = vu_rec_vertex(kick - 2u);
+            }
+            if (corner != 1u) {
+                b = vu_rec_vertex(kick - 1u);
+            }
+            if (corner != 2u) {
+                c = vu_rec_vertex(kick);
+            }
+#else
             VuVtx a = vu_rec_vertex(kick - 2u);
             VuVtx b = vu_rec_vertex(kick - 1u);
             VuVtx c = vu_rec_vertex(kick);
+#endif
             precise float z = o.pos.z + vu_later_bias(a, b, c) * g_z.x * o.pos.w;
             o.pos.z = z;
         }
     }
     // the planes hold where vu_attr_planes makes them
     uint planes = exact & (g_vp.x != 0.0 ? 1u : 0u);
+#if ICO_VU_FLAT0
+    // a0 .. r are flat (nointerpolation): the rasteriser takes them from the
+    // triangle's provoking vertex, its first index value, corner 0 in every
+    // list the replay draws (rd_mesh.c batchIndices, rd_replay_vu.c
+    // vuRunWrite and the grids' lists: kick * 4 + 0, + 1, + 2 in that
+    // order), on every backend (Vulkan's first-vertex mode, the default;
+    // Direct3D's first vertex; OpenGL's glProvokingVertex(
+    // GL_FIRST_VERTEX_CONVENTION), rhi/gl/gl_device.c gl_defaults).  Corners
+    // 1 and 2 leave them as vu_out_init made them, nothing reads them: their
+    // five loads are skipped.  Every interpolated output and the position
+    // are computed as before at every corner
+    planes &= corner == 0u ? 1u : 0u;
+#endif
     if (planes != 0u) {
         o = vu_rec_planes(o, a0, vu_tri.x + kick, vu_tri.y + kick);
     }

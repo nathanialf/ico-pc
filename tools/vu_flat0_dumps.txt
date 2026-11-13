@@ -1,0 +1,26 @@
+# Dump list for rd_vu_flat0_ab (port/render/test/rd_vu_flat0_ab.cmake: the
+# main vertex shader's flat outputs at the provoking corner against every
+# corner computing them, byte for byte).  MACHINE-LOCAL: these are paths on
+# the maintainer's machine; the dumps themselves are never committed.  Where
+# /primary/dev/ico-dumps exists, a listed dump that is absent (or a glob
+# that matches nothing) fails the test; elsewhere (CI) it is skipped.
+# Each line: the profiles it is replayed under (comma-separated: corpus,
+# mali, pixel; rd_vu_flat0_ab.cmake says what each is), a space, the path.
+# Relative paths are relative to this file; '*' globs are allowed.
+#
+# the 2026-10-07 captures (rd_vustage_ab's list)
+corpus /primary/dev/ico-dumps/*.rddump
+# a Mac reporter's 16:9 frame, a device-loss frame, the deja vu 48:9 frame
+corpus /primary/dev/ico-pc/build-host/tmp/evidence-v079/102/frame-20261015-161933-v4251.rddump
+corpus /primary/dev/ico-pc/build-host/tmp/evidence-v079/95/loss-20261015-100428-lost.rddump
+corpus /primary/dev/ico-pc/build-host/tmp/issue-drafts/deja/frame-20261013-125037-v2227.rddump
+# issue 179's Mali-G52 (moto g24 power, v0.11.5): the three slow-scene
+# captures (stages 42, 43, 45) and the manual frame (stage 3)
+mali,corpus /primary/dev/ico-dumps/v0116-mali179/slow-20261112-195541.zip
+mali,corpus /primary/dev/ico-dumps/v0116-mali179/slow-20261112-195621.zip
+mali,corpus /primary/dev/ico-dumps/v0116-mali179/slow-20261112-195651.zip
+mali,corpus /primary/dev/ico-dumps/v0116-mali179/frame-20261112-195947-v17565.zip
+# the Pixel 10 Pro Fold's opening (tools/lamps_dumps.txt's: lamps, dark, sun)
+pixel /primary/dev/ico-dumps/v0115-opening/frame-20261112-110824-v746.zip
+pixel /primary/dev/ico-dumps/v0115-opening/frame-20261112-110838-v1545.zip
+pixel /primary/dev/ico-dumps/v0115-opening/frame-20261112-110852-v2278.zip

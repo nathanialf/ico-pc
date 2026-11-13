@@ -295,11 +295,23 @@ run() {
                 -P "$(winpath "$SRC/port/render/test/rd_vustage_ab.cmake")"
             log_has rd_vustage_ab_compared "$LOGS/rd_vustage_ab.log" \
                 "rd_vustage_ab: [1-9][0-9]* targets equal over 3 dumps at 2 settings" ""
+            # the main shader's flat outputs at the provoking corner against
+            # every corner computing them (ICO_RD_VU_FLAT0=0, the twins), byte
+            # for byte, merged and one draw a command (port/render/
+            # rd_vu_flat0.cmake rd_vu_flat0_ab_pixel runs the same on Vulkan)
+            printf 'corpus %s\n' rd_pixel_vu.rddump rd_pixel_vu36.rddump rd_pixel_frame.rddump \
+                > "$WORK/vu_flat0_dumps.txt"
+            run_test rd_vu_flat0_ab "$CMAKE_BIN" "-DTOOL=$W/rd_replay_tool.exe" \
+                "-DLIST=$(winpath "$WORK/vu_flat0_dumps.txt")" "-DOUT=$(winpath "$WORK/vu_flat0_ab")" \
+                -DBACKEND=d3d11 -P "$(winpath "$SRC/port/render/test/rd_vu_flat0_ab.cmake")"
+            log_has rd_vu_flat0_ab_compared "$LOGS/rd_vu_flat0_ab.log" \
+                "rd_vu_flat0_ab \(d3d11\): [1-9][0-9]* targets compared" ""
         else
             echo "ci_d3d11_warp: no cmake on PATH: the merge, fuse and pre-pass A/Bs cannot run"
-            NAMES+=("rd_vumerge_ab" "rd_vumerge_fallback" "rd_vufuse_ab" "rd_vustage_ab")
+            NAMES+=("rd_vumerge_ab" "rd_vumerge_fallback" "rd_vufuse_ab" "rd_vustage_ab"
+                "rd_vu_flat0_ab")
             RESULTS+=("FAILED (no cmake)" "FAILED (no cmake)" "FAILED (no cmake)"
-                "FAILED (no cmake)")
+                "FAILED (no cmake)" "FAILED (no cmake)")
             FAILED=1
         fi
     else

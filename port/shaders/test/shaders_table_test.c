@@ -135,6 +135,9 @@ static const char *const expectedPrepass[] = {
     "vu_particle_pre_vs",
     "vu_main_vs",
     "vu_particle_main_vs",
+    /* vu_main_vs's twin with every corner computing the flat outputs
+     * (ICO_VU_FLAT0=0: the tests' A/B, port/render/rd_vu_flat0.c) */
+    "vu_all_main_vs",
 };
 
 /* the pre-pass's batch builds (ICO_VU_PRE_BATCH, vu_common.hlsli: the
@@ -194,7 +197,8 @@ static unsigned computeCount;
 /* the draw merge's builds (ICO_VU_MERGE, vu_common.hlsli: the mesh and grid
  * programs' entries, both variants, and vu_main_vs reading every draw's
  * VuCB and VuBoneCB from the ring at t5 for a draw of many; rd_replay_vu.c
- * vuDraw, g_rd.vuMerge) */
+ * vuDraw, g_rd.vuMerge), and vu_merge_main_vs's ICO_VU_FLAT0=0 twin (the
+ * tests' A/B, port/render/rd_vu_flat0.c) */
 static const char *const expectedMerge[] = {
     "vu_prelit_merge_vs",         "vu_lit_merge_vs",
     "vu_lit_spec_merge_vs",       "vu_reflect_merge_vs",
@@ -203,7 +207,7 @@ static const char *const expectedMerge[] = {
     "vu_lit_merge_plain_vs",      "vu_lit_spec_merge_plain_vs",
     "vu_reflect_merge_plain_vs",  "vu_grid_merge_plain_vs",
     "vu_grid_lit_merge_plain_vs", "vu_grid_spec_merge_plain_vs",
-    "vu_merge_main_vs",
+    "vu_merge_main_vs",           "vu_merge_all_main_vs",
 };
 
 /* entries the record path retired: the triangle stage of the vertex

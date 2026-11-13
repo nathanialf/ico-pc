@@ -258,6 +258,15 @@ foreach(_v prelit:prelit lit:lit lit_spec:lit reflect:lit grid:grid grid_lit:gri
                    DEFINES ICO_VU_MERGE=1 ICO_VU_PLAIN=1)
 endforeach()
 ico_add_shader(vu_merge_main_vs vu_tri.hlsl vu_main_vs vertex DEFINES ICO_VU_MERGE=1)
+# The main shader's twins before its flat outputs moved to the provoking
+# corner (vu_all_main_vs, vu_merge_all_main_vs)
+# vu_main_vs and vu_merge_main_vs with ICO_VU_FLAT0=0 (vu_tri.hlsl): every
+# corner computing the planes, as before v0.11.6; made only under the tests'
+# ICO_RD_VU_FLAT0=0 (port/render/rd_vu_flat0.c, the A/B rd_vu_flat0_ab); no id
+# in the tables
+ico_add_shader(vu_all_main_vs vu_tri.hlsl vu_main_vs vertex DEFINES ICO_VU_FLAT0=0)
+ico_add_shader(vu_merge_all_main_vs vu_tri.hlsl vu_main_vs vertex
+               DEFINES ICO_VU_MERGE=1 ICO_VU_FLAT0=0)
 # The 2D plane builds (sprite_*_ps_planes and their twins)
 # the screen-prim triangles with their planes (rd_screen_planes.c): the
 # planes build of sprite.hlsl (ICO_SPRITE_PLANES), whose SpriteVSOut and

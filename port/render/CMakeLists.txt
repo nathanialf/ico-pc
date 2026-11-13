@@ -3700,3 +3700,4 @@ if(ICO_RUN_TESTS AND ICO_RHI_OPENGL AND ICO_SHADERS_GLSL AND TARGET ico_rhi_open
 endif()
 # ---- OpenGL twins end ----
 include(rd_early.cmake)
+include(rd_vu_flat0.cmake) # the main shader's flat outputs at the provoking corner
