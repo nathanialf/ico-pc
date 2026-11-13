@@ -231,9 +231,11 @@ static void asks_more(long rssKb, long availKb, long totalKb, bool haveDev, doub
 {
     static double s_some = -1.0;
     static uint32_t s_gen;
-    static double ext[14];
+    static double ext[16];
     static bool s_have;
-    char buf[1024];
+    /* /proc/self/status reaches VmSwap past 1 KB on Android (its Groups
+       line alone can be long) */
+    char buf[4096];
     double some = 0.0, full = 0.0;
     const int n = read_small("/proc/pressure/memory", buf, sizeof buf);
     if (n > 0 && stall_pressure_parse(buf, (size_t)n, &some, &full)) {
@@ -244,10 +246,13 @@ static void asks_more(long rssKb, long availKb, long totalKb, bool haveDev, doub
         const double pv[4] = {0.0, 0.0, -1.0, (double)(n < 0 ? n : -EINVAL)};
         sys_cell_put(&s_pressureCell, atMs, 0.0, pv, 4);
     }
-    long anon = -1, file = -1, shmem = -1;
+    long anon = -1, file = -1, shmem = -1, swap = -1;
     const int m = read_small("/proc/self/status", buf, sizeof buf);
     if (m <= 0 || !stall_status_parse(buf, (size_t)m, &anon, &file, &shmem)) {
         anon = file = shmem = -1;
+    }
+    if (m <= 0 || !stall_status_swap(buf, (size_t)m, &swap)) {
+        swap = -1;
     }
     const struct mallinfo mi = mallinfo(); /* bionic: size_t fields */
     const uint32_t gen = __atomic_load_n(&s_memBlockGen, __ATOMIC_ACQUIRE);
@@ -264,6 +269,7 @@ static void asks_more(long rssKb, long availKb, long totalKb, bool haveDev, doub
             ext[2 + 2 * i] = ext[3 + 2 * i] = now[1 + i];
         }
         ext[10] = ext[11] = 0.0;
+        ext[14] = ext[15] = (double)swap;
     }
     if (now[0] >= 0.0 && (ext[0] < 0.0 || now[0] < ext[0])) {
         ext[0] = now[0];
@@ -280,7 +286,11 @@ static void asks_more(long rssKb, long availKb, long totalKb, bool haveDev, doub
     ext[11] += 1.0;
     ext[12] = (double)mi.uordblks / 1048576.0;
     ext[13] = (double)mi.hblkhd / 1048576.0;
-    sys_cell_put(&s_memBlockCell, atMs, 0.0, ext, 14);
+    if (swap >= 0) {
+        ext[14] = ext[14] < 0.0 || (double)swap < ext[14] ? (double)swap : ext[14];
+        ext[15] = (double)swap > ext[15] ? (double)swap : ext[15];
+    }
+    sys_cell_put(&s_memBlockCell, atMs, 0.0, ext, 16);
 }
 
 static void asks_tick(void)
@@ -343,9 +353,9 @@ static ThermalState thermal_now(const char **why, double *ageMs)
 
 bool window_stall_memory_block(WindowMemBlock *b)
 {
-    double v[14], at;
+    double v[16], at;
     memset(b, 0, sizeof(*b));
-    if (!s_asksOn || sys_cell_get(&s_memBlockCell, v, 14, &at, NULL) != 14) {
+    if (!s_asksOn || sys_cell_get(&s_memBlockCell, v, 16, &at, NULL) != 16) {
         return false;
     }
     __atomic_fetch_add(&s_memBlockGen, 1u, __ATOMIC_RELEASE); /* the next block from here */
@@ -359,6 +369,8 @@ bool window_stall_memory_block(WindowMemBlock *b)
     b->reads = (unsigned)v[11];
     b->heapMb = v[12];
     b->mappedMb = v[13];
+    b->swapLo = v[14] >= 0.0 ? (long)(v[14] / 1024.0) : -1;
+    b->swapHi = v[15] >= 0.0 ? (long)(v[15] / 1024.0) : -1;
     return true;
 }
 

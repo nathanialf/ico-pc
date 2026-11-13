@@ -188,6 +188,14 @@ int main(void)
     CHECK(stall_status_parse(st, strlen(st), &a, &f, &s) && a == 412000 && f == 420000 &&
           s == 7000);
     CHECK(!stall_status_parse("VmRSS: 1 kB\n", 12, &a, &f, &s));
+    /* VmSwap: the pages moved out to swap (zram), past RssShmem */
+    {
+        const char *sw = "VmRSS:\t  839000 kB\nRssAnon:\t  412000 kB\nVmPTE:\t 1200 kB\n"
+                         "VmSwap:\t  301234 kB\nHugetlbPages:\t 0 kB\n";
+        long w = -1;
+        CHECK(stall_status_swap(sw, strlen(sw), &w) && w == 301234);
+        CHECK(!stall_status_swap(st, strlen(st), &w));
+    }
 
     /* the driver's thread names */
     CHECK(stall_driver_name("mali-cmar-backe"));

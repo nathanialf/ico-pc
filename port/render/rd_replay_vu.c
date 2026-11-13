@@ -195,12 +195,18 @@ static bool recEnsure(uint32_t rows)
         }
     }
     if (s_recRows < rows) {
+        const uint32_t before = s_recRows;
         s_recRows = rows;
         /* made at start-up, or grown in play (past what start-up made) */
         char when[96] = "";
         if (s_recEarlyNow) {
             snprintf(when, sizeof(when), "; made at start-up, before play");
-        } else if (s_recEarlyRows != 0u) {
+        } else if (before != 0u) {
+            /* a record that existed grown (not the first, the self-test's
+               16 rows): counted for the memory line and the attempt ledger */
+            rd__vu_rec_grew();
+        }
+        if (!s_recEarlyNow && s_recEarlyRows != 0u) {
             snprintf(when, sizeof(when), "; grown in play past the %u rows made at start-up",
                      s_recEarlyRows);
         }
@@ -2849,6 +2855,19 @@ static void vuPrepassRun(const RdFrame *f, int keep)
         nv = v;
         nt = t;
         taken = i + 1u;
+    }
+    /* the memory line's figures (rd_vu_rec_early.h rd_vu_record_memory):
+       this picture's need, the rows held as it begins, the upload rings */
+    {
+        uint64_t ring = 0;
+        for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
+            ring += g_rd.ringCap[i];
+        }
+        rd__vu_rec_note(vuRows(nv) + vuRows(nt), s_recRows,
+                        s_recRows ? recBytes(s_recRows) * RHI_FRAMES_IN_FLIGHT +
+                                        (rd__vu_record_buffered() ? 0u : recBytes(s_recTexRows))
+                                  : 0u,
+                        ring);
     }
     if (nv == 0) {
         return;

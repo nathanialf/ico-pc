@@ -315,6 +315,11 @@ bool stall_status_parse(const char *buf, size_t len, long *anonKb, long *fileKb,
            kbOf(buf, len, "RssShmem:", shmemKb);
 }
 
+bool stall_status_swap(const char *buf, size_t len, long *swapKb)
+{
+    return kbOf(buf, len, "VmSwap:", swapKb);
+}
+
 bool stall_driver_name(const char *name)
 {
     static const char *const k[] = {"mali", "kgsl", "adreno", "qgl", "pvr", "img", "gpu", "tu_"};
