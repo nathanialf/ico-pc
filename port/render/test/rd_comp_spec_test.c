@@ -77,6 +77,10 @@ static void testForms(void)
             const RhiFormat depth = dz ? RHI_FMT_D32F_S8 : RHI_FMT_UNKNOWN;
             RdStateBlock c = compositeState(false);
             const RdDrawPass p = planned(&c, sp, depth);
+            /* the planner leaves the alpha test out of the key (atst ALWAYS:
+             * the test is DrawCB.mode[2]); a form that asked for the
+             * state's ATST GREATER took no composite on any device */
+            CHECK(p.key.gs.atst == RD_ATST_ALWAYS && p.key.gs.blend == RD_BLEND_LERP_AS);
             CHECK(rd_comp_spec_key_form(&p.key) == RD_COMP_SPEC_FORM_COMPOSITE);
             /* the planner's flags with the texture's (rd_replay.c fillDrawCB:
              * TEXTURED, MODULATE, TCC) */
