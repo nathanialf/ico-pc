@@ -1930,7 +1930,7 @@ counters in the hot path.
   the worker's block of N bytes: copied into a block grown here instead` (the old way, once),
   `window: slow-scene dump: not written: the worker could not make a block of N bytes`, and
   `window: slow-scene dump: not written: no frame of the scene could be copied in 10000 ms (the
-  worker's block of N bytes given up)`. The skin check's capture is unchanged.
+  worker's block of N bytes given up)`, each ending `; not counted, the next slow block arms one again` (the dump is not counted as made, the dump before's work and stage restored, `window_dump_auto_slow_lost`; at most three such re-arms a run, after which `; counted (the run's re-arms used up)`), and `... not written: frame F could not be copied; ...` when the copy into a block grown here failed too. The skin check's capture is unchanged.
 - **The logging's own cost** (`port/platform/log_cost.c`, `window_lines.c`, the log thread's
   counts in `port/platform/android/host_android.c`), once a 10 s block:
 

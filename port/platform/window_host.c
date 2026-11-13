@@ -4722,6 +4722,12 @@ static void slow_scene_check(void)
     RdReplayWork w;
 
     memset(&b, 0, sizeof(b));
+    if (window_dump_auto_slow_lost(&b)) { /* a two-step dump given up: not made */
+        s_slowCount = b.count;
+        s_slowLastWorkMs = b.lastWorkMs;
+        s_slowLastStage = b.lastStage;
+        memset(&b, 0, sizeof(b));
+    }
     b.dominant = s_blockKind;
     b.window = s_window != NULL;
     b.movie = mpegPlay != 0;

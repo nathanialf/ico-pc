@@ -98,6 +98,37 @@ static struct {
     char stamp[32];
 } s_slow;
 
+/* A second step given up (window_dump_auto_slow_lost): the block's figures
+   as the first step had them (its count and the dump before's work and
+   stage), so window_host.c counts the dump as not made and the next slow
+   block can arm one again; at most SLOW_SCENE_DUMPS re-arms a run (a
+   device whose every block gives up does not try forever) */
+static int s_lost, s_rearms;
+static SlowSceneBlock s_lostB;
+
+static void slow_given_up(const char *why)
+{
+    const int again = s_rearms < SLOW_SCENE_DUMPS;
+    if (again) {
+        s_rearms++;
+        s_lost = 1;
+        s_lostB = s_slow.b;
+    }
+    fprintf(stderr, "window: slow-scene dump: not written: %s; %s\n", why,
+            again ? "not counted, the next slow block arms one again"
+                  : "counted (the run's re-arms used up)");
+}
+
+int window_dump_auto_slow_lost(SlowSceneBlock *b)
+{
+    if (!s_lost) {
+        return 0;
+    }
+    s_lost = 0;
+    *b = s_lostB;
+    return 1;
+}
+
 /* the slow-scene job's rest and its hand-over: 1 handed over, 0 dropped
    (its blocks freed) */
 static int slow_submit(IcoDumpJob *j, const SlowSceneBlock *b, uint32_t got, double work,
@@ -296,10 +327,12 @@ static void slow_pump(void)
         ico_dump_auto_unprepare(s_slow.block); /* the block taken or asked for, freed */
         s_slow.block = NULL;
         s_slow.on = 0;
-        fprintf(stderr,
-                "window: slow-scene dump: not written: no frame of the scene could be copied in "
-                "%.0f ms (the worker's block of %zu bytes given up)\n",
-                SLOW_PREP_LIMIT_MS, s_slow.asked);
+        char why[160];
+        snprintf(why, sizeof(why),
+                 "no frame of the scene could be copied in %.0f ms (the worker's block of %zu "
+                 "bytes given up)",
+                 SLOW_PREP_LIMIT_MS, s_slow.asked);
+        slow_given_up(why);
         return;
     }
     if (s_slow.block == NULL) {
@@ -310,10 +343,10 @@ static void slow_pump(void)
         }
         if (r < 0) {
             s_slow.on = 0;
-            fprintf(stderr,
-                    "window: slow-scene dump: not written: the worker could not make a block of "
-                    "%zu bytes\n",
-                    s_slow.asked);
+            char why[96];
+            snprintf(why, sizeof(why), "the worker could not make a block of %zu bytes",
+                     s_slow.asked);
+            slow_given_up(why);
             return;
         }
     }
@@ -368,7 +401,9 @@ static void slow_pump(void)
                 (unsigned)frame,
                 into == RD_DUMP_INTO_SMALL ? "had grown past" : "could not be written into", size);
         if (!rd_dump_retained_frame_mem(frame, &j->dump, &j->dumpLen, &got)) {
-            fprintf(stderr, "window: slow scene: frame %u not written\n", (unsigned)frame);
+            char why[64];
+            snprintf(why, sizeof(why), "frame %u could not be copied", (unsigned)frame);
+            slow_given_up(why);
             return;
         }
         j->copyMs = ms_since(t1) - drain;

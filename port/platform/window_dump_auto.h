@@ -24,6 +24,15 @@ void window_dump_auto_skin_pump(void);
    frame could not be taken (said in the log). */
 int window_dump_auto_slow(uint32_t frame, const SlowSceneBlock *b, double work, double meanWork);
 
+/* A slow-scene dump whose second step (every vsync, window_dump_auto_report)
+   was given up after window_dump_auto_slow returned 1 (no frame copied in
+   the 10 s, no block from the worker, the copy failed): 1 once, with *b the
+   block's figures as the first step had them (count, lastWorkMs, lastStage:
+   the values before that dump), so the caller counts it as not made and
+   the next slow block can arm one again (at most SLOW_SCENE_DUMPS times a
+   run, the line says which); else 0. */
+int window_dump_auto_slow_lost(SlowSceneBlock *b);
+
 /* Every vsync: the worker's finished job, if any, as its log lines (the
    game thread's cost, the worker's) and, for a slow-scene zip, noted for the
    crash report. */
