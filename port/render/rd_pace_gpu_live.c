@@ -54,6 +54,7 @@ static bool s_clock;       /* a span and a first submit came back this run */
 static uint32_t s_noClock; /* measurements back without one before one did */
 static int s_state = -1;   /* the row as last decided: -1 none, 0 paced, 1 on, 2 no clock */
 static uint32_t s_changes; /* for the start line's limit */
+static double s_predEnd;   /* the last placement's predicted end (rd_pace_gpu_pred_end) */
 
 static void drain(void)
 {
@@ -101,6 +102,7 @@ double rd_pace_gpu_shift(double handMs, uint32_t frame, double *wouldMs)
     decide(true);
     RdPaceGpuPlace p;
     rd_pace_gpu_model_place(&s_m, handMs, frame, &p);
+    s_predEnd = p.predEndMs;
     rd_pace_gpu_tally(&p);
     if (p.how == RD_PACE_GPU_PLACED) {
         ico_attempt_fire(ICO_ATT_PACE_GPU, 1u);
@@ -112,8 +114,25 @@ double rd_pace_gpu_shift(double handMs, uint32_t frame, double *wouldMs)
     return rd_pace_gpu_on() ? p.shiftMs : 0.0;
 }
 
+double rd_pace_gpu_pred_end(void)
+{
+    return s_predEnd;
+}
+
+bool rd_pace_gpu_figures(double *gMs, double *dMs, double *lastEndMs)
+{
+    drain();
+    return rd_pace_gpu_model_figures(&s_m, gMs, dMs, lastEndMs);
+}
+
+int rd_pace_gpu_clock_state(void)
+{
+    return s_clock ? 1 : (s_noClock >= RD_PACE_GPU_NO_CLOCK ? 0 : -1);
+}
+
 void rd_pace_gpu_paced(void)
 {
+    s_predEnd = 0.0;
     /* the measurements dropped unread: the model starts again when the
        pictures are made as fast as the GPU allows again */
     __atomic_store_n(&s_tail, __atomic_load_n(&s_head, __ATOMIC_ACQUIRE), __ATOMIC_RELEASE);

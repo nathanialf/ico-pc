@@ -1166,11 +1166,15 @@ void rd__perf_begin(const RdFrame *f, int keep, bool present)
         /* its rules' alphas for the on-glass line (rd_pace_rules.h) */
         RdRuleNote rn;
         rd_pace_rules_take(&rn);
+        _Static_assert(sizeof g_rdPerf.ruleAlpha / sizeof g_rdPerf.ruleAlpha[0] == RD_RULE_COUNT,
+                       "a record's alpha for every rule");
         for (int i = 0; i < RD_RULE_COUNT; i++) {
             g_rdPerf.ruleAlpha[i] = rn.alpha[i];
         }
         g_rdPerf.rule = rn.rule;
         g_rdPerf.ruleTickMs = rn.tickMs;
+        g_rdPerf.screenEndMs = rn.screenEndMs;
+        g_rdPerf.screenAtMs = rn.screenAtMs;
     }
     g_rdPerf.firstOfTick = s_first;
     g_rdPerf.reshown = s_reshownNext;
@@ -1531,12 +1535,14 @@ void rd__perf_collect_gpu(void)
         const RdGlassPic gp = {r->glassId,
                                r->frame,
                                r->alpha,
-                               {r->ruleAlpha[0], r->ruleAlpha[1], r->ruleAlpha[2]},
+                               {r->ruleAlpha[0], r->ruleAlpha[1], r->ruleAlpha[2], r->ruleAlpha[3]},
                                r->rule,
                                r->ruleTickMs,
                                r->evenHandMs,
                                endMs,
-                               r->gpuDoneValid == 1};
+                               r->gpuDoneValid == 1,
+                               r->screenEndMs,
+                               r->screenAtMs};
         rd_glass_picture(&gp);
     }
     /* no stamps: the next timed record's gap is measured across this one

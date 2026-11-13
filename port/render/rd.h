@@ -2863,12 +2863,16 @@ typedef struct RdPerfRecord {
      * 0 and 0 for one made where it was asked (rd_even.h) */
     double evenAskMs, evenHandMs;
     /* the on-glass line (rd_glass.h): the moment's alpha by each rule (the
-     * hand-over, the GPU's predicted end, the own timer: rd_pace_rules.h; -1
-     * not computed), the rule drawn (RD_RULE_CLOCK: paced), the tick, and
-     * the display-times id its present carried (rhi_present_glass; 0 none) */
-    float ruleAlpha[3];
+     * hand-over, the GPU's predicted end, the own timer, the screen's
+     * refresh: rd_pace_rules.h RD_RULE_COUNT; -1 not computed), the rule
+     * drawn (RD_RULE_CLOCK: paced), the tick, the screen's prediction (the
+     * GPU end it came from, rd's clock, and the refresh predicted, the
+     * display's clock: rd_pace_screen.h; 0 none), and the display-times id
+     * its present carried (rhi_present_glass; 0 none) */
+    float ruleAlpha[4];
     uint8_t rule;
     double ruleTickMs;
+    double screenEndMs, screenAtMs;
     uint32_t glassId;
     /* the replay changed effect more often than there were timestamps:
        the later changes were not timed apart (their time stayed with the
@@ -3530,6 +3534,12 @@ void rd_even_line(double refreshMs);
  * drain's running mean, not the present clock's (rd_thread.c presentRebase,
  * rd_rebase.h; docs/port/DISPLAY.md "The alpha") */
 void rd_present_as_made(bool on);
+/* the even cadence (rd_pace_even.h; off by default, ICO_RD_PACE_EVEN=1): with
+ * pictures as made, how long the window's pacer holds the next hand-over
+ * (ms; 0 none), untilDeadlineMs the time left before the game's next step,
+ * tickMs the game's frame; the window's thread (window_present.c
+ * window_present_pace, the poster's) */
+double rd_present_even_hold(double untilDeadlineMs, double tickMs);
 /* the plan's switch: on, ICO_RD_GLOW_LIGHT=0 off (the tests' A/B, no config
  * key); rd__glow_light_force sets it (-1 the environment's) and forgets the
  * plan's off and the plan frame before */

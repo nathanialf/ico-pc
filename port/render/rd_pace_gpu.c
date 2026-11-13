@@ -160,6 +160,19 @@ void rd_pace_gpu_model_note(RdPaceGpu *m, const RdPaceGpuSample *s, RdPaceGpuNot
     }
 }
 
+bool rd_pace_gpu_model_figures(const RdPaceGpu *m, double *gMs, double *dMs, double *lastEndMs)
+{
+    *gMs = *dMs = *lastEndMs = 0.0;
+    if (m->spanN == 0u || m->leadN == 0u) {
+        return false;
+    }
+    *gMs = rd_pace_gpu_median(m->span, m->spanN);
+    *dMs = rd_pace_gpu_median(m->lead, m->leadN);
+    *lastEndMs =
+        m->ringN != 0u ? m->ring[(m->ringAt + RD_PACE_GPU_RING - 1u) % RD_PACE_GPU_RING].end : 0.0;
+    return true;
+}
+
 void rd_pace_gpu_model_place(RdPaceGpu *m, double handMs, uint32_t frame, RdPaceGpuPlace *out)
 {
     memset(out, 0, sizeof(*out));

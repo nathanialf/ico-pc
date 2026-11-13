@@ -166,6 +166,10 @@ void rd_pace_gpu_model_note(RdPaceGpu *m, const RdPaceGpuSample *s, RdPaceGpuNot
 /* the picture handed over at handMs of frame `frame` (the newer frame's
    number, rd_rebase_raw's): its shift (out->shiftMs) */
 void rd_pace_gpu_model_place(RdPaceGpu *m, double handMs, uint32_t frame, RdPaceGpuPlace *out);
+/* the model's figures for a picture not yet handed over (the even cadence,
+   rd_pace_even.h): G and D (their medians) and the last picture's end as
+   predicted or measured; false (all 0) before a span and a lead are known */
+bool rd_pace_gpu_model_figures(const RdPaceGpu *m, double *gMs, double *dMs, double *lastEndMs);
 /* the p-th share's sample of n (rank ceil(p * n), at least 1; n at most
    RD_PACE_GPU_LAT; 0 for none) and the median (the share 0.5: the middle
    sample of an odd n) */
@@ -189,6 +193,17 @@ bool rd_pace_gpu_on(void);
    present as made that the clock did not time (or ICO_RD_S2_LEGACY=1) is
    not re-based and leaves the model as it is */
 void rd_pace_gpu_paced(void);
+/* the poster's thread: the GPU end the last rd_pace_gpu_shift predicted for
+   its picture (RdPaceGpuPlace.predEndMs: 0 before a span and a lead are
+   known, and after rd_pace_gpu_paced), for the screen's rule
+   (rd_pace_screen.h) */
+double rd_pace_gpu_pred_end(void);
+/* the poster's thread: 1 a GPU span and first submit came back this run, 0
+   RD_PACE_GPU_NO_CLOCK measurements came back without one first, -1 not
+   known yet (the ledger's rows) */
+int rd_pace_gpu_clock_state(void);
+/* the poster's thread: rd_pace_gpu_model_figures of the live model */
+bool rd_pace_gpu_figures(double *gMs, double *dMs, double *lastEndMs);
 
 /* the 10 s sums, taken (and emptied) by rd_pace_gpu_take */
 #define RD_PACE_GPU_SHIFT_BIN_MS 0.5

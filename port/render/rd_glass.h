@@ -14,7 +14,9 @@
  * 1.00 is real time.  Per rule: the drawn one (whichever it is, the present
  * clock's in paced modes) and, with pictures as made, the three computed at
  * every picture (rd_pace_rules.h: the hand-over, the GPU's predicted end,
- * the own timer), so one run says which would be evenest on the glass;
+ * the own timer, the screen's refresh), so one run says which would be
+ * evenest on the glass, and the screen's prediction scored against the
+ * refresh each picture was shown at (hits, one late, one early);
  * beside each, the same step against the hand-overs and against the GPU's
  * ends.  No clock is read: the record's stamps and the display's times. */
 #ifndef ICO_RD_GLASS_H
@@ -30,23 +32,30 @@ typedef struct RdGlassPic {
     uint32_t id;     /* its present's display-times id (0: none) */
     uint32_t frame;  /* the newer frame's number */
     float drawn;     /* the alpha drawn (RdPerfRecord.alpha; < 0: not a present) */
-    float alpha[3];  /* by rule (RdPerfRecord.ruleAlpha; < 0 not computed) */
+    float alpha[4];  /* by rule (RdPerfRecord.ruleAlpha; < 0 not computed) */
     uint8_t rule;    /* the rule drawn (rd_pace_rules.h, RD_RULE_CLOCK: paced) */
     double tickMs;   /* the tick (0: not known: the content's ms from 33.3667) */
     double handMs;   /* the hand-over (0 none) */
     double gpuEndMs; /* the GPU's end (0 none) */
     bool gpuExact;
+    /* the screen's prediction (rd_pace_screen.h; RdPerfRecord.screenEndMs,
+       screenAtMs): the GPU end predicted at the hand-over (rd's clock) and
+       the refresh predicted (the display's clock); 0 none */
+    double screenEndMs, screenAtMs;
 } RdGlassPic;
 
-/* the measures: the drawn rule, then the three computed */
+/* the measures: the drawn rule, then the four computed (rd_pace_rules.h
+   RD_RULE_COUNT, asserted in rd_glass.c) */
 #define RD_GLASS_DRAWN 0
-#define RD_GLASS_RULES 4
+#define RD_GLASS_RULES 5
 /* the display's gaps in refreshes: under half, 1, 2, 3, 4 or more */
 #define RD_GLASS_CLASSES 5
 /* a pair further apart than this (or a frame number back, or on by more
    than 8) is not a step (a pause, a load) */
 #define RD_GLASS_GAP_MAX_MS 1000.0
 #define RD_GLASS_FRAME_JUMP 8
+/* a presentMargin further than this from 0 either way is not averaged */
+#define RD_GLASS_MARGIN_MAX_NS 1000000000ll
 /* ratios kept in ten-thousandths */
 #define RD_GLASS_UNITS 10000.0
 
@@ -65,6 +74,21 @@ typedef struct RdGlassWindow {
     uint8_t drawnRule;  /* at the last pair */
     RdGlassStat glass[RD_GLASS_RULES][RD_GLASS_CLASSES + 1]; /* [.][CLASSES]: every gap */
     RdGlassStat hand[RD_GLASS_RULES], gpu[RD_GLASS_RULES];
+    /* the screen's prediction against the display (rd_pace_screen.h): the
+       shown pictures with a refresh predicted, on it, one refresh late, one
+       early, further; the display's own figures for the shown pictures
+       (VkPastPresentationTimingGOOGLE) over figuresN: presentMargin read
+       signed (the field is unsigned; v0.11.6-rc5's phone, asked no desired
+       time, gave values that wrapped below 0, and their unsigned sum
+       printed -7373559260669.68 ms) and summed (us) over marginN where
+       within RD_GLASS_MARGIN_MAX_NS either way, the rest counted in
+       marginWild (their signed sum in wildSumMs), and those whose
+       earliestPresentTime was half a refresh or more before the time shown
+       (by earlySumUs in all) */
+    uint64_t scored, hit, late, early, further;
+    uint64_t figuresN, marginN, marginWild, earlyN;
+    int64_t marginSumUs, earlySumUs;
+    double wildSumMs;
 } RdGlassWindow;
 
 /* pure: one pair of consecutive shown pictures (a shown at aNs, b at bNs on
@@ -83,7 +107,8 @@ void rd_glass_picture(const RdGlassPic *p);
    a display time by id, in either order; a pair is made when both of a
    picture are in, in the presents' order */
 void rd_glass_join(const RdGlassPic *p);
-void rd_glass_time(uint32_t id, uint64_t actualNs, uint64_t refreshNs);
+void rd_glass_time(uint32_t id, uint64_t actualNs, uint64_t refreshNs, uint64_t earliestNs,
+                   uint64_t marginNs);
 /* the 10 s sums taken (the window's thread) and the join emptied (tests) */
 void rd_glass_take(RdGlassWindow *w);
 void rd_glass_reset(void);

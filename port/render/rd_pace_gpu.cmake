@@ -5,7 +5,8 @@
 # rd_even.cmake (port/render/CMakeLists.txt is near the 256 KiB cap,
 # tools/check_no_rom.sh).
 target_sources(ico_render PRIVATE rd_pace_gpu.c rd_pace_gpu_live.c rd_pace_rules.c
-                                  rd_as_made_timer.c rd_glass.c rd_glass_live.c)
+                                  rd_as_made_timer.c rd_glass.c rd_glass_live.c rd_pace_screen.c
+                                  rd_pace_screen_live.c rd_pace_even.c rd_pace_even_live.c)
 
 # rd_pace_gpu_test: CPU only: the model's edges (before its measurements,
 # an empty queue and one picture a tick at 0 to the bit, the queue's wait less
@@ -20,7 +21,8 @@ target_sources(ico_render PRIVATE rd_pace_gpu.c rd_pace_gpu_live.c rd_pace_rules
 # and the evenness clause word for word); off by default: presentRebase's
 # path with the model and the timer computed gives v0.11.5's value to the bit
 add_executable(rd_pace_gpu_test test/rd_pace_gpu_test.c rd_pace_gpu.c rd_pace_gpu_live.c
-                                rd_rebase.c rd_pace_rules.c rd_as_made_timer.c)
+                                rd_rebase.c rd_pace_rules.c rd_as_made_timer.c rd_pace_screen.c
+                                rd_pace_screen_live.c rd_pace_even.c rd_pace_even_live.c)
 target_include_directories(rd_pace_gpu_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
                                                      "${CMAKE_SOURCE_DIR}/port/rhi")
 target_compile_options(rd_pace_gpu_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
@@ -61,8 +63,11 @@ endif()
 # and the GPU's ends (exact at both only), the shares; not steps (a frame
 # back or on by more than 8, a gap not positive or over a second); the join
 # of pictures and display times by id in either order with a present never
-# shown; the line word for word
-add_executable(rd_glass_test test/rd_glass_test.c rd_glass.c)
+# shown; the line word for word; the screen's rule as a fifth measure, its
+# prediction scored at the join (on it, one late, one early, further) and
+# sent to its model's ring, the display's own figures (presentMargin,
+# earliestPresentTime)
+add_executable(rd_glass_test test/rd_glass_test.c rd_glass.c rd_pace_screen.c rd_pace_even.c)
 target_include_directories(rd_glass_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(rd_glass_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 if(NOT WIN32)
@@ -70,4 +75,34 @@ if(NOT WIN32)
 endif()
 if(ICO_RUN_TESTS)
     add_test(NAME rd_glass COMMAND rd_glass_test)
+endif()
+
+# rd_pace_screen_test: CPU only: the screen's refresh (rd_pace_screen.c,
+# rd_pace_screen_live.c): the expected time on the glass, the latch's and
+# the grid's fits (the period measured, not the one reported; off one grid
+# refused), the score; the placement (the chain's first picture at the value
+# drawn otherwise to the bit, the lag's step bounded, never back, the holds,
+# a restart, every fall-back to the bit); 10 s simulations of v0.11.6-rc4's
+# regimes on the owner's phone (play at one and two refreshes, at two levels
+# of the prediction's error, the opening at two and three, kept frames, one
+# a tick, an exact prediction) with a display model (a 120 Hz grid reported
+# as 8.35 ms, a latch lead with a jitter, the clocks' offset, mailbox, the
+# times back three refreshes late): the content's speed on the glass for the
+# hand-over, the GPU end, the own timer and the screen over the same
+# pictures, the score, the holds, the content's rate over the glass; the
+# fall-backs over a run (no display times, times that stop, a display at
+# 90 Hz); the start line, the clause and the ledger's row
+add_executable(rd_pace_screen_test test/rd_pace_screen_test.c rd_pace_screen.c
+                                   rd_pace_screen_live.c rd_pace_gpu.c rd_pace_gpu_live.c
+                                   rd_rebase.c rd_as_made_timer.c rd_pace_even.c
+                                   rd_pace_even_live.c)
+target_include_directories(rd_pace_screen_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+                                                        "${CMAKE_SOURCE_DIR}/port/rhi")
+target_compile_options(rd_pace_screen_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(rd_pace_screen_test PRIVATE ico_thread)
+if(NOT WIN32)
+    target_link_libraries(rd_pace_screen_test PRIVATE m)
+endif()
+if(ICO_RUN_TESTS)
+    add_test(NAME rd_pace_screen COMMAND rd_pace_screen_test)
 endif()

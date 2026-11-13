@@ -6,12 +6,13 @@
 # 256 KiB cap, tools/check_no_rom.sh).
 target_sources(ico_render PRIVATE rd_even.c rd_rebase.c)
 
-# rd_even_test (with rd_pace_gpu.c and rd_glass.c: the line's last clause, the on-glass line): CPU only: ten made-up presents (GPU ends a quarter of a ms
+# rd_even_test (with rd_pace_gpu.c, rd_glass.c, rd_pace_screen.c and rd_pace_even.c: the line's last clause, the on-glass line and its screen and even-cadence clauses): CPU only: ten made-up presents (GPU ends a quarter of a ms
 # bin's middle apart, 1 to 5 refreshes and under half of one, one a bound,
 # one with none, a chain restart) and five clock notes folded, the line word
 # for word on an 8 ms grid; taken twice: no line; one more present with the
 # refresh unknown; the hand-over's stamps taken once
-add_executable(rd_even_test test/rd_even_test.c rd_even.c rd_pace_gpu.c rd_glass.c)
+add_executable(rd_even_test test/rd_even_test.c rd_even.c rd_pace_gpu.c rd_glass.c
+                            rd_pace_screen.c rd_pace_even.c)
 target_include_directories(rd_even_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(rd_even_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 if(NOT WIN32)

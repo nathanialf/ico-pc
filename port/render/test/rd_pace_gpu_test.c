@@ -801,7 +801,8 @@ static void testLive(void)
    v0.11.5) to the bit, the note's drawn rule the hand-over's */
 static void testOffBitIdentical(void)
 {
-    if (getenv("ICO_RD_PACE_GPU") != NULL || getenv("ICO_RD_AS_MADE_TIMER") != NULL) {
+    if (getenv("ICO_RD_PACE_GPU") != NULL || getenv("ICO_RD_AS_MADE_TIMER") != NULL ||
+        getenv("ICO_RD_PACE_SCREEN") != NULL || getenv("ICO_RD_PACE_EVEN") != NULL) {
         printf(" off-by-default check skipped: a tests' switch is set\n");
         return;
     }
@@ -832,7 +833,7 @@ static void testOffBitIdentical(void)
             double r1 = rd_rebase_raw(&now, queue != 0.0 ? atAsk + queue / T : atAsk, T, drain, k,
                                       &sh1, &h1);
             RdRuleNote note;
-            r1 = rd_pace_rules_pick(r1, queue, would, ask - atAsk * T, T, hand, k, &note);
+            r1 = rd_pace_rules_pick(r1, queue, would, ask - atAsk * T, T, hand, k, false, &note);
             same += memcmp(&r0, &r1, sizeof r0) == 0 && note.rule == RD_RULE_HAND &&
                             note.alpha[RD_RULE_HAND] == rd_rebase_alpha(r0)
                         ? 1u

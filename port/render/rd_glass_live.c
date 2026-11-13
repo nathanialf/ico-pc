@@ -15,7 +15,7 @@ void rd_glass_picture(const RdGlassPic *p)
     do {
         n = rhi_present_glass(NULL, &refresh, t, 64);
         for (uint32_t i = 0; i < n; i++) {
-            rd_glass_time(t[i].id, t[i].actualNs, refresh);
+            rd_glass_time(t[i].id, t[i].actualNs, refresh, t[i].earliestNs, t[i].marginNs);
         }
     } while (n == 64);
     rd_glass_join(p);

@@ -1192,6 +1192,28 @@ void window_present_pace(int hz)
             SDL_DelayPrecise(wake - now);
             continue;
         }
+        /* the even cadence (rd.h rd_present_even_hold, rd_pace_even.h; off by
+           default, ICO_RD_PACE_EVEN=1): with pictures as made the hand-over
+           held until its picture's GPU end is due half a refresh before the
+           refresh it is aimed at; past this step's deadline the step ends
+           and the next one asks again */
+        if (asMade) {
+            const double holdMs = rd_present_even_hold(
+                now < s_deadline ? (double)(s_deadline - now) / 1e6 : 0.0, (double)tick / 1e6);
+
+            if (holdMs > 0.01) {
+                const Uint64 wake = now + (Uint64)(holdMs * 1e6);
+
+                if (wake >= s_deadline) {
+                    if (now < s_deadline) {
+                        SDL_DelayPrecise(s_deadline - now);
+                    }
+                    break;
+                }
+                SDL_DelayPrecise(wake - now);
+                continue;
+            }
+        }
         /* alpha from the present clock (the measured time smoothed
            to the presents' steady cadence) against the simulated time the
            frame closed; the raw measured time jittered with the step and
