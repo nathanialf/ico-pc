@@ -246,8 +246,8 @@ static struct {
     /* the VU vertex pre-pass's vertices, draws and the mesh and grid draws
        drawn the old way (rd.h RdPerfRecord.vuPre*) */
     uint64_t vuPreVerts, vuPreDraws, vuPreFallbacks;
-    uint64_t vuDraws, vuTris;    /* the VU draws and their triangles (rd.h RdPerfRecord) */
-    uint64_t twinDraws, twinInv; /* the skin check's twins' draws and invocations */
+    uint64_t vuDraws, vuTris, vuLeftOut; /* the VU draws, their triangles, left out (rd.h) */
+    uint64_t twinDraws, twinInv;         /* the skin check's twins' draws and invocations */
     /* the timed replays' (vertex invocations, GPU work ms) for the VU line's
        least-squares line (window_scene.h SceneVuFit, issue 179): vertex
        invocations against the GPU's work */
@@ -4918,6 +4918,7 @@ static void perf_drain(void)
         s_perf.vuPreVerts += r.vuPreVertices;
         s_perf.vuDraws += r.vuDraws;
         s_perf.vuTris += r.vuTris;
+        s_perf.vuLeftOut += r.vuTrisLeftOut;
         s_perf.twinDraws += r.skinTwinDraws;
         s_perf.twinInv += r.skinTwinInvocations;
         s_perf.vuPreDraws += r.vuPreDraws;
@@ -5051,10 +5052,10 @@ static void perf_log(void)
             (double)(cardTris - s_pres.cardTris) / steps, (cardMs - s_pres.cardMs) / steps);
     {
         /* the VU work of a replay: where the vertex shader's time goes */
-        char vu[160], fit[192], twins[96];
+        char vu[256], fit[192], twins[96];
 
         (void)window_scene_vu_text(vu, sizeof(vu), s_perf.vuDraws, s_perf.vuTris, s_perf.vuPreVerts,
-                                   b->n, rd_vu_prepass_on());
+                                   b->n, rd_vu_prepass_on(), s_perf.vuLeftOut);
         /* the skin check's own share (issue 123): its twins' draws */
         (void)window_scene_twins_text(twins, sizeof(twins), s_perf.twinDraws, s_perf.twinInv, b->n);
         /* and the GPU's work against the vertex invocations: what the vertex
@@ -5071,6 +5072,7 @@ static void perf_log(void)
                      "; pre-pass skipped %u frames under %u slots", (unsigned)skip, (unsigned)minS);
         }
         fprintf(stderr, "window: %s%s%s%s\n", vu, twins, fit, rec);
+        window_vu_compact_line(); /* the index compaction's block (window_lines.h) */
         window_log_cost_mark("the replays and VU lines");
     }
     {

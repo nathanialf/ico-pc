@@ -243,6 +243,14 @@ foreach(_v prelit:prelit lit:lit lit_spec:lit reflect:lit skin:skin skin_spec:sk
     ico_add_shader(vu_${_e}_batch_compute_pre_cs vu_${_f}.hlsl vu_${_e}_pre_cs compute
                    DEFINES ICO_VU_PRE_BATCH=1 ICO_VU_REC_COMPUTE=1)
 endforeach()
+# The index compaction's keep stage (vu_tri.hlsl vu_tri_keep_cs; port/render/
+# rd_vu_compact.c, docs/port/PIPELINES.md "The index compaction"): after the
+# compute record's pass T, a draw's index list written again into the
+# record's fourth plane with each triangle that provably draws nothing as a
+# clipped filler, one invocation a triangle; compute alone (no GLSL, as the
+# record's compute builds)
+ico_add_shader(vu_tri_keep_compute_cs vu_tri.hlsl vu_tri_keep_cs compute
+               DEFINES ICO_VU_REC_COMPUTE=1)
 # The draw merge's builds (vu_X_merge_vs, vu_X_merge_plain_vs, vu_merge_main_vs)
 # the mesh and grid programs' entries (both variants) and vu_main_vs read
 # every draw's VuCB and VuBoneCB from the upload ring at t5 through the run's

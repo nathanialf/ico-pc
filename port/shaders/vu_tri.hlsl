@@ -339,6 +339,227 @@ VuVSOut vu_main_vs(uint vid : SV_VertexID)
     return vu_fused_out(o, mode); // a fused pair's kick: r.w, plane (the merge build)
 }
 
+#ifdef ICO_VU_REC_COMPUTE
+// ------------------------------------------------ the index compaction
+// vu_tri_keep_cs (built as vu_tri_keep_compute_cs; port/render/
+// rd_vu_compact.c, docs/port/PIPELINES.md "The index compaction"): after
+// pass T, one invocation a triangle of one draw's index list (a mesh
+// command's, or one of a code 36 command's cut and kick draws), the list
+// written again into the record buffer's fourth plane in its own order,
+// each value raised by the draw's raise (the draw merge's, fixed when the
+// pre-pass plans the draw), a triangle that provably draws nothing written
+// as its corner-1 value three times.  The draw then reads that list.
+//   g_aux0  x the list's first value in t0 (uint units from the bound
+//           buffer's start: the mesh arena or the ring holds stream and
+//           list), y its first value out in u6 (uint units from the record's
+//           start), z the triangles, w the raise
+//   g_aux1  x the draw's pass flags (VU_F_CUT_ONLY, VU_F_KICK_ONLY or 0),
+//           y the texel of its first workgroup's counts (after the plane's
+//           lists, a texel a workgroup), z 1 for a list 0 command's draw,
+//           w 1 under the tests' sabotage (ICO_RD_VU_COMPACT_SABOTAGE: every
+//           triangle written as a filler, so the self-test must refuse it)
+// Drawing nothing, decided from the record words vu_main_vs reads with
+// vu_main_vs's statements (vu_keep_position), never from the rasteriser's
+// fill rule:
+//   drop     every corner's verdict leaves it at VU_CULLED (hidden, the
+//            region rule's drop the camera, card and beside rules keep, the
+//            other scissor pass's triangle, every corner past the chain
+//            plane): VU_CULLED is outside x <= w
+//   outside  every corner past one plane of the bound target's clip-space
+//            box (the target's share of the exact viewport, two texels
+//            out, or the clip volume) or of 0 <= z <= w, by more than
+//            2^-10 of the corner's magnitude: no point of the triangle is
+//            inside, so the GPU's clipping leaves no fragment
+// The filler (corner 1, three times) is that corner's position again, past
+// the same plane: clipped, no fragment, no sample, no depth, no stencil.
+// One vertex invocation where the GPU reuses an index within a triangle
+// (the triangle's three before).  Counts: each workgroup stores its own
+// texel, x drop, y outside, z kept, w g_aux1.z (stores, no atomics on the
+// buffer, nothing to clear: rd_vu_compact.c reads them back and sums).
+
+// a value of t0's list (uint u of the bound range)
+uint vu_keep_index(uint u)
+{
+    uint4 q = vu_stream[u >> 2];
+    uint l = u & 3u;
+    return l == 0u ? q.x : (l == 1u ? q.y : (l == 2u ? q.z : q.w));
+}
+
+// a value into u6 (uint u from the record's start), one lane: the
+// neighbouring lanes are other invocations' values; held to the record's
+// four planes
+void vu_keep_store(uint u, uint v)
+{
+    uint q = u >> 2;
+    uint l = u & 3u;
+    if (q >= vu_rec.y * 4u) {
+        return;
+    }
+    if (l == 0u) {
+        vu_rec_out[q].x = v;
+    } else if (l == 1u) {
+        vu_rec_out[q].y = v;
+    } else if (l == 2u) {
+        vu_rec_out[q].z = v;
+    } else {
+        vu_rec_out[q].w = v;
+    }
+}
+
+// vu_main_vs's position of the draw's own index value vid under the pass
+// flags passFlags, its statements in their order (the same record words, the
+// same verdict, vu_corner_position, the chain plane's cull and the later
+// bias); culled 1 when the verdict left the corner at VU_CULLED.  The side
+// bands: as vu_main_vs with the command's VU_F_NO_BESIDE (a _dstrov pass
+// adds the flag at its draw, vuDraw: a drop there, drawn here: kept)
+float4 vu_keep_position(uint vid, uint passFlags, out uint culled)
+{
+    uint kick = vid >> 2;
+    uint corner = vid & 3u;
+    VuVtx me = vu_rec_vertex(kick - 2u + corner);
+    uint rule = vu_rec.w;
+    uint mode = rule & VU_CLIP_MASK;
+    uint drawZ = vu_draw.z | passFlags;
+    uint f = vu_rec_buf[vu_tri.x + kick].x;
+    culled = 1u;
+    if ((f & VU_TF_HIDDEN) != 0u) {
+        return VU_CULLED;
+    }
+    uint at = 0u;
+    if (mode == VU_CLIP_NONE) {
+        at = (me.gx & 65535) != me.gx || (me.gy & 65535) != me.gy ? 3u : 1u;
+    } else if (mode == VU_CLIP_REGION) {
+        uint r = f & VU_TF_RULE_MASK;
+        if (r == VU_RULE_DROP && (drawZ & VU_F_TICKS) != 0u) {
+            uint4 s = vu_rec_buf[vu_tri.z + kick];
+            r = s.x == 2u || s.y == 2u ? VU_RULE_CLIP
+                                       : ((s.x | s.y) != 0u ? VU_RULE_STRIP : VU_RULE_DROP);
+        }
+        if (r == VU_RULE_STRIP) {
+            r = (f & VU_TF_CARD) != 0u ? VU_RULE_DROP : VU_RULE_CLIP;
+        }
+        if (r == VU_RULE_DROP && (f & VU_TF_CAMERA) != 0u) {
+            r = VU_RULE_CLIP;
+        }
+        if (r == VU_RULE_DROP && (f & VU_TF_BESIDE) != 0u && (drawZ & VU_F_NO_BESIDE) == 0u) {
+            r = VU_RULE_CLIP_BESIDE;
+        }
+        if (r == VU_RULE_EXACT) {
+            at = 1u;
+        } else if (r == VU_RULE_CLIP || r == VU_RULE_CLIP_BESIDE) {
+            at = 2u;
+        }
+    } else {
+        uint cut = (f & VU_TF_CUT) != 0u ? 1u : 0u;
+        if ((cut != 0u && (drawZ & VU_F_KICK_ONLY) != 0u) ||
+            (cut == 0u && (drawZ & VU_F_CUT_ONLY) != 0u)) {
+            // drawn by the other pass
+        } else {
+            at = (f >> VU_TF_AT_SHIFT) & 3u;
+        }
+    }
+    float4 pos = vu_corner_position(me, mode, at);
+    culled = at == 0u ? 1u : 0u;
+    if ((rule & VU_TRI_CHAIN) != 0u) {
+        // value by value, as vu_main_vs (no vector of booleans)
+        bool past = vu_batch.z != 0u && (f & VU_TF_PAST) != 0u;
+        pos.x = past ? VU_CULLED.x : pos.x;
+        pos.y = past ? VU_CULLED.y : pos.y;
+        pos.z = past ? VU_CULLED.z : pos.z;
+        pos.w = past ? VU_CULLED.w : pos.w;
+        culled = past ? 1u : culled;
+        if ((f & VU_TF_LATER) != 0u) {
+            VuVtx a = vu_rec_vertex(kick - 2u);
+            VuVtx b = vu_rec_vertex(kick - 1u);
+            VuVtx c = vu_rec_vertex(kick);
+            precise float z = pos.z + vu_later_bias(a, b, c) * g_z.x * pos.w;
+            pos.z = z;
+        }
+    }
+    return pos;
+}
+
+// the bound target's half extents in clip space (x, y over w), two texels
+// out: its share of the exact viewport about the viewport's centre moved
+// by g_vpo less the jitter (common.hlsli fullscreen_triangle), else the
+// viewport itself and two GS pixels
+float2 vu_keep_extent()
+{
+    if (g_vp.x != 0.0 && g_misc.z != 0.0) {
+        return g_misc.zw + abs((g_vpo.xy - g_jitter.xy) * g_vp.xy) + 2.0 * g_vp.xy;
+    }
+    return float2(1.0, 1.0) + 4.0 * g_target.zw;
+}
+
+// 1 when a, b and c are all on the outer side of the plane d(p) >= 0 by
+// more than 2^-10 of their magnitude (da = d(a), ma = the magnitude)
+uint vu_keep_past(float da, float ma, float db, float mb, float dc, float mc)
+{
+    const float k = 1.0 / 1024.0;
+    return da < -k * ma && db < -k * mb && dc < -k * mc ? 1u : 0u;
+}
+
+// 1 when the triangle a, b, c lies wholly past one plane of the target's
+// box or of 0 <= z <= w (NaN fails every comparison: kept)
+uint vu_keep_outside(float4 a, float4 b, float4 c)
+{
+    float2 e = vu_keep_extent();
+    uint o = 0u;
+    o |= vu_keep_past(e.x * a.w - a.x, abs(a.x) + abs(e.x * a.w), e.x * b.w - b.x,
+                      abs(b.x) + abs(e.x * b.w), e.x * c.w - c.x, abs(c.x) + abs(e.x * c.w));
+    o |= vu_keep_past(e.x * a.w + a.x, abs(a.x) + abs(e.x * a.w), e.x * b.w + b.x,
+                      abs(b.x) + abs(e.x * b.w), e.x * c.w + c.x, abs(c.x) + abs(e.x * c.w));
+    o |= vu_keep_past(e.y * a.w - a.y, abs(a.y) + abs(e.y * a.w), e.y * b.w - b.y,
+                      abs(b.y) + abs(e.y * b.w), e.y * c.w - c.y, abs(c.y) + abs(e.y * c.w));
+    o |= vu_keep_past(e.y * a.w + a.y, abs(a.y) + abs(e.y * a.w), e.y * b.w + b.y,
+                      abs(b.y) + abs(e.y * b.w), e.y * c.w + c.y, abs(c.y) + abs(e.y * c.w));
+    o |= vu_keep_past(a.z, abs(a.z) + abs(a.w), b.z, abs(b.z) + abs(b.w), c.z,
+                      abs(c.z) + abs(c.w));
+    o |= vu_keep_past(a.w - a.z, abs(a.z) + abs(a.w), b.w - b.z, abs(b.z) + abs(b.w),
+                      c.w - c.z, abs(c.z) + abs(c.w));
+    return o;
+}
+
+groupshared uint vu_keep_n[3];
+
+[numthreads(64, 1, 1)] void vu_tri_keep_cs(uint3 t : SV_DispatchThreadID,
+                                           uint3 g : SV_GroupThreadID, uint3 w : SV_GroupID)
+{
+    if (g.x < 3u) {
+        vu_keep_n[g.x] = 0u;
+    }
+    GroupMemoryBarrierWithGroupSync();
+    if (t.x < g_aux0.z) {
+        uint s = g_aux0.x + 3u * t.x;
+        uint i0 = vu_keep_index(s);
+        uint i1 = vu_keep_index(s + 1u);
+        uint i2 = vu_keep_index(s + 2u);
+        uint c0, c1, c2;
+        float4 p0 = vu_keep_position(i0, g_aux1.x, c0);
+        float4 p1 = vu_keep_position(i1, g_aux1.x, c1);
+        float4 p2 = vu_keep_position(i2, g_aux1.x, c2);
+        uint drop = c0 & c1 & c2;
+        uint past = drop != 0u ? 0u : vu_keep_outside(p0, p1, p2);
+        uint cls = drop != 0u || g_aux1.w != 0u ? 0u : (past != 0u ? 1u : 2u);
+        if (cls != 2u) {
+            i0 = i1; // the filler: corner 1, past the plane its triangle is past
+            i2 = i1;
+        }
+        uint o = g_aux0.y + 3u * t.x;
+        vu_keep_store(o, i0 + g_aux0.w);
+        vu_keep_store(o + 1u, i1 + g_aux0.w);
+        vu_keep_store(o + 2u, i2 + g_aux0.w);
+        uint ignored;
+        InterlockedAdd(vu_keep_n[cls], 1u, ignored);
+    }
+    GroupMemoryBarrierWithGroupSync();
+    uint q = g_aux1.y + w.x;
+    if (g.x == 0u && q < vu_rec.y * 4u) {
+        vu_rec_out[q] = uint4(vu_keep_n[0], vu_keep_n[1], vu_keep_n[2], g_aux1.z);
+    }
+}
+#endif
+
 // The pre-pass's targets: the record's three planes
 struct VuPreIn {
     float4 pos : SV_Position;

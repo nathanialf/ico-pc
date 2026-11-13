@@ -82,9 +82,13 @@ enum {
     /* a second Adreno attempt: not built (not in this build) */
     ICO_ATT_ADRENO_B,
     /* the other exact cuts planned for the tile-based phones: the subpass
-       read, the blend constant, the index compaction */
+       read, the blend constant (not in this build) */
     ICO_ATT_SUBPASS,
     ICO_ATT_BLEND_CONST,
+    /* rd_vu_compact.c: the index compaction (the compute record's mesh
+       triangles that draw nothing written as a clipped filler in each
+       draw's list); state from ico_attempt_decide_compaction, count the
+       triangles left out a block (the counters read back) */
     ICO_ATT_COMPACTION,
     /* rd_vu_class.c (rd_vu_record.c): the VU record by compute dispatches
        in place of the vertex stores on the PowerVR class; count the
@@ -187,5 +191,15 @@ int ico_attempt_decide_vu_compute(int byName, int stores, int compute, int power
    failed, 1 passed).  1 when the fold may run (each present still checks
    its draws), else 0 */
 int ico_attempt_decide_turn_fold(int turned, int env, int defaultOn, int selftest);
+/* the index compaction (rd_vu_compact.c, at the pre-pass's start and after
+   the record's self-test): compute the record is written by compute
+   dispatches with the pre-pass on (else notWhy, the record path that
+   holds: not applicable), arm the Arm class under Vulkan (the Mali-G52),
+   env the tests' switch (ICO_RD_VU_COMPACT: -1 unset, 0, 1), defaultOn
+   RD_VU_COMPACT_DEFAULT, armDefaultOn RD_VU_COMPACT_ARM_DEFAULT, selftest
+   the record's start-up self-test with it (-1 not run, 0 refused it, 1
+   passed).  1 when the compaction runs (the row on), else 0 */
+int ico_attempt_decide_compaction(int compute, const char *notWhy, int arm, int env, int defaultOn,
+                                  int armDefaultOn, int selftest);
 
 #endif

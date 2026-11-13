@@ -229,7 +229,28 @@ static void test_classes(void)
         {1024, 1024, 1024, ICO_ATT_NA},
     };
 
+    /* the index compaction, k's classes in order: the record written by
+       compute dispatches (else the path that holds), the Arm class, the
+       row's state.  The Mali-G52 the compute record (no vertex stores),
+       Arm's class, its self-test passed; every other class the vertex
+       stores (the PowerVR rule off by default) */
+    static const struct {
+        int compute;
+        const char *notWhy;
+        int arm;
+        IcoAttemptState want;
+    } kCmp[] = {
+        {1, NULL, 1, ICO_ATT_ON},
+        {0, "record path stores: vertex shader stores", 0, ICO_ATT_NA},
+        {0, "record path stores: vertex shader stores", 0, ICO_ATT_NA},
+        {0, "record path stores: vertex shader stores", 0, ICO_ATT_NA},
+        {0, "record path stores: vertex shader stores", 0, ICO_ATT_NA},
+        {0, "record path stores: vertex shader stores", 0, ICO_ATT_NA},
+        {0, "record path stores: vertex shader stores", 0, ICO_ATT_NA},
+    };
+
     CHECK(sizeof kRec / sizeof kRec[0] == sizeof k / sizeof k[0]);
+    CHECK(sizeof kCmp / sizeof kCmp[0] == sizeof k / sizeof k[0]);
     for (size_t c = 0; c < sizeof k / sizeof k[0]; c++) {
         const DeviceClass *d = &k[c];
         ico_attempt_reset();
@@ -243,6 +264,9 @@ static void test_classes(void)
         CHECK(ico_attempt_decide_vu_compute(0, d->vuStores, 1, d->vuPowervr, -1, 0) == 0);
         CHECK(ico_attempt_decide_turn_fold(d->turned, -1, 0, -1) == 0);
         ico_attempt_decide_rec_need(1, kRec[c].made, kRec[c].bound, kRec[c].need);
+        CHECK(ico_attempt_decide_compaction(kCmp[c].compute, kCmp[c].notWhy, kCmp[c].arm, -1, 1, 1,
+                                            kCmp[c].compute ? 1 : -1) ==
+              (kCmp[c].want == ICO_ATT_ON));
         for (int i = 0; i < ICO_ATT_COUNT; i++) {
             if (ico_attempt_state_of(i) == ICO_ATT_NOT_SET) {
                 printf("FAIL %s: %s not reported\n", d->name, ico_attempt_name(i));
@@ -262,6 +286,7 @@ static void test_classes(void)
             failures++;
         }
         CHECK(ico_attempt_state_of(ICO_ATT_REC_NEED) == kRec[c].want);
+        CHECK(ico_attempt_state_of(ICO_ATT_COMPACTION) == kCmp[c].want);
         char b[2048], want[256];
         (void)ico_attempt_start_text(b, sizeof b);
         snprintf(want, sizeof want, "; no-volume break %s (%s)",
@@ -310,6 +335,39 @@ static void test_classes(void)
     CHECK(ico_attempt_decide_turn_fold(0, 1, 1, 1) == 0);
     CHECK(ico_attempt_state_of(ICO_ATT_TURN_FOLD) == ICO_ATT_NA);
     CHECK(ico_attempt_why_of(ICO_ATT_COUNT) == NULL);
+    /* the index compaction's other states: the tests' switch both ways,
+       refused by the self-test (over the switch), the Arm class's define
+       off, the other class's define off, the self-test not run, not the
+       compute record with and without its words; its count */
+    CHECK(ico_attempt_decide_compaction(1, NULL, 0, 0, 1, 1, 1) == 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_COMPACTION) == ICO_ATT_OFF_DEFAULT);
+    CHECK(ico_attempt_decide_compaction(1, NULL, 0, 1, 0, 0, -1) == 1);
+    CHECK(strcmp(ico_attempt_why_of(ICO_ATT_COMPACTION),
+                 "ICO_RD_VU_COMPACT=1: the tests' switch") == 0);
+    CHECK(ico_attempt_decide_compaction(1, NULL, 1, 1, 1, 1, 0) == 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_COMPACTION) == ICO_ATT_REFUSED);
+    CHECK(ico_attempt_decide_compaction(1, NULL, 1, -1, 1, 0, 1) == 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_COMPACTION) == ICO_ATT_OFF_DEFAULT);
+    CHECK(strstr(ico_attempt_why_of(ICO_ATT_COMPACTION), "RD_VU_COMPACT_ARM_DEFAULT 0") != NULL);
+    CHECK(ico_attempt_decide_compaction(1, NULL, 0, -1, 0, 1, 1) == 0);
+    CHECK(strcmp(ico_attempt_why_of(ICO_ATT_COMPACTION),
+                 "off by default (RD_VU_COMPACT_DEFAULT 0)") == 0);
+    CHECK(ico_attempt_decide_compaction(1, NULL, 0, -1, 1, 0, -1) == 1);
+    CHECK(strcmp(ico_attempt_why_of(ICO_ATT_COMPACTION),
+                 "the compute record; the start-up self-test decides where it runs") == 0);
+    CHECK(ico_attempt_decide_compaction(0, NULL, 1, 1, 1, 1, 1) == 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_COMPACTION) == ICO_ATT_NA);
+    CHECK(strcmp(ico_attempt_why_of(ICO_ATT_COMPACTION), "not the compute record") == 0);
+    CHECK(ico_attempt_decide_compaction(1, NULL, 1, -1, 1, 1, 1) == 1);
+    ico_attempt_fire(ICO_ATT_COMPACTION, 9866);
+    {
+        char b[2048];
+        (void)ico_attempt_start_text(b, sizeof b);
+        CHECK(strstr(b, "; index compaction on (the Arm class, its start-up self-test passed)") !=
+              NULL);
+        (void)ico_attempt_block_text(b, sizeof b, -1);
+        CHECK(strstr(b, "; index compaction on 9866 triangles left out") != NULL);
+    }
     /* the record's row: the pre-pass off; on with its growths counted */
     ico_attempt_decide_rec_need(0, 512, 1024, 512);
     CHECK(ico_attempt_state_of(ICO_ATT_REC_NEED) == ICO_ATT_NA);
@@ -337,7 +395,8 @@ int main(void)
     (void)ico_attempt_start_text(b, sizeof(b));
     CHECK(starts(b, "attempts at the start: few-cores rule not reported; pipeline set on every "
                     "core not reported; "));
-    CHECK(strstr(b, "; index compaction not in this build") != NULL);
+    CHECK(strstr(b, "; index compaction not reported") != NULL);
+    CHECK(strstr(b, "; blend constant not in this build") != NULL);
     CHECK(ico_attempt_state_of(ICO_ATT_SUBPASS) == ICO_ATT_NOT_BUILT);
     /* and the block line is empty, with no stalls asked */
     CHECK(ico_attempt_block_text(b, sizeof(b), -1) == 0 && b[0] == '\0');

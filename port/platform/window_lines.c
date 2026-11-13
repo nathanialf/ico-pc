@@ -17,6 +17,7 @@
 #include "pace_policy.h"
 #include "host_loop.h"
 #include "rd_tex.h"
+#include "rd_vu_compact.h"   /* rd_vu_compact_block, rd_vu_cmp_block_text */
 #include "rd_vu_rec_early.h" /* rd_vu_record_memory, rd_loss_keep_held_bytes */
 #include "rhi.h"
 #ifdef __ANDROID__
@@ -120,6 +121,18 @@ static void window_vu_record_line(void)
     }
     char line[400];
     (void)rd_vu_record_memory_text(line, sizeof line, &m);
+    fprintf(stderr, "%s\n", line);
+}
+
+void window_vu_compact_line(void)
+{
+    RdVuCmpCounts c;
+    rd_vu_compact_block(&c);
+    if (c.pictures == 0u) {
+        return; /* nothing read back in the block (off, or not the compute record) */
+    }
+    char line[512];
+    (void)rd_vu_cmp_block_text(line, sizeof line, &c);
     fprintf(stderr, "%s\n", line);
 }
 

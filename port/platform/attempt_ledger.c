@@ -29,7 +29,7 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
     [ICO_ATT_ADRENO_B] = {"Adreno attempt B", "fired", NULL},
     [ICO_ATT_SUBPASS] = {"subpass read", "passes", NULL},
     [ICO_ATT_BLEND_CONST] = {"blend constant", "draws", NULL},
-    [ICO_ATT_COMPACTION] = {"index compaction", "triangles dropped", NULL},
+    [ICO_ATT_COMPACTION] = {"index compaction", "triangles left out", NULL},
     [ICO_ATT_VU_COMPUTE_CLASS] = {"VU record by compute on the PowerVR", "dispatches", NULL},
     [ICO_ATT_TURN_FOLD] = {"turn in the present's blit", "presents", "kept the turn pass"},
     [ICO_ATT_REC_NEED] = {"VU record sized from need", "growths in play", NULL},
@@ -46,14 +46,12 @@ static struct {
     [ICO_ATT_ADRENO_B] = {ICO_ATT_NOT_BUILT, NULL, 0, 0, 0, 0},
     [ICO_ATT_SUBPASS] = {ICO_ATT_NOT_BUILT, NULL, 0, 0, 0, 0},
     [ICO_ATT_BLEND_CONST] = {ICO_ATT_NOT_BUILT, NULL, 0, 0, 0, 0},
-    [ICO_ATT_COMPACTION] = {ICO_ATT_NOT_BUILT, NULL, 0, 0, 0, 0},
 };
 
 /* a row's state at the start */
 static int startState(int i)
 {
-    return i == ICO_ATT_ADRENO_B || i == ICO_ATT_SUBPASS || i == ICO_ATT_BLEND_CONST ||
-                   i == ICO_ATT_COMPACTION
+    return i == ICO_ATT_ADRENO_B || i == ICO_ATT_SUBPASS || i == ICO_ATT_BLEND_CONST
                ? ICO_ATT_NOT_BUILT
                : ICO_ATT_NOT_SET;
 }
@@ -384,5 +382,37 @@ int ico_attempt_decide_turn_fold(int turned, int env, int defaultOn, int selftes
                        : "self-test passed: presents of the box blit alone";
     }
     ico_attempt_state(ICO_ATT_TURN_FOLD, st, why);
+    return on;
+}
+
+int ico_attempt_decide_compaction(int compute, const char *notWhy, int arm, int env, int defaultOn,
+                                  int armDefaultOn, int selftest)
+{
+    IcoAttemptState st = ICO_ATT_NA;
+    const char *why;
+    int on = 0;
+    if (!compute) {
+        why = notWhy != NULL ? notWhy : "not the compute record";
+    } else if (env == 0) {
+        st = ICO_ATT_OFF_DEFAULT;
+        why = "ICO_RD_VU_COMPACT=0: the tests' switch";
+    } else if (selftest == 0) {
+        st = ICO_ATT_REFUSED;
+        why = "the record's self-test failed with it and passed without it: every draw reads its "
+              "own index list";
+    } else if (env != 1 && !(arm ? armDefaultOn : defaultOn)) {
+        st = ICO_ATT_OFF_DEFAULT;
+        why = arm ? "off by default on the Arm class (RD_VU_COMPACT_ARM_DEFAULT 0) until a "
+                    "Mali-G52 log shows it"
+                  : "off by default (RD_VU_COMPACT_DEFAULT 0)";
+    } else {
+        st = ICO_ATT_ON;
+        on = 1;
+        why = selftest == 1 ? (arm ? "the Arm class, its start-up self-test passed"
+                                   : "its start-up self-test passed")
+              : env == 1    ? "ICO_RD_VU_COMPACT=1: the tests' switch"
+                            : "the compute record; the start-up self-test decides where it runs";
+    }
+    ico_attempt_state(ICO_ATT_COMPACTION, st, why);
     return on;
 }

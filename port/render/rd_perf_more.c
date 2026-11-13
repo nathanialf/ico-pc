@@ -95,6 +95,15 @@ uint64_t rd_perf_more_draw_invocations(uint64_t tris, bool prepass)
     return tris * (prepass ? 3u : 9u);
 }
 
+uint64_t rd_perf_more_draw_invocations_left(uint64_t tris, uint64_t leftOut, bool prepass)
+{
+    if (!prepass) {
+        return tris * 9u;
+    }
+    const uint64_t left = leftOut < tris ? leftOut : tris;
+    return tris * 3u - left * 2u;
+}
+
 void rd_perf_more_add(RdPerfMore *b, const RdPerfRecord *r, bool prepass)
 {
     b->n++;
@@ -126,7 +135,8 @@ void rd_perf_more_add(RdPerfMore *b, const RdPerfRecord *r, bool prepass)
         }
     }
     b->preVerts += prepass ? (double)r->vuPreVertices : 0.0;
-    b->drawInv += (double)rd_perf_more_draw_invocations(r->vuTris, prepass);
+    b->drawInv += (double)rd_perf_more_draw_invocations_left(r->vuTris, r->vuTrisLeftOut, prepass);
+    b->leftOut += prepass ? (double)r->vuTrisLeftOut : 0.0;
     if (r->glowLight <= RD_GLOW_LIGHT_OFF) {
         b->glowPlan[r->glowLight]++;
     }
@@ -295,9 +305,10 @@ size_t rd_perf_more_compare_text(const RdPerfMore *b, const char *scene, bool ti
     }
     put(&o, "; vertex invocations a picture: the pre-pass's %s, the draws' %s (%s; never summed)",
         count(b->preVerts / n, c2, sizeof c2), count(b->drawInv / n, c3, sizeof c3),
-        b->prepassN == b->n ? "3 a triangle"
-        : b->prepassN == 0u ? "9 a triangle without the pre-pass"
-                            : "3 a triangle with the pre-pass, 9 without");
+        b->leftOut > 0.0      ? "3 a triangle, after the index compaction 1 a triangle it left out"
+        : b->prepassN == b->n ? "3 a triangle"
+        : b->prepassN == 0u   ? "9 a triangle without the pre-pass"
+                              : "3 a triangle with the pre-pass, 9 without");
     static const char *const k_plan[RD_GLOW_LIGHT_OFF + 1] = {"none", "dark", "lamps", "whole",
                                                               "off"};
     put(&o, "; glow plans:");

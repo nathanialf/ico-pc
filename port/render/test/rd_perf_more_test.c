@@ -120,6 +120,13 @@ static void test_lines(void)
     CHECK(b.n == 2 && b.keep == 1 && b.gpuN == 2 && b.prepassN == 2);
     CHECK(rd_perf_more_draw_invocations(52000, true) == 156000u);
     CHECK(rd_perf_more_draw_invocations(52000, false) == 468000u);
+    /* after the index compaction: a triangle it left out one invocation
+       (156000 - 2 x 20000), at most every triangle, none without the
+       pre-pass */
+    CHECK(rd_perf_more_draw_invocations_left(52000, 20000, true) == 116000u);
+    CHECK(rd_perf_more_draw_invocations_left(52000, 60000, true) == 52000u);
+    CHECK(rd_perf_more_draw_invocations_left(52000, 20000, false) == 468000u);
+    CHECK(rd_perf_more_draw_invocations_left(52000, 0, true) == 156000u);
     (void)rd_perf_more_cost_text(&b, t, sizeof t);
     text_is(t,
             "costs a picture: two-pass blend 3.0 draws drawn twice (0 triangles' vertex work "

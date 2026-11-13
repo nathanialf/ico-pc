@@ -19,6 +19,13 @@ void window_slow_replay_line(const RdPerfRecord *r, unsigned vsync, const char *
    process's and the device's memory, the pipeline pool */
 void window_memory_line(void);
 
+/* The block's "window: index compaction: ..." line (port/render/
+   rd_vu_compact.h rd_vu_cmp_block_text): the triangles the compute
+   record's index compaction left out as drawing nothing, a picture, list 0
+   and the others, from the counters read back in the block; nothing where
+   none was read back */
+void window_vu_compact_line(void);
+
 /* Once a block: writes the line "video memory N MB of M MB: the driver may
    be paging; ..." the first time the card's local memory use is at 90 % of
    its budget or more in the block (Direct3D 11 and 12; nothing elsewhere).

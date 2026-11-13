@@ -178,7 +178,7 @@ double window_scene_gpu_work_ms(double spanMs, double waitMs, double presentMs)
 }
 
 size_t window_scene_vu_text(char *out, size_t cap, uint64_t draws, uint64_t tris,
-                            uint64_t preVertices, unsigned n, int prepass)
+                            uint64_t preVertices, unsigned n, int prepass, uint64_t leftOut)
 {
     const double d = n ? (double)n : 1.0;
     const double inv = (double)window_scene_vu_invocations(tris, preVertices, prepass) / d;
@@ -194,13 +194,26 @@ size_t window_scene_vu_text(char *out, size_t cap, uint64_t draws, uint64_t tris
         /* the pre-pass's figure, and the draws' own vu_main_vs beside it
            (index kick * 4 + corner: 3 a triangle, no vertex reuse; issue
            179: list 0's vertex work was not in the log) */
-        char dv[24];
-        count_words(3.0 * (double)tris / d, dv, sizeof(dv));
-        w = snprintf(out, cap,
-                     "VU: %.0f draws, %s triangles, %s vertex invocations (pre-pass: each vertex "
-                     "once); the draws' vu_main_vs %s more (3 a triangle; never summed with the "
-                     "pre-pass's)",
-                     (double)draws / d, t, v, dv);
+        char dv[24], lv[24];
+        const uint64_t left = leftOut < tris ? leftOut : tris;
+        /* after the index compaction a triangle it left out is one
+           invocation (its filler), the others three */
+        count_words((3.0 * (double)tris - 2.0 * (double)left) / d, dv, sizeof(dv));
+        count_words((double)left / d, lv, sizeof(lv));
+        if (left) {
+            w = snprintf(out, cap,
+                         "VU: %.0f draws, %s triangles, %s vertex invocations (pre-pass: each "
+                         "vertex once); the draws' vu_main_vs %s more (3 a triangle, after the "
+                         "index compaction 1 a triangle it left out: %s of %s; never summed with "
+                         "the pre-pass's)",
+                         (double)draws / d, t, v, dv, lv, t);
+        } else {
+            w = snprintf(out, cap,
+                         "VU: %.0f draws, %s triangles, %s vertex invocations (pre-pass: each "
+                         "vertex once); the draws' vu_main_vs %s more (3 a triangle; never summed "
+                         "with the pre-pass's)",
+                         (double)draws / d, t, v, dv);
+        }
     } else {
         w = snprintf(out, cap, "VU: %.0f draws, %s triangles, %s vertex invocations (%s)",
                      (double)draws / d, t, v, "pre-pass off: 9 a triangle");

@@ -1,0 +1,9 @@
+# Expected counts for rd_vu_compact_ab (port/render/test/rd_vu_compact_ab.cmake:
+# the index compaction on against off).  MACHINE-LOCAL, as
+# tools/vu_flat0_dumps.txt whose dumps it names.  Each line: the dump's file
+# name, the profile, the setting, the merge (merge or nomerge), then the =1
+# run's "N of M list 0 triangles left out (drop D, outside O)" as N M D O.
+# A (dump, profile, setting, merge) with a line must print exactly these
+# numbers; one without prints "rd_vu_compact_ab: count ..." in the test's
+# log, the line to copy here.  The numbers are the shader's own classes
+# (vu_tri.hlsl vu_tri_keep_cs) on lavapipe, written after the first run.
