@@ -987,6 +987,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   2x. `_sabotage`: the lamps list at the phone's setting with `=sabotage`: the self-test failed at a
   texel, no paste by it, the same bytes. `_gl` (label gl): the lamps list on OpenGL: off (the module
   is Vulkan's alone), the same bytes.
+- `rd_volume_fs_test.c` (`rd_volume_fs`; `rd_volume_fs.cmake`, CPU): the shadow volumes' stencil-only entry (`rd_volume_fs.c`): the gate's reasons in order, the `date_clear_ps` twin (the fragment entry alone differs), the volume key without a device (`sprite_ps`, seen, none taken), no twin in the start-up set there, `ICO_RD_VOLUME_FS`'s words, the bench's force, the ledger's row.
+- `rd_volume_fs_ab.cmake` (`rd_volume_fs_ab`, `rd_volume_fs_sabotage`; `rd_volume_fs.cmake`): every dump of `tools/shadow_cuts_dumps.txt`, `date_cut_dumps.txt`, `shadow_box_dumps.txt`, `no_volume_dumps.txt` and `lamps_dumps.txt` (an absent one FAILS), `ICO_RD_VOLUME_FS=0` against `=1` at the phone's setting, Enhanced 2x 16:9, the Mali class at 1x and MSAA 4x at 2x: every PNG, the draws, passes and traffic the same, arm 1's self-test passed, every single-sampled volume draw by `date_clear_ps`. `_sabotage`: the phone's setting: refused, the same bytes.
 - `rd_vu_compact_test.c` (`rd_vu_compact`; `rd_vu_compact.cmake`, CPU): the index compaction's pure
   parts (`rd_vu_compact.c`): the plan's places (two calls one after the other in the plane, their
   workgroups), its raises (the first call's values from 0, the next one's past them, mod 2^32),
