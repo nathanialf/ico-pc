@@ -1123,6 +1123,12 @@ uint32_t rhi_present_glass(uint64_t *lastId, uint64_t *refreshNs, RhiGlassTime *
     return 0;
 }
 
+/* rhi.h: no desired present time on this backend */
+void rhi_present_desire(uint64_t desiredNs)
+{
+    (void)desiredNs;
+}
+
 int rhi_present_timing_next(uint64_t *id, uint64_t *ns)
 {
     (void)id;

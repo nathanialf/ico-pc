@@ -952,6 +952,13 @@ uint32_t rhi_present_glass(uint64_t *lastId, uint64_t *refreshNs, RhiGlassTime *
     return be()->present_glass(lastId, refreshNs, out, max);
 }
 
+void rhi_present_desire(uint64_t desiredNs)
+{
+    if (s_up) {
+        be()->present_desire(desiredNs);
+    }
+}
+
 bool rhi_present_statistics(uint64_t *presentCount, uint64_t *presentRefresh, uint64_t *syncRefresh,
                             uint64_t *syncNs)
 {

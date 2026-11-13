@@ -286,6 +286,14 @@ typedef struct Cfg {
     double gLo2, gHi2;        /* ... in this range */
     double gSwing, gSwingS;   /* the GPU's time swings by +-gSwing over a period of gSwingS s */
     double step2Lo, step2Hi;  /* the other step's CPU (0: 0.2 ms; the phone's 3.2 ms a step) */
+    /* the GPU slower after it idled (its clocks down): its time longer by
+       this share per ms of idle before it on average (from none to twice
+   that, picture to picture), at most 10 ms of it */
+    double dvfs;
+    /* a picture held for its desired time is replaced by the next one
+       queued before it is shown (mailbox's rule, if Android's compositor
+       applies it to held pictures) */
+    int dropHeld;
 } Cfg;
 
 /* how a run is made: the screen model's opts, the kept frames as rc5 did
@@ -310,7 +318,7 @@ static const char *const kRule[NR] = {"hand-over", "GPU end", "own timer", "scre
 #define OFFSET 5123.456 /* the display's clock less rd's */
 
 typedef struct Pic {
-    double hand, sub, g, end, shown, t0, endPred, hardMs;
+    double hand, sub, g, end, shown, t0, endPred, hardMs, queued;
     double raw[NR], moment[NR];
     uint32_t frame;
     int how;
@@ -365,7 +373,10 @@ typedef struct Out {
     /* the even cadence */
     uint32_t aimed, lateAims, earlyHand, changes, notAimed, nMin, nMax, nLast, shownOff,
         nAt[RD_PE_N_MAX + 1];
-    double fpsShown; /* shown pictures a second (after WARM) */
+    double fpsShown;       /* shown pictures a second (after WARM) */
+    uint32_t shownEarlier; /* aimed pictures shown before their refresh */
+    uint32_t lost;         /* aimed pictures never shown */
+    double offAtMs;        /* when the self-check turned the cadence off (0 never) */
     uint32_t heldUnfit,
         maxRounds;     /* holds without a usable fit; the most holds before one hand-over */
     double firstAimMs; /* the run's time of its first aimed picture (0 none) */
@@ -477,6 +488,7 @@ static void run(const Cfg *c, const Mode *md, Out *o)
                                                         q->exact ? q->end : 0.0};
                         rd_pace_screen_add(&sc, &smp);
                         if (md->even && q->aimed) {
+                            (void)rd_pace_even_lost(&ev, false);
                             rd_pace_even_shown(
                                 &ev, rd_pace_screen_score(q->hardMs, q->shown + OFFSET, REP));
                         }
@@ -488,7 +500,12 @@ static void run(const Cfg *c, const Mode *md, Out *o)
                 if (md->even && !c->noTimes) {
                     RdPaceEvenIn ei;
                     evenIn(&sc, &m, x, &ei);
-                    ei.stepEndMs = pe; /* the pacer's deadline */
+                    /* the pacer's deadline, and for a further picture the
+                       time from which the step rule would hold it (the pacer
+                       asks the rule at the hand-over the plan wants:
+                       window_present.c even_block_at) */
+                    ei.stepEndMs = pe;
+                    ei.ruleEndMs = !first ? t0 + TICK - c->reads : 0.0;
                     RdPaceEvenPlan pl;
                     rd_pace_even_plan(&ev, &ei, &pl);
                     o->earlyHand += pl.early && pl.holdMs > 0.01 && n >= WARM ? 1u : 0u;
@@ -527,6 +544,12 @@ static void run(const Cfg *c, const Mode *md, Out *o)
                 p->frame = k;
                 p->t0 = t0;
                 p->kept = kept;
+                if (c->dvfs > 0.0 && p->sub > Eprev && n > 0) {
+                    const double idle = p->sub - Eprev;
+                    /* the governor's clock picture to picture: from as
+                       made to twice the mean slowdown */
+                    gpu *= 1.0 + U(0.0, 2.0 * c->dvfs) * (idle < 10.0 ? idle : 10.0);
+                }
                 p->end = (p->sub > Eprev ? p->sub : Eprev) + gpu;
                 double jobEnd = x + r;
                 if (n > 0) {
@@ -549,10 +572,7 @@ static void run(const Cfg *c, const Mode *md, Out *o)
                    when both make the same refresh */
                 p->shown = gridAt(p->end + lead + U(-0.3, 0.3), phase, pd, changeAt);
                 p->visible = true;
-                if (n > 0 && p->shown <= s_p[n - 1u].shown) {
-                    s_p[n - 1u].visible = false;
-                    p->shown = s_p[n - 1u].shown;
-                }
+                p->queued = x + r; /* its present queued (the submit thread's) */
                 /* the GPU model: rc5 stepped a kept frame's present through
                    it (never measured); now it is left out */
                 RdPaceGpuPlace pl;
@@ -587,6 +607,34 @@ static void run(const Cfg *c, const Mode *md, Out *o)
                     }
                     lastN = ev.n != 0u ? ev.n : lastN;
                     o->nLast = ev.n;
+                    if (p->aimed && ev.desire) {
+                        /* the desired present time: not shown before the
+                           refresh it was aimed at (a time half a refresh
+                           before it, rd_pace_even.h) */
+                        const double at = gridAt(target - OFFSET - 0.5 * pd, phase, pd, changeAt);
+                        p->held = at > p->shown;
+                        p->shown = at > p->shown ? at : p->shown;
+                    }
+                }
+                /* mailbox: the picture before replaced where this one makes
+                   the same refresh; with dropHeld also one still held for its
+                   desired time when this one is queued */
+                if (n > 0) {
+                    Pic *q = &s_p[n - 1u];
+                    if (p->shown <= q->shown) {
+                        q->visible = false;
+                        p->shown = q->shown;
+                    } else if (c->dropHeld && q->held && p->queued < q->shown - lead) {
+                        q->visible = false;
+                    }
+                    /* the self-check (rd_pace_even_live.c: an aim passed by a
+                       later one never seen) */
+                    if (md->even && q->aimed && !q->visible) {
+                        o->lost++;
+                        if (rd_pace_even_lost(&ev, true) && o->offAtMs == 0.0) {
+                            o->offAtMs = x - 1000.0;
+                        }
+                    }
                 }
                 if (!kept || !md->keepFix) {
                     double sh;
@@ -701,6 +749,7 @@ static void run(const Cfg *c, const Mode *md, Out *o)
                 o->early += s == -1 ? 1u : 0u;
                 o->further += s > 1 || s < -1 ? 1u : 0u;
                 o->shownOff += b->aimed && s != 0 ? 1u : 0u;
+                o->shownEarlier += b->aimed && s < 0 ? 1u : 0u;
             }
             firstRate = firstRate < 0 ? (int)i : firstRate;
             lastRate = (int)i;
@@ -767,9 +816,9 @@ static void print(const Cfg *c, const Out *o)
         printf(
             "    the even cadence: N %u-%u (the last %u; pictures at N 1/2/3/4: %u/%u/%u/%u), %u "
             "changes; %u aimed, %u not, %u late at the hand-over, %u holds cut before the "
-            "step, %u shown off their refresh\n",
+            "step, %u shown off their refresh (%u earlier)\n",
             o->nMin, o->nMax, o->nLast, o->nAt[1], o->nAt[2], o->nAt[3], o->nAt[4], o->changes,
-            o->aimed, o->notAimed, o->lateAims, o->earlyHand, o->shownOff);
+            o->aimed, o->notAimed, o->lateAims, o->earlyHand, o->shownOff, o->shownEarlier);
     }
 }
 
@@ -1143,13 +1192,54 @@ static const Cfg kStraddle1 = {.name =
                                .step2Lo = 2.6,
                                .step2Hi = 3.4};
 
+/* v0.11.6-rc8 (the even cadence on the phone, the opening, evidence/rc8
+   L:827-1038): as made the opening's pictures took 16.7-19.2 ms of GPU
+   with 0.2-0.8 ms idle before each (rc6 L:820-1118); held to four
+   refreshes the GPU idled 8.0-10.1 ms before each and each took 23.7-25.4
+   ms (its clocks down), the GPU's ends exact for 8-26 of 282-308 pictures
+   (only those the render thread still waited for), and 160-181 of 247-266
+   aimed pictures were shown off their refresh, twice as often earlier as
+   later */
+static const Cfg kR8Open = {.name = "rc8 the opening held: the GPU slower after an idle",
+                            .gLo = 16.0,
+                            .gHi = 21.0,
+                            .rLo = 9.0,
+                            .rHi = 10.4,
+                            .dLess = 0.2,
+                            .stepLo = 3.4,
+                            .stepHi = 4.0,
+                            .reads = 8.4,
+                            .seed = 63u,
+                            .pd = 8.3525,
+                            .step2Lo = 2.6,
+                            .step2Hi = 3.4,
+                            .dvfs = 0.035};
+
+/* a compositor that replaces a picture held for its desired time by the
+   next one queued before it is shown (mailbox's rule applied to a held
+   picture: not known for Android, so the self-check) */
+static const Cfg kR8Drop = {.name = "play, a held picture replaced by the next one queued",
+                            .gLo = 13.0,
+                            .gHi = 15.0,
+                            .rLo = 7.0,
+                            .rHi = 9.0,
+                            .dLess = 0.2,
+                            .stepLo = 2.4,
+                            .stepHi = 4.0,
+                            .reads = 6.0,
+                            .seed = 64u,
+                            .pd = 8.3532,
+                            .step2Lo = 2.6,
+                            .step2Hi = 3.4,
+                            .dropHeld = 1};
+
 static void testEven(void)
 {
     printf(" the even cadence against the screen's rule alone (the screen's measure on the "
            "glass: deviation, above 1.5, below 0.75; on the refresh aimed or predicted; shown a "
            "second):\n");
-    const Cfg *const all[] = {&kR5Play, &kR5Cage,    &kOpening,   &kR5Fast, &kOne,
-                              &kR5Sac,  &kStraddle2, &kStraddle1, &kR5Lead, &kR5Regime};
+    const Cfg *const all[] = {&kR5Play,    &kR5Cage,    &kOpening, &kR5Fast,   &kOne,   &kR5Sac,
+                              &kStraddle2, &kStraddle1, &kR5Lead,  &kR5Regime, &kR8Open};
 
     enum { N = sizeof all / sizeof all[0] };
 
@@ -1170,24 +1260,55 @@ static void testEven(void)
         CHECK(statDev(&e->glass[3]) <= statDev(&rule[i].glass[3]) + 1e-9);
         CHECK(e->changes <= 3u);
     }
-    /* the rates: two refreshes a picture where the picture fits two (play,
-       about one a refresh, across one refresh): shown 1000 / (2 P) a second
-       within 0.3 and deviation under .06; four (one a tick, and where three
-       does not hold: the opening, across two refreshes) at 1000 / (4 P)
-       within 0.3, deviation under .05 (simulated .003, .000, .030) */
-    static const int kTwo[] = {0, 3, 7}, kFour[] = {2, 4, 6};
-    for (size_t i = 0; i < 3; i++) {
-        const Cfg *c = all[kTwo[i]];
-        const Out *e = &even[kTwo[i]];
-        CHECK(fabs(e->fpsShown - 1000.0 / (2.0 * c->pd)) < 0.3 && statDev(&e->glass[3]) < 0.06);
-        CHECK(e->nLast == 2u);
-    }
-    for (size_t i = 0; i < 3; i++) {
-        const Cfg *c = all[kFour[i]];
-        const Out *e = &even[kFour[i]];
+
+    /* the rates: N the fewest refreshes the picture time fits with
+       RD_PE_UP_MS (at most the tick's four), shown 1000 / (N P) a second
+       within 0.3: play, about one a refresh, across one refresh, one a
+       tick, the opening, across two refreshes and rc8's opening at 2, 1,
+       2, 4, 3, 3 and 3 (with the desired present time three holds: a
+       hand-over the step rule would hold is moved before it); deviation
+       under .06 at two or one, under .15 at three (the pictures moved
+       before the tick's close drawn from the frame pair before), under .01
+       at four */
+    static const struct {
+        int at;
+        uint32_t n;
+        double dev;
+    } kRate[] = {{0, 2, 0.06}, {3, 1, 0.06}, {7, 2, 0.06}, {4, 4, 0.01},
+                 {2, 3, 0.15}, {6, 3, 0.15}, {10, 3, 0.15}};
+
+    for (size_t i = 0; i < sizeof kRate / sizeof kRate[0]; i++) {
+        const Cfg *c = all[kRate[i].at];
+        const Out *e = &even[kRate[i].at];
         const double pd = c->pd > 0.0 ? c->pd : PD;
-        CHECK(fabs(e->fpsShown - 1000.0 / (4.0 * pd)) < 0.3 && statDev(&e->glass[3]) < 0.05);
-        CHECK(e->nLast == 4u);
+        if (!(fabs(e->fpsShown - 1000.0 / ((double)kRate[i].n * pd)) < 0.3 &&
+              statDev(&e->glass[3]) < kRate[i].dev && e->nLast == kRate[i].n)) {
+            printf("FAIL rate %s: N %u, %.1f a second, deviation %.3f\n", c->name, e->nLast,
+                   e->fpsShown, statDev(&e->glass[3]));
+            failures++;
+        }
+    }
+    /* with the desired present time no aimed picture is shown before its
+       refresh, in any regime; rc8's opening (the GPU slower and uneven
+       after an idle) evener than the screen's rule alone (rc8 on the phone
+       was worse: .45-.48 against rc6's .20-.26) */
+    for (size_t i = 0; i < N; i++) {
+        CHECK(even[i].shownEarlier == 0u);
+    }
+    CHECK(statDev(&even[10].glass[3]) < statDev(&rule[10].glass[3]) - 0.1);
+    /* the self-check: where held pictures are replaced, off within the
+       first second of aims (RD_PE_LOST_MAX never shown of RD_PE_LOST_WIN),
+       the pictures as made from there (shown a second as the screen's rule
+       alone's within 3), nothing held without an aim */
+    {
+        Out r, e;
+        run(&kR8Drop, &kNow, &r);
+        run(&kR8Drop, &kEven, &e);
+        printf("  %s: lost %u, off at %.0f ms (first aim %.0f ms); shown a second %.1f against "
+               "%.1f alone\n",
+               kR8Drop.name, e.lost, e.offAtMs, e.firstAimMs, e.fpsShown, r.fpsShown);
+        CHECK(e.offAtMs > 0.0 && e.offAtMs < e.firstAimMs + 1000.0 && e.lost >= RD_PE_LOST_MAX);
+        CHECK(fabs(e.fpsShown - r.fpsShown) < 3.0 && e.heldUnfit == 0u);
     }
     /* every regime: nothing held without a usable fit, never more than two
        waits before a hand-over (the refresh committed at the first ask: a
@@ -1245,9 +1366,13 @@ static void testEvenParts(void)
        hold to put the end RD_PE_AIM P before its latch */
     const double early = 1000.0 + 8.0 + 14.0;
     CHECK(pl.how == RD_PE_AIMED && pl.n == 2u && !pl.changed);
-    CHECK(pl.targetMs >= early + in.xMs + RD_PE_AIM * p - 1e-9 &&
-          pl.targetMs < early + in.xMs + RD_PE_AIM * p + p);
-    CHECK(fabs(1000.0 + pl.holdMs + 22.0 + in.xMs - (pl.targetMs - RD_PE_AIM * p)) < 1e-9);
+    const double sh = rd_pace_even_aim_share(&e);
+    CHECK(sh == RD_PE_AIM_DESIRED); /* desired present times after a reset */
+    CHECK(pl.targetMs >= early + in.xMs + sh * p - 1e-9 &&
+          pl.targetMs < early + in.xMs + sh * p + p);
+    CHECK(fabs(1000.0 + pl.holdMs + 22.0 + in.xMs - (pl.targetMs - sh * p)) < 1e-9);
+    /* the desired time half a refresh before the refresh */
+    CHECK(rd_pace_even_desired_ms(pl.targetMs, p) == pl.targetMs - 0.5 * p);
     /* idempotent until taken */
     RdPaceEvenPlan p2;
     rd_pace_even_plan(&e, &in, &p2);
@@ -1255,14 +1380,15 @@ static void testEvenParts(void)
     bool late;
     const double r0 = rd_pace_even_take(&e, &in, 1000.0 + pl.holdMs + 22.0, false, &late);
     CHECK(r0 == pl.targetMs && !late);
-    /* the next: N refreshes on; handed over 6 ms later than planned: its end
+    /* the next: N refreshes on; handed over 9 ms later than planned (over
+       the aim's refresh less RD_PE_LATE_MS): its end
        past the refresh less RD_PE_LATE_MS, a refresh later and late */
     in.nowMs = 1010.0;
     in.prevEndMs = 1000.0 + pl.holdMs + 22.0;
     rd_pace_even_plan(&e, &in, &pl);
     CHECK(fabs(pl.targetMs - (r0 + 2.0 * p)) < 1e-6);
     const double planned = in.nowMs + pl.holdMs + 22.0;
-    const double r1 = rd_pace_even_take(&e, &in, planned + 6.0, false, &late);
+    const double r1 = rd_pace_even_take(&e, &in, planned + 9.0, false, &late);
     CHECK(late && fabs(r1 - (r0 + 3.0 * p)) < 1e-6);
     /* the bias: a late one aims RD_PE_BIAS_STEP_MS earlier, an on-time one
        back by RD_PE_BIAS_DECAY_MS */
@@ -1283,7 +1409,7 @@ static void testEvenParts(void)
     }
     CHECK(e.n == 3u); /* 4 s later, the same picture time: still 3 */
     in.gMs = 12.5;    /* the picture time moved by over RD_PE_FLOOR_T_MS: down after the hold */
-    for (int i = 0; i < 150; i++) {
+    for (int i = 0; i < 250; i++) {
         in.nowMs += 10.0;
         rd_pace_even_plan(&e, &in, &pl);
         (void)rd_pace_even_take(&e, &in, 0.0, false, &late);
@@ -1321,11 +1447,13 @@ static void testEvenParts(void)
                         .stepEndMs = 0.0,
                         .tickMs = TICK};
     rd_pace_even_plan(&e, &in, &pl);
+    /* asked again 5 ms before it is due (the refresh committed), with the
+       game's step due 2 ms before it: handed over before the step */
     const double due = 1000.0 + pl.holdMs;
-    e.planned = false;
+    in.nowMs = due - 5.0;
     in.stepEndMs = due - 2.0;
     rd_pace_even_plan(&e, &in, &pl);
-    CHECK(pl.early && fabs(1000.0 + pl.holdMs - (due - 2.0 - 0.3)) < 1e-9);
+    CHECK(pl.early && fabs(in.nowMs + pl.holdMs - (due - 2.0 - RD_PE_STEP_MARGIN_MS)) < 1e-9);
 
     /* the texts */
     char line[2048];
@@ -1336,10 +1464,13 @@ static void testEvenParts(void)
               "with the picture time (the larger of the GPU's median span and the hand-over to "
               "the first submit) + 0.25 ms, up at once or when 8 of the last 32 aims were late "
               "(then not down until the picture time moves by 1.00 ms), down to the fewest it "
-              "fits with 1.00 ms to spare after 1000 ms of it; each hand-over held until its "
-              "predicted GPU end sits 0.50 of a refresh before its refresh's latch (the screen's "
-              "grid and latch), the content drawn for that refresh; it lowers the pictures a "
-              "second where the GPU could make more; not used (ICO_RD_PACE_EVEN=1 turns it on)");
+              "fits with 0.25 ms to spare after 2000 ms of it; each hand-over held until its "
+              "predicted GPU end sits 1.00 of a refresh before its refresh's latch (the screen's "
+              "grid and latch), its present asking that refresh less half a refresh as its "
+              "desired time (shown no earlier), the content drawn for that refresh; off for the "
+              "run where 4 of the last 32 such pictures were never shown or their acquire and "
+              "present call took 3.0 ms more than without; it lowers the pictures a second "
+              "where the GPU could make more; not used (ICO_RD_PACE_EVEN=1 turns it on)");
     RdPaceEvenWindow w;
     memset(&w, 0, sizeof w);
     CHECK(!rd_pace_even_format(&w, line, sizeof line) && line[0] == '\0');

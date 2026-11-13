@@ -42,11 +42,14 @@ typedef struct RdRuleNote {
        from (rd's clock) and the refresh predicted (the display's clock);
        0 none */
     double screenEndMs, screenAtMs;
+    /* the even cadence's desired present time (rd_pace_even.h; the
+       display's clock, ms; 0 none) */
+    double desiredMs;
 } RdRuleNote;
 
 /* a note with nothing computed (a present not made as fast as the GPU
    allows, or no note) */
-#define RD_RULE_NOTE_NONE {{-1.0f, -1.0f, -1.0f, -1.0f}, RD_RULE_CLOCK, 0.0, 0.0, 0.0}
+#define RD_RULE_NOTE_NONE {{-1.0f, -1.0f, -1.0f, -1.0f}, RD_RULE_CLOCK, 0.0, 0.0, 0.0, 0.0}
 
 /* the poster's thread, a picture as made: raw the value presentRebase made
    (the hand-over rule's, plus applied / tick where the GPU end is drawn),

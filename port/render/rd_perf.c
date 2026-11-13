@@ -28,6 +28,7 @@
 #include "rd_even.h"
 #include "rd_glass.h"
 #include "rd_pace_gpu.h"
+#include "rd_pace_even.h"
 #include "rd_pace_rules.h"
 #include "rd_internal.h"
 #include "rd_passring.h"
@@ -1175,6 +1176,7 @@ void rd__perf_begin(const RdFrame *f, int keep, bool present)
         g_rdPerf.ruleTickMs = rn.tickMs;
         g_rdPerf.screenEndMs = rn.screenEndMs;
         g_rdPerf.screenAtMs = rn.screenAtMs;
+        g_rdPerf.desiredMs = rn.desiredMs;
     }
     g_rdPerf.firstOfTick = s_first;
     g_rdPerf.reshown = s_reshownNext;
@@ -1529,6 +1531,9 @@ void rd__perf_collect_gpu(void)
                                     r->gpuDoneValid == 1};
         rd_pace_gpu_measure(&ps);
     }
+    /* the even cadence's self-check: the presents' acquire and present
+       call with a desired time against those without (rd_pace_even.h) */
+    rd_pace_even_note_present(r->acquireMs + r->presentCallMs, r->desiredMs > 0.0);
     if (r->glassId != 0) {
         /* the content's speed on the glass (rd_glass.h): the display's
            times read back since, then this picture */

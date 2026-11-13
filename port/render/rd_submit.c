@@ -179,6 +179,7 @@ void rd__submit_frame(RhiCommandList cl, bool present, double walkStart, double 
     t = t1;
     const bool shows = present && rd__present_will_show(); /* rhi_present is called */
     if (present) {
+        rhi_present_desire(g_rdPerf.desiredMs > 0.0 ? (uint64_t)(g_rdPerf.desiredMs * 1e6) : 0u);
         rd__present_finish();
         rd__capture_finish(); /* a capture this present copied */
     }

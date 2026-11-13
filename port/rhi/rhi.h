@@ -2139,6 +2139,13 @@ typedef struct RhiGlassTime {
 } RhiGlassTime;
 
 uint32_t rhi_present_glass(uint64_t *lastId, uint64_t *refreshNs, RhiGlassTime *out, uint32_t max);
+/* The desired present time of the calling thread's next present
+ * (VK_GOOGLE_display_timing's desiredPresentTime, on the clock of
+ * RhiGlassTime.actualNs: the display's; 0 "any time"), taken by that
+ * present and then 0 again.  The even cadence's (port/render/rd_pace_even.h):
+ * the compositor does not show the picture before that time.  Elsewhere,
+ * and on Vulkan without the extension: nothing. */
+void rhi_present_desire(uint64_t desiredNs);
 /* The swapchain's own count of the pictures it showed, read after each
  * present (D3D12: IDXGISwapChain::GetFrameStatistics; diagnostics for the
  * window's log): *presentCount the present count of the last picture

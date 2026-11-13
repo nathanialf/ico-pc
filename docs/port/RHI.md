@@ -1412,7 +1412,7 @@ gives the calling thread's last present's id and takes the times (`port/rhi/vk/v
 start line `rhi_vk: display timing (read back): VK_GOOGLE_display_timing on (read only: ...)` or
 `off (...)`). A swapchain made again by the present itself is not read after it is destroyed.
 `VK_EXT_present_timing` is not used. OpenGL and Direct3D give none. The renderer's on-glass line
-reads it ([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#the-on-glass-line)).
+reads it ([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#the-on-glass-line)). The one exception to the desired time of 0: `rhi_present_desire(ns)` sets the calling thread's next present's `desiredPresentTime` (then 0 again), on the clock of `actualPresentTime` (the display's own: the extension's times are in ns of a monotonic clock, `CLOCK_MONOTONIC` on Android, the same the read-back gives, so no mapping is made); only the even cadence calls it, an rc variant off by default ([DISPLAY.md](DISPLAY.md#interpolation-between-ticks)). Elsewhere it does nothing.
 
 **The present-wait thread.** With `ICO_VK_PRESENT_WAIT=1` a thread waits on each present's id in
 turn (`vkWaitForPresentKHR`, 4 ms a wait) and notes when it returned on `SDL_GetTicksNS`'s clock in

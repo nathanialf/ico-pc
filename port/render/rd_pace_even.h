@@ -60,8 +60,8 @@
 /* the picture time's margins for N up and down, the time N - 1 must fit
    before N goes down, the most refreshes a picture */
 #define RD_PE_UP_MS 0.25
-#define RD_PE_DOWN_MS 1.0
-#define RD_PE_DOWN_HOLD_MS 1000.0
+#define RD_PE_DOWN_MS 0.25
+#define RD_PE_DOWN_HOLD_MS 2000.0
 #define RD_PE_N_MAX 8u
 /* late aims over the last RD_PE_MISS_WIN that take N up; N then not below
    the raised value while the picture time is within RD_PE_FLOOR_T_MS of the
@@ -77,6 +77,42 @@
    when the earliest end + X is past R less this */
 #define RD_PE_AIM 0.5
 #define RD_PE_LATE_MS 1.0
+/* with a desired present time (VK_GOOGLE_display_timing's
+   desiredPresentTime, half a refresh before R: the compositor does not show
+   the picture before R), earliness costs nothing: the end aimed a whole
+   refresh before R's latch, so a picture may end up to a refresh less
+   RD_PE_LATE_MS later than predicted and still make R (v0.11.6-rc8: the
+   GPU 24-25 ms a picture after an idle of 8-10 ms against 17-19 ms as
+   made, its ends' prediction off by 6-32 ms, 160-181 of 247-266 aimed
+   pictures shown off their refresh) */
+#define RD_PE_AIM_DESIRED 1.0
+/* the self-check: off for the run where RD_PE_LOST_MAX of the last
+   RD_PE_LOST_WIN aimed pictures were never shown (a picture held for its
+   desired time replaced by the next one: mailbox's rule, if Android's
+   compositor applies it to a held picture), or where the presents with a
+   desired time spend RD_PE_BLOCK_MS more on their acquire and present call
+   on average over RD_PE_BLOCK_N than those without (a held image keeping an
+   acquire or a present waiting); before RD_PE_BASE_N presents without one
+   the second check is not made */
+#define RD_PE_LOST_WIN 32u
+#define RD_PE_LOST_MAX 4u
+#define RD_PE_BLOCK_MS 3.0
+#define RD_PE_BLOCK_N 32u
+#define RD_PE_BASE_N 32u
+
+enum { RD_PE_WHY_NONE = 0, RD_PE_WHY_LOST, RD_PE_WHY_BLOCK };
+
+/* a hand-over moved before the game's next step (or before the step rule
+   would hold it) goes this far before it: the hand's cost and the sleep's
+   overshoot (SDL_DelayPrecise: a fraction of a ms) */
+#define RD_PE_STEP_MARGIN_MS 1.5
+/* N down to the fewest the picture time fits with RD_PE_UP_MS, after that
+   has held RD_PE_DOWN_HOLD_MS; up at once only where the picture time is
+   over N refreshes (the GPU cannot keep up), or by the late aims.  The
+   picture time measured while held is inflated by the GPU's clocks going
+   down in its idle (rc8: 24.6 ms at four refreshes for pictures of 17-19
+   ms as made): with a margin of a whole ms down from four never fitted
+   three, though three refreshes (25.06 ms) held the pictures' rate */
 /* the aim moved this much earlier at each picture shown a refresh late,
    later at each one shown early, at most half a refresh either way: with
    every picture aimed at one phase of its refresh the shown times no longer
@@ -102,6 +138,7 @@ enum {
     RD_PE_KEPT,    /* a kept frame's present (a fade, a load) */
     RD_PE_NO_PLAN, /* handed over without a plan (a present the pacer did not hold) */
     RD_PE_SLOW,    /* a picture takes longer than a game tick: as made */
+    RD_PE_OFF,     /* turned off for the run by its self-check (RdPaceEven.offWhy) */
     RD_PE_HOW_COUNT
 };
 
@@ -116,6 +153,15 @@ typedef struct RdPaceEven {
     double biasMs;       /* the aim this much earlier (RD_PE_BIAS_STEP_MS) */
     double tRefMs;       /* the picture time the bias and the late aims were taken at */
     double periodMs;     /* P at the last plan (the bias's bound) */
+    bool desire;         /* desired present times in use (true after a reset): the aim
+                            RD_PE_AIM_DESIRED */
+    /* the self-check (rd_pace_even_lost, rd_pace_even_presents): off for
+       the run once it trips, why (RD_PE_WHY_*) */
+    bool off;
+    int offWhy;
+    uint32_t lostBits; /* the last RD_PE_LOST_WIN aims seen or not: 1 never shown */
+    double baseMs;     /* the presents' acquire and call without a desired time, mean */
+    uint32_t baseN;
     /* the plan for the picture about to be handed over */
     bool planned;
     double planTargetMs;
@@ -132,6 +178,7 @@ typedef struct RdPaceEvenIn {
     double prevEndMs; /* the GPU model's last predicted end (rd's clock; 0 none) */
     double stepEndMs; /* the pacer's deadline: the game steps from it (0 not known) */
     double tickMs;    /* the game's frame (N at most its refreshes, rounded; 0 not known) */
+    double ruleEndMs; /* a further picture: from when the step rule would hold it (0 none) */
 } RdPaceEvenIn;
 
 typedef struct RdPaceEvenPlan {
@@ -146,6 +193,11 @@ typedef struct RdPaceEvenPlan {
 } RdPaceEvenPlan;
 
 void rd_pace_even_reset(RdPaceEven *e);
+/* the share of a refresh the end is aimed before its refresh's latch */
+double rd_pace_even_aim_share(const RdPaceEven *e);
+/* the desired present time for a picture aimed at refresh r of period p
+   (the display's clock: half a refresh before r) */
+double rd_pace_even_desired_ms(double r, double p);
 /* pure: the fewest refreshes of p a picture of t ms fits with margin m */
 uint32_t rd_pace_even_n_for(double t, double p, double m);
 /* the plan for the next hand-over (idempotent until rd_pace_even_take: the
@@ -156,6 +208,14 @@ void rd_pace_even_plan(RdPaceEven *e, const RdPaceEvenIn *in, RdPaceEvenPlan *ou
    refresh at the hand-over (aimed at a later one) */
 double rd_pace_even_take(RdPaceEven *e, const RdPaceEvenIn *in, double endMs, bool kept,
                          bool *late);
+/* the self-check, pure: an aimed picture seen (lost false) or passed by a
+   later one never seen (lost true); the presents' mean acquire and present
+   call over a batch, with or without a desired time.  Each may turn the
+   cadence off for the run (e->off, e->offWhy); true where it just did */
+bool rd_pace_even_lost(RdPaceEven *e, bool lost);
+bool rd_pace_even_presents(RdPaceEven *e, double meanMs, uint32_t n, bool desired);
+/* the reason's words */
+const char *rd_pace_even_off_text(int why);
 /* a shown picture's score against its aim (rd_pace_screen_score: 0 on it):
    the late window and the aim's bias */
 void rd_pace_even_shown(RdPaceEven *e, int score);
@@ -164,7 +224,7 @@ void rd_pace_even_shown(RdPaceEven *e, int score);
 
 typedef struct RdPaceEvenWindow {
     uint64_t how[RD_PE_HOW_COUNT];
-    uint64_t changes, lateAims, held, heldUs, early, shownOff, shownLate, shownEarly, shown;
+    uint64_t changes, lateAims, held, heldUs, early, shownOff, shownLate, shownEarly, shown, lost;
     uint32_t n, periodNs; /* the last */
 } RdPaceEvenWindow;
 
@@ -172,6 +232,7 @@ typedef struct RdPaceEvenWindow {
 void rd_pace_even_tally_plan(const RdPaceEvenPlan *p, double periodMs);
 void rd_pace_even_tally_take(int how, bool late);
 void rd_pace_even_tally_shown(int score);
+void rd_pace_even_tally_lost(void);
 void rd_pace_even_take_window(RdPaceEvenWindow *w);
 /* "; the even cadence: ..." appended at out (the on-glass line's clause);
    false and "" when nothing was planned or taken */
@@ -187,8 +248,12 @@ bool rd_pace_even_on(void);
 /* the poster's thread (rd_pace_rules.c, a picture as made handed over with
    its predicted GPU end; kept a kept frame's present): the refresh it is
    aimed at (the display's clock; 0 not aimed: off, no plan, kept), the plan
-   taken and tallied */
-double rd_pace_even_take_live(double endPredMs, bool kept);
+      taken and tallied; *desiredMs its desired present time (0 none) */
+double rd_pace_even_take_live(double endPredMs, bool kept, double *desiredMs);
+/* the collecting thread, every record: its acquire and present call (ms)
+   and whether its present carried a desired time (the self-check's input:
+   atomics the poster's thread takes) */
+void rd_pace_even_note_present(double ms, bool desired);
 /* the poster's thread: a shown picture the screen's model took (its score
    against the refresh it was aimed at, where it was) */
 struct RdPaceScreenSample;
@@ -199,6 +264,7 @@ void rd_pace_even_paced(void);
 /* the poster's thread at nowMs (rd's clock; rd.h rd_present_even_hold
    from the window's pacer): the hold before the next hand-over (ms, 0
    none), the plan made and its first ask tallied */
-double rd_pace_even_hold_at(double nowMs, double untilDeadlineMs, double tickMs);
+double rd_pace_even_hold_at(double nowMs, double untilDeadlineMs, double tickMs,
+                            double untilRuleMs);
 
 #endif
