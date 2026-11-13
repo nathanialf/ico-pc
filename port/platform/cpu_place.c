@@ -595,6 +595,95 @@ unsigned cpu_place_refree(uint64_t mask, const long *skip, int nSkip, unsigned *
     return moved;
 }
 
+int cpu_place_sweep_pick(const long *ids, const uint64_t *masks, int n, uint64_t held,
+                         const long *skip, int nSkip, long *out, int cap)
+{
+    int m = 0;
+
+    for (int i = 0; i < n && m < cap; i++) {
+        bool skipIt = ids[i] <= 0 || masks[i] == 0 || (masks[i] & held) == 0;
+
+        for (int k = 0; !skipIt && k < nSkip; k++) {
+            skipIt = skip[k] == ids[i];
+        }
+        if (!skipIt) {
+            out[m++] = ids[i];
+        }
+    }
+    return m;
+}
+
+static int by_long(const void *a, const void *b)
+{
+    const long x = *(const long *)a, y = *(const long *)b;
+
+    return x < y ? -1 : x > y;
+}
+
+int cpu_place_task_ids(const char *root, long *ids, int cap)
+{
+    int n = 0;
+#if defined(__linux__)
+    DIR *d = opendir(root != NULL ? root : "/proc/self/task");
+    struct dirent *e;
+
+    if (d == NULL) {
+        return 0;
+    }
+    while (n < cap && (e = readdir(d)) != NULL) {
+        char *end;
+        const long tid = strtol(e->d_name, &end, 10);
+
+        if (e->d_name[0] >= '0' && e->d_name[0] <= '9' && *end == '\0' && tid > 0) {
+            ids[n++] = tid;
+        }
+    }
+    closedir(d);
+    if (n > 1) {
+        qsort(ids, (size_t)n, sizeof(ids[0]), by_long);
+    }
+#else
+    (void)root;
+    (void)ids;
+    (void)cap;
+#endif
+    return n;
+}
+
+unsigned cpu_place_sweep(uint64_t held, uint64_t to, const long *skip, int nSkip, unsigned *seen,
+                         unsigned *failed)
+{
+    /* the log thread's alone: off its stack */
+    static long s_ids[CPU_SWEEP_MAX], s_pick[CPU_SWEEP_MAX];
+    static uint64_t s_masks[CPU_SWEEP_MAX];
+    unsigned moved = 0, bad = 0;
+    int n = 0, m;
+
+    if (held != 0 && to != 0 && (held & ~to) != 0) {
+        n = cpu_place_task_ids(NULL, s_ids, CPU_SWEEP_MAX);
+    }
+    for (int i = 0; i < n; i++) {
+        s_masks[i] = cpu_place_allowed_tid(s_ids[i]);
+    }
+    m = cpu_place_sweep_pick(s_ids, s_masks, n, held, skip, nSkip, s_pick, CPU_SWEEP_MAX);
+    for (int i = 0; i < m; i++) {
+        char why[96];
+
+        if (cpu_place_pin_tid(s_pick[i], to, why, sizeof(why))) {
+            moved++;
+        } else if (cpu_place_allowed_tid(s_pick[i]) != 0) {
+            bad++; /* still there: refused (an ended thread reads 0) */
+        }
+    }
+    if (seen != NULL) {
+        *seen = (unsigned)n;
+    }
+    if (failed != NULL) {
+        *failed = bad;
+    }
+    return moved;
+}
+
 void cpu_place_keep_free(uint64_t mask)
 {
     __atomic_store_n(&s_freeMask, mask, __ATOMIC_RELEASE);

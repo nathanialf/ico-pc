@@ -17,6 +17,17 @@
  *              reports -1 with the reason;
  *   shutdown   the worker joins with a job in flight (its zip is written),
  *              twice is safe, and a later job starts a new worker;
+ *   prepare    the slow-scene dump's block made by the worker before the
+ *              job (issue 179, port/render/rd_dump_mem.h): none asked
+ *              gives -1, a size of 0 is refused, the block comes back at
+ *              the size asked with the worker's time, the worker is busy
+ *              from the ask to the submit (a second ask and a job offered
+ *              meanwhile are refused, the job's line counted), the block
+ *              filled and handed back is written whole (the zip's entry
+ *              is its bytes, the result's worker time includes the
+ *              making); a block given up while asked, once made, and once
+ *              taken leaves the worker free; one made and never taken is
+ *              freed at shutdown;
  *   bundle     ico_dump_auto_bundle: of five recorded zips the newest three
  *              go into the report zip, stored, with a note naming each; a
  *              size cap leaves one out and the note says so; none recorded
@@ -238,6 +249,104 @@ static void test_shutdown(const char *base)
     ico_dump_auto_shutdown();
 }
 
+/* the prepared block: polled until made (0 while the worker makes it) */
+static int wait_block(void **blk, size_t *size, double *ms)
+{
+    int r = 0;
+
+    for (int i = 0; i < 5000 && (r = ico_dump_auto_prepared(blk, size, ms)) == 0; i++) {
+        for (volatile int k = 0; k < 200000; k++) {}
+    }
+    return r;
+}
+
+static void spin(int rounds)
+{
+    for (int i = 0; i < rounds; i++) {
+        for (volatile int k = 0; k < 200000; k++) {}
+    }
+}
+
+static void wait_free(void)
+{
+    for (int i = 0; i < 5000 && ico_dump_auto_busy(); i++) {
+        for (volatile int k = 0; k < 200000; k++) {}
+    }
+}
+
+static void test_prepare(const char *base)
+{
+    char dir[400];
+    const char frame[] = "the frame copied into the worker's block";
+    const size_t asked = 3u * 4096u + 5u;
+    IcoDumpJob j, other;
+    IcoDumpDone d;
+    mz_zip_archive z;
+    void *blk = NULL, *none = NULL;
+    size_t size = 0, noneSize = 9;
+    double ms = -1.0, noneMs = 9.0;
+    const unsigned drops = ico_dump_auto_dropped();
+
+    snprintf(dir, sizeof(dir), "%s/dump-auto-prep", base);
+    ico_mkdir(dir);
+    CHECK(!ico_dump_auto_busy());
+    CHECK(ico_dump_auto_prepared(&none, &noneSize, &noneMs) == -1 && none == NULL &&
+          noneSize == 0 && noneMs == 0.0);
+    CHECK(ico_dump_auto_prepare(0) == -1);
+    CHECK(!ico_dump_auto_busy());
+    CHECK(ico_dump_auto_prepare(asked) == 0);
+    CHECK(ico_dump_auto_busy());
+    CHECK(ico_dump_auto_prepare(100) == -1); /* one at a time */
+    fill(&other, dir, "20261113-090000", "x", 2);
+    CHECK(ico_dump_auto_submit(&other) == -1); /* a job meanwhile: dropped */
+    CHECK(ico_dump_auto_dropped() == drops + 1);
+    free(other.dump);
+    CHECK(wait_block(&blk, &size, &ms) == 1);
+    CHECK(blk != NULL && size == asked && ms >= 0.0);
+    CHECK(ico_dump_auto_busy()); /* held: until the submit */
+    CHECK(ico_dump_auto_prepared(&none, &noneSize, &noneMs) == -1 && none == NULL);
+    if (blk != NULL) {
+        memcpy(blk, frame, sizeof(frame));
+        ((char *)blk)[size - 1] = 1; /* the whole block is the caller's */
+    }
+    fill(&j, dir, "20261113-090001", "y", 2);
+    free(j.dump);
+    j.dump = blk;
+    j.dumpLen = sizeof(frame);
+    j.prepMs = ms;
+    CHECK(ico_dump_auto_submit(&j) == 0);
+    memset(&d, 0, sizeof(d));
+    wait_done(&d);
+    CHECK(d.result >= 0 && d.bytes == sizeof(frame) && d.prepMs == ms && d.workerMs >= ms);
+    memset(&z, 0, sizeof(z));
+    CHECK(mz_zip_reader_init_file(&z, d.zip, 0));
+    CHECK(entry_is(&z, "slow-20261113-090001.rddump", frame, sizeof(frame)));
+    mz_zip_reader_end(&z);
+    CHECK(!ico_dump_auto_busy());
+
+    /* given up while asked (made or not yet): the worker frees it */
+    CHECK(ico_dump_auto_prepare(asked) == 0);
+    ico_dump_auto_unprepare(NULL);
+    wait_free();
+    CHECK(!ico_dump_auto_busy());
+    /* given up once made, before it is taken */
+    CHECK(ico_dump_auto_prepare(asked) == 0);
+    spin(50); /* most likely made by now; either way it is the worker's to free */
+    ico_dump_auto_unprepare(NULL);
+    wait_free();
+    CHECK(!ico_dump_auto_busy());
+    /* given up once taken */
+    CHECK(ico_dump_auto_prepare(asked) == 0);
+    CHECK(wait_block(&blk, &size, &ms) == 1 && blk != NULL);
+    ico_dump_auto_unprepare(blk);
+    CHECK(!ico_dump_auto_busy());
+    /* made and never taken: freed at shutdown, the worker free after */
+    CHECK(ico_dump_auto_prepare(asked) == 0);
+    spin(50);
+    ico_dump_auto_shutdown();
+    CHECK(!ico_dump_auto_busy());
+}
+
 static void test_bundle(const char *base)
 {
     char dir[400], rep[600], line[400], p[6][600];
@@ -328,6 +437,7 @@ int main(int argc, char **argv)
     test_job(base);
     test_busy(base);
     test_shutdown(base);
+    test_prepare(base);
     test_bundle(base);
     printf("dump_auto_test: %s\n", fails ? "FAILED" : "ok");
     return fails ? 1 : 0;

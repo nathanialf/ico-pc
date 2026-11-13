@@ -86,7 +86,10 @@ bool cpu_place_split(const CpuClasses *c, uint64_t *render, uint64_t *submit);
    the render thread both keep to those two cores, the submit thread free
    (CPU_PLAN_TWO_FAST).  With one faster core: the render thread alone on
    it, the game and submit threads free (CPU_PLAN_ONE_FAST; two threads
-   would share the core).  No faster core: nothing kept (CPU_PLAN_NONE). */
+   would share the core).  No faster core: nothing kept (CPU_PLAN_NONE).
+   This is the start's placement; after it, with one or two faster cores,
+   the keeper's few-cores rule (cpu_keep.h) gives the render and game
+   threads a faster core each and moves every other thread off them. */
 typedef enum CpuPlanKind {
     CPU_PLAN_NONE = 0,
     CPU_PLAN_ONE_FAST,
@@ -194,6 +197,32 @@ uint64_t cpu_place_free_mask(void);
    and the rest leave them */
 #define CPU_FREE_TIDS 64
 unsigned cpu_place_refree(uint64_t mask, const long *skip, int nSkip, unsigned *ended);
+
+/* The few-cores rule's sweep (cpu_keep.h cpu_keep_held; the log thread's
+   tick in render_thread.c): a thread made by the game or render thread
+   starts on its maker's cores, and the system's and the driver's own
+   threads (AudioTrack, made inside the process by AAudio on the thread
+   that opened the device; mali-cmar-backend) are made where nothing of
+   the game's calls cpu_place_thread_free, so once a second every thread
+   of the process found on a held core is moved to the others' cores.
+   The process's thread ids from /proc/self/task (root NULL) or a fake
+   root, by id, at most cap: the count held (Linux and Android; 0
+   elsewhere) */
+int cpu_place_task_ids(const char *root, long *ids, int cap);
+/* Pure: of n threads (ids, their cores; a mask of 0, not known, is left
+   alone) those whose cores include one of held, other than the ids in skip
+   (the render and game threads, Android's UI thread, the submit thread),
+   into out (at most cap): the count */
+int cpu_place_sweep_pick(const long *ids, const uint64_t *masks, int n, uint64_t held,
+                         const long *skip, int nSkip, long *out, int cap);
+/* cpu_place_task_ids, each thread's cores (cpu_place_allowed_tid), the
+   pick, each picked thread kept to `to` (cpu_place_pin_tid): the count
+   moved; *seen the threads looked at, *failed the pins refused for a
+   thread still there (one that ended between the list and the pin is not
+   counted).  Nothing with held or to 0, or held inside to */
+#define CPU_SWEEP_MAX 256
+unsigned cpu_place_sweep(uint64_t held, uint64_t to, const long *skip, int nSkip, unsigned *seen,
+                         unsigned *failed);
 
 typedef enum CpuFreeResult {
     CPU_FREE_NONE = 0, /* no mask kept (no pin in this process), or not Linux */

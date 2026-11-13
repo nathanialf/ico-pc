@@ -43,6 +43,9 @@ typedef struct IcoDumpJob {
        handed to them (rd_thread_drain), before the frame's bytes could be
        read; -1 not measured apart */
     double drainMs;
+    /* the worker's time making the job's block beforehand
+       (ico_dump_auto_prepare), 0 none: added to the result's worker time */
+    double prepMs;
 } IcoDumpJob;
 
 typedef struct IcoDumpDone {
@@ -53,6 +56,7 @@ typedef struct IcoDumpDone {
     int result; /* 0 both, 1 without the log, -1 not written */
     double gameMs, workerMs;
     double drainMs;     /* IcoDumpJob.drainMs */
+    double prepMs;      /* IcoDumpJob.prepMs (part of workerMs, made before the job) */
     double workerEndMs; /* the worker's end, ico_thread_now_ms */
     size_t bytes;       /* the dump's bytes */
 } IcoDumpDone;
@@ -65,6 +69,21 @@ int ico_dump_auto_busy(void);
    caller's. Either failure is a drop: one line (the first 8, then every
    100th) names the tag and the count. */
 int ico_dump_auto_submit(const IcoDumpJob *job);
+/* The slow-scene dump's block made by the worker before the job
+   (port/render/rd_dump_mem.h; issue 179): the game thread asks for a
+   block of `bytes` (ico_dump_auto_prepare: 0; -1 when busy, -2 when no
+   thread could be made), the worker allocates it and touches every page
+   (one write each 4096 bytes), and the game thread takes it at a later
+   picture without waiting (ico_dump_auto_prepared: 1 with the block, its
+   size and the worker's ms; 0 not ready yet; -1 when the worker could not
+   allocate it or none was asked), fills it and hands it back as the job's
+   dump (ico_dump_auto_submit), or gives it up (ico_dump_auto_unprepare:
+   the block taken, or NULL, freed; one asked and not made yet is freed by
+   the worker when it is).  From the ask to the submit or the give-up the
+   worker is busy (ico_dump_auto_busy): one dump at a time, as before */
+int ico_dump_auto_prepare(size_t bytes);
+int ico_dump_auto_prepared(void **block, size_t *size, double *ms);
+void ico_dump_auto_unprepare(void *block);
 /* The game thread: the finished job's result when there is one (1; then
    *out is filled, the slot free for the next job), else 0 */
 int ico_dump_auto_poll(IcoDumpDone *out);

@@ -62,7 +62,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_passring.h`, `rd_passring.c` | the pass ring: the last passes recorded, for the device-loss report |
 | `port/render/rd_loss_pick.h`, `rd_loss_pick.c`, `rd_loss_keep.h` | which frame the loss dump writes and the memory copies of frames the GPU may not have finished ([The loss dump](#the-loss-dump)) |
 | `port/render/rd_vu_rec_early.c`, `rd_vu_rec_early.h`, `rd_early_plan.c`, `rd_early_plan.h` | the first 3D pictures' allocations made at start-up, and their memory bound ([Made at start-up](#made-at-start-up)) |
-| `port/render/rd_dump.c`, `rd_png.c` | frame dumps; a minimal PNG writer |
+| `port/render/rd_dump.c`, `rd_dump_mem.h`, `rd_png.c` | frame dumps (the slow-scene dump's measure and copy into the worker's block: [ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-stall-and-logging-lines-issues-123-and-179)); a minimal PNG writer |
 | `port/render/tools/rd_replay_tool.c` | [the replay tool](ARCHITECTURE.md#terms) |
 | `port/render/tools/rd_replay_region.c` | the replay tool's `--region-stats`: the region rule's verdicts on the CPU |
 | `port/render/vu1_ref/` | the VU1 programs' CPU references ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-cpu-oracles)) |

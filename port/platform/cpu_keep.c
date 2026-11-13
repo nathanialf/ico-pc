@@ -52,16 +52,60 @@ bool cpu_keep_applies(const CpuClasses *c)
     return popcount64(cpu_place_fast_mask(c)) >= CPU_KEEP_MIN_FAST;
 }
 
+bool cpu_keep_few(const CpuClasses *c)
+{
+    const int n = popcount64(cpu_place_fast_mask(c));
+
+    return n >= 1 && n < CPU_KEEP_MIN_FAST;
+}
+
+/* the few-cores rule's ALONE and PAIR (cpu_keep.h): f the allowed faster
+   cores (not 0), a the allowed ones */
+static bool few_choose(const CpuClasses *c, uint64_t a, uint64_t f, uint64_t refused,
+                       uint64_t gameRefused, CpuKeepLevel level, CpuKeepSets *out)
+{
+    if (level == CPU_KEEP_ALONE) {
+        const int r = best_core(c, f & ~refused);
+
+        if (r < 0) {
+            return false;
+        }
+        out->render = bit(r);
+        if (popcount64(f) >= 2) {
+            const int g = best_core(c, f & ~out->render & ~refused & ~gameRefused);
+
+            out->game = g >= 0 ? bit(g) : f;
+        } else {
+            out->game = a; /* one faster core: the game thread free, as before */
+        }
+    } else {
+        if (popcount64(f) < 2) {
+            return false;
+        }
+        out->render = out->game = f;
+    }
+    out->submit = 0;
+    out->others = a & ~f;
+    if (out->others == 0) {
+        out->others = a;
+    }
+    return true;
+}
+
 bool cpu_keep_choose(const CpuClasses *c, uint64_t allowed, uint64_t refused, uint64_t gameRefused,
                      CpuKeepLevel level, CpuKeepSets *out)
 {
     const uint64_t a = allowed != 0 ? allowed : known_mask(c);
     const uint64_t f = cpu_place_fast_mask(c) & a;
+    const bool few = cpu_keep_few(c);
 
     memset(out, 0, sizeof(*out));
     out->level = level;
-    if (!cpu_keep_applies(c) || f == 0) {
+    if ((!cpu_keep_applies(c) && !few) || f == 0) {
         return false;
+    }
+    if (few && level != CPU_KEEP_FAST) {
+        return few_choose(c, a, f, refused, gameRefused, level, out);
     }
     if (level == CPU_KEEP_FAST) {
         /* the start's rule on the allowed cores, the render thread on
@@ -112,7 +156,8 @@ void cpu_keep_init(CpuKeep *k, const CpuClasses *c)
 {
     memset(k, 0, sizeof(*k));
     k->classes = *c;
-    k->on = cpu_keep_applies(c);
+    k->few = cpu_keep_few(c);
+    k->on = cpu_keep_applies(c) || k->few;
 }
 
 static bool pin_kept(const CpuKeepPin *p)
@@ -475,7 +520,7 @@ size_t cpu_keep_block_text(const CpuKeep *k, const char *sys, char *out, size_t 
         out[0] = '\0';
     }
     if (!k->on) {
-        put(out, cap, &len, "off (fewer than three cores faster than the slowest)");
+        put(out, cap, &len, "off (no core faster than the slowest)");
         return done(out, cap, len);
     }
     if (!k->have) {
@@ -508,4 +553,55 @@ size_t cpu_keep_block_text(const CpuKeep *k, const char *sys, char *out, size_t 
 void cpu_keep_block_reset(CpuKeep *k)
 {
     k->blockTries = k->blockKept = k->blockChanges = k->blockReads = k->blockOnSet = 0;
+}
+
+uint64_t cpu_keep_held(const CpuKeep *k)
+{
+    const uint64_t fast = cpu_place_fast_mask(&k->classes);
+    uint64_t held;
+
+    if (!k->on || !k->few || !k->have) {
+        return 0;
+    }
+    held = (k->sets.render | k->sets.game) & fast;
+    return (k->sets.others & held) != 0 ? 0 : held;
+}
+
+size_t cpu_keep_few_text(const CpuClasses *c, uint64_t allowed, char *out, size_t cap)
+{
+    CpuKeepSets s, pair;
+    size_t len = 0;
+    char r[96], g[96], o[96], h[96];
+    int n;
+
+    if (cap > 0) {
+        out[0] = '\0';
+    }
+    if (!cpu_keep_few(c) || !cpu_keep_choose(c, allowed, 0, 0, CPU_KEEP_ALONE, &s)) {
+        return 0;
+    }
+    n = popcount64(cpu_place_fast_mask(c));
+    (void)cpu_place_mask_text(s.render, r, sizeof(r));
+    (void)cpu_place_mask_text(s.game, g, sizeof(g));
+    (void)cpu_place_mask_text(s.others, o, sizeof(o));
+    (void)cpu_place_mask_text((s.render | s.game) & cpu_place_fast_mask(c), h, sizeof(h));
+    put(out, cap, &len, "kept (%d core%s faster than the slowest): the render thread on %s alone, ",
+        n, n == 1 ? "" : "s", r);
+    if (popcount64(s.game) == 1) {
+        put(out, cap, &len, "the game thread on %s alone, ", g);
+    } else {
+        put(out, cap, &len, "the game thread on every core it may (%s), ", g);
+    }
+    put(out, cap, &len,
+        "the submit thread and every other thread of the process on %s (the audio threads, the "
+        "log thread, the workers, the driver's threads and those made later: the log thread "
+        "moves a thread found on %s there once a second; Android's UI thread is left to the "
+        "system)",
+        o, h);
+    if (cpu_keep_choose(c, allowed, 0, 0, CPU_KEEP_PAIR, &pair)) {
+        (void)cpu_place_mask_text(pair.render, h, sizeof(h));
+        put(out, cap, &len,
+            "; where the system widens a one-core pin, the render and the game thread share %s", h);
+    }
+    return done(out, cap, len);
 }

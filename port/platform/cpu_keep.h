@@ -30,14 +30,46 @@
  * It applies where three or more cores are faster than the slowest (the
  * Pixel's 1 + 5 over 2, a 4 + 3 + 1 phone, 4 bigs over 4 littles): the
  * render and game threads alone still leave the submit thread a faster
- * core.  With two faster cores (the Helio G85's 2 + 6, issue 179's class)
- * the two alone would leave the submit thread and every worker on the
- * slow cores, where the start's rule leaves the submit thread to the
- * system; with two, one or one speed the start's rule stands as before
- * this keeper and nothing is kept after it (the start line says so).  The
- * game thread is SDL's "ico-main" (main_android.c), not Android's UI
- * thread: input and the lifecycle's callbacks arrive on the UI thread,
- * which the keeper never moves.
+ * core.  The game thread is SDL's "ico-main" (main_android.c), not
+ * Android's UI thread: input and the lifecycle's callbacks arrive on the
+ * UI thread, which the keeper never moves.
+ *
+ * With one or two faster cores (cpu_keep_few; the Helio G85's 2 + 6 of
+ * issue 179) the rule is its own (the few-cores rule).  Before it the
+ * start's rule kept the game and render threads to both faster cores and
+ * nothing after: every thread the game thread made afterwards inherited
+ * them (pthread_create(3)), so the v0.11.5 log (moto g24 power) had the
+ * game, render, AudioTrack and SDLAudio threads all on cores 6-7; the
+ * game and render threads each waited 0.2-1.0 s per 10 s for a core (the
+ * submit thread, free on 0-7, 0.0-0.2 s; the audio threads' waits were not
+ * logged), while the six slow cores were shared by everything else.  The picture is GPU-bound there (the GPU
+ * 97-100 % busy, the render thread's CPU 16-21 ms of a 110 ms picture),
+ * so what the two fast cores must give is short waits to the two threads
+ * that feed the GPU, not more throughput:
+ *   ALONE: the render thread on the best faster core alone, the game
+ *     thread on the other alone (one faster core: the game thread on every
+ *     allowed core, as before); the submit thread and every other thread
+ *     of the process on the cores neither has (the slow cores): the audio
+ *     threads, the log thread, the workers, the driver's threads and the
+ *     threads made later, which the log thread moves there once a second
+ *     when it finds them on a held core (cpu_keep_held,
+ *     cpu_place_sweep);
+ *   PAIR (a one-core pin widened, or the game thread's refused): the
+ *     render and game threads share the two faster cores, the rest as
+ *     ALONE;
+ *   FAST: the start's rule as before (all cores for the others).
+ * The other candidate, no pin at all on such devices (the kernel's
+ * scheduler deciding), has no log on this class; the nearest one, the
+ * rule before the start's present one (render and submit threads on the
+ * two, the game thread left to the scheduler), had the game's step on the
+ * slow cores 15-62 % of its samples (cpu_place.h CpuPlanKind): with
+ * the fast cores busy, this phone's scheduler ran a free busy thread on
+ * the slow ones.  No pin
+ * would also leave the audio threads free to take the fast cores (the
+ * owner's decision for v0.11.6: audio off them).  The few-cores rule
+ * keeps the driver's threads (mali-cmar-backend and its kin, which feed
+ * the GPU) off the two cores too: they share the six slow cores with the
+ * audio threads and the workers, not the game and render threads' two.
  *
  * The keeper (cpu_keep_tick), once a second on the log thread:
  *   - reads back the render and game threads' cores; one that differs from
@@ -82,11 +114,18 @@ typedef struct CpuKeepSets {
 enum { CPU_KEEP_MIN_FAST = 3 };
 
 bool cpu_keep_applies(const CpuClasses *c);
+/* one or two cores faster than the slowest: the few-cores rule
+   (CPU_KEEP_MIN_FAST - 1 at most); cpu_keep_applies and this are never
+   both true, and neither on cores of one speed */
+bool cpu_keep_few(const CpuClasses *c);
 /* the sets at a level from the allowed cores (0: every core with a speed),
    the refused ones (the render thread's one-core pins the system did not
    keep: neither thread is put there alone) and the game thread's own
    (its one-core pins not kept: not its core again); false when nothing can
-   be chosen at that level */
+   be chosen at that level.  Under the few-cores rule: ALONE as the header
+   says (with two faster cores and the other one refused to the game
+   thread, the game thread on both); PAIR the render and game threads on
+   both faster cores (false with one); FAST as for three or more */
 bool cpu_keep_choose(const CpuClasses *c, uint64_t allowed, uint64_t refused, uint64_t gameRefused,
                      CpuKeepLevel level, CpuKeepSets *out);
 
@@ -123,6 +162,7 @@ typedef struct CpuKeepPin {
 
 typedef struct CpuKeep {
     bool on;
+    bool few; /* the few-cores rule (cpu_keep_few) */
     CpuClasses classes;
     long renderTid, submitTid;         /* the threads the state is of (0: none yet) */
     bool have;                         /* sets applied */
@@ -146,7 +186,7 @@ typedef struct CpuKeep {
     unsigned blockTries, blockKept, blockChanges, blockReads, blockOnSet;
 } CpuKeep;
 
-/* off when the rule does not apply (cpu_keep_applies) */
+/* off when neither rule applies (cpu_keep_applies, cpu_keep_few) */
 void cpu_keep_init(CpuKeep *k, const CpuClasses *c);
 /* One tick at nowMs (ms on any steady clock), why: the requests since the
    last tick, allowed: the cores the process and its cpuset allow (0: not
@@ -177,5 +217,28 @@ size_t cpu_keep_try_text(const CpuKeep *k, const char *sys, char *out, size_t ca
    "off (...)" when the rule does not apply; the length written */
 size_t cpu_keep_block_text(const CpuKeep *k, const char *sys, char *out, size_t cap);
 void cpu_keep_block_reset(CpuKeep *k);
+
+/* The few-cores rule's sweep: the faster cores the render and game
+   threads hold in the sets in force, from which every other thread of the
+   process is moved to sets.others (render_thread.c, the log thread's
+   tick, cpu_place_sweep); 0 (no sweep) under the rule for three or more,
+   with no sets yet, or when the others' cores would include a held one
+   (FAST) */
+uint64_t cpu_keep_held(const CpuKeep *k);
+
+/* The few-cores rule's start line, after "window: cores after the start: "
+   (render_thread.c place_init), from the ideal sets on the allowed cores
+   (0: every core with a speed):
+     kept (2 cores faster than the slowest): the render thread on 7 alone,
+     the game thread on 6 alone, the submit thread and every other thread
+     of the process on 0-5 (the audio threads, the log thread, the
+     workers, the driver's threads and those made later: the log thread
+     moves a thread found on 6-7 there once a second; Android's UI thread
+     is left to the system); where the system widens a one-core pin, the
+     render and the game thread share 6-7
+   One faster core: "the game thread on every core it may (0-7)" and no
+   widening clause.  "" when the few-cores rule does not apply; the length
+   written */
+size_t cpu_keep_few_text(const CpuClasses *c, uint64_t allowed, char *out, size_t cap);
 
 #endif

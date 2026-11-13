@@ -734,7 +734,12 @@ that stops again writing its own line without the retry mark); a stop at the fre
   five recorded zips stored with `automatic-captures.txt` naming each and why one is left out, the
   report zip's own entries kept, a zip gone from the disk not listed, none recorded adding nothing;
   a zip that cannot be read as the report is rebuilt left out and named `left out: gone` in the
-  note, the other still in).
+  note, the other still in); the slow-scene dump's block made by the worker before the job
+  (`ico_dump_auto_prepare`, `_prepared`, `_unprepare`: none asked, a size of 0 refused, the block
+  at the size asked with the worker's time, busy from the ask to the submit so a second ask and a
+  job offered meanwhile are refused, the filled block written whole with the making in the worker
+  time, a block given up while asked, once made and once taken leaving the worker free, one made
+  and never taken freed at shutdown).
   Run under the asan and thread presets as well.
 - `game_data_range_test.c`: the game data ranges ([PLATFORM.md](PLATFORM.md#game-data-ranges))
   on this toolchain's compiler and linker, over a stand-in game library (`game_data_fixture.c`)
@@ -1112,8 +1117,11 @@ that stops again writing its own line without the retry mark); a stop at the fre
   `0-1 2.2 GHz, 2-6 3.1 GHz, 7 3.8 GHz` (render 7 alone, game 6 alone, submit 2-5, others 0-5;
   core 7 refused: 6, 5, `2-4, 7`, `0-4, 7`; 7 not allowed: 6, 5, 2-4, 0-4; the pair 6-7; the
   start's rule 2-7 with submit 2-6; the game thread's 6 refused: 5; only 7 fast and allowed;
-  every fast core refused: none), a Helio G85 (two faster cores: the keeper off, nothing chosen
-  at any level), the Pixel, a 4 + 3 + 1 phone and 4 + 4 applying (7, 6, 4-5), a 1 + 2 + 1
+  every fast core refused: none), a Helio G85 (two faster cores: the few-cores rule, render 7
+  alone, game 6 alone, submit and others 0-5; 7 refused: 6 alone and 6-7; the game thread's 6
+  refused: 6-7; both refused: the pair 6-7 for both; the start's rule with others 0-7; a cpuset
+  without 7: render 6 alone, the game thread on 0-6), 1 + 7 (render 7 alone, the game thread on
+  0-7, the rest 0-6, no pair), the Pixel, a 4 + 3 + 1 phone and 4 + 4 applying (7, 6, 4-5), a 1 + 2 + 1
   four-core device (3, 2, 1, others 0-1), one speed (4 and 8 cores) and one core (off); the keeper against a fake kernel
   that keeps a mask a thread: every pin kept (the ideal at the start, a scene and the focus
   asking nothing more, the try and block lines word for word, the system moving the render
@@ -1122,7 +1130,15 @@ that stops again writing its own line without the retry mark); a stop at the fre
   kernel keeps it), every one-core pin widened (the pair, the game thread's cores refused one a
   tick until it joins the others' 0-5, then quiet), a cpuset without core 7 (never asked, then
   asked when the allowed cores grow), the render thread's id not known yet (the request waits),
-  the submit thread starting later, a new render thread; the reasons' words; and cpu_place's
+  the submit thread starting later, a new render thread; the few-cores rule against the fake
+  kernel (the Helio G85 all kept with its try and block lines word for word, every one-core pin
+  widened: the pair with the rest still 0-5, the game thread's core alone widened: 6-7 for it at
+  the next tick, the held cores the sweep moves threads off and none under the start's rule or
+  the Pixel's, the start line word for word for 2 + 6 and 1 + 7, none for the Pixel); each
+  thread's cores on five layouts read from a fake sysfs under the build folder (2 + 6, 1 + 7,
+  4 + 4, 1 + 3 + 4, 8 of one speed: the start's rule, the keeper's first tick, the sweep's picks
+  among two audio threads and a driver's thread made on the game thread's start cores, a worker
+  on core 0, the UI thread and one not read; Linux); the reasons' words; and cpu_place's
   samples by core word for word, a thread's cpuset and its cores from a fake tree under the
   build folder (`/top-app` and `cpus`, the root set, `effective_cpus`, no such thread: `ENOENT`)
   and a registered free thread moved back by `cpu_place_refree` (Linux, two or more cores

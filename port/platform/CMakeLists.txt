@@ -370,7 +370,9 @@ endif()
 # one core), the keeper against a fake kernel (all kept, core 7 alone
 # widened to 2-7 as on the Pixel, the system changing the cores, every
 # one-core pin widened, a cpuset without core 7, ids not known yet), the
-# lines word for word; cpu_place's samples by core, a fake cpuset under the
+# lines word for word; the few-cores rule (one or two faster cores) and its
+# sweep, each thread's cores on five layouts from a fake sysfs under the
+# build folder; cpu_place's samples by core, a fake cpuset under the
 # build folder and the registered free threads moved back (Linux)
 add_executable(cpu_keep_test test/cpu_keep_test.c cpu_keep.c)
 target_include_directories(cpu_keep_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")

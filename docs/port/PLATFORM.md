@@ -55,7 +55,7 @@ run explain itself. [ARCHITECTURE.md](ARCHITECTURE.md) places this layer among t
 | `port/platform/startup_retry.c`, `startup_retry.h` | the steps the relaunch takes after a graphics driver crash or a lost graphics device |
 | `port/platform/hotkeys.c`, `hotkeys.h` | F11 and F12 |
 | `port/platform/dump_zip.c`, `dump_zip.h` | F12's zip and the aspect sweep's zip |
-| `port/platform/dump_auto.c`, `window_dump_auto.c` | the automatic dumps' worker ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md)) |
+| `port/platform/dump_auto.c`, `window_dump_auto.c` | the automatic dumps' worker, and the block it makes before a slow-scene dump's copy ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md)) |
 | `port/platform/backup.c`, `backup.h` | Options > Extras > Back up your data and Restore from a backup: the zip of the user folder's data, its manifest and checks, the unpacking and the start's swap ([Backups](#backups); pure C, tested everywhere) |
 | `port/platform/backup_host.c`, `backup_host.h` | the two rows' host in the window build: the file dialogs, the work on its own thread, the end of the run after a restore (not on iOS) |
 | `port/platform/steam_shortcut.c`, `steam_shortcut.h` | Settings > Extras > Add to Steam (Windows and Linux; not offered on macOS) |
@@ -821,7 +821,13 @@ faster core the render thread keeps to it alone and the other two are left to th
 line says which: `window: big cores: 2 fast of 8: game and render threads on them (6-7), the submit
 thread free; the game thread kept` (or `NOT kept: the system keeps it to cores ...`, or the
 refused call's errno); with three or more the line reads `big cores: N fast of M: render and submit
-threads on them, the game thread free`. A new thread starts with the cores of the thread that
+threads on them, the game thread free`. That is the start's placement; from the log thread's first
+tick the keeper's few-cores rule takes over on such phones (`cpu_keep_few`): the render thread on
+the best faster core alone, the game thread on the other alone (with one faster core, on every core
+as before), and the submit thread and every other thread of the process on the slow cores, the
+audio and driver threads included, which the log thread moves off the two cores once a second
+when it finds them there (`cpu_keep_held`, `cpu_place_sweep`;
+[the lines](ANDROID_DIAGNOSTICS.md#the-threads-cores-after-the-start)). A new thread starts with the cores of the thread that
 makes it (pthread_create(3): it "inherits ... CPU affinity mask"; bionic's `pthread_create` goes
 through clone(2), which copies it the same way), so a pin on the game thread would hold the
 submit thread and every worker the game thread makes afterwards to the same two cores, and a pin
