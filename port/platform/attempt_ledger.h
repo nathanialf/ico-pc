@@ -123,6 +123,12 @@ enum {
        count the pictures it placed, second count those held at their frame
        pair's tick's edges */
     ICO_ATT_PACE_SCREEN,
+    /* rd_pace_even_live.c (window_present.c's hold, rd_pace_rules.c): with
+       pictures as made, every picture shown for the same whole number of
+       refreshes (rd_pace_even.h; off by default, an rc variant); count the
+       pictures aimed, second count those late for their refresh at the
+       hand-over */
+    ICO_ATT_PACE_EVEN,
     /* rd_paste_spec.c: the glow's paste drawn by its own entry (fx_paste_ps,
        fx_frame_ps's paste path alone) behind its start-up self-test; count
        the pastes drawn by it, second count the premultiplied adds that kept
@@ -270,6 +276,14 @@ void ico_attempt_decide_as_made_timer(int asMade, int on);
    both: off by default (computed and reported, not drawn) or on; else the
    row left as it was */
 void ico_attempt_decide_pace_screen(int asMade, int clock, int times, int on);
+/* the even cadence for pictures as made (rd_pace_even_live.c, the poster's
+   thread at each change): asMade, clock and times as
+   ico_attempt_decide_pace_screen's, on it is used (RD_PACE_EVEN_DEFAULT,
+   ICO_RD_PACE_EVEN).  Not paced: not applicable; no slot clock or no
+   display times: not applicable (the pictures as made); both: off by
+   default (an rc variant: it lowers the pictures a second of Uncapped) or
+   on; else the row left as it was */
+void ico_attempt_decide_pace_even(int asMade, int clock, int times, int on);
 /* the glow's paste by its own entry (rd_paste_spec.c, at start-up and after
    its self-test): module fx_paste_ps was made (Vulkan; 0 on the other
    backends), env the tests' switch (ICO_RD_PASTE_SPEC: -1 unset, 0, 1; its

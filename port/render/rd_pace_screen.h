@@ -43,6 +43,29 @@
  *       no L keeps them all, toward the top of the range (no picture before
  *       its frame's close; a picture past the newest frame held there).
  *
+ * v0.11.6-rc5's log (the owner's phone, the rule not drawn) refined it:
+ *
+ *   - a kept frame's present (a fade, a load, a menu over the picture before:
+ *     rd_interp.c rd_present's keep path, no alpha drawn, its GPU work not in
+ *     the queue model) is neither placed, sampled nor scored (RD_PS_KEPT):
+ *     its predicted end is a scene picture's G late, and in the three blocks
+ *     with most of them (op2, deja, the sacrifice scene) the latch's fit went
+ *     to -21.6 and -32.3 ms with 37-41 of 64 agreeing and the hits fell to
+ *     49-72 %;
+ *   - hysteresis: the latch stays where it was unless another range agrees
+ *     with RD_PS_HYST more of the window (two ranges of nearly equal
+ *     agreement would otherwise swap the refresh a picture at a time);
+ *   - the measured errors: where RD_PS_MEAS_MIN or more of the window's
+ *     shown pictures have an exact GPU end, the expected time on the glass
+ *     is the mean of the refreshes the picture would be shown at with each
+ *     of their errors (its predicted end + the error + the exact end's
+ *     latch), and the refresh predicted their most frequent: a skewed or a
+ *     two-sided error (rc5's cage: one late against one early 1.3-2.0 to 1)
+ *     is taken as measured rather than as a symmetric Gaussian.
+ *
+ * Each of the last two is a bit of RdPaceScreen.opts (all on after
+ * rd_pace_screen_reset; the test turns each off to measure it).
+ *
  * The moment never goes back (held at the one before) and never leaves the
  * frame pair's tick (held at its edge, counted).  Where the display gives no
  * times (desktop, no extension, OpenGL, Direct3D), the times are stale, off
@@ -90,6 +113,13 @@
 #define RD_PS_SLEW_MS 0.25
 /* the top of the frame pair's tick (rd_rebase.h rd_rebase_alpha's clamp) */
 #define RD_PS_TOP 0.999
+/* the latch kept where it was unless another range agrees with this many
+   more of the window; the exact ends the measured errors need */
+#define RD_PS_HYST 4u
+#define RD_PS_MEAS_MIN 16u
+#define RD_PS_OPT_HYST 1u
+#define RD_PS_OPT_MEASURED 2u
+#define RD_PS_OPT_ALL 3u
 /* the chain's restarts, as the evenness line's (rd_even.h) */
 #define RD_PS_FRAME_JUMP 8
 #define RD_PS_GAP_RESET_MS 1000.0
@@ -116,6 +146,11 @@ typedef struct RdPaceScreenFit {
     bool lead;         /* the same fit over exact GPU ends */
     double leadMs;     /* shown at the first refresh at or after the GPU's end + this */
     uint32_t leadHits, leadN;
+    /* the exact ends' errors (gpuEnd - endPred), RD_PS_OPT_MEASURED */
+    double err[RD_PS_WIN];
+    uint32_t errN;
+    bool measured; /* used: the lead fitted and errN >= RD_PS_MEAS_MIN */
+    bool held;     /* the latch kept by RD_PS_HYST */
 } RdPaceScreenFit;
 
 /* the model (one thread: the poster's) */
@@ -124,6 +159,7 @@ typedef struct RdPaceScreen {
     uint32_t sN, sAt;
     bool dirty;
     RdPaceScreenFit fit;
+    uint32_t opts;      /* RD_PS_OPT_* (RD_PS_OPT_ALL after a reset) */
     double newestEndMs; /* the newest sample's predicted end (staleness) */
     /* the lag's chain */
     bool have;
@@ -142,6 +178,7 @@ enum {
     RD_PS_STALE,      /* the newest shown picture over RD_PS_STALE_MS behind */
     RD_PS_OFF_GRID,   /* the times not on one refresh grid (or no refresh reported) */
     RD_PS_NO_FIT,     /* the latch's fit agrees with too few */
+    RD_PS_KEPT,       /* a kept frame (a fade, a load): not modelled */
     RD_PS_HOW_COUNT
 };
 
@@ -152,6 +189,11 @@ typedef struct RdPaceScreenIn {
     double tickMs;
     double endPredMs; /* E (0 not predicted) */
     double rawOther;  /* the value drawn otherwise, in ticks from the close */
+    bool kept;        /* a kept frame's present (RD_PS_KEPT) */
+    /* the refresh the even cadence aims this picture at (rd_pace_even.h;
+       the display's clock; 0 none): its expected time on the glass and the
+       refresh predicted, where it is placed */
+    double targetMs;
 } RdPaceScreenIn;
 
 typedef struct RdPaceScreenPlace {
@@ -164,6 +206,7 @@ typedef struct RdPaceScreenPlace {
     bool heldLo, heldHi; /* held at the frame's close / at the newest frame */
     bool heldBack;       /* held at the moment before */
     bool replaced;       /* predicted on the same refresh as the picture before */
+    bool measured;       /* by the measured errors (RD_PS_OPT_MEASURED) */
 } RdPaceScreenPlace;
 
 void rd_pace_screen_reset(RdPaceScreen *m);
@@ -182,6 +225,13 @@ double rd_pace_screen_expect(double t, double a, double p, double w, double *har
    agree with (sample i: x in (d[i] - p, d[i]]), prefer the range nearest
    prev (NAN none); *hits how many agree */
 double rd_pace_screen_latch(const double *d, uint32_t n, double p, double prev, uint32_t *hits);
+/* how many of d agree with x (d[i] - p < x <= d[i]) */
+uint32_t rd_pace_screen_cover(const double *d, uint32_t n, double p, double x);
+/* the expected time on the glass from the measured errors: the mean of the
+   refreshes of t + err[i] (t the predicted end + the exact end's latch) on
+   the grid (a, p); *hard their most frequent (ties: the earliest) */
+double rd_pace_screen_expect_measured(double t, double a, double p, const double *err, uint32_t n,
+                                      double *hard);
 
 /* --------------------------------------------- the collecting thread's */
 
@@ -204,7 +254,7 @@ int rd_pace_screen_score(double predictedMs, double actualMs, double refreshMs);
 
 typedef struct RdPaceScreenWindow {
     uint64_t how[RD_PS_HOW_COUNT];
-    uint64_t restarts, heldLo, heldHi, heldBack, replaced, dropped;
+    uint64_t restarts, heldLo, heldHi, heldBack, replaced, dropped, measured;
     /* the last fit (the poster's, at its last placement) */
     uint32_t grid, latch, lead;
     uint32_t periodNs, reportedNs, hits, n, leadHits, leadN, offGrid;
@@ -236,5 +286,13 @@ void rd_pace_screen_step(const RdPaceScreenIn *in, RdPaceScreenPlace *out);
 /* the poster's thread, the pictures paced: the model emptied, the ring
    dropped, the row not applicable */
 void rd_pace_screen_paced(void);
+/* the poster's thread: the shown pictures taken (each new one to the even
+   cadence, rd_pace_even_seen), the fit made where they changed; *fit
+   whether the grid and the latch can be used at nowMs (enough shown
+   pictures, not stale, one grid, a latch); the fit itself */
+const RdPaceScreenFit *rd_pace_screen_live_fit(double nowMs, bool *fit);
+/* 1 a shown picture's time came back this run, 0 none after 600 pictures
+   as made, -1 not known yet */
+int rd_pace_screen_times_state(void);
 
 #endif

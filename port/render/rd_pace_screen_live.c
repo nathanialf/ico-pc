@@ -8,12 +8,14 @@
  * single-producer ring; the poster's thread (window_present.c
  * window_present_pace: rd_present_post's presentRebase and
  * rd_present_as_made, one thread) takes them before it places a picture and
- * owns the model, the switch's state and the ledger's row.  The 10 s sums
- * are atomics the window's thread takes. */
+ * owns the model, the switch's state and the ledger's row (and hands each
+ * new shown picture to the even cadence, rd_pace_even_live.c, the same
+ * thread).  The 10 s sums are atomics the window's thread takes. */
 #include <stdio.h>
 #include <stdlib.h>
 
 #include "attempt_ledger.h"
+#include "rd_pace_even.h"
 #include "rd_pace_gpu.h"
 #include "rd_pace_screen.h"
 
@@ -64,11 +66,39 @@ static void decide(bool asMade)
     }
 }
 
+/* the ring taken; each new shown picture also to the even cadence */
+static uint32_t take(void)
+{
+    const uint32_t n = rd_pace_screen_drain(&s_m);
+    if (n != 0u) {
+        s_times = true;
+        const uint32_t k = n < s_m.sN ? n : s_m.sN;
+        for (uint32_t i = 0; i < k; i++) {
+            rd_pace_even_seen(&s_m.s[(s_m.sAt + RD_PS_WIN - k + i) % RD_PS_WIN]);
+        }
+    }
+    return n;
+}
+
+const RdPaceScreenFit *rd_pace_screen_live_fit(double nowMs, bool *fit)
+{
+    (void)take();
+    if (s_m.dirty) {
+        rd_pace_screen_fit(&s_m);
+    }
+    const RdPaceScreenFit *f = &s_m.fit;
+    *fit = s_m.sN >= RD_PS_MIN && f->grid && f->latch && nowMs - s_m.newestEndMs <= RD_PS_STALE_MS;
+    return f;
+}
+
+int rd_pace_screen_times_state(void)
+{
+    return s_times ? 1 : (s_noTimes >= NO_TIMES ? 0 : -1);
+}
+
 void rd_pace_screen_step(const RdPaceScreenIn *in, RdPaceScreenPlace *out)
 {
-    if (rd_pace_screen_drain(&s_m) != 0u) {
-        s_times = true;
-    } else if (!s_times && s_noTimes < NO_TIMES) {
+    if (take() == 0u && !s_times && s_noTimes < NO_TIMES) {
         s_noTimes++;
     }
     decide(true);

@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "rd_pace_even.h"
 #include "rd_pace_rules.h"
 #include "rd_pace_screen.h"
 
@@ -135,8 +136,16 @@ static void done(uint32_t i)
         s_sum.further += k > 1 || k < -1 ? 1u : 0u;
     }
     if (s_slot[i].marginNs != 0 || s_slot[i].earliestNs != 0) {
-        s_sum.marginN++;
-        s_sum.marginSumUs += (int64_t)(s_slot[i].marginNs / 1000u);
+        s_sum.figuresN++;
+        /* the unsigned field read signed: a margin below 0 wraps */
+        const int64_t mg = (int64_t)s_slot[i].marginNs;
+        if (mg >= -RD_GLASS_MARGIN_MAX_NS && mg <= RD_GLASS_MARGIN_MAX_NS) {
+            s_sum.marginN++;
+            s_sum.marginSumUs += mg / 1000;
+        } else {
+            s_sum.marginWild++;
+            s_sum.wildSumMs += (double)mg / 1e6;
+        }
         if (s_slot[i].earliestNs != 0 && s_slot[i].earliestNs < s_slot[i].ns &&
             2u * (s_slot[i].ns - s_slot[i].earliestNs) >= s_slot[i].refreshNs) {
             s_sum.earlyN++;
@@ -337,11 +346,23 @@ bool rd_glass_format(const RdGlassWindow *w, char *out, size_t size)
             measure(&o, w, 1 + r);
         }
     }
-    if (w->marginN) {
-        put(&o,
-            "; the display's own figures over %llu shown: present margin %.2f ms on average, "
-            "earliest present half a refresh or more before the time shown %llu",
-            (unsigned long long)w->marginN, (double)w->marginSumUs / 1000.0 / (double)w->marginN,
+    if (w->figuresN) {
+        put(&o, "; the display's own figures over %llu shown: ", (unsigned long long)w->figuresN);
+        if (w->marginN) {
+            put(&o, "present margin %.2f ms on average",
+                (double)w->marginSumUs / 1000.0 / (double)w->marginN);
+            if (w->marginWild) {
+                put(&o, " over %llu", (unsigned long long)w->marginN);
+            }
+        }
+        if (w->marginWild) {
+            put(&o,
+                "%spresent margin over a second either way %llu (%.0f ms on average: not a "
+                "margin, no desired time was asked)",
+                w->marginN ? ", " : "", (unsigned long long)w->marginWild,
+                w->wildSumMs / (double)w->marginWild);
+        }
+        put(&o, ", earliest present half a refresh or more before the time shown %llu",
             (unsigned long long)w->earlyN);
         if (w->earlyN) {
             put(&o, " (by %.2f ms on average)", (double)w->earlySumUs / 1000.0 / (double)w->earlyN);
@@ -354,19 +375,24 @@ void rd_glass_line(void)
 {
     static RdGlassWindow w;
     static RdPaceScreenWindow sw;
+    static RdPaceEvenWindow ew;
     static char line[6144];
     rd_glass_take(&w);
     rd_pace_screen_take(&sw);
+    rd_pace_even_take_window(&ew);
     const bool any = rd_glass_format(&w, line, sizeof line);
     if (!any) {
         /* no picture with a display id (no VK_GOOGLE_display_timing): the
            screen's rule's fall-backs alone, where it ran */
         (void)snprintf(line, sizeof line, "on the glass in 10 s: no picture with a display id");
     }
-    const size_t at = strlen(line);
-    if (rd_pace_screen_format(&sw, w.scored, w.hit, w.late, w.early, w.further, line + at,
-                              sizeof line - at) ||
-        any) {
+    size_t at = strlen(line);
+    const bool screen = rd_pace_screen_format(&sw, w.scored, w.hit, w.late, w.early, w.further,
+                                              line + at, sizeof line - at);
+    at = strlen(line);
+    /* the even cadence's clause (rd_pace_even.h: only where it ran) */
+    const bool even = rd_pace_even_format(&ew, line + at, sizeof line - at);
+    if (screen || even || any) {
         fprintf(stderr, "window: %s\n", line);
     }
 }

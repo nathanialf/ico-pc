@@ -176,7 +176,8 @@ static void testScreen(void)
     }
     rd_glass_take(&w);
     CHECK(w.scored == 4 && w.hit == 1 && w.late == 1 && w.early == 1 && w.further == 1);
-    CHECK(w.marginN == 4 && w.marginSumUs == 8000 && w.earlyN == 1 && w.earlySumUs == 8000);
+    CHECK(w.figuresN == 4 && w.marginN == 4 && w.marginSumUs == 8000 && w.earlyN == 1 &&
+          w.earlySumUs == 8000 && w.marginWild == 0);
     /* the screen's measure (1 + RD_RULE_SCREEN): 1000 -> 1016 a quarter
        tick (8 ms) over 16 ms */
     CHECK(w.glass[1 + RD_RULE_SCREEN][5].n == 3 && w.glass[1 + RD_RULE_SCREEN][2].sum == 5000);
@@ -191,6 +192,24 @@ static void testScreen(void)
     CHECK(strstr(out, "; the display's own figures over 4 shown: present margin 2.00 ms on "
                       "average, earliest present half a refresh or more before the time shown 1 "
                       "(by 8.00 ms on average)") != NULL);
+    /* a margin below 0 (the field unsigned: wrapped) read signed; one 20 s
+       below 0 (rc5's phone with no desired time asked) not averaged */
+    rd_glass_reset();
+    rd_pace_screen_drop();
+    for (uint32_t i = 0; i < 3; i++) {
+        RdGlassPic p = pic(i + 1u, 10, 0.25f, 0.2f, 0.2f, 100.0 + 8.0 * i, 0.0);
+        rd_glass_join(&p);
+        const uint64_t mg = i == 0u ? (uint64_t)(-(int64_t)(3 * MS))
+                                    : (i == 1u ? 5 * MS : (uint64_t)(-(int64_t)(20000 * MS)));
+        rd_glass_time(i + 1u, (1000 + 8 * i) * MS, REF, (1000 + 8 * i) * MS, mg);
+    }
+    rd_glass_take(&w);
+    CHECK(w.figuresN == 3 && w.marginN == 2 && w.marginSumUs == 2000 && w.marginWild == 1);
+    CHECK(rd_glass_format(&w, out, sizeof out));
+    CHECK(strstr(out, "; the display's own figures over 3 shown: present margin 1.00 ms on "
+                      "average over 2, present margin over a second either way 1 (-20000 ms on "
+                      "average: not a margin, no desired time was asked), earliest present half a "
+                      "refresh or more before the time shown 0") != NULL);
 }
 
 int main(void)

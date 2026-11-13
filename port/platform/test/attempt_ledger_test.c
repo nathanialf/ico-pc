@@ -350,6 +350,11 @@ static void test_classes(void)
         ico_attempt_decide_pace_screen(kPace[c].asMade,
                                        kPace[c].clock ? 1 : (kPace[c].waited ? 0 : -1), 1, 0);
         CHECK(ico_attempt_state_of(ICO_ATT_PACE_SCREEN) == kPace[c].want);
+        /* the even cadence: the same classes as the screen's rule (it aims
+           by its fit), off by default */
+        ico_attempt_decide_pace_even(kPace[c].asMade,
+                                     kPace[c].clock ? 1 : (kPace[c].waited ? 0 : -1), 1, 0);
+        CHECK(ico_attempt_state_of(ICO_ATT_PACE_EVEN) == kPace[c].want);
         /* the glow's paste by its own entry: every class here is a Vulkan
            device (the module made) whose self-test passed (rd_paste_spec.c) */
         CHECK(ico_attempt_decide_paste_spec(1, -1, 1, 1) == 1);
@@ -553,6 +558,32 @@ static void test_classes(void)
     /* not known yet (no display time and under 600 pictures): left as it was */
     ico_attempt_decide_pace_screen(1, 1, -1, 1);
     CHECK(ico_attempt_state_of(ICO_ATT_PACE_SCREEN) == ICO_ATT_ON);
+    /* the even cadence: paced, no display times, no clock, on with its
+       counts, not known */
+    ico_attempt_decide_pace_even(0, 1, 1, 1);
+    CHECK(ico_attempt_state_of(ICO_ATT_PACE_EVEN) == ICO_ATT_NA &&
+          strstr(ico_attempt_why_of(ICO_ATT_PACE_EVEN), "paced here") != NULL);
+    ico_attempt_decide_pace_even(1, 1, 0, 1);
+    CHECK(ico_attempt_state_of(ICO_ATT_PACE_EVEN) == ICO_ATT_NA &&
+          strstr(ico_attempt_why_of(ICO_ATT_PACE_EVEN), "gives no times back") != NULL);
+    ico_attempt_decide_pace_even(1, 0, 1, 1);
+    CHECK(ico_attempt_state_of(ICO_ATT_PACE_EVEN) == ICO_ATT_NA &&
+          strstr(ico_attempt_why_of(ICO_ATT_PACE_EVEN), "no GPU end") != NULL);
+    ico_attempt_decide_pace_even(1, 1, 1, 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_PACE_EVEN) == ICO_ATT_OFF_DEFAULT &&
+          strstr(ico_attempt_why_of(ICO_ATT_PACE_EVEN), "lowers the pictures a second") != NULL);
+    ico_attempt_decide_pace_even(1, 1, 1, 1);
+    CHECK(ico_attempt_state_of(ICO_ATT_PACE_EVEN) == ICO_ATT_ON);
+    ico_attempt_fire(ICO_ATT_PACE_EVEN, 600);
+    ico_attempt_fire2(ICO_ATT_PACE_EVEN, 3);
+    {
+        char b[2048];
+        (void)ico_attempt_block_text(b, sizeof b, -1);
+        CHECK(strstr(b, "; an even number of refreshes a picture on 600 pictures aimed (3 late for "
+                        "their refresh)") != NULL);
+    }
+    ico_attempt_decide_pace_even(1, 1, -1, 1);
+    CHECK(ico_attempt_state_of(ICO_ATT_PACE_EVEN) == ICO_ATT_ON);
     /* the record's row: the pre-pass off; on with its growths counted */
     ico_attempt_decide_rec_need(0, 512, 1024, 512);
     CHECK(ico_attempt_state_of(ICO_ATT_REC_NEED) == ICO_ATT_NA);

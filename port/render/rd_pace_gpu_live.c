@@ -119,6 +119,12 @@ double rd_pace_gpu_pred_end(void)
     return s_predEnd;
 }
 
+bool rd_pace_gpu_figures(double *gMs, double *dMs, double *lastEndMs)
+{
+    drain();
+    return rd_pace_gpu_model_figures(&s_m, gMs, dMs, lastEndMs);
+}
+
 int rd_pace_gpu_clock_state(void)
 {
     return s_clock ? 1 : (s_noClock >= RD_PACE_GPU_NO_CLOCK ? 0 : -1);

@@ -6,7 +6,7 @@
 # tools/check_no_rom.sh).
 target_sources(ico_render PRIVATE rd_pace_gpu.c rd_pace_gpu_live.c rd_pace_rules.c
                                   rd_as_made_timer.c rd_glass.c rd_glass_live.c rd_pace_screen.c
-                                  rd_pace_screen_live.c)
+                                  rd_pace_screen_live.c rd_pace_even.c rd_pace_even_live.c)
 
 # rd_pace_gpu_test: CPU only: the model's edges (before its measurements,
 # an empty queue and one picture a tick at 0 to the bit, the queue's wait less
@@ -22,7 +22,7 @@ target_sources(ico_render PRIVATE rd_pace_gpu.c rd_pace_gpu_live.c rd_pace_rules
 # path with the model and the timer computed gives v0.11.5's value to the bit
 add_executable(rd_pace_gpu_test test/rd_pace_gpu_test.c rd_pace_gpu.c rd_pace_gpu_live.c
                                 rd_rebase.c rd_pace_rules.c rd_as_made_timer.c rd_pace_screen.c
-                                rd_pace_screen_live.c)
+                                rd_pace_screen_live.c rd_pace_even.c rd_pace_even_live.c)
 target_include_directories(rd_pace_gpu_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
                                                      "${CMAKE_SOURCE_DIR}/port/rhi")
 target_compile_options(rd_pace_gpu_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
@@ -67,7 +67,7 @@ endif()
 # prediction scored at the join (on it, one late, one early, further) and
 # sent to its model's ring, the display's own figures (presentMargin,
 # earliestPresentTime)
-add_executable(rd_glass_test test/rd_glass_test.c rd_glass.c rd_pace_screen.c)
+add_executable(rd_glass_test test/rd_glass_test.c rd_glass.c rd_pace_screen.c rd_pace_even.c)
 target_include_directories(rd_glass_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(rd_glass_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 if(NOT WIN32)
@@ -94,7 +94,8 @@ endif()
 # 90 Hz); the start line, the clause and the ledger's row
 add_executable(rd_pace_screen_test test/rd_pace_screen_test.c rd_pace_screen.c
                                    rd_pace_screen_live.c rd_pace_gpu.c rd_pace_gpu_live.c
-                                   rd_rebase.c rd_as_made_timer.c)
+                                   rd_rebase.c rd_as_made_timer.c rd_pace_even.c
+                                   rd_pace_even_live.c)
 target_include_directories(rd_pace_screen_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
                                                         "${CMAKE_SOURCE_DIR}/port/rhi")
 target_compile_options(rd_pace_screen_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})

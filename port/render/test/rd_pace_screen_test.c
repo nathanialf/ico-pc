@@ -40,6 +40,7 @@
 
 #include "attempt_ledger.h"
 #include "rd_as_made_timer.h"
+#include "rd_pace_even.h"
 #include "rd_pace_gpu.h"
 #include "rd_pace_screen.h"
 #include "rd_rebase.h"
@@ -164,7 +165,7 @@ static void testPlace(void)
     RdPaceScreenPlace o;
     /* the fall-backs: the value drawn otherwise to the bit, the reason */
     rd_pace_screen_reset(&m);
-    RdPaceScreenIn in = {6000.0, 100, 5990.0, TICK, 6025.0, 0.3125};
+    RdPaceScreenIn in = {6000.0, 100, 5990.0, TICK, 6025.0, 0.3125, false, 0.0};
     rd_pace_screen_place(&m, &in, &o);
     CHECK(o.how == RD_PS_NO_TIMES && o.raw == 0.3125);
     filled(&m, 5990.0);
@@ -214,7 +215,7 @@ static void testPlace(void)
         const double close = 5990.0 + tk * (double)(frame - 100u);
         const double hand = close + (i % 2 == 0 ? 10.0 : 24.0);
         const RdPaceScreenIn pi = {
-            hand, frame, close, tk, 5990.0 + 2.0 * PD * i + 1.0, (hand - close) / tk};
+            hand, frame, close, tk, 5990.0 + 2.0 * PD * i + 1.0, (hand - close) / tk, false, 0.0};
         rd_pace_screen_place(&m, &pi, &o);
         CHECK(o.how == RD_PS_PLACED);
         const double c = close + o.raw * tk;
@@ -244,13 +245,13 @@ static void testPlace(void)
     CHECK(holds == 0);
     CHECK(stepMin >= 2.0 * PD - RD_PS_SLEW_MS - 1e-9 && stepMax <= 2.0 * PD + RD_PS_SLEW_MS + 1e-9);
     /* a frame number back: a restart, the value drawn otherwise again */
-    const RdPaceScreenIn rb = {6600.0, 90, 6590.0, 33.0, 6620.0, 0.25};
+    const RdPaceScreenIn rb = {6600.0, 90, 6590.0, 33.0, 6620.0, 0.25, false, 0.0};
     rd_pace_screen_place(&m, &rb, &o);
     CHECK(o.restarted && o.how == RD_PS_PLACED && o.raw == 0.25);
     /* two pictures on one refresh: the second marked, the same moment (the
        first is replaced: no content time of its own) */
     const double hard0 = o.hardMs;
-    const RdPaceScreenIn r1 = {6601.0, 90, 6590.0, 33.0, 6620.5, 0.4};
+    const RdPaceScreenIn r1 = {6601.0, 90, 6590.0, 33.0, 6620.5, 0.4, false, 0.0};
     rd_pace_screen_place(&m, &r1, &o);
     CHECK(o.how == RD_PS_PLACED && o.replaced && o.hardMs == hard0 && !o.heldLo);
 }
@@ -273,14 +274,39 @@ typedef struct Cfg {
     int noTimes;    /* no display times back */
     int staleTick;  /* the times stop after this tick (0 never) */
     int changeTick; /* the display at 90 Hz from this tick (0 never) */
+    /* v0.11.6-rc5's regimes (PACE4): */
+    double pd; /* the display's true refresh (0: PD; the phone's fit 8.3526-8.3551) */
+    double tailShare, tailLo,
+        tailHi;  /* a share of pictures whose GPU time is longer by U(lo, hi) */
+    int keepRun; /* kept ticks come in runs of this many (a fade, a load; 0: one at a time) */
+    double keepG, keepFirstG; /* a kept picture's GPU time, its tick's first's (0: as a scene's) */
+    int leadTick;             /* the latch's lead from this tick (0 never) ... */
+    double leadTo;            /* ... this (2.5 before) */
+    int gTick;                /* the GPU's time from this tick (0 never) ... */
+    double gLo2, gHi2;        /* ... in this range */
+    double gSwing, gSwingS;   /* the GPU's time swings by +-gSwing over a period of gSwingS s */
+    double step2Lo, step2Hi;  /* the other step's CPU (0: 0.2 ms; the phone's 3.2 ms a step) */
 } Cfg;
+
+/* how a run is made: the screen model's opts, the kept frames as rc5 did
+   (sampled, placed and scored; their present stepped through the GPU model
+   without a measurement) or as now (RD_PS_KEPT, not in the GPU model), the
+   even cadence */
+typedef struct Mode {
+    uint32_t opts;
+    bool keepFix;
+    bool even;
+} Mode;
+
+static const Mode kRc5 = {0u, false, false};
+static const Mode kNow = {RD_PS_OPT_ALL, true, false};
+static const Mode kEven = {RD_PS_OPT_ALL, true, true};
 
 #define NR 4
 static const char *const kRule[NR] = {"hand-over", "GPU end", "own timer", "screen"};
 #define SIMN 4096
 #define TICKS 300u
-#define WARM 150u /* pictures before the measures (the windows fill) */
-#define FB (3.0 * PD)
+#define WARM 150u       /* pictures before the measures (the windows fill) */
 #define OFFSET 5123.456 /* the display's clock less rd's */
 
 typedef struct Pic {
@@ -288,7 +314,7 @@ typedef struct Pic {
     double raw[NR], moment[NR];
     uint32_t frame;
     int how;
-    bool visible, kept, exact, fed, held;
+    bool visible, kept, exact, fed, held, aimed, late;
 } Pic;
 
 static Pic s_p[SIMN];
@@ -329,26 +355,47 @@ typedef struct Out {
     double fps;
     Stat glass[NR], byGap[NR][3]; /* byGap: 1, 2, 3 refreshes */
     uint32_t clampLo[NR], clampHi[NR], back[NR];
-    uint32_t how[RD_PS_HOW_COUNT], heldLo, heldHi, heldBack, replaced;
+    uint32_t how[RD_PS_HOW_COUNT], heldLo, heldHi, heldBack, replaced, measured;
     uint32_t scored, hit, late, early, further;
     double predRms; /* the GPU model's predicted end against the end */
     double rate;    /* the screen's content over the shown time, first to last */
     double rateTol; /* its bound from the code: the lag's range and a tick over the span */
     double lagMin, lagMax;
     bool sameOther; /* every picture not placed drawn as otherwise to the bit */
+    /* the even cadence */
+    uint32_t aimed, lateAims, earlyHand, changes, notAimed, nMin, nMax, nLast, shownOff,
+        nAt[RD_PE_N_MAX + 1];
+    double fpsShown; /* shown pictures a second (after WARM) */
 } Out;
 
 /* the display's refresh at or after t (rd's clock) */
-static double gridAt(double t, double phase, double changeAt)
+static double gridAt(double t, double phase, double pd, double changeAt)
 {
     if (changeAt > 0.0 && t > changeAt) {
-        const double base = phase + ceil((changeAt - phase) / PD) * PD;
+        const double base = phase + ceil((changeAt - phase) / pd) * pd;
         return base + ceil((t - base) / (1000.0 / 90.0)) * (1000.0 / 90.0);
     }
-    return phase + ceil((t - phase) / PD) * PD;
+    return phase + ceil((t - phase) / pd) * pd;
 }
 
-static void run(const Cfg *c, Out *o)
+/* the even cadence's inputs from the two models at rd's time now */
+static void evenIn(RdPaceScreen *sc, const RdPaceGpu *m, double now, RdPaceEvenIn *in)
+{
+    if (sc->dirty) {
+        rd_pace_screen_fit(sc);
+    }
+    const RdPaceScreenFit *f = &sc->fit;
+    memset(in, 0, sizeof(*in));
+    in->nowMs = now;
+    in->tickMs = TICK;
+    in->fit = sc->sN >= RD_PS_MIN && f->grid && f->latch && now - sc->newestEndMs <= RD_PS_STALE_MS;
+    in->anchorMs = f->anchorMs;
+    in->periodMs = f->periodMs;
+    in->xMs = f->xMs;
+    (void)rd_pace_gpu_model_figures(m, &in->gMs, &in->dMs, &in->prevEndMs);
+}
+
+static void run(const Cfg *c, const Mode *md, Out *o)
 {
     memset(o, 0, sizeof(*o));
     s_seed = c->seed;
@@ -358,9 +405,14 @@ static void run(const Cfg *c, Out *o)
     rd_as_made_timer_reset(&tm);
     RdPaceScreen sc;
     rd_pace_screen_reset(&sc);
+    sc.opts = md->opts;
+    RdPaceEven ev;
+    rd_pace_even_reset(&ev);
     RdRebase rb[2];
     memset(rb, 0, sizeof rb);
-    const double phase = U(0.0, PD);
+    const double pd = c->pd > 0.0 ? c->pd : PD;
+    const double fb = 3.0 * pd;
+    const double phase = U(0.0, pd);
     const double changeAt = c->changeTick ? 1000.0 + c->changeTick * TICK : 0.0;
     uint32_t n = 0, fedAt = 0;
     double J = 0.0, Eprev = 0.0;
@@ -369,6 +421,7 @@ static void run(const Cfg *c, Out *o)
     o->lagMin = 1e300;
     o->lagMax = -1e300;
     o->sameOther = true;
+    o->nMin = 99u;
 
     typedef struct Pend {
         RdPaceGpuSample s;
@@ -376,15 +429,31 @@ static void run(const Cfg *c, Out *o)
     } Pend;
 
     static Pend pend[SIMN];
-    uint32_t pendN = 0, pendAt = 0;
+    uint32_t pendN = 0, pendAt = 0, lastN = 0;
+    bool keptRun = false;
+    int runLeft = 0;
     for (uint32_t k = 0; k < TICKS && n < SIMN - 8; k++) {
         const double t0 = 1000.0 + (double)k * TICK;
         const double step = U(c->stepLo, c->stepHi);
-        const bool kept = c->keepShare > 0.0 && U(0.0, 1.0) < c->keepShare;
+        const double step2 = c->step2Hi > 0.0 ? U(c->step2Lo, c->step2Hi) : 0.2;
+        bool kept;
+        if (c->keepRun > 0) {
+            /* runs of kept ticks at the share asked */
+            if (runLeft <= 0) {
+                keptRun = c->keepShare > 0.0 && U(0.0, 1.0) < c->keepShare;
+                runLeft = c->keepRun;
+            }
+            runLeft--;
+            kept = keptRun;
+        } else {
+            kept = c->keepShare > 0.0 && U(0.0, 1.0) < c->keepShare;
+        }
+        const double lead = c->leadTick && (int)k >= c->leadTick ? c->leadTo : 2.5;
         bool first = true;
         for (int j = 0; j < 2; j++) {
             const double ps = t0 + j * P, pe = ps + P;
-            double x = J > ps + (j == 0 ? step : 0.2) ? J : ps + (j == 0 ? step : 0.2);
+            const double st = j == 0 ? step : step2;
+            double x = J > ps + st ? J : ps + st;
             for (;;) {
                 if (x + 0.3 > pe) {
                     break;
@@ -399,18 +468,51 @@ static void run(const Cfg *c, Out *o)
                 }
                 /* the display's times back three refreshes after shown, for
                    pictures whose successor exists (replaced ones get none) */
-                while (fedAt + 1u < n && s_p[fedAt].shown + FB <= x) {
+                while (fedAt + 1u < n && s_p[fedAt].shown + fb <= x) {
                     const Pic *q = &s_p[fedAt];
                     const bool stale = c->staleTick && q->shown > 1000.0 + c->staleTick * TICK;
-                    if (q->visible && !q->kept && q->endPred > 0.0 && !c->noTimes && !stale) {
+                    /* rc5 sampled the kept frames' presents too */
+                    const bool sampled = !q->kept || !md->keepFix;
+                    if (q->visible && sampled && q->endPred > 0.0 && !c->noTimes && !stale) {
                         const RdPaceScreenSample smp = {q->endPred, q->shown + OFFSET, REP,
                                                         q->exact ? q->end : 0.0};
                         rd_pace_screen_add(&sc, &smp);
+                        if (md->even && q->aimed) {
+                            rd_pace_even_shown(
+                                &ev, rd_pace_screen_score(q->hardMs, q->shown + OFFSET, REP));
+                        }
                     }
                     fedAt++;
                 }
+                /* the even cadence: the hand-over held to the plan's (the
+                   window's pacer), not past this step */
+                if (md->even && !c->noTimes) {
+                    RdPaceEvenIn ei;
+                    evenIn(&sc, &m, x, &ei);
+                    ei.stepEndMs = pe; /* the pacer's deadline */
+                    RdPaceEvenPlan pl;
+                    rd_pace_even_plan(&ev, &ei, &pl);
+                    o->earlyHand += pl.early && pl.holdMs > 0.01 && n >= WARM ? 1u : 0u;
+                    if (pl.how == RD_PE_AIMED && pl.holdMs > 0.01) {
+                        if (x + pl.holdMs + 0.3 > pe + 1e-9) {
+                            break; /* asked again in the next step */
+                        }
+                        x += pl.holdMs;
+                        continue; /* the times back and the step rule again at the new time */
+                    }
+                }
                 const double r = U(c->rLo, c->rHi);
-                const double gpu = U(c->gLo, c->gHi);
+                double gpu =
+                    c->gTick && (int)k >= c->gTick ? U(c->gLo2, c->gHi2) : U(c->gLo, c->gHi);
+                if (c->gSwing > 0.0) {
+                    gpu += c->gSwing * sin(2.0 * acos(-1.0) * (x - 1000.0) / (1000.0 * c->gSwingS));
+                }
+                if (c->tailShare > 0.0 && U(0.0, 1.0) < c->tailShare) {
+                    gpu += U(c->tailLo, c->tailHi);
+                }
+                if (kept && c->keepG > 0.0) {
+                    gpu = first ? c->keepFirstG : c->keepG;
+                }
                 Pic *p = &s_p[n];
                 memset(p, 0, sizeof(*p));
                 p->hand = x;
@@ -439,15 +541,44 @@ static void run(const Cfg *c, Out *o)
                 /* the display: the first refresh whose latch (its lead and
                    a jitter) follows the end; mailbox replaces the one before
                    when both make the same refresh */
-                p->shown = gridAt(p->end + 2.5 + U(-0.3, 0.3), phase, changeAt);
+                p->shown = gridAt(p->end + lead + U(-0.3, 0.3), phase, pd, changeAt);
                 p->visible = true;
                 if (n > 0 && p->shown <= s_p[n - 1u].shown) {
                     s_p[n - 1u].visible = false;
                     p->shown = s_p[n - 1u].shown;
                 }
-                if (!kept) {
-                    RdPaceGpuPlace pl;
+                /* the GPU model: rc5 stepped a kept frame's present through
+                   it (never measured); now it is left out */
+                RdPaceGpuPlace pl;
+                memset(&pl, 0, sizeof pl);
+                if (!kept || !md->keepFix) {
                     rd_pace_gpu_model_place(&m, x, k, &pl);
+                }
+                double target = 0.0;
+                if (md->even && !c->noTimes) {
+                    RdPaceEvenIn ei;
+                    evenIn(&sc, &m, x, &ei);
+                    bool late = false;
+                    target = rd_pace_even_take(&ev, &ei, pl.predEndMs, kept, &late);
+                    if (n >= WARM && (target > 0.0 || kept)) {
+                        o->lateAims += late ? 1u : 0u;
+                    }
+                    p->aimed = target > 0.0;
+                    p->late = late;
+                    if (n >= WARM) {
+                        o->aimed += p->aimed ? 1u : 0u;
+                        o->notAimed += !p->aimed && !kept ? 1u : 0u;
+                        if (ev.n != 0u) {
+                            o->nMin = ev.n < o->nMin ? ev.n : o->nMin;
+                            o->nMax = ev.n > o->nMax ? ev.n : o->nMax;
+                            o->nAt[ev.n <= RD_PE_N_MAX ? ev.n : 0]++;
+                            o->changes += lastN != 0u && ev.n != lastN ? 1u : 0u;
+                        }
+                    }
+                    lastN = ev.n != 0u ? ev.n : lastN;
+                    o->nLast = ev.n;
+                }
+                if (!kept || !md->keepFix) {
                     double sh;
                     bool held;
                     const double rawHand =
@@ -456,7 +587,8 @@ static void run(const Cfg *c, Out *o)
                                                         0.0, k, &sh, &held);
                     RdAsMadeTimerOut to;
                     rd_as_made_timer_step(&tm, t0 + rawHand * TICK, x, k, t0, TICK, &to);
-                    const RdPaceScreenIn in = {x, k, t0, TICK, pl.predEndMs, rawHand};
+                    const RdPaceScreenIn in = {x,       k,     t0,    TICK, pl.predEndMs,
+                                               rawHand, false, target};
                     RdPaceScreenPlace sp;
                     rd_pace_screen_place(&sc, &in, &sp);
                     p->endPred = pl.predEndMs;
@@ -469,12 +601,13 @@ static void run(const Cfg *c, Out *o)
                     if (sp.how != RD_PS_PLACED && memcmp(&sp.raw, &rawHand, sizeof rawHand) != 0) {
                         o->sameOther = false;
                     }
-                    if (n >= WARM) {
+                    if (n >= WARM && !kept) {
                         o->how[sp.how]++;
                         o->heldLo += sp.heldLo ? 1u : 0u;
                         o->heldHi += sp.heldHi ? 1u : 0u;
                         o->heldBack += sp.heldBack ? 1u : 0u;
                         o->replaced += sp.replaced ? 1u : 0u;
+                        o->measured += sp.measured ? 1u : 0u;
                         if (sp.how == RD_PS_PLACED) {
                             o->lagMin = sp.lagMs < o->lagMin ? sp.lagMs : o->lagMin;
                             o->lagMax = sp.lagMs > o->lagMax ? sp.lagMs : o->lagMax;
@@ -485,11 +618,23 @@ static void run(const Cfg *c, Out *o)
                         }
                     }
                     for (int q = 0; q < NR; q++) {
-                        if (n >= WARM) {
+                        if (n >= WARM && !kept) {
                             o->clampLo[q] += p->raw[q] < 0.0 ? 1u : 0u;
                             o->clampHi[q] += p->raw[q] > 0.999 ? 1u : 0u;
                         }
                         p->moment[q] = ((double)k + rd_rebase_alpha(p->raw[q])) * TICK;
+                    }
+                } else {
+                    /* now: the screen's rule says a kept frame (the value
+                       drawn otherwise, not sampled, not scored) */
+                    const RdPaceScreenIn in = {x, k, t0, TICK, 0.0, (x - t0) / TICK, true, 0.0};
+                    RdPaceScreenPlace sp;
+                    rd_pace_screen_place(&sc, &in, &sp);
+                    if (sp.how != RD_PS_KEPT || sp.raw != in.rawOther) {
+                        o->sameOther = false;
+                    }
+                    if (n >= WARM) {
+                        o->how[sp.how]++;
                     }
                 }
                 Eprev = p->end;
@@ -504,6 +649,8 @@ static void run(const Cfg *c, Out *o)
     o->fps = (double)n / ((double)TICKS * TICK / 1000.0);
     o->predRms = errN > 0.0 ? sqrt(err2 / errN) : 0.0;
     int lastShown = -1, lastMade = -1, firstRate = -1, lastRate = -1;
+    double firstShownAt = 0.0, lastShownAt = 0.0;
+    uint32_t shownAfter = 0;
     for (uint32_t i = WARM; i < n; i++) {
         const Pic *b = &s_p[i];
         if (!b->kept) {
@@ -518,10 +665,13 @@ static void run(const Cfg *c, Out *o)
             continue;
         }
         o->shown++;
+        firstShownAt = shownAfter == 0u ? b->shown : firstShownAt;
+        lastShownAt = b->shown;
+        shownAfter++;
         if (lastShown >= 0 && !b->kept && !s_p[lastShown].kept) {
             const Pic *a = &s_p[lastShown];
             const double gap = b->shown - a->shown;
-            const double kr = floor(gap / PD + 0.5);
+            const double kr = floor(gap / pd + 0.5);
             const int cls = kr >= 4.0 ? 4 : (int)kr;
             o->gaps[cls]++;
             for (int q = 0; q < NR; q++) {
@@ -540,12 +690,31 @@ static void run(const Cfg *c, Out *o)
                 o->late += s == 1 ? 1u : 0u;
                 o->early += s == -1 ? 1u : 0u;
                 o->further += s > 1 || s < -1 ? 1u : 0u;
+                o->shownOff += b->aimed && s != 0 ? 1u : 0u;
             }
             firstRate = firstRate < 0 ? (int)i : firstRate;
             lastRate = (int)i;
         }
         lastShown = (int)i;
     }
+    /* the kept frames' presents as rc5 scored them (the score over every
+       placed picture) */
+    if (!md->keepFix) {
+        for (uint32_t i = WARM; i < n; i++) {
+            const Pic *b = &s_p[i];
+            if (b->kept && b->visible && b->hardMs > 0.0) {
+                const int s = rd_pace_screen_score(b->hardMs, b->shown + OFFSET, REP);
+                o->scored++;
+                o->hit += s == 0 ? 1u : 0u;
+                o->late += s == 1 ? 1u : 0u;
+                o->early += s == -1 ? 1u : 0u;
+                o->further += s > 1 || s < -1 ? 1u : 0u;
+            }
+        }
+    }
+    o->fpsShown = lastShownAt > firstShownAt && shownAfter > 1u
+                      ? 1000.0 * (double)(shownAfter - 1u) / (lastShownAt - firstShownAt)
+                      : 0.0;
     if (firstRate >= 0 && lastRate > firstRate) {
         const Pic *a = &s_p[firstRate], *b = &s_p[lastRate];
         const double span = b->shown - a->shown;
@@ -553,16 +722,16 @@ static void run(const Cfg *c, Out *o)
         /* the content is g - L inside the tick: against the glass it differs
            by the lag's change, the expectation's distance from the refresh
            (under half a refresh) and the holds (a tick at most) at each end */
-        o->rateTol = ((o->lagMax > o->lagMin ? o->lagMax - o->lagMin : 0.0) + PD + TICK) / span;
+        o->rateTol = ((o->lagMax > o->lagMin ? o->lagMax - o->lagMin : 0.0) + pd + TICK) / span;
     }
 }
 
 static void print(const Cfg *c, const Out *o)
 {
-    printf("  %s: %u pictures, %.1f fps, %u shown; gaps 1/2/3/4+ refreshes %u/%u/%u/%u; the "
-           "GPU model's predicted end against the end %.2f ms rms\n",
-           c->name, o->pics, o->fps, o->shown, o->gaps[1], o->gaps[2], o->gaps[3], o->gaps[4],
-           o->predRms);
+    printf("  %s: %u pictures, %.1f fps (%.1f shown a second), %u shown; gaps 1/2/3/4+ "
+           "refreshes %u/%u/%u/%u; the GPU model's predicted end against the end %.2f ms rms\n",
+           c->name, o->pics, o->fps, o->fpsShown, o->shown, o->gaps[1], o->gaps[2], o->gaps[3],
+           o->gaps[4], o->predRms);
     for (int q = 0; q < NR; q++) {
         printf("    %-9s on the glass %.2f (deviation %.3f), above 1.25 %.1f %%, above 1.5 %.1f "
                "%%, below 0.75 %.1f %%; 1 refresh %.2f, 2 %.2f, 3 %.2f; clamps %u/%u, back %u\n",
@@ -573,17 +742,36 @@ static void print(const Cfg *c, const Out *o)
                statMean(&o->byGap[q][1]), statMean(&o->byGap[q][2]), o->clampLo[q], o->clampHi[q],
                o->back[q]);
     }
+    printf("    the screen: placed %u (no times %u, no end %u, few %u, stale %u, off grid %u, no "
+           "fit %u, kept %u); held at the close %u, at the newest frame %u, at the moment before "
+           "%u; on the picture before's refresh %u; by the measured errors %u; score "
+           "over %u: on it %u (%.1f %%), one late %u, one early %u, further %u; the lag %.2f to "
+           "%.2f ms (less the clocks' offset); content over the glass %.4f (bound %.4f)\n",
+           o->how[RD_PS_PLACED], o->how[RD_PS_NO_TIMES], o->how[RD_PS_NO_END], o->how[RD_PS_FEW],
+           o->how[RD_PS_STALE], o->how[RD_PS_OFF_GRID], o->how[RD_PS_NO_FIT], o->how[RD_PS_KEPT],
+           o->heldLo, o->heldHi, o->heldBack, o->replaced, o->measured, o->scored, o->hit,
+           share((double)o->hit, (double)o->scored), o->late, o->early, o->further,
+           o->how[RD_PS_PLACED] ? o->lagMin - OFFSET : 0.0,
+           o->how[RD_PS_PLACED] ? o->lagMax - OFFSET : 0.0, o->rate, o->rateTol);
+    if (o->aimed || o->notAimed) {
+        printf(
+            "    the even cadence: N %u-%u (the last %u; pictures at N 1/2/3/4: %u/%u/%u/%u), %u "
+            "changes; %u aimed, %u not, %u late at the hand-over, %u holds cut before the "
+            "step, %u shown off their refresh\n",
+            o->nMin, o->nMax, o->nLast, o->nAt[1], o->nAt[2], o->nAt[3], o->nAt[4], o->changes,
+            o->aimed, o->notAimed, o->lateAims, o->earlyHand, o->shownOff);
+    }
+}
+
+/* one table row: the screen's measure, the shares, the score */
+static void row(const char *what, const Out *o)
+{
     printf(
-        "    the screen: placed %u (no times %u, no end %u, few %u, stale %u, off grid %u, no "
-        "fit %u); held at the close %u, at the newest frame %u, at the moment before %u; on "
-        "the picture before's refresh %u; score over %u: on it %u (%.1f %%), one late %u, "
-        "one early %u, further %u; the lag %.2f to %.2f ms (less the clocks' offset); content over the glass %.4f "
-        "(bound %.4f)\n",
-        o->how[RD_PS_PLACED], o->how[RD_PS_NO_TIMES], o->how[RD_PS_NO_END], o->how[RD_PS_FEW],
-        o->how[RD_PS_STALE], o->how[RD_PS_OFF_GRID], o->how[RD_PS_NO_FIT], o->heldLo, o->heldHi,
-        o->heldBack, o->replaced, o->scored, o->hit, share((double)o->hit, (double)o->scored),
-        o->late, o->early, o->further, o->how[RD_PS_PLACED] ? o->lagMin - OFFSET : 0.0,
-        o->how[RD_PS_PLACED] ? o->lagMax - OFFSET : 0.0, o->rate, o->rateTol);
+        "    | %-34s | %.3f | %4.1f %% | %4.1f %% | %5.1f %% (%u: %u late, %u early, %u further) | "
+        "%.1f |\n",
+        what, statDev(&o->glass[3]), share(o->glass[3].above15, o->glass[3].n),
+        share(o->glass[3].below075, o->glass[3].n), share((double)o->hit, (double)o->scored),
+        o->scored, o->late, o->early, o->further, o->fpsShown);
 }
 
 /* the rc4 regimes.  Play (L:2148-2498): 688-742 pictures in 10 s, 171-243
@@ -591,66 +779,67 @@ static void print(const Cfg *c, const Out *o)
    the exact end 0.81-1.87 ms deviation.  The opening (L:903-1158): 443-534,
    two and three refreshes.  A scene with kept frames (L:1852, 1962: 607-613
    pairs, 245 hand-overs) */
-static const Cfg kPlay = {"play, one and two refreshes (rc4 L:2148-2498)",
-                          13.2,
-                          15.4,
-                          7.0,
-                          9.0,
-                          0.2,
-                          2.4,
-                          4.0,
-                          6.0,
-                          0.0,
-                          31u,
-                          0,
-                          0,
-                          0};
-static const Cfg kPlayWide = {"play at rc4's prediction error (GPU 12.0-16.6 ms)",
-                              12.0,
-                              16.6,
-                              7.0,
-                              9.0,
-                              0.2,
-                              2.4,
-                              4.0,
-                              6.0,
-                              0.0,
-                              32u,
-                              0,
-                              0,
-                              0};
-static const Cfg kOpening = {"the opening, two and three refreshes (rc4 L:903-1158)",
-                             20.4,
-                             22.8,
-                             9.0,
-                             10.4,
-                             0.2,
-                             3.4,
-                             4.0,
-                             8.4,
-                             0.0,
-                             33u,
-                             0,
-                             0,
-                             0};
-static const Cfg kKept = {
-    "kept frames (rc4 L:1852, 1962)", 13.2, 15.4, 7.0, 9.0, 0.2, 2.4, 4.0, 6.0, 0.6, 34u, 0, 0, 0};
-static const Cfg kOne = {"one a tick", 30.0, 32.5, 9.0, 10.4, 0.2, 4.3,
-                         5.8,          TICK, 0.0,  35u, 0,    0,   0};
-static const Cfg kExact = {"play with an exact prediction (GPU 14.3 ms every picture)",
-                           14.3,
-                           14.3,
-                           7.0,
-                           9.0,
-                           0.2,
-                           2.4,
-                           4.0,
-                           6.0,
-                           0.0,
-                           36u,
-                           0,
-                           0,
-                           0};
+static const Cfg kPlay = {.name = "play, one and two refreshes (rc4 L:2148-2498)",
+                          .gLo = 13.2,
+                          .gHi = 15.4,
+                          .rLo = 7.0,
+                          .rHi = 9.0,
+                          .dLess = 0.2,
+                          .stepLo = 2.4,
+                          .stepHi = 4.0,
+                          .reads = 6.0,
+                          .seed = 31u};
+static const Cfg kPlayWide = {.name = "play at rc4's prediction error (GPU 12.0-16.6 ms)",
+                              .gLo = 12.0,
+                              .gHi = 16.6,
+                              .rLo = 7.0,
+                              .rHi = 9.0,
+                              .dLess = 0.2,
+                              .stepLo = 2.4,
+                              .stepHi = 4.0,
+                              .reads = 6.0,
+                              .seed = 32u};
+static const Cfg kOpening = {.name = "the opening, two and three refreshes (rc4 L:903-1158)",
+                             .gLo = 20.4,
+                             .gHi = 22.8,
+                             .rLo = 9.0,
+                             .rHi = 10.4,
+                             .dLess = 0.2,
+                             .stepLo = 3.4,
+                             .stepHi = 4.0,
+                             .reads = 8.4,
+                             .seed = 33u};
+static const Cfg kKept = {.name = "kept frames (rc4 L:1852, 1962)",
+                          .gLo = 13.2,
+                          .gHi = 15.4,
+                          .rLo = 7.0,
+                          .rHi = 9.0,
+                          .dLess = 0.2,
+                          .stepLo = 2.4,
+                          .stepHi = 4.0,
+                          .reads = 6.0,
+                          .keepShare = 0.6,
+                          .seed = 34u};
+static const Cfg kOne = {.name = "one a tick",
+                         .gLo = 30.0,
+                         .gHi = 32.5,
+                         .rLo = 9.0,
+                         .rHi = 10.4,
+                         .dLess = 0.2,
+                         .stepLo = 4.3,
+                         .stepHi = 5.8,
+                         .reads = TICK,
+                         .seed = 35u};
+static const Cfg kExact = {.name = "play with an exact prediction (GPU 14.3 ms every picture)",
+                           .gLo = 14.3,
+                           .gHi = 14.3,
+                           .rLo = 7.0,
+                           .rHi = 9.0,
+                           .dLess = 0.2,
+                           .stepLo = 2.4,
+                           .stepHi = 4.0,
+                           .reads = 6.0,
+                           .seed = 36u};
 
 static void testSims(void)
 {
@@ -660,14 +849,15 @@ static void testSims(void)
     enum { N = sizeof all / sizeof all[0] };
 
     /* the holds at the tick's edges (at its close; both), the simulated
-       counts rounded up: where the pictures of a frame pair are shown
+       counts rounded up (v0.11.6 PACE4: with the measured errors 3/6, 3/6,
+       3/6, 1/9, 0/0, 0/29): where the pictures of a frame pair are shown
        further apart than a tick (the hand-overs' spread in the tick and the
        latency's to the glass together) no lag keeps them all inside it */
-    static const uint32_t kLoMax[N] = {2, 4, 6, 1, 1, 2};
-    static const uint32_t kHeldMax[N] = {6, 10, 14, 4, 2, 40};
+    static const uint32_t kLoMax[N] = {3, 4, 6, 1, 1, 2};
+    static const uint32_t kHeldMax[N] = {6, 10, 14, 10, 2, 40};
     Out res[N];
     for (size_t i = 0; i < N; i++) {
-        run(all[i], &res[i]);
+        run(all[i], &kNow, &res[i]);
         print(all[i], &res[i]);
         const Out *r = &res[i];
         /* every regime: the screen's moments never back, its content over the
@@ -712,15 +902,457 @@ static void testSims(void)
           exact->hit * 100u >= exact->scored * 95u);
 }
 
+/* v0.11.6-rc5's regimes (the owner's phone, evidence/rc5/ico-pc.log; the
+   rule not drawn, its score and fit on the on-glass line):
+     play, stage 3 (L:2306-2486): 69-72 fps, gaps 1/2 190-239/459-501, GPU
+       13.8-14.3 ms a picture, the prediction's error 0.9-2.2 ms, 87-92 % on
+       the refresh predicted, the period 8.3526-8.3533 ms;
+     the cage, stage 4 (L:2862-3215): 52-61 fps, GPU 14.9-17.9 ms, the
+       prediction's error 1.9-3.1 ms, 74-82 % on it, one late against one
+       early 1.3-2.0 to 1, the period 8.3530-8.3551;
+     kept frames in runs (op2 L:1945 203 of 624, deja L:2109 784 of 1004,
+       the sacrifice scene L:2216 418 of 858): 49-72 % on it with 43-105
+       further, the latch at -32.29 and -21.61 ms (37 and 41 of 64) against
+       the exact end's +8.52 and +4.60;
+     one picture about every refresh (deja's 503 of 623 gaps one refresh,
+       the GPU 6.5 ms a picture with its kept frames). */
+static const Cfg kR5Play = {.name = "rc5 play, stage 3 (L:2306-2486)",
+                            .gLo = 13.0,
+                            .gHi = 15.0,
+                            .rLo = 7.0,
+                            .rHi = 9.0,
+                            .dLess = 0.2,
+                            .stepLo = 2.4,
+                            .stepHi = 4.0,
+                            .reads = 6.0,
+                            .seed = 51u,
+                            .pd = 8.3532,
+                            .step2Lo = 2.6,
+                            .step2Hi = 3.4};
+static const Cfg kR5Cage = {.name = "rc5 the cage, stage 4 (L:2948-3215)",
+                            .gLo = 14.6,
+                            .gHi = 15.8,
+                            .rLo = 7.5,
+                            .rHi = 9.5,
+                            .dLess = 0.2,
+                            .stepLo = 2.4,
+                            .stepHi = 4.0,
+                            .reads = 6.0,
+                            .seed = 52u,
+                            .pd = 8.3540,
+                            .tailShare = 0.10,
+                            .tailLo = 1.5,
+                            .tailHi = 5.0,
+                            .step2Lo = 2.6,
+                            .step2Hi = 3.4};
+static const Cfg kR5Deja = {.name = "rc5 kept frames in runs, deja (L:2109)",
+                            .gLo = 12.0,
+                            .gHi = 14.0,
+                            .rLo = 3.0,
+                            .rHi = 5.0,
+                            .dLess = 0.2,
+                            .stepLo = 2.4,
+                            .stepHi = 4.0,
+                            .reads = 4.0,
+                            .keepShare = 0.63,
+                            .seed = 53u,
+                            .pd = 8.3504,
+                            .keepRun = 10,
+                            .keepG = 1.6,
+                            .keepFirstG = 5.0,
+                            .step2Lo = 2.6,
+                            .step2Hi = 3.4};
+static const Cfg kR5Sac = {.name = "rc5 kept frames in runs, the sacrifice scene (L:2216)",
+                           .gLo = 13.0,
+                           .gHi = 15.5,
+                           .rLo = 5.0,
+                           .rHi = 7.0,
+                           .dLess = 0.2,
+                           .stepLo = 2.4,
+                           .stepHi = 4.0,
+                           .reads = 6.0,
+                           .keepShare = 0.5,
+                           .seed = 54u,
+                           .pd = 8.3510,
+                           .keepRun = 15,
+                           .keepG = 1.6,
+                           .keepFirstG = 5.0,
+                           .step2Lo = 2.6,
+                           .step2Hi = 3.4};
+static const Cfg kR5Op2 = {.name = "rc5 kept frames in runs, op2 (L:1945)",
+                           .gLo = 13.5,
+                           .gHi = 15.5,
+                           .rLo = 6.0,
+                           .rHi = 8.0,
+                           .dLess = 0.2,
+                           .stepLo = 2.4,
+                           .stepHi = 4.0,
+                           .reads = 6.0,
+                           .keepShare = 0.33,
+                           .seed = 55u,
+                           .pd = 8.3523,
+                           .keepRun = 10,
+                           .keepG = 1.6,
+                           .keepFirstG = 5.0,
+                           .step2Lo = 2.6,
+                           .step2Hi = 3.4};
+static const Cfg kR5Fast = {.name = "about one a refresh (GPU 6.5-8.0 ms)",
+                            .gLo = 6.5,
+                            .gHi = 8.0,
+                            .rLo = 3.0,
+                            .rHi = 5.0,
+                            .dLess = 0.2,
+                            .stepLo = 2.4,
+                            .stepHi = 4.0,
+                            .reads = 4.0,
+                            .seed = 56u,
+                            .pd = 8.3504,
+                            .step2Lo = 2.6,
+                            .step2Hi = 3.4};
+static const Cfg kR5Lead = {.name = "the latch's lead 2.5 to 6.5 ms at tick 150",
+                            .gLo = 13.0,
+                            .gHi = 15.0,
+                            .rLo = 7.0,
+                            .rHi = 9.0,
+                            .dLess = 0.2,
+                            .stepLo = 2.4,
+                            .stepHi = 4.0,
+                            .reads = 6.0,
+                            .seed = 57u,
+                            .pd = 8.3532,
+                            .leadTick = 150,
+                            .leadTo = 6.5,
+                            .step2Lo = 2.6,
+                            .step2Hi = 3.4};
+static const Cfg kR5Regime = {.name =
+                                  "the opening's GPU (20.4-22.8) to play's (13.2-15.4) at tick 150",
+                              .gLo = 20.4,
+                              .gHi = 22.8,
+                              .rLo = 7.0,
+                              .rHi = 9.0,
+                              .dLess = 0.2,
+                              .stepLo = 2.4,
+                              .stepHi = 4.0,
+                              .reads = 6.0,
+                              .seed = 58u,
+                              .pd = 8.3532,
+                              .gTick = 150,
+                              .gLo2 = 13.2,
+                              .gHi2 = 15.4,
+                              .step2Lo = 2.6,
+                              .step2Hi = 3.4};
+
+#define R5N 8
+static const Cfg *const kR5[R5N] = {&kR5Play, &kR5Cage, &kR5Deja, &kR5Sac,
+                                    &kR5Op2,  &kR5Fast, &kR5Lead, &kR5Regime};
+
+static void testRc5(void)
+{
+    printf(" rc5's regimes, each change on in turn (the screen's measure on the glass: "
+           "deviation, above 1.5, below 0.75; on the refresh predicted; shown a second):\n");
+
+    static const struct {
+        const char *what;
+        Mode md;
+    } kSteps[] = {
+        {"rc5's rule", {0u, false, false}},
+        {"+ kept frames left out", {0u, true, false}},
+        {"+ hysteresis", {RD_PS_OPT_HYST, true, false}},
+        {"+ measured errors (all: now)", {RD_PS_OPT_ALL, true, false}},
+    };
+
+    enum { S = sizeof kSteps / sizeof kSteps[0] };
+
+    static Out res[R5N][S];
+    for (int i = 0; i < R5N; i++) {
+        printf("  %s\n", kR5[i]->name);
+        for (int k = 0; k < S; k++) {
+            run(kR5[i], &kSteps[k].md, &res[i][k]);
+            row(kSteps[k].what, &res[i][k]);
+        }
+        print(kR5[i], &res[i][S - 1]);
+        const Out *now = &res[i][S - 1], *was = &res[i][0];
+        CHECK(now->back[3] == 0u && now->sameOther && now->how[RD_PS_PLACED] > 0u);
+        CHECK(fabs(now->rate - 1.0) <= now->rateTol);
+        /* no regime evener under rc5's rule than now (within .01) */
+        CHECK(statDev(&now->glass[3]) <= statDev(&was->glass[3]) + 0.01);
+    }
+    /* the kept frames' scenes (deja, the sacrifice scene, op2): rc5's rule
+       a refresh or more off for over a hundred pictures (the log: 43-105
+       further), now none, the hits up by twenty points or more, the
+       deviation down by .04 or more (simulated .434 to .373, .413 to .363,
+       .383 to .304) */
+    for (int i = 2; i <= 4; i++) {
+        const Out *now = &res[i][S - 1], *was = &res[i][0];
+        CHECK(was->further > 100u && now->further == 0u);
+        CHECK(share((double)now->hit, (double)now->scored) >=
+              share((double)was->hit, (double)was->scored) + 20.0);
+        CHECK(statDev(&now->glass[3]) < statDev(&was->glass[3]) - 0.04);
+    }
+    /* the measured errors in the cage (a skewed error): evener than the
+       Gaussian spread's expectation (simulated .342 to .319) */
+    CHECK(statDev(&res[1][S - 1].glass[3]) < statDev(&res[1][S - 2].glass[3]) - 0.01);
+}
+
+/* the even cadence (rd_pace_even.h) against the screen's rule alone, over
+   the same regimes: the content's speed on the glass, the pictures shown a
+   second, N and its changes, the aims late at the hand-over and the
+   pictures shown off their refresh; a picture time that straddles two
+   refreshes (16.1-17.1 ms swinging 0.5 ms each way over 4 s) and one that
+   straddles one (7.9-8.9) */
+static const Cfg kStraddle2 = {
+    .name = "a picture time across two refreshes (GPU 16.1-17.1, a 4 s swing)",
+    .gLo = 16.1,
+    .gHi = 17.1,
+    .rLo = 7.0,
+    .rHi = 9.0,
+    .dLess = 0.2,
+    .stepLo = 2.4,
+    .stepHi = 4.0,
+    .reads = 6.0,
+    .seed = 61u,
+    .pd = 8.3532,
+    .gSwing = 0.5,
+    .gSwingS = 4.0,
+    .step2Lo = 2.6,
+    .step2Hi = 3.4};
+static const Cfg kStraddle1 = {.name =
+                                   "a picture time across one refresh (GPU 7.9-8.9, a 4 s swing)",
+                               .gLo = 7.9,
+                               .gHi = 8.9,
+                               .rLo = 3.0,
+                               .rHi = 5.0,
+                               .dLess = 0.2,
+                               .stepLo = 2.4,
+                               .stepHi = 4.0,
+                               .reads = 4.0,
+                               .seed = 62u,
+                               .pd = 8.3532,
+                               .gSwing = 0.5,
+                               .gSwingS = 4.0,
+                               .step2Lo = 2.6,
+                               .step2Hi = 3.4};
+
+static void testEven(void)
+{
+    printf(" the even cadence against the screen's rule alone (the screen's measure on the "
+           "glass: deviation, above 1.5, below 0.75; on the refresh aimed or predicted; shown a "
+           "second):\n");
+    const Cfg *const all[] = {&kR5Play, &kR5Cage,    &kOpening,   &kR5Fast, &kOne,
+                              &kR5Sac,  &kStraddle2, &kStraddle1, &kR5Lead, &kR5Regime};
+
+    enum { N = sizeof all / sizeof all[0] };
+
+    static Out rule[N], even[N];
+    for (size_t i = 0; i < N; i++) {
+        printf("  %s\n", all[i]->name);
+        run(all[i], &kNow, &rule[i]);
+        run(all[i], &kEven, &even[i]);
+        row("the screen's rule alone", &rule[i]);
+        row("the even cadence", &even[i]);
+        print(all[i], &even[i]);
+        const Out *e = &even[i];
+        /* every regime: never back, the content over the glass at real time
+           within its bound, aimed at all, evener than the screen's rule
+           alone, N changed at most 3 times in the 10 s */
+        CHECK(e->back[3] == 0u && e->sameOther && e->aimed > 0u);
+        CHECK(fabs(e->rate - 1.0) <= e->rateTol);
+        CHECK(statDev(&e->glass[3]) <= statDev(&rule[i].glass[3]) + 1e-9);
+        CHECK(e->changes <= 3u);
+    }
+    /* the rates: two refreshes a picture where the picture fits two (play,
+       about one a refresh, across one refresh): shown 1000 / (2 P) a second
+       within 0.3 and deviation under .06; four (one a tick, and where three
+       does not hold: the opening, across two refreshes) at 1000 / (4 P)
+       within 0.3, deviation under .05 (simulated .003, .000, .030) */
+    static const int kTwo[] = {0, 3, 7}, kFour[] = {2, 4, 6};
+    for (size_t i = 0; i < 3; i++) {
+        const Cfg *c = all[kTwo[i]];
+        const Out *e = &even[kTwo[i]];
+        CHECK(fabs(e->fpsShown - 1000.0 / (2.0 * c->pd)) < 0.3 && statDev(&e->glass[3]) < 0.06);
+        CHECK(e->nLast == 2u);
+    }
+    for (size_t i = 0; i < 3; i++) {
+        const Cfg *c = all[kFour[i]];
+        const Out *e = &even[kFour[i]];
+        const double pd = c->pd > 0.0 ? c->pd : PD;
+        CHECK(fabs(e->fpsShown - 1000.0 / (4.0 * pd)) < 0.3 && statDev(&e->glass[3]) < 0.05);
+        CHECK(e->nLast == 4u);
+    }
+    /* the cage (a tail of slow pictures): evener by .05 or more (simulated
+       .319 to .241, at two refreshes, 59.4 shown a second) */
+    CHECK(statDev(&even[1].glass[3]) < statDev(&rule[1].glass[3]) - 0.05);
+    (void)kRc5;
+}
+
+/* the even cadence's parts: N for a picture time (its band), the plan's
+   refresh and hold, a hand-over too late for its refresh, the bias, the
+   floor, the fall-backs, the texts word for word */
+static void testEvenParts(void)
+{
+    const double p = 8.3532;
+    /* N: the fewest refreshes with t + 0.25 ms; up past 2P - 0.25 */
+    CHECK(rd_pace_even_n_for(8.0, p, RD_PE_UP_MS) == 1u);
+    CHECK(rd_pace_even_n_for(8.2, p, RD_PE_UP_MS) == 2u);
+    CHECK(rd_pace_even_n_for(16.4, p, RD_PE_UP_MS) == 2u);
+    CHECK(rd_pace_even_n_for(16.5, p, RD_PE_UP_MS) == 3u);
+    CHECK(rd_pace_even_n_for(100.0, p, RD_PE_UP_MS) == RD_PE_N_MAX);
+    RdPaceEven e;
+    rd_pace_even_reset(&e);
+    RdPaceEvenIn in = {.nowMs = 1000.0,
+                       .fit = true,
+                       .anchorMs = 6000.0,
+                       .periodMs = p,
+                       .xMs = 5003.0,
+                       .gMs = 14.0,
+                       .dMs = 8.0,
+                       .prevEndMs = 990.0,
+                       .stepEndMs = 0.0,
+                       .tickMs = TICK};
+    RdPaceEvenPlan pl;
+    rd_pace_even_plan(&e, &in, &pl);
+    /* the first: the refresh whose aim the earliest end (1022) makes, the
+       hold to put the end RD_PE_AIM P before its latch */
+    const double early = 1000.0 + 8.0 + 14.0;
+    CHECK(pl.how == RD_PE_AIMED && pl.n == 2u && !pl.changed);
+    CHECK(pl.targetMs >= early + in.xMs + RD_PE_AIM * p - 1e-9 &&
+          pl.targetMs < early + in.xMs + RD_PE_AIM * p + p);
+    CHECK(fabs(1000.0 + pl.holdMs + 22.0 + in.xMs - (pl.targetMs - RD_PE_AIM * p)) < 1e-9);
+    /* idempotent until taken */
+    RdPaceEvenPlan p2;
+    rd_pace_even_plan(&e, &in, &p2);
+    CHECK(p2.targetMs == pl.targetMs && p2.holdMs == pl.holdMs);
+    bool late;
+    const double r0 = rd_pace_even_take(&e, &in, 1000.0 + pl.holdMs + 22.0, false, &late);
+    CHECK(r0 == pl.targetMs && !late);
+    /* the next: N refreshes on; handed over 6 ms later than planned: its end
+       past the refresh less RD_PE_LATE_MS, a refresh later and late */
+    in.nowMs = 1010.0;
+    in.prevEndMs = 1000.0 + pl.holdMs + 22.0;
+    rd_pace_even_plan(&e, &in, &pl);
+    CHECK(fabs(pl.targetMs - (r0 + 2.0 * p)) < 1e-6);
+    const double planned = in.nowMs + pl.holdMs + 22.0;
+    const double r1 = rd_pace_even_take(&e, &in, planned + 6.0, false, &late);
+    CHECK(late && fabs(r1 - (r0 + 3.0 * p)) < 1e-6);
+    /* the bias: a late one aims RD_PE_BIAS_STEP_MS earlier, an on-time one
+       back by RD_PE_BIAS_DECAY_MS */
+    rd_pace_even_shown(&e, 1);
+    CHECK(fabs(e.biasMs - RD_PE_BIAS_STEP_MS) < 1e-12);
+    rd_pace_even_shown(&e, 0);
+    CHECK(fabs(e.biasMs - (RD_PE_BIAS_STEP_MS - RD_PE_BIAS_DECAY_MS)) < 1e-12);
+    /* RD_PE_MISS_UP late aims: N up and floored while the picture time stays */
+    e.missBits = (1u << RD_PE_MISS_UP) - 1u;
+    in.nowMs = 1100.0;
+    in.prevEndMs = 1080.0;
+    rd_pace_even_plan(&e, &in, &pl);
+    CHECK(pl.n == 3u && pl.changed && e.floorN == 3u);
+    for (int i = 0; i < 400; i++) {
+        in.nowMs += 10.0;
+        rd_pace_even_plan(&e, &in, &pl);
+        (void)rd_pace_even_take(&e, &in, 0.0, false, &late);
+    }
+    CHECK(e.n == 3u); /* 4 s later, the same picture time: still 3 */
+    in.gMs = 12.5;    /* the picture time moved by over RD_PE_FLOOR_T_MS: down after the hold */
+    for (int i = 0; i < 150; i++) {
+        in.nowMs += 10.0;
+        rd_pace_even_plan(&e, &in, &pl);
+        (void)rd_pace_even_take(&e, &in, 0.0, false, &late);
+    }
+    CHECK(e.n == 2u);
+    /* a picture time across the band (2P - 1.0 to 2P - 0.25): N kept */
+    in.gMs = 2.0 * p - 0.6;
+    for (int i = 0; i < 300; i++) {
+        in.nowMs += 10.0;
+        rd_pace_even_plan(&e, &in, &pl);
+        (void)rd_pace_even_take(&e, &in, 0.0, false, &late);
+        CHECK(pl.n == 2u);
+    }
+    /* the fall-backs: no fit, no GPU time, slower than the game's tick */
+    in.fit = false;
+    rd_pace_even_plan(&e, &in, &pl);
+    CHECK(pl.how == RD_PE_NO_FIT && pl.holdMs == 0.0 && !e.planned);
+    in.fit = true;
+    in.gMs = 0.0;
+    rd_pace_even_plan(&e, &in, &pl);
+    CHECK(pl.how == RD_PE_NO_GPU && pl.holdMs == 0.0);
+    in.gMs = 40.0;
+    rd_pace_even_plan(&e, &in, &pl);
+    CHECK(pl.how == RD_PE_SLOW && pl.holdMs == 0.0);
+    /* a hand-over due 2 ms into the game's next step: made before it */
+    rd_pace_even_reset(&e);
+    in = (RdPaceEvenIn){.nowMs = 1000.0,
+                        .fit = true,
+                        .anchorMs = 6000.0,
+                        .periodMs = p,
+                        .xMs = 5003.0,
+                        .gMs = 14.0,
+                        .dMs = 8.0,
+                        .prevEndMs = 990.0,
+                        .stepEndMs = 0.0,
+                        .tickMs = TICK};
+    rd_pace_even_plan(&e, &in, &pl);
+    const double due = 1000.0 + pl.holdMs;
+    e.planned = false;
+    in.stepEndMs = due - 2.0;
+    rd_pace_even_plan(&e, &in, &pl);
+    CHECK(pl.early && fabs(1000.0 + pl.holdMs - (due - 2.0 - 0.3)) < 1e-9);
+
+    /* the texts */
+    char line[2048];
+    (void)rd_pace_even_start_text(true, false, "off by default", line, sizeof line);
+    CHECK_STR(line,
+              "rd: an even number of refreshes a picture: off by default (off by default); with "
+              "pictures as made, every picture shown for the same N refreshes: N the fewest "
+              "with the picture time (the larger of the GPU's median span and the hand-over to "
+              "the first submit) + 0.25 ms, up at once or when 8 of the last 32 aims were late "
+              "(then not down until the picture time moves by 1.00 ms), down to the fewest it "
+              "fits with 1.00 ms to spare after 1000 ms of it; each hand-over held until its "
+              "predicted GPU end sits 0.50 of a refresh before its refresh's latch (the screen's "
+              "grid and latch), the content drawn for that refresh; it lowers the pictures a "
+              "second where the GPU could make more; not used (ICO_RD_PACE_EVEN=1 turns it on)");
+    RdPaceEvenWindow w;
+    memset(&w, 0, sizeof w);
+    CHECK(!rd_pace_even_format(&w, line, sizeof line) && line[0] == '\0');
+    w.how[RD_PE_AIMED] = 590;
+    w.how[RD_PE_NO_FIT] = 10;
+    w.changes = 1;
+    w.held = 580;
+    w.heldUs = 580u * 3250u;
+    w.early = 12;
+    w.lateAims = 4;
+    w.shown = 588;
+    w.shownOff = 6;
+    w.shownLate = 5;
+    w.shownEarly = 1;
+    w.n = 2;
+    w.periodNs = 8353200;
+    CHECK(rd_pace_even_format(&w, line, sizeof line));
+    CHECK_STR(line,
+              "; the even cadence: 2 refreshes a picture (the last; 59.9 a second), 1 changes; "
+              "590 pictures aimed (580 held before the hand-over, 3.25 ms on average; 12 before "
+              "the game's step), 4 late for their refresh at the hand-over; not aimed: the "
+              "screen's grid or latch not fitted 10; shown off their refresh 6 of 588 (5 later, 1 "
+              "earlier)");
+}
+
 /* ------------------------------------------------------------------- 4 */
 
 static void testFallbacks(void)
 {
     Out o;
     printf(" fall-backs:\n");
-    const Cfg none = {
-        "no display times", 13.2, 15.4, 7.0, 9.0, 0.2, 2.4, 4.0, 6.0, 0.0, 41u, 1, 0, 0};
-    run(&none, &o);
+    const Cfg none = {.name = "no display times",
+                      .gLo = 13.2,
+                      .gHi = 15.4,
+                      .rLo = 7.0,
+                      .rHi = 9.0,
+                      .dLess = 0.2,
+                      .stepLo = 2.4,
+                      .stepHi = 4.0,
+                      .reads = 6.0,
+                      .seed = 41u,
+                      .noTimes = 1};
+    run(&none, &kNow, &o);
     print(&none, &o);
     /* every picture the hand-over rule's to the bit, by the reason */
     CHECK(o.sameOther && o.how[RD_PS_PLACED] == 0u && o.how[RD_PS_NO_TIMES] > 0u);
@@ -729,38 +1361,32 @@ static void testFallbacks(void)
             CHECK(memcmp(&s_p[i].raw[3], &s_p[i].raw[0], sizeof(double)) == 0);
         }
     }
-    const Cfg stale = {"times that stop at tick 150",
-                       13.2,
-                       15.4,
-                       7.0,
-                       9.0,
-                       0.2,
-                       2.4,
-                       4.0,
-                       6.0,
-                       0.0,
-                       42u,
-                       0,
-                       150,
-                       0};
-    run(&stale, &o);
+    const Cfg stale = {.name = "times that stop at tick 150",
+                       .gLo = 13.2,
+                       .gHi = 15.4,
+                       .rLo = 7.0,
+                       .rHi = 9.0,
+                       .dLess = 0.2,
+                       .stepLo = 2.4,
+                       .stepHi = 4.0,
+                       .reads = 6.0,
+                       .seed = 42u,
+                       .staleTick = 150};
+    run(&stale, &kNow, &o);
     print(&stale, &o);
     CHECK(o.sameOther && o.how[RD_PS_PLACED] > 0u && o.how[RD_PS_STALE] > 0u);
-    const Cfg change = {"the display at 90 Hz from tick 150",
-                        13.2,
-                        15.4,
-                        7.0,
-                        9.0,
-                        0.2,
-                        2.4,
-                        4.0,
-                        6.0,
-                        0.0,
-                        43u,
-                        0,
-                        0,
-                        150};
-    run(&change, &o);
+    const Cfg change = {.name = "the display at 90 Hz from tick 150",
+                        .gLo = 13.2,
+                        .gHi = 15.4,
+                        .rLo = 7.0,
+                        .rHi = 9.0,
+                        .dLess = 0.2,
+                        .stepLo = 2.4,
+                        .stepHi = 4.0,
+                        .reads = 6.0,
+                        .seed = 43u,
+                        .changeTick = 150};
+    run(&change, &kNow, &o);
     print(&change, &o);
     CHECK(o.sameOther && o.how[RD_PS_PLACED] > 0u && o.how[RD_PS_OFF_GRID] > 0u);
 }
@@ -841,7 +1467,7 @@ static void testLive(void)
     const RdPaceScreenSample s = {1027.0, 6000.0, REP, 1027.0};
     rd_pace_screen_seen(&s);
     RdPaceScreenPlace o;
-    const RdPaceScreenIn in = {1030.0, 1, 1010.0, TICK, 1060.0, 0.4};
+    const RdPaceScreenIn in = {1030.0, 1, 1010.0, TICK, 1060.0, 0.4, false, 0.0};
     rd_pace_screen_step(&in, &o);
     CHECK(o.how == RD_PS_FEW && o.raw == 0.4);
     CHECK(ico_attempt_state_of(ICO_ATT_PACE_SCREEN) == ICO_ATT_OFF_DEFAULT);
@@ -861,6 +1487,9 @@ int main(void)
     testParts();
     testPlace();
     testSims();
+    testRc5();
+    testEvenParts();
+    testEven();
     testFallbacks();
     testTexts();
     testLive();

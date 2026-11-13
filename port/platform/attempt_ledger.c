@@ -39,6 +39,8 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
                                "held in their frame's tick"},
     [ICO_ATT_PACE_SCREEN] = {"in-between pictures for the screen's refresh", "pictures placed",
                              "held at their frame's edges"},
+    [ICO_ATT_PACE_EVEN] = {"an even number of refreshes a picture", "pictures aimed",
+                           "late for their refresh"},
     [ICO_ATT_PASTE_SPEC] = {"the glow's paste by its own entry", "pastes",
                             "kept on the general entry"},
     [ICO_ATT_CHAIN3] = {"the glow chain in three passes", "chains", NULL},
@@ -381,6 +383,31 @@ void ico_attempt_decide_pace_screen(int asMade, int clock, int times, int on)
         ico_attempt_state(ICO_ATT_PACE_SCREEN, ICO_ATT_ON,
                           "each picture drawn for the refresh the screen is predicted to show it "
                           "at");
+    }
+}
+
+void ico_attempt_decide_pace_even(int asMade, int clock, int times, int on)
+{
+    if (!asMade) {
+        ico_attempt_state(ICO_ATT_PACE_EVEN, ICO_ATT_NA,
+                          "the pictures are paced here: the present clock and the display");
+    } else if (clock == 0) {
+        ico_attempt_state(ICO_ATT_PACE_EVEN, ICO_ATT_NA,
+                          "no GPU end to aim from on this backend (no GPU span or slot clock): "
+                          "the pictures as made");
+    } else if (times == 0) {
+        ico_attempt_state(ICO_ATT_PACE_EVEN, ICO_ATT_NA,
+                          "the display gives no times back (no VK_GOOGLE_display_timing: "
+                          "desktop, OpenGL, Direct3D): the pictures as made");
+    } else if (times == 1 && clock == 1 && !on) {
+        ico_attempt_state(ICO_ATT_PACE_EVEN, ICO_ATT_OFF_DEFAULT,
+                          "off by default: an rc variant for the owner's eye (it lowers the "
+                          "pictures a second of Uncapped to the refresh rate over a whole number "
+                          "of refreshes)");
+    } else if (times == 1 && clock == 1) {
+        ico_attempt_state(ICO_ATT_PACE_EVEN, ICO_ATT_ON,
+                          "every picture shown for the same whole number of refreshes, the "
+                          "number from the measured picture time");
     }
 }
 

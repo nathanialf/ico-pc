@@ -8,6 +8,7 @@
 #include "ico_thread.h"
 #include "rd_even.h"
 #include "rd_internal.h"
+#include "rd_pace_even.h"
 #include "rd_pace_gpu.h"
 #include "rd_pace_rules.h"
 #include "rd_rebase.h"
@@ -1023,6 +1024,12 @@ static double s_drainAtMs, s_drainEndMs;
 static RdRebase s_rebase;
 static bool s_asMade;
 
+double rd_present_even_hold(double untilDeadlineMs, double tickMs)
+{
+    /* the poster's thread, as made only (rd_pace_even.h) */
+    return s_asMade ? rd_pace_even_hold_at(rd__now_ms(), untilDeadlineMs, tickMs) : 0.0;
+}
+
 void rd_present_as_made(bool on)
 {
     s_asMade = on;
@@ -1036,7 +1043,7 @@ void rd_present_as_made(bool on)
  * drain's running mean, on the timer path only (the clock timed it: raw not
  * NAN; not under ICO_RD_S2_LEGACY=1, whose alpha is the raw time); its
  * figures into the evenness line.  No clock read: the drain's stamps */
-static void presentRebase(PresentArgs *p, uint32_t frame)
+static void presentRebase(PresentArgs *p, uint32_t frame, bool kept)
 {
     const double tick = p->gap[1];
     if (isnan(p->raw) || rd__s2_legacy() || !(tick > 0.0)) {
@@ -1059,13 +1066,17 @@ static void presentRebase(PresentArgs *p, uint32_t frame)
            (ICO_RD_PACE_GPU=1; off by default: queue 0 and the value the
            hand-over rule's to the bit); the model computed either way */
         double would = 0.0;
-        const double queue = rd_pace_gpu_shift(s_drainEndMs, frame, &would);
+        /* a kept frame's present (a fade, a load: rd_interp.c rd_present's
+           keep path, no alpha drawn and no measurement back) is not stepped
+           through the queue model: its predicted end was a scene picture's
+           GPU time late and chained into the next (v0.11.6-rc5) */
+        const double queue = kept ? 0.0 : rd_pace_gpu_shift(s_drainEndMs, frame, &would);
         raw = rd_rebase_raw(&s_rebase, queue != 0.0 ? atAsk + queue / tick : atAsk, tick, drain,
                             frame, &shift, &held);
         /* the three rules side by side; the own timer's value drawn where
            it is on (rd_pace_rules.h), raw untouched otherwise */
         raw = rd_pace_rules_pick(raw, queue, would, s_drainAtMs - atAsk * tick, tick, s_drainEndMs,
-                                 frame, &p->rules);
+                                 frame, kept, &p->rules);
         p->raw = raw;
         p->alpha = rd_rebase_alpha(raw);
         /* the content's moment to the hand-over: at the clock's moment
@@ -1130,7 +1141,7 @@ bool rd_present_post(float alpha)
     s_picPresent =
         (PresentArgs){alpha, 0.0, {0.0, 0.0}, false, s_drainAtMs, s_drainEndMs, RD_RULE_NOTE_NONE};
     s_picPresent.raw = rd__present_clock_take(s_picPresent.gap);
-    presentRebase(&s_picPresent, cur->number);
+    presentRebase(&s_picPresent, cur->number, cur->keep != 0u);
     s_picTramp = (Tramp){presentJob, &s_picPresent, !wait, NULL};
     if (!wait) {
         handOver();

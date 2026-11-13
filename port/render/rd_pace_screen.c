@@ -114,6 +114,43 @@ double rd_pace_screen_latch(const double *d, uint32_t n, double p, double prev, 
     return mid;
 }
 
+uint32_t rd_pace_screen_cover(const double *d, uint32_t n, double p, double x)
+{
+    uint32_t c = 0;
+    for (uint32_t i = 0; i < n; i++) {
+        c += d[i] - p < x && x <= d[i] ? 1u : 0u;
+    }
+    return c;
+}
+
+double rd_pace_screen_expect_measured(double t, double a, double p, const double *err, uint32_t n,
+                                      double *hard)
+{
+    double k[RD_PS_WIN];
+    n = n > RD_PS_WIN ? RD_PS_WIN : n;
+    if (n == 0u) {
+        return rd_pace_screen_expect(t, a, p, 0.0, hard);
+    }
+    double sum = 0.0;
+    for (uint32_t i = 0; i < n; i++) {
+        k[i] = ceil((t + err[i] - a) / p);
+        sum += k[i];
+    }
+    sortD(k, n);
+    /* the most frequent refresh; ties the earliest (sorted: the first run) */
+    double best = k[0];
+    uint32_t bestN = 0, run = 0;
+    for (uint32_t i = 0; i < n; i++) {
+        run = i > 0u && k[i] == k[i - 1u] ? run + 1u : 1u;
+        if (run > bestN) {
+            bestN = run;
+            best = k[i];
+        }
+    }
+    *hard = a + best * p;
+    return a + (sum / (double)n) * p;
+}
+
 int rd_pace_screen_score(double predictedMs, double actualMs, double refreshMs)
 {
     if (!(refreshMs > 0.0)) {
@@ -127,6 +164,7 @@ int rd_pace_screen_score(double predictedMs, double actualMs, double refreshMs)
 void rd_pace_screen_reset(RdPaceScreen *m)
 {
     memset(m, 0, sizeof(*m));
+    m->opts = RD_PS_OPT_ALL;
 }
 
 void rd_pace_screen_add(RdPaceScreen *m, const RdPaceScreenSample *s)
@@ -216,18 +254,36 @@ void rd_pace_screen_fit(RdPaceScreen *m)
         d[i] = at - smp(m, i)->endPredMs;
         if (smp(m, i)->gpuEndMs > 0.0) {
             e[ne++] = at - smp(m, i)->gpuEndMs;
+            f->err[f->errN++] = smp(m, i)->gpuEndMs - smp(m, i)->endPredMs;
         }
     }
     f->n = n;
     f->xMs = rd_pace_screen_latch(d, n, p, prevX, &f->hits);
+    if ((m->opts & RD_PS_OPT_HYST) && !isnan(prevX)) {
+        /* kept where it was unless another range agrees with RD_PS_HYST more */
+        const uint32_t c = rd_pace_screen_cover(d, n, p, prevX);
+        if (f->hits < c + RD_PS_HYST) {
+            f->held = f->xMs != prevX;
+            f->xMs = prevX;
+            f->hits = c;
+        }
+    }
     f->latch = (double)f->hits >= RD_PS_FIT_MIN * (double)n;
     double w = sqrt(acos(-1.0) / 2.0) * p * (double)(n - f->hits) / (double)n;
     f->widthMs = w > RD_PS_WIDTH_MAX * p ? RD_PS_WIDTH_MAX * p : w;
     if (ne >= RD_PS_MIN / 4u) {
         f->leadN = ne;
         f->leadMs = rd_pace_screen_latch(e, ne, p, prevLead, &f->leadHits);
+        if ((m->opts & RD_PS_OPT_HYST) && !isnan(prevLead)) {
+            const uint32_t c = rd_pace_screen_cover(e, ne, p, prevLead);
+            if (f->leadHits < c + RD_PS_HYST) {
+                f->leadMs = prevLead;
+                f->leadHits = c;
+            }
+        }
         f->lead = (double)f->leadHits >= RD_PS_FIT_MIN * (double)ne;
     }
+    f->measured = (m->opts & RD_PS_OPT_MEASURED) && f->lead && f->errN >= RD_PS_MEAS_MIN;
 }
 
 static void chainReset(RdPaceScreen *m)
@@ -249,11 +305,13 @@ void rd_pace_screen_place(RdPaceScreen *m, const RdPaceScreenIn *in, RdPaceScree
             out->restarted = true;
         }
     }
-    if (m->dirty) {
+    if (m->dirty && !in->kept) {
         rd_pace_screen_fit(m);
     }
     const RdPaceScreenFit *f = &m->fit;
-    if (m->sN == 0u) {
+    if (in->kept) {
+        out->how = RD_PS_KEPT;
+    } else if (m->sN == 0u) {
         out->how = RD_PS_NO_TIMES;
     } else if (!(in->endPredMs > 0.0)) {
         out->how = RD_PS_NO_END;
@@ -277,9 +335,19 @@ void rd_pace_screen_place(RdPaceScreen *m, const RdPaceScreenIn *in, RdPaceScree
         return;
     }
     const double tick = in->tickMs;
-    double hard;
-    const double g =
-        rd_pace_screen_expect(in->endPredMs + f->xMs, f->anchorMs, f->periodMs, f->widthMs, &hard);
+    double hard, g;
+    if (in->targetMs > 0.0) {
+        /* the even cadence's refresh (rd_pace_even.h): aimed at the middle
+           of its window, so the refresh itself */
+        hard = g = in->targetMs;
+    } else if (f->measured) {
+        g = rd_pace_screen_expect_measured(in->endPredMs + f->leadMs, f->anchorMs, f->periodMs,
+                                           f->err, f->errN, &hard);
+        out->measured = true;
+    } else {
+        g = rd_pace_screen_expect(in->endPredMs + f->xMs, f->anchorMs, f->periodMs, f->widthMs,
+                                  &hard);
+    }
     const double y = g - in->closeAtMs;
     m->y[m->yAt] = y;
     m->yAt = (m->yAt + 1u) % RD_PS_LAG_WIN;
@@ -414,6 +482,7 @@ void rd_pace_screen_tally(const RdPaceScreenPlace *p, const RdPaceScreenFit *f)
     add(&s_sum.heldHi, p->heldHi);
     add(&s_sum.heldBack, p->heldBack);
     add(&s_sum.replaced, p->replaced);
+    add(&s_sum.measured, p->measured);
     put32(&s_sum.grid, f->grid ? 1u : 0u);
     put32(&s_sum.latch, f->latch ? 1u : 0u);
     put32(&s_sum.lead, f->lead ? 1u : 0u);
@@ -452,6 +521,7 @@ void rd_pace_screen_take(RdPaceScreenWindow *w)
     w->heldHi = take(&s_sum.heldHi);
     w->heldBack = take(&s_sum.heldBack);
     w->replaced = take(&s_sum.replaced);
+    w->measured = take(&s_sum.measured);
     w->dropped = take(&s_sum.dropped);
     /* the last fit stays for the next block's line */
     w->grid = __atomic_load_n(&s_sum.grid, __ATOMIC_RELAXED);
@@ -507,6 +577,8 @@ const char *rd_pace_screen_how_text(int how)
         return "the display's times off one refresh grid";
     case RD_PS_NO_FIT:
         return "the latch not predictable";
+    case RD_PS_KEPT:
+        return "a kept frame (a fade or a load, its GPU work not modelled)";
     default:
         return "?";
     }
@@ -547,6 +619,9 @@ bool rd_pace_screen_format(const RdPaceScreenWindow *w, uint64_t scored, uint64_
         (unsigned long long)w->restarts, (unsigned long long)w->heldLo,
         (unsigned long long)w->heldHi, (unsigned long long)w->heldBack,
         (unsigned long long)w->replaced);
+    if (w->measured) {
+        put(&o, "; %llu by the exact ends' measured errors", (unsigned long long)w->measured);
+    }
     if (scored) {
         put(&o,
             "; the refresh predicted against the one shown over %llu pictures: %llu on it "

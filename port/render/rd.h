@@ -3534,6 +3534,12 @@ void rd_even_line(double refreshMs);
  * drain's running mean, not the present clock's (rd_thread.c presentRebase,
  * rd_rebase.h; docs/port/DISPLAY.md "The alpha") */
 void rd_present_as_made(bool on);
+/* the even cadence (rd_pace_even.h; off by default, ICO_RD_PACE_EVEN=1): with
+ * pictures as made, how long the window's pacer holds the next hand-over
+ * (ms; 0 none), untilDeadlineMs the time left before the game's next step,
+ * tickMs the game's frame; the window's thread (window_present.c
+ * window_present_pace, the poster's) */
+double rd_present_even_hold(double untilDeadlineMs, double tickMs);
 /* the plan's switch: on, ICO_RD_GLOW_LIGHT=0 off (the tests' A/B, no config
  * key); rd__glow_light_force sets it (-1 the environment's) and forgets the
  * plan's off and the plan frame before */

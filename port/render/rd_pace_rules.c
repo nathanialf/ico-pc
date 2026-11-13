@@ -5,6 +5,7 @@
 
 #include "attempt_ledger.h"
 #include "rd_as_made_timer.h"
+#include "rd_pace_even.h"
 #include "rd_pace_gpu.h"
 #include "rd_pace_screen.h"
 #include "rd_rebase.h"
@@ -36,7 +37,7 @@ static void decide(bool asMade)
 }
 
 double rd_pace_rules_pick(double raw, double appliedMs, double wouldMs, double closeAtMs,
-                          double tickMs, double handMs, uint32_t frame, RdRuleNote *note)
+                          double tickMs, double handMs, uint32_t frame, bool kept, RdRuleNote *note)
 {
     decide(true);
     const double rawHand = appliedMs != 0.0 ? raw - appliedMs / tickMs : raw;
@@ -60,14 +61,25 @@ double rd_pace_rules_pick(double raw, double appliedMs, double wouldMs, double c
     const uint8_t ruleOther =
         timer ? RD_RULE_TIMER : (rd_pace_gpu_on() ? RD_RULE_GPU : RD_RULE_HAND);
     /* the screen's rule over it (rd_pace_screen.h): computed at every
-       picture as made, drawn where it is on and could predict */
-    const RdPaceScreenIn in = {handMs, frame, closeAtMs, tickMs, rd_pace_gpu_pred_end(), rawOther};
+       picture as made, drawn where it is on and could predict, or where the
+       even cadence aimed the picture at a refresh (rd_pace_even.h); a kept
+       frame's present (its GPU work not in the queue model, rd_thread.c
+       presentRebase) neither placed, sampled nor scored */
+    const double endPred = kept ? 0.0 : rd_pace_gpu_pred_end();
+    const double target = rd_pace_even_take_live(endPred, kept);
+    const RdPaceScreenIn in = {handMs, frame, closeAtMs, tickMs, endPred, rawOther, kept, target};
     RdPaceScreenPlace sp;
     rd_pace_screen_step(&in, &sp);
     note->alpha[RD_RULE_SCREEN] = rd_rebase_alpha(sp.raw);
     note->screenEndMs = in.endPredMs > 0.0 ? in.endPredMs : 0.0; /* the model's samples */
     note->screenAtMs = sp.how == RD_PS_PLACED ? sp.hardMs : 0.0;
-    if (rd_pace_screen_on() && sp.how == RD_PS_PLACED) {
+    if (kept) {
+        /* no motion drawn: no rule's content on the on-glass line */
+        for (int i = 0; i < RD_RULE_COUNT; i++) {
+            note->alpha[i] = -1.0f;
+        }
+    }
+    if ((rd_pace_screen_on() || target > 0.0) && sp.how == RD_PS_PLACED) {
         note->rule = RD_RULE_SCREEN;
         return sp.raw;
     }
@@ -82,6 +94,7 @@ void rd_pace_rules_paced(void)
     }
     decide(false);
     rd_pace_screen_paced();
+    rd_pace_even_paced();
 }
 
 static _Thread_local RdRuleNote t_note;

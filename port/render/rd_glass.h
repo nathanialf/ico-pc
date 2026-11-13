@@ -54,6 +54,8 @@ typedef struct RdGlassPic {
    than 8) is not a step (a pause, a load) */
 #define RD_GLASS_GAP_MAX_MS 1000.0
 #define RD_GLASS_FRAME_JUMP 8
+/* a presentMargin further than this from 0 either way is not averaged */
+#define RD_GLASS_MARGIN_MAX_NS 1000000000ll
 /* ratios kept in ten-thousandths */
 #define RD_GLASS_UNITS 10000.0
 
@@ -75,12 +77,18 @@ typedef struct RdGlassWindow {
     /* the screen's prediction against the display (rd_pace_screen.h): the
        shown pictures with a refresh predicted, on it, one refresh late, one
        early, further; the display's own figures for the shown pictures
-       (VkPastPresentationTimingGOOGLE): presentMargin summed (us) over
-       marginN, and those whose earliestPresentTime was half a refresh or
-       more before the time shown (by earlySumUs in all) */
+       (VkPastPresentationTimingGOOGLE) over figuresN: presentMargin read
+       signed (the field is unsigned; v0.11.6-rc5's phone, asked no desired
+       time, gave values that wrapped below 0, and their unsigned sum
+       printed -7373559260669.68 ms) and summed (us) over marginN where
+       within RD_GLASS_MARGIN_MAX_NS either way, the rest counted in
+       marginWild (their signed sum in wildSumMs), and those whose
+       earliestPresentTime was half a refresh or more before the time shown
+       (by earlySumUs in all) */
     uint64_t scored, hit, late, early, further;
-    uint64_t marginN, earlyN;
+    uint64_t figuresN, marginN, marginWild, earlyN;
     int64_t marginSumUs, earlySumUs;
+    double wildSumMs;
 } RdGlassWindow;
 
 /* pure: one pair of consecutive shown pictures (a shown at aNs, b at bNs on
