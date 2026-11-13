@@ -62,7 +62,9 @@ samples `U(X) = u0 + (X - x0) (u1 - u0) / (x1 - x0)`, truncated; LINEAR weighs t
 
 `makeFullScreenFlareAfter` (list 7, the flare and the bloom) reduces WORK2 into WORK0, runs
 `blur(n)` for n = 10 .. 19, blurs WORK0 into WORK3 (`eyeBlur`), and `pasteFullScreenFlare` pastes
-WORK3 over SCENE. `blur(n)` is two sprites:
+WORK3 over SCENE (where its start-up self-test passed, through `fx_paste_ps`, the paste's path of
+`fx_frame_ps` alone: the same bytes, [RENDER_POST.md](RENDER_POST.md#the-glows-paste-by-its-own-entry)).
+`blur(n)` is two sprites:
 
 - pass 1, WORK0 into WORK1: the rect shrunk by `rm = n + 6` sixteenths, the UV from 8;
 - pass 2, WORK1 into WORK0: the rect whole, the UV shrunk by `um = n + 6`.

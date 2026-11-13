@@ -373,6 +373,12 @@ ico_add_shader(vu_texa_np_ps vu_prelit.hlsl vu_texa_ps fragment DEFINES ICO_VU_N
 ico_add_shader(vu_texa_np_ps vu_prelit.hlsl vu_texa_ps fragment DEFINES ICO_VU_NO_PLANES=1
                ICO_NO_DUAL=1 SUFFIX _nodual)
 ico_add_shader(fx_frame_ps fx_sprite.hlsl fx_sprite_ps fragment DEFINES ICO_FX_FRAME=1)
+# fx_frame_ps for the glow's paste alone (ICO_FX_PASTE: the words the paste never changes held as
+# constants, the branches it never takes left out; port/render/rd_paste_spec.c, behind its
+# start-up self-test against fx_frame_ps): Vulkan only in use (rd_paste_spec.c makes the module
+# on Vulkan alone), its DXIL and GLSL plain builds, never used
+ico_add_shader(fx_paste_ps fx_sprite.hlsl fx_sprite_ps fragment DEFINES ICO_FX_FRAME=1
+               ICO_FX_PASTE=1)
 ico_add_shader(fx_local_ps fx_sprite.hlsl fx_sprite_ps fragment DEFINES ICO_FX_DST_LOCAL=1)
 
 # the table of every entry above, the fences included (ico_shaders_library reads

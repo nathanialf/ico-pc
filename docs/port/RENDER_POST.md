@@ -751,6 +751,122 @@ drawn as recorded: <why>]; the run: ...`. Tests: `rd_glow_blur` (the operator, t
 two passes emulated against the chain's integers), `rd_glow_blur_ab` and `rd_glow_blur_gl`
 ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
 
+### The glow's paste by its own entry
+
+On by default (`RD_PASTE_SPEC_DEFAULT` 1 in `port/render/rd_paste_spec.h`) on every class under
+Vulkan whose start-up self-test passes; the same bytes.
+
+The glow's paste (`staticBlur.c` `pasteFullScreenFlare`: WORK3 over the whole of SCENE through FIX
+128) is drawn by the fx plan's premultiplied add (above): one full-size draw of `fx_frame_ps`.
+That module is `fx_sprite_ps`'s frame-size build for every post sprite: the above-1x kernel's two
+loops, the alpha-only and glow-mask paths, the alpha test, DATE and the destination read are all
+in it and chosen at run time from DrawCB words. On the PowerVR phone that one draw is about 3 ms
+of a lamps picture (list 11's pass costs about 4.3 ms a lamps picture against the crack fill's
+own 1.2 to 1.5 ms in a picture without lamps).
+
+`fx_paste_ps` is the same source built with `ICO_FX_PASTE` (`port/shaders/fx_sprite.hlsl`): the
+words the paste never changes are constants, the words it does change stay run-time values, and
+every function is called as `fx_frame_ps` calls it, in the same order:
+
+| word | in `fx_paste_ps` |
+| --- | --- |
+| flags: TEXTURED, OUT_PREMUL | set |
+| flags: ABOVE1X, ALPHA_ONLY, GLOW_MASK, FOLD, ABE, PABE, DATE, DATM, DST | clear (their branches and loads not in the module) |
+| flags: TFX, TCC, LINEAR, CLAMP_S, CLAMP_T, FBA | read from `g_mode.x` |
+| TEXFMT | RGBA32 (TEXA leaves the texel as it is, so its mode word is not read) |
+| the alpha test | off |
+| the source's scale and crop | 1 and none (a work buffer) |
+| the colour, the ALPHA register and FIX, the rect, the UVs, TEX0's size, the target's scale, origin, crop and jitter | run-time values, as in `fx_frame_ps` |
+
+The two modules (SPIR-V, `tools/check_spirv.py --sizes`):
+
+| | words | instructions | blocks | loops | texel loads in the module | loads a texel on the paste's path |
+| --- | --- | --- | --- | --- | --- | --- |
+| `fx_frame_ps` | 17985 | 4403 | 810 | 5 | 15 | 4 (the GS bilinear) |
+| `fx_paste_ps` | 3430 | 765 | 72 | 0 | 5 | 4 |
+
+So the draw does the same loads and the same arithmetic; what goes is the module's size and the
+registers its other paths hold (the saving on the phone is an estimate: about 0.8 to 2 ms of the
+3 ms; not measured on a device).
+
+**Exact.** `port/render/rd_paste_spec.c` draws a premultiplied add through `fx_paste_ps` only when
+its DrawCB holds the constants' values and its key is the start-up set's (the premultiplied add at
+Z ALWAYS without the Z write, no depth, RGBA8, the colour mask whole, single-sampled):
+`rd__paste_spec_why`, pure, with a reason for each refusal. Every value the module computes is then
+the one `fx_frame_ps` computes from the same words. A driver could still lower the two modules'
+float arithmetic apart (the coverage test's and the UVs' divides), so a start-up self-test
+(`rd__paste_spec_selftest`, with the crack fill's swap test: `rd_fog_selftest`'s first run, and the
+replay tool after each start) draws pastes both ways from a random source of the glow's shape over
+a random destination, reads both back and compares every byte:
+
+- at SCENE's own texture size, GS size, scale, origin, Full pixel crop and jitter (FrameCB as the
+  replay makes it for the paste, under the exact viewport), from a source half the frame's width by
+  128 rows;
+- at 1x, 2x, 2.8125 x 2.41071 (the phone's) and 2x with the half-line offset on a 96 x 56 frame;
+- each in five bands of rows with five DrawCB forms: the paste itself (CLAMP, bilinear, MODULATE
+  with TCC, FIX 128), the As form without the clamp, nearest DECAL with FBA, HIGHLIGHT with a
+  clamp on one axis, nearest HIGHLIGHT2 with REPEAT; TEXA mode words RGBA32 ignores.
+
+Any difference (or a case that cannot run) keeps `fx_frame_ps` for the run, with the first texel
+apart in the log. The module is made on Vulkan alone (OpenGL and Direct3D keep `fx_frame_ps`, said
+once). The MSAA epoch never draws the paste by the fx plan, so the paste has no 4-sample form. Its
+one pipeline key is in the start-up set wherever the module is made, so no draw makes a pipeline on
+first use.
+
+**Start-up set: the mask's 4-sample key.** Where the lamps' 4-sample pass is in force
+(`rd__lamps_lowres_ms`), `fx_frame_ps`'s alpha-only key (the glow's mask drawn in that pass) at 4
+samples is in the start-up set too: the PowerVR phone made it on first use in list 7 (594.6 ms). The
+lamps' and the sun's fans' own 4-sample keys (`vu_merge_main_vs` with `vu_ps`, `sprite_ps_planes`)
+stay made on first use: their states are the game's draws, and the start-up set would need every
+VU and 2D key at 4 samples to hold them.
+
+**Switch and lines.** The tests' `ICO_RD_PASTE_SPEC=0` (off) and `1` (on whatever the build's default;
+the module and the self-test still decide), and `ICO_RD_PASTE_SPEC=sabotage` (the self-test's own
+`fx_paste_ps` draw given another FIX, so it must refuse). No setting. Lines:
+
+```
+rd: paste: the glow's paste by its own entry (fx_paste_ps, fx_frame_ps's paste path alone): on (the build's default; self-test passed: 2640114 texels the same at 2366x1080, SCENE's scale and Full pixel crop, and at 1x, 2x, 2.8125x2.41071 and the half-line)
+rd: paste: the glow's paste by its own entry (fx_paste_ps; self-test: 2640114 texels the same at 2366x1080 and four more scales, five DrawCB forms each): the same bytes
+rd: paste: self-test failed at texel N (x, y) of case own (2366x1080): RRGGBBAA for RRGGBBAA: fx_frame_ps draws the paste
+rd: paste: the glow's paste drawn by fx_paste_ps, frame F (a premultiplied add into an RGBA8 target; reported once)
+rd: paste: a premultiplied add kept fx_frame_ps: <why> (frame F, flags 0x..., TEXA word 0x...; reported once for this reason)
+window: paste: P pastes by fx_paste_ps of Q, K kept on fx_frame_ps (counts by why)
+```
+
+`rd_replay_tool --stats`: `stats: paste spec on|off (self-test <words>): P pastes by fx_paste_ps of
+Q; the run: ...`. The attempt ledger's row `the glow's paste by its own entry` counts the pastes
+drawn by it and those kept on `fx_frame_ps` in each 10 s block
+([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-attempt-ledger)). Tests: `rd_paste_spec`,
+`rd_paste_spec_ab`, `rd_paste_spec_sabotage`, `rd_paste_spec_gl`
+([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
+
+### The glow chain in three passes (measured, not built)
+
+After the glow's blur in two passes, a lamps picture's chain on the PowerVR phone is five small
+passes on 424 x 128 buffers: the reduction R (WORK2 -> WORK0, a box over 2 x 3.5 WORK2 texels a
+texel), across (WORK0 -> WORK1), down (WORK1 -> WORK0), the eye blur E (WORK0 -> WORK3, the GS
+bilinear) and WORK0's alpha sprite A (WORK0's RGB kept, alpha 128). Folding R into across and E and
+A into down (two outputs, WORK0 and WORK3) would leave three. It is not built, for two reasons:
+
+- **Not exact by construction.** Across samples WORK0 through the hardware's bilinear filter
+  (`fx_glowblur_ps`: 7 `SampleLevel` taps). With R folded in, those taps would read R's values
+  computed in the shader, so the shader would have to reproduce the texture unit's weighting of
+  two 8-bit texels, which Vulkan leaves to the device (`subTexelPrecisionBits` at least 4, the
+  rounding of the weights and the sum unspecified). E reads down's output as stored: an 8-bit
+  write of a float whose rounding is the device's.
+- **More work a texel than the passes it would save.** Today: R about 6 to 15 loads a texel (2 to
+  3 by 4 to 5 WORK2 texels), across 14 (7 taps, 7 table reads), down 18 (7, 7 and 4 for the loss),
+  E 4, A none. Folded: across would compute R at each of the 8 to 14 WORK0 texels its 7 taps
+  cover, 6 to 15 loads each: about 50 to 210 loads a texel besides its 7 table reads; down would
+  compute its value at E's 4 bilinear taps as well as its own, 4 x 18 = 72 to 5 x 18 = 90 loads a
+  texel (`fx_glowblur_ps` is 470 SPIR-V instructions; four to five copies of its body about 1900 to
+  2350). The two-pairs blur fold, which doubled the loads a texel (about 64 against 32)
+  to save three of the twelve WORK0 passes, measured slower on the phone: 8.80 ms for the glow's
+  WORK0 passes against 3.2 ms ([the lamps' glow for less](#the-lamps-glow-for-less), two blur pairs
+  a pass). Three passes at about 0.22 ms each would not pay for four to ten times the loads.
+
+The attempt ledger's row `the glow chain in three passes` says `not in this build`.
+
 ### The fades fold
 
 List 11 ends with the game's full-frame post sprites (`ico2/seki/src/GsBase.c`'s post pass order:

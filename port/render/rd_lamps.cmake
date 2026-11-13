@@ -97,3 +97,6 @@ endif()
 
 # the glow's blur pairs in two passes (rd_glow_blur.c)
 include("${CMAKE_CURRENT_LIST_DIR}/rd_glow_blur.cmake")
+
+# the glow's paste by its own entry (rd_paste_spec.c)
+include("${CMAKE_CURRENT_LIST_DIR}/rd_paste_spec.cmake")

@@ -86,6 +86,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "rd_paste_spec.h"
 #include "rd_perf_hooks.h"
 #include "rd_replay.h"
 
@@ -460,7 +461,15 @@ static bool fxDraw(Replay *r, const RdFxDraw *x, const RdPipeKeyInt *key, uint32
     if (s_clip.on) {
         rhi_cmd_set_scissor(cl, &s_clip.rect); /* the aura's split: these rows alone */
     }
-    rd__set_pipeline(cl, pipe, key);
+    /* the premultiplied add through fx_paste_ps where its gate takes the
+     * DrawCB (rd_paste_spec.c: fx_frame_ps's paste path alone, the same
+     * bytes); else fx_frame_ps as looked up above */
+    RdPipeKeyInt specKey;
+    const RdPipeKeyInt *drawKey = key;
+    if (kind == FX_ADDITIVE) {
+        pipe = rd__paste_spec_pipe(&cb, key, pipe, &specKey, &drawKey);
+    }
+    rd__set_pipeline(cl, pipe, drawKey);
     rd__bind_uniform(cl, 0, r->frameBG);
     rd__bind_uniform(cl, 1, rd__draw_group(&cb));
     rhi_cmd_set_bind_group(cl, 2, g2);
@@ -860,6 +869,12 @@ uint32_t rd__fx_enumerate(RdPipeKeyInt *out, uint32_t max, uint32_t n)
                 n = rd__add_pipe_key(out, max, n, &k);
             }
         }
+    }
+    /* the glow's paste by its own entry (rd_paste_spec.c): fx_paste_ps's
+     * twin of the premultiplied add at Z ALWAYS without the Z write, where
+     * its module is made */
+    if (frame && dstForms) {
+        n = rd__paste_spec_keys(out, max, n);
     }
     return n;
 }

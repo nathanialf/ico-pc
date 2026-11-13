@@ -337,6 +337,9 @@ static void test_classes(void)
               (kCmp[c].want == ICO_ATT_ON));
         ico_attempt_decide_subpass(d->spRoute, d->spOn, d->spRefused, d->spOff, d->spWhy);
         ico_attempt_decide_pace_gpu(kPace[c].asMade, kPace[c].clock, kPace[c].waited);
+        /* the glow's paste by its own entry: every class here is a Vulkan
+           device (the module made) whose self-test passed (rd_paste_spec.c) */
+        CHECK(ico_attempt_decide_paste_spec(1, -1, 1, 1) == 1);
         for (int i = 0; i < ICO_ATT_COUNT; i++) {
             if (ico_attempt_state_of(i) == ICO_ATT_NOT_SET) {
                 printf("FAIL %s: %s not reported\n", d->name, ico_attempt_name(i));
@@ -349,6 +352,8 @@ static void test_classes(void)
         CHECK(ico_attempt_state_of(ICO_ATT_ADRENO_A) == (d->passRow ? ICO_ATT_ON : ICO_ATT_NA));
         CHECK(ico_attempt_state_of(ICO_ATT_ADRENO_B) == ICO_ATT_NOT_BUILT);
         CHECK(ico_attempt_state_of(ICO_ATT_BLEND_CONST) == ICO_ATT_NOT_BUILT);
+        CHECK(ico_attempt_state_of(ICO_ATT_PASTE_SPEC) == ICO_ATT_ON);
+        CHECK(ico_attempt_state_of(ICO_ATT_CHAIN3) == ICO_ATT_NOT_BUILT);
         if (ico_attempt_state_of(ICO_ATT_SUBPASS) != d->wantSubpass) {
             printf("FAIL %s: subpass read %s\n", d->name,
                    ico_attempt_state_word(ico_attempt_state_of(ICO_ATT_SUBPASS)));
@@ -529,6 +534,8 @@ int main(void)
                     "core not reported; "));
     CHECK(strstr(b, "; index compaction not reported") != NULL);
     CHECK(strstr(b, "; blend constant not in this build") != NULL);
+    CHECK(strstr(b, "; the glow's paste by its own entry not reported") != NULL);
+    CHECK(strstr(b, "; the glow chain in three passes not in this build") != NULL);
     CHECK(strstr(b, "; subpass read not reported") != NULL);
     CHECK(ico_attempt_state_of(ICO_ATT_SUBPASS) == ICO_ATT_NOT_SET);
     CHECK(ico_attempt_state_of(ICO_ATT_BLEND_CONST) == ICO_ATT_NOT_BUILT);
