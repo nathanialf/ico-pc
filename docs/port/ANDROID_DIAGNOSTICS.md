@@ -1870,7 +1870,7 @@ counter is an increment in a hot path, and none of them reads anything from the 
 | Mali: single passes of 100-280 ms, presents blocked 254-385 ms | What coincided with each one? | `window: stall: <the pass or the present>; at that moment: ...` for each stall (the cores and their clocks, the core waits in the last second, the driver's threads, memory against the floor, memory pressure, thermal headroom, the classes), and once per block `window: stalls by what coincided: N in the block (...)` |
 | Mali: device memory under its floor; the process swinging 538-1067 MB while graphics stays at 335 MB | Which part of the process swings? | `window: memory in the block: the device's least N MB available against the floor F MB (under it at u of r reads); the process a-b MB resident: anonymous ..., file-backed ..., shared ...; the C heap ...; beside them the graphics allocations ..., the dumps' capture blocks ...` |
 | Mali: three automatic captures of 47-56 ms on the game thread | Which step costs the game thread? | `window: slow-scene dump: the game thread's parts: the measure M ms, the copy C ms (each without its drain); the worker's block made in P ms; two steps: frame N copied into the worker's block` (or `grown here: ...`), after the capture line |
-| Mali: the game, render and both audio threads on the two fast cores | Where do the threads run, and does audio keep up on the slow cores? | `window: render thread cores: ...` (the few-cores rule's sets and moves); the game thread line's `ran / waited for a core: game ..., render ..., submit ..., SDL audio ..., system audio ...`; `audio: ... ms of silence (... ms held back behind the game) ...; the sound chip's emulation E ms a callback on average (longest L ms; R renders) against the device's period of P ms`; and the ledger's `few-cores rule on N threads moved` |
+| Mali: the game, render and both audio threads on the two fast cores | Where do the threads run, and does audio keep up on the slow cores? | `window: render thread cores: ...` (the few-cores rule's sets and moves); the game thread line's `ran / waited for a core: game ..., render ..., submit ..., SDL audio ..., system audio ...` and after it `; run time on the faster cores 6-7: submit N % of T s, SDL audio ..., system audio ..., <the driver's threads> ..., pipeline workers ...` ([The faster cores' share of run time](#the-faster-cores-share-of-run-time)); `audio: ... ms of silence (... ms held back behind the game) ...; the sound chip's emulation E ms a callback on average (longest L ms; R renders) against the device's period of P ms`; and the ledger's `few-cores rule on N threads moved` |
 | Few-core phones: start-up of 62.2 s (51.2 s of it pipelines, cold cache) | How long does the pipeline set take, on which cores, and with how much CPU time? | `rd: pipelines: N of the reachable set's M created at start-up in T ms ...` (wall time), followed by `window: pipeline set: made in T s ...; its N workers on every core ... while it ran ...; the process's CPU time C s over it (B cores busy on average)` |
 | Adreno 740 hangs | Did this release's attempt run, and how many stalls were there with it on? | The start lines that name the hung draw (`rd: GPU clock: ...`), the attempt ledger's Adreno rows (state and fired count), and the ledger line's `; stalls N in the block (the Adreno attempts on)` |
 | Pixel opening: lamps, dark and sun views | What does each block cost, and which cut fired? | `window: compare: ...; GPU ms a picture: ...; glow plans: lamps N, dark N, whole N`, `passes` and `breaks` a picture, and the ledger line's per-cut fired counts |
@@ -1892,12 +1892,25 @@ print it:
   provoking corner on (static); ...; stalls 3 in the block`. Rows that are not reported are left
   out. Where an Adreno row is reported, the stalls clause adds `(the Adreno attempts on)` or `off`.
 
-To add a row, a package adds one enum value and one table row with its words. It then calls
-`ico_attempt_state` where it decides and `ico_attempt_fire` / `ico_attempt_fire2` where it fires.
-Each call is a relaxed atomic, so any thread can make it, hot paths included. The rows for the
-shadow cuts (`one DATE set-up`, `empty composites skipped`, `no-volume break`) and for the Adreno
-attempts are in the table, but their state and fire calls belong to those cuts' own files. Until
-those files call them, the rows read `not reported`.
+To add a row, a package adds one enum value and one table row with its words, a decider
+(`ico_attempt_decide_*`: the row's state and its reason from the facts its owner has, so the unit
+test can set every row as a device of each class would) called where it decides, and
+`ico_attempt_fire` / `ico_attempt_fire2` where it fires. Each call is a relaxed atomic, so any
+thread can make it, hot paths included. The rows and where their states are set:
+
+| Row | State set by | Counted by |
+| --- | --- | --- |
+| few-cores rule, pipeline set on every core | `render_thread.c` `place_init` (`ico_attempt_decide_cores`: on with one or two faster cores and the pins allowed; not applicable with three or more, cores of one speed, or off Android) | the keeper's and the sweep's moves; the sets' workers |
+| capture in two steps | `window_perf_rank.c` at the first block (every platform) | `window_dump_auto.c` |
+| flat outputs at the provoking corner | `rd_vu_flat0.c` at the renderer's start | static |
+| one DATE set-up | `rd_date_one.c` at each replay's scan (off by the tests' switch, not applicable under MSAA or the exact blend) | the window, from the record's `dateOneShared` and `dateOneRefused` |
+| empty composites skipped | `rd_shadow_box.c` at each replay's scan | the window, from `emptySkipped` |
+| no-volume break | `rd_no_volume.c` at each replay's scan: `off by default (off by default until a phone rc shows the PowerVR phone's title and pause menu clean with it)` on the PowerVR and MoltenVK class, `not applicable here (not the PowerVR or MoltenVK class under Vulkan)` elsewhere, or the other gates' reason (the DATE path, MSAA ...) with the class allowed | the window, from `noVolumeBreak` |
+| Adreno attempt A and B | the Adreno attempts' own files | the same |
+| subpass read, blend constant, index compaction | `not in this build` from the start (left out of the block line) | none |
+
+The shadow cuts' counts come from the replay's record where the window reads it
+(`window_perf_rank_record`), not from the cuts' hot paths.
 
 ### The cost counters
 
@@ -2086,3 +2099,24 @@ On the log thread, the extra file reads each second are `/proc/pressure/memory`,
 `/proc/self/status`, up to four driver threads' `schedstat` files and `mallinfo`. The renderer
 adds a few increments a draw, a box projection per kept VU command, and three `RhiStats`
 snapshots per SCENE break.
+
+### The faster cores' share of run time
+
+The game and render threads sample their own core every step and picture (`the samples by core`).
+The others cannot, so the log thread estimates their share once a second (`core_share.h`,
+`render_thread.c` `share_tick`; Android, on any device whose cores are not all of one speed, the
+keeper's three-or-more class too). The threads it covers are the submit thread, SDL's and the
+system's audio threads, the first four threads named like the graphics driver's, and the pipeline
+workers: the set's own ids while one runs, and the `rhi-pipelines` threads the last ten-second
+list found. For each one it reads the schedstat run time and field 39 of
+`/proc/self/task/<tid>/stat` (the core it last ran on), and adds that second's run time to the
+last core's class. The game thread's 10 s line then adds `; run time on the faster cores 6-7:
+submit 4 % of 0.3 s, SDL audio 0 % of 0.4 s, system audio 0 % of 0.1 s, mali-cmar-backe 1 % of 1.2
+s, pipeline workers 100 % of 2.0 s (each thread's last core once a second, weighted by its run time
+in that second)`.
+
+The method's error: a second's run time goes whole to the core the thread was on when it was last
+read. A thread that moved between the faster and slower cores within a second is counted entirely
+on one side, so the error is at most the run time of the seconds in which it moved. A thread pinned
+to one class has none. Pipeline workers that live less than ten seconds outside a set are missed.
+The log thread makes two more file reads per thread per second: up to 30.

@@ -12,6 +12,7 @@
 #include <string.h>
 #include "attempt_ledger.h"
 #include "config.h"
+#include "core_share.h"
 #include "cpu_keep.h"
 #include "cpu_place.h"
 #include "diag_host.h"
@@ -665,15 +666,136 @@ static void sec_note(SecPrev *prev, SysCell *cell, long tid, const ThreadStat *n
     prev->atMs = atMs;
 }
 
+/* The share of run time on the faster cores (core_share.h) of the threads
+   that do not sample their own core: the submit thread, the two audio
+   threads, the driver's (s_drv), the pipeline workers (the set's ids and
+   those a list tick found, named "rhi-pipelines"); the log thread adds a
+   second's run time at the core each last ran on, the game thread's block
+   line takes the sums (ico_render_thread_block_line) */
+#define SHARE_PIPES 8
+
+static struct {
+    SDL_SpinLock lock;
+    CoreShare acc;
+} s_share;
+
+static long s_pipeTid[SHARE_PIPES]; /* the log thread's: found on the last list tick */
+
+#if defined(__linux__)
+/* the core tid last ran on (/proc/self/task/<tid>/stat field 39), -1 not read */
+static int last_core(long tid)
+{
+    char path[64], buf[1024];
+    snprintf(path, sizeof path, "/proc/self/task/%ld/stat", tid);
+    FILE *f = fopen(path, "r");
+    if (f == NULL) {
+        return -1;
+    }
+    const size_t n = fread(buf, 1, sizeof buf, f);
+    fclose(f);
+    int core = -1;
+    return core_share_parse_stat(buf, n, &core) ? core : -1;
+}
+
+static void share_tick(void)
+{
+    const uint64_t fast = cpu_place_fast_mask(&s_place.classes);
+    if (fast == 0) {
+        return; /* cores of one speed (or not known): no share to say */
+    }
+
+    enum { WHO = 5 + STALL_DRIVERS + 2 * SHARE_PIPES };
+
+    long tid[WHO];
+    char name[WHO][24];
+    int n = 0;
+    static const char *const k_own[3] = {"submit", "SDL audio", "system audio"};
+    for (int i = 0; i < 3; i++) {
+        if (stat_tid(2 + i) > 0) {
+            tid[n] = stat_tid(2 + i);
+            snprintf(name[n], sizeof name[n], "%s", k_own[i]);
+            n++;
+        }
+    }
+    SDL_LockSpinlock(&s_drv.lock);
+    for (int i = 0; i < s_drv.n; i++) {
+        tid[n] = s_drv.tid[i];
+        snprintf(name[n], sizeof name[n], "%.15s", s_drv.name[i]);
+        n++;
+    }
+    SDL_UnlockSpinlock(&s_drv.lock);
+    for (int i = 0; i < SHARE_PIPES; i++) {
+        const long a = __atomic_load_n(&s_set.tid[i], __ATOMIC_ACQUIRE);
+        const long b = s_pipeTid[i];
+        if (a > 0) {
+            tid[n] = a;
+            snprintf(name[n], sizeof name[n], "pipeline workers");
+            n++;
+        }
+        if (b > 0 && b != a) {
+            tid[n] = b;
+            snprintf(name[n], sizeof name[n], "pipeline workers");
+            n++;
+        }
+    }
+
+    /* each id's last run time (the log thread's) */
+    static struct {
+        long tid;
+        uint64_t run;
+    } s_prev[WHO];
+
+    static int s_nPrev;
+
+    struct {
+        long tid;
+        uint64_t run;
+    } next[WHO];
+
+    int nNext = 0;
+    for (int i = 0; i < n; i++) {
+        ThreadStat now;
+        if (thread_stat_read(NULL, tid[i], &now) != 0) {
+            continue; /* ended (a worker), or not readable */
+        }
+        bool dup = false;
+        for (int k = 0; k < nNext; k++) {
+            dup = dup || next[k].tid == tid[i];
+        }
+        if (dup) {
+            continue;
+        }
+        next[nNext].tid = tid[i];
+        next[nNext].run = now.runNs;
+        nNext++;
+        for (int k = 0; k < s_nPrev; k++) {
+            if (s_prev[k].tid == tid[i] && now.runNs >= s_prev[k].run) {
+                const int core = last_core(tid[i]);
+                SDL_LockSpinlock(&s_share.lock);
+                core_share_add(&s_share.acc, name[i], core, now.runNs - s_prev[k].run, fast);
+                SDL_UnlockSpinlock(&s_share.lock);
+                break;
+            }
+        }
+    }
+    memcpy(s_prev, next, sizeof(next[0]) * (size_t)nNext);
+    s_nPrev = nNext;
+}
+#endif
+
 /* the threads named like the graphics driver's in a list tick's list */
 static void driver_tids(const CpuThreads *list)
 {
     long tid[STALL_DRIVERS];
     char name[STALL_DRIVERS][16], all[512];
-    int n = 0;
+    int n = 0, pipes = 0;
     size_t at = 0;
     all[0] = '\0';
+    memset(s_pipeTid, 0, sizeof(s_pipeTid));
     for (int i = 0; i < list->n; i++) {
+        if (strncmp(list->t[i].name, "rhi-pipelines", 13) == 0 && pipes < SHARE_PIPES) {
+            s_pipeTid[pipes++] = list->t[i].tid; /* the shares' workers */
+        }
         if (!stall_driver_name(list->t[i].name)) {
             continue;
         }
@@ -727,6 +849,9 @@ void ico_render_thread_tick(void)
             }
         }
     }
+#if defined(__linux__)
+    share_tick(); /* the faster cores' share of the threads that sample none */
+#endif
     if (s_ticks++ % TICK_LIST_EVERY == 0u) {
         static char text[1024]; /* the log thread's alone */
         static CpuThreads s_threads;
@@ -928,21 +1053,8 @@ static void place_init(void)
     s_place.noPin = "only on Android";
 #endif
     /* the attempt ledger's rows (attempt_ledger.h) */
-    if (__atomic_load_n(&s_set.fewOn, __ATOMIC_ACQUIRE)) {
-        const char *why =
-            cpu_place_fast_mask(&s_place.classes) & (cpu_place_fast_mask(&s_place.classes) - 1u)
-                ? "2 cores faster than the slowest"
-                : "1 core faster than the slowest";
-        ico_attempt_state(ICO_ATT_FEW_CORES, ICO_ATT_ON, why);
-        ico_attempt_state(ICO_ATT_PIPE_SET_CORES, ICO_ATT_ON, why);
-    } else {
-        const char *why = s_place.noPin != NULL ? s_place.noPin
-                          : cpu_keep_applies(&s_place.classes)
-                              ? "3 or more cores faster than the slowest: the keeper's rule"
-                              : "no faster core";
-        ico_attempt_state(ICO_ATT_FEW_CORES, ICO_ATT_NA, why);
-        ico_attempt_state(ICO_ATT_PIPE_SET_CORES, ICO_ATT_NA, why);
-    }
+    ico_attempt_decide_cores(__builtin_popcountll(cpu_place_fast_mask(&s_place.classes)),
+                             s_place.pin, s_place.noPin);
     (void)cpu_place_classes_text(&s_place.classes, cls, sizeof(cls));
     (void)cpu_place_mask_text(cpu_place_allowed(), allowed, sizeof(allowed));
     (void)cpu_place_priority_text(pr, sizeof(pr));
@@ -1824,7 +1936,7 @@ void ico_render_thread_block_line(double stepMs, double stepCpuMs, double pictur
     RdSubmitBlock sb;
     unsigned closes;
     double closeMs, closeMaxMs;
-    char rt[1536], st[384], cores[1024];
+    char rt[1536], st[384], cores[1600];
     CpuPlaceHist gc, rc, sc;
 
     s_rt.held = s_rt.heldMiss = s_rt.heldOverrun = s_rt.heldBehind = 0;
@@ -1872,6 +1984,19 @@ void ico_render_thread_block_line(double stepMs, double stepCpuMs, double pictur
 
         if (place_stat_part(ran, sizeof(ran), rd_thread_submit_on()) > 0) {
             snprintf(cores + at, sizeof(cores) - at, "; %s", ran);
+        }
+        /* beside them, the faster cores' share of the threads that do not
+           sample their own core (core_share.h; the log thread's tick) */
+        CoreShare sh;
+        SDL_LockSpinlock(&s_share.lock);
+        sh = s_share.acc;
+        core_share_reset(&s_share.acc);
+        SDL_UnlockSpinlock(&s_share.lock);
+        char share[560];
+        const size_t at2 = strlen(cores);
+        if (core_share_text(&sh, cpu_place_fast_mask(&s_place.classes), share, sizeof(share)) > 0 &&
+            at2 < sizeof(cores)) {
+            snprintf(cores + at2, sizeof(cores) - at2, "; %s", share);
         }
     }
     window_log_cost_mark("the game thread line's cores and run times");

@@ -9,6 +9,7 @@ target_sources(ico_platform PRIVATE
     backup.c
     bones_ladder.c
     code_hash.c
+    core_share.c
     cpu_keep.c
     diag_host.c
     fiber.c
@@ -354,6 +355,17 @@ target_compile_options(attempt_ledger_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO
 target_link_libraries(attempt_ledger_test PRIVATE ico_thread)
 if(ICO_RUN_TESTS)
     add_test(NAME attempt_ledger COMMAND attempt_ledger_test)
+endif()
+
+# core_share_test: the share of run time on the faster cores of the threads
+# that do not sample their own core (core_share.h, issue 179): the sums by
+# name, the line word for word, field 39 of a thread's stat (CPU only)
+add_executable(core_share_test test/core_share_test.c core_share.c)
+target_include_directories(core_share_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(core_share_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(core_share_test PRIVATE ico_thread)
+if(ICO_RUN_TESTS)
+    add_test(NAME core_share COMMAND core_share_test)
 endif()
 
 # stall_coincide_test: what a stall coincided with (stall_coincide.h, issue

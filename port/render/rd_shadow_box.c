@@ -80,6 +80,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "attempt_ledger.h"
 #include "rd_date_one.h"
 #include "rd_internal.h"
 #include "rd_shadow_box.h"
@@ -409,6 +410,7 @@ bool rd__shadow_box_scan_begin(const RdFrame *f)
     rd__date_one_scan_begin(f); /* rd_date_one.c reads the composites found here */
     static int s_said = -1;
     const int skip = s_scan.env ? rd__shadow_box_empty_mode() : 0;
+    ico_attempt_decide_empty_skip(s_scan.env, skip); /* the attempt ledger's row */
     if (s_said != skip) {
         s_said = skip;
         rd__log("shadows: empty composites: %s",

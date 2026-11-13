@@ -54,6 +54,11 @@ void window_perf_rank_record(const RdPerfRecord *r, double vuInvocations)
     SDL_LockSpinlock(&s_lock);
     rd_perf_rank_add_record(&s_block, r, vuInvocations);
     rd_perf_more_add(&s_more, r, rd_vu_prepass_on());
+    /* the shadow cuts' rows count from the record (rd.h: their counters) */
+    ico_attempt_fire(ICO_ATT_DATE_ONE, r->dateOneShared);
+    ico_attempt_fire2(ICO_ATT_DATE_ONE, r->dateOneRefused);
+    ico_attempt_fire(ICO_ATT_EMPTY_SKIP, r->emptySkipped);
+    ico_attempt_fire(ICO_ATT_NO_VOLUME_BREAK, r->noVolumeBreak);
     if (r->presented && r->gpuValid && !r->keep) {
         if (r->passTimed && s_stampedN < STAMP_SPANS) {
             s_stamped[s_stampedN++] = (float)r->gpuMs;
@@ -143,8 +148,7 @@ static void ledger_lines(void)
     if (!s_said) {
         /* the slow-scene capture in two steps runs on every platform (its
            fallbacks counted by the capture, window_dump_auto.c) */
-        ico_attempt_state(ICO_ATT_CAPTURE_TWO_STEP, ICO_ATT_ON,
-                          "the copy into a block the dump worker made");
+        ico_attempt_decide_capture();
     }
     const uint32_t serial = ico_attempt_serial();
     if (!s_said || serial != s_serial) {

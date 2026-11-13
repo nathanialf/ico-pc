@@ -44,7 +44,10 @@ typedef enum IcoAttemptState {
     ICO_ATT_ON,
     ICO_ATT_OFF_DEFAULT,
     ICO_ATT_REFUSED,
-    ICO_ATT_NA
+    ICO_ATT_NA,
+    /* not in this build: a row kept for an attempt not built yet (its lines
+       say so at the start and leave it out of the blocks) */
+    ICO_ATT_NOT_BUILT
 } IcoAttemptState;
 
 /* The rows, in the lines' order */
@@ -112,7 +115,34 @@ size_t ico_attempt_start_text(char *out, size_t cap);
    written */
 size_t ico_attempt_block_text(char *out, size_t cap, int stalls);
 
-/* every row back to NOT_SET and 0 (the tests) */
+/* every row back to its state at the start (NOT_SET, the rows not built
+   NOT_BUILT) and 0 (the tests) */
 void ico_attempt_reset(void);
+
+/* The deciders: each row's state and why from the facts its owner has, one
+   call where it decides (so the test can set every row as a device of each
+   class would: attempt_ledger_test).  The whys are static strings.
+   cores (render_thread.c place_init, both rows): faster the cores faster
+   than the slowest, pin the start's pins allowed (Android, [dev]
+   big_cores), noPin why not (NULL none) */
+void ico_attempt_decide_cores(int faster, int pin, const char *noPin);
+/* the slow-scene capture in two steps: every platform (window_perf_rank.c) */
+void ico_attempt_decide_capture(void);
+/* the flat outputs at the provoking corner (rd_vu_flat0.c): shipped build
+   on, or the tests' twins */
+void ico_attempt_decide_flat0(int on);
+/* one DATE set-up (rd_date_one.c, each replay's scan): mode 0 off
+   (ICO_RD_DATE_ONE=0), 1 on, 2 the tests' force; setting MSAA or the exact
+   blend in force (nothing shared) */
+void ico_attempt_decide_date_one(int mode, int setting);
+/* the empty composites (rd_shadow_box.c, each replay's scan): box the
+   volumes' box on (ICO_RD_SHADOW_BOX), mode the skip's (0 off, 1 on) */
+void ico_attempt_decide_empty_skip(int box, int mode);
+/* the no-volume break (rd_no_volume.c, each replay's scan): env the tests'
+   switch (-1 unset, 0, 1), classOk the PowerVR or MoltenVK class under
+   Vulkan, defaultOn RD_NO_VOLUME_BREAK_DEFAULT, gateWhy a setting gate's
+   refusal with the class allowed (the DATE path, MSAA, the pass window, the
+   exact blend, GS state as shader data; NULL none) */
+void ico_attempt_decide_no_volume_break(int env, int classOk, int defaultOn, const char *gateWhy);
 
 #endif

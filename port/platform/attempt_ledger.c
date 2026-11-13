@@ -39,7 +39,19 @@ static struct {
     const char *why;
     uint64_t n, n2;
     uint64_t lastN, lastN2;
-} s_att[ICO_ATT_COUNT];
+} s_att[ICO_ATT_COUNT] = {
+    [ICO_ATT_SUBPASS] = {ICO_ATT_NOT_BUILT, NULL, 0, 0, 0, 0},
+    [ICO_ATT_BLEND_CONST] = {ICO_ATT_NOT_BUILT, NULL, 0, 0, 0, 0},
+    [ICO_ATT_COMPACTION] = {ICO_ATT_NOT_BUILT, NULL, 0, 0, 0, 0},
+};
+
+/* a row's state at the start */
+static int startState(int i)
+{
+    return i == ICO_ATT_SUBPASS || i == ICO_ATT_BLEND_CONST || i == ICO_ATT_COMPACTION
+               ? ICO_ATT_NOT_BUILT
+               : ICO_ATT_NOT_SET;
+}
 
 static uint32_t s_serial; /* __atomic */
 
@@ -95,6 +107,8 @@ const char *ico_attempt_state_word(IcoAttemptState s)
         return "refused by its self-test";
     case ICO_ATT_NA:
         return "not applicable here";
+    case ICO_ATT_NOT_BUILT:
+        return "not in this build";
     default:
         return "not reported";
     }
@@ -160,7 +174,7 @@ size_t ico_attempt_block_text(char *out, size_t cap, int stalls)
         const uint64_t d = n - s_att[i].lastN, d2 = n2 - s_att[i].lastN2;
         s_att[i].lastN = n;
         s_att[i].lastN2 = n2;
-        if (st == ICO_ATT_NOT_SET) {
+        if (st == ICO_ATT_NOT_SET || st == ICO_ATT_NOT_BUILT) {
             continue;
         }
         if (i == ICO_ATT_ADRENO_A || i == ICO_ATT_ADRENO_B) {
@@ -190,10 +204,89 @@ size_t ico_attempt_block_text(char *out, size_t cap, int stalls)
 void ico_attempt_reset(void)
 {
     for (int i = 0; i < ICO_ATT_COUNT; i++) {
-        __atomic_store_n(&s_att[i].state, 0, __ATOMIC_RELEASE);
+        __atomic_store_n(&s_att[i].state, startState(i), __ATOMIC_RELEASE);
         __atomic_store_n(&s_att[i].why, (const char *)NULL, __ATOMIC_RELEASE);
         __atomic_store_n(&s_att[i].n, 0u, __ATOMIC_RELEASE);
         __atomic_store_n(&s_att[i].n2, 0u, __ATOMIC_RELEASE);
         s_att[i].lastN = s_att[i].lastN2 = 0;
+    }
+}
+
+void ico_attempt_decide_cores(int faster, int pin, const char *noPin)
+{
+    const char *why;
+    IcoAttemptState st = ICO_ATT_NA;
+    if (!pin) {
+        why = noPin != NULL ? noPin : "no core pinned on this device";
+    } else if (faster == 1 || faster == 2) {
+        st = ICO_ATT_ON;
+        why = faster == 2 ? "2 cores faster than the slowest" : "1 core faster than the slowest";
+    } else if (faster >= 3) {
+        why = "3 or more cores faster than the slowest: the keeper's rule";
+    } else {
+        why = "the cores are of one speed";
+    }
+    ico_attempt_state(ICO_ATT_FEW_CORES, st, why);
+    ico_attempt_state(ICO_ATT_PIPE_SET_CORES, st, why);
+}
+
+void ico_attempt_decide_capture(void)
+{
+    ico_attempt_state(ICO_ATT_CAPTURE_TWO_STEP, ICO_ATT_ON,
+                      "the copy into a block the dump worker made");
+}
+
+void ico_attempt_decide_flat0(int on)
+{
+    ico_attempt_state(ICO_ATT_FLAT0, on ? ICO_ATT_ON : ICO_ATT_OFF_DEFAULT,
+                      on ? "every device and backend" : "ICO_RD_VU_FLAT0=0: the tests' twins");
+}
+
+void ico_attempt_decide_date_one(int mode, int setting)
+{
+    if (mode == 0) {
+        ico_attempt_state(ICO_ATT_DATE_ONE, ICO_ATT_OFF_DEFAULT,
+                          "ICO_RD_DATE_ONE=0: the tests' switch");
+    } else if (setting) {
+        ico_attempt_state(ICO_ATT_DATE_ONE, ICO_ATT_NA,
+                          "MSAA or the exact blend in force: nothing shared");
+    } else {
+        ico_attempt_state(ICO_ATT_DATE_ONE, ICO_ATT_ON,
+                          mode == 2 ? "ICO_RD_DATE_ONE=force: the tests' sabotage"
+                                    : "every device and backend, where no composite can set the "
+                                      "alpha's top bit");
+    }
+}
+
+void ico_attempt_decide_empty_skip(int box, int mode)
+{
+    if (!box) {
+        ico_attempt_state(ICO_ATT_EMPTY_SKIP, ICO_ATT_OFF_DEFAULT, "ICO_RD_SHADOW_BOX=0: no box");
+    } else if (!mode) {
+        ico_attempt_state(ICO_ATT_EMPTY_SKIP, ICO_ATT_OFF_DEFAULT,
+                          "ICO_RD_EMPTY_SKIP=0: the tests' switch");
+    } else {
+        ico_attempt_state(ICO_ATT_EMPTY_SKIP, ICO_ATT_ON, "every device and backend");
+    }
+}
+
+void ico_attempt_decide_no_volume_break(int env, int classOk, int defaultOn, const char *gateWhy)
+{
+    if (env == 0) {
+        ico_attempt_state(ICO_ATT_NO_VOLUME_BREAK, ICO_ATT_OFF_DEFAULT,
+                          "ICO_RD_NO_VOLUME_BREAK=0: the tests' switch");
+    } else if (env != 1 && !classOk) {
+        ico_attempt_state(ICO_ATT_NO_VOLUME_BREAK, ICO_ATT_NA,
+                          "not the PowerVR or MoltenVK class under Vulkan");
+    } else if (gateWhy != NULL) {
+        ico_attempt_state(ICO_ATT_NO_VOLUME_BREAK, ICO_ATT_NA, gateWhy);
+    } else if (env == 1) {
+        ico_attempt_state(ICO_ATT_NO_VOLUME_BREAK, ICO_ATT_ON, "ICO_RD_NO_VOLUME_BREAK=1");
+    } else if (!defaultOn) {
+        ico_attempt_state(ICO_ATT_NO_VOLUME_BREAK, ICO_ATT_OFF_DEFAULT,
+                          "off by default until a phone rc shows the PowerVR phone's title and "
+                          "pause menu clean with it");
+    } else {
+        ico_attempt_state(ICO_ATT_NO_VOLUME_BREAK, ICO_ATT_ON, "the PowerVR or MoltenVK class");
     }
 }
