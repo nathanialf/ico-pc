@@ -1242,9 +1242,15 @@ looks for the marks `window: bench: ` and `bench: frame ` in a release's program
   watchdog, marks the run's phase as `the bench (a release candidate's measurement)`
   (`ico_diag_set_probe`: a device loss or GPU hang inside it is not counted on the loss ladder), and
   draws a line over the picture: `Measuring the picture (a test build's bench)`, `Measuring the
-  picture: frame 2 of 4, 37 %`, `Tap to skip it; the game goes on after it`. A tap, a key or a
-  button skips the rest; the app leaving the screen, a quit or a size change stops it with those
-  events left for the pump. After it every switch is put back, the frames' resources destroyed,
+  picture: frame 2 of 4, 37 %`, `Tap to skip it; the game goes on after it`. A new tap, key or
+  button press skips the rest: one whose own moment (the event's timestamp) is half a second or more
+  after the bench began (`bench_plan.c` `ico_bench_input_verdict`). A press from before it (the touch
+  on the on-screen control that opened the pause), one inside its first half second and a held
+  key's repeat are taken and passed over, and said once at its end: `window: bench: 1 press passed
+  over, not taken as a skip (the first: a finger down from before the bench, -0.31 s from the start;
+  a skip is a new press 0.5 s or more after the start)`; a skip says what it was, `ended (skipped by
+  a tap: a tap: a finger down 3.12 s after the start)`. The app leaving the screen, a quit or a size
+  change stops it with those events left for the pump. After it every switch is put back, the frames' resources destroyed,
   the pacer moved past the time as for a swapchain rebuilt, and the game goes on at the title or the
   pause.
 - **How a frame runs** (`rd_bench_run.c`). The kept bytes are loaded again into the renderer
@@ -1277,17 +1283,18 @@ looks for the marks `window: bench: ` and `bench: frame ` in a release's program
   renderer's own and put back after it: the no-volume break mode the other way; the open no-volume
   mode (SCENE's pass not ended; its pictures are thrown away); DATE's shared set-up the other way;
   the shadow volumes in a pass of their own; the lamps' pass at 1 sample; the lamps' target at full
-  size; the texture filter trilinear against anisotropic; the present from SCENE; the shadow volumes by `sprite_ps` against the stencil-only entry and the glow paste by `fx_frame_ps` against its own entry (each the other way, only where its self-test passed). A variant whose
+  size; the texture filter trilinear against anisotropic; the present from SCENE; the shadow volumes by `sprite_ps` against the stencil-only entry, the glow paste by `fx_frame_ps` against its own entry and the shadow composites by `sprite_ps` against their own entry (each the other way, only where its self-test passed). The shadow chain a draw at a time (not in the parts' sum): the count's draw alone (the levels then read the count as an earlier replay left it), each level, each composite by its source, DATE's stencil set-ups left out, the shadow box off, and the volumes left out with the box off (the composites drawn over the whole picture, every fragment discarded: the volumes' knock-out alone takes the composites with it, as the empty composites are skipped) ([RENDER_POST.md](RENDER_POST.md#the-shadow-composites-by-their-own-entry)). A variant whose
   class has no command in the frame, or whose switch cannot change here, is not run. A part left
   out changes what later passes see (no volumes make the composites empty); each line's executed
-  passes, draws and cuts say what ran. What cannot be separated: the count alone (it needs the
-  window's stencil, so it is the window less the volumes and the levels), the crack fill from the
+  passes, draws and cuts say what ran. What cannot be separated: the count's pass from the
+  draw's (its row leaves the draw out, the levels reading the count an earlier replay left), the crack fill from the
   fog (the fog's knock-out takes the fill with it; the fill's own switch takes the fill alone), and
   any part from the passes it ends or begins.
 - **The lines** (`bench_plan.c`, `window: bench: ...`). Per frame: `bench: frame 2 of 4: a lamps
   picture without a shadow volume (frame 1234, 1500 commands, 9000 KB): 31 variants, 2 rounds of 3
   warm-up and 10 timed replays each, a baseline after every 4; present mode mailbox; GPU stamps
-  yes`; one line a variant, `bench: frame 2 | without the glow paste | 14 passes, 500 draws, 25000
+  yes` (written after the frame's run: `no` where the baseline's timed replays came back without
+  GPU times, `not known (no replay was timed)` where the run ended before any); one line a variant, `bench: frame 2 | without the glow paste | 14 passes, 500 draws, 25000
   triangles | picture 18.00 ms (17.90-18.20, n 20) | GPU 17.00 ms (16.90-17.10) | wait 6.00 ms |
   -2.50 ms against the baselines (rounds -2.40 to -2.60) | removed 1 | cuts: plan lamps, no volume
   0, composites skipped 3, volumes merged 0, crack fills 1, SCENE presented 0` (the delta: the
@@ -2096,6 +2103,7 @@ thread can make it, hot paths included. The rows and where their states are set:
 | the glow's paste by its own entry | `rd_paste_spec.c` at start-up and after its self-test (`ico_attempt_decide_paste_spec`): `not applicable here` where `fx_paste_ps` is not made (OpenGL, Direct3D), `off by default` with `ICO_RD_PASTE_SPEC=0`, the define at 0 or its self-test not run yet, `refused by its self-test` where the two entries' bytes differed on the device, `on` with it passed | `rd_paste_spec.c` at each premultiplied add: the pastes drawn by `fx_paste_ps` (the second count: those that kept `fx_frame_ps`, the 10 s `window: paste:` line says why) |
 | the glow chain in three passes | `not in this build` from the start (measured, not built: [RENDER_POST.md](RENDER_POST.md#the-glow-chain-in-three-passes-measured-not-built)) | none |
 | the shadow volumes by the stencil-only entry | `rd_volume_fs.c` at start-up and after its self-test (`ico_attempt_decide_volume_fs`): `not applicable here` off Vulkan, `off by default` with `ICO_RD_VOLUME_FS=0`, the define at 0 or its self-test not run yet, `refused by its self-test` where the volumes' count by `date_clear_ps` differed from `sprite_ps`'s on the device, `on` with it passed | `rd_volume_fs.c` at each volume draw: the volume draws by `date_clear_ps` (the second count: those that kept `sprite_ps` where it is offered: a multisampled pass, the self-test, the pipeline) |
+| the shadow composites by their own entry | `rd_comp_spec.c` at start-up and after its self-test (`ico_attempt_decide_comp_spec`): `not applicable here` off Vulkan or without the dual-source fixed-function blend (the two-pass or the exact blend), `off by default` with `ICO_RD_COMP_SPEC=0`, the define at 0 or its self-test not run yet, `refused by its self-test` where SCENE's bytes differed between `sprite_ps` and `sprite_comp_ps` on the device, `on` with it passed | `rd_comp_spec.c` at each composite and level drawn: the draws by `sprite_comp_ps` (the second count: those of their forms that kept `sprite_ps` where it is offered; the 10 s `window: composites:` line says why) |
 
 The shadow cuts' counts come from the replay's record where the window reads it
 (`window_perf_rank_record`), not from the cuts' hot paths.

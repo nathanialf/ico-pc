@@ -10,6 +10,7 @@
 - On phones whose graphics chip prepares the 3D scenery in a separate step first (the Mali-G52 among them), the parts of the scenery that are off screen or that the game itself hides are skipped before they are drawn, once the game has checked at start that the picture stays exactly the same.
 - With Vulkan, the glow around lamps and the sun is added to the picture by a smaller graphics program made for that one step, once the game has checked at start that the picture comes out exactly the same.
 - With Vulkan, the shapes that mark where shadows fall are drawn by a graphics program that does no colour work at all, so the graphics chip can mark them before it paints anything, once the game has checked at start that the shadows come out exactly the same.
+- With Vulkan, shadows are laid over the scenery by a smaller graphics program made for that one step, once the game has checked at start that the picture comes out exactly the same.
 
 ## Fixed
 
