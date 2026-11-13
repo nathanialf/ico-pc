@@ -1334,7 +1334,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
 - `rd_glass_test.c` (`rd_glass`, CPU): the on-glass line (`rd_glass.c`): a pair per rule against the
   display's gap, its class, the hand-overs and the GPU's ends, the shares; not steps; the join of
   pictures and display times by id in either order with a present never shown; the line word for
-  word.
+  word; the screen's rule's measure, its score (on it, late, early, further), its ring, the display's own figures.
+- `rd_pace_screen_test.c` (`rd_pace_screen`, CPU): the screen's predicted refresh (`rd_pace_screen.c`): the expected time on the glass, the latch's and the grid's fits, the score; the placement's edges and fall-backs (the value drawn otherwise to the bit); 10 s simulations of the owner's phone's regimes with a display model (grid, latch lead, mailbox, late times): the four rules' speed on the glass, the holds, never back, the content's rate over the glass; the start line, the clause, the ledger's row.
 - `rd_cpu_phase_test.c` (`rd_cpu_phase`, CPU): the render thread's CPU phases (`rd_cpu_phase.c`):
   two pictures of one frame folded (2 pictures, 1 tick, 1 hashed, 6 clock reads, the look-ups
   folded once and `g_rdCpu` emptied), taken twice (empty), no line without a picture, and the
