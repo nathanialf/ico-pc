@@ -1949,7 +1949,8 @@ thread can make it, hot paths included. The rows and where their states are set:
 | no-volume break | `rd_no_volume.c` at each replay's scan: `off by default (off by default until a phone rc shows the PowerVR phone's title and pause menu clean with it)` on the PowerVR and MoltenVK class, `not applicable here (not the PowerVR or MoltenVK class under Vulkan)` elsewhere, or the other gates' reason (the DATE path, MSAA ...) with the class allowed | the window, from `noVolumeBreak` |
 | Qualcomm passes as VkRenderPass objects | `window_perf_rank.c` every block (`ico_attempt_decide_pass_objects`: on with `RhiLimits.passObjectsRow`'s reason while Qualcomm's row holds the device's passes, `not applicable here (not Qualcomm's own driver)` otherwise) | the block's growth of `RhiStats.passObjects`, only while the row holds |
 | Adreno attempt B | `not in this build` (one Adreno attempt was built) | none |
-| subpass read, blend constant, index compaction | `not in this build` from the start (left out of the block line) | none |
+| subpass read, blend constant | `not in this build` from the start (left out of the block line) | none |
+| index compaction | `rd_vu_compact.c` at the pre-pass's start and after the record's self-test (`ico_attempt_decide_compaction`): `on` on the compute record where the class's define allows and the self-test passed (`its start-up self-test passed`, or `the Arm class, ...`; before the self-test or where none ran, `the compute record; the start-up self-test decides where it runs`), `refused by its self-test` when the record's test failed with it and passed without it, `off by default` by the define or `ICO_RD_VU_COMPACT=0`, `not applicable here` with the record path that holds (`record path stores: vertex shader stores`, `record path targets: render targets`, `the VU pre-pass is off`) | the triangles left out (drop and outside, every list), from the counts read back when the frame slot comes round |
 | VU record by compute on the PowerVR | `rd_vu_record.c` at the record's start (`ico_attempt_decide_vu_compute`): `off by default` on the PowerVR class under Vulkan with both stores, `on` by the tests' switch or the define flipped, `refused by its self-test` when the compute record failed it (the vertex stores then), `not applicable here` elsewhere (no vertex stores, no compute stores, another class, a `[dev] vu_record` by name) | `rd_vu_record.c` `rd__replay_dispatch`: the dispatches |
 | turn in the present's blit | `rd_present.c` at each present (`ico_attempt_decide_turn_fold`): `not applicable here` without a pre-rotated swapchain, `off by default` until the define is flipped or with its self-test not run, `refused by its self-test`, `on` with it passed | `rd_turn_fold.c`: the presents folded (the second count: those on a turned swapchain that kept the turn pass) |
 | VU record sized from need | `rd_vu_rec_early.c` at the start-up preparation (`ico_attempt_decide_rec_need`: on where the run's need made a smaller record than the memory bound allowed; not applicable with the pre-pass off, nothing made at start-up, or a bound no larger than the need) | the record's growths in play (`rd_replay_vu.c` recEnsure, a record that existed grown) |
@@ -2130,6 +2131,24 @@ the block needed (pass V's and pass T's) and of the run, the record's growths in
 frame slots' upload rings. A block whose pictures need more than the rows held grows the record
 (its own `the record holds` line); a run whose need stays far under the held rows is memory the
 record holds for nothing.
+
+Every block where the index compaction ran (the compute record; [PIPELINES.md](PIPELINES.md#the-index-compaction)):
+
+`window: index compaction: triangles left out as drawing nothing, a picture: 9866 of 22169 in list
+0 (44.5 %), by class: the game's drops 3370, outside the target or the depth range 6496; the other
+lists 1200 of 30000 (4.0 %) (25 pictures read back, two frame slots behind)`
+
+The triangles the keep stage judged a picture (each code 36 triangle twice: its cut and its kick
+draw), those it left out by class, list 0 apart, from the counts each workgroup stores and a copy
+reads back when the frame slot comes round. The draws' invocation figures (`window: VU: ...`,
+`perf scene`, `compare`) count a left-out triangle as one invocation (its filler) and say so:
+`3 a triangle, after the index compaction 1 a triangle it left out: A of B`.
+The start lines: `rd: VU index compaction: on where its start-up self-test passes: ... (<the
+ledger's why>; RD_VU_COMPACT_DEFAULT 1, the Arm class's RD_VU_COMPACT_ARM_DEFAULT 1; this device
+is of the Arm class)` at the pre-pass's start, then `rd: VU index compaction: on: passed its
+start-up self-test with the record's (...)` or `rd: VU index compaction: refused by its start-up
+self-test (the record's test with it: <the difference>; without it the test passed): every draw
+reads its own index list`.
 
 ### The pipeline set's cores
 

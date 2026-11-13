@@ -1322,6 +1322,63 @@ pictures with the programs' entries', which compute the planes at every corner, 
 takes corner 0's in both; the skin check counts samples covered (the position alone); the blend
 self-test draws no VU program.
 
+#### The index compaction
+
+Of list 0's mesh triangles a picture draws, a large share draws nothing: the game's own drops
+(`vu_main_vs` sends every corner to `VU_CULLED`) and triangles wholly past the target's edges or
+the depth range (the GPU's clipping discards them). On the Mali-G52's four dumps of issue 179 that
+is 27-54 % of list 0 (44.5 % in the 8-12 fps scene), on the Pixel's opening 38-82 %; each still
+costs `vu_main_vs` three invocations with their record loads. Under the compute record a third
+record pass, pass K, runs after pass T (`rd_replay_vu.c` `vuCompactPass`; `rd_vu_compact.c`,
+`rd_vu_compact.h`): one dispatch of `vu_tri_keep_compute_cs` (`vu_tri.hlsl` `vu_tri_keep_cs`) a
+mesh draw `doVuDraw` will make (a command's one draw, or a code 36 command's cut and kick draws of
+each batch with their own pass's rule), one invocation a triangle of the draw's index list. It
+evaluates each corner's position with `vu_main_vs`'s statements over the same record words
+(`vu_keep_position`: the verdict, `vu_corner_position`, the chain plane's cull, the later bias)
+and writes the list again, in its order and length, into the record buffer's fourth plane: a
+kept triangle as it was, one that draws nothing as its corner-1 value three times. The draw reads
+that list, the record buffer bound as its index buffer.
+
+- **drop**: all three corners left at `VU_CULLED` (hidden, the region rule's drop that the
+  camera, card and beside rules keep, the other scissor pass's triangle, every corner past the
+  chain plane). A `_dstrov` pass's own `VU_F_NO_BESIDE` (added at the draw) is not seen here:
+  such a triangle is kept.
+- **outside**: every corner past one plane of the bound target's clip-space box (its share of the
+  exact viewport, `g_misc.zw`, about the centre `g_vpo` less the jitter moves it to, two texels
+  out; the viewport and two GS pixels without the exact viewport) or of `0 <= z <= w`, by more
+  than 2^-10 of the corner's magnitude. No point of the triangle is inside, so the clipping leaves
+  no fragment, no sample, no depth, no stencil; the margins absorb any last-bit difference
+  between the compute's floats and the draw's.
+- Nothing else is left out: no zero-area class (the rasteriser's fill rule would decide it), no
+  back faces (the GS draws both).
+
+The filler (corner 1 three times) is that corner's position again, past the plane its triangle is
+past, so it is clipped too; it costs one vertex invocation where the GPU reuses an index within a
+triangle (index-driven vertex shading on Mali), three where it does not (as before). The count of
+every draw stays known on the CPU: no indirect draw, no read-back before a draw, no new wait (the
+compute bracket's end makes the plane visible to the index fetch: the record buffer carries
+`RHI_BUF_INDEX` where the compaction may run). The draw merge keeps its runs: each planned draw's
+values are raised by a raise fixed in the plan (the ranges one after the other in the walk's
+order), a run joins the next planned draw whose list follows its own in the plane and whose
+values lie past its own, and the table's `w` is that raise (`vu_merge_entry` subtracts it); without
+the merge's builds the values are not raised. The skin check's draws, the loss bisect's window,
+the grids and the particles read their own lists. Each workgroup of 64 stores its counts (drop,
+outside, kept, list 0 or not) in a texel after the lists; a copy reads them back when the frame
+slot comes round (`window: index compaction: ...` every block, the attempt ledger's row, the
+draws' invocation figures after the compaction).
+
+Where: the compute record only. The vertex stores and the render targets: not applicable (their
+record passes are draws; a compute pass after them would bring the compute record's work to a
+device that does not take it). By class: `RD_VU_COMPACT_DEFAULT` (every class on the compute record
+but Arm's, 1) and `RD_VU_COMPACT_ARM_DEFAULT` (the Mali-G52's, Arm's vendor id under Vulkan, 1). It
+is a new kind of GPU work on that driver (an extra compute output read by the vertex input stage),
+so it runs only where the start-up self-test passes: the record's test runs with it and with a copy
+of the prelit mesh past the target's right edge (merged with the ticks copy); a failure runs the
+test again without it, and a pass then refuses it for the run (`refused by its self-test`). The
+tests' switch `ICO_RD_VU_COMPACT=0|1`; `ICO_RD_VU_COMPACT_SABOTAGE=1` writes every triangle as a
+filler. The fourth plane is one more plane of the record (16 bytes a row's texel): on the Mali at
+512 rows, 8 MB a frame slot. `rd_vu_compact_ab` compares every target with it on and off.
+
 #### The record stores' restart rung
 
 The record stored by the vertex shaders is new on every Vulkan device that offers

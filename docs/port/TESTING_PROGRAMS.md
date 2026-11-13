@@ -1167,7 +1167,13 @@ that stops again writing its own line without the retry mark); a stop at the fre
   only with its self-test passed, refused by it, not run, no turned swapchain); the VU record
   sized from need per class (on where the need's size made less than the memory bound allowed:
   the Mali-G52 and a desktop at the Original frame rate; not applicable where the bound allowed
-  no more, under the floor or with the pre-pass off) and its growths in play in the start and block lines (CPU only).
+  no more, under the floor or with the pre-pass off) and its growths in play in the start and
+  block lines; the index compaction per class (on on the Mali-G52's compute record as the Arm
+  class with its self-test passed, not applicable with the vertex stores elsewhere) and its other
+  states (the tests' switch both ways, refused by the self-test, each class's define off, the
+  self-test not run, not the compute record with and without its words), its triangles left out
+  in the start and block lines; at the reset the compaction's row `not reported`, the blend
+  constant's `not in this build` (CPU only).
 - `core_share_test.c` (ctest `core_share`): the share of run time on the faster cores of the
   threads that do not sample their own core (`port/platform/core_share.h`, issue 179): ten seconds
   of the Helio G85's submit, SDL audio and driver threads and two pipeline workers under one name,
@@ -1377,7 +1383,9 @@ only when the Turnip package loaded and the mark carries trial or needed (`bones
 - `sched_test.c`: the fiber scheduler against the EE kernel's rules through the SDK calls
   (`sched`); the longest single switch (`ico_sched_switch_max`: a 30 ms thread against a 1 ms
   one names the long one, its time at least 30 ms, the reset empties it, a NULL id).
-- `window_scene_test.c`: the window's scene lines (`window_scene.h`, issue 179; the cost-model fit only over a spread of 2 or more in the vertex invocations, the smallest counted above 0 (a block with keep frames' zero-invocation replays beside narrow scene replays: no fit), else `fit: not enough spread (x N..M ...)`): the layout kinds
+- `window_scene_test.c`: the window's scene lines (`window_scene.h`, issue 179; the VU line's
+  draws' invocations after the index compaction, a triangle it left out one (`23k more (3 a
+  triangle, after the index compaction 1 a triangle it left out: 2.5k of 9.2k; ...`); the cost-model fit only over a spread of 2 or more in the vertex invocations, the smallest counted above 0 (a block with keep frames' zero-invocation replays beside narrow scene replays: no fit), else `fit: not enough spread (x N..M ...)`): the layout kinds
   of the European disc's ids (a movie over any layout is a scene, the title's two, the pause menu,
   the options and button configuration, the vibration choice, the memory card's and the Continue
   screen's file lists, the load and the save's confirmation, anything else `other`; a table without
