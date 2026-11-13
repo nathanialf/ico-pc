@@ -107,17 +107,16 @@ static void test_classes(void)
          1,
          -1,
          1,
-         0,
+         1,
          NULL,
          ICO_ATT_NA,
-         ICO_ATT_OFF_DEFAULT,
-         "off by default until a phone rc shows the PowerVR phone's title and pause menu clean "
-         "with it",
+         ICO_ATT_ON,
+         "the PowerVR D-Series DXT-48-1536",
          NULL,
          1,
          1,
          1,
-         ICO_ATT_OFF_DEFAULT,
+         ICO_ATT_ON,
          ICO_ATT_OFF_DEFAULT,
          0,
          0,
@@ -135,7 +134,7 @@ static void test_classes(void)
          1,
          -1,
          1,
-         0,
+         1,
          "the composites' DATE by the R8 snapshot or the shader's read",
          ICO_ATT_ON,
          ICO_ATT_NA,
@@ -280,11 +279,23 @@ static void test_classes(void)
         {1024, 1024, 1024, ICO_ATT_NA},
     };
 
+    /* the facts the shipped defaults read, k's classes in order: the
+       device is the PowerVR the VU record by compute and the no-volume
+       break were shown on (rd_vu_class.h rd__vu_class_measured: the
+       Pixel's D-Series DXT-48-1536), the build is Android's (the own
+       timer's reach, rd_as_made_timer.h) */
+    static const struct {
+        int measured, android;
+    } kShip[] = {
+        {0, 1}, {1, 1}, {0, 1}, {0, 1}, {0, 1}, {0, 0}, {0, 0},
+    };
+
     /* the index compaction, k's classes in order: the record written by
        compute dispatches (else the path that holds), the Arm class, the
        row's state.  The Mali-G52 the compute record (no vertex stores),
-       Arm's class, its self-test passed; every other class the vertex
-       stores (the PowerVR rule off by default) */
+       Arm's class, its self-test passed; the Pixel the compute record by
+       the PowerVR rule (on by default on its DXT), its self-test passed;
+       every other class the vertex stores */
     static const struct {
         int compute;
         const char *notWhy;
@@ -292,7 +303,7 @@ static void test_classes(void)
         IcoAttemptState want;
     } kCmp[] = {
         {1, NULL, 1, ICO_ATT_ON},
-        {0, "record path stores: vertex shader stores", 0, ICO_ATT_NA},
+        {1, NULL, 0, ICO_ATT_ON},
         {0, "record path stores: vertex shader stores", 0, ICO_ATT_NA},
         {0, "record path stores: vertex shader stores", 0, ICO_ATT_NA},
         {0, "record path stores: vertex shader stores", 0, ICO_ATT_NA},
@@ -309,7 +320,8 @@ static void test_classes(void)
        off by default; the PowerVR B without GPU timestamps: no slot clock;
        the Adreno 740 on either driver uncapped: off by default; the
        desktop with vsync on: paced; the Mac uncapped: off by default.  The
-       own timer: not applicable where paced, off by default as made */
+       own timer: not applicable where paced, on as made on Android, off by
+       default as made elsewhere (the Mac) */
     static const struct {
         int asMade, clock, waited;
         IcoAttemptState want;
@@ -322,6 +334,7 @@ static void test_classes(void)
     CHECK(sizeof kRec / sizeof kRec[0] == sizeof k / sizeof k[0]);
     CHECK(sizeof kCmp / sizeof kCmp[0] == sizeof k / sizeof k[0]);
     CHECK(sizeof kPace / sizeof kPace[0] == sizeof k / sizeof k[0]);
+    CHECK(sizeof kShip / sizeof kShip[0] == sizeof k / sizeof k[0]);
     for (size_t c = 0; c < sizeof k / sizeof k[0]; c++) {
         const DeviceClass *d = &k[c];
         ico_attempt_reset();
@@ -330,9 +343,12 @@ static void test_classes(void)
         ico_attempt_decide_flat0(1);
         ico_attempt_decide_date_one(d->dateMode, d->dateSetting);
         ico_attempt_decide_empty_skip(d->box, d->skip);
-        ico_attempt_decide_no_volume_break(d->nvEnv, d->nvClass, d->nvDefault, d->nvGate);
+        ico_attempt_decide_no_volume_break(d->nvEnv, d->nvClass, kShip[c].measured, d->nvDefault,
+                                           d->nvGate);
         ico_attempt_decide_pass_objects(d->passRow);
-        CHECK(ico_attempt_decide_vu_compute(0, d->vuStores, 1, d->vuPowervr, -1, 0) == 0);
+        /* the VU record by compute with the shipped default (1) */
+        CHECK(ico_attempt_decide_vu_compute(0, d->vuStores, 1, d->vuPowervr, kShip[c].measured, -1,
+                                            1) == (d->wantVu == ICO_ATT_ON ? 1 : 0));
         CHECK(ico_attempt_decide_turn_fold(d->turned, -1, 0, -1) == 0);
         ico_attempt_decide_rec_need(1, kRec[c].made, kRec[c].bound, kRec[c].need);
         CHECK(ico_attempt_decide_compaction(kCmp[c].compute, kCmp[c].notWhy, kCmp[c].arm, -1, 1, 1,
@@ -340,21 +356,32 @@ static void test_classes(void)
               (kCmp[c].want == ICO_ATT_ON));
         ico_attempt_decide_subpass(d->spRoute, d->spOn, d->spRefused, d->spOff, d->spWhy);
         ico_attempt_decide_pace_gpu(kPace[c].asMade, kPace[c].clock, kPace[c].waited, 0);
-        ico_attempt_decide_as_made_timer(kPace[c].asMade, 0);
-        CHECK(ico_attempt_state_of(ICO_ATT_AS_MADE_TIMER) ==
-              (kPace[c].asMade ? ICO_ATT_OFF_DEFAULT : ICO_ATT_NA));
+        /* the own timer as shipped: drawn on Android */
+        ico_attempt_decide_as_made_timer(kPace[c].asMade, kShip[c].android, NULL);
+        CHECK(ico_attempt_state_of(ICO_ATT_AS_MADE_TIMER) == (!kPace[c].asMade ? ICO_ATT_NA
+                                                              : kShip[c].android
+                                                                  ? ICO_ATT_ON
+                                                                  : ICO_ATT_OFF_DEFAULT));
         /* the screen's refresh: every as-made class here gives the display's
            times back (Android's swapchain and MoltenVK offer
-           VK_GOOGLE_display_timing), so it follows the GPU model's row: off
-           by default, not applicable where paced or without a slot clock */
+           VK_GOOGLE_display_timing), so it follows the GPU model's row; as
+           shipped it is drawn on Android only: on there where that row is
+           off by default, off by default on the Mac (computed and reported),
+           not applicable where paced or without a slot clock */
         ico_attempt_decide_pace_screen(kPace[c].asMade,
-                                       kPace[c].clock ? 1 : (kPace[c].waited ? 0 : -1), 1, 0);
-        CHECK(ico_attempt_state_of(ICO_ATT_PACE_SCREEN) == kPace[c].want);
+                                       kPace[c].clock ? 1 : (kPace[c].waited ? 0 : -1), 1,
+                                       kShip[c].android, NULL);
+        CHECK(ico_attempt_state_of(ICO_ATT_PACE_SCREEN) ==
+              (kPace[c].want == ICO_ATT_OFF_DEFAULT && kShip[c].android ? ICO_ATT_ON
+                                                                        : kPace[c].want));
         /* the even cadence: the same classes as the screen's rule (it aims
-           by its fit), off by default */
+           by its fit), off by default with the reason */
         ico_attempt_decide_pace_even(kPace[c].asMade,
                                      kPace[c].clock ? 1 : (kPace[c].waited ? 0 : -1), 1, 0);
         CHECK(ico_attempt_state_of(ICO_ATT_PACE_EVEN) == kPace[c].want);
+        CHECK(kPace[c].want != ICO_ATT_OFF_DEFAULT ||
+              strcmp(ico_attempt_why_of(ICO_ATT_PACE_EVEN),
+                     "three phone rcs did not land pictures on their refresh") == 0);
         /* the glow's paste by its own entry: every class here is a Vulkan
            device (the module made) whose self-test passed (rd_paste_spec.c) */
         CHECK(ico_attempt_decide_paste_spec(1, -1, 1, 1) == 1);
@@ -457,24 +484,38 @@ static void test_classes(void)
     CHECK(ico_attempt_state_of(ICO_ATT_DATE_ONE) == ICO_ATT_OFF_DEFAULT);
     ico_attempt_decide_empty_skip(0, 1);
     CHECK(ico_attempt_state_of(ICO_ATT_EMPTY_SKIP) == ICO_ATT_OFF_DEFAULT);
-    ico_attempt_decide_no_volume_break(0, 1, 1, NULL);
+    ico_attempt_decide_no_volume_break(0, 1, 1, 1, NULL);
     CHECK(ico_attempt_state_of(ICO_ATT_NO_VOLUME_BREAK) == ICO_ATT_OFF_DEFAULT);
-    ico_attempt_decide_no_volume_break(-1, 1, 1, NULL);
+    ico_attempt_decide_no_volume_break(-1, 1, 1, 1, NULL);
     CHECK(ico_attempt_state_of(ICO_ATT_NO_VOLUME_BREAK) == ICO_ATT_ON);
+    /* the class but not the device it was shown on (another PowerVR, a Mac):
+       off by default with the reason; the define 0: off by default */
+    ico_attempt_decide_no_volume_break(-1, 1, 0, 1, NULL);
+    CHECK(ico_attempt_state_of(ICO_ATT_NO_VOLUME_BREAK) == ICO_ATT_OFF_DEFAULT &&
+          strcmp(ico_attempt_why_of(ICO_ATT_NO_VOLUME_BREAK),
+                 "shown clean only on the PowerVR D-Series DXT-48-1536's title and pause menu; "
+                 "not tried on this device") == 0);
+    ico_attempt_decide_no_volume_break(-1, 1, 1, 0, NULL);
+    CHECK(ico_attempt_state_of(ICO_ATT_NO_VOLUME_BREAK) == ICO_ATT_OFF_DEFAULT);
     ico_attempt_decide_cores(0, 1, NULL);
     CHECK(ico_attempt_state_of(ICO_ATT_FEW_CORES) == ICO_ATT_NA);
     /* the VU record by compute: the tests' switch, the default flipped, a
        mode asked by name, no compute stores */
-    CHECK(ico_attempt_decide_vu_compute(0, 1, 1, 0, 1, 0) == 1);
+    CHECK(ico_attempt_decide_vu_compute(0, 1, 1, 0, 0, 1, 0) == 1);
     CHECK(ico_attempt_state_of(ICO_ATT_VU_COMPUTE_CLASS) == ICO_ATT_ON);
-    CHECK(ico_attempt_decide_vu_compute(0, 1, 1, 1, -1, 1) == 1);
+    CHECK(ico_attempt_decide_vu_compute(0, 1, 1, 1, 1, -1, 1) == 1);
     CHECK(strcmp(ico_attempt_why_of(ICO_ATT_VU_COMPUTE_CLASS),
-                 "the PowerVR class: compute dispatches in place of the vertex stores") == 0);
-    CHECK(ico_attempt_decide_vu_compute(0, 1, 1, 1, 0, 1) == 0);
+                 "the PowerVR D-Series DXT-48-1536: compute dispatches in place of the vertex "
+                 "stores") == 0);
+    CHECK(ico_attempt_decide_vu_compute(0, 1, 1, 1, 0, -1, 1) == 0);
     CHECK(ico_attempt_state_of(ICO_ATT_VU_COMPUTE_CLASS) == ICO_ATT_OFF_DEFAULT);
-    CHECK(ico_attempt_decide_vu_compute(1, 1, 1, 1, 1, 1) == 0);
+    CHECK(ico_attempt_decide_vu_compute(0, 1, 1, 1, 1, -1, 0) == 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_VU_COMPUTE_CLASS) == ICO_ATT_OFF_DEFAULT);
+    CHECK(ico_attempt_decide_vu_compute(0, 1, 1, 1, 1, 0, 1) == 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_VU_COMPUTE_CLASS) == ICO_ATT_OFF_DEFAULT);
+    CHECK(ico_attempt_decide_vu_compute(1, 1, 1, 1, 1, 1, 1) == 0);
     CHECK(ico_attempt_state_of(ICO_ATT_VU_COMPUTE_CLASS) == ICO_ATT_NA);
-    CHECK(ico_attempt_decide_vu_compute(0, 1, 0, 1, 1, 1) == 0);
+    CHECK(ico_attempt_decide_vu_compute(0, 1, 0, 1, 1, 1, 1) == 0);
     CHECK(ico_attempt_state_of(ICO_ATT_VU_COMPUTE_CLASS) == ICO_ATT_NA);
     /* the turn fold: on only with its self-test passed */
     CHECK(ico_attempt_decide_turn_fold(1, 1, 0, 1) == 1);
@@ -548,7 +589,11 @@ static void test_classes(void)
     }
     ico_attempt_decide_pace_gpu(1, 0, 1, 0);
     CHECK(ico_attempt_state_of(ICO_ATT_PACE_GPU) == ICO_ATT_NA);
-    ico_attempt_decide_as_made_timer(1, 1);
+    ico_attempt_decide_as_made_timer(1, 0, "not Android: the hand-over rule kept");
+    CHECK(ico_attempt_state_of(ICO_ATT_AS_MADE_TIMER) == ICO_ATT_OFF_DEFAULT &&
+          strcmp(ico_attempt_why_of(ICO_ATT_AS_MADE_TIMER),
+                 "not Android: the hand-over rule kept") == 0);
+    ico_attempt_decide_as_made_timer(1, 1, NULL);
     CHECK(ico_attempt_state_of(ICO_ATT_AS_MADE_TIMER) == ICO_ATT_ON);
     ico_attempt_fire(ICO_ATT_AS_MADE_TIMER, 600);
     ico_attempt_fire2(ICO_ATT_AS_MADE_TIMER, 4);
@@ -560,13 +605,17 @@ static void test_classes(void)
     }
     CHECK(strstr(ico_attempt_why_of(ICO_ATT_PACE_GPU), "no GPU span or slot clock") != NULL);
     /* the screen's refresh: no display times; then on with its counts */
-    ico_attempt_decide_pace_screen(1, 1, 0, 0);
+    ico_attempt_decide_pace_screen(1, 1, 0, 0, NULL);
     CHECK(ico_attempt_state_of(ICO_ATT_PACE_SCREEN) == ICO_ATT_NA &&
           strstr(ico_attempt_why_of(ICO_ATT_PACE_SCREEN), "gives no times back") != NULL);
-    ico_attempt_decide_pace_screen(1, 0, 1, 1);
+    ico_attempt_decide_pace_screen(1, 0, 1, 1, NULL);
     CHECK(ico_attempt_state_of(ICO_ATT_PACE_SCREEN) == ICO_ATT_NA &&
           strstr(ico_attempt_why_of(ICO_ATT_PACE_SCREEN), "no GPU end") != NULL);
-    ico_attempt_decide_pace_screen(1, 1, 1, 1);
+    ico_attempt_decide_pace_screen(1, 1, 1, 0, "not Android: measured on Android phones only");
+    CHECK(ico_attempt_state_of(ICO_ATT_PACE_SCREEN) == ICO_ATT_OFF_DEFAULT &&
+          strcmp(ico_attempt_why_of(ICO_ATT_PACE_SCREEN),
+                 "not Android: measured on Android phones only") == 0);
+    ico_attempt_decide_pace_screen(1, 1, 1, 1, NULL);
     CHECK(ico_attempt_state_of(ICO_ATT_PACE_SCREEN) == ICO_ATT_ON);
     ico_attempt_fire(ICO_ATT_PACE_SCREEN, 700);
     ico_attempt_fire2(ICO_ATT_PACE_SCREEN, 2);
@@ -577,7 +626,7 @@ static void test_classes(void)
                         "held at their frame's edges)") != NULL);
     }
     /* not known yet (no display time and under 600 pictures): left as it was */
-    ico_attempt_decide_pace_screen(1, 1, -1, 1);
+    ico_attempt_decide_pace_screen(1, 1, -1, 1, NULL);
     CHECK(ico_attempt_state_of(ICO_ATT_PACE_SCREEN) == ICO_ATT_ON);
     /* the even cadence: paced, no display times, no clock, on with its
        counts, not known */
@@ -592,7 +641,8 @@ static void test_classes(void)
           strstr(ico_attempt_why_of(ICO_ATT_PACE_EVEN), "no GPU end") != NULL);
     ico_attempt_decide_pace_even(1, 1, 1, 0);
     CHECK(ico_attempt_state_of(ICO_ATT_PACE_EVEN) == ICO_ATT_OFF_DEFAULT &&
-          strstr(ico_attempt_why_of(ICO_ATT_PACE_EVEN), "lowers the pictures a second") != NULL);
+          strcmp(ico_attempt_why_of(ICO_ATT_PACE_EVEN),
+                 "three phone rcs did not land pictures on their refresh") == 0);
     ico_attempt_decide_pace_even(1, 1, 1, 1);
     CHECK(ico_attempt_state_of(ICO_ATT_PACE_EVEN) == ICO_ATT_ON);
     ico_attempt_fire(ICO_ATT_PACE_EVEN, 600);

@@ -228,9 +228,10 @@ void rd__vu_record_init(const RhiLimits *lim)
     g_rdRec.classCompute = false;
     {
         const bool powervr = lim != NULL && rd__profile_powervr();
+        const bool measured = powervr && rd__vu_class_measured(rhi_adapter_name());
         const bool compute =
-            rd__vu_class_pick(g_rdRec.asked, want, g_rdRec.canCompute, powervr, rd__vu_class_env(),
-                              RD_VU_COMPUTE_CLASS_DEFAULT != 0);
+            rd__vu_class_pick(g_rdRec.asked, want, g_rdRec.canCompute, powervr, measured,
+                              rd__vu_class_env(), RD_VU_COMPUTE_CLASS_DEFAULT != 0);
         if (compute) {
             want = RD_VU_RECORD_COMPUTE;
             g_rdRec.classCompute = true;

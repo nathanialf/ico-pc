@@ -1,5 +1,6 @@
 /* rd_as_made_timer.c: the own timer for pictures as made (rd_as_made_timer.h).
- * Pure but for the switch's one getenv. */
+ * Pure but for the switch's one getenv (rd_as_made_timer_on, the poster's
+ * thread only). */
 #include "rd_as_made_timer.h"
 
 #include <math.h>
@@ -112,12 +113,57 @@ void rd_as_made_timer_step(RdAsMadeTimer *t, double targetMs, double handMs, uin
     out->leadMs = t->lead;
 }
 
+bool rd_as_made_timer_decide(int env, bool defaultOn, bool android, const char **why)
+{
+    if (env == 0) {
+        *why = "ICO_RD_AS_MADE_TIMER=0: the tests' switch";
+        return false;
+    }
+    if (env == 1) {
+        *why = "ICO_RD_AS_MADE_TIMER=1: the tests' switch";
+        return true;
+    }
+    if (!defaultOn) {
+        *why = "RD_AS_MADE_TIMER_DEFAULT 0: computed and reported";
+        return false;
+    }
+    if (!android) {
+        /* the timer was measured on the owner's phone only; a desktop as
+           made (vsync off, Uncapped) keeps the v0.11.5 rule to the bit */
+        *why = "not Android: the hand-over rule kept, the timer measured on a phone only; "
+               "computed and reported";
+        return false;
+    }
+    *why = "Android: each picture's moment from its own timer";
+    return true;
+}
+
+static int s_on = -1;
+static const char *s_why = "";
+
+static void read_switch(void)
+{
+    if (s_on >= 0) {
+        return;
+    }
+    const char *e = getenv("ICO_RD_AS_MADE_TIMER");
+    const int env = e != NULL && e[0] != '\0' ? (e[0] != '0' ? 1 : 0) : -1;
+#ifdef __ANDROID__
+    const bool android = true;
+#else
+    const bool android = false;
+#endif
+    s_on = rd_as_made_timer_decide(env, RD_AS_MADE_TIMER_DEFAULT != 0, android, &s_why) ? 1 : 0;
+}
+
 bool rd_as_made_timer_on(void)
 {
-    static int s_on = -1;
-    if (s_on < 0) {
-        const char *e = getenv("ICO_RD_AS_MADE_TIMER");
-        s_on = e != NULL && e[0] != '\0' ? (e[0] != '0') : RD_AS_MADE_TIMER_DEFAULT;
-    }
+    read_switch();
     return s_on != 0;
+}
+
+const char *rd_as_made_timer_why(void)
+{
+    read_switch();
+    return s_why;
 }

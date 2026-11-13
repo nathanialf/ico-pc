@@ -1457,9 +1457,16 @@ static void testEvenParts(void)
 
     /* the texts */
     char line[2048];
-    (void)rd_pace_even_start_text(true, false, "off by default", line, sizeof line);
+    /* off (the default): its rules not described, nothing of it runs */
+    (void)rd_pace_even_start_text(
+        true, false, "three phone rcs did not land pictures on their refresh", line, sizeof line);
     CHECK_STR(line,
-              "rd: an even number of refreshes a picture: off by default (off by default); with "
+              "rd: an even number of refreshes a picture: off by default (three phone rcs did "
+              "not land pictures on their refresh); not used: the pictures as made "
+              "(ICO_RD_PACE_EVEN=1 turns it on for the tests)");
+    (void)rd_pace_even_start_text(true, true, "on", line, sizeof line);
+    CHECK_STR(line,
+              "rd: an even number of refreshes a picture: on (on); with "
               "pictures as made, every picture shown for the same N refreshes: N the fewest "
               "with the picture time (the larger of the GPU's median span and the hand-over to "
               "the first submit) + 0.25 ms, up at once or when 8 of the last 32 aims were late "
@@ -1470,7 +1477,7 @@ static void testEvenParts(void)
               "desired time (shown no earlier), the content drawn for that refresh; off for the "
               "run where 4 of the last 32 such pictures were never shown or their acquire and "
               "present call took 3.0 ms more than without; it lowers the pictures a second "
-              "where the GPU could make more; not used (ICO_RD_PACE_EVEN=1 turns it on)");
+              "where the GPU could make more");
     RdPaceEvenWindow w;
     memset(&w, 0, sizeof w);
     CHECK(!rd_pace_even_format(&w, line, sizeof line) && line[0] == '\0');
@@ -1567,7 +1574,21 @@ static void testTexts(void)
               "moment drawn otherwise and moves at most 0.25 ms a picture to keep the last 64 "
               "inside their frame's tick; never back; with no display times, stale ones, ones "
               "off one grid or a latch that fits under 50 %, the moment drawn otherwise; "
-              "computed and reported, not drawn (ICO_RD_PACE_SCREEN=1 draws it)");
+              "computed and reported, not drawn");
+    (void)rd_pace_screen_start_text(true, true,
+                                    "each picture drawn for the refresh the screen is predicted "
+                                    "to show it at",
+                                    line, sizeof line);
+    CHECK_STR(line,
+              "rd: in-between pictures for the screen's refresh: on (each picture drawn for the "
+              "refresh the screen is predicted to show it at); each picture drawn for the time "
+              "the screen will show it: its GPU end as predicted at the hand-over, plus the "
+              "latch fitted over the last 64 shown pictures' display times, rounded up to the "
+              "display's measured refresh grid (each refresh at its probability under the fit's "
+              "own spread); the lag to the content starts at the moment drawn otherwise and "
+              "moves at most 0.25 ms a picture to keep the last 64 inside their frame's tick; "
+              "never back; with no display times, stale ones, ones off one grid or a latch that "
+              "fits under 50 %, the moment drawn otherwise");
     (void)rd_pace_screen_start_text(false, false, "x", line, sizeof line);
     CHECK_STR(line, "rd: in-between pictures for the screen's refresh: not applicable here (x)");
     char small[8];
@@ -1623,22 +1644,77 @@ static void testLive(void)
     double would;
     (void)rd_pace_gpu_shift(1010.0, 1, &would);
     CHECK(rd_pace_gpu_clock_state() == 1);
-    /* a shown picture's time back: the row off by default; the value drawn
-       the one otherwise (too few shown pictures) */
+    /* a shown picture's time back: the row decided; the value drawn the one
+       otherwise (too few shown pictures) */
     const RdPaceScreenSample s = {1027.0, 6000.0, REP, 1027.0};
     rd_pace_screen_seen(&s);
     RdPaceScreenPlace o;
     const RdPaceScreenIn in = {1030.0, 1, 1010.0, TICK, 1060.0, 0.4, false, 0.0};
     rd_pace_screen_step(&in, &o);
     CHECK(o.how == RD_PS_FEW && o.raw == 0.4);
-    CHECK(ico_attempt_state_of(ICO_ATT_PACE_SCREEN) == ICO_ATT_OFF_DEFAULT);
-    CHECK(rd_pace_screen_on() == (RD_PACE_SCREEN_DEFAULT != 0));
+    /* the decision, pure: drawn by default on Android only (measured on
+       Android phones only), the tests' switch over it */
+    {
+        const char *why = NULL;
+        CHECK(rd_pace_screen_decide(-1, true, true, &why) &&
+              strcmp(why, "Android: each picture drawn for the refresh the screen is predicted "
+                          "to show it at (measured on Android phones only)") == 0);
+        CHECK(!rd_pace_screen_decide(-1, true, false, &why) &&
+              strcmp(why, "not Android: measured on Android phones only; computed and reported "
+                          "on the on-glass line as a what-if") == 0);
+        CHECK(!rd_pace_screen_decide(-1, false, true, &why) &&
+              strcmp(why, "RD_PACE_SCREEN_DEFAULT 0: computed and reported on the on-glass "
+                          "line") == 0);
+        CHECK(rd_pace_screen_decide(1, false, false, &why) &&
+              strcmp(why, "ICO_RD_PACE_SCREEN=1: the tests' switch") == 0);
+        CHECK(!rd_pace_screen_decide(0, true, true, &why) &&
+              strcmp(why, "ICO_RD_PACE_SCREEN=0: the tests' switch; computed and reported on "
+                          "the on-glass line") == 0);
+#ifdef __ANDROID__
+        const bool android = true;
+#else
+        const bool android = false;
+#endif
+        CHECK(rd_pace_screen_on() ==
+              rd_pace_screen_decide(-1, RD_PACE_SCREEN_DEFAULT != 0, android, &why));
+        CHECK(strcmp(rd_pace_screen_why(), why) == 0);
+    }
+    /* the row with the display's times and a slot clock: on where drawn,
+       off by default (computed and reported) elsewhere, with the words */
+    CHECK(ico_attempt_state_of(ICO_ATT_PACE_SCREEN) ==
+          (rd_pace_screen_on() ? ICO_ATT_ON : ICO_ATT_OFF_DEFAULT));
+    CHECK(strcmp(ico_attempt_why_of(ICO_ATT_PACE_SCREEN), rd_pace_screen_why()) == 0);
     RdPaceScreenWindow w;
     rd_pace_screen_take(&w);
     CHECK(w.how[RD_PS_FEW] == 1u);
     rd_pace_screen_paced();
     rd_pace_gpu_paced();
     CHECK(ico_attempt_state_of(ICO_ATT_PACE_SCREEN) == ICO_ATT_NA);
+    ico_attempt_reset();
+}
+
+/* the even cadence off (its default): nothing of it runs on the renderer's
+   side (no hold, no aim, no desired time, no clause on the on-glass line),
+   its row never on */
+static void testEvenOff(void)
+{
+    if (rd_pace_even_on()) {
+        printf(" the even cadence's off check skipped: it is on (the tests' switch)\n");
+        return;
+    }
+    ico_attempt_reset();
+    for (int i = 0; i < 64; i++) {
+        CHECK(rd_pace_even_hold_at(1000.0 + 16.0 * i, 20.0, TICK, 5.0) == 0.0);
+        double desired = -1.0;
+        CHECK(rd_pace_even_take_live(1040.0 + 16.0 * i, false, &desired) == 0.0 && desired == 0.0);
+        rd_pace_even_note_present(0.5, false);
+    }
+    RdPaceEvenWindow w;
+    rd_pace_even_take_window(&w);
+    char line[1536];
+    CHECK(!rd_pace_even_format(&w, line, sizeof line) && line[0] == '\0');
+    CHECK(ico_attempt_state_of(ICO_ATT_PACE_EVEN) != ICO_ATT_ON);
+    rd_pace_even_paced();
     ico_attempt_reset();
 }
 
@@ -1654,6 +1730,7 @@ int main(void)
     testFallbacks();
     testTexts();
     testLive();
+    testEvenOff();
     if (failures) {
         printf("rd_pace_screen_test: %d failures\n", failures);
         return 1;

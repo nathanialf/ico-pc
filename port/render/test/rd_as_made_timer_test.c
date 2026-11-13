@@ -6,7 +6,8 @@
  *   1. the timer's edges: its first picture on the hand-over rule's moment,
  *      a steady interval stepped exactly, a held picture's slot taken whole,
  *      the pull, an error over half a tick (a reset), the minimum step, the
- *      restarts, the switch;
+ *      restarts, the decision (on Android by default, the hand-over rule on a
+ *      desktop, the tests' switch over it) and the switch;
  *   2. 10 s simulations per regime (the window asks when the render thread
  *      is free, a further picture held when its reads would end past the
  *      next closing step, the GPU's start the later of the first submit and
@@ -92,11 +93,36 @@ static void testEdges(void)
     CHECK(o.reset && o.momentMs == 900.0);
     st(&t, 2100.0, 2100.0, 11, &o);
     CHECK(o.reset && o.momentMs == 2100.0);
-    /* the switch: the default off */
-    CHECK(rd_as_made_timer_on() ==
-          (getenv("ICO_RD_AS_MADE_TIMER") != NULL && getenv("ICO_RD_AS_MADE_TIMER")[0] != '\0'
-               ? getenv("ICO_RD_AS_MADE_TIMER")[0] != '0'
-               : RD_AS_MADE_TIMER_DEFAULT != 0));
+    /* the decision: the tests' switch over everything; the default on
+       Android only, a desktop the hand-over rule (v0.11.5's) */
+    {
+        const char *why = NULL;
+        CHECK(rd_as_made_timer_decide(-1, true, true, &why) &&
+              strcmp(why, "Android: each picture's moment from its own timer") == 0);
+        CHECK(!rd_as_made_timer_decide(-1, true, false, &why) &&
+              strcmp(why, "not Android: the hand-over rule kept, the timer measured on a phone "
+                          "only; computed and reported") == 0);
+        CHECK(!rd_as_made_timer_decide(-1, false, true, &why) &&
+              strcmp(why, "RD_AS_MADE_TIMER_DEFAULT 0: computed and reported") == 0);
+        CHECK(rd_as_made_timer_decide(1, false, false, &why) &&
+              strcmp(why, "ICO_RD_AS_MADE_TIMER=1: the tests' switch") == 0);
+        CHECK(!rd_as_made_timer_decide(0, true, true, &why) &&
+              strcmp(why, "ICO_RD_AS_MADE_TIMER=0: the tests' switch") == 0);
+    }
+    /* the switch: the decision with this build's platform */
+    {
+        const char *e = getenv("ICO_RD_AS_MADE_TIMER");
+        const int env = e != NULL && e[0] != '\0' ? (e[0] != '0' ? 1 : 0) : -1;
+#ifdef __ANDROID__
+        const bool android = true;
+#else
+        const bool android = false;
+#endif
+        const char *why = NULL;
+        CHECK(rd_as_made_timer_on() ==
+              rd_as_made_timer_decide(env, RD_AS_MADE_TIMER_DEFAULT != 0, android, &why));
+        CHECK(strcmp(rd_as_made_timer_why(), why) == 0);
+    }
 }
 
 /* ------------------------------------------------------------------- 2 */

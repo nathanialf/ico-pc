@@ -35,8 +35,10 @@
 #include <string.h>
 
 #include "attempt_ledger.h"
+#include "rd_as_made_timer.h"
 #include "rd_pace_gpu.h"
 #include "rd_pace_rules.h"
+#include "rd_pace_screen.h"
 #include "rd_rebase.h"
 
 static int failures;
@@ -795,23 +797,31 @@ static void testLive(void)
     ico_attempt_reset();
 }
 
-/* the default off, bit for bit: presentRebase's path (rd_thread.c) over a
-   cage-like run of hand-overs with the model and the timer computed: the
+/* the shipped defaults on a build that is not Android's (a desktop, a Mac
+   or an iPhone as made: vsync off, Uncapped), bit for bit: presentRebase's
+   path (rd_thread.c) over a cage-like run of hand-overs with the model, the
+   timer and the screen's rule computed (both drawn on Android only): the
    value drawn the hand-over rule's (rd_rebase_raw of the measured ask, as
-   v0.11.5) to the bit, the note's drawn rule the hand-over's */
-static void testOffBitIdentical(void)
+   v0.11.5) to the bit, the note's drawn rule the hand-over's.  times: the
+   display gives its times back (VK_GOOGLE_display_timing faked: each
+   picture shown at the first refresh of a 120 Hz grid at or after its
+   predicted GPU end + 2.5 ms, on a display clock 5123.456 ms off, its time
+   back three pictures later), so the screen's rule fits and places pictures
+   it does not draw */
+static void bitRun(bool times)
 {
-    if (getenv("ICO_RD_PACE_GPU") != NULL || getenv("ICO_RD_AS_MADE_TIMER") != NULL ||
-        getenv("ICO_RD_PACE_SCREEN") != NULL || getenv("ICO_RD_PACE_EVEN") != NULL) {
-        printf(" off-by-default check skipped: a tests' switch is set\n");
-        return;
-    }
     rd_pace_gpu_paced();
     rd_pace_rules_paced();
+    {
+        RdPaceScreenWindow w0;
+        rd_pace_screen_take(&w0); /* the sums before */
+    }
     RdRebase today, now;
     memset(&today, 0, sizeof today);
     memset(&now, 0, sizeof now);
-    const double T = 33.3667;
+    const double T = 33.3667, P = 1000.0 / 120.0, OFF = 5123.456;
+    RdPaceScreenSample late[3];
+    uint32_t lateN = 0;
     uint32_t seed = 5u;
     uint32_t same = 0, n = 0;
     for (uint32_t k = 0; k < 300; k++) {
@@ -825,6 +835,12 @@ static void testOffBitIdentical(void)
             const RdPaceGpuSample sm = {hand - 2.0 * 16.68, hand - 2.0 * 16.68 + 9.5, 15.0,
                                         hand - 2.0 * 16.68 + 27.0, true};
             rd_pace_gpu_measure(&sm);
+            if (times && lateN == 3u) {
+                rd_pace_screen_seen(&late[0]);
+                late[0] = late[1];
+                late[1] = late[2];
+                lateN = 2;
+            }
             double sh0, sh1, would = 0.0;
             bool h0, h1;
             const double atAsk = (ask - t0) / T;
@@ -839,12 +855,45 @@ static void testOffBitIdentical(void)
                         ? 1u
                         : 0u;
             n++;
+            if (times && note.screenEndMs > 0.0) {
+                const double shown = OFF + ceil((note.screenEndMs + 2.5) / P) * P;
+                late[lateN++] = (RdPaceScreenSample){note.screenEndMs, shown, 8.35, 0.0};
+            }
         }
     }
-    printf(" off by default: %u of %u values the hand-over rule's to the bit\n", same, n);
+    RdPaceScreenWindow w;
+    rd_pace_screen_take(&w);
+    printf(" the shipped defaults off Android (%s): %u of %u values the hand-over rule's to the "
+           "bit; the screen's rule placed %u, not drawn\n",
+           times ? "the display's times faked on" : "no display times", same, n,
+           (unsigned)w.how[RD_PS_PLACED]);
     CHECK(same == n && n == 600u);
+    if (times) {
+        /* the rule ran (fitted and placed) and the row says why it is not
+           drawn */
+        CHECK(w.how[RD_PS_PLACED] > 0u);
+        CHECK(ico_attempt_state_of(ICO_ATT_PACE_SCREEN) == ICO_ATT_OFF_DEFAULT &&
+              strstr(ico_attempt_why_of(ICO_ATT_PACE_SCREEN), "not Android") != NULL);
+    } else {
+        CHECK(w.how[RD_PS_PLACED] == 0u);
+    }
     rd_pace_gpu_paced();
     rd_pace_rules_paced();
+}
+
+static void testOffBitIdentical(void)
+{
+    if (getenv("ICO_RD_PACE_GPU") != NULL || getenv("ICO_RD_AS_MADE_TIMER") != NULL ||
+        getenv("ICO_RD_PACE_SCREEN") != NULL || getenv("ICO_RD_PACE_EVEN") != NULL) {
+        printf(" off-Android default check skipped: a tests' switch is set\n");
+        return;
+    }
+    if (rd_as_made_timer_on() || rd_pace_screen_on()) {
+        printf(" off-Android default check skipped: the build is Android's\n");
+        return;
+    }
+    bitRun(false);
+    bitRun(true);
 }
 
 int main(void)

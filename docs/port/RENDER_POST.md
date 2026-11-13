@@ -1185,13 +1185,22 @@ pass in each 10 s block ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-att
 Tests: `rd_smallcuts` (the turned rects against the table, the reasons) and `rd_turn_fold_ab` (the
 headless twin, every PNG byte for byte).
 
-### The VU record by compute on the PowerVR class (off by default until a phone rc)
+### The VU record by compute on the PowerVR D-Series DXT
 
 `[dev] vu_record = auto` takes the vertex shaders' stores wherever the device offers them
 (`port/render/rd_vu_record.c`), and the PowerVR phone offers both kinds of store (its start line), so its
 record is written by two render passes begun without an attachment. The class rule
 (`port/render/rd_vu_class.c`, `rd_vu_class.h`) writes it by compute dispatches instead on the PowerVR
-class under Vulkan where both are offered. Every other class keeps auto's order.
+class under Vulkan where both are offered, and by default only on the one PowerVR it ran on: the
+owner's phone's D-Series DXT-48-1536 (`rd__vu_class_measured`, the Vulkan device name), whose
+release candidate with it (and the screen's rule, the own timer and the no-volume break) was the
+fastest opening measured there, the picture judged right. The class is wider: every Imagination
+device under Vulkan, the B-Series (no `dualSrcBlend`, no GPU timestamps) and the older Rogue parts
+among them, none of which ran the compute record. The start-up self-test judges the record's bytes,
+but a device lost inside it on a driver never tried is not something a self-test can refuse, so the
+rest of the class keeps the vertex stores, off by default with that reason. With the compute record
+the index compaction runs there too ([PIPELINES.md](PIPELINES.md#the-index-compaction)). Every
+other class keeps auto's order.
 
 **What differs in the GPU's work on an opening picture**, from the code
 (`rd_replay_vu.c` `vuRecPassBegin`, `vuRecPassEnd`, `recDrawGap`; `vk_cmd.c` the store and compute
@@ -1206,7 +1215,8 @@ brackets):
 
 So the expected effect is the two passes' fixed cost, about 0.5 ms a picture at most (two small
 passes at about 0.27 ms each on this GPU; NEXT_CUTS's estimate), against any cost of compute work
-between graphics passes on this driver. Not measured on a device.
+between graphics passes on this driver. The release candidate measured the four defaults together,
+not this one alone.
 
 **The gates.** The start-up self-test judges the compute record as it judges any start mode
 (`rd_vuprepass_selftest.c`). A compute record that fails goes back to the vertex stores (the path
@@ -1214,13 +1224,14 @@ auto takes without the rule), not to the render targets; the ledger's row then s
 self-test`. `rd_vurecord_ab_compute_class` and `_opening` compare the two writes' targets byte for
 byte.
 
-**Switch and lines.** `RD_VU_COMPUTE_CLASS_DEFAULT` 0 in `rd_vu_class.h`; the tests'
-`ICO_RD_VU_COMPUTE_CLASS=1` takes the rule on any device that offers both stores, `0` keeps it off;
+**Switch and lines.** `RD_VU_COMPUTE_CLASS_DEFAULT` 1 in `rd_vu_class.h` (its reach
+`RD_VU_CLASS_MEASURED_NAME`); the tests' `ICO_RD_VU_COMPUTE_CLASS=1` takes the rule on any device
+that offers both stores, `0` keeps it off;
 a `[dev] vu_record` asked for by name always wins. Lines:
 
 ```
-rd: VU record: the PowerVR class's rule: the record as auto takes it (off by default until a phone rc shows the PowerVR phone's opening with it; RD_VU_COMPUTE_CLASS_DEFAULT 0)
-rd: VU record: the PowerVR class's rule: the compute dispatches in place of the vertex stores (the PowerVR class: compute dispatches in place of the vertex stores; RD_VU_COMPUTE_CLASS_DEFAULT 1)
+rd: VU record: the PowerVR class's rule: the compute dispatches in place of the vertex stores (the PowerVR D-Series DXT-48-1536: compute dispatches in place of the vertex stores; RD_VU_COMPUTE_CLASS_DEFAULT 1)
+rd: VU record: the PowerVR class's rule: the record as auto takes it (not the PowerVR D-Series DXT-48-1536 it was shown on: the vertex stores (its self-test judges the record's bytes, not a device lost on a driver not tried); RD_VU_COMPUTE_CLASS_DEFAULT 1)
 rd: VU record: stored by the vertex shaders into the frame slot's record buffer: no render targets, no copies (the PowerVR class's compute record off: they failed the start-up self-test)
 ```
 
@@ -1732,14 +1743,15 @@ holding zero) are kept with their textures; the next replay alone (the replay co
 own frame or other replay between) reads them, and only for a target no command before its window's
 resolve names (the scan marks it), whose texture is the same and still in SHADER_READ as the
 clear's pass left it. So on the title, picture after picture, the four small clears are not drawn
-either. `RD_NO_VOLUME_BREAK_DEFAULT` 0 in `port/render/rd_no_volume.c`: off on every device until
-a phone release candidate shows the PowerVR phone's title and pause menu clean with it (the open
-mode, its relative, flickered there); with the constant 1 its classes are the open mode's (the
-PowerVR class and MoltenVK under Vulkan, DATE through the stencil bit); it goes before the open
-mode. `ICO_RD_NO_VOLUME_BREAK=0|1` and `ICO_RD_NO_VOLUME_POISON=1` (the owed clears written
+either. `RD_NO_VOLUME_BREAK_DEFAULT` 1 in `port/render/rd_no_volume.c`: two phone release
+candidates showed the owner's PowerVR D-Series DXT-48-1536's title and pause menu clean with it (the
+open mode, its relative, had flickered there). Its classes are the open mode's (the PowerVR class
+and MoltenVK under Vulkan, DATE through the stencil bit), but the default reaches only that device
+(`rd__vu_class_measured`); the rest of the PowerVR class and MoltenVK never ran it and stay off by
+default, the ledger's row saying so. It goes before the open mode. `ICO_RD_NO_VOLUME_BREAK=0|1` and `ICO_RD_NO_VOLUME_POISON=1` (the owed clears written
 magenta, none left out: a reader of a target the walk does not draw shows) are the tests'
 switches ([TESTING.md](TESTING.md)). Its lines: once a renderer `rd: shadows: no volume: on with
-SCENE's pass ended at the resolve (ICO_RD_NO_VOLUME_BREAK=1 | the PowerVR or MoltenVK class,
+SCENE's pass ended at the resolve (ICO_RD_NO_VOLUME_BREAK=1 | the PowerVR D-Series DXT-48-1536,
 RD_NO_VOLUME_BREAK_DEFAULT 1): ...`; once `rd: shadows: no volume: frame F, the window at commands
 R..S has no volume: SCENE's pass ended at the resolve, its count (the reduced count) and levels
 owed as zero clears or holding zero already (...)`; the 10 s clause above ends `, B with SCENE's

@@ -22,7 +22,7 @@ static void decide(bool asMade)
         return;
     }
     s_state = st;
-    ico_attempt_decide_as_made_timer(st, rd_as_made_timer_on() ? 1 : 0);
+    ico_attempt_decide_as_made_timer(st, rd_as_made_timer_on() ? 1 : 0, rd_as_made_timer_why());
     const uint32_t k = s_changes++;
     if (asMade && (k < 8u || k % 100u == 0u)) {
         fprintf(stderr,
@@ -30,7 +30,8 @@ static void decide(bool asMade)
                 "one before plus the mean hand-over interval over the last %.0f ticks, pulled "
                 "%.2f of the way to the hand-over rule's moment, a held picture's slot taken "
                 "whole, a lead kept for a tick's first picture after the close, held inside the "
-                "frame's tick; picture by picture the three rules go to the on-glass line\n",
+                "frame's tick; where on, drawn for the pictures the screen's rule does not place; "
+                "picture by picture the rules go to the on-glass line\n",
                 rd_as_made_timer_on() ? "on" : "off by default",
                 ico_attempt_why_of(ICO_ATT_AS_MADE_TIMER), RD_AMT_WINDOW_TICKS, RD_AMT_GAIN);
     }

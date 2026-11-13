@@ -1,8 +1,12 @@
 /* rd_as_made_timer.h: an own timer for the moment of each picture made as
  * fast as the GPU allows (rd_as_made_timer.c; docs/port/DISPLAY.md "The
- * alpha").  A variant: off by default (RD_AS_MADE_TIMER_DEFAULT 0, the
- * tests' switch ICO_RD_AS_MADE_TIMER=1), computed beside the drawn rule at
- * every picture as made so the on-glass line can compare it.
+ * alpha").  Computed beside the drawn rule at every picture as made so the
+ * on-glass line can compare it; drawn (as the moment the screen's rule falls
+ * back to, rd_pace_screen.h) on Android only (RD_AS_MADE_TIMER_DEFAULT 1,
+ * rd_as_made_timer_decide: the release candidates measured it on the owner's
+ * phone, steadier there than the hand-over rule, and nowhere else; a desktop
+ * keeps v0.11.5's hand-over rule to the bit), the tests' switch
+ * ICO_RD_AS_MADE_TIMER=0/1 over it on every platform.
  *
  * Why not the present clock: the present clock (rd_present_clock.c) steps
  * each present by the running mean of the present intervals and pulls an
@@ -32,8 +36,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/* 1: drawn on Android (rd_as_made_timer_decide), 0: drawn nowhere */
 #ifndef RD_AS_MADE_TIMER_DEFAULT
-#define RD_AS_MADE_TIMER_DEFAULT 0
+#define RD_AS_MADE_TIMER_DEFAULT 1
 #endif
 
 #define RD_AMT_WINDOW_TICKS 2.0
@@ -76,8 +81,15 @@ void rd_as_made_timer_reset(RdAsMadeTimer *t);
 void rd_as_made_timer_step(RdAsMadeTimer *t, double targetMs, double handMs, uint32_t frame,
                            double tickAtMs, double tickMs, RdAsMadeTimerOut *out);
 
-/* the switch: RD_AS_MADE_TIMER_DEFAULT, ICO_RD_AS_MADE_TIMER=0/1 over it
-   (read once) */
+/* the decision, pure: env the tests' switch (ICO_RD_AS_MADE_TIMER: -1
+   unset, 0, 1), defaultOn RD_AS_MADE_TIMER_DEFAULT, android the build is
+   Android's.  True where the timer's moment is drawn; *why (never NULL) the
+   reason in words, for the start line and the attempt ledger's row */
+bool rd_as_made_timer_decide(int env, bool defaultOn, bool android, const char **why);
+
+/* the switch: rd_as_made_timer_decide with ICO_RD_AS_MADE_TIMER, the
+   define and the platform (read once); rd_as_made_timer_why its words */
 bool rd_as_made_timer_on(void);
+const char *rd_as_made_timer_why(void);
 
 #endif

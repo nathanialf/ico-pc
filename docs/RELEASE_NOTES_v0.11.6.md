@@ -11,6 +11,8 @@
 - With Vulkan, the glow around lamps and the sun is added to the picture by a smaller graphics program made for that one step, once the game has checked at start that the picture comes out exactly the same.
 - With Vulkan, the shapes that mark where shadows fall are drawn by a graphics program that does no colour work at all, so the graphics chip can mark them before it paints anything, once the game has checked at start that the shadows come out exactly the same.
 - With Vulkan, shadows are laid over the scenery by a smaller graphics program made for that one step, once the game has checked at start that the picture comes out exactly the same.
+- With Frame rate set to Uncapped on Android phones, motion is steadier: each in-between picture is drawn for the moment the screen will actually show it, where the phone reports when its pictures reach the screen.
+- On phones with the PowerVR DXT graphics chip (the Google Pixel 10 Pro Fold among them), the opening and the lamp-lit scenes run faster: the 3D scenery is prepared by a quicker kind of graphics step, and pictures with no shadow in them, such as the title and the pause menu, skip the whole shadow step (the picture is exactly the same).
 
 ## Fixed
 
