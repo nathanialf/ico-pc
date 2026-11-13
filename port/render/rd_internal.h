@@ -1594,6 +1594,7 @@ typedef enum RdFsId {
      * alone, made, named and destroyed by their own file (g_rd.fs and its
      * twins' arrays hold RD_FS_SLOTS) */
     RD_FS_FX_PASTE = RD_FS_COUNT, /* fx_paste_ps: the glow's paste (rd_paste_spec.h) */
+    RD_FS_SPRITE_COMP, /* sprite_comp_ps: the shadow composites and levels (rd_comp_spec.h) */
     RD_FS_SLOTS
 } RdFsId;
 

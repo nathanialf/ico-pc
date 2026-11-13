@@ -12,7 +12,10 @@
  *   - a list's mask takes that list's actions and none of its state;
  *   - the baseline's mask makes the lists whole again;
  *   - rd_bench_variants without a device: the baseline, each list with an
- *     action, each class with a command, in the table's order, no switch.
+ *     action, each class with a command, in the table's order, no switch
+ *     (the shadow chain's draw-at-a-time rows after the levels': the count's
+ *     draw, the level the frame has, SHADOW0, and its composite's source,
+ *     SHADOW2).
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -95,13 +98,13 @@ int main(void)
         {3, RDC_TARGET, TEMP_COUNT, scene, 0, 0},
         {3, RDC_SHADOW_RESET, 0, 0, 0, ACT | B(WINDOW)},
         {3, RDC_SHADOW_STRIP, 0, 0, 0, ACT | B(VOLUMES)},
-        {3, RDC_SHADOW_RESOLVE, 0, 0, 0, ACT | B(WINDOW)},
+        {3, RDC_SHADOW_RESOLVE, 0, 0, 0, ACT | B(WINDOW) | B(RESOLVE)},
         {3, RDC_TARGET, 0, 0, 0, 0}, /* SHADOW0 below */
         {3, RDC_TEXTURE, TEX_SHADOW2, 0, 0, 0},
-        {3, RDC_SCREEN, 0, 0, 0, ACT | B(LEVELS)},
+        {3, RDC_SCREEN, 0, 0, 0, ACT | B(LEVELS) | B(LEVEL0)},
         {3, RDC_TARGET, scene, scene, 0, 0},
         {3, RDC_TEXTURE, TEX_SHADOW2, 0, 0, 0},
-        {3, RDC_SCREEN, 0, 0, 0, ACT | B(COMPOSITES)},
+        {3, RDC_SCREEN, 0, 0, 0, ACT | B(COMPOSITES) | B(COMP2)},
         {4, RDC_TEXTURE_OFF, 0, 0, 0, 0},
         {4, RDC_POST_STUB, 0, 0, RD_POST_FOG, ACT | B(FOG)},
         {4, RDC_SCREEN, 0, 0, 0, ACT | B(FOG)},
@@ -257,6 +260,9 @@ int main(void)
             "without the shadow volumes' draws",
             "without the shadow window (reset, volumes, count, levels)",
             "without the shadow levels",
+            "without the shadow count's draw (the levels read the count as it was)",
+            "without the shadow level SHADOW0",
+            "without the shadow composite of SHADOW2 (the first)",
             "without the shadow composites",
             "without the fog (and the crack fill it arms)",
             "without the lamps' set-up (WORK2's clears, the depth fill)",

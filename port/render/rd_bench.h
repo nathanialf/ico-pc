@@ -59,6 +59,17 @@ enum {
     RD_BENCH_C_SOFTEN,
     RD_BENCH_C_L0_ALPHA, /* list 0's VU draws with the alpha test or blending on */
     RD_BENCH_C_L0_LARGE, /* list 0's mesh draws whose screen box covers over a quarter */
+    /* the shadow chain one draw at a time (rows only, not in the parts' sum):
+     * the count's draw alone (RDC_SHADOW_RESOLVE, also in WINDOW), each level
+     * by its destination (also in LEVELS), each composite by its source
+     * (also in COMPOSITES) */
+    RD_BENCH_C_RESOLVE,
+    RD_BENCH_C_LEVEL0,
+    RD_BENCH_C_LEVEL1,
+    RD_BENCH_C_LEVEL2,
+    RD_BENCH_C_COMP0,
+    RD_BENCH_C_COMP1,
+    RD_BENCH_C_COMP2,
     RD_BENCH_C_COUNT
 };
 
@@ -103,6 +114,11 @@ enum {
     RD_BENCH_S_NO_CRACK,   /* the crack fill off (a knock-out) */
     RD_BENCH_S_VOLUME_FS,  /* the volumes' stencil-only entry (rd_volume_fs.c), the other way */
     RD_BENCH_S_PASTE_SPEC, /* the glow's paste by its own entry (rd_paste_spec.c), the other way */
+    RD_BENCH_S_COMP_SPEC,  /* the shadow composites' own entry (rd_comp_spec.c), the other way */
+    RD_BENCH_S_NO_DATE_SETUP, /* DATE's stencil set-ups not drawn (rd_comp_spec.c's force,
+                                 rd_replay_tiler.c): each DATE draw tests the bit as it was */
+    RD_BENCH_S_NO_BOX,        /* the shadow box off (rd_shadow_box.c's force): the count and
+                                 the composites drawn whole, no empty composite skipped */
     RD_BENCH_S_COUNT
 };
 
@@ -165,5 +181,12 @@ int rd__no_volume_bench_mode(void);
 /* rd_crack_fill.c: the fill's switch as it stands, and back to it */
 uint32_t rd__crack_fill_bench_save(void);
 void rd__crack_fill_bench_restore(uint32_t saved);
+/* rd_shadow_box.c: the box as if ICO_RD_SHADOW_BOX were 0 (1), the
+ * environment's again (-1) */
+void rd__shadow_box_bench_force(int off);
+/* rd_comp_spec.c: DATE's stencil set-ups left out (1) or drawn (0); read by
+ * rd_replay_tiler.c rd__replay_date_take (the bench's alone) */
+void rd__date_setup_bench_skip(int skip);
+bool rd__date_setup_bench_skipped(void);
 
 #endif /* ICO_RD_BENCH_H */

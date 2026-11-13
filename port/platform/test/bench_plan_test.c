@@ -249,14 +249,55 @@ static void testResults(void)
                        "17.000,17.000,17.000,3,6.000,-2.500,-2.500,-2.500,1,1.000,lamps,1,3,0,1,"
                        "0,1") == 0,
           "csv row: %s", line);
+    /* the GPU stamps: none timed is not known, not "no" (the head line is
+       written after the run) */
+    ico_bench_head_line(line, sizeof(line), &run, 1500, 9000, "mailbox", 0);
+    CHECK(strstr(line, "; GPU stamps no") != NULL, "head without stamps: %s", line);
+    ico_bench_head_line(line, sizeof(line), &run, 1500, 9000, "mailbox", -1);
+    CHECK(strstr(line, "; GPU stamps not known (no replay was timed)") != NULL,
+          "head with nothing timed: %s", line);
     /* a cut buffer stays terminated */
     char small[16];
     ico_bench_variant_line(small, sizeof(small), &run, 1, &res[1]);
     CHECK(strlen(small) < sizeof(small), "a short buffer");
 }
 
+/* the skip (the phone's pause bench "skipped by a tap" 0.2-0.3 s in: the
+   touch that opened the pause): only a new press at least the guard after
+   the start skips; one from before it, inside the guard, a key's repeat or
+   one with no moment is passed over */
+static void testSkip(void)
+{
+    const uint64_t start = 5000000000ull, g = ICO_BENCH_SKIP_GUARD_NS;
+    CHECK(g == 500000000ull, "the guard is half a second");
+    CHECK(ico_bench_input_verdict(start - 1, start, 0) == ICO_BENCH_INPUT_BEFORE, "before");
+    CHECK(ico_bench_input_verdict(start - 300000000ull, start, 0) == ICO_BENCH_INPUT_BEFORE,
+          "the pause's own touch, 0.3 s before");
+    CHECK(ico_bench_input_verdict(0, start, 0) == ICO_BENCH_INPUT_BEFORE, "no moment");
+    CHECK(ico_bench_input_verdict(start, start, 0) == ICO_BENCH_INPUT_GUARD, "at the start");
+    CHECK(ico_bench_input_verdict(start + 200000000ull, start, 0) == ICO_BENCH_INPUT_GUARD,
+          "0.2 s in (the phone's)");
+    CHECK(ico_bench_input_verdict(start + g - 1, start, 0) == ICO_BENCH_INPUT_GUARD,
+          "just inside the guard");
+    CHECK(ico_bench_input_verdict(start + g, start, 0) == ICO_BENCH_INPUT_SKIPS, "at the guard");
+    CHECK(ico_bench_input_verdict(start + 9000000000ull, start, 0) == ICO_BENCH_INPUT_SKIPS,
+          "a new press");
+    CHECK(ico_bench_input_verdict(start + 9000000000ull, start, 1) == ICO_BENCH_INPUT_REPEAT,
+          "a held key's repeat, however late");
+    CHECK(strcmp(ico_bench_input_words(ICO_BENCH_INPUT_SKIPS), "a new press") == 0, "words");
+    CHECK(strcmp(ico_bench_input_words(ICO_BENCH_INPUT_BEFORE), "from before the bench") == 0,
+          "words before");
+    CHECK(strcmp(ico_bench_input_words(ICO_BENCH_INPUT_GUARD), "inside the bench's first 0.5 s") ==
+              0,
+          "words guard");
+    CHECK(strcmp(ico_bench_input_words(ICO_BENCH_INPUT_REPEAT), "a held key's repeat") == 0,
+          "words repeat");
+    CHECK(strcmp(ico_bench_input_words(7), "?") == 0, "words unknown");
+}
+
 int main(void)
 {
+    testSkip();
     testPick();
     testSchedule();
     testK();

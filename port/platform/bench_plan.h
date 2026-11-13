@@ -53,6 +53,29 @@
 #define ICO_BENCH_FRAMES 5
 #define ICO_BENCH_FRAME_BYTES (64u << 20)
 
+/* ------------------------------------------------------------ the skip */
+
+/* A tap skips the rest of the bench only when it is a new touch: an input
+   whose own moment (SDL's event timestamp) is at least ICO_BENCH_SKIP_GUARD_NS
+   after the bench began.  The pause the bench runs at on a phone is itself
+   made by a touch on the on-screen control (the phone's pause bench ended
+   "skipped by a tap" 0.2-0.3 s in, nothing timed); that touch, its release or a key repeat
+   held from before must never end it.  The verdicts: */
+#define ICO_BENCH_SKIP_GUARD_NS 500000000ull
+
+enum {
+    ICO_BENCH_INPUT_SKIPS = 1,  /* a new press: the bench skips the rest */
+    ICO_BENCH_INPUT_BEFORE = 0, /* from before the bench (or no moment): passed over */
+    ICO_BENCH_INPUT_GUARD = -1, /* inside the guard after its start: passed over */
+    ICO_BENCH_INPUT_REPEAT = -2 /* a held key's repeat: passed over */
+};
+
+/* the verdict on an input of moment eventNs (0: unknown) for a bench that
+   began at startNs (the same clock), repeat a key repeat */
+int ico_bench_input_verdict(uint64_t eventNs, uint64_t startNs, int repeat);
+/* the verdict's words ("a new press", "from before the bench", ...) */
+const char *ico_bench_input_words(int verdict);
+
 /* ------------------------------------------------------------ the picks */
 
 /* the frames' kinds: four moments of the opening and the paused picture */
@@ -193,6 +216,10 @@ int ico_bench_variants_ran(const IcoBenchResult *res, int n);
    head      "bench: frame F of N: <kind> (frame number, C commands, B KB):
              V variants, R rounds of W warm-up and K timed replays each, a
              baseline after every E; present mode P; GPU stamps yes/no"
+             (gpuStamps 1 yes: the baseline's timed replays hold GPU times;
+             0 no: they were timed without; -1 "not known (no replay was
+             timed)": the run ended before any timed replay, the line is
+             written after the run)
    variant   "bench: frame F | <name> | P passes, D draws, T triangles |
              picture M ms (Q1-Q3, n N) | GPU G ms (Q1-Q3) | wait W ms | +D
              ms against the baselines (rounds +A to +B) | removed C | cuts:

@@ -551,6 +551,7 @@
 #include "rd_glow_blur.h"        /* --stats: the glow blur in two passes */
 #include "rd_paste_spec.h"       /* --stats: the glow's paste by its own entry */
 #include "rd_volume_fs.h"        /* --stats: the shadow volumes' stencil-only entry */
+#include "rd_comp_spec.h"        /* --stats: the shadow composites' own entry */
 #include "rd_turn_fold.h"        /* the turn in the present's blit's self-test */
 #include "rd_fill11.h"           /* --stats: the crack fill in list 11's pass */
 #include "rd_present_scene.h"    /* --stats: the present from SCENE */
@@ -2776,6 +2777,12 @@ int main(int argc, char **argv)
         if (getenv("ICO_RD_VOLUME_FS") != NULL) {
             (void)rd__volume_fs_selftest();
         }
+        /* the shadow composites' own entry where ICO_RD_COMP_SPEC asks
+         * (rd_comp_spec.c: the game runs it with rd_fog_selftest; its two
+         * replays on SCENE are left out of every other test's run) */
+        if (getenv("ICO_RD_COMP_SPEC") != NULL) {
+            (void)rd__comp_spec_selftest();
+        }
     }
     if (!noDevice && getenv("ICO_RD_EARLY_PREPARE") != NULL &&
         strcmp(getenv("ICO_RD_EARLY_PREPARE"), "1") == 0) {
@@ -3422,6 +3429,24 @@ int main(int argc, char **argv)
                    (unsigned long long)vs, vt < vs ? ", last kept on sprite_ps: " : "",
                    vt < vs ? rd__volume_fs_why_text(vw) : "");
         }
+        /* the shadow composites and levels by their own entry
+         * (rd_comp_spec.c): this replay's draws of the two forms by
+         * sprite_comp_ps of those seen; the run's, and the last reason one
+         * kept sprite_ps */
+        {
+            uint64_t ct = 0, cs = 0;
+            int cw = 0;
+            uint32_t rt = 0, rs = 0;
+            const char *ctw = NULL;
+            rd__comp_spec_counts(&ct, &cs, &cw);
+            rd__comp_spec_replay(&rt, &rs);
+            (void)rd__comp_spec_test_state(&ctw);
+            printf("%s: stats: comp spec %s (self-test %s): %u composites and levels by "
+                   "sprite_comp_ps of %u; the run: %llu of %llu%s%s\n",
+                   dump, rd__comp_spec_on() ? "on" : "off", ctw, rt, rs, (unsigned long long)ct,
+                   (unsigned long long)cs, ct < cs ? ", last kept on sprite_ps: " : "",
+                   ct < cs ? rd__comp_spec_why_text(cw) : "");
+        }
         /* the aura's paste as the alpha alone (rd_aura_paste.c) */
         printf("%s: stats: aura paste %s: %u split (%u rows as the alpha alone, %u band rows), %u "
                "drawn whole%s%s%s\n",
@@ -3714,6 +3739,9 @@ int main(int argc, char **argv)
             (void)rd__turn_fold_selftest();  /* the new renderer's (rd_turn_fold.c) */
             if (getenv("ICO_RD_VOLUME_FS") != NULL) {
                 (void)rd__volume_fs_selftest(); /* the new renderer's (rd_volume_fs.c) */
+            }
+            if (getenv("ICO_RD_COMP_SPEC") != NULL) {
+                (void)rd__comp_spec_selftest(); /* the new renderer's (rd_comp_spec.c) */
             }
             if (overlay) {
                 rd_set_present_overlay(overlayTest, NULL);

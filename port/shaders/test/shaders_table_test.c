@@ -61,11 +61,12 @@ static const char *const expectedTiler[] = {"date_clear_ps",    "date_stencil_ps
  * (ICO_VU_NO_PLANES, with their two-pass twins, and vu_np_ps's attachment
  * read twin for GS state as shader data, port/render/rd_uber.c) and
  * fx_sprite_ps's frame-size and local-read forms (ICO_FX_FRAME,
- * ICO_FX_DST_LOCAL), and fx_frame_ps for the glow's paste alone (ICO_FX_PASTE;
- * port/render/rd_paste_spec.c) */
+ * ICO_FX_DST_LOCAL), fx_frame_ps for the glow's paste alone (ICO_FX_PASTE;
+ * port/render/rd_paste_spec.c) and sprite_ps for the shadow composites and
+ * levels alone (ICO_SPRITE_COMP; port/render/rd_comp_spec.c) */
 static const char *const expectedDiet[] = {
-    "vu_np_ps",    "vu_np_ps_nodual", "vu_texa_np_ps",   "vu_texa_np_ps_nodual",
-    "fx_frame_ps", "fx_local_ps",     "vu_np_ps_dstatt", "fx_paste_ps"};
+    "vu_np_ps",    "vu_np_ps_nodual", "vu_texa_np_ps", "vu_texa_np_ps_nodual", "fx_frame_ps",
+    "fx_local_ps", "vu_np_ps_dstatt", "fx_paste_ps",   "sprite_comp_ps"};
 
 /* Motion blur: Smooth's accumulator (fx_sprite.hlsl; port/render/rd_blur_smooth.c) */
 static const char *const expectedSmooth[] = {"fx_acc_ps", "fx_acc_resolve_ps"};

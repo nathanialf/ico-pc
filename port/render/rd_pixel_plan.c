@@ -50,6 +50,7 @@
 #include <math.h>
 
 #include "rd_replay.h"
+#include "rd_comp_spec.h" /* the composites' own entry, noted at the DrawCB */
 
 static bool wholeScale(float s)
 {
@@ -134,4 +135,9 @@ void rd__fill_draw_cb_extra(const Replay *r, const RdDrawPass *dp, const DrawSet
     }
     /* the reduction's hardware sprite above 1x with the fades fold */
     rd__fades_fold_screen(r, dp, ds, cb);
+    /* the shadow composites and levels by their own entry (rd_comp_spec.c):
+     * the DrawCB is final here; the run's draw binds the twin */
+    if (dp) {
+        rd__comp_spec_note(&dp->key, cb);
+    }
 }

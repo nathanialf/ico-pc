@@ -57,6 +57,12 @@ static char s_text[2][192];
 static volatile int s_textAt;
 static const char *s_stopWhy;
 static int s_background; /* the stop was the app going to the background (its lifecycle's) */
+/* the skip's rule (bench_plan.h ico_bench_input_verdict): the run's start,
+   the inputs passed over and the first of them, the press that skipped */
+static Uint64 s_benchStart;
+static int s_passedOver;
+static char s_passedFirst[128];
+static char s_skipWhy[128];
 
 static int in_opening(void)
 {
@@ -205,9 +211,33 @@ static void bench_csv(void *user, const char *text)
     }
 }
 
+static const char *input_name(Uint32 type)
+{
+    switch (type) {
+    case SDL_EVENT_FINGER_DOWN:
+        return "a finger down";
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        return "a mouse button";
+    case SDL_EVENT_KEY_DOWN:
+        return "a key";
+    default:
+        return "a pad button";
+    }
+}
+
+/* the input's moment against the run's start, in seconds (negative: before) */
+static double input_age(Uint64 ts)
+{
+    return ts >= s_benchStart ? (double)(ts - s_benchStart) / 1e9
+                              : -(double)(s_benchStart - ts) / 1e9;
+}
+
 /* between replays: the app leaving stops the bench with its events left
-   queued for the pump; a tap, a key or a button press (taken) skips the
-   rest; the moves are dropped so the queue does not fill */
+   queued for the pump; a new tap, key or button press (taken) skips the
+   rest, one from before the bench or inside its first half second (the
+   touch that opened the pause, its key's repeat) is taken and passed over
+   (bench_plan.h ico_bench_input_verdict); the moves are dropped so the
+   queue does not fill */
 static int bench_poll(void *user)
 {
     static const Uint32 k_leave[] = {SDL_EVENT_QUIT,
@@ -240,7 +270,22 @@ static int bench_poll(void *user)
     }
     for (size_t i = 0; i < sizeof(k_down) / sizeof(k_down[0]); i++) {
         while (SDL_PeepEvents(&e, 1, SDL_GETEVENT, k_down[i], k_down[i]) == 1) {
-            tap = 1;
+            const int repeat = k_down[i] == SDL_EVENT_KEY_DOWN && e.key.repeat;
+            const int v = ico_bench_input_verdict(e.common.timestamp, s_benchStart, repeat);
+
+            if (v == ICO_BENCH_INPUT_SKIPS) {
+                if (!tap) {
+                    snprintf(s_skipWhy, sizeof(s_skipWhy), "a tap: %s %.2f s after the start",
+                             input_name(k_down[i]), input_age(e.common.timestamp));
+                }
+                tap = 1;
+            } else {
+                if (s_passedOver++ == 0) {
+                    snprintf(s_passedFirst, sizeof(s_passedFirst), "%s %s, %.2f s from the start",
+                             input_name(k_down[i]), ico_bench_input_words(v),
+                             input_age(e.common.timestamp));
+                }
+            }
         }
     }
     SDL_FlushEvent(SDL_EVENT_FINGER_MOTION);
@@ -248,7 +293,7 @@ static int bench_poll(void *user)
     SDL_FlushEvent(SDL_EVENT_GAMEPAD_AXIS_MOTION);
     SDL_FlushEvent(SDL_EVENT_JOYSTICK_AXIS_MOTION);
     if (tap) {
-        s_stopWhy = "a tap";
+        s_stopWhy = s_skipWhy;
         return RD_BENCH_SKIPPED;
     }
     return 0;
@@ -313,6 +358,10 @@ static void run(const char *where)
     ico_audio_sdl_pause(1);
     s_stopWhy = NULL;
     s_background = 0;
+    s_benchStart = SDL_GetTicksNS(); /* a press after this and the guard skips the rest */
+    s_passedOver = 0;
+    s_passedFirst[0] = '\0';
+    snprintf(s_skipWhy, sizeof(s_skipWhy), "a tap");
     bench_status(NULL, "getting ready");
     prev = rd_get_present_overlay(&prevUser);
     prevTop = rd_get_present_overlay_top(&prevTopUser);
@@ -363,6 +412,13 @@ static void run(const char *where)
                 s_stopWhy != NULL ? s_stopWhy : "", (double)dt / 1e9, framesRun, count, out.ran,
                 out.variants, s_csvName[0] ? "the tables in " : "no CSV",
                 s_csvName[0] ? s_csvName : "");
+        if (s_passedOver > 0) {
+            fprintf(stderr,
+                    "window: bench: %d press%s passed over, not taken as a skip (the first: %s; "
+                    "a skip is a new press %.1f s or more after the start)\n",
+                    s_passedOver, s_passedOver == 1 ? "" : "es", s_passedFirst,
+                    (double)ICO_BENCH_SKIP_GUARD_NS / 1e9);
+        }
     }
     for (int i = first; i < first + count; i++) {
         free((void *)s_kept[i].bytes);

@@ -988,6 +988,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   texel, no paste by it, the same bytes. `_gl` (label gl): the lamps list on OpenGL: off (the module
   is Vulkan's alone), the same bytes.
 - `rd_volume_fs_test.c` (`rd_volume_fs`; `rd_volume_fs.cmake`, CPU): the shadow volumes' stencil-only entry (`rd_volume_fs.c`): the gate's reasons in order, the `date_clear_ps` twin (the fragment entry alone differs), the volume key without a device (`sprite_ps`, seen, none taken), no twin in the start-up set there, `ICO_RD_VOLUME_FS`'s words, the bench's force, the ledger's row.
+- `rd_comp_spec_test.c` (`rd_comp_spec`; `rd_comp_spec.cmake`, CPU): the composites' own entry (`rd_comp_spec.c`): the planner's composite and level keys take their forms, each held field refused alone; the DrawCB's flags (each one `sprite_ps` reads refused, the others taken, the TEXA word); the twin; no device: seen, kept, none taken, no twin; the words; the ledger.
+- `rd_comp_spec_ab.cmake` (`rd_comp_spec_ab`, `rd_comp_spec_sabotage`; `rd_comp_spec.cmake`): the lists of `rd_volume_fs_ab` and `glow_light_dumps.txt`, `ICO_RD_COMP_SPEC=0` against `=1` at the phone's setting and Enhanced 2x 16:9, the first list at the Mali class (off) and MSAA 4x: every PNG, draws, passes and traffic the same, arm 1 on, a draw by it on each volume dump at the phone. `rd_comp_spec_selftest`, `_selftest_sabotage`: as the volumes'.
 - `rd_volume_fs_ab.cmake` (`rd_volume_fs_ab`, `rd_volume_fs_sabotage`; `rd_volume_fs.cmake`): every dump of `tools/shadow_cuts_dumps.txt`, `date_cut_dumps.txt`, `shadow_box_dumps.txt`, `no_volume_dumps.txt` and `lamps_dumps.txt` (an absent one FAILS), `ICO_RD_VOLUME_FS=0` against `=1` at the phone's setting, Enhanced 2x 16:9, the Mali class at 1x and MSAA 4x at 2x: every PNG, the draws, passes and traffic the same, arm 1's self-test passed, every single-sampled volume draw by `date_clear_ps`. `_sabotage`: the phone's setting: refused, the same bytes. `rd_volume_fs_selftest` and `_selftest_sabotage` (`test/rd_shadow_selftest.cmake` through `rd_fog_selftest_test`): the device self-test's passed line and the entry on; sabotaged, the Z ALWAYS frame differs and it stays off.
 - `rd_vu_compact_test.c` (`rd_vu_compact`; `rd_vu_compact.cmake`, CPU): the index compaction's pure
   parts (`rd_vu_compact.c`): the plan's places (two calls one after the other in the plane, their
@@ -1061,7 +1063,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   by hand (a command of every class, list by list): `rd_bench_classify` against the test's table,
   each class's mask making NOPs of exactly its commands, list 7's mask its seven actions and none of
   its state, the baseline's mask the lists whole again, and `rd_bench_variants` without a device
-  (the baseline, the six lists, the parts in order, no switch).
+  (the baseline, the six lists, the parts in order with the shadow chain's count, level and
+  composite rows, no switch).
 - `rd_bench_ab.cmake` (`rd_bench_ab`; `rd_bench.cmake`): `rd_replay_tool --bench 1` on lavapipe over
   rd_pixel's dump (640x480) and the machine-local `tools/bench_dumps.txt` (the Pixel's v746 and
   v2278 at the phone's setting; a listed dump that is absent FAILS where `/primary/dev/ico-dumps`

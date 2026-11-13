@@ -714,8 +714,9 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   the baseline alone; the bounds), K from a picture time (the most, cut, the least), the type 7
   quantiles, a frame's results over made-up samples (the deltas against the bracketing baselines,
   an excluded sample left out, the baseline over both its blocks, the drift), the ranking, and the
-  head, variant, drift, ranking and sum lines and the CSV row word for word, a short buffer cut
-  (`bench_plan`).
+  head, variant, drift, ranking and sum lines and the CSV row word for word (the GPU stamps no and
+  not known), a short buffer cut, and the skip's verdicts (a press before the start, inside its
+  first half second or a key's repeat passed over; one at the guard or later skips) (`bench_plan`).
 - `backup_test.c`: Options > Extras' backup and restore (`backup.h`) on a user folder of its own
   under the build folder: the names a backup may hold (no `..`, no absolute or drive path, no `\`,
   no empty part, the places only); a backup holding the card folders, `states/`, `config.toml`,

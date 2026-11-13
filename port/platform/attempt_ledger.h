@@ -132,6 +132,11 @@ enum {
        self-test; count the volume draws by it, second count the volume
        draws that kept sprite_ps where it is offered */
     ICO_ATT_VOLUME_FS,
+    /* rd_comp_spec.c: the shadow composites and levels drawn by their own
+       entry (sprite_comp_ps, sprite_ps's path for them alone) behind its
+       start-up self-test; count the draws by it, second count the draws of
+       their forms that kept sprite_ps where it is offered */
+    ICO_ATT_COMP_SPEC,
     ICO_ATT_COUNT
 };
 
@@ -272,5 +277,14 @@ int ico_attempt_decide_paste_spec(int module, int env, int defaultOn, int selfte
    selftest its start-up self-test (-1 not run, 0 failed, 1 passed).  1 when
    the volumes may take it (each draw still passes its gate), else 0 */
 int ico_attempt_decide_volume_fs(int module, int env, int defaultOn, int selftest);
+/* the shadow composites' and levels' own entry (rd_comp_spec.c, at start-up
+   and after its self-test): module sprite_comp_ps was made (Vulkan; 0 on the
+   other backends), device the dual-source fixed-function blend (0: the
+   two-pass blend or the exact blend keep sprite_ps), env the tests' switch
+   (ICO_RD_COMP_SPEC: -1 unset, 0, 1; its sabotage counts as 1), defaultOn
+   RD_COMP_SPEC_DEFAULT, selftest its start-up self-test (-1 not run, 0
+   failed, 1 passed).  1 when the draws may take it (each still passes its
+   gate), else 0 */
+int ico_attempt_decide_comp_spec(int module, int device, int env, int defaultOn, int selftest);
 
 #endif

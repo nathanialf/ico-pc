@@ -13,6 +13,7 @@
 #include "rd_date_one.h"
 #include "rd_lamps.h"
 #include "rd_mesh.h"
+#include "rd_comp_spec.h"
 #include "rd_paste_spec.h"
 #include "rd_present_scene.h"
 #include "rd_vis.h"
@@ -88,6 +89,13 @@ static bool isShadowLevel(uint32_t t)
                  t == tid(RD_TARGET_SHADOW2));
 }
 
+/* the class of level t alone (first: RD_BENCH_C_LEVEL0 or RD_BENCH_C_COMP0) */
+static uint32_t levelBit(uint32_t t, int first)
+{
+    const int k = t == tid(RD_TARGET_SHADOW0) ? 0 : t == tid(RD_TARGET_SHADOW1) ? 1 : 2;
+    return RD_BENCH_BIT(first + k);
+}
+
 /* the class of an effect the perf classes name (RD_PERF_POST_*), 0 none */
 static uint32_t effectBit(int post)
 {
@@ -124,12 +132,15 @@ static uint32_t classOf(const RdFrame *f, int l, const RdCmd *c, const RdStateBl
         k |= RD_BENCH_BIT(RD_BENCH_C_VOLUMES);
     } else if (c->type == RDC_SHADOW_RESET || c->type == RDC_SHADOW_RESOLVE) {
         k |= RD_BENCH_BIT(RD_BENCH_C_WINDOW);
+        if (c->type == RDC_SHADOW_RESOLVE) {
+            k |= RD_BENCH_BIT(RD_BENCH_C_RESOLVE);
+        }
     } else if (effect) {
         k |= effectBit(post);
     } else if (isShadowLevel(dst)) {
-        k |= RD_BENCH_BIT(RD_BENCH_C_LEVELS);
+        k |= RD_BENCH_BIT(RD_BENCH_C_LEVELS) | levelBit(dst, RD_BENCH_C_LEVEL0);
     } else if (dst == scene && isShadowLevel(src)) {
-        k |= RD_BENCH_BIT(RD_BENCH_C_COMPOSITES);
+        k |= RD_BENCH_BIT(RD_BENCH_C_COMPOSITES) | levelBit(src, RD_BENCH_C_COMP0);
     } else if (dst == scene && src &&
                (src == tid(RD_TARGET_WORK3) || src == tid(RD_TARGET_WORK3_HELD))) {
         k |= RD_BENCH_BIT(RD_BENCH_C_PASTE);
@@ -273,6 +284,15 @@ void rd_bench_switches_restore(void)
     if (s_sw.set[RD_BENCH_S_PASTE_SPEC]) {
         rd__paste_spec_force(-1);
     }
+    if (s_sw.set[RD_BENCH_S_COMP_SPEC]) {
+        rd__comp_spec_force(-1);
+    }
+    if (s_sw.set[RD_BENCH_S_NO_DATE_SETUP]) {
+        rd__date_setup_bench_skip(0);
+    }
+    if (s_sw.set[RD_BENCH_S_NO_BOX]) {
+        rd__shadow_box_bench_force(-1);
+    }
     memset(&s_sw, 0, sizeof(s_sw));
 }
 
@@ -319,6 +339,15 @@ static void switchSet(int sw)
         break;
     case RD_BENCH_S_PASTE_SPEC:
         rd__paste_spec_force(rd__paste_spec_on() ? 0 : 1);
+        break;
+    case RD_BENCH_S_COMP_SPEC:
+        rd__comp_spec_force(rd__comp_spec_on() ? 0 : 1);
+        break;
+    case RD_BENCH_S_NO_DATE_SETUP:
+        rd__date_setup_bench_skip(1);
+        break;
+    case RD_BENCH_S_NO_BOX:
+        rd__shadow_box_bench_force(1);
         break;
     default:
         break;
@@ -506,6 +535,30 @@ int rd_bench_variants(const RdBenchFrame *b, RdBenchVariant *out, int max)
             1, 0);
     }
 
+    /* the shadow chain a draw at a time (not in the parts' sum): the count's
+     * draw (the levels then read the count target as an earlier replay left
+     * it, the same shadow), each level (the composites read it as it was),
+     * each composite (the one after it takes DATE's shared set-up) */
+    static const struct {
+        int c;
+        const char *name;
+    } kChain[] = {
+        {RD_BENCH_C_RESOLVE,
+         "without the shadow count's draw (the levels read the count as it was)"},
+        {RD_BENCH_C_LEVEL0, "without the shadow level SHADOW0"},
+        {RD_BENCH_C_LEVEL1, "without the shadow level SHADOW1"},
+        {RD_BENCH_C_LEVEL2, "without the shadow level SHADOW2"},
+        {RD_BENCH_C_COMP2, "without the shadow composite of SHADOW2 (the first)"},
+        {RD_BENCH_C_COMP1, "without the shadow composite of SHADOW1 (the second)"},
+        {RD_BENCH_C_COMP0, "without the shadow composite of SHADOW0 (the third)"},
+    };
+
+    for (size_t i = 0; i < sizeof(kChain) / sizeof(kChain[0]); i++) {
+        if (HAS(kChain[i].c)) {
+            put(out, max, &n, kChain[i].name, BIT(kChain[i].c), 0, RD_BENCH_S_NONE, 1, 0);
+        }
+    }
+
     static const struct {
         int c;
         const char *name;
@@ -602,6 +655,31 @@ int rd_bench_variants(const RdBenchFrame *b, RdBenchVariant *out, int max)
             rd__paste_spec_on() ? "the glow paste by fx_frame_ps (not its own entry)"
                                 : "the glow paste by its own entry (fx_paste_ps)",
             0, 0, RD_BENCH_S_PASTE_SPEC, 0, 0);
+    }
+    /* the shadow composites' and levels' own entry (rd_comp_spec.c), the
+     * other way, where its self-test passed */
+    if ((HAS(RD_BENCH_C_COMPOSITES) || HAS(RD_BENCH_C_LEVELS)) &&
+        rd__comp_spec_test_state(NULL) == 1) {
+        put(out, max, &n,
+            rd__comp_spec_on() ? "the shadow composites by sprite_ps (not their own entry)"
+                               : "the shadow composites by their own entry (sprite_comp_ps)",
+            0, 0, RD_BENCH_S_COMP_SPEC, 0, 0);
+    }
+    /* what the composites' cost follows (the phone's bench: the volumes' knock-out took
+     * the composites with it, the empty composites skipped): DATE's set-ups
+     * alone; the volumes out with the composites still drawn over the whole
+     * picture (the box off, so nothing is skipped: the composites then read
+     * levels of zeros and discard every fragment); the box off alone */
+    if (HAS(RD_BENCH_C_COMPOSITES)) {
+        put(out, max, &n, "without DATE's stencil set-ups (each DATE draw tests the bit as it was)",
+            0, 0, RD_BENCH_S_NO_DATE_SETUP, 1, 0);
+        put(out, max, &n, "the shadow box off (the count and the composites drawn whole)", 0, 0,
+            RD_BENCH_S_NO_BOX, 0, 0);
+        if (HAS(RD_BENCH_C_VOLUMES)) {
+            put(out, max, &n,
+                "without the shadow volumes' draws, the composites drawn whole (the box off)",
+                BIT(RD_BENCH_C_VOLUMES), 0, RD_BENCH_S_NO_BOX, 1, 0);
+        }
     }
     /* another package's switch is a row here: an RD_BENCH_S_* value
        (rd_bench.h), its case in switchSet (the variant's value) and in

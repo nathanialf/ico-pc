@@ -82,6 +82,7 @@
 
 #include "attempt_ledger.h"
 #include "rd_date_one.h"
+#include "rd_bench.h" /* the bench's switch (rd__shadow_box_bench_force) */
 #include "rd_internal.h"
 #include "rd_shadow_box.h"
 
@@ -401,10 +402,19 @@ int rd__shadow_box_empty_mode(void)
     return s_env;
 }
 
+/* the bench's variant (rd__shadow_box_bench_force): 1 the box off, -1 the
+ * environment's */
+static int s_boxBench = -1;
+
+void rd__shadow_box_bench_force(int off)
+{
+    s_boxBench = off < 0 ? -1 : (off ? 1 : 0);
+}
+
 bool rd__shadow_box_scan_begin(const RdFrame *f)
 {
     const char *e = getenv("ICO_RD_SHADOW_BOX");
-    s_scan.env = e && strcmp(e, "0") == 0 ? 0 : 1;
+    s_scan.env = (e && strcmp(e, "0") == 0) || s_boxBench == 1 ? 0 : 1;
     s_scan.nRole = s_scan.nCand = s_scan.nChain = 0;
     s_scan.roleFull = false;
     rd__date_one_scan_begin(f); /* rd_date_one.c reads the composites found here */

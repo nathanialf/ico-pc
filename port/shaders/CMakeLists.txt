@@ -380,6 +380,11 @@ ico_add_shader(fx_frame_ps fx_sprite.hlsl fx_sprite_ps fragment DEFINES ICO_FX_F
 ico_add_shader(fx_paste_ps fx_sprite.hlsl fx_sprite_ps fragment DEFINES ICO_FX_FRAME=1
                ICO_FX_PASTE=1)
 ico_add_shader(fx_local_ps fx_sprite.hlsl fx_sprite_ps fragment DEFINES ICO_FX_DST_LOCAL=1)
+# sprite_ps for the shadow composites and levels alone (ICO_SPRITE_COMP: the flags they draw with
+# held as constants, every other branch left out; port/render/rd_comp_spec.c, behind its start-up
+# self-test against sprite_ps): Vulkan only in use (rd_comp_spec.c makes the module on Vulkan
+# alone), its DXIL and GLSL plain builds, never used
+ico_add_shader(sprite_comp_ps sprite.hlsl sprite_comp_ps fragment DEFINES ICO_SPRITE_COMP=1)
 
 # the table of every entry above, the fences included (ico_shaders_library reads
 # the manifest where it is called: it must come after every ico_add_shader)
