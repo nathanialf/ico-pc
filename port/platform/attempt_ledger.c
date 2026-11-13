@@ -33,6 +33,8 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
     [ICO_ATT_VU_COMPUTE_CLASS] = {"VU record by compute on the PowerVR", "dispatches", NULL},
     [ICO_ATT_TURN_FOLD] = {"turn in the present's blit", "presents", "kept the turn pass"},
     [ICO_ATT_REC_NEED] = {"VU record sized from need", "growths in play", NULL},
+    [ICO_ATT_PACE_GPU] = {"in-between pictures for the GPU's predicted end", "pictures placed",
+                          "at the bound"},
 };
 
 /* the rows' live values (__atomic), and the block text's last counts (the
@@ -310,6 +312,22 @@ void ico_attempt_decide_rec_need(int wanted, uint32_t made, uint32_t bound, uint
     } else {
         ico_attempt_state(ICO_ATT_REC_NEED, ICO_ATT_NA,
                           "the memory bound allowed no more than the run's need");
+    }
+}
+
+void ico_attempt_decide_pace_gpu(int asMade, int clock, int waited)
+{
+    if (!asMade) {
+        ico_attempt_state(ICO_ATT_PACE_GPU, ICO_ATT_NA,
+                          "the pictures are paced here (vsync on, a frame rate cap, the Original "
+                          "frame rate or the render thread off): the present clock's moment");
+    } else if (clock) {
+        ico_attempt_state(ICO_ATT_PACE_GPU, ICO_ATT_ON,
+                          "pictures as made: each drawn for its GPU work's predicted end");
+    } else if (waited) {
+        ico_attempt_state(ICO_ATT_PACE_GPU, ICO_ATT_NA,
+                          "no GPU span or slot clock on this backend (OpenGL, Direct3D 11 or "
+                          "timestamps off): the hand-over less the mean drain kept");
     }
 }
 
