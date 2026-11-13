@@ -66,7 +66,8 @@ static struct {
     bool testing; /* inside the self-test's replays */
     int testArm;  /* there: 0 sprite_ps, 1 sprite_comp_ps */
     char words[224];
-    uint32_t replay; /* g_rd.replayCounter of rTaken, rSeen, rNoted */
+    uint32_t tRefused, tFlags0, tFlags1; /* arm 1's refusals, the first's DrawCB words */
+    uint32_t replay;                     /* g_rd.replayCounter of rTaken, rSeen, rNoted */
     uint32_t rTaken, rSeen, rNoted;
     uint64_t taken, seen; /* since rd_init, the self-test's replays left out */
     int lastWhy;
@@ -129,7 +130,15 @@ int rd_comp_spec_key_form(const RdPipeKeyInt *k)
         g->colorMask != 0xF) {
         return RD_COMP_SPEC_FORM_NONE;
     }
-    if (g->blend == RD_BLEND_LERP_AS && g->atst == RD_ATST_GREATER && g->zwrite == RD_ZWRITE_OFF &&
+    /* the planner keeps the alpha test out of the key (rd_pipeline.c
+     * rd__plan_screen_draw_ex: atst ALWAYS, the test in DrawCB.mode[2] and
+     * [3], read at run time by both entries) and turns every LERP into
+     * RD_BLEND_LERP_AS (canonicalBlend: FIX's factor is DF_FIX_FACTOR, which
+     * the flags' gate refuses) */
+    if (g->atst != RD_ATST_ALWAYS) {
+        return RD_COMP_SPEC_FORM_NONE;
+    }
+    if (g->blend == RD_BLEND_LERP_AS && g->zwrite == RD_ZWRITE_OFF &&
         (g->stencil == RD_STENCIL_OFF || g->stencil == RD_STENCIL_DATE_TEST0 ||
          g->stencil == RD_STENCIL_DATE_TEST1)) {
         return RD_COMP_SPEC_FORM_COMPOSITE;
@@ -230,9 +239,15 @@ void rd__comp_spec_note(const RdPipeKeyInt *key, const struct IcoDrawCB *cb)
         /* the self-test's replays: arm 0 sprite_ps, arm 1 sprite_comp_ps
          * wherever the module and the gate's words take it; not counted for
          * the run or the block */
-        if (s_cs.testArm == 0 || !g_rd.fs[RD_FS_SPRITE_COMP].id || !deviceOk() ||
-            g_rd.passSamples > 1 ||
+        if (s_cs.testArm == 0) {
+            return;
+        }
+        if (!g_rd.fs[RD_FS_SPRITE_COMP].id || !deviceOk() || g_rd.passSamples > 1 ||
             rd_comp_spec_flags_why(cb->mode[0], cb->mode[1]) != RD_COMP_SPEC_WHY_NONE) {
+            if (s_cs.tRefused++ == 0) {
+                s_cs.tFlags0 = cb->mode[0] | (g_rd.passSamples > 1 ? 0x80000000u : 0u);
+                s_cs.tFlags1 = cb->mode[1];
+            }
             return;
         }
     } else {
@@ -647,6 +662,19 @@ bool rd__comp_spec_selftest(void)
         stateNote();
         return false;
     }
+    /* the targets still owed their first clear (rd_upload.c
+     * rd__clear_new_targets): the self-test's first replay would take that
+     * clear for them, so the first replay after it (the game's first frame,
+     * the replay tool's dump) would begin and store fewer passes than with
+     * the self-test off; they are owed it again afterwards (each still holds
+     * the zero that clear wrote: the frame draws SCENE alone), as
+     * rd_volume_fs.c does */
+    static uint32_t owed[RD_MAX_TARGETS];
+    for (int i = 0; i < RD_MAX_TARGETS; i++) {
+        const RdTargetRec *o = &g_rd.targets[i];
+        owed[i] = o->live && o->clearPending ? o->color.id : 0u;
+    }
+    s_cs.tRefused = s_cs.tFlags0 = s_cs.tFlags1 = 0;
     const uint32_t w = t->w, h = t->h;
     const size_t texels = (size_t)t->tw * t->th, size = texels * 4u;
     uint8_t *px[2] = {malloc(size), malloc(size)};
@@ -656,7 +684,7 @@ bool rd__comp_spec_selftest(void)
     const bool sabotage = s_cs.env == 2;
     const bool wasBlocked = g_rd.msaaBlocked;
     g_rd.msaaBlocked = true;
-    uint32_t took[2] = {0, 0}, noted[2] = {0, 0};
+    uint32_t took[2] = {0, 0}, noted[2] = {0, 0}, seen[2] = {0, 0};
     const char *err = NULL;
     if (!px[0] || !px[1]) {
         err = "no memory for its readbacks";
@@ -679,6 +707,7 @@ bool rd__comp_spec_selftest(void)
         s_cs.testing = false;
         took[arm] = s_cs.replay == g_rd.replayCounter ? s_cs.rTaken : 0u;
         noted[arm] = s_cs.replay == g_rd.replayCounter ? s_cs.rNoted : 0u;
+        seen[arm] = s_cs.replay == g_rd.replayCounter ? s_cs.rSeen : 0u;
         rd__frame_free(&f);
         if (!done || !rd__read_target(rd_target(RD_TARGET_SCENE), px[arm], size, &rw, &rh) ||
             (size_t)rw * rh != texels) {
@@ -692,6 +721,12 @@ bool rd__comp_spec_selftest(void)
     s_cs.nPend = 0;
     g_rd.msaaBlocked = wasBlocked;
     t->clearPending = 1; /* the next replay starts SCENE from its clear */
+    for (int i = 0; i < RD_MAX_TARGETS; i++) {
+        RdTargetRec *o = &g_rd.targets[i];
+        if (owed[i] && o->live && o->color.id == owed[i]) {
+            o->clearPending = 1; /* owed its first clear again (above) */
+        }
+    }
     if (dst.id) {
         rd_destroy_texture(dst);
     }
@@ -707,7 +742,8 @@ bool rd__comp_spec_selftest(void)
     }
     /* the four bands without DATE always pass the gate; the DATE band where
      * DATE is the stencil bit's test */
-    const bool tookAll = !err && took[1] >= 4u && took[1] == noted[1] && took[0] == 0;
+    const bool tookAll =
+        !err && took[1] >= 4u && took[1] == noted[1] && seen[1] >= 5u && took[0] == 0;
     if (err) {
         snprintf(s_cs.words, sizeof(s_cs.words), "not run: %s", err);
         rd__log("composites: self-test not run (%s): sprite_ps draws the shadow composites and "
@@ -715,9 +751,15 @@ bool rd__comp_spec_selftest(void)
                 err);
     } else if (!tookAll) {
         snprintf(s_cs.words, sizeof(s_cs.words),
-                 "not run: the draws not taken as asked, %u of %u noted by sprite_comp_ps, %u in "
-                 "the sprite_ps replay",
-                 took[1], noted[1], took[0]);
+                 "not run: the draws not taken as asked, %u of %u noted by sprite_comp_ps of %u of "
+                 "the forms, %u in the sprite_ps replay",
+                 took[1], noted[1], seen[1], took[0]);
+        if (s_cs.tRefused) {
+            rd__log("composites: self-test: %u draws of the forms refused by the gate in its "
+                    "second replay, the first with DrawCB flags 0x%08X, TEXA word 0x%X (bit 31: a "
+                    "multisampled pass)",
+                    s_cs.tRefused, s_cs.tFlags0, s_cs.tFlags1);
+        }
         rd__log("composites: self-test %s: sprite_ps draws the shadow composites and levels",
                 s_cs.words);
     } else if (nd) {

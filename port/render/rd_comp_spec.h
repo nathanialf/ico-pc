@@ -77,7 +77,7 @@ extern "C" {
 /* the key's form (rd_comp_spec_key_form) */
 enum {
     RD_COMP_SPEC_FORM_NONE = 0,
-    RD_COMP_SPEC_FORM_COMPOSITE, /* LERP As, ATST GREATER, Z write off, mask RGBA */
+    RD_COMP_SPEC_FORM_COMPOSITE, /* a LERP, Z write off, mask RGBA (the alpha test is DrawCB words) */
     RD_COMP_SPEC_FORM_LEVEL,     /* no blend, no alpha test, no depth, mask RGBA */
 };
 
