@@ -1158,7 +1158,11 @@ that stops again writing its own line without the retry mark); a stop at the fre
   buffer cut and terminated; the deciders as six device classes' owners call them (the Mali-G52,
   the Pixel, a PowerVR B, an Adreno 740, a desktop with MSAA, a Mac with the break forced): no row
   but the two Adreno ones left `not reported`, the rows not built `not in this build`, the cores'
-  rows and the no-volume break's state with its reason in the start line (CPU only).
+  rows and the no-volume break's state with its reason in the start line, the VU record by
+  compute's and the turn fold's states per class (off by default on the PowerVR phone, the Mali and
+  the Adreno turned phones' turn fold off by default, not applicable on the desktops); the two
+  deciders' other states (the switch, the define, a mode by name, no compute stores; the fold on
+  only with its self-test passed, refused by it, not run, no turned swapchain) (CPU only).
 - `core_share_test.c` (ctest `core_share`): the share of run time on the faster cores of the
   threads that do not sample their own core (`port/platform/core_share.h`, issue 179): ten seconds
   of the Helio G85's submit, SDL audio and driver threads and two pipeline workers under one name,

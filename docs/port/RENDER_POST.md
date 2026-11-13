@@ -999,6 +999,140 @@ the last every 10 s while the switch is on. Tests: `rd_present_scene` (the map, 
 every reason, the debt's verdicts on recorded frames) and `rd_present_scene_ab` (the corpus,
 [TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
 
+### The turn in the present's blit (off by default until a phone rc)
+
+On a pre-rotated swapchain (a phone held sideways: [DISPLAY.md](DISPLAY.md#the-turned-swapchain),
+`port/render/rd_prerotate.c`) the present draws its picture upright into a texture of the window's
+size, and one more full-size pass turns that texture into the swapchain image. When the present is
+the box blit alone, that blit draws into the turned image itself and the turn pass is not drawn
+(`port/render/rd_turn_fold.c`, `rd_turn_fold.h`):
+
+- `blit_vs` already turns its source position by `DrawCB.aux1.w` (the turn pass's own mechanism);
+- the viewport and the scissor (the box, the border mask's inset) are turned in whole pixels by
+  `rd__turn_rect`, the table of `rd_prerotate.c` (90: (X, Y) = (h - 1 - y, x); 180:
+  (w - 1 - x, h - 1 - y); 270: (y, w - 1 - x));
+- the bars are the same cleared black; the colour adjustment and the mirror stay in the blit.
+
+**Why it is exact, and where it is not.** Where every output pixel is one source texel (the
+snapped Full pixel window, or the supersampling's reduce and FSR 1.0's output drawn one texel a
+pixel), the turned triangle's interpolated source position differs from the upright one by rounding
+only, half a texel from any texel edge, so nearest takes the same texel and a linear tap at the
+texel centre returns that texel. Every other draw of the present cannot be turned with a proof:
+
+| draw of the present | turned identically? | the fold |
+| --- | --- | --- |
+| the box blit, one texel a pixel (`blit_ps`, `blit_tone_ps`) | yes (above) | folds |
+| FSR 3.1's display layer (the 2D drawn after the upscale, `rd_layer.c`) | drawn into DISPLAY and COMPOSITE in the replay, before the present: the box blit carries it | folds with the blit |
+| FSR 1.0's EASU and RCAS, the supersampling's reduce | their own textures, at the box's size, before the blit (then one texel a pixel, nearest) | folds with the blit |
+| the box blit scaled (1x into a larger window, Downsampling, the line doubling) | no: a linear weight from the interpolated position can move by its last bit | keeps the turn pass |
+| the box blit from SCENE (`blit_scene_ps`) | no: it reads its own pixel position | keeps it |
+| the effects depth's blit | no: it reads the scene's depth at its pixel | keeps it |
+| the CRT filter | no: its scanlines are pixel positions | keeps it |
+| the deferred text (its halo too), the overlay (touch controls, the fps corner, popups) | no: triangles with edges inside the picture (the fill rule's ties fall on other edges once turned), linear taps at scaled positions, DATE and dither reads of the pixel position | keeps it |
+| a capture, a shot, the icon hold | they copy the upright picture | keeps it |
+| films (`rd_video.c`), the blank frame | their own paths | unchanged |
+
+So a present that draws any of the rows marked "keeps" draws as today. The reasons are counted
+(`rd__turn_fold_why`).
+
+**Self-test.** `rd__turn_fold_selftest` runs with the start-up self-tests (`rd_fog_path.c`; the
+replay tool runs it too) when the fold is asked for. It draws an 11x7 pattern (one cleared area a
+texel, each channel a different function of both coordinates) into a 48x30 picture at two odd
+places, nearest with a scissor inset and linear mirrored, both ways for 90, 180 and 270 degrees (the
+blit then the turn pass, and the blit drawn turned) in the swapchain's format, and compares the
+turned images byte for byte. A difference refuses the fold for the run, with the first differing
+pixel in the log.
+
+**What it saves.** One full-size pass a present on a turned swapchain that draws the box blit
+alone: the pass writes the window's 2364x1080 once more and reads the texture once (the present's
+`colour 0.0/19.3 MB` stores at the title in the Pixel's log are the two writes). Expected
+effect on the opening: none while the touch controls are on the screen (each present then draws the
+overlay); the Pixel's present costs 0.5 ms a picture in the opening (its GPU line). Not measured on
+a device.
+
+**Switch and lines.** `RD_TURN_FOLD_DEFAULT` 0 in `rd_turn_fold.h`: off on every device until a phone
+rc; the tests' `ICO_RD_TURN_FOLD=1` (the self-test still decides) or `0`. No setting. Lines:
+
+```
+rd: present: turn in the blit: self-test passed (6 cases: 90, 180 and 270 degrees, nearest with a scissor inset and linear mirrored, one texel a pixel, the turned blit byte for byte the turn pass's; format 37)
+rd: present: turn in the blit: refused by its self-test (<why>): every present on a turned swapchain keeps the turn pass
+rd: present: turn in the blit: the 2364x1080 picture's box blit drawn turned 90 degrees into the 1080x2364 image, no turn pass (reported once)
+rd: present: turn in the blit: a present keeps the turn pass: the port's overlay or the deferred text drawn (reported once for each reason)
+```
+
+The attempt ledger's row `turn in the blit` counts the presents folded and those that kept the turn
+pass in each 10 s block ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-attempt-ledger)).
+Tests: `rd_smallcuts` (the turned rects against the table, the reasons) and `rd_turn_fold_ab` (the
+headless twin, every PNG byte for byte).
+
+### The VU record by compute on the PowerVR class (off by default until a phone rc)
+
+`[dev] vu_record = auto` takes the vertex shaders' stores wherever the device offers them
+(`port/render/rd_vu_record.c`), and the PowerVR phone offers both kinds of store (its start line), so its
+record is written by two render passes begun without an attachment. The class rule
+(`port/render/rd_vu_class.c`, `rd_vu_class.h`) writes it by compute dispatches instead on the PowerVR
+class under Vulkan where both are offered. Every other class keeps auto's order.
+
+**What differs in the GPU's work on an opening picture**, from the code
+(`rd_replay_vu.c` `vuRecPassBegin`, `vuRecPassEnd`, `recDrawGap`; `vk_cmd.c` the store and compute
+brackets):
+
+| | the stores (today) | the compute dispatches |
+| --- | --- | --- |
+| render passes | 2 a picture (the vertex records, then the triangle records), no attachment | none |
+| work items | one batched point draw a run of up to 64 entries (17 to 21 a picture in the Pixel's opening) through pipelines without rasterization | one dispatch for each of those draws, (points + 63) / 64 groups of 64 |
+| barriers | each pass's bracket (vertex stage writes) folded into the next pass's or copy's barrier | the same bracket with the compute stage writing, flushed at the first dispatch |
+| bytes written | the record's three planes | the same bytes at the same places (`rd_vu_record.h`) |
+
+So the expected effect is the two passes' fixed cost, about 0.5 ms a picture at most (two small
+passes at about 0.27 ms each on this GPU; NEXT_CUTS's estimate), against any cost of compute work
+between graphics passes on this driver. Not measured on a device.
+
+**The gates.** The start-up self-test judges the compute record as it judges any start mode
+(`rd_vuprepass_selftest.c`). A compute record that fails goes back to the vertex stores (the path
+auto takes without the rule), not to the render targets; the ledger's row then says `refused by its
+self-test`. `rd_vurecord_ab_compute_class` and `_opening` compare the two writes' targets byte for
+byte.
+
+**Switch and lines.** `RD_VU_COMPUTE_CLASS_DEFAULT` 0 in `rd_vu_class.h`; the tests'
+`ICO_RD_VU_COMPUTE_CLASS=1` takes the rule on any device that offers both stores, `0` keeps it off;
+a `[dev] vu_record` asked for by name always wins. Lines:
+
+```
+rd: VU record: the PowerVR class's rule: the record as auto takes it (off by default until a phone rc shows the PowerVR phone's opening with it; RD_VU_COMPUTE_CLASS_DEFAULT 0)
+rd: VU record: the PowerVR class's rule: the compute dispatches in place of the vertex stores (the PowerVR class: compute dispatches in place of the vertex stores; RD_VU_COMPUTE_CLASS_DEFAULT 1)
+rd: VU record: stored by the vertex shaders into the frame slot's record buffer: no render targets, no copies (the PowerVR class's compute record off: they failed the start-up self-test)
+```
+
+The attempt ledger's row `VU record by compute on the PowerVR` counts the dispatches in each 10 s
+block.
+
+### WORK2's second lamps pass (a finding, no cut)
+
+The Pixel's opening log says `a pass on WORK2 drawn single-sampled (the pass loads WORK2; it begins at list 7
+command ordinal 2104, the mask ...)` and `... ordinal 1287, a lamp ...`: with the
+lamps' 4-sample pass (`rd_lamps.c` `msConvert`) a second and third WORK2 pass begin in some pictures.
+The replay of v2278 (the sun's whole chain) on lavapipe with the phone's lamps, pass area and pass
+cut words shows it: WORK2 passes 15 (the fill's clear carried as its load, the sun's fans, 4
+samples), 16, 17 and 18 (`4 single-sampled` over two replays). With the mask (7:66) turned into a NOP
+the run is one 4-sample pass of 10 draws and none single-sampled; v746 (the lamps plan, the mask not
+drawn) is one 4-sample pass too. So the cause is the mask: it samples SCENE's colour, which is in its
+render-target state after list 7's first pass, and its transition to a shader read ends WORK2's pass
+(`rd_replay.c` `resolveTexture`, `endPassFor`), so the mask and the lamps after it begin passes that
+load WORK2, which the 4-sample form refuses. Only pictures whose glow chain is drawn whole (the sun's
+tint or glare) have it: 91 of 472, 0 of 456, 23 of 433 and 0 of 538 pictures in that log's
+opening blocks.
+
+- No standalone clear of WORK2 is drawn in this form: the clear carry already takes the fill's clear
+  as the first pass's load (`2 clears taken by the next pass`). The clear-only pass of NEXT_CUTS's
+  v746 listing belongs to the single-sampled low-resolution form, which no class runs by default.
+- No exact remedy was built. Drawing the mask and the lamps inside the 4-sample pass (SCENE made
+  readable before it begins) changes the picture: the lamps would take 4 samples where today they
+  take one, and the mask would blend into each sample before the resolve instead of into the
+  resolve. Keeping today's bytes with one pass fewer (WORK2's depth filled before the mask's pass
+  and that pass carrying the depth) needs a mask pipeline with a depth format the start-up set does
+  not make, for at most one small pass in a fifth of the first block's pictures.
+
 ### The motion blur under Smooth
 
 Options > Effects > Motion blur: Smooth (`[video] effect_motion_blur_mode = "smooth"` with
