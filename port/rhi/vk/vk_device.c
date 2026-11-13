@@ -1813,7 +1813,7 @@ static void vkr_offer_line(float queuePriority)
     /* the core 1.1 call only on a 1.1 device (props2 may be the KHR pair of
        a 1.0 device, where a 1.1 loader still hands out the core pointer) */
     if (props2 && (gpKhr || gpQuery) && vkr_props2_core(g_vkr.phys) &&
-        vkGetPhysicalDeviceQueueFamilyProperties2 != NULL) {
+        VKR_FUNCTION_AVAILABLE(vkGetPhysicalDeviceQueueFamilyProperties2)) {
         uint32_t qn = 0;
         vkGetPhysicalDeviceQueueFamilyProperties2(g_vkr.phys, &qn, NULL);
         VkQueueFamilyProperties2 *qp = calloc(qn ? qn : 1, sizeof(*qp));
