@@ -1401,11 +1401,11 @@ since the driver can go on returning success while the surface changes size (`vk
 poll and Android's suboptimal present also rebuild when the surface's turn changed (the phone turned
 over, `vkr_swap_differs`).
 
-**The display's times read back.** On Android alone (the screen's rule and the on-glass line, which use the times, are Android's; on the desktop and the Mac the extension is not enabled, the start line says `off (not on this platform: ...)` and the driver's present path is v0.11.5's), where the device offers `VK_GOOGLE_display_timing` on a window,
+**The display's times read back.** On Android alone (the screen's rule and the on-glass line, which use the times, are Android's; on the desktop and the Mac the extension is not enabled, the start line says `off (not on this platform: ...)` and the driver's present path is the one without the extension), where the device offers `VK_GOOGLE_display_timing` on a window,
 the extension is enabled and, while the renderer presents pictures as made (`rhi_present_glass_use`, set by `rd_present_as_made`: vsync off, Frame rate Uncapped, the render thread on; an atomic flag each present reads once, its id saying which way it went), every present chains a `VkPresentTimeGOOGLE` with an id and a
 `desiredPresentTime` of 0 (the specification: zero "specifies that the presentation engine may
 display the image at any time"), so which pictures are shown and when is as without it, in every
-present mode (in every other mode nothing is chained and nothing read: capped and vsync presents are v0.11.5's); after each present that carried an id, on the presenting thread under the swapchain's lock,
+present mode (in every other mode nothing is chained and nothing read: capped and vsync presents are made as without the extension); after each present that carried an id, on the presenting thread under the swapchain's lock,
 `vkGetPastPresentationTimingGOOGLE` (no wait: it returns what the driver has) fills a 256-time ring
 and `vkGetRefreshCycleDurationGOOGLE` gives the refresh for each new swapchain and again every second (a rate pin or an LTPO screen changes it without a new swapchain; a failed read keeps the period known before and is tried again 100 ms later, `display timing (read back): the display's refresh could not be read (VkResult R, N ns; failure K): ...`; a change is logged, `display timing (read back): the display's refresh is now P ms (was Q ms; change K)`, both the first 8 then every 100th, and the screen's model starts its grid and latch again from the first sample with the new period, counted on the on-glass line); `rhi_present_glass`
 gives the calling thread's last present's id and takes the times (`port/rhi/vk/vk_glass.c`; the

@@ -2521,7 +2521,7 @@ the on-glass line has measured a phone. The desktop paths correspond: the vsync 
 timer by construction (k / (n x perFrame)), FIFO and the caps the present clock, which works there
 because every present is a refresh apart and none is held by the step rule.
 
-Where the device offers `VK_GOOGLE_display_timing` (the Pixel 10 Pro Fold does), on Android with pictures as made only (elsewhere and in capped or vsync modes nothing is chained: v0.11.5's present), the display's own
+Where the device offers `VK_GOOGLE_display_timing` (the Pixel 10 Pro Fold does), on Android with pictures as made only (elsewhere and in capped or vsync modes nothing is chained, the present as without the extension), the display's own
 time of each shown picture is read back (`rhi_present_glass`, `port/rhi/vk/vk_glass.c`: an id and a
 desired time of 0, "any time", chained to each present, so nothing is asked of the display; the
 past times read after each present on the presenting thread with no wait) and the 10 s `window: on
