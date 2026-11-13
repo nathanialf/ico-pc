@@ -7,8 +7,11 @@
 # --stats under the fixed-function blend (ICO_RD_BLEND=fixed), the store plan
 # (ICO_RD_STORE_PLAN=1) and its poison (ICO_RD_STORE_POISON=1: a depth or
 # stencil load the plan leaves undefined clears to garbage, so a depth the cut
-# lost would show), DATE by the R8 snapshot (ICO_RD_DATE_PATH=snapshot) and the
-# programs' own entries (ICO_RD_VU_PREPASS=0), at:
+# lost would show), DATE by the R8 snapshot (ICO_RD_DATE_PATH=snapshot), one
+# DATE set-up for the composites off (ICO_RD_DATE_ONE=0: with it on the shared
+# composites end no pass, so the cut's runs reach list 4 and it takes none;
+# rd_date_one_ab checks the two together) and the programs' own entries
+# (ICO_RD_VU_PREPASS=0), at:
 #   mali    the Mali-G52's (issue 179): 1x, 21:9, presented at 1612x720, the
 #           fake Mali limits without the in-pass read (ICO_VK_FAKE_LIMITS=mali,
 #           ICO_VK_FAKE_NO_DST=1);
@@ -86,8 +89,12 @@ endforeach()
 list(REMOVE_DUPLICATES dumps)
 list(LENGTH dumps ndumps)
 
+# one DATE set-up for the composites off (ICO_RD_DATE_ONE=0, rd_date_one.c):
+# with it the second and third composites take no snapshot, no pass ends
+# there, and the cut has no run to take (its own pair, rd_date_one_ab, checks
+# the two together)
 set(common ICO_RD_BLEND=fixed ICO_RD_STORE_PLAN=1 ICO_RD_STORE_POISON=1
-           ICO_RD_DATE_PATH=snapshot ICO_RD_VU_PREPASS=0)
+           ICO_RD_DATE_PATH=snapshot ICO_RD_VU_PREPASS=0 ICO_RD_DATE_ONE=0)
 set(args_mali --aspect 21:9 --present 1612x720)
 set(env_mali ICO_VK_FAKE_LIMITS=mali ICO_VK_FAKE_NO_DST=1)
 set(args_adreno --enhanced --resolution 3x --full-height --full-pixel --aspect 1.5

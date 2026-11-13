@@ -20,3 +20,6 @@
 /primary/dev/ico-pc/build-host/tmp/v0115/evidence/datecut/pixel/frame-20261110-194925-v3677.rddump 0
 # its v0.11.5 rc8 frame (the cage: one reset, six strips)
 /primary/dev/ico-pc/build-host/tmp/v0115/evidence/rc8/x/frame-20261111-135423-v4651/frame-20261111-135423-v4651.rddump 0
+# the Pixel 10 Pro Fold's v0.11.5 opening, the lamps view: a window with no
+# volume (reset 3:6, resolve 3:13, levels, composites 3:42/47/52; DATEPROOF Q3)
+/primary/dev/ico-dumps/v0115-opening/frame-20261112-110824-v746.zip 1

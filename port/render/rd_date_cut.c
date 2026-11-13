@@ -51,6 +51,7 @@
 #include <string.h>
 
 #include "rd_date_cut.h"
+#include "rd_date_one.h"
 #include "rd_replay.h"
 
 #define DC_RUNS 64
@@ -178,6 +179,9 @@ void rd__date_cut_scan_cmd(const RdCmd *c, const RdStateBlock *st, bool state, u
             d.depthFree = dcDepthFree(st);
             d.alpha = (st->ds.colorMask & 8u) != 0;
             d.hasDepth = td && td->withDepth;
+            /* rd_date_one.c's scan marked it (rd_shadow_box.c's scan, before
+             * this one in the store plan's walk) */
+            d.shared = d.date && rd__date_one_shared_at(ord);
         }
     } else if (c->type >= RDC_MESH && c->type <= RDC_PARTICLES) {
         d.kind = RD_DC_DRAW;
@@ -320,17 +324,22 @@ RhiTexture rd__date_snapshot(Replay *r, RdTargetRec *tc, uint32_t tcId, const Rh
         h = h > sn->th ? sn->th : h;
     }
     RhiRect take;
-    const bool retake = rd__date_retake(r->dateFor, r->dateSerial, &r->dateArea, tcId,
-                                        r->writeSerial, area, w, h, &take);
+    /* a shadow composite after one that cannot set the alpha's top bit holds
+     * the same bits as a snapshot taken now (rd_date_one.c): the serial the
+     * held snapshot stands for */
+    const uint32_t held = rd__date_one_held(r->dateFor, r->dateSerial, tcId, r->writeSerial, false);
+    const bool retake =
+        rd__date_retake(r->dateFor, held, &r->dateArea, tcId, r->writeSerial, area, w, h, &take);
     if (!retake && sn->colorState == RHI_STATE_SHADER_READ) {
         g_rdPerf.dateSnapReused++;
+        rd__date_one_took(tcId, r->writeSerial, false, true, (uint64_t)tc->tw * tc->th);
         return sn->color;
     }
-    const int why = !retake                           ? RD_DATE_RETAKE_TOUCHED
-                    : r->dateFor == 0                 ? RD_DATE_RETAKE_FIRST
-                    : r->dateFor != tcId              ? RD_DATE_RETAKE_TARGET
-                    : r->dateSerial != r->writeSerial ? RD_DATE_RETAKE_WRITTEN
-                                                      : RD_DATE_RETAKE_AREA;
+    const int why = !retake                  ? RD_DATE_RETAKE_TOUCHED
+                    : r->dateFor == 0        ? RD_DATE_RETAKE_FIRST
+                    : r->dateFor != tcId     ? RD_DATE_RETAKE_TARGET
+                    : held != r->writeSerial ? RD_DATE_RETAKE_WRITTEN
+                                             : RD_DATE_RETAKE_AREA;
     g_rdPerf.dateRetakeWhy[why]++;
     if (!retake) {
         /* the snapshot was touched elsewhere since: nothing of it is known */
@@ -379,6 +388,7 @@ RhiTexture rd__date_snapshot(Replay *r, RdTargetRec *tc, uint32_t tcId, const Rh
     r->dateFor = tcId;
     r->dateSerial = r->writeSerial;
     r->dateArea = take;
+    rd__date_one_took(tcId, r->writeSerial, false, false, (uint64_t)tc->tw * tc->th);
     return sn->color;
 }
 
@@ -394,6 +404,7 @@ void rd__date_cut_pop(const RdPerfRecord *r)
     for (int i = 0; i < RD_DATE_RETAKE_COUNT; i++) {
         s_sum.why[i] += r->dateRetakeWhy[i];
     }
+    rd__date_one_pop(r); /* one DATE set-up for the composites (rd_date_one.c) */
 }
 
 void rd__date_cut_text(char *out, size_t n, size_t *at)
@@ -421,6 +432,7 @@ void rd__date_cut_text(char *out, size_t n, size_t *at)
             *at += w > 0 && (size_t)w < n - *at ? (size_t)w : 0;
         }
     }
+    rd__date_one_text(out, n, at); /* its clause, when it shared or kept any */
     memset(&s_sum, 0, sizeof(s_sum));
 }
 

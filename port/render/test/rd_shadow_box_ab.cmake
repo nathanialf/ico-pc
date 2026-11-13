@@ -5,7 +5,9 @@
 # (tools/shadow_box_dumps.txt: a path, '*' globs allowed, optionally the counts
 # and composites the box takes at the phone setting; a listed dump that is
 # absent FAILS), rd_replay_tool's --pass-dump with --stats under the store plan
-# (ICO_RD_STORE_PLAN=1) and the programs' own entries (ICO_RD_VU_PREPASS=0), at:
+# (ICO_RD_STORE_PLAN=1), the empty composites off (ICO_RD_EMPTY_SKIP=0: the
+# box on would skip them) and the programs' own entries (ICO_RD_VU_PREPASS=0),
+# at:
 #   phone    the PowerVR phone's profile on lavapipe (ICO_VK_FAKE_LIMITS=
 #            moltenvk: DATE through the stencil bit, the count in one draw):
 #            Enhanced, 2364x1080, Full height, Full pixel, presented 2364x1080;
@@ -78,7 +80,11 @@ endforeach()
 list(REMOVE_DUPLICATES dumps)
 list(LENGTH dumps ndumps)
 
-set(common ICO_RD_STORE_PLAN=1 ICO_RD_VU_PREPASS=0)
+# the empty composites off (ICO_RD_EMPTY_SKIP=0, rd_shadow_box.c): with the
+# box on they skip a composite whose level is empty, which the box off cannot
+# (no box): the same draws and passes are this pair's (its own pair,
+# rd_empty_skip_ab, checks what the skip leaves out)
+set(common ICO_RD_STORE_PLAN=1 ICO_RD_VU_PREPASS=0 ICO_RD_EMPTY_SKIP=0)
 set(args_phone --enhanced --resolution 2364x1080 --full-height --full-pixel --present 2364x1080)
 set(env_phone ICO_VK_FAKE_LIMITS=moltenvk)
 set(args_mali --present 1612x720)

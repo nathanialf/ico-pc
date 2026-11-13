@@ -507,11 +507,14 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
                 rd__glow_light_scan_cmd(f, c, &st, state, ord);
                 rd__lamps_scan_cmd(f, c, &st, state, ord);
             }
-            if (dateCut) {
-                rd__date_cut_scan_cmd(c, &st, state, ord);
-            }
+            /* the box's roles first: one DATE set-up for the composites
+             * (rd_date_one.c, from the box scan) marks the composites whose
+             * snapshot is shared, which the DATE cut's runs read */
             if (box) {
                 rd__shadow_box_scan_cmd(f, c, &st, state, ord);
+            }
+            if (dateCut) {
+                rd__date_cut_scan_cmd(c, &st, state, ord);
             }
             rd__no_volume_scan_cmd(f, c, &st, state, ord);
             if (state || !plan) {

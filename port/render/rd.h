@@ -3224,6 +3224,18 @@ typedef struct RdPerfRecord {
     uint32_t dateCutRuns, dateCutPasses, dateCutDraws, dateCutAgain, dateCutKept;
     uint64_t dateCutTexels;
     uint32_t dateRetakeWhy[RD_DATE_RETAKE_COUNT], dateSnapReused;
+    /* One DATE set-up for the shadow composites (rd_date_one.c): the
+     * composites that used the set-up before them (dateOneShared; their
+     * targets' texels dateOneTexels), those kept to their own by the bound
+     * or at the replay (dateOneRefused).  The empty composites skipped
+     * (rd_shadow_box.c: emptySkipped, of them with DATE emptySkippedDate).
+     * A shadow window with no volume taken with SCENE's pass ended at the
+     * resolve (rd_no_volume.c: noVolumeBreak) and its zero clears not
+     * recorded because the target held zero already (noVolumeHeld) */
+    uint32_t dateOneShared, dateOneRefused;
+    uint64_t dateOneTexels;
+    uint32_t emptySkipped, emptySkippedDate;
+    uint16_t noVolumeBreak, noVolumeHeld;
     /* GS state as shader data (rd_uber.c): uber 1 while it is in force;
      * pipeFamily the pipeline cache by family at the replay's end, in
      * rd_internal.h RdKeyFamily's order (2D, VU, VU point, shadow, fog,

@@ -1076,7 +1076,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   `tools/date_cut_dumps.txt` (machine-local; a listed dump that is absent FAILS, a glob that matches
   none too) with `ICO_RD_DATE_CUT=0` and `1`, `--pass-dump --stats`, under `ICO_RD_BLEND=fixed`,
   `ICO_RD_STORE_PLAN=1`, `ICO_RD_STORE_POISON=1`, `ICO_RD_DATE_PATH=snapshot`,
-  `ICO_RD_VU_PREPASS=0`, at the Mali-G52's setting (1x, 21:9, 1612x720; `ICO_VK_FAKE_LIMITS=mali`,
+  `ICO_RD_VU_PREPASS=0`, `ICO_RD_DATE_ONE=0` (with one DATE set-up for the composites the cut has
+  no run on them; `rd_date_one_ab` checks the two together), at the Mali-G52's setting (1x, 21:9, 1612x720; `ICO_VK_FAKE_LIMITS=mali`,
   `ICO_VK_FAKE_NO_DST=1`), the Adreno 740's (3x, 3:2, Full height and pixel, 3048x2032;
   `ICO_VK_FAKE_ADRENO=1`, `ICO_VK_FAKE_NO_DST=1`) and the PowerVR phone's Resolution Auto without
   its in-pass read (`ICO_VK_FAKE_NO_DST=1`: a fractional scale, 0 passes cut expected); the `_gl`
@@ -1086,6 +1087,54 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   composites) or at least one where it takes two snapshots, and its depth and stencil MB loaded and
   stored each fall by 0.8 to 1.0 of the "at most" its stats line names; Vulkan also `--keys` at the
   Mali's present size without an aspect: the cut adds no key the start-up set lacks. No device: SKIP.
+- `rd_date_one_test.c` (`rd_date_one`, lavapipe, 77 without a device after its CPU cases): one
+  DATE set-up for the shadow composites (`rd_date_one.c`, `rd_date_one.h`) and the empty
+  composites (`rd_shadow_box.c` `rd__shadow_box_empty_skip`). CPU: the bound and the group rule on
+  the retail stage data (shadowDepth 72 with blends 40/80/120, 80 with 90/100/128: two shared), the
+  debug menu's 128 x 128 (0x80 at every composite: two refused; 128 with shadowBlend[1] alone: the
+  SHADOW0 composite is the last, two shared), the bound rounded up, DATM 1, FBA 1, COLCLAMP 0's
+  wrap and a draw in no composite form (none kept), no alpha written (kept), force; a draw or a
+  composite without DATE between, another target; the 10 s clause and the `--stats` words. On the
+  device (`ICO_RD_DATE_PATH=snapshot`, `ICO_RD_BLEND=fixed`, `ICO_RD_STORE_POISON=1`, 1x, 512x448)
+  frames in the shadow's shape built by hand (list 0 SCENE's depth and the alpha's top bit over its
+  left half; list 3 a reset, a rectangle's volume, the resolve, SHADOW0 from the count, three
+  composites of SHADOW0 under 0x3400D; list 4 a Z GEQUAL sprite): d1 (shadowDepth 72, blends 40/80/120)
+  off against on (`rd__date_one_force`): SCENE byte for byte, snapshots 3 (1 first, 2 written) against
+  1 with 2 shared and 2 reused, 4 render passes and 2 draws fewer, the DATE cut's passes 2 against 0,
+  none begun again, the shared texels 2 x SCENE's; d2 (128 x 128): on refuses both (3 snapshots, 2
+  refused, SCENE byte for byte), forced past the bound 2 shared, 1 snapshot and SCENE different (the
+  test sees a wrong share); d3 (no volume, one DATE set-up off) the empty composites off against on
+  (`rd__shadow_box_empty_force`): SCENE byte for byte, 3 skipped with DATE, snapshots 3 against 0,
+  5 passes and 3 draws fewer; no validation error.
+- `rd_shadow_cuts_ab.cmake` (`rd_date_one_ab`, `rd_empty_skip_ab`, `rd_no_volume_break_ab` and their
+  `_gl` twins, `-DITEM=dateone|emptyskip|novolbreak`): the dumps of `tools/shadow_cuts_dumps.txt`
+  (the Mali reporter's four dumps and the Pixel's three opening dumps, each "volume" or
+  "novolume", v746 with the Mali setting's passes fewer under the empty composites, 6), then of
+  `tools/date_cut_dumps.txt`, `tools/shadow_box_dumps.txt` and `tools/no_volume_dumps.txt` (their
+  classes where those lists give them; machine-local; a listed dump that is absent FAILS), each item
+  off against on with the other two items and the no-volume window's open mode off in both runs,
+  `--pass-dump --stats` under `ICO_RD_STORE_PLAN=1`, `ICO_RD_VU_PREPASS=0`. Settings: dateone the
+  Mali-G52's (`ICO_VK_FAKE_LIMITS=mali ICO_VK_FAKE_NO_DST=1 ICO_VK_FAKE_NO_DUAL=1`, 1x), the Adreno
+  740's (3x, Full height and pixel), the PowerVR phone's Resolution Auto without its in-pass read
+  (fractional) each by the snapshot (`ICO_RD_DATE_PATH=snapshot ICO_RD_BLEND=fixed
+  ICO_RD_STORE_POISON=1`), and the phone's stencil path (`ICO_VK_FAKE_LIMITS=moltenvk
+  ICO_RD_LATE_PASS=1`); emptyskip the Mali's and the phone's; novolbreak the phone's, lavapipe 1x with
+  `ICO_RD_DATE_PATH=stencil`, the phone's with `ICO_RD_NO_VOLUME_POISON=1` (every PNG but SHADOW0-2
+  compared), the phone's with `--repeat 2` (the second replay's targets holding the first's zeros)
+  and the Mali's (not taken); the `_gl` twins at 1x on OpenGL. Every pair: every PNG byte for byte;
+  from the code: dateone: off shares nothing, on keeps none to its own, begins no pass again; by
+  the snapshot S shared means S snapshots and S draws fewer, 2 S passes fewer, the colour loaded and
+  stored each S x 5 bytes a texel of the shared targets fewer, the depth and stencil the same at the
+  integer scales and 4 to 5 bytes a texel fewer at the fractional one; by the stencil bit S set-ups
+  and 2 S draws fewer, the same passes and traffic; "volume" and "novolume" dumps share 2;
+  `--keys` at the Mali's: no key more missing; emptyskip: K skipped, D with DATE: by the snapshot D
+  snapshots and draws fewer and D to 2 D passes fewer (v746 at the Mali's: 6), by the stencil bit D
+  set-ups and 2 D draws fewer, the passes the same or one fewer (a "novolume" dump the same, and
+  its traffic); "novolume" dumps skip 3, "volume" none; novolbreak: the listed windows taken at the
+  stencil settings, none by the snapshot; a taken window: the passes off's less 4 a window plus the
+  zero clears it recorded, the set-ups 3 fewer a "novolume" window, at `--repeat 2` no clear and
+  the targets holding zero counted, none counted in a first replay; nothing taken: the same passes
+  and traffic. Each item does something over the dumps. No device: SKIP.
 - `rd_shadow_tile_test.c` (`rd_shadow_tile` with `frames`, `rd_shadow_tile_selftest` with
   `startup` and `ICO_RD_SHADOW_TILE=1`; both `ICO_RD_DATE_PATH=stencil`, lavapipe; 77 without a
   device, DATE's stencil bit or the one-draw count, after the CPU words): the shadow tiles
@@ -1115,7 +1164,9 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
 - `rd_shadow_box_ab.cmake` (`rd_shadow_box_ab`, `rd_shadow_box_ab_gl`): the dumps of
   `tools/shadow_box_dumps.txt` (machine-local; a listed dump that is absent FAILS: the Pixel's
   v3677 and v4287, the main gate, the PowerVR phone's v4657 and v2381) with `ICO_RD_SHADOW_BOX=0`
-  and `1`, `--pass-dump --stats`, under `ICO_RD_STORE_PLAN=1`, `ICO_RD_VU_PREPASS=0`, at the
+  and `1`, `--pass-dump --stats`, under `ICO_RD_STORE_PLAN=1`, `ICO_RD_VU_PREPASS=0`,
+  `ICO_RD_EMPTY_SKIP=0` (with the box on an empty composite would be skipped, which the box off
+  cannot; `rd_empty_skip_ab` checks the skip), at the
   PowerVR phone's profile (`ICO_VK_FAKE_LIMITS=moltenvk`, Enhanced 2364x1080, Full height and
   pixel), the Mali-G52's (`ICO_VK_FAKE_LIMITS=mali`, `ICO_VK_FAKE_NO_DST=1`), the B-spline
   composites at Enhanced 2x (`ICO_RD_SHADOW_BSPLINE=1`) and MSAA 4x at Enhanced 2x; the `_gl` twin
@@ -1155,8 +1206,9 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   data, DATE); the 10 s clause and the `--stats` words from made-up records.
 - `rd_no_volume_ab.cmake` (`rd_no_volume_ab`, `rd_no_volume_ab_gl`): the dumps of
   `tools/no_volume_dumps.txt` (machine-local; a listed dump that is absent FAILS: the corpus boot
-  frames rd-00400 and rd-00600, a window with no volume, and rd-00200, the Pixel's v3677 and the
-  cage frame v4651, windows with volumes) with `ICO_RD_NO_VOLUME=0` and `1`, `--pass-dump --stats`,
+  frames rd-00400 and rd-00600 and the Pixel's opening v746, a window with no volume, and rd-00200,
+  the Pixel's v3677 and the cage frame v4651, windows with volumes) with `ICO_RD_NO_VOLUME=0` and
+  `1`, `--pass-dump --stats`,
   under `ICO_RD_STORE_PLAN=1`, `ICO_RD_VU_PREPASS=0`, at the PowerVR phone's profile with its late
   passes (`ICO_VK_FAKE_LIMITS=moltenvk ICO_RD_LATE_PASS=1`, Enhanced 2364x1080, Full height and
   pixel), lavapipe at 1x (DATE by the snapshot: not taken), lavapipe at 1x with

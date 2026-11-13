@@ -820,6 +820,35 @@ clears. What the log shows:
   With it on, a release candidate's title block read `1.0 windows a replay ... kept SCENE's pass open (1.0 with it
   open, up to 42.9 MB ...)`, the pause menu's `0.8`.
 
+The break mode (off by default until a phone release candidate: `RD_NO_VOLUME_BREAK_DEFAULT`
+0) takes the same windows with SCENE's pass ended at the resolve as before
+([RENDER_POST.md](RENDER_POST.md#a-shadow-window-with-no-volume)): its gate line reads `rd: shadows:
+no volume: on with SCENE's pass ended at the resolve (...)`, and the 10 s clause above ends `, 1.0
+with SCENE's pass ended at the resolve (C zero clears, H targets holding zero already)` (on the
+title, picture after picture, C near 0 and H near 4: the count and the levels already hold the
+zeros).
+
+### One DATE set-up for the shadow composites, the empty composites
+
+On every device ([RENDER_POST.md](RENDER_POST.md#one-date-set-up-for-the-shadow-composites)): the
+second and third shadow composites use the first one's DATE snapshot (the Mali, Qualcomm's driver,
+the PowerVR B class, Direct3D 11, OpenGL) or stencil set-up (the Pixel, the Adreno 710), and a
+composite with nothing to draw (no volume) is skipped with its set-up. What the log shows:
+
+- once a renderer: `rd: DATE one set-up: on: the shadow composites share one DATE snapshot or
+  stencil set-up where none can set the alpha's top bit (...)` and `rd: shadows: empty composites:
+  on: ...`; once each: `rd: DATE one set-up: the first shared (frame F, command C with command P's
+  snapshot)` and `rd: shadows: empty composites: the first skipped (command C, ...)`;
+- a composite kept to its own set-up (the stage-setting debug menu's 128 x 128 is the one retail
+  way): `rd: DATE one set-up: a composite could write alpha 128 (level alpha up to L x vertex alpha
+  A, frame F, command C): ...` or `rd: DATE one set-up: command C retakes its set-up as before:
+  <why>`, the first 8 then every 100th;
+- in each 10 s block's `window: per replay` line, after the DATE clause: `; DATE one set-up: 2.0
+  composites a replay shared the set-up before them, 0.0 kept their own` in pictures with volumes
+  (the DATE clause's snapshots then read about 1.0 a replay, `an alpha write since` near 0, where
+  each composite taking its own reads 3.0 and 2.0); after the shadow box's clause: `; empty composites: 3.0 a replay
+  skipped (3.0 with their DATE set-up)` in pictures with no volume.
+
 ### The stencil outside the shadow window (the PowerVR phone)
 
 On the PowerVR class with the fog's local read (`fog local on` in the profile line, `rd: fog: depth

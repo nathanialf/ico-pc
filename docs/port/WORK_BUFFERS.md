@@ -33,6 +33,7 @@ sprite model ([RENDER_POST.md](RENDER_POST.md#post-passes), "The staticBlur spri
 | `port/render/rd_pass_area.c`, `port/render/rd_replay.c`, `port/rhi/vk/vk_cmd.c` | the pass area: the commands' boxes before the walk (`rd__pass_area_scan`, from `rd__store_plan_scan`), each pass's area (`rd__pass_area_begin` from `beginPass`), the end of its commands (`rd__pass_area_due`), the render area and the cut scissors (`rhi_cmd_begin_render_pass`, `rhi_cmd_set_scissor`) |
 | `port/render/rd_date_cut.c`, `port/render/rd_date_cut.h`, `port/render/rd_store_plan.c` | DATE's passes without the depth: the rule (`rd_date_cut_step`), the scan (`rd__date_cut_scan_cmd`, from `rd__store_plan_scan`), each draw's depth (`rd__date_cut_depth`, from `prepareDrawEx`), the DATE snapshot and its reasons (`rd__date_snapshot`) |
 | `port/render/rd_shadow_box.c`, `port/render/rd_shadow_box.h`, `port/render/rd_shadow_one.c` | the shadows over the volumes' box: the scan's sources and composites (`rd__shadow_box_scan_cmd`, from `rd__store_plan_scan`), the count's box from the strips and the one draw's clear and scissor (`rd__shadow_box_count_area`), the composites' scissor and DATE area (`rd__shadow_box_screen`, from `doScreen`) |
+| `port/render/rd_date_one.c`, `port/render/rd_date_one.h` | one DATE set-up for the shadow composites: the bound and the group rule (`rd_date_one_alpha`, `rd_date_one_keeps`, `rd_date_one_step`), the scan (`rd__date_one_scan_cmd`, from `rd__shadow_box_scan_cmd`), the held set-up's serial (`rd__date_one_held`, from `rd__date_snapshot` and `rd__replay_date_take`); the empty composites' skip is `rd__shadow_box_empty_skip` ([RENDER_POST.md](RENDER_POST.md#one-date-set-up-for-the-shadow-composites)) |
 | `port/render/rd_stencil_selftest.c`, `port/render/rd_stencil_selftest.h`, `port/render/rd_shadow.c` | the stencil outside the shadow window: the decision (`rd__stencil_cut_forced`, read by `rd__stencil_ops_packed`), its start-up self-test (`rd__stencil_cut_selftest`), the passes' counters and the tests' poison (`rd__stencil_cut_pass`) |
 | `port/render/rd_store_plan.c`, `port/render/rd_replay.c`, `port/render/rd_profile.c` | the store plan: the scan before the walk (`rd__store_plan_scan`), each pass's depth ops (`rd__store_plan_pass` from `beginPass`), the walk's command count (`g_rdStoreOrd`), the profile's `storePlan` |
 
@@ -1433,7 +1434,13 @@ state commands and commands that draw nothing (a NOP, a folded fade, the deferre
 Anything else (a copy, a clear, a post sprite, the fog, a shadow command, a VU draw on the target, a
 draw that uses the depth) ends the run undecided, and its passes keep the depth. The replay's end
 closes a run. On the composites: the first two runs are depth-free, the third goes on into list
-4's mesh draws and keeps its depth.
+4's mesh draws and keeps its depth. A DATE draw that shares the snapshot before it
+(one DATE set-up for the shadow composites, [RENDER_POST.md](RENDER_POST.md#one-date-set-up-for-the-shadow-composites):
+`RdDateCutCmd.shared`, marked by `rd_date_one.c`'s scan, which the store plan's walk runs before
+this one) ends no pass and stays in the run: with the second and third composites shared, the run
+from the first goes on into list 4's draws, undecided, and the three composites draw in list 4's
+pass with the depth (no pass is begun without it there; the integer-scale twins drew the same
+bytes). `rd_date_cut_ab` pins `ICO_RD_DATE_ONE=0`.
 
 **The walk** (`rd__date_cut_depth`, from `rd_replay.c` `prepareDrawEx` after the DATE snapshot).
 A draw of a depth-free run gets no depth target (`DrawSetup.tdId` 0, `depthFmt`
@@ -1629,9 +1636,12 @@ The box is on by default, byte for byte; on the owner's Pixel it gave nothing me
 - **The composites.** A fragment whose taps all hold alpha 0 has As 0 and fails its alpha test,
   which keeps the destination. Each composite is scissored to its box (texels, `rd__gs_rect_texels`)
   and its DATE area (the stencil bit's setup or the R8 snapshot, `prepareDrawEx`'s area) is
-  shrunk to it. One with nothing left to draw still takes its DATE snapshot and moves the write
-  serial as the whole draw did, so the DATE cut's prediction (`rd_date_cut.c`, from the scan's
-  commands, not their areas) and its counters stay as they were.
+  shrunk to it. One with nothing left to draw because its level's box is empty is skipped whole,
+  its DATE snapshot or set-up with it (the empty composites,
+  [RENDER_POST.md](RENDER_POST.md#one-date-set-up-for-the-shadow-composites): the write serial
+  moved, so the next DATE draw takes its own set-up; the DATE cut's predicted pass ends then come
+  at the next composite's retake, never a byte); one that empties against the draw's scissor still
+  takes its DATE snapshot and moves the write serial as the whole draw did.
 
 **The map** (`rd_sb_map_sprite`, `rd_sb_map_axis`): a destination pixel may take a texel of the
 source's box only where its UV comes within 3 source texels of it (bilinear taps reach one texel,

@@ -74,3 +74,7 @@ endif()
 
 # the late passes on SCENE (rd_late_pass.c in ico_render) and their tests
 include(rd_late_pass.cmake)
+
+# one DATE set-up for the shadow composites, the empty composites, the no-volume
+# window's break mode (rd_date_one.c and its kin in ico_render) and their tests
+include(rd_date_one.cmake)
