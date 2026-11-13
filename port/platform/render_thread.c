@@ -188,7 +188,14 @@ static void place_rhi_thread_begin(void)
  * (no log thread, or not Android) it reads the files itself, as before */
 #define TICK_LIST_EVERY 10u
 static int s_tickOn; /* __atomic: the tick has run: the block reads its cells */
-static SysCell s_statCell[3];
+/* the game, render and submit threads, then the two audio threads: SDL's
+   device thread (SDLAudioP..., the mixing and SPU2) and the system's
+   output thread AAudio makes inside the process (AudioTrack, or AAudio_N
+   on its MMAP path), found by name in the log thread's list (issue 179:
+   both inherited the game thread's two cores) */
+#define STAT_THREADS 5
+static SysCell s_statCell[STAT_THREADS];
+static long s_audioTid[2]; /* __atomic: 0 not found */
 
 static struct {
     SDL_SpinLock lock;
@@ -200,7 +207,27 @@ static long stat_tid(int i)
 {
     return i == 0   ? s_place.gameTid
            : i == 1 ? __atomic_load_n(&s_place.renderTid, __ATOMIC_ACQUIRE)
-                    : __atomic_load_n(&s_place.submitTid, __ATOMIC_ACQUIRE);
+           : i == 2 ? __atomic_load_n(&s_place.submitTid, __ATOMIC_ACQUIRE)
+                    : __atomic_load_n(&s_audioTid[i - 3], __ATOMIC_ACQUIRE);
+}
+
+/* the audio threads' ids from a list (the first of each name's family) */
+static void audio_tids(const CpuThreads *list)
+{
+    long found[2] = {0, 0};
+
+    for (int i = 0; i < list->n; i++) {
+        const char *nm = list->t[i].name;
+
+        if (found[0] == 0 && strncmp(nm, "SDLAudioP", 9) == 0) {
+            found[0] = list->t[i].tid;
+        } else if (found[1] == 0 &&
+                   (strncmp(nm, "AudioTrack", 10) == 0 || strncmp(nm, "AAudio", 6) == 0)) {
+            found[1] = list->t[i].tid;
+        }
+    }
+    __atomic_store_n(&s_audioTid[0], found[0], __ATOMIC_RELEASE);
+    __atomic_store_n(&s_audioTid[1], found[1], __ATOMIC_RELEASE);
 }
 
 /* The keeper (cpu_keep.h): the render, game and submit threads' cores
@@ -228,6 +255,7 @@ static struct {
 } s_keepOut;
 
 static unsigned s_keepMoved, s_keepEnded; /* the log thread's: threads moved off the kept cores */
+static unsigned s_sweepMoved, s_sweepFailed; /* the log thread's: the few-cores rule's sweep */
 
 static void keep_request(unsigned why)
 {
@@ -311,6 +339,23 @@ static void keep_tick(const CpuThreads *list)
     }
     const bool tried = cpu_keep_tick(&s_keep, &ops, ico_thread_now_ms(), why, allowed, rtid,
                                      stat_tid(2), s_place.gameTid);
+    const uint64_t held = cpu_keep_held(&s_keep);
+
+    if (held != 0) {
+        /* the few-cores rule (cpu_keep.h): every other thread found on the
+           render or game thread's faster cores (the audio threads, the
+           driver's, those inherited) moved to the others' cores; Android's
+           UI thread (the process's id) left to the system */
+        long pid = 0;
+        unsigned failed = 0;
+#if defined(__linux__)
+        pid = (long)getpid();
+#endif
+        const long skip[4] = {rtid, stat_tid(2), s_place.gameTid, pid};
+
+        s_sweepMoved += cpu_place_sweep(held, s_keep.sets.others, skip, 4, NULL, &failed);
+        s_sweepFailed += failed;
+    }
 
     if (list != NULL && s_keep.have) {
         /* a thread the render or game thread made starts on its creator's
@@ -361,9 +406,18 @@ static void keep_tick(const CpuThreads *list)
     }
     n = cpu_keep_block_text(&s_keep, sys, text, sizeof(text));
     if (n < sizeof(text)) {
+        const int w =
+            snprintf(text + n, sizeof(text) - n,
+                     "; threads moved off the kept cores %u since the start (%u had ended)",
+                     s_keepMoved, s_keepEnded);
+        n += w > 0 ? (size_t)w : 0u;
+    }
+    if (s_keep.few && n < sizeof(text)) {
+        (void)cpu_place_mask_text(s_keep.sets.others, m, sizeof(m));
         snprintf(text + n, sizeof(text) - n,
-                 "; threads moved off the kept cores %u since the start (%u had ended)",
-                 s_keepMoved, s_keepEnded);
+                 ", %u moved to %s by the few-cores rule once a second since the start (%u "
+                 "refused)",
+                 s_sweepMoved, s_keep.have ? m : "the others' cores", s_sweepFailed);
     }
     SDL_LockSpinlock(&s_keepOut.lock);
     memcpy(s_keepOut.blockText, text, sizeof(text));
@@ -389,7 +443,7 @@ void ico_render_thread_tick(void)
 {
     static uint32_t s_ticks;
     const CpuThreads *list = NULL;
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < STAT_THREADS; i++) {
         ThreadStat now;
         const long tid = stat_tid(i);
         if (tid > 0 && thread_stat_read(NULL, tid, &now) == 0) {
@@ -403,6 +457,7 @@ void ico_render_thread_tick(void)
         static CpuThreads s_threads;
         (void)cpu_place_threads_read(NULL, &s_threads);
         list = &s_threads;
+        audio_tids(list);
         if (cpu_place_threads_format(&s_threads, s_place.gameTid, text, sizeof(text)) > 0) {
             SDL_LockSpinlock(&s_list.lock);
             memcpy(s_list.text, text, sizeof(text));
@@ -463,7 +518,7 @@ static void place_threads_line(void)
    thread's could be read and the game thread's read failed: "ran / waited
    for a core: schedstat not readable (EACCES)".  "" off Linux (no thread
    ids).  The game thread's */
-static ThreadStatTrack s_statTrack[3];
+static ThreadStatTrack s_statTrack[STAT_THREADS];
 
 static void place_stat_prime(void)
 {
@@ -476,12 +531,15 @@ static void place_stat_prime(void)
 
 static size_t place_stat_part(char *out, size_t cap, bool submitOn)
 {
-    static const char *const who[3] = {"game", "render", "submit"};
+    static const char *const who[STAT_THREADS] = {"game", "render", "submit", "SDL audio",
+                                                  "system audio"};
     static bool s_failSaid;
-    const long tids[3] = {s_place.gameTid, __atomic_load_n(&s_place.renderTid, __ATOMIC_ACQUIRE),
-                          submitOn ? __atomic_load_n(&s_place.submitTid, __ATOMIC_ACQUIRE) : 0};
-    ThreadStat d[3];
-    bool have[3] = {false, false, false};
+    const long tids[STAT_THREADS] = {
+        s_place.gameTid, __atomic_load_n(&s_place.renderTid, __ATOMIC_ACQUIRE),
+        submitOn ? __atomic_load_n(&s_place.submitTid, __ATOMIC_ACQUIRE) : 0, stat_tid(3),
+        stat_tid(4)};
+    ThreadStat d[STAT_THREADS];
+    bool have[STAT_THREADS] = {false, false, false, false, false};
     int gameErr = 0;
 
     if (cap > 0) {
@@ -490,7 +548,7 @@ static size_t place_stat_part(char *out, size_t cap, bool submitOn)
     const bool cells = __atomic_load_n(&s_tickOn, __ATOMIC_ACQUIRE);
     double oldest = -1.0;
 
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < STAT_THREADS; i++) {
         ThreadStat now;
         int e;
 
@@ -525,7 +583,7 @@ static size_t place_stat_part(char *out, size_t cap, bool submitOn)
         have[i] = thread_stat_track(&s_statTrack[i], tids[i], &now, &d[i]);
     }
     if (have[0] || have[1] || have[2]) {
-        size_t n = thread_stat_text(out, cap, who, d, have, 3);
+        size_t n = thread_stat_text(out, cap, who, d, have, STAT_THREADS);
         if (cells && oldest >= 0.0 && n < cap) {
             /* the deltas run between the log thread's reads, not the
                block's ends: up to a second more or less than the block */
@@ -577,14 +635,15 @@ static void place_init(void)
                (cpu_keep.h), from the log thread's first tick */
             cpu_keep_init(&s_keep, &s_place.classes);
             __atomic_store_n(&s_keepOn, 1, __ATOMIC_RELEASE);
-        } else {
-            /* two faster cores: the render and game threads alone would
-               leave the submit thread on the slow ones (cpu_keep.h) */
-            fprintf(stderr,
-                    "window: cores after the start: not kept (%d core%s faster than the slowest; "
-                    "the keeper needs %d): the start's placement only, as before this keeper\n",
-                    s_place.plan.fastCount, s_place.plan.fastCount == 1 ? "" : "s",
-                    (int)CPU_KEEP_MIN_FAST);
+        } else if (cpu_keep_few(&s_place.classes)) {
+            /* one or two faster cores: the few-cores rule (cpu_keep.h),
+               from the log thread's first tick, its sweep with it */
+            char few[768];
+
+            cpu_keep_init(&s_keep, &s_place.classes);
+            __atomic_store_n(&s_keepOn, 1, __ATOMIC_RELEASE);
+            (void)cpu_keep_few_text(&s_place.classes, cpu_place_allowed(), few, sizeof(few));
+            fprintf(stderr, "window: cores after the start: %s\n", few);
         }
     }
 #else
@@ -1512,7 +1571,7 @@ void ico_render_thread_block_line(double stepMs, double stepCpuMs, double pictur
     {
         /* the threads' time on a core and waiting for one in the block
            (thread_stat.h), after the cores */
-        char ran[200];
+        char ran[320];
         const size_t at = strlen(cores);
 
         if (place_stat_part(ran, sizeof(ran), rd_thread_submit_on()) > 0) {

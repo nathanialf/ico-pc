@@ -1425,15 +1425,53 @@ once-a-second tick) keeps three threads apart after the start, by the cores' top
 | one-core pins widened (the pair) | 6-7 | 5 alone, or 0-5 when every one-core pin is widened | 2-4 | 0-4 |
 | a pair widened too (the start's rule) | 2-7 | 0-7 | 2-6 | 0-7 |
 
-The keeper needs three or more cores faster than the slowest (`CPU_KEEP_MIN_FAST`): the Pixel's
-six, a 4 + 3 + 1 phone's four (7, 6, 4-5), 4 bigs over 4 littles. A Helio G85 (`0-5 1.8 GHz, 6-7
-2.0 GHz`, issue 179's class) has two: the render and game threads alone on them would leave the
-submit thread and every worker on the slow cores, where the start's rule leaves the submit thread
-to the system, so there, as with one faster core or one speed, the keeper is off and the start's
-placement stands (both on 6-7, the submit thread free). The start says `window: cores after the
-start: not kept (2 cores faster than the slowest; the keeper needs 3): the start's placement only,
-as before this keeper`, and the 10 s block's keeper text reads `off (fewer than three cores faster
-than the slowest)`. The game thread is SDL's `ico-main` thread, not Android's UI
+The rule above needs three or more cores faster than the slowest (`CPU_KEEP_MIN_FAST`): the
+Pixel's six, a 4 + 3 + 1 phone's four (7, 6, 4-5), 4 bigs over 4 littles. With one or two
+(`cpu_keep_few`; a Helio G85, `0-5 1.8 GHz, 6-7 2.0 GHz`, issue 179's moto g24 power) the keeper
+runs the few-cores rule instead. Before it the start's placement stood alone (game and
+render threads both on 6-7, nothing kept after), and every thread the game thread made afterwards
+inherited 6-7: issue 179's log's threads line read `kept to cores 6-7: ico-main (the game
+thread), ico render, AudioTrack, SDLAudioP15`, the game and render threads each waited 0.2-1.0 s a
+block for a core (the submit thread, free, 0.0-0.2 s), and the six slow cores held everything
+else, the driver's threads too. The picture there is GPU-bound (97-100 % busy, the render
+thread's CPU 16-21 ms of a 110 ms picture), so the two fast cores go to the two threads that
+feed the GPU, one each, and everything else goes to the slow cores:
+
+| 2 + 6 (Helio G85) | render thread | game thread | submit thread | every other thread of the process |
+|---|---|---|---|---|
+| the ideal | 7 alone | 6 alone | 0-5 | 0-5 |
+| 7 refused alone | 6 alone | 6-7 | 0-5 | 0-5 |
+| the game thread's 6 refused | 7 alone | 6-7 | 0-5 | 0-5 |
+| one-core pins widened (the pair) | 6-7 | 6-7 | 0-5 | 0-5 |
+| a pair widened too (the start's rule) | 6-7 | 6-7 | 0-7 | 0-7 |
+
+With one faster core (1 + 7) the render thread is alone on it, the game thread on every core as
+before, the rest on 0-6. "Every other thread of the process" is the audio threads (SDL's device
+thread, which runs the mixing and the sound chip, and AAudio's `AudioTrack` thread), the log
+thread, the workers, the driver's threads (`mali-cmar-backend` and its kin) and any thread made
+later: the system's and the driver's threads are made where nothing of the game's puts them
+back, so once a second the log thread moves every thread it finds on the render or game thread's
+fast cores to the others' (`cpu_keep_held`, `cpu_place_sweep`: the process's thread ids from
+`/proc/self/task`, each one's cores by `sched_getaffinity`). Android's UI thread (the process's
+own id) is left to the system, as everywhere. The alternative, no pin at all, has no log on this
+class; the nearest one (render and submit threads on the two, the game thread free) had the game's
+step on the slow cores 15-62 % of the samples, and it would leave the audio threads free to take
+the fast cores. The start says:
+
+```
+window: cores after the start: kept (2 cores faster than the slowest): the render thread on 7 alone, the game thread on 6 alone, the submit thread and every other thread of the process on 0-5 (the audio threads, the log thread, the workers, the driver's threads and those made later: the log thread moves a thread found on 6-7 there once a second; Android's UI thread is left to the system); where the system widens a one-core pin, the render and the game thread share 6-7
+```
+
+The keeper's try and block lines are those below; under the few-cores rule the block line ends
+`, N moved to 0-5 by the few-cores rule once a second since the start (M refused)`, and the
+threads line should read `kept to core 6: ico-main (the game thread); kept to core 7: ico render;
+kept to cores 0-5: ...` once the first second has passed. The game thread line's run-queue part
+names the two audio threads too (every phone, found by name in the thread list every 10 s):
+`ran / waited for a core: game 2.6 s / 0.7 s, render 1.2 s / 0.3 s, submit 0.2 s / 0.0 s, SDL
+audio 0.4 s / 0.1 s, system audio 0.1 s / 0.0 s`. Under the few-cores rule the game and render
+threads' waits are the ones to read: near 0 means the rule holds; still 0.2-1.0 s means threads
+outside the process (the system's) share the two cores. The 10 s block's keeper text on a phone
+with every core of one speed reads `off (no core faster than the slowest)`. The game thread is SDL's `ico-main` thread, not Android's UI
 thread: the touches, keys and the activity's lifecycle arrive on the UI thread, which is never
 moved, and are queued for the game thread to take. Threads the game or render thread makes start
 on their creator's cores (pthread_create(3)); the workers put themselves back on the others' cores

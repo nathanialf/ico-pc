@@ -7,9 +7,12 @@
  *     GHz, 7 3.8 GHz): the ideal, core 7 refused, core 7 forbidden by the
  *     allowed cores, the pair, the start's rule, the game thread's core
  *     refused, only core 7 fast and allowed, every fast core refused; a
- *     Helio G85 (0-5 1.8 GHz, 6-7 2.0 GHz): two faster cores, the keeper
- *     off (it needs three); the Pixel, 4 + 3 + 1, 4 + 4 applying, 8 cores
- *     of one speed not;
+ *     Helio G85 (0-5 1.8 GHz, 6-7 2.0 GHz): two faster cores, the
+ *     few-cores rule (render 7 alone, game 6 alone, the rest 0-5; 7
+ *     refused, the game thread's 6 refused, both refused, the pair, the
+ *     start's rule, a cpuset without core 7); the Pixel, 4 + 3 + 1, 4 + 4
+ *     applying, 8 cores of one speed not; 1 + 7 (render alone, the game
+ *     thread free, the rest 0-6, no pair);
  *     a 4 + 3 + 1 Mali phone (0-3 1.8, 4-6 2.6, 7 3.0); 4 bigs of one
  *     speed and 4 littles; a 4-core 1 + 2 + 1 device; a 4-core device of
  *     one speed and a one-core device (the rule does not apply);
@@ -23,6 +26,17 @@
  *     on the others' cores, then quiet); a cpuset without core 7 (the
  *     request never names it); the render thread's id not known yet (the
  *     request waits); the rule off;
+ *   the few-cores rule against the fake kernel: the Helio G85 all kept,
+ *     every one-core pin widened (the pair for both threads, the rest
+ *     still 0-5), the game thread's core alone widened (both cores for it
+ *     at the next tick), the held cores the sweep moves threads off (none
+ *     under the start's rule or the rule for three or more), the start
+ *     line word for word (2 + 6, 1 + 7; none for the Pixel);
+ *   each thread's cores on five layouts read from a fake sysfs under the
+ *     build folder (2 + 6, 1 + 7, 4 + 4, 1 + 3 + 4, 8 of one speed): the
+ *     start's rule, the keeper's first tick, and the sweep's picks among
+ *     the audio threads, the driver's thread, a worker on core 0, the UI
+ *     thread and one not read (Linux);
  *   the words of the reasons;
  *   cpu_place.h's additions: the samples by core, a thread's cpuset and
  *     its cores from a fake /proc and /dev/cpuset under the build folder
@@ -81,6 +95,7 @@ static const unsigned SMALL4[4] = {1800, 2400, 2400, 3000};
 static const unsigned SAME4[4] = {2000, 2000, 2000, 2000};
 static const unsigned SAME8[8] = {2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000};
 static const unsigned ONE[1] = {2000};
+static const unsigned ONE7[8] = {1800, 1800, 1800, 1800, 1800, 1800, 1800, 2400};
 
 static int sets_are(const CpuKeepSets *s, CpuKeepLevel lv, uint64_t r, uint64_t g, uint64_t sub,
                     uint64_t o)
@@ -133,19 +148,40 @@ static void test_choose(void)
     /* every fast core refused: nothing alone */
     CHECK(!cpu_keep_choose(&c, 0xff, 0xfc, 0, CPU_KEEP_ALONE, &s));
 
-    /* two faster cores (2 + 6): the keeper does not apply (the render and
-       game threads alone would leave the submit thread and every worker on
-       the slow cores); the start's rule stands, nothing chosen at any
-       level, and the keeper is off */
+    /* two faster cores (2 + 6): not the rule for three or more but the
+       few-cores rule (cpu_keep.h): the render thread on 7 alone, the game
+       thread on 6 alone, the submit thread and every other thread on the
+       slow cores 0-5 */
     classes(&c, 8, HELIO);
-    CHECK(!cpu_keep_applies(&c));
-    CHECK(!cpu_keep_choose(&c, 0xff, 0, 0, CPU_KEEP_ALONE, &s));
-    CHECK(!cpu_keep_choose(&c, 0xff, 0, 0, CPU_KEEP_FAST, &s));
+    CHECK(!cpu_keep_applies(&c) && cpu_keep_few(&c));
+    CHECK(cpu_keep_choose(&c, 0xff, 0, 0, CPU_KEEP_ALONE, &s));
+    CHECK(sets_are(&s, CPU_KEEP_ALONE, 0x80, 0x40, 0, 0x3f));
+    /* core 7 refused alone: the render thread on 6 alone, the game thread
+       on both (no other faster core of its own) */
+    CHECK(cpu_keep_choose(&c, 0xff, 0x80, 0, CPU_KEEP_ALONE, &s));
+    CHECK(sets_are(&s, CPU_KEEP_ALONE, 0x40, 0xc0, 0, 0x3f));
+    /* the game thread's 6 refused: it shares both */
+    CHECK(cpu_keep_choose(&c, 0xff, 0, 0x40, CPU_KEEP_ALONE, &s));
+    CHECK(sets_are(&s, CPU_KEEP_ALONE, 0x80, 0xc0, 0, 0x3f));
+    /* both refused alone: nothing alone; the pair: both threads on 6-7,
+       the rest still on 0-5 */
+    CHECK(!cpu_keep_choose(&c, 0xff, 0xc0, 0, CPU_KEEP_ALONE, &s));
+    CHECK(cpu_keep_choose(&c, 0xff, 0xc0, 0, CPU_KEEP_PAIR, &s));
+    CHECK(sets_are(&s, CPU_KEEP_PAIR, 0xc0, 0xc0, 0, 0x3f));
+    /* the start's rule (FAST): both on 6-7, everything else on every core,
+       as before the few-cores rule */
+    CHECK(cpu_keep_choose(&c, 0xff, 0xc0, 0, CPU_KEEP_FAST, &s));
+    CHECK(sets_are(&s, CPU_KEEP_FAST, 0xc0, 0xc0, 0, 0xff));
+    /* core 7 not allowed (a cpuset of 0-6): one faster core allowed, the
+       render thread on 6 alone, the game thread on every allowed core */
+    CHECK(cpu_keep_choose(&c, 0x7f, 0, 0, CPU_KEEP_ALONE, &s));
+    CHECK(sets_are(&s, CPU_KEEP_ALONE, 0x40, 0x7f, 0, 0x3f));
+    CHECK(!cpu_keep_choose(&c, 0x7f, 0, 0, CPU_KEEP_PAIR, &s));
     {
         CpuKeep k2;
 
         cpu_keep_init(&k2, &c);
-        CHECK(!k2.on);
+        CHECK(k2.on && k2.few);
     }
     /* the Pixel (1 + 5 over 2): applies, its placement as measured good
        (render 7 alone, game 6 alone, submit 2-5) */
@@ -158,9 +194,10 @@ static void test_choose(void)
     CHECK(cpu_keep_applies(&c));
     classes(&c, 8, BIG4);
     CHECK(cpu_keep_applies(&c));
+    CHECK(!cpu_keep_few(&c));
     /* 8 cores of one speed: none faster, off */
     classes(&c, 8, SAME8);
-    CHECK(!cpu_keep_applies(&c));
+    CHECK(!cpu_keep_applies(&c) && !cpu_keep_few(&c));
     CHECK(!cpu_keep_choose(&c, 0xff, 0, 0, CPU_KEEP_ALONE, &s));
     /* 1 + 2 + 1 over 4 cores: three faster, applies */
     classes(&c, 4, SMALL4);
@@ -177,11 +214,23 @@ static void test_choose(void)
     CHECK(sets_are(&s, CPU_KEEP_ALONE, 0x08, 0x04, 0x02, 0x03));
 
     classes(&c, 4, SAME4);
-    CHECK(!cpu_keep_applies(&c));
+    CHECK(!cpu_keep_applies(&c) && !cpu_keep_few(&c));
     CHECK(!cpu_keep_choose(&c, 0x0f, 0, 0, CPU_KEEP_ALONE, &s));
     classes(&c, 1, ONE);
-    CHECK(!cpu_keep_applies(&c));
+    CHECK(!cpu_keep_applies(&c) && !cpu_keep_few(&c));
     CHECK(!cpu_keep_choose(&c, 0x01, 0, 0, CPU_KEEP_FAST, &s));
+
+    /* one faster core of eight (1 + 7): the render thread on it alone, the
+       game thread on every core (as before), the rest on 0-6; no pair */
+    classes(&c, 8, ONE7);
+    CHECK(!cpu_keep_applies(&c) && cpu_keep_few(&c));
+    CHECK(cpu_keep_choose(&c, 0xff, 0, 0, CPU_KEEP_ALONE, &s));
+    CHECK(sets_are(&s, CPU_KEEP_ALONE, 0x80, 0xff, 0, 0x7f));
+    CHECK(!cpu_keep_choose(&c, 0xff, 0, 0, CPU_KEEP_PAIR, &s));
+    CHECK(!cpu_keep_choose(&c, 0xff, 0x80, 0, CPU_KEEP_ALONE, &s));
+    /* the start's rule: render on it, the game thread on the others' (all) */
+    CHECK(cpu_keep_choose(&c, 0xff, 0x80, 0, CPU_KEEP_FAST, &s));
+    CHECK(sets_are(&s, CPU_KEEP_FAST, 0x80, 0, 0, 0xff));
 }
 
 /* the fake kernel: a mask a thread (the log thread 0, the game 100, the
@@ -429,8 +478,281 @@ static void test_keep_waits(void)
     cpu_keep_init(&k, &c);
     CHECK(!k.on && !cpu_keep_tick(&k, &ops, 0.0, CPU_KEEP_WHY_START, 0x0f, 101, 102, 100));
     (void)cpu_keep_block_text(&k, "", t, sizeof(t));
-    CHECK_STR(t, "off (fewer than three cores faster than the slowest)");
+    CHECK_STR(t, "off (no core faster than the slowest)");
 }
+
+/* the few-cores rule against the fake kernel (cpu_keep.h): the Helio G85
+   (2 + 6) all kept, a kernel widening every one-core pin, one widening
+   the game thread's alone; the held cores the sweep moves threads off;
+   the start line word for word (2 + 6, 1 + 7, none for the Pixel) */
+static void test_keep_few(void)
+{
+    CpuClasses c;
+    CpuKeep k;
+    CpuKeepOps ops;
+    Fake f;
+    char t[1024];
+
+    classes(&c, 8, HELIO);
+    fake_init(&f, &ops);
+    cpu_keep_init(&k, &c);
+    CHECK(k.on && k.few);
+    CHECK(cpu_keep_held(&k) == 0); /* nothing kept yet */
+    CHECK(cpu_keep_tick(&k, &ops, 0.0, 0, 0xff, 101, 102, 100));
+    CHECK(f.mask[2] == 0x80 && f.mask[1] == 0x40 && f.mask[3] == 0x3f && f.mask[0] == 0x3f);
+    CHECK(f.freeMask == 0x3f && f.frees == 1);
+    CHECK(cpu_keep_held(&k) == 0xc0);
+    (void)cpu_keep_try_text(&k, "", t, sizeof(t));
+    CHECK_STR(t, "asked 7, read back 7, the process may run on 0-7; re-pin kept; the game thread "
+                 "on 6 alone (kept), the submit thread on 0-5 (kept), every other thread on 0-5; "
+                 "why: the start");
+    (void)cpu_keep_block_text(&k, "", t, sizeof(t));
+    CHECK_STR(t, "now on 7 alone (the ideal), the game thread on 6 alone, the submit thread on "
+                 "0-5, every other thread on 0-5; read back as set at 0 of 0 reads; tries in the "
+                 "block 1 (the ideal kept in 1), since the start 1 (kept in 1); changed by the "
+                 "system 0 times in the block, 0 since the start");
+    CHECK(!cpu_keep_tick(&k, &ops, 1000.0, CPU_KEEP_WHY_SCENE, 0xff, 101, 102, 100));
+
+    /* every one-core pin widened to 0-7: 7, then 6 refused alone, the
+       pair 6-7 for both threads, the rest still on 0-5; quiet until the
+       10 s retry */
+    fake_init(&f, &ops);
+    f.widenSingles = true;
+    f.widenTo = 0xff;
+    cpu_keep_init(&k, &c);
+    CHECK(cpu_keep_tick(&k, &ops, 0.0, 0, 0xff, 101, 102, 100));
+    CHECK(k.sets.level == CPU_KEEP_PAIR && k.refused == 0xc0);
+    CHECK(f.mask[2] == 0xc0 && f.mask[1] == 0xc0 && f.mask[3] == 0x3f && f.mask[0] == 0x3f);
+    CHECK(cpu_keep_held(&k) == 0xc0);
+    CHECK(!cpu_keep_tick(&k, &ops, 1000.0, 0, 0xff, 101, 102, 100));
+
+    /* the game thread's 6 alone widened (the render thread's 7 kept): 6-7
+       for it from the next tick, then quiet */
+    fake_init(&f, &ops);
+    f.widenCores = 0x40;
+    f.widenTo = 0xff;
+    cpu_keep_init(&k, &c);
+    CHECK(cpu_keep_tick(&k, &ops, 0.0, 0, 0xff, 101, 102, 100));
+    CHECK(k.gameRefused == 0x40 && f.mask[1] == 0xff && f.mask[2] == 0x80);
+    CHECK(cpu_keep_tick(&k, &ops, 1000.0, 0, 0xff, 101, 102, 100));
+    CHECK(k.sets.game == 0xc0 && f.mask[1] == 0xc0 && f.mask[2] == 0x80 && f.mask[3] == 0x3f);
+    CHECK(!cpu_keep_tick(&k, &ops, 2000.0, 0, 0xff, 101, 102, 100));
+
+    /* the start's rule reached (FAST): the others on every core, so no
+       sweep */
+    k.sets.level = CPU_KEEP_FAST;
+    k.sets.others = 0xff;
+    CHECK(cpu_keep_held(&k) == 0);
+
+    /* the rule for three or more never sweeps */
+    classes(&c, 8, PIXEL);
+    fake_init(&f, &ops);
+    cpu_keep_init(&k, &c);
+    CHECK(cpu_keep_tick(&k, &ops, 0.0, 0, 0xff, 101, 102, 100) && cpu_keep_held(&k) == 0);
+    CHECK(cpu_keep_few_text(&c, 0xff, t, sizeof(t)) == 0 && t[0] == '\0');
+
+    /* the start lines */
+    classes(&c, 8, HELIO);
+    (void)cpu_keep_few_text(&c, 0xff, t, sizeof(t));
+    CHECK_STR(t, "kept (2 cores faster than the slowest): the render thread on 7 alone, the game "
+                 "thread on 6 alone, the submit thread and every other thread of the process on "
+                 "0-5 (the audio threads, the log thread, the workers, the driver's threads and "
+                 "those made later: the log thread moves a thread found on 6-7 there once a "
+                 "second; Android's UI thread is left to the system); where the system widens a "
+                 "one-core pin, the render and the game thread share 6-7");
+    classes(&c, 8, ONE7);
+    (void)cpu_keep_few_text(&c, 0, t, sizeof(t));
+    CHECK_STR(t, "kept (1 core faster than the slowest): the render thread on 7 alone, the game "
+                 "thread on every core it may (0-7), the submit thread and every other thread of "
+                 "the process on 0-6 (the audio threads, the log thread, the workers, the "
+                 "driver's threads and those made later: the log thread moves a thread found on "
+                 "7 there once a second; Android's UI thread is left to the system)");
+}
+
+#if defined(__linux__)
+static void write_speed(const char *root, int cpu, unsigned mhz)
+{
+    char p[1024];
+    FILE *f;
+
+    snprintf(p, sizeof(p), "%s/cpu%d", root, cpu);
+    (void)mkdir(p, 0755);
+    snprintf(p, sizeof(p), "%s/cpu%d/cpufreq", root, cpu);
+    (void)mkdir(p, 0755);
+    snprintf(p, sizeof(p), "%s/cpu%d/cpufreq/cpuinfo_max_freq", root, cpu);
+    f = fopen(p, "w");
+    if (f != NULL) {
+        fprintf(f, "%u\n", mhz * 1000u);
+        fclose(f);
+    }
+}
+
+/* Each thread's cores on five layouts read from a fake sysfs under the
+   build folder (cpu_place_classes_read, as cpu_place_test's): the start's
+   rule (cpu_place_plan), then the keeper's first tick on a kernel that
+   keeps every pin, then the few-cores rule's sweep over a table of the
+   process's other threads as they were made (the audio threads and the
+   driver's thread inheriting the game thread's start cores, a worker
+   already on core 0, Android's UI thread, one whose cores could not be
+   read).  The layouts with three or more faster cores keep the
+   expectations above (test_choose, test_keep_all_kept) and sweep nothing */
+typedef struct Layout {
+    const char *name;
+    int n;
+    unsigned mhz[8];
+    /* the start (cpu_place_plan) */
+    CpuPlanKind kind;
+    uint64_t startGame, startRender, startSubmit;
+    /* after the keeper's first tick (0 masks: the keeper off) */
+    bool on;
+    uint64_t game, render, submit, log, held;
+    /* the sweep's moves (thread ids, 0 ended) */
+    long moved[4];
+} Layout;
+
+static void test_layouts(const char *dir)
+{
+    static const Layout L[5] = {
+        {"2+6",
+         8,
+         {1800, 1800, 1800, 1800, 1800, 1800, 2000, 2000},
+         CPU_PLAN_TWO_FAST,
+         0xc0,
+         0xc0,
+         0,
+         true,
+         0x40,
+         0x80,
+         0x3f,
+         0x3f,
+         0xc0,
+         {200, 201, 202, 0}},
+        {"1+7",
+         8,
+         {1800, 1800, 1800, 1800, 1800, 1800, 1800, 2400},
+         CPU_PLAN_ONE_FAST,
+         0,
+         0x80,
+         0,
+         true,
+         0xff,
+         0x80,
+         0x7f,
+         0x7f,
+         0x80,
+         {200, 201, 202, 0}},
+        {"4+4",
+         8,
+         {1800, 1800, 1800, 1800, 2400, 2400, 2400, 2400},
+         CPU_PLAN_MANY_FAST,
+         0,
+         0xf0,
+         0xf0,
+         true,
+         0x40,
+         0x80,
+         0x30,
+         0x3f,
+         0,
+         {0}},
+        {"1+3+4",
+         8,
+         {1800, 1800, 1800, 1800, 2600, 2600, 2600, 3000},
+         CPU_PLAN_MANY_FAST,
+         0,
+         0x80,
+         0x70,
+         true,
+         0x40,
+         0x80,
+         0x30,
+         0x3f,
+         0,
+         {0}},
+        {"8",
+         8,
+         {2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000},
+         CPU_PLAN_NONE,
+         0,
+         0,
+         0,
+         false,
+         0,
+         0,
+         0,
+         0,
+         0,
+         {0}},
+    };
+
+    for (int li = 0; li < 5; li++) {
+        const Layout *y = &L[li];
+        char root[600];
+        CpuClasses c;
+        CpuPlan p;
+        CpuKeep k;
+        CpuKeepOps ops;
+        Fake f;
+
+        snprintf(root, sizeof(root), "%s/cpu_keep_layout_%d", dir, li);
+        (void)mkdir(root, 0755);
+        for (int i = 0; i < y->n; i++) {
+            write_speed(root, i, y->mhz[i]);
+        }
+        CHECK(cpu_place_classes_read(root, &c) == y->n);
+        cpu_place_plan(&c, &p);
+        if (p.kind != y->kind || p.game != y->startGame || p.render != y->startRender ||
+            p.submit != y->startSubmit) {
+            fprintf(stderr, "  layout %s: start %d game %#llx render %#llx submit %#llx\n", y->name,
+                    (int)p.kind, (unsigned long long)p.game, (unsigned long long)p.render,
+                    (unsigned long long)p.submit);
+            fails++;
+        }
+        fake_init(&f, &ops);
+        /* the threads as the start leaves them: the game thread on its
+           start cores (every core when free), the render and submit
+           threads too */
+        f.mask[1] = y->startGame != 0 ? y->startGame : 0xff;
+        f.mask[2] = y->startRender != 0 ? y->startRender : 0xff;
+        f.mask[3] = y->startSubmit != 0 ? y->startSubmit : 0xff;
+        cpu_keep_init(&k, &c);
+        CHECK(k.on == y->on);
+        (void)cpu_keep_tick(&k, &ops, 0.0, 0, 0xff, 101, 102, 100);
+        if (y->on && (f.mask[1] != y->game || f.mask[2] != y->render || f.mask[3] != y->submit ||
+                      f.mask[0] != y->log || cpu_keep_held(&k) != y->held)) {
+            fprintf(stderr,
+                    "  layout %s: game %#llx render %#llx submit %#llx log %#llx held %#llx\n",
+                    y->name, (unsigned long long)f.mask[1], (unsigned long long)f.mask[2],
+                    (unsigned long long)f.mask[3], (unsigned long long)f.mask[0],
+                    (unsigned long long)cpu_keep_held(&k));
+            fails++;
+        }
+        {
+            /* the process's other threads: Android's UI thread (50), the
+               game, render and submit threads, SDL's audio thread (200)
+               and AAudio's (201) made from the game thread at its start
+               cores, the driver's (202) made before any pin, a worker
+               already on core 0 (203), one not read (204) */
+            const uint64_t g0 = y->startGame != 0 ? y->startGame : 0xff;
+            const long ids[9] = {50, 100, 101, 102, 200, 201, 202, 203, 204};
+            const uint64_t masks[9] = {0xff, f.mask[1], f.mask[2], f.mask[3], g0,
+                                       g0,   0xff,      0x01,      0};
+            const long skip[4] = {101, 102, 100, 50};
+            long out[9];
+            const int m = cpu_place_sweep_pick(ids, masks, 9, cpu_keep_held(&k), skip, 4, out, 9);
+            int want = 0;
+
+            while (want < 4 && y->moved[want] != 0) {
+                want++;
+            }
+            CHECK(m == want);
+            for (int i = 0; i < m && i < want; i++) {
+                CHECK(out[i] == y->moved[i]);
+            }
+        }
+    }
+}
+#endif
 
 static void test_words(void)
 {
@@ -559,8 +881,10 @@ int main(int argc, char **argv)
     test_keep_singles_widened();
     test_keep_forbidden();
     test_keep_waits();
+    test_keep_few();
     test_words();
 #if defined(__linux__)
+    test_layouts(argc > 1 ? argv[1] : ".");
     test_cpuset(argc > 1 ? argv[1] : ".");
     test_refree();
 #else

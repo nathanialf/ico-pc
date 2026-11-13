@@ -821,7 +821,13 @@ faster core the render thread keeps to it alone and the other two are left to th
 line says which: `window: big cores: 2 fast of 8: game and render threads on them (6-7), the submit
 thread free; the game thread kept` (or `NOT kept: the system keeps it to cores ...`, or the
 refused call's errno); with three or more the line reads `big cores: N fast of M: render and submit
-threads on them, the game thread free`. A new thread starts with the cores of the thread that
+threads on them, the game thread free`. That is the start's placement; from the log thread's first
+tick the keeper's few-cores rule takes over on such phones (`cpu_keep_few`): the render thread on
+the best faster core alone, the game thread on the other alone (with one faster core, on every core
+as before), and the submit thread and every other thread of the process on the slow cores, the
+audio and driver threads included, which the log thread moves off the two cores once a second
+when it finds them there (`cpu_keep_held`, `cpu_place_sweep`;
+[the lines](ANDROID_DIAGNOSTICS.md#the-threads-cores-after-the-start)). A new thread starts with the cores of the thread that
 makes it (pthread_create(3): it "inherits ... CPU affinity mask"; bionic's `pthread_create` goes
 through clone(2), which copies it the same way), so a pin on the game thread would hold the
 submit thread and every worker the game thread makes afterwards to the same two cores, and a pin
