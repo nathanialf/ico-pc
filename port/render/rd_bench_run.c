@@ -185,7 +185,8 @@ int rd_bench_run_frame(RdBenchFrame *b, int frame, int frames, int kind, const R
     const int most = cfg->k < 1 ? 1 : (cfg->k > ICO_BENCH_K_MAX ? ICO_BENCH_K_MAX : cfg->k);
     s_run.nVariants = rd_bench_variants(b, s_var, ICO_BENCH_VARIANTS);
     for (int v = 0; v < s_run.nVariants; v++) {
-        snprintf(s_run.info[v].name, sizeof(s_run.info[v].name), "%s", s_var[v].name);
+        snprintf(s_run.info[v].name, sizeof(s_run.info[v].name), "%.*s",
+                 (int)sizeof(s_run.info[v].name) - 1, s_var[v].name);
         s_run.info[v].knock = s_var[v].knock;
         s_run.info[v].sum = s_var[v].sum;
     }
