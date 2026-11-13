@@ -747,12 +747,7 @@ afterwards:
   the fog.
 - `gpu_checkpoints=true` makes the log say more exactly what the graphics
   card was doing when it stopped. The game may run a little slower with it.
-- `gpu_robust=true` makes the graphics card check every read and write the
-  game asks for. The game may run a little slower with it. It is off unless
-  you turn it on; on a phone the game turns it on by itself for one start
-  after the graphics driver stopped responding (see above), and
-  turns it off again after three clean starts or an update;
-  `gpu_robust=false` keeps it off.
+- `gpu_robust=true` makes the graphics card check every read and write the game asks for. The game may run a little slower with it. It is off unless you turn it on. This line stays in `ico-pc.ini` until you delete it: the game never changes this file. Separately, on a phone the game turns the same check on by itself for one start after the graphics driver stopped responding (see above), and its own setting for it in `config.toml` turns off again after three clean starts or an update. `gpu_robust=false` keeps it off.
 
 ## The game closes by itself
 
