@@ -690,6 +690,27 @@ int ico_diag_startup_stall_end(void);
    robust step (window_robust.c) counts that start as an unclean end, not
    a clean one (review 2 N5). */
 int ico_diag_startup_prev_watchdog(void);
+/* A first-start probe as a named phase of the run (the subpass read's,
+   port/rhi/rhi_subpass_verdict.h, port/render/rd_subpass_probe.c): name
+   while the device runs with what the probe tries (the window, from the
+   device's start until the renderer's verdict), NULL after it.  A name
+   writes the mark "<activity file without .txt>-probe.txt"
+   ("<version>\n<name>\n", flushed to the disc) and logs "ico_pc: <name>
+   runs at this start: ..."; NULL removes it, and so does an exit without a
+   device loss (ico_diag_startup_activity_exit).  The next start
+   (ico_diag_startup_activity_begin) reads and deletes it and logs
+   "ico_pc: the previous run (version V) ended while <name> was running:
+   its end is not counted on the loss ladder, the robust step or the
+   watchdog's mark ...": that run's device loss or GPU hang counts on no
+   loss step (loss_count_prev: the row, the robust count), its loss dump is
+   not replayed, and its watchdog mark is not an unclean end
+   (ico_diag_startup_prev_watchdog 0).  A device loss while it is set
+   restarts the desktop game as a fresh start, with no loss step
+   (ico_diag_device_lost_restart).  The probe's own verdict file keeps the
+   probed feature off on that driver.  ico_diag_startup_prev_probe: 1 when
+   the previous run ended with the mark. */
+void ico_diag_set_probe(const char *name);
+int ico_diag_startup_prev_probe(void);
 /* This start's set is made under the careful policy (on != 0; the window,
    before ICO_DIAG_ACTIVITY_STARTUP): while the file records it holds the
    line "set: careful" after the note, so an end inside that set makes the

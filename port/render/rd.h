@@ -1058,6 +1058,12 @@ void rd_set_vu_bones(const char *mode, const char *by);
  * statistics line. */
 double rd_replay_time_max(int reset, uint32_t *count);
 void rd_set_host_call(RdHostCall call);
+/* The window's hook for a first-start probe as a named phase of the run
+ * (port/render/rd_subpass_probe.c: the subpass read's; port/platform
+ * diag_host.h ico_diag_set_probe): called with the probe's name while the
+ * device runs with what it tries, with NULL after its verdict.  NULL: no
+ * hook (the tools and tests). */
+void rd_set_probe_fn(void (*fn)(const char *name));
 
 /* Frame rate Original (interpolation off): asked on the game thread before
  * rd_end_frame replays and presents a frame, with the frame's keep flag and

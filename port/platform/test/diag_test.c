@@ -991,8 +991,14 @@ static void activity_child(const char *mode, const char *log)
         /* the loss ladder's count and the backend's variable (rhi_tile_rule.h) */
         ico_diag_log("test: loss row %u, ICO_LOSS_ROW %s", ico_diag_startup_loss_row(),
                      getenv("ICO_LOSS_ROW") != NULL ? getenv("ICO_LOSS_ROW") : "unset");
+        /* the subpass read's probe as a phase (ico_diag_set_probe): the
+           previous run's, and this run's with ICO_TEST_PROBE */
+        ico_diag_log("test: prev probe %d", ico_diag_startup_prev_probe());
         ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
         ico_diag_startup_activity_record(0);
+        if (getenv("ICO_TEST_PROBE") != NULL) {
+            ico_diag_set_probe("the subpass read's probe");
+        }
         if (getenv("ICO_TEST_THEN") != NULL && strcmp(getenv("ICO_TEST_THEN"), "loss") == 0) {
             ico_diag_note_device_loss(NULL);
             _exit(0);
@@ -3474,6 +3480,45 @@ int main(int argc, char **argv)
         unsetenv("ICO_TEST_ROBUST_SAID");
         s = read_file(log);
         CHECK(strstr(s, "test: losses 0, robust as set\n") != NULL);
+        CHECK(strstr(s, "test: loss row 0, ICO_LOSS_ROW unset\n") != NULL);
+        CHECK(read_file(ends)[0] == '\0');
+        /* ... a loss inside a first-start probe (ico_diag_set_probe: the
+           subpass read's) counts on no loss step: the next start says the
+           probe was running, its loss row and robust count stay 0 (the
+           graphics backend's verdict file refuses the read, port/rhi
+           rhi_vk_subpass_verdict); the same loss without the probe counts
+           as before (row 1) */
+        setenv("ICO_TEST_ROBUST_SAID", "[dev] gpu_robust", 1);
+        setenv("ICO_TEST_THEN", "loss", 1);
+        setenv("ICO_TEST_PROBE", "1", 1);
+        run(argv[0], "actlossnext", log);
+        unsetenv("ICO_TEST_PROBE");
+        unsetenv("ICO_TEST_THEN");
+        CHECK(strstr(read_file(log), "ico_pc: the subpass read's probe runs at this start: a "
+                                     "device loss, GPU hang or end before its verdict counts on "
+                                     "no loss step\n") != NULL);
+        r = run(argv[0], "actlossnext", log);
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: the previous run (version test 1) ended while the subpass "
+                        "read's probe was running: its end is not counted on the loss ladder, "
+                        "the robust step or the watchdog's mark") != NULL);
+        CHECK(strstr(s, "test: prev probe 1\n") != NULL);
+        CHECK(strstr(s, "test: losses 0, robust as set\n") != NULL);
+        CHECK(strstr(s, "test: loss row 0, ICO_LOSS_ROW unset\n") != NULL);
+        CHECK(strstr(s, "lost the graphics device: ") == NULL);
+        CHECK(read_file(ends)[0] == '\0');
+        setenv("ICO_TEST_THEN", "loss", 1);
+        run(argv[0], "actlossnext", log);
+        unsetenv("ICO_TEST_THEN");
+        r = run(argv[0], "actlossnext", log);
+        s = read_file(log);
+        CHECK(strstr(s, "test: prev probe 0\n") != NULL);
+        CHECK(strstr(s, "ico_pc: starts in a row that lost the graphics device: 1\n") != NULL);
+        CHECK(strstr(s, "test: loss row 1, ICO_LOSS_ROW 1\n") != NULL);
+        /* ... and a start without a loss ends that row again */
+        r = run(argv[0], "actlossnext", log);
+        unsetenv("ICO_TEST_ROBUST_SAID");
+        s = read_file(log);
         CHECK(strstr(s, "test: loss row 0, ICO_LOSS_ROW unset\n") != NULL);
         CHECK(read_file(ends)[0] == '\0');
         /* ... a restart after a loss (the desktop's loss order) counts

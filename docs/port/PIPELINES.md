@@ -26,6 +26,24 @@ forces the two-pass form on any device (`port/render/rd_core.c` (`rd_init`)). Wh
 read is available these paths give way to it (next section), and where the device orders the
 colour read the key keeps none of them ([GS state as data](#gs-state-as-data)).
 
+**The blend constant for the two passes (measured, not built).** For a FIX lerp (ALPHA
+0x64) and mode 3 (0x29) the factor is known on the CPU, so one draw with `RHI_BF_CONSTANT` /
+`RHI_BF_ONE_MINUS_CONSTANT` (the constant FIX/128 after the clamp, `rhi_cmd_set_blend_constant`,
+always dynamic on Vulkan) and the shader's alpha left as As (blend ONE/ZERO on alpha) could replace
+the two passes where the mask has both RGB and A: the colour pass's `SRC_ALPHA` / `ONE_MINUS_SRC_ALPHA`
+(lerp) or `ONE` / `SRC_ALPHA` (mode 3) with c0.a the same float, and the alpha pass's As. Not with
+PABE (its factor is per pixel), not under Z GREATER with Z write and A in the mask (the alpha pass
+there admits the stored Z's fragments, the logged deviation, which one draw would not reproduce),
+and nothing to gain where the mask lacks A or RGB (one pass already); whether a driver's constant
+and its shader-output alpha give the same bytes is a device's question (a blend self-test cell).
+The count first: in issue 179's four dumps and the Pixel's three, no draw takes it. Every FIX lerp
+there has FIX 0x80 (the cut-scene bars), which the alpha plan's factor-one rule already draws as one
+unblended pass, and mode 3 does not occur; over the corpus the only other FIX lerps are the motion
+blur's post sprite (FIX 0x20 to 0x27, one a picture while the game draws its motion blur, none in
+those dumps) and two deja-veil sheets in one scene. So it is not built:
+new pipelines in every no-dual start-up set and a self-test at every start for no draw of the
+reporter's pictures.
+
 **The AFAIL split.** An alpha-tested draw whose failing fragments write something other than its
 passing ones is two draws: the passing fragments with the draw's Z write and mask, then the failing
 ones under AFAIL (FB_ONLY: no Z; ZB_ONLY: no colour; RGB_ONLY: no Z, no alpha), the shader keeping

@@ -682,8 +682,11 @@ static RhiTexture createTexture(const RhiTextureDesc *desc)
      * single-sampled RGBA8_UNORM render target, asked or not, since a pass
      * of its class names its colour as an input attachment whichever
      * texture it is (VUID-VkFramebufferCreateInfo-pAttachments-00879: the
-     * usage on every image a framebuffer's input attachment is) */
+     * usage on every image a framebuffer's input attachment is); not one
+     * asked without it (RHI_TEX_NO_SUBPASS_READ: the probe's plain twin,
+     * port/render/rd_subpass_probe.c, never drawn with a depth target) */
     const bool subpassRead = g_vkr.subpassRead && (desc->usage & RHI_TEX_RENDER_TARGET) &&
+                             !(desc->usage & RHI_TEX_NO_SUBPASS_READ) &&
                              vkFmt == VK_FORMAT_R8G8B8A8_UNORM && desc->samples <= 1u;
     if (subpassRead) {
         usage |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;

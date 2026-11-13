@@ -209,7 +209,16 @@ typedef enum RhiTextureUsage {
      * keeps it in tile memory), refused without RhiLimits.resolveInPass;
      * OpenGL, D3D11 and D3D12 have no such texture (the caller asks for it
      * only where resolveInPass is true). */
-    RHI_TEX_TRANSIENT = 1 << 8
+    RHI_TEX_TRANSIENT = 1 << 8,
+    /* a render target made without the subpass read's shape where the
+     * device has it on (RhiLimits.localReadSubpass: Vulkan gives every
+     * single-sampled RGBA8_UNORM render target the input-attachment usage
+     * and keeps it in GENERAL; vk_resource.c): the usage and layout of a
+     * device without the read.  Only for a texture never drawn with a depth
+     * target (a pass of the read's class needs the shape); the subpass
+     * read's probe's plain twin (port/render/rd_subpass_probe.c).  Ignored
+     * everywhere else */
+    RHI_TEX_NO_SUBPASS_READ = 1 << 9
 } RhiTextureUsage;
 
 typedef struct RhiTextureDesc {
@@ -996,6 +1005,26 @@ typedef struct RhiLimits {
      * read); rhi_cmd_local_read_barrier in another pass is skipped (logged).
      * False elsewhere */
     bool localReadSubpass;
+    /* The subpass read's decision (Vulkan, vk_device.c
+     * vkr_subpass_read_decide; port/rhi/rhi_subpass_verdict.h; false and
+     * NULL elsewhere).  subpassRoute: the device's passes are VkRenderPass
+     * objects without dynamic rendering's local read, the one route the
+     * read serves.  subpassProbe: the read's shape is on for this start's
+     * probe (no verdict kept for this driver yet): the renderer checks DATE
+     * through the read, times it (port/render/rd_subpass_probe.c) and
+     * writes the verdict to subpassVerdictFile under subpassVerdictKey
+     * (the device and driver).  subpassWhy: the decision's words, the
+     * device line's ("kept by the probe of an earlier start: ...", "no GPU
+     * timestamps: ...") */
+    bool subpassRoute;
+    bool subpassProbe;
+    /* subpassOffDefault: on the route, off by default on this device's
+     * class this release (rhi_subpass_verdict.h RHI_SUBPASS_PROBE_*_DEFAULT:
+     * the Arm and Qualcomm drivers; subpassWhy says why) */
+    bool subpassOffDefault;
+    const char *subpassWhy;
+    const char *subpassVerdictFile;
+    const char *subpassVerdictKey;
 } RhiLimits;
 
 /* The window's part in a driver call that may take long (rhi_set_wait_hooks):

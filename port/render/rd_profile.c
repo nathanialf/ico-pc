@@ -175,6 +175,7 @@
 #include "rd_vu_skin_check.h"
 #include "rd_stencil_selftest.h" /* rd__profile_powervr */
 #include "rd_shadow_tile.h"      /* rd__profile_tile_class */
+#include "rd_subpass_probe.h"    /* rd__subpass_probe_begin */
 
 /* the device classes of the table */
 typedef enum ProfileClass {
@@ -641,6 +642,9 @@ void rd__profile_init(void)
                  rhi_backend_kind_name(rhi_backend()));
     }
     makeText(p);
+    /* the subpass read's probe as a phase of the run, where the device
+       made its shape for this start's probe (rd_subpass_probe.c) */
+    rd__subpass_probe_begin();
 
     /* the start line: the blend as rd__dst_init will set it (the ask read
      * now, as rd__gpu_init read it), robust access as the backend made the

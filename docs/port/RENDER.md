@@ -688,8 +688,9 @@ at Vulkan 1.1) there is no local read by default, so DATE takes the snapshot, wh
 scene's pass and begins it again (3 a replay in the reporter's log, each a 912x512 colour and D32S8
 store and reload). The RHI's subpass read ([RHI.md](RHI.md#local-read): the scene's passes with
 its depth name its colour as their subpass's input attachment, with a self-dependency) gives such a
-device the read, so that DATE ends no pass there either; it is an experiment, off by default
-(its cost on a phone is not measured), turned on by `[dev] subpass_read = on`. The DATE self-test decides per device ([The fog path and its
+device the read, so that DATE ends no pass there either; the device decides it at its
+start from the verdict its first-start probe kept ([The subpass read's
+probe](#the-subpass-reads-probe)), `[dev] subpass_read` forcing it either way. The DATE self-test decides per device ([The fog path and its
 self-test](RENDER_POST.md#the-fog-path-and-its-self-test)) (`port/render/rd_replay.c` (`dateStencilFor`,
 `prepareDrawEx`, `bindDrawEx`); `port/render/rd_replay_tiler.c` (`rd__replay_date_take`);
 `port/render/rd_pipeline.c` (`shadowStencil`,
@@ -1649,6 +1650,7 @@ immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan. OpenGL and Direct3
 | the culler's default (`rd_vis.c` `rd__vis_profile_default`, `RhiLimits.tiler`) | frustum and occlusion | frustum and occlusion | frustum alone | frustum alone | frustum alone | frustum alone | frustum alone on Apple silicon; frustum and occlusion on an Intel or AMD Mac |
 | the late pass's fill hold and deferred paste (`rd_late_pass.c`, `RhiLimits.tiler` under Vulkan), shot late (`rd_present.c`, `RhiLimits.tiler`) | off | off | on | on | on | on | on for Apple silicon; off on an Intel or AMD Mac |
 | the VU record by compute in place of the vertex stores (`rd_vu_class.c`; [RENDER_POST.md](RENDER_POST.md#the-vu-record-by-compute-on-the-powervr-class-off-by-default-until-a-phone-rc)) | off | off | off | off | off (no vertex stores: auto's compute already) | off on the PowerVR (`RD_VU_COMPUTE_CLASS_DEFAULT` 0 until a phone rc; Imagination's vendor id only, not the other tile-based) | off |
+| the subpass read (DATE's set-up inside the scene's pass on `VkRenderPass` objects without local read; [The subpass read's probe](#the-subpass-reads-probe)) | the Intel driver row's devices: by the probe at their first start; elsewhere not this route (local read, or dynamic rendering without it) | none | off by default this release on Qualcomm's own driver (`RHI_SUBPASS_PROBE_QCOM_DEFAULT` 0: a driver that lost the device before; one pass a picture), no probe | not this route (local read) | off by default this release on Vulkan 1.1 drivers (issue 179's r32p1; `RHI_SUBPASS_PROBE_ARM_DEFAULT` 0), no probe; a driver with dynamic rendering (r38p1): not this route | the B-Series (Vulkan 1.1): off, no GPU timestamps to time the probe; the D-Series: not this route (local read) | not this route (dynamic rendering) |
 | the turn in the present's blit (`rd_turn_fold.c`; [RENDER_POST.md](RENDER_POST.md#the-turn-in-the-presents-blit-off-by-default-until-a-phone-rc)) | no turned swapchain | no turned swapchain | off (`RD_TURN_FOLD_DEFAULT` 0 until a phone rc) | off, the same | off, the same | off, the same | no turned swapchain on a Mac |
 | the index compaction (`rd_vu_compact.c`; [PIPELINES.md](PIPELINES.md#the-index-compaction)) | not applicable (the vertex stores) | not applicable (no compute record) | not applicable (the vertex stores) | not applicable, the same | on where the start-up self-test passes (the compute record; `RD_VU_COMPACT_ARM_DEFAULT` 1) | not applicable (the vertex stores; on with the PowerVR rule's compute record, `RD_VU_COMPACT_DEFAULT` 1) | not applicable where the vertex stores are offered |
 
@@ -1709,6 +1711,60 @@ rd: profile: tile-based GPU (Imagination, Vulkan): blend fixed-function; fog loc
 
 On desktop Vulkan with local read, "(probe)" marks the three local-read flags where the start-up cost probe
 found them slower, and both lines end with its words: [WORK_BUFFERS.md](WORK_BUFFERS.md#the-desktops-local-read-and-its-probe).
+
+### The subpass read's probe
+
+On a Vulkan device whose passes are `VkRenderPass` objects without local read (the Mali-G52 of
+issue 179 at Vulkan 1.1, the Adreno 740 under Qualcomm's row, the Intel driver row's devices) DATE
+can read the scene's colour inside its pass through the RHI's subpass read
+([RHI.md](RHI.md#local-read)) instead of ending the pass for an R8 snapshot. Its shape is the
+device's for the run, so the device decides it at its start from a verdict kept for this device and
+driver ([RHI.md](RHI.md#the-subpass-reads-probe)); with none it makes the shape for this start's
+probe, on the classes whose default runs it: this release the Intel driver row's devices alone (the
+Arm and Qualcomm drivers lost the device before, and the read saves one pass a picture: off by
+default there, no probe, no shape, `RHI_SUBPASS_PROBE_*_DEFAULT` in `port/rhi/rhi_subpass_verdict.h`
+for an rc to flip one; `[dev] subpass_read = on` still forces it) (`port/render/rd_subpass_probe.c`, `rd_subpass_probe.h`). The order at that start: the
+start-up set, then DATE's self-test on the read (`rd_date_selftest.c`: five samples, a failure is a
+refusal), then the probe, all before the first picture:
+
+- **the read's frame** on SCENE at its real size: eight full-frame layers of 16 x 16 sprites (Z
+  GEQUAL, Z written, half the cells alpha 0x80) and three full-frame DATE sprites (DATM 0, the alpha
+  masked, so one set-up or one snapshot serves the three, the count a game picture with shadow
+  volumes takes under the one DATE set-up's sharing), replayed with `dateStencil` on (the set-up
+  inside the pass) and off (the R8 snapshot);
+- **a plain pass**: four passes a replay on a temporary target of SCENE's size, each of two layers
+  and each ended by a sprite on a 64 x 64 target (so the target is loaded and stored four times),
+  with the target's own colour (the shape: input-attachment usage, `GENERAL`) and with a twin made
+  with `RHI_TEX_NO_SUBPASS_READ` (no usage, `COLOR_ATTACHMENT_OPTIMAL`) lent to its record: what the
+  shape costs every ordinary pass of the run, the framebuffer compression a driver may drop;
+- **the time**: two replays a way alternated over two rounds (the second only while the first took
+  under 400 ms of the CPU's clock), each replay's GPU time from its timestamps, the least of each way;
+- **the rule** (`rd__subpass_probe_keep`): kept only when the read's least time is at most 5 % above
+  the snapshot's and the shaped plain pass's at most the larger of 5 % and the twin's own spread
+  above the twin's; a missing time refuses.
+
+The verdict goes to the device's file (`kept` or `refused` with the four times), and the next starts
+of this driver decide from it without a probe; a refusal also turns `dateStencil` off for the rest of
+the probe's start (`rd: profile: DATE stencil off (probe)`, the shape still made). The lines:
+`rd: subpass read: kept (probe: the read 0.412 vs the snapshot 0.530 ms, a plain pass 0.210 vs 0.205
+ms without the shape): the least of 4 and 4, 4 and 4 replays on SCENE 912x512 at 912x512 texels;
+kept unless the read is more than 5 % slower or a plain pass more than 5 % (its spread 1.0 %); 312.4
+ms; the verdict kept for this device and driver (13b5:72120000:80200000)`, `rd: subpass read: refused
+(probe: the read slower, ...)`, `rd: subpass read: refused (DATE's self-test on the read: stencil
+fail 2 at sample 1: ...)`, and where it cannot run (a `[dev] date_path = snapshot`, no list stamps,
+no SCENE) `rd: subpass read: not probed at this start (...); its mark taken away, the next start
+probes`. The attempt ledger's row `subpass read` ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md))
+says the state and why at the start and counts the DATE set-ups drawn inside the pass in each 10 s
+block.
+
+What it replaces: on the lavapipe A/B at the Mali-G52's and the Pixel's settings (`rd_subpass_ab`)
+the one R8 snapshot a picture with volumes left by the one DATE set-up (with the read: 0 snapshots,
+one SCENE pass fewer: 35 to 34 passes on the stage 3 dump, 34 to 33 on the three slow-scene dumps), every
+target byte for byte; DATE's other users (a DATE draw on any other target, inside the MSAA epoch,
+under the exact blend's storage read) keep the snapshot. What still ends SCENE's pass after it (the
+survey's per-picture reasons): the aura's read of SCENE (one break, four aura passes), the reduction
+(one), the crack fill above 1x, the glow where on, the shadow levels and blurs on other targets
+(one), the present.
 
 and the `ico_pc: summary:` line (abridged) carries the flags as in force after the blend's text
 (`rd__profile_text`; `port/render/rd_core.c` (`rd_summary_text`)): `profile tile-based GPU
