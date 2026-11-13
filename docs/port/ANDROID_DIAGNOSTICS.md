@@ -1210,6 +1210,105 @@ round that needs new frames builds a variant with it 1, which prints the lines b
   the one before the hitch, and the next moment cannot be met within 2 s of the dump's end, so no
   saved frame follows a hitch directly.
 
+## The bench in a release candidate
+
+An rc build (`ICO_RC_TOOLS`, on Android alone; [BUILDING.md](../BUILDING.md#release-candidate-tools))
+can measure what each part of a picture costs on the phone itself. The phone's 10 s lines cannot:
+on a tile-based GPU a pass's timestamps carry deferred work of the passes before it, two app starts
+differ by about 1 ms, and the opening's views change every few seconds. Only a whole picture's time
+is trustworthy, and only against the same picture in the same run. So the bench keeps a few frames
+and draws each again and again, as play draws it, with parts of it left out in turn. The build's
+`WINDOW_BENCH_DEFAULT` is 0: the bench is compiled in, keeps nothing and prints `window: bench: off
+(WINDOW_BENCH_DEFAULT 0: no frame is kept or measured in this build)`; an rc variant that wants the
+measurement sets it to 1 and prints `window: bench: on (a release candidate, WINDOW_BENCH_DEFAULT 1):
+...`. A release has none of it (`port/platform/window_bench.c`, `bench_plan.c`,
+`port/render/rd_bench_run.c` in the program inside `if(ICO_RC_TOOLS AND ANDROID)` alone;
+`port/render/rd_bench.c` in the renderer, linked only by them; the package scripts' string check
+looks for the marks `window: bench: ` and `bench: frame ` in a release's program).
+
+- **The frames kept** (`bench_plan.h` `ico_bench_pick_picture`, `window_bench.c` `keep`). In the
+  opening (the capture's test: stage 1, the disc's scene layout), from each replay's record: **a lamps
+  picture with a shadow volume** and **one without** (a LAMPS picture after more than 60 LAMPS
+  pictures in a row, told apart by `RdPerfRecord.noVolumeWith`), **a dark picture** (more than 60
+  DARK in a row) and **a sun picture** (more than 20 WHOLE in a row), each once a run. A moment arms
+  the keep; the window's next pump copies the frame's dump bytes (`rd_dump_retained_frame_mem`, the
+  slow-scene dump's memory copy, on the game thread) while the renderer still holds that frame, and a
+  later picture of the same kind moves the arm to its frame. And **the paused picture**: a pause
+  menu held for 1 s keeps the last closed frame (the scene with the menu over it; the pause menu is
+  not a keep frame). At most 5 frames a run, at most 64 MiB each.
+- **When it runs.** The title menu held for 2 s after the opening runs the opening's frames; a pause
+  runs the paused picture (and any frame still held). The bench holds the window's pump while it
+  runs (the game steps no tick, the game thread's state is not touched), pauses the sound and the
+  watchdog, marks the run's phase as `the bench (a release candidate's measurement)`
+  (`ico_diag_set_probe`: a device loss or GPU hang inside it is not counted on the loss ladder), and
+  draws a line over the picture: `Measuring the picture (a test build's bench)`, `Measuring the
+  picture: frame 2 of 4, 37 %`, `Tap to skip it; the game goes on after it`. A tap, a key or a
+  button skips the rest; the app leaving the screen, a quit or a size change stops it with those
+  events left for the pump. After it every switch is put back, the frames' resources destroyed,
+  the pacer moved past the time as for a swapchain rebuilt, and the game goes on at the title or the
+  pause.
+- **How a frame runs** (`rd_bench_run.c`). The kept bytes are loaded again into the renderer
+  (written to `bench-frame.rddump` beside the settings, read by `rd__load_frame`, removed), the frame
+  numbered 2^30 + its own (so the game's own records are never taken for the bench's). Its commands
+  are classified once by the perf classes' own walk (`rd_bench.c` `rd_bench_classify`). Every
+  variant is drawn once untimed (its pipelines and uploads made before any timed replay); K is cut
+  from 10 where the baseline's picture time would take the frame past 22 s (never below 5). Then
+  R = 2 rounds of every variant, the second round's order turned by half the list, a baseline block
+  at each round's start and end and after every 4 variants; a block is W = 3 warm-up replays (the
+  variant's first replay and the two frames in flight of the block before) and K timed ones, each
+  posted one a present as play posts them (`rd__replay_frame_async`, the same passes, pipelines,
+  waits and present; no picture between ticks). The present mode is the run's (mailbox and
+  uncapped on the Pixel); the bench never rebuilds the swapchain and says the mode. Three baseline
+  replays at the end bring the last records in. The whole bench stops at 150 s.
+- **What each replay gives** (its `RdPerfRecord`): the picture time (its replay's start less the
+  start of the replay before, both of the block: present to present), the GPU span (first stamp to
+  last), the render thread's wait for the GPU, the passes, draws and VU triangles executed, and the
+  cuts that fired (the glow plan, the no-volume windows taken, the empty composites skipped, the
+  volumes merged into SCENE's pass, the crack fills, SCENE presented). A replay that made a pipeline
+  or was not presented is left out.
+- **The variants.** The baseline. Knock-outs, each commands made NOPs in the bench's copy of the
+  lists (as `rd_replay_tool --nop`): each list with an action; the shadow volumes' draws; the shadow
+  window (its reset, volumes, count and levels); the shadow levels; the shadow composites; the fog
+  (and the crack fill it arms); the lamps' set-up (WORK2's clears and the depth fill); the lamps'
+  meshes; the glow mask; the blur chain; the glow paste; the glow's other draws; the aura; the
+  motion blur; the depth of field; the softening; the reduction (DISPLAY not drawn); the crack fill
+  (its switch off); list 0 without its alpha-tested and blended draws; list 0 without its draws over
+  a quarter of the picture (the culler's box under the draw's VU matrix). Switches, each the
+  renderer's own and put back after it: the no-volume break mode the other way; the open no-volume
+  mode (SCENE's pass not ended; its pictures are thrown away); DATE's shared set-up the other way;
+  the shadow volumes in a pass of their own; the lamps' pass at 1 sample; the lamps' target at full
+  size; the texture filter trilinear against anisotropic; the present from SCENE. A variant whose
+  class has no command in the frame, or whose switch cannot change here, is not run. A part left
+  out changes what later passes see (no volumes make the composites empty); each line's executed
+  passes, draws and cuts say what ran. What cannot be separated: the count alone (it needs the
+  window's stencil, so it is the window less the volumes and the levels), the crack fill from the
+  fog (the fog's knock-out takes the fill with it; the fill's own switch takes the fill alone), and
+  any part from the passes it ends or begins.
+- **The lines** (`bench_plan.c`, `window: bench: ...`). Per frame: `bench: frame 2 of 4: a lamps
+  picture without a shadow volume (frame 1234, 1500 commands, 9000 KB): 31 variants, 2 rounds of 3
+  warm-up and 10 timed replays each, a baseline after every 4; present mode mailbox; GPU stamps
+  yes`; one line a variant, `bench: frame 2 | without the glow paste | 14 passes, 500 draws, 25000
+  triangles | picture 18.00 ms (17.90-18.20, n 20) | GPU 17.00 ms (16.90-17.10) | wait 6.00 ms |
+  -2.50 ms against the baselines (rounds -2.40 to -2.60) | removed 1 | cuts: plan lamps, no volume
+  0, composites skipped 3, volumes merged 0, crack fills 1, SCENE presented 0` (the delta: the
+  variant's block median less the mean of the baseline blocks before and after it, averaged over
+  the rounds); the baseline's drift, `bench: frame 2: the baseline over 18 blocks: first 20.10 ms,
+  last 20.30 ms, from 19.90 to 20.40 ms (drift 0.50 ms)`; the ranking, `bench: frame 2: what removing
+  each part saves (the picture 20.10 ms): without the glow paste 2.50 ms, ...`; and the sum check,
+  `bench: frame 2: the lists' savings add up to L ms of the picture's M ms (P %), the parts' (...) to
+  Q ms (P %); what neither holds is ...`. Around it: `window: bench: kept a lamps picture with a
+  shadow volume: frame 1234, 15366089 bytes, 41.0 ms on the game thread (frame 1 of at most 5 this
+  run)`, `window: bench: starts at the title: 4 frames, present mode mailbox; ...` and `window: bench:
+  ended (done) after 74.2 s: 4 of 4 frames, 120 of 120 variants with a timed replay; the tables in
+  bench-20261113-101010.csv; every switch put back, the game goes on`.
+- **The CSV.** The same tables, one row a variant, in `logs/bench-<stamp>.csv` beside the log;
+  **Share a bug report** sends the newest (`share_report.c`).
+- **How long.** About 1000 replays a frame of about 30 variants at the Pixel's 18-21 ms: about 20 s
+  a frame, about 60-80 s for the opening's four (the dark picture has fewer variants), plus each
+  variant's pipelines the first time. At most 150 s.
+- **The tool's twin.** `rd_replay_tool <dump> - <setting> --present WxH --bench K` runs the same
+  loop on a dump (W 1, one round) and checks the picture before and after it (`rd_bench_ab`).
+
 ## Issue 123's present stalls: what the mechanisms predict
 
 The reporter's run (Adreno 740, Qualcomm's own driver, Frame rate Original, a 120 Hz display that

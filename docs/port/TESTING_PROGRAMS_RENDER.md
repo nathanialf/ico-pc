@@ -1038,6 +1038,17 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   ledger's decider (off by default on the class, on by the define or `ICO_RD_VU_COMPUTE_CLASS=1`,
   off by `=0`, not applicable with a mode asked by name, without vertex stores or compute stores,
   or on another class with the define flipped).
+- `rd_bench_test.c` (`rd_bench`; `rd_bench.cmake`, CPU): the rc bench's classes over a frame built
+  by hand (a command of every class, list by list): `rd_bench_classify` against the test's table,
+  each class's mask making NOPs of exactly its commands, list 7's mask its seven actions and none of
+  its state, the baseline's mask the lists whole again, and `rd_bench_variants` without a device
+  (the baseline, the six lists, the parts in order, no switch).
+- `rd_bench_ab.cmake` (`rd_bench_ab`; `rd_bench.cmake`): `rd_replay_tool --bench 1` on lavapipe over
+  rd_pixel's dump (640x480) and the machine-local `tools/bench_dumps.txt` (the Pixel's v746 and
+  v2278 at the phone's setting; a listed dump that is absent FAILS where `/primary/dev/ico-dumps`
+  exists): every variant ran, a baseline's presented picture after the bench byte for byte the one
+  before it (unless two baselines before it already differ: a feedback effect, said so), and each
+  variant line the list names. No device: SKIP.
 - `rd_turn_fold_ab.cmake` (`rd_turn_fold_ab`; `rd_smallcuts.cmake`): the present's turn drawn by its
   box blit (`ICO_RD_TURN_FOLD=1`) against the turn pass (unset) through the headless twin
   (`ICO_VK_FAKE_TRANSFORM=90`, `180`, `270`), rd_pixel's dump and every dump of the machine-local

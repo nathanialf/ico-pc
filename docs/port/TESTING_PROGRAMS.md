@@ -692,7 +692,8 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   start (`ico_share_report_collect_run`), every zip of dumps modified since in place of the newest
   (three, then the newest four of five, oldest first, the count at ten), a start at a zip's own
   second counting it, the newest zip when the run has none, a start below 0 the plain collect, and
-  the run's zips without a logs folder (`share_report`).
+  the run's zips without a logs folder; the rc bench's newest `bench-*.csv` last (eleven with
+  every kind and four zips) (`share_report`).
 - `capture_trigger_test.c`: an rc build's frames of the opening (`capture_trigger.h`) over
   made-up sequences of glow light plans, frames and times, in the opening or not: the lamps moment
   on the 61st LAMPS picture in a row (not the 60th) and once a run, a run broken by another plan
@@ -704,6 +705,17 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   and kept while busy, the 2 s from the dump's end and not its take (the arm at exactly 2 s after
   it), the three dumps and the cap on its own, a clock that went back, a new run, and the start
   text, the three names and the dump lines word for word with a short buffer (`capture_trigger`).
+- `bench_plan_test.c`: the rc bench's pure parts (`bench_plan.h`): the picks of the opening's
+  frames (the plain lamps kind on the 61st LAMPS picture, not the 60th; a volume while it is armed
+  passing; a later picture of the armed kind moving the arm; a kept or refused kind not armed
+  again; a later present of the tick with no plan passed over and a new frame without one ending the
+  run; the dark kind on the 61st DARK, dropped outside the opening; the sun on the 21st WHOLE), the
+  schedule (five variants over two rounds, the second turned by two, a baseline after every four;
+  the baseline alone; the bounds), K from a picture time (the most, cut, the least), the type 7
+  quantiles, a frame's results over made-up samples (the deltas against the bracketing baselines,
+  an excluded sample left out, the baseline over both its blocks, the drift), the ranking, and the
+  head, variant, drift, ranking and sum lines and the CSV row word for word, a short buffer cut
+  (`bench_plan`).
 - `backup_test.c`: Options > Extras' backup and restore (`backup.h`) on a user folder of its own
   under the build folder: the names a backup may hold (no `..`, no absolute or drive path, no `\`,
   no empty part, the places only); a backup holding the card folders, `states/`, `config.toml`,
