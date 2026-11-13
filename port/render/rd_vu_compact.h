@@ -46,10 +46,15 @@
  * Where: the compute record only (the vertex stores and the render
  * targets: not applicable, their record passes are draws, a compute pass
  * after them would be the compute record's work on a device that does not
- * take it).  By class: RD_VU_COMPACT_DEFAULT (every class on the compute
- * record but Arm's), RD_VU_COMPACT_ARM_DEFAULT (the Mali-G52's class, Arm's
- * vendor id under Vulkan).  The tests' switch ICO_RD_VU_COMPACT=0|1 (no
- * ini key).  Logged once at the record's start and after the self-test
+ * take it).  By class: RD_VU_COMPACT_ARM_DEFAULT (the Mali-G52: Arm's
+ * vendor id under Vulkan with RD_VU_CMP_G52_NAME in the device name, the
+ * one Arm device measured, issue 179), RD_VU_COMPACT_DEFAULT (the PowerVR
+ * D-Series DXT-48-1536, whose compute record the PowerVR rule ships,
+ * rd_vu_class.h); every other device on the compute record is off by
+ * default ("measured on the Mali-G52 only").  Tried by the start-up
+ * self-test, run only on its pass: a self-test that never ran keeps it off
+ * (attempt_ledger.c ico_attempt_decide_compaction).  The tests' switch ICO_RD_VU_COMPACT=0|1 (no
+ * ini key; 1 runs it without a self-test).  Logged once at the record's start and after the self-test
  * ("rd: VU index compaction: ..."), counted in the attempt ledger's row
  * (triangles dropped a block) and in the window's 10 s line
  * ("window: index compaction: ..."), from the counts each workgroup of the
@@ -62,7 +67,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* the class decisions: on where the self-test passes (1) or off (0) */
+/* the Mali-G52's Vulkan device name (a substring: "Mali-G52 MC2" in issue
+   179's log), the one Arm device the compaction was measured on */
+#define RD_VU_CMP_G52_NAME "Mali-G52"
+
+/* the class decisions: on where the self-test passes (1) or off (0); every
+   other device on the compute record is off by default (measured on the
+   Mali-G52 only) */
 #ifndef RD_VU_COMPACT_DEFAULT
 #define RD_VU_COMPACT_DEFAULT 1
 #endif
@@ -142,6 +153,11 @@ size_t rd_vu_cmp_block_text(char *out, size_t cap, const RdVuCmpCounts *c);
 
 /* ICO_RD_VU_COMPACT: -1 unset, 0, 1 (anything else -1, said once) */
 int rd_vu_cmp_env(void);
+/* pure: the device's class (attempt_ledger.h ICO_ATT_CMP_*): the Mali-G52
+   where Arm's vendor id (not through MoltenVK) has RD_VU_CMP_G52_NAME in its
+   device name (name NULL: unknown) or byTests (ICO_RD_VU_COMPACT_ARM=1), else
+   the PowerVR D-Series DXT-48-1536 where dxt, else another device */
+int rd_vu_cmp_class(const char *name, uint32_t vendor, bool moltenvk, bool dxt, bool byTests);
 
 /* the block's counts, taken and reset (the window's 10 s line; the render
    thread adds at each readback) */
@@ -201,6 +217,9 @@ uint32_t rd__vu_compact_last_left_out(void);
    words; done: the self-test's end (on: the pre-pass stays on), the row
    and the line */
 void rd__vu_compact_refuse(const char *why);
+/* the self-test returned before it ran (why: its words): the row off (but
+   under the tests' switch), the line */
+void rd__vu_compact_selftest_not_run(const char *why);
 void rd__vu_compact_selftest_done(bool on);
 #endif
 

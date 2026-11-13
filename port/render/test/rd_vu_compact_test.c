@@ -1,11 +1,12 @@
 /* rd_vu_compact_test.c: the index compaction's pure parts (rd_vu_compact.h,
  * CPU): the plan's places, groups, raises and refusals, the counts' sums,
  * the counts' base, the window's line word for word and cut short, the
- * tests' switch's words. */
+ * tests' switch's words, the device's class by name. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "attempt_ledger.h"
 #include "rd_vu_compact.h"
 
 static int failures;
@@ -153,8 +154,28 @@ static void test_env(void)
 #endif
 }
 
+static void test_class(void)
+{
+    /* issue 179's device name and vendor (its log: "Mali-G52 MC2",
+       13b5): the Mali-G52; another Mali, through MoltenVK, no name: not;
+       the tests' switch on any device; the DXT by the PowerVR rule's name */
+    CHECK(rd_vu_cmp_class("Mali-G52 MC2", 0x13B5u, false, false, false) == ICO_ATT_CMP_G52);
+    CHECK(rd_vu_cmp_class("Mali-G52", 0x13B5u, false, false, false) == ICO_ATT_CMP_G52);
+    CHECK(rd_vu_cmp_class("Mali-G57 MC2", 0x13B5u, false, false, false) == ICO_ATT_CMP_OTHER);
+    CHECK(rd_vu_cmp_class("Mali-G52 MC2", 0x13B5u, true, false, false) == ICO_ATT_CMP_OTHER);
+    CHECK(rd_vu_cmp_class("Mali-G52 MC2", 0x10DEu, false, false, false) == ICO_ATT_CMP_OTHER);
+    CHECK(rd_vu_cmp_class(NULL, 0x13B5u, false, false, false) == ICO_ATT_CMP_OTHER);
+    CHECK(rd_vu_cmp_class("llvmpipe (LLVM 15.0.7, 256 bits)", 0x10005u, false, false, true) ==
+          ICO_ATT_CMP_G52);
+    CHECK(rd_vu_cmp_class("PowerVR D-Series DXT-48-1536 MC1", 0x1010u, false, true, false) ==
+          ICO_ATT_CMP_DXT);
+    CHECK(rd_vu_cmp_class("PowerVR B-Series BXM-8-256", 0x1010u, false, false, false) ==
+          ICO_ATT_CMP_OTHER);
+}
+
 int main(void)
 {
+    test_class();
     test_plan();
     test_counts();
     test_text();

@@ -9,7 +9,10 @@
 #include "rd_internal.h"
 #include "attempt_ledger.h"
 #include "rd_vu_compact.h"
+#include "rd_vu_class.h"
+#include "rd_stencil_selftest.h" /* rd__profile_powervr */
 #include "rd_vu_record.h"
+#include "rd_vu_skin_check.h" /* rd__vu_prepass_selftest_running */
 
 /* Arm's PCI vendor id (the Mali-G52 of issue 179; rd_profile.c VENDOR_ARM) */
 #define CMP_VENDOR_ARM 0x13B5u
@@ -157,14 +160,25 @@ int rd_vu_cmp_env(void)
     return -1;
 }
 
+int rd_vu_cmp_class(const char *name, uint32_t vendor, bool moltenvk, bool dxt, bool byTests)
+{
+    if (byTests || (!moltenvk && vendor == CMP_VENDOR_ARM && name != NULL &&
+                    strstr(name, RD_VU_CMP_G52_NAME) != NULL)) {
+        return ICO_ATT_CMP_G52;
+    }
+    return dxt ? ICO_ATT_CMP_DXT : ICO_ATT_CMP_OTHER;
+}
+
 /* ------------------------------------------------------------ the state */
 
 static struct {
     bool plane;      /* the record's fourth plane (fixed at init) */
-    bool arm;        /* Arm's class under Vulkan */
+    int cls;         /* ICO_ATT_CMP_*: the device's class */
     uint32_t vendor; /* RhiLimits.vendorId, for the line */
-    bool armByTests; /* ICO_RD_VU_COMPACT_ARM=1: the Arm class on this device */
-    bool on;         /* the decider's verdict at the start */
+    char name[96];   /* the Vulkan device name, for the line */
+    bool armByTests; /* ICO_RD_VU_COMPACT_ARM=1: the Mali-G52's class on this device */
+    bool on;         /* to be tried at the start (the keep stage made) */
+    bool runs;       /* the decider's verdict (on outside the self-test's replays) */
     bool refused;    /* the self-test refused it for the run */
     int env;         /* ICO_RD_VU_COMPACT */
     int selftest;    /* -1 not run, 0 refused, 1 passed */
@@ -230,7 +244,7 @@ static bool decide(void)
                          : !rd__vu_record_compute()  ? "record path stores: vertex shader "
                                                        "stores"
                                                      : NULL;
-    return ico_attempt_decide_compaction(compute ? 1 : 0, notWhy, s_cmp.arm ? 1 : 0, s_cmp.env,
+    return ico_attempt_decide_compaction(compute ? 1 : 0, notWhy, s_cmp.cls, s_cmp.env,
                                          RD_VU_COMPACT_DEFAULT, RD_VU_COMPACT_ARM_DEFAULT,
                                          s_cmp.selftest) != 0;
 }
@@ -240,14 +254,20 @@ static bool decide(void)
 static void startLine(const char *what)
 {
     const char *why = ico_attempt_why_of(ICO_ATT_COMPACTION);
-    char cls[128];
-    if (s_cmp.arm) {
-        snprintf(cls, sizeof cls, "the Arm class (vendor 0x%04X%s): RD_VU_COMPACT_ARM_DEFAULT %d",
+    char cls[256];
+    if (s_cmp.cls == ICO_ATT_CMP_G52) {
+        snprintf(cls, sizeof cls,
+                 "the Mali-G52 (%s, vendor 0x%04X%s): RD_VU_COMPACT_ARM_DEFAULT %d", s_cmp.name,
                  (unsigned)s_cmp.vendor, s_cmp.armByTests ? ", ICO_RD_VU_COMPACT_ARM=1" : "",
                  RD_VU_COMPACT_ARM_DEFAULT);
+    } else if (s_cmp.cls == ICO_ATT_CMP_DXT) {
+        snprintf(cls, sizeof cls, "the PowerVR D-Series DXT-48-1536 (%s): RD_VU_COMPACT_DEFAULT %d",
+                 s_cmp.name, RD_VU_COMPACT_DEFAULT);
     } else {
-        snprintf(cls, sizeof cls, "not the Arm class (vendor 0x%04X): RD_VU_COMPACT_DEFAULT %d",
-                 (unsigned)s_cmp.vendor, RD_VU_COMPACT_DEFAULT);
+        snprintf(cls, sizeof cls,
+                 "not the Mali-G52 or the PowerVR D-Series DXT-48-1536 (%s, vendor 0x%04X): off "
+                 "by default",
+                 s_cmp.name, (unsigned)s_cmp.vendor);
     }
     rd__log("VU index compaction: %s (%s; %s)", what, why ? why : "", cls);
 }
@@ -255,14 +275,21 @@ static void startLine(const char *what)
 void rd__vu_compact_init(const RhiLimits *lim)
 {
     freeObjects();
-    /* Arm's vendor id as the device reports it (RhiLimits.vendorId; the
-       tile rule's ICO_VK_FAKE_VENDOR changes that rule alone, vk_device.c),
-       or the tests' ICO_RD_VU_COMPACT_ARM=1 on any device */
+    /* the Mali-G52 by its Vulkan device name ("Mali-G52 MC2" in issue
+       179's log) under Arm's vendor id as the device reports it
+       (RhiLimits.vendorId; the tile rule's ICO_VK_FAKE_VENDOR changes that
+       rule alone, vk_device.c), or the tests' ICO_RD_VU_COMPACT_ARM=1 on
+       any device; the PowerVR D-Series DXT-48-1536 by the PowerVR rule's
+       name (rd_vu_class.h) */
     const char *armEnv = getenv("ICO_RD_VU_COMPACT_ARM");
     s_cmp.armByTests = armEnv != NULL && strcmp(armEnv, "1") == 0;
     s_cmp.vendor = lim != NULL ? lim->vendorId : 0u;
-    s_cmp.arm =
-        lim != NULL && ((!lim->moltenvk && lim->vendorId == CMP_VENDOR_ARM) || s_cmp.armByTests);
+    const char *name = lim != NULL ? rhi_adapter_name() : NULL;
+    snprintf(s_cmp.name, sizeof s_cmp.name, "%s", name != NULL ? name : "no device name");
+    const bool dxt = lim != NULL && rd__profile_powervr() && rd__vu_class_measured(name);
+    s_cmp.cls = lim != NULL
+                    ? rd_vu_cmp_class(name, lim->vendorId, lim->moltenvk, dxt, s_cmp.armByTests)
+                    : ICO_ATT_CMP_OTHER;
     s_cmp.env = rd_vu_cmp_env();
     {
         const char *sb = getenv("ICO_RD_VU_COMPACT_SABOTAGE");
@@ -274,7 +301,13 @@ void rd__vu_compact_init(const RhiLimits *lim)
     }
     s_cmp.selftest = -1;
     s_cmp.refused = false;
-    s_cmp.on = lim != NULL && decide();
+    /* the row before the self-test (off: not run yet, but under the tests'
+       switch); tried by the self-test where it would run were the test to
+       pass */
+    s_cmp.runs = lim != NULL && decide();
+    s_cmp.on = lim != NULL && ico_attempt_compaction_candidate(
+                                  g_rd.vuPrepass && rd__vu_record_compute(), s_cmp.cls, s_cmp.env,
+                                  RD_VU_COMPACT_DEFAULT, RD_VU_COMPACT_ARM_DEFAULT) != 0;
     s_cmp.plane = false;
     if (s_cmp.on) {
         /* group 0 FrameCB and group 1's store layout, as the record's
@@ -297,14 +330,19 @@ void rd__vu_compact_init(const RhiLimits *lim)
                                             "could not be made");
             freeObjects();
             s_cmp.on = false;
+            s_cmp.runs = false;
         }
     }
     s_cmp.plane = s_cmp.on;
-    startLine(s_cmp.on ? "on where its start-up self-test passes: the compute record's mesh "
-                         "triangles that draw nothing (the game's drops, wholly outside the "
-                         "target or the depth range) written as a clipped filler in each draw's "
-                         "list, a fourth record plane"
-                       : "off");
+    startLine(s_cmp.runs ? "on by the tests' switch: the compute record's mesh triangles that "
+                           "draw nothing (the game's drops, wholly outside the target or the "
+                           "depth range) written as a clipped filler in each draw's list, a "
+                           "fourth record plane"
+              : s_cmp.on ? "to be tried by the start-up self-test, on where it passes: the "
+                           "compute record's mesh triangles that draw nothing (the game's "
+                           "drops, wholly outside the target or the depth range) written as a "
+                           "clipped filler in each draw's list, a fourth record plane"
+                         : "off");
 }
 
 void rd__vu_compact_shutdown(void)
@@ -314,6 +352,7 @@ void rd__vu_compact_shutdown(void)
     s_cmp.calls = NULL;
     s_cmp.cap = 0;
     s_cmp.on = false;
+    s_cmp.runs = false;
     s_cmp.plane = false;
 }
 
@@ -324,8 +363,11 @@ bool rd__vu_compact_plane(void)
 
 bool rd__vu_compact_active(void)
 {
-    return s_cmp.on && !s_cmp.refused && s_cmp.pipe.id != 0 && g_rd.vuPrepass &&
-           rd__vu_record_compute() && !g_rdWin.first;
+    /* tried inside the record's self-test, run outside it only on its
+       verdict (a self-test that never ran: off, but under the tests'
+       switch) */
+    return s_cmp.on && !s_cmp.refused && (s_cmp.runs || rd__vu_prepass_selftest_running()) &&
+           s_cmp.pipe.id != 0 && g_rd.vuPrepass && rd__vu_record_compute() && !g_rdWin.first;
 }
 
 RhiPipeline rd__vu_compact_pipeline(void)
@@ -488,6 +530,18 @@ bool rd_vu_compact_counts_now(RdVuCmpCounts *out)
     return true;
 }
 
+void rd__vu_compact_selftest_not_run(const char *why)
+{
+    if (!s_cmp.on) {
+        return;
+    }
+    s_cmp.runs = decide() && !s_cmp.refused; /* the row: not run, but under the tests' switch */
+    char what[200];
+    snprintf(what, sizeof what, "%s: the start-up self-test did not run (%s)",
+             s_cmp.runs ? "on by the tests' switch" : "off", why ? why : "");
+    startLine(what);
+}
+
 void rd__vu_compact_refuse(const char *why)
 {
     s_cmp.refused = true;
@@ -511,6 +565,7 @@ void rd__vu_compact_selftest_done(bool on)
         s_cmp.selftest = -1;
     }
     const bool runs = decide() && !s_cmp.refused;
+    s_cmp.runs = runs;
     if (s_cmp.refused && compute) {
         rd__log("VU index compaction: refused by its start-up self-test (the record's test with "
                 "it: %s; without it the test passed): every draw reads its own index list",

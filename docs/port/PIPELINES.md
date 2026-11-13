@@ -1387,10 +1387,9 @@ draws' invocation figures after the compaction).
 
 Where: the compute record only. The vertex stores and the render targets: not applicable (their
 record passes are draws; a compute pass after them would bring the compute record's work to a
-device that does not take it). By class: `RD_VU_COMPACT_DEFAULT` (every class on the compute record
-but Arm's, 1) and `RD_VU_COMPACT_ARM_DEFAULT` (the Mali-G52's, Arm's vendor id under Vulkan, 1). It
+device that does not take it). By class: `RD_VU_COMPACT_ARM_DEFAULT` (the Mali-G52: Arm's vendor id under Vulkan and `Mali-G52` in the Vulkan device name, issue 179's `Mali-G52 MC2`, 1), `RD_VU_COMPACT_DEFAULT` (the PowerVR D-Series DXT-48-1536, whose compute record the PowerVR rule ships, 1); every other device on the compute record (another Mali, PanVK, a PowerVR without vertex stores, a `[dev] vu_record = "compute"`) is off by default (`measured on the Mali-G52 only`). It
 is a new kind of GPU work on that driver (an extra compute output read by the vertex input stage),
-so it runs only where the start-up self-test passes: the record's test runs with it and with a copy
+so it runs only where the start-up self-test passes (a self-test that never ran, such as one with no SCENE target, keeps it off; the tests' `ICO_RD_VU_COMPACT=1` alone runs it untested): the record's test runs with it and with a copy
 of the prelit mesh past the target's right edge (merged with the ticks copy); a failure runs the
 test again without it, and a pass then refuses it for the run (`refused by its self-test`). The
 tests' switch `ICO_RD_VU_COMPACT=0|1`; `ICO_RD_VU_COMPACT_SABOTAGE=1` writes every triangle as a

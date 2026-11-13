@@ -24,19 +24,26 @@ endif()
 # record's four replays with it, the frame with a copy of the prelit mesh past
 # the target's right edge; lavapipe takes the vertex stores unless asked, so
 # the rows ask for the compute record):
-#   rd_vuprepass_selftest_compact  passes with it: the verdict names the copy,
-#                      the compaction's line says it passed
+#   rd_vuprepass_selftest_compact  lavapipe is another device (off by
+#                      default: measured on the Mali-G52 only), so the tests'
+#                      ICO_RD_VU_COMPACT=1: passes with it, the verdict names
+#                      the copy, the compaction's line says it passed
+#                      (attempt_ledger_test: a self-test that never ran keeps
+#                      it off but under the switch)
 #   rd_vuprepass_selftest_compact_refused  every triangle written as a filler
-#                      (ICO_RD_VU_COMPACT_SABOTAGE=1): the run with it fails, the
+#                      (ICO_RD_VU_COMPACT_SABOTAGE=1, under ICO_RD_VU_COMPACT=1):
+#                      the run with it fails, the
 #                      run without it passes, the compaction refused for the
 #                      run, the pre-pass on with the record by compute
 #   rd_vuprepass_selftest_compact_mali  under the phone's limits
 #                      (ICO_VK_FAKE_LIMITS=mali, ICO_VK_FAKE_VENDOR=0x13B5 for
-#                      the tile rule) and the Arm class by the tests' switch
-#                      (ICO_RD_VU_COMPACT_ARM=1: RhiLimits.vendorId stays
-#                      lavapipe's), synchronisation validation with the
-#                      submit-time checks: passes, its lines naming the Arm
-#                      class and RD_VU_COMPACT_ARM_DEFAULT
+#                      the tile rule) and the Mali-G52's class by the tests'
+#                      switch (ICO_RD_VU_COMPACT_ARM=1: RhiLimits.vendorId and
+#                      the device name stay lavapipe's), synchronisation
+#                      validation with the submit-time checks: tried by the
+#                      self-test without the ICO_RD_VU_COMPACT switch, passes,
+#                      its lines naming the Mali-G52 and
+#                      RD_VU_COMPACT_ARM_DEFAULT
 #   rd_vuprepass_selftest_compact_stores  the vertex stores (lavapipe's own
 #                      path): not applicable, no copy in the frame
 if(ICO_RUN_TESTS AND TARGET rd_vuprepass_selftest_test AND DEFINED _vst)
@@ -45,7 +52,7 @@ if(ICO_RUN_TESTS AND TARGET rd_vuprepass_selftest_test AND DEFINED _vst)
     add_test(NAME rd_vuprepass_selftest_compact
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}"
-                     "-DEXTRA=rd: VU index compaction: on: passed its start-up self-test with the record's \\(its start-up self-test passed, not the Arm class \\(vendor 0x[0-9A-F]+\\): RD_VU_COMPACT_DEFAULT 1\\).*rd: VU pre-pass: on \\(self-test: [^\n]*${_cmp_copy}[^\n]*${_cmp_rec}"
+                     "-DEXTRA=rd: VU index compaction: on by the tests' switch: [^\n]*rd: VU index compaction: on: passed its start-up self-test with the record's \\(ICO_RD_VU_COMPACT=1, its start-up self-test passed, not the Mali-G52 or the PowerVR D-Series DXT-48-1536 \\([^\n]*, vendor 0x[0-9A-F]+\\): off by default\\).*rd: VU pre-pass: on \\(self-test: [^\n]*${_cmp_copy}[^\n]*${_cmp_rec}"
                      -P "${_vst}")
     add_test(NAME rd_vuprepass_selftest_compact_refused
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
@@ -55,7 +62,7 @@ if(ICO_RUN_TESTS AND TARGET rd_vuprepass_selftest_test AND DEFINED _vst)
     add_test(NAME rd_vuprepass_selftest_compact_mali
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}"
-                     "-DEXTRA=rd: VU index compaction: on: passed its start-up self-test with the record's \\(the Arm class, its start-up self-test passed, the Arm class \\(vendor 0x[0-9A-F]+, ICO_RD_VU_COMPACT_ARM=1\\): RD_VU_COMPACT_ARM_DEFAULT 1\\).*${_cmp_copy}"
+                     "-DEXTRA=rd: VU index compaction: to be tried by the start-up self-test, on where it passes: [^\n]*rd: VU index compaction: on: passed its start-up self-test with the record's \\(the Mali-G52, its start-up self-test passed, the Mali-G52 \\([^\n]*, vendor 0x[0-9A-F]+, ICO_RD_VU_COMPACT_ARM=1\\): RD_VU_COMPACT_ARM_DEFAULT 1\\).*${_cmp_copy}"
                      -P "${_vst}")
     add_test(NAME rd_vuprepass_selftest_compact_stores
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
@@ -66,10 +73,10 @@ if(ICO_RUN_TESTS AND TARGET rd_vuprepass_selftest_test AND DEFINED _vst)
                    rd_vuprepass_selftest_compact_mali rd_vuprepass_selftest_compact_stores)
     set_tests_properties(${_cmp_tests} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
     set_tests_properties(rd_vuprepass_selftest_compact
-                         PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_RECORD=compute")
+                         PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_RECORD=compute;ICO_RD_VU_COMPACT=1")
     set_tests_properties(
         rd_vuprepass_selftest_compact_refused
-        PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_RECORD=compute;ICO_RD_VU_COMPACT_SABOTAGE=1")
+        PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_RECORD=compute;ICO_RD_VU_COMPACT=1;ICO_RD_VU_COMPACT_SABOTAGE=1")
     if(DEFINED _env_mali_pre)
         set_tests_properties(
             rd_vuprepass_selftest_compact_mali

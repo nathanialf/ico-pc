@@ -769,6 +769,7 @@ bool rd_vuprepass_selftest(void)
     if (!t || !t->color.id || t->format != RHI_FMT_RGBA8_UNORM || t->w < ST_W || t->h < ST_H) {
         snprintf(g_rdSumPrepass, sizeof g_rdSumPrepass, "on (self-test not run: no SCENE target)");
         rd__log("VU pre-pass: on (self-test not run: no SCENE target to run it on)");
+        rd__vu_compact_selftest_not_run("no SCENE target"); /* off: never tried */
         return true;
     }
     readSabotage();

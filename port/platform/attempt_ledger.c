@@ -490,7 +490,19 @@ int ico_attempt_decide_turn_fold(int turned, int env, int defaultOn, int selftes
     return on;
 }
 
-int ico_attempt_decide_compaction(int compute, const char *notWhy, int arm, int env, int defaultOn,
+/* the class's define (the other device's: none, off) */
+static int cmpClassDefault(int cls, int defaultOn, int armDefaultOn)
+{
+    return cls == ICO_ATT_CMP_G52 ? armDefaultOn : cls == ICO_ATT_CMP_DXT ? defaultOn : 0;
+}
+
+int ico_attempt_compaction_candidate(int compute, int cls, int env, int defaultOn, int armDefaultOn)
+{
+    return compute && env != 0 && (env == 1 || cmpClassDefault(cls, defaultOn, armDefaultOn)) ? 1
+                                                                                              : 0;
+}
+
+int ico_attempt_decide_compaction(int compute, const char *notWhy, int cls, int env, int defaultOn,
                                   int armDefaultOn, int selftest)
 {
     IcoAttemptState st = ICO_ATT_NA;
@@ -505,18 +517,27 @@ int ico_attempt_decide_compaction(int compute, const char *notWhy, int arm, int 
         st = ICO_ATT_REFUSED;
         why = "the record's self-test failed with it and passed without it: every draw reads its "
               "own index list";
-    } else if (env != 1 && !(arm ? armDefaultOn : defaultOn)) {
+    } else if (env != 1 && cls != ICO_ATT_CMP_G52 && cls != ICO_ATT_CMP_DXT) {
         st = ICO_ATT_OFF_DEFAULT;
-        why = arm ? "off by default on the Arm class (RD_VU_COMPACT_ARM_DEFAULT 0) until a "
-                    "Mali-G52 log shows it"
-                  : "off by default (RD_VU_COMPACT_DEFAULT 0)";
+        why = "off by default: measured on the Mali-G52 only (and on the PowerVR D-Series "
+              "DXT-48-1536's compute record)";
+    } else if (env != 1 && !cmpClassDefault(cls, defaultOn, armDefaultOn)) {
+        st = ICO_ATT_OFF_DEFAULT;
+        why = cls == ICO_ATT_CMP_G52
+                  ? "off by default on the Mali-G52 (RD_VU_COMPACT_ARM_DEFAULT 0)"
+                  : "off by default on the PowerVR D-Series DXT-48-1536 "
+                    "(RD_VU_COMPACT_DEFAULT 0)";
+    } else if (selftest < 0 && env != 1) {
+        st = ICO_ATT_OFF_DEFAULT;
+        why = "its start-up self-test not run (yet)";
     } else {
         st = ICO_ATT_ON;
         on = 1;
-        why = selftest == 1 ? (arm ? "the Arm class, its start-up self-test passed"
-                                   : "its start-up self-test passed")
-              : env == 1    ? "ICO_RD_VU_COMPACT=1: the tests' switch"
-                            : "the compute record; the start-up self-test decides where it runs";
+        why = selftest < 0             ? "ICO_RD_VU_COMPACT=1: the tests' switch"
+              : env == 1               ? "ICO_RD_VU_COMPACT=1, its start-up self-test passed"
+              : cls == ICO_ATT_CMP_G52 ? "the Mali-G52, its start-up self-test passed"
+                                       : "the PowerVR D-Series DXT-48-1536, its start-up "
+                                         "self-test passed";
     }
     ico_attempt_state(ICO_ATT_COMPACTION, st, why);
     return on;

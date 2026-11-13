@@ -291,24 +291,25 @@ static void test_classes(void)
     };
 
     /* the index compaction, k's classes in order: the record written by
-       compute dispatches (else the path that holds), the Arm class, the
-       row's state.  The Mali-G52 the compute record (no vertex stores),
-       Arm's class, its self-test passed; the Pixel the compute record by
-       the PowerVR rule (on by default on its DXT), its self-test passed;
-       every other class the vertex stores */
+       compute dispatches (else the path that holds), the device's class
+       (ICO_ATT_CMP_*), the row's state.  The Mali-G52 the compute record (no
+       vertex stores), its class by name, its self-test passed; the Pixel
+       the compute record by the PowerVR rule (on by default on its DXT),
+       the DXT's class, its self-test passed; every other class the vertex
+       stores */
     static const struct {
         int compute;
         const char *notWhy;
-        int arm;
+        int cls;
         IcoAttemptState want;
     } kCmp[] = {
-        {1, NULL, 1, ICO_ATT_ON},
-        {1, NULL, 0, ICO_ATT_ON},
-        {0, "record path stores: vertex shader stores", 0, ICO_ATT_NA},
-        {0, "record path stores: vertex shader stores", 0, ICO_ATT_NA},
-        {0, "record path stores: vertex shader stores", 0, ICO_ATT_NA},
-        {0, "record path stores: vertex shader stores", 0, ICO_ATT_NA},
-        {0, "record path stores: vertex shader stores", 0, ICO_ATT_NA},
+        {1, NULL, ICO_ATT_CMP_G52, ICO_ATT_ON},
+        {1, NULL, ICO_ATT_CMP_DXT, ICO_ATT_ON},
+        {0, "record path stores: vertex shader stores", ICO_ATT_CMP_OTHER, ICO_ATT_NA},
+        {0, "record path stores: vertex shader stores", ICO_ATT_CMP_OTHER, ICO_ATT_NA},
+        {0, "record path stores: vertex shader stores", ICO_ATT_CMP_OTHER, ICO_ATT_NA},
+        {0, "record path stores: vertex shader stores", ICO_ATT_CMP_OTHER, ICO_ATT_NA},
+        {0, "record path stores: vertex shader stores", ICO_ATT_CMP_OTHER, ICO_ATT_NA},
     };
 
     /* the in-between pictures for the GPU's predicted end, k's classes in
@@ -351,7 +352,7 @@ static void test_classes(void)
                                             1) == (d->wantVu == ICO_ATT_ON ? 1 : 0));
         CHECK(ico_attempt_decide_turn_fold(d->turned, -1, 0, -1) == 0);
         ico_attempt_decide_rec_need(1, kRec[c].made, kRec[c].bound, kRec[c].need);
-        CHECK(ico_attempt_decide_compaction(kCmp[c].compute, kCmp[c].notWhy, kCmp[c].arm, -1, 1, 1,
+        CHECK(ico_attempt_decide_compaction(kCmp[c].compute, kCmp[c].notWhy, kCmp[c].cls, -1, 1, 1,
                                             kCmp[c].compute ? 1 : -1) ==
               (kCmp[c].want == ICO_ATT_ON));
         ico_attempt_decide_subpass(d->spRoute, d->spOn, d->spRefused, d->spOff, d->spWhy);
@@ -531,34 +532,62 @@ static void test_classes(void)
     CHECK(ico_attempt_state_of(ICO_ATT_TURN_FOLD) == ICO_ATT_NA);
     CHECK(ico_attempt_why_of(ICO_ATT_COUNT) == NULL);
     /* the index compaction's other states: the tests' switch both ways,
-       refused by the self-test (over the switch), the Arm class's define
-       off, the other class's define off, the self-test not run, not the
-       compute record with and without its words; its count */
-    CHECK(ico_attempt_decide_compaction(1, NULL, 0, 0, 1, 1, 1) == 0);
+       refused by the self-test (over the switch), the Mali-G52's define
+       off, the DXT's define off, another device off by default (measured
+       on the Mali-G52 only) and on by the switch, the self-test not run (off
+       but under the switch), not the compute record with and without its
+       words; the candidate (tried by the self-test); its count */
+    const int G = ICO_ATT_CMP_G52, D = ICO_ATT_CMP_DXT, O = ICO_ATT_CMP_OTHER;
+    CHECK(ico_attempt_decide_compaction(1, NULL, G, 0, 1, 1, 1) == 0);
     CHECK(ico_attempt_state_of(ICO_ATT_COMPACTION) == ICO_ATT_OFF_DEFAULT);
-    CHECK(ico_attempt_decide_compaction(1, NULL, 0, 1, 0, 0, -1) == 1);
+    CHECK(strcmp(ico_attempt_why_of(ICO_ATT_COMPACTION),
+                 "ICO_RD_VU_COMPACT=0: the tests' switch") == 0);
+    CHECK(ico_attempt_decide_compaction(1, NULL, O, 1, 0, 0, -1) == 1);
     CHECK(strcmp(ico_attempt_why_of(ICO_ATT_COMPACTION),
                  "ICO_RD_VU_COMPACT=1: the tests' switch") == 0);
-    CHECK(ico_attempt_decide_compaction(1, NULL, 1, 1, 1, 1, 0) == 0);
+    CHECK(ico_attempt_decide_compaction(1, NULL, O, 1, 0, 0, 1) == 1);
+    CHECK(strcmp(ico_attempt_why_of(ICO_ATT_COMPACTION),
+                 "ICO_RD_VU_COMPACT=1, its start-up self-test passed") == 0);
+    CHECK(ico_attempt_decide_compaction(1, NULL, G, 1, 1, 1, 0) == 0);
     CHECK(ico_attempt_state_of(ICO_ATT_COMPACTION) == ICO_ATT_REFUSED);
-    CHECK(ico_attempt_decide_compaction(1, NULL, 1, -1, 1, 0, 1) == 0);
+    CHECK(ico_attempt_decide_compaction(1, NULL, G, -1, 1, 0, 1) == 0);
     CHECK(ico_attempt_state_of(ICO_ATT_COMPACTION) == ICO_ATT_OFF_DEFAULT);
-    CHECK(strstr(ico_attempt_why_of(ICO_ATT_COMPACTION), "RD_VU_COMPACT_ARM_DEFAULT 0") != NULL);
-    CHECK(ico_attempt_decide_compaction(1, NULL, 0, -1, 0, 1, 1) == 0);
     CHECK(strcmp(ico_attempt_why_of(ICO_ATT_COMPACTION),
-                 "off by default (RD_VU_COMPACT_DEFAULT 0)") == 0);
-    CHECK(ico_attempt_decide_compaction(1, NULL, 0, -1, 1, 0, -1) == 1);
+                 "off by default on the Mali-G52 (RD_VU_COMPACT_ARM_DEFAULT 0)") == 0);
+    CHECK(ico_attempt_decide_compaction(1, NULL, D, -1, 0, 1, 1) == 0);
     CHECK(strcmp(ico_attempt_why_of(ICO_ATT_COMPACTION),
-                 "the compute record; the start-up self-test decides where it runs") == 0);
-    CHECK(ico_attempt_decide_compaction(0, NULL, 1, 1, 1, 1, 1) == 0);
+                 "off by default on the PowerVR D-Series DXT-48-1536 (RD_VU_COMPACT_DEFAULT 0)") ==
+          0);
+    CHECK(ico_attempt_decide_compaction(1, NULL, D, -1, 1, 0, 1) == 1);
+    CHECK(strcmp(ico_attempt_why_of(ICO_ATT_COMPACTION),
+                 "the PowerVR D-Series DXT-48-1536, its start-up self-test passed") == 0);
+    CHECK(ico_attempt_decide_compaction(1, NULL, O, -1, 1, 1, 1) == 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_COMPACTION) == ICO_ATT_OFF_DEFAULT);
+    CHECK(strcmp(ico_attempt_why_of(ICO_ATT_COMPACTION),
+                 "off by default: measured on the Mali-G52 only (and on the PowerVR D-Series "
+                 "DXT-48-1536's compute record)") == 0);
+    CHECK(ico_attempt_decide_compaction(1, NULL, G, -1, 1, 1, -1) == 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_COMPACTION) == ICO_ATT_OFF_DEFAULT);
+    CHECK(strcmp(ico_attempt_why_of(ICO_ATT_COMPACTION), "its start-up self-test not run (yet)") ==
+          0);
+    CHECK(ico_attempt_decide_compaction(1, NULL, D, -1, 1, 1, -1) == 0);
+    CHECK(ico_attempt_decide_compaction(1, NULL, G, 1, 1, 1, -1) == 1);
+    CHECK(ico_attempt_decide_compaction(0, NULL, G, 1, 1, 1, 1) == 0);
     CHECK(ico_attempt_state_of(ICO_ATT_COMPACTION) == ICO_ATT_NA);
     CHECK(strcmp(ico_attempt_why_of(ICO_ATT_COMPACTION), "not the compute record") == 0);
-    CHECK(ico_attempt_decide_compaction(1, NULL, 1, -1, 1, 1, 1) == 1);
+    CHECK(ico_attempt_compaction_candidate(1, G, -1, 0, 1) == 1);
+    CHECK(ico_attempt_compaction_candidate(1, G, -1, 1, 0) == 0);
+    CHECK(ico_attempt_compaction_candidate(1, D, -1, 1, 0) == 1);
+    CHECK(ico_attempt_compaction_candidate(1, O, -1, 1, 1) == 0);
+    CHECK(ico_attempt_compaction_candidate(1, O, 1, 0, 0) == 1);
+    CHECK(ico_attempt_compaction_candidate(1, G, 0, 1, 1) == 0);
+    CHECK(ico_attempt_compaction_candidate(0, G, 1, 1, 1) == 0);
+    CHECK(ico_attempt_decide_compaction(1, NULL, G, -1, 1, 1, 1) == 1);
     ico_attempt_fire(ICO_ATT_COMPACTION, 9866);
     {
         char b[2048];
         (void)ico_attempt_start_text(b, sizeof b);
-        CHECK(strstr(b, "; index compaction on (the Arm class, its start-up self-test passed)") !=
+        CHECK(strstr(b, "; index compaction on (the Mali-G52, its start-up self-test passed)") !=
               NULL);
         (void)ico_attempt_block_text(b, sizeof b, -1);
         CHECK(strstr(b, "; index compaction on 9866 triangles left out") != NULL);

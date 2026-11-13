@@ -248,16 +248,32 @@ int ico_attempt_decide_vu_compute(int byName, int stores, int compute, int power
    failed, 1 passed).  1 when the fold may run (each present still checks
    its draws), else 0 */
 int ico_attempt_decide_turn_fold(int turned, int env, int defaultOn, int selftest);
+
+/* the index compaction's device classes (rd_vu_compact.c rd_vu_cmp_class):
+   another device, the Mali-G52 by its Vulkan device name (issue 179's
+   Mali-G52 MC2; or the tests' ICO_RD_VU_COMPACT_ARM=1), the PowerVR
+   D-Series DXT-48-1536 (rd_vu_class.h rd__vu_class_measured: the compute
+   record the PowerVR rule ships there) */
+enum { ICO_ATT_CMP_OTHER = 0, ICO_ATT_CMP_G52 = 1, ICO_ATT_CMP_DXT = 2 };
+
 /* the index compaction (rd_vu_compact.c, at the pre-pass's start and after
    the record's self-test): compute the record is written by compute
    dispatches with the pre-pass on (else notWhy, the record path that
-   holds: not applicable), arm the Arm class under Vulkan (the Mali-G52),
-   env the tests' switch (ICO_RD_VU_COMPACT: -1 unset, 0, 1), defaultOn
-   RD_VU_COMPACT_DEFAULT, armDefaultOn RD_VU_COMPACT_ARM_DEFAULT, selftest
-   the record's start-up self-test with it (-1 not run, 0 refused it, 1
-   passed).  1 when the compaction runs (the row on), else 0 */
-int ico_attempt_decide_compaction(int compute, const char *notWhy, int arm, int env, int defaultOn,
+   holds: not applicable), cls the device's class (ICO_ATT_CMP_*: another
+   device is off by default, measured on the Mali-G52 only), env the tests'
+   switch (ICO_RD_VU_COMPACT: -1 unset, 0, 1), defaultOn
+   RD_VU_COMPACT_DEFAULT (the DXT's), armDefaultOn RD_VU_COMPACT_ARM_DEFAULT
+   (the Mali-G52's), selftest the record's start-up self-test with it (-1
+   not run, 0 refused it, 1 passed: a self-test that never ran keeps it
+   off, but under the tests' switch).  1 when the compaction runs (the row
+   on), else 0 */
+int ico_attempt_decide_compaction(int compute, const char *notWhy, int cls, int env, int defaultOn,
                                   int armDefaultOn, int selftest);
+/* pure, no row: the compaction is to be tried by the record's start-up
+   self-test (the keep stage made, the fourth plane allocated): the
+   decider's verdict were the self-test to pass */
+int ico_attempt_compaction_candidate(int compute, int cls, int env, int defaultOn,
+                                     int armDefaultOn);
 /* the subpass read (rd_subpass_probe.c, at DATE's self-test and after its
    probe): route the device's passes are VkRenderPass objects without local
    read (RhiLimits.subpassRoute), on the read in force for DATE (the device
