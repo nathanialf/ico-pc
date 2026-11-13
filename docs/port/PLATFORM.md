@@ -1774,9 +1774,12 @@ The window build's diagnostic keys are free of SDL so a unit test checks them
 - **Settings > Share a bug report** (Main, below it; an rc build on Android alone,
   `ICO_RC_TOOLS`, [BUILDING.md](../BUILDING.md#release-candidate-tools)): `share_report_arm` sets
   a flag and the pump's `share_report_pump`, on SDL's main thread, collects the files
-  (`port/platform/share_report.c` `ico_share_report_collect`: `logs/ico-pc.log`,
-  `logs/ico-pc-previous.log`, the newest `dumps/*.zip` and `dumps/*-present.png` by modification
-  time then name, the newest `logs/report-*.zip`, each skipped when missing), logs `window: share:
+  (`port/platform/share_report.c` `ico_share_report_collect_run`: `logs/ico-pc.log`,
+  `logs/ico-pc-previous.log`, up to four `dumps/*.zip` written since the run started
+  (`ICO_SHARE_REPORT_RUN_ZIPS`, oldest first; the newest `dumps/*.zip` of any age when this run
+  has written none), the newest `dumps/*-present.png`, the newest `logs/report-*.zip`, the newest
+  `logs/vu-skin-fail-*.bin` and the newest `logs/slow-*.zip`, newest by modification time then
+  name, each skipped when missing), logs `window: share:
   N files offered (name, name, ...)`, flushes the log and calls `ico_android_share_files`
   (`host_android.c`), which calls the static `IcoActivity.shareReport(String title, String[]
   paths)`: content URIs of the app's `FileProvider` (authority `<package>.reports`,

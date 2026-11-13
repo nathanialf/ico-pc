@@ -1610,15 +1610,15 @@ immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan. OpenGL and Direct3
 | `fogLocal` | on (probe) | off | on where local read is offered | same | same | same | same |
 | `dateStencil` | on (probe) | off | on where local read is offered | same | same | same | same |
 | `storePlan` | on | on | on | on | on | on | on |
-| `blurFold` | on | on | on | on | off (the G52 is bound by its ALU) | on | on |
-| `glowFold` (`[dev] glow_fold`) | on | on | off | off | off | off (the folded reduction cost the PowerVR phone 8 ms a glow picture) | off |
+| `blurFold` | on | on | on | on | off (the G52 is bound by its ALU: the profile's reason, no measurement cited) | on | on |
+| `glowFold` (`[dev] glow_fold`) | on | on | off | off | off | off (the folded reduction cost the PowerVR phone 8 ms a glow picture; the Adreno, Mali and Apple columns are that class rule, not measured on them) | off |
 | robust access | off | its own bounds rules | off | off | off | off | off |
 | `localRead` | as offered | none | as offered | as offered | as offered | as offered | as offered |
 | `uintViewWork`, `uintViewScene` | on where the backend has the view | off (`RhiLimits.uintView` false on D3D12) | off | off | off | off | off |
 | `carefulSet` | off | off | off | off | off | off | off |
-| the record path (the triangle pre-pass, `[dev] vu_prepass`) | on | on | on (issue 179); off for the run when the start-up self-test's four replays fail ([PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)) | on, the same | on, the same | on, the same | on, the same; off on an Apple A9 or A10 (32 bytes of colour targets a pixel) under the targets |
+| the record path (the triangle pre-pass, `[dev] vu_prepass`) | on | on | on, except the Adreno 740 (off by the device table, issue 123: `vk_device.c` `kVuPlainOnly`; `[dev] vu_prepass = true` draws with it anyway); off for the run when the start-up self-test's four replays fail, and for one start after a lost one on a tile-based phone GPU ([PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)) | on, the same | on, the same | on, the same | on, the same; off on an Apple A9 or A10 (32 bytes of colour targets a pixel) under the targets |
 | the record's write (`[dev] vu_record`) | stored by the vertex shaders where Vulkan offers `vertexPipelineStoresAndAtomics`, else by compute dispatches | render targets and copies (no vertex or compute stores this release; Direct3D 11 never stores from its vertex shaders) | stored where offered, else compute dispatches, else targets ([PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes), the record's three writes) | same | same (the Mali-G52 of issue 179: compute dispatches, no vertex stores) | same | same |
-| dynamic state (`[dev] dynamic_state`) | on where offered | none | off (the PowerVR phone whose pictures shook; `[dev] dynamic_state = true` turns it on) | off | off | off | off |
+| dynamic state (`[dev] dynamic_state`) | on where offered | none | off | off | off | off (the PowerVR phone whose pictures shook; the rule is every tile-based GPU's, and every GPU on Android, unmeasured on the others: `vk_device.c`; `[dev] dynamic_state = true` turns it on) | off |
 | `alphaPlan` (`[dev] alpha_plan`) | on | on | on | on | on | on | on |
 | `fxPlan` (`[dev] fx_plan`) | on | on | on | on | on | on | on |
 | `fxDstLocal` (`[dev] fx_dst_local`) | on (probe) | off | on where local read is offered | same | same | same | same |
@@ -1626,6 +1626,21 @@ immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan. OpenGL and Direct3
 | `crackFill` (`[dev] crack_fill`) | on | on | on | on | on | on | on |
 | `shadowOne` (`[dev] shadow_one`) | on | off | on | on | on | on | on |
 | `shadowBspline` (`[dev] shadow_bspline`) | off | off | off | off | off | off | off |
+| `auraBox` (`[dev] aura_box`; [WORK_BUFFERS.md](WORK_BUFFERS.md#the-auras-feedback-read)) | off (not measured there) | off | on | on | on | on | on |
+| `passArea` (`[dev] pass_area`; [WORK_BUFFERS.md](WORK_BUFFERS.md#the-pass-area)) | off | off | on | on | on | on | on |
+| `passCut` (`[dev] clear_carry`, `clear_skip`, `last_store`; [WORK_BUFFERS.md](WORK_BUFFERS.md#passes-cut)) | off | off | on | on | on | on | on |
+| `shadowMerge` (the shadow volumes in the scene's pass, `ICO_RD_SHADOW_MERGE` for the tests; [WORK_BUFFERS.md](WORK_BUFFERS.md#the-shadow-volumes-in-the-scenes-pass)) | off | off | on | on | on | on | on |
+| `sheetBake2x` (menu text baked at scale 2) | off | off | on | on | on | on | on |
+| the one DATE set-up for the shadow composites (`ICO_RD_DATE_ONE`, tests only; [RENDER_POST.md](RENDER_POST.md#one-date-set-up-for-the-shadow-composites)) | on | on | on | on | on | on | on |
+| the empty composites skipped (`ICO_RD_EMPTY_SKIP`, tests only; needs the shadow box, which needs the one-draw count) | on | off (no box: the seven-draw count) | on | on | on | on | on |
+| the culler's default (`rd_vis.c` `rd__vis_profile_default`, `RhiLimits.tiler`) | frustum and occlusion | frustum and occlusion | frustum alone | frustum alone | frustum alone | frustum alone | frustum alone on Apple silicon; frustum and occlusion on an Intel or AMD Mac |
+| the late pass's fill hold and deferred paste (`rd_late_pass.c`, `RhiLimits.tiler` under Vulkan), shot late (`rd_present.c`, `RhiLimits.tiler`) | off | off | on | on | on | on | on for Apple silicon; off on an Intel or AMD Mac |
+
+Two meanings of "tile-based" meet in this table. The flags from `auraBox` to `sheetBake2x` follow
+the profile's class (every class but desktop Vulkan, D3D12, OpenGL and Direct3D 11, so an Intel or
+AMD Mac under MoltenVK is on the Apple column and takes them); the last two rows follow
+`RhiLimits.tiler`, which is false on such a Mac (`vkr_is_tiler` in `port/rhi/vk/vk_device.c` names
+the vendors).
 
 The blend row is `rd_dst_read.c`'s ([Destination reads and blend
 paths](#destination-reads-and-blend-paths)), robust access the Vulkan backend's

@@ -59,9 +59,9 @@ struct Replay;
 extern "C" {
 #endif
 
-/* 1: the two passes wherever they are eligible and ICO_RD_LAMPS names no
- * words of its own (a build variant's choice); 0 (v0.11.5): by the word
- * glowblur alone, until the owner has seen it */
+/* 1 (the default, from v0.11.5): the two passes wherever they are eligible
+ * and ICO_RD_LAMPS names no words of its own; 0 (a build variant's choice):
+ * by the word glowblur alone */
 #ifndef RD_GLOW_BLUR_DEFAULT
 #define RD_GLOW_BLUR_DEFAULT 1
 #endif

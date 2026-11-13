@@ -552,8 +552,10 @@ Measured or worked out, not done:
   11's load) fewer a DARK title picture at 2366 x 1080, and list 11's depth load. Not measured on
   the phone (no dump of its current title on this machine; the corpus title's motion blur draws
   into SCENE before list 11); `rd_fill11_ab` asserts the passes and bytes on lavapipe from the
-  code. Off by default in this release: on the PowerVR phone the title's right part flickered black
-  with it on (cause not found).
+  code. Off by default in this release: on the PowerVR phone the build with it alone on (the
+  no-volume shadow window off) drew the bottom right quarter of the picture wrong (cause not found
+  by reading); the black flicker of the title's right part in the earlier candidates was the
+  no-volume shadow window's, not this ([RENDER_POST.md](RENDER_POST.md#the-crack-fill-in-list-11s-pass)).
 - **The fog's cost per frame.** On lavapipe the fog of the Mac frame costs several times the
   title frame's at under three times the pixels; the fog pass count (`rd__fog_plan`) and its
   depth source (`rd__fog_source`) are where to look before its shader, which is about 60
@@ -596,7 +598,7 @@ What was tried for the issue 163 rooms' lamps (`port/render/rd_lamps.c`, [RENDER
 | WORK2 at the GS size (`lowres`) | 22.8 to 24.5, but the glow shimmers | off |
 | the crack fill's hold past the lamps (`fillhold`) | a loss: flushed by a later draw, the snapshot copy back | off |
 | WORK2 at the GS size from 4 samples resolved in the pass (`lowresms`) | 22.7 to 24.0, no shimmer seen | on on the PowerVR class (VD-32) |
-| the crack fill drawn in the paste's pass (`fillpaste`) | not measured | built, off by default (`RD_LAMPS_FILLPASTE_DEFAULT` 0): under the lamps plan the fill's snapshot is taken where it lands, by the swap, so the fill, the paste and list 11's draws are one SCENE pass that loads nothing; exact |
+| the crack fill drawn in the paste's pass (`fillpaste`) | not measured | on on the PowerVR class under Vulkan where the 4-sample lamps form is on (`RD_LAMPS_FILLPASTE_DEFAULT` 1): under the lamps plan the fill's snapshot is taken where it lands, by the swap, so the fill, the paste and list 11's draws are one SCENE pass that loads nothing; exact |
 | a WORK2 pass that loads WORK2 drawn with 4 samples after a copy and a spread draw | not built | the next release: some pictures on the phone split the lamps over two WORK2 passes (a pass beginning at a lamp in 80 of 418 pictures of one 10 s block; cause not found, no dump); designed, not shipped: untested for the lamp case, and it costs every mask-begun pass |
 
 ### Culling

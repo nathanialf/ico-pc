@@ -670,8 +670,9 @@ WxH)`.
 
 ### The glow's blur in two passes
 
-Off by default (`RD_GLOW_BLUR_DEFAULT` 0 in `port/render/rd_glow_blur.h`; the tests' word `glowblur`
-of `ICO_RD_LAMPS`); not byte-identical: [DIVERGENCES.md](DIVERGENCES.md) VD-33, "to check".
+On by default (`RD_GLOW_BLUR_DEFAULT` 1 in `port/render/rd_glow_blur.h`; the tests' word
+`glowblur` of `ICO_RD_LAMPS` asks for it alone, `noglowblur` leaves it out of the class's defaults);
+not byte-identical: [DIVERGENCES.md](DIVERGENCES.md) VD-33, "to check".
 
 The glow's ten blur pairs (`ico2/sugipon/src/staticBlur.c` `blur(10)` .. `blur(19)`) are twenty
 dependent passes on WORK0 and WORK1 (424 x 128 on the PowerVR phone; the blur fold draws nine of
@@ -2285,9 +2286,10 @@ The walk (`rd__fill11_take`, `rd__fill11_at`, `rd__fill11_draw`):
   clear pending on another target keeps its carry), the same bytes as at its place.
 
 The switch: **off by default in this release** (`RD_FILL11_DEFAULT 0`): on the owner's PowerVR phone
-the right part of the title's picture flickered black from the first picture the fill was drawn in
-list 11's pass, and the cause was not found by reading the code (the start line says so; nothing of
-it runs, not the self-test nor the start-up set's twins, without `ICO_RD_FILL11`). With the default
+the build with this alone on (the no-volume shadow window off) drew the bottom right quarter of the
+picture wrong, and the cause was not found by reading the code; the black flicker of the title's
+right part in the earlier candidates was the no-volume shadow window's, not this (the start line
+says it is off; nothing of it runs, not the self-test nor the start-up set's twins, without `ICO_RD_FILL11`). With the default
 on it would be on where the start-up self-test passed and the device's class is the PowerVR phone's or a
 desktop one (`rd__profile_tile_class` 1, or 2 on a GPU that is not a tile-based phone's,
 `RhiLimits.tilePhone`: Vulkan, OpenGL, Direct3D 11 and 12 on a PC); off on the Arm, Qualcomm and

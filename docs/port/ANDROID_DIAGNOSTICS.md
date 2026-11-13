@@ -675,8 +675,8 @@ once line `rd: lamps: low resolution: a draw into WORK2 ... drawn without a dept
 the reason; with H the late pass's `N crack fills held ... into the glow's` rises by about one a
 lamps picture and `glow WORK2 ...` in `GPU top passes` falls to the GS size).
 
-Where the glow's blur in two passes is in force (`RD_GLOW_BLUR_DEFAULT` 1 in a variant, or the
-tests' word `glowblur`; [RENDER_POST.md](RENDER_POST.md#the-glows-blur-in-two-passes), VD-33): the
+Where the glow's blur in two passes is in force (the default, `RD_GLOW_BLUR_DEFAULT` 1,
+or the tests' word `glowblur`; [RENDER_POST.md](RENDER_POST.md#the-glows-blur-in-two-passes), VD-33): the
 start line `rd: glow blur: on: ...`, once `rd: glow blur: the glow's 10 blur pairs drawn as two
 passes on WORK0 424x128 (...)` on the phone's Auto, and the 10 s `window: glow blur: N pictures
 with the glow's blur in two passes (P pairs, about Q passes fewer), R chains drawn as recorded
@@ -1140,7 +1140,9 @@ causes in it, each on its own lines. The lines to read, in the log's order:
 An rc build (`ICO_RC_TOOLS`, on Android alone; [BUILDING.md](../BUILDING.md#release-candidate-tools))
 saves frames of the game's opening by itself, because the opening plays for about 80 s before the
 title menu and cannot be paused, so the player cannot ask for a bug-report picture there. A release
-has none of this.
+has none of this. The build's `WINDOW_CAPTURE_DEFAULT` is 0 (the phone's frames are in): the capture is compiled in and does nothing, and the start prints `window: capture: off
+(WINDOW_CAPTURE_DEFAULT 0: the opening's frames are not saved by themselves in this build)`; a later
+round that needs new frames builds a variant with it 1, which prints the lines below.
 
 - **When.** In the opening alone: `stage_no` 1 with the disc's scene layout in front
   (`ico_region_cur()->layout_scene`: the log's `menu screen 7 -> 55` on the European disc, 51 or 52
