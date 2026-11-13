@@ -81,6 +81,7 @@
 #include <string.h>
 
 #include "attempt_ledger.h"
+#include "rd_clause.h" /* the 10 s clause whole or "; ..." */
 #include "rd_date_one.h"
 #include "rd_bench.h" /* the bench's switch (rd__shadow_box_bench_force) */
 #include "rd_internal.h"
@@ -1006,14 +1007,14 @@ void rd__shadow_box_text(char *out, size_t size, size_t *at)
                            (double)s_sum.counts / n, (double)s_sum.composites / n,
                            s_sum.all ? 100.0 * (double)s_sum.texels / (double)s_sum.all : 0.0,
                            (double)k / n, why[0] ? " (" : "", why, why[0] ? ")" : "");
-    *at += w > 0 && (size_t)w < size - *at ? (size_t)w : 0;
+    rd_clause_done(out, size, at, w); /* whole, or "; ..." */
     if (s_sum.skipped && *at < size) {
         /* the empty composites (rd__shadow_box_empty_skip) */
         const int e = snprintf(out + *at, size - *at,
                                "; empty composites: %.1f a replay skipped (%.1f with their DATE "
                                "set-up)",
                                (double)s_sum.skipped / n, (double)s_sum.skippedDate / n);
-        *at += e > 0 && (size_t)e < size - *at ? (size_t)e : 0;
+        rd_clause_done(out, size, at, e);
     }
     memset(&s_sum, 0, sizeof(s_sum));
 }

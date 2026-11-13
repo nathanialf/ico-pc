@@ -101,7 +101,8 @@
 #include <string.h>
 
 #include "attempt_ledger.h"
-#include "rd_bench.h" /* the bench's switch below */
+#include "rd_bench.h"  /* the bench's switch below */
+#include "rd_clause.h" /* the stats clause whole or "; ..." */
 #include "rd_date_one.h"
 #include "rd_no_volume.h"
 #include "rd_replay.h"
@@ -1048,7 +1049,7 @@ void rd__no_volume_stats(const RdPerfRecord *rec, char *out, size_t size)
                      s_nv.gateBreak == RD_NV_WHY_COUNT ? "on" : "off", rec->noVolumeBreak,
                      rec->noVolumeBreak ? rec->noVolumeClears : 0u, rec->noVolumeHeld,
                      m ? "on" : "off", rec->emptySkipped, rec->emptySkippedDate);
-        at += w > 0 && (size_t)w < size - at ? (size_t)w : 0;
+        rd_clause_done(out, size, &at, w); /* whole, or "; ..." */
     }
     if (at < size) {
         rd__date_one_stats(rec, out + at, size - at);

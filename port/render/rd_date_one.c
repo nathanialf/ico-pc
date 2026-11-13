@@ -56,6 +56,7 @@
 #include <string.h>
 
 #include "attempt_ledger.h"
+#include "rd_clause.h" /* the 10 s clause whole or "; ..." */
 #include "rd_date_one.h"
 #include "rd_replay.h"
 
@@ -330,7 +331,7 @@ void rd__date_one_text(char *out, size_t size, size_t *at)
                                "; DATE one set-up: %.1f composites a replay shared the set-up "
                                "before them, %.1f kept their own",
                                (double)s_sum.shared / n, (double)s_sum.refused / n);
-        *at += w > 0 && (size_t)w < size - *at ? (size_t)w : 0;
+        rd_clause_done(out, size, at, w); /* whole, or "; ..." */
     }
     memset(&s_sum, 0, sizeof(s_sum));
 }

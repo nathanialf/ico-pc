@@ -60,6 +60,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "rd_clause.h"
 #include "rd_date_one.h"
 #include "rd_internal.h"
 #include "rd_no_volume.h"
@@ -263,6 +264,33 @@ static void testLines(void)
     CHECK(strcmp(out, "DATE one set-up on: 2 shared (458752 texels), 0 kept their own") == 0,
           "b5: the stats words: %s", out);
     rd__date_one_force(-1);
+    /* a clause that does not fit is dropped whole (rd_clause.h): "; ..." in
+       its place, never a cut fragment; one that fits as before */
+    {
+        /* the sizes through a volatile: the clauses cut on purpose */
+        volatile size_t bSize = 16, cSize = 8;
+        char b[16] = "head";
+        size_t k = 4;
+        int n = snprintf(b + k, bSize - k, "; %s", "ab");
+        rd_clause_done(b, bSize, &k, n);
+        CHECK(k == 8 && strcmp(b, "head; ab") == 0, "b5: a clause that fits: %s", b);
+        n = snprintf(b + k, bSize - k, "; %s", "a long clause");
+        rd_clause_done(b, bSize, &k, n);
+        CHECK(k == 13 && strcmp(b, "head; ab; ...") == 0, "b5: a clause dropped whole: %s", b);
+        n = snprintf(b + k, bSize - k, "; %s", "cd");
+        rd_clause_done(b, bSize, &k, n);
+        CHECK(k == 13 && strcmp(b, "head; ab; ...") == 0, "b5: no room for the mark: %s", b);
+        char c[8] = "abcd";
+        k = 4;
+        n = snprintf(c + k, cSize - k, "; %s", "xyz");
+        rd_clause_done(c, cSize, &k, n);
+        CHECK(k == 4 && strcmp(c, "abcd") == 0, "b5: no room for the mark either: %s", c);
+        rd__date_one_pop(&rec);
+        char s[24] = "";
+        k = 0;
+        rd__date_one_text(s, sizeof s, &k);
+        CHECK(k == 5 && strcmp(s, "; ...") == 0, "b5: the 10 s clause cut short: %s", s);
+    }
 }
 
 /* ------------------------------------------------------- on a device */
