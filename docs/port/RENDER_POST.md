@@ -1462,6 +1462,113 @@ volumes, R not taken (...)`.
 lines on the CPU) and `rd_no_volume_ab` / `_gl` (`tools/no_volume_dumps.txt`)
 ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
 
+**The break mode.** The same window, taken with SCENE's pass ended where the count ends
+it today: the reset is recorded as before (the merged pass's stencil store armed as before), and
+the resolve records no count but ends the open pass (`rd__replay_end_pass`, as
+`rd__shadow_one_draw` does: the reset's pending stencil clear recorded as before) and closes the
+shadow window as `doShadowResolve` does after the count; the levels and composites are skipped
+and the zeros owed as in the open mode. So the only difference from the window drawn is the count's
+pass, the three levels' passes, the composites' DATE set-ups (on the Pixel 3 set-ups of two draws
+and two by-region barriers each over the whole area) not drawn and the owed zero clears drawn
+(DATEPROOF Q3, `build-host/tmp/v0116/design/DATEPROOF.md`); list 3's pass on SCENE is begun by its
+next draw on SCENE (the fog), with LOAD, as the first composite began it. A target that holds zero
+already is owed no clear: the zero clears the replay before recorded (and the targets it found
+holding zero) are kept with their textures; the next replay alone (the replay counter one more: no
+own frame or other replay between) reads them, and only for a target no command before its window's
+resolve names (the scan marks it), whose texture is the same and still in SHADER_READ as the
+clear's pass left it. So on the title, picture after picture, the four small clears are not drawn
+either. `RD_NO_VOLUME_BREAK_DEFAULT` 0 in `port/render/rd_no_volume.c`: off on every device until
+a phone release candidate shows the PowerVR phone's title and pause menu clean with it (the open
+mode, its relative, flickered there); with the constant 1 its classes are the open mode's (the
+PowerVR class and MoltenVK under Vulkan, DATE through the stencil bit); it goes before the open
+mode. `ICO_RD_NO_VOLUME_BREAK=0|1` and `ICO_RD_NO_VOLUME_POISON=1` (the owed clears written
+magenta, none left out: a reader of a target the walk does not draw shows) are the tests'
+switches ([TESTING.md](TESTING.md)). Its lines: once a renderer `rd: shadows: no volume: on with
+SCENE's pass ended at the resolve (ICO_RD_NO_VOLUME_BREAK=1 | the PowerVR or MoltenVK class,
+RD_NO_VOLUME_BREAK_DEFAULT 1): ...`; once `rd: shadows: no volume: frame F, the window at commands
+R..S has no volume: SCENE's pass ended at the resolve, its count (the reduced count) and levels
+owed as zero clears or holding zero already (...)`; the 10 s clause above ends `, B with SCENE's
+pass ended at the resolve (C zero clears, H targets holding zero already)`; `--stats` adds `; break
+on|off: B taken (C zero clears, H targets holding zero)` to the no-volume line. The test:
+`rd_no_volume_break_ab` (`port/render/test/rd_shadow_cuts_ab.cmake`).
+
+### One DATE set-up for the shadow composites
+
+Shadow.c composites its three levels into SCENE with three sprites under TEST 0x3400D (DATE, DATM 0,
+ATST GREATER 0, AFAIL KEEP), FBA 0, vertex alpha `shadowBlend[3]`, `[2]`, `[1]` for SHADOW2, 1, 0.
+Each wrote alpha, so the replay took a DATE set-up for each: on the snapshot path (no in-pass read:
+the Mali-G52, Qualcomm's driver, the PowerVR B class, Direct3D 11, OpenGL) an R8 snapshot that ends
+SCENE's pass and begins it again, three a picture; on the stencil path (the Pixel, the Adreno 710)
+three clear-and-set set-ups. `port/render/rd_date_one.c` keeps the first for the next composite
+when the one between cannot set the alpha's top bit (DATEPROOF Q1,
+`build-host/tmp/v0116/design/DATEPROOF.md`):
+
+- **The bound** (`rd_date_one.h`). A composite in the box scan's form
+  ([WORK_BUFFERS.md](WORK_BUFFERS.md#the-shadows-over-the-volumes-box)) with DATM 0 and FBA 0 draws
+  only where the bit is 0 and stores As, never reading the destination's alpha on any blend path
+  (dual source: alpha factors ONE/ZERO; the two-pass fallback's colour pass RGB only, its alpha
+  pass As with blending off). As is at most the level's largest alpha times the composite's largest
+  vertex alpha, >> 7 (rounded up here), under MODULATE with TCC 1, the level's under DECAL; a
+  level's alpha is at most its source's times its vertex alpha the same way (the filters are
+  convex), the count's 0x80. Under 0x80 the bit is the same at every texel after the composite, so a
+  set-up taken again would hold the bits of the one before. The retail discs' stage data
+  (`shadowDepth` 45 to 80, `shadowBlend` up to 128, every `.ssb` of every disc) keep the written
+  alpha at 56 or under; the stage-setting debug menu reaches 128 x 128, exactly 0x80. The scan
+  computes the bound a picture from the chain's own vertex alphas (`rd__date_one_scan_cmd`, from
+  `rd_shadow_box.c`'s scan in the store plan's walk) and marks a composite that follows one in the
+  form on its target, nothing but state between, every composite before it under the bound.
+- **The walk.** `rd__date_snapshot` and `rd__replay_date_take` ask `rd__date_one_held` which serial
+  the held set-up stands for: for a marked composite whose predecessor took its set-up this replay
+  (the same target and path, the stencil's in the same pass), no write since but the predecessor's
+  own draw, the current one, so `rd__date_retake` reuses it where its area holds the draw's (an area
+  not held still takes the whole target again). Not under MSAA or the exact blend, nor after a
+  level or composite replayed with a brighter vertex than the scan read (`rd__shadow_box_screen`
+  checks). On the snapshot path the DATE cut's runs do not end at a shared composite
+  (`RdDateCutCmd.shared`), so composites 1 and 2 draw in the pass list 4 uses, with the depth, by
+  the screen key composite 3 uses (in the start-up set).
+- **What it saves.** The snapshot path: 2 R8 passes and 2 breaks of SCENE's pass a picture with
+  volumes (at the Mali's 912x512 about 12.5 MiB of attachment traffic). The stencil path: 2 of the
+  3 set-ups (4 draws, 4 by-region barriers).
+
+**The empty composites.** A composite whose level's box this replay is empty (no volume, or none in
+its reach: `rd__shadow_box_empty_skip`, at the top of `doScreen` through `rd__no_volume_skip`)
+draws nothing; it was drawn with its DATE set-up and then an empty scissor. It is skipped with the
+set-up: the open run flushed, the write serial moved (the next DATE draw takes its own set-up from
+the alpha as it is, as after the drawn one), a share it held passed on (`rd__date_one_passed`).
+Nothing reads what the skipped set-up would have left: the R8 snapshot is read only at a DATE draw's
+own texels inside the area its retake copies, the stencil's bit 6 only by DATE draws inside their
+own set-up's area (the count masks it off, the volumes' INCR and DECR write bits 0-5 alone), and a
+pass on SCENE not begun is begun by the next draw on SCENE with LOAD. Where no window has a volume
+this is 3 R8 passes and up to 3 empty SCENE passes a picture on the snapshot path (6 on the Mali's
+v746) and the 3 whole-area set-ups on the Pixel; on every device and backend, the classes the
+no-volume window refuses included.
+
+**Where.** Both on by default on every device and backend (`RD_DATE_ONE_DEFAULT` 1,
+`RD_EMPTY_SKIP_DEFAULT` 1): fewer passes and draws of the kinds drawn today, no new pipeline or pass
+kind, so no start-up self-test. `ICO_RD_DATE_ONE=0|1|force` and `ICO_RD_EMPTY_SKIP=0|1` are the
+tests' switches ([TESTING.md](TESTING.md)). Nothing differs in the picture: no `DIVERGENCES.md` row.
+
+**The lines.** Once a renderer: `rd: DATE one set-up: on: the shadow composites share one DATE
+snapshot or stencil set-up where none can set the alpha's top bit (...); the same picture` (or `off
+(ICO_RD_DATE_ONE=0)`) and `rd: shadows: empty composites: on: a composite whose level the volumes'
+box leaves empty draws nothing and is skipped with its DATE snapshot or stencil set-up (the same
+picture)`; once each: `rd: DATE one set-up: the first shared (frame F, command C with command P's
+snapshot|stencil set-up): ...` and `rd: shadows: empty composites: the first skipped (command C,
+...)`; the first 8 then every 100th: `rd: DATE one set-up: a composite could write alpha X (level
+alpha up to L x vertex alpha A, frame F, command C): the next one's set-up retaken as before` and
+`rd: DATE one set-up: command C retakes its set-up as before: <why>`. The 10 s `window: per replay`
+line: `; DATE one set-up: S composites a replay shared the set-up before them, K kept their own`
+after the DATE clause and `; empty composites: K a replay skipped (D with their DATE set-up)` after
+the shadow box's (each only when it counted anything). `rd_replay_tool --stats` (the no-volume
+line): `; empty composites on|off: K skipped (D with DATE); DATE one set-up on|off|force: S shared
+(T texels), K kept their own`.
+
+**The tests.** `rd_date_one` (`port/render/test/rd_date_one_test.c`: the bound and the rule on the
+CPU, then frames in the shadow's shape on lavapipe), `rd_date_one_ab`, `rd_empty_skip_ab` and their
+`_gl` twins (`port/render/test/rd_shadow_cuts_ab.cmake`, `tools/shadow_cuts_dumps.txt` with the
+DATE cut's, the box's and the no-volume window's lists)
+([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
+
 ## Water and render-to-texture blocks
 
 `puddle.c`, `pool.c` and `queen_barrier_disp.c` draw into the VRAM block `tex_AllocVramAuto` hands
