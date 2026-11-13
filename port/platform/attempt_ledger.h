@@ -188,8 +188,10 @@ int ico_attempt_decide_turn_fold(int turned, int env, int defaultOn, int selftes
    read (RhiLimits.subpassRoute), on the read in force for DATE (the device
    made its shape and DATE's self-test and the probe kept it), refused this
    start's self-test or probe, or an earlier start's verdict, refused it;
-   why the decision's words (a string that outlives the row: the device's
+   offDefault the device's class keeps it off by default this release
+   (RhiLimits.subpassOffDefault: the Arm and Qualcomm drivers, any class but
+   the Intel driver row); why the decision's words (a string that outlives the row: the device's
    RhiLimits.subpassWhy or the probe's verdict) */
-void ico_attempt_decide_subpass(int route, int on, int refused, const char *why);
+void ico_attempt_decide_subpass(int route, int on, int refused, int offDefault, const char *why);
 
 #endif

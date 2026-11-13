@@ -2,7 +2,11 @@
 # verdict file (port/rhi/rhi_subpass_verdict.h, vk_device.c
 # vkr_subpass_read_decide) with no [dev] subpass_read, on the 1.1 profile
 # (ICO_VK_FAKE_API=1.1 in the test's environment: VkRenderPass objects, no
-# local read).  rhi_vk_test's subpass cell (rhi_vk_subpass.c) runs five times
+# local read).  First the class defaults (none probed but the Intel driver
+# row's this release): lavapipe's vendor and the Arm fakes' are off by
+# default with their words and write no file; then, with the tests' switch
+# over the class (ICO_VK_SUBPASS_PROBE_CLASS=1),
+# rhi_vk_test's subpass cell (rhi_vk_subpass.c) runs five times
 # with ICO_VK_SUBPASS_VERDICT=FILE, ICO_TEST_SUBPASS_WANT saying whether the
 # read must be on:
 #   1. no file: on for the probe ("no verdict for this device and driver
@@ -22,7 +26,7 @@
 cmake_policy(SET CMP0054 NEW) # a quoted if() argument is a string, not a variable
 function(run want out)
   execute_process(COMMAND "${CMAKE_COMMAND}" -E env "ICO_VK_SUBPASS_VERDICT=${FILE}"
-                          "ICO_TEST_SUBPASS_WANT=${want}" "${TOOL}" subpass
+                          "ICO_TEST_SUBPASS_WANT=${want}" ${classEnv} "${TOOL}" subpass
                   RESULT_VARIABLE rc OUTPUT_VARIABLE o ERROR_VARIABLE e)
   if(rc EQUAL 77)
     message(STATUS "SKIP: no Vulkan device")
@@ -46,11 +50,28 @@ function(need text re what)
 endfunction()
 
 file(REMOVE "${FILE}")
-# 1. no file: the probe's start, the mark away at the clean shutdown
-run(1 log)
+# 0. this release's class defaults (rhi_subpass_verdict.h): lavapipe's
+# vendor is no class the probe runs on (only the Intel driver row's), and
+# under the Arm fakes (ICO_VK_FAKE_VENDOR=0x13B5) Arm's: off by default with
+# its words, no probe, no mark
+set(classEnv "")
+run(0 log)
 if(log STREQUAL "SKIP")
   return()
 endif()
+need("${log}" "the subpass read off by default \\(probed on the Intel driver row only this release"
+     "0 (lavapipe's class)")
+set(classEnv "ICO_VK_FAKE_VENDOR=0x13B5")
+run(0 log)
+need("${log}" "the subpass read off by default \\(off on this driver this release: a new kind of GPU work at start-up on a driver that lost the device before, one pass a picture"
+     "0 (Arm's class)")
+if(EXISTS "${FILE}")
+  message(FATAL_ERROR "0: a class off by default wrote ${FILE}")
+endif()
+# the rest with the tests' switch over the class's default
+set(classEnv "ICO_VK_SUBPASS_PROBE_CLASS=1")
+# 1. no file: the probe's start, the mark away at the clean shutdown
+run(1 log)
 need("${log}" "render passes: the subpass read: [^\n]*no verdict for this device and driver yet"
      "1 (no file)")
 need("${log}" "device and driver ([0-9a-f]+:[0-9a-f]+:[0-9a-f]+)" "1 (the key)")

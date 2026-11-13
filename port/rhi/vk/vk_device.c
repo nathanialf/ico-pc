@@ -1723,7 +1723,7 @@ static void vkr_pass_row_apply(void)
 static void vkr_subpass_read_decide(void)
 {
     g_vkr.subpassRead = false;
-    g_vkr.subpassRoute = g_vkr.subpassProbe = false;
+    g_vkr.subpassRoute = g_vkr.subpassProbe = g_vkr.subpassOffDefault = false;
     g_vkr.subpassPasses = g_vkr.subpassSkipped = g_vkr.subpassMisfit = 0;
     g_vkr.subpassWhy[0] = g_vkr.subpassFile[0] = g_vkr.subpassKey[0] = '\0';
     if (!g_vkr.legacyPasses) {
@@ -1767,10 +1767,30 @@ static void vkr_subpass_read_decide(void)
     if (prev == RHI_SUBPASS_NONE) {
         prevWhy[0] = '\0';
     }
+    /* the device's class (rhi_subpass_verdict.h: the probe's default this
+       release); ICO_VK_FAKE_VENDOR names the vendor for the tests' fakes */
+    uint32_t vendor = g_vkr.props.vendorID;
+    {
+        const char *fv = getenv("ICO_VK_FAKE_VENDOR");
+        char *end = NULL;
+        const unsigned long v = fv && fv[0] ? strtoul(fv, &end, 0) : 0ul;
+        if (fv && fv[0] && end != fv && *end == '\0' && v <= 0xFFFFFFFFul) {
+            vendor = (uint32_t)v;
+        }
+    }
+    const RhiSubpassClass cls =
+        g_vkr.passRowHit ? RHI_SUBPASS_CLASS_INTEL
+        : g_vkr.passRowQcom || rhi_driver_is_qualcomm_proprietary(vendor, g_vkr.driverID)
+            ? RHI_SUBPASS_CLASS_QCOM
+        : vendor == 0x13B5u ? RHI_SUBPASS_CLASS_ARM
+                            : RHI_SUBPASS_CLASS_OTHER;
+    const char *ce = getenv("ICO_VK_SUBPASS_PROBE_CLASS");
+    const int classEnv = ce && ce[0] ? (ce[0] != '0' ? 1 : 0) : -1;
     RhiSubpassWrite write = RHI_SUBPASS_WRITE_NOTHING;
     const RhiSubpassDecision d =
-        rhi_subpass_decide(ask, g_vkr.subpassRoute, fake, haveFile, stamps, prev, prevWhy,
-                           g_vkr.subpassWhy, sizeof g_vkr.subpassWhy, &write);
+        rhi_subpass_decide(ask, g_vkr.subpassRoute, fake, haveFile, stamps, cls, classEnv, prev,
+                           prevWhy, g_vkr.subpassWhy, sizeof g_vkr.subpassWhy, &write);
+    g_vkr.subpassOffDefault = d == RHI_SUBPASS_OFF_DEFAULT;
     if (write != RHI_SUBPASS_WRITE_NOTHING) {
         char line[RHI_SUBPASS_VERDICT_MAX];
         if (write == RHI_SUBPASS_WRITE_PROBING) {
@@ -1797,7 +1817,7 @@ static void vkr_subpass_read_decide(void)
                     g_vkr.subpassFile);
         }
     }
-    g_vkr.subpassRead = d != RHI_SUBPASS_OFF;
+    g_vkr.subpassRead = d == RHI_SUBPASS_ON || d == RHI_SUBPASS_PROBE;
     g_vkr.subpassProbe = d == RHI_SUBPASS_PROBE;
     if (g_vkr.subpassRead) {
         VKR_LOG("render passes: the subpass read: a pass of one RGBA8 colour target and a depth "
@@ -1809,9 +1829,9 @@ static void vkr_subpass_read_decide(void)
                                   "legacy_passes chose"
                                 : "");
     } else {
-        VKR_LOG("render passes: the subpass read off (%s; device and driver %s): a read of a "
+        VKR_LOG("render passes: the subpass read off%s (%s; device and driver %s): a read of a "
                 "pass's own colour ends the pass for a copy (DATE's snapshot)",
-                g_vkr.subpassWhy, g_vkr.subpassKey);
+                g_vkr.subpassOffDefault ? " by default" : "", g_vkr.subpassWhy, g_vkr.subpassKey);
     }
 }
 
@@ -3356,6 +3376,7 @@ static void vkr_fill_limits(void)
     /* its decision (vkr_subpass_read_decide, rhi.h) */
     o->subpassRoute = g_vkr.subpassRoute;
     o->subpassProbe = g_vkr.subpassProbe && o->localReadSubpass;
+    o->subpassOffDefault = g_vkr.subpassOffDefault;
     o->subpassWhy = g_vkr.subpassWhy[0] ? g_vkr.subpassWhy : NULL;
     o->subpassVerdictFile = g_vkr.subpassFile[0] ? g_vkr.subpassFile : NULL;
     o->subpassVerdictKey = g_vkr.subpassKey[0] ? g_vkr.subpassKey : NULL;

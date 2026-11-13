@@ -602,7 +602,7 @@ typedef struct VkrState {
      * the route (VkRenderPass objects without local read), the read on for
      * this start's probe, the decision's words, the verdict file and the
      * device and driver's key in it */
-    bool subpassRoute, subpassProbe;
+    bool subpassRoute, subpassProbe, subpassOffDefault;
     char subpassWhy[256];
     char subpassFile[1100];
     char subpassKey[32];

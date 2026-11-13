@@ -97,6 +97,23 @@ static const uint8_t kSmall[4] = {200, 100, 50, 0x80};
 /* the ledger's words and the verdict's (the row keeps the pointer) */
 static char s_why[256];
 
+/* the window's phase hook (rd.h rd_set_probe_fn: diag_host.h
+   ico_diag_set_probe): the probe's name while the device runs with its
+   shape, NULL once the verdict is written or the probe is given up */
+static void (*s_phase)(const char *name);
+
+void rd_set_probe_fn(void (*fn)(const char *name))
+{
+    s_phase = fn;
+}
+
+static void phaseEnd(void)
+{
+    if (s_phase != NULL) {
+        s_phase(NULL);
+    }
+}
+
 RdSubpassProbeRule rd__subpass_probe_keep(double readMs, double snapMs, double shapedMs,
                                           double plainMs, double plainSpread)
 {
@@ -256,6 +273,7 @@ static const char *sabotage(void)
 /* the verdict over the mark; false when it could not be written */
 static bool writeVerdict(const RhiLimits *lim, RhiSubpassVerdict v, const char *why)
 {
+    phaseEnd(); /* the verdict follows: an end from here is not the probe's */
     char line[RHI_SUBPASS_VERDICT_MAX];
     (void)rhi_subpass_verdict_line(line, sizeof line, lim->subpassVerdictKey, v, why);
     if (!rhi_subpass_verdict_write(lim->subpassVerdictFile, line)) {
@@ -277,6 +295,18 @@ static RhiSubpassVerdict fileVerdict(const RhiLimits *lim)
     return rhi_subpass_verdict_parse(text, lim->subpassVerdictKey, why, sizeof why);
 }
 
+void rd__subpass_probe_begin(void)
+{
+    if (!g_rd.hasDevice || s_phase == NULL) {
+        return;
+    }
+    const RhiLimits *lim = rhi_limits();
+    if (lim != NULL && lim->subpassProbe && lim->subpassVerdictFile && lim->subpassVerdictKey &&
+        fileVerdict(lim) == RHI_SUBPASS_PROBING) {
+        s_phase(RD_SUBPASS_PROBE_NAME);
+    }
+}
+
 void rd__subpass_probe_report(void)
 {
     if (!g_rd.inited || !g_rd.hasDevice) {
@@ -289,15 +319,16 @@ void rd__subpass_probe_report(void)
     const bool on = lim->localReadSubpass;
     const char *why = lim->subpassWhy ? lim->subpassWhy : "";
     const bool refused = !on && strncmp(why, "refused", 7) == 0;
-    ico_attempt_decide_subpass(lim->subpassRoute || on, on, refused, why);
+    ico_attempt_decide_subpass(lim->subpassRoute || on, on, refused, lim->subpassOffDefault, why);
 }
 
 /* not probed at this start: the mark away, so the next start probes */
 static void notProbed(const RhiLimits *lim, const char *why)
 {
     (void)rhi_subpass_verdict_write(lim->subpassVerdictFile, NULL);
+    phaseEnd();
     snprintf(s_why, sizeof s_why, "not probed at this start (%s)", why);
-    ico_attempt_decide_subpass(1, 0, 0, s_why);
+    ico_attempt_decide_subpass(1, 0, 0, 0, s_why);
     rd__log("subpass read: not probed at this start (%s); its mark taken away, the next start "
             "probes",
             why);
@@ -354,7 +385,7 @@ void rd__subpass_probe_after_selftest(int ran, bool passed, const char *words)
         if (lim->localReadSubpass && ran && !passed) {
             snprintf(s_why, sizeof s_why, "DATE's self-test on the read: %s",
                      words ? words : "failed");
-            ico_attempt_decide_subpass(1, 0, 1, s_why);
+            ico_attempt_decide_subpass(1, 0, 1, 0, s_why);
         }
         return;
     }
@@ -363,7 +394,7 @@ void rd__subpass_probe_after_selftest(int ran, bool passed, const char *words)
     const RhiSubpassVerdict now = fileVerdict(lim);
     if (now == RHI_SUBPASS_REFUSED) {
         rd__profile_probe_off();
-        ico_attempt_decide_subpass(1, 0, 1, "refused by this start's probe");
+        ico_attempt_decide_subpass(1, 0, 1, 0, "refused by this start's probe");
         return;
     }
     if (now != RHI_SUBPASS_PROBING) {
@@ -376,7 +407,7 @@ void rd__subpass_probe_after_selftest(int ran, bool passed, const char *words)
     if (!passed) {
         snprintf(s_why, sizeof s_why, "DATE's self-test on the read: %s", words ? words : "failed");
         (void)writeVerdict(lim, RHI_SUBPASS_REFUSED, s_why);
-        ico_attempt_decide_subpass(1, 0, 1, s_why);
+        ico_attempt_decide_subpass(1, 0, 1, 0, s_why);
         rd__log("subpass read: refused (%s): DATE takes its R8 snapshot; the verdict kept for "
                 "this device and driver (%s)",
                 s_why, lim->subpassVerdictKey);
@@ -527,7 +558,7 @@ void rd__subpass_probe_after_selftest(int ran, bool passed, const char *words)
     if (!keep) {
         rd__profile_probe_off(); /* DATE stencil off "(probe)": the snapshot draws DATE */
     }
-    ico_attempt_decide_subpass(1, keep, !keep, s_why);
+    ico_attempt_decide_subpass(1, keep, !keep, 0, s_why);
     rd__log("subpass read: %s: the least of %u and %u, %u and %u replays on SCENE %ux%u at %ux%u "
             "texels; kept unless the read is more than %d %% slower or a plain pass more than %d "
             "%% (its spread %.1f %%); %.1f ms; the verdict kept for this device and driver (%s)",

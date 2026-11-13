@@ -1720,7 +1720,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   above the twin's, the read judged first, a time missing (0, negative, NaN, infinite) untimed; the
   after-self-test hook doing nothing without a renderer (`rd_subpass_probe_rule`). On lavapipe
   (`test/rd_subpass_probe.cmake` through `rd_fog_selftest_test`, `ICO_VK_FAKE_API=1.1`,
-  `ICO_VK_FAKE_LIMITS=moltenvk`, the verdict file named by `ICO_VK_SUBPASS_VERDICT` and absent at the
+  `ICO_VK_FAKE_LIMITS=moltenvk`, Arm's class by `ICO_VK_FAKE_VENDOR=0x13B5`, off by default this
+  release, with the tests' switch over it, `ICO_VK_SUBPASS_PROBE_CLASS=1`, the verdict file named by `ICO_VK_SUBPASS_VERDICT` and absent at the
   start, so the first run is the probe's start, then a second run decided by the file):
   `rd_subpass_probe_kept` (`ICO_RD_SUBPASS_PROBE_SABOTAGE=fast`: `subpass read: kept (probe: the
   read X vs the snapshot Y ms, a plain pass Z vs W ms without the shape)`, the file `kept: probe:

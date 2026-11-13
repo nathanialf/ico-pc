@@ -249,9 +249,17 @@ question it decides:
   20.0 (render passes 13, VU pre-pass 2, DATE snapshot 3, present 1)` in its stage 3 block, each
   snapshot a store and reload of SCENE's 912x512 colour and D32S8 depth; list 3 cost 9-12 ms in
   play and 25-33 ms in the cage. The `VkRenderPass` path can read the pass's own colour as an
-  input attachment of its subpass; the device decides it at its start from a verdict
-  its first-start probe keeps per device and driver ([RENDER.md](RENDER.md#the-subpass-reads-probe),
-  [RHI.md](RHI.md#the-subpass-reads-probe)). Read, in a log:
+  input attachment of its subpass; the device decides it at its start by its class and, where the
+  class runs the probe, from a verdict its first-start probe keeps per device and driver
+  ([RENDER.md](RENDER.md#the-subpass-reads-probe), [RHI.md](RHI.md#the-subpass-reads-probe)). This
+  release only the Intel driver row's devices (Windows desktops) run the probe. On the Mali-G52 and
+  on Qualcomm's own driver it is off by default (both lost the device before; it saves one pass a
+  picture): the device line says `rhi_vk: render passes: the subpass read off by default (off on this
+  driver this release: a new kind of GPU work at start-up on a driver that lost the device before;
+  one pass a picture; device and driver ...)` and the attempt ledger `subpass read off by default
+  (...)`, nothing of it is made, and DATE takes its R8 snapshot as before. A reporter who sets
+  `subpass_read = true` under `[dev]` forces it (no probe; DATE's self-test still decides). Read, in a
+  log where it runs:
   - The device line `rhi_vk: render passes: the subpass read: ... (no verdict for this device and
     driver yet: on for this start's probe ...; device and driver 13b5:...)` on the probe's start;
     `(kept by the probe of an earlier start (probe: the read X vs the snapshot Y ms, a plain pass Z
@@ -269,6 +277,11 @@ question it decides:
   - The attempt ledger's `subpass read on (...)` at the start and `subpass read on N DATE set-ups in
     the pass` in each 10 s block (0 in a picture without shadow volumes); the `DATE snapshots` cost
     clause near 0 and `SCENE's pass ended mid-picture` fewer by the DATE breaks.
+  - A device loss, GPU hang or end while the probe's start runs (from the renderer's start to the
+    verdict) is the probe's: the next start logs `ico_pc: the previous run (version V) ended while
+    the subpass read's probe was running: its end is not counted on the loss ladder, the robust step
+    or the watchdog's mark ...`, takes no loss step (no robust start, no pre-pass off, no loss bisect;
+    the desktop game starts again as a fresh start), and the device line says `refused for good`.
   - The issue's four dumps replayed on lavapipe at its setting (`rd_subpass_ab`): 1 DATE snapshot
     to 0 and one pass fewer a picture with volumes (the one DATE set-up already took the other two),
     every target byte for byte. The gain on the phone is not measured.
@@ -1954,7 +1967,7 @@ thread can make it, hot paths included. The rows and where their states are set:
 | no-volume break | `rd_no_volume.c` at each replay's scan: `off by default (off by default until a phone rc shows the PowerVR phone's title and pause menu clean with it)` on the PowerVR and MoltenVK class, `not applicable here (not the PowerVR or MoltenVK class under Vulkan)` elsewhere, or the other gates' reason (the DATE path, MSAA ...) with the class allowed | the window, from `noVolumeBreak` |
 | Qualcomm passes as VkRenderPass objects | `window_perf_rank.c` every block (`ico_attempt_decide_pass_objects`: on with `RhiLimits.passObjectsRow`'s reason while Qualcomm's row holds the device's passes, `not applicable here (not Qualcomm's own driver)` otherwise) | the block's growth of `RhiStats.passObjects`, only while the row holds |
 | Adreno attempt B | `not in this build` (one Adreno attempt was built) | none |
-| subpass read | `rd_subpass_probe.c` at DATE's self-test (`ico_attempt_decide_subpass`): `on` with the device's reason (kept by an earlier probe, on for this start's probe, `[dev] subpass_read = on`), `refused by its self-test` (DATE's self-test on the read failed, or this start's or an earlier start's probe refused it), `not applicable here` off the route (`not a VkRenderPass path without local read ...`) or where it cannot be decided (no GPU timestamps, no verdict file, not probed at this start) | the window, from the record's `dateStencilTakes` while the row is on |
+| subpass read | `rd_subpass_probe.c` at DATE's self-test (`ico_attempt_decide_subpass`): `off by default` on a class the probe does not run on this release (`off on this driver this release: ...` on the Arm and Qualcomm drivers, `probed on the Intel driver row only this release` elsewhere), `on` with the device's reason (kept by an earlier probe, on for this start's probe, `[dev] subpass_read = on`), `refused by its self-test` (DATE's self-test on the read failed, or this start's or an earlier start's probe refused it), `not applicable here` off the route (`not a VkRenderPass path without local read ...`) or where it cannot be decided (no GPU timestamps, no verdict file, not probed at this start) | the window, from the record's `dateStencilTakes` while the row is on |
 | blend constant, index compaction | `not in this build` from the start (left out of the block line; the blend constant measured: no draw of the Mali reporter's pictures to convert, [PIPELINES.md](PIPELINES.md)) | none |
 | VU record by compute on the PowerVR | `rd_vu_record.c` at the record's start (`ico_attempt_decide_vu_compute`): `off by default` on the PowerVR class under Vulkan with both stores, `on` by the tests' switch or the define flipped, `refused by its self-test` when the compute record failed it (the vertex stores then), `not applicable here` elsewhere (no vertex stores, no compute stores, another class, a `[dev] vu_record` by name) | `rd_vu_record.c` `rd__replay_dispatch`: the dispatches |
 | turn in the present's blit | `rd_present.c` at each present (`ico_attempt_decide_turn_fold`): `not applicable here` without a pre-rotated swapchain, `off by default` until the define is flipped or with its self-test not run, `refused by its self-test`, `on` with it passed | `rd_turn_fold.c`: the presents folded (the second count: those on a turned swapchain that kept the turn pass) |

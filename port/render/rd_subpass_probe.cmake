@@ -22,7 +22,10 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_subpass_probe_rule COMMAND rd_subpass_probe_test)
     # rd_subpass_probe_kept, _refused, _plain, _selftest, _end
     # (test/rd_subpass_probe.cmake): the probe's start on lavapipe through
-    # rd_fog_selftest_test on the 1.1 profile with a tile-based profile, each
+    # rd_fog_selftest_test on the 1.1 profile with a tile-based profile, Arm's
+    # class by its fake (ICO_VK_FAKE_VENDOR=0x13B5: off by default this
+    # release) with the tests' switch over its default
+    # (ICO_VK_SUBPASS_PROBE_CLASS=1), each
     # verdict's path by ICO_RD_SUBPASS_PROBE_SABOTAGE (fast, slow, plain,
     # end) or ICO_RD_DATE_SABOTAGE=1, the verdict in the file and the next
     # start decided by it
@@ -34,7 +37,7 @@ if(ICO_RUN_TESTS)
                          -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_subpass_probe.cmake")
         set_tests_properties(rd_subpass_probe_${_sp_mode} PROPERTIES
                              SKIP_REGULAR_EXPRESSION "SKIP:" LABELS "vk11"
-                             ENVIRONMENT "${_dc_env};ICO_VK_FAKE_API=1.1;ICO_VK_FAKE_LIMITS=moltenvk")
+                             ENVIRONMENT "${_dc_env};ICO_VK_FAKE_API=1.1;ICO_VK_FAKE_LIMITS=moltenvk;ICO_VK_FAKE_VENDOR=0x13B5;ICO_VK_SUBPASS_PROBE_CLASS=1")
     endforeach()
 endif()
 

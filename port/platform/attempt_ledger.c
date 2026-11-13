@@ -367,7 +367,7 @@ int ico_attempt_decide_turn_fold(int turned, int env, int defaultOn, int selftes
     return on;
 }
 
-void ico_attempt_decide_subpass(int route, int on, int refused, const char *why)
+void ico_attempt_decide_subpass(int route, int on, int refused, int offDefault, const char *why)
 {
     IcoAttemptState st = ICO_ATT_NA;
     if (!route) {
@@ -377,6 +377,8 @@ void ico_attempt_decide_subpass(int route, int on, int refused, const char *why)
         st = ICO_ATT_ON;
     } else if (refused) {
         st = ICO_ATT_REFUSED;
+    } else if (offDefault) {
+        st = ICO_ATT_OFF_DEFAULT;
     }
     ico_attempt_state(ICO_ATT_SUBPASS, st, why);
 }

@@ -1637,7 +1637,7 @@ immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan. OpenGL and Direct3
 | the culler's default (`rd_vis.c` `rd__vis_profile_default`, `RhiLimits.tiler`) | frustum and occlusion | frustum and occlusion | frustum alone | frustum alone | frustum alone | frustum alone | frustum alone on Apple silicon; frustum and occlusion on an Intel or AMD Mac |
 | the late pass's fill hold and deferred paste (`rd_late_pass.c`, `RhiLimits.tiler` under Vulkan), shot late (`rd_present.c`, `RhiLimits.tiler`) | off | off | on | on | on | on | on for Apple silicon; off on an Intel or AMD Mac |
 | the VU record by compute in place of the vertex stores (`rd_vu_class.c`; [RENDER_POST.md](RENDER_POST.md#the-vu-record-by-compute-on-the-powervr-class-off-by-default-until-a-phone-rc)) | off | off | off | off | off (no vertex stores: auto's compute already) | off on the PowerVR (`RD_VU_COMPUTE_CLASS_DEFAULT` 0 until a phone rc; Imagination's vendor id only, not the other tile-based) | off |
-| the subpass read (DATE's set-up inside the scene's pass on `VkRenderPass` objects without local read; [The subpass read's probe](#the-subpass-reads-probe)) | the Intel driver row's devices: by the probe; elsewhere not this route (local read, or dynamic rendering without it) | none | the Adreno 740 class on Qualcomm's row (no local read): by the probe; a model with local read: not this route | not this route (local read) | Vulkan 1.1 drivers (issue 179's r32p1): by the probe; a driver with dynamic rendering (r38p1, Vulkan 1.3): not this route | the B-Series (Vulkan 1.1): off, no GPU timestamps to time the probe; the D-Series: not this route (local read) | not this route (dynamic rendering) |
+| the subpass read (DATE's set-up inside the scene's pass on `VkRenderPass` objects without local read; [The subpass read's probe](#the-subpass-reads-probe)) | the Intel driver row's devices: by the probe at their first start; elsewhere not this route (local read, or dynamic rendering without it) | none | off by default this release on Qualcomm's own driver (`RHI_SUBPASS_PROBE_QCOM_DEFAULT` 0: a driver that lost the device before; one pass a picture), no probe | not this route (local read) | off by default this release on Vulkan 1.1 drivers (issue 179's r32p1; `RHI_SUBPASS_PROBE_ARM_DEFAULT` 0), no probe; a driver with dynamic rendering (r38p1): not this route | the B-Series (Vulkan 1.1): off, no GPU timestamps to time the probe; the D-Series: not this route (local read) | not this route (dynamic rendering) |
 | the turn in the present's blit (`rd_turn_fold.c`; [RENDER_POST.md](RENDER_POST.md#the-turn-in-the-presents-blit-off-by-default-until-a-phone-rc)) | no turned swapchain | no turned swapchain | off (`RD_TURN_FOLD_DEFAULT` 0 until a phone rc) | off, the same | off, the same | off, the same | no turned swapchain on a Mac |
 
 Two meanings of "tile-based" meet in this table. The flags from `auraBox` to `sheetBake2x` follow
@@ -1706,7 +1706,10 @@ can read the scene's colour inside its pass through the RHI's subpass read
 ([RHI.md](RHI.md#local-read)) instead of ending the pass for an R8 snapshot. Its shape is the
 device's for the run, so the device decides it at its start from a verdict kept for this device and
 driver ([RHI.md](RHI.md#the-subpass-reads-probe)); with none it makes the shape for this start's
-probe (`port/render/rd_subpass_probe.c`, `rd_subpass_probe.h`). The order at that start: the
+probe, on the classes whose default runs it: this release the Intel driver row's devices alone (the
+Arm and Qualcomm drivers lost the device before, and the read saves one pass a picture: off by
+default there, no probe, no shape, `RHI_SUBPASS_PROBE_*_DEFAULT` in `port/rhi/rhi_subpass_verdict.h`
+for an rc to flip one; `[dev] subpass_read = on` still forces it) (`port/render/rd_subpass_probe.c`, `rd_subpass_probe.h`). The order at that start: the
 start-up set, then DATE's self-test on the read (`rd_date_selftest.c`: five samples, a failure is a
 refusal), then the probe, all before the first picture:
 

@@ -62,6 +62,8 @@ typedef struct DeviceClass {
     int spRoute, spOn, spRefused;
     const char *spWhy;
     IcoAttemptState wantSubpass;
+    /* off by default on the class this release (RhiLimits.subpassOffDefault) */
+    int spOff;
 } DeviceClass;
 
 static void test_classes(void)
@@ -89,11 +91,12 @@ static void test_classes(void)
          ICO_ATT_NA,
          ICO_ATT_OFF_DEFAULT,
          1,
-         1,
          0,
-         "no verdict for this device and driver yet: on for this start's probe (DATE's "
-         "self-test, then the read timed against the R8 snapshot)",
-         ICO_ATT_ON},
+         0,
+         "off on this driver this release: a new kind of GPU work at start-up on a driver that "
+         "lost the device before; one pass a picture",
+         ICO_ATT_OFF_DEFAULT,
+         1},
         {"Pixel (PowerVR D, 1 + 5 over 2)",
          6,
          1,
@@ -120,7 +123,8 @@ static void test_classes(void)
          0,
          0,
          NULL,
-         ICO_ATT_NA},
+         ICO_ATT_NA,
+         0},
         {"PowerVR B (no local read)",
          2,
          1,
@@ -146,7 +150,8 @@ static void test_classes(void)
          0,
          0,
          "no GPU timestamps: the probe cannot time it, so DATE keeps its R8 snapshot",
-         ICO_ATT_NA},
+         ICO_ATT_NA,
+         0},
         {"Adreno 740 on Qualcomm's driver (4 + 3 + 1)",
          4,
          1,
@@ -170,10 +175,11 @@ static void test_classes(void)
          ICO_ATT_OFF_DEFAULT,
          1,
          0,
-         1,
-         "refused by the probe of an earlier start (DATE's self-test on the read: stencil "
-         "fail 1 at sample 4)",
-         ICO_ATT_REFUSED},
+         0,
+         "off on this driver this release: a new kind of GPU work at start-up on a driver that "
+         "lost the device before; one pass a picture",
+         ICO_ATT_OFF_DEFAULT,
+         1},
         {"Adreno 740 on Turnip",
          4,
          1,
@@ -199,7 +205,8 @@ static void test_classes(void)
          0,
          0,
          NULL,
-         ICO_ATT_NA},
+         ICO_ATT_NA,
+         0},
         {"desktop with MSAA",
          0,
          0,
@@ -225,7 +232,8 @@ static void test_classes(void)
          0,
          0,
          NULL,
-         ICO_ATT_NA},
+         ICO_ATT_NA,
+         0},
         {"a Mac (MoltenVK), the break forced",
          0,
          0,
@@ -251,7 +259,8 @@ static void test_classes(void)
          0,
          0,
          NULL,
-         ICO_ATT_NA},
+         ICO_ATT_NA,
+         0},
     };
     for (size_t c = 0; c < sizeof k / sizeof k[0]; c++) {
         const DeviceClass *d = &k[c];
@@ -265,7 +274,7 @@ static void test_classes(void)
         ico_attempt_decide_pass_objects(d->passRow);
         CHECK(ico_attempt_decide_vu_compute(0, d->vuStores, 1, d->vuPowervr, -1, 0) == 0);
         CHECK(ico_attempt_decide_turn_fold(d->turned, -1, 0, -1) == 0);
-        ico_attempt_decide_subpass(d->spRoute, d->spOn, d->spRefused, d->spWhy);
+        ico_attempt_decide_subpass(d->spRoute, d->spOn, d->spRefused, d->spOff, d->spWhy);
         for (int i = 0; i < ICO_ATT_COUNT; i++) {
             if (ico_attempt_state_of(i) == ICO_ATT_NOT_SET) {
                 printf("FAIL %s: %s not reported\n", d->name, ico_attempt_name(i));
@@ -310,6 +319,24 @@ static void test_classes(void)
             failures++;
         }
     }
+    /* the subpass read on the Intel driver row: probed (on for this start's
+       probe); the Mali's start line says off by default with the words */
+    ico_attempt_decide_subpass(1, 1, 0, 0, "no verdict for this device and driver yet");
+    CHECK(ico_attempt_state_of(ICO_ATT_SUBPASS) == ICO_ATT_ON);
+    ico_attempt_decide_subpass(1, 0, 0, 1,
+                               "off on this driver this release: a new kind of GPU work at "
+                               "start-up on a driver that lost the device before; one pass a "
+                               "picture");
+    {
+        char b[2048];
+        (void)ico_attempt_start_text(b, sizeof b);
+        CHECK(strstr(b, "; subpass read off by default (off on this driver this release: a new "
+                        "kind of GPU work at start-up on a driver that lost the device before; "
+                        "one pass a picture);") != NULL);
+    }
+    /* off by default never over on or refused */
+    ico_attempt_decide_subpass(1, 0, 1, 1, "refused");
+    CHECK(ico_attempt_state_of(ICO_ATT_SUBPASS) == ICO_ATT_REFUSED);
     /* the DATE row's and the empty row's other states */
     ico_attempt_decide_date_one(1, 1);
     CHECK(ico_attempt_state_of(ICO_ATT_DATE_ONE) == ICO_ATT_NA);

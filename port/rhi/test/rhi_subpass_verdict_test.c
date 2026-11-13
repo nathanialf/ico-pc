@@ -22,6 +22,8 @@ static int failures;
 
 typedef struct Case {
     int ask, route, fake, file, stamps;
+    RhiSubpassClass cls;
+    int classEnv;
     RhiSubpassVerdict prev;
     RhiSubpassDecision want;
     RhiSubpassWrite wantWrite;
@@ -32,37 +34,56 @@ static void test_decide(void)
 {
     static const Case k[] = {
         /* the [dev] key and the fake first, whatever else */
-        {0, 1, 0, 1, 1, RHI_SUBPASS_KEPT, RHI_SUBPASS_OFF, RHI_SUBPASS_WRITE_NOTHING,
-         "[dev] subpass_read = off"},
-        {1, 1, 1, 1, 1, RHI_SUBPASS_NONE, RHI_SUBPASS_OFF, RHI_SUBPASS_WRITE_NOTHING,
-         "ICO_VK_FAKE_NO_DST, over [dev] subpass_read = on"},
-        {-1, 1, 1, 1, 1, RHI_SUBPASS_NONE, RHI_SUBPASS_OFF, RHI_SUBPASS_WRITE_NOTHING,
-         "ICO_VK_FAKE_NO_DST"},
-        {1, 0, 0, 0, 0, RHI_SUBPASS_REFUSED, RHI_SUBPASS_ON, RHI_SUBPASS_WRITE_NOTHING,
-         "[dev] subpass_read = on"},
+        {0, 1, 0, 1, 1, RHI_SUBPASS_CLASS_INTEL, -1, RHI_SUBPASS_KEPT, RHI_SUBPASS_OFF,
+         RHI_SUBPASS_WRITE_NOTHING, "[dev] subpass_read = off"},
+        {1, 1, 1, 1, 1, RHI_SUBPASS_CLASS_INTEL, -1, RHI_SUBPASS_NONE, RHI_SUBPASS_OFF,
+         RHI_SUBPASS_WRITE_NOTHING, "ICO_VK_FAKE_NO_DST, over [dev] subpass_read = on"},
+        {-1, 1, 1, 1, 1, RHI_SUBPASS_CLASS_INTEL, -1, RHI_SUBPASS_NONE, RHI_SUBPASS_OFF,
+         RHI_SUBPASS_WRITE_NOTHING, "ICO_VK_FAKE_NO_DST"},
+        {1, 0, 0, 0, 0, RHI_SUBPASS_CLASS_INTEL, -1, RHI_SUBPASS_REFUSED, RHI_SUBPASS_ON,
+         RHI_SUBPASS_WRITE_NOTHING, "[dev] subpass_read = on"},
         /* automatic: the route, the file, the timestamps */
-        {-1, 0, 0, 1, 1, RHI_SUBPASS_NONE, RHI_SUBPASS_OFF, RHI_SUBPASS_WRITE_NOTHING,
-         "the device's passes read their attachments by local read"},
-        {-1, 1, 0, 0, 1, RHI_SUBPASS_NONE, RHI_SUBPASS_OFF, RHI_SUBPASS_WRITE_NOTHING,
-         "no file to keep the probe's verdict in"},
-        {-1, 1, 0, 1, 0, RHI_SUBPASS_KEPT, RHI_SUBPASS_OFF, RHI_SUBPASS_WRITE_NOTHING,
-         "no GPU timestamps"},
+        {-1, 0, 0, 1, 1, RHI_SUBPASS_CLASS_INTEL, -1, RHI_SUBPASS_NONE, RHI_SUBPASS_OFF,
+         RHI_SUBPASS_WRITE_NOTHING, "the device's passes read their attachments by local read"},
+        {-1, 1, 0, 0, 1, RHI_SUBPASS_CLASS_INTEL, -1, RHI_SUBPASS_NONE, RHI_SUBPASS_OFF,
+         RHI_SUBPASS_WRITE_NOTHING, "no file to keep the probe's verdict in"},
+        {-1, 1, 0, 1, 0, RHI_SUBPASS_CLASS_INTEL, -1, RHI_SUBPASS_KEPT, RHI_SUBPASS_OFF,
+         RHI_SUBPASS_WRITE_NOTHING, "no GPU timestamps"},
         /* the verdict */
-        {-1, 1, 0, 1, 1, RHI_SUBPASS_KEPT, RHI_SUBPASS_ON, RHI_SUBPASS_WRITE_NOTHING,
-         "kept by the probe of an earlier start (why)"},
-        {-1, 1, 0, 1, 1, RHI_SUBPASS_REFUSED, RHI_SUBPASS_OFF, RHI_SUBPASS_WRITE_NOTHING,
-         "refused by the probe of an earlier start (why)"},
-        {-1, 1, 0, 1, 1, RHI_SUBPASS_PROBING, RHI_SUBPASS_OFF, RHI_SUBPASS_WRITE_REFUSED,
+        {-1, 1, 0, 1, 1, RHI_SUBPASS_CLASS_INTEL, -1, RHI_SUBPASS_KEPT, RHI_SUBPASS_ON,
+         RHI_SUBPASS_WRITE_NOTHING, "kept by the probe of an earlier start (why)"},
+        {-1, 1, 0, 1, 1, RHI_SUBPASS_CLASS_INTEL, -1, RHI_SUBPASS_REFUSED, RHI_SUBPASS_OFF,
+         RHI_SUBPASS_WRITE_NOTHING, "refused by the probe of an earlier start (why)"},
+        {-1, 1, 0, 1, 1, RHI_SUBPASS_CLASS_INTEL, -1, RHI_SUBPASS_PROBING, RHI_SUBPASS_OFF,
+         RHI_SUBPASS_WRITE_REFUSED,
          "refused for good: the start that probed it ended before its verdict"},
-        {-1, 1, 0, 1, 1, RHI_SUBPASS_NONE, RHI_SUBPASS_PROBE, RHI_SUBPASS_WRITE_PROBING,
-         "no verdict for this device and driver yet"},
+        {-1, 1, 0, 1, 1, RHI_SUBPASS_CLASS_INTEL, -1, RHI_SUBPASS_NONE, RHI_SUBPASS_PROBE,
+         RHI_SUBPASS_WRITE_PROBING, "no verdict for this device and driver yet"},
+        /* the classes' defaults this release: Arm, Qualcomm and the others
+           off by default (no verdict read, nothing written), whatever the
+           file holds; the key and the tests' switch over them; the
+           timestamps before the class (the PowerVR B says why it cannot) */
+        {-1, 1, 0, 1, 1, RHI_SUBPASS_CLASS_ARM, -1, RHI_SUBPASS_NONE, RHI_SUBPASS_OFF_DEFAULT,
+         RHI_SUBPASS_WRITE_NOTHING, RHI_SUBPASS_OFF_LOST_WORDS},
+        {-1, 1, 0, 1, 1, RHI_SUBPASS_CLASS_QCOM, -1, RHI_SUBPASS_PROBING, RHI_SUBPASS_OFF_DEFAULT,
+         RHI_SUBPASS_WRITE_NOTHING, RHI_SUBPASS_OFF_LOST_WORDS},
+        {-1, 1, 0, 1, 1, RHI_SUBPASS_CLASS_OTHER, -1, RHI_SUBPASS_KEPT, RHI_SUBPASS_OFF_DEFAULT,
+         RHI_SUBPASS_WRITE_NOTHING, RHI_SUBPASS_OFF_OTHER_WORDS},
+        {1, 1, 0, 1, 1, RHI_SUBPASS_CLASS_ARM, -1, RHI_SUBPASS_NONE, RHI_SUBPASS_ON,
+         RHI_SUBPASS_WRITE_NOTHING, "[dev] subpass_read = on"},
+        {-1, 1, 0, 1, 1, RHI_SUBPASS_CLASS_ARM, 1, RHI_SUBPASS_NONE, RHI_SUBPASS_PROBE,
+         RHI_SUBPASS_WRITE_PROBING, "no verdict for this device and driver yet"},
+        {-1, 1, 0, 1, 1, RHI_SUBPASS_CLASS_INTEL, 0, RHI_SUBPASS_NONE, RHI_SUBPASS_OFF_DEFAULT,
+         RHI_SUBPASS_WRITE_NOTHING, "ICO_VK_SUBPASS_PROBE_CLASS=0"},
+        {-1, 1, 0, 1, 0, RHI_SUBPASS_CLASS_OTHER, -1, RHI_SUBPASS_NONE, RHI_SUBPASS_OFF,
+         RHI_SUBPASS_WRITE_NOTHING, "no GPU timestamps"},
     };
     for (size_t i = 0; i < sizeof k / sizeof k[0]; i++) {
         char why[256];
         RhiSubpassWrite w = RHI_SUBPASS_WRITE_PROBING;
         const RhiSubpassDecision d =
-            rhi_subpass_decide(k[i].ask, k[i].route, k[i].fake, k[i].file, k[i].stamps, k[i].prev,
-                               "why", why, sizeof why, &w);
+            rhi_subpass_decide(k[i].ask, k[i].route, k[i].fake, k[i].file, k[i].stamps, k[i].cls,
+                               k[i].classEnv, k[i].prev, "why", why, sizeof why, &w);
         if (d != k[i].want || w != k[i].wantWrite ||
             strncmp(why, k[i].wantWhy, strlen(k[i].wantWhy)) != 0) {
             printf("FAIL case %zu: decision %d write %d why \"%s\"\n", i, (int)d, (int)w, why);
@@ -72,8 +93,13 @@ static void test_decide(void)
     /* no words kept with the verdict */
     char why[256];
     RhiSubpassWrite w;
-    CHECK(rhi_subpass_decide(-1, 1, 0, 1, 1, RHI_SUBPASS_KEPT, NULL, why, sizeof why, &w) ==
-          RHI_SUBPASS_ON);
+    CHECK(rhi_subpass_decide(-1, 1, 0, 1, 1, RHI_SUBPASS_CLASS_INTEL, -1, RHI_SUBPASS_KEPT, NULL,
+                             why, sizeof why, &w) == RHI_SUBPASS_ON);
+    /* this release's defaults */
+    CHECK(rhi_subpass_class_default(RHI_SUBPASS_CLASS_INTEL) == 1);
+    CHECK(rhi_subpass_class_default(RHI_SUBPASS_CLASS_ARM) == 0);
+    CHECK(rhi_subpass_class_default(RHI_SUBPASS_CLASS_QCOM) == 0);
+    CHECK(rhi_subpass_class_default(RHI_SUBPASS_CLASS_OTHER) == 0);
     CHECK(strcmp(why, "kept by the probe of an earlier start (no words kept)") == 0);
 }
 

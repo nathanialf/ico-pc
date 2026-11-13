@@ -26,6 +26,10 @@
  *             self-test (rd_subpass_probe.c); a clean exit of a start that
  *             never reached the probe takes the mark away again (the next
  *             start probes)
+ * Before the verdict, the device's class this release (RhiSubpassClass,
+ * RHI_SUBPASS_PROBE_*_DEFAULT): only the Intel driver row's devices are
+ * probed; Arm's, Qualcomm's own driver and the others are off by default
+ * (no probe, no shape, no file read or written).
  * Off without a probe where it cannot decide: no GPU timestamps (the
  * PowerVR B-Series), no file to keep the verdict in (the tools and the
  * tests: no pipeline cache file, unless ICO_VK_SUBPASS_VERDICT names one).
@@ -61,10 +65,56 @@ typedef enum RhiSubpassVerdict {
 
 /* what the device does at this start (rhi_subpass_decide) */
 typedef enum RhiSubpassDecision {
-    RHI_SUBPASS_OFF = 0, /* today's path */
-    RHI_SUBPASS_ON,      /* the read on, no probe */
-    RHI_SUBPASS_PROBE,   /* the read on for this start's probe */
+    RHI_SUBPASS_OFF = 0,     /* today's path */
+    RHI_SUBPASS_ON,          /* the read on, no probe */
+    RHI_SUBPASS_PROBE,       /* the read on for this start's probe */
+    RHI_SUBPASS_OFF_DEFAULT, /* off by default on this class: no probe, no shape */
 } RhiSubpassDecision;
+
+/* The device classes and whether the probe runs at their first start this
+ * release (the owner's decision for v0.11.6; an rc variant flips one): the
+ * Intel driver row's devices are probed; Arm's (the Mali-G52 of issue 179)
+ * and Qualcomm's own driver (the Adreno 740 under Qualcomm's row) are not:
+ * both lost the device before, and the read is a new kind of GPU work at
+ * start-up for one pass a picture; any other VkRenderPass device (a [dev]
+ * legacy_passes desktop, another vendor's Vulkan 1.1 driver) neither.  Off
+ * by default means no probe, no shape: today's snapshot path, nothing new
+ * at start-up.  [dev] subpass_read = on still forces the read on any of
+ * them; ICO_VK_SUBPASS_PROBE_CLASS=1|0 (the tests alone) overrides a class's
+ * default, so the probe runs under the Arm fakes on lavapipe. */
+#define RHI_SUBPASS_PROBE_INTEL_DEFAULT 1
+#define RHI_SUBPASS_PROBE_ARM_DEFAULT 0
+#define RHI_SUBPASS_PROBE_QCOM_DEFAULT 0
+#define RHI_SUBPASS_PROBE_OTHER_DEFAULT 0
+
+typedef enum RhiSubpassClass {
+    RHI_SUBPASS_CLASS_OTHER = 0,
+    RHI_SUBPASS_CLASS_INTEL, /* the Intel driver row (rhi_pass_row.h) */
+    RHI_SUBPASS_CLASS_ARM,   /* vendor 0x13B5 */
+    RHI_SUBPASS_CLASS_QCOM,  /* Qualcomm's own driver */
+} RhiSubpassClass;
+
+/* the class's default this release: 1 the probe runs, 0 off by default */
+static inline int rhi_subpass_class_default(RhiSubpassClass c)
+{
+    return c == RHI_SUBPASS_CLASS_INTEL  ? RHI_SUBPASS_PROBE_INTEL_DEFAULT
+           : c == RHI_SUBPASS_CLASS_ARM  ? RHI_SUBPASS_PROBE_ARM_DEFAULT
+           : c == RHI_SUBPASS_CLASS_QCOM ? RHI_SUBPASS_PROBE_QCOM_DEFAULT
+                                         : RHI_SUBPASS_PROBE_OTHER_DEFAULT;
+}
+
+/* the words of a class off by default (the device line's and the attempt
+ * ledger's why: "off by default (<these>)") */
+#define RHI_SUBPASS_OFF_LOST_WORDS                                                                 \
+    "off on this driver this release: a new kind of GPU work at start-up on a driver that "        \
+    "lost the device before; one pass a picture"
+#define RHI_SUBPASS_OFF_OTHER_WORDS "probed on the Intel driver row only this release"
+
+static inline const char *rhi_subpass_class_off_words(RhiSubpassClass c)
+{
+    return c == RHI_SUBPASS_CLASS_ARM || c == RHI_SUBPASS_CLASS_QCOM ? RHI_SUBPASS_OFF_LOST_WORDS
+                                                                     : RHI_SUBPASS_OFF_OTHER_WORDS;
+}
 
 /* what rhi_subpass_decide asks the caller to write before it goes on */
 typedef enum RhiSubpassWrite {
@@ -180,14 +230,18 @@ static inline int rhi_subpass_verdict_line(char *out, size_t cap, const char *ke
  * the device has no local read (the read's route; with local read the
  * automatic decision is off); fakeNoDst:
  * ICO_VK_FAKE_NO_DST; haveFile: a verdict file is named; timestamps: the
- * queue writes GPU timestamps; prev: the file's verdict for this device
+ * queue writes GPU timestamps; cls: the device's class and classEnv the
+ * tests' override of its default (-1 unset, 0, 1), after the timestamps and
+ * before the verdict (a class off by default reads no verdict and writes
+ * nothing); prev: the file's verdict for this device
  * and driver (prevWhy its words, NULL ""): a device made again in the same
  * run finds the mark this run wrote only after a loss (a clean shutdown
  * takes it away), which ends the probe as a loss in another run would.
  * The decision's words go into why (cap bytes), and *write says what to
  * write to the file before going on. */
 static inline RhiSubpassDecision rhi_subpass_decide(int ask, int route, int fakeNoDst, int haveFile,
-                                                    int timestamps, RhiSubpassVerdict prev,
+                                                    int timestamps, RhiSubpassClass cls,
+                                                    int classEnv, RhiSubpassVerdict prev,
                                                     const char *prevWhy, char *why, size_t cap,
                                                     RhiSubpassWrite *write)
 {
@@ -222,6 +276,12 @@ static inline RhiSubpassDecision rhi_subpass_decide(int ask, int route, int fake
         snprintf(why, cap,
                  "no GPU timestamps: the probe cannot time it, so DATE keeps its R8 snapshot");
         return RHI_SUBPASS_OFF;
+    }
+    if (classEnv == 0 || (classEnv != 1 && !rhi_subpass_class_default(cls))) {
+        snprintf(why, cap, "%s",
+                 classEnv == 0 ? "ICO_VK_SUBPASS_PROBE_CLASS=0: the tests' switch"
+                               : rhi_subpass_class_off_words(cls));
+        return RHI_SUBPASS_OFF_DEFAULT;
     }
     switch (prev) {
     case RHI_SUBPASS_KEPT:

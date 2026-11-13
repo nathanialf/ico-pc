@@ -52,6 +52,16 @@ typedef enum RdSubpassProbeRule {
 RdSubpassProbeRule rd__subpass_probe_keep(double readMs, double snapMs, double shapedMs,
                                           double plainMs, double plainSpread);
 
+/* The probe's name as a phase of the run (diag_host.h ico_diag_set_probe) */
+#define RD_SUBPASS_PROBE_NAME "the subpass read's probe"
+
+/* At the renderer's start (rd_profile.c rd__profile_init), where the device
+ * made the read's shape for this start's probe: the window's phase hook
+ * (rd.h rd_set_probe_fn) gets RD_SUBPASS_PROBE_NAME, so a loss, GPU hang or
+ * end of the run before the verdict counts on no loss step; the hook gets
+ * NULL once the verdict is written or the probe is given up. */
+void rd__subpass_probe_begin(void);
+
 /* At DATE's self-test's start (rd_date_selftest.c), once a renderer: the
  * attempt ledger's subpass read row from the device's decision (the row's
  * state where no probe runs at this start). */

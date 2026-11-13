@@ -944,7 +944,7 @@ writes to the same reads, `RHI_LOCAL_READ_BACK` those reads to the next draws' d
 colour writes. Outside a pass, or without local read, it records nothing.
 
 **The subpass read** (`RhiLimits.localReadSubpass`; `port/rhi/vk/vk_renderpass.c`, header comment;
-issue 179). **Decided per device and driver at the device's start** ([The subpass read's
+issue 179). **Decided per device class and driver at the device's start** ([The subpass read's
 probe](#the-subpass-reads-probe) below): its shape costs every `RGBA8_UNORM` render target of the
 device `GENERAL` and the input-attachment usage, which a driver may answer by keeping its framebuffer
 compression off, so it is on only where an earlier start's probe kept it, or for the start that
@@ -994,7 +994,8 @@ subpass_read = on` (`ICO_VK_SUBPASS_READ=1`) turns it on on any of them, not und
 key: `rhi_vk: render passes: the subpass read off (refused by the probe of an earlier start (probe:
 the read slower, ...); device and driver 13b5:72120000:80200000): a read of a pass's own colour ends
 the pass for a copy (DATE's snapshot)` (or `([dev] subpass_read = off (ICO_VK_SUBPASS_READ=0); ...)`,
-`(no GPU timestamps: the probe cannot time it, so DATE keeps its R8 snapshot; ...)`), or `rhi_vk:
+`(no GPU timestamps: the probe cannot time it, so DATE keeps its R8 snapshot; ...)`, and on a class
+off by default `the subpass read off by default (off on this driver this release: ...; ...)`), or `rhi_vk:
 render passes: the subpass read: a pass of one RGBA8 colour target and a depth target names its colour
 as its subpass's input attachment 0, in GENERAL, with a by-region self-dependency (Vulkan 1.0), so a
 read of the pass's own colour (DATE's stencil setup) does not end the pass (kept by the probe of an
@@ -1032,6 +1033,7 @@ every pipeline of the class), so it is decided when the device is made
 | local read on the device | off (not its route) |
 | no verdict file (no pipeline cache file: the tools and the tests, unless `ICO_VK_SUBPASS_VERDICT` names one) | off |
 | no GPU timestamps on the game's queue (the PowerVR B-Series) | off: the probe cannot time it |
+| the device's class this release (`RHI_SUBPASS_PROBE_INTEL_DEFAULT` 1, `_ARM_DEFAULT` 0, `_QCOM_DEFAULT` 0, `_OTHER_DEFAULT` 0; `ICO_VK_SUBPASS_PROBE_CLASS=1\|0` the tests' override) | the Intel driver row: on to the verdict below; Arm (vendor 0x13B5, the Mali-G52) and Qualcomm's own driver: off by default, `off on this driver this release: a new kind of GPU work at start-up on a driver that lost the device before; one pass a picture` (both lost the device before); any other: off by default, `probed on the Intel driver row only this release`. No probe, no shape, the file neither read nor written |
 | the file's verdict for this device and driver: `kept` / `refused` | on / off, its words quoted in the device line |
 | `probing` (the start that probed it ended before its verdict: a device loss, a GPU hang, a crash, the system ending the app) | off, and the file rewritten `refused` for good |
 | none (no file, another device or driver, another format) | on for this start's probe: the mark `probing` written and flushed to the disc first |
@@ -1046,7 +1048,13 @@ did not run at this start (no verdict): its mark taken away, the next start prob
 after a device loss keeps it. A GPU hang inside the probe is ended by the watchdog's GPU hang limit
 (half its timeout, 15 s by default: `port/platform/gpu_hang.h`), which ends the process without a
 shutdown, so the mark stays. `RHI_TEX_NO_SUBPASS_READ` makes a render target without the shape while
-the device has it (the probe's plain twin; never drawn with a depth target). Tests:
+the device has it (the probe's plain twin; never drawn with a depth target). The run's loss bookkeeping knows the
+probe as a named phase (the renderer's hook `rd_set_probe_fn`, the window's
+`ico_diag_set_probe` in `port/platform/diag_host.h`): from the renderer's start on a probe's start
+until the verdict, a device loss, GPU hang or end counts on no loss step (not on the loss ladder,
+Android's robust start or the watchdog's mark; the desktop game starts again as a fresh start), and
+the next start logs `ico_pc: the previous run (version V) ended while the subpass read's probe was
+running: ...`. Tests:
 `rhi_subpass_verdict` (the decision's order, the file's line, its path, a write, read and remove, no
 device), `rhi_vk_subpass_verdict` (the decision on lavapipe's 1.1 profile from each state of the
 file).
@@ -1356,6 +1364,7 @@ transfer features (`vkr_choose_depth_stencil`).
 | `ICO_VK_LEGACY_PASSES` | 1 records the render passes as `VkRenderPass` objects on any device (the Intel driver row's path, `rd_display_change_2x_legacy`), 0 keeps dynamic rendering on a device of the row; unset, the row; ico-pc.ini `[dev] legacy_passes` ([Vulkan](#vulkan), **Render passes**) |
 | `ICO_VK_FAKE_PASS_ROW` | tests only: `qualcomm` puts the device on Qualcomm's driver row alone (its passes `VkRenderPass` objects, `RhiLimits.passObjectsRow` set; nothing else of the driver faked): `rhi_vk_qcom_passes`, `_off`, `rd_pass_objects_ab` ([Vulkan](#vulkan), **Render passes**) |
 | `ICO_VK_SUBPASS_READ` | `[dev] subpass_read`: 1 turns [the subpass read](#local-read) on without its probe on any `VkRenderPass` path (the device's own, the driver rows' and `[dev] legacy_passes`': `rhi_vk_subpass_vk11`, `_legacy_on`); 0 off; unset, [the probe's verdict](#the-subpass-reads-probe) decides |
+| `ICO_VK_SUBPASS_PROBE_CLASS` | tests only: 1 runs [the subpass read's probe](#the-subpass-reads-probe) on a class off by default this release (Arm's under `ICO_VK_FAKE_VENDOR=0x13B5`, lavapipe's own), 0 keeps it off on any class: `rhi_vk_subpass_verdict`, `rd_subpass_probe_*` |
 | `ICO_VK_SUBPASS_VERDICT` | tests only: the subpass read's verdict file (the game's is `ico-subpass-read.txt` beside its pipeline cache file; without either the read is off): `rhi_vk_subpass_verdict`, `rd_subpass_probe_*` |
 | `ICO_VK_STORAGE_BARRIERS` | 1 puts the by-region barrier before a destination-read draw that only the validation layer needs |
 | `ICO_VK_GLOBAL_BARRIERS` | 1 records a global barrier before every render pass and copy (`vk_cmd.c`) |

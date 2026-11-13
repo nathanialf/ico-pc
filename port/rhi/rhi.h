@@ -1018,6 +1018,10 @@ typedef struct RhiLimits {
      * timestamps: ...") */
     bool subpassRoute;
     bool subpassProbe;
+    /* subpassOffDefault: on the route, off by default on this device's
+     * class this release (rhi_subpass_verdict.h RHI_SUBPASS_PROBE_*_DEFAULT:
+     * the Arm and Qualcomm drivers; subpassWhy says why) */
+    bool subpassOffDefault;
     const char *subpassWhy;
     const char *subpassVerdictFile;
     const char *subpassVerdictKey;
