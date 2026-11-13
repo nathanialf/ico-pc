@@ -1105,7 +1105,8 @@ picture with `VuVSOut.plane.y` 1, the side bands' discard's mark), applies the s
 position value by value as `vu_triangle_out_pos` does (`vu_corner_position`: the GS position, the
 cut position of `vu_corner_cut_position`, clip mode none's wrapped one), culls past the chain plane and takes its corner's
 distance (`vu_plane_distance`, one stream load), and adds the later bias from the three corners'
-records where the flag says (`vu_later_bias`). The program's choices come from VuCB as for the
+records where the flag says (`vu_later_bias`: each corner's GS X, Y and Z, plane 1 of its vertex
+record; the corner's own from the record it read already, so two loads). The program's choices come from VuCB as for the
 stages: `vu_rec.w` holds the clip mode the program uses (normal_c takes VuCB's, normal_l's code
 32/36 the scissor mode or the region test, codes 34 and 38, the cluster and the grids the region
 test), whether the chain clip plane and the later mark apply (normal_c and normal_l) and whether
@@ -1114,10 +1115,17 @@ region test's bounds (the cluster's VU memory 0 and 1, the others 0 and (4094, 4
 16777214)) (`vuTriRule`). Its output is the programs' entries' `VuVSOut`: the position, the
 colour, S, T, Q and the plane distance, interpolated in screen space, and, where the triangle's
 planes hold (`exact` and the exact viewport, as `vu_attr_planes` makes them), the planes as flat
-varyings: the five other plane texels of slots A and B read once a vertex (`vu_rec_planes`: slot
-A's anchor RGBA bytes and `r`, `x1`, `y1`, slot B's `a1`, `x0`, `y0`), the words the stages wrote,
-bit for bit. A flat varying stays in the tile on a tile-based GPU; a read by the triangle in every
-pixel (six buffer loads a fragment) would cost the fill-heavy scenes most. `vu_particle_main_vs`
+varyings: the five other plane texels of slots A and B read at the triangle's first corner
+(`vu_rec_planes`: slot A's anchor RGBA bytes and `r`, `x1`, `y1`, slot B's `a1`, `x0`, `y0`), the
+words the stages wrote, bit for bit ([Flat outputs at the provoking
+corner](#flat-outputs-at-the-provoking-corner)). Reading them in the pixel shader instead (one flat
+triangle index, six buffer loads a fragment) was left out on the premise that a flat varying stays
+in the tile on a tile-based GPU; that premise is unmeasured, and on a Mali GPU (Bifrost and later,
+index-driven vertex shading) every varying is written to memory by the vertex stage and read
+back by the fragment stage: about 530 bytes a triangle for the ten vec4s, roughly 40 MB a picture
+in issue 179's stage 42 (an inference from the varyings' sizes and the reporter's log's triangle
+counts; no Arm documentation is quoted here and no Mali counter measured it).
+`vu_particle_main_vs`
 draws sprite `vid / 6` from `vu_particle` with slot A's verdict and the sprite's planes the same
 way. `vu_ps` and `vu_texa_ps` take `VuVSOut` from either the main shaders or the programs' own
 entries and evaluate the planes (`vu_pixel_attrs`); at a fractional scale `vu_np_ps` reads its
@@ -1265,6 +1273,54 @@ command's vertex records a texel off, `=tri` its triangles' slot A a slot off, `
 stage's tick 1 at tick 0's camera, each in every replay, `=stale` the record's copies left out from
 the second replay on (under the stores: those replays' records stored into a sink buffer), which only the replays after the first can catch (a self-test of one replay
 passes it); [TESTING.md](TESTING.md#environment-switches)).
+
+#### Flat outputs at the provoking corner
+
+`VuVSOut`'s seven flat varyings (`a0`, `a1`, `x0`, `x1`, `y0`, `y1`, `r`: `nointerpolation` in the
+HLSL, `flat` in the GLSL SPIRV-Cross writes, constant interpolation in DXBC) reach the pixel
+shader from the triangle's provoking vertex alone, and that is its first vertex on every backend
+the port has: Vulkan's default (the port never chains `VK_EXT_provoking_vertex`; MoltenVK follows
+Metal, whose flat attributes take the first vertex), Direct3D 11 and 12 (always the first), and
+OpenGL by `glProvokingVertex(GL_FIRST_VERTEX_CONVENTION)` (`port/rhi/gl/gl_device.c`
+(`gl_defaults`), set once on the context; [RHI.md](RHI.md)). Every list a main shader draws is a
+triangle list whose triangles are `kick * 4 + 0`, `+ 1`, `+ 2` in that order (`rd_mesh.c`
+(`batchIndices`, the meshes, their tiled sheets and replacements), `rd_replay_vu.c` (the grids'
+lists, `vuRunWrite`: the merge's raised values keep the order); no strip, fan or restart), so
+the first vertex is corner 0. `vu_main_vs` therefore reads the planes at corner 0 alone
+(`ICO_VU_FLAT0`, `port/shaders/vu_tri.hlsl`): corners 1 and 2 leave the flat outputs as
+`vu_out_init` made them and skip the five loads; the position, the depth and every interpolated
+output (colour, S, T, Q, the plane distance and the side-band mark) are computed as before at
+every corner, statement for statement. The later bias reads the corner's own vertex from `me`
+(the same record texels, so the same words), the other two in branches of their own: two loads
+for its three. `vu_fused_out`'s `r.w` stays at every corner (no load). Record loads an
+invocation (the record, `vu_ring`, the stream), corner 0 / corners 1 and 2 (before: every corner
+the first figure):
+
+| draw | before | now |
+| --- | --- | --- |
+| alone, planes held (exact, exact viewport) | 9 | 9 / 4 |
+| alone, no planes (clipped, or no exact viewport) | 4 | 4 / 4 |
+| under the tick cameras, the blended verdict a drop | + 1 (slot C) | + 1 |
+| chain plane (normal_c, normal_l, `vu_batch.z`) | + 1 (stream) | + 1 |
+| later bias (`VU_TF_LATER`) | + 3 (plane 1 of each corner) | + 2 |
+| merged (`vu_merge_main_vs`) | + 10 (the table's count, four search steps, the draw's row, its `vu_draw`, `vu_batch`, `vu_rec`, `vu_tri`) | + 10 |
+
+(The SPIR-V's own loads: 13 record loads and 1 stream load in `vu_main_vs`, 10 ring loads more in
+`vu_merge_main_vs`, with the compiler having dropped the later bias's unused planes 0 and 2 and
+the merge's unused `vu_strip`, `vu_mark`, `vu_lo` and `vu_hi`.) The merge's search and constants
+feed the position at every corner and no address in it is read twice, so they stay. A plain mesh
+triangle with its planes drops from 27 loads to 17. A future backend with the last vertex as its
+provoking one (OpenGL ES without `GL_EXT_provoking_vertex`) would need its own build of the corner
+test (a define naming that backend's corner), never a setting. The start line: `rd: VU flat
+outputs: provoking corner only (9 loads a corner-0 invocation, 4 at the others: ...)`
+(`port/render/rd_vu_flat0.c`); the tests' `ICO_RD_VU_FLAT0=0` draws through the twins built with
+`ICO_VU_FLAT0=0` (`vu_all_main_vs`, `vu_merge_all_main_vs`: the shader before the change) and says `rd: VU
+flat outputs: every corner (...)`; `rd_vu_flat0_ab` holds the two to the same bytes
+([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)). The start-up self-tests are unaffected
+by construction: the pre-pass self-test (`rd_vuprepass_selftest.c`) compares the main shaders'
+pictures with the programs' entries', which compute the planes at every corner, and the rasteriser
+takes corner 0's in both; the skin check counts samples covered (the position alone); the blend
+self-test draws no VU program.
 
 #### The record stores' restart rung
 

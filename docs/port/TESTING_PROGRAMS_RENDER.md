@@ -970,6 +970,33 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   today's + 4 (every scale takes it, Original 1x included); the poison every PNG the
   same bytes; a chain in two passes over the list at each measured setting. `rd_glow_blur_gl`:
   the phone's setting on OpenGL (llvmpipe). No device: SKIP.
+- `rd_vu_flat0_test.c` (`rd_vu_flat0`; `rd_vu_flat0.cmake`, CPU): the main vertex shader's flat
+  outputs at the provoking corner, its pure parts (`rd_vu_flat0.c`): `ICO_RD_VU_FLAT0` unset, empty
+  and 1 the shipped build, 0 the twins, any other word the shipped build and named; the start line
+  in both forms (`VU flat outputs: provoking corner only (9 loads a corner-0 invocation, 4 at the
+  others`, `VU flat outputs: every corner (ICO_RD_VU_FLAT0=0` naming both twins) and with a twin
+  that could not be made, cut in a short buffer; the counts (corner 0 the 3 + 1 + 5 loads every
+  corner read before, the others 5 fewer).
+- `rd_vu_flat0_ab.cmake` (`rd_vu_flat0_ab`, `rd_vu_flat0_ab_pixel`, `rd_vu_flat0_gl`;
+  `rd_vu_flat0.cmake`): `vu_main_vs` and `vu_merge_main_vs` reading the planes at corner 0 alone
+  ([PIPELINES.md](PIPELINES.md#flat-outputs-at-the-provoking-corner)) against their twins with
+  every corner computing them, `ICO_RD_VU_FLAT0=1` against `=0`, `--pass-dump --stats`, each with
+  the draw merge and without it (`ICO_RD_VU_MERGE=0`), on every dump of
+  `tools/vu_flat0_dumps.txt` (machine-local; each line its profiles and a path; a listed dump that
+  is absent FAILS where `/primary/dev/ico-dumps` exists): the corpus profile (Original 4:3 at 1x,
+  Enhanced 16:9 at 2x) on the 2026-10-07 captures, three reporters' frames and issue 179's four
+  Mali-G52 dumps; those four again under the Arm fakes (`ICO_VK_FAKE_LIMITS=mali
+  ICO_VK_FAKE_VENDOR=0x13B5`, the record by compute, 1x, 21:9, half height); the Pixel's three
+  opening dumps at its setting (`ICO_VK_FAKE_LIMITS=moltenvk`, Enhanced 2364x1080, full height,
+  full pixel). Every target's PNG (SCENE and DISPLAY among them) the same bytes, each run's line
+  (`rd: VU flat outputs: every corner`, `... provoking corner only (9 loads ...`), `merge on)` or
+  `merge off)`, a frame drawing nothing through the record (no `stats: VU pre-pass on: [1-9]`)
+  skipped, a 4:3 frame the 16:9 setting cannot show skipped, targets compared under every profile
+  with a dump. `rd_vu_flat0_ab_pixel`: rd_pixel's `rd_pixel_vu`, `rd_pixel_vu36` and
+  `rd_pixel_frame` (every machine; CI's Direct3D 11 job runs the same on WARP,
+  `tools/ci_d3d11_warp.sh`, `-DBACKEND=d3d11`, the debug layer's errors failing it).
+  `rd_vu_flat0_gl`: the list on OpenGL (llvmpipe), every dump at the corpus settings (the fakes are
+  Vulkan's). No device: SKIP.
 - `rd_lamps_lowres_ab.cmake` (`rd_lamps_lowres_ab`; `rd_lamps.cmake`): the lamps' glow at the GS
   frame's size above 1x (`RD_LAMPS_LOWRES`, DIVERGENCES.md VD-32) on every glow dump of
   `tools/glow_light_dumps.txt` (machine-local; a listed dump that is absent FAILS),

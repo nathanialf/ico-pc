@@ -14,6 +14,7 @@
 #include "rd_passring.h"
 #include "rd_replay.h"
 #include "rd_velocity.h"
+#include "rd_vu_flat0.h"
 #include "rd_vu_rec_early.h"
 #include "rd_vu_record.h"
 #include "rd_vu_rec_sink.h"
@@ -3559,6 +3560,7 @@ void rd__vu_prepass_init(const RhiLimits *lim)
     preBatchInit();
     rd__vu_record_shaders(); /* the store or compute builds (rd_vu_record.h) */
     vuMergeInit();           /* the draw merge's modules (the fallback's variant is chosen) */
+    rd__vu_flat0_init();     /* the main shader's flat outputs: the line (rd_vu_flat0.h) */
     if (g_rd.vuPrepass) {
         rd__log("VU pre-pass: on: each mesh and grid vertex and triangle and each sprite "
                 "evaluated once before the lists (two passes), %u bytes a record slot in %u "

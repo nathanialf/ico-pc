@@ -2,6 +2,8 @@
 
 (kept current after every merge; player words only)
 
+- The 3D scenery asks the graphics chip for less work on every device, with the picture unchanged.
+
 ## Fixed
 
 (kept current after every merge; player words only)
