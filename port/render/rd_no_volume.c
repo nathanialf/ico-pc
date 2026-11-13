@@ -48,8 +48,8 @@
  * takes its own snapshot or stencil set-up from the alpha as it is (a
  * retake reads the same alpha; nothing it would have reused was written).
  *
- * The break mode (v0.11.6, RD_NO_VOLUME_BREAK_DEFAULT 0, ICO_RD_NO_VOLUME_BREAK
- * for the tests): the same window, but the reset is recorded as before (the
+ * The break mode (v0.11.6, RD_NO_VOLUME_BREAK_DEFAULT 1 on the PowerVR it was
+ * shown clean on, ICO_RD_NO_VOLUME_BREAK for the tests): the same window, but the reset is recorded as before (the
  * merged pass's stencil store armed as before: rd__no_volume_owns says no)
  * and the resolve ends the open pass as the count's draw ends it
  * (rd_shadow_one.c rd__replay_end_pass: the reset's pending stencil clear
@@ -106,6 +106,7 @@
 #include "rd_no_volume.h"
 #include "rd_replay.h"
 #include "rd_shadow_box.h"
+#include "rd_vu_class.h"         /* rd__vu_class_measured */
 #include "rd_stencil_selftest.h" /* rd__profile_powervr */
 
 /* ------------------------------------------------------------- the scan */
@@ -481,11 +482,15 @@ static int envOf(void)
 
 /* The break mode (v0.11.6): the same window taken with SCENE's pass ended at
  * the resolve as the count's draw ends it, the reset and the merged stencil
- * store as without it; off by default until a phone rc shows the PowerVR
- * phone's title and pause menu clean with it (a relative of the open mode,
- * which flickered there): the user decides.  Its classes are the open
- * mode's.  ICO_RD_NO_VOLUME_BREAK=1 turns it on (tests) */
-#define RD_NO_VOLUME_BREAK_DEFAULT 0
+ * store as without it.  On by default where it was shown: two phone rcs
+ * (v0.11.6-rc2 and rc13) showed the owner's PowerVR D-Series DXT-48-1536's
+ * title and pause menu clean with it (the open mode, its relative, had
+ * flickered there).  Its classes are the open mode's (the PowerVR class
+ * and MoltenVK under Vulkan); the default reaches only that device
+ * (rd_vu_class.h rd__vu_class_measured, the VU record's measured PowerVR):
+ * the rest of the PowerVR class and MoltenVK never ran it and stay off by
+ * default with that reason.  ICO_RD_NO_VOLUME_BREAK=0|1 (tests) */
+#define RD_NO_VOLUME_BREAK_DEFAULT 1
 
 /* the classes the window's passes end and begin at a cost: the tile-based
  * classes under Vulkan whose composites take DATE through the stencil bit */
@@ -500,9 +505,15 @@ static bool classOn(void)
     return RD_NO_VOLUME_DEFAULT && classBase();
 }
 
+/* the device the break mode was shown clean on (the default's reach) */
+static bool breakMeasured(void)
+{
+    return classBase() && rd__profile_powervr() && rd__vu_class_measured(rhi_adapter_name());
+}
+
 static bool breakClassOn(void)
 {
-    return RD_NO_VOLUME_BREAK_DEFAULT && classBase();
+    return RD_NO_VOLUME_BREAK_DEFAULT && breakMeasured();
 }
 
 static int breakEnvOf(void)
@@ -558,9 +569,9 @@ void rd__no_volume_scan_begin(const RdFrame *f, int keep)
            (the class, the tests' switch, the default, and the other gates
            as with the class allowed) */
         const int other = gateOf(1, true);
-        ico_attempt_decide_no_volume_break(breakEnvOf(), classBase(), RD_NO_VOLUME_BREAK_DEFAULT,
-                                           other == RD_NV_WHY_COUNT ? NULL
-                                                                    : rd_nv_why_words(other));
+        ico_attempt_decide_no_volume_break(
+            breakEnvOf(), classBase(), breakMeasured(), RD_NO_VOLUME_BREAK_DEFAULT,
+            other == RD_NV_WHY_COUNT ? NULL : rd_nv_why_words(other));
     }
 }
 
@@ -701,7 +712,7 @@ void rd__no_volume_scan_end(void)
                     "and levels written as zero clears (none where they hold zero already), "
                     "the reset and the stencil's store as before; the same bytes",
                     breakEnvOf() == 1 ? "ICO_RD_NO_VOLUME_BREAK=1"
-                                      : "the PowerVR or MoltenVK class, "
+                                      : "the PowerVR D-Series DXT-48-1536, "
                                         "RD_NO_VOLUME_BREAK_DEFAULT 1");
         } else {
             rd__log("shadows: no volume: %s (%s): a shadow window without a volume keeps "

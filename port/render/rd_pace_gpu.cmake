@@ -18,8 +18,10 @@ target_sources(ico_render PRIVATE rd_pace_gpu.c rd_pace_gpu_live.c rd_pace_rules
 # steps, against the GPU's ends, never back, no repeat, the mean moment within
 # its derived tolerance, the same pictures; the rc1 log's three runs; the
 # renderer's side (the measurements' ring, the ledger's row, the start line
-# and the evenness clause word for word); off by default: presentRebase's
-# path with the model and the timer computed gives v0.11.5's value to the bit
+# and the evenness clause word for word); the desktop's defaults (no display
+# times, not Android: the screen's rule places nothing, the own timer not
+# drawn): presentRebase's path with the model, the timer and the screen's rule
+# computed gives v0.11.5's value to the bit
 add_executable(rd_pace_gpu_test test/rd_pace_gpu_test.c rd_pace_gpu.c rd_pace_gpu_live.c
                                 rd_rebase.c rd_pace_rules.c rd_as_made_timer.c rd_pace_screen.c
                                 rd_pace_screen_live.c rd_pace_even.c rd_pace_even_live.c)
@@ -37,7 +39,9 @@ endif()
 # rd_as_made_timer_test: CPU only: the own timer's edges (its first picture on
 # the hand-over rule's moment, a steady interval stepped exactly, the pull, a
 # held picture's slot taken whole, an error over half a tick, the minimum
-# step, the restarts, the switch); 10 s simulations with a 120 Hz mailbox
+# step, the restarts, the decision (drawn on Android by default, the
+# hand-over rule elsewhere, the tests' switch over it) and the switch); 10 s
+# simulations with a 120 Hz mailbox
 # display (each picture at the first refresh at or after its GPU end, one
 # replaced by the next at the same refresh) of the cage, the brief's cage
 # pattern, stages 3 and 5, three a tick, the GPU-bound opening, one a tick,
@@ -91,7 +95,8 @@ endif()
 # hand-over, the GPU end, the own timer and the screen over the same
 # pictures, the score, the holds, the content's rate over the glass; the
 # fall-backs over a run (no display times, times that stop, a display at
-# 90 Hz); the start line, the clause and the ledger's row
+# 90 Hz); the start line, the clause and the ledger's row; the even cadence
+# off (its default): no hold, no aim, no desired time, no clause
 add_executable(rd_pace_screen_test test/rd_pace_screen_test.c rd_pace_screen.c
                                    rd_pace_screen_live.c rd_pace_gpu.c rd_pace_gpu_live.c
                                    rd_rebase.c rd_as_made_timer.c rd_pace_even.c

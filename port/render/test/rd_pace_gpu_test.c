@@ -35,6 +35,7 @@
 #include <string.h>
 
 #include "attempt_ledger.h"
+#include "rd_as_made_timer.h"
 #include "rd_pace_gpu.h"
 #include "rd_pace_rules.h"
 #include "rd_rebase.h"
@@ -795,15 +796,23 @@ static void testLive(void)
     ico_attempt_reset();
 }
 
-/* the default off, bit for bit: presentRebase's path (rd_thread.c) over a
-   cage-like run of hand-overs with the model and the timer computed: the
-   value drawn the hand-over rule's (rd_rebase_raw of the measured ask, as
-   v0.11.5) to the bit, the note's drawn rule the hand-over's */
+/* the defaults where the display gives no times back and the build is not
+   Android's (a desktop as made: vsync off, Uncapped), bit for bit:
+   presentRebase's path (rd_thread.c) over a cage-like run of hand-overs
+   with the model, the timer and the screen's rule computed (the screen's
+   rule on by default, but with no display time it places nothing; the own
+   timer drawn on Android only): the value drawn the hand-over rule's
+   (rd_rebase_raw of the measured ask, as v0.11.5) to the bit, the note's
+   drawn rule the hand-over's */
 static void testOffBitIdentical(void)
 {
     if (getenv("ICO_RD_PACE_GPU") != NULL || getenv("ICO_RD_AS_MADE_TIMER") != NULL ||
         getenv("ICO_RD_PACE_SCREEN") != NULL || getenv("ICO_RD_PACE_EVEN") != NULL) {
-        printf(" off-by-default check skipped: a tests' switch is set\n");
+        printf(" desktop-default check skipped: a tests' switch is set\n");
+        return;
+    }
+    if (rd_as_made_timer_on()) {
+        printf(" desktop-default check skipped: the own timer is drawn here (Android)\n");
         return;
     }
     rd_pace_gpu_paced();
@@ -841,7 +850,9 @@ static void testOffBitIdentical(void)
             n++;
         }
     }
-    printf(" off by default: %u of %u values the hand-over rule's to the bit\n", same, n);
+    printf(" the desktop's defaults (no display times): %u of %u values the hand-over rule's to "
+           "the bit\n",
+           same, n);
     CHECK(same == n && n == 600u);
     rd_pace_gpu_paced();
     rd_pace_rules_paced();

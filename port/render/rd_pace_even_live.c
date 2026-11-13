@@ -16,14 +16,18 @@
 #include "rd_pace_gpu.h"
 #include "rd_pace_screen.h"
 
+/* read from the poster's thread and the collecting thread
+   (rd_pace_even_note_present): an atomic, the same value from either */
 bool rd_pace_even_on(void)
 {
-    static int s_on = -1;
-    if (s_on < 0) {
+    static int s_on = -1; /* __atomic */
+    int on = __atomic_load_n(&s_on, __ATOMIC_RELAXED);
+    if (on < 0) {
         const char *e = getenv("ICO_RD_PACE_EVEN");
-        s_on = e != NULL && e[0] != '\0' ? (e[0] != '0') : RD_PACE_EVEN_DEFAULT;
+        on = e != NULL && e[0] != '\0' ? (e[0] != '0') : RD_PACE_EVEN_DEFAULT;
+        __atomic_store_n(&s_on, on, __ATOMIC_RELAXED);
     }
-    return s_on != 0;
+    return on != 0;
 }
 
 /* the poster's */
@@ -74,6 +78,9 @@ static uint64_t s_presUs[2], s_presN[2]; /* __atomic */
 
 void rd_pace_even_note_present(double ms, bool desired)
 {
+    if (!rd_pace_even_on()) {
+        return; /* off: its self-check has nothing to judge */
+    }
     const int k = desired ? 1 : 0;
     __atomic_add_fetch(&s_presUs[k], (uint64_t)(ms > 0.0 ? ms * 1000.0 + 0.5 : 0.0),
                        __ATOMIC_RELAXED);

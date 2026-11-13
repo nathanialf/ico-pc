@@ -78,10 +78,14 @@
 #ifndef ICO_RD_PACE_SCREEN_H
 #define ICO_RD_PACE_SCREEN_H
 
-/* Off by default (an rc variant flips it); ICO_RD_PACE_SCREEN=1 (the tests'
-   switch) draws it.  Computed and reported either way (the on-glass line) */
+/* On by default (v0.11.6: the release candidates on the owner's phone were
+   steadiest with it, the own timer as its fall-back); it can draw only where
+   the display gives its times back (today Android's swapchain through
+   VK_GOOGLE_display_timing), elsewhere every picture is the moment drawn
+   otherwise to the bit with the reason counted.  ICO_RD_PACE_SCREEN=0 (the
+   tests' switch) keeps it computed and reported only (the on-glass line) */
 #ifndef RD_PACE_SCREEN_DEFAULT
-#define RD_PACE_SCREEN_DEFAULT 0
+#define RD_PACE_SCREEN_DEFAULT 1
 #endif
 
 #include <stdbool.h>

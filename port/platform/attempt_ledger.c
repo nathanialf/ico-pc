@@ -293,7 +293,8 @@ void ico_attempt_decide_empty_skip(int box, int mode)
     }
 }
 
-void ico_attempt_decide_no_volume_break(int env, int classOk, int defaultOn, const char *gateWhy)
+void ico_attempt_decide_no_volume_break(int env, int classOk, int measured, int defaultOn,
+                                        const char *gateWhy)
 {
     if (env == 0) {
         ico_attempt_state(ICO_ATT_NO_VOLUME_BREAK, ICO_ATT_OFF_DEFAULT,
@@ -307,10 +308,13 @@ void ico_attempt_decide_no_volume_break(int env, int classOk, int defaultOn, con
         ico_attempt_state(ICO_ATT_NO_VOLUME_BREAK, ICO_ATT_ON, "ICO_RD_NO_VOLUME_BREAK=1");
     } else if (!defaultOn) {
         ico_attempt_state(ICO_ATT_NO_VOLUME_BREAK, ICO_ATT_OFF_DEFAULT,
-                          "off by default until a phone rc shows the PowerVR phone's title and "
-                          "pause menu clean with it");
+                          "RD_NO_VOLUME_BREAK_DEFAULT 0");
+    } else if (!measured) {
+        ico_attempt_state(ICO_ATT_NO_VOLUME_BREAK, ICO_ATT_OFF_DEFAULT,
+                          "shown clean only on the PowerVR D-Series DXT-48-1536's title and pause "
+                          "menu; not tried on this device");
     } else {
-        ico_attempt_state(ICO_ATT_NO_VOLUME_BREAK, ICO_ATT_ON, "the PowerVR or MoltenVK class");
+        ico_attempt_state(ICO_ATT_NO_VOLUME_BREAK, ICO_ATT_ON, "the PowerVR D-Series DXT-48-1536");
     }
 }
 
@@ -351,18 +355,17 @@ void ico_attempt_decide_pace_gpu(int asMade, int clock, int waited, int on)
     }
 }
 
-void ico_attempt_decide_as_made_timer(int asMade, int on)
+void ico_attempt_decide_as_made_timer(int asMade, int on, const char *why)
 {
     if (!asMade) {
         ico_attempt_state(ICO_ATT_AS_MADE_TIMER, ICO_ATT_NA,
                           "the pictures are paced here: the present clock's moment");
     } else if (!on) {
         ico_attempt_state(ICO_ATT_AS_MADE_TIMER, ICO_ATT_OFF_DEFAULT,
-                          "off by default until a phone rc shows it to the owner's eye; computed "
-                          "and reported");
+                          why != NULL ? why : "computed and reported");
     } else {
         ico_attempt_state(ICO_ATT_AS_MADE_TIMER, ICO_ATT_ON,
-                          "each picture's moment from its own timer");
+                          why != NULL ? why : "each picture's moment from its own timer");
     }
 }
 
@@ -381,8 +384,8 @@ void ico_attempt_decide_pace_screen(int asMade, int clock, int times, int on)
                           "desktop, OpenGL, Direct3D): the moment drawn otherwise kept");
     } else if (times == 1 && clock == 1 && !on) {
         ico_attempt_state(ICO_ATT_PACE_SCREEN, ICO_ATT_OFF_DEFAULT,
-                          "off by default until a phone rc shows it to the owner's eye; computed "
-                          "and reported on the on-glass line");
+                          "ICO_RD_PACE_SCREEN=0 or RD_PACE_SCREEN_DEFAULT 0: computed and "
+                          "reported on the on-glass line, not drawn");
     } else if (times == 1 && clock == 1) {
         ico_attempt_state(ICO_ATT_PACE_SCREEN, ICO_ATT_ON,
                           "each picture drawn for the refresh the screen is predicted to show it "
@@ -405,9 +408,7 @@ void ico_attempt_decide_pace_even(int asMade, int clock, int times, int on)
                           "desktop, OpenGL, Direct3D): the pictures as made");
     } else if (times == 1 && clock == 1 && !on) {
         ico_attempt_state(ICO_ATT_PACE_EVEN, ICO_ATT_OFF_DEFAULT,
-                          "off by default: an rc variant for the owner's eye (it lowers the "
-                          "pictures a second of Uncapped to the refresh rate over a whole number "
-                          "of refreshes)");
+                          "three phone rcs did not land pictures on their refresh");
     } else if (times == 1 && clock == 1) {
         ico_attempt_state(ICO_ATT_PACE_EVEN, ICO_ATT_ON,
                           "every picture shown for the same whole number of refreshes, the "
@@ -421,8 +422,8 @@ void ico_attempt_decide_pass_objects(const char *row)
                       row != NULL ? row : "not Qualcomm's own driver");
 }
 
-int ico_attempt_decide_vu_compute(int byName, int stores, int compute, int powervr, int env,
-                                  int defaultOn)
+int ico_attempt_decide_vu_compute(int byName, int stores, int compute, int powervr, int measured,
+                                  int env, int defaultOn)
 {
     IcoAttemptState st = ICO_ATT_NA;
     const char *why;
@@ -445,11 +446,15 @@ int ico_attempt_decide_vu_compute(int byName, int stores, int compute, int power
         why = "not the PowerVR class under Vulkan";
     } else if (!defaultOn) {
         st = ICO_ATT_OFF_DEFAULT;
-        why = "off by default until a phone rc shows the PowerVR phone's opening with it";
+        why = "RD_VU_COMPUTE_CLASS_DEFAULT 0: the vertex stores";
+    } else if (!measured) {
+        st = ICO_ATT_OFF_DEFAULT;
+        why = "not the PowerVR D-Series DXT-48-1536 it was shown on: the vertex stores (its "
+              "self-test judges the record's bytes, not a device lost on a driver not tried)";
     } else {
         st = ICO_ATT_ON;
         on = 1;
-        why = "the PowerVR class: compute dispatches in place of the vertex stores";
+        why = "the PowerVR D-Series DXT-48-1536: compute dispatches in place of the vertex stores";
     }
     ico_attempt_state(ICO_ATT_VU_COMPUTE_CLASS, st, why);
     return on;

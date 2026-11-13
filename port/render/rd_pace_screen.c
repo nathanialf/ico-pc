@@ -711,7 +711,7 @@ size_t rd_pace_screen_start_text(bool measured, bool drawn, const char *why, cha
             "inside their frame's tick; never back; with no display times, stale ones, ones off "
             "one grid or a latch that fits under %.0f %%, the moment drawn otherwise%s",
             RD_PS_WIN, RD_PS_SLEW_MS, RD_PS_LAG_WIN, 100.0 * RD_PS_FIT_MIN,
-            drawn ? "" : "; computed and reported, not drawn (ICO_RD_PACE_SCREEN=1 draws it)");
+            drawn ? "" : "; computed and reported, not drawn");
     }
     return o.at < size ? o.at : size - 1;
 }

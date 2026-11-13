@@ -6,10 +6,11 @@
  *     at odd sizes, the rects at the corners and inside
  *   rd__turn_fold_why: each fact keeps the turn pass with its reason, in
  *     the order the present checks them; the box blit alone folds
- *   rd__vu_class_pick (rd_vu_class.c): the PowerVR class's rule through
- *     the attempt ledger's decider: off by default on the class, on by the
- *     tests' switch, never where a mode is asked by name or the vertex
- *     stores are not auto's pick */
+ *   rd__vu_class_pick, rd__vu_class_measured (rd_vu_class.c): the PowerVR
+ *     class's rule through the attempt ledger's decider: on by default on
+ *     the measured PowerVR (the D-Series DXT-48-1536) alone, off by default
+ *     on the rest of the class, on by the tests' switch, never where a mode
+ *     is asked by name or the vertex stores are not auto's pick */
 #include <stdio.h>
 #include <string.h>
 
@@ -123,26 +124,41 @@ static void testWhy(void)
 static void testVuClass(void)
 {
     ico_attempt_reset();
-    /* the phone (PowerVR, both stores), the build's default 0: off */
-    CHECK(!rd__vu_class_pick(RD_VU_RECORD_AUTO, RD_VU_RECORD_STORES, true, true, -1, false));
+    /* the measured PowerVR's name, and the class's others */
+    CHECK(rd__vu_class_measured("PowerVR D-Series DXT-48-1536 MC1"));
+    CHECK(!rd__vu_class_measured("PowerVR B-Series BXM-8-256"));
+    CHECK(!rd__vu_class_measured("PowerVR Rogue GE8320"));
+    CHECK(!rd__vu_class_measured(NULL));
+    /* the owner's phone (the DXT, both stores), the define 0: off */
+    CHECK(!rd__vu_class_pick(RD_VU_RECORD_AUTO, RD_VU_RECORD_STORES, true, true, true, -1, false));
     CHECK(ico_attempt_state_of(ICO_ATT_VU_COMPUTE_CLASS) == ICO_ATT_OFF_DEFAULT);
-    /* the define flipped: on */
-    CHECK(rd__vu_class_pick(RD_VU_RECORD_AUTO, RD_VU_RECORD_STORES, true, true, -1, true));
-    CHECK(ico_attempt_state_of(ICO_ATT_VU_COMPUTE_CLASS) == ICO_ATT_ON);
+    /* the build's default (1): on there */
+    CHECK(rd__vu_class_pick(RD_VU_RECORD_AUTO, RD_VU_RECORD_STORES, true, true, true, -1,
+                            RD_VU_COMPUTE_CLASS_DEFAULT != 0) ==
+          (RD_VU_COMPUTE_CLASS_DEFAULT != 0));
+    CHECK(ico_attempt_state_of(ICO_ATT_VU_COMPUTE_CLASS) ==
+          (RD_VU_COMPUTE_CLASS_DEFAULT ? ICO_ATT_ON : ICO_ATT_OFF_DEFAULT));
+    /* another PowerVR (never ran it), the default on: off by default, the
+       vertex stores, with the reason */
+    CHECK(!rd__vu_class_pick(RD_VU_RECORD_AUTO, RD_VU_RECORD_STORES, true, true, false, -1, true));
+    CHECK(ico_attempt_state_of(ICO_ATT_VU_COMPUTE_CLASS) == ICO_ATT_OFF_DEFAULT);
+    CHECK(strstr(ico_attempt_why_of(ICO_ATT_VU_COMPUTE_CLASS),
+                 "not the PowerVR D-Series DXT-48-1536 it was shown on") != NULL);
     /* the tests' switch on lavapipe (not the class): on */
-    CHECK(rd__vu_class_pick(RD_VU_RECORD_AUTO, RD_VU_RECORD_STORES, true, false, 1, false));
-    /* =0 on the class with the define flipped: off */
-    CHECK(!rd__vu_class_pick(RD_VU_RECORD_AUTO, RD_VU_RECORD_STORES, true, true, 0, true));
+    CHECK(rd__vu_class_pick(RD_VU_RECORD_AUTO, RD_VU_RECORD_STORES, true, false, false, 1, false));
+    /* =0 on the measured PowerVR with the default on: off */
+    CHECK(!rd__vu_class_pick(RD_VU_RECORD_AUTO, RD_VU_RECORD_STORES, true, true, true, 0, true));
     /* a mode asked by name, or no vertex stores (the Mali: auto's compute
        already), or no compute stores: not applicable */
-    CHECK(!rd__vu_class_pick(RD_VU_RECORD_STORES, RD_VU_RECORD_STORES, true, true, 1, true));
+    CHECK(!rd__vu_class_pick(RD_VU_RECORD_STORES, RD_VU_RECORD_STORES, true, true, true, 1, true));
     CHECK(ico_attempt_state_of(ICO_ATT_VU_COMPUTE_CLASS) == ICO_ATT_NA);
-    CHECK(!rd__vu_class_pick(RD_VU_RECORD_AUTO, RD_VU_RECORD_COMPUTE, true, false, -1, true));
+    CHECK(
+        !rd__vu_class_pick(RD_VU_RECORD_AUTO, RD_VU_RECORD_COMPUTE, true, false, false, -1, true));
     CHECK(ico_attempt_state_of(ICO_ATT_VU_COMPUTE_CLASS) == ICO_ATT_NA);
-    CHECK(!rd__vu_class_pick(RD_VU_RECORD_AUTO, RD_VU_RECORD_STORES, false, true, 1, true));
+    CHECK(!rd__vu_class_pick(RD_VU_RECORD_AUTO, RD_VU_RECORD_STORES, false, true, true, 1, true));
     CHECK(ico_attempt_state_of(ICO_ATT_VU_COMPUTE_CLASS) == ICO_ATT_NA);
-    /* another class, the default flipped: not applicable */
-    CHECK(!rd__vu_class_pick(RD_VU_RECORD_AUTO, RD_VU_RECORD_STORES, true, false, -1, true));
+    /* another class, the default on: not applicable */
+    CHECK(!rd__vu_class_pick(RD_VU_RECORD_AUTO, RD_VU_RECORD_STORES, true, false, false, -1, true));
     CHECK(ico_attempt_state_of(ICO_ATT_VU_COMPUTE_CLASS) == ICO_ATT_NA);
     ico_attempt_reset();
 }

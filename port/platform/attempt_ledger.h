@@ -208,9 +208,11 @@ void ico_attempt_decide_date_one(int mode, int setting);
 void ico_attempt_decide_empty_skip(int box, int mode);
 /* the no-volume break (rd_no_volume.c, each replay's scan): env the tests'
    switch (-1 unset, 0, 1), classOk the PowerVR or MoltenVK class under
-   Vulkan, defaultOn RD_NO_VOLUME_BREAK_DEFAULT, gateWhy a setting gate's
-   refusal with the class allowed (the DATE path, MSAA, the pass window, the
-   exact blend, GS state as shader data; NULL none) */
+   Vulkan, measured the device it was shown clean on (the PowerVR D-Series
+   DXT-48-1536: the default's reach; the rest of the class off by default),
+   defaultOn RD_NO_VOLUME_BREAK_DEFAULT, gateWhy a setting gate's refusal
+   with the class allowed (the DATE path, MSAA, the pass window, the exact
+   blend, GS state as shader data; NULL none) */
 /* the Adreno attempt (window_perf_rank.c at the first block): row the
    device's RhiLimits.passObjectsRow (its reason while Qualcomm's row holds
    the passes; NULL otherwise, and on the other backends) */
@@ -221,16 +223,19 @@ void ico_attempt_decide_pass_objects(const char *row);
    need (rd_early_start_rows; 0 none): on where the need's size made less
    than the bound allowed, else not applicable with the reason */
 void ico_attempt_decide_rec_need(int wanted, uint32_t made, uint32_t bound, uint32_t need);
-void ico_attempt_decide_no_volume_break(int env, int classOk, int defaultOn, const char *gateWhy);
+void ico_attempt_decide_no_volume_break(int env, int classOk, int measured, int defaultOn,
+                                        const char *gateWhy);
 /* the VU record by compute on the PowerVR class (rd_vu_class.c, at the
    record's start): byName a [dev] vu_record asked for by name, stores auto
    takes the vertex stores here, compute the device has compute stores,
-   powervr the PowerVR class under Vulkan, env the tests' switch
-   (ICO_RD_VU_COMPUTE_CLASS: -1 unset, 0, 1), defaultOn
+   powervr the PowerVR class under Vulkan, measured the device is the
+   PowerVR it was shown on (rd_vu_class.h rd__vu_class_measured: the
+   D-Series DXT-48-1536; the rest of the class off by default), env the
+   tests' switch (ICO_RD_VU_COMPUTE_CLASS: -1 unset, 0, 1), defaultOn
    RD_VU_COMPUTE_CLASS_DEFAULT.  1 when the record is to be written by
    compute dispatches (the row on), else 0 */
-int ico_attempt_decide_vu_compute(int byName, int stores, int compute, int powervr, int env,
-                                  int defaultOn);
+int ico_attempt_decide_vu_compute(int byName, int stores, int compute, int powervr, int measured,
+                                  int env, int defaultOn);
 /* the turn in the present's blit (rd_turn_fold.c, at each change of its
    inputs): turned the swapchain is pre-rotated (or the tests' twin), env
    the tests' switch (ICO_RD_TURN_FOLD: -1 unset, 0, 1), defaultOn
@@ -271,28 +276,29 @@ void ico_attempt_decide_subpass(int route, int on, int refused, int offDefault, 
 void ico_attempt_decide_pace_gpu(int asMade, int clock, int waited, int on);
 /* the own timer for pictures as made (rd_pace_rules.c, the poster's thread
    at each change): asMade as ico_attempt_decide_pace_gpu's, on the timer's
-   moment is drawn (RD_AS_MADE_TIMER_DEFAULT, ICO_RD_AS_MADE_TIMER).  Not
-   paced: not applicable; as made: off by default (computed and reported,
-   not drawn) or on */
-void ico_attempt_decide_as_made_timer(int asMade, int on);
+   moment is drawn, why the words of its decision (rd_as_made_timer.h
+   rd_as_made_timer_decide: RD_AS_MADE_TIMER_DEFAULT on Android only,
+   ICO_RD_AS_MADE_TIMER; NULL: fixed words).  Not paced: not applicable; as
+   made: off by default (computed and reported, not drawn) or on */
+void ico_attempt_decide_as_made_timer(int asMade, int on, const char *why);
 /* the screen's refresh for pictures as made (rd_pace_screen_live.c, the
    poster's thread at each change): asMade as ico_attempt_decide_pace_gpu's,
    clock the GPU model's slot clock (rd_pace_gpu_clock_state: 1 yes, 0 none
    after its wait, -1 not known), times the display's own times (1 one came
    back, 0 none after 600 pictures as made, -1 not known), on the rule is
-   drawn (RD_PACE_SCREEN_DEFAULT, ICO_RD_PACE_SCREEN).  Not paced: not
-   applicable; no slot clock: not applicable (no GPU end to predict from);
-   no display times: not applicable (desktop, no VK_GOOGLE_display_timing);
-   both: off by default (computed and reported, not drawn) or on; else the
-   row left as it was */
+   drawn (RD_PACE_SCREEN_DEFAULT 1, ICO_RD_PACE_SCREEN=0 over it).  Not
+   paced: not applicable; no slot clock: not applicable (no GPU end to
+   predict from); no display times: not applicable (desktop, no
+   VK_GOOGLE_display_timing); both: on, or off by default with the tests'
+   switch (computed and reported, not drawn); else the row left as it was */
 void ico_attempt_decide_pace_screen(int asMade, int clock, int times, int on);
 /* the even cadence for pictures as made (rd_pace_even_live.c, the poster's
    thread at each change): asMade, clock and times as
    ico_attempt_decide_pace_screen's, on it is used (RD_PACE_EVEN_DEFAULT,
    ICO_RD_PACE_EVEN).  Not paced: not applicable; no slot clock or no
    display times: not applicable (the pictures as made); both: off by
-   default (an rc variant: it lowers the pictures a second of Uncapped) or
-   on; else the row left as it was */
+   default (three phone rcs did not land pictures on their refresh) or on
+   with the tests' switch; else the row left as it was */
 void ico_attempt_decide_pace_even(int asMade, int clock, int times, int on);
 /* the glow's paste by its own entry (rd_paste_spec.c, at start-up and after
    its self-test): module fx_paste_ps was made (Vulkan; 0 on the other

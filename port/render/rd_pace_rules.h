@@ -3,14 +3,16 @@
  * (rd_pace_rules.c; docs/port/DISPLAY.md "The alpha"):
  *
  *   RD_RULE_HAND   the hand-over less the drain's running mean (rd_rebase.h:
- *                  drawn by default);
+ *                  drawn where the others are not: a desktop's default);
  *   RD_RULE_GPU    the predicted GPU end less the mean latency
  *                  (rd_pace_gpu.h: drawn with ICO_RD_PACE_GPU=1);
- *   RD_RULE_TIMER  the own timer (rd_as_made_timer.h: drawn with
- *                  ICO_RD_AS_MADE_TIMER=1, over the GPU end);
+ *   RD_RULE_TIMER  the own timer (rd_as_made_timer.h: drawn on Android by
+ *                  default, ICO_RD_AS_MADE_TIMER=0/1 over it; over the GPU
+ *                  end);
  *   RD_RULE_SCREEN the time the screen will show the picture (rd_pace_screen.h:
- *                  drawn with ICO_RD_PACE_SCREEN=1, over the others; where
- *                  it cannot predict, the value of the rule drawn otherwise);
+ *                  drawn by default, over the others, where the display
+ *                  gives its times back; where it cannot predict, the value
+ *                  of the rule drawn otherwise);
  *   RD_RULE_CLOCK  the present clock or the lock's grid: paced modes (the
  *                  others not computed).
  *
@@ -59,8 +61,8 @@ typedef struct RdRuleNote {
    not drawn, rd_interp.c rd_present's keep path; no rule's alpha noted,
    the screen's model and the even cadence leave it out).  Returns the raw
    value to draw (raw itself unless the timer or the screen's rule is
-   drawn: the screen's where ICO_RD_PACE_SCREEN=1, or where the even
-   cadence aimed the picture, rd_pace_even.h); *note the four rules'
+   drawn: the screen's where it is on and placed the picture, or where the
+   even cadence aimed the picture, rd_pace_even.h); *note the four rules'
    alphas, the drawn one and the screen's prediction */
 double rd_pace_rules_pick(double raw, double appliedMs, double wouldMs, double closeAtMs,
                           double tickMs, double handMs, uint32_t frame, bool kept,

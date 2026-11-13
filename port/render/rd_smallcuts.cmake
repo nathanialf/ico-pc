@@ -4,7 +4,8 @@
 #   the turn in the present's blit (rd_turn_fold.c, rd_turn_fold.h;
 #     RD_TURN_FOLD_DEFAULT 0, ICO_RD_TURN_FOLD)
 #   the VU record by compute on the PowerVR class (rd_vu_class.c,
-#     rd_vu_class.h; RD_VU_COMPUTE_CLASS_DEFAULT 0, ICO_RD_VU_COMPUTE_CLASS)
+#     rd_vu_class.h; RD_VU_COMPUTE_CLASS_DEFAULT 1 on the measured PowerVR only,
+#     ICO_RD_VU_COMPUTE_CLASS)
 # docs/port/RENDER_POST.md has a section for each.
 target_sources(ico_render PRIVATE rd_turn_fold.c rd_vu_class.c)
 

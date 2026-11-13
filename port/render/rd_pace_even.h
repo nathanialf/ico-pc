@@ -1,6 +1,10 @@
-/* rd_pace_even.h: the even cadence for pictures as made, an rc variant off by
- * default (rd_pace_even.c, rd_pace_even_live.c; docs/port/DISPLAY.md "The
- * alpha").
+/* rd_pace_even.h: the even cadence for pictures as made, off by default
+ * (rd_pace_even.c, rd_pace_even_live.c; docs/port/DISPLAY.md "The alpha"):
+ * three phone rcs (v0.11.6-rc7 to rc9) did not land pictures on their
+ * refresh.  Off, nothing of it runs: no hold (rd_pace_even_hold_at returns
+ * 0), no aim, no desired time, no self-check feed, no clause on the
+ * on-glass line; the start line and the attempt ledger's row say off and
+ * why.
  *
  * With pictures as made (vsync off, uncapped, mailbox, the render thread on)
  * and a GPU that cannot make one a refresh, the pictures reach the screen a
@@ -47,8 +51,8 @@
 #ifndef ICO_RD_PACE_EVEN_H
 #define ICO_RD_PACE_EVEN_H
 
-/* Off by default (an rc variant flips it); ICO_RD_PACE_EVEN=1 (the tests'
-   switch) turns it on */
+/* Off by default (three phone rcs did not land pictures on their refresh);
+   ICO_RD_PACE_EVEN=1 (the tests' switch) turns it on */
 #ifndef RD_PACE_EVEN_DEFAULT
 #define RD_PACE_EVEN_DEFAULT 0
 #endif

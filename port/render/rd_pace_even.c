@@ -474,7 +474,11 @@ size_t rd_pace_even_start_text(bool measured, bool on, const char *why, char *ou
     Out o = {out, size, 0};
     put(&o, "rd: an even number of refreshes a picture: %s (%s)",
         !measured ? "not applicable here" : (on ? "on" : "off by default"), why != NULL ? why : "");
-    if (measured) {
+    if (measured && !on) {
+        /* off: nothing of it runs (no hold, no aim, no desired time, no
+           clause on the on-glass line), so its rules are not described */
+        put(&o, "; not used: the pictures as made (ICO_RD_PACE_EVEN=1 turns it on for the tests)");
+    } else if (measured) {
         put(&o,
             "; with pictures as made, every picture shown for the same N refreshes: N the fewest "
             "with the picture time (the larger of the GPU's median span and the hand-over to "
@@ -486,10 +490,9 @@ size_t rd_pace_even_start_text(bool measured, bool on, const char *why, char *ou
             "desired time (shown no earlier), the content drawn for that refresh; off for the "
             "run where %u of the last %u such pictures were never shown or their acquire and "
             "present call took %.1f ms more than without; it lowers the pictures a second "
-            "where the GPU could make more%s",
+            "where the GPU could make more",
             RD_PE_UP_MS, RD_PE_MISS_UP, RD_PE_MISS_WIN, RD_PE_FLOOR_T_MS, RD_PE_DOWN_MS,
-            RD_PE_DOWN_HOLD_MS, RD_PE_AIM_DESIRED, RD_PE_LOST_MAX, RD_PE_LOST_WIN, RD_PE_BLOCK_MS,
-            on ? "" : "; not used (ICO_RD_PACE_EVEN=1 turns it on)");
+            RD_PE_DOWN_HOLD_MS, RD_PE_AIM_DESIRED, RD_PE_LOST_MAX, RD_PE_LOST_WIN, RD_PE_BLOCK_MS);
     }
     return o.at < size ? o.at : size - 1;
 }
