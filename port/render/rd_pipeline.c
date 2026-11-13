@@ -84,6 +84,7 @@
 #include "rd_cpu_phase.h"
 #include "rd_internal.h"
 #include "rd_passring.h"
+#include "rd_paste_spec.h"
 #include "rd_pipe_finish.h"
 #include "rd_present_scene.h"
 #include "rd_shadow_tile.h"
@@ -1246,7 +1247,8 @@ static void keyVsName(const RdPipeKeyInt *k, char *out, size_t size)
 
 static void keyFsName(const RdPipeKeyInt *k, char *out, size_t size)
 {
-    const char *f = rd__fs_name(k->fs);
+    /* the entries past the name table's count name themselves (rd_paste_spec.c) */
+    const char *f = k->fs == RD_FS_FX_PASTE ? RD_PASTE_SPEC_NAME : rd__fs_name(k->fs);
     if (k->dst == RHI_DST_READ_STORAGE) {
         snprintf(out, size, "%s_dstrov", f);
     } else if (k->dst == RHI_DST_READ_ATTACHMENT) {
@@ -3927,6 +3929,7 @@ RdKeyFamily rd__pipe_key_family(const RdPipeKeyInt *k)
     case RD_FS_FX_BLUR4:
     case RD_FS_FX_GLOWBLUR:
     case RD_FS_FX_FRAME:
+    case RD_FS_FX_PASTE:
     case RD_FS_FX_LOCAL:
     case RD_FS_FX_AURA_ROWS:
     case RD_FS_FX_AURA_SUM:
@@ -4849,6 +4852,23 @@ uint32_t rd__enumerate_reachable_blur(RdPipeKeyInt *out, uint32_t max, uint32_t 
             km.gs.colorMask = 0;
             km.gs.msaa = 4;
             n = rd__add_pipe_key(out, max, n, &km);
+            /* and fx_frame_ps's alpha alone (the glow's mask, rd_fx_plan.c)
+             * drawn in that pass: rd__fx_enumerate's key at Z ALWAYS without
+             * the Z write, no depth, as rd__get_pipeline turns it for a
+             * 4-sample pass (the PowerVR phone made it on first use in
+             * v0.11.6-rc1, 594.6 ms in list 7) */
+            if (g_rd.profile.fxPlan && g_rd.fs[RD_FS_FX_FRAME].id) {
+                RdStateBlock sm;
+                rd__reset_state_block(&sm);
+                sm.ds.colorMask = 0xF;
+                sm.ds.test = rd_test_from_gs(RD_TEST_Z_ALWAYS);
+                sm.ds.test.ztst = RD_ZTST_ALWAYS;
+                sm.ds.zwrite = RD_ZWRITE_OFF;
+                RdPipeKeyInt kf = rd__blur_key(&sm, RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8, NULL, 0);
+                kf.fs = RD_FS_FX_FRAME;
+                kf.gs.msaa = 4;
+                n = rd__add_pipe_key(out, max, n, &kf);
+            }
         }
     }
     n = rd__aura_box_keys(out, max, n);   /* the aura's read in two passes (rd_aura_box.c) */

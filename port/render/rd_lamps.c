@@ -87,6 +87,7 @@
 #include "rd_glow_blur.h"
 #include "rd_lamps.h"
 #include "rd_mesh.h"
+#include "rd_paste_spec.h"
 #include "rd_replay.h"
 #include "rd_shadow_tile.h"
 #include "rd_vis.h"
@@ -600,7 +601,8 @@ void rd__lamps_init(void)
     memset(&s_test, 0, sizeof(s_test));
     note();
     lowresNote();
-    rd__glow_blur_init(); /* the glow's blur in two passes (rd_glow_blur.c) */
+    rd__glow_blur_init();  /* the glow's blur in two passes (rd_glow_blur.c) */
+    rd__paste_spec_init(); /* the glow's paste by its own entry (rd_paste_spec.c) */
 }
 
 void rd__lamps_force(int bits)
@@ -799,6 +801,7 @@ bool rd__lamps_selftest(void)
 {
     const bool area = areaSelftest();
     (void)rd__blur_fold4_selftest(); /* the fold of two pairs (rd_replay_tiler.c), logged there */
+    (void)rd__paste_spec_selftest(); /* the glow's paste by its own entry (rd_paste_spec.c) */
     note();
     return area;
 }
@@ -1583,8 +1586,9 @@ void rd__lamps_shutdown(void)
     }
     memset(&s_lr.copy, 0, sizeof(s_lr.copy));
     s_lr.fresh = false;
-    msFree();                 /* the 4-sample pair (LOWRESMS) */
-    rd__glow_blur_shutdown(); /* its table texture (rd_glow_blur.c) */
+    msFree();                  /* the 4-sample pair (LOWRESMS) */
+    rd__glow_blur_shutdown();  /* its table texture (rd_glow_blur.c) */
+    rd__paste_spec_shutdown(); /* fx_paste_ps's module (rd_paste_spec.c) */
 }
 
 /* WORK2's own depth (w2) from SCENE's (sc): a depth-only pass of WORK2's
@@ -2318,7 +2322,8 @@ static void lowresLine(void)
 void rd_lamps_line(void)
 {
     lowresLine();
-    rd__glow_blur_line(); /* the glow's blur in two passes (rd_glow_blur.c) */
+    rd__glow_blur_line();  /* the glow's blur in two passes (rd_glow_blur.c) */
+    rd__paste_spec_line(); /* the glow's paste by its own entry (rd_paste_spec.c) */
     uint64_t v[9];
     uint64_t *const src[9] = {&s_sum.areas,      &s_sum.whole,  &s_sum.pads,
                               &s_sum.areaTexels, &s_sum.texels, &s_sum.clear,

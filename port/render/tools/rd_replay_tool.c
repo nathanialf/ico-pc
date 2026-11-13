@@ -541,6 +541,7 @@
 #include "rd_late_pass.h"        /* --stats: the late passes on SCENE */
 #include "rd_lamps.h"            /* --stats: the lamps' glow for less */
 #include "rd_glow_blur.h"        /* --stats: the glow blur in two passes */
+#include "rd_paste_spec.h"       /* --stats: the glow's paste by its own entry */
 #include "rd_turn_fold.h"        /* the turn in the present's blit's self-test */
 #include "rd_fill11.h"           /* --stats: the crack fill in list 11's pass */
 #include "rd_present_scene.h"    /* --stats: the present from SCENE */
@@ -3363,6 +3364,23 @@ int main(int argc, char **argv)
                    dump, rd__glow_blur_on() ? "on" : "off", rc1, rp,
                    rw ? ", drawn as recorded: " : "", rw ? rd__glow_blur_why_text(rw) : "",
                    (unsigned long long)gc, (unsigned long long)gp, (unsigned long long)gr);
+        }
+        /* the glow's paste by its own entry (rd_paste_spec.c): this replay's
+         * premultiplied adds drawn by fx_paste_ps of those seen; the run's,
+         * and the last reason one kept fx_frame_ps */
+        {
+            uint64_t pt = 0, ps = 0;
+            int pw = 0;
+            uint32_t rt = 0, rs = 0;
+            const char *ptw = NULL;
+            rd__paste_spec_counts(&pt, &ps, &pw);
+            rd__paste_spec_replay(&rt, &rs);
+            (void)rd__paste_spec_test_state(&ptw);
+            printf("%s: stats: paste spec %s (self-test %s): %u pastes by fx_paste_ps of %u; the "
+                   "run: %llu of %llu%s%s\n",
+                   dump, rd__paste_spec_on() ? "on" : "off", ptw, rt, rs, (unsigned long long)pt,
+                   (unsigned long long)ps, pt < ps ? ", last kept on fx_frame_ps: " : "",
+                   pt < ps ? rd__paste_spec_why_text(pw) : "");
         }
         /* the aura's paste as the alpha alone (rd_aura_paste.c) */
         printf("%s: stats: aura paste %s: %u split (%u rows as the alpha alone, %u band rows), %u "

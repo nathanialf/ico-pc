@@ -970,6 +970,23 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   today's + 4 (every scale takes it, Original 1x included); the poison every PNG the
   same bytes; a chain in two passes over the list at each measured setting. `rd_glow_blur_gl`:
   the phone's setting on OpenGL (llvmpipe). No device: SKIP.
+- `rd_paste_spec_test.c` (`rd_paste_spec`; `rd_paste_spec.cmake`, CPU): the glow's paste by its own
+  entry (`port/render/rd_paste_spec.c`): the bits `fx_paste_ps` holds and reads; the gate on the
+  phone's paste DrawCB taken, with any TFX, FBA, the As form, AREF without ATE and an unset source
+  scale; each held flag, TEXFMT not RGBA32, ATE, a scaled or cropped source refused with its reason;
+  a key with a depth, the subtract, another entry, format or sample count refused; the general key
+  `rd__fx_enumerate`'s premultiplied add, its twin added by the module's stand-in (one key more);
+  `ICO_RD_PASTE_SPEC`'s words; the attempt ledger's row through its decider.
+- `rd_paste_spec_ab.cmake` (`rd_paste_spec_ab`, `rd_paste_spec_sabotage`, `rd_paste_spec_gl`;
+  `rd_paste_spec.cmake`): every dump of `tools/lamps_dumps.txt` and `tools/glow_light_dumps.txt`
+  (machine-local; a listed dump that is absent FAILS where `/primary/dev/ico-dumps` exists),
+  `ICO_RD_PASTE_SPEC=0` against `=1`, `--pass-dump --stats`, at the phone's Resolution Auto under
+  `ICO_VK_FAKE_LIMITS=moltenvk` with `ICO_RD_LATE_PASS=1`, Enhanced 2x at 16:9 and (the lamps list)
+  Original 4:3 at 1x: every PNG the same bytes, the same draws and passes and pastes seen, arm 0 off,
+  arm 1 on with its self-test passed, at least one paste by `fx_paste_ps` at the phone's setting and
+  2x. `_sabotage`: the lamps list at the phone's setting with `=sabotage`: the self-test failed at a
+  texel, no paste by it, the same bytes. `_gl` (label gl): the lamps list on OpenGL: off (the module
+  is Vulkan's alone), the same bytes.
 - `rd_vu_compact_test.c` (`rd_vu_compact`; `rd_vu_compact.cmake`, CPU): the index compaction's pure
   parts (`rd_vu_compact.c`): the plan's places (two calls one after the other in the plane, their
   workgroups), its raises (the first call's values from 0, the next one's past them, mod 2^32),

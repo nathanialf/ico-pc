@@ -107,6 +107,16 @@ enum {
        (rd_early_start_rows) instead of the largest the memory bound
        allowed; count the record's growths in play (rd__vu_rec_grew) */
     ICO_ATT_REC_NEED,
+    /* rd_paste_spec.c: the glow's paste drawn by its own entry (fx_paste_ps,
+       fx_frame_ps's paste path alone) behind its start-up self-test; count
+       the pastes drawn by it, second count the premultiplied adds that kept
+       fx_frame_ps */
+    ICO_ATT_PASTE_SPEC,
+    /* the glow chain in three passes (R folded into the first blur pass, E
+       and A into the second): not built, refused by its measurement (each
+       folded texel would recompute about 14 and 28 taps where the passes
+       load 8 and 7: v0.11.5's FOLD4, which the phone measured slower) */
+    ICO_ATT_CHAIN3,
     ICO_ATT_COUNT
 };
 
@@ -216,5 +226,12 @@ int ico_attempt_decide_compaction(int compute, const char *notWhy, int arm, int 
    the Intel driver row); why the decision's words (a string that outlives the row: the device's
    RhiLimits.subpassWhy or the probe's verdict) */
 void ico_attempt_decide_subpass(int route, int on, int refused, int offDefault, const char *why);
+/* the glow's paste by its own entry (rd_paste_spec.c, at start-up and after
+   its self-test): module fx_paste_ps was made (Vulkan; 0 on the other
+   backends), env the tests' switch (ICO_RD_PASTE_SPEC: -1 unset, 0, 1; its
+   sabotage counts as 1), defaultOn RD_PASTE_SPEC_DEFAULT, selftest its
+   start-up self-test (-1 not run, 0 failed, 1 passed).  1 when the paste
+   may take it (each draw still passes its gate), else 0 */
+int ico_attempt_decide_paste_spec(int module, int env, int defaultOn, int selftest);
 
 #endif

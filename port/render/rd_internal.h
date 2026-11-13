@@ -1589,7 +1589,12 @@ typedef enum RdFsId {
     RD_FS_DEPTH_DOWN, /* depth_down_ps: SCENE's depth at the GS size (rd_lamps.h RD_LAMPS_LOWRES) */
     RD_FS_DEPTH_DOWN_MS, /* depth_down_ms_ps: the same per sample (RD_LAMPS_LOWRESMS) */
     RD_FS_FX_GLOWBLUR,   /* fx_glowblur_ps: the glow blur in two passes (rd_glow_blur.h) */
-    RD_FS_COUNT
+    RD_FS_COUNT,
+    /* past the count: entries rd__gpu_init's loop and its name table leave
+     * alone, made, named and destroyed by their own file (g_rd.fs and its
+     * twins' arrays hold RD_FS_SLOTS) */
+    RD_FS_FX_PASTE = RD_FS_COUNT, /* fx_paste_ps: the glow's paste (rd_paste_spec.h) */
+    RD_FS_SLOTS
 } RdFsId;
 
 #define RD_FS_OPTIONAL_FIRST RD_FS_SPRITE_PLANES
@@ -2828,7 +2833,7 @@ typedef struct RdContext {
     RhiBindGroupLayout layoutFrame, layoutDraw, layoutTex, layoutInt;
     RhiBindGroupLayout layoutVu; /* t0 stream, b1 DrawCB, b2 VuCB, b3 VuBoneCB, t4 record,
                                     t5 the ring */
-    RhiShader vs[RD_VS_COUNT], fs[RD_FS_COUNT];
+    RhiShader vs[RD_VS_COUNT], fs[RD_FS_SLOTS];
     RdProfile profile; /* rd__profile_init */
     /* the fallback's program entries (rd__vu_policy_init; docs/port/RENDER.md
      * "The fallback entries"): vsPlain the ten mesh entries' plain variants
@@ -2906,7 +2911,7 @@ typedef struct RdContext {
     /* the *_nodual twins of the gs_dual_out entries (0 for the
      * others), and whether the two-pass blend is in force (no dualSrcBlend,
      * ICO_RD_NO_DUAL or rd_set_no_dual) */
-    RhiShader fsNoDual[RD_FS_COUNT];
+    RhiShader fsNoDual[RD_FS_SLOTS];
     bool noDual;
     /* 1x sheet text through font_sheet_ps instead of the CPU bake
      * (ICO_RD_SHEET_SHADER=1, rd_core.c rd_init; rd__set_sheet_shader for
@@ -2918,7 +2923,7 @@ typedef struct RdContext {
      * target as a storage texture or an input attachment) */
     uint8_t dstMode;
     uint8_t dstModes;
-    RhiShader fsDstRov[RD_FS_COUNT], fsDstAtt[RD_FS_COUNT];
+    RhiShader fsDstRov[RD_FS_SLOTS], fsDstAtt[RD_FS_SLOTS];
     RhiBindGroupLayout layoutDstStorage, layoutDstAttach;
     /* GS state as shader data (rd_uber.c): in force with the attachment
      * read (rd__uber_on: dstMode RD_BLEND_EXACT_ATTACHMENT), set by

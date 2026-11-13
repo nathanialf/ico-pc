@@ -168,6 +168,41 @@ uint4 fx_load(Texture2D<float4> t, int2 c)
 #error "fx_frame_ps is the UNORM build with its textures in t1, t2"
 #endif
 
+// fx_paste_ps (ICO_FX_FRAME=1 ICO_FX_PASTE=1): fx_frame_ps for the glow's
+// paste alone (WORK3 into SCENE through the premultiplied add,
+// port/render/rd_paste_spec.c), the same functions called in the same order
+// with the words the paste can never change held as constants, so the
+// branches it never takes and their loads are not in the module:
+//   FX_FLAGS        TEXTURED and OUT_PREMUL set; ABOVE1X, ALPHA_ONLY,
+//                   GLOW_MASK, FOLD, ABE, PABE, DATE, DATM, DST clear; the
+//                   paste's own bits (TFX, TCC, LINEAR, CLAMP_S, CLAMP_T,
+//                   FBA) read from g_mode.x as fx_frame_ps reads them
+//   FX_TEXA_WORD    TEXFMT RGBA32 (TEXA leaves the texel as it is,
+//                   gs_texa_expand)
+//   FX_ATEST_WORD   no alpha test
+//   fx_src_scale    1 on both axes, fx_src_crop16 0 (a work buffer: t1 at
+//                   scale 1, no Full pixel crop)
+// The CPU draws through it only a sprite whose DrawCB holds exactly those
+// values (rd_paste_spec.c rd__paste_spec_take), so every value it computes
+// is fx_frame_ps's; a start-up self-test compares the two draws byte for
+// byte on the device (rd__paste_spec_selftest).  The other builds read the
+// words as before.
+#if defined(ICO_FX_PASTE) && !defined(ICO_FX_FRAME)
+#error "fx_paste_ps is fx_frame_ps's build (ICO_FX_FRAME=1) for the glow's paste"
+#endif
+#ifdef ICO_FX_PASTE
+#define FX_PASTE_FIXED (FXF_TEXTURED | FXF_OUT_PREMUL)
+#define FX_PASTE_FREE                                                                              \
+    ((3u << FXF_TFX_SHIFT) | FXF_TCC | FXF_LINEAR | FXF_CLAMP_S | FXF_CLAMP_T | FXF_FBA)
+#define FX_FLAGS ((g_mode.x & FX_PASTE_FREE) | FX_PASTE_FIXED)
+#define FX_TEXA_WORD (TEXFMT_RGBA32 << 8)
+#define FX_ATEST_WORD 0u
+#else
+#define FX_FLAGS g_mode.x
+#define FX_TEXA_WORD g_mode.y
+#define FX_ATEST_WORD g_mode.z
+#endif
+
 // The destination at the fragment's texel px, 0..255: the snapshot's, or
 // the open pass's own by local read (fx_local_ps)
 uint4 fx_dest(int2 px)
@@ -182,14 +217,22 @@ uint4 fx_dest(int2 px)
 // t1 texels per GS texel, 1 when unset.
 float2 fx_src_scale()
 {
+#ifdef ICO_FX_PASTE
+    return float2(1.0, 1.0); // a work buffer (the CPU's condition)
+#else
     return float2(g_scale.x > 0.0 ? g_scale.x : 1.0, g_scale.y > 0.0 ? g_scale.y : 1.0);
+#endif
 }
 
 // t1's Full pixel crop in 1/16 texels: the texels of the GS frame left out
 // at its left (g_scale.z times its width), 0 on every other texture
 int fx_src_crop16()
 {
+#ifdef ICO_FX_PASTE
+    return 0; // no crop on a work buffer (the CPU's condition)
+#else
     return g_scale.z != 0.0 ? int(round(g_scale.z * g_tex.z * 16.0)) : 0;
+#endif
 }
 
 // fx_texel's addressing on one axis, which the other axis does not change:
@@ -221,7 +264,7 @@ int fx_axis_y(int c, uint flags)
 // The texel at addressed coordinates (fx_axis_x, fx_axis_y), after TEXA
 uint4 fx_texel_at(int x, int y)
 {
-    return gs_texa_expand(fx_load(g_texture, int2(x, y)), g_mode.y & 0xFFu, g_mode.y >> 8);
+    return gs_texa_expand(fx_load(g_texture, int2(x, y)), FX_TEXA_WORD & 0xFFu, FX_TEXA_WORD >> 8);
 }
 
 #if !defined(ICO_FX_FRAME) && !defined(ICO_FX_DST_LOCAL)
@@ -649,7 +692,7 @@ float4 fx_sprite_out(uint4 col, int2 px, uint flags)
 {
     // alpha test
     bool keepDestAlpha = false;
-    const bool ate = ((g_mode.z >> 8) & 1u) != 0u;
+    const bool ate = ((FX_ATEST_WORD >> 8) & 1u) != 0u;
     if (ate && !gs_alpha_pass(g_mode.z & 0xFFu, g_mode.w, col.a)) {
         const uint afail = (g_mode.z >> 16) & 3u;
         if (afail == AFAIL_KEEP || afail == AFAIL_ZB_ONLY) {
@@ -688,7 +731,7 @@ float4 fx_sprite_out(uint4 col, int2 px, uint flags)
 
 float4 fx_sprite_ps(float4 pos : SV_Position) : SV_Target0
 {
-    const uint flags = g_mode.x;
+    const uint flags = FX_FLAGS; // g_mode.x (fx_paste_ps: its constant bits, above)
     const int2 px = int2(pos.xy);
     // the pixel's GS window coordinate, 12.4: px * 16 at scale 1.  On a
     // scaled target the texel's GS pixel (its s x s block) for the coverage,

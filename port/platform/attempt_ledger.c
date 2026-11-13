@@ -33,6 +33,9 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
     [ICO_ATT_VU_COMPUTE_CLASS] = {"VU record by compute on the PowerVR", "dispatches", NULL},
     [ICO_ATT_TURN_FOLD] = {"turn in the present's blit", "presents", "kept the turn pass"},
     [ICO_ATT_REC_NEED] = {"VU record sized from need", "growths in play", NULL},
+    [ICO_ATT_PASTE_SPEC] = {"the glow's paste by its own entry", "pastes",
+                            "kept on the general entry"},
+    [ICO_ATT_CHAIN3] = {"the glow chain in three passes", "chains", NULL},
 };
 
 /* the rows' live values (__atomic), and the block text's last counts (the
@@ -45,12 +48,15 @@ static struct {
 } s_att[ICO_ATT_COUNT] = {
     [ICO_ATT_ADRENO_B] = {ICO_ATT_NOT_BUILT, NULL, 0, 0, 0, 0},
     [ICO_ATT_BLEND_CONST] = {ICO_ATT_NOT_BUILT, NULL, 0, 0, 0, 0},
+    [ICO_ATT_CHAIN3] = {ICO_ATT_NOT_BUILT, NULL, 0, 0, 0, 0},
 };
 
 /* a row's state at the start */
 static int startState(int i)
 {
-    return i == ICO_ATT_ADRENO_B || i == ICO_ATT_BLEND_CONST ? ICO_ATT_NOT_BUILT : ICO_ATT_NOT_SET;
+    return i == ICO_ATT_ADRENO_B || i == ICO_ATT_BLEND_CONST || i == ICO_ATT_CHAIN3
+               ? ICO_ATT_NOT_BUILT
+               : ICO_ATT_NOT_SET;
 }
 
 static uint32_t s_serial; /* __atomic */
@@ -428,4 +434,33 @@ void ico_attempt_decide_subpass(int route, int on, int refused, int offDefault, 
         st = ICO_ATT_OFF_DEFAULT;
     }
     ico_attempt_state(ICO_ATT_SUBPASS, st, why);
+}
+
+int ico_attempt_decide_paste_spec(int module, int env, int defaultOn, int selftest)
+{
+    IcoAttemptState st = ICO_ATT_NA;
+    const char *why;
+    int on = 0;
+    if (env == 0) {
+        st = ICO_ATT_OFF_DEFAULT;
+        why = "ICO_RD_PASTE_SPEC=0: the tests' switch";
+    } else if (!module) {
+        why = "fx_paste_ps is made under Vulkan alone";
+    } else if (env != 1 && !defaultOn) {
+        st = ICO_ATT_OFF_DEFAULT;
+        why = "off by default (RD_PASTE_SPEC_DEFAULT 0)";
+    } else if (selftest == 0) {
+        st = ICO_ATT_REFUSED;
+        why = "fx_paste_ps's draw differs from fx_frame_ps's bytes on this device";
+    } else if (selftest < 0) {
+        st = ICO_ATT_OFF_DEFAULT;
+        why = "its self-test not run yet";
+    } else {
+        st = ICO_ATT_ON;
+        on = 1;
+        why = env == 1 ? "ICO_RD_PASTE_SPEC=1, self-test passed"
+                       : "self-test passed: the same bytes as fx_frame_ps";
+    }
+    ico_attempt_state(ICO_ATT_PASTE_SPEC, st, why);
+    return on;
 }
