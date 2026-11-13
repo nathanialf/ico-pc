@@ -2144,8 +2144,9 @@ reads back when the frame slot comes round. The draws' invocation figures (`wind
 `perf scene`, `compare`) count a left-out triangle as one invocation (its filler) and say so:
 `3 a triangle, after the index compaction 1 a triangle it left out: A of B`.
 The start lines: `rd: VU index compaction: on where its start-up self-test passes: ... (<the
-ledger's why>; RD_VU_COMPACT_DEFAULT 1, the Arm class's RD_VU_COMPACT_ARM_DEFAULT 1; this device
-is of the Arm class)` at the pre-pass's start, then `rd: VU index compaction: on: passed its
+ledger's why>; the Arm class (vendor 0x13B5): RD_VU_COMPACT_ARM_DEFAULT 1)` at the pre-pass's
+start (elsewhere `not the Arm class (vendor 0x....): RD_VU_COMPACT_DEFAULT 1`: the class the
+decision was taken for and the define that took it), then `rd: VU index compaction: on: passed its
 start-up self-test with the record's (...)` or `rd: VU index compaction: refused by its start-up
 self-test (the record's test with it: <the difference>; without it the test passed): every draw
 reads its own index list`.
