@@ -1024,10 +1024,11 @@ static double s_drainAtMs, s_drainEndMs;
 static RdRebase s_rebase;
 static bool s_asMade;
 
-double rd_present_even_hold(double untilDeadlineMs, double tickMs)
+double rd_present_even_hold(double untilDeadlineMs, double tickMs, double untilRuleMs)
 {
     /* the poster's thread, as made only (rd_pace_even.h) */
-    return s_asMade ? rd_pace_even_hold_at(rd__now_ms(), untilDeadlineMs, tickMs) : 0.0;
+    return s_asMade ? rd_pace_even_hold_at(rd__now_ms(), untilDeadlineMs, tickMs, untilRuleMs)
+                    : 0.0;
 }
 
 void rd_present_as_made(bool on)

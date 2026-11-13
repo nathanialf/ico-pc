@@ -172,6 +172,29 @@ static PaceRtHold rt_further_hold(Uint64 now, Uint64 refresh, Uint64 period, boo
     return why;
 }
 
+/* The even cadence (rd.h rd_present_even_hold): for a further present, the
+   time from now at which the step rule (rt_further_hold's question, asked
+   of the pure rule at later times, pace_rt_further_trace) would first hold
+   one handed over then, within limitNs; 0 when it would not (or holds it
+   now: the guard's own) */
+static double even_rule_ms(Uint64 now, Uint64 limitNs, Uint64 refresh, Uint64 period, bool asMade)
+{
+    IcoRtPlan p;
+    PaceRtAsk q;
+    PaceRtTrace t;
+
+    if (!ico_render_thread_plan(&p)) {
+        return 0.0;
+    }
+    for (Uint64 dt = 0; dt <= limitNs; dt += 500000ull) {
+        rt_ask(&q, &p, now + dt, refresh, period, asMade);
+        if (pace_rt_further_trace(&q, &s_pres.rtPipe, &t) != PACE_RT_GO) {
+            return dt == 0 ? 0.0 : (double)dt / 1e6;
+        }
+    }
+    return 0.0;
+}
+
 /* A present handed to the render thread at now: the pipeline's prediction
    (pace_policy.h PaceRtPipe) takes it, its reads' end by the estimates */
 static void rt_pipe_posted(Uint64 now, Uint64 refresh, Uint64 period)
@@ -1194,12 +1217,25 @@ void window_present_pace(int hz)
         }
         /* the even cadence (rd.h rd_present_even_hold, rd_pace_even.h; off by
            default, ICO_RD_PACE_EVEN=1): with pictures as made the hand-over
-           held until its picture's GPU end is due half a refresh before the
-           refresh it is aimed at; past this step's deadline the step ends
-           and the next one asks again */
+           held until its picture's GPU end is due a refresh before the
+           refresh it is aimed at (its present carries that refresh as its
+           desired time); past this step's deadline the step ends and the
+           next one asks again */
         if (asMade) {
-            const double holdMs = rd_present_even_hold(
-                now < s_deadline ? (double)(s_deadline - now) / 1e6 : 0.0, (double)tick / 1e6);
+            const double untilMs = now < s_deadline ? (double)(s_deadline - now) / 1e6 : 0.0;
+            double holdMs = rd_present_even_hold(untilMs, (double)tick / 1e6, 0.0);
+
+            if (holdMs > 0.01 && s_pres.presentedFrame == s_pres.frame) {
+                /* a further picture: asked again with the time the step
+                   rule would hold it from (the plan moves it before that
+                   where its refreshes go round the game's tick) */
+                const double ruleMs =
+                    even_rule_ms(now, (Uint64)(holdMs * 1e6) + 1000000ull, refresh, period, asMade);
+
+                if (ruleMs > 0.0) {
+                    holdMs = rd_present_even_hold(untilMs, (double)tick / 1e6, ruleMs);
+                }
+            }
 
             if (holdMs > 0.01) {
                 const Uint64 wake = now + (Uint64)(holdMs * 1e6);

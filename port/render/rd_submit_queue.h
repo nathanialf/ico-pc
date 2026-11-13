@@ -70,6 +70,9 @@ typedef struct RdSubmitJob {
     double presentLockMs, presentCallMs, presentPollMs, presentEndMs;
     /* the display-times id the present carried (rhi_present_glass; 0 none) */
     uint32_t glassId;
+    /* the present's desired time (the even cadence's, rd_pace_even.h; the
+       display's clock, ms; 0 none): rhi_present_desire before it */
+    double desiredMs;
 } RdSubmitJob;
 
 /* the 10 s block (rd__sq_block_take): the jobs finished and their means in

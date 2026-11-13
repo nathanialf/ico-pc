@@ -67,7 +67,46 @@ static void decide(bool asMade)
     }
 }
 
-static void gather(double nowMs, double untilDeadlineMs, double tickMs, RdPaceEvenIn *in)
+/* the self-check's input from the collecting thread (rd_pace_even_note_present):
+   the presents' acquire and call in us, summed, with and without a desired
+   time; the poster takes them in batches */
+static uint64_t s_presUs[2], s_presN[2]; /* __atomic */
+
+void rd_pace_even_note_present(double ms, bool desired)
+{
+    const int k = desired ? 1 : 0;
+    __atomic_add_fetch(&s_presUs[k], (uint64_t)(ms > 0.0 ? ms * 1000.0 + 0.5 : 0.0),
+                       __ATOMIC_RELAXED);
+    __atomic_add_fetch(&s_presN[k], 1u, __ATOMIC_RELAXED);
+}
+
+static void offLine(void)
+{
+    fprintf(stderr,
+            "rd: an even number of refreshes a picture: off for this run (its self-check: %s); "
+            "the pictures as made\n",
+            rd_pace_even_off_text(s_e.offWhy));
+}
+
+/* a batch of RD_PE_BLOCK_N presents of a kind taken into the self-check */
+static void checkPresents(void)
+{
+    for (int k = 0; k < 2; k++) {
+        const uint64_t n = __atomic_load_n(&s_presN[k], __ATOMIC_RELAXED);
+        if (n < RD_PE_BLOCK_N) {
+            continue;
+        }
+        const uint64_t us = __atomic_exchange_n(&s_presUs[k], 0u, __ATOMIC_RELAXED);
+        const uint64_t m = __atomic_exchange_n(&s_presN[k], 0u, __ATOMIC_RELAXED);
+        if (m != 0u &&
+            rd_pace_even_presents(&s_e, (double)us / 1000.0 / (double)m, (uint32_t)m, k == 1)) {
+            offLine();
+        }
+    }
+}
+
+static void gather(double nowMs, double untilDeadlineMs, double tickMs, double untilRuleMs,
+                   RdPaceEvenIn *in)
 {
     memset(in, 0, sizeof(*in));
     in->nowMs = nowMs;
@@ -76,17 +115,19 @@ static void gather(double nowMs, double untilDeadlineMs, double tickMs, RdPaceEv
     in->periodMs = f->periodMs;
     (void)rd_pace_gpu_figures(&in->gMs, &in->dMs, &in->prevEndMs);
     in->stepEndMs = untilDeadlineMs > 0.0 ? nowMs + untilDeadlineMs : 0.0;
+    in->ruleEndMs = untilRuleMs > 0.0 ? nowMs + untilRuleMs : 0.0;
     in->tickMs = tickMs;
 }
 
-double rd_pace_even_hold_at(double nowMs, double untilDeadlineMs, double tickMs)
+double rd_pace_even_hold_at(double nowMs, double untilDeadlineMs, double tickMs, double untilRuleMs)
 {
     decide(true); /* the row and its start line, on or off */
     if (!rd_pace_even_on()) {
         return 0.0;
     }
+    checkPresents();
     const bool first = !s_e.planned;
-    gather(nowMs, untilDeadlineMs, tickMs, &s_in);
+    gather(nowMs, untilDeadlineMs, tickMs, untilRuleMs, &s_in);
     RdPaceEvenPlan p;
     rd_pace_even_plan(&s_e, &s_in, &p);
     s_lastHow = p.how;
@@ -97,8 +138,9 @@ double rd_pace_even_hold_at(double nowMs, double untilDeadlineMs, double tickMs)
     return p.how == RD_PE_AIMED ? p.holdMs : 0.0;
 }
 
-double rd_pace_even_take_live(double endPredMs, bool kept)
+double rd_pace_even_take_live(double endPredMs, bool kept, double *desiredMs)
 {
+    *desiredMs = 0.0;
     if (!rd_pace_even_on()) {
         return 0.0;
     }
@@ -120,6 +162,11 @@ double rd_pace_even_take_live(double endPredMs, bool kept)
     const double target = rd_pace_even_take(&s_e, &s_in, endPredMs, false, &late);
     rd_pace_even_tally_take(target > 0.0 ? RD_PE_AIMED : RD_PE_NO_PLAN, late);
     if (target > 0.0) {
+        /* not shown before its refresh (rhi.h rhi_present_desire, carried
+           by the note to the present) */
+        if (s_e.desire) {
+            *desiredMs = rd_pace_even_desired_ms(target, s_in.periodMs);
+        }
         ico_attempt_fire(ICO_ATT_PACE_EVEN, 1u);
         if (late) {
             ico_attempt_fire2(ICO_ATT_PACE_EVEN, 1u);
@@ -144,9 +191,23 @@ void rd_pace_even_seen(const RdPaceScreenSample *s)
         if (s_aims[i].endMs == s->endPredMs) {
             const double ref = s->refreshMs > 0.0 ? s->refreshMs : s_aims[i].refreshMs;
             const int score = rd_pace_screen_score(s_aims[i].targetMs, s->actualMs, ref);
+            const double target = s_aims[i].targetMs;
             rd_pace_even_shown(&s_e, score);
             rd_pace_even_tally_shown(score);
             s_aims[i].endMs = 0.0;
+            if (rd_pace_even_lost(&s_e, false)) {
+                offLine();
+            }
+            /* the aims before it never shown: replaced (the self-check) */
+            for (uint32_t j = 0; j < AIMS; j++) {
+                if (s_aims[j].endMs > 0.0 && s_aims[j].targetMs < target) {
+                    s_aims[j].endMs = 0.0;
+                    rd_pace_even_tally_lost();
+                    if (rd_pace_even_lost(&s_e, true)) {
+                        offLine();
+                    }
+                }
+            }
             return;
         }
     }
@@ -155,7 +216,13 @@ void rd_pace_even_seen(const RdPaceScreenSample *s)
 void rd_pace_even_paced(void)
 {
     if (s_e.n != 0u || s_e.planned || s_e.lastTargetMs > 0.0) {
+        /* the self-check's verdict and base kept for the run */
+        const RdPaceEven keep = s_e;
         rd_pace_even_reset(&s_e);
+        s_e.off = keep.off;
+        s_e.offWhy = keep.offWhy;
+        s_e.baseMs = keep.baseMs;
+        s_e.baseN = keep.baseN;
         memset(s_aims, 0, sizeof s_aims);
     }
     s_lastHow = -1;

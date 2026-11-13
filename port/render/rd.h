@@ -2873,6 +2873,9 @@ typedef struct RdPerfRecord {
     uint8_t rule;
     double ruleTickMs;
     double screenEndMs, screenAtMs;
+    /* the even cadence's desired present time (rd_pace_even.h; the
+       display's clock, ms; 0 none), from the note */
+    double desiredMs;
     uint32_t glassId;
     /* the replay changed effect more often than there were timestamps:
        the later changes were not timed apart (their time stayed with the
@@ -3536,10 +3539,11 @@ void rd_even_line(double refreshMs);
 void rd_present_as_made(bool on);
 /* the even cadence (rd_pace_even.h; off by default, ICO_RD_PACE_EVEN=1): with
  * pictures as made, how long the window's pacer holds the next hand-over
- * (ms; 0 none), untilDeadlineMs the time left before the game's next step,
- * tickMs the game's frame; the window's thread (window_present.c
- * window_present_pace, the poster's) */
-double rd_present_even_hold(double untilDeadlineMs, double tickMs);
+  * (ms; 0 none), untilDeadlineMs the time left before the game's next step,
+ * tickMs the game's frame, untilRuleMs for a further picture the time from
+ * which the step rule would hold it (0 none); the window's thread
+ * (window_present.c window_present_pace, the poster's) */
+double rd_present_even_hold(double untilDeadlineMs, double tickMs, double untilRuleMs);
 /* the plan's switch: on, ICO_RD_GLOW_LIGHT=0 off (the tests' A/B, no config
  * key); rd__glow_light_force sets it (-1 the environment's) and forgets the
  * plan's off and the plan frame before */

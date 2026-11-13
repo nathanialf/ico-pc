@@ -66,7 +66,9 @@ double rd_pace_rules_pick(double raw, double appliedMs, double wouldMs, double c
        frame's present (its GPU work not in the queue model, rd_thread.c
        presentRebase) neither placed, sampled nor scored */
     const double endPred = kept ? 0.0 : rd_pace_gpu_pred_end();
-    const double target = rd_pace_even_take_live(endPred, kept);
+    double desiredMs = 0.0;
+    const double target = rd_pace_even_take_live(endPred, kept, &desiredMs);
+    note->desiredMs = desiredMs;
     const RdPaceScreenIn in = {handMs, frame, closeAtMs, tickMs, endPred, rawOther, kept, target};
     RdPaceScreenPlace sp;
     rd_pace_screen_step(&in, &sp);

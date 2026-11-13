@@ -3,7 +3,11 @@
  *
  * Where the device offers VK_GOOGLE_display_timing on a window, the
  * extension is enabled and every present chains one VkPresentTimeGOOGLE:
- * an id (1, 2, ...) and a desiredPresentTime of 0.  The specification
+ * an id (1, 2, ...) and a desiredPresentTime of 0 unless the even cadence
+ * asked one for that present (rhi_present_desire: the time of the refresh
+ * it was aimed at less half a refresh, on the clock actualPresentTime is
+ * on, so it is the display's own times' clock and needs no mapping).  The
+ * specification
  * (VkPresentTimeGOOGLE): "desiredPresentTime specifies that the image
  * must not be displayed to the user earlier than this time ... A value of
  * zero specifies that the presentation engine may display the image at
@@ -42,6 +46,7 @@ static uint32_t s_nextId;          /* under the swapchain's lock */
 static VkSwapchainKHR s_refreshSc; /* the swapchain the refresh was read for */
 static uint64_t s_refreshNs;       /* __atomic */
 static _Thread_local uint32_t t_lastId;
+static _Thread_local uint64_t t_desire; /* the next present's desired time (rhi_present_desire) */
 
 /* the ring: written under the swapchain's lock (one writer at a time),
    read by the renderer's one reader */
@@ -122,7 +127,10 @@ const void *vkr_glass_chain(VkPresentTimesInfoGOOGLE *info, VkPresentTimeGOOGLE 
         return next; /* the stand-in chains nothing */
     }
     t->presentID = s_nextId;
-    t->desiredPresentTime = 0; /* any time: nothing asked of the display */
+    /* any time (0: nothing asked of the display), or the even cadence's
+       time for this present (rhi_present_desire, the display's clock) */
+    t->desiredPresentTime = t_desire;
+    t_desire = 0;
     *info = (VkPresentTimesInfoGOOGLE){.sType = VK_STRUCTURE_TYPE_PRESENT_TIMES_INFO_GOOGLE,
                                        .pNext = next,
                                        .swapchainCount = 1,
@@ -139,6 +147,11 @@ static void ringPut(const RhiGlassTime *g)
     }
     s_ring[head % GLASS_RING] = *g;
     __atomic_store_n(&s_head, head + 1u, __ATOMIC_RELEASE);
+}
+
+void rhi_present_desire(uint64_t desiredNs)
+{
+    t_desire = s_on && !s_fake ? desiredNs : 0;
 }
 
 void vkr_glass_presented(VkSwapchainKHR sc, uint32_t id, bool shown)

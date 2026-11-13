@@ -87,6 +87,8 @@ static void tail(RdSubmitJob *j)
         }
     }
     if (j->present) {
+        /* the even cadence's desired time for this present (0: any time) */
+        rhi_present_desire(j->desiredMs > 0.0 ? (uint64_t)(j->desiredMs * 1e6) : 0u);
         rhi_present();
     }
     j->presentMs = rd__now_ms() - t1;
@@ -459,6 +461,7 @@ bool rd__submit_defer(RhiCommandList cl, RhiCommandList cl2, bool present)
     t_job.slot = (uint8_t)(rhi_frame_slot() % RHI_FRAMES_IN_FLIGHT);
     t_job.present = present && rd__present_will_show();
     t_job.replay = g_rdPerf.replay;
+    t_job.desiredMs = g_rdPerf.desiredMs;
     t_kept = true;
     return true;
 }

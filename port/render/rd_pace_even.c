@@ -25,6 +25,17 @@
 void rd_pace_even_reset(RdPaceEven *e)
 {
     memset(e, 0, sizeof(*e));
+    e->desire = true;
+}
+
+double rd_pace_even_aim_share(const RdPaceEven *e)
+{
+    return e->desire ? RD_PE_AIM_DESIRED : RD_PE_AIM;
+}
+
+double rd_pace_even_desired_ms(double r, double p)
+{
+    return r - 0.5 * p;
 }
 
 uint32_t rd_pace_even_n_for(double t, double p, double m)
@@ -55,10 +66,63 @@ static double earliestEnd(const RdPaceEvenIn *in)
     return (before > base ? before : base) + in->gMs;
 }
 
+bool rd_pace_even_lost(RdPaceEven *e, bool lost)
+{
+    const uint32_t mask = RD_PE_LOST_WIN >= 32u ? 0xFFFFFFFFu : ((1u << RD_PE_LOST_WIN) - 1u);
+    e->lostBits = ((e->lostBits << 1) | (lost ? 1u : 0u)) & mask;
+    if (!e->off && bits(e->lostBits) >= RD_PE_LOST_MAX) {
+        e->off = true;
+        e->offWhy = RD_PE_WHY_LOST;
+        e->planned = false;
+        return true;
+    }
+    return false;
+}
+
+bool rd_pace_even_presents(RdPaceEven *e, double meanMs, uint32_t n, bool desired)
+{
+    if (n == 0u) {
+        return false;
+    }
+    if (!desired) {
+        /* the base: the running mean of those without a desired time */
+        e->baseMs = e->baseN == 0u
+                        ? meanMs
+                        : e->baseMs + (meanMs - e->baseMs) * (double)n / (double)(e->baseN + n);
+        e->baseN += n;
+        return false;
+    }
+    if (!e->off && e->baseN >= RD_PE_BASE_N && n >= RD_PE_BLOCK_N &&
+        meanMs > e->baseMs + RD_PE_BLOCK_MS) {
+        e->off = true;
+        e->offWhy = RD_PE_WHY_BLOCK;
+        e->planned = false;
+        return true;
+    }
+    return false;
+}
+
+const char *rd_pace_even_off_text(int why)
+{
+    switch (why) {
+    case RD_PE_WHY_LOST:
+        return "pictures held for their refresh were not shown (the compositor replaced them)";
+    case RD_PE_WHY_BLOCK:
+        return "the presents with a desired time waited longer in their acquire and present call";
+    default:
+        return "";
+    }
+}
+
 void rd_pace_even_plan(RdPaceEven *e, const RdPaceEvenIn *in, RdPaceEvenPlan *out)
 {
     memset(out, 0, sizeof(*out));
     out->n = e->n;
+    if (e->off) {
+        out->how = RD_PE_OFF;
+        e->planned = false;
+        return;
+    }
     if (!in->fit || !(in->periodMs > 0.0)) {
         out->how = RD_PE_NO_FIT;
         e->lastTargetMs = 0.0; /* aligned again when it can aim */
@@ -91,7 +155,10 @@ void rd_pace_even_plan(RdPaceEven *e, const RdPaceEvenIn *in, RdPaceEvenPlan *ou
         e->missBits = 0;
         e->tRefMs = t;
     }
-    const uint32_t up = rd_pace_even_n_for(t, p, RD_PE_UP_MS);
+    /* up at once where the picture does not fit N refreshes at all (with a
+       desired time the aim's whole refresh absorbs the rest), with the
+       margin otherwise; from the start with the margin */
+    const uint32_t up = rd_pace_even_n_for(t, p, e->desire && e->n != 0u ? 0.0 : RD_PE_UP_MS);
     const uint32_t n0 = e->n;
     if (e->n == 0u || up > e->n) {
         e->n = up;
@@ -150,18 +217,36 @@ void rd_pace_even_plan(RdPaceEven *e, const RdPaceEvenIn *in, RdPaceEvenPlan *ou
     if (!e->planned && !(r > 0.0)) {
         /* the first refresh whose aim the earliest end makes */
         r = in->anchorMs +
-            ceil((early + in->xMs + RD_PE_AIM * p + e->biasMs - in->anchorMs) / p) * p;
+            ceil((early + in->xMs + rd_pace_even_aim_share(e) * p + e->biasMs - in->anchorMs) / p) *
+                p;
     }
-    const double aim = r - in->xMs - RD_PE_AIM * p - e->biasMs;
+    const double share = rd_pace_even_aim_share(e);
+    const double aim = r - in->xMs - share * p - e->biasMs;
     const double hand = aim - in->gMs - in->dMs;
     out->how = RD_PE_AIMED;
     double at = hand > in->nowMs ? hand : in->nowMs;
-    if (in->stepEndMs > 0.0 && at > in->stepEndMs - 0.3 &&
-        at - in->stepEndMs <= (1.0 - RD_PE_AIM) * p - RD_PE_LATE_MS &&
-        in->stepEndMs - 0.3 > in->nowMs - 1e-9) {
-        /* due inside the game's next step: before it, at most the aim's
-           early side less RD_PE_LATE_MS early (shown at R still) */
-        at = in->stepEndMs - 0.3 > in->nowMs ? in->stepEndMs - 0.3 : in->nowMs;
+    /* the hold's end: the pacer's deadline (the game's step next), and,
+       where N refreshes go round the game's tick (its refreshes not a
+       multiple of N: three on a tick of four), the time from which the
+       step rule would hold a further picture before the tick's close
+       (otherwise one aim in four is late every time).  With N dividing the
+       tick the aims keep their phase in it and meet the step rule's hold
+       only as the two clocks drift: there the late aim costs less than a
+       picture moved before the frame's close, which would have to be drawn
+       from the frame pair before (held at its newest frame) */
+    double end = in->stepEndMs;
+    if (in->ruleEndMs > 0.0 && in->tickMs > 0.0) {
+        const uint32_t tr = (uint32_t)floor(in->tickMs / p + 0.5);
+        if (e->n != 0u && tr % e->n != 0u && (end <= 0.0 || in->ruleEndMs < end)) {
+            end = in->ruleEndMs;
+        }
+    }
+    const double before = end - RD_PE_STEP_MARGIN_MS;
+    if (end > 0.0 && at > before &&
+        at - end <= (e->desire ? p : (1.0 - share) * p) - RD_PE_LATE_MS && end > in->nowMs) {
+        /* due inside the hold: before it, at most the aim's early side less
+           RD_PE_LATE_MS early (shown at R still) */
+        at = before > in->nowMs ? before : in->nowMs;
         out->early = true;
     }
     out->holdMs = at - in->nowMs;
@@ -253,6 +338,11 @@ void rd_pace_even_tally_take(int how, bool late)
     add(&s_sum.lateAims, late ? 1u : 0u);
 }
 
+void rd_pace_even_tally_lost(void)
+{
+    add(&s_sum.lost, 1u);
+}
+
 void rd_pace_even_tally_shown(int score)
 {
     add(&s_sum.shown, 1u);
@@ -280,6 +370,7 @@ void rd_pace_even_take_window(RdPaceEvenWindow *w)
     w->shownLate = take(&s_sum.shownLate);
     w->shownEarly = take(&s_sum.shownEarly);
     w->shown = take(&s_sum.shown);
+    w->lost = take(&s_sum.lost);
     w->n = __atomic_load_n(&s_sum.n, __ATOMIC_RELAXED);
     w->periodNs = __atomic_load_n(&s_sum.periodNs, __ATOMIC_RELAXED);
 }
@@ -319,6 +410,8 @@ const char *rd_pace_even_how_text(int how)
         return "handed over without a plan";
     case RD_PE_SLOW:
         return "a picture longer than a game frame";
+    case RD_PE_OFF:
+        return "turned off by its self-check";
     default:
         return "?";
     }
@@ -366,6 +459,9 @@ bool rd_pace_even_format(const RdPaceEvenWindow *w, char *out, size_t size)
     put(&o, "; shown off their refresh %llu of %llu (%llu later, %llu earlier)",
         (unsigned long long)w->shownOff, (unsigned long long)w->shown,
         (unsigned long long)w->shownLate, (unsigned long long)w->shownEarly);
+    if (w->lost) {
+        put(&o, ", %llu never shown", (unsigned long long)w->lost);
+    }
     return true;
 }
 
@@ -386,10 +482,14 @@ size_t rd_pace_even_start_text(bool measured, bool on, const char *why, char *ou
             "(then not down until the picture time moves by %.2f ms), down to the fewest it fits "
             "with %.2f ms to spare after %.0f ms of it; each hand-over held until its "
             "predicted GPU end sits %.2f of a refresh before its refresh's latch (the screen's "
-            "grid and latch), the content drawn for that refresh; it lowers the pictures a "
-            "second where the GPU could make more%s",
+            "grid and latch), its present asking that refresh less half a refresh as its "
+            "desired time (shown no earlier), the content drawn for that refresh; off for the "
+            "run where %u of the last %u such pictures were never shown or their acquire and "
+            "present call took %.1f ms more than without; it lowers the pictures a second "
+            "where the GPU could make more%s",
             RD_PE_UP_MS, RD_PE_MISS_UP, RD_PE_MISS_WIN, RD_PE_FLOOR_T_MS, RD_PE_DOWN_MS,
-            RD_PE_DOWN_HOLD_MS, RD_PE_AIM, on ? "" : "; not used (ICO_RD_PACE_EVEN=1 turns it on)");
+            RD_PE_DOWN_HOLD_MS, RD_PE_AIM_DESIRED, RD_PE_LOST_MAX, RD_PE_LOST_WIN, RD_PE_BLOCK_MS,
+            on ? "" : "; not used (ICO_RD_PACE_EVEN=1 turns it on)");
     }
     return o.at < size ? o.at : size - 1;
 }
