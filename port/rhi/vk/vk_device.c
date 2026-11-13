@@ -1628,12 +1628,14 @@ static void vkr_tile_rule_apply(void)
     }
 }
 
-/* The driver row and its override (rhi_pass_row.h) over legacyPasses as
- * the device's version and extensions set it: VkRenderPass objects on a
- * device of the row (Intel's Windows driver at Vulkan 1.3.215 or older,
+/* The driver rows and their override (rhi_pass_row.h) over legacyPasses
+ * as the device's version and extensions set it: VkRenderPass objects on a
+ * device of a row (Intel's Windows driver at Vulkan 1.3.215 or older,
  * whose vkCmdBeginRendering crashed in the reporter's first picture after
- * a live switch to 2x), or wherever ICO_VK_LEGACY_PASSES ([dev]
- * legacy_passes) is 1; with it 0, dynamic rendering wherever offered.
+ * a live switch to 2x; Qualcomm's own driver, whose GPU hangs inside a
+ * dynamic rendering pass about once in 500 pictures, issue 123), or
+ * wherever ICO_VK_LEGACY_PASSES ([dev] legacy_passes) is 1; with it 0,
+ * dynamic rendering wherever offered.
  * One line when either changes the path or the override asks for what the
  * device cannot give.  Without the VkRenderPass path in the build
  * (VKR_LEGACY_PASSES 0) neither applies. */
@@ -1641,6 +1643,7 @@ static void vkr_pass_row_apply(void)
 {
     g_vkr.legacyWhy = NULL;
     g_vkr.passRowHit = false;
+    g_vkr.passRowQcom = false;
 #if VKR_LEGACY_PASSES
     const int ov = rhi_vk_pass_override(getenv("ICO_VK_LEGACY_PASSES"));
 #ifdef _WIN32
@@ -1648,11 +1651,21 @@ static void vkr_pass_row_apply(void)
 #else
     const int windows = 0;
 #endif
-    const char *row =
+    const char *intelRow =
         rhi_vk_pass_row(g_vkr.props.vendorID, g_vkr.driverID, g_vkr.props.apiVersion, windows);
-    /* the store passes' throwaway targets follow the row whatever the path
-       (RhiLimits.storePassTarget) */
-    g_vkr.passRowHit = row != NULL;
+    /* the store passes' throwaway targets follow Intel's row whatever the
+       path (RhiLimits.storePassTarget); Qualcomm's row moves only the passes
+       (issue 123, rhi_pass_row.h).  ICO_VK_FAKE_PASS_ROW=qualcomm (the tests
+       alone) puts any device on Qualcomm's row, nothing else of it faked */
+    const char *fakeRow = getenv("ICO_VK_FAKE_PASS_ROW");
+    const bool fakeQcom = fakeRow && strcmp(fakeRow, "qualcomm") == 0;
+    const char *qcomRow =
+        intelRow ? NULL
+        : fakeQcom
+            ? rhi_vk_pass_row_qualcomm(RHI_VENDOR_QUALCOMM, RHI_DRIVER_ID_QUALCOMM_PROPRIETARY)
+            : rhi_vk_pass_row_qualcomm(g_vkr.props.vendorID, g_vkr.driverID);
+    const char *row = intelRow ? intelRow : qcomRow;
+    g_vkr.passRowHit = intelRow != NULL;
     if (g_vkr.legacyPasses) {
         if (ov == 0) {
             VKR_LOG("render passes: [dev] legacy_passes = false (ICO_VK_LEGACY_PASSES=0) asks for "
@@ -1673,9 +1686,10 @@ static void vkr_pass_row_apply(void)
     } else if (row) {
         g_vkr.legacyPasses = true;
         g_vkr.legacyWhy = row;
-        VKR_LOG("render passes: VkRenderPass objects, not dynamic rendering: %s; [dev] "
+        g_vkr.passRowQcom = qcomRow != NULL; /* RhiLimits.passObjectsRow */
+        VKR_LOG("render passes: VkRenderPass objects, not dynamic rendering: %s%s; [dev] "
                 "legacy_passes = false (ICO_VK_LEGACY_PASSES=0) gives dynamic rendering",
-                row);
+                row, fakeQcom && qcomRow ? " (ICO_VK_FAKE_PASS_ROW=qualcomm)" : "");
     }
 #endif
 }
@@ -3239,6 +3253,9 @@ static void vkr_fill_limits(void)
      * vkCmdBeginRendering) and with the subpass read on; elsewhere without
      * an attachment, as v0.11.2 (port/render/rd_vu_rec_sink.h) */
     o->storePassTarget = g_vkr.passRowHit || g_vkr.subpassRead;
+    /* Qualcomm's row (rhi_pass_row.h, issue 123): its reason while it holds
+       the device's passes on VkRenderPass objects */
+    o->passObjectsRow = g_vkr.passRowQcom && g_vkr.legacyPasses ? g_vkr.legacyWhy : NULL;
     o->vuPrepassLoss = g_vkr.tile.noPrepass ? g_vkr.tile.prepassWhy : NULL;
     /* v0.7.10: the device profile's facts (rhi.h) */
     /* either path's read (RhiLimits.localReadSubpass: the subpass read,

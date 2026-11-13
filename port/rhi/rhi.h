@@ -837,6 +837,13 @@ typedef struct RhiLimits {
      * elsewhere and on the other backends: the passes begin without an
      * attachment, as v0.11.2's did */
     bool storePassTarget;
+    /* Vulkan on Qualcomm's own driver (rhi_pass_row.h
+     * rhi_vk_pass_row_qualcomm, issue 123): the row's reason when it put the
+     * device's passes on VkRenderPass objects, for the attempt's line; NULL
+     * elsewhere (another row, the override, a device without dynamic
+     * rendering) and on the other backends.  RhiStats.passObjects counts
+     * the passes begun so */
+    const char *passObjectsRow;
     /* (docs/port/RENDER.md, the device profile).  localRead: Vulkan
      * dynamicRenderingLocalRead (VK_KHR_dynamic_rendering_local_read, or
      * VkPhysicalDeviceVulkan14Features on a 1.4 device without the
@@ -1603,6 +1610,11 @@ typedef struct RhiStats {
      * gl_bind_groups); 0 on the other backends, which bind a group whole */
     uint64_t entryBinds, entryBindsSkipped;
     uint64_t draws, renderPasses, barriers, copies;
+    /* Vulkan: of renderPasses, those begun as VkRenderPass objects
+     * (vkCmdBeginRenderPass: a device without dynamic rendering, a driver
+     * row of rhi_pass_row.h, [dev] legacy_passes; RhiLimits.passObjectsRow
+     * names Qualcomm's row, issue 123's attempt); 0 elsewhere */
+    uint64_t passObjects;
     /* compute dispatches recorded (rhi_cmd_dispatch: the VU record's under
      * the compute builds; Vulkan, 0 elsewhere); not in draws */
     uint64_t dispatches;

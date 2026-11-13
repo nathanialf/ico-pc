@@ -861,6 +861,25 @@ if(_ico_have_vk)
                              "${_ico_vk_vk11_env}")
         get_test_property(rhi_vk_vk11 LABELS _ico_vk11_labels)
         set_tests_properties(rhi_vk_vk11 PROPERTIES LABELS "${_ico_vk11_labels};vk11")
+        # Qualcomm's driver row (rhi_pass_row.h rhi_vk_pass_row_qualcomm, issue
+        # 123): rhi_vk_qcom_passes every cell with lavapipe put on the row alone
+        # (ICO_VK_FAKE_PASS_ROW=qualcomm: VkRenderPass objects on a 1.4 device,
+        # the store passes still without an attachment), failing if the device
+        # line says dynamic rendering; rhi_vk_qcom_passes_off the clock cell with
+        # [dev] legacy_passes = false over the row (ICO_VK_LEGACY_PASSES=0),
+        # failing if it says VkRenderPass objects
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/qcom_passes")
+        add_test(NAME rhi_vk_qcom_passes COMMAND rhi_vk_test
+                 WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/qcom_passes")
+        set(_ico_vk_qcom_env ${_ico_vk_test_env} "ICO_VK_FAKE_PASS_ROW=qualcomm")
+        set_tests_properties(rhi_vk_qcom_passes PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_qcom_env}" FAIL_REGULAR_EXPRESSION
+                             "render passes dynamic;")
+        add_test(NAME rhi_vk_qcom_passes_off COMMAND rhi_vk_test clock)
+        set(_ico_vk_qcomoff_env ${_ico_vk_qcom_env} "ICO_VK_LEGACY_PASSES=0")
+        set_tests_properties(rhi_vk_qcom_passes_off PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_qcomoff_env}" FAIL_REGULAR_EXPRESSION
+                             "render passes legacy")
         # the cells on a Vulkan 1.0 driver (ICO_VK_FAKE_API=1.0, issue 158):
         # a 1.0 instance with VK_KHR_get_physical_device_properties2, the
         # device at 1.0 with VK_KHR_maintenance1/2, the core 1.1 entry points

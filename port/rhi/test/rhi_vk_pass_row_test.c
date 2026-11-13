@@ -4,7 +4,10 @@
  * VkRenderPass objects, as does every Intel Windows driver at or below
  * 1.3.215; a newer Intel driver, Mesa's ANV on the same GPU, another vendor
  * at 1.3.215 and an Intel GPU on a non-Windows build without a driver id
- * keep dynamic rendering; the override's words.
+ * keep dynamic rendering; the override's words.  The Qualcomm row (issue
+ * 123): Qualcomm's own driver (its id, or none) on vendor 0x5143 takes
+ * VkRenderPass objects; Turnip on the same GPU, Qualcomm's id on another
+ * vendor and every other vendor do not; neither row answers for the other.
  * Exit 0 on success, 1 on a failure. */
 #include "rhi_pass_row.h"
 #include "rhi_driver_version.h"
@@ -45,6 +48,30 @@ int main(void)
     {
         const char *why = rhi_vk_pass_row(RHI_VENDOR_INTEL, 0, v13215, 1);
         CHECK(why != NULL && strstr(why, "Intel") != NULL &&
+              strstr(why, "vkCmdBeginRendering") != NULL);
+    }
+    /* the Qualcomm row: the 123 tablet's driver (id 8), and with no id */
+    CHECK(rhi_vk_pass_row_qualcomm(RHI_VENDOR_QUALCOMM, RHI_DRIVER_ID_QUALCOMM_PROPRIETARY) !=
+          NULL);
+    CHECK(rhi_vk_pass_row_qualcomm(RHI_VENDOR_QUALCOMM, 0) != NULL);
+    /* Turnip on the same GPU, another driver id, other vendors */
+    CHECK(rhi_vk_pass_row_qualcomm(RHI_VENDOR_QUALCOMM, RHI_DRIVER_ID_MESA_TURNIP) == NULL);
+    CHECK(rhi_vk_pass_row_qualcomm(RHI_VENDOR_QUALCOMM, ANV) == NULL);
+    CHECK(rhi_vk_pass_row_qualcomm(0x13B5u, RHI_DRIVER_ID_QUALCOMM_PROPRIETARY) == NULL);
+    CHECK(rhi_vk_pass_row_qualcomm(0x13B5u, 0) == NULL);
+    CHECK(rhi_vk_pass_row_qualcomm(RHI_VENDOR_INTEL, 0) == NULL);
+    CHECK(rhi_vk_pass_row_qualcomm(RHI_VENDOR_IMGTEC, 0) == NULL);
+    /* the rows are apart: Intel's row says nothing of Qualcomm's driver
+       (above) and Qualcomm's nothing of Intel's */
+    CHECK(rhi_vk_pass_row_qualcomm(RHI_VENDOR_INTEL, RHI_DRIVER_ID_INTEL_PROPRIETARY_WINDOWS) ==
+          NULL);
+    CHECK(rhi_vk_pass_row(RHI_VENDOR_QUALCOMM, RHI_DRIVER_ID_QUALCOMM_PROPRIETARY,
+                          RHI_VK_API(1, 3, 128), 0) == NULL);
+    /* the reason names the driver, the issue and the call */
+    {
+        const char *why =
+            rhi_vk_pass_row_qualcomm(RHI_VENDOR_QUALCOMM, RHI_DRIVER_ID_QUALCOMM_PROPRIETARY);
+        CHECK(why != NULL && strstr(why, "Qualcomm") != NULL && strstr(why, "123") != NULL &&
               strstr(why, "vkCmdBeginRendering") != NULL);
     }
     /* the override */

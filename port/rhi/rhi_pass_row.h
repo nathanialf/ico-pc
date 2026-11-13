@@ -1,6 +1,7 @@
 /* rhi_pass_row.h: which Vulkan drivers record their render passes as
  * VkRenderPass objects although they offer dynamic rendering (the driver
- * row of port/rhi/vk/vk_device.c, g_vkr.legacyPasses).  No Vulkan header:
+ * rows of port/rhi/vk/vk_device.c, g_vkr.legacyPasses: Intel's below and
+ * Qualcomm's, rhi_vk_pass_row_qualcomm).  No Vulkan header:
  * built and tested on every host (port/rhi/test/rhi_vk_pass_row_test.c).
  *
  * The row: Intel's own Windows driver (vendor 0x8086 with
@@ -38,6 +39,24 @@
  * a Windows build. */
 const char *rhi_vk_pass_row(uint32_t vendorId, uint32_t driverId, uint32_t apiVersion,
                             int windowsBuild);
+
+/* The second row (issue 123): Qualcomm's own Vulkan driver (vendor 0x5143
+ * with VK_DRIVER_ID_QUALCOMM_PROPRIETARY, or with no driver id), every
+ * Adreno and every version; Mesa's Turnip on the same GPUs reports its own
+ * id and keeps dynamic rendering.  The Adreno 740 of issue 123 (driver
+ * 512.676) and the Adreno 710 of issue 211 (512.800) hang inside a render
+ * pass about once in 500 pictures (the stall's length fits the kernel
+ * driver's hardware hang detector, 218 million cycles: docs/port/
+ * ANDROID_DIAGNOSTICS.md, "Issue 123"), and every such run recorded its
+ * passes with vkCmdBeginRendering:
+ * the VkRenderPass path (the driver's since Vulkan 1.0; the one the
+ * port's Mali-G52 and PowerVR B-Series users always take) removes that
+ * path as a cause with the same attachments, ops, layouts and barriers, so
+ * the same picture.  Unlike the Intel row it does not move the VU record's
+ * store passes onto a colour target (RhiLimits.storePassTarget stays the
+ * Intel row's).  NULL when the device keeps dynamic rendering; else the
+ * reason, a phrase for the device line. */
+const char *rhi_vk_pass_row_qualcomm(uint32_t vendorId, uint32_t driverId);
 
 /* The override's value: -1 none (NULL, empty, "auto" or anything else), 0
  * ("0", "false", "no", "off"), 1 ("1", "true", "yes", "on"); case does not
