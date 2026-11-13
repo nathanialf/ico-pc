@@ -66,14 +66,15 @@ static char s_skipWhy[128];
 
 static int in_opening(void)
 {
-    return stage_no == 1 && current_layout_id == ico_region_cur()->layout_scene;
+    const IcoRegionInfo *r = ico_region_cur();
+    return stage_no == r->stage_title && current_layout_id == r->layout_scene;
 }
 
 static int in_title(void)
 {
     const IcoRegionInfo *r = ico_region_cur();
-    return stage_no == 1 && (current_layout_id == r->layout_title_continue ||
-                             current_layout_id == r->layout_title_new);
+    return stage_no == r->stage_title && (current_layout_id == r->layout_title_continue ||
+                                          current_layout_id == r->layout_title_new);
 }
 
 static int in_pause(void)
