@@ -160,13 +160,15 @@ int rd_vu_cmp_env(void)
 /* ------------------------------------------------------------ the state */
 
 static struct {
-    bool plane;    /* the record's fourth plane (fixed at init) */
-    bool arm;      /* Arm's class under Vulkan */
-    bool on;       /* the decider's verdict at the start */
-    bool refused;  /* the self-test refused it for the run */
-    int env;       /* ICO_RD_VU_COMPACT */
-    int selftest;  /* -1 not run, 0 refused, 1 passed */
-    bool sabotage; /* ICO_RD_VU_COMPACT_SABOTAGE */
+    bool plane;      /* the record's fourth plane (fixed at init) */
+    bool arm;        /* Arm's class under Vulkan */
+    uint32_t vendor; /* RhiLimits.vendorId, for the line */
+    bool armByTests; /* ICO_RD_VU_COMPACT_ARM=1: the Arm class on this device */
+    bool on;         /* the decider's verdict at the start */
+    bool refused;    /* the self-test refused it for the run */
+    int env;         /* ICO_RD_VU_COMPACT */
+    int selftest;    /* -1 not run, 0 refused, 1 passed */
+    bool sabotage;   /* ICO_RD_VU_COMPACT_SABOTAGE */
     RhiShader cs;
     RhiPipeline pipe;
     /* the counts' readback, a buffer a frame slot (grown by powers of
@@ -233,19 +235,34 @@ static bool decide(void)
                                          s_cmp.selftest) != 0;
 }
 
+/* the class the decision was taken for, and the define that decided it
+   (the reporter's log names the class on every device) */
 static void startLine(const char *what)
 {
     const char *why = ico_attempt_why_of(ICO_ATT_COMPACTION);
-    rd__log("VU index compaction: %s (%s; RD_VU_COMPACT_DEFAULT %d, the Arm class's "
-            "RD_VU_COMPACT_ARM_DEFAULT %d%s)",
-            what, why ? why : "", RD_VU_COMPACT_DEFAULT, RD_VU_COMPACT_ARM_DEFAULT,
-            s_cmp.arm ? "; this device is of the Arm class" : "");
+    char cls[128];
+    if (s_cmp.arm) {
+        snprintf(cls, sizeof cls, "the Arm class (vendor 0x%04X%s): RD_VU_COMPACT_ARM_DEFAULT %d",
+                 (unsigned)s_cmp.vendor, s_cmp.armByTests ? ", ICO_RD_VU_COMPACT_ARM=1" : "",
+                 RD_VU_COMPACT_ARM_DEFAULT);
+    } else {
+        snprintf(cls, sizeof cls, "not the Arm class (vendor 0x%04X): RD_VU_COMPACT_DEFAULT %d",
+                 (unsigned)s_cmp.vendor, RD_VU_COMPACT_DEFAULT);
+    }
+    rd__log("VU index compaction: %s (%s; %s)", what, why ? why : "", cls);
 }
 
 void rd__vu_compact_init(const RhiLimits *lim)
 {
     freeObjects();
-    s_cmp.arm = lim != NULL && !lim->moltenvk && lim->vendorId == CMP_VENDOR_ARM;
+    /* Arm's vendor id as the device reports it (RhiLimits.vendorId; the
+       tile rule's ICO_VK_FAKE_VENDOR changes that rule alone, vk_device.c),
+       or the tests' ICO_RD_VU_COMPACT_ARM=1 on any device */
+    const char *armEnv = getenv("ICO_RD_VU_COMPACT_ARM");
+    s_cmp.armByTests = armEnv != NULL && strcmp(armEnv, "1") == 0;
+    s_cmp.vendor = lim != NULL ? lim->vendorId : 0u;
+    s_cmp.arm =
+        lim != NULL && ((!lim->moltenvk && lim->vendorId == CMP_VENDOR_ARM) || s_cmp.armByTests);
     s_cmp.env = rd_vu_cmp_env();
     {
         const char *sb = getenv("ICO_RD_VU_COMPACT_SABOTAGE");

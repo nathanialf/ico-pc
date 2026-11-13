@@ -30,10 +30,13 @@ endif()
 #                      (ICO_RD_VU_COMPACT_SABOTAGE=1): the run with it fails, the
 #                      run without it passes, the compaction refused for the
 #                      run, the pre-pass on with the record by compute
-#   rd_vuprepass_selftest_compact_mali  under the phone's limits and Arm's
-#                      vendor id (ICO_VK_FAKE_LIMITS=mali,
-#                      ICO_VK_FAKE_VENDOR=0x13B5), synchronisation validation
-#                      with the submit-time checks: passes, the Arm class
+#   rd_vuprepass_selftest_compact_mali  under the phone's limits
+#                      (ICO_VK_FAKE_LIMITS=mali, ICO_VK_FAKE_VENDOR=0x13B5 for
+#                      the tile rule) and the Arm class by the tests' switch
+#                      (ICO_RD_VU_COMPACT_ARM=1: RhiLimits.vendorId stays
+#                      lavapipe's), synchronisation validation with the
+#                      submit-time checks: passes, its lines naming the Arm
+#                      class and RD_VU_COMPACT_ARM_DEFAULT
 #   rd_vuprepass_selftest_compact_stores  the vertex stores (lavapipe's own
 #                      path): not applicable, no copy in the frame
 if(ICO_RUN_TESTS AND TARGET rd_vuprepass_selftest_test AND DEFINED _vst)
@@ -42,7 +45,7 @@ if(ICO_RUN_TESTS AND TARGET rd_vuprepass_selftest_test AND DEFINED _vst)
     add_test(NAME rd_vuprepass_selftest_compact
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}"
-                     "-DEXTRA=rd: VU index compaction: on: passed its start-up self-test with the record's \\(its start-up self-test passed.*rd: VU pre-pass: on \\(self-test: [^\n]*${_cmp_copy}[^\n]*${_cmp_rec}"
+                     "-DEXTRA=rd: VU index compaction: on: passed its start-up self-test with the record's \\(its start-up self-test passed, not the Arm class \\(vendor 0x[0-9A-F]+\\): RD_VU_COMPACT_DEFAULT 1\\).*rd: VU pre-pass: on \\(self-test: [^\n]*${_cmp_copy}[^\n]*${_cmp_rec}"
                      -P "${_vst}")
     add_test(NAME rd_vuprepass_selftest_compact_refused
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
@@ -52,7 +55,7 @@ if(ICO_RUN_TESTS AND TARGET rd_vuprepass_selftest_test AND DEFINED _vst)
     add_test(NAME rd_vuprepass_selftest_compact_mali
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}"
-                     "-DEXTRA=rd: VU index compaction: on: passed its start-up self-test with the record's \\(the Arm class, its start-up self-test passed. RD_VU_COMPACT_DEFAULT [01], the Arm class's RD_VU_COMPACT_ARM_DEFAULT [01]. this device is of the Arm class\\).*${_cmp_copy}"
+                     "-DEXTRA=rd: VU index compaction: on: passed its start-up self-test with the record's \\(the Arm class, its start-up self-test passed, the Arm class \\(vendor 0x[0-9A-F]+, ICO_RD_VU_COMPACT_ARM=1\\): RD_VU_COMPACT_ARM_DEFAULT 1\\).*${_cmp_copy}"
                      -P "${_vst}")
     add_test(NAME rd_vuprepass_selftest_compact_stores
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
@@ -71,12 +74,12 @@ if(ICO_RUN_TESTS AND TARGET rd_vuprepass_selftest_test AND DEFINED _vst)
         set_tests_properties(
             rd_vuprepass_selftest_compact_mali
             PROPERTIES ENVIRONMENT
-                       "${_env_mali_pre};ICO_VK_FAKE_VENDOR=0x13B5;ICO_RD_VU_RECORD=compute")
+                       "${_env_mali_pre};ICO_VK_FAKE_VENDOR=0x13B5;ICO_RD_VU_COMPACT_ARM=1;ICO_RD_VU_RECORD=compute")
     else()
         set_tests_properties(
             rd_vuprepass_selftest_compact_mali
             PROPERTIES ENVIRONMENT
-                       "${_env};ICO_VK_FAKE_LIMITS=mali;ICO_VK_FAKE_VENDOR=0x13B5;ICO_RD_VU_RECORD=compute")
+                       "${_env};ICO_VK_FAKE_LIMITS=mali;ICO_VK_FAKE_VENDOR=0x13B5;ICO_RD_VU_COMPACT_ARM=1;ICO_RD_VU_RECORD=compute")
     endif()
     set_tests_properties(rd_vuprepass_selftest_compact_stores
                          PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_RECORD=stores")
