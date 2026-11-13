@@ -271,6 +271,10 @@ bool rd_date_selftest(void)
     if (!buildFrame(&f, rd_target(RD_TARGET_SCENE).id, t->w, t->h)) {
         rd__frame_free(&f);
         rd__log("DATE: self-test: could not build its frame");
+        /* the subpass probe's phase ended as on the no-SCENE return: left
+           open, every later loss of the run would skip the loss steps
+           (diag_host.c's probe hook) */
+        rd__subpass_probe_after_selftest(0, false, NULL);
         return false;
     }
     if (rd__date_sabotaged()) {
