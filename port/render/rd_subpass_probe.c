@@ -383,7 +383,7 @@ void rd__subpass_probe_after_selftest(int ran, bool passed, const char *words)
     }
     if (!lim->subpassProbe || !lim->subpassVerdictFile || !lim->subpassVerdictKey) {
         if (lim->localReadSubpass && ran && !passed) {
-            snprintf(s_why, sizeof s_why, "DATE's self-test on the read: %s",
+            snprintf(s_why, sizeof s_why, "DATE's self-test on the read: stencil %s",
                      words ? words : "failed");
             ico_attempt_decide_subpass(1, 0, 1, 0, s_why);
         }
@@ -405,7 +405,10 @@ void rd__subpass_probe_after_selftest(int ran, bool passed, const char *words)
         return;
     }
     if (!passed) {
-        snprintf(s_why, sizeof s_why, "DATE's self-test on the read: %s", words ? words : "failed");
+        /* words: the stencil replay's result as rd_date_selftest.c's line
+           has it after "stencil " ("fail 3 at sample 0: ...") */
+        snprintf(s_why, sizeof s_why, "DATE's self-test on the read: stencil %s",
+                 words ? words : "failed");
         (void)writeVerdict(lim, RHI_SUBPASS_REFUSED, s_why);
         ico_attempt_decide_subpass(1, 0, 1, 0, s_why);
         rd__log("subpass read: refused (%s): DATE takes its R8 snapshot; the verdict kept for "
