@@ -2117,6 +2117,28 @@ bool rhi_present_timing(void);
 void rhi_present_timing_use(bool on);
 uint64_t rhi_present_last_id(void);
 int rhi_present_timing_next(uint64_t *id, uint64_t *ns);
+
+/* The display's own times of past presents, read back (read only).  Vulkan
+ * with VK_GOOGLE_display_timing on a window (vk_glass.c): every present
+ * chains an id and a desired time of 0 ("any time": nothing is asked of the
+ * display, so which pictures are shown and when is as without it); after
+ * each present, on the presenting thread under the swapchain's lock and
+ * with no wait, the times the driver has of past presents are read into a
+ * ring.  rhi_present_glass: *lastId the id the calling thread's last
+ * present carried (0: none, or not in use), *refreshNs the display's
+ * refresh as the driver gives it (0 not known), and up to max past times
+ * taken, oldest first, into out (the count; one reader).  A present the
+ * display never showed (replaced in mailbox mode) has no time.  Elsewhere
+ * (no extension, OpenGL, Direct3D): 0, 0 and 0. */
+typedef struct RhiGlassTime {
+    uint32_t id;
+    uint64_t actualNs;   /* when the display showed it (the driver's clock) */
+    uint64_t earliestNs; /* the earliest it could have been shown */
+    uint64_t marginNs;   /* how early its work was done for that */
+    uint64_t desiredNs;  /* as asked: 0 */
+} RhiGlassTime;
+
+uint32_t rhi_present_glass(uint64_t *lastId, uint64_t *refreshNs, RhiGlassTime *out, uint32_t max);
 /* The swapchain's own count of the pictures it showed, read after each
  * present (D3D12: IDXGISwapChain::GetFrameStatistics; diagnostics for the
  * window's log): *presentCount the present count of the last picture

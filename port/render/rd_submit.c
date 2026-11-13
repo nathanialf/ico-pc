@@ -194,6 +194,7 @@ void rd__submit_frame(RhiCommandList cl, bool present, double walkStart, double 
         g_rdPerf.presentCallMs = sj.presentCallMs;
         g_rdPerf.presentPollMs = sj.presentPollMs;
         g_rdPerf.presentEndMs = sj.presentEndMs;
+        g_rdPerf.glassId = sj.glassId;
     }
     if (present) {
         /* the window's hold on further presents while they wait (rd_thread.h) */

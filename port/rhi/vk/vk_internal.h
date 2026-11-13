@@ -1244,5 +1244,17 @@ void vkr_swapchain_destroy(void);
 void vkr_present_wait_shutdown(void);
 /* vkr_test_fake_present_wait's stand-in, NULL when it is off */
 PFN_vkWaitForPresentKHR vkr_present_wait_fake(void);
+/* the display's times of past presents read back (vk_glass.c, rhi.h
+ * rhi_present_glass): the extension added to the device's where offered on
+ * a window; its entry points after the device is made; forgotten before it
+ * goes; a present's VkPresentTimesInfoGOOGLE chained before next (returned:
+ * the chain's head; *id the present's id, 0 none); after the present (under
+ * the swapchain's lock), the past times read */
+void vkr_glass_device_exts(bool offered, bool surface, const char **exts, uint32_t *count);
+void vkr_glass_device_made(VkDevice dev);
+void vkr_glass_device_gone(void);
+const void *vkr_glass_chain(VkPresentTimesInfoGOOGLE *info, VkPresentTimeGOOGLE *t,
+                            const void *next, uint32_t *id);
+void vkr_glass_presented(VkSwapchainKHR sc, uint32_t id, bool shown);
 
 #endif /* PORT_RHI_VK_VK_INTERNAL_H */

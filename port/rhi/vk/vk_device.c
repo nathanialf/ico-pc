@@ -2370,6 +2370,10 @@ static bool vkr_create_device(void)
             exts[extCount++] = VK_KHR_PRESENT_WAIT_EXTENSION_NAME;
         }
     }
+    /* the display's times of past presents read back (vk_glass.c): read
+       only, every device that offers VK_GOOGLE_display_timing on a window */
+    vkr_glass_device_exts(vkr_device_has_ext(g_vkr.phys, VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME),
+                          g_vkr.surface != VK_NULL_HANDLE, exts, &extCount);
 
     /* VK_PRESENT_MODE_FIFO_LATEST_READY (VK_EXT_present_mode_fifo_latest_ready):
      * opt-in with ICO_VK_FIFO_LATEST_READY=1 (vkr_choose_present_mode takes it
@@ -3027,6 +3031,7 @@ static bool vkr_create_device(void)
     if (g_vkr.presentWaitFake) {
         g_vkr.presentWait = true; /* the extensions stay off (vkr_present_wait_fake) */
     }
+    vkr_glass_device_made(g_vkr.device);
     /* the dynamic state's commands (through the device, as the loss
      * diagnostics' below): the core names on a 1.3 device, the EXT ones
      * otherwise; a group whose commands are not all found stays static */
@@ -3615,6 +3620,7 @@ void rhi_shutdown(void)
         }
         vkr_sync_destroy();
         vkr_pipeline_cache_shutdown();
+        vkr_glass_device_gone();
         vkDestroyDevice(g_vkr.device, NULL);
     }
     vkr_compile_serial_shutdown();

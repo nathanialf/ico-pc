@@ -889,6 +889,71 @@ static int presentWaitHang(SDL_Window *win)
     return failures;
 }
 
+/* The display's times read back (rhi_present_glass, vk_glass.c): fake 1
+   the test's stand-in (ids without the extension, every third present not
+   reported, a refresh of 8333333 ns), 0 the driver's own where it offers
+   VK_GOOGLE_display_timing (lavapipe's headless surface may not: then
+   nothing to check but that no id is given).  Each present's id one more
+   than the one before; the times taken oldest first, their ids presented
+   ones, increasing; no validation error with the struct chained */
+static int glassTimes(SDL_Window *win, int fake)
+{
+    RhiDeviceDesc dd = {win, true, true, "rhi_vk_swapchain_test", NULL};
+    int failures = 0;
+    SDL_SetWindowSize(win, 64, 48);
+    SDL_SyncWindow(win);
+    vkr_test_fake_glass(fake);
+    if (!rhi_init(&dd)) {
+        printf("FAIL rhi_init for the display's times\n");
+        vkr_test_fake_glass(0);
+        return 1;
+    }
+    const RhiFormat fmt = rhi_swapchain_format();
+    uint64_t prev = 0, refresh = 0;
+    uint32_t taken = 0, lastTaken = 0;
+    for (int n = 0; n < 12 && !failures; n++) {
+        failures += frame(win, fmt, 60 + n);
+        uint64_t id = 0;
+        RhiGlassTime t[64];
+        const uint32_t k = rhi_present_glass(&id, &refresh, t, 64);
+        if (n == 0 && id == 0 && !fake) {
+            printf("glass: no display times here (VK_GOOGLE_display_timing not offered)\n");
+            break;
+        }
+        if (id != prev + 1u) {
+            printf("FAIL glass: present %d carried id %llu after %llu\n", n, (unsigned long long)id,
+                   (unsigned long long)prev);
+            failures++;
+        }
+        prev = id;
+        for (uint32_t i = 0; i < k; i++) {
+            if (t[i].id <= lastTaken || t[i].id > id || t[i].desiredNs != 0) {
+                printf("FAIL glass: time of id %u (after %u, the last present %llu)\n", t[i].id,
+                       lastTaken, (unsigned long long)id);
+                failures++;
+            }
+            lastTaken = t[i].id;
+        }
+        taken += k;
+    }
+    printf("glass: %llu presents, %u times read back, refresh %llu ns%s\n",
+           (unsigned long long)prev, taken, (unsigned long long)refresh,
+           fake ? " (the stand-in)" : "");
+    if (fake && (taken != 8u || refresh != 8333333u)) {
+        printf("FAIL glass: the stand-in gave %u times (8 of 12 expected), refresh %llu\n", taken,
+               (unsigned long long)refresh);
+        failures++;
+    }
+    rhi_wait_idle();
+    rhi_shutdown();
+    vkr_test_fake_glass(0);
+    if (rhi_vk_validation_error_count()) {
+        printf("FAIL %u validation error(s)\n", rhi_vk_validation_error_count());
+        failures++;
+    }
+    return failures;
+}
+
 int main(void)
 {
     SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "offscreen");
@@ -907,6 +972,9 @@ int main(void)
         rc = 1;
     }
     if (rc == 0 && presentWaitHang(win) != 0) {
+        rc = 1;
+    }
+    if (rc == 0 && (glassTimes(win, 1) != 0 || glassTimes(win, 0) != 0)) {
         rc = 1;
     }
     SDL_DestroyWindow(win);

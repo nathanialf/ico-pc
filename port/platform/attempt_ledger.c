@@ -35,6 +35,8 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
     [ICO_ATT_REC_NEED] = {"VU record sized from need", "growths in play", NULL},
     [ICO_ATT_PACE_GPU] = {"in-between pictures for the GPU's predicted end", "pictures placed",
                           "at the bound"},
+    [ICO_ATT_AS_MADE_TIMER] = {"in-between pictures on their own timer", "pictures timed",
+                               "held in their frame's tick"},
     [ICO_ATT_PASTE_SPEC] = {"the glow's paste by its own entry", "pastes",
                             "kept on the general entry"},
     [ICO_ATT_CHAIN3] = {"the glow chain in three passes", "chains", NULL},
@@ -321,19 +323,38 @@ void ico_attempt_decide_rec_need(int wanted, uint32_t made, uint32_t bound, uint
     }
 }
 
-void ico_attempt_decide_pace_gpu(int asMade, int clock, int waited)
+void ico_attempt_decide_pace_gpu(int asMade, int clock, int waited, int on)
 {
     if (!asMade) {
         ico_attempt_state(ICO_ATT_PACE_GPU, ICO_ATT_NA,
                           "the pictures are paced here (vsync on, a frame rate cap, the Original "
                           "frame rate or the render thread off): the present clock's moment");
+    } else if (clock && !on) {
+        ico_attempt_state(ICO_ATT_PACE_GPU, ICO_ATT_OFF_DEFAULT,
+                          "off by default (the owner's phone felt worse with it in rc3; kept for "
+                          "measurement)");
     } else if (clock) {
         ico_attempt_state(ICO_ATT_PACE_GPU, ICO_ATT_ON,
-                          "pictures as made: each drawn for its GPU work's predicted end");
+                          "ICO_RD_PACE_GPU=1: each picture drawn for its GPU work's predicted end");
     } else if (waited) {
         ico_attempt_state(ICO_ATT_PACE_GPU, ICO_ATT_NA,
                           "no GPU span or slot clock on this backend (OpenGL, Direct3D 11 or "
                           "timestamps off): the hand-over less the mean drain kept");
+    }
+}
+
+void ico_attempt_decide_as_made_timer(int asMade, int on)
+{
+    if (!asMade) {
+        ico_attempt_state(ICO_ATT_AS_MADE_TIMER, ICO_ATT_NA,
+                          "the pictures are paced here: the present clock's moment");
+    } else if (!on) {
+        ico_attempt_state(ICO_ATT_AS_MADE_TIMER, ICO_ATT_OFF_DEFAULT,
+                          "off by default until a phone rc shows it to the owner's eye; computed "
+                          "and reported");
+    } else {
+        ico_attempt_state(ICO_ATT_AS_MADE_TIMER, ICO_ATT_ON,
+                          "each picture's moment from its own timer");
     }
 }
 

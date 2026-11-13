@@ -1704,6 +1704,13 @@ static void vkr_present(bool defer)
             pi.pNext = &pid;
         }
     }
+    /* the display's time read back later (vk_glass.c): an id and a desired
+       time of 0, "any time", chained ahead of the rest */
+    VkPresentTimesInfoGOOGLE glassInfo;
+    VkPresentTimeGOOGLE glassTime;
+    uint32_t glassId = 0;
+    const VkSwapchainKHR glassSc = g_vkr.swapchain;
+    pi.pNext = vkr_glass_chain(&glassInfo, &glassTime, pi.pNext, &glassId);
     const uint64_t t0 = vkr_now_ns();
     VkResult r = vkQueuePresentKHR(g_vkr.queue, &pi);
     t_split.callNs = vkr_now_ns() - t0;
@@ -1771,6 +1778,12 @@ static void vkr_present(bool defer)
     /* an image queued for the display (a suboptimal one too: it is shown) */
     const bool shown = r == VK_SUCCESS || r == VK_SUBOPTIMAL_KHR;
     __atomic_store_n(&s_presentShown, shown, __ATOMIC_RELAXED);
+    /* the swapchain presented to, while it is still alive (a rebuild above
+       may have made another and destroyed it): its past presents' times
+       read, no wait */
+    vkr_glass_presented(glassSc == g_vkr.swapchain || glassSc == g_vkr.retired ? glassSc
+                                                                               : VK_NULL_HANDLE,
+                        glassId, shown);
     if (presentId != 0 && shown && !rebuild) {
         vkr_pw_posted(presentId);
     }

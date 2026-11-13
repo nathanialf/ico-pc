@@ -68,6 +68,8 @@ typedef struct RdSubmitJob {
        presented (issue 123) */
     uint8_t presentSplit;
     double presentLockMs, presentCallMs, presentPollMs, presentEndMs;
+    /* the display-times id the present carried (rhi_present_glass; 0 none) */
+    uint32_t glassId;
 } RdSubmitJob;
 
 /* the 10 s block (rd__sq_block_take): the jobs finished and their means in

@@ -31,10 +31,12 @@
  */
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "attempt_ledger.h"
 #include "rd_pace_gpu.h"
+#include "rd_pace_rules.h"
 #include "rd_rebase.h"
 
 static int failures;
@@ -205,9 +207,10 @@ static void testEdges(void)
     }
     rd_pace_gpu_model_place(&m, 2025.0, 71, &p);
     /* the medians now: span 15 (the 14 one of 15), lead 10 (11 one of 15):
-       Z re-predicted at max(2030, 2041) + 15 = 2056, this one at
-       max(2035, 2056) + 15: q 21 */
-    CHECK(p.queueMs == 21.0 && p.predEndMs == 2071.0);
+       Z re-predicted at max(2030, 2041) + 15 = 2056, this one's base
+       2035: 21 behind it, capped at one picture's G (the frames in
+       flight): q 15, the end 2035 + 15 + 15 */
+    CHECK(p.queueMs == 15.0 && p.predEndMs == 2065.0);
     /* a measurement of no picture of the ring: samples only */
     {
         const RdPaceGpuSample s = {1.5, 0.0, 0.0, 0.0, false};
@@ -231,6 +234,17 @@ static void testEdges(void)
         rd_pace_gpu_model_place(&m, kRe[i].hand, kRe[i].frame, &p);
         CHECK(p.restarted && p.how == RD_PACE_GPU_NOT_READY && p.shiftMs == 0.0);
     }
+    /* unmeasured pictures (keep frames: no record comes back) handed over
+       5 ms apart with G 15: the queue held at one picture's G, not
+       growing 10 ms a picture (rc3's 205-426 ms means) */
+    rd_pace_gpu_model_reset(&m);
+    warm(&m);
+    for (int i = 0; i < 40; i++) {
+        rd_pace_gpu_model_place(&m, 5000.0 + 5.0 * i, (uint32_t)(300 + i / 3), &p);
+        CHECK(p.queueMs <= 15.0);
+    }
+    CHECK(p.queueMs == 15.0);
+
     /* frame on by 8 within a second: the same chain */
     rd_pace_gpu_model_reset(&m);
     warm(&m);
@@ -671,20 +685,29 @@ static void testLive(void)
     rd_pace_gpu_paced();
     CHECK(ico_attempt_state_of(ICO_ATT_PACE_GPU) == ICO_ATT_NA);
 
-    /* as made with no measurement back: the row as it was until 64
-       pictures, then not applicable (no clock) */
-    for (int i = 0; i < RD_PACE_GPU_NO_CLOCK - 1; i++) {
-        CHECK(rd_pace_gpu_shift(5000.0 + 20.0 * i, (uint32_t)(200 + i / 2)) == 0.0);
+    /* the default off: the drawn shift 0 at every picture (the hand-over
+       rule's value to the bit in presentRebase), the model's computed */
+    CHECK(!rd_pace_gpu_on() || getenv("ICO_RD_PACE_GPU") != NULL);
+    const bool drawn = rd_pace_gpu_on();
+    double would = 0.0;
+
+    /* as made with measurements back without a slot clock: the row as it
+       was until 600 of them, then not applicable (no clock) */
+    for (int i = 0; i < RD_PACE_GPU_NO_CLOCK; i++) {
+        const RdPaceGpuSample s = {5000.0 + 20.0 * i, 0.0, 15.0, 0.0, false};
+        rd_pace_gpu_measure(&s);
+        CHECK(rd_pace_gpu_shift(5000.0 + 20.0 * i, (uint32_t)(200 + i / 2), &would) == 0.0);
+        if (i == RD_PACE_GPU_NO_CLOCK - 2) {
+            CHECK(ico_attempt_state_of(ICO_ATT_PACE_GPU) == ICO_ATT_NA &&
+                  strstr(ico_attempt_why_of(ICO_ATT_PACE_GPU), "paced") != NULL);
+        }
     }
-    CHECK(ico_attempt_state_of(ICO_ATT_PACE_GPU) == ICO_ATT_NA &&
-          strstr(ico_attempt_why_of(ICO_ATT_PACE_GPU), "paced") != NULL);
-    (void)rd_pace_gpu_shift(5000.0 + 20.0 * 63, 231);
     CHECK(ico_attempt_state_of(ICO_ATT_PACE_GPU) == ICO_ATT_NA &&
           strstr(ico_attempt_why_of(ICO_ATT_PACE_GPU), "slot clock") != NULL);
     rd_pace_gpu_take(&w);
-    CHECK(w.notReady == 64 && w.placed == 0);
+    CHECK(w.notReady == RD_PACE_GPU_NO_CLOCK && w.placed == 0);
     CHECK(rd_pace_gpu_format(&w, out, sizeof out));
-    CHECK_STR(out, "; the GPU's predicted end: 0 pictures placed by it (0 with one a tick, 64 "
+    CHECK_STR(out, "; the GPU's predicted end: 0 pictures placed by it (0 with one a tick, 600 "
                    "before its measurements, 0 restarts), 0 held to 0.5-2.0 times the "
                    "hand-overs' gap; predicted against the measured end: no exact end");
     rd_pace_gpu_paced();
@@ -704,38 +727,41 @@ static void testLive(void)
         const RdPaceGpuSample s = {0.0, 20.0, 15.0, 30.0, true};
         rd_pace_gpu_measure(&s);
     }
-    CHECK(rd_pace_gpu_shift(1000.0, 50) == 0.0);
-    CHECK(ico_attempt_state_of(ICO_ATT_PACE_GPU) == ICO_ATT_ON);
-    CHECK(rd_pace_gpu_shift(1012.0, 50) == 3.0);
+    CHECK(rd_pace_gpu_shift(1000.0, 50, &would) == 0.0 && would == 0.0);
+    CHECK(ico_attempt_state_of(ICO_ATT_PACE_GPU) == (drawn ? ICO_ATT_ON : ICO_ATT_OFF_DEFAULT));
+    CHECK(rd_pace_gpu_shift(1012.0, 50, &would) == (drawn ? 3.0 : 0.0) && would == 3.0);
     /* picture 1000 measured exact at 1027: error -2 */
     {
         const RdPaceGpuSample s = {1000.0, 1010.0, 15.0, 1027.0, true};
         rd_pace_gpu_measure(&s);
     }
-    (void)rd_pace_gpu_shift(1014.0, 50);
+    CHECK(rd_pace_gpu_shift(1014.0, 50, &would) == (drawn ? would : 0.0));
     rd_pace_gpu_take(&w);
     /* the third: the first anchored at 1027 (predicted 1025: error -2;
        its latency 27 into the window: 11 of them, mean 312 / 11, 10th the
        2nd 25, 90th the 10th 32: the bound 312 / 11 - 25 = 3.64), the
-       second's end max(1022, 1027) + 15 = 1042, base 1024: q 18, raw
-       18 - 3/16 over the bound; the ratio's range 1 to 4 ms of shift (the
-       moment before 1015, the gap 2) holds it; the queue's waits 3 and 18;
-       the shifts 3 and 3.64 in the half-ms bins 38 and 39 */
+       second's end max(1022, 1027) + 15 = 1042, base 1024: 18, capped at
+       one picture's G (the frames in flight): q 15, raw 15 - 3/16 over the
+       bound; the ratio's range 1 to 4 ms of shift (the moment before 1015,
+       the gap 2) holds it; the queue's waits 3 and 15; the shifts 3 and
+       3.64 in the half-ms bins 38 and 39 */
     CHECK(w.placed == 2 && w.oneATick == 1 && w.errN == 1 && w.errSumUs == -2000 &&
           w.boundUs == 3636 && w.latP10Us == 25000 && w.latP90Us == 32000 && w.atBound == 1 &&
-          w.shift[38] == 1 && w.shift[39] == 1 && w.queueUs == 21000);
+          w.shift[38] == 1 && w.shift[39] == 1 && w.queueUs == 18000);
     CHECK(rd_pace_gpu_format(&w, out, sizeof out));
     CHECK_STR(out, "; the GPU's predicted end: 2 pictures placed by it (1 with one a tick, 0 "
                    "before its measurements, 0 restarts), the shift 10th 3.25, median 3.25, 90th "
-                   "3.75 ms (the queue's wait 10.50 ms on average), 1 at the bound (the last "
+                   "3.75 ms (the queue's wait 9.00 ms on average), 1 at the bound (the last "
                    "3.64 ms, from the hand-over to the measured end 10th 25.00, 90th 32.00 ms), "
                    "0 held to 0.5-2.0 times the hand-overs' gap; predicted against the measured "
                    "end over 1 pictures: mean -2.00 ms (deviation 0.00)");
     {
         char b[2048];
         (void)ico_attempt_block_text(b, sizeof b, -1);
-        CHECK(strstr(b, "in-between pictures for the GPU's predicted end on 2 pictures placed (1 "
-                        "at the bound)") != NULL);
+        CHECK(strstr(b, drawn ? "in-between pictures for the GPU's predicted end on 2 pictures "
+                                "placed (1 at the bound)"
+                              : "in-between pictures for the GPU's predicted end off by default 2 "
+                                "pictures placed (1 at the bound)") != NULL);
     }
     /* the ring full: the 33rd measurement before a take dropped */
     for (int i = 0; i < 33; i++) {
@@ -748,23 +774,76 @@ static void testLive(void)
 
     /* the start line */
     char line[1024];
-    (void)rd_pace_gpu_start_text(true,
-                                 "pictures as made: each drawn for its GPU work's predicted "
-                                 "end",
-                                 line, sizeof line);
+    (void)rd_pace_gpu_start_text(true, false, "kept for measurement", line, sizeof line);
     CHECK_STR(line,
-              "rd: in-between pictures for the GPU's predicted end: on (pictures as made: each "
-              "drawn for its GPU work's predicted end); the GPU per picture the median of the "
-              "last 15 measured spans, the hand-over to the first submit the median of the last "
-              "15, the queue's wait from the hand-overs; the shift the wait less its running "
-              "mean, held to the measured spread of the hand-over to the GPU's end over the last "
-              "32 measured ends and to 0.5-2.0 times the hand-overs' gap; one picture a tick or an "
-              "empty queue keep the hand-over's moment");
-    (void)rd_pace_gpu_start_text(false, "x", line, sizeof line);
+              "rd: in-between pictures for the GPU's predicted end: off by default (kept for "
+              "measurement); the GPU per picture the median of the last 15 measured spans, the "
+              "hand-over to the first submit the median of the last 15, the queue's wait from "
+              "the hand-overs (at most 1 picture's GPU time: the frames in flight); the shift "
+              "the wait less its running mean, held to the measured spread of the hand-over to "
+              "the GPU's end over the last 32 measured ends and to 0.5-2.0 times the hand-overs' "
+              "gap; one picture a tick or an empty queue keep the hand-over's moment; computed "
+              "and reported, not drawn (ICO_RD_PACE_GPU=1 draws it)");
+    (void)rd_pace_gpu_start_text(true, true, "x", line, sizeof line);
+    CHECK(strncmp(line, "rd: in-between pictures for the GPU's predicted end: on (x); ", 61) == 0 &&
+          strstr(line, "not drawn") == NULL);
+    (void)rd_pace_gpu_start_text(false, false, "x", line, sizeof line);
     CHECK_STR(line, "rd: in-between pictures for the GPU's predicted end: not applicable here (x)");
     char small[8];
-    CHECK(rd_pace_gpu_start_text(false, "x", small, sizeof small) == 7 && strlen(small) == 7);
+    CHECK(rd_pace_gpu_start_text(false, false, "x", small, sizeof small) == 7 &&
+          strlen(small) == 7);
     ico_attempt_reset();
+}
+
+/* the default off, bit for bit: presentRebase's path (rd_thread.c) over a
+   cage-like run of hand-overs with the model and the timer computed: the
+   value drawn the hand-over rule's (rd_rebase_raw of the measured ask, as
+   v0.11.5) to the bit, the note's drawn rule the hand-over's */
+static void testOffBitIdentical(void)
+{
+    if (getenv("ICO_RD_PACE_GPU") != NULL || getenv("ICO_RD_AS_MADE_TIMER") != NULL) {
+        printf(" off-by-default check skipped: a tests' switch is set\n");
+        return;
+    }
+    rd_pace_gpu_paced();
+    rd_pace_rules_paced();
+    RdRebase today, now;
+    memset(&today, 0, sizeof today);
+    memset(&now, 0, sizeof now);
+    const double T = 33.3667;
+    uint32_t seed = 5u;
+    uint32_t same = 0, n = 0;
+    for (uint32_t k = 0; k < 300; k++) {
+        const double t0 = 1000.0 + k * T;
+        for (int j = 0; j < 2; j++) {
+            seed = seed * 1664525u + 1013904223u;
+            const double u = (double)(seed >> 8) / 16777216.0;
+            const double ask = t0 + (j == 0 ? 0.15 + 0.2 * u : 0.51 + 0.28 * u) * T;
+            const double drain = 0.05 + 0.1 * u, hand = ask + drain;
+            /* a measurement two pictures late, as the record's */
+            const RdPaceGpuSample sm = {hand - 2.0 * 16.68, hand - 2.0 * 16.68 + 9.5, 15.0,
+                                        hand - 2.0 * 16.68 + 27.0, true};
+            rd_pace_gpu_measure(&sm);
+            double sh0, sh1, would = 0.0;
+            bool h0, h1;
+            const double atAsk = (ask - t0) / T;
+            const double r0 = rd_rebase_raw(&today, atAsk, T, drain, k, &sh0, &h0);
+            const double queue = rd_pace_gpu_shift(hand, k, &would);
+            double r1 = rd_rebase_raw(&now, queue != 0.0 ? atAsk + queue / T : atAsk, T, drain, k,
+                                      &sh1, &h1);
+            RdRuleNote note;
+            r1 = rd_pace_rules_pick(r1, queue, would, ask - atAsk * T, T, hand, k, &note);
+            same += memcmp(&r0, &r1, sizeof r0) == 0 && note.rule == RD_RULE_HAND &&
+                            note.alpha[RD_RULE_HAND] == rd_rebase_alpha(r0)
+                        ? 1u
+                        : 0u;
+            n++;
+        }
+    }
+    printf(" off by default: %u of %u values the hand-over rule's to the bit\n", same, n);
+    CHECK(same == n && n == 600u);
+    rd_pace_gpu_paced();
+    rd_pace_rules_paced();
 }
 
 int main(void)
@@ -775,6 +854,7 @@ int main(void)
     testSims();
     testLogRuns();
     testLive();
+    testOffBitIdentical();
     if (failures) {
         printf("rd_pace_gpu_test: %d failures\n", failures);
         return 1;

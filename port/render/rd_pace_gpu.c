@@ -83,7 +83,10 @@ static RdPaceGpuPic *pic(RdPaceGpu *m, uint32_t i)
 static double endOf(double hand, double prevEnd, double d, double g, double *q)
 {
     const double base = hand + d;
-    const double start = prevEnd > base ? prevEnd : base;
+    /* the frames in flight: at most the picture before ahead of it */
+    const double cap = base + (double)(RD_PACE_GPU_IN_FLIGHT - 1) * g;
+    const double before = prevEnd > cap ? cap : prevEnd;
+    const double start = before > base ? before : base;
     *q = start - base;
     return start + g;
 }
@@ -407,7 +410,7 @@ bool rd_pace_gpu_format(const RdPaceGpuWindow *w, char *out, size_t size)
     return true;
 }
 
-size_t rd_pace_gpu_start_text(bool on, const char *why, char *out, size_t size)
+size_t rd_pace_gpu_start_text(bool measured, bool drawn, const char *why, char *out, size_t size)
 {
     if (size == 0) {
         return 0;
@@ -415,16 +418,19 @@ size_t rd_pace_gpu_start_text(bool on, const char *why, char *out, size_t size)
     out[0] = '\0';
     Out o = {out, size, 0};
     put(&o, "rd: in-between pictures for the GPU's predicted end: %s (%s)",
-        on ? "on" : "not applicable here", why != NULL ? why : "");
-    if (on) {
+        !measured ? "not applicable here" : (drawn ? "on" : "off by default"),
+        why != NULL ? why : "");
+    if (measured) {
         put(&o,
             "; the GPU per picture the median of the last %d measured spans, the hand-over to "
-            "the first submit the median of the last %d, the queue's wait from the hand-overs; "
-            "the shift the wait less its running mean, held to the measured spread of the "
-            "hand-over to the GPU's end over the last %d measured ends and to %.1f-%.1f times the "
-            "hand-overs' gap; one picture a tick or an empty queue keep the hand-over's moment",
-            RD_PACE_GPU_MED, RD_PACE_GPU_MED, RD_PACE_GPU_LAT, RD_PACE_GPU_RATIO_LO,
-            RD_PACE_GPU_RATIO_HI);
+            "the first submit the median of the last %d, the queue's wait from the hand-overs "
+            "(at most %d picture's GPU time: the frames in flight); the shift the wait less its "
+            "running mean, held to the measured spread of the hand-over to the GPU's end over "
+            "the last %d measured ends and to %.1f-%.1f times the hand-overs' gap; one picture "
+            "a tick or an empty queue keep the hand-over's moment%s",
+            RD_PACE_GPU_MED, RD_PACE_GPU_MED, RD_PACE_GPU_IN_FLIGHT - 1, RD_PACE_GPU_LAT,
+            RD_PACE_GPU_RATIO_LO, RD_PACE_GPU_RATIO_HI,
+            drawn ? "" : "; computed and reported, not drawn (ICO_RD_PACE_GPU=1 draws it)");
     }
     return o.at < size ? o.at : size - 1;
 }

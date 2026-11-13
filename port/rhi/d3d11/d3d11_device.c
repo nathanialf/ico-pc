@@ -1656,6 +1656,20 @@ uint64_t rhi_present_last_id(void)
     return 0;
 }
 
+/* rhi.h: no display times read back on this backend */
+uint32_t rhi_present_glass(uint64_t *lastId, uint64_t *refreshNs, RhiGlassTime *out, uint32_t max)
+{
+    (void)out;
+    (void)max;
+    if (lastId != NULL) {
+        *lastId = 0;
+    }
+    if (refreshNs != NULL) {
+        *refreshNs = 0;
+    }
+    return 0;
+}
+
 int rhi_present_timing_next(uint64_t *id, uint64_t *ns)
 {
     (void)id;

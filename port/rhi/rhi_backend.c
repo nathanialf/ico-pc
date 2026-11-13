@@ -938,6 +938,20 @@ int rhi_present_timing_next(uint64_t *id, uint64_t *ns)
     return s_up ? be()->present_timing_next(id, ns) : -1;
 }
 
+uint32_t rhi_present_glass(uint64_t *lastId, uint64_t *refreshNs, RhiGlassTime *out, uint32_t max)
+{
+    if (!s_up) {
+        if (lastId != NULL) {
+            *lastId = 0;
+        }
+        if (refreshNs != NULL) {
+            *refreshNs = 0;
+        }
+        return 0;
+    }
+    return be()->present_glass(lastId, refreshNs, out, max);
+}
+
 bool rhi_present_statistics(uint64_t *presentCount, uint64_t *presentRefresh, uint64_t *syncRefresh,
                             uint64_t *syncNs)
 {

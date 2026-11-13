@@ -9,6 +9,7 @@
 #include "rd_even.h"
 #include "rd_internal.h"
 #include "rd_pace_gpu.h"
+#include "rd_pace_rules.h"
 #include "rd_rebase.h"
 #include "rd_submit.h"
 #include "rd_submit_thread.h"
@@ -106,6 +107,8 @@ typedef struct PresentArgs {
     /* the drain's start (the alpha's sample) and end (the hand-over) for
      * the evenness line (rd_even.h), 0 when not handed over */
     double askMs, handMs;
+    /* the three rules' alphas for the on-glass line (rd_pace_rules.h) */
+    RdRuleNote rules;
 } PresentArgs;
 
 static PresentArgs s_picPresent;
@@ -985,8 +988,10 @@ static void presentJob(void *arg)
     t_gap[0] = p->gap[0];
     t_gap[1] = p->gap[1];
     rd_even_hand_note(p->askMs, p->handMs); /* for the replay's record */
+    rd_pace_rules_note(&p->rules);
     p->ok = rd_present(p->alpha);
     rd_even_hand_note(0.0, 0.0);
+    rd_pace_rules_note(NULL);
     t_rawSet = set;
     t_raw = raw;
     t_gap[0] = gap0;
@@ -1022,7 +1027,8 @@ void rd_present_as_made(bool on)
 {
     s_asMade = on;
     if (!on) {
-        rd_pace_gpu_paced(); /* the GPU queue's model off (rd_pace_gpu.h) */
+        rd_pace_gpu_paced();   /* the GPU queue's model off (rd_pace_gpu.h) */
+        rd_pace_rules_paced(); /* and the own timer (rd_pace_rules.h) */
     }
 }
 
@@ -1048,11 +1054,18 @@ static void presentRebase(PresentArgs *p, uint32_t frame)
            running mean (rd_rebase.h), not the clock's smoothed moment */
         double shift = 0.0;
         bool held = false;
-        /* and moved by the GPU queue's predicted wait for this picture less
-           its running mean (rd_pace_gpu.h): the moment its GPU work is
-           predicted to end, less the mean latency */
-        const double queue = rd_pace_gpu_shift(s_drainEndMs, frame);
-        raw = rd_rebase_raw(&s_rebase, atAsk + queue / tick, tick, drain, frame, &shift, &held);
+        /* moved by the GPU queue's predicted wait for this picture less its
+           running mean (rd_pace_gpu.h) only where that rule is drawn
+           (ICO_RD_PACE_GPU=1; off by default: queue 0 and the value the
+           hand-over rule's to the bit); the model computed either way */
+        double would = 0.0;
+        const double queue = rd_pace_gpu_shift(s_drainEndMs, frame, &would);
+        raw = rd_rebase_raw(&s_rebase, queue != 0.0 ? atAsk + queue / tick : atAsk, tick, drain,
+                            frame, &shift, &held);
+        /* the three rules side by side; the own timer's value drawn where
+           it is on (rd_pace_rules.h), raw untouched otherwise */
+        raw = rd_pace_rules_pick(raw, queue, would, s_drainAtMs - atAsk * tick, tick, s_drainEndMs,
+                                 frame, &p->rules);
         p->raw = raw;
         p->alpha = rd_rebase_alpha(raw);
         /* the content's moment to the hand-over: at the clock's moment
@@ -1114,7 +1127,13 @@ bool rd_present_post(float alpha)
      * callbacks share port/ui's font state with the step's own text
      * (rd_present.c s_pre) */
     rd__overlay_hand_over();
-    s_picPresent = (PresentArgs){alpha, 0.0, {0.0, 0.0}, false, s_drainAtMs, s_drainEndMs};
+    s_picPresent = (PresentArgs){alpha,
+                                 0.0,
+                                 {0.0, 0.0},
+                                 false,
+                                 s_drainAtMs,
+                                 s_drainEndMs,
+                                 {{-1.0f, -1.0f, -1.0f}, RD_RULE_CLOCK, 0.0}};
     s_picPresent.raw = rd__present_clock_take(s_picPresent.gap);
     presentRebase(&s_picPresent, cur->number);
     s_picTramp = (Tramp){presentJob, &s_picPresent, !wait, NULL};

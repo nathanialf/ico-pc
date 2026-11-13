@@ -9,8 +9,24 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <stdlib.h>
+
 #include "attempt_ledger.h"
 #include "rd_pace_gpu.h"
+#include "rhi.h"
+
+_Static_assert(RD_PACE_GPU_IN_FLIGHT == RHI_FRAMES_IN_FLIGHT,
+               "the model's queue cap follows the frames in flight");
+
+bool rd_pace_gpu_on(void)
+{
+    static int s_on = -1;
+    if (s_on < 0) {
+        const char *e = getenv("ICO_RD_PACE_GPU");
+        s_on = e != NULL && e[0] != '\0' ? (e[0] != '0') : RD_PACE_GPU_DEFAULT;
+    }
+    return s_on != 0;
+}
 
 #define QCAP 32u
 
@@ -35,7 +51,7 @@ void rd_pace_gpu_measure(const RdPaceGpuSample *s)
 /* the poster's */
 static RdPaceGpu s_m;
 static bool s_clock;       /* a span and a first submit came back this run */
-static uint32_t s_noClock; /* pictures as made before one did */
+static uint32_t s_noClock; /* measurements back without one before one did */
 static int s_state = -1;   /* the row as last decided: -1 none, 0 paced, 1 on, 2 no clock */
 static uint32_t s_changes; /* for the start line's limit */
 
@@ -53,6 +69,8 @@ static void drain(void)
         }
         if (smp.spanMs > 0.0 && smp.submitMs > 0.0) {
             s_clock = true;
+        } else if (!s_clock && s_noClock < RD_PACE_GPU_NO_CLOCK) {
+            s_noClock++;
         }
     }
     __atomic_store_n(&s_tail, tail, __ATOMIC_RELEASE);
@@ -66,22 +84,20 @@ static void decide(bool asMade)
         return;
     }
     s_state = st;
-    ico_attempt_decide_pace_gpu(asMade ? 1 : 0, s_clock ? 1 : 0, waited ? 1 : 0);
+    ico_attempt_decide_pace_gpu(asMade ? 1 : 0, s_clock ? 1 : 0, waited ? 1 : 0,
+                                rd_pace_gpu_on() ? 1 : 0);
     const uint32_t k = s_changes++;
     if (k < 8u || k % 100u == 0u) {
         char line[1024];
-        (void)rd_pace_gpu_start_text(st == 1, ico_attempt_why_of(ICO_ATT_PACE_GPU), line,
-                                     sizeof line);
+        (void)rd_pace_gpu_start_text(st == 1, rd_pace_gpu_on(),
+                                     ico_attempt_why_of(ICO_ATT_PACE_GPU), line, sizeof line);
         fprintf(stderr, "%s\n", line);
     }
 }
 
-double rd_pace_gpu_shift(double handMs, uint32_t frame)
+double rd_pace_gpu_shift(double handMs, uint32_t frame, double *wouldMs)
 {
     drain();
-    if (!s_clock && s_noClock < RD_PACE_GPU_NO_CLOCK) {
-        s_noClock++;
-    }
     decide(true);
     RdPaceGpuPlace p;
     rd_pace_gpu_model_place(&s_m, handMs, frame, &p);
@@ -92,7 +108,8 @@ double rd_pace_gpu_shift(double handMs, uint32_t frame)
             ico_attempt_fire2(ICO_ATT_PACE_GPU, 1u);
         }
     }
-    return p.shiftMs;
+    *wouldMs = p.shiftMs;
+    return rd_pace_gpu_on() ? p.shiftMs : 0.0;
 }
 
 void rd_pace_gpu_paced(void)

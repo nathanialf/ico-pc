@@ -57,6 +57,12 @@ uint64_t vkr_test_swapchain_handle(bool retired);
 void vkr_test_fake_present_wait(int on);
 void vkr_test_fake_present_wait_hang(uint32_t ms);
 uint32_t vkr_test_present_wait_misuse(void);
+/* The display's times read back without the extension (vk_glass.c): with
+ * vkr_test_fake_glass(1) before rhi_init, presents carry ids (nothing
+ * chained) and every present but each third gets the time it was made as
+ * its display time, so rhi_present_glass's ring and its reader run on a
+ * driver without VK_GOOGLE_display_timing */
+void vkr_test_fake_glass(int on);
 
 /* For rhi_vk_test's scopes cell (rhi_vk_scope.c): the pipeline barriers
  * vk_cmd.c records from vkr_test_barrier_trace(true) on (the trace cleared),

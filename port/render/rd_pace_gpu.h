@@ -49,6 +49,15 @@
 #ifndef ICO_RD_PACE_GPU_H
 #define ICO_RD_PACE_GPU_H
 
+/* Off by default: the owner's phone felt the motion more sped up with it in
+   v0.11.6-rc3 (the opening and stage 3).  Kept for measurement: the model
+   runs and its moment is reported (the evenness line, the on-glass line,
+   rd_glass.h) without being drawn.  ICO_RD_PACE_GPU=1 (the tests' switch)
+   draws it; an rc variant can flip the define. */
+#ifndef RD_PACE_GPU_DEFAULT
+#define RD_PACE_GPU_DEFAULT 0
+#endif
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -80,9 +89,20 @@
    RD_EVEN_RATIO_LO, RD_EVEN_RATIO_HI) */
 #define RD_PACE_GPU_RATIO_LO 0.5
 #define RD_PACE_GPU_RATIO_HI 2.0
-/* pictures handed over as made with no measurement back before the
-   ledger says the backend has none (OpenGL, Direct3D 11, timestamps off) */
-#define RD_PACE_GPU_NO_CLOCK 64
+/* measurements back with no slot clock (no first submit or no span) before
+   the ledger says the backend has none (OpenGL, Direct3D 11, timestamps
+   off): 10 s of them at 60 pictures a second, so the start-up's pictures
+   without stamps do not decide it (v0.11.6-rc3 said "no slot clock" for
+   its first 64 pictures, then "on") */
+#define RD_PACE_GPU_NO_CLOCK 600
+/* the frames in flight (rhi.h RHI_FRAMES_IN_FLIGHT, asserted in
+   rd_pace_gpu_live.c): a picture's work is submitted only once the picture
+   two before it ended, so the GPU's queue ahead of it holds at most the
+   picture before: q <= G.  Without that cap the predicted queue ran away
+   where most pictures are not measured (keep frames: v0.11.6-rc3's
+   13a4demo, deja and sacrifice scenes, the queue's mean wait 205-426 ms,
+   shifts of +-14 ms) */
+#define RD_PACE_GPU_IN_FLIGHT 2
 
 /* one picture's measurement (the replaying thread, rd__perf_collect_gpu),
    on rd's monotonic ms clock */
@@ -158,9 +178,12 @@ double rd_pace_gpu_median(const double *v, uint32_t n);
    counted, when the poster has not taken the 32 before it) */
 void rd_pace_gpu_measure(const RdPaceGpuSample *s);
 /* the poster's thread, pictures as made, the clock timed this present:
-   the shift in ms for the picture handed over at handMs of frame `frame`
+   the shift in ms to draw for the picture handed over at handMs of frame
+   `frame` (0 unless rd_pace_gpu_on), *wouldMs the model's shift either way
    (the measurements taken first; the ledger's row decided; the 10 s sums) */
-double rd_pace_gpu_shift(double handMs, uint32_t frame);
+double rd_pace_gpu_shift(double handMs, uint32_t frame, double *wouldMs);
+/* RD_PACE_GPU_DEFAULT, ICO_RD_PACE_GPU=0/1 over it (read once) */
+bool rd_pace_gpu_on(void);
 /* the poster's thread, the pictures paced (rd_present_as_made(false), at
    every step): the model emptied, the ledger's row not applicable.  A
    present as made that the clock did not time (or ICO_RD_S2_LEGACY=1) is
@@ -194,7 +217,8 @@ void rd_pace_gpu_take(RdPaceGpuWindow *w);
    last clause); false and "" when no picture was handed over as made */
 bool rd_pace_gpu_format(const RdPaceGpuWindow *w, char *out, size_t size);
 /* the start line's text ("rd: in-between pictures for the GPU's predicted
-   end: ..."), on: the row's state is on */
-size_t rd_pace_gpu_start_text(bool on, const char *why, char *out, size_t size);
+   end: ..."): measured the model runs here (pictures as made with the slot
+   clock), drawn its moment is drawn (rd_pace_gpu_on) */
+size_t rd_pace_gpu_start_text(bool measured, bool drawn, const char *why, char *out, size_t size);
 
 #endif

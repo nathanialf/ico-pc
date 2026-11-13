@@ -302,18 +302,21 @@ static void test_classes(void)
 
     /* the in-between pictures for the GPU's predicted end, k's classes in
        order: the window presents pictures as made (vsync off, uncapped,
-       the render thread on), a GPU span and first submit came back, 64
-       pictures as made without one.  The Mali-G52's reporter at the
-       Original frame rate (v0.11.5 log: "framerate original"): paced; the
-       Pixel uncapped with vsync off (rc1): on; the PowerVR B without GPU
-       timestamps: no slot clock; the Adreno 740 on either driver uncapped:
-       on; the desktop with vsync on: paced; the Mac uncapped: on */
+       the render thread on), a GPU span and first submit came back, 600
+       measurements without one; the default off (RD_PACE_GPU_DEFAULT 0).
+       The Mali-G52's reporter at the Original frame rate (v0.11.5 log:
+       "framerate original"): paced; the Pixel uncapped with vsync off:
+       off by default; the PowerVR B without GPU timestamps: no slot clock;
+       the Adreno 740 on either driver uncapped: off by default; the
+       desktop with vsync on: paced; the Mac uncapped: off by default.  The
+       own timer: not applicable where paced, off by default as made */
     static const struct {
         int asMade, clock, waited;
         IcoAttemptState want;
     } kPace[] = {
-        {0, 0, 0, ICO_ATT_NA}, {1, 1, 0, ICO_ATT_ON}, {1, 0, 1, ICO_ATT_NA}, {1, 1, 0, ICO_ATT_ON},
-        {1, 1, 0, ICO_ATT_ON}, {0, 1, 0, ICO_ATT_NA}, {1, 1, 0, ICO_ATT_ON},
+        {0, 0, 0, ICO_ATT_NA},          {1, 1, 0, ICO_ATT_OFF_DEFAULT}, {1, 0, 1, ICO_ATT_NA},
+        {1, 1, 0, ICO_ATT_OFF_DEFAULT}, {1, 1, 0, ICO_ATT_OFF_DEFAULT}, {0, 1, 0, ICO_ATT_NA},
+        {1, 1, 0, ICO_ATT_OFF_DEFAULT},
     };
 
     CHECK(sizeof kRec / sizeof kRec[0] == sizeof k / sizeof k[0]);
@@ -336,7 +339,10 @@ static void test_classes(void)
                                             kCmp[c].compute ? 1 : -1) ==
               (kCmp[c].want == ICO_ATT_ON));
         ico_attempt_decide_subpass(d->spRoute, d->spOn, d->spRefused, d->spOff, d->spWhy);
-        ico_attempt_decide_pace_gpu(kPace[c].asMade, kPace[c].clock, kPace[c].waited);
+        ico_attempt_decide_pace_gpu(kPace[c].asMade, kPace[c].clock, kPace[c].waited, 0);
+        ico_attempt_decide_as_made_timer(kPace[c].asMade, 0);
+        CHECK(ico_attempt_state_of(ICO_ATT_AS_MADE_TIMER) ==
+              (kPace[c].asMade ? ICO_ATT_OFF_DEFAULT : ICO_ATT_NA));
         /* the glow's paste by its own entry: every class here is a Vulkan
            device (the module made) whose self-test passed (rd_paste_spec.c) */
         CHECK(ico_attempt_decide_paste_spec(1, -1, 1, 1) == 1);
@@ -485,25 +491,40 @@ static void test_classes(void)
     }
     /* the GPU's predicted end: as made without a clock yet leaves the row
        as it was; the clock turns it on; its counts in the block line */
-    ico_attempt_decide_pace_gpu(0, 0, 0);
+    ico_attempt_decide_pace_gpu(0, 0, 0, 0);
     CHECK(ico_attempt_state_of(ICO_ATT_PACE_GPU) == ICO_ATT_NA);
-    ico_attempt_decide_pace_gpu(1, 0, 0);
+    ico_attempt_decide_pace_gpu(1, 0, 0, 0);
     CHECK(ico_attempt_state_of(ICO_ATT_PACE_GPU) == ICO_ATT_NA);
-    ico_attempt_decide_pace_gpu(1, 1, 1);
+    ico_attempt_decide_pace_gpu(1, 1, 0, 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_PACE_GPU) == ICO_ATT_OFF_DEFAULT &&
+          strcmp(ico_attempt_why_of(ICO_ATT_PACE_GPU),
+                 "off by default (the owner's phone felt worse with it in rc3; kept for "
+                 "measurement)") == 0);
+    ico_attempt_decide_pace_gpu(1, 1, 1, 1);
     CHECK(ico_attempt_state_of(ICO_ATT_PACE_GPU) == ICO_ATT_ON);
     ico_attempt_fire(ICO_ATT_PACE_GPU, 598);
     ico_attempt_fire2(ICO_ATT_PACE_GPU, 3);
     {
         char b[2048];
         (void)ico_attempt_start_text(b, sizeof b);
-        CHECK(strstr(b, "; in-between pictures for the GPU's predicted end on (pictures as made: "
-                        "each drawn for its GPU work's predicted end)") != NULL);
+        CHECK(strstr(b, "; in-between pictures for the GPU's predicted end on (ICO_RD_PACE_GPU=1: "
+                        "each picture drawn for its GPU work's predicted end)") != NULL);
         (void)ico_attempt_block_text(b, sizeof b, -1);
         CHECK(strstr(b, "; in-between pictures for the GPU's predicted end on 598 pictures "
                         "placed (3 at the bound)") != NULL);
     }
-    ico_attempt_decide_pace_gpu(1, 0, 1);
+    ico_attempt_decide_pace_gpu(1, 0, 1, 0);
     CHECK(ico_attempt_state_of(ICO_ATT_PACE_GPU) == ICO_ATT_NA);
+    ico_attempt_decide_as_made_timer(1, 1);
+    CHECK(ico_attempt_state_of(ICO_ATT_AS_MADE_TIMER) == ICO_ATT_ON);
+    ico_attempt_fire(ICO_ATT_AS_MADE_TIMER, 600);
+    ico_attempt_fire2(ICO_ATT_AS_MADE_TIMER, 4);
+    {
+        char b[2048];
+        (void)ico_attempt_block_text(b, sizeof b, -1);
+        CHECK(strstr(b, "; in-between pictures on their own timer on 600 pictures timed (4 held "
+                        "in their frame's tick)") != NULL);
+    }
     CHECK(strstr(ico_attempt_why_of(ICO_ATT_PACE_GPU), "no GPU span or slot clock") != NULL);
     /* the record's row: the pre-pass off; on with its growths counted */
     ico_attempt_decide_rec_need(0, 512, 1024, 512);

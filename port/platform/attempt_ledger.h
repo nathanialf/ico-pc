@@ -109,9 +109,14 @@ enum {
     ICO_ATT_REC_NEED,
     /* rd_pace_gpu_live.c (rd_thread.c presentRebase): with pictures as made,
        each in-between picture drawn for the moment its GPU work is predicted
-       to end; count the pictures the model placed, second count those held
-       at its bound */
+       to end (off by default: computed, not drawn); count the pictures the
+       model placed, second count those held at its bound */
     ICO_ATT_PACE_GPU,
+    /* rd_pace_rules.c (rd_thread.c presentRebase): with pictures as made,
+       each picture's moment from its own timer (rd_as_made_timer.h; off by
+       default: computed, not drawn); count the pictures it gave a moment,
+       second count those held inside their frame's tick */
+    ICO_ATT_AS_MADE_TIMER,
     /* rd_paste_spec.c: the glow's paste drawn by its own entry (fx_paste_ps,
        fx_frame_ps's paste path alone) behind its start-up self-test; count
        the pastes drawn by it, second count the premultiplied adds that kept
@@ -235,11 +240,19 @@ void ico_attempt_decide_subpass(int route, int on, int refused, int offDefault, 
    the poster's thread at each change): asMade the window presents pictures
    as made (vsync off, uncapped, the render thread on: pace_rt_as_made),
    clock a picture's GPU span and first submit came back (the slot clock:
-   Vulkan with timestamps), waited RD_PACE_GPU_NO_CLOCK pictures were handed
-   over as made without one.  Not paced: not applicable; as made with the
-   clock: on; as made, waited and no clock: not applicable (the backend has
-   none); as made, not waited, no clock: the row left as it was */
-void ico_attempt_decide_pace_gpu(int asMade, int clock, int waited);
+   Vulkan with timestamps), waited RD_PACE_GPU_NO_CLOCK measurements came
+   back without one, on the model's moment is drawn (RD_PACE_GPU_DEFAULT,
+   ICO_RD_PACE_GPU).  Not paced: not applicable; as made with the clock: off
+   by default (the model computed and reported, not drawn) or on; as made,
+   waited and no clock: not applicable (the backend has none); as made, not
+   waited, no clock: the row left as it was */
+void ico_attempt_decide_pace_gpu(int asMade, int clock, int waited, int on);
+/* the own timer for pictures as made (rd_pace_rules.c, the poster's thread
+   at each change): asMade as ico_attempt_decide_pace_gpu's, on the timer's
+   moment is drawn (RD_AS_MADE_TIMER_DEFAULT, ICO_RD_AS_MADE_TIMER).  Not
+   paced: not applicable; as made: off by default (computed and reported,
+   not drawn) or on */
+void ico_attempt_decide_as_made_timer(int asMade, int on);
 /* the glow's paste by its own entry (rd_paste_spec.c, at start-up and after
    its self-test): module fx_paste_ps was made (Vulkan; 0 on the other
    backends), env the tests' switch (ICO_RD_PASTE_SPEC: -1 unset, 0, 1; its

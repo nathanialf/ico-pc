@@ -122,6 +122,7 @@
     X(present_timing_use)                                                                          \
     X(present_last_id)                                                                             \
     X(present_timing_next)                                                                         \
+    X(present_glass)                                                                               \
     X(present_statistics)                                                                          \
     X(set_pipeline_cache_path)                                                                     \
     X(pipeline_cache_loaded)                                                                       \

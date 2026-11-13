@@ -25,6 +25,7 @@
 #include <string.h>
 
 #include "rd_even.h"
+#include "rd_glass.h"
 #include "rd_pace_gpu.h"
 
 static RdEvenWindow s_sum;
@@ -491,4 +492,5 @@ void rd_even_line(double refreshMs)
         (void)rd_pace_gpu_format(&pw, line + at, sizeof line - at);
         fprintf(stderr, "window: %s\n", line);
     }
+    rd_glass_line(); /* the content's speed on the glass (rd_glass.h) */
 }

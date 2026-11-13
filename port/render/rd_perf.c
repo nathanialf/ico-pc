@@ -26,7 +26,9 @@
 #include <string.h>
 #include "ico_thread.h"
 #include "rd_even.h"
+#include "rd_glass.h"
 #include "rd_pace_gpu.h"
+#include "rd_pace_rules.h"
 #include "rd_internal.h"
 #include "rd_passring.h"
 #include "rd_perf_clock.h"
@@ -1160,6 +1162,16 @@ void rd__perf_begin(const RdFrame *f, int keep, bool present)
         /* a present handed over: its drain's stamps (rd_even.h) */
         rd_even_hand_take(&g_rdPerf.evenAskMs, &g_rdPerf.evenHandMs);
     }
+    {
+        /* its rules' alphas for the on-glass line (rd_pace_rules.h) */
+        RdRuleNote rn;
+        rd_pace_rules_take(&rn);
+        for (int i = 0; i < RD_RULE_COUNT; i++) {
+            g_rdPerf.ruleAlpha[i] = rn.alpha[i];
+        }
+        g_rdPerf.rule = rn.rule;
+        g_rdPerf.ruleTickMs = rn.tickMs;
+    }
     g_rdPerf.firstOfTick = s_first;
     g_rdPerf.reshown = s_reshownNext;
     g_rdPerf.glowHeld = s_glowHeldNext;
@@ -1205,6 +1217,7 @@ static void presentSplitInto(RdPerfRecord *r, const RdSubmitJob *j)
     r->presentCallMs = j->presentCallMs;
     r->presentPollMs = j->presentPollMs;
     r->presentEndMs = j->presentEndMs;
+    r->glassId = j->glassId;
     r->presentThread = RD_PRESENT_ON_SUBMIT;
 }
 
@@ -1239,10 +1252,16 @@ void rd__present_split_take(RdSubmitJob *j, bool presented)
     RhiPresentSplit sp;
     j->presentSplit = 0;
     j->presentLockMs = j->presentCallMs = j->presentPollMs = j->presentEndMs = 0.0;
+    j->glassId = 0;
     if (!presented) {
         return;
     }
     j->presentEndMs = rd__now_ms();
+    if (g_rd.hasDevice) {
+        uint64_t id = 0;
+        (void)rhi_present_glass(&id, NULL, NULL, 0); /* this thread's last present's id */
+        j->glassId = (uint32_t)id;
+    }
     if (g_rd.hasDevice && rhi_present_split(&sp)) {
         j->presentSplit = sp.called ? 1u : 2u; /* 2: the lock only, no present call made */
         j->presentLockMs = (double)sp.lockNs / 1e6;
@@ -1505,6 +1524,20 @@ void rd__perf_collect_gpu(void)
         const RdPaceGpuSample ps = {r->evenHandMs, submitMs, r->gpuValid ? r->gpuMs : 0.0, endMs,
                                     r->gpuDoneValid == 1};
         rd_pace_gpu_measure(&ps);
+    }
+    if (r->glassId != 0) {
+        /* the content's speed on the glass (rd_glass.h): the display's
+           times read back since, then this picture */
+        const RdGlassPic gp = {r->glassId,
+                               r->frame,
+                               r->alpha,
+                               {r->ruleAlpha[0], r->ruleAlpha[1], r->ruleAlpha[2]},
+                               r->rule,
+                               r->ruleTickMs,
+                               r->evenHandMs,
+                               endMs,
+                               r->gpuDoneValid == 1};
+        rd_glass_picture(&gp);
     }
     /* no stamps: the next timed record's gap is measured across this one
        (gpuGapSkipped) */
