@@ -16,6 +16,7 @@
 #include "rd_glow_blur.h"
 #include "rd_lamps.h"
 #include "rd_replay.h"
+#include "rd_bench.h" /* the bench's switch (rd__date_setup_bench_skipped) */
 
 static int32_t floorDiv16(int32_t v)
 {
@@ -50,6 +51,9 @@ bool rd__date_sabotaged(void)
  * draw is then skipped: dateStencilFor checked the pipelines) */
 bool rd__replay_date_take(Replay *r, const DrawSetup *ds)
 {
+    if (rd__date_setup_bench_skipped()) {
+        return true; /* the bench's variant (rd_bench.c): no set-up, the bit as it was */
+    }
     RhiCommandList cl = rd__replay_cl();
     RdTargetRec *tc = ds->tc;
     RhiRect take;

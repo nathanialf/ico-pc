@@ -130,8 +130,12 @@ static void emit(const RdBenchFrame *b, const RdBenchRunCfg *cfg, const RdBenchR
     static char line[4096];
     IcoBenchDrift drift;
     ico_bench_results(&s_run, s_res, &drift);
+    /* the GPU stamps as the baseline's timed replays hold them: none timed
+     * (a run skipped or stopped before its first block) is "not known", not
+     * "no" (the phone's pause bench: skipped 0.2 s in, "GPU stamps no") */
+    const int stamps = s_res[0].gpu.n > 0 ? 1 : (s_res[0].pic.n > 0 ? 0 : -1);
     ico_bench_head_line(line, sizeof(line), &s_run, b->commands, (uint32_t)(b->bytes / 1024u),
-                        cfg->presentMode, s_res[0].gpu.n > 0);
+                        cfg->presentMode, stamps);
     say(cb, line);
     for (int v = 0; v < s_run.nVariants; v++) {
         ico_bench_variant_line(line, sizeof(line), &s_run, v, &s_res[v]);

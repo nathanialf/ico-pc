@@ -102,6 +102,36 @@ const char *ico_bench_kind_name(int kind)
     }
 }
 
+int ico_bench_input_verdict(uint64_t eventNs, uint64_t startNs, int repeat)
+{
+    if (repeat) {
+        return ICO_BENCH_INPUT_REPEAT;
+    }
+    if (eventNs == 0 || eventNs < startNs) {
+        return ICO_BENCH_INPUT_BEFORE;
+    }
+    if (eventNs - startNs < ICO_BENCH_SKIP_GUARD_NS) {
+        return ICO_BENCH_INPUT_GUARD;
+    }
+    return ICO_BENCH_INPUT_SKIPS;
+}
+
+const char *ico_bench_input_words(int verdict)
+{
+    switch (verdict) {
+    case ICO_BENCH_INPUT_SKIPS:
+        return "a new press";
+    case ICO_BENCH_INPUT_BEFORE:
+        return "from before the bench";
+    case ICO_BENCH_INPUT_GUARD:
+        return "inside the bench's first 0.5 s";
+    case ICO_BENCH_INPUT_REPEAT:
+        return "a held key's repeat";
+    default:
+        return "?";
+    }
+}
+
 const char *ico_bench_plan_name(uint32_t glowLight)
 {
     static const char *const kNames[] = {"none", "dark", "lamps", "whole", "off"};
@@ -354,7 +384,10 @@ int ico_bench_head_line(char *out, size_t size, const IcoBenchRun *run, uint32_t
          "stamps %s",
          run->frame, run->frames, ico_bench_kind_name(run->kind), run->number, commands, kb,
          run->nVariants, run->rounds, run->rounds == 1 ? "" : "s", run->w, run->k, run->every,
-         presentMode ? presentMode : "unknown", gpuStamps ? "yes" : "no");
+         presentMode ? presentMode : "unknown",
+         gpuStamps > 0    ? "yes"
+         : gpuStamps == 0 ? "no"
+                          : "not known (no replay was timed)");
     return (int)at;
 }
 

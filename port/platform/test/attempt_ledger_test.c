@@ -349,6 +349,9 @@ static void test_classes(void)
         /* the shadow volumes' stencil-only entry: likewise a Vulkan device
            whose self-test passed (rd_volume_fs.c) */
         CHECK(ico_attempt_decide_volume_fs(1, -1, 1, 1) == 1);
+        /* the shadow composites' own entry: likewise a dual-source Vulkan
+           device whose self-test passed (rd_comp_spec.c) */
+        CHECK(ico_attempt_decide_comp_spec(1, 1, -1, 1, 1) == 1);
         for (int i = 0; i < ICO_ATT_COUNT; i++) {
             if (ico_attempt_state_of(i) == ICO_ATT_NOT_SET) {
                 printf("FAIL %s: %s not reported\n", d->name, ico_attempt_name(i));
@@ -364,6 +367,7 @@ static void test_classes(void)
         CHECK(ico_attempt_state_of(ICO_ATT_PASTE_SPEC) == ICO_ATT_ON);
         CHECK(ico_attempt_state_of(ICO_ATT_CHAIN3) == ICO_ATT_NOT_BUILT);
         CHECK(ico_attempt_state_of(ICO_ATT_VOLUME_FS) == ICO_ATT_ON);
+        CHECK(ico_attempt_state_of(ICO_ATT_COMP_SPEC) == ICO_ATT_ON);
         if (ico_attempt_state_of(ICO_ATT_SUBPASS) != d->wantSubpass) {
             printf("FAIL %s: subpass read %s\n", d->name,
                    ico_attempt_state_word(ico_attempt_state_of(ICO_ATT_SUBPASS)));
@@ -569,6 +573,34 @@ static void test_classes(void)
         (void)ico_attempt_block_text(b, sizeof b, -1);
         CHECK(strstr(b, "; the shadow volumes by the stencil-only entry on 8 volume draws (2 kept "
                         "on sprite_ps)") != NULL);
+    }
+    /* the shadow composites' own entry, each state (rd_comp_spec.c): the
+       tests' 0, another backend, the two-pass blend, the build's default 0,
+       a refusal, not run yet, the switch's 1 */
+    CHECK(ico_attempt_decide_comp_spec(1, 1, 0, 1, 1) == 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_COMP_SPEC) == ICO_ATT_OFF_DEFAULT);
+    CHECK(ico_attempt_decide_comp_spec(0, 1, -1, 1, -1) == 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_COMP_SPEC) == ICO_ATT_NA);
+    CHECK(ico_attempt_decide_comp_spec(1, 0, -1, 1, -1) == 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_COMP_SPEC) == ICO_ATT_NA);
+    CHECK(ico_attempt_decide_comp_spec(1, 1, -1, 0, 1) == 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_COMP_SPEC) == ICO_ATT_OFF_DEFAULT);
+    CHECK(ico_attempt_decide_comp_spec(1, 1, -1, 1, 0) == 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_COMP_SPEC) == ICO_ATT_REFUSED);
+    CHECK(ico_attempt_decide_comp_spec(1, 1, -1, 1, -1) == 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_COMP_SPEC) == ICO_ATT_OFF_DEFAULT);
+    CHECK(ico_attempt_decide_comp_spec(1, 1, 1, 0, 1) == 1);
+    CHECK(ico_attempt_state_of(ICO_ATT_COMP_SPEC) == ICO_ATT_ON);
+    ico_attempt_fire(ICO_ATT_COMP_SPEC, 9);
+    ico_attempt_fire2(ICO_ATT_COMP_SPEC, 1);
+    {
+        char b[2048];
+        (void)ico_attempt_start_text(b, sizeof b);
+        CHECK(strstr(b, "; the shadow composites by their own entry on (ICO_RD_COMP_SPEC=1, "
+                        "self-test passed)") != NULL);
+        (void)ico_attempt_block_text(b, sizeof b, -1);
+        CHECK(strstr(b, "; the shadow composites by their own entry on 9 draws (1 kept on "
+                        "sprite_ps)") != NULL);
     }
     ico_attempt_reset();
 }

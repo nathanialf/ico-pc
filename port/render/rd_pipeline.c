@@ -85,6 +85,7 @@
 #include "rd_internal.h"
 #include "rd_passring.h"
 #include "rd_paste_spec.h"
+#include "rd_comp_spec.h"
 #include "rd_pipe_finish.h"
 #include "rd_present_scene.h"
 #include "rd_shadow_tile.h"
@@ -1249,7 +1250,9 @@ static void keyVsName(const RdPipeKeyInt *k, char *out, size_t size)
 static void keyFsName(const RdPipeKeyInt *k, char *out, size_t size)
 {
     /* the entries past the name table's count name themselves (rd_paste_spec.c) */
-    const char *f = k->fs == RD_FS_FX_PASTE ? RD_PASTE_SPEC_NAME : rd__fs_name(k->fs);
+    const char *f = k->fs == RD_FS_FX_PASTE      ? RD_PASTE_SPEC_NAME
+                    : k->fs == RD_FS_SPRITE_COMP ? RD_COMP_SPEC_NAME
+                                                 : rd__fs_name(k->fs);
     if (k->dst == RHI_DST_READ_STORAGE) {
         snprintf(out, size, "%s_dstrov", f);
     } else if (k->dst == RHI_DST_READ_ATTACHMENT) {
@@ -1846,6 +1849,9 @@ static void firstUseLine(const RdPipeKeyInt *k, float ms)
  * dynamically (the RHI skips the values already in force) */
 void rd__set_pipeline(RhiCommandList cl, RhiPipeline p, const RdPipeKeyInt *k)
 {
+    /* a shadow composite's or level's run noted for its own entry: the twin's
+     * pipeline, every fixed-function state the same (rd_comp_spec.c) */
+    p = rd__comp_spec_turn(p, k);
     rhi_cmd_set_pipeline(cl, p);
     if (k == NULL || !p.id || (!g_rd.dynDepth && !g_rd.dynBlend)) {
         return;
@@ -4032,7 +4038,10 @@ static uint32_t enumerateAll(RdPipeKeyInt *out, uint32_t max)
     n = rd__enumerate_reachable_water(out, max, n);
     n = rd__enumerate_reachable_crt(out, max, n);
     n = rd__enumerate_reachable_date(out, max, n); /* after every family that draws DATE */
-    return rd__enumerate_reachable_blur(out, max, n);
+    n = rd__enumerate_reachable_blur(out, max, n);
+    /* the shadow composites' and levels' twins (rd_comp_spec.c), of every key
+     * above of their forms */
+    return rd__comp_spec_keys(out, max, n, n);
 }
 
 /* In the two-pass fallback every key is what rd__expand_no_dual

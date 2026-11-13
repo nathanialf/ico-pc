@@ -42,6 +42,8 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
     [ICO_ATT_CHAIN3] = {"the glow chain in three passes", "chains", NULL},
     [ICO_ATT_VOLUME_FS] = {"the shadow volumes by the stencil-only entry", "volume draws",
                            "kept on sprite_ps"},
+    [ICO_ATT_COMP_SPEC] = {"the shadow composites by their own entry", "draws",
+                           "kept on sprite_ps"},
 };
 
 /* the rows' live values (__atomic), and the block text's last counts (the
@@ -532,5 +534,36 @@ int ico_attempt_decide_volume_fs(int module, int env, int defaultOn, int selftes
                        : "self-test passed: the same count as sprite_ps";
     }
     ico_attempt_state(ICO_ATT_VOLUME_FS, st, why);
+    return on;
+}
+
+int ico_attempt_decide_comp_spec(int module, int device, int env, int defaultOn, int selftest)
+{
+    IcoAttemptState st = ICO_ATT_NA;
+    const char *why;
+    int on = 0;
+    if (env == 0) {
+        st = ICO_ATT_OFF_DEFAULT;
+        why = "ICO_RD_COMP_SPEC=0: the tests' switch";
+    } else if (!module) {
+        why = "sprite_comp_ps is made under Vulkan alone";
+    } else if (!device) {
+        why = "no dual-source fixed-function blend (sprite_ps's two-pass or exact blend)";
+    } else if (env != 1 && !defaultOn) {
+        st = ICO_ATT_OFF_DEFAULT;
+        why = "off by default (RD_COMP_SPEC_DEFAULT 0)";
+    } else if (selftest == 0) {
+        st = ICO_ATT_REFUSED;
+        why = "sprite_comp_ps's draws differ from sprite_ps's bytes on this device";
+    } else if (selftest < 0) {
+        st = ICO_ATT_OFF_DEFAULT;
+        why = "its self-test not run yet";
+    } else {
+        st = ICO_ATT_ON;
+        on = 1;
+        why = env == 1 ? "ICO_RD_COMP_SPEC=1, self-test passed"
+                       : "self-test passed: the same bytes as sprite_ps";
+    }
+    ico_attempt_state(ICO_ATT_COMP_SPEC, st, why);
     return on;
 }

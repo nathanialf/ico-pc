@@ -9,6 +9,8 @@
 #
 # the PowerVR phone's opening (v0.11.5 rc34): v746 lamps without a volume
 # (list 7's WORK2 meshes, the WORK0/WORK1 chain, the paste of WORK3 into
-# SCENE, list 4's fog), v2278 the sun with volumes (list 3's strips)
+# SCENE, list 4's fog), v2278 the sun with volumes (list 3's strips; the
+# shadow chain a draw at a time: the resolve 3:33, the levels 3:44, 3:49,
+# 3:54, the composites 3:62, 3:67, 3:72, and the device's rows for them)
 /primary/dev/ico-dumps/v0115-opening/frame-20261112-110824-v746.zip|without the lamps' meshes|without the blur chain|without the glow paste|without the fog (and the crack fill it arms)
-/primary/dev/ico-dumps/v0115-opening/frame-20261112-110852-v2278.zip|without the shadow volumes' draws|without the shadow composites
+/primary/dev/ico-dumps/v0115-opening/frame-20261112-110852-v2278.zip|without the shadow volumes' draws|without the shadow composites|without the shadow count's draw (the levels read the count as it was)|without the shadow level SHADOW0|without the shadow level SHADOW1|without the shadow level SHADOW2|without the shadow composite of SHADOW2 (the first)|without the shadow composite of SHADOW1 (the second)|without the shadow composite of SHADOW0 (the third)|without DATE's stencil set-ups (each DATE draw tests the bit as it was)|the shadow box off (the count and the composites drawn whole)|without the shadow volumes' draws, the composites drawn whole (the box off)

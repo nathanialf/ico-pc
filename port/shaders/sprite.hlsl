@@ -379,6 +379,35 @@ GS_PS_ATTR GS_PS_OUT sprite_ps(SpriteVSOut i)
     GS_RETURN(col, i.pos);
 }
 
+#ifdef ICO_SPRITE_COMP
+// sprite_comp_ps (built with ICO_SPRITE_COMP=1 alone): sprite_ps for the
+// draws the shadow composites and levels make (port/render/rd_comp_spec.c,
+// behind its start-up self-test against sprite_ps).  The CPU takes this
+// entry only for a dual-source key of the plain build (no destination read,
+// single-sampled) whose DrawCB has, of the flags sprite_ps reads, TEXTURED
+// and TCC alone (RD_COMP_SPEC_FIXED: MODULATE, no DATE in the shader, no
+// above-1x kernel, no GS levels, nearest or fold, no FBA, PABE, FIX factor,
+// premultiplied or Cd*FIX output) and an RGBA32 texel (TEXA's expansion
+// returns it unchanged).  sprite_ps's path for that DrawCB, statement for
+// statement: the vertex colour rounded, the sampler's texel (gs_sample with
+// neither DF_GS_LOD nor DF_NEAREST), MODULATE with TCC, the alpha test from
+// the DrawCB (a real one: g_mode.z and g_mode.w stay run-time words), the
+// two outputs (the blend's factor As / 128 in c1: LERP draws need it).
+// Every branch sprite_ps takes on another flag is left out.
+#define SPRITE_COMP_FLAGS (DF_TEXTURED | DF_TCC_RGBA)
+
+GS_PS_OUT sprite_comp_ps(SpriteVSOut i)
+{
+    uint4 col = uint4(floor(i.col + 0.5));
+    uint4 t = uint4(floor(g_texture.Sample(g_sampler, i.uv) * 255.0 + 0.5));
+    col = gs_texture_function(t, col, SPRITE_COMP_FLAGS);
+    if (gs_alpha_discard(g_mode.z, g_mode.w, col.a)) {
+        discard;
+    }
+    return gs_dual_out(col, SPRITE_COMP_FLAGS, g_blend.y);
+}
+#endif
+
 // sprite_texa_ps: sprite_ps for a PSMCT24 or PSMCT16 texture
 // (or a 24- or 16-bit CLUT) under a TEXA with AEM and a linear filter, which
 // the planner (rd_pipeline.c rd__texa_per_texel) gives this entry: TEXA per
