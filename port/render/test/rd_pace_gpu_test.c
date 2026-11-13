@@ -758,7 +758,7 @@ static void testLive(void)
               "last 15 measured spans, the hand-over to the first submit the median of the last "
               "15, the queue's wait from the hand-overs; the shift the wait less its running "
               "mean, held to the measured spread of the hand-over to the GPU's end over the last "
-              "32 exact ends and to 0.5-2.0 times the hand-overs' gap; one picture a tick or an "
+              "32 measured ends and to 0.5-2.0 times the hand-overs' gap; one picture a tick or an "
               "empty queue keep the hand-over's moment");
     (void)rd_pace_gpu_start_text(false, "x", line, sizeof line);
     CHECK_STR(line, "rd: in-between pictures for the GPU's predicted end: not applicable here (x)");

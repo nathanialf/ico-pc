@@ -421,7 +421,7 @@ size_t rd_pace_gpu_start_text(bool on, const char *why, char *out, size_t size)
             "; the GPU per picture the median of the last %d measured spans, the hand-over to "
             "the first submit the median of the last %d, the queue's wait from the hand-overs; "
             "the shift the wait less its running mean, held to the measured spread of the "
-            "hand-over to the GPU's end over the last %d exact ends and to %.1f-%.1f times the "
+            "hand-over to the GPU's end over the last %d measured ends and to %.1f-%.1f times the "
             "hand-overs' gap; one picture a tick or an empty queue keep the hand-over's moment",
             RD_PACE_GPU_MED, RD_PACE_GPU_MED, RD_PACE_GPU_LAT, RD_PACE_GPU_RATIO_LO,
             RD_PACE_GPU_RATIO_HI);
