@@ -4,6 +4,7 @@
 
 - The 3D scenery asks the graphics chip for less work on every device, with the picture unchanged.
 - Shadows take less graphics work on every device, phones most: the three layers that soften a shadow share one check of the picture instead of three, and when no shadow is on screen those layers are skipped (the picture is exactly the same).
+- Phones with an older graphics driver (such as the moto g24 power's Mali-G52) can draw shadows without stopping the picture partway to copy it: the first start after an install or a driver update checks once that the picture is exactly the same and not slower on that phone, and keeps it only then.
 - The log says more about slow phones: what each picture costs, what a stutter happened alongside, and which of this release's changes ran on the phone.
 
 ## Fixed

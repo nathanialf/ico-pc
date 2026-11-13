@@ -225,7 +225,7 @@ Not twinned: any test whose environment holds `ICO_VK_FAKE_*` or `ICO_VK_ATTACHM
 game or work on the replay tool's files (`rd_replay_tool*`, `rd_fog_depth_copy_dump*`,
 `rd_vustage_ab`, `rd_vubatch_ab`, `rd_fades_fold_ab`, the frame gates, `coverage_corpus`; the compare below covers the dumps), and the
 tests with no device (`rd_alpha_plan`, `rd_fx_frame`, `rd_vu_frac`, `rd_fades_fold`, `rd_mip`, `rd_passring`,
-`rd_filter`, `rd_bisect_plan`, `rd_cache_name`, `rd_stream_audit`, `rd_local_probe_rule`, `fog_lut*`, `gsb_cull*`, `texpack*`, `gltf`).
+`rd_filter`, `rd_bisect_plan`, `rd_cache_name`, `rd_stream_audit`, `rd_local_probe_rule`, `rd_subpass_probe_rule`, `fog_lut*`, `gsb_cull*`, `texpack*`, `gltf`).
 The two-pass blend copies (`*_nodual`, `ICO_RD_NO_DUAL=1`, the renderer's own switch) are
 twinned, and so is `rd_cull_ab` (`rd_cull_ab_gl`: the replay tool takes `ICO_RHI_BACKEND`, so the
 visibility test's byte identity is proven on both backends). The sources decide what else skips: `ctest -L gl` output lists the skipped ones.
@@ -492,6 +492,8 @@ switches the tests and their registrations use:
 | `ICO_RD_DEPTH_COPY` | `rd_fog_path.c` | 0 samples the depth in place, 1 copies it |
 | `ICO_RD_LOCAL_PROBE` | `rd_profile.c`, `rd_local_probe.c` | in a headless run (no window), 1 the game's desktop local reads and their start-up probe where the self-tests run, 0 the local reads without the probe; unset there, the desktop class keeps the snapshots (`rd_local_probe_kept`, `rd_local_probe_off`) |
 | `ICO_RD_LOCAL_PROBE_SABOTAGE` | `rd_local_probe.c` | `slow` counts the local reads' probe time 4 times (turned off), `fast` a quarter (kept) (`rd_local_probe_off`, `rd_local_probe_kept`) |
+| `ICO_RD_SUBPASS_PROBE_SABOTAGE` | `rd_subpass_probe.c` | `slow` counts the subpass read's probe time of the read 4 times (refused), `fast` a quarter (kept), `plain` the shaped plain pass's 4 times (refused), `end` ends the process with exit 86 right after DATE's self-test, as a GPU hang inside the probe would (the mark `probing` left) (`rd_subpass_probe_refused`, `_kept`, `_plain`, `_end`) |
+| `ICO_VK_SUBPASS_VERDICT` | `vk_device.c` (`rhi_subpass_verdict.h`) | the subpass read's verdict file for a run without the game's pipeline cache file (the tools and tests decide nothing without one): `rhi_vk_subpass_verdict`, `rd_subpass_probe_*` ([RHI.md](RHI.md#the-subpass-reads-probe)) |
 | `ICO_RD_FOG_SABOTAGE` | `rd_fog_path.c` | makes named paths fail the self-test (`rd_fog_selftest_fallback`; `local`: `rd_fog_selftest_local_sabotage`) |
 | `ICO_RD_SHADOW_ONE` | `rd_profile.c` | 0: the shadow count's seven stencil-tested draws (and the box reduction above 1x) instead of the one draw ([dev] `shadow_one`); 1 the one draw where the backend has the stencil view, kept whatever the self-test finds |
 | `ICO_RD_SHADOW_BSPLINE` | `rd_profile.c` | 1: the shadow composites above 1x through the cubic B-spline instead of one bilinear tap ([dev] `shadow_bspline`; `rd_fx_plan.c` `rd__sprite_above1x`); `rd_shadow_test` flips `RdProfile.shadowBspline` itself |

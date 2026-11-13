@@ -944,11 +944,13 @@ writes to the same reads, `RHI_LOCAL_READ_BACK` those reads to the next draws' d
 colour writes. Outside a pass, or without local read, it records nothing.
 
 **The subpass read** (`RhiLimits.localReadSubpass`; `port/rhi/vk/vk_renderpass.c`, header comment;
-issue 179). An experiment, **off by default on every device**: its cost on a phone is not measured
-(every `RGBA8_UNORM` render target of the device would sit in `GENERAL` with the input-attachment
-usage, and a driver may then keep its framebuffer compression off), so by default none of it exists
-(no usage, no layout, no self-dependency, DATE through its snapshot); `[dev]
-subpass_read = on` (`ICO_VK_SUBPASS_READ=1`, [CONFIG.md](CONFIG.md)) tries it. With it on, on the
+issue 179). **Decided per device and driver at the device's start** ([The subpass read's
+probe](#the-subpass-reads-probe) below): its shape costs every `RGBA8_UNORM` render target of the
+device `GENERAL` and the input-attachment usage, which a driver may answer by keeping its framebuffer
+compression off, so it is on only where an earlier start's probe kept it, or for the start that
+probes it; elsewhere none of it exists (no usage, no layout, no self-dependency, DATE through its
+snapshot). `[dev] subpass_read = on` (`ICO_VK_SUBPASS_READ=1`, [CONFIG.md](CONFIG.md)) forces it
+without the probe, `= off` forces it off. With it on, on the
 Vulkan `VkRenderPass` path (a device without dynamic rendering, the Mali-G52 of
 issue 179 at Vulkan 1.1) `RhiLimits.localRead` is the same read through Vulkan 1.0's input
 attachments, for the colour of a pass with one `RGBA8_UNORM` colour target, single-sampled, and a
@@ -976,23 +978,29 @@ input-attachment usage and sits in `GENERAL` as a render target (`VkrTexture.sub
 drawn with a depth target; a pass of the class on a texture outside it is begun without the input
 attachment and logged (`rhi_vk: render pass: the subpass read's class ... on a colour swapchain
 image ...: begun without its input attachment; the class's pipelines do not match it (N so far)`,
-none by construction). Colour-only passes and other formats keep the old shape, so
+none by construction; the probe's plain twin, made with `RHI_TEX_NO_SUBPASS_READ`, is a texture
+outside it that is never drawn with a depth target). Colour-only passes and other formats keep the
+old shape, so
 `rhi_cmd_local_read_barrier` in one is skipped (no self-dependency there):
 `rhi_vk: render pass: a local-read barrier in a pass without the subpass read (no depth target, or
 not one RGBA8 colour): skipped, and a read after it is not ordered (N so far)` (first 8, then every
 100th). A readable depth is refused on it (`a readable depth target without local read (the subpass
 read reads the colour only), or read-only`): the fog's depth read stays dynamic rendering's (its
-shader's input attachment has no index, which only dynamic rendering's mapping gives it). Off by
-default on every `VkRenderPass` path (the device's own, the Intel driver row's, `[dev]
-legacy_passes`'), the Intel row's fix unchanged; `[dev] subpass_read = on`
-(`ICO_VK_SUBPASS_READ=1`) turns it on on any of them, not under `ICO_VK_FAKE_NO_DST`. The device
-line on that path says which: `rhi_vk: render passes: the subpass read off (the default; [dev]
-subpass_read = on tries it): a read of a pass's own colour ends the pass for a copy (DATE's
-snapshot)` (or `([dev] subpass_read = off (ICO_VK_SUBPASS_READ=0))`), or with the key `rhi_vk: render
-passes: the subpass read: a pass of one RGBA8 colour target and a depth target names its colour as
-its subpass's input attachment 0, in GENERAL, with a by-region self-dependency (Vulkan 1.0), so a
-read of the pass's own colour (DATE's stencil setup) does not end the pass ([dev] subpass_read = on,
-ICO_VK_SUBPASS_READ=1: an experiment; DATE's self-test still decides)`, and at the first pass made with it `rhi_vk: render passes: the first with the subpass read:
+shader's input attachment has no index, which only dynamic rendering's mapping gives it). On a
+`VkRenderPass` path (the device's own, the Intel driver row's, Qualcomm's row's, `[dev]
+legacy_passes`') without local read the probe's verdict decides, the rows' fixes unchanged; `[dev]
+subpass_read = on` (`ICO_VK_SUBPASS_READ=1`) turns it on on any of them, not under
+`ICO_VK_FAKE_NO_DST`. The device line on that path says which and why, with the device and driver's
+key: `rhi_vk: render passes: the subpass read off (refused by the probe of an earlier start (probe:
+the read slower, ...); device and driver 13b5:72120000:80200000): a read of a pass's own colour ends
+the pass for a copy (DATE's snapshot)` (or `([dev] subpass_read = off (ICO_VK_SUBPASS_READ=0); ...)`,
+`(no GPU timestamps: the probe cannot time it, so DATE keeps its R8 snapshot; ...)`), or `rhi_vk:
+render passes: the subpass read: a pass of one RGBA8 colour target and a depth target names its colour
+as its subpass's input attachment 0, in GENERAL, with a by-region self-dependency (Vulkan 1.0), so a
+read of the pass's own colour (DATE's stencil setup) does not end the pass (kept by the probe of an
+earlier start (probe: the read 0.412 vs the snapshot 0.530 ms, ...); device and driver ...)` (or
+`(no verdict for this device and driver yet: on for this start's probe ...)`, `([dev] subpass_read =
+on (ICO_VK_SUBPASS_READ=1): no probe, DATE's self-test still decides)`), and at the first pass made with it `rhi_vk: render passes: the first with the subpass read:
 its colour (format 37) also input attachment 0, ...`. The renderer uses it for DATE's stencil setup
 alone, and only where DATE's self-test passes on the device ([RENDER.md](RENDER.md), the device
 profile). Checked on lavapipe (`rhi_vk_subpass*`): without the self-dependency the layer reports
@@ -1010,6 +1018,38 @@ readable pass: [PIPELINES.md](PIPELINES.md#gs-state-as-data); `port/render/rd_re
 (`rhi_cmd_begin_render_pass`, `rhi_cmd_local_read_barrier`); `port/rhi/vk/vk_pipeline.c`
 (`rhi_create_bind_group`); `port/rhi/vk/vk_resource.c` (`createTexture`)). The renderer reads the
 fog's depth and DATE's alpha this way ([RENDER.md](RENDER.md#the-replay)).
+
+### The subpass read's probe
+
+The subpass read's shape is the device's for the whole run (render pass compatibility puts it in
+every pipeline of the class), so it is decided when the device is made
+(`port/rhi/vk/vk_device.c` (`vkr_subpass_read_decide`), `port/rhi/rhi_subpass_verdict.h`), on a
+`VkRenderPass` path without local read (`RhiLimits.subpassRoute`), in this order:
+
+| what | decision |
+| --- | --- |
+| `[dev] subpass_read = off` / `ICO_VK_FAKE_NO_DST` / `= on` | off / off / on without a probe (DATE's self-test still decides) |
+| local read on the device | off (not its route) |
+| no verdict file (no pipeline cache file: the tools and the tests, unless `ICO_VK_SUBPASS_VERDICT` names one) | off |
+| no GPU timestamps on the game's queue (the PowerVR B-Series) | off: the probe cannot time it |
+| the file's verdict for this device and driver: `kept` / `refused` | on / off, its words quoted in the device line |
+| `probing` (the start that probed it ended before its verdict: a device loss, a GPU hang, a crash, the system ending the app) | off, and the file rewritten `refused` for good |
+| none (no file, another device or driver, another format) | on for this start's probe: the mark `probing` written and flushed to the disc first |
+
+The file is `ico-subpass-read.txt` beside the pipeline cache file (Android: the app's cache folder;
+a cache the system empties loses the verdict, and the next start probes again), one line `v1
+<vendor:device:driverVersion> <state>: <words>`; a driver update probes again. The renderer's probe
+(`port/render/rd_subpass_probe.c`, [RENDER.md](RENDER.md#the-subpass-reads-probe)) writes `kept` or
+`refused` over the mark after DATE's self-test; a clean shutdown of a start that made the shape for
+its probe and never reached it takes the mark away (`rhi_vk: render passes: the subpass read's probe
+did not run at this start (no verdict): its mark taken away, the next start probes`), and a shutdown
+after a device loss keeps it. A GPU hang inside the probe is ended by the watchdog's GPU hang limit
+(half its timeout, 15 s by default: `port/platform/gpu_hang.h`), which ends the process without a
+shutdown, so the mark stays. `RHI_TEX_NO_SUBPASS_READ` makes a render target without the shape while
+the device has it (the probe's plain twin; never drawn with a depth target). Tests:
+`rhi_subpass_verdict` (the decision's order, the file's line, its path, a write, read and remove, no
+device), `rhi_vk_subpass_verdict` (the decision on lavapipe's 1.1 profile from each state of the
+file).
 
 ## Native handles for external compute
 
@@ -1315,7 +1355,8 @@ transfer features (`vkr_choose_depth_stencil`).
 | `ICO_VK_ATTACHMENT_READ` | 1 offers the attachment read on Qualcomm's driver too; ico-pc.ini `attachment_read` |
 | `ICO_VK_LEGACY_PASSES` | 1 records the render passes as `VkRenderPass` objects on any device (the Intel driver row's path, `rd_display_change_2x_legacy`), 0 keeps dynamic rendering on a device of the row; unset, the row; ico-pc.ini `[dev] legacy_passes` ([Vulkan](#vulkan), **Render passes**) |
 | `ICO_VK_FAKE_PASS_ROW` | tests only: `qualcomm` puts the device on Qualcomm's driver row alone (its passes `VkRenderPass` objects, `RhiLimits.passObjectsRow` set; nothing else of the driver faked): `rhi_vk_qcom_passes`, `_off`, `rd_pass_objects_ab` ([Vulkan](#vulkan), **Render passes**) |
-| `ICO_VK_SUBPASS_READ` | `[dev] subpass_read`: 1 turns [the subpass read](#local-read), an experiment off by default, on on any `VkRenderPass` path (the device's own, the driver row's and `[dev] legacy_passes`': `rhi_vk_subpass_vk11`, `_legacy_on`); 0 or unset off |
+| `ICO_VK_SUBPASS_READ` | `[dev] subpass_read`: 1 turns [the subpass read](#local-read) on without its probe on any `VkRenderPass` path (the device's own, the driver rows' and `[dev] legacy_passes`': `rhi_vk_subpass_vk11`, `_legacy_on`); 0 off; unset, [the probe's verdict](#the-subpass-reads-probe) decides |
+| `ICO_VK_SUBPASS_VERDICT` | tests only: the subpass read's verdict file (the game's is `ico-subpass-read.txt` beside its pipeline cache file; without either the read is off): `rhi_vk_subpass_verdict`, `rd_subpass_probe_*` |
 | `ICO_VK_STORAGE_BARRIERS` | 1 puts the by-region barrier before a destination-read draw that only the validation layer needs |
 | `ICO_VK_GLOBAL_BARRIERS` | 1 records a global barrier before every render pass and copy (`vk_cmd.c`) |
 | `ICO_VK_DEPTH_ALWAYS` | 1 makes every depth test compare `ALWAYS`, static and dynamic (`vk_pipeline.c`, `rhi_cmd_set_depth_state`), with the line `ICO_VK_DEPTH_ALWAYS: every depth test passes (...)`: the occlusion measurement's run without the depth ([RENDER.md](RENDER_PERF.md#culling)); the picture is not the game's |

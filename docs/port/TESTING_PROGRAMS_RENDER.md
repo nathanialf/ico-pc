@@ -1681,7 +1681,7 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   with `ICO_RD_FOG_SABOTAGE=local`, `local fail N, copy ok N`, the copy taken at both sizes and
   `profile: fog local off (self-test)` (`rd_fog_selftest_local_sabotage`). On the Vulkan
   `VkRenderPass` path's subpass read ([RHI.md](RHI.md#local-read); `test/rd_date_subpass.cmake`):
-  each with `ICO_VK_SUBPASS_READ=1` (the read is an experiment, off by default):
+  each with `ICO_VK_SUBPASS_READ=1` (the read forced on without its probe):
   `rd_date_selftest_vk11` (`ICO_VK_FAKE_API=1.1`) and `_vk10` (`=1.0`, all-static pipelines) with
   `ICO_RD_DATE_PATH=stencil`, stencil and snapshot ok 5 and the lines `render passes: the subpass
   read: ...` and `local read yes (the subpass read: ...)`; `rd_date_selftest_tiler_vk11` under
@@ -1714,6 +1714,32 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   ([WORK_BUFFERS.md](WORK_BUFFERS.md#the-desktops-local-read-and-its-probe)).
 - `rd_local_probe_test.c`: the local-read probe's verdict on synthetic times, no device: kept up to
   5 % slower, off above, kept with a time missing (`rd_local_probe_rule`).
+- `rd_subpass_probe_test.c` (`rd_subpass_probe.cmake`): the subpass read's probe rule
+  (`rd__subpass_probe_keep`) on synthetic least times, no device: kept with the read's frame up to 5 %
+  above the snapshot's and the shaped plain pass up to the larger of 5 % and the twin's own spread
+  above the twin's, the read judged first, a time missing (0, negative, NaN, infinite) untimed; the
+  after-self-test hook doing nothing without a renderer (`rd_subpass_probe_rule`). On lavapipe
+  (`test/rd_subpass_probe.cmake` through `rd_fog_selftest_test`, `ICO_VK_FAKE_API=1.1`,
+  `ICO_VK_FAKE_LIMITS=moltenvk`, the verdict file named by `ICO_VK_SUBPASS_VERDICT` and absent at the
+  start, so the first run is the probe's start, then a second run decided by the file):
+  `rd_subpass_probe_kept` (`ICO_RD_SUBPASS_PROBE_SABOTAGE=fast`: `subpass read: kept (probe: the
+  read X vs the snapshot Y ms, a plain pass Z vs W ms without the shape)`, the file `kept: probe:
+  ...`, the second run `kept by the probe of an earlier start (probe: ...` and no probe),
+  `rd_subpass_probe_refused` (`slow`: `refused (probe: the read slower, ...`, `profile: DATE stencil
+  off (probe)`, the second run off `refused by the probe of an earlier start`),
+  `rd_subpass_probe_plain` (`plain`: `refused (probe: a plain pass slower with the shape, ...`),
+  `rd_subpass_probe_selftest` (`ICO_RD_DATE_SABOTAGE=1`: `refused (DATE's self-test on the read:
+  stencil fail ...`), `rd_subpass_probe_end` (`end`: the first run ends inside the probe with exit 86
+  and the file `probing`, the second off `refused for good: the start that probed it ended before
+  its verdict` and the file so rewritten); no validation error in any run (label vk11).
+  `rd_subpass_ab` (`test/rd_subpass_ab.cmake`): the read on against off byte for byte over the
+  machine-local `tools/vu_flat0_dumps.txt` rows naming the mali or pixel profile and every
+  `tools/shadow_cuts_dumps.txt` row (the pixel profile), at issue 179's setting under the Arm fakes
+  (`ICO_VK_FAKE_LIMITS=mali`, `ICO_VK_FAKE_VENDOR=0x13B5`, `ICO_VK_FAKE_NO_DUAL=1`,
+  `ICO_RD_VU_RECORD=compute`, 21:9) and at the Pixel's under the MoltenVK fakes, both at
+  `ICO_VK_FAKE_API=1.1`: every target the same, no DATE snapshot with the read on and the passes fewer
+  by at least the off run's snapshots; a listed dump that is absent fails where
+  `/primary/dev/ico-dumps` exists (label vk11).
 - `rd_fog_test.c`: the depth fog of `fog_DrawFog` on the CPU and on the device, every depth path
   (`rd_fog`, `rd_fog_*`; the local read from the start in `rd_fog_local`, the other paths' replays
   the same bytes); at 2x a depth ramp's fog alpha equals the above-1x formula (the table

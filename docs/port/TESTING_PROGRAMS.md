@@ -1162,7 +1162,10 @@ that stops again writing its own line without the retry mark); a stop at the fre
   state with its reason in the start line, the Qualcomm passes row on only on Qualcomm's driver,
   its count and the stalls clause `(the Adreno attempt on|off)`, the VU record by compute's and
   the turn fold's states per class (off by default on the PowerVR phone, the Mali and the Adreno
-  turned phones' turn fold off by default, not applicable on the desktops); the two small cuts'
+  turned phones' turn fold off by default, not applicable on the desktops), the subpass read's
+  state and why per class (on for the Mali-G52's probe, not applicable for no GPU timestamps on the
+  PowerVR B, refused on the Adreno 740 by an earlier verdict, not applicable off the route with the
+  fixed words), the blend constant `not in this build`; the two small cuts'
   deciders' other states (the switch, the define, a mode by name, no compute stores; the fold on
   only with its self-test passed, refused by it, not run, no turned swapchain) (CPU only).
 - `core_share_test.c` (ctest `core_share`): the share of run time on the faster cores of the
@@ -1723,6 +1726,18 @@ The renderer's test programs have a page of their own:
   device put on the row alone (`ICO_VK_FAKE_PASS_ROW=qualcomm`), failing if the device line says
   `render passes dynamic;`; `rhi_vk_qcom_passes_off` the clock cell with `ICO_VK_LEGACY_PASSES=0`
   over the row, failing if it says `render passes legacy`.
+- `rhi_subpass_verdict_test.c`: the subpass read's decision at a Vulkan start and its verdict file
+  (`port/rhi/rhi_subpass_verdict.h`), pure: every branch of `rhi_subpass_decide` in its order
+  (`[dev] subpass_read = off`, `ICO_VK_FAKE_NO_DST` with and without the key, `= on` over a refusal,
+  local read, no file, no timestamps, `kept`, `refused`, `probing` asking for the refusal to be
+  written, none asking for the mark), the key's text, the file beside a pipeline cache path (`/`,
+  `\`, none, empty, too long), the line's parse (another key or format, an unknown state, a key's
+  prefix, a why cut to its buffer, the line's end) and a write, read, overwrite and remove of a file
+  in the test's folder (`rhi_subpass_verdict`). On lavapipe, `rhi_vk_subpass_verdict`
+  (`test/rhi_vk_subpass_verdict.cmake`, `rhi_vk_test subpass` at `ICO_VK_FAKE_API=1.1` with
+  `ICO_VK_SUBPASS_VERDICT`): no file, the read on for the probe and the mark taken away at the clean
+  shutdown; a `kept` verdict on, the file unchanged; a `probing` mark off and rewritten `refused`
+  for good; a refusal off; another driver's verdict, the probe again.
 - `rhi_vk_tile_rule_test.c`: the barrier scopes and the submission wait a Vulkan start runs
   (`port/rhi/rhi_tile_rule.c`, pure; issues 179 and 211): which devices are tile-based phone GPUs
   (`rhi_tile_phone`: the Android branch whatever the vendor, iOS through MoltenVK, a faked
