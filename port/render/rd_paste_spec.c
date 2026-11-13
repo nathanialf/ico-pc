@@ -55,7 +55,7 @@ static struct {
     uint64_t taken, seen; /* since rd_init */
     int lastWhy;
     bool said[RD_PASTE_SPEC_WHY_COUNT], firstSaid;
-    char stateSaid[240];
+    char stateSaid[384];
 } s_ps = {.env = -1};
 
 /* the 10 s block's counts (__atomic: the render thread adds, the window's
