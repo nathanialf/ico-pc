@@ -48,6 +48,11 @@ void rd_icon_hold(bool on)
     __atomic_store_n(&s_req, 0u, __ATOMIC_RELEASE);
 }
 
+bool rd__icon_hold_asked(void)
+{
+    return __atomic_load_n(&s_req, __ATOMIC_ACQUIRE) != 0u;
+}
+
 bool rd_icon_hold_ready(void)
 {
     return __atomic_load_n(&s_req, __ATOMIC_ACQUIRE) &&

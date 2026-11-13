@@ -61,6 +61,10 @@ typedef struct RdVuRecord {
     /* the device's offers at rd__vu_record_init (RhiLimits.vertexStores,
      * computeStores), for the fallback's next rung */
     bool canStores, canCompute;
+    /* the compute dispatches taken by the PowerVR class's rule in place of
+     * the vertex stores (rd_vu_class.h): a compute record the self-test
+     * refuses goes back to the stores; cleared at that fall back */
+    bool classCompute;
     /* the mode's words for the start line and the summary: how the record
      * is written, and why the other ways are not taken */
     char why[320];

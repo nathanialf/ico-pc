@@ -30,6 +30,8 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
     [ICO_ATT_SUBPASS] = {"subpass read", "passes", NULL},
     [ICO_ATT_BLEND_CONST] = {"blend constant", "draws", NULL},
     [ICO_ATT_COMPACTION] = {"index compaction", "triangles dropped", NULL},
+    [ICO_ATT_VU_COMPUTE_CLASS] = {"VU record by compute on the PowerVR", "dispatches", NULL},
+    [ICO_ATT_TURN_FOLD] = {"turn in the present's blit", "presents", "kept the turn pass"},
 };
 
 /* the rows' live values (__atomic), and the block text's last counts (the
@@ -91,6 +93,11 @@ IcoAttemptState ico_attempt_state_of(int id)
 {
     return idOk(id) ? (IcoAttemptState)__atomic_load_n(&s_att[id].state, __ATOMIC_ACQUIRE)
                     : ICO_ATT_NOT_SET;
+}
+
+const char *ico_attempt_why_of(int id)
+{
+    return idOk(id) ? __atomic_load_n(&s_att[id].why, __ATOMIC_ACQUIRE) : NULL;
 }
 
 const char *ico_attempt_name(int id)
@@ -297,4 +304,67 @@ void ico_attempt_decide_pass_objects(const char *row)
 {
     ico_attempt_state(ICO_ATT_ADRENO_A, row != NULL ? ICO_ATT_ON : ICO_ATT_NA,
                       row != NULL ? row : "not Qualcomm's own driver");
+}
+
+int ico_attempt_decide_vu_compute(int byName, int stores, int compute, int powervr, int env,
+                                  int defaultOn)
+{
+    IcoAttemptState st = ICO_ATT_NA;
+    const char *why;
+    int on = 0;
+    if (byName) {
+        why = "[dev] vu_record asked for a write by name";
+    } else if (!stores) {
+        why = "no vertex stores here: auto's own order";
+    } else if (!compute) {
+        why = "no compute stores here";
+    } else if (env == 0) {
+        st = ICO_ATT_OFF_DEFAULT;
+        why = "ICO_RD_VU_COMPUTE_CLASS=0: the tests' switch";
+    } else if (env == 1) {
+        st = ICO_ATT_ON;
+        on = 1;
+        why = powervr ? "ICO_RD_VU_COMPUTE_CLASS=1 on the PowerVR class"
+                      : "ICO_RD_VU_COMPUTE_CLASS=1: the tests' switch on another class";
+    } else if (!powervr) {
+        why = "not the PowerVR class under Vulkan";
+    } else if (!defaultOn) {
+        st = ICO_ATT_OFF_DEFAULT;
+        why = "off by default until a phone rc shows the PowerVR phone's opening with it";
+    } else {
+        st = ICO_ATT_ON;
+        on = 1;
+        why = "the PowerVR class: compute dispatches in place of the vertex stores";
+    }
+    ico_attempt_state(ICO_ATT_VU_COMPUTE_CLASS, st, why);
+    return on;
+}
+
+int ico_attempt_decide_turn_fold(int turned, int env, int defaultOn, int selftest)
+{
+    IcoAttemptState st = ICO_ATT_NA;
+    const char *why;
+    int on = 0;
+    if (!turned) {
+        why = "the swapchain is not pre-rotated here";
+    } else if (env == 0) {
+        st = ICO_ATT_OFF_DEFAULT;
+        why = "ICO_RD_TURN_FOLD=0: the tests' switch";
+    } else if (env != 1 && !defaultOn) {
+        st = ICO_ATT_OFF_DEFAULT;
+        why = "off by default until a phone rc shows the turned phone's pictures with it";
+    } else if (selftest == 0) {
+        st = ICO_ATT_REFUSED;
+        why = "the box blit drawn turned differs from the turn pass's bytes";
+    } else if (selftest < 0) {
+        st = ICO_ATT_OFF_DEFAULT;
+        why = "its self-test not run yet";
+    } else {
+        st = ICO_ATT_ON;
+        on = 1;
+        why = env == 1 ? "ICO_RD_TURN_FOLD=1, self-test passed"
+                       : "self-test passed: presents of the box blit alone";
+    }
+    ico_attempt_state(ICO_ATT_TURN_FOLD, st, why);
+    return on;
 }

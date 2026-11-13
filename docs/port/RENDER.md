@@ -1635,6 +1635,8 @@ immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan. OpenGL and Direct3
 | the empty composites skipped (`ICO_RD_EMPTY_SKIP`, tests only; needs the shadow box, which needs the one-draw count) | on | off (no box: the seven-draw count) | on | on | on | on | on |
 | the culler's default (`rd_vis.c` `rd__vis_profile_default`, `RhiLimits.tiler`) | frustum and occlusion | frustum and occlusion | frustum alone | frustum alone | frustum alone | frustum alone | frustum alone on Apple silicon; frustum and occlusion on an Intel or AMD Mac |
 | the late pass's fill hold and deferred paste (`rd_late_pass.c`, `RhiLimits.tiler` under Vulkan), shot late (`rd_present.c`, `RhiLimits.tiler`) | off | off | on | on | on | on | on for Apple silicon; off on an Intel or AMD Mac |
+| the VU record by compute in place of the vertex stores (`rd_vu_class.c`; [RENDER_POST.md](RENDER_POST.md#the-vu-record-by-compute-on-the-powervr-class-off-by-default-until-a-phone-rc)) | off | off | off | off | off (no vertex stores: auto's compute already) | off on the PowerVR (`RD_VU_COMPUTE_CLASS_DEFAULT` 0 until a phone rc; Imagination's vendor id only, not the other tile-based) | off |
+| the turn in the present's blit (`rd_turn_fold.c`; [RENDER_POST.md](RENDER_POST.md#the-turn-in-the-presents-blit-off-by-default-until-a-phone-rc)) | no turned swapchain | no turned swapchain | off (`RD_TURN_FOLD_DEFAULT` 0 until a phone rc) | off, the same | off, the same | off, the same | no turned swapchain on a Mac |
 
 Two meanings of "tile-based" meet in this table. The flags from `auraBox` to `sheetBake2x` follow
 the profile's class (every class but desktop Vulkan, D3D12, OpenGL and Direct3D 11, so an Intel or

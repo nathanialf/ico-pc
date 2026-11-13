@@ -997,6 +997,41 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   `tools/ci_d3d11_warp.sh`, `-DBACKEND=d3d11`, the debug layer's errors failing it).
   `rd_vu_flat0_gl`: the list on OpenGL (llvmpipe), every dump at the corpus settings (the fakes are
   Vulkan's). No device: SKIP.
+- `rd_smallcuts_test.c` (`rd_smallcuts`; `rd_smallcuts.cmake`, CPU): the pure parts of the turn in
+  the present's blit and the VU record by compute on the PowerVR class: `rd__turn_rect` for every
+  quarter turn against `rd_prerotate.c`'s pixel table (every pixel of the rect lands inside the
+  turned rect, the sizes swapped for odd turns) at the phone's window (2364x1080: the whole box, a
+  4:3 box with bars, the border mask's inset) and odd sizes and corners, and the self-test's own
+  90-degree case by value (7,5 11x7 in 48x30 is 18,7 7x11); `rd__turn_fold_why`'s reasons in the
+  present's order (the CRT filter first, the box blit alone folds); `rd__vu_class_pick` through the
+  ledger's decider (off by default on the class, on by the define or `ICO_RD_VU_COMPUTE_CLASS=1`,
+  off by `=0`, not applicable with a mode asked by name, without vertex stores or compute stores,
+  or on another class with the define flipped).
+- `rd_turn_fold_ab.cmake` (`rd_turn_fold_ab`; `rd_smallcuts.cmake`): the present's turn drawn by its
+  box blit (`ICO_RD_TURN_FOLD=1`) against the turn pass (unset) through the headless twin
+  (`ICO_VK_FAKE_TRANSFORM=90`, `180`, `270`), rd_pixel's dump and every dump of the machine-local
+  `tools/turn_fold_dumps.txt` (the Pixel's three opening dumps and issue 179's three Mali-G52 dumps;
+  a listed dump that is absent FAILS where `/primary/dev/ico-dumps` exists): the phone's setting
+  (`ICO_VK_FAKE_LIMITS=moltenvk`, Enhanced 2364x1080, full height, full pixel) and a 16:9 window at
+  its own resolution (1280x720, full pixel) fold or keep the turn pass for drawn text, 640x480 at 1x
+  keeps it (`the box blit not one texel a pixel`), rd_pixel's dump with `--overlay-test` keeps it
+  (`the port's overlay or the deferred text drawn`); the fold's runs say its self-test passed
+  (`6 cases`), the turn pass's runs never fold, every PNG pair the same bytes, at least one present
+  folded. No device: SKIP.
+- `rd_vuprepass_selftest_compute_class`, `_back`, `_off` (`rd_smallcuts.cmake`, through
+  `test/rd_vuprepass_selftest.cmake`): the VU record by compute on the PowerVR class on lavapipe
+  by the tests' switch: with `ICO_RD_VU_COMPUTE_CLASS=1` the rule's line (`the compute dispatches
+  in place of the vertex stores (ICO_RD_VU_COMPUTE_CLASS=1: the tests' switch on another class`)
+  and the self-test's `record compute`; under the stale sabotage the compute record goes back to the
+  vertex stores first (`(the PowerVR class's compute record off: they failed the start-up
+  self-test)`) before the verdict; with `=0` the rule's `the record as auto takes it` and no compute
+  record.
+- `rd_vurecord_ab_compute_class`, `_opening` (`rd_smallcuts.cmake`, through
+  `test/rd_vu_env_ab.cmake`): `ICO_RD_VU_COMPUTE_CLASS=0` (the stores) against `=1` (the compute
+  dispatches by the rule), every named target byte for byte, A's stats `VU record stores`, B's
+  `VU record compute: ... (the PowerVR class's rule`; on rd_pixel's dump and
+  `tools/vustage_dumps.txt`, and on `tools/lamps_dumps.txt` (the Pixel's opening dumps among them;
+  `LIST_STRICT`). No device: SKIP.
 - `rd_lamps_lowres_ab.cmake` (`rd_lamps_lowres_ab`; `rd_lamps.cmake`): the lamps' glow at the GS
   frame's size above 1x (`RD_LAMPS_LOWRES`, DIVERGENCES.md VD-32) on every glow dump of
   `tools/glow_light_dumps.txt` (machine-local; a listed dump that is absent FAILS),

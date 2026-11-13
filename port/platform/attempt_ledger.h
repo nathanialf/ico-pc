@@ -86,6 +86,14 @@ enum {
     ICO_ATT_SUBPASS,
     ICO_ATT_BLEND_CONST,
     ICO_ATT_COMPACTION,
+    /* rd_vu_class.c (rd_vu_record.c): the VU record by compute dispatches
+       in place of the vertex stores on the PowerVR class; count the
+       dispatches */
+    ICO_ATT_VU_COMPUTE_CLASS,
+    /* rd_turn_fold.c (rd_present.c): presents whose turn into a pre-rotated
+       swapchain was drawn by the box blit itself (no turn pass); second
+       count the presents on a turned swapchain that kept the turn pass */
+    ICO_ATT_TURN_FOLD,
     ICO_ATT_COUNT
 };
 
@@ -98,6 +106,8 @@ void ico_attempt_fire2(int id, uint64_t n);
 
 /* the row's state now (ICO_ATT_NOT_SET for an id out of range) */
 IcoAttemptState ico_attempt_state_of(int id);
+/* the row's why as last set (NULL none or out of range) */
+const char *ico_attempt_why_of(int id);
 /* the row's words ("few-cores rule"), NULL out of range */
 const char *ico_attempt_name(int id);
 /* the state's word: "not reported", "on", "off by default", "refused by
@@ -151,5 +161,21 @@ void ico_attempt_decide_empty_skip(int box, int mode);
    the passes; NULL otherwise, and on the other backends) */
 void ico_attempt_decide_pass_objects(const char *row);
 void ico_attempt_decide_no_volume_break(int env, int classOk, int defaultOn, const char *gateWhy);
+/* the VU record by compute on the PowerVR class (rd_vu_class.c, at the
+   record's start): byName a [dev] vu_record asked for by name, stores auto
+   takes the vertex stores here, compute the device has compute stores,
+   powervr the PowerVR class under Vulkan, env the tests' switch
+   (ICO_RD_VU_COMPUTE_CLASS: -1 unset, 0, 1), defaultOn
+   RD_VU_COMPUTE_CLASS_DEFAULT.  1 when the record is to be written by
+   compute dispatches (the row on), else 0 */
+int ico_attempt_decide_vu_compute(int byName, int stores, int compute, int powervr, int env,
+                                  int defaultOn);
+/* the turn in the present's blit (rd_turn_fold.c, at each change of its
+   inputs): turned the swapchain is pre-rotated (or the tests' twin), env
+   the tests' switch (ICO_RD_TURN_FOLD: -1 unset, 0, 1), defaultOn
+   RD_TURN_FOLD_DEFAULT, selftest its start-up self-test (-1 not run, 0
+   failed, 1 passed).  1 when the fold may run (each present still checks
+   its draws), else 0 */
+int ico_attempt_decide_turn_fold(int turned, int env, int defaultOn, int selftest);
 
 #endif

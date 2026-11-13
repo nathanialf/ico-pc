@@ -10,6 +10,9 @@
 #include <string.h>
 
 #include "rd_vu_record.h"
+#include "attempt_ledger.h"
+#include "rd_stencil_selftest.h" /* rd__profile_powervr */
+#include "rd_vu_class.h"
 #include "rd_vu_rec_sink.h"
 
 RdVuRecord g_rdRec;
@@ -170,7 +173,11 @@ static void wordsFor(int mode, const RhiLimits *lim)
                                             : "[dev] vu_record = targets keeps the render "
                                               "targets, = compute the compute dispatches");
     } else if (mode == RD_VU_RECORD_COMPUTE) {
-        if (asked == RD_VU_RECORD_COMPUTE) {
+        if (g_rdRec.classCompute) {
+            whySet("%s (the PowerVR class's rule, rd_vu_class.h: in place of the vertex stores; "
+                   "[dev] vu_record = stores keeps the stores)",
+                   kComputeWords);
+        } else if (asked == RD_VU_RECORD_COMPUTE) {
             whySet("%s ([dev] vu_record = compute)", kComputeWords);
         } else {
             whySet("%s (no vertex stores: %s%s; [dev] vu_record = targets keeps the render "
@@ -214,6 +221,27 @@ void rd__vu_record_init(const RhiLimits *lim)
         want = g_rdRec.canStores    ? RD_VU_RECORD_STORES
                : g_rdRec.canCompute ? RD_VU_RECORD_COMPUTE
                                     : RD_VU_RECORD_TARGETS;
+    }
+    /* the PowerVR class's rule (rd_vu_class.h): the compute dispatches in
+       place of the stores where both are offered; the ledger's row says
+       which, the line once a start */
+    g_rdRec.classCompute = false;
+    {
+        const bool powervr = lim != NULL && rd__profile_powervr();
+        const bool compute =
+            rd__vu_class_pick(g_rdRec.asked, want, g_rdRec.canCompute, powervr, rd__vu_class_env(),
+                              RD_VU_COMPUTE_CLASS_DEFAULT != 0);
+        if (compute) {
+            want = RD_VU_RECORD_COMPUTE;
+            g_rdRec.classCompute = true;
+        }
+        if (powervr || ico_attempt_state_of(ICO_ATT_VU_COMPUTE_CLASS) != ICO_ATT_NA) {
+            const char *why = ico_attempt_why_of(ICO_ATT_VU_COMPUTE_CLASS);
+            rd__log("VU record: the PowerVR class's rule: %s (%s; RD_VU_COMPUTE_CLASS_DEFAULT %d)",
+                    compute ? "the compute dispatches in place of the vertex stores"
+                            : "the record as auto takes it",
+                    why ? why : "", RD_VU_COMPUTE_CLASS_DEFAULT);
+        }
     }
     if (want != RD_VU_RECORD_TARGETS) {
         /* group 1 of the store and compute pipelines: layoutVu's slots but
@@ -300,7 +328,33 @@ bool rd__vu_record_fall_back(const char *why)
     const char *w = why != NULL ? why : "?";
     int to = RD_VU_RECORD_TARGETS;
     char miss[64] = "";
-    if (from == RD_VU_RECORD_STORES && g_rdRec.canCompute && g_rdRec.layoutVuPre.id) {
+    const bool classBack = from == RD_VU_RECORD_COMPUTE && g_rdRec.classCompute;
+    g_rdRec.classCompute = false;
+    if (classBack) {
+        /* the PowerVR class's compute record refused (rd_vu_class.h): back
+           to the vertex stores, the path auto takes without the rule; the
+           row refused by its self-test */
+        ico_attempt_state(ICO_ATT_VU_COMPUTE_CLASS, ICO_ATT_REFUSED,
+                          "the compute record failed the start-up self-test: the vertex stores");
+        if (g_rdRec.canStores && g_rdRec.layoutVuPre.id &&
+            makeBuilds(RD_VU_RECORD_STORES, miss, sizeof miss) && rd__vu_rec_sink_ready()) {
+            g_rdRec.mode = RD_VU_RECORD_STORES;
+            whySet("%s (the PowerVR class's compute record off: %s)", kStoresWords, w);
+            rd__log("VU record: %s", g_rdRec.why);
+            return true;
+        }
+        failedAdd(RD_VU_RECORD_STORES);
+        g_rdRec.mode = RD_VU_RECORD_TARGETS;
+        whySet("%s (the PowerVR class's compute record off: %s; the stores off: %s)", kTargetsWords,
+               w,
+               miss[0]             ? miss
+               : g_rdRec.canStores ? "the store passes' throwaway targets could not be made"
+                                   : "no vertex stores");
+        rd__log("VU record: %s", g_rdRec.why);
+        return true;
+    }
+    if (from == RD_VU_RECORD_STORES && g_rdRec.canCompute && g_rdRec.layoutVuPre.id &&
+        strstr(g_rdRec.failed, "compute") == NULL) {
         to = RD_VU_RECORD_COMPUTE;
         if (!makeBuilds(RD_VU_RECORD_COMPUTE, miss, sizeof miss)) {
             /* the compute rung given up too, said with its build */
@@ -314,6 +368,9 @@ bool rd__vu_record_fall_back(const char *why)
     } else if (miss[0]) {
         whySet("%s (the %s off: %s; the compute off: %s could not be made)", kTargetsWords,
                modeName(from), w, miss);
+    } else if (from == RD_VU_RECORD_STORES && strstr(g_rdRec.failed, "compute") != NULL) {
+        whySet("%s (the stores off: %s; the compute dispatches given up before them)",
+               kTargetsWords, w);
     } else if (from == RD_VU_RECORD_STORES) {
         whySet("%s (the stores off: %s; no compute stores: %s)", kTargetsWords, w,
                g_rdRec.canCompute ? "the stores' layout is missing"
@@ -337,6 +394,10 @@ void rd__vu_record_shaders(void)
         return;
     }
     if (!g_rd.vuPrepass) {
+        if (g_rdRec.classCompute) {
+            g_rdRec.classCompute = false;
+            ico_attempt_state(ICO_ATT_VU_COMPUTE_CLASS, ICO_ATT_NA, "the VU pre-pass is off");
+        }
         g_rdRec.mode = RD_VU_RECORD_TARGETS;
         whySet("%s (the pre-pass is off)", kTargetsWords);
         return;
@@ -400,6 +461,9 @@ void rd__replay_dispatch(RhiCommandList cl, uint32_t points)
         return;
     }
     rhi_cmd_dispatch(cl, (points + 63u) / 64u, 1, 1);
+    if (g_rdRec.classCompute) {
+        ico_attempt_fire(ICO_ATT_VU_COMPUTE_CLASS, 1); /* the ledger's row (rd_vu_class.h) */
+    }
 }
 
 bool rd__vu_record_skip(uint64_t slots)

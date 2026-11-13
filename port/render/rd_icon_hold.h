@@ -68,6 +68,10 @@ bool rd__icon_hold_tainted(uint32_t frame, float alpha, uint32_t first, uint32_t
 void rd__icon_hold_record(RhiCommandList cl, RhiTexture out, RhiState *outState, RhiFormat fmt,
                           uint32_t w, uint32_t h, bool open);
 
+/* a hold asked for (rd_icon_hold(true) until (false)): the present's
+   record may copy or draw the picture (rd_turn_fold.h keeps the turn pass) */
+bool rd__icon_hold_asked(void);
+
 /* rd__present_shutdown: the hold's texture freed, the hold forgotten */
 void rd__icon_hold_shutdown(void);
 

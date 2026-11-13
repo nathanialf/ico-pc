@@ -3702,3 +3702,4 @@ endif()
 include(rd_early.cmake)
 include(rd_vu_flat0.cmake) # the main shader's flat outputs at the provoking corner
 include(rd_pass_objects.cmake) # Qualcomm's passes as VkRenderPass objects (issue 123)
+include(rd_smallcuts.cmake) # the turn in the present's blit, the VU record by compute on the PowerVR

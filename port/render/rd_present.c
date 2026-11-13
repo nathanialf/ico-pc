@@ -103,6 +103,7 @@
 #include "rd_fsr3.h"
 #include "rd_icon_hold.h"
 #include "rd_present_scene.h"
+#include "rd_turn_fold.h"
 #include "shader_consts.h"
 
 typedef struct RdPresentPreset {
@@ -630,6 +631,9 @@ static RhiState *s_picState;
  * present clears the image and presents it (rd__prerotate_blank), never
  * leaving an acquired image unpresented */
 static bool s_turnFailed;
+/* this present's box blit drew the turned image itself (rd_turn_fold.h):
+ * no turn pass at its end */
+static bool s_folded;
 
 static bool presentAcquire(void);
 
@@ -650,12 +654,12 @@ static RhiState *outStateOf(void)
 static void outFinish(RhiCommandList cl)
 {
     if (s_window) {
-        if (s_turns) {
+        if (s_turns && !s_folded) {
             rd__prerotate_record(cl, s_pic, s_picState, s_outW, s_outH, s_backbuffer,
                                  &s_backbufferState, s_outFormat, s_turns);
         }
         rd__transition(cl, s_backbuffer, &s_backbufferState, RHI_STATE_PRESENT);
-    } else if (s_turns) {
+    } else if (s_turns && !s_folded) {
         rd__prerotate_twin(cl, g_rd.presentOut, &g_rd.presentOutState, s_outW, s_outH, s_turns);
     }
 }
@@ -753,6 +757,12 @@ static bool snapWindow(uint32_t sw, float crop, uint32_t boxW, float *u0, float 
  * set by rd__present_record around that one call */
 static bool s_blitScene;
 
+/* the box blit drawn turned (rd_turn_fold.h): the quarter turns into the
+ * image and the upright picture's size (box and sc are the picture's);
+ * set by rd__present_record and rd__present_blit_turned around that one
+ * call, 0 every other blit */
+static uint32_t s_blitTurns, s_blitPicW, s_blitPicH;
+
 /* src (sw x sh) into box of dst in a pass of its own, crop texels left out
  * at each side of src (sourceCrop; 0: all of it); keepOpen leaves the pass
  * open for the caller to draw more into dst and end it.  sc: the scissor
@@ -774,9 +784,17 @@ static void blit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, Rh
     p.width = dw;
     p.height = dh;
     rhi_cmd_begin_render_pass(cl, &p);
-    RhiViewport vp = {(float)box->x, (float)box->y, (float)box->w, (float)box->h, 0.0f, 1.0f};
+    /* turned: the viewport and the scissor the box's and sc's in the image
+     * (whole pixels, rd__turn_rect), blit_vs turning its source position
+     * by aux1.w as the turn pass does */
+    const RhiRect vbox =
+        s_blitTurns ? rd__turn_rect(s_blitTurns, s_blitPicW, s_blitPicH, *box) : *box;
+    const RhiRect vsc = s_blitTurns
+                            ? rd__turn_rect(s_blitTurns, s_blitPicW, s_blitPicH, sc ? *sc : *box)
+                            : (sc ? *sc : *box);
+    RhiViewport vp = {(float)vbox.x, (float)vbox.y, (float)vbox.w, (float)vbox.h, 0.0f, 1.0f};
     rhi_cmd_set_viewport(cl, &vp);
-    rhi_cmd_set_scissor(cl, sc ? sc : box);
+    rhi_cmd_set_scissor(cl, &vsc);
     RdPipeKeyInt k = rd__post_key(
         RD_VS_BLIT, s_blitScene ? RD_FS_BLIT_SCENE : (tone ? RD_FS_BLIT_TONE : RD_FS_BLIT), dstFmt);
     RhiPipeline pipe = rd__get_pipeline(&k);
@@ -806,6 +824,7 @@ static void blit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, Rh
         cb.tex[1] = (float)sh;
         cb.tex[2] = 1.0f / (float)sw;
         cb.tex[3] = 1.0f / (float)sh;
+        cb.aux1[3] = s_blitTurns; /* blit_vs: the source read at the turned position */
         rd__set_pipeline(cl, pipe, &k);
         rd__bind_uniform(cl, 0, rd__frame_group(dw, dh, 0.0f, 0.0f));
         rd__bind_uniform(cl, 1, rd__draw_group(&cb));
@@ -816,6 +835,20 @@ static void blit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, Rh
     if (!keepOpen) {
         rhi_cmd_end_render_pass(cl);
     }
+}
+
+void rd__present_blit_turned(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh,
+                             RhiTexture dst, RhiFormat fmt, uint32_t w, uint32_t h,
+                             const RhiRect *box, const RhiRect *sc, int filter, int mirror,
+                             uint32_t turns)
+{
+    const uint32_t dw = (turns & 1u) ? h : w, dh = (turns & 1u) ? w : h;
+    s_blitTurns = turns;
+    s_blitPicW = w;
+    s_blitPicH = h;
+    blit(cl, src, sw, sh, dst, fmt, dw, dh, RHI_LOAD_CLEAR, box, sc, (RdFilter)filter, mirror, 0.0f,
+         false, false);
+    s_blitTurns = 0;
 }
 
 void rd__present_blit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, RhiTexture dst,
@@ -2721,8 +2754,12 @@ void rd__present_record(RhiCommandList cl)
      * out and read it back between them.  The CRT filter and the effects
      * depth keep a pass each */
     bool open = false;
+    s_folded = false;
+    /* the turn in the box blit (rd_turn_fold.h): the ledger's row as this
+     * present's swapchain has it (on: the fold may run; each present still
+     * checks what it draws) */
+    const bool foldOn = rd__turn_fold_on(s_turns != 0 && !s_turnFailed);
     if (!filtered) {
-        rd__transition(cl, out, outState, RHI_STATE_RENDER_TARGET);
         /* with the effects depth when asked for and an
          * effects program is loaded (never under the CRT filter, even when
          * it could not draw) */
@@ -2736,9 +2773,11 @@ void rd__present_record(RhiCommandList cl)
          * (reduceRecord; the reduce takes the crop; the box blit is then
          * one texel a pixel, nearest).  Not after the downsample: its
          * picture is presented as 1x is */
+        bool reduced = false;
         if (!downsampled && reduceRecord(cl, &src, &sw, &sh, &box, crop)) {
             crop = 0.0f;
             scaleFilter = RD_FILTER_NEAREST;
+            reduced = true;
         } else if (rd__fsr1_record(cl, &src, &sw, &sh, &box, crop, snapped)) {
             /* Upscaling: FSR 1.0 (rd_fsr1.c): fewer texels than the box has
              * pixels on both axes, EASU and RCAS into a texture of the box's
@@ -2748,6 +2787,7 @@ void rd__present_record(RhiCommandList cl)
              * with the colour) */
             crop = 0.0f;
             scaleFilter = RD_FILTER_NEAREST;
+            reduced = true;
         }
         /* Full pixel off: the game's border over the picture (the scissor
          * inset, the viewport the box's) */
@@ -2758,7 +2798,41 @@ void rd__present_record(RhiCommandList cl)
          * rows; rd_tone.h): the finished picture's colour, the box alone
          * (the bars stay the cleared black) */
         const bool tone = rd__tone_active();
-        const bool depth = depthWanted() && !rd__crt_on() &&
+        if (foldOn && s_turns && !s_turnFailed) {
+            /* the box blit alone, one texel a pixel (snapped, or after the
+             * reduce or FSR 1.0): drawn turned into the image itself; any
+             * other draw of this present keeps the turn pass */
+            const RdTurnFoldPresent fp = {
+                .crt = rd__crt_on(),
+                .depth = depthWanted(),
+                .scene = fromScene && src.id == disp->color.id,
+                .oneToOne = (crop == 0.0f && sw == box.w && sh == box.h) ||
+                            (!reduced && snapped && sh == box.h),
+                .batches = s_ov.buf.bCount,
+                .capture = s_cap.armed || s_shot.armed || s_shot.copied || rd__icon_hold_asked(),
+                .formatOk = s_outFormat == rd__turn_fold_format(),
+            };
+            int why = rd__turn_fold_why(&fp);
+            RhiTexture ft = {0};
+            RhiState *fst = NULL;
+            if (why == RD_TF_FOLD) {
+                if (s_window) {
+                    ft = s_backbuffer;
+                    fst = &s_backbufferState;
+                } else if (!rd__prerotate_twin_target(s_outW, s_outH, s_turns, &ft, &fst)) {
+                    ft.id = 0;
+                }
+                why = ft.id ? RD_TF_FOLD : RD_TF_FORMAT;
+            }
+            rd__turn_fold_note(why, s_outW, s_outH, s_turns);
+            if (why == RD_TF_FOLD) {
+                s_folded = true;
+                out = ft;
+                outState = fst;
+            }
+        }
+        rd__transition(cl, out, outState, RHI_STATE_RENDER_TARGET);
+        const bool depth = !s_folded && depthWanted() && !rd__crt_on() &&
                            depthBlit(cl, src, sw, sh, out, s_outFormat, s_outW, s_outH, &box, sc,
                                      scaleFilter, mirror, crop, tone);
         if (!depth) {
@@ -2767,8 +2841,16 @@ void rd__present_record(RhiCommandList cl)
              * 1.0 or downsample took it: rd__present_scene_present_why) */
             s_blitScene = fromScene && src.id == disp->color.id;
             const RhiTexture from = s_blitScene ? rd__present_scene_texture(cl) : src;
-            blit(cl, from, sw, sh, out, s_outFormat, s_outW, s_outH, RHI_LOAD_CLEAR, &box, sc,
-                 scaleFilter, mirror, crop, open, tone);
+            /* folded: the image's turned size, the box and scissor turned
+             * in blit (s_blitTurns) */
+            const uint32_t q = s_folded ? s_turns : 0u;
+            s_blitTurns = q;
+            s_blitPicW = s_outW;
+            s_blitPicH = s_outH;
+            blit(cl, from, sw, sh, out, s_outFormat, (q & 1u) ? s_outH : s_outW,
+                 (q & 1u) ? s_outW : s_outH, RHI_LOAD_CLEAR, &box, sc, scaleFilter, mirror, crop,
+                 open, tone);
+            s_blitTurns = 0;
             if (s_blitScene) {
                 rd__present_scene_shown();
             }
