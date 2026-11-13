@@ -45,6 +45,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_turn_fold.h"
 #include "shader_consts.h"
 
 /* the window's picture before the turn (w x h, the swapchain's format) */
@@ -159,6 +160,13 @@ static void turnPass(RhiCommandList cl, RhiTexture src, RhiState *srcState, uint
     rhi_cmd_end_render_pass(cl);
 }
 
+void rd__prerotate_turn_pass(RhiCommandList cl, RhiTexture src, RhiState *srcState, uint32_t w,
+                             uint32_t h, RhiTexture dst, RhiState *dstState, RhiFormat dstFmt,
+                             uint32_t turns)
+{
+    turnPass(cl, src, srcState, w, h, dst, dstState, dstFmt, turns);
+}
+
 void rd__prerotate_record(RhiCommandList cl, RhiTexture src, RhiState *srcState, uint32_t w,
                           uint32_t h, RhiTexture dst, RhiState *dstState, RhiFormat dstFmt,
                           uint32_t turns)
@@ -193,8 +201,9 @@ void rd__prerotate_blank(RhiCommandList cl, RhiTexture image, RhiState *state, u
     rd__transition(cl, image, state, RHI_STATE_PRESENT);
 }
 
-void rd__prerotate_twin(RhiCommandList cl, RhiTexture src, RhiState *srcState, uint32_t w,
-                        uint32_t h, uint32_t turns)
+/* the twin at the turned size of a w x h picture (made, or made again on a
+ * change of size), its line said once; false when it could not be made */
+static bool twinMake(uint32_t w, uint32_t h, uint32_t turns)
 {
     const uint32_t tw = (turns & 1u) ? h : w, th = (turns & 1u) ? w : h;
     if (!s_twin.tex.id || s_twin.w != tw || s_twin.h != th) {
@@ -210,7 +219,7 @@ void rd__prerotate_twin(RhiCommandList cl, RhiTexture src, RhiState *srcState, u
         s_twin.h = s_twin.tex.id ? th : 0;
     }
     if (!s_twin.tex.id) {
-        return; /* the read takes the unturned picture: the test then fails its line */
+        return false; /* the read takes the unturned picture: the test then fails its line */
     }
     if (!s_twinLogged) {
         s_twinLogged = true;
@@ -218,11 +227,34 @@ void rd__prerotate_twin(RhiCommandList cl, RhiTexture src, RhiState *srcState, u
                 "turned back (ICO_VK_FAKE_TRANSFORM)",
                 w, h, turns * 90u, tw, th);
     }
-    turnPass(cl, src, srcState, w, h, s_twin.tex, &s_twin.state, RHI_FMT_RGBA8_UNORM, turns);
     s_twin.picW = w;
     s_twin.picH = h;
     s_twin.turns = turns;
+    return true;
+}
+
+void rd__prerotate_twin(RhiCommandList cl, RhiTexture src, RhiState *srcState, uint32_t w,
+                        uint32_t h, uint32_t turns)
+{
+    if (!twinMake(w, h, turns)) {
+        return;
+    }
+    turnPass(cl, src, srcState, w, h, s_twin.tex, &s_twin.state, RHI_FMT_RGBA8_UNORM, turns);
     s_twin.pending = true;
+}
+
+bool rd__prerotate_twin_target(uint32_t w, uint32_t h, uint32_t turns, RhiTexture *tex,
+                               RhiState **state)
+{
+    if (!twinMake(w, h, turns)) {
+        return false;
+    }
+    /* the folded present draws it (rd_turn_fold.h): read as the turn
+     * pass's twin is */
+    s_twin.pending = true;
+    *tex = s_twin.tex;
+    *state = &s_twin.state;
+    return true;
 }
 
 void rd__prerotate_twin_clear(void)
@@ -285,4 +317,5 @@ void rd__prerotate_shutdown(void)
     memset(&s_twin, 0, sizeof(s_twin));
     s_loggedTurns = s_loggedW = s_loggedH = 0;
     s_twinLogged = false;
+    rd__turn_fold_reset(); /* the fold's self-test again at the next renderer's start */
 }

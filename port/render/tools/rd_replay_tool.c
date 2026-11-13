@@ -541,6 +541,7 @@
 #include "rd_late_pass.h"        /* --stats: the late passes on SCENE */
 #include "rd_lamps.h"            /* --stats: the lamps' glow for less */
 #include "rd_glow_blur.h"        /* --stats: the glow blur in two passes */
+#include "rd_turn_fold.h"        /* the turn in the present's blit's self-test */
 #include "rd_fill11.h"           /* --stats: the crack fill in list 11's pass */
 #include "rd_present_scene.h"    /* --stats: the present from SCENE */
 #include "rd_stencil_selftest.h" /* --stats: the stencil outside the shadow window */
@@ -2749,6 +2750,7 @@ int main(int argc, char **argv)
          * (rd_crack_fill.c; the game runs it with the other self-tests,
          * rd_fog_selftest, which the tool does not run) */
         (void)rd__crack_swap_selftest();
+        (void)rd__turn_fold_selftest(); /* where ICO_RD_TURN_FOLD asks (rd_turn_fold.c) */
     }
     if (!noDevice && getenv("ICO_RD_EARLY_PREPARE") != NULL &&
         strcmp(getenv("ICO_RD_EARLY_PREPARE"), "1") == 0) {
@@ -3632,6 +3634,7 @@ int main(int argc, char **argv)
             }
             rd__set_not_implemented_fatal(false);
             (void)rd__crack_swap_selftest(); /* the new renderer's (rd_crack_fill.c) */
+            (void)rd__turn_fold_selftest();  /* the new renderer's (rd_turn_fold.c) */
             if (overlay) {
                 rd_set_present_overlay(overlayTest, NULL);
             }

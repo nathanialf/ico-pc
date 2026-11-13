@@ -52,26 +52,136 @@ typedef struct DeviceClass {
     const char *nvGate;
     IcoAttemptState wantCores, wantNoVolume;
     const char *wantNoVolumeWhy;
+    /* the VU record by compute (stores, powervr) and the turn fold
+       (turned): the facts as rd_vu_record.c and rd_turn_fold.c have them */
+    int vuStores, vuPowervr, turned;
+    IcoAttemptState wantVu, wantTurn;
 } DeviceClass;
 
 static void test_classes(void)
 {
     static const DeviceClass k[] = {
-        {"Mali-G52 (2 + 6)", 2, 1, NULL, 1, 0, 1, 1, -1, 0, 0, NULL, ICO_ATT_ON, ICO_ATT_NA,
-         "not the PowerVR or MoltenVK class under Vulkan"},
-        {"Pixel (PowerVR D, 1 + 5 over 2)", 6, 1, NULL, 1, 0, 1, 1, -1, 1, 0, NULL, ICO_ATT_NA,
+        {"Mali-G52 (2 + 6)",
+         2,
+         1,
+         NULL,
+         1,
+         0,
+         1,
+         1,
+         -1,
+         0,
+         0,
+         NULL,
+         ICO_ATT_ON,
+         ICO_ATT_NA,
+         "not the PowerVR or MoltenVK class under Vulkan",
+         0,
+         0,
+         1,
+         ICO_ATT_NA,
+         ICO_ATT_OFF_DEFAULT},
+        {"Pixel (PowerVR D, 1 + 5 over 2)",
+         6,
+         1,
+         NULL,
+         1,
+         0,
+         1,
+         1,
+         -1,
+         1,
+         0,
+         NULL,
+         ICO_ATT_NA,
          ICO_ATT_OFF_DEFAULT,
          "off by default until a phone rc shows the PowerVR phone's title and pause menu clean "
-         "with it"},
-        {"PowerVR B (no local read)", 2, 1, NULL, 1, 0, 1, 1, -1, 1, 0,
-         "the composites' DATE by the R8 snapshot or the shader's read", ICO_ATT_ON, ICO_ATT_NA,
-         "the composites' DATE by the R8 snapshot or the shader's read"},
-        {"Adreno 740 (4 + 3 + 1)", 4, 1, NULL, 1, 0, 1, 1, -1, 0, 0, NULL, ICO_ATT_NA, ICO_ATT_NA,
-         "not the PowerVR or MoltenVK class under Vulkan"},
-        {"desktop with MSAA", 0, 0, "only on Android", 1, 1, 1, 1, -1, 0, 0, NULL, ICO_ATT_NA,
-         ICO_ATT_NA, "not the PowerVR or MoltenVK class under Vulkan"},
-        {"a Mac (MoltenVK), the break forced", 0, 0, "only on Android", 1, 0, 1, 1, 1, 1, 0, NULL,
-         ICO_ATT_NA, ICO_ATT_ON, "ICO_RD_NO_VOLUME_BREAK=1"},
+         "with it",
+         1,
+         1,
+         1,
+         ICO_ATT_OFF_DEFAULT,
+         ICO_ATT_OFF_DEFAULT},
+        {"PowerVR B (no local read)",
+         2,
+         1,
+         NULL,
+         1,
+         0,
+         1,
+         1,
+         -1,
+         1,
+         0,
+         "the composites' DATE by the R8 snapshot or the shader's read",
+         ICO_ATT_ON,
+         ICO_ATT_NA,
+         "the composites' DATE by the R8 snapshot or the shader's read",
+         1,
+         1,
+         1,
+         ICO_ATT_OFF_DEFAULT,
+         ICO_ATT_OFF_DEFAULT},
+        {"Adreno 740 (4 + 3 + 1)",
+         4,
+         1,
+         NULL,
+         1,
+         0,
+         1,
+         1,
+         -1,
+         0,
+         0,
+         NULL,
+         ICO_ATT_NA,
+         ICO_ATT_NA,
+         "not the PowerVR or MoltenVK class under Vulkan",
+         1,
+         0,
+         1,
+         ICO_ATT_NA,
+         ICO_ATT_OFF_DEFAULT},
+        {"desktop with MSAA",
+         0,
+         0,
+         "only on Android",
+         1,
+         1,
+         1,
+         1,
+         -1,
+         0,
+         0,
+         NULL,
+         ICO_ATT_NA,
+         ICO_ATT_NA,
+         "not the PowerVR or MoltenVK class under Vulkan",
+         1,
+         0,
+         0,
+         ICO_ATT_NA,
+         ICO_ATT_NA},
+        {"a Mac (MoltenVK), the break forced",
+         0,
+         0,
+         "only on Android",
+         1,
+         0,
+         1,
+         1,
+         1,
+         1,
+         0,
+         NULL,
+         ICO_ATT_NA,
+         ICO_ATT_ON,
+         "ICO_RD_NO_VOLUME_BREAK=1",
+         1,
+         0,
+         0,
+         ICO_ATT_NA,
+         ICO_ATT_NA},
     };
     for (size_t c = 0; c < sizeof k / sizeof k[0]; c++) {
         const DeviceClass *d = &k[c];
@@ -82,6 +192,8 @@ static void test_classes(void)
         ico_attempt_decide_date_one(d->dateMode, d->dateSetting);
         ico_attempt_decide_empty_skip(d->box, d->skip);
         ico_attempt_decide_no_volume_break(d->nvEnv, d->nvClass, d->nvDefault, d->nvGate);
+        CHECK(ico_attempt_decide_vu_compute(0, d->vuStores, 1, d->vuPowervr, -1, 0) == 0);
+        CHECK(ico_attempt_decide_turn_fold(d->turned, -1, 0, -1) == 0);
         for (int i = 0; i < ICO_ATT_COUNT; i++) {
             if (i == ICO_ATT_ADRENO_A || i == ICO_ATT_ADRENO_B) {
                 continue;
@@ -94,6 +206,13 @@ static void test_classes(void)
         CHECK(ico_attempt_state_of(ICO_ATT_FEW_CORES) == d->wantCores);
         CHECK(ico_attempt_state_of(ICO_ATT_PIPE_SET_CORES) == d->wantCores);
         CHECK(ico_attempt_state_of(ICO_ATT_NO_VOLUME_BREAK) == d->wantNoVolume);
+        if (ico_attempt_state_of(ICO_ATT_VU_COMPUTE_CLASS) != d->wantVu ||
+            ico_attempt_state_of(ICO_ATT_TURN_FOLD) != d->wantTurn) {
+            printf("FAIL %s: VU compute %s, turn fold %s\n", d->name,
+                   ico_attempt_state_word(ico_attempt_state_of(ICO_ATT_VU_COMPUTE_CLASS)),
+                   ico_attempt_state_word(ico_attempt_state_of(ICO_ATT_TURN_FOLD)));
+            failures++;
+        }
         char b[2048], want[256];
         (void)ico_attempt_start_text(b, sizeof b);
         snprintf(want, sizeof want, "; no-volume break %s (%s)",
@@ -116,6 +235,32 @@ static void test_classes(void)
     CHECK(ico_attempt_state_of(ICO_ATT_NO_VOLUME_BREAK) == ICO_ATT_ON);
     ico_attempt_decide_cores(0, 1, NULL);
     CHECK(ico_attempt_state_of(ICO_ATT_FEW_CORES) == ICO_ATT_NA);
+    /* the VU record by compute: the tests' switch, the default flipped, a
+       mode asked by name, no compute stores */
+    CHECK(ico_attempt_decide_vu_compute(0, 1, 1, 0, 1, 0) == 1);
+    CHECK(ico_attempt_state_of(ICO_ATT_VU_COMPUTE_CLASS) == ICO_ATT_ON);
+    CHECK(ico_attempt_decide_vu_compute(0, 1, 1, 1, -1, 1) == 1);
+    CHECK(strcmp(ico_attempt_why_of(ICO_ATT_VU_COMPUTE_CLASS),
+                 "the PowerVR class: compute dispatches in place of the vertex stores") == 0);
+    CHECK(ico_attempt_decide_vu_compute(0, 1, 1, 1, 0, 1) == 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_VU_COMPUTE_CLASS) == ICO_ATT_OFF_DEFAULT);
+    CHECK(ico_attempt_decide_vu_compute(1, 1, 1, 1, 1, 1) == 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_VU_COMPUTE_CLASS) == ICO_ATT_NA);
+    CHECK(ico_attempt_decide_vu_compute(0, 1, 0, 1, 1, 1) == 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_VU_COMPUTE_CLASS) == ICO_ATT_NA);
+    /* the turn fold: on only with its self-test passed */
+    CHECK(ico_attempt_decide_turn_fold(1, 1, 0, 1) == 1);
+    CHECK(ico_attempt_state_of(ICO_ATT_TURN_FOLD) == ICO_ATT_ON);
+    CHECK(ico_attempt_decide_turn_fold(1, -1, 1, 1) == 1);
+    CHECK(ico_attempt_decide_turn_fold(1, 1, 0, 0) == 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_TURN_FOLD) == ICO_ATT_REFUSED);
+    CHECK(ico_attempt_decide_turn_fold(1, -1, 1, -1) == 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_TURN_FOLD) == ICO_ATT_OFF_DEFAULT);
+    CHECK(ico_attempt_decide_turn_fold(1, 0, 1, 1) == 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_TURN_FOLD) == ICO_ATT_OFF_DEFAULT);
+    CHECK(ico_attempt_decide_turn_fold(0, 1, 1, 1) == 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_TURN_FOLD) == ICO_ATT_NA);
+    CHECK(ico_attempt_why_of(ICO_ATT_COUNT) == NULL);
     ico_attempt_reset();
 }
 

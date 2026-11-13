@@ -1,0 +1,15 @@
+# Dump list for rd_turn_fold_ab (port/render/test/rd_turn_fold_ab.cmake: the
+# present's turn drawn by its box blit against the turn pass, byte for byte,
+# through the headless twin).  MACHINE-LOCAL: paths on the maintainer's
+# machine; the dumps are never committed.  Where /primary/dev/ico-dumps exists
+# a listed dump that is absent fails the test (no folder: SKIP).
+#
+# the PowerVR phone's opening (v0.11.5 rc34): lamps, dark, whole
+/primary/dev/ico-dumps/v0115-opening/frame-20261112-110824-v746.zip
+/primary/dev/ico-dumps/v0115-opening/frame-20261112-110838-v1545.zip
+/primary/dev/ico-dumps/v0115-opening/frame-20261112-110852-v2278.zip
+# issue 179's Mali-G52 (a turned phone too): stage 42 and 43 slow captures,
+# the stage 3 frame
+/primary/dev/ico-dumps/v0116-mali179/slow-20261112-195541.zip
+/primary/dev/ico-dumps/v0116-mali179/slow-20261112-195621.zip
+/primary/dev/ico-dumps/v0116-mali179/frame-20261112-195947-v17565.zip
