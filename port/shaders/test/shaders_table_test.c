@@ -669,8 +669,9 @@ int main(void)
         }
     }
     /* the record's compute builds: two for each batch build's entry (checked
-       by name above), the only compute-stage entries of the table */
-    const size_t nCompute = 2 * nBatch;
+       by name above), and the index compaction's keep stage: the only
+       compute-stage entries of the table */
+    const size_t nCompute = 2 * nBatch + 1;
     if (computeCount != nCompute) {
         printf("FAIL %u compute-stage entries, expected %zu\n", computeCount, nCompute);
         failures++;
