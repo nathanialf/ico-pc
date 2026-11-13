@@ -1265,7 +1265,33 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   hand-over's stamps taken once; the steps over gaps not on the grid (2: mean 0.375, deviation
   0.125) and two re-base notes (the shift, the hold, both spreads) in the line; five content notes (a step
   equal to its gap, two repeats in a row, a step over twice its gap: 4 pairs, 2 repeats in 1 run,
-  ratios 0 to 2.125, 3 outside 0.5 to 2).
+  ratios 0 to 2.125, 3 outside 0.5 to 2). Linked with `rd_pace_gpu.c` for the line's last clause
+  (left out with no picture as made).
+- `rd_pace_gpu_test.c` (`rd_pace_gpu`, CPU): each in-between picture drawn for its GPU work's
+  predicted end (`rd_pace_gpu.c`, `rd_pace_gpu_live.c`, `rd_pace_gpu.h`, with `rd_rebase.c`): the
+  share and the median; the model's edges, each figure from the code: before its windows are full
+  (0), an empty queue (q 0 and the shift 0 to the bit at every picture), one a tick with a full
+  queue (0), two a tick with the second queued (q 3, shift 3), the mean's sixteenth, the bound from
+  the latencies 24 to 33 (4.5), the ratio hold above (to twice the gap) and below (to half of it)
+  after exact ends re-anchor the chain, a bound end, the prediction's error, the four restarts and
+  a frame 8 on kept; 10 s simulations at 120 Hz (a frame every 33.37 ms; the window asks when the
+  render thread is free, a further picture held when its reads would end past the next closing
+  step; the GPU's start the later of the first submit and the end before; each end stamped where
+  the render thread's slot wait for it blocked, collected at that wait) of the cage at two a tick,
+  the brief's cage pattern (0.15-0.35 and max(0.506, that + 0.29-0.45) of a tick, the GPU 14.8-15.6
+  ms), stages 3 and 5 at two to three a tick, three a tick, a GPU-bound one to two, one a tick and
+  an idle GPU, the moments through `rd_rebase_raw` with and without the model: the same pictures
+  and hand-overs, never back, no repeat, the mean shift within 16 times q's range over the
+  pictures plus the held ones, every step's, the 2-refresh class's and the GPU's ends' deviation
+  under half of today's (the cage .210 to .040, the brief's .149 to .068, stages 3 and 5 .101 to
+  .039, three .119 to .048, one to two .170 to .066), one a tick and an idle GPU today's moments
+  to the bit; the owner's cage log's runs (lines 3846-3851, 4109-4113 and 4275-4280 of its first candidate's log) (frame, alpha and GPU ms) after
+  a warm cage: today's steps the log's alphas', the uneven two under half of today's distance from
+  the GPU's ends, every step within the two shifts' bounds; the renderer's side: paced (not
+  applicable), 64 pictures without a clock (not applicable, the clause word for word), the ring's
+  measurements, the row on, the clause word for word with an exact end's error of -2 ms and one
+  shift at the bound, the block line's counts, a full ring's drop, the start line word for word
+  and cut.
 - `rd_cpu_phase_test.c` (`rd_cpu_phase`, CPU): the render thread's CPU phases (`rd_cpu_phase.c`):
   two pictures of one frame folded (2 pictures, 1 tick, 1 hashed, 6 clock reads, the look-ups
   folded once and `g_rdCpu` emptied), taken twice (empty), no line without a picture, and the

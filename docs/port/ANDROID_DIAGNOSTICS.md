@@ -1654,6 +1654,16 @@ quarter of them at 0). The `content drawn against the hand-overs` clause counts 
 picture before shown again) and the step's ratio to its real gap: repeats near 0 and ratios near 1
 are content following real time.
 
+The moment is then moved on from the hand-over to the picture's predicted GPU end less the
+mean latency (the evenness line's last clause, `the GPU's predicted end: ...`): the `re-based`
+clause's shift then holds both shifts and its `content's moment to the hand-over` spreads by the
+queue's wait (a few ms each way in the cage), and the ratio to the real gap is not near 1 by
+design: the content follows the GPU's ends, which the GPU spaces evenly, instead of the hand-overs,
+which the step grid pins unevenly. Read the clause's `predicted against the measured end` first: a
+mean within a ms or two of 0 with a deviation of a few ms says the model follows the GPU; then
+`every step`'s deviation and the `2 refreshes` class's against the block before (the owner's
+cage before the model: .164-.187 and .128-.156).
+
 ## The refresh rate under Uncapped
 
 The owner's Pixel 10 Pro Fold ran four release candidates under Uncapped: two at 120 Hz and two at
@@ -1973,6 +1983,7 @@ thread can make it, hot paths included. The rows and where their states are set:
 | VU record by compute on the PowerVR | `rd_vu_record.c` at the record's start (`ico_attempt_decide_vu_compute`): `off by default` on the PowerVR class under Vulkan with both stores, `on` by the tests' switch or the define flipped, `refused by its self-test` when the compute record failed it (the vertex stores then), `not applicable here` elsewhere (no vertex stores, no compute stores, another class, a `[dev] vu_record` by name) | `rd_vu_record.c` `rd__replay_dispatch`: the dispatches |
 | turn in the present's blit | `rd_present.c` at each present (`ico_attempt_decide_turn_fold`): `not applicable here` without a pre-rotated swapchain, `off by default` until the define is flipped or with its self-test not run, `refused by its self-test`, `on` with it passed | `rd_turn_fold.c`: the presents folded (the second count: those on a turned swapchain that kept the turn pass) |
 | VU record sized from need | `rd_vu_rec_early.c` at the start-up preparation (`ico_attempt_decide_rec_need`: on where the run's need made a smaller record than the memory bound allowed; not applicable with the pre-pass off, nothing made at start-up, or a bound no larger than the need) | the record's growths in play (`rd_replay_vu.c` recEnsure, a record that existed grown) |
+| in-between pictures for the GPU's predicted end | `rd_pace_gpu_live.c` on the poster's thread at each change (`ico_attempt_decide_pace_gpu`): `not applicable here (the pictures are paced here (vsync on, a frame rate cap, the Original frame rate or the render thread off): ...)` while the window does not present pictures as made, `on (pictures as made: each drawn for its GPU work's predicted end)` once a picture's GPU span and first submit came back, `not applicable here (no GPU span or slot clock on this backend ...)` after 64 pictures as made without one (OpenGL, Direct3D 11, timestamps off: the hand-over less the mean drain kept); the start line `rd: in-between pictures for the GPU's predicted end: on (...); the GPU per picture the median of the last 15 measured spans, ...` at each change (the first 8, then every 100th) | `rd_pace_gpu_live.c` `rd_pace_gpu_shift`: the pictures the model placed (the second count: those held at its bound); the evenness line's last clause has the rest ([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#the-evenness-line)) |
 
 The shadow cuts' counts come from the replay's record where the window reads it
 (`window_perf_rank_record`), not from the cuts' hot paths.

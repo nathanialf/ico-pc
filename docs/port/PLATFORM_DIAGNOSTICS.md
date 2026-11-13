@@ -937,7 +937,7 @@ prints after the CPU phases' line (`port/render/rd_even.c`, `rd_even.h`; `port/p
 (`perf_log`)):
 
 ```
-window: evenness in 10 s: P pictures; the GPU's ends apart (E with both ends exact, B with a bound at one, U without a GPU end) by refreshes of R ms: under half a refresh N0, 1 refresh N1, 2 refreshes N2, 3 refreshes N3, 4 or more N4; the content's step over them in ticks (mean, deviation): under half a refresh M0 (D0), 1 refresh M1 (D1), 2 refreshes M2 (D2), 3 refreshes M3 (D3), 4 or more M4 (D4); every step (S): mean M (deviation D), the largest L, back K times (the most X), C chain restarts; the alpha clamped at 0 Z times (the most A below), at 0.999 T times (the most H above); the present clock: N samples, resets F forward and K back, H held instead of going back within a frame pair (the most X ms); the alpha's sample to the GPU's end over N pictures: 10th A, median B, 90th C ms, the hand-over to it 10th A, median B, 90th C ms (the drain before the hand-over D ms on average over N); re-based to the hand-over: N pictures (the shift 10th A, median B, 90th C ms; H held at the frame's last value), the content's moment to the hand-over 10th A, median B, 90th C ms (at the sample 10th A, median B, 90th C); the content drawn against the hand-overs over P pairs: R repeats (the same moment as the picture before) in U runs, the longest L; the step over the real gap from A to B, outside 0.5-2.0 in N
+window: evenness in 10 s: P pictures; the GPU's ends apart (E with both ends exact, B with a bound at one, U without a GPU end) by refreshes of R ms: under half a refresh N0, 1 refresh N1, 2 refreshes N2, 3 refreshes N3, 4 or more N4; the content's step over them in ticks (mean, deviation): under half a refresh M0 (D0), 1 refresh M1 (D1), 2 refreshes M2 (D2), 3 refreshes M3 (D3), 4 or more M4 (D4); every step (S): mean M (deviation D), the largest L, back K times (the most X), C chain restarts; the alpha clamped at 0 Z times (the most A below), at 0.999 T times (the most H above); the present clock: N samples, resets F forward and K back, H held instead of going back within a frame pair (the most X ms); the alpha's sample to the GPU's end over N pictures: 10th A, median B, 90th C ms, the hand-over to it 10th A, median B, 90th C ms (the drain before the hand-over D ms on average over N); re-based to the hand-over: N pictures (the shift 10th A, median B, 90th C ms; H held at the frame's last value), the content's moment to the hand-over 10th A, median B, 90th C ms (at the sample 10th A, median B, 90th C); the content drawn against the hand-overs over P pairs: R repeats (the same moment as the picture before) in U runs, the longest L; the step over the real gap from A to B, outside 0.5-2.0 in N; the GPU's predicted end: P pictures placed by it (O with one a tick, N before its measurements, R restarts), the shift 10th A, median B, 90th C ms (the queue's wait Q ms on average), K at the bound (the last W ms, from the hand-over to the measured end 10th A, 90th B ms), H held to 0.5-2.0 times the hand-overs' gap; predicted against the measured end over M pictures: mean E ms (deviation D)
 ```
 
 `every step` also says, when some steps are over gaps the line cannot put on the grid (a bound or
@@ -1000,6 +1000,25 @@ no GPU end at one side), `, U of them over gaps not on the grid: mean M (deviati
   time picture to picture.
   The `alpha clamped` counts are the clock's value's; the `interp:` alpha line counts the alpha
   drawn.
+- **The GPU's predicted end** (pictures as made only; the clause is left out when no picture was
+  handed over as made in the block; `port/render/rd_pace_gpu.c`, [DISPLAY.md](DISPLAY.md) "The
+  alpha"): P the pictures whose moment the GPU queue's model placed (moved by its predicted queue
+  wait less the wait's running mean), O those it left at the hand-over because no picture of the
+  last 16 was a further one of its frame (one picture a tick), N those before its windows were full
+  (the first pictures of a run, after a restart, and every picture on a backend without the slot
+  clock: OpenGL, Direct3D 11, timestamps off), R its restarts (a frame number back or on by more
+  than 8, hand-overs over a second apart). The shift's spread over P (by the half-ms bin's middle)
+  and the queue's mean wait; K the pictures whose shift was held at the bound, W the bound at the
+  block's last placed picture and the 10th and 90th of the measured hand-over to end times it came
+  from (the larger of 90th less mean and mean less 10th); H the pictures whose step was held to 0.5
+  to 2 times the hand-overs' gap. `predicted against the measured end`: for each picture whose end
+  was stamped, its end as predicted at its hand-over less the stamped end (negative: the GPU ended
+  later than predicted), the mean and the deviation over M, `no exact end` with none; a wide
+  deviation or a mean far from 0 says the prediction is off and the shifts with it. `(N
+  measurements dropped)` follows when the poster's thread fell 32 records behind. On the owner's
+  120 Hz phone in the cage P should be nearly every picture, the shift a few ms each way, and
+  `every step`'s deviation well under the .164-.187 the hand-over's moment gave there; at one
+  picture a tick O is every picture and nothing else changes.
 
 No clock is read for the line: the stamps are the ones the drain, the slot wait and the present
 clock already take. The render thread adds about a dozen relaxed atomic additions a picture, the
