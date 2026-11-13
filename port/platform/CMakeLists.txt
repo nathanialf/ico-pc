@@ -35,6 +35,7 @@ target_sources(ico_platform PRIVATE
     report.c
     robust_persist.c
     sched.c
+    stall_coincide.c
     startup_retry.c
     state_check.c
     state_file.c
@@ -342,6 +343,28 @@ target_compile_options(sys_cell_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_
 target_link_libraries(sys_cell_test PRIVATE ico_thread)
 if(ICO_RUN_TESTS)
     add_test(NAME sys_cell COMMAND sys_cell_test)
+endif()
+
+# attempt_ledger_test: the attempt ledger's rows and lines (attempt_ledger.h,
+# in ico_thread): states, the block's counts taken per block, the stalls
+# clause, a short buffer (CPU only)
+add_executable(attempt_ledger_test test/attempt_ledger_test.c)
+target_include_directories(attempt_ledger_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(attempt_ledger_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(attempt_ledger_test PRIVATE ico_thread)
+if(ICO_RUN_TESTS)
+    add_test(NAME attempt_ledger COMMAND attempt_ledger_test)
+endif()
+
+# stall_coincide_test: what a stall coincided with (stall_coincide.h, issue
+# 179): the block's pass medians, the spike rule, a moment's classes, the
+# tally and moment lines word for word, the pressure and status parsers, the
+# driver's thread names (CPU only)
+add_executable(stall_coincide_test test/stall_coincide_test.c stall_coincide.c)
+target_include_directories(stall_coincide_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(stall_coincide_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+if(ICO_RUN_TESTS)
+    add_test(NAME stall_coincide COMMAND stall_coincide_test)
 endif()
 
 add_executable(log_cost_test test/log_cost_test.c log_cost.c)

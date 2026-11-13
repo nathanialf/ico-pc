@@ -241,4 +241,37 @@ uint64_t cpu_keep_held(const CpuKeep *k);
    written */
 size_t cpu_keep_few_text(const CpuClasses *c, uint64_t allowed, char *out, size_t cap);
 
+/* The pipeline set made while the few-cores rule is in force
+   (render_thread.c ico_render_thread_pipeline_set).  The start-up set
+   of a device's first start is made before the rule exists (window_host.c
+   makes it before the render thread starts and place_init pins anything),
+   so its workers have every core; a set made later (a switch of the
+   graphics API, a start again after a lost device) is made while the game
+   and render threads wait for it, with no steady work on the faster
+   cores, so its workers keep every core too, as at the first start: the
+   cores a pipeline worker starting now keeps (allowed: the process's
+   cores; 0 every core with a speed), or 0 for the rule's own (the free
+   mask through cpu_place_thread_free, the sweep): the latter under the
+   rule for three or more, with the keeper off, and once the set is done
+   (lazy compiles, the background finisher: the game and render threads
+   have steady work then) */
+uint64_t cpu_keep_set_cores(const CpuKeep *k, bool setRunning, uint64_t allowed);
+
+/* The set's line after "window: pipeline set: " (render_thread.c, at the
+   set's end), mode 0: made with no cores' rule in force (nothing pinned: the first
+   start, or no pin on this device);
+   1: under the few-cores rule, its workers kept on `cores`; 2: under
+   another rule (the workers on the free mask, `cores`).  workers: the
+   pipeline workers seen starting (0 not counted: mode 0), wallS the set's
+   time, cpuS the process's CPU time over it (< 0 not measured), after:
+   the cores pipeline workers made from here run on (modes 1 and 2):
+     made in 12.3 s; its 7 workers on every core 0-7 while it ran (the
+     few-cores rule's exception: the set is made before the game and
+     render threads have steady work); the process's CPU time 61.2 s over
+     it (5.0 cores busy on average); pipeline workers made from here (lazy
+     compiles, the background finisher) run on 0-5
+   the length written */
+size_t cpu_keep_set_text(char *out, size_t cap, int mode, unsigned workers, uint64_t cores,
+                         uint64_t after, double wallS, double cpuS);
+
 #endif

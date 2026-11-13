@@ -273,6 +273,27 @@ static void testGpu(void)
                    "0.4, interpolation 0.0), its waits for the GPU 27.5 ms");
     CHECK_IN(line, "a picture's work done 61.0 ms after its last submit (longest 61.0), the slot "
                    "wait blocked 168 times (27.0 ms on average, longest 27.0)");
+    /* the draws' own vertex work beside the pre-pass's (the scene line): only
+       with the pre-pass, from the records' triangles (none here: no clause) */
+    CHECK(strstr(line, "the draws' own") == NULL);
+    {
+        RdPerfRankBlock d;
+        rd_perf_rank_block_reset(&d);
+        RdPerfRecord r = record(1, 20.0);
+        r.vuTris = 52000;
+        rd_perf_rank_add_record(&d, &r, 85000.0);
+        RdPerfRankInfo pi = in;
+        pi.prepass = true;
+        static char pl[4096];
+        RdPerfRankVerdict pv;
+        rd_perf_rank_verdict(&d, &pi, &pv);
+        rd_perf_rank_scene_text(&d, &pi, &pv, pl, sizeof pl);
+        CHECK_IN(pl, "85k vertex invocations (the VU pre-pass's; the draws' own 156k more, 3 a "
+                     "triangle), ");
+        pi.prepass = false;
+        rd_perf_rank_scene_text(&d, &pi, &pv, pl, sizeof pl);
+        CHECK_IN(pl, "85k vertex invocations, ");
+    }
     CHECK_IN(
         line,
         "colour 8.0 MB loaded 9.0 MB stored, depth and stencil 4.0 MB loaded 2.0 MB "

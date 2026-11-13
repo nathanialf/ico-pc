@@ -90,6 +90,9 @@ static void write_job(IcoDumpJob *j, IcoDumpDone *d)
     d->gameMs = j->gameMs;
     d->drainMs = j->drainMs;
     d->prepMs = j->prepMs;
+    d->measureMs = j->measureMs;
+    d->copyMs = j->copyMs;
+    snprintf(d->how, sizeof(d->how), "%s", j->how);
     d->bytes = j->dumpLen;
     e[n].name = j->dumpName;
     e[n].data = j->dump;
@@ -224,6 +227,24 @@ static void worker_main(void *arg)
         }
     }
     ico_mutex_unlock(g.mu);
+}
+
+size_t ico_dump_auto_held_bytes(void)
+{
+    size_t held = 0;
+
+    if (g.mu == NULL) {
+        return 0;
+    }
+    ico_mutex_lock(g.mu);
+    if (g.prep != PREP_NONE) {
+        held += g.prepBytes; /* asked, being made, made or taken */
+    }
+    if (g.hasJob) {
+        held += g.job.dumpLen + g.job.prevLen;
+    }
+    ico_mutex_unlock(g.mu);
+    return held;
 }
 
 int ico_dump_auto_busy(void)

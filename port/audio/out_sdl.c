@@ -206,6 +206,9 @@ static uint64_t trim_frames;
 static struct {
     uint64_t callbacks, frames, silence, held, misses, late;
     uint64_t wait_max_ns, wait_run_ns;
+    /* the sound chip's emulation inside the callbacks (pull_render): its
+       time in all, the renders, the longest since the last 10 s line */
+    uint64_t render_ns, renders, render_max_ns;
     uint64_t last_ns, asked;
     int queued;
     int ahead, ahead_max; /* the lead over the game after a callback, its 10 s maximum */
@@ -215,6 +218,7 @@ static struct {
 /* the totals at the last 10 s line (main thread) */
 static struct {
     uint64_t callbacks, frames, silence, held, misses, late, ticks, long_gaps, trim;
+    uint64_t render_ns, renders;
 } P_at;
 
 #define P_LOAD(x) __atomic_load_n(&(x), __ATOMIC_ACQUIRE)
@@ -540,8 +544,15 @@ static void SDLCALL pull_cb(void *user, SDL_AudioStream *s, int additional, int 
         int q8;
 
         note_wait(waited);
+        const Uint64 r0 = SDL_GetTicksNS();
         pull_render(pull_buf, n);
+        const Uint64 rn = SDL_GetTicksNS() - r0;
         SDL_UnlockMutex(audio_mutex);
+        P_ADD(P.render_ns, rn);
+        P_ADD(P.renders, 1);
+        if (rn > P_LOAD(P.render_max_ns)) {
+            P_STORE(P.render_max_ns, rn); /* this thread alone raises it */
+        }
         q8 = ico_audio_volume_q8(); /* one read: Settings may change it */
         if (q8 != 256) {
             ico_audio_scale(pull_buf, pull_buf, n * CHANNELS, q8);
@@ -1360,21 +1371,36 @@ int ico_audio_sdl_summary_text(char *out, size_t size)
     late = P_LOAD(P.late);
     wait = __atomic_exchange_n(&P.wait_max_ns, 0, __ATOMIC_ACQ_REL);
     ahead = __atomic_exchange_n(&P.ahead_max, 0, __ATOMIC_ACQ_REL);
+    const uint64_t renderNs = P_LOAD(P.render_ns), renders = P_LOAD(P.renders);
+    const uint64_t renderMax = __atomic_exchange_n(&P.render_max_ns, 0, __ATOMIC_ACQ_REL);
     ico_audio_tick_take(&t);
-    snprintf(out, size,
-             "audio: %llu callbacks, %llu frames; waited %.2f ms at most for the driver (%llu "
-             "gave up), %llu callbacks late, %llu ms of silence (%llu ms held back behind the "
-             "game); ahead of the game by %d ms at most, slowed for %.1f s; the driver ticked "
-             "%llu times, longest gap %llu ms (%llu over %llu ms)",
-             (unsigned long long)(callbacks - P_at.callbacks),
-             (unsigned long long)(frames - P_at.frames), wait / 1e6,
-             (unsigned long long)(misses - P_at.misses), (unsigned long long)(late - P_at.late),
-             (unsigned long long)((silence - P_at.silence) * 1000u / RATE),
-             (unsigned long long)((held - P_at.held) * 1000u / RATE), ahead * 1000 / RATE,
-             (double)(trim_frames - P_at.trim) / RATE, (unsigned long long)(t.ticks - P_at.ticks),
-             (unsigned long long)(t.gap_max_ns / 1000000u),
-             (unsigned long long)(t.long_gaps - P_at.long_gaps),
-             (unsigned long long)(ICO_AUDIO_TICK_LONG_NS / 1000000u));
+    const int head = snprintf(
+        out, size,
+        "audio: %llu callbacks, %llu frames; waited %.2f ms at most for the driver (%llu "
+        "gave up), %llu callbacks late, %llu ms of silence (%llu ms held back behind the "
+        "game); ahead of the game by %d ms at most, slowed for %.1f s; the driver ticked "
+        "%llu times, longest gap %llu ms (%llu over %llu ms)",
+        (unsigned long long)(callbacks - P_at.callbacks),
+        (unsigned long long)(frames - P_at.frames), wait / 1e6,
+        (unsigned long long)(misses - P_at.misses), (unsigned long long)(late - P_at.late),
+        (unsigned long long)((silence - P_at.silence) * 1000u / RATE),
+        (unsigned long long)((held - P_at.held) * 1000u / RATE), ahead * 1000 / RATE,
+        (double)(trim_frames - P_at.trim) / RATE, (unsigned long long)(t.ticks - P_at.ticks),
+        (unsigned long long)(t.gap_max_ns / 1000000u),
+        (unsigned long long)(t.long_gaps - P_at.long_gaps),
+        (unsigned long long)(ICO_AUDIO_TICK_LONG_NS / 1000000u));
+    if (head > 0 && (size_t)head < size) {
+        /* the sound chip's emulation per callback against the device's
+           period (issue 179: whether audio keeps up on a slow core) */
+        const uint64_t rd = renders - P_at.renders;
+        snprintf(out + head, size - (size_t)head,
+                 "; the sound chip's emulation %.2f ms a callback on average (longest %.2f ms; "
+                 "%llu renders) against the device's period of %.2f ms",
+                 rd ? (double)(renderNs - P_at.render_ns) / (double)rd / 1e6 : 0.0,
+                 (double)renderMax / 1e6, (unsigned long long)rd, (double)period_ns / 1e6);
+    }
+    P_at.render_ns = renderNs;
+    P_at.renders = renders;
     P_at.callbacks = callbacks;
     P_at.frames = frames;
     P_at.silence = silence;

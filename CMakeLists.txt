@@ -218,10 +218,11 @@ target_link_libraries(ico_platform PUBLIC ico_host_fs)
 # cpu_place.c beside it: the core a thread runs on, sampled by the submit
 # thread (port/render/rd_submit_thread.c) and the window's threads;
 # thread_stat.c: a thread's time on a core and waiting for one (the
-# window's 10 s game-thread line).
+# window's 10 s game-thread line); attempt_ledger.c: the attempt ledger's
+# rows, which the renderer and the window both count into.
 find_package(Threads REQUIRED)
 add_library(ico_thread STATIC port/platform/ico_thread.c port/platform/cpu_place.c
-                              port/platform/thread_stat.c)
+                              port/platform/thread_stat.c port/platform/attempt_ledger.c)
 target_include_directories(ico_thread PUBLIC port/platform PRIVATE "${ICO_COMPAT_DIR}")
 target_compile_options(ico_thread PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(ico_thread PUBLIC Threads::Threads)

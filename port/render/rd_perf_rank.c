@@ -111,6 +111,7 @@ void rd_perf_rank_add_record(RdPerfRankBlock *b, const RdPerfRecord *r, double v
     b->uploadBytes += (double)r->uploadBytes;
     b->texUploads += r->textureUploads;
     b->vuInv += vuInvocations;
+    b->vuTris += (double)r->vuTris;
     b->colorLoad += (double)r->colorLoadBytes;
     b->colorStore += (double)r->colorStoreBytes;
     b->depthLoad += (double)r->depthLoadBytes;
@@ -673,11 +674,18 @@ int rd_perf_rank_scene_text(const RdPerfRankBlock *b, const RdPerfRankInfo *in,
         "stencil %.1f MB loaded %.1f MB stored, %.1f MB cleared, %.2f Mpx of area, copies %.1f "
         "MB (each copy once: as many read as written; uncompressed; %.1f passes with an attachment of no known format, at 4 bytes a "
         "texel); %.0f draws, %.0f pipeline and %.0f bind group binds, %.0fk vertex "
-        "invocations, %.0f KB uploaded (%.1f textures), %.1f DATE snapshots",
+        "invocations",
         b->passes / N, mb(b->colorLoad) / N, mb(b->colorStore) / N, mb(b->depthLoad) / N,
         mb(b->depthStore) / N, mb(b->clear) / N, b->texels / N / 1e6, mb(b->copy) / N,
-        b->untracked / N, b->draws / N, b->pipeBinds / N, b->groupBinds / N, b->vuInv / N / 1000.0,
-        b->uploadBytes / N / 1024.0, b->texUploads / N, b->dateSnaps / N);
+        b->untracked / N, b->draws / N, b->pipeBinds / N, b->groupBinds / N, b->vuInv / N / 1000.0);
+    if (in->prepass && b->vuTris > 0.0) {
+        /* the figure above is the pre-pass's (window_scene.h); the draws run
+           vu_main_vs three times a triangle besides it */
+        put(&o, " (the VU pre-pass's; the draws' own %.0fk more, 3 a triangle)",
+            3.0 * b->vuTris / N / 1000.0);
+    }
+    put(&o, ", %.0f KB uploaded (%.1f textures), %.1f DATE snapshots", b->uploadBytes / N / 1024.0,
+        b->texUploads / N, b->dateSnaps / N);
     if (b->gpuN) {
         const double g = (double)b->gpuN;
         put(&o,

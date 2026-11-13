@@ -12,6 +12,7 @@
 #include "rd_internal.h"
 #include "rd_mesh.h"
 #include "rd_passring.h"
+#include "rd_perf_hooks.h"
 #include "rd_replay.h"
 #include "rd_velocity.h"
 #include "rd_vu_flat0.h"
@@ -1184,6 +1185,8 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
     const uint64_t ua = rhi_limits()->uniformAlign;
     RdDrawPass dp[8];
     const int np = vuPlan(r, s, ds, prog, vs, vcb, dp);
+    rd__perf_vu_draw(np == 2 && rd__no_dual_second(dp, 1),
+                     np == 1 && (dp[0].flags & ICO_DF_NODUAL_FACTOR) != 0, count / 3u);
     for (int i = 0; i < np; i++) {
         if (dp[i].key.dst == RHI_DST_READ_STORAGE) {
             /* the _dstrov build writes depth before its shader runs, so a

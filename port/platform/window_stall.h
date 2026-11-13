@@ -103,6 +103,27 @@ void window_stall_gpu_block(void);
    0 and the values (avail/total -1 when the device's were not readable)
    with their age; -1: read them on the calling thread */
 int window_stall_memory(long *rss, long *peak, long *avail, long *total, double *ageMs);
+
+/* The block's memory extremes the log thread kept (Android, its tick on;
+   issue 179's swing): the device's least available against
+   the floor, the reads under the floor of all, the process's resident (0),
+   anonymous (1), file-backed (2) and shared (3) ranges in MB (-1 not
+   read), the C heap in use and mapped at the last read (bionic's
+   mallinfo); taken: the next block's start from the next read.  false
+   elsewhere (nothing kept) */
+typedef struct WindowMemBlock {
+    long minAvailMb, floorMb;
+    unsigned underFloor, reads;
+    long lo[4], hi[4];
+    double heapMb, mappedMb;
+} WindowMemBlock;
+
+bool window_stall_memory_block(WindowMemBlock *b);
+/* The stalls' coincidences (stall_coincide.h) of the block so far: their
+   count, the tally's line into out ("" with none), the tally emptied; the
+   threads named like the graphics driver's, once a run when first known
+   (render_thread.h), before it */
+int window_stall_tally_take(char *out, size_t cap);
 /* The log thread's asks since the last take (their count), and what the
    last thermal ask and memory read took on it, ms */
 uint32_t window_stall_asks_take(double *thermalMs, double *memoryMs);

@@ -30,6 +30,7 @@
 #include "rd_passring.h"
 #include "rd_perf_clock.h"
 #include "rd_perf_gap.h"
+#include "rd_perf_hooks.h"
 #include "rd_perf_rare.h"
 #include "rd_shadow_box.h"
 #include "rd_shadow_tile.h"
@@ -966,6 +967,7 @@ void rd__perf_pass(RhiCommandList cl, int kind, uint32_t target, uint32_t w, uin
         g_rdPerf.passEffects[post] < UINT16_MAX) {
         g_rdPerf.passEffects[post]++;
     }
+    rd__perf_hooks_pass(kind, passTarget(target), post); /* SCENE's breaks (rd_perf_hooks.h) */
     if (!s_passOn) {
         return;
     }
@@ -1141,6 +1143,7 @@ static bool s_recOpen;
 void rd__perf_begin(const RdFrame *f, int keep, bool present)
 {
     memset(&g_rdPerf, 0, sizeof(g_rdPerf));
+    rd__perf_hooks_begin(); /* the cost counters' state (rd_perf_hooks.h) */
     s_recOpen = true;
     g_rdPerf.replay = ++s_replay;
     g_rdPerf.frame = f ? f->number : 0;
@@ -1585,7 +1588,8 @@ void rd__perf_end(void)
 {
     RdPerfRecord *r = &g_rdPerf;
     s_recOpen = false;
-    workNote(r); /* its CPU-side counts are final here, its GPU times come later */
+    rd__perf_hooks_end(); /* the last break's loads */
+    workNote(r);          /* its CPU-side counts are final here, its GPU times come later */
     r->totalMs = rd__now_ms() - s_t0 + r->interpMs;
     r->pipelineCreates = rd__stats_here()->pipelineCreates - s_pipelineCreates;
     r->a1xDraws = g_rd.above1xDraws - s_a1xDraws;

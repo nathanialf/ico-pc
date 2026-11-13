@@ -200,4 +200,31 @@ void ico_render_thread_tick(void);
 void ico_render_thread_place_scene(bool play);
 void ico_render_thread_place_focus(void);
 
+/* The pipeline set's span (window_host.c around rd_precreate_pipelines, at
+   the start and at a switch of the graphics API; the game thread): while
+   it runs under the few-cores rule its workers ("rhi-pipelines") keep
+   every core of the process (cpu_keep.h cpu_keep_set_cores) and the sweep
+   leaves them there; at its end one line, "window: pipeline set: ..."
+   (cpu_keep_set_text: the set's time, its workers' cores, the process's
+   CPU time over it, where later workers run), and the attempt ledger's
+   row (attempt_ledger.h ICO_ATT_PIPE_SET_CORES).  At a device's first
+   start the set runs before the cores' rule (place_init): the line says
+   so */
+void ico_render_thread_pipeline_set(bool on);
+
+/* What a stall coincided with (stall_coincide.h; window_stall.c): the
+   render thread's core at its last picture (-1 not known); the core waits
+   of the game, render, submit, SDL audio and system audio threads over the
+   log thread's last tick (about a second; -1 for one not read; false when
+   none was, *ageMs the oldest read's age); the threads named like the
+   graphics driver's (stall_coincide.h stall_driver_name: at most cap, the
+   first STALL_DRIVERS of the list) with their run and wait ms over the
+   last tick, the count; every such name of the first list that had one
+   ("" none yet), for the once line.  Android with the log thread's tick;
+   nothing elsewhere */
+int ico_render_thread_render_core(void);
+bool ico_render_thread_last_second(double waitMs[5], double *ageMs);
+int ico_render_thread_driver_threads(char names[][16], double *runMs, double *waitMs, int cap);
+size_t ico_render_thread_driver_names(char *out, size_t cap);
+
 #endif /* ICO_PLATFORM_RENDER_THREAD_H */

@@ -605,3 +605,53 @@ size_t cpu_keep_few_text(const CpuClasses *c, uint64_t allowed, char *out, size_
     }
     return done(out, cap, len);
 }
+
+uint64_t cpu_keep_set_cores(const CpuKeep *k, bool setRunning, uint64_t allowed)
+{
+    if (!setRunning || !k->on || !k->few) {
+        return 0;
+    }
+    if (allowed == 0) {
+        for (int i = 0; i < k->classes.count && i < 64; i++) {
+            allowed |= k->classes.khz[i] != 0 ? (uint64_t)1 << i : 0u;
+        }
+    }
+    return allowed;
+}
+
+size_t cpu_keep_set_text(char *out, size_t cap, int mode, unsigned workers, uint64_t cores,
+                         uint64_t after, double wallS, double cpuS)
+{
+    size_t len = 0;
+    char m[96], a[96];
+
+    if (cap > 0) {
+        out[0] = '\0';
+    }
+    (void)cpu_place_mask_text(cores, m, sizeof(m));
+    (void)cpu_place_mask_text(after, a, sizeof(a));
+    put(out, cap, &len, "made in %.1f s", wallS);
+    if (mode == 0) {
+        put(out, cap, &len,
+            " with no cores' rule in force (nothing pinned: its workers ran on any core the "
+            "system gave them)");
+    } else if (mode == 1) {
+        put(out, cap, &len,
+            "; its %u workers on every core %s while it ran (the few-cores rule's exception: "
+            "the set is made before the game and render threads have steady work)",
+            workers, m);
+    } else {
+        put(out, cap, &len, "; its %u workers on the free cores %s (the cores' rule in force)",
+            workers, m);
+    }
+    if (cpuS >= 0.0) {
+        put(out, cap, &len, "; the process's CPU time %.1f s over it (%.1f cores busy on average)",
+            cpuS, wallS > 0.0 ? cpuS / wallS : 0.0);
+    }
+    if (mode != 0) {
+        put(out, cap, &len,
+            "; pipeline workers made from here (lazy compiles, the background finisher) run on %s",
+            a);
+    }
+    return done(out, cap, len);
+}

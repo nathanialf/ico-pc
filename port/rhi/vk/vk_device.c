@@ -1979,6 +1979,13 @@ static bool vkr_create_device(void)
     /* occlusion queries count samples exactly with it (rhi.h
      * rhi_cmd_begin_occlusion; the replay tool's measurement) */
     g_vkr.occPrecise = avail.occlusionQueryPrecise == VK_TRUE;
+    /* whether the device's own counters could split a list's vertex work
+     * from its fragment work (issue 179's list 0): read only,
+     * nothing enabled, no query made (docs/port/ANDROID_DIAGNOSTICS.md, "The
+     * cost counters") */
+    VKR_LOG("pipeline statistics: %s (read only, nothing enabled: the vertex and fragment shader "
+            "invocations a list are not sampled in this release)",
+            avail.pipelineStatisticsQuery == VK_TRUE ? "offered" : "not offered");
     /* ICO_VK_FAKE_NO_DUAL=1 leaves the feature off, as on a device without
      * it (tests: rhi_vk_nodual) */
     const char *fakeNoDual = getenv("ICO_VK_FAKE_NO_DUAL");

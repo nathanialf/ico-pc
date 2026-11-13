@@ -144,13 +144,13 @@ static bool is_hz(int node)
 static bool is_clock(int node)
 {
     return node == GPU_SYSFS_GPUCLK || node == GPU_SYSFS_CLOCK_MHZ || node == GPU_SYSFS_DEVFREQ ||
-           node == GPU_SYSFS_DF_CUR || node == GPU_SYSFS_GED_FREQ;
+           node == GPU_SYSFS_DF_CUR || node == GPU_SYSFS_GED_FREQ || node == GPU_SYSFS_KGPU_CLOCK;
 }
 
 static bool is_busy(int node)
 {
     return node == GPU_SYSFS_BUSY || node == GPU_SYSFS_DF_LOAD || node == GPU_SYSFS_MALI_UTIL ||
-           node == GPU_SYSFS_GED_UTIL;
+           node == GPU_SYSFS_GED_UTIL || node == GPU_SYSFS_KGPU_BUSY;
 }
 
 /* a read node's value as the sample keeps it */
@@ -342,6 +342,9 @@ void gpu_sysfs_android_start(GpuSysfsInfo *info)
         }
         e = read_node_text(s_paths[i], &v, i == GPU_SYSFS_GED_FREQ, quote ? s_info.first[i] : NULL,
                            sizeof(s_info.first[i]));
+        if (e == EINVAL && (i == GPU_SYSFS_MALI_GPUINFO || i == GPU_SYSFS_MTK_GPUFREQ)) {
+            e = 0; /* a text node: readable when read, its text quoted */
+        }
         s_info.state[i] = e == 0 ? 1 : e == ENOENT ? 0 : -e;
         if (e != 0) {
             continue;

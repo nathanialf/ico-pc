@@ -114,6 +114,7 @@
 #include <string.h>
 
 #include "rd_mesh.h"
+#include "rd_perf_hooks.h"
 #include "rd_vis.h"
 #include "shader_consts.h"
 
@@ -1072,6 +1073,11 @@ static int cmdVerdict(VisWalk *w, int l, const RdCmd *c, const RdStateBlock *st,
         w->n.unbounded++;
     } else if (none) {
         w->n.exempt++; /* bounded but never plane-tested */
+    }
+    if (v == RD_VIS_KEEP) {
+        /* the draw's screen box against its triangles (rd_perf_hooks.h) */
+        rd__perf_box_note(l, d->have ? (const float (*)[4])d->m : NULL, d->box.lo, d->box.hi,
+                          d->have && d->scissor, r.x0, r.y0, r.x1, r.y1);
     }
     s_vis.whyCur = why;
     return v;
