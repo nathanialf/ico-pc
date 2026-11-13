@@ -69,6 +69,13 @@
  *                 holding its last touch dropped (rd_pass_cut.c; [dev]
  *                 clear_carry, clear_skip, last_store = auto|on|off, read
  *                 there, each with its start line)
+ *   shadowMerge   on on the tile-based classes, off on the others: the
+ *                 shadow volumes drawn in the scene's open pass, not a pass
+ *                 of their own that loads and stores the scene's depth
+ *                 (rd_shadow_merge.c; ICO_RD_SHADOW_MERGE=0|1, the tests')
+ *   sheetBake2x   on on the tile-based classes, off on the others: menu
+ *                 text pages baked on the CPU at scale 2 (rd_tex.c
+ *                 rd__sheet_bake_scale; issue 126)
  *   crackFill     on on every class (the crack filler above 1x,
  *                 rd_crack_fill.c: on the local read's path it draws in
  *                 the pass the fog then keeps, so a tile-based GPU pays

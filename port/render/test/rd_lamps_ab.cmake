@@ -26,8 +26,12 @@
 #           first lamps replay is whole and the second takes the area;
 #   seqd    --prev rd-00400 --prev rd-00600 (DARK: nothing drawn into WORK2)
 #           then rd-00400: the region survives the dark frame, the area taken.
-# For every run: every PNG (each target and PRESENT) byte for byte; the same
-# draws; passes fewer by the bands left lazy exactly; colour loaded the same;
+# For every run: every PNG (each target and PRESENT) byte for byte; draws
+# fewer by the passes of two pairs (one draw each where two were); passes
+# fewer by the bands left lazy, the owed sprites and the passes of two pairs
+# exactly (under the poison each pass of two pairs leaves a magenta clear
+# pass of its own: that one back); colour loaded fewer by the passes of two
+# pairs' WORK0 texels (the same where there are none);
 # colour stored and cleared fewer by the lamps line's saved bytes plus a
 # band's (WORK2_PAD's texels x 4) each, depth and stencil loaded and stored
 # fewer by its saved bytes (two hundredths of a MB: the stats print two
@@ -274,8 +278,14 @@ macro(lamps_ab _name _s _pre _dump _rep)
       message(SEND_ERROR "${_name}: off, ${areas_0} areas, ${pads_0} bands, ${owed_0} owed")
       math(EXPR failures "${failures} + 1")
     endif()
-    if(NOT draws_1 EQUAL draws_0)
-      message(SEND_ERROR "${_name}: ${draws_1} draws on, ${draws_0} off")
+    # a pass of two pairs is one draw where the two pairs folded one by one
+    # were two (rd__replay_blur_fold, rd_replay_tiler.c: one draw a call,
+    # `draws++` once, the call taking four passes' worth when fold4 applies):
+    # draws fewer by the passes of two pairs
+    math(EXPR wantDraws "${draws_0} - ${f4_1}")
+    if(NOT draws_1 EQUAL wantDraws)
+      message(SEND_ERROR "${_name}: ${draws_1} draws on, ${draws_0} off with ${f4_1} passes of two "
+                         "pairs (want ${wantDraws})")
       math(EXPR failures "${failures} + 1")
     endif()
     # the fold of two pairs: one pass where two fx_blur2_ps passes were, the
@@ -294,10 +304,20 @@ macro(lamps_ab _name _s _pre _dump _rep)
       message(SEND_ERROR "${_name}: ${f4_1} passes of two pairs at ${_s} (want none)")
       math(EXPR failures "${failures} + 1")
     endif()
+    # each pass of two pairs is one pass where the pairs folded one by one
+    # were two; under the poison (ICO_RD_LAMPS_POISON=1) each of them whose
+    # WORK0 colour came by the swap (the sprite covers the target: every one
+    # of the list's) is preceded by a pass of its own that clears WORK0 to
+    # magenta (fold4Poison, rd_replay_tiler.c): one pass more a fold
     math(EXPR wantPasses "${passes_0} - ${pads_1} - ${owed_1} - ${f4_1}")
+    list(FIND poisonSettings "${_s}" isPoisonP)
+    if(NOT isPoisonP EQUAL -1)
+      math(EXPR wantPasses "${wantPasses} + ${f4_1}")
+    endif()
     if(NOT passes_1 EQUAL wantPasses)
       message(SEND_ERROR "${_name}: ${passes_1} passes on, ${passes_0} off with ${pads_1} bands "
-                         "left lazy and ${owed_1} WORK0 alpha sprites owed (want ${wantPasses})")
+                         "left lazy, ${owed_1} WORK0 alpha sprites owed and ${f4_1} passes of two "
+                         "pairs (want ${wantPasses})")
       math(EXPR failures "${failures} + 1")
     endif()
     # the planned pass: one a lamps replay, never whole for want of the
