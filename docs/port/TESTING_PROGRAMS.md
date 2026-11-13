@@ -734,7 +734,12 @@ that stops again writing its own line without the retry mark); a stop at the fre
   five recorded zips stored with `automatic-captures.txt` naming each and why one is left out, the
   report zip's own entries kept, a zip gone from the disk not listed, none recorded adding nothing;
   a zip that cannot be read as the report is rebuilt left out and named `left out: gone` in the
-  note, the other still in).
+  note, the other still in); the slow-scene dump's block made by the worker before the job
+  (`ico_dump_auto_prepare`, `_prepared`, `_unprepare`: none asked, a size of 0 refused, the block
+  at the size asked with the worker's time, busy from the ask to the submit so a second ask and a
+  job offered meanwhile are refused, the filled block written whole with the making in the worker
+  time, a block given up while asked, once made and once taken leaving the worker free, one made
+  and never taken freed at shutdown).
   Run under the asan and thread presets as well.
 - `game_data_range_test.c`: the game data ranges ([PLATFORM.md](PLATFORM.md#game-data-ranges))
   on this toolchain's compiler and linker, over a stand-in game library (`game_data_fixture.c`)

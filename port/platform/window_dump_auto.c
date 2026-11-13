@@ -17,8 +17,10 @@
 #include "host_loop.h"
 #include "hotkeys.h"
 #include "input_record.h"
+#include "ico_thread.h" /* ico_thread_now_ms */
 #include "rd.h"
-#include "rd_thread.h" /* rd_thread_drain */
+#include "rd_dump_mem.h" /* the slow-scene dump's two steps */
+#include "rd_thread.h"   /* rd_thread_drain */
 #include "trace_host.h"
 #include "window_lines.h" /* window_log_cost_job */
 #include "window_present.h"
@@ -26,6 +28,7 @@
 #define s_pres g_windowPres
 
 static IcoDumpJob s_job; /* the game thread's, copied into the worker's slot */
+
 static int s_skinPending;
 static char s_skinSidecar[ICO_PATH_MAX];
 static int s_flushSet;
@@ -69,6 +72,48 @@ static void job_release(IcoDumpJob *j)
     free(j->dump);
     free(j->prev);
     j->dump = j->prev = NULL;
+}
+
+/* The slow-scene dump between its two steps (rd_dump_mem.h): the frame
+   measured and the worker asked for a block of its size; at a later
+   picture the block taken and the frame copied into it.  The game
+   thread's alone */
+#define SLOW_PREP_LIMIT_MS 10000.0 /* the arm's own life: a 10 s block */
+
+static struct {
+    int on;
+    IcoDumpJob job; /* the paths, filled at the first step */
+    uint32_t frame; /* the frame picked (window_host.c slow_scene_poll) */
+    uint32_t seen;  /* the last replay looked at for another frame */
+    SlowSceneBlock b;
+    double work, meanWork;
+    double gameMs, drainMs; /* the first step's */
+    double t0Ms;            /* the first step, ico_thread_now_ms */
+    size_t asked;           /* the block's size */
+    void *block;            /* the worker's block once taken (NULL before) */
+    size_t size;
+    double prepMs;
+    char stamp[32];
+} s_slow;
+
+/* the slow-scene job's rest and its hand-over: 1 handed over, 0 dropped
+   (its blocks freed) */
+static int slow_submit(IcoDumpJob *j, const SlowSceneBlock *b, uint32_t got, double work,
+                       double meanWork, const char *stamp, double gameMs)
+{
+    char name[64], line[640];
+
+    snprintf(j->logPath, sizeof(j->logPath), "%s", ico_diag_log_path());
+    j->pruneSlow = 1;
+    snprintf(name, sizeof(name), "slow-%s.zip", stamp);
+    (void)window_slow_scene_text(line, sizeof(line), b, (unsigned)got, work, meanWork, name);
+    snprintf(j->text, sizeof(j->text), "%s", line);
+    j->gameMs = gameMs;
+    if (ico_dump_auto_submit(j) != 0) {
+        job_release(j);
+        return 0;
+    }
+    return 1;
 }
 
 /* the skin check's frame dump (F12's frame_dump without the display PNG,
@@ -179,35 +224,146 @@ int window_dump_auto_slow(uint32_t frame, const SlowSceneBlock *b, double work, 
         return 0;
     }
     use_flush();
-    /* The frame's bytes are read here, not on the worker: the ring frame
-       names textures, meshes and targets the game thread changes from its
-       next call on, so they are serialised while nothing else reads or
-       changes them (rd_dump.c dumpFrame drains the render and submit
-       threads first; the zip and the file writes are the worker's).  The
-       drain is timed apart: on a GPU-bound phone it is the render thread's
-       own slot wait (issue 179: 26-156 ms in all) */
+    /* The frame's bytes are read on the game thread, not on the worker:
+       the ring frame names textures, meshes and targets the game thread
+       changes from its next call on (rd_dump.c dumpFrame drains the render
+       and submit threads first; the zip and the file writes are the
+       worker's).  Here the frame is only measured and the worker makes a
+       block of its size with its pages touched; the copy into it is made
+       at a later picture (slow_pump), one pass of the dump's bytes
+       (rd_dump_mem.h; issue 179: 47-56 ms here when the block was grown
+       on this thread).  The drain is timed apart */
+    size_t bytes = 0;
     j->drainMs = (double)rd_thread_drain() / 1e6;
-    if (!rd_dump_retained_frame_mem(frame, &j->dump, &j->dumpLen, &got)) {
+    if (!rd_dump_retained_frame_bytes(frame, &bytes)) {
         fprintf(stderr, "window: slow scene: frame %u not written\n", (unsigned)frame);
         return 0;
     }
-    snprintf(j->logPath, sizeof(j->logPath), "%s", ico_diag_log_path());
-    j->pruneSlow = 1;
-    char name[64], line[640];
-    snprintf(name, sizeof(name), "slow-%s.zip", stamp);
-    (void)window_slow_scene_text(line, sizeof(line), b, (unsigned)got, work, meanWork, name);
-    snprintf(j->text, sizeof(j->text), "%s", line);
-    j->gameMs = ms_since(t0);
-    if (ico_dump_auto_submit(j) != 0) {
-        job_release(j);
-        return 0;
+    /* room for the frame's textures to change before the copy: an eighth
+       more and 1 MiB */
+    const size_t want = bytes + bytes / 8u + ((size_t)1 << 20);
+    if (ico_dump_auto_prepare(want) != 0) {
+        /* no worker thread (or busy since the check): the old way, the
+           copy grown here; the submit says why when it fails too */
+        if (!rd_dump_retained_frame_mem(frame, &j->dump, &j->dumpLen, &got)) {
+            fprintf(stderr, "window: slow scene: frame %u not written\n", (unsigned)frame);
+            return 0;
+        }
+        return slow_submit(j, b, got, work, meanWork, stamp, ms_since(t0));
     }
+    {
+        RdReplayWork w;
+
+        memset(&s_slow, 0, sizeof(s_slow));
+        s_slow.seen = rd_perf_last_replay_work(&w) ? w.replay : 0u;
+    }
+    s_slow.on = 1;
+    s_slow.job = *j;
+    s_slow.frame = frame;
+    s_slow.b = *b;
+    s_slow.work = work;
+    s_slow.meanWork = meanWork;
+    s_slow.gameMs = ms_since(t0);
+    s_slow.drainMs = j->drainMs;
+    s_slow.t0Ms = ico_thread_now_ms();
+    s_slow.asked = want;
+    snprintf(s_slow.stamp, sizeof(s_slow.stamp), "%s", stamp);
     return 1;
+}
+
+/* the second step, every vsync while a block is asked for (from
+   window_dump_auto_report): the block taken when the worker has made it,
+   the frame picked (the first step's while the ring holds it, else the
+   next replay at or above the block's mean, window_host.c's rule) copied
+   into it, the job handed back */
+static void slow_pump(void)
+{
+    if (!s_slow.on) {
+        return;
+    }
+    if (ico_thread_now_ms() - s_slow.t0Ms > SLOW_PREP_LIMIT_MS) {
+        ico_dump_auto_unprepare(s_slow.block); /* the block taken or asked for, freed */
+        s_slow.block = NULL;
+        s_slow.on = 0;
+        fprintf(stderr,
+                "window: slow-scene dump: not written: no frame of the scene could be copied in "
+                "%.0f ms (the worker's block of %zu bytes given up)\n",
+                SLOW_PREP_LIMIT_MS, s_slow.asked);
+        return;
+    }
+    if (s_slow.block == NULL) {
+        const int r = ico_dump_auto_prepared(&s_slow.block, &s_slow.size, &s_slow.prepMs);
+
+        if (r == 0) {
+            return; /* the worker is making it */
+        }
+        if (r < 0) {
+            s_slow.on = 0;
+            fprintf(stderr,
+                    "window: slow-scene dump: not written: the worker could not make a block of "
+                    "%zu bytes\n",
+                    s_slow.asked);
+            return;
+        }
+    }
+    void *const block = s_slow.block;
+    const size_t size = s_slow.size;
+    uint32_t frame = s_slow.frame;
+    double work = s_slow.work;
+    if (!rd_frame_retained(frame)) {
+        RdReplayWork w;
+
+        frame = 0;
+        if (rd_perf_last_replay_work(&w) && w.replay != s_slow.seen) {
+            s_slow.seen = w.replay;
+            work =
+                (double)window_scene_vu_invocations(w.vuTris, w.vuPreVertices, rd_vu_prepass_on());
+            if (window_slow_scene_pick(work, s_slow.meanWork) && rd_frame_retained(w.frame)) {
+                frame = w.frame;
+            }
+        }
+    }
+    if (frame == 0) {
+        return; /* the block kept for a later picture's replay */
+    }
+    s_slow.on = 0;
+    s_slow.block = NULL;
+    IcoDumpJob *j = &s_job;
+    const Uint64 t1 = SDL_GetTicksNS();
+    uint32_t got = 0;
+    size_t len = 0;
+
+    *j = s_slow.job;
+    const double drain = (double)rd_thread_drain() / 1e6;
+    const RdDumpInto into = rd_dump_retained_frame_into(frame, block, size, &len, &got);
+
+    j->drainMs = s_slow.drainMs + drain;
+    j->prepMs = s_slow.prepMs;
+    if (into == RD_DUMP_INTO_OK) {
+        j->dump = block;
+        j->dumpLen = len;
+    } else {
+        /* the frame grew past the block (or could not be read): the block
+           given up, the old way */
+        ico_dump_auto_unprepare(block);
+        fprintf(stderr,
+                "window: slow-scene dump: frame %u %s the worker's block of %zu bytes: copied "
+                "into a block grown here instead\n",
+                (unsigned)frame,
+                into == RD_DUMP_INTO_SMALL ? "had grown past" : "could not be written into", size);
+        if (!rd_dump_retained_frame_mem(frame, &j->dump, &j->dumpLen, &got)) {
+            fprintf(stderr, "window: slow scene: frame %u not written\n", (unsigned)frame);
+            return;
+        }
+    }
+    (void)slow_submit(j, &s_slow.b, got, work, s_slow.meanWork, s_slow.stamp,
+                      s_slow.gameMs + ms_since(t1));
 }
 
 static void report_one(const IcoDumpDone *d)
 {
-    window_log_cost_job(d->gameMs, d->workerEndMs - d->workerMs, d->workerEndMs);
+    /* the zip's start (the block made before it is not in the span) */
+    window_log_cost_job(d->gameMs, d->workerEndMs - (d->workerMs - d->prepMs), d->workerEndMs);
     if (d->result < 0) {
         fprintf(stderr,
                 "window: %s: zip not written: %s (%.1f ms on the game thread, %.0f ms on the "
@@ -242,10 +398,22 @@ void window_dump_auto_report(void)
     while (ico_dump_auto_poll(&d)) {
         report_one(&d);
     }
+    slow_pump(); /* a slow-scene dump's second step */
 }
 
 void window_dump_auto_stop(void)
 {
+    if (s_slow.on) {
+        ico_dump_auto_unprepare(s_slow.block); /* a slow-scene dump not copied yet */
+        s_slow.block = NULL;
+        s_slow.on = 0;
+    }
     ico_dump_auto_shutdown();
-    window_dump_auto_report();
+    {
+        IcoDumpDone d;
+
+        while (ico_dump_auto_poll(&d)) {
+            report_one(&d);
+        }
+    }
 }

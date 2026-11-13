@@ -1689,8 +1689,27 @@ counters in the hot path.
   worker (...)`. The frame is serialised on the game thread because the ring frame names textures,
   meshes and targets the game thread changes from its next call on (`rd_dump.c` `dumpFrame` drains
   the render and submit threads first); the zip and the file writes were already the worker's. On a
-  GPU-bound phone the drain is the render thread's own slot wait, so most of issue 179's 26-156 ms
-  hitches are expected to be that wait (unmeasured until the next log).
+  GPU-bound phone the drain could be the render thread's own slot wait; issue 179's next log
+  measured it at 0.0 ms and the frame's bytes at 47.1-56.0 ms (8.6-10.3 MB), more than one 40 ms
+  tick.
+- **The slow-scene dump in two steps** (`port/render/rd_dump_mem.h`, `dump_auto.h`
+  `ico_dump_auto_prepare`): the copy itself cannot leave the game thread (the frame's textures are
+  written in place by its next calls, its meshes and targets freed, its ring slot reused), but the
+  block it went into was grown on the game thread by doubling from 1 MiB, every page of every
+  block touched there for the first time. Now the game thread first measures the frame
+  (`rd_dump_retained_frame_bytes`: the same walk, nothing copied), the worker allocates a block of
+  that size plus an eighth and 1 MiB and touches its pages, and at a later vsync, once the worker
+  says it is made, the game thread copies the frame into it in one pass
+  (`rd_dump_retained_frame_into`: exactly the dump's bytes, no allocation of the block, no file,
+  no compression) and hands the job back for the zip. The frame is the one picked while the ring
+  still holds it, else the next replay at or above the block's mean (the pick's own rule); the
+  bytes are those of the old copy for the same frame. The line keeps its words: the game-thread
+  figure is now both steps (the measure and the copy, each with its drain), the worker figure the
+  block's making and the zip. Lines of their own: `window: slow-scene dump: frame F had grown past
+  the worker's block of N bytes: copied into a block grown here instead` (the old way, once),
+  `window: slow-scene dump: not written: the worker could not make a block of N bytes`, and
+  `window: slow-scene dump: not written: no frame of the scene could be copied in 10000 ms (the
+  worker's block of N bytes given up)`. The skin check's capture is unchanged.
 - **The logging's own cost** (`port/platform/log_cost.c`, `window_lines.c`, the log thread's
   counts in `port/platform/android/host_android.c`), once a 10 s block:
 

@@ -147,6 +147,7 @@
 #include "rd_loss_keep.h"
 #include "rd_loss_pick.h"
 #include "rd_passring.h"
+#include "rd_dump_mem.h"
 #include "rd_tex.h"
 #include "rd_velocity.h"
 #include "shader_consts.h"
@@ -290,6 +291,11 @@ typedef struct DumpOut {
     size_t len, cap;
     size_t max; /* a memory dump's bound (0: RD_DUMP_MEM_MAX) */
     bool bad, big;
+    /* the slow-scene dump's two steps (rd_dump_mem.h): count only the
+       bytes (nothing copied, nothing allocated), or write into the
+       caller's block of cap bytes (never grown: past it the dump stops,
+       big set) */
+    bool count, fixed;
 } DumpOut;
 
 #define RD_DUMP_MEM_MAX ((size_t)192u << 20)
@@ -301,6 +307,20 @@ static bool dumpPut(DumpOut *o, const void *p, size_t n)
     }
     if (o->bad) {
         return false;
+    }
+    if (o->count) {
+        o->len += n;
+        return true;
+    }
+    if (o->fixed) {
+        if (n > o->cap - o->len) {
+            o->bad = true;
+            o->big = true;
+            return false;
+        }
+        memcpy(o->buf + o->len, p, n);
+        o->len += n;
+        return true;
     }
     const size_t max = o->max && o->max < RD_DUMP_MEM_MAX ? o->max : RD_DUMP_MEM_MAX;
     if (n > max - o->len) {
@@ -499,6 +519,11 @@ static bool dumpFrame(const RdFrame *f, DumpOut *out)
             continue;
         }
         const uint32_t bytes = (m->vertexCount + 7u) / 8u;
+        if (fp->count) {
+            /* the table's size alone (rd_dump_mem.h): not built */
+            ok = w32(fp, meshes->ids[i]) && w32(fp, m->vertexCount) && dumpPut(fp, NULL, bytes);
+            continue;
+        }
         uint8_t *bits = malloc(bytes ? bytes : 1u);
         ok = bits && rd__mesh_facing_bits(m, bits, bytes ? bytes : 1u) && w32(fp, meshes->ids[i]) &&
              w32(fp, m->vertexCount) && wraw(fp, bits, bytes);
@@ -588,6 +613,49 @@ bool rd_dump_retained_frame_mem(uint32_t number, void **buf, size_t *len, uint32
         *dumped = f->number;
     }
     return true;
+}
+
+bool rd_dump_retained_frame_bytes(uint32_t number, size_t *bytes)
+{
+    const RdFrame *f = rd__retained_frame(number);
+    DumpOut out = {0};
+
+    *bytes = 0;
+    if (!f || !f->closed) {
+        return false;
+    }
+    out.count = true;
+    if (!dumpFrame(f, &out)) {
+        return false;
+    }
+    *bytes = out.len;
+    return true;
+}
+
+RdDumpInto rd_dump_retained_frame_into(uint32_t number, void *block, size_t cap, size_t *len,
+                                       uint32_t *dumped)
+{
+    const RdFrame *f = rd__retained_frame(number);
+    DumpOut out = {0};
+
+    *len = 0;
+    if (dumped) {
+        *dumped = 0;
+    }
+    if (!f || !f->closed || !block) {
+        return RD_DUMP_INTO_GONE;
+    }
+    out.fixed = true;
+    out.buf = block;
+    out.cap = cap;
+    if (!dumpFrame(f, &out) || out.bad) {
+        return out.big ? RD_DUMP_INTO_SMALL : RD_DUMP_INTO_FAILED;
+    }
+    *len = out.len;
+    if (dumped) {
+        *dumped = f->number;
+    }
+    return RD_DUMP_INTO_OK;
 }
 
 /* ------------------------------------------------------------------ load */

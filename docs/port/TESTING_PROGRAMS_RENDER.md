@@ -2198,7 +2198,7 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   composited level not constant over level texels i0 - 2 to i0 + 3, the kernels' joint support and
   a tie: N = 3 level texels), some texels differing; the |d| histogram printed (`checkEdges2x`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#the-shadow-edges-above-1x)).
-- `rd_state_test.c`: the recording half of rd without a GPU: the retained-frame lookup of the slow-scene dump (`rd__retained_frame` and `rd_frame_retained`: the last closed and the one before by number, other numbers none; `rd_dump_retained_frame` writes nothing for a number outside the ring), the payload arena's alignment gap
+- `rd_state_test.c`: the recording half of rd without a GPU: the retained-frame lookup of the slow-scene dump (`rd__retained_frame` and `rd_frame_retained`: the last closed and the one before by number, other numbers none; `rd_dump_retained_frame` writes nothing for a number outside the ring; the slow-scene dump's two steps of `rd_dump_mem.h`: the frame measured with nothing copied is the memory dump's size, copied into a block of exactly that size it is the memory dump byte for byte, a block one byte short refused, a frame outside the ring neither measured nor copied), the payload arena's alignment gap
   zeroed over a reused buffer's bytes (`testPayloadPad`), the sheet shader's keys in the set
   (`testSheetSet`, issue 188: no `font_sheet_ps` key on a tile-based profile at 1x and 2x with a
   1008-line output, the frame's 8 at a 3x scene, the overlay's 4 at 1080 lines, 10 with `[dev]

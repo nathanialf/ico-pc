@@ -140,6 +140,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../../core/region.h" /* the dump's region (version 12) */
+#include "rd_dump_mem.h"
 #include "rd_internal.h"
 #include "rd_mesh.h"
 #include "shader_consts.h"
@@ -876,6 +877,40 @@ static void testDump(const char *dir)
               "the retained frame's memory dump is the same");
         CHECK(!rd_dump_retained_frame_mem(f->number + 7u, &none, &noneLen, NULL),
               "a frame the ring does not hold is not dumped");
+        {
+            /* the slow-scene dump's two steps (rd_dump_mem.h): the frame
+               measured with nothing copied is the memory dump's size; copied
+               into a block of exactly that size it is the memory dump byte
+               for byte (no growth: one byte short is refused, nothing
+               written past the block, which the sanitizer builds check) */
+            size_t want = 0, got = 9;
+            uint32_t dn = 9;
+
+            CHECK(rd_dump_retained_frame_bytes(f->number, &want) && want == memLen,
+                  "the measured bytes are the memory dump's (%zu, %zu)", want, memLen);
+            uint8_t *blk = want ? malloc(want) : NULL;
+            uint8_t *shortBlk = want > 1 ? malloc(want - 1) : NULL;
+
+            CHECK(blk &&
+                      rd_dump_retained_frame_into(f->number, blk, want, &got, &dn) ==
+                          RD_DUMP_INTO_OK &&
+                      got == memLen && dn == f->number && memcmp(blk, mem, memLen) == 0,
+                  "the frame copied into a block of its size is the memory dump (%zu)", got);
+            CHECK(shortBlk &&
+                      rd_dump_retained_frame_into(f->number, shortBlk, want - 1, &got, &dn) ==
+                          RD_DUMP_INTO_SMALL &&
+                      got == 0 && dn == 0,
+                  "a block one byte short: refused, no dump");
+            CHECK(blk &&
+                      rd_dump_retained_frame_into(f->number + 7u, blk, want, &got, &dn) ==
+                          RD_DUMP_INTO_GONE &&
+                      got == 0 && dn == 0,
+                  "a frame the ring does not hold is not copied");
+            CHECK(!rd_dump_retained_frame_bytes(f->number + 7u, &got) && got == 0,
+                  "a frame the ring does not hold is not measured");
+            free(blk);
+            free(shortBlk);
+        }
         free(mem);
         free(none);
         free(fileBytes);
