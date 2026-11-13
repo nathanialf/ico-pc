@@ -1177,7 +1177,8 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   (the second Adreno row among them) `not in this build`, the cores' rows, the no-volume break's
   state with its reason in the start line, the Qualcomm passes row on only on Qualcomm's driver,
   its count and the stalls clause `(the Adreno attempt on|off)`, the VU record by compute's and
-  the turn fold's states per class (off by default on the PowerVR phone, the Mali and the Adreno
+  the turn fold's states per class (the VU record by compute on with the shipped default on the
+  Pixel's D-Series DXT, off by default on the PowerVR B, which never ran it; the Mali and the Adreno
   turned phones' turn fold off by default, not applicable on the desktops), the subpass read's
   state and why per class (off by default on the Mali-G52 and the Adreno 740 on Qualcomm's driver
   with the words `off on this driver this release: ...` in the start line, on for the Intel driver
@@ -1189,7 +1190,8 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   the Mali-G52 and a desktop at the Original frame rate; not applicable where the bound allowed
   no more, under the floor or with the pre-pass off) and its growths in play in the start and
   block lines; the index compaction per class (on on the Mali-G52's compute record as the Arm
-  class with its self-test passed, not applicable with the vertex stores elsewhere) and its other
+  class and on the Pixel's compute record, each with its self-test passed, not applicable with the
+  vertex stores elsewhere) and its other
   states (the tests' switch both ways, refused by the self-test, each class's define off, the
   self-test not run, not the compute record with and without its words), its triangles left out
   in the start and block lines; the in-between pictures for the GPU's predicted end per class (not
@@ -1197,8 +1199,12 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   applicable without a slot clock on the PowerVR B, off by default for the Pixel, both Adreno 740 drivers and
   the Mac uncapped), as made without a clock yet leaving the
   row as it was, on with the tests' switch, its pictures placed and held at the bound in the start
-  and block lines; the own timer's row not applicable where paced and off by default as made, on
-  with its counts in the block line; at the reset the compaction's row `not reported`, the blend
+  and block lines; the own timer's row not applicable where paced, on as made on the Android classes and off by
+  default as made on the Mac (the shipped decision), off by default with a given reason, on with its
+  counts in the block line; the screen's refresh row on where the GPU model's row is off by default;
+  the even cadence's row off by default with its reason (`three phone rcs did not land pictures on
+  their refresh`); the no-volume break on for the Pixel (`the PowerVR D-Series DXT-48-1536`) and off
+  by default for the rest of its class with its reason; at the reset the compaction's row `not reported`, the blend
   constant's `not in this build` (CPU only).
 - `core_share_test.c` (ctest `core_share`): the share of run time on the faster cores of the
   threads that do not sample their own core (`port/platform/core_share.h`, issue 179): ten seconds

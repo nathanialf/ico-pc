@@ -308,10 +308,12 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   turned rect, the sizes swapped for odd turns) at the phone's window (2364x1080: the whole box, a
   4:3 box with bars, the border mask's inset) and odd sizes and corners, and the self-test's own
   90-degree case by value (7,5 11x7 in 48x30 is 18,7 7x11); `rd__turn_fold_why`'s reasons in the
-  present's order (the CRT filter first, the box blit alone folds); `rd__vu_class_pick` through the
-  ledger's decider (off by default on the class, on by the define or `ICO_RD_VU_COMPUTE_CLASS=1`,
-  off by `=0`, not applicable with a mode asked by name, without vertex stores or compute stores,
-  or on another class with the define flipped).
+  present's order (the CRT filter first, the box blit alone folds); `rd__vu_class_measured` (the
+  Pixel's `PowerVR D-Series DXT-48-1536 MC1` yes; a B-Series, a Rogue and no name no) and
+  `rd__vu_class_pick` through the ledger's decider (on by the build's default on the measured
+  PowerVR, off by default on the rest of the class with its reason and with the define 0, on by
+  `ICO_RD_VU_COMPUTE_CLASS=1`, off by `=0`, not applicable with a mode asked by name, without vertex
+  stores or compute stores, or on another class).
 - `rd_bench_test.c` (`rd_bench`; `rd_bench.cmake`, CPU): the rc bench's classes over a frame built
   by hand (a command of every class, list by list): `rd_bench_classify` against the test's table,
   each class's mask making NOPs of exactly its commands, list 7's mask its seven actions and none of
@@ -580,11 +582,15 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   a clock (not applicable, the clause word for word), the ring's measurements, the row off by
   default (on under `ICO_RD_PACE_GPU=1`) with the shift drawn 0 and the model's computed, the
   clause word for word with an exact end's error of -2 ms and one shift at the bound, the block
-  line's counts, a full ring's drop, the start line word for word and cut; off by default, the
-  rules picked as `presentRebase` does over 600 cage pictures: the hand-over rule's value to the bit.
+  line's counts, a full ring's drop, the start line word for word and cut; the desktop's defaults
+  (no display times, not Android: the screen's rule on but placing nothing, the own timer not
+  drawn), the rules picked as `presentRebase` does over 600 cage pictures: the hand-over rule's
+  value to the bit (skipped under a tests' switch or where the own timer is drawn).
 - `rd_as_made_timer_test.c` (`rd_as_made_timer`, CPU): the own timer (`rd_as_made_timer.c`): its
   edges (the first picture on the target, a steady interval exactly, the quarter pull, a held
-  slot taken whole, an error over half a tick, the minimum step, the restarts, the switch); 10 s
+  slot taken whole, an error over half a tick, the minimum step, the restarts, the decision
+  `rd_as_made_timer_decide` (on by default on Android, the hand-over rule elsewhere, the define 0,
+  the tests' switch both ways, each with its words) and the switch against it); 10 s
   simulations with a 120 Hz mailbox display of the cage, the brief's cage pattern, stages 3 and 5,
   three a tick, the GPU-bound opening, one a tick, two to three a tick and back, a 200 ms stall,
   the three rules over the same pictures (every step, clamps, largest step, speed against the
@@ -595,7 +601,9 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   display's gap, its class, the hand-overs and the GPU's ends, the shares; not steps; the join of
   pictures and display times by id in either order with a present never shown; the line word for
   word; the screen's rule's measure, its score (on it, late, early, further), its ring, the display's own figures.
-- `rd_pace_screen_test.c` (`rd_pace_screen`, CPU): the screen's predicted refresh (`rd_pace_screen.c`): the expected time on the glass, the latch's and the grid's fits, the score; the placement's edges and fall-backs (the value drawn otherwise to the bit); 10 s simulations of the owner's phone's regimes with a display model (grid, latch lead, mailbox, late times): the four rules' speed on the glass, the holds, never back, the content's rate over the glass; the log's later regimes (kept frames in runs, the cage's slow tail, a latch or GPU time that moves) with each refinement on in turn; the even cadence (`rd_pace_even.c`): N, its band, the hold, a late hand-over, the bias, and its simulations (shown a second, deviation, N's changes); the start lines, the clauses, the ledger's rows.
+- `rd_pace_screen_test.c` (`rd_pace_screen`, CPU): the screen's predicted refresh (`rd_pace_screen.c`): the expected time on the glass, the latch's and the grid's fits, the score; the placement's edges and fall-backs (the value drawn otherwise to the bit); 10 s simulations of the owner's phone's regimes with a display model (grid, latch lead, mailbox, late times): the four rules' speed on the glass, the holds, never back, the content's rate over the glass; the log's later regimes (kept frames in runs, the cage's slow tail, a latch or GPU time that moves) with each refinement on in turn; the even cadence (`rd_pace_even.c`): N, its band, the hold, a late hand-over, the bias, and its simulations (shown a second, deviation, N's changes); the start lines (the screen's on and off, the even
+  cadence's short off line and its full on line), the clauses, the ledger's rows (the screen's on by
+  default); the even cadence off: no hold, no aim, no desired time, no clause, its row never on.
 - `rd_cpu_phase_test.c` (`rd_cpu_phase`, CPU): the render thread's CPU phases (`rd_cpu_phase.c`):
   two pictures of one frame folded (2 pictures, 1 tick, 1 hashed, 6 clock reads, the look-ups
   folded once and `g_rdCpu` emptied), taken twice (empty), no line without a picture, and the
