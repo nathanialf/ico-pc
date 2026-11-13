@@ -1155,7 +1155,15 @@ that stops again writing its own line without the retry mark); a stop at the fre
   moving on a change only, the block line's counts taken per block (the next block from 0), a
   static row, rows not reported left out (their counts kept for when they are), the stalls clause
   with no Adreno row, with one not applicable (`off`) and one on, out-of-range ids ignored, a short
-  buffer cut and terminated (CPU only).
+  buffer cut and terminated; the deciders as six device classes' owners call them (the Mali-G52,
+  the Pixel, a PowerVR B, an Adreno 740, a desktop with MSAA, a Mac with the break forced): no row
+  but the two Adreno ones left `not reported`, the rows not built `not in this build`, the cores'
+  rows and the no-volume break's state with its reason in the start line (CPU only).
+- `core_share_test.c` (ctest `core_share`): the share of run time on the faster cores of the
+  threads that do not sample their own core (`port/platform/core_share.h`, issue 179): ten seconds
+  of the Helio G85's submit, SDL audio and driver threads and two pipeline workers under one name,
+  the line word for word, the Pixel's 2-7, an unknown core and no fast mask adding nothing, a full
+  table, a short buffer, field 39 of a stat line whose name holds spaces and brackets (CPU only).
 - `stall_coincide_test.c` (ctest `stall_coincide`): what a stall coincided with (`port/platform/
   stall_coincide.h`, issue 179): the block's pass medians (none before five, odd and even counts,
   the ring's last 64, a full key table), the spike rule at its bounds (5.9x not, 8.3x and 40.1 ms

@@ -40,8 +40,88 @@ static int text_is(const char *got, const char *want)
     return 1;
 }
 
+/* the deciders as each device class's owners call them: no row but the
+   Adreno attempts (their own package's) left "not reported", and each
+   class's no-volume break state with its reason */
+typedef struct DeviceClass {
+    const char *name;
+    int faster, pin;
+    const char *noPin;
+    int dateMode, dateSetting, box, skip;
+    int nvEnv, nvClass, nvDefault;
+    const char *nvGate;
+    IcoAttemptState wantCores, wantNoVolume;
+    const char *wantNoVolumeWhy;
+} DeviceClass;
+
+static void test_classes(void)
+{
+    static const DeviceClass k[] = {
+        {"Mali-G52 (2 + 6)", 2, 1, NULL, 1, 0, 1, 1, -1, 0, 0, NULL, ICO_ATT_ON, ICO_ATT_NA,
+         "not the PowerVR or MoltenVK class under Vulkan"},
+        {"Pixel (PowerVR D, 1 + 5 over 2)", 6, 1, NULL, 1, 0, 1, 1, -1, 1, 0, NULL, ICO_ATT_NA,
+         ICO_ATT_OFF_DEFAULT,
+         "off by default until a phone rc shows the PowerVR phone's title and pause menu clean "
+         "with it"},
+        {"PowerVR B (no local read)", 2, 1, NULL, 1, 0, 1, 1, -1, 1, 0,
+         "the composites' DATE by the R8 snapshot or the shader's read", ICO_ATT_ON, ICO_ATT_NA,
+         "the composites' DATE by the R8 snapshot or the shader's read"},
+        {"Adreno 740 (4 + 3 + 1)", 4, 1, NULL, 1, 0, 1, 1, -1, 0, 0, NULL, ICO_ATT_NA, ICO_ATT_NA,
+         "not the PowerVR or MoltenVK class under Vulkan"},
+        {"desktop with MSAA", 0, 0, "only on Android", 1, 1, 1, 1, -1, 0, 0, NULL, ICO_ATT_NA,
+         ICO_ATT_NA, "not the PowerVR or MoltenVK class under Vulkan"},
+        {"a Mac (MoltenVK), the break forced", 0, 0, "only on Android", 1, 0, 1, 1, 1, 1, 0, NULL,
+         ICO_ATT_NA, ICO_ATT_ON, "ICO_RD_NO_VOLUME_BREAK=1"},
+    };
+    for (size_t c = 0; c < sizeof k / sizeof k[0]; c++) {
+        const DeviceClass *d = &k[c];
+        ico_attempt_reset();
+        ico_attempt_decide_cores(d->faster, d->pin, d->noPin);
+        ico_attempt_decide_capture();
+        ico_attempt_decide_flat0(1);
+        ico_attempt_decide_date_one(d->dateMode, d->dateSetting);
+        ico_attempt_decide_empty_skip(d->box, d->skip);
+        ico_attempt_decide_no_volume_break(d->nvEnv, d->nvClass, d->nvDefault, d->nvGate);
+        for (int i = 0; i < ICO_ATT_COUNT; i++) {
+            if (i == ICO_ATT_ADRENO_A || i == ICO_ATT_ADRENO_B) {
+                continue;
+            }
+            if (ico_attempt_state_of(i) == ICO_ATT_NOT_SET) {
+                printf("FAIL %s: %s not reported\n", d->name, ico_attempt_name(i));
+                failures++;
+            }
+        }
+        CHECK(ico_attempt_state_of(ICO_ATT_FEW_CORES) == d->wantCores);
+        CHECK(ico_attempt_state_of(ICO_ATT_PIPE_SET_CORES) == d->wantCores);
+        CHECK(ico_attempt_state_of(ICO_ATT_NO_VOLUME_BREAK) == d->wantNoVolume);
+        char b[2048], want[256];
+        (void)ico_attempt_start_text(b, sizeof b);
+        snprintf(want, sizeof want, "; no-volume break %s (%s)",
+                 ico_attempt_state_word(d->wantNoVolume), d->wantNoVolumeWhy);
+        if (strstr(b, want) == NULL) {
+            printf("FAIL %s: %s not in %s\n", d->name, want, b);
+            failures++;
+        }
+    }
+    /* the DATE row's and the empty row's other states */
+    ico_attempt_decide_date_one(1, 1);
+    CHECK(ico_attempt_state_of(ICO_ATT_DATE_ONE) == ICO_ATT_NA);
+    ico_attempt_decide_date_one(0, 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_DATE_ONE) == ICO_ATT_OFF_DEFAULT);
+    ico_attempt_decide_empty_skip(0, 1);
+    CHECK(ico_attempt_state_of(ICO_ATT_EMPTY_SKIP) == ICO_ATT_OFF_DEFAULT);
+    ico_attempt_decide_no_volume_break(0, 1, 1, NULL);
+    CHECK(ico_attempt_state_of(ICO_ATT_NO_VOLUME_BREAK) == ICO_ATT_OFF_DEFAULT);
+    ico_attempt_decide_no_volume_break(-1, 1, 1, NULL);
+    CHECK(ico_attempt_state_of(ICO_ATT_NO_VOLUME_BREAK) == ICO_ATT_ON);
+    ico_attempt_decide_cores(0, 1, NULL);
+    CHECK(ico_attempt_state_of(ICO_ATT_FEW_CORES) == ICO_ATT_NA);
+    ico_attempt_reset();
+}
+
 int main(void)
 {
+    test_classes();
     char b[2048];
 
     ico_attempt_reset();
@@ -49,7 +129,8 @@ int main(void)
     (void)ico_attempt_start_text(b, sizeof(b));
     CHECK(starts(b, "attempts at the start: few-cores rule not reported; pipeline set on every "
                     "core not reported; "));
-    CHECK(strstr(b, "; index compaction not reported") != NULL);
+    CHECK(strstr(b, "; index compaction not in this build") != NULL);
+    CHECK(ico_attempt_state_of(ICO_ATT_SUBPASS) == ICO_ATT_NOT_BUILT);
     /* and the block line is empty, with no stalls asked */
     CHECK(ico_attempt_block_text(b, sizeof(b), -1) == 0 && b[0] == '\0');
     CHECK(ico_attempt_block_text(b, sizeof(b), 0) > 0 &&

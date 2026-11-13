@@ -100,6 +100,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "attempt_ledger.h"
 #include "rd_date_one.h"
 #include "rd_no_volume.h"
 #include "rd_replay.h"
@@ -551,6 +552,15 @@ void rd__no_volume_scan_begin(const RdFrame *f, int keep)
     }
     s_zero.n = 0;
     s_zero.replay = g_rd.replayCounter;
+    {
+        /* the attempt ledger's row: the break mode's state on this device
+           (the class, the tests' switch, the default, and the other gates
+           as with the class allowed) */
+        const int other = gateOf(1, true);
+        ico_attempt_decide_no_volume_break(breakEnvOf(), classBase(), RD_NO_VOLUME_BREAK_DEFAULT,
+                                           other == RD_NV_WHY_COUNT ? NULL
+                                                                    : rd_nv_why_words(other));
+    }
 }
 
 /* the target a state's texture is a view of, else 0; enabledOnly: a

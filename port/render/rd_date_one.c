@@ -55,6 +55,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "attempt_ledger.h"
 #include "rd_date_one.h"
 #include "rd_replay.h"
 
@@ -124,6 +125,7 @@ void rd__date_one_scan_begin(const RdFrame *f)
      * refuses them at the walk too): no composite marked, so the DATE cut's
      * runs end at every composite as before */
     s_scan.setting = rd_aa_samples(rd__aa_mode()) > 1u || g_rd.dstMode != RD_BLEND_EXACT_OFF;
+    ico_attempt_decide_date_one(s_scan.mode, s_scan.setting); /* the attempt ledger's row */
     s_scan.n = 0;
     s_scan.lastLevel = s_scan.lastVertex = s_scan.lastAmax = 0;
     s_scan.lastAlpha = 0;
