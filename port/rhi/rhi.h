@@ -2127,7 +2127,10 @@ int rhi_present_timing_next(uint64_t *id, uint64_t *ns);
  * ring.  rhi_present_glass: *lastId the id the calling thread's last
  * present carried (0: none, or not in use), *refreshNs the display's
  * refresh as the driver gives it (0 not known), and up to max past times
- * taken, oldest first, into out (the count; one reader).  A present the
+ * taken, oldest first, into out (the count; one reader: the times are
+ * taken by one thread alone, and a call with max 0 or out NULL, which any
+ * thread may make for its last id, takes none and leaves the ring as it
+ * was).  A present the
  * display never showed (replaced in mailbox mode) has no time.  Elsewhere
  * (no extension, OpenGL, Direct3D): 0, 0 and 0. */
 typedef struct RhiGlassTime {

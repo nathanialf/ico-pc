@@ -68,7 +68,13 @@ static _Thread_local uint32_t t_lastId;
 static _Thread_local uint64_t t_desire; /* the next present's desired time (rhi_present_desire) */
 
 /* the ring: written under the swapchain's lock (one writer at a time),
-   read by the renderer's one reader */
+   read by the renderer's one reader.  The contract: s_tail is the
+   consumer's alone, stored only by rhi_present_glass with max > 0 (the
+   thread that collects the records, rd_glass_live.c) and by
+   vkr_glass_device_made (the device made again, no present or reader
+   running); a call with max 0 (rd_perf.c: the calling thread's last id
+   only, on the submit thread) never touches it, so it cannot rewind times
+   the reader already took */
 static RhiGlassTime s_ring[GLASS_RING];
 static uint32_t s_head, s_tail; /* __atomic */
 
@@ -268,6 +274,9 @@ uint32_t rhi_present_glass(uint64_t *lastId, uint64_t *refreshNs, RhiGlassTime *
     }
     if (refreshNs != NULL) {
         *refreshNs = __atomic_load_n(&s_refreshNs, __ATOMIC_RELAXED);
+    }
+    if (max == 0u || out == NULL) {
+        return 0; /* the id and the refresh alone: not the ring's consumer */
     }
     uint32_t n = 0;
     uint32_t tail = __atomic_load_n(&s_tail, __ATOMIC_RELAXED);
