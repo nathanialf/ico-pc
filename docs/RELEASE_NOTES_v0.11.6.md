@@ -3,7 +3,7 @@
 (kept current after every merge; player words only)
 
 - The 3D scenery asks the graphics chip for less work on every device, with the picture unchanged.
-- Shadows take less graphics work on every device, phones most: the three layers that soften a
+- Shadows take less graphics work on every device, phones most: the three layers that soften a shadow share one check of the picture instead of three, and when no shadow is on screen those layers are skipped (the picture is exactly the same).
 
 ## Fixed
 
