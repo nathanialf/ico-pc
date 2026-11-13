@@ -28,6 +28,7 @@
 #include <string.h>
 #include <time.h>
 #include "../fmv/rd_video.h"
+#include "rd_glass.h" /* rd_glass_reset */
 #include "rd_lamps.h"
 #include "rd_log_line.h"
 #include "rd_made_outside.h" /* what play makes outside the key cache, named */
@@ -1850,6 +1851,11 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
         return false;
     }
     g_rd.hasDevice = true;
+    /* the display times' join emptied: the new device's present ids start
+       at 1 again (vk_glass.c vkr_glass_device_made), so the old run's last
+       shown picture would block every pair (rd_glass.h; rd_init runs with
+       no replay in flight) */
+    rd_glass_reset();
     rd__made_outside_init(); /* the RHI's create hook (named in play once the window says) */
     g_rd.windowed = sdlWindow != NULL; /* the game: the desktop's local reads (rd_profile.c) */
     rd__profile_init();                /* the device profile (rd_profile.c) */

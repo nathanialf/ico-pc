@@ -1677,6 +1677,11 @@ bool rhi_present_split(RhiPresentSplit *out)
 static void vkr_present(bool defer)
 {
     __atomic_store_n(&s_presentShown, false, __ATOMIC_RELAXED);
+    /* the thread's last display-times id cleared until this present carries
+       one: a return below (no swapchain, no slot, no signal) presents
+       nothing, and the previous present's id must not be given to this
+       picture's record (vk_glass.c; rhi_present_glass) */
+    vkr_glass_presented(VK_NULL_HANDLE, 0u, false);
     VkrFrame *f = vkr_present_slot();
     if (!g_vkr.swapchain || f == NULL) {
         return;

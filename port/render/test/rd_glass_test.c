@@ -10,7 +10,9 @@
  *   2. the join: pictures and display times by id in either order, a
  *      present never shown counted, the pairs in the presents' order;
  *   3. the line word for word, and nothing with no picture;
- *   4. the drawn rule's measure equal to its own rule's (the same alphas).
+ *   4. the drawn rule's measure equal to its own rule's (the same alphas);
+ *   5. the pending sums merged (the collector's, while the window's thread
+ *      held the flag): two windows merged equal to one built from both.
  */
 #include <math.h>
 #include <stdio.h>
@@ -86,6 +88,63 @@ static void testPair(void)
     CHECK(!rd_glass_pair(&w, &d, 1032 * MS, &c, 1032 * MS, REF));
     CHECK(!rd_glass_pair(&w, &a, 1000 * MS, &b, 2001 * MS, REF));
     CHECK(w.pairs == 3);
+}
+
+static void testMerge(void)
+{
+    /* one window from three pairs against the first pair's window merged
+       with the other two's: every count and sum the same, the last refresh
+       and rule the newer's */
+    const RdGlassPic a = pic(1, 10, 0.25f, 0.25f, 0.25f, 100.0, 130.0);
+    const RdGlassPic b = pic(2, 10, 0.75f, 0.75f, 0.5f, 108.0, 146.0);
+    RdGlassPic c = pic(3, 11, 0.25f, 0.25f, 0.25f, 120.0, 160.0);
+    RdGlassPic d = pic(4, 11, 0.5f, 0.5f, 0.5f, 136.0, 178.0);
+    d.rule = RD_RULE_TIMER;
+    RdGlassWindow all, one, two;
+    memset(&all, 0, sizeof all);
+    memset(&one, 0, sizeof one);
+    memset(&two, 0, sizeof two);
+    CHECK(rd_glass_pair(&all, &a, 1000 * MS, &b, 1016 * MS, REF));
+    CHECK(rd_glass_pair(&all, &b, 1016 * MS, &c, 1024 * MS, REF));
+    CHECK(rd_glass_pair(&all, &c, 1024 * MS, &d, 1040 * MS, 2 * REF));
+    all.pictures = 4;
+    all.shown = 4;
+    all.scored = 3;
+    all.hit = 2;
+    all.late = 1;
+    all.marginSumUs = -7;
+    all.wildSumMs = 2.5;
+    CHECK(rd_glass_pair(&one, &a, 1000 * MS, &b, 1016 * MS, REF));
+    one.pictures = 2;
+    one.shown = 2;
+    one.scored = 1;
+    one.hit = 1;
+    one.marginSumUs = -10;
+    one.wildSumMs = 1.0;
+    CHECK(rd_glass_pair(&two, &b, 1016 * MS, &c, 1024 * MS, REF));
+    CHECK(rd_glass_pair(&two, &c, 1024 * MS, &d, 1040 * MS, 2 * REF));
+    two.pictures = 2;
+    two.shown = 2;
+    two.scored = 2;
+    two.hit = 1;
+    two.late = 1;
+    two.marginSumUs = 3;
+    two.wildSumMs = 1.5;
+    rd_glass_merge(&one, &two);
+    CHECK(one.pairs == all.pairs && one.pictures == all.pictures && one.shown == all.shown);
+    CHECK(one.refreshNs == 2 * REF && one.drawnRule == RD_RULE_TIMER &&
+          all.drawnRule == RD_RULE_TIMER);
+    CHECK(memcmp(one.gaps, all.gaps, sizeof one.gaps) == 0);
+    CHECK(memcmp(one.glass, all.glass, sizeof one.glass) == 0);
+    CHECK(memcmp(one.hand, all.hand, sizeof one.hand) == 0);
+    CHECK(memcmp(one.gpu, all.gpu, sizeof one.gpu) == 0);
+    CHECK(one.scored == 3 && one.hit == 2 && one.late == 1 && one.marginSumUs == -7 &&
+          one.wildSumMs == 2.5);
+    /* an empty window merged: nothing changes, the refresh and rule kept */
+    RdGlassWindow none;
+    memset(&none, 0, sizeof none);
+    rd_glass_merge(&one, &none);
+    CHECK(one.pairs == 3 && one.refreshNs == 2 * REF && one.drawnRule == RD_RULE_TIMER);
 }
 
 static void testJoin(void)
@@ -216,6 +275,7 @@ int main(void)
 {
     printf("rd_glass_test\n");
     testPair();
+    testMerge();
     testJoin();
     testLine();
     testScreen();

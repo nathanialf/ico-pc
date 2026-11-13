@@ -109,7 +109,11 @@ void rd_glass_picture(const RdGlassPic *p);
 void rd_glass_join(const RdGlassPic *p);
 void rd_glass_time(uint32_t id, uint64_t actualNs, uint64_t refreshNs, uint64_t earliestNs,
                    uint64_t marginNs);
-/* the 10 s sums taken (the window's thread) and the join emptied (tests) */
+/* pure: from's sums added into into (the collecting thread's pending sums,
+   kept while the window's thread held the flag, rd_glass.c) */
+void rd_glass_merge(RdGlassWindow *into, const RdGlassWindow *from);
+/* the 10 s sums taken (the window's thread) and the join emptied (tests, and
+   rd_init when the device is made: its present ids start at 1 again) */
 void rd_glass_take(RdGlassWindow *w);
 void rd_glass_reset(void);
 /* the window's 10 s line ("window: on the glass in 10 s: ..."; nothing

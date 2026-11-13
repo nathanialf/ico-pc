@@ -7,6 +7,14 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h> /* SwitchToThread */
+#else
+/* POSIX (glibc, bionic, macOS): declared here, as <sched.h> hides it under
+   the build's strict C standard without a feature macro */
+int sched_yield(void);
+#endif
 
 #include "rd_pace_even.h"
 #include "rd_pace_rules.h"
@@ -99,17 +107,103 @@ static struct {
     uint64_t ns;
 } s_last;
 
-/* the 10 s sums: the collecting thread adds, the window's thread takes,
-   under a spin (one add a picture, one take every 10 s) */
+/* the 10 s sums: the collecting thread adds, the window's thread takes.
+   The collecting thread (the one that replays: a frame's thread) never
+   waits: it tries the flag once, and where the window's thread holds it
+   (its take: one copy of the sums and a clear, every 10 s) the picture's
+   sums go into s_pend, its own, merged into s_sum at its next try that
+   holds the flag.  So no frame can wait on the window's thread, however
+   long that thread is preempted inside the take; the window's thread waits
+   at most the collector's few adds (it yields while it waits) */
 static RdGlassWindow s_sum;
+static RdGlassWindow s_pend; /* the collecting thread's alone */
+static bool s_pendAny;
 static int s_spin;
 
-static void lock(void)
+static void statMerge(RdGlassStat *a, const RdGlassStat *b)
 {
-    while (__atomic_exchange_n(&s_spin, 1, __ATOMIC_ACQUIRE)) {}
+    a->n += b->n;
+    a->sum2 += b->sum2;
+    a->above125 += b->above125;
+    a->above15 += b->above15;
+    a->below075 += b->below075;
+    a->sum += b->sum;
 }
 
-static void unlock(void)
+void rd_glass_merge(RdGlassWindow *into, const RdGlassWindow *from)
+{
+    into->pictures += from->pictures;
+    into->shown += from->shown;
+    into->unseen += from->unseen;
+    if (from->pairs) {
+        into->drawnRule = from->drawnRule;
+    }
+    into->pairs += from->pairs;
+    for (int c = 0; c < RD_GLASS_CLASSES; c++) {
+        into->gaps[c] += from->gaps[c];
+    }
+    if (from->refreshNs) {
+        into->refreshNs = from->refreshNs;
+    }
+    for (int m = 0; m < RD_GLASS_RULES; m++) {
+        for (int c = 0; c <= RD_GLASS_CLASSES; c++) {
+            statMerge(&into->glass[m][c], &from->glass[m][c]);
+        }
+        statMerge(&into->hand[m], &from->hand[m]);
+        statMerge(&into->gpu[m], &from->gpu[m]);
+    }
+    into->scored += from->scored;
+    into->hit += from->hit;
+    into->late += from->late;
+    into->early += from->early;
+    into->further += from->further;
+    into->figuresN += from->figuresN;
+    into->marginN += from->marginN;
+    into->marginWild += from->marginWild;
+    into->earlyN += from->earlyN;
+    into->marginSumUs += from->marginSumUs;
+    into->earlySumUs += from->earlySumUs;
+    into->wildSumMs += from->wildSumMs;
+}
+
+/* the collecting thread's sums for this picture: s_sum with the flag held
+   (s_pend merged in first), else s_pend; *held for addEnd */
+static RdGlassWindow *addBegin(bool *held)
+{
+    *held = !__atomic_exchange_n(&s_spin, 1, __ATOMIC_ACQUIRE);
+    if (!*held) {
+        s_pendAny = true;
+        return &s_pend;
+    }
+    if (s_pendAny) {
+        rd_glass_merge(&s_sum, &s_pend);
+        memset(&s_pend, 0, sizeof(s_pend));
+        s_pendAny = false;
+    }
+    return &s_sum;
+}
+
+static void addEnd(bool held)
+{
+    if (held) {
+        __atomic_store_n(&s_spin, 0, __ATOMIC_RELEASE);
+    }
+}
+
+/* the window's thread (and the tests' reset): waits for the collector's
+   adds, yielding */
+static void lockTake(void)
+{
+    while (__atomic_exchange_n(&s_spin, 1, __ATOMIC_ACQUIRE)) {
+#ifdef _WIN32
+        (void)SwitchToThread();
+#else
+        (void)sched_yield();
+#endif
+    }
+}
+
+static void unlockTake(void)
 {
     __atomic_store_n(&s_spin, 0, __ATOMIC_RELEASE);
 }
@@ -126,39 +220,40 @@ static void done(uint32_t i)
                                         p->gpuExact ? p->gpuEndMs : 0.0};
         rd_pace_screen_seen(&smp);
     }
-    lock();
+    bool held;
+    RdGlassWindow *w = addBegin(&held);
     if (p->screenAtMs > 0.0 && refMs > 0.0) {
         const int k = rd_pace_screen_score(p->screenAtMs, actualMs, refMs);
-        s_sum.scored++;
-        s_sum.hit += k == 0 ? 1u : 0u;
-        s_sum.late += k == 1 ? 1u : 0u;
-        s_sum.early += k == -1 ? 1u : 0u;
-        s_sum.further += k > 1 || k < -1 ? 1u : 0u;
+        w->scored++;
+        w->hit += k == 0 ? 1u : 0u;
+        w->late += k == 1 ? 1u : 0u;
+        w->early += k == -1 ? 1u : 0u;
+        w->further += k > 1 || k < -1 ? 1u : 0u;
     }
     if (s_slot[i].marginNs != 0 || s_slot[i].earliestNs != 0) {
-        s_sum.figuresN++;
+        w->figuresN++;
         /* the unsigned field read signed: a margin below 0 wraps */
         const int64_t mg = (int64_t)s_slot[i].marginNs;
         if (mg >= -RD_GLASS_MARGIN_MAX_NS && mg <= RD_GLASS_MARGIN_MAX_NS) {
-            s_sum.marginN++;
-            s_sum.marginSumUs += mg / 1000;
+            w->marginN++;
+            w->marginSumUs += mg / 1000;
         } else {
-            s_sum.marginWild++;
-            s_sum.wildSumMs += (double)mg / 1e6;
+            w->marginWild++;
+            w->wildSumMs += (double)mg / 1e6;
         }
         if (s_slot[i].earliestNs != 0 && s_slot[i].earliestNs < s_slot[i].ns &&
             2u * (s_slot[i].ns - s_slot[i].earliestNs) >= s_slot[i].refreshNs) {
-            s_sum.earlyN++;
-            s_sum.earlySumUs += (int64_t)((s_slot[i].ns - s_slot[i].earliestNs) / 1000u);
+            w->earlyN++;
+            w->earlySumUs += (int64_t)((s_slot[i].ns - s_slot[i].earliestNs) / 1000u);
         }
     }
-    s_sum.shown++;
+    w->shown++;
     if (s_last.have && s_slot[i].id > s_last.p.id) {
-        s_sum.unseen += s_slot[i].id - s_last.p.id - 1u;
-        (void)rd_glass_pair(&s_sum, &s_last.p, s_last.ns, &s_slot[i].p, s_slot[i].ns,
+        w->unseen += s_slot[i].id - s_last.p.id - 1u;
+        (void)rd_glass_pair(w, &s_last.p, s_last.ns, &s_slot[i].p, s_slot[i].ns,
                             s_slot[i].refreshNs);
     }
-    unlock();
+    addEnd(held);
     s_last.have = true;
     s_last.p = s_slot[i].p;
     s_last.ns = s_slot[i].ns;
@@ -180,9 +275,9 @@ void rd_glass_join(const RdGlassPic *p)
     if (p->id == 0) {
         return;
     }
-    lock();
-    s_sum.pictures++;
-    unlock();
+    bool held;
+    addBegin(&held)->pictures++;
+    addEnd(held);
     const uint32_t i = slotOf(p->id);
     s_slot[i].p = *p;
     s_slot[i].pic = true;
@@ -210,19 +305,21 @@ void rd_glass_time(uint32_t id, uint64_t actualNs, uint64_t refreshNs, uint64_t 
 
 void rd_glass_take(RdGlassWindow *w)
 {
-    lock();
+    lockTake();
     *w = s_sum;
     memset(&s_sum, 0, sizeof(s_sum));
-    unlock();
+    unlockTake();
 }
 
 void rd_glass_reset(void)
 {
     memset(s_slot, 0, sizeof(s_slot));
     memset(&s_last, 0, sizeof(s_last));
-    lock();
+    lockTake();
     memset(&s_sum, 0, sizeof(s_sum));
-    unlock();
+    memset(&s_pend, 0, sizeof(s_pend));
+    s_pendAny = false;
+    unlockTake();
 }
 
 /* ------------------------------------------------------------- the line */
