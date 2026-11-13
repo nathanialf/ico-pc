@@ -112,6 +112,18 @@ static void arm_block_end(void); /* the bounded pass timing, below */
    known) */
 static StallMedians s_med;
 static StallTally s_tally;
+
+/* the last record that showed the GPU's own sign of a reset (stamps
+   unwritten after its work was signalled finished, its first list run
+   twice, the timestamp counter gone back: rd_perf_clock.h), for a stall at
+   it or up to two replays after it (issue 123: the hung replay's stamps,
+   the next one's restarted clock, the present that blocked between) */
+static struct {
+    uint32_t replay;
+    unsigned missing;
+    bool twice, back;
+} s_reset;
+
 static int s_gpuMaxMhz = -1;
 
 /* the block's stall line and its join into the run's sums; clock the
@@ -412,9 +424,15 @@ static int core_mhz(double t0Ms, double t1Ms, int core, int *gpuMhz)
 
 /* the moment of a stall over [t0Ms, t1Ms] from the last samples (no file
    read here: the log thread's cells, the sampler's ring) */
-static void moment_now(StallMoment *m, double t0Ms, double t1Ms)
+static void moment_now(StallMoment *m, double t0Ms, double t1Ms, uint32_t replay)
 {
     memset(m, 0, sizeof(*m));
+    if (s_reset.replay != 0 && replay >= s_reset.replay && replay - s_reset.replay <= 2u) {
+        m->resetReplay = s_reset.replay;
+        m->stampsMissing = s_reset.missing;
+        m->ranTwice = s_reset.twice;
+        m->clockBack = s_reset.back;
+    }
     m->gameCore = cpu_place_now();
     m->renderCore = ico_render_thread_render_core();
     m->gpuMhz = m->gpuMaxMhz = -1;
@@ -452,11 +470,11 @@ static void moment_now(StallMoment *m, double t0Ms, double t1Ms)
 #endif
 }
 
-static void stall_event(const char *what, double t0Ms, double t1Ms)
+static void stall_event(const char *what, double t0Ms, double t1Ms, uint32_t replay)
 {
     StallMoment m;
     char text[1280];
-    moment_now(&m, t0Ms, t1Ms);
+    moment_now(&m, t0Ms, t1Ms, replay);
     stall_tally_add(&s_tally, &m);
     (void)stall_moment_text(&m, text, sizeof text);
     ico_log_limited("window: stall", "window: stall: %s; at that moment: %s", what, text);
@@ -671,7 +689,7 @@ void window_stall_blocked(const RdPerfRecord *r)
             r->presentMs, r->replay, r->acquireMs, r->presentLockMs, r->presentCallMs,
             r->presentPollMs, r->gpuValid ? r->gpuMs : 0.0, r->gpuValid ? "" : ", not timed yet");
         const double t1 = r->presentEndMs > 0.0 ? r->presentEndMs : ico_thread_now_ms();
-        stall_event(what, t1 - r->presentMs, t1);
+        stall_event(what, t1 - r->presentMs, t1, r->replay);
     }
     if (r->presentEndMs > 0.0) {
         window_log_cost_present(r->presentEndMs - r->presentMs, r->presentEndMs);
@@ -721,6 +739,12 @@ void window_stall_after(const RdPerfRecord *r, PaceGpuGap *gap)
     if (s_stallT0 <= 0.0) {
         s_stallT0 = ico_thread_now_ms(); /* the first block starts with the first record */
     }
+    if (stall_reset_sign(r->gpuStampsMissing, r->gpuRanTwice != 0, r->gpuGapBackNs)) {
+        s_reset.replay = r->replay;
+        s_reset.missing = r->gpuStampsMissing;
+        s_reset.twice = r->gpuRanTwice != 0;
+        s_reset.back = r->gpuGapBackNs != 0;
+    }
     stall_block_add(&s_stall, &sr);
     if (!s_after.pending) {
         return;
@@ -768,7 +792,8 @@ void window_stall_passes(const RdPerfRecord *r, const RdPerfPassAgg *agg, const 
                      "%.1f ms)",
                      label, (unsigned)p[best].w, (unsigned)p[best].h, bestMs, bestMed, r->replay,
                      r->gpuValid ? r->gpuMs : 0.0);
-            stall_event(what, r->startMs, r->startMs + r->totalMs + (r->gpuValid ? r->gpuMs : 0.0));
+            stall_event(what, r->startMs, r->startMs + r->totalMs + (r->gpuValid ? r->gpuMs : 0.0),
+                        r->replay);
         }
     }
 

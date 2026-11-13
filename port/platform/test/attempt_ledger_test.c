@@ -40,9 +40,9 @@ static int text_is(const char *got, const char *want)
     return 1;
 }
 
-/* the deciders as each device class's owners call them: no row but the
-   Adreno attempts (their own package's) left "not reported", and each
-   class's no-volume break state with its reason */
+/* the deciders as each device class's owners call them: no row at all left
+   "not reported", each class's no-volume break state with its reason, the
+   Adreno attempt on Qualcomm's own driver alone */
 typedef struct DeviceClass {
     const char *name;
     int faster, pin;
@@ -52,26 +52,31 @@ typedef struct DeviceClass {
     const char *nvGate;
     IcoAttemptState wantCores, wantNoVolume;
     const char *wantNoVolumeWhy;
+    const char *passRow; /* RhiLimits.passObjectsRow (NULL: not Qualcomm's driver) */
 } DeviceClass;
 
 static void test_classes(void)
 {
     static const DeviceClass k[] = {
         {"Mali-G52 (2 + 6)", 2, 1, NULL, 1, 0, 1, 1, -1, 0, 0, NULL, ICO_ATT_ON, ICO_ATT_NA,
-         "not the PowerVR or MoltenVK class under Vulkan"},
+         "not the PowerVR or MoltenVK class under Vulkan", NULL},
         {"Pixel (PowerVR D, 1 + 5 over 2)", 6, 1, NULL, 1, 0, 1, 1, -1, 1, 0, NULL, ICO_ATT_NA,
          ICO_ATT_OFF_DEFAULT,
          "off by default until a phone rc shows the PowerVR phone's title and pause menu clean "
-         "with it"},
+         "with it",
+         NULL},
         {"PowerVR B (no local read)", 2, 1, NULL, 1, 0, 1, 1, -1, 1, 0,
          "the composites' DATE by the R8 snapshot or the shader's read", ICO_ATT_ON, ICO_ATT_NA,
-         "the composites' DATE by the R8 snapshot or the shader's read"},
-        {"Adreno 740 (4 + 3 + 1)", 4, 1, NULL, 1, 0, 1, 1, -1, 0, 0, NULL, ICO_ATT_NA, ICO_ATT_NA,
-         "not the PowerVR or MoltenVK class under Vulkan"},
+         "the composites' DATE by the R8 snapshot or the shader's read", NULL},
+        {"Adreno 740 on Qualcomm's driver (4 + 3 + 1)", 4, 1, NULL, 1, 0, 1, 1, -1, 0, 0, NULL,
+         ICO_ATT_NA, ICO_ATT_NA, "not the PowerVR or MoltenVK class under Vulkan",
+         "Qualcomm's own driver: every render pass a VkRenderPass object"},
+        {"Adreno 740 on Turnip", 4, 1, NULL, 1, 0, 1, 1, -1, 0, 0, NULL, ICO_ATT_NA, ICO_ATT_NA,
+         "not the PowerVR or MoltenVK class under Vulkan", NULL},
         {"desktop with MSAA", 0, 0, "only on Android", 1, 1, 1, 1, -1, 0, 0, NULL, ICO_ATT_NA,
-         ICO_ATT_NA, "not the PowerVR or MoltenVK class under Vulkan"},
+         ICO_ATT_NA, "not the PowerVR or MoltenVK class under Vulkan", NULL},
         {"a Mac (MoltenVK), the break forced", 0, 0, "only on Android", 1, 0, 1, 1, 1, 1, 0, NULL,
-         ICO_ATT_NA, ICO_ATT_ON, "ICO_RD_NO_VOLUME_BREAK=1"},
+         ICO_ATT_NA, ICO_ATT_ON, "ICO_RD_NO_VOLUME_BREAK=1", NULL},
     };
     for (size_t c = 0; c < sizeof k / sizeof k[0]; c++) {
         const DeviceClass *d = &k[c];
@@ -82,10 +87,8 @@ static void test_classes(void)
         ico_attempt_decide_date_one(d->dateMode, d->dateSetting);
         ico_attempt_decide_empty_skip(d->box, d->skip);
         ico_attempt_decide_no_volume_break(d->nvEnv, d->nvClass, d->nvDefault, d->nvGate);
+        ico_attempt_decide_pass_objects(d->passRow);
         for (int i = 0; i < ICO_ATT_COUNT; i++) {
-            if (i == ICO_ATT_ADRENO_A || i == ICO_ATT_ADRENO_B) {
-                continue;
-            }
             if (ico_attempt_state_of(i) == ICO_ATT_NOT_SET) {
                 printf("FAIL %s: %s not reported\n", d->name, ico_attempt_name(i));
                 failures++;
@@ -94,6 +97,8 @@ static void test_classes(void)
         CHECK(ico_attempt_state_of(ICO_ATT_FEW_CORES) == d->wantCores);
         CHECK(ico_attempt_state_of(ICO_ATT_PIPE_SET_CORES) == d->wantCores);
         CHECK(ico_attempt_state_of(ICO_ATT_NO_VOLUME_BREAK) == d->wantNoVolume);
+        CHECK(ico_attempt_state_of(ICO_ATT_ADRENO_A) == (d->passRow ? ICO_ATT_ON : ICO_ATT_NA));
+        CHECK(ico_attempt_state_of(ICO_ATT_ADRENO_B) == ICO_ATT_NOT_BUILT);
         char b[2048], want[256];
         (void)ico_attempt_start_text(b, sizeof b);
         snprintf(want, sizeof want, "; no-volume break %s (%s)",
@@ -175,8 +180,7 @@ int main(void)
     (void)ico_attempt_block_text(b, sizeof(b), 4);
     CHECK(starts(b, "attempts: few-cores rule on 2 threads moved; capture in two steps on 0 "
                     "captures (0 grown here); "));
-    CHECK(strstr(b, "; stalls 4 in the block") != NULL &&
-          strstr(b, "(the Adreno attempts") == NULL);
+    CHECK(strstr(b, "; stalls 4 in the block") != NULL && strstr(b, "(the Adreno attempt") == NULL);
     /* reported late: counts since the last block (9 before, 1 since) */
     ico_attempt_state(ICO_ATT_DATE_ONE, ICO_ATT_ON, "every device");
     ico_attempt_fire(ICO_ATT_DATE_ONE, 1);
@@ -184,13 +188,18 @@ int main(void)
     (void)ico_attempt_block_text(b, sizeof(b), -1);
     CHECK(strstr(b, "; one DATE set-up on 1 shared (2 retaken by the guard)") != NULL);
 
-    /* the Adreno rows: the stalls clause says whether one is on */
-    ico_attempt_state(ICO_ATT_ADRENO_A, ICO_ATT_NA, "not an Adreno 740");
+    /* the Adreno row: the stalls clause says whether it is on */
+    ico_attempt_decide_pass_objects(NULL);
     (void)ico_attempt_block_text(b, sizeof(b), 2);
-    CHECK(strstr(b, "; stalls 2 in the block (the Adreno attempts off)") != NULL);
-    ico_attempt_state(ICO_ATT_ADRENO_B, ICO_ATT_ON, "Adreno 740, Qualcomm's driver");
+    CHECK(strstr(b, "; stalls 2 in the block (the Adreno attempt off)") != NULL);
+    CHECK(strstr(b, "Qualcomm passes as VkRenderPass objects not applicable here 0 passes") !=
+          NULL);
+    ico_attempt_decide_pass_objects("Qualcomm's own driver");
+    ico_attempt_fire(ICO_ATT_ADRENO_A, 120);
     (void)ico_attempt_block_text(b, sizeof(b), 1);
-    CHECK(strstr(b, "; stalls 1 in the block (the Adreno attempts on)") != NULL);
+    CHECK(strstr(b, "; stalls 1 in the block (the Adreno attempt on)") != NULL);
+    CHECK(strstr(b, "Qualcomm passes as VkRenderPass objects on 120 passes") != NULL);
+    CHECK(strstr(b, "Adreno attempt B") == NULL); /* not in this build: left out */
     CHECK(strcmp(ico_attempt_state_word(ICO_ATT_REFUSED), "refused by its self-test") == 0);
     CHECK(strcmp(ico_attempt_state_word(ICO_ATT_NA), "not applicable here") == 0);
 

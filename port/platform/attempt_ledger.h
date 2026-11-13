@@ -14,7 +14,7 @@
  *   attempts: few-cores rule on 3 threads moved; capture in two steps on 1
  *     captures (0 grown here); flat outputs at the provoking corner on
  *     (static); one DATE set-up on 270 shared (0 retaken by the guard);
- *     ...; stalls 3 in the block (the Adreno attempts on)
+ *     ...; stalls 3 in the block (the Adreno attempt on)
  * The first once a run at the first 10 s block (and again when a state
  * changes later: the first 8 changes, then every 100th), the second every
  * 10 s block.
@@ -74,9 +74,12 @@ enum {
     /* rd_no_volume.c: no-volume pictures whose count and level passes
        were skipped with SCENE's pass still ended at the resolve */
     ICO_ATT_NO_VOLUME_BREAK,
-    /* the Adreno 740 attempts (their files name them at their state call's
-       why; the rows' words are generic until renamed here) */
+    /* the Adreno 740 attempt (rhi_pass_row.h): every render pass a
+       VkRenderPass object on Qualcomm's own driver; state from
+       RhiLimits.passObjectsRow, count the block's growth of
+       RhiStats.passObjects (window_perf_rank.c) */
     ICO_ATT_ADRENO_A,
+    /* a second Adreno attempt: not built (not in this build) */
     ICO_ATT_ADRENO_B,
     /* the other exact cuts planned for the tile-based phones: the subpass
        read, the blend constant, the index compaction */
@@ -110,8 +113,8 @@ size_t ico_attempt_start_text(char *out, size_t cap);
 /* "attempts: few-cores rule on 3 threads moved; ..." with the counts since
    the last call (each row's counts taken: the next call starts from
    here); rows not reported left out; stalls >= 0 adds "; stalls N in the
-   block" and, where an Adreno row is reported, "(the Adreno attempts on)"
-   or "(... off)"; "" when no row is reported and stalls < 0; the length
+   block" and, where the Adreno row is reported, "(the Adreno attempt on)"
+   or "(the Adreno attempt off)"; "" when no row is reported and stalls < 0; the length
    written */
 size_t ico_attempt_block_text(char *out, size_t cap, int stalls);
 
@@ -143,6 +146,10 @@ void ico_attempt_decide_empty_skip(int box, int mode);
    Vulkan, defaultOn RD_NO_VOLUME_BREAK_DEFAULT, gateWhy a setting gate's
    refusal with the class allowed (the DATE path, MSAA, the pass window, the
    exact blend, GS state as shader data; NULL none) */
+/* the Adreno attempt (window_perf_rank.c at the first block): row the
+   device's RhiLimits.passObjectsRow (its reason while Qualcomm's row holds
+   the passes; NULL otherwise, and on the other backends) */
+void ico_attempt_decide_pass_objects(const char *row);
 void ico_attempt_decide_no_volume_break(int env, int classOk, int defaultOn, const char *gateWhy);
 
 #endif

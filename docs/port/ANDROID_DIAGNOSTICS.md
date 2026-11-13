@@ -1913,7 +1913,7 @@ counter is an increment in a hot path, and none of them reads anything from the 
 | Mali: three automatic captures of 47-56 ms on the game thread | Which step costs the game thread? | `window: slow-scene dump: the game thread's parts: the measure M ms, the copy C ms (each without its drain); the worker's block made in P ms; two steps: frame N copied into the worker's block` (or `grown here: ...`), after the capture line |
 | Mali: the game, render and both audio threads on the two fast cores | Where do the threads run, and does audio keep up on the slow cores? | `window: render thread cores: ...` (the few-cores rule's sets and moves); the game thread line's `ran / waited for a core: game ..., render ..., submit ..., SDL audio ..., system audio ...` and after it `; run time on the faster cores 6-7: submit N % of T s, SDL audio ..., system audio ..., <the driver's threads> ..., pipeline workers ...` ([The faster cores' share of run time](#the-faster-cores-share-of-run-time)); `audio: ... ms of silence (... ms held back behind the game) ...; the sound chip's emulation E ms a callback on average (longest L ms; R renders) against the device's period of P ms`; and the ledger's `few-cores rule on N threads moved` |
 | Few-core phones: start-up of 62.2 s (51.2 s of it pipelines, cold cache) | How long does the pipeline set take, on which cores, and with how much CPU time? | `rd: pipelines: N of the reachable set's M created at start-up in T ms ...` (wall time), followed by `window: pipeline set: made in T s ...; its N workers on every core ... while it ran ...; the process's CPU time C s over it (B cores busy on average)` |
-| Adreno 740 hangs | Did this release's attempt run, and how many stalls were there with it on? | The start lines that name the hung draw (`rd: GPU clock: ...`), the attempt ledger's Adreno rows (state and fired count), and the ledger line's `; stalls N in the block (the Adreno attempts on)` |
+| Adreno 740 hangs | Did this release's attempt run, and how many stalls were there with it on? | The start lines that name the hung draw (`rd: GPU clock: ...`); the attempt ledger's row `Qualcomm passes as VkRenderPass objects on (<the row's reason>) N passes` (`not applicable here (not Qualcomm's own driver)` elsewhere, Turnip included); the ledger line's `; stalls N in the block (the Adreno attempt on)`; and each stall's `coincided with: ..., the GPU's own sign of a reset` with the tally's `the GPU's own sign of a reset N` |
 | Pixel opening: lamps, dark and sun views | What does each block cost, and which cut fired? | `window: compare: ...; GPU ms a picture: ...; glow plans: lamps N, dark N, whole N`, `passes` and `breaks` a picture, and the ledger line's per-cut fired counts |
 
 ### The attempt ledger
@@ -1931,7 +1931,7 @@ print it:
 - In every block: `window: attempts: few-cores rule on 3 threads moved; pipeline set on every core
   on 0 workers (0 sets); capture in two steps on 1 captures (0 grown here); flat outputs at the
   provoking corner on (static); ...; stalls 3 in the block`. Rows that are not reported are left
-  out. Where an Adreno row is reported, the stalls clause adds `(the Adreno attempts on)` or `off`.
+  out. Where the Adreno row is reported, the stalls clause adds `(the Adreno attempt on)` or `off`.
 
 To add a row, a package adds one enum value and one table row with its words, a decider
 (`ico_attempt_decide_*`: the row's state and its reason from the facts its owner has, so the unit
@@ -1947,7 +1947,8 @@ thread can make it, hot paths included. The rows and where their states are set:
 | one DATE set-up | `rd_date_one.c` at each replay's scan (off by the tests' switch, not applicable under MSAA or the exact blend) | the window, from the record's `dateOneShared` and `dateOneRefused` |
 | empty composites skipped | `rd_shadow_box.c` at each replay's scan | the window, from `emptySkipped` |
 | no-volume break | `rd_no_volume.c` at each replay's scan: `off by default (off by default until a phone rc shows the PowerVR phone's title and pause menu clean with it)` on the PowerVR and MoltenVK class, `not applicable here (not the PowerVR or MoltenVK class under Vulkan)` elsewhere, or the other gates' reason (the DATE path, MSAA ...) with the class allowed | the window, from `noVolumeBreak` |
-| Adreno attempt A and B | the Adreno attempts' own files | the same |
+| Qualcomm passes as VkRenderPass objects | `window_perf_rank.c` every block (`ico_attempt_decide_pass_objects`: on with `RhiLimits.passObjectsRow`'s reason while Qualcomm's row holds the device's passes, `not applicable here (not Qualcomm's own driver)` otherwise) | the block's growth of `RhiStats.passObjects`, only while the row holds |
+| Adreno attempt B | `not in this build` (one Adreno attempt was built) | none |
 | subpass read, blend constant, index compaction | `not in this build` from the start (left out of the block line) | none |
 
 The shadow cuts' counts come from the replay's record where the window reads it
@@ -2029,9 +2030,26 @@ poll apart, and the replay's GPU span. How long the present held past that span 
   log thread's last ask.
 - **The classes** (`coincided with:`): a core wait over 100 ms in the last second, memory under
   the floor, memory pressure rising (some avg10 above the reading before), the GPU clock under half
-  its fastest (where readable), or none of these. Each block, beside the attempt ledger: `window:
-  stalls by what coincided: 3 in the block (a core wait over 100 ms 1, memory under the floor 2,
-  memory pressure rising 1, the GPU clock low 0 (not readable), none of these 1)`.
+  its fastest (where readable), the GPU's own sign of a reset, or none of these. Each block,
+  beside the attempt ledger: `window: stalls by what coincided: 3 in the block (a core wait over
+  100 ms 1, memory under the floor 2, memory pressure rising 1, the GPU clock low 0 (not
+  readable), the GPU's own sign of a reset 0, none of these 1)`.
+- **The GPU's own sign of a reset**: the stalled replay, or one of the two before it, had recorded
+  stamps come back unwritten after its work was signalled finished, ran its first list twice, or
+  saw the GPU's timestamp counter go back (`rd_perf_clock.h`'s fields of the record). The line
+  names it: `the GPU's own sign of a reset at replay 689: 19 stamps came back unwritten after its
+  work was signalled finished`.
+
+Issue 123's Adreno 740 log (Qualcomm's driver) had 12 stalls of 401-415 ms, 2 of them in stage 1's
+opening. In every one the hung replay's `rd: GPU clock` line has 19-45 stamps unwritten after the
+work was signalled finished (the first: list 0's end), and the next present blocked. KGSL is not
+readable there (EACCES), so the GPU's clock is not known. The device had 1650-1716 MB available
+against Qualcomm's floor of 1947 MB for the whole run. Read from those fields, each stall prints
+`coincided with: memory under the floor, the GPU's own sign of a reset`, plus a core wait where one
+crossed 100 ms. Without the reset class they would print only `memory under the floor`, which
+every block of that run had whether it stalled or not. A tally with `the GPU's own sign of a reset`
+equal to the stall count says the stalls are the GPU's own hangs, and the memory and wait classes
+are the context around them.
 
 Outside Android only the cores and the record's own numbers are known. The other parts say `not
 sampled` or `not known`.

@@ -50,6 +50,11 @@ double stall_medians_add(StallMedians *m, uint32_t key, double ms)
     return median;
 }
 
+bool stall_reset_sign(unsigned stampsMissing, bool ranTwice, uint64_t clockBackNs)
+{
+    return stampsMissing != 0 || ranTwice || clockBackNs != 0;
+}
+
 bool stall_pass_spike(double ms, double median)
 {
     return median > 0.0 && ms > STALL_PASS_TIMES * median && ms > STALL_PASS_MS;
@@ -73,6 +78,9 @@ unsigned stall_classes(const StallMoment *m)
     }
     if (m->gpuMhz > 0 && m->gpuMaxMhz > 0 && (double)m->gpuMhz < STALL_GPU_LOW * m->gpuMaxMhz) {
         bits |= 1u << STALL_CLASS_GPU;
+    }
+    if (m->resetReplay != 0) {
+        bits |= 1u << STALL_CLASS_RESET;
     }
     return bits ? bits : 1u << STALL_CLASS_NONE;
 }
@@ -107,8 +115,8 @@ static void put(Out *o, const char *fmt, ...)
 }
 
 static const char *const k_class[STALL_CLASSES] = {
-    "a core wait over 100 ms", "memory under the floor", "memory pressure rising",
-    "the GPU clock low", "none of these"};
+    "a core wait over 100 ms", "memory under the floor",        "memory pressure rising",
+    "the GPU clock low",       "the GPU's own sign of a reset", "none of these"};
 
 size_t stall_tally_text(const StallTally *t, char *out, size_t cap)
 {
@@ -197,6 +205,22 @@ size_t stall_moment_text(const StallMoment *m, char *out, size_t cap)
         put(&o, "; the GPU clock %d MHz", m->gpuMhz);
         if (m->gpuMaxMhz > 0) {
             put(&o, " of %d", m->gpuMaxMhz);
+        }
+    }
+    if (m->resetReplay != 0) {
+        put(&o, "; the GPU's own sign of a reset at replay %u:", m->resetReplay);
+        const char *in = " ";
+        if (m->stampsMissing) {
+            put(&o, "%s%u stamps came back unwritten after its work was signalled finished", in,
+                m->stampsMissing);
+            in = ", ";
+        }
+        if (m->ranTwice) {
+            put(&o, "%sits first list ran twice", in);
+            in = ", ";
+        }
+        if (m->clockBack) {
+            put(&o, "%sthe GPU's clock restarted", in);
         }
     }
     const unsigned bits = stall_classes(m);

@@ -25,7 +25,7 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
     [ICO_ATT_DATE_ONE] = {"one DATE set-up", "shared", "retaken by the guard"},
     [ICO_ATT_EMPTY_SKIP] = {"empty composites skipped", "skipped", NULL},
     [ICO_ATT_NO_VOLUME_BREAK] = {"no-volume break", "pictures", NULL},
-    [ICO_ATT_ADRENO_A] = {"Adreno attempt A", "fired", NULL},
+    [ICO_ATT_ADRENO_A] = {"Qualcomm passes as VkRenderPass objects", "passes", NULL},
     [ICO_ATT_ADRENO_B] = {"Adreno attempt B", "fired", NULL},
     [ICO_ATT_SUBPASS] = {"subpass read", "passes", NULL},
     [ICO_ATT_BLEND_CONST] = {"blend constant", "draws", NULL},
@@ -40,6 +40,7 @@ static struct {
     uint64_t n, n2;
     uint64_t lastN, lastN2;
 } s_att[ICO_ATT_COUNT] = {
+    [ICO_ATT_ADRENO_B] = {ICO_ATT_NOT_BUILT, NULL, 0, 0, 0, 0},
     [ICO_ATT_SUBPASS] = {ICO_ATT_NOT_BUILT, NULL, 0, 0, 0, 0},
     [ICO_ATT_BLEND_CONST] = {ICO_ATT_NOT_BUILT, NULL, 0, 0, 0, 0},
     [ICO_ATT_COMPACTION] = {ICO_ATT_NOT_BUILT, NULL, 0, 0, 0, 0},
@@ -48,7 +49,8 @@ static struct {
 /* a row's state at the start */
 static int startState(int i)
 {
-    return i == ICO_ATT_SUBPASS || i == ICO_ATT_BLEND_CONST || i == ICO_ATT_COMPACTION
+    return i == ICO_ATT_ADRENO_B || i == ICO_ATT_SUBPASS || i == ICO_ATT_BLEND_CONST ||
+                   i == ICO_ATT_COMPACTION
                ? ICO_ATT_NOT_BUILT
                : ICO_ATT_NOT_SET;
 }
@@ -166,7 +168,7 @@ size_t ico_attempt_block_text(char *out, size_t cap, int stalls)
     Put p = {out, cap, 0, 0};
     out[0] = '\0';
     int shown = 0;
-    int adreno = -1; /* -1 no Adreno row reported, 0 reported off, 1 one on */
+    int adreno = -1; /* -1 the Adreno row not reported, 0 reported and not on, 1 on */
     for (int i = 0; i < ICO_ATT_COUNT; i++) {
         const IcoAttemptState st = ico_attempt_state_of(i);
         const uint64_t n = __atomic_load_n(&s_att[i].n, __ATOMIC_RELAXED);
@@ -177,8 +179,8 @@ size_t ico_attempt_block_text(char *out, size_t cap, int stalls)
         if (st == ICO_ATT_NOT_SET || st == ICO_ATT_NOT_BUILT) {
             continue;
         }
-        if (i == ICO_ATT_ADRENO_A || i == ICO_ATT_ADRENO_B) {
-            adreno = st == ICO_ATT_ON ? 1 : (adreno < 0 ? 0 : adreno);
+        if (i == ICO_ATT_ADRENO_A) {
+            adreno = st == ICO_ATT_ON ? 1 : 0;
         }
         put(&p, "%s %s %s", shown ? ";" : "attempts:", k_rows[i].name, ico_attempt_state_word(st));
         if (k_rows[i].unit == NULL) {
@@ -194,7 +196,7 @@ size_t ico_attempt_block_text(char *out, size_t cap, int stalls)
     if (stalls >= 0) {
         put(&p, "%sstalls %d in the block", shown ? "; " : "attempts: ", stalls);
         if (adreno >= 0) {
-            put(&p, " (the Adreno attempts %s)", adreno ? "on" : "off");
+            put(&p, " (the Adreno attempt %s)", adreno ? "on" : "off");
         }
         shown++;
     }
@@ -289,4 +291,10 @@ void ico_attempt_decide_no_volume_break(int env, int classOk, int defaultOn, con
     } else {
         ico_attempt_state(ICO_ATT_NO_VOLUME_BREAK, ICO_ATT_ON, "the PowerVR or MoltenVK class");
     }
+}
+
+void ico_attempt_decide_pass_objects(const char *row)
+{
+    ico_attempt_state(ICO_ATT_ADRENO_A, row != NULL ? ICO_ATT_ON : ICO_ATT_NA,
+                      row != NULL ? row : "not Qualcomm's own driver");
 }
