@@ -1304,11 +1304,26 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   .039, three .119 to .048, one to two .170 to .066), one a tick and an idle GPU today's moments
   to the bit; the owner's cage log's runs (lines 3846-3851, 4109-4113 and 4275-4280 of its first candidate's log) (frame, alpha and GPU ms) after
   a warm cage: today's steps the log's alphas', the uneven two under half of today's distance from
-  the GPU's ends, every step within the two shifts' bounds; the renderer's side: paced (not
-  applicable), 64 pictures without a clock (not applicable, the clause word for word), the ring's
-  measurements, the row on, the clause word for word with an exact end's error of -2 ms and one
-  shift at the bound, the block line's counts, a full ring's drop, the start line word for word
-  and cut.
+  the GPU's ends, every step within the two shifts' bounds; the queue capped at one picture's G
+  over unmeasured pictures; the renderer's side: paced (not applicable), 600 measurements without
+  a clock (not applicable, the clause word for word), the ring's measurements, the row off by
+  default (on under `ICO_RD_PACE_GPU=1`) with the shift drawn 0 and the model's computed, the
+  clause word for word with an exact end's error of -2 ms and one shift at the bound, the block
+  line's counts, a full ring's drop, the start line word for word and cut; off by default, the
+  rules picked as `presentRebase` does over 600 cage pictures: the hand-over rule's value to the bit.
+- `rd_as_made_timer_test.c` (`rd_as_made_timer`, CPU): the own timer (`rd_as_made_timer.c`): its
+  edges (the first picture on the target, a steady interval exactly, the quarter pull, a held
+  slot taken whole, an error over half a tick, the minimum step, the restarts, the switch); 10 s
+  simulations with a 120 Hz mailbox display of the cage, the brief's cage pattern, stages 3 and 5,
+  three a tick, the GPU-bound opening, one a tick, two to three a tick and back, a 200 ms stall,
+  the three rules over the same pictures (every step, clamps, largest step, speed against the
+  hand-overs, the GPU's ends and the display): the timer never back, no repeat, no clamp, held in
+  its frame's tick at most 20 times in 10 s, within half a tick of the hand-over rule, evener than
+  the hand-over wherever two or more a tick; the owner's cage log's three runs.
+- `rd_glass_test.c` (`rd_glass`, CPU): the on-glass line (`rd_glass.c`): a pair per rule against the
+  display's gap, its class, the hand-overs and the GPU's ends, the shares; not steps; the join of
+  pictures and display times by id in either order with a present never shown; the line word for
+  word.
 - `rd_cpu_phase_test.c` (`rd_cpu_phase`, CPU): the render thread's CPU phases (`rd_cpu_phase.c`):
   two pictures of one frame folded (2 pictures, 1 tick, 1 hashed, 6 clock reads, the look-ups
   folded once and `g_rdCpu` emptied), taken twice (empty), no line without a picture, and the

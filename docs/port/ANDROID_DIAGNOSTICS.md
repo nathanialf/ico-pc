@@ -1654,15 +1654,24 @@ quarter of them at 0). The `content drawn against the hand-overs` clause counts 
 picture before shown again) and the step's ratio to its real gap: repeats near 0 and ratios near 1
 are content following real time.
 
-The moment is then moved on from the hand-over to the picture's predicted GPU end less the
-mean latency (the evenness line's last clause, `the GPU's predicted end: ...`): the `re-based`
-clause's shift then holds both shifts and its `content's moment to the hand-over` spreads by the
-queue's wait (a few ms each way in the cage), and the ratio to the real gap is not near 1 by
-design: the content follows the GPU's ends, which the GPU spaces evenly, instead of the hand-overs,
-which the step grid pins unevenly. Read the clause's `predicted against the measured end` first: a
-mean within a ms or two of 0 with a deviation of a few ms says the model follows the GPU; then
-`every step`'s deviation and the `2 refreshes` class's against the block before (the owner's
-cage before the model: .164-.187 and .128-.156).
+Two other rules are computed beside the hand-over's at every picture as made and drawn only by the
+tests' switches: the picture's predicted GPU end less the mean latency (the evenness line's last
+clause, `the GPU's predicted end: ...`; `ICO_RD_PACE_GPU=1`) and an own timer
+(`ICO_RD_AS_MADE_TIMER=1`); [DISPLAY.md](DISPLAY.md) "The alpha" has both and why the first is off
+(the owner's phone felt it more sped up; the alpha drawn clamped at 0 at a tick's first picture in
+the opening, and the model's queue ran away in scenes of keep frames). Reading a log for "sped up":
+
+- The `interp: alpha of the N presents: Z at 0 (C clamped from below, lowest X)` line counts the
+  alpha drawn. A clamp at 0 shows the end of the pair before and makes the next step long; tens a
+  line, or a lowest under -0.1, is visible. The evenness line's `alpha clamped` counts are the
+  present clock's, which runs in every mode but is not drawn with pictures as made: they stay at
+  tens a block whatever rule is drawn.
+- The `on the glass` line ([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#the-on-glass-line)),
+  where the display's times come back: the drawn rule's speed above 1.25 and 1.5 and its deviation
+  are what the eye sees; the rules not drawn beside it say which would have been evener in the same
+  run. Compare two runs with different rules drawn by those figures and the clamps.
+- The evenness line's `every step` and its last clause put the content against the GPU's ends,
+  which the display need not follow: a rule better there was worse on the owner's phone.
 
 ## The refresh rate under Uncapped
 
@@ -1983,7 +1992,8 @@ thread can make it, hot paths included. The rows and where their states are set:
 | VU record by compute on the PowerVR | `rd_vu_record.c` at the record's start (`ico_attempt_decide_vu_compute`): `off by default` on the PowerVR class under Vulkan with both stores, `on` by the tests' switch or the define flipped, `refused by its self-test` when the compute record failed it (the vertex stores then), `not applicable here` elsewhere (no vertex stores, no compute stores, another class, a `[dev] vu_record` by name) | `rd_vu_record.c` `rd__replay_dispatch`: the dispatches |
 | turn in the present's blit | `rd_present.c` at each present (`ico_attempt_decide_turn_fold`): `not applicable here` without a pre-rotated swapchain, `off by default` until the define is flipped or with its self-test not run, `refused by its self-test`, `on` with it passed | `rd_turn_fold.c`: the presents folded (the second count: those on a turned swapchain that kept the turn pass) |
 | VU record sized from need | `rd_vu_rec_early.c` at the start-up preparation (`ico_attempt_decide_rec_need`: on where the run's need made a smaller record than the memory bound allowed; not applicable with the pre-pass off, nothing made at start-up, or a bound no larger than the need) | the record's growths in play (`rd_replay_vu.c` recEnsure, a record that existed grown) |
-| in-between pictures for the GPU's predicted end | `rd_pace_gpu_live.c` on the poster's thread at each change (`ico_attempt_decide_pace_gpu`): `not applicable here (the pictures are paced here (vsync on, a frame rate cap, the Original frame rate or the render thread off): ...)` while the window does not present pictures as made, `on (pictures as made: each drawn for its GPU work's predicted end)` once a picture's GPU span and first submit came back, `not applicable here (no GPU span or slot clock on this backend ...)` after 64 pictures as made without one (OpenGL, Direct3D 11, timestamps off: the hand-over less the mean drain kept); the start line `rd: in-between pictures for the GPU's predicted end: on (...); the GPU per picture the median of the last 15 measured spans, ...` at each change (the first 8, then every 100th) | `rd_pace_gpu_live.c` `rd_pace_gpu_shift`: the pictures the model placed (the second count: those held at its bound); the evenness line's last clause has the rest ([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#the-evenness-line)) |
+| in-between pictures for the GPU's predicted end | `rd_pace_gpu_live.c` on the poster's thread at each change (`ico_attempt_decide_pace_gpu`): `not applicable here (the pictures are paced here (vsync on, a frame rate cap, the Original frame rate or the render thread off): ...)` while the window does not present pictures as made, `off by default (the owner's phone felt worse with it in ...; kept for measurement)` once a picture's GPU span and first submit came back (`on (ICO_RD_PACE_GPU=1: ...)` with the tests' switch), `not applicable here (no GPU span or slot clock on this backend ...)` after 600 measurements back without one (OpenGL, Direct3D 11, timestamps off: the hand-over less the mean drain kept); the start line `rd: in-between pictures for the GPU's predicted end: off by default (...); the GPU per picture the median of the last 15 measured spans, ...; computed and reported, not drawn (ICO_RD_PACE_GPU=1 draws it)` at each change (the first 8, then every 100th) | `rd_pace_gpu_live.c` `rd_pace_gpu_shift`: the pictures the model placed, drawn or not (the second count: those held at its bound); the evenness line's last clause has the rest ([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#the-evenness-line)) |
+| in-between pictures on their own timer | `rd_pace_rules.c` on the poster's thread at each change (`ico_attempt_decide_as_made_timer`): `not applicable here (the pictures are paced here: ...)` while paced, `off by default (off by default until a phone rc shows it to the owner's eye; computed and reported)` as made (`on (...)` with `ICO_RD_AS_MADE_TIMER=1`); the start line `rd: in-between pictures on their own timer: off by default (...); each picture's moment the one before plus the mean hand-over interval ...` | `rd_pace_rules.c`: the pictures it gave a moment, drawn or not (the second count: those held inside their frame's tick); the on-glass line has its speed ([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#the-on-glass-line)) |
 | the glow's paste by its own entry | `rd_paste_spec.c` at start-up and after its self-test (`ico_attempt_decide_paste_spec`): `not applicable here` where `fx_paste_ps` is not made (OpenGL, Direct3D), `off by default` with `ICO_RD_PASTE_SPEC=0`, the define at 0 or its self-test not run yet, `refused by its self-test` where the two entries' bytes differed on the device, `on` with it passed | `rd_paste_spec.c` at each premultiplied add: the pastes drawn by `fx_paste_ps` (the second count: those that kept `fx_frame_ps`, the 10 s `window: paste:` line says why) |
 | the glow chain in three passes | `not in this build` from the start (measured, not built: [RENDER_POST.md](RENDER_POST.md#the-glow-chain-in-three-passes-measured-not-built)) | none |
 

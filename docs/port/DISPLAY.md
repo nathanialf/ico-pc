@@ -38,7 +38,9 @@ are [RHI.md](RHI.md).
 | `port/render/rd_prerotate.c` | the present into a swapchain made in the surface's own turn ([The turned swapchain](#the-turned-swapchain)) |
 | `port/render/rd_interp.c` | presenting between ticks |
 | `port/render/rd_present_clock.c` | the present clock (`rd_present_clock_alpha`), what it notes for `rd_present`, Motion blur: Smooth's presents a tick |
-| `port/render/rd_pace_gpu.c`, `rd_pace_gpu_live.c`, `rd_pace_gpu.h` | with pictures as made, each in-between picture's moment at its GPU work's predicted end (the GPU queue's model, its evenness clause, its attempt ledger row; [Interpolation between ticks](#interpolation-between-ticks)) |
+| `port/render/rd_pace_gpu.c`, `rd_pace_gpu_live.c`, `rd_pace_gpu.h` | with pictures as made, each in-between picture's moment at its GPU work's predicted end, computed and reported, drawn only with `ICO_RD_PACE_GPU=1` (the GPU queue's model, its evenness clause, its attempt ledger row; [Interpolation between ticks](#interpolation-between-ticks)) |
+| `port/render/rd_as_made_timer.c`, `.h`, `rd_pace_rules.c`, `.h` | the own timer for pictures as made (drawn only with `ICO_RD_AS_MADE_TIMER=1`) and the three rules side by side at every picture |
+| `port/render/rd_glass.c`, `rd_glass_live.c`, `.h`; `port/rhi/vk/vk_glass.c` | the content's speed on the glass: the display's own times read back (`VK_GOOGLE_display_timing`, read only) and the `on the glass` line |
 | `port/render/rd_crt.c`, `port/shaders/crt.hlsl` | the CRT filter |
 | `port/render/rd_upscale_temporal.c`, `port/render/rd_upscale_temporal.h` | Upscaling: FSR 3.1's rows (quality ratios, exclusions, the display line's words; [FSR 3.1 upscaling](#fsr-31-upscaling)) |
 | `port/render/rd_fsr3.c`, `port/render/rd_fsr3.h` | Upscaling: FSR 3.1 itself: the support answer, the context, the dispatch at the upscale point ([FSR 3.1 upscaling](#fsr-31-upscaling)) |
@@ -2435,9 +2437,20 @@ deadline `tickAt`) and the next closing step's deadline, so the measured ask is 
 only the drain's shift can reach a clamp. Every other mode (the vsync lock, FIFO, the Frame rate
 caps, vsync on) keeps the clock's alpha.
 
-With pictures as made the value is also moved to the moment the picture's GPU work is predicted to
-end, less the mean latency (`port/render/rd_pace_gpu.c`, `rd_pace_gpu_live.c`, `rd_pace_gpu.h`; the
-call in `presentRebase`): a picture reaches the screen after its GPU work, and where the hand-overs
+With pictures as made a second rule is computed beside it at every picture and drawn only with
+`ICO_RD_PACE_GPU=1` (the tests' switch; `RD_PACE_GPU_DEFAULT 0`: off by default, the hand-over
+rule's value drawn to the bit, `rd_pace_gpu_test`'s off-by-default case): the moment the picture's
+GPU work is predicted to end, less the mean latency (`port/render/rd_pace_gpu.c`,
+`rd_pace_gpu_live.c`, `rd_pace_gpu.h`; the call in `presentRebase`). It is off because the owner's
+phone felt the motion more sped up with it drawn, in the opening at 47-56 pictures a second and in
+stage 3 at 68-72, although the evenness line's own measure (the content's step against the GPU's
+ends) was better there. Two defects show in that run's lines: the tick's first picture moved before
+the frame's close, so the alpha drawn clamped at 0 (17-42 an `interp:` line in the opening against
+0-1 with the hand-over's moment; 82, down to -0.53 of a tick, in a scene of keep frames), which
+shows the end of the pair before and makes the step after it long; and where most pictures carry no
+measurement (keep frames) the predicted queue ran away (its mean wait 205-426 ms, shifts of +-14
+ms), which the model now caps at one picture's GPU time (`RD_PACE_GPU_IN_FLIGHT`: with two frames in
+flight a picture's work is submitted only once the picture two before it ended). A picture reaches the screen after its GPU work, and where the hand-overs
 are pinned to the game's step grid (two pictures a tick: the first after the closing step, the
 second after the half-tick deadline, the third held by the step rule) the GPU's queue spaces them
 evenly while the hand-overs are 0.3 and 0.7 of a tick apart (the owner's 120 Hz phone in the cage
@@ -2472,8 +2485,48 @@ the grid. In `rd_pace_gpu_test`'s simulations (10 s, 120 Hz, a frame every 33.37
 deviation goes from .210 to .040 ticks in the cage at two a tick (.149 to .068 on the brief's cage
 pattern), .101 to .039 at two to three a tick, .119 to .048 at three, .170 to .066 GPU-bound at one
 to two, and stays the same at one a tick and with an idle GPU; the GPU's end is not the glass (the
-display latches at its next refresh), so up to a refresh of that remains. Measured on no phone
-yet. The clock itself (its step, resets and holds, Motion blur:
+display latches at its next refresh), so up to a refresh of that remains.
+
+A third rule, also computed at every picture as made and drawn only with `ICO_RD_AS_MADE_TIMER=1`
+(`RD_AS_MADE_TIMER_DEFAULT 0`), is an own timer (`port/render/rd_as_made_timer.c`, `.h`;
+`rd_pace_rules.c` puts the three side by side). The present clock above is a timer too, and it was
+taken out of this mode because it failed there: it steps each present by the running mean of the
+present intervals and pulls an eighth of the error, so when the step rule holds a further picture
+the interval is a picture's slot longer than the mean, seven eighths of it stay as a lag, the lags
+add up past half a tick and the clock resets forward (35 to 154 presents a 10 s block on the owner's
+phone, up to 22 %), and a lagging clock at a tick's first picture is before the frame's close: a
+clamp at 0 (10 to 94 a block). The evenness line still counts that clock's clamps and resets, which
+is why its `alpha clamped` figures stay at 38-66 at 0 although the alpha drawn clamps far less. The
+own timer keeps the timer's even steps without those causes: each picture's moment is the one
+before plus I, the mean hand-over interval over the last two ticks (the hand-overs' pattern is
+pinned to the step grid and repeats every tick, so a whole-tick window removes it), corrected toward
+the hand-over rule's moment: an error beyond half an interval is taken as whole slots (a held
+picture's slot, which the present clock lacked), the rest pulled a quarter of the way; an error over
+half a tick (a stall, a resync) puts it on the hand-over rule's moment; each step is at least a
+quarter of I (never back, never the same moment). A tick's first picture keeps a lead after the
+close (the largest distance below the close of the last 16 first pictures without it) and the
+timer is held inside its frame's tick rather than the alpha clamped. In `rd_as_made_timer_test`'s
+simulations (10 s, 120 Hz, a mailbox display that shows each picture at the first refresh at or
+after its GPU end) every step's deviation with the hand-over / the GPU end / the timer: the cage
+.210 / .040 / .067, stages 3 and 5 .101 / .039 / .037, three a tick .119 / .048 / .035, the GPU-bound
+opening .170 / .066 / .081, one a tick .017 / .017 / .015; clamps at 0 of the GPU-end rule 67 in
+stages 3 and 5 and 80 in the opening (0 with the hand-over), the timer 0 (held in its tick 0-18 times
+in 10 s); the timer within 9.5 ms of the hand-over rule's moment, so over any span its speed is real
+time's within that over the span. On the modelled display the content's speed against the display's
+gaps deviates .40 (hand-over), .26 (GPU end) and .26 (timer) in the cage: the model favours both
+later rules, the owner's eye did not favour the GPU end, so the display model is not trusted until
+the on-glass line has measured a phone. The desktop paths correspond: the vsync lock's grid is a
+timer by construction (k / (n x perFrame)), FIFO and the caps the present clock, which works there
+because every present is a refresh apart and none is held by the step rule.
+
+Where the device offers `VK_GOOGLE_display_timing` (the Pixel 10 Pro Fold does), the display's own
+time of each shown picture is read back (`rhi_present_glass`, `port/rhi/vk/vk_glass.c`: an id and a
+desired time of 0, "any time", chained to each present, so nothing is asked of the display; the
+past times read after each present on the presenting thread with no wait) and the 10 s `window: on
+the glass in 10 s:` line puts each rule's content against it: the content's step over the display's
+gap, 1.00 real time, for the rule drawn and for each rule computed, beside the same steps against
+the hand-overs and the GPU's ends ([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#the-on-glass-line)).
+One run per rule drawn then says on the glass which is evenest. Measured on no phone yet. The clock itself (its step, resets and holds, Motion blur:
 Smooth's interval and presents a tick, FSR's step) and every pacing input (the step rule's asks,
 holds and estimates) are untouched: this changes only the alpha the render thread draws at, its
 value in the `interp:` alpha line and in the present's record. Not under `ICO_RD_S2_LEGACY=1`, and

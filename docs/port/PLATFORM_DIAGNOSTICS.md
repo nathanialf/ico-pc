@@ -1018,9 +1018,43 @@ no GPU end at one side), `, U of them over gaps not on the grid: mean M (deviati
   measurements dropped)` follows when the poster's thread fell 32 records behind. On the owner's
   120 Hz phone in the cage P should be nearly every picture, the shift a few ms each way, and
   `every step`'s deviation well under the .164-.187 the hand-over's moment gave there; at one
-  picture a tick O is every picture and nothing else changes.
+  picture a tick O is every picture and nothing else changes. The model is off by default (its
+  moment computed and reported, not drawn: [DISPLAY.md](DISPLAY.md) "The alpha"), so P counts the
+  pictures it would have placed.
 
 No clock is read for the line: the stamps are the ones the drain, the slot wait and the present
 clock already take. The render thread adds about a dozen relaxed atomic additions a picture, the
 present clock one to three a present (a compare-and-swap only when a maximum grows), and the window
 formats one line every 10 s.
+
+## The on-glass line
+
+Where the display's own times of past presents come back (Vulkan with `VK_GOOGLE_display_timing`,
+read only: `rhi_present_glass`, `port/rhi/vk/vk_glass.c`), the window prints after the evenness line
+(`port/render/rd_glass.c`, `rd_glass.h`):
+
+```
+window: on the glass in 10 s: P pictures with a display id, S shown with the display's time, U presented with no time back (replaced before shown, or not reported), N pairs; the display's gaps by refreshes of R ms: under half N0, 1 N1, 2 N2, 3 N3, 4 or more N4; the content's speed on the glass (its step over the display's gap, 1.00 real time), drawn (RULE): mean M (deviation D), above 1.25 A %, above 1.5 B %, below 0.75 C %; by the display's gap: 1 refresh M (D), 2 refreshes M (D), ...; against the hand-overs M (D) over K, against the GPU's ends M (D) over K; by the hand-over (drawn|not drawn): ...; by the GPU's predicted end (...): ...; by the own timer (...): ...
+```
+
+- **The pairs** are consecutive shown pictures in the presents' order (a picture's record joined
+  with its display time by its id). U counts the ids between two shown pictures that never got a
+  time: in mailbox mode a picture replaced before a refresh, or a time the driver did not keep. A
+  frame number back or on by more than 8, or two pictures over a second apart, is not a step.
+- **The speed**: the content's step from the shown picture before (frame plus alpha, in ms of game
+  time) over the time between their display times. 1.00 is real time; a step over 1.25 or 1.5 is
+  the content moving faster than real time for that picture (what reads as "sped up"), under 0.75
+  slower. The deviation is the unevenness the eye sees. By the display's gap in refreshes (the
+  driver's refresh) the classes show whether the long steps are the content's or the display's.
+- **The rules**: `drawn` names the rule the pictures were drawn by (the hand-over, the GPU's
+  predicted end, the own timer, or the present clock in paced modes). With pictures as made the
+  three rules are computed at every picture (`port/render/rd_pace_rules.c`) and each gets the same
+  measures (its own alpha, clamped as drawn, without the frame's hold), so one run compares them on
+  the glass; the drawn one's figures equal its `drawn` figures.
+- **Against the hand-overs and the GPU's ends**: the same step over the hand-overs' interval and over
+  the GPU's ends' (both exact), so the three clocks are side by side: a rule even against the GPU's
+  ends and uneven on the glass says the display does not follow the GPU's ends.
+
+No clock is read for it; the display's times are the driver's (its own clock: only differences are
+used). Nothing is printed where no picture carried an id (another backend, the extension not
+offered).

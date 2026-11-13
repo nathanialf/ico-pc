@@ -1401,6 +1401,19 @@ since the driver can go on returning success while the surface changes size (`vk
 poll and Android's suboptimal present also rebuild when the surface's turn changed (the phone turned
 over, `vkr_swap_differs`).
 
+**The display's times read back.** Where the device offers `VK_GOOGLE_display_timing` on a window,
+the extension is enabled and every present chains a `VkPresentTimeGOOGLE` with an id and a
+`desiredPresentTime` of 0 (the specification: zero "specifies that the presentation engine may
+display the image at any time"), so which pictures are shown and when is as without it, in every
+present mode; after each present, on the presenting thread under the swapchain's lock,
+`vkGetPastPresentationTimingGOOGLE` (no wait: it returns what the driver has) fills a 256-time ring
+and `vkGetRefreshCycleDurationGOOGLE` gives the refresh once per swapchain; `rhi_present_glass`
+gives the calling thread's last present's id and takes the times (`port/rhi/vk/vk_glass.c`; the
+start line `rhi_vk: display timing (read back): VK_GOOGLE_display_timing on (read only: ...)` or
+`off (...)`). A swapchain made again by the present itself is not read after it is destroyed.
+`VK_EXT_present_timing` is not used. OpenGL and Direct3D give none. The renderer's on-glass line
+reads it ([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#the-on-glass-line)).
+
 **The present-wait thread.** With `ICO_VK_PRESENT_WAIT=1` a thread waits on each present's id in
 turn (`vkWaitForPresentKHR`, 4 ms a wait) and notes when it returned on `SDL_GetTicksNS`'s clock in
 a 64-note ring. Ids go only to presents made while the window uses the timing (under its vsync
@@ -2553,7 +2566,7 @@ bound), so the renderer leaves the VU vertex pre-pass (48 bytes a pixel) off on 
 | `rhi_vk_scope.c` | the buffer barriers' scopes ([Buffer barriers' scopes](#buffer-barriers-scopes)): seven lists under synchronisation validation with the shader access analysis, counted by `RhiStats.fragmentHolds`: a picture's mesh upload, VU record (compute and stores) and pass after the picture before's hold no fragment work (0), a texture upload over a sampled texture 1, the bracket's held-back end joined to a transition out of `SHADER_READ` 1 (0 on the global path), and after a fragment shader that declares a storage buffer the copy and the bracket wait for fragment work (2) and a copy over a buffer that shader read is clean; the record read back word for word; also inside `rhi_vk`'s run; ctests `rhi_vk_scopes`, `_vk11`, `_global`, `_novs` |
 | `rhi_vk_spirv_scan_test.c` | `vk_spirv_scan.c` over the tests' modules, a fragment shader that reads a storage buffer (`rhi_vk_ps_storage.h`, with its vertex shader) and hand-built and unreadable modules; ctest `rhi_vk_spirv_scan` |
 | `rhi_native_test.c`, `rhi_test_native.c` | `rhi_native.h`: `rhi_test_native.c` runs inside the common cells on every backend (Vulkan and D3D12 hand out a device, a queue and, with a device-level loader or the command list, the handles; Direct3D 11 and OpenGL answer "not offered" with zeroed outputs, a reason for the capability query, and refuse a null and a real texture and list); `rhi_native_test.c` on Vulkan (lavapipe): the device handles, a vkCmdPipelineBarrier recorded through the `getDeviceProcAddr` handed out, RGBA16F and RGBA8 textures granted storage with their image, format, extent and layouts (a texture without the flag reports none, D32F with it is accepted), the storage barriers passing the layer's synchronisation checks, the external begin refused inside a pass and twice, and a two-pass picture byte-identical without the pair, around an empty stretch and around a native barrier (the second pass drawing with no pipeline or vertex buffer call after the pair), the pair counting two barriers; ctest `rhi_native` (exit 77 without a device; a validation message fails it) |
-| `rhi_vk_swapchain_test.c` | the window path on SDL's offscreen driver: frames, readback order, surface release and recreation, suboptimal and lost presents, resizes, the surface poll, submits per frame, the present-wait stand-in and a hanging wait; ctest `rhi_vk_swapchain` |
+| `rhi_vk_swapchain_test.c` | the window path on SDL's offscreen driver: frames, readback order, surface release and recreation, suboptimal and lost presents, resizes, the surface poll, submits per frame, the present-wait stand-in and a hanging wait; the display's times read back by the stand-in (`vkr_test_fake_glass`: ids one apart, 8 times of 12 presents, a refresh of 8333333 ns) and by the driver where it offers `VK_GOOGLE_display_timing` (ids one apart, times oldest first with presented ids and a desired time of 0, no validation error); ctest `rhi_vk_swapchain` |
 | `rhi_vk_present_mode_test.c` | `vkr_choose_present_mode` over the mode sets drivers offer, and `vkr_present_wait_wanted`; ctest `rhi_vk_present_mode` |
 | `rhi_vk_enum_test.c` | every `rhi.h` enumeration has a Vulkan mapping; the layer classifiers and `rhi_layer_switched_on`; ctest `rhi_vk_enum` |
 | `rhi_driver_version_test.c` | the driver version text of each vendor's encoding; ctest `rhi_driver_version` |

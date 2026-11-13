@@ -1181,9 +1181,11 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   self-test not run, not the compute record with and without its words), its triangles left out
   in the start and block lines; the in-between pictures for the GPU's predicted end per class (not
   applicable at the Mali-G52 reporter's Original frame rate and on the desktop with vsync on, not
-  applicable without a slot clock on the PowerVR B, on for the Pixel, both Adreno 740 drivers and
-  the Mac uncapped), as made without a clock yet leaving the row as it was, its pictures placed
-  and held at the bound in the start and block lines; at the reset the compaction's row `not reported`, the blend
+  applicable without a slot clock on the PowerVR B, off by default for the Pixel, both Adreno 740 drivers and
+  the Mac uncapped), as made without a clock yet leaving the
+  row as it was, on with the tests' switch, its pictures placed and held at the bound in the start
+  and block lines; the own timer's row not applicable where paced and off by default as made, on
+  with its counts in the block line; at the reset the compaction's row `not reported`, the blend
   constant's `not in this build` (CPU only).
 - `core_share_test.c` (ctest `core_share`): the share of run time on the faster cores of the
   threads that do not sample their own core (`port/platform/core_share.h`, issue 179): ten seconds
