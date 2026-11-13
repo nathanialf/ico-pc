@@ -1013,9 +1013,12 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   `tools/turn_fold_dumps.txt` (the Pixel's three opening dumps and issue 179's three Mali-G52 dumps;
   a listed dump that is absent FAILS where `/primary/dev/ico-dumps` exists): the phone's setting
   (`ICO_VK_FAKE_LIMITS=moltenvk`, Enhanced 2364x1080, full height, full pixel) and a 16:9 window at
-  its own resolution (1280x720, full pixel) fold or keep the turn pass for drawn text, 640x480 at 1x
-  keeps it (`the box blit not one texel a pixel`), rd_pixel's dump with `--overlay-test` keeps it
-  (`the port's overlay or the deferred text drawn`); the fold's runs say its self-test passed
+  its own resolution (1280x720, full pixel) fold or keep the turn pass for drawn text where the
+  scene fills the box one texel a pixel, and keep it (`the box blit not one texel a pixel`) where
+  the tool's display line says the frame is cropped (every listed dump) or its aspect is not the
+  window's (rd_pixel's 4:3 frame); rd_pixel's dump at 1024x768, full pixel, folds; 640x480 at 1x
+  keeps it; rd_pixel's dump with `--overlay-test` at 1024x768 keeps it (`the port's overlay or the
+  deferred text drawn`); the fold's runs say its self-test passed
   (`6 cases`), the turn pass's runs never fold, every PNG pair the same bytes, at least one present
   folded. No device: SKIP.
 - `rd_vuprepass_selftest_compute_class`, `_back`, `_off` (`rd_smallcuts.cmake`, through

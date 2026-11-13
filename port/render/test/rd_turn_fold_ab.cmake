@@ -9,13 +9,18 @@
 # present kept the turn pass:
 #   phone   the PowerVR phone's profile (ICO_VK_FAKE_LIMITS=moltenvk, Enhanced,
 #           --resolution 2364x1080 --full-height --full-pixel --present
-#           2364x1080: one texel a pixel): must fold unless the dump's
-#           deferred text or overlay is drawn
+#           2364x1080) and
 #   win720  a desktop 16:9 window at the window's resolution (1280x720,
-#           Full pixel): must fold likewise
+#           Full pixel): must fold (or keep the turn pass for drawn text)
+#           where the scene fills the box one texel a pixel; where the tool's
+#           display line says the frame is cropped (the opening's 848 GS
+#           pixels for 840.53, the Mali's 912 for 910.22) or its aspect is
+#           not the window's (rd_pixel's 4:3 frame), must keep it ("the box
+#           blit not one texel a pixel")
+#   win43   rd_pixel's dump at 1024x768, Full pixel: must fold
 #   plain   --present 640x480 at 1x (the box blit scaled): must keep the turn
 #           pass ("not one texel a pixel")
-#   overlay rd_pixel's dump with --overlay-test at the phone's setting: must
+#   overlay rd_pixel's dump with --overlay-test at win43's setting: must
 #           keep it ("the port's overlay or the deferred text drawn")
 # At least one present must have folded over the run.  The dumps: DUMP
 # (rd_pixel's, may be absent) and LIST's; where /primary/dev/ico-dumps exists a
@@ -63,9 +68,13 @@ set(args_plain --present 640x480)
 set(env_plain "")
 set(size_plain 640x480)
 set(want_plain "the box blit not one texel a pixel")
-set(args_overlay ${args_phone} --overlay-test)
-set(env_overlay "ICO_VK_FAKE_LIMITS=moltenvk")
-set(size_overlay 2364x1080)
+set(args_win43 --enhanced --resolution 1024x768 --full-height --full-pixel --present 1024x768)
+set(env_win43 "")
+set(size_win43 1024x768)
+set(want_win43 fold)
+set(args_overlay ${args_win43} --overlay-test)
+set(env_overlay "")
+set(size_overlay 1024x768)
 set(want_overlay "the port's overlay or the deferred text drawn")
 
 set(first TRUE)
@@ -74,7 +83,7 @@ set(folded 0)
 set(i 0)
 foreach(dump IN LISTS dumps)
   if(dump STREQUAL "${DUMP}")
-    set(configs phone win720 plain overlay)
+    set(configs phone win720 win43 plain overlay)
   else()
     set(configs phone win720 plain)
   endif()
@@ -119,7 +128,31 @@ foreach(dump IN LISTS dumps)
       endif()
       set(foldLine "turn in the blit: the ${pw}x${ph} picture's box blit drawn turned ${deg} degrees into the ${tw}x${th} image")
       set(textLine "keeps the turn pass: the port's overlay or the deferred text drawn")
-      if(want_${cfg} STREQUAL "fold")
+      # a "fold" setting folds only where the scene fills the window: the
+      # tool's display line gives the scene's size and the frame's aspect
+      # (a 4:3 frame such as rd_pixel's in a wider window is drawn into a
+      # 4:3 box, so its blit is scaled and must keep the turn pass)
+      set(want "${want_${cfg}}")
+      if(want STREQUAL "fold")
+        if(NOT log MATCHES "rd: display: scene [^ ]+ \\(([0-9]+)x([0-9]+)\\), aspect ([0-9.]+)")
+          message(FATAL_ERROR "${dump} ${cfg} ${deg}: no display line:\n${err}")
+        endif()
+        math(EXPR sceneAsp "${CMAKE_MATCH_1} * 1000 / ${CMAKE_MATCH_2}")
+        string(REGEX REPLACE "^([0-9]+)\\.([0-9][0-9][0-9]).*$" "\\1\\2" frameAsp "${CMAKE_MATCH_3}000")
+        math(EXPR d "${sceneAsp} - ${frameAsp}")
+        if(d GREATER 10 OR d LESS -10)
+          set(want "the box blit not one texel a pixel")
+        endif()
+        # a frame wider than its exact width (the opening's 848 GS pixels
+        # for 840.53, the Mali's 912 for 910.22) leaves its outer columns
+        # out at present: the rest is stretched to the box (rd_present.c
+        # sourceCrop, snapWindow: one texel a pixel only for a crop of half
+        # a texel), so the blit is scaled there too
+        if(log MATCHES "frame [0-9]+ GS wide \\(exact [0-9.]+: cropped\\)")
+          set(want "the box blit not one texel a pixel")
+        endif()
+      endif()
+      if(want STREQUAL "fold")
         if(log MATCHES "${foldLine}")
           math(EXPR folded "${folded} + 1")
         elseif(NOT log MATCHES "${textLine}")
@@ -129,8 +162,8 @@ foreach(dump IN LISTS dumps)
         if(log MATCHES "turn in the blit: the ")
           message(FATAL_ERROR "${dump} ${cfg} ${deg}: folded where it must keep the turn pass:\n${err}")
         endif()
-        if(NOT log MATCHES "keeps the turn pass: ${want_${cfg}}")
-          message(FATAL_ERROR "${dump} ${cfg} ${deg}: no \"${want_${cfg}}\" refusal:\n${err}")
+        if(NOT log MATCHES "keeps the turn pass: ${want}")
+          message(FATAL_ERROR "${dump} ${cfg} ${deg}: no \"${want}\" refusal:\n${err}")
         endif()
       endif()
       file(SHA256 "${OUT}/${tag}-a.png" ha)

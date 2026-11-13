@@ -1045,10 +1045,14 @@ pixel in the log.
 
 **What it saves.** One full-size pass a present on a turned swapchain that draws the box blit
 alone: the pass writes the window's 2364x1080 once more and reads the texture once (the present's
-`colour 0.0/19.3 MB` stores at the title in the Pixel's log are the two writes). Expected
-effect on the opening: none while the touch controls are on the screen (each present then draws the
-overlay); the Pixel's present costs 0.5 ms a picture in the opening (its GPU line). Not measured on
-a device.
+`colour 0.0/19.3 MB` stores at the title in the Pixel's log are the two writes). **Expected effect
+on the phones' game pictures: none.** Their frames are wider than their exact width (the opening's
+848 GS pixels for 840.53, the Mali's 912 for 910.22: `rd: display: ... cropped`), so at Full pixel
+the visible columns are stretched to the box (2343 texels into 2364 pixels on the Pixel's opening)
+and the box blit is not one texel a pixel; the fold keeps the turn pass there (measured with the
+replay tool on the three opening dumps and the three Mali dumps, at 2364x1080 and 1280x720). It
+folds where the frame is at its exact width and fills the window, as rd_pixel's 4:3 frame at
+1024x768 does, and with no touch controls, text or overlay drawn. Not measured on a device.
 
 **Switch and lines.** `RD_TURN_FOLD_DEFAULT` 0 in `rd_turn_fold.h`: off on every device until a phone
 rc; the tests' `ICO_RD_TURN_FOLD=1` (the self-test still decides) or `0`. No setting. Lines:
