@@ -3,6 +3,7 @@
 (kept current after every merge; player words only)
 
 - The 3D scenery asks the graphics chip for less work on every device, with the picture unchanged.
+- The log says more about slow phones: what each picture costs, what a stutter happened alongside, and which of this release's changes ran on the phone.
 
 ## Fixed
 

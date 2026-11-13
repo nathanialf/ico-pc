@@ -24,7 +24,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   on a device-less SDL stream over the real SPU2: a writer thread under the audio lock and a
   pulling thread render the frames one thread renders; 10 s free-running with the frames and the
   silence accounted; the ramp out of and into silence while the lock is held elsewhere; the 10 s
-  line and the mode choice; the bound on the SPU2's lead over the game (2 s of pulls with the
+  line (with the sound chip's emulation per callback against the device's period: three renders)
+  and the mode choice; the bound on the SPU2's lead over the game (2 s of pulls with the
   game's frames frozen render exactly 120 ms, then a ramp and silence counted as held back; the
   game stepping releases the hold 40 ms under the bound, the trim plays the stream slower while
   over 64 ms and stops under 32) (`audio_pull`). Its checks are counts, fences and samples, never wall
@@ -1142,8 +1143,26 @@ that stops again writing its own line without the retry mark); a stop at the fre
   samples by core word for word, a thread's cpuset and its cores from a fake tree under the
   build folder (`/top-app` and `cpus`, the root set, `effective_cpus`, no such thread: `ENOENT`)
   and a registered free thread moved back by `cpu_place_refree` (Linux, two or more cores
-  allowed: left alone when skipped, moved, then not touched). CPU only: the kernel's own answers
-  are a phone's.
+  allowed: left alone when skipped, moved, then not touched); the pipeline set's cores
+  (`cpu_keep_set_cores`): on the 2 + 6 and 1 + 7 layouts a worker starting while the set runs
+  keeps every core (the process's, or every core with a speed), the rule's own once it is done,
+  under the Pixel's rule and with the keeper off the rule's own throughout; the sweep leaving a
+  set's worker on every core while its id is in the skip list and moving it after; the set's line
+  word for word in its three modes and a short buffer. CPU only: the kernel's own answers are a
+  phone's.
+- `attempt_ledger_test.c` (ctest `attempt_ledger`): the attempt ledger (`port/platform/
+  attempt_ledger.h`): every row `not reported` at the start, a state with its why, the serial
+  moving on a change only, the block line's counts taken per block (the next block from 0), a
+  static row, rows not reported left out (their counts kept for when they are), the stalls clause
+  with no Adreno row, with one not applicable (`off`) and one on, out-of-range ids ignored, a short
+  buffer cut and terminated (CPU only).
+- `stall_coincide_test.c` (ctest `stall_coincide`): what a stall coincided with (`port/platform/
+  stall_coincide.h`, issue 179): the block's pass medians (none before five, odd and even counts,
+  the ring's last 64, a full key table), the spike rule at its bounds (5.9x not, 8.3x and 40.1 ms
+  yes, 40.0 ms not, no median not), the classes of issue 179's moment (memory under the floor;
+  with a 150 ms render wait and pressure rising; none; the GPU clock at 300 of 950 MHz), the
+  moment and tally lines word for word, a short buffer, the pressure and status parsers, the
+  driver's thread names (CPU only).
 - `thread_stat_test.c`: `schedstat` parsed and read from a fake `/proc/self/task`, the block's
   difference, its words (`thread_stat`).
 - `fps_counter_test.c`: the Frame rate counter's number (`port/platform/fps_counter.h`): 0 before
@@ -1293,7 +1312,7 @@ that stops again writing its own line without the retry mark); a stop at the fre
   by the stall's display rate and by band) word for word; a short buffer; the GPU's start against
   the submit (calibrated, and "about" from the wait's end) and a first list that ran twice in the
   stall's entry and the run's line (`present_stall_block`).
-- `gpu_sysfs_test.c`: the kernel GPU driver's nodes, the pure part (`gpu_sysfs.h`, issue 123): the nodes' texts parsed (`905000000`, `42 %`, leading blanks, a sign, empty, no digit first, a 4 KB text, a buffer read to its length only, digits past a long long's room), Hz to MHz rounded; the ring of 64 (70 samples, the oldest dropped); the 10 s block (the clock's range and mean, busy's mean, the resets in the block against the last before it and from the ring's start, the thermal level's highest, a temperature, only busy read, a steady clock, an empty block); around a present (the sample before, the ones during, the one after, samples exactly at its start and end, none before, none after, nothing read); the open line (the usual readable set, every node denied, the directory missing, nothing present, only the once nodes with errnos named), the block and around lines word for word, a short buffer cut; issue 179: the devfreq name rule and lines, the CPU clocks by class and around a present (`gpu_sysfs`).
+- `gpu_sysfs_test.c`: the kernel GPU driver's nodes, the pure part (`gpu_sysfs.h`, issue 123): the nodes' texts parsed (`905000000`, `42 %`, leading blanks, a sign, empty, no digit first, a 4 KB text, a buffer read to its length only, digits past a long long's room), Hz to MHz rounded; the ring of 64 (70 samples, the oldest dropped); the 10 s block (the clock's range and mean, busy's mean, the resets in the block against the last before it and from the ring's start, the thermal level's highest, a temperature, only busy read, a steady clock, an empty block); around a present (the sample before, the ones during, the one after, samples exactly at its start and end, none before, none after, nothing read); the open line (the usual readable set, every node denied, the directory missing, nothing present, only the once nodes with errnos named), the block and around lines word for word, a short buffer cut; issue 179: the devfreq name rule and lines, the CPU clocks by class and around a present; the kernel's `/sys/kernel/gpu` nodes sampled and the Mali driver's `gpuinfo` and MediaTek's `gpufreq_status` read once, in the open line's lists where GED is denied (`gpu_sysfs`).
 - `thermal_text_test.c`: the thermal and screen recording words (`thermal_text.h`, issue 123): the
   status name table (NONE 0 to SHUTDOWN 6, -1 and 7 UNKNOWN), the change line (`MODERATE (2) ->
   SEVERE (3) (run time 212.4 s)`) and the recording line (visible, not visible), the 10 s block's line
@@ -1343,7 +1362,8 @@ only when the Turnip package loaded and the mark carries trial or needed (`bones
   sequence of steps (`layout: play 6.2 s, scene 3.1 s, pause 0.7 s, other 0.0 s`, the empty block,
   a kind out of range ignored, a reset, a cut buffer), the slow step's game threads part (`game
   threads 199.3 in 39 switches (longest Main 171.2 ms; on core 2)`, the core or the longest switch
-  left out, no name) and the VU line (pre-pass off 9 a triangle, on the recorded vertices, the k and
+  left out, no name) and the VU line (pre-pass off 9 a triangle, on the recorded vertices with the draws' own
+  vu_main_vs three a triangle beside them, never summed, the k and
   M words, no replays, a cut buffer), its skin check twins' part (`; twins 42 draws, 76k vertex
   invocations a picture`, no replays, none drawn: nothing, a cut buffer), the GPU work line (the invocations 9 a triangle off and the recorded vertices on, the work less the display wait and the present, never negative, the fit word for word), the acquire line (none asked: nothing) and the images in use, word for word, and
   the slow-scene dump's trigger over a block's figures (each condition alone: kind, window, movie,
@@ -1558,7 +1578,7 @@ The renderer's test programs have a page of their own:
   its visibility and the closing barrier, each with the masks of the release before the narrowing), a texture copied into the
   arena (the copy's wait the shader stages and vertex input alone, no transfer stage, no memory
   barrier), and texture copy, buffer copy, texture copy (the second's barrier with a buffer barrier:
-  the hazard record kept; narrow: none); the narrow runs the narrow closing barrier. `rhi_vk_offer` (the same `clock` run, passing on the device start's `rhi_vk: offered (read only, nothing enabled for it): calibrated time domains ...; global queue priority ... offered` line, issue 123). `rhi_vk_offer_timing` (the same run, passing on that line's `display timing: VK_GOOGLE_display_timing yes|no, VK_EXT_present_timing yes|no, VK_KHR_present_id yes|no, VK_KHR_present_wait yes|no` clause: nothing enabled for them). `rhi_vk_clock_arm` (the argument `clock`: the clock cell alone) on Arm faked with
+  the hazard record kept; narrow: none); the narrow runs the narrow closing barrier. `rhi_vk_offer` (the same `clock` run, passing on the device start's `rhi_vk: offered (read only, nothing enabled for it): calibrated time domains ...; global queue priority ... offered` line, issue 123). `rhi_vk_pipeline_stats` (the same run, passing on the device start's `rhi_vk: pipeline statistics: offered|not offered (read only, nothing enabled` line, issue 179). `rhi_vk_offer_timing` (the same run, passing on that line's `display timing: VK_GOOGLE_display_timing yes|no, VK_EXT_present_timing yes|no, VK_KHR_present_id yes|no, VK_KHR_present_wait yes|no` clause: nothing enabled for them). `rhi_vk_clock_arm` (the argument `clock`: the clock cell alone) on Arm faked with
   `ICO_TEST_POLLED_WANT=0`: the single wait, a held wait of 150 ms with no trace point, no
   calibrated pair and no fall (`RhiLimits.polledWait` false); every other run asserts the polled
   wait's trace as before. `rhi_vk_budget` and `rhi_vk_budget_phone` (the argument `budget`):

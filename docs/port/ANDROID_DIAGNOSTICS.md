@@ -19,6 +19,10 @@ screen recording the app's Java side reports. The window's lines that use them a
 | `port/render/rd_perf_clock.c`, `rd_perf_clock.h` | a replay's GPU clock against the CPU's and the `rd: GPU clock` line (`rd_perf_clock_test`, every platform; [Issue 123: what the GPU did during a stall](#issue-123-what-the-gpu-did-during-a-stall)) |
 | `port/rhi/vk/vk_tsclock.c`, `vk_range.c` | the slot's clock (submit times, calibrated timestamps, the polled wait's trace) and the ranges robust access does not cover (`rhi_vk`) |
 | `android/app/src/main/java/com/defnf/icopc/IcoActivity.java` | the thermal getters and the two listeners |
+| `port/platform/attempt_ledger.c`, `attempt_ledger.h` | the attempt ledger's rows and lines, in `ico_thread` so the renderer and the window both count into it (`attempt_ledger_test`, every platform; [The attempt ledger](#the-attempt-ledger)) |
+| `port/platform/stall_coincide.c`, `stall_coincide.h` | what a stall coincided with: the pass medians, the rule, the classes, the parsers of `/proc/pressure/memory` and `/proc/self/status`, the lines (`stall_coincide_test`, every platform; [What a stall coincided with](#what-a-stall-coincided-with)) |
+| `port/render/rd_perf_more.c`, `rd_perf_more.h` | the cost counters' block sums and the costs and compare lines (`rd_perf_more_test`, every platform; [The cost counters](#the-cost-counters)) |
+| `port/render/rd_perf_hooks.c`, `rd_perf_hooks.h` | the cost counters' increments: SCENE's pass breaks, the two-pass blend, the screen boxes by list |
 
 ## The kernel GPU driver's sampler
 
@@ -1820,3 +1824,236 @@ counters in the hot path.
   more or less than the block. Its marks: `the hold line`, `the game thread line's cores and run
   times`, `the game thread line`, `the thread list`. Without the log thread they are read on the
   game thread as before.
+
+## Ranking the costs and the attempts (issues 179 and 123)
+
+Each problem the Mali-G52 (issue 179), Adreno 740 (issue 123) and Pixel 10 Pro Fold logs showed
+has a question that the next log has to answer by itself. The lines below are what answer them.
+Each one is printed once per 10 s block or on an event (the first 8, then every 100th). Every
+counter is an increment in a hot path, and none of them reads anything from the GPU while it runs.
+
+### The issue ledger
+
+| Problem the logs showed | The question the next log answers | The line and field that answers it |
+| --- | --- | --- |
+| Mali stage 42: list 0 at 47-77 ms a picture for 52-77k triangles | Is list 0 bound by its vertices or by its pixels? | `window: costs a picture:`: `boxes against triangles: list 0 N triangles in M Mpx of boxes (K times its target's ...)`, which you set against `window: compare:`'s `list 0` ms across blocks. `window: VU: ...; the draws' vu_main_vs N more (3 a triangle ...)` and the `perf scene` line's `(the VU pre-pass's; the draws' own N more, 3 a triangle)` give the draws' own vertex work. `rhi_vk: pipeline statistics: offered` or `not offered` says whether a later release could sample the split |
+| Mali: robust access set by hand | Is robust access on, and where from? | `rhi_vk: loss diagnostics: ... robust access on, buffers (gpu_robust)` and `rd: profile: ... robust access on, buffers (gpu_robust)` at the start, plus `ico_pc: [dev] gpu_robust = true ... has no gpu_robust_by mark: set by hand`, and in every block the compare line's `; robust access on, buffers (gpu_robust)` |
+| Mali: single passes of 100-280 ms, presents blocked 254-385 ms | What coincided with each one? | `window: stall: <the pass or the present>; at that moment: ...` for each stall (the cores and their clocks, the core waits in the last second, the driver's threads, memory against the floor, memory pressure, thermal headroom, the classes), and once per block `window: stalls by what coincided: N in the block (...)` |
+| Mali: device memory under its floor; the process swinging 538-1067 MB while graphics stays at 335 MB | Which part of the process swings? | `window: memory in the block: the device's least N MB available against the floor F MB (under it at u of r reads); the process a-b MB resident: anonymous ..., file-backed ..., shared ...; the C heap ...; beside them the graphics allocations ..., the dumps' capture blocks ...` |
+| Mali: three automatic captures of 47-56 ms on the game thread | Which step costs the game thread? | `window: slow-scene dump: the game thread's parts: the measure M ms, the copy C ms (each without its drain); the worker's block made in P ms; two steps: frame N copied into the worker's block` (or `grown here: ...`), after the capture line |
+| Mali: the game, render and both audio threads on the two fast cores | Where do the threads run, and does audio keep up on the slow cores? | `window: render thread cores: ...` (the few-cores rule's sets and moves); the game thread line's `ran / waited for a core: game ..., render ..., submit ..., SDL audio ..., system audio ...`; `audio: ... ms of silence (... ms held back behind the game) ...; the sound chip's emulation E ms a callback on average (longest L ms; R renders) against the device's period of P ms`; and the ledger's `few-cores rule on N threads moved` |
+| Few-core phones: start-up of 62.2 s (51.2 s of it pipelines, cold cache) | How long does the pipeline set take, on which cores, and with how much CPU time? | `rd: pipelines: N of the reachable set's M created at start-up in T ms ...` (wall time), followed by `window: pipeline set: made in T s ...; its N workers on every core ... while it ran ...; the process's CPU time C s over it (B cores busy on average)` |
+| Adreno 740 hangs | Did this release's attempt run, and how many stalls were there with it on? | The start lines that name the hung draw (`rd: GPU clock: ...`), the attempt ledger's Adreno rows (state and fired count), and the ledger line's `; stalls N in the block (the Adreno attempts on)` |
+| Pixel opening: lamps, dark and sun views | What does each block cost, and which cut fired? | `window: compare: ...; GPU ms a picture: ...; glow plans: lamps N, dark N, whole N`, `passes` and `breaks` a picture, and the ledger line's per-cut fired counts |
+
+### The attempt ledger
+
+`port/platform/attempt_ledger.h`: one row per behaviour that this release changes on purpose for a
+device class. Each row has a name, its state on this device (on, off by default, refused by its
+self-test, not applicable here, or not reported) with a reason, and up to two counts. Two lines
+print it:
+
+- At the first 10 s block, and again whenever a state changes (the first 8 changes, then every
+  100th): `window: attempts at the start: few-cores rule on (2 cores faster than the slowest);
+  pipeline set on every core on (2 cores faster than the slowest); capture in two steps on (the copy
+  into a block the dump worker made); flat outputs at the provoking corner on (every device and
+  backend); one DATE set-up not reported; ...`
+- In every block: `window: attempts: few-cores rule on 3 threads moved; pipeline set on every core
+  on 0 workers (0 sets); capture in two steps on 1 captures (0 grown here); flat outputs at the
+  provoking corner on (static); ...; stalls 3 in the block`. Rows that are not reported are left
+  out. Where an Adreno row is reported, the stalls clause adds `(the Adreno attempts on)` or `off`.
+
+To add a row, a package adds one enum value and one table row with its words. It then calls
+`ico_attempt_state` where it decides and `ico_attempt_fire` / `ico_attempt_fire2` where it fires.
+Each call is a relaxed atomic, so any thread can make it, hot paths included. The rows for the
+shadow cuts (`one DATE set-up`, `empty composites skipped`, `no-volume break`) and for the Adreno
+attempts are in the table, but their state and fire calls belong to those cuts' own files. Until
+those files call them, the rows read `not reported`.
+
+### The cost counters
+
+`port/render/rd_perf_more.h` and `rd_perf_hooks.c` count into the replay's record (`RdPerfRecord`
+`noDual*`, `breakN`, `breakKB`, `listBox*`, `vuListTris`). The window adds each record into a
+block sum and prints one line per block:
+
+`window: costs a picture: two-pass blend 3.0 draws drawn twice (2.1k triangles' vertex work twice),
+1.0 drawn once by the colour pass; SCENE's pass ended mid-picture 3.0 times (DATE 2.0, 9.2 MB; aura
+1.0, 4.5 MB); DATE snapshots 3.0 (the first 1.0, an alpha write since 2.0), 0.0 reused, 0.0
+composites with an empty box; boxes against triangles: list 0 50k triangles in 1.85 Mpx of boxes
+(4.0 times its target's 0.47 Mpx GS; 112 draws, 6 without a box), list 3 2.0k triangles, no box
+(...)`
+
+- **The two-pass blend** clause appears only on a device without dual-source blending. A 2D
+  draw's passes are counted as their DrawCB is filled (`rd_fx_plan.c` `rd__sprite_above1x`'s head
+  runs once for every pass that is drawn). A VU draw is counted once per draw from its planned
+  passes (`vuDraw`), because the draw merge can fill a pass twice when it refuses the pass. Its
+  triangles count twice when it is drawn twice. Screen-box areas are not counted for these draws:
+  the culler's boxes are made before the walk and are not carried to the draw.
+- **The breaks** count every render pass on SCENE that begins after an earlier one in the same
+  replay. The reason is the first piece of GPU work between the two: a DATE snapshot, the shadow
+  count, levels or stencil pass, the aura, the reduction, the crack fill, the glow, the lamps' work
+  buffers, copies, the present, `again` (nothing between), or `other`. The bytes are the stores of
+  the SCENE pass that ended plus the loads of the one that began again, from the RHI's traffic
+  counters. Those counters are read only around SCENE's passes. Only SCENE is tracked; other
+  full-size targets are not.
+- **DATE** shows the snapshots split by why each was taken (`rd_date_cut.c`'s reasons), the
+  reuses, and the shadow composites whose box was empty (`shadowBoxEmpty`: set-ups whose draw then
+  drew nothing).
+- **The boxes**: for each VU draw command the culler keeps (`rd_vis.c` `cmdVerdict`), the box of
+  the batches it reads is projected through its VU matrix and clipped to the target, in GS pixels
+  (`rd_perf_box_area`: 8 corners, or 16 over the w range in the scissor mode; a corner at or behind
+  the eye counts as the whole target). These boxes sit next to the list's triangles. A list whose
+  boxes grow while its triangles stay flat is bound by fill. Particles and skinned draws have no
+  box. With `[dev] cull` off, no draw has one.
+
+`rhi_vk: pipeline statistics: offered (read only, nothing enabled: ...)` or `not offered` comes
+once at the device's start. Sampling the vertex and fragment invocations is not done in this
+release. The query pool would be begun and ended inside list 0's render passes, and on tile-based
+phones every read of in-flight work stays off (the single submission wait). The line says which
+devices could take a sampled replay later.
+
+### What a stall coincided with
+
+`port/platform/stall_coincide.h`. A stall is a timed replay's pass that runs over 8 times its
+block's median for that pass (the same kind, target and list, with at least 5 seen) and over 40 ms,
+or a present over 100 ms. Each stall writes one line from the last samples. Nothing is read from a
+file on the game or render thread for it:
+
+`window: stall: list 0 912x512 283.3 ms against the block's median 48.0 ms (replay 2709, GPU span
+411.4 ms); at that moment: the game thread on core 6 (909 MHz), the render thread on core 7 (1443
+MHz); in the last second the core waits: game 60 ms, render 40 ms, submit 5 ms, SDL audio 3 ms;
+the driver's threads: mali-cmar-backe ran 120 ms, waited 30 ms; memory 501 MB available against
+the floor 641 MB (under it); pressure some 12.3 %, full 4.1 % (avg10; some 3.2 % a second before:
+rising); thermal headroom 0.80; coincided with: memory under the floor, memory pressure rising`
+
+A present's line names its acquire, the swapchain lock, the driver's present call and the surface
+poll apart, and the replay's GPU span. How long the present held past that span is in the block's
+`present stalls` line. The samples:
+
+- **Cores**: the game thread's core now (it writes the line). The render thread's core is the one
+  at its last picture. Each core's clock comes from the kernel sampler's ring over the stall:
+  the lowest during it, else the last sample before.
+- **Core waits** of the game, render, submit, SDL audio and system audio threads over the log
+  thread's last tick (`render_thread.c` `ico_render_thread_last_second`, the difference between
+  two once-a-second schedstat reads).
+- **The driver's threads**: the threads whose name looks like the graphics driver's (`mali...`,
+  `kgsl...`, `adreno...`, `QGL...`, `pvr...`, `IMG...`, `gpu...`, `tu_...`). The first four are
+  read each second. The whole list is printed once: `window: threads named like the graphics
+  driver's: mali-cmar-backend, mali-utility-wo, ... (the first 4 are named at a stall with their
+  run and wait times)`.
+- **Memory** against the start-up set's floor. **Pressure** is `/proc/pressure/memory`'s avg10,
+  read once a second on the log thread, or `not readable (errno N)`. **Thermal headroom** is the
+  log thread's last ask.
+- **The classes** (`coincided with:`): a core wait over 100 ms in the last second, memory under
+  the floor, memory pressure rising (some avg10 above the reading before), the GPU clock under half
+  its fastest (where readable), or none of these. Each block, beside the attempt ledger: `window:
+  stalls by what coincided: 3 in the block (a core wait over 100 ms 1, memory under the floor 2,
+  memory pressure rising 1, the GPU clock low 0 (not readable), none of these 1)`.
+
+Outside Android only the cores and the record's own numbers are known. The other parts say `not
+sampled` or `not known`.
+
+### The GPU clock where GED is denied
+
+The probe (`gpu_sysfs.h`) also tries `/sys/kernel/gpu/gpu_clock` (MHz) and
+`/sys/kernel/gpu/gpu_busy` (a percentage), and samples them when they are readable and no earlier
+node gave a clock or a busy figure. It also reads `/sys/class/misc/mali0/device/gpuinfo` and
+`/proc/gpufreqv2/gpufreq_status` once and quotes them. The open line says per node whether it is
+readable (its first text quoted), not readable (with the errno) or not present. None of these
+paths or formats has been checked on a device.
+
+### Comparing two logs
+
+`window: compare: stage 42 scene (24a4demo): 91 pictures (0 keep frames); a picture 52k triangles,
+351 draws, 21.0 passes, 3.0 breaks; GPU ms a picture: span 110.0, before list 0 4.3, list 0 76.5,
+list 3 10.1, aura 5.5, reduction 4.3, glow 0.0, crack fill 0.0, present 2.9, pre-pass 6.2; vertex
+invocations a picture: the pre-pass's 85k, the draws' 156k (3 a triangle; never summed); glow
+plans: none 91; robust access on, buffers (gpu_robust)`
+
+This is one line per block with the fields that compare two logs of the same scene. The scene key
+is `window_scene_key`'s, as the `perf scene` line uses. The GPU figures are the records' own,
+averaged over the pictures with GPU times. The earlier logs' lines stay word for word, so they
+line up with logs from before this line existed: `window: perf scene:` (with its new bracket
+after the vertex invocations), `window: perf classes`, `window: GPU ms per replay: lists 0-12`,
+`window: per replay N draws, N passes`, `window: passes per replay`, the `VU:` line's text up to
+its new clause, `window: memory:`, `audio:` up to its new clause, and `window: present stalls`.
+
+The Mali log printed `before list 0 + list 0 81.05 ms` in two blocks in a row. That is not a
+stale value. The `perf classes` line is rebuilt in each block from that block's timed pieces
+(`window_perf_rank.c` resets its block after the print). The `GPU top passes` line comes from a
+separate sum that `perf_reset` clears. The two blocks had different timed replays (90 and 81),
+different draws (315 and 410) and different list 0 and before-list-0 parts (76.46 + 4.3 and 76.53
++ 5.3 over every record). Two four-digit means of different sets matched.
+
+### The memory in a block
+
+On Android, the log thread reads `/proc/self/status`'s `RssAnon`, `RssFile` and `RssShmem` and the
+C heap's `mallinfo` once a second, and keeps the block's extremes. The window prints them after
+the memory line, and the next block starts from the next read:
+
+`window: memory in the block: the device's least 501 MB available against the floor 641 MB (under
+it at 8 of 10 reads); the process 538-1067 MB resident: anonymous 410-520 MB, file-backed 120-540 MB,
+shared 5-5 MB (/proc/self/status, once a second); the C heap 380 MB in use and 60 MB mapped (at the
+last read); beside them the graphics allocations 335 MB, the dumps' capture blocks 0.0 MB`
+
+The numbers in this example are made up. A swing in the file-backed part is the game data's
+mapped pages being read in and dropped by the system. A swing in the anonymous part is the
+process's own allocations. Texture copies held by the renderer and audio buffers are not counted
+apart.
+
+### The pipeline set's cores
+
+`render_thread.c` `ico_render_thread_pipeline_set`, called around `rd_precreate_pipelines` at
+the start and at a switch of the graphics API.
+
+At a device's first start the pipeline set runs before any cores' rule exists, because
+`place_init` runs when the render thread starts, after the set. So the workers are on whatever
+cores the system gives them: `window: pipeline set: made in 51.2 s with no cores' rule in force
+(nothing pinned: its workers ran on any core the system gave them); the process's CPU time ... over it
+(... cores busy on average)`.
+
+A set made later, while the few-cores rule is in force (a graphics switch, or a start after a lost
+device), is made while the game and render threads wait for it. Its workers (`rhi-pipelines`)
+keep every core of the process, and the once-a-second sweep leaves them alone:
+`window: pipeline set: made in 12.3 s; its 7 workers on every core 0-7 while it ran (the few-cores
+rule's exception: the set is made before the game and render threads have steady work); ...;
+pipeline workers made from here (lazy compiles, the background finisher) run on 0-5`. Pipeline
+workers made after the set (lazy compiles, the background finisher during play) follow the rule.
+
+### The slow-scene capture's parts
+
+After the capture line: `window: slow-scene dump: the game thread's parts: the measure M ms, the
+copy C ms (each without its drain); the worker's block made in P ms; two steps: frame N copied into
+the worker's block`. If the copy fell back, the line ends `grown here: frame N had grown past the
+worker's block`, `grown here: frame N missed the worker's block`, or `grown here: the worker could
+not be asked`. Captures in two steps and fallbacks are the ledger's `capture in two steps` counts.
+
+### The sound chip's time per callback
+
+The pull path's 10 s line ends `; the sound chip's emulation 0.81 ms a callback on average (longest
+3.20 ms; 1001 renders) against the device's period of 10.00 ms`. This is the SPU2's render inside
+SDL's audio callback, timed around `pull_render`. When the average or the longest nears the
+period, audio cannot keep up on the core it runs on. That shows up beside `ms of silence (... held
+back behind the game)`.
+
+### What these lines cost
+
+Per block, a phone adds about 1.5 KB:
+
+- the costs line: about 400 bytes
+- the compare line: about 350 bytes
+- the attempts line: about 350 bytes
+- the stall tally: 150 bytes when there are stalls
+- the memory-in-the-block line: about 330 bytes
+- the audio clause: about 120 bytes
+
+Each stall line is about 600 bytes, and those lines are rate-limited. The start adds the ledger's
+start line (about 700 bytes), the pipeline set's line and the driver threads' line. The block
+lines are formatted on the game thread inside the 10 s print. The logging line's `the display and
+slow scene lines` and `the performance lines` parts include them, so the logging-cost clause still
+counts them.
+
+On the log thread, the extra file reads each second are `/proc/pressure/memory`,
+`/proc/self/status`, up to four driver threads' `schedstat` files and `mallinfo`. The renderer
+adds a few increments a draw, a box projection per kept VU command, and three `RhiStats`
+snapshots per SCENE break.
