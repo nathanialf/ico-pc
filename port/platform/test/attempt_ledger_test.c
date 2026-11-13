@@ -346,6 +346,9 @@ static void test_classes(void)
         /* the glow's paste by its own entry: every class here is a Vulkan
            device (the module made) whose self-test passed (rd_paste_spec.c) */
         CHECK(ico_attempt_decide_paste_spec(1, -1, 1, 1) == 1);
+        /* the shadow volumes' stencil-only entry: likewise a Vulkan device
+           whose self-test passed (rd_volume_fs.c) */
+        CHECK(ico_attempt_decide_volume_fs(1, -1, 1, 1) == 1);
         for (int i = 0; i < ICO_ATT_COUNT; i++) {
             if (ico_attempt_state_of(i) == ICO_ATT_NOT_SET) {
                 printf("FAIL %s: %s not reported\n", d->name, ico_attempt_name(i));
@@ -360,6 +363,7 @@ static void test_classes(void)
         CHECK(ico_attempt_state_of(ICO_ATT_BLEND_CONST) == ICO_ATT_NOT_BUILT);
         CHECK(ico_attempt_state_of(ICO_ATT_PASTE_SPEC) == ICO_ATT_ON);
         CHECK(ico_attempt_state_of(ICO_ATT_CHAIN3) == ICO_ATT_NOT_BUILT);
+        CHECK(ico_attempt_state_of(ICO_ATT_VOLUME_FS) == ICO_ATT_ON);
         if (ico_attempt_state_of(ICO_ATT_SUBPASS) != d->wantSubpass) {
             printf("FAIL %s: subpass read %s\n", d->name,
                    ico_attempt_state_word(ico_attempt_state_of(ICO_ATT_SUBPASS)));
@@ -540,6 +544,32 @@ static void test_classes(void)
         (void)ico_attempt_block_text(b, sizeof b, -1);
         CHECK(strstr(b, "; VU record sized from need on 2 growths in play") != NULL);
     }
+    /* the shadow volumes' stencil-only entry, each state (rd_volume_fs.c):
+       the tests' 0, another backend, the build's default 0, a refusal, not
+       run yet, the switch's 1 */
+    CHECK(ico_attempt_decide_volume_fs(1, 0, 1, 1) == 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_VOLUME_FS) == ICO_ATT_OFF_DEFAULT);
+    CHECK(ico_attempt_decide_volume_fs(0, -1, 1, -1) == 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_VOLUME_FS) == ICO_ATT_NA);
+    CHECK(ico_attempt_decide_volume_fs(1, -1, 0, 1) == 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_VOLUME_FS) == ICO_ATT_OFF_DEFAULT);
+    CHECK(ico_attempt_decide_volume_fs(1, -1, 1, 0) == 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_VOLUME_FS) == ICO_ATT_REFUSED);
+    CHECK(ico_attempt_decide_volume_fs(1, -1, 1, -1) == 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_VOLUME_FS) == ICO_ATT_OFF_DEFAULT);
+    CHECK(ico_attempt_decide_volume_fs(1, 1, 0, 1) == 1);
+    CHECK(ico_attempt_state_of(ICO_ATT_VOLUME_FS) == ICO_ATT_ON);
+    ico_attempt_fire(ICO_ATT_VOLUME_FS, 8);
+    ico_attempt_fire2(ICO_ATT_VOLUME_FS, 2);
+    {
+        char b[2048];
+        (void)ico_attempt_start_text(b, sizeof b);
+        CHECK(strstr(b, "; the shadow volumes by the stencil-only entry on (ICO_RD_VOLUME_FS=1, "
+                        "self-test passed)") != NULL);
+        (void)ico_attempt_block_text(b, sizeof b, -1);
+        CHECK(strstr(b, "; the shadow volumes by the stencil-only entry on 8 volume draws (2 kept "
+                        "on sprite_ps)") != NULL);
+    }
     ico_attempt_reset();
 }
 
@@ -557,6 +587,7 @@ int main(void)
     CHECK(strstr(b, "; blend constant not in this build") != NULL);
     CHECK(strstr(b, "; the glow's paste by its own entry not reported") != NULL);
     CHECK(strstr(b, "; the glow chain in three passes not in this build") != NULL);
+    CHECK(strstr(b, "; the shadow volumes by the stencil-only entry not reported") != NULL);
     CHECK(strstr(b, "; subpass read not reported") != NULL);
     CHECK(ico_attempt_state_of(ICO_ATT_SUBPASS) == ICO_ATT_NOT_SET);
     CHECK(ico_attempt_state_of(ICO_ATT_BLEND_CONST) == ICO_ATT_NOT_BUILT);

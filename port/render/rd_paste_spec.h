@@ -123,6 +123,10 @@ RhiPipeline rd__paste_spec_pipe(const struct IcoDrawCB *cb, const RdPipeKeyInt *
 /* in force: the module, the switch, the self-test passed */
 bool rd__paste_spec_on(void);
 
+/* the bench's switch (rd_bench.c): 0 off, 1 on (still behind the module and
+ * the self-test), -1 the environment's and the default again */
+void rd__paste_spec_force(int v);
+
 /* rd_lamps.c rd__lamps_init / rd__lamps_shutdown: the module made (Vulkan)
  * and the run's state; the module destroyed */
 void rd__paste_spec_init(void);

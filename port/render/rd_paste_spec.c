@@ -76,10 +76,25 @@ int rd__paste_spec_env(const char *env)
     return e[0] == '0' ? 0 : 1;
 }
 
-/* asked for: the switch, else the build's default */
+/* the bench's variant (rd__paste_spec_force): -1 none, 0, 1; kept apart from
+ * s_ps, which each renderer's init clears */
+static int s_psForce = -1;
+
+/* asked for: the bench's variant, the switch, else the build's default */
 static bool wanted(void)
 {
+    if (s_psForce >= 0) {
+        return s_psForce == 1;
+    }
     return s_ps.env >= 1 || (s_ps.env < 0 && RD_PASTE_SPEC_DEFAULT);
+}
+
+static void stateNote(void);
+
+void rd__paste_spec_force(int v)
+{
+    s_psForce = v < 0 ? -1 : (v ? 1 : 0);
+    stateNote();
 }
 
 RdPipeKeyInt rd__paste_spec_general_key(void)
@@ -210,11 +225,13 @@ RhiPipeline rd__paste_spec_pipe(const IcoDrawCB *cb, const RdPipeKeyInt *key, Rh
 static void stateNote(void)
 {
     char line[sizeof(s_ps.stateSaid)];
-    const char *how = s_ps.env == 0   ? "ICO_RD_PASTE_SPEC=0"
-                      : s_ps.env == 1 ? "ICO_RD_PASTE_SPEC=1"
-                      : s_ps.env == 2 ? "ICO_RD_PASTE_SPEC=sabotage"
-                                      : (RD_PASTE_SPEC_DEFAULT ? "the build's default"
-                                                               : "RD_PASTE_SPEC_DEFAULT 0");
+    const char *how = s_psForce == 0   ? "the bench's variant: off"
+                      : s_psForce == 1 ? "the bench's variant: on"
+                      : s_ps.env == 0  ? "ICO_RD_PASTE_SPEC=0"
+                      : s_ps.env == 1  ? "ICO_RD_PASTE_SPEC=1"
+                      : s_ps.env == 2  ? "ICO_RD_PASTE_SPEC=sabotage"
+                                       : (RD_PASTE_SPEC_DEFAULT ? "the build's default"
+                                                                : "RD_PASTE_SPEC_DEFAULT 0");
     if (!wanted()) {
         snprintf(line, sizeof(line), "off (%s)", how);
     } else if (!g_rd.fs[RD_FS_FX_PASTE].id) {

@@ -13,8 +13,10 @@
 #include "rd_date_one.h"
 #include "rd_lamps.h"
 #include "rd_mesh.h"
+#include "rd_paste_spec.h"
 #include "rd_present_scene.h"
 #include "rd_vis.h"
+#include "rd_volume_fs.h"
 
 /* ------------------------------------------------------- classification */
 
@@ -265,6 +267,12 @@ void rd_bench_switches_restore(void)
     if (s_sw.set[RD_BENCH_S_NO_CRACK]) {
         rd__crack_fill_bench_restore(s_sw.crack);
     }
+    if (s_sw.set[RD_BENCH_S_VOLUME_FS]) {
+        rd__volume_fs_force(-1);
+    }
+    if (s_sw.set[RD_BENCH_S_PASTE_SPEC]) {
+        rd__paste_spec_force(-1);
+    }
     memset(&s_sw, 0, sizeof(s_sw));
 }
 
@@ -305,6 +313,12 @@ static void switchSet(int sw)
         break;
     case RD_BENCH_S_NO_CRACK:
         rd__crack_fill_set_enabled(false);
+        break;
+    case RD_BENCH_S_VOLUME_FS:
+        rd__volume_fs_force(rd__volume_fs_on() ? 0 : 1);
+        break;
+    case RD_BENCH_S_PASTE_SPEC:
+        rd__paste_spec_force(rd__paste_spec_on() ? 0 : 1);
         break;
     default:
         break;
@@ -574,11 +588,25 @@ int rd_bench_variants(const RdBenchFrame *b, RdBenchVariant *out, int max)
         put(out, max, &n, "the present from SCENE (no reduction where it may)", 0, 0,
             RD_BENCH_S_SCENE, 0, 0);
     }
-    /* another package's switch is a row here, e.g. LAMPS4's "the glow paste
-       by its specialised entry": an RD_BENCH_S_* value (rd_bench.h), its
-       case in switchSet (the variant's value) and in
+    /* the volumes' stencil-only entry (rd_volume_fs.c) and the glow's paste
+       by its own entry (rd_paste_spec.c), each the other way, where its
+       self-test passed (a force cannot take either past its self-test) */
+    if (HAS(RD_BENCH_C_VOLUMES) && rd__volume_fs_test_state(NULL) == 1) {
+        put(out, max, &n,
+            rd__volume_fs_on() ? "the shadow volumes by sprite_ps (not the stencil-only entry)"
+                               : "the shadow volumes by the stencil-only entry (date_clear_ps)",
+            0, 0, RD_BENCH_S_VOLUME_FS, 0, 0);
+    }
+    if (HAS(RD_BENCH_C_PASTE) && rd__paste_spec_test_state(NULL) == 1) {
+        put(out, max, &n,
+            rd__paste_spec_on() ? "the glow paste by fx_frame_ps (not its own entry)"
+                                : "the glow paste by its own entry (fx_paste_ps)",
+            0, 0, RD_BENCH_S_PASTE_SPEC, 0, 0);
+    }
+    /* another package's switch is a row here: an RD_BENCH_S_* value
+       (rd_bench.h), its case in switchSet (the variant's value) and in
        rd_bench_switches_restore (its force back to -1), and a put() here
-       when the frame has the class it acts on (RD_BENCH_C_PASTE) */
+       when the frame has the class it acts on */
     return n;
 }
 

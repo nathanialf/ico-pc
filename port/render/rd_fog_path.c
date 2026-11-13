@@ -84,6 +84,7 @@
 #include "rd_replay.h" /* rd__msaa_shadow_selftest */
 #include "rd_stencil_selftest.h"
 #include "rd_shadow_tile.h"
+#include "rd_volume_fs.h" /* the volumes' stencil-only entry's self-test */
 
 static const char *const s_pathNames[RD_FOG_PATH_COUNT] = {"inplace", "copy", "buffer", "local"};
 
@@ -1449,6 +1450,7 @@ bool rd_fog_selftest(void)
         (void)rd_date_selftest();
         (void)rd__fx_local_selftest();   /* it reads the readable passes DATE's path keeps */
         (void)rd__shadow_selftest();     /* the shadow count's one draw (rd_shadow_selftest.c) */
+        (void)rd__volume_fs_selftest();  /* the volumes' stencil-only entry (rd_volume_fs.c) */
         (void)rd__crack_swap_selftest(); /* the crack fill's swap (rd_crack_fill.c) */
         (void)rd__turn_fold_selftest();  /* the turn in the present's blit (rd_turn_fold.c) */
     }

@@ -40,6 +40,8 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
     [ICO_ATT_PASTE_SPEC] = {"the glow's paste by its own entry", "pastes",
                             "kept on the general entry"},
     [ICO_ATT_CHAIN3] = {"the glow chain in three passes", "chains", NULL},
+    [ICO_ATT_VOLUME_FS] = {"the shadow volumes by the stencil-only entry", "volume draws",
+                           "kept on sprite_ps"},
 };
 
 /* the rows' live values (__atomic), and the block text's last counts (the
@@ -501,5 +503,34 @@ int ico_attempt_decide_paste_spec(int module, int env, int defaultOn, int selfte
                        : "self-test passed: the same bytes as fx_frame_ps";
     }
     ico_attempt_state(ICO_ATT_PASTE_SPEC, st, why);
+    return on;
+}
+
+int ico_attempt_decide_volume_fs(int module, int env, int defaultOn, int selftest)
+{
+    IcoAttemptState st = ICO_ATT_NA;
+    const char *why;
+    int on = 0;
+    if (env == 0) {
+        st = ICO_ATT_OFF_DEFAULT;
+        why = "ICO_RD_VOLUME_FS=0: the tests' switch";
+    } else if (!module) {
+        why = "date_clear_ps draws the volumes under Vulkan alone";
+    } else if (env != 1 && !defaultOn) {
+        st = ICO_ATT_OFF_DEFAULT;
+        why = "off by default (RD_VOLUME_FS_DEFAULT 0)";
+    } else if (selftest == 0) {
+        st = ICO_ATT_REFUSED;
+        why = "the volumes' count by date_clear_ps differs from sprite_ps's on this device";
+    } else if (selftest < 0) {
+        st = ICO_ATT_OFF_DEFAULT;
+        why = "its self-test not run yet";
+    } else {
+        st = ICO_ATT_ON;
+        on = 1;
+        why = env == 1 ? "ICO_RD_VOLUME_FS=1, self-test passed"
+                       : "self-test passed: the same count as sprite_ps";
+    }
+    ico_attempt_state(ICO_ATT_VOLUME_FS, st, why);
     return on;
 }

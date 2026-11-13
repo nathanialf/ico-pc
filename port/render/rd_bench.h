@@ -15,7 +15,8 @@
  *   switches    the renderer's own switches the tests use (the no-volume
  *               modes, DATE's shared set-up, the volumes' own pass, the
  *               lamps' samples and size, the filter, the present from
- *               SCENE, the crack fill), set before a variant and every one
+ *               SCENE, the crack fill, the volumes' stencil-only entry, the
+ *               glow paste's own entry), set before a variant and every one
  *               restored after it
  *
  * Nothing of the game's: a bench frame is not in the frame ring, the game
@@ -100,6 +101,8 @@ enum {
     RD_BENCH_S_FILTER,     /* the texture filter: trilinear and anisotropic swapped */
     RD_BENCH_S_SCENE,      /* the present from SCENE (no reduction) */
     RD_BENCH_S_NO_CRACK,   /* the crack fill off (a knock-out) */
+    RD_BENCH_S_VOLUME_FS,  /* the volumes' stencil-only entry (rd_volume_fs.c), the other way */
+    RD_BENCH_S_PASTE_SPEC, /* the glow's paste by its own entry (rd_paste_spec.c), the other way */
     RD_BENCH_S_COUNT
 };
 

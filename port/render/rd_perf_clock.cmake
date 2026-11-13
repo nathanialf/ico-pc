@@ -94,6 +94,9 @@ include(rd_shadow_tile.cmake)
 # a shadow window with no volume (rd_no_volume.c in ico_render) and its tests
 include(rd_no_volume.cmake)
 
+# the shadow volumes' stencil-only entry (rd_volume_fs.c in ico_render) and its tests
+include(rd_volume_fs.cmake)
+
 # the per-draw lookups' hash (rd_hash.c in ico_render) and its test
 include(rd_hash.cmake)
 
