@@ -300,8 +300,25 @@ static void test_classes(void)
         {0, "record path stores: vertex shader stores", 0, ICO_ATT_NA},
     };
 
+    /* the in-between pictures for the GPU's predicted end, k's classes in
+       order: the window presents pictures as made (vsync off, uncapped,
+       the render thread on), a GPU span and first submit came back, 64
+       pictures as made without one.  The Mali-G52's reporter at the
+       Original frame rate (v0.11.5 log: "framerate original"): paced; the
+       Pixel uncapped with vsync off (rc1): on; the PowerVR B without GPU
+       timestamps: no slot clock; the Adreno 740 on either driver uncapped:
+       on; the desktop with vsync on: paced; the Mac uncapped: on */
+    static const struct {
+        int asMade, clock, waited;
+        IcoAttemptState want;
+    } kPace[] = {
+        {0, 0, 0, ICO_ATT_NA}, {1, 1, 0, ICO_ATT_ON}, {1, 0, 1, ICO_ATT_NA}, {1, 1, 0, ICO_ATT_ON},
+        {1, 1, 0, ICO_ATT_ON}, {0, 1, 0, ICO_ATT_NA}, {1, 1, 0, ICO_ATT_ON},
+    };
+
     CHECK(sizeof kRec / sizeof kRec[0] == sizeof k / sizeof k[0]);
     CHECK(sizeof kCmp / sizeof kCmp[0] == sizeof k / sizeof k[0]);
+    CHECK(sizeof kPace / sizeof kPace[0] == sizeof k / sizeof k[0]);
     for (size_t c = 0; c < sizeof k / sizeof k[0]; c++) {
         const DeviceClass *d = &k[c];
         ico_attempt_reset();
@@ -319,6 +336,7 @@ static void test_classes(void)
                                             kCmp[c].compute ? 1 : -1) ==
               (kCmp[c].want == ICO_ATT_ON));
         ico_attempt_decide_subpass(d->spRoute, d->spOn, d->spRefused, d->spOff, d->spWhy);
+        ico_attempt_decide_pace_gpu(kPace[c].asMade, kPace[c].clock, kPace[c].waited);
         for (int i = 0; i < ICO_ATT_COUNT; i++) {
             if (ico_attempt_state_of(i) == ICO_ATT_NOT_SET) {
                 printf("FAIL %s: %s not reported\n", d->name, ico_attempt_name(i));
@@ -356,6 +374,11 @@ static void test_classes(void)
         }
         CHECK(ico_attempt_state_of(ICO_ATT_REC_NEED) == kRec[c].want);
         CHECK(ico_attempt_state_of(ICO_ATT_COMPACTION) == kCmp[c].want);
+        if (ico_attempt_state_of(ICO_ATT_PACE_GPU) != kPace[c].want) {
+            printf("FAIL %s: GPU's predicted end %s\n", d->name,
+                   ico_attempt_state_word(ico_attempt_state_of(ICO_ATT_PACE_GPU)));
+            failures++;
+        }
         char b[2048], want[256];
         (void)ico_attempt_start_text(b, sizeof b);
         snprintf(want, sizeof want, "; no-volume break %s (%s)",
@@ -455,6 +478,28 @@ static void test_classes(void)
         (void)ico_attempt_block_text(b, sizeof b, -1);
         CHECK(strstr(b, "; index compaction on 9866 triangles left out") != NULL);
     }
+    /* the GPU's predicted end: as made without a clock yet leaves the row
+       as it was; the clock turns it on; its counts in the block line */
+    ico_attempt_decide_pace_gpu(0, 0, 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_PACE_GPU) == ICO_ATT_NA);
+    ico_attempt_decide_pace_gpu(1, 0, 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_PACE_GPU) == ICO_ATT_NA);
+    ico_attempt_decide_pace_gpu(1, 1, 1);
+    CHECK(ico_attempt_state_of(ICO_ATT_PACE_GPU) == ICO_ATT_ON);
+    ico_attempt_fire(ICO_ATT_PACE_GPU, 598);
+    ico_attempt_fire2(ICO_ATT_PACE_GPU, 3);
+    {
+        char b[2048];
+        (void)ico_attempt_start_text(b, sizeof b);
+        CHECK(strstr(b, "; in-between pictures for the GPU's predicted end on (pictures as made: "
+                        "each drawn for its GPU work's predicted end)") != NULL);
+        (void)ico_attempt_block_text(b, sizeof b, -1);
+        CHECK(strstr(b, "; in-between pictures for the GPU's predicted end on 598 pictures "
+                        "placed (3 at the bound)") != NULL);
+    }
+    ico_attempt_decide_pace_gpu(1, 0, 1);
+    CHECK(ico_attempt_state_of(ICO_ATT_PACE_GPU) == ICO_ATT_NA);
+    CHECK(strstr(ico_attempt_why_of(ICO_ATT_PACE_GPU), "no GPU span or slot clock") != NULL);
     /* the record's row: the pre-pass off; on with its growths counted */
     ico_attempt_decide_rec_need(0, 512, 1024, 512);
     CHECK(ico_attempt_state_of(ICO_ATT_REC_NEED) == ICO_ATT_NA);

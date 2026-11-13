@@ -26,6 +26,7 @@
 #include <string.h>
 #include "ico_thread.h"
 #include "rd_even.h"
+#include "rd_pace_gpu.h"
 #include "rd_internal.h"
 #include "rd_passring.h"
 #include "rd_perf_clock.h"
@@ -1484,9 +1485,10 @@ void rd__perf_collect_gpu(void)
     }
     /* the slot's clock (Vulkan) */
     RhiTimestampClock clk;
-    double endMs = 0.0;
+    double endMs = 0.0, submitMs = 0.0;
     if (g_rd.hasDevice && rhi_read_timestamp_clock(&clk)) {
         clockNote(r, slot, &clk, ts, n);
+        submitMs = (double)clk.firstSubmitNs / 1e6;
         if (r->gpuDoneValid != 0) {
             /* the GPU's end on the CPU's clock (rd__now_ms's): the slot
                wait's end when it blocked, its start (a bound) when it
@@ -1499,6 +1501,10 @@ void rd__perf_collect_gpu(void)
         const RdEvenPic ep = {r->frame,      r->alpha, r->evenAskMs,
                               r->evenHandMs, endMs,    r->gpuDoneValid == 1};
         rd_even_picture(&ep);
+        /* and into the GPU queue's model (rd_pace_gpu.h): handed over only */
+        const RdPaceGpuSample ps = {r->evenHandMs, submitMs, r->gpuValid ? r->gpuMs : 0.0, endMs,
+                                    r->gpuDoneValid == 1};
+        rd_pace_gpu_measure(&ps);
     }
     /* no stamps: the next timed record's gap is measured across this one
        (gpuGapSkipped) */

@@ -13,7 +13,8 @@
  *     within a frame pair (the most X ms); the alpha's sample to the GPU's
  *     end over N pictures: 10th A, median B, 90th C ms, the hand-over to it
  *     10th A, median B, 90th C ms (the drain before the hand-over D ms on
- *     average over N)
+ *     average over N)...; the GPU's predicted end: ... (rd_pace_gpu.c
+ *     rd_pace_gpu_format, with pictures as made)
  *
  * The sums are atomics (the line runs on the window's thread); the chain
  * (the present before) is the replaying thread's own, as replays never
@@ -24,6 +25,7 @@
 #include <string.h>
 
 #include "rd_even.h"
+#include "rd_pace_gpu.h"
 
 static RdEvenWindow s_sum;
 
@@ -479,9 +481,14 @@ bool rd_even_format(const RdEvenWindow *w, double refreshMs, char *out, size_t s
 void rd_even_line(double refreshMs)
 {
     static RdEvenWindow w; /* 6 KB: off the window thread's stack */
+    static RdPaceGpuWindow pw;
+    static char line[4096];
     rd_even_take(&w);
-    char line[2048];
+    rd_pace_gpu_take(&pw);
     if (rd_even_format(&w, refreshMs, line, sizeof line)) {
+        /* the GPU queue's model, its last clause (rd_pace_gpu.h) */
+        const size_t at = strlen(line);
+        (void)rd_pace_gpu_format(&pw, line + at, sizeof line - at);
         fprintf(stderr, "window: %s\n", line);
     }
 }

@@ -107,6 +107,11 @@ enum {
        (rd_early_start_rows) instead of the largest the memory bound
        allowed; count the record's growths in play (rd__vu_rec_grew) */
     ICO_ATT_REC_NEED,
+    /* rd_pace_gpu_live.c (rd_thread.c presentRebase): with pictures as made,
+       each in-between picture drawn for the moment its GPU work is predicted
+       to end; count the pictures the model placed, second count those held
+       at its bound */
+    ICO_ATT_PACE_GPU,
     ICO_ATT_COUNT
 };
 
@@ -216,5 +221,14 @@ int ico_attempt_decide_compaction(int compute, const char *notWhy, int arm, int 
    the Intel driver row); why the decision's words (a string that outlives the row: the device's
    RhiLimits.subpassWhy or the probe's verdict) */
 void ico_attempt_decide_subpass(int route, int on, int refused, int offDefault, const char *why);
+/* the in-between pictures for the GPU's predicted end (rd_pace_gpu_live.c,
+   the poster's thread at each change): asMade the window presents pictures
+   as made (vsync off, uncapped, the render thread on: pace_rt_as_made),
+   clock a picture's GPU span and first submit came back (the slot clock:
+   Vulkan with timestamps), waited RD_PACE_GPU_NO_CLOCK pictures were handed
+   over as made without one.  Not paced: not applicable; as made with the
+   clock: on; as made, waited and no clock: not applicable (the backend has
+   none); as made, not waited, no clock: the row left as it was */
+void ico_attempt_decide_pace_gpu(int asMade, int clock, int waited);
 
 #endif

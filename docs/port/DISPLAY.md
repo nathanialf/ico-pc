@@ -38,6 +38,7 @@ are [RHI.md](RHI.md).
 | `port/render/rd_prerotate.c` | the present into a swapchain made in the surface's own turn ([The turned swapchain](#the-turned-swapchain)) |
 | `port/render/rd_interp.c` | presenting between ticks |
 | `port/render/rd_present_clock.c` | the present clock (`rd_present_clock_alpha`), what it notes for `rd_present`, Motion blur: Smooth's presents a tick |
+| `port/render/rd_pace_gpu.c`, `rd_pace_gpu_live.c`, `rd_pace_gpu.h` | with pictures as made, each in-between picture's moment at its GPU work's predicted end (the GPU queue's model, its evenness clause, its attempt ledger row; [Interpolation between ticks](#interpolation-between-ticks)) |
 | `port/render/rd_crt.c`, `port/shaders/crt.hlsl` | the CRT filter |
 | `port/render/rd_upscale_temporal.c`, `port/render/rd_upscale_temporal.h` | Upscaling: FSR 3.1's rows (quality ratios, exclusions, the display line's words; [FSR 3.1 upscaling](#fsr-31-upscaling)) |
 | `port/render/rd_fsr3.c`, `port/render/rd_fsr3.h` | Upscaling: FSR 3.1 itself: the support answer, the context, the dispatch at the upscale point ([FSR 3.1 upscaling](#fsr-31-upscaling)) |
@@ -2432,7 +2433,47 @@ a fifth of the presents, and a quarter of the presents clamped at 0, the content
 picture before). The window asks a frame's presents only between its close (never before its
 deadline `tickAt`) and the next closing step's deadline, so the measured ask is never below 0 and
 only the drain's shift can reach a clamp. Every other mode (the vsync lock, FIFO, the Frame rate
-caps, vsync on) keeps the clock's alpha. The clock itself (its step, resets and holds, Motion blur:
+caps, vsync on) keeps the clock's alpha.
+
+With pictures as made the value is also moved to the moment the picture's GPU work is predicted to
+end, less the mean latency (`port/render/rd_pace_gpu.c`, `rd_pace_gpu_live.c`, `rd_pace_gpu.h`; the
+call in `presentRebase`): a picture reaches the screen after its GPU work, and where the hand-overs
+are pinned to the game's step grid (two pictures a tick: the first after the closing step, the
+second after the half-tick deadline, the third held by the step rule) the GPU's queue spaces them
+evenly while the hand-overs are 0.3 and 0.7 of a tick apart (the owner's 120 Hz phone in the cage
+with the hand-over's moment: steps .35/.70/.28/.66, every step's deviation .164-.187, the hand-over to the GPU's end
+24.5-33.5 ms against 4 ms elsewhere). The model takes only what the port measures for each picture
+handed over, at its record's collection (`rd_perf.c` `rd__perf_collect_gpu`, through a
+single-producer ring to the poster's thread; no wait, no clock read): G the median of the last 15
+GPU spans (a pipeline-compile replay is an outlier it skips), D the median of the last 15 hand-over
+to first submit times (the slot clock's `firstSubmitNs`), and each picture's end: stamped where the
+slot wait blocked, otherwise its first submit or the picture before's end, whichever is later, plus
+its span, under the wait's bound where there is one. At a hand-over h the picture's GPU start is
+max(h + D, the end of the picture before) and its end that plus G; the queue's wait q = start - (h +
+D) and the shift is q less q's running mean (a sixteenth of the difference a picture, as the
+drain's), so the moment is the predicted end less the mean latency and over a block the mean moment
+is the hand-overs' (the shifts sum to 16 times the mean's change). A picture measured later
+re-anchors the chain and the pictures after it are predicted again. The bound: the shift is held to
+the larger of the 90th share less the mean and the mean less the 10th share of the last 32 measured
+hand-over to end times (the real latencies' own spread, so a mispredicted spike moves a moment no
+further than they differ), and the step from the picture before's moment to 0.5-2 times the
+hand-overs' gap (the evenness line's own range: never back, never the same moment); the clamp and
+the frame's hold above still apply. Where it changes nothing: an empty queue (q 0 at every picture:
+the shift is 0 to the bit), one picture a tick (no further picture among the last 16: 0), before its
+windows hold 15 spans, 15 leads and 10 latencies (after a start or a restart: 0), and a restart when
+the frame number goes back or on by more than 8 or the hand-overs are over a second apart (a stage
+load, a pause, a stall), as the evenness line's chain restarts. Paced modes (`rd_present_as_made`
+false) empty it. A backend with no slot clock or span (OpenGL, Direct3D 11, timestamps off) never
+fills its windows and keeps the hand-over's moment; the attempt ledger's row `in-between pictures for
+the GPU's predicted end` says which ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-attempt-ledger)),
+the evenness line's last clause what it did. No picture is moved, delayed, dropped or added, the
+step rule, the hold, the back-off and the present allowance are untouched, and game time stays on
+the grid. In `rd_pace_gpu_test`'s simulations (10 s, 120 Hz, a frame every 33.37 ms) every step's
+deviation goes from .210 to .040 ticks in the cage at two a tick (.149 to .068 on the brief's cage
+pattern), .101 to .039 at two to three a tick, .119 to .048 at three, .170 to .066 GPU-bound at one
+to two, and stays the same at one a tick and with an idle GPU; the GPU's end is not the glass (the
+display latches at its next refresh), so up to a refresh of that remains. Measured on no phone
+yet. The clock itself (its step, resets and holds, Motion blur:
 Smooth's interval and presents a tick, FSR's step) and every pacing input (the step rule's asks,
 holds and estimates) are untouched: this changes only the alpha the render thread draws at, its
 value in the `interp:` alpha line and in the present's record. Not under `ICO_RD_S2_LEGACY=1`, and

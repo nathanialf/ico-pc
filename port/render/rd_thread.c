@@ -8,6 +8,7 @@
 #include "ico_thread.h"
 #include "rd_even.h"
 #include "rd_internal.h"
+#include "rd_pace_gpu.h"
 #include "rd_rebase.h"
 #include "rd_submit.h"
 #include "rd_submit_thread.h"
@@ -1020,6 +1021,9 @@ static bool s_asMade;
 void rd_present_as_made(bool on)
 {
     s_asMade = on;
+    if (!on) {
+        rd_pace_gpu_paced(); /* the GPU queue's model off (rd_pace_gpu.h) */
+    }
 }
 
 /* the handed-over present's alpha moved by its drain's difference from the
@@ -1044,12 +1048,16 @@ static void presentRebase(PresentArgs *p, uint32_t frame)
            running mean (rd_rebase.h), not the clock's smoothed moment */
         double shift = 0.0;
         bool held = false;
-        raw = rd_rebase_raw(&s_rebase, atAsk, tick, drain, frame, &shift, &held);
+        /* and moved by the GPU queue's predicted wait for this picture less
+           its running mean (rd_pace_gpu.h): the moment its GPU work is
+           predicted to end, less the mean latency */
+        const double queue = rd_pace_gpu_shift(s_drainEndMs, frame);
+        raw = rd_rebase_raw(&s_rebase, atAsk + queue / tick, tick, drain, frame, &shift, &held);
         p->raw = raw;
         p->alpha = rd_rebase_alpha(raw);
         /* the content's moment to the hand-over: at the clock's moment
-           d - L, now d less the shift (or the hold's) */
-        rd_even_rebase_note(drain - lead, drain - (raw - atAsk) * tick, shift, held);
+           d - L, now d less both shifts (or the hold's) */
+        rd_even_rebase_note(drain - lead, drain - (raw - atAsk) * tick, shift + queue, held);
     } else {
         s_rebase.have = false;
     }
