@@ -951,6 +951,10 @@ void window_present_pace(int hz)
                                ? pace_lock_presents(s_pres.framerate, period)
                                : 0;
         if (n > 0 && pace_grid_period_ok(n, window_refresh_ns(period), period)) {
+            /* the vsync lock is never as made: no display times chained or
+               read (rhi.h rhi_present_glass_use; the as-made decision below
+               is not reached on this path) */
+            rhi_present_glass_use(false);
             pace_locked(n, period);
             return;
         }
