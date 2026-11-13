@@ -1523,7 +1523,7 @@ only when the Turnip package loaded and the mark carries trial or needed (`bones
 ## port/render/test
 
 The renderer's test programs have a page of their own:
-[TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md).
+[TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md). Continued in [TESTING_PROGRAMS_RENDER_2.md](TESTING_PROGRAMS_RENDER_2.md).
 
 ## port/rhi/test
 
