@@ -57,8 +57,7 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
     [ICO_ATT_SKIN_RESET_SKIP] = {"no capture after a stall", "checks skipped after a reset", NULL},
     [ICO_ATT_PICTURE_HEALTH] = {"picture health", "3D pictures with stamps unwritten",
                                 "GPU clock restarts"},
-    [ICO_ATT_CLOCK_LIFT] = {"clock lift at one picture a tick", "lifts asked",
-                            "taken by the system"},
+    [ICO_ATT_PIN_RELEASE] = {"pins let go at one picture a tick", "times let go", "taken again"},
 };
 
 /* the rows' live values (__atomic), and the block text's last counts (the
@@ -788,20 +787,23 @@ void ico_attempt_decide_skin_skip(int on)
                          : "the skin check is off here");
 }
 
-void ico_attempt_decide_clock_lift(int android, int offered, int session)
+void ico_attempt_decide_pin_release(int android, int rule)
 {
     if (!android) {
-        ico_attempt_state(ICO_ATT_CLOCK_LIFT, ICO_ATT_NA, "Android's performance hints only");
-    } else if (!offered) {
-        ico_attempt_state(ICO_ATT_CLOCK_LIFT, ICO_ATT_NA,
-                          "the system has no workload notice: "
-                          "APerformanceHint_notifyWorkloadIncrease is Android 16 and later");
-    } else if (!session) {
-        ico_attempt_state(ICO_ATT_CLOCK_LIFT, ICO_ATT_NA, "no performance hint session");
+        ico_attempt_state(ICO_ATT_PIN_RELEASE, ICO_ATT_NA, "Android's core placement only");
+    } else if (rule == 2) {
+        ico_attempt_state(ICO_ATT_PIN_RELEASE, ICO_ATT_NA,
+                          "one or two cores faster than the slowest: the few-cores rule keeps "
+                          "its pins");
+    } else if (rule != 1) {
+        ico_attempt_state(ICO_ATT_PIN_RELEASE, ICO_ATT_NA,
+                          "nothing pinned here (the cores of one speed, or [dev] big_cores = "
+                          "false)");
     } else {
-        ico_attempt_state(ICO_ATT_CLOCK_LIFT, ICO_ATT_ON,
-                          "a second at one picture a tick behind the step rule told to the "
-                          "system as a heavier CPU and GPU load");
+        ico_attempt_state(ICO_ATT_PIN_RELEASE, ICO_ATT_ON,
+                          "a second at one picture a tick with a picture's CPU raised lets the "
+                          "render and game threads run on any faster core until 10 s pass "
+                          "without one");
     }
 }
 

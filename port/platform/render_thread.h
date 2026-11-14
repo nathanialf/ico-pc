@@ -199,6 +199,17 @@ void ico_render_thread_tick(void);
    ico_render_thread_unpark itself.  A bit set, no call to the system */
 void ico_render_thread_place_scene(bool play);
 void ico_render_thread_place_focus(void);
+/* The pins let go or taken again (pin_release.h; the game thread, at a
+   second's close in window_clock_trap.c): the wish is an atomic the
+   keeper's next tick reads (cpu_keep_release), so the threads move within
+   a second.  Nothing where the keeper is off */
+void ico_render_thread_pin_release(bool on);
+/* The keeper's rule in force: 0 off (not Android, [dev] big_cores = false,
+   or no core faster than the slowest), 1 the rule for three or more faster
+   cores (the pins may be let go), 2 the few-cores rule (its pins stand) */
+int ico_render_thread_pin_release_rule(void);
+/* The render thread's id (0 not running yet) */
+long ico_render_thread_render_tid(void);
 
 /* The pipeline set's span (window_host.c around rd_precreate_pipelines, at
    the start and at a switch of the graphics API; the game thread): while

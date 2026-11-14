@@ -1565,7 +1565,7 @@ threads' ids (the same ids the `window: threads:` line counts), the target and i
 mode, and the system's update rate; `off (...)` names why there is no session (an Android 12 or
 older phone, a phone without hint support), and then the port runs exactly as before.
 
-## The clock lift and the worst second (the owner's Pixel)
+## One picture a tick and the worst second (the owner's Pixel)
 
 The owner's Pixel 10 Pro Fold (a release candidate, Enhanced, Uncapped, 120 Hz) showed "slow down on
 movement of objects like the cage". Its log held the game at 30.0 of 30.0 in every cage block, but
@@ -1599,61 +1599,94 @@ the code and those lines:
   said "early" (the 33.3 ms a tick the brief suspected is not the target), but it says "late" all
   the time, so it carries no news when the clocks drop.
 
-**The attempt (on with Android 16 or later and a hint session; the ledger's `clock lift at one
-picture a tick`).** A second at one picture a tick behind the step rule (at least 20 game frames,
-at most 1.1 pictures a frame, at least half a frame's worth of asks and at least half of them
-held, as made) asks the system once for a heavier CPU and GPU load
-(`APerformanceHint_notifyWorkloadIncrease(session, cpu, gpu, "ico one picture a tick")`, the
-hint thread's call), at most once every 2 s (`port/platform/clock_trap.c`,
-`window_clock_trap.c`, `window_perf_hint.c`). Nothing changes a picture, the step rule or the frame
-rate; where the call is absent (before API 36, NDK 28's header has no such call: the signature is
-the documented one, looked up at run time) or no session was made, nothing is asked and the row
-says why.
+**The clock lift, taken out.** The second release candidate told the system of each second at
+one picture a tick (`APerformanceHint_notifyWorkloadIncrease`, at most every 2 s). On the phone
+every call written was taken (`window: clock lift: ... taken`, its log's :4234 to :4416; past
+the eighth they are not written) and the 16 traced seconds after them stayed at 1.00-1.03 pictures
+a tick with a picture's CPU 19-24 ms; the recovery came some 20 s into the calls (:4441), as the
+cage log's run had recovered with no call at all (:4318). The call is documented to act for
+one cycle and not to be sent for an ongoing heavy load (developer.android.com, the NDK's
+`APerformanceHint_notifyWorkloadIncrease`); AOSP's Pixel power HAL holds its vote for two target
+durations (`power-libperfmgr` `PowerHintSession.cpp`, `CPU_LOAD_UP`: 15.6 ms at the 7.81 ms
+target). It and its ledger row were taken out.
+
+What else the logs say about the stuck state:
+
+- **It came with the render thread pinned to one core either way**: core 6 alone in the cage log
+  (`now on 6 alone`), core 7 alone (`now on 7 alone (the ideal)`) in the first candidate's (:5321,
+  :5415) and the second's (:4249-:4457); the game thread on 5 or 6 alone. No cage block of the
+  keeper's logs had the render thread on several cores.
+- **Every cluster was low in the stuck seconds, not only the render thread's**: over the 16 traced
+  stuck seconds (the second candidate's :4237-:4422, 64 samples each) the medians were cores 0-1 729, cores 2-6 688,
+  core 7 883 MHz (core 7 at 883 in 43 samples, 800 in 10), against core 7 at 1305-2342 in the
+  seconds it recovered (:4441-:4452). There was no faster-clocked core for a free thread to move
+  to.
+- **A utilisation floor reached the render thread and did not lift its core**: its clamps read
+  `480-1024` in the slowest block (:4363, 10 of 10 seconds at one a tick, core 7 at 883 MHz
+  in all four samples of its worst second; the hint's own boost or the workload notice's, not told
+  apart) and after each focus gain, `0-1024` at the other reads.
+- **Not decided by the cutscene alone**: the stretches overlap the cage's cutscenes (`menu screen
+  54 -> 55`), but four other cutscenes of the same run (:2616, :2944, :3917, :4123) stayed at
+  about two a tick.
+
+**The attempt (on where three or more cores are faster than the slowest; the ledger's `pins let go
+at one picture a tick`).** Android's guidance is that a game should not set its threads' cores
+(the Performance Hint API and the thread scheduling pages on developer.android.com), and the logs
+cannot say whether a scheduler free to place the threads would leave the stuck state. The
+single-core pin was measured to help on this phone (core 7 alone against 2-7, [below](#the-threads-cores-after-the-start)),
+so it is not taken away: a stuck second (one a tick behind the step rule, as above, with its
+picture's CPU at least 1.25 times the blocks' median: `clock_trap_cpu_raised`) lets the render,
+game and submit threads run on every allowed faster core and every other thread on every allowed
+core (`port/platform/pin_release.c`; the keeper's `RELEASED` sets, `cpu_keep.c`, within a second);
+10 judged seconds without one a tick (a stuck one starts the count again; seconds under 20 game
+frames count neither way) take the pins again, the ideal asked first. The few-cores rule's phones
+keep their pins. Nothing changes a picture, the step rule or the frame rate.
 
 The lines:
 
-- `window: clock lift asked: 30 pictures for 30 game frames in a second (one a tick), the step rule
-  held 41 of 55 further pictures asked, a picture's CPU 22.6 ms: the system told of a heavier CPU
-  and GPU load` (the game thread, the first 8 then every 100th), and the hint thread's answer
-  `window: clock lift: APerformanceHint_notifyWorkloadIncrease (CPU and GPU) taken` (or
-  `rate-limited by the system (EBUSY)`, `not supported here (ENOTSUP)`, `failed (error N)`);
-- in the performance hints' 10 s line `; clock lifts 3 (taken 3, rate-limited 0, not supported 0,
-  failed 0, not sent without a session 0)` when any was asked;
+- `window: pins let go: 30 pictures for 30 game frames in a second (one a tick) with a picture's
+  CPU 21.3 ms against 8.5 (the blocks' median): the render and game threads may run on any faster
+  core until 10 seconds pass without one picture a tick; 1 this run` and `window: pins taken
+  again: 10 seconds without one picture a tick; let go for 14 s, 3 of them at one a tick; 1 this
+  run` (the first 8, then every 100th); the keeper's try line `window: render thread cores: the
+  pins let go; the process may run on 0-7; the render thread on 2-7 (kept), ...; the game thread on
+  2-7 (kept), the submit thread on 2-7 (kept), every other thread on 0-7; why: the pins let go at
+  one picture a tick`, its block line `now on the faster cores 2-7 (the pins let go), ...`, and
+  `why: the pins taken again` on the try that pins them again;
+- each stuck second, each second let go and the 5 after the pins come back (at most 300 a run):
+  `window: pin trace (let go, second 1): 30 pictures for 30 game frames (1.00 a tick), a picture's
+  CPU 21.3 ms; the step rule held 35 of 46 further pictures asked; the CPU clocks in that second (4
+  samples, MHz): cores 0-1 ..., cores 2-6 ..., core 7 ...; the render thread on core 6 10, core 7 10
+  (core changes 1), may run on 2-7; the game thread on core 5 20 (core changes 1), may run on 2-7;
+  their cores' clocks in that second (MHz): core 6 898 608 760 1209, core 7 1305 1305 883 1305,
+  core 5 898 608 760 1209` (`pinned, at one a tick` and `pinned again, second N of 5` for the
+  others). The cores are the game thread's samples, one a drained picture: the render thread's core
+  at its last picture and the game thread's own; a core change is a sample on another core than
+  the one before. The clocks are each such core's own 250 ms samples, so the render thread's core
+  is not hidden in the cluster's mean;
 - every 10 s block, on every platform: `window: worst second of the block: 30 pictures for 30 game
-  frames (1.00 a tick), from 3.2 s into the block; the step rule held 41 of 55 further pictures
-  asked; a picture's CPU 22.6 ms (the block's 22.4); the CPU clocks in that second (4 samples,
-  MHz): cores 0-1 460 812 1286 533, cores 2-6 400 884 2092 1100, core 7 883 2707 1008 900; 9 of 10
-  seconds at one a tick behind the step rule, clock lifts asked 5` (the fewest pictures a frame,
-  then the most CPU a picture; the samples are the 250 ms CPU clock samples inside that second,
-  each cluster's mean; `the CPU clocks not sampled here` off Android);
+  frames (1.00 a tick), ...; 9 of 10 seconds at one a tick behind the step rule; the render
+  thread's cores: 7 78 % (1180 MHz), 6 22 % (clock not sampled), core changes 2; the game thread's:
+  6 60 % ..., core changes 1; pins let go 1, taken again 0, let go for 6 s of the block (at one a
+  tick 1 s pinned, 1 s let go)` (`; pins not let go here (the few-cores rule keeps its pins), at one
+  a tick N s` on those phones);
 - at the end of the ranked line (`window: perf ranked: ...`), only for a block at or near one
   picture a tick (at most 1.5 pictures a game frame) whose picture CPU is 1.25 times the median of
   the blocks before or more (at least two with a CPU known): the clusters whose block average is
   under 80 % of the median of the six blocks before (at least two of them, at least 8 samples),
   `; the CPU clocks under their level: cores 2-6 averaged 884 MHz against 1197 (the median of the
   6 blocks before; 74 %); the performance hint's target 7.81 ms a picture, its reports 22.56 ms CPU /
-  20.73 ms GPU (over target in 294 of 300); clock lifts asked 3 (taken 3)`, or `; the CPU clocks
-  not under their level (no cluster under 80 % of its median before)`, then the block and the
-  render thread's own core: `; at 1.00 pictures a tick with a picture's CPU 22.6 ms against 9.5
-  (the median of the 6 blocks before); the render thread on core 6 averaged 870 MHz in the block,
-  its cluster cores 2-6 at 1197 before (73 %)` (`clock_trap.c clock_trap_due`). The first release
-  candidate printed the clause for any dipped cluster: it fired on good blocks after a capture or a
-  resume (47-102 presented fps) and named cores 0-1 and core 7 but not the render thread's cores
-  2-6 in the one block that mattered; the gate and the render thread's core are the fix.
-- after each lift asked, one line a second for the 5 seconds after the lift's own (a lift during
-  them starts the 5 again; at most 300 such lines a run): `window: clock lift trace 2 of 5: 41
-  pictures for 30 game frames (1.37 a tick), a picture's CPU 12.3 ms; the step rule held 12 of 40
-  further pictures asked; the CPU clocks in that second (4 samples, MHz): cores 0-1 460 812 1286
-  533, cores 2-6 400 884 2092 1100, core 7 883 2707 1008 900`. The first release candidate's log
-  could not tell whether a lift did anything (the clocks fell after the calls, and the recovery
-  came with the cutscene's end); the trace shows the clocks and the pictures a tick second by
-  second after each call.
+  20.73 ms GPU (over target in 294 of 300)`, or `; the CPU clocks not under their level (no cluster
+  under 80 % of its median before)`, then `; at 1.00 pictures a tick with a picture's CPU 22.6 ms
+  against 9.5 (the median of the 6 blocks before); the render thread on core 6 averaged 870 MHz in
+  the block, its cluster cores 2-6 at 1197 before (73 %)` (`clock_trap.c clock_trap_due`).
 
-What to look for in the next log from the phone: blocks in the cage at about two pictures a tick
-throughout; where a block still falls to one a tick, the worst-second line timing it, the ranked
-line's clock clause, `clock lift asked` lines followed by `taken` and the clusters' clocks in the
-worst second rising in the block after. `not supported here (ENOTSUP)` or `rate-limited` on every
-lift says the system ignores the notice: then the clocks are out of the port's reach.
+What to look for in the next log from the phone: where a block falls toward one a tick, `pins let
+go` within a second of the first stuck second, then the `pin trace (let go, ...)` lines: the
+pictures a tick, the cores the threads ran on and those cores' clocks second by second. Recovery
+within a few seconds of the release, against the 10-30 s stretches pinned, says the pins held the
+state; the same stretches let go say they did not (then the clocks are the system's, out of the
+port's reach). The block lines compare the two states in one run.
 
 The first release candidate's `the GPU's time would pace them to 7.0 a step` (a block line on the
 as-made path) is the arithmetic of the block's last step: the step's GPU time (a stage switch's
@@ -1757,7 +1790,9 @@ fast cores to the others' (`cpu_keep_held`, `cpu_place_sweep`: the process's thr
 own id) is left to the system, as everywhere. The alternative, no pin at all, has no log on this
 class; the nearest one (render and submit threads on the two, the game thread free) had the game's
 step on the slow cores 15-62 % of the samples, and it would leave the audio threads free to take
-the fast cores. The start says:
+the fast cores. Under the rule for three or more faster cores the pins are let go while the game
+is stuck at one picture a tick ([One picture a tick](#one-picture-a-tick-and-the-worst-second-the-owners-pixel));
+the few-cores rule keeps them. The start says:
 
 ```
 window: cores after the start: kept (2 cores faster than the slowest): the render thread on 7 alone, the game thread on 6 alone, the submit thread and every other thread of the process on 0-5 (the audio threads, the log thread, the workers, the driver's threads and those made later: the log thread moves a thread found on 6-7 there once a second; Android's UI thread is left to the system); where the system widens a one-core pin, the render and the game thread share 6-7
@@ -2310,7 +2345,7 @@ counter is an increment in a hot path, and none of them reads anything from the 
 | Pixel under Uncapped at 120 Hz: motion sped up and slowed (pictures shown a mix of one and two refreshes apart) | Which moment is drawn for each picture, and how many land on the refresh predicted for them? | The attempt ledger's `in-between pictures for the screen's refresh on (...) N pictures placed` and `in-between pictures on their own timer on (Android: ...)`; the `on the glass` line's `drawn (the screen's predicted refresh)` measure (its deviation and its share above 1.5) and its clause's `the refresh predicted against the one shown over S pictures: H on it (P %)` with the reasons a picture was `drawn as otherwise` ([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#the-on-glass-line)) |
 | Adreno 740: three skin-check `wrong` verdicts right after 400 ms stalls with the GPU's own sign of a reset, each reading the readback's bytes from an earlier check (`not written again`); the first started the run's capture (44 ms on the game thread, about 1 s on the worker), and more stalls followed | Do the stall clusters remain without the captures? | The attempt ledger's row `no capture after a stall on (a skin check read after a GPU reset is skipped, not captured) N checks skipped after a reset` in the block that holds the stalls, the ledger line's `; stalls N in the block`, each skipped check's `rd: VU skin check: frame F command L:I ...: skipped after a reset: WHY; ...` and the 10 s `rd: VU skin check: P checks, W wrong, K skipped after a reset, ...`; no `VU skin check: captured` or `window: skin-check capture:` line after a stall; then whether `window: stall:` lines still come in clusters a few replays apart ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md#skipped-after-a-reset)). Every stall of a block has its line (up to 350 a block; the tally says how many were left out past it), so a cluster's members are each named with their replay and `(a hang)` or `(not a hang: ...)`, and the tally's `H of them hangs` per block shows whether the hangs themselves come in clusters or only the presents after them |
 | Adreno 740: every hang's first unwritten stamp is `list 0's end`, the present's own list's stamps written after it | Which submission hangs, and was the present waiting on it? | Each `window: stall:` line's clause `the submissions around it (from the stall's start): replay R's K of N (lists 0-12, P pieces; S stamps, U unwritten; it holds the first unwritten stamp) submitted at -T ms, signalled at or before +T ms ...; replay R's 2 of 2 (the present's list, ...; S stamps, all written) ...; replay R+1's 2 of 2 (1 list, the stalled present waits on it) ...; in flight at the stall's start: S seen, U not known`: the submission index that holds the first unwritten stamp across the hangs (always 1 of 2, the scene's, or not), whether the present's list after it ran (its stamps written), and how long before the stall each was submitted. The earlier submissions' own signals stay unknown (no Vulkan call reads them; the slot's last one's is its wait's end) ([Which submission hangs](#issue-123-the-hang-detector-and-the-pass-path)) |
-| Pixel 10 Pro Fold under Uncapped in the cage: two 10 s blocks at exactly one picture a tick, the render thread's CPU and the GPU's work a picture up by half to double, the cores 2-6 clock down, the hint over target either way | Did the clock lift keep the cage at about two a tick, and when a block falls, what were the clocks in its worst second? | The attempt ledger's `clock lift at one picture a tick on (...) N lifts asked (M taken by the system)` and the hint line's `; clock lifts ...`; `window: clock lift asked: ...` with `window: clock lift: ... taken`; `window: worst second of the block: ...` (pictures a tick, the step rule's holds, the clusters' clocks by sample); the ranked line's clock clause at a block near one a tick with its CPU raised (`; at 1.00 pictures a tick ...; the render thread on core N ...`); `window: clock lift trace k of 5: ...` the five seconds after each lift (did the clocks rise after the call?) ([The clock lift](#the-clock-lift-and-the-worst-second-the-owners-pixel)) |
+| Pixel 10 Pro Fold under Uncapped in the cage: two 10 s blocks at exactly one picture a tick, the render thread's CPU and the GPU's work a picture up by half to double, the cores 2-6 clock down, the hint over target either way; the second release candidate's workload notices taken and nothing moved | Do stretches at one picture a tick remain with the threads unpinned? | The attempt ledger's `pins let go at one picture a tick on (...) N times let go (M taken again)`; `window: pins let go: ...` and `window: pins taken again: ...`; `window: pin trace (let go, second k): ...` (pictures a tick, the cores the render and game threads ran on, those cores' clocks, the cores each may run on) against the `pin trace (pinned, at one a tick)` seconds; `window: worst second of the block: ...; the render thread's cores: ...; pins let go ...` (seconds stuck pinned against stuck let go in each block); the ranked line's clock clause ([One picture a tick](#one-picture-a-tick-and-the-worst-second-the-owners-pixel)) |
 | The owner's "slow down on movement of objects like the cage": draws left at their tick's position were 0.1-0.5 % of keyed draws, unnamed; the first release candidate's stair-steppers (`chain4`, `pot`, `taimatsu1`) were still objects the test misjudged | Which objects are drawn at their tick's position, and does any really move every other tick? | `rd: interp names: draws left at their tick's position over 250 frames (...; counted at each frame's first present) ...`: the top five names of each reason and the stair-steppers with their cadence `[moved M of J, alternating A]` (A near M near half of J: a real every-other-tick object) ([by name](#the-draws-left-at-their-ticks-position-by-name)) |
 | Pixel opening: lamps, dark and sun views | What does each block cost, and which cut fired? | `window: compare: ...; GPU ms a picture: ...; glow plans: lamps N, dark N, whole N`, `passes` and `breaks` a picture, and the ledger line's per-cut fired counts |
 
@@ -2330,7 +2365,7 @@ print it:
   each, the second part beginning `window: attempts at the start (continued): ...`. With the
   25 rows the longest each row's reason can be (its decider's words, the device's own: the pass
   row's 162 bytes, the subpass probe's 255) made 3927 bytes, one line; with the rows
-  added since (the queue priority, no capture after a stall, picture health, the clock lift) a
+  added since (the queue priority, no capture after a stall, picture health, the pins let go) a
   device class's line may take a second part (`attempt_ledger_test` holds it to one or two, every row whole).
 - In every block: `window: attempts: few-cores rule on 3 threads moved; pipeline set on every core
   on 0 workers (0 sets); slow-scene capture in two steps on 1 slow-scene captures (0 grown here);
@@ -2371,7 +2406,7 @@ thread can make it, hot paths included. The rows and where their states are set:
 | the shadow composites by their own entry | `rd_comp_spec.c` at start-up and after its self-test (`ico_attempt_decide_comp_spec`): `not applicable here` off Vulkan or without the dual-source fixed-function blend (the two-pass or the exact blend), `off by default` with `ICO_RD_COMP_SPEC=0`, the define at 0 or its self-test not run yet, `refused by its self-test` where SCENE's bytes differed between `sprite_ps` and `sprite_comp_ps` on the device, `on` with it passed | `rd_comp_spec.c` at each composite and level drawn: the draws by `sprite_comp_ps` (the second count: those of their forms that kept `sprite_ps` where it is offered; the 10 s `window: composites:` line says why) |
 | no capture after a stall | `rd_vu_skin_selftest.c` at the skin check's start line (`ico_attempt_decide_skin_skip`): `on (a skin check read after a GPU reset is skipped, not captured)` where the skin check runs (an Adreno with a window, or the tests' switch), `not applicable here (the skin check is off here)` where it is off or its start-up probe failed; not reported where the probe never ran (not Vulkan) | `rd_vu_skin_check.c` at each check skipped after a reset (`rd__skin_skip`: the readback not written again, or read in the span of the GPU's own sign of a reset) ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md#skipped-after-a-reset)) |
 | picture health | `rd_health_live.c` at the first collected record (`ico_attempt_decide_picture_health`: `on (counting: 16 of 32 3D pictures unfinished are said once)` on Vulkan, `not applicable here (only Vulkan's GPU stamps say a picture came back unfinished)` elsewhere); a report, nothing switched ([The picture-health report](#the-picture-health-report-issue-179)) | the judged 3D pictures with stamps unwritten (the second count: the GPU clock restarts with work queued) |
-| clock lift at one picture a tick | `window_perf_hint.c` every block (`ico_attempt_decide_clock_lift`): `on (a second at one picture a tick behind the step rule told to the system as a heavier CPU and GPU load)` with `APerformanceHint_notifyWorkloadIncrease` (Android 16 and later) and a hint session, `not applicable here` with `Android's performance hints only`, `the system has no workload notice: ...` or `no performance hint session` ([The clock lift](#the-clock-lift-and-the-worst-second-the-owners-pixel)) | `window_clock_trap.c`: the lifts asked (the second count: those the system answered 0) |
+| pins let go at one picture a tick | `window_clock_trap.c` every block (`ico_attempt_decide_pin_release`): `on (a second at one picture a tick with a picture's CPU raised lets the render and game threads run on any faster core until 10 s pass without one)` under the keeper's rule for three or more faster cores, `not applicable here` with `Android's core placement only`, `one or two cores faster than the slowest: the few-cores rule keeps its pins` or `nothing pinned here (...)` ([One picture a tick](#one-picture-a-tick-and-the-worst-second-the-owners-pixel)) | `window_clock_trap.c`: the times let go (the second count: taken again) |
 | the old robust-access line taken off | `window_robust.c` `window_robust_start` at the window's first start (`ico_attempt_decide_robust_line`): `on ([dev] gpu_robust = true without the game's mark removed from config.toml: robust access off from this start)`, `refused by its self-test (config.toml could not be written: robust access stays on, the next start tries again)` (the refusal is the file's), `refused by its self-test (gpu_robust = true in config.toml is in a hand-written form the game cannot take out ...: delete the line by hand)` (the text without the lines the removal knows, `[dev]`'s two keys and the root's dotted `dev.gpu_robust` / `dev.gpu_robust_by`, parsed as config.toml is read, still says true: nothing is written and the start says `ico_pc: robust access stays on: gpu_robust = true in config.toml is written in a form the game does not write and could not take out ...`; a marked key's too), `not applicable here (no [dev] gpu_robust = true without the game's mark in config.toml)`; a later start of the window in the same run changes it only when it finds such a key | static |
 
 The shadow cuts' counts come from the replay's record where the window reads it

@@ -1,18 +1,20 @@
 /*
  * port/platform/window_clock_trap.h
  *
- * The window's side of the clock lift and the worst second (clock_trap.h):
- * every call on the game thread (the records' drain, the step rule's asks,
- * the 10 s block), no lock.  The lift itself is the hint thread's call
- * (window_perf_hint.c); off Android the seconds and the worst-second line
- * are kept, nothing is asked of the system and no clock is sampled.
+ * The window's side of the worst second (clock_trap.h) and of the pins let
+ * go at one picture a tick (pin_release.h): every call on the game thread
+ * (the records' drain, the step rule's asks, the 10 s block), no lock.  The
+ * pins are moved by the keeper on the log thread (render_thread.c, an
+ * atomic wish); off Android the seconds, the trace and the worst-second
+ * line are kept, nothing is let go and no clock is sampled.
  *
  * The lines:
- *   window: clock lift asked: 30 pictures for 30 game frames in a second (one
- *     a tick), the step rule held 41 of 55 further pictures asked, a
- *     picture's CPU 22.6 ms: the system told of a heavier CPU and GPU load
- *     (the first 8, then every 100th)
- *   window: worst second of the block: ... (every 10 s block)
+ *   window: pins let go: ... / window: pins taken again: ... (the first 8,
+ *     then every 100th)
+ *   window: pin trace (let go, second 3): ... (each stuck second, each
+ *     second let go and 5 after; at most 300 a run)
+ *   window: worst second of the block: ...; the render thread's cores: ...
+ *     (every 10 s block)
  *   "; the CPU clocks under their level: ..." at the end of the ranked line
  *     (window_perf_rank.c) when a cluster's clock dipped
  */

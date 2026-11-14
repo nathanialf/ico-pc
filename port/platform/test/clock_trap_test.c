@@ -13,23 +13,24 @@
  *            seconds restarts the seconds at the next event;
  *   rule     one a tick (at most 1.1 pictures a frame, at least 20 frames,
  *            asks at least half the frames, at least half of them held, as
- *            made) at its edges; the lift at most once in 2 s;
+ *            made) at its edges, said at every such second's close;
  *   worst    the block's worst second: fewer pictures a frame, then more
  *            CPU a picture; the first of equals kept;
  *   dips     the cores' clusters from the block's sums, and the dip against
  *            the median of the six blocks before over the owner's log's
  *            cores 2-6 averages from :3048 to :5449: a dip at :4251 (884
  *            against 1197) and :5276 (896 against 1132.5) and nowhere else;
- *   lines    the ranked clause, the worst-second line and the lift line word
- *            for word, a short buffer cut and terminated;
+ *   lines    the ranked clause and the worst-second line word for word, a
+ *            short buffer cut and terminated;
  *   due      the ranked line names the clocks only for a block at or near
  *            one picture a tick (at most 1.5) with its picture CPU at 1.25
  *            times the median of the blocks before or more (v0.11.7-rc1's
  *            clause fired on good blocks at 1.6-3.4 a tick): the edges, the
  *            render thread's core and its cluster's level, the clause word
  *            for word; the block's pictures and frames counted;
- *   trace    the line a second after a lift, with the ring's samples and
- *            without.
+ *   second   one second's text (the pin trace's, pin_release.h), with the
+ *            ring's samples and without; the blocks' CPU median and a
+ *            second's CPU raised against it.
  */
 #include <stdio.h>
 #include <string.h>
@@ -190,7 +191,7 @@ static void test_rate(void)
     }
 }
 
-/* --- the seconds, the rule and the lift ------------------------------------ */
+/* --- the seconds and the rule ---------------------------------------------- */
 
 static ClockTrapSecond sec(unsigned pictures, unsigned frames, unsigned asks, unsigned held,
                            bool asMade)
@@ -233,9 +234,10 @@ static void test_rule(void)
 
 /* one second of the cage at one a tick from ms: 55 asks (41 held) 17 ms
    apart from +2, 30 pictures each a new frame 33 ms apart from +5, in
-   time order; cpuMs each picture's CPU; the lifts counted */
+   time order; cpuMs each picture's CPU; the seconds closed at one a tick
+   counted */
 static unsigned feed_second(ClockTrap *c, double ms, uint32_t *frame, double cpuMs,
-                            unsigned picturesPerFrame, unsigned *lifts)
+                            unsigned picturesPerFrame, unsigned *ones)
 {
     unsigned ev = 0;
     unsigned a = 0, k = 0;
@@ -257,7 +259,7 @@ static unsigned feed_second(ClockTrap *c, double ms, uint32_t *frame, double cpu
             e = clock_trap_picture(c, tp, *frame, cpuMs, &closed);
             k++;
         }
-        *lifts += (e & CLOCK_TRAP_EV_LIFT) ? 1u : 0u;
+        *ones += (e & CLOCK_TRAP_EV_ONE) ? 1u : 0u;
         ev |= e;
     }
     return ev;
@@ -268,18 +270,17 @@ static void test_seconds(void)
     ClockTrap c;
     ClockTrapBlock b;
     uint32_t frame = 100;
-    unsigned lifts = 0;
+    unsigned ones = 0;
     const double base = 50000.0;
 
     clock_trap_reset(&c);
     for (unsigned s = 0; s < 10u; s++) {
-        (void)feed_second(&c, base + 1000.0 * s, &frame, 22.6, 1u, &lifts);
+        (void)feed_second(&c, base + 1000.0 * s, &frame, 22.6, 1u, &ones);
     }
-    /* seconds 0-8 closed (the tenth is open); the lifts at the closes of
-       seconds 0, 2, 4, 6 and 8 (2 s apart) */
-    CHECK(lifts == 5u);
+    /* seconds 0-8 closed (the tenth is open), each at one a tick */
+    CHECK(ones == 9u);
     clock_trap_block_take(&c, &b);
-    CHECK(b.seconds == 9u && b.oneATick == 9u && b.lifts == 5u);
+    CHECK(b.seconds == 9u && b.oneATick == 9u);
     CHECK(b.haveWorst && b.worst.pictures == 30u && b.worst.frames == 30u);
     CHECK(b.worst.asks == 55u && b.worst.held == 41u && b.worst.asMade);
     CHECK(b.worst.t0Ms == base + 2.0); /* the first event's time, the first of equals */
@@ -287,30 +288,29 @@ static void test_seconds(void)
     CHECK(b.pictures == 300u && b.frames == 300u); /* every picture, every new frame */
     /* the block taken: zeroed */
     clock_trap_block_take(&c, &b);
-    CHECK(b.seconds == 0u && !b.haveWorst && b.lifts == 0u && b.pictures == 0u && b.frames == 0u);
+    CHECK(b.seconds == 0u && !b.haveWorst && b.pictures == 0u && b.frames == 0u);
     /* a gap: the open second (the tenth) closes at the next event, the next
-       starts there; its lift 1 s after the last is not due */
-    lifts = 0;
+       starts there; it was at one a tick */
     {
         ClockTrapSecond closed;
         const unsigned e = clock_trap_picture(&c, base + 15000.0, ++frame, 22.6, &closed);
 
-        CHECK((e & CLOCK_TRAP_EV_CLOSED) && !(e & CLOCK_TRAP_EV_LIFT));
+        CHECK((e & CLOCK_TRAP_EV_CLOSED) && (e & CLOCK_TRAP_EV_ONE));
         CHECK(closed.t0Ms == base + 9002.0 && closed.pictures == 30u);
         CHECK(c.cur.t0Ms == base + 15000.0 && c.cur.pictures == 1u);
     }
     clock_trap_block_take(&c, &b);
-    CHECK(b.seconds == 1u && b.oneATick == 1u && b.lifts == 0u);
+    CHECK(b.seconds == 1u && b.oneATick == 1u);
     /* two seconds at two a tick, then one at one a tick: the worst is the
-       one a tick; its lift the first since the reset */
+       one a tick, the only one said */
     clock_trap_reset(&c);
-    lifts = 0;
-    (void)feed_second(&c, base, &frame, 9.5, 2u, &lifts);
-    (void)feed_second(&c, base + 1000.0, &frame, 9.5, 2u, &lifts);
-    (void)feed_second(&c, base + 2000.0, &frame, 22.6, 1u, &lifts);
-    (void)feed_second(&c, base + 3000.0, &frame, 9.5, 2u, &lifts);
+    ones = 0;
+    (void)feed_second(&c, base, &frame, 9.5, 2u, &ones);
+    (void)feed_second(&c, base + 1000.0, &frame, 9.5, 2u, &ones);
+    (void)feed_second(&c, base + 2000.0, &frame, 22.6, 1u, &ones);
+    (void)feed_second(&c, base + 3000.0, &frame, 9.5, 2u, &ones);
     clock_trap_block_take(&c, &b);
-    CHECK(lifts == 1u && b.seconds == 3u && b.oneATick == 1u);
+    CHECK(ones == 1u && b.seconds == 3u && b.oneATick == 1u);
     CHECK(b.worst.pictures == 30u && b.worst.t0Ms == base + 2002.0);
     /* worse: fewer a frame first, then more CPU */
     {
@@ -432,13 +432,11 @@ static void test_lines(void)
     hint.gpuMs = 20.73;
     hint.reports = 300;
     hint.over = 294;
-    hint.liftsAsked = 3;
-    hint.liftsTaken = 3;
     (void)clock_trap_dip_text(&d, 1, &hint, b, sizeof b);
     CHECK_STR(b, "; the CPU clocks under their level: cores 2-6 averaged 884 MHz against 1197 "
                  "(the median of the 6 blocks before; 74 %); the performance hint's target "
                  "7.81 ms a picture, its reports 22.56 ms CPU / 20.73 ms GPU (over target in "
-                 "294 of 300); clock lifts asked 3 (taken 3)");
+                 "294 of 300)");
     hint.known = false;
     (void)clock_trap_dip_text(&d, 1, &hint, b, sizeof b);
     CHECK_STR(b, "; the CPU clocks under their level: cores 2-6 averaged 884 MHz against 1197 "
@@ -471,7 +469,6 @@ static void test_lines(void)
         blk.worst.cpuN = 30;
         blk.seconds = 9;
         blk.oneATick = 9;
-        blk.lifts = 5;
         blk.cpuMs = 6780.0;
         blk.cpuN = 300;
         memset(&ring, 0, sizeof(ring));
@@ -493,31 +490,20 @@ static void test_lines(void)
                      "asked; a picture's CPU 22.6 ms (the block's 22.6); the CPU clocks in that "
                      "second (4 samples, MHz): cores 0-1 460 812 1286 533, cores 2-6 400 884 "
                      "2092 1100, core 7 883 2707 1008 900; 9 of 9 seconds at one a tick behind "
-                     "the step rule, clock lifts asked 5");
+                     "the step rule");
         (void)clock_trap_worst_text(&blk, t0 - 3200.0, NULL, b, sizeof b);
         CHECK_STR(b, "worst second of the block: 30 pictures for 30 game frames (1.00 a tick), "
                      "from 3.2 s into the block; the step rule held 41 of 55 further pictures "
                      "asked; a picture's CPU 22.6 ms (the block's 22.6); the CPU clocks not "
-                     "sampled here; 9 of 9 seconds at one a tick behind the step rule, clock "
-                     "lifts asked 5");
+                     "sampled here; 9 of 9 seconds at one a tick behind the step rule");
         memset(&blk, 0, sizeof(blk));
         (void)clock_trap_worst_text(&blk, 0.0, NULL, b, sizeof b);
         CHECK_STR(b, "worst second of the block: none judged (fewer than 20 game frames in "
-                     "every second); clock lifts asked 0");
-    }
-    {
-        ClockTrapSecond s = sec(30, 30, 55, 41, true);
-
-        s.cpuMs = 678.0;
-        s.cpuN = 30;
-        (void)clock_trap_lift_text(&s, b, sizeof b);
-        CHECK_STR(b, "clock lift asked: 30 pictures for 30 game frames in a second (one a "
-                     "tick), the step rule held 41 of 55 further pictures asked, a picture's "
-                     "CPU 22.6 ms: the system told of a heavier CPU and GPU load");
+                     "every second)");
     }
 }
 
-/* --- when the ranked line names the clocks, and the trace after a lift ----- */
+/* --- when the ranked line names the clocks, and one second's text --------- */
 
 /* the worst-second test's ring: 5 samples around a second from t0, four in it */
 static void owner_ring(GpuSysfsRing *ring, double t0)
@@ -616,7 +602,7 @@ static void test_due(void)
     }
 }
 
-static void test_trace(void)
+static void test_second(void)
 {
     char b[1024];
     GpuSysfsRing ring;
@@ -627,16 +613,48 @@ static void test_trace(void)
     s.cpuMs = 504.3;
     s.cpuN = 41;
     owner_ring(&ring, t0);
-    (void)clock_trap_trace_text(&s, 2, &ring, b, sizeof b);
-    CHECK_STR(b, "clock lift trace 2 of 5: 41 pictures for 30 game frames (1.37 a tick), a "
-                 "picture's CPU 12.3 ms; the step rule held 12 of 40 further pictures asked; the "
-                 "CPU clocks in that second (4 samples, MHz): cores 0-1 460 812 1286 533, cores "
-                 "2-6 400 884 2092 1100, core 7 883 2707 1008 900");
+    (void)clock_trap_second_text(&s, &ring, b, sizeof b);
+    CHECK_STR(b, "41 pictures for 30 game frames (1.37 a tick), a picture's CPU 12.3 ms; the "
+                 "step rule held 12 of 40 further pictures asked; the CPU clocks in that second "
+                 "(4 samples, MHz): cores 0-1 460 812 1286 533, cores 2-6 400 884 2092 1100, "
+                 "core 7 883 2707 1008 900");
     s.cpuN = 0;
-    (void)clock_trap_trace_text(&s, 5, NULL, b, sizeof b);
-    CHECK_STR(b, "clock lift trace 5 of 5: 41 pictures for 30 game frames (1.37 a tick), a "
-                 "picture's CPU not known; the step rule held 12 of 40 further pictures asked; "
-                 "the CPU clocks not sampled here");
+    (void)clock_trap_second_text(&s, NULL, b, sizeof b);
+    CHECK_STR(b, "41 pictures for 30 game frames (1.37 a tick), a picture's CPU not known; the "
+                 "step rule held 12 of 40 further pictures asked; the CPU clocks not sampled "
+                 "here");
+    /* the blocks' CPU median over the blocks with one known: none gives 0;
+       8.0, 9.0, 0 (not known) and 10.0 give 9.0 of 3 */
+    {
+        ClockTrapHist h;
+        ClockTrapClusters c;
+        unsigned n = 99;
+
+        memset(&h, 0, sizeof(h));
+        memset(&c, 0, sizeof(c));
+        CHECK(clock_trap_cpu_median(&h, &n) == 0.0 && n == 0u);
+        c.cpuMs = 8.0;
+        clock_trap_hist_push(&h, &c);
+        c.cpuMs = 9.0;
+        clock_trap_hist_push(&h, &c);
+        c.cpuMs = 0.0;
+        clock_trap_hist_push(&h, &c);
+        c.cpuMs = 10.0;
+        clock_trap_hist_push(&h, &c);
+        CHECK(clock_trap_cpu_median(&h, &n) == 9.0 && n == 3u);
+        CHECK(clock_trap_cpu_median(&h, NULL) == 9.0);
+    }
+    /* raised: 1.25 x 8.0 = 10.0 at the edge; fewer than two blocks: any CPU
+       known; none known: never */
+    s.cpuMs = 300.0;
+    s.cpuN = 30; /* 10.0 ms */
+    CHECK(clock_trap_cpu_raised(&s, 8.0, 2));
+    s.cpuMs = 299.0;
+    CHECK(!clock_trap_cpu_raised(&s, 8.0, 2));
+    CHECK(clock_trap_cpu_raised(&s, 8.0, 1));
+    CHECK(clock_trap_cpu_raised(&s, 0.0, 0));
+    s.cpuN = 0;
+    CHECK(!clock_trap_cpu_raised(&s, 8.0, 0));
 }
 
 int main(void)
@@ -647,7 +665,7 @@ int main(void)
     test_dips();
     test_lines();
     test_due();
-    test_trace();
+    test_second();
     if (failures) {
         printf("clock_trap_test: %d failure(s)\n", failures);
         return 1;
