@@ -57,6 +57,8 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
     [ICO_ATT_SKIN_RESET_SKIP] = {"no capture after a stall", "checks skipped after a reset", NULL},
     [ICO_ATT_PICTURE_HEALTH] = {"picture health", "3D pictures with stamps unwritten",
                                 "GPU clock restarts"},
+    [ICO_ATT_CLOCK_LIFT] = {"clock lift at one picture a tick", "lifts asked",
+                            "taken by the system"},
 };
 
 /* the rows' live values (__atomic), and the block text's last counts (the
@@ -776,6 +778,23 @@ void ico_attempt_decide_skin_skip(int on)
     ico_attempt_state(ICO_ATT_SKIN_RESET_SKIP, on ? ICO_ATT_ON : ICO_ATT_NA,
                       on ? "a skin check read after a GPU reset is skipped, not captured"
                          : "the skin check is off here");
+}
+
+void ico_attempt_decide_clock_lift(int android, int offered, int session)
+{
+    if (!android) {
+        ico_attempt_state(ICO_ATT_CLOCK_LIFT, ICO_ATT_NA, "Android's performance hints only");
+    } else if (!offered) {
+        ico_attempt_state(ICO_ATT_CLOCK_LIFT, ICO_ATT_NA,
+                          "the system has no workload notice: "
+                          "APerformanceHint_notifyWorkloadIncrease is Android 16 and later");
+    } else if (!session) {
+        ico_attempt_state(ICO_ATT_CLOCK_LIFT, ICO_ATT_NA, "no performance hint session");
+    } else {
+        ico_attempt_state(ICO_ATT_CLOCK_LIFT, ICO_ATT_ON,
+                          "a second at one picture a tick behind the step rule told to the "
+                          "system as a heavier CPU and GPU load");
+    }
 }
 
 void ico_attempt_decide_picture_health(int vulkan)

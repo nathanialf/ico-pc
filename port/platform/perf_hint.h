@@ -122,6 +122,10 @@ typedef struct PerfHintOps {
     /* NULL: not offered (API 33): the session is closed and made again */
     int (*set_threads)(void *user, void *session, const int32_t *tids, size_t n);
     void (*close)(void *user, void *session);
+    /* the clock lift (clock_trap.h): the system told of a heavier CPU and
+       GPU load (APerformanceHint_notifyWorkloadIncrease, API 36); 0 or the
+       call's error (EBUSY: its rate limit, ENOTSUP); NULL: not offered */
+    int (*notify)(void *user, void *session, bool cpu, bool gpu);
     /* the clock the calls are timed by (monotonic ns) */
     uint64_t (*now_ns)(void *user);
     bool withGpu; /* the reports carry the GPU time (API 35) */
@@ -132,6 +136,11 @@ typedef struct PerfHintStats {
     unsigned reports, over, gpuReports, gpuOwn, failed, dropped, background;
     unsigned targetChanges, threadChanges;
     int lastError;
+    /* the clock lifts: called, taken (0), rate-limited (EBUSY), not
+       supported (ENOTSUP), failed otherwise (liftError the last), asked
+       with no session (the background) */
+    unsigned lifts, liftsTaken, liftsBusy, liftsUnsupported, liftsFailed, liftsMissed;
+    int liftError;
     double cpuMs, gpuMs; /* sums over reports, gpuReports */
     double callMs, callMaxMs;
 } PerfHintStats;
@@ -150,6 +159,7 @@ typedef struct PerfHint {
     uint32_t head, tail; /* the ring: head the game thread's, tail the hint thread's */
     PerfHintWork ring[PERF_HINT_RING];
     uint32_t droppedW; /* full ring, the writer's count (atomic) */
+    uint32_t liftReq;  /* clock lifts asked (atomic, the game thread's) */
     /* the hint thread's */
     void *session;
     uint64_t sessTargetNs;
@@ -160,6 +170,8 @@ typedef struct PerfHint {
     unsigned made;
     double madeMs;     /* the last create call's time */
     uint32_t droppedR; /* droppedW already counted */
+    uint32_t liftSeen; /* liftReq already answered */
+    int liftRc;        /* the last lift call's answer (PERF_HINT_EV_LIFT) */
     /* the block's numbers, under the spin (the hint thread adds, the game
        thread takes) */
     int spin;
@@ -178,13 +190,18 @@ void perf_hint_set_threads(PerfHint *h, const int32_t *tids, uint32_t n);
 void perf_hint_set_active(PerfHint *h, bool active);
 /* false when the ring is full (counted as dropped) */
 bool perf_hint_push(PerfHint *h, const PerfHintWork *w);
+/* A clock lift asked of the hint thread's next step (one call for the
+   lifts asked since its last; clock_trap.h): false, nothing asked, when the
+   backend has no notify */
+bool perf_hint_request_lift(PerfHint *h);
 
 /* The hint thread's step: the session's life and the ring's reports.
    Returns PERF_HINT_EV_* bits for the caller's lines. */
 enum {
     PERF_HINT_EV_MADE = 1,    /* a session made (the first, or again after the background) */
     PERF_HINT_EV_REFUSED = 2, /* the create call answered none: off for the run */
-    PERF_HINT_EV_CLOSED = 4   /* closed for the background */
+    PERF_HINT_EV_CLOSED = 4,  /* closed for the background */
+    PERF_HINT_EV_LIFT = 8     /* a clock lift called (its answer in liftRc) */
 };
 
 unsigned perf_hint_step(PerfHint *h);
@@ -192,6 +209,12 @@ unsigned perf_hint_step(PerfHint *h);
 void perf_hint_shutdown(PerfHint *h);
 /* the block's numbers since the last take (any thread) */
 void perf_hint_take(PerfHint *h, PerfHintStats *out);
+/* the same, not taken (the ranked line before the block's own) */
+void perf_hint_peek(PerfHint *h, PerfHintStats *out);
+/* a lift call's answer in words: "taken", "rate-limited by the system
+   (EBUSY)", "not supported here (ENOTSUP)", "failed (error N)" (buf for
+   the last, at least 32 bytes) */
+const char *perf_hint_lift_words(int rc, char *buf, size_t cap);
 
 /* --- the lines ----------------------------------------------------------- */
 
@@ -224,7 +247,9 @@ size_t perf_hint_on_text(const PerfHintOnText *t, char *out, size_t cap);
    (longest 0.21 ms), target changed 0 times" and, when they happened,
    "; GPU this picture's own in 40 of 612, the last timed one's otherwise",
    "; threads changed 1 times", "; 2 failed (error 32)", "; 5 dropped (the
-   queue full)", "; 30 not reported (in the background)".  withGpu false:
+   queue full)", "; 30 not reported (in the background)", "; clock lifts 2
+   (taken 1, rate-limited 1, not supported 0, failed 0, not sent without a
+   session 0)" (the last error after failed when any).  withGpu false:
    "GPU not reported (API 33 and 34)".  targetNs the session's now. */
 size_t perf_hint_block_text(const PerfHintStats *s, bool withGpu, uint64_t targetNs, char *out,
                             size_t cap);

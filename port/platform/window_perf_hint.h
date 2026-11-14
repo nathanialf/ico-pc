@@ -16,6 +16,8 @@
  *   window: performance hints: on again (...)               (after the background)
  *   window: performance hints: session closed (the app in the background) ...
  *   window: performance hints: 612 reports (actual CPU ... target changed 0 times)  (10 s)
+ *   window: clock lift: APerformanceHint_notifyWorkloadIncrease (CPU and GPU) taken
+ * and on every platform the worst second's 10 s line (window_clock_trap.h).
  */
 #ifndef ICO_PLATFORM_WINDOW_PERF_HINT_H
 #define ICO_PLATFORM_WINDOW_PERF_HINT_H
@@ -23,6 +25,7 @@
 #include <stdbool.h>
 
 struct RdPerfRecord;
+struct ClockTrapHint;
 
 /* After the render thread's start at the window's open: the NDK's calls
    looked up, the game mode read for the line, the hint thread started (or
@@ -38,6 +41,16 @@ void window_perf_hint_picture(const struct RdPerfRecord *r);
 void window_perf_hint_active(bool active);
 /* The 10 s block's line (once a session was made) */
 void window_perf_hint_block(void);
+/* The clock lift (clock_trap.h): asked of the hint thread, which calls
+   APerformanceHint_notifyWorkloadIncrease; false, nothing asked, without
+   the call (before API 36), a session or off Android.  The lines:
+   "window: clock lift: APerformanceHint_notifyWorkloadIncrease (CPU and
+   GPU) taken" (or "rate-limited by the system (EBUSY)", "not supported
+   here (ENOTSUP)", "failed (error N)"; the first 8, then every 100th) */
+bool window_perf_hint_lift(void);
+/* The block's hint so far (the ranked line's clause, before the block's
+   own line takes it): false off Android or without a session */
+bool window_perf_hint_peek(struct ClockTrapHint *out);
 /* The window's close: the hint thread joined, the session closed */
 void window_perf_hint_close(void);
 

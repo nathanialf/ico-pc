@@ -175,6 +175,12 @@ enum {
        signalled finished, second count the GPU clock restarts with work
        queued (an idle GPU's are not counted) */
     ICO_ATT_PICTURE_HEALTH,
+    /* clock_trap.h (window_clock_trap.c, window_perf_hint.c; the owner's
+       Pixel, v0.11.7): a second at one picture a tick behind the step rule
+       told to the system as a heavier CPU and GPU load
+       (APerformanceHint_notifyWorkloadIncrease, Android 16 and later); count
+       the lifts asked, second count those the system took */
+    ICO_ATT_CLOCK_LIFT,
     ICO_ATT_COUNT
 };
 
@@ -409,5 +415,10 @@ void ico_attempt_decide_skin_skip(int on);
    record): on where the records carry the slot clock's signs (Vulkan),
    counting; else not applicable */
 void ico_attempt_decide_picture_health(int vulkan);
+/* the clock lift (window_perf_hint.c every block): android the build is
+   Android's, offered the system has APerformanceHint_notifyWorkloadIncrease
+   (API 36 and later), session a performance hint session was made and not
+   refused.  All three: on; else not applicable with the missing one */
+void ico_attempt_decide_clock_lift(int android, int offered, int session);
 
 #endif

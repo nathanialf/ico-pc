@@ -420,21 +420,36 @@ static void test_classes(void)
            Vulkan device, counting */
         ico_attempt_decide_picture_health(1);
         CHECK(ico_attempt_state_of(ICO_ATT_PICTURE_HEALTH) == ICO_ATT_ON);
-        /* the whole start line fits the window's 4 KB buffer
-           (window_perf_rank.c ledger_lines), its last row included */
+        /* the clock lift (clock_trap.h): on where the system has the
+           workload notice and a hint session (the Android classes here, as
+           an Android 16 phone with a session), not applicable elsewhere */
+        ico_attempt_decide_clock_lift(kShip[c].android, kShip[c].android, kShip[c].android);
+        CHECK(ico_attempt_state_of(ICO_ATT_CLOCK_LIFT) ==
+              (kShip[c].android ? ICO_ATT_ON : ICO_ATT_NA));
+        /* the whole start line, its last row included, in the window's 4 KB
+           parts (window_perf_rank.c ledger_lines, ico_attempt_start_part):
+           one part, or two since the clock lift's row, each whole rows */
         {
-            char big[4096];
+            static char big[8192];
             const size_t n = ico_attempt_start_text(big, sizeof big);
             CHECK(n + 1u < sizeof big);
             CHECK(strstr(big, "; the old robust-access line taken off ") != NULL);
             CHECK(strstr(big, "; no capture after a stall ") != NULL);
             CHECK(strstr(big, "; picture health on (counting: 16 of 32 3D pictures unfinished "
                               "are said once)") != NULL);
-            /* and in one part (ico_attempt_start_part, the window's) */
-            int row = 0;
+            CHECK(strstr(big, "; clock lift at one picture a tick ") != NULL);
+            int row = 0, parts = 0;
             char part[4096];
-            const size_t m = ico_attempt_start_part(part, sizeof part, &row);
-            CHECK(row == ICO_ATT_COUNT && m == n && strcmp(part, big) == 0);
+            while (row < ICO_ATT_COUNT && parts < 4) {
+                const int from = row;
+                const size_t m = ico_attempt_start_part(part, sizeof part, &row);
+                CHECK(m + 1u < sizeof part && row > from);
+                if (parts == 0 && row == ICO_ATT_COUNT) {
+                    CHECK(m == n && strcmp(part, big) == 0);
+                }
+                parts++;
+            }
+            CHECK(row == ICO_ATT_COUNT && parts >= 1 && parts <= 2);
         }
         for (int i = 0; i < ICO_ATT_COUNT; i++) {
             if (ico_attempt_state_of(i) == ICO_ATT_NOT_SET) {
@@ -960,8 +975,45 @@ static void test_start_parts(void)
     ico_attempt_reset();
 }
 
+/* the clock lift (clock_trap.h): not applicable off Android, without the
+   system's workload notice and without a session, each with its words; on
+   with all three; its two counts in the block line, taken per block */
+static void test_clock_lift(void)
+{
+    char b[4096];
+
+    ico_attempt_reset();
+    CHECK(ico_attempt_state_of(ICO_ATT_CLOCK_LIFT) == ICO_ATT_NOT_SET);
+    ico_attempt_decide_clock_lift(0, 0, 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_CLOCK_LIFT) == ICO_ATT_NA &&
+          strcmp(ico_attempt_why_of(ICO_ATT_CLOCK_LIFT), "Android's performance hints only") == 0);
+    ico_attempt_decide_clock_lift(1, 0, 1);
+    CHECK(ico_attempt_state_of(ICO_ATT_CLOCK_LIFT) == ICO_ATT_NA &&
+          strcmp(ico_attempt_why_of(ICO_ATT_CLOCK_LIFT),
+                 "the system has no workload notice: APerformanceHint_notifyWorkloadIncrease is "
+                 "Android 16 and later") == 0);
+    ico_attempt_decide_clock_lift(1, 1, 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_CLOCK_LIFT) == ICO_ATT_NA &&
+          strcmp(ico_attempt_why_of(ICO_ATT_CLOCK_LIFT), "no performance hint session") == 0);
+    ico_attempt_decide_clock_lift(1, 1, 1);
+    CHECK(ico_attempt_state_of(ICO_ATT_CLOCK_LIFT) == ICO_ATT_ON);
+    (void)ico_attempt_start_text(b, sizeof b);
+    CHECK(strstr(b, "; clock lift at one picture a tick on (a second at one picture a tick behind "
+                    "the step rule told to the system as a heavier CPU and GPU load)") != NULL);
+    ico_attempt_fire(ICO_ATT_CLOCK_LIFT, 3u);
+    ico_attempt_fire2(ICO_ATT_CLOCK_LIFT, 2u);
+    (void)ico_attempt_block_text(b, sizeof b, -1);
+    CHECK(text_is(b, "attempts: clock lift at one picture a tick on 3 lifts asked (2 taken by "
+                     "the system)"));
+    (void)ico_attempt_block_text(b, sizeof b, -1);
+    CHECK(text_is(b, "attempts: clock lift at one picture a tick on 0 lifts asked (0 taken by "
+                     "the system)"));
+    ico_attempt_reset();
+}
+
 int main(void)
 {
+    test_clock_lift();
     test_classes();
     test_robust_line();
     test_skin_skip();
