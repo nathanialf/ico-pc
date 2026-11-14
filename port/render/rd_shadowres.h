@@ -33,6 +33,28 @@ struct RdPerfRecord;
 #define RD_SR_SPAN_MAX 64
 #define RD_SR_SCALE_MAX 31.0f
 
+/* why a shadow above 1x is drawn at the PS2's size (RdPerfRecord.shadowFineWhy,
+ * the 10 s clause's and --stats' words, rd__shadow_fine_why_word) */
+enum {
+    RD_SR_WHY_PRIM = 0, /* not one two-vertex UV sprite in the world's space */
+    RD_SR_WHY_FLAGS,    /* the frame camera, the ST shift or PRIM.AA1 */
+    RD_SR_WHY_TEXFN,    /* not MODULATE with TCC RGBA */
+    RD_SR_WHY_BLEND,    /* a blend, FBA or a colour mask */
+    RD_SR_WHY_TEST,     /* an alpha test, DATE or a Z test */
+    RD_SR_WHY_FILTER,   /* not bilinear on both filters */
+    RD_SR_WHY_COLOUR,   /* two vertex colours */
+    RD_SR_WHY_MAP,      /* the UVs not 2 a pixel, or the level not covered */
+    RD_SR_WHY_COUNT,    /* level 0's source not the count kept at its full size */
+    RD_SR_WHY_PIPES,    /* the shaders or pipelines could not be made */
+    RD_SR_WHY_TEXTURES, /* the textures could not be made */
+    RD_SR_WHY_SCALE,    /* a scale above RD_SR_SCALE_MAX */
+    RD_SR_WHY_N
+};
+
+_Static_assert(RD_SR_WHY_N <= RD_SHADOW_FINE_WHYS, "rd.h RD_SHADOW_FINE_WHYS");
+/* the reason's short word ("filter", "map", ...) */
+const char *rd__shadow_fine_why_word(int why);
+
 /* ----------------------------------------------------------- arithmetic */
 /* the count's texels per GS pixel on an axis of w GS pixels held in tw
  * texels (sx the target's scale, ox its Full pixel left-out texels: the
@@ -45,22 +67,35 @@ float rd_sr_count_scale(uint32_t w, uint32_t tw, float sx, float ox);
  * is centred on one, so every stage is exact (rd_shadowres.c) */
 uint32_t rd_sr_level_scale(float s);
 /* the box weight of source texel i for a first-level tap at a: [a, a + s)
- * at 0.75 / s, [a + s, a + 2 s) at 0.25 / s (shadowres.hlsl sr_box_w) */
-float rd_sr_box_w(float i, float a, float s);
+ * at (1 - f) / s, [a + s, a + 2 s) at f / s (shadowres.hlsl sr_box_w; f 0.25
+ * for the game's sprites) */
+float rd_sr_box_w(float i, float a, float s, float f);
+/* index i of an axis of n texels wrapped (repeat) or held to its edge */
+int rd_sr_index(int i, int n, int repeat);
+/* a sprite's u at the level's pixel 0 as the GS's bilinear tap: the first
+ * source texel's whole offset and the second tap's weight (0 and 0.25 for
+ * the game's u = 2 x + 0.75); false when u0 is not a number */
+bool rd_sr_offset(float u0, int *whole, float *frac);
 /* the tent's weight at t = n - m on an axis of scale s (unnormalised) */
 float rd_sr_tent_w(int t, float s);
 /* the tent's first and last t on an axis of scale s */
 void rd_sr_tent_range(float s, int *t0, int *t1);
 
 /* The reference of the two shaders over RGBA8 images (the CPU test's): a
- * level texel (mx, my) of the step from src (sw x sh texels): first 1 the
- * box mode (the count), else the point mode; ax, ay the taps' origin (texels,
- * shadowres.hlsl's g_scale), kx, ky the texels a destination texel moves the
- * taps (g_param.xy), sx, sy the tap's offset (g_param.zw), col the sprite's
- * colour; and a texel n of the tent along one axis (down 0 across) of a w x
- * h level of scale s */
-void rd_sr_step_texel(const uint8_t *src, uint32_t sw, uint32_t sh, int first, float kx, float ky,
-                      float ax, float ay, float sx, float sy, const uint8_t col[4], uint32_t mx,
+ * level texel (mx, my) of the step from src (sw x sh texels) under p, as
+ * shadowres_step_ps's DrawCB carries it; and a texel n of the tent along one
+ * axis (down 0 across) of a w x h level of scale s */
+typedef struct RdSrStep {
+    int first;      /* 1 the box mode (the count), else the point mode */
+    float kx, ky;   /* the texels a destination texel moves the taps (g_param.xy) */
+    float ax, ay;   /* the first tap's origin in source texels (g_scale.xy) */
+    float sx, sy;   /* the second tap's offset, the box's width (g_param.zw) */
+    float fx, fy;   /* the second tap's weight (g_uvRect.xy) */
+    int repS, repT; /* the sprite's REPEAT (g_mode.y), else CLAMP */
+    uint8_t col[4]; /* the sprite's colour */
+} RdSrStep;
+
+void rd_sr_step_texel(const uint8_t *src, uint32_t sw, uint32_t sh, const RdSrStep *p, uint32_t mx,
                       uint32_t my, uint8_t out[4]);
 void rd_sr_tent_texel(const uint8_t *src, uint32_t w, uint32_t h, int down, float s, uint32_t x,
                       uint32_t y, uint8_t out[4]);

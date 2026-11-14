@@ -23,14 +23,19 @@
 //                      the level's edge; in bytes, rounded.
 //
 // Bindings: t1 the source (Load only; s1 bound, unused).
-// DrawCB (rd_shadowres.c srStepCb, srTentCb):
+// DrawCB (rd_shadowres.c rd__shadow_fine_screen, tent):
 //   step  g_mode.x 0 the first level (boxes of the count), 1 a later level
-//         (points of the level before); g_param.xy the source texels a
-//         destination texel moves its taps by (2 S_src / S_dst), zw the
-//         source texels of one PS2 texel (S_src: the second tap's offset and
-//         the box's width); g_scale.xy the taps' origin in source texels (a
-//         Full pixel count's left-out texels, negated); g_tex.xy the
-//         source's size; g_col the sprite's colour (bytes)
+//         (points of the level before); g_mode.y bit 0 the sprite's S axis
+//         REPEATs, bit 1 its T axis (else CLAMP: a tap past the source's edge
+//         reads its edge, as the GS's sampler does); g_param.xy the source
+//         texels a destination texel moves its taps by (2 S_src / S_dst), zw
+//         the source texels of one PS2 texel (S_src: the second tap's offset
+//         and the box's width); g_scale.xy the first tap's origin in source
+//         texels (the sprite's whole-texel offset times S_src, less a Full
+//         pixel count's left-out texels); g_uvRect.xy the second tap's weight
+//         on each axis (the sprite's sub-texel offset: 0.25 for the game's
+//         u = 2 x + 0.75; the first tap takes 1 - it); g_tex.xy the source's
+//         size; g_col the sprite's colour (bytes)
 //   tent  g_mode.x 0 across, 1 down; g_param.x S of that axis; g_tex.xy
 //         the level's size (the indices are held inside it)
 #include "common.hlsli"
@@ -49,15 +54,25 @@ struct SrIn {
 #define SR_SPAN_MAX 64
 #define SR_TENT_MAX 64
 
-// the box weight of source texel i: [a, a + s) at 0.75 / s, [a + s, a + 2 s)
-// at 0.25 / s
-float sr_box_w(float i, float a, float s)
+// the box weight of source texel i: [a, a + s) at (1 - f) / s, [a + s,
+// a + 2 s) at f / s
+float sr_box_w(float i, float a, float s, float f)
 {
     const float b = a + s;
     const float c = b + s;
     const float w0 = max(min(b, i + 1.0) - max(a, i), 0.0);
     const float w1 = max(min(c, i + 1.0) - max(b, i), 0.0);
-    return (0.75 * w0 + 0.25 * w1) / s;
+    return ((1.0 - f) * w0 + f * w1) / s;
+}
+
+// an index of an axis of n texels: wrapped (repeat) or held to the edge
+int sr_index(int i, int n, bool repeat)
+{
+    if (repeat) {
+        const int r = i % n;
+        return r < 0 ? r + n : r;
+    }
+    return clamp(i, 0, n - 1);
 }
 
 float4 sr_load(int x, int y)
@@ -66,16 +81,16 @@ float4 sr_load(int x, int y)
 }
 
 // the level before at source coordinate j (texel k at j = k), linear
-// between its texels, the indices held to its edge
-float4 sr_point(float2 j)
+// between its texels, the indices wrapped or held as the sprite's sampler
+float4 sr_point(float2 j, bool rs, bool rt)
 {
-    const int2 lim = int2(g_tex.xy) - int2(1, 1);
+    const int2 n = int2(g_tex.xy);
     const float2 f0 = floor(j);
     const float2 f = j - f0;
-    const int2 a = clamp(int2(f0), int2(0, 0), lim);
-    const int2 b = clamp(int2(f0) + int2(1, 1), int2(0, 0), lim);
-    const float4 top = sr_load(a.x, a.y) * (1.0 - f.x) + sr_load(b.x, a.y) * f.x;
-    const float4 bot = sr_load(a.x, b.y) * (1.0 - f.x) + sr_load(b.x, b.y) * f.x;
+    const int ax = sr_index(int(f0.x), n.x, rs), bx = sr_index(int(f0.x) + 1, n.x, rs);
+    const int ay = sr_index(int(f0.y), n.y, rt), by = sr_index(int(f0.y) + 1, n.y, rt);
+    const float4 top = sr_load(ax, ay) * (1.0 - f.x) + sr_load(bx, ay) * f.x;
+    const float4 bot = sr_load(ax, by) * (1.0 - f.x) + sr_load(bx, by) * f.x;
     return top * (1.0 - f.y) + bot * f.y;
 }
 
@@ -84,20 +99,26 @@ float4 shadowres_step_ps(SrIn i) : SV_Target0
     const float2 m = floor(i.pos.xy);
     const float2 a = m * g_param.xy + g_scale.xy;
     const float2 s = g_param.zw;
+    const float2 f = g_uvRect.xy;
+    const bool rs = (g_mode.y & 1u) != 0u;
+    const bool rt = (g_mode.y & 2u) != 0u;
+    const int2 n = int2(g_tex.xy);
     float4 sum = float4(0.0, 0.0, 0.0, 0.0);
     if (g_mode.x == 0u) {
-        const int2 first = max(int2(floor(a)), int2(0, 0));
-        const int2 last =
-            min(min(int2(ceil(a + 2.0 * s)), int2(g_tex.xy)), first + int2(SR_SPAN_MAX, SR_SPAN_MAX));
+        const int2 first = int2(floor(a));
+        const int2 last = min(int2(ceil(a + 2.0 * s)), first + int2(SR_SPAN_MAX, SR_SPAN_MAX));
         for (int y = first.y; y < last.y; y++) {
-            const float wy = sr_box_w(float(y), a.y, s.y);
+            const float wy = sr_box_w(float(y), a.y, s.y, f.y);
+            const int yy = sr_index(y, n.y, rt);
             for (int x = first.x; x < last.x; x++) {
-                sum += sr_load(x, y) * (sr_box_w(float(x), a.x, s.x) * wy);
+                sum += sr_load(sr_index(x, n.x, rs), yy) * (sr_box_w(float(x), a.x, s.x, f.x) * wy);
             }
         }
     } else {
-        sum = sr_point(a) * 0.5625 + sr_point(a + float2(s.x, 0.0)) * 0.1875 +
-              sr_point(a + float2(0.0, s.y)) * 0.1875 + sr_point(a + s) * 0.0625;
+        sum = sr_point(a, rs, rt) * ((1.0 - f.x) * (1.0 - f.y)) +
+              sr_point(a + float2(s.x, 0.0), rs, rt) * (f.x * (1.0 - f.y)) +
+              sr_point(a + float2(0.0, s.y), rs, rt) * ((1.0 - f.x) * f.y) +
+              sr_point(a + s, rs, rt) * (f.x * f.y);
     }
     const uint4 t = uint4(floor(sum * 255.0 + 0.5));
     const uint4 o = min((t * g_col) >> 7, uint4(255u, 255u, 255u, 255u));

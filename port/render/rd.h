@@ -2780,6 +2780,10 @@ enum {
     RD_BREAK_COUNT
 };
 
+/* the reasons a shadow above 1x is drawn at the PS2's size
+ * (RdPerfRecord.shadowFineWhy; rd_shadowres.h RD_SR_WHY_*) */
+#define RD_SHADOW_FINE_WHYS 12
+
 typedef struct RdPerfRecord {
     uint32_t replay; /* 1, 2, ... */
     uint32_t frame;  /* the replayed frame's number */
@@ -2979,6 +2983,8 @@ typedef struct RdPerfRecord {
      * full-size count, three levels, six tent passes), shadowFineRefused the
      * chains above 1x drawn at the PS2's size (a level the rule does not take) */
     uint32_t shadowFineChains, shadowFinePasses, shadowFineRefused;
+    /* of shadowFineRefused, by reason (rd_shadowres.c's RD_SR_WHY_*) */
+    uint16_t shadowFineWhy[RD_SHADOW_FINE_WHYS];
     /* of shadowOne, the draws that read the stencil four texels a gather
      * (the rest a texel a load: g_rd.shadowLoad, rd_shadow_selftest.c) */
     uint32_t shadowGathered;

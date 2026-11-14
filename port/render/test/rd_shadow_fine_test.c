@@ -10,8 +10,10 @@
  *      S^2 at whole S;
  *   4. at scale 1 the step is the GS's sprite: texel x = ((0.75 C[2x] +
  *      0.25 C[2x + 1]) rounded x col) >> 7 on both axes (the box of one
- *      texel; the point mode at whole taps), and the tent leaves a level as
- *      it is;
+ *      texel; the point mode at whole taps), at any whole and sub-texel
+ *      offset of the sprite's map and under CLAMP and REPEAT (the GS's taps
+ *      at u = 2 x + u0, indices wrapped or held), and the tent leaves a
+ *      level as it is;
  *   5. the straight edge moved across one SHADOW2 texel (8 GS pixels) in 24
  *      steps at scene scales 2, 2.41, 2.8125 (Resolution window's across),
  *      3 and 4 across, the y axis at scale 1 (the non-uniform case: the
@@ -65,6 +67,21 @@ static const uint32_t kW[RD_SR_LEVELS] = {288, 144, 72};
 static const uint32_t kBlend[RD_SR_LEVELS] = {40, 80, 120};
 static const uint8_t kCol[4] = {128, 128, 128, 80};
 
+/* the game's step (taps 0.75 / 0.25 from the first texel, CLAMP) */
+static RdSrStep stepOf(int first, float kx, float sx)
+{
+    RdSrStep p;
+    memset(&p, 0, sizeof(p));
+    p.first = first;
+    p.kx = kx;
+    p.ky = 2.0f;
+    p.sx = sx;
+    p.sy = 1.0f;
+    p.fx = p.fy = 0.25f;
+    memcpy(p.col, kCol, 4);
+    return p;
+}
+
 static void testScales(void)
 {
     CHECK(rd_sr_count_scale(576, 1728, 3.0f, 0.0f) == 3.0f, "3x");
@@ -91,7 +108,7 @@ static void testBox(void)
             const float a = 0.37f * (float)m + 10.0f;
             double sum = 0.0;
             for (int i = (int)floorf(a); i < (int)ceilf(a + 2.0f * s); i++) {
-                sum += rd_sr_box_w((float)i, a, s);
+                sum += rd_sr_box_w((float)i, a, s, 0.25f);
             }
             CHECK(fabs(sum - 1.0) < 1e-5, "box weights at s %g a %g sum %g", (double)s, (double)a,
                   sum);
@@ -151,8 +168,9 @@ static void testScaleOne(void)
     uint8_t *lvl = calloc(32u * ROWS * 4u, 1);
     for (uint32_t x = 0; src && lvl && x < 32; x++) {
         uint8_t box[4], pt[4];
-        rd_sr_step_texel(src, 64, ROWS, 1, 2.0f, 2.0f, 0.0f, 0.0f, 1.0f, 1.0f, kCol, x, 0, box);
-        rd_sr_step_texel(src, 64, ROWS, 0, 2.0f, 2.0f, 0.0f, 0.0f, 1.0f, 1.0f, kCol, x, 0, pt);
+        const RdSrStep pb = stepOf(1, 2.0f, 1.0f), pp = stepOf(0, 2.0f, 1.0f);
+        rd_sr_step_texel(src, 64, ROWS, &pb, x, 0, box);
+        rd_sr_step_texel(src, 64, ROWS, &pp, x, 0, pt);
         /* the GS: 0.75 / 0.25 across, the rows the same (0.75 + 0.25 of one) */
         const float v = 0.75f * (float)a[2 * x] + 0.25f * (float)a[2 * x + 1];
         const uint32_t t = (uint32_t)floorf(v + 0.5f), want = (t * 80u) >> 7;
@@ -161,6 +179,37 @@ static void testScaleOne(void)
         memcpy(lvl + (size_t)x * 4u, box, 4);
         memcpy(lvl + (32u + x) * 4u, box, 4);
     }
+    /* any whole and sub-texel offset of the sprite's map, CLAMP or REPEAT
+     * (the GS's state: the game leaves the wrap as the draw before set it) */
+    static const float kU0[] = {0.75f, 0.5f, 1.25f, 0.3125f, 0.0625f};
+    static const int kWhole[] = {0, 0, 0, -1, -1};
+    static const float kFrac[] = {0.25f, 0.0f, 0.75f, 0.8125f, 0.5625f};
+    for (size_t u = 0; u < sizeof kU0 / sizeof kU0[0]; u++) {
+        int whole = 99;
+        float frac = -1.0f;
+        CHECK(rd_sr_offset(kU0[u], &whole, &frac) && whole == kWhole[u] && frac == kFrac[u],
+              "u0 %g: whole %d frac %g", (double)kU0[u], whole, (double)frac);
+        for (int rep = 0; src && rep < 2; rep++) {
+            RdSrStep p = stepOf(1, 2.0f, 1.0f);
+            p.ax = (float)whole;
+            p.fx = frac;
+            p.repS = rep;
+            for (uint32_t x = 0; x < 32; x++) {
+                uint8_t o[4];
+                rd_sr_step_texel(src, 64, ROWS, &p, x, 0, o);
+                const int i0 = rd_sr_index(2 * (int)x + whole, 64, rep);
+                const int i1 = rd_sr_index(2 * (int)x + whole + 1, 64, rep);
+                /* the rows: 0.75 + 0.25 of one row (both alike) */
+                const float v = (1.0f - frac) * (float)a[i0] + frac * (float)a[i1];
+                const uint32_t want = ((uint32_t)floorf(v + 0.5f) * 80u) >> 7;
+                CHECK(o[3] == want, "u0 %g %s texel %u: %u, the GS %u", (double)kU0[u],
+                      rep ? "repeat" : "clamp", x, o[3], want);
+            }
+        }
+    }
+    CHECK(rd_sr_index(-1, 64, 1) == 63 && rd_sr_index(64, 64, 1) == 0 &&
+              rd_sr_index(-1, 64, 0) == 0 && rd_sr_index(64, 64, 0) == 63,
+          "the wrap and the clamp");
     for (uint32_t x = 0; src && lvl && x < 32; x++) {
         uint8_t o[4];
         rd_sr_tent_texel(lvl, 32, ROWS, 0, 1.0f, x, 1, o);
@@ -289,8 +338,8 @@ static bool sweep(double S, Sweep *out)
         uint32_t sw = GSW;
         for (int k = 0; k < RD_SR_LEVELS; k++) {
             for (uint32_t x = 0; x < kW[k]; x++) {
-                rd_sr_step_texel(src, sw, ROWS, k == 0, 2.0f, 2.0f, 0.0f, 0.0f, 1.0f, 1.0f, kCol, x,
-                                 0, gs[k] + (size_t)x * 4u);
+                const RdSrStep p = stepOf(k == 0, 2.0f, 1.0f);
+                rd_sr_step_texel(src, sw, ROWS, &p, x, 0, gs[k] + (size_t)x * 4u);
             }
             dupRow(gs[k], kW[k]);
             src = gs[k];
@@ -303,8 +352,8 @@ static bool sweep(double S, Sweep *out)
         float ss = sc;
         for (int k = 0; k < RD_SR_LEVELS; k++) {
             for (uint32_t x = 0; x < lw[k]; x++) {
-                rd_sr_step_texel(src, sw, ROWS, k == 0, 2.0f * ss / (float)L, 2.0f, 0.0f, 0.0f, ss,
-                                 1.0f, kCol, x, 0, fine[k] + (size_t)x * 4u);
+                const RdSrStep p = stepOf(k == 0, 2.0f * ss / (float)L, ss);
+                rd_sr_step_texel(src, sw, ROWS, &p, x, 0, fine[k] + (size_t)x * 4u);
             }
             dupRow(fine[k], lw[k]);
             src = fine[k];
@@ -400,14 +449,16 @@ static void testLines(void)
     memset(&rec, 0, sizeof(rec));
     rec.shadowFineChains = 1;
     rec.shadowFinePasses = 10;
+    rec.shadowFineRefused = 2;
+    rec.shadowFineWhy[RD_SR_WHY_FILTER] = 2;
     rd__shadow_fine_pop(&rec);
     char text[512];
     size_t at = 0;
     text[0] = '\0';
     rd__shadow_fine_text(text, sizeof text, &at);
     printf("  10 s clause: %s\n", text);
-    CHECK(strcmp(text, "; shadow levels: 1.0 shadows a replay at the scene's scale (10.0 "
-                       "passes), 0.0 at the PS2's size") == 0,
+    CHECK(strcmp(text, "; shadow levels: 1 shadows at the scene's scale, 2 at the PS2's size "
+                       "(filter 2) in 1 replays (10.0 passes a replay)") == 0,
           "the 10 s clause: %s", text);
     const size_t was = at;
     rd__shadow_fine_text(text, sizeof text, &at);
@@ -415,8 +466,8 @@ static void testLines(void)
     char st[256];
     rd__shadow_fine_stats(&rec, st, sizeof st);
     printf("  --stats: %s\n", st);
-    CHECK(strcmp(st, "shadow levels: 1 shadows at the scene's scale, 10 passes, 0 at the PS2's "
-                     "size") == 0,
+    CHECK(strcmp(st, "shadow levels: 1 shadows at the scene's scale, 10 passes, 2 at the PS2's "
+                     "size (filter 2)") == 0,
           "the stats words: %s", st);
 }
 
