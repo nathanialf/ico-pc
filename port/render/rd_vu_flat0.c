@@ -8,7 +8,6 @@
 #include "attempt_ledger.h"
 #include "rd_internal.h"
 #include "rd_vu_flat0.h"
-#include "rd_health.h" /* the picture-health guard's step (c) */
 
 bool rd_vu_flat0_word(const char *e, bool *bad)
 {
@@ -50,10 +49,7 @@ void rd__vu_flat0_init(void)
 {
     const char *e = getenv("ICO_RD_VU_FLAT0");
     bool bad = false;
-    /* an earlier start's picture-health guard (rd_health.h step (c)): the
-       twins, as ICO_RD_VU_FLAT0=0 takes them */
-    const bool guard = rd__health_part_off(RD_HEALTH_P_FLAT0);
-    const bool on = rd_vu_flat0_word(e, &bad) && !guard;
+    const bool on = rd_vu_flat0_word(e, &bad);
     if (bad) {
         rd__log("VU flat outputs: ICO_RD_VU_FLAT0=%s is not 0 or 1: 1", e);
     }
@@ -92,15 +88,8 @@ void rd__vu_flat0_init(void)
         }
     }
     char line[512];
-    if (guard && missing == NULL) {
-        rd__log("VU flat outputs: every corner (the picture-health guard turned the provoking "
-                "corner's off for this start, [dev] picture_health: the twins vu_all_main_vs and "
-                "vu_merge_all_main_vs, %u loads an invocation)",
-                RD_VU_FLAT0_LOADS_ALL);
-    } else {
-        (void)rd_vu_flat0_line(line, sizeof(line), on || missing != NULL, missing);
-        rd__log("%s", line);
-    }
+    (void)rd_vu_flat0_line(line, sizeof(line), on || missing != NULL, missing);
+    rd__log("%s", line);
     /* not applicable where the pre-pass is off: vu_main_vs runs only
        through its record (the window says it again each block) */
     ico_attempt_decide_flat0(on || missing != NULL, g_rd.vuPrepass);

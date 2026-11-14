@@ -84,9 +84,8 @@
    after list 0's start, the fences still signalled), and the index
    compaction, the first index buffer the GPU wrote on that device, is the
    likeliest of v0.11.6's changes there (lavapipe draws the reporter's loss
-   dumps the same with it on and off: not proven); the picture-health guard
-   (rd_health.h) steps the others off if pictures still come back
-   unfinished */
+   dumps the same with it on and off, and the bounds audit, rd_vu_audit.h,
+   found no access out of range: not proven); off there, as v0.11.5 drew */
 #ifndef RD_VU_COMPACT_ARM_DEFAULT
 #define RD_VU_COMPACT_ARM_DEFAULT 0
 #endif
@@ -238,10 +237,6 @@ void rd__vu_compact_selftest_done(bool on);
    plan (0 none) */
 void rd__vu_compact_selftest_far(bool on);
 uint32_t rd__vu_compact_far_at(void);
-/* the picture-health guard (rd_health_live.c): off for the rest of the run
-   from the next replay, its fourth plane given up (the record made again
-   without it); nothing when it does not run */
-void rd__vu_compact_guard_off(void);
 #endif
 
 #endif /* PORT_RENDER_RD_VU_COMPACT_H */

@@ -66,10 +66,9 @@ static struct {
     const char *why;
     uint64_t n, n2;
     uint64_t lastN, lastN2;
-    int guard; /* ico_attempt_guard_off holds the row (__atomic) */
 } s_att[ICO_ATT_COUNT] = {
-    [ICO_ATT_BLEND_CONST] = {ICO_ATT_NOT_BUILT, NULL, 0, 0, 0, 0, 0},
-    [ICO_ATT_CHAIN3] = {ICO_ATT_NOT_BUILT, NULL, 0, 0, 0, 0, 0},
+    [ICO_ATT_BLEND_CONST] = {ICO_ATT_NOT_BUILT, NULL, 0, 0, 0, 0},
+    [ICO_ATT_CHAIN3] = {ICO_ATT_NOT_BUILT, NULL, 0, 0, 0, 0},
 };
 
 /* the shipped build's flat outputs or the tests' twins, as the renderer
@@ -89,35 +88,15 @@ static int idOk(int id)
     return id >= 0 && id < ICO_ATT_COUNT;
 }
 
-/* the state and why stored, the serial moved on a change */
-static void stateSet(int id, IcoAttemptState state, const char *why)
-{
-    __atomic_store_n(&s_att[id].why, why, __ATOMIC_RELEASE);
-    if (__atomic_exchange_n(&s_att[id].state, (int)state, __ATOMIC_ACQ_REL) != (int)state) {
-        __atomic_fetch_add(&s_serial, 1u, __ATOMIC_RELAXED);
-    }
-}
-
 void ico_attempt_state(int id, IcoAttemptState state, const char *why)
-{
-    if (!idOk(id) || __atomic_load_n(&s_att[id].guard, __ATOMIC_ACQUIRE)) {
-        return; /* the picture-health guard holds the row */
-    }
-    stateSet(id, state, why);
-}
-
-void ico_attempt_guard_off(int id, const char *why)
 {
     if (!idOk(id)) {
         return;
     }
-    __atomic_store_n(&s_att[id].guard, 1, __ATOMIC_RELEASE);
-    stateSet(id, ICO_ATT_GUARD_OFF, why);
-}
-
-int ico_attempt_guard_held(int id)
-{
-    return idOk(id) ? __atomic_load_n(&s_att[id].guard, __ATOMIC_ACQUIRE) : 0;
+    __atomic_store_n(&s_att[id].why, why, __ATOMIC_RELEASE);
+    if (__atomic_exchange_n(&s_att[id].state, (int)state, __ATOMIC_ACQ_REL) != (int)state) {
+        __atomic_fetch_add(&s_serial, 1u, __ATOMIC_RELAXED);
+    }
 }
 
 void ico_attempt_fire(int id, uint64_t n)
@@ -165,8 +144,6 @@ const char *ico_attempt_state_word(IcoAttemptState s)
         return "not in this build";
     case ICO_ATT_DRIVER_REFUSED:
         return "refused by the driver";
-    case ICO_ATT_GUARD_OFF:
-        return "turned off by the picture-health guard";
     default:
         return "not reported";
     }
@@ -319,7 +296,6 @@ size_t ico_attempt_block_text(char *out, size_t cap, int stalls)
 void ico_attempt_reset(void)
 {
     for (int i = 0; i < ICO_ATT_COUNT; i++) {
-        __atomic_store_n(&s_att[i].guard, 0, __ATOMIC_RELEASE);
         __atomic_store_n(&s_att[i].state, startState(i), __ATOMIC_RELEASE);
         __atomic_store_n(&s_att[i].why, (const char *)NULL, __ATOMIC_RELEASE);
         __atomic_store_n(&s_att[i].n, 0u, __ATOMIC_RELEASE);
@@ -806,7 +782,7 @@ void ico_attempt_decide_picture_health(int vulkan)
 {
     if (vulkan) {
         ico_attempt_state(ICO_ATT_PICTURE_HEALTH, ICO_ATT_ON,
-                          "watching: 16 of 32 3D pictures unfinished step");
+                          "counting: 16 of 32 3D pictures unfinished are said once");
     } else {
         ico_attempt_state(ICO_ATT_PICTURE_HEALTH, ICO_ATT_NA,
                           "only Vulkan's GPU stamps say a picture came back unfinished");

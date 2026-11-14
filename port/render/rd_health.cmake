@@ -1,16 +1,13 @@
-# rd_health.cmake: the picture-health guard (rd_health.c the rule and the
-# mark, rd_health_live.c the renderer's part; rd_health.h; issue 179),
+# rd_health.cmake: the picture-health report (rd_health.c the rule,
+# rd_health_live.c the renderer's part; rd_health.h; issue 179),
 # included at the end of port/render/CMakeLists.txt (a file of its own:
 # port/render/CMakeLists.txt is near the 256 KiB cap, tools/check_no_rom.sh).
 target_sources(ico_render PRIVATE rd_health.c rd_health_live.c)
 
-# rd_health_test: the pure parts (CPU): the rule over the four logs'
-# patterns (the Mali-G52's v0.11.6 runs step within 16 pictures; the same
-# phone's v0.11.5 run, the Adreno 740's isolated hangs and its restarts, an
-# idle GPU's restarts never do), each step's groups and parts, a recovery
-# naming the culprit, no recovery ending without a loop, the next-start
-# parts confirmed at the next start, and the mark: formatted, parsed back,
-# kept for this version and dropped after an update or in another form
+# rd_health_test: the rule (CPU) over the four logs' patterns: issue 179's
+# Mali-G52 v0.11.6 runs meet it at replay 164, once; its v0.11.5 run, the
+# Adreno 740's isolated hangs and restarts, an idle GPU's restarts and
+# unjudged pictures never do; 15 of 32 never, 16 of 32 does
 add_executable(rd_health_test test/rd_health_test.c)
 target_compile_options(rd_health_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_include_directories(rd_health_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -37,24 +34,4 @@ if(ICO_RUN_TESTS AND TARGET rd_vuprepass_selftest_test AND DEFINED _vst)
     set_tests_properties(rd_vuprepass_selftest_compact_stamps
                          PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                          ENVIRONMENT "${_env};ICO_RD_VU_RECORD=compute;ICO_RD_VU_COMPACT=1;ICO_RD_HEALTH_FAKE=selftest")
-endif()
-
-# rd_health_ab (test/rd_health_ab.cmake): issue 179's Mali-G52 stage 3 frame
-# under the Arm fakes, every group the guard switches in the run on, the
-# guard driven by ICO_RD_HEALTH_FAKE: every step's line, the recovery's line
-# naming each group, and the picture after the steps equal to the picture
-# without them byte for byte.  No device, or no dump folder: SKIP.
-if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
-    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/health_ab")
-    add_test(NAME rd_health_ab
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMP=/primary/dev/ico-dumps/v0116-mali179/frame-20261112-195947-v17565.zip"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/health_ab"
-                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_health_ab.cmake")
-    set_tests_properties(rd_health_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
-    if(ICO_SANITIZE MATCHES "address")
-        # the lavapipe driver's exit leak (port/render/CMakeLists.txt, the
-        # replay tool's tests under asan)
-        set_property(TEST rd_health_ab APPEND PROPERTY ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0")
-    endif()
 endif()

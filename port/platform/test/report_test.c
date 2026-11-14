@@ -119,6 +119,48 @@ int main(int argc, char **argv)
     CHECK(st.m_comp_size == SLOW_BYTES);
     mz_zip_reader_end(&z);
 
+    /* the log's key lines: the picture-health report's line first (issue
+       179: a reporter's zip says at its top that the picture came back
+       unfinished), the summary after it */
+    {
+        static const char kLog[] =
+            "ico_pc: summary: version test; Android arm64\n"
+            "rd: picture health: 3D pictures are coming back unfinished from the GPU: 16 of the "
+            "last 16 (replay 164, frame 139); the picture is probably black\n"
+            "window: something else\n";
+        char logPath[600];
+        snprintf(logPath, sizeof logPath, "%s/ico-pc.log", dir);
+        CHECK(put(logPath, kLog, sizeof kLog - 1) == 0);
+        (void)ico_remove(zipPath); /* the first report: a name in the same second */
+        in.log_path = logPath;
+        in.loss_zip = NULL;
+        in.slow_zip = NULL;
+        name[0] = '\0';
+        CHECK(ico_report_write(&in, name, sizeof name) == 0);
+        snprintf(zipPath, sizeof zipPath, "%s/%s", dir, name);
+        memset(&z, 0, sizeof z);
+        CHECK(mz_zip_reader_init_file(&z, zipPath, 0));
+        size_t got = 0;
+        char *txt = mz_zip_reader_extract_file_to_heap(&z, "report.txt", &got, 0);
+        CHECK(txt != NULL);
+        if (txt != NULL) {
+            char *t = malloc(got + 1);
+            if (t != NULL) {
+                memcpy(t, txt, got);
+                t[got] = '\0';
+                const char *keys = strstr(t, "the log's key lines (the latest of each):");
+                const char *mine = keys ? strstr(keys, "rd: picture health: 3D pictures are "
+                                                       "coming back unfinished")
+                                        : NULL;
+                const char *sum = keys ? strstr(keys, "ico_pc: summary: version test") : NULL;
+                CHECK(keys != NULL && mine != NULL && sum != NULL && mine < sum);
+                free(t);
+            }
+            mz_free(txt);
+        }
+        mz_zip_reader_end(&z);
+    }
+
     (void)ico_remove_tree(dir);
     if (fails != 0) {
         printf("report_test: %d failure(s)\n", fails);

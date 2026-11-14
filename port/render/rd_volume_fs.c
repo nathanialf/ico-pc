@@ -21,7 +21,6 @@
 #include "attempt_ledger.h"
 #include "rd_replay.h"
 #include "rd_volume_fs.h"
-#include "rd_health.h" /* the picture-health guard's step (d) */
 
 static const char *const kWhy[RD_VOLUME_FS_WHY_COUNT] = {
     [RD_VOLUME_FS_WHY_NONE] = "drawn by date_clear_ps",
@@ -84,9 +83,6 @@ bool rd__volume_fs_wanted(void)
     envRead();
     if (s_vf.force >= 0) {
         return s_vf.force == 1;
-    }
-    if (rd__health_part_off(RD_HEALTH_P_VOLUME_FS)) {
-        return false; /* the picture-health guard (rd_health.h) */
     }
     return s_vf.env >= 1 || (s_vf.env < 0 && RD_VOLUME_FS_DEFAULT);
 }
@@ -214,9 +210,7 @@ static void stateNote(void)
 {
     char line[sizeof(s_vf.stateSaid)];
     const char *how =
-        s_vf.force < 0 && rd__health_part_off(RD_HEALTH_P_VOLUME_FS)
-            ? "the picture-health guard: 3D pictures came back unfinished with it on"
-        : s_vf.force == 0 ? "the bench's variant: off"
+        s_vf.force == 0   ? "the bench's variant: off"
         : s_vf.force == 1 ? "the bench's variant: on"
         : s_vf.env == 0   ? "ICO_RD_VOLUME_FS=0"
         : s_vf.env == 1   ? "ICO_RD_VOLUME_FS=1"
@@ -253,11 +247,6 @@ void rd__volume_fs_init(void)
     s_vf.force = -1;
     s_vf.env = rd__volume_fs_env(NULL);
     s_vf.envRead = true;
-    stateNote();
-}
-
-void rd__volume_fs_guard_note(void)
-{
     stateNote();
 }
 

@@ -1606,8 +1606,8 @@ void rd__perf_collect_gpu(void)
         r->gpuResetSign = (uint8_t)rd_perf_reset_sign(0, false, r->gpuGapBackNs, idle);
         r->gpuIdleMs = idle ? -1.0 : 0.0;
     }
-    /* the picture-health guard (rd_health.h, issue 179): a compare a
-       record, a step at this replay's start before its recording */
+    /* the picture-health report (rd_health.h, issue 179): counts and a
+       compare a record, nothing switched */
     rd__health_note(r);
     if (r->alpha >= 0.0f) {
         /* a present into the evenness line (rd_even.h): no clock read */

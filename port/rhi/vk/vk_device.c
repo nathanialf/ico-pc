@@ -2604,9 +2604,7 @@ static bool vkr_create_device(void)
             snprintf(robustSay, sizeof robustSay, "on, buffers%s%s%s (%s)",
                      buffer2 ? " (robustness2)" : "", image2 ? " and images (robustness2)" : "",
                      nullDesc ? ", null descriptors" : "",
-                     robustRetry ? "the restart after the graphics card stopped responding"
-                     : vkr_env_on("ICO_GPU_ROBUST_BY_GUARD")
-                         ? "the picture-health guard's group (e), issue 179: [dev] picture_health"
+                     robustRetry       ? "the restart after the graphics card stopped responding"
                      : robustSaid == 1 ? "gpu_robust"
                                        : "the default");
         }

@@ -6,7 +6,6 @@
 #include <string.h>
 #include "attempt_ledger.h"
 #include "rd_early_plan.h"
-#include "rd_health.h" /* the picture-health guard's step (b) */
 #include "rd_internal.h"
 #include "rd_velocity.h"
 #include "rd_vu_record.h"
@@ -118,12 +117,9 @@ void rd_vu_record_prepare(RdEarlyMemoryFn memory)
        temporal upscaler's velocity) */
     const bool ticks = rd_interpolation_active(), vel = rd__velocity_on();
     const uint32_t envRows = rowsFromEnv(in.minRows, in.maxRows);
-    /* the picture-health guard's step (b) from an earlier start: the
-       largest within the bound, as v0.11.5 made it */
-    const bool guard = envRows == 0u && rd__health_part_off(RD_HEALTH_P_REC);
-    in.startRows = envRows != 0u ? envRows
-                   : guard ? in.maxRows
-                           : rd_early_start_rows(ticks, vel, in.minRows, in.maxRows, ICO_VU_REC_W);
+    in.startRows = envRows != 0u
+                       ? envRows
+                       : rd_early_start_rows(ticks, vel, in.minRows, in.maxRows, ICO_VU_REC_W);
     RdEarlyPlan p;
     rd_early_plan(&in, &p);
 
@@ -145,14 +141,12 @@ void rd_vu_record_prepare(RdEarlyMemoryFn memory)
     char rec[224];
     /* the need's words: what sized the record, what the bound alone would
        have made */
-    char need[256];
+    char need[200];
     snprintf(need, sizeof(need), "; the run's need %u rows (%s%s%s), the bound alone %u rows%s",
              in.startRows,
-             envRows != 0u ? "ICO_RD_EARLY_ROWS"
-             : guard       ? "the picture-health guard: the largest, as v0.11.5 made it"
-                           : "the largest recorded scene's, doubled",
-             envRows == 0u && !guard && ticks ? ", the presents interpolated" : "",
-             envRows == 0u && !guard && vel ? ", the velocity's record" : "", p.boundRows,
+             envRows != 0u ? "ICO_RD_EARLY_ROWS" : "the largest recorded scene's, doubled",
+             envRows == 0u && ticks ? ", the presents interpolated" : "",
+             envRows == 0u && vel ? ", the velocity's record" : "", p.boundRows,
              p.boundRows > p.rows && p.rows != 0u ? ": the need's size made" : "");
     const unsigned long long mb = 1024ull * 1024ull;
     if (!in.recordWanted) {

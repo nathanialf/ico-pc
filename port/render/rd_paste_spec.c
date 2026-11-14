@@ -22,7 +22,6 @@
 
 #include "attempt_ledger.h"
 #include "rd_paste_spec.h"
-#include "rd_health.h" /* the picture-health guard's step (d) */
 #include "rd_replay.h"
 #include "shader_consts.h"
 #include "shaders_gen.h"
@@ -87,18 +86,10 @@ static bool wanted(void)
     if (s_psForce >= 0) {
         return s_psForce == 1;
     }
-    if (rd__health_part_off(RD_HEALTH_P_PASTE_SPEC)) {
-        return false; /* the picture-health guard (rd_health.h) */
-    }
     return s_ps.env >= 1 || (s_ps.env < 0 && RD_PASTE_SPEC_DEFAULT);
 }
 
 static void stateNote(void);
-
-void rd__paste_spec_guard_note(void)
-{
-    stateNote();
-}
 
 void rd__paste_spec_force(int v)
 {
@@ -234,9 +225,7 @@ RhiPipeline rd__paste_spec_pipe(const IcoDrawCB *cb, const RdPipeKeyInt *key, Rh
 static void stateNote(void)
 {
     char line[sizeof(s_ps.stateSaid)];
-    const char *how = s_psForce < 0 && rd__health_part_off(RD_HEALTH_P_PASTE_SPEC)
-                          ? "the picture-health guard: 3D pictures came back unfinished with it on"
-                      : s_psForce == 0 ? "the bench's variant: off"
+    const char *how = s_psForce == 0   ? "the bench's variant: off"
                       : s_psForce == 1 ? "the bench's variant: on"
                       : s_ps.env == 0  ? "ICO_RD_PASTE_SPEC=0"
                       : s_ps.env == 1  ? "ICO_RD_PASTE_SPEC=1"

@@ -88,7 +88,6 @@
 #include "rd_lamps.h"
 #include "rd_mesh.h"
 #include "rd_paste_spec.h"
-#include "rd_health.h"
 #include "rd_comp_spec.h"
 #include "rd_replay.h"
 #include "rd_shadow_tile.h"
@@ -608,7 +607,6 @@ void rd__lamps_init(void)
     rd__paste_spec_init(); /* the glow's paste by its own entry (rd_paste_spec.c) */
     rd__volume_fs_init();  /* the volumes' stencil-only entry: this renderer's (rd_volume_fs.c) */
     rd__comp_spec_init();  /* the shadow composites' own entry (rd_comp_spec.c) */
-    rd__health_init();     /* the picture-health guard, after the modules it steps (rd_health.h) */
 }
 
 void rd__lamps_force(int bits)

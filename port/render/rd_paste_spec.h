@@ -126,9 +126,6 @@ bool rd__paste_spec_on(void);
 /* the bench's switch (rd_bench.c): 0 off, 1 on (still behind the module and
  * the self-test), -1 the environment's and the default again */
 void rd__paste_spec_force(int v);
-/* the picture-health guard (rd_health.h) turned it off: the state's line
-   and the ledger's row again (each draw asks wanted() as it is made) */
-void rd__paste_spec_guard_note(void);
 
 /* rd_lamps.c rd__lamps_init / rd__lamps_shutdown: the module made (Vulkan)
  * and the run's state; the module destroyed */

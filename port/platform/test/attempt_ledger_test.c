@@ -416,8 +416,8 @@ static void test_classes(void)
         ico_attempt_decide_skin_skip(d->passRow != NULL);
         CHECK(ico_attempt_state_of(ICO_ATT_SKIN_RESET_SKIP) ==
               (d->passRow != NULL ? ICO_ATT_ON : ICO_ATT_NA));
-        /* the picture-health guard (issue 179): every class here is a
-           Vulkan device, watching */
+        /* the picture-health report (issue 179): every class here is a
+           Vulkan device, counting */
         ico_attempt_decide_picture_health(1);
         CHECK(ico_attempt_state_of(ICO_ATT_PICTURE_HEALTH) == ICO_ATT_ON);
         /* the whole start line fits the window's 4 KB buffer
@@ -428,8 +428,8 @@ static void test_classes(void)
             CHECK(n + 1u < sizeof big);
             CHECK(strstr(big, "; the old robust-access line taken off ") != NULL);
             CHECK(strstr(big, "; no capture after a stall ") != NULL);
-            CHECK(strstr(big, "; picture health on (watching: 16 of 32 3D pictures unfinished "
-                              "step)") != NULL);
+            CHECK(strstr(big, "; picture health on (counting: 16 of 32 3D pictures unfinished "
+                              "are said once)") != NULL);
             /* and in one part (ico_attempt_start_part, the window's) */
             int row = 0;
             char part[4096];
@@ -850,11 +850,9 @@ static void test_skin_skip(void)
     CHECK(ico_attempt_state_of(ICO_ATT_SKIN_RESET_SKIP) == ICO_ATT_NOT_SET);
 }
 
-/* the picture-health guard (issue 179, v0.11.7): its row's states and
-   counts per block, and its hold on another row (ico_attempt_guard_off):
-   the owner's later deciders do not show the row on again; reset clears
-   it */
-static void test_guard(void)
+/* the picture-health report (issue 179, v0.11.7): its row's states and its
+   counts per block */
+static void test_health(void)
 {
     char b[4096];
 
@@ -863,35 +861,17 @@ static void test_guard(void)
     CHECK(ico_attempt_state_of(ICO_ATT_PICTURE_HEALTH) == ICO_ATT_NA);
     ico_attempt_decide_picture_health(1);
     CHECK(ico_attempt_state_of(ICO_ATT_PICTURE_HEALTH) == ICO_ATT_ON);
+    (void)ico_attempt_start_text(b, sizeof b);
+    CHECK(strstr(b, "picture health on (counting: 16 of 32 3D pictures unfinished are said "
+                    "once)") != NULL);
     ico_attempt_fire(ICO_ATT_PICTURE_HEALTH, 3u);
     ico_attempt_fire2(ICO_ATT_PICTURE_HEALTH, 1u);
     (void)ico_attempt_block_text(b, sizeof b, -1);
     CHECK(text_is(b, "attempts: picture health on 3 3D pictures with stamps unwritten (1 GPU "
                      "clock restarts)"));
-    ico_attempt_decide_date_one(1, 0);
-    CHECK(ico_attempt_state_of(ICO_ATT_DATE_ONE) == ICO_ATT_ON);
-    CHECK(ico_attempt_guard_held(ICO_ATT_DATE_ONE) == 0);
-    ico_attempt_guard_off(ICO_ATT_DATE_ONE, "3D pictures kept coming back unfinished");
-    CHECK(ico_attempt_state_of(ICO_ATT_DATE_ONE) == ICO_ATT_GUARD_OFF);
-    CHECK(ico_attempt_guard_held(ICO_ATT_DATE_ONE) == 1);
-    ico_attempt_decide_date_one(1, 0); /* the owner's per-replay decider */
-    CHECK(ico_attempt_state_of(ICO_ATT_DATE_ONE) == ICO_ATT_GUARD_OFF);
-    CHECK(strcmp(ico_attempt_why_of(ICO_ATT_DATE_ONE), "3D pictures kept coming back unfinished") ==
-          0);
-    CHECK(strcmp(ico_attempt_state_word(ICO_ATT_GUARD_OFF),
-                 "turned off by the picture-health guard") == 0);
-    (void)ico_attempt_start_text(b, sizeof b);
-    CHECK(strstr(b, "; one DATE set-up turned off by the picture-health guard (3D pictures kept "
-                    "coming back unfinished)") != NULL);
     (void)ico_attempt_block_text(b, sizeof b, -1);
-    CHECK(strstr(b, "attempts: one DATE set-up turned off by the picture-health guard 0 shared "
-                    "(0 retaken by the guard); picture health on 0 3D pictures") != NULL);
-    CHECK(ico_attempt_guard_held(ICO_ATT_COUNT) == 0);
-    ico_attempt_guard_off(ICO_ATT_COUNT, "x"); /* out of range: nothing */
-    ico_attempt_reset();
-    CHECK(ico_attempt_guard_held(ICO_ATT_DATE_ONE) == 0);
-    ico_attempt_decide_date_one(1, 0);
-    CHECK(ico_attempt_state_of(ICO_ATT_DATE_ONE) == ICO_ATT_ON);
+    CHECK(text_is(b, "attempts: picture health on 0 3D pictures with stamps unwritten (0 GPU "
+                     "clock restarts)"));
     ico_attempt_reset();
 }
 
@@ -986,7 +966,7 @@ int main(void)
     test_robust_line();
     test_skin_skip();
     test_flat0_capture();
-    test_guard();
+    test_health();
     test_start_parts();
     char b[2048];
 
