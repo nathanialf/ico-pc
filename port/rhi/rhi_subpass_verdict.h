@@ -285,16 +285,16 @@ static inline RhiSubpassDecision rhi_subpass_decide(int ask, int route, int fake
     }
     switch (prev) {
     case RHI_SUBPASS_KEPT:
-        snprintf(why, cap, "kept by the probe of an earlier start (%s)", pw);
+        snprintf(why, cap, "kept by the probe of an earlier start (%.120s)", pw);
         return RHI_SUBPASS_ON;
     case RHI_SUBPASS_REFUSED:
-        snprintf(why, cap, "refused by the probe of an earlier start (%s)", pw);
+        snprintf(why, cap, "refused by the probe of an earlier start (%.120s)", pw);
         return RHI_SUBPASS_OFF;
     case RHI_SUBPASS_PROBING:
         *write = RHI_SUBPASS_WRITE_REFUSED;
         snprintf(why, cap,
                  "refused for good: the start that probed it ended before its verdict (a device "
-                 "loss, a GPU hang, a crash or the app ended; %s)",
+                 "loss, a GPU hang, a crash or the app ended; %.120s)",
                  pw);
         return RHI_SUBPASS_OFF;
     default:

@@ -1816,7 +1816,7 @@ static void vkr_subpass_read_decide(void)
                not be known at the next start) */
             if (write == RHI_SUBPASS_WRITE_PROBING) {
                 snprintf(g_vkr.subpassWhy, sizeof g_vkr.subpassWhy,
-                         "its probe's mark could not be written to %s, so no probe",
+                         "its probe's mark could not be written to %.200s, so no probe",
                          g_vkr.subpassFile);
                 g_vkr.subpassRead = false;
                 VKR_LOG("render passes: the subpass read off (%s): a read of a pass's own colour "
