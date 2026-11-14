@@ -528,7 +528,10 @@ void rd__subpass_probe_after_selftest(int ran, bool passed, const char *words)
     if (sab && strcmp(sab, "slow") == 0) {
         readF = 4.0;
     } else if (sab && strcmp(sab, "fast") == 0) {
+        /* both of the rule's comparisons decided by the switch: the plain
+           pass's own timing is noise on a loaded machine (CI's asan runs) */
         readF = 0.25;
+        plainF = 0.25;
     } else if (sab && strcmp(sab, "plain") == 0) {
         plainF = 4.0;
     }
