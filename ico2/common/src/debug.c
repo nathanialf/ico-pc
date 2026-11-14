@@ -63,7 +63,7 @@ int ico_opt_debug_option(void);
 void ico_variants_bind_debug(int *one_hit, int *ignore_dodge, int *battle_type,
                              int *ignore_demo_camera, int *hand_camera, void (*menu_open)(void));
 
-/* Gameplay > Yorda's Chain swing speed and slowdown: the two chain switches
+/* Gameplay > Chains' Chain swing speed and slowdown: the two chain switches
    (port/game/variants.h ico_variants_bind_debug_chain) */
 void ico_variants_bind_debug_chain(int *cycle_speed, int *slow_speed);
 

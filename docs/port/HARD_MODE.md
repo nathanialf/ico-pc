@@ -46,12 +46,12 @@ per swing or Peaceful shadows. Light sword colour and Stick change the weapon, n
 the difficulty, and stay in Options > Gameplay (Stick: Insect net removes the stick's damage, so a preset
 would not set it).
 
-## Customize > Rules (and Gameplay > Yorda)
+## Customize > Rules (and Gameplay > Chains)
 
 | lever | the game's value | harder value | discs | achievements | mechanism |
 | --- | --- | --- | --- | --- | --- |
 | Time to rescue Yorda (`pit_time`, Rules) | 15 s (462 ticks; 463 on jun26) | 4 s (a shorter pull-in); 4 to 30 s offered | all | stay on | the five SINK motions' play speed, `port/game/pit_time.h` and `ico_opt_pit_time_factor` |
-| Chain swing speed / slowdown (Gameplay > Yorda; not difficulty rows) | 4 / 4 | not a difficulty lever (traversal feel) | all | stay on | `chain.c`, `debug_chain_cycle_speed`, `debug_chain_slow_speed` |
+| Chain swing speed / slowdown (Gameplay > Chains; not difficulty rows) | 4 / 4 | not a difficulty lever (traversal feel) | all | stay on | `chain.c`, `debug_chain_cycle_speed`, `debug_chain_slow_speed` |
 
 ## The knock-down limit
 

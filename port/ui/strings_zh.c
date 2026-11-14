@@ -719,7 +719,7 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
         "無法將光碟映像複製到 %s。\n請確認約有 %llu.%llu GB 的可用空間，且檔案仍在原處，然後重新啟動遊戲。記錄檔會說明原因。",
     [UI_STR_ISO_COPYING] = "正在將光碟映像複製到應用程式中",
     [UI_STR_ISO_COPYING_LONG] = "正在將光碟映像複製到應用程式中。映像檔很大，需要幾分鐘",
-    [UI_STR_SECTION_YORDA] = "Yorda",
+    [UI_STR_SECTION_CHAINS] = "鎖鏈",
     [UI_STR_SECTION_SHADOWS] = "影子",
     [UI_STR_SECTION_CUTSCENES] = "過場動畫",
     [UI_STR_OPT_VAR_TOUGHNESS] = "影子的強韌度",

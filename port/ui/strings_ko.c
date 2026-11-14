@@ -737,7 +737,7 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_ISO_COPYING] = "디스크 이미지를 앱으로 복사하는 중",
     [UI_STR_ISO_COPYING_LONG] =
         "디스크 이미지를 앱으로 복사하는 중. 이미지가 커서 수 분이 소요됩니다",
-    [UI_STR_SECTION_YORDA] = "요르다",
+    [UI_STR_SECTION_CHAINS] = "사슬",
     [UI_STR_SECTION_SHADOWS] = "그림자",
     [UI_STR_SECTION_CUTSCENES] = "컷신",
     [UI_STR_OPT_VAR_TOUGHNESS] = "그림자 강도",

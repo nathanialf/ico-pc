@@ -3458,7 +3458,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addNote(pg, UI_OPT_VAR_SWORD_COLOUR, UI_STR_OPT_VAR_SWORD_COLOUR_NOTE);
         addNote(pg, UI_OPT_VAR_WEAPON, UI_STR_OPT_VAR_WEAPON_NOTE);
         break;
-    case UI_PAGE_YORDA:
+    case UI_PAGE_CHAINS:
         addNote(pg, UI_OPT_NATURAL_CHAINS, UI_STR_OPT_NATURAL_CHAINS_NOTE);
         addNote(pg, UI_OPT_VAR_CHAIN_SPEED, UI_STR_OPT_VAR_CHAIN_SPEED_NOTE);
         addNote(pg, UI_OPT_VAR_CHAIN_DAMPING, UI_STR_OPT_VAR_CHAIN_DAMPING_NOTE);
@@ -4155,7 +4155,7 @@ static void build(void)
     static const int touchLinks[] = {-1, -1, -1, UI_PAGE_TOUCH_LAYOUT, -1, -1, -1, -1, -1};
     /* Gameplay (from both entries): the game's Film effect and Players
        from the pause menu once the game is cleared, the two weapon rows;
-       the Yorda and Cutscenes pages' links before Back (the Controls >
+       X before Back (the Controls >
        Touch screen pattern).  The rows a journey's difficulty holds are the
        New Game's Customize pages' (settings_difficulty.c); from the pause
        menu the Difficulty link opens them read-only */
@@ -4163,18 +4163,24 @@ static void build(void)
                                    UI_OPT_FILM_EFFECT, UI_OPT_PLAYERS,  UI_OPT_VAR_SWORD_COLOUR,
                                    UI_OPT_VAR_WEAPON,  UI_OPT_LINK,     UI_OPT_LINK,
                                    UI_OPT_LINK,        UI_OPT_BACK};
-    static const int gameStrs[] = {
-        UI_STR_OPT_STICK_FIX,   UI_STR_OPT_DOOR_FIX,  UI_STR_OPT_SECOND_CARD,
-        UI_STR_OPT_FILM_EFFECT, UI_STR_OPT_PLAYERS,   UI_STR_OPT_VAR_SWORD_COLOUR,
-        UI_STR_OPT_VAR_WEAPON,  UI_STR_SECTION_YORDA, UI_STR_SECTION_CUTSCENES,
-        UI_STR_DIFF_LINK,       UI_STR_BACK};
+    static const int gameStrs[] = {UI_STR_OPT_STICK_FIX,
+                                   UI_STR_OPT_DOOR_FIX,
+                                   UI_STR_OPT_SECOND_CARD,
+                                   UI_STR_OPT_FILM_EFFECT,
+                                   UI_STR_OPT_PLAYERS,
+                                   UI_STR_OPT_VAR_SWORD_COLOUR,
+                                   UI_STR_OPT_VAR_WEAPON,
+                                   UI_STR_SECTION_CHAINS,
+                                   UI_STR_SECTION_CUTSCENES,
+                                   UI_STR_DIFF_LINK,
+                                   UI_STR_BACK};
     static const int gameLinks[] = {
-        -1, -1, -1, -1, -1, -1, -1, UI_PAGE_YORDA, UI_PAGE_CUTSCENES, UI_PAGE_CUSTOMIZE, -1};
-    /* Gameplay > Yorda: the chains Ico lets down for her and how they swing
+        -1, -1, -1, -1, -1, -1, -1, UI_PAGE_CHAINS, UI_PAGE_CUTSCENES, UI_PAGE_CUSTOMIZE, -1};
+    /* Gameplay > Chains: the chains Ico lets down for her and how they swing
        (the [variants] chain rows) */
-    static const int yordaOpts[] = {UI_OPT_NATURAL_CHAINS, UI_OPT_VAR_CHAIN_SPEED,
+    static const int chainOpts[] = {UI_OPT_NATURAL_CHAINS, UI_OPT_VAR_CHAIN_SPEED,
                                     UI_OPT_VAR_CHAIN_DAMPING, UI_OPT_BACK};
-    static const int yordaStrs[] = {UI_STR_OPT_NATURAL_CHAINS, UI_STR_OPT_VAR_CHAIN_SPEED,
+    static const int chainStrs[] = {UI_STR_OPT_NATURAL_CHAINS, UI_STR_OPT_VAR_CHAIN_SPEED,
                                     UI_STR_OPT_VAR_CHAIN_DAMPING, UI_STR_BACK};
     /* Gameplay > Cutscenes: the opening skipped, the two cutscene
        [variants] rows */
@@ -4197,7 +4203,7 @@ static void build(void)
     _Static_assert(sizeof(gpuOpts) == sizeof(gpuStrs), "a string for each Graphics driver row");
     _Static_assert(sizeof(gameOpts) == sizeof(gameStrs) && sizeof(gameOpts) == sizeof(gameLinks),
                    "a string and a link for each Gameplay row");
-    _Static_assert(sizeof(yordaOpts) == sizeof(yordaStrs), "a string for each Yorda row");
+    _Static_assert(sizeof(chainOpts) == sizeof(chainStrs), "a string for each Chains row");
     _Static_assert(sizeof(cutOpts) == sizeof(cutStrs), "a string for each Cutscenes row");
     _Static_assert(sizeof(extrasOpts) == sizeof(extrasStrs) &&
                        sizeof(extrasOpts) == sizeof(extrasLinks),
@@ -4214,7 +4220,7 @@ static void build(void)
     _Static_assert(N_OF(ctlOpts) <= MAX_ROWS, "the ctlOpts rows fit the page's row budget");
     _Static_assert(N_OF(gameOpts) <= MAX_ROWS, "the gameOpts rows fit the page's row budget");
     _Static_assert(N_OF(extrasOpts) <= MAX_ROWS, "the extrasOpts rows fit the page's row budget");
-    _Static_assert(N_OF(yordaOpts) <= MAX_ROWS, "the Yorda rows fit the page's row budget");
+    _Static_assert(N_OF(chainOpts) <= MAX_ROWS, "the Chains rows fit the page's row budget");
     _Static_assert(N_OF(cutOpts) <= MAX_ROWS, "the Cutscenes rows fit the page's row budget");
 
     ui_font_init(); /* the notes are wrapped by measuring */
@@ -4240,8 +4246,8 @@ static void build(void)
     buildTouchEditorPage();
     buildOptionPage(UI_PAGE_GAMEPLAY, UI_STR_SECTION_GAMEPLAY, gameOpts, gameStrs, gameLinks,
                     N_OF(gameOpts), UI_PAGE_MAIN);
-    buildOptionPage(UI_PAGE_YORDA, UI_STR_SECTION_YORDA, yordaOpts, yordaStrs, NULL,
-                    N_OF(yordaOpts), UI_PAGE_GAMEPLAY);
+    buildOptionPage(UI_PAGE_CHAINS, UI_STR_SECTION_CHAINS, chainOpts, chainStrs, NULL,
+                    N_OF(chainOpts), UI_PAGE_GAMEPLAY);
     /* the New Game's Customize and its three pages (settings_difficulty.c) */
     for (int p = 0; p < UI_PAGE_COUNT; p++) {
         const int *o, *t, *k;

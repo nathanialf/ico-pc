@@ -635,12 +635,12 @@ typedef enum UiSettingsPage {
        shows only while the build has more than one renderer
        (ui_settings_set_backend_names) */
     UI_PAGE_GRAPHICS,
-    /* Gameplay's two pages, their links before Gameplay's Back: Yorda
+    /* Gameplay's two pages, their links before Gameplay's Back: Chains
        (Natural chains and the two chain rows of [variants],
        port/game/variants.h) and Cutscenes (Skip the opening and the two
        cutscene [variants] rows), each with Back.  Shadows and Combat are
        Customize's (below): rows of the New Game draft, not of the config */
-    UI_PAGE_YORDA,
+    UI_PAGE_CHAINS,
     UI_PAGE_SHADOWS,
     UI_PAGE_COMBAT,
     UI_PAGE_CUTSCENES,
@@ -791,7 +791,7 @@ typedef enum UiSettingsOpt {
        three combat rows, One hit, Never dodge, Queen barrier on Combat; No
        hints on Rules), the others [variants] keys: the two cutscene rows on
        Gameplay > Cutscenes, the two weapon rows on Gameplay, the two chain
-       rows on Gameplay > Yorda */
+       rows on Gameplay > Chains */
     UI_OPT_VAR_TOUGHNESS,
     UI_OPT_VAR_ONE_HIT,
     UI_OPT_VAR_NEVER_DODGE,
@@ -806,8 +806,8 @@ typedef enum UiSettingsOpt {
     UI_OPT_VAR_SWORD_COLOUR,
     UI_OPT_VAR_WEAPON,
     UI_OPT_VAR_PEACEFUL,
-    UI_OPT_VAR_CHAIN_SPEED,   /* Gameplay > Yorda */
-    UI_OPT_VAR_CHAIN_DAMPING, /* Gameplay > Yorda */
+    UI_OPT_VAR_CHAIN_SPEED,   /* Gameplay > Chains */
+    UI_OPT_VAR_CHAIN_DAMPING, /* Gameplay > Chains */
     UI_OPT_DEVELOPER,
     /* actions */
     UI_OPT_BACK,

@@ -3543,7 +3543,7 @@ static void testHoldType(void)
     optionControlType = 0;
 }
 
-/* Gameplay > Yorda > Natural chains ([gameplay] natural_chains): a row from
+/* Gameplay > Chains > Natural chains ([gameplay] natural_chains): a row from
    the title and the pause menu after Yorda trips, the last before Back, Off
    by default; a step turns it on and sets the key, the saved file has it,
    its note shows on the cursor, a step back turns it off, the page fits, and
@@ -3557,20 +3557,20 @@ static void testNaturalChains(void)
         stage_no = title ? 1 : 11;
         const int mainL = enterMain(title);
         int gameL = -1;
-        openGameplayPage(mainL, UI_PAGE_YORDA, &gameL);
-        const int row = ui_settings_row_of(UI_PAGE_YORDA, UI_OPT_NATURAL_CHAINS);
+        openGameplayPage(mainL, UI_PAGE_CHAINS, &gameL);
+        const int row = ui_settings_row_of(UI_PAGE_CHAINS, UI_OPT_NATURAL_CHAINS);
         CHECK(row >= 0 && ui_settings_row_shown(row), "title %d: the Natural chains row", title);
         CHECK(row >= 0 && strcmp(lt_ext_row_text(row), "Natural chains") == 0,
               "title %d: its label \"%s\"", title, row >= 0 ? lt_ext_row_text(row) : "");
         /* the page's first row, before the two chain rows and Back */
-        CHECK(row < ui_settings_row_of(UI_PAGE_YORDA, UI_OPT_VAR_CHAIN_SPEED) &&
-                  row < ui_settings_row_of(UI_PAGE_YORDA, UI_OPT_BACK),
+        CHECK(row < ui_settings_row_of(UI_PAGE_CHAINS, UI_OPT_VAR_CHAIN_SPEED) &&
+                  row < ui_settings_row_of(UI_PAGE_CHAINS, UI_OPT_BACK),
               "title %d: first, before the chain rows", title);
         CHECK(ico_opt_natural_chains() == 0 &&
                   strcmp(ui_settings_value_text(UI_OPT_NATURAL_CHAINS), "Off") == 0,
               "title %d: Off by default", title);
         press(0x10);
-        CHECK(settle(gameL, 60), "Yorda: back to Gameplay");
+        CHECK(settle(gameL, 60), "Chains: back to Gameplay");
         press(0x10);
         CHECK(settle(mainL, 60), "Gameplay: back");
     }
@@ -3579,16 +3579,16 @@ static void testNaturalChains(void)
     stage_no = 11;
     const int mainL = enterMain(0);
     int gameL = -1;
-    const int yordaL = openGameplayPage(mainL, UI_PAGE_YORDA, &gameL);
-    checkPageFits(UI_PAGE_YORDA, "Gameplay > Yorda (cleared, with Natural chains)");
-    const int row = ui_settings_row_of(UI_PAGE_YORDA, UI_OPT_NATURAL_CHAINS);
+    const int yordaL = openGameplayPage(mainL, UI_PAGE_CHAINS, &gameL);
+    checkPageFits(UI_PAGE_CHAINS, "Gameplay > Chains (cleared, with Natural chains)");
+    const int row = ui_settings_row_of(UI_PAGE_CHAINS, UI_OPT_NATURAL_CHAINS);
     lt_ext_layout(yordaL)->curItem = row;
     press(0x2000);
     CHECK(ico_opt_natural_chains() == 1 &&
               strcmp(ui_settings_value_text(UI_OPT_NATURAL_CHAINS), "On") == 0 &&
               ico_config_get_bool("gameplay.natural_chains", 0) == 1,
           "Right: Natural chains On and the key set");
-    const int note = noteStarting(UI_PAGE_YORDA, "A chain that comes down");
+    const int note = noteStarting(UI_PAGE_CHAINS, "A chain that comes down");
     CHECK(note >= 0 && !lt_ext_prop(note)->masked, "the Natural chains note on the cursor");
     CHECK(ui_settings_save() == 0, "save");
     path(p, sizeof(p), "settings_test.toml");
@@ -3602,7 +3602,7 @@ static void testNaturalChains(void)
     CHECK(ico_opt_natural_chains() == 0 && ico_config_get_bool("gameplay.natural_chains", 1) == 0,
           "Left: Natural chains Off again");
     press(0x10);
-    CHECK(settle(gameL, 60), "Yorda: back to Gameplay");
+    CHECK(settle(gameL, 60), "Chains: back to Gameplay");
     press(0x10);
     CHECK(settle(mainL, 60), "Gameplay: back");
     ico_opt_set_natural_chains(0);
@@ -4717,7 +4717,7 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
                                                 "Players",
                                                 "Light sword colour",
                                                 "Stick",
-                                                "Yorda",
+                                                "Chains",
                                                 "Cutscenes",
                                                 "Difficulty",
                                                 "Back"};
@@ -4783,8 +4783,8 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
           y2001 ? "hidden" : "shown");
     CHECK(ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_VAR_NO_HINTS) < 0 &&
               ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_YORDA) < 0 &&
-              ui_settings_row_of(UI_PAGE_YORDA, UI_OPT_PIT_TIME) < 0,
-          "%s: no journey row on Gameplay or its Yorda page", who);
+              ui_settings_row_of(UI_PAGE_CHAINS, UI_OPT_PIT_TIME) < 0,
+          "%s: no journey row on Gameplay or its Chains page", who);
     checkPageFits(UI_PAGE_GAMEPLAY, "Gameplay (the variants' entry)");
     VarSwitch kSw[] = {
         {UI_PAGE_CUTSCENES, 1, ICO_VARIANT_NO_CUTSCENE_LOOK, "variants.no_cutscene_look",

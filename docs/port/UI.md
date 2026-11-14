@@ -18,7 +18,7 @@ draws, navigates, fades and sounds it; the port supplies the rows, their words a
 | `port/ui/settings_backup.h`, `settings_backup.c` | Settings > Extras > Back up your data and Restore from a backup: the rows' words and notes, Cross, the confirmations, the popups |
 | `port/ui/settings_unused.h`, `settings_unused.c` | Settings > Extras > Unused content's host: whether each row and the link show, Cross's open ([Extras > Unused content](#extras--unused-content)) |
 | `port/ui/settings_step.h`, `settings_step.c` | holding Left or Right on the value rows (the tracker and the rows that repeat), L1/R1 on the Picture colour rows, the colour rows' field and step |
-| `port/ui/settings_variants.h`, `settings_variants.c` | the game variants rows' helpers: which options they are, their value text, the disc's note and whether a row shows on the disc ([Gameplay > Yorda and Cutscenes](#gameplay--yorda-and-cutscenes)) |
+| `port/ui/settings_variants.h`, `settings_variants.c` | the game variants rows' helpers: which options they are, their value text, the disc's note and whether a row shows on the disc ([Gameplay > Chains and Cutscenes](#gameplay--chains-and-cutscenes)) |
 | `port/ui/settings_states.h`, `settings_states.c` | the Save states page's host, cards' texts and pictures, actions on a slot with their second press, and F6's latch (`settings.c` builds, opens, leaves and ticks the page) |
 | `port/ui/ui_list.h`, `ui_list.c` | the scrolling list pages (Achievements, Remap, Music) |
 | `port/ui/ui_hint.h`, `ui_hint.c` | a line of button prompts (glyphs and words) |
@@ -206,8 +206,8 @@ tables in step and within the `MAX_ROWS` (17, 18 in an rc build) budget of a pag
 | Controls | Remap (a list, ending with Ask Yorda for a hint on the discs with hints: `REMAP_TARGETS` in `settings.c`), Button configuration, Vibration, Hold type, Stick fix, the mouse camera's six rows, Circle back, Touch screen (a link, with a touch screen only), Back |
 | Touch screen (`UI_PAGE_TOUCH`) | Touch controls, Touch size, Touch opacity, Edit layout (`UI_OPT_TOUCH_EDIT`), Snap to grid, Grid size, Reset layout, Reset all layouts, Back |
 | Edit layout (`UI_PAGE_TOUCH_LAYOUT`) | no shown rows: the editor's own screen ([The touch layout editor](#the-touch-layout-editor)) |
-| Gameplay | Stick fix, Door fix, Second memory card (`UI_OPT_SECOND_CARD`, `[gameplay] second_memory_card`, its note `UI_STR_OPT_SECOND_CARD_NOTE`; the step calls `ico_opt_set_second_memory_card`, whose listener puts the card in at once), Film effect, Players, Light sword colour (`UI_OPT_VAR_SWORD_COLOUR`: Original, Red; hidden on ntsc, aug6 and jun26, `ui__variant_shown`), Stick (`UI_OPT_VAR_WEAPON`: Original, Insect net), Yorda (`UI_PAGE_YORDA`), Cutscenes (`UI_PAGE_CUTSCENES`), Difficulty (a link to `UI_PAGE_CUSTOMIZE`, shown from the pause menu only: `optShown` hides it while `onTitle()`), Back: the three links before Back as Controls' Touch screen; eleven rows once the game is cleared, the window's ten slots scroll. The rows a journey's difficulty holds are Customize's (below) |
-| Yorda (`UI_PAGE_YORDA`) | Natural chains, Chain swing speed (`UI_OPT_VAR_CHAIN_SPEED`) and Chain swing slowdown (`UI_OPT_VAR_CHAIN_DAMPING`) (`[variants] chain_swing_speed` and `chain_swing_damping`, `ICO_VARIANT_CHAIN_SWING_SPEED` / `_DAMPING`: the value is the game's number 1 to 10 as text, the game's own 4 reads `UI_STR_VAL_VAR_CHAIN_ORIGINAL`, "4 (original)"; Left and Right wrap 10 and 1; notes `UI_STR_OPT_VAR_CHAIN_SPEED_NOTE` / `_DAMPING_NOTE`; their text is in `settings_variants.c`), Back |
+| Gameplay | Stick fix, Door fix, Second memory card (`UI_OPT_SECOND_CARD`, `[gameplay] second_memory_card`, its note `UI_STR_OPT_SECOND_CARD_NOTE`; the step calls `ico_opt_set_second_memory_card`, whose listener puts the card in at once), Film effect, Players, Light sword colour (`UI_OPT_VAR_SWORD_COLOUR`: Original, Red; hidden on ntsc, aug6 and jun26, `ui__variant_shown`), Stick (`UI_OPT_VAR_WEAPON`: Original, Insect net), Chains (`UI_PAGE_CHAINS`), Cutscenes (`UI_PAGE_CUTSCENES`), Difficulty (a link to `UI_PAGE_CUSTOMIZE`, shown from the pause menu only: `optShown` hides it while `onTitle()`), Back: the three links before Back as Controls' Touch screen; eleven rows once the game is cleared, the window's ten slots scroll. The rows a journey's difficulty holds are Customize's (below) |
+| Chains (`UI_PAGE_CHAINS`) | Natural chains, Chain swing speed (`UI_OPT_VAR_CHAIN_SPEED`) and Chain swing slowdown (`UI_OPT_VAR_CHAIN_DAMPING`) (`[variants] chain_swing_speed` and `chain_swing_damping`, `ICO_VARIANT_CHAIN_SWING_SPEED` / `_DAMPING`: the value is the game's number 1 to 10 as text, the game's own 4 reads `UI_STR_VAL_VAR_CHAIN_ORIGINAL`, "4 (original)"; Left and Right wrap 10 and 1; notes `UI_STR_OPT_VAR_CHAIN_SPEED_NOTE` / `_DAMPING_NOTE`; their text is in `settings_variants.c`), Back |
 | Customize (`UI_PAGE_CUSTOMIZE`) | Shadows (`UI_PAGE_SHADOWS`), Combat (`UI_PAGE_COMBAT`), Rules (`UI_PAGE_RULES`), Back; reached from the New Game screen's Customize row (its Back returns there) and, read-only, from the pause menu's Gameplay > Difficulty link (its Back returns to Gameplay, the cursor on the link) ([Customize: the New Game draft's pages](#customize-the-new-game-drafts-pages)) |
 | Shadows (`UI_PAGE_SHADOWS`) | Shadow speed, Shadow toughness, Shadow aggression, Peaceful shadows, Shadows never take Yorda (`UI_OPT_YORDA`), Shadows attack together, No Shadows (`UI_OPT_DIFF_NO_SHADOWS`), Back: the New Game draft's rows |
 | Combat (`UI_PAGE_COMBAT`) | Automatic guard, Turn to face shadows, Shadows wait while Ico is down, One hit per swing, Shadows never dodge, Queen barrier, Back: the draft's rows |
@@ -1157,16 +1157,16 @@ frame (`lt_host_point_item`), and whether a card screen's empty slot is pickable
 (`la_host_mc_slot_pickable`: on the Save screen, not on Load) (`ico2/common/src/layout_texture.c`;
 `ico2/common/src/layout_action.c`).
 
-### Gameplay > Yorda and Cutscenes
+### Gameplay > Chains and Cutscenes
 
-`UI_PAGE_YORDA` and `UI_PAGE_CUTSCENES`, two links on Gameplay right before its Back (`gameLinks` in
+`UI_PAGE_CHAINS` and `UI_PAGE_CUTSCENES`, two links on Gameplay right before its Back (`gameLinks` in
 `build`, the Controls > Touch screen pattern), each page built like Controls from its tables
-(`yordaOpts`, `cutOpts` and their strings) with Gameplay as its parent, so Back and Triangle return
+(`chainOpts`, `cutOpts` and their strings) with Gameplay as its parent, so Back and Triangle return
 to Gameplay on the link's row (`leaveTo`). All of them show from the title and the pause menu on every
 disc; the game's pause-only rows (Film effect, Players) stay on Gameplay. The game variants
 (`port/game/variants.h`), sixteen stepped rows, one `UI_OPT_VAR_*` per `IcoVariantId` (a
 `_Static_assert` keeps the order): Light sword colour and Stick on Gameplay, Chain swing speed and
-Chain swing slowdown on Yorda, No cutscene look-around and Ignore cutscene cameras on Cutscenes after
+Chain swing slowdown on Chains, No cutscene look-around and Ignore cutscene cameras on Cutscenes after
 Skip the opening; the other ten are rows of a journey's difficulty, on Customize's pages (below).
 Debug menu (`UI_OPT_VAR_DEBUG_MENU`, a press row after `UI_OPT_DEVELOPER` in the enum, so not
 stepped) is on Developer before Back. The config rows' helpers live in `port/ui/settings_variants.c`
