@@ -1,20 +1,24 @@
-"""port/render/test/shadow_high_check.py ORIG_A ORIG_B HIGH_A --scale S:
-Shadow detail: High's change confined to the shadow (rd_shadow_high_ab.cmake).
+"""port/render/test/shadow_fine_check.py PS2_A PS2_B FINE_A --scale S [--dark-tol T]:
+the shadow's levels at the scene's scale change only the shadow, and keep its
+darkness (rd_shadow_fine_ab.cmake).
 
-ORIG_A is SCENE right after list 3 at Original's levels, ORIG_B the same
-without the three composites (the darkening Original draws is where A and B
-differ), HIGH_A SCENE right after list 3 with the levels at the scene's
-scale.  Every texel High changes must lie within D SCENE texels of a texel
-Original darkens, D = ceil(8 (3 + 1 / L) S): a SHADOW2 texel is 8 GS pixels,
+PS2_A is SCENE right after list 3 with the levels at the PS2's sizes
+(ICO_RD_SHADOW_FINE=0), PS2_B the same without the three composites (the
+darkening the composites draw is where A and B differ), FINE_A SCENE right
+after list 3 with the levels at the scene's scale.  Every texel the fine
+levels change must lie within D SCENE texels of a texel the PS2's levels
+darken, D = ceil(8 (3 + 1 / L) S): a SHADOW2 texel is 8 GS pixels,
 8 S SCENE texels, and a fine level reaches past the named one by one level
 texel of the step, one of the tent and 1 / L of one of the composite's tap
 (L the levels' odd whole scale, rd_shadowres.c rd_sr_level_scale), plus the
-one texel of Original's own tap whose darkening rounds to nothing.
+one texel of the PS2 tap whose darkening rounds to nothing.  The darkness:
+the RGB levels the composites take away, summed over the picture (B - A),
+for each; their ratio fine / PS2 within 1 +- T (--dark-tol, default 0.02).
 
 Prints one line:
-    shadow_high_check: W x H, D texels: S darkened by Original, C changed by High, O outside
-and exits 0; 1 when O > 0 or C is 0; 2 when the files cannot be read or
-their sizes differ.  Run it with python3 -I.
+    shadow_fine_check: W x H, D texels: S darkened by the PS2's levels, C changed by the fine ones, O outside; darkness R
+and exits 0; 1 when O > 0, C is 0 or R is outside 1 +- T; 2 when the files
+cannot be read or their sizes differ.  Run it with python3 -I.
 """
 import math
 import struct
@@ -115,6 +119,11 @@ def dilate(mask, w, h, d):
 def main(argv):
     args = argv[1:]
     scale = None
+    tol = 0.02
+    if "--dark-tol" in args:
+        k = args.index("--dark-tol")
+        tol = float(args[k + 1])
+        del args[k:k + 2]
     if "--scale" in args:
         k = args.index("--scale")
         scale = float(args[k + 1])
@@ -125,12 +134,12 @@ def main(argv):
     try:
         oa, ob, ha = (load(p) for p in args)
     except (OSError, ValueError, zlib.error) as e:
-        print("shadow_high_check: %s" % e)
+        print("shadow_fine_check: %s" % e)
         return 2
     w, h, bpp = oa[0], oa[1], oa[2]
     for o in (ob, ha):
         if o[0] != w or o[1] != h or o[2] != bpp:
-            print("shadow_high_check: the sizes or formats differ")
+            print("shadow_fine_check: the sizes or formats differ")
             return 2
     n = int(math.ceil(scale - 1.0e-3))
     lvl = n if n % 2 == 1 else n + 1
@@ -141,9 +150,17 @@ def main(argv):
     s = sum(len(c) for c in dark)
     c = sum(len(x) for x in changed)
     o = sum(bin(bits(cols) & ~near[y]).count("1") for y, cols in enumerate(changed) if cols)
-    print("shadow_high_check: %d x %d, D %d texels: %d darkened by Original, %d changed by High, "
-          "%d outside" % (w, h, d, s, c, o))
-    return 1 if o or c == 0 else 0
+    def rgb(rows):
+        if bpp == 4:
+            return sum(sum(r[0::4]) + sum(r[1::4]) + sum(r[2::4]) for r in rows)
+        return sum(sum(r) for r in rows)
+    lit = rgb(ob[3])
+    dark_p, dark_f = lit - rgb(oa[3]), lit - rgb(ha[3])
+    ratio = dark_f / dark_p if dark_p > 0 else 0.0
+    print("shadow_fine_check: %d x %d, D %d texels: %d darkened by the PS2's levels, %d changed "
+          "by the fine ones, %d outside; darkness %.4f (%d against %d levels)"
+          % (w, h, d, s, c, o, ratio, dark_f, dark_p))
+    return 1 if o or c == 0 or abs(ratio - 1.0) > tol else 0
 
 
 if __name__ == "__main__":

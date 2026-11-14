@@ -1,5 +1,5 @@
-/* rd_shadow_high_test.c: Shadow detail: High's arithmetic (rd_shadowres.c,
- * rd_shadowres.h), CPU only.  Every expectation follows from the code's
+/* rd_shadow_fine_test.c: the arithmetic of the shadow's levels at the
+ * scene's scale above 1x (rd_shadowres.c, rd_shadowres.h), CPU only.  Every expectation follows from the code's
  * rules (the numbers in the comments from the same arithmetic in floats).
  *
  *   1. the scales: the count's (tw / w, or sx under Full pixel's crop), the
@@ -13,19 +13,25 @@
  *      texel; the point mode at whole taps), and the tent leaves a level as
  *      it is;
  *   5. the straight edge moved across one SHADOW2 texel (8 GS pixels) in 24
- *      steps at scene scales 2, 2.41, 3 and 4 (the y axis at scale 1): the
+ *      steps at scene scales 2, 2.41, 2.8125 (Resolution window's across),
+ *      3 and 4 across, the y axis at scale 1 (the non-uniform case: the
+ *      levels' rows at the PS2's count, the step and tent there the
+ *      identity): the
  *      three composites' darkening (SHADOW0..2 at 40, 80, 120, shadowDepth
- *      80) of the Original chain (the count box-reduced to its GS size, the
+ *      80) of the PS2-size chain (the count box-reduced to its GS size, the
  *      GS levels, one bilinear tap of each at the SCENE texel's GS
- *      position) against High's (the full-size count, the step and the
+ *      position) against the fine chain's (the full-size count, the step and the
  *      tent of rd_sr_step_texel and rd_sr_tent_texel at the levels' odd
- *      scale, one bilinear tap at S u - 1/2): High's 10-90 % width within
- *      RD_SRT_WIDTH_TOL of Original's mean over the phases (the float model
+ *      scale, one bilinear tap at S u - 1/2): the fine chain's 10-90 % width within
+ *      RD_SRT_WIDTH_TOL of the PS2 chain's mean over the phases (the float model
  *      of this arithmetic: 3 to 6 % under, the levels' byte roundings), its
  *      spread over the phases under RD_SRT_SD_MAX SCENE texels (the model:
- *      0.36 to 0.68; Original 2.3 to 5.3), and its 50 % point's wander over
+ *      0.36 to 0.68; the PS2 chain 2.3 to 5.3), and its 50 % point's wander over
  *      the phases under RD_SRT_WANDER_MAX texels and under half of
- *      Original's (the model: 0.43 to 0.98 against 2.6 to 5.5);
+ *      the PS2 chain's (the model: 0.43 to 0.98 against 2.6 to 5.5), and its
+ *      darkness (the darkening summed over the edge, the phases' mean)
+ *      within RD_SRT_DARK_TOL of the PS2 chain's (the model: 0.01 to 0.15 %:
+ *      the mean over the grid's placements keeps the integral);
  *   6. the 10 s clause and the --stats words from a made-up record. */
 #include <math.h>
 #include <stdio.h>
@@ -51,6 +57,7 @@ static int failures;
 #define RD_SRT_WIDTH_TOL 0.08
 #define RD_SRT_SD_MAX 1.0
 #define RD_SRT_WANDER_MAX 1.5
+#define RD_SRT_DARK_TOL 0.01
 
 enum { GSW = 576, ROWS = 2, PHASES = 24 };
 
@@ -234,7 +241,7 @@ static bool profileOf(const double *p, int n, double *width, double *mid)
 }
 
 typedef struct {
-    double meanO, sdO, wanderO, meanH, sdH, wanderH;
+    double meanO, sdO, wanderO, meanH, sdH, wanderH, darkO, darkH;
 } Sweep;
 
 static bool sweep(double S, Sweep *out)
@@ -262,7 +269,7 @@ static bool sweep(double S, Sweep *out)
         for (uint32_t i = 0; i < cw; i++) {
             cntA[i] = ((double)i + 0.5) / (double)sc < e ? 128u : 0u;
         }
-        /* Original: the box reduction (box_reduce_ps), then the GS levels */
+        /* the PS2 chain: the box reduction (box_reduce_ps), then the GS levels */
         for (uint32_t p = 0; p < GSW; p++) {
             const double lo = p * (double)sc, hi = (p + 1) * (double)sc;
             double acc = 0.0;
@@ -289,7 +296,7 @@ static bool sweep(double S, Sweep *out)
             src = gs[k];
             sw = kW[k];
         }
-        /* High: the full-size count, the steps at the levels' scale L, the
+        /* the fine chain: the full-size count, the steps at the levels' scale L, the
          * tent across (the rows at scale 1: no tent down) */
         src = cnt;
         sw = cw;
@@ -319,6 +326,8 @@ static bool sweep(double S, Sweep *out)
         for (int j = j0; j < j1; j++) {
             po[j - j0] = shade(gs, gw, one, S, j);
             ph[j - j0] = shade(fine, lw, fineScale, S, j);
+            out->darkO += (1.0 - po[j - j0]) / PHASES;
+            out->darkH += (1.0 - ph[j - j0]) / PHASES;
         }
         ok = profileOf(po, nj, &wO[phase], &mO[phase]) && profileOf(ph, nj, &wH[phase], &mH[phase]);
         mO[phase] += (double)j0 - e * S;
@@ -359,7 +368,7 @@ static bool sweep(double S, Sweep *out)
 
 static void testEdge(void)
 {
-    static const double kS[] = {2.0, 2.41, 3.0, 4.0};
+    static const double kS[] = {2.0, 2.41, 2.8125, 3.0, 4.0};
     for (size_t i = 0; i < sizeof kS / sizeof kS[0]; i++) {
         Sweep s;
         memset(&s, 0, sizeof(s));
@@ -368,15 +377,20 @@ static void testEdge(void)
         if (!ok) {
             continue;
         }
-        printf("  S %g: Original width %.3f (sd %.3f), middle wander %.3f; High width %.3f (sd "
-               "%.3f), middle wander %.3f (SCENE texels)\n",
-               kS[i], s.meanO, s.sdO, s.wanderO, s.meanH, s.sdH, s.wanderH);
+        printf("  S %g: the PS2's sizes: width %.3f (sd %.3f), middle wander %.3f, darkness "
+               "%.3f; the scene's scale: width %.3f (sd %.3f), middle wander %.3f, darkness %.3f "
+               "(SCENE texels)\n",
+               kS[i], s.meanO, s.sdO, s.wanderO, s.darkO, s.meanH, s.sdH, s.wanderH, s.darkH);
+        CHECK(fabs(s.darkH - s.darkO) <= RD_SRT_DARK_TOL * s.darkO,
+              "S %g: the darkness %.3f against the PS2's sizes' %.3f (within %.0f %%)", kS[i],
+              s.darkH, s.darkO, RD_SRT_DARK_TOL * 100.0);
         CHECK(fabs(s.meanH - s.meanO) <= RD_SRT_WIDTH_TOL * s.meanO,
-              "S %g: High's width %.3f against Original's %.3f (within %.0f %%)", kS[i], s.meanH,
-              s.meanO, RD_SRT_WIDTH_TOL * 100.0);
-        CHECK(s.sdH <= RD_SRT_SD_MAX, "S %g: High's width spread %.3f", kS[i], s.sdH);
+              "S %g: the fine width %.3f against the PS2 chain's %.3f (within %.0f %%)", kS[i],
+              s.meanH, s.meanO, RD_SRT_WIDTH_TOL * 100.0);
+        CHECK(s.sdH <= RD_SRT_SD_MAX, "S %g: the fine width spread %.3f", kS[i], s.sdH);
         CHECK(s.wanderH <= RD_SRT_WANDER_MAX && s.wanderH <= 0.5 * s.wanderO,
-              "S %g: High's middle wanders %.3f (Original %.3f)", kS[i], s.wanderH, s.wanderO);
+              "S %g: the fine middle wanders %.3f (the PS2 chain %.3f)", kS[i], s.wanderH,
+              s.wanderO);
     }
 }
 
@@ -384,31 +398,31 @@ static void testLines(void)
 {
     RdPerfRecord rec;
     memset(&rec, 0, sizeof(rec));
-    rec.shadowHighChains = 1;
-    rec.shadowHighPasses = 10;
-    rd__shadow_high_pop(&rec);
+    rec.shadowFineChains = 1;
+    rec.shadowFinePasses = 10;
+    rd__shadow_fine_pop(&rec);
     char text[512];
     size_t at = 0;
     text[0] = '\0';
-    rd__shadow_high_text(text, sizeof text, &at);
+    rd__shadow_fine_text(text, sizeof text, &at);
     printf("  10 s clause: %s\n", text);
-    CHECK(strcmp(text, "; shadow detail high: 1.0 shadows a replay at the scene's scale (10.0 "
-                       "passes), 0.0 as Original") == 0,
+    CHECK(strcmp(text, "; shadow levels: 1.0 shadows a replay at the scene's scale (10.0 "
+                       "passes), 0.0 at the PS2's size") == 0,
           "the 10 s clause: %s", text);
     const size_t was = at;
-    rd__shadow_high_text(text, sizeof text, &at);
+    rd__shadow_fine_text(text, sizeof text, &at);
     CHECK(at == was, "a second clause without a record");
     char st[256];
-    rd__shadow_high_stats(&rec, st, sizeof st);
+    rd__shadow_fine_stats(&rec, st, sizeof st);
     printf("  --stats: %s\n", st);
-    CHECK(strcmp(st, "shadow detail original: 1 shadows at the scene's scale, 10 passes, 0 as "
-                     "Original") == 0,
-          "the stats words (the option at Original in a zeroed context): %s", st);
+    CHECK(strcmp(st, "shadow levels: 1 shadows at the scene's scale, 10 passes, 0 at the PS2's "
+                     "size") == 0,
+          "the stats words: %s", st);
 }
 
 int main(void)
 {
-    printf("rd_shadow_high_test\n");
+    printf("rd_shadow_fine_test\n");
     testScales();
     testBox();
     testTent();
@@ -416,9 +430,9 @@ int main(void)
     testEdge();
     testLines();
     if (failures) {
-        printf("rd_shadow_high_test: %d failures\n", failures);
+        printf("rd_shadow_fine_test: %d failures\n", failures);
         return 1;
     }
-    printf("rd_shadow_high_test: ok\n");
+    printf("rd_shadow_fine_test: ok\n");
     return 0;
 }
