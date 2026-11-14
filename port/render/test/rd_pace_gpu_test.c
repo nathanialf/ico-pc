@@ -896,6 +896,111 @@ static void testOffBitIdentical(void)
     bitRun(true);
 }
 
+/* as made -> locked -> as made (window_present.c: the vsync lock's path
+   now declares the pictures not as made each step, rd_present_as_made(false):
+   rd_pace_gpu_paced and rd_pace_rules_paced, as the paced timer path does).
+   The same hand-overs and display times from frame K0 on are stepped twice:
+   once from a fresh start, once after an as-made run of other pictures, a
+   lock during which a late display time still arrives (dropped by the
+   lock's step) and the lock's own steps.  Every rule's value (the hand-over,
+   the GPU's end, the own timer, the screen's) and the value drawn are the
+   same to the bit: the GPU model, the own timer and the screen's model
+   start again cleanly; while locked the screen's row is not applicable and
+   nothing is left in its ring */
+#define TRANS_K0 400u
+#define TRANS_TICKS 150u
+
+static void transPicks(uint32_t k0, uint32_t ticks, uint32_t seed, double *drawn, RdRuleNote *notes)
+{
+    RdRebase rb;
+    memset(&rb, 0, sizeof rb); /* presentRebase's: have false on every paced present */
+    const double T = 33.3667, P = 1000.0 / 120.0, OFF = 5123.456;
+    RdPaceScreenSample late[3];
+    uint32_t lateN = 0, n = 0;
+    for (uint32_t k = k0; k < k0 + ticks; k++) {
+        const double t0 = 1000.0 + k * T;
+        for (int j = 0; j < 2; j++) {
+            seed = seed * 1664525u + 1013904223u;
+            const double u = (double)(seed >> 8) / 16777216.0;
+            const double ask = t0 + (j == 0 ? 0.15 + 0.2 * u : 0.51 + 0.28 * u) * T;
+            const double drain = 0.05 + 0.1 * u, hand = ask + drain;
+            const RdPaceGpuSample sm = {hand - 2.0 * 16.68, hand - 2.0 * 16.68 + 9.5, 15.0,
+                                        hand - 2.0 * 16.68 + 27.0, true};
+            rd_pace_gpu_measure(&sm);
+            if (lateN == 3u) {
+                rd_pace_screen_seen(&late[0]);
+                late[0] = late[1];
+                late[1] = late[2];
+                lateN = 2;
+            }
+            double sh, would = 0.0;
+            bool held;
+            const double atAsk = (ask - t0) / T;
+            const double queue = rd_pace_gpu_shift(hand, k, &would);
+            double r = rd_rebase_raw(&rb, queue != 0.0 ? atAsk + queue / T : atAsk, T, drain, k,
+                                     &sh, &held);
+            RdRuleNote note;
+            r = rd_pace_rules_pick(r, queue, would, ask - atAsk * T, T, hand, k, false, &note);
+            if (drawn != NULL) {
+                drawn[n] = r;
+                notes[n] = note;
+            }
+            n++;
+            if (note.screenEndMs > 0.0) {
+                const double shown = OFF + ceil((note.screenEndMs + 2.5) / P) * P;
+                late[lateN++] = (RdPaceScreenSample){note.screenEndMs, shown, 8.35, 0.0};
+            }
+        }
+    }
+}
+
+static void lockStep(void)
+{
+    /* rd_present_as_made(false)'s renderer side (rd_thread.c) */
+    rd_pace_gpu_paced();
+    rd_pace_rules_paced();
+}
+
+static void testLockTransition(void)
+{
+    static double a[2 * TRANS_TICKS], b[2 * TRANS_TICKS];
+    static RdRuleNote na[2 * TRANS_TICKS], nb[2 * TRANS_TICKS];
+    lockStep();
+    transPicks(TRANS_K0, TRANS_TICKS, 11u, a, na);
+    lockStep();
+    /* as made (other pictures), then locked: a display time of the as-made
+       run arrives while locked, and the lock steps a second's worth */
+    transPicks(0u, 200u, 3u, NULL, NULL);
+    lockStep();
+    CHECK(ico_attempt_state_of(ICO_ATT_PACE_SCREEN) == ICO_ATT_NA);
+    const RdPaceScreenSample stray = {7000.0, 12000.0, 8.35, 0.0};
+    rd_pace_screen_seen(&stray);
+    for (int i = 0; i < 120; i++) {
+        lockStep();
+    }
+    {
+        RdPaceScreen probe;
+        rd_pace_screen_reset(&probe);
+        CHECK(rd_pace_screen_drain(&probe) == 0u); /* the stray time dropped while locked */
+    }
+    transPicks(TRANS_K0, TRANS_TICKS, 11u, b, nb);
+    uint32_t same = 0, placed = 0;
+    for (uint32_t i = 0; i < 2u * TRANS_TICKS; i++) {
+        bool eq = memcmp(&a[i], &b[i], sizeof a[i]) == 0 && na[i].rule == nb[i].rule;
+        for (int r = 0; r < RD_RULE_COUNT; r++) {
+            eq = eq && memcmp(&na[i].alpha[r], &nb[i].alpha[r], sizeof na[i].alpha[r]) == 0;
+        }
+        same += eq ? 1u : 0u;
+        placed += na[i].screenAtMs > 0.0 ? 1u : 0u;
+    }
+    printf(" as made -> locked -> as made: %u of %u pictures the same to the bit as a fresh "
+           "start (every rule's value and the one drawn; %u placed by the screen's rule)\n",
+           same, 2u * TRANS_TICKS, placed);
+    CHECK(same == 2u * TRANS_TICKS);
+    CHECK(placed > 0u); /* the screen's model fitted again after the lock */
+    lockStep();
+}
+
 int main(void)
 {
     printf("rd_pace_gpu_test\n");
@@ -905,6 +1010,7 @@ int main(void)
     testLogRuns();
     testLive();
     testOffBitIdentical();
+    testLockTransition();
     if (failures) {
         printf("rd_pace_gpu_test: %d failures\n", failures);
         return 1;
