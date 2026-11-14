@@ -35,6 +35,17 @@ const char *rhi_vk_pass_row_qualcomm(uint32_t vendorId, uint32_t driverId, int a
            "picture)";
 }
 
+const char *rhi_vk_qprio_row(uint32_t vendorId, uint32_t driverId, int android)
+{
+    /* the same devices as rhi_vk_pass_row_qualcomm's */
+    if (!android || vendorId != RHI_VENDOR_QUALCOMM ||
+        (driverId != RHI_DRIVER_ID_QUALCOMM_PROPRIETARY && driverId != 0)) {
+        return NULL;
+    }
+    return "Qualcomm's own driver on Android, issue 123: the system's own GPU work at a lower "
+           "priority does not preempt the game's";
+}
+
 static int word_is(const char *v, const char *w)
 {
     size_t i = 0;
