@@ -22,7 +22,9 @@
  * pixels).
  *
  * Log: "window: frame rate counter on" or "off" when the option changes
- * (and "on" at the start when it is on).
+ * (and "on" at the start when it is on); "window: frame rate counter: its
+ * second started again after time the game was not presenting ..." with
+ * the count so far, the first 8 times and then every 100th.
  */
 #ifndef PORT_UI_UI_FPS_H
 #define PORT_UI_UI_FPS_H
@@ -40,6 +42,11 @@ struct RdOverlayCtx;
 void ui_fps_tick(uint64_t now_ns);
 /* a present made (window_host.c, with interpolation on) */
 void ui_fps_present(void);
+/* the game was not presenting for a while (window_host.c: the app back in
+   the foreground, a pause of the host such as a swapchain made again, a
+   capture written): the next tick starts the counter's second again and
+   keeps the number shown (fps_counter.h fps_gap).  Any thread. */
+void ui_fps_gap(void);
 
 /* The counter on the output (ui_host.c's top overlay callback, when the
    option is on). */

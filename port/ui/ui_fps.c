@@ -10,7 +10,9 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "diag_host.h"
 #include "fps_counter.h"
+#include "gpu_hang.h"
 #include "strings.h"
 #include "touch_ui.h"
 #include "video_options.h"
@@ -27,13 +29,35 @@ void ui_fps_present(void)
     fps_present(&s_fps);
 }
 
+void ui_fps_gap(void)
+{
+    fps_gap(&s_fps);
+}
+
 void ui_fps_tick(uint64_t now_ns)
 {
     uint32_t replays = 0;
     const int on = ico_video_show_fps() != 0;
+    const unsigned before = fps_restarts(&s_fps);
+    const double limitS = ico_diag_gpu_hang_limit(); /* 0: off, the counter's shortest */
 
+    s_fps.gapNs = limitS > 0.0 ? (uint64_t)(limitS * 1e9) : 0;
     (void)rd_replay_time_max(0, &replays); /* the 10 s line zeroes it */
     fps_tick(&s_fps, now_ns, rd_interpolation_active(), replays);
+    {
+        const unsigned n = fps_restarts(&s_fps);
+
+        if (n != before && (n <= 8 || n % 100 == 0)) {
+            /* the first 8, then every 100th */
+            fprintf(stderr,
+                    "window: frame rate counter: its second started again after time the game "
+                    "was not presenting (the app away, the screen made again, a capture; a "
+                    "gap of %.1f s or more between paces); the number shown stays %d (%u so "
+                    "far)\n",
+                    s_fps.gapNs != 0 ? (double)s_fps.gapNs / 1e9 : ICO_GPU_HANG_MIN_S,
+                    fps_value(&s_fps), n);
+        }
+    }
     if (on != s_logged) {
         s_logged = on;
         fprintf(stderr, "window: frame rate counter %s\n", on ? "on" : "off");
@@ -131,6 +155,8 @@ void ui_fps_tick(uint64_t now_ns)
 {
     (void)now_ns;
 }
+
+void ui_fps_gap(void) {}
 
 void ui_fps_present(void) {}
 

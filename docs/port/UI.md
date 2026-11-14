@@ -1067,6 +1067,26 @@ the touch controls' row, clear of the drawn controls" (x, y, the output's size) 
 place, besides "window: frame rate counter on" or "off" when the option changes (and "on" at the start when it is
 on).
 
+Time the game was not presenting is not a frame rate (issue 123: the reporter's counter read
+about 5 after 13 s in the background, the event pump's 12999.9 ms at the return, and after the 1.1 s a
+bug-report capture held the window). The window notes such a gap with `ui_fps_gap()` (`fps_gap`), and
+the next tick starts the counter's second again from there with the value kept, so no value is made
+from a span that held one. The notes, four calls in `window_host.c`: `lc_pace_reset` (the app back in
+the foreground, Android's lifecycle), `window_pace_paused` (every pause of the host the pacer moves its
+deadline by: a swapchain made again for a rotation or size, a window mode, a present mode or a
+renderer switch, the first present on a new swapchain), the end of `frame_dump` (F12, Settings' bug
+report, an rc's capture) and `photo_pump` when a capture's PNG was written. A guard covers a pause no
+note names: a gap between two ticks of `gapNs` or more counts the same; `gapNs` is the GPU hang limit
+in force (`ico_diag_gpu_hang_limit`, half the watchdog's, 15 s by default) or, with it off,
+`ICO_GPU_HANG_MIN_S` (2 s, its shortest): a single wait for the GPU that long ends the run, so no stall
+the run lives through makes one. A stall shorter than that (the reporter's were 365-486 ms, often in
+clusters) stays inside the second and lowers the number, which is what the counter is for:
+`fps_counter_test` has a 450 ms stall reading 27 and three 440 ms stalls in 1.36 s reading 5, against
+a 1.1 s capture noted (50 kept, then 40 for the next second) and a 2 s gap with no note (50 kept). The
+log says "window: frame rate counter: its second started again after time the game was not presenting
+(the app away, the screen made again, a capture; a gap of G s or more between paces); the number shown
+stays N (K so far)", the first 8 times and then every 100th.
+
 ## The touch layout editor
 
 Options > Controls > Touch screen is `UI_PAGE_TOUCH` (parent Controls), nine rows. Touch controls,

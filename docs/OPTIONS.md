@@ -150,7 +150,11 @@ The window, the picture's size and shape, and the speed.
   covers (with the normal layout, between the D-pad and Select), so
   nothing covers it; controls you set to Hidden or Off do not count, and
   when the controls fade away the number goes back to the corner. It updates once a second and shows nothing until the
-  first second has passed.
+  first second has passed. Time the game spends away from the screen (the
+  app in the background, a picture saved for a bug report, the screen
+  turned) is not counted: the number keeps its last value until a whole
+  second of play has passed again. A short freeze during play does lower
+  it, as it should.
 - **Video mode** is PAL 50 Hz or 60 Hz. The normal choice is 60 Hz. This
   row is only on the title screen's Options, and only with the European
   disc: the other six discs always run at 60 Hz, as they did on the

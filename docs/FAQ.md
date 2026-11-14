@@ -178,7 +178,9 @@ Open **Options > Display** and turn **Frame rate counter** On. A small
 number such as "60 fps" appears in the top-left corner of the screen,
 updated once a second. With the touch controls showing, it moves along the top
 edge to the first place no visible control covers (between the D-pad and
-Select unless you moved them). Turn it Off the same way.
+Select unless you moved them). After you come back to the game, save a picture
+for a bug report or turn the screen, it keeps its last number until a whole
+second of play has passed. Turn it Off the same way.
 [What the row does](OPTIONS.md#display).
 
 ## The counter shows 30 at Frame rate 60

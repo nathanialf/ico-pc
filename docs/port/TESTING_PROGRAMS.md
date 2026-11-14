@@ -1231,7 +1231,12 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   the first second, 50 presents a second give 50 at every whole second, a second that ran 1.5 s long
   divides by its real length and rounds to the nearest (91 presents 61, 89 presents 59), replays
   counted through the renderer's count being zeroed after a tick (100 a second, none lost), a
-  change of mode starting the second again, a time going backwards changing nothing (`fps_counter`).
+  change of mode starting the second again (not counted as a gap), a time going backwards changing
+  nothing; issue 123: a 1.1 s capture noted (`fps_gap`) starts the second again with 50 kept, the
+  next second 40; a 2 s gap between ticks with no note (the guard at `ICO_GPU_HANG_MIN_S`) the same,
+  while with `gapNs` the 15 s limit a 13 s gap stays in the second (10 presents over 13.3 s, 1); a
+  450 ms stall inside play reads 27, three 440 ms stalls in 1.36 s read 5, neither a restart
+  (`fps_counter`).
 - `pace_policy_test.c`: the slow-present decision, Resolution "auto"'s steps (and under a
   temporal upscaler from the window's scale over its ratio, `pace_auto_window_scale`), the gap between
   presents, the vsync lock's n and alphas and its period's sanity, and the vblank clock's laws on a
