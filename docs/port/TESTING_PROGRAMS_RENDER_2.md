@@ -583,7 +583,12 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   the fine 10-90 width within 8 % of the PS2 chain's phase mean, its spread under 1 SCENE texel,
   its middle's wander under 1.5 texels and under half the PS2 chain's, its darkness within 1 %
   (a float model of the same arithmetic: 3 to 6 % under, 0.36 to 0.68, 0.43 to 0.98 against 2.6
-  to 5.5, under 0.2 %); the 10 s clause and the `--stats` words.
+  to 5.5, under 0.2 %); the recogniser over the 22 distinct real level sprites of the dumps
+  (`test/rd_shadow_fine_vectors.h`); the cuts: the one-pass tent against the two passes at every
+  texel (scales 1, 3, 5 each axis), the step's empty-area mask never skipping a nonzero texel (a
+  sparse count at 2.8125 x 2.41 with a Full pixel crop), every nonzero texel of a full chain from a
+  boxed count inside the step's and the tent's boxes (clamp and repeat, boxes at the corners); the
+  10 s clause and the `--stats` words. The pure half (`rd_shadowres_math.c`) links alone.
 - `rd_shadow_fine_ab.cmake` (`rd_shadow_fine_ab`, `rd_shadow_fine_ab_gl`): the dumps of
   `tools/shadow_fine_dumps.txt` (machine-local; a listed dump that is absent FAILS: issue 123's
   three main gate frames, the owner's three), the default against `ICO_RD_SHADOW_FINE=0`, at the
@@ -597,7 +602,8 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   line fails), its 9 or 10 passes and 9 draws and nothing else, the
   levels' scale the setting's, the change confined (with lists 4-12 left out) to within reach of
   the texels the PS2's levels darken and the darkness within 3 % (`test/shadow_fine_check.py`), the
-  B-spline doing nothing to it; the forced chain at 1x within a level of the default on SCENE
+  B-spline doing nothing to it, the cuts against `ICO_RD_SHADOW_FINE_CUTS=0` every PNG the same
+  bytes (6 passes against 9); the forced chain at 1x within a level of the default on SCENE
   (`test/png_level_diff.py`). No device: SKIP.
 - `rd_even_test.c` (`rd_even`, CPU): the pictures' evenness line (`rd_even.c`): ten made-up
   presents with GPU ends at the middles of their quarter-ms bins (1, 2, 3, 5 and under half a

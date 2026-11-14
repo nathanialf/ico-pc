@@ -1578,6 +1578,21 @@ empty composites and the one DATE set-up hold (the named levels' boxes, inside t
 margin); the shadow tiles step aside for a composite that reads a fine level; `[dev]
 shadow_bspline` does nothing to one.
 
+The cuts (each the same bytes as the chain drawn whole; `ICO_RD_SHADOW_FINE_CUTS=0` draws it
+whole for the A/B). Each level pass clears its target and draws only the box its count can reach
+(the volumes' box from `rd_shadow_box.c`, carried through each step's reach, 2 x + offset .. + 3
+source GS pixels, and the tent's c - L + 1 .. c + L - 1: `rd_sr_step_box`, `rd_sr_tent_box`; the
+whole axis where a REPEAT tap can wrap the far side in), so outside it every texel is the 0 it
+holds anyway, every frame. The first level's step returns 0 at once where every GS pixel its taps
+touch holds alpha 0 in the count box-reduced to its GS size (a nonzero count texel makes its GS
+pixel at least 0x20 / (S.x S.y), below a scale product of 64; never where a tap leaves the count's
+texels). The tent is one pass (`shadowres_tent2_ps`): the two passes' bytes in integers, an odd L
+making every weight whole and no quotient a half. An empty count draws no step or tent and clears
+each final level once. So 6 passes a shadow (7 with the one draw's full-size count) instead of 9
+(10). At the main gate the volumes' box is the whole frame (the volumes sweep open space), so there
+the step's empty areas are the cut that counts: the reporter's frame has 0.83 % of its count's
+texels nonzero.
+
 Lines: at start `rd: shadow levels: at the scene's scale above 1x (the smallest odd whole one at or
 above it on each axis: ...); at 1x the PS2's sizes`; at each change `rd: shadow levels: at the
 scene's scale: SHADOW0 864x768, SHADOW1 432x384, SHADOW2 216x192 (3x3 texels a GS pixel) from the
