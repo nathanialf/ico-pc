@@ -1,0 +1,18 @@
+# Dump list for rd_shadow_high_ab and rd_shadow_high_ab_gl
+# (port/render/test/rd_shadow_high_ab.cmake: Options > Effects > Shadow detail,
+# Original against High, port/render/rd_shadowres.c).
+# MACHINE-LOCAL: these are paths on the maintainer's machine; the dumps
+# themselves are never committed.  A listed dump that is absent FAILS the test.
+# Relative paths are relative to this file.  The second field: the --nop spec
+# of the frame's three shadow composites (list 3's SHADOW2, SHADOW1 and SHADOW0
+# sprites, as `rd_replay_tool DUMP - --list --no-device` prints them), which the
+# test leaves out to find the texels Original darkens; each dump has one shadow
+# window with volumes.  A third field "all": the dump the phone, MSAA and
+# B-spline settings run on too (the others run the tablet's three).
+#
+# issue 123's Adreno 740 tablet on v0.11.6 (Custom 3x, Full height, Full pixel):
+# the main gate, stage 12, frame 6313, plain, the tick before and the blended
+# picture between them (count 3:6-3:29, levels 3:40/45/50, composites 3:58/63/68)
+/primary/dev/ico-dumps/v0117-adreno123/frame-20261114-101655-v12635.rddump 3:58,3:63,3:68
+/primary/dev/ico-dumps/v0117-adreno123/frame-20261114-101655-v12635-prev.rddump 3:58,3:63,3:68
+/primary/dev/ico-dumps/v0117-adreno123/frame-20261114-101655-v12635-blended.rddump 3:58,3:63,3:68 all
