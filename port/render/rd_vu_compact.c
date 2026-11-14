@@ -16,9 +16,6 @@
 #include "rd_vu_record.h"
 #include "rd_vu_skin_check.h" /* rd__vu_prepass_selftest_running */
 
-/* Arm's PCI vendor id (the Mali-G52 of issue 179; rd_profile.c VENDOR_ARM) */
-#define CMP_VENDOR_ARM 0x13B5u
-
 /* ------------------------------------------------------------ the plan */
 
 void rd_vu_cmp_plan_reset(RdVuCmpPlan *p, uint32_t cap, uint32_t maxValue, bool raise)
@@ -164,11 +161,40 @@ int rd_vu_cmp_env(void)
 
 int rd_vu_cmp_class(const char *name, uint32_t vendor, bool moltenvk, bool dxt, bool byTests)
 {
-    if (byTests || (!moltenvk && vendor == CMP_VENDOR_ARM && name != NULL &&
-                    strstr(name, RD_VU_CMP_G52_NAME) != NULL)) {
+    /* the device table's COMPACTION_CLASS on the arguments' identity (its
+       row mali-g52 reads no backend, as this rule never did); the tests'
+       switch is the table's fake; the DXT stays the caller's (the PowerVR
+       class and its measured name) */
+    RhiDeviceId id;
+    RhiDeviceFakes fk;
+    RhiDeviceChoices c;
+    memset(&id, 0, sizeof id);
+    memset(&fk, 0, sizeof fk);
+    id.backend = RHI_DT_VULKAN;
+    id.os = RHI_DT_OS_BUILD;
+    id.moltenvk = moltenvk ? 1u : 0u;
+    id.vendorId = vendor;
+    id.deviceName = name;
+    fk.compactArm = byTests ? 1u : 0u;
+    rhi_device_table_eval(&id, &fk, &c);
+    if (c.value[RHI_DC_COMPACTION_CLASS] == RHI_DT_CMP_G52) {
         return ICO_ATT_CMP_G52;
     }
     return dxt ? ICO_ATT_CMP_DXT : ICO_ATT_CMP_OTHER;
+}
+
+/* the class defaults, from the device table's rows (their values are
+   RD_VU_COMPACT_ARM_DEFAULT and RD_VU_COMPACT_DEFAULT, rhi_device_table.h) */
+static int armDefault(void)
+{
+    return (int)rhi_device_table_row_value("mali-g52", RHI_DC_COMPACTION_DEFAULT,
+                                           RD_VU_COMPACT_ARM_DEFAULT);
+}
+
+static int dxtDefault(void)
+{
+    return (int)rhi_device_table_row_value("powervr-dxt-48-1536", RHI_DC_COMPACTION_DEFAULT,
+                                           RD_VU_COMPACT_DEFAULT);
 }
 
 /* ------------------------------------------------------------ the state */
@@ -249,8 +275,7 @@ static bool decide(void)
                                                        "stores"
                                                      : NULL;
     return ico_attempt_decide_compaction(compute ? 1 : 0, notWhy, s_cmp.cls, s_cmp.env,
-                                         RD_VU_COMPACT_DEFAULT, RD_VU_COMPACT_ARM_DEFAULT,
-                                         s_cmp.selftest) != 0;
+                                         dxtDefault(), armDefault(), s_cmp.selftest) != 0;
 }
 
 /* the class the decision was taken for, and the define that decided it
@@ -263,10 +288,10 @@ static void startLine(const char *what)
         snprintf(cls, sizeof cls,
                  "the Mali-G52 (%s, vendor 0x%04X%s): RD_VU_COMPACT_ARM_DEFAULT %d", s_cmp.name,
                  (unsigned)s_cmp.vendor, s_cmp.armByTests ? ", ICO_RD_VU_COMPACT_ARM=1" : "",
-                 RD_VU_COMPACT_ARM_DEFAULT);
+                 armDefault());
     } else if (s_cmp.cls == ICO_ATT_CMP_DXT) {
         snprintf(cls, sizeof cls, "the PowerVR D-Series DXT-48-1536 (%s): RD_VU_COMPACT_DEFAULT %d",
-                 s_cmp.name, RD_VU_COMPACT_DEFAULT);
+                 s_cmp.name, dxtDefault());
     } else {
         snprintf(cls, sizeof cls,
                  "not the Mali-G52 or the PowerVR D-Series DXT-48-1536 (%s, vendor 0x%04X): off "
@@ -322,7 +347,7 @@ void rd__vu_compact_init(const RhiLimits *lim)
     s_cmp.runs = lim != NULL && decide();
     s_cmp.on = lim != NULL && ico_attempt_compaction_candidate(
                                   g_rd.vuPrepass && rd__vu_record_compute(), s_cmp.cls, s_cmp.env,
-                                  RD_VU_COMPACT_DEFAULT, RD_VU_COMPACT_ARM_DEFAULT) != 0;
+                                  dxtDefault(), armDefault()) != 0;
     s_cmp.plane = false;
     if (s_cmp.on) {
         /* group 0 FrameCB and group 1's store layout, as the record's

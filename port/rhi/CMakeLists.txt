@@ -249,6 +249,11 @@ if(ICO_RUN_TESTS)
     add_test(NAME rhi_vk_pass_crumb COMMAND rhi_vk_pass_crumb_test)
 endif()
 
+# --- The device table (CPU only, every target) --------------------------------
+# rhi_device_table.c: the hardware rows that set renderer-internal choices
+# (docs/port/DEVICE_TABLE.md), its library and its three tests.
+include(rhi_device_table.cmake)
+
 # --- The [video] adapter rules (CPU only, every target) ---------------------
 # rhi_adapter.c: the exact-name match the Vulkan and Direct3D backends force
 # a pick with, and the device-list line's text. Each of those backends links
@@ -387,7 +392,7 @@ if(_ico_have_vk)
     set(_ico_vk_sources rhi_adapter.c rhi_bind_cache.c rhi_driver_version.c rhi_pass_row.c rhi_tile_rule.c vk/vk_cmd.c vk/vk_device.c vk/vk_memory.c vk/vk_native.c
                         vk/vk_pipeline.c vk/vk_present_mode.c vk/vk_renderpass.c vk/vk_resource.c
                         vk/vk_spirv_scan.c vk/vk_swapchain.c vk/vk_sync.c vk/vk_tsclock.c vk/vk_range.c
-                        vk/vk_glass.c rhi_qprio.c vk/vk_qprio.c)
+                        vk/vk_glass.c rhi_qprio.c vk/vk_qprio.c vk/vk_device_table.c)
     if(ANDROID)
         # the window's surface through the loader in use (a
         # driver the program loaded, or the system's)
@@ -414,6 +419,7 @@ if(_ico_have_vk)
     target_link_libraries(ico_rhi_vulkan PRIVATE ${CMAKE_DL_LIBS})
     # the crash report's breadcrumb (vk_renderpass.c writes it)
     target_link_libraries(ico_rhi_vulkan PUBLIC ico_pass_crumb)
+    target_link_libraries(ico_rhi_vulkan PUBLIC ico_device_table) # the start-up lines
     if(SDL3_FOUND)
         target_compile_definitions(ico_rhi_vulkan PRIVATE ICO_RHI_HAVE_SDL=1)
         target_link_libraries(ico_rhi_vulkan PUBLIC SDL3::SDL3)
@@ -509,6 +515,7 @@ endif()
 # --- ico_rhi: the dispatcher ----------------------------------------------------
 add_library(ico_rhi STATIC rhi_backend.c rhi_traffic.c)
 target_include_directories(ico_rhi PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(ico_rhi PUBLIC ico_device_table) # the renderer's reads
 target_compile_options(ico_rhi PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 if(_ico_have_vk)
     target_compile_definitions(ico_rhi PRIVATE ICO_RHI_HAVE_VK=1)
