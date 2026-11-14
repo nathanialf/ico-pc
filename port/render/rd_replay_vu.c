@@ -750,8 +750,8 @@ static void vuRunRange(VuRunDraw *d)
 /* the tests' bounds audit of an indexed VU draw (rd_vu_audit.h): ib at
  * ibOff, indices [first, first + count), its values lo .. hi; plane: the
  * index compaction's list (the slot's record buffer, its fourth plane) */
-static void vuAuditDraw(RhiBuffer ib, uint64_t ibOff, uint32_t first, uint32_t count, uint32_t lo,
-                        uint32_t hi, bool plane)
+static void vuAuditDraw(const Replay *r, RhiBuffer ib, uint64_t ibOff, uint32_t first,
+                        uint32_t count, uint32_t lo, uint32_t hi, bool plane)
 {
     if (!rd_vu_audit_on()) {
         return;
@@ -768,6 +768,8 @@ static void vuAuditDraw(RhiBuffer ib, uint64_t ibOff, uint32_t first, uint32_t c
     d.hi = hi;
     d.ibOff = ibOff;
     d.maxValue = maxIndexValue();
+    d.pass = r->passSerial;
+    d.list = rd__passring_list_now();
     if (plane) {
         d.ibBytes = ib.id == s_recBuf[slot].id ? recBytes(s_recBufRows[slot]) : 0u;
         d.planeBytes = (uint64_t)s_recBufRows[slot] * ICO_VU_REC_W * 16u;
@@ -923,7 +925,7 @@ void rd__replay_vu_flush(Replay *r)
         if (n == 1) {
             vuRunRange(&s_run.d[0]);
         }
-        vuAuditDraw(ib, ibOff, first, count, s_run.d[0].lo, n > 1 ? next - 1u : s_run.d[0].hi,
+        vuAuditDraw(r, ib, ibOff, first, count, s_run.d[0].lo, n > 1 ? next - 1u : s_run.d[0].hi,
                     d0->ix.cmp != NULL);
     }
     /* each pass over the whole list (two: the colour pass, then the alpha
@@ -1431,7 +1433,7 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
             ad.first = first;
             ad.count = count;
             vuRunRange(&ad);
-            vuAuditDraw(ix->buf, ix->off, first, count, ad.lo, ad.hi, ix->cmp != NULL);
+            vuAuditDraw(r, ix->buf, ix->off, first, count, ad.lo, ad.hi, ix->cmp != NULL);
         }
     }
     uint64_t dOff0 = ~0ull; /* the first pass's DrawCB (the skin check's) */

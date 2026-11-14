@@ -30,7 +30,26 @@
  * after a full wait).  It also says the index values the draws reached
  * (the compacted lists' raised values and the draws' own lists'), the
  * figures a driver that sizes a draw's vertex work by its index range
- * would see.  Nothing changes the picture: the audit only reads. */
+ * would see.
+ *
+ * The Arm estimate: on Mali "memory is allocated for all vertex indices
+ * between the min and max index referenced by a draw call", in an
+ * intermediate geometry region "fixed to 180 MB on current Mali GPUs";
+ * "Exceeding the size of this region may result in a VK_ERROR_DEVICE_LOST"
+ * (Khronos Vulkan-Samples docs/memory_limits.adoc,
+ * https://github.com/KhronosGroup/Vulkan-Samples/blob/main/docs/memory_limits.adoc);
+ * on Bifrost a draw whose indices differ by a large value fails, only the
+ * difference counting (Arm community thread 52444,
+ * https://community.arm.com/support-forums/f/graphics-gaming-and-vr-forum/52444/drawcall-will-fail-on-mali-gpu-when-there-is-large-index-value-diff-in-index-buffer).
+ * So for each render pass the audit sums its indexed VU draws' ranges
+ * (largest - smallest + 1, in vertices) and prints the sum times the bytes
+ * one vertex's outputs take on this path (164: vu_main_vs's VuVSOut, the
+ * position and 148 bytes of varyings) and times Arm's example 64, against
+ * 180 MB, a line a pass and the run's worst pass; with the largest single
+ * draw span, the draws whose smallest index is 0 and the largest span over
+ * a draw's indices.  The non-indexed VU draws (the particles) and the 2D
+ * draws are not in the sums.  Nothing changes the picture: the audit only
+ * reads. */
 #ifndef PORT_RENDER_RD_VU_AUDIT_H
 #define PORT_RENDER_RD_VU_AUDIT_H
 
@@ -83,6 +102,8 @@ typedef struct RdVuAuditDraw {
     uint32_t lo, hi;
     uint64_t ibOff, ibBytes, planeBytes;
     uint32_t maxValue;
+    uint32_t pass; /* the render pass it is drawn in (the replay's pass serial) */
+    int list;      /* the list being walked */
 } RdVuAuditDraw;
 
 void rd__vu_audit_draw(const RdVuAuditDraw *d);
