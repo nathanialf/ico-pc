@@ -8,13 +8,14 @@ target_sources(ico_render PRIVATE rd_inames.c rd_inames_live.c)
 
 # rd_inames_test: CPU only: the tally by name and reason (a name of 24
 # bytes and more cut, the table full counted), the top five of each reason
-# and the line word for word, a short buffer; the stair test (an object
-# moved every other tick steps at each still tick after a move, one moved
-# every tick never, one that stops once, a key drawn twice in a tick judged
-# once, a tick skipped not judged, the table emptied when three quarters
-# full); the model's origin through the frame's view (the camera's motion
-# cancels, a view that does not invert), the kept inverse, the moved test's
-# bound
+# and the line word for word, a short buffer; the stair test's verdicts (an
+# object moved every other tick steps at each still tick after a move and
+# alternates from its fourth judged tick, one moved every tick never, one
+# that stops once, a key drawn twice in a tick judged once, a tick skipped
+# not judged, the table emptied when three quarters full), the cadence by
+# name and its window; the tick before's rows carried to this tick's view
+# (the camera's motion cancels, the 2^-17 bound at its edge, the GS Z lane
+# left out, a view that does not invert, the kept carry)
 add_executable(rd_inames_test test/rd_inames_test.c rd_inames.c)
 target_include_directories(rd_inames_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(rd_inames_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})

@@ -24,10 +24,15 @@ static uint32_t name_hash(const char *s)
 {
     uint32_t h = 2166136261u;
 
-    for (int i = 0; i < RD_INAMES_NAME && s[i] != '\0'; i++) {
+    for (int i = 0; i < RD_INAMES_NAME - 1 && s[i] != '\0'; i++) {
         h = (h ^ (uint8_t)s[i]) * 16777619u;
     }
     return h;
+}
+
+uint32_t rd_inames_name_hash(const char *name)
+{
+    return name_hash(name != NULL && name[0] != '\0' ? name : "a draw");
 }
 
 void rd_inames_add(RdInameTally *t, const char *name, int why, uint32_t n)
@@ -80,14 +85,17 @@ static void put(Out *o, const char *fmt, ...)
     o->len = o->len + (size_t)n < o->cap ? o->len + (size_t)n : o->cap;
 }
 
-int rd_inames_text(const RdInameTally *t, uint32_t frames, uint32_t presents, char *out, size_t cap)
+int rd_inames_text(const RdInameTally *t, uint32_t frames, uint32_t presents,
+                   const RdInameStairs *cad, char *out, size_t cap)
 {
     Out o = {out, cap, 0, 0};
 
     if (cap > 0) {
         out[0] = '\0';
     }
-    put(&o, "interp names: draws left at their tick's position over %u frames (%u presents)",
+    put(&o,
+        "interp names: draws left at their tick's position over %u frames (%u presents; counted "
+        "at each frame's first present)",
         frames, presents);
     for (int w = 0; w < RD_INAME_COUNT; w++) {
         bool shown[RD_INAMES_SLOTS];
@@ -111,6 +119,12 @@ int rd_inames_text(const RdInameTally *t, uint32_t frames, uint32_t presents, ch
             }
             shown[best] = true;
             put(&o, "%s%s %u", named == 0 ? " (" : ", ", t->s[best].name, t->s[best].n[w]);
+            if (w == RD_INAME_STAIR && cad != NULL) {
+                uint32_t judged, moved, alt;
+
+                rd_inames_cadence(cad, name_hash(t->s[best].name), &judged, &moved, &alt);
+                put(&o, " [moved %u of %u, alternating %u]", moved, judged, alt);
+            }
         }
         if (named > 0) {
             put(&o, ")");
@@ -127,10 +141,18 @@ void rd_inames_stairs_reset(RdInameStairs *s)
     memset(s, 0, sizeof(*s));
 }
 
-bool rd_inames_stair(RdInameStairs *s, uint64_t key, uint32_t tick, uint32_t prevTick, bool moved)
+static void count(RdInameKey *e, unsigned v)
+{
+    e->judged += e->judged < UINT16_MAX ? 1u : 0u;
+    e->moved += (v & RD_INAMES_V_MOVED) && e->moved < UINT16_MAX ? 1u : 0u;
+    e->alt += (v & RD_INAMES_V_ALT) && e->alt < UINT16_MAX ? 1u : 0u;
+}
+
+unsigned rd_inames_stair(RdInameStairs *s, uint64_t key, uint32_t nameHash, uint32_t tick,
+                         uint32_t prevTick, bool moved)
 {
     if (tick == 0) {
-        return false;
+        return 0u;
     }
     if (s->used * 4u >= RD_INAMES_KEYS * 3u) {
         rd_inames_stairs_reset(s);
@@ -142,84 +164,127 @@ bool rd_inames_stair(RdInameStairs *s, uint64_t key, uint32_t tick, uint32_t pre
         RdInameKey *e = &s->k[at];
 
         if (e->tick == 0) {
+            memset(e, 0, sizeof(*e));
             e->key = key;
             e->tick = tick;
-            e->moved = moved;
+            e->nameHash = nameHash;
             s->used++;
-            return false;
+            return 0u; /* the first sight: nothing to judge against */
         }
-        if (e->key == key) {
-            /* one verdict a tick (a key drawn twice in a frame counts once) */
-            if (e->tick == tick) {
-                return false;
-            }
-            const bool step = !moved && e->moved && e->tick == prevTick;
-
+        if (e->key != key) {
+            continue;
+        }
+        /* one verdict a tick (a key drawn twice in a frame counts once) */
+        if (e->tick == tick) {
+            return 0u;
+        }
+        e->nameHash = nameHash;
+        if (e->tick != prevTick) {
+            /* not paired with the tick before's: a run broken, not judged */
             e->tick = tick;
-            e->moved = moved;
-            return step;
+            e->run = 0;
+            e->hist = 0;
+            return 0u;
+        }
+        const bool movedBefore = e->run > 0 && (e->hist & 1u) != 0;
+        unsigned v = RD_INAMES_V_JUDGED | (moved ? RD_INAMES_V_MOVED : 0u);
+
+        e->hist = (uint8_t)((e->hist << 1) | (moved ? 1u : 0u));
+        e->run = e->run < 8u ? (uint8_t)(e->run + 1u) : 8u;
+        e->tick = tick;
+        if (!moved && movedBefore) {
+            v |= RD_INAMES_V_STEP;
+        }
+        if (e->run >= 4u && ((e->hist & 0xFu) == 0x5u || (e->hist & 0xFu) == 0xAu)) {
+            v |= RD_INAMES_V_ALT;
+        }
+        count(e, v);
+        return v;
+    }
+    return 0u;
+}
+
+void rd_inames_cadence(const RdInameStairs *s, uint32_t nameHash, uint32_t *judged, uint32_t *moved,
+                       uint32_t *alt)
+{
+    uint32_t j = 0, m = 0, a = 0;
+
+    for (uint32_t i = 0; i < RD_INAMES_KEYS; i++) {
+        const RdInameKey *e = &s->k[i];
+
+        if (e->tick != 0 && e->nameHash == nameHash) {
+            j += e->judged;
+            m += e->moved;
+            a += e->alt;
         }
     }
-    return false;
+    *judged = j;
+    *moved = m;
+    *alt = a;
 }
 
-/* the origin through the view's inverse inv */
-static bool origin_by(const double *inv, const float (*m)[4], float out[3])
+void rd_inames_stairs_window(RdInameStairs *s)
 {
-    double w[4] = {0.0, 0.0, 0.0, 0.0};
-
-    for (int r = 0; r < 4; r++) {
-        for (int k = 0; k < 4; k++) {
-            w[r] += inv[k * 4 + r] * m[19][k];
-        }
+    for (uint32_t i = 0; i < RD_INAMES_KEYS; i++) {
+        s->k[i].judged = s->k[i].moved = s->k[i].alt = 0;
     }
-    if (!(fabs(w[3]) > 1e-12)) {
-        return false;
-    }
-    for (int j = 0; j < 3; j++) {
-        out[j] = (float)(w[j] / w[3]);
-    }
-    return isfinite(out[0]) && isfinite(out[1]) && isfinite(out[2]);
 }
 
-bool rd_inames_origin(const float (*m)[4], float out[3])
+bool rd_inames_carry(RdInameCarry *k, const float (*mp)[4], const float (*mc)[4])
 {
-    double a[16], inv[16];
+    if (!k->have || memcmp(k->vp, &mp[4][0], sizeof(k->vp)) != 0 ||
+        memcmp(k->vc, &mc[4][0], sizeof(k->vc)) != 0) {
+        double a[16], inv[16];
 
-    for (int i = 0; i < 16; i++) {
-        a[i] = m[4 + i / 4][i % 4];
-    }
-    if (!rdcb_invert4d(a, inv)) {
-        return false;
-    }
-    return origin_by(inv, m, out);
-}
-
-bool rd_inames_origin_kept(RdInameView *k, const float (*m)[4], float out[3])
-{
-    if (!k->have || memcmp(k->v, &m[4][0], sizeof(k->v)) != 0) {
-        double a[16];
-
-        memcpy(k->v, &m[4][0], sizeof(k->v));
+        memcpy(k->vp, &mp[4][0], sizeof(k->vp));
+        memcpy(k->vc, &mc[4][0], sizeof(k->vc));
         for (int i = 0; i < 16; i++) {
-            a[i] = k->v[i];
+            a[i] = k->vp[i];
         }
-        k->ok = rdcb_invert4d(a, k->inv) != 0;
+        k->ok = rdcb_invert4d(a, inv) != 0;
+        if (k->ok) {
+            /* row r of t: row r of Vp^-1 times Vc (rows as the VU stores
+               them: a point's screen place is sum_k p_k Vc[k]) */
+            for (int r = 0; r < 4; r++) {
+                for (int c = 0; c < 4; c++) {
+                    double v = 0.0;
+
+                    for (int q = 0; q < 4; q++) {
+                        v += inv[r * 4 + q] * (double)k->vc[q * 4 + c];
+                    }
+                    k->t[r * 4 + c] = v;
+                }
+            }
+        }
         k->have = true;
     }
-    return k->ok && origin_by(k->inv, m, out);
+    return k->ok;
 }
 
-bool rd_inames_moved(const float a[3], const float b[3])
+bool rd_inames_moved(const double t[16], const float (*mp)[4], const float (*mc)[4])
 {
-    double size = 1.0;
+    for (int q = 16; q < 20; q++) {
+        double p[4];
+        double m = 0.0;
 
-    for (int j = 0; j < 3; j++) {
-        size = fmax(size, fmax(fabs((double)a[j]), fabs((double)b[j])));
-    }
-    for (int j = 0; j < 3; j++) {
-        if (fabs((double)a[j] - (double)b[j]) > 1e-6 * size) {
-            return true;
+        for (int c = 0; c < 4; c++) {
+            double v = 0.0;
+
+            for (int r = 0; r < 4; r++) {
+                v += (double)mp[q][r] * t[r * 4 + c];
+            }
+            p[c] = v;
+        }
+        /* X, Y and W (lane 2, the GS Z, left out), as stillRows reads them */
+        for (int c = 0; c < 4; c++) {
+            if (c != 2) {
+                m = fmax(m, fmax(fabs(p[c]), fabs((double)mc[q][c])));
+            }
+        }
+        for (int c = 0; c < 4; c++) {
+            if (c != 2 && !(fabs(p[c] - (double)mc[q][c]) <= m * RD_INAMES_STILL_REL)) {
+                return true;
+            }
         }
     }
     return false;

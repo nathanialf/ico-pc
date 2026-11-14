@@ -4,6 +4,7 @@
 - The Options page that holds the chain settings is now called Chains (it was called Yorda).
 - The log now lists, at start, the adjustments the game makes for your graphics chip and driver, with the reason for each.
 - The log now names the objects that move without smoothing between game frames, and times the moments when the picture rate drops to one picture per game frame, so a report of slow-looking movement can be traced.
+- The log now follows each request the game makes to Android for more speed for five seconds, so the next log shows whether the request helped.
 
 ## Fixed
 
@@ -13,3 +14,4 @@
 - The frame rate counter no longer shows a very low number after you return to the game, turn the screen or save a picture for a bug report.
 - After a short graphics freeze the game no longer mistakes its own check for a fault and saves a capture, which could cause another freeze.
 - An attempt at moving objects looking slow on phones running Android 16 or later with the frame rate uncapped: when the picture rate drops to one picture per game frame, the game now tells Android it needs more processor and graphics speed (the picture itself is unchanged).
+- The log's list of objects that move only every other game frame named torches, chains and pots that stand still; it now judges movement the way the smoothing does and says how often each named object moves.

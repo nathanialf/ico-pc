@@ -1626,18 +1626,40 @@ The lines:
   seconds at one a tick behind the step rule, clock lifts asked 5` (the fewest pictures a frame,
   then the most CPU a picture; the samples are the 250 ms CPU clock samples inside that second,
   each cluster's mean; `the CPU clocks not sampled here` off Android);
-- at the end of the ranked line (`window: perf ranked: ...`) when a cluster's block average is under
-  80 % of the median of the six blocks before (at least two of them, at least 8 samples):
+- at the end of the ranked line (`window: perf ranked: ...`), only for a block at or near one
+  picture a tick (at most 1.5 pictures a game frame) whose picture CPU is 1.25 times the median of
+  the blocks before or more (at least two with a CPU known): the clusters whose block average is
+  under 80 % of the median of the six blocks before (at least two of them, at least 8 samples),
   `; the CPU clocks under their level: cores 2-6 averaged 884 MHz against 1197 (the median of the
   6 blocks before; 74 %); the performance hint's target 7.81 ms a picture, its reports 22.56 ms CPU /
-  20.73 ms GPU (over target in 294 of 300); clock lifts asked 3 (taken 3)`. Over the owner's log
-  the rule names exactly the two slow blocks (884 against 1197, 896 against 1132.5) and no other.
+  20.73 ms GPU (over target in 294 of 300); clock lifts asked 3 (taken 3)`, or `; the CPU clocks
+  not under their level (no cluster under 80 % of its median before)`, then the block and the
+  render thread's own core: `; at 1.00 pictures a tick with a picture's CPU 22.6 ms against 9.5
+  (the median of the 6 blocks before); the render thread on core 6 averaged 870 MHz in the block,
+  its cluster cores 2-6 at 1197 before (73 %)` (`clock_trap.c clock_trap_due`). The first release
+  candidate printed the clause for any dipped cluster: it fired on good blocks after a capture or a
+  resume (47-102 presented fps) and named cores 0-1 and core 7 but not the render thread's cores
+  2-6 in the one block that mattered; the gate and the render thread's core are the fix.
+- after each lift asked, one line a second for the 5 seconds after the lift's own (a lift during
+  them starts the 5 again; at most 300 such lines a run): `window: clock lift trace 2 of 5: 41
+  pictures for 30 game frames (1.37 a tick), a picture's CPU 12.3 ms; the step rule held 12 of 40
+  further pictures asked; the CPU clocks in that second (4 samples, MHz): cores 0-1 460 812 1286
+  533, cores 2-6 400 884 2092 1100, core 7 883 2707 1008 900`. The first release candidate's log
+  could not tell whether a lift did anything (the clocks fell after the calls, and the recovery
+  came with the cutscene's end); the trace shows the clocks and the pictures a tick second by
+  second after each call.
 
 What to look for in the next log from the phone: blocks in the cage at about two pictures a tick
 throughout; where a block still falls to one a tick, the worst-second line timing it, the ranked
 line's clock clause, `clock lift asked` lines followed by `taken` and the clusters' clocks in the
 worst second rising in the block after. `not supported here (ENOTSUP)` or `rate-limited` on every
 lift says the system ignores the notice: then the clocks are out of the port's reach.
+
+The first release candidate's `the GPU's time would pace them to 7.0 a step` (a block line on the
+as-made path) is the arithmetic of the block's last step: the step's GPU time (a stage switch's
+fade, 2.4 ms a picture) into the 16.7 ms period (`pace_policy.c pace_budget_paced_tenths`, kept at
+each step). On the as-made path nothing is held by it; it says how many pictures a step the GPU
+alone would allow at that last step, so a block that ends in a fade or a load shows a large number.
 
 ### The draws left at their tick's position, by name
 
@@ -1648,13 +1670,39 @@ presents): unmatched 9 (cage 5, ico part 2 3, a screen prim 1); mismatched 0; ju
 turn snapped 0; unkeyed 812 (a screen prim 700, ...); stair-steppers (matched, still this tick after
 moving the tick before) 30 (cage part 2 15, ...); names past the table 0` names the top five of each
 reason by the mesh's name (the model's name the game gave the packet) or the draw's kind
-(`port/render/rd_inames.c`, `rd_inames_live.c`; hooks in `rd_interp.c`). A stair-stepper is a
-matched mesh draw placed in the world whose model is where it was the tick before while the tick
-before it moved (its origin through the inverse of the frame's view, the camera's own motion
-cancelled): an object the game moves every other tick steps on alternate ticks, which next to the
-blended world looks slow. One that stopped counts once; a stepper counts every other tick, so a
-name with a count near half the ticks is a stepper. A name in `unmatched`, `jumped` or `turn
-snapped` with a large count is drawn at its tick's position (no in-between motion).
+(`port/render/rd_inames.c`, `rd_inames_live.c`; hooks in `rd_interp.c`), counted at each frame's
+first present as the interpolation's own line counts its draws (the first release candidate
+counted every present, twice the interpolation line's numbers at two pictures a tick).
+
+A stair-stepper is a matched mesh draw placed in the world that the interpolation would draw still
+this tick while it moved at the tick before against the one before that. "Still" is the
+interpolation's own still bound (`rd_interp.c stillRows`, 2^-17): the tick before's model rows
+carried to this tick's view against this tick's, the screen's X, Y and W. Each name carries its
+cadence over the window, `chain4 40 [moved 120 of 245, alternating 118]`: the ticks its draws moved
+in of those judged, and of them the ticks in a run of every other tick (the last four judged ticks
+moved, still, moved, still). An object the game moves every other tick shows about half its ticks
+moved and nearly all of them alternating; one that pauses now and then, few.
+
+The first release candidate's stair-steppers were the test's own error, not the game's: it
+compared the model's origin in the world (through the inverse of the frame's view) at a millionth
+of its size, and the view's depth lane (about 10^9) puts the float rounding of a still object at
+1.4e-7 to 2.0e-6 of its size there. In seven stage 4 dump pairs of the owner's phone (the camera
+moving) the cage, its chain, the torches (`taimatsu1`, `taimatsu2`) and `sekizo01` did not move
+between the ticks (their screen places 0.00004-0.0002 GS pixels apart in the three measured:
+rounding), yet the origin test said "moved" for the cage in all seven and for its chain in three
+of six; with the camera moving such objects moved and stopped at random, which is how `taimatsu1
+432` (stage 4's cutscene) and `chain4 754`, `pot 690` (stage 5) read. Carried in the rows the same
+objects sit at 0.1-1.1 % of the 2^-17 bound and Ico's moving parts at 90 to 24000 times it. The
+interpolation itself judges with the rows (a replay of one of those pairs at 0.5: 255 still draws,
+0 unmatched), so those objects were drawn still between the ticks. No dump of stage 5 was at hand:
+whether `chain4` and `pot` there move at all is for the next log's cadence to say.
+
+A name in `unmatched` (no draw of the tick before) is drawn at its tick's position through the
+blended camera. For the stage's own parts (`st13c_p1`, `st13d_p3`: drawn at the world's origin, the
+model rows the view's) that is exactly what a blend would draw: they come and go with the game's box
+cull as the camera turns and cost nothing on screen. For a moving object it is one tick without
+in-between motion: in the first release candidate's log `cage 48` in two windows (12 parts on two
+pictures of each of two ticks: `114 not drawn the tick before`), the cage coming into view.
 
 ## The threads' cores after the start
 
@@ -2262,8 +2310,8 @@ counter is an increment in a hot path, and none of them reads anything from the 
 | Pixel under Uncapped at 120 Hz: motion sped up and slowed (pictures shown a mix of one and two refreshes apart) | Which moment is drawn for each picture, and how many land on the refresh predicted for them? | The attempt ledger's `in-between pictures for the screen's refresh on (...) N pictures placed` and `in-between pictures on their own timer on (Android: ...)`; the `on the glass` line's `drawn (the screen's predicted refresh)` measure (its deviation and its share above 1.5) and its clause's `the refresh predicted against the one shown over S pictures: H on it (P %)` with the reasons a picture was `drawn as otherwise` ([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#the-on-glass-line)) |
 | Adreno 740: three skin-check `wrong` verdicts right after 400 ms stalls with the GPU's own sign of a reset, each reading the readback's bytes from an earlier check (`not written again`); the first started the run's capture (44 ms on the game thread, about 1 s on the worker), and more stalls followed | Do the stall clusters remain without the captures? | The attempt ledger's row `no capture after a stall on (a skin check read after a GPU reset is skipped, not captured) N checks skipped after a reset` in the block that holds the stalls, the ledger line's `; stalls N in the block`, each skipped check's `rd: VU skin check: frame F command L:I ...: skipped after a reset: WHY; ...` and the 10 s `rd: VU skin check: P checks, W wrong, K skipped after a reset, ...`; no `VU skin check: captured` or `window: skin-check capture:` line after a stall; then whether `window: stall:` lines still come in clusters a few replays apart ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md#skipped-after-a-reset)). Every stall of a block has its line (up to 350 a block; the tally says how many were left out past it), so a cluster's members are each named with their replay and `(a hang)` or `(not a hang: ...)`, and the tally's `H of them hangs` per block shows whether the hangs themselves come in clusters or only the presents after them |
 | Adreno 740: every hang's first unwritten stamp is `list 0's end`, the present's own list's stamps written after it | Which submission hangs, and was the present waiting on it? | Each `window: stall:` line's clause `the submissions around it (from the stall's start): replay R's K of N (lists 0-12, P pieces; S stamps, U unwritten; it holds the first unwritten stamp) submitted at -T ms, signalled at or before +T ms ...; replay R's 2 of 2 (the present's list, ...; S stamps, all written) ...; replay R+1's 2 of 2 (1 list, the stalled present waits on it) ...; in flight at the stall's start: S seen, U not known`: the submission index that holds the first unwritten stamp across the hangs (always 1 of 2, the scene's, or not), whether the present's list after it ran (its stamps written), and how long before the stall each was submitted. The earlier submissions' own signals stay unknown (no Vulkan call reads them; the slot's last one's is its wait's end) ([Which submission hangs](#issue-123-the-hang-detector-and-the-pass-path)) |
-| Pixel 10 Pro Fold under Uncapped in the cage: two 10 s blocks at exactly one picture a tick, the render thread's CPU and the GPU's work a picture up by half to double, the cores 2-6 clock down, the hint over target either way | Did the clock lift keep the cage at about two a tick, and when a block falls, what were the clocks in its worst second? | The attempt ledger's `clock lift at one picture a tick on (...) N lifts asked (M taken by the system)` and the hint line's `; clock lifts ...`; `window: clock lift asked: ...` with `window: clock lift: ... taken`; `window: worst second of the block: ...` (pictures a tick, the step rule's holds, the clusters' clocks by sample); the ranked line's `; the CPU clocks under their level: ...` ([The clock lift](#the-clock-lift-and-the-worst-second-the-owners-pixel)) |
-| The owner's "slow down on movement of objects like the cage": draws left at their tick's position were 0.1-0.5 % of keyed draws, unnamed | Which objects are drawn at their tick's position, and which step every other tick? | `rd: interp names: draws left at their tick's position over 250 frames ...`: the top five names of each reason and the stair-steppers ([by name](#the-draws-left-at-their-ticks-position-by-name)) |
+| Pixel 10 Pro Fold under Uncapped in the cage: two 10 s blocks at exactly one picture a tick, the render thread's CPU and the GPU's work a picture up by half to double, the cores 2-6 clock down, the hint over target either way | Did the clock lift keep the cage at about two a tick, and when a block falls, what were the clocks in its worst second? | The attempt ledger's `clock lift at one picture a tick on (...) N lifts asked (M taken by the system)` and the hint line's `; clock lifts ...`; `window: clock lift asked: ...` with `window: clock lift: ... taken`; `window: worst second of the block: ...` (pictures a tick, the step rule's holds, the clusters' clocks by sample); the ranked line's clock clause at a block near one a tick with its CPU raised (`; at 1.00 pictures a tick ...; the render thread on core N ...`); `window: clock lift trace k of 5: ...` the five seconds after each lift (did the clocks rise after the call?) ([The clock lift](#the-clock-lift-and-the-worst-second-the-owners-pixel)) |
+| The owner's "slow down on movement of objects like the cage": draws left at their tick's position were 0.1-0.5 % of keyed draws, unnamed; the first release candidate's stair-steppers (`chain4`, `pot`, `taimatsu1`) were still objects the test misjudged | Which objects are drawn at their tick's position, and does any really move every other tick? | `rd: interp names: draws left at their tick's position over 250 frames (...; counted at each frame's first present) ...`: the top five names of each reason and the stair-steppers with their cadence `[moved M of J, alternating A]` (A near M near half of J: a real every-other-tick object) ([by name](#the-draws-left-at-their-ticks-position-by-name)) |
 | Pixel opening: lamps, dark and sun views | What does each block cost, and which cut fired? | `window: compare: ...; GPU ms a picture: ...; glow plans: lamps N, dark N, whole N`, `passes` and `breaks` a picture, and the ledger line's per-cut fired counts |
 
 ### The attempt ledger
@@ -2312,7 +2360,7 @@ thread can make it, hot paths included. The rows and where their states are set:
 | index compaction | `rd_vu_compact.c` at the pre-pass's start and after the record's self-test (`ico_attempt_decide_compaction`): `off by default (off by default on the Mali-G52: it blacked out the picture there ... (issue 179; RD_VU_COMPACT_ARM_DEFAULT 0))` on the Mali-G52; `on` on the compute record of the PowerVR D-Series DXT-48-1536 (or a Mali-G52 under `ICO_RD_VU_COMPACT=1`) where the class's define allows and the self-test passed (its pictures equal, at the play record's size with the lists from the fourth plane's middle, and no stamp of its own pictures unwritten) (`the Mali-G52, its start-up self-test passed`, `the PowerVR D-Series DXT-48-1536, ...`; `ICO_RD_VU_COMPACT=1: the tests' switch` without a self-test), `refused by its self-test` when the record's test failed with it and passed without it, `off by default` on every other device (`measured on the Mali-G52 only ...`), by the define, before the self-test or where none ran (`its start-up self-test not run (yet)`) or by `ICO_RD_VU_COMPACT=0`, `not applicable here` with the record path that holds (`record path stores: vertex shader stores`, `record path targets: render targets`, `the VU pre-pass is off`) | the triangles left out (drop and outside, every list), from the counts read back when the frame slot comes round |
 | VU record by compute on the PowerVR | `rd_vu_record.c` at the record's start (`ico_attempt_decide_vu_compute`): `on (the PowerVR D-Series DXT-48-1536: compute dispatches in place of the vertex stores)` on the one PowerVR it ran on, `off by default (not the PowerVR D-Series DXT-48-1536 it was shown on: the vertex stores (its self-test judges the record's bytes, not a device lost on a driver not tried))` on the rest of the PowerVR class under Vulkan with both stores, `on` by the tests' switch, `refused by its self-test` when the compute record failed it (the vertex stores then), `not applicable here` elsewhere (no vertex stores, no compute stores, another class, a `[dev] vu_record` by name) | `rd_vu_record.c` `rd__replay_dispatch`: the dispatches |
 | turn in the present's blit | `rd_present.c` at each present (`ico_attempt_decide_turn_fold`): `not applicable here` without a pre-rotated swapchain, `off by default` until the define is flipped or with its self-test not run, `refused by its self-test`, `on` with it passed | `rd_turn_fold.c`: the presents folded (the second count: those on a turned swapchain that kept the turn pass) |
-| VU record sized from need | `rd_vu_rec_early.c` at the start-up preparation (`ico_attempt_decide_rec_need`: on where the run's need made a smaller record than the memory bound allowed; not applicable with the pre-pass off, nothing made at start-up, or a bound no larger than the need) | the record's growths in play (`rd_replay_vu.c` recEnsure, a record that existed grown) |
+| VU record sized from need | `rd_vu_rec_early.c` at the start-up preparation (`ico_attempt_decide_rec_need`: on where the run's need made a smaller record than the memory bound allowed; not applicable with the pre-pass off, `the record already held the run's need at start-up: nothing to make` (the owner's Pixel: 1024 rows held, its largest; the first release candidate said "under the free-memory floor ..." there with 774 MB above it), nothing made for the memory (`the free memory under its floor or the system's low-memory signal, or no larger record within the memory bound`), or a bound no larger than the need) | the record's growths in play (`rd_replay_vu.c` recEnsure, a record that existed grown) |
 | in-between pictures for the GPU's predicted end | `rd_pace_gpu_live.c` on the poster's thread at each change (`ico_attempt_decide_pace_gpu`): `not applicable here (the pictures are paced here (vsync on, a frame rate cap, the Original frame rate or the render thread off): ...)` while the window does not present pictures as made, `off by default (the owner's phone felt worse with it in ...; kept for measurement)` once a picture's GPU span and first submit came back (`on (ICO_RD_PACE_GPU=1: ...)` with the tests' switch), `not applicable here (no GPU span or slot clock on this backend ...)` after 600 measurements back without one (OpenGL, Direct3D 11, timestamps off: the hand-over less the mean drain kept); the start line `rd: in-between pictures for the GPU's predicted end: off by default (...); the GPU per picture the median of the last 15 measured spans, ...; computed and reported, not drawn (ICO_RD_PACE_GPU=1 draws it)` at each change (the first 8, then every 100th) | `rd_pace_gpu_live.c` `rd_pace_gpu_shift`: the pictures the model placed, drawn or not (the second count: those held at its bound); the evenness line's last clause has the rest ([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#the-evenness-line)) |
 | in-between pictures on their own timer | `rd_pace_rules.c` on the poster's thread at each change (`ico_attempt_decide_as_made_timer`): `not applicable here (the pictures are paced here: ...)` while paced, `on (Android: each picture's moment from its own timer)` as made on Android (drawn where the screen's rule does not place the picture), `off by default (not Android: the hand-over rule kept, the timer measured on a phone only; computed and reported)` as made elsewhere (`ICO_RD_AS_MADE_TIMER=0|1` over both); the start line `rd: in-between pictures on their own timer: on (...); each picture's moment the one before plus the mean hand-over interval ...` | `rd_pace_rules.c`: the pictures it gave a moment, drawn or not (the second count: those held inside their frame's tick); the on-glass line has its speed ([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#the-on-glass-line)) |
 | in-between pictures for the screen's refresh | `rd_pace_screen_live.c` on the poster's thread at each change (`ico_attempt_decide_pace_screen`): `not applicable here (the pictures are paced here: ...)` while paced, `not applicable here (no GPU end to predict from on this backend ...)` where the GPU queue's model has no slot clock, `not applicable here (the display gives no times back (no VK_GOOGLE_display_timing: desktop, OpenGL, Direct3D): ...)` after 600 pictures as made without a display time, `on (Android: each picture drawn for the refresh the screen is predicted to show it at (measured on Android phones only))` once both came back on Android, `off by default (not Android: measured on Android phones only; computed and reported on the on-glass line as a what-if)` on any other build whose display gives its times back (`ICO_RD_PACE_SCREEN=0|1` over both); the start line `rd: in-between pictures for the screen's refresh: on (...); each picture drawn for the time the screen will show it: ...` at each change (the first 8, then every 100th) | `rd_pace_screen_live.c` `rd_pace_screen_step`: the pictures it placed, drawn or not (the second count: those held at their frame pair's tick's edges); the on-glass line's clause has the rest ([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#the-on-glass-line)) |

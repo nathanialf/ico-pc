@@ -133,7 +133,7 @@ void rd_vu_record_prepare(RdEarlyMemoryFn memory)
     s_rows = recOk ? p.rows : 0u;
     s_arena = p.arena && arenaOk;
     __atomic_store_n(&s_early, s_rows, __ATOMIC_RELAXED);
-    ico_attempt_decide_rec_need(in.recordWanted, s_rows, p.boundRows, in.startRows);
+    ico_attempt_decide_rec_need(in.recordWanted, s_rows, p.boundRows, in.startRows, in.haveRows);
     const double ms = rd__now_ms() - t0;
     const uint64_t made = (uint64_t)s_rows * in.rowBytes + (s_arena ? in.arenaBytes : 0u);
 

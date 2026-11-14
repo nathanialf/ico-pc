@@ -277,9 +277,12 @@ void ico_attempt_decide_queue_priority(int state, const char *why);
 /* the record sized from need (rd_vu_rec_early.c rd_vu_record_prepare, once
    at start-up): wanted the pre-pass is on, made the rows made at start-up
    (0 none), bound the rows the memory bound alone allowed, need the run's
-   need (rd_early_start_rows; 0 none): on where the need's size made less
-   than the bound allowed, else not applicable with the reason */
-void ico_attempt_decide_rec_need(int wanted, uint32_t made, uint32_t bound, uint32_t need);
+   need (rd_early_start_rows; 0 none), have the rows the record held before
+   (rd__vu_rec_rows): on where the need's size made less than the bound
+   allowed, else not applicable with the reason (nothing made because the
+   record already held the need is said as that, not as the memory) */
+void ico_attempt_decide_rec_need(int wanted, uint32_t made, uint32_t bound, uint32_t need,
+                                 uint32_t have);
 void ico_attempt_decide_no_volume_break(int env, int classOk, int measured, int defaultOn,
                                         const char *gateWhy);
 /* the VU record by compute on the PowerVR class (rd_vu_class.c, at the

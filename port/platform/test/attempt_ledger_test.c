@@ -279,6 +279,10 @@ static void test_classes(void)
         {1024, 1024, 1024, ICO_ATT_NA},
     };
 
+    /* the rows the record held before the start's plan: 256 in every class
+       above (the start's record), so a class with nothing made is the
+       memory's reason; the record already at the need is checked below */
+
     /* the facts the shipped defaults read, k's classes in order: the
        device is the PowerVR the VU record by compute and the no-volume
        break were shown on (rd_vu_class.h rd__vu_class_measured: the
@@ -365,7 +369,7 @@ static void test_classes(void)
         CHECK(ico_attempt_decide_vu_compute(0, d->vuStores, 1, d->vuPowervr, kShip[c].measured, -1,
                                             1) == (d->wantVu == ICO_ATT_ON ? 1 : 0));
         CHECK(ico_attempt_decide_turn_fold(d->turned, -1, 0, -1) == 0);
-        ico_attempt_decide_rec_need(1, kRec[c].made, kRec[c].bound, kRec[c].need);
+        ico_attempt_decide_rec_need(1, kRec[c].made, kRec[c].bound, kRec[c].need, 256u);
         CHECK(ico_attempt_decide_compaction(kCmp[c].compute, kCmp[c].notWhy, kCmp[c].cls, -1, 1, 1,
                                             kCmp[c].compute ? 1 : -1) ==
               (kCmp[c].want == ICO_ATT_ON));
@@ -732,9 +736,27 @@ static void test_classes(void)
     ico_attempt_decide_pace_even(1, 1, -1, 1);
     CHECK(ico_attempt_state_of(ICO_ATT_PACE_EVEN) == ICO_ATT_ON);
     /* the record's row: the pre-pass off; on with its growths counted */
-    ico_attempt_decide_rec_need(0, 512, 1024, 512);
+    ico_attempt_decide_rec_need(0, 512, 1024, 512, 256);
     CHECK(ico_attempt_state_of(ICO_ATT_REC_NEED) == ICO_ATT_NA);
-    ico_attempt_decide_rec_need(1, 512, 1024, 512);
+    /* nothing made: the record already at the need (the owner's Pixel in
+       v0.11.7-rc1: 1024 rows held, the need 1024, 774 MB above the floor),
+       and the memory's reason where it held less */
+    {
+        char b[8192];
+
+        ico_attempt_decide_rec_need(1, 0, 0, 1024, 1024);
+        CHECK(ico_attempt_state_of(ICO_ATT_REC_NEED) == ICO_ATT_NA);
+        (void)ico_attempt_start_text(b, sizeof b);
+        CHECK(strstr(b, "; VU record sized from need not applicable here (the record already "
+                        "held the run's need at start-up: nothing to make)") != NULL);
+        ico_attempt_decide_rec_need(1, 0, 0, 1024, 256);
+        CHECK(ico_attempt_state_of(ICO_ATT_REC_NEED) == ICO_ATT_NA);
+        (void)ico_attempt_start_text(b, sizeof b);
+        CHECK(strstr(b, "; VU record sized from need not applicable here (nothing made at "
+                        "start-up: the free memory under its floor or the system's low-memory "
+                        "signal, or no larger record within the memory bound)") != NULL);
+    }
+    ico_attempt_decide_rec_need(1, 512, 1024, 512, 256);
     CHECK(ico_attempt_state_of(ICO_ATT_REC_NEED) == ICO_ATT_ON);
     ico_attempt_fire(ICO_ATT_REC_NEED, 2);
     {

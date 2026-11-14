@@ -72,7 +72,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_icon_hold.c`, `rd_icon_hold.h` | the title's last picture held on screen while the icon capture's frames are presented ([APP_ICON.md](APP_ICON.md#the-capture-on-the-title)) |
 | `port/render/rd_present_clock.c` | the present clock the timer path takes alpha from (`rd_present_clock_alpha`), the values it notes for `rd_present` (the alpha before its clamp, the time since the present before, the tick) and Motion blur: Smooth's presents a tick (`rd__present_clock_k`) ([DISPLAY.md](DISPLAY.md#interpolation-between-ticks)) |
 | `port/render/rd_interp_mesh.c` | the interpolation's reads of a mesh's stream kept while its serial holds: a skinned mesh's bone pivots, a rigid mesh's centroid, the same-shape answer of two streams ([Performance notes](RENDER_PERF.md#performance-notes)) |
-| `port/render/rd_inames.c`, `rd_inames.h`, `rd_inames_live.c`, `rd_inames.cmake` | the draws left at their tick's position by name and the stair-steppers (matched, still this tick after moving the tick before): `rd: interp names: ...` every 250 frames ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-draws-left-at-their-ticks-position-by-name)) |
+| `port/render/rd_inames.c`, `rd_inames.h`, `rd_inames_live.c`, `rd_inames.cmake` | the draws left at their tick's position by name, counted at each frame's first present, and the stair-steppers (matched, drawn still this tick by the interpolation's own still bound after moving the tick before) with each name's cadence: `rd: interp names: ...` every 250 frames ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-draws-left-at-their-ticks-position-by-name)) |
 | `port/render/texpack*.c`, `modelpack.c`, `gltf.c`, `xxh3.c` | texture and model packs ([PACKS.md](PACKS.md)) |
 
 ## The model
@@ -1996,6 +1996,21 @@ the still draws (less the turn), differs in bits from the block they take: the d
 changed. W counts the parts of the world `camCurDraw` re-based in a blended frame, K the draws
 marked `RD_VU_TICK_CAMERAS` (`RdInterpStats` `stillDraws`, `stillReRounded`, `curWorld`, `tickCams`,
 `port/render/rd_internal.h`).
+
+**Objects that move every other tick (the stair-steppers).** An object the game moved only every
+other tick would be blended over one tick and held over the next, which beside a smoothly blended
+world looks slow. The interpolation does not try to detect or re-time such objects: the diagnostic
+`rd: interp names: ...` (`port/render/rd_inames.c`) names them with the same still bound as
+`stillRows` (the tick before's model rows carried to this tick's view, X, Y and W within 2^-17 of
+the row's larger lane) and gives each name's cadence, `[moved M of J, alternating A]`. The
+investigation of the owner's "slow down on movement of objects like the cage" found no such
+object: the first release candidate's stair-steppers (`taimatsu1`, `chain4`, `pot`) came from a
+test on the model's world origin at a millionth of its size, inside the float rounding of a still
+object seen through the screen-view's inverse (its depth lane is about 10^9); in seven stage 4 dump
+pairs the cage, its chain and the torches did not move at all between the ticks. Re-timing an
+object found to move every other tick (blending from two ticks back to the latest over two ticks)
+would show it one tick, 33 ms, late and leave the tick's own picture to be drawn exactly as today;
+it is not built, as no object has been shown to need it ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-draws-left-at-their-ticks-position-by-name)).
 
 **Alpha 0 is a present between the ticks.** On the timer path the present clock clamps a value
 below 0 to exactly 0, which a present right after a tick closes often has

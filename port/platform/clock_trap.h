@@ -86,6 +86,7 @@ typedef struct ClockTrapBlock {
     unsigned seconds, oneATick, lifts;
     double cpuMs;
     unsigned cpuN;
+    unsigned pictures, frames; /* the block's (every picture drained, every new frame) */
 } ClockTrapBlock;
 
 typedef struct ClockTrap {
@@ -132,6 +133,7 @@ typedef struct ClockTrapClusters {
     int first[CLOCK_TRAP_CLUSTERS], last[CLOCK_TRAP_CLUSTERS];
     double mean[CLOCK_TRAP_CLUSTERS]; /* MHz over the block's samples */
     unsigned samples[CLOCK_TRAP_CLUSTERS];
+    double cpuMs; /* the block's picture CPU (ClockTrapBlock's mean); 0 not known */
 } ClockTrapClusters;
 
 /* from the block's per-core sums (the first CLOCK_TRAP_CLUSTERS runs) */
@@ -155,6 +157,46 @@ typedef struct ClockTrapDip {
    least CLOCK_TRAP_DIP_MIN_SAMPLES samples): their count (at most cap) */
 int clock_trap_dips(const ClockTrapHist *h, const ClockTrapClusters *now, ClockTrapDip *out,
                     int cap);
+
+/* --- when the ranked line names the clocks ---------------------------------- */
+
+/* v0.11.7-rc1 on the owner's Pixel: the dip clause fired on good blocks
+   after a capture or a resume (47-102 presented fps, 1.6-3.4 pictures a
+   tick: :2966, :3204, :3321, :3450, :3567) and not where it mattered.  It
+   is said only for a block at or near one picture a tick
+   (pictures x 10 <= frames x CLOCK_TRAP_DUE_TICK_TENTHS) whose picture
+   CPU is CLOCK_TRAP_DUE_CPU_RISE times the median of the blocks kept or
+   more (at least two with a CPU known): the rc13 log's slow blocks, 1.0 a
+   tick at 22.6 ms against 9-10 ms, are such blocks. */
+#define CLOCK_TRAP_DUE_TICK_TENTHS 15u
+#define CLOCK_TRAP_DUE_CPU_RISE 1.25
+
+typedef struct ClockTrapDue {
+    bool due;
+    unsigned pictures, frames;
+    double cpuMs, cpuMedian;
+    unsigned cpuBlocks;
+    /* the render thread's core at its last picture (-1 not known), its
+       average clock in the block (0 not sampled), its cluster's cores and
+       that cluster's median over the blocks kept (0 none) */
+    int core;
+    double coreMhz;
+    int clFirst, clLast;
+    double clMedian;
+    unsigned clBlocks;
+} ClockTrapDue;
+
+/* The block's pictures, frames and picture CPU (cpuMs 0: not known)
+   against the blocks kept; now the block's clusters, core the render
+   thread's core and coreMhz its block average (0 not sampled): out
+   filled, out->due returned */
+bool clock_trap_due(const ClockTrapHist *h, const ClockTrapClusters *now, unsigned pictures,
+                    unsigned frames, double cpuMs, int core, double coreMhz, ClockTrapDue *out);
+
+/* "; at 1.02 pictures a tick with a picture's CPU 22.6 ms against 9.4 (the
+   median of the 6 blocks before); the render thread on core 6 averaged 870
+   MHz in the block, its cluster cores 2-6 at 1197 before (73 %)" */
+int clock_trap_due_text(const ClockTrapDue *d, char *out, size_t cap);
 
 /* --- the lines (without "window: "; the length snprintf gives) ----------- */
 
@@ -180,5 +222,17 @@ int clock_trap_worst_text(const ClockTrapBlock *b, double blockStartMs, const Gp
 
 /* "clock lift asked: ..." (the event line on the game thread) */
 int clock_trap_lift_text(const ClockTrapSecond *s, char *out, size_t cap);
+
+/* After each lift asked, a line a second for CLOCK_TRAP_TRACE_SECONDS
+   seconds (the seconds after the lift's own), so a log shows whether the
+   call moved anything: "clock lift trace 2 of 5: 41 pictures for 30 game
+   frames (1.37 a tick), a picture's CPU 12.3 ms; the CPU clocks in that
+   second (4 samples, MHz): cores 0-1 ..., cores 2-6 ..., core 7 ..." (ring
+   NULL: "the CPU clocks not sampled here").  At most CLOCK_TRAP_TRACE_MAX
+   lines a run. */
+#define CLOCK_TRAP_TRACE_SECONDS 5u
+#define CLOCK_TRAP_TRACE_MAX 300u
+int clock_trap_trace_text(const ClockTrapSecond *s, unsigned k, const GpuSysfsRing *ring, char *out,
+                          size_t cap);
 
 #endif /* ICO_PLATFORM_CLOCK_TRAP_H */

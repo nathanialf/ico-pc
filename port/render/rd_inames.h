@@ -12,22 +12,40 @@
  * ico2/seki/src/Packet.c pac_hostBuild) or the draw's kind where it has no
  * mesh.
  *
- * And the stair-steppers: a matched mesh draw whose model is where it was
- * the tick before while the tick before it moved (its place in the world,
- * the model's origin through the inverse of the frame's camera, as
- * rd_interp.c vuWorldOrigin reads it).  An object the game moves every
- * other tick is blended between ticks but steps on alternate ones: next to
- * the blended world it looks slow and jerky.  A draw that only stopped
- * counts once; one that steps counts every other tick, so the top names
- * over 250 frames are the steppers.
+ * And the stair-steppers: a matched mesh draw placed in the world that the
+ * interpolation would draw still this tick (its placement where it was the
+ * tick before) while it moved at the tick before against the one before
+ * that.  "Moved" is the interpolation's own still bound (rd_interp.c
+ * stillRows, RD_INTERP_STILL_REL 2^-17): the tick before's model rows
+ * (VU mem 16..19, the model through the frame's screen-view) carried to
+ * this tick's view (the tick before's view inverted, this tick's applied)
+ * against this tick's, X, Y and W apart by more than 2^-17 of the larger
+ * magnitude in their row.  v0.11.7-rc1 compared the model's origin in the
+ * world (through the view's inverse) at a millionth of its size: the
+ * screen-view's Z lane (about 1e9) puts the float rounding of a still
+ * object's origin at 1.4e-7 to 2.0e-6 of its size in the world (seven
+ * stage 4 dump pairs of the owner's phone, the camera moving: taimatsu1,
+ * chain, cage, sekizo01, all still), so a still torch moved and stopped at
+ * random and counted as a stepper; carried in the rows the same objects
+ * are 0.1-1.1 % of the 2^-17 bound and Ico's moving parts 90 to 24000
+ * times over it.
+ *
+ * Each name in the list carries its cadence over the window: the ticks its
+ * draws moved in of the ticks judged, and of them the ticks in a run of
+ * every other tick (moved, still, moved, still: the last four judged ticks
+ * alternating), "chain4 40 [moved 120 of 245, alternating 118]": an
+ * object the game moves every other tick shows about half its ticks moved
+ * and nearly all of them alternating; one that pauses now and then, few.
  *
  * The line (the render thread's, every 250 frames, after the interpolation's
- * first line):
+ * first line; counted at each frame's first present, as that line's keyed
+ * draws are):
  *   rd: interp names: draws left at their tick's position over 250 frames
- *   (348 presents): unmatched 9 (cage 5, ico part 2 3, a screen prim 1);
- *   mismatched 0; jumped 2 (cage 2); turn snapped 0; unkeyed 812 (a screen
- *   prim 700, ...); stair-steppers (matched, still this tick after moving
- *   the tick before) 30 (cage part 2 15, ...); names past the table 0
+ *   (348 presents; counted at each frame's first present): unmatched 9
+ *   (cage 5, ico part 2 3, a screen prim 1); mismatched 0; jumped 2 (cage
+ *   2); turn snapped 0; unkeyed 812 (a screen prim 700, ...); stair-steppers
+ *   (matched, still this tick after moving the tick before) 30 (cage part 2
+ *   15 [moved 15 of 30, alternating 12], ...); names past the table 0
  *
  * Nothing here changes a draw.  The tally and the stair test are pure
  * (port/render/test/rd_inames_test.c); rd_inames_live.c is rd_interp.c's
@@ -68,19 +86,29 @@ typedef struct RdInameTally {
 void rd_inames_reset(RdInameTally *t);
 /* n draws of name (NULL or "": "a draw") left for why */
 void rd_inames_add(RdInameTally *t, const char *name, int why, uint32_t n);
-/* "draws left at their tick's position over F frames (P presents):
-   unmatched N (name n, ...); ...; names past the table L" */
-int rd_inames_text(const RdInameTally *t, uint32_t frames, uint32_t presents, char *out,
-                   size_t cap);
+struct RdInameStairs;
+/* "draws left at their tick's position over F frames (P presents; counted
+   at each frame's first present): unmatched N (name n, ...); ...; names
+   past the table L", each stair-stepper's name with its cadence from cad
+   ("[moved M of J, alternating A]"; cad NULL: none) */
+int rd_inames_text(const RdInameTally *t, uint32_t frames, uint32_t presents,
+                   const struct RdInameStairs *cad, char *out, size_t cap);
 
 /* --- the stair-steppers --------------------------------------------------- */
 
 #define RD_INAMES_KEYS 4096 /* a power of two */
+/* the interpolation's still bound (rd_interp.c RD_INTERP_STILL_REL) */
+#define RD_INAMES_STILL_REL (1.0 / 131072.0)
 
 typedef struct RdInameKey {
     uint64_t key;
-    uint32_t tick; /* the tick it was last seen at (0: empty) */
-    bool moved;    /* it moved at that tick against the one before */
+    uint32_t tick;     /* the tick it was last seen at (0: empty) */
+    uint32_t nameHash; /* its name's (rd_inames_name_hash) */
+    uint16_t judged;   /* in the window: ticks judged against the tick before */
+    uint16_t moved;    /* of them, moved */
+    uint16_t alt;      /* of them, the last four judged alternating */
+    uint8_t hist;      /* moved bits of the judged ticks, the latest bit 0 */
+    uint8_t run;       /* judged ticks in a row (at most 8) */
 } RdInameKey;
 
 typedef struct RdInameStairs {
@@ -88,35 +116,55 @@ typedef struct RdInameStairs {
     uint32_t used;
 } RdInameStairs;
 
+enum {
+    RD_INAMES_V_JUDGED = 1, /* paired with the tick before's: judged */
+    RD_INAMES_V_MOVED = 2,  /* moved against it */
+    RD_INAMES_V_STEP = 4,   /* still now, moved at the tick before against the one before */
+    RD_INAMES_V_ALT = 8     /* the last four judged ticks alternate (moved, still, ...) */
+};
+
 void rd_inames_stairs_reset(RdInameStairs *s);
-/* A matched draw of key seen at tick (the frame's number), prevTick the
-   frame it was paired with, moved its place against that frame's: true
-   when it is a stair step (still now, moved at prevTick against the one
-   before).  The table emptied when three quarters full (stale keys) */
-bool rd_inames_stair(RdInameStairs *s, uint64_t key, uint32_t tick, uint32_t prevTick, bool moved);
+/* A matched draw of key (its name's hash nameHash) seen at tick (the
+   frame's number), prevTick the frame it was paired with, moved its place
+   against that frame's: RD_INAMES_V_* bits (0: not judged: the first sight,
+   a second draw of the key in the tick, a tick skipped).  The table
+   emptied when three quarters full (stale keys) */
+unsigned rd_inames_stair(RdInameStairs *s, uint64_t key, uint32_t nameHash, uint32_t tick,
+                         uint32_t prevTick, bool moved);
+/* the window's cadence of the keys of nameHash (summed), then every key's
+   zeroed by rd_inames_stairs_window */
+void rd_inames_cadence(const RdInameStairs *s, uint32_t nameHash, uint32_t *judged, uint32_t *moved,
+                       uint32_t *alt);
+void rd_inames_stairs_window(RdInameStairs *s);
+/* a name's hash as the tally keys it (cut to RD_INAMES_NAME - 1 bytes;
+   NULL or "": "a draw") */
+uint32_t rd_inames_name_hash(const char *name);
 
-/* the model's origin in the world from a VU block (mem 0..35: the frame's
-   screen-view at 4..7, the model through it at 16..19), rd_interp.c
-   vuWorldOrigin's arithmetic; false when the view does not invert */
-bool rd_inames_origin(const float (*m)[4], float out[3]);
-
-/* The same with the view's inverse kept (one frame's draws share its
-   screen-view: inverted once, compared to the bit) */
-typedef struct RdInameView {
-    float v[16];
-    double inv[16];
+/* The tick before's view carried to this tick's: t = Vp^-1 Vc (the
+   frames' screen-views, VU mem 4..7 of each tick's block), kept while both
+   views stay (one frame's draws share them) */
+typedef struct RdInameCarry {
+    float vp[16], vc[16];
+    double t[16];
     bool have, ok;
-} RdInameView;
+} RdInameCarry;
 
-bool rd_inames_origin_kept(RdInameView *k, const float (*m)[4], float out[3]);
-/* two origins apart by more than a millionth of their size (1 at least) */
-bool rd_inames_moved(const float a[3], const float b[3]);
+/* t for the blocks mp (the tick before's) and mc (this tick's); false when
+   the tick before's view does not invert */
+bool rd_inames_carry(RdInameCarry *k, const float (*mp)[4], const float (*mc)[4]);
+/* the model moved: mp's rows 16..19 through t against mc's, lanes X, Y and W,
+   apart by more than RD_INAMES_STILL_REL of the larger magnitude of the
+   row's lanes (the interpolation's still test, rd_interp.c stillRows) */
+bool rd_inames_moved(const double t[16], const float (*mp)[4], const float (*mc)[4]);
 
 /* --- rd_interp.c's side (rd_inames_live.c; the render thread's) --------- */
 
 struct RdCmd;
 struct RdFrame;
 
+/* the present's start: the notes below count at a frame's first present
+   only (firstOfTick), as the interpolation's own line counts its draws */
+void rd__inames_first(int firstOfTick);
 /* a draw left for why (RD_INAME_*: unmatched, mismatched, jumped, turn
    snapped, unkeyed), named by its mesh or its kind */
 void rd__inames_note(const struct RdCmd *c, int why);
@@ -126,7 +174,7 @@ void rd__inames_note(const struct RdCmd *c, int why);
 void rd__inames_step(const struct RdFrame *prev, const struct RdCmd *pc, const uint8_t *op,
                      const struct RdCmd *c, uint32_t curNumber, int firstOfTick);
 /* the line after the interpolation's first (rd_interp.c presentLog), the
-   tally then emptied */
+   tally and the window's cadence then emptied */
 void rd__inames_log(uint32_t frames, uint32_t presents);
 
 #endif /* ICO_RD_INAMES_H */
