@@ -75,6 +75,7 @@
 #include "rd_shadow_box.h"
 #include "rd_lamps.h" /* rd__lamps_lowres_on */
 #include "rd_shadow_tile.h"
+#include "rd_shadowres.h" /* rd__shadow_high_level */
 
 enum { ST_NOT_RUN, ST_OK, ST_FAIL, ST_ERROR };
 
@@ -298,6 +299,12 @@ void rd__shadow_tile_prepare(Replay *r, DrawSetup *ds, const RdScreenVtx *v, uin
     uint32_t src = 0;
     if (!ds->dateStencil || r->dateDstNow || !rd__shadow_box_composite(&src)) {
         return; /* not a boxed composite on DATE's stencil path */
+    }
+    if (rd__shadow_high_level(src)) {
+        /* Shadow detail: High: the composite reads the level at the scene's
+         * scale (rd_shadowres.c), which the named level's mask does not
+         * cover: drawn over its box alone, not counted */
+        return;
     }
     if (!rd__shadow_tile_on() || !modules()) {
         if (envSwitch() == 0) {

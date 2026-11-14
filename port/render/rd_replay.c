@@ -68,6 +68,7 @@
 #include "rd_passring.h"
 #include "rd_replay.h"
 #include "rd_shadow_box.h"
+#include "rd_shadowres.h"
 #include "rd_shadow_tile.h"
 #include "rd_stencil_selftest.h"
 #include "rd_submit.h"
@@ -2384,6 +2385,10 @@ static RhiTexture resolveTexture(Replay *r, RdTargetRec *drawTarget, uint32_t dr
         t->target != drawTargetId) {
         return s_shadowRed; /* the shadow count at the GS size */
     }
+    const RhiTexture fine = rd__shadow_fine(t->target, drawTargetId); /* rd_shadowres.c */
+    if (fine.id) {
+        return fine;
+    }
     if (t->target == drawTargetId && src == drawTarget) {
         /* the GS reads the buffer it is drawing into: sample a copy, whole
          * (the sampler, the mip choice and a perspective STQ leave the
@@ -4476,16 +4481,8 @@ void rd__shadow_shutdown(void)
     rd__shadow_one_shutdown(); /* the one draw's table */
 }
 
-/* The count at the GS size.  The first blur level reads the count with a
- * 2:1 bilinear sprite, which averages a 2x2 block of the PS2's 512x512
- * count exactly; on a count at s times the resolution the same sprite
- * takes 2x2 taps of an 2s x 2s footprint, and the shadow's integral varies
- * with the volume's sub-pixel position (2.6 % at 4x against 2.0 %).  With
- * the count target scaled, doShadowResolve box-averages it down to its GS
- * size (box_reduce_ps) into s_shadowRed and resolveTexture hands that to
- * whatever samples the count as a texture, so the level reads what the
- * PS2's did.  Unscaled targets (Original) never come here. */
-/* s_shadowRed at tc's GS size; false when it cannot be made */
+/* The count at the GS size: rd_shadowres.c's header says why.
+ * s_shadowRed at tc's GS size; false when it cannot be made */
 static bool shadowRedMake(const RdTargetRec *tc)
 {
     if (!s_shadowRed.id || s_shadowRedW != tc->w || s_shadowRedH != tc->h) {
