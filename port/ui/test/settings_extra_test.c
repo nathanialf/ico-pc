@@ -4717,7 +4717,7 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
                                                 "Players",
                                                 "Light sword colour",
                                                 "Stick",
-                                                "Yorda",
+                                                "Chains",
                                                 "Cutscenes",
                                                 "Difficulty",
                                                 "Back"};
