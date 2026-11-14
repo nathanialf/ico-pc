@@ -206,24 +206,24 @@ static void testTables(void)
        own words; newer than the three community tables, English there
        until a translator sends them */
     for (int l = 0; l < UI_LANG_COMMUNITY_FIRST; l++) {
-        CHECK(kTables[l][UI_STR_SECTION_YORDA] != NULL &&
+        CHECK(kTables[l][UI_STR_SECTION_CHAINS] != NULL &&
                   kTables[l][UI_STR_SECTION_SHADOWS] != NULL &&
                   kTables[l][UI_STR_SECTION_CUTSCENES] != NULL,
-              "%s: Yorda, Shadows and Cutscenes in its own words", kNames[l]);
+              "%s: Chains, Shadows and Cutscenes in its own words", kNames[l]);
     }
     for (int l = UI_LANG_COMMUNITY_FIRST; l < UI_LANG_TABLES; l++) {
-        const char *y = kTables[l][UI_STR_SECTION_YORDA];
+        const char *y = kTables[l][UI_STR_SECTION_CHAINS];
         const char *sh = kTables[l][UI_STR_SECTION_SHADOWS];
         const char *c = kTables[l][UI_STR_SECTION_CUTSCENES];
         CHECK((y == NULL && sh == NULL && c == NULL &&
                strcmp(ui_str_in((UiLang)l, UI_STR_SECTION_CUTSCENES), "Cutscenes") == 0) ||
                   (y != NULL && sh != NULL && c != NULL && y[0] != 0 && sh[0] != 0 && c[0] != 0 &&
                    strcmp(c, "Cutscenes") != 0),
-              "%s: Yorda, Shadows and Cutscenes in English or the translator's words", kNames[l]);
+              "%s: Chains, Shadows and Cutscenes in English or the translator's words", kNames[l]);
     }
-    CHECK(ui_strings_ru_bobttz[UI_STR_SECTION_YORDA] != NULL &&
-              ui_strings_ru_cobra838[UI_STR_SECTION_YORDA] == NULL &&
-              ui_strings_pt_br[UI_STR_SECTION_YORDA] == NULL,
+    CHECK(ui_strings_ru_bobttz[UI_STR_SECTION_CHAINS] != NULL &&
+              ui_strings_ru_cobra838[UI_STR_SECTION_CHAINS] == NULL &&
+              ui_strings_pt_br[UI_STR_SECTION_CHAINS] == NULL,
           "the Gameplay pages: bob-ttz's words (PR 195), the other two in English");
     /* Gameplay > Combat (v0.10.5): the page's name and the three rows with
        their notes, the eight tables in their own words (never the English
@@ -297,7 +297,7 @@ static void testTables(void)
             }
         }
     }
-    /* Gameplay > Yorda (v0.10.5): the two chain rows, their notes and the
+    /* Gameplay > Chains (v0.10.5): the two chain rows, their notes and the
        game's own 4 as a value, the same rule */
     for (int id = UI_STR_OPT_VAR_CHAIN_SPEED; id <= UI_STR_VAL_VAR_CHAIN_ORIGINAL; id++) {
         for (int l = 0; l < UI_LANG_TABLES; l++) {

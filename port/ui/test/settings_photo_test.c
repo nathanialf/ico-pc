@@ -776,13 +776,13 @@ static int render(void)
         CHECK(settle(mainL, 60), "back to the menu from Controls (touch)");
         ui_settings_set_touch_query(NULL);
     }
-    /* Gameplay -> Yorda and Cutscenes (its two links before Back), each
+    /* Gameplay -> Chains and Cutscenes (its two links before Back), each
        with the cursor on its first row */
     {
         static const struct {
             UiSettingsPage page;
             const char *name;
-        } sub[] = {{UI_PAGE_YORDA, "settings_gameplay_yorda.png"},
+        } sub[] = {{UI_PAGE_CHAINS, "settings_gameplay_chains.png"},
                    {UI_PAGE_CUTSCENES, "settings_gameplay_cutscenes.png"}};
 
         for (unsigned i = 0; i < sizeof(sub) / sizeof(sub[0]); i++) {
@@ -1043,7 +1043,7 @@ static int render(void)
             static const struct {
                 UiSettingsPage page;
                 const char *name;
-            } sub[] = {{UI_PAGE_YORDA, "settings_gameplay_yorda"},
+            } sub[] = {{UI_PAGE_CHAINS, "settings_gameplay_chains"},
                        {UI_PAGE_CUTSCENES, "settings_gameplay_cutscenes"}};
 
             for (unsigned i = 0; i < sizeof(sub) / sizeof(sub[0]); i++) {

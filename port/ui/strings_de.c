@@ -759,7 +759,7 @@ const char *const
             [UI_STR_ISO_COPYING] = "Das Disc-Image wird in die App kopiert",
             [UI_STR_ISO_COPYING_LONG] =
                 "Das Disc-Image wird in die App kopiert. Es ist groß: Das dauert einige Minuten",
-            [UI_STR_SECTION_YORDA] = "Yorda",
+            [UI_STR_SECTION_CHAINS] = "Ketten",
             [UI_STR_SECTION_SHADOWS] = "Schatten",
             [UI_STR_SECTION_CUTSCENES] = "Zwischensequenzen",
             [UI_STR_OPT_VAR_TOUGHNESS] = "Härte der Schatten",

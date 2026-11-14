@@ -70,7 +70,7 @@ defaults are [CONFIG.md](CONFIG.md#gameplay)'s; the differences from the PS2 are
 | `[gameplay] natural_chains` | `BgAnimation.c` (window build) |
 | `[gameplay] skip_opening` | `kanbanBoot.c`, `op.c`, `main_host.c` (its log line) |
 | `[gameplay] hold_type` | `mcard.c`, `layout_action.c`, `settings.c` |
-| `[variants] *` (Gameplay, Gameplay > Yorda, Gameplay > Cutscenes, the Debug menu; the ten difficulty rows are the journey's record, read through `variants.c`) | `port/game/variants.c`; the game hooks in `debug.c`, `enemy.c`, `enemy_act.c`, `queen.c`, `lws_kyomi.c`, `girl.c`, `commonact.c`, `boyact.c`, `weapon.c` ([Game variants](#game-variants)); `settings.c` (the Debug menu row); `gamestate.c` (the achievements rule) |
+| `[variants] *` (Gameplay, Gameplay > Chains, Gameplay > Cutscenes, the Debug menu; the ten difficulty rows are the journey's record, read through `variants.c`) | `port/game/variants.c`; the game hooks in `debug.c`, `enemy.c`, `enemy_act.c`, `queen.c`, `lws_kyomi.c`, `girl.c`, `commonact.c`, `boyact.c`, `weapon.c` ([Game variants](#game-variants)); `settings.c` (the Debug menu row); `gamestate.c` (the achievements rule) |
 | `[gameplay] mirror` | `pad_host.c`, `audio_host.c`, rd, `photo_ui.c` |
 | `[developer] free_movement` | `boyact.c` (the four boy control loops), `gamestate.c` |
 | `[input] kb.hint`, `mouse.hint`, `pad.hint` | `lws_kyomi.c` (`LwsKyomiGeo`), through `ico_hint_ask` |
@@ -448,7 +448,7 @@ disc](#options-on-each-disc)).
 
 Options > Gameplay: Light sword colour and Stick on the page, No cutscene look-around and Ignore
 cutscene cameras on Gameplay > Cutscenes, and the Debug menu on Developer (`[variants]`,
-[CONFIG.md](CONFIG.md#variants), [UI.md](UI.md#gameplay--yorda-and-cutscenes)); No hints, Shadow
+[CONFIG.md](CONFIG.md#variants), [UI.md](UI.md#gameplay--chains-and-cutscenes)); No hints, Shadow
 toughness, Shadow aggression, Peaceful shadows, Automatic guard, Turn to face shadows, Shadows wait
 while Ico is down, One hit per swing, Shadows never dodge and Queen barrier on the New Game screen's
 Customize pages, a journey's difficulty ([UI.md](UI.md#customize-the-new-game-drafts-pages)). The values are
@@ -474,7 +474,7 @@ program's link order (`libico_game.a` before `libico_options.a`) needs nothing f
 | Chain swing speed | `debug_chain_cycle_speed` (the debug row `CHAIN CYCLE SPEED`, 1..10), bound by `ico_variants_bind_debug_chain`; 4 (`debug_VariableInit`'s value) leaves it alone | `ico2/omori/src/chain.c`: `initPendulum` (from `StartPendulum`) and `InitPendulum` |
 | Chain swing slowdown | `debug_chain_slow_speed` (`CHAIN SLOW SPEED`, 1..10); 4 leaves it alone | `chain.c`: `DecreasePdlChain`, called from `boyact.c` while Ico is on a chain without the swing button (`pad.now & 0x20` clear) |
 
-The chain rows (Gameplay > Yorda, `[variants] chain_swing_speed` and `chain_swing_damping`, integers
+The chain rows (Gameplay > Chains, `[variants] chain_swing_speed` and `chain_swing_damping`, integers
 1 to 10, index 0..9 in `ICO_VARIANT_CHAIN_SWING_SPEED` / `_DAMPING`) hold two more debug switches,
 bound by a second call, `ico_variants_bind_debug_chain`, that `debug_VariableInit` makes right after
 `ico_variants_bind_debug` (so the first call's signature did not change); nothing else in `ico2/`

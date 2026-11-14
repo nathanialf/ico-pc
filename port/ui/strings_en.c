@@ -734,7 +734,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_ISO_COPYING] = "Copying the disc image into the app",
     [UI_STR_ISO_COPYING_LONG] =
         "Copying the disc image into the app. It is a large image: this takes a few minutes",
-    [UI_STR_SECTION_YORDA] = "Yorda",
+    [UI_STR_SECTION_CHAINS] = "Chains",
     [UI_STR_SECTION_SHADOWS] = "Shadows",
     [UI_STR_SECTION_CUTSCENES] = "Cutscenes",
     [UI_STR_OPT_VAR_TOUGHNESS] = "Shadow toughness",
