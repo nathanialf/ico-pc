@@ -21,7 +21,15 @@
  *            cores 2-6 averages from :3048 to :5449: a dip at :4251 (884
  *            against 1197) and :5276 (896 against 1132.5) and nowhere else;
  *   lines    the ranked clause, the worst-second line and the lift line word
- *            for word, a short buffer cut and terminated.
+ *            for word, a short buffer cut and terminated;
+ *   due      the ranked line names the clocks only for a block at or near
+ *            one picture a tick (at most 1.5) with its picture CPU at 1.25
+ *            times the median of the blocks before or more (v0.11.7-rc1's
+ *            clause fired on good blocks at 1.6-3.4 a tick): the edges, the
+ *            render thread's core and its cluster's level, the clause word
+ *            for word; the block's pictures and frames counted;
+ *   trace    the line a second after a lift, with the ring's samples and
+ *            without.
  */
 #include <stdio.h>
 #include <string.h>
@@ -276,9 +284,10 @@ static void test_seconds(void)
     CHECK(b.worst.asks == 55u && b.worst.held == 41u && b.worst.asMade);
     CHECK(b.worst.t0Ms == base + 2.0); /* the first event's time, the first of equals */
     CHECK(b.cpuN == 300u);
+    CHECK(b.pictures == 300u && b.frames == 300u); /* every picture, every new frame */
     /* the block taken: zeroed */
     clock_trap_block_take(&c, &b);
-    CHECK(b.seconds == 0u && !b.haveWorst && b.lifts == 0u);
+    CHECK(b.seconds == 0u && !b.haveWorst && b.lifts == 0u && b.pictures == 0u && b.frames == 0u);
     /* a gap: the open second (the tenth) closes at the next event, the next
        starts there; its lift 1 s after the last is not due */
     lifts = 0;
@@ -508,6 +517,128 @@ static void test_lines(void)
     }
 }
 
+/* --- when the ranked line names the clocks, and the trace after a lift ----- */
+
+/* the worst-second test's ring: 5 samples around a second from t0, four in it */
+static void owner_ring(GpuSysfsRing *ring, double t0)
+{
+    static const uint16_t lo[5] = {700, 460, 812, 1286, 533};
+    static const uint16_t mid[5] = {1200, 400, 884, 2092, 1100};
+    static const uint16_t top[5] = {900, 883, 2707, 1008, 900};
+    static const double at[5] = {-100.0, 100.0, 350.0, 600.0, 850.0};
+
+    memset(ring, 0, sizeof(*ring));
+    ring->cpuCount = 8;
+    for (int i = 0; i < 8; i++) {
+        ring->cpuKhz[i] = i < 2 ? 2246000u : (i < 7 ? 3052000u : 2707000u);
+    }
+    for (int s = 0; s < 5; s++) {
+        ring->s[s].tMs = t0 + at[s];
+        for (int i = 0; i < 8; i++) {
+            ring->s[s].cpuMhz[i] = i < 2 ? lo[s] : (i < 7 ? mid[s] : top[s]);
+        }
+    }
+    ring->count = 5;
+    ring->next = 5;
+}
+
+static void test_due(void)
+{
+    /* six blocks before: cores 2-6 at the :4251 dip's six (median 1197),
+       a picture's CPU 9.0 to 10.0 ms (median 9.5) */
+    static const double mid[6] = {1089, 1131, 1182, 1231, 1212, 1277};
+    static const double cpu[6] = {9.0, 9.2, 9.4, 9.6, 9.8, 10.0};
+    ClockTrapHist h;
+    ClockTrapClusters now;
+    ClockTrapDue d;
+    char b[1024];
+
+    memset(&h, 0, sizeof(h));
+    for (int i = 0; i < 6; i++) {
+        const GpuSysfsBlock blk = owner_block(850.0, mid[i], 900.0);
+
+        clock_trap_clusters(&blk, &now);
+        now.cpuMs = cpu[i];
+        clock_trap_hist_push(&h, &now);
+    }
+    {
+        const GpuSysfsBlock blk = owner_block(850.0, 884.0, 900.0);
+
+        clock_trap_clusters(&blk, &now);
+    }
+    /* the rc13 slow block: 300 pictures for 300 frames, 22.6 ms, the render
+       thread on core 6 at 870 MHz */
+    CHECK(clock_trap_due(&h, &now, 300, 300, 22.6, 6, 870.0, &d));
+    CHECK(d.cpuMedian == 9.5 && d.cpuBlocks == 6u && d.clFirst == 2 && d.clLast == 6);
+    CHECK(d.clMedian == 1197.0 && d.clBlocks == 6u);
+    (void)clock_trap_due_text(&d, b, sizeof b);
+    CHECK_STR(b, "; at 1.00 pictures a tick with a picture's CPU 22.6 ms against 9.5 (the median "
+                 "of the 6 blocks before); the render thread on core 6 averaged 870 MHz in the "
+                 "block, its cluster cores 2-6 at 1197 before (73 %)");
+    /* rc1's false clause: a good block after a resume, 754 pictures for 300
+       frames (2.5 a tick): never, whatever the CPU */
+    CHECK(!clock_trap_due(&h, &now, 754, 300, 22.6, 6, 870.0, &d));
+    /* the tick edge: 1.5 a tick due, one picture more not */
+    CHECK(clock_trap_due(&h, &now, 450, 300, 22.6, 6, 870.0, &d));
+    CHECK(!clock_trap_due(&h, &now, 451, 300, 22.6, 6, 870.0, &d));
+    /* the CPU edge: 1.25 x 9.5 = 11.875 due, under it not; not known: not */
+    CHECK(clock_trap_due(&h, &now, 300, 300, 11.875, 6, 870.0, &d));
+    CHECK(!clock_trap_due(&h, &now, 300, 300, 11.8, 6, 870.0, &d));
+    CHECK(!clock_trap_due(&h, &now, 300, 300, 0.0, 6, 870.0, &d));
+    /* fewer than 20 frames (a load, a pause) */
+    CHECK(!clock_trap_due(&h, &now, 19, 19, 22.6, 6, 870.0, &d));
+    /* the render thread on core 7 (its own cluster, 900 before); its core
+       not known; its clock not sampled */
+    CHECK(clock_trap_due(&h, &now, 300, 300, 22.6, 7, 880.0, &d));
+    CHECK(d.clFirst == 7 && d.clLast == 7 && d.clMedian == 900.0);
+    (void)clock_trap_due_text(&d, b, sizeof b);
+    CHECK(strstr(b, "; the render thread on core 7 averaged 880 MHz in the block, its cluster "
+                    "core 7 at 900 before (98 %)") != NULL);
+    CHECK(clock_trap_due(&h, &now, 300, 300, 22.6, -1, 0.0, &d));
+    (void)clock_trap_due_text(&d, b, sizeof b);
+    CHECK_STR(b, "; at 1.00 pictures a tick with a picture's CPU 22.6 ms against 9.5 (the median "
+                 "of the 6 blocks before); the render thread's core not known");
+    CHECK(clock_trap_due(&h, &now, 300, 300, 22.6, 6, 0.0, &d));
+    (void)clock_trap_due_text(&d, b, sizeof b);
+    CHECK(strstr(b, "; the render thread on core 6, its clock not sampled, its cluster cores 2-6 "
+                    "at 1197 before") != NULL &&
+          strstr(b, "%") == NULL);
+    /* one block before with a CPU known: not due */
+    {
+        ClockTrapHist e;
+
+        memset(&e, 0, sizeof(e));
+        now.cpuMs = 9.5;
+        clock_trap_hist_push(&e, &now);
+        now.cpuMs = 0.0;
+        clock_trap_hist_push(&e, &now); /* a block with no CPU known */
+        CHECK(!clock_trap_due(&e, &now, 300, 300, 22.6, 6, 870.0, &d) && d.cpuBlocks == 1u);
+    }
+}
+
+static void test_trace(void)
+{
+    char b[1024];
+    GpuSysfsRing ring;
+    ClockTrapSecond s = sec(41, 30, 40, 12, true);
+    const double t0 = 50002.0;
+
+    s.t0Ms = t0;
+    s.cpuMs = 504.3;
+    s.cpuN = 41;
+    owner_ring(&ring, t0);
+    (void)clock_trap_trace_text(&s, 2, &ring, b, sizeof b);
+    CHECK_STR(b, "clock lift trace 2 of 5: 41 pictures for 30 game frames (1.37 a tick), a "
+                 "picture's CPU 12.3 ms; the step rule held 12 of 40 further pictures asked; the "
+                 "CPU clocks in that second (4 samples, MHz): cores 0-1 460 812 1286 533, cores "
+                 "2-6 400 884 2092 1100, core 7 883 2707 1008 900");
+    s.cpuN = 0;
+    (void)clock_trap_trace_text(&s, 5, NULL, b, sizeof b);
+    CHECK_STR(b, "clock lift trace 5 of 5: 41 pictures for 30 game frames (1.37 a tick), a "
+                 "picture's CPU not known; the step rule held 12 of 40 further pictures asked; "
+                 "the CPU clocks not sampled here");
+}
+
 int main(void)
 {
     test_rate();
@@ -515,6 +646,8 @@ int main(void)
     test_seconds();
     test_dips();
     test_lines();
+    test_due();
+    test_trace();
     if (failures) {
         printf("clock_trap_test: %d failure(s)\n", failures);
         return 1;

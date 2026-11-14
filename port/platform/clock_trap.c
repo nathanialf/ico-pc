@@ -93,8 +93,10 @@ unsigned clock_trap_picture(ClockTrap *c, double tMs, uint32_t frame, double cpu
     const unsigned ev = advance(c, tMs, closed);
 
     c->cur.pictures++;
+    c->block.pictures++;
     if (!c->haveFrame || frame != c->lastFrame) {
         c->cur.frames++;
+        c->block.frames++;
         c->lastFrame = frame;
         c->haveFrame = true;
     }
@@ -250,6 +252,63 @@ static void cores_words(Out *o, int first, int last)
     }
 }
 
+/* "; the CPU clocks in that second (N samples, MHz): cores a-b x y, ..."
+   for the second from t0Ms (ring NULL or no cores: not sampled) */
+static void ring_text(Out *o, const GpuSysfsRing *ring, double t0Ms)
+{
+    if (ring == NULL || ring->cpuCount == 0) {
+        put(o, "; the CPU clocks not sampled here");
+        return;
+    }
+    unsigned inside = 0;
+
+    for (uint32_t k = 0; k < ring->count; k++) {
+        const uint32_t at = (ring->next + GPU_SYSFS_RING - ring->count + k) % GPU_SYSFS_RING;
+        const double t = ring->s[at].tMs;
+
+        inside += t >= t0Ms && t < t0Ms + 1000.0;
+    }
+    put(o, "; the CPU clocks in that second (%u samples, MHz):", inside);
+    const char *sep = " ";
+
+    for (int i = 0; i < ring->cpuCount;) {
+        int j = i;
+
+        while (j + 1 < ring->cpuCount && ring->cpuKhz[j + 1] == ring->cpuKhz[i]) {
+            j++;
+        }
+        put(o, "%s", sep);
+        cores_words(o, i, j);
+        unsigned shown = 0;
+
+        for (uint32_t k = 0; k < ring->count; k++) {
+            const uint32_t at = (ring->next + GPU_SYSFS_RING - ring->count + k) % GPU_SYSFS_RING;
+            const GpuSysfsSample *s = &ring->s[at];
+            unsigned n = 0;
+            double sum = 0.0;
+
+            if (!(s->tMs >= t0Ms && s->tMs < t0Ms + 1000.0)) {
+                continue;
+            }
+            for (int c = i; c <= j && c < GPU_SYSFS_CPUS; c++) {
+                if (s->cpuMhz[c] != 0) {
+                    sum += s->cpuMhz[c];
+                    n++;
+                }
+            }
+            if (n != 0) {
+                put(o, " %.0f", sum / n);
+                shown++;
+            }
+        }
+        if (shown == 0) {
+            put(o, " none");
+        }
+        sep = ", ";
+        i = j + 1;
+    }
+}
+
 int clock_trap_dip_text(const ClockTrapDip *d, int n, const ClockTrapHint *hint, char *out,
                         size_t cap)
 {
@@ -305,58 +364,7 @@ int clock_trap_worst_text(const ClockTrapBlock *b, double blockStartMs, const Gp
     if (b->cpuN) {
         put(&o, " (the block's %.1f)", b->cpuMs / b->cpuN);
     }
-    if (ring == NULL || ring->cpuCount == 0) {
-        put(&o, "; the CPU clocks not sampled here");
-    } else {
-        unsigned inside = 0;
-
-        for (uint32_t k = 0; k < ring->count; k++) {
-            const uint32_t at = (ring->next + GPU_SYSFS_RING - ring->count + k) % GPU_SYSFS_RING;
-            const double t = ring->s[at].tMs;
-
-            inside += t >= w->t0Ms && t < w->t0Ms + 1000.0;
-        }
-        put(&o, "; the CPU clocks in that second (%u samples, MHz):", inside);
-        const char *sep = " ";
-
-        for (int i = 0; i < ring->cpuCount;) {
-            int j = i;
-
-            while (j + 1 < ring->cpuCount && ring->cpuKhz[j + 1] == ring->cpuKhz[i]) {
-                j++;
-            }
-            put(&o, "%s", sep);
-            cores_words(&o, i, j);
-            unsigned shown = 0;
-
-            for (uint32_t k = 0; k < ring->count; k++) {
-                const uint32_t at =
-                    (ring->next + GPU_SYSFS_RING - ring->count + k) % GPU_SYSFS_RING;
-                const GpuSysfsSample *s = &ring->s[at];
-                unsigned n = 0;
-                double sum = 0.0;
-
-                if (!(s->tMs >= w->t0Ms && s->tMs < w->t0Ms + 1000.0)) {
-                    continue;
-                }
-                for (int c = i; c <= j && c < GPU_SYSFS_CPUS; c++) {
-                    if (s->cpuMhz[c] != 0) {
-                        sum += s->cpuMhz[c];
-                        n++;
-                    }
-                }
-                if (n != 0) {
-                    put(&o, " %.0f", sum / n);
-                    shown++;
-                }
-            }
-            if (shown == 0) {
-                put(&o, " none");
-            }
-            sep = ", ";
-            i = j + 1;
-        }
-    }
+    ring_text(&o, ring, w->t0Ms);
     put(&o, "; %u of %u seconds at one a tick behind the step rule, clock lifts asked %u",
         b->oneATick, b->seconds, b->lifts);
     return o.total;
@@ -374,5 +382,121 @@ int clock_trap_lift_text(const ClockTrapSecond *s, char *out, size_t cap)
         put(&o, ", a picture's CPU %.1f ms", s->cpuMs / s->cpuN);
     }
     put(&o, ": the system told of a heavier CPU and GPU load");
+    return o.total;
+}
+
+int clock_trap_trace_text(const ClockTrapSecond *s, unsigned k, const GpuSysfsRing *ring, char *out,
+                          size_t cap)
+{
+    Out o = out_of(out, cap);
+
+    put(&o,
+        "clock lift trace %u of %u: %u pictures for %u game frames (%.2f a tick), a picture's "
+        "CPU ",
+        k, CLOCK_TRAP_TRACE_SECONDS, s->pictures, s->frames,
+        s->frames ? (double)s->pictures / s->frames : 0.0);
+    if (s->cpuN) {
+        put(&o, "%.1f ms", s->cpuMs / s->cpuN);
+    } else {
+        put(&o, "not known");
+    }
+    put(&o, "; the step rule held %u of %u further pictures asked", s->held, s->asks);
+    ring_text(&o, ring, s->t0Ms);
+    return o.total;
+}
+
+/* the median of n values (sorted in place; n at least 1) */
+static double median_of(double *v, unsigned m)
+{
+    for (unsigned a = 1; a < m; a++) {
+        const double x = v[a];
+        unsigned b = a;
+
+        while (b > 0 && v[b - 1] > x) {
+            v[b] = v[b - 1];
+            b--;
+        }
+        v[b] = x;
+    }
+    return (m & 1u) ? v[m / 2u] : 0.5 * (v[m / 2u - 1u] + v[m / 2u]);
+}
+
+bool clock_trap_due(const ClockTrapHist *h, const ClockTrapClusters *now, unsigned pictures,
+                    unsigned frames, double cpuMs, int core, double coreMhz, ClockTrapDue *out)
+{
+    double v[CLOCK_TRAP_HIST];
+    unsigned m = 0;
+
+    memset(out, 0, sizeof(*out));
+    out->pictures = pictures;
+    out->frames = frames;
+    out->cpuMs = cpuMs;
+    out->core = core;
+    out->coreMhz = coreMhz;
+    out->clFirst = out->clLast = -1;
+    for (unsigned k = 0; k < h->n; k++) {
+        if (h->h[k].cpuMs > 0.0) {
+            v[m++] = h->h[k].cpuMs;
+        }
+    }
+    out->cpuBlocks = m;
+    if (m > 0u) {
+        out->cpuMedian = median_of(v, m);
+    }
+    /* the render thread's cluster in the block and its median before */
+    for (int i = 0; now != NULL && core >= 0 && i < now->n; i++) {
+        if (core < now->first[i] || core > now->last[i]) {
+            continue;
+        }
+        unsigned n = 0;
+
+        out->clFirst = now->first[i];
+        out->clLast = now->last[i];
+        for (unsigned k = 0; k < h->n; k++) {
+            const ClockTrapClusters *e = &h->h[k];
+
+            for (int j = 0; j < e->n; j++) {
+                if (e->first[j] == now->first[i] && e->last[j] == now->last[i]) {
+                    v[n++] = e->mean[j];
+                    break;
+                }
+            }
+        }
+        out->clBlocks = n;
+        out->clMedian = n > 0u ? median_of(v, n) : 0.0;
+        break;
+    }
+    out->due = frames >= CLOCK_TRAP_MIN_FRAMES &&
+               (uint64_t)pictures * 10u <= (uint64_t)frames * CLOCK_TRAP_DUE_TICK_TENTHS &&
+               cpuMs > 0.0 && m >= 2u && cpuMs >= CLOCK_TRAP_DUE_CPU_RISE * out->cpuMedian;
+    return out->due;
+}
+
+int clock_trap_due_text(const ClockTrapDue *d, char *out, size_t cap)
+{
+    Out o = out_of(out, cap);
+
+    put(&o,
+        "; at %.2f pictures a tick with a picture's CPU %.1f ms against %.1f (the median of the "
+        "%u blocks before)",
+        d->frames ? (double)d->pictures / d->frames : 0.0, d->cpuMs, d->cpuMedian, d->cpuBlocks);
+    if (d->core < 0) {
+        put(&o, "; the render thread's core not known");
+        return o.total;
+    }
+    put(&o, "; the render thread on core %d", d->core);
+    if (d->coreMhz > 0.0) {
+        put(&o, " averaged %.0f MHz in the block", d->coreMhz);
+    } else {
+        put(&o, ", its clock not sampled");
+    }
+    if (d->clFirst >= 0 && d->clMedian > 0.0) {
+        put(&o, ", its cluster ");
+        cores_words(&o, d->clFirst, d->clLast);
+        put(&o, " at %.0f before", d->clMedian);
+        if (d->coreMhz > 0.0) {
+            put(&o, " (%.0f %%)", 100.0 * d->coreMhz / d->clMedian);
+        }
+    }
     return o.total;
 }

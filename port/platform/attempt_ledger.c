@@ -408,14 +408,22 @@ void ico_attempt_decide_no_volume_break(int env, int classOk, int measured, int 
     }
 }
 
-void ico_attempt_decide_rec_need(int wanted, uint32_t made, uint32_t bound, uint32_t need)
+void ico_attempt_decide_rec_need(int wanted, uint32_t made, uint32_t bound, uint32_t need,
+                                 uint32_t have)
 {
     if (!wanted) {
         ico_attempt_state(ICO_ATT_REC_NEED, ICO_ATT_NA, "the VU pre-pass is off");
+    } else if (made == 0u && need != 0u && have >= need) {
+        /* the owner's Pixel (v0.11.7-rc1): the record held 1024 rows, its
+           largest, the run's need 1024: nothing to make, with 774 MB above
+           the floor (rd_early_plan.c largestRows: no row past the held) */
+        ico_attempt_state(ICO_ATT_REC_NEED, ICO_ATT_NA,
+                          "the record already held the run's need at start-up: nothing to make");
     } else if (made == 0u) {
         ico_attempt_state(ICO_ATT_REC_NEED, ICO_ATT_NA,
-                          "nothing made at start-up: under the free-memory floor, after the "
-                          "system's low-memory signal or no row within the bound");
+                          "nothing made at start-up: the free memory under its floor or the "
+                          "system's low-memory signal, or no larger record within the memory "
+                          "bound");
     } else if (need != 0u && made != 0u && made < bound) {
         ico_attempt_state(ICO_ATT_REC_NEED, ICO_ATT_ON,
                           "made at the run's need, less than the memory bound allowed");
