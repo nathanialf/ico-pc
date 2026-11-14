@@ -1878,6 +1878,32 @@ repository).
   in a comparable session says it was; a different first unwritten stamp says the hang moved with
   the path. `RhiStats.passObjects` (the passes begun as `VkRenderPass` objects) and
   `RhiLimits.passObjectsRow` (the row's reason) are the attempt's counter and state for the ledger.
+- **The second attempt (on for this class).** The tablet's log with the first attempt on (13 stalls
+  with the reset sign in about 325 s, every one with `list 0's end` first unwritten) showed the
+  `VkRenderPass` path in every block and robust access off: neither changed the stalls. The next
+  hypothesis that an app can act on: the system's compositor preempts the game's GPU work inside
+  list 0's binned pass and the switch (the pass's tile memory saved and restored) hangs. Qualcomm's
+  own driver under Android now creates the game's queue at high global priority
+  ([RHI.md](RHI.md#vulkan), **Queue priority**; `rhi_pass_row.h` `rhi_vk_qprio_row`,
+  `vk_qprio.c`). The tablet offers it (its start line: `global queue priority KHR and EXT
+  offered, its query too (the game's queue family 0's priorities: 3: low, medium, high)`). Whether
+  Android lets an app have it is not known: a refusal makes the device as before and says so. The
+  `VkRenderPass` path stays on as it was, so each release changes one thing for this class. The
+  risk: with the game above it the compositor may wait behind the game's long submissions (later
+  presents); the present lines show it. The analysis: `build-host/tmp/v0117/design/QPRIO.md` (not
+  in the repository).
+- **Reading the next log for it.** At the start `rhi_vk: queue priority: high, asked and granted
+  (...)`, or `high asked and refused (VkResult N, ...)` (the attempt did nothing), and the
+  attempt ledger's `Qualcomm queue at high priority on (high granted through
+  VK_KHR_global_priority: ...)`. Then in each block `Qualcomm queue at high priority on N stalls in
+  the block` and the clause `; stalls N in the block (the Adreno attempt on, high queue priority
+  granted)`. The ledger counts every stall (presents that blocked and passes over the limit, with
+  or without the reset sign: 15 in the first attempt's log's 34 blocks, 13 of them the hang with `list 0's end`
+  first unwritten in the `rd: GPU clock:` lines); the `window: stall:` lines and their tally's
+  `the GPU's own sign of a reset N` count the reset ones (15 in that log: the sign also fired on an
+  idle pause).
+  About as many with the sign says preemption is not the trigger; none in a session as long says
+  it was.
 
 ## The stall and logging lines (issues 123 and 179)
 
@@ -1992,7 +2018,12 @@ counters in the hot path.
       VK_KHR_present_wait yes
 
   Whether the compositor could preempt the game's queue (issue 123's T2) and whether a stall could
-  be placed on the CPU's clock if the polled wait were used again. The calibrated domains are
+  be placed on the CPU's clock if the polled wait were used again. The queue clause
+  says what the queue was made with: `with no global priority asked (the driver's default,
+  medium)` off the high priority's row, `with global priority high asked and granted
+  (VK_KHR_global_priority)` or `with global priority high asked and refused (not permitted): no
+  global priority (the driver's default, medium)` on it ([RHI.md](RHI.md#vulkan), **Queue
+  priority**). The calibrated domains are
   listed whatever the submission wait; they are enabled only with the polled wait, as before. The
   display timing clause (the values above an example) says which of the means of learning when a
   picture reached the screen the device offers, for the evenness line's next step
@@ -2061,6 +2092,7 @@ counter is an increment in a hot path, and none of them reads anything from the 
 | Mali: the game, render and both audio threads on the two fast cores | Where do the threads run, and does audio keep up on the slow cores? | `window: render thread cores: ...` (the few-cores rule's sets and moves); the game thread line's `ran / waited for a core: game ..., render ..., submit ..., SDL audio ..., system audio ...` and after it `; run time on the faster cores 6-7: submit N % of T s, SDL audio ..., system audio ..., <the driver's threads> ..., pipeline workers ...` ([The faster cores' share of run time](#the-faster-cores-share-of-run-time)); `audio: ... ms of silence (... ms held back behind the game) ...; the sound chip's emulation E ms a callback on average (longest L ms; R renders) against the device's period of P ms`; and the ledger's `few-cores rule on N threads moved` |
 | Few-core phones: start-up of 62.2 s (51.2 s of it pipelines, cold cache) | How long does the pipeline set take, on which cores, and with how much CPU time? | `rd: pipelines: N of the reachable set's M created at start-up in T ms ...` (wall time), followed by `window: pipeline set: made in T s ...; its N workers on every core ... while it ran ...; the process's CPU time C s over it (B cores busy on average)` |
 | Adreno 740 hangs | Did this release's attempt run, and how many stalls were there with it on? | The start lines that name the hung draw (`rd: GPU clock: ...`); the attempt ledger's row `Qualcomm passes as VkRenderPass objects on (<the row's reason>) N passes` (`not applicable here (not Qualcomm's own driver)` elsewhere, Turnip included); the ledger line's `; stalls N in the block (the Adreno attempt on)`; and each stall's `coincided with: ..., the GPU's own sign of a reset` with the tally's `the GPU's own sign of a reset N` |
+| Adreno 740 hangs (unchanged by the `VkRenderPass` path) | Did high queue priority change the stall rate? | The start's `rhi_vk: queue priority: high, asked and granted (...)` (or `refused (VkResult N, ...)`: the attempt did nothing) and the offer line's `the game's one queue made at priority 1.0 with global priority high asked and granted (...)`; the attempt ledger's `Qualcomm queue at high priority on (...)` at the start and `Qualcomm queue at high priority on N stalls in the block` in each block with the clause `; stalls N in the block (the Adreno attempt on, high queue priority granted)`, summed over the log's blocks against the first attempt's log's 15 stalls in 34 blocks (13 of them the hang, `rd: GPU clock:` with `list 0's end` first unwritten; the tally's `the GPU's own sign of a reset` counted 15, as it also fired on an idle pause) |
 | Pixel under Uncapped at 120 Hz: motion sped up and slowed (pictures shown a mix of one and two refreshes apart) | Which moment is drawn for each picture, and how many land on the refresh predicted for them? | The attempt ledger's `in-between pictures for the screen's refresh on (...) N pictures placed` and `in-between pictures on their own timer on (Android: ...)`; the `on the glass` line's `drawn (the screen's predicted refresh)` measure (its deviation and its share above 1.5) and its clause's `the refresh predicted against the one shown over S pictures: H on it (P %)` with the reasons a picture was `drawn as otherwise` ([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#the-on-glass-line)) |
 | Adreno 740: three skin-check `wrong` verdicts right after 400 ms stalls with the GPU's own sign of a reset, each reading the readback's bytes from an earlier check (`not written again`); the first started the run's capture (44 ms on the game thread, about 1 s on the worker), and more stalls followed | Do the stall clusters remain without the captures? | The attempt ledger's row `no capture after a stall on (a skin check read after a GPU reset is skipped, not captured) N checks skipped after a reset` in the block that holds the stalls, the ledger line's `; stalls N in the block`, each skipped check's `rd: VU skin check: frame F command L:I ...: skipped after a reset: WHY; ...` and the 10 s `rd: VU skin check: P checks, W wrong, K skipped after a reset, ...`; no `VU skin check: captured` or `window: skin-check capture:` line after a stall; then whether `window: stall:` lines still come in clusters a few replays apart ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md#skipped-after-a-reset)) |
 | Pixel opening: lamps, dark and sun views | What does each block cost, and which cut fired? | `window: compare: ...; GPU ms a picture: ...; glow plans: lamps N, dark N, whole N`, `passes` and `breaks` a picture, and the ledger line's per-cut fired counts |
@@ -2069,7 +2101,8 @@ counter is an increment in a hot path, and none of them reads anything from the 
 
 `port/platform/attempt_ledger.h`: one row per behaviour that this release changes on purpose for a
 device class. Each row has a name, its state on this device (on, off by default, refused by its
-self-test, not applicable here, or not reported) with a reason, and up to two counts. Two lines
+self-test, refused by the driver, not applicable here, not in this build, or not reported) with a
+reason, and up to two counts. Two lines
 print it:
 
 - At the first 10 s block, and again whenever a state changes (the first 8 changes, then every
@@ -2080,7 +2113,9 @@ print it:
 - In every block: `window: attempts: few-cores rule on 3 threads moved; pipeline set on every core
   on 0 workers (0 sets); capture in two steps on 1 captures (0 grown here); flat outputs at the
   provoking corner on (static); ...; stalls 3 in the block`. Rows that are not reported are left
-  out. Where the Adreno row is reported, the stalls clause adds `(the Adreno attempt on)` or `off`.
+  out. Where the Adreno row is reported, the stalls clause adds `(the Adreno attempt on)` or `off`,
+  and with the high queue priority's row reported too `(the Adreno attempt on, high queue priority
+  granted)` (`refused`, `not asked`).
 
 To add a row, a package adds one enum value and one table row with its words, a decider
 (`ico_attempt_decide_*`: the row's state and its reason from the facts its owner has, so the unit
@@ -2097,7 +2132,7 @@ thread can make it, hot paths included. The rows and where their states are set:
 | empty composites skipped | `rd_shadow_box.c` at each replay's scan | the window, from `emptySkipped` |
 | no-volume break | `rd_no_volume.c` at each replay's scan: `on (the PowerVR D-Series DXT-48-1536)` on the device two phone release candidates showed clean with it, `off by default (shown clean only on the PowerVR D-Series DXT-48-1536's title and pause menu; not tried on this device)` on the rest of the PowerVR and MoltenVK class, `not applicable here (not the PowerVR or MoltenVK class under Vulkan)` elsewhere, or the other gates' reason (the DATE path, MSAA ...) with the class allowed | the window, from `noVolumeBreak` |
 | Qualcomm passes as VkRenderPass objects | `window_perf_rank.c` every block (`ico_attempt_decide_pass_objects`: on with `RhiLimits.passObjectsRow`'s reason while Qualcomm's row holds the device's passes, `not applicable here (not Qualcomm's own driver)` otherwise) | the block's growth of `RhiStats.passObjects`, only while the row holds |
-| Adreno attempt B | `not in this build` (one Adreno attempt was built) | none |
+| Qualcomm queue at high priority | `window_perf_rank.c` every block (`ico_attempt_decide_queue_priority` from `RhiLimits.queuePriority` and `queuePriorityWhy`, set by `vk_qprio.c` at the device's creation): `on (high granted through VK_KHR_global_priority: Qualcomm's own driver on Android)`, `refused by the driver (high asked, the driver answered not permitted: the driver's default (medium))` (or `initialization failed`, or `the device's creation failed with it`), `not applicable here` with the reason (`not Qualcomm's own driver on Android`, `... global queue priority not offered`, `... the game's queue family does not list high`; `not asked on this graphics API (Vulkan's alone)` on OpenGL and Direct3D) | the block's stalls (`ico_attempt_block_text`'s, `window_stall_tally_take`'s count), whatever the state |
 | subpass read | `rd_subpass_probe.c` at DATE's self-test (`ico_attempt_decide_subpass`): `off by default` on a class the probe does not run on this release (`off on this driver this release: ...` on the Arm and Qualcomm drivers, `probed on the Intel driver row only this release` elsewhere), `on` with the device's reason (kept by an earlier probe, on for this start's probe, `[dev] subpass_read = on`), `refused by its self-test` (DATE's self-test on the read failed, or this start's or an earlier start's probe refused it), `not applicable here` off the route (`not a VkRenderPass path without local read ...`) or where it cannot be decided (no GPU timestamps, no verdict file, not probed at this start) | the window, from the record's `dateStencilTakes` while the row is on |
 | blend constant | `not in this build` from the start (left out of the block line; measured: no draw of the Mali reporter's pictures to convert, [PIPELINES.md](PIPELINES.md)) | none |
 | index compaction | `rd_vu_compact.c` at the pre-pass's start and after the record's self-test (`ico_attempt_decide_compaction`): `on` on the compute record of the Mali-G52 (by its Vulkan device name) or the PowerVR D-Series DXT-48-1536 where the class's define allows and the self-test passed (`the Mali-G52, its start-up self-test passed`, `the PowerVR D-Series DXT-48-1536, ...`; `ICO_RD_VU_COMPACT=1: the tests' switch` without a self-test), `refused by its self-test` when the record's test failed with it and passed without it, `off by default` on every other device (`measured on the Mali-G52 only ...`), by the define, before the self-test or where none ran (`its start-up self-test not run (yet)`) or by `ICO_RD_VU_COMPACT=0`, `not applicable here` with the record path that holds (`record path stores: vertex shader stores`, `record path targets: render targets`, `the VU pre-pass is off`) | the triangles left out (drop and outside, every list), from the counts read back when the frame slot comes round |
