@@ -1,5 +1,6 @@
-// shadowres.hlsl: Shadow detail: High (port/render/rd_shadowres.c,
-// rd_shadowres.h; docs/port/RENDER_POST.md, "Shadow detail: High";
+// shadowres.hlsl: the shadow's levels at the scene's scale above 1x
+// (port/render/rd_shadowres.c, rd_shadowres.h; docs/port/RENDER_POST.md,
+// "The shadow's levels above 1x";
 // DIVERGENCES.md VD-34). Both behind blit_vs, one triangle over the target,
 // no blend, RGBA8 in and out, read with Load.
 //

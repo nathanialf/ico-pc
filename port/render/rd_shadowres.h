@@ -1,5 +1,5 @@
-/* rd_shadowres.h: Options > Effects > Shadow detail: High (rd_shadowres.c;
- * docs/port/RENDER_POST.md "Shadow detail: High").
+/* rd_shadowres.h: the shadow's levels at the scene's scale above 1x
+ * (rd_shadowres.c; docs/port/RENDER_POST.md "The shadow's levels above 1x").
  *
  * The arithmetic (pure, the CPU test's): one axis at a time, positions in
  * GS pixels of the level drawn, the source's texels at s_src texels per GS
@@ -68,36 +68,34 @@ void rd_sr_tent_texel(const uint8_t *src, uint32_t w, uint32_t h, int down, floa
 /* ------------------------------------------------------------ the replay */
 /* rd_no_volume.c rd__no_volume_skip, at the top of every screen command
  * (doScreen): the replay the command is drawn in */
-void rd__shadow_high_replay(struct Replay *r);
+void rd__shadow_fine_replay(struct Replay *r);
 /* rd_shadow_box.c rd__shadow_box_reset: a new count (a new chain) */
-void rd__shadow_high_reset(uint32_t color);
+void rd__shadow_fine_reset(uint32_t color);
 /* rd_shadow_one.c: the count target tc (scaled) is to be drawn at its full
- * size too (the option High, a scale above 1 on an axis, not refused) */
-bool rd__shadow_high_count_wanted(const struct RdTargetRec *tc);
+ * size too (a scale above 1 on an axis, not refused) */
+bool rd__shadow_fine_count_wanted(const struct RdTargetRec *tc);
 /* the count of target color holds the full size (the seven draws, MSAA,
  * the one draw's full-size pass) */
-void rd__shadow_high_count_full(uint32_t color);
+void rd__shadow_fine_count_full(uint32_t color);
 /* rd_shadow_box.c rd__shadow_box_screen, before the draw's pass: a level
  * sprite of the chain is drawn at the scene's scale too (and the tent
  * after the third) */
-void rd__shadow_high_screen(const struct RdStateBlock *st, const struct RdCmd *c,
+void rd__shadow_fine_screen(const struct RdStateBlock *st, const struct RdCmd *c,
                             const RdScreenVtx *v, uint32_t n);
 /* rd_replay.c resolveTexture: the fine level that stands for level target
  * `target` this replay, read by a draw into drawTarget; {0} none */
 RhiTexture rd__shadow_fine(uint32_t target, uint32_t drawTarget);
 /* the texture is one of the fine levels (rd_fx_plan.c: no B-spline) */
-bool rd__shadow_high_tex(uint32_t texId);
+bool rd__shadow_fine_tex(uint32_t texId);
 /* the level target holds a fine twin this replay (rd_shadow_tile.c steps
  * aside) */
-bool rd__shadow_high_level(uint32_t target);
-/* the option's line at the renderer's start and at a change */
-void rd__shadow_high_log(const char *when);
-/* the fine levels freed (the option back to Original; logged when held) */
-void rd__shadow_high_free(const char *why);
-void rd__shadow_high_shutdown(void);
+bool rd__shadow_fine_level(uint32_t target);
+/* the rule's line at the renderer's start (and the tests' switch) */
+void rd__shadow_fine_log(void);
+void rd__shadow_fine_shutdown(void);
 /* the 10 s clause and the --stats words */
-void rd__shadow_high_pop(const struct RdPerfRecord *rec);
-void rd__shadow_high_text(char *out, size_t size, size_t *at);
-void rd__shadow_high_stats(const struct RdPerfRecord *rec, char *out, size_t size);
+void rd__shadow_fine_pop(const struct RdPerfRecord *rec);
+void rd__shadow_fine_text(char *out, size_t size, size_t *at);
+void rd__shadow_fine_stats(const struct RdPerfRecord *rec, char *out, size_t size);
 
 #endif

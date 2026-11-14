@@ -107,7 +107,7 @@
 #include "rd_no_volume.h"
 #include "rd_replay.h"
 #include "rd_shadow_box.h"
-#include "rd_shadowres.h"        /* rd__shadow_high_replay */
+#include "rd_shadowres.h"        /* rd__shadow_fine_replay */
 #include "rd_vu_class.h"         /* rd__vu_class_measured */
 #include "rd_stencil_selftest.h" /* rd__profile_powervr */
 
@@ -852,7 +852,7 @@ void rd__no_volume_resolve(Replay *r, RdTargetRec *tc, RhiTexture *red, RhiState
 
 bool rd__no_volume_skip(Replay *r)
 {
-    rd__shadow_high_replay(r); /* the screen command's replay (rd_shadowres.c) */
+    rd__shadow_fine_replay(r); /* the screen command's replay (rd_shadowres.c) */
     const int kind =
         s_nv.resolved && here() ? rd_nv_skip_kind(&s_nv.scan, g_rdStoreOrd) : RD_NV_NONE;
     if (kind == RD_NV_NONE) {

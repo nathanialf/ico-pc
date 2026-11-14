@@ -41,7 +41,7 @@
 #include "rd_mesh.h"
 #include "rd_present_scene.h"
 #include "rd_shadow_tile.h" /* rd__shadow_tile_shutdown */
-#include "rd_shadowres.h"   /* Shadow detail: High */
+#include "rd_shadowres.h"   /* the shadow levels' start line */
 #include "rd_tex.h"
 #include "rd_tex_decode.h"
 #include "rd_tone.h"
@@ -1936,7 +1936,7 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
     if (g_rd.settings.waterSharp) {
         rd__log("water reflections: sharp (the scene's scale)");
     }
-    rd__shadow_high_log(""); /* Shadow detail (rd_shadowres.c) */
+    rd__shadow_fine_log(); /* the shadow's levels (rd_shadowres.c) */
     if (g_rd.settings.motionBlurSmooth) {
         logMotionBlur(""); /* made at its first sprite (rd_blur_smooth.c) */
     }
@@ -2358,15 +2358,6 @@ static void fogProbeFinish(void *arg)
 
 /* Motion blur: Smooth turned off (or on again): its accumulator goes, the
  * next Smooth sprite starts a trail of its own */
-/* Shadow detail chosen: the levels at the scene's scale freed (made again
- * at the next shadow while High), a refusal forgotten */
-static void shadowHighChanged(void *arg)
-{
-    (void)arg;
-    rd__shadow_high_free(g_rd.settings.shadowHigh ? "Shadow detail: High chosen"
-                                                  : "Shadow detail: Original chosen");
-}
-
 static void blurSmoothChanged(void *arg)
 {
     (void)arg;
@@ -2462,7 +2453,6 @@ void rd_begin_frame(void)
         const bool modelsChanged = g_rd.settings.modelPack != g_rd.pendingSettings.modelPack;
         const bool dumpChanged = g_rd.settings.dumpModels != g_rd.pendingSettings.dumpModels;
         const bool waterChanged = g_rd.settings.waterSharp != g_rd.pendingSettings.waterSharp;
-        const bool shadowChanged = g_rd.settings.shadowHigh != g_rd.pendingSettings.shadowHigh;
         const bool blurChanged =
             g_rd.settings.motionBlurSmooth != g_rd.pendingSettings.motionBlurSmooth;
         const bool glowChanged = g_rd.settings.glowSmooth != g_rd.pendingSettings.glowSmooth;
@@ -2484,12 +2474,6 @@ void rd_begin_frame(void)
             /* the blocks made from this frame on (rd__target_scale_of) */
             rd__log("water reflections: %s", g_rd.settings.waterSharp ? "sharp (the scene's scale)"
                                                                       : "original (their GS size)");
-        }
-        if (shadowChanged) {
-            rd__shadow_high_log(", from the next present");
-            if (g_rd.hasDevice) {
-                rd__on_host(shadowHighChanged, NULL);
-            }
         }
         if (glowChanged) {
             logGlowBetween(", from the next present");

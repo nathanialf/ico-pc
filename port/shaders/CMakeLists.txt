@@ -316,9 +316,9 @@ ico_add_shader(fx_blur4_ps fx_sprite.hlsl fx_blur4_ps fragment)
 # a few hardware-bilinear taps a texel across, then down, behind fx_rect_vs; used on every
 # backend where it is asked for
 ico_add_shader(fx_glowblur_ps fx_glowblur.hlsl fx_glowblur_ps fragment)
-# Shadow detail: High (port/render/rd_shadowres.c): the game's level step at every texel of a
+# The shadow's levels above 1x (port/render/rd_shadowres.c): the game's level step at every texel of a
 # level at the scene's scale, and one axis of the tent its magnification supplied, behind
-# blit_vs; made only while the option is High, on every backend
+# blit_vs; made only once a scene above 1x draws a shadow, on every backend
 ico_add_shader(shadowres_step_ps shadowres.hlsl shadowres_step_ps fragment)
 ico_add_shader(shadowres_tent_ps shadowres.hlsl shadowres_tent_ps fragment)
 # Motion blur: Smooth's accumulator (port/render/rd_blur_smooth.c): its step

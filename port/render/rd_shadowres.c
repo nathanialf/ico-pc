@@ -1,6 +1,8 @@
-/* rd_shadowres.c: Options > Effects > Shadow detail: High (RdSettings.shadowHigh,
- * [video] effect_shadow_high; rd_shadowres.h; docs/port/RENDER_POST.md
- * "Shadow detail: High"; docs/port/DIVERGENCES.md VD-34).
+/* rd_shadowres.c: the shadow's levels at the scene's scale above 1x
+ * (rd_shadowres.h; docs/port/RENDER_POST.md "The shadow's levels above 1x";
+ * docs/port/DIVERGENCES.md VD-34).  Not an option: how the port draws the
+ * shadow whenever the scene's scale is above 1 on an axis, in every preset
+ * and at every aspect; at scale 1 on both axes nothing here is made or run.
  *
  * The game's shadow (Shadow.c shadow_Draw) is a count of the volumes, three
  * blur levels drawn one from the other by a 2:1 bilinear sprite (SHADOW0..2:
@@ -22,19 +24,23 @@
  * down to its GS size (box_reduce_ps, or the one draw's box) into the
  * reduced count and resolveTexture hands that to whatever samples the
  * count as a texture, so the level reads what the PS2's did.  Unscaled
- * targets (Original) never come there.  None of that changes under High.
+ * targets never come there.  The named levels are still drawn from it.
  *
- * High.  Where the count target is scaled (above 1 on an axis):
+ * Above 1x (the count target's scale above 1 on an axis; each axis on its
+ * own: 2.8125 x 2.41 under Resolution window; at 1 x 2 the levels keep the
+ * PS2's width, the step and tent the identity across):
  *   1. the count is also kept at its full size: the seven draws and the
- *      MSAA resolve leave it there already; the one draw (rd_shadow_one.c)
- *      draws it a second time into the count target at its own texels (the
- *      box of one texel: the stencil's table texel itself), one pass more;
+ *      MSAA resolve (the covered-majority resolve to one sample at the
+ *      scene's size, rd_msaa_shadow.c) leave it there already; the one
+ *      draw (rd_shadow_one.c) draws it a second time into the count target
+ *      at its own texels (the box of one texel: the stencil's table texel
+ *      itself), one pass more;
  *   2. at each of the game's three level sprites (rd_shadow_box.c
  *      rd__shadow_box_screen, before the sprite's own pass), the level is
  *      drawn again into a texture of its own at S texels a GS pixel on each
  *      axis, S the smallest odd whole number at or above the scene's scale
- *      there (rd_sr_level_scale: 3 at 2x, 2.41x and 3x, 5 at 4x and at
- *      2160 rows; an axis at scale 1 keeps S = 1) (shadowres_step_ps):
+ *      there (rd_sr_level_scale: 3 at 2x, 2.41x, 2.8125x and 3x, 5 at 4x
+ *      and at 2160 rows; an axis at scale 1 keeps S = 1) (shadowres_step_ps):
  *      texel m stands for the GS position m / S, its taps the GS's two
  *      (0.75 / 0.25, one PS2 texel apart), the first level's each the box
  *      of count texels its GS pixel covers (partial texels by their share
@@ -47,50 +53,56 @@
  *      c = S / 2 - 1/2 (whole at an odd S), over t = n - m.  The composite
  *      reads the level where the PS2 read the GS texel at u, fine texel
  *      S u - 1/2; with the tent there its one bilinear tap gives exactly the
- *      mean of today's picture over the level grid's S x S placements: the
- *      same width, no staircase.  (At an even S the tent's centre would be
- *      half a texel off and the tap would soften it further: 10 % wider at
- *      2x in the edge model; hence the odd S);
+ *      mean of the PS2's picture over the level grid's S x S placements:
+ *      the same width and darkness, no staircase.  (At an even S the tent's
+ *      centre would be half a texel off and the tap would soften it further:
+ *      10 % wider at 2x in the edge model; hence the odd S);
  *   4. the composites are the game's, drawn as before, reading the fine
  *      level (resolveTexture, rd__shadow_fine) instead of the named one.
- * The game's own level sprites are drawn too, as before (the named targets
- * keep Original's levels: a chain High could not take, a refusal, a draw
- * into a level that is not the chain's, all read them as Original).  All of
- * it sits between the count and the composites, where SCENE's pass is
- * ended already (the DATE snapshot's and the levels' own passes): no SCENE
- * pass more on a tiler.
- *
- * At 1x (the count target's scale 1 on both axes) nothing here runs: no
- * texture, no pipeline, no pass; the same bytes as Original by
- * construction (the tests' rd_shadow_high_ab at 1x).  With the option at
- * Original nothing here runs either, and nothing is made.
+ * The game's own level sprites still draw the named levels as before (a
+ * chain the rule could not take, a refusal, a draw into a level that is not
+ * the chain's, all read them: the PS2's size).  All of it sits between the
+ * count and the composites, where SCENE's pass is ended already (the DATE
+ * snapshot's and the levels' own passes): no SCENE pass more on a tiler.
+ * Every backend draws it (two plain pixel shaders, Load only: SPIR-V for
+ * Vulkan, GLSL for OpenGL, DXIL for Direct3D 12, the HLSL compiled at run
+ * time for Direct3D 11); a backend whose shaders or pipelines cannot be
+ * made keeps the PS2's size for the run, logged.
  *
  * Interactions: the volumes' box and the empty composites (rd_shadow_box.c)
  * are the named levels' and are kept (a fine level's reach is the named
  * level's plus one level texel of the step (a fine texel between two named
  * ones reads both their footprints), one of the tent and 1 / S of one of the
  * composite's tap: inside the composites' RD_SB_TEX_MARGIN of 3, where the
- * named level needs one); the one DATE set-up holds
- * (every fine texel is a mean of values the named levels hold, MODULATEd
- * alike); the shadow tiles (rd_shadow_tile.c) step aside for a composite
- * that reads a fine level (their mask is the named level's); [dev]
- * shadow_bspline does nothing to a fine level (rd_fx_plan.c); a window
- * without volumes (rd_no_volume.c) skips the levels, so no chain is made.
+ * named level needs one); the one DATE set-up holds (every fine texel is a
+ * mean of values the named levels hold, MODULATEd alike); the shadow tiles
+ * (rd_shadow_tile.c) step aside for a composite that reads a fine level
+ * (their mask is the named level's); [dev] shadow_bspline does nothing to a
+ * fine level (rd_fx_plan.c); a window without volumes (rd_no_volume.c)
+ * skips the levels, so no chain is made.
+ *
+ * Tests only (docs/port/TESTING.md): ICO_RD_SHADOW_FINE=0 keeps the PS2's
+ * sizes above 1x (v0.11.6's picture: the A/B's other half);
+ * ICO_RD_SHADOW_FINE=force draws the fine chain at 1x too (S = 1 on both
+ * axes: the GS's own step and an identity tent).
  *
  * The lines (rd__log):
- *   shadow detail: high (above 1x the shadow's three levels at the scene's
- *     scale, the smallest odd whole one at or above it: the count at its
- *     full size, the game's step at every texel, the tent its magnification
- *     supplied; at 1x the game's own)
- *   shadow detail: high: SHADOW0 864x768, SHADOW1 432x384, SHADOW2 216x192
- *     at 3x3 from the count's 3x3 texels a GS pixel, 10 passes a shadow,
- *     7.1 MB (reported once a size)
- *   shadow detail: high: a shadow drawn as Original: <why> (reported once a
- *     reason)
- *   the 10 s clause "; shadow detail high: 1.0 shadows a replay at the
- *     scene's scale (10.0 passes), 0.0 as Original" and --stats' "shadow
- *     detail high: 1 shadows at the scene's scale, 10 passes, 0 as
- *     Original". */
+ *   shadow levels: at the scene's scale above 1x (the smallest odd whole
+ *     one at or above it on each axis: the count at its full size, the
+ *     game's step at every texel, the tent its magnification supplied); at
+ *     1x the PS2's sizes
+ *   shadow levels: at the scene's scale: SHADOW0 864x768, SHADOW1 432x384,
+ *     SHADOW2 216x192 (3x3 texels a GS pixel) from the count's 3x3 texels a
+ *     GS pixel, 10 passes a shadow, 7.1 MB, on vulkan (reported at each
+ *     change)
+ *   shadow levels: the PS2's sizes: the scene at 1x1 texels a GS pixel
+ *     (reported at each change)
+ *   shadow levels: a shadow above 1x drawn at the PS2's size: <why>
+ *     (reported once a reason)
+ *   the 10 s clause "; shadow levels: 1.0 shadows a replay at the scene's
+ *     scale (10.0 passes), 0.0 at the PS2's size" and --stats' "shadow
+ *     levels: 1 shadows at the scene's scale, 10 passes, 0 at the PS2's
+ *     size". */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -244,14 +256,14 @@ enum {
 static const char *const kWhy[WHY_N] = {
     "the sprite is not the game's 2:1 map of the level before",
     "its state is not a level's (blend, test, filter, colour, texture)",
-    "the count was not kept at its full size",
+    "its source is not the count kept at its full size",
     "the shaders or pipelines could not be made",
     "the textures could not be made",
     "the scene's scale is above 31 on an axis"};
 
 static struct {
     struct Replay *r; /* the screen command's replay (rd__no_volume_skip) */
-    uint32_t chain;   /* the counts begun (rd__shadow_high_reset) */
+    uint32_t chain;   /* the counts begun (rd__shadow_fine_reset) */
     uint32_t fullFor; /* the count target holding its full size this chain */
     uint32_t fullChain;
     uint32_t made[RD_SR_LEVELS]; /* chain + 1 of the fine level drawn, 0 none */
@@ -267,7 +279,7 @@ static struct {
     uint32_t chainPasses;
     RhiShader fsStep, fsTent;
     RhiPipeline pipeStep, pipeTent;
-    bool refused; /* the pipelines failed: Original until the option is set again */
+    bool refused; /* the pipelines failed: the PS2's sizes for the run */
     uint32_t saidWhy;
     uint32_t saidW, saidH; /* the size line's last SHADOW0 */
 } s_sr;
@@ -279,27 +291,60 @@ static struct {
 
 static void say(int why)
 {
-    g_rdPerf.shadowHighOriginal++;
+    g_rdPerf.shadowFineRefused++;
     if (s_sr.saidWhy & (1u << why)) {
         return;
     }
     s_sr.saidWhy |= 1u << why;
-    rd__log("shadow detail: high: a shadow drawn as Original: %s (reported once a reason)",
+    rd__log("shadow levels: a shadow above 1x drawn at the PS2's size: %s (reported once a "
+            "reason)",
             kWhy[why]);
 }
 
-void rd__shadow_high_log(const char *when)
+/* ICO_RD_SHADOW_FINE (tests only): 0 the PS2's sizes above 1x, "force" the
+ * fine chain at 1x too, anything else (or none) the rule */
+enum { FINE_OFF = 0, FINE_RULE = 1, FINE_FORCE = 2 };
+
+static int fineMode(void)
 {
-    if (g_rd.settings.shadowHigh) {
-        rd__log("shadow detail: high (above 1x the shadow's three levels at the scene's scale, "
-                "the smallest odd whole one at or above it: the count at its full size, the "
-                "game's step at every texel, the tent its magnification supplied; at 1x the "
-                "game's own)%s",
-                when ? when : "");
-    } else {
-        rd__log("shadow detail: original (the game's levels at their GS sizes)%s",
-                when ? when : "");
+    static int s_mode = -1;
+    if (s_mode < 0) {
+        const char *e = getenv("ICO_RD_SHADOW_FINE");
+        s_mode = e && strcmp(e, "0") == 0       ? FINE_OFF
+                 : e && strcmp(e, "force") == 0 ? FINE_FORCE
+                                                : FINE_RULE;
     }
+    return s_mode;
+}
+
+static const char *backendName(void)
+{
+    switch (rhi_backend()) {
+    case RHI_BACKEND_VULKAN:
+        return "vulkan";
+    case RHI_BACKEND_D3D12:
+        return "d3d12";
+    case RHI_BACKEND_OPENGL:
+        return "opengl";
+    case RHI_BACKEND_D3D11:
+        return "d3d11";
+    default:
+        return "another backend";
+    }
+}
+
+void rd__shadow_fine_log(void)
+{
+    const int m = fineMode();
+    if (m == FINE_OFF) {
+        rd__log("shadow levels: the PS2's sizes at every scale (ICO_RD_SHADOW_FINE=0, the "
+                "tests' switch)");
+        return;
+    }
+    rd__log("shadow levels: at the scene's scale above 1x (the smallest odd whole one at or "
+            "above it on each axis: the count at its full size, the game's step at every texel, "
+            "the tent its magnification supplied); at 1x the PS2's sizes%s",
+            m == FINE_FORCE ? "; at 1x too (ICO_RD_SHADOW_FINE=force, the tests' switch)" : "");
 }
 
 static void destroyAll(void)
@@ -327,21 +372,7 @@ static double heldMb(void)
     return b / (1024.0 * 1024.0);
 }
 
-void rd__shadow_high_free(const char *why)
-{
-    const bool held = s_sr.lvl[0].id != 0;
-    if (held && g_rd.hasDevice) {
-        rd__log("shadow detail: high: the levels at the scene's scale freed, %.1f MB (%s)",
-                heldMb(), why ? why : "asked");
-    }
-    if (g_rd.hasDevice) {
-        destroyAll();
-    }
-    s_sr.refused = false; /* a new choice: tried again */
-    s_sr.saidW = s_sr.saidH = 0;
-}
-
-void rd__shadow_high_shutdown(void)
+void rd__shadow_fine_shutdown(void)
 {
     if (g_rd.hasDevice) {
         destroyAll();
@@ -361,12 +392,12 @@ void rd__shadow_high_shutdown(void)
     memset(&s_sr, 0, sizeof(s_sr));
 }
 
-void rd__shadow_high_replay(struct Replay *r)
+void rd__shadow_fine_replay(struct Replay *r)
 {
     s_sr.r = r;
 }
 
-void rd__shadow_high_reset(uint32_t color)
+void rd__shadow_fine_reset(uint32_t color)
 {
     (void)color;
     s_sr.chain++;
@@ -375,24 +406,24 @@ void rd__shadow_high_reset(uint32_t color)
 }
 
 /* the count target's scales on both axes; false when neither is above 1
- * (the option takes no path: 1x) */
+ * (1x: no path of its own) unless the tests force it */
 static bool countScales(const RdTargetRec *tc, float *cx, float *cy)
 {
     *cx = rd_sr_count_scale(tc->w, tc->tw, tc->sx, tc->ox);
     *cy = rd_sr_count_scale(tc->h, tc->th, tc->sy, 0.0f);
-    return *cx > 1.0f || *cy > 1.0f;
+    return *cx > 1.0f || *cy > 1.0f || fineMode() == FINE_FORCE;
 }
 
-bool rd__shadow_high_count_wanted(const RdTargetRec *tc)
+bool rd__shadow_fine_count_wanted(const RdTargetRec *tc)
 {
     float cx, cy;
-    return g_rd.settings.shadowHigh && g_rd.hasDevice && !s_sr.refused && tc &&
+    return fineMode() != FINE_OFF && g_rd.hasDevice && !s_sr.refused && tc &&
            countScales(tc, &cx, &cy) && cx <= RD_SR_SCALE_MAX && cy <= RD_SR_SCALE_MAX;
 }
 
-void rd__shadow_high_count_full(uint32_t color)
+void rd__shadow_fine_count_full(uint32_t color)
 {
-    if (!g_rd.settings.shadowHigh) {
+    if (fineMode() == FINE_OFF) {
         return;
     }
     s_sr.fullFor = color;
@@ -445,15 +476,16 @@ static bool pipes(void)
         s_sr.fsTent = rd__make_shader("shadowres_tent_ps");
     }
     if (s_sr.fsStep.id && !s_sr.pipeStep.id) {
-        s_sr.pipeStep = makePipe(s_sr.fsStep, "rd shadow detail step");
+        s_sr.pipeStep = makePipe(s_sr.fsStep, "rd shadow levels step");
     }
     if (s_sr.fsTent.id && !s_sr.pipeTent.id) {
-        s_sr.pipeTent = makePipe(s_sr.fsTent, "rd shadow detail tent");
+        s_sr.pipeTent = makePipe(s_sr.fsTent, "rd shadow levels tent");
     }
     if (!s_sr.pipeStep.id || !s_sr.pipeTent.id) {
-        rd__log("shadow detail: high: its shaders or pipelines could not be made (step %s, tent "
-                "%s): the shadows are drawn as Original until the option is chosen again",
-                s_sr.pipeStep.id ? "made" : "missing", s_sr.pipeTent.id ? "made" : "missing");
+        rd__log("shadow levels: the shaders or pipelines of the levels at the scene's scale could "
+                "not be made on %s (step %s, tent %s): the PS2's sizes for this run",
+                backendName(), s_sr.pipeStep.id ? "made" : "missing",
+                s_sr.pipeTent.id ? "made" : "missing");
         s_sr.refused = true;
         return false;
     }
@@ -467,9 +499,9 @@ static bool texturesFor(int k, uint32_t w, uint32_t h)
         return true;
     }
     static const char *const kNames[RD_SR_LEVELS][2] = {
-        {"rd shadow detail level 0", "rd shadow detail level 0 across"},
-        {"rd shadow detail level 1", "rd shadow detail level 1 across"},
-        {"rd shadow detail level 2", "rd shadow detail level 2 across"}};
+        {"rd shadow fine level 0", "rd shadow fine level 0 across"},
+        {"rd shadow fine level 1", "rd shadow fine level 1 across"},
+        {"rd shadow fine level 2", "rd shadow fine level 2 across"}};
     if (s_sr.lvl[k].id) {
         rhi_destroy_texture(s_sr.lvl[k]);
     }
@@ -520,7 +552,7 @@ static void drawPass(struct Replay *r, RhiPipeline pipe, RhiTexture dst, RhiStat
     rd__stats_here()->draws++;
     rhi_cmd_end_render_pass(cl);
     rd__transition(cl, dst, dstState, RHI_STATE_SHADER_READ);
-    g_rdPerf.shadowHighPasses++;
+    g_rdPerf.shadowFinePasses++;
     s_sr.chainPasses++;
 }
 
@@ -575,7 +607,8 @@ static bool chainSprite(const RdStateBlock *st, const RdCmd *c, const RdScreenVt
     return true;
 }
 
-/* the size line, once a SHADOW0 size */
+/* the chain in force, at each change: the fine levels' sizes (saidW, saidH)
+ * or the PS2's at a scale of 1 (saidW 1, saidH 0) */
 static void sizeLine(void)
 {
     if (s_sr.saidW == s_sr.w[0] && s_sr.saidH == s_sr.h[0]) {
@@ -583,11 +616,26 @@ static void sizeLine(void)
     }
     s_sr.saidW = s_sr.w[0];
     s_sr.saidH = s_sr.h[0];
-    rd__log("shadow detail: high: SHADOW0 %ux%u, SHADOW1 %ux%u, SHADOW2 %ux%u at %.4gx%.4g from "
-            "the count's %.4gx%.4g texels a GS pixel, %u passes a shadow, %.1f MB (reported "
-            "once a size)",
+    const uint32_t ms = g_rdPerf.msaaSamples;
+    rd__log("shadow levels: at the scene's scale: SHADOW0 %ux%u, SHADOW1 %ux%u, SHADOW2 %ux%u "
+            "(%.4gx%.4g texels a GS pixel) from the count's %.4gx%.4g texels a GS pixel, %u "
+            "passes a shadow, %.1f MB, on %s%s (reported at each change)",
             s_sr.w[0], s_sr.h[0], s_sr.w[1], s_sr.h[1], s_sr.w[2], s_sr.h[2], (double)s_sr.sx[0],
-            (double)s_sr.sy[0], (double)s_sr.cx, (double)s_sr.cy, s_sr.chainPasses, heldMb());
+            (double)s_sr.sy[0], (double)s_sr.cx, (double)s_sr.cy, s_sr.chainPasses, heldMb(),
+            backendName(),
+            ms > 1u ? ", the count from the MSAA epoch's covered-majority resolve" : "");
+}
+
+static void ps2Line(float cx, float cy)
+{
+    if (s_sr.saidW == 1u && s_sr.saidH == 0u) {
+        return;
+    }
+    s_sr.saidW = 1u;
+    s_sr.saidH = 0u;
+    rd__log("shadow levels: the PS2's sizes: the scene at %.4gx%.4g texels a GS pixel (reported "
+            "at each change)",
+            (double)cx, (double)cy);
 }
 
 /* the tent across (level -> temporary) and down (temporary -> level) */
@@ -612,11 +660,11 @@ static void tent(struct Replay *r, int k, uint32_t name)
     }
 }
 
-void rd__shadow_high_screen(const RdStateBlock *st, const RdCmd *c, const RdScreenVtx *v,
+void rd__shadow_fine_screen(const RdStateBlock *st, const RdCmd *c, const RdScreenVtx *v,
                             uint32_t n)
 {
     struct Replay *r = s_sr.r;
-    if (!g_rd.settings.shadowHigh || !g_rd.hasDevice || !r || &r->st != st) {
+    if (fineMode() == FINE_OFF || !g_rd.hasDevice || !r || &r->st != st) {
         return;
     }
     const int k = levelOf(st->color);
@@ -639,6 +687,7 @@ void rd__shadow_high_screen(const RdStateBlock *st, const RdCmd *c, const RdScre
     if (k == 0) {
         float cx, cy;
         if (!countScales(src, &cx, &cy)) {
+            ps2Line(cx, cy);
             return; /* 1x: the game's own, no path of its own */
         }
         if (cx > RD_SR_SCALE_MAX || cy > RD_SR_SCALE_MAX) {
@@ -653,13 +702,16 @@ void rd__shadow_high_screen(const RdStateBlock *st, const RdCmd *c, const RdScre
          * or its refusal already counted): the named level as recorded */
         return;
     }
+    if (k == 0 && (s_sr.fullFor == 0u || s_sr.fullChain != s_sr.chain)) {
+        return; /* no count resolved under the rule this chain (a self-test's frame) */
+    }
+    if (k == 0 && s_sr.fullFor != t->target) {
+        say(WHY_COUNT); /* a level 0 from another target than the count */
+        return;
+    }
     int why = WHY_FORM;
     if (!chainSprite(st, c, v, n, dst, src, &why)) {
         say(why);
-        return;
-    }
-    if (k == 0 && (s_sr.fullFor != t->target || s_sr.fullChain != s_sr.chain)) {
-        say(WHY_COUNT);
         return;
     }
     if (!pipes()) {
@@ -725,14 +777,14 @@ void rd__shadow_high_screen(const RdStateBlock *st, const RdCmd *c, const RdScre
     s_sr.ready = true;
     s_sr.readyChain = s_sr.chain;
     s_sr.readyReplay = g_rd.replayCounter;
-    g_rdPerf.shadowHighChains++;
+    g_rdPerf.shadowFineChains++;
     sizeLine();
 }
 
 RhiTexture rd__shadow_fine(uint32_t target, uint32_t drawTarget)
 {
     if (!s_sr.ready || s_sr.readyChain != s_sr.chain || s_sr.readyReplay != g_rd.replayCounter ||
-        !g_rd.settings.shadowHigh || levelOf(drawTarget) >= 0) {
+        fineMode() == FINE_OFF || levelOf(drawTarget) >= 0) {
         return (RhiTexture){0};
     }
     const int k = levelOf(target);
@@ -742,7 +794,7 @@ RhiTexture rd__shadow_fine(uint32_t target, uint32_t drawTarget)
     return s_sr.lvl[k];
 }
 
-bool rd__shadow_high_tex(uint32_t texId)
+bool rd__shadow_fine_tex(uint32_t texId)
 {
     for (int k = 0; texId && k < RD_SR_LEVELS; k++) {
         if (s_sr.lvl[k].id == texId) {
@@ -752,22 +804,22 @@ bool rd__shadow_high_tex(uint32_t texId)
     return false;
 }
 
-bool rd__shadow_high_level(uint32_t target)
+bool rd__shadow_fine_level(uint32_t target)
 {
     return levelOf(target) >= 0 && rd__shadow_fine(target, 0).id != 0;
 }
 
 /* ------------------------------------------------------------ the lines */
 
-void rd__shadow_high_pop(const RdPerfRecord *rec)
+void rd__shadow_fine_pop(const RdPerfRecord *rec)
 {
-    s_sum.chains += rec->shadowHighChains;
-    s_sum.passes += rec->shadowHighPasses;
-    s_sum.original += rec->shadowHighOriginal;
+    s_sum.chains += rec->shadowFineChains;
+    s_sum.passes += rec->shadowFinePasses;
+    s_sum.original += rec->shadowFineRefused;
     s_sum.replays++;
 }
 
-void rd__shadow_high_text(char *out, size_t size, size_t *at)
+void rd__shadow_fine_text(char *out, size_t size, size_t *at)
 {
     if (s_sum.replays == 0 || (s_sum.chains == 0 && s_sum.original == 0) || *at >= size) {
         memset(&s_sum, 0, sizeof(s_sum));
@@ -776,17 +828,16 @@ void rd__shadow_high_text(char *out, size_t size, size_t *at)
     const double n = (double)s_sum.replays;
     const int w =
         snprintf(out + *at, size - *at,
-                 "; shadow detail high: %.1f shadows a replay at the scene's scale "
-                 "(%.1f passes), %.1f as Original",
+                 "; shadow levels: %.1f shadows a replay at the scene's scale "
+                 "(%.1f passes), %.1f at the PS2's size",
                  (double)s_sum.chains / n, (double)s_sum.passes / n, (double)s_sum.original / n);
     rd_clause_done(out, size, at, w);
     memset(&s_sum, 0, sizeof(s_sum));
 }
 
-void rd__shadow_high_stats(const RdPerfRecord *rec, char *out, size_t size)
+void rd__shadow_fine_stats(const RdPerfRecord *rec, char *out, size_t size)
 {
     snprintf(out, size,
-             "shadow detail %s: %u shadows at the scene's scale, %u passes, %u as Original",
-             g_rd.settings.shadowHigh ? "high" : "original", rec->shadowHighChains,
-             rec->shadowHighPasses, rec->shadowHighOriginal);
+             "shadow levels: %u shadows at the scene's scale, %u passes, %u at the PS2's size",
+             rec->shadowFineChains, rec->shadowFinePasses, rec->shadowFineRefused);
 }

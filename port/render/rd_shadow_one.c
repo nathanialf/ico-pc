@@ -44,7 +44,7 @@
 #include "rd_internal.h"
 #include "rd_replay.h"
 #include "rd_shadow_box.h"
-#include "rd_shadowres.h" /* Shadow detail: High's full-size count */
+#include "rd_shadowres.h" /* the fine levels' full-size count */
 
 bool rd__shadow_count_loads(void)
 {
@@ -138,7 +138,7 @@ void rd__shadow_reduce_cb(const RdTargetRec *tc, IcoDrawCB *cb)
 
 void rd__shadow_one_shutdown(void)
 {
-    rd__shadow_high_shutdown(); /* Shadow detail: High's levels and pipelines */
+    rd__shadow_fine_shutdown(); /* the fine levels and their pipelines */
     for (int i = 0; i < 2; i++) {
         if (s_table[i].id) {
             rhi_destroy_texture(s_table[i]);
@@ -187,7 +187,7 @@ static bool tableMake(RhiCommandList cl, int i)
     return true;
 }
 
-/* Shadow detail: High (rd_shadowres.c): after the count at its GS size,
+/* The shadow's levels at the scene's scale (rd_shadowres.c): after the count at its GS size,
  * the count drawn again into the count target at its own texels (the box of
  * one texel: the stencil's table texel itself, as at scale 1), over the
  * volumes' box in texels where the GS-size pass had one (gsBox; the rest
@@ -233,8 +233,8 @@ static void fullPass(Replay *r, RdTargetRec *tc, RhiPipeline pipe, const RdPipeK
         rd__replay_draw(cl, 3, 0, 1);
     }
     rhi_cmd_end_render_pass(cl);
-    g_rdPerf.shadowHighPasses++;
-    rd__shadow_high_count_full(r->st.color);
+    g_rdPerf.shadowFinePasses++;
+    rd__shadow_fine_count_full(r->st.color);
 }
 
 RhiPipeline rd__get_pipeline_held(const RdPipeKeyInt *k)
@@ -336,7 +336,9 @@ bool rd__shadow_one_draw(Replay *r, RdTargetRec *tc, RdTargetRec *td, uint32_t s
         rd__replay_draw(cl, 3, 0, 1); /* an empty box: the clear alone */
     }
     rhi_cmd_end_render_pass(cl);
-    if (dst.id != tc->color.id && rd__shadow_high_count_wanted(tc)) {
+    if (dst.id == tc->color.id) {
+        rd__shadow_fine_count_full(r->st.color); /* at scale 1 the count is its full size */
+    } else if (rd__shadow_fine_count_wanted(tc)) {
         fullPass(r, tc, pipe, &k, g2, &cb, boxed ? &box : NULL);
     }
     g_rdPerf.shadowOne++;

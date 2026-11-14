@@ -466,15 +466,6 @@ typedef struct RdSettings {
      * drawn at their own GS size, as on the PS2 (and as before this
      * option; the replay tool's --water-sharp sets it) */
     uint8_t waterSharp;
-    /* Shadow detail: High ([video] effect_shadow_high).  Above 1x the
-     * shadow's three blur levels are drawn at the scene's scale with the
-     * game's own two-tap step at every texel, each then given the tent its
-     * bilinear magnification supplied, and the composites read them
-     * (rd_shadowres.c; docs/port/RENDER_POST.md "Shadow detail: High").  At
-     * 1x it takes no path of its own.  0 in a zeroed RdSettings: the
-     * game's own levels (Original); the replay tool's --shadow-detail high
-     * sets it */
-    uint8_t shadowHigh;
     /* Motion blur: Smooth ([video] effect_motion_blur_mode = "smooth" with
      * effect_motion_blur on).  The motion blur's sprite (staticBlur.c
      * MotionBlur) reads an accumulator of the scenes of every present
@@ -2982,12 +2973,12 @@ typedef struct RdPerfRecord {
      * shadowSeven through the seven stencil-tested draws (and the box
      * reduction above 1x) */
     uint32_t shadowOne, shadowSeven;
-    /* Shadow detail: High (rd_shadowres.c): shadowHighChains the shadow
-     * chains drawn at the scene's scale this replay (their composites read
-     * the fine levels), shadowHighPasses their passes (the full-size count,
-     * three levels, six tent passes), shadowHighOriginal the chains drawn as
-     * Original while the option is High (a level the rule does not take) */
-    uint32_t shadowHighChains, shadowHighPasses, shadowHighOriginal;
+    /* The shadow's levels at the scene's scale (rd_shadowres.c): shadowFineChains
+     * the shadow chains drawn at the scene's scale this replay (their
+     * composites read the fine levels), shadowFinePasses their passes (the
+     * full-size count, three levels, six tent passes), shadowFineRefused the
+     * chains above 1x drawn at the PS2's size (a level the rule does not take) */
+    uint32_t shadowFineChains, shadowFinePasses, shadowFineRefused;
     /* of shadowOne, the draws that read the stencil four texels a gather
      * (the rest a texel a load: g_rd.shadowLoad, rd_shadow_selftest.c) */
     uint32_t shadowGathered;

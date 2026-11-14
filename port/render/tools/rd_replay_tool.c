@@ -139,12 +139,6 @@
  *                         (rd_core.c rd__target_scale_of); without it they are
  *                         drawn at their GS size, the PS2's.  A dump from before
  *                         the option marks no block and replays as without it
- *   --shadow-detail D     original (the default) or high: Options > Effects >
- *                         Shadow detail (RdSettings.shadowHigh, rd_shadowres.c):
- *                         high draws the shadow's three levels at the scene's
- *                         scale above 1x (the same bytes at 1x); --stats
- *                         prints "shadow detail high: N shadows at the
- *                         scene's scale, P passes, O as Original"
  *   --motion-blur M       original (the default) or smooth: Options > Effects
  *                         > Motion blur's way (RdSettings.motionBlurSmooth,
  *                         rd_blur_smooth.c).  Smooth's trail is an
@@ -565,7 +559,7 @@
 #include "rd_vu_compact.h"       /* --stats: the index compaction's counts */
 #include "rd_shadow_box.h"       /* --stats: the shadows over the volumes' box */
 #include "rd_shadow_tile.h"      /* --stats: the shadow composites over the tile mask */
-#include "rd_shadowres.h"        /* --stats: Shadow detail: High */
+#include "rd_shadowres.h"        /* --stats: the shadow's levels above 1x */
 #include "rd_no_volume.h"        /* --stats: a shadow window with no volume */
 #include "rd_upscale.h"
 #include "rd_upscale_capture.h" /* --fsr3-dump */
@@ -2200,8 +2194,7 @@ int main(int argc, char **argv)
         fprintf(stderr,
                 "usage: %s <dump> <out.png> [--target NAME] [--present WxH] [--enhanced] "
                 "[--aspect A] [--resolution WxH|Nx] [--full-height] [--full-pixel] "
-                "[--border-mask] [--water-sharp] [--shadow-detail original|high] "
-                "[--motion-blur original|smooth] [--no-crack-fill] "
+                "[--border-mask] [--water-sharp] [--motion-blur original|smooth] [--no-crack-fill] "
                 "[--motion-blur-strength N] "
                 "[--work-clear RRGGBB] [--no-glow-edge] "
                 "[--filter F] "
@@ -2400,13 +2393,6 @@ int main(int argc, char **argv)
             presentsN = (int)n;
         } else if (strcmp(argv[i], "--water-sharp") == 0) {
             s.waterSharp = 1;
-        } else if (strcmp(argv[i], "--shadow-detail") == 0 && i + 1 < argc) {
-            const char *d = argv[++i];
-            if (strcmp(d, "original") != 0 && strcmp(d, "high") != 0) {
-                fprintf(stderr, "bad --shadow-detail (original or high)\n");
-                return 1;
-            }
-            s.shadowHigh = (uint8_t)(strcmp(d, "high") == 0);
         } else if (strcmp(argv[i], "--mirror") == 0) {
             s.mirror = 1;
         } else if (strcmp(argv[i], "--pass-dump") == 0 && i + 1 < argc) {
@@ -3277,7 +3263,7 @@ int main(int argc, char **argv)
             printf("%s: stats: %s\n", dump, sc);
             rd__no_volume_stats(pr, sc, sizeof sc); /* rd_no_volume.c */
             printf("%s: stats: %s\n", dump, sc);
-            rd__shadow_high_stats(pr, sc, sizeof sc); /* rd_shadowres.c */
+            rd__shadow_fine_stats(pr, sc, sizeof sc); /* rd_shadowres.c */
             printf("%s: stats: %s\n", dump, sc);
         }
         /* a cleared source read as its colour (rd_const_read.c) */

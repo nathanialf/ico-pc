@@ -93,9 +93,9 @@ static const char *const expectedShadowTile[] = {"shadow_tile_mask_ps", "shadow_
 /* Upscaling: FSR 1.0's two passes (fsr1.hlsl over port/third_party/fsr1;
  * port/render/rd_fsr1.c) */
 static const char *const expectedFsr1[] = {"fsr1_easu_ps", "fsr1_rcas_ps"};
-/* Shadow detail: High's level step and tent (port/render/rd_shadowres.c,
+/* the shadow levels' step and tent above 1x (port/render/rd_shadowres.c,
  * shadowres.hlsl), pixel shaders on every backend */
-static const char *const expectedShadowHigh[] = {"shadowres_step_ps", "shadowres_tent_ps"};
+static const char *const expectedShadowFine[] = {"shadowres_step_ps", "shadowres_tent_ps"};
 
 /* the mesh programs' entries' plain variants (ICO_VU_PLAIN, vu_common.hlsli:
  * the fallback's on a device of the table) */
@@ -568,10 +568,10 @@ int main(void)
             failures++;
         }
     }
-    for (size_t i = 0; i < sizeof(expectedShadowHigh) / sizeof(expectedShadowHigh[0]); i++) {
-        const IcoShaderBlob *b = ico_find_shader(expectedShadowHigh[i]);
+    for (size_t i = 0; i < sizeof(expectedShadowFine) / sizeof(expectedShadowFine[0]); i++) {
+        const IcoShaderBlob *b = ico_find_shader(expectedShadowFine[i]);
         if (!b || b->stage != ICO_SHADER_STAGE_FRAGMENT) {
-            printf("FAIL %s: not in the table as a fragment shader\n", expectedShadowHigh[i]);
+            printf("FAIL %s: not in the table as a fragment shader\n", expectedShadowFine[i]);
             failures++;
         }
     }
