@@ -11,13 +11,10 @@
  * once and never asked again; a full ring dropped and counted; a failed
  * report counted; the lines word for word; a short buffer; the wake period;
  * and a game thread pushing while the hint thread reports, on two real
- * threads (no picture lost, none reported twice).  The clock lift
- * (clock_trap.h): not asked without the backend's notify, not sent before a
- * session (counted), the lifts asked before a step one call for CPU and
- * GPU, its answers counted (taken, EBUSY, ENOTSUP, another error), in the
- * background not sent, the block line's clause and the answers' words.
+ * threads (no picture lost, none reported twice).  The block's numbers
+ * peeked (the ranked line, before the block's own line) leave them for the
+ * take.
  */
-#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -553,95 +550,39 @@ static void testThreads(void)
     free(s_th);
 }
 
-/* the clock lift's notify (perf_hint.h PerfHintOps.notify) */
-static int s_notifyRc;
-static unsigned s_notifies;
-static bool s_notifyCpu, s_notifyGpu;
-
-static int f_notify(void *u, void *s, bool cpu, bool gpu)
-{
-    Fake *f = u;
-
-    CHECK(s == &f->session);
-    s_notifies++;
-    s_notifyCpu = cpu;
-    s_notifyGpu = gpu;
-    return s_notifyRc;
-}
-
-static void testLift(void)
+/* the ranked line's peek (perf_hint_peek): the numbers so far, not taken */
+static void testPeek(void)
 {
     Fake f;
     PerfHint *h = calloc(1, sizeof(*h));
     PerfHintOps o;
     PerfHintStats s;
-    char line[640], want[640], w[48];
+    PerfHintWork w;
 
     memset(&f, 0, sizeof(f));
     o = fake_ops(&f, true, true);
-    /* no notify (before API 36): nothing asked */
     perf_hint_init(h, &o);
-    CHECK(!perf_hint_request_lift(h));
-    o.notify = f_notify;
-    perf_hint_init(h, &o);
-    /* asked before a session: not sent, counted */
-    CHECK(perf_hint_request_lift(h));
-    CHECK(perf_hint_step(h) == 0 && s_notifies == 0);
-    perf_hint_take(h, &s);
-    CHECK(s.liftsMissed == 1u && s.lifts == 0u);
     perf_hint_set_threads(h, k_tids, 3);
     perf_hint_set_target(h, 7812500u);
     CHECK(perf_hint_step(h) == PERF_HINT_EV_MADE);
-    /* two asked before the step: one call, CPU and GPU */
-    CHECK(perf_hint_request_lift(h) && perf_hint_request_lift(h));
-    CHECK(perf_hint_step(h) == PERF_HINT_EV_LIFT && s_notifies == 1u && s_notifyCpu &&
-          s_notifyGpu && h->liftRc == 0);
-    CHECK(perf_hint_step(h) == 0 && s_notifies == 1u); /* nothing new */
-    s_notifyRc = EBUSY;
-    CHECK(perf_hint_request_lift(h));
-    CHECK(perf_hint_step(h) == PERF_HINT_EV_LIFT && h->liftRc == EBUSY);
-    s_notifyRc = ENOTSUP;
-    CHECK(perf_hint_request_lift(h));
-    CHECK(perf_hint_step(h) == PERF_HINT_EV_LIFT && h->liftRc == ENOTSUP);
-    s_notifyRc = EPIPE;
-    CHECK(perf_hint_request_lift(h));
-    CHECK(perf_hint_step(h) == PERF_HINT_EV_LIFT && h->liftRc == EPIPE && s_notifies == 4u);
-    /* peeked, not taken; then taken */
+    w = work(13100000, 17790000, true);
+    CHECK(perf_hint_push(h, &w) && perf_hint_push(h, &w));
+    CHECK(perf_hint_step(h) == 0);
     perf_hint_peek(h, &s);
-    CHECK(s.lifts == 4u && s.liftsTaken == 1u);
+    CHECK(s.reports == 2 && s.over == 2);
+    perf_hint_peek(h, &s);
+    CHECK(s.reports == 2);
     perf_hint_take(h, &s);
-    CHECK(s.lifts == 4u && s.liftsTaken == 1u && s.liftsBusy == 1u && s.liftsUnsupported == 1u &&
-          s.liftsFailed == 1u && s.liftError == EPIPE && s.liftsMissed == 0u);
-    perf_hint_block_text(&s, true, h->sessTargetNs, line, sizeof(line));
-    (void)snprintf(want, sizeof(want),
-                   "performance hints: 0 reports (actual CPU 0.00 ms / GPU none timed yet of the "
-                   "7.81 ms target; over target in 0), the report calls 0.00 ms in all (longest "
-                   "0.00 ms), target changed 0 times; clock lifts 4 (taken 1, rate-limited 1, not "
-                   "supported 1, failed 1 (error %d), not sent without a session 0)",
-                   EPIPE);
-    CHECK_STR(line, want);
+    CHECK(s.reports == 2 && s.over == 2);
     perf_hint_take(h, &s);
-    CHECK(s.lifts == 0u);
-    /* in the background: closed, the lift not sent */
-    perf_hint_set_active(h, false);
-    CHECK(perf_hint_request_lift(h));
-    CHECK(perf_hint_step(h) == PERF_HINT_EV_CLOSED && s_notifies == 4u);
-    perf_hint_take(h, &s);
-    CHECK(s.liftsMissed == 1u && s.lifts == 0u);
-    /* the answers' words */
-    CHECK_STR(perf_hint_lift_words(0, w, sizeof(w)), "taken");
-    CHECK_STR(perf_hint_lift_words(EBUSY, w, sizeof(w)), "rate-limited by the system (EBUSY)");
-    CHECK_STR(perf_hint_lift_words(ENOTSUP, w, sizeof(w)), "not supported here (ENOTSUP)");
-    (void)snprintf(want, sizeof(want), "failed (error %d)", EPIPE);
-    CHECK_STR(perf_hint_lift_words(EPIPE, w, sizeof(w)), want);
-    CHECK_STR(perf_hint_lift_words(EPIPE, NULL, 0), "failed");
+    CHECK(s.reports == 0);
     perf_hint_shutdown(h);
     free(h);
 }
 
 int main(void)
 {
-    testLift();
+    testPeek();
     testTarget();
     testWork();
     testSession();

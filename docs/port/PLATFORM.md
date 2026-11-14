@@ -69,8 +69,9 @@ run explain itself. [ARCHITECTURE.md](ARCHITECTURE.md) places this layer among t
 | `port/platform/gpu_sysfs.c`, `gpu_sysfs.h` | the kernel GPU driver's nodes for the log, the pure part (tested everywhere; [ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md)) |
 | `port/platform/perf_hint.c`, `perf_hint.h` | Android's performance hints, the pure part: the target from the pacer's plan, a picture's work, the session's life against a backend, the lines (tested everywhere; [Performance hints](#performance-hints-android)) |
 | `port/platform/window_perf_hint.c`, `window_perf_hint.h` | the window's side of the hints: the hint thread, the target and the threads' ids, the pictures, the lifecycle, the 10 s line (Android; nothing elsewhere) |
-| `port/platform/clock_trap.c`, `clock_trap.h` | one picture a tick behind the step rule: the seconds' pictures, frames, asks and holds, the clock lift's rule, the block's worst second, the CPU clusters' dip against the blocks before, the lines (pure, tested everywhere; [ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-clock-lift-and-the-worst-second-the-owners-pixel)) |
-| `port/platform/window_clock_trap.c`, `window_clock_trap.h` | the window's side: each drained picture and each ask of the step rule into its second, the lift asked of the hint thread, the worst-second line and the ranked line's clock clause (the clocks on Android only) |
+| `port/platform/clock_trap.c`, `clock_trap.h` | one picture a tick behind the step rule: the seconds' pictures, frames, asks and holds, the one-a-tick rule, the block's worst second, the CPU clusters' dip against the blocks before, the lines (pure, tested everywhere; [ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#one-picture-a-tick-and-the-worst-second-the-owners-pixel)) |
+| `port/platform/window_clock_trap.c`, `window_clock_trap.h` | the window's side: each drained picture and each ask of the step rule into its second, the pins let go and taken again (`pin_release.h`, the keeper told through `render_thread.c`), the pin trace, the worst-second line and the ranked line's clock clause (the clocks on Android only) |
+| `port/platform/pin_release.c`, `pin_release.h` | the render and game threads' single-core pins let go at one picture a tick and taken again after 10 s without: the rule, the threads' cores a second and a block, the lines (pure, tested everywhere; [ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#one-picture-a-tick-and-the-worst-second-the-owners-pixel)) |
 | `port/platform/android/` | `main_android.c`, `host_android.c`, `android_paths.c`, `iso_import.c`, `gpu_driver_android.c`, `gpu_sysfs_android.c`, `perf_hint_android.c` (the NDK's hint calls looked up at run time) |
 | `port/platform/ios/main_ios.c`, `ios/Info.plist.in` | the iOS entry point and bundle |
 | `port/platform/macos/Info.plist.in` | the macOS bundle |
@@ -815,6 +816,18 @@ after the start, at a 3D scene, focus, a return and every 10 s, and gives the ga
 core of its own (`cpu_keep.h`, the log thread's tick; `[dev] big_cores = false` turns it off with
 the rest): the starts that kept core 7 ran the old bridge evenly at 67-71 fps, the others at 48-59
 with back-offs ([the lines](ANDROID_DIAGNOSTICS.md#the-threads-cores-after-the-start)).
+While the game is stuck at one picture a tick (a second at one a tick behind the step rule with a
+picture's CPU at 1.25 times the blocks' median or more) the keeper lets those single-core pins go:
+the render, game and submit threads on every allowed faster core, every other thread on every
+allowed core, no ideal asked and no 10 s retry (`cpu_keep_release`, the `RELEASED` sets); after 10
+judged seconds without one a tick it takes them again, the ideal asked first (`pin_release.c`,
+driven by `window_clock_trap.c` at each second's close, the wish an atomic in `render_thread.c`
+the keeper's next tick reads). The owner's Pixel fell into such stretches with the render thread on
+core 7 alone and on core 6 alone, all three clusters' clocks low, and Android's guidance is that
+a game should not set its threads' cores; the pin's measured gain (core 7 alone against 2-7) is
+why it is let go only in that state, so one log compares the two
+([the lines](ANDROID_DIAGNOSTICS.md#one-picture-a-tick-and-the-worst-second-the-owners-pixel)).
+The few-cores rule keeps its pins.
 With exactly two cores faster than the slowest (a Helio G85: `0-5 1.8 GHz, 6-7 2.0 GHz`, whose
 game thread, saturated, ran on the slow cores in 15-62 % of the samples while the render and
 submit threads held both fast ones) the game thread and the render thread both keep to those two
@@ -1916,21 +1929,18 @@ changed N times`, `; N failed (error E)`, `; N dropped (the queue full)` and `; 
 the background)` when they happened. `perf_hint_test` holds the pure part against a fake backend
 ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)); the NDK's side runs only on a phone.
 
-**The clock lift** (the owner's Pixel in the cage room): on Android 16 and later
-(`APerformanceHint_notifyWorkloadIncrease`, looked up at run time; not in NDK 28's header) a second
-at one picture a tick behind the step rule (`clock_trap.h` `clock_trap_one_a_tick`: at least 20
-game frames, at most 1.1 pictures a frame, at least half a frame's worth of asks of the step rule
-and at least half of them held, as made) asks the hint thread for one call telling the system of a
-heavier CPU and GPU load, at most once every 2 s. The hint alone cannot ask for it: its reports are
-over its target (the present gap, 7.81 ms at 120 Hz) at two pictures a tick and at one alike. The
-lines: `window: clock lift asked: ...` (the game thread), `window: clock lift:
-APerformanceHint_notifyWorkloadIncrease (CPU and GPU) taken` (or the error's words; the hint
-thread), `; clock lifts N (taken T, rate-limited B, not supported U, failed F, not sent without a
-session M)` in the 10 s line, and the attempt ledger's row `clock lift at one picture a tick`;
-every 10 s block on every platform `window: worst second of the block: ...`
-([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-clock-lift-and-the-worst-second-the-owners-pixel)
-reads them). `clock_trap_test` and `perf_hint_test` hold the rule, the lines and the call's
-counting.
+**Not called:** `APerformanceHint_notifyWorkloadIncrease` (Android 16). A release candidate made it at
+each second at one picture a tick behind the step rule (the clock lift); on the owner's Pixel
+every call was taken and the seconds after stayed at one a tick with the same clocks. The NDK
+documents its effect as lasting one cycle and says it is not for an ongoing heavy load, which
+reported durations are for; it was taken out. `APerformanceHint_setPreferPowerEfficiency` is not
+called either (its default, off, is what the port wants). **The target under Uncapped** stays the
+present gap (7.81 ms at 120 Hz), which the reports exceed at two pictures a tick and at one alike:
+the documented contract is the desired duration of a cycle, and a target the pictures could meet
+(a tick's share) would tell the system the good state was early and lower its help. Every 10 s
+block on every platform `window: worst second of the block: ...`
+([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#one-picture-a-tick-and-the-worst-second-the-owners-pixel)
+reads it).
 
 ## The renderer switched from the menu
 

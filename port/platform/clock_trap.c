@@ -33,7 +33,7 @@ bool clock_trap_worse(const ClockTrapSecond *a, const ClockTrapSecond *b)
     return ca > cb;
 }
 
-/* the open second closed: judged into the block, the lift's rule */
+/* the open second closed: judged into the block, the one-a-tick rule */
 static unsigned close_second(ClockTrap *c, ClockTrapSecond *closed)
 {
     unsigned ev = CLOCK_TRAP_EV_CLOSED;
@@ -51,15 +51,8 @@ static unsigned close_second(ClockTrap *c, ClockTrapSecond *closed)
         }
     }
     if (clock_trap_one_a_tick(s)) {
-        const double at = s->t0Ms + 1000.0;
-
         b->oneATick++;
-        if (!c->lifted || at - c->lastLiftMs >= CLOCK_TRAP_LIFT_GAP_MS) {
-            c->lifted = true;
-            c->lastLiftMs = at;
-            b->lifts++;
-            ev |= CLOCK_TRAP_EV_LIFT;
-        }
+        ev |= CLOCK_TRAP_EV_ONE;
     }
     return ev;
 }
@@ -331,8 +324,7 @@ int clock_trap_dip_text(const ClockTrapDip *d, int n, const ClockTrapHint *hint,
         if (hint->gpuMs > 0.0) {
             put(&o, " / %.2f ms GPU", hint->gpuMs);
         }
-        put(&o, " (over target in %u of %u); clock lifts asked %u (taken %u)", hint->over,
-            hint->reports, hint->liftsAsked, hint->liftsTaken);
+        put(&o, " (over target in %u of %u)", hint->over, hint->reports);
     } else {
         put(&o, "; no performance hint session");
     }
@@ -347,8 +339,7 @@ int clock_trap_worst_text(const ClockTrapBlock *b, double blockStartMs, const Gp
 
     put(&o, "worst second of the block: ");
     if (!b->haveWorst) {
-        put(&o, "none judged (fewer than %u game frames in every second); clock lifts asked %u",
-            CLOCK_TRAP_MIN_FRAMES, b->lifts);
+        put(&o, "none judged (fewer than %u game frames in every second)", CLOCK_TRAP_MIN_FRAMES);
         return o.total;
     }
     put(&o,
@@ -365,36 +356,17 @@ int clock_trap_worst_text(const ClockTrapBlock *b, double blockStartMs, const Gp
         put(&o, " (the block's %.1f)", b->cpuMs / b->cpuN);
     }
     ring_text(&o, ring, w->t0Ms);
-    put(&o, "; %u of %u seconds at one a tick behind the step rule, clock lifts asked %u",
-        b->oneATick, b->seconds, b->lifts);
+    put(&o, "; %u of %u seconds at one a tick behind the step rule", b->oneATick, b->seconds);
     return o.total;
 }
 
-int clock_trap_lift_text(const ClockTrapSecond *s, char *out, size_t cap)
+int clock_trap_second_text(const ClockTrapSecond *s, const GpuSysfsRing *ring, char *out,
+                           size_t cap)
 {
     Out o = out_of(out, cap);
 
-    put(&o,
-        "clock lift asked: %u pictures for %u game frames in a second (one a tick), the step "
-        "rule held %u of %u further pictures asked",
-        s->pictures, s->frames, s->held, s->asks);
-    if (s->cpuN) {
-        put(&o, ", a picture's CPU %.1f ms", s->cpuMs / s->cpuN);
-    }
-    put(&o, ": the system told of a heavier CPU and GPU load");
-    return o.total;
-}
-
-int clock_trap_trace_text(const ClockTrapSecond *s, unsigned k, const GpuSysfsRing *ring, char *out,
-                          size_t cap)
-{
-    Out o = out_of(out, cap);
-
-    put(&o,
-        "clock lift trace %u of %u: %u pictures for %u game frames (%.2f a tick), a picture's "
-        "CPU ",
-        k, CLOCK_TRAP_TRACE_SECONDS, s->pictures, s->frames,
-        s->frames ? (double)s->pictures / s->frames : 0.0);
+    put(&o, "%u pictures for %u game frames (%.2f a tick), a picture's CPU ", s->pictures,
+        s->frames, s->frames ? (double)s->pictures / s->frames : 0.0);
     if (s->cpuN) {
         put(&o, "%.1f ms", s->cpuMs / s->cpuN);
     } else {
@@ -421,6 +393,30 @@ static double median_of(double *v, unsigned m)
     return (m & 1u) ? v[m / 2u] : 0.5 * (v[m / 2u - 1u] + v[m / 2u]);
 }
 
+double clock_trap_cpu_median(const ClockTrapHist *h, unsigned *blocks)
+{
+    double v[CLOCK_TRAP_HIST];
+    unsigned m = 0;
+
+    for (unsigned k = 0; k < h->n && k < CLOCK_TRAP_HIST; k++) {
+        if (h->h[k].cpuMs > 0.0) {
+            v[m++] = h->h[k].cpuMs;
+        }
+    }
+    if (blocks != NULL) {
+        *blocks = m;
+    }
+    return m > 0u ? median_of(v, m) : 0.0;
+}
+
+bool clock_trap_cpu_raised(const ClockTrapSecond *s, double median, unsigned blocks)
+{
+    if (s->cpuN == 0u) {
+        return false;
+    }
+    return blocks < 2u || s->cpuMs / s->cpuN >= CLOCK_TRAP_DUE_CPU_RISE * median;
+}
+
 bool clock_trap_due(const ClockTrapHist *h, const ClockTrapClusters *now, unsigned pictures,
                     unsigned frames, double cpuMs, int core, double coreMhz, ClockTrapDue *out)
 {
@@ -434,15 +430,8 @@ bool clock_trap_due(const ClockTrapHist *h, const ClockTrapClusters *now, unsign
     out->core = core;
     out->coreMhz = coreMhz;
     out->clFirst = out->clLast = -1;
-    for (unsigned k = 0; k < h->n; k++) {
-        if (h->h[k].cpuMs > 0.0) {
-            v[m++] = h->h[k].cpuMs;
-        }
-    }
+    out->cpuMedian = clock_trap_cpu_median(h, &m);
     out->cpuBlocks = m;
-    if (m > 0u) {
-        out->cpuMedian = median_of(v, m);
-    }
     /* the render thread's cluster in the block and its median before */
     for (int i = 0; now != NULL && core >= 0 && i < now->n; i++) {
         if (core < now->first[i] || core > now->last[i]) {

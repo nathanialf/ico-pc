@@ -424,15 +424,15 @@ static void test_classes(void)
            Vulkan device, counting */
         ico_attempt_decide_picture_health(1);
         CHECK(ico_attempt_state_of(ICO_ATT_PICTURE_HEALTH) == ICO_ATT_ON);
-        /* the clock lift (clock_trap.h): on where the system has the
-           workload notice and a hint session (the Android classes here, as
-           an Android 16 phone with a session), not applicable elsewhere */
-        ico_attempt_decide_clock_lift(kShip[c].android, kShip[c].android, kShip[c].android);
-        CHECK(ico_attempt_state_of(ICO_ATT_CLOCK_LIFT) ==
+        /* the pins let go at one picture a tick (pin_release.h): on where
+           the keeper's rule for three or more faster cores is in force (the
+           Android classes here, as the Pixel), not applicable elsewhere */
+        ico_attempt_decide_pin_release(kShip[c].android, kShip[c].android ? 1 : 0);
+        CHECK(ico_attempt_state_of(ICO_ATT_PIN_RELEASE) ==
               (kShip[c].android ? ICO_ATT_ON : ICO_ATT_NA));
         /* the whole start line, its last row included, in the window's 4 KB
            parts (window_perf_rank.c ledger_lines, ico_attempt_start_part):
-           one part, or two since the clock lift's row, each whole rows */
+           one part, or two since the v0.11.7 rows, each whole rows */
         {
             static char big[8192];
             const size_t n = ico_attempt_start_text(big, sizeof big);
@@ -441,7 +441,7 @@ static void test_classes(void)
             CHECK(strstr(big, "; no capture after a stall ") != NULL);
             CHECK(strstr(big, "; picture health on (counting: 16 of 32 3D pictures unfinished "
                               "are said once)") != NULL);
-            CHECK(strstr(big, "; clock lift at one picture a tick ") != NULL);
+            CHECK(strstr(big, "; pins let go at one picture a tick ") != NULL);
             int row = 0, parts = 0;
             char part[4096];
             while (row < ICO_ATT_COUNT && parts < 4) {
@@ -997,45 +997,48 @@ static void test_start_parts(void)
     ico_attempt_reset();
 }
 
-/* the clock lift (clock_trap.h): not applicable off Android, without the
-   system's workload notice and without a session, each with its words; on
-   with all three; its two counts in the block line, taken per block */
-static void test_clock_lift(void)
+/* the pins let go at one picture a tick (pin_release.h): not applicable off
+   Android, under the few-cores rule and with nothing pinned, each with its
+   words; on under the rule for three or more faster cores; its two counts in
+   the block line, taken per block */
+static void test_pin_release(void)
 {
     char b[4096];
 
     ico_attempt_reset();
-    CHECK(ico_attempt_state_of(ICO_ATT_CLOCK_LIFT) == ICO_ATT_NOT_SET);
-    ico_attempt_decide_clock_lift(0, 0, 0);
-    CHECK(ico_attempt_state_of(ICO_ATT_CLOCK_LIFT) == ICO_ATT_NA &&
-          strcmp(ico_attempt_why_of(ICO_ATT_CLOCK_LIFT), "Android's performance hints only") == 0);
-    ico_attempt_decide_clock_lift(1, 0, 1);
-    CHECK(ico_attempt_state_of(ICO_ATT_CLOCK_LIFT) == ICO_ATT_NA &&
-          strcmp(ico_attempt_why_of(ICO_ATT_CLOCK_LIFT),
-                 "the system has no workload notice: APerformanceHint_notifyWorkloadIncrease is "
-                 "Android 16 and later") == 0);
-    ico_attempt_decide_clock_lift(1, 1, 0);
-    CHECK(ico_attempt_state_of(ICO_ATT_CLOCK_LIFT) == ICO_ATT_NA &&
-          strcmp(ico_attempt_why_of(ICO_ATT_CLOCK_LIFT), "no performance hint session") == 0);
-    ico_attempt_decide_clock_lift(1, 1, 1);
-    CHECK(ico_attempt_state_of(ICO_ATT_CLOCK_LIFT) == ICO_ATT_ON);
+    CHECK(ico_attempt_state_of(ICO_ATT_PIN_RELEASE) == ICO_ATT_NOT_SET);
+    ico_attempt_decide_pin_release(0, 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_PIN_RELEASE) == ICO_ATT_NA &&
+          strcmp(ico_attempt_why_of(ICO_ATT_PIN_RELEASE), "Android's core placement only") == 0);
+    ico_attempt_decide_pin_release(1, 2);
+    CHECK(ico_attempt_state_of(ICO_ATT_PIN_RELEASE) == ICO_ATT_NA &&
+          strcmp(ico_attempt_why_of(ICO_ATT_PIN_RELEASE),
+                 "one or two cores faster than the slowest: the few-cores rule keeps its "
+                 "pins") == 0);
+    ico_attempt_decide_pin_release(1, 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_PIN_RELEASE) == ICO_ATT_NA &&
+          strcmp(ico_attempt_why_of(ICO_ATT_PIN_RELEASE),
+                 "nothing pinned here (the cores of one speed, or [dev] big_cores = false)") == 0);
+    ico_attempt_decide_pin_release(1, 1);
+    CHECK(ico_attempt_state_of(ICO_ATT_PIN_RELEASE) == ICO_ATT_ON);
     (void)ico_attempt_start_text(b, sizeof b);
-    CHECK(strstr(b, "; clock lift at one picture a tick on (a second at one picture a tick behind "
-                    "the step rule told to the system as a heavier CPU and GPU load)") != NULL);
-    ico_attempt_fire(ICO_ATT_CLOCK_LIFT, 3u);
-    ico_attempt_fire2(ICO_ATT_CLOCK_LIFT, 2u);
+    CHECK(strstr(b, "; pins let go at one picture a tick on (a second at one picture a tick with "
+                    "a picture's CPU raised lets the render and game threads run on any faster "
+                    "core until 10 s pass without one)") != NULL);
+    ico_attempt_fire(ICO_ATT_PIN_RELEASE, 3u);
+    ico_attempt_fire2(ICO_ATT_PIN_RELEASE, 2u);
     (void)ico_attempt_block_text(b, sizeof b, -1);
-    CHECK(text_is(b, "attempts: clock lift at one picture a tick on 3 lifts asked (2 taken by "
-                     "the system)"));
+    CHECK(text_is(b, "attempts: pins let go at one picture a tick on 3 times let go (2 taken "
+                     "again)"));
     (void)ico_attempt_block_text(b, sizeof b, -1);
-    CHECK(text_is(b, "attempts: clock lift at one picture a tick on 0 lifts asked (0 taken by "
-                     "the system)"));
+    CHECK(text_is(b, "attempts: pins let go at one picture a tick on 0 times let go (0 taken "
+                     "again)"));
     ico_attempt_reset();
 }
 
 int main(void)
 {
-    test_clock_lift();
+    test_pin_release();
     test_classes();
     test_robust_line();
     test_skin_skip();

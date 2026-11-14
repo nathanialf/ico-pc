@@ -5,7 +5,6 @@
  * perf_hint.h).
  */
 #include "window_perf_hint.h"
-#include "attempt_ledger.h"
 #include "clock_trap.h"
 #include "window_clock_trap.h"
 
@@ -95,18 +94,6 @@ static int SDLCALL hint_main(void *u)
         if (ev & PERF_HINT_EV_MADE) {
             on_line(s_h.made > 1);
             __atomic_store_n(&s_made, (int)s_h.made, __ATOMIC_RELEASE);
-        }
-        if (ev & PERF_HINT_EV_LIFT) {
-            /* the clock lift's answer (clock_trap.h; the hint thread's call) */
-            char w[48];
-
-            if (s_h.liftRc == 0) {
-                ico_attempt_fire2(ICO_ATT_CLOCK_LIFT, 1u);
-            }
-            ico_log_limited("window: clock lift answered",
-                            "window: clock lift: APerformanceHint_notifyWorkloadIncrease (CPU "
-                            "and GPU) %s",
-                            perf_hint_lift_words(s_h.liftRc, w, sizeof(w)));
         }
         if (ev & PERF_HINT_EV_CLOSED) {
             ico_log_limited("window: performance hints closed",
@@ -246,16 +233,6 @@ void window_perf_hint_active(bool active)
     SDL_SignalSemaphore(s_sem); /* the thread steps now (the close, or the session again) */
 }
 
-bool window_perf_hint_lift(void)
-{
-    if (!s_on || __atomic_load_n(&s_refused, __ATOMIC_ACQUIRE) ||
-        __atomic_load_n(&s_made, __ATOMIC_ACQUIRE) == 0 || !perf_hint_request_lift(&s_h)) {
-        return false;
-    }
-    SDL_SignalSemaphore(s_sem); /* the hint thread calls it now */
-    return true;
-}
-
 bool window_perf_hint_peek(struct ClockTrapHint *out)
 {
     PerfHintStats st;
@@ -271,8 +248,6 @@ bool window_perf_hint_peek(struct ClockTrapHint *out)
     out->over = st.over;
     out->cpuMs = st.reports ? st.cpuMs / st.reports : 0.0;
     out->gpuMs = st.gpuReports ? st.gpuMs / st.gpuReports : 0.0;
-    out->liftsAsked = st.lifts + st.liftsMissed;
-    out->liftsTaken = st.liftsTaken;
     return true;
 }
 
@@ -281,12 +256,7 @@ void window_perf_hint_block(void)
     PerfHintStats st;
     char line[640];
 
-    /* the worst second (clock_trap.h) and the clock lift's row: on with
-       the system's workload notice and a session */
-    window_clock_trap_block();
-    ico_attempt_decide_clock_lift(1, s_info.notify,
-                                  s_on && __atomic_load_n(&s_made, __ATOMIC_ACQUIRE) != 0 &&
-                                      !__atomic_load_n(&s_refused, __ATOMIC_ACQUIRE));
+    window_clock_trap_block(); /* the worst second (clock_trap.h) */
     if (!s_on || __atomic_load_n(&s_made, __ATOMIC_ACQUIRE) == 0 ||
         __atomic_load_n(&s_refused, __ATOMIC_ACQUIRE)) {
         return;
@@ -326,11 +296,6 @@ void window_perf_hint_picture(const struct RdPerfRecord *r)
     window_clock_trap_picture(r); /* the worst second's (clock_trap.h) */
 }
 
-bool window_perf_hint_lift(void)
-{
-    return false;
-}
-
 bool window_perf_hint_peek(struct ClockTrapHint *out)
 {
     (void)out;
@@ -345,7 +310,6 @@ void window_perf_hint_active(bool active)
 void window_perf_hint_block(void)
 {
     window_clock_trap_block();
-    ico_attempt_decide_clock_lift(0, 0, 0);
 }
 
 void window_perf_hint_close(void) {}

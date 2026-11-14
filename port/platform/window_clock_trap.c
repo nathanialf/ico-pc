@@ -1,8 +1,8 @@
 /*
  * port/platform/window_clock_trap.c
  *
- * The window's side of the clock lift and the worst second
- * (window_clock_trap.h, clock_trap.h).
+ * The window's side of the worst second and of the pins let go at one
+ * picture a tick (window_clock_trap.h, clock_trap.h, pin_release.h).
  */
 #include "window_clock_trap.h"
 
@@ -10,8 +10,10 @@
 #include <string.h>
 #include "attempt_ledger.h"
 #include "clock_trap.h"
+#include "cpu_place.h"
 #include "diag_host.h"
 #include "ico_thread.h"
+#include "pin_release.h"
 #include "rd.h"
 #include "render_thread.h"
 #include "window_perf_hint.h"
@@ -31,9 +33,9 @@ static ClockTrapDip s_dips[CLOCK_TRAP_CLUSTERS];
 static int s_dipN;
 /* whether the ranked line names the clocks (clock_trap_due), and why */
 static ClockTrapDue s_due;
-/* the seconds still to trace after a lift, the next one's number, the
-   trace lines written in the run (CLOCK_TRAP_TRACE_MAX) */
-static unsigned s_traceLeft, s_traceK, s_traceLines;
+/* the pins let go at one picture a tick (pin_release.h) */
+static PinRelease s_pr;
+static bool s_prInit;
 
 /* the cores' clock samples (Android's sampler ring; NULL elsewhere) */
 static const GpuSysfsRing *ring_now(void)
@@ -48,49 +50,65 @@ static const GpuSysfsRing *ring_now(void)
     return NULL;
 }
 
-/* a second after a lift: its pictures, CPU and clocks */
-static void trace(const ClockTrapSecond *s)
+/* the keeper's rule (render_thread.h): 1 the pins may be let go */
+static int rule_now(void)
 {
-    char line[512];
-
-    if (s_traceLines >= CLOCK_TRAP_TRACE_MAX) {
-        if (s_traceLines++ == CLOCK_TRAP_TRACE_MAX) {
-            fprintf(stderr, "window: clock lift trace: %u lines written, no more this run\n",
-                    CLOCK_TRAP_TRACE_MAX);
-        }
-        return;
-    }
-    s_traceLines++;
-    (void)clock_trap_trace_text(s, ++s_traceK, ring_now(), line, sizeof(line));
-    fprintf(stderr, "window: %s\n", line);
+#ifdef __ANDROID__
+    return ico_render_thread_pin_release_rule();
+#else
+    return 0;
+#endif
 }
 
-static void lift(const ClockTrapSecond *s)
+static void pr_init(void)
 {
-    char line[320];
-
-    if (!window_perf_hint_lift()) {
-        return; /* no notice on this system, or no session: the row says which */
+    if (!s_prInit) {
+        pin_release_reset(&s_pr);
+        s_prInit = true;
     }
-    ico_attempt_fire(ICO_ATT_CLOCK_LIFT, 1u);
-    (void)clock_trap_lift_text(s, line, sizeof(line));
-    ico_log_limited("window: clock lift asked", "window: %s", line);
-    /* the seconds after it, one line each (a lift while tracing starts the
-       count again) */
-    s_traceLeft = CLOCK_TRAP_TRACE_SECONDS;
-    s_traceK = 0;
+}
+
+/* a closed second: the pins' rule, its trace line, the let-go and
+   taken-again lines and the keeper told */
+static void second(const ClockTrapSecond *closed)
+{
+    PinCores cores;
+    unsigned blocks = 0;
+    const double med = clock_trap_cpu_median(&s_hist, &blocks);
+    const unsigned ev = pin_release_second(&s_pr, closed, med, blocks, rule_now() == 1, &cores);
+    char line[1536];
+
+    if (ev & PIN_RELEASE_EV_TRACE) {
+        const long rtid = ico_render_thread_render_tid();
+
+        (void)pin_release_trace_text(&s_pr, closed, &cores,
+                                     rtid > 0 ? cpu_place_allowed_tid(rtid) : 0u,
+                                     cpu_place_allowed(), ring_now(), line, sizeof(line));
+        fprintf(stderr, "window: %s\n", line);
+    }
+    if (ev & PIN_RELEASE_EV_TRACE_END) {
+        fprintf(stderr, "window: pin trace: %u lines written, no more this run\n",
+                PIN_RELEASE_TRACE_MAX);
+    }
+    if (ev & PIN_RELEASE_EV_RELEASE) {
+        ico_render_thread_pin_release(true);
+        ico_attempt_fire(ICO_ATT_PIN_RELEASE, 1u);
+        (void)pin_release_release_text(&s_pr, closed, blocks >= 2u ? med : 0.0, line, sizeof(line));
+        ico_log_limited("window: pins let go", "window: %s", line);
+    }
+    if (ev & PIN_RELEASE_EV_RESTORE) {
+        ico_render_thread_pin_release(false);
+        ico_attempt_fire2(ICO_ATT_PIN_RELEASE, 1u);
+        (void)pin_release_restore_text(&s_pr, line, sizeof(line));
+        ico_log_limited("window: pins taken again", "window: %s", line);
+    }
 }
 
 static void events(unsigned ev, const ClockTrapSecond *closed)
 {
-    /* the closed second traced first: the lift's own second is the lift's
-       line, the trace the ones after */
-    if ((ev & CLOCK_TRAP_EV_CLOSED) && s_traceLeft > 0) {
-        s_traceLeft--;
-        trace(closed);
-    }
-    if (ev & CLOCK_TRAP_EV_LIFT) {
-        lift(closed);
+    pr_init();
+    if (ev & CLOCK_TRAP_EV_CLOSED) {
+        second(closed);
     }
 }
 
@@ -111,6 +129,9 @@ void window_clock_trap_picture(const struct RdPerfRecord *r)
     events(
         clock_trap_picture(&s_ct, ico_thread_now_ms(), r->frame, cpu > 0.0 ? cpu : -1.0, &closed),
         &closed);
+    /* this picture's cores into its second (after the second it closed):
+       the render thread's at its last picture, the game thread's now */
+    pin_release_note(&s_pr, ico_render_thread_render_core(), cpu_place_now());
 }
 
 void window_clock_trap_ask(bool held, bool asMade)
@@ -181,14 +202,41 @@ void window_clock_trap_block(void)
 {
     const GpuSysfsRing *ring = NULL;
     ClockTrapBlock b;
-    char line[1024];
+    char line[2048];
     const double now = ico_thread_now_ms();
+    double coreMhz[PIN_RELEASE_CORES];
+    int coreCount = 0;
+    const int rule = rule_now();
 
     dips();
+    pr_init();
     ring = ring_now();
     clock_trap_block_take(&s_ct, &b);
+    memset(coreMhz, 0, sizeof(coreMhz));
+#ifdef __ANDROID__
+    {
+        GpuSysfsBlock gb;
+
+        if (s_blockStartMs >= 0.0 && gpu_sysfs_android_block(s_blockStartMs, &gb)) {
+            for (int i = 0; i < gb.cpuCount && i < PIN_RELEASE_CORES && i < GPU_SYSFS_CPUS; i++) {
+                coreMhz[i] = gb.cpuN[i] != 0 ? gb.cpuSum[i] / gb.cpuN[i] : 0.0;
+                coreCount = i + 1;
+            }
+        }
+    }
+    ico_attempt_decide_pin_release(1, rule);
+#else
+    ico_attempt_decide_pin_release(0, rule);
+#endif
     if (s_blockStartMs >= 0.0) {
         (void)clock_trap_worst_text(&b, s_blockStartMs, ring, line, sizeof(line));
+        const size_t at = strlen(line);
+
+        (void)pin_release_block_text(&s_pr, coreMhz, coreCount,
+                                     rule == 1   ? NULL
+                                     : rule == 2 ? "the few-cores rule keeps its pins"
+                                                 : "nothing pinned",
+                                     line + at, sizeof(line) - at);
         fprintf(stderr, "window: %s\n", line);
     }
     if (s_now.n > 0) {
