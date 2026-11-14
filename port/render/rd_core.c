@@ -50,6 +50,7 @@
 #include "rd_vis.h"
 #include "rd_vu_record.h" /* the record's write on the display line */
 #include "rd_vu_skin_check.h"
+#include "rhi_device_table.h" /* the summary's device table rows */
 #include "texpack.h"
 
 RdContext g_rd;
@@ -147,10 +148,14 @@ void rd_summary_text(char *out, size_t size)
     if (g_rd.passSplit) {
         snprintf(split, sizeof split, ", pass split every %u VU draws", g_rd.passSplit);
     }
+    /* the device table's rows in force on this device (the Vulkan backend
+       notes them at its start-up lines: port/rhi/vk/vk_device_table.c) */
+    const char *rows = rhi_backend() == RHI_BACKEND_VULKAN ? rhi_device_table_noted() : NULL;
     snprintf(out, size,
              "blend %s; profile %s; index values dense (marks in the stream); fog %s; VU shaders "
              "%s%s%s%s; VU pre-pass %s%s; VU merge %s; VU fuse %s; constant reads %s; fades "
-             "fold %s; cull %s; pipelines %s (pool %d, cache %d); menu text %s; FSR 3.1 fp16 %s",
+             "fold %s; cull %s; pipelines %s (pool %d, cache %d); menu text %s; FSR 3.1 fp16 "
+             "%s%s%s",
              g_rdSumBlend[0] ? g_rdSumBlend : "(self-test not reached)",
              rd__profile_text()[0] ? rd__profile_text() : "(not decided)",
              g_rdSumFog[0] ? g_rdSumFog : "(self-test not reached)",
@@ -179,7 +184,9 @@ void rd_summary_text(char *out, size_t size)
              : g_rd.profile.sheetBake2x ? "baked at 1x and 2x (the shader above)"
                                         : "baked at 1x (the shader above)",
              /* FSR 3.1's precision (rd_fsr3.c, issue 203) */
-             rd__fsr3_fp16_word());
+             rd__fsr3_fp16_word(),
+             /* the device table's rows (rhi_device_table.h) */
+             rows ? "; " : "", rows ? rows : "");
 }
 
 /* ------------------------------------------------ the VU index spans

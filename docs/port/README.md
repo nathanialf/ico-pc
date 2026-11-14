@@ -34,6 +34,7 @@ In reading order.
 | [DISPLAY.md](DISPLAY.md) | The native frame, the video options and presets, pacing and the vsync lock, presentation, interpolation and the CRT filter. |
 | [RHI.md](RHI.md) | The render hardware interface and its Vulkan, Direct3D 12, Direct3D 11, OpenGL and MoltenVK backends. |
 | [BACKENDS.md](BACKENDS.md) | The four backends as the renderer sees them: its branches, limits and policies, the OpenGL and Direct3D 11 profile rows, the window and the fallback order. |
+| [DEVICE_TABLE.md](DEVICE_TABLE.md) | The device table: the hardware rows that set renderer-internal choices, how a choice is resolved, the start-up lines, adding a row and the generated list of rows. |
 | [SHADERS.md](SHADERS.md) | The HLSL sources, how they are compiled and embedded, the binding scheme and the shared constants. |
 | [AUDIO.md](AUDIO.md) | The software SPU2, libsd, the sound driver as a host server, streams, mixing and the output. |
 | [FMV.md](FMV.md) | The movie player: the PSS demuxer, the MPEG-2 decoder, pacing and the picture on screen. |

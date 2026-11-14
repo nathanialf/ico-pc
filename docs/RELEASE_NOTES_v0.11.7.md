@@ -2,6 +2,7 @@
 
 - The log now says more about short freezes on phones and tablets: every freeze gets its own line with what the graphics chip was working on when it stopped, so the next log can show where they come from.
 - The Options page that holds the chain settings is now called Chains (it was called Yorda).
+- The log now lists, at start, the adjustments the game makes for your graphics chip and driver, with the reason for each.
 - The log now names the objects that move without smoothing between game frames, and times the moments when the picture rate drops to one picture per game frame, so a report of slow-looking movement can be traced.
 
 ## Fixed

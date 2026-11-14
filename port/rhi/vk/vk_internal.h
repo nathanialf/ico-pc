@@ -1190,6 +1190,12 @@ const char *vkr_pipeline_cache_path(void);
  * any thread; nothing where the rule does not hold).  vkr_compile_serial_init
  * after the limits are filled (rhi_init; logs the line), _shutdown after the
  * device is gone. */
+/* vk_device_table.c: the device table's start-up lines for the picked
+ * device (../rhi_device_table.h; after the driver text and the MoltenVK
+ * test, vk_device.c): driverText RhiLimits.driverText's, customDriver a
+ * driver the Android build loaded (rhi_set_vulkan_loader); read only, and
+ * the rows' clause noted for the renderer's summary line */
+void vkr_device_table_log(const char *driverText, bool customDriver);
 void vkr_compile_serial_init(void);
 void vkr_compile_serial_shutdown(void);
 void vkr_compile_lock(void);

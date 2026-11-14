@@ -95,6 +95,7 @@ static int vkr_env_switch(const char *name)
 
 static void vkr_tile_rule_apply(void); /* the barrier scopes and the wait, below */
 static void vkr_budget_line(void);     /* VK_EXT_memory_budget's line, below */
+static bool vkr_loader_custom(void);   /* a driver the program loaded, below */
 
 /* ------------------------------------------------------------ device loss
  * The report vkr_check prints once, at the first VK_ERROR_DEVICE_LOST
@@ -1446,6 +1447,9 @@ static bool vkr_pick_device(void)
     g_vkr.moltenvk =
         g_vkr.fakeMoltenvk || rhi_driver_is_moltenvk(g_vkr.props.vendorID, g_vkr.driverID, 0);
 #endif
+    /* the device table's lines (vk_device_table.c, docs/port/DEVICE_TABLE.md):
+       the rows this device matched, read only */
+    vkr_device_table_log(s_driverText[0] == ';' ? s_driverText + 2 : NULL, vkr_loader_custom());
     vkr_tile_rule_apply(); /* the barrier scopes and the submission wait (rhi_tile_rule.h) */
     vkGetPhysicalDeviceMemoryProperties(g_vkr.phys, &g_vkr.memProps);
     /* the heaps, and the one uploads (the renderer's ring, texture
@@ -3505,6 +3509,12 @@ static PFN_vkGetInstanceProcAddr s_loaderGipa;
 void rhi_set_vulkan_loader(void *getInstanceProcAddr)
 {
     s_loaderGipa = (PFN_vkGetInstanceProcAddr)getInstanceProcAddr;
+}
+
+/* a driver the program loaded (an Android build's driver package) */
+static bool vkr_loader_custom(void)
+{
+    return s_loaderGipa != NULL;
 }
 
 bool rhi_init(const RhiDeviceDesc *desc)

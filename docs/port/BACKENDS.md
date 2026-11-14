@@ -7,7 +7,9 @@ the device profile's rows for the OpenGL and Direct3D 11 classes, the window eac
 the order the window tries them in, and what has not been run. How each backend works inside is
 [RHI.md](RHI.md) ([Vulkan](RHI.md#vulkan), [Direct3D 12](RHI.md#direct3d-12),
 [OpenGL](RHI.md#opengl), [Direct3D 11](RHI.md#direct3d-11)); the device profile of every class is
-[RENDER.md](RENDER.md#the-device-profile).
+[RENDER.md](RENDER.md#the-device-profile). The hardware rows behind the Vulkan classes and every
+other choice keyed on the GPU, its driver or the OS are listed in [DEVICE_TABLE.md](DEVICE_TABLE.md);
+the other backends match none of them.
 
 ## Where the renderer branches on the backend
 
