@@ -154,6 +154,12 @@ enum {
        v0.7.10 to v0.10.1, or by hand) removed from config.toml at the
        start, robust access off from that start; static, no count */
     ICO_ATT_ROBUST_LINE,
+    /* rd_vu_skin_check.c (issue 123, v0.11.7): a skin check whose readback
+       a GPU reset left (not written again, or read in the span of the
+       GPU's own sign of a reset: rd_vu_skin_check.h rd__skin_skip) skipped,
+       with no failure and no capture; state at the check's start line
+       (rd_vu_skin_selftest.c), count the checks skipped */
+    ICO_ATT_SKIN_RESET_SKIP,
     ICO_ATT_COUNT
 };
 
@@ -355,5 +361,9 @@ int ico_attempt_decide_comp_spec(int module, int device, int env, int defaultOn,
    removed: refused (by the file, or by its form); not found: not
    applicable */
 void ico_attempt_decide_robust_line(int found, int removed);
+/* no capture after a stall (rd_vu_skin_selftest.c at the skin check's start
+   line): on the skin check runs on this device (an Adreno with a window,
+   or the tests' switch); else not applicable */
+void ico_attempt_decide_skin_skip(int on);
 
 #endif

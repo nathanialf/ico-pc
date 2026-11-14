@@ -32,6 +32,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "attempt_ledger.h"
 #include "rd_replay.h"
 #include "rd_vu_skin_check.h"
 #include "shader_consts.h"
@@ -169,6 +170,7 @@ bool rd__vu_skin_selftest(void)
         return true;
     }
     if (!rd__vu_skin_check_on()) {
+        ico_attempt_decide_skin_skip(0); /* the attempt ledger's row (rd__skin_skip) */
         if (rhi_backend() == RHI_BACKEND_VULKAN && g_rd.windowed) {
             rd__log("VU skin check: off (%s)",
                     rhi_device_lost() ? "the device was lost" : rd__vu_skin_check_why());
@@ -424,9 +426,11 @@ bool rd__vu_skin_selftest(void)
         /* the device cannot run it: off for the run, and the window
          * writes the setting (rd_vu_skin_probe_failed) */
         rd__vu_skin_check_set(0);
+        ico_attempt_decide_skin_skip(0);
         rd__log("VU skin check: off (the start-up probe failed: %s)", s_failed);
         return true;
     }
+    ico_attempt_decide_skin_skip(1);
     const RhiLimits *lim = rhi_limits();
     if (rd__vu_skin_twins_on()) {
         rd__log(

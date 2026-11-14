@@ -1,7 +1,7 @@
 /* rd_vu_skin_check_test.c: the skinned draws' bone-block check (issue 163;
  * rd_vu_skin_check.h, docs/port/VU_SKIN_CHECK.md).
  *
- *   rd_vu_skin_check_test <judge|clean|probe|ring|twin|capture|thin|thinphone|stale>
+ *   rd_vu_skin_check_test <judge|clean|probe|ring|twin|capture|thin|thinphone|stale|reset>
  *                         [folder]
  *
  * judge (no device): the judgement alone (rd_vu_skin_judge.c) on a skinned
@@ -104,6 +104,15 @@
  *   with the reason no box check is compiled or drawn (22.), and there are
  *   no stamps, so the readbacks not written again are not told apart (21.:
  *   none unwritten, none old, none wrong).
+ * judge also runs 29. skipped after a reset (rd__skin_skip, issue 123
+ *   v0.11.7): not written again, the stamps unwritten, a reset sign inside
+ *   and outside the readback's span, written again and differing judged.
+ * stale also checks 21.'s four checks are skipped after a reset, not wrong
+ *   (none skipped on a phone: no stamps, the copy equal to the bytes kept).
+ * reset (a device; ICO_RD_VU_SKIN_SABOTAGE=200): 30. the GPU's own sign of
+ *   a reset faked at the check's replay (rd__vu_skin_reset_seen): the
+ *   wrong probe skipped, not wrong, no capture asked; the sign forgotten:
+ *   wrong at 200 and the capture asked.
  * The log lines are matched by test/rd_vu_skin_check.cmake. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -387,6 +396,59 @@ static void traceTests(void)
     printf("  18.-20. the trace's stamps and search\n");
 }
 
+/* 29. skipped after a reset (rd__skin_skip, issue 123 v0.11.7): the
+ * readback not written by its replay, or the GPU's copy differing from the
+ * bytes kept and equal to the slot's previous check's: STALE; written again
+ * and differing: judged; a reset sign in the readback's span (from the
+ * slot's previous check, else 2 replays before the check, to 2 replays
+ * after it): RESET, outside it judged */
+static void skipTests(void)
+{
+    enum { F = RHI_FRAMES_IN_FLIGHT };
+
+    static const struct {
+        RdSkinSkipIn in;
+        int want;
+        const char *what;
+    } rows[] = {
+        /* the reporter's first: the copy the bytes of the slot's check of
+         * 10905, no reset sign read yet (its own replay's comes after) */
+        {{false, true, true, 10917u, true, 10905u, 0u, F}, RD_SKIN_SKIP_STALE, "not written again"},
+        {{true, false, false, 10917u, true, 10905u, 0u, F}, RD_SKIN_SKIP_STALE, "stamps unwritten"},
+        {{true, true, false, 10917u, false, 0u, 0u, F}, RD_SKIN_SKIP_STALE, "stamps, no previous"},
+        /* written again and differing: a mismatch, judged as before */
+        {{false, true, false, 10917u, true, 10905u, 0u, F}, RD_SKIN_JUDGED, "written, differing"},
+        /* equal to the previous check's and to the bytes kept: judged */
+        {{false, false, true, 10917u, true, 10905u, 0u, F}, RD_SKIN_JUDGED, "the same bytes"},
+        /* a reset sign in the span from the slot's previous check */
+        {{false, true, false, 10917u, true, 10905u, 10905u, F},
+         RD_SKIN_SKIP_RESET,
+         "reset at the previous check"},
+        {{false, false, false, 10917u, true, 10905u, 10912u, F},
+         RD_SKIN_SKIP_RESET,
+         "reset between, the check right"},
+        {{false, true, false, 10917u, true, 10905u, 10918u, F},
+         RD_SKIN_SKIP_RESET,
+         "reset lag - 1 after"},
+        {{false, true, false, 10917u, true, 10905u, 10904u, F},
+         RD_SKIN_JUDGED,
+         "reset before the previous check"},
+        {{false, true, false, 10917u, true, 10905u, 10919u, F}, RD_SKIN_JUDGED, "reset lag after"},
+        /* no previous check: lag replays before the check */
+        {{false, true, false, 100u, false, 0u, 98u, F}, RD_SKIN_SKIP_RESET, "lag before"},
+        {{false, true, false, 100u, false, 0u, 97u, F}, RD_SKIN_JUDGED, "lag + 1 before"},
+        {{false, true, false, 1u, false, 0u, 1u, F}, RD_SKIN_SKIP_RESET, "the first replay"},
+    };
+
+    for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++) {
+        const int got = rd__skin_skip(&rows[i].in);
+        CHECK(got == rows[i].want, "29. %s: %d, %d expected", rows[i].what, got, rows[i].want);
+    }
+    printf("  29. skipped after a reset: %zu rows (not written again, a reset sign in the "
+           "readback's span; written again and differing judged)\n",
+           sizeof(rows) / sizeof(rows[0]));
+}
+
 static int judgeTests(void)
 {
     block(s_mem);
@@ -543,6 +605,7 @@ static int judgeTests(void)
     }
     printf("  10. on by default only on an Adreno with a window; =false off, =1 on anywhere\n");
     traceTests();
+    skipTests();
     return failures ? 1 : 0;
 }
 
@@ -821,6 +884,7 @@ static int deviceTests(const char *mode, const char *folder)
     const bool thinPhone = strcmp(mode, "thinphone") == 0;
     const bool thin = strcmp(mode, "thin") == 0 || thinPhone;
     const bool stale = strcmp(mode, "stale") == 0;
+    const bool reset = strcmp(mode, "reset") == 0;
     const bool twins = strcmp(mode, "twin") == 0 || strcmp(mode, "capture") == 0 || thin;
     if (twins) {
         rd__vu_skin_twins_set(1);
@@ -878,11 +942,44 @@ static int deviceTests(const char *mode, const char *folder)
                   (!phone || s.wrong == 0),
               "rc %d, %u checks, %u unwritten (%u expected), %u ring stamps old, %u wrong", rc,
               s.checks, s.unwritten, phone ? 0u : 4u, s.ringOld, s.wrong);
+        /* issue 123 (v0.11.7): a readback not written by its replay is
+         * skipped after a reset, never wrong (rd__skin_skip); on a phone
+         * there are no stamps and the copy equals the bytes kept: judged */
+        CHECK(s.skipped == (phone ? 0u : 4u) && (phone || s.wrong == 0),
+              "%u skipped (%u expected), %u wrong", s.skipped, phone ? 0u : 4u, s.wrong);
         /* written again: both stamps right */
         const int rc2 = rd__vu_skin_check_replays(&f, 0, 2, &s);
         CHECK(rc2 >= 0 && s.checks == 2 && s.unwritten == 0 && s.ringOld == 0 && s.wrong == 0,
               "rc %d, %u checks, %u unwritten, %u ring stamps old, %u wrong", rc2, s.checks,
               s.unwritten, s.ringOld, s.wrong);
+        rd__frame_free(&f);
+    } else if (mesh.id && reset && buildFrame(&f, mesh, 1)) {
+        /* 30. issue 123 (v0.11.7): the probe's bone at 200 read as zeros
+         * (ICO_RD_VU_SKIN_SABOTAGE=200: wrong, its bytes right); with the
+         * GPU's own sign of a reset faked at the check's own replay
+         * (rd__vu_skin_reset_seen), skipped: not wrong, no capture asked;
+         * the sign forgotten, the same check wrong at 200 and the capture
+         * asked, as before */
+        char path[1200];
+        RdSkinSummary s;
+        rd__vu_skin_reset_seen(g_rd.replayCounter + 1u);
+        const int rc = rd__vu_skin_check_frame(&f, 0, &s);
+        const bool due = rd_vu_skin_capture_due(path, sizeof(path));
+        printf("  30. a reset sign at the check's replay: %u checks, %u skipped, %u wrong, "
+               "capture %s\n",
+               s.checks, s.skipped, s.wrong, due ? "asked" : "not asked");
+        CHECK(rc == 0 && s.checks == 1 && s.skipped == 1 && s.wrong == 0 && !due,
+              "rc %d, %u checks, %u skipped, %u wrong, capture %d", rc, s.checks, s.skipped,
+              s.wrong, due);
+        rd__vu_skin_reset_seen(0);
+        const int rc2 = rd__vu_skin_check_frame(&f, 0, &s);
+        const bool due2 = rd_vu_skin_capture_due(path, sizeof(path));
+        printf("  30. no reset sign: %u checks, %u skipped, %u wrong (address %u), capture %s\n",
+               s.checks, s.skipped, s.wrong, s.lastAddr, due2 ? "asked" : "not asked");
+        CHECK(rc2 == 1 && s.checks == 1 && s.skipped == 0 && s.wrong == 1 && s.lastAddr == 200 &&
+                  due2,
+              "rc %d, %u checks, %u skipped, %u wrong, address %u, capture %d", rc2, s.checks,
+              s.skipped, s.wrong, s.lastAddr, due2);
         rd__frame_free(&f);
     } else if (mesh.id && twins && !thin && buildFrame(&f, mesh, 1)) {
         /* 11., 12. */
@@ -969,7 +1066,7 @@ int main(int argc, char **argv)
 {
     if (argc < 2) {
         printf("usage: rd_vu_skin_check_test "
-               "<judge|clean|probe|ring|twin|capture|thin|thinphone|stale> "
+               "<judge|clean|probe|ring|twin|capture|thin|thinphone|stale|reset> "
                "[folder]\n");
         return 2;
     }

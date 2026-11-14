@@ -73,6 +73,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "attempt_ledger.h"
 #include "rd_mesh.h"
 #include "rd_replay.h"
 #include "rd_vu_skin_check.h"
@@ -435,6 +436,9 @@ static struct {
      * ring stamp was not their replay's with the rows written; the stamp
      * lines' budget */
     uint64_t unwritten, ringOld, stampEvents;
+    /* issue 123 (v0.11.7): checks skipped after a reset (rd__skin_skip),
+     * their lines' budget */
+    uint64_t skipped, skipEvents;
 } s_run;
 
 static struct {
@@ -451,6 +455,7 @@ static struct {
     uint32_t firstDiffer;
     bool anyDiffer;
     uint64_t unwritten, ringOld; /* the trace's stamps (s_run's) */
+    uint64_t skipped;            /* skipped after a reset (s_run's) */
 } s_blk;
 
 /* the box check's pipelines: the draw's key without its writes, compiled
@@ -953,6 +958,15 @@ static uint64_t gpuCount(bool finished)
 }
 
 static SkSlot s_slots[RHI_FRAMES_IN_FLIGHT];
+
+/* the newest replay whose record showed the GPU's own sign of a reset
+ * (rd__vu_skin_reset_seen; 0 none) */
+static uint32_t s_resetReplay;
+
+void rd__vu_skin_reset_seen(uint32_t replay)
+{
+    s_resetReplay = replay; /* the records come in replay order: the newest */
+}
 
 /* the pick's state: the vertex-weighted schedule (the vertices of the
  * replay's skinned commands seen so far, the last replay's total, the
@@ -2094,6 +2108,57 @@ static int copyFind(const SkSlot *sl, uint32_t slot, const uint8_t *map, uint32_
     return f.kind;
 }
 
+/* a check skipped after a reset (rd__skin_skip): counted, its line (the
+ * first 8, then every 100th), the attempt ledger's count */
+static void skipNote(const SkSlot *sl, const SkCheck *k, int why, const RdSkinVerdict *v0,
+                     const RdSkinSkipIn *in)
+{
+    s_run.checks++;
+    s_blk.checks++;
+    s_run.skipped++;
+    s_blk.skipped++;
+    if (s_collect) {
+        s_collect->checks++;
+        s_collect->skipped++;
+    }
+    ico_attempt_fire(ICO_ATT_SKIN_RESET_SKIP, 1u);
+    if (!sayNth(++s_run.skipEvents)) {
+        return;
+    }
+    char reason[192], place[48];
+    if (why == RD_SKIN_SKIP_RESET) {
+        if (sl->prevHas) {
+            snprintf(reason, sizeof(reason),
+                     "the GPU's own sign of a reset at replay %u, since the slot's check before "
+                     "(replay %u)",
+                     s_resetReplay, sl->prevReplay);
+        } else {
+            snprintf(reason, sizeof(reason),
+                     "the GPU's own sign of a reset at replay %u, within %u replays of it",
+                     s_resetReplay, (unsigned)RHI_FRAMES_IN_FLIGHT);
+        }
+    } else if (!in->unwritten) {
+        snprintf(reason, sizeof(reason),
+                 "the readback not written again: the GPU's copy is the bytes the slot held "
+                 "from the check of replay %u",
+                 sl->prevReplay);
+    } else {
+        snprintf(reason, sizeof(reason),
+                 "the readback not written by this replay's copies (the stamps' line)");
+    }
+    if (k->list != UINT32_MAX) {
+        snprintf(place, sizeof(place), "%u:%u", k->list, k->index);
+    } else {
+        snprintf(place, sizeof(place), "?");
+    }
+    rd__log("VU skin check: frame %u command %s mesh %s #%u (recorded in replay %u): skipped "
+            "after a reset: %s; it read %u of %u vertices wrong, the GPU's copy of the bone "
+            "block %s; not judged: no failure, no capture, nothing for the ladder (skipped %llu "
+            "this run)",
+            k->frame, place, k->mesh, k->meshId, sl->counter, reason, v0->wrong, v0->compared,
+            in->copyDiffers ? "differing" : "equal", (unsigned long long)s_run.skipped);
+}
+
 static void readCheck(const SkSlot *sl, uint32_t slot, const uint8_t *map, uint32_t i, bool intact,
                       const uint8_t *ringNow, const uint64_t *samples, uint32_t nSamples,
                       const SkStamps *st)
@@ -2137,6 +2202,25 @@ static void readCheck(const SkSlot *sl, uint32_t slot, const uint8_t *map, uint3
     const bool rereadDiff =
         reread && rd__skin_bytes_differ(ringNow + k->bonesOff, k->bones, SK_BONE_BYTES, &r0, &r1);
     const int c1 = varState(k, &v[1], true), c2 = varState(k, &v[2], k->c2);
+    /* issue 123 (v0.11.7): a readback the reset left (rd__skin_skip) is not
+     * judged: no failure, no capture, nothing for the ladder */
+    const RdSkinSkipIn skIn = {
+        unwritten,
+        copyDiff,
+        i == 0 && sl->prevHas && copyDiff && memcmp(map, sl->prev, SK_BONE_BYTES) == 0,
+        sl->counter,
+        sl->prevHas,
+        sl->prevReplay,
+        s_resetReplay,
+        RHI_FRAMES_IN_FLIGHT,
+    };
+    const int skip = rd__skin_skip(&skIn);
+    if (skip != RD_SKIN_JUDGED) {
+        skipNote(sl, k, skip, &v[0], &skIn);
+        km->judged = false;
+        km->probeWrong = km->probeAddr = km->probeDropped = 0;
+        return;
+    }
     const char *decision =
         unwritten
             ? "the readback was not written by this replay's copies: its rows and bytes are an "
@@ -2703,17 +2787,18 @@ void rd__vu_skin_block(void)
                  "%llu",
                  (unsigned long long)s_blk.unwritten, (unsigned long long)s_blk.ringOld);
     }
-    rd__log("VU skin check: %llu checks, %llu wrong, %llu blocks whose bytes differed (%llu "
-            "changed after the draw); %llu box checks, %llu with samples outside the box, %llu "
-            "not drawn (their pipeline not made yet; %llu with no slot left for the key); "
-            "variants on the wrong ones: c1 right %llu, c2 right %llu (c2 drawn in %llu checks); "
-            "largest difference on a right vertex %d/16 pixel%s%s",
+    rd__log("VU skin check: %llu checks, %llu wrong, %llu skipped after a reset, %llu blocks "
+            "whose bytes differed (%llu changed after the draw); %llu box checks, %llu with "
+            "samples outside the box, %llu not drawn (their pipeline not made yet; %llu with no "
+            "slot left for the key); variants on the wrong ones: c1 right %llu, c2 right %llu (c2 "
+            "drawn in %llu checks); largest difference on a right vertex %d/16 pixel%s%s",
             (unsigned long long)s_blk.checks, (unsigned long long)s_blk.wrong,
-            (unsigned long long)s_blk.blocks, (unsigned long long)s_blk.reread,
-            (unsigned long long)s_blk.box, (unsigned long long)s_blk.boxOut,
-            (unsigned long long)s_blk.boxNot, (unsigned long long)s_blk.boxFull,
-            (unsigned long long)s_blk.c1Right, (unsigned long long)s_blk.c2Right,
-            (unsigned long long)s_blk.c2Run, s_blk.maxRight, stamps, twins);
+            (unsigned long long)s_blk.skipped, (unsigned long long)s_blk.blocks,
+            (unsigned long long)s_blk.reread, (unsigned long long)s_blk.box,
+            (unsigned long long)s_blk.boxOut, (unsigned long long)s_blk.boxNot,
+            (unsigned long long)s_blk.boxFull, (unsigned long long)s_blk.c1Right,
+            (unsigned long long)s_blk.c2Right, (unsigned long long)s_blk.c2Run, s_blk.maxRight,
+            stamps, twins);
     memset(&s_blk, 0, sizeof(s_blk));
 }
 
@@ -2790,11 +2875,12 @@ void rd__vu_skin_shutdown(void)
         rd__log("VU skin check: at the end of the run: %llu checks drawn (%llu box checks drawn), "
                 "%llu read, %llu wrong, %llu blocks whose bytes differed, %llu box checks with "
                 "samples outside; %llu readbacks not written by their replay, %llu ring stamps of "
-                "an earlier replay",
+                "an earlier replay; %llu checks skipped after a reset",
                 (unsigned long long)s_run.drawn, (unsigned long long)s_run.boxDrawn,
                 (unsigned long long)s_run.checks, (unsigned long long)s_run.wrong,
                 (unsigned long long)s_run.blocks, (unsigned long long)s_run.boxOut,
-                (unsigned long long)s_run.unwritten, (unsigned long long)s_run.ringOld);
+                (unsigned long long)s_run.unwritten, (unsigned long long)s_run.ringOld,
+                (unsigned long long)s_run.skipped);
     }
     if (s_run.twinsDrawn) {
         /* the A/B's proof that the attachment-read draws were twinned
@@ -2880,6 +2966,7 @@ void rd__vu_skin_shutdown(void)
     memset(&s_trace, 0, sizeof(s_trace));
     memset(s_ringUsed, 0, sizeof(s_ringUsed));
     memset(s_ringReplay, 0, sizeof(s_ringReplay));
+    s_resetReplay = 0;
     s_cur = NULL;
     g_rdSkinArm = false;
     s_seenReplay = s_seen = 0;

@@ -397,6 +397,11 @@ static void test_classes(void)
            log, line 15), removed at the start; no other class's did */
         ico_attempt_decide_robust_line(c == 0, 1);
         CHECK(ico_attempt_state_of(ICO_ATT_ROBUST_LINE) == (c == 0 ? ICO_ATT_ON : ICO_ATT_NA));
+        /* no capture after a stall: the skin check runs on an Adreno with a
+           window (Qualcomm's driver here), off on the other classes */
+        ico_attempt_decide_skin_skip(d->passRow != NULL);
+        CHECK(ico_attempt_state_of(ICO_ATT_SKIN_RESET_SKIP) ==
+              (d->passRow != NULL ? ICO_ATT_ON : ICO_ATT_NA));
         /* the whole start line fits the window's 4 KB buffer
            (window_perf_rank.c ledger_lines), its last row included */
         {
@@ -404,6 +409,7 @@ static void test_classes(void)
             const size_t n = ico_attempt_start_text(big, sizeof big);
             CHECK(n + 1u < sizeof big);
             CHECK(strstr(big, "; the old robust-access line taken off ") != NULL);
+            CHECK(strstr(big, "; no capture after a stall ") != NULL);
         }
         for (int i = 0; i < ICO_ATT_COUNT; i++) {
             if (ico_attempt_state_of(i) == ICO_ATT_NOT_SET) {
@@ -791,10 +797,38 @@ static void test_robust_line(void)
     CHECK(ico_attempt_state_of(ICO_ATT_ROBUST_LINE) == ICO_ATT_NOT_SET);
 }
 
+/* no capture after a stall (issue 123, v0.11.7): its two states, its start
+   words, and its block count per block (the checks skipped after a reset) */
+static void test_skin_skip(void)
+{
+    char b[4096];
+
+    ico_attempt_reset();
+    ico_attempt_decide_skin_skip(0);
+    CHECK(ico_attempt_state_of(ICO_ATT_SKIN_RESET_SKIP) == ICO_ATT_NA);
+    (void)ico_attempt_start_text(b, sizeof b);
+    CHECK(strstr(b, "; no capture after a stall not applicable here (the skin check is off "
+                    "here)") != NULL);
+    ico_attempt_decide_skin_skip(1);
+    CHECK(ico_attempt_state_of(ICO_ATT_SKIN_RESET_SKIP) == ICO_ATT_ON);
+    (void)ico_attempt_start_text(b, sizeof b);
+    CHECK(strstr(b, "; no capture after a stall on (a skin check read after a GPU reset is "
+                    "skipped, not captured)") != NULL);
+    ico_attempt_fire(ICO_ATT_SKIN_RESET_SKIP, 1u);
+    ico_attempt_fire(ICO_ATT_SKIN_RESET_SKIP, 2u);
+    (void)ico_attempt_block_text(b, sizeof b, -1);
+    CHECK(text_is(b, "attempts: no capture after a stall on 3 checks skipped after a reset"));
+    (void)ico_attempt_block_text(b, sizeof b, -1);
+    CHECK(text_is(b, "attempts: no capture after a stall on 0 checks skipped after a reset"));
+    ico_attempt_reset();
+    CHECK(ico_attempt_state_of(ICO_ATT_SKIN_RESET_SKIP) == ICO_ATT_NOT_SET);
+}
+
 int main(void)
 {
     test_classes();
     test_robust_line();
+    test_skin_skip();
     char b[2048];
 
     ico_attempt_reset();

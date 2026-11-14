@@ -46,3 +46,14 @@ add_test(NAME rd_vu_skin_check_thin_phone
 set_tests_properties(rd_vu_skin_check_thin_phone PROPERTIES
                      ENVIRONMENT "${_env};ICO_RD_VU_SKIN_INTERVAL_MS=off;ICO_VK_FAKE_VENDOR=0x13B5"
                      SKIP_REGULAR_EXPRESSION "SKIP:")
+# reset (issue 123, v0.11.7; rd_vu_skin_check.h rd__skin_skip): the probe's
+# bone at 200 read as zeros (wrong, its bytes right) with the GPU's own sign
+# of a reset faked at the check's own replay: skipped after a reset, not
+# wrong, no capture asked; the sign forgotten, the same check wrong at 200
+# and the capture asked (no folder: no sidecar), as before
+add_test(NAME rd_vu_skin_check_reset
+         COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vu_skin_check_test> -DMODE=reset
+                 "-DEXTRA=rd: VU skin check: frame [0-9]+ command 0:[0-9]+ mesh rd vu skin check test #[0-9]+ \\(recorded in replay [0-9]+\\): skipped after a reset: the GPU's own sign of a reset at replay [0-9]+, (within [0-9]+ replays of it|since the slot's check before \\(replay [0-9]+\\))[;,] it read [1-9][0-9]* of 120 vertices wrong.*${_vsk_wrong}.*rd: VU skin check: no sidecar written \\(no folder for it\\)[;,] asked for a frame dump"
+                 -P "${_vsk}")
+set_tests_properties(rd_vu_skin_check_reset PROPERTIES
+                     ENVIRONMENT "${_env};ICO_RD_VU_SKIN_SABOTAGE=200" SKIP_REGULAR_EXPRESSION "SKIP:")

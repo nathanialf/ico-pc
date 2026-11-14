@@ -303,6 +303,24 @@ const char *rd__skin_decision(bool copyDiffers, bool rereadDiffers, bool probeWr
            "ran)";
 }
 
+int rd__skin_skip(const RdSkinSkipIn *in)
+{
+    if (in->unwritten || (in->copyDiffers && in->copyIsPrev)) {
+        return RD_SKIN_SKIP_STALE;
+    }
+    if (in->resetReplay == 0) {
+        return RD_SKIN_JUDGED;
+    }
+    /* the readback's span: from the slot's previous check (its bytes held
+     * until this check's copy) or, without one, lag replays before the
+     * check, to lag replays after it */
+    const uint32_t from = in->prevHas && in->prevReplay <= in->replay ? in->prevReplay
+                          : in->replay > in->lag                      ? in->replay - in->lag
+                                                                      : 0u;
+    return in->resetReplay >= from && in->resetReplay < in->replay + in->lag ? RD_SKIN_SKIP_RESET
+                                                                             : RD_SKIN_JUDGED;
+}
+
 int rd__skin_check_env(const char *value)
 {
     if (!value || !value[0]) {
