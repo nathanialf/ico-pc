@@ -29,5 +29,8 @@ void gpu_sysfs_android_stop(void);
    sampled (no readable node, not started) */
 bool gpu_sysfs_android_block(double sinceMs, GpuSysfsBlock *out);
 bool gpu_sysfs_android_around(double t0Ms, double t1Ms, int core, GpuSysfsAround *out);
+/* A copy of the ring (the worst second's clock samples, clock_trap.h);
+   false when nothing is sampled */
+bool gpu_sysfs_android_ring(GpuSysfsRing *out);
 
 #endif /* ICO_PLATFORM_GPU_SYSFS_ANDROID_H */

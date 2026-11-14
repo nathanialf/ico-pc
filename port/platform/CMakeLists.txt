@@ -8,6 +8,7 @@ target_sources(ico_platform PRIVATE
     arena.c
     backup.c
     bones_ladder.c
+    clock_trap.c
     code_hash.c
     core_share.c
     cpu_keep.c
@@ -164,6 +165,15 @@ endif()
 # version's line without it, the batch halving across starts (32 -> 16 -> 8
 # -> 4, floor 4), the place inside a set that shrank, the stop count, the
 # longest line against the activity file's 256 bytes
+# clock_trap: one picture a tick behind the step rule (clock_trap.c, the
+# owner's Pixel in the cage room): the step rule's rate at a picture's reads
+# of 8 to 30 ms in the cage's frame (pace_policy.c pace_rt_further_trace: two
+# a tick up to the bound 2R <= 3P - 2S - margin, one past it), the seconds
+# (a second's pictures, frames, asks and holds; a gap restarts), the rule
+# (one a tick, wanted, held) and the lift's spacing, the block's worst
+# second, the clusters and the dip against the median of the blocks before
+# (the owner's log's clocks: the dip at :4251 and :5276, none in the blocks
+# between), the lines word for word
 # bones_ladder: issue 123's ladder across starts (bones_ladder.c): the step
 # for each run's evidence over sequences of starts (step 1, step 2, healed,
 # both tried, a port race, step 2 out of reach), the mark written and read
@@ -171,7 +181,7 @@ endif()
 foreach(t sched fiber fps_counter arena diag hotkeys pace_policy pace_loop perf_block lifecycle pump_watch ico_thread
           gpu_hang state_fiber state_guard state_port state_registry pipeline_skip memory_floor
           present_fallback frame_mailbox display_rate present_hist present_stall_block gpu_sysfs
-          thermal_text window_scene bones_ladder pipe_resume)
+          thermal_text window_scene bones_ladder pipe_resume clock_trap)
     add_executable(${t}_test test/${t}_test.c)
     target_include_directories(${t}_test PRIVATE "${ICO_COMPAT_DIR}")
     target_compile_options(${t}_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})

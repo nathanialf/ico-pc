@@ -72,6 +72,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_icon_hold.c`, `rd_icon_hold.h` | the title's last picture held on screen while the icon capture's frames are presented ([APP_ICON.md](APP_ICON.md#the-capture-on-the-title)) |
 | `port/render/rd_present_clock.c` | the present clock the timer path takes alpha from (`rd_present_clock_alpha`), the values it notes for `rd_present` (the alpha before its clamp, the time since the present before, the tick) and Motion blur: Smooth's presents a tick (`rd__present_clock_k`) ([DISPLAY.md](DISPLAY.md#interpolation-between-ticks)) |
 | `port/render/rd_interp_mesh.c` | the interpolation's reads of a mesh's stream kept while its serial holds: a skinned mesh's bone pivots, a rigid mesh's centroid, the same-shape answer of two streams ([Performance notes](RENDER_PERF.md#performance-notes)) |
+| `port/render/rd_inames.c`, `rd_inames.h`, `rd_inames_live.c`, `rd_inames.cmake` | the draws left at their tick's position by name and the stair-steppers (matched, still this tick after moving the tick before): `rd: interp names: ...` every 250 frames ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-draws-left-at-their-ticks-position-by-name)) |
 | `port/render/texpack*.c`, `modelpack.c`, `gltf.c`, `xxh3.c` | texture and model packs ([PACKS.md](PACKS.md)) |
 
 ## The model

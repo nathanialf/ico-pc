@@ -5,6 +5,7 @@
  */
 #include "perf_hint.h"
 
+#include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -152,6 +153,15 @@ bool perf_hint_push(PerfHint *h, const PerfHintWork *w)
     return true;
 }
 
+bool perf_hint_request_lift(PerfHint *h)
+{
+    if (h->ops.notify == NULL) {
+        return false;
+    }
+    (void)__atomic_fetch_add(&h->liftReq, 1u, __ATOMIC_RELEASE);
+    return true;
+}
+
 /* the ids as last written whole; false while they are being written */
 static bool read_tids(PerfHint *h, int32_t *t, uint32_t *n, uint32_t *gen)
 {
@@ -279,6 +289,40 @@ static void count_change(PerfHint *h, bool target, int rc)
     spin_unlock(&h->spin);
 }
 
+/* the lifts asked since the last step: one call with a session (clock_trap.h) */
+static unsigned lift(PerfHint *h)
+{
+    const uint32_t req = __atomic_load_n(&h->liftReq, __ATOMIC_ACQUIRE);
+
+    if (req == h->liftSeen) {
+        return 0;
+    }
+    h->liftSeen = req;
+    if (h->session == NULL || h->ops.notify == NULL) {
+        spin_lock(&h->spin);
+        h->st.liftsMissed++;
+        spin_unlock(&h->spin);
+        return 0;
+    }
+    const int rc = h->ops.notify(h->ops.user, h->session, true, true);
+
+    h->liftRc = rc;
+    spin_lock(&h->spin);
+    h->st.lifts++;
+    if (rc == 0) {
+        h->st.liftsTaken++;
+    } else if (rc == EBUSY) {
+        h->st.liftsBusy++;
+    } else if (rc == ENOTSUP) {
+        h->st.liftsUnsupported++;
+    } else {
+        h->st.liftsFailed++;
+        h->st.liftError = rc;
+    }
+    spin_unlock(&h->spin);
+    return PERF_HINT_EV_LIFT;
+}
+
 unsigned perf_hint_step(PerfHint *h)
 {
     unsigned ev = 0;
@@ -294,10 +338,12 @@ unsigned perf_hint_step(PerfHint *h)
             h->session = NULL;
             ev |= PERF_HINT_EV_CLOSED;
         }
+        (void)lift(h); /* counted as not sent */
         drain(h, true);
         return ev;
     }
     if (h->refused) {
+        (void)lift(h); /* counted as not sent */
         drain(h, false);
         return ev;
     }
@@ -336,6 +382,7 @@ unsigned perf_hint_step(PerfHint *h)
         h->sessTargetNs = target; /* not asked again for the same target */
         count_change(h, true, rc);
     }
+    ev |= lift(h);
     drain(h, false);
     return ev;
 }
@@ -354,6 +401,31 @@ void perf_hint_take(PerfHint *h, PerfHintStats *out)
     *out = h->st;
     memset(&h->st, 0, sizeof(h->st));
     spin_unlock(&h->spin);
+}
+
+void perf_hint_peek(PerfHint *h, PerfHintStats *out)
+{
+    spin_lock(&h->spin);
+    *out = h->st;
+    spin_unlock(&h->spin);
+}
+
+const char *perf_hint_lift_words(int rc, char *buf, size_t cap)
+{
+    if (rc == 0) {
+        return "taken";
+    }
+    if (rc == EBUSY) {
+        return "rate-limited by the system (EBUSY)";
+    }
+    if (rc == ENOTSUP) {
+        return "not supported here (ENOTSUP)";
+    }
+    if (buf == NULL || cap == 0) {
+        return "failed";
+    }
+    (void)snprintf(buf, cap, "failed (error %d)", rc);
+    return buf;
 }
 
 /* --- the lines ----------------------------------------------------------- */
@@ -466,6 +538,15 @@ size_t perf_hint_block_text(const PerfHintStats *s, bool withGpu, uint64_t targe
     }
     if (s->background) {
         put(out, cap, &len, "; %u not reported (in the background)", s->background);
+    }
+    if (s->lifts || s->liftsMissed) {
+        put(out, cap, &len,
+            "; clock lifts %u (taken %u, rate-limited %u, not supported %u, failed %u", s->lifts,
+            s->liftsTaken, s->liftsBusy, s->liftsUnsupported, s->liftsFailed);
+        if (s->liftsFailed) {
+            put(out, cap, &len, " (error %d)", s->liftError);
+        }
+        put(out, cap, &len, ", not sent without a session %u)", s->liftsMissed);
     }
     return len;
 }

@@ -16,8 +16,9 @@
 #include "rd.h" /* rd_vu_prepass_on */
 #include "rd_perf_rank.h"
 #include "rhi.h"
-#include "window_lines.h" /* window_log_cost_part */
-#include "window_stall.h" /* window_stall_tally_take */
+#include "window_clock_trap.h" /* window_clock_trap_ranked */
+#include "window_lines.h"      /* window_log_cost_part */
+#include "window_stall.h"      /* window_stall_tally_take */
 
 /* the window's thread and the lifecycle's (SDL's posting thread) both
    reach the block and the run: every entry point holds the lock */
@@ -272,6 +273,9 @@ static void window_perf_rank_block_lines(const WindowPerfBlock *in)
         fprintf(stderr, "window: %s\n", line); /* both kinds in the block */
     }
     (void)rd_perf_rank_ranked_text(&info, &v, ranked, sizeof ranked);
+    /* a CPU clock dip against the blocks before, with what the performance
+       hint said (clock_trap.h; the owner's Pixel at one picture a tick) */
+    window_clock_trap_ranked(ranked, sizeof ranked);
     if (v.below) {
         /* every block below the rate: the 10 s summaries are the rate limit */
         fprintf(stderr, "window: %s\n", ranked);

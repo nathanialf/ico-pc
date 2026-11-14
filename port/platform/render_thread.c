@@ -25,7 +25,8 @@
 #include "stall_coincide.h"
 #include "sys_cell.h"
 #include "thread_stat.h"
-#include "window_lines.h" /* window_log_cost_mark */
+#include "window_clock_trap.h" /* window_clock_trap_ask */
+#include "window_lines.h"      /* window_log_cost_mark */
 
 #if defined(__linux__)
 #include <sys/prctl.h> /* PR_GET_NAME */
@@ -1834,6 +1835,7 @@ static unsigned s_heldLines;
 void ico_render_thread_note_ask(const struct PaceRtAsk *q, const struct PaceRtTrace *t, int why)
 {
     pace_rt_trace_sum_add(&s_rt.asks, q, t, (PaceRtHold)why);
+    window_clock_trap_ask(why == PACE_RT_MISS, q->asMade); /* its second (clock_trap.h) */
     const unsigned run = why == PACE_RT_MISS ? ++s_heldLines : 0u;
     if (why == PACE_RT_MISS && (run <= 8u || run % 100u == 0)) {
         char line[1536];

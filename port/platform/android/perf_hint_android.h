@@ -6,7 +6,9 @@
  * so the APK keeps its minSdk (26): API 33 the session, its target and the
  * plain report (APerformanceHint_reportActualWorkDuration: the CPU's time);
  * API 34 APerformanceHint_setThreads; API 35 the report with the GPU's time
- * (APerformanceHint_reportActualWorkDuration2 with an AWorkDuration).
+ * (APerformanceHint_reportActualWorkDuration2 with an AWorkDuration);
+ * API 36 APerformanceHint_notifyWorkloadIncrease (the clock lift,
+ * clock_trap.h).
  * APerformanceHint_setPreferPowerEfficiency (35) is not called: its default
  * (off) is what the port wants.  Compiled into libmain.so only.
  */
@@ -21,6 +23,7 @@ typedef struct PerfHintAndroidInfo {
     int api;        /* the device's API level */
     int64_t rateNs; /* APerformanceHint_getPreferredUpdateRateNanos (-1: none) */
     bool withGpu, setThreads;
+    bool notify;   /* APerformanceHint_notifyWorkloadIncrease (API 36): the clock lift */
     char why[192]; /* off: why */
 } PerfHintAndroidInfo;
 
