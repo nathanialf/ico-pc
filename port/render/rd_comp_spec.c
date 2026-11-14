@@ -23,6 +23,7 @@
 #include "attempt_ledger.h"
 #include "rd_bench.h" /* the bench's DATE set-up switch, defined here */
 #include "rd_comp_spec.h"
+#include "rd_health.h" /* the picture-health guard's step (d) */
 #include "rd_replay.h"
 #include "shader_consts.h"
 #include "shaders_gen.h"
@@ -110,6 +111,9 @@ static bool wanted(void)
 {
     if (s_csForce >= 0) {
         return s_csForce == 1;
+    }
+    if (rd__health_part_off(RD_HEALTH_P_COMP_SPEC)) {
+        return false; /* the picture-health guard (rd_health.h) */
     }
     return s_cs.env >= 1 || (s_cs.env < 0 && RD_COMP_SPEC_DEFAULT);
 }
@@ -330,7 +334,9 @@ static void stateNote(void)
 {
     char line[sizeof(s_cs.stateSaid)];
     const char *how =
-        s_csForce == 0   ? "the bench's variant: off"
+        s_csForce < 0 && rd__health_part_off(RD_HEALTH_P_COMP_SPEC)
+            ? "the picture-health guard: 3D pictures came back unfinished with it on"
+        : s_csForce == 0 ? "the bench's variant: off"
         : s_csForce == 1 ? "the bench's variant: on"
         : s_cs.env == 0  ? "ICO_RD_COMP_SPEC=0"
         : s_cs.env == 1  ? "ICO_RD_COMP_SPEC=1"
@@ -377,6 +383,11 @@ void rd__date_setup_bench_skip(int skip)
 bool rd__date_setup_bench_skipped(void)
 {
     return s_noDateSetup;
+}
+
+void rd__comp_spec_guard_note(void)
+{
+    stateNote();
 }
 
 void rd__comp_spec_force(int v)

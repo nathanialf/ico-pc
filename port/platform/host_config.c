@@ -1293,11 +1293,15 @@ void ico_ini_export(const IcoIni *ini, const char *path, int r)
            force shows in the log */
         {
             /* and issue 123's ladder: the bones through the ring, TU_DEBUG
-               on a Turnip package, each with the skin check's mark */
-            static const char *const kept[] = {
-                "dev.pipeline_set", "dev.vu_prepass",  "dev.gpu_robust",   "dev.pipeline_skip",
-                "dev.vu_bones",     "dev.vu_bones_by", "dev.turnip_debug", "dev.turnip_debug_by"};
-            char line[768] = "";
+               on a Turnip package, each with the skin check's mark; issue
+               179's picture-health guard's groups off and its mark
+               (window_health.c) */
+            static const char *const kept[] = {"dev.pipeline_set",   "dev.vu_prepass",
+                                               "dev.gpu_robust",     "dev.pipeline_skip",
+                                               "dev.vu_bones",       "dev.vu_bones_by",
+                                               "dev.turnip_debug",   "dev.turnip_debug_by",
+                                               "dev.picture_health", "dev.picture_health_by"};
+            char line[1024] = "";
             size_t i;
 
             for (i = 0; t != NULL && i < sizeof(kept) / sizeof(kept[0]); i++) {

@@ -1167,7 +1167,9 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   word for word in its three modes and a short buffer. CPU only: the kernel's own answers are a
   phone's.
 - `attempt_ledger_test.c` (ctest `attempt_ledger`): the attempt ledger (`port/platform/
-  attempt_ledger.h`): every row `not reported` at the start, a state with its why, the serial
+  attempt_ledger.h`): the picture-health guard's row (on, not applicable, its two counts in the
+  block line) and its hold on another row (`turned off by the picture-health guard` with its why in
+  the start and block lines, kept over the owner's decider, cleared by the reset); every row `not reported` at the start, a state with its why, the serial
   moving on a change only, the block line's counts taken per block (the next block from 0), a
   static row, rows not reported left out (their counts kept for when they are), the stalls clause
   with no Adreno row, with one not applicable (`off`) and one on, out-of-range ids ignored, a short

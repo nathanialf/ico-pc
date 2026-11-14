@@ -1387,10 +1387,16 @@ draws' invocation figures after the compaction).
 
 Where: the compute record only. The vertex stores and the render targets: not applicable (their
 record passes are draws; a compute pass after them would bring the compute record's work to a
-device that does not take it). By class: `RD_VU_COMPACT_ARM_DEFAULT` (the Mali-G52: Arm's vendor id under Vulkan and `Mali-G52` in the Vulkan device name, issue 179's `Mali-G52 MC2`, 1), `RD_VU_COMPACT_DEFAULT` (the PowerVR D-Series DXT-48-1536, whose compute record the PowerVR rule ships, 1); every other device on the compute record (another Mali, PanVK, a PowerVR without vertex stores, a `[dev] vu_record = "compute"`) is off by default (`measured on the Mali-G52 only`). It
+device that does not take it). By class: `RD_VU_COMPACT_ARM_DEFAULT` (the Mali-G52: Arm's vendor id under Vulkan and `Mali-G52` in the Vulkan device name, issue 179's `Mali-G52 MC2`, 0: the reporter's phone drew a black picture from its first 3D picture on with it at 1, every picture's GPU work stopping after list 0's start, and it is the likeliest of the changes that came with it there, the first index buffer the GPU wrote on that device; lavapipe draws the reporter's dumps the same with it on and off, so this is not proven; the picture-health guard turns the other changes off by itself if pictures still come back unfinished, [ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-picture-health-guard-issue-179)), `RD_VU_COMPACT_DEFAULT` (the PowerVR D-Series DXT-48-1536, whose compute record the PowerVR rule ships, 1); every other device on the compute record (another Mali, PanVK, a PowerVR without vertex stores, a `[dev] vu_record = "compute"`) is off by default (`measured on the Mali-G52 only`). It
 is a new kind of GPU work on that driver (an extra compute output read by the vertex input stage),
 so it runs only where the start-up self-test passes (a self-test that never ran, such as one with no SCENE target, keeps it off; the tests' `ICO_RD_VU_COMPACT=1` alone runs it untested): the record's test runs with it and with a copy
-of the prelit mesh past the target's right edge (merged with the ticks copy); a failure runs the
+of the prelit mesh past the target's right edge (merged with the ticks copy), at the play record's
+size (the start-up need, `rd_early_start_rows`: the record made then and kept for play), with the
+draws' lists placed from the fourth plane's middle (large first indices, as a busy picture's last
+draws have), the frames moved every replay; and the test's own pictures' stamps are read: one
+recorded stamp unwritten after its work was signalled finished, or a clock restart with work
+queued (`rd_health.h`), fails it (the Mali-G52's play came back black while a test at 16 rows and
+60 vertices passed). A failure runs the
 test again without it, and a pass then refuses it for the run (`refused by its self-test`). The
 tests' switch `ICO_RD_VU_COMPACT=0|1`; `ICO_RD_VU_COMPACT_SABOTAGE=1` writes every triangle as a
 filler. The fourth plane is one more plane of the record (16 bytes a row's texel): on the Mali at

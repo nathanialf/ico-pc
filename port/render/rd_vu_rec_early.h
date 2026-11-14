@@ -72,6 +72,10 @@ bool rd__vu_rec_presize(uint32_t rows);
  * rd_vu_compact.c): the next replay grows it at the size without the plane
  * (the destroys deferred past the frames that read it) */
 void rd__vu_rec_release(void);
+/* the picture-health guard's step (b) (rd_health.h): every later pre-pass
+ * makes the record at least rows rows (grown at the next picture's start,
+ * as play grows it; RD_VU_REC_ROWS_MAX: v0.11.5's largest) */
+void rd__vu_rec_floor(uint32_t rows);
 /* the replay's pre-pass (rd_replay_vu.c vuPrepassRun): the rows its picture
  * needs (pass V's and pass T's), the rows held as it began, the upload
  * rings' bytes; and a growth in play */

@@ -86,6 +86,7 @@
 #include "rd_bench.h" /* the bench's switch (rd__shadow_box_bench_force) */
 #include "rd_internal.h"
 #include "rd_shadow_box.h"
+#include "rd_health.h" /* the picture-health guard's step (e) */
 
 static int32_t floorDiv16(int32_t a)
 {
@@ -395,6 +396,9 @@ int rd__shadow_box_empty_mode(void)
     static int s_env = -1;
     if (s_emptyForce >= 0) {
         return s_emptyForce;
+    }
+    if (rd__health_part_off(RD_HEALTH_P_EMPTY_SKIP)) {
+        return 0; /* the picture-health guard (rd_health.h) */
     }
     if (s_env < 0) {
         const char *e = getenv("ICO_RD_EMPTY_SKIP");

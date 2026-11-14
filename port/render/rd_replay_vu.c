@@ -142,6 +142,10 @@ static uint32_t s_recFails;
    rows it made (0 none), and whether recEnsure runs inside it (its line) */
 static uint32_t s_recEarlyRows;
 static bool s_recEarlyNow;
+/* the rows every pre-pass makes the record at least (rd__vu_rec_floor: the
+   picture-health guard's step (b), the record at its largest as v0.11.5
+   made it; 0 none) */
+static uint32_t s_recFloor;
 
 /* the record's textures and buffers (not s_recNull) */
 static void recFree(void)
@@ -262,6 +266,11 @@ uint32_t rd__vu_rec_rows_max(void)
 uint64_t rd__vu_rec_row_bytes(void)
 {
     return recBytes(1u) * (RHI_FRAMES_IN_FLIGHT + (rd__vu_record_buffered() ? 0u : 1u));
+}
+
+void rd__vu_rec_floor(uint32_t rows)
+{
+    s_recFloor = rows > RD_VU_REC_ROWS_MAX ? RD_VU_REC_ROWS_MAX : rows;
 }
 
 void rd__vu_rec_release(void)
@@ -3137,6 +3146,8 @@ static void vuPrepassRun(const RdFrame *f, int keep)
     }
     const uint32_t rowsV = vuRows(nv), rowsT = vuRows(nt);
     uint32_t rows = s_recRows > RD_VU_REC_ROWS_MIN ? s_recRows : RD_VU_REC_ROWS_MIN;
+    rows =
+        rows < s_recFloor ? s_recFloor : rows; /* the picture-health guard's (rd__vu_rec_floor) */
     while (rows < rowsV + rowsT && rows < RD_VU_REC_ROWS_MAX) {
         rows *= 2u;
     }

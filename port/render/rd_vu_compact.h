@@ -48,7 +48,8 @@
  * after them would be the compute record's work on a device that does not
  * take it).  By class: RD_VU_COMPACT_ARM_DEFAULT (the Mali-G52: Arm's
  * vendor id under Vulkan with RD_VU_CMP_G52_NAME in the device name, the
- * one Arm device measured, issue 179), RD_VU_COMPACT_DEFAULT (the PowerVR
+ * one Arm device measured, issue 179: 0 since v0.11.7, below),
+ * RD_VU_COMPACT_DEFAULT (the PowerVR
  * D-Series DXT-48-1536, whose compute record the PowerVR rule ships,
  * rd_vu_class.h); every other device on the compute record is off by
  * default ("measured on the Mali-G52 only").  Tried by the start-up
@@ -78,8 +79,16 @@
 #ifndef RD_VU_COMPACT_DEFAULT
 #define RD_VU_COMPACT_DEFAULT 1
 #endif
+/* 0 since v0.11.7: on in v0.11.6, the Mali-G52 of issue 179 drew a black
+   picture from its first 3D picture on (every picture's GPU work stopped
+   after list 0's start, the fences still signalled), and the index
+   compaction, the first index buffer the GPU wrote on that device, is the
+   likeliest of v0.11.6's changes there (lavapipe draws the reporter's loss
+   dumps the same with it on and off: not proven); the picture-health guard
+   (rd_health.h) steps the others off if pictures still come back
+   unfinished */
 #ifndef RD_VU_COMPACT_ARM_DEFAULT
-#define RD_VU_COMPACT_ARM_DEFAULT 1
+#define RD_VU_COMPACT_ARM_DEFAULT 0
 #endif
 
 /* the fourth plane: the planned draws' lists from its start (uint values,
@@ -223,6 +232,16 @@ void rd__vu_compact_refuse(const char *why);
    under the tests' switch), the fourth plane given up, the line */
 void rd__vu_compact_selftest_not_run(const char *why);
 void rd__vu_compact_selftest_done(bool on);
+/* the self-test's lists placed from the fourth plane's middle (the
+   record's test with it, rd_vuprepass_selftest.c: large first indices, as
+   a busy picture's last draws have); the value they began at in the last
+   plan (0 none) */
+void rd__vu_compact_selftest_far(bool on);
+uint32_t rd__vu_compact_far_at(void);
+/* the picture-health guard (rd_health_live.c): off for the rest of the run
+   from the next replay, its fourth plane given up (the record made again
+   without it); nothing when it does not run */
+void rd__vu_compact_guard_off(void);
 #endif
 
 #endif /* PORT_RENDER_RD_VU_COMPACT_H */

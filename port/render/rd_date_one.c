@@ -58,6 +58,7 @@
 #include "attempt_ledger.h"
 #include "rd_clause.h" /* the 10 s clause whole or "; ..." */
 #include "rd_date_one.h"
+#include "rd_health.h" /* the picture-health guard's step (c) */
 #include "rd_replay.h"
 
 /* on on every device (no new kind of GPU work: fewer passes and draws) */
@@ -77,6 +78,9 @@ int rd__date_one_mode(void)
 {
     if (s_force >= 0) {
         return s_force;
+    }
+    if (rd__health_part_off(RD_HEALTH_P_DATE_ONE)) {
+        return 0; /* the picture-health guard (rd_health.h): from the next replay's scan */
     }
     if (s_env < 0) {
         const char *e = getenv("ICO_RD_DATE_ONE");
@@ -134,7 +138,10 @@ void rd__date_one_scan_begin(const RdFrame *f)
     if (s_said != s_scan.mode) {
         s_said = s_scan.mode;
         rd__log("DATE one set-up: %s",
-                s_scan.mode == 0 ? "off (ICO_RD_DATE_ONE=0)"
+                s_scan.mode == 0 && rd__health_part_off(RD_HEALTH_P_DATE_ONE)
+                    ? "off (the picture-health guard turned it off: 3D pictures came back "
+                      "unfinished with it on)"
+                : s_scan.mode == 0 ? "off (ICO_RD_DATE_ONE=0)"
                 : s_scan.mode == 2
                     ? "on, the bound ignored (ICO_RD_DATE_ONE=force: the tests' sabotage)"
                     : "on: the shadow composites share one DATE snapshot or stencil set-up where "

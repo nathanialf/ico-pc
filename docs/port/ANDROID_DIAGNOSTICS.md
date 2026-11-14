@@ -2094,6 +2094,128 @@ counters in the hot path.
   times`, `the game thread line`, `the thread list`. Without the log thread they are read on the
   game thread as before.
 
+## The picture-health guard (issue 179)
+
+`port/render/rd_health.h` (the rule and the mark, `rd_health.c`), `rd_health_live.c` (the
+renderer's part), `port/platform/window_health.c` (the window's). The Mali-G52 MC2 of issue 179
+(driver v1.r32p1) drew a black picture with the release that brought the index compaction, the
+record sized from need, the flat outputs at the provoking corner, one DATE set-up, the volumes',
+composites' and paste's own entries and the empty composites' skip, and with the reporter's old
+`[dev] gpu_robust` line taken off. From the first 3D picture on, every picture's GPU work stopped
+after `list 0's start` or `the VU pre-pass's start`: `rd: GPU clock: replay N: ... 16 of 19
+recorded stamps came back unwritten after its work was signalled finished (the first: list 0's
+end; the last written: list 0's start)` at every replay from 149 on in both of its logs (410 and
+6800 such replays), and `rd: GPU timestamps: the clock went back ...` (8 and at least 1200
+restarts: the line is written for the first 8, then every 100th). The fences still signalled, so
+no wait failed. The same phone's log of the release before had none of either. Lavapipe draws
+the reporter's two loss dumps the same with each of those changes on and off, so which one it was
+is not known here. The index compaction is off by default on the Mali-G52 now
+(`RD_VU_COMPACT_ARM_DEFAULT 0`, [PIPELINES.md](PIPELINES.md#the-index-compaction)), and the guard
+turns the others off by itself where pictures keep coming back unfinished.
+
+**The rule.** On Vulkan (the slot clock's stamps). A judged picture is a presented one with VU
+draws (a 3D picture; the start-up self-tests present nothing). It is unfinished when its record
+carries the GPU's own sign of a reset (`rd_perf_clock.h rd_perf_reset_counted`: recorded stamps
+unwritten after its work was signalled finished, its first list run twice, or the timestamp
+counter restarted with work queued; a restart after a span with no GPU work, the app away, a
+pause or a capture, is not one). 16 of the last 32 judged pictures unfinished take the next group
+off. After a step the window starts empty, the next 3 replays (recorded before it) are not
+judged, and 64 judged pictures in a row whose window holds at most 4 unfinished confirm the step.
+The cost: one compare and a shift a collected record (`rd_perf.c rd__perf_collect_gpu`, at a
+replay's start before its recording, which is where a step is taken).
+
+Checked against the four logs: the Mali-G52's two runs step at replay 164 (the 16th unfinished
+3D picture, about 0.6 s of 3D at 25 fps), and every group is off by replay 236 (3.5 s); its run
+of the release before has no unwritten stamp and no restart (its 110 stall lines are waits of
+100 ms or more, which are no sign); the Adreno 740's two runs (issue 123) have 12 and 13 isolated
+hangs in about 5 minutes, the closest 3 within 6 replays, and at most 4 restarts in a 10 s block:
+never 16 of 32.
+
+**The groups**, from the likeliest cause to the least, each turned off whole; a part is switched
+in the run, or from the next start where it is made with the renderer or the device:
+
+| Group | Parts | In the run | From the next start |
+| --- | --- | --- | --- |
+| (a) | the index compaction | its fourth plane given up, the record made again at the next picture (`rd__vu_compact_guard_off`) | not made |
+| (b) | the VU record sized from need | the record grown to its largest (1024 rows) at the next picture (`rd__vu_rec_floor`) | made at the largest the memory bound allows |
+| (c) | one DATE set-up; flat outputs at the provoking corner | one DATE set-up off from the next scan (`rd__date_one_mode`) | the flat outputs' twins `vu_all_main_vs` and `vu_merge_all_main_vs` |
+| (d) | the shadow volumes', the shadow composites' and the glow paste's own entries | each draw asks `wanted()` | as in the run |
+| (e) | empty composites skipped; robust access off | the skip off (`rd__shadow_box_empty_mode`) | robust access on for the start (`ICO_GPU_ROBUST=1` from the window; nothing written to the settings; the player's `gpu_robust` rules where set) |
+
+A group none of whose parts is on here (the attempt ledger's row not `on`) is passed over. When
+the trigger finds no group left, the guard says so once and takes no more steps in the run.
+
+**What the next start does.** The guard's state goes to `config.toml` as `[dev] picture_health =
+"bce"` (the groups off) and `picture_health_by = "picture health <version>; <state>;
+<evidence>"`, written by the game alone ([CONFIG.md](CONFIG.md)). The state is `stepping`,
+`culprit X` (pictures complete again after turning X off), `pending X` (X's next-start parts not
+seen yet) or `exhausted`. The next start of the same version begins with every part of those
+groups off and confirms a pending group on its own pictures; a start of another version, or a
+mark that is not in the game's form, removes both keys (left empty).
+
+The lines, in the order a run on the reporter's phone would print them (example numbers from its
+log):
+
+- `window: picture health: [dev] picture_health = "bc" (picture_health_by = "picture health
+  <version>; culprit c; complete again from replay 248, frame 223") in <config.toml>: this start
+  begins with these turned off: (b) the VU record sized from need, (c) one DATE set-up and (c)
+  flat outputs at the provoking corner`, or `... removed from <config.toml>: written by another version of the
+  game (an update starts the guard afresh); this start begins with nothing turned off`. With
+  group (e): `window: picture health: robust access on for this start (group (e)); nothing is
+  written to the settings for it`, and the device line's robust clause ends `(the picture-health
+  guard's group (e), issue 179: [dev] picture_health)`.
+- `rd: picture health: on: a presented 3D picture is unfinished when the GPU's own sign of a reset
+  comes with it (...); 16 of the last 32 unfinished turns this release's newer GPU work off, one
+  group at a time: (a) the index compaction, (b) ..., (e) empty composites skipped and robust
+  access off; 64 in a row with at most 4 of 32 unfinished confirm a step; off from this start:
+  none` (or the parts, and `; this start's pictures confirm (ce)`). Off Vulkan: `rd: picture
+  health: not applicable here (...)`.
+- A step: `rd: picture health: 16 of the last 16 3D pictures came back unfinished (replay 164,
+  frame 139: 16 of its recorded stamps unwritten, the first: list 0's end; in the run 16
+  unfinished of 16 judged, 16 with stamps unwritten, 0 clock restarts): turning off (b) the VU
+  record sized from need now (the record grown to its largest at the next picture, as <the
+  release before> made it); then 64 3D pictures in a row decide (step 1 of the run)`; group (c)
+  adds `; from the next start (made at the start): (c) flat outputs at the provoking corner`.
+  The parts' own lines follow (`rd: VU pre-pass: the record holds ... (1024 rows ...; grown in
+  play past the 512 rows made at start-up)`, `rd: DATE one set-up: off (the picture-health guard
+  turned it off: ...)`, `rd: shadow volumes: the stencil-only entry (...): off (the picture-health
+  guard: 3D pictures came back unfinished with it on)`, `rd: VU index compaction: off: the
+  picture-health guard turned it off in the run ...`).
+- Recovered: `rd: picture health: pictures complete again after turning off (c) one DATE set-up:
+  64 3D pictures in a row with at most 4 of 32 unfinished (replay 248); it stays off, and every
+  start of the same version begins without it ([dev] picture_health)`. That group is the culprit. At
+  a start that confirms its mark: `rd: picture health: pictures complete from the start with these
+  turned off: (c) flat outputs at the provoking corner and (e) robust access off (...): ...; the
+  culprit is among them; ...`.
+- No recovery in the run: `rd: picture health: stepping everything off in this run did not
+  recover: 16 of the last 16 3D pictures still unfinished (replay 236, frame 211) with every group
+  the guard switches in the run off; from the next start (made at the start): (c) flat outputs at
+  the provoking corner and (e) robust access off, whose pictures decide; no more steps in this
+  run`. With every group off from the start already: `rd: picture health: stepping
+  everything off did not recover: ... the parts that need a restart too: <the release before>'s
+  GPU work does not complete them either; no more steps`. Nothing of this release on here: `...
+  and nothing this release added to the 3D path is on here to turn off: no steps`.
+- `window: picture health: [dev] picture_health = "bcde" and picture_health_by = "picture health
+  <version>; pending ce; 16 of 16 3D pictures unfinished at replay 236, frame 211" written to
+  <config.toml>: every start of the same version begins there`.
+- The attempt ledger: `picture health on (watching: 16 of 32 3D pictures unfinished step)` at the
+  start (`stepped to (c): ...`, `culprit: ...`, `everything off in the run, not recovered; from the
+  next start: ...` after each change), and each block `picture health on N 3D pictures with
+  stamps unwritten (M GPU clock restarts)`; every row the guard turned off reads `turned off by
+  the picture-health guard (3D pictures kept coming back unfinished with it on: off for the rest of
+  the run and from the next start)` (or `... off from the next start (made at the start)`, or `off
+  from this start: an earlier start's picture-health guard ([dev] picture_health)`), held against
+  its owner's deciders (`ico_attempt_guard_off`).
+
+The guard does not decide anything about a device loss: the loss ladder does
+([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md)). A loss found at the lifecycle's wait for the
+GPU as the app goes to the background (`rhi_vk: vkDeviceWaitIdle(g_vkr.device) failed (VkResult
+-4)` after `window: lifecycle: will enter background`) is counted there at once: `ico_pc: the
+graphics device was lost at the GPU wait as the app went to the background; counted now as a
+start that lost it (the system may end the app there before the game notices; the next start
+takes the loss steps)`. The reporter's 5-minute run lost the device there and was ended in the
+background before the main loop's loss path ran, so its next start said `no lost start`.
+
 ## Ranking the costs and the attempts (issues 179 and 123)
 
 Each problem the Mali-G52 (issue 179), Adreno 740 (issue 123) and Pixel 10 Pro Fold logs showed
@@ -2105,6 +2227,9 @@ counter is an increment in a hot path, and none of them reads anything from the 
 
 | Problem the logs showed | The question the next log answers | The line and field that answers it |
 | --- | --- | --- |
+| Mali-G52: a black picture from the first 3D picture on, every picture's GPU work stopping after `list 0's start` (stamps unwritten, clock restarts), the touch controls flickering | Is the picture complete again? | The block's ledger row `picture health on N 3D pictures with stamps unwritten (M GPU clock restarts)`: 0 and 0 in every block with 3D is a complete picture with the index compaction off by default (`index compaction off by default (off by default on the Mali-G52: it blacked out the picture there ...)`); otherwise the `rd: picture health:` step lines follow within seconds of the first 3D picture and `pictures complete again after turning off ...` says when it came back ([The picture-health guard](#the-picture-health-guard-issue-179)) |
+| Mali-G52: the black picture's cause not known (lavapipe draws the reporter's dumps the same with each change on and off) | Which of the newer changes blacked it out? | No step line and complete pictures: the index compaction (off by default now). Else `rd: picture health: pictures complete again after turning off (X) ...` names the group in the run; `pictures complete from the start with these turned off: ...; the culprit is among them` names the restart parts (the flat outputs, robust access) at the start after `stepping everything off in this run did not recover`; `[dev] picture_health_by = "picture health <version>; culprit X; ..."` in a later report's `config.toml` keeps it. `... <the release before>'s GPU work does not complete them either` says none of them was it |
+| Mali-G52: the device lost at `vkDeviceWaitIdle` (-4) as the app went to the background; the next start said `no lost start` | Was the loss at backgrounding counted? | In the run: `ico_pc: the graphics device was lost at the GPU wait as the app went to the background; counted now as a start that lost it ...` right after `rhi_vk: device lost`; at the next start: `ico_pc: starts in a row that lost the graphics device: 1` and `ico_pc: loss ladder: 1 start(s) in a row lost the graphics device before this one ...` (the loss ladder's steps), and the VU shaders line without `no lost start` |
 | Mali stage 42: list 0 at 47-77 ms a picture for 52-77k triangles | Is list 0 bound by its vertices or by its pixels? | `window: costs a picture:`: `boxes against triangles: list 0 N triangles in M Mpx of boxes (K times its target's ...)`, which you set against `window: compare:`'s `list 0` ms across blocks. `window: VU: ...; the draws' vu_main_vs N more (3 a triangle ...)` and the `perf scene` line's `(the VU pre-pass's; the draws' own N more, 3 a triangle)` give the draws' own vertex work. `rhi_vk: pipeline statistics: offered` or `not offered` says whether a later release could sample the split |
 | Mali: robust access left on by a key without the mark | Did the checks come off, and is robust access on, and where from? | The start's `ico_pc: robust access turned off ([dev] gpu_robust = true in <config.toml> had no gpu_robust_by mark: ...)` (once: the key is removed) and the attempt ledger's `the old robust-access line taken off on (...)` (`refused by its self-test (config.toml could not be written: ...)` when the file could not be written, then the next start tries again; `not applicable here` on the starts after), then `rhi_vk: loss diagnostics: ... robust access off (the default; ...)` and `rd: profile: ... robust access off ...` at the start, and in every block the compare line's robust clause. Robust access on again shows as `robust access on, ... (the restart after the graphics card stopped responding)` (a start after a loss) or `ico_pc: robust access on (set by the game after 2 lost starts on <version>): N clean starts of 3 before it turns off` |
 | Mali: single passes of 100-280 ms, presents blocked 254-385 ms | What coincided with each one? | `window: stall: <the pass or the present>; at that moment: ...` for each stall (the cores and their clocks, the core waits in the last second, the driver's threads, memory against the floor, memory pressure, thermal headroom, the classes), and once per block `window: stalls by what coincided: N in the block (...)` |
@@ -2123,8 +2248,8 @@ counter is an increment in a hot path, and none of them reads anything from the 
 
 `port/platform/attempt_ledger.h`: one row per behaviour that this release changes on purpose for a
 device class. Each row has a name, its state on this device (on, off by default, refused by its
-self-test, refused by the driver, not applicable here, not in this build, or not reported) with a
-reason, and up to two counts. Two lines
+self-test, refused by the driver, turned off by the picture-health guard, not applicable here, not
+in this build, or not reported) with a reason, and up to two counts. Two lines
 print it:
 
 - At the first 10 s block, and again whenever a state changes (the first 8 changes, then every
@@ -2162,7 +2287,7 @@ thread can make it, hot paths included. The rows and where their states are set:
 | Qualcomm queue at high priority | `window_perf_rank.c` every block (`ico_attempt_decide_queue_priority` from `RhiLimits.queuePriority` and `queuePriorityWhy`, set by `vk_qprio.c` at the device's creation): `on (high granted through VK_KHR_global_priority: Qualcomm's own driver on Android)`, `refused by the driver (high asked, the driver answered not permitted: the driver's default (medium))` (or `initialization failed`, or `the device's creation failed with it`), `not applicable here` with the reason (`not Qualcomm's own driver on Android`, `... global queue priority not offered`, `... the game's queue family does not list high`; `not asked on this graphics API (Vulkan's alone)` on OpenGL and Direct3D) | the block's stalls (`ico_attempt_block_text`'s, `window_stall_tally_take`'s count), whatever the state |
 | subpass read | `rd_subpass_probe.c` at DATE's self-test (`ico_attempt_decide_subpass`): `off by default` on a class the probe does not run on this release (`off on this driver this release: ...` on the Arm and Qualcomm drivers, `probed on the Intel driver row only this release` elsewhere), `on` with the device's reason (kept by an earlier probe, on for this start's probe, `[dev] subpass_read = on`), `refused by its self-test` (DATE's self-test on the read failed, or this start's or an earlier start's probe refused it), `not applicable here` off the route (`not a VkRenderPass path without local read ...`) or where it cannot be decided (no GPU timestamps, no verdict file, not probed at this start) | the window, from the record's `dateStencilTakes` while the row is on |
 | blend constant | `not in this build` from the start (left out of the block line; measured: no draw of the Mali reporter's pictures to convert, [PIPELINES.md](PIPELINES.md)) | none |
-| index compaction | `rd_vu_compact.c` at the pre-pass's start and after the record's self-test (`ico_attempt_decide_compaction`): `on` on the compute record of the Mali-G52 (by its Vulkan device name) or the PowerVR D-Series DXT-48-1536 where the class's define allows and the self-test passed (`the Mali-G52, its start-up self-test passed`, `the PowerVR D-Series DXT-48-1536, ...`; `ICO_RD_VU_COMPACT=1: the tests' switch` without a self-test), `refused by its self-test` when the record's test failed with it and passed without it, `off by default` on every other device (`measured on the Mali-G52 only ...`), by the define, before the self-test or where none ran (`its start-up self-test not run (yet)`) or by `ICO_RD_VU_COMPACT=0`, `not applicable here` with the record path that holds (`record path stores: vertex shader stores`, `record path targets: render targets`, `the VU pre-pass is off`) | the triangles left out (drop and outside, every list), from the counts read back when the frame slot comes round |
+| index compaction | `rd_vu_compact.c` at the pre-pass's start and after the record's self-test (`ico_attempt_decide_compaction`): `off by default (off by default on the Mali-G52: it blacked out the picture there ... (issue 179; RD_VU_COMPACT_ARM_DEFAULT 0))` on the Mali-G52; `on` on the compute record of the PowerVR D-Series DXT-48-1536 (or a Mali-G52 under `ICO_RD_VU_COMPACT=1`) where the class's define allows and the self-test passed (its pictures equal, at the play record's size with the lists from the fourth plane's middle, and no stamp of its own pictures unwritten) (`the Mali-G52, its start-up self-test passed`, `the PowerVR D-Series DXT-48-1536, ...`; `ICO_RD_VU_COMPACT=1: the tests' switch` without a self-test), `refused by its self-test` when the record's test failed with it and passed without it, `off by default` on every other device (`measured on the Mali-G52 only ...`), by the define, before the self-test or where none ran (`its start-up self-test not run (yet)`) or by `ICO_RD_VU_COMPACT=0`, `not applicable here` with the record path that holds (`record path stores: vertex shader stores`, `record path targets: render targets`, `the VU pre-pass is off`) | the triangles left out (drop and outside, every list), from the counts read back when the frame slot comes round |
 | VU record by compute on the PowerVR | `rd_vu_record.c` at the record's start (`ico_attempt_decide_vu_compute`): `on (the PowerVR D-Series DXT-48-1536: compute dispatches in place of the vertex stores)` on the one PowerVR it ran on, `off by default (not the PowerVR D-Series DXT-48-1536 it was shown on: the vertex stores (its self-test judges the record's bytes, not a device lost on a driver not tried))` on the rest of the PowerVR class under Vulkan with both stores, `on` by the tests' switch, `refused by its self-test` when the compute record failed it (the vertex stores then), `not applicable here` elsewhere (no vertex stores, no compute stores, another class, a `[dev] vu_record` by name) | `rd_vu_record.c` `rd__replay_dispatch`: the dispatches |
 | turn in the present's blit | `rd_present.c` at each present (`ico_attempt_decide_turn_fold`): `not applicable here` without a pre-rotated swapchain, `off by default` until the define is flipped or with its self-test not run, `refused by its self-test`, `on` with it passed | `rd_turn_fold.c`: the presents folded (the second count: those on a turned swapchain that kept the turn pass) |
 | VU record sized from need | `rd_vu_rec_early.c` at the start-up preparation (`ico_attempt_decide_rec_need`: on where the run's need made a smaller record than the memory bound allowed; not applicable with the pre-pass off, nothing made at start-up, or a bound no larger than the need) | the record's growths in play (`rd_replay_vu.c` recEnsure, a record that existed grown) |
@@ -2175,6 +2300,7 @@ thread can make it, hot paths included. The rows and where their states are set:
 | the shadow volumes by the stencil-only entry | `rd_volume_fs.c` at start-up and after its self-test (`ico_attempt_decide_volume_fs`): `not applicable here` off Vulkan, `off by default` with `ICO_RD_VOLUME_FS=0`, the define at 0 or its self-test not run yet, `refused by its self-test` where the volumes' count by `date_clear_ps` differed from `sprite_ps`'s on the device, `on` with it passed | `rd_volume_fs.c` at each volume draw: the volume draws by `date_clear_ps` (the second count: those that kept `sprite_ps` where it is offered: a multisampled pass, the self-test, the pipeline) |
 | the shadow composites by their own entry | `rd_comp_spec.c` at start-up and after its self-test (`ico_attempt_decide_comp_spec`): `not applicable here` off Vulkan or without the dual-source fixed-function blend (the two-pass or the exact blend), `off by default` with `ICO_RD_COMP_SPEC=0`, the define at 0 or its self-test not run yet, `refused by its self-test` where SCENE's bytes differed between `sprite_ps` and `sprite_comp_ps` on the device, `on` with it passed | `rd_comp_spec.c` at each composite and level drawn: the draws by `sprite_comp_ps` (the second count: those of their forms that kept `sprite_ps` where it is offered; the 10 s `window: composites:` line says why) |
 | no capture after a stall | `rd_vu_skin_selftest.c` at the skin check's start line (`ico_attempt_decide_skin_skip`): `on (a skin check read after a GPU reset is skipped, not captured)` where the skin check runs (an Adreno with a window, or the tests' switch), `not applicable here (the skin check is off here)` where it is off or its start-up probe failed; not reported where the probe never ran (not Vulkan) | `rd_vu_skin_check.c` at each check skipped after a reset (`rd__skin_skip`: the readback not written again, or read in the span of the GPU's own sign of a reset) ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md#skipped-after-a-reset)) |
+| picture health | `rd_health_live.c` at the renderer's first start (`ico_attempt_decide_picture_health`: `on (watching: 16 of 32 3D pictures unfinished step)` on Vulkan, `not applicable here (only Vulkan's GPU stamps say a picture came back unfinished)` elsewhere), then by the guard at each step, recovery or end (`stepped to (b): ...`, `culprit: ...`, `everything off in the run, not recovered; ...`) ([The picture-health guard](#the-picture-health-guard-issue-179)) | the judged 3D pictures with stamps unwritten (the second count: the GPU clock restarts with work queued) |
 | the old robust-access line taken off | `window_robust.c` `window_robust_start` at the window's first start (`ico_attempt_decide_robust_line`): `on ([dev] gpu_robust = true without the game's mark removed from config.toml: robust access off from this start)`, `refused by its self-test (config.toml could not be written: robust access stays on, the next start tries again)` (the refusal is the file's), `refused by its self-test (gpu_robust = true in config.toml is in a hand-written form the game cannot take out ...: delete the line by hand)` (the text without the lines the removal knows, `[dev]`'s two keys and the root's dotted `dev.gpu_robust` / `dev.gpu_robust_by`, parsed as config.toml is read, still says true: nothing is written and the start says `ico_pc: robust access stays on: gpu_robust = true in config.toml is written in a form the game does not write and could not take out ...`; a marked key's too), `not applicable here (no [dev] gpu_robust = true without the game's mark in config.toml)`; a later start of the window in the same run changes it only when it finds such a key | static |
 
 The shadow cuts' counts come from the replay's record where the window reads it
@@ -2423,7 +2549,7 @@ draw), those it left out by class, list 0 apart, from the counts each workgroup 
 reads back when the frame slot comes round. The draws' invocation figures (`window: VU: ...`,
 `perf scene`, `compare`) count a left-out triangle as one invocation (its filler) and say so:
 `3 a triangle, after the index compaction 1 a triangle it left out: A of B`.
-The start lines: `rd: VU index compaction: to be tried by the start-up self-test, on where it passes: ... (its start-up self-test not run (yet); the Mali-G52 (Mali-G52 MC2, vendor 0x13B5): RD_VU_COMPACT_ARM_DEFAULT 1)` at the pre-pass's start (on the Pixel `the PowerVR D-Series DXT-48-1536 (...): RD_VU_COMPACT_DEFAULT 1`; on every other device `off (off by default: measured on the Mali-G52 only (and on the PowerVR D-Series DXT-48-1536's compute record); not the Mali-G52 or the PowerVR D-Series DXT-48-1536 (<device name>, vendor 0x....): off by default)`: the class the decision was taken for, by the Vulkan device name, and the define that took it), then `rd: VU index compaction: on: passed its start-up self-test with the record's (...)`, `rd: VU index compaction: refused by its start-up self-test (the record's test with it: <the difference>; without it the test passed): every draw reads its own index list` or, where the self-test returned before it ran, `rd: VU index compaction: off: the start-up self-test did not run (no SCENE target) (its start-up self-test not run (yet); ...)`. Off after the self-test (refused, or not run), the fourth record plane is given up: the record is made again without it.
+The start lines: `rd: VU index compaction: off (off by default on the Mali-G52: it blacked out the picture there ... (issue 179; RD_VU_COMPACT_ARM_DEFAULT 0); the Mali-G52 (Mali-G52 MC2, vendor 0x13B5): RD_VU_COMPACT_ARM_DEFAULT 0)` at the pre-pass's start on the Mali-G52 (`rd: VU index compaction: off: the picture-health guard turned it off (...)` where an earlier start's guard did; `... off: the picture-health guard turned it off in the run (...)` when it does in the run: [The picture-health guard](#the-picture-health-guard-issue-179)); `rd: VU index compaction: to be tried by the start-up self-test, on where it passes: ...` (on the Pixel `the PowerVR D-Series DXT-48-1536 (...): RD_VU_COMPACT_DEFAULT 1`; on every other device `off (off by default: measured on the Mali-G52 only (and on the PowerVR D-Series DXT-48-1536's compute record); not the Mali-G52 or the PowerVR D-Series DXT-48-1536 (<device name>, vendor 0x....): off by default)`: the class the decision was taken for, by the Vulkan device name, and the define that took it), then `rd: VU index compaction: on: passed its start-up self-test with the record's (...)`, `rd: VU index compaction: refused by its start-up self-test (the record's test with it: <the difference>; without it the test passed): every draw reads its own index list` or, where the self-test returned before it ran, `rd: VU index compaction: off: the start-up self-test did not run (no SCENE target) (its start-up self-test not run (yet); ...)`. Off after the self-test (refused, or not run), the fourth record plane is given up: the record is made again without it.
 
 ### The pipeline set's cores
 

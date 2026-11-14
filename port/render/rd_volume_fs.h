@@ -116,6 +116,9 @@ bool rd__volume_fs_on(void);
 /* the bench's switch (rd_bench.c): 0 off, 1 on (still behind the backend,
  * the self-test and the pass), -1 the environment's and the default again */
 void rd__volume_fs_force(int v);
+/* the picture-health guard (rd_health.h) turned it off: the state's line
+   and the ledger's row again (each draw asks wanted() as it is made) */
+void rd__volume_fs_guard_note(void);
 /* wanted now (the force, the switch, the default) */
 bool rd__volume_fs_wanted(void);
 

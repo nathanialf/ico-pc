@@ -63,6 +63,7 @@
 #include "window_pipeline_skip.h"
 #include "window_bones.h"
 #include "window_robust.h"
+#include "window_health.h"
 #include "window_display_rate.h"
 #include "window_pipe_finish.h"
 #include "window_present.h"
@@ -2272,6 +2273,7 @@ open_window:
         }
     }
 #endif
+    window_health_start(cfgName); /* the picture-health guard's mark (window_health.h) */
     rd_set_activity_fn(window_activity);
     rd_set_batch_fn(ico_diag_startup_activity_batch);
     /* before the set: the careful policy's budget reads the process's
@@ -4056,7 +4058,8 @@ int ico_window_pump(void)
     resume_recheck();
     report_picture_pump();
     window_dump_auto_skin_pump();
-    window_bones_pump(); /* issue 123's ladder (window_bones.c) */
+    window_bones_pump();  /* issue 123's ladder (window_bones.c) */
+    window_health_pump(); /* the picture-health guard's mark (window_health.c) */
 #if ICO_RC_TOOLS && defined(__ANDROID__)
     window_bench_pump(); /* the bench holds the pump while it runs */
     share_report_pump();

@@ -51,7 +51,12 @@ typedef enum IcoAttemptState {
     /* refused by the driver: the attempt asked the driver for something it
        declined (the high queue priority's VK_ERROR_NOT_PERMITTED), the
        behaviour before it kept */
-    ICO_ATT_DRIVER_REFUSED
+    ICO_ATT_DRIVER_REFUSED,
+    /* turned off by the picture-health guard (port/render/rd_health.h,
+       issue 179): 3D pictures kept coming back unfinished while it was on
+       (or an earlier start's guard turned it off); set through
+       ico_attempt_guard_off, which holds it against the owner's deciders */
+    ICO_ATT_GUARD_OFF
 } IcoAttemptState;
 
 /* The rows, in the lines' order */
@@ -169,6 +174,12 @@ enum {
        with no failure and no capture; state at the check's start line
        (rd_vu_skin_selftest.c), count the checks skipped */
     ICO_ATT_SKIN_RESET_SKIP,
+    /* rd_health_live.c (issue 179, v0.11.7): the picture-health guard; its
+       state and why the step it reached and the culprit it found; count
+       the 3D pictures whose recorded stamps came back unwritten after
+       their work was signalled finished, second count the GPU clock
+       restarts with work queued (an idle GPU's are not counted) */
+    ICO_ATT_PICTURE_HEALTH,
     ICO_ATT_COUNT
 };
 
@@ -178,6 +189,16 @@ void ico_attempt_state(int id, IcoAttemptState state, const char *why);
 /* the row's counts (any thread; a relaxed atomic add each) */
 void ico_attempt_fire(int id, uint64_t n);
 void ico_attempt_fire2(int id, uint64_t n);
+
+/* The picture-health guard's override (rd_health_live.c): the row's
+   state ICO_ATT_GUARD_OFF with why (a static string), held for the run:
+   every later ico_attempt_state of the row is ignored, so the owner's
+   deciders (called per replay or per block by some) never show the row on
+   again while the guard holds its behaviour off; ico_attempt_reset clears
+   it (the tests) */
+void ico_attempt_guard_off(int id, const char *why);
+/* whether the guard holds the row (ico_attempt_guard_off) */
+int ico_attempt_guard_held(int id);
 
 /* the row's state now (ICO_ATT_NOT_SET for an id out of range) */
 IcoAttemptState ico_attempt_state_of(int id);
@@ -399,5 +420,10 @@ void ico_attempt_decide_robust_line(int found, int removed);
    line): on the skin check runs on this device (an Adreno with a window,
    or the tests' switch); else not applicable */
 void ico_attempt_decide_skin_skip(int on);
+/* the picture-health guard (port/render/rd_health_live.c at the renderer's
+   first start): on where the records carry the slot clock's signs
+   (Vulkan), watching; else not applicable.  Its later states (the step
+   reached, the culprit) are set by the guard itself */
+void ico_attempt_decide_picture_health(int vulkan);
 
 #endif

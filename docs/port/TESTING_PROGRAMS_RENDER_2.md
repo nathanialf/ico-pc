@@ -259,8 +259,33 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   compaction's line `on: passed its start-up self-test`; with `ICO_RD_VU_COMPACT_SABOTAGE=1` the run
   with it fails, the run without it passes and the compaction is refused, the pre-pass on with the
   compute record; under the phone's limits and Arm's vendor id (`ICO_VK_FAKE_LIMITS=mali
-  ICO_VK_FAKE_VENDOR=0x13B5`, synchronisation validation with the submit-time checks) it passes as
-  the Arm class; with the vertex stores the compaction is not applicable and the frame has no copy.
+  ICO_VK_FAKE_VENDOR=0x13B5`, synchronisation validation with the submit-time checks) the Arm class
+  has it off by default (`RD_VU_COMPACT_ARM_DEFAULT 0`, the line naming the black picture), the
+  frame without the copy; with the vertex stores the compaction is not applicable and the frame has
+  no copy. The verdict's compaction words name the play record's rows, the fourth plane's value the
+  lists began at and the test's pictures whose stamps were all written.
+- `rd_health.cmake`'s self-test row (`rd_vuprepass_selftest_compact_stamps`; lavapipe): with
+  `ICO_RD_HEALTH_FAKE=selftest` every record collected inside the compaction's run reads as a hang,
+  so the record's test with it fails (`the GPU's own sign of a reset in N of the test's M
+  pictures`), again without it passes, the compaction refused for the run, the pre-pass on.
+- `rd_health_test.c` (`rd_health`; `rd_health.cmake`, CPU): the picture-health guard's pure parts
+  (`rd_health.c`): the rule fed the four logs' patterns (issue 179's two Mali-G52 runs step at
+  replays 164, 182, 200 and 218 and end at 236 with groups (c) and (e) pending, its earlier run, the
+  Adreno 740's 13 isolated hangs and 13 restarts in 16,300 pictures, an idle GPU's restarts and
+  unjudged pictures never step), the window's threshold (15 of 32 never, 16 does), a group with
+  nothing on here passed over, a recovery 64 judged pictures after the settle naming the culprit,
+  4 unfinished in the window kept clean and 5 restarting the count, the next start from each mark
+  (pending confirmed or exhausted once, exhausted never stepping, culprit going on after it,
+  stepping confirming its last group), the mark's text both ways in every state, the start rule
+  (kept, dropped after an update, dropped in another form), the parts' words.
+- `rd_health_ab.cmake` (`rd_health_ab`; `rd_health.cmake`, lavapipe): issue 179's Mali-G52 stage 3
+  frame under the Arm fakes at the reporter's settings, every group the guard switches in the run
+  on (the compaction by its switch, the record made at the run's need, the volumes' entry after its
+  self-test), 170 presented pictures a run: no fake (no step), `ICO_RD_HEALTH_FAKE=hang` (one step
+  line a group, then `stepping everything off in this run did not recover`), and `b` to `e` (the
+  steps up to that group, then `pictures complete again after turning off (<group>) ...`), every
+  run's picture equal to the run without the fake byte for byte. The dump absent where
+  `/primary/dev/ico-dumps` exists fails.
 - `rd_vu_compact_ab.cmake` (`rd_vu_compact_ab`, `rd_vu_compact_ab_pixel`; `rd_vu_compact.cmake`):
   the index compaction ([PIPELINES.md](PIPELINES.md#the-index-compaction)) on against off,
   `ICO_RD_VU_COMPACT=1` against `=0`, the record by compute in both (`ICO_RD_VU_RECORD=compute`),

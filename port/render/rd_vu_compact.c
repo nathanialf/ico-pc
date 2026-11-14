@@ -9,6 +9,7 @@
 #include "rd_internal.h"
 #include "attempt_ledger.h"
 #include "rd_vu_compact.h"
+#include "rd_health.h" /* rd__health_part_off: the picture-health guard */
 #include "rd_vu_class.h"
 #include "rd_stencil_selftest.h" /* rd__profile_powervr */
 #include "rd_vu_rec_early.h"     /* rd__vu_rec_release */
@@ -184,6 +185,9 @@ static struct {
     int env;         /* ICO_RD_VU_COMPACT */
     int selftest;    /* -1 not run, 0 refused, 1 passed */
     bool sabotage;   /* ICO_RD_VU_COMPACT_SABOTAGE */
+    bool guardOff;   /* the picture-health guard turned it off (rd_health.h) */
+    bool far; /* the self-test's lists from the plane's middle (rd__vu_compact_selftest_far) */
+    uint32_t farAt; /* the value they began at (0 none) */
     RhiShader cs;
     RhiPipeline pipe;
     /* the counts' readback, a buffer a frame slot (grown by powers of
@@ -321,6 +325,14 @@ void rd__vu_compact_init(const RhiLimits *lim)
                                   g_rd.vuPrepass && rd__vu_record_compute(), s_cmp.cls, s_cmp.env,
                                   RD_VU_COMPACT_DEFAULT, RD_VU_COMPACT_ARM_DEFAULT) != 0;
     s_cmp.plane = false;
+    s_cmp.guardOff = false;
+    if (s_cmp.on && rd__health_part_off(RD_HEALTH_P_COMPACT)) {
+        /* an earlier start's picture-health guard (or this run's, for a
+           renderer made again): nothing made, the row held off by it */
+        s_cmp.on = false;
+        s_cmp.runs = false;
+        s_cmp.guardOff = true;
+    }
     if (s_cmp.on) {
         /* group 0 FrameCB and group 1's store layout, as the record's
            compute builds (rd_pipeline.c) */
@@ -346,6 +358,11 @@ void rd__vu_compact_init(const RhiLimits *lim)
         }
     }
     s_cmp.plane = s_cmp.on;
+    if (s_cmp.guardOff) {
+        startLine("off: the picture-health guard turned it off (3D pictures came back unfinished "
+                  "with it on: [dev] picture_health)");
+        return;
+    }
     startLine(s_cmp.runs ? "on by the tests' switch: the compute record's mesh triangles that "
                            "draw nothing (the game's drops, wholly outside the target or the "
                            "depth range) written as a clipped filler in each draw's list, a "
@@ -378,8 +395,9 @@ bool rd__vu_compact_active(void)
     /* tried inside the record's self-test, run outside it only on its
        verdict (a self-test that never ran: off, but under the tests'
        switch) */
-    return s_cmp.on && !s_cmp.refused && (s_cmp.runs || rd__vu_prepass_selftest_running()) &&
-           s_cmp.pipe.id != 0 && g_rd.vuPrepass && rd__vu_record_compute() && !g_rdWin.first;
+    return s_cmp.on && !s_cmp.refused && !s_cmp.guardOff &&
+           (s_cmp.runs || rd__vu_prepass_selftest_running()) && s_cmp.pipe.id != 0 &&
+           g_rd.vuPrepass && rd__vu_record_compute() && !g_rdWin.first;
 }
 
 RhiPipeline rd__vu_compact_pipeline(void)
@@ -402,7 +420,40 @@ RdVuCmpPlan *rd__vu_compact_plan_begin(uint32_t cap, bool raise)
     uint32_t m = rhi_limits()->maxDrawIndexedIndexValue;
     m = m == 0u ? 0xFFFFFFu : (m < 0xFFFFFFFEu ? m : 0xFFFFFFFEu); /* never the restart value */
     rd_vu_cmp_plan_reset(&s_cmp.plan, cap, m, raise);
+    if (s_cmp.far && rd__vu_prepass_selftest_running()) {
+        /* the self-test's lists from the plane's middle (a whole texel):
+           the draws' first index there, as a busy picture's last lists
+           are; the counts after them as always */
+        s_cmp.plan.used = (cap / 2u) & ~3u;
+        s_cmp.farAt = s_cmp.plan.used;
+    }
     return &s_cmp.plan;
+}
+
+void rd__vu_compact_selftest_far(bool on)
+{
+    s_cmp.far = on;
+    if (on) {
+        s_cmp.farAt = 0;
+    }
+}
+
+uint32_t rd__vu_compact_far_at(void)
+{
+    return s_cmp.farAt;
+}
+
+void rd__vu_compact_guard_off(void)
+{
+    if (s_cmp.guardOff || !rd__vu_compact_active()) {
+        return;
+    }
+    s_cmp.guardOff = true;
+    s_cmp.runs = false;
+    dropPlane(); /* the record made again without it at the next pre-pass */
+    startLine("off: the picture-health guard turned it off in the run (3D pictures kept coming "
+              "back unfinished with it on): every draw reads its own index list from the next "
+              "picture");
 }
 
 uint32_t rd__vu_compact_add(const uint32_t *src, uint32_t first, uint32_t count, uint8_t pass,
