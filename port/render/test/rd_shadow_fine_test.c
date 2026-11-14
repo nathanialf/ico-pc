@@ -42,6 +42,8 @@
 
 #include "rd_internal.h"
 #include "rd_shadowres.h"
+#include "rd_shadow_fine_vectors.h"
+#include "rd_shadow_fine_sprite.h"
 
 static int failures;
 
@@ -443,6 +445,83 @@ static void testEdge(void)
     }
 }
 
+/* the recogniser over every real level sprite of the dumps (the vectors:
+ * eight frame sizes 512x448 to 2048x448 and 576x512, 912x512, the wrap
+ * REPEAT the game leaves): each accepted with the game's taps (offset 0,
+ * weight 0.25), and the fields it judges, each broken alone, refused for
+ * their own reason (rd_shadowres_math.c rd_sr_recognise) */
+static void testRecognise(void)
+{
+    const int nv = (int)(sizeof kSftVecs / sizeof kSftVecs[0]);
+    CHECK(nv >= 22, "%d vectors", nv);
+    for (int i = 0; i < nv; i++) {
+        const RdSrSprite sp = rd_sft_sprite(&kSftVecs[i]);
+        int ox = 9, oy = 9;
+        float fx = -1.0f, fy = -1.0f;
+        char d[256];
+        const int why = rd_sr_recognise(&sp, &ox, &oy, &fx, &fy, d, sizeof d);
+        CHECK(why < 0 && ox == 0 && oy == 0 && fx == 0.25f && fy == 0.25f,
+              "%s: %s (%s), offset %d,%d weight %g,%g", kSftVecs[i].where,
+              why < 0 ? "accepted" : rd__shadow_fine_why_word(why), d, ox, oy, (double)fx,
+              (double)fy);
+        /* either corner order */
+        RdSrSprite sw = sp;
+        sw.x16[0] = sp.x16[1];
+        sw.x16[1] = sp.x16[0];
+        sw.s16[0] = sp.s16[1];
+        sw.s16[1] = sp.s16[0];
+        CHECK(rd_sr_recognise(&sw, &ox, &oy, &fx, &fy, d, sizeof d) < 0, "%s swapped: %s",
+              kSftVecs[i].where, d);
+    }
+    const RdSrSprite base = rd_sft_sprite(&kSftVecs[0]);
+
+    struct {
+        int why;
+        RdSrSprite sp;
+    } bad[8];
+
+    for (int k = 0; k < 8; k++) {
+        bad[k].sp = base;
+    }
+    bad[0].why = RD_SR_WHY_MAP;
+    bad[0].sp.x16[1] -= 16; /* one pixel short of the level */
+    bad[1].why = RD_SR_WHY_MAP;
+    bad[1].sp.s16[1] += 16.0f * (float)base.dstW; /* 3 texels a pixel */
+    bad[2].why = RD_SR_WHY_FILTER;
+    bad[2].sp.magF = 0;
+    bad[3].why = RD_SR_WHY_BLEND;
+    bad[3].sp.abe = 1;
+    bad[4].why = RD_SR_WHY_TEST;
+    bad[4].sp.date = 1;
+    bad[5].why = RD_SR_WHY_COLOUR;
+    bad[5].sp.rgba[1][3] = 81;
+    bad[6].why = RD_SR_WHY_TEXFN;
+    bad[6].sp.tcc = 0;
+    bad[7].why = RD_SR_WHY_PRIM;
+    bad[7].sp.n = 4;
+    for (int k = 0; k < 8; k++) {
+        int ox, oy;
+        float fx, fy;
+        char d[256];
+        const int why = rd_sr_recognise(&bad[k].sp, &ox, &oy, &fx, &fy, d, sizeof d);
+        CHECK(why == bad[k].why, "broken field %d: %s, %s expected (%s)", k,
+              why < 0 ? "accepted" : rd__shadow_fine_why_word(why),
+              rd__shadow_fine_why_word(bad[k].why), d);
+    }
+    /* the start 1/16 further: offset 0, weight 0.3125 (any sub-texel offset) */
+    RdSrSprite shift = base;
+    shift.s16[0] += 1.0f;
+    shift.s16[1] += 1.0f;
+    {
+        int ox, oy;
+        float fx, fy;
+        char d[256];
+        CHECK(rd_sr_recognise(&shift, &ox, &oy, &fx, &fy, d, sizeof d) < 0 && ox == 0 &&
+                  fx == 0.3125f,
+              "a 1/16 texel offset: %s, offset %d weight %g", d, ox, (double)fx);
+    }
+}
+
 static void testLines(void)
 {
     RdPerfRecord rec;
@@ -479,6 +558,7 @@ int main(void)
     testTent();
     testScaleOne();
     testEdge();
+    testRecognise();
     testLines();
     if (failures) {
         printf("rd_shadow_fine_test: %d failures\n", failures);

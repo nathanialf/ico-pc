@@ -3,7 +3,7 @@
 # docs/port/RENDER_POST.md "The shadow's levels above 1x"), included at the end
 # of port/render/CMakeLists.txt (a file of its own: that file is near the
 # 256 KiB cap, tools/check_no_rom.sh).
-target_sources(ico_render PRIVATE rd_shadowres.c)
+target_sources(ico_render PRIVATE rd_shadowres.c rd_shadowres_math.c)
 
 # rd_shadow_fine: CPU only: the scales (the count's, the levels' odd whole
 # one), the box weights and the tent, the step and the tent at scale 1 (the
@@ -13,7 +13,7 @@ target_sources(ico_render PRIVATE rd_shadowres.c)
 # darkness kept), the 10 s clause and the --stats words
 add_executable(rd_shadow_fine_test test/rd_shadow_fine_test.c)
 target_compile_options(rd_shadow_fine_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
-target_include_directories(rd_shadow_fine_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+target_include_directories(rd_shadow_fine_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/test"
                                                        "${CMAKE_SOURCE_DIR}/port/rhi")
 target_link_libraries(rd_shadow_fine_test PRIVATE ico_render)
 if(COMMAND ico_copy_sdl3_dll)

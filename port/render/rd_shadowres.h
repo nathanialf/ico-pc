@@ -54,6 +54,30 @@ enum {
 _Static_assert(RD_SR_WHY_N <= RD_SHADOW_FINE_WHYS, "rd.h RD_SHADOW_FINE_WHYS");
 /* the reason's short word ("filter", "map", ...) */
 const char *rd__shadow_fine_why_word(int why);
+/* the reason's words for the log line */
+const char *rd_sr_why_text(int why);
+
+/* A level sprite as plain values (the recogniser's input; rd_shadowres.c
+ * fills it from the draw, the CPU test and the harness from the dumps'
+ * listings) */
+typedef struct RdSrSprite {
+    uint8_t prim, space, uvFixed, frameCam, stShift, aa1; /* RdCmd b[0], b[1], b[2], b[4], b[5] */
+    uint32_t n;                                           /* vertices */
+    uint8_t tcc, texFn, abe, fba, colorMask, ate, atst, date, zte, ztst, magF, minF;
+    uint8_t rgba[2][4];     /* the two vertices' colours */
+    int32_t x16[2], y16[2]; /* their 12.4 positions (after XYOFFSET's 0x8000 base) */
+    float s16[2], t16[2];   /* their fixed UVs in 1/16 texels */
+    float uOff, vOff;       /* the state's UV offset in texels */
+    uint32_t gsW, gsH;      /* the frame the sprite is drawn in (its origin) */
+    uint32_t dstW, dstH;    /* the level's GS size */
+    uint32_t srcW, srcH;    /* the source's GS size */
+} RdSrSprite;
+
+/* -1 when sp is the game's level sprite (*ox, *oy the first tap's whole
+ * offset, *fx, *fy the second tap's weight), else the RD_SR_WHY_* reason
+ * with the field's values in detail */
+int rd_sr_recognise(const RdSrSprite *sp, int *ox, int *oy, float *fx, float *fy, char *detail,
+                    size_t dsize);
 
 /* ----------------------------------------------------------- arithmetic */
 /* the count's texels per GS pixel on an axis of w GS pixels held in tw
