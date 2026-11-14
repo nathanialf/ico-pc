@@ -287,6 +287,20 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   `tools/vu_compact_counts.txt` has a line for the dump, profile, setting and merge, printed
   (`rd_vu_compact_ab: count ...`) where it has none. `rd_vu_compact_ab_pixel`: rd_pixel's frames,
   the corpus profile. No device: SKIP.
+- `rd_vu_audit.cmake` (`rd_vu_audit`; `port/render/rd_vu_audit.cmake`): the VU record path's bounds
+  audit (`ICO_RD_VU_AUDIT=1`, `port/render/rd_vu_audit.h`; issue 179) on the reporter's two loss dumps
+  (`/primary/dev/ico-dumps/v0117-mali179/`) and four earlier captures (`v0116-mali179/`) under
+  the Arm fakes at the reporter's settings (21:9, presented at 1612x720, the record by compute made at
+  start-up, the volumes' stencil-only entry), four replays each, the compaction on (merged and not)
+  and off: every recorded command's slots and index values, every compacted list read back after its
+  fence (each triangle its source raised, or the filler) and every draw of the fourth plane (offset,
+  range, values) checked on the CPU; 0 violations in every run, the run lines printed. The Arm
+  estimate (a render pass's indexed VU draws' index ranges summed, in vertices, times 164 bytes a
+  vertex and Arm's 64, against Mali's 180 MB intermediate geometry region: Khronos Vulkan-Samples
+  [memory_limits.adoc](https://github.com/KhronosGroup/Vulkan-Samples/blob/main/docs/memory_limits.adoc))
+  is printed for the worst pass of each run; the compaction's arms must not pass the off arm's
+  worst pass sum, nor its largest span over a draw's indices, by more than 1 %. A listed dump
+  that is absent FAILS where `/primary/dev/ico-dumps` exists; no dump folder or no device: SKIP.
 - `rd_vu_flat0_test.c` (`rd_vu_flat0`; `rd_vu_flat0.cmake`, CPU): the main vertex shader's flat
   outputs at the provoking corner, its pure parts (`rd_vu_flat0.c`): `ICO_RD_VU_FLAT0` unset, empty
   and 1 the shipped build, 0 the twins, any other word the shipped build and named; the start line
