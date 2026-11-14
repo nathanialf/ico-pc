@@ -613,12 +613,14 @@ int cpu_place_sweep_pick(const long *ids, const uint64_t *masks, int n, uint64_t
     return m;
 }
 
+#if defined(__linux__)
 static int by_long(const void *a, const void *b)
 {
     const long x = *(const long *)a, y = *(const long *)b;
 
     return x < y ? -1 : x > y;
 }
+#endif
 
 int cpu_place_task_ids(const char *root, long *ids, int cap)
 {

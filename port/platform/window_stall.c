@@ -189,7 +189,10 @@ static SysCell s_thermalCell, s_memoryCell;
    the reads under the floor of all, the process's resident range and its
    anonymous, file-backed and shared parts' ranges, the C heap in use and
    mapped at the last read) */
-static SysCell s_pressureCell, s_memBlockCell;
+static SysCell s_memBlockCell;
+#ifdef __ANDROID__
+static SysCell s_pressureCell; /* written and read on Android alone */
+#endif
 static uint32_t s_memBlockGen; /* __atomic: the window took the block's extremes */
 #ifdef __ANDROID__
 static const char *s_thermalWhy; /* __atomic: a static string (Android's asks only) */

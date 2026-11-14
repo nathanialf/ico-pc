@@ -280,7 +280,10 @@ static void testLines(void)
         n = snprintf(b + k, bSize - k, "; %s", "cd");
         rd_clause_done(b, bSize, &k, n);
         CHECK(k == 13 && strcmp(b, "head; ab; ...") == 0, "b5: no room for the mark: %s", b);
-        char c[8] = "abcd";
+        /* the buffer through a volatile pointer too: its size is not the compiler's to reason on */
+        char cbuf[8] = "abcd";
+        char *volatile cv = cbuf;
+        char *c = cv;
         k = 4;
         n = snprintf(c + k, cSize - k, "; %s", "xyz");
         rd_clause_done(c, cSize, &k, n);
