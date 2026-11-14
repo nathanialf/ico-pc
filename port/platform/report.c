@@ -629,6 +629,10 @@ static int starts(const char *s, const char *p)
 
 /* the log's key lines: the latest of each */
 enum {
+    /* first: the picture-health report's line (port/render/rd_health.h,
+       issue 179), a picture the GPU leaves unfinished, at the top of the
+       key lines */
+    K_UNFINISHED,
     K_SUMMARY,
     K_VERSION,
     K_DEVICE,
@@ -646,6 +650,9 @@ static char s_key[K_COUNT][LINE_BYTES];
 
 static int key_of(const char *l)
 {
+    if (starts(l, "rd: picture health: 3D pictures are coming back unfinished")) {
+        return K_UNFINISHED;
+    }
     if (starts(l, "ico_pc: summary:")) {
         return K_SUMMARY;
     }

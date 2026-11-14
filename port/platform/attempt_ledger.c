@@ -55,6 +55,8 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
                            "kept on sprite_ps"},
     [ICO_ATT_ROBUST_LINE] = {"the old robust-access line taken off", NULL, NULL},
     [ICO_ATT_SKIN_RESET_SKIP] = {"no capture after a stall", "checks skipped after a reset", NULL},
+    [ICO_ATT_PICTURE_HEALTH] = {"picture health", "3D pictures with stamps unwritten",
+                                "GPU clock restarts"},
 };
 
 /* the rows' live values (__atomic), and the block text's last counts (the
@@ -623,7 +625,8 @@ int ico_attempt_decide_compaction(int compute, const char *notWhy, int cls, int 
     } else if (env != 1 && !cmpClassDefault(cls, defaultOn, armDefaultOn)) {
         st = ICO_ATT_OFF_DEFAULT;
         why = cls == ICO_ATT_CMP_G52
-                  ? "off by default on the Mali-G52 (RD_VU_COMPACT_ARM_DEFAULT 0)"
+                  ? "off by default on the Mali-G52: it blacked out the picture there in v0.11.6 "
+                    "(issue 179; RD_VU_COMPACT_ARM_DEFAULT 0)"
                   : "off by default on the PowerVR D-Series DXT-48-1536 "
                     "(RD_VU_COMPACT_DEFAULT 0)";
     } else if (selftest < 0 && env != 1) {
@@ -773,4 +776,15 @@ void ico_attempt_decide_skin_skip(int on)
     ico_attempt_state(ICO_ATT_SKIN_RESET_SKIP, on ? ICO_ATT_ON : ICO_ATT_NA,
                       on ? "a skin check read after a GPU reset is skipped, not captured"
                          : "the skin check is off here");
+}
+
+void ico_attempt_decide_picture_health(int vulkan)
+{
+    if (vulkan) {
+        ico_attempt_state(ICO_ATT_PICTURE_HEALTH, ICO_ATT_ON,
+                          "counting: 16 of 32 3D pictures unfinished are said once");
+    } else {
+        ico_attempt_state(ICO_ATT_PICTURE_HEALTH, ICO_ATT_NA,
+                          "only Vulkan's GPU stamps say a picture came back unfinished");
+    }
 }

@@ -416,6 +416,10 @@ static void test_classes(void)
         ico_attempt_decide_skin_skip(d->passRow != NULL);
         CHECK(ico_attempt_state_of(ICO_ATT_SKIN_RESET_SKIP) ==
               (d->passRow != NULL ? ICO_ATT_ON : ICO_ATT_NA));
+        /* the picture-health report (issue 179): every class here is a
+           Vulkan device, counting */
+        ico_attempt_decide_picture_health(1);
+        CHECK(ico_attempt_state_of(ICO_ATT_PICTURE_HEALTH) == ICO_ATT_ON);
         /* the whole start line fits the window's 4 KB buffer
            (window_perf_rank.c ledger_lines), its last row included */
         {
@@ -424,6 +428,8 @@ static void test_classes(void)
             CHECK(n + 1u < sizeof big);
             CHECK(strstr(big, "; the old robust-access line taken off ") != NULL);
             CHECK(strstr(big, "; no capture after a stall ") != NULL);
+            CHECK(strstr(big, "; picture health on (counting: 16 of 32 3D pictures unfinished "
+                              "are said once)") != NULL);
             /* and in one part (ico_attempt_start_part, the window's) */
             int row = 0;
             char part[4096];
@@ -578,7 +584,8 @@ static void test_classes(void)
     CHECK(ico_attempt_decide_compaction(1, NULL, G, -1, 1, 0, 1) == 0);
     CHECK(ico_attempt_state_of(ICO_ATT_COMPACTION) == ICO_ATT_OFF_DEFAULT);
     CHECK(strcmp(ico_attempt_why_of(ICO_ATT_COMPACTION),
-                 "off by default on the Mali-G52 (RD_VU_COMPACT_ARM_DEFAULT 0)") == 0);
+                 "off by default on the Mali-G52: it blacked out the picture there in v0.11.6 "
+                 "(issue 179; RD_VU_COMPACT_ARM_DEFAULT 0)") == 0);
     CHECK(ico_attempt_decide_compaction(1, NULL, D, -1, 0, 1, 1) == 0);
     CHECK(strcmp(ico_attempt_why_of(ICO_ATT_COMPACTION),
                  "off by default on the PowerVR D-Series DXT-48-1536 (RD_VU_COMPACT_DEFAULT 0)") ==
@@ -843,6 +850,31 @@ static void test_skin_skip(void)
     CHECK(ico_attempt_state_of(ICO_ATT_SKIN_RESET_SKIP) == ICO_ATT_NOT_SET);
 }
 
+/* the picture-health report (issue 179, v0.11.7): its row's states and its
+   counts per block */
+static void test_health(void)
+{
+    char b[4096];
+
+    ico_attempt_reset();
+    ico_attempt_decide_picture_health(0);
+    CHECK(ico_attempt_state_of(ICO_ATT_PICTURE_HEALTH) == ICO_ATT_NA);
+    ico_attempt_decide_picture_health(1);
+    CHECK(ico_attempt_state_of(ICO_ATT_PICTURE_HEALTH) == ICO_ATT_ON);
+    (void)ico_attempt_start_text(b, sizeof b);
+    CHECK(strstr(b, "picture health on (counting: 16 of 32 3D pictures unfinished are said "
+                    "once)") != NULL);
+    ico_attempt_fire(ICO_ATT_PICTURE_HEALTH, 3u);
+    ico_attempt_fire2(ICO_ATT_PICTURE_HEALTH, 1u);
+    (void)ico_attempt_block_text(b, sizeof b, -1);
+    CHECK(text_is(b, "attempts: picture health on 3 3D pictures with stamps unwritten (1 GPU "
+                     "clock restarts)"));
+    (void)ico_attempt_block_text(b, sizeof b, -1);
+    CHECK(text_is(b, "attempts: picture health on 0 3D pictures with stamps unwritten (0 GPU "
+                     "clock restarts)"));
+    ico_attempt_reset();
+}
+
 /* the flat outputs where the VU pre-pass is off (issue 123: the Adreno
    740's ledger said "on" for a shader that never ran there), and the
    capture row's words (slow-scene dumps alone) */
@@ -934,6 +966,7 @@ int main(void)
     test_robust_line();
     test_skin_skip();
     test_flat0_capture();
+    test_health();
     test_start_parts();
     char b[2048];
 

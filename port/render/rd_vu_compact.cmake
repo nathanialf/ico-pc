@@ -40,14 +40,14 @@ endif()
 #                      the tile rule) and the Mali-G52's class by the tests'
 #                      switch (ICO_RD_VU_COMPACT_ARM=1: RhiLimits.vendorId and
 #                      the device name stay lavapipe's), synchronisation
-#                      validation with the submit-time checks: tried by the
-#                      self-test without the ICO_RD_VU_COMPACT switch, passes,
-#                      its lines naming the Mali-G52 and
-#                      RD_VU_COMPACT_ARM_DEFAULT
+#                      validation with the submit-time checks: off by default
+#                      since v0.11.7 (issue 179: RD_VU_COMPACT_ARM_DEFAULT 0),
+#                      its line naming the Mali-G52, the blacked-out picture
+#                      and the define, no copy in the self-test's frame
 #   rd_vuprepass_selftest_compact_stores  the vertex stores (lavapipe's own
 #                      path): not applicable, no copy in the frame
 if(ICO_RUN_TESTS AND TARGET rd_vuprepass_selftest_test AND DEFINED _vst)
-    set(_cmp_copy ", the index compaction \\(a copy past the target's edge\\) and particles")
+    set(_cmp_copy ", the index compaction \\(a copy past the target's edge, its lists from value [0-9]+ of the fourth plane, the record at [0-9]+ rows, no stamp of the test's [0-9]+ pictures unwritten\\) and particles")
     set(_cmp_rec "ms, record compute")
     add_test(NAME rd_vuprepass_selftest_compact
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
@@ -62,8 +62,8 @@ if(ICO_RUN_TESTS AND TARGET rd_vuprepass_selftest_test AND DEFINED _vst)
     add_test(NAME rd_vuprepass_selftest_compact_mali
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}"
-                     "-DEXTRA=rd: VU index compaction: to be tried by the start-up self-test, on where it passes: .*rd: VU index compaction: on: passed its start-up self-test with the record's \\(the Mali-G52, its start-up self-test passed, the Mali-G52 \\([^\n]*, vendor 0x[0-9A-F]+, ICO_RD_VU_COMPACT_ARM=1\\): RD_VU_COMPACT_ARM_DEFAULT 1\\).*${_cmp_copy}"
-                     -P "${_vst}")
+                     "-DEXTRA=rd: VU index compaction: off \\(off by default on the Mali-G52: it blacked out the picture there in v0.11.6 \\(issue 179, RD_VU_COMPACT_ARM_DEFAULT 0\\), the Mali-G52 \\([^\n]*, vendor 0x[0-9A-F]+, ICO_RD_VU_COMPACT_ARM=1\\): RD_VU_COMPACT_ARM_DEFAULT 0\\)"
+                     "-DNOT_=${_cmp_copy}" -P "${_vst}")
     add_test(NAME rd_vuprepass_selftest_compact_stores
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}"

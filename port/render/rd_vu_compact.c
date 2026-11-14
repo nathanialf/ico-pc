@@ -185,6 +185,8 @@ static struct {
     int env;         /* ICO_RD_VU_COMPACT */
     int selftest;    /* -1 not run, 0 refused, 1 passed */
     bool sabotage;   /* ICO_RD_VU_COMPACT_SABOTAGE */
+    bool far; /* the self-test's lists from the plane's middle (rd__vu_compact_selftest_far) */
+    uint32_t farAt; /* the value they began at (0 none) */
     RhiShader cs;
     RhiPipeline pipe;
     /* the counts' readback, a buffer a frame slot (grown by powers of
@@ -403,7 +405,27 @@ RdVuCmpPlan *rd__vu_compact_plan_begin(uint32_t cap, bool raise)
     uint32_t m = rhi_limits()->maxDrawIndexedIndexValue;
     m = m == 0u ? 0xFFFFFFu : (m < 0xFFFFFFFEu ? m : 0xFFFFFFFEu); /* never the restart value */
     rd_vu_cmp_plan_reset(&s_cmp.plan, cap, m, raise);
+    if (s_cmp.far && rd__vu_prepass_selftest_running()) {
+        /* the self-test's lists from the plane's middle (a whole texel):
+           the draws' first index there, as a busy picture's last lists
+           are; the counts after them as always */
+        s_cmp.plan.used = (cap / 2u) & ~3u;
+        s_cmp.farAt = s_cmp.plan.used;
+    }
     return &s_cmp.plan;
+}
+
+void rd__vu_compact_selftest_far(bool on)
+{
+    s_cmp.far = on;
+    if (on) {
+        s_cmp.farAt = 0;
+    }
+}
+
+uint32_t rd__vu_compact_far_at(void)
+{
+    return s_cmp.farAt;
 }
 
 uint32_t rd__vu_compact_add(const uint32_t *src, uint32_t first, uint32_t count, uint8_t pass,

@@ -169,6 +169,12 @@ enum {
        with no failure and no capture; state at the check's start line
        (rd_vu_skin_selftest.c), count the checks skipped */
     ICO_ATT_SKIN_RESET_SKIP,
+    /* rd_health_live.c (issue 179, v0.11.7): the picture-health report
+       (counts only, nothing switched); count the presented 3D pictures
+       whose recorded stamps came back unwritten after their work was
+       signalled finished, second count the GPU clock restarts with work
+       queued (an idle GPU's are not counted) */
+    ICO_ATT_PICTURE_HEALTH,
     ICO_ATT_COUNT
 };
 
@@ -399,5 +405,9 @@ void ico_attempt_decide_robust_line(int found, int removed);
    line): on the skin check runs on this device (an Adreno with a window,
    or the tests' switch); else not applicable */
 void ico_attempt_decide_skin_skip(int on);
+/* the picture-health report (port/render/rd_health_live.c at the first
+   record): on where the records carry the slot clock's signs (Vulkan),
+   counting; else not applicable */
+void ico_attempt_decide_picture_health(int vulkan);
 
 #endif

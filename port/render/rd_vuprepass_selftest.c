@@ -108,10 +108,15 @@
 #include <string.h>
 
 #include "rd_internal.h"
+#include "rd_early_plan.h" /* rd_early_start_rows: the play record's size */
+#include "rd_health.h"     /* the test's own pictures' stamps */
 #include "rd_mesh.h"
 #include "rd_vu_compact.h"
+#include "rd_vu_rec_early.h"
 #include "rd_vu_record.h"
 #include "rd_vu_skin_check.h"
+#include "rd_velocity.h"
+#include "shader_consts.h" /* ICO_VU_REC_W */
 
 #define ST_W 256 /* the block, GS pixels */
 #define ST_H 96
@@ -529,7 +534,7 @@ static bool readBlocks(uint8_t *px, size_t size)
  * line's words inside its parentheses after "on (" or "off (self-test: " */
 typedef struct Verdict {
     bool on, pass;
-    char text[320];
+    char text[512]; /* the index compaction's words (runSelftest's cmpWords) included */
 } Verdict;
 
 static void readSabotage(void)
@@ -568,7 +573,7 @@ typedef struct PreRun {
 
 /* the verdict of the four replays against their references */
 static void judge(Verdict *v, const PreRun *run, const uint8_t *ref, const uint8_t *pre,
-                  size_t size, uint32_t wantDraws, bool ticks, bool cmp)
+                  size_t size, uint32_t wantDraws, bool ticks, const char *cmp)
 {
     for (int k = 0; k < ST_REPLAYS; k++) {
         const RdPerfRecord *r = &run[k].r;
@@ -629,8 +634,7 @@ static void judge(Verdict *v, const PreRun *run, const uint8_t *ref, const uint8
              "self-test: prelit, lit, skin%s%s and particles byte for byte over %d replays in %s, "
              "%u vertices and %u sprites in %u pre-pass draws (%u passes, %u triangle slots), "
              "%zu of %zu pixels drawn",
-             ticks ? ", the tick cameras" : "",
-             cmp ? ", the index compaction (a copy past the target's edge)" : "", ST_REPLAYS,
+             ticks ? ", the tick cameras" : "", cmp != NULL ? cmp : "", ST_REPLAYS,
              both ? "both frame slots" : "one frame slot", r->vuPreVertices, r->vuPreSprites,
              r->vuPreDraws, r->vuPrePasses, r->vuTriSlots, drawn, size / 4u);
 }
@@ -640,6 +644,26 @@ static void runSelftest(RdTargetRec *t, Verdict *v)
     v->on = true;
     v->pass = false;
     const bool cmpCopy = cullCopy(); /* the frames' copy past the edge (buildFrame) */
+    /* the index compaction's run as play draws it (issue 179: it passed at
+       16 rows and 60 vertices while the Mali-G52's play came back black):
+       the record at the play's size (rd_vu_rec_early.h's need: made here
+       now, kept for play), the draws' lists from the fourth plane's middle
+       (large first indices), the frames moved a replay as before; and the
+       test's own pictures' stamps (rd_health.h): one unwritten after its
+       work was signalled finished, or a clock restart with work queued,
+       fails it */
+    uint32_t cmpRows = 0;
+    if (cmpCopy) {
+        const uint32_t want =
+            rd_early_start_rows(rd_interpolation_active(), rd__velocity_on(), rd__vu_rec_rows_min(),
+                                rd__vu_rec_rows_max(), ICO_VU_REC_W);
+        if (want > rd__vu_rec_rows() && rd__vu_rec_presize(want)) {
+            cmpRows = want;
+        } else {
+            cmpRows = rd__vu_rec_rows();
+        }
+        rd__vu_compact_selftest_far(true);
+    }
     sceneBones();
     RdMesh m[ST_REPLAYS][M_COUNT];
     bool made = true;
@@ -684,6 +708,9 @@ static void runSelftest(RdTargetRec *t, Verdict *v)
             bool stopped = false;
             (void)rd__pipeline_create_gathered(&stopped);
         }
+        if (cmpCopy) {
+            rd__health_selftest_begin(); /* every record collected from here */
+        }
         /* the references: every command through its program's entry */
         g_rd.vuPrepass = false;
         bool refOk = true;
@@ -708,6 +735,16 @@ static void runSelftest(RdTargetRec *t, Verdict *v)
         }
         rd__vu_prepass_sabotage(RD_VU_SABOTAGE_OFF);
         preOk = preOk && readBlocks(pre, size);
+        uint32_t stBad = 0, stN = 0;
+        if (cmpCopy) {
+            /* the last two replays' records are collected by the two after
+               them (rd_perf.c: a slot's at its next use): two more of the
+               last frame, nothing read from them */
+            for (int k = 0; k < RHI_FRAMES_IN_FLIGHT && preOk; k++) {
+                preOk = rd__replay_frame(&f[ST_REPLAYS - 1], 0, false) && !rhi_device_lost();
+            }
+            stBad = rd__health_selftest_end(&stN);
+        }
         /* the draws the frame makes through the pre-passes: pass V a vertex
          * draw a mesh and two for the sprites, pass T the rule and planes
          * stages a mesh and the tick stage's two for the ticks copy, counted
@@ -722,7 +759,27 @@ static void runSelftest(RdTargetRec *t, Verdict *v)
             snprintf(v->text, sizeof v->text, "the device failed in the replays %s the pre-pass",
                      refOk ? "with" : "without");
         } else {
-            judge(v, run, ref, pre, size, wantDraws, ticksCopy, cmpCopy);
+            char cmpWords[200];
+            snprintf(cmpWords, sizeof cmpWords,
+                     ", the index compaction (a copy past the target's edge; its lists from value "
+                     "%u of the fourth plane, the record at %u rows; no stamp of the test's %u "
+                     "pictures unwritten)",
+                     rd__vu_compact_far_at(), cmpRows, stN);
+            judge(v, run, ref, pre, size, wantDraws, ticksCopy, cmpCopy ? cmpWords : NULL);
+            if (v->on && v->pass && stBad != 0u) {
+                /* the pictures matched, but the GPU left part of the test's
+                   own work undone (issue 179's sign): not a pass */
+                v->on = false;
+                v->pass = false;
+                snprintf(v->text, sizeof v->text,
+                         "the GPU's own sign of a reset in %u of the test's %u pictures (recorded "
+                         "stamps unwritten after the work was signalled finished, or the clock "
+                         "restarted with work queued)",
+                         stBad, stN);
+            }
+        }
+        if (cmpCopy && (!refOk || !preOk)) {
+            (void)rd__health_selftest_end(NULL); /* not ended above */
         }
     }
     free(ref);
@@ -741,6 +798,9 @@ static void runSelftest(RdTargetRec *t, Verdict *v)
     }
     /* the next replay starts SCENE from its clear, not from the block */
     t->clearPending = 1;
+    if (cmpCopy) {
+        rd__vu_compact_selftest_far(false);
+    }
 }
 
 /* runSelftest is replaying (rd__vu_prepass_selftest_running) */
