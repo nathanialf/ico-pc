@@ -576,7 +576,8 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   1x (`rd_shadowres.c`): the count's scale (`tw / w`, or `sx` under Full pixel's crop), the levels'
   odd whole scale (3 at 2x, 2.41x and 3x, 5 at 4x and 4.82x, 1 at or under 1x), the step's box
   weights summing to 1, the tent (1 2 3 2 1 at 3, the identity at 1, S^2 at whole S), the step and
-  the tent at scale 1 being the GS's sprite and the identity; a straight edge swept across one
+  the tent at scale 1 being the GS's sprite and the identity (at any whole or sub-texel offset of
+  the sprite's map, CLAMP and REPEAT); a straight edge swept across one
   SHADOW2 texel in 24 phases at 2x, 2.41x, 2.8125x, 3x and 4x across with the rows at 1x (the
   non-uniform case), the three composites' darkening of the PS2-size chain against the fine one:
   the fine 10-90 width within 8 % of the PS2 chain's phase mean, its spread under 1 SCENE texel,
@@ -588,9 +589,12 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   three main gate frames, the owner's three), the default against `ICO_RD_SHADOW_FINE=0`, at the
   settings each dump's line names (the tablet's 3x path, Enhanced and Original at 1x, the phone's
   4.10 x 2.41, MSAA 4x at 2x, the B-spline at 2x, the owner's Resolution window 2.8125 x 2.41071, 1 x 2,
-  the forced chain at 1x; the `_gl` twin 1x and 2x on OpenGL): `=0` every PNG the goldens'
+  the owner's Pixel as its own settings run it (2364x1080 over the 848-wide frame, Full height, Full pixel,
+  anisotropic: 2.79 x 2.41) on his two main gate captures, the forced chain at 1x; the `_gl` twin 1x
+  and 2x on OpenGL): `=0` every PNG the goldens'
   (`tools/shadow_fine_goldens.txt`); at 1x the default the same bytes, passes and draws; above 1x
-  one shadow at the scene's scale with its 9 or 10 passes and 9 draws and nothing else, the
+  one shadow at the scene's scale and none at the PS2's size on every dump (any reason in the stats
+  line fails), its 9 or 10 passes and 9 draws and nothing else, the
   levels' scale the setting's, the change confined (with lists 4-12 left out) to within reach of
   the texels the PS2's levels darken and the darkness within 3 % (`test/shadow_fine_check.py`), the
   B-spline doing nothing to it; the forced chain at 1x within a level of the default on SCENE

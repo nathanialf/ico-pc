@@ -20,6 +20,12 @@
 # the owner's Pixel at the main gate (frame 48849, 848 GS wide; count 3:6-3:25,
 # levels 3:36/41/46 of 424x256, 212x128, 106x64, composites 3:54/59/64), at its
 # Resolution window (2385x1080: 2.8125 x 2.41071) and at 1 x 2 (848x896)
-/primary/dev/ico-dumps/v0117-owner-gate/frame-20261114-133111-v97707.rddump 3:54,3:59,3:64 owner,tall,e1x
-/primary/dev/ico-dumps/v0117-owner-gate/frame-20261114-133111-v97707-prev.rddump 3:54,3:59,3:64 owner,tall,e1x
-/primary/dev/ico-dumps/v0117-owner-gate/frame-20261114-133111-v97707-blended.rddump 3:54,3:59,3:64 owner,tall,e1x
+/primary/dev/ico-dumps/v0117-owner-gate/frame-20261114-133111-v97707.rddump 3:54,3:59,3:64 owner,tall,e1x,pixel
+/primary/dev/ico-dumps/v0117-owner-gate/frame-20261114-133111-v97707-prev.rddump 3:54,3:59,3:64 owner,tall,e1x,pixel
+/primary/dev/ico-dumps/v0117-owner-gate/frame-20261114-133111-v97707-blended.rddump 3:54,3:59,3:64 owner,tall,e1x,pixel
+# the owner's Pixel on v0.11.7 rc3 at the main gate (frame 4245; the same chain's
+# commands), as the device ran it: Enhanced, Resolution window 2364x1080 over the
+# 848-wide frame, Full height, Full pixel, anisotropic filter (the setting "pixel")
+/primary/dev/ico-dumps/v0117-owner-rc3/frame-20261114-144508-v4245.rddump 3:54,3:59,3:64 pixel
+/primary/dev/ico-dumps/v0117-owner-rc3/frame-20261114-144508-v4245-prev.rddump 3:54,3:59,3:64 pixel
+/primary/dev/ico-dumps/v0117-owner-rc3/frame-20261114-144508-v4245-blended.rddump 3:54,3:59,3:64 pixel

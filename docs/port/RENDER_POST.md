@@ -1553,7 +1553,11 @@ staircase along a slanted edge). Now:
    2.8125x and 3x, 5 at 4x and 2160 rows; 1 on an axis at scale 1, whose step and tent are then the
    identity: 1 x 2 keeps the PS2's columns), `shadowres_step_ps`: the game's own step, the GS's two
    taps 0.75 / 0.25 one PS2 texel apart, at every fine texel (the first level's taps the box of count
-   texels its GS pixel covers), MODULATEd by the sprite's colour;
+   texels its GS pixel covers), MODULATEd by the sprite's colour. The sprite is recognised by its
+   form, not by a fixed state: any sprite colour (shadowDepth), any whole or sub-texel offset of its
+   2:1 map (the taps then weighted as the GS weights them), CLAMP or REPEAT (the game leaves the
+   wrap as the draw before set it: REPEAT on the main gate, where a recogniser that wanted CLAMP
+   refused every shadow), every frame width and height;
 3. after the third, each level takes the tent its bilinear magnification supplied, across then
    down (`shadowres_tent_ps`, weights S - |t - c|, c = S / 2 - 1/2);
 4. the composites, the game's own, read the fine levels (`resolveTexture` -> `rd__shadow_fine`).
@@ -1579,10 +1583,14 @@ above it on each axis: ...); at 1x the PS2's sizes`; at each change `rd: shadow 
 scene's scale: SHADOW0 864x768, SHADOW1 432x384, SHADOW2 216x192 (3x3 texels a GS pixel) from the
 count's 3x3 texels a GS pixel, 10 passes a shadow, 7.1 MB, on vulkan (reported at each change)` or
 `rd: shadow levels: the PS2's sizes: the scene at 1x1 texels a GS pixel (reported at each
-change)`; a refusal once a reason `rd: shadow levels: a shadow above 1x drawn at the PS2's size:
-<why>`; the 10 s clause `; shadow levels: 1.0 shadows a replay at the scene's scale (10.0
-passes), 0.0 at the PS2's size`; `rd_replay_tool --stats` `stats: shadow levels: 1 shadows at the
-scene's scale, 10 passes, 0 at the PS2's size`. The tests' switch `ICO_RD_SHADOW_FINE=0` (the
+change)`; a refusal `rd: shadow levels: a shadow above 1x drawn at the PS2's size: <why>: <the
+field and its values> (replay R, command C; refusal N, after M shadows at the scene's scale; ...)`,
+logged the first 8 times, at the first refusal after shadows at the scene's scale (a scene that
+falls back) and every 100th; the 10 s clause `; shadow levels: 412 shadows at the scene's scale, 0
+at the PS2's size in 412 replays (10.0 passes a replay)`, a fallback's reasons with counts after
+"size" (`(filter 3, map 1)`; the words prim, flags, texfn, blend, test, filter, colour, map,
+count, pipes, textures, scale); `rd_replay_tool --stats` `stats: shadow levels: 1 shadows at the
+scene's scale, 10 passes, 0 at the PS2's size` with the same reasons. The tests' switch `ICO_RD_SHADOW_FINE=0` (the
 PS2's sizes above 1x) and `=force` (the fine chain at 1x too), no config key
 ([TESTING.md](TESTING.md)).
 

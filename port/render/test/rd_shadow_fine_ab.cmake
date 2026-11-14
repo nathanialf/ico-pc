@@ -21,6 +21,11 @@
 #            (2.8125 x 2.41071: levels at 3 x 3);
 #   tall     848x896 with Full height over an 848-wide frame (1 x 2: levels at
 #            1 x 3, the step and the tent the identity across);
+#   pixel    the owner's Pixel as rc3 ran it (ICO_VK_FAKE_LIMITS=moltenvk):
+#            Enhanced, Resolution window 2364x1080 over the 848-wide frame,
+#            Full height, Full pixel, the anisotropic filter (levels at 3 x 3;
+#            the frame where rc3's chain fell back: the game leaves the
+#            levels' wrap at REPEAT, which the first recogniser refused);
 #   force    e1x with ICO_RD_SHADOW_FINE=force against e1x's default (the fine
 #            chain at 1x: S 1 on both axes);
 #   gl1x, gl2x  -DBACKEND=opengl: Enhanced 1x and 2x on OpenGL (llvmpipe), on
@@ -33,8 +38,10 @@
 #   2. at 1x (e1x, o1x, gl1x) the default is the PS2's sizes: every PNG the
 #      same bytes, the same draws and passes, "shadow levels: 0 shadows at the
 #      scene's scale, 0 passes, 0 at the PS2's size";
-#   3. above 1x (adreno, phone, msaa, bspline, owner, tall, gl2x), the default
-#      against the PS2's sizes: one shadow at the scene's scale, none refused;
+#   3. above 1x (adreno, phone, msaa, bspline, owner, tall, pixel, gl2x), the
+#      default against the PS2's sizes: on every dump exactly one shadow at the
+#      scene's scale and none drawn at the PS2's size (no reason in the stats
+#      line: a silent fallback fails here);
 #      its passes 3 levels + 6 tent passes + 1 full-size count where the count
 #      is the one draw ("shadow count: N in one draw", N > 0), so 10 or 9; the
 #      passes exactly the PS2 run's plus those (no SCENE pass more), the draws
@@ -141,6 +148,10 @@ set(levels_bspline 3x3)
 set(env_owner ICO_VK_FAKE_LIMITS=moltenvk)
 set(args_owner --enhanced --resolution 2385x1080 --full-height --present 2385x1080)
 set(levels_owner 3x3)
+set(env_pixel ICO_VK_FAKE_LIMITS=moltenvk)
+set(args_pixel --enhanced --resolution 2364x1080 --full-height --full-pixel --filter anisotropic
+               --present 2364x1080)
+set(levels_pixel 3x3)
 set(env_tall "")
 set(args_tall --enhanced --resolution 848x896 --full-height --present 1280x720)
 set(levels_tall 1x3)
@@ -152,7 +163,7 @@ set(levels_gl2x 3x3)
 set(same e1x o1x gl1x)
 
 set(drawsRe "stats: ([0-9]+) draws, ([0-9]+) passes")
-set(fineRe "stats: shadow levels: ([0-9]+) shadows at the scene's scale, ([0-9]+) passes, ([0-9]+) at the PS2's size")
+set(fineRe "stats: shadow levels: ([0-9]+) shadows at the scene's scale, ([0-9]+) passes, ([0-9]+) at the PS2's size([^\n,]*)")
 set(oneRe "stats: shadow count: ([0-9]+) in one draw")
 set(sizeRe "shadow levels: at the scene's scale: SHADOW0 [0-9]+x[0-9]+, SHADOW1 [0-9]+x[0-9]+, SHADOW2 [0-9]+x[0-9]+ \\(([0-9.]+)x([0-9.]+) texels a GS pixel\\) from the count's ([0-9.]+)x([0-9.]+) texels a GS pixel")
 set(diffRe "png_level_diff: [0-9]+ x [0-9]+, [0-9]+ channels: [0-9]+ equal, [0-9]+ one level apart, ([0-9]+) more")
@@ -188,6 +199,7 @@ function(sf_run name dump dir envs)
   set(chains_${name} "${CMAKE_MATCH_1}" PARENT_SCOPE)
   set(fpasses_${name} "${CMAKE_MATCH_2}" PARENT_SCOPE)
   set(refused_${name} "${CMAKE_MATCH_3}" PARENT_SCOPE)
+  set(whys_${name} "${CMAKE_MATCH_4}" PARENT_SCOPE)
   string(REGEX MATCH "${oneRe}" m "${flat}")
   set(one_${name} "${CMAKE_MATCH_1}" PARENT_SCOPE)
   set(ok_${name} TRUE PARENT_SCOPE)
@@ -336,6 +348,10 @@ foreach(dump IN LISTS dumps)
       math(EXPR wantPasses "9 + ${full}")
       math(EXPR wantAll "${passes_p} + ${fpasses_h}")
       math(EXPR wantDraws "${draws_p} + 9 * ${chains_h}")
+      if(NOT whys_h STREQUAL "")
+        message(SEND_ERROR "${dumpName} ${s}: drawn at the PS2's size for${whys_h}:\n${err_h}")
+        set(sfFail TRUE)
+      endif()
       if(NOT chains_h EQUAL 1 OR NOT refused_h EQUAL 0 OR NOT fpasses_h EQUAL wantPasses OR
          NOT passes_h EQUAL wantAll OR NOT draws_h EQUAL wantDraws)
         message(SEND_ERROR "${dumpName} ${s}: ${chains_h} shadows at the scene's scale (1), "
