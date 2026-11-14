@@ -561,7 +561,13 @@ endif()
 if(compared EQUAL 0)
   message(FATAL_ERROR "rd_shadow_cuts_ab ${ITEM}: no target compared over ${ndumps} dumps")
 endif()
-if(acted EQUAL 0)
+if(ITEM STREQUAL "novolbreak" AND "${BACKEND}" STREQUAL "opengl")
+  # OpenGL takes DATE by the snapshot: the break mode takes no window there,
+  # and the twin's job is that both arms draw the same bytes
+  if(NOT acted EQUAL 0)
+    message(FATAL_ERROR "rd_shadow_cuts_ab ${ITEM}: the break mode acted on OpenGL (${acted} pairs)")
+  endif()
+elseif(acted EQUAL 0)
   message(FATAL_ERROR "rd_shadow_cuts_ab ${ITEM}: the cut did nothing over ${ndumps} dumps")
 endif()
 message(STATUS "rd_shadow_cuts_ab ${ITEM}: ${compared} targets the same bytes over ${ndumps} "
