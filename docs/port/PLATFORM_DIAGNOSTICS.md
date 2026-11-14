@@ -211,6 +211,20 @@ The next start's step, by kind (`ico_diag_startup_pipeline_set`, `ico_diag_start
 | ended inside any other pipeline, its file with `set: careful` (the device table's careful set, `pipeline_set = "careful"`, or the careful start the row above gave) | makes no set: lazy (`ICO_DIAG_PIPESET_LAZY_ONCE`), its notes and clean exit saying `for this start only` | the same |
 | lost the graphics device, on Android, `gpu_robust` not set (a `config.toml` `true` without the mark is removed first, `window_robust_start`, so it does not count as set) | draws with robust access on (`ICO_GPU_ROBUST=1`, `ICO_GPU_ROBUST_AFTER_LOSS=1`) | `[dev] gpu_robust = true` (`gpu_robust_persist`), this start robust |
 
+A loss counts as a lost start through the activity file's loss line, written by
+`ico_diag_note_device_loss` when the main loop's loss path makes its dump. A loss found at the
+lifecycle's wait for the GPU as the app goes to the background (`window_host.c`
+`lc_gpu_wait_idle`, `VK_ERROR_DEVICE_LOST` at `vkDeviceWaitIdle`) is noted there at once
+(`ico_diag_note_device_loss_at_wait`: `ico_pc: the graphics device was lost at the GPU wait as the
+app went to the background; counted now as a start that lost it ...`), because the system may end
+the app in the background before that loop runs again (issue 179's reporter: the next start said
+`no lost start`); the dump, when the app comes back, replaces the line with its own. The system
+ending an app in the background without a loss writes no loss line and counts nothing. The
+picture-health guard's group (e) sets `ICO_GPU_ROBUST=1` and `ICO_GPU_ROBUST_BY_GUARD=1` for a
+start (`window_health.c`; the device line's robust clause then names the guard), never written to
+the settings and never over the player's `gpu_robust`
+([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-picture-health-guard-issue-179)).
+
 The careful set's start writes `set: careful` after the note in the activity file
 (`ico_diag_startup_activity_careful`), which is how the next start tells the two apart, so the
 first end of a full set makes the next start careful and the first end of a careful set makes it

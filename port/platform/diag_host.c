@@ -3512,6 +3512,20 @@ void ico_diag_note_device_loss(const char *dump_zip)
     }
 }
 
+void ico_diag_note_device_loss_at_wait(const char *where)
+{
+    static int s_noted;
+    if (s_noted) {
+        return;
+    }
+    s_noted = 1;
+    ico_diag_log("ico_pc: the graphics device was lost at %s; counted now as a start that lost "
+                 "it (the system may end the app there before the game notices; the next start "
+                 "takes the loss steps)",
+                 where != NULL ? where : "a wait for the GPU");
+    ico_diag_note_device_loss(NULL);
+}
+
 void ico_diag_note_slow_scene(const char *zip)
 {
     snprintf(slow_scene_zip, sizeof slow_scene_zip, "%s", zip != NULL ? zip : "");

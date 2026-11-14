@@ -1003,6 +1003,20 @@ static void activity_child(const char *mode, const char *log)
             ico_diag_note_device_loss(NULL);
             _exit(0);
         }
+        /* issue 179: the app to the background, the lifecycle's GPU wait
+           finding the device lost (window_host.c lc_gpu_wait_idle), then the
+           system ending the process there before the main loop's
+           device_lost_quit ("bgloss"); or ending it there with no loss
+           ("bgkill") */
+        if (getenv("ICO_TEST_THEN") != NULL && strcmp(getenv("ICO_TEST_THEN"), "bgloss") == 0) {
+            ico_diag_startup_activity_background(1);
+            ico_diag_note_device_loss_at_wait("the GPU wait as the app went to the background");
+            _exit(0);
+        }
+        if (getenv("ICO_TEST_THEN") != NULL && strcmp(getenv("ICO_TEST_THEN"), "bgkill") == 0) {
+            ico_diag_startup_activity_background(1);
+            _exit(0);
+        }
         child_quit(0);
     } else if (strcmp(mode, "actstall") == 0) {
         /* review finding 2: the stall mark read at the start */
@@ -3347,6 +3361,42 @@ int main(int argc, char **argv)
         CHECK(strstr(s, "test: vu prepass 0\n") != NULL);
         CHECK(strstr(s, "test: pipeline set 0\n") != NULL);
         CHECK(startup_retry_note_has_skin_probe(SKIN_PROBE_NOTE));
+        remove(act);
+        remove(ends);
+        /* issue 179: the loss at the lifecycle's GPU wait as the app went
+           to the background, the process then ended there by the system
+           (the reporter's 5-minute v0.11.6 run: "no lost start" at the
+           next): counted at the wait, so the next start takes the loss
+           steps; the system ending the app in the background without a
+           loss counts nothing */
+        remove(act);
+        remove(ends);
+        setenv("ICO_TEST_THEN", "bgkill", 1);
+        run(argv[0], "actlossnext", log);
+        unsetenv("ICO_TEST_THEN");
+        CHECK(read_file(act)[0] == '\0'); /* the set's end removed it, nothing wrote it again */
+        run(argv[0], "actlossnext", log);
+        s = read_file(log);
+        CHECK(strstr(s, "test: losses 0, robust as set\n") != NULL);
+        CHECK(strstr(s, "lost the graphics device: ") == NULL);
+        setenv("ICO_TEST_THEN", "bgloss", 1);
+        run(argv[0], "actlossnext", log);
+        unsetenv("ICO_TEST_THEN");
+        CHECK(strstr(read_file(log),
+                     "ico_pc: the graphics device was lost at the GPU wait as the app went to the "
+                     "background; counted now as a start that lost it (the system may end the "
+                     "app there before the game notices; the next start takes the loss "
+                     "steps)\n") != NULL);
+        CHECK(strcmp(read_file(act), "test 1\n\ngraphics device lost, no loss dump") == 0);
+        r = run(argv[0], "actlossnext", log);
+        s = read_file(log);
+        CHECK(r == 0);
+        CHECK(strstr(s, "ico_pc: starts in a row that lost the graphics device: 1\n") != NULL);
+        CHECK(strstr(s, "test: losses 1, robust this start\n") != NULL);
+        CHECK(strstr(s, "test: loss row 1, ICO_LOSS_ROW 1\n") != NULL);
+        if (fails) {
+            printf("--- background loss log ---\n%s\n", read_file(log));
+        }
         remove(act);
         remove(ends);
         /* Android's next start after a device loss: robust access for that

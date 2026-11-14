@@ -787,6 +787,17 @@ void ico_diag_startup_activity_exit(void);
    hang (ico_diag_set_gpu_hang) it writes the hang's own line instead,
    which is counted but never bisected. */
 void ico_diag_note_device_loss(const char *dump_zip);
+/* A device loss found at a wait for the GPU outside the main loop (issue
+   179: window_host.c's lifecycle wait as the app goes to the background,
+   VK_ERROR_DEVICE_LOST at vkDeviceWaitIdle): noted at once
+   (ico_diag_note_device_loss(NULL)), because the system may end the app in
+   the background before the main loop's device_lost_quit writes the loss
+   and its dump (the reporter's 5-minute v0.11.6 run ended so, and its next
+   start said "no lost start"); that later call replaces the line with the
+   dump's.  Once a run; logged: "ico_pc: the graphics device was lost at
+   <where>; counted now as a start that lost it ...".  Nothing is noted
+   without a loss: an app the system ends in the background is not one. */
+void ico_diag_note_device_loss_at_wait(const char *where);
 /* The loss dump the previous run left for this one (NULL: none). */
 const char *ico_diag_loss_dump(void);
 /* The slow-scene dump this run wrote (window_host.c slow_scene_dump, issue

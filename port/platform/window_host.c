@@ -1030,6 +1030,9 @@ static void lc_gpu_wait_idle(void *u)
 {
     (void)u;
     rhi_wait_idle();
+    if (rhi_device_lost()) { /* issue 179: counted now, the system may end the app there */
+        ico_diag_note_device_loss_at_wait("the GPU wait as the app went to the background");
+    }
 }
 
 static void lc_surface_release(void *u)
