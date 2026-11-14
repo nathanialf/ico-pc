@@ -168,6 +168,59 @@ enum { RD_SKIN_VAR_NOT_RUN = -1, RD_SKIN_VAR_WRONG = 0, RD_SKIN_VAR_RIGHT = 1 };
 const char *rd__skin_decision(bool copyDiffers, bool rereadDiffers, bool probeWrong, int c1,
                               int c2);
 
+/* ------------------------------------------- skipped after a reset
+ * Issue 123 (v0.11.6's log): three checks read "wrong" right after
+ * 400 ms stalls that carried the GPU's own sign of a reset (rd_perf.c: a
+ * stamp never written, the first list run twice, the timestamp counter
+ * gone back), and each one's GPU copy of the bone block held the bytes
+ * the slot's readback kept from the check before ("not written again"):
+ * the readback, not the draw, was what the reset left.  The first started
+ * the automatic capture (44 ms on the game thread, about 1 s on a worker;
+ * the capture is once a run, so the other two fed the ladder's evidence
+ * only), and more stalls followed.  Such a check is not judged: it is
+ * counted as skipped after a reset, with no failure, no capture, no ladder
+ * evidence (so no key written), and its own line.
+ *
+ * Skipped (rd__skin_skip):
+ *   STALE  the readback was not written by this replay's copies (the clear
+ *          stamp an earlier replay's or none), or the GPU's copy of the
+ *          bone block differs from the bytes the CPU wrote and equals, byte
+ *          for byte, what the slot's readback held from its previous check
+ *          (check 0 of a slot only: the one whose bytes are kept, SkSlot
+ *          .prev);
+ *   RESET  the newest replay with the GPU's sign of a reset lies in the
+ *          readback's span: from the slot's previous check (whose bytes
+ *          the readback held until this check's copy; without one, lag
+ *          replays before the check) up to lag replays after the check,
+ *          lag being RHI_FRAMES_IN_FLIGHT: a check is read lag replays
+ *          after its record (its slot's fence, rd__vu_skin_harvest), and a
+ *          replay's reset sign is read when its slot comes round, lag
+ *          replays after it (rd__perf_collect_gpu).  The harvest comes
+ *          first in that replay (rd__wait_frame, then the collect), so the
+ *          sign of the check's own replay is read after its harvest: there
+ *          the STALE rule is what holds.  In the reporter's log each of the
+ *          three checks was of the frame a stall drew (frames 6513, 7219,
+ *          9025; the check's replay numbers are g_rd.replayCounter's, about
+ *          7 above the stall lines', which count the game's replays only),
+ *          and all three are STALE.
+ * Everything else, a check whose bytes were written again and differ
+ * among them, is judged exactly as before. */
+enum { RD_SKIN_JUDGED = 0, RD_SKIN_SKIP_STALE = 1, RD_SKIN_SKIP_RESET = 2 };
+
+typedef struct RdSkinSkipIn {
+    bool unwritten;       /* the clear stamp not this replay's (the trace's) */
+    bool copyDiffers;     /* the GPU's copy differs from the bytes kept */
+    bool copyIsPrev;      /* ... and equals the slot's readback as its previous check left it */
+    uint32_t replay;      /* the check's replay (g_rd.replayCounter at its record) */
+    bool prevHas;         /* the slot had a previous check whose bytes it kept */
+    uint32_t prevReplay;  /* that check's replay */
+    uint32_t resetReplay; /* the newest replay with the GPU's own sign of a reset (0: none) */
+    uint32_t lag;         /* RHI_FRAMES_IN_FLIGHT */
+} RdSkinSkipIn;
+
+/* RD_SKIN_JUDGED, RD_SKIN_SKIP_STALE or RD_SKIN_SKIP_RESET (pure) */
+int rd__skin_skip(const RdSkinSkipIn *in);
+
 /* ------------------------------------------------------- the trace
  * rd_vu_skin_trace.c (pure, no device): issue 123's v0.11.2 log had the
  * GPU's copy of a bone block differ in every used qword while the ring
@@ -406,6 +459,12 @@ void rd__vu_skin_harvest(void);
 uint64_t rd__vu_skin_ring_bytes(void);
 /* the 10 s summary's line (rd_interp.c presentLog) */
 void rd__vu_skin_block(void);
+/* rd_perf.c rd__perf_collect_gpu: the replay (g_rd.replayCounter's number
+ * at its end) whose record showed the GPU's own sign of a reset (the stall
+ * line's test, stall_coincide.h stall_reset_sign: a stamp never written,
+ * the first list run twice, the counter gone back); the newest is kept for
+ * rd__skin_skip.  0 forgets it (the tests).  The replay's thread. */
+void rd__vu_skin_reset_seen(uint32_t replay);
 /* rd_shutdown */
 void rd__vu_skin_shutdown(void);
 
@@ -434,6 +493,9 @@ typedef struct RdSkinSummary {
      * (RD_SKIN_FOUND_*, -1: no copy differed) */
     uint32_t unwritten, ringOld;
     int lastFound;
+    /* issue 123 (v0.11.7): checks skipped after a reset (rd__skin_skip),
+     * not counted wrong, no capture asked */
+    uint32_t skipped;
 } RdSkinSummary;
 
 int rd__vu_skin_check_frame(const RdFrame *f, int keep, RdSkinSummary *out);

@@ -332,10 +332,52 @@ So the next log decides the path by itself:
 
 | the stamps and the search say | means |
 | --- | --- |
-| `the readback was not written by this replay's copies (the probe target's clear stamp: replay R's ...)` | the GPU did not run the replay's copies (a submission dropped or cut short, e.g. a GPU fault recovered by the kernel) or the CPU read the readback before they landed: the check's verdict is not about the bones; the ladder is not fed |
+| `the readback was not written by this replay's copies (the probe target's clear stamp: replay R's ...)` | the GPU did not run the replay's copies (a submission dropped or cut short, e.g. a GPU fault recovered by the kernel) or the CPU read the readback before they landed: the check's verdict is not about the bones; the check is skipped after a reset (not wrong, no capture, the ladder not fed) |
 | the clear stamp right, `the ring's stamp reads replay R's` (`H2, the memory: the GPU read the ring as an earlier replay left it`) | the copies ran but the GPU saw the ring's memory as replay R left it: stale memory under the GPU (a cache or mapping of the upload memory) |
 | both right, the copy `the block checked in replay R ...` or `the block at ring offset O of frame slot S's ring ...` | the GPU read another block: an offset or slot the GPU used that the CPU did not |
 | both right, `no block ...: other memory` | other memory: neither the check's blocks nor the rings |
+
+## Skipped after a reset
+
+Issue 123's log of 2026-11-14 (the Adreno 740 tablet, Qualcomm's driver 512.676.1) has three `wrong`
+checks (its lines 2825, 3039, 4026), each of the frame a 400 ms stall drew whose GPU work carried the
+GPU's own sign of a reset (a stamp never written, the timestamp counter gone back: the `rd: GPU
+clock:` lines around them), each `999 | 499 | 763 vertices wrong of all`, `reads as: H2, the
+memory`, and each with the GPU's copy `the bytes the slot's readback held from the check of replay Q
+(not written again)`: the copy into the readback did not land, so the verdict was not about the
+bones. The first started the run's capture (the sidecar and a frame dump: 44 ms on the game thread,
+996 ms on the dump worker); the capture is once a run, so the other two fed the ladder's evidence
+only. On a tile-based phone GPU there are no stamps (the trace's), so only the copy said so.
+
+Such a check is not judged (`rd_vu_skin_check.h` `rd__skin_skip`, pure, in
+`rd_vu_skin_judge.c`): it is counted as skipped after a reset, with no failure, no capture, no
+ladder evidence (so no `[dev]` key written by the ladder) and its own line. Skipped:
+
+- **Stale.** The readback was not written by its replay's copies (the clear stamp an earlier
+  replay's or none), or the GPU's copy differs from the bytes the CPU wrote and equals, byte for
+  byte, what the slot's readback held from its previous check (check 0 of a slot, the one whose
+  bytes are kept: `SkSlot.prev`). All three of the log's checks are this.
+- **Reset.** The newest replay whose record showed the GPU's own sign of a reset (`rd_perf.c`
+  `rd__perf_collect_gpu`, the stall line's test `stall_reset_sign`: a stamp never written, the first
+  list run twice, the counter gone back; passed as the skin check's replay number by
+  `rd__vu_skin_reset_seen`) lies in the readback's span: from the slot's previous check (whose bytes
+  the readback held until this check's copy; without one, 2 replays before the check) to 2 replays
+  after the check. 2 is `RHI_FRAMES_IN_FLIGHT`: a check is read 2 replays after its record (its
+  slot's fence), and a replay's reset sign is read when its slot comes round, 2 replays after it.
+  The harvest comes first in a replay (`rd__wait_frame`, then the collect), so the sign of the
+  check's own replay is read after its harvest: there the stale rule is what holds.
+
+Everything else, a check whose bytes were written again and differ among them, is judged exactly
+as before. The two replay numbers differ: the skin check's are `g_rd.replayCounter`'s, which also
+counts the renderer's own frames (the start-up self-tests), the stall lines' are the records',
+about 7 lower in that log (the check `recorded in replay 10917` is of frame 6513; the stall lines'
+replay 10911 drew frame 6514), so `rd_perf.c` keeps the counter with each pending record.
+
+The counts: the 10 s line's `K skipped after a reset`, the end-of-run line's `K checks skipped
+after a reset`, and the attempt ledger's row `no capture after a stall on (a skin check read after a
+GPU reset is skipped, not captured) K checks skipped after a reset` ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-attempt-ledger)).
+Not covered: the twins (their occlusion counts after a reset still make a twin event); the
+reporter's device has none drawn (its pipelines not made under the careful rule).
 
 ## The decision table
 
@@ -434,12 +476,19 @@ On an event, the first 8, then every 100th, of each kind on its own count (a wro
   (the clear stamp is this replay's) but the ring's stamp reads replay Q's | no stamp: the GPU read
   the ring's memory as it was before this replay wrote it; ...` (its own budget: the first 8, then
   every 100th)
+- `rd: VU skin check: frame F command L:I mesh NAME #ID (recorded in replay R): skipped after a
+  reset: WHY; it read N of C vertices wrong, the GPU's copy of the bone block differing | equal; not
+  judged: no failure, no capture, nothing for the ladder (skipped K this run)`, WHY one of `the
+  readback not written again: the GPU's copy is the bytes the slot held from the check of replay
+  Q`, `the readback not written by this replay's copies (the stamps' line)`, `the GPU's own sign of
+  a reset at replay S, since the slot's check before (replay Q)` or `..., within 2 replays of it`
+  (the first 8, then every 100th; [Skipped after a reset](#skipped-after-a-reset))
 - `rd: VU skin check: frame F command L:I drew N samples outside its box (texels X,Y WxH, the CPU's vertices + 2 GS pixels; through FS[ without the draw's attachment read]; the probe right|wrong too) (box event E)`
 
 At the renderer's shutdown, when the run drew a check: `rd: VU skin check: at the end of the run: D
 checks drawn (B box checks drawn), R read, W wrong, X blocks whose bytes differed, Y box checks
-with samples outside; U readbacks not written by their replay, O ring stamps of an earlier replay`
-(a check of the last replays is not read: its slot was not recycled), and with
+with samples outside; U readbacks not written by their replay, O ring stamps of an earlier replay; K
+checks skipped after a reset` (a check of the last replays is not read: its slot was not recycled), and with
 twins drawn `rd: VU skin check: twins at the end of the run: T drawn (O through the draw's own
 pipeline with its attachment read), R read, D differ; K checks targeted after a twin event; the ring
 read's twin (C) X drawn, Y read, Z differ from B; thinned N times, re-armed M times[ (thinned at the
@@ -447,8 +496,8 @@ end)]`; under `[dev] vu_bones = ring`, when twins were
 read, `rd: VU skin check: the ring read: healed (0 of T twins differ over P replays)` or `... not
 healed (D of T twins differ over P replays)`.
 
-In the 10 s summary, when the check ran: `rd: VU skin check: P checks, W wrong, B blocks whose bytes
-differed (R changed after the draw); Q box checks, S with samples outside the box, N not drawn
+In the 10 s summary, when the check ran: `rd: VU skin check: P checks, W wrong, K skipped after a
+reset, B blocks whose bytes differed (R changed after the draw); Q box checks, S with samples outside the box, N not drawn
 (their pipeline not made yet; F with no slot left for the key); variants on the wrong ones: c1
 right K, c2 right L (c2 drawn in M checks); largest difference on a right vertex D/16 pixel[;
 readbacks not written by their replay U, ring stamps of an earlier replay O (only when one was)][; T twins, D differ (first at frame F), N not drawn
@@ -662,7 +711,10 @@ the device's wrong read.
 `rd_vu_skin_check_probe_robust`, `rd_vu_skin_check_ring`, `rd_vu_skin_check_twin`,
 `rd_vu_skin_check_twin_nan`, `rd_vu_skin_check_capture`, `rd_vu_skin_check_stale` (the careful
 compile rule draws a box check; each slot's readback not written again names the replay whose
-stamps it holds), `rd_vu_skin_check_stale_phone` and `rd_vu_skin_check_clean_phone` (Arm's phone
+stamps it holds, and the four checks are skipped after a reset, none wrong),
+`rd_vu_skin_check_reset` (the probe's bone at 200 read as zeros with the GPU's sign of a reset faked
+at the check's replay: skipped, not wrong, no capture asked; the sign forgotten: wrong at 200 and the
+capture asked), `rd_vu_skin_check_stale_phone` and `rd_vu_skin_check_clean_phone` (Arm's phone
 GPU faked: no compile and no box check after the reason, no stamps; the clean frame right without
 the stamp's bytes), `rd_vu_skin_check_thin` (the thinning:
 three twins a replay until the clean replays, one after, re-armed by the zeroed bone),

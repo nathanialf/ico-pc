@@ -1212,7 +1212,7 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   the even cadence's row off by default with its reason (`three phone rcs did not land pictures on
   their refresh`); the no-volume break on for the Pixel (`the PowerVR D-Series DXT-48-1536`) and off
   by default for the rest of its class with its reason; at the reset the compaction's row `not reported`, the blend
-  constant's `not in this build` (CPU only). The old robust-access row: on for the Mali-G52 class (its reporter's `config.toml` held a `gpu_robust = true` without the mark), not applicable for the others; each class's whole start line within the window's 4 KB buffer with that last row in it; the row's three states with their words in the start line, `on (static)` in the block line, `not reported` after the reset.
+  constant's `not in this build` (CPU only). The old robust-access row: on for the Mali-G52 class (its reporter's `config.toml` held a `gpu_robust = true` without the mark), not applicable for the others; each class's whole start line within the window's 4 KB buffer with that row and the last in it; the row's three states with their words in the start line, `on (static)` in the block line, `not reported` after the reset. No capture after a stall (issue 123): on for the Adreno 740 on Qualcomm's driver (where the skin check runs), not applicable for the others; its two states' words in the start line, its count per block (`3 checks skipped after a reset`, then 0), `not reported` after the reset.
 - `core_share_test.c` (ctest `core_share`): the share of run time on the faster cores of the
   threads that do not sample their own core (`port/platform/core_share.h`, issue 179): ten seconds
   of the Helio G85's submit, SDL audio and driver threads and two pipeline workers under one name,
@@ -1237,7 +1237,12 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   the first second, 50 presents a second give 50 at every whole second, a second that ran 1.5 s long
   divides by its real length and rounds to the nearest (91 presents 61, 89 presents 59), replays
   counted through the renderer's count being zeroed after a tick (100 a second, none lost), a
-  change of mode starting the second again, a time going backwards changing nothing (`fps_counter`).
+  change of mode starting the second again (not counted as a gap), a time going backwards changing
+  nothing; issue 123: a 1.1 s capture noted (`fps_gap`) starts the second again with 50 kept, the
+  next second 40; a 2 s gap between ticks with no note (the guard at `ICO_GPU_HANG_MIN_S`) the same,
+  while with `gapNs` the 15 s limit a 13 s gap stays in the second (10 presents over 13.3 s, 1); a
+  450 ms stall inside play reads 27, three 440 ms stalls in 1.36 s read 5, neither a restart
+  (`fps_counter`).
 - `pace_policy_test.c`: the slow-present decision, Resolution "auto"'s steps (and under a
   temporal upscaler from the window's scale over its ratio, `pace_auto_window_scale`), the gap between
   presents, the vsync lock's n and alphas and its period's sanity, and the vblank clock's laws on a

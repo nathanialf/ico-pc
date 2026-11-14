@@ -727,6 +727,7 @@ void window_pace_paused(Uint64 ns)
     if (ns == 0 || s_deadline == 0) {
         return; /* nothing, or the pacer not started (a size event at open) */
     }
+    ui_fps_gap(); /* no presents in it */
     s_deadline += ns;
     if (s_pres.tickAt != 0) {
         s_pres.tickAt += ns;
@@ -1070,6 +1071,7 @@ static void lc_pace_reset(void *u)
     s_pres.lockN = 0; /* the lock starts again from now */
     s_pres.lastReturn = 0;
     window_timer_budget_reset();
+    ui_fps_gap(); /* the counter's second too */
 }
 
 static int lc_config_dirty(void *u)
@@ -3274,6 +3276,7 @@ static void frame_dump(int forReport)
             havePrev ? "with the tick before: rd_replay_tool --interp rebuilds the pictures between"
                      : "without the tick before",
             blended ? "; the next present's frame if between the ticks" : "");
+    ui_fps_gap(); /* the time it held the window */
     if (forReport) {
         fprintf(stderr, "window: bug report: %s\n",
                 s_pres.reportZip[0] != '\0'
@@ -3419,6 +3422,7 @@ static void photo_pump(void)
         const int r = rd_capture_result(path, sizeof(path));
 
         if (r != 0) {
+            ui_fps_gap(); /* the PNG written here */
             const char *base = strrchr(path, '/');
 #ifdef _WIN32
             const char *b2 = strrchr(path, '\\');

@@ -410,7 +410,11 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   (`rd_vu_skin_trace.c`, issue 123): the clear stamp read back as its replay, an earlier
   one's, none; the ring stamp's states and the stamp line's words; a differing copy searched (the
   slot's readback as before, zeros, nowhere, the other slot's ring at the draw's offset, the own
-  ring at another offset, a block checked two replays before, the trace's last 64)
+  ring at another offset, a block checked two replays before, the trace's last 64); skipped after a
+  reset (`rd__skin_skip`, issue 123): the GPU's copy equal to the slot's previous check's and
+  differing from the bytes kept, or the stamps unwritten, skipped; written again and differing
+  judged; equal to both judged; a reset sign from the slot's previous check to 2 replays after the
+  check skipped, one before it or 2 after judged; without a previous check 2 replays before
   (`rd_vu_skin_check_judge`); the default (`rd__skin_check_default`): on only for vendor 0x5143
   with a window, off on Mali, PowerVR, NVIDIA, lavapipe, through MoltenVK and headless,
   `ICO_RD_VU_SKIN_CHECK` 1/true on anywhere, 0/false/off off, 2 every command. On a device at
@@ -433,7 +437,13 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   draws a box check; then four replays under the game's mode with each slot's
   readback not written again (`rd__vu_skin_sabotage_copy`): four `the readback was not written by
   this replay's copies (the probe target's clear stamp: replay R's ...; the ring's stamp: replay
-  R's)` lines, then two replays without it with both stamps right (`rd_vu_skin_check_stale`); on Arm's phone GPU faked (`ICO_VK_FAKE_VENDOR=0x13B5`, `rd_vu_skin_check_stale_phone`) no box check is compiled or drawn after the reason (the line of the release before the careful rule) and no readback is named unwritten (no stamps), and `rd_vu_skin_check_clean_phone` checks the clean frame right without the stamp's bytes. `twin` (issue 123): the same frame
+  R's)` lines, the four checks skipped after a reset and none wrong, then two replays without it
+  with both stamps right (`rd_vu_skin_check_stale`); `reset` (issue 123,
+  `ICO_RD_VU_SKIN_SABOTAGE=200`): the GPU's own sign of a reset faked at the check's replay
+  (`rd__vu_skin_reset_seen`), the wrong probe skipped (`skipped after a reset: the GPU's own sign of
+  a reset at replay S, ...`), not wrong, no capture asked; the sign forgotten, the same check wrong
+  at 200 and the capture asked (`no sidecar written (no folder for it); asked for a frame dump`)
+  (`rd_vu_skin_check_reset`); on Arm's phone GPU faked (`ICO_VK_FAKE_VENDOR=0x13B5`, `rd_vu_skin_check_stale_phone`) no box check is compiled or drawn after the reason (the line of the release before the careful rule) and no readback is named unwritten (no stamps), and `rd_vu_skin_check_clean_phone` checks the clean frame right without the stamp's bytes. `twin` (issue 123): the same frame
   under the game's mode with the twins on (`rd__vu_skin_twins_set`), the scheduled probe off
   (`ICO_RD_VU_SKIN_INTERVAL_MS=off`) and `ICO_RD_VU_SKIN_SABOTAGE=200,ring`, replayed three times
   through `rd__vu_skin_check_replays`: the first replay's twins differ with nothing probed (`twins

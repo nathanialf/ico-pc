@@ -42,6 +42,7 @@
 #include "rd_shot_late.h"
 #include "rd_stencil_selftest.h"
 #include "rd_vis.h"
+#include "rd_vu_skin_check.h"
 
 RdPerfRecord g_rdPerf;
 
@@ -55,6 +56,10 @@ static uint32_t s_head, s_count;
 static RdPerfRecord s_pending[RHI_FRAMES_IN_FLIGHT];
 
 static bool s_pendingValid[RHI_FRAMES_IN_FLIGHT];
+/* g_rd.replayCounter at the pending record's end: the skin check's replay
+   number for the same replay (rd__vu_skin_reset_seen), which also counts
+   the renderer's own frames (the start-up self-tests) the records do not */
+static uint32_t s_pendingCounter[RHI_FRAMES_IN_FLIGHT];
 
 static RhiStats s_last;
 
@@ -1513,6 +1518,12 @@ void rd__perf_collect_gpu(void)
     double endMs = 0.0, submitMs = 0.0;
     if (g_rd.hasDevice && rhi_read_timestamp_clock(&clk)) {
         clockNote(r, slot, &clk, ts, n);
+        if (r->gpuStampsMissing != 0 || r->gpuRanTwice != 0 || r->gpuGapBackNs != 0) {
+            /* the GPU's own sign of a reset, the stall line's test
+               (stall_coincide.h stall_reset_sign): the skin check skips a
+               readback in its span (rd_vu_skin_check.h rd__skin_skip) */
+            rd__vu_skin_reset_seen(s_pendingCounter[slot]);
+        }
         submitMs = (double)clk.firstSubmitNs / 1e6;
         if (r->gpuDoneValid != 0) {
             /* the GPU's end on the CPU's clock (rd__now_ms's): the slot
@@ -1718,6 +1729,7 @@ void rd__perf_end(void)
     s_pendingStamps[slot] = s_stamps;
     memcpy(s_pendingOrd[slot], s_ord, s_ordN);
     s_pendingOrdN[slot] = s_ordN;
+    s_pendingCounter[slot] = g_rd.replayCounter;
     s_pendingValid[slot] = true;
 }
 

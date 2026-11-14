@@ -49,6 +49,7 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
     [ICO_ATT_COMP_SPEC] = {"the shadow composites by their own entry", "draws",
                            "kept on sprite_ps"},
     [ICO_ATT_ROBUST_LINE] = {"the old robust-access line taken off", NULL, NULL},
+    [ICO_ATT_SKIN_RESET_SKIP] = {"no capture after a stall", "checks skipped after a reset", NULL},
 };
 
 /* the rows' live values (__atomic), and the block text's last counts (the
@@ -695,4 +696,11 @@ void ico_attempt_decide_robust_line(int found, int removed)
                           "[dev] gpu_robust = true without the game's mark removed from "
                           "config.toml: robust access off from this start");
     }
+}
+
+void ico_attempt_decide_skin_skip(int on)
+{
+    ico_attempt_state(ICO_ATT_SKIN_RESET_SKIP, on ? ICO_ATT_ON : ICO_ATT_NA,
+                      on ? "a skin check read after a GPU reset is skipped, not captured"
+                         : "the skin check is off here");
 }

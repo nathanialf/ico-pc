@@ -7,6 +7,11 @@
  * the nearest; replays counted with interpolation off through the renderer's
  * count being zeroed every 10 s (a zeroing loses no replay); a change of mode
  * starts the second again; a clock that goes backwards changes nothing.
+ * Issue 123: a gap the window notes (fps_gap: a capture, the app back) starts
+ * the second again and keeps the value; a gap between ticks of the guard's
+ * length does the same with no note, a shorter one counts; a 450 ms stall
+ * inside play lowers the value truthfully; three 440 ms stalls in a little
+ * more than a second read 5.
  */
 #include <stdio.h>
 
@@ -102,6 +107,121 @@ static void testBackwards(FpsCounter *c)
     CHECK(fps_value(c) == before);
 }
 
+/* 50 a second for a whole second from t0: the value 50 at t0 + 1 s */
+static void steady(FpsCounter *c, uint64_t t0, unsigned every)
+{
+    fps_tick(c, t0, 1, 0);
+    for (unsigned t = 1; t <= 1000; t++) {
+        if (t % every == 0) {
+            fps_present(c);
+        }
+        fps_tick(c, t0 + t * MS, 1, 0);
+    }
+}
+
+/* the reporter's capture (issue 123: 1.1 s with no pace): 15 presents in
+   300 ms, the capture noted, the next tick 1.1 s later starts the second
+   again and keeps 50 (without the note: 15 / 1.4 s, 11); the second after
+   it is its own, 40 a second gives 40 */
+static void testGapNote(void)
+{
+    FpsCounter c = {0};
+    const uint64_t t1 = BASE + 1000 * MS;
+
+    steady(&c, BASE, 20);
+    CHECK(fps_value(&c) == 50);
+    for (unsigned t = 1; t <= 300; t++) {
+        if (t % 20 == 0) {
+            fps_present(&c);
+        }
+        fps_tick(&c, t1 + t * MS, 1, 0);
+    }
+    fps_gap(&c);
+    fps_tick(&c, t1 + 1400 * MS, 1, 0);
+    CHECK(fps_value(&c) == 50);
+    CHECK(fps_restarts(&c) == 1);
+    for (unsigned t = 1401; t <= 2400; t++) {
+        if (t % 25 == 0) {
+            fps_present(&c);
+        }
+        fps_tick(&c, t1 + t * MS, 1, 0);
+        if (t == 2399) {
+            CHECK(fps_value(&c) == 50);
+        }
+    }
+    CHECK(fps_value(&c) == 40);
+    CHECK(fps_restarts(&c) == 1);
+}
+
+/* no note: a gap between ticks of ICO_GPU_HANG_MIN_S (2 s, the guard with
+   gapNs 0) or more starts the second again, the value kept; with gapNs the
+   15 s limit a 13 s gap is inside the second: 10 presents over 13.3 s, 1 */
+static void testGapGuard(void)
+{
+    FpsCounter c = {0};
+    const uint64_t t1 = BASE + 1000 * MS;
+
+    steady(&c, BASE, 20);
+    for (unsigned k = 0; k < 10; k++) {
+        fps_present(&c);
+    }
+    fps_tick(&c, t1 + 300 * MS, 1, 0);
+    fps_tick(&c, t1 + 2300 * MS, 1, 0);
+    CHECK(fps_value(&c) == 50);
+    CHECK(fps_restarts(&c) == 1);
+
+    FpsCounter d = {0};
+
+    d.gapNs = 15000ull * MS;
+    steady(&d, BASE, 20);
+    for (unsigned k = 0; k < 10; k++) {
+        fps_present(&d);
+    }
+    fps_tick(&d, t1 + 300 * MS, 1, 0);
+    fps_tick(&d, t1 + 13300 * MS, 1, 0);
+    CHECK(fps_value(&d) == 1);
+    CHECK(fps_restarts(&d) == 0);
+}
+
+/* a 450 ms stall inside play: presents every 20 ms to 540 ms (27), no pace
+   from 550 to 1000 ms; the second's 27 presents over 1 s give 27, the
+   second not started again */
+static void testStall(void)
+{
+    FpsCounter c = {0};
+
+    fps_tick(&c, BASE, 1, 0);
+    for (unsigned t = 1; t <= 550; t++) {
+        if (t % 20 == 0) {
+            fps_present(&c);
+        }
+        fps_tick(&c, BASE + t * MS, 1, 0);
+    }
+    fps_tick(&c, BASE + 1000 * MS, 1, 0);
+    CHECK(fps_value(&c) == 27);
+    CHECK(fps_restarts(&c) == 0);
+}
+
+/* three 440 ms stalls in a row (the reporter's cluster): presents at 10, 20,
+   460, 470, 910, 920 and 1360 ms, a pace at each; at 1360 ms 7 presents over
+   1.36 s, 5.15, 5 */
+static void testStallCluster(void)
+{
+    static const unsigned kAt[7] = {10, 20, 460, 470, 910, 920, 1360};
+    FpsCounter c = {0};
+
+    fps_tick(&c, BASE, 1, 0);
+    for (int i = 0; i < 7; i++) {
+        fps_present(&c);
+        fps_tick(&c, BASE + kAt[i] * MS, 1, 0);
+        if (i == 5) {
+            CHECK(fps_value(&c) == 0);
+        }
+    }
+    CHECK(fps_value(&c) == 5);
+    CHECK(fps_restarts(&c) == 0);
+}
+
 int main(void)
 {
     FpsCounter c = {0};
@@ -111,7 +231,12 @@ int main(void)
     testLongSecond();
     testReplays();
     testModeChange(&c);
+    CHECK(fps_restarts(&c) == 0); /* a change of mode is not a gap */
     testBackwards(&c);
+    testGapNote();
+    testGapGuard();
+    testStall();
+    testStallCluster();
     if (fails) {
         printf("fps_counter_test: %d failures\n", fails);
         return 1;
