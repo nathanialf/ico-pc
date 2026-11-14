@@ -3704,6 +3704,7 @@ include(rd_vu_flat0.cmake) # the main shader's flat outputs at the provoking cor
 include(rd_pass_objects.cmake) # Qualcomm's passes as VkRenderPass objects (issue 123)
 include(rd_smallcuts.cmake) # the turn in the present's blit, the VU record by compute on the PowerVR
 include(rd_vu_compact.cmake) # the index compaction (issue 179)
+include(rd_vu_audit.cmake) # the VU record path's bounds audit (issue 179, tests)
 include(rd_subpass_probe.cmake) # the subpass read's first-start probe
 include(rd_bench.cmake) # the rc-only bench: kept frames measured part by part
 

@@ -8,6 +8,7 @@
 
 #include "rd_internal.h"
 #include "attempt_ledger.h"
+#include "rd_vu_audit.h" /* rd__vu_audit_flush */
 #include "rd_vu_compact.h"
 #include "rd_vu_class.h"
 #include "rd_stencil_selftest.h" /* rd__profile_powervr */
@@ -528,6 +529,7 @@ void rd_vu_compact_block(RdVuCmpCounts *out)
 
 bool rd_vu_compact_counts_now(RdVuCmpCounts *out)
 {
+    rd__vu_audit_flush(); /* the tests' bounds audit's run line (rd_vu_audit.h) */
     memset(out, 0, sizeof(*out));
     if (!s_cmp.ever) {
         return false;
