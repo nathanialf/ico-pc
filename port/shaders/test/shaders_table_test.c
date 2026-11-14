@@ -95,7 +95,8 @@ static const char *const expectedShadowTile[] = {"shadow_tile_mask_ps", "shadow_
 static const char *const expectedFsr1[] = {"fsr1_easu_ps", "fsr1_rcas_ps"};
 /* the shadow levels' step and tent above 1x (port/render/rd_shadowres.c,
  * shadowres.hlsl), pixel shaders on every backend */
-static const char *const expectedShadowFine[] = {"shadowres_step_ps", "shadowres_tent_ps"};
+static const char *const expectedShadowFine[] = {"shadowres_step_ps", "shadowres_tent_ps",
+                                                 "shadowres_tent2_ps"};
 
 /* the mesh programs' entries' plain variants (ICO_VU_PLAIN, vu_common.hlsli:
  * the fallback's on a device of the table) */

@@ -270,7 +270,7 @@ int rd_sr_recognise(const RdSrSprite *sp, int *ox, int *oy, float *fx, float *fy
 /* ------------------------------------------------------------ the lines */
 
 static struct {
-    uint64_t chains, passes, original, why[RD_SR_WHY_N];
+    uint64_t chains, passes, original, why[RD_SR_WHY_N], texels, area;
     uint32_t replays;
 } s_sum;
 
@@ -279,6 +279,8 @@ void rd__shadow_fine_pop(const RdPerfRecord *rec)
     s_sum.chains += rec->shadowFineChains;
     s_sum.passes += rec->shadowFinePasses;
     s_sum.original += rec->shadowFineRefused;
+    s_sum.texels += rec->shadowFineTexels;
+    s_sum.area += rec->shadowFineArea;
     for (int k = 0; k < RD_SR_WHY_N; k++) {
         s_sum.why[k] += rec->shadowFineWhy[k];
     }
@@ -312,12 +314,15 @@ void rd__shadow_fine_text(char *out, size_t size, size_t *at)
     }
     char why[160];
     whyList(why, sizeof why, s_sum.why);
-    const int w =
-        snprintf(out + *at, size - *at,
-                 "; shadow levels: %llu shadows at the scene's scale, %llu at the PS2's "
-                 "size%s in %u replays (%.1f passes a replay)",
-                 (unsigned long long)s_sum.chains, (unsigned long long)s_sum.original, why,
-                 (unsigned)s_sum.replays, (double)s_sum.passes / (double)s_sum.replays);
+    const int w = snprintf(
+        out + *at, size - *at,
+        "; shadow levels: %llu shadows at the scene's scale, %llu at the PS2's "
+        "size%s in %u replays (%.1f passes a shadow, drawing %.1f %% of their targets' "
+        "texels, %.2f M texels a shadow)",
+        (unsigned long long)s_sum.chains, (unsigned long long)s_sum.original, why,
+        (unsigned)s_sum.replays, s_sum.chains ? (double)s_sum.passes / (double)s_sum.chains : 0.0,
+        s_sum.area ? 100.0 * (double)s_sum.texels / (double)s_sum.area : 0.0,
+        s_sum.chains ? (double)s_sum.texels / (double)s_sum.chains / 1.0e6 : 0.0);
     rd_clause_done(out, size, at, w);
     memset(&s_sum, 0, sizeof(s_sum));
 }
@@ -333,4 +338,112 @@ void rd__shadow_fine_stats(const RdPerfRecord *rec, char *out, size_t size)
     snprintf(out, size,
              "shadow levels: %u shadows at the scene's scale, %u passes, %u at the PS2's size%s",
              rec->shadowFineChains, rec->shadowFinePasses, rec->shadowFineRefused, words);
+}
+
+/* --------------------------------------------------------------- the cuts */
+
+static int floorDiv2(int a)
+{
+    return a >= 0 ? a / 2 : -((-a + 1) / 2);
+}
+
+bool rd_sr_step_box(int srcLo, int srcHi, int srcSize, int whole, int dstSize, int repeat, int *lo,
+                    int *hi)
+{
+    if (srcHi < srcLo) {
+        return false; /* nothing in the source: the level is 0 there */
+    }
+    /* GS pixel x's fine texels read the source's GS pixels 2x + whole .. 2x +
+     * whole + 3 at most (two taps one PS2 texel apart, each a box of one GS
+     * pixel or a point with its linear neighbour, over the GS pixel's L
+     * fine texels): x meets [srcLo, srcHi] only between these */
+    int a = -floorDiv2(-(srcLo - whole - 3)); /* ceil((srcLo - whole - 3) / 2) */
+    int b = floorDiv2(srcHi - whole);
+    const int reach = 4 + (whole < 0 ? -whole : whole);
+    if (repeat && (srcLo <= reach || srcHi >= srcSize - 1 - reach)) {
+        a = 0; /* a wrapped tap can bring the source's far side in */
+        b = dstSize - 1;
+    }
+    if (!repeat && srcLo <= 0) {
+        a = 0; /* a tap held to the edge reads the edge's texel */
+    }
+    if (!repeat && srcHi >= srcSize - 1) {
+        b = dstSize - 1;
+    }
+    *lo = a < 0 ? 0 : a;
+    *hi = b > dstSize - 1 ? dstSize - 1 : b;
+    return *lo <= *hi;
+}
+
+void rd_sr_tent_box(int lo, int hi, int L, int size, int *flo, int *fhi)
+{
+    /* B[n] sums E[n - t] over t in c - L + 1 .. c + L - 1, c = (L - 1) / 2 */
+    const int c = (L - 1) / 2;
+    const int a = lo + c - L + 1, b = hi + c + L - 1;
+    *flo = a < 0 ? 0 : a;
+    *fhi = b > size - 1 ? size - 1 : b;
+}
+
+void rd_sr_tent2_texel(const uint8_t *src, uint32_t w, uint32_t h, int lx, int ly, uint32_t x,
+                       uint32_t y, uint8_t out[4])
+{
+    const int cx = (lx - 1) / 2, cy = (ly - 1) / 2;
+    uint32_t sum[4] = {0, 0, 0, 0};
+    for (int t = cy - ly + 1; t <= cy + ly - 1; t++) {
+        const uint32_t wy = (uint32_t)(ly - (t > cy ? t - cy : cy - t));
+        const int k = rd_sr_index((int)y - t, (int)h, 0);
+        uint32_t row[4] = {0, 0, 0, 0};
+        for (int s = cx - lx + 1; s <= cx + lx - 1; s++) {
+            const uint32_t wx = (uint32_t)(lx - (s > cx ? s - cx : cx - s));
+            const int kx = rd_sr_index((int)x - s, (int)w, 0);
+            const uint8_t *p = src + ((size_t)k * w + (size_t)kx) * 4u;
+            for (int ch = 0; ch < 4; ch++) {
+                row[ch] += (uint32_t)p[ch] * wx;
+            }
+        }
+        const uint32_t wsx = (uint32_t)(lx * lx);
+        for (int ch = 0; ch < 4; ch++) {
+            sum[ch] += (2u * row[ch] + wsx) / (2u * wsx) * wy;
+        }
+    }
+    const uint32_t wsy = (uint32_t)(ly * ly);
+    for (int ch = 0; ch < 4; ch++) {
+        out[ch] = (uint8_t)((2u * sum[ch] + wsy) / (2u * wsy));
+    }
+}
+
+bool rd_sr_mask_empty(const uint8_t *mask, uint32_t mw, uint32_t mh, uint32_t sw, uint32_t sh,
+                      float ax, float ay, float sx, float sy, float ox)
+{
+    /* the whole texels the taps touch, floor(a) .. ceil(a + 2 s) - 1, and the
+     * GS pixels those texels overlap (a texel's other GS pixel may hold the
+     * larger part of it) */
+    const float t0x = floorf(ax), t0y = floorf(ay);
+    const float t1x = ceilf(ax + 2.0f * sx), t1y = ceilf(ay + 2.0f * sy);
+    if (t0x < 0.0f || t0y < 0.0f || t1x > (float)sw || t1y > (float)sh) {
+        return false; /* a tap wraps or is held at the source's edge */
+    }
+    const int g0x = (int)floorf((t0x + ox) / sx), g0y = (int)floorf(t0y / sy);
+    const int g1x = (int)floorf((t1x - 1.0e-3f + ox) / sx);
+    const int g1y = (int)floorf((t1y - 1.0e-3f) / sy);
+    if (g0x < 0 || g0y < 0 || g1x >= (int)mw || g1y >= (int)mh || g1x - g0x >= 4 ||
+        g1y - g0y >= 4) {
+        return false;
+    }
+    for (int y = g0y; y <= g1y; y++) {
+        for (int x = g0x; x <= g1x; x++) {
+            if (mask[((size_t)y * mw + (size_t)x) * 4u + 3u]) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+void rd__shadow_fine_drawn(const RdPerfRecord *rec, char *out, size_t size)
+{
+    snprintf(
+        out, size, "shadow levels drawn: %u texels of the %u their passes' targets hold (%.1f %%)",
+        rec->shadowFineTexels, rec->shadowFineArea,
+        rec->shadowFineArea ? 100.0 * (double)rec->shadowFineTexels / rec->shadowFineArea : 0.0);
 }

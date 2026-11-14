@@ -522,6 +522,232 @@ static void testRecognise(void)
     }
 }
 
+/* ---------------------------------------------------------- the cuts */
+
+static uint32_t s_rng = 12345u;
+
+static uint32_t rnd(void)
+{
+    s_rng = s_rng * 1103515245u + 12345u;
+    return s_rng >> 8;
+}
+
+/* the fused tent against the two passes (rd_sr_tent_texel across into a
+ * temporary, then down), every texel, odd scales 1, 3, 5 on each axis,
+ * random bytes and sparse levels */
+static void testTent2(void)
+{
+    enum { TW = 37, TH = 23 };
+
+    static uint8_t lv[TW * TH * 4], tmp[TW * TH * 4], two[TW * TH * 4];
+    static const int kL[] = {1, 3, 5};
+    int bad = 0;
+    for (int pass = 0; pass < 2; pass++) {
+        for (int i = 0; i < TW * TH * 4; i++) {
+            lv[i] =
+                pass ? (uint8_t)((rnd() % 7u) == 0u ? rnd() & 255u : 0u) : (uint8_t)(rnd() & 255u);
+        }
+        for (int a = 0; a < 3; a++) {
+            for (int b = 0; b < 3; b++) {
+                const int lx = kL[a], ly = kL[b];
+                for (uint32_t y = 0; y < TH; y++) {
+                    for (uint32_t x = 0; x < TW; x++) {
+                        rd_sr_tent_texel(lv, TW, TH, 0, (float)lx, x, y, tmp + (y * TW + x) * 4u);
+                    }
+                }
+                for (uint32_t y = 0; y < TH; y++) {
+                    for (uint32_t x = 0; x < TW; x++) {
+                        rd_sr_tent_texel(tmp, TW, TH, 1, (float)ly, x, y, two + (y * TW + x) * 4u);
+                        uint8_t one[4];
+                        rd_sr_tent2_texel(lv, TW, TH, lx, ly, x, y, one);
+                        bad += memcmp(one, two + (y * TW + x) * 4u, 4) != 0;
+                    }
+                }
+            }
+        }
+    }
+    CHECK(bad == 0, "the fused tent differs from the two passes at %d texels", bad);
+}
+
+/* the empty-area mask: a sparse count at 2.8125 x 2.41071 with a Full pixel
+ * crop, box-reduced as box_reduce_ps (the mean over each GS pixel's texels,
+ * rounded), and every first-level fine texel: where the mask says empty the
+ * step gives 0 (so the early return is the step's own bytes), and the mask
+ * says empty somewhere */
+static void testMask(void)
+{
+    enum { GW = 64, GH = 48 };
+
+    const float sx = 2.8125f, sy = 2.41071f, ox = 2.5f;
+    const uint32_t cw = (uint32_t)(GW * sx - 2.0f * ox), ch = (uint32_t)floorf(GH * sy);
+    uint8_t *cnt = calloc((size_t)cw * ch * 4u, 1), *red = calloc((size_t)GW * GH * 4u, 1);
+    if (!cnt || !red) {
+        free(cnt);
+        free(red);
+        CHECK(0, "memory");
+        return;
+    }
+    /* two blobs and single texels */
+    for (uint32_t y = 0; y < ch; y++) {
+        for (uint32_t x = 0; x < cw; x++) {
+            const int in = (x > 30 && x < 52 && y > 20 && y < 33) || (x == 101 && y == 77) ||
+                           (x == 140 && y == 5) || ((rnd() % 997u) == 0u);
+            uint8_t *q = cnt + ((size_t)y * cw + x) * 4u;
+            q[0] = q[1] = q[2] = in ? 4u : 0u;
+            q[3] = in ? 0x80u : 0u;
+        }
+    }
+    for (uint32_t gy = 0; gy < GH; gy++) {
+        for (uint32_t gx = 0; gx < GW; gx++) {
+            const float lx = gx * sx - ox, hx = lx + sx, ly = gy * sy, hy = ly + sy;
+            float a = 0.0f;
+            for (int y = (int)floorf(ly); y < (int)ceilf(hy) && y < (int)ch; y++) {
+                for (int x = (int)floorf(lx) < 0 ? 0 : (int)floorf(lx);
+                     x < (int)ceilf(hx) && x < (int)cw; x++) {
+                    if (y < 0) {
+                        continue;
+                    }
+                    const float w = (fminf(hx, x + 1.0f) - fmaxf(lx, (float)x)) *
+                                    (fminf(hy, y + 1.0f) - fmaxf(ly, (float)y));
+                    a += cnt[((size_t)y * cw + (size_t)x) * 4u + 3u] / 255.0f * w;
+                }
+            }
+            red[((size_t)gy * GW + gx) * 4u + 3u] = (uint8_t)floorf(a / (sx * sy) * 255.0f + 0.5f);
+        }
+    }
+    RdSrStep p;
+    memset(&p, 0, sizeof(p));
+    p.first = 1;
+    p.kx = 2.0f * sx / 3.0f;
+    p.ky = 2.0f * sy / 3.0f;
+    p.ax = -ox;
+    p.sx = sx;
+    p.sy = sy;
+    p.fx = p.fy = 0.25f;
+    p.repS = p.repT = 1;
+    memcpy(p.col, kCol, 4);
+    int wrong = 0, empty = 0;
+    for (uint32_t my = 0; my < GH / 2u * 3u; my++) {
+        for (uint32_t mx = 0; mx < GW / 2u * 3u; mx++) {
+            uint8_t o[4];
+            rd_sr_step_texel(cnt, cw, ch, &p, mx, my, o);
+            const float ax = (float)mx * p.kx + p.ax, ay = (float)my * p.ky + p.ay;
+            if (rd_sr_mask_empty(red, GW, GH, cw, ch, ax, ay, sx, sy, ox)) {
+                empty++;
+                wrong += o[0] || o[1] || o[2] || o[3];
+            }
+        }
+    }
+    CHECK(wrong == 0 && empty > 0, "the mask: %d empty texels, %d of them not 0", empty, wrong);
+    free(cnt);
+    free(red);
+}
+
+/* the boxes: a count nonzero only inside a GS box, the chain run in full
+ * (the reference), every nonzero texel of each level inside the level's box
+ * (before the tent) and of its tent inside the final box; at a REPEAT axis
+ * whose box comes near an edge the box is the whole axis */
+static void testBoxes(void)
+{
+    enum { GW = 80, GH = 64, L = 3 };
+
+    static const int kBox[][4] = {
+        {30, 20, 41, 33}, {0, 0, 9, 7}, {70, 50, 79, 63}, {40, 30, 40, 30}};
+    const uint32_t cw = GW * L, ch = GH * L;
+    uint8_t *cnt = calloc((size_t)cw * ch * 4u, 1);
+    uint8_t *lv[3], *fin[3];
+    uint32_t lw[3], lh[3];
+    for (int k = 0; k < 3; k++) {
+        lw[k] = (GW >> (k + 1)) * L;
+        lh[k] = (GH >> (k + 1)) * L;
+        lv[k] = calloc((size_t)lw[k] * lh[k] * 4u, 1);
+        fin[k] = calloc((size_t)lw[k] * lh[k] * 4u, 1);
+    }
+    for (size_t b = 0; cnt && b < sizeof kBox / sizeof kBox[0]; b++) {
+        for (int rep = 0; rep < 2; rep++) {
+            memset(cnt, 0, (size_t)cw * ch * 4u);
+            for (int gy = kBox[b][1]; gy <= kBox[b][3]; gy++) {
+                for (int gx = kBox[b][0]; gx <= kBox[b][2]; gx++) {
+                    for (int j = 0; j < L * L; j++) {
+                        if (rnd() % 3u == 0u || (gx == kBox[b][0] || gy == kBox[b][3])) {
+                            uint8_t *q =
+                                cnt +
+                                ((size_t)(gy * L + j / L) * cw + (size_t)(gx * L + j % L)) * 4u;
+                            q[0] = q[1] = q[2] = 4u;
+                            q[3] = 0x80u;
+                        }
+                    }
+                }
+            }
+            int lo[2] = {kBox[b][0], kBox[b][1]}, hi[2] = {kBox[b][2], kBox[b][3]};
+            int ssz[2] = {GW, GH};
+            const uint8_t *src = cnt;
+            uint32_t sw = cw, sh = ch;
+            for (int k = 0; k < 3; k++) {
+                RdSrStep p;
+                memset(&p, 0, sizeof(p));
+                p.first = k == 0;
+                p.kx = p.ky = 2.0f;
+                p.sx = p.sy = (float)L;
+                p.fx = p.fy = 0.25f;
+                p.repS = p.repT = rep;
+                memcpy(p.col, kCol, 4);
+                const int dw = (int)lw[k] / L, dh = (int)lh[k] / L;
+                int nlo[2], nhi[2];
+                const bool any =
+                    rd_sr_step_box(lo[0], hi[0], ssz[0], 0, dw, rep, &nlo[0], &nhi[0]) &&
+                    rd_sr_step_box(lo[1], hi[1], ssz[1], 0, dh, rep, &nlo[1], &nhi[1]);
+                int fx0 = 0, fx1 = -1, fy0 = 0, fy1 = -1;
+                if (any) {
+                    rd_sr_tent_box(nlo[0] * L, (nhi[0] + 1) * L - 1, L, (int)lw[k], &fx0, &fx1);
+                    rd_sr_tent_box(nlo[1] * L, (nhi[1] + 1) * L - 1, L, (int)lh[k], &fy0, &fy1);
+                }
+                int out = 0, outFin = 0;
+                for (uint32_t y = 0; y < lh[k]; y++) {
+                    for (uint32_t x = 0; x < lw[k]; x++) {
+                        uint8_t *q = lv[k] + ((size_t)y * lw[k] + x) * 4u;
+                        rd_sr_step_texel(src, sw, sh, &p, x, y, q);
+                        const int inside = any && (int)x >= nlo[0] * L &&
+                                           (int)x < (nhi[0] + 1) * L && (int)y >= nlo[1] * L &&
+                                           (int)y < (nhi[1] + 1) * L;
+                        out += (q[0] || q[1] || q[2] || q[3]) && !inside;
+                    }
+                }
+                for (uint32_t y = 0; y < lh[k]; y++) {
+                    for (uint32_t x = 0; x < lw[k]; x++) {
+                        uint8_t *q = fin[k] + ((size_t)y * lw[k] + x) * 4u;
+                        rd_sr_tent2_texel(lv[k], lw[k], lh[k], L, L, x, y, q);
+                        const int inside =
+                            (int)x >= fx0 && (int)x <= fx1 && (int)y >= fy0 && (int)y <= fy1;
+                        outFin += (q[0] || q[1] || q[2] || q[3]) && !inside;
+                    }
+                }
+                CHECK(
+                    out == 0 && outFin == 0,
+                    "box %zu %s level %d: %d texels outside the step's box, %d outside the tent's",
+                    b, rep ? "repeat" : "clamp", k, out, outFin);
+                if (!any) {
+                    break;
+                }
+                lo[0] = nlo[0];
+                lo[1] = nlo[1];
+                hi[0] = nhi[0];
+                hi[1] = nhi[1];
+                ssz[0] = dw;
+                ssz[1] = dh;
+                src = lv[k];
+                sw = lw[k];
+                sh = lh[k];
+            }
+        }
+    }
+    free(cnt);
+    for (int k = 0; k < 3; k++) {
+        free(lv[k]);
+        free(fin[k]);
+    }
+}
+
 static void testLines(void)
 {
     RdPerfRecord rec;
@@ -530,6 +756,8 @@ static void testLines(void)
     rec.shadowFinePasses = 10;
     rec.shadowFineRefused = 2;
     rec.shadowFineWhy[RD_SR_WHY_FILTER] = 2;
+    rec.shadowFineTexels = 250000;
+    rec.shadowFineArea = 1000000;
     rd__shadow_fine_pop(&rec);
     char text[512];
     size_t at = 0;
@@ -537,7 +765,8 @@ static void testLines(void)
     rd__shadow_fine_text(text, sizeof text, &at);
     printf("  10 s clause: %s\n", text);
     CHECK(strcmp(text, "; shadow levels: 1 shadows at the scene's scale, 2 at the PS2's size "
-                       "(filter 2) in 1 replays (10.0 passes a replay)") == 0,
+                       "(filter 2) in 1 replays (10.0 passes a shadow, drawing 25.0 % of their "
+                       "targets' texels, 0.25 M texels a shadow)") == 0,
           "the 10 s clause: %s", text);
     const size_t was = at;
     rd__shadow_fine_text(text, sizeof text, &at);
@@ -548,6 +777,10 @@ static void testLines(void)
     CHECK(strcmp(st, "shadow levels: 1 shadows at the scene's scale, 10 passes, 2 at the PS2's "
                      "size (filter 2)") == 0,
           "the stats words: %s", st);
+    rd__shadow_fine_drawn(&rec, st, sizeof st);
+    CHECK(strcmp(st, "shadow levels drawn: 250000 texels of the 1000000 their passes' targets "
+                     "hold (25.0 %)") == 0,
+          "the drawn words: %s", st);
 }
 
 int main(void)
@@ -559,6 +792,9 @@ int main(void)
     testScaleOne();
     testEdge();
     testRecognise();
+    testTent2();
+    testMask();
+    testBoxes();
     testLines();
     if (failures) {
         printf("rd_shadow_fine_test: %d failures\n", failures);

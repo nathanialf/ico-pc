@@ -3265,6 +3265,8 @@ int main(int argc, char **argv)
             printf("%s: stats: %s\n", dump, sc);
             rd__shadow_fine_stats(pr, sc, sizeof sc); /* rd_shadowres.c */
             printf("%s: stats: %s\n", dump, sc);
+            rd__shadow_fine_drawn(pr, sc, sizeof sc);
+            printf("%s: stats: %s\n", dump, sc);
         }
         /* a cleared source read as its colour (rd_const_read.c) */
         printf("%s: stats: constant reads %s: %u sprites drawn in a cleared source's colour, %u "

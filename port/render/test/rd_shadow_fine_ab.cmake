@@ -42,10 +42,11 @@
 #      default against the PS2's sizes: on every dump exactly one shadow at the
 #      scene's scale and none drawn at the PS2's size (no reason in the stats
 #      line: a silent fallback fails here);
-#      its passes 3 levels + 6 tent passes + 1 full-size count where the count
-#      is the one draw ("shadow count: N in one draw", N > 0), so 10 or 9; the
-#      passes exactly the PS2 run's plus those (no SCENE pass more), the draws
-#      the PS2 run's plus 9 (the full-size count's draw is not counted, as the
+#      its passes, under the cuts, 3 steps + 3 tents + 1 full-size count where
+#      the count is the one draw ("shadow count: N in one draw", N > 0), so 7 or
+#      6; the passes exactly the PS2 run's plus those (no SCENE pass more), the
+#      draws the PS2 run's plus at most 6 (a level whose box holds nothing is a
+#      clear alone; the full-size count's draw is not counted, as the
 #      one draw's is not); the levels' texels a GS pixel the size line names
 #      as the setting expects (3x3, or 1x3 at tall); the present (or SCENE)
 #      not the same bytes; and with lists 4-12 left out (SCENE right after
@@ -56,7 +57,11 @@
 #   4. bspline: also the default with [dev] shadow_bspline against the
 #      default without it at 2x, every PNG (the B-spline does nothing to a
 #      fine level);
-#   5. force: the fine chain at 1x, one shadow, 9 passes of its own, SCENE
+#   6. above 1x the cuts (the default) against ICO_RD_SHADOW_FINE_CUTS=0 (the
+#      chain as dbedd6025 drew it): every PNG the same bytes; the cuts' own
+#      passes 6 + the full-size count, at most 6 draws; without them 9 + it,
+#      9 draws;
+#   5. force: the fine chain at 1x, one shadow, 6 passes of its own, SCENE
 #      within one level of the default's at every channel (png_level_diff.py:
 #      the step's own rounding of 0.75 / 0.25 against the GS sprite's bilinear
 #      tap, then the composite's; no texel more than a level).
@@ -281,11 +286,11 @@ foreach(dump IN LISTS dumps)
         continue()
       endif()
       math(EXPR compared "${compared} + 1")
-      math(EXPR wantAll "${passes_d} + 9")
-      if(NOT chains_f EQUAL 1 OR NOT fpasses_f EQUAL 9 OR NOT refused_f EQUAL 0 OR
+      math(EXPR wantAll "${passes_d} + 6")
+      if(NOT chains_f EQUAL 1 OR NOT fpasses_f EQUAL 6 OR NOT refused_f EQUAL 0 OR
          NOT passes_f EQUAL wantAll)
         message(SEND_ERROR "${dumpName} force: ${chains_f} shadows (1), ${fpasses_f} passes of "
-                           "its own (9), ${refused_f} refused, ${passes_f} passes (${wantAll})")
+                           "its own (6), ${refused_f} refused, ${passes_f} passes (${wantAll})")
         set(sfFail TRUE)
       endif()
       execute_process(COMMAND "${PY}" -I "${DIFF}" "${base}-default/SCENE.png"
@@ -345,15 +350,17 @@ foreach(dump IN LISTS dumps)
       if(one_h GREATER 0)
         set(full 1)
       endif()
-      math(EXPR wantPasses "9 + ${full}")
+      # the cuts: a step and the tent in one pass a level (a level whose box
+      # holds nothing: its clear alone, no draw)
+      math(EXPR wantPasses "6 + ${full}")
       math(EXPR wantAll "${passes_p} + ${fpasses_h}")
-      math(EXPR wantDraws "${draws_p} + 9 * ${chains_h}")
+      math(EXPR wantDraws "${draws_p} + 6 * ${chains_h}")
       if(NOT whys_h STREQUAL "")
         message(SEND_ERROR "${dumpName} ${s}: drawn at the PS2's size for${whys_h}:\n${err_h}")
         set(sfFail TRUE)
       endif()
       if(NOT chains_h EQUAL 1 OR NOT refused_h EQUAL 0 OR NOT fpasses_h EQUAL wantPasses OR
-         NOT passes_h EQUAL wantAll OR NOT draws_h EQUAL wantDraws)
+         NOT passes_h EQUAL wantAll OR draws_h GREATER wantDraws OR draws_h LESS draws_p)
         message(SEND_ERROR "${dumpName} ${s}: ${chains_h} shadows at the scene's scale (1), "
                            "${refused_h} refused (0), ${fpasses_h} passes of its own "
                            "(${wantPasses}); ${passes_h} passes (${wantAll}), ${draws_h} draws "
@@ -407,6 +414,24 @@ foreach(dump IN LISTS dumps)
                                "its darkness moved (exit ${crc}): ${cout}${cerr}")
             set(sfFail TRUE)
           endif()
+        endif()
+      endif()
+      # 6. the cuts against the chain without them (ICO_RD_SHADOW_FINE_CUTS=0:
+      # nine passes over every texel): every PNG the same bytes, its passes
+      # 9 + the full-size count, 9 draws
+      sf_run(hc "${dump}" "${base}-fine-nocuts" "${env_${s}};ICO_RD_SHADOW_FINE_CUTS=0"
+             ${args_${s}})
+      if(NOT ok_hc)
+        set(sfFail TRUE)
+      else()
+        sf_same("${dumpName} ${s}: the cuts against the chain without them" "${base}-fine-nocuts"
+                "${base}-fine")
+        math(EXPR wantNc "9 + ${full}")
+        math(EXPR wantNcDraws "${draws_p} + 9")
+        if(NOT chains_hc EQUAL 1 OR NOT fpasses_hc EQUAL wantNc OR NOT draws_hc EQUAL wantNcDraws)
+          message(SEND_ERROR "${dumpName} ${s}: without the cuts ${chains_hc} shadows, "
+                             "${fpasses_hc} passes (${wantNc}), ${draws_hc} draws (${wantNcDraws})")
+          set(sfFail TRUE)
         endif()
       endif()
       if(s STREQUAL "bspline")

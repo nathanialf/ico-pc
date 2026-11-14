@@ -124,6 +124,30 @@ void rd_sr_step_texel(const uint8_t *src, uint32_t sw, uint32_t sh, const RdSrSt
 void rd_sr_tent_texel(const uint8_t *src, uint32_t w, uint32_t h, int down, float s, uint32_t x,
                       uint32_t y, uint8_t out[4]);
 
+/* The cuts (rd_shadowres.c "The cuts"; each exact, the CPU test's):
+ * the GS pixels lo..hi of a level of dstSize GS pixels that can be nonzero
+ * when its source (srcSize GS pixels) is nonzero only in srcLo..srcHi, the
+ * sprite's whole offset `whole`, its axis repeating or held; false when none */
+bool rd_sr_step_box(int srcLo, int srcHi, int srcSize, int whole, int dstSize, int repeat, int *lo,
+                    int *hi);
+/* the fine texels the tent of scale L spreads lo..hi to, clipped to size */
+void rd_sr_tent_box(int lo, int hi, int L, int size, int *flo, int *fhi);
+/* shadowres_tent2_ps's reference: the tent across and down at (x, y) of a
+ * w x h RGBA8 level at the odd whole scales lx, ly, in integers */
+void rd_sr_tent2_texel(const uint8_t *src, uint32_t w, uint32_t h, int lx, int ly, uint32_t x,
+                       uint32_t y, uint8_t out[4]);
+/* shadowres_step_ps's empty-area test for a first-level texel whose taps
+ * start at (ax, ay) count texels of the sw x sh count, the count at sx x sy
+ * texels a GS pixel with ox left-out texels: true (never when a tap would
+ * leave the count's texels: it wraps or is held) when every GS pixel of the mask (mw x mh
+ * RGBA8, the count box-reduced) under the taps has alpha 0 */
+bool rd_sr_mask_empty(const uint8_t *mask, uint32_t mw, uint32_t mh, uint32_t sw, uint32_t sh,
+                      float ax, float ay, float sx, float sy, float ox);
+
+/* rd_replay.c: the count of target color box-reduced to its GS size this
+ * replay ({0} when it was not made: an unscaled count) */
+RhiTexture rd__shadow_red_of(uint32_t color);
+
 /* ------------------------------------------------------------ the replay */
 /* rd_no_volume.c rd__no_volume_skip, at the top of every screen command
  * (doScreen): the replay the command is drawn in */
@@ -156,5 +180,7 @@ void rd__shadow_fine_shutdown(void);
 void rd__shadow_fine_pop(const struct RdPerfRecord *rec);
 void rd__shadow_fine_text(char *out, size_t size, size_t *at);
 void rd__shadow_fine_stats(const struct RdPerfRecord *rec, char *out, size_t size);
+/* --stats' second line: the texels the chain's passes drew of their targets' */
+void rd__shadow_fine_drawn(const struct RdPerfRecord *rec, char *out, size_t size);
 
 #endif

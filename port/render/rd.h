@@ -2985,6 +2985,10 @@ typedef struct RdPerfRecord {
     uint32_t shadowFineChains, shadowFinePasses, shadowFineRefused;
     /* of shadowFineRefused, by reason (rd_shadowres.c's RD_SR_WHY_*) */
     uint16_t shadowFineWhy[RD_SHADOW_FINE_WHYS];
+    /* the cuts (rd_shadowres.c): the texels the chain's passes drew this
+     * replay (their boxes) and the texels of the targets those passes cover
+     * (the levels' and temporaries' whole area, a pass each) */
+    uint32_t shadowFineTexels, shadowFineArea;
     /* of shadowOne, the draws that read the stencil four texels a gather
      * (the rest a texel a load: g_rd.shadowLoad, rd_shadow_selftest.c) */
     uint32_t shadowGathered;

@@ -81,6 +81,32 @@
  * fine level (rd_fx_plan.c); a window without volumes (rd_no_volume.c)
  * skips the levels, so no chain is made.
  *
+ * The cuts (v0.11.7 round 5; ICO_RD_SHADOW_FINE_CUTS=0 the tests' switch to
+ * the nine-pass form; each the same bytes, the CPU test proving the pure
+ * parts and rd_shadow_fine_ab the pictures):
+ *   - the box: the count is 0 outside the volumes' box (rd_shadow_box.c
+ *     rd__shadow_box_count_area; the one draw clears outside it, the stencil
+ *     is 0 there for the seven draws); a level's GS pixel x reads its source's
+ *     pixels 2 x + whole .. 2 x + whole + 3 at most, so its box follows
+ *     (rd_sr_step_box: the whole axis where a REPEAT tap can wrap the source's
+ *     far side in, the edge where a held tap reads it), and the tent spreads
+ *     it by c - L + 1 .. c + L - 1 (rd_sr_tent_box).  Each pass clears its
+ *     target (CLEAR: free on a tiler) and draws its box alone, so outside the
+ *     box every texel is the 0 it would hold anyway, every frame, whatever
+ *     the box did the frame before;
+ *   - the step's empty areas: shadowres_step_ps skips a first-level texel
+ *     whose count texels all lie in GS pixels the reduced count (rd_replay.c,
+ *     rd__shadow_red_of) holds at alpha 0 (a nonzero count texel's alpha
+ *     0x80 overlaps one of its GS pixels by a quarter texel or more, so its
+ *     GS pixel reads at least 0x20 / (S.x S.y), nonzero below a scale product
+ *     of 64); not where a tap leaves the count's texels (rd_sr_mask_empty);
+ *   - the tent in one pass (shadowres_tent2_ps): the two passes' bytes in
+ *     integers (an odd L makes every weight whole and S / L^2 never a half),
+ *     so 6 passes a shadow instead of 9 (7 and 10 with the one draw's
+ *     full-size count), the temporaries the final levels;
+ *   - an empty count: no step or tent; each final level cleared once and kept
+ *     while it holds 0.
+ *
  * Tests only (docs/port/TESTING.md): ICO_RD_SHADOW_FINE=0 keeps the PS2's
  * sizes above 1x (v0.11.6's picture: the A/B's other half);
  * ICO_RD_SHADOW_FINE=force draws the fine chain at 1x too (S = 1 on both
@@ -111,6 +137,7 @@
 #include "rd_clause.h"
 #include "rd_internal.h"
 #include "rd_replay.h"
+#include "rd_shadow_box.h" /* rd__shadow_box_count_area */
 #include "rd_shadowres.h"
 
 /* ------------------------------------------------------------ the replay */
@@ -131,8 +158,17 @@ static struct {
      * level's texels per GS pixel */
     float cx, cy, cox, sx[RD_SR_LEVELS], sy[RD_SR_LEVELS];
     uint32_t chainPasses;
-    RhiShader fsStep, fsTent;
-    RhiPipeline pipeStep, pipeTent;
+    RhiShader fsStep, fsTent, fsTent2;
+    RhiPipeline pipeStep, pipeTent, pipeTent2;
+    /* the cuts (cutsOn): this chain's count box known (boxed) and empty, each
+     * level's GS box (glo, ghi per axis) and its fine pre-tent and final
+     * boxes; the final level is tmp[k] under the cuts (the fused tent writes
+     * it), lvl[k] without; zero[k]: the final texture holds 0 everywhere (a
+     * clear pass of an empty chain made it and nothing has written it since) */
+    bool boxed, empty;
+    int glo[RD_SR_LEVELS][2], ghi[RD_SR_LEVELS][2];
+    RhiRect pre[RD_SR_LEVELS], fin[RD_SR_LEVELS];
+    bool cuts, zero[RD_SR_LEVELS];
     bool refused;          /* the pipelines failed: the PS2's sizes for the run */
     uint32_t whyEvents;    /* the refusals so far (logged: 8, then every 100th) */
     uint32_t fineSince;    /* the shadows at the scene's scale since the last refusal */
@@ -184,6 +220,21 @@ static int fineMode(void)
     return s_mode;
 }
 
+/* ICO_RD_SHADOW_FINE_CUTS=0 (tests only): the chain as v0.11.7's first
+ * form drew it (nine passes over every texel); else the cuts: each level's
+ * passes over the box its count can reach, the step's empty areas skipped,
+ * the tent in one pass, an empty count's levels cleared once (rd_shadowres.c
+ * "The cuts"; every one the same bytes) */
+static bool cutsOn(void)
+{
+    static int s_on = -1;
+    if (s_on < 0) {
+        const char *e = getenv("ICO_RD_SHADOW_FINE_CUTS");
+        s_on = !(e && strcmp(e, "0") == 0);
+    }
+    return s_on == 1;
+}
+
 static const char *backendName(void)
 {
     switch (rhi_backend()) {
@@ -226,6 +277,7 @@ static void destroyAll(void)
         s_sr.lvl[k] = s_sr.tmp[k] = (RhiTexture){0};
         s_sr.w[k] = s_sr.h[k] = 0;
         s_sr.made[k] = 0;
+        s_sr.zero[k] = false;
     }
     s_sr.ready = false;
 }
@@ -248,6 +300,12 @@ void rd__shadow_fine_shutdown(void)
         }
         if (s_sr.pipeTent.id) {
             rhi_destroy_pipeline(s_sr.pipeTent);
+        }
+        if (s_sr.pipeTent2.id) {
+            rhi_destroy_pipeline(s_sr.pipeTent2);
+        }
+        if (s_sr.fsTent2.id) {
+            rhi_destroy_shader(s_sr.fsTent2);
         }
         if (s_sr.fsStep.id) {
             rhi_destroy_shader(s_sr.fsStep);
@@ -330,7 +388,7 @@ static RhiPipeline makePipe(RhiShader fs, const char *name)
 
 static bool pipes(void)
 {
-    if (s_sr.pipeStep.id && s_sr.pipeTent.id) {
+    if (s_sr.pipeStep.id && s_sr.pipeTent.id && (s_sr.pipeTent2.id || !cutsOn())) {
         return true;
     }
     if (s_sr.refused || !g_rd.vs[RD_VS_BLIT].id) {
@@ -348,7 +406,13 @@ static bool pipes(void)
     if (s_sr.fsTent.id && !s_sr.pipeTent.id) {
         s_sr.pipeTent = makePipe(s_sr.fsTent, "rd shadow levels tent");
     }
-    if (!s_sr.pipeStep.id || !s_sr.pipeTent.id) {
+    if (cutsOn() && !s_sr.fsTent2.id) {
+        s_sr.fsTent2 = rd__make_shader("shadowres_tent2_ps");
+    }
+    if (s_sr.fsTent2.id && !s_sr.pipeTent2.id) {
+        s_sr.pipeTent2 = makePipe(s_sr.fsTent2, "rd shadow levels tent in one pass");
+    }
+    if (!s_sr.pipeStep.id || !s_sr.pipeTent.id || (cutsOn() && !s_sr.pipeTent2.id)) {
         rd__log("shadow levels: the shaders or pipelines of the levels at the scene's scale could "
                 "not be made on %s (step %s, tent %s): the PS2's sizes for this run",
                 backendName(), s_sr.pipeStep.id ? "made" : "missing",
@@ -384,16 +448,23 @@ static bool texturesFor(int k, uint32_t w, uint32_t h)
     s_sr.w[k] = w;
     s_sr.h[k] = h;
     s_sr.made[k] = 0;
+    s_sr.zero[k] = false;
     return s_sr.lvl[k].id && s_sr.tmp[k].id;
 }
 
-/* one pass of one triangle over dst (w x h) reading src through pipe */
+/* one pass of one triangle over dst (w x h) reading src (and mask, the
+ * step's empty-area mask, when it has an id) through pipe; with box, the
+ * pass clears dst to 0 and draws inside box alone (nothing outside it can be
+ * other than 0: rd_shadowres.c "The cuts"); a box of no texels: the clear
+ * alone (no pipe needed) */
 static void drawPass(struct Replay *r, RhiPipeline pipe, RhiTexture dst, RhiState *dstState,
                      RhiTexture src, RhiState *srcState, uint32_t w, uint32_t h, uint32_t name,
-                     const IcoDrawCB *cb)
+                     const IcoDrawCB *cb, const RhiRect *box, RhiTexture mask)
 {
     RhiCommandList cl = rd__replay_cl();
-    rd__transition(cl, src, srcState, RHI_STATE_SHADER_READ);
+    if (src.id) {
+        rd__transition(cl, src, srcState, RHI_STATE_SHADER_READ);
+    }
     rd__transition(cl, dst, dstState, RHI_STATE_RENDER_TARGET);
     rd__perf_pass(cl, RD_PERF_PASS_RENDER, name, w, h, r->perfPost);
     rhi_cmd_checkpoint(cl,
@@ -401,22 +472,30 @@ static void drawPass(struct Replay *r, RhiPipeline pipe, RhiTexture dst, RhiStat
     RhiRenderPassDesc p;
     memset(&p, 0, sizeof(p));
     p.color[0].texture = dst;
-    p.color[0].load = RHI_LOAD_DONT_CARE; /* every texel is written */
+    /* every texel is written (DONT_CARE), or the outside of the box is 0
+     * (CLEAR: clear[] zeroed) */
+    p.color[0].load = box ? RHI_LOAD_CLEAR : RHI_LOAD_DONT_CARE;
     p.colorCount = 1;
     p.width = w;
     p.height = h;
     rhi_cmd_begin_render_pass(cl, &p);
-    rd__replay_viewport(w, h);
-    const RhiRect all = {0, 0, w, h};
-    rhi_cmd_set_scissor(cl, &all);
-    rd__set_pipeline(cl, pipe, NULL); /* makePipe: every state static */
-    rd__bind_uniform(cl, 0, rd__frame_group(w, h, 0.0f, 0.0f));
-    rd__bind_uniform(cl, 1, rd__draw_group(cb));
-    rhi_cmd_set_bind_group(cl, 2,
-                           rd__tex_group(src, rd__sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST,
-                                                          RD_WRAP_CLAMP, RD_WRAP_CLAMP)));
-    rd__replay_draw(cl, 3, 0, 1);
-    rd__stats_here()->draws++;
+    const bool draw = !box || (box->w && box->h);
+    if (draw) {
+        rd__replay_viewport(w, h);
+        const RhiRect all = {0, 0, w, h};
+        rhi_cmd_set_scissor(cl, box ? box : &all);
+        rd__set_pipeline(cl, pipe, NULL); /* makePipe: every state static */
+        rd__bind_uniform(cl, 0, rd__frame_group(w, h, 0.0f, 0.0f));
+        rd__bind_uniform(cl, 1, rd__draw_group(cb));
+        const RhiSampler smp =
+            rd__sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+        rhi_cmd_set_bind_group(
+            cl, 2, mask.id ? rd__tex_group_date(src, smp, mask) : rd__tex_group(src, smp));
+        rd__replay_draw(cl, 3, 0, 1);
+        rd__stats_here()->draws++;
+        g_rdPerf.shadowFineTexels += box ? box->w * box->h : w * h;
+    }
+    g_rdPerf.shadowFineArea += w * h;
     rhi_cmd_end_render_pass(cl);
     rd__transition(cl, dst, dstState, RHI_STATE_SHADER_READ);
     g_rdPerf.shadowFinePasses++;
@@ -515,6 +594,7 @@ static void ps2Line(float cx, float cy)
 /* the tent across (level -> temporary) and down (temporary -> level) */
 static void tent(struct Replay *r, int k, uint32_t name)
 {
+    s_sr.zero[k] = false; /* the temporary written */
     for (int down = 0; down < 2; down++) {
         IcoDrawCB cb;
         memset(&cb, 0, sizeof(cb));
@@ -526,11 +606,57 @@ static void tent(struct Replay *r, int k, uint32_t name)
         cb.tex[3] = 1.0f / (float)s_sr.h[k];
         if (down) {
             drawPass(r, s_sr.pipeTent, s_sr.lvl[k], &s_sr.lvlState[k], s_sr.tmp[k],
-                     &s_sr.tmpState[k], s_sr.w[k], s_sr.h[k], name, &cb);
+                     &s_sr.tmpState[k], s_sr.w[k], s_sr.h[k], name, &cb, NULL, (RhiTexture){0});
         } else {
             drawPass(r, s_sr.pipeTent, s_sr.tmp[k], &s_sr.tmpState[k], s_sr.lvl[k],
-                     &s_sr.lvlState[k], s_sr.w[k], s_sr.h[k], name, &cb);
+                     &s_sr.lvlState[k], s_sr.w[k], s_sr.h[k], name, &cb, NULL, (RhiTexture){0});
         }
+    }
+}
+
+/* the cuts' tent: one pass level -> temporary over the final box
+ * (shadowres_tent2_ps, the two passes' bytes) */
+static void tent2(struct Replay *r, int k, uint32_t name)
+{
+    IcoDrawCB cb;
+    memset(&cb, 0, sizeof(cb));
+    cb.param[0] = s_sr.sx[k];
+    cb.param[1] = s_sr.sy[k];
+    cb.tex[0] = (float)s_sr.w[k];
+    cb.tex[1] = (float)s_sr.h[k];
+    cb.tex[2] = 1.0f / (float)s_sr.w[k];
+    cb.tex[3] = 1.0f / (float)s_sr.h[k];
+    drawPass(r, s_sr.pipeTent2, s_sr.tmp[k], &s_sr.tmpState[k], s_sr.lvl[k], &s_sr.lvlState[k],
+             s_sr.w[k], s_sr.h[k], name, &cb, s_sr.boxed ? &s_sr.fin[k] : NULL, (RhiTexture){0});
+    s_sr.zero[k] = s_sr.boxed && (s_sr.fin[k].w == 0 || s_sr.fin[k].h == 0);
+}
+
+/* level k's boxes from its source's GS box (the count's, or level k - 1's):
+ * the GS box, the fine pre-tent box (the step's scissor) and the final box
+ * (the tent's); false when the source holds nothing (the level is 0) */
+static void levelBoxes(int k, const RdTargetRec *dst, int srcLo[2], int srcHi[2],
+                       const int srcSize[2], int ofx, int ofy, int repS, int repT)
+{
+    const int Lx = (int)rd_sr_level_scale(s_sr.cx), Ly = (int)rd_sr_level_scale(s_sr.cy);
+    int lo[2] = {0, 0}, hi[2] = {-1, -1};
+    const bool any =
+        rd_sr_step_box(srcLo[0], srcHi[0], srcSize[0], ofx, (int)dst->w, repS, &lo[0], &hi[0]) &&
+        rd_sr_step_box(srcLo[1], srcHi[1], srcSize[1], ofy, (int)dst->h, repT, &lo[1], &hi[1]);
+    if (!any) {
+        lo[0] = lo[1] = 0;
+        hi[0] = hi[1] = -1;
+        s_sr.pre[k] = s_sr.fin[k] = (RhiRect){0, 0, 0, 0};
+    } else {
+        s_sr.pre[k] = (RhiRect){lo[0] * Lx, lo[1] * Ly, (uint32_t)((hi[0] - lo[0] + 1) * Lx),
+                                (uint32_t)((hi[1] - lo[1] + 1) * Ly)};
+        int fx0, fx1, fy0, fy1;
+        rd_sr_tent_box(lo[0] * Lx, (hi[0] + 1) * Lx - 1, Lx, (int)s_sr.w[k], &fx0, &fx1);
+        rd_sr_tent_box(lo[1] * Ly, (hi[1] + 1) * Ly - 1, Ly, (int)s_sr.h[k], &fy0, &fy1);
+        s_sr.fin[k] = (RhiRect){fx0, fy0, (uint32_t)(fx1 - fx0 + 1), (uint32_t)(fy1 - fy0 + 1)};
+    }
+    for (int a = 0; a < 2; a++) {
+        s_sr.glo[k][a] = lo[a];
+        s_sr.ghi[k][a] = hi[a];
     }
 }
 
@@ -605,6 +731,35 @@ void rd__shadow_fine_screen(const RdStateBlock *st, const RdCmd *c, const RdScre
     s_sr.sy[k] = (float)h / (float)dst->h;
     if (k == 0) {
         s_sr.chainPasses = 0;
+        s_sr.cuts = cutsOn();
+        s_sr.boxed = false;
+        s_sr.empty = false;
+    }
+    const int repS = st->ds.wrap.s == RD_WRAP_REPEAT, repT = st->ds.wrap.t == RD_WRAP_REPEAT;
+    RhiTexture mask = (RhiTexture){0};
+    if (s_sr.cuts) {
+        if (k == 0) {
+            /* the count's box (rd_shadow_box.c: the volumes' extent, the count 0
+             * outside it): none known, the whole level */
+            RhiRect gb;
+            s_sr.boxed = rd__shadow_box_count_area(src, &gb);
+            int slo[2] = {gb.x, gb.y}, shi[2] = {gb.x + (int)gb.w - 1, gb.y + (int)gb.h - 1};
+            const int ssz[2] = {(int)src->w, (int)src->h};
+            if (s_sr.boxed) {
+                s_sr.empty = gb.w == 0 || gb.h == 0;
+                levelBoxes(0, dst, slo, shi, ssz, ofx, ofy, repS, repT);
+            }
+            /* the step's empty-area mask: the count box-reduced, where a
+             * nonzero count texel's GS pixel is sure to read nonzero */
+            if (s_sr.cx * s_sr.cy <= 64.0f) {
+                mask = rd__shadow_red_of(t->target);
+            }
+        } else if (s_sr.boxed) {
+            int slo[2] = {s_sr.glo[k - 1][0], s_sr.glo[k - 1][1]},
+                shi[2] = {s_sr.ghi[k - 1][0], s_sr.ghi[k - 1][1]};
+            const int ssz[2] = {(int)src->w, (int)src->h};
+            levelBoxes(k, dst, slo, shi, ssz, ofx, ofy, repS, repT);
+        }
     }
     IcoDrawCB cb;
     memset(&cb, 0, sizeof(cb));
@@ -647,13 +802,33 @@ void rd__shadow_fine_screen(const RdStateBlock *st, const RdCmd *c, const RdScre
     for (int ch = 0; ch < 4; ch++) {
         cb.col[ch] = v[1].rgba[ch];
     }
-    drawPass(r, s_sr.pipeStep, s_sr.lvl[k], &s_sr.lvlState[k], stex, sstate, w, h, st->color, &cb);
+    if (mask.id) {
+        cb.mode[2] = 1u;
+        cb.scale[2] = ox;
+        cb.uvRect[2] = (float)src->w;
+        cb.uvRect[3] = (float)src->h;
+    }
+    if (!(s_sr.cuts && s_sr.empty)) {
+        drawPass(r, s_sr.pipeStep, s_sr.lvl[k], &s_sr.lvlState[k], stex, sstate, w, h, st->color,
+                 &cb, s_sr.cuts && s_sr.boxed ? &s_sr.pre[k] : NULL, mask);
+    }
     s_sr.made[k] = s_sr.chain + 1u;
     if (k + 1 < RD_SR_LEVELS) {
         return;
     }
     for (int j = 0; j < RD_SR_LEVELS; j++) {
-        tent(r, j, rd_target((RdTargetId)(RD_TARGET_SHADOW0 + j)).id);
+        const uint32_t name = rd_target((RdTargetId)(RD_TARGET_SHADOW0 + j)).id;
+        if (!s_sr.cuts) {
+            tent(r, j, name);
+        } else if (!s_sr.empty) {
+            tent2(r, j, name);
+        } else if (!s_sr.zero[j]) {
+            /* an empty count: every level 0; the final texture cleared once,
+             * kept while nothing writes it */
+            drawPass(r, (RhiPipeline){0}, s_sr.tmp[j], &s_sr.tmpState[j], (RhiTexture){0}, NULL,
+                     s_sr.w[j], s_sr.h[j], name, NULL, &(RhiRect){0, 0, 0, 0}, (RhiTexture){0});
+            s_sr.zero[j] = true;
+        }
     }
     s_sr.ready = true;
     s_sr.readyChain = s_sr.chain;
@@ -670,16 +845,21 @@ RhiTexture rd__shadow_fine(uint32_t target, uint32_t drawTarget)
         return (RhiTexture){0};
     }
     const int k = levelOf(target);
-    if (k < 0 || !s_sr.lvl[k].id || s_sr.lvlState[k] != RHI_STATE_SHADER_READ) {
+    if (k < 0) {
         return (RhiTexture){0};
     }
-    return s_sr.lvl[k];
+    const RhiTexture fin = s_sr.cuts ? s_sr.tmp[k] : s_sr.lvl[k];
+    const RhiState fs = s_sr.cuts ? s_sr.tmpState[k] : s_sr.lvlState[k];
+    if (!fin.id || fs != RHI_STATE_SHADER_READ) {
+        return (RhiTexture){0};
+    }
+    return fin;
 }
 
 bool rd__shadow_fine_tex(uint32_t texId)
 {
     for (int k = 0; texId && k < RD_SR_LEVELS; k++) {
-        if (s_sr.lvl[k].id == texId) {
+        if (s_sr.lvl[k].id == texId || s_sr.tmp[k].id == texId) {
             return true;
         }
     }

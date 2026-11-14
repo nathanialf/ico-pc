@@ -321,6 +321,7 @@ ico_add_shader(fx_glowblur_ps fx_glowblur.hlsl fx_glowblur_ps fragment)
 # blit_vs; made only once a scene above 1x draws a shadow, on every backend
 ico_add_shader(shadowres_step_ps shadowres.hlsl shadowres_step_ps fragment)
 ico_add_shader(shadowres_tent_ps shadowres.hlsl shadowres_tent_ps fragment)
+ico_add_shader(shadowres_tent2_ps shadowres.hlsl shadowres_tent2_ps fragment)
 # Motion blur: Smooth's accumulator (port/render/rd_blur_smooth.c): its step
 # and its resolve into the RGBA8 target the motion blur's sprite reads, behind
 # blit_vs; used on both backends

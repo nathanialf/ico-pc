@@ -4651,6 +4651,11 @@ bool rd__shadow_count_read(uint32_t color, void *dst, size_t dstSize, uint32_t *
     return rd__read_rhi_texture(t->color, &t->colorState, t->tw, t->th, dst, dstSize);
 }
 
+RhiTexture rd__shadow_red_of(uint32_t color) /* rd_shadowres.c's empty-area mask */
+{
+    return s_shadowRedFor == color && s_shadowRed.id ? s_shadowRed : (RhiTexture){0};
+}
+
 void rd__shadow_count_forget(void)
 {
     s_shadowRedFor = 0;
