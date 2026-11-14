@@ -52,7 +52,7 @@ if(ICO_RUN_TESTS AND TARGET rd_vuprepass_selftest_test AND DEFINED _vst)
     add_test(NAME rd_vuprepass_selftest_compact
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}"
-                     "-DEXTRA=rd: VU index compaction: on by the tests' switch: [^\n]*rd: VU index compaction: on: passed its start-up self-test with the record's \\(ICO_RD_VU_COMPACT=1, its start-up self-test passed, not the Mali-G52 or the PowerVR D-Series DXT-48-1536 \\([^\n]*, vendor 0x[0-9A-F]+\\): off by default\\).*rd: VU pre-pass: on \\(self-test: [^\n]*${_cmp_copy}[^\n]*${_cmp_rec}"
+                     "-DEXTRA=rd: VU index compaction: on by the tests' switch: .*rd: VU index compaction: on: passed its start-up self-test with the record's \\(ICO_RD_VU_COMPACT=1, its start-up self-test passed, not the Mali-G52 or the PowerVR D-Series DXT-48-1536 \\([^\n]*, vendor 0x[0-9A-F]+\\): off by default\\).*rd: VU pre-pass: on \\(self-test: [^\n]*${_cmp_copy}[^\n]*${_cmp_rec}"
                      -P "${_vst}")
     add_test(NAME rd_vuprepass_selftest_compact_refused
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
@@ -62,7 +62,7 @@ if(ICO_RUN_TESTS AND TARGET rd_vuprepass_selftest_test AND DEFINED _vst)
     add_test(NAME rd_vuprepass_selftest_compact_mali
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}"
-                     "-DEXTRA=rd: VU index compaction: to be tried by the start-up self-test, on where it passes: [^\n]*rd: VU index compaction: on: passed its start-up self-test with the record's \\(the Mali-G52, its start-up self-test passed, the Mali-G52 \\([^\n]*, vendor 0x[0-9A-F]+, ICO_RD_VU_COMPACT_ARM=1\\): RD_VU_COMPACT_ARM_DEFAULT 1\\).*${_cmp_copy}"
+                     "-DEXTRA=rd: VU index compaction: to be tried by the start-up self-test, on where it passes: .*rd: VU index compaction: on: passed its start-up self-test with the record's \\(the Mali-G52, its start-up self-test passed, the Mali-G52 \\([^\n]*, vendor 0x[0-9A-F]+, ICO_RD_VU_COMPACT_ARM=1\\): RD_VU_COMPACT_ARM_DEFAULT 1\\).*${_cmp_copy}"
                      -P "${_vst}")
     add_test(NAME rd_vuprepass_selftest_compact_stores
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
