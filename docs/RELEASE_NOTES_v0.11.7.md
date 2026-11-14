@@ -5,6 +5,7 @@
 - The log now lists, at start, the adjustments the game makes for your graphics chip and driver, with the reason for each.
 - The log now names the objects that move without smoothing between game frames, and times the moments when the picture rate drops to one picture per game frame, so a report of slow-looking movement can be traced.
 - The log now follows each request the game makes to Android for more speed for five seconds, so the next log shows whether the request helped.
+- Above the original resolution, characters' shadows are now drawn at the picture's resolution and no longer look blocky; they keep the original's softness. At the original resolution nothing changes.
 
 ## Fixed
 

@@ -870,8 +870,10 @@ the green-grey floors).
 in that order (the v4251 frame: commands 3:42, 3:47 and 3:52), each a sprite over the whole frame,
 LERP by the texel's alpha (ALPHA blend 4), the alpha test GREATER 0 and DATE against the receiver
 mask ([RENDER_POST.md](RENDER_POST.md#shadows)). A level texel covers 2, 4 or 8 GS pixels on each axis
-(SHADOW0 is W / 2 x 256 for a frame of W x 448, `namedTargetDesc`), and the levels stay at scale 1
-at every scale ([RENDER_POST.md](RENDER_POST.md#above-1x), "Left as they are"). On a SCENE at scale s each
+(SHADOW0 is W / 2 x 256 for a frame of W x 448, `namedTargetDesc`), and the named levels stay at
+scale 1 at every scale. The composites above 1x read the levels' twins at the scene's
+scale instead ([RENDER_POST.md](RENDER_POST.md#the-shadows-levels-above-1x)), which this section's
+B-spline does nothing to; what follows is the PS2-size chain (`ICO_RD_SHADOW_FINE=0`). On a SCENE at scale s each
 composite therefore steps 1 / (2 s), 1 / (4 s) or 1 / (8 s) level texels a texel, under half a
 texel on both axes whenever s > 1.
 
