@@ -9,6 +9,7 @@
 #include "../rhi_adapter.h"
 #include "../rhi_backend.h"
 #include "../rhi_bind_cache.h"
+#include "../rhi_device_table.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -515,6 +516,29 @@ static uint32_t d11_msaa_counts(void)
 }
 
 static char s_driverLimitText[96];
+
+/* the device table's start-up lines (../rhi_device_table.h,
+   docs/port/DEVICE_TABLE.md): no row is keyed on Direct3D 11, so the
+   header names the rows a D3D11 identity matches, with no fakes (the
+   tests' are Vulkan's); the summary's clause noted */
+static void d11_device_table_line(const char *line, void *user)
+{
+    (void)user;
+    D11_LOG("%s", line);
+}
+
+static void d11_device_table(void)
+{
+    RhiDeviceId id;
+    memset(&id, 0, sizeof id);
+    id.backend = RHI_DT_D3D11;
+    id.os = RHI_DT_OS_BUILD;
+    id.vendorId = g_d11.vendorId;
+    id.deviceId = g_d11.deviceId;
+    id.deviceName = g_d11.adapterName;
+    id.driverText = g_d11.limits.driverText;
+    (void)rhi_device_table_start(&id, NULL, d11_device_table_line, NULL);
+}
 
 static void d11_fill_limits(void)
 {
@@ -1473,6 +1497,7 @@ bool rhi_init(const RhiDeviceDesc *desc)
             g_d11.swapchain ? (g_d11.tearing ? "yes" : "no") : "n/a",
             g_d11.info ? "on" : (debug ? "asked for, not installed" : "off"),
             g_d11.cacheDir[0] ? g_d11.cacheDir : "none", g_d11.swapchain ? "" : "; headless");
+    d11_device_table();
     d11_video_memory();
     if (g_d11.memBudget == 0) {
         D11_LOG("video memory budget: not reported by this adapter");

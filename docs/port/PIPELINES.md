@@ -544,7 +544,7 @@ waited 13.6 s for the pipelines made on first use, and the 2048 MB cap stopped i
 MB (a 2.2 s freeze in play). A stop at the floor on another driver than Qualcomm's own is for that
 start only, and the rest is finished in the background (next section).
 
-The table's row (`port/rhi/vk/vk_device.c` `kVuPlainOnly`; the fallback rule of the next section
+The table's row (the device table's `adreno-740-qualcomm`, [DEVICE_TABLE.md](DEVICE_TABLE.md); the fallback rule of the next section
 stays on the same device):
 
 | device | match | reason |
@@ -772,8 +772,8 @@ program entry's key is made from is decided once a run, at `rd_init` (`port/rend
 
 - the extended build `vu_X_vs` elsewhere;
 - the plain build `vu_X_plain_vs` (`port/shaders/vu_common.hlsli`, `ICO_VU_PLAIN`: no card test, no
-  tick cameras) on a device of the table (`RhiLimits.vuFallbackPlain`, `kVuPlainOnly` in
-  `port/rhi/vk/vk_device.c`), under Turnip (issue 163, [SHADERS.md](SHADERS.md#the-variants)), with `[dev] vu_set = plain` (`ICO_RD_VU_SET=plain`, `ICO_RD_VU_PLAIN=1`) or `rd_set_vu_plain_only`; only the
+  tick cameras) on a device of the table (`RhiLimits.vuFallbackPlain`, the device table's
+  `adreno-740-qualcomm` row), under Turnip (issue 163, [SHADERS.md](SHADERS.md#the-variants)), with `[dev] vu_set = plain` (`ICO_RD_VU_SET=plain`, `ICO_RD_VU_PLAIN=1`) or `rd_set_vu_plain_only`; only the
   ten mesh entries have it (the particles' `vu_particle_vs` is one build), and its modules are made
   only then. `[dev] vu_set = extended` (`ICO_RD_VU_EXTENDED=1`) gives the extended build whatever the others say.
 
@@ -1201,8 +1201,8 @@ ICO_RD_VU_PREPASS=0): ...` or `off on this device (its colour targets hold 32 by
 together, the record 48: an Apple A9 or A10 GPU): ...` (`port/render/rd_replay_vu.c`
 (`rd__vu_prepass_init`)).
 
-One device draws without it by the device table (`port/rhi/vk/vk_device.c` `kVuPlainOnly`, the
-`noPrepass` column, `RhiLimits.vuPrepassOff`; NULL on every other device and backend): the Adreno
+One device draws without it by the device table (its `adreno-740-qualcomm` row's `VU_PREPASS_OFF`,
+[DEVICE_TABLE.md](DEVICE_TABLE.md), `RhiLimits.vuPrepassOff`; NULL on every other device and backend): the Adreno
 740 under Qualcomm's own driver (issue 123: the first build to run the pre-pass there drew a
 full-screen noise picture in its first scene and the GPU then hung on driver 512.676.1; the
 record path's modules are built once for every device, with the card test and the tick cameras the

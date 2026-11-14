@@ -14,6 +14,7 @@
 #include "../rhi.h"
 #include "../rhi_native.h"
 #include "../rhi_tile_rule.h"
+#include "../rhi_device_table.h"
 #include "vk_enums.h"
 #include <stdio.h>
 
@@ -732,6 +733,11 @@ typedef struct VkrState {
     /* legacyPasses is on by Qualcomm's row (rhi_pass_row.h, issue 123):
      * RhiLimits.passObjectsRow gives its reason to the attempt's line */
     bool passRowQcom;
+    /* the device table's choices for this device (vk_device_table.c,
+     * ../rhi_device_table.h: evaluated once at the pick with the tests'
+     * fakes, devFakes) */
+    const RhiDeviceChoices *devTable;
+    RhiDeviceFakes devFakes;
     /* the game's queue's global priority (vk_qprio.c, rhi_qprio.h; issue
      * 123's second attempt): qprio RHI_QPRIO_NOT_ASKED, _GRANTED or
      * _REFUSED; qprioResult the asking creation's VkResult when refused;
@@ -1190,12 +1196,14 @@ const char *vkr_pipeline_cache_path(void);
  * any thread; nothing where the rule does not hold).  vkr_compile_serial_init
  * after the limits are filled (rhi_init; logs the line), _shutdown after the
  * device is gone. */
-/* vk_device_table.c: the device table's start-up lines for the picked
- * device (../rhi_device_table.h; after the driver text and the MoltenVK
- * test, vk_device.c): driverText RhiLimits.driverText's, customDriver a
- * driver the Android build loaded (rhi_set_vulkan_loader); read only, and
- * the rows' clause noted for the renderer's summary line */
-void vkr_device_table_log(const char *driverText, bool customDriver);
+/* vk_device_table.c: the device table for the picked device
+ * (../rhi_device_table.h; after the driver text and the MoltenVK test,
+ * vk_device.c): driverText RhiLimits.driverText's, customDriver a driver
+ * the Android build loaded (rhi_set_vulkan_loader).  Evaluated once with the
+ * tests' fakes into g_vkr.devTable and g_vkr.devFakes (the call sites read
+ * them), its start-up lines logged, the rows' clause noted for the
+ * renderer's summary line */
+void vkr_device_table_start(const char *driverText, bool customDriver);
 void vkr_compile_serial_init(void);
 void vkr_compile_serial_shutdown(void);
 void vkr_compile_lock(void);

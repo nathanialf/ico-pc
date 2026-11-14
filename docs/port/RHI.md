@@ -20,7 +20,7 @@ window paces and presents is [DISPLAY.md](DISPLAY.md).
 | `port/rhi/rhi_driver_version.h`, `rhi_driver_version.c` | a Vulkan `driverVersion` decoded the way its vendor writes it, for the adapter log line |
 | `port/rhi/rhi_pass_row.h`, `rhi_pass_row.c` | the render pass driver rows (Intel's Windows driver at Vulkan 1.3.215 or older, and Qualcomm's own driver, issue 123, take `VkRenderPass` objects) and the `[dev] legacy_passes` override's words, pure ([Vulkan](#vulkan), **Render passes**) |
 | `port/rhi/rhi_tile_rule.h`, `rhi_tile_rule.c` | the barrier scopes, the submission wait and the phones' pre-pass rung a Vulkan start runs (a tile-based phone GPU, `rhi_tile_phone`; the loss ladder; the tests' `ICO_VK_FAKE_SCOPES`) and their lines' words, pure ([Barrier scopes and the submission wait](#barrier-scopes-and-the-submission-wait)) |
-| `port/rhi/rhi_device_table.h`, `rhi_device_table.c`, `vk/vk_device_table.c` | the device table: the hardware rows that set renderer-internal choices, pure, and the Vulkan backend's start-up lines for it ([DEVICE_TABLE.md](DEVICE_TABLE.md)) |
+| `port/rhi/rhi_device_table.h`, `rhi_device_table.c`, `vk/vk_device_table.c` | the device table: the hardware rows that set renderer-internal choices, pure, and the Vulkan backend's one evaluation of the picked device (with the tests' fakes) and its start-up lines ([DEVICE_TABLE.md](DEVICE_TABLE.md)) |
 | `port/rhi/rhi_traffic.h`, `rhi_traffic.c` | the attachment bytes each render pass asks to load, store and clear and the texture copies' bytes, counted on the CPU in `rhi_backend.c`'s forwarders (a table of the textures' formats by handle), summed into `RhiStats.pass*Bytes`, pure ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-performance-lines-issues-179-211-and-123)) |
 | `port/rhi/rhi_pass_crumb.h`, `rhi_pass_crumb.c` | the render pass the backend last began, stored before the driver's begin call and printed by the crash report (library `ico_pass_crumb`; [Device loss](#device-loss), **The crash report's pass**) |
 | `port/rhi/rhi_adapter.h`, `rhi_adapter.c` | the `[video] adapter` name match and the device-list line's text, linked by the Vulkan and Direct3D backends |
@@ -454,8 +454,8 @@ input, so the same entries run as compute entries and store the same words
 - **The offer.** `RhiLimits.computeStores` (with `computeStoresOff`, why not): Vulkan where the
   graphics queue's family takes compute work, never gated on the external compute's
   `RhiComputeCaps.ok` (subgroups and storage image formats are not needed here);
-  `ICO_VK_FAKE_NO_COMPUTE_STORES=1` reports it absent; the device table's `noComputeRecord` column
-  (`vk_device.c` `kVuPlainOnly`) is the hook for a driver whose compute builds misbehave (no row).
+  `ICO_VK_FAKE_NO_COMPUTE_STORES=1` reports it absent; the device table's `COMPUTE_RECORD_OFF`
+  (`vk_device.c` `vkr_vu_plain_only`) is the hook for a driver whose compute builds misbehave (no row).
   The device line: `compute record stores: offered (queue compute yes, vertex stores no)` or `not
   offered: <why> (...)`. Direct3D 12, Direct3D 11 and OpenGL report false in this release (their
   bracket refuses, a dispatch is a no-op logged once: D3D12 compute pipelines and UAV barriers,
@@ -573,7 +573,7 @@ that has it (`attachment read off: Qualcomm driver <version>`, NULL otherwise), 
 `colorBytesPerPixel`, the bytes one pixel of a pass's colour targets may take together: 0 (no
 bound) on D3D12 and Vulkan, under MoltenVK the Apple GPU's Metal implicit image block (below),
 `dynamicDepth` and `dynamicBlend` ([Dynamic state](#dynamic-state)), and the device table's two
-reasons (Vulkan, `kVuPlainOnly` in `port/rhi/vk/vk_device.c`; NULL elsewhere and on D3D12):
+reasons (Vulkan, its `adreno-740-qualcomm` row, read by `vkr_vu_plain_only` in `port/rhi/vk/vk_device.c`; NULL elsewhere and on D3D12):
 `vuFallbackPlain`, why the renderer's VU fallback takes the plain program entries on this device,
 and `carefulPipelines`, why its start-up set is made under the careful policy
 ([RENDER.md](PIPELINES.md#the-fallback-entries), [RENDER.md](PIPELINES.md#the-start-up-set)),
@@ -1284,10 +1284,15 @@ preference does not reach the pick: Vulkan's score reads the device type and Dir
 `DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE`, so Automatic is the same on every start and the Options
 row ([OPTIONS.md](../OPTIONS.md#choosing-the-graphics-card)) is how a player picks another card.
 
-After the device line the Vulkan backend prints the device table's lines for the picked device
-(`vk_device_table.c`): the rows in force out of the table's count, then one line a row with what it
-sets, its issue, the release it came in and the condition to revisit it, and the renderer's summary
-ends with the rows' ids ([DEVICE_TABLE.md](DEVICE_TABLE.md#the-start-up-lines-and-the-summary)).
+After the device line the Vulkan backend evaluates the device table once for the picked device,
+with the tests' fakes (`vk_device_table.c`, `g_vkr.devTable`: the tile rule, the dynamic state, the
+memory budget, the driver rows, the subpass class, the attachment read, the robustness ask, the VU
+rows, the queue's priority and the serial compiles read it), and prints its lines: the rows in force
+out of the table's count, then one line a row with what it sets, its issue, the release it came in
+and the condition to revisit it. OpenGL, Direct3D 11 and Direct3D 12 print the same lines after
+theirs (no row is keyed on them). The renderer's summary ends with the rows' count; the header names
+them, and is a key line of `report.txt`
+([DEVICE_TABLE.md](DEVICE_TABLE.md#the-start-up-lines-and-the-summary)).
 
 ## Vulkan
 

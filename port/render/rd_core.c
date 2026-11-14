@@ -148,9 +148,10 @@ void rd_summary_text(char *out, size_t size)
     if (g_rd.passSplit) {
         snprintf(split, sizeof split, ", pass split every %u VU draws", g_rd.passSplit);
     }
-    /* the device table's rows in force on this device (the Vulkan backend
-       notes them at its start-up lines: port/rhi/vk/vk_device_table.c) */
-    const char *rows = rhi_backend() == RHI_BACKEND_VULKAN ? rhi_device_table_noted() : NULL;
+    /* the device table's count of rows in force on this device (every
+       backend notes it at its start-up lines, which name the rows:
+       port/rhi/rhi_device_table.h rhi_device_table_start) */
+    const char *rows = rhi_device_table_noted();
     snprintf(out, size,
              "blend %s; profile %s; index values dense (marks in the stream); fog %s; VU shaders "
              "%s%s%s%s; VU pre-pass %s%s; VU merge %s; VU fuse %s; constant reads %s; fades "

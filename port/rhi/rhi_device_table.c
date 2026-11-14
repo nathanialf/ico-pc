@@ -9,6 +9,7 @@
 #include "rhi_device_table.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define VK (1u << RHI_DT_VULKAN)
@@ -18,7 +19,7 @@
 
 /* ------------------------------------------------------------------ rows */
 
-/* vk_device.c vkr_is_tiler, RhiLimits.tiler (rd_profile.c's tile-based
+/* vk_device.c vkr_is_tiler before the table, RhiLimits.tiler (rd_profile.c's tile-based
    vendors outside Android too: rhi_tile_rule.c rhi_tile_vendor_name) */
 static const RhiDeviceSetting kTileVendors[] = {
     {RHI_DC_TILER, 1, "a tile-based GPU", NULL, "",
@@ -192,13 +193,41 @@ static const RhiDeviceSetting kTurnip[] = {
      "v0.9.7", "a Mesa version a device test shows free of the sliver with the extended set"},
 };
 
-/* vk_device.c kVuPlainOnly, the table's seed: the Adreno 740 by the whole
- * chip id both devices report (0x43050A01, the issue 93 and 107 logs),
- * nothing near it (Mesa's freedreno device list gives 0x43050A00 to the
- * Adreno A32, 0x43050B00 to the 740v3 and 0x43051401 to the Adreno 750,
- * none of them seen failing), Qualcomm's own driver alone (Turnip on the
- * same GPU is another compiler).  ICO_RD_VU_EXTENDED=1, [dev] vu_prepass and
- * [dev] pipeline_set stay over it at their call sites */
+/* vk_device.c kVuPlainOnly before the table (read by vkr_vu_plain_only
+ * now), the table's seed: the Adreno 740 by the whole chip id both devices
+ * report (0x43050A01, the issue 93 and 107 logs), nothing near it (Mesa's
+ * freedreno device list, src/freedreno/common/freedreno_devices.py, gives
+ * 0x43050A00 to the Adreno A32, 0x43050B00 to the 740v3 and 0x43051401 to
+ * the Adreno 750, none of them seen failing), Qualcomm's own driver alone
+ * (Turnip on the same GPU is another compiler).  ICO_RD_VU_EXTENDED=1,
+ * [dev] vu_prepass and [dev] pipeline_set stay over it at their call sites.
+ *   The plain set: on the Adreno 740 (AYN Thor, issue 107, and AYN Odin 2
+ *   Portal, issue 93; driver 512.676.53, compiler E031.41.03.47) the whole
+ *   device froze, needing a reboot, while the driver compiled the first
+ *   pipelines with a VU vertex shader of v0.7.5 to v0.7.7 (46,470 to 93,407
+ *   words); v0.6.1's (20,975 to 32,709 words) built (docs/port/SHADERS.md,
+ *   The size history).  The plain variants are 10,011 to 23,305 words, the
+ *   record path's largest module about 20,000 (an estimate until the build
+ *   measures it).
+ *   The careful set: with v0.7.7 both devices died inside the 2D half of
+ *   the blind set (its first 327 keys at Original 4:3 with the fixed-function
+ *   blend, before any VU key): the Odin 2 Portal at 201 of 527 finished, the
+ *   process shrinking from 194 MB to 47 MB until the system ended it (issue
+ *   93), the Thor at 307 or later with the whole device frozen (issue 107);
+ *   the same since v0.5.3, while v0.5.2 and v0.6.1 started.  No one module
+ *   explains it (font_sheet_ps and yuv_ps were as large in v0.6.1); memory
+ *   pressure from the parallel compiles is the hypothesis the careful policy
+ *   answers (inferred, not measured).
+ *   The pre-pass off: under Qualcomm's own driver (issue 123, a Xiaomi Pad
+ *   6S Pro on driver 512.676.1, compiler E031.41.03.64) v0.11.0 is the first
+ *   build to run the pre-pass there, and the record path's modules have one
+ *   build on every device (vu_tri_rule_pre_vs 17,289 words,
+ *   vu_tri_tick_pre_vs 16,627: the card test and the tick cameras the plain
+ *   set exists to keep from this compiler).  Its self-test passed on its
+ *   one-row frame, then the first scene's 8 replays drew a full-screen noise
+ *   picture and submission 369 never finished (the GPU hang at 25.5 s).
+ *   Turnip on the same GPU keeps the pre-pass ("runs better and no
+ *   graphical glitches"). */
 static const RhiDeviceSetting kAdreno740[] = {
     {RHI_DC_VU_FALLBACK_PLAIN, RHI_DT_VUSET_TABLE, "the VU fallback's plain set",
      "Adreno 740, issue 107", "issue 107",
@@ -1045,6 +1074,41 @@ void rhi_device_table_eval(const RhiDeviceId *id, const RhiDeviceFakes *fk, RhiD
     }
 }
 
+int32_t rhi_device_table_choice(const RhiDeviceId *id, RhiDeviceChoice choice, const char **reason)
+{
+    if (reason != NULL) {
+        *reason = NULL;
+    }
+    if ((unsigned)choice >= RHI_DC_COUNT) {
+        return 0;
+    }
+    if (choice == RHI_DC_COMPACTION_DEFAULT) {
+        /* its default reads COMPACTION_CLASS, not a fact: the whole table */
+        RhiDeviceChoices all;
+        rhi_device_table_eval(id, NULL, &all);
+        if (reason != NULL) {
+            *reason = rhi_device_choice_reason(&all, choice);
+        }
+        return all.value[choice];
+    }
+    /* the facts before it (a row matches on nothing else, and no other
+       choice's default reads more), then the choice */
+    int32_t v[RHI_DC_COUNT];
+    int8_t cache[RHI_DT_MAX_ROWS];
+    memset(v, 0, sizeof v);
+    memset(cache, -1, sizeof cache);
+    Resolved r;
+    for (int c = 0; c <= RHI_DC_TILE_CLASS && c < (int)choice; c++) {
+        resolve(c, id, v, cache, &r);
+        v[c] = r.value;
+    }
+    resolve((int)choice, id, v, cache, &r);
+    if (reason != NULL && r.row >= 0 && r.setting >= 0) {
+        *reason = kRows[r.row].settings[r.setting].reason;
+    }
+    return r.value;
+}
+
 const char *rhi_device_choice_reason(const RhiDeviceChoices *c, RhiDeviceChoice choice)
 {
     if ((unsigned)choice >= RHI_DC_COUNT) {
@@ -1121,8 +1185,14 @@ size_t rhi_device_table_header(char *out, size_t cap, const RhiDeviceId *id,
         return 0;
     }
     char ids[96], api[48], count[64];
-    snprintf(ids, sizeof ids, "device %04x:%04x; driver ID %u", (unsigned)id->vendorId,
-             (unsigned)id->deviceId, (unsigned)id->driverId);
+    if (id->backend == RHI_DT_VULKAN) {
+        snprintf(ids, sizeof ids, "device %04x:%04x; driver ID %u", (unsigned)id->vendorId,
+                 (unsigned)id->deviceId, (unsigned)id->driverId);
+    } else {
+        /* no driver id outside Vulkan */
+        snprintf(ids, sizeof ids, "device %04x:%04x", (unsigned)id->vendorId,
+                 (unsigned)id->deviceId);
+    }
     if (id->backend == RHI_DT_VULKAN) {
         snprintf(api, sizeof api, "Vulkan %u.%u.%u", (unsigned)(id->apiVersion >> 22) & 0x7Fu,
                  (unsigned)(id->apiVersion >> 12) & 0x3FFu, (unsigned)id->apiVersion & 0xFFFu);
@@ -1200,26 +1270,20 @@ size_t rhi_device_table_summary(char *out, size_t cap, const RhiDeviceChoices *c
     if (cap == 0) {
         return 0;
     }
-    char buf[RHI_DT_SUMMARY_MAX + 64];
-    size_t at = 0;
-    buf[0] = '\0';
-    add(buf, sizeof buf, &at, "%s%s", "device table rows", c->rowsApplied ? "" : " none");
-    int first = 1;
-    for (int r = 0; r < ROW_COUNT; r++) {
-        if (c->applied[r]) {
-            add(buf, sizeof buf, &at, "%s%s", first ? " " : ", ", kRows[r].id);
-            first = 0;
-        }
-    }
-    if (at >= RHI_DT_SUMMARY_MAX) {
-        snprintf(buf, sizeof buf, "device table rows: %u (the start lines name them)",
-                 (unsigned)c->rowsApplied);
+    /* the count alone: the ids are the start-up header's (the summary line's
+       room, rhi_device_table.h) */
+    char buf[RHI_DT_SUMMARY_MAX];
+    if (c->rowsApplied == 0u) {
+        snprintf(buf, sizeof buf, "device table rows: none of %d", ROW_COUNT);
+    } else {
+        snprintf(buf, sizeof buf, "device table rows: %u of %d (the start lines name them)",
+                 (unsigned)c->rowsApplied, ROW_COUNT);
     }
     const int k = snprintf(out, cap, "%s", buf);
     return k < 0 ? 0 : (size_t)k < cap ? (size_t)k : cap - 1u;
 }
 
-static char s_noted[RHI_DT_SUMMARY_MAX + 64];
+static char s_noted[RHI_DT_SUMMARY_MAX];
 static int s_haveNote;
 
 void rhi_device_table_note(const RhiDeviceChoices *c)
@@ -1236,4 +1300,95 @@ void rhi_device_table_note(const RhiDeviceChoices *c)
 const char *rhi_device_table_noted(void)
 {
     return s_haveNote ? s_noted : NULL;
+}
+
+/* ------------------------------------------------- the backends' reads */
+
+void rhi_device_fakes_parse(const RhiDeviceFakeEnv *env, RhiDeviceFakes *out)
+{
+    memset(out, 0, sizeof(*out));
+    if (env == NULL) {
+        return;
+    }
+    const char *fv = env->vendor;
+    if (fv && fv[0]) {
+        char *end = NULL;
+        const unsigned long v = strtoul(fv, &end, 0);
+        if (end != fv && *end == '\0' && v <= 0xFFFFFFFFul) {
+            out->vendorSet = 1;
+            out->vendor = (uint32_t)v;
+        }
+    }
+    out->passRowQualcomm = env->passRow && strcmp(env->passRow, "qualcomm") == 0;
+    out->queuePriority = env->queuePriority != 0;
+    out->adreno = env->adreno && env->adreno[0] && env->adreno[0] != '0';
+    out->serial = env->serial && env->serial[0] == '1';
+    out->noPrepass = env->noPrepass && env->noPrepass[0] && env->noPrepass[0] != '0';
+    out->compactArm = env->compactArm && strcmp(env->compactArm, "1") == 0;
+}
+
+const char *rhi_device_choice_why(const RhiDeviceChoices *c, RhiDeviceChoice choice)
+{
+    if ((unsigned)choice >= RHI_DC_COUNT || c->value[choice] == 0) {
+        return NULL;
+    }
+    return rhi_device_choice_reason(c, choice);
+}
+
+void rhi_device_pass_rows(const RhiDeviceChoices *c, const char **intelRow, const char **qcomRow)
+{
+    const int32_t v = c->value[RHI_DC_PASS_OBJECTS];
+    const char *why = rhi_device_choice_reason(c, RHI_DC_PASS_OBJECTS);
+    *intelRow = v == RHI_DT_PASS_INTEL ? why : NULL;
+    *qcomRow = v == RHI_DT_PASS_QUALCOMM ? why : NULL;
+}
+
+int rhi_device_subpass_class(const RhiDeviceChoices *c, int passRowQcom)
+{
+    const int32_t t = c->value[RHI_DC_SUBPASS_CLASS];
+    return t == RHI_DT_SUBPASS_INTEL ? RHI_DT_SUBPASS_INTEL
+           : passRowQcom             ? RHI_DT_SUBPASS_QCOM
+                                     : (int)t;
+}
+
+RhiDeviceVuRows rhi_device_vu_rows(const RhiDeviceChoices *c)
+{
+    RhiDeviceVuRows o;
+    o.plain = c->value[RHI_DC_VU_FALLBACK_PLAIN] == RHI_DT_VUSET_TABLE
+                  ? rhi_device_choice_reason(c, RHI_DC_VU_FALLBACK_PLAIN)
+                  : NULL;
+    o.careful = rhi_device_choice_why(c, RHI_DC_CAREFUL_PIPELINES);
+    o.noPrepass = rhi_device_choice_why(c, RHI_DC_VU_PREPASS_OFF);
+    o.noComputeRecord = rhi_device_choice_why(c, RHI_DC_COMPUTE_RECORD_OFF);
+    return o;
+}
+
+/* ---------------------------------------------- the device's evaluation */
+
+static RhiDeviceChoices s_current;
+static int s_haveCurrent;
+
+const RhiDeviceChoices *rhi_device_table_start(const RhiDeviceId *id, const RhiDeviceFakes *fakes,
+                                               RhiDeviceLineFn emit, void *user)
+{
+    static char line[RHI_DT_LINE_MAX]; /* a device's start: one thread */
+    rhi_device_table_eval(id, fakes, &s_current);
+    s_haveCurrent = 1;
+    rhi_device_table_note(&s_current);
+    if (emit != NULL) {
+        rhi_device_table_header(line, sizeof line, id, &s_current);
+        emit(line, user);
+        for (int r = 0; r < ROW_COUNT; r++) {
+            if (s_current.applied[r]) {
+                rhi_device_table_row_line(line, sizeof line, &s_current, r);
+                emit(line, user);
+            }
+        }
+    }
+    return &s_current;
+}
+
+const RhiDeviceChoices *rhi_device_table_current(void)
+{
+    return s_haveCurrent ? &s_current : NULL;
 }
