@@ -31,6 +31,7 @@ target_sources(ico_platform PRIVATE
     present_latency.c
     present_stall_block.c
     perf_block.c
+    pin_release.c
     pipeline_skip.c
     pipe_resume.c
     present_fallback.c
@@ -170,10 +171,17 @@ endif()
 # of 8 to 30 ms in the cage's frame (pace_policy.c pace_rt_further_trace: two
 # a tick up to the bound 2R <= 3P - 2S - margin, one past it), the seconds
 # (a second's pictures, frames, asks and holds; a gap restarts), the rule
-# (one a tick, wanted, held) and the lift's spacing, the block's worst
-# second, the clusters and the dip against the median of the blocks before
-# (the owner's log's clocks: the dip at :4251 and :5276, none in the blocks
-# between), the lines word for word
+# (one a tick, wanted, held) said at each such second's close, the block's
+# worst second, the clusters and the dip against the median of the blocks
+# before (the owner's log's clocks: the dip at :4251 and :5276, none in the
+# blocks between), the lines word for word, one second's text, the blocks'
+# picture CPU median and a second's CPU raised against it
+# pin_release: the render and game threads' single-core pins let go at one
+# picture a tick (pin_release.c, the owner's Pixel, v0.11.7-rc2's seconds):
+# stuck = one a tick with the CPU raised, let go and taken again after 10
+# judged seconds without, a stuck second starting the count again, the rule
+# not allowing it, the trace's seconds and its cap, the threads' cores a
+# second and a block, every line word for word
 # bones_ladder: issue 123's ladder across starts (bones_ladder.c): the step
 # for each run's evidence over sequences of starts (step 1, step 2, healed,
 # both tried, a port race, step 2 out of reach), the mark written and read
@@ -181,7 +189,7 @@ endif()
 foreach(t sched fiber fps_counter arena diag hotkeys pace_policy pace_loop perf_block lifecycle pump_watch ico_thread
           gpu_hang state_fiber state_guard state_port state_registry pipeline_skip memory_floor
           present_fallback frame_mailbox display_rate present_hist present_stall_block gpu_sysfs
-          thermal_text window_scene bones_ladder pipe_resume clock_trap)
+          thermal_text window_scene bones_ladder pipe_resume clock_trap pin_release)
     add_executable(${t}_test test/${t}_test.c)
     target_include_directories(${t}_test PRIVATE "${ICO_COMPAT_DIR}")
     target_compile_options(${t}_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
@@ -428,7 +436,8 @@ endif()
 # one core), the keeper against a fake kernel (all kept, core 7 alone
 # widened to 2-7 as on the Pixel, the system changing the cores, every
 # one-core pin widened, a cpuset without core 7, ids not known yet), the
-# lines word for word; the few-cores rule (one or two faster cores) and its
+# lines word for word; the pins let go and taken again (the RELEASED sets,
+# none under the few-cores rule); the few-cores rule (one or two faster cores) and its
 # sweep, each thread's cores on five layouts from a fake sysfs under the
 # build folder; cpu_place's samples by core, a fake cpuset under the
 # build folder and the registered free threads moved back (Linux)

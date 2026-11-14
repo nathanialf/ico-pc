@@ -37,6 +37,16 @@
  *     start's rule, the keeper's first tick, and the sweep's picks among
  *     the audio threads, the driver's thread, a worker on core 0, the UI
  *     thread and one not read (Linux);
+ *   the pins let go (cpu_keep_release, v0.11.7): the RELEASED sets on the
+ *     Pixel (every faster core 2-7 for the three threads, every core for
+ *     the rest), a cpuset without core 7, a 4 + 3 + 1 phone; none under
+ *     the few-cores rule (the Helio G85, 1 + 7: their pins stand) or on
+ *     cores of one speed; the keeper on the Pixel's widening kernel: let
+ *     go from 6 alone, no ideal asked, no 10 s retry, a scene asking
+ *     nothing, the try and block lines word for word, the wish repeated
+ *     changing nothing, taken again with the ideal asked first and the
+ *     walk from ALONE (6 alone again), the 10 s retry back; the Helio's
+ *     keeper unchanged by the wish;
  *   the words of the reasons;
  *   cpu_place.h's additions: the samples by core, a thread's cpuset and
  *     its cores from a fake /proc and /dev/cpuset under the build folder
@@ -231,6 +241,39 @@ static void test_choose(void)
     /* the start's rule: render on it, the game thread on the others' (all) */
     CHECK(cpu_keep_choose(&c, 0xff, 0x80, 0, CPU_KEEP_FAST, &s));
     CHECK(sets_are(&s, CPU_KEEP_FAST, 0x80, 0, 0, 0xff));
+    /* its pins stand: never let go */
+    CHECK(!cpu_keep_choose(&c, 0xff, 0, 0, CPU_KEEP_RELEASED, &s));
+}
+
+/* the pins let go (cpu_keep.h RELEASED): the three threads on the allowed
+   faster cores, every other thread on the allowed cores; not under the
+   few-cores rule, not on cores of one speed */
+static void test_choose_released(void)
+{
+    CpuClasses c;
+    CpuKeepSets s;
+
+    classes(&c, 8, PIXEL);
+    CHECK(cpu_keep_choose(&c, 0xff, 0, 0, CPU_KEEP_RELEASED, &s));
+    CHECK(sets_are(&s, CPU_KEEP_RELEASED, 0xfc, 0xfc, 0xfc, 0xff));
+    /* refusals do not matter: no single core is asked */
+    CHECK(cpu_keep_choose(&c, 0xff, 0xc0, 0x20, CPU_KEEP_RELEASED, &s));
+    CHECK(sets_are(&s, CPU_KEEP_RELEASED, 0xfc, 0xfc, 0xfc, 0xff));
+    /* a cpuset without core 7 */
+    CHECK(cpu_keep_choose(&c, 0x7f, 0, 0, CPU_KEEP_RELEASED, &s));
+    CHECK(sets_are(&s, CPU_KEEP_RELEASED, 0x7c, 0x7c, 0x7c, 0x7f));
+    classes(&c, 8, MALI);
+    CHECK(cpu_keep_choose(&c, 0xff, 0, 0, CPU_KEEP_RELEASED, &s));
+    CHECK(sets_are(&s, CPU_KEEP_RELEASED, 0xf0, 0xf0, 0xf0, 0xff));
+    classes(&c, 8, BIG4);
+    CHECK(cpu_keep_choose(&c, 0xff, 0, 0, CPU_KEEP_RELEASED, &s));
+    CHECK(sets_are(&s, CPU_KEEP_RELEASED, 0xf0, 0xf0, 0xf0, 0xff));
+    /* the few-cores rule's two layouts keep their pins */
+    classes(&c, 8, HELIO);
+    CHECK(!cpu_keep_choose(&c, 0xff, 0, 0, CPU_KEEP_RELEASED, &s));
+    /* one speed: nothing */
+    classes(&c, 8, SAME8);
+    CHECK(!cpu_keep_choose(&c, 0xff, 0, 0, CPU_KEEP_RELEASED, &s));
 }
 
 /* the fake kernel: a mask a thread (the log thread 0, the game 100, the
@@ -387,6 +430,76 @@ static void test_keep_widened(void)
     CHECK(cpu_keep_tick(&k, &ops, 21000.0, 0, 0xff, 101, 102, 100));
     CHECK(k.idealKept && k.refused == 0 && k.kept == 1 && f.mask[2] == 0x80 && f.mask[1] == 0x40 &&
           f.mask[3] == 0x3c && f.freeMask == 0x3f);
+}
+
+/* the Pixel's kernel (core 7 alone widened to 2-7): 6 alone, then the pins
+   let go and taken again */
+static void test_keep_released(void)
+{
+    CpuClasses c;
+    CpuKeep k;
+    CpuKeepOps ops;
+    Fake f;
+    char t[1024];
+
+    classes(&c, 8, PIXEL);
+    fake_init(&f, &ops);
+    f.widenCores = 0x80;
+    f.widenTo = 0xfc;
+    cpu_keep_init(&k, &c);
+    CHECK(cpu_keep_tick(&k, &ops, 0.0, 0, 0xff, 101, 102, 100));
+    CHECK(f.mask[2] == 0x40 && f.mask[1] == 0x20 && f.mask[3] == 0x9c && k.tries == 1);
+    /* let go: a try at the next tick, no ideal asked */
+    CHECK(cpu_keep_release(&k, true));
+    CHECK(!cpu_keep_release(&k, true)); /* the same wish: nothing */
+    CHECK(cpu_keep_tick(&k, &ops, 1000.0, 0, 0xff, 101, 102, 100));
+    CHECK(k.why == CPU_KEEP_WHY_RELEASE && k.sets.level == CPU_KEEP_RELEASED && k.tries == 2);
+    CHECK(f.mask[2] == 0xfc && f.mask[1] == 0xfc && f.mask[3] == 0xfc && f.mask[0] == 0xff);
+    CHECK(f.freeMask == 0xff && !k.ideal.done && !k.idealKept);
+    (void)cpu_keep_try_text(&k, "cpuset /top-app (cores 0-7)", t, sizeof(t));
+    CHECK_STR(t, "the pins let go; the process may run on 0-7; the render thread on 2-7 (kept), "
+                 "cpuset /top-app (cores 0-7); the game thread on 2-7 (kept), the submit thread "
+                 "on 2-7 (kept), every other thread on 0-7; why: the pins let go at one picture a "
+                 "tick");
+    /* let go: no 10 s retry, a scene asks nothing */
+    CHECK(!cpu_keep_tick(&k, &ops, 5000.0, 0, 0xff, 101, 102, 100));
+    CHECK(!cpu_keep_tick(&k, &ops, 25000.0, 0, 0xff, 101, 102, 100));
+    CHECK(!cpu_keep_tick(&k, &ops, 26000.0, CPU_KEEP_WHY_SCENE, 0xff, 101, 102, 100));
+    CHECK(k.tries == 2 && k.pending == 0);
+    (void)cpu_keep_block_text(&k, "", t, sizeof(t));
+    CHECK_STR(t, "now on the faster cores 2-7 (the pins let go), the game thread on 2-7, the "
+                 "submit thread on 2-7, every other thread on 0-7; read back as set at 4 of 4 "
+                 "reads; tries in the block 2 (the ideal kept in 0), since the start 2 (kept in "
+                 "0); changed by the system 0 times in the block, 0 since the start");
+    /* taken again: the ideal asked first (7, widened again), the walk from
+       ALONE: 6 alone, the game thread 5 */
+    CHECK(cpu_keep_release(&k, false));
+    CHECK(cpu_keep_tick(&k, &ops, 27000.0, 0, 0xff, 101, 102, 100));
+    CHECK(k.why == CPU_KEEP_WHY_RESTORE && k.ideal.done && k.ideal.asked == 0x80);
+    CHECK(k.sets.level == CPU_KEEP_ALONE && f.mask[2] == 0x40 && f.mask[1] == 0x20 &&
+          f.mask[3] == 0x9c && f.mask[0] == 0x9f && f.freeMask == 0x9f && k.tries == 3);
+    (void)cpu_keep_try_text(&k, "", t, sizeof(t));
+    CHECK_STR(t, "asked 7, read back 2-7, the process may run on 0-7; re-pin refused (the system "
+                 "said yes and keeps it to cores 2-7); on 6 alone instead (kept); the game thread "
+                 "on 5 alone (kept), the submit thread on 2-4, 7 (kept), every other thread on "
+                 "0-4, 7; why: the pins taken again");
+    /* the 10 s retry back */
+    CHECK(!cpu_keep_tick(&k, &ops, 30000.0, 0, 0xff, 101, 102, 100));
+    CHECK(cpu_keep_tick(&k, &ops, 37000.0, 0, 0xff, 101, 102, 100));
+    CHECK(k.why == CPU_KEEP_WHY_RETRY && k.tries == 4);
+
+    /* the few-cores rule (the Helio G85): the wish changes nothing */
+    classes(&c, 8, HELIO);
+    fake_init(&f, &ops);
+    cpu_keep_init(&k, &c);
+    CHECK(cpu_keep_tick(&k, &ops, 0.0, 0, 0xff, 101, 102, 100));
+    CHECK(!cpu_keep_release(&k, true) && !k.release && k.pending == 0);
+    CHECK(!cpu_keep_tick(&k, &ops, 1000.0, 0, 0xff, 101, 102, 100));
+    CHECK(f.mask[2] == 0x80 && f.mask[1] == 0x40 && k.sets.level == CPU_KEEP_ALONE);
+    /* the keeper off (one speed): nothing */
+    classes(&c, 8, SAME8);
+    cpu_keep_init(&k, &c);
+    CHECK(!cpu_keep_release(&k, true));
 }
 
 static void test_keep_singles_widened(void)
@@ -764,6 +877,8 @@ static void test_words(void)
     CHECK_STR(t, "the start, a 3D scene began, focus gained, back from the background, the system "
                  "changed the threads' cores, the cores the process may run on changed, the 10 s "
                  "retry, the submit thread started");
+    (void)cpu_keep_why_text(CPU_KEEP_WHY_RELEASE | CPU_KEEP_WHY_RESTORE, t, sizeof(t));
+    CHECK_STR(t, "the pins let go at one picture a tick, the pins taken again");
     {
         CpuPlaceHist g, r, s;
 
@@ -943,6 +1058,8 @@ int main(int argc, char **argv)
 {
     test_pipe_set();
     test_choose();
+    test_choose_released();
+    test_keep_released();
     test_keep_all_kept();
     test_keep_widened();
     test_keep_singles_widened();
