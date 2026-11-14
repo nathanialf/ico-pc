@@ -10,9 +10,8 @@
 #include "attempt_ledger.h"
 #include "rd_vu_audit.h" /* rd__vu_audit_flush */
 #include "rd_vu_compact.h"
-#include "rd_vu_class.h"
-#include "rd_stencil_selftest.h" /* rd__profile_powervr */
-#include "rd_vu_rec_early.h"     /* rd__vu_rec_release */
+#include "rd_device_rows.h"  /* rd__device_value */
+#include "rd_vu_rec_early.h" /* rd__vu_rec_release */
 #include "rd_vu_record.h"
 #include "rd_vu_skin_check.h" /* rd__vu_prepass_selftest_running */
 
@@ -319,14 +318,17 @@ void rd__vu_compact_init(const RhiLimits *lim)
        179's log) under Arm's vendor id as the device reports it
        (RhiLimits.vendorId; the tile rule's ICO_VK_FAKE_VENDOR changes that
        rule alone, vk_device.c), or the tests' ICO_RD_VU_COMPACT_ARM=1 on
-       any device; the PowerVR D-Series DXT-48-1536 by the PowerVR rule's
-       name (rd_vu_class.h) */
+       any device; the PowerVR D-Series DXT-48-1536 by the device table's
+       row powervr-dxt-48-1536 */
     const char *armEnv = getenv("ICO_RD_VU_COMPACT_ARM");
     s_cmp.armByTests = armEnv != NULL && strcmp(armEnv, "1") == 0;
     s_cmp.vendor = lim != NULL ? lim->vendorId : 0u;
     const char *name = lim != NULL ? rhi_adapter_name() : NULL;
     snprintf(s_cmp.name, sizeof s_cmp.name, "%s", name != NULL ? name : "no device name");
-    const bool dxt = lim != NULL && rd__profile_powervr() && rd__vu_class_measured(name);
+    /* the DXT: the device's COMPACTION_CLASS (the row powervr-dxt-48-1536:
+       the PowerVR class and its measured name; the evaluation carries no
+       ICO_RD_VU_COMPACT_ARM, read above for this rule alone) */
+    const bool dxt = lim != NULL && rd__device_value(RHI_DC_COMPACTION_CLASS) == RHI_DT_CMP_DXT;
     s_cmp.cls = lim != NULL
                     ? rd_vu_cmp_class(name, lim->vendorId, lim->moltenvk, dxt, s_cmp.armByTests)
                     : ICO_ATT_CMP_OTHER;

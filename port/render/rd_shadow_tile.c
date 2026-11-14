@@ -75,7 +75,8 @@
 #include "rd_shadow_box.h"
 #include "rd_lamps.h" /* rd__lamps_lowres_on */
 #include "rd_shadow_tile.h"
-#include "rd_shadowres.h" /* rd__shadow_fine_level */
+#include "rd_shadowres.h"   /* rd__shadow_fine_level */
+#include "rd_device_rows.h" /* rd__device_value */
 
 enum { ST_NOT_RUN, ST_OK, ST_FAIL, ST_ERROR };
 
@@ -130,14 +131,16 @@ bool rd__shadow_tile_on(void)
     if (env >= 0) {
         return env == 1;
     }
-    return RD_SHADOW_TILE_DEFAULT != 0 && rd__profile_tile_class() != 0 && s_t.test == ST_OK;
+    return RD_SHADOW_TILE_DEFAULT != 0 && rd__device_value(RHI_DC_SHADOW_TILE_CLASS) != 0 &&
+           s_t.test == ST_OK;
 }
 
 bool rd__shadow_tile_keys_wanted(void)
 {
     const int env = envSwitch();
     return modules() && env != 0 &&
-           (env == 1 || (RD_SHADOW_TILE_DEFAULT != 0 && rd__profile_tile_class() != 0));
+           (env == 1 ||
+            (RD_SHADOW_TILE_DEFAULT != 0 && rd__device_value(RHI_DC_SHADOW_TILE_CLASS) != 0));
 }
 
 RdPipeKeyInt rd__shadow_tile_mask_key(void)
@@ -790,7 +793,9 @@ bool rd__shadow_tile_selftest(void)
     s_t.test = ST_NOT_RUN;
     s_t.words[0] = '\0';
     const int env = envSwitch();
-    const int cls = rd__profile_tile_class();
+    /* the device table's SHADOW_TILE_CLASS (its tile class: 1 the PowerVR
+       class, 2 a desktop one) */
+    const int cls = (int)rd__device_value(RHI_DC_SHADOW_TILE_CLASS);
     if (env == 0 || !modules() || (env < 0 && (cls == 0 || RD_SHADOW_TILE_DEFAULT == 0))) {
         rd__log("shadow tiles: off (%s)",
                 env == 0          ? "ICO_RD_SHADOW_TILE=0"

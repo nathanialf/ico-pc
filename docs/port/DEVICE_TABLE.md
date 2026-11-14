@@ -16,6 +16,7 @@ stay there too.
 | `port/rhi/rhi_device_table.cmake` | The library `ico_device_table` (linked PUBLIC by `ico_rhi` and every backend library) and its three tests; the pure predicates' tests link it too. |
 | `port/rhi/vk/vk_device_table.c` | The Vulkan backend's one evaluation of the picked device with the tests' fakes (`g_vkr.devTable`), and its start-up lines. |
 | `port/rhi/gl/gl_device.c`, `d3d11/d3d11_device.c`, `d3d12/d3d12_device.c` | The other backends' evaluation (no fakes) and start-up lines, after their device line. |
+| `port/render/rd_device_rows.c`, `rd_device_rows.h` | The renderer's reads: `rd__device_value` (in `rd_profile.c`) gives a choice of the current device, or with no device the backend's defaults; the renderer's pure predicates that keep their signatures. |
 | `port/rhi/test/rhi_device_table_test.c` | The table's own rules, the lines of five devices, and the list below (`--docs`, `--check-docs`). |
 | `port/rhi/test/rhi_device_table_equiv_test.c`, `rhi_device_table_ref.inc` | The proof that the table changes no behaviour (below). |
 
@@ -133,12 +134,52 @@ read one choice (`rhi_device_table_choice`): `rhi_vk_pass_row`, `rhi_vk_pass_row
 (`rhi_tile_rule.c`). Their tests (`rhi_vk_pass_row`, `rhi_vk_qprio`, `rhi_driver_version`,
 `rhi_vk_tile_rule`) are unchanged.
 
-The index compaction reads its class and its two class defaults (`RD_VU_COMPACT_ARM_DEFAULT`,
-`RD_VU_COMPACT_DEFAULT`, defined in `rhi_device_table.h`) from the rows `mali-g52` and
-`powervr-dxt-48-1536` (`port/render/rd_vu_compact.c`). The renderer's and the platform's other
-choices are still decided by the rule the table copies, at their call sites
-(`rhi_device_table_equiv` proves they agree); each moves onto the table with its own merge, its
-pure test unchanged.
+The renderer reads the current device's choices (`rhi_device_table_current`, the backend's one
+evaluation with its fakes) through `rd__device_value` (`port/render/rd_device_rows.h`). Every
+backend zeroes its limits at `rhi_init` and `rhi_shutdown` and fills them after the evaluation, so
+while the limits are zero (no device: before the start, after the end, a run without a GPU) it
+gives the backend's defaults, which are what the old rules read from the zeroed limits (a desktop
+class, no tile-based GPU, no phone), whatever evaluation an earlier device left.
+
+| Choice | Call site (`port/render/`) |
+| --- | --- |
+| `PROFILE_CLASS` | `rd_profile.c` (the profile's class and its words; `rd__profile_adreno`, `rd__profile_powervr`) |
+| `TILER` | `rd_profile.c` (`RdProfile.tiler`) |
+| `TILE_CLASS` | `rd_profile.c` `rd__profile_tile_class` (the lamps' fill-paste check and their words) |
+| `TILE_COLUMNS`, `BLUR_FOLD_OFF` | `rd_profile.c` `rd__profile_init` (glow fold, uint views, local reads, aura box, pass area, pass cut, shadow merge, menu text at scale 2; the blur fold) |
+| `LAMPS_MS`, `LAMPS_FILLPASTE`, `LAMPS_AREA` | `rd_lamps.c` `rd__lamps_init` (`rd__lamps_default_bits_of`, with Vulkan, the pass area and the release's `RD_LAMPS_MS_DEFAULT` and `RD_LAMPS_FILLPASTE_DEFAULT`), the 4-sample pass's class |
+| `FILL11_CLASS` | `rd_fill11.c` `classOk` |
+| `SHADOW_TILE_CLASS` | `rd_shadow_tile.c` (with `RD_SHADOW_TILE_DEFAULT`) |
+| `STENCIL_CUT` | `rd_stencil_selftest.c` (the self-test still decides) |
+| `VU_COMPUTE_CLASS` | `rd_vu_record.c` (the PowerVR class and the measured device; `ICO_RD_VU_COMPUTE_CLASS` and `RD_VU_COMPUTE_CLASS_DEFAULT` stay there) |
+| `NO_VOLUME_CLASS`, `NO_VOLUME_BREAK` | `rd_no_volume.c` `classBase`, `breakMeasured` (with `RD_NO_VOLUME_DEFAULT`, `RD_NO_VOLUME_BREAK_DEFAULT`) |
+| `COMPACTION_CLASS` | `rd_vu_compact.c` (the DXT; the class and its two defaults by the rows `mali-g52` and `powervr-dxt-48-1536`, `RD_VU_COMPACT_ARM_DEFAULT` and `RD_VU_COMPACT_DEFAULT` defined in `rhi_device_table.h`; `ICO_RD_VU_COMPACT_ARM` read there) |
+| `SKIN_CHECK_DEFAULT`, `SKIN_AS_BEFORE` | `rd_vu_skin_check.c` (with a window; `ICO_RD_VU_SKIN_CHECK` stays there) |
+| `VU_FALLBACK_PLAIN` (Turnip) | `rd_pipeline.c` `rd__vu_set_choose` (the turnip row's words; the test is `rd__driver_is_turnip`) |
+| `MSAA_MAX4` | `rd_core.c` `rd_aa_supported_mask` |
+| `SCENE_CAP_4096`, `MSAA_BUDGET`, `SHOT_LATE` | `rd_present.c` |
+| `UBER_AUTO` | `rd_uber.c` |
+| `FOG_ORDER_TILER` | `rd_fog_path.c` |
+
+The release-wide switches the renderer ANDs with a class (`RD_LAMPS_MS_DEFAULT`,
+`RD_LAMPS_FILLPASTE_DEFAULT`, `RD_SHADOW_TILE_DEFAULT`, `RD_FILL11_DEFAULT`,
+`RD_VU_COMPUTE_CLASS_DEFAULT`, `RD_NO_VOLUME_DEFAULT`, `RD_NO_VOLUME_BREAK_DEFAULT`,
+`RD_LATE_DEFAULT`) stay in their files: the rows hold the class, the call site the switch, and the
+table never reads their values (unlike the compaction's two, which are the rows' values).
+
+Two readers still read the profile's `TILER` fact (`RdProfile.tiler`, which the table sets) rather
+than their own choice: `rd_late_pass.c` (`LATE_PASS_TILER`) and `rd_vis.c` (`CULL_FRUSTUM`). Their
+tests set `RdProfile.tiler` by hand to stand for a tile-based GPU (`rd_vis_test`, and the
+tile-based pipeline sets of `rd_state_test` and `rd_pixel_test`); reading the choice would change
+what those tests see. The values agree on every identity (`rhi_device_table_equiv`).
+
+The renderer's pure predicates keep their names and signatures and read the table on an identity
+of their arguments (`rd_device_rows.c`): `rd__driver_is_turnip` (the table's Turnip test),
+`rd__profile_vendor_adreno` (`PROFILE_CLASS` on a Vulkan identity of that vendor),
+`rd__vu_class_measured` (`VU_COMPUTE_CLASS` on an Imagination identity of that name). Their tests
+(`rd_state`, `rd_vu_skin_check_judge` and the rest of `rd_vu_skin_check_test`, `rd_smallcuts`) are
+unchanged. The platform's choices are still decided by the rule the table copies, at their call
+sites (`rhi_device_table_equiv` proves they agree).
 
 ## Adding a row
 
@@ -181,8 +222,16 @@ pure test unchanged.
   (the two pass rows, the subpass class with every way its Qualcomm row can apply, the VU rows,
   the queue's row, the serial rule's reason, the fakes' parse), and the one-choice read and the
   backends' evaluation against the whole evaluation on the logged devices on every backend and
-  OS; every row in force somewhere, every override link deciding some identity, no unlinked
-  conflict.
+  OS; the renderer's reads as its call sites compose them (`port/render/rd_device_rows.c` linked
+  in: the class and its Adreno and PowerVR tests, the tile class and columns, the lamps' three
+  classes with and without a device, the crack fill's and the shadow tiles' classes, the stencil
+  cut's words and its want, the VU record's class and measured device, the no-volume window and
+  its break, the compaction's DXT, the skin check's default and v0.11.2 work, the VU set's kind and
+  words, the tile-based limits and orders) on every identity, again on every logged GPU of
+  `DEVICES.md` at each Vulkan version of the matrix's edges with the profile's run inputs, and with
+  no device (whatever an earlier device left) on every backend; the renderer's three pure
+  predicates against their copies; every row in force somewhere, every override link deciding
+  some identity, no unlinked conflict.
 - `rhi_device_table_docs`: the list below against the table.
 
 ## The list

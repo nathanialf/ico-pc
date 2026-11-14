@@ -293,7 +293,7 @@ int main(int argc, char **argv)
     rd_summary_text(sum, sizeof(sum));
     printf("  summary: %s\n", sum);
     /* ICO_VK_FAKE_NO_PREPASS=1: the device table's no-pre-pass row on
-       this device (vk_device.c kVuPlainOnly, issue 123) */
+       this device (the device table's row adreno-740-qualcomm, issue 123) */
     const char *fakeRow = getenv("ICO_VK_FAKE_NO_PREPASS");
     const bool tableOff = fakeRow && fakeRow[0] && fakeRow[0] != '0';
     /* the record's write after the verdict (rd_vu_record.h) */

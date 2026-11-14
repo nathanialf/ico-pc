@@ -32,6 +32,7 @@
 
 #include "memory_floor.h"
 #include "present_fallback.h"
+#include "rd_device_rows.h"
 #include "rhi_device_table.h"
 #include "rhi_driver_version.h"
 #include "rhi_pass_row.h"
@@ -126,6 +127,17 @@ static void newEval(const RefIn *in, RhiDeviceChoices *c)
     rhi_device_table_eval(&id, &fk, c);
 }
 
+/* the renderer's current evaluation (rhi_device_table_current): the
+   backend's, with the Vulkan fakes on Vulkan and never
+   ICO_RD_VU_COMPACT_ARM (the renderer reads that one at its rule,
+   rd_vu_compact.c) */
+static void currentEval(const RefIn *in, RhiDeviceChoices *c)
+{
+    RefIn k = *in;
+    k.compactArm = NULL;
+    newEval(&k, c);
+}
+
 /* rd_pipeline.c rd__vu_set_choose read from VU_FALLBACK_PLAIN */
 static RefVuSet newVuSet(const RhiDeviceChoices *c)
 {
@@ -142,6 +154,36 @@ static RefVuSet newVuSet(const RhiDeviceChoices *c)
     } else if (v == RHI_DT_VUSET_TURNIP) {
         o.kind = "plain set";
         o.brief = rhi_device_choice_reason(c, RHI_DC_VU_FALLBACK_PLAIN);
+        o.noBeside = true;
+    }
+    return o;
+}
+
+/* rd_pipeline.c rd__vu_set_choose as the call site reads it now: the
+   backend's RhiLimits.vuFallbackPlain (the VU rows' plain), then the
+   Turnip test on the limits (rd__driver_is_turnip) with the turnip row's
+   reason as the brief */
+static RefVuSet callSiteVuSet(const RefIn *in, const char *vuFallbackPlain)
+{
+    RefVuSet o;
+    o.kind = "extended set (no device-table row, no Turnip driver, no lost start, no [dev] "
+             "setting asks for the plain one)";
+    o.brief = "";
+    o.noBeside = false;
+    RhiLimits lim;
+    memset(&lim, 0, sizeof lim);
+    lim.vendorId = in->vendor;
+    lim.driverId = in->driverId;
+    lim.driverText = in->text;
+    lim.vuFallbackPlain = vuFallbackPlain;
+    if (lim.vuFallbackPlain) {
+        o.kind = "plain set by the device table";
+        o.brief = lim.vuFallbackPlain;
+        o.noBeside = true;
+    } else if (rd__driver_is_turnip(&lim)) {
+        o.kind = "plain set";
+        const char *b = rd_device_rows_reason("turnip", RHI_DC_VU_FALLBACK_PLAIN);
+        o.brief = b != NULL ? b : "";
         o.noBeside = true;
     }
     return o;
@@ -192,6 +234,20 @@ static void noteRows(const RefIn *in, const RhiDeviceChoices *c)
 /* the live pure functions against their copies */
 static void live(const RefIn *in)
 {
+    /* the renderer's pure predicates (rd_device_rows.c) */
+    {
+        RhiLimits lim;
+        memset(&lim, 0, sizeof lim);
+        lim.vendorId = in->vendor;
+        lim.driverId = in->driverId;
+        lim.driverText = in->text;
+        SAME(in, "live rd__driver_is_turnip", ref_driver_is_turnip(in), rd__driver_is_turnip(&lim));
+        SAME(in, "live rd__profile_vendor_adreno",
+             ref_profile_vendor_adreno(in->vendor, in->moltenvk),
+             rd__profile_vendor_adreno(in->vendor, in->moltenvk));
+        SAME(in, "live rd__vu_class_measured", ref_vu_class_measured(in->name),
+             rd__vu_class_measured(in->name));
+    }
     const int windows = in->os == RHI_DT_WINDOWS;
     const int android = in->os == RHI_DT_ANDROID;
     sameWords(in, "live rhi_vk_pass_row",
@@ -236,6 +292,101 @@ static void live(const RefIn *in)
          !ref_fallback_eligible(in->vendor, in->driverId, in->text) ? ICO_PRESENT_FALLBACK_GATE_NO
          : ref_qualcomm_own(in->vendor, in->driverId, in->text) ? ICO_PRESENT_FALLBACK_GATE_YES
                                                                 : ICO_PRESENT_FALLBACK_GATE_OTHER);
+}
+
+/* The renderer's reads as its call sites compose them now (DT3:
+ * rd_profile.c, rd_lamps.c, rd_fill11.c, rd_shadow_tile.c,
+ * rd_stencil_selftest.c, rd_vu_record.c, rd_no_volume.c, rd_vu_compact.c,
+ * rd_vu_skin_check.c, rd_pipeline.c, rd_core.c, rd_present.c, rd_uber.c,
+ * rd_fog_path.c), each through rd_device_rows_value on the current
+ * evaluation, against the old rule's copy; dev: the renderer has a device
+ * (g_rd.hasDevice, the limits pointer the rule tested).
+ * have: the evaluation newEval made (reused when it carries no
+ * ICO_RD_VU_COMPACT_ARM, NULL: made here); liveLimits false: no device (in
+ * is ref_no_device's, stale an evaluation the backend may have left) */
+static void rendererReads(const RefIn *in, const RhiDeviceChoices *have, bool liveLimits,
+                          const RhiDeviceChoices *stale)
+{
+    RhiDeviceChoices own;
+    const RhiDeviceChoices *cur = stale;
+    if (liveLimits) {
+        if (have == NULL || in->compactArm != NULL) {
+            currentEval(in, &own);
+            have = &own;
+        }
+        cur = have;
+    }
+    const bool vulkan = in->backend == RHI_DT_VULKAN;
+#define RV(ch) rd_device_rows_value(cur, in->backend, liveLimits, (ch))
+    const int32_t cls = RV(RHI_DC_PROFILE_CLASS);
+    SAME(in, "rd classOf", ref_classOf(in), cls);
+    SAME(in, "rd__profile_adreno", ref_profile_adreno(in), rd_device_rows_adreno(cls));
+    SAME(in, "rd__profile_powervr", ref_profile_powervr(in), cls == RHI_DT_CLASS_POWERVR);
+    SAME(in, "rd__profile_tile_class", ref_profile_tile_class(in), RV(RHI_DC_TILE_CLASS));
+    SAME(in, "rd profile tiler", ref_lim_tiler(in), RV(RHI_DC_TILER) != 0);
+    SAME(in, "rd profile tile columns",
+         cls != RHI_DT_CLASS_DESKTOP && cls != RHI_DT_CLASS_D3D12 && cls != RHI_DT_CLASS_OPENGL &&
+             cls != RHI_DT_CLASS_D3D11,
+         RV(RHI_DC_TILE_COLUMNS) != 0);
+    SAME(in, "rd profile blurFold", ref_classOf(in) != RHI_DT_CLASS_MALI,
+         !RV(RHI_DC_BLUR_FOLD_OFF));
+    for (int dev = 0; dev < 2; dev++) {
+        /* rd_lamps.c rd__lamps_init (tilePhone read through the limits on a
+           device, vulkan with the device) and the 4-sample pass's class */
+        const bool vk = dev && vulkan;
+        for (int passArea = 0; passArea < 2; passArea++) {
+            const RefLamps o =
+                ref_lamps(ref_profile_tile_class(in), dev && ref_tile_phone(in), vk, passArea != 0);
+            SAME(in, "rd lamps ms", o.ms, RV(RHI_DC_LAMPS_MS) && vk);
+            SAME(in, "rd lamps fillpaste", o.fillpaste, RV(RHI_DC_LAMPS_FILLPASTE) && vk);
+            SAME(in, "rd lamps area", o.area, RV(RHI_DC_LAMPS_AREA) && vk && passArea);
+        }
+        SAME(in, "rd lamps ms powervr", ref_lamps_ms_powervr(in, dev != 0),
+             dev && RV(RHI_DC_LAMPS_MS) != 0 && vulkan);
+        SAME(in, "rd vu compact dxt", ref_cmp_dxt(in, dev != 0),
+             dev && RV(RHI_DC_COMPACTION_CLASS) == RHI_DT_CMP_DXT);
+        bool pv, ms;
+        ref_vu_record_class(in, dev != 0, &pv, &ms);
+        const int32_t vcc = dev ? RV(RHI_DC_VU_COMPUTE_CLASS) : 0;
+        SAME(in, "rd vu record powervr", pv, vcc != RHI_DT_VUCOMP_NONE);
+        SAME(in, "rd vu record measured", ms, vcc == RHI_DT_VUCOMP_MEASURED);
+        SAME(in, "rd no volume classBase", ref_no_volume_base_dev(in, dev != 0),
+             dev && RV(RHI_DC_NO_VOLUME_CLASS) != 0);
+        SAME(in, "rd no volume breakMeasured",
+             ref_no_volume_base_dev(in, dev != 0) && ref_no_volume_break(in),
+             dev && RV(RHI_DC_NO_VOLUME_CLASS) != 0 && RV(RHI_DC_NO_VOLUME_BREAK) != 0);
+        SAME(in, "rd fog tiler", ref_fog_tiler(in, dev != 0),
+             dev && RV(RHI_DC_FOG_ORDER_TILER) != 0);
+        SAME(in, "rd scene cap", dev && ref_lim_tiler(in), dev && RV(RHI_DC_SCENE_CAP_4096) != 0);
+        SAME(in, "rd MSAA budget", dev && ref_lim_tiler(in), dev && RV(RHI_DC_MSAA_BUDGET) != 0);
+    }
+    SAME(in, "rd fill11 classOk", ref_fill11_class(ref_profile_tile_class(in), ref_tile_phone(in)),
+         RV(RHI_DC_FILL11_CLASS));
+    SAME(in, "rd shadow tile class", ref_profile_tile_class(in), RV(RHI_DC_SHADOW_TILE_CLASS));
+    {
+        const int why = rd_device_rows_adreno(cls) ? 1 : !RV(RHI_DC_STENCIL_CUT) ? 2 : 0;
+        SAME(in, "rd stencil cut why", ref_stencil_off_why(in), why);
+        SAME(in, "rd stencil cut want", !ref_profile_adreno(in) && ref_profile_powervr(in),
+             RV(RHI_DC_STENCIL_CUT) != 0);
+    }
+    SAME(in, "rd skin check default", ref_profile_adreno(in), RV(RHI_DC_SKIN_CHECK_DEFAULT) != 0);
+    SAME(in, "rd skin as before", ref_tile_phone(in), RV(RHI_DC_SKIN_AS_BEFORE) != 0);
+    SAME(in, "rd MSAA max 4", ref_lim_tiler(in), RV(RHI_DC_MSAA_MAX4) != 0);
+    SAME(in, "rd shot late", ref_lim_tiler(in), RV(RHI_DC_SHOT_LATE) != 0);
+    SAME(in, "rd uber auto", ref_lim_tiler(in), RV(RHI_DC_UBER_AUTO) != 0);
+    {
+        const RefVuSet o = ref_vu_set(ref_vu_plain_only(in).plain, ref_driver_is_turnip(in));
+        const RefVuSet n =
+            callSiteVuSet(in, liveLimits && cur != NULL ? rhi_device_vu_rows(cur).plain : NULL);
+        sameWords(in, "rd vu set kind", o.kind, n.kind);
+        sameWords(in, "rd vu set brief", o.brief, n.brief);
+        SAME(in, "rd vu set noBeside", o.noBeside, n.noBeside);
+    }
+    /* every choice: the live limits read the evaluation */
+    for (int ch = 0; liveLimits && ch < RHI_DC_COUNT; ch++) {
+        SAME(in, "rd_device_rows_value", cur->value[ch], RV((RhiDeviceChoice)ch));
+    }
+#undef RV
 }
 
 /* every choice on one identity; withRun: the profile's run inputs too */
@@ -396,6 +547,7 @@ static void compare(const RefIn *in, bool withRun)
     SAME(in, "UBER_AUTO", tiler, v[RHI_DC_UBER_AUTO]);
     SAME(in, "FOG_ORDER_TILER", tiler, v[RHI_DC_FOG_ORDER_TILER]);
     SAME(in, "CULL_FRUSTUM", tiler, v[RHI_DC_CULL_FRUSTUM]);
+    rendererReads(in, &c, true, NULL);
 
     if (withRun) {
         for (int bits = 0; bits < 16; bits++) {
@@ -601,6 +753,25 @@ static const Known kKnown[] = {
      NULL},
     {"N6", RHI_DT_VULKAN, RHI_DT_WINDOWS, false, 0x10DEu, 0x2204u, 4, API(1, 4, 341),
      "NVIDIA GeForce RTX 3090", "device 10de:2204; driver NVIDIA 610.88, version 610.88"},
+    /* DT3: the rest of DEVICES.md's logged GPUs (device lines from their
+       logs; the driver ids NVIDIA's 4 and RADV's 3 by the driver's name) */
+    {"N3", RHI_DT_VULKAN, RHI_DT_WINDOWS, false, 0x10DEu, 0x1B82u, 4, API(1, 4, 312),
+     "NVIDIA GeForce GTX 1070 Ti", "device 10de:1b82; driver NVIDIA 581.80, version 581.80"},
+    {"N4", RHI_DT_VULKAN, RHI_DT_WINDOWS, false, 0x10DEu, 0x1F82u, 4, API(1, 4, 351),
+     "NVIDIA GeForce GTX 1650", "device 10de:1f82; driver NVIDIA 617.42, version 617.42"},
+    {"N5", RHI_DT_VULKAN, RHI_DT_WINDOWS, false, 0x10DEu, 0x28E0u, 4, API(1, 4, 341),
+     "NVIDIA GeForce RTX 4060 Laptop GPU",
+     "device 10de:28e0; driver NVIDIA 610.74, version 610.74"},
+    {"N6 3050", RHI_DT_VULKAN, RHI_DT_WINDOWS, false, 0x10DEu, 0x2584u, 4, API(1, 4, 303),
+     "NVIDIA GeForce RTX 3050", "device 10de:2584; driver NVIDIA 577.00, version 577.00"},
+    {"N6 2000 Ada", RHI_DT_VULKAN, RHI_DT_WINDOWS, false, 0x10DEu, 0x28B8u, 4, API(1, 4, 341),
+     "NVIDIA RTX 2000 Ada Generation Laptop GPU",
+     "device 10de:28b8; driver NVIDIA 610.88, version 610.88"},
+    {"N6 4090", RHI_DT_VULKAN, RHI_DT_WINDOWS, false, 0x10DEu, 0x2684u, 4, API(1, 4, 351),
+     "NVIDIA GeForce RTX 4090", "device 10de:2684; driver NVIDIA 617.14, version 617.14"},
+    {"A2", RHI_DT_VULKAN, RHI_DT_LINUX, false, 0x1002u, 0x15BFu, 3, API(1, 4, 354),
+     "AMD Ryzen Z1 Extreme (RADV PHOENIX)",
+     "device 1002:15bf; driver radv Mesa 26.2.4, version 26.2.4, Mesa 26.2.4"},
     {"A1", RHI_DT_VULKAN, RHI_DT_LINUX, false, 0x1002u, 0x747Eu, 3, API(1, 4, 318),
      "AMD Radeon RX 7800 XT (RADV NAVI32)",
      "device 1002:747e; driver radv Mesa 25.3.0, version 25.3.0, Mesa 25.3.0"},
@@ -700,6 +871,75 @@ static void edges(void)
     }
 }
 
+/* DT3: the renderer's reads on the logged devices at every Vulkan version of
+   the matrix's edges (each device's own and 1.0.61 to 1.4.344), on every
+   backend and OS, MoltenVK or not, a driver package or not, with the
+   profile's run inputs */
+static unsigned long rendererKnown(void)
+{
+    unsigned long n = 0;
+    for (size_t k = 0; k < NN(kKnown); k++) {
+        for (size_t ai = 0; ai <= NN(kApis); ai++) {
+            for (int os = 0; os < RHI_DT_OS_COUNT; os++) {
+                for (size_t bi = 0; bi < NN(kBackends); bi++) {
+                    for (int bits = 0; bits < 4; bits++) {
+                        RefIn in;
+                        memset(&in, 0, sizeof in);
+                        in.backend = kBackends[bi];
+                        in.os = os;
+                        in.moltenvk = (bits & 1) != 0;
+                        in.customDriver = (bits & 2) != 0;
+                        in.vendor = kKnown[k].vendor;
+                        in.device = kKnown[k].device;
+                        in.driverId = kKnown[k].driverId;
+                        in.api = ai < NN(kApis) ? kApis[ai] : kKnown[k].api;
+                        in.name = kKnown[k].name;
+                        in.text = kKnown[k].text;
+                        compare(&in, true);
+                        live(&in);
+                        n++;
+                    }
+                }
+            }
+        }
+    }
+    return n;
+}
+
+/* DT3: no device (the backend's limits zeroed: before rhi_init, after
+   rhi_shutdown, a failed start): the renderer's reads give what the old
+   rules gave on the zeroed limits, whatever evaluation a device before left
+   (none, or each logged device's on each OS) */
+static unsigned long noDevice(void)
+{
+    unsigned long n = 0;
+    for (size_t bi = 0; bi < NN(kBackends); bi++) {
+        const RefIn none = ref_no_device(kBackends[bi]);
+        rendererReads(&none, NULL, false, NULL);
+        n++;
+        for (size_t k = 0; k < NN(kKnown); k++) {
+            for (int os = 0; os < RHI_DT_OS_COUNT; os++) {
+                RefIn was;
+                memset(&was, 0, sizeof was);
+                was.backend = kKnown[k].backend;
+                was.os = os;
+                was.moltenvk = kKnown[k].moltenvk;
+                was.vendor = kKnown[k].vendor;
+                was.device = kKnown[k].device;
+                was.driverId = kKnown[k].driverId;
+                was.api = kKnown[k].api;
+                was.name = kKnown[k].name;
+                was.text = kKnown[k].text;
+                RhiDeviceChoices stale;
+                currentEval(&was, &stale);
+                rendererReads(&none, NULL, false, &stale);
+                n++;
+            }
+        }
+    }
+    return n;
+}
+
 /* rhi_device_table_choice (the pure predicates' one-choice read) and
    rhi_device_table_start (the backends' one evaluation) give what the whole
    evaluation gives, every choice, value and reason, on the logged devices on
@@ -763,6 +1003,8 @@ int main(void)
     const unsigned long faked = fakes();
     edges();
     const unsigned long one = choices();
+    const unsigned long rk = rendererKnown();
+    const unsigned long nd = noDevice();
     size_t rowCount;
     const RhiDeviceRow *rows = rhi_device_table_rows(&rowCount);
     for (size_t r = 0; r < rowCount; r++) {
@@ -802,7 +1044,8 @@ int main(void)
         printf("FAIL %lu identities with an unlinked conflict\n", s_conflicts);
     }
     printf("rhi_device_table_equiv: %lu identities, %lu with the tests' fakes, %lu one choice at "
-           "a time, %lu checks, %lu failures\n",
-           ids, faked, one, s_checks, s_failures);
+           "a time, %lu renderer identities at the edge versions, %lu without a device, %lu "
+           "checks, %lu failures\n",
+           ids, faked, one, rk, nd, s_checks, s_failures);
     return s_failures ? 1 : 0;
 }

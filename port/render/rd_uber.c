@@ -83,6 +83,7 @@
 #include <string.h>
 
 #include "rd_internal.h"
+#include "rd_device_rows.h" /* rd__device_value */
 #include "shader_consts.h"
 #include "shaders_gen.h"
 
@@ -131,7 +132,7 @@ bool rd__uber_wanted(const char **why)
                                          : "no rasterization-order attachment read");
         } else if (!lim->localRead) {
             snprintf(s_why, sizeof s_why, "off (no local read)");
-        } else if (ask < 0 && !lim->tiler) {
+        } else if (ask < 0 && !rd__device_value(RHI_DC_UBER_AUTO)) {
             snprintf(s_why, sizeof s_why,
                      "off (auto: tile-based GPUs only; [dev] uber = on draws with it here)");
         } else {

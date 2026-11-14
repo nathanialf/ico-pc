@@ -2,10 +2,12 @@
  * docs/port/RENDER.md "The device profile").
  *
  * One renderer, one table: after rd__gpu_init the profile is decided once
- * from RhiLimits (tiler, localRead, vendorId, moltenvk, uintView, the
- * driver text) and the backend, and every vendor-dependent choice in the
- * renderer reads a flag of it; no other file of the renderer branches on a
- * vendor.  The device classes and their defaults:
+ * from the device table's choices for this device (the class, its tile
+ * columns, the blur fold: port/rhi/rhi_device_table.c, rd_device_rows.h,
+ * docs/port/DEVICE_TABLE.md) and RhiLimits' capabilities (localRead,
+ * uintView, the stencil view), and every vendor-dependent choice in the
+ * renderer reads a flag of it or a choice of the table; no file of the
+ * renderer branches on a vendor.  The device classes and their defaults:
  *
  *   flag          desktop  D3D12   Adreno    Adreno   Mali  PowerVR  Apple /
  *                 Vulkan           Qualcomm  Turnip                  MoltenVK
@@ -171,11 +173,12 @@
 #include <string.h>
 #include "rd_internal.h"
 #include "rd_vis.h"
-#include "rhi_driver_version.h" /* RHI_DRIVER_ID_MESA_TURNIP */
+#include "rhi_driver_version.h" /* rhi_mesa_version_text */
 #include "rd_vu_skin_check.h"
 #include "rd_stencil_selftest.h" /* rd__profile_powervr */
 #include "rd_shadow_tile.h"      /* rd__profile_tile_class */
 #include "rd_subpass_probe.h"    /* rd__subpass_probe_begin */
+#include "rd_device_rows.h"      /* rd__device_value */
 
 /* the device classes of the table */
 typedef enum ProfileClass {
@@ -238,33 +241,6 @@ static const char *vendorName(uint32_t v, char *buf, size_t n)
     }
 }
 
-/* s holds word, ASCII letters in any case */
-static bool hasWord(const char *s, const char *word)
-{
-    const size_t n = strlen(word);
-    for (; s && *s; s++) {
-        size_t i = 0;
-        while (i < n && s[i] && (s[i] | 0x20) == (word[i] | 0x20)) {
-            i++;
-        }
-        if (i == n) {
-            return true;
-        }
-    }
-    return false;
-}
-
-/* Mesa's Turnip, or a build of it that renamed itself: the Vulkan driver id
- * (VK_DRIVER_ID_MESA_TURNIP, 18; rhi_driver_is_qualcomm_proprietary reads the
- * same id) or, from a driver without VK_KHR_driver_properties (id 0), the
- * name in the driver text.  Issue 209's "PurpleVK public driver" (Turnip
- * 26.3.0-devel, id 18) names itself neither Turnip nor Mesa */
-bool rd__driver_is_turnip(const RhiLimits *lim)
-{
-    return lim != NULL &&
-           (lim->driverId == RHI_DRIVER_ID_MESA_TURNIP || hasWord(lim->driverText, "turnip"));
-}
-
 void rd__turnip_note(const RhiLimits *lim, char *out, size_t n)
 {
     char mesa[32];
@@ -280,82 +256,56 @@ void rd__turnip_note(const RhiLimits *lim, char *out, size_t n)
                              : "Mesa version not named by the driver");
 }
 
-static ProfileClass classOf(const RhiLimits *lim)
+/* the class: the device table's PROFILE_CLASS (port/rhi/rhi_device_table.c:
+ * by backend D3D12, OpenGL, D3D11; on Vulkan the rows adreno (Qualcomm's
+ * vendor id, not through MoltenVK; turnip-adreno over it where the driver
+ * is Turnip, rd__driver_is_turnip), moltenvk, mali, powervr, and
+ * other-tiler (RhiLimits.tiler: another tile-based GPU), else desktop) */
+_Static_assert((int)PC_DESKTOP == RHI_DT_CLASS_DESKTOP && (int)PC_D3D12 == RHI_DT_CLASS_D3D12 &&
+                   (int)PC_OPENGL == RHI_DT_CLASS_OPENGL && (int)PC_D3D11 == RHI_DT_CLASS_D3D11 &&
+                   (int)PC_ADRENO_QUALCOMM == RHI_DT_CLASS_ADRENO_QUALCOMM &&
+                   (int)PC_ADRENO_TURNIP == RHI_DT_CLASS_ADRENO_TURNIP &&
+                   (int)PC_MALI == RHI_DT_CLASS_MALI && (int)PC_POWERVR == RHI_DT_CLASS_POWERVR &&
+                   (int)PC_APPLE == RHI_DT_CLASS_APPLE && (int)PC_TILER == RHI_DT_CLASS_TILER,
+               "ProfileClass is the table's PROFILE_CLASS");
+_Static_assert((int)RHI_BACKEND_VULKAN == RHI_DT_VULKAN && (int)RHI_BACKEND_D3D12 == RHI_DT_D3D12 &&
+                   (int)RHI_BACKEND_OPENGL == RHI_DT_OPENGL &&
+                   (int)RHI_BACKEND_D3D11 == RHI_DT_D3D11,
+               "RhiBackendKind is the table's backend");
+
+int32_t rd__device_value(RhiDeviceChoice choice)
 {
-    switch (rhi_backend()) {
-    case RHI_BACKEND_D3D12:
-        return PC_D3D12;
-    case RHI_BACKEND_OPENGL:
-        return PC_OPENGL;
-    case RHI_BACKEND_D3D11:
-        return PC_D3D11;
-    default:
-        break;
-    }
-    if (rd__profile_vendor_adreno(lim->vendorId, lim->moltenvk)) {
-        /* Mesa's Turnip reports Qualcomm's vendor id, its own driver id
-         * (18) and names itself in the driver text
-         * (VkPhysicalDeviceDriverProperties.driverName "turnip Mesa
-         * driver", RhiLimits.driverText); a renamed build keeps the id;
-         * Qualcomm's own driver has neither (rd__driver_is_turnip) */
-        return rd__driver_is_turnip(lim) ? PC_ADRENO_TURNIP : PC_ADRENO_QUALCOMM;
-    }
-    if (lim->moltenvk) {
-        return PC_APPLE;
-    }
-    switch (lim->vendorId) {
-    case VENDOR_ARM:
-        return PC_MALI;
-    case VENDOR_IMAGINATION:
-        return PC_POWERVR;
-    default:
-        return lim->tiler ? PC_TILER : PC_DESKTOP;
-    }
+    /* the backend zeroes its limits at rhi_init and at rhi_shutdown and fills
+       them after the table's evaluation (vk_device.c vkr_pick_device,
+       gl_device.c, d3d11_device.c, d3d12_device.c): a device's limits have
+       a render target size */
+    const RhiLimits *lim = rhi_limits();
+    return rd_device_rows_value(rhi_device_table_current(), (int)rhi_backend(),
+                                lim != NULL && lim->maxRenderTargetSize != 0u, choice);
 }
 
-/* rd_vu_skin_check.h: classOf's two Adreno classes on Vulkan (Qualcomm's
- * vendor id, not through MoltenVK), from the ids alone */
-bool rd__profile_vendor_adreno(uint32_t vendorId, bool moltenvk)
+static ProfileClass classOf(void)
 {
-    return !moltenvk && vendorId == VENDOR_QUALCOMM;
+    return (ProfileClass)rd__device_value(RHI_DC_PROFILE_CLASS);
 }
 
 bool rd__profile_adreno(void)
 {
-    const RhiLimits *lim = rhi_limits();
-    if (lim == NULL) {
-        return false;
-    }
-    const ProfileClass c = classOf(lim);
-    return c == PC_ADRENO_QUALCOMM || c == PC_ADRENO_TURNIP;
+    return rd_device_rows_adreno(classOf());
 }
 
 /* rd_stencil_selftest.h: classOf's PowerVR class (Imagination's vendor id on
  * Vulkan, not through MoltenVK); another tiler that takes its row is not it */
 bool rd__profile_powervr(void)
 {
-    const RhiLimits *lim = rhi_limits();
-    return lim != NULL && classOf(lim) == PC_POWERVR;
+    return classOf() == PC_POWERVR;
 }
 
-/* rd_shadow_tile.h: 1 the PowerVR class, 2 a desktop class, 0 any other */
+/* rd_shadow_tile.h: 1 the PowerVR class, 2 a desktop class, 0 any other
+ * (the table's TILE_CLASS) */
 int rd__profile_tile_class(void)
 {
-    const RhiLimits *lim = rhi_limits();
-    if (lim == NULL) {
-        return 0;
-    }
-    switch (classOf(lim)) {
-    case PC_POWERVR:
-        return 1;
-    case PC_DESKTOP:
-    case PC_D3D12:
-    case PC_OPENGL:
-    case PC_D3D11:
-        return 2;
-    default:
-        return 0;
-    }
+    return (int)rd__device_value(RHI_DC_TILE_CLASS);
 }
 
 /* ICO_<name>: -1 unset, else 1 for 1/true/on/yes, 0 for anything else */
@@ -454,12 +404,14 @@ void rd__profile_init(void)
     RdProfile *p = &g_rd.profile;
     const RhiLimits *lim = rhi_limits();
     memset(p, 0, sizeof(*p));
-    const ProfileClass c = classOf(lim);
+    const ProfileClass c = classOf();
     /* D3D12 and D3D11: no local read in the API ("n/a") and the API's own
      * bounds on buffer access (both report robustText NULL) */
     const bool d3d = c == PC_D3D12 || c == PC_D3D11;
-    const bool tile = c != PC_DESKTOP && c != PC_D3D12 && c != PC_OPENGL && c != PC_D3D11;
-    p->tiler = lim->tiler;
+    /* the table's TILE_COLUMNS: a class not desktop, D3D12, OpenGL or D3D11
+       (the row tile-classes) */
+    const bool tile = rd__device_value(RHI_DC_TILE_COLUMNS) != 0;
+    p->tiler = rd__device_value(RHI_DC_TILER) != 0; /* RhiLimits.tiler */
     p->localRead = lim->localRead;
     /* the desktop's local reads (the file comment's (1)): with a window, or
        as ICO_RD_LOCAL_PROBE asks in a headless run */
@@ -482,7 +434,7 @@ void rd__profile_init(void)
     p->fogLocal = local && !subpass;
     p->dateStencil = local;
     p->storePlan = true; /* rd_store_plan.c; nothing changes where the device keeps the contents */
-    p->blurFold = c != PC_MALI;
+    p->blurFold = !rd__device_value(RHI_DC_BLUR_FOLD_OFF); /* the row mali */
     /* the glow's mask in its reduction on the immediate-mode classes only
      * (the table's glowFold row; rd_glow_fold.c reads it) */
     p->glowFold = !tile;

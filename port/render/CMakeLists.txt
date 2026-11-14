@@ -212,6 +212,7 @@ add_library(ico_render STATIC
     rd_occlusion.c # the replay's GPU draw issue and the hidden-draw measurement around it
     rd_msaa.c # the MSAA epoch's resolve pass (the covered-majority rule) and its close line
     rd_profile.c # the device profile: what this device class gets 
+    rd_device_rows.c # the renderer's pure reads of the device table (rd_device_rows.h)
     rd_content_hide.c # the content table: stage geometry made for the 4:3 picture
     rd_content_extend.c # the content table's sheets: overlays continued to the frame's edges
     rd_content_chain.c # Natural chains: the chains a stage animation lets down
@@ -2146,7 +2147,7 @@ if(ICO_RUN_TESTS)
                                     "${_env};ICO_RD_VU_RECORD=stores;ICO_RD_VU_PREPASS_SABOTAGE=stale")
     set_tests_properties(rd_vuprepass_selftest_nostores_fallback
                          PROPERTIES ENVIRONMENT "${_env};ICO_VK_FAKE_NO_VERTEX_STORES=1")
-    # the device table's no-pre-pass row (vk_device.c kVuPlainOnly, issue
+    # the device table's no-pre-pass row (adreno-740-qualcomm, issue
     # 123: the Adreno 740 under Qualcomm's own driver), given to lavapipe by
     # ICO_VK_FAKE_NO_PREPASS=1: devtable the pre-pass off by the table and
     # the self-test not run; devtable_on the same with ICO_RD_VU_PREPASS=on
