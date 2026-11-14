@@ -273,6 +273,7 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   once (restarts alone too, at the 16th); its earlier run, the Adreno 740's 13 isolated hangs and 13
   restarts in 16,300 pictures, an idle GPU's restarts and unjudged pictures never do; every other
   picture unfinished meets it at the 31st (15 of 32 never, the 16th does).
+- `rd_inames_test.c` (`rd_inames`; `rd_inames.cmake`, CPU): the draws left at their tick's position by name (`rd_inames.h`): the tally by name and reason, the top five of each reason and `interp names: ...` word for word, a NULL or empty name `a draw`, a name cut to the record's 23 bytes, the table of 128 names full and the rest counted, a short buffer; the stair test (moved every other tick: a step at each of the four still ticks after a move; moved every tick or never: none; stopped once: one; a key twice in a tick judged once; a skipped tick not judged; the table emptied at three quarters); the model's origin through the inverse of the frame's view (the camera's motion cancels, a singular view gives none, the kept inverse the same), the moved test's bound at a millionth of the size.
 - `rd_vu_compact_ab.cmake` (`rd_vu_compact_ab`, `rd_vu_compact_ab_pixel`; `rd_vu_compact.cmake`):
   the index compaction ([PIPELINES.md](PIPELINES.md#the-index-compaction)) on against off,
   `ICO_RD_VU_COMPACT=1` against `=0`, the record by compute in both (`ICO_RD_VU_RECORD=compute`),

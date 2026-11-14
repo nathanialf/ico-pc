@@ -1639,6 +1639,23 @@ line's clock clause, `clock lift asked` lines followed by `taken` and the cluste
 worst second rising in the block after. `not supported here (ENOTSUP)` or `rate-limited` on every
 lift says the system ignores the notice: then the clocks are out of the port's reach.
 
+### The draws left at their tick's position, by name
+
+The interpolation's 250-frame lines count the keyed draws it could not blend and say nothing of
+which objects they were (in the owner's log 0.1-0.5 % of keyed draws in the cage, as in stage 3).
+After its first line, `rd: interp names: draws left at their tick's position over 250 frames (348
+presents): unmatched 9 (cage 5, ico part 2 3, a screen prim 1); mismatched 0; jumped 2 (cage 2);
+turn snapped 0; unkeyed 812 (a screen prim 700, ...); stair-steppers (matched, still this tick after
+moving the tick before) 30 (cage part 2 15, ...); names past the table 0` names the top five of each
+reason by the mesh's name (the model's name the game gave the packet) or the draw's kind
+(`port/render/rd_inames.c`, `rd_inames_live.c`; hooks in `rd_interp.c`). A stair-stepper is a
+matched mesh draw placed in the world whose model is where it was the tick before while the tick
+before it moved (its origin through the inverse of the frame's view, the camera's own motion
+cancelled): an object the game moves every other tick steps on alternate ticks, which next to the
+blended world looks slow. One that stopped counts once; a stepper counts every other tick, so a
+name with a count near half the ticks is a stepper. A name in `unmatched`, `jumped` or `turn
+snapped` with a large count is drawn at its tick's position (no in-between motion).
+
 ## The threads' cores after the start
 
 The start pins the render thread to the fastest core alone (`window: render thread: the high
@@ -2246,6 +2263,7 @@ counter is an increment in a hot path, and none of them reads anything from the 
 | Adreno 740: three skin-check `wrong` verdicts right after 400 ms stalls with the GPU's own sign of a reset, each reading the readback's bytes from an earlier check (`not written again`); the first started the run's capture (44 ms on the game thread, about 1 s on the worker), and more stalls followed | Do the stall clusters remain without the captures? | The attempt ledger's row `no capture after a stall on (a skin check read after a GPU reset is skipped, not captured) N checks skipped after a reset` in the block that holds the stalls, the ledger line's `; stalls N in the block`, each skipped check's `rd: VU skin check: frame F command L:I ...: skipped after a reset: WHY; ...` and the 10 s `rd: VU skin check: P checks, W wrong, K skipped after a reset, ...`; no `VU skin check: captured` or `window: skin-check capture:` line after a stall; then whether `window: stall:` lines still come in clusters a few replays apart ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md#skipped-after-a-reset)). Every stall of a block has its line (up to 350 a block; the tally says how many were left out past it), so a cluster's members are each named with their replay and `(a hang)` or `(not a hang: ...)`, and the tally's `H of them hangs` per block shows whether the hangs themselves come in clusters or only the presents after them |
 | Adreno 740: every hang's first unwritten stamp is `list 0's end`, the present's own list's stamps written after it | Which submission hangs, and was the present waiting on it? | Each `window: stall:` line's clause `the submissions around it (from the stall's start): replay R's K of N (lists 0-12, P pieces; S stamps, U unwritten; it holds the first unwritten stamp) submitted at -T ms, signalled at or before +T ms ...; replay R's 2 of 2 (the present's list, ...; S stamps, all written) ...; replay R+1's 2 of 2 (1 list, the stalled present waits on it) ...; in flight at the stall's start: S seen, U not known`: the submission index that holds the first unwritten stamp across the hangs (always 1 of 2, the scene's, or not), whether the present's list after it ran (its stamps written), and how long before the stall each was submitted. The earlier submissions' own signals stay unknown (no Vulkan call reads them; the slot's last one's is its wait's end) ([Which submission hangs](#issue-123-the-hang-detector-and-the-pass-path)) |
 | Pixel 10 Pro Fold under Uncapped in the cage: two 10 s blocks at exactly one picture a tick, the render thread's CPU and the GPU's work a picture up by half to double, the cores 2-6 clock down, the hint over target either way | Did the clock lift keep the cage at about two a tick, and when a block falls, what were the clocks in its worst second? | The attempt ledger's `clock lift at one picture a tick on (...) N lifts asked (M taken by the system)` and the hint line's `; clock lifts ...`; `window: clock lift asked: ...` with `window: clock lift: ... taken`; `window: worst second of the block: ...` (pictures a tick, the step rule's holds, the clusters' clocks by sample); the ranked line's `; the CPU clocks under their level: ...` ([The clock lift](#the-clock-lift-and-the-worst-second-the-owners-pixel)) |
+| The owner's "slow down on movement of objects like the cage": draws left at their tick's position were 0.1-0.5 % of keyed draws, unnamed | Which objects are drawn at their tick's position, and which step every other tick? | `rd: interp names: draws left at their tick's position over 250 frames ...`: the top five names of each reason and the stair-steppers ([by name](#the-draws-left-at-their-ticks-position-by-name)) |
 | Pixel opening: lamps, dark and sun views | What does each block cost, and which cut fired? | `window: compare: ...; GPU ms a picture: ...; glow plans: lamps N, dark N, whole N`, `passes` and `breaks` a picture, and the ledger line's per-cut fired counts |
 
 ### The attempt ledger

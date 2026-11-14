@@ -160,6 +160,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rd_camera_blend.h"
+#include "rd_inames.h"
 #include "rd_internal.h"
 #include "rd_layer.h"
 #include "rd_mesh.h"
@@ -5940,6 +5941,7 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
                 }
                 if (!isKeyedDraw(c)) {
                     camCurDraw(c); /* unkeyed, cur's through the blended camera */
+                    rd__inames_note(c, RD_INAME_UNKEYED);
                     continue;
                 }
                 const RdCmd *pc = matchOf(prev, c, l, i);
@@ -5948,6 +5950,7 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
                     const int why = pc ? RD_UNMATCHED_PAYLOAD : s_unWhy;
                     st.missing++;
                     st.unmatchedWhy[why < RD_UNMATCHED_COUNT ? why : 0]++;
+                    rd__inames_note(c, RD_INAME_UNMATCHED);
                     camCurDraw(c);
                     if (!pc && isProjected(c)) {
                         umCurOnly((uint32_t)l, i); /* faded in, or from half way */
@@ -5961,6 +5964,7 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
                 int r;
                 s_rotated = 0;
                 s_shifted = 0;
+                rd__inames_step(prev, pc, op, c, cur->number, firstOfTick); /* before the blend */
                 switch (c->type) {
                 case RDC_SCREEN:
                     r = blendScreen(op, prev, pc, c, t);
@@ -6006,6 +6010,9 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
                 if (r == R_MISMATCH) {
                     st.why[s_why < RD_MISMATCH_COUNT ? s_why : 0]++;
                 }
+                if (r == R_MISMATCH || r == R_JUMP) {
+                    rd__inames_note(c, r == R_JUMP ? RD_INAME_JUMPED : RD_INAME_MISMATCHED);
+                }
                 if (r == R_LERP && s_rotated && (c->type == RDC_MESH || c->type == RDC_SKINNED)) {
                     st.rotated++;
                     st.turned += s_drawTurn > 10.0;
@@ -6013,6 +6020,7 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
                     st.longWay += (uint32_t)s_drawLong;
                     st.turnSnap += (uint32_t)s_drawSnap;
                     if (s_drawSnap) {
+                        rd__inames_note(c, RD_INAME_TURN);
                         st.turnWhy[s_drawSnapWhy < RD_TURN_WHY_COUNT ? s_drawSnapWhy : 0]++;
                         if (s_track) {
                             snapNote(c, l, s_drawSnapWhy, s_drawTurn);
@@ -6224,6 +6232,7 @@ static void presentLog(void)
             (unsigned long long)s_pres.lerped, (unsigned long long)s_pres.missing,
             (unsigned long long)s_pres.mismatch, (unsigned long long)s_pres.jump,
             (unsigned long long)s_pres.morph);
+    rd__inames_log(s_pres.frames, s_pres.presents); /* the draws by name (rd_inames.h) */
     /* a separate line, so the line above keeps its form */
     const uint32_t flapping = flapReport();
     rd__log(
