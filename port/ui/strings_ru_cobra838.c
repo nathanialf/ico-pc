@@ -661,10 +661,6 @@ const char *const ui_strings_ru_cobra838[UI_STR_COUNT] = {
     [UI_STR_BACKUP_WHY_TOO_BIG] = NULL,    /* newer than his table: English */
     [UI_STR_BACKUP_WHY_NO_DIALOG] = NULL,  /* newer than his table: English */
     [UI_STR_BACKUP_WHY_NO_SPACE] = NULL,   /* newer than his table: English */
-    [UI_STR_OPT_EFFECT_WATER] = "Отражения в воде",
-    [UI_STR_VAL_SHARP] = "Четкие",
-    [UI_STR_EFFECT_WATER_NOTE] =
-        "В режиме «Четкие» отражения в воде отображаются в выбранном вами разрешении; «Оригинал» сохраняет более мягкие отражения PS2.",
     [UI_STR_VAL_SMOOTH] = "Плавно",
     [UI_STR_OPT_SHOW_FPS] = "Счетчик кадров",
     [UI_STR_EFFECT_MOTION_BLUR_NOTE] =

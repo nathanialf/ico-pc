@@ -724,7 +724,6 @@ typedef enum UiSettingsOpt {
        PS2's); shown only while Motion blur is not Off */
     UI_OPT_EFFECT_MOTION_BLUR_STRENGTH,
     UI_OPT_EFFECT_FOG,
-    UI_OPT_EFFECT_WATER, /* [video] effect_water_sharp: Original/Sharp, default Original */
     UI_OPT_EFFECT_CINEMATIC_BARS,
     UI_OPT_FULL_PIXEL, /* [video] full_pixel; On/Off, last Effects row, outside the preset */
     /* Audio */

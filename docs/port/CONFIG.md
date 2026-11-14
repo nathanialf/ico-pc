@@ -85,11 +85,12 @@ anything malformed gives the caller's default (`ico_toml_get_bool`).
 The top-level `version` is `1` (`port/config/config.h` (`ICO_CONFIG_VERSION`)); a file with a
 larger one is read, its unknown keys kept, and a log line says so (`port/config/config.c`
 (`ensure`)). Keys in `retired_keys` (`[game] classic_menu_text`, `[game] port_font`,
-`[dev] hand_probe`, `[video] effect_glow_size`, and the fifteen difficulty keys
+`[dev] hand_probe`, `[video] effect_glow_size`, `[video] effect_water_sharp` (the retired Water
+reflections row: the blocks always take the scene's scale), and the fifteen difficulty keys
 below: `[gameplay] yorda_safe`, `pit_time`, `shadow_speed`, `yorda_trips`, `shadows_together` and
 `[variants] shade_toughness`, `one_hit`, `never_dodge`, `aggression`, `no_hints`, `barrier_hits`,
 `auto_guard`, `attack_turn`, `shadows_wait_down`, `peaceful_shadows`) are kept in the file and
-logged once a load: the first four as `config: <key> is not used; ignored`, the fifteen the file
+logged once a load: the first five as `config: <key> is not used; ignored`, the fifteen the file
 holds in one line that names them and says they are kept for saves made before the difficulty
 records, giving such a save its difficulty the first time it is loaded (`port/config/config.c`
 (`retired_keys`, `log_retired`)). The fifteen are rows of each save's difficulty record now
@@ -189,7 +190,7 @@ display option, the [preset](ARCHITECTURE.md#terms) rule and the pacing belong t
 | `effect_glow_mode` | string | `"original"` (`"smooth"` for a file without the key whose Display rows are Enhanced's) | Glow between frames above Frame rate Original: `"original"` (a tick's later presents paste the glow the first drew) or `"smooth"` (`RdSettings.glowSmooth`: the glow's chain drawn at every present, [WORK_BUFFERS.md](WORK_BUFFERS.md#the-glow-between-ticks)); part of the preset: `ico_video_preset` is Original with `"original"`, Enhanced with `"smooth"`, and any other mix of the four rows and this key is Custom (`ico_video_preset_rows` is the four rows alone, which the renderer's preset and the anti-aliasing lock follow); the Enhanced shortcut writes `"smooth"`, Original `"original"`; no key: derived at load from the four rows, with the `video: effect_glow_mode not in the file: ...` line, and written at the next save; an explicit key wins; anything else is `"original"` with a `video:` stderr line; written with every save |
 | `effect_motion_blur_mode` | string | `"original"` | Motion blur's way while `effect_motion_blur` is on: `"original"` (the game's sprite reading the DISPLAY the tick started from) or `"smooth"` (`RdSettings.motionBlurSmooth`: an accumulator of every present's scene, [RENDER_POST.md](RENDER_POST.md#the-motion-blur-under-smooth)); anything else is `"original"` with a `video:` stderr line; written with every save, never by itself |
 | `effect_motion_blur_strength` | int | `100` | Motion blur strength (`RdSettings.motionBlurStrength`): 10..100 in tens, the motion blur sprite's FIX drawn as `round(FIX x strength / 100)` under Original and Smooth alike ([RENDER_POST.md](RENDER_POST.md#the-motion-blurs-strength)); a value off the tens is rounded to the nearest (half up), outside 10..100 clamped, a word is 100, each with a `video:` stderr line; no key (a file from before the row) is 100; written with every save |
-| `effect_water_sharp` | bool | `false` | Water reflections: `true` (Sharp) draws the reflections in water and the queen barrier's picture at the scene's scale, `false` (Original) at their GS size ([RENDER_POST.md](RENDER_POST.md#water-and-render-to-texture-blocks)) |
+| `effect_water_sharp` | bool | (none) | retired, not read: the Water reflections row's key (`true` Sharp, `false` Original); the reflections in water and the queen barrier's picture always take the scene's scale ([RENDER_POST.md](RENDER_POST.md#water-and-render-to-texture-blocks)); a file's line is kept as it is and logged `config: video.effect_water_sharp is not used; ignored` once a load; not in the first-run template |
 | `effects_depth` | bool | `true` | file only; the scene's depth for an effects program such as ReShade |
 | `video_mode` | string | absent: 60 Hz | `pal50` or `60hz`, the boot screen's choice (`port/config/sysconf.c`); ignored on every disc but the European one, which have no 50 Hz mode (`ico_boot_video_mode` returns 60 Hz and logs it once) |
 | `backend` | string | `"vulkan"` | `vulkan` or `d3d12`, the window build's renderer; when the key is empty, a run restarted after a graphics driver crash takes the backend its retry step names (`port/platform/window_host.c` (`ico_window_open`); `port/platform/startup_retry.h`) |

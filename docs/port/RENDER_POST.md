@@ -1926,27 +1926,34 @@ out after `tex_ResetVramPri`, TBP 0x2800 in their lists, which the register deco
 The records live per frame slot and are cleared when the slot is reused
 (`port/render/rd_water.c` (`rd__water_frame_reset`)).
 
-**Water reflections** (`[video] effect_water_sharp`, `RdSettings.waterSharp`, issue 97). A block
+**The blocks' scale** (issue 97; the retired Water reflections row). A block
 the game sizes as the native frame (the dark volume's, `gsFrame.w x ScreenHeight`) is scene-class
-and takes the scene's scale whatever the option. Every other block, the puddle's and the pool's
-reflection (`bw x 256`, `ico2/sugipon/src/puddle.c` (`puddleHostBlockBegin`), `pool.c`
-(`poolHostBlockBegin`)) and the queen barrier's copy of the frame (`gsFrame.w x 256`,
-`ico2/ito/src/queen_barrier_disp.c` (`barrierHostBlock`)), is drawn at its own GS size under
-Original, the PS2's texels and the default, so above 1x the reflection is softer than the scene
-around it. Under Sharp such a block takes the scene's scale, both ways as SCENE has it
-(`sceneSx`, `sceneSy`) (`port/render/rd_core.c` (`rd__target_scale_of`)). Its depth buffer
-is made at the same texture size, the clears and scissors are in GS pixels through the target's
-`sx`/`sy` as on any scaled target, and what samples it (the reflecting grid's GS-texel STs, pool.c's
-screen STs normalised by the screen size, the barrier mesh's UVs, the copy sprites) addresses it
-in GS texels, so only the texel count changes. The queen barrier's copy follows the same rule: it
-is the frame seen through the barrier, as soft as the reflections under Original for the same
-reason. A block at the scene's scale that does not fit comes down with the scene
-(`rd__note_target_pressure`). Off, `rd__target_scale_of` takes the branch it always did, so the
-picture is byte for byte the one before the option. A change applies to the blocks made from the
-next frame (they are per-frame temporaries) and logs `water reflections: sharp|original`; a
-Sharp start logs the line once at `rd_init`. Dumps carry the mark in the temporary target's keep
-word (bit 1); the replay tool's `--water-sharp` draws them at the scene's scale, and without it they
-replay at their GS size (`port/render/rd_dump.c`, header comment).
+and takes the scene's scale. Every other block, the puddle's and the pool's reflection (`bw x 256`,
+`ico2/sugipon/src/puddle.c` (`puddleHostBlockBegin`), `pool.c` (`poolHostBlockBegin`)) and the
+queen barrier's copy of the frame (`gsFrame.w x 256`, `ico2/ito/src/queen_barrier_disp.c`
+(`barrierHostBlock`)), takes the scene's scale too, in every preset and at every aspect, both ways
+as SCENE has it (`sceneSx`, `sceneSy`) (`port/render/rd_core.c` (`rd__target_scale_of`)): drawn at
+its own GS size, the PS2's texels, the reflection above 1x was softer than the scene around it.
+Its depth buffer is made at the same texture size, the clears and scissors are in GS pixels
+through the target's `sx`/`sy` as on any scaled target, and what samples it (the reflecting
+grid's GS-texel STs, pool.c's screen STs normalised by the screen size, the barrier mesh's UVs,
+the copy sprites) addresses it in GS texels, so only the texel count changes. The queen barrier's
+copy follows the same rule: it is the frame seen through the barrier. At scale 1 the scene's scale
+is the GS size, so the 1x picture is the PS2-size one byte for byte. This is the retired row's Sharp, the
+same branch of `rd__target_scale_of`; its Original (the GS size at every scale) is
+`ICO_RD_WATER_SCALE=0`, the tests' switch ([TESTING.md](TESTING.md)), read at `rd_init`
+(`g_rd.waterPs2`). `rd_init` logs `water reflections: the blocks at the scene's scale (at 1x their
+GS size)` (or `water reflections: the blocks at their GS size, the PS2's (ICO_RD_WATER_SCALE=0,
+the tests' switch)`). A block at the scene's scale that does not fit comes down with the scene
+(`rd__note_target_pressure`). Cost: at the scene's scale a block is `tw x th` RGBA8 plus its
+`D32F_S8` depth where it has one (the puddle's and the pool's; the barrier's copy has none), drawn only in
+the rooms with a puddle, a pool, the mill's water or the queen's barrier; on a tile-based phone the
+scene cap ([DEVICE_TABLE.md](DEVICE_TABLE.md), 4096) bounds the scene's scale and with it every
+block. Dumps carry the mark in the temporary target's keep word (bit 1), not the option a dump
+was made with: the replay tool draws marked blocks at the scene's scale as the game does now, and
+`--water-ps2` (`ICO_RD_WATER_SCALE=0`) replays a dump made under the row's Original as it was
+drawn (`--water-sharp` is accepted and is the default); a dump from before the mark replays at the
+GS size either way (`port/render/rd_dump.c`, header comment).
 
 **What the log says about the water** (issue 106). The puddles are four steps in list 4
 (`ico2/sugipon/src/puddle.c` (`PuddleDL`)): `baseSetup` clears SCENE's alpha with a full-frame

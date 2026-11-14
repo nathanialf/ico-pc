@@ -156,7 +156,8 @@ end). The puddle's copy over the frame reads the block inside its edges, the sam
 frame-sized block (the dark volume's) and every VU draw keep the clamp. The `--list` water line and
 the F12 line name the counts: `Full pixel on, border mask off: N render-target reads clamped, M
 block reads kept on REPEAT` (ctest `rd_water`, the ripples; `rd_replay_tool_ripple`,
-`rd_replay_tool_ripple_447`, `rd_replay_tool_ripple_436`, `rd_replay_tool_mirror_floor`).
+`rd_replay_tool_ripple_447`, `rd_replay_tool_ripple_436` and its `_ps2`, `_1x`, `_1x_ps2` twins,
+`rd_replay_tool_mirror_floor`).
 
 **The [scene scale](ARCHITECTURE.md#terms)** comes from the Resolution row in `rd__apply_display`:
 "Nx" is the GS size times N; "WxH" that size; "window" the presentation box (only with the Enhanced
@@ -2239,7 +2240,7 @@ power-of-two fractions of a coordinate normalised to the width, the mark of redu
 arithmetic on it; the port's shaders hold no half-precision type, FSR 3.1 runs every pass but RCAS
 in fp16 on that GPU (before this default). No lavapipe replay of the dumps shows them (FSR 3.1 at Quality 80 and 0,
 Native, `--presents 8|64`, `--repeat 8`, the blended dump, the reporter's filter, height, fog path
-and DATE path, 2560x1440 and 1920x1080, without `--water-sharp`, the column high-pass 0.12 to 0.14
+and DATE path, 2560x1440 and 1920x1080, with the water's blocks at their GS size (`--water-ps2`), the column high-pass 0.12 to 0.14
 levels against the reporter's 0.9 to 1.4), and the dump draws the sea's three pack-textured layers
 blank (the reporter's texture pack). Hence the full-precision default above; the pictures above
 confirm it on the next report.

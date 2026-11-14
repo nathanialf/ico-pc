@@ -1487,8 +1487,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   them differ in the outer columns alone (`checkFullPixelOnPin`),
   an old file's `window_size` among them (ignored, kept as written);
   the targets' scales include the work buffers and shadow levels at their GS sizes at every scale
-  and Water reflections' block: its GS size under Original, the scene's scale under Sharp (4x at
-  4x), both the GS size at 1x (`checkScales`); downsampling in force with a scale or a fixed size,
+  and the water's reflection block: the scene's scale (4x at 4x), its GS size under
+  `g_rd.waterPs2` (`ICO_RD_WATER_SCALE=0`), both the GS size at 1x (`checkScales`); downsampling in force with a scale or a fixed size,
   not at the `window` resolution or under the CRT filter, and the supersampling measured against
   the GS grid (4x + SSAA2 is 4x, 2x + SSAA4 is 4x, 1x + SSAA2 is 2x; `checkScales`); without
   anti-aliasing 4x into 640 x 480 and into 1600 x 1200 both take the window's reduce, byte for byte

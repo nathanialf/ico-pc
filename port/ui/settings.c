@@ -1866,8 +1866,6 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return buf;
     case UI_OPT_EFFECT_FOG:
         return onOff(o.effectFog);
-    case UI_OPT_EFFECT_WATER:
-        return ui_str(o.effectWaterSharp ? UI_STR_VAL_SHARP : UI_STR_VAL_ORIGINAL);
     case UI_OPT_EFFECT_CINEMATIC_BARS:
         return onOff(o.effectCinematicBars);
     case UI_OPT_FULL_PIXEL:
@@ -2324,8 +2322,6 @@ static int *videoSwitch(IcoVideoOptions *o, UiSettingsOpt opt)
         return &o->effectSoftening;
     case UI_OPT_EFFECT_FOG:
         return &o->effectFog;
-    case UI_OPT_EFFECT_WATER:
-        return &o->effectWaterSharp;
     case UI_OPT_EFFECT_CINEMATIC_BARS:
         return &o->effectCinematicBars;
     case UI_OPT_SHOW_FPS:
@@ -2482,13 +2478,11 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
     case UI_OPT_EFFECT_DEPTH_OF_FIELD:
     case UI_OPT_EFFECT_SOFTENING:
     case UI_OPT_EFFECT_FOG:
-    case UI_OPT_EFFECT_WATER:
     case UI_OPT_EFFECT_CINEMATIC_BARS:
     case UI_OPT_SHOW_FPS:
     case UI_OPT_DOWNSAMPLE:
     case UI_OPT_FULL_PIXEL: {
-        /* the plain On/Off display rows (and Water reflections' Original
-           and Sharp) */
+        /* the plain On/Off display rows */
         int *const on = videoSwitch(&o, opt);
         *on = !*on;
         video = 1;
@@ -3415,7 +3409,6 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addNote(pg, UI_OPT_EFFECT_GLOW_SMOOTH, UI_STR_EFFECT_GLOW_SMOOTH_NOTE);
         addNote(pg, UI_OPT_EFFECT_MOTION_BLUR, UI_STR_EFFECT_MOTION_BLUR_NOTE);
         addNote(pg, UI_OPT_EFFECT_MOTION_BLUR_STRENGTH, UI_STR_EFFECT_MOTION_BLUR_STRENGTH_NOTE);
-        addNote(pg, UI_OPT_EFFECT_WATER, UI_STR_EFFECT_WATER_NOTE);
         break;
     case UI_PAGE_GPU_DRIVER:
         /* one note under the page, on every row but Back */
@@ -4003,16 +3996,10 @@ static void build(void)
     static const int gpuStrs[] = {UI_STR_OPT_GPU_DRIVER, UI_STR_GPU_DRIVER_ADD,
                                   UI_STR_GPU_DRIVER_ADD_FILE, UI_STR_GPU_DRIVER_REMOVE,
                                   UI_STR_BACK};
-    static const int fxOpts[] = {UI_OPT_EFFECT_GLOW,
-                                 UI_OPT_EFFECT_GLOW_SMOOTH,
-                                 UI_OPT_EFFECT_DEPTH_OF_FIELD,
-                                 UI_OPT_EFFECT_SOFTENING,
-                                 UI_OPT_EFFECT_MOTION_BLUR,
-                                 UI_OPT_EFFECT_MOTION_BLUR_STRENGTH,
-                                 UI_OPT_EFFECT_FOG,
-                                 UI_OPT_EFFECT_WATER,
-                                 UI_OPT_EFFECT_CINEMATIC_BARS,
-                                 UI_OPT_BACK};
+    static const int fxOpts[] = {
+        UI_OPT_EFFECT_GLOW,      UI_OPT_EFFECT_GLOW_SMOOTH,    UI_OPT_EFFECT_DEPTH_OF_FIELD,
+        UI_OPT_EFFECT_SOFTENING, UI_OPT_EFFECT_MOTION_BLUR,    UI_OPT_EFFECT_MOTION_BLUR_STRENGTH,
+        UI_OPT_EFFECT_FOG,       UI_OPT_EFFECT_CINEMATIC_BARS, UI_OPT_BACK};
     static const int fxStrs[] = {UI_STR_OPT_EFFECT_GLOW,
                                  UI_STR_OPT_EFFECT_GLOW_SMOOTH,
                                  UI_STR_OPT_EFFECT_DEPTH_OF_FIELD,
@@ -4020,7 +4007,6 @@ static void build(void)
                                  UI_STR_OPT_EFFECT_MOTION_BLUR,
                                  UI_STR_OPT_EFFECT_MOTION_BLUR_STRENGTH,
                                  UI_STR_OPT_EFFECT_FOG,
-                                 UI_STR_OPT_EFFECT_WATER,
                                  UI_STR_OPT_EFFECT_CINEMATIC_BARS,
                                  UI_STR_BACK};
     /* Picture: the picture's own rows (Brightness is the pause menu's, the

@@ -3020,17 +3020,19 @@ int main(void)
         rd_shutdown();
     }
     /* the other-size rule's counter and the dump line (issue 106): the
-       scene at 2x, the block at its GS size under Water reflections
-       Original, at the scene's under Sharp */
-    for (int sharp = 0; sharp < 2; sharp++) {
+       scene at 2x, the block at the scene's scale (the default since
+       v0.11.7, v0.11.6's Water reflections: Sharp) and at its GS size under
+       the tests' ICO_RD_WATER_SCALE=0 (g_rd.waterPs2, set here after rd_init
+       read the variable; v0.11.6's Original) */
+    for (int ps2 = 0; ps2 < 2; ps2++) {
         st.preset = RD_PRESET_ENHANCED;
         st.aspect = 4.0f / 3.0f;
         st.sceneScale = 2.0f;
-        st.waterSharp = (uint8_t)sharp;
         if (!rd_init(W, H, &st, NULL)) {
             CHECK(0, "rd_init at 2x");
             continue;
         }
+        g_rd.waterPs2 = ps2 != 0;
         gif_HostForgetTextures();
         gif_HostFrameReset();
         setup();
@@ -3038,16 +3040,24 @@ int main(void)
         s_surfFba = 1;
         setupPuddle();
         recordPuddle(); /* replayed at rd_end_frame */
-        printf("  2x %s: %u draws read a block not at the scene's scale\n",
-               sharp ? "sharp" : "original", g_rdPerf.blockOtherScaleReads);
-        CHECK(g_rdPerf.blockOtherScaleReads == (sharp ? 0u : 1u),
-              "2x %s: the copy's read of the block counted by the other-size rule (%u)",
-              sharp ? "sharp" : "original", g_rdPerf.blockOtherScaleReads);
-        checkPuddleDumpLine(sharp ? "2x sharp" : "2x original",
-                            sharp ? "(2x2, the scene's scale)" : "(1x1, not the scene's scale)");
+        const char *const how = ps2 ? "2x PS2 size" : "2x";
+        printf("  %s: %u draws read a block not at the scene's scale\n", how,
+               g_rdPerf.blockOtherScaleReads);
+        CHECK(g_rdPerf.blockOtherScaleReads == (ps2 ? 1u : 0u),
+              "%s: the copy's read of the block counted by the other-size rule (%u)", how,
+              g_rdPerf.blockOtherScaleReads);
+        checkPuddleDumpLine(how, ps2 ? "(1x1, not the scene's scale)" : "(2x2, the scene's scale)");
+        {
+            char line[1536];
+            rd__water_dump_line(rd__last_frame(), line, sizeof(line));
+            CHECK(strstr(line, ps2 ? "water reflections at their GS size (ICO_RD_WATER_SCALE=0)"
+                                   : "water reflections at the scene's scale") != NULL,
+                  "%s: the dump line names the blocks' scale rule", how);
+        }
         CHECK(rhi_vk_validation_error_count() == 0, "2x: %u validation errors",
               rhi_vk_validation_error_count());
         rd_shutdown();
+        g_rd.waterPs2 = false;
     }
     if (failures) {
         printf("rd_water_test: %d failures\n", failures);
