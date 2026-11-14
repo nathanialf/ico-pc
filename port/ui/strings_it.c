@@ -741,7 +741,7 @@ const char *const ui_strings_it[UI_STR_COUNT] =
         [UI_STR_ISO_COPYING] = "Copia dell’immagine del disco nell’app",
         [UI_STR_ISO_COPYING_LONG] =
             "Copia dell’immagine del disco nell’app. È un’immagine grande: ci vorranno alcuni minuti",
-        [UI_STR_SECTION_YORDA] = "Yorda",
+        [UI_STR_SECTION_CHAINS] = "Catene",
         [UI_STR_SECTION_SHADOWS] = "Ombre",
         [UI_STR_SECTION_CUTSCENES] = "Filmati",
         [UI_STR_OPT_VAR_TOUGHNESS] = "Resistenza delle ombre",

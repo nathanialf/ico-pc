@@ -498,7 +498,7 @@ The six mouse rows do not show on phones and tablets.
 
 Every row here plays as the original until you change it, on a phone too.
 The Gameplay page has its own rows, then two pages of their own, each
-opened from its row just above Back: [Yorda](#yorda) and
+opened from its row just above Back: [Chains](#chains) and
 [Cutscenes](#cutscenes). All of it is there from
 the title screen or the pause menu, on every disc.
 
@@ -568,9 +568,9 @@ Ico's hand at the highest ledges (he pulls her up the usual way), and the
 second controller does not rumble. Your choice is kept with each save, as on the
 other discs.
 
-### Yorda
+### Chains
 
-Options > Gameplay > Yorda:
+Options > Gameplay > Chains:
 
 - **Natural chains** changes how two chains look as they come down for Ico:
   the one at the Stone Pillar and one underground. In the original game the

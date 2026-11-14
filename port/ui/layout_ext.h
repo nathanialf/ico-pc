@@ -52,7 +52,7 @@ int lt_ext_game_layout_count(void);
 int lt_ext_game_property_count(void);
 /* every Options page's layout, the Settings screens' and the model
    viewer's two, with 4 spare (settings_test testBudget): 27 in v0.10.2,
-   29 in v0.10.3 by the page count (Gameplay's Yorda, Shadows and
+   29 in v0.10.3 by the page count (Gameplay's Chains, Shadows and
    Cutscenes, three pages for one) */
 #define LT_EXT_MAX_LAYOUTS 40
 /* room for every page's rows, the mouse rows, the Android driver page and

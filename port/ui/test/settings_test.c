@@ -161,14 +161,20 @@ static void testBuild(void)
                                    UI_OPT_FILM_EFFECT, UI_OPT_PLAYERS,  UI_OPT_VAR_SWORD_COLOUR,
                                    UI_OPT_VAR_WEAPON,  UI_OPT_LINK,     UI_OPT_LINK,
                                    UI_OPT_LINK,        UI_OPT_BACK};
-    static const int gameStrs[] = {
-        UI_STR_OPT_STICK_FIX,   UI_STR_OPT_DOOR_FIX,  UI_STR_OPT_SECOND_CARD,
-        UI_STR_OPT_FILM_EFFECT, UI_STR_OPT_PLAYERS,   UI_STR_OPT_VAR_SWORD_COLOUR,
-        UI_STR_OPT_VAR_WEAPON,  UI_STR_SECTION_YORDA, UI_STR_SECTION_CUTSCENES,
-        UI_STR_DIFF_LINK,       UI_STR_BACK};
-    static const int yordaOpts[] = {UI_OPT_NATURAL_CHAINS, UI_OPT_VAR_CHAIN_SPEED,
+    static const int gameStrs[] = {UI_STR_OPT_STICK_FIX,
+                                   UI_STR_OPT_DOOR_FIX,
+                                   UI_STR_OPT_SECOND_CARD,
+                                   UI_STR_OPT_FILM_EFFECT,
+                                   UI_STR_OPT_PLAYERS,
+                                   UI_STR_OPT_VAR_SWORD_COLOUR,
+                                   UI_STR_OPT_VAR_WEAPON,
+                                   UI_STR_SECTION_CHAINS,
+                                   UI_STR_SECTION_CUTSCENES,
+                                   UI_STR_DIFF_LINK,
+                                   UI_STR_BACK};
+    static const int chainOpts[] = {UI_OPT_NATURAL_CHAINS, UI_OPT_VAR_CHAIN_SPEED,
                                     UI_OPT_VAR_CHAIN_DAMPING, UI_OPT_BACK};
-    static const int yordaStrs[] = {UI_STR_OPT_NATURAL_CHAINS, UI_STR_OPT_VAR_CHAIN_SPEED,
+    static const int chainStrs[] = {UI_STR_OPT_NATURAL_CHAINS, UI_STR_OPT_VAR_CHAIN_SPEED,
                                     UI_STR_OPT_VAR_CHAIN_DAMPING, UI_STR_BACK};
     /* the New Game's Customize and its three pages: every row of the draft */
     static const int custOpts[] = {UI_OPT_LINK, UI_OPT_LINK, UI_OPT_LINK, UI_OPT_BACK};
@@ -268,17 +274,17 @@ static void testBuild(void)
               "Touch screen opens its page");
     }
     CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 11), "gameplay rows");
-    CHECK(labelsAre(UI_PAGE_YORDA, yordaOpts, yordaStrs, 4), "Gameplay > Yorda rows");
+    CHECK(labelsAre(UI_PAGE_CHAINS, chainOpts, chainStrs, 4), "Gameplay > Chains rows");
     CHECK(labelsAre(UI_PAGE_CUTSCENES, cutOpts, cutStrs, 4), "Gameplay > Cutscenes rows");
     CHECK(labelsAre(UI_PAGE_CUSTOMIZE, custOpts, custStrs, 4), "Customize rows");
     CHECK(labelsAre(UI_PAGE_SHADOWS, shadowOpts, shadowStrs, 8), "Customize > Shadows rows");
     CHECK(labelsAre(UI_PAGE_COMBAT, combatOpts, combatStrs, 7), "Customize > Combat rows");
     CHECK(labelsAre(UI_PAGE_RULES, rulesOpts, rulesStrs, 7), "Customize > Rules rows");
     {
-        /* Yorda and Cutscenes open their pages, right before Back (settings_extra's
+        /* Chains and Cutscenes open their pages, right before Back (settings_extra's
            testNaturalChains and testSkipOpening walk them and back); Customize's
            three links its pages, which no Settings page leads to */
-        static const UiSettingsPage kSub[2] = {UI_PAGE_YORDA, UI_PAGE_CUTSCENES};
+        static const UiSettingsPage kSub[2] = {UI_PAGE_CHAINS, UI_PAGE_CUTSCENES};
         static const UiSettingsPage kCust[3] = {UI_PAGE_SHADOWS, UI_PAGE_COMBAT, UI_PAGE_RULES};
         int gl[16], go[16];
         const int gn = ui_settings_page_rows(UI_PAGE_GAMEPLAY, gl, go, NULL, 16);
@@ -330,10 +336,10 @@ static void testBuild(void)
                   l->first >= LT_GAME_PROPERTY_COUNT && l->last > l->first && l->proc != NULL,
               "page %d layout", p);
     }
-    /* Shadows never take Yorda on Customize > Shadows, on neither Gameplay nor its Yorda page */
+    /* Shadows never take Yorda on Customize > Shadows, on neither Gameplay nor its Chains page */
     int yorda = ui_settings_row_of(UI_PAGE_SHADOWS, UI_OPT_YORDA);
     CHECK(yorda >= 0 && ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_YORDA) < 0 &&
-              ui_settings_row_of(UI_PAGE_YORDA, UI_OPT_YORDA) < 0,
+              ui_settings_row_of(UI_PAGE_CHAINS, UI_OPT_YORDA) < 0,
           "the Yorda row");
     /* the Gameplay page holds the stick fix */
     CHECK(ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_STICK_FIX) >= 0, "the stick fix row");
@@ -2465,7 +2471,7 @@ static void testValues(void)
         CHECK(ico_config_get_string("gameplay.shadow_speed", NULL) == NULL, "shadow speed: no key");
         ui__diff_draft_start(NULL);
     }
-    /* Chain swing speed and slowdown (Gameplay > Yorda, after Natural chains): the
+    /* Chain swing speed and slowdown (Gameplay > Chains, after Natural chains): the
        game's own 4 reads "4 (original)", the others are their numbers, 1 to 10 around
        both ways, each step writes the key as the number; neither switches achievements off */
     {
@@ -2502,12 +2508,12 @@ static void testValues(void)
             ui_settings_step(chain[r].opt, 1);
         }
     }
-    /* their notes, on the Yorda page, after Natural chains' */
-    CHECK(noteStarting(UI_PAGE_YORDA, "How fast a chain") >= 0 &&
-              noteStarting(UI_PAGE_YORDA, "How quickly a swing") >
-                  noteStarting(UI_PAGE_YORDA, "How fast a chain") &&
-              noteStarting(UI_PAGE_YORDA, "How fast a chain") >
-                  noteStarting(UI_PAGE_YORDA, "A chain that comes down"),
+    /* their notes, on the Chains page, after Natural chains' */
+    CHECK(noteStarting(UI_PAGE_CHAINS, "How fast a chain") >= 0 &&
+              noteStarting(UI_PAGE_CHAINS, "How quickly a swing") >
+                  noteStarting(UI_PAGE_CHAINS, "How fast a chain") &&
+              noteStarting(UI_PAGE_CHAINS, "How fast a chain") >
+                  noteStarting(UI_PAGE_CHAINS, "A chain that comes down"),
           "the chain rows' notes follow Natural chains'");
     ui_settings_step(UI_OPT_DEVELOPER, 1);
     CHECK(ico_opt_developer_mode() == 1, "developer mode on");

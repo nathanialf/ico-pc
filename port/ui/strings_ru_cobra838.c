@@ -708,7 +708,7 @@ const char *const ui_strings_ru_cobra838[UI_STR_COUNT] = {
     [UI_STR_ISO_COPYING] = "Копирование образа диска в приложение",
     [UI_STR_ISO_COPYING_LONG] =
         "Копирование образа диска в приложение. Из-за большого объема файла это может занять несколько минут.",
-    [UI_STR_SECTION_YORDA] = NULL,     /* newer than his table: English */
+    [UI_STR_SECTION_CHAINS] = NULL,    /* newer than his table: English */
     [UI_STR_SECTION_SHADOWS] = NULL,   /* newer than his table: English */
     [UI_STR_SECTION_CUTSCENES] = NULL, /* newer than his table: English */
     [UI_STR_OPT_VAR_TOUGHNESS] = "Прочность теней",

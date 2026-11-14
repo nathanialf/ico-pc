@@ -718,7 +718,7 @@ const char *const ui_strings_ru_bobttz[UI_STR_COUNT] = {
     [UI_STR_ISO_COPYING] = "Копирование образа диска в приложение",
     [UI_STR_ISO_COPYING_LONG] =
         "Копирование образа диска в приложение. Это большой образ: процесс займет несколько минут.",
-    [UI_STR_SECTION_YORDA] = "Йорда",
+    [UI_STR_SECTION_CHAINS] = "Цепи",
     [UI_STR_SECTION_SHADOWS] = "Тени",
     [UI_STR_SECTION_CUTSCENES] = "Внутриигровые ролики",
     [UI_STR_OPT_VAR_TOUGHNESS] = "Сила теней",

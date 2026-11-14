@@ -901,7 +901,7 @@ typedef enum UiStrId {
        notes and values (a note ends with whether the row switches
        achievements off) and Developer's Debug menu row (shown with
        Developer mode); Original is UI_STR_VAL_ORIGINAL */
-    UI_STR_SECTION_YORDA,
+    UI_STR_SECTION_CHAINS,
     UI_STR_SECTION_SHADOWS,
     UI_STR_SECTION_CUTSCENES,
     UI_STR_OPT_VAR_TOUGHNESS,
@@ -1025,7 +1025,7 @@ typedef enum UiStrId {
     UI_STR_OPT_VAR_TOUGHNESS_NOTE_THIRD,
     UI_STR_OPT_VAR_PEACEFUL,
     UI_STR_OPT_VAR_PEACEFUL_NOTE,
-    /* Gameplay > Yorda (v0.10.5): Chain swing speed and Chain swing slowdown
+    /* Gameplay > Chains (v0.10.5): Chain swing speed and Chain swing slowdown
        ([variants] chain_swing_speed, chain_swing_damping) with their notes,
        and the value text of the game's own 4 ("4 (original)"; the other
        values are plain numbers) */

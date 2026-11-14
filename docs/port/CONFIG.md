@@ -261,7 +261,7 @@ original game's behaviour (`port/game/options.h`, header comment).
 ### [variants]
 
 Options > Gameplay: the two weapon rows on the page, Chain swing speed and Chain swing slowdown on
-Gameplay > Yorda, the two cutscene rows on Gameplay > Cutscenes ([UI.md](UI.md#gameplay--yorda-and-cutscenes));
+Gameplay > Chains, the two cutscene rows on Gameplay > Cutscenes ([UI.md](UI.md#gameplay--chains-and-cutscenes));
 the ten difficulty rows (Shadow toughness, Shadow aggression, Peaceful shadows, the three combat rows,
 One hit per swing, Shadows never dodge, Queen barrier, No hints) on the New Game screen's Customize
 pages ([UI.md](UI.md#customize-the-new-game-drafts-pages),

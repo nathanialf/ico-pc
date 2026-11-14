@@ -4,7 +4,7 @@
  * The game variants' rows (settings_variants.h): one row per IcoVariantId,
  * in its order (UI_OPT_VAR_TOUGHNESS + id): the two weapon rows on
  * Gameplay, the cutscene rows on Gameplay > Cutscenes, the two chain rows on
- * Gameplay > Yorda.  The ten a journey's difficulty holds (toughness, One
+ * Gameplay > Chains.  The ten a journey's difficulty holds (toughness, One
  * hit, Never dodge, aggression, No hints, the barrier, the three combat rows,
  * Peaceful shadows) are rows of the New Game draft on Customize's pages since
  * v0.11.3: settings_difficulty.c gives their text and notes from the draft;

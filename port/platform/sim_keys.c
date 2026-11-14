@@ -34,7 +34,7 @@ const char *const ICO_SIM_KEYS[] = {
     "variants.sword_colour",
     "variants.weapon",
     "developer.free_movement", /* Developer > Free movement (ico_rows.h) */
-    /* Gameplay > Yorda's chain rows: the swing's pace (chain.c, debug values 1..10) */
+    /* Gameplay > Chains' chain rows: the swing's pace (chain.c, debug values 1..10) */
     "variants.chain_swing_speed",
     "variants.chain_swing_damping",
     NULL,

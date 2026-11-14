@@ -756,7 +756,7 @@ int openPage(int mainL, int mainRow, UiSettingsPage page)
 }
 
 /* from the page `parent` on screen (its layout parentL), Cross on the row
-   that links to page (Gameplay's Yorda, Shadows and Cutscenes): its layout */
+   that links to page (Gameplay's Chains, Shadows and Cutscenes): its layout */
 int openLink(int parentL, UiSettingsPage parent, UiSettingsPage page)
 {
     int labels[24];
