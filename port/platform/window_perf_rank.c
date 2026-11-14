@@ -176,6 +176,11 @@ static void ledger_lines(void)
                                                    : st.passObjects);
         }
         s_passLast = st.passObjects;
+        /* issue 123's second attempt (rhi_qprio.h): the queue's global
+           priority as the device's creation got it; its count the block's
+           stalls (ico_attempt_block_text) */
+        ico_attempt_decide_queue_priority(rhi_limits()->queuePriority,
+                                          rhi_limits()->queuePriorityWhy);
     }
     const uint32_t serial = ico_attempt_serial();
     if (!s_said || serial != s_serial) {

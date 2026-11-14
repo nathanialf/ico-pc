@@ -1174,9 +1174,15 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   buffer cut and terminated; the deciders as seven device classes' owners call them (the
   Mali-G52, the Pixel, a PowerVR B, an Adreno 740 on Qualcomm's driver and on Turnip, a desktop
   with MSAA, a Mac with the break forced): no row at all left `not reported`, the rows not built
-  (the second Adreno row among them) `not in this build`, the cores' rows, the no-volume break's
+  `not in this build`, the cores' rows, the no-volume break's
   state with its reason in the start line, the Qualcomm passes row on only on Qualcomm's driver,
-  its count and the stalls clause `(the Adreno attempt on|off)`, the VU record by compute's and
+  its count and the stalls clause `(the Adreno attempt on|off)`, the high queue priority's row
+  (issue 123's second attempt) on with Qualcomm's passes row and not applicable elsewhere, its
+  count the block's stalls (3, then 1, then 0 with no stalls asked), its state in the stalls clause
+  `(the Adreno attempt on, high queue priority granted)`, `refused by the driver` with its reason
+  in the start line and `high queue priority refused` in the clause, `not applicable here (not asked
+  on this graphics API (Vulkan's alone))` for a NULL why and `(the Adreno attempt off, high queue
+  priority not asked)`, the VU record by compute's and
   the turn fold's states per class (the VU record by compute on with the shipped default on the
   Pixel's D-Series DXT, off by default on the PowerVR B, which never ran it; the Mali and the Adreno
   turned phones' turn fold off by default, not applicable on the desktops), the subpass read's
@@ -1771,6 +1777,26 @@ The renderer's test programs have a page of their own:
   device put on the row alone (`ICO_VK_FAKE_PASS_ROW=qualcomm`), failing if the device line says
   `render passes dynamic;`; `rhi_vk_qcom_passes_off` the clock cell with `ICO_VK_LEGACY_PASSES=0`
   over the row, failing if it says `render passes legacy`.
+- `rhi_vk_qprio_test.c` (ctest `rhi_vk_qprio`): the high queue priority (`port/rhi/rhi_qprio.c`,
+  `rhi_pass_row.c` `rhi_vk_qprio_row`; issue 123's second attempt), pure: the row is Qualcomm's own
+  driver (id 8 or none) on vendor 0x5143 on an Android build, the same devices as the
+  `VkRenderPass` row; not Android, Turnip, Qualcomm's id on Arm's vendor, Intel, Imagination and
+  NVIDIA are not on it; the plan: off the row not asked (`not Qualcomm's own driver on Android`),
+  the tablet's offer (KHR, EXT and the query, high listed) asked through `VK_KHR_global_priority`,
+  EXT alone through `VK_EXT_global_priority` (with and without a read list), neither listed not
+  asked (`... global queue priority not offered`), a read list without high not asked (`... the
+  game's queue family does not list high`); `ICO_VK_FAKE_QUEUE_PRIORITY`'s words (`grant`,
+  `refuse`, `unoffered` in any case; anything else none) both ways; the results' words
+  (`VK_ERROR_NOT_PERMITTED` -1000174001 `not permitted`, -3, -1, -4, another); the ledger's
+  granted and refused reasons. On lavapipe (`rhi_vk_test qprio`, `port/rhi/test/rhi_vk_qprio.c`):
+  each first starts without the fake (not asked, `not Qualcomm's own driver on Android`; 77
+  without a device), then sets `ICO_VK_FAKE_QUEUE_PRIORITY` from `ICO_TEST_QPRIO`, runs every
+  exact-texel cell and starts once more: `rhi_vk_qprio_granted` (`grant`) `RHI_QPRIO_GRANTED` with
+  `high granted through ...`; `rhi_vk_qprio_refused` (`refuse`) `RHI_QPRIO_REFUSED`, result
+  -1000174001 and `not permitted`, the device made again without the priority and drawing;
+  `rhi_vk_qprio_unoffered` (`unoffered`) not asked with `global queue priority not offered`.
+  `_granted` and `_refused` skip (77) where the device offers no global priority with high (this
+  host's lavapipe lists `VK_KHR_global_priority` with low, medium, high and realtime).
 - `rhi_subpass_verdict_test.c`: the subpass read's decision at a Vulkan start and its verdict file
   (`port/rhi/rhi_subpass_verdict.h`), pure: every branch of `rhi_subpass_decide` in its order
   (`[dev] subpass_read = off`, `ICO_VK_FAKE_NO_DST` with and without the key, `= on` over a refusal
