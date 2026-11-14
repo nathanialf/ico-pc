@@ -32,7 +32,14 @@
  *   - on Android, the app's own thermal headroom and status and whether
  *     the screen is being recorded (thermal_text.h, host_android.h
  *     ico_host_thermal): the block's "window: thermal: ..." line after the
- *     driver's, and the end of each around line.
+ *     driver's, and the end of each around line;
+ *   - each stall's "window: stall: ..." line (stall_coincide.h: every
+ *     stall of a block up to STALL_BLOCK_LINES, the GPU's own sign of a
+ *     reset with the hung replay apart, a counter restart after a span
+ *     with no GPU work said and not counted, the submissions around it
+ *     from the records' gpuSub), and per block after the present stalls'
+ *     line the present latency line (present_latency.h) with the queue's
+ *     priority.
  * The texts are present_hist.c's and rd_perf.c's (pure, present_hist_test
  * and rd_perf_test's checkPassTexts).  Everything
  * here runs on the window's thread, in perf_drain, from the records as

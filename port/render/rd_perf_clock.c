@@ -264,3 +264,96 @@ int rd_perf_clock_text(const RdPerfClockIn *in, const RdPerfClockVerdict *v, cha
     }
     return o.total;
 }
+
+int rd_perf_reset_sign(unsigned missing, bool ranTwice, uint64_t backNs, int idle)
+{
+    if (missing != 0) {
+        return RD_RESET_HANG;
+    }
+    if (ranTwice) {
+        return RD_RESET_TWICE;
+    }
+    if (backNs != 0) {
+        return idle == 1 ? RD_RESET_IDLE : RD_RESET_RESTART;
+    }
+    return RD_RESET_NONE;
+}
+
+bool rd_perf_reset_counted(int sign)
+{
+    return sign == RD_RESET_HANG || sign == RD_RESET_TWICE || sign == RD_RESET_RESTART;
+}
+
+int rd_perf_idle(const RdPerfIdleIn *in, double *idleMs)
+{
+    *idleMs = 0.0;
+    if (in->prevAdjacent && in->prevEndMs > 0.0 && in->firstSubmitMs > 0.0) {
+        if (in->firstSubmitMs > in->prevEndMs) {
+            /* submitted after the replay before had ended (its exact end,
+               or a bound it ended at or before): nothing queued between */
+            *idleMs = in->firstSubmitMs - in->prevEndMs;
+            return 1;
+        }
+        if (in->prevExact) {
+            return 0; /* queued while the replay before still ran */
+        }
+    }
+    if (in->noted) {
+        *idleMs = -1.0;
+        return 1;
+    }
+    return 0;
+}
+
+uint32_t rd_perf_subs_judge(const RdPerfClockIn *in, const RdPerfClockVerdict *v,
+                            const RdPerfSubMap *map, bool named, RdPerfSub *out, uint32_t cap)
+{
+    const RhiTimestampClock *c = in->clk;
+    if (c == NULL) {
+        return 0;
+    }
+    const uint32_t n = c->subN < cap ? c->subN : cap;
+    uint32_t hung = 0;
+    for (uint32_t k = 0; k < n; k++) {
+        const RhiTsSubmit *s = &c->sub[k];
+        RdPerfSub *o = &out[k];
+        memset(o, 0, sizeof(*o));
+        o->submitMs = c->firstSubmitNs != 0 && s->submitNs >= c->firstSubmitNs
+                          ? (float)((double)(s->submitNs - c->firstSubmitNs) / 1e6)
+                          : 0.0f;
+        o->lists = s->lists;
+        o->present = s->present;
+        o->listLo = o->listHi = -1;
+        if (!named) {
+            continue;
+        }
+        o->named = 1;
+        for (uint32_t w = 0; w < RHI_TIMESTAMP_WORDS; w++) {
+            uint32_t bits = s->stamps[w] & c->recorded[w];
+            while (bits) {
+                const uint32_t b = (uint32_t)__builtin_ctz(bits);
+                bits &= bits - 1u;
+                const uint32_t i = w * 32u + b;
+                o->stamps++;
+                const bool got = rhi_ts_has(c->available, i) && i < in->n && in->ts[i] != 0;
+                if (!got) {
+                    o->missing++;
+                }
+                if (i >= map->list0 && i < map->list0 + map->lists) {
+                    const int l = (int)(i - map->list0);
+                    o->listLo = (int8_t)(o->listLo < 0 || l < o->listLo ? l : o->listLo);
+                    o->listHi = (int8_t)(l > o->listHi ? l : o->listHi);
+                } else if (i >= map->pass0) {
+                    o->pieces++;
+                } else if (i == map->present0 || i == map->present1) {
+                    o->presentStamps = 1;
+                }
+            }
+        }
+        if (hung == 0 && v != NULL && v->firstMissing >= 0 &&
+            rhi_ts_has(s->stamps, (uint32_t)v->firstMissing)) {
+            hung = k + 1u;
+        }
+    }
+    return hung;
+}

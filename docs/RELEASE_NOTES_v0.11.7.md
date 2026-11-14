@@ -1,5 +1,6 @@
 ## New
 
+- The log now says more about short freezes on phones and tablets: every freeze gets its own line with what the graphics chip was working on when it stopped, so the next log can show where they come from.
 
 ## Fixed
 

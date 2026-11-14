@@ -90,5 +90,7 @@ void rd__vu_flat0_init(void)
     char line[512];
     (void)rd_vu_flat0_line(line, sizeof(line), on || missing != NULL, missing);
     rd__log("%s", line);
-    ico_attempt_decide_flat0(on || missing != NULL);
+    /* not applicable where the pre-pass is off: vu_main_vs runs only
+       through its record (the window says it again each block) */
+    ico_attempt_decide_flat0(on || missing != NULL, g_rd.vuPrepass);
 }

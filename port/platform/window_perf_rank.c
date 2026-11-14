@@ -13,6 +13,7 @@
 #include "ico_gamestate.h"
 #include "log_cost.h"
 #include "rd_perf_more.h"
+#include "rd.h" /* rd_vu_prepass_on */
 #include "rd_perf_rank.h"
 #include "rhi.h"
 #include "window_lines.h" /* window_log_cost_part */
@@ -181,6 +182,10 @@ static void ledger_lines(void)
            stalls (ico_attempt_block_text) */
         ico_attempt_decide_queue_priority(rhi_limits()->queuePriority,
                                           rhi_limits()->queuePriorityWhy);
+        /* the flat outputs reach the device only with the VU pre-pass on
+           (the Adreno 740's is off by its device table; a self-test or
+           the record can turn it off after the start) */
+        ico_attempt_flat0_reach(rd_vu_prepass_on());
     }
     const uint32_t serial = ico_attempt_serial();
     if (!s_said || serial != s_serial) {
@@ -188,8 +193,13 @@ static void ledger_lines(void)
         s_said = 1;
         const unsigned n = ++s_starts;
         if (n <= 8u || n % 100u == 0u) {
-            (void)ico_attempt_start_text(text, sizeof text);
-            fprintf(stderr, "window: %s%s\n", text, n > 1u ? " (a state changed)" : "");
+            /* in parts that each fit the buffer (attempt_ledger.h
+               ico_attempt_start_part): one line on every device class
+               measured, a second where the rows' reasons outgrow it */
+            for (int row = 0; row < ICO_ATT_COUNT;) {
+                (void)ico_attempt_start_part(text, sizeof text, &row);
+                fprintf(stderr, "window: %s%s\n", text, n > 1u ? " (a state changed)" : "");
+            }
         }
     }
     char tally[512];

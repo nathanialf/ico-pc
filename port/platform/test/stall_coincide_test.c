@@ -114,9 +114,10 @@ int main(void)
     stall_tally_add(&ty, &m);
     (void)stall_tally_text(&ty, t, sizeof t);
     text_is(t,
-            "stalls by what coincided: 3 in the block (a core wait over 100 ms 1, memory under "
-            "the floor 2, memory pressure rising 1, the GPU clock low 0 (not readable), the GPU's "
-            "own sign of a reset 0, none of these 1)",
+            "stalls by what coincided: 3 in the block, 0 of them hangs (the GPU's own sign of a "
+            "reset with a stamp unwritten) and 3 other; all 3 by class: a core wait over 100 ms "
+            "1, memory under the floor 2, memory pressure rising 1, the GPU clock low 0 (not "
+            "readable), the GPU's own sign of a reset 0, none of these 1",
             __LINE__);
     /* the GPU clock where readable */
     m.gpuMhz = 300;
@@ -156,7 +157,7 @@ int main(void)
     m.some10Before = -1.0;
     m.headroom = 0.65;
     m.gpuMhz = m.gpuMaxMhz = -1;
-    m.resetReplay = 689;
+    m.hangReplay = 689;
     m.stampsMissing = 19;
     CHECK(stall_classes(&m) == ((1u << STALL_CLASS_MEMORY) | (1u << STALL_CLASS_RESET)));
     (void)stall_moment_text(&m, t, sizeof t);
@@ -164,17 +165,119 @@ int main(void)
             "the game thread on core 6 (1920 MHz); the core waits not sampled; memory 1716 MB "
             "available against the floor 1947 MB (under it); thermal headroom 0.65; the GPU's own "
             "sign of a reset at replay 689: 19 stamps came back unwritten after its work was "
-            "signalled finished; coincided with: memory under the floor, the GPU's own sign of a "
-            "reset",
+            "signalled finished (a hang); coincided with: memory under the floor, the GPU's own "
+            "sign of a reset",
             __LINE__);
-    m.stampsMissing = 0;
-    m.ranTwice = true;
+    /* v0.11.6's shape: the hung replay's stamps and the next one's clock */
+    snprintf(m.firstMissing, sizeof m.firstMissing, "list 0's end");
+    m.resetReplay = 690;
     m.clockBack = true;
     (void)stall_moment_text(&m, t, sizeof t);
-    CHECK(strstr(t, "reset at replay 689: its first list ran twice, the GPU's clock restarted;") !=
-          NULL);
-    CHECK(stall_reset_sign(19, false, 0) && stall_reset_sign(0, true, 0) &&
-          stall_reset_sign(0, false, 800000) && !stall_reset_sign(0, false, 0));
+    CHECK(strstr(t, "; the GPU's own sign of a reset at replay 689: 19 stamps came back unwritten "
+                    "after its work was signalled finished (the first: list 0's end), and at "
+                    "replay 690: the GPU's clock restarted (a hang); coincided with: ") != NULL);
+    /* a sign without a hang (issue 123's 197 ms present at :2842: replay
+       10911's restart after 10910's hang, two replays back) */
+    m.hangReplay = 0;
+    m.stampsMissing = 0;
+    m.resetReplay = 10911;
+    m.ranTwice = true;
+    CHECK(stall_classes(&m) == ((1u << STALL_CLASS_MEMORY) | (1u << STALL_CLASS_RESET)));
+    (void)stall_moment_text(&m, t, sizeof t);
+    CHECK(strstr(t,
+                 "; the GPU's own sign of a reset at replay 10911: its first list ran twice, the "
+                 "GPU's clock restarted (not a hang: no stamp unwritten in the stalled replay "
+                 "or the two before it); coincided with: ") != NULL);
+    /* a restart after a span with no GPU work: said, not a sign (issue
+       123's capture at :2736) */
+    m.resetReplay = 0;
+    m.ranTwice = m.clockBack = false;
+    m.idleReplay = 10621;
+    m.idleMs = 1150.5;
+    CHECK(stall_classes(&m) == 1u << STALL_CLASS_MEMORY);
+    (void)stall_moment_text(&m, t, sizeof t);
+    CHECK(strstr(t, "; the GPU's clock restarted at replay 10621 after 1150.5 ms with no GPU work: "
+                    "not a sign of a reset; coincided with: memory under the floor") != NULL);
+    m.idleMs = -1.0;
+    (void)stall_moment_text(&m, t, sizeof t);
+    CHECK(strstr(t,
+                 "; the GPU's clock restarted at replay 10621 after a span the game was not "
+                 "presenting (a pause, a capture, the app away): not a sign of a reset;") != NULL);
+    m.idleReplay = 0;
+
+    /* the hangs apart in the tally, and the block's cap: issue 123's block
+       at :2900 (three hangs, the 197 ms present after them) */
+    {
+        StallTally h;
+        memset(&h, 0, sizeof h);
+        StallMoment hm;
+        memset(&hm, 0, sizeof hm);
+        hm.gpuMhz = hm.gpuMaxMhz = -1;
+        hm.availMb = hm.floorMb = -1;
+        hm.pressure = -1;
+        hm.hangReplay = 10905;
+        stall_tally_add(&h, &hm);
+        stall_tally_add(&h, &hm);
+        stall_tally_add(&h, &hm);
+        hm.hangReplay = 0;
+        hm.resetReplay = 10911;
+        stall_tally_add(&h, &hm);
+        CHECK(h.stalls == 4 && h.hangs == 3 && h.cls[STALL_CLASS_RESET] == 4);
+        (void)stall_tally_text(&h, t, sizeof t);
+        text_is(t,
+                "stalls by what coincided: 4 in the block, 3 of them hangs (the GPU's own sign of "
+                "a reset with a stamp unwritten) and 1 other; all 4 by class: a core wait over 100 "
+                "ms 0, memory under the floor 0, memory pressure rising 0, the GPU clock low 0 "
+                "(not readable), the GPU's own sign of a reset 4, none of these 0",
+                __LINE__);
+        /* the cap: 10 s over the shortest present stall and pass stall */
+        CHECK(STALL_BLOCK_LINES == 350u);
+        unsigned due = 0;
+        for (unsigned i = 0; i < 352u; i++) {
+            due += stall_tally_line_due(&h) ? 1u : 0u;
+        }
+        CHECK(due == 350u && h.written == 350u && h.leftOut == 2u);
+        (void)stall_tally_text(&h, t, sizeof t);
+        CHECK(strstr(t, "none of these 0; 2 stall lines left out (the block's first 350 "
+                        "written)") != NULL);
+    }
+
+    /* the submissions around a stall: issue 123's first (replay 2074's
+       scene list held list 0's end, the first unwritten; the present of
+       2075 blocked 365 ms from 0 ms), the times as the records would carry
+       them */
+    {
+        StallMoment sm;
+        memset(&sm, 0, sizeof sm);
+        sm.gameCore = sm.renderCore = -1;
+        sm.gpuMhz = sm.gpuMaxMhz = -1;
+        sm.availMb = sm.floorMb = -1;
+        sm.pressure = -1;
+        sm.headroom = -1.0;
+        sm.subs = 4;
+        const StallSub s0 = {2074, 1, 2, 1, 0, 0, 1, 1, 0, 0, 12, 23, 25, 20, -21.5, 3, 365.4};
+        const StallSub s1 = {2074, 2, 2, 1, 1, 0, 0, 1, 1, -1, -1, 0, 5, 0, -21.1, 1, 365.4};
+        const StallSub s2 = {2075, 1, 2, 1, 0, 0, 0, 0, 0, -1, -1, 0, 0, 0, -1.2, 0, 0.0};
+        const StallSub s3 = {2075, 2, 2, 1, 1, 1, 0, 0, 0, -1, -1, 0, 0, 0, -0.4, 2, 2.0};
+        sm.sub[0] = s0;
+        sm.sub[1] = s1;
+        sm.sub[2] = s2;
+        sm.sub[3] = s3;
+        (void)stall_moment_text(&sm, t, sizeof t);
+        text_is(t,
+                "the game thread's core not known; the core waits not sampled; device memory not "
+                "known; the submissions around it (from the stall's start): replay 2074's 1 of 2 "
+                "(lists 0-12, 23 pieces; 25 stamps, 20 unwritten; it holds the first unwritten "
+                "stamp) submitted at -21.5 ms, signalled at or before +365.4 ms (its replay's "
+                "last's; not seen apart); replay 2074's 2 of 2 (the present's list, its replay's "
+                "present waits on it; 5 stamps, all written) submitted at -21.1 ms, signalled at "
+                "+365.4 ms (the slot's wait's end); replay 2075's 1 of 2 (1 list) submitted at "
+                "-1.2 ms, its signal not known; replay 2075's 2 of 2 (1 list, the stalled present "
+                "waits on it) submitted at -0.4 ms, signalled at or before +2.0 ms (finished when "
+                "the slot's wait began); in flight at the stall's start: 1 seen, 3 not known; "
+                "coincided with: none of these",
+                __LINE__);
+    }
 
     /* the parsers */
     double some = -1, full = -1;

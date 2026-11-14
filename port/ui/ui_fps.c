@@ -32,6 +32,9 @@ void ui_fps_present(void)
 void ui_fps_gap(void)
 {
     fps_gap(&s_fps);
+    /* and the renderer's: a GPU counter restart across it is the GPU idle,
+       not a sign of a reset (rd.h rd_perf_idle_note, issue 123) */
+    rd_perf_idle_note();
 }
 
 void ui_fps_tick(uint64_t now_ns)

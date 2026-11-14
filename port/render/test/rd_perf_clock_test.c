@@ -25,7 +25,14 @@
  *              100th, each on its own count;
  *   quiet      a replay that had finished when the CPU came to wait: no line
  *              due, the backend's unrecorded indices ignored;
- *   short      a small buffer is cut and terminated.
+ *   short      a small buffer is cut and terminated;
+ *   signs      the GPU's own sign of a reset by kind, a counter restart
+ *              after a span with no GPU work not counted, the idle test from
+ *              the replay before's end and the notes (issue 123's stall and
+ *              its reporter's capture);
+ *   subs       a replay's submissions: the one holding the first unwritten
+ *              stamp, each one's lists, pieces and stamps, the times alone
+ *              for a verdict that is not a stall.
  */
 #include <stdio.h>
 #include <string.h>
@@ -303,8 +310,116 @@ static void testLimits(void)
     CHECK(!v.stall && v.report && v.lastWritten == 5);
 }
 
+/* the GPU's own sign of a reset (rd_perf_reset_sign) and whether the GPU
+   was idle before a replay (rd_perf_idle): issue 123's v0.11.6 log */
+static void testSigns(void)
+{
+    CHECK(rd_perf_reset_sign(20, false, 0, 0) == RD_RESET_HANG);
+    CHECK(rd_perf_reset_sign(20, true, 16528200000ull, 1) == RD_RESET_HANG);
+    CHECK(rd_perf_reset_sign(0, true, 5, 1) == RD_RESET_TWICE);
+    CHECK(rd_perf_reset_sign(0, false, 16528200000ull, 0) == RD_RESET_RESTART);
+    CHECK(rd_perf_reset_sign(0, false, 16528200000ull, 1) == RD_RESET_IDLE);
+    CHECK(rd_perf_reset_sign(0, false, 0, 1) == RD_RESET_NONE);
+    CHECK(rd_perf_reset_counted(RD_RESET_HANG) && rd_perf_reset_counted(RD_RESET_TWICE) &&
+          rd_perf_reset_counted(RD_RESET_RESTART));
+    CHECK(!rd_perf_reset_counted(RD_RESET_IDLE) && !rd_perf_reset_counted(RD_RESET_NONE));
+
+    double ms = 99.0;
+    /* the stall at :1106: replay 2075 submitted 19.5 ms after 2074, whose
+       slot's wait blocked to 365 ms after its last submit: queued while it
+       ran, its restart a sign whatever the notes say */
+    RdPerfIdleIn in = {1019.5, 1365.0, true, true, true};
+    CHECK(rd_perf_idle(&in, &ms) == 0 && ms == 0.0);
+    /* submitted after the replay before's exact end: idle that long at
+       least */
+    in.firstSubmitMs = 1500.0;
+    in.noted = false;
+    CHECK(rd_perf_idle(&in, &ms) == 1 && near(ms, 135.0, 1e-9));
+    /* a bound (it had finished when its wait began, after this submit):
+       the times cannot say, the notes do (the capture at :2736) */
+    in.prevExact = false;
+    in.prevEndMs = 1600.0;
+    CHECK(rd_perf_idle(&in, &ms) == 0 && ms == 0.0);
+    in.noted = true;
+    CHECK(rd_perf_idle(&in, &ms) == 1 && ms == -1.0);
+    /* submitted after the bound: idle at least the gap */
+    in.prevEndMs = 1400.0;
+    in.noted = false;
+    CHECK(rd_perf_idle(&in, &ms) == 1 && near(ms, 100.0, 1e-9));
+    /* the replay before not this one less one (its stamps never came), or
+       its end not known: the notes alone */
+    in.prevAdjacent = false;
+    CHECK(rd_perf_idle(&in, &ms) == 0);
+    in.noted = true;
+    CHECK(rd_perf_idle(&in, &ms) == 1 && ms == -1.0);
+    in.prevAdjacent = true;
+    in.prevEndMs = 0.0;
+    CHECK(rd_perf_idle(&in, &ms) == 1 && ms == -1.0);
+}
+
+/* a replay's submissions (rd_perf_subs_judge): the hang's shape, list 0's
+   end the first unwritten stamp in the scene's submission, the present's
+   own list written */
+static void testSubs(void)
+{
+    static uint64_t ts[40];
+    RhiTimestampClock c;
+    memset(&c, 0, sizeof c);
+    memset(ts, 0, sizeof ts);
+    /* the replay's start, the lists' start, piece 32, list 0's end, piece
+       33, list 1's end, the present's two */
+    const uint8_t order[8] = {0, 1, 32, 2, 33, 3, 4, 5};
+    for (uint32_t k = 0; k < 8; k++) {
+        rhi_ts_add(c.recorded, order[k]);
+        if (order[k] != 2 && order[k] != 33 && order[k] != 3) {
+            rhi_ts_add(c.available, order[k]);
+            ts[order[k]] = 1000000ull * (k + 1u);
+        }
+    }
+    c.submits = 2;
+    c.subN = 2;
+    c.firstSubmitNs = 5000000000ull;
+    c.lastSubmitNs = 5000400000ull;
+    c.sub[0].submitNs = 5000000000ull;
+    c.sub[0].lists = 1;
+    c.sub[1].submitNs = 5000400000ull;
+    c.sub[1].lists = 1;
+    c.sub[1].present = 1;
+    for (uint32_t k = 0; k < 6; k++) {
+        rhi_ts_add(c.sub[0].stamps, order[k]);
+    }
+    rhi_ts_add(c.sub[1].stamps, 4);
+    rhi_ts_add(c.sub[1].stamps, 5);
+    const RdPerfClockIn in = {&c, ts, 40, order, 8, 2074, 0, nameOf, NULL};
+    RdPerfClockVerdict v;
+    rd_perf_clock_judge(&in, &v);
+    CHECK(v.missing == 3 && v.firstMissing == 2 && v.stall);
+    const RdPerfSubMap map = {2, 2, 32, 4, 5};
+    RdPerfSub out[RD_PERF_SUBS];
+    CHECK(rd_perf_subs_judge(&in, &v, &map, true, out, RD_PERF_SUBS) == 1u);
+    CHECK(out[0].named == 1 && out[0].lists == 1 && out[0].present == 0 && out[0].submitMs == 0.0f);
+    CHECK(out[0].stamps == 6 && out[0].missing == 3 && out[0].pieces == 2);
+    CHECK(out[0].listLo == 0 && out[0].listHi == 1 && out[0].presentStamps == 0);
+    CHECK(out[1].named == 1 && out[1].present == 1 && near(out[1].submitMs, 0.4, 1e-6));
+    CHECK(out[1].stamps == 2 && out[1].missing == 0 && out[1].pieces == 0);
+    CHECK(out[1].listLo == -1 && out[1].listHi == -1 && out[1].presentStamps == 1);
+    /* not a stalled replay's verdict: the times alone, no submission named */
+    CHECK(rd_perf_subs_judge(&in, &v, &map, false, out, RD_PERF_SUBS) == 0u);
+    CHECK(out[0].named == 0 && out[0].stamps == 0 && out[1].present == 1 &&
+          near(out[1].submitMs, 0.4, 1e-6));
+    /* one kept: the first still found; the first unwritten in the second
+       submission, past the one kept: none */
+    CHECK(rd_perf_subs_judge(&in, &v, &map, true, out, 1) == 1u);
+    RdPerfClockVerdict v2 = v;
+    v2.firstMissing = 4;
+    CHECK(rd_perf_subs_judge(&in, &v2, &map, true, out, 1) == 0u);
+    CHECK(rd_perf_subs_judge(&in, &v2, &map, true, out, RD_PERF_SUBS) == 2u);
+}
+
 int main(void)
 {
+    testSigns();
+    testSubs();
     testStall();
     testEstimate();
     testMissing();

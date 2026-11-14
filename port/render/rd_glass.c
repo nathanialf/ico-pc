@@ -40,13 +40,11 @@ static void statAdd(RdGlassStat *s, double r)
     s->below075 += r < 0.75 ? 1u : 0u;
 }
 
-/* a picture's content moment by measure m (0 the drawn, 1 + rule), ms; NAN
-   when not computed */
-static double content(const RdGlassPic *p, int m)
+/* a picture's alpha by measure m (0 the drawn, 1 + rule); under 0 when not
+   computed */
+static double alphaOf(const RdGlassPic *p, int m)
 {
-    const double tick = p->tickMs > 0.0 ? p->tickMs : DEFAULT_TICK_MS;
-    const double a = m == RD_GLASS_DRAWN ? (double)p->drawn : (double)p->alpha[m - 1];
-    return a < 0.0 ? NAN : ((double)p->frame + a) * tick;
+    return m == RD_GLASS_DRAWN ? (double)p->drawn : (double)p->alpha[m - 1];
 }
 
 bool rd_glass_pair(RdGlassWindow *w, const RdGlassPic *a, uint64_t aNs, const RdGlassPic *b,
@@ -70,12 +68,18 @@ bool rd_glass_pair(RdGlassWindow *w, const RdGlassPic *a, uint64_t aNs, const Rd
     const double de = b->gpuEndMs > 0.0 && a->gpuEndMs > 0.0 && a->gpuExact && b->gpuExact
                           ? b->gpuEndMs - a->gpuEndMs
                           : 0.0;
+    /* the content's step in the newer picture's tick (the measured gap
+       between frame closes, which moves frame to frame): the frames between
+       and the alphas, never each picture's frame number times its own tick
+       (v0.11.6: 6000 frames times a tick 0.1 ms longer read as a 600 ms
+       step, the deviations of 84-1040 in issue 123's stall blocks) */
+    const double tick = b->tickMs > 0.0 ? b->tickMs : a->tickMs > 0.0 ? a->tickMs : DEFAULT_TICK_MS;
     for (int m = 0; m < RD_GLASS_RULES; m++) {
-        const double ca = content(a, m), cb = content(b, m);
-        if (isnan(ca) || isnan(cb)) {
+        const double aa = alphaOf(a, m), ab = alphaOf(b, m);
+        if (aa < 0.0 || ab < 0.0) {
             continue;
         }
-        const double step = cb - ca;
+        const double step = ((double)df + ab - aa) * tick;
         statAdd(&w->glass[m][RD_GLASS_CLASSES], step / gap);
         if (cls < RD_GLASS_CLASSES) {
             statAdd(&w->glass[m][cls], step / gap);

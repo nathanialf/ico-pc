@@ -171,7 +171,7 @@ void vkr_tsclock_init(uint32_t validBits)
     }
 }
 
-void vkr_tsclock_note_submit(VkrFrame *f, uint64_t value)
+void vkr_tsclock_note_submit(VkrFrame *f, uint64_t value, uint32_t lists, bool present)
 {
     const uint64_t now = vkr_now_ns();
     if (f->tsSubmits == 0) {
@@ -179,7 +179,29 @@ void vkr_tsclock_note_submit(VkrFrame *f, uint64_t value)
         f->tsFirstValue = value;
     }
     f->tsLastSubmitNs = now;
+    if (f->tsSubmits < RHI_TS_SUBMITS) {
+        /* one by one (issue 123: which submission held the stamps a stall
+           left unwritten): a few stores, no Vulkan call */
+        RhiTsSubmit *s = &f->tsSub[f->tsSubmits];
+        s->submitNs = now;
+        s->lists = (uint8_t)(lists > 255u ? 255u : lists);
+        s->present = present ? 1u : 0u;
+        memset(s->stamps, 0, sizeof(s->stamps));
+    }
     f->tsSubmits++;
+}
+
+void vkr_tsclock_note_stamps(VkrFrame *f, const uint32_t *stamps)
+{
+    const uint32_t k = f->tsSubmits;
+    if (k == 0 || k > RHI_TS_SUBMITS) {
+        return; /* none noted, or past the ones kept */
+    }
+    for (uint32_t w = 0; w < RHI_TIMESTAMP_WORDS; w++) {
+        if (stamps[w]) {
+            __atomic_or_fetch(&f->tsSub[k - 1u].stamps[w], stamps[w], __ATOMIC_RELAXED);
+        }
+    }
 }
 
 static uint64_t tick_ns(uint64_t raw)
@@ -322,6 +344,15 @@ void vkr_tsclock_recycled(VkrFrame *f)
     k->submits = f->tsSubmits;
     k->firstSubmitNs = f->tsFirstSubmitNs;
     k->lastSubmitNs = f->tsLastSubmitNs;
+    k->subN = f->tsSubmits < RHI_TS_SUBMITS ? f->tsSubmits : RHI_TS_SUBMITS;
+    for (uint32_t i = 0; i < k->subN; i++) {
+        k->sub[i].submitNs = f->tsSub[i].submitNs;
+        k->sub[i].lists = f->tsSub[i].lists;
+        k->sub[i].present = f->tsSub[i].present;
+        for (uint32_t w = 0; w < RHI_TIMESTAMP_WORDS; w++) {
+            k->sub[i].stamps[w] = __atomic_load_n(&f->tsSub[i].stamps[w], __ATOMIC_RELAXED);
+        }
+    }
     const bool blocked =
         k->waitBeginNs != 0 && k->waitEndNs >= k->waitBeginNs &&
         k->waitEndNs - k->waitBeginNs >= (uint64_t)RHI_TS_TRACE_AFTER_MS * 1000000u;

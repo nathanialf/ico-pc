@@ -11,7 +11,9 @@
 #include "gpu_sysfs.h"
 #include "ico_thread.h"
 #include "present_hist.h"
+#include "present_latency.h"
 #include "present_stall_block.h"
+#include "rd_perf_clock.h" /* RD_RESET_* */
 #include "rd_perf_rare.h"
 #include "render_thread.h" /* ico_render_thread_tick */
 #include "rhi.h"
@@ -113,16 +115,47 @@ static void arm_block_end(void); /* the bounded pass timing, below */
 static StallMedians s_med;
 static StallTally s_tally;
 
-/* the last record that showed the GPU's own sign of a reset (stamps
-   unwritten after its work was signalled finished, its first list run
-   twice, the timestamp counter gone back: rd_perf_clock.h), for a stall at
-   it or up to two replays after it (issue 123: the hung replay's stamps,
-   the next one's restarted clock, the present that blocked between) */
+/* the last records that showed the GPU's own sign of a reset (rd.h
+   RdPerfRecord.gpuResetSign, rd_perf_clock.h rd_perf_reset_sign), for a
+   stall at them or up to two replays after (issue 123: the hung replay's
+   stamps, the next one's restarted clock, the present that blocked
+   between): the last hang (stamps unwritten), the last other sign counted
+   (its first list run twice, the counter gone back with the GPU kept
+   busy), the last counter restart after a span with no GPU work (not a
+   sign: said, not counted) */
 static struct {
     uint32_t replay;
     unsigned missing;
+    char first[48];
+} s_hang;
+
+static struct {
+    uint32_t replay;
     bool twice, back;
-} s_reset;
+} s_sign;
+
+static struct {
+    uint32_t replay;
+    double ms;
+} s_idle;
+
+/* the last records' submissions (rd_perf_sub.h), for the per-stall line:
+   the stalled replay's and the two before it (one more kept) */
+#define SUB_RECS 4
+
+typedef struct SubRec {
+    uint32_t replay;
+    double firstMs, signalMs;
+    uint8_t doneValid, subN, subAll, hung;
+    RdPerfSub sub[RD_PERF_SUBS];
+} SubRec;
+
+static SubRec s_subs[SUB_RECS];
+
+static unsigned s_subsAt;
+
+/* the block's present latency (present_latency.h) */
+static PresentLatency s_lat;
 
 static int s_gpuMaxMhz = -1;
 
@@ -140,6 +173,10 @@ static void stall_block_close(const StallBlockClock *clock)
                         sizeof(text))) {
         fprintf(stderr, "window: %s\n", text);
     }
+    if (present_latency_text(&s_lat, rhi_limits()->queuePriority, text, sizeof(text)) > 0) {
+        fprintf(stderr, "window: %s\n", text);
+    }
+    memset(&s_lat, 0, sizeof(s_lat));
     s_stallT0 = now;
     rd_perf_rare_block_end(); /* a stalled replay's rare pipelines: counted per block */
     arm_block_end();
@@ -437,17 +474,68 @@ static int core_mhz(double t0Ms, double t1Ms, int core, int *gpuMhz)
 #endif
 }
 
+/* the submissions of the stalled replay and the two before it, oldest
+   first, from the stall's start t0Ms (rd's clock: the records' times are
+   the same CLOCK_MONOTONIC as the window's) */
+static void moment_subs(StallMoment *m, double t0Ms, uint32_t replay)
+{
+    for (uint32_t back = 3; back-- > 0;) {
+        if (replay < back + 1u) {
+            continue;
+        }
+        const uint32_t want = replay - back;
+        for (unsigned i = 0; i < SUB_RECS; i++) {
+            const SubRec *e = &s_subs[i];
+            if (e->replay != want || e->firstMs <= 0.0) {
+                continue;
+            }
+            for (unsigned k = 0; k < e->subN && m->subs < STALL_SUBS; k++) {
+                const RdPerfSub *u = &e->sub[k];
+                StallSub *o = &m->sub[m->subs++];
+                o->replay = e->replay;
+                o->index = (uint8_t)(k + 1u);
+                o->of = e->subAll;
+                o->lists = u->lists;
+                o->present = u->present;
+                o->stalledOn = (uint8_t)(u->present && e->replay == replay);
+                o->hung = (uint8_t)(e->hung == k + 1u);
+                o->named = u->named;
+                o->presentStamps = u->presentStamps;
+                o->listLo = u->listLo;
+                o->listHi = u->listHi;
+                o->pieces = u->pieces;
+                o->stamps = u->stamps;
+                o->missing = u->missing;
+                o->submitMs = e->firstMs + (double)u->submitMs - t0Ms;
+                const bool last = k + 1u == e->subAll;
+                o->signalKind = e->doneValid == 0 ? 0u : last ? e->doneValid : 3u;
+                o->signalMs = e->doneValid != 0 ? e->signalMs - t0Ms : 0.0;
+            }
+            break;
+        }
+    }
+}
+
 /* the moment of a stall over [t0Ms, t1Ms] from the last samples (no file
    read here: the log thread's cells, the sampler's ring) */
 static void moment_now(StallMoment *m, double t0Ms, double t1Ms, uint32_t replay)
 {
     memset(m, 0, sizeof(*m));
-    if (s_reset.replay != 0 && replay >= s_reset.replay && replay - s_reset.replay <= 2u) {
-        m->resetReplay = s_reset.replay;
-        m->stampsMissing = s_reset.missing;
-        m->ranTwice = s_reset.twice;
-        m->clockBack = s_reset.back;
+    if (s_hang.replay != 0 && replay >= s_hang.replay && replay - s_hang.replay <= 2u) {
+        m->hangReplay = s_hang.replay;
+        m->stampsMissing = s_hang.missing;
+        memcpy(m->firstMissing, s_hang.first, sizeof(m->firstMissing));
     }
+    if (s_sign.replay != 0 && replay >= s_sign.replay && replay - s_sign.replay <= 2u) {
+        m->resetReplay = s_sign.replay;
+        m->ranTwice = s_sign.twice;
+        m->clockBack = s_sign.back;
+    }
+    if (s_idle.replay != 0 && replay >= s_idle.replay && replay - s_idle.replay <= 2u) {
+        m->idleReplay = s_idle.replay;
+        m->idleMs = s_idle.ms;
+    }
+    moment_subs(m, t0Ms, replay);
     m->gameCore = cpu_place_now();
     m->renderCore = ico_render_thread_render_core();
     m->gpuMhz = m->gpuMaxMhz = -1;
@@ -487,12 +575,18 @@ static void moment_now(StallMoment *m, double t0Ms, double t1Ms, uint32_t replay
 
 static void stall_event(const char *what, double t0Ms, double t1Ms, uint32_t replay)
 {
-    StallMoment m;
-    char text[1280];
+    /* every stall of the block up to STALL_BLOCK_LINES (stall_coincide.h;
+       the tally says how many were left out): v0.11.6's run-wide cap of 8
+       left issue 123's stalls 9-13 with the tallies alone */
+    static StallMoment m;
+    static char text[4096];
     moment_now(&m, t0Ms, t1Ms, replay);
     stall_tally_add(&s_tally, &m);
+    if (!stall_tally_line_due(&s_tally)) {
+        return;
+    }
     (void)stall_moment_text(&m, text, sizeof text);
-    ico_log_limited("window: stall", "window: stall: %s; at that moment: %s", what, text);
+    fprintf(stderr, "window: stall: %s; at that moment: %s\n", what, text);
 }
 
 int window_stall_tally_take(char *out, size_t cap)
@@ -754,11 +848,56 @@ void window_stall_after(const RdPerfRecord *r, PaceGpuGap *gap)
     if (s_stallT0 <= 0.0) {
         s_stallT0 = ico_thread_now_ms(); /* the first block starts with the first record */
     }
-    if (stall_reset_sign(r->gpuStampsMissing, r->gpuRanTwice != 0, r->gpuGapBackNs)) {
-        s_reset.replay = r->replay;
-        s_reset.missing = r->gpuStampsMissing;
-        s_reset.twice = r->gpuRanTwice != 0;
-        s_reset.back = r->gpuGapBackNs != 0;
+    switch (r->gpuResetSign) {
+    case RD_RESET_HANG:
+        s_hang.replay = r->replay;
+        s_hang.missing = r->gpuStampsMissing;
+        memcpy(s_hang.first, r->gpuFirstMissing, sizeof(s_hang.first));
+        s_hang.first[sizeof(s_hang.first) - 1u] = '\0';
+        if (r->gpuRanTwice || r->gpuGapBackNs != 0) {
+            /* its other signs, said beside the hang */
+            s_sign.replay = r->replay;
+            s_sign.twice = r->gpuRanTwice != 0;
+            s_sign.back = r->gpuGapBackNs != 0;
+        }
+        break;
+    case RD_RESET_TWICE:
+    case RD_RESET_RESTART:
+        s_sign.replay = r->replay;
+        s_sign.twice = r->gpuRanTwice != 0;
+        s_sign.back = r->gpuGapBackNs != 0;
+        break;
+    case RD_RESET_IDLE:
+        s_idle.replay = r->replay;
+        s_idle.ms = r->gpuIdleMs;
+        break;
+    default:
+        break;
+    }
+    if (r->gpuSubN > 0) {
+        /* the submissions for the per-stall line: a copy of under 100 bytes */
+        SubRec *e = &s_subs[s_subsAt++ % SUB_RECS];
+        e->replay = r->replay;
+        e->firstMs = r->gpuFirstSubmitMs;
+        e->signalMs = r->gpuSignalMs;
+        e->doneValid = r->gpuDoneValid;
+        e->subN = r->gpuSubN;
+        e->subAll = r->gpuSubAll;
+        e->hung = r->gpuSubHung;
+        memcpy(e->sub, r->gpuSub, sizeof(e->sub));
+    }
+    if (r->presented && r->presentEndMs > 0.0) {
+        /* the block's present latency (present_latency.h): a few adds */
+        const PresentLatencyRec lr = {r->replay,
+                                      r->evenHandMs > 0.0 ? r->evenHandMs : r->startMs,
+                                      r->evenHandMs > 0.0,
+                                      r->presentEndMs,
+                                      r->presentMs,
+                                      r->presentCallMs,
+                                      r->fenceWaitMs,
+                                      r->acquireMs,
+                                      r->gpuDoneValid == 1 ? r->gpuSignalMs : 0.0};
+        present_latency_add(&s_lat, &lr);
     }
     stall_block_add(&s_stall, &sr);
     if (!s_after.pending) {

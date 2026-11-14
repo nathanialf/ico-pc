@@ -20,7 +20,12 @@ typedef struct AttRow {
 static const AttRow k_rows[ICO_ATT_COUNT] = {
     [ICO_ATT_FEW_CORES] = {"few-cores rule", "threads moved", NULL},
     [ICO_ATT_PIPE_SET_CORES] = {"pipeline set on every core", "workers", "sets"},
-    [ICO_ATT_CAPTURE_TWO_STEP] = {"capture in two steps", "captures", "grown here"},
+    /* the slow-scene dumps alone: F12's and the skin check's captures go
+       another way (window_dump_auto.c skin_capture, window_host.c
+       frame_dump) and are not counted (issue 123's v0.11.6 log: "0
+       captures" beside two of those) */
+    [ICO_ATT_CAPTURE_TWO_STEP] = {"slow-scene capture in two steps", "slow-scene captures",
+                                  "grown here"},
     [ICO_ATT_FLAT0] = {"flat outputs at the provoking corner", NULL, NULL},
     [ICO_ATT_DATE_ONE] = {"one DATE set-up", "shared", "retaken by the guard"},
     [ICO_ATT_EMPTY_SKIP] = {"empty composites skipped", "skipped", NULL},
@@ -63,6 +68,10 @@ static struct {
     [ICO_ATT_BLEND_CONST] = {ICO_ATT_NOT_BUILT, NULL, 0, 0, 0, 0},
     [ICO_ATT_CHAIN3] = {ICO_ATT_NOT_BUILT, NULL, 0, 0, 0, 0},
 };
+
+/* the shipped build's flat outputs or the tests' twins, as the renderer
+   said at its start (-1: not said yet) */
+static int s_flat0On = -1;
 
 /* a row's state at the start */
 static int startState(int i)
@@ -163,6 +172,20 @@ static void put(Put *p, const char *fmt, ...)
     p->at = p->at + (size_t)w < p->cap ? p->at + (size_t)w : p->cap - 1u;
 }
 
+/* row i's start words ("; name state (why)"; no "; " for the first) */
+static void startRow(Put *p, int i, int first)
+{
+    if (!idOk(i)) {
+        return;
+    }
+    const IcoAttemptState st = ico_attempt_state_of(i);
+    const char *why = __atomic_load_n(&s_att[i].why, __ATOMIC_ACQUIRE);
+    put(p, "%s %s %s", first ? "" : ";", k_rows[i].name, ico_attempt_state_word(st));
+    if (st != ICO_ATT_NOT_SET && why != NULL && why[0] != '\0') {
+        put(p, " (%s)", why);
+    }
+}
+
 size_t ico_attempt_start_text(char *out, size_t cap)
 {
     if (cap == 0) {
@@ -172,13 +195,41 @@ size_t ico_attempt_start_text(char *out, size_t cap)
     out[0] = '\0';
     put(&p, "attempts at the start:");
     for (int i = 0; i < ICO_ATT_COUNT; i++) {
-        const IcoAttemptState st = ico_attempt_state_of(i);
-        const char *why = __atomic_load_n(&s_att[i].why, __ATOMIC_ACQUIRE);
-        put(&p, "%s %s %s", i ? ";" : "", k_rows[i].name, ico_attempt_state_word(st));
-        if (st != ICO_ATT_NOT_SET && why != NULL && why[0] != '\0') {
-            put(&p, " (%s)", why);
+        startRow(&p, i, i == 0);
+    }
+    return p.at;
+}
+
+size_t ico_attempt_start_part(char *out, size_t cap, int *row)
+{
+    if (cap == 0 || row == NULL || *row < 0 || *row >= ICO_ATT_COUNT) {
+        if (cap > 0) {
+            out[0] = '\0';
+        }
+        return 0;
+    }
+    Put p = {out, cap, 0, 0};
+    out[0] = '\0';
+    const int from = *row;
+    put(&p, from == 0 ? "attempts at the start:" : "attempts at the start (continued):");
+    int i = from;
+    for (; i < ICO_ATT_COUNT; i++) {
+        /* the row into the rest of the buffer: kept whole, or (past the
+           first of the part) left for the next part */
+        const size_t at = p.at, total = p.total;
+        startRow(&p, i, i == from);
+        if (p.total - total + at + 1u > cap) {
+            if (i > from) {
+                p.at = at;
+                p.total = total;
+                out[at] = '\0';
+            } else {
+                i++; /* one row over the whole buffer: cut, and on */
+            }
+            break;
         }
     }
+    *row = i;
     return p.at;
 }
 
@@ -249,6 +300,7 @@ void ico_attempt_reset(void)
         __atomic_store_n(&s_att[i].n2, 0u, __ATOMIC_RELEASE);
         s_att[i].lastN = s_att[i].lastN2 = 0;
     }
+    s_flat0On = -1;
 }
 
 void ico_attempt_decide_cores(int faster, int pin, const char *noPin)
@@ -275,10 +327,28 @@ void ico_attempt_decide_capture(void)
                       "the copy into a block the dump worker made");
 }
 
-void ico_attempt_decide_flat0(int on)
+void ico_attempt_decide_flat0(int on, int prepass)
 {
+    s_flat0On = on ? 1 : 0;
+    if (!prepass) {
+        /* vu_main_vs runs only through the pre-pass's record: with the
+           pre-pass off (the Adreno 740's device table, issue 123's
+           v0.11.6 log) the change does not reach the device */
+        ico_attempt_state(ICO_ATT_FLAT0, ICO_ATT_NA,
+                          "the VU pre-pass is off here: vu_main_vs, the shader it changes, draws "
+                          "only through the pre-pass's record");
+        return;
+    }
     ico_attempt_state(ICO_ATT_FLAT0, on ? ICO_ATT_ON : ICO_ATT_OFF_DEFAULT,
-                      on ? "every device and backend" : "ICO_RD_VU_FLAT0=0: the tests' twins");
+                      on ? "every device and backend with the VU pre-pass"
+                         : "ICO_RD_VU_FLAT0=0: the tests' twins");
+}
+
+void ico_attempt_flat0_reach(int prepass)
+{
+    if (s_flat0On >= 0) {
+        ico_attempt_decide_flat0(s_flat0On, prepass);
+    }
 }
 
 void ico_attempt_decide_date_one(int mode, int setting)

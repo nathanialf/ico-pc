@@ -211,6 +211,13 @@ size_t ico_attempt_block_text(char *out, size_t cap, int stalls);
    NOT_BUILT) and 0 (the tests) */
 void ico_attempt_reset(void);
 
+/* The start line in parts that each fit cap (window_perf_rank.c: a 4 KB
+   buffer): from row *row on, "attempts at the start:" (row 0) or
+   "attempts at the start (continued):" and the whole rows that fit; *row
+   is left at the next row (ICO_ATT_COUNT when all were written).  A row
+   longer than the whole buffer is cut there and passed.  The length. */
+size_t ico_attempt_start_part(char *out, size_t cap, int *row);
+
 /* The deciders: each row's state and why from the facts its owner has, one
    call where it decides (so the test can set every row as a device of each
    class would: attempt_ledger_test).  The whys are static strings.
@@ -218,11 +225,19 @@ void ico_attempt_reset(void);
    than the slowest, pin the start's pins allowed (Android, [dev]
    big_cores), noPin why not (NULL none) */
 void ico_attempt_decide_cores(int faster, int pin, const char *noPin);
-/* the slow-scene capture in two steps: every platform (window_perf_rank.c) */
+/* the slow-scene capture in two steps: every platform (window_perf_rank.c);
+   its counts the slow-scene dumps alone (F12's and the skin check's
+   captures are made another way) */
 void ico_attempt_decide_capture(void);
-/* the flat outputs at the provoking corner (rd_vu_flat0.c): shipped build
-   on, or the tests' twins */
-void ico_attempt_decide_flat0(int on);
+/* the flat outputs at the provoking corner (rd_vu_flat0.c at the
+   renderer's start): shipped build on, or the tests' twins; prepass the VU
+   pre-pass draws (rd.h rd_vu_prepass_on): without it vu_main_vs never runs
+   and the row is not applicable.  ico_attempt_flat0_reach: the same with
+   the pre-pass as it is now (window_perf_rank.c every block: the pre-pass
+   can turn off after the start, its self-test or its record), nothing
+   before the renderer said */
+void ico_attempt_decide_flat0(int on, int prepass);
+void ico_attempt_flat0_reach(int prepass);
 /* one DATE set-up (rd_date_one.c, each replay's scan): mode 0 off
    (ICO_RD_DATE_ONE=0), 1 on, 2 the tests' force; setting MSAA or the exact
    blend in force (nothing shared) */

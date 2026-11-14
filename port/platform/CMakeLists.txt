@@ -27,6 +27,7 @@ target_sources(ico_platform PRIVATE
     memory_floor.c
     display_rate.c
     present_hist.c
+    present_latency.c
     present_stall_block.c
     perf_block.c
     pipeline_skip.c
@@ -377,6 +378,18 @@ target_include_directories(stall_coincide_test PRIVATE "${CMAKE_CURRENT_SOURCE_D
 target_compile_options(stall_coincide_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 if(ICO_RUN_TESTS)
     add_test(NAME stall_coincide COMMAND stall_coincide_test)
+endif()
+
+# present_latency_test: the present's latency in a 10 s block
+# (present_latency.h, issue 123): the mean and longest from the hand-over or
+# the replay's start, the parts before the present and of it, the driver's
+# call split at the picture's GPU end, records left out, the line word for
+# word with each queue priority (CPU only)
+add_executable(present_latency_test test/present_latency_test.c present_latency.c)
+target_include_directories(present_latency_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(present_latency_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+if(ICO_RUN_TESTS)
+    add_test(NAME present_latency COMMAND present_latency_test)
 endif()
 
 add_executable(log_cost_test test/log_cost_test.c log_cost.c)

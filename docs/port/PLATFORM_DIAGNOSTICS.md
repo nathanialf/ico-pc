@@ -1046,6 +1046,11 @@ window: on the glass in 10 s: P pictures with a display id, S shown with the dis
   the content moving faster than real time for that picture (what reads as "sped up"), under 0.75
   slower. The deviation is the unevenness the eye sees. By the display's gap in refreshes (the
   driver's refresh) the classes show whether the long steps are the content's or the display's.
+  The step is the frames between plus the alphas' difference, in the newer picture's tick (the
+  measured gap between frame closes, which moves picture to picture). An earlier form took each picture's
+  content as its frame number plus alpha times its own tick, so a tick 0.1 ms longer at frame
+  6000 read as a 600 ms step: issue 123's log of 2026-11-14 showed deviations of 84 to 1040 and negative
+  means in exactly its stall blocks, where the tick moved most.
 - **The rules**: `drawn` names the rule the pictures were drawn by (the hand-over, the GPU's
   predicted end, the own timer, the screen's predicted refresh, or the present clock in paced
   modes). By default with pictures as made on Android it is the screen's predicted refresh where

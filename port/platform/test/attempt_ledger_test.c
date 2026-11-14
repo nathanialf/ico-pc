@@ -341,7 +341,13 @@ static void test_classes(void)
         ico_attempt_reset();
         ico_attempt_decide_cores(d->faster, d->pin, d->noPin);
         ico_attempt_decide_capture();
-        ico_attempt_decide_flat0(1);
+        /* the flat outputs: the shipped build; the VU pre-pass off by the
+           device table on the Adreno 740 under Qualcomm's own driver (the
+           classes with the pass row; issue 123's v0.11.6 log :103), on
+           elsewhere here */
+        ico_attempt_decide_flat0(1, d->passRow == NULL);
+        CHECK(ico_attempt_state_of(ICO_ATT_FLAT0) ==
+              (d->passRow == NULL ? ICO_ATT_ON : ICO_ATT_NA));
         ico_attempt_decide_date_one(d->dateMode, d->dateSetting);
         ico_attempt_decide_empty_skip(d->box, d->skip);
         ico_attempt_decide_no_volume_break(d->nvEnv, d->nvClass, kShip[c].measured, d->nvDefault,
@@ -418,6 +424,11 @@ static void test_classes(void)
             CHECK(n + 1u < sizeof big);
             CHECK(strstr(big, "; the old robust-access line taken off ") != NULL);
             CHECK(strstr(big, "; no capture after a stall ") != NULL);
+            /* and in one part (ico_attempt_start_part, the window's) */
+            int row = 0;
+            char part[4096];
+            const size_t m = ico_attempt_start_part(part, sizeof part, &row);
+            CHECK(row == ICO_ATT_COUNT && m == n && strcmp(part, big) == 0);
         }
         for (int i = 0; i < ICO_ATT_COUNT; i++) {
             if (ico_attempt_state_of(i) == ICO_ATT_NOT_SET) {
@@ -832,11 +843,98 @@ static void test_skin_skip(void)
     CHECK(ico_attempt_state_of(ICO_ATT_SKIN_RESET_SKIP) == ICO_ATT_NOT_SET);
 }
 
+/* the flat outputs where the VU pre-pass is off (issue 123: the Adreno
+   740's ledger said "on" for a shader that never ran there), and the
+   capture row's words (slow-scene dumps alone) */
+static void test_flat0_capture(void)
+{
+    char b[4096];
+
+    ico_attempt_reset();
+    ico_attempt_flat0_reach(1); /* nothing before the renderer said */
+    CHECK(ico_attempt_state_of(ICO_ATT_FLAT0) == ICO_ATT_NOT_SET);
+    ico_attempt_decide_flat0(1, 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_FLAT0) == ICO_ATT_NA);
+    (void)ico_attempt_start_text(b, sizeof b);
+    CHECK(strstr(b, "; flat outputs at the provoking corner not applicable here (the VU pre-pass "
+                    "is off here: vu_main_vs, the shader it changes, draws only through the "
+                    "pre-pass's record);") != NULL);
+    /* the pre-pass on (a later block's look): on again */
+    ico_attempt_flat0_reach(1);
+    CHECK(ico_attempt_state_of(ICO_ATT_FLAT0) == ICO_ATT_ON);
+    CHECK(strcmp(ico_attempt_why_of(ICO_ATT_FLAT0),
+                 "every device and backend with the VU pre-pass") == 0);
+    /* the tests' twins: off by default, not applicable without the
+       pre-pass, the twins remembered across */
+    ico_attempt_decide_flat0(0, 1);
+    CHECK(ico_attempt_state_of(ICO_ATT_FLAT0) == ICO_ATT_OFF_DEFAULT);
+    ico_attempt_flat0_reach(0);
+    CHECK(ico_attempt_state_of(ICO_ATT_FLAT0) == ICO_ATT_NA);
+    ico_attempt_flat0_reach(1);
+    CHECK(ico_attempt_state_of(ICO_ATT_FLAT0) == ICO_ATT_OFF_DEFAULT);
+    /* the capture row counts the slow-scene dumps alone */
+    ico_attempt_reset();
+    ico_attempt_decide_capture();
+    ico_attempt_fire(ICO_ATT_CAPTURE_TWO_STEP, 1);
+    (void)ico_attempt_block_text(b, sizeof b, -1);
+    CHECK(text_is(b, "attempts: slow-scene capture in two steps on 1 slow-scene captures (0 "
+                     "grown here)"));
+    ico_attempt_reset();
+}
+
+/* the start line in parts (ico_attempt_start_part): every row's reason
+   600 bytes long, so the rows outgrow the window's 4 KB buffer: each part
+   fits, holds whole rows from where the last stopped, and every row comes
+   once in order; one row past a whole small buffer is cut and passed */
+static void test_start_parts(void)
+{
+    static char why[601];
+    char b[4096];
+
+    memset(why, 'w', 600);
+    why[600] = '\0';
+    ico_attempt_reset();
+    for (int i = 0; i < ICO_ATT_COUNT; i++) {
+        ico_attempt_state(i, ICO_ATT_ON, why);
+    }
+    int row = 0, parts = 0, seen = 0;
+    while (row < ICO_ATT_COUNT && parts < 100) {
+        const int from = row;
+        const size_t n = ico_attempt_start_part(b, sizeof b, &row);
+        CHECK(n + 1u <= sizeof b && n == strlen(b) && n > 0 && b[n - 1u] == ')');
+        CHECK(row > from);
+        CHECK(starts(b, parts == 0 ? "attempts at the start: "
+                                   : "attempts at the start "
+                                     "(continued): "));
+        for (int i = from; i < row; i++) {
+            CHECK(strstr(b, ico_attempt_name(i)) != NULL);
+        }
+        seen += row - from;
+        parts++;
+    }
+    /* 25 rows of over 600 bytes: more than one part */
+    CHECK(row == ICO_ATT_COUNT && seen == ICO_ATT_COUNT && parts >= 2);
+    /* a row over a whole buffer: cut there, the next part from the row after */
+    char s[64];
+    row = 0;
+    size_t n = ico_attempt_start_part(s, sizeof s, &row);
+    CHECK(row == 1 && n == sizeof s - 1u && n == strlen(s));
+    n = ico_attempt_start_part(s, sizeof s, &row);
+    CHECK(row == 2 && starts(s, "attempts at the start (continued):"));
+    /* past the rows, or no row: nothing */
+    row = ICO_ATT_COUNT;
+    CHECK(ico_attempt_start_part(s, sizeof s, &row) == 0 && s[0] == '\0');
+    CHECK(ico_attempt_start_part(s, sizeof s, NULL) == 0);
+    ico_attempt_reset();
+}
+
 int main(void)
 {
     test_classes();
     test_robust_line();
     test_skin_skip();
+    test_flat0_capture();
+    test_start_parts();
     char b[2048];
 
     ico_attempt_reset();
@@ -873,11 +971,12 @@ int main(void)
     CHECK(ico_attempt_name(ICO_ATT_COUNT) == NULL);
     CHECK(strcmp(ico_attempt_name(ICO_ATT_DATE_ONE), "one DATE set-up") == 0);
     (void)ico_attempt_start_text(b, sizeof(b));
-    CHECK(starts(b, "attempts at the start: few-cores rule on (2 cores faster than the slowest); "
-                    "pipeline set on every core not reported; capture in two steps on; flat "
-                    "outputs at the provoking corner on (every device); one DATE set-up not "
-                    "reported; empty composites skipped not reported; no-volume break off by "
-                    "default (a phone rc turns it on); "));
+    CHECK(starts(
+        b, "attempts at the start: few-cores rule on (2 cores faster than the slowest); "
+           "pipeline set on every core not reported; slow-scene capture in two steps on; flat "
+           "outputs at the provoking corner on (every device); one DATE set-up not "
+           "reported; empty composites skipped not reported; no-volume break off by "
+           "default (a phone rc turns it on); "));
 
     /* the block's counts; out-of-range ids ignored */
     ico_attempt_fire(ICO_ATT_FEW_CORES, 3);
@@ -888,14 +987,14 @@ int main(void)
     ico_attempt_fire2(ICO_ATT_COUNT, 5);
     ico_attempt_fire(ICO_ATT_DATE_ONE, 9); /* counted, not printed: not reported */
     (void)ico_attempt_block_text(b, sizeof(b), -1);
-    CHECK(text_is(b, "attempts: few-cores rule on 3 threads moved; capture in two steps on 1 "
-                     "captures (0 grown here); flat outputs at the provoking corner on (static); "
-                     "no-volume break off by default 0 pictures"));
+    CHECK(text_is(b, "attempts: few-cores rule on 3 threads moved; slow-scene capture in two "
+                     "steps on 1 slow-scene captures (0 grown here); flat outputs at the provoking "
+                     "corner on (static); no-volume break off by default 0 pictures"));
     /* the next block starts from 0 */
     ico_attempt_fire(ICO_ATT_FEW_CORES, 2);
     (void)ico_attempt_block_text(b, sizeof(b), 4);
-    CHECK(starts(b, "attempts: few-cores rule on 2 threads moved; capture in two steps on 0 "
-                    "captures (0 grown here); "));
+    CHECK(starts(b, "attempts: few-cores rule on 2 threads moved; slow-scene capture in two "
+                    "steps on 0 slow-scene captures (0 grown here); "));
     CHECK(strstr(b, "; stalls 4 in the block") != NULL && strstr(b, "(the Adreno attempt") == NULL);
     /* reported late: counts since the last block (9 before, 1 since) */
     ico_attempt_state(ICO_ATT_DATE_ONE, ICO_ATT_ON, "every device");
