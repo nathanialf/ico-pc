@@ -39,7 +39,59 @@ static struct {
     uint32_t lo[3], hi[3];
     bool any[3];
     uint32_t maxPlaneEnd; /* the largest (first + count) of a plane draw */
+
+    /* the Arm estimate (rd_vu_audit.h): the open pass's sums, the run's
+       worst pass, the largest draw span, the draws whose smallest index is
+       0, the largest span over indices of a draw (x 1000) */
+    struct {
+        bool open;
+        uint32_t replay, pass;
+        int list;
+        uint32_t draws;
+        uint64_t indices, span;
+    } cur, worst;
+
+    uint64_t passes;
+    uint32_t bigSpan, bigSpanCount;
+    int bigSpanKind;
+    uint64_t zeroLo, spanDraws;
+    uint32_t ratioMilli, ratioSpan, ratioCount;
 } s_au = {.on = -1};
+
+/* the bytes one vertex's outputs take on this path: vu_main_vs's VuVSOut
+   (vu_common.hlsli): the position 16, col 16, stq 12, plane 8 and the seven
+   flat float4 a0 .. r 112 (the varyings 148), packed 4 bytes a component */
+#define AUDIT_VERTEX_BYTES 164u
+/* Arm's example (Khronos Vulkan-Samples docs/memory_limits.adoc) */
+#define AUDIT_VERTEX_BYTES_ARM 64u
+/* the intermediate geometry region "fixed to 180 MB on current Mali GPUs"
+   (the same document), taken as 180 MiB */
+#define AUDIT_REGION_MB 180.0
+
+static double mb(uint64_t vertices, uint32_t bytes)
+{
+    return (double)vertices * (double)bytes / (1024.0 * 1024.0);
+}
+
+/* the open pass closed: its line, the run's worst */
+static void passClose(void)
+{
+    if (!s_au.cur.open) {
+        return;
+    }
+    s_au.cur.open = false;
+    s_au.passes++;
+    rd__log("VU audit: pass: replay %u, list %d, pass %u: %u indexed VU draws, %llu indices, "
+            "index ranges summed %llu vertices (%.1f MB at %u bytes a vertex, %.1f MB at %u; "
+            "the region %.0f MB)",
+            s_au.cur.replay, s_au.cur.list, s_au.cur.pass, s_au.cur.draws,
+            (unsigned long long)s_au.cur.indices, (unsigned long long)s_au.cur.span,
+            mb(s_au.cur.span, AUDIT_VERTEX_BYTES), AUDIT_VERTEX_BYTES,
+            mb(s_au.cur.span, AUDIT_VERTEX_BYTES_ARM), AUDIT_VERTEX_BYTES_ARM, AUDIT_REGION_MB);
+    if (s_au.cur.span > s_au.worst.span) {
+        s_au.worst = s_au.cur;
+    }
+}
 
 bool rd_vu_audit_on(void)
 {
@@ -271,6 +323,34 @@ void rd__vu_audit_draw(const RdVuAuditDraw *d)
     }
     const int k = d->kind;
     s_au.draws[k]++;
+    /* the Arm estimate: this draw's index range in the pass's sum */
+    if (!s_au.cur.open || s_au.cur.replay != g_rd.replayCounter || s_au.cur.pass != d->pass) {
+        passClose();
+        memset(&s_au.cur, 0, sizeof(s_au.cur));
+        s_au.cur.open = true;
+        s_au.cur.replay = g_rd.replayCounter;
+        s_au.cur.pass = d->pass;
+        s_au.cur.list = d->list;
+    }
+    if (d->count > 0u && d->hi >= d->lo) {
+        const uint32_t span = d->hi - d->lo + 1u;
+        s_au.cur.draws++;
+        s_au.cur.indices += d->count;
+        s_au.cur.span += span;
+        s_au.spanDraws++;
+        s_au.zeroLo += d->lo == 0u;
+        if (span > s_au.bigSpan) {
+            s_au.bigSpan = span;
+            s_au.bigSpanCount = d->count;
+            s_au.bigSpanKind = k;
+        }
+        const uint64_t ratio = (uint64_t)span * 1000u / d->count;
+        if (ratio > s_au.ratioMilli) {
+            s_au.ratioMilli = ratio > UINT32_MAX ? UINT32_MAX : (uint32_t)ratio;
+            s_au.ratioSpan = span;
+            s_au.ratioCount = d->count;
+        }
+    }
     if (d->count > 0u) {
         s_au.lo[k] = !s_au.any[k] || d->lo < s_au.lo[k] ? d->lo : s_au.lo[k];
         s_au.hi[k] = !s_au.any[k] || d->hi > s_au.hi[k] ? d->hi : s_au.hi[k];
@@ -310,6 +390,21 @@ void rd__vu_audit_flush(void)
     for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
         judgeSlot(&s_au.slot[i]);
     }
+    passClose();
+    static const char *const kWord[3] = {"the fourth plane's", "its own list", "a ring run"};
+    rd__log("VU audit: worst pass: replay %u, list %d, pass %u: index ranges summed %llu "
+            "vertices over %u indexed VU draws (%llu indices): %.1f MB at %u bytes a vertex, "
+            "%.1f MB at %u, of the %.0f MB region; %llu passes; the largest draw span %u "
+            "vertices (%u indices, %s); draws whose smallest index is 0: %llu of %llu; the "
+            "largest span over indices of a draw %.3f (%u over %u)",
+            s_au.worst.replay, s_au.worst.list, s_au.worst.pass,
+            (unsigned long long)s_au.worst.span, s_au.worst.draws,
+            (unsigned long long)s_au.worst.indices, mb(s_au.worst.span, AUDIT_VERTEX_BYTES),
+            AUDIT_VERTEX_BYTES, mb(s_au.worst.span, AUDIT_VERTEX_BYTES_ARM), AUDIT_VERTEX_BYTES_ARM,
+            AUDIT_REGION_MB, (unsigned long long)s_au.passes, s_au.bigSpan, s_au.bigSpanCount,
+            kWord[s_au.bigSpanKind], (unsigned long long)s_au.zeroLo,
+            (unsigned long long)s_au.spanDraws, (double)s_au.ratioMilli / 1000.0, s_au.ratioSpan,
+            s_au.ratioCount);
     rd__log("VU audit: %llu entries (%llu index values), %llu compacted lists from %llu "
             "readbacks (%llu values, %llu filler triangles), draws: %llu of the fourth plane "
             "(values %u .. %u, the furthest index %u), %llu of their own lists (values %u .. "
