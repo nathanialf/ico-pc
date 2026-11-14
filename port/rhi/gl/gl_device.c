@@ -6,6 +6,7 @@
 #include "rhi_gl.h"
 #include "../rhi_backend.h"
 #include "../rhi_bind_cache.h"
+#include "../rhi_device_table.h"
 #include "gl_sync_wait.h"
 #include <stdlib.h>
 #include <string.h>
@@ -308,6 +309,29 @@ static uint32_t gl_vendor_id(const char *vendor, const char *renderer)
         return 0x8086u;
     }
     return 0u;
+}
+
+/* the device table's start-up lines (../rhi_device_table.h,
+   docs/port/DEVICE_TABLE.md): no row is keyed on OpenGL, so the header
+   names the rows a GL identity matches (vendor-unknown on a driver whose
+   vendor the strings do not name), with no fakes (the tests' are Vulkan's);
+   the summary's clause noted */
+static void gl_device_table_line(const char *line, void *user)
+{
+    (void)user;
+    GL_LOG_DIRECT("%s", line);
+}
+
+static void gl_device_table(void)
+{
+    RhiDeviceId id;
+    memset(&id, 0, sizeof id);
+    id.backend = RHI_DT_OPENGL;
+    id.os = RHI_DT_OS_BUILD;
+    id.vendorId = g_gl.limits.vendorId;
+    id.deviceName = g_gl.adapterName[0] ? g_gl.adapterName : NULL;
+    id.driverText = g_gl.limits.driverText;
+    (void)rhi_device_table_start(&id, NULL, gl_device_table_line, NULL);
 }
 
 static void gl_fill_limits(void)
@@ -1011,6 +1035,7 @@ bool rhi_init(const RhiDeviceDesc *desc)
                   g_gl.major, g_gl.minor, g_gl.core ? "core" : "compatibility", g_gl.versionText,
                   gl_str(GL_SHADING_LANGUAGE_VERSION), g_gl.window ? "" : ", headless",
                   l->maxDrawIndexedIndexValue);
+    gl_device_table();
     GL_LOG_DIRECT(
         "limits: uniform align %u, dual-source %s, MSAA %s, interlock %s (image units %d), "
         "texture barrier %s, multi bind %s, BC %s, anisotropy %.0f, max texture %u, entry "

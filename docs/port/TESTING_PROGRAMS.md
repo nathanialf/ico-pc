@@ -1826,8 +1826,14 @@ The renderer's test programs have a page of their own:
   derived facts resolved before what they set, every override link names a row it shares a choice
   with, the start-up header and the summary clause of the Mali-G52 MC2, the Adreno 740 on
   Qualcomm's driver, the PowerVR DXT-48-1536, the Intel HD 530 and an RTX 3090 word for word (and
-  the `mali-g52` row's line, an overridden setting's and a fake's words), the clause cut to its
-  count past 224 bytes, the noted clause, a row's value by id. `rhi_device_table_docs` runs it with
+  the `mali-g52` row's line, an overridden setting's and a fake's words), the clause with every
+  row in force and cut at a small buffer, the noted clause, a row's value by id, the header of
+  WARP on Direct3D 12 (`vendor-unknown`), a GTX 750 Ti on Direct3D 11 and llvmpipe on OpenGL
+  through `rhi_device_table_start`, and the summary's room: the issue 123 tablet's summary
+  of the last release (1810 bytes before the clause), grown by the longest GPU name and driver text of the
+  logged devices and the clause with every row in force, leaves at least 128 of the summary's
+  2047 bytes; the longest header (every row, the longest name) fits `report.c`'s key line and each
+  row's line the start lines' 2048-byte buffer with the same margin (it prints the three sizes). `rhi_device_table_docs` runs it with
   `--check-docs docs/port/DEVICE_TABLE.md`: the list between the markers must be what `--docs`
   prints.
 - `rhi_device_table_equiv_test.c` (ctest `rhi_device_table_equiv`): the device table changes no
@@ -1841,8 +1847,16 @@ The renderer's test programs have a page of their own:
   `ICO_VK_FAKE_VENDOR`, `_PASS_ROW`, `_QUEUE_PRIORITY`, `_ADRENO`, `_SERIAL`, `_NO_PREPASS`,
   `ICO_RD_VU_COMPACT_ARM` and `ICO_VK_FAKE_LIMITS=moltenvk`, and the profile's run inputs. It links
   `rhi_pass_row.c`, `rhi_driver_version.c`, `rhi_tile_rule.c`, `rhi_qprio.c`, `memory_floor.c` and
-  `present_fallback.c` and compares each with its copy over the matrix. It fails when a row is in
-  force on no identity, an override link decides none, or two matching rows differ without a link.
+  `present_fallback.c` and compares each with its copy over the matrix (those files' predicates read
+  the table, so the copies prove the moved predicates; also `rhi_tile_phone` on
+  every combination, `rhi_tile_vendor`, the serial rule at any Vulkan version). The Vulkan call
+  sites' reads are the library's functions the test calls too: the fakes' parse
+  (`rhi_device_fakes_parse`), the two pass rows, the subpass class with every way Qualcomm's row
+  can apply, the VU rows, the queue's row and the serial rule's reason. On the logged devices on
+  every backend, OS, MoltenVK and driver package, the one-choice read (`rhi_device_table_choice`)
+  and the backends' evaluation (`rhi_device_table_start`) equal the whole evaluation. It fails
+  when a row is in force on no identity, an override link decides none, or two matching rows differ
+  without a link. About 15 s at -O2, 3 minutes under the sanitizers (hand-measured).
   About 6 s at -O2, 45 s under the address and undefined-behaviour sanitizers.
 - `rhi_subpass_verdict_test.c`: the subpass read's decision at a Vulkan start and its verdict file
   (`port/rhi/rhi_subpass_verdict.h`), pure: every branch of `rhi_subpass_decide` in its order

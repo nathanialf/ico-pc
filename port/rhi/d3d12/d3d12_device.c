@@ -6,6 +6,7 @@
 #include "../rhi_adapter.h"
 #include "../rhi_backend.h"
 #include "../rhi_bind_cache.h"
+#include "../rhi_device_table.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -740,6 +741,29 @@ static void dx_probe_compute(void)
            g_dx.compute.float16 ? "yes" : "no");
 }
 
+/* the device table's start-up lines (../rhi_device_table.h,
+   docs/port/DEVICE_TABLE.md): no row is keyed on Direct3D 12; its vendor id
+   is 0 (RhiLimits.vendorId), so the header names the vendor-unknown row
+   (the free-memory floor's cautious rule, port/platform/memory_floor.c),
+   with no fakes (the tests' are Vulkan's); the summary's clause noted */
+static void dx_device_table_line(const char *line, void *user)
+{
+    (void)user;
+    DX_LOG("%s", line);
+}
+
+static void dx_device_table(void)
+{
+    RhiDeviceId id;
+    memset(&id, 0, sizeof id);
+    id.backend = RHI_DT_D3D12;
+    id.os = RHI_DT_OS_BUILD;
+    id.vendorId = g_dx.limits.vendorId;
+    id.deviceName = g_dx.adapterName;
+    id.driverText = g_dx.limits.driverText;
+    (void)rhi_device_table_start(&id, NULL, dx_device_table_line, NULL);
+}
+
 static void dx_fill_limits(void)
 {
     RhiLimits *o = &g_dx.limits;
@@ -926,6 +950,7 @@ bool rhi_init(const RhiDeviceDesc *desc)
            "offered)",
            g_dx.adapterName, g_dx.warp ? ", WARP" : "", s_driverText,
            g_dx.swapchain ? "" : ", headless", g_dx.limits.maxDrawIndexedIndexValue);
+    dx_device_table();
     dx_video_memory();
     if (g_dx.memBudget == 0) {
         DX_LOG("video memory budget: not reported by this adapter");

@@ -2,7 +2,8 @@
  * driver under Android (port/rhi/rhi_qprio.h; issue 123's second attempt).
  *
  * vkr_create_device hands its finished VkDeviceCreateInfo here.  Off the
- * row (rhi_pass_row.h rhi_vk_qprio_row), or on it where the device offers
+ * row (the device table's qualcomm-android row, rhi_pass_row.h
+ * rhi_vk_qprio_row), or on it where the device offers
  * no global priority extension or its queue family does not list high,
  * the device is created exactly as before.  On the row the queue's
  * VkDeviceQueueCreateInfo gets VkDeviceQueueGlobalPriorityCreateInfo at
@@ -23,8 +24,6 @@
 #include <stdlib.h>
 
 #include "vk_internal.h"
-#include "../rhi_driver_version.h"
-#include "../rhi_pass_row.h"
 #include "../rhi_qprio.h"
 
 static char s_said[160] = "no global priority asked (the driver's default, medium)";
@@ -63,15 +62,9 @@ bool vkr_qprio_create_device(VkDeviceCreateInfo *ci, VkDeviceQueueCreateInfo *qc
     g_vkr.qprioKhr = false;
     snprintf(s_said, sizeof s_said, "no global priority asked (the driver's default, medium)");
     const int fake = rhi_vk_qprio_fake(getenv("ICO_VK_FAKE_QUEUE_PRIORITY"));
-#ifdef __ANDROID__
-    const int android = 1;
-#else
-    const int android = 0;
-#endif
-    const char *row =
-        fake != RHI_QPRIO_FAKE_NONE
-            ? rhi_vk_qprio_row(RHI_VENDOR_QUALCOMM, RHI_DRIVER_ID_QUALCOMM_PROPRIETARY, 1)
-            : rhi_vk_qprio_row(g_vkr.props.vendorID, g_vkr.driverID, android);
+    /* the row: the device table's QUEUE_PRIORITY_HIGH (row qualcomm-android,
+       the fake's device too), evaluated at the pick (vk_device_table.c) */
+    const char *row = rhi_device_choice_why(g_vkr.devTable, RHI_DC_QUEUE_PRIORITY_HIGH);
     const bool hidden = fake == RHI_QPRIO_FAKE_UNOFFERED;
     bool hasHigh = false;
     for (uint32_t i = 0; i < offer->count && i < VK_MAX_GLOBAL_PRIORITY_SIZE_KHR; i++) {

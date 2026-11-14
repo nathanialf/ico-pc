@@ -13,8 +13,9 @@ stay there too.
 | --- | --- |
 | `port/rhi/rhi_device_table.h` | The identity, the choices and their values, the row and setting structs, the evaluation, the start-up lines and the summary clause. |
 | `port/rhi/rhi_device_table.c` | The rows, the matcher, the defaults, the tests' fakes, the lines. Pure C: no Vulkan, SDL, I/O or environment. |
-| `port/rhi/rhi_device_table.cmake` | The library `ico_device_table` (linked PUBLIC by `ico_rhi` and `ico_rhi_vulkan`) and its three tests. |
-| `port/rhi/vk/vk_device_table.c` | The Vulkan backend's start-up lines for the picked device. |
+| `port/rhi/rhi_device_table.cmake` | The library `ico_device_table` (linked PUBLIC by `ico_rhi` and every backend library) and its three tests; the pure predicates' tests link it too. |
+| `port/rhi/vk/vk_device_table.c` | The Vulkan backend's one evaluation of the picked device with the tests' fakes (`g_vkr.devTable`), and its start-up lines. |
+| `port/rhi/gl/gl_device.c`, `d3d11/d3d11_device.c`, `d3d12/d3d12_device.c` | The other backends' evaluation (no fakes) and start-up lines, after their device line. |
 | `port/rhi/test/rhi_device_table_test.c` | The table's own rules, the lines of five devices, and the list below (`--docs`, `--check-docs`). |
 | `port/rhi/test/rhi_device_table_equiv_test.c`, `rhi_device_table_ref.inc` | The proof that the table changes no behaviour (below). |
 
@@ -63,17 +64,21 @@ without a row.
 
 ## The tests' fakes
 
-The table reads no environment. The backend hands it the fakes it reads (`RhiDeviceFakes`), each
-with its exact scope: `ICO_VK_FAKE_VENDOR` (the tile-based phone, and the subpass class's Arm and
-Qualcomm parts, not over the Intel row), `ICO_VK_FAKE_PASS_ROW=qualcomm`,
-`ICO_VK_FAKE_QUEUE_PRIORITY`, `ICO_VK_FAKE_ADRENO`, `ICO_VK_FAKE_SERIAL`,
-`ICO_VK_FAKE_NO_PREPASS` (a row's own words replace it) and `ICO_RD_VU_COMPACT_ARM` (the Mali-G52's
-compaction class and its default). A row's line says "replaced by <variable>, a test" where a fake
-changed its value. The start-up lines are evaluated without the fakes: they name the hardware.
+The table reads no environment. The backend hands it the fakes it reads (`RhiDeviceFakes`, parsed
+by `rhi_device_fakes_parse` as each call site parsed its variable before the table), each with its
+exact scope: `ICO_VK_FAKE_VENDOR` (the tile-based phone, and the subpass class's Arm and Qualcomm
+parts, not over the Intel row), `ICO_VK_FAKE_PASS_ROW=qualcomm`, `ICO_VK_FAKE_QUEUE_PRIORITY`,
+`ICO_VK_FAKE_ADRENO`, `ICO_VK_FAKE_SERIAL`, `ICO_VK_FAKE_NO_PREPASS` (a row's own words replace it)
+and `ICO_RD_VU_COMPACT_ARM` (the Mali-G52's compaction class and its default). The Vulkan backend
+reads the first six once, when the device is picked (`vk_device_table.c`); `ICO_RD_VU_COMPACT_ARM`
+is the renderer's, read where the compaction decides (`port/render/rd_vu_compact.c`). The other
+backends have no fakes. The start-up lines come from that one evaluation: a row's line says
+"replaced by <variable>, a test" where a fake changed its value.
 
 ## The start-up lines and the summary
 
-At device creation the Vulkan backend prints, after its device line:
+At device creation every backend evaluates the table once (`rhi_device_table_start`: the current
+device's choices, `rhi_device_table_current`) and prints, after its device line:
 
 ```
 rhi_vk: device table: <name> (device vvvv:dddd; driver ID n, version v; Vulkan a.b.c; <OS>): N of the table's M rows: <ids>[; overridden here: <ids>]
@@ -81,9 +86,20 @@ rhi_vk: device table: <id> (<what it matches>): <what it sets> (<issue>, <since>
 ```
 
 one line for each row in force, or the header alone with "none of the table's M rows: every choice
-as capability and self-tests decide". The renderer's summary line ends with "device table rows
-<ids>" (or "none"; past 224 bytes the count alone) on Vulkan. Example on the Mali-G52 MC2 of
-issue 179:
+as capability and self-tests decide". OpenGL, Direct3D 11 and Direct3D 12 print the same lines
+with their own prefix (`rhi_gl:`, `rhi_d3d11:`, `rhi_d3d12:`) and no driver ID in the header
+("(device 10de:1380; D3D11; Windows)"). No row is keyed on them; Direct3D 12's vendor id is 0, so
+its header names `vendor-unknown` (the free-memory floor's cautious rule), and a GL driver whose
+strings name no vendor does the same.
+
+The header is the line that names the rows; it is a key line of a report's `report.txt`
+(`port/platform/report.c`). The renderer's summary line carries their count alone, "device table
+rows: 13 of 27 (the start lines name them)" or "device table rows: none of 27": the summary holds
+at most 2047 bytes (`diag_host.c` `SUMMARY_MAX_BYTES`), issue 123's tablet filled 1810 of them in
+v0.11.6, and the clause of ids would have taken 210 more. `rhi_device_table` builds the longest
+summary (that line, the longest GPU name and driver text of every logged device, the clause with
+every row in force) and fails with less than 128 bytes left. Example on the Mali-G52 MC2 of issue
+179:
 
 ```
 rhi_vk: device table: Mali-G52 MC2 (device 13b5:74021000; driver ID 9, version 32.1.0; Vulkan 1.1.177; Android): 8 of the table's 27 rows: tile-vendors, android, tiler, tile-phone, arm, mali, mali-g52, tile-classes; overridden here: other-tiler
@@ -92,11 +108,37 @@ rhi_vk: device table: mali-g52 (vendor 0x13B5, not MoltenVK, a device name with 
 
 ## Who reads the table
 
+The Vulkan backend reads its choices from its one evaluation (`g_vkr.devTable`), through the
+library's call-site reads (`rhi_device_choice_why`, `rhi_device_pass_rows`,
+`rhi_device_subpass_class`, `rhi_device_vu_rows`), which the equivalence test calls too:
+
+| Choice | Call site (`port/rhi/vk/`) |
+| --- | --- |
+| `TILER` | `vk_device.c` `vkr_fill_limits` (`RhiLimits.tiler`) |
+| `TILE_PHONE` | `vk_device.c` `vkr_tile_rule_apply` (the barrier scopes, the submission wait, the loss rung; the line's words still name the vendor through `rhi_tile_vendor_name`) |
+| `DYNAMIC_STATE_OFF` | `vk_device.c` (the dynamic depth and blend state; `ICO_VK_FAKE_NO_DYNAMIC` stays there) |
+| `MEMORY_BUDGET_OFF` | `vk_device.c` (`VK_EXT_memory_budget`) |
+| `PASS_OBJECTS` | `vk_device.c` `vkr_pass_row_apply` (`ICO_VK_LEGACY_PASSES` and `passRowQcom` stay there) |
+| `SUBPASS_CLASS` | `vk_device.c` `vkr_subpass_read_decide` (Qualcomm's where its row holds the passes) |
+| `ATTACHMENT_READ_OFF` | `vk_device.c` (the rasterization-order attachment read; `ICO_VK_ATTACHMENT_READ` stays there) |
+| `PIPE_ROBUST_ASK` | `vk_device.c` (`VK_EXT_pipeline_robustness` with `ICO_RD_VU_SKIN_CHECK` unset) |
+| `VU_FALLBACK_PLAIN` (table), `CAREFUL_PIPELINES`, `VU_PREPASS_OFF`, `COMPUTE_RECORD_OFF` | `vk_device.c` `vkr_vu_plain_only` (`RhiLimits.vuFallbackPlain`, `carefulPipelines`, `vuPrepassOff`, `computeStoresOff`) |
+| `QUEUE_PRIORITY_HIGH` | `vk_qprio.c` (the fake's grant, refuse and unoffered stay there) |
+| `COMPILER_SERIAL` | `vk_pipeline.c` `vkr_compile_serial_init` |
+
+The pure predicates keep their names and signatures, and build an identity of their arguments to
+read one choice (`rhi_device_table_choice`): `rhi_vk_pass_row`, `rhi_vk_pass_row_qualcomm`,
+`rhi_vk_qprio_row` (`rhi_pass_row.c`), `rhi_driver_compiler_serial`, `rhi_driver_is_qualcomm_proprietary`
+(the table's test by id; `rhi_driver_version.c`), `rhi_tile_phone`, `rhi_tile_vendor_name`
+(`rhi_tile_rule.c`). Their tests (`rhi_vk_pass_row`, `rhi_vk_qprio`, `rhi_driver_version`,
+`rhi_vk_tile_rule`) are unchanged.
+
 The index compaction reads its class and its two class defaults (`RD_VU_COMPACT_ARM_DEFAULT`,
 `RD_VU_COMPACT_DEFAULT`, defined in `rhi_device_table.h`) from the rows `mali-g52` and
-`powervr-dxt-48-1536` (`port/render/rd_vu_compact.c`). Every other choice is still decided by the
-rule the table copies, at its call site (`rhi_device_table_equiv` proves they agree); each call
-site moves onto the table with its own merge, its pure test unchanged.
+`powervr-dxt-48-1536` (`port/render/rd_vu_compact.c`). The renderer's and the platform's other
+choices are still decided by the rule the table copies, at their call sites
+(`rhi_device_table_equiv` proves they agree); each moves onto the table with its own merge, its
+pure test unchanged.
 
 ## Adding a row
 
@@ -122,7 +164,10 @@ site moves onto the table with its own merge, its pure test unchanged.
   facts resolved before what they set, every override link names a row it shares a choice with,
   the start-up lines and the summary clause of the Mali-G52, the Adreno 740 on Qualcomm's driver,
   the PowerVR DXT-48-1536, the Intel HD 530 and an RTX 3090 word for word, the clause's cut, the
-  noted clause, a row's value by id.
+  noted clause, a row's value by id; the header of WARP on Direct3D 12, a GTX 750 Ti on Direct3D
+  11 and llvmpipe on OpenGL; the summary's room (the longest summary leaves 128 bytes or more of
+  2047, the longest header and row line fit the report's key line and the start lines' buffer
+  with the same margin).
 - `rhi_device_table_equiv` (`port/rhi/test/rhi_device_table_equiv_test.c`, pure): copies of every
   rule the table replaces (`rhi_device_table_ref.inc`, each naming its source lines) against the
   table, value and words byte for byte, over about 1.4 million identities (every vendor that sent
@@ -130,8 +175,14 @@ site moves onto the table with its own merge, its pure test unchanged.
   the rows read, twelve driver ids, fourteen driver texts, the Vulkan versions around 1.3.215,
   five OSes, four backends, MoltenVK, a driver package), the tests' fakes in every combination on
   the logged devices, and the profile's run inputs; the pure files the copies come from are linked
-  in and compared with them; every row in force somewhere, every override link deciding some
-  identity, no unlinked conflict.
+  in and compared with them, and they now read the table: the comparison covers the moved
+  predicates (`rhi_tile_phone` on every combination of its arguments, `rhi_tile_vendor`, the
+  serial rule at any Vulkan version), the Vulkan call sites' reads as the backend composes them
+  (the two pass rows, the subpass class with every way its Qualcomm row can apply, the VU rows,
+  the queue's row, the serial rule's reason, the fakes' parse), and the one-choice read and the
+  backends' evaluation against the whole evaluation on the logged devices on every backend and
+  OS; every row in force somewhere, every override link deciding some identity, no unlinked
+  conflict.
 - `rhi_device_table_docs`: the list below against the table.
 
 ## The list

@@ -45,12 +45,11 @@ static char s_serialWhy[64];
 void vkr_compile_serial_init(void)
 {
     RhiLimits *o = &g_vkr.limits;
-    const char *why =
-        rhi_driver_compiler_serial(o->vendorId, o->driverText, o->apiMajor, o->apiMinor);
-    const char *fake = getenv("ICO_VK_FAKE_SERIAL");
-    if (why == NULL && fake != NULL && fake[0] == '1') {
-        why = "ICO_VK_FAKE_SERIAL"; /* tests: the rule on any device */
-    }
+    /* the device table's COMPILER_SERIAL (row powervr-b-series,
+       rhi_driver_version.h rhi_driver_compiler_serial), evaluated at the
+       pick (vk_device_table.c); ICO_VK_FAKE_SERIAL=1 the rule on any device
+       without it, its reason "ICO_VK_FAKE_SERIAL" (the tests) */
+    const char *why = rhi_device_choice_why(g_vkr.devTable, RHI_DC_COMPILER_SERIAL);
     o->serialPipelines = NULL;
     s_serialWhy[0] = '\0';
     if (why == NULL) {

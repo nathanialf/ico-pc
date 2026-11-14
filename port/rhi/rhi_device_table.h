@@ -270,6 +270,25 @@ typedef struct RhiDeviceFakes {
     uint8_t passRowQualcomm, queuePriority, adreno, serial, noPrepass, compactArm;
 } RhiDeviceFakes;
 
+/* The fakes' environment as the backend read it (NULL unset), each parsed
+ * as its call site parsed it before the table (the Vulkan backend reads them
+ * once a device is picked, vk_device_table.c):
+ *   vendor      ICO_VK_FAKE_VENDOR: a number strtoul(s, 0) takes whole, at
+ *               most 0xFFFFFFFF (vk_device.c's tile rule and subpass class)
+ *   passRow     ICO_VK_FAKE_PASS_ROW: "qualcomm"
+ *   adreno      ICO_VK_FAKE_ADRENO: set, not empty, not starting with '0'
+ *   serial      ICO_VK_FAKE_SERIAL: starting with '1' (vk_pipeline.c)
+ *   noPrepass   ICO_VK_FAKE_NO_PREPASS: as adreno
+ *   compactArm  ICO_RD_VU_COMPACT_ARM: "1" (the renderer's, rd_vu_compact.c)
+ *   queuePriority  ICO_VK_FAKE_QUEUE_PRIORITY already read by rhi_qprio.h
+ *               rhi_vk_qprio_fake: non-zero a fake word */
+typedef struct RhiDeviceFakeEnv {
+    const char *vendor, *passRow, *adreno, *serial, *noPrepass, *compactArm;
+    int queuePriority;
+} RhiDeviceFakeEnv;
+
+void rhi_device_fakes_parse(const RhiDeviceFakeEnv *env, RhiDeviceFakes *out);
+
 /* the fakes' names (RhiDeviceChoices.faked) */
 enum {
     RHI_DT_FAKE_NONE = 0,
@@ -320,14 +339,62 @@ int rhi_device_text_has(const char *s, const char *word);
 /* Every choice for id with the fakes (NULL none) applied */
 void rhi_device_table_eval(const RhiDeviceId *id, const RhiDeviceFakes *fakes,
                            RhiDeviceChoices *out);
+/* One choice for id without fakes, as rhi_device_table_eval gives it (the
+   derived facts before it resolved first): the pure predicates that keep
+   their signatures (rhi_pass_row.h, rhi_driver_version.h, rhi_tile_rule.h)
+   build an identity from their arguments and read their choice here.
+   reason (may be NULL): the setting row's reason, NULL the default */
+int32_t rhi_device_table_choice(const RhiDeviceId *id, RhiDeviceChoice choice, const char **reason);
 /* the reason the setting row gives (RhiDeviceSetting.reason; a fake's own
    words where a fake set it), NULL when the default holds or none */
 const char *rhi_device_choice_reason(const RhiDeviceChoices *c, RhiDeviceChoice choice);
+
+/* The call sites' reads (the Vulkan backend's, and the equivalence test's
+ * proof of them, port/rhi/test/rhi_device_table_equiv_test.c):
+ *   rhi_device_choice_why   the reason where the choice is non-zero, else
+ *                           NULL (COMPILER_SERIAL, QUEUE_PRIORITY_HIGH,
+ *                           CAREFUL_PIPELINES, VU_PREPASS_OFF, ...)
+ *   rhi_device_pass_rows    PASS_OBJECTS as vk_device.c's two driver rows:
+ *                           Intel's reason or NULL, Qualcomm's or NULL
+ *   rhi_device_subpass_class  SUBPASS_CLASS with the run's passRowQcom
+ *                           (Qualcomm's row applied to the passes, after
+ *                           ICO_VK_LEGACY_PASSES): the Intel row first, then
+ *                           Qualcomm's applied row, then the table's class
+ *                           (RHI_DT_SUBPASS_*, rhi_subpass_verdict.h's order)
+ *   rhi_device_vu_rows      the VU rows of vk_device.c (the Adreno 740's):
+ *                           the fallback's plain set (VU_FALLBACK_PLAIN by the
+ *                           table alone; Turnip's is the renderer's), the
+ *                           careful set, the pre-pass off, the compute record
+ *                           off: each its reason or NULL */
+const char *rhi_device_choice_why(const RhiDeviceChoices *c, RhiDeviceChoice choice);
+void rhi_device_pass_rows(const RhiDeviceChoices *c, const char **intelRow, const char **qcomRow);
+int rhi_device_subpass_class(const RhiDeviceChoices *c, int passRowQcom);
+
+typedef struct RhiDeviceVuRows {
+    const char *plain, *careful, *noPrepass, *noComputeRecord;
+} RhiDeviceVuRows;
+
+RhiDeviceVuRows rhi_device_vu_rows(const RhiDeviceChoices *c);
+
+/* One evaluation a device (every backend at its start): the identity with
+ * the fakes through the table, kept as the current device's choices
+ * (rhi_device_table_current; the call sites read them), the summary's clause
+ * noted (rhi_device_table_note), and the start-up lines (the header, then a
+ * line a row in force) handed to emit one by one, without prefix or newline
+ * (the backend logs them with its own).  Returns the current choices. */
+typedef void (*RhiDeviceLineFn)(const char *line, void *user);
+const RhiDeviceChoices *rhi_device_table_start(const RhiDeviceId *id, const RhiDeviceFakes *fakes,
+                                               RhiDeviceLineFn emit, void *user);
+/* the current device's choices, NULL before any start */
+const RhiDeviceChoices *rhi_device_table_current(void);
+/* the start-up lines' buffer (each line cut at RHI_DT_LINE_MAX - 1 bytes) */
+#define RHI_DT_LINE_MAX 2048
 
 /* The start-up lines (no prefix, no newline; each cut at cap - 1; the length
  * written):
  *   the header: "device table: <name> (device vvvv:dddd; driver ID n,
  *     version v; Vulkan a.b.c; <OS>): 8 of the table's 27 rows: id, id, ..."
+ *     (another backend: "(device vvvv:dddd; OpenGL; <OS>)", no driver ID)
  *     (the rows in force; "; overridden here: id, ..." for rows that matched
  *     with every setting overridden), or "...: none of the table's 27 rows:
  *     every choice as capability and self-tests decide"
@@ -338,10 +405,14 @@ const char *rhi_device_choice_reason(const RhiDeviceChoices *c, RhiDeviceChoice 
 size_t rhi_device_table_header(char *out, size_t cap, const RhiDeviceId *id,
                                const RhiDeviceChoices *c);
 size_t rhi_device_table_row_line(char *out, size_t cap, const RhiDeviceChoices *c, int row);
-/* the summary's clause: "device table rows a, b, c" or "device table rows
-   none"; past RHI_DT_SUMMARY_MAX bytes "device table rows: N (the start
-   lines name them)" */
-#define RHI_DT_SUMMARY_MAX 224
+/* the summary's clause: "device table rows: 13 of 27 (the start lines name
+   them)" or "device table rows: none of 27"; the ids are the start-up
+   header's alone (a line of its own, and a key line of report.txt,
+   port/platform/report.c): the summary line holds at most
+   diag_host.c's 2048 bytes, and issue 123's tablet filled 1810 of them in
+   v0.11.6 before the clause (rhi_device_table_test's summary bound).  At most
+   RHI_DT_SUMMARY_MAX - 1 bytes. */
+#define RHI_DT_SUMMARY_MAX 64
 size_t rhi_device_table_summary(char *out, size_t cap, const RhiDeviceChoices *c);
 /* The backend keeps its device's clause for the renderer's summary line
    (rd_core.c rd_summary_text): noted at device creation, NULL before any

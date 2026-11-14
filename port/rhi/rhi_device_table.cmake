@@ -2,11 +2,19 @@
 # rows that set renderer-internal choices, docs/port/DEVICE_TABLE.md),
 # included from port/rhi/CMakeLists.txt beside the pass breadcrumb's library.
 # A library of its own, pure C (no Vulkan, SDL, I/O or environment): every
-# backend, the renderer and the platform may read it.  ico_rhi and
-# ico_rhi_vulkan link it PUBLIC (port/rhi/CMakeLists.txt).
+# backend, the renderer and the platform may read it.  ico_rhi and every
+# backend library link it PUBLIC (port/rhi/CMakeLists.txt).
 add_library(ico_device_table STATIC rhi_device_table.c)
 target_include_directories(ico_device_table PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(ico_device_table PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+
+# The pure predicates that read the table and keep their signatures
+# (rhi_pass_row.c, rhi_driver_version.c, rhi_tile_rule.c): their tests,
+# registered in port/rhi/CMakeLists.txt before this file, link it too
+target_link_libraries(rhi_driver_version_test PRIVATE ico_device_table)
+target_link_libraries(rhi_vk_pass_row_test PRIVATE ico_device_table)
+target_link_libraries(rhi_vk_qprio_test PRIVATE ico_device_table)
+target_link_libraries(rhi_vk_tile_rule_test PRIVATE ico_device_table)
 
 # rhi_device_table_test (CPU only, every target): unique ids, every setting's
 # issue, evidence, since and revisit, the derived facts read before what a

@@ -1,6 +1,7 @@
 /* rhi_driver_version.c: the driver version text and the drivers' rules
  * (rhi_driver_version.h). */
 #include "rhi_driver_version.h"
+#include "rhi_device_table.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -37,8 +38,14 @@ char *rhi_driver_version_text(uint32_t vendorId, uint32_t driverId, uint32_t dri
 
 int rhi_driver_is_qualcomm_proprietary(uint32_t vendorId, uint32_t driverId)
 {
-    return vendorId == RHI_VENDOR_QUALCOMM &&
-           (driverId == RHI_DRIVER_ID_QUALCOMM_PROPRIETARY || driverId == 0);
+    /* the device table's test by id (rhi_device_table.h RHI_DT_DRV_QCOM_ID:
+       vendor 0x5143 with driver id 8 or 0), the one its rows key on */
+    RhiDeviceId id;
+    memset(&id, 0, sizeof id);
+    id.backend = RHI_DT_VULKAN;
+    id.vendorId = vendorId;
+    id.driverId = driverId;
+    return rhi_device_driver_test(RHI_DT_DRV_QCOM_ID, &id);
 }
 
 int rhi_driver_is_moltenvk(uint32_t vendorId, uint32_t driverId, int moltenvkBuild)
@@ -203,11 +210,13 @@ const char *rhi_driver_compiler_serial(uint32_t vendorId, const char *driverText
        phones (review 2 N4) */
     (void)apiMajor;
     (void)apiMinor;
-    if (vendorId != RHI_VENDOR_IMGTEC) {
-        return NULL;
-    }
-    if (driverText != NULL && findNoCase(driverText, "b-series") != NULL) {
-        return "PowerVR B-Series";
-    }
-    return NULL;
+    /* the device table's powervr-b-series row (vendor 0x1010, "b-series" in
+       the driver text in any case) */
+    RhiDeviceId id;
+    memset(&id, 0, sizeof id);
+    id.backend = RHI_DT_VULKAN;
+    id.vendorId = vendorId;
+    id.driverText = driverText;
+    const char *why = NULL;
+    return rhi_device_table_choice(&id, RHI_DC_COMPILER_SERIAL, &why) ? why : NULL;
 }

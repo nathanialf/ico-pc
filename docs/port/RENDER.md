@@ -1660,8 +1660,8 @@ immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan. OpenGL and Direct3
 Two meanings of "tile-based" meet in this table. The flags from `auraBox` to `sheetBake2x` follow
 the profile's class (every class but desktop Vulkan, D3D12, OpenGL and Direct3D 11, so an Intel or
 AMD Mac under MoltenVK is on the Apple column and takes them); the last two rows follow
-`RhiLimits.tiler`, which is false on such a Mac (`vkr_is_tiler` in `port/rhi/vk/vk_device.c` names
-the vendors).
+`RhiLimits.tiler`, which is false on such a Mac (the device table's `tile-vendors` row names the
+vendors, [DEVICE_TABLE.md](DEVICE_TABLE.md)).
 
 The blend row is `rd_dst_read.c`'s ([Destination reads and blend
 paths](#destination-reads-and-blend-paths)), robust access the Vulkan backend's

@@ -38,7 +38,7 @@
  * row the wide scopes, after two or more the single wait too; on a phone,
  * whose scopes and wait are v0.11.2's already, after one or more the VU
  * pre-pass off for that start (noPrepass: what the Adreno 740's
- * device-table row does, vk_device.c kVuPlainOnly; lossRow: the starts in
+ * device-table row does (VU_PREPASS_OFF); lossRow: the starts in
  * a row that lost the device before this one, port/platform/diag_host.c's
  * count through ICO_LOSS_ROW; nothing is written to the settings).  The
  * tests alone pick the scopes on any device with ICO_VK_FAKE_SCOPES=wide or

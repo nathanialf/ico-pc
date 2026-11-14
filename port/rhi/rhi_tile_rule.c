@@ -1,6 +1,7 @@
 /* rhi_tile_rule.c: the barrier scopes and the submission wait a start uses
  * (rhi_tile_rule.h; issues 179 and 211).  Pure: no Vulkan, no I/O. */
 #include "rhi_tile_rule.h"
+#include "rhi_device_table.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,7 +9,22 @@
 
 bool rhi_tile_phone(bool android, bool ios, bool fakedTileVendor)
 {
-    return android || ios || fakedTileVendor;
+    /* the device table's TILE_PHONE (rows android and ios) on a Vulkan
+       identity of the build, iOS through MoltenVK; the tests' faked vendor
+       as its fake gives it (a tile-based vendor's id: Qualcomm's stands for
+       any of them) */
+    RhiDeviceId id;
+    RhiDeviceFakes fk;
+    RhiDeviceChoices c;
+    memset(&id, 0, sizeof id);
+    memset(&fk, 0, sizeof fk);
+    id.backend = RHI_DT_VULKAN;
+    id.os = android ? RHI_DT_ANDROID : ios ? RHI_DT_IOS : RHI_DT_LINUX;
+    id.moltenvk = ios ? 1u : 0u;
+    fk.vendorSet = fakedTileVendor ? 1u : 0u;
+    fk.vendor = 0x5143u;
+    rhi_device_table_eval(&id, &fk, &c);
+    return c.value[RHI_DC_TILE_PHONE] != 0;
 }
 
 void rhi_tile_rule(const char *fakeScopes, bool phone, const char *device, uint32_t lossRow,
@@ -73,7 +89,7 @@ void rhi_tile_rule(const char *fakeScopes, bool phone, const char *device, uint3
 
     /* the phones' rung: the scopes and the wait are already v0.11.2's
        there, so a start after a lost one draws without the VU pre-pass (the
-       Adreno 740's device-table row's remedy, vk_device.c kVuPlainOnly) */
+       Adreno 740's device-table row's remedy, its VU_PREPASS_OFF) */
     if (phone && lossRow) {
         out->noPrepass = true;
         snprintf(out->prepassWhy, sizeof out->prepassWhy, "%s", lossWords);
@@ -87,6 +103,16 @@ bool rhi_tile_vendor(uint32_t vendorId)
 
 const char *rhi_tile_vendor_name(uint32_t vendorId)
 {
+    /* the device table's tile-vendors row decides (TILER on a Vulkan
+       identity of the vendor off Android); the names are words */
+    RhiDeviceId id;
+    memset(&id, 0, sizeof id);
+    id.backend = RHI_DT_VULKAN;
+    id.os = RHI_DT_LINUX;
+    id.vendorId = vendorId;
+    if (!rhi_device_table_choice(&id, RHI_DC_TILER, NULL)) {
+        return NULL;
+    }
     switch (vendorId) {
     case 0x5143:
         return "Qualcomm";

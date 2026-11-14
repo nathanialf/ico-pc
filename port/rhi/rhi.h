@@ -906,7 +906,7 @@ typedef struct RhiLimits {
     bool stencilGather;
     /* Why the VU fallback's program entries are the plain ones on this
      * device ("Adreno 740, issue 107": the driver hung the whole device
-     * compiling the extended ones; Vulkan, vk_device.c kVuPlainOnly), NULL
+     * compiling the extended ones; Vulkan, the device table's row), NULL
      * otherwise: the draws the record path cannot take draw through
      * vu_X_plain_vs there (port/render/rd_pipeline.c rd__vu_policy_init,
      * g_rd.vsFallback); the record path is the same on every device.
@@ -917,14 +917,14 @@ typedef struct RhiLimits {
     const char *compilerVersion;
     /* Why this device gets its start-up set under the careful policy
      * ("Adreno 740, issues 93 and 107": the driver died inside the blind
-     * set; Vulkan, vk_device.c kVuPlainOnly's careful column), NULL
+     * set; Vulkan, the device table's CAREFUL_PIPELINES), NULL
      * otherwise: the window then passes rd_pipeline_policy_careful() to
      * rd_set_pipeline_policy (small batches on one thread, the cache written
      * after each, the set stopped past a memory budget; port/render/rd.h). */
     const char *carefulPipelines;
     /* Why this device draws without the VU vertex pre-pass ("Adreno 740 on
      * Qualcomm's driver, issue 123": its first scene drew noise and hung;
-     * Vulkan, vk_device.c kVuPlainOnly's noPrepass column), NULL otherwise
+     * Vulkan, the device table's VU_PREPASS_OFF), NULL otherwise
      * (every other backend: their fill functions zero the limits).  The
      * renderer's rd__vu_prepass_init turns the pre-pass off with it unless
      * [dev] vu_prepass = true is written in config.toml (ICO_RD_VU_PREPASS=on). */
