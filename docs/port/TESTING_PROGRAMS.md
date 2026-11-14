@@ -1212,19 +1212,33 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   the even cadence's row off by default with its reason (`three phone rcs did not land pictures on
   their refresh`); the no-volume break on for the Pixel (`the PowerVR D-Series DXT-48-1536`) and off
   by default for the rest of its class with its reason; at the reset the compaction's row `not reported`, the blend
-  constant's `not in this build` (CPU only). The old robust-access row: on for the Mali-G52 class (its reporter's `config.toml` held a `gpu_robust = true` without the mark), not applicable for the others; each class's whole start line within the window's 4 KB buffer with that row and the last in it; the row's three states with their words in the start line, `on (static)` in the block line, `not reported` after the reset. No capture after a stall (issue 123): on for the Adreno 740 on Qualcomm's driver (where the skin check runs), not applicable for the others; its two states' words in the start line, its count per block (`3 checks skipped after a reset`, then 0), `not reported` after the reset.
+  constant's `not in this build` (CPU only). The old robust-access row: on for the Mali-G52 class (its reporter's `config.toml` held a `gpu_robust = true` without the mark), not applicable for the others; each class's whole start line within the window's 4 KB buffer with that row and the last in it; the row's three states with their words in the start line, `on (static)` in the block line, `not reported` after the reset. No capture after a stall (issue 123): on for the Adreno 740 on Qualcomm's driver (where the skin check runs), not applicable for the others; its two states' words in the start line, its count per block (`3 checks skipped after a reset`, then 0), `not reported` after the reset. The flat outputs (issue 123): not applicable on the Adreno 740 under Qualcomm's own driver (the VU pre-pass off by its device table), on elsewhere; nothing before the renderer said, then on and off with the pre-pass (`ico_attempt_flat0_reach`), the tests' twins remembered; the capture row's words (`slow-scene capture in two steps on 1 slow-scene captures (0 grown here)`). The start line in parts (`ico_attempt_start_part`): each class's line in one part equal to the whole text; every row's reason 600 bytes long: each part within 4 KB, whole rows, `attempts at the start (continued):` after the first, every row once in order; a row longer than a 64-byte buffer cut and passed; past the rows or no row nothing.
 - `core_share_test.c` (ctest `core_share`): the share of run time on the faster cores of the
   threads that do not sample their own core (`port/platform/core_share.h`, issue 179): ten seconds
   of the Helio G85's submit, SDL audio and driver threads and two pipeline workers under one name,
   the line word for word, the Pixel's 2-7, an unknown core and no fast mask adding nothing, a full
   table, a short buffer, field 39 of a stat line whose name holds spaces and brackets (CPU only).
+- `present_latency_test.c` (ctest `present_latency`): the present's latency in a 10 s block
+  (`port/platform/present_latency.h`, issue 123): four made-up records (from the hand-over and
+  from the replay's start; the driver's call split at the picture's GPU end before, after and across
+  the call; one without a GPU end seen) and two left out (no present end, an end before its
+  start); the mean and longest, the parts before the present and of it, the line word for word with
+  each queue priority's words, the call not split without a GPU end, nothing with no present (CPU
+  only).
 - `stall_coincide_test.c` (ctest `stall_coincide`): what a stall coincided with (`port/platform/
   stall_coincide.h`, issue 179): the block's pass medians (none before five, odd and even counts,
   the ring's last 64, a full key table), the spike rule at its bounds (5.9x not, 8.3x and 40.1 ms
   yes, 40.0 ms not, no median not), the classes of issue 179's moment (memory under the floor;
   with a 150 ms render wait and pressure rising; none; the GPU clock at 300 of 950 MHz), the
   moment and tally lines word for word, issue 123's Adreno 740 stall (19 stamps unwritten, memory
-  under Qualcomm's floor: memory and the GPU's own sign of a reset) and the reset's other signs, a
+  under Qualcomm's floor: memory and the GPU's own sign of a reset, `(a hang)`), the hung replay
+  named with the next one's restart (`(the first: list 0's end), and at replay 690: the GPU's clock
+  restarted (a hang)`), a sign without a stamp unwritten (`not a hang`), a restart after a span with
+  no GPU work said and not counted (measured, and by the notes alone), the tally's hangs apart
+  (issue 123's block of three hangs and the 197 ms present after them: `4 in the block, 3 of them
+  hangs ... and 1 other`), the block's cap (350, the 351st and 352nd left out and said), the
+  submissions around a stall word for word (issue 123's first: the scene's submission holding the
+  first unwritten stamp, the present's list, the stalled present's own, `1 seen, 3 not known`), a
   short buffer, the pressure and status parsers (`VmSwap` read past `RssShmem`, absent from a
   status without it), the driver's thread names (CPU only).
 - `sys_cell_test.c` (ctest `sys_cell`): the log thread's last-value cell (`port/platform/

@@ -719,7 +719,7 @@ static bool vkr_submit_batch(VkrFrame *f, const VkCommandBuffer *cbs, uint32_t c
     vkr_late_add(&g_vkr.late.submits, 1u);
     f->waitValue = value;
     vkr_note_submit(f, value, count, forPresent);
-    vkr_tsclock_note_submit(f, value);
+    vkr_tsclock_note_submit(f, value, count, forPresent);
     return true;
 }
 
@@ -779,6 +779,7 @@ void rhi_submit(RhiCommandList cl)
     }
     if (stamped) {
         __atomic_add_fetch(&f->tsListsSubmitted, 1u, __ATOMIC_RELAXED);
+        vkr_tsclock_note_stamps(f, c->tsWritten); /* and the submission's own (rhi.h sub) */
     }
 }
 

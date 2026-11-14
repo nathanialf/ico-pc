@@ -17,9 +17,16 @@
  *     second before: rising); thermal headroom 0.80; coincided with: memory
  *     under the floor, memory pressure rising
  * and at each 10 s block, beside the attempt ledger:
- *   stalls by what coincided: 3 in the block (a core wait over 100 ms 1,
- *     memory under the floor 3, memory pressure rising 0, the GPU clock
- *     low 0 (not readable), the GPU's own sign of a reset 0, none of these 0)
+ *   stalls by what coincided: 3 in the block, 0 of them hangs (the GPU's
+ *     own sign of a reset with a stamp unwritten) and 3 other; all 3 by
+ *     class: a core wait over 100 ms 1, memory under the floor 3, memory
+ *     pressure rising 0, the GPU clock low 0 (not readable), the GPU's own
+ *     sign of a reset 0, none of these 0
+ * Issue 123 (the Adreno 740's hangs): the line names the hung replay's
+ * stamps and the submissions around the stall (which one held the first
+ * unwritten stamp, each one's submit and signal from the stall's start),
+ * a counter restart after a span with no GPU work is said and not counted
+ * as a sign, and every stall of a block gets its line (STALL_BLOCK_LINES).
  * The rules, the medians, the parsers and the texts are pure
  * (port/platform/test/stall_coincide_test.c).
  */
@@ -60,14 +67,24 @@ double stall_medians_add(StallMedians *m, uint32_t key, double ms);
 /* a pass that is a stall: over STALL_PASS_TIMES its median (known, above
    0) and over STALL_PASS_MS */
 bool stall_pass_spike(double ms, double median);
-/* the GPU's sign of a reset in one replay's record: stamps unwritten after
-   its work was signalled finished, its first list run twice, or the
-   timestamp counter gone back */
-bool stall_reset_sign(unsigned stampsMissing, bool ranTwice, uint64_t clockBackNs);
+
+/* The per-stall lines a block writes (issue 123: v0.11.6's run-wide cap of
+   8 left the reporter's stalls 9-13 with block tallies alone): every stall
+   of a 10 s block (hotkeys.h ICO_STATS_PERIOD_NS, the blocks' period) up
+   to STALL_BLOCK_LINES, the most the detector can count in one: a present
+   stall holds the present for over STALL_PRESENT_MS and a pass stall the
+   GPU for over STALL_PASS_MS, each on its own timeline, so at most
+   10000 / 100 + 10000 / 40 = 350.  Past it (a block that ran longer) the
+   tally says how many were left out */
+#define STALL_LINES_BLOCK_MS 10000.0
+#define STALL_BLOCK_LINES                                                                          \
+    ((unsigned)(STALL_LINES_BLOCK_MS / STALL_PRESENT_MS) +                                         \
+     (unsigned)(STALL_LINES_BLOCK_MS / STALL_PASS_MS))
 
 /* What the samples said at a stall: -1 (or < 0) where not known */
 #define STALL_WAIT_THREADS 5 /* game, render, submit, SDL audio, system audio */
 #define STALL_DRIVERS 4
+#define STALL_SUBS 8 /* submissions named at a stall: two a replay over the three (rd_perf_sub.h) */
 
 typedef struct StallMoment {
     int gameCore, renderCore;
@@ -84,15 +101,52 @@ typedef struct StallMoment {
     double some10, full10, some10Before;
     double headroom;       /* < 0 not known */
     int gpuMhz, gpuMaxMhz; /* < 0 not readable */
-    /* the GPU's own sign of a reset (rd_perf_clock.h, the record of the
-       stalled replay or the two before it): its recorded stamps came back
-       unwritten after its work was signalled finished (stampsMissing of
-       them), it ran its first list twice, or the GPU's timestamp counter went
-       back (restarted); resetReplay the replay that showed it, 0 none */
+    /* the GPU's own sign of a reset (rd_perf_clock.h rd_perf_reset_sign,
+       the records of the stalled replay and the two before it): the newest
+       record with a sign counted (resetReplay, 0 none) and its kind: it ran
+       its first list twice, or the GPU's timestamp counter went back
+       (restarted) with the GPU kept busy before it; and the newest with
+       recorded stamps that came back unwritten after its work was
+       signalled finished (hangReplay, 0 none: stampsMissing of them, the
+       first named in firstMissing): a hang, the class the tally counts
+       apart */
     uint32_t resetReplay;
-    unsigned stampsMissing;
     bool ranTwice, clockBack;
+    uint32_t hangReplay;
+    unsigned stampsMissing;
+    char firstMissing[48];
+    /* a counter restart after a span with no GPU work (a pause, a capture,
+       the app away): not a sign; idleReplay 0 none, idleMs the span where
+       measured (-1: the game's note of a span not presenting alone) */
+    uint32_t idleReplay;
+    double idleMs;
+    /* the submissions around the stall (rd_perf_sub.h, the records of the
+       stalled replay and the two before it; window_stall.c): subs of them,
+       their times relative to the stall's start */
+    unsigned subs;
+
+    struct StallSub {
+        uint32_t replay;
+        uint8_t index, of; /* 1-based in its replay's submissions, of them */
+        uint8_t lists;     /* command lists (0: an empty batch) */
+        uint8_t present;   /* it signals its replay's present's semaphore */
+        uint8_t stalledOn; /* the stalled present is its replay's: that present waits on it */
+        uint8_t hung;      /* it holds its replay's first unwritten stamp */
+        uint8_t named;     /* the contents below are known (a stalled replay's verdict) */
+        uint8_t presentStamps;
+        int8_t listLo, listHi; /* game lists whose ends it carries (-1 none) */
+        uint16_t pieces, stamps, missing;
+        double submitMs; /* relative to the stall's start (under 0: before it) */
+        /* its signal: kind 1 seen at signalMs (its slot's wait's end), 2 at
+           or before signalMs (that wait's start: it had finished), 3 at or
+           before its replay's last submission's (signalMs that one's, kind
+           1 or 2 there), 0 not known */
+        uint8_t signalKind;
+        double signalMs;
+    } sub[STALL_SUBS];
 } StallMoment;
+
+typedef struct StallSub StallSub;
 
 /* the moment's coincidence classes (bits 1 << STALL_CLASS_*);
    NONE alone when no other holds */
@@ -101,7 +155,7 @@ enum {
     STALL_CLASS_MEMORY,   /* memory under the floor */
     STALL_CLASS_PRESSURE, /* memory pressure rising (some avg10 above the second before's) */
     STALL_CLASS_GPU,      /* the GPU clock under STALL_GPU_LOW of its fastest, where readable */
-    STALL_CLASS_RESET,    /* the GPU's own sign of a reset (resetReplay set: issue 123's hangs) */
+    STALL_CLASS_RESET,    /* the GPU's own sign of a reset (resetReplay or hangReplay set) */
     STALL_CLASS_NONE,
     STALL_CLASSES
 };
@@ -112,11 +166,17 @@ typedef struct StallTally {
     unsigned stalls;
     unsigned cls[STALL_CLASSES];
     bool gpuReadable; /* a moment had the GPU's clock */
+    unsigned hangs;   /* of stalls, those with a hang (StallMoment.hangReplay) */
+    /* the block's per-stall lines written and left out (stall_tally_line_due) */
+    unsigned written, leftOut;
 } StallTally;
 
 void stall_tally_add(StallTally *t, const StallMoment *m);
-/* "stalls by what coincided: 3 in the block (...)" (after "window: "); the
-   length written */
+/* whether a stall's own line is written: the block's first
+   STALL_BLOCK_LINES (written counts them), past it leftOut */
+bool stall_tally_line_due(StallTally *t);
+/* "stalls by what coincided: 4 in the block, 3 of them hangs (...) and 1
+   other; all 4 by class: ..." (after "window: "); the length written */
 size_t stall_tally_text(const StallTally *t, char *out, size_t cap);
 /* the moment's part after "at that moment: " and its classes; the length
    written */

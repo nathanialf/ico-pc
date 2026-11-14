@@ -358,8 +358,9 @@ ladder evidence (so no `[dev]` key written by the ladder) and its own line. Skip
   byte, what the slot's readback held from its previous check (check 0 of a slot, the one whose
   bytes are kept: `SkSlot.prev`). All three of the log's checks are this.
 - **Reset.** The newest replay whose record showed the GPU's own sign of a reset (`rd_perf.c`
-  `rd__perf_collect_gpu`, the stall line's test `stall_reset_sign`: a stamp never written, the first
-  list run twice, the counter gone back; passed as the skin check's replay number by
+  `rd__perf_collect_gpu`, the stall lines' test `rd_perf_reset_counted` in `rd_perf_clock.h`: a
+  stamp never written, the first list run twice, the counter gone back with the GPU kept busy, not
+  a counter restart after a span with no GPU work; passed as the skin check's replay number by
   `rd__vu_skin_reset_seen`) lies in the readback's span: from the slot's previous check (whose bytes
   the readback held until this check's copy; without one, 2 replays before the check) to 2 replays
   after the check. 2 is `RHI_FRAMES_IN_FLIGHT`: a check is read 2 replays after its record (its

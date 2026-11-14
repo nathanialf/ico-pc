@@ -50,6 +50,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "rd_perf_sub.h"
 #include "rhi.h"
 
 /* a wait at least this long with a trace gets the line */
@@ -111,5 +112,61 @@ uint32_t rd_perf_clock_due(RdPerfClockLines *l, const RdPerfClockVerdict *v);
 
 /* The line (without "rd: ") into buf; returns snprintf's count. */
 int rd_perf_clock_text(const RdPerfClockIn *in, const RdPerfClockVerdict *v, char *buf, size_t n);
+
+/* The GPU's own sign of a reset in one replay's record (issue 123), the one
+ * test the window's stall lines (port/platform/window_stall.c) and the skin
+ * check's span (rd_perf.c, rd_vu_skin_check.h rd__skin_skip) both read
+ * (RdPerfRecord.gpuResetSign):
+ *   HANG     recorded stamps came back unwritten after its work was
+ *            signalled finished (every one of issue 123's 13 hangs in its
+ *            v0.11.6 log: the first unwritten list 0's end);
+ *   TWICE    its first list ran a second time (the polled wait's fall);
+ *   RESTART  the timestamp counter went back with the GPU kept busy
+ *            before it (the replay queued before the one before ended, or
+ *            nothing says it was idle);
+ *   IDLE     the counter went back after a span with no GPU work submitted
+ *            (idle 1: rd_perf_idle): an idle GPU's counter restarts on this
+ *            driver (seven of them at issue 123's start-up, and its
+ *            reporter's own capture at the v0.11.6 log's :2736): not a sign.
+ * In that order of precedence; NONE without any of them. */
+enum { RD_RESET_NONE = 0, RD_RESET_HANG, RD_RESET_TWICE, RD_RESET_RESTART, RD_RESET_IDLE };
+
+int rd_perf_reset_sign(unsigned missing, bool ranTwice, uint64_t backNs, int idle);
+/* HANG, TWICE and RESTART: the signs counted */
+bool rd_perf_reset_counted(int sign);
+
+/* Whether the GPU had no work before a replay (rd_perf_reset_sign's idle):
+ * firstSubmitMs this replay's first submit; prevEndMs the replay before's
+ * end as its slot's wait saw it (prevExact: the wait's end, at or after
+ * the GPU's end; else the wait's start, which the GPU's end came at or
+ * before), both on the CPU's clock (0 not known); prevAdjacent: the replay
+ * before is this one less one; noted: a span the game was not presenting
+ * since the replay before's end (rd.h rd_perf_idle_note).  1 idle: this
+ * first submit after that end (*idleMs at least the gap), or, where the
+ * times cannot say (the bound past this submit, or not known), a note
+ * (*idleMs -1); 0 busy: this replay queued before the replay before's
+ * exact end, or nothing says idle (*idleMs 0). */
+typedef struct RdPerfIdleIn {
+    double firstSubmitMs, prevEndMs;
+    bool prevExact, prevAdjacent, noted;
+} RdPerfIdleIn;
+
+int rd_perf_idle(const RdPerfIdleIn *in, double *idleMs);
+
+/* The stamp indices that name a submission's contents (rd_internal.h
+ * RD_PERF_TS_*): list l's end at list0 + l (lists of them), the timed
+ * pieces' from pass0 on, the present's two */
+typedef struct RdPerfSubMap {
+    uint32_t list0, lists, pass0, present0, present1;
+} RdPerfSubMap;
+
+/* The replay's submissions from the slot's clock (rhi.h
+ * RhiTimestampClock.sub) into out (cap of them): each one's time after the
+ * first submit, lists and present signal always (a few stores a replay);
+ * with named (a stalled replay's verdict v) its game lists' ends, pieces,
+ * stamps and those unwritten.  Returns the 1-based submission holding the
+ * verdict's first unwritten stamp (0: none, or not among those kept). */
+uint32_t rd_perf_subs_judge(const RdPerfClockIn *in, const RdPerfClockVerdict *v,
+                            const RdPerfSubMap *map, bool named, RdPerfSub *out, uint32_t cap);
 
 #endif /* RD_PERF_CLOCK_H */

@@ -76,6 +76,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "rd_perf_sub.h"
 #include "rd_state.h"
 
 #ifdef __cplusplus
@@ -3361,6 +3362,25 @@ typedef struct RdPerfRecord {
      * 1; an upper bound when it had finished before, 2; 0 not known) */
     double gpuSlotWaitMs, gpuDoneMs;
     uint8_t gpuDoneValid;
+    /* The GPU's own sign of a reset in this record (rd_perf_clock.h
+     * rd_perf_reset_sign, issue 123; RD_RESET_*): its stamps unwritten, its
+     * first list run twice, its counter gone back with the GPU kept busy,
+     * or gone back after a span with no GPU work (a pause, a capture, the
+     * app away: not a sign; gpuIdleMs the span where measured, -1 noted
+     * only).  The skin check's span and the window's stall lines read it */
+    uint8_t gpuResetSign;
+    double gpuIdleMs;
+    /* The replay's submissions (rd_perf_sub.h, issue 123): its first
+     * submit and the slot's last submission's signal as the recycle's wait
+     * saw it (gpuSignalMs: the wait's end with gpuDoneValid 1, its start, a
+     * bound, with 2), rd's clock, 0 not known; the submissions made
+     * (gpuSubAll) and kept (gpuSubN), and the one holding the first
+     * unwritten stamp (gpuSubHung, 1-based; 0 none), named
+     * (gpuFirstMissing) for a stalled replay */
+    double gpuFirstSubmitMs, gpuSignalMs;
+    uint8_t gpuSubN, gpuSubAll, gpuSubHung;
+    RdPerfSub gpuSub[RD_PERF_SUBS];
+    char gpuFirstMissing[48];
     /* the attachment memory the replay's render passes asked a tile-based
      * GPU to move (rhi_traffic.h, RhiStats.pass*Bytes): colour and
      * depth-stencil loaded and stored, cleared in tile memory, the
@@ -3423,6 +3443,12 @@ typedef struct RdPerfRecord {
 /* The oldest finished record not yet popped (a queue of 64; the oldest are
  * dropped when nobody pops); false when there is none. */
 bool rd_perf_pop(RdPerfRecord *out);
+/* A span the game was not presenting (the window's notes, port/ui/ui_fps.h
+ * ui_fps_gap: the app back in the foreground, a pause of the host, a
+ * capture): a timestamp counter that went back across it is the GPU idle,
+ * not a sign of a reset (rd_perf_clock.h rd_perf_reset_sign; issue 123's
+ * capture at its log's :2736).  One atomic add; any thread. */
+void rd_perf_idle_note(void);
 /* "; Direct3D 11 submits wrote N KB to the GPU": the mean backendWriteBytes
  * a record of those rd_perf_pop handed out since the last call, "" when
  * they wrote none (every other backend); the count starts again.  The

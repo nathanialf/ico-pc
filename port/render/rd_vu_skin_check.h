@@ -461,8 +461,9 @@ uint64_t rd__vu_skin_ring_bytes(void);
 void rd__vu_skin_block(void);
 /* rd_perf.c rd__perf_collect_gpu: the replay (g_rd.replayCounter's number
  * at its end) whose record showed the GPU's own sign of a reset (the stall
- * line's test, stall_coincide.h stall_reset_sign: a stamp never written,
- * the first list run twice, the counter gone back); the newest is kept for
+ * lines' test, rd_perf_clock.h rd_perf_reset_counted: a stamp never
+ * written, the first list run twice, the counter gone back with the GPU
+ * kept busy; not a restart after a span with no GPU work); the newest is kept for
  * rd__skin_skip.  0 forgets it (the tests).  The replay's thread. */
 void rd__vu_skin_reset_seen(uint32_t replay);
 /* rd_shutdown */

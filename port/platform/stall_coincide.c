@@ -50,11 +50,6 @@ double stall_medians_add(StallMedians *m, uint32_t key, double ms)
     return median;
 }
 
-bool stall_reset_sign(unsigned stampsMissing, bool ranTwice, uint64_t clockBackNs)
-{
-    return stampsMissing != 0 || ranTwice || clockBackNs != 0;
-}
-
 bool stall_pass_spike(double ms, double median)
 {
     return median > 0.0 && ms > STALL_PASS_TIMES * median && ms > STALL_PASS_MS;
@@ -79,7 +74,7 @@ unsigned stall_classes(const StallMoment *m)
     if (m->gpuMhz > 0 && m->gpuMaxMhz > 0 && (double)m->gpuMhz < STALL_GPU_LOW * m->gpuMaxMhz) {
         bits |= 1u << STALL_CLASS_GPU;
     }
-    if (m->resetReplay != 0) {
+    if (m->resetReplay != 0 || m->hangReplay != 0) {
         bits |= 1u << STALL_CLASS_RESET;
     }
     return bits ? bits : 1u << STALL_CLASS_NONE;
@@ -93,6 +88,17 @@ void stall_tally_add(StallTally *t, const StallMoment *m)
         t->cls[c] += (bits >> c) & 1u;
     }
     t->gpuReadable = t->gpuReadable || m->gpuMhz > 0;
+    t->hangs += m->hangReplay != 0 ? 1u : 0u;
+}
+
+bool stall_tally_line_due(StallTally *t)
+{
+    if (t->written < STALL_BLOCK_LINES) {
+        t->written++;
+        return true;
+    }
+    t->leftOut++;
+    return false;
 }
 
 typedef struct Out {
@@ -128,18 +134,95 @@ size_t stall_tally_text(const StallTally *t, char *out, size_t cap)
     if (t->stalls == 0) {
         return o.at;
     }
+    /* the hangs apart (a stamp unwritten: as many as the renderer's "GPU
+       clock" stall lines with "came back unwritten" in the block) */
+    put(&o,
+        ", %u of them hangs (the GPU's own sign of a reset with a stamp unwritten) and %u "
+        "other; all %u by class: ",
+        t->hangs, t->stalls - t->hangs, t->stalls);
     for (int c = 0; c < STALL_CLASSES; c++) {
-        put(&o, "%s%s %u", c ? ", " : " (", k_class[c], t->cls[c]);
+        put(&o, "%s%s %u", c ? ", " : "", k_class[c], t->cls[c]);
         if (c == STALL_CLASS_GPU && !t->gpuReadable) {
             put(&o, " (not readable)");
         }
     }
-    put(&o, ")");
+    if (t->leftOut > 0) {
+        put(&o, "; %u stall lines left out (the block's first %u written)", t->leftOut, t->written);
+    }
     return o.at;
 }
 
 static const char *const k_who[STALL_WAIT_THREADS] = {"game", "render", "submit", "SDL audio",
                                                       "system audio"};
+
+/* the submissions around a stall (StallMoment.sub): each one's replay and
+   place, what it held where known, its submit and its signal from the
+   stall's start; then those in flight at the start */
+static void subsText(Out *o, const StallMoment *m)
+{
+    if (m->subs == 0) {
+        return;
+    }
+    unsigned seen = 0, maybe = 0;
+    put(o, "; the submissions around it (from the stall's start):");
+    for (unsigned k = 0; k < m->subs && k < STALL_SUBS; k++) {
+        const StallSub *s = &m->sub[k];
+        put(o, "%s replay %u's %u of %u (", k ? ";" : "", s->replay, s->index, s->of);
+        if (s->lists == 0) {
+            put(o, "an empty batch");
+        } else if (s->named && s->listLo >= 0) {
+            put(o, "lists %d-%d", s->listLo, s->listHi);
+        } else if (s->named && s->presentStamps) {
+            put(o, "the present's list");
+        } else {
+            put(o, "%u list%s", s->lists, s->lists == 1 ? "" : "s");
+        }
+        if (s->named && s->pieces > 0) {
+            put(o, ", %u pieces", s->pieces);
+        }
+        if (s->present) {
+            put(o, "%s",
+                s->stalledOn ? ", the stalled present waits on it"
+                             : ", its replay's present waits on it");
+        }
+        if (s->named) {
+            if (s->missing > 0) {
+                put(o, "; %u stamps, %u unwritten", s->stamps, s->missing);
+            } else {
+                put(o, "; %u stamps, all written", s->stamps);
+            }
+        }
+        if (s->hung) {
+            put(o, "; it holds the first unwritten stamp");
+        }
+        put(o, ") submitted at %+.1f ms, ", s->submitMs);
+        bool known = false, flight = false;
+        if (s->signalKind == 1) {
+            put(o, "signalled at %+.1f ms (the slot's wait's end)", s->signalMs);
+            known = true;
+            flight = s->submitMs <= 0.0 && s->signalMs > 0.0;
+        } else if (s->signalKind == 2) {
+            put(o, "signalled at or before %+.1f ms (finished when the slot's wait began)",
+                s->signalMs);
+            known = s->signalMs <= 0.0;
+        } else if (s->signalKind == 3) {
+            put(o, "signalled at or before %+.1f ms (its replay's last's; not seen apart)",
+                s->signalMs);
+            known = s->signalMs <= 0.0;
+        } else {
+            put(o, "its signal not known");
+        }
+        if (s->submitMs > 0.0) {
+            continue; /* made after the stall began */
+        }
+        if (flight) {
+            seen++;
+        } else if (!known) {
+            maybe++;
+        }
+    }
+    put(o, "; in flight at the stall's start: %u seen, %u not known", seen, maybe);
+}
 
 size_t stall_moment_text(const StallMoment *m, char *out, size_t cap)
 {
@@ -207,22 +290,42 @@ size_t stall_moment_text(const StallMoment *m, char *out, size_t cap)
             put(&o, " of %d", m->gpuMaxMhz);
         }
     }
-    if (m->resetReplay != 0) {
-        put(&o, "; the GPU's own sign of a reset at replay %u:", m->resetReplay);
-        const char *in = " ";
-        if (m->stampsMissing) {
-            put(&o, "%s%u stamps came back unwritten after its work was signalled finished", in,
+    if (m->hangReplay != 0 || m->resetReplay != 0) {
+        put(&o, "; the GPU's own sign of a reset at replay %u:",
+            m->hangReplay != 0 ? m->hangReplay : m->resetReplay);
+        if (m->hangReplay != 0) {
+            put(&o, " %u stamps came back unwritten after its work was signalled finished",
                 m->stampsMissing);
-            in = ", ";
+            if (m->firstMissing[0] != '\0') {
+                put(&o, " (the first: %s)", m->firstMissing);
+            }
         }
-        if (m->ranTwice) {
+        if (m->resetReplay != 0 && m->hangReplay != 0) {
+            put(&o, ", and at replay %u:", m->resetReplay);
+        }
+        const char *in = " ";
+        if (m->resetReplay != 0 && m->ranTwice) {
             put(&o, "%sits first list ran twice", in);
             in = ", ";
         }
-        if (m->clockBack) {
+        if (m->resetReplay != 0 && m->clockBack) {
             put(&o, "%sthe GPU's clock restarted", in);
         }
+        if (m->hangReplay != 0) {
+            put(&o, " (a hang)");
+        } else {
+            put(&o, " (not a hang: no stamp unwritten in the stalled replay or the two before it)");
+        }
+    } else if (m->idleReplay != 0) {
+        put(&o, "; the GPU's clock restarted at replay %u ", m->idleReplay);
+        if (m->idleMs >= 0.0) {
+            put(&o, "after %.1f ms with no GPU work", m->idleMs);
+        } else {
+            put(&o, "after a span the game was not presenting (a pause, a capture, the app away)");
+        }
+        put(&o, ": not a sign of a reset");
     }
+    subsText(&o, m);
     const unsigned bits = stall_classes(m);
     const char *sep = "; coincided with: ";
     for (int c = 0; c < STALL_CLASSES; c++) {

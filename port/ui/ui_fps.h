@@ -45,7 +45,9 @@ void ui_fps_present(void);
 /* the game was not presenting for a while (window_host.c: the app back in
    the foreground, a pause of the host such as a swapchain made again, a
    capture written): the next tick starts the counter's second again and
-   keeps the number shown (fps_counter.h fps_gap).  Any thread. */
+   keeps the number shown (fps_counter.h fps_gap); the renderer is told
+   too (rd.h rd_perf_idle_note: a GPU counter restart across the gap is not
+   a sign of a reset).  Any thread. */
 void ui_fps_gap(void);
 
 /* The counter on the output (ui_host.c's top overlay callback, when the

@@ -20,6 +20,8 @@ screen recording the app's Java side reports. The window's lines that use them a
 | `port/rhi/vk/vk_tsclock.c`, `vk_range.c` | the slot's clock (submit times, calibrated timestamps, the polled wait's trace) and the ranges robust access does not cover (`rhi_vk`) |
 | `android/app/src/main/java/com/defnf/icopc/IcoActivity.java` | the thermal getters and the two listeners |
 | `port/platform/attempt_ledger.c`, `attempt_ledger.h` | the attempt ledger's rows and lines, in `ico_thread` so the renderer and the window both count into it (`attempt_ledger_test`, every platform; [The attempt ledger](#the-attempt-ledger)) |
+| `port/platform/present_latency.c`, `present_latency.h` | the present's latency in a block and the queue's priority (`present_latency_test`, every platform; [The present latency line](#the-present-latency-line)) |
+| `port/render/rd_perf_sub.h` | a replay's submissions as its record carries them (the per-stall line's, issue 123) |
 | `port/platform/stall_coincide.c`, `stall_coincide.h` | what a stall coincided with: the pass medians, the rule, the classes, the parsers of `/proc/pressure/memory` and `/proc/self/status`, the lines (`stall_coincide_test`, every platform; [What a stall coincided with](#what-a-stall-coincided-with)) |
 | `port/render/rd_perf_more.c`, `rd_perf_more.h` | the cost counters' block sums and the costs and compare lines (`rd_perf_more_test`, every platform; [The cost counters](#the-cost-counters)) |
 | `port/render/rd_perf_hooks.c`, `rd_perf_hooks.h` | the cost counters' increments: SCENE's pass breaks, the two-pass blend, the screen boxes by list |
@@ -1899,11 +1901,30 @@ repository).
   the block` and the clause `; stalls N in the block (the Adreno attempt on, high queue priority
   granted)`. The ledger counts every stall (presents that blocked and passes over the limit, with
   or without the reset sign: 15 in the first attempt's log's 34 blocks, 13 of them the hang with `list 0's end`
-  first unwritten in the `rd: GPU clock:` lines); the `window: stall:` lines and their tally's
-  `the GPU's own sign of a reset N` count the reset ones (15 in that log: the sign also fired on an
-  idle pause).
-  About as many with the sign says preemption is not the trigger; none in a session as long says
-  it was.
+  first unwritten in the `rd: GPU clock:` lines). The tally beside it counts the hangs
+  apart (`window: stalls by what coincided: N in the block, H of them hangs (the GPU's own sign
+  of a reset with a stamp unwritten) and O other; ...`): H summed over the blocks is the number to
+  set against the 13. About as many hangs says preemption is not the trigger; none in a session as
+  long says it was. The present latency line's last clause names the priority the queue got
+  ([The present latency line](#the-present-latency-line)).
+- **Which submission hangs (diagnostics only).** A presenting picture is two submissions
+  (`rd_submit.c`): the scene's list (the uploads, the VU pre-pass where it runs, lists 0-12 and
+  their pieces) and the present's own list, which signals the present's semaphore. The renderer
+  keeps each submission's submit time, its lists and the stamps it recorded (`rhi.h`
+  `RhiTimestampClock.sub`: stores at each submit, no Vulkan call), and the per-stall line names
+  them: `the submissions around it (from the stall's start): replay 2074's 1 of 2 (lists 0-12, 23
+  pieces; 25 stamps, 20 unwritten; it holds the first unwritten stamp) submitted at -21.5 ms,
+  signalled at or before +365.4 ms (its replay's last's; not seen apart); replay 2074's 2 of 2 (the
+  present's list, its replay's present waits on it; 5 stamps, all written) submitted at -21.1 ms,
+  signalled at +365.4 ms (the slot's wait's end); ...; in flight at the stall's start: S seen, U not
+  known`. What stays unknown: no submission's own signal is read (that would be a Vulkan call on the
+  hot path); the slot's last submission's is the recycle wait's end where it blocked, an earlier
+  one's is only bounded by it (the port's counter is reached in submission order), and the GPU's
+  own start of each is not seen on the single submission wait (no trace there). So the line says
+  which submission held the unwritten stamps and whether the present's own list ran after it (its
+  stamps written), not when the hung one gave up. If the hung submission is always the scene's,
+  the next release can split list 0 into a submission of its own (not shipped: the owner's
+  decision, 2026-11-14) and this line says where the next hang lands.
 
 ## The stall and logging lines (issues 123 and 179)
 
@@ -2092,9 +2113,10 @@ counter is an increment in a hot path, and none of them reads anything from the 
 | Mali: the game, render and both audio threads on the two fast cores | Where do the threads run, and does audio keep up on the slow cores? | `window: render thread cores: ...` (the few-cores rule's sets and moves); the game thread line's `ran / waited for a core: game ..., render ..., submit ..., SDL audio ..., system audio ...` and after it `; run time on the faster cores 6-7: submit N % of T s, SDL audio ..., system audio ..., <the driver's threads> ..., pipeline workers ...` ([The faster cores' share of run time](#the-faster-cores-share-of-run-time)); `audio: ... ms of silence (... ms held back behind the game) ...; the sound chip's emulation E ms a callback on average (longest L ms; R renders) against the device's period of P ms`; and the ledger's `few-cores rule on N threads moved` |
 | Few-core phones: start-up of 62.2 s (51.2 s of it pipelines, cold cache) | How long does the pipeline set take, on which cores, and with how much CPU time? | `rd: pipelines: N of the reachable set's M created at start-up in T ms ...` (wall time), followed by `window: pipeline set: made in T s ...; its N workers on every core ... while it ran ...; the process's CPU time C s over it (B cores busy on average)` |
 | Adreno 740 hangs | Did this release's attempt run, and how many stalls were there with it on? | The start lines that name the hung draw (`rd: GPU clock: ...`); the attempt ledger's row `Qualcomm passes as VkRenderPass objects on (<the row's reason>) N passes` (`not applicable here (not Qualcomm's own driver)` elsewhere, Turnip included); the ledger line's `; stalls N in the block (the Adreno attempt on)`; and each stall's `coincided with: ..., the GPU's own sign of a reset` with the tally's `the GPU's own sign of a reset N` |
-| Adreno 740 hangs (unchanged by the `VkRenderPass` path) | Did high queue priority change the stall rate? | The start's `rhi_vk: queue priority: high, asked and granted (...)` (or `refused (VkResult N, ...)`: the attempt did nothing) and the offer line's `the game's one queue made at priority 1.0 with global priority high asked and granted (...)`; the attempt ledger's `Qualcomm queue at high priority on (...)` at the start and `Qualcomm queue at high priority on N stalls in the block` in each block with the clause `; stalls N in the block (the Adreno attempt on, high queue priority granted)`, summed over the log's blocks against the first attempt's log's 15 stalls in 34 blocks (13 of them the hang, `rd: GPU clock:` with `list 0's end` first unwritten; the tally's `the GPU's own sign of a reset` counted 15, as it also fired on an idle pause) |
+| Adreno 740 hangs (unchanged by the `VkRenderPass` path) | Did high queue priority change the stall rate? | The start's `rhi_vk: queue priority: high, asked and granted (...)` (or `refused (VkResult N, ...)`: the attempt did nothing) and the offer line's `the game's one queue made at priority 1.0 with global priority high asked and granted (...)`; the attempt ledger's `Qualcomm queue at high priority on (...)` at the start and `Qualcomm queue at high priority on N stalls in the block` in each block with the clause `; stalls N in the block (the Adreno attempt on, high queue priority granted)`, summed over the log's blocks against the first attempt's log's 15 stalls in 34 blocks (13 of them the hang, `rd: GPU clock:` with `list 0's end` first unwritten; the tally's `the GPU's own sign of a reset` counted 15, as it also fired on an idle pause). Then the tally's `H of them hangs` summed over the blocks against the 13 (a restart after a pause is not counted), every stall with its own `window: stall:` line ending its sign `(a hang)`, and each block's `window: present latency in the block: ...; the queue's priority: high, granted` with its `after its end (the display's)` part (a compositor delayed behind the game) |
 | Pixel under Uncapped at 120 Hz: motion sped up and slowed (pictures shown a mix of one and two refreshes apart) | Which moment is drawn for each picture, and how many land on the refresh predicted for them? | The attempt ledger's `in-between pictures for the screen's refresh on (...) N pictures placed` and `in-between pictures on their own timer on (Android: ...)`; the `on the glass` line's `drawn (the screen's predicted refresh)` measure (its deviation and its share above 1.5) and its clause's `the refresh predicted against the one shown over S pictures: H on it (P %)` with the reasons a picture was `drawn as otherwise` ([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#the-on-glass-line)) |
-| Adreno 740: three skin-check `wrong` verdicts right after 400 ms stalls with the GPU's own sign of a reset, each reading the readback's bytes from an earlier check (`not written again`); the first started the run's capture (44 ms on the game thread, about 1 s on the worker), and more stalls followed | Do the stall clusters remain without the captures? | The attempt ledger's row `no capture after a stall on (a skin check read after a GPU reset is skipped, not captured) N checks skipped after a reset` in the block that holds the stalls, the ledger line's `; stalls N in the block`, each skipped check's `rd: VU skin check: frame F command L:I ...: skipped after a reset: WHY; ...` and the 10 s `rd: VU skin check: P checks, W wrong, K skipped after a reset, ...`; no `VU skin check: captured` or `window: skin-check capture:` line after a stall; then whether `window: stall:` lines still come in clusters a few replays apart ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md#skipped-after-a-reset)) |
+| Adreno 740: three skin-check `wrong` verdicts right after 400 ms stalls with the GPU's own sign of a reset, each reading the readback's bytes from an earlier check (`not written again`); the first started the run's capture (44 ms on the game thread, about 1 s on the worker), and more stalls followed | Do the stall clusters remain without the captures? | The attempt ledger's row `no capture after a stall on (a skin check read after a GPU reset is skipped, not captured) N checks skipped after a reset` in the block that holds the stalls, the ledger line's `; stalls N in the block`, each skipped check's `rd: VU skin check: frame F command L:I ...: skipped after a reset: WHY; ...` and the 10 s `rd: VU skin check: P checks, W wrong, K skipped after a reset, ...`; no `VU skin check: captured` or `window: skin-check capture:` line after a stall; then whether `window: stall:` lines still come in clusters a few replays apart ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md#skipped-after-a-reset)). Every stall of a block has its line (up to 350 a block; the tally says how many were left out past it), so a cluster's members are each named with their replay and `(a hang)` or `(not a hang: ...)`, and the tally's `H of them hangs` per block shows whether the hangs themselves come in clusters or only the presents after them |
+| Adreno 740: every hang's first unwritten stamp is `list 0's end`, the present's own list's stamps written after it | Which submission hangs, and was the present waiting on it? | Each `window: stall:` line's clause `the submissions around it (from the stall's start): replay R's K of N (lists 0-12, P pieces; S stamps, U unwritten; it holds the first unwritten stamp) submitted at -T ms, signalled at or before +T ms ...; replay R's 2 of 2 (the present's list, ...; S stamps, all written) ...; replay R+1's 2 of 2 (1 list, the stalled present waits on it) ...; in flight at the stall's start: S seen, U not known`: the submission index that holds the first unwritten stamp across the hangs (always 1 of 2, the scene's, or not), whether the present's list after it ran (its stamps written), and how long before the stall each was submitted. The earlier submissions' own signals stay unknown (no Vulkan call reads them; the slot's last one's is its wait's end) ([Which submission hangs](#issue-123-the-hang-detector-and-the-pass-path)) |
 | Pixel opening: lamps, dark and sun views | What does each block cost, and which cut fired? | `window: compare: ...; GPU ms a picture: ...; glow plans: lamps N, dark N, whole N`, `passes` and `breaks` a picture, and the ledger line's per-cut fired counts |
 
 ### The attempt ledger
@@ -2107,12 +2129,17 @@ print it:
 
 - At the first 10 s block, and again whenever a state changes (the first 8 changes, then every
   100th): `window: attempts at the start: few-cores rule on (2 cores faster than the slowest);
-  pipeline set on every core on (2 cores faster than the slowest); capture in two steps on (the copy
-  into a block the dump worker made); flat outputs at the provoking corner on (every device and
-  backend); one DATE set-up not reported; ...`
+  pipeline set on every core on (2 cores faster than the slowest); slow-scene capture in two steps
+  on (the copy into a block the dump worker made); flat outputs at the provoking corner on (every
+  device and backend with the VU pre-pass); one DATE set-up not reported; ...`. The line is
+  written in parts that each fit the window's 4 KB buffer (`ico_attempt_start_part`): whole rows
+  each, the second part beginning `window: attempts at the start (continued): ...`. With the
+  25 rows the longest each row's reason can be (its decider's words, the device's own: the pass
+  row's 162 bytes, the subpass probe's 255) makes 3927 bytes, so one line today; the parts keep a
+  later row from cutting the line.
 - In every block: `window: attempts: few-cores rule on 3 threads moved; pipeline set on every core
-  on 0 workers (0 sets); capture in two steps on 1 captures (0 grown here); flat outputs at the
-  provoking corner on (static); ...; stalls 3 in the block`. Rows that are not reported are left
+  on 0 workers (0 sets); slow-scene capture in two steps on 1 slow-scene captures (0 grown here);
+  flat outputs at the provoking corner on (static); ...; stalls 3 in the block`. Rows that are not reported are left
   out. Where the Adreno row is reported, the stalls clause adds `(the Adreno attempt on)` or `off`,
   and with the high queue priority's row reported too `(the Adreno attempt on, high queue priority
   granted)` (`refused`, `not asked`).
@@ -2126,8 +2153,8 @@ thread can make it, hot paths included. The rows and where their states are set:
 | Row | State set by | Counted by |
 | --- | --- | --- |
 | few-cores rule, pipeline set on every core | `render_thread.c` `place_init` (`ico_attempt_decide_cores`: on with one or two faster cores and the pins allowed; not applicable with three or more, cores of one speed, or off Android) | the keeper's and the sweep's moves; the sets' workers |
-| capture in two steps | `window_perf_rank.c` at the first block (every platform) | `window_dump_auto.c` |
-| flat outputs at the provoking corner | `rd_vu_flat0.c` at the renderer's start | static |
+| slow-scene capture in two steps | `window_perf_rank.c` at the first block (every platform) | `window_dump_auto.c`: the slow-scene dumps alone (the second count those grown on the game thread). F12's dump and the skin check's capture are made another way and not counted (issue 123's log of 2026-11-14 said `0 captures` beside two of those, under the row's earlier name `capture in two steps`) |
+| flat outputs at the provoking corner | `rd_vu_flat0.c` at the renderer's start (`ico_attempt_decide_flat0`), and `window_perf_rank.c` every block with the pre-pass as it is then (`ico_attempt_flat0_reach`): `on (every device and backend with the VU pre-pass)`, `off by default (ICO_RD_VU_FLAT0=0: the tests' twins)`, `not applicable here (the VU pre-pass is off here: vu_main_vs, the shader it changes, draws only through the pre-pass's record)` where the pre-pass is off (the Adreno 740 on Qualcomm's own driver by its device table; a start whose self-test or record turned it off), which the row's earlier decider printed as `on` | static |
 | one DATE set-up | `rd_date_one.c` at each replay's scan (off by the tests' switch, not applicable under MSAA or the exact blend) | the window, from the record's `dateOneShared` and `dateOneRefused` |
 | empty composites skipped | `rd_shadow_box.c` at each replay's scan | the window, from `emptySkipped` |
 | no-volume break | `rd_no_volume.c` at each replay's scan: `on (the PowerVR D-Series DXT-48-1536)` on the device two phone release candidates showed clean with it, `off by default (shown clean only on the PowerVR D-Series DXT-48-1536's title and pause menu; not tried on this device)` on the rest of the PowerVR and MoltenVK class, `not applicable here (not the PowerVR or MoltenVK class under Vulkan)` elsewhere, or the other gates' reason (the DATE path, MSAA ...) with the class allowed | the window, from `noVolumeBreak` |
@@ -2200,7 +2227,12 @@ devices could take a sampled replay later.
 `port/platform/stall_coincide.h`. A stall is a timed replay's pass that runs over 8 times its
 block's median for that pass (the same kind, target and list, with at least 5 seen) and over 40 ms,
 or a present over 100 ms. Each stall writes one line from the last samples. Nothing is read from a
-file on the game or render thread for it:
+file on the game or render thread for it. Every stall of a 10 s block gets its line, up to 350 a
+block (`STALL_BLOCK_LINES`: 10 s over the shortest present stall, 100 ms, plus 10 s over the
+shortest pass stall, 40 ms, each on its own timeline: the most the detector can count in a block).
+Past it (a block that ran longer) the tally ends `; N stall lines left out (the block's first 350
+written)`. A run-wide cap of 8 lines left issue 123's stalls 9-13 of its log of 2026-11-14 in its
+tallies alone:
 
 `window: stall: list 0 912x512 283.3 ms against the block's median 48.0 ms (replay 2709, GPU span
 411.4 ms); at that moment: the game thread on core 6 (909 MHz), the render thread on core 7 (1443
@@ -2230,14 +2262,67 @@ poll apart, and the replay's GPU span. How long the present held past that span 
 - **The classes** (`coincided with:`): a core wait over 100 ms in the last second, memory under
   the floor, memory pressure rising (some avg10 above the reading before), the GPU clock under half
   its fastest (where readable), the GPU's own sign of a reset, or none of these. Each block,
-  beside the attempt ledger: `window: stalls by what coincided: 3 in the block (a core wait over
-  100 ms 1, memory under the floor 2, memory pressure rising 1, the GPU clock low 0 (not
-  readable), the GPU's own sign of a reset 0, none of these 1)`.
-- **The GPU's own sign of a reset**: the stalled replay, or one of the two before it, had recorded
-  stamps come back unwritten after its work was signalled finished, ran its first list twice, or
-  saw the GPU's timestamp counter go back (`rd_perf_clock.h`'s fields of the record). The line
-  names it: `the GPU's own sign of a reset at replay 689: 19 stamps came back unwritten after its
-  work was signalled finished`.
+  beside the attempt ledger: `window: stalls by what coincided: 3 in the block, 0 of them hangs
+  (the GPU's own sign of a reset with a stamp unwritten) and 3 other; all 3 by class: a core wait
+  over 100 ms 1, memory under the floor 2, memory pressure rising 1, the GPU clock low 0 (not
+  readable), the GPU's own sign of a reset 0, none of these 1`. The hangs are the stalls whose line
+  ends its sign with `(a hang)`: as many as the block's `rd: GPU clock:` stall lines with stamps
+  `came back unwritten` (13 in issue 123's log of 2026-11-14, against its tallies' 15 stalls).
+- **The GPU's own sign of a reset** (`rd_perf_clock.h` `rd_perf_reset_sign`, one test for these
+  lines and the skin check's span): the stalled replay, or one of the two before it, had recorded
+  stamps come back unwritten after its work was signalled finished (a hang), ran its first list
+  twice, or saw the GPU's timestamp counter go back while the GPU was kept busy. The line names
+  the hung replay and the restart apart: `the GPU's own sign of a reset at replay 2074: 20 stamps
+  came back unwritten after its work was signalled finished (the first: list 0's end), and at
+  replay 2075: the GPU's clock restarted (a hang)`, or without a stamp unwritten in the three
+  replays `... at replay 10911: the GPU's clock restarted (not a hang: no stamp unwritten in the
+  stalled replay or the two before it)`.
+- **A counter restart after a span with no GPU work is not a sign.** The Adreno's counter
+  restarts whenever the GPU idles (seven times at issue 123's start-up, and after the reporter's
+  own capture: the 155 ms present at its log's :2736 (2026-11-14) counted as a reset). A restart is
+  judged idle when the replay's first submit came after the replay before had ended (its slot's
+  wait's end, or the wait's start where it had finished before), or, where the times cannot say,
+  when the window noted a span the game was not presenting since the replay before (the Frame rate
+  counter's notes, `ui_fps_gap`: the app back in the foreground, a pause of the host such as a
+  swapchain made again, a capture written; `rd.h` `rd_perf_idle_note`). A replay queued while the
+  one before still ran is busy whatever the notes say. Such a restart is said and not counted:
+  `the GPU's clock restarted at replay 10621 after 1150.0 ms with no GPU work: not a sign of a
+  reset` (or `after a span the game was not presenting (a pause, a capture, the app away)`), and
+  its `rd: GPU clock: ... (restart line N of the run)` line ends `; submitted N ms after the replay
+  before had ended: the GPU idle, not a sign of a reset`.
+- **The submissions around it** (`rhi.h` `RhiTimestampClock.sub`, the records' `gpuSub`; see
+  [Which submission hangs](#issue-123-the-hang-detector-and-the-pass-path)): for the stalled
+  replay and the two before it, each submission's place in its replay, its lists (`lists 0-12` and
+  the pieces timed in it, or `the present's list`, where its replay was a stall; else its count of
+  lists), whether a present waits on it (`the stalled present waits on it` for the stalled
+  present's own), its stamps and those unwritten, which one holds the first unwritten stamp, when
+  it was submitted and when its signal was seen (`signalled at +T ms (the slot's wait's end)`,
+  `signalled at or before +T ms (finished when the slot's wait began)`, or for an earlier
+  submission of its replay `signalled at or before +T ms (its replay's last's; not seen apart)`),
+  all from the stall's start; then `in flight at the stall's start: S seen, U not known`.
+
+### The present latency line
+
+`port/platform/present_latency.h`, every block after the present stalls' line, on every platform
+(issue 123):
+
+`window: present latency in the block: 519 presents (519 from the hand-over), mean 34.6 ms,
+longest 365.2 ms (replay 2075); of the mean: before the present 18.0 ms (the slot's wait for the
+GPU 15.6 ms, the acquire 0.0 ms), the present 16.6 ms, the driver's present call 15.4 ms of it;
+over 518 presents with the picture's GPU end seen, the call 12.0 ms while the picture's GPU work
+still ran and 3.4 ms after its end (the display's); the queue's priority: high, granted`
+
+From the picture's hand-over to the render thread (the replay's start where it was not handed
+over: `N from the replay's start`) to the present's end. The part before the present holds the
+replay's CPU work, its frame slot's wait for the GPU and the acquire of the window's image. The
+driver's present call is split at the picture's own GPU end, where its slot's wait blocked and saw
+it end: the part while that work still ran is at most a wait for the GPU, the rest is the display's
+(the compositor's queue, the refresh). Where no wait blocked, `the call not split`. The last
+clause is the queue's global priority as the device's creation got it (`RhiLimits.queuePriority`:
+`high, granted`, `the driver's default (high refused)`, `the driver's default (high not asked)`).
+Its cost: a few adds a presented record on the window's thread. A granted priority that delays the
+compositor would show as a longer `after its end (the display's)` part against the first
+attempt's logs.
 
 Issue 123's Adreno 740 log (Qualcomm's driver) had 12 stalls of 401-415 ms, 2 of them in stage 1's
 opening. In every one the hung replay's `rd: GPU clock` line has 19-45 stamps unwritten after the
@@ -2316,7 +2401,7 @@ cell holds 16 now. How to read a swing:
 
 Every block, on every platform, the VU pre-pass's record follows:
 
-`window: VU record memory: 512 rows held (48 MB over the frame slots; 512 rows made at start-up); a
+`window: VU record memory: 512 rows held (64 MB over the frame slots; 512 rows made at start-up); a
 picture of the block needed at most 214 rows (248 in the run); 0 growths in play in the run; the
 upload rings 128 MB`
 
@@ -2365,7 +2450,7 @@ After the capture line: `window: slow-scene dump: the game thread's parts: the m
 copy C ms (each without its drain); the worker's block made in P ms; two steps: frame N copied into
 the worker's block`. If the copy fell back, the line ends `grown here: frame N had grown past the
 worker's block`, `grown here: frame N missed the worker's block`, or `grown here: the worker could
-not be asked`. Captures in two steps and fallbacks are the ledger's `capture in two steps` counts.
+not be asked`. Captures in two steps and fallbacks are the ledger's `slow-scene capture in two steps` counts.
 
 ### The sound chip's time per callback
 

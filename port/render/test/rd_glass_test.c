@@ -12,7 +12,9 @@
  *   3. the line word for word, and nothing with no picture;
  *   4. the drawn rule's measure equal to its own rule's (the same alphas);
  *   5. the pending sums merged (the collector's, while the window's thread
- *      held the flag): two windows merged equal to one built from both.
+ *      held the flag): two windows merged equal to one built from both;
+ *   6. a tick that moves between two pictures: the step in the newer one's
+ *      tick (issue 123's deviations of 84 to 1040).
  */
 #include <math.h>
 #include <stdio.h>
@@ -88,6 +90,35 @@ static void testPair(void)
     CHECK(!rd_glass_pair(&w, &d, 1032 * MS, &c, 1032 * MS, REF));
     CHECK(!rd_glass_pair(&w, &a, 1000 * MS, &b, 2001 * MS, REF));
     CHECK(w.pairs == 3);
+}
+
+/* the measured tick moves picture to picture (the present clock's gap
+   between frame closes): the step is the frames and alphas between in the
+   newer picture's tick, not each frame number times its own tick (issue
+   123's v0.11.6 log: deviations of 84 to 1040 in its stall blocks) */
+static void testTickMoves(void)
+{
+    RdGlassWindow w;
+    memset(&w, 0, sizeof w);
+    RdGlassPic a = pic(1, 6000, 0.5f, 0.5f, 0.5f, 0.0, 0.0);
+    RdGlassPic b = pic(2, 6001, 0.5f, 0.5f, 0.5f, 0.0, 0.0);
+    a.tickMs = 33.3667;
+    b.tickMs = 33.4667;
+    /* shown one of b's ticks apart: 1.00 (each frame times its own tick
+       would make it (6001.5 x 33.4667 - 6000.5 x 33.3667) / 33.4667, 19.9) */
+    CHECK(rd_glass_pair(&w, &a, 1000 * MS, &b, 1000 * MS + 33466700ull, 0));
+    CHECK(w.glass[RD_GLASS_DRAWN][RD_GLASS_CLASSES].n == 1 &&
+          w.glass[RD_GLASS_DRAWN][RD_GLASS_CLASSES].sum == 10000);
+    CHECK(w.glass[3][RD_GLASS_CLASSES].sum == 10000);
+    /* a tick not known at b: a's; at neither: 33.3667 */
+    b.tickMs = 0.0;
+    memset(&w, 0, sizeof w);
+    CHECK(rd_glass_pair(&w, &a, 1000 * MS, &b, 1000 * MS + 33366700ull, 0));
+    CHECK(w.glass[RD_GLASS_DRAWN][RD_GLASS_CLASSES].sum == 10000);
+    a.tickMs = 0.0;
+    memset(&w, 0, sizeof w);
+    CHECK(rd_glass_pair(&w, &a, 1000 * MS, &b, 1000 * MS + 33366700ull, 0));
+    CHECK(w.glass[RD_GLASS_DRAWN][RD_GLASS_CLASSES].sum == 10000);
 }
 
 static void testMerge(void)
@@ -275,6 +306,7 @@ int main(void)
 {
     printf("rd_glass_test\n");
     testPair();
+    testTickMoves();
     testMerge();
     testJoin();
     testLine();

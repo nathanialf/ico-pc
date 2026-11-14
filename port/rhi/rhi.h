@@ -1986,8 +1986,27 @@ uint32_t rhi_read_timestamps_busy(uint64_t *ns, uint32_t max);
  *                 many stamps were available through it and whether they
  *                 were the previous use's (the GPU had not begun the slot);
  *   validBits     the queue's timestampValidBits.
+ *   sub, subN     the slot's first RHI_TS_SUBMITS submissions one by one
+ *                 (issue 123: which of a stalled replay's submissions held
+ *                 the stamps the GPU never wrote): when each was made, its
+ *                 command lists (0: an empty batch), whether it signalled
+ *                 the present's semaphore (the present waits on it), and
+ *                 the stamp indices its lists recorded.  The CPU's times
+ *                 only, kept at each submit; no Vulkan call is made for
+ *                 them, and no submission's own signal is read: the
+ *                 slot's last one's is the recycle's wait (waitEndNs when
+ *                 it blocked), the earlier ones' at or before it (the
+ *                 port's counter is reached in submission order).
  * False (and *out zeroed) where the backend keeps none of it (OpenGL,
  * Direct3D 11 and 12) or timestamps are off. */
+#define RHI_TS_SUBMITS 4
+
+typedef struct RhiTsSubmit {
+    uint64_t submitNs;
+    uint8_t lists, present;
+    uint32_t stamps[RHI_TIMESTAMP_WORDS];
+} RhiTsSubmit;
+
 #define RHI_TS_TRACE_MAX 24
 #define RHI_TS_TRACE_AFTER_MS 50u
 #define RHI_TS_TRACE_STEP_MS 4u
@@ -2016,6 +2035,8 @@ typedef struct RhiTimestampClock {
     /* the slot's command lists with stamps that were recorded and not
      * submitted (their stamps are not in recorded) */
     uint32_t listsUnsubmitted;
+    uint32_t subN; /* sub[] kept: the slot's submissions up to RHI_TS_SUBMITS */
+    RhiTsSubmit sub[RHI_TS_SUBMITS];
 } RhiTimestampClock;
 
 bool rhi_read_timestamp_clock(RhiTimestampClock *out);

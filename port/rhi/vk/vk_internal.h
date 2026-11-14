@@ -431,6 +431,10 @@ typedef struct VkrFrame {
     uint32_t tsSubmits;
     uint64_t tsFirstSubmitNs, tsLastSubmitNs, tsFirstValue;
     uint64_t tsPrevFirst;
+    /* the first RHI_TS_SUBMITS of them one by one (rhi.h RhiTsSubmit): the
+     * time, lists and present signal at vkr_tsclock_note_submit, the
+     * stamps or-ed in by rhi_submit (__atomic) once the list was sent */
+    RhiTsSubmit tsSub[RHI_TS_SUBMITS];
 } VkrFrame;
 
 /* A render pass as both paths take it (vk_cmd.c rhi_cmd_begin_render_pass
@@ -1033,7 +1037,9 @@ void vkr_wait_slot_value(VkrFrame *f, uint64_t value);
  * blocking wait with the poll, and the recycle's calibrated pair */
 const char *vkr_tsclock_pick(bool hasKhr, bool hasExt);
 void vkr_tsclock_init(uint32_t validBits);
-void vkr_tsclock_note_submit(VkrFrame *f, uint64_t value);
+void vkr_tsclock_note_submit(VkrFrame *f, uint64_t value, uint32_t lists, bool present);
+/* the stamps a sent list recorded, into the slot's last noted submission */
+void vkr_tsclock_note_stamps(VkrFrame *f, const uint32_t *stamps);
 VkResult vkr_tsclock_wait(VkrFrame *f, uint64_t value);
 void vkr_tsclock_recycled(VkrFrame *f);
 

@@ -1395,6 +1395,61 @@ void rd__perf_rare_stall(uint32_t slot, uint32_t replay, uint32_t k)
    long wait, a second run, a stamp the GPU never wrote (a stalled replay:
    the first 32, then every 10th) or a counter restart alone (the first 8,
    then every 100th, on its own count: rd_perf_clock.h rd_perf_clock_due) */
+/* The spans the game was not presenting (rd.h rd_perf_idle_note: any
+   thread), the count at the last record's end, and at each pending
+   record's end the count at the end of the replay before it: a note since
+   then is a span with no GPU work before that replay (rd_perf_idle) */
+static uint32_t s_idleNotes; /* __atomic */
+static uint32_t s_endNotes;
+static uint32_t s_pendingNotes[RHI_FRAMES_IN_FLIGHT];
+
+void rd_perf_idle_note(void)
+{
+    __atomic_fetch_add(&s_idleNotes, 1u, __ATOMIC_RELEASE);
+}
+
+/* the replay collected last: its number and its end as its slot's wait saw
+   it (rd_perf_clock.h RdPerfIdleIn) */
+static struct {
+    uint32_t replay;
+    double endMs;
+    bool exact;
+} s_prevEnd;
+
+/* clockNote's: the replay's submissions, its first unwritten stamp's
+   name, whether the GPU was idle before it and its sign of a reset (the
+   record's gpu* fields: rd.h).  A few stores a replay; the submissions'
+   contents and the name only for a stalled replay's verdict */
+static void clockSubs(RdPerfRecord *r, uint32_t slot, const RdPerfClockIn *in,
+                      const RdPerfClockVerdict *v)
+{
+    const RhiTimestampClock *c = in->clk;
+    static const RdPerfSubMap k_map = {RD_PERF_TS_LIST0, RD_LIST_COUNT, RD_PERF_TS_PASS0,
+                                       RD_PERF_TS_PRESENT, RD_PERF_TS_PRESENT_BEGIN};
+    r->gpuFirstSubmitMs = (double)c->firstSubmitNs / 1e6;
+    r->gpuSignalMs = v->doneValid == 1   ? (double)c->waitEndNs / 1e6
+                     : v->doneValid == 2 ? (double)c->waitBeginNs / 1e6
+                                         : 0.0;
+    r->gpuSubAll = (uint8_t)(c->submits > 255u ? 255u : c->submits);
+    r->gpuSubN = (uint8_t)(c->subN < RD_PERF_SUBS ? c->subN : RD_PERF_SUBS);
+    r->gpuSubHung = (uint8_t)rd_perf_subs_judge(in, v, &k_map, v->stall, r->gpuSub, RD_PERF_SUBS);
+    if (v->missing > 0 && v->firstMissing >= 0) {
+        clockName((uint32_t)v->firstMissing, in->user, r->gpuFirstMissing,
+                  sizeof r->gpuFirstMissing);
+    }
+    const RdPerfIdleIn idleIn = {r->gpuFirstSubmitMs, s_prevEnd.endMs, s_prevEnd.exact,
+                                 s_prevEnd.replay != 0 && s_prevEnd.replay + 1u == r->replay,
+                                 __atomic_load_n(&s_idleNotes, __ATOMIC_ACQUIRE) !=
+                                     s_pendingNotes[slot]};
+    double idleMs = 0.0;
+    const int idle = r->gpuGapBackNs != 0 ? rd_perf_idle(&idleIn, &idleMs) : 0;
+    r->gpuResetSign = (uint8_t)rd_perf_reset_sign(v->missing, v->ranTwice, r->gpuGapBackNs, idle);
+    r->gpuIdleMs = idle == 1 ? idleMs : 0.0;
+    s_prevEnd.replay = r->replay;
+    s_prevEnd.endMs = r->gpuSignalMs;
+    s_prevEnd.exact = v->doneValid == 1;
+}
+
 static void clockNote(RdPerfRecord *r, uint32_t slot, const RhiTimestampClock *clk,
                       const uint64_t *ts, uint32_t n)
 {
@@ -1417,6 +1472,7 @@ static void clockNote(RdPerfRecord *r, uint32_t slot, const RhiTimestampClock *c
     r->gpuSlotWaitMs = v.waitMs;
     r->gpuDoneMs = v.doneMs;
     r->gpuDoneValid = (uint8_t)v.doneValid;
+    clockSubs(r, slot, &in, &v);
     if (!v.report) {
         return;
     }
@@ -1424,7 +1480,17 @@ static void clockNote(RdPerfRecord *r, uint32_t slot, const RhiTimestampClock *c
     if (k != 0) {
         char line[2048];
         rd_perf_clock_text(&in, &v, line, sizeof line);
-        rd__log("%s (%s line %u of the run)", line, v.stall ? "stall" : "restart", k);
+        if (r->gpuResetSign == RD_RESET_IDLE && r->gpuIdleMs >= 0.0) {
+            rd__log("%s; submitted %.1f ms after the replay before had ended: the GPU idle, not a "
+                    "sign of a reset (%s line %u of the run)",
+                    line, r->gpuIdleMs, v.stall ? "stall" : "restart", k);
+        } else if (r->gpuResetSign == RD_RESET_IDLE) {
+            rd__log("%s; after a span the game was not presenting (a pause, a capture, the app "
+                    "away): the GPU idle, not a sign of a reset (%s line %u of the run)",
+                    line, v.stall ? "stall" : "restart", k);
+        } else {
+            rd__log("%s (%s line %u of the run)", line, v.stall ? "stall" : "restart", k);
+        }
     }
     if (v.stall) {
         rd__perf_rare_stall(slot, r->replay, k); /* the hung list's pipelines (rd_perf_rare.h) */
@@ -1518,9 +1584,10 @@ void rd__perf_collect_gpu(void)
     double endMs = 0.0, submitMs = 0.0;
     if (g_rd.hasDevice && rhi_read_timestamp_clock(&clk)) {
         clockNote(r, slot, &clk, ts, n);
-        if (r->gpuStampsMissing != 0 || r->gpuRanTwice != 0 || r->gpuGapBackNs != 0) {
-            /* the GPU's own sign of a reset, the stall line's test
-               (stall_coincide.h stall_reset_sign): the skin check skips a
+        if (rd_perf_reset_counted(r->gpuResetSign)) {
+            /* the GPU's own sign of a reset, the stall lines' test
+               (rd_perf_clock.h rd_perf_reset_sign: a counter restart after
+               a span with no GPU work is not one): the skin check skips a
                readback in its span (rd_vu_skin_check.h rd__skin_skip) */
             rd__vu_skin_reset_seen(s_pendingCounter[slot]);
         }
@@ -1531,6 +1598,12 @@ void rd__perf_collect_gpu(void)
                blocked under 0.05 ms (rd_perf_clock.c); none when not */
             endMs = (double)(r->gpuDoneValid == 1 ? clk.waitEndNs : clk.waitBeginNs) / 1e6;
         }
+    } else if (r->gpuGapBackNs != 0) {
+        /* no slot clock (OpenGL, Direct3D): a counter restart judged by the
+           notes alone */
+        const int idle = __atomic_load_n(&s_idleNotes, __ATOMIC_ACQUIRE) != s_pendingNotes[slot];
+        r->gpuResetSign = (uint8_t)rd_perf_reset_sign(0, false, r->gpuGapBackNs, idle);
+        r->gpuIdleMs = idle ? -1.0 : 0.0;
     }
     if (r->alpha >= 0.0f) {
         /* a present into the evenness line (rd_even.h): no clock read */
@@ -1730,6 +1803,9 @@ void rd__perf_end(void)
     memcpy(s_pendingOrd[slot], s_ord, s_ordN);
     s_pendingOrdN[slot] = s_ordN;
     s_pendingCounter[slot] = g_rd.replayCounter;
+    /* the notes up to the replay before's end (rd_perf_idle) */
+    s_pendingNotes[slot] = s_endNotes;
+    s_endNotes = __atomic_load_n(&s_idleNotes, __ATOMIC_ACQUIRE);
     s_pendingValid[slot] = true;
 }
 
