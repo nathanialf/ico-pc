@@ -93,13 +93,15 @@ static void sameWords(const RefIn *in, const char *what, const char *oldW, const
 /* ------------------------------------------- the new side, as DT2-DT4 read it */
 
 /* the identity and the fakes a backend hands the table (the Vulkan backend
-   reads the fakes; ICO_RD_VU_COMPACT_ARM is the renderer's, any backend) */
+   reads the fakes, vk_device_table.c, through rhi_device_fakes_parse;
+   ICO_RD_VU_COMPACT_ARM is the renderer's, any backend) */
 static void newEval(const RefIn *in, RhiDeviceChoices *c)
 {
     RhiDeviceId id;
     RhiDeviceFakes fk;
+    RhiDeviceFakeEnv env;
     memset(&id, 0, sizeof id);
-    memset(&fk, 0, sizeof fk);
+    memset(&env, 0, sizeof env);
     id.backend = (uint8_t)in->backend;
     id.os = (uint8_t)in->os;
     id.moltenvk = in->moltenvk;
@@ -111,22 +113,16 @@ static void newEval(const RefIn *in, RhiDeviceChoices *c)
     id.deviceName = in->name;
     id.driverText = in->text;
     if (in->backend == RHI_DT_VULKAN) {
-        const char *fv = in->fakeVendor;
-        if (fv && fv[0]) {
-            char *end = NULL;
-            const unsigned long v = strtoul(fv, &end, 0);
-            if (end != fv && *end == '\0' && v <= 0xFFFFFFFFul) {
-                fk.vendorSet = 1;
-                fk.vendor = (uint32_t)v;
-            }
-        }
-        fk.passRowQualcomm = in->fakePassRow && strcmp(in->fakePassRow, "qualcomm") == 0;
-        fk.queuePriority = rhi_vk_qprio_fake(in->fakeQprio) != RHI_QPRIO_FAKE_NONE;
-        fk.adreno = in->fakeAdreno && in->fakeAdreno[0] && in->fakeAdreno[0] != '0';
-        fk.serial = in->fakeSerial && in->fakeSerial[0] == '1';
-        fk.noPrepass = in->fakeNoPrepass && in->fakeNoPrepass[0] && in->fakeNoPrepass[0] != '0';
+        /* the Vulkan backend's reads (vk_device_table.c) */
+        env.vendor = in->fakeVendor;
+        env.passRow = in->fakePassRow;
+        env.queuePriority = rhi_vk_qprio_fake(in->fakeQprio) != RHI_QPRIO_FAKE_NONE;
+        env.adreno = in->fakeAdreno;
+        env.serial = in->fakeSerial;
+        env.noPrepass = in->fakeNoPrepass;
     }
-    fk.compactArm = in->compactArm && strcmp(in->compactArm, "1") == 0;
+    env.compactArm = in->compactArm;
+    rhi_device_fakes_parse(&env, &fk);
     rhi_device_table_eval(&id, &fk, c);
 }
 
@@ -261,6 +257,28 @@ static void compare(const RefIn *in, bool withRun)
     SAME(in, "MEMORY_BUDGET_OFF", ref_memory_budget_off(in), v[RHI_DC_MEMORY_BUDGET_OFF]);
 
     if (vulkan) {
+        /* the fakes' parse (rhi_device_fakes_parse, vk_device_table.c) gives
+           the words' flags the call sites print as each parsed them before:
+           the tile rule's " (ICO_VK_FAKE_VENDOR)", the pass row's
+           " (ICO_VK_FAKE_PASS_ROW=qualcomm)", the attachment read's
+           "(ICO_VK_FAKE_ADRENO)" */
+        {
+            RhiDeviceFakeEnv env;
+            RhiDeviceFakes fk;
+            memset(&env, 0, sizeof env);
+            env.vendor = in->fakeVendor;
+            env.passRow = in->fakePassRow;
+            env.adreno = in->fakeAdreno;
+            rhi_device_fakes_parse(&env, &fk);
+            bool faked;
+            const uint32_t fv = ref_fake_vendor(in, &faked);
+            SAME(in, "ICO_VK_FAKE_VENDOR parsed", faked, fk.vendorSet);
+            SAME(in, "ICO_VK_FAKE_VENDOR's vendor", faked ? fv : 0u, fk.vendor);
+            SAME(in, "ICO_VK_FAKE_PASS_ROW parsed",
+                 in->fakePassRow && strcmp(in->fakePassRow, "qualcomm") == 0, fk.passRowQualcomm);
+            SAME(in, "ICO_VK_FAKE_ADRENO parsed",
+                 in->fakeAdreno && in->fakeAdreno[0] && in->fakeAdreno[0] != '0', fk.adreno);
+        }
         const char *intelRow, *qcomRow;
         ref_pass_rows(in, &intelRow, &qcomRow);
         SAME(in, "PASS_OBJECTS",
@@ -270,39 +288,46 @@ static void compare(const RefIn *in, bool withRun)
              v[RHI_DC_PASS_OBJECTS]);
         sameWords(in, "PASS_OBJECTS", intelRow ? intelRow : qcomRow,
                   rhi_device_choice_reason(&c, RHI_DC_PASS_OBJECTS));
-        /* the subpass class with the run's passRowQcom (vk_device.c: the
-           Qualcomm row applied), every way it can come out */
+        /* vk_device.c vkr_pass_row_apply's two rows (rhi_device_pass_rows) */
+        {
+            const char *ni, *nq;
+            rhi_device_pass_rows(&c, &ni, &nq);
+            sameWords(in, "vkr_pass_row_apply intelRow", intelRow, ni);
+            sameWords(in, "vkr_pass_row_apply qcomRow", qcomRow, nq);
+        }
+        /* the subpass class with the run's passRowQcom (vk_device.c
+           vkr_subpass_read_decide: the Qualcomm row applied), every way it
+           can come out, as the call site composes it
+           (rhi_device_subpass_class) */
         for (int legacy = 0; legacy < 2; legacy++) {
             for (int ov = -1; ov <= 1; ov++) {
                 const bool qcomApplied = ref_pass_row_qcom_applied(qcomRow, legacy != 0, ov);
-                const int t = v[RHI_DC_SUBPASS_CLASS];
-                const int composed = t == RHI_DT_SUBPASS_INTEL ? RHI_DT_SUBPASS_INTEL
-                                     : qcomApplied             ? RHI_DT_SUBPASS_QCOM
-                                                               : t;
-                SAME(in, "SUBPASS_CLASS", ref_subpass_class(in, qcomApplied), composed);
+                SAME(in, "SUBPASS_CLASS", ref_subpass_class(in, qcomApplied),
+                     rhi_device_subpass_class(&c, qcomApplied));
             }
         }
+        /* vk_qprio.c's row (rhi_device_choice_why) */
         const char *q = ref_qprio(in, rhi_vk_qprio_fake(in->fakeQprio));
         SAME(in, "QUEUE_PRIORITY_HIGH", q != NULL, v[RHI_DC_QUEUE_PRIORITY_HIGH]);
         sameWords(in, "QUEUE_PRIORITY_HIGH", q,
-                  rhi_device_choice_reason(&c, RHI_DC_QUEUE_PRIORITY_HIGH));
+                  rhi_device_choice_why(&c, RHI_DC_QUEUE_PRIORITY_HIGH));
     } else {
         SAME(in, "PASS_OBJECTS off Vulkan", RHI_DT_PASS_NONE, v[RHI_DC_PASS_OBJECTS]);
         SAME(in, "QUEUE_PRIORITY_HIGH off Vulkan", 0, v[RHI_DC_QUEUE_PRIORITY_HIGH]);
     }
     SAME(in, "ATTACHMENT_READ_OFF", ref_attachment_read_off(in), v[RHI_DC_ATTACHMENT_READ_OFF]);
     {
+        /* vk_device.c vkr_vu_plain_only (rhi_device_vu_rows) on Vulkan;
+           the other backends set none of the three */
         const RefVuPlain p = ref_vu_plain_only(in);
         SAME(in, "VU_FALLBACK_PLAIN table", p.plain != NULL,
              v[RHI_DC_VU_FALLBACK_PLAIN] == RHI_DT_VUSET_TABLE);
-        sameWords(in, "CAREFUL_PIPELINES", p.careful,
-                  v[RHI_DC_CAREFUL_PIPELINES]
-                      ? rhi_device_choice_reason(&c, RHI_DC_CAREFUL_PIPELINES)
-                      : NULL);
-        sameWords(in, "VU_PREPASS_OFF", p.noPrepass,
-                  v[RHI_DC_VU_PREPASS_OFF] ? rhi_device_choice_reason(&c, RHI_DC_VU_PREPASS_OFF)
-                                           : NULL);
+        const RhiDeviceVuRows rows = rhi_device_vu_rows(&c);
+        sameWords(in, "vkr_vu_plain_only plain", p.plain, rows.plain);
+        sameWords(in, "CAREFUL_PIPELINES", p.careful, rows.careful);
+        sameWords(in, "VU_PREPASS_OFF", p.noPrepass, rows.noPrepass);
         SAME(in, "COMPUTE_RECORD_OFF (no row)", 0, v[RHI_DC_COMPUTE_RECORD_OFF]);
+        sameWords(in, "COMPUTE_RECORD_OFF reason (no row)", NULL, rows.noComputeRecord);
         const RefVuSet o = ref_vu_set(p.plain, ref_driver_is_turnip(in));
         const RefVuSet n = newVuSet(&c);
         sameWords(in, "vu_set kind", o.kind, n.kind);
@@ -312,9 +337,8 @@ static void compare(const RefIn *in, bool withRun)
     {
         const char *s = ref_compiler_serial(in);
         SAME(in, "COMPILER_SERIAL", s != NULL, v[RHI_DC_COMPILER_SERIAL]);
-        sameWords(in, "COMPILER_SERIAL", s,
-                  v[RHI_DC_COMPILER_SERIAL] ? rhi_device_choice_reason(&c, RHI_DC_COMPILER_SERIAL)
-                                            : NULL);
+        /* vk_pipeline.c vkr_compile_serial_init (rhi_device_choice_why) */
+        sameWords(in, "COMPILER_SERIAL", s, rhi_device_choice_why(&c, RHI_DC_COMPILER_SERIAL));
     }
     SAME(in, "PIPE_ROBUST_ASK", ref_pipe_robust_ask(in), v[RHI_DC_PIPE_ROBUST_ASK]);
     SAME(in, "FIFO_FROM_START", ref_fifo_start(in), v[RHI_DC_FIFO_FROM_START]);
@@ -647,10 +671,98 @@ static unsigned long fakes(void)
     return n;
 }
 
+/* the pure predicates' remaining arguments (the matrix ties them to the
+   OS): rhi_tile_phone on every combination, rhi_tile_vendor, the serial
+   rule's unused Vulkan version */
+static void edges(void)
+{
+    RefIn none;
+    memset(&none, 0, sizeof none);
+    for (int bits = 0; bits < 8; bits++) {
+        const bool a = (bits & 1) != 0, i = (bits & 2) != 0, f = (bits & 4) != 0;
+        SAME(&none, "live rhi_tile_phone (every combination)", ref_tile_phone_rule(a, i, f),
+             rhi_tile_phone(a, i, f));
+    }
+    static const uint32_t vendors[] = {0x5143u, 0x13B5u, 0x1010u,    0x144Du, 0x106Bu,
+                                       0x14E4u, 0x8086u, 0x10DEu,    0x1002u, 0x10005u,
+                                       0x1414u, 0u,      0xFFFFFFFFu};
+    for (size_t k = 0; k < sizeof vendors / sizeof vendors[0]; k++) {
+        SAME(&none, "live rhi_tile_vendor", ref_tile_vendor_name(vendors[k]) != NULL,
+             rhi_tile_vendor(vendors[k]));
+        for (uint32_t major = 0; major < 3; major++) {
+            for (uint32_t minor = 0; minor < 5; minor++) {
+                const char *copy = vendors[k] == 0x1010u ? "PowerVR B-Series" : NULL;
+                sameWords(&none, "live rhi_driver_compiler_serial (any Vulkan version)", copy,
+                          rhi_driver_compiler_serial(vendors[k], "PowerVR B-Series Vulkan Driver",
+                                                     major, minor));
+            }
+        }
+    }
+}
+
+/* rhi_device_table_choice (the pure predicates' one-choice read) and
+   rhi_device_table_start (the backends' one evaluation) give what the whole
+   evaluation gives, every choice, value and reason, on the logged devices on
+   every backend and OS, MoltenVK or not, a driver package or not */
+static unsigned long choices(void)
+{
+    unsigned long n = 0;
+    for (size_t k = 0; k < NN(kKnown); k++) {
+        for (int os = 0; os < RHI_DT_OS_COUNT; os++) {
+            for (size_t bi = 0; bi < NN(kBackends); bi++) {
+                for (int bits = 0; bits < 4; bits++) {
+                    RhiDeviceId id;
+                    memset(&id, 0, sizeof id);
+                    id.backend = (uint8_t)kBackends[bi];
+                    id.os = (uint8_t)os;
+                    id.moltenvk = (bits & 1) != 0;
+                    id.customDriver = (bits & 2) != 0;
+                    id.vendorId = kKnown[k].vendor;
+                    id.deviceId = kKnown[k].device;
+                    id.driverId = kKnown[k].driverId;
+                    id.apiVersion = kKnown[k].api;
+                    id.deviceName = kKnown[k].name;
+                    id.driverText = kKnown[k].text;
+                    RhiDeviceChoices all;
+                    rhi_device_table_eval(&id, NULL, &all);
+                    const RhiDeviceChoices *cur = rhi_device_table_start(&id, NULL, NULL, NULL);
+                    RefIn in;
+                    memset(&in, 0, sizeof in);
+                    in.backend = id.backend;
+                    in.os = id.os;
+                    in.moltenvk = id.moltenvk;
+                    in.customDriver = id.customDriver;
+                    in.vendor = id.vendorId;
+                    in.device = id.deviceId;
+                    in.driverId = id.driverId;
+                    in.api = id.apiVersion;
+                    in.name = id.deviceName;
+                    in.text = id.driverText;
+                    s_checks++;
+                    if (cur != rhi_device_table_current() || memcmp(cur, &all, sizeof all) != 0) {
+                        fail(&in, "rhi_device_table_start", 0, 1);
+                    }
+                    for (int ch = 0; ch < RHI_DC_COUNT; ch++) {
+                        const char *why = NULL;
+                        const int32_t one = rhi_device_table_choice(&id, (RhiDeviceChoice)ch, &why);
+                        SAME(&in, rhi_device_choice_name((RhiDeviceChoice)ch), all.value[ch], one);
+                        sameWords(&in, rhi_device_choice_name((RhiDeviceChoice)ch),
+                                  rhi_device_choice_reason(&all, (RhiDeviceChoice)ch), why);
+                    }
+                    n++;
+                }
+            }
+        }
+    }
+    return n;
+}
+
 int main(void)
 {
     const unsigned long ids = matrix();
     const unsigned long faked = fakes();
+    edges();
+    const unsigned long one = choices();
     size_t rowCount;
     const RhiDeviceRow *rows = rhi_device_table_rows(&rowCount);
     for (size_t r = 0; r < rowCount; r++) {
@@ -689,8 +801,8 @@ int main(void)
         s_failures++;
         printf("FAIL %lu identities with an unlinked conflict\n", s_conflicts);
     }
-    printf("rhi_device_table_equiv: %lu identities, %lu with the tests' fakes, %lu checks, %lu "
-           "failures\n",
-           ids, faked, s_checks, s_failures);
+    printf("rhi_device_table_equiv: %lu identities, %lu with the tests' fakes, %lu one choice at "
+           "a time, %lu checks, %lu failures\n",
+           ids, faked, one, s_checks, s_failures);
     return s_failures ? 1 : 0;
 }

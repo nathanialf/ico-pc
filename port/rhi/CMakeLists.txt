@@ -419,7 +419,7 @@ if(_ico_have_vk)
     target_link_libraries(ico_rhi_vulkan PRIVATE ${CMAKE_DL_LIBS})
     # the crash report's breadcrumb (vk_renderpass.c writes it)
     target_link_libraries(ico_rhi_vulkan PUBLIC ico_pass_crumb)
-    target_link_libraries(ico_rhi_vulkan PUBLIC ico_device_table) # the start-up lines
+    target_link_libraries(ico_rhi_vulkan PUBLIC ico_device_table) # the rows and start-up lines
     if(SDL3_FOUND)
         target_compile_definitions(ico_rhi_vulkan PRIVATE ICO_RHI_HAVE_SDL=1)
         target_link_libraries(ico_rhi_vulkan PUBLIC SDL3::SDL3)
@@ -445,6 +445,7 @@ if(_ico_have_d3d12)
     # the IIDs (IID_ID3D12Device, ...); d3d12.dll and dxgi.dll are loaded at
     # run time (d3d12_device.c)
     target_link_libraries(ico_rhi_d3d12 PRIVATE dxguid)
+    target_link_libraries(ico_rhi_d3d12 PUBLIC ico_device_table) # the start-up lines
     if(SDL3_FOUND)
         target_compile_definitions(ico_rhi_d3d12 PRIVATE ICO_RHI_HAVE_SDL=1)
         target_link_libraries(ico_rhi_d3d12 PUBLIC SDL3::SDL3)
@@ -475,6 +476,7 @@ if(_ico_have_d3d11)
     # d3dcompiler_47.dll are loaded at run time (d3d11_device.c,
     # d3d11_shader.c)
     target_link_libraries(ico_rhi_d3d11 PRIVATE dxguid)
+    target_link_libraries(ico_rhi_d3d11 PUBLIC ico_device_table) # the start-up lines
     if(SDL3_FOUND)
         target_compile_definitions(ico_rhi_d3d11 PRIVATE ICO_RHI_HAVE_SDL=1)
         target_link_libraries(ico_rhi_d3d11 PUBLIC SDL3::SDL3)
@@ -505,6 +507,7 @@ if(_ico_have_gl)
                                ${_ico_rhi_debug_default})
     target_compile_options(ico_rhi_opengl PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
     target_link_libraries(ico_rhi_opengl PUBLIC SDL3::SDL3 PRIVATE ico_miniz)
+    target_link_libraries(ico_rhi_opengl PUBLIC ico_device_table) # the start-up lines
     if(NOT WIN32)
         # d3d12_plan.c's floorf: lld does not take libm from SDL3's link line
         target_link_libraries(ico_rhi_opengl PUBLIC m)

@@ -125,6 +125,9 @@ int main(int argc, char **argv)
     {
         static const char kLog[] =
             "ico_pc: summary: version test; Android arm64\n"
+            "rhi_vk: device table: Adreno (TM) 740 (device 5143:43050a01; driver ID 8; Vulkan "
+            "1.3.128; Android): 2 of the table's 27 rows: tile-vendors, android\n"
+            "rhi_vk: device table: android (Vulkan on Android): a tile-based GPU\n"
             "rd: picture health: 3D pictures are coming back unfinished from the GPU: 16 of the "
             "last 16 (replay 164, frame 139); the picture is probably black\n"
             "window: something else\n";
@@ -154,6 +157,12 @@ int main(int argc, char **argv)
                                         : NULL;
                 const char *sum = keys ? strstr(keys, "ico_pc: summary: version test") : NULL;
                 CHECK(keys != NULL && mine != NULL && sum != NULL && mine < sum);
+                /* the device table's header (the rows' ids, which the summary
+                   counts alone) is a key line; a row's line is not */
+                const char *table =
+                    keys ? strstr(keys, "rhi_vk: device table: Adreno (TM) 740 (") : NULL;
+                CHECK(table != NULL && sum != NULL && table > sum);
+                CHECK(keys != NULL && strstr(keys, "device table: android (") == NULL);
                 free(t);
             }
             mz_free(txt);

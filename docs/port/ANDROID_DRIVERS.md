@@ -115,8 +115,8 @@ phone's own driver runs; it then says `window: VU skin check ladder: step 2 of 2
 
 The Adreno 740 (device id `0x43050A01`: AYN Thor, AYN Odin 2 Portal, Xiaomi Pad 6S Pro) under the
 phone's own Qualcomm driver draws without the VU vertex pre-pass: the device table's
-`noPrepass` column (`port/rhi/vk/vk_device.c` `kVuPlainOnly`, beside the row's plain set and
-careful start-up set; [PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)). The first build to run the
+`adreno-740-qualcomm` row (`VU_PREPASS_OFF`, beside the row's plain set and careful start-up set;
+[DEVICE_TABLE.md](DEVICE_TABLE.md), [PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)). The first build to run the
 pre-pass there, on a Xiaomi Pad 6S Pro (driver 512.676.1, compiler
 E031.41.03.64; issue 123), drew in its first scene a full-screen grey and black noise picture and the
 GPU then stopped finishing work (the watchdog's GPU hang at 25.5 s), while the pre-pass's start-up

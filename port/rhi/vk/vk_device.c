@@ -1447,9 +1447,10 @@ static bool vkr_pick_device(void)
     g_vkr.moltenvk =
         g_vkr.fakeMoltenvk || rhi_driver_is_moltenvk(g_vkr.props.vendorID, g_vkr.driverID, 0);
 #endif
-    /* the device table's lines (vk_device_table.c, docs/port/DEVICE_TABLE.md):
-       the rows this device matched, read only */
-    vkr_device_table_log(s_driverText[0] == ';' ? s_driverText + 2 : NULL, vkr_loader_custom());
+    /* the device table (vk_device_table.c, docs/port/DEVICE_TABLE.md): the
+       rows this device matches, with the tests' fakes, once, before every
+       rule that reads them (g_vkr.devTable), and their lines */
+    vkr_device_table_start(s_driverText[0] == ';' ? s_driverText + 2 : NULL, vkr_loader_custom());
     vkr_tile_rule_apply(); /* the barrier scopes and the submission wait (rhi_tile_rule.h) */
     vkGetPhysicalDeviceMemoryProperties(g_vkr.phys, &g_vkr.memProps);
     /* the heaps, and the one uploads (the renderer's ring, texture
@@ -1556,8 +1557,6 @@ static uint32_t vkr_msaa_counts(void)
     return counts | 1u;
 }
 
-static bool vkr_is_tiler(uint32_t vendor); /* below, with the vendor table */
-
 /* The tile-based phones' rule and the loss ladder (rhi_tile_rule.h, issues
  * 179 and 211): the barrier scopes and the submission wait this device
  * runs (VkrState.tile), decided once the device is picked and before it is
@@ -1574,29 +1573,14 @@ static bool vkr_is_tiler(uint32_t vendor); /* below, with the vendor table */
  * cause was one of the two). */
 static void vkr_tile_rule_apply(void)
 {
-    uint32_t vendor = g_vkr.props.vendorID;
-    const char *fake = getenv("ICO_VK_FAKE_VENDOR");
-    bool faked = false;
-    if (fake && fake[0]) {
-        char *end = NULL;
-        const unsigned long v = strtoul(fake, &end, 0);
-        if (end != fake && *end == '\0' && v <= 0xFFFFFFFFul) {
-            vendor = (uint32_t)v;
-            faked = true;
-        }
-    }
+    /* the phone: the device table's TILE_PHONE (rows android, every Android
+       GPU, and ios, Apple's phone and tablet GPUs through MoltenVK; the
+       tests' ICO_VK_FAKE_VENDOR a tile-based vendor's id), evaluated at the
+       pick (vk_device_table.c) */
+    const bool faked = g_vkr.devFakes.vendorSet != 0;
+    const uint32_t vendor = faked ? g_vkr.devFakes.vendor : g_vkr.props.vendorID;
     const char *name = rhi_tile_vendor_name(vendor);
-#ifdef __ANDROID__
-    const bool android = true; /* every Android GPU (vkr_fill_limits' RhiLimits.tiler) */
-#else
-    const bool android = false;
-#endif
-#ifdef ICO_IOS
-    const bool ios = g_vkr.moltenvk; /* Apple's phone and tablet GPUs */
-#else
-    const bool ios = false;
-#endif
-    const bool phone = rhi_tile_phone(android, ios, faked && name != NULL);
+    const bool phone = g_vkr.devTable->value[RHI_DC_TILE_PHONE] != 0;
     char device[80];
     snprintf(device, sizeof device, "%s, vendor 0x%04X%s",
              g_vkr.moltenvk ? "MoltenVK"
@@ -1651,29 +1635,20 @@ static void vkr_pass_row_apply(void)
     g_vkr.passRowQcom = false;
 #if VKR_LEGACY_PASSES
     const int ov = rhi_vk_pass_override(getenv("ICO_VK_LEGACY_PASSES"));
-#ifdef _WIN32
-    const int windows = 1;
-#else
-    const int windows = 0;
-#endif
-    const char *intelRow =
-        rhi_vk_pass_row(g_vkr.props.vendorID, g_vkr.driverID, g_vkr.props.apiVersion, windows);
-    /* the store passes' throwaway targets follow Intel's row whatever the
-       path (RhiLimits.storePassTarget); Qualcomm's row moves only the passes
-       (issue 123, rhi_pass_row.h).  ICO_VK_FAKE_PASS_ROW=qualcomm (the tests
-       alone) puts any device on Qualcomm's row, nothing else of it faked */
-    const char *fakeRow = getenv("ICO_VK_FAKE_PASS_ROW");
-    const bool fakeQcom = fakeRow && strcmp(fakeRow, "qualcomm") == 0;
+    /* the device table's PASS_OBJECTS (rows intel-windows-1.3.215 and
+       qualcomm-android, rhi_pass_row.h), evaluated at the pick: the store
+       passes' throwaway targets follow Intel's row whatever the path
+       (RhiLimits.storePassTarget); Qualcomm's row moves only the passes
+       (issue 123).  ICO_VK_FAKE_PASS_ROW=qualcomm (the tests alone) puts any
+       device off Intel's row on Qualcomm's, nothing else of it faked */
+    const bool fakeQcom = g_vkr.devFakes.passRowQualcomm != 0;
 #ifdef __ANDROID__
     const int android = 1;
 #else
     const int android = 0;
 #endif
-    const char *qcomRow =
-        intelRow ? NULL
-        : fakeQcom
-            ? rhi_vk_pass_row_qualcomm(RHI_VENDOR_QUALCOMM, RHI_DRIVER_ID_QUALCOMM_PROPRIETARY, 1)
-            : rhi_vk_pass_row_qualcomm(g_vkr.props.vendorID, g_vkr.driverID, android);
+    const char *intelRow, *qcomRow;
+    rhi_device_pass_rows(g_vkr.devTable, &intelRow, &qcomRow);
     if (!intelRow && !qcomRow && !android &&
         rhi_vk_pass_row_qualcomm(g_vkr.props.vendorID, g_vkr.driverID, 1) != NULL) {
         VKR_LOG("render passes: dynamic rendering on Qualcomm's own driver: its row (VkRenderPass "
@@ -1783,22 +1758,14 @@ static void vkr_subpass_read_decide(void)
         prevWhy[0] = '\0';
     }
     /* the device's class (rhi_subpass_verdict.h: the probe's default this
-       release); ICO_VK_FAKE_VENDOR names the vendor for the tests' fakes */
-    uint32_t vendor = g_vkr.props.vendorID;
-    {
-        const char *fv = getenv("ICO_VK_FAKE_VENDOR");
-        char *end = NULL;
-        const unsigned long v = fv && fv[0] ? strtoul(fv, &end, 0) : 0ul;
-        if (fv && fv[0] && end != fv && *end == '\0' && v <= 0xFFFFFFFFul) {
-            vendor = (uint32_t)v;
-        }
-    }
-    const RhiSubpassClass cls =
-        g_vkr.passRowHit ? RHI_SUBPASS_CLASS_INTEL
-        : g_vkr.passRowQcom || rhi_driver_is_qualcomm_proprietary(vendor, g_vkr.driverID)
-            ? RHI_SUBPASS_CLASS_QCOM
-        : vendor == 0x13B5u ? RHI_SUBPASS_CLASS_ARM
-                            : RHI_SUBPASS_CLASS_OTHER;
+       release): the device table's SUBPASS_CLASS (rows intel-windows-1.3.215,
+       qualcomm and arm; ICO_VK_FAKE_VENDOR names the vendor of the last two
+       for the tests' fakes), Qualcomm's where its row holds the passes */
+    const int dtClass = rhi_device_subpass_class(g_vkr.devTable, g_vkr.passRowQcom);
+    const RhiSubpassClass cls = dtClass == RHI_DT_SUBPASS_INTEL  ? RHI_SUBPASS_CLASS_INTEL
+                                : dtClass == RHI_DT_SUBPASS_QCOM ? RHI_SUBPASS_CLASS_QCOM
+                                : dtClass == RHI_DT_SUBPASS_ARM  ? RHI_SUBPASS_CLASS_ARM
+                                                                 : RHI_SUBPASS_CLASS_OTHER;
     const char *ce = getenv("ICO_VK_SUBPASS_PROBE_CLASS");
     const int classEnv = ce && ce[0] ? (ce[0] != '0' ? 1 : 0) : -1;
     RhiSubpassWrite write = RHI_SUBPASS_WRITE_NOTHING;
@@ -2285,12 +2252,12 @@ static bool vkr_create_device(void)
          * offered there, so the renderer's blend self-test starts from the
          * next path.  ICO_VK_FAKE_ADRENO=1 takes this branch on any device;
          * ICO_VK_ATTACHMENT_READ=1 ([dev] attachment_read) offers it anyway */
-        const char *fakeQc = getenv("ICO_VK_FAKE_ADRENO");
-        const bool fakeAdreno = fakeQc && fakeQc[0] && fakeQc[0] != '0';
+        const bool fakeAdreno = g_vkr.devFakes.adreno != 0;
         const char *askRead = getenv("ICO_VK_ATTACHMENT_READ");
         const bool forceRead = askRead && askRead[0] && askRead[0] != '0';
-        const bool qualcomm =
-            fakeAdreno || rhi_driver_is_qualcomm_proprietary(g_vkr.props.vendorID, g_vkr.driverID);
+        /* the device table's ATTACHMENT_READ_OFF (row qualcomm: Qualcomm's
+           own driver by its id; the fake on any device) */
+        const bool qualcomm = g_vkr.devTable->value[RHI_DC_ATTACHMENT_READ_OFF] != 0;
         g_vkr.rasterOrderOff[0] = '\0';
         if (hasOrder && qualcomm && !forceRead) {
             snprintf(g_vkr.rasterOrderOff, sizeof g_vkr.rasterOrderOff,
@@ -2495,7 +2462,7 @@ static bool vkr_create_device(void)
         const char *skinEnv = getenv("ICO_RD_VU_SKIN_CHECK");
         const bool skinCheck = skinEnv && skinEnv[0]
                                    ? vkr_env_on("ICO_RD_VU_SKIN_CHECK") || strcmp(skinEnv, "2") == 0
-                                   : g_vkr.props.vendorID == 0x5143u;
+                                   : g_vkr.devTable->value[RHI_DC_PIPE_ROBUST_ASK] != 0;
         const bool extPipeRob =
             wantRobust && skinCheck &&
             vkr_device_has_ext(g_vkr.phys, VK_EXT_PIPELINE_ROBUSTNESS_EXTENSION_NAME);
@@ -2580,13 +2547,14 @@ static bool vkr_create_device(void)
          * adapter memory), read by the start-up's allocations
          * (rd_vu_rec_early.c: half of what is free) and the window's video
          * memory lines; a query only, nothing drawn or allocated
-         * differently.  Not on a tile-based phone GPU, whose device is made
-         * as before and whose free memory is the system's own measure
-         * (Android's MemAvailable, window_pipe_finish.c) */
-        g_vkr.memBudget = !g_vkr.tile.phone && vkr_props2_core(g_vkr.phys) &&
-                          VKR_FUNCTION_AVAILABLE(vkGetPhysicalDeviceMemoryProperties2) &&
-                          vkr_device_has_ext(g_vkr.phys, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME) &&
-                          extCount < 47u;
+         * differently.  Not on a tile-based phone GPU (the device table's
+         * MEMORY_BUDGET_OFF, row tile-phone), whose device is made as before
+         * and whose free memory is the system's own measure (Android's
+         * MemAvailable, window_pipe_finish.c) */
+        g_vkr.memBudget =
+            !g_vkr.devTable->value[RHI_DC_MEMORY_BUDGET_OFF] && vkr_props2_core(g_vkr.phys) &&
+            VKR_FUNCTION_AVAILABLE(vkGetPhysicalDeviceMemoryProperties2) &&
+            vkr_device_has_ext(g_vkr.phys, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME) && extCount < 47u;
         if (g_vkr.memBudget) {
             exts[extCount++] = VK_EXT_MEMORY_BUDGET_EXTENSION_NAME;
         }
@@ -2667,11 +2635,9 @@ static bool vkr_create_device(void)
          * replay is byte-identical on lavapipe either way, so it is the
          * driver's handling); [dev] dynamic_state = true (exported as
          * ICO_VK_FAKE_NO_DYNAMIC=0) turns it on there */
-#ifdef __ANDROID__
-        const bool tilerDevice = true;
-#else
-        const bool tilerDevice = vkr_is_tiler(g_vkr.props.vendorID);
-#endif
+        /* the device table's DYNAMIC_STATE_OFF (row tiler: the tile-based
+           vendors, every Android GPU) */
+        const bool tilerDevice = g_vkr.devTable->value[RHI_DC_DYNAMIC_STATE_OFF] != 0;
         const bool forcedOn = fakeDyn && strcmp(fakeDyn, "0") == 0;
         const bool tilerOff = tilerDevice && !forcedOn && !fakeAll;
         const bool hasEds =
@@ -3185,139 +3151,61 @@ static bool vkr_create_device(void)
     return VKR_CHECK(vkCreateCommandPool(g_vkr.device, &pci, NULL, &g_vkr.oneShotPool));
 }
 
-/* The PCI vendor ids of the tile-based GPUs: Qualcomm Adreno (and Mesa's
- * Turnip, which reports Qualcomm's id), ARM Mali, Imagination PowerVR,
- * Samsung Xclipse, Apple (MoltenVK) and Broadcom VideoCore */
-static bool vkr_is_tiler(uint32_t vendor)
-{
-    switch (vendor) {
-    case 0x5143: /* Qualcomm */
-    case 0x13B5: /* ARM */
-    case 0x1010: /* Imagination */
-    case 0x144D: /* Samsung */
-    case 0x106B: /* Apple */
-    case 0x14E4: /* Broadcom */
-        return true;
-    default:
-        return false;
-    }
-}
-
 /* The devices whose VU fallback takes the program entries' plain variants
  * (port/shaders/vu_common.hlsli, ICO_VU_PLAIN; docs/port/RENDER.md, "The
- * fallback entries"): the record path's modules are the same on every
- * device; a draw it cannot take (past the record, a stage pipeline that
- * could not be made, a failed self-test) draws through vu_X_plain_vs there
- * instead of vu_X_vs (port/render/rd_pipeline.c rd__vu_policy_init,
- * g_rd.vsFallback).  A row matches the vendor id, the device id under its
- * mask and, with qualcomm set, Qualcomm's own driver only
- * (rhi_driver_is_qualcomm_proprietary: Mesa's Turnip on the same GPU is
- * another compiler).  The reason is logged and goes to
- * RhiLimits.vuFallbackPlain.
- *   Adreno 740 (device 0x43050A01; AYN Thor, issue 107, and AYN Odin 2
- *   Portal, issue 93; driver 512.676.53, compiler E031.41.03.47): the
- *   whole device froze, needing a reboot, while the driver compiled the
- *   first pipelines with a VU vertex shader of v0.7.5 to v0.7.7 (46,470
- *   to 93,407 words); v0.6.1's (20,975 to 32,709 words) built
- *   (docs/port/SHADERS.md, The size history).  The plain variants are 10,011
- *   to 23,305 words, the record path's largest module about 20,000 (an
- *   estimate until the build measures it).
- * ICO_RD_VU_EXTENDED=1 gives the fallback the extended variants anyway (the
- * renderer reads it).
- *
- * The careful column: the devices whose start-up set is made under the
- * careful policy (its reason for RhiLimits.carefulPipelines;
- * docs/port/PIPELINES.md, "The start-up set"): the window passes
- * rd_pipeline_policy_careful() to rd_set_pipeline_policy (batches of 8 on
- * one thread, the pipeline cache written after each, the set stopped and
- * the rest made on first use once the process grew past the budget or a
- * batch took over 10 s).
- *   Adreno 740 again: with v0.7.7 both devices died inside the 2D half of
- *   the blind set (its first 327 keys at Original 4:3 with the
- *   fixed-function blend, before any VU key): the Odin 2 Portal at 201 of
- *   527 finished, the process shrinking from 194 MB to 47 MB until the
- *   system ended it (issue 93), the Thor at 307 or later with the whole
- *   device frozen (issue 107); the same since v0.5.3, while v0.5.2 and
- *   v0.6.1 started.  No one module explains it (font_sheet_ps and yuv_ps
- *   were as large in v0.6.1); memory pressure from the parallel compiles
- *   is the hypothesis the careful policy answers (inferred, not measured).
- *
- * The noPrepass column: the devices that draw without the VU vertex
- * pre-pass (its reason for RhiLimits.vuPrepassOff; the renderer's
- * rd__vu_prepass_init logs "off by the device table (<reason>)" and
- * [dev] vu_prepass = true written in config.toml, exported as
- * ICO_RD_VU_PREPASS=on, draws with it anyway).
- *   Adreno 740 under Qualcomm's own driver (issue 123, a Xiaomi Pad 6S Pro
- *   on driver 512.676.1, compiler E031.41.03.64): v0.11.0 is the first
- *   build to run the pre-pass there, and the record path's modules have
- *   one build on every device (vu_tri_rule_pre_vs 17,289 words,
- *   vu_tri_tick_pre_vs 16,627: the card test and the tick cameras the
- *   plain set exists to keep from this compiler; docs/port/SHADERS.md).
- *   Its self-test passed on its one-row frame, then the first scene's 8
- *   replays drew a full-screen noise picture and submission 369 never
- *   finished (the GPU hang at 25.5 s).  Turnip on the same GPU keeps the
- *   pre-pass (the row's qualcomm flag: "runs better and no graphical
- *   glitches").  ICO_VK_FAKE_NO_PREPASS=1 gives any device the column's
- *   reason (the ctests).
- *
- * The noComputeRecord column: the devices whose VU record is never written
- * by compute dispatches (its reason for RhiLimits.computeStoresOff; the
- * renderer then takes the render targets where the vertex shaders cannot
- * store, rd_vu_record.c).  The hook for a driver whose compute builds
- * fail or hang; no device is listed (v0.11.2: the Mali-G52 of issue 179 is
- * the reason the compute record exists, and its start-up self-test falls
- * back to the targets on a wrong picture by itself). */
-static const struct {
-    uint32_t vendor, deviceMask, device;
-    bool qualcomm;
-    const char *reason;
-    const char *careful;         /* NULL: the start-up set as usual */
-    const char *noPrepass;       /* NULL: the pre-pass as everywhere */
-    const char *noComputeRecord; /* NULL: the compute record where offered */
-} kVuPlainOnly[] = {
-    /* the Adreno 740 by the whole chip id both devices report (0x43050A01,
-     * the issue 93 and 107 logs), nothing near it: Mesa's freedreno
-     * device list (src/freedreno/common/freedreno_devices.py) gives
-     * 0x43050A00 to the Adreno A32, 0x43050B00 to the 740v3 and
-     * 0x43051401 to the Adreno 750, none of them seen failing */
-    {RHI_VENDOR_QUALCOMM, 0xFFFFFFFFu, 0x43050A01u, true, "Adreno 740, issue 107",
-     "Adreno 740, issues 93 and 107", "Adreno 740 on Qualcomm's driver, issue 123", NULL},
-};
-
+ * fallback entries"), whose start-up set is made under the careful policy,
+ * and which draw without the VU vertex pre-pass: the device table's
+ * adreno-740-qualcomm row (port/rhi/rhi_device_table.c, where the evidence
+ * of each setting is written: the Adreno 740, device 0x43050A01, on
+ * Qualcomm's own driver by its id; Mesa's Turnip on the same GPU is another
+ * compiler), read at the pick (vk_device_table.c).
+ *   The plain set (VU_FALLBACK_PLAIN): the record path's modules are the
+ *   same on every device; a draw it cannot take (past the record, a stage
+ *   pipeline that could not be made, a failed self-test) draws through
+ *   vu_X_plain_vs there instead of vu_X_vs (port/render/rd_pipeline.c
+ *   rd__vu_policy_init, g_rd.vsFallback); its reason goes to
+ *   RhiLimits.vuFallbackPlain.  ICO_RD_VU_EXTENDED=1 gives the fallback the
+ *   extended variants anyway (the renderer reads it).
+ *   The careful set (CAREFUL_PIPELINES): its reason for
+ *   RhiLimits.carefulPipelines (docs/port/PIPELINES.md, "The start-up set"):
+ *   the window passes rd_pipeline_policy_careful() to rd_set_pipeline_policy
+ *   (batches of 8 on one thread, the pipeline cache written after each, the
+ *   set stopped and the rest made on first use once the process grew past
+ *   the budget or a batch took over 10 s).
+ *   The pre-pass off (VU_PREPASS_OFF): its reason for RhiLimits.vuPrepassOff
+ *   (the renderer's rd__vu_prepass_init logs "off by the device table
+ *   (<reason>)" and [dev] vu_prepass = true written in config.toml, exported
+ *   as ICO_RD_VU_PREPASS=on, draws with it anyway).  ICO_VK_FAKE_NO_PREPASS=1
+ *   gives any device the reason "ICO_VK_FAKE_NO_PREPASS" where no row sets
+ *   it (the ctests).
+ *   The compute record off (COMPUTE_RECORD_OFF): the devices whose VU record
+ *   is never written by compute dispatches (its reason for
+ *   RhiLimits.computeStoresOff; the renderer then takes the render targets
+ *   where the vertex shaders cannot store, rd_vu_record.c).  The hook for a
+ *   driver whose compute builds fail or hang; no row sets it (v0.11.2: the
+ *   Mali-G52 of issue 179 is the reason the compute record exists, and its
+ *   start-up self-test falls back to the targets on a wrong picture by
+ *   itself). */
 static void vkr_vu_plain_only(void)
 {
-    const uint32_t v = g_vkr.props.vendorID, d = g_vkr.props.deviceID;
+    const RhiDeviceVuRows rows = rhi_device_vu_rows(g_vkr.devTable);
     g_vkr.vuFallbackPlain[0] = '\0';
     g_vkr.carefulPipelines[0] = '\0';
     g_vkr.noVuPrepass[0] = '\0';
-    {
-        const char *fake = getenv("ICO_VK_FAKE_NO_PREPASS");
-        if (fake && fake[0] && fake[0] != '0') {
-            snprintf(g_vkr.noVuPrepass, sizeof g_vkr.noVuPrepass, "ICO_VK_FAKE_NO_PREPASS");
-        }
+    if (rows.plain != NULL) {
+        snprintf(g_vkr.vuFallbackPlain, sizeof g_vkr.vuFallbackPlain, "%s", rows.plain);
     }
-    for (size_t i = 0; i < sizeof(kVuPlainOnly) / sizeof(kVuPlainOnly[0]); i++) {
-        if (kVuPlainOnly[i].vendor == v &&
-            (d & kVuPlainOnly[i].deviceMask) == kVuPlainOnly[i].device &&
-            (!kVuPlainOnly[i].qualcomm || rhi_driver_is_qualcomm_proprietary(v, g_vkr.driverID))) {
-            snprintf(g_vkr.vuFallbackPlain, sizeof g_vkr.vuFallbackPlain, "%s",
-                     kVuPlainOnly[i].reason);
-            if (kVuPlainOnly[i].careful != NULL) {
-                snprintf(g_vkr.carefulPipelines, sizeof g_vkr.carefulPipelines, "%s",
-                         kVuPlainOnly[i].careful);
-            }
-            if (kVuPlainOnly[i].noPrepass != NULL) {
-                snprintf(g_vkr.noVuPrepass, sizeof g_vkr.noVuPrepass, "%s",
-                         kVuPlainOnly[i].noPrepass);
-            }
-            if (kVuPlainOnly[i].noComputeRecord != NULL && g_vkr.computeStores) {
-                g_vkr.computeStores = false;
-                snprintf(g_vkr.computeStoresOff, sizeof g_vkr.computeStoresOff,
-                         "the device table: %s", kVuPlainOnly[i].noComputeRecord);
-                VKR_LOG("compute record stores: not offered (%s)", g_vkr.computeStoresOff);
-            }
-            return;
-        }
+    if (rows.careful != NULL) {
+        snprintf(g_vkr.carefulPipelines, sizeof g_vkr.carefulPipelines, "%s", rows.careful);
+    }
+    if (rows.noPrepass != NULL) {
+        snprintf(g_vkr.noVuPrepass, sizeof g_vkr.noVuPrepass, "%s", rows.noPrepass);
+    }
+    if (rows.noComputeRecord != NULL && g_vkr.computeStores) {
+        g_vkr.computeStores = false;
+        snprintf(g_vkr.computeStoresOff, sizeof g_vkr.computeStoresOff, "the device table: %s",
+                 rows.noComputeRecord);
+        VKR_LOG("compute record stores: not offered (%s)", g_vkr.computeStoresOff);
     }
 }
 
@@ -3347,13 +3235,11 @@ static void vkr_fill_limits(void)
     o->depthReadback = g_vkr.dsFormat == VK_FORMAT_D32_SFLOAT_S8_UINT;
     o->depthStencilFormatName = g_vkr.dsFormat == VK_FORMAT_D24_UNORM_S8_UINT ? "D24S8" : "D32S8";
     o->depthSampled = g_vkr.dsSampled;
-    o->tiler = vkr_is_tiler(g_vkr.props.vendorID);
-#ifdef __ANDROID__
-    /* every Android GPU counts as tile-based, whatever its vendor id: the
-     * list above names the known ones, and a phone GPU missing from it
-     * would otherwise take the desktop defaults */
-    o->tiler = true;
-#endif
+    /* the device table's TILER (rows tile-vendors: Qualcomm, Arm,
+     * Imagination, Samsung, Apple and Broadcom; android: every Android GPU,
+     * whatever its vendor id, so a phone GPU missing from the list does not
+     * take the desktop defaults) */
+    o->tiler = g_vkr.devTable->value[RHI_DC_TILER] != 0;
     o->copyRowPitchAlign = 1; /* bufferRowLength is in texels; the pitch is width * texel size */
     o->copyOffsetAlign = 4;   /* bufferOffset: texel size, and 4 for depth/stencil */
     /* images carry mipLevels, views and barriers span every level, and
@@ -3446,8 +3332,8 @@ static void vkr_fill_limits(void)
     o->stencilView = g_vkr.dsSampled;
     o->stencilViewChannel = 0;
     o->stencilGather = o->stencilView; /* OpImageGather on the stencil aspect */
-    /* the VU shader variants' device table (kVuPlainOnly) and the
-     * compiler's line, for the renderer's log (rd__vu_policy_init) */
+    /* the VU shader variants' device table rows (vkr_vu_plain_only) and
+     * the compiler's line, for the renderer's log (rd__vu_policy_init) */
     vkr_vu_plain_only();
     o->vuFallbackPlain = g_vkr.vuFallbackPlain[0] ? g_vkr.vuFallbackPlain : NULL;
     o->carefulPipelines = g_vkr.carefulPipelines[0] ? g_vkr.carefulPipelines : NULL;

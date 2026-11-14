@@ -9,7 +9,9 @@ the order the window tries them in, and what has not been run. How each backend 
 [OpenGL](RHI.md#opengl), [Direct3D 11](RHI.md#direct3d-11)); the device profile of every class is
 [RENDER.md](RENDER.md#the-device-profile). The hardware rows behind the Vulkan classes and every
 other choice keyed on the GPU, its driver or the OS are listed in [DEVICE_TABLE.md](DEVICE_TABLE.md);
-the other backends match none of them.
+every backend prints the rows it matches after its device line. No row is keyed on OpenGL, Direct3D
+11 or Direct3D 12: they match only the platform's rows a vendor id of 0 or a Mesa driver gives
+(`vendor-unknown`, `mesa-drivers`).
 
 ## Where the renderer branches on the backend
 

@@ -636,6 +636,9 @@ enum {
     K_SUMMARY,
     K_VERSION,
     K_DEVICE,
+    /* the device table's start-up header, which names the rows in force
+       (the summary carries their count alone: port/rhi/rhi_device_table.h) */
+    K_DEVTABLE,
     K_ROBUST,
     K_BLEND,
     K_INDEX,
@@ -662,6 +665,10 @@ static int key_of(const char *l)
     if (strstr(l, "index values up to") != NULL &&
         (strstr(l, "(Vulkan ") != NULL || strstr(l, "(D3D12") != NULL)) {
         return K_DEVICE;
+    }
+    if (starts(l, "rhi_") && strstr(l, ": device table: ") != NULL &&
+        strstr(l, " of the table's ") != NULL) {
+        return K_DEVTABLE;
     }
     if (strstr(l, "loss diagnostics:") != NULL) {
         return K_ROBUST;
