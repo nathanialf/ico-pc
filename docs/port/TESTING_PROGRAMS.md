@@ -1820,6 +1820,30 @@ The renderer's test programs have a page of their own:
   `rhi_vk_qprio_unoffered` (`unoffered`) not asked with `global queue priority not offered`.
   `_granted` and `_refused` skip (77) where the device offers no global priority with high (this
   host's lavapipe lists `VK_KHR_global_priority` with low, medium, high and realtime).
+- `rhi_device_table_test.c` (ctests `rhi_device_table`, `rhi_device_table_docs`): the device table
+  (`port/rhi/rhi_device_table.c`, [DEVICE_TABLE.md](DEVICE_TABLE.md)), pure: unique row ids, every
+  setting's evidence, release and revisit condition, a row sets a choice once, rows read only the
+  derived facts resolved before what they set, every override link names a row it shares a choice
+  with, the start-up header and the summary clause of the Mali-G52 MC2, the Adreno 740 on
+  Qualcomm's driver, the PowerVR DXT-48-1536, the Intel HD 530 and an RTX 3090 word for word (and
+  the `mali-g52` row's line, an overridden setting's and a fake's words), the clause cut to its
+  count past 224 bytes, the noted clause, a row's value by id. `rhi_device_table_docs` runs it with
+  `--check-docs docs/port/DEVICE_TABLE.md`: the list between the markers must be what `--docs`
+  prints.
+- `rhi_device_table_equiv_test.c` (ctest `rhi_device_table_equiv`): the device table changes no
+  behaviour, pure. `rhi_device_table_ref.inc` keeps a copy of every rule the table replaces (each
+  naming its source lines) and the test compares each choice, value and words byte for byte, as the
+  call sites compose it, over about 1.4 million identities: the vendors that sent a log and the
+  rest of the tile-based list, the Adreno device ids beside the 740's, the GPU names the rows read,
+  driver ids 0, 1, 3 to 9, 13, 14 and 18, fourteen driver texts (Qualcomm's, Turnip's, PurpleVK's,
+  the B-Series in any case, Mesa's, none), the Vulkan versions around 1.3.215 on Intel and vendor
+  0, every OS and backend, MoltenVK, a driver package; on the logged devices every combination of
+  `ICO_VK_FAKE_VENDOR`, `_PASS_ROW`, `_QUEUE_PRIORITY`, `_ADRENO`, `_SERIAL`, `_NO_PREPASS`,
+  `ICO_RD_VU_COMPACT_ARM` and `ICO_VK_FAKE_LIMITS=moltenvk`, and the profile's run inputs. It links
+  `rhi_pass_row.c`, `rhi_driver_version.c`, `rhi_tile_rule.c`, `rhi_qprio.c`, `memory_floor.c` and
+  `present_fallback.c` and compares each with its copy over the matrix. It fails when a row is in
+  force on no identity, an override link decides none, or two matching rows differ without a link.
+  About 6 s at -O2, 45 s under the address and undefined-behaviour sanitizers.
 - `rhi_subpass_verdict_test.c`: the subpass read's decision at a Vulkan start and its verdict file
   (`port/rhi/rhi_subpass_verdict.h`), pure: every branch of `rhi_subpass_decide` in its order
   (`[dev] subpass_read = off`, `ICO_VK_FAKE_NO_DST` with and without the key, `= on` over a refusal

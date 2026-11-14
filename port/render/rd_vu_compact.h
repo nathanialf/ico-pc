@@ -75,20 +75,13 @@
 
 /* the class decisions: on where the self-test passes (1) or off (0); every
    other device on the compute record is off by default (measured on the
-   Mali-G52 only) */
-#ifndef RD_VU_COMPACT_DEFAULT
-#define RD_VU_COMPACT_DEFAULT 1
-#endif
-/* 0 since v0.11.7: on in v0.11.6, the Mali-G52 of issue 179 drew a black
-   picture from its first 3D picture on (every picture's GPU work stopped
-   after list 0's start, the fences still signalled), and the index
-   compaction, the first index buffer the GPU wrote on that device, is the
-   likeliest of v0.11.6's changes there (lavapipe draws the reporter's loss
-   dumps the same with it on and off, and the bounds audit, rd_vu_audit.h,
-   found no access out of range: not proven); off there, as v0.11.5 drew */
-#ifndef RD_VU_COMPACT_ARM_DEFAULT
-#define RD_VU_COMPACT_ARM_DEFAULT 0
-#endif
+   Mali-G52 only).  RD_VU_COMPACT_DEFAULT (1, the DXT's) and
+   RD_VU_COMPACT_ARM_DEFAULT (0 since v0.11.7, the Mali-G52's: issue 179's
+   black pictures, the reason beside them) are the device table's values
+   (port/rhi/rhi_device_table.h, its rows powervr-dxt-48-1536 and mali-g52;
+   docs/port/DEVICE_TABLE.md), and rd_vu_compact.c reads them from the
+   rows */
+#include "rhi_device_table.h"
 
 /* the fourth plane: the planned draws' lists from its start (uint values,
    in the plan's order), then from the next whole texel the counts, a texel
@@ -163,9 +156,10 @@ size_t rd_vu_cmp_block_text(char *out, size_t cap, const RdVuCmpCounts *c);
 /* ICO_RD_VU_COMPACT: -1 unset, 0, 1 (anything else -1, said once) */
 int rd_vu_cmp_env(void);
 /* pure: the device's class (attempt_ledger.h ICO_ATT_CMP_*): the Mali-G52
-   where Arm's vendor id (not through MoltenVK) has RD_VU_CMP_G52_NAME in its
-   device name (name NULL: unknown) or byTests (ICO_RD_VU_COMPACT_ARM=1), else
-   the PowerVR D-Series DXT-48-1536 where dxt, else another device */
+   where the device table's row mali-g52 matches (Arm's vendor id, not
+   through MoltenVK, RD_VU_CMP_G52_NAME in the device name; name NULL:
+   unknown) or byTests (ICO_RD_VU_COMPACT_ARM=1), else the PowerVR D-Series
+   DXT-48-1536 where dxt, else another device */
 int rd_vu_cmp_class(const char *name, uint32_t vendor, bool moltenvk, bool dxt, bool byTests);
 
 /* the block's counts, taken and reset (the window's 10 s line; the render
