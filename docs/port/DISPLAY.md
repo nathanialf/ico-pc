@@ -1007,6 +1007,15 @@ behind (the closing step then ends past its own period by design and the miss co
 frame's end): at the phone's 25 ms GPU pictures 39.8 presented fps against the rule's 39.2, 45-54
 against 40-50 where the GPU has time to spare, for up to a field more input latency and the
 back-off's misses redefined (`build-host/tmp/v098/evidence/pace3/rc10_cells.py`, `lag_trace.py`).
+As a rate requirement in the steady state (the further picture asked as soon as the render
+thread is free; a later ask only ends its reads later): two pictures a frame while `S + 2R <= 3P -
+S - 2 ms` and the step after's start `2S + 3R <= 4P - B - 2 ms` (S the closing step's plan, B the
+step between's, R a picture's reads), one otherwise. With S = 12.5 ms and B = 1.2 ms: 60 a second
+at reads of 8, 9.5 and 11 ms, 30 at 12, 16, 20, 24 and 30 ms, the bound 11.524999 ms to the
+nanosecond; with S = 6 ms the step after binds at 17.177777 ms (`clock_trap_test`, on
+`pace_rt_further_trace`). The rate is not proportional to the cost: it steps at the bound. The
+owner's Pixel crossed it in the cage when its reads went from 8-10 to 16.8 ms for the same pictures
+at lower CPU clocks ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-clock-lift-and-the-worst-second-the-owners-pixel)).
 The render thread's times say how long a picture's reads will take: its interpolation, its waits
 for the submit thread and for the GPU's slot fences (2 pictures in flight at most), at the GPU's
 measured time a picture, and its own reads (`port/platform/pace_policy.h` (`pace_rt_further_ask`,

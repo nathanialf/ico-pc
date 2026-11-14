@@ -10,3 +10,4 @@
 - An attempt at the short freezes on tablets and phones with Adreno graphics on Qualcomm's own driver: the game now asks Android to run its graphics work ahead of other apps' (the picture is unchanged).
 - The frame rate counter no longer shows a very low number after you return to the game, turn the screen or save a picture for a bug report.
 - After a short graphics freeze the game no longer mistakes its own check for a fault and saves a capture, which could cause another freeze.
+- An attempt at moving objects looking slow on phones running Android 16 or later with the frame rate uncapped: when the picture rate drops to one picture per game frame, the game now tells Android it needs more processor and graphics speed (the picture itself is unchanged).

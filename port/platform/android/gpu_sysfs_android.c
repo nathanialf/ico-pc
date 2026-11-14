@@ -391,6 +391,17 @@ bool gpu_sysfs_android_block(double sinceMs, GpuSysfsBlock *out)
     return true;
 }
 
+bool gpu_sysfs_android_ring(GpuSysfsRing *out)
+{
+    if (!s_sampling) {
+        return false;
+    }
+    pthread_mutex_lock(&s_lock);
+    *out = s_ring;
+    pthread_mutex_unlock(&s_lock);
+    return true;
+}
+
 bool gpu_sysfs_android_around(double t0Ms, double t1Ms, int core, GpuSysfsAround *out)
 {
     if (!s_sampling) {
