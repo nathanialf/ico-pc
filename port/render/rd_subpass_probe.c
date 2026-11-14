@@ -533,6 +533,9 @@ void rd__subpass_probe_after_selftest(int ran, bool passed, const char *words)
         readF = 0.25;
         plainF = 0.25;
     } else if (sab && strcmp(sab, "plain") == 0) {
+        /* the read decided too, so the plain pass is the reason given (the
+           read's own timing is noise on a loaded machine) */
+        readF = 0.25;
         plainF = 4.0;
     }
     if (sab) {

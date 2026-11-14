@@ -3706,3 +3706,19 @@ include(rd_smallcuts.cmake) # the turn in the present's blit, the VU record by c
 include(rd_vu_compact.cmake) # the index compaction (issue 179)
 include(rd_subpass_probe.cmake) # the subpass read's first-start probe
 include(rd_bench.cmake) # the rc-only bench: kept frames measured part by part
+
+# the lavapipe driver's compile thread racing the exit (the leak described at
+# rd_blend_selftest above: 240 or 480 bytes, every frame in libasan, libc or an
+# unloaded module, none of the port's) reached the replay tool's tests in CI
+# run 43554209427 (asan 5/5: these twelve, clean in run 43548413539 on the
+# same sources): the leak check is off for them under asan, as for that family
+if(ICO_SANITIZE MATCHES "address")
+    foreach(_t rd_replay_tool_jitter rd_replay_tool_fsr3_dump rd_replay_tool_pass_dump
+               rd_replay_tool_velocity rd_replay_tool_loss_bisect rd_replay_tool_pass_split
+               rd_replay_tool_prerotate rd_replay_tool_pass_merge rd_replay_tool_snap_swap
+               rd_replay_tool_crack rd_vu_flat0_ab_pixel rd_vu_compact_ab_pixel)
+        if(TEST ${_t})
+            set_property(TEST ${_t} APPEND PROPERTY ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0")
+        endif()
+    endforeach()
+endif()
