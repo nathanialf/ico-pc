@@ -13,7 +13,6 @@ port/render/test/rd_bench_ab.cmake
 port/render/test/rd_crack_work_ab.cmake
 port/render/test/rd_fill11_ab.cmake
 port/render/test/rd_late_pass_ab.cmake
-port/render/test/rd_pass_objects_ab.cmake
 port/render/test/rd_replay_tool_glow_hold.cmake
 port/render/test/rd_replay_tool_ripple.cmake
 port/render/test/rd_replay_tool_save_blended.cmake
@@ -23,7 +22,6 @@ port/render/test/rd_vis_hiz_corpus.txt
 port/render/test/rd_vu_audit.cmake
 port/render/test/rd_vu_compact_ab.cmake
 port/render/test/rd_vu_flat0_ab.cmake
-tools/aura_box_dumps.txt
 tools/aura_paste_dumps.txt
 tools/bench_dumps.txt
 tools/constant_reads_dumps.txt
@@ -40,9 +38,6 @@ tools/native_frame_dumps.txt
 tools/no_volume_dumps.txt
 tools/noplanes_dumps.txt
 tools/occlusion_corpus.txt
-tools/pass_area_dumps.txt
-tools/pass_cut_dumps.txt
-tools/pass_objects_dumps.txt
 tools/prerotate_dumps.txt
 tools/scope_dumps.txt
 tools/shadow_box_dumps.txt
