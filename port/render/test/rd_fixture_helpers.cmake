@@ -72,6 +72,8 @@ set(_rdfx_q_present_scene_skipped "present from SCENE on: ([0-9]+) reductions no
 set(_rdfx_q_lamps_area_passes "\\): ([0-9]+) passes with the lamps' area")
 set(_rdfx_q_lamps_bands_lazy "([0-9]+) bands left lazy")
 set(_rdfx_q_lamps_owed "([0-9]+) WORK0 alpha sprites owed")
+# the crack fill after the MSAA resolve
+set(_rdfx_q_crack_msaa_fills "crack fill on: [^\n]*, ([0-9]+) fills after the MSAA resolve")
 # the passes' render areas, the passes cut, the aura's read in two passes
 set(_rdfx_q_pass_area_passes "pass area on: ([0-9]+) passes with an area")
 set(_rdfx_q_pass_area_covered "pass area on: [^\n]*[(,] ?([0-9]+) its draws cover the picture")

@@ -1,0 +1,20 @@
+# rd_crack_work_ab, rd_crack_work_gl (port/render/test/rd_crack_work_ab.cmake):
+# the crack fill's swap and early leave off against on, byte for byte.  A
+# fixture's name (port/render/test/fixtures/NAME.rdfix), swapN and tapN (one
+# replay's snapshots by the swap and early-leave draws at the PowerVR phone's
+# setting, re-derived from a run of the fixture) and the line's own properties
+# (QUANTITY OP VALUE: crack_pixels, the fill drawn at every setting on the
+# generated geometry).  Not here: fx-shadow-wide (0 pixels filled at every
+# setting: no crack on its generated geometry; its source fills 55 at the
+# phone's setting).
+#
+# the PowerVR phone's bridge (the fill the first draw of the aura's paste
+# pass: swapped, the early leave) and its cage under the dark plan (the fill
+# held: its copy kept)
+fx-phone-4761 swap1 tap1
+fx-phone-7583 swap0 tap1
+# issue 163's lamps room (the fill held at the phone's setting)
+fx-163-blended swap0 tap0 crack_pixels>=1
+# the corpus's lightning room, the title's menu (the fill in a pass of its own)
+fx-lightning-0300 swap1 tap0
+fx-title-0300 swap1 tap0

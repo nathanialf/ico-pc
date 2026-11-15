@@ -1,10 +1,14 @@
 # rd_crack_work_ab: the crack fill's swap and early leave (port/render/rd_crack_fill.c
 # FILLSWAP and CRACKTAP; docs/port/RENDER_POST.md, "The crack fill's snapshot by
 # the swap"): both off (ICO_RD_CRACK_SWAP=0 ICO_RD_CRACK_TAP2=0) against both on
-# (=1).  For every dump the list names (tools/crack_work_dumps.txt: a path, '*'
-# globs allowed, optionally swapN and tapN, one replay's swapped snapshots and
-# early-leave draws at the phone's setting; a listed dump that is absent FAILS),
-# rd_replay_tool's --pass-dump with --stats and ICO_RD_VU_PREPASS=0, at:
+# (=1).  For every fixture the list names (port/render/test/fixtures/lists/
+# crack_work.txt: fixture names of the repository, docs/port/TESTING_FIXTURES.md;
+# a listed fixture that is absent or does not expand to its pinned SHA-256
+# FAILS; after each name swapN and tapN, one replay's swapped snapshots and
+# early-leave draws at the phone's setting, re-derived from a run of the
+# fixture, and the line's own properties, rd_fixture_list_props.cmake),
+# expanded into OUT, rd_replay_tool's --pass-dump with --stats and
+# ICO_RD_VU_PREPASS=0, at:
 #   phone   the PowerVR phone's Resolution Auto (Enhanced, 2364x1080, Full height,
 #           Full pixel, presented at 2364x1080; scale about 2.8 x 2.4, reach 2x2)
 #           under the tile class's fakes (ICO_VK_FAKE_LIMITS=moltenvk) and the
@@ -19,74 +23,53 @@
 #   desk4x  Enhanced 4x at 4:3 (reach 2x2), the same profile;
 #   gl      -DBACKEND=opengl (rd_crack_work_gl): the phone's setting on OpenGL
 #           (llvmpipe, no fakes: the fill in a pass of its own);
-# a dump drawn narrower than a setting's aspect cannot show it and is skipped
-# there.  Each pair: every PNG the off run writes (SCENE, DISPLAY, PRESENT and
-# every other named target) the on run's byte for byte; the same draws and
-# passes; the off run's stats say the swap off with nothing swapped and the early
-# leave off with no draw; the on run's swap self-test passed where the fill drew
-# (the off run's too: it runs either way); its colour MB copied and loaded each
-# fewer than the off run's by the MB its stats name for the swapped snapshots
-# (within 0.02, two decimals' rounding), stored the same, depth and stencil the
-# same; the swapped snapshots and the early-leave draws at most the off run's
-# copied snapshots and fill draws; the dumps the list marks swap and leave early
-# that many times at the phone's setting.  At least one snapshot swapped and one
-# early-leave draw over the list.  No device: SKIP (77).
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
-# -DBACKEND=vulkan|opengl
-# The lists name dumps of the build machine alone (the owner's rule there: a
-# listed dump that is absent FAILS). A machine without that folder has none of
-# them: the test is skipped as the older dump tests are.
-if(NOT IS_DIRECTORY "/primary/dev/ico-dumps")
-  message(STATUS "SKIP: no dump folder on this machine (/primary/dev/ico-dumps): the list's dumps are the build machine's")
-  return()
-endif()
-set(dumps "")
+# a fixture drawn narrower than a setting's aspect cannot show it and is
+# skipped there.  Each pair: every PNG the off run writes (SCENE, DISPLAY,
+# PRESENT and every other named target) the on run's byte for byte; the same
+# draws and passes; the off run's stats say the swap off with nothing swapped
+# and the early leave off with no draw; the on run's swap self-test passed where
+# the fill drew (the off run's too: it runs either way); its colour MB copied and
+# loaded each fewer than the off run's by the MB its stats name for the swapped
+# snapshots (within 0.02, two decimals' rounding), stored the same, depth and
+# stencil the same; the swapped snapshots and the early-leave draws at most the
+# off run's copied snapshots and fill draws; the list's swapN and tapN at the
+# phone's setting.  The path ran: the generated geometry decides where the
+# cracks are, so on the on run of every pair the fixture's declared crack_pixels
+# (>=1: the fill drew at that setting) is checked (rd_fixture_require), every
+# fixture swaps or leaves early at least once over its settings (a held fill
+# keeps its copy at the phone's setting and swaps at the desktop's), and a
+# fixture the phone's setting (OpenGL's) did not replay fails.  At least one snapshot swapped and one early-leave draw over the list.
+# No device: SKIP (77).
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the
+# fixtures folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<a
+# fixture list> -DOUT=<a folder the test may write> -DBACKEND=vulkan|opengl
+include("${FIXTURE_HELPERS}")
+include("${CMAKE_CURRENT_LIST_DIR}/rd_fixture_list_props.cmake")
 set(failures 0)
-if("${LIST}" STREQUAL "" OR NOT EXISTS "${LIST}")
-  message(FATAL_ERROR "rd_crack_work_ab: no dump list ${LIST}")
-endif()
-get_filename_component(listDir "${LIST}" DIRECTORY)
-file(STRINGS "${LIST}" lines)
-foreach(l IN LISTS lines)
-  string(STRIP "${l}" l)
-  if(l STREQUAL "" OR l MATCHES "^#")
-    continue()
-  endif()
+rd_fixture_list("${LIST}" names)
+set(dumps "")
+foreach(name IN LISTS names)
+  rd_fixture_list_props(${name})
   set(wantSwap "")
   set(wantTap "")
-  if(l MATCHES "^(.*[^ \t])[ \t]+tap([0-9]+)$")
-    set(l "${CMAKE_MATCH_1}")
-    set(wantTap "${CMAKE_MATCH_2}")
-  endif()
-  if(l MATCHES "^(.*[^ \t])[ \t]+swap([0-9]+)$")
-    set(l "${CMAKE_MATCH_1}")
-    set(wantSwap "${CMAKE_MATCH_2}")
-  endif()
-  if(NOT IS_ABSOLUTE "${l}")
-    set(l "${listDir}/${l}")
-  endif()
-  if(l MATCHES "[*]")
-    file(GLOB found "${l}")
-    list(SORT found)
-    if(NOT found)
-      message(SEND_ERROR "${l}: no dump matches (a listed dump must exist)")
-      math(EXPR failures "${failures} + 1")
+  string(REGEX REPLACE "[ \t]+" ";" words "${RDFX_FIELDS_${name}}")
+  foreach(w IN LISTS words)
+    if(w MATCHES "^swap([0-9]+)$")
+      set(wantSwap "${CMAKE_MATCH_1}")
+    elseif(w MATCHES "^tap([0-9]+)$")
+      set(wantTap "${CMAKE_MATCH_1}")
     endif()
-    foreach(d IN LISTS found)
-      list(APPEND dumps "${d}")
-      set(wantSwap_${d} "${wantSwap}")
-      set(wantTap_${d} "${wantTap}")
-    endforeach()
-  elseif(EXISTS "${l}")
-    list(APPEND dumps "${l}")
-    set(wantSwap_${l} "${wantSwap}")
-    set(wantTap_${l} "${wantTap}")
-  else()
-    message(SEND_ERROR "${l}: no such dump (a listed dump must exist)")
-    math(EXPR failures "${failures} + 1")
+  endforeach()
+  if(wantSwap STREQUAL "" OR wantTap STREQUAL "")
+    message(FATAL_ERROR "${LIST}: ${name} without swapN and tapN (the phone's setting's swapped "
+                        "snapshots and early-leave draws, re-derived from a run of the fixture)")
   endif()
+  rd_fixture_expand(${name} "${OUT}/fixtures" d)
+  list(APPEND dumps "${d}")
+  set(name_${d} "${name}")
+  set(wantSwap_${d} "${wantSwap}")
+  set(wantTap_${d} "${wantTap}")
 endforeach()
-list(REMOVE_DUPLICATES dumps)
 list(LENGTH dumps ndumps)
 
 set(common ICO_RD_VU_PREPASS=0)
@@ -136,7 +119,7 @@ foreach(dump IN LISTS dumps)
       file(MAKE_DIRECTORY "${dir}")
       execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${common} ${env_${s}}
                               ICO_RD_CRACK_SWAP=${w} ICO_RD_CRACK_TAP2=${w}
-                              "${TOOL}" "${dump}" - --pass-dump "${dir}" --stats ${args_${s}}
+                              "${TOOL}" "${dump}" "${dir}-out.png" --pass-dump "${dir}" --stats ${args_${s}}
                       RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
       if(rc EQUAL 77)
         message(STATUS "SKIP: no device: ${err}")
@@ -153,6 +136,7 @@ foreach(dump IN LISTS dumps)
         set(skipped TRUE)
         continue()
       endif()
+      set(out_${w} "${out}")
       string(REPLACE ";" "," flat "${out}")
       set(ok TRUE)
       foreach(re drawsRe crackRe swapRe tapRe trafficRe)
@@ -247,6 +231,17 @@ foreach(dump IN LISTS dumps)
                          "and loaded, the rest the same")
       math(EXPR failures "${failures} + 1")
     endif()
+    # the path ran: the fill drew at this setting on the fixture's generated
+    # geometry (its declared crack_pixels)
+    set(n "${name_${dump}}")
+    rd_fixture_require(${n} "${out_1}" crack_pixels)
+    if(s STREQUAL "phone" OR s STREQUAL "gl")
+      set(required_${dump} TRUE)
+    endif()
+    math(EXPR work "${swaps_1} + ${taps_1}")
+    if(work GREATER 0)
+      set(worked_${dump} TRUE)
+    endif()
     if(s STREQUAL "phone")
       foreach(k Swap Tap)
         set(want "${want${k}_${dump}}")
@@ -255,8 +250,8 @@ foreach(dump IN LISTS dumps)
         else()
           set(got "${taps_1}")
         endif()
-        if(NOT want STREQUAL "" AND NOT got EQUAL want)
-          message(SEND_ERROR "${dump} ${s}: ${got} ${k} on, ${want} expected")
+        if(NOT got EQUAL want)
+          message(SEND_ERROR "${n} ${s}: ${got} ${k} on, ${want} expected (the list's field)")
           math(EXPR failures "${failures} + 1")
         endif()
       endforeach()
@@ -285,13 +280,25 @@ foreach(dump IN LISTS dumps)
     endforeach()
   endforeach()
 endforeach()
+foreach(dump IN LISTS dumps)
+  if(NOT required_${dump})
+    message(SEND_ERROR "${name_${dump}}: never replayed at the phone's setting (OpenGL: its one "
+                       "setting): a fixture this test cannot measure is no test")
+    math(EXPR failures "${failures} + 1")
+  elseif(NOT worked_${dump})
+    message(SEND_ERROR "${name_${dump}}: no snapshot swapped and no early-leave draw at any "
+                       "setting: the swap and the early leave did not run on this fixture")
+    math(EXPR failures "${failures} + 1")
+  endif()
+endforeach()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(failures GREATER 0)
-  message(FATAL_ERROR "rd_crack_work_ab: ${failures} failures over ${ndumps} dumps")
+  message(FATAL_ERROR "rd_crack_work_ab: ${failures} failures over ${ndumps} fixtures")
 endif()
 if(compared EQUAL 0 OR swapTotal EQUAL 0 OR tapTotal EQUAL 0)
   message(FATAL_ERROR "rd_crack_work_ab: ${compared} targets compared, ${swapTotal} snapshots "
-                      "swapped, ${tapTotal} early-leave draws over ${ndumps} dumps: one of each "
+                      "swapped, ${tapTotal} early-leave draws over ${ndumps} fixtures: one of each "
                       "at least expected")
 endif()
-message(STATUS "rd_crack_work_ab: ${compared} targets the same bytes over ${ndumps} dumps; "
+message(STATUS "rd_crack_work_ab: ${compared} targets the same bytes over ${ndumps} fixtures; "
                "${swapTotal} snapshots swapped, ${tapTotal} early-leave draws")
