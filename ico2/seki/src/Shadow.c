@@ -1086,25 +1086,28 @@ static inline float clipVolumeEdge(VECTOR *pa, VECTOR *pb, float sgn) /* derived
         }
     }
 
-    /* PC port: the edge clip at +-gsFrame.w about the centre across (FRAME:
-       the PS2's +-ScreenWidth, 512, at 4:3), so a shadow at a wide frame's
-       sides is not cut (GsBase.c; at most GSB_SHADOW_CLIP_MAX, 2046 pixels,
-       so a clipped end passes volumeVertsOutOfRange below) */
+    /* PC port: the edge clip is the disc's own box on the native frame
+       (GsBase.c, port/include/ico_shadow_clip.h): +-ScreenWidth by
+       +-ScreenHeight on the European, Japanese, Korean and Asian discs,
+       three halves of both on the North American disc and the two 2001
+       previews, with the frame's width for ScreenWidth (FRAME: 512 at 4:3),
+       so a shadow at a wide frame's sides is not cut (at most
+       GSB_SHADOW_CLIP_MAX across, 2046 pixels, so a clipped end passes
+       volumeVertsOutOfRange below) */
     fw = gsb_HostShadowClipX();
+    fh = gsb_HostShadowClipY();
     rate[0] = rate[1] = 1.0f;
     /* a wholly visible edge returns at once */
-    if (-fw < oa.x && oa.x < fw && -fw < ob.x && ob.x < fw && -ScreenHeight < oa.y &&
-        oa.y < ScreenHeight && -ScreenHeight < ob.y && ob.y < ScreenHeight) {
+    if (-fw < oa.x && oa.x < fw && -fw < ob.x && ob.x < fw && -fh < oa.y && oa.y < fh &&
+        -fh < ob.y && ob.y < fh) {
         return dot * sgn;
     }
     if ((oa.x <= -fw && ob.x <= -fw) || (fw <= oa.x && fw <= ob.x) ||
-        (oa.y <= -ScreenHeight && ob.y <= -ScreenHeight) ||
-        (ScreenHeight <= oa.y && ScreenHeight <= ob.y)) {
+        (oa.y <= -fh && ob.y <= -fh) || (fh <= oa.y && fh <= ob.y)) {
         pb->w = -1.0f;
         pa->w = -1.0f;
         return -1.0f;
     }
-    fh = ScreenHeight;
     t0 = t1 = 1.0f;
     if (fw < oa.x && ob.x <= fw) {
         t = (ob.x - fw) / (ob.x - oa.x);

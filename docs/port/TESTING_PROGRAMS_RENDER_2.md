@@ -273,6 +273,15 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   once (restarts alone too, at the 16th); its earlier run, the Adreno 740's 13 isolated hangs and 13
   restarts in 16,300 pictures, an idle GPU's restarts and unjudged pictures never do; every other
   picture unfinished meets it at the 31st (15 of 32 never, the 16th does).
+- `shadow_clip_test.c` (`shadow_clip`; `shadow_clip.cmake`, CPU, no game code): the box the shadow
+  volumes' edges are clipped to (`port/include/ico_shadow_clip.h`; [GS.md](GS.md#primitives-and-shadows)):
+  each disc's own box at the 4:3 frame (512 by 448 or 512 on the European, Japanese, Korean and
+  Asian discs, 768 by 672 or 768 on the North American disc and the two 2001 previews); at every
+  native width from 512 to 2560 the box across is the width times 1 or 3 / 2, at most 2046, never
+  inside the disc's own, never inside the width itself, past the picture's side, not narrower than
+  at the width before, and an end moved onto it passes `Shadow.c`'s range test on both axes; the
+  widths of 16:9, 32:9 and 48:9; a number that is no row of `config/regions.txt` takes the European
+  disc's box.
 - `rd_inames_test.c` (`rd_inames`; `rd_inames.cmake`, CPU): the draws left at their tick's position by name (`rd_inames.h`): the tally by name and reason, the top five of each reason and `interp names: ...` word for word, a NULL or empty name `a draw`, a name cut to the record's 23 bytes, the table of 128 names full and the rest counted, a short buffer; the line counted at each frame's first present; the stair test's verdict bits (moved every other tick over ten ticks: 9 judged, 5 moved, a step at each of the four still ticks after a move, alternating at the six ticks from the fourth judged one; two keys of a name summed and the window zeroing the counts, not the keys; moved every tick or never: no step, no alternation; stopped once: one; a key twice in a tick judged once; a skipped tick not judged and the run broken; the table emptied at three quarters); the line's cadence `[moved 5 of 9, alternating 6]`; the name hash (NULL and empty `a draw`, a long name cut); the tick before's rows carried to this tick's view (`rd_inames_carry`, `rd_inames_moved`: the camera's motion cancels, a model moved 2 units moves, the bound at 2^-17 of the row's larger lane: 1 apart at 131072 still and 2 apart moved, the GS Z lane left out, an axis turned moved, the kept carry the same, a singular view none).
 - `rd_vu_compact_ab.cmake` (`rd_vu_compact_ab`, `rd_vu_compact_ab_pixel`; `rd_vu_compact.cmake`):
   the index compaction ([PIPELINES.md](PIPELINES.md#the-index-compaction)) on against off,

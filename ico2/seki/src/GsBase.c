@@ -2077,9 +2077,12 @@ static int gsbHostRdW, gsbHostRdH; /* port: the size rd's scene targets were mad
 
 #endif
 
+static void gsbHostShadowClipNote(void);
+
 static void gsbHostFrameLatch(void)
 {
     ico_video_frame(&gsFrame, ScreenHeight);
+    gsbHostShadowClipNote();
     {
         /* GifPacket.c (every build): isInScreen's window and the decoder's
            field widths and work-buffer classes read the frame's width */
@@ -3050,9 +3053,14 @@ float gsb_HostLineHalfWidth(void)
     return hw;
 }
 
-/* PC port: Shadow.c's edge clip: +-ScreenWidth (512) about the centre on
-   the PS2, +-gsFrame.w on the native frame (FRAME; 512 at 4:3), so the
-   clip lies a half-width past the picture's side at every width.  At most
+/* PC port: Shadow.c's edge clip: the disc's own box on the native frame
+   (port/include/ico_shadow_clip.h).  On the PS2 it is +-ScreenWidth by
+   +-ScreenHeight about the centre (512 by 448 or 512) on the European,
+   Japanese, Korean and Asian discs and three halves of both (768 by 672 or
+   768) on the North American disc and the two 2001 previews; here the
+   frame's width stands for ScreenWidth (FRAME; 512 at 4:3), so the clip
+   lies half a picture, or a whole one, past the picture's side at every
+   width.  Across at most
    GSB_SHADOW_CLIP_MAX pixels: a clipped end
    must pass emitVolumeStrip's range test (volumeVertsOutOfRange: x in
    0x11 .. 0xFFEF sixteenths, GS 1.0625 .. 4094.9375), or the strip it
@@ -3067,9 +3075,37 @@ float gsb_HostLineHalfWidth(void)
    side (1024 .. 1280 out).  GSB_SHADOW_CLIP_MAX is in GsBase.h. */
 float gsb_HostShadowClipX(void)
 {
-    float x = (float)gsFrame.w; /* FRAME */
+    return ico_shadow_clip_x(ico_region, gsFrame.w); /* FRAME */
+}
 
-    return x > GSB_SHADOW_CLIP_MAX ? GSB_SHADOW_CLIP_MAX : x;
+/* PC port: the same box down: +-ScreenHeight, or three halves of it (at
+   most 768: GS y 1280 .. 2816, inside the range test) */
+float gsb_HostShadowClipY(void)
+{
+    return ico_shadow_clip_y(ico_region, ScreenHeight);
+}
+
+/* PC port: one line when the box is not the European disc's proportion of
+   the frame, at gsb_Init's latch and at each change of the frame after it
+   (gsbHostFrameLatch) */
+static void gsbHostShadowClipNote(void)
+{
+    static int notedW, notedH;
+    const float x = gsb_HostShadowClipX();
+    const float y = gsb_HostShadowClipY();
+    const float px = ico_shadow_clip_x(ICO_REGION_PAL, gsFrame.w);
+    const float py = ico_shadow_clip_y(ICO_REGION_PAL, ScreenHeight);
+
+    if ((x == px && y == py) || (notedW == gsFrame.w && notedH == ScreenHeight)) {
+        return;
+    }
+    notedW = gsFrame.w;
+    notedH = ScreenHeight;
+    fprintf(stderr,
+            "shadow: the volumes' edges are clipped to this disc's own box, +-%g by +-%g GS "
+            "pixels about the centre of the %d x %d frame (three halves of it; the European "
+            "disc's is +-%g by +-%g; logged at each change of the frame)\n",
+            (double)x, (double)y, gsFrame.w, ScreenHeight, (double)px, (double)py);
 }
 
 /* Clip a box against the current matrix: transform its eight corners with the
