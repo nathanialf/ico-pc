@@ -1,60 +1,43 @@
 # rd_aura_box_ab: the aura's feedback read of the picture into FEED128 in two
 # passes (port/render/rd_aura_box.c; docs/port/WORK_BUFFERS.md, "The aura's
-# feedback read") against the one-pass box, byte for byte.  For every dump
-# the list names (tools/aura_box_dumps.txt: tools/vustage_dumps.txt's dumps
-# and the PowerVR phone's three F12 frames, read as rd_fades_fold_ab.cmake
-# reads its lists), rd_replay_tool's --pass-dump with --stats twice under
+# feedback read") against the one-pass box, byte for byte.  For every fixture
+# the list names (port/render/test/fixtures/lists/aura_box.txt: fixture names
+# of the repository, docs/port/TESTING_FIXTURES.md, each with the reads it
+# shows here on its line; a listed fixture that is absent or does not expand
+# to its pinned SHA-256 FAILS), expanded into OUT, rd_replay_tool's
+# --pass-dump with --stats twice under
 # ICO_RD_BLEND=fixed, with ICO_RD_AURA_BOX=0 (one pass) and ICO_RD_AURA_BOX=1
 # (two passes), at two settings:
 #   phoneauto the phone's Resolution Auto (2364x1080, Full height, Full
 #             pixel, aspect 2.189, presented at 2364x1080, the programs' own
 #             entries, ICO_RD_VU_PREPASS=0): the box's edges a fraction of a
 #             texel off the grid, moving by a 32nd from column to column; a
-#             dump drawn narrower than the aspect cannot show it and is
+#             fixture drawn narrower than the aspect cannot show it and is
 #             skipped there;
 #   enh2x     Enhanced 2x at 4:3, presented at 1280x960.
 # Every PNG the first run writes (FEED128, SCENE, PRESENT and every other
 # named target) must be the second's byte for byte; the one-pass run must
 # say "aura box off: 0", the other "aura box on"; the two-pass run's passes
 # and draws must be the other's plus its reads in two passes (ROWBOX's pass
-# and draw, one each a read); some dump must read in two passes at some
-# setting (else the gate saw nothing).  A missing list or dump is named and
-# skipped; no dump read, or no device: SKIP (77).
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
+# and draw, one each a read); some fixture must read in two passes at some
+# setting (else the gate saw nothing).  The path ran (rd_fixture_require on
+# the two-pass run of every setting the fixture shows): its declared
+# aura_box_reads; a fixture whose properties no setting checked FAILS.  No
+# device: SKIP (77).
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the
+# fixtures folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<a
+# fixture list> -DOUT=<a folder the test may write>
+include("${FIXTURE_HELPERS}")
+include("${CMAKE_CURRENT_LIST_DIR}/rd_fixture_list_props.cmake")
 set(dumps "")
-if(NOT "${LIST}" STREQUAL "" AND EXISTS "${LIST}")
-  get_filename_component(listDir "${LIST}" DIRECTORY)
-  file(STRINGS "${LIST}" lines)
-  foreach(l IN LISTS lines)
-    string(STRIP "${l}" l)
-    if(l STREQUAL "" OR l MATCHES "^#")
-      continue()
-    endif()
-    if(NOT IS_ABSOLUTE "${l}")
-      set(l "${listDir}/${l}")
-    endif()
-    if(l MATCHES "[*]")
-      file(GLOB found "${l}")
-      list(SORT found)
-      if(NOT found)
-        message(STATUS "${l}: no dump matches, skipped")
-      endif()
-      list(APPEND dumps ${found})
-    elseif(EXISTS "${l}")
-      list(APPEND dumps "${l}")
-    else()
-      message(STATUS "${l}: no such dump, skipped")
-    endif()
-  endforeach()
-else()
-  message(STATUS "${LIST}: no dump list, skipped")
-endif()
-list(REMOVE_DUPLICATES dumps)
+rd_fixture_list("${LIST}" names)
+foreach(name IN LISTS names)
+  rd_fixture_list_props(${name})
+  rd_fixture_expand(${name} "${OUT}/fixtures" d)
+  list(APPEND dumps "${d}")
+  set(name_${d} "${name}")
+endforeach()
 list(LENGTH dumps ndumps)
-if(ndumps EQUAL 0)
-  message(STATUS "SKIP: no dump of ${LIST} is here")
-  return()
-endif()
 
 set(settings phoneauto enh2x)
 set(args_phoneauto --enhanced --resolution 2364x1080 --full-height --full-pixel --aspect 2.189
@@ -76,8 +59,8 @@ foreach(dump IN LISTS dumps)
     file(REMOVE_RECURSE "${dirOff}" "${dirOn}")
     file(MAKE_DIRECTORY "${dirOff}" "${dirOn}")
     execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_AURA_BOX=0
-                            ${env_${s}} "${TOOL}" "${dump}" - --pass-dump "${dirOff}" --stats
-                            ${args_${s}}
+                            ${env_${s}} "${TOOL}" "${dump}" "${OUT}/out.png" --pass-dump
+                            "${dirOff}" --stats ${args_${s}}
                     RESULT_VARIABLE rcOff OUTPUT_VARIABLE outOff ERROR_VARIABLE errOff)
     if(rcOff EQUAL 77)
       message(STATUS "SKIP: no device: ${errOff}")
@@ -88,8 +71,8 @@ foreach(dump IN LISTS dumps)
       continue()
     endif()
     execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_AURA_BOX=1
-                            ${env_${s}} "${TOOL}" "${dump}" - --pass-dump "${dirOn}" --stats
-                            ${args_${s}}
+                            ${env_${s}} "${TOOL}" "${dump}" "${OUT}/out.png" --pass-dump
+                            "${dirOn}" --stats ${args_${s}}
                     RESULT_VARIABLE rcOn OUTPUT_VARIABLE outOn ERROR_VARIABLE errOn)
     if(NOT rcOff EQUAL 0 OR NOT rcOn EQUAL 0)
       message(SEND_ERROR "${dump} ${s}: exit ${rcOff} (one pass) and ${rcOn} (two passes):\n"
@@ -141,6 +124,9 @@ foreach(dump IN LISTS dumps)
                          "(${nOn} reads)")
       math(EXPR failures "${failures} + 1")
     endif()
+    # the path ran: the reads the fixture declares, in two passes
+    rd_fixture_require(${name_${dump}} "${outOn}" aura_box_reads)
+    set(required_${dump} TRUE)
     math(EXPR reads "${reads} + ${nOn}")
     message(STATUS "${dump} ${s}: ${nOn} reads in two passes; passes ${passesOff} -> "
                    "${passesOn}, draws ${drawsOff} -> ${drawsOn}")
@@ -172,16 +158,23 @@ foreach(dump IN LISTS dumps)
     endforeach()
   endforeach()
 endforeach()
+foreach(dump IN LISTS dumps)
+  if(NOT required_${dump})
+    message(SEND_ERROR "${name_${dump}}: its properties were never checked (no setting could "
+                       "show it): a fixture this test cannot measure is no test")
+    math(EXPR failures "${failures} + 1")
+  endif()
+endforeach()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(failures GREATER 0)
-  message(FATAL_ERROR "rd_aura_box_ab: ${failures} failures over ${ndumps} dumps")
+  message(FATAL_ERROR "rd_aura_box_ab: ${failures} failures over ${ndumps} fixtures")
 endif()
 if(compared EQUAL 0)
-  message(STATUS "SKIP: no dump of ${LIST} could be compared")
-  return()
+  message(FATAL_ERROR "rd_aura_box_ab: no target compared over ${ndumps} fixtures")
 endif()
 if(reads EQUAL 0)
-  message(FATAL_ERROR "rd_aura_box_ab: no dump read the picture in two passes at any setting: "
+  message(FATAL_ERROR "rd_aura_box_ab: no fixture read the picture in two passes at any setting: "
                       "the gate saw nothing")
 endif()
-message(STATUS "rd_aura_box_ab: ${compared} targets the same bytes over ${ndumps} dumps, ${reads} "
-               "reads in two passes in all")
+message(STATUS "rd_aura_box_ab: ${compared} targets the same bytes over ${ndumps} fixtures, "
+               "${reads} reads in two passes in all")

@@ -1409,8 +1409,8 @@ it), the last store dropped and kept where a command the cut does not take lies 
 DATE frame's reason counted and the others' none, a draw reading a target made readable by the
 pass's first draw kept in the pass (the store dropped there, the guard not tripped), and the pass
 area's reasons (its fourth cell).
-`rd_pass_cut_ab` replays the corpus and the phone's frames (`tools/pass_cut_dumps.txt`) with every
-cut off, each alone and all on: every target and the present byte for byte, the passes fewer by the
+`rd_pass_cut_ab` replays committed fixtures of the corpus's and the phone's frames
+(`test/fixtures/lists/pass_cut.txt`) with every cut off, each alone and all on: every target and the present byte for byte, the passes fewer by the
 clears carried and skipped, the depth stores dropped more by those at the last touch, each cut
 cutting something on the phone's frames ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
 

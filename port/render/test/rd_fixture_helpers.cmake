@@ -72,6 +72,13 @@ set(_rdfx_q_present_scene_skipped "present from SCENE on: ([0-9]+) reductions no
 set(_rdfx_q_lamps_area_passes "\\): ([0-9]+) passes with the lamps' area")
 set(_rdfx_q_lamps_bands_lazy "([0-9]+) bands left lazy")
 set(_rdfx_q_lamps_owed "([0-9]+) WORK0 alpha sprites owed")
+# the passes' render areas, the passes cut, the aura's read in two passes
+set(_rdfx_q_pass_area_passes "pass area on: ([0-9]+) passes with an area")
+set(_rdfx_q_pass_area_covered "pass area on: [^\n]*[(,] ?([0-9]+) its draws cover the picture")
+set(_rdfx_q_clear_carried "clear carry on: ([0-9]+) clears taken by the next pass")
+set(_rdfx_q_clear_skipped "clear skip on: ([0-9]+) clears skipped")
+set(_rdfx_q_last_store_dropped "last store on: ([0-9]+) depth stores dropped at the last touch")
+set(_rdfx_q_aura_box_reads "aura box on: ([0-9]+) feedback reads in two passes")
 # the index compaction: list 0's triangles it left out
 set(_rdfx_q_vu_compact_left_out "VU index compaction on: ([0-9]+) of [0-9]+ list 0 triangles left out")
 # the VU family: the pre-pass's draws, the merge's joined draws, the store plan,

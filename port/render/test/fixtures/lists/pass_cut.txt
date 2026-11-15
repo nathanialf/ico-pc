@@ -1,0 +1,23 @@
+# rd_pass_cut_ab (port/render/test/rd_pass_cut_ab.cmake): the passes cut, each
+# on against all off, byte for byte.  A name a line; the word phone marks a
+# PowerVR phone's frame (the crack fill off for the last store's two more
+# runs at the phone's setting, and each cut must cut something over those
+# frames); then what the fixture's runs show (QUANTITY OP VALUE:
+# rd_fixture_list_props.cmake): clear_carried and clear_skipped on the
+# all-on run, last_store_dropped on the lastnf run of a phone frame and on
+# the all-on run of any other.
+#
+# the dump corpus's first frames (512x512 GS, Enhanced 2x alone): SCENE's
+# clear carried into DISPLAY's draw back over it, and DISPLAY's own
+fx-corpus-lightning
+fx-corpus-plain
+fx-corpus-puddle
+fx-corpus-queen
+# issue 102's gate frame at 16:9 (Enhanced 2x alone): the fog's pass holds
+# the depth's last touch
+fx-gate-102 clear_carried>=1 clear_skipped=0 last_store_dropped>=1
+# the PowerVR phone's F12 frames of 2026-10-28 and 2026-11-02: the
+# reduction's DISPLAY clear, AURA_WORK's clear, the fog's pass's depth store
+fx-phone-4657 phone clear_carried>=1 clear_skipped>=1 last_store_dropped>=1
+fx-phone-15677 phone
+fx-phone-2381 phone

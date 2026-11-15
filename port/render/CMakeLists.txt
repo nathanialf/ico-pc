@@ -3273,17 +3273,14 @@ if(ICO_RUN_TESTS)
             set_tests_properties(rd_crack_late_ab PROPERTIES ENVIRONMENT "${_env}")
         endif()
     endif()
-    # rd_aura_box_ab (test/rd_aura_box_ab.cmake): the dumps of
-    # tools/aura_box_dumps.txt (vustage_dumps.txt's and the PowerVR phone's
-    # three F12 frames) with the aura's read of the picture into FEED128 in
-    # one pass (ICO_RD_AURA_BOX=0) and in two (=1, rd_aura_box.c), under
-    # ICO_RD_BLEND=fixed at the phone's Resolution Auto and Enhanced 2x 4:3:
-    # every target byte for byte, one pass and one draw more a read in two
-    # passes; SKIP as rd_vustage_ab
+    # rd_aura_box_ab (test/rd_aura_box_ab.cmake): lists/aura_box.txt's fixtures
+    # with the aura's read into FEED128 in one pass and in two: the same bytes
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/aura_box_ab")
     add_test(NAME rd_aura_box_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/aura_box_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                     "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DLIST=${ICO_FIXTURE_DIR}/lists/aura_box.txt"
+                     "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/aura_box_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_aura_box_ab.cmake")
     set_tests_properties(rd_aura_box_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
@@ -3309,19 +3306,14 @@ if(ICO_RUN_TESTS)
     if(_env)
         set_tests_properties(rd_shadow_merge_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
-    # rd_pass_area_ab (test/rd_pass_area_ab.cmake): the dumps of
-    # tools/pass_area_dumps.txt (vustage_dumps.txt's, the PowerVR phone's
-    # three F12 frames and its rc3 frame) with the passes' render areas off
-    # (ICO_RD_PASS_AREA=0) and on (=1, rd_pass_area.c), under
-    # ICO_RD_BLEND=fixed at the phone's Resolution Auto and Enhanced 2x 4:3:
-    # every target byte for byte (lavapipe clips to the area, so a wrong
-    # area would show), the same passes and draws but for the passes ended
-    # early, and some pass with an area on the phone's frames; SKIP as
-    # rd_vustage_ab
+    # rd_pass_area_ab (test/rd_pass_area_ab.cmake): lists/pass_area.txt's
+    # fixtures with the passes' render areas off and on: the same bytes
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/pass_area_ab")
     add_test(NAME rd_pass_area_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/pass_area_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                     "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DLIST=${ICO_FIXTURE_DIR}/lists/pass_area.txt"
+                     "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/pass_area_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_pass_area_ab.cmake")
     set_tests_properties(rd_pass_area_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
@@ -3352,19 +3344,14 @@ if(ICO_RUN_TESTS)
             set_tests_properties(rd_glow_cheap_ab PROPERTIES ENVIRONMENT "${_env}")
         endif()
     endif()
-    # rd_pass_cut_ab (test/rd_pass_cut_ab.cmake): the dumps of
-    # tools/pass_cut_dumps.txt with every pass cut off and each on alone and
-    # all on (rd_pass_cut.c: ICO_RD_CLEAR_CARRY, ICO_RD_CLEAR_SKIP,
-    # ICO_RD_LAST_STORE), under ICO_RD_BLEND=fixed, the store plan and its
-    # poison, at the phone's Resolution Auto with its paths and Enhanced 2x
-    # 4:3: every target and the present byte for byte, the passes fewer by
-    # the clears carried and skipped, the depth stores dropped more by those
-    # at the last touch, and each cut cutting something on the phone's
-    # frames; SKIP as rd_vustage_ab
+    # rd_pass_cut_ab (test/rd_pass_cut_ab.cmake): lists/pass_cut.txt's
+    # fixtures with every pass cut off, each alone and all on: the same bytes
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/pass_cut_ab")
     add_test(NAME rd_pass_cut_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/pass_cut_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                     "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DLIST=${ICO_FIXTURE_DIR}/lists/pass_cut.txt"
+                     "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/pass_cut_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_pass_cut_ab.cmake")
     set_tests_properties(rd_pass_cut_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
