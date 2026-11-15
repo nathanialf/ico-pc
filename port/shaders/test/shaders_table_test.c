@@ -93,6 +93,10 @@ static const char *const expectedShadowTile[] = {"shadow_tile_mask_ps", "shadow_
 /* Upscaling: FSR 1.0's two passes (fsr1.hlsl over port/third_party/fsr1;
  * port/render/rd_fsr1.c) */
 static const char *const expectedFsr1[] = {"fsr1_easu_ps", "fsr1_rcas_ps"};
+/* the shadow levels' step and tent above 1x (port/render/rd_shadowres.c,
+ * shadowres.hlsl), pixel shaders on every backend */
+static const char *const expectedShadowFine[] = {"shadowres_step_ps", "shadowres_tent_ps",
+                                                 "shadowres_tent2_ps"};
 
 /* the mesh programs' entries' plain variants (ICO_VU_PLAIN, vu_common.hlsli:
  * the fallback's on a device of the table) */
@@ -565,6 +569,13 @@ int main(void)
             failures++;
         }
     }
+    for (size_t i = 0; i < sizeof(expectedShadowFine) / sizeof(expectedShadowFine[0]); i++) {
+        const IcoShaderBlob *b = ico_find_shader(expectedShadowFine[i]);
+        if (!b || b->stage != ICO_SHADER_STAGE_FRAGMENT) {
+            printf("FAIL %s: not in the table as a fragment shader\n", expectedShadowFine[i]);
+            failures++;
+        }
+    }
     const size_t nFsr1 = sizeof(expectedFsr1) / sizeof(expectedFsr1[0]);
     for (size_t i = 0; i < nFsr1; i++) {
         const IcoShaderBlob *b = ico_find_shader(expectedFsr1[i]);
@@ -688,7 +699,8 @@ int main(void)
     const size_t nAll = sizeof(expected) / sizeof(expected[0]) + nAa + nNoDual + nVariants + nDst +
                         nUint + nTiler + nDiet + nPlanes + nPlain + nPrepass + nBatch + nMerge +
                         nSmooth + nCrack + nShadowLoad + nAuraBox + nBaked + nTone + nFsr1 +
-                        nVelocity + nStore + nCompute + nPresentScene + nShadowTile;
+                        nVelocity + nStore + nCompute + nPresentScene + nShadowTile +
+                        sizeof(expectedShadowFine) / sizeof(expectedShadowFine[0]);
     if (g_icoShaderCount != nAll) {
         printf("FAIL table has %u entries, expected %zu\n", g_icoShaderCount, nAll);
         failures++;

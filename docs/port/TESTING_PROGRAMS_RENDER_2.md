@@ -572,6 +572,42 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   at 1x on OpenGL (llvmpipe). Each pair: every PNG byte for byte, the same draws and passes, `=0`
   off with nothing boxed, `=1` on; v3677 at the phone setting 1 count and 3 composites boxed; the
   phone setting boxes at least one of each over the dumps. No device: SKIP.
+- `rd_shadow_fine_test.c` (`rd_shadow_fine`, CPU): the shadow's levels at the scene's scale above
+  1x (`rd_shadowres.c`): the count's scale (`tw / w`, or `sx` under Full pixel's crop), the levels'
+  odd whole scale (3 at 2x, 2.41x and 3x, 5 at 4x and 4.82x, 1 at or under 1x), the step's box
+  weights summing to 1, the tent (1 2 3 2 1 at 3, the identity at 1, S^2 at whole S), the step and
+  the tent at scale 1 being the GS's sprite and the identity (at any whole or sub-texel offset of
+  the sprite's map, CLAMP and REPEAT); a straight edge swept across one
+  SHADOW2 texel in 24 phases at 2x, 2.41x, 2.8125x, 3x and 4x across with the rows at 1x (the
+  non-uniform case), the three composites' darkening of the PS2-size chain against the fine one:
+  the fine 10-90 width within 8 % of the PS2 chain's phase mean, its spread under 1 SCENE texel,
+  its middle's wander under 1.5 texels and under half the PS2 chain's, its darkness within 1 %
+  (a float model of the same arithmetic: 3 to 6 % under, 0.36 to 0.68, 0.43 to 0.98 against 2.6
+  to 5.5, under 0.2 %); the recogniser over the 22 distinct real level sprites of the dumps
+  (`test/rd_shadow_fine_vectors.h`); the cuts: the one-pass tent against the two passes at every
+  texel (scales 1, 3, 5 each axis), the step's empty-area mask never skipping a nonzero texel (a
+  sparse count at 2.8125 x 2.41 with a Full pixel crop), every nonzero texel of a full chain from a
+  boxed count inside the step's and the tent's boxes (clamp and repeat, boxes at the corners), the
+  render area over 200 pictures of moving boxes (0 outside each box, the draw's bytes inside, the
+  area cleared alone or the whole); the
+  10 s clause and the `--stats` words. The pure half (`rd_shadowres_math.c`) links alone.
+- `rd_shadow_fine_ab.cmake` (`rd_shadow_fine_ab`, `rd_shadow_fine_ab_gl`): the dumps of
+  `tools/shadow_fine_dumps.txt` (machine-local; a listed dump that is absent FAILS: issue 123's
+  three main gate frames, the owner's three), the default against `ICO_RD_SHADOW_FINE=0`, at the
+  settings each dump's line names (the tablet's 3x path, Enhanced and Original at 1x, the phone's
+  4.10 x 2.41, MSAA 4x at 2x, the B-spline at 2x, the owner's Resolution window 2.8125 x 2.41071, 1 x 2,
+  the owner's Pixel as its own settings run it (2364x1080 over the 848-wide frame, Full height, Full pixel,
+  anisotropic: 2.79 x 2.41) on his two main gate captures, the forced chain at 1x; the `_gl` twin 1x
+  and 2x on OpenGL): `=0` every PNG the goldens'
+  (`tools/shadow_fine_goldens.txt`); at 1x the default the same bytes, passes and draws; above 1x
+  one shadow at the scene's scale and none at the PS2's size on every dump (any reason in the stats
+  line fails), its 9 or 10 passes and 9 draws and nothing else, the
+  levels' scale the setting's, the change confined (with lists 4-12 left out) to within reach of
+  the texels the PS2's levels darken and the darkness within 10 % (the PS2-size chain's own spread over the level grid's placements: up to 9.2 % on the owner's gate frame; `test/shadow_fine_check.py`), the
+  B-spline doing nothing to it, the cuts against `ICO_RD_SHADOW_FINE_CUTS=0` every PNG the same
+  bytes (6 passes against 9), three replays in a row with and without the cuts the same presented
+  bytes; the forced chain at 1x within a level of the default on SCENE
+  (`test/png_level_diff.py`). No device: SKIP.
 - `rd_even_test.c` (`rd_even`, CPU): the pictures' evenness line (`rd_even.c`): ten made-up
   presents with GPU ends at the middles of their quarter-ms bins (1, 2, 3, 5 and under half a
   refresh of 8 ms apart, one end a bound, one present with none, a frame number that went back),
