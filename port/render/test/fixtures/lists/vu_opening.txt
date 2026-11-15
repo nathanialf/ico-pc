@@ -1,0 +1,7 @@
+# rd_vurecord_ab_compute_class_opening (docs/port/TESTING_FIXTURES.md): the
+# Pixel 10 Pro Fold's opening (lamps, dark, sun), each drawing VU commands
+# through the pre-pass (prepass_vertices) and, by the PowerVR class's rule, the
+# record by compute dispatches (vu_record_dispatches)
+fx-lamps-novolume
+fx-opening-dark
+fx-opening-sun

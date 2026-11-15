@@ -2299,8 +2299,8 @@ picture, the glow's mask flipping at the cracks (above); at the PowerVR phone's
 Resolution Auto (2364 x 1080, its profile's fakes) the phone's seven F12 frames hold 112 to 285
 cracks (0.004 to 0.011 %), 98 to 99.6 % of them the same bytes, at most three a frame apart, by up
 to 20 levels; the deja vu 48:9 frame 469 cracks (0.018 %), most of them one to seven levels apart,
-the largest 14 ([DIVERGENCES.md](DIVERGENCES.md) VD-20). ctest `rd_crack_late_ab` measures the
-whole picture against the earlier build's pass dumps.
+the largest 14 ([DIVERGENCES.md](DIVERGENCES.md) VD-20). ctest `rd_crack_late_ab` holds the late
+fill's whole picture on committed fixtures to the release before's, byte for byte.
 
 ### The fill's place after list 7
 

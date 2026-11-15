@@ -3,12 +3,20 @@
 # port/render/rd_vu_flat0.h; docs/port/PIPELINES.md, "Flat outputs at the
 # provoking corner") against the twins with every corner computing them
 # (ICO_RD_VU_FLAT0=0: vu_all_main_vs, vu_merge_all_main_vs, the shader of
-# v0.11.5), byte for byte.  For every dump LIST names (tools/vu_flat0_dumps.txt:
-# each line the profiles it is replayed under, then the path) and DUMP (one
-# more file, may be absent: the corpus profile), rd_replay_tool --pass-dump
-# with --stats twice, ICO_RD_VU_FLAT0=0 and =1, at each setting of each of its
-# profiles, each with the draw merge (the merge build vu_merge_main_vs) and
-# without it (ICO_RD_VU_MERGE=0: vu_main_vs a draw):
+# v0.11.5), byte for byte.  The frames, two forms:
+#   fixtures  -DFIXTURE_TOOL -DFIXTURES -DFIXTURE_HELPERS and LIST a fixture
+#             list (port/render/test/fixtures/lists/vu_flat0.txt: a fixture,
+#             the profiles it is replayed under, then its QUANTITY OP VALUE
+#             words, rd_fixture_list_props.cmake): each expanded into
+#             ${OUT}/fixtures (docs/port/TESTING_FIXTURES.md)
+#   paths     no FIXTURE_TOOL: LIST names dumps the build writes (rd_pixel's
+#             frames; tools/ci_d3d11_warp.sh's copy): each line the profiles,
+#             then a name relative to the list's folder; a name that is not
+#             there is reported and skipped
+# For every frame, rd_replay_tool --pass-dump with --stats twice,
+# ICO_RD_VU_FLAT0=0 and =1, at each setting of each of its profiles, each
+# with the draw merge (the merge build vu_merge_main_vs) and without it
+# (ICO_RD_VU_MERGE=0: vu_main_vs a draw):
 #   corpus  the device as it is: the Original preset at 4:3 and 1x, and the
 #           Enhanced preset at 16:9 and 2x
 #   mali    issue 179's Mali-G52 on lavapipe: the Arm fakes
@@ -18,43 +26,58 @@
 #   pixel   the Pixel 10 Pro Fold's (ICO_VK_FAKE_LIMITS=moltenvk, Enhanced at
 #           2364x1080, full height, full pixel, presented at 2364x1080)
 # With BACKEND other than vulkan (the OpenGL twin, Direct3D 11 on CI's WARP)
-# every dump takes the corpus settings alone (the fakes are Vulkan's).
+# every frame takes the corpus settings alone (the fakes are Vulkan's).
 # Every target's PNG (SCENE and DISPLAY among them) must be equal byte for
 # byte; the =0 run must say "rd: VU flat outputs: every corner" and the =1
 # run "rd: VU flat outputs: provoking corner only (9 loads a corner-0
 # invocation, 4 at the others"; the merged runs "merge on)", the others
-# "merge off)".  A dump whose =0 run draws nothing through the record (no
+# "merge off)".  A frame whose =0 run draws nothing through the record (no
 # "stats: VU pre-pass on: [1-9]" line: a 2D-only frame) is skipped at that
 # setting, as is a 4:3 frame the 16:9 setting cannot show; every profile
-# with a dump here must have compared targets.  Where /primary/dev/ico-dumps
-# exists, a listed dump that is absent (a glob that matches nothing) fails;
-# elsewhere it is reported and skipped.  No dump here, or no device (77):
-# SKIP.
-# -DTOOL=<rd_replay_tool> -DOUT=<a folder the test may write> [-DLIST=<list>]
-# [-DDUMP=<dump>] [-DBACKEND=vulkan|opengl|d3d11 (default vulkan)]
+# with a frame here must have compared targets.  The path ran (fixtures):
+# on every =1 run compared, the fixture's prepass_vertices (the mesh and
+# grid vertices the record holds, every one of them drawn by the provoking
+# corner's vu_main_vs or vu_merge_main_vs: rd_vu_flat0.h) against its
+# declared bound; a fixture with no pair compared under one of its profiles
+# fails.  No frame here, or no device (77): SKIP.
+# -DTOOL=<rd_replay_tool> -DOUT=<a folder the test may write> -DLIST=<list>
+# [-DBACKEND=vulkan|opengl|d3d11 (default vulkan)] [-DFIXTURE_TOOL=...
+# -DFIXTURES=... -DFIXTURE_HELPERS=...]
 cmake_policy(SET CMP0057 NEW) # if(... IN_LIST ...) in a -P script
 if(NOT BACKEND)
   set(BACKEND vulkan)
-endif()
-set(strict FALSE)
-if(EXISTS "/primary/dev/ico-dumps")
-  set(strict TRUE)
 endif()
 set(profiles corpus mali pixel)
 set(entries "")
 set(failures 0)
 set(missing 0)
-if(DUMP AND EXISTS "${DUMP}")
-  list(APPEND entries "corpus|${DUMP}")
-endif()
-if(LIST)
-  if(NOT EXISTS "${LIST}")
-    if(strict)
-      message(SEND_ERROR "rd_vu_flat0_ab: ${LIST}: no dump list")
+set(fixtures FALSE)
+if(DEFINED FIXTURE_TOOL AND NOT "${FIXTURE_TOOL}" STREQUAL "")
+  set(fixtures TRUE)
+  include("${FIXTURE_HELPERS}")
+  include("${CMAKE_CURRENT_LIST_DIR}/rd_fixture_list_props.cmake")
+  rd_fixture_list("${LIST}" fxNames)
+  foreach(name IN LISTS fxNames)
+    string(REGEX MATCH "^[^ \t]+" prof "${RDFX_FIELDS_${name}}")
+    if(NOT prof MATCHES "^[a-z,]+$")
+      message(SEND_ERROR "rd_vu_flat0_ab: ${LIST}: ${name}: \"${prof}\" is not its profiles")
       math(EXPR failures "${failures} + 1")
-    else()
-      message(STATUS "rd_vu_flat0_ab: ${LIST}: no dump list, skipped")
+      continue()
     endif()
+    string(REPLACE "," ";" profList "${prof}")
+    foreach(p IN LISTS profList)
+      if(NOT p IN_LIST profiles)
+        message(SEND_ERROR "rd_vu_flat0_ab: ${LIST}: ${name}: \"${p}\" is none of ${profiles}")
+        math(EXPR failures "${failures} + 1")
+      endif()
+    endforeach()
+    rd_fixture_list_props(${name})
+    rd_fixture_expand(${name} "${OUT}/fixtures" dump)
+    list(APPEND entries "${prof}|${dump}|${name}")
+  endforeach()
+elseif(LIST)
+  if(NOT EXISTS "${LIST}")
+    message(STATUS "rd_vu_flat0_ab: ${LIST}: no dump list, skipped")
   else()
     get_filename_component(listDir "${LIST}" DIRECTORY)
     file(STRINGS "${LIST}" lines)
@@ -64,7 +87,7 @@ if(LIST)
         continue()
       endif()
       if(NOT l MATCHES "^([a-z,]+)[ \t]+(.+)$")
-        message(SEND_ERROR "rd_vu_flat0_ab: ${LIST}: \"${l}\" is not \"profiles path\"")
+        message(SEND_ERROR "rd_vu_flat0_ab: ${LIST}: \"${l}\" is not \"profiles name\"")
         math(EXPR failures "${failures} + 1")
         continue()
       endif()
@@ -80,35 +103,21 @@ if(LIST)
       if(NOT IS_ABSOLUTE "${path}")
         set(path "${listDir}/${path}")
       endif()
-      set(found "")
-      if(path MATCHES "[*]")
-        file(GLOB found "${path}")
-        list(SORT found)
-      elseif(EXISTS "${path}")
-        set(found "${path}")
-      endif()
-      if(NOT found)
+      if(NOT EXISTS "${path}")
         math(EXPR missing "${missing} + 1")
-        if(strict)
-          message(SEND_ERROR "rd_vu_flat0_ab: ${LIST} names ${path}, which is not here")
-          math(EXPR failures "${failures} + 1")
-        else()
-          message(STATUS "rd_vu_flat0_ab: ${LIST} names ${path}, which is not here: skipped")
-        endif()
+        message(STATUS "rd_vu_flat0_ab: ${LIST} names ${path}, which is not here: skipped")
         continue()
       endif()
-      foreach(f IN LISTS found)
-        list(APPEND entries "${prof}|${f}")
-      endforeach()
+      list(APPEND entries "${prof}|${path}|")
     endforeach()
   endif()
 endif()
 list(LENGTH entries nentries)
 if(nentries EQUAL 0)
   if(failures GREATER 0)
-    message(FATAL_ERROR "rd_vu_flat0_ab: ${failures} failures, no dump replayed")
+    message(FATAL_ERROR "rd_vu_flat0_ab: ${failures} failures, no frame replayed")
   endif()
-  message(STATUS "SKIP: no dump is here")
+  message(STATUS "SKIP: no frame is here")
   return()
 endif()
 
@@ -137,8 +146,10 @@ endforeach()
 set(compared 0)
 set(index 0)
 foreach(e IN LISTS entries)
-  string(REGEX REPLACE "\\|.*$" "" prof "${e}")
-  string(REGEX REPLACE "^[^|]*\\|" "" dump "${e}")
+  string(REPLACE "|" ";" ef "${e}")
+  list(GET ef 0 prof)
+  list(GET ef 1 dump)
+  list(GET ef 2 name)
   string(REPLACE "," ";" profList "${prof}")
   if(NOT BACKEND STREQUAL "vulkan")
     set(profList corpus)
@@ -146,6 +157,7 @@ foreach(e IN LISTS entries)
   list(REMOVE_DUPLICATES profList)
   foreach(p IN LISTS profList)
     set(asked_${p} 1)
+    set(fxPairs 0)
     foreach(s IN LISTS settings_${p})
       foreach(m IN LISTS merges)
         math(EXPR index "${index} + 1")
@@ -194,6 +206,10 @@ foreach(e IN LISTS entries)
             math(EXPR failures "${failures} + 1")
           endif()
         endforeach()
+        # the path ran: the vertices the provoking corner's shader drew
+        if(NOT name STREQUAL "")
+          rd_fixture_require(${name} "${outB}\n${errB}" prepass_vertices)
+        endif()
         file(GLOB pngs RELATIVE "${dirA}" "${dirA}/*.png")
         foreach(need SCENE.png DISPLAY.png)
           if(NOT need IN_LIST pngs)
@@ -225,6 +241,9 @@ foreach(e IN LISTS entries)
         endforeach()
         math(EXPR compared "${compared} + ${n}")
         math(EXPR compared_${p} "${compared_${p}} + ${n}")
+        if(n GREATER 0)
+          math(EXPR fxPairs "${fxPairs} + 1")
+        endif()
         message(STATUS "${dump} ${p} ${s} ${m}: ${n} targets compared")
         # the folders of a pair that matched are not kept (thousands of PNGs)
         if(failures EQUAL 0)
@@ -232,6 +251,11 @@ foreach(e IN LISTS entries)
         endif()
       endforeach()
     endforeach()
+    if(NOT name STREQUAL "" AND fxPairs EQUAL 0)
+      message(SEND_ERROR "${name}: no pair compared under the ${p} profile (no setting could show it, "
+                         "nothing drawn through the record, or its runs failed)")
+      math(EXPR failures "${failures} + 1")
+    endif()
   endforeach()
 endforeach()
 foreach(p IN LISTS profiles)
@@ -240,7 +264,10 @@ foreach(p IN LISTS profiles)
     math(EXPR failures "${failures} + 1")
   endif()
 endforeach()
-message(STATUS "rd_vu_flat0_ab (${BACKEND}): ${compared} targets compared over ${nentries} dumps "
+if(fixtures)
+  math(EXPR failures "${failures} + ${RDFX_FAILURES}")
+endif()
+message(STATUS "rd_vu_flat0_ab (${BACKEND}): ${compared} targets compared over ${nentries} frames "
                "(corpus ${compared_corpus}, mali ${compared_mali}, pixel ${compared_pixel}), "
                "${missing} listed dumps not here")
 if(failures GREATER 0)

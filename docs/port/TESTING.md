@@ -33,7 +33,8 @@ tests a change needs. Every test program, by area, is
 | `port/input/pad_script.h`, `port/input/input_record.h`, `port/platform/trace_host.h` | pad scripts, recordings, the trace |
 | `tools/dev_build.sh` | build a few targets of one checkout and run a few tests |
 | `tools/check_docs.py`, `tools/check_docs_allow.txt` | the documentation gate and its allow-list |
-| `.github/workflows/ci.yml`, `ios.yml` | CI |
+| `.github/workflows/ci.yml`, `ios.yml`, `apple-build.yml` | CI |
+| `tools/apple_precheck.py` | the Apple builds' Vulkan backend (linked to MoltenVK) compiled on a Linux host, before a push ([../BUILDING.md](../BUILDING.md#continuous-integration)) |
 | `tools/ci_shard.py`, `tools/ci_costs/*.txt` | CI's split of a ctest suite into shards and its cost tables, one a suite |
 
 ## The framework
@@ -526,7 +527,7 @@ switches the tests and their registrations use:
 | `ICO_RD_PASS_AREA` | `rd_pass_area.c` | 1: a render pass on SCENE whose draws are all 2D with a known place takes the render area of the tiles they touch, 0: every pass its whole target, `auto` or unset: the profile's (on on a tile-based GPU; `[dev] pass_area`; `rd_pass_area_ab`, `rd_state` `testPassArea`) |
 | `ICO_RD_CLEAR_CARRY` | `rd_pass_cut.c` | 1: a pending clear carried past a source's barrier into the next pass on its target, 0: flushed as before, `auto` or unset: the profile's (on on a tile-based GPU; `[dev] clear_carry`; `rd_pass_cut_ab`, `rd_pass_cut`) |
 | `ICO_RD_CLEAR_SKIP` | `rd_pass_cut.c` | 1: a clear of AURA_WORK or AURA_TAP whose only reader is a constant read not drawn (drawn later where read), 0: drawn, `auto` or unset: the profile's (on on a tile-based GPU; `[dev] clear_skip`; `rd_pass_cut_ab`, `rd_pass_cut`) |
-| `ICO_RD_GLOW_LIGHT` | `rd_glow_light.c` | 0: the glow's chain drawn whole at every scale (the light plan off; `rd_glow_light_ab`'s baseline, the runs of `rd_glow_cheap_ab`, whose cuts and mask fold need the chain drawn, and those of `rd_crack_late_ab`, whose stored pictures predate the plan); unset or 1: the plan, the default on every device (no config key; [RENDER_POST.md](RENDER_POST.md#the-glow-where-it-adds-light)) |
+| `ICO_RD_GLOW_LIGHT` | `rd_glow_light.c` | 0: the glow's chain drawn whole at every scale (the light plan off; `rd_glow_light_ab`'s baseline, the runs of `rd_glow_cheap_ab`, whose cuts and mask fold need the chain drawn, and those of `rd_crack_late_ab`, whose goldens were made with the chain drawn whole); unset or 1: the plan, the default on every device (no config key; [RENDER_POST.md](RENDER_POST.md#the-glow-where-it-adds-light)) |
 | `ICO_RD_LAST_STORE` | `rd_pass_cut.c` | 1: the depth store of the pass holding its last touch dropped where the walk keeps that pass open to the touch, 0: stored, `auto` or unset: the profile's (on on a tile-based GPU; `[dev] last_store`; `rd_pass_cut_ab`, `rd_pass_cut`) |
 | `ICO_RD_SHADOW_TILE` | `rd_shadow_tile.c` | 0: the shadow composites drawn whole, 1: over the GPU tile mask whatever the class and the self-test (DATE through the stencil bit still needed), unset: off (`RD_SHADOW_TILE_DEFAULT` 0 in rd_shadow_tile.c: no keys, no self-test; no setting: `rd_shadow_tile_ab`, `rd_shadow_tile`) |
 | `ICO_RD_SHADOW_BOX` | `rd_shadow_box.c` | 0: the shadow count's one draw and the shadow composites drawn whole, 1 or unset: over the volumes' box (no setting: `rd_shadow_box_ab`) |
@@ -935,11 +936,13 @@ Arimo's ranges `tools/subset_font_arimo.py` (`font_subset_arimo`). A gameplay op
 | `ci.yml` | `linux-arm64` | `ubuntu-24.04-arm` | the no-disc-data check, the `linux-arm64` preset with `ctest` (without the filtered-pixel render tests), the arm64 package on release tags (kept as an artifact and attached to the tag's release) |
 | `ci.yml` | `linux-arm64-filtered` | `ubuntu-24.04-arm` | the filtered-pixel render tests the `linux-arm64` job leaves out, in 2 shards, not gating (never run for a dispatched package) |
 | `ci.yml` | `android` | `ubuntu-24.04` | the debug APK (`assembleDebug`), `tools/check_android_flags.sh`, the APK structure checks |
-| `ios.yml` | `build`, `publish` | `macos-15`, `ubuntu-24.04` | the unsigned iPhone IPA for a published release, attached to it |
-| `ios.yml` | `build-macos`, `publish-macos` | `macos-15`, `ubuntu-24.04` | the macOS app for a published release, attached to it |
+| `ci.yml` | `apple` (`macos`, `ios`) | `macos-15` | the macOS app and the unsigned iPhone IPA built and packaged (`apple-build.yml`), nothing kept; no test runs on the Mac |
+| `ios.yml` | `build-ios`, `publish-ios` | `macos-15`, `ubuntu-24.04` | the unsigned iPhone IPA for a published release (`apple-build.yml`), attached to it |
+| `ios.yml` | `build-macos`, `publish-macos` | `macos-15`, `ubuntu-24.04` | the macOS app for a published release (`apple-build.yml`), attached to it |
+| `ios.yml`, dispatched with `check_only` | `build-ios`, `build-macos` | `macos-15` | the dispatched branch's IPA and macOS app as the run's artifacts, no release, nothing attached |
 
-(`.github/workflows/ci.yml`, jobs `linux`, `tests`, `windows`, `extra`, `linux-arm64`, `linux-arm64-filtered`, `android`;
-`.github/workflows/ios.yml`.)
+(`.github/workflows/ci.yml`, jobs `linux`, `tests`, `windows`, `extra`, `linux-arm64`, `linux-arm64-filtered`, `android`, `apple`;
+`.github/workflows/ios.yml`; `.github/workflows/apple-build.yml`, the Apple build both call.)
 
 The triggers, steps and caches are [../BUILDING.md](../BUILDING.md#continuous-integration)'s.
 
@@ -1036,7 +1039,12 @@ sequence:
    another is still expected, since each push restarts CI.
 5. **CI.** About 30 minutes a run with the shards ([The CI shards](#the-ci-shards)): the
    longest job is an `asan` shard. The release waits for main's run to finish green, every job
-   counted.
+   counted: the Apple jobs green on main before the release (the `apple` matrix, `macos` and
+   `ios`, the same build and packaging the release's Apple packages run does). A branch's Apple builds
+   can be seen before it reaches main with the check-only dispatch
+   (`gh workflow run ios.yml -R nathanialf/ico-pc --ref <branch> -f check_only=true`, the branch
+   pushed first) and, earlier still, `tools/apple_precheck.py` on this host
+   ([../BUILDING.md](../BUILDING.md#continuous-integration)).
 6. **The release.** The packages from the release commit, the tag, `gh release create`; the
    tag's own run adds the arm64 packages ([../BUILDING.md](../BUILDING.md#packages)): its
    `linux-arm64` job keeps the six files (`linux-arm64.tar.gz`, `linux-arm64-portable.tar.gz`,
@@ -1046,3 +1054,6 @@ sequence:
    before the tag's run reaches its packaging, or re-run the job after. A dispatched run
    (`gh workflow run ci.yml -f tag=<tag>`) attaches nothing and prints the upload command for its
    artifact's files.
+   Publishing the release starts the Apple packages workflow (`ios.yml`), which attaches the IPA
+   and the macOS zip and dmg; the release is finished when that run is green and the three files
+   are on it ([../BUILDING.md](../BUILDING.md#packages)).

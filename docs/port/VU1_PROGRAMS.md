@@ -914,11 +914,12 @@ So the merge and the fuse take the two passes (`port/render/rd_replay_vu.c` `vuM
 
 Expected on the 164 dump under the fakes: `1097 draws in 358 GPU draws (826 merged into 87, 271
 alone)` and `397 pairs fused`, the desktop's figures. `rd_vumerge_mali` (`port/render/test/rd_vumerge_mali.cmake`,
-label `mali`) is its gate: the dumps of the machine-local list `tools/vumerge_mali_dumps.txt` (the
-164 frame in `/primary/dev/ico-dumps/164/`, the two phone frames `rd_vufuse_ab` reads and a capture)
+label `mali`) is its gate: the committed fixtures of `port/render/test/fixtures/lists/vumerge_mali.txt`
+(the 164 frame's, two PowerVR phone frames' and a capture's: [TESTING_FIXTURES.md](TESTING_FIXTURES.md))
 on the plain device and under `ICO_VK_FAKE_LIMITS=mali ICO_VK_FAKE_NO_DUAL=1`, under
 `ICO_RD_BLEND=fixed`: every named target byte for byte, the merge's figures and the fused pairs the
-plain device's, and the 164 frame's `826 merged into 87`.
+plain device's, and each fixture's figure from a run of it (`1012 merged into 110` on the 164
+frame's, whose generated geometry is not the game's).
 
 ## Tests
 
@@ -992,8 +993,8 @@ every SCENE pixel the camera rule changes lies in `--region-mask`'s mask, every 
 where the mask is empty; and the camera rule's verdicts (drawn, dropped, rescued) the same under the
 Original preset and Enhanced at 1x ([The camera rule](#the-camera-rule)).
 
-`rd_vubatch_ab` (`port/render/test/rd_vubatch_ab.cmake`) replays the dumps of
-`tools/vustage_dumps.txt` through the record one draw an entry (`ICO_RD_VU_PREPASS_BATCH=0`) and in
+`rd_vubatch_ab` (`port/render/test/rd_vubatch_ab.cmake`) replays the fixtures of
+`port/render/test/fixtures/lists/vustage.txt` through the record one draw an entry (`ICO_RD_VU_PREPASS_BATCH=0`) and in
 batches, at Original 4:3 1x, Enhanced 4:3 2x and Enhanced 16:9 2x: every target byte for byte, the
 same vertices, fewer pre-pass draws batched. `rd_vuprepass_selftest_unbatched` runs the pre-pass's
 start-up self-test one draw an entry; the other `rd_vuprepass_selftest` runs check that the
@@ -1007,8 +1008,9 @@ joined, and fewer over the list. `rd_vuprepass_selftest_unmerged` runs the start
 the merge off; the other `rd_vuprepass_selftest` runs check that it is on and draw through it
 ([The draw merge](#the-draw-merge)).
 
-`rd_vufuse_ab` (`port/render/test/rd_vufuse_ab.cmake`) replays the same dumps and the PowerVR
-phone's frames (`tools/vufuse_dumps.txt`) with the merge on, code 36's kicks under their own
+`rd_vufuse_ab` (`port/render/test/rd_vufuse_ab.cmake`) replays the fixtures of
+`port/render/test/fixtures/lists/vufuse.txt` (a loss frame, the deja vu frame, the PowerVR phone's
+and issue 164's frames) with the merge on, code 36's kicks under their own
 pipelines (`ICO_RD_VU_FUSE=0`) and fused, at the phone's profile (the programs' own entries, 2x at
 2.189 presented at 2364x1080, and Resolution Auto: 2364x1080 with Full height and Full pixel, the
 no-planes twins), through the programs' own entries at Enhanced 4:3 2x and through the record at

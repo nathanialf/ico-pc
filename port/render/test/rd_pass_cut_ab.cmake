@@ -1,8 +1,10 @@
 # rd_pass_cut_ab: the passes cut (port/render/rd_pass_cut.c; docs/port/
 # WORK_BUFFERS.md, "Passes cut"), each on against all three off, byte for byte.
-# For every dump the list names (tools/pass_cut_dumps.txt: tools/vustage_dumps.txt's
-# dumps, the PowerVR phone's three F12 frames and its rc3 frame, read as
-# rd_pass_area_ab.cmake reads its list), rd_replay_tool's --pass-dump with
+# For every fixture the list names (port/render/test/fixtures/lists/
+# pass_cut.txt: fixture names of the repository, docs/port/TESTING_FIXTURES.md;
+# the word phone after a name marks a PowerVR phone's frame; a listed fixture
+# that is absent or does not expand to its pinned SHA-256 FAILS), expanded
+# into OUT, rd_replay_tool's --pass-dump with
 # --stats under ICO_RD_BLEND=fixed, the store plan (ICO_RD_STORE_PLAN=1) and
 # its poison (ICO_RD_STORE_POISON=1: a depth or stencil load the plan leaves
 # undefined clears to garbage, lavapipe itself keeps an attachment's contents
@@ -13,7 +15,7 @@
 #             pixel, aspect 2.189, presented at 2364x1080), its paths: the
 #             programs' own entries (ICO_RD_VU_PREPASS=0), the fog's depth
 #             read in the scene pass (ICO_RD_FOG_PATH=local), DATE through
-#             the stencil bit (ICO_RD_DATE_PATH=stencil); a dump drawn
+#             the stencil bit (ICO_RD_DATE_PATH=stencil); a fixture drawn
 #             narrower than the aspect cannot show it and is skipped there;
 #   enh2x     Enhanced 2x at 4:3, presented at 1280x960.
 # Every PNG the off run writes (SCENE, DISPLAY, PRESENT and every other named
@@ -25,51 +27,36 @@
 # clear carried or skipped (a clear's own pass whose depth store the plan dropped
 # goes with the carry: queen rd-00100 at enh2x, 'a replay of 4 passes (2 with a
 # depth)' and 2 dropped off, '2 passes (1 with a depth)' and 1 dropped with its two
-# clears carried).  Over the phone's frames (frame-20261028-* and
-# frame-20261102-*) at the phone's setting, each cut must cut something (the
-# reduction's DISPLAY clear, AURA_WORK's clear, the fog's pass's depth store),
-# else the gate saw nothing.  The crack fill after lists 4-6 reads SCENE's depth
-# at list 7 on every such frame, and the store plan keeps the fog's pass's depth
-# store for that read (rd_store_plan.c, PlanDepth.late), so the last-touch drop
-# is counted on two more runs of those frames, every cut off and the last store
-# alone on, both with ICO_RD_CRACK_FILL=0 (offnf, lastnf: compared with each
-# other as the five are with off).  A missing list or
-# dump is named and skipped; no dump read, or no device: SKIP (77).
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
+# clears carried).  Over the phone's frames at the phone's setting, each cut
+# must cut something (the reduction's DISPLAY clear, AURA_WORK's clear, the
+# fog's pass's depth store), else the gate saw nothing.  The crack fill after
+# lists 4-6 reads SCENE's depth at list 7 on every such frame, and the store
+# plan keeps the fog's pass's depth store for that read (rd_store_plan.c,
+# PlanDepth.late), so the last-touch drop is counted on two more runs of those
+# frames, every cut off and the last store alone on, both with
+# ICO_RD_CRACK_FILL=0 (offnf, lastnf: compared with each other as the five are
+# with off).  The path ran (rd_fixture_require, at every setting the fixture
+# shows): the fixture's declared clear_carried and clear_skipped on the all
+# run, last_store_dropped on the lastnf run of a phone frame at the phone's
+# setting and on the all run of any other fixture (a phone frame at enh2x
+# keeps that store for the crack fill's read: not checked there); a fixture
+# whose properties no setting checked FAILS.  No device: SKIP (77).
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the
+# fixtures folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<a
+# fixture list> -DOUT=<a folder the test may write>
+include("${FIXTURE_HELPERS}")
+include("${CMAKE_CURRENT_LIST_DIR}/rd_fixture_list_props.cmake")
 set(dumps "")
-if(NOT "${LIST}" STREQUAL "" AND EXISTS "${LIST}")
-  get_filename_component(listDir "${LIST}" DIRECTORY)
-  file(STRINGS "${LIST}" lines)
-  foreach(l IN LISTS lines)
-    string(STRIP "${l}" l)
-    if(l STREQUAL "" OR l MATCHES "^#")
-      continue()
-    endif()
-    if(NOT IS_ABSOLUTE "${l}")
-      set(l "${listDir}/${l}")
-    endif()
-    if(l MATCHES "[*]")
-      file(GLOB found "${l}")
-      list(SORT found)
-      if(NOT found)
-        message(STATUS "${l}: no dump matches, skipped")
-      endif()
-      list(APPEND dumps ${found})
-    elseif(EXISTS "${l}")
-      list(APPEND dumps "${l}")
-    else()
-      message(STATUS "${l}: no such dump, skipped")
-    endif()
-  endforeach()
-else()
-  message(STATUS "${LIST}: no dump list, skipped")
-endif()
-list(REMOVE_DUPLICATES dumps)
+rd_fixture_list("${LIST}" names)
+foreach(name IN LISTS names)
+  rd_fixture_list_props(${name})
+  rd_fixture_list_word(${name} phone isPhone)
+  rd_fixture_expand(${name} "${OUT}/fixtures" d)
+  list(APPEND dumps "${d}")
+  set(name_${d} "${name}")
+  set(phone_${d} ${isPhone})
+endforeach()
 list(LENGTH dumps ndumps)
-if(ndumps EQUAL 0)
-  message(STATUS "SKIP: no dump of ${LIST} is here")
-  return()
-endif()
 
 set(settings phone enh2x)
 set(args_phone --enhanced --resolution 2364x1080 --full-height --full-pixel --aspect 2.189
@@ -114,11 +101,7 @@ set(phoneLast 0)
 set(index 0)
 foreach(dump IN LISTS dumps)
   math(EXPR index "${index} + 1")
-  get_filename_component(dumpName "${dump}" NAME)
-  set(phoneFrame FALSE)
-  if(dumpName MATCHES "^frame-2026(1028|1102)-")
-    set(phoneFrame TRUE)
-  endif()
+  set(phoneFrame ${phone_${dump}})
   foreach(s IN LISTS settings)
     set(skipped FALSE)
     set(theRuns ${runs})
@@ -142,7 +125,8 @@ foreach(dump IN LISTS dumps)
       execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${common} ICO_RD_CLEAR_CARRY=${carry}
                               ICO_RD_CLEAR_SKIP=${skip} ICO_RD_LAST_STORE=${last} ${fillEnv}
                               ${env_${s}}
-                              "${TOOL}" "${dump}" - --pass-dump "${dir}" --stats ${args_${s}}
+                              "${TOOL}" "${dump}" "${OUT}/out.png" --pass-dump "${dir}" --stats
+                              ${args_${s}}
                       RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
       if(rc EQUAL 77)
         message(STATUS "SKIP: no device: ${err}")
@@ -223,6 +207,19 @@ foreach(dump IN LISTS dumps)
                            "${draws_${ref}} and ${leastDepth} to ${wantDepth}")
         math(EXPR failures "${failures} + 1")
       endif()
+      # the path ran: the cuts the fixture declares (the last store where the crack fill
+      # does not keep it)
+      if(run STREQUAL "all")
+        if(phoneFrame)
+          rd_fixture_require(${name_${dump}} "${out}" clear_carried clear_skipped)
+        else()
+          rd_fixture_require(${name_${dump}} "${out}" clear_carried clear_skipped
+                             last_store_dropped)
+        endif()
+        set(required_${dump} TRUE)
+      elseif(run STREQUAL "lastnf")
+        rd_fixture_require(${name_${dump}} "${out}" last_store_dropped)
+      endif()
       if(phoneFrame AND s STREQUAL "phone" AND run STREQUAL "all")
         math(EXPR phoneCompared "${phoneCompared} + 1")
         math(EXPR phoneCarried "${phoneCarried} + ${carried_all}")
@@ -258,20 +255,30 @@ foreach(dump IN LISTS dumps)
     endforeach()
   endforeach()
 endforeach()
+foreach(dump IN LISTS dumps)
+  if(NOT required_${dump})
+    message(SEND_ERROR "${name_${dump}}: its properties were never checked (no setting could "
+                       "show it): a fixture this test cannot measure is no test")
+    math(EXPR failures "${failures} + 1")
+  endif()
+endforeach()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(failures GREATER 0)
-  message(FATAL_ERROR "rd_pass_cut_ab: ${failures} failures over ${ndumps} dumps")
+  message(FATAL_ERROR "rd_pass_cut_ab: ${failures} failures over ${ndumps} fixtures")
 endif()
 if(compared EQUAL 0)
-  message(STATUS "SKIP: no dump of ${LIST} could be compared")
-  return()
+  message(FATAL_ERROR "rd_pass_cut_ab: no target compared over ${ndumps} fixtures")
 endif()
-if(phoneCompared GREATER 0 AND
-   (phoneCarried EQUAL 0 OR phoneSkipped EQUAL 0 OR phoneLast EQUAL 0))
+if(phoneCompared EQUAL 0)
+  message(FATAL_ERROR "rd_pass_cut_ab: no phone frame (the word phone) compared at the phone's "
+                      "setting: the gate saw nothing")
+endif()
+if(phoneCarried EQUAL 0 OR phoneSkipped EQUAL 0 OR phoneLast EQUAL 0)
   message(FATAL_ERROR "rd_pass_cut_ab: the phone's ${phoneCompared} frames at its setting "
                       "carried ${phoneCarried} clears, skipped ${phoneSkipped} and dropped "
                       "${phoneLast} stores at the last touch (without the crack fill): each must "
                       "cut something")
 endif()
-message(STATUS "rd_pass_cut_ab: ${compared} targets the same bytes over ${ndumps} dumps; the "
+message(STATUS "rd_pass_cut_ab: ${compared} targets the same bytes over ${ndumps} fixtures; the "
                "phone's frames: ${phoneCarried} clears carried, ${phoneSkipped} skipped, "
                "${phoneLast} stores dropped at the last touch without the crack fill")

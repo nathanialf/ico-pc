@@ -1,0 +1,30 @@
+# rd_late_pass_ab, rd_late_pass_gl (port/render/test/rd_late_pass_ab.cmake):
+# the late passes on SCENE off against on.  A fixture's name
+# (port/render/test/fixtures/NAME.rdfix), heldN (the crack fills one replay
+# holds at the PowerVR phone's setting: the light plan's DARK rooms), joinN
+# (the passes list 11's draws join there), both re-derived from a run of the
+# fixture, the word none (the late pass must hold, defer and join nothing:
+# the fill is the first draw of the aura's paste pass) and the line's own
+# properties (QUANTITY OP VALUE: crack_pixels, the fill drawn at every setting
+# on the generated geometry).  Not here: fx-shadow-wide (0 pixels filled: no
+# crack on its generated geometry; its source fills 55).  The title's menu
+# frames (fx-title-0300, fx-title-dark-0300) join list 11's first two draws
+# (a pass not begun, the stats say) and keep as many passes as without the
+# late pass (48 and 48, 39 and 39): the passes rule fails there, on the game's
+# frame too (rd-00300: 49 and 49; the release before's tool 42 and 42).  Their
+# list 11 has text that tests SCENE's depth after the joined draws; that it
+# begins the pass the join saved is not traced.
+#
+# the PowerVR phone's cage under the dark plan, issue 163's lamps room: one
+# fill held into the aura's paste pass
+fx-phone-7583 held1
+fx-163-blended held1 crack_pixels>=1
+# the phone's bridge: no glow, the fill the first draw of the aura's paste
+# pass, nothing held
+fx-phone-4761 none
+# issue 102's frame (the sun's fans): the pause menu's draws in list 11 join
+# the open pass (one pass fewer, as on the game's frame).  Its generated
+# geometry leaves no crack at any setting (0 pixels filled against 1918 and
+# 603 on the game's frame): the join is list 11's, not the fill's, so the line
+# declares crack_pixels=0 and the fill's checks are the other lines'
+fx-gate-102 join1 crack_pixels=0

@@ -9,8 +9,10 @@
 # on a Windows runner (after `linux`), `extra`, the Windows clang build,
 # `linux-arm64`, the arm64 Linux build and tests on an arm64 runner (and on a
 # pushed v* tag the arm64 package) with `linux-arm64-filtered`, the tests it
-# leaves out in two shards, and `android`, the APK build and
-# its structural checks; all but `windows` run side by side.
+# leaves out in two shards, `android`, the APK build and
+# its structural checks, and `apple`, the macOS app and the iPhone IPA built
+# and packaged on macos-15 (.github/workflows/apple-build.yml, the steps the
+# Apple packages workflow publishes with); all but `windows` run side by side.
 name: ci
 
 on:
@@ -840,3 +842,19 @@ jobs:
           path: android-symbols/
           retention-days: 14
           if-no-files-found: error
+
+  # The macOS app and the unsigned iPhone IPA, built and packaged on macos-15
+  # with the steps the Apple packages workflow (ios.yml) publishes a release
+  # with (.github/workflows/apple-build.yml), so an Apple compile or
+  # packaging error stops main's run before a release; nothing is kept or
+  # attached. Each platform is its own job; the caches they save on main are
+  # the ones a release's run restores.
+  apple:
+    if: github.event_name != 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos, ios]
+    uses: ./.github/workflows/apple-build.yml
+    with:
+      platform: ${{ matrix.platform }}

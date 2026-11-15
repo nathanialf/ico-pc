@@ -1,6 +1,6 @@
 # rd_vumerge_ab: the VU draw merge against one GPU draw a VU draw, byte for
-# byte (docs/port/VU1_PROGRAMS.md, "The draw merge").  For every dump the
-# list names (tools/vustage_dumps.txt, as rd_vustage_ab.cmake reads it), at
+# byte (docs/port/VU1_PROGRAMS.md, "The draw merge").  For every frame the
+# list names (lists/vustage.txt's fixtures, as rd_vustage_ab.cmake reads them), at
 # the Original preset at 4:3 and 1x, the Enhanced preset at 4:3 and 2x and
 # at 16:9 and 2x, each through the record (the pre-passes on) and through
 # the programs' own entries (ICO_RD_VU_PREPASS=0: what a tile-based GPU and
@@ -13,9 +13,11 @@
 # run must say "merge on" and the other "merge off" with nothing merged; the
 # merged run's GPU draws must be the other's less what its runs joined
 # (draws merged less the GPU draws they took), and the GPU draws over every
-# dump and setting fewer.  Each pair's draws are printed.  A missing list or
-# dump is named and skipped; no dump read, or no device: SKIP (77).
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
+# dump and setting fewer.  The path ran: on the merged run through the record
+# every fixture's declared vu_merged_draws, every fixture checked.  Each pair's
+# draws are printed.  No dump, or no device: SKIP (77).
+# -DTOOL=<rd_replay_tool> -DLIST=<list> -DOUT=<a folder the test may write>
+# [-DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<folder> -DFIXTURE_HELPERS=<file>]
 # [-DBLEND_ENV=<NAME=value>]: the blend both runs draw with, ICO_RD_BLEND=fixed
 # by default; ICO_RD_UBER=on (rd_vumerge_ab_uber, rd_vumerge_ab_pixel_uber): GS
 # state as shader data, the VU draws through the colour read and merged
@@ -23,35 +25,13 @@
 if(NOT DEFINED BLEND_ENV OR BLEND_ENV STREQUAL "")
   set(BLEND_ENV "ICO_RD_BLEND=fixed")
 endif()
-if(NOT EXISTS "${LIST}")
+include("${CMAKE_CURRENT_LIST_DIR}/rd_vu_inputs.cmake")
+if(NOT vuFixtures AND NOT EXISTS "${LIST}")
   message(STATUS "SKIP: ${LIST}: no dump list")
   return()
 endif()
-get_filename_component(listDir "${LIST}" DIRECTORY)
-file(STRINGS "${LIST}" lines)
-set(dumps "")
-foreach(l IN LISTS lines)
-  string(STRIP "${l}" l)
-  if(l STREQUAL "" OR l MATCHES "^#")
-    continue()
-  endif()
-  if(NOT IS_ABSOLUTE "${l}")
-    set(l "${listDir}/${l}")
-  endif()
-  if(l MATCHES "[*]")
-    file(GLOB matched "${l}")
-    list(SORT matched)
-    if(matched)
-      list(APPEND dumps ${matched})
-    else()
-      message(STATUS "${l}: no dump matches, skipped")
-    endif()
-  elseif(EXISTS "${l}")
-    list(APPEND dumps "${l}")
-  else()
-    message(STATUS "${l}: no such dump, skipped")
-  endif()
-endforeach()
+rd_vu_inputs("${LIST}")
+set(dumps "${vuDumps}")
 list(LENGTH dumps ndumps)
 if(ndumps EQUAL 0)
   message(STATUS "SKIP: no dump of ${LIST} is here")
@@ -139,6 +119,11 @@ foreach(dump IN LISTS dumps)
       endif()
       set(joined "${CMAKE_MATCH_3}")
       set(took "${CMAKE_MATCH_4}")
+      # the path ran: through the record, every fixture's declared
+      # vu_merged_draws (the draws its runs joined)
+      if(path STREQUAL "rec")
+        rd_vu_require(${index} "${outOn}" vu_merged_draws)
+      endif()
       math(EXPR want "${nOff} - (${joined} - ${took})")
       message(STATUS "${dump} ${path} ${s}: ${nOff} GPU draws one a draw, ${nOn} merged "
                      "(${joined} draws merged into ${took})")
@@ -173,6 +158,7 @@ foreach(dump IN LISTS dumps)
     endforeach()
   endforeach()
 endforeach()
+rd_vu_inputs_done(failures)
 if(failures GREATER 0)
   message(FATAL_ERROR "rd_vumerge_ab: ${failures} failures over ${ndumps} dumps")
 endif()

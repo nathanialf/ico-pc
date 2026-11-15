@@ -1,0 +1,9 @@
+# rd_vufuse_ab and _uber (docs/port/TESTING_FIXTURES.md): frames with code 36's
+# cut and kick pairs that fuse (vu_fuse_pairs); `extra`: a phone frame, which
+# must fuse at both phone settings
+fx-loss95
+fx-deja
+# the PowerVR phone's v0.9.4 rc1 frame (Resolution Auto, 2364x1080)
+fx-phone-4103 extra
+# issue 164's Mali-G52 frame (the settings over a paused room, 21:9)
+fx-mobile-164 extra

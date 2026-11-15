@@ -489,16 +489,19 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   NULL)`) thins the twins at once, three replays twin one each and the first twin's line says `at
   one skinned draw a picture from the start (a tile-based phone GPU`; the zeroed bone re-arms them
   (the next replay twins all three), and four clean replays thin them again, two more twin one each.
-- `rd_vustage_ab.cmake`: every dump of `tools/vustage_dumps.txt` (the dump corpus, machine-local
-  paths, `*` globs, a missing dump named and skipped, none at all `SKIP`) replayed by
+- `rd_vustage_ab.cmake`: every fixture of `port/render/test/fixtures/lists/vustage.txt` (the
+  2026-10-07 captures, issue 95's loss frame and the deja vu 48:9 frame:
+  [TESTING_FIXTURES.md](TESTING_FIXTURES.md); `test/rd_vu_inputs.cmake` reads the list, or a list
+  of the dumps the build writes for the `_pixel` twins and `tools/ci_d3d11_warp.sh`) replayed by
   `rd_replay_tool --pass-dump --stats` under `ICO_RD_BLEND=fixed` the
   old way (`ICO_RD_VU_PREPASS=0`: the programs' entries) and through the record
   (the pre-passes, the main shaders, `vu_ps`), at Original 4:3 1x and Enhanced 4:3 2x: every named
   target's PNG byte for byte, no VU draw the old way with the record, no Direct3D 11
   debug-layer error and no refused record copy (`rhi_cmd_copy_texture_to_buffer: ... skipped`) in
-  either run, the stats lines printed; a dump with no VU command (the four 2D dumps of the corpus) records no pre-pass and passes with 0
-  passes; the records' camera is the one each command's draw uses (the walk follows the field's half
-  pixel as `replayFrame` does). SKIP without the list, its dumps or a device (`rd_vustage_ab`).
+  either run, the stats lines printed, each fixture's declared `prepass_vertices` on the record's
+  run (the path ran; every fixture checked); a dump with no VU command records no pre-pass and
+  passes with 0 passes; the records' camera is the one each command's draw uses (the walk follows
+  the field's half pixel as `replayFrame` does). SKIP without a device (`rd_vustage_ab`).
 - `rd_replay_tool --stats` also prints two counting lines (no draw or record changes): `VU merge:
   N draws in M runs (mean R a run); blocked by ...; per list: L:N/M ...` and `VU pre-pass batches:
   B distinct (stage, frame, stream, bones) of D draws`. A run is consecutive VU draws of one pass
@@ -534,13 +537,16 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   stage (`ICO_RD_VU_PREPASS_BATCH=0`) and in the pre-pass's batches, at Original 4:3 1x, Enhanced
   4:3 2x and Enhanced 16:9 2x under `ICO_RD_BLEND=fixed`: every named target's PNG byte for byte,
   every VU command through the record in both, the same vertices, no more pre-pass draws batched
-  and fewer where one an entry made two or more; each run's draws printed, and the totals
+  and fewer where one an entry made two or more, each fixture's `prepass_vertices` and
+  `prepass_draws` on the batched run; each run's draws printed, and the totals
   (`rd_vubatch_ab`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-pre-passs-batches)). SKIP as
   `rd_vustage_ab`.
 - `rd_vu_env_ab.cmake`: two runs of `rd_replay_tool --pass-dump --stats` over rd_pixel's dump and
-  the dumps of `tools/vustage_dumps.txt`, at Original 4:3 1x and Enhanced 16:9 2x under
-  `ICO_RD_BLEND=fixed`, under two environments, every named target's PNG byte for byte and each
-  run's stats matching its regex: `rd_vurecord_ab` the VU record drawn into the render targets and
+  the fixtures of `lists/vustage.txt`, at Original 4:3 1x and Enhanced 16:9 2x under
+  `ICO_RD_BLEND=fixed`, under two environments, every named target's PNG byte for byte, each
+  run's stats matching its regex and each fixture's declared quantities the registration names
+  (`-DFX_A`, `-DFX_B`: `prepass_vertices` on both runs, `vu_record_dispatches` on a run with the
+  record by compute dispatches; every fixture checked): `rd_vurecord_ab` the VU record drawn into the render targets and
   copied (`ICO_RD_VU_RECORD=targets`) against stored by the vertex shaders (`=stores`), each
   drawing every VU command through the record and naming its write (`stats: VU record targets` /
   `stores`); `rd_vurecord_ab_compute` the targets against the compute dispatches (`=compute`: B's
@@ -548,18 +554,17 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   dispatches`); `rd_vuprepass_min_ab` `[dev] vu_prepass_min` under every frame
   (`ICO_RD_VU_PREPASS_MIN=0`) against above every frame (2147483647: the pre-pass skipped, 0
   passes, every VU command the old way, `pre-pass skipped N frames under 2147483647 slots`)
-  ([PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)). SKIP without a dump or a
-  device. The same script for the barrier scopes (issues 179 and 211, `port/rhi/rhi_tile_rule.h`;
-  registered in `test/rd_vu_compute_tests.cmake`), over rd_pixel's dump and
-  `tools/scope_dumps.txt` (the VU stage list's captures and issue 179's two loss frames,
-  machine-local): `rd_scope_ab` the narrow scopes (`ICO_VK_FAKE_SCOPES=narrow`, the texture
+  ([PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)). SKIP without a device. The
+  same script for the barrier scopes (issues 179 and 211, `port/rhi/rhi_tile_rule.h`;
+  registered in `test/rd_vu_compute_tests.cmake`), over rd_pixel's dump and the fixtures of
+  `lists/scope.txt` (the VU stage list's captures and loss frame and issue 179's two loss frames,
+  `prepass_vertices` on both runs): `rd_scope_ab` the narrow scopes (`ICO_VK_FAKE_SCOPES=narrow`, the texture
   uploads after the VU pre-pass) against the wide ones with the uploads before it (Arm's
   phone GPU faked, `ICO_VK_FAKE_VENDOR=0x13B5`: the tile rule's default), the desktop
   profile; `rd_scope_ab_tiler` both on a tile-based profile (`ICO_VK_FAKE_LIMITS=moltenvk`), narrow
   faked (`ICO_VK_FAKE_SCOPES=narrow`) against the tile rule's wide (Arm faked too: a Mac is
   narrow): every named target byte for byte, and each run must print the backend's `rhi_vk:
-  barriers: narrow (...` / `wide (...` line (stderr), so a switch that did nothing fails; the list
-  is strict (`LIST_STRICT`: where any of its files is here, one that is not is an error).
+  barriers: narrow (...` / `wide (...` line (stderr), so a switch that did nothing fails.
   `rd_vuprepass_selftest_lossrung` (the phones' loss rung: Arm faked and `ICO_LOSS_ROW=1`, the
   backend's and the renderer's lines, the pre-pass off for the start, the self-test not run) and
   `_lossrung_desktop` (lavapipe and `ICO_LOSS_ROW=1`: the wide scopes, the pre-pass on, no rung).
@@ -569,10 +574,12 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   and Enhanced 16:9 2x under `ICO_RD_BLEND=fixed`: every named target's PNG byte for byte, `merge
   off` with nothing merged against `merge on`, the merged run's GPU draws (the first stats line's)
   exactly the other's less what its runs joined (K less G of the `VU merge` line), and fewer over
-  the whole list; each pair's draws printed (`rd_vumerge_ab`;
+  the whole list, each fixture's declared `vu_merged_draws` (K) on the merged run through the
+  record; each pair's draws printed (`rd_vumerge_ab`;
   [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge)). SKIP as `rd_vustage_ab`.
-- `rd_vufuse_ab.cmake`: the same dumps and those of `tools/vufuse_dumps.txt` (the PowerVR phone's
-  three frames) twice with the draw merge on, code 36's kicks under their own pipelines
+- `rd_vufuse_ab.cmake`: the fixtures of `lists/vufuse.txt` (issue 95's loss frame, the deja vu
+  frame, and marked `extra` a PowerVR phone frame and issue 164's Mali-G52 frame) twice
+  with the draw merge on, code 36's kicks under their own pipelines
   (`ICO_RD_VU_FUSE=0`) and the fused scissor pair, at five settings under `ICO_RD_BLEND=fixed`: the
   phone's profile (`ICO_RD_VU_PREPASS=0`, `--enhanced --resolution 2x --aspect 2.189 --present
   2364x1080`; a narrower dump skips it) and the same at its Resolution Auto (`--resolution 2364x1080
@@ -584,23 +591,24 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   difference of what the merge joined (K less G of each run's `VU merge` line), no pair kept apart
   for the pixel shader (`no planes 0`: every pixel shader a pair draws with reads the mark), at
   every setting that counted pairs with ABE off some fused and fewer GPU draws in total, and on
-  every phone frame some fused at both phone settings; each pair's counts printed
+  every phone frame some fused at both phone settings, each fixture's declared `vu_fuse_pairs` on
+  every fused run; each pair's counts printed
   (`rd_vufuse_ab`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-fused-scissor-pair)). SKIP
   as `rd_vustage_ab`.
 - `rd_vumerge_ab.cmake` and `rd_vufuse_ab.cmake` take `-DBLEND_ENV=` (the blend both runs draw
   with, `ICO_RD_BLEND=fixed` by default): `rd_vumerge_ab_uber`, `rd_vufuse_ab_uber` and their
   `_pixel` twins on `rd_pixel`'s frames run them under `ICO_RD_UBER=on`, the VU draws through the
   colour read, merged and fused (`port/render/rd_replay_vu.c` (`vuMergeDst`, `vuFuseVerdict`)).
-- `rd_vumerge_mali.cmake` (label `mali`): the dumps of `tools/vumerge_mali_dumps.txt` (the Mali-G52
-  reporter's frame of issue 164 in `/primary/dev/ico-dumps/164/`, the two phone frames
-  `rd_vufuse_ab` reads and a 2026-10-07 capture; a line is the dump, `expect=IN/GPU` and the
-  tool's setting arguments) on the plain device and under `ICO_VK_FAKE_LIMITS=mali
+- `rd_vumerge_mali.cmake` (label `mali`): the fixtures of `lists/vumerge_mali.txt` (the Mali-G52
+  reporter's frame of issue 164, two PowerVR phone frames and a 2026-10-07 capture; a line is the
+  fixture, `expect=IN/GPU` and the tool's setting arguments) on the plain device and under `ICO_VK_FAKE_LIMITS=mali
   ICO_VK_FAKE_NO_DUAL=1` (a phone's limits, every lerp draw two passes), under
   `ICO_RD_BLEND=fixed` and `ICO_RD_CULL=off` (the `expect=` figures count every VU draw of the
   frame; the visibility test would leave some out): every named target's PNG byte for byte, both
   fakes' lines in the faked run,
   the `VU merge` figures (draws, GPU draws, merged, into, alone) and the fused pairs the plain
-  device's, and `expect=` the plain run's merged figure (826 into 87 on the 164 frame)
+  device's, `expect=` the plain run's merged figure (re-derived from a run of each fixture: 1012
+  into 110 on the 164 frame's) and each fixture's declared `vu_merged_draws` on the plain run
   (`rd_vumerge_mali`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge-without-dual-source-blending)).
   SKIP as `rd_vustage_ab`.
 - `rd_noplanes_ab.cmake`: the dumps of `tools/noplanes_dumps.txt` (the title's and the boot's
@@ -831,13 +839,15 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   match); `rd_replay_tool_crack` runs the tool on `rd_pixel`'s dump with `--enhanced --resolution
   2x --stats --no-crack-fill` and matches `crack fill: off (the replay tool's --no-crack-fill)`
   and the `stats: crack fill off: 0 passes, 0 pixels filled` line. `rd_crack_resolved_msaa2` and
-  `rd_crack_resolved_msaa4` run the tool on the corpus room `lightning/rd-00300.rddump`
-  (machine-local under `build-host/tmp/corpus/dumps/`, SKIP without it) with `--enhanced
+  `rd_crack_resolved_msaa4` run the tool on the corpus room's fixture `fx-lightning-0300`
+  ([TESTING_FIXTURES.md](TESTING_FIXTURES.md), expanded by the script) with `--enhanced
   --resolution 2x --aa msaa2|msaa4 --stats`: its MSAA epoch closes at the shadow count's pass in
   list 3, before the fog, so the filler draws on the resolved picture: the state line ends `(drawn
   after the MSAA resolve)`, the stats line reads `crack fill on: 1 passes, M pixels filled` with M
-  above 0, no replay left unfilled, `1 fills after lists 4-6` and `1 fills after the MSAA resolve`, and no `not drawn` line
-  (`-DNEED_FILE`: SKIP without the dump; `-DNEED=rd: msaa: N samples`: SKIP where the device does
+  above 0, no replay left unfilled, `1 fills after lists 4-6` and `1 fills after the MSAA resolve`, and no `not drawn` line;
+  the fixture's declared `crack_pixels` and `crack_msaa_fills` (the path ran: the cracks are where
+  the generated geometry leaves gaps)
+  (`-DNEED=rd: msaa: N samples`: SKIP where the device does
   not offer the count, which it then draws as off: lavapipe offers 4 only)
   ([MSAA.md](MSAA.md#the-crack-filler-after-the-resolve)).
 - `rd_crt_test.c`: the CRT filter's options and its shader (`rd_crt`, `rd_crt_fixed`); downsampling
@@ -1204,19 +1214,20 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   need keeps the bound's; a record already at the need makes none) and the window's
   `VU record memory` line word for word and cut short. `rd_vu_rec_early_ab`,
   `rd_vu_rec_early_ab_compute`, `rd_vu_rec_early_ab_targets`
-  (`rd_early.cmake`, through `test/rd_vu_env_ab.cmake`): the dumps of `tools/vustage_dumps.txt`
+  (`rd_early.cmake`, through `test/rd_vu_env_ab.cmake`): the fixtures of `lists/vustage.txt`
   with the record grown by the frame (`ICO_RD_EARLY_PREPARE=0`) and made at start at 1,024 rows
   with the arena's chunk (`=1` with `ICO_RD_EARLY_ROWS=1024`: the replay tool calls
   `rd_vu_record_prepare` as the game window does and prints `early: record 1024 rows, arena
   made`), under lavapipe's own record write, the compute dispatches and the render targets: every
-  named target byte for byte at Original 4:3 1x and Enhanced 16:9 2x; a frame without a pre-pass
-  is skipped. `rd_vu_rec_size_ab`, `rd_vu_rec_size_ab_mali` (`rd_early.cmake`): the dumps of
-  `tools/vu_rec_size_dumps.txt` (issue 179's four Mali dumps, the Pixel's three opening dumps, the
-  corpus's largest pre-pass record) with the record made at start at 1,024 rows
+  named target byte for byte at Original 4:3 1x and Enhanced 16:9 2x, each fixture's
+  `prepass_vertices` on both runs (and `vu_record_dispatches` under the compute record).
+  `rd_vu_rec_size_ab`, `rd_vu_rec_size_ab_mali` (`rd_early.cmake`): the fixtures of
+  `lists/vu_rec_size.txt` (issue 179's Mali slow-scene capture and manual frame, the Pixel's three
+  opening frames, the corpus's largest pre-pass record) with the record made at start at 1,024 rows
   (`ICO_RD_EARLY_PREPARE=1`, `ICO_RD_EARLY_ROWS=1024`) against the run's need (`=1` alone: `early:
   record 512 rows`): every named target byte for byte at the two settings, and no `grown in play
-  past` line in the need's run (`FORBID_B`); `_mali` under the Arm fakes and the compute record.
-  A listed dump that is absent fails where the dumps are (`LIST_STRICT`).
+  past` line in the need's run (`FORBID_B`), each fixture's `prepass_vertices` on both runs;
+  `_mali` under the Arm fakes and the compute record (and `vu_record_dispatches`).
   `ICO_RD_EARLY_ROWS=N` (a power of two from 16 to 1,024; anything else is said and ignored) takes
   N as the run's need at start-up; tests only.
 - `rd_log_line_test.c` (ctest `rd_log_line`, `rd_early.cmake`): a log line handed to an
