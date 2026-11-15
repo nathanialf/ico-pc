@@ -99,9 +99,24 @@ def skeleton(sk, ver):
     if ver >= 15:
         c.raw(c.u32() * 8)
     c.raw(c.u32() * 8)
-    if c.o != len(sk):
+    tag = c.u32() if c.o != len(sk) else None
+    if tag == 0x34505846:
+        # the drop sheets' section (rd_fixture.h, @scene drops / cards): per sheet the
+        # mesh id, its role, the exponent, four corners and the normal as small integers
+        sheets = c.u32()
+        if sheets == 0 or sheets > meshes:
+            raise Bad("%d drop sheets of %d meshes" % (sheets, meshes))
+        for _ in range(sheets):
+            _id, role, e = struct.unpack("<IIi", c.raw(12))
+            words = struct.unpack("<15i", c.raw(60))
+            if role >= 4 or not -60 <= e <= 60:
+                raise Bad("a drop sheet's role or exponent is out of range")
+            corners, normal = words[:12], words[12:]
+            if max(abs(w) for w in corners) >= 1 << 21 or max(abs(w) for w in normal) > 1 << 20:
+                raise Bad("a drop sheet's corner or normal is past its range")
+    elif tag is not None:
         # the placement section (rd_fixture.h): centres in lattice steps, payload offsets
-        if c.u32() != 0x31505846:
+        if tag != 0x31505846:
             raise Bad("bytes after the skeleton's end that are no placement section")
         placed = c.u32()
         if placed > meshes:

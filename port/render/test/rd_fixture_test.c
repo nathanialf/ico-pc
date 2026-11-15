@@ -67,6 +67,9 @@ enum {
     PAY_BYTES = OFF_TEXT + 304
 };
 
+/* buildDumpAt's mesh matrix with perspective (the drop sheets' block) */
+static bool s_persp;
+
 static RdCmd cmd(uint8_t type)
 {
     RdCmd c;
@@ -184,6 +187,13 @@ static void buildDumpAt(RdFxBuf *b, uint32_t ver, bool work2)
     /* mem[16..19]: x' = 2048 + 100 x, y' = 2048 + 100 y, w 1: a cube of half
        side 2^-2 reaches 25 pixels, the first of the powers of two to 24 */
     float m[4][4] = {{100, 0, 0, 0}, {0, 100, 0, 0}, {0, 0, 1, 0}, {2048, 2048, 0, 1}};
+    if (s_persp) {
+        /* x' = 100 x + 2048 w, y' = 100 y + 2048 w, z' = 4096, w = z + 4: the
+           eye 4 units in front of the origin, looking along +z */
+        const float p[4][4] = {
+            {100, 0, 0, 0}, {0, 100, 0, 0}, {2048, 2048, 0, 1}, {8192, 8192, 4096, 4}};
+        memcpy(m, p, sizeof(m));
+    }
     memset(pay + OFF_MESH + 32, 0, 576);
     memcpy(pay + OFF_MESH + 32 + 16 * 16, m, sizeof(m));
     RdMaterial mat;
@@ -538,6 +548,115 @@ int main(int argc, char **argv)
     CHECK(!rd_fixture_make(dn.p, dn.n, "checker\n@lamps move\n", &fx, report, sizeof(report), why,
                            sizeof(why)));
     rd_fx_free(&dn);
+
+    /* the drop sheets (@scene drops, @scene cards; rd_fixture_make.c
+       dropSheet) on the frame with a perspective matrix: h = (100 x + 2048
+       (z + 4), 100 y + 2048 (z + 4), 4096, z + 4); the origin's w0 = 4, the
+       mirror's determinant 100 * 100 * 1 > 0 (none); the picture 2048 -+ 256
+       by 2048 -+ 224 (the command names none), the target 512 wide (W 256).
+       Mesh 7 (prelit with a facing table, list 0's first draw) takes the
+       first role.  @scene drops: the floor; its corners (x - 2048 w, y - 2048
+       w, w) A (-1024, 672, 4), B (1024, 672, 4), C (1024, 672, -2), D
+       (-1024, 672, -2); det(A, B, C) = (-1024)(-4032) - 672 (-6144) =
+       8257536 > 0: away from the eye, so the order A D C B (det -8257536,
+       facing).  Solving: z = w - 4, x = (x - 2048 w) / 100, y likewise: A
+       (-10.24, 6.72, 0), D (-10.24, 6.72, -6), C (10.24, 6.72, -6), B
+       (10.24, 6.72, 0); the largest 10.24 = 0.64 * 2^4, e = 4 - 21 = -17:
+       x -10.24 * 2^17 = -1342177.28 -> -1342177, y 6.72 * 2^17 = 880803.84
+       -> 880804, z -6 * 2^17 = -786432.  The normal cross(D - A, C - A) =
+       cross((0, 0, -6), (20.48, 0, -6)) = (0, -122.88, 0) -> (0, -2^20, 0),
+       towards the eye (y 0).  The strip's five vertices: A D C B A. */
+    s_persp = true;
+    RdFxBuf dp = {0};
+    buildDump(&dp, 17);
+    s_persp = false;
+    CHECK(!dp.bad);
+    CHECK(rd_fixture_make(dp.p, dp.n, NULL, &fx, report, sizeof(report), why, sizeof(why)));
+    const size_t perspSkel = fx.skelBytes;
+    rd_fixture_free(&fx);
+    static const char dropRules[] = "checker\n@scene drops\n";
+    CHECK(rd_fixture_make(dp.p, dp.n, dropRules, &fx, report, sizeof(report), why, sizeof(why)));
+    printf("drop sheets: %s %s\n", report, why);
+    CHECK(strstr(report, "drop sheets: 1 (floor 1, card 0, floor facing away 0, card facing away "
+                         "0), 0 meshes refused") != NULL);
+    CHECK(fx.skelBytes == perspSkel + 8 + 72);
+    {
+        const uint8_t *q = fx.skel + perspSkel;
+        static const int32_t want[18] = {7,        0,      -17,     -1342177, 880804,   0,
+                                         -1342177, 880804, -786432, 1342177,  880804,   -786432,
+                                         1342177,  880804, 0,       0,        -1048576, 0};
+        CHECK(rd_fx_get32(q) == RD_FX_PLACE_TAG4 && rd_fx_get32(q + 4) == 1);
+        for (int k = 0; k < 18; k++) {
+            CHECK((int32_t)rd_fx_get32(q + 8 + 4 * k) == want[k]);
+        }
+    }
+    CHECK(rd_fixture_check(&fx, why, sizeof(why), stats, sizeof(stats)));
+    CHECK(strstr(stats, ", 1 meshes as drop sheets") != NULL);
+    x = NULL;
+    CHECK(rd_fixture_expand(&fx, true, &x, &xn, why, sizeof(why)));
+    if (x) {
+        const size_t pp = payloadAt(x, 17);
+        CHECK(xn == dp.n);
+        size_t op = pp + PAY_BYTES + 4 + 32 + 8 * 4 * 4 + 4 + 32 + 16 * 16 * 4 + 4 + 8 * 8 * 4;
+        op += 4 + 4 + 20 + 24;
+        const float ax = -1342177.0f / 131072.0f, ay = 880804.0f / 131072.0f;
+        static const int corner[5] = {0, 1, 2, 3, 0}; /* A D C B A */
+        const float cx[4] = {ax, ax, -ax, -ax}, cz[4] = {0.0f, -6.0f, -6.0f, 0.0f};
+        for (int j = 0; j < 5; j++) {
+            const size_t o = op + (size_t)j * 48;
+            CHECK(rd_fx_get32(x + o) == fbits(cx[corner[j]]));
+            CHECK(rd_fx_get32(x + o + 4) == fbits(ay));
+            CHECK(rd_fx_get32(x + o + 8) == fbits(cz[corner[j]]));
+            CHECK(rd_fx_get32(x + o + 12) == fbits(1.0f));
+        }
+        CHECK(rd_fixture_selfcheck(dp.p, dp.n, x, xn, &windows, &hits, why, sizeof(why)));
+        CHECK(windows > 0 && hits == 0);
+        free(x);
+    }
+    rd_fixture_free(&fx);
+    /* @scene cards: the card; A (-3072 * 4, -28 * 4, 4) = (-12288, -112, 4),
+       B (12288, -112, 4), C (12288, 112, 4), D (-12288, 112, 4) (H / 8 =
+       28); det(A, B, C) = (-12288)(-896) + 4 (2752512) = 22020096 > 0, so A
+       D C B (det -22020096); z = 0, x = (x - 2048 w) / 100: A (-122.88,
+       -1.12, 0), D (-122.88, 1.12, 0), C (122.88, 1.12, 0), B (122.88, -1.12,
+       0); 122.88 = 0.96 * 2^7, e = -14: 122.88 * 2^14 = 2013265.92 ->
+       2013266, 1.12 * 2^14 = 18350.08 -> 18350; the corners at X = 2048 +
+       25 x = -1024.0001 and 5120.0001, outside the GS window; the normal
+       cross((0, 2.24, 0), (245.76, 2.24, 0)) = (0, 0, -550.5) -> (0, 0, -2^20),
+       towards the eye (z -4) */
+    CHECK(rd_fixture_make(dp.p, dp.n, "checker\n@scene cards\n", &fx, report, sizeof(report), why,
+                          sizeof(why)));
+    CHECK(strstr(report, "drop sheets: 1 (floor 0, card 1, floor facing away 0, card facing away "
+                         "0), 0 meshes refused") != NULL);
+    if (fx.skelBytes == perspSkel + 8 + 72) {
+        const uint8_t *q = fx.skel + perspSkel;
+        static const int32_t want[18] = {7,        1,      -14, -2013266, -18350, 0,
+                                         -2013266, 18350,  0,   2013266,  18350,  0,
+                                         2013266,  -18350, 0,   0,        0,      -1048576};
+        for (int k = 0; k < 18; k++) {
+            CHECK((int32_t)rd_fx_get32(q + 8 + 4 * k) == want[k]);
+        }
+    } else {
+        CHECK(fx.skelBytes == perspSkel + 8 + 72);
+    }
+    CHECK(rd_fixture_check(&fx, why, sizeof(why), NULL, 0));
+    fx.skelBytes -= 4;
+    CHECK(!rd_fixture_check(&fx, why, sizeof(why), NULL, 0));
+    fx.skelBytes += 4;
+    rd_fixture_free(&fx);
+    /* refused: with another placement rule; on the frame whose matrix has no
+       perspective (its w row has no x, y or z term: the corners' equations
+       are singular) the floor is refused, no later mesh takes its role, so
+       no sheet: matched nothing */
+    CHECK(!rd_fixture_make(dp.p, dp.n, "checker\n@scene drops\n@fans off\n", &fx, report,
+                           sizeof(report), why, sizeof(why)));
+    CHECK(strstr(why, "combine") != NULL);
+    rd_fx_free(&dp);
+    RdFxBuf df = {0};
+    buildDump(&df, 17);
+    CHECK(!rd_fixture_make(df.p, df.n, dropRules, &fx, report, sizeof(report), why, sizeof(why)));
+    CHECK(strstr(why, "matched nothing") != NULL && strstr(why, "0 sheets, 1 meshes refused"));
+    rd_fx_free(&df);
     printf("rd_fixture_test: %s\n", s_fail ? "FAILED" : "all passed");
     return s_fail ? 1 : 0;
 }

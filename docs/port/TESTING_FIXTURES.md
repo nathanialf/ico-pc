@@ -179,6 +179,46 @@ same bytes.
   fans) is generated as the same ribbon 64 GS pixels wide, 8 pixels past the target's right edge:
   the fans of a sun that is off the picture.
 
+A generated cube (24 to 48 GS pixels about its origin) never leaves the region the VU's region test
+holds (GS 0 to 4094 across and down, in front of the eye), so no generated frame has a triangle
+the region rule drops (measured: `--region-stats` drop 0 on every fixture made without the rules
+below), and the tests of what the port draws of those drops (`rd_sideband_ab`, the side bands
+under `ICO_RD_REGION_RULE=ps2`; `rd_region_camera_ab`, the camera rule; `rd_sideband_cards`)
+would never draw one. Two more lines make the drops (`port/render/rd_fixture_make.c` dropSheet has
+the derivation from the region rule's code, `vu1_ref.c` vu1ref_region_draw and
+vu1ref_region_facing):
+
+- `@scene drops`: the first four meshes whose first draw is a non-skinned draw of list 0 with
+  winding marks (a lit stream, whose marks the expander's normals give; or a prelit one with a
+  facing table, version 15 on, whose bits are generated zero) are generated as drop sheets, by
+  their ordinal: (0) a floor across the eye plane facing the eye, (1) a card facing the eye, (2)
+  the floor facing away, (3) the card facing away. Every strip of a sheet zigzags over its four
+  corners (every triangle a cyclic triple of the quad: all wound the same way), each strip moved
+  by its index so no two strips share a position (no strip joined, so the card test cannot pass
+  one). The corners, read from that draw alone (its placement matrix, the picture its command
+  names, the target's width), at w0 the w of the model's origin, as (x - 2048 w, y - 2048 w, w):
+  the card a band a quarter of the picture's height across its middle whose corners lie at
+  X = -1024 and 5120, beyond the GS window on both sides (every triangle has a corner outside the
+  region and its strip none inside: a card the PS2 drops, kept off the sides by the side bands,
+  drawn by the camera rule when it faces the eye; at the Original preset 4:3 1x the same
+  triangles are out-of-box drops); the floor a plane below the eye from a far edge three quarters
+  down the picture at w0 to w0 / 2 behind the eye, as wide as the target there (every triangle
+  has a corner behind the eye: a drop the side bands draw beside the picture on a wider frame and
+  the camera rule draws whole, when it faces the eye). A sheet facing away keeps the drop under
+  both rules. The model points solve the matrix's x, y and w rows, are rounded to units of 2^e (e
+  keeps the largest under 2^21 units) and checked again (the card's corners in front and outside,
+  the floor's far corners in front within the depth range and its near ones behind, the facing);
+  a mesh that fails a check keeps its cube and the role goes to the next mesh. No vertex, bound or
+  statistic of the model is read.
+- `@scene cards`: the two cards alone (roles 1 and 3), for a test that holds every picture the
+  same with the side bands on (nothing is drawn beside the picture).
+
+Neither combines with `@lamps place` or `@fans off`. The drop sheets' section (`RD_FX_PLACE_TAG4`,
+"FXP4": per sheet the mesh id, its role, the exponent, the corners and the normal) ends the
+skeleton in place of the placement section: `rd_fixture_tool info` says `N meshes as drop sheets`,
+the maker's line `drop sheets: N (floor F, card C, floor facing away F', card facing away C'), K
+meshes refused`.
+
 A rule that matches no draw fails the make. The fixture keeps the result at the end of its
 skeleton (the placed meshes' ids and centres in lattice steps, the moved prims' payload offsets):
 `rd_fixture_tool info` says `N meshes placed on WORK2, N prims beside it`, the maker's line

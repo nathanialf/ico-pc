@@ -49,7 +49,11 @@
  *   count and per placed mesh (u32 mesh id, i32 x, y, z: the cube's centre
  *   in units of its lattice step 2^(size exponent - 3), in place of the
  *   model's origin), u32 count and per CPU-projected prim generated beside
- *   the target (u32 payload offset of its vertices). */
+ *   the target (u32 payload offset of its vertices).  With @scene drops or
+ *   @scene cards the section is instead u32 RD_FX_PLACE_TAG4, u32 count and
+ *   per drop sheet (u32 mesh id, u32 role RD_FX_DROP_*, i32 exponent e, the
+ *   four corners' i32 x, y, z in units of 2^e, the normal's i32 x, y, z in
+ *   units of 2^-20). */
 #ifndef PORT_RENDER_RD_FIXTURE_H
 #define PORT_RENDER_RD_FIXTURE_H
 
@@ -164,6 +168,19 @@ void rd_fx_pattern_texel(const char *name, uint32_t x, uint32_t y, uint32_t w, u
  * lattice adds at most 8, and the sum must stay an exact float (2^24) */
 #define RD_FX_PLACE_TAG 0x31505846u
 #define RD_FX_PLACE_MAX ((1 << 23) - 16)
+/* the section of a fixture made with @scene drops or @scene cards ("FXP4"):
+ * the drop sheets (rd_fixture_make.c dropSheet), each a mesh whose every
+ * strip zigzags over its four corners (rd_fixture.c genMesh), and the role
+ * it was made for */
+#define RD_FX_PLACE_TAG4 0x34505846u
+
+enum {
+    RD_FX_DROP_FLOOR = 0,      /* across the eye plane, facing the eye */
+    RD_FX_DROP_CARD = 1,       /* beyond the GS window on both sides, facing the eye */
+    RD_FX_DROP_FLOOR_BACK = 2, /* the floor, facing away */
+    RD_FX_DROP_CARD_BACK = 3,  /* the card, facing away */
+    RD_FX_DROP_ROLES = 4
+};
 
 /* ------------------------------------------------------------- the file */
 
@@ -212,6 +229,22 @@ bool rd_fixture_check(const RdFixture *fx, char *why, size_t whySize, char *stat
  *   @fans off      every CPU-projected prim (not a sprite, not text) drawn
  *                  into WORK2 (the sun's fans) is generated beside the
  *                  target, as the fans of a sun that is off the picture
+ * and two for a test of the region rule's drops (rd_sideband_ab,
+ * rd_region_camera_ab, rd_sideband_cards), which no other placement makes:
+ *   @scene drops   the first four meshes whose first draw is a non-skinned
+ *                  draw of list 0 with winding marks (a lit stream, or a
+ *                  prelit one with a facing table) are generated as drop
+ *                  sheets by their ordinal: a floor across the eye plane
+ *                  facing the eye (a drop behind the eye: the side bands and
+ *                  the camera rule draw it), a card (every corner beyond the
+ *                  GS window: a card the PS2 drops, the camera rule draws), a
+ *                  floor and a card facing away (both keep the drop); read
+ *                  from that draw alone (its placement matrix, the picture
+ *                  its command names, the target's GS size) and the ordinal;
+ *                  see rd_fixture_make.c dropSheet
+ *   @scene cards   the same with the two cards only (no floor: nothing is
+ *                  drawn beside the picture)
+ * Neither combines with @lamps place or @fans off.
  * A rule that matches no draw fails the make. */
 extern const char rd_fx_default_rules[];
 bool rd_fixture_make(const uint8_t *dump, size_t n, const char *rules, RdFixture *fx, char *report,
