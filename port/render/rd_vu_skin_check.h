@@ -328,9 +328,10 @@ int rd__skin_check_env(const char *value);
 /* The check's mode: env (rd__skin_check_env) when set, else on (1) only on
  * an Adreno with a window, off (0) elsewhere */
 int rd__skin_check_default(bool windowed, bool adreno, int env);
-/* rd_profile.c: an Adreno, Qualcomm's driver or Turnip (the profile's
- * PC_ADRENO_QUALCOMM and PC_ADRENO_TURNIP): from the ids (vendor 0x5143, not
- * through MoltenVK) and of the device in use */
+/* an Adreno, Qualcomm's driver or Turnip (the profile's PC_ADRENO_QUALCOMM
+ * and PC_ADRENO_TURNIP, the device table's PROFILE_CLASS): from the ids
+ * (vendor 0x5143, not through MoltenVK; rd_device_rows.c) and of the device
+ * in use (rd_profile.c) */
 bool rd__profile_vendor_adreno(uint32_t vendorId, bool moltenvk);
 bool rd__profile_adreno(void);
 

@@ -45,7 +45,9 @@
    device name: "PowerVR D-Series DXT-48-1536 MC1" on the Pixel 10 Pro Fold) */
 #define RD_VU_CLASS_MEASURED_NAME "PowerVR D-Series DXT-48-1536"
 
-/* pure: name (NULL: unknown) is the measured PowerVR's */
+/* pure: name (NULL: unknown) is the measured PowerVR's (the device table's
+   row powervr-dxt-48-1536 on an Imagination GPU of that name:
+   rd_device_rows.c) */
 bool rd__vu_class_measured(const char *name);
 
 /* ICO_RD_VU_COMPUTE_CLASS: -1 unset, 0, 1 (anything else: -1, said once) */

@@ -65,6 +65,7 @@
 #include "rd_stencil_selftest.h"
 #include "rd_lamps.h"         /* rd__lamps_lowres_on */
 #include "rd_vu_skin_check.h" /* rd__profile_adreno */
+#include "rd_device_rows.h"   /* rd__device_value */
 
 #define SC_SAMPLES 4 /* a target */
 #define SC_TOLERANCE 2
@@ -135,7 +136,8 @@ static bool decide(char *why, size_t n)
                  "it");
         return true;
     }
-    if (!rd__profile_powervr()) {
+    /* the device table's STENCIL_CUT (the row powervr) */
+    if (!rd__device_value(RHI_DC_STENCIL_CUT)) {
         snprintf(why, n, "not the PowerVR class: the cut is the PowerVR phone's in this release");
         return true;
     }
@@ -544,7 +546,7 @@ bool rd__stencil_cut_selftest(void)
     s_sc.test = SC_NOT_RUN;
     s_sc.testWords[0] = '\0';
     const bool want = s_sc.env == 0 || (s_sc.env < 0 && s_sc.path == RD_FOG_LOCAL &&
-                                        !rd__profile_adreno() && rd__profile_powervr());
+                                        rd__device_value(RHI_DC_STENCIL_CUT) != 0);
     if (want && g_rd.inited && g_rd.hasDevice) {
         runTest();
     }

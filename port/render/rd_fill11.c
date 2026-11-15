@@ -70,7 +70,7 @@
 
 #include "rd_fill11.h"
 #include "rd_replay.h"
-#include "rd_shadow_tile.h" /* rd__profile_tile_class */
+#include "rd_device_rows.h" /* rd__device_value */
 #include "rd_upscale.h"     /* rd__upscale_point_on */
 
 /* Off by default in this release: on the owner's PowerVR phone (DXT-48-1536) the build with
@@ -181,15 +181,11 @@ static int envSwitch(void)
 }
 
 /* 1 the PowerVR class, 2 a desktop class, 0 any other (the Arm, Qualcomm
- * and Apple classes, another tile-based phone GPU) */
+ * and Apple classes, another tile-based phone GPU): the device table's
+ * FILL11_CLASS (its tile class, 2 only off a tile-based phone GPU) */
 static int classOk(void)
 {
-    const RhiLimits *lim = rhi_limits();
-    const int c = rd__profile_tile_class();
-    if (c == 1) {
-        return 1;
-    }
-    return c == 2 && lim != NULL && !lim->tilePhone ? 2 : 0;
+    return (int)rd__device_value(RHI_DC_FILL11_CLASS);
 }
 
 /* the self-test and the start-up set's twins: wherever the default and the

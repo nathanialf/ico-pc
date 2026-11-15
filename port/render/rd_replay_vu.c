@@ -3906,7 +3906,7 @@ void rd__vu_prepass_init(const RhiLimits *lim)
         snprintf(g_rd.vuPrepassWhy, sizeof(g_rd.vuPrepassWhy),
                  "by the settings ([dev] vu_prepass = false, ICO_RD_VU_PREPASS=0)");
     } else if (lim && lim->vuPrepassOff && !(env && strcmp(env, "on") == 0)) {
-        /* the device table (vk_device.c kVuPlainOnly's noPrepass column,
+        /* the device table (the row adreno-740-qualcomm's VU_PREPASS_OFF,
          * issue 123); "on" is [dev] vu_prepass = true written in the file
          * (host_config.c), over the table alone, never the byte bound */
         snprintf(g_rd.vuPrepassWhy, sizeof(g_rd.vuPrepassWhy),

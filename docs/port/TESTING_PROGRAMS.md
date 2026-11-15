@@ -1868,9 +1868,20 @@ The renderer's test programs have a page of their own:
   can apply, the VU rows, the queue's row and the serial rule's reason. On the logged devices on
   every backend, OS, MoltenVK and driver package, the one-choice read (`rhi_device_table_choice`)
   and the backends' evaluation (`rhi_device_table_start`) equal the whole evaluation. It fails
-  when a row is in force on no identity, an override link decides none, or two matching rows differ
-  without a link. About 15 s at -O2, 3 minutes under the sanitizers (hand-measured).
-  About 6 s at -O2, 45 s under the address and undefined-behaviour sanitizers.
+  The renderer's reads (`port/render/rd_device_rows.c`, linked in): every renderer call site's
+  composition of its choices (the class, its Adreno and PowerVR tests, the tile class and
+  columns, the blur fold, the lamps' three classes with and without a device, the crack fill's and
+  the shadow tiles' classes, the stencil cut's words and want, the VU record's class and measured
+  device, the no-volume window and its break, the compaction's DXT, the skin check's default and
+  phone rule, the VU set's kind, words and side bands, the tile-based limits and orders) against
+  the old rules' copies on every identity of the matrix and with the fakes; again on every logged
+  GPU of `DEVICES.md` (the NVIDIA, AMD, Intel, Apple, Arm, Qualcomm and Imagination ones) at each
+  Vulkan version of the matrix's edges with the profile's run inputs; and with no device (the
+  zeroed limits) on every backend, whatever evaluation an earlier device left; and
+  `rd__driver_is_turnip`, `rd__profile_vendor_adreno` and `rd__vu_class_measured` against their
+  copies. It fails when a row is in force on no identity, an override link decides none, or two
+  matching rows differ without a link. About 15 s at -O2, about 2 minutes under the address and
+  undefined-behaviour sanitizers at -O1 (hand-measured).
 - `rhi_subpass_verdict_test.c`: the subpass read's decision at a Vulkan start and its verdict file
   (`port/rhi/rhi_subpass_verdict.h`), pure: every branch of `rhi_subpass_decide` in its order
   (`[dev] subpass_read = off`, `ICO_VK_FAKE_NO_DST` with and without the key, `= on` over a refusal

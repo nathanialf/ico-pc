@@ -597,3 +597,75 @@ static RefVuSet ref_vu_set(const char *vuFallbackPlain, bool turnip)
      port/render/rd_fog_path.c:206, :214-215 rhi_limits()->tiler
      port/render/rd_vis.c:637-642 g_rd.profile.tiler (= RhiLimits.tiler)
    ref_lim_tiler above is each of them. */
+
+/* ------------------------------------------------------------------ DT3
+ * The renderer's rules as they read at int/v0117 6839bd7b8 (after DT2's
+ * merge), where the copies above did not hold them whole. */
+
+/* port/render/rd_profile.c:318-321 rd__profile_vendor_adreno */
+static bool ref_profile_vendor_adreno(uint32_t vendorId, bool moltenvk)
+{
+    return !moltenvk && vendorId == 0x5143u;
+}
+
+/* port/render/rd_stencil_selftest.c:132-141 the cut's off words' order
+   (an Adreno class first, then not the PowerVR class): which of the two
+   says why (0 neither) */
+static int ref_stencil_off_why(const RefIn *in)
+{
+    if (ref_profile_adreno(in)) {
+        return 1;
+    }
+    if (!ref_profile_powervr(in)) {
+        return 2;
+    }
+    return 0;
+}
+
+/* port/render/rd_lamps.c:1450-1451 the 4-sample pass's class on a device
+   (dl: g_rd.hasDevice) */
+static bool ref_lamps_ms_powervr(const RefIn *in, bool dl)
+{
+    return dl && ref_profile_tile_class(in) == 1 && REF_VULKAN(in);
+}
+
+/* port/render/rd_vu_compact.c:329 the DXT (lim != NULL) */
+static bool ref_cmp_dxt(const RefIn *in, bool lim)
+{
+    return lim && ref_profile_powervr(in) && ref_vu_class_measured(in->name);
+}
+
+/* port/render/rd_vu_record.c:230-231 the PowerVR class's rule's inputs
+   (lim != NULL) */
+static void ref_vu_record_class(const RefIn *in, bool lim, bool *powervr, bool *measured)
+{
+    *powervr = lim && ref_profile_powervr(in);
+    *measured = *powervr && ref_vu_class_measured(in->name);
+}
+
+/* port/render/rd_no_volume.c:498-513 classBase and breakMeasured with
+   g_rd.hasDevice */
+static bool ref_no_volume_base_dev(const RefIn *in, bool hasDevice)
+{
+    return hasDevice && ref_no_volume_base(in);
+}
+
+/* port/render/rd_fog_path.c:206 the desktop local order's tiler term and
+   :214 the tiler term (hasDevice) */
+static bool ref_fog_tiler(const RefIn *in, bool hasDevice)
+{
+    return hasDevice && ref_lim_tiler(in);
+}
+
+/* The old rules on no device (before rhi_init, after rhi_shutdown: the
+   backend's limits zeroed, rhi_backend() the backend): rd_profile.c classOf
+   read vendor 0, moltenvk false, tiler false, the driver id 0 and no text;
+   the readers of RhiLimits.tiler and .tilePhone read false */
+static RefIn ref_no_device(int backend)
+{
+    RefIn in;
+    memset(&in, 0, sizeof in);
+    in.backend = backend;
+    in.os = RHI_DT_LINUX; /* no OS row: the zeroed limits' tiler false on every OS */
+    return in;
+}

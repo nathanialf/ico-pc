@@ -11,7 +11,7 @@
 
 #include "rd_vu_record.h"
 #include "attempt_ledger.h"
-#include "rd_stencil_selftest.h" /* rd__profile_powervr */
+#include "rd_device_rows.h" /* rd__device_value */
 #include "rd_vu_class.h"
 #include "rd_vu_rec_sink.h"
 
@@ -227,8 +227,11 @@ void rd__vu_record_init(const RhiLimits *lim)
        which, the line once a start */
     g_rdRec.classCompute = false;
     {
-        const bool powervr = lim != NULL && rd__profile_powervr();
-        const bool measured = powervr && rd__vu_class_measured(rhi_adapter_name());
+        /* the device table's VU_COMPUTE_CLASS: the rows powervr (the
+           class) and powervr-dxt-48-1536 (the measured device) */
+        const int32_t vcc = lim != NULL ? rd__device_value(RHI_DC_VU_COMPUTE_CLASS) : 0;
+        const bool powervr = vcc != RHI_DT_VUCOMP_NONE;
+        const bool measured = vcc == RHI_DT_VUCOMP_MEASURED;
         const bool compute =
             rd__vu_class_pick(g_rdRec.asked, want, g_rdRec.canCompute, powervr, measured,
                               rd__vu_class_env(), RD_VU_COMPUTE_CLASS_DEFAULT != 0);

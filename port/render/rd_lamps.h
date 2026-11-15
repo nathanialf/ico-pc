@@ -230,6 +230,13 @@ int rd__lamps_parse(const char *e, uint32_t *bits);
  * by ICO_RD_LAMPS only) */
 uint32_t rd__lamps_default_bits(int tileClass, bool tilePhone, bool vulkan, bool passArea,
                                 bool blurFold);
+/* the same from the device's classes as the device table gives them (the
+ * renderer's call: LAMPS_MS, LAMPS_FILLPASTE and LAMPS_AREA, rd_lamps.c
+ * rd__lamps_init); rd__lamps_default_bits hands it the classes a tile class
+ * gives (the row powervr's three on class 1, the table's default area on
+ * class 2 off a tile-based phone) */
+uint32_t rd__lamps_default_bits_of(bool msClass, bool fillpasteClass, bool areaClass, bool vulkan,
+                                   bool passArea, bool blurFold);
 /* the union of a and b (an empty rect, w or h 0, adds nothing) */
 RhiRect rd__lamps_union(RhiRect a, RhiRect b);
 /* r aligned out to whole tiles of tile texels, clamped to w x h */

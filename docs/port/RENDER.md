@@ -1611,10 +1611,14 @@ storage read; the release check is the shot list on an interlock card with and w
 ## The device profile
 
 One renderer with device-class profiles: after `rd__gpu_init`, `rd__profile_init` decides
-`g_rd.profile` (`RdProfile`, `port/render/rd_internal.h`) once from `RhiLimits` (`tiler`,
-`localRead`, `vendorId`, `moltenvk`, `uintView`, `driverText`) and the backend, and every
-vendor-dependent choice of the renderer reads one of its flags; no other file of the renderer
-branches on a vendor (`port/render/rd_profile.c`). The classes: D3D12 (the backend), Apple /
+`g_rd.profile` (`RdProfile`, `port/render/rd_internal.h`) once from the device table's choices for
+the device (`PROFILE_CLASS`, `TILER`, `TILE_COLUMNS`, `BLUR_FOLD_OFF`: the rows of
+[DEVICE_TABLE.md](DEVICE_TABLE.md), read through `rd__device_value`, `port/render/rd_device_rows.h`)
+and `RhiLimits`' capabilities (`localRead`, `uintView`, the stencil view), and every
+vendor-dependent choice of the renderer reads one of its flags or a choice of the table; no file
+of the renderer branches on a vendor (`port/render/rd_profile.c`). The classes (the table's rows
+`adreno`, `turnip-adreno`, `moltenvk`, `mali`, `powervr` and `other-tiler`; by backend on D3D12,
+OpenGL and Direct3D 11): D3D12 (the backend), Apple /
 MoltenVK (`RhiLimits.moltenvk`), Adreno on Qualcomm's driver and Adreno on Turnip (vendor 0x5143;
 Turnip by its Vulkan driver id, 18, which a renamed build keeps, such as the "PurpleVK public driver" of issue 209, or from a driver without the id by its name in the driver text; the profile line ends with `; turnip: Mesa 25.3.0-devel` from `RhiLimits.mesa`, or `; turnip: Mesa version not named by the driver`), Mali (0x13B5), PowerVR (0x1010), any other tile-based GPU
 (`RhiLimits.tiler`: Samsung, Broadcom, every Android GPU) on the PowerVR row, and the desktop
@@ -1633,7 +1637,7 @@ immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan. OpenGL and Direct3
 | `localRead` | as offered | none | as offered | as offered | as offered | as offered | as offered |
 | `uintViewWork`, `uintViewScene` | on where the backend has the view | off (`RhiLimits.uintView` false on D3D12) | off | off | off | off | off |
 | `carefulSet` | off | off | off | off | off | off | off |
-| the record path (the triangle pre-pass, `[dev] vu_prepass`) | on | on | on, except the Adreno 740 (off by the device table, issue 123: `vk_device.c` `kVuPlainOnly`; `[dev] vu_prepass = true` draws with it anyway); off for the run when the start-up self-test's four replays fail, and for one start after a lost one on a tile-based phone GPU ([PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)) | on, the same | on, the same | on, the same | on, the same; off on an Apple A9 or A10 (32 bytes of colour targets a pixel) under the targets |
+| the record path (the triangle pre-pass, `[dev] vu_prepass`) | on | on | on, except the Adreno 740 (off by the device table, issue 123: its row `adreno-740-qualcomm`; `[dev] vu_prepass = true` draws with it anyway); off for the run when the start-up self-test's four replays fail, and for one start after a lost one on a tile-based phone GPU ([PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)) | on, the same | on, the same | on, the same | on, the same; off on an Apple A9 or A10 (32 bytes of colour targets a pixel) under the targets |
 | the record's write (`[dev] vu_record`) | stored by the vertex shaders where Vulkan offers `vertexPipelineStoresAndAtomics`, else by compute dispatches | render targets and copies (no vertex or compute stores this release; Direct3D 11 never stores from its vertex shaders) | stored where offered, else compute dispatches, else targets ([PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes), the record's three writes) | same | same (the Mali-G52 of issue 179: compute dispatches, no vertex stores) | same | same |
 | dynamic state (`[dev] dynamic_state`) | on where offered | none | off | off | off | off (the PowerVR phone whose pictures shook; the rule is every tile-based GPU's, and every GPU on Android, unmeasured on the others: `vk_device.c`; `[dev] dynamic_state = true` turns it on) | off |
 | `alphaPlan` (`[dev] alpha_plan`) | on | on | on | on | on | on | on |
@@ -1650,8 +1654,8 @@ immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan. OpenGL and Direct3
 | `sheetBake2x` (menu text baked at scale 2) | off | off | on | on | on | on | on |
 | the one DATE set-up for the shadow composites (`ICO_RD_DATE_ONE`, tests only; [RENDER_POST.md](RENDER_POST.md#one-date-set-up-for-the-shadow-composites)) | on | on | on | on | on | on | on |
 | the empty composites skipped (`ICO_RD_EMPTY_SKIP`, tests only; needs the shadow box, which needs the one-draw count) | on | off (no box: the seven-draw count) | on | on | on | on | on |
-| the culler's default (`rd_vis.c` `rd__vis_profile_default`, `RhiLimits.tiler`) | frustum and occlusion | frustum and occlusion | frustum alone | frustum alone | frustum alone | frustum alone | frustum alone on Apple silicon; frustum and occlusion on an Intel or AMD Mac |
-| the late pass's fill hold and deferred paste (`rd_late_pass.c`, `RhiLimits.tiler` under Vulkan), shot late (`rd_present.c`, `RhiLimits.tiler`) | off | off | on | on | on | on | on for Apple silicon; off on an Intel or AMD Mac |
+| the culler's default (`rd_vis.c` `rd__vis_profile_default`, `RdProfile.tiler`: the table's `TILER`) | frustum and occlusion | frustum and occlusion | frustum alone | frustum alone | frustum alone | frustum alone | frustum alone on Apple silicon; frustum and occlusion on an Intel or AMD Mac |
+| the late pass's fill hold and deferred paste (`rd_late_pass.c`, `RdProfile.tiler` under Vulkan), shot late (`rd_present.c`, the table's `SHOT_LATE`) | off | off | on | on | on | on | on for Apple silicon; off on an Intel or AMD Mac |
 | the VU record by compute in place of the vertex stores (`rd_vu_class.c`; [RENDER_POST.md](RENDER_POST.md#the-vu-record-by-compute-on-the-powervr-d-series-dxt)) | off | off | off | off | off (no vertex stores: auto's compute already) | on on the PowerVR D-Series DXT-48-1536 (`RD_VU_COMPUTE_CLASS_DEFAULT` 1, the device it ran on); off by default on the rest of the PowerVR class (Imagination's vendor id, not the other tile-based) | off |
 | the subpass read (DATE's set-up inside the scene's pass on `VkRenderPass` objects without local read; [The subpass read's probe](#the-subpass-reads-probe)) | the Intel driver row's devices: by the probe at their first start; elsewhere not this route (local read, or dynamic rendering without it) | none | off by default this release on Qualcomm's own driver (`RHI_SUBPASS_PROBE_QCOM_DEFAULT` 0: a driver that lost the device before; one pass a picture), no probe | not this route (local read) | off by default this release on Vulkan 1.1 drivers (issue 179's r32p1; `RHI_SUBPASS_PROBE_ARM_DEFAULT` 0), no probe; a driver with dynamic rendering (r38p1): not this route | the B-Series (Vulkan 1.1): off, no GPU timestamps to time the probe; the D-Series: not this route (local read) | not this route (dynamic rendering) |
 | the turn in the present's blit (`rd_turn_fold.c`; [RENDER_POST.md](RENDER_POST.md#the-turn-in-the-presents-blit-off-by-default-until-a-phone-rc)) | no turned swapchain | no turned swapchain | off (`RD_TURN_FOLD_DEFAULT` 0 until a phone rc) | off, the same | off, the same | off, the same | no turned swapchain on a Mac |
@@ -1661,9 +1665,10 @@ immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan. OpenGL and Direct3
 | the shadow composites and levels by their own entry, `sprite_comp_ps` in place of `sprite_ps` (`rd_comp_spec.c`; [RENDER_POST.md](RENDER_POST.md#the-shadow-composites-by-their-own-entry)) | on where the start-up self-test passes (dual-source blend, single-sampled passes) | off (Vulkan alone) | on where the start-up self-test passes (the same) | on, the same | on, the same; off without dual-source blending (the Mali reporter's class: the two-pass blend keeps `sprite_ps`) | on, the same | on, the same |
 
 Two meanings of "tile-based" meet in this table. The flags from `auraBox` to `sheetBake2x` follow
-the profile's class (every class but desktop Vulkan, D3D12, OpenGL and Direct3D 11, so an Intel or
-AMD Mac under MoltenVK is on the Apple column and takes them); the last two rows follow
-`RhiLimits.tiler`, which is false on such a Mac (the device table's `tile-vendors` row names the
+the profile's class (the table's `TILE_COLUMNS`: every class but desktop Vulkan, D3D12, OpenGL and
+Direct3D 11, so an Intel or AMD Mac under MoltenVK is on the Apple column and takes them); the
+culler's and the late pass's rows follow the table's `TILER` fact, and shot late its `SHOT_LATE`
+(the row `tiler`), which are false on such a Mac (the device table's `tile-vendors` row names the
 vendors, [DEVICE_TABLE.md](DEVICE_TABLE.md)).
 
 The blend row is `rd_dst_read.c`'s ([Destination reads and blend

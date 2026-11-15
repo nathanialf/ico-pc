@@ -91,6 +91,7 @@
 #include "rd_comp_spec.h"
 #include "rd_replay.h"
 #include "rd_shadow_tile.h"
+#include "rd_device_rows.h" /* rd__device_value */
 #include "rd_vis.h"
 #include "rd_volume_fs.h"
 #include "rhi_traffic.h"
@@ -307,6 +308,14 @@ int rd__lamps_parse(const char *e, uint32_t *bits)
 uint32_t rd__lamps_default_bits(int tileClass, bool tilePhone, bool vulkan, bool passArea,
                                 bool blurFold)
 {
+    return rd__lamps_default_bits_of(tileClass == 1, tileClass == 1,
+                                     tileClass == 1 || (tileClass == 2 && !tilePhone), vulkan,
+                                     passArea, blurFold);
+}
+
+uint32_t rd__lamps_default_bits_of(bool msClass, bool fillpasteClass, bool areaClass, bool vulkan,
+                                   bool passArea, bool blurFold)
+{
     /* FILLHOLD by its word alone: on the PowerVR phone (rc24) every held
      * fill was flushed by a later draw on SCENE before the paste's pass (the
      * glow's paste deferred to list 11), drawn early in a pass of its own
@@ -317,13 +326,13 @@ uint32_t rd__lamps_default_bits(int tileClass, bool tilePhone, bool vulkan, bool
      * alone: the form the owner accepted on the phone (rc28); every other
      * class keeps today's full-size path (rd__lamps_lowres_on decides, its
      * checks and self-test too) */
-    if (tileClass == 1 && vulkan && RD_LAMPS_MS_DEFAULT) {
+    if (msClass && vulkan && RD_LAMPS_MS_DEFAULT) {
         b |= RD_LAMPS_LOWRES | RD_LAMPS_LOWRESMS;
     }
     /* the crack fill in the paste's pass (FILLPASTE): the build's
      * RD_LAMPS_FILLPASTE_DEFAULT on the PowerVR class under Vulkan (the
      * tile class where the swap runs; rd__lamps_fillpaste_on checks) */
-    if (tileClass == 1 && vulkan && RD_LAMPS_FILLPASTE_DEFAULT) {
+    if (fillpasteClass && vulkan && RD_LAMPS_FILLPASTE_DEFAULT) {
         b |= RD_LAMPS_FILLPASTE;
     }
     /* the glow's blur in two passes (GLOWBLUR): the build's
@@ -332,8 +341,7 @@ uint32_t rd__lamps_default_bits(int tileClass, bool tilePhone, bool vulkan, bool
     if (RD_GLOW_BLUR_DEFAULT) {
         b |= RD_LAMPS_GLOWBLUR;
     }
-    const bool cls = tileClass == 1 || (tileClass == 2 && !tilePhone);
-    if (cls && vulkan && passArea) {
+    if (areaClass && vulkan && passArea) {
         b |= RD_LAMPS_AREA;
     }
     /* the fold of two blur pairs is off by default on every class in this
@@ -592,10 +600,13 @@ static void lowresNote(void);
 
 void rd__lamps_init(void)
 {
-    const RhiLimits *lim = g_rd.hasDevice ? rhi_limits() : NULL;
-    s_sw.def = rd__lamps_default_bits(rd__profile_tile_class(), lim && lim->tilePhone,
-                                      g_rd.hasDevice && rhi_backend() == RHI_BACKEND_VULKAN,
-                                      rd__pass_area_on(), g_rd.profile.blurFold);
+    /* the device table's lamps classes (the row powervr; the area's
+       default on a desktop class off a tile-based phone GPU) */
+    s_sw.def = rd__lamps_default_bits_of(rd__device_value(RHI_DC_LAMPS_MS) != 0,
+                                         rd__device_value(RHI_DC_LAMPS_FILLPASTE) != 0,
+                                         rd__device_value(RHI_DC_LAMPS_AREA) != 0,
+                                         g_rd.hasDevice && rhi_backend() == RHI_BACKEND_VULKAN,
+                                         rd__pass_area_on(), g_rd.profile.blurFold);
     memset(&s_w2, 0, sizeof(s_w2));
     memset(&s_scan, 0, sizeof(s_scan));
     /* the self-test again for this renderer (rd__lamps_selftest: its first
@@ -1448,7 +1459,7 @@ bool rd__lamps_lowres_on(void)
          * by the tests' word */
         const RhiLimits *dl = g_rd.hasDevice ? rhi_limits() : NULL;
         const bool powervr =
-            dl && rd__profile_tile_class() == 1 && rhi_backend() == RHI_BACKEND_VULKAN;
+            dl && rd__device_value(RHI_DC_LAMPS_MS) != 0 && rhi_backend() == RHI_BACKEND_VULKAN;
         const bool msAsked = s_sw.env == 1 ? (s_sw.envBits & RD_LAMPS_LOWRESMS) != 0u
                                            : RD_LAMPS_MS_DEFAULT != 0 && powervr;
         if (s_sw.env != 1 && !msAsked && !s_lr.on) {

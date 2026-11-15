@@ -82,6 +82,7 @@
 #include "rd_made_outside.h"
 #include "rd_hash.h"
 #include "rd_cpu_phase.h"
+#include "rd_device_rows.h" /* rd_device_rows_reason */
 #include "rd_internal.h"
 #include "rd_passring.h"
 #include "rd_paste_spec.h"
@@ -3470,8 +3471,9 @@ const RdPipeKeyInt *rd__pipeline_key_at(uint32_t i)
  * the record, a stage pipeline that could not be made, a failed self-test,
  * the pre-pass off) draws the old way, through its program's own entry
  * with vu_ps: vu_X_vs (the extended build), or on a
- * device of the table (RhiLimits.vuFallbackPlain, vk_device.c kVuPlainOnly)
- * and under Mesa's Turnip driver (rd__driver_is_turnip, issue 163)
+ * device of the table (RhiLimits.vuFallbackPlain, the device table's row
+ * adreno-740-qualcomm) and under Mesa's Turnip driver (rd__driver_is_turnip,
+ * the row turnip, issue 163)
  * vu_X_plain_vs (ICO_VU_PLAIN: no card test, no tick cameras), as
  * [dev] vu_set = plain (ICO_RD_VU_SET=plain), ICO_RD_VU_PLAIN=1 or the
  * host (rd_set_vu_plain_only) ask anywhere (rd__vu_set_choose);
@@ -3640,7 +3642,10 @@ void rd__vu_set_choose(const RhiLimits *lim, bool envPlain, bool envExtended, co
                  "(Turnip driver: the extended set's clipped triangles showed a stray vertex "
                  "there, issue 163; [dev] vu_set = extended asks for the extended one)");
         out->kind = "plain set";
-        out->brief = "Turnip driver, issue 163";
+        /* the turnip row's reason (port/rhi/rhi_device_table.c: "Turnip
+           driver, issue 163") */
+        const char *brief = rd_device_rows_reason("turnip", RHI_DC_VU_FALLBACK_PLAIN);
+        out->brief = brief != NULL ? brief : "";
         /* the side bands would draw those dropped triangles again, clipped
          * beside the 4:3 picture (a phone's frame is always wider): the
          * sliver of a skinned draw would come back there (vuDropMode) */

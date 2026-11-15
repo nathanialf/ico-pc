@@ -1157,9 +1157,10 @@ bool rd__vu_extended(void);
  * region rule").  False under region_rule = ps2: the PS2's drops (with the
  * side bands).  Read once a run (rd_pipeline.c) */
 bool rd__region_camera(void);
-/* Whether the device's driver is Mesa's Turnip: its text (RhiLimits.driverText,
- * "turnip Mesa driver" or "Turnip Mesa 26.3.0") has the word in any case;
- * Qualcomm's own driver does not (rd_profile.c) */
+/* Whether the device's driver is Mesa's Turnip: the driver id 18, or its text
+ * (RhiLimits.driverText, "turnip Mesa driver" or "Turnip Mesa 26.3.0") has
+ * the word in any case; Qualcomm's own driver does not (the device table's
+ * Turnip test: rd_device_rows.c) */
 bool rd__driver_is_turnip(const RhiLimits *lim);
 /* The profile line's Turnip note: "; turnip: Mesa 25.3.0-devel" (the Mesa
  * version RhiLimits.mesa holds, from the driver's driverInfo) or "; turnip:

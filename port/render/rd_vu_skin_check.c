@@ -74,6 +74,7 @@
 #include <string.h>
 
 #include "attempt_ledger.h"
+#include "rd_device_rows.h" /* rd__device_value */
 #include "rd_mesh.h"
 #include "rd_replay.h"
 #include "rd_vu_skin_check.h"
@@ -117,7 +118,10 @@ static int skMode(void)
         s_env = rd__skin_check_env(getenv("ICO_RD_VU_SKIN_CHECK"));
     }
     if (s_dev < 0) {
-        s_dev = rd__skin_check_default(g_rd.windowed, rd__profile_adreno(), -1);
+        /* the device table's SKIN_CHECK_DEFAULT (the row adreno: Qualcomm's
+           driver or Turnip) */
+        s_dev = rd__skin_check_default(g_rd.windowed,
+                                       rd__device_value(RHI_DC_SKIN_CHECK_DEFAULT) != 0, -1);
     }
     return s_env >= 0 ? s_env : s_dev;
 }
@@ -188,7 +192,7 @@ bool rd__vu_skin_twins_on(void)
     }
     /* the probe check's own default rule: an Adreno (Qualcomm's driver or
      * Turnip) with a window (rd__skin_check_default) */
-    return m == 2 || (g_rd.windowed && rd__profile_adreno());
+    return m == 2 || (g_rd.windowed && rd__device_value(RHI_DC_SKIN_CHECK_DEFAULT) != 0);
 }
 
 uint32_t rd__vu_skin_queries(void)
@@ -505,9 +509,10 @@ static RdSkinSummary *s_collect; /* rd__vu_skin_check_frame's */
  * replay's.  CPU-only additions (the copy search, the trace) stay. */
 static bool skAsBefore(void)
 {
-    /* the device's limits (zero before rhi_init); valid while the ring is
-       sized (rd_upload.c) and every check is drawn */
-    return rhi_limits()->tilePhone;
+    /* the device table's SKIN_AS_BEFORE (the row tile-phone: RhiLimits
+       .tilePhone; none before rhi_init); valid while the ring is sized
+       (rd_upload.c) and every check is drawn */
+    return rd__device_value(RHI_DC_SKIN_AS_BEFORE) != 0;
 }
 
 static RdBackgroundMemoryFn s_memFn;

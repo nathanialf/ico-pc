@@ -80,6 +80,7 @@
 #include <string.h>
 
 #include "rd_internal.h"
+#include "rd_device_rows.h" /* rd__device_value */
 #include "rd_turn_fold.h"
 #include "rd_replay.h" /* rd__msaa_shadow_selftest */
 #include "rd_stencil_selftest.h"
@@ -203,7 +204,8 @@ static bool depthIs24(void)
 static const uint8_t *platformOrder(void)
 {
     if (rd__fog_local_offered()) {
-        const bool desk = g_rd.profile.desktopLocal && !rhi_limits()->tiler && !depthIs24();
+        const bool desk =
+            g_rd.profile.desktopLocal && !rd__device_value(RHI_DC_FOG_ORDER_TILER) && !depthIs24();
         return desk ? kOrderDesktopLocal : kOrderLocal;
     }
     /* the local order without local, once its self-test turned it off;
@@ -211,7 +213,8 @@ static const uint8_t *platformOrder(void)
      * place first), as after the probe's "off" */
     const bool localOff =
         (g_rd.profile.selfTestOff & RD_PROFILE_FOG_LOCAL) != 0 && !g_rd.profile.desktopLocal;
-    const bool tiler = g_rd.hasDevice && rhi_limits()->tiler;
+    /* the device table's FOG_ORDER_TILER (the row tiler) */
+    const bool tiler = g_rd.hasDevice && rd__device_value(RHI_DC_FOG_ORDER_TILER) != 0;
     return localOff || tiler || depthIs24() ? kOrderTiler : kOrderDesktop;
 }
 

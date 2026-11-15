@@ -52,6 +52,7 @@
 #include "rd_vu_record.h" /* the record's write on the display line */
 #include "rd_vu_skin_check.h"
 #include "rhi_device_table.h" /* the summary's device table rows */
+#include "rd_device_rows.h"   /* rd__device_value */
 #include "texpack.h"
 
 RdContext g_rd;
@@ -2198,11 +2199,13 @@ uint32_t rd_aa_supported_mask(void)
         if (!g_rd.fs[RD_FS_MSAA_RESOLVE].id || !g_rd.fs[RD_FS_DEPTH_RESOLVE].id) {
             return mask;
         }
+        const bool max4 = rd__device_value(RHI_DC_MSAA_MAX4) != 0;
         for (int aa = RD_AA_MSAA2; aa <= RD_AA_MSAA8; aa++) {
             const uint32_t n = rd_aa_samples(aa);
 
-            /* a tile-based GPU: 4 samples at most (memory) */
-            if ((l->msaaCounts & n) != 0u && !(l->tiler && n > 4u)) {
+            /* a tile-based GPU: 4 samples at most (memory; the device
+               table's MSAA_MAX4, the row tiler) */
+            if ((l->msaaCounts & n) != 0u && !(max4 && n > 4u)) {
                 mask |= 1u << aa;
             }
         }

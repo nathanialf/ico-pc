@@ -28,10 +28,8 @@ int rd__vu_class_env(void)
     return -1;
 }
 
-bool rd__vu_class_measured(const char *name)
-{
-    return name != NULL && strstr(name, RD_VU_CLASS_MEASURED_NAME) != NULL;
-}
+/* rd__vu_class_measured: the device table's row powervr-dxt-48-1536
+   (rd_device_rows.c, pure) */
 
 bool rd__vu_class_pick(int asked, int want, bool canCompute, bool powervr, bool measured, int env,
                        bool defaultOn)

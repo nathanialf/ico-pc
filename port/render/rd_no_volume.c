@@ -107,9 +107,8 @@
 #include "rd_no_volume.h"
 #include "rd_replay.h"
 #include "rd_shadow_box.h"
-#include "rd_shadowres.h"        /* rd__shadow_fine_replay */
-#include "rd_vu_class.h"         /* rd__vu_class_measured */
-#include "rd_stencil_selftest.h" /* rd__profile_powervr */
+#include "rd_shadowres.h"   /* rd__shadow_fine_replay */
+#include "rd_device_rows.h" /* rd__device_value */
 
 /* ------------------------------------------------------------- the scan */
 
@@ -489,17 +488,18 @@ static int envOf(void)
  * title and pause menu clean with it (the open mode, its relative, had
  * flickered there).  Its classes are the open mode's (the PowerVR class
  * and MoltenVK under Vulkan); the default reaches only that device
- * (rd_vu_class.h rd__vu_class_measured, the VU record's measured PowerVR):
+ * (the device table's row powervr-dxt-48-1536, the VU record's measured PowerVR):
  * the rest of the PowerVR class and MoltenVK never ran it and stay off by
  * default with that reason.  ICO_RD_NO_VOLUME_BREAK=0|1 (tests) */
 #define RD_NO_VOLUME_BREAK_DEFAULT 1
 
 /* the classes the window's passes end and begin at a cost: the tile-based
- * classes under Vulkan whose composites take DATE through the stencil bit */
+ * classes under Vulkan whose composites take DATE through the stencil bit
+ * (the device table's NO_VOLUME_CLASS: the rows powervr and moltenvk, both
+ * Vulkan's) */
 static bool classBase(void)
 {
-    const RhiLimits *lim = g_rd.hasDevice ? rhi_limits() : NULL;
-    return lim && rhi_backend() == RHI_BACKEND_VULKAN && (lim->moltenvk || rd__profile_powervr());
+    return g_rd.hasDevice && rd__device_value(RHI_DC_NO_VOLUME_CLASS) != 0;
 }
 
 static bool classOn(void)
@@ -510,7 +510,8 @@ static bool classOn(void)
 /* the device the break mode was shown clean on (the default's reach) */
 static bool breakMeasured(void)
 {
-    return classBase() && rd__profile_powervr() && rd__vu_class_measured(rhi_adapter_name());
+    /* the device table's NO_VOLUME_BREAK: the row powervr-dxt-48-1536 */
+    return classBase() && rd__device_value(RHI_DC_NO_VOLUME_BREAK) != 0;
 }
 
 static bool breakClassOn(void)

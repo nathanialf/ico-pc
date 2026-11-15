@@ -33,14 +33,17 @@ target_link_libraries(rhi_device_table_test PRIVATE ico_device_table)
 # million identities (every logged device, the edges of each rule's bounds,
 # every backend and OS) and the tests' environment fakes on the logged
 # devices; the pure files the copies come from are linked in and compared
-# with their copies.  About 6 s on the build host at -O2 (more under the
-# sanitizers: the timeout).
+# with their copies; the renderer's reads (port/render/rd_device_rows.c, pure)
+# are linked too and compared with their call sites' old rules, with no
+# device and on the logged devices at the edge Vulkan versions.
 add_executable(rhi_device_table_equiv_test
                test/rhi_device_table_equiv_test.c rhi_pass_row.c rhi_driver_version.c
                rhi_tile_rule.c rhi_qprio.c "${CMAKE_SOURCE_DIR}/port/platform/memory_floor.c"
-               "${CMAKE_SOURCE_DIR}/port/platform/present_fallback.c")
+               "${CMAKE_SOURCE_DIR}/port/platform/present_fallback.c"
+               "${CMAKE_SOURCE_DIR}/port/render/rd_device_rows.c")
 target_include_directories(rhi_device_table_equiv_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
-                           "${CMAKE_CURRENT_SOURCE_DIR}/test" "${CMAKE_SOURCE_DIR}/port/platform")
+                           "${CMAKE_CURRENT_SOURCE_DIR}/test" "${CMAKE_SOURCE_DIR}/port/platform"
+                           "${CMAKE_SOURCE_DIR}/port/render")
 target_compile_options(rhi_device_table_equiv_test PRIVATE ${ICO_SEMANTIC_OPTIONS}
                        ${ICO_PORT_WARNINGS})
 target_link_libraries(rhi_device_table_equiv_test PRIVATE ico_device_table)

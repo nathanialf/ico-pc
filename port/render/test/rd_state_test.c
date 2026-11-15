@@ -3357,7 +3357,7 @@ static void testVuSetPolicy(void)
         "(Turnip driver: the extended set's clipped triangles showed a stray vertex there, issue "
         "163; [dev] vu_set = extended asks for the extended one)";
     RdVuSetChoice c;
-    /* the stock Adreno 740: vk_device.c kVuPlainOnly's row */
+    /* the stock Adreno 740: the device table's row adreno-740-qualcomm */
     RhiLimits lim = vuSetLimits(0x5143u,
                                 "device 5143:43050a01; driver Qualcomm Technologies Inc. Adreno "
                                 "Vulkan Driver, version 512.676.53",

@@ -93,6 +93,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_device_rows.h" /* rd__device_value */
 #include "rd_shot_late.h"
 #include "rd_submit.h"
 #include "rd_fsr1.h"
@@ -456,7 +457,7 @@ bool rd__apply_display(void)
     /* from the GS size up to the GPU's largest render target, both axes scaled
      * together so the shape is kept (16384 where there is no device) */
     float lim = g_rd.hasDevice ? (float)rhi_limits()->maxRenderTargetSize : 16384.0f;
-    if (g_rd.hasDevice && rhi_limits()->tiler && lim > 4096.0f) {
+    if (g_rd.hasDevice && rd__device_value(RHI_DC_SCENE_CAP_4096) && lim > 4096.0f) {
         lim = 4096.0f; /* phones share memory with the system: a big scene could
                           get the app killed before the allocation reports failure */
     }
@@ -471,7 +472,7 @@ bool rd__apply_display(void)
     /* MSAA on a tile-based GPU: the multisampled scene pair (4 + 8 bytes a
      * sample) shares the phone's memory, so the scale halves (both axes, not
      * below the GS size) until the pair fits RD_MSAA_TILER_BUDGET */
-    if (g_rd.hasDevice && rhi_limits()->tiler && rd_aa_samples(aaMode) > 1u) {
+    if (g_rd.hasDevice && rd__device_value(RHI_DC_MSAA_BUDGET) && rd_aa_samples(aaMode) > 1u) {
         const double per = 12.0 * (double)rd_aa_samples(aaMode);
         while ((double)w * (double)h * per > (double)RD_MSAA_TILER_BUDGET && w > gw * 1.5f &&
                h > gh * 1.5f) {
@@ -2339,13 +2340,14 @@ static void shotTake(const RhiRect *box)
  * false: the old path */
 static bool shotLateOn(void)
 {
-    /* the tile-based GPUs (rhi_limits()->tiler: the phones, issue 179);
-       ICO_RD_SHOT_LATE=1 or 0 forces it either way (the tests) */
+    /* the tile-based GPUs (the device table's SHOT_LATE, the row tiler: the
+       phones, issue 179); ICO_RD_SHOT_LATE=1 or 0 forces it either way (the
+       tests) */
     const char *env = getenv("ICO_RD_SHOT_LATE");
     if (env != NULL && (env[0] == '0' || env[0] == '1')) {
         return env[0] == '1';
     }
-    return rhi_limits()->tiler;
+    return rd__device_value(RHI_DC_SHOT_LATE) != 0;
 }
 
 static bool shotLateRecord(RhiCommandList cl, RhiTexture out, RhiState *outState, bool inPass)
