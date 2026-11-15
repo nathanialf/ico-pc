@@ -89,6 +89,7 @@
 #include "rd_paste_spec.h"
 #include "rd_perf_hooks.h"
 #include "rd_replay.h"
+#include "rd_shadowres.h" /* rd__shadow_fine_tex */
 
 /* gs_math.hlsli gs_blend_term / gs_blend_factor: 0 Cs, 1 Cd, 2 (and 3) 0;
  * the factor 0 As, 1 Ad, 2 FIX */
@@ -976,6 +977,18 @@ int rd__sprite_above1x(const Replay *r, const RdDrawPass *dp, const DrawSetup *d
     /* the shadow count at its GS size (resolveTexture) is at scale 1 */
     const int red = redId && ds->tex.id == redId;
     if ((red ? 1.0f : src->sx) == ds->tc->sx && (red ? 1.0f : src->sy) == ds->tc->sy) {
+        return 0;
+    }
+    if (rd__shadow_level(src) && g_rd.profile.shadowBspline && rd__shadow_fine_tex(ds->tex.id)) {
+        /* the composite reads the level at the
+         * scene's scale (rd_shadowres.c), its tent drawn already: one
+         * bilinear tap, no B-spline */
+        static bool loggedFine;
+        if (!loggedFine) {
+            loggedFine = true;
+            rd__log("shadow edges: [dev] shadow_bspline does nothing to a composite that reads a "
+                    "level at the scene's scale (reported once)");
+        }
         return 0;
     }
     if (rd__shadow_level(src) && !g_rd.profile.shadowBspline) {

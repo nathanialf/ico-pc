@@ -2780,6 +2780,10 @@ enum {
     RD_BREAK_COUNT
 };
 
+/* the reasons a shadow above 1x is drawn at the PS2's size
+ * (RdPerfRecord.shadowFineWhy; rd_shadowres.h RD_SR_WHY_*) */
+#define RD_SHADOW_FINE_WHYS 12
+
 typedef struct RdPerfRecord {
     uint32_t replay; /* 1, 2, ... */
     uint32_t frame;  /* the replayed frame's number */
@@ -2973,6 +2977,21 @@ typedef struct RdPerfRecord {
      * shadowSeven through the seven stencil-tested draws (and the box
      * reduction above 1x) */
     uint32_t shadowOne, shadowSeven;
+    /* The shadow's levels at the scene's scale (rd_shadowres.c): shadowFineChains
+     * the shadow chains drawn at the scene's scale this replay (their
+     * composites read the fine levels), shadowFinePasses their passes (the
+     * full-size count, three levels, six tent passes), shadowFineRefused the
+     * chains above 1x drawn at the PS2's size (a level the rule does not take) */
+    uint32_t shadowFineChains, shadowFinePasses, shadowFineRefused;
+    /* of shadowFineRefused, by reason (rd_shadowres.c's RD_SR_WHY_*) */
+    uint16_t shadowFineWhy[RD_SHADOW_FINE_WHYS];
+    /* the cuts (rd_shadowres.c): the texels the chain's passes drew this
+     * replay (their boxes) and the texels of the targets those passes cover
+     * (the levels' and temporaries' whole area, a pass each) */
+    uint32_t shadowFineTexels, shadowFineArea;
+    /* of shadowFineArea, the texels of the passes' render areas (the box and
+     * what the texture still held nonzero: a tile-based GPU's work) */
+    uint32_t shadowFineRendered;
     /* of shadowOne, the draws that read the stencil four texels a gather
      * (the rest a texel a load: g_rd.shadowLoad, rd_shadow_selftest.c) */
     uint32_t shadowGathered;

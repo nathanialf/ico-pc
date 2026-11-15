@@ -78,3 +78,6 @@ tools/vu_rec_size_dumps.txt
 tools/vufuse_dumps.txt
 tools/vumerge_mali_dumps.txt
 tools/vustage_dumps.txt
+port/render/test/rd_shadow_fine_ab.cmake
+tools/shadow_fine_dumps.txt
+tools/shadow_fine_goldens.txt

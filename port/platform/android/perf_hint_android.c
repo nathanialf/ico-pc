@@ -31,11 +31,6 @@ typedef int (*Report2Fn)(APerfSession *, AWorkDur *);
 typedef AWorkDur *(*WdCreateFn)(void);
 typedef void (*WdReleaseFn)(AWorkDur *);
 typedef void (*WdSetFn)(AWorkDur *, int64_t);
-/* API 36 (Android 16): APerformanceHint_notifyWorkloadIncrease(session,
-   cpu, gpu, identifier); not in NDK 28's header, the signature as
-   developer.android.com documents it (0, EBUSY its rate limit, EPIPE,
-   ENOTSUP) */
-typedef int (*NotifyFn)(APerfSession *, bool, bool, const char *);
 
 static struct {
     bool looked, ok;
@@ -47,7 +42,6 @@ static struct {
     CloseFn close;
     SetThreadsFn setThreads;
     Report2Fn report2;
-    NotifyFn notify;
     WdReleaseFn wdRelease;
     WdSetFn wdStart, wdTotal, wdCpu, wdGpu;
     AWorkDur *wd; /* the hint thread's, reused for every report */
@@ -88,12 +82,6 @@ static int a_set_threads(void *u, void *s, const int32_t *tids, size_t n)
         t[i] = (pid_t)tids[i];
     }
     return s_a.setThreads((APerfSession *)s, t, n);
-}
-
-static int a_notify(void *u, void *s, bool cpu, bool gpu)
-{
-    (void)u;
-    return s_a.notify((APerfSession *)s, cpu, gpu, "ico one picture a tick");
 }
 
 static void a_close(void *u, void *s)
@@ -155,9 +143,6 @@ static void lookup(void)
     /* API 34 and 35: optional, each used only when found */
     s_a.setThreads = (SetThreadsFn)dlsym(lib, "APerformanceHint_setThreads");
     s_a.report2 = (Report2Fn)dlsym(lib, "APerformanceHint_reportActualWorkDuration2");
-    /* API 36: the clock lift (clock_trap.h), looked up only there */
-    s_a.notify =
-        in->api >= 36 ? (NotifyFn)dlsym(lib, "APerformanceHint_notifyWorkloadIncrease") : NULL;
     wdCreate = (WdCreateFn)dlsym(lib, "AWorkDuration_create");
     s_a.wdRelease = (WdReleaseFn)dlsym(lib, "AWorkDuration_release");
     s_a.wdStart = (WdSetFn)dlsym(lib, "AWorkDuration_setWorkPeriodStartTimestampNanos");
@@ -181,7 +166,6 @@ static void lookup(void)
     in->rateNs = rate(s_a.manager);
     in->withGpu = s_a.wd != NULL;
     in->setThreads = s_a.setThreads != NULL;
-    in->notify = s_a.notify != NULL;
     s_a.ok = true;
 }
 
@@ -200,7 +184,6 @@ bool perf_hint_android_ops(PerfHintOps *ops, PerfHintAndroidInfo *info)
     ops->report = a_report;
     ops->set_threads = s_a.setThreads != NULL ? a_set_threads : NULL;
     ops->close = a_close;
-    ops->notify = s_a.notify != NULL ? a_notify : NULL;
     ops->now_ns = a_now;
     ops->withGpu = s_a.wd != NULL;
     return true;

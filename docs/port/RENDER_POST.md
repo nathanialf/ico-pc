@@ -1529,10 +1529,90 @@ skips texels), never at scale 1 (`port/render/rd_present.c` (`reduceRecord`)); d
 **Left as they are.** The work buffers' chains run at the PS2's sizes and their draws back onto the
 frame take the GS's filter ([The glow size](RENDER.md#the-glow-size)). The reduction SCENE to DISPLAY is never above 2:1 in texels
 (`port/render/rd_blur.c` (`rd__blur_screen_fallback`)), where the GS's bilinear is already the area
-average, so it keeps the GS's filter. The shadow levels stay at scale 1 (their resolution is the
-penumbra, `port/render/rd_core.c` (`shadowLevel`)), and the first level reads the count already
-box-averaged to its GS size (`port/render/rd_replay.c` (`shadowReduce`)), so the chain between them
-is the PS2's at every scale; only the composites back into SCENE resample.
+average, so it keeps the GS's filter. The shadow's levels are not among them: above 1x they
+follow the picture's resolution ([below](#the-shadows-levels-above-1x)).
+
+### The shadow's levels above 1x
+
+Not an option: the rule whenever the scene's scale is above 1 on an axis, in every preset and at
+every aspect (`port/render/rd_shadowres.c`, its header the full account; DIVERGENCES.md VD-34). The
+named levels SHADOW0..2 keep their GS sizes at scale 1 (`port/render/rd_core.c` (`shadowLevel`))
+and are still drawn from the count box-averaged to its GS size (`port/render/rd_replay.c`
+(`shadowReduce`)); at 1x on both axes that is all, nothing more is made or run, the PS2's chain byte
+for byte. Above 1x the PS2's levels were the penumbra's resolution: a level texel 6, 12 and 24
+SCENE texels at 3x, so where an edge fell against their grid changed the penumbra (10-90 width
+11.3 to 24.3 SCENE texels at 3x over the grid's phase, its middle wandering 3.8 texels: the
+staircase along a slanted edge). Now:
+
+1. the count is also kept at its full size (the one draw draws it again at the count target's own
+   texels, `port/render/rd_shadow_one.c`; the seven draws and the MSAA epoch's covered-majority
+   resolve, `rd_msaa_shadow.c`, leave it there already);
+2. at each of the game's three level sprites (`rd_shadow_box.c` `rd__shadow_box_screen`, before the
+   sprite's pass) the level is drawn again into a texture of its own at S texels a GS pixel on each
+   axis, S the smallest odd whole number at or above the scene's scale on that axis (3 at 2x, 2.41x,
+   2.8125x and 3x, 5 at 4x and 2160 rows; 1 on an axis at scale 1, whose step and tent are then the
+   identity: 1 x 2 keeps the PS2's columns), `shadowres_step_ps`: the game's own step, the GS's two
+   taps 0.75 / 0.25 one PS2 texel apart, at every fine texel (the first level's taps the box of count
+   texels its GS pixel covers), MODULATEd by the sprite's colour. The sprite is recognised by its
+   form, not by a fixed state: any sprite colour (shadowDepth), any whole or sub-texel offset of its
+   2:1 map (the taps then weighted as the GS weights them), CLAMP or REPEAT (the game leaves the
+   wrap as the draw before set it: REPEAT on the main gate, where a recogniser that wanted CLAMP
+   refused every shadow), every frame width and height;
+3. after the third, each level takes the tent its bilinear magnification supplied, across then
+   down (`shadowres_tent_ps`, weights S - |t - c|, c = S / 2 - 1/2);
+4. the composites, the game's own, read the fine levels (`resolveTexture` -> `rd__shadow_fine`).
+
+The composite's one bilinear tap of the tent-blurred fine level is exactly the mean of the PS2's
+picture over the level grid's S x S placements: the same width and darkness, without the grid. An
+odd S keeps every stage exact (at an even S the tent's centre would sit half a texel off the tap:
+10 % wider at 2x in the edge model). The edge model (24 phases across a SHADOW2 texel,
+`rd_shadow_fine`): 10-90 width 17.2 against the PS2 chain's 18.1 mean at 3x (spread 0.60 against
+3.78), the middle's wander 0.43 against 3.96, the darkness within 0.2 %. Passes: the full-size
+count (one-draw path only), three levels, six tent passes, all between the count and the
+composites, where SCENE's pass is ended already: no SCENE pass more on a tiler. Memory at 3x on a
+576-wide frame: 7.1 MB (the levels and their temporaries), made at the first shadow above 1x.
+Every backend draws it (Vulkan, OpenGL, Direct3D 12, Direct3D 11's run-time HLSL); a backend that
+cannot make its shaders or pipelines keeps the PS2's sizes for the run, logged. MSAA: the count
+from the epoch's covered-majority resolve, as the PS2-size chain reads it. The volumes' box, the
+empty composites and the one DATE set-up hold (the named levels' boxes, inside the composites'
+margin); the shadow tiles step aside for a composite that reads a fine level; `[dev]
+shadow_bspline` does nothing to one.
+
+The cuts (each the same bytes as the chain drawn whole; `ICO_RD_SHADOW_FINE_CUTS=0` draws it
+whole for the A/B). Each level pass clears its target and draws only the box its count can reach
+(the volumes' box from `rd_shadow_box.c`, carried through each step's reach, 2 x + offset .. + 3
+source GS pixels, and the tent's c - L + 1 .. c + L - 1: `rd_sr_step_box`, `rd_sr_tent_box`; the
+whole axis where a REPEAT tap can wrap the far side in), so outside it every texel is the 0 it
+holds anyway, every frame. The first level's step returns 0 at once where every GS pixel its taps
+touch holds alpha 0 in the count box-reduced to its GS size (a nonzero count texel makes its GS
+pixel at least 0x20 / (S.x S.y), below a scale product of 64; never where a tap leaves the count's
+texels). The tent is one pass (`shadowres_tent2_ps`): the two passes' bytes in integers, an odd L
+making every weight whole and no quotient a half. An empty count draws no step or tent and clears
+each final level once. So 6 passes a shadow (7 with the one draw's full-size count) instead of 9
+(10). At the main gate the volumes' box is the whole frame (the volumes sweep open space), so there
+the step's empty areas are the cut that counts: the reporter's frame has 0.83 % of its count's
+texels nonzero. The render area: each texture is 0 outside the box its last pass drew, so a pass's
+render area is the union of that box and its own (`rd_sr_area`), cleared by its CLEAR load and
+drawn inside its box; a tile-based GPU loads, shades and stores those tiles alone (the RHI's
+`RhiRenderPassDesc.area`; backends without tiles clear the whole, the same bytes), and a texture
+that is 0 with an empty box takes no pass. The 10 s clause adds the render areas' share of the
+targets.
+
+Lines: at start `rd: shadow levels: at the scene's scale above 1x (the smallest odd whole one at or
+above it on each axis: ...); at 1x the PS2's sizes`; at each change `rd: shadow levels: at the
+scene's scale: SHADOW0 864x768, SHADOW1 432x384, SHADOW2 216x192 (3x3 texels a GS pixel) from the
+count's 3x3 texels a GS pixel, 10 passes a shadow, 7.1 MB, on vulkan (reported at each change)` or
+`rd: shadow levels: the PS2's sizes: the scene at 1x1 texels a GS pixel (reported at each
+change)`; a refusal `rd: shadow levels: a shadow above 1x drawn at the PS2's size: <why>: <the
+field and its values> (replay R, command C; refusal N, after M shadows at the scene's scale; ...)`,
+logged the first 8 times, at the first refusal after shadows at the scene's scale (a scene that
+falls back) and every 100th; the 10 s clause `; shadow levels: 412 shadows at the scene's scale, 0
+at the PS2's size in 412 replays (10.0 passes a replay)`, a fallback's reasons with counts after
+"size" (`(filter 3, map 1)`; the words prim, flags, texfn, blend, test, filter, colour, map,
+count, pipes, textures, scale); `rd_replay_tool --stats` `stats: shadow levels: 1 shadows at the
+scene's scale, 10 passes, 0 at the PS2's size` with the same reasons. The tests' switch `ICO_RD_SHADOW_FINE=0` (the
+PS2's sizes above 1x) and `=force` (the fine chain at 1x too), no config key
+([TESTING.md](TESTING.md)).
 
 ## Shadows
 
