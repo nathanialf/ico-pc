@@ -243,6 +243,7 @@ add a row when a family needs one):
 | `pass_area_passes`, `pass_area_covered` | `pass area on: N passes with an area`, `pass area on: ... (..., M its draws cover the picture)` (the on word alone) |
 | `clear_carried`, `clear_skipped`, `last_store_dropped` | `clear carry on: N clears taken by the next pass`, `clear skip on: N clears skipped`, `last store on: N depth stores dropped at the last touch` (each its on word alone) |
 | `aura_box_reads` | `aura box on: N feedback reads in two passes` |
+| `pass_objects` | `render passes: N begun, M as VkRenderPass objects` (M) |
 | `vu_compact_left_out` | `VU index compaction on: N of M list 0 triangles left out` (the on word alone) |
 | `prepass_draws` | `VU pre-pass on: P passes, V vertices in N draws` |
 | `vu_merged_draws` | `VU merge: D draws in G GPU draws (N merged into M` (the draws the merge's runs joined) |

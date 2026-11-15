@@ -516,9 +516,11 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   from a run of the fixture and required at each setting the fixture runs at, and may give
   `nop SPEC`, the tool's `--nop` for both runs)
   passes dynamic`, `render passes legacy (Qualcomm's own driver`); a fixture drawn narrower than a
-  setting's aspect is skipped there; at least one target compared. The path ran: the row's run
-  shows the passes its list line declares (every pass under the row is a `VkRenderPass` object,
-  `vk_renderpass.c`; the tool prints no count of its own); a fixture no setting checked fails.
+  setting's aspect is skipped there; at least one target compared; the stats line `render passes:
+  N begun, M as VkRenderPass objects` with M 0 on dynamic rendering and M = N on the row (a pass is
+  counted begun only once `vkr_pass_begin` succeeded, and every begin on the legacy path is one
+  object, `vk_renderpass.c`). The path ran: the row's run shows the `pass_objects` its list line
+  declares; a fixture no setting checked fails.
   No device: SKIP.
 - `rd_fill11_ab.cmake` (`rd_fill11_ab`, `rd_fill11_gl`; `rd_fill11.cmake`): the dumps of
   `tools/fill11_dumps.txt` (machine-local; a listed dump that is absent FAILS, a glob that matches none
@@ -976,9 +978,6 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   fill later (`1 fills in the aura's paste pass` or `1 fills after the glow's alpha`) at least one
   pass fewer. The fill against the fill before the fog on the game's own frames is the measurement of
   [DIVERGENCES.md](DIVERGENCES.md) VD-20, not this test's. No device: SKIP.
-- `rd_aura_box_ab.cmake`: the dumps of `tools/aura_box_dumps.txt` (`tools/vustage_dumps.txt`'s and
-  the PowerVR phone's three F12 zips `frame-20261028-{105852-v4103,151709-v2199,173610-v4657}`;
-  machine-local) replayed with `--pass-dump --stats` under `ICO_RD_BLEND=fixed` with the aura's
 - `rd_crack_late_ab.cmake`: the crack fill after lists 4-6 against pass dumps of the build that drew
   it before the fog: each line of `tools/crack_late_dumps.txt` (`<setting> <dump> <baseline
   folder>`, machine-local: six corpus dumps at the gate's Enhanced 2x 4:3 against
@@ -1008,7 +1007,8 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   fog; another change to the picture needs baselines of its own before this test can tell the two
   apart.
 - `rd_aura_box_ab.cmake`: the fixtures of `test/fixtures/lists/aura_box.txt`
-  ([TESTING_FIXTURES.md](TESTING_FIXTURES.md); an absent one FAILS) replayed with `--pass-dump --stats` under `ICO_RD_BLEND=fixed` with the aura's
+  ([TESTING_FIXTURES.md](TESTING_FIXTURES.md); an absent one FAILS) replayed with `--pass-dump
+  --stats` under `ICO_RD_BLEND=fixed` with the aura's
   read of the picture into FEED128 in one pass (`ICO_RD_AURA_BOX=0`) and in two
   (`ICO_RD_AURA_BOX=1`, `rd_aura_box.c`), at the phone's Resolution Auto (`--enhanced --resolution
   2364x1080 --full-height --full-pixel --aspect 2.189 --present 2364x1080`,
@@ -1040,9 +1040,17 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   at most its passes ended early; the phone's frames at the phone's setting must give some pass an
   area or name `its draws cover the picture` among the passes kept whole (the tool's `--stats`
   clause; the aura's paste and list 11's fades are full-frame sprites, so the stage 6 frames have
-  no area to give). The path ran: each fixture's declared `pass_area_passes` and
-  `pass_area_covered` on the on run of every setting it shows; a fixture no setting checked fails
-  (`rd_pass_area_ab`). No device: SKIP.
+  no area to give); over the list some pass takes an area (`fx-pass-area`, the frame
+  `rd_pass_area_frame` records: the game's frames measured take none). The path ran: each
+  fixture's declared `pass_area_passes` and `pass_area_covered` on the on run of every setting it
+  shows; a fixture no setting checked fails (`rd_pass_area_ab`). No device: SKIP.
+- `rd_pass_area_frame.c` (`rd_pass_area_frame`; `rd_pass_area.cmake`, CPU, no device): records a
+  frame without a device (`rd__init_record_only`, 512x448 GS) whose passes on SCENE take render
+  areas by `rd_pass_area.c`'s rule: SCENE's clear taken by a full-frame flat sprite, a sprite on
+  WORK0, two overlapping flat sprites on SCENE (one pass, their union's tiles), a sprite on WORK0
+  again and one more on SCENE (a second pass); no texture, no art. It writes
+  `rd_pass_area_frame.rddump` into its folder argument; `fx-pass-area` is made from that dump
+  ([TESTING_FIXTURES.md](TESTING_FIXTURES.md)).
 - `rd_glow_cheap_ab.cmake`: the glow's cheaper passes ([RENDER.md](RENDER.md#the-glows-passes):
   WORK2's fill in the mask's pass, cleanUpFB in the fog's) against the passes drawn without them:
   the fixtures of `test/fixtures/lists/glow_cheap.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md):

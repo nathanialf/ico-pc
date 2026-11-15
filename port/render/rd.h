@@ -2814,6 +2814,9 @@ typedef struct RdPerfRecord {
     /* compute dispatches (RhiStats.dispatches: the VU record's under the
      * compute builds, rd_vu_record.h; not in draws) */
     uint32_t dispatches;
+    /* of renderPasses, those begun as VkRenderPass objects (RhiStats.passObjects:
+     * Vulkan on a driver row of rhi_pass_row.h, Qualcomm's included; 0 elsewhere) */
+    uint32_t passObjects;
     /* the queue submits (RhiStats.submits; the submit thread's land in the
      * record closed after them): a presenting picture's two lists, its
      * scene's and its present's (rd_submit.c), on Vulkan an empty one

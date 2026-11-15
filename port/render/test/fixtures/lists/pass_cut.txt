@@ -21,3 +21,13 @@ fx-gate-102 clear_carried>=1 clear_skipped=0 last_store_dropped>=1
 fx-phone-4657 phone clear_carried>=1 clear_skipped>=1 last_store_dropped>=1
 fx-phone-15677 phone
 fx-phone-2381 phone
+# the 2026-10-07 captures and the device-loss frame (4:3: Enhanced 2x alone):
+# the fog's pass holds the depth's last touch; the deja vu 48:9 frame
+fx-vu-3086 clear_carried>=1 clear_skipped=0 last_store_dropped>=1
+fx-vu-3112 clear_carried>=1 clear_skipped=0 last_store_dropped>=1
+fx-vu-1985 clear_carried>=1 clear_skipped=0 last_store_dropped>=1
+fx-loss95 clear_carried>=1 clear_skipped=0 last_store_dropped>=1
+fx-deja clear_carried>=1 clear_skipped>=1 last_store_dropped=0
+# the PowerVR phone's F12 frames of 2026-10-28 v4103 and v2199
+fx-phone-4103 phone clear_carried>=1 clear_skipped>=1 last_store_dropped>=1
+fx-phone-2199 phone clear_carried>=1 clear_skipped>=1 last_store_dropped>=1

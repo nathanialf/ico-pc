@@ -14,3 +14,13 @@ fx-phone-2381 phone
 # issue 163's lamps room, a blended frame (3:2: Enhanced 2x alone): the
 # aura's paste over the frame's rect
 fx-163-blended pass_area_passes=0 pass_area_covered>=1
+# the 2026-10-07 captures, the device-loss frame (4:3), the deja vu 48:9 frame:
+# the aura's paste over the frame's rect
+fx-vu-3086 pass_area_passes=0 pass_area_covered>=1
+fx-vu-3112 pass_area_passes=0 pass_area_covered>=1
+fx-vu-1985 pass_area_passes=0 pass_area_covered>=1
+fx-loss95 pass_area_passes=0 pass_area_covered>=1
+fx-deja pass_area_passes=0 pass_area_covered>=1
+# the PowerVR phone's F12 frames of 2026-10-28 v4103 and v2199
+fx-phone-4103 phone pass_area_passes=0 pass_area_covered>=1
+fx-phone-2199 phone pass_area_passes=0 pass_area_covered>=1
