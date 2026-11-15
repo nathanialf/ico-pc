@@ -77,15 +77,22 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
 endif()
 
 # rd_lamps_fillpaste_ab (test/rd_lamps_fillpaste_ab.cmake): the crack fill in
-# the paste's pass (RD_LAMPS_FILLPASTE) against it off on the lamps dumps at
-# the phone's setting (the tile class's fakes, the late pass and the swap on,
-# the lamps on WORK2's own depth), with and without the poison: every PNG the
-# same bytes, a SCENE pass fewer for each fill so drawn.  No device: SKIP.
+# the paste's pass (RD_LAMPS_FILLPASTE) against it off on the fixtures of
+# test/fixtures/lists/lamps.txt (committed frames, rd_fixture.cmake,
+# docs/port/TESTING_FIXTURES.md; a listed fixture that is absent fails; the
+# lamps' frames with the cull off, the list's nocull word) at the phone's
+# setting (the tile class's fakes, the late pass and the swap on, the lamps on
+# WORK2's own depth), with and without the poison: every PNG the same bytes,
+# a SCENE pass fewer for each fill so drawn, the fills each fixture declares
+# drawn in the paste's pass (the path ran).  No device: SKIP.
+include(rd_fixture.cmake)
 if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/lamps_fillpaste_ab")
     add_test(NAME rd_lamps_fillpaste_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/lamps_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                     "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/lamps.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/lamps_fillpaste_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_lamps_fillpaste_ab.cmake")
     set_tests_properties(rd_lamps_fillpaste_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"

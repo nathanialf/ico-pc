@@ -1,0 +1,21 @@
+# Fixtures for rd_present_scene_ab (port/render/test/rd_present_scene_ab.cmake:
+# the present from SCENE, port/render/rd_present_scene.c, against the
+# reduction drawn into DISPLAY: every target byte for byte, the presented
+# picture within the derived bound): fixture names of this repository
+# (port/render/test/fixtures/NAME.rdfix), a name a line.  The first is the
+# one the readers (the CRT filter, FSR 1.0, the display layer, Downsampling,
+# the mirror) and the 10 s line are checked on.  Each declares
+# present_scene_skipped (port/render/test/fixtures/fixtures.txt): the reduction
+# is not drawn at the PowerVR phone's setting (>=1), or is kept there (=0).
+#
+# a character's shadow at 21:9 in a glow room (stage 4, the Pixel's F12 frame)
+fx-shadow-wide
+# the PowerVR phone's F12 frame of 2026-10-28
+fx-phone-4657
+# the bridge capture on the Pixel
+fx-tile-2809
+# the main gate at 32:9 (fog, DATE, the shadow count, the crack fill): the
+# reduction kept at the phone's and the desktop's settings (the open border's
+# repeated columns): present_scene_skipped=0, every target and the present
+# the same bytes
+fx-maingate

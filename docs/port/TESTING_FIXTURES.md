@@ -198,6 +198,8 @@ add a row when a family needs one):
 | `comp_spec_seen`, `comp_spec_taken` | `M composites and levels by sprite_comp_ps of N` (N seen), `comp spec on (...): M composites and levels` (M taken, the on word alone) |
 | `shadow_tile_composites` | `shadow tiles on: N composites over the tile mask` |
 | `shadow_merge_counts` | `shadow volumes in the scene's pass on: N of M counts` |
+| `lamps_fillpaste_fills` | `lamps fillpaste on: N crack fills drawn in the paste's pass` |
+| `present_scene_skipped` | `present from SCENE on: N reductions not drawn` |
 
 The fixtures' declared properties are their manifest line's; `rd_fixtures_check` holds the two
 equal.
@@ -299,3 +301,5 @@ expansion does not change); its manifest line must say the same.
 | `rd_comp_spec_ab`, `rd_comp_spec_sabotage` | `lists/comp_spec.txt` | the same five (`fx-maingate` also `comp_spec_seen>=1`, `comp_spec_taken>=1`) | `shadow_volume_draws`, `comp_spec_seen` and `comp_spec_taken` on the `=1` run at the phone setting (a fixture whose run shows volume draws has a draw by the entry there); the sabotage twin without `comp_spec_taken` |
 | `rd_shadow_tile_ab` | `lists/shadow_tile.txt` (the composites over the mask and the live-texel bounds a fixture) | `fx-shadow-wide`, `fx-tile-2809`, `fx-maingate`, `fx-phone-4657` (`shadow_volume_draws>=1`; the last three `shadow_tile_composites>=1`) | `shadow_volume_draws` and `shadow_tile_composites` on the `=1` run at the phone setting; the list's count (3) and bounds |
 | `rd_shadow_merge_ab` | `lists/shadow_merge.txt` | `fx-phone-4657`, `fx-maingate`, `fx-tile-2809` (`shadow_volume_draws>=1`, `shadow_merge_counts>=1`) | `shadow_volume_draws` and `shadow_merge_counts` on the `=1` run at both settings |
+| `rd_lamps_fillpaste_ab` | `lists/lamps.txt` (the word `nocull` after a name: `ICO_RD_CULL=off` in every arm, the generated lamps kept in the glow's chain) | `fx-lamps-novolume`, `fx-opening-dark`, `fx-boot-0400` (each `nocull`, `lamps_fillpaste_fills>=1`), `fx-opening-sun`, `fx-boot-0200`, `fx-boot-0600` (`lamps_fillpaste_fills=0`: the chain drawn whole) | `lamps_fillpaste_fills` on the `+fillpaste` run at the phone setting |
+| `rd_present_scene_ab` | `lists/present_scene.txt` | `fx-shadow-wide`, `fx-phone-4657`, `fx-tile-2809` (`present_scene_skipped>=1`), `fx-maingate` (`present_scene_skipped=0`: kept for the open border's repeated columns) | `present_scene_skipped` on the `=1` run at the phone setting |
