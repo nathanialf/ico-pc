@@ -133,12 +133,19 @@
  *   --full-pixel          the reduction draws the whole frame: no black border
  *   --border-mask         the game's Full pixel off: the same picture, the
  *                         border masked over it at present (rd__border_mask)
- *   --water-sharp         Water reflections: Sharp: the dump's render-to-texture
- *                         blocks that are not scene-sized (the reflections in
- *                         water, the queen barrier's copy) at the scene's scale
- *                         (rd_core.c rd__target_scale_of); without it they are
- *                         drawn at their GS size, the PS2's.  A dump from before
- *                         the option marks no block and replays as without it
+ *   --water-ps2           the dump's render-to-texture blocks that are not
+ *                         scene-sized (the reflections in water, the queen
+ *                         barrier's copy) at their GS size, the PS2's, as
+ *                         v0.11.6's Water reflections: Original drew them
+ *                         (sets ICO_RD_WATER_SCALE=0 before rd_init); without
+ *                         it they take the scene's scale as the game draws
+ *                         them (rd_core.c rd__target_scale_of).  No dump
+ *                         records the option it was made with: one made under
+ *                         Original replays as made with this.  A dump from
+ *                         before the block mark marks no block and replays at
+ *                         the GS size either way.  --water-sharp, the old
+ *                         switch for the scene's scale, is the default now
+ *                         and is accepted for older command lines
  *   --motion-blur M       original (the default) or smooth: Options > Effects
  *                         > Motion blur's way (RdSettings.motionBlurSmooth,
  *                         rd_blur_smooth.c).  Smooth's trail is an
@@ -2194,7 +2201,7 @@ int main(int argc, char **argv)
         fprintf(stderr,
                 "usage: %s <dump> <out.png> [--target NAME] [--present WxH] [--enhanced] "
                 "[--aspect A] [--resolution WxH|Nx] [--full-height] [--full-pixel] "
-                "[--border-mask] [--water-sharp] [--motion-blur original|smooth] [--no-crack-fill] "
+                "[--border-mask] [--water-ps2] [--motion-blur original|smooth] [--no-crack-fill] "
                 "[--motion-blur-strength N] "
                 "[--work-clear RRGGBB] [--no-glow-edge] "
                 "[--filter F] "
@@ -2391,8 +2398,10 @@ int main(int argc, char **argv)
                 return 1;
             }
             presentsN = (int)n;
+        } else if (strcmp(argv[i], "--water-ps2") == 0) {
+            setEnv("ICO_RD_WATER_SCALE", "0"); /* read at rd_init (rd_core.c) */
         } else if (strcmp(argv[i], "--water-sharp") == 0) {
-            s.waterSharp = 1;
+            /* the default since v0.11.7: the blocks at the scene's scale */
         } else if (strcmp(argv[i], "--mirror") == 0) {
             s.mirror = 1;
         } else if (strcmp(argv[i], "--pass-dump") == 0 && i + 1 < argc) {

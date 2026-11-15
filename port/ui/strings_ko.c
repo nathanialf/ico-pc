@@ -522,10 +522,6 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_OPT_WINDOW_MODE] = "창 모드",
     [UI_STR_VAL_WINDOWED] = "창",
     [UI_STR_VAL_BORDERLESS] = "테두리 없음",
-    [UI_STR_OPT_EFFECT_WATER] = "수면 반사",
-    [UI_STR_VAL_SHARP] = "선명하게",
-    [UI_STR_EFFECT_WATER_NOTE] =
-        "‘선명하게’는 수면의 반사를 선택한 해상도로 그립니다. ‘오리지널’은 PS2의 부드러운 반사 그대로입니다.",
     [UI_STR_VAL_SMOOTH] = "부드럽게",
     [UI_STR_OPT_SHOW_FPS] = "프레임 레이트 표시",
     [UI_STR_EFFECT_MOTION_BLUR_NOTE] =

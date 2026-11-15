@@ -50,10 +50,14 @@
  *            renderer draws (sheetFromHalo), the halo and the gain dropped
  *   u32      temp target count; per target: u32 id, w, h, withDepth, keep
  *            (keep's bit 1: a render-to-texture block, RdTargetRec.block,
- *            which the loading context draws at the scene's scale under
- *            Water reflections: Sharp, RdSettings.waterSharp; 0 in the dumps
- *            from before it, whose blocks replay at their GS size as they
- *            were drawn; the version is unchanged)
+ *            which the loading context draws at the scene's scale, as the
+ *            game does since v0.11.7 (v0.11.6's Water reflections: Sharp;
+ *            the replay tool's --water-ps2, ICO_RD_WATER_SCALE=0, draws it
+ *            at its GS size, as v0.11.6's Original did); 0 in the dumps
+ *            from before the mark, whose blocks replay at their GS size as
+ *            they were drawn; the version is unchanged.  No dump records
+ *            which of the two the game used: one made under Original
+ *            replays as made with --water-ps2)
  *   (version 5: RDC_OVERLAY_TEXT commands, their RdTextItem and
  *   RdTextOp payloads, and RDC_SCREEN's b[3]; no new section.  A version 4
  *   dump has none, so it replays unchanged in every preset)
@@ -1049,8 +1053,8 @@ bool rd__load_frame(const char *path, RdFrame *out)
         ok = r32(fp, &id) && r32(fp, &w) && r32(fp, &h) && r32(fp, &d) && r32(fp, &k) && w && h &&
              w <= 8192 && h <= 8192;
         if (ok) {
-            /* keep's bit 1: a block, which takes the scene's scale when
-             * the replay has Water reflections: Sharp (--water-sharp) */
+            /* keep's bit 1: a block, which takes the scene's scale but
+             * under ICO_RD_WATER_SCALE=0 (the replay tool's --water-ps2) */
             uint32_t nid =
                 rd__temp_target_alloc_ex(w, h, (int)d, (int)(k & 1u), (int)((k >> 1) & 1u));
             tgtMap.from[tgtMap.n] = id;

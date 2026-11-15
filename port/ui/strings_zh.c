@@ -516,10 +516,6 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_VAL_WINDOWED] = "視窗",
     [UI_STR_VAL_BORDERLESS] = "無邊框",
     /* Effects > Cinematic bars */
-    [UI_STR_OPT_EFFECT_WATER] = "水面倒影",
-    [UI_STR_VAL_SHARP] = "清晰",
-    [UI_STR_EFFECT_WATER_NOTE] =
-        "「清晰」以您選擇的解析度描繪水中的倒影；「原版」保留 PS2 較柔和的倒影。",
     [UI_STR_VAL_SMOOTH] = "平滑",
     [UI_STR_OPT_SHOW_FPS] = "顯示影格率",
     [UI_STR_EFFECT_MOTION_BLUR_NOTE] =

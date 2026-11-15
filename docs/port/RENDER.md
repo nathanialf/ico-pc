@@ -336,7 +336,7 @@ and the named shadow levels keep their GS sizes, the PS2's, at every scale ([bel
 above 1x the composites read twins at the scene's scale,
 [RENDER_POST.md](RENDER_POST.md#the-shadows-levels-above-1x);
 `port/render/rd_core.c` (`rd__target_scale_of`)). A temporary target of any other size is drawn
-at its GS size, except a render-to-texture block under Water reflections: Sharp
+at its GS size, except a render-to-texture block, which takes the scene's scale
 ([below](RENDER_POST.md#water-and-render-to-texture-blocks)). Under
 [Full pixel](ARCHITECTURE.md#terms) a frame-wide scene target holds the frame's exact visible width
 plus `RD_FULL_PIXEL_GUARD` texels each side, centred, so the window's pixels are its texels
@@ -2192,7 +2192,7 @@ The options:
 | `--dump-temps DIR` | writes every per-frame temp target (the water blocks among them: puddle.c's 344x256 reflection block with its depth) to `DIR/temp-<n>-<w>x<h>.png` right after the replay, before the frame's end frees them |
 | `--present WxH` | renders the presenter into a W x H output |
 | `--backend vulkan\|d3d12` | picks the RHI backend, to compare backends |
-| `--enhanced`, `--aspect`, `--resolution`, `--full-height`, `--full-pixel`, `--border-mask` (Full pixel off as the game has it), `--water-sharp` (Water reflections: Sharp), `--filter`, `--mirror`, `--crt` | the display options a dump does not carry; the PS2 picture by default |
+| `--enhanced`, `--aspect`, `--resolution`, `--full-height`, `--full-pixel`, `--border-mask` (Full pixel off as the game has it), `--water-ps2` (the water's blocks at their GS size, the retired Water reflections row's Original; `ICO_RD_WATER_SCALE=0`; `--water-sharp` is accepted, the default), `--filter`, `--mirror`, `--crt` | the display options a dump does not carry; the PS2 picture by default |
 | `--list` | every command of the replayed lists, with textures, prims, boxes and state, then the water summary (`water: ...`, [above](RENDER_POST.md#water-and-render-to-texture-blocks)); `[display layer begins]` before the command where a temporal upscaler's display layer would begin, `[keep copy]` after a keep frame's keep sprite the layer holds 1:1, and ` new history (<reason>)` after an upscale point's `src ... dst ...` that resets the upscaler's history (first, size, cut, keep run, camera, forgotten) ([DISPLAY_LAYER.md](DISPLAY_LAYER.md)); the plan needs no device |
 | `--no-device` | loads into a record-only renderer for `--list`, `--mesh`, `--dump-textures`, `--region-stats` |
 | `--nop SPEC` | turns commands into NOPs, to find the draw behind a pixel; SPEC is `L:A[-B]`, several separated by commas (`0:12-14,0:40`), or `@FILE` for a spec in a file; the state commands in a range stay |

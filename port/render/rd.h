@@ -458,14 +458,6 @@ typedef struct RdSettings {
      * scissor, DISPLAY's border is the GS's own (the tests' PS2 models,
      * the replay tool without --border-mask); ignored with fullPixel. */
     uint8_t borderMask;
-    /* Water reflections: Sharp ([video] effect_water_sharp).  The blocks
-     * rd_block_target makes that are not scene-sized (the reflections of
-     * puddle.c and pool.c, the queen barrier's copy of the frame) take the
-     * scene's scale, so their pictures have the scene's texels per GS pixel
-     * (rd_core.c rd__target_scale_of).  0 in a zeroed RdSettings: they are
-     * drawn at their own GS size, as on the PS2 (and as before this
-     * option; the replay tool's --water-sharp sets it) */
-    uint8_t waterSharp;
     /* Motion blur: Smooth ([video] effect_motion_blur_mode = "smooth" with
      * effect_motion_blur on).  The motion blur's sprite (staticBlur.c
      * MotionBlur) reads an accumulator of the scenes of every present
@@ -1993,12 +1985,13 @@ void rd_shadow_resolve(void);
  *                  with a depth buffer when withDepth), the same target for
  *                  the same (tbp, gsW, gsH) for the rest of the frame, as
  *                  the VRAM block is one block whoever draws into it; {0}
- *                  outside a frame.  Any width: the block is drawn at its
- *                  own GS size at every aspect (one the game sizes as the
- *                  native frame, gsFrame.w x ScreenHeight, takes the scene's
- *                  resolution scale like SCENE; rd_core.c
- *                  rd__target_scale_of), or at the scene's scale under
- *                  Water reflections: Sharp (RdSettings.waterSharp)
+ *                  outside a frame.  Any width, at every aspect: the block
+ *                  takes the scene's scale, its picture the scene's texels
+ *                  per GS pixel (one the game sizes as the native frame,
+ *                  gsFrame.w x ScreenHeight, is scene-class like SCENE; one
+ *                  of any other size too; rd_core.c rd__target_scale_of);
+ *                  ICO_RD_WATER_SCALE=0, the tests' switch, keeps the other
+ *                  sizes at their GS size, as on the PS2
  * rd_alias_target   from here on, in the current list and the open frame,
  *                  rd_set_target and rd_clear_target of `from` and rd_texture
  *                  of a view of `from` (rd_target_texture) record `to`

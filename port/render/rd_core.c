@@ -793,18 +793,19 @@ static uint32_t scaled(uint32_t n, float k)
  * 1 (Original, and every Enhanced target the options leave alone) tw == w,
  * th == h.  The scale is the resolution's alone: sx == sy, but under the
  * Window resolution, whose box keeps the PS2's pixel shape
- * (rd__apply_display).  A block of any other size (a reflection block, the
- * queen barrier's copy) is drawn at its own GS size, whatever the aspect:
- * the game sizes it, and its picture is the one its own screen matrix
- * gives.  Under Water reflections: Sharp (RdSettings.waterSharp) such a
- * block that rd_block_target made (t->block: puddle.c's and pool.c's
- * reflections, the queen barrier's copy) takes the scene's scale instead,
- * both ways as SCENE has it, so its picture has the scene's texels per GS
- * pixel; its depth buffer is made at the same texture size, and the
- * grids and sprites that sample it address it in GS texels (the scale is
- * the texture's alone).  With the option off nothing here changes.  Every
- * other named target (the work buffers, the shadow levels) is at its GS
- * size, the PS2's, at every scale. */
+ * (rd__apply_display).  A block of any other size that rd_block_target
+ * made (t->block: puddle.c's and pool.c's reflections, the water at the
+ * mill, the queen barrier's copy) takes the scene's scale too, in every
+ * preset and at every aspect, both ways as SCENE has it, so its picture
+ * has the scene's texels per GS pixel (the game sizes the block; its
+ * picture is the one its own screen matrix gives, only finer): its depth
+ * buffer is made at the same texture size, and the grids and sprites that
+ * sample it address it in GS texels (the scale is the texture's alone).
+ * At scale 1 that is its GS size, as before.  This was v0.11.6's Water
+ * reflections: Sharp; Original, the GS size at every scale, is the tests'
+ * ICO_RD_WATER_SCALE=0 (g_rd.waterPs2).  Every other temporary target and
+ * every other named target (the work buffers, the shadow levels) is at its
+ * GS size, the PS2's, at every scale. */
 void rd__target_scale_of(RdTargetRec *t, int named)
 {
     float sx = 1.0f, sy = 1.0f;
@@ -826,7 +827,7 @@ void rd__target_scale_of(RdTargetRec *t, int named)
         const float k = rd__lamps_lowres_factor();
         sx = g_rd.sceneSx > k ? k : (g_rd.sceneSx > 1.0f ? g_rd.sceneSx : 1.0f);
         sy = g_rd.sceneSy > k ? k : (g_rd.sceneSy > 1.0f ? g_rd.sceneSy : 1.0f);
-    } else if (named < 0 && t->block && g_rd.settings.waterSharp) {
+    } else if (named < 0 && t->block && !g_rd.waterPs2) {
         sx = g_rd.sceneSx > 0.0f ? g_rd.sceneSx : 1.0f;
         sy = g_rd.sceneSy > 0.0f ? g_rd.sceneSy : 1.0f;
     }
@@ -1183,8 +1184,8 @@ void rd__note_target_pressure(const RdTargetRec *t)
     const int idx = (int)(t - g_rd.targets);
     const int scene = idx >= 0 && idx < RD_TARGET_COUNT ? sceneClass(idx)
                                                         : (t->w == g_rd.gsW && t->h == g_rd.gsH);
-    /* a block at the scene's scale (Water reflections: Sharp) comes down
-     * with the scene */
+    /* a block at the scene's scale (rd__target_scale_of) comes down with
+     * the scene */
     const int sharpBlock = t->block && (t->sx > 1.0f || t->sy > 1.0f);
     if (scene || sharpBlock) {
         rd__note_scene_pressure();
@@ -1932,11 +1933,18 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
     rd__dst_init();
     /* the fog's depth path (RdContext.fogPath, depthCopy) */
     rd__fog_path_init();
-    rd__apply_display(); /* the scales the named targets take */
-    if (g_rd.settings.waterSharp) {
-        rd__log("water reflections: sharp (the scene's scale)");
+    /* the render-to-texture blocks' scale (rd__target_scale_of): the
+     * scene's, or their GS size under the tests' ICO_RD_WATER_SCALE=0 */
+    {
+        const char *ws = getenv("ICO_RD_WATER_SCALE");
+        g_rd.waterPs2 = ws != NULL && strcmp(ws, "0") == 0;
+        rd__log("water reflections: %s",
+                g_rd.waterPs2 ? "the blocks at their GS size, the PS2's (ICO_RD_WATER_SCALE=0, "
+                                "the tests' switch)"
+                              : "the blocks at the scene's scale (at 1x their GS size)");
     }
     rd__shadow_fine_log(); /* the shadow's levels (rd_shadowres.c) */
+    rd__apply_display();   /* the scales the named targets take */
     if (g_rd.settings.motionBlurSmooth) {
         logMotionBlur(""); /* made at its first sprite (rd_blur_smooth.c) */
     }
@@ -2452,7 +2460,6 @@ void rd_begin_frame(void)
         /* the model pack's switch and its dump, on a change */
         const bool modelsChanged = g_rd.settings.modelPack != g_rd.pendingSettings.modelPack;
         const bool dumpChanged = g_rd.settings.dumpModels != g_rd.pendingSettings.dumpModels;
-        const bool waterChanged = g_rd.settings.waterSharp != g_rd.pendingSettings.waterSharp;
         const bool blurChanged =
             g_rd.settings.motionBlurSmooth != g_rd.pendingSettings.motionBlurSmooth;
         const bool glowChanged = g_rd.settings.glowSmooth != g_rd.pendingSettings.glowSmooth;
@@ -2469,11 +2476,6 @@ void rd_begin_frame(void)
         }
         if (dumpChanged) {
             modelpack_set_dump_enabled(g_rd.settings.dumpModels != 0);
-        }
-        if (waterChanged) {
-            /* the blocks made from this frame on (rd__target_scale_of) */
-            rd__log("water reflections: %s", g_rd.settings.waterSharp ? "sharp (the scene's scale)"
-                                                                      : "original (their GS size)");
         }
         if (glowChanged) {
             logGlowBetween(", from the next present");
