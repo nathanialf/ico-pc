@@ -1,0 +1,25 @@
+# rd_vu_flat0_ab, rd_vu_flat0_gl (test/rd_vu_flat0_ab.cmake) and
+# rd_vu_compact_ab (test/rd_vu_compact_ab.cmake): a fixture, the profiles it
+# is replayed under (corpus, mali, pixel: the scripts' heads say what each
+# is; OpenGL replays every fixture at the corpus settings alone), then the
+# properties the two tests check (rd_fixture_list_props.cmake), each holding
+# on every =1 run compared:
+#   prepass_vertices    rd_vu_flat0_ab: the mesh and grid vertices the
+#                       record holds, drawn by the provoking corner's shader
+#   vu_compact_left_out rd_vu_compact_ab: list 0's triangles the compaction
+#                       left out
+#   region_rule_draws   rd_vu_compact_ab: the VU draws the camera rule
+#                       decided (0 on a frame dumped before the facing
+#                       tables: the PS2's drops kept)
+# The counts each pair of rd_vu_compact_ab prints are lists/vu_compact_counts.txt.
+#
+# a Mac reporter's 16:9 frame (version 11, no facing tables)
+fx-gate-102 corpus prepass_vertices>=1 vu_compact_left_out>=1 region_rule_draws=0
+# issue 179's Mali-G52 (moto g24 power, v0.11.5): the manual frame (stage 3)
+# and a slow-scene capture (stage 42)
+fx-mali-frame mali,corpus prepass_vertices>=1 vu_compact_left_out>=1 region_rule_draws>=1
+fx-mali-slow541 mali,corpus prepass_vertices>=1 vu_compact_left_out>=1 region_rule_draws>=1
+# the Pixel 10 Pro Fold's opening: lamps, dark, sun
+fx-lamps-novolume pixel prepass_vertices>=1 vu_compact_left_out>=1 region_rule_draws>=1
+fx-opening-dark pixel prepass_vertices>=1 vu_compact_left_out>=1 region_rule_draws>=1
+fx-opening-sun pixel prepass_vertices>=1 vu_compact_left_out>=1 region_rule_draws>=1

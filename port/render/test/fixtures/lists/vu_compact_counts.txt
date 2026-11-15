@@ -1,0 +1,38 @@
+# Expected counts for rd_vu_compact_ab (port/render/test/rd_vu_compact_ab.cmake:
+# the index compaction on against off), over the fixtures of lists/vu_flat0.txt.
+# Each line: the fixture, the profile, the setting, the merge (merge or
+# nomerge), then the =1 run's "N of M list 0 triangles left out (drop D,
+# outside O)" as N M D O.  Every pair the test compares must have its line and
+# print exactly these numbers; a line no pair takes fails.  The numbers are
+# the shader's own classes (vu_tri.hlsl vu_tri_keep_cs) on lavapipe, from a run
+# of each fixture (fixbin3, int/v0117 2453045ab, 2026-11-15): the generated
+# meshes keep the source's index lists, so M follows the draws the visibility
+# test keeps and N, D, O where the generated cubes land.
+fx-gate-102 corpus orig merge 12767 12767 0 12767
+fx-gate-102 corpus orig nomerge 12767 12767 0 12767
+fx-gate-102 corpus enh169 merge 12767 12767 0 12767
+fx-gate-102 corpus enh169 nomerge 12767 12767 0 12767
+fx-gate-102 corpus msaa merge 12767 12767 0 12767
+fx-gate-102 corpus frac merge 12767 12767 0 12767
+fx-mali-frame mali mali merge 9230 12192 4612 4618
+fx-mali-frame mali mali nomerge 9230 12192 4612 4618
+fx-mali-frame corpus orig merge 9230 12192 4612 4618
+fx-mali-frame corpus orig nomerge 9230 12192 4612 4618
+fx-mali-frame corpus enh169 merge 9234 12192 4612 4622
+fx-mali-frame corpus enh169 nomerge 9234 12192 4612 4622
+fx-mali-frame corpus msaa merge 9230 12192 4612 4618
+fx-mali-frame corpus frac merge 9231 12192 4612 4619
+fx-mali-slow541 mali mali merge 10124 19185 8196 1928
+fx-mali-slow541 mali mali nomerge 10124 19185 8196 1928
+fx-mali-slow541 corpus orig merge 10124 19185 8196 1928
+fx-mali-slow541 corpus orig nomerge 10124 19185 8196 1928
+fx-mali-slow541 corpus enh169 merge 10125 19185 8196 1929
+fx-mali-slow541 corpus enh169 nomerge 10125 19185 8196 1929
+fx-mali-slow541 corpus msaa merge 10124 19185 8196 1928
+fx-mali-slow541 corpus frac merge 10124 19185 8196 1928
+fx-lamps-novolume pixel pixel merge 17 17 0 17
+fx-lamps-novolume pixel pixel nomerge 17 17 0 17
+fx-opening-dark pixel pixel merge 8430 14406 0 8430
+fx-opening-dark pixel pixel nomerge 8430 14406 0 8430
+fx-opening-sun pixel pixel merge 7363 8841 138 7225
+fx-opening-sun pixel pixel nomerge 7363 8841 138 7225
