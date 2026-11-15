@@ -19,3 +19,5 @@ fx-tile-2809
 # repeated columns): present_scene_skipped=0, every target and the present
 # the same bytes
 fx-maingate
+# issue 164's paused frame on the Mali-G52 (21:9): the reduction not drawn
+fx-mobile-164

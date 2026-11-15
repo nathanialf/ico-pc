@@ -1,8 +1,8 @@
 # rd_constant_reads_ab: a cleared source read as its colour against the read
 # itself, byte for byte (docs/port/WORK_BUFFERS.md, "A cleared source read as
-# its colour"; port/render/rd_const_read.c).  For every dump the lists name
-# (tools/vustage_dumps.txt and tools/constant_reads_dumps.txt, read as
-# rd_vufuse_ab.cmake reads them), under ICO_RD_BLEND=fixed, rd_replay_tool's
+# its colour"; port/render/rd_const_read.c).  For every frame the list names
+# (lists/constant_reads.txt's fixtures, read by rd_vu_inputs.cmake; `extra`
+# marks the phone's frames), under ICO_RD_BLEND=fixed, rd_replay_tool's
 # --pass-dump with --stats twice: with ICO_RD_CONSTANT_READS=0 (every post
 # sprite reads its source target, as before) and with the default (a sprite
 # whose source holds only its last clear drawn untextured in the colour the
@@ -18,49 +18,18 @@
 # it.  Every named target's PNG (PRESENT.png with --present) must be equal
 # byte for byte; the A/B run must say "constant reads off" with none served,
 # the default "constant reads on"; both runs must count the same target reads
-# (served plus kept); and every dump of tools/constant_reads_dumps.txt (the
-# phone's frames: the aura with no aura object, AURA_WORK holding its clear
-# when auraInspireAfter reads it) must have some served at both phone
-# settings.  Each pair's counts are printed.  A missing list or dump is named
-# and skipped; no dump read, or no device: SKIP (77).
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DEXTRA=<the phone's dump list>
+# (served plus kept); and every phone frame (`extra`: the aura with no aura
+# object, AURA_WORK holding its clear when auraInspireAfter reads it) must
+# have some served at both phone settings.  The path ran: on every default
+# run each fixture's declared constant_reads_served, every fixture checked.
+# Each pair's counts are printed.  No dump, or no device: SKIP (77).
+# -DTOOL=<rd_replay_tool> -DLIST=<list> [-DEXTRA=<the phone's dump list>]
 # -DOUT=<a folder the test may write>
-set(dumps "")
-set(phoneDumps "")
-foreach(list IN ITEMS "${LIST}" "${EXTRA}")
-  if(list STREQUAL "" OR NOT EXISTS "${list}")
-    message(STATUS "${list}: no dump list, skipped")
-    continue()
-  endif()
-  get_filename_component(listDir "${list}" DIRECTORY)
-  file(STRINGS "${list}" lines)
-  foreach(l IN LISTS lines)
-    string(STRIP "${l}" l)
-    if(l STREQUAL "" OR l MATCHES "^#")
-      continue()
-    endif()
-    if(NOT IS_ABSOLUTE "${l}")
-      set(l "${listDir}/${l}")
-    endif()
-    set(found "")
-    if(l MATCHES "[*]")
-      file(GLOB found "${l}")
-      list(SORT found)
-      if(NOT found)
-        message(STATUS "${l}: no dump matches, skipped")
-      endif()
-    elseif(EXISTS "${l}")
-      set(found "${l}")
-    else()
-      message(STATUS "${l}: no such dump, skipped")
-    endif()
-    list(APPEND dumps ${found})
-    if(list STREQUAL "${EXTRA}")
-      list(APPEND phoneDumps ${found})
-    endif()
-  endforeach()
-endforeach()
-list(REMOVE_DUPLICATES dumps)
+# [-DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<folder> -DFIXTURE_HELPERS=<file>]
+include("${CMAKE_CURRENT_LIST_DIR}/rd_vu_inputs.cmake")
+rd_vu_inputs("${LIST}" "${EXTRA}")
+set(dumps "${vuDumps}")
+set(phoneDumps "${vuExtra}")
 list(LENGTH dumps ndumps)
 if(ndumps EQUAL 0)
   message(STATUS "SKIP: no dump of ${LIST} or ${EXTRA} is here")
@@ -94,7 +63,7 @@ foreach(dump IN LISTS dumps)
     file(REMOVE_RECURSE "${dirOff}" "${dirOn}")
     file(MAKE_DIRECTORY "${dirOff}" "${dirOn}")
     execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_CONSTANT_READS=0
-                            ${env_${s}} "${TOOL}" "${dump}" - --pass-dump "${dirOff}" --stats
+                            ${env_${s}} "${TOOL}" "${dump}" "${dirOff}.png" --pass-dump "${dirOff}" --stats
                             ${args_${s}}
                     RESULT_VARIABLE rcOff OUTPUT_VARIABLE outOff ERROR_VARIABLE errOff)
     if(rcOff EQUAL 77)
@@ -107,7 +76,7 @@ foreach(dump IN LISTS dumps)
       continue()
     endif()
     execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ${env_${s}} "${TOOL}"
-                            "${dump}" - --pass-dump "${dirOn}" --stats ${args_${s}}
+                            "${dump}" "${dirOn}.png" --pass-dump "${dirOn}" --stats ${args_${s}}
                     RESULT_VARIABLE rcOn OUTPUT_VARIABLE outOn ERROR_VARIABLE errOn)
     if(NOT rcOff EQUAL 0 OR NOT rcOn EQUAL 0)
       message(SEND_ERROR "${dump} ${s}: exit ${rcOff} (every source read) and ${rcOn} "
@@ -139,6 +108,9 @@ foreach(dump IN LISTS dumps)
       math(EXPR failures "${failures} + 1")
       continue()
     endif()
+    # the path ran: the sprites drawn in a cleared source's colour (a
+    # fixture's declared constant_reads_served)
+    rd_vu_require(${index} "${outOn}" constant_reads_served)
     math(EXPR readsOn "${servedOn} + ${keptOn}")
     if(NOT readsOn EQUAL keptOff)
       message(SEND_ERROR "${dump} ${s}: ${keptOff} target reads with every source read, "
@@ -181,6 +153,7 @@ foreach(s IN LISTS settings)
   message(STATUS "rd_constant_reads_ab ${s}: ${served_${s}} of ${reads_${s}} target reads "
                  "served by the source's clear")
 endforeach()
+rd_vu_inputs_done(failures)
 if(failures GREATER 0)
   message(FATAL_ERROR "rd_constant_reads_ab: ${failures} failures over ${ndumps} dumps")
 endif()

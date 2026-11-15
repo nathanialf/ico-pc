@@ -1,0 +1,11 @@
+# rd_constant_reads_ab (docs/port/TESTING_FIXTURES.md): frames that read a
+# cleared source as its colour (constant_reads_served: the aura with no aura
+# object, AURA_WORK holding its clear when auraInspireAfter reads it);
+# `extra`: a phone frame, which must serve some at both phone settings
+# the PowerVR phone's v0.9.4 rc1, rc2 and rc3 frames
+fx-phone-4103 extra
+fx-phone-2199 extra
+fx-phone-4657 extra
+# issue 164's Mali-G52 frame, the deja vu 48:9 frame
+fx-mobile-164
+fx-deja
