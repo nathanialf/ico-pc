@@ -28,8 +28,10 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   `--sweep DISC` generalises it to every stage folder of the disc (`object/sdf/stNN?/model/`, the
   member index as the `rd_mesh` disc walk builds it, numbered in index order, shard q of 8 takes
   the stages numbered q mod 8) at the camera of every line of `tools/sweep_cameras.txt` (stage,
-  dump path; a .rddump or an F12 zip; the dump's view and zoom; a line whose dump is absent is
-  skipped; `builtin:i76` is the i76 camera of st18a) and the 768 steps about each, every 4th pair
+  `camera NAME`, the captured frame's view as 16 numbers and `zoom` and its zoom, read once from
+  the dump's header with nine significant digits, so the test reads nothing from outside the
+  repository; `builtin:i76` is the i76 camera of st18a; a local list may name a dump instead, a
+  .rddump or an F12 zip, whose view and zoom are read and which is skipped when absent) and the 768 steps about each, every 4th pair
   by default (`--sweep-step N`, 1 is the whole sweep), at 16:9 (688 GS pixels wide) and 48:9
   (2048). Per stage and aspect it counts the mechanisms that leave an in-view part or triangle
   undrawn: the box cull (parts a picture between the ticks shows that this tick did not
