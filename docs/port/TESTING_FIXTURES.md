@@ -153,6 +153,38 @@ nothing of a model's shape or extent is used:
 Every float is written from its bits (an integer times a power of two, exact), so no compiler or
 CPU changes a byte.
 
+### The placement rules (opt-in)
+
+A room's lamps are pieces of the room's model, whose origin is off the picture, so a lamp generated
+about that origin is dropped by the visibility test and never lights the glow; and a generated sun
+fan is always on the picture, so a frame whose sun was off it never has the glow's dark plan. A
+test of the glow's light chooses otherwise with two lines in its fixture's rule file. A rule file
+without them makes the fixture it always made, and every fixture made before they existed is the
+same bytes.
+
+- `@lamps place`: every mesh that a non-skinned draw puts into WORK2 (the glow's lamps) is
+  generated about a point that lands on WORK2. The rule reads only that draw: its placement matrix
+  M (VU memory 16..19), the scissor and the target's GS size in the state at the draw, and the
+  mesh's number n (0, 1, ...) among the meshes so drawn. The place is the scissor's box cut in four
+  each way, the meshes on its three inner columns and rows in turn: X = 2048 - gsW / 2 + x0 +
+  (x1 - x0 + 1) (1 + n mod 3) / 4, Y the same down with (n / 3) mod 3. The centre is the
+  model-space point M sends to (X, Y) at the w of the model's origin (the object keeps its
+  distance from the eye and moves across the picture; |w| for an origin behind the eye; for a
+  matrix without perspective the point of that line nearest the origin). The cube's size is found
+  about the centre as it is about an origin, and the centre is rounded to the cube's lattice step
+  (at most half a step, a sixteenth of the half side), so every vertex is still an exact float. No
+  vertex and no bound of the model is read. A mesh the rule cannot place (w 0, a singular matrix, a
+  centre behind the eye or past 2^23 steps) keeps its origin and is counted in the maker's line.
+- `@fans off`: every CPU-projected prim (not a rectangle, not text) drawn into WORK2 (the sun's
+  fans) is generated as the same ribbon 64 GS pixels wide, 8 pixels past the target's right edge:
+  the fans of a sun that is off the picture.
+
+A rule that matches no draw fails the make. The fixture keeps the result at the end of its
+skeleton (the placed meshes' ids and centres in lattice steps, the moved prims' payload offsets):
+`rd_fixture_tool info` says `N meshes placed on WORK2, N prims beside it`, the maker's line
+`placement: N meshes drawn into WORK2 generated on it (K kept their origin), N prims drawn into
+WORK2 generated beside it`.
+
 ## The format
 
 `port/render/rd_fixture.h` is the reference. In short: the head (`ICORDFX1`, the format, the
@@ -160,7 +192,8 @@ expanded dump's version, the expansion's SHA-256 and size), the notes (`key=valu
 `maker=`, `rule=`, `selfcheck=`, `expect=`), and the deflated skeleton: the dump's own layout with
 every texture's texels replaced by its pattern name, every mesh's name and stream by the generator's
 name, its size exponent and bone count, the facing tables by their sizes, and at the end the size
-exponent of each grid and particle draw. A fixture is made from a dump of any version the loader
+exponent of each grid and particle draw (then, only in a fixture made with a placement rule, the
+placement section). A fixture is made from a dump of any version the loader
 reads (3 on: the 80- and 84-byte state blocks of versions 3 and 4 to 8, no GS levels field before
 9) and expands to that version's layout.
 

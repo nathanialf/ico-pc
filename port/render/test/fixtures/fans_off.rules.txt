@@ -1,0 +1,13 @@
+# Rules for a frame whose sun is off the picture (docs/port/TESTING_FIXTURES.md
+# "The placement rules"): the default texture rules, and the sun's fans (the
+# CPU-projected prims drawn into WORK2) generated beside the target
+glyphs     sheet
+ramp       r8
+date_split date
+alpha_ramp ate
+bright     additive
+gradient   abe
+checker    sprite
+grey       unused
+checker
+@fans off

@@ -77,8 +77,10 @@ static RdCmd cmd(uint8_t type)
 
 /* the frame dump (version ver: 17, or 8 without the frame fields, the
  * region, the GS levels, the tick cameras and the facing tables, its state
- * blocks 84 bytes), into b; its art ranges filled from the stream */
-static void buildDump(RdFxBuf *b, uint32_t ver)
+ * blocks 84 bytes), into b; its art ranges filled from the stream; work2:
+ * the list begins with WORK2 as the target (512 x 448), so the triangle
+ * and the mesh are drawn into it */
+static void buildDumpAt(RdFxBuf *b, uint32_t ver, bool work2)
 {
     rd_fx_put(b, RD_DUMP_MAGIC, 8);
     rd_fx_put32(b, ver);
@@ -111,6 +113,11 @@ static void buildDump(RdFxBuf *b, uint32_t ver)
     /* list 0 */
     RdCmd c[16];
     int n = 0;
+    if (work2) {
+        c[n] = cmd(RDC_TARGET);
+        c[n].u[0] = (uint32_t)RD_TARGET_WORK2 + 1u;
+        c[n++].u[2] = 512u | (448u << 16);
+    }
     c[n] = cmd(RDC_TEXTURE);
     c[n++].u[0] = 1;
     c[n] = cmd(RDC_TEST);
@@ -248,6 +255,11 @@ static void buildDump(RdFxBuf *b, uint32_t ver)
         const uint8_t bits = 0x1F;
         rd_fx_put(b, &bits, 1);
     }
+}
+
+static void buildDump(RdFxBuf *b, uint32_t ver)
+{
+    buildDumpAt(b, ver, false);
 }
 
 /* the offset of the payload in a version ver dump with this frame's lists */
@@ -452,6 +464,80 @@ int main(int argc, char **argv)
     }
     rd_fixture_free(&fx);
     rd_fx_free(&d8);
+
+    /* the placement rules (rd_fixture.h): the frame with WORK2 as the target */
+    static const char placeRules[] = "alpha_ramp ate\nbright additive\nchecker\n"
+                                     "@lamps place\n@fans off\n";
+    RdFxBuf dw = {0};
+    buildDumpAt(&dw, 17, true);
+    CHECK(!dw.bad);
+    /* without the rules: no section, the mesh about its origin as above */
+    CHECK(rd_fixture_make(dw.p, dw.n, NULL, &fx, report, sizeof(report), why, sizeof(why)));
+    const size_t plainSkel = fx.skelBytes;
+    x = NULL;
+    CHECK(rd_fixture_expand(&fx, true, &x, &xn, why, sizeof(why)));
+    if (x) {
+        const size_t pw = payloadAt(x, 17);
+        memcpy(&v, x + pw + OFF_TRI, sizeof(v));
+        CHECK(v.x == (2048 - 256 + 128) * 16);
+        size_t ow = pw + PAY_BYTES + 4 + 32 + 8 * 4 * 4 + 4 + 32 + 16 * 16 * 4 + 4 + 8 * 8 * 4;
+        ow += 4 + 4 + 20 + 24;
+        CHECK(rd_fx_get32(x + ow) == fbits(-0.25f) && rd_fx_get32(x + ow + 4) == fbits(-0.25f));
+        free(x);
+    }
+    rd_fixture_free(&fx);
+    /* with them: mesh 7 is the first mesh drawn into WORK2, so its place is
+       the scissor's first inner column and row: X = 2048 - 256 + 512 / 4 =
+       1920, Y = 2048 - 224 + 448 / 4 = 1936; the matrix has no perspective,
+       so the centre is the point of that line nearest the origin, (-1.28,
+       -1.12, 0); the size there 2^-2 as at the origin (25 pixels), the
+       lattice step 2^-5: the centre (-41, -36, 0) steps, vertex 0 at
+       ((-41 - 8) / 32, (-36 - 8) / 32, -8 / 32); the triangle 8 GS pixels
+       past the target's right edge */
+    CHECK(rd_fixture_make(dw.p, dw.n, placeRules, &fx, report, sizeof(report), why, sizeof(why)));
+    printf("placement: %s %s\n", report, why);
+    CHECK(strstr(report, "1 meshes drawn into WORK2 generated on it (0 kept their origin), 1 "
+                         "prims drawn into WORK2 generated beside it") != NULL);
+    CHECK(fx.skelBytes == plainSkel + 4 + 4 + 16 + 4 + 4);
+    CHECK(rd_fx_get32(fx.skel + plainSkel) == RD_FX_PLACE_TAG);
+    CHECK(rd_fx_get32(fx.skel + plainSkel + 8) == 7 &&
+          (int32_t)rd_fx_get32(fx.skel + plainSkel + 12) == -41 &&
+          (int32_t)rd_fx_get32(fx.skel + plainSkel + 16) == -36 &&
+          rd_fx_get32(fx.skel + plainSkel + 20) == 0);
+    CHECK(rd_fx_get32(fx.skel + plainSkel + 28) == OFF_TRI);
+    CHECK(rd_fixture_check(&fx, why, sizeof(why), stats, sizeof(stats)));
+    CHECK(strstr(stats, "1 meshes placed on WORK2, 1 prims beside it") != NULL);
+    x = NULL;
+    CHECK(rd_fixture_expand(&fx, true, &x, &xn, why, sizeof(why)));
+    if (x) {
+        const size_t pw = payloadAt(x, 17);
+        CHECK(xn == dw.n);
+        memcpy(&v, x + pw + OFF_TRI, sizeof(v));
+        CHECK(v.x == (2048 - 256 + 512 + 8) * 16 && v.y == (2048 - 224 + 112) * 16);
+        size_t ow = pw + PAY_BYTES + 4 + 32 + 8 * 4 * 4 + 4 + 32 + 16 * 16 * 4 + 4 + 8 * 8 * 4;
+        ow += 4 + 4 + 20 + 24;
+        CHECK(rd_fx_get32(x + ow) == fbits(-49.0f / 32.0f));
+        CHECK(rd_fx_get32(x + ow + 4) == fbits(-44.0f / 32.0f));
+        CHECK(rd_fx_get32(x + ow + 8) == fbits(-0.25f) && rd_fx_get32(x + ow + 12) == fbits(1.0f));
+        CHECK(rd_fixture_selfcheck(dw.p, dw.n, x, xn, &windows, &hits, why, sizeof(why)));
+        CHECK(windows > 0 && hits == 0);
+        free(x);
+    }
+    /* a cut or empty section does not parse */
+    fx.skelBytes -= 4;
+    CHECK(!rd_fixture_check(&fx, why, sizeof(why), NULL, 0));
+    fx.skelBytes += 4;
+    rd_fixture_free(&fx);
+    rd_fx_free(&dw);
+    /* the rules on a frame that draws nothing into WORK2: refused; a
+       placement line that is not one: refused */
+    RdFxBuf dn = {0};
+    buildDump(&dn, 17);
+    CHECK(!rd_fixture_make(dn.p, dn.n, placeRules, &fx, report, sizeof(report), why, sizeof(why)));
+    CHECK(strstr(why, "matched nothing") != NULL);
+    CHECK(!rd_fixture_make(dn.p, dn.n, "checker\n@lamps move\n", &fx, report, sizeof(report), why,
+                           sizeof(why)));
+    rd_fx_free(&dn);
     printf("rd_fixture_test: %s\n", s_fail ? "FAILED" : "all passed");
     return s_fail ? 1 : 0;
 }

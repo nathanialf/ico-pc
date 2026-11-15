@@ -10,7 +10,14 @@
  * are skipped by their sizes.  The textures' patterns come from the rules
  * (below) on the state of the draws that use them; the meshes' size from the
  * placement matrix of the first draw of each (so the generated geometry
- * reaches the screen where the object was), never from the mesh. */
+ * reaches the screen where the object was), never from the mesh.
+ *
+ * The placement rules (rd_fixture.h; opt-in lines of a rule file): @lamps
+ * place generates each mesh a non-skinned draw puts into WORK2 about a point
+ * that lands on WORK2 (placeAt below: from that draw's placement matrix, the
+ * state's scissor and target size and the mesh's ordinal among them, nothing
+ * else); @fans off generates the CPU-projected prims drawn into WORK2 beside
+ * the target.  Neither reads a vertex. */
 #include "rd_fixture.h"
 
 #include <math.h>
@@ -90,9 +97,13 @@ static char *word(char **s)
     return w;
 }
 
-static bool parseRules(const char *text, Rule *out, uint32_t *n, char *why, size_t whySize)
+enum { PLACE_LAMPS = 1u << 0, PLACE_FANS_OFF = 1u << 1 };
+
+static bool parseRules(const char *text, Rule *out, uint32_t *n, uint32_t *place, char *why,
+                       size_t whySize)
 {
     *n = 0;
+    *place = 0;
     const char *p = text;
     int line = 0;
     while (*p) {
@@ -114,6 +125,21 @@ static bool parseRules(const char *text, Rule *out, uint32_t *n, char *why, size
         char *save = buf;
         char *tok = word(&save);
         if (!tok) {
+            continue;
+        }
+        if (tok[0] == '@') {
+            /* a placement rule: "@lamps place", "@fans off" */
+            const char *arg = word(&save);
+            if (strcmp(tok, "@lamps") == 0 && arg && strcmp(arg, "place") == 0 && !word(&save)) {
+                *place |= PLACE_LAMPS;
+            } else if (strcmp(tok, "@fans") == 0 && arg && strcmp(arg, "off") == 0 &&
+                       !word(&save)) {
+                *place |= PLACE_FANS_OFF;
+            } else {
+                snprintf(why, whySize, "rule line %d: no placement rule '%s %s'", line, tok,
+                         arg ? arg : "");
+                return false;
+            }
             continue;
         }
         if (*n >= RULES_MAX) {
@@ -175,6 +201,8 @@ typedef struct DMesh {
     int32_t sizeExp;
     bool sized;
     uint32_t bones;
+    bool placed;       /* @lamps place: generated about centre, not the origin */
+    int32_t centre[3]; /* in lattice steps 2^(sizeExp - 3) */
 } DMesh;
 
 typedef struct DFacing {
@@ -396,9 +424,9 @@ static void xf(const double m[4][4], const double v[4], double o[4])
  * corners reach at least 24 GS pixels from the origin's place on screen
  * through the draw's matrix (and the bone's for a skinned draw); 0 when the
  * origin is behind the eye or no k reaches */
-static int32_t sizeOf(const double M[4][4], const double (*B)[4])
+static int32_t sizeAt(const double M[4][4], const double (*B)[4], const double centre[3])
 {
-    const double zero[4] = {0, 0, 0, 1};
+    const double zero[4] = {centre[0], centre[1], centre[2], 1};
     double t[4], o[4];
     if (B) {
         xf(B, zero, t);
@@ -413,8 +441,8 @@ static int32_t sizeOf(const double M[4][4], const double (*B)[4])
         const double s = ldexp(1.0, k);
         double ext = 0.0;
         for (int a = 0; a < 3; a++) {
-            double v[4] = {0, 0, 0, 1}, p[4];
-            v[a] = s;
+            double v[4] = {centre[0], centre[1], centre[2], 1}, p[4];
+            v[a] += s;
             if (B) {
                 xf(B, v, t);
                 xf(M, t, p);
@@ -433,6 +461,118 @@ static int32_t sizeOf(const double M[4][4], const double (*B)[4])
         }
     }
     return 0;
+}
+
+static int32_t sizeOf(const double M[4][4], const double (*B)[4])
+{
+    const double origin[3] = {0, 0, 0};
+    return sizeAt(M, B, origin);
+}
+
+/* A v = b by Cramer's rule; false when A is singular or v is not finite */
+static bool solve3(double A[3][3], const double b[3], double v[3])
+{
+    const double det = A[0][0] * (A[1][1] * A[2][2] - A[1][2] * A[2][1]) -
+                       A[0][1] * (A[1][0] * A[2][2] - A[1][2] * A[2][0]) +
+                       A[0][2] * (A[1][0] * A[2][1] - A[1][1] * A[2][0]);
+    if (!isfinite(det) || fabs(det) < 1e-30) {
+        return false;
+    }
+    for (int k = 0; k < 3; k++) {
+        double T[3][3];
+        memcpy(T, A, sizeof(T));
+        for (int r = 0; r < 3; r++) {
+            T[r][k] = b[r];
+        }
+        v[k] = (T[0][0] * (T[1][1] * T[2][2] - T[1][2] * T[2][1]) -
+                T[0][1] * (T[1][0] * T[2][2] - T[1][2] * T[2][0]) +
+                T[0][2] * (T[1][0] * T[2][1] - T[1][1] * T[2][0])) /
+               det;
+        if (!isfinite(v[k])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/* @lamps place: where mesh number n (0, 1, ...: the meshes drawn into WORK2,
+ * in the order of their first such draw) is generated.  Read: the draw's
+ * placement matrix M (VU mem 16..19: model to GS pixels, x / w and y / w
+ * about 2048), the state's scissor (GS pixels of the target, inclusive) and
+ * the target's GS size.  The place on the target: the scissor's box cut in
+ * four each way, the meshes on its three inner columns and rows in turn,
+ *   X = 2048 - gsW / 2 + x0 + (x1 - x0 + 1) (1 + n mod 3) / 4
+ *   Y = 2048 - gsH / 2 + y0 + (y1 - y0 + 1) (1 + (n / 3) mod 3) / 4.
+ * The centre v is the model-space point that M sends to (X, Y) at the w of
+ * the model's origin (the object keeps its distance from the eye and moves
+ * across the picture; an origin behind the eye: at |w|, as far in front):
+ * the three linear equations
+ *   (Mx - X Mw) . (v, 1) = 0, (My - Y Mw) . (v, 1) = 0, Mw . (v, 1) = |w|
+ * (a matrix whose w does not depend on the position: the third is instead
+ * the plane through the origin across the line the first two give).
+ * The size k is sizeAt's about v; the centre is then rounded to the cube's
+ * lattice step 2^(k - 3) (so every vertex stays an exact float), which moves
+ * it by at most half a step, a sixteenth of the cube's half side.  False (the
+ * mesh keeps its origin) when the origin's w is 0, the equations are
+ * singular, the centre is not in front of the eye, or it is past
+ * RD_FX_PLACE_MAX steps. */
+static bool placeAt(const uint8_t *pay, const RdCmd *c, const RdStateBlock *st, uint32_t n,
+                    int32_t *sizeExp, int32_t centre[3])
+{
+    double M[4][4];
+    cols(pay + c->u[1] + sizeof(RdVuPayload) + 16 * 16, M);
+    /* the origin's w; an origin behind the eye: as far in front of it */
+    const double w0 = fabs(M[3][3]);
+    if (!(w0 > 1e-9) || st->gsW == 0 || st->gsH == 0) {
+        return false;
+    }
+    int32_t x0 = st->scissor[0], y0 = st->scissor[1], x1 = st->scissor[2], y1 = st->scissor[3];
+    x0 = x0 < 0 ? 0 : x0;
+    y0 = y0 < 0 ? 0 : y0;
+    x1 = x1 >= (int32_t)st->gsW ? (int32_t)st->gsW - 1 : x1;
+    y1 = y1 >= (int32_t)st->gsH ? (int32_t)st->gsH - 1 : y1;
+    if (x1 < x0 || y1 < y0) {
+        return false;
+    }
+    const double X =
+        2048.0 - (double)(st->gsW / 2u) + x0 + (double)(x1 - x0 + 1) * (1 + n % 3u) / 4.0;
+    const double Y =
+        2048.0 - (double)(st->gsH / 2u) + y0 + (double)(y1 - y0 + 1) * (1 + (n / 3u) % 3u) / 4.0;
+    double A[3][3], b[3], v[3];
+    for (int k = 0; k < 3; k++) {
+        A[0][k] = M[k][0] - X * M[k][3];
+        A[1][k] = M[k][1] - Y * M[k][3];
+        A[2][k] = M[k][3];
+    }
+    b[0] = -(M[3][0] - X * M[3][3]);
+    b[1] = -(M[3][1] - Y * M[3][3]);
+    b[2] = w0 - M[3][3];
+    if (!solve3(A, b, v)) {
+        /* w does not depend on the position (no perspective in M): the
+         * point of the line through (X, Y) nearest the model's origin */
+        A[2][0] = A[0][1] * A[1][2] - A[0][2] * A[1][1];
+        A[2][1] = A[0][2] * A[1][0] - A[0][0] * A[1][2];
+        A[2][2] = A[0][0] * A[1][1] - A[0][1] * A[1][0];
+        b[2] = 0.0;
+        if (!solve3(A, b, v)) {
+            return false;
+        }
+    }
+    const double wv = M[0][3] * v[0] + M[1][3] * v[1] + M[2][3] * v[2] + M[3][3];
+    if (!(wv > 1e-9)) {
+        return false;
+    }
+    const int32_t k = sizeAt((const double (*)[4])M, NULL, v);
+    const double step = ldexp(1.0, k - 3);
+    for (int a = 0; a < 3; a++) {
+        const double q = floor(v[a] / step + 0.5);
+        if (!(fabs(q) <= (double)RD_FX_PLACE_MAX)) {
+            return false;
+        }
+        centre[a] = (int32_t)q;
+    }
+    *sizeExp = k;
+    return true;
 }
 
 /* a VU draw's size from its block: the model matrix (mem 16..19), or for a
@@ -517,8 +657,10 @@ static bool isAdditive(uint8_t blend)
 
 /* the texture flags from every draw's state, the meshes' sizes and bones,
  * the grid and particle draws' sizes */
-static bool walk(DMap *m, RdFxBuf *exps, uint32_t *nexp)
+static bool walk(DMap *m, RdFxBuf *exps, uint32_t *nexp, uint32_t place, RdFxBuf *offs,
+                 uint32_t *placed, uint32_t *notPlaced, uint32_t *noff)
 {
+    const uint32_t work2 = (uint32_t)RD_TARGET_WORK2 + 1u; /* rd_target's handle */
     RdStateBlock st;
     memset(&st, 0, sizeof(st)); /* an older block: the fields after it 0, as loaded */
     memcpy(&st, m->p + m->headBytes - 2 * (size_t)rd_fx_state_bytes(m->ver),
@@ -558,10 +700,25 @@ static bool walk(DMap *m, RdFxBuf *exps, uint32_t *nexp)
                 f |= d->tcc == 0 ? C_TCC_RGB : 0u;
                 m->tex[t].flags |= f;
             }
+            if ((place & PLACE_FANS_OFF) && how == C_SCREEN && st.color == work2) {
+                rd_fx_put32(offs, c.u[0]); /* the sun's fans: beside the target */
+                (*noff)++;
+            }
             if (c.type == RDC_MESH || c.type == RDC_SKINNED) {
                 const int k = meshIndex(m, c.u[0]);
                 if (k >= 0) {
                     DMesh *d = &m->mesh[k];
+                    if ((place & PLACE_LAMPS) && c.type == RDC_MESH && st.color == work2 &&
+                        !d->placed) {
+                        /* a lamp: about a point on WORK2 (this draw's
+                         * matrix, over the size an earlier draw gave) */
+                        if (placeAt(pay, &c, &st, *placed, &d->sizeExp, d->centre)) {
+                            d->placed = d->sized = true;
+                            (*placed)++;
+                        } else {
+                            (*notPlaced)++;
+                        }
+                    }
                     if (!d->sized) {
                         d->sizeExp = drawSize(pay, &c);
                         d->sized = true;
@@ -609,19 +766,30 @@ bool rd_fixture_make(const uint8_t *dump, size_t n, const char *rules, RdFixture
 {
     memset(fx, 0, sizeof(*fx));
     static Rule rl[RULES_MAX];
-    uint32_t nrules = 0;
-    if (!parseRules(rules ? rules : rd_fx_default_rules, rl, &nrules, why, whySize)) {
+    uint32_t nrules = 0, place = 0;
+    if (!parseRules(rules ? rules : rd_fx_default_rules, rl, &nrules, &place, why, whySize)) {
         return false;
     }
     DMap m;
     if (!mapDump(dump, n, &m, why, whySize)) {
         return false;
     }
-    RdFxBuf exps = {0};
-    uint32_t nexp = 0;
-    if (!walk(&m, &exps, &nexp)) {
+    RdFxBuf exps = {0}, offs = {0};
+    uint32_t nexp = 0, placed = 0, notPlaced = 0, noff = 0;
+    if (!walk(&m, &exps, &nexp, place, &offs, &placed, &notPlaced, &noff) || offs.bad) {
         snprintf(why, whySize, "a command's payload range does not hold");
         rd_fx_free(&exps);
+        rd_fx_free(&offs);
+        mapFree(&m);
+        return false;
+    }
+    if (((place & PLACE_LAMPS) && placed == 0) || ((place & PLACE_FANS_OFF) && noff == 0)) {
+        snprintf(why, whySize,
+                 "a placement rule matched nothing (@lamps place: %u meshes placed, %u not; "
+                 "@fans off: %u prims)",
+                 placed, notPlaced, noff);
+        rd_fx_free(&exps);
+        rd_fx_free(&offs);
         mapFree(&m);
         return false;
     }
@@ -718,6 +886,22 @@ bool rd_fixture_make(const uint8_t *dump, size_t n, const char *rules, RdFixture
         }
         rd_fx_put32(&sk, nexp);
         rd_fx_put(&sk, exps.p, exps.n);
+        if (placed || noff) {
+            /* the placement section (rd_fixture.h) */
+            rd_fx_put32(&sk, RD_FX_PLACE_TAG);
+            rd_fx_put32(&sk, placed);
+            for (uint32_t i = 0; i < m.nm; i++) {
+                const DMesh *d = &m.mesh[i];
+                if (d->placed) {
+                    rd_fx_put32(&sk, d->id);
+                    for (int a = 0; a < 3; a++) {
+                        rd_fx_put32(&sk, (uint32_t)d->centre[a]);
+                    }
+                }
+            }
+            rd_fx_put32(&sk, noff);
+            rd_fx_put(&sk, offs.p, offs.n);
+        }
         ok = !sk.bad;
         if (!ok) {
             snprintf(why, whySize, "out of memory");
@@ -772,6 +956,12 @@ bool rd_fixture_make(const uint8_t *dump, size_t n, const char *rules, RdFixture
                                rd_fx_pattern_name(q), perPattern[q]);
             }
         }
+        if (place && at > 0 && (size_t)at < reportSize) {
+            snprintf(report + at, reportSize - (size_t)at,
+                     "; placement: %u meshes drawn into WORK2 generated on it (%u kept their "
+                     "origin), %u prims drawn into WORK2 generated beside it",
+                     placed, notPlaced, noff);
+        }
     }
     if (!ok) {
         rd_fixture_free(fx);
@@ -779,6 +969,7 @@ bool rd_fixture_make(const uint8_t *dump, size_t n, const char *rules, RdFixture
     rd_fx_free(&sk);
     rd_fx_free(&lists);
     rd_fx_free(&exps);
+    rd_fx_free(&offs);
     free(k.out);
     free(k.kept);
     free(k.gen);
