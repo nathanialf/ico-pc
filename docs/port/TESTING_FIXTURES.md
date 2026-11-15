@@ -200,9 +200,11 @@ of a rule file chooses otherwise:
 
 - `@water place`: every mesh that a non-skinned draw puts into a block is generated about a point
   on the block, the n-th on the block scissor's inner columns and rows as `@lamps place` places
-  WORK2's; every mesh that a non-skinned draw puts into SCENE with FBA on (the writer of the
-  alpha bit the DATE draws test) about a point on SCENE, the n-th at grid point (n + 4) mod 9 of
-  the same nine, so the first lies on the scissor's middle; every CPU-projected prim with ST and Q
+  WORK2's; every mesh that a non-skinned draw puts into SCENE with FBA on, in a list that draws into
+  a block (the writer of the alpha bit the DATE draws test: the puddle's list clears SCENE's alpha
+  before its surface, so an FBA mesh of another list sets no bit they read), about a point on
+  SCENE, the n-th such at grid point (n + 4) mod 9 of the same nine, so the first lies on the
+  scissor's middle; every CPU-projected prim with ST and Q
   whose texture is a block is generated as the ribbon, its S running 12/16 to 27/16 along the
   ribbon's columns where its draw reads S on REPEAT, its T 6/8 to 15/8 down the rows where it
   reads T on REPEAT (an axis on CLAMP keeps the ribbon's STs): the reads cross the block's period,

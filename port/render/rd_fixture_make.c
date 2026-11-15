@@ -667,6 +667,7 @@ static bool isAdditive(uint8_t blend)
  * rd__block_keeps_repeat: the reads the open border leaves on REPEAT) */
 typedef struct Water {
     uint32_t onBlock, onScene, notPlaced; /* meshes placed on a block, on SCENE; refused */
+    bool blockList[RD_LIST_COUNT];        /* the lists with a TARGET of a block */
     RdFxBuf wraps;                        /* (payload offset, axes) per prim read across */
     uint32_t nwrap;
 } Water;
@@ -684,16 +685,19 @@ static bool isBlock(const DMap *m, uint32_t id)
     return false;
 }
 
-/* @water place on one draw: a mesh into a block about a point on the block
- * (placeAt with the block's scissor and size, the n-th such mesh on the
- * scissor's inner columns and rows in @lamps place's order); a mesh into
- * SCENE with FBA on about a point on SCENE (the n-th at grid point
- * (n + 4) mod 9: the first on the scissor's middle, where the generated
- * ribbon of a prim reading the block lies); a CPU-projected prim with ST and
+/* @water place on one draw (of list l): a mesh into a block about a point
+ * on the block (placeAt with the block's scissor and size, the n-th such
+ * mesh on the scissor's inner columns and rows in @lamps place's order); a
+ * mesh into SCENE with FBA on, in a list that draws into a block (the
+ * puddle's own list, whose full-frame clear of SCENE's alpha comes before
+ * its surface: an FBA mesh of another list sets no bit the DATE draws
+ * read), about a point on SCENE (the n-th such at grid point (n + 4) mod 9:
+ * the first on the scissor's middle, where the generated ribbon of a prim
+ * reading the block lies); a CPU-projected prim with ST and
  * Q whose texture is a block: its payload offset and the axes its draw
  * reads on REPEAT (none: not marked) */
-static void waterDraw(const DMap *m, const uint8_t *pay, const RdCmd *c, const RdStateBlock *st,
-                      uint32_t how, DMesh *d, Water *wa)
+static void waterDraw(const DMap *m, int l, const uint8_t *pay, const RdCmd *c,
+                      const RdStateBlock *st, uint32_t how, DMesh *d, Water *wa)
 {
     const uint32_t scene = (uint32_t)RD_TARGET_SCENE + 1u; /* rd_target's handle */
     if (how == C_SCREEN && c->b[2] == 0 && st->ds.texEnabled && st->tex) {
@@ -713,7 +717,7 @@ static void waterDraw(const DMap *m, const uint8_t *pay, const RdCmd *c, const R
         return;
     }
     const bool block = isBlock(m, st->color);
-    const bool alpha = !block && st->color == scene && st->ds.fba;
+    const bool alpha = !block && wa->blockList[l] && st->color == scene && st->ds.fba;
     if (!block && !alpha) {
         return;
     }
@@ -739,6 +743,12 @@ static bool walk(DMap *m, RdFxBuf *exps, uint32_t *nexp, uint32_t place, RdFxBuf
     const uint8_t *pay = m->p + m->payOff;
     uint32_t *seen = NULL, nseen = 0;
     bool ok = true;
+    for (int l = 0; (place & PLACE_WATER) && l < RD_LIST_COUNT; l++) {
+        for (uint32_t i = 0; i < m->listN[l]; i++) {
+            const RdCmd c = cmdAt(m, l, i);
+            wa->blockList[l] = wa->blockList[l] || (c.type == RDC_TARGET && isBlock(m, c.u[0]));
+        }
+    }
     for (int l = 0; ok && l < RD_LIST_COUNT; l++) {
         for (uint32_t i = 0; ok && i < m->listN[l]; i++) {
             const RdCmd c = cmdAt(m, l, i);
@@ -776,7 +786,7 @@ static bool walk(DMap *m, RdFxBuf *exps, uint32_t *nexp, uint32_t place, RdFxBuf
                 (*noff)++;
             }
             if ((place & PLACE_WATER) && how == C_SCREEN) {
-                waterDraw(m, pay, &c, &st, how, NULL, wa);
+                waterDraw(m, l, pay, &c, &st, how, NULL, wa);
             }
             if (c.type == RDC_MESH || c.type == RDC_SKINNED) {
                 const int k = meshIndex(m, c.u[0]);
@@ -794,7 +804,7 @@ static bool walk(DMap *m, RdFxBuf *exps, uint32_t *nexp, uint32_t place, RdFxBuf
                         }
                     }
                     if (place & PLACE_WATER) {
-                        waterDraw(m, pay, &c, &st, how, d, wa);
+                        waterDraw(m, l, pay, &c, &st, how, d, wa);
                     }
                     if (!d->sized) {
                         d->sizeExp = drawSize(pay, &c);

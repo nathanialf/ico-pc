@@ -227,9 +227,10 @@ bool rd_fixture_check(const RdFixture *fx, char *why, size_t whySize, char *stat
  *                  puts into a block (a temporary target the dump marks a
  *                  block, smaller than the frame) is generated about a point
  *                  on the block, as @lamps place does on WORK2; every mesh a
- *                  non-skinned draw puts into SCENE with FBA on (the alpha
- *                  bit the DATE draws over the frame test) about a point on
- *                  SCENE, the first on the scissor's middle; every
+ *                  non-skinned draw puts into SCENE with FBA on in a list
+ *                  that draws into a block (the alpha bit the DATE draws
+ *                  over the frame test) about a point on SCENE, the first
+ *                  on the scissor's middle; every
  *                  CPU-projected prim (ST with Q) whose texture is a block
  *                  reads it across the block's period on each axis its
  *                  draw reads on REPEAT.  Read from each draw alone: its
