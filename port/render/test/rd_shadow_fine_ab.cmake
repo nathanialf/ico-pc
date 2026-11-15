@@ -1,10 +1,11 @@
 # rd_shadow_fine_ab: the shadow's levels at the scene's scale above 1x
 # (port/render/rd_shadowres.c), the default, against the PS2's sizes
-# (ICO_RD_SHADOW_FINE=0, the tests' switch), on the dumps of -DLIST
-# (tools/shadow_fine_dumps.txt: a listed dump that is absent FAILS; its second
-# field the --nop spec of its three shadow composites, its third the settings
-# it runs at).  Each run is rd_replay_tool's --pass-dump with --stats at a
-# setting:
+# (ICO_RD_SHADOW_FINE=0, the tests' switch), on the fixtures of -DLIST
+# (port/render/test/fixtures/lists/shadow_fine.txt: a fixture's name, the --nop
+# spec of its three shadow composites, the settings it runs at; the frames are
+# expanded into OUT/fixtures, docs/port/TESTING_FIXTURES.md; a listed fixture
+# that is absent FAILS).  Each run is rd_replay_tool's --pass-dump with --stats
+# at a setting:
 #   adreno   the issue 123 tablet's path (ICO_VK_FAKE_PASS_ROW=qualcomm
 #            ICO_RD_VOLUME_FS=1 ICO_RD_COMP_SPEC=1), Custom 3x, Full height,
 #            Full pixel, presented 3048x2032 (levels at 3 x 3);
@@ -29,17 +30,19 @@
 #   force    e1x with ICO_RD_SHADOW_FINE=force against e1x's default (the fine
 #            chain at 1x: S 1 on both axes);
 #   gl1x, gl2x  -DBACKEND=opengl: Enhanced 1x and 2x on OpenGL (llvmpipe), on
-#            every dump.
-# The checks, every expectation from the code (unverified until the first run):
-#   1. the PS2's sizes are v0.11.6's picture: at every setting but force and
-#      the OpenGL ones, every PNG the golden list (-DGOLDENS,
-#      tools/shadow_fine_goldens.txt: v0.11.6's rd_replay_tool at the same
-#      settings on this machine's lavapipe) names for the dump has its SHA-256;
+#            every fixture.
+# The checks, every expectation from the code:
+#   1. the PS2's sizes are v0.11.6's picture of the fixture: at every setting
+#      but force and the OpenGL ones, every PNG the golden list (-DGOLDENS,
+#      port/render/test/fixtures/lists/shadow_fine_goldens.txt: v0.11.6's
+#      rd_replay_tool at the same settings on the expanded fixtures, lavapipe)
+#      names for the fixture has its SHA-256, and every golden of the list was
+#      matched (a golden no run asked for fails);
 #   2. at 1x (e1x, o1x, gl1x) the default is the PS2's sizes: every PNG the
 #      same bytes, the same draws and passes, "shadow levels: 0 shadows at the
 #      scene's scale, 0 passes, 0 at the PS2's size";
 #   3. above 1x (adreno, phone, msaa, bspline, owner, tall, pixel, gl2x), the
-#      default against the PS2's sizes: on every dump exactly one shadow at the
+#      default against the PS2's sizes: on every fixture exactly one shadow at the
 #      scene's scale and none drawn at the PS2's size (no reason in the stats
 #      line: a silent fallback fails here);
 #      its passes, under the cuts, 3 steps + 3 tents + 1 full-size count where
@@ -51,17 +54,28 @@
 #      as the setting expects (3x3, or 1x3 at tall); the present (or SCENE)
 #      not the same bytes; and with lists 4-12 left out (SCENE right after
 #      list 3) every SCENE texel the fine levels change lies within D of a
-#      texel the PS2's levels darken, and the darkness (the RGB levels the
-#      composites take away, summed) within 10 % of the PS2's
-#      (shadow_fine_check.py).  The bound is the PS2 chain's own spread: its
-#      darkness depends on where the level grid falls against the shadow, and
-#      the fine chain is that picture averaged over the grid's placements.
-#      Measured on the owner's gate frame (build-host/tmp/v0117/shadowres/r7/
-#      probe.c on its dumped count): the count moved by whole texels changes
-#      the PS2 chain's level-1 alpha by up to 7.6 % and its three composites'
-#      summed darkening by up to 9.2 % (composite 2 alone 17.5 %), the dumped
-#      placement among the darkest; the fine chain sat 5.4 % under it (rc5's
-#      run: 0.944..1.002 over the dumps; a half-plane edge, the model: 0.2 %);
+#      texel the PS2's levels darken (shadow_fine_check.py; the darkness ratio
+#      it prints is not judged: below);
+#   3b. above 1x the levels themselves: rd_replay_tool --fine-check on the
+#      default (a replay of its own) reads back the count and each level's
+#      step and tent and compares them with the CPU reference
+#      (rd_shadowres_math.c) on the same input: every tent texel the
+#      reference's bytes (the tent is whole-number arithmetic), every step
+#      texel the reference's byte or, where the reference's value lies within
+#      the float bound of a rounding boundary, the byte beside it
+#      (tools/rd_replay_fine.c derives the bound from the shader); the line
+#      "fine check: 3 levels, 0 step texels outside the rule, 0 tent texels
+#      not the reference's: ok".  This replaces a bound on the picture's
+#      darkness against the PS2-size chain (10 % until the fixtures): the
+#      PS2-size chain's darkness on a shadow a few texels thin swings with
+#      where its 2:1 grid falls (the reference on a bar 2 GS rows tall moved
+#      over 16 rows: 0.73 to 1.36 of its mean; 6 rows: 0.91 to 1.08; 24 rows:
+#      0.985 to 1.011; the fine chain 0.92 to 1.06, 0.99 to 1.02 and 0.997 to
+#      1.004 of its own, its mean 0.974, 0.995 and 0.999 of the PS2 chain's
+#      mean), and the composites darken only the texels whose destination
+#      alpha passes DATE, so one picture's ratio is bounded for broad shadows
+#      on broad surfaces alone (the real frames: 0.944 to 1.002; the fixtures'
+#      generated slivers: 0.84 to 1.03);
 #   4. bspline: also the default with [dev] shadow_bspline against the
 #      default without it at 2x, every PNG (the B-spline does nothing to a
 #      fine level);
@@ -80,47 +94,35 @@
 #      step, 1 below).  A level off by 1 changes a composite's As by at most 1
 #      ((a w) >> 7, w <= 128), so SCENE by at most ceil(255 / 128) = 2 a
 #      composite, 6 over the three (rc5's run: largest 4, 1011 pixels).
-# No device: SKIP (77).  -DTOOL -DLIST -DGOLDENS -DPY -DCHECK -DDIFF -DOUT -DBACKEND
-if(NOT IS_DIRECTORY "/primary/dev/ico-dumps")
-  message(STATUS "SKIP: no dump folder on this machine (/primary/dev/ico-dumps): the list's dumps are the build machine's")
-  return()
-endif()
+# The path ran (rd_fixture_require): on the default run of every pair above
+# 1x, and on the forced run, the fixture's declared shadow_levels and
+# shadow_level_texels (the levels drawn at the scene's scale); a fixture no
+# such run checked fails.
+# No device: SKIP (77).  -DTOOL -DFIXTURE_TOOL -DFIXTURES -DFIXTURE_HELPERS
+# -DLIST -DGOLDENS -DPY -DCHECK -DDIFF -DOUT -DBACKEND
+include("${FIXTURE_HELPERS}")
 set(failures 0)
-if(NOT EXISTS "${LIST}")
-  message(FATAL_ERROR "rd_shadow_fine_ab: no dump list ${LIST}")
-endif()
-get_filename_component(listDir "${LIST}" DIRECTORY)
-file(STRINGS "${LIST}" lines)
+rd_fixture_list("${LIST}" names)
 set(dumps "")
-foreach(l IN LISTS lines)
-  string(STRIP "${l}" l)
-  if(l STREQUAL "" OR l MATCHES "^#")
-    continue()
-  endif()
-  string(REGEX REPLACE "[ \t]+" ";" fields "${l}")
+foreach(name IN LISTS names)
+  string(REGEX REPLACE "[ \t]+" ";" fields "${RDFX_FIELDS_${name}}")
   list(LENGTH fields nf)
-  list(GET fields 0 path)
-  if(NOT IS_ABSOLUTE "${path}")
-    set(path "${listDir}/${path}")
-  endif()
-  if(nf LESS 3)
-    message(SEND_ERROR "${path}: the list names no --nop spec or settings for it")
+  if(NOT nf EQUAL 2)
+    message(SEND_ERROR "${name}: the list names no --nop spec or settings for it")
     math(EXPR failures "${failures} + 1")
     continue()
   endif()
-  if(NOT EXISTS "${path}")
-    message(SEND_ERROR "${path}: no such dump (a listed dump must exist)")
-    math(EXPR failures "${failures} + 1")
-    continue()
-  endif()
+  rd_fixture_expand(${name} "${OUT}/fixtures" path)
   list(APPEND dumps "${path}")
-  list(GET fields 1 comp_${path})
-  list(GET fields 2 sets)
+  set(name_${path} "${name}")
+  set(checked_${name} 0)
+  list(GET fields 0 comp_${path})
+  list(GET fields 1 sets)
   string(REPLACE "," ";" sets_${path} "${sets}")
 endforeach()
 list(LENGTH dumps ndumps)
 
-# the goldens: "<dump file name> <setting> <png> <sha256>"
+# the goldens: "<fixture> <setting> <png> <sha256>"
 set(goldenKeys "")
 if(EXISTS "${GOLDENS}")
   file(STRINGS "${GOLDENS}" glines)
@@ -187,10 +189,11 @@ set(fineRe "stats: shadow levels: ([0-9]+) shadows at the scene's scale, ([0-9]+
 set(oneRe "stats: shadow count: ([0-9]+) in one draw")
 set(sizeRe "shadow levels: at the scene's scale: SHADOW0 [0-9]+x[0-9]+, SHADOW1 [0-9]+x[0-9]+, SHADOW2 [0-9]+x[0-9]+ \\(([0-9.]+)x([0-9.]+) texels a GS pixel\\) from the count's ([0-9.]+)x([0-9.]+) texels a GS pixel")
 set(diffRe "png_level_diff: [0-9]+ x [0-9]+, [0-9]+ channels: [0-9]+ equal, [0-9]+ one level apart, ([0-9]+) more \\(largest ([0-9]+)\\)")
+set(fineOkRe "fine check: 3 levels, 0 step texels outside the rule, 0 tent texels not the reference's: ok")
 set(nopRest "4:0-1000000,5:0-1000000,6:0-1000000,7:0-1000000,8:0-1000000,9:0-1000000,10:0-1000000,11:0-1000000,12:0-1000000")
 
 # one run: -> ok_<name> draws_<name> passes_<name> chains_<name> fpasses_<name>
-# refused_<name> one_<name> err_<name> (the parent's scope)
+# refused_<name> one_<name> err_<name> out_<name> (the parent's scope)
 function(sf_run name dump dir envs)
   set(args ${ARGN})
   file(REMOVE_RECURSE "${dir}")
@@ -199,6 +202,7 @@ function(sf_run name dump dir envs)
                           "${TOOL}" "${dump}" - --pass-dump "${dir}" --stats ${args}
                   RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
   set(err_${name} "${err}" PARENT_SCOPE)
+  set(out_${name} "${out}" PARENT_SCOPE)
   if(rc EQUAL 77)
     message(STATUS "SKIP: no device: ${err}")
     set(ok_${name} SKIP PARENT_SCOPE)
@@ -246,8 +250,8 @@ function(sf_same what a b)
   endforeach()
 endfunction()
 
-# the golden PNGs of (dump, setting) in dir; none listed fails (the dump list
-# and the goldens drifted apart)
+# the golden PNGs of (fixture, setting) in dir; none listed fails (the fixture
+# list and the goldens drifted apart)
 function(sf_golden what dumpName s dir)
   list(FIND goldenKeys "${dumpName}__${s}" at)
   if(at LESS 0)
@@ -255,6 +259,7 @@ function(sf_golden what dumpName s dir)
     set(sfFail TRUE PARENT_SCOPE)
     return()
   endif()
+  set(goldenUsed ${goldenUsed} "${dumpName}__${s}" PARENT_SCOPE)
   set(n 0)
   foreach(e IN LISTS gold_${dumpName}__${s})
     string(REGEX MATCH "^([^=]+)=(.*)$" m "${e}")
@@ -278,9 +283,10 @@ endfunction()
 set(compared 0)
 set(acted 0)
 set(index 0)
+set(goldenUsed "")
 foreach(dump IN LISTS dumps)
   math(EXPR index "${index} + 1")
-  get_filename_component(dumpName "${dump}" NAME)
+  set(dumpName "${name_${dump}}")
   if("${BACKEND}" STREQUAL "opengl")
     set(settings gl1x gl2x)
   else()
@@ -301,6 +307,8 @@ foreach(dump IN LISTS dumps)
         continue()
       endif()
       math(EXPR compared "${compared} + 1")
+      rd_fixture_require(${dumpName} "${out_f}" shadow_levels shadow_level_texels)
+      math(EXPR checked_${dumpName} "${checked_${dumpName}} + 1")
       math(EXPR wantAll "${passes_d} + 6")
       if(NOT chains_f EQUAL 1 OR NOT fpasses_f EQUAL 6 OR NOT refused_f EQUAL 0 OR
          NOT passes_f EQUAL wantAll)
@@ -361,6 +369,8 @@ foreach(dump IN LISTS dumps)
     else()
       # 3. above 1x
       math(EXPR compared "${compared} + 1")
+      rd_fixture_require(${dumpName} "${out_h}" shadow_levels shadow_level_texels)
+      math(EXPR checked_${dumpName} "${checked_${dumpName}} + 1")
       set(full 0)
       if(one_h GREATER 0)
         set(full 1)
@@ -422,15 +432,30 @@ foreach(dump IN LISTS dumps)
         else()
           execute_process(COMMAND "${PY}" -I "${CHECK}" "${base}-ps2-a/SCENE.png"
                                   "${base}-ps2-b/SCENE.png" "${base}-fine-a/SCENE.png"
-                                  --scale "${scale}" --dark-tol 0.10
+                                  --scale "${scale}" --dark-tol none
                           RESULT_VARIABLE crc OUTPUT_VARIABLE cout ERROR_VARIABLE cerr)
           message(STATUS "${dumpName} ${s}: ${cout}${cerr}")
           if(NOT crc EQUAL 0)
-            message(SEND_ERROR "${dumpName} ${s}: the change is not confined to the shadow or "
-                               "its darkness moved (exit ${crc}): ${cout}${cerr}")
+            message(SEND_ERROR "${dumpName} ${s}: the change is not confined to the shadow "
+                               "(exit ${crc}): ${cout}${cerr}")
             set(sfFail TRUE)
           endif()
         endif()
+      endif()
+      # 3b. the levels against the CPU reference on the same count
+      execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${env_${s}}
+                              "${TOOL}" "${dump}" "${base}-finecheck.png" --fine-check
+                              ${args_${s}}
+                      RESULT_VARIABLE frc OUTPUT_VARIABLE fout ERROR_VARIABLE ferr)
+      string(REPLACE ";" "," fflat "${fout}")
+      string(REGEX MATCHALL "fine check: [^\n]*" flines "${fflat}")
+      foreach(fl IN LISTS flines)
+        message(STATUS "${dumpName} ${s}: ${fl}")
+      endforeach()
+      if(NOT frc EQUAL 0 OR NOT fflat MATCHES "${fineOkRe}")
+        message(SEND_ERROR "${dumpName} ${s}: the levels are not the CPU reference's (exit "
+                           "${frc}):\n${fout}\n${ferr}")
+        set(sfFail TRUE)
       endif()
       # 6. the cuts against the chain without them (ICO_RD_SHADOW_FINE_CUTS=0:
       # nine passes over every texel): every PNG the same bytes, its passes
@@ -486,10 +511,28 @@ foreach(dump IN LISTS dumps)
   endforeach()
 endforeach()
 
+foreach(name IN LISTS names)
+  if(DEFINED checked_${name} AND checked_${name} EQUAL 0)
+    message(SEND_ERROR "${name}: no setting above 1x ran it: its properties were never checked")
+    math(EXPR failures "${failures} + 1")
+  endif()
+endforeach()
+# every golden matched: one no run asked for is a drifted list
+if(NOT "${BACKEND}" STREQUAL "opengl")
+  list(REMOVE_DUPLICATES goldenKeys)
+  foreach(k IN LISTS goldenKeys)
+    list(FIND goldenUsed "${k}" at)
+    if(at LESS 0)
+      message(SEND_ERROR "${GOLDENS}: the goldens of ${k} were asked for by no run")
+      math(EXPR failures "${failures} + 1")
+    endif()
+  endforeach()
+endif()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(failures GREATER 0)
-  message(FATAL_ERROR "rd_shadow_fine_ab: ${failures} failures over ${ndumps} dumps")
+  message(FATAL_ERROR "rd_shadow_fine_ab: ${failures} failures over ${ndumps} fixtures")
 endif()
 if(compared EQUAL 0 OR acted EQUAL 0)
   message(FATAL_ERROR "rd_shadow_fine_ab: ${compared} pairs compared, the fine levels acted in ${acted}")
 endif()
-message(STATUS "rd_shadow_fine_ab: ${compared} pairs over ${ndumps} dumps, the fine levels acted in ${acted}")
+message(STATUS "rd_shadow_fine_ab: ${compared} pairs over ${ndumps} fixtures, the fine levels acted in ${acted}")

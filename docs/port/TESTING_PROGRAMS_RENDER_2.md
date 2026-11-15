@@ -475,9 +475,10 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   first; the title's WHOLE, LAMPS and motion-blurred DARK frames and the gameplay dumps none at the
   settings marked); at least one fill drawn in list 11's pass over the list (desk or gl). No device:
   SKIP.
-- `rd_date_cut_ab.cmake` (`rd_date_cut_ab`, `rd_date_cut_ab_gl`): the dumps of
-  `tools/date_cut_dumps.txt` (machine-local; a listed dump that is absent FAILS, a glob that matches
-  none too) with `ICO_RD_DATE_CUT=0` and `1`, `--pass-dump --stats`, under `ICO_RD_BLEND=fixed`,
+- `rd_date_cut_ab.cmake` (`rd_date_cut_ab`, `rd_date_cut_ab_gl`): the fixtures of
+  `port/render/test/fixtures/lists/date_cut.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md); each
+  line a fixture and the passes the cut takes on it, re-derived from a run of the fixture; a listed
+  fixture that is absent FAILS) with `ICO_RD_DATE_CUT=0` and `1`, `--pass-dump --stats`, under `ICO_RD_BLEND=fixed`,
   `ICO_RD_STORE_PLAN=1`, `ICO_RD_STORE_POISON=1`, `ICO_RD_DATE_PATH=snapshot`,
   `ICO_RD_VU_PREPASS=0`, `ICO_RD_DATE_ONE=0` (with one DATE set-up for the composites the cut has
   no run on them; `rd_date_one_ab` checks the two together), at the Mali-G52's setting (1x, 21:9, 1612x720; `ICO_VK_FAKE_LIMITS=mali`,
@@ -487,9 +488,11 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   twin the Mali's setting on OpenGL (llvmpipe).
   Each pair: every PNG byte for byte, the same draws, passes, snapshots, colour and copy MB; the
   off run cuts nothing, the on run begins no pass again, cuts the passes the list names (2 for the
-  composites) or at least one where it takes two snapshots, and its depth and stencil MB loaded and
+  composites), and its depth and stencil MB loaded and
   stored each fall by 0.8 to 1.0 of the "at most" its stats line names; Vulkan also `--keys` at the
-  Mali's present size without an aspect: the cut adds no key the start-up set lacks. No device: SKIP.
+  Mali's present size without an aspect: the cut adds no key the start-up set lacks. The path ran:
+  on the on run of every pair the fixture's declared `date_snapshots`, and `date_cut_passes` where
+  the cut acts (not at the phone's setting); a fixture no setting could show fails. No device: SKIP.
 - `rd_date_one_test.c` (`rd_date_one`, lavapipe, 77 without a device after its CPU cases): one
   DATE set-up for the shadow composites (`rd_date_one.c`, `rd_date_one.h`) and the empty
   composites (`rd_shadow_box.c` `rd__shadow_box_empty_skip`). CPU: the bound and the group rule on
@@ -629,19 +632,28 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   render area over 200 pictures of moving boxes (0 outside each box, the draw's bytes inside, the
   area cleared alone or the whole); the
   10 s clause and the `--stats` words. The pure half (`rd_shadowres_math.c`) links alone.
-- `rd_shadow_fine_ab.cmake` (`rd_shadow_fine_ab`, `rd_shadow_fine_ab_gl`): the dumps of
-  `tools/shadow_fine_dumps.txt` (machine-local; a listed dump that is absent FAILS: issue 123's
-  three main gate frames, the owner's three), the default against `ICO_RD_SHADOW_FINE=0`, at the
-  settings each dump's line names (the tablet's 3x path, Enhanced and Original at 1x, the phone's
+- `rd_shadow_fine_ab.cmake` (`rd_shadow_fine_ab`, `rd_shadow_fine_ab_gl`): the fixtures of
+  `port/render/test/fixtures/lists/shadow_fine.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md); a
+  listed fixture that is absent FAILS: issue 123's three main gate frames, the owner's three and
+  three more of his from a later build), the default against `ICO_RD_SHADOW_FINE=0`, at the
+  settings each fixture's line names (the tablet's 3x path, Enhanced and Original at 1x, the phone's
   4.10 x 2.41, MSAA 4x at 2x, the B-spline at 2x, the owner's Resolution window 2.8125 x 2.41071, 1 x 2,
   the owner's Pixel as its own settings run it (2364x1080 over the 848-wide frame, Full height, Full pixel,
   anisotropic: 2.79 x 2.41) on his two main gate captures, the forced chain at 1x; the `_gl` twin 1x
   and 2x on OpenGL): `=0` every PNG the goldens'
-  (`tools/shadow_fine_goldens.txt`); at 1x the default the same bytes, passes and draws; above 1x
-  one shadow at the scene's scale and none at the PS2's size on every dump (any reason in the stats
-  line fails), its 9 or 10 passes and 9 draws and nothing else, the
+  (`port/render/test/fixtures/lists/shadow_fine_goldens.txt`: the release before's pictures of the
+  fixtures, every golden of the list matched); at 1x the default the same bytes, passes and draws; above 1x
+  one shadow at the scene's scale and none at the PS2's size on every fixture (any reason in the stats
+  line fails; the path ran: the fixture's declared `shadow_levels` and `shadow_level_texels` on the
+  default run, and on the forced run at 1x), its 9 or 10 passes and 9 draws and nothing else, the
   levels' scale the setting's, the change confined (with lists 4-12 left out) to within reach of
-  the texels the PS2's levels darken and the darkness within 10 % (the PS2-size chain's own spread over the level grid's placements: up to 9.2 % on the owner's gate frame; `test/shadow_fine_check.py`), the
+  the texels the PS2's levels darken (`test/shadow_fine_check.py`; the darkness ratio it prints is
+  not judged: the PS2-size chain's darkness on a shadow a few texels thin swings with where its 2:1
+  grid falls, 0.73 to 1.36 of its mean for a bar 2 GS rows tall, and the composites darken only the
+  texels DATE lets them), the levels themselves the CPU reference's on the same count
+  (`rd_replay_tool --fine-check`, `tools/rd_replay_fine.c`: every tent texel the reference's bytes,
+  every step texel the reference's byte or the one beside it where the value lies within the float
+  bound of a rounding boundary), the
   B-spline doing nothing to it, the cuts against `ICO_RD_SHADOW_FINE_CUTS=0` every PNG the same
   bytes (6 passes against 9), three replays in a row with and without the cuts the same presented
   bytes; the forced chain at 1x within a level of the default on SCENE

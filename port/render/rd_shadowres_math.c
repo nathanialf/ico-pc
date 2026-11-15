@@ -135,8 +135,8 @@ static void pointAt(const uint8_t *src, uint32_t sw, uint32_t sh, const RdSrStep
     }
 }
 
-void rd_sr_step_texel(const uint8_t *src, uint32_t sw, uint32_t sh, const RdSrStep *p, uint32_t mx,
-                      uint32_t my, uint8_t out[4])
+void rd_sr_step_value(const uint8_t *src, uint32_t sw, uint32_t sh, const RdSrStep *p, uint32_t mx,
+                      uint32_t my, float val[4])
 {
     const float a[2] = {(float)mx * p->kx + p->ax, (float)my * p->ky + p->ay};
     const float fx = p->fx, fy = p->fy;
@@ -164,9 +164,23 @@ void rd_sr_step_texel(const uint8_t *src, uint32_t sw, uint32_t sh, const RdSrSt
         pointAt(src, sw, sh, p, a[0] + p->sx, a[1] + p->sy, fx * fy, sum);
     }
     for (int ch = 0; ch < 4; ch++) {
-        const uint32_t t = (uint32_t)floorf(sum[ch] * 255.0f + 0.5f);
-        const uint32_t o = (t * p->col[ch]) >> 7;
-        out[ch] = (uint8_t)(o > 255u ? 255u : o);
+        val[ch] = sum[ch] * 255.0f;
+    }
+}
+
+uint8_t rd_sr_step_byte(uint32_t t, uint8_t col)
+{
+    const uint32_t o = (t * col) >> 7;
+    return (uint8_t)(o > 255u ? 255u : o);
+}
+
+void rd_sr_step_texel(const uint8_t *src, uint32_t sw, uint32_t sh, const RdSrStep *p, uint32_t mx,
+                      uint32_t my, uint8_t out[4])
+{
+    float val[4];
+    rd_sr_step_value(src, sw, sh, p, mx, my, val);
+    for (int ch = 0; ch < 4; ch++) {
+        out[ch] = rd_sr_step_byte((uint32_t)floorf(val[ch] + 0.5f), p->col[ch]);
     }
 }
 

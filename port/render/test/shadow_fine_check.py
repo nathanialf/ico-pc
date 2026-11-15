@@ -13,11 +13,17 @@ texel of the step, one of the tent and 1 / L of one of the composite's tap
 (L the levels' odd whole scale, rd_shadowres.c rd_sr_level_scale), plus the
 one texel of the PS2 tap whose darkening rounds to nothing.  The darkness:
 the RGB levels the composites take away, summed over the picture (B - A),
-for each; their ratio fine / PS2 within 1 +- T (--dark-tol, default 0.02).
+for each; their ratio fine / PS2 within 1 +- T (--dark-tol, default 0.02;
+"--dark-tol none": the ratio printed and not judged.  The PS2-size chain's
+darkness on a shadow a few texels thin depends on where its 2:1 grid falls,
+and the composites darken only the texels whose alpha lets them, so the ratio
+over one picture is bounded for broad shadows on broad surfaces alone;
+rd_shadow_fine_ab judges the levels themselves against the CPU reference
+instead, rd_replay_tool --fine-check).
 
 Prints one line:
     shadow_fine_check: W x H, D texels: S darkened by the PS2's levels, C changed by the fine ones, O outside; darkness R
-and exits 0; 1 when O > 0, C is 0 or R is outside 1 +- T; 2 when the files
+and exits 0; 1 when O > 0, C is 0 or (with a T) R is outside 1 +- T; 2 when the files
 cannot be read or their sizes differ.  Run it with python3 -I.
 """
 import math
@@ -122,7 +128,7 @@ def main(argv):
     tol = 0.02
     if "--dark-tol" in args:
         k = args.index("--dark-tol")
-        tol = float(args[k + 1])
+        tol = None if args[k + 1] == "none" else float(args[k + 1])
         del args[k:k + 2]
     if "--scale" in args:
         k = args.index("--scale")
@@ -160,7 +166,7 @@ def main(argv):
     print("shadow_fine_check: %d x %d, D %d texels: %d darkened by the PS2's levels, %d changed "
           "by the fine ones, %d outside; darkness %.4f (%d against %d levels)"
           % (w, h, d, s, c, o, ratio, dark_f, dark_p))
-    return 1 if o or c == 0 or abs(ratio - 1.0) > tol else 0
+    return 1 if o or c == 0 or (tol is not None and abs(ratio - 1.0) > tol) else 0
 
 
 if __name__ == "__main__":

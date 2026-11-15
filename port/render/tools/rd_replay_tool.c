@@ -192,6 +192,11 @@
  *                         overlay
  *
  * Inspection:
+ *   --fine-check          after the replay, the shadow's levels at the
+ *                         scene's scale read back and compared with the CPU
+ *                         reference on the same count (tools/rd_replay_fine.c
+ *                         says the rule and the lines); exit 1 outside the
+ *                         rule or with no chain to check
  *   --list                prints every command of the replayed lists: the
  *                         list, index, type and key; for a draw its texture
  *                         (id and size), and for screen prims the prim,
@@ -566,6 +571,7 @@
 #include "rd_vu_compact.h"       /* --stats: the index compaction's counts */
 #include "rd_shadow_box.h"       /* --stats: the shadows over the volumes' box */
 #include "rd_shadow_tile.h"      /* --stats: the shadow composites over the tile mask */
+#include "rd_replay_fine.h"      /* --fine-check */
 #include "rd_shadowres.h"        /* --stats: the shadow's levels above 1x */
 #include "rd_no_volume.h"        /* --stats: a shadow window with no volume */
 #include "rd_upscale.h"
@@ -2256,6 +2262,8 @@ int main(int argc, char **argv)
     uint32_t vuRefI[8];
     const char *passDir = NULL;
     const char *tempsDir = NULL; /* --dump-temps: every per-frame temp target after the replay */
+    bool fineCheck = false;      /* --fine-check: the fine shadow levels against the reference */
+    bool fineFailed = false;
     const char *texDir = NULL, *meshName = NULL;
     bool lossBisect = false, maskMarks = false;
     const char *overlapBefore = NULL;
@@ -2422,6 +2430,8 @@ int main(int argc, char **argv)
             repeatN = n;
         } else if (strcmp(argv[i], "--dump-temps") == 0 && i + 1 < argc) {
             tempsDir = argv[++i];
+        } else if (strcmp(argv[i], "--fine-check") == 0) {
+            fineCheck = true;
         } else if (strcmp(argv[i], "--aspect") == 0 && i + 1 < argc) {
             unsigned a = 0, b = 0;
             aspectGiven = true;
@@ -2965,7 +2975,7 @@ int main(int argc, char **argv)
     }
     bool replayed;
     if (rd_thread_host_on() && pw != 0 && !passDir && !occlusion && !saveBlended && !tempsDir &&
-        repeatN <= 8) {
+        !fineCheck && repeatN <= 8) {
         /* --render-thread: the presented picture handed over as the
            window's are (sync: waited), its submit and present on the
            submit thread (rd_submit_thread.h), read back after the drain;
@@ -3063,6 +3073,9 @@ int main(int argc, char **argv)
             }
             free(tp);
         }
+    }
+    if (fineCheck && (!replayed || rd_replay_fine_check() != 0)) {
+        fineFailed = true; /* the pictures still written; the exit says the levels are not */
     }
     if (replayed && velocityOn && !velocityReport(dump, rf, velocityPng)) {
         velFailed = true;
@@ -3897,7 +3910,7 @@ int main(int argc, char **argv)
     if (rc == 0 && benchK > 0 && (interpPrev || rd_bench_tool(&f, benchK, pw != 0) != 0)) {
         rc = 1; /* the rc bench (rd_bench_run.h); not over an --interp frame */
     }
-    if (occFailed || regionFailed || skinFailed || velFailed || fsr3Failed) {
+    if (occFailed || regionFailed || skinFailed || velFailed || fsr3Failed || fineFailed) {
         rc = 1;
     }
     rd__frame_free(&f);

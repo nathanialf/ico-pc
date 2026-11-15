@@ -1,9 +1,12 @@
 # rd_date_cut_ab: DATE's passes without the depth their draws never touch
 # (port/render/rd_date_cut.c; docs/port/WORK_BUFFERS.md, "DATE's passes without
 # the depth"), the cut off (ICO_RD_DATE_CUT=0) against on (=1), byte for byte.
-# For every dump the list names (tools/date_cut_dumps.txt: a path, '*' globs
-# allowed, and the passes the cut is expected to begin without the depth in a
-# replay; a listed dump that is absent FAILS), rd_replay_tool's --pass-dump with
+# For every fixture the list names (port/render/test/fixtures/lists/
+# date_cut.txt: a fixture's name, the passes the cut begins without the depth
+# in one replay of it, re-derived from a run of the fixture, and the word
+# "narrow" for a frame drawn narrower than 21:9; the frames are expanded into
+# OUT/fixtures, docs/port/TESTING_FIXTURES.md; a listed fixture that is absent
+# FAILS), rd_replay_tool's --pass-dump with
 # --stats under the fixed-function blend (ICO_RD_BLEND=fixed), the store plan
 # (ICO_RD_STORE_PLAN=1) and its poison (ICO_RD_STORE_POISON=1: a depth or
 # stencil load the plan leaves undefined clears to garbage, so a depth the cut
@@ -24,70 +27,50 @@
 #           every depth (rd_date_cut_scale_ok; the Pixel's v3677 drew a
 #           composite a level apart at four texels with the cut there before
 #           the rule): 0 passes cut, the bytes the same;
-# a dump drawn narrower than a setting's aspect cannot show it and is skipped
-# there.  -DBACKEND=opengl (rd_date_cut_ab_gl): the mali setting alone on
-# OpenGL (llvmpipe, DATE by the snapshot there; the Vulkan fakes left out).
+# a frame the list marks "narrow" cannot show the mali setting's 21:9 and is
+# skipped there, and there alone (it must say "cannot show" there; any other
+# fixture or setting that cannot show FAILS).  -DBACKEND=opengl
+# (rd_date_cut_ab_gl): the mali setting alone on OpenGL (llvmpipe, DATE by the
+# snapshot there; the Vulkan fakes left out), so a narrow frame is not replayed
+# by the twin.
 # Each pair: every PNG the off run writes (SCENE, DISPLAY, PRESENT and every
 # other named target) the on run's byte for byte; the same draws, passes and
 # DATE snapshots, colour MB loaded and stored and MB copied (the stats'
 # traffic line); the off run cuts nothing; the on run begins no pass again
-# for a draw that needed the depth, cuts the passes the list expects (at
-# least one where it takes two snapshots or more), and the depth and stencil
+# for a draw that needed the depth, cuts the passes the list expects, and the
+# depth and stencil
 # MB loaded and stored each fall by at least 0.8 and at most 1.0 times the
 # "at most" its stats name (4 bytes of depth and up to 1 of stencil a texel),
 # and by something where it cut.  On Vulkan also --keys at the mali setting:
 # the cut on asks for no pipeline the start-up set lacks that the cut off does
-# not (no --aspect there: --present 1612x720 alone).  No device: SKIP (77).
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
-# -DBACKEND=vulkan|opengl
-# The lists name dumps of the build machine alone (the owner's rule there: a
-# listed dump that is absent FAILS). A machine without that folder has none of
-# them: the test is skipped as the older dump tests are.
-if(NOT IS_DIRECTORY "/primary/dev/ico-dumps")
-  message(STATUS "SKIP: no dump folder on this machine (/primary/dev/ico-dumps): the list's dumps are the build machine's")
-  return()
-endif()
-set(dumps "")
+# not (no --aspect there: --present 1612x720 alone).
+# The path ran (rd_fixture_require on the on run of every pair): the fixture's
+# declared date_snapshots (the cut's runs are the passes the snapshots end) at
+# every setting and date_cut_passes where the cut acts (not at the phone
+# setting); the list's passes pin the count on every fixture, so one whose data
+# takes no snapshot or no cut fails.  No device: SKIP (77).
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the
+# fixtures' folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<the
+# fixture list> -DOUT=<a folder the test may write> -DBACKEND=vulkan|opengl
+include("${FIXTURE_HELPERS}")
 set(failures 0)
-if("${LIST}" STREQUAL "" OR NOT EXISTS "${LIST}")
-  message(FATAL_ERROR "rd_date_cut_ab: no dump list ${LIST}")
-endif()
-get_filename_component(listDir "${LIST}" DIRECTORY)
-file(STRINGS "${LIST}" lines)
-foreach(l IN LISTS lines)
-  string(STRIP "${l}" l)
-  if(l STREQUAL "" OR l MATCHES "^#")
-    continue()
+rd_fixture_list("${LIST}" names)
+list(LENGTH names ndumps)
+foreach(name IN LISTS names)
+  rd_fixture_expand(${name} "${OUT}/fixtures" dump_${name})
+  set(want_${name} "${RDFX_FIELDS_${name}}")
+  set(narrow_${name} FALSE)
+  if(want_${name} MATCHES "^([0-9]+)[ \t]+narrow$")
+    set(want_${name} "${CMAKE_MATCH_1}")
+    set(narrow_${name} TRUE)
   endif()
-  set(want "")
-  if(l MATCHES "^([^ \t]+)[ \t]+([0-9]+)$")
-    set(l "${CMAKE_MATCH_1}")
-    set(want "${CMAKE_MATCH_2}")
-  endif()
-  if(NOT IS_ABSOLUTE "${l}")
-    set(l "${listDir}/${l}")
-  endif()
-  if(l MATCHES "[*]")
-    file(GLOB found "${l}")
-    list(SORT found)
-    if(NOT found)
-      message(SEND_ERROR "${l}: no dump matches (a listed dump must exist)")
-      math(EXPR failures "${failures} + 1")
-    endif()
-    foreach(d IN LISTS found)
-      list(APPEND dumps "${d}")
-      set(want_${d} "${want}")
-    endforeach()
-  elseif(EXISTS "${l}")
-    list(APPEND dumps "${l}")
-    set(want_${l} "${want}")
-  else()
-    message(SEND_ERROR "${l}: no such dump (a listed dump must exist)")
+  if(NOT want_${name} MATCHES "^[0-9]+$")
+    message(SEND_ERROR "${name}: the list names no passes for it ('${want_${name}}')")
     math(EXPR failures "${failures} + 1")
+    set(want_${name} "")
   endif()
+  set(checked_${name} 0)
 endforeach()
-list(REMOVE_DUPLICATES dumps)
-list(LENGTH dumps ndumps)
 
 # one DATE set-up for the composites off (ICO_RD_DATE_ONE=0, rd_date_one.c):
 # with it the second and third composites take no snapshot, no pass ends
@@ -130,7 +113,8 @@ endfunction()
 set(compared 0)
 set(cutTotal 0)
 set(index 0)
-foreach(dump IN LISTS dumps)
+foreach(name IN LISTS names)
+  set(dump "${dump_${name}}")
   math(EXPR index "${index} + 1")
   foreach(s IN LISTS settings)
     set(skipped FALSE)
@@ -148,10 +132,15 @@ foreach(dump IN LISTS dumps)
         message(STATUS "SKIP: no device: ${err}")
         return()
       endif()
-      if(NOT rc EQUAL 0 AND cut EQUAL 0 AND "${err}" MATCHES "cannot show")
+      if(NOT rc EQUAL 0 AND cut EQUAL 0 AND "${err}" MATCHES "cannot show" AND
+         narrow_${name} AND (s STREQUAL "mali" OR s STREQUAL "gl"))
         message(STATUS "${dump} ${s}: skipped (drawn narrower than the setting's aspect)")
         set(skipped TRUE)
         continue()
+      endif()
+      if(rc EQUAL 0 AND cut EQUAL 0 AND narrow_${name} AND (s STREQUAL "mali" OR s STREQUAL "gl"))
+        message(SEND_ERROR "${name} ${s}: the list says narrow, and the setting shows it")
+        math(EXPR failures "${failures} + 1")
       endif()
       if(NOT rc EQUAL 0)
         message(SEND_ERROR "${dump} ${s} cut ${cut}: exit ${rc}:\n${err}")
@@ -160,6 +149,7 @@ foreach(dump IN LISTS dumps)
         continue()
       endif()
       string(REPLACE ";" "," flat "${out}")
+      set(out_${cut} "${out}")
       set(ok TRUE)
       foreach(re drawsRe snapRe cutRe trafficRe)
         if(NOT flat MATCHES "${${re}}")
@@ -217,17 +207,18 @@ foreach(dump IN LISTS dumps)
                          "predicted a pass end that did not come)")
       math(EXPR failures "${failures} + 1")
     endif()
-    set(want "${want_${dump}}")
+    set(want "${want_${name}}")
     if(s STREQUAL "phone")
       # a fractional scale (2364x1080 for the frame: 2.79 x 2.41 on the
       # Pixel's): the cut keeps the depth (rd_date_cut.h rd_date_cut_scale_ok)
       set(want 0)
+      rd_fixture_require(${name} "${out_1}" date_snapshots)
+    else()
+      rd_fixture_require(${name} "${out_1}" date_snapshots date_cut_passes)
     endif()
+    math(EXPR checked_${name} "${checked_${name}} + 1")
     if(NOT want STREQUAL "" AND NOT cut_1 EQUAL want)
       message(SEND_ERROR "${dump} ${s}: ${cut_1} passes without the depth, ${want} expected")
-      math(EXPR failures "${failures} + 1")
-    elseif(want STREQUAL "" AND snaps_1 GREATER 1 AND cut_1 LESS 1 AND NOT s STREQUAL "phone")
-      message(SEND_ERROR "${dump} ${s}: ${snaps_1} DATE snapshots and no pass without the depth")
       math(EXPR failures "${failures} + 1")
     endif()
     math(EXPR cutTotal "${cutTotal} + ${cut_1}")
@@ -293,15 +284,22 @@ foreach(dump IN LISTS dumps)
       math(EXPR failures "${failures} + 1")
     endif()
   endif()
+  if(checked_${name} EQUAL 0 AND narrow_${name} AND "${BACKEND}" STREQUAL "opengl")
+    message(STATUS "${name}: narrow, not replayed on OpenGL (the mali setting alone there)")
+  elseif(checked_${name} EQUAL 0)
+    message(SEND_ERROR "${name}: no setting could show it: its properties were never checked")
+    math(EXPR failures "${failures} + 1")
+  endif()
 endforeach()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(failures GREATER 0)
-  message(FATAL_ERROR "rd_date_cut_ab: ${failures} failures over ${ndumps} dumps")
+  message(FATAL_ERROR "rd_date_cut_ab: ${failures} failures over ${ndumps} fixtures")
 endif()
 if(compared EQUAL 0)
-  message(FATAL_ERROR "rd_date_cut_ab: no target compared over ${ndumps} dumps")
+  message(FATAL_ERROR "rd_date_cut_ab: no target compared over ${ndumps} fixtures")
 endif()
 if(cutTotal EQUAL 0)
-  message(FATAL_ERROR "rd_date_cut_ab: no pass was begun without the depth over ${ndumps} dumps")
+  message(FATAL_ERROR "rd_date_cut_ab: no pass was begun without the depth over ${ndumps} fixtures")
 endif()
-message(STATUS "rd_date_cut_ab: ${compared} targets the same bytes over ${ndumps} dumps; "
+message(STATUS "rd_date_cut_ab: ${compared} targets the same bytes over ${ndumps} fixtures; "
                "${cutTotal} passes begun without the depth")

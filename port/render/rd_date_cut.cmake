@@ -37,22 +37,27 @@ if(ICO_RUN_TESTS)
     endif()
 endif()
 
-# rd_date_cut_ab (test/rd_date_cut_ab.cmake): the dumps of
-# tools/date_cut_dumps.txt with the cut off and on (ICO_RD_DATE_CUT=0 and 1)
+# rd_date_cut_ab (test/rd_date_cut_ab.cmake): the fixtures of
+# test/fixtures/lists/date_cut.txt (docs/port/TESTING_FIXTURES.md) with the
+# cut off and on (ICO_RD_DATE_CUT=0 and 1)
 # on the devices without the in-pass read (the Mali's, the Adreno's and the
 # PowerVR phone's settings with the snapshot path forced: ICO_VK_FAKE_NO_DST,
 # ICO_RD_DATE_PATH=snapshot, ICO_VK_FAKE_LIMITS=mali or ICO_VK_FAKE_ADRENO=1),
 # the fixed-function blend, the store plan and its poison: every target the
 # same bytes, the same draws, passes, snapshots, colour and copy bytes, the
 # depth and stencil bytes lower by what the cut's passes left out, the cut
-# passes each dump expects; --keys: the cut asks for no pipeline the start-up
-# set lacks.  rd_date_cut_ab_gl: the same pairs on OpenGL (llvmpipe: DATE by
-# the snapshot there, no fake).  A listed dump that is absent fails.
+# passes the list pins for each fixture and its declared properties (the path
+# ran); --keys: the cut asks for no pipeline the start-up set lacks.
+# rd_date_cut_ab_gl: the same pairs on OpenGL (llvmpipe: DATE by the snapshot
+# there, no fake).  A listed fixture that is absent fails.
+include(rd_fixture.cmake)
 if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/date_cut_ab")
     add_test(NAME rd_date_cut_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/date_cut_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                     "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/date_cut.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/date_cut_ab" -DBACKEND=vulkan
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_date_cut_ab.cmake")
     set_tests_properties(rd_date_cut_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 7200)
@@ -63,7 +68,10 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
         file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/gl/date_cut_ab")
         add_test(NAME rd_date_cut_ab_gl
                  COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                         "-DLIST=${CMAKE_SOURCE_DIR}/tools/date_cut_dumps.txt"
+                         -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                         "-DFIXTURES=${ICO_FIXTURE_DIR}"
+                         "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                         "-DLIST=${ICO_FIXTURE_DIR}/lists/date_cut.txt"
                          "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/gl/date_cut_ab" -DBACKEND=opengl
                          -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_date_cut_ab.cmake")
         set_tests_properties(rd_date_cut_ab_gl PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
