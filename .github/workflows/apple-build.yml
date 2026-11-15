@@ -1,0 +1,155 @@
+# The Apple builds, once: the macOS app (tools/package_macos.sh) or the
+# unsigned iPhone IPA (tools/package_ios.sh) on macos-15. Called by ci.yml
+# (every push to main, pull request and v* tag: built and packaged, nothing
+# kept) and by ios.yml (a published release: kept as the run's artifact for
+# its publish jobs; a check-only dispatch: kept as the run's artifact).
+# Nothing here writes to the repository or a release.
+# docs/BUILDING.md ("Continuous integration") describes the jobs.
+name: Apple build
+
+on:
+  workflow_call:
+    inputs:
+      platform:
+        description: "macos or ios"
+        required: true
+        type: string
+      ref:
+        description: "What to check out (a tag); empty: the calling run's own commit"
+        required: false
+        type: string
+        default: ''
+      label:
+        description: "The version label (vX.Y.Z, or vX.Y.Z-rcN when release is false); empty: none"
+        required: false
+        type: string
+        default: ''
+      release:
+        description: "true: the label must be vX.Y.Z (the files a release gets)"
+        required: false
+        type: boolean
+        default: false
+      upload:
+        description: "true: keep the package as the artifact ico-pc-<platform>-<run number>"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  # the Mac's host DXC (docs/THIRD_PARTY.md): the tag, and the commit it
+  # must resolve to
+  ICO_MAC_DXC_TAG: v1.9.2602
+  ICO_MAC_DXC_COMMIT: 21d28f727ad395b59394815ef76012e432f7e4e5
+
+jobs:
+  build:
+    name: ${{ inputs.platform }}
+    runs-on: macos-15
+    timeout-minutes: 120
+    env:
+      ICO_BUILD_JOBS: '2'
+      PLATFORM: ${{ inputs.platform }}
+      LABEL: ${{ inputs.label }}
+      RELEASE: ${{ inputs.release }}
+    steps:
+      - name: The inputs
+        run: |
+          case "$PLATFORM" in
+              macos|ios) ;;
+              *) echo "platform must be macos or ios, not '$PLATFORM'" >&2; exit 1 ;;
+          esac
+          if [[ "$RELEASE" == true ]]; then
+              [[ "$LABEL" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+                  { echo "a release's label is vX.Y.Z, not '$LABEL'" >&2; exit 1; }
+          elif [[ -n "$LABEL" ]]; then
+              [[ "$LABEL" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?$ ]] ||
+                  { echo "the label is empty, vX.Y.Z or vX.Y.Z-rcN, not '$LABEL'" >&2; exit 1; }
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.ref }}
+
+      # macOS's iconv keeps the Japanese sources' backslashes only as
+      # EUC-JP-MS: the clone's own override (docs/BUILDING.md, "Checking out
+      # on a Mac"), then those files checked out again
+      - name: Japanese sources as EUC-JP-MS
+        run: |
+          attrs="$(git rev-parse --git-path info/attributes)"
+          mkdir -p "$(dirname "$attrs")"
+          sed -n 's/ working-tree-encoding=EUC-JP$/ working-tree-encoding=EUC-JP-MS/p' .gitattributes >>"$attrs"
+          files=$(sed -n 's/ working-tree-encoding=EUC-JP$//p' .gitattributes)
+          rm -f $files
+          git checkout -- $files
+
+      - name: Host tools
+        run: |
+          brew install cmake ninja
+          python3 -m venv .venv
+          .venv/bin/pip install PyYAML
+
+      # Two caches, both saved by main's pushes (a release's run, on its tag,
+      # may restore main's caches but saves where no later tag can read):
+      # the host DXC, keyed by its pin alone and shared by both platforms,
+      # and the platform's MoltenVK and static SDL3, keyed by the scripts
+      # that pin them
+      - name: Host DXC cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            tools/toolchain/deps/dxc-build/bin
+            tools/toolchain/deps/dxc-build/lib
+          key: apple-dxc-macos15-arm64-${{ env.ICO_MAC_DXC_TAG }}-${{ env.ICO_MAC_DXC_COMMIT }}
+
+      - name: MoltenVK and SDL3 cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            tools/toolchain/deps/moltenvk/${{ inputs.platform }}
+            tools/toolchain/deps/sdl3/${{ inputs.platform }}-arm64
+          key: apple-deps-${{ inputs.platform }}-macos15-arm64-${{ hashFiles('tools/fetch_moltenvk.sh', 'tools/fetch_common.sh') }}
+
+      - name: Build host DXC if needed
+        run: |
+          if [[ ! -x tools/toolchain/deps/dxc-build/bin/dxc ]]; then
+            git clone --depth 1 --branch "$ICO_MAC_DXC_TAG" --recurse-submodules \
+              https://github.com/microsoft/DirectXShaderCompiler tools/toolchain/deps/dxc-src
+            [[ "$(git -C tools/toolchain/deps/dxc-src rev-parse HEAD)" == "$ICO_MAC_DXC_COMMIT" ]]
+            cmake -S tools/toolchain/deps/dxc-src -B tools/toolchain/deps/dxc-build -G Ninja \
+              -C tools/toolchain/deps/dxc-src/cmake/caches/PredefinedParams.cmake \
+              -DCMAKE_BUILD_TYPE=Release -DENABLE_SPIRV_CODEGEN=ON \
+              -DHLSL_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_TESTS=OFF \
+              -DSPIRV_BUILD_TESTS=OFF "-DCMAKE_CXX_FLAGS=-Wno-unknown-warning-option -Wno-invalid-specialization"
+            cmake --build tools/toolchain/deps/dxc-build --target dxc --parallel 2
+          fi
+
+      # the package script, then its files must exist; they are gathered in
+      # apple-out/ for the artifact
+      - name: Build and package
+        run: |
+          if [[ "$PLATFORM" == macos ]]; then
+              tools/package_macos.sh ${LABEL:+"$LABEL"}
+              files=(macos-arm64.zip macos-arm64.dmg macos-arm64.map)
+          else
+              tools/package_ios.sh ${LABEL:+"$LABEL"}
+              files=(ios-unsigned.ipa ios.map)
+          fi
+          mkdir -p apple-out
+          for f in "${files[@]}"; do
+              path="dist/ico-pc${LABEL:+-$LABEL}-$f"
+              [[ -s "$path" ]] || { echo "missing package file: $path" >&2; exit 1; }
+              cp "$path" apple-out/
+          done
+          ls -l apple-out
+
+      - if: inputs.upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: ico-pc-${{ inputs.platform }}-${{ github.run_number }}
+          path: apple-out/
+          retention-days: 30
+          if-no-files-found: error

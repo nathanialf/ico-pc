@@ -1,3 +1,13 @@
+# The Apple packages: the unsigned iPhone IPA and the macOS app, built by
+# .github/workflows/apple-build.yml (the same steps ci.yml's apple jobs run on
+# every push to main and pull request).
+#   - a published release: each platform built from the release's tag and
+#     attached to it (a failure of one never touches the other's files);
+#   - a dispatch with `tag` (the release must exist): the same, by hand;
+#   - a dispatch with check_only: the dispatched branch built for both
+#     platforms and kept as the run's artifacts, no release needed and
+#     nothing attached (`tag`, optional there, only labels the files).
+# docs/BUILDING.md ("Continuous integration") describes the jobs.
 name: Apple packages
 
 on:
@@ -6,9 +16,15 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to build and attach to (vX.Y.Z); the release must exist"
-        required: true
+        description: "Release tag to build and attach to (vX.Y.Z; the release must exist). With check_only: an optional label for the files"
+        required: false
+        default: ''
         type: string
+      check_only:
+        description: "Build the dispatched branch and keep the packages as the run's artifacts; attach nothing"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -18,75 +34,19 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
-    runs-on: macos-15
-    timeout-minutes: 120
-    env:
-      ICO_BUILD_JOBS: '2'
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.release.tag_name || inputs.tag }}
+  build-ios:
+    uses: ./.github/workflows/apple-build.yml
+    with:
+      platform: ios
+      # a check builds the dispatched commit; a release its tag
+      ref: ${{ !(github.event_name == 'workflow_dispatch' && inputs.check_only) && (github.event.release.tag_name || inputs.tag) || '' }}
+      label: ${{ github.event.release.tag_name || inputs.tag }}
+      release: ${{ !(github.event_name == 'workflow_dispatch' && inputs.check_only) }}
+      upload: true
 
-      # macOS's iconv keeps the Japanese sources' backslashes only as
-      # EUC-JP-MS: the clone's own override (docs/BUILDING.md, "Checking out
-      # on a Mac"), then those files checked out again
-      - name: Japanese sources as EUC-JP-MS
-        run: |
-          attrs="$(git rev-parse --git-path info/attributes)"
-          mkdir -p "$(dirname "$attrs")"
-          sed -n 's/ working-tree-encoding=EUC-JP$/ working-tree-encoding=EUC-JP-MS/p' .gitattributes >>"$attrs"
-          files=$(sed -n 's/ working-tree-encoding=EUC-JP$//p' .gitattributes)
-          rm -f $files
-          git checkout -- $files
-
-      - name: Host tools
-        run: |
-          brew install cmake ninja
-          python3 -m venv .venv
-          .venv/bin/pip install PyYAML
-
-      - name: Apple dependency cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            tools/toolchain/deps/moltenvk
-            tools/toolchain/deps/sdl3/ios-arm64
-            tools/toolchain/deps/dxc-build/bin
-            tools/toolchain/deps/dxc-build/lib
-          key: ios-macos15-arm64-${{ hashFiles('tools/fetch_moltenvk.sh', 'tools/fetch_common.sh', '.github/workflows/ios.yml') }}
-
-      - name: Build host DXC if needed
-        run: |
-          if [[ ! -x tools/toolchain/deps/dxc-build/bin/dxc ]]; then
-            git clone --depth 1 --branch v1.9.2602 --recurse-submodules \
-              https://github.com/microsoft/DirectXShaderCompiler tools/toolchain/deps/dxc-src
-            [[ "$(git -C tools/toolchain/deps/dxc-src rev-parse HEAD)" == 21d28f727ad395b59394815ef76012e432f7e4e5 ]]
-            cmake -S tools/toolchain/deps/dxc-src -B tools/toolchain/deps/dxc-build -G Ninja \
-              -C tools/toolchain/deps/dxc-src/cmake/caches/PredefinedParams.cmake \
-              -DCMAKE_BUILD_TYPE=Release -DENABLE_SPIRV_CODEGEN=ON \
-              -DHLSL_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_TESTS=OFF \
-              -DSPIRV_BUILD_TESTS=OFF "-DCMAKE_CXX_FLAGS=-Wno-unknown-warning-option -Wno-invalid-specialization"
-            cmake --build tools/toolchain/deps/dxc-build --target dxc --parallel 2
-          fi
-
-      - name: Build the unsigned IPA for the release tag
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
-        run: |
-          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          tools/package_ios.sh "$RELEASE_TAG"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ico-pc-ios-${{ github.run_number }}
-          path: dist/ico-pc-${{ github.event.release.tag_name || inputs.tag }}-ios-unsigned.ipa
-          retention-days: 30
-          if-no-files-found: error
-
-  publish:
-    needs: build
+  publish-ios:
+    needs: build-ios
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.check_only) }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -104,77 +64,20 @@ jobs:
             "dist/ico-pc-$RELEASE_TAG-ios-unsigned.ipa" \
             --clobber --repo "$GITHUB_REPOSITORY"
 
-  # The Apple-silicon macOS app (tools/package_macos.sh): its own pair of
-  # jobs, so a failure here never touches the IPA
+  # The Apple-silicon macOS app: its own pair of jobs, so a failure here
+  # never touches the IPA
   build-macos:
-    runs-on: macos-15
-    timeout-minutes: 120
-    env:
-      ICO_BUILD_JOBS: '2'
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.release.tag_name || inputs.tag }}
-
-      - name: Japanese sources as EUC-JP-MS
-        run: |
-          attrs="$(git rev-parse --git-path info/attributes)"
-          mkdir -p "$(dirname "$attrs")"
-          sed -n 's/ working-tree-encoding=EUC-JP$/ working-tree-encoding=EUC-JP-MS/p' .gitattributes >>"$attrs"
-          files=$(sed -n 's/ working-tree-encoding=EUC-JP$//p' .gitattributes)
-          rm -f $files
-          git checkout -- $files
-
-      - name: Host tools
-        run: |
-          brew install cmake ninja
-          python3 -m venv .venv
-          .venv/bin/pip install PyYAML
-
-      - name: Apple dependency cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            tools/toolchain/deps/moltenvk
-            tools/toolchain/deps/sdl3/macos-arm64
-            tools/toolchain/deps/dxc-build/bin
-            tools/toolchain/deps/dxc-build/lib
-          key: macos-macos15-arm64-${{ hashFiles('tools/fetch_moltenvk.sh', 'tools/fetch_common.sh', '.github/workflows/ios.yml') }}
-
-      - name: Build host DXC if needed
-        run: |
-          if [[ ! -x tools/toolchain/deps/dxc-build/bin/dxc ]]; then
-            git clone --depth 1 --branch v1.9.2602 --recurse-submodules \
-              https://github.com/microsoft/DirectXShaderCompiler tools/toolchain/deps/dxc-src
-            [[ "$(git -C tools/toolchain/deps/dxc-src rev-parse HEAD)" == 21d28f727ad395b59394815ef76012e432f7e4e5 ]]
-            cmake -S tools/toolchain/deps/dxc-src -B tools/toolchain/deps/dxc-build -G Ninja \
-              -C tools/toolchain/deps/dxc-src/cmake/caches/PredefinedParams.cmake \
-              -DCMAKE_BUILD_TYPE=Release -DENABLE_SPIRV_CODEGEN=ON \
-              -DHLSL_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_TESTS=OFF \
-              -DSPIRV_BUILD_TESTS=OFF "-DCMAKE_CXX_FLAGS=-Wno-unknown-warning-option -Wno-invalid-specialization"
-            cmake --build tools/toolchain/deps/dxc-build --target dxc --parallel 2
-          fi
-
-      - name: Build the macOS app for the release tag
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
-        run: |
-          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          tools/package_macos.sh "$RELEASE_TAG"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ico-pc-macos-${{ github.run_number }}
-          path: |
-            dist/ico-pc-${{ github.event.release.tag_name || inputs.tag }}-macos-arm64.zip
-            dist/ico-pc-${{ github.event.release.tag_name || inputs.tag }}-macos-arm64.dmg
-            dist/ico-pc-${{ github.event.release.tag_name || inputs.tag }}-macos-arm64.map
-          retention-days: 30
-          if-no-files-found: error
+    uses: ./.github/workflows/apple-build.yml
+    with:
+      platform: macos
+      ref: ${{ !(github.event_name == 'workflow_dispatch' && inputs.check_only) && (github.event.release.tag_name || inputs.tag) || '' }}
+      label: ${{ github.event.release.tag_name || inputs.tag }}
+      release: ${{ !(github.event_name == 'workflow_dispatch' && inputs.check_only) }}
+      upload: true
 
   publish-macos:
     needs: build-macos
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.check_only) }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
