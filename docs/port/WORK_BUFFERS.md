@@ -977,7 +977,7 @@ pass's begin. The one exception is the shadow count's colour while the count is 
 one reads ([The shadow count's colour](#the-shadow-counts-colour)): `storeColorDropped` counts
 those passes.
 
-On the PowerVR phone's 2x frame (`tools/vufuse_dumps.txt`, read from `rd_replay_tool --list`)
+On the PowerVR phone's 2x frame (its dump at 2.189, read from `rd_replay_tool --list`)
 the last touch of SCENE's depth is list 5's fog meshes (GEQUAL tested); after it SCENE's depth is
 bound by list 11's screen sprites (a screen draw binds the state's depth whatever its Z test; a post
 sprite without a Z test or Z write binds none, `rd__blur_key`), so those are the passes the plan
@@ -1017,7 +1017,7 @@ mask; DISPLAY is the frame's picture.
 
   The last clause appears only when the replay before had dropped that depth's last store: that one
   picture may show it (in practice the memory holds what the last stored pass left, above). Every
-  frame of the dump corpus that touches a depth (`tools/vustage_dumps.txt` and the phone's, read with
+  frame of the dump corpus that touches a depth (the VU stage list's and the phone's, read with
   `rd_replay_tool --list`) clears SCENE's depth at list 0's head before any read, and the 2D frames
   touch none; one frame (the issue-95 loss frame) Z-tests list 11's text against SCENE's depth, so a
   keep frame drawing such text would be the first case of this rule.
@@ -1409,8 +1409,8 @@ it), the last store dropped and kept where a command the cut does not take lies 
 DATE frame's reason counted and the others' none, a draw reading a target made readable by the
 pass's first draw kept in the pass (the store dropped there, the guard not tripped), and the pass
 area's reasons (its fourth cell).
-`rd_pass_cut_ab` replays the corpus and the phone's frames (`tools/pass_cut_dumps.txt`) with every
-cut off, each alone and all on: every target and the present byte for byte, the passes fewer by the
+`rd_pass_cut_ab` replays committed fixtures of the corpus's and the phone's frames
+(`test/fixtures/lists/pass_cut.txt`) with every cut off, each alone and all on: every target and the present byte for byte, the passes fewer by the
 clears carried and skipped, the depth stores dropped more by those at the last touch, each cut
 cutting something on the phone's frames ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
 
@@ -1752,7 +1752,7 @@ target reads kept (the source drawn since its clear, or not cleared this replay)
 `[dev] constant_reads = false` (`ICO_RD_CONSTANT_READS=0`) reads every source as before, the A/B
 of ctest `rd_constant_reads_ab` (`port/render/test/rd_constant_reads_ab.cmake`: every named
 target's PNG equal byte for byte, the same target reads counted either way, the phone's frames of
-`tools/constant_reads_dumps.txt` served at the phone's settings). AURA_WORK's clear itself is still
+`port/render/test/fixtures/lists/constant_reads.txt` served at the phone's settings). AURA_WORK's clear itself is still
 recorded here (its pass, 1.27 ms on the phone, is the store of the cleared 10 MB); the clear skip
 (below, "Passes cut") leaves that pass out when the sprite the constant read drew is its target's
 only reader in the replay.

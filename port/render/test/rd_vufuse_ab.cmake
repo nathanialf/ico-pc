@@ -1,7 +1,8 @@
 # rd_vufuse_ab: the fused scissor pair against code 36's cut and kick draws
 # under their own pipelines, byte for byte (docs/port/VU1_PROGRAMS.md, "The
-# fused scissor pair").  For every dump the lists name (tools/vustage_dumps.txt
-# and tools/vufuse_dumps.txt, read as rd_vumerge_ab.cmake reads them), under
+# fused scissor pair").  For every frame the lists name (lists/vufuse.txt's
+# fixtures, read by rd_vu_inputs.cmake; the word `extra` marks the phone's
+# frames, EXTRA's in the paths form), under
 # ICO_RD_BLEND=fixed and the draw merge on, rd_replay_tool's --pass-dump with
 # --stats twice: with ICO_RD_VU_FUSE=0 (every kick under its own pipeline, as
 # before the fuse) and with the fuse (a pair the blend form and the plans allow
@@ -27,12 +28,13 @@
 # took, from each run's "VU merge:" line), no pair may be kept apart for the
 # no-planes pixel shader (every pixel shader a pair draws with reads the mark),
 # at every setting where pairs were counted some must be fused, with fewer GPU
-# draws, and every dump of the second list (tools/vufuse_dumps.txt: the phone's
-# frames) must have some fused at both phone settings.  Each pair's draws and
-# pairs are printed.  A missing list or dump is named and skipped; no dump
-# read, or no device: SKIP (77).
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DEXTRA=<the phone's dump list>
+# draws, and every phone frame (`extra`: the phone's frames) must have some
+# fused at both phone settings.  The path ran: on every fused run each
+# fixture's declared vu_fuse_pairs, every fixture checked.  Each pair's draws
+# and pairs are printed.  No dump, or no device: SKIP (77).
+# -DTOOL=<rd_replay_tool> -DLIST=<list> [-DEXTRA=<the phone's dump list>]
 # -DOUT=<a folder the test may write>
+# [-DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<folder> -DFIXTURE_HELPERS=<file>]
 # [-DBLEND_ENV=<NAME=value>]: the blend both runs draw with, ICO_RD_BLEND=fixed
 # by default; ICO_RD_UBER=on (rd_vufuse_ab_uber, rd_vufuse_ab_pixel_uber): GS
 # state as shader data, the pair's two draws one pipeline through the colour
@@ -40,42 +42,10 @@
 if(NOT DEFINED BLEND_ENV OR BLEND_ENV STREQUAL "")
   set(BLEND_ENV "ICO_RD_BLEND=fixed")
 endif()
-set(dumps "")
-set(phoneDumps "")
-foreach(list IN ITEMS "${LIST}" "${EXTRA}")
-  if(list STREQUAL "" OR NOT EXISTS "${list}")
-    message(STATUS "${list}: no dump list, skipped")
-    continue()
-  endif()
-  get_filename_component(listDir "${list}" DIRECTORY)
-  file(STRINGS "${list}" lines)
-  foreach(l IN LISTS lines)
-    string(STRIP "${l}" l)
-    if(l STREQUAL "" OR l MATCHES "^#")
-      continue()
-    endif()
-    if(NOT IS_ABSOLUTE "${l}")
-      set(l "${listDir}/${l}")
-    endif()
-    set(found "")
-    if(l MATCHES "[*]")
-      file(GLOB found "${l}")
-      list(SORT found)
-      if(NOT found)
-        message(STATUS "${l}: no dump matches, skipped")
-      endif()
-    elseif(EXISTS "${l}")
-      set(found "${l}")
-    else()
-      message(STATUS "${l}: no such dump, skipped")
-    endif()
-    list(APPEND dumps ${found})
-    if(list STREQUAL "${EXTRA}")
-      list(APPEND phoneDumps ${found})
-    endif()
-  endforeach()
-endforeach()
-list(REMOVE_DUPLICATES dumps)
+include("${CMAKE_CURRENT_LIST_DIR}/rd_vu_inputs.cmake")
+rd_vu_inputs("${LIST}" "${EXTRA}")
+set(dumps "${vuDumps}")
+set(phoneDumps "${vuExtra}")
 list(LENGTH dumps ndumps)
 if(ndumps EQUAL 0)
   message(STATUS "SKIP: no dump of ${LIST} or ${EXTRA} is here")
@@ -114,8 +84,8 @@ foreach(dump IN LISTS dumps)
     file(REMOVE_RECURSE "${dirOff}" "${dirOn}")
     file(MAKE_DIRECTORY "${dirOff}" "${dirOn}")
     execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${BLEND_ENV} ICO_RD_VU_FUSE=0
-                            ${env_${s}} "${TOOL}" "${dump}" - --pass-dump "${dirOff}" --stats
-                            ${args_${s}}
+                            ${env_${s}} "${TOOL}" "${dump}" "${dirOff}.png" --pass-dump "${dirOff}"
+                            --stats ${args_${s}}
                     RESULT_VARIABLE rcOff OUTPUT_VARIABLE outOff ERROR_VARIABLE errOff)
     if(rcOff EQUAL 77)
       message(STATUS "SKIP: no device: ${errOff}")
@@ -127,7 +97,7 @@ foreach(dump IN LISTS dumps)
       continue()
     endif()
     execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${BLEND_ENV} ${env_${s}} "${TOOL}"
-                            "${dump}" - --pass-dump "${dirOn}" --stats ${args_${s}}
+                            "${dump}" "${dirOn}.png" --pass-dump "${dirOn}" --stats ${args_${s}}
                     RESULT_VARIABLE rcOn OUTPUT_VARIABLE outOn ERROR_VARIABLE errOn)
     if(NOT rcOff EQUAL 0 OR NOT rcOn EQUAL 0)
       message(SEND_ERROR "${dump} ${s}: exit ${rcOff} (kicks apart) and ${rcOn} (fused):\n"
@@ -195,6 +165,8 @@ foreach(dump IN LISTS dumps)
                    "(blend form ${blendOn}, plans differ ${plansOn}, no planes ${noPlanesOn}), "
                    "${sameOn} under one pipeline already; GPU draws ${nOff} kicks apart, "
                    "${nOn} fused")
+    # the path ran: every fixture's declared vu_fuse_pairs on the fused run
+    rd_vu_require(${index} "${outOn}" vu_fuse_pairs)
     if(NOT noPlanesOn EQUAL 0)
       message(SEND_ERROR "${dump} ${s}: ${noPlanesOn} pairs kept apart for a pixel shader "
                          "that reads no mark (no planes)")
@@ -249,6 +221,7 @@ foreach(s IN LISTS settings)
     math(EXPR failures "${failures} + 1")
   endif()
 endforeach()
+rd_vu_inputs_done(failures)
 if(failures GREATER 0)
   message(FATAL_ERROR "rd_vufuse_ab: ${failures} failures over ${ndumps} dumps")
 endif()

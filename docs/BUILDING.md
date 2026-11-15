@@ -594,23 +594,83 @@ captures and `rd_replay_tool` are in [port/TESTING.md](port/TESTING.md), every t
 
 ## Continuous integration
 
-`.github/workflows/ios.yml` (the "Apple packages" workflow) runs when a release is published, or
-by hand (`workflow_dispatch`) with a `tag` input naming an existing release
-(`gh workflow run ios.yml -f tag=<tag>`); never for a push or a pull request. On `macos-15` it
-builds the tag's source with `tools/package_ios.sh <tag>` (the tag must be `vX.Y.Z`), building the
-pinned DXC from source on a cache miss, and a second job on Ubuntu attaches
-`ico-pc-<tag>-ios-unsigned.ipa` to that release (`--clobber`, so a re-run replaces it). An
-independent pair of jobs does the same for the macOS app with `tools/package_macos.sh <tag>`,
-attaching `ico-pc-<tag>-macos-arm64.zip` and `.dmg` (the app is ad-hoc signed, not notarized; its
-link map stays in the run's artifact for 30 days). The workflow reads the repository only; the
-upload jobs alone may write to it. No secret, signing identity or game data is used.
+The Apple builds are one reusable workflow, `.github/workflows/apple-build.yml`
+(`workflow_call`, input `platform`: `macos` or `ios`), called from two places, so the steps exist
+once. On `macos-15` it checks out the source (the Japanese sources as `EUC-JP-MS`, [Checking out on
+a Mac](#checking-out-on-a-mac)), restores two caches, builds the pinned host DXC from source when
+its cache misses ([Apple Vulkan renderer](#apple-vulkan-renderer-moltenvk)), runs
+`tools/package_macos.sh` or `tools/package_ios.sh` (with the version label when one is given) and
+fails unless every package file exists: the macOS zip, dmg and link map, or the IPA and its link
+map. It writes nothing to the repository or a release.
+
+| cache | key | holds |
+| --- | --- | --- |
+| host DXC | `apple-dxc-macos15-arm64-<tag>-<commit>`, the DXC pin alone, shared by both platforms | `tools/toolchain/deps/dxc-build/{bin,lib}` |
+| MoltenVK and SDL3 | `apple-deps-<platform>-macos15-arm64-<hash>`, the hash of `tools/fetch_moltenvk.sh` and `tools/fetch_common.sh` | `tools/toolchain/deps/moltenvk/<platform>`, `tools/toolchain/deps/sdl3/<platform>-arm64` |
+
+GitHub lets a run restore the caches of its own branch or tag and of main; a release's run cannot
+save into main's, a cache no run has read for 7 days is dropped, and the least recently read ones
+go first when the repository's caches pass 10 GB ([GitHub's cache
+rules](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching)).
+So main's pushes save the Apple caches and keep them read, and a release's run, on its tag,
+restores them. A cold host DXC build is 16 to 18 minutes of a job (measured on the release runs
+that missed the cache); a warm job is estimated at 4 to 5 minutes in all (the packaging step alone
+measured about 3.5 minutes).
+
+`ci.yml`'s `apple` job calls it for `macos` and `ios` (a matrix of two jobs, `fail-fast` off) on
+every push to main, every pull request and every pushed `v*` tag, beside the other jobs, with no
+label and nothing kept: an Apple compile, link or packaging error fails main's run before a release
+is made. No test runs on the Mac.
+
+`.github/workflows/ios.yml` (the "Apple packages" workflow) calls it three ways:
+
+- **A published release.** `build-ios` and `build-macos` build the release's tag with the tag as
+  the label (it must be `vX.Y.Z`) and keep the files as the run's artifacts
+  (`ico-pc-ios-<run number>`, `ico-pc-macos-<run number>`, 30 days); `publish-ios` on Ubuntu then
+  attaches `ico-pc-<tag>-ios-unsigned.ipa` to that release and `publish-macos` attaches
+  `ico-pc-<tag>-macos-arm64.zip` and `.dmg` (`--clobber`, so a re-run replaces them; the app is
+  ad-hoc signed, not notarized; the link maps stay in the artifacts). Each platform is its own
+  pair of jobs, so a failure of one never touches the other's files.
+- **By hand for a release** (`gh workflow run ios.yml -R nathanialf/ico-pc -f tag=<tag>`): the
+  same, for an existing release whose run failed or did not start.
+- **A check, no release** (`check_only`): builds the dispatched branch for both platforms and
+  keeps the packages as the run's artifacts; nothing is attached and no release is needed. `tag`
+  is optional there and only labels the files (`vX.Y.Z` or `vX.Y.Z-rcN`). The branch must be on
+  GitHub; pushing a branch other than main starts no workflow (`ci.yml` runs for main, pull
+  requests and tags alone), so this is the way to see a branch's Apple builds before it reaches
+  main:
+
+  ```sh
+  git push origin <branch>
+  gh workflow run ios.yml -R nathanialf/ico-pc --ref <branch> -f check_only=true
+  gh run list -R nathanialf/ico-pc -w "Apple packages" -L 1
+  gh run download <run id> -R nathanialf/ico-pc
+  ```
+
+  A dispatched run uses the workflow file of the ref it is dispatched on (`--ref`, [the gh
+  manual](https://cli.github.com/manual/gh_workflow_run)), and GitHub only dispatches a workflow
+  whose file is also on the default branch: `ios.yml` is there, so a branch carrying this
+  version of it can be checked before main has it.
+
+The two publish jobs alone may write to the repository (`contents: write`). No secret, signing
+identity or game data is used.
+
+`tools/apple_precheck.py` is the early look on a Linux host, before a push: it compiles the Vulkan
+backend's sources (`port/rhi/CMakeLists.txt`'s list) the way the Apple builds do, linked to
+MoltenVK (`ICO_RHI_MOLTENVK`: every `vk*` entry point a declared function, not a pointer), with the
+host's clang, the vendored Vulkan headers and the port's warnings as errors, and fails on what only
+the Apple builds see there (a function compared with `NULL`, assigned, or tested as a pointer).
+`--symbols-against <tag>` also lists the entry points the backend now calls directly that the
+tag's tree did not, each one MoltenVK must export for the Apple link. It needs no Apple SDK and
+covers neither Apple's own clang, nor code under `__APPLE__` or `ICO_IOS`, nor the link: the
+`apple` jobs are the gate.
 
 `.github/workflows/ci.yml` runs on every push to main, every pull request and
 every pushed `v*` tag (which also packages for arm64, see
 [Packages](#packages)): the `linux` job (`ubuntu-24.04`), the `tests` matrix
 of eighteen `ubuntu-24.04` runners (five suites in 3 to 5 shards each), the `extra` job, the
-`linux-arm64` job and the `linux-arm64-filtered` job (two shards) on `ubuntu-24.04-arm` and the
-`android` job side by side, then the `windows` job
+`linux-arm64` job and the `linux-arm64-filtered` job (two shards) on `ubuntu-24.04-arm`, the
+`android` job and the two `apple` jobs on `macos-15` (above) side by side, then the `windows` job
 (`windows-2022`) after `linux`, no secrets, no disc image. `linux` runs the
 hygiene checks and the `win-x64` cross build below in order. Each `tests`
 runner builds one preset and runs one shard of its `ctest` suite; `extra`
@@ -853,10 +913,21 @@ Linux arm64 archives, each with its portable twin, the x86-64 and aarch64 AppIma
 and the aarch64 AppImage come from CI, above), and the APK. The `.sha256` files are for checking
 the copies before the upload and are not attached. Publishing the release starts the Apple packages workflow, which attaches three more: the IPA
 and the macOS zip and dmg ([Continuous integration](#continuous-integration); run it by hand with
-`gh workflow run ios.yml -f tag=<tag>` when the release event does not start it):
+`gh workflow run ios.yml -R nathanialf/ico-pc -f tag=<tag>` when the release event does not start
+it). The release is made only once main's run is green with its two Apple jobs among the green
+ones (the `apple` matrix, `macos` and `ios`): they build and package what the release's Apple run
+will, so an Apple error is never first seen after the release is published:
 
 ```sh
 gh release create <tag> dist/ico-pc-<tag>-win.zip dist/ico-pc-<tag>-win-portable.zip dist/ico-pc-<tag>-linux.tar.gz dist/ico-pc-<tag>-linux-portable.tar.gz dist/ico-pc-<tag>-linux-arm64.tar.gz dist/ico-pc-<tag>-linux-arm64-portable.tar.gz dist/ico-pc-<tag>-linux-x86_64.AppImage dist/ico-pc-<tag>-linux-aarch64.AppImage dist/ico-pc-<tag>-android.apk
+```
+
+After publishing, check that the release's Apple packages run went green and that the IPA and the
+macOS zip and dmg are on the release:
+
+```sh
+gh run list -R nathanialf/ico-pc -w "Apple packages" -L 1
+gh release view <tag> -R nathanialf/ico-pc --json assets -q '.assets[].name'
 ```
 
 ## Release candidate tools

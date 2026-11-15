@@ -1,9 +1,9 @@
 # rd_vumerge_mali: the VU draw merge on a phone without dual-source blending
 # (issue 164: a Mali-G52, where every lerp draw is two passes) against the
 # plain device, byte for byte (docs/port/VU1_PROGRAMS.md, "The draw merge
-# without dual-source blending").  For every dump the list names
-# (tools/vumerge_mali_dumps.txt: a dump, optionally expect=IN/GPU, then
-# rd_replay_tool's setting arguments), rd_replay_tool's --pass-dump with
+# without dual-source blending").  For every frame the list names
+# (lists/vumerge_mali.txt: a fixture, optionally expect=IN/GPU, then
+# rd_replay_tool's setting arguments; rd_vu_inputs.cmake), rd_replay_tool's --pass-dump with
 # --stats twice under ICO_RD_BLEND=fixed: on the plain device and under
 # ICO_VK_FAKE_LIMITS=mali ICO_VK_FAKE_NO_DUAL=1 (a Mali-G68's limits,
 # vk_device.c vkr_fake_limits, and no dualSrcBlend: the two-pass blend,
@@ -14,35 +14,26 @@
 # draws and their GPU draws that figure.  Both runs replay every draw
 # (ICO_RD_CULL=off): the expect= figures count every VU draw of the frame,
 # and the visibility test's NOPs (rd_vis.c) would take some out of the runs
-# (rd_cull_ab is its gate).  A missing list or dump is named
-# and skipped; no dump read, or no device: SKIP (77).
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
-if(NOT EXISTS "${LIST}")
+# (rd_cull_ab is its gate).  The path ran: the plain run's joined draws,
+# every fixture's declared vu_merged_draws, every fixture checked.  No dump,
+# or no device: SKIP (77).
+# -DTOOL=<rd_replay_tool> -DLIST=<list> -DOUT=<a folder the test may write>
+# [-DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<folder> -DFIXTURE_HELPERS=<file>]
+include("${CMAKE_CURRENT_LIST_DIR}/rd_vu_inputs.cmake")
+if(NOT vuFixtures AND NOT EXISTS "${LIST}")
   message(STATUS "SKIP: ${LIST}: no dump list")
   return()
 endif()
-get_filename_component(listDir "${LIST}" DIRECTORY)
-file(STRINGS "${LIST}" lines)
+rd_vu_inputs("${LIST}")
 set(mergeRe "stats: VU merge: ([0-9]+) draws in ([0-9]+) GPU draws \\(([0-9]+) merged into ([0-9]+), ([0-9]+) alone, merge (on|off)\\)")
 set(fuseRe "stats: VU fuse: ([0-9]+) pairs fused")
 set(compared 0)
 set(failures 0)
 set(ndumps 0)
 set(index 0)
-foreach(l IN LISTS lines)
-  string(STRIP "${l}" l)
-  if(l STREQUAL "" OR l MATCHES "^#")
-    continue()
-  endif()
-  separate_arguments(words UNIX_COMMAND "${l}")
-  list(POP_FRONT words dump)
-  if(NOT IS_ABSOLUTE "${dump}")
-    set(dump "${listDir}/${dump}")
-  endif()
-  if(NOT EXISTS "${dump}")
-    message(STATUS "${dump}: no such dump, skipped")
-    continue()
-  endif()
+foreach(dump IN LISTS vuDumps)
+  math(EXPR index "${index} + 1")
+  separate_arguments(words UNIX_COMMAND "${vuWords_${index}}")
   set(expect "")
   list(LENGTH words nw)
   if(nw GREATER 0)
@@ -53,7 +44,6 @@ foreach(l IN LISTS lines)
     endif()
   endif()
   set(args ${words})
-  math(EXPR index "${index} + 1")
   math(EXPR ndumps "${ndumps} + 1")
   set(dirPlain "${OUT}/${index}-plain")
   set(dirMali "${OUT}/${index}-mali")
@@ -95,6 +85,9 @@ foreach(l IN LISTS lines)
   endif()
   set(figPlain "${CMAKE_MATCH_1} draws in ${CMAKE_MATCH_2} GPU draws (${CMAKE_MATCH_3} merged into ${CMAKE_MATCH_4}, ${CMAKE_MATCH_5} alone)")
   set(joinedPlain "${CMAKE_MATCH_3}/${CMAKE_MATCH_4}")
+  # the path ran: the plain run's joined draws (a fixture's declared
+  # vu_merged_draws; every VU draw replayed, the cull off)
+  rd_vu_require(${index} "${outPlain}" vu_merged_draws)
   if(NOT flatMali MATCHES "${mergeRe}" OR NOT CMAKE_MATCH_6 STREQUAL "on")
     message(SEND_ERROR "${dump}: the Mali run's merge is not on:\n${outMali}")
     math(EXPR failures "${failures} + 1")
@@ -148,6 +141,7 @@ foreach(l IN LISTS lines)
     endif()
   endforeach()
 endforeach()
+rd_vu_inputs_done(failures)
 if(failures GREATER 0)
   message(FATAL_ERROR "rd_vumerge_mali: ${failures} failures over ${ndumps} dumps")
 endif()

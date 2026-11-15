@@ -7,61 +7,31 @@
 # and then stderr, where the backend's lines go) must match its regex
 # (REQ_A, REQ_B: the lines that say the run took the path it was meant to).  At the Original preset at 4:3 and 1x and the Enhanced
 # preset at 16:9 and 2x, under ICO_RD_BLEND=fixed.  The dumps: DUMP (one
-# file, may be absent) and those LIST names (tools/vustage_dumps.txt, as
-# rd_vubatch_ab.cmake reads it); none here, or no device: SKIP (77).
+# file the build writes, may be absent) and the frames LIST names (a fixture
+# list, read by rd_vu_inputs.cmake; or a list of the build's dumps); none
+# here, or no device: SKIP (77).  The path ran: on each arm the quantities
+# FX_A, FX_B name (`|` between) of every listed fixture (its declared
+# properties, rd_fixture_require), every fixture checked.
 # -DTOOL=<rd_replay_tool> -DOUT=<a folder the test may write> -DNAME=<label>
 # -DENV_A=<VAR=VALUE[|VAR=VALUE]> -DENV_B=<...> -DREQ_A=<regex> -DREQ_B=<regex>
-# [-DDUMP=<dump>] [-DLIST=<dump list>] [-DSKIP_UNLESS=<regex>: a dump whose
-# first run prints no line matching it is skipped, not compared (the list's
-# frames without VU commands: 0 pre-passes, nothing for a floor to skip)]
+# [-DDUMP=<dump>] [-DLIST=<list>] [-DFX_A=<quantity[|quantity]>] [-DFX_B=<...>]
+# [-DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<folder> -DFIXTURE_HELPERS=<file>]
+# [-DSKIP_UNLESS=<regex>: a dump whose
+# first run prints no line matching it is skipped, not compared (a frame
+# without VU commands: 0 pre-passes, nothing for a floor to skip; a listed
+# fixture so skipped at every setting fails, unchecked)]
 # [-DFORBID_B=<regex>: the B run's output must have no line matching it
 # (rd_vu_rec_size_ab: no growth in play past the record made at start-up)]
-# [-DLIST_STRICT=1: on a machine where any of the list's entries exists,
-# each entry that names no file (or a glob no file matches) is an error;
-# without it, or where none exists (CI), a missing entry is reported only]
+include("${CMAKE_CURRENT_LIST_DIR}/rd_vu_inputs.cmake")
 set(dumps "")
-set(missing "")
-set(listFound 0)
+set(first 0)
 if(DUMP AND EXISTS "${DUMP}")
   list(APPEND dumps "${DUMP}")
+  set(first 1)
 endif()
-if(LIST AND EXISTS "${LIST}")
-  get_filename_component(listDir "${LIST}" DIRECTORY)
-  file(STRINGS "${LIST}" lines)
-  foreach(l IN LISTS lines)
-    string(STRIP "${l}" l)
-    if(l STREQUAL "" OR l MATCHES "^#")
-      continue()
-    endif()
-    if(NOT IS_ABSOLUTE "${l}")
-      set(l "${listDir}/${l}")
-    endif()
-    if(l MATCHES "[*]")
-      file(GLOB matched "${l}")
-      list(SORT matched)
-      list(APPEND dumps ${matched})
-      if(matched)
-        set(listFound 1)
-      else()
-        list(APPEND missing "${l}")
-      endif()
-    elseif(EXISTS "${l}")
-      list(APPEND dumps "${l}")
-      set(listFound 1)
-    else()
-      list(APPEND missing "${l}")
-    endif()
-  endforeach()
-endif()
-foreach(m IN LISTS missing)
-  if(LIST_STRICT AND listFound)
-    message(SEND_ERROR "${NAME}: ${LIST} names ${m}, which is not here")
-  else()
-    message(STATUS "${NAME}: ${LIST} names ${m}, which is not here: skipped")
-  endif()
-endforeach()
-if(LIST_STRICT AND listFound AND missing)
-  message(FATAL_ERROR "${NAME}: the dump list names files that are not here")
+if(LIST)
+  rd_vu_inputs("${LIST}")
+  list(APPEND dumps ${vuDumps})
 endif()
 list(LENGTH dumps ndumps)
 if(ndumps EQUAL 0)
@@ -119,6 +89,17 @@ foreach(dump IN LISTS dumps)
       message(SEND_ERROR "${dump} ${s}: the ${ENV_B} run has no line matching \"${REQ_B}\":\n${outB}")
       math(EXPR failures "${failures} + 1")
     endif()
+    # the path ran: each arm's declared quantities of the list's fixture
+    # (FX_A, FX_B; rd_fixture_require)
+    math(EXPR fx "${index} - ${first}")
+    if(FX_A AND fx GREATER 0)
+      string(REPLACE "|" ";" q "${FX_A}")
+      rd_vu_require(${fx} "${outA}\n${errA}" ${q})
+    endif()
+    if(FX_B AND fx GREATER 0)
+      string(REPLACE "|" ";" q "${FX_B}")
+      rd_vu_require(${fx} "${outB}\n${errB}" ${q})
+    endif()
     if(FORBID_B AND flatB MATCHES "${FORBID_B}")
       message(SEND_ERROR "${dump} ${s}: the ${ENV_B} run has a line matching \"${FORBID_B}\"")
       math(EXPR failures "${failures} + 1")
@@ -145,6 +126,7 @@ foreach(dump IN LISTS dumps)
     endforeach()
   endforeach()
 endforeach()
+rd_vu_inputs_done(failures)
 if(failures GREATER 0)
   message(FATAL_ERROR "${NAME}: ${failures} failures over ${ndumps} dumps")
 endif()
