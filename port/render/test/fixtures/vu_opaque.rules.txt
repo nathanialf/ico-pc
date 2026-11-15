@@ -1,0 +1,16 @@
+# Rules for the VU family's fixtures (FIX-P4a): a texture a VU draw samples is
+# `opaque` (alpha 128 on every texel), so the alpha plan (rd_alpha_plan.c)
+# decides an alpha-tested VU draw's pixels at once and plans the one pass the
+# draw merge and code 36's fused pair need (a texture of alpha 0 to 255 decides
+# nothing: two passes, every run of one draw and every pair kept apart); the
+# default rules otherwise
+glyphs     sheet
+ramp       r8
+date_split date
+opaque     vu
+alpha_ramp ate
+bright     additive
+gradient   abe
+checker    sprite
+grey       unused
+checker

@@ -1,13 +1,15 @@
 # rd_thread_ab: the replays on the render thread against the replays where
 # they are made, byte for byte (port/render/rd_thread.h; docs/port/RENDER.md,
-# "The render thread").  For every dump the lists name (tools/vustage_dumps.txt
-# and tools/vufuse_dumps.txt, read as rd_store_plan_ab.cmake reads them),
-# rd_replay_tool's --pass-dump with --render-thread off, sync (every job
+# "The render thread").  For every frame the list names (lists/thread.txt's
+# fixtures, read by rd_vu_inputs.cmake), rd_replay_tool's --pass-dump with
+# --stats and --render-thread off, sync (every job
 # waited for) and on (the pictures handed over), at two settings:
 #   orig    Original at the dump's aspect, presented at 640x480;
 #   enh2x   Enhanced 2x 4:3, presented at 1280x960;
-# and for every F12 zip (the frame and the tick before it) the blended
-# present between them, --interp 0.5 <zip>, presented, at Enhanced 2x.
+# and for every fixture whose list words name the tick before's fixture
+# (prev=NAME; in the paths form an F12 zip: the frame and the tick before it)
+# the blended present between them, --interp 0.5 <prev>, presented, at
+# Enhanced 2x.
 # Every target's PNG of sync and on must equal off's byte for byte, and the
 # sync and on runs must say "render thread: sync" / "render thread: on" (the
 # thread ran); the blended present is made three times in a row
@@ -17,42 +19,15 @@
 # device's frame slots are apart ("rhi_vk: frame slots: apart") the on run
 # must also say "submit thread: the frame slots apart" (the second and
 # third pictures recorded while the one before was submitted: the slots
-# rule, "the slots" there).  A missing list or dump is named and skipped;
-# no dump read, or no device: SKIP (77).
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DEXTRA=<a second dump list>
+# rule, "the slots" there).  The path ran: on the render thread's on run at
+# both settings every fixture's declared prepass_vertices, every fixture
+# checked.  No dump, or no device: SKIP (77).
+# -DTOOL=<rd_replay_tool> -DLIST=<list> [-DEXTRA=<a second list>]
 # -DOUT=<a folder the test may write>
-set(dumps "")
-foreach(list IN ITEMS "${LIST}" "${EXTRA}")
-  if(list STREQUAL "" OR NOT EXISTS "${list}")
-    message(STATUS "${list}: no dump list, skipped")
-    continue()
-  endif()
-  get_filename_component(listDir "${list}" DIRECTORY)
-  file(STRINGS "${list}" lines)
-  foreach(l IN LISTS lines)
-    string(STRIP "${l}" l)
-    if(l STREQUAL "" OR l MATCHES "^#")
-      continue()
-    endif()
-    if(NOT IS_ABSOLUTE "${l}")
-      set(l "${listDir}/${l}")
-    endif()
-    if(l MATCHES "[*]")
-      file(GLOB matched "${l}")
-      list(SORT matched)
-      if(matched)
-        list(APPEND dumps ${matched})
-      else()
-        message(STATUS "${l}: no dump matches, skipped")
-      endif()
-    elseif(EXISTS "${l}")
-      list(APPEND dumps "${l}")
-    else()
-      message(STATUS "${l}: no such dump, skipped")
-    endif()
-  endforeach()
-endforeach()
-list(REMOVE_DUPLICATES dumps)
+# [-DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<folder> -DFIXTURE_HELPERS=<file>]
+include("${CMAKE_CURRENT_LIST_DIR}/rd_vu_inputs.cmake")
+rd_vu_inputs("${LIST}" "${EXTRA}")
+set(dumps "${vuDumps}")
 list(LENGTH dumps ndumps)
 if(ndumps EQUAL 0)
   message(STATUS "SKIP: no dump of ${LIST} or ${EXTRA} is here")
@@ -70,7 +45,15 @@ set(index 0)
 foreach(dump IN LISTS dumps)
   math(EXPR index "${index} + 1")
   set(cases ${settings})
+  # the blended present: an F12 zip (the frame and the tick before it), or a
+  # fixture whose list words name the tick before's fixture (prev=NAME)
+  set(prev "")
   if(dump MATCHES "\\.zip$")
+    set(prev "${dump}")
+  elseif("${vuWords_${index}}" MATCHES "(^| )prev=([^ ]+)")
+    rd_fixture_expand(${CMAKE_MATCH_2} "${OUT}/fixtures" prev)
+  endif()
+  if(NOT prev STREQUAL "")
     list(APPEND cases "interp")
   endif()
   foreach(s IN LISTS cases)
@@ -80,10 +63,11 @@ foreach(dump IN LISTS dumps)
       file(REMOVE_RECURSE "${dir_${run}}")
       file(MAKE_DIRECTORY "${dir_${run}}")
       if(s STREQUAL "interp")
-        set(cmd "${TOOL}" "${dump}" "${dir_${run}}/PRESENT.png" --interp 0.5 "${dump}"
+        set(cmd "${TOOL}" "${dump}" "${dir_${run}}/PRESENT.png" --interp 0.5 "${prev}"
                 --repeat 3 ${args_enh2x})
       else()
-        set(cmd "${TOOL}" "${dump}" - --pass-dump "${dir_${run}}" ${args_${s}})
+        set(cmd "${TOOL}" "${dump}" "${dir_${run}}.png" --pass-dump "${dir_${run}}" --stats
+                ${args_${s}})
       endif()
       execute_process(COMMAND ${cmd} --render-thread ${run}
                       RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
@@ -117,6 +101,11 @@ foreach(dump IN LISTS dumps)
                            "thread kept them one at a time:\n${err}")
         set(ok FALSE)
         break()
+      endif()
+      # the path ran: the replays on the render thread drew the VU commands
+      # through the pre-pass (a fixture's declared prepass_vertices)
+      if(run STREQUAL "on" AND NOT s STREQUAL "interp")
+        rd_vu_require(${index} "${out}" prepass_vertices)
       endif()
     endforeach()
     if(NOT ok)
@@ -156,6 +145,7 @@ if(compared EQUAL 0 AND failures EQUAL 0)
   message(STATUS "SKIP: no dump of ${LIST} or ${EXTRA} could be compared")
   return()
 endif()
+rd_vu_inputs_done(failures)
 message(STATUS "rd_thread_ab: ${compared} pictures compared over ${ndumps} dumps (${interps} "
                "blended presents)")
 if(failures GREATER 0)
