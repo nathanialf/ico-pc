@@ -20,6 +20,7 @@
 *.jpg binary
 *.gz binary
 *.zip binary
+*.rdfix binary
 *.jar binary
 
 # EUC-JP sources: the developers' files carried Japanese text in EUC-JP, and the

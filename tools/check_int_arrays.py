@@ -122,6 +122,10 @@ EXEMPT = {
     ("port/render/test/rd_fog_test.c", "kColT4"): _PORT
     + "the GS PSMT4 column layout (which nibble each of 32 x 4 pixels is), "
     "the reference swizzle the test checks the port's against.",
+    ("port/render/rd_fixture.c", "s_k"): _PORT
+    + "SHA-256's 64 round constants (FIPS 180-4 section 4.2.2: the first 32 "
+    "bits of the fractional parts of the cube roots of the first 64 primes), "
+    "the fixtures' expansion pin; a published standard's constants.",
     ("port/rhi/test/shaders/rhi_test_dxil.h", "dxil_vs_main"): _PORT
     + _SHADER,
     ("port/rhi/test/shaders/rhi_test_dxil.h", "dxil_ps_dual"): _PORT

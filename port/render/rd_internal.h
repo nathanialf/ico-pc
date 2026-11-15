@@ -452,9 +452,8 @@ typedef struct RdTargetRec {
     /* a render-to-texture block rd_block_target made (rd_water.c: the
      * reflections of puddle.c and pool.c, the queen barrier's copy of the
      * frame, the dark volume's scene-sized block): one that is not
-     * scene-sized takes the scene's scale under Water reflections: Sharp
-     * (RdSettings.waterSharp, rd__target_scale_of); 1 also in a dump's
-     * keep word (rd_dump.c) */
+     * scene-sized takes the scene's scale too (rd__target_scale_of; its GS
+     * size under g_rd.waterPs2); 1 also in a dump's keep word (rd_dump.c) */
     uint8_t block;
 } RdTargetRec;
 
@@ -3015,6 +3014,12 @@ typedef struct RdContext {
      * ICO_RD_PASS_MERGE=1 turns it on; rd_core.c rd_init): off by default,
      * used only under the storage mode */
     bool passMerge;
+    /* ICO_RD_WATER_SCALE=0 (the tests' switch, docs/port/TESTING.md;
+     * rd_core.c rd_init; the replay tool's --water-ps2): the blocks
+     * rd_block_target made that are not scene-sized at their GS size, the
+     * PS2's (v0.11.6's Water reflections: Original); false, the default,
+     * they take the scene's scale (rd__target_scale_of) */
+    bool waterPs2;
     /* the supersampling factor in force (rd__apply_display): 1, 2 or 4,
      * already in sceneReqSx/Sy; rd_scene_scale_lowered divides it out */
     float ssaa;
@@ -4101,7 +4106,7 @@ typedef struct RdCameraScope {
 
 void rd__water_frame_reset(const RdFrame *f);
 /* The F12 log line's summary of f's render-to-texture blocks (issue 106):
- * the Water reflections option, SCENE's scale, each block a draw of f wrote
+ * the blocks' scale rule, SCENE's scale, each block a draw of f wrote
  * or read (GS size, texels and scale, depth, the draws into it, the draws
  * reading it with their DATE, AFAIL and blend), the DATE draws by target,
  * and the draws sampling a texture-pack replacement (blank in a dump).  At

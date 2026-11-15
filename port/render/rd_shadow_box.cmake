@@ -22,21 +22,26 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_shadow_box COMMAND rd_shadow_box_test)
 endif()
 
-# rd_shadow_box_ab (test/rd_shadow_box_ab.cmake): the dumps of
-# tools/shadow_box_dumps.txt (machine-local; a listed dump that is absent fails)
-# with ICO_RD_SHADOW_BOX=0 and 1 at the PowerVR phone's profile, the Mali's, the
+# rd_shadow_box_ab (test/rd_shadow_box_ab.cmake): the fixtures of
+# test/fixtures/lists/shadow_box.txt (committed frames, rd_fixture.cmake,
+# docs/port/TESTING_FIXTURES.md; a listed fixture that is absent fails) with
+# ICO_RD_SHADOW_BOX=0 and 1 at the PowerVR phone's profile, the Mali's, the
 # B-spline composites at 2x and MSAA 4x at 2x: every target the same bytes, the
-# same draws and passes, the phone's counts and composites boxed as listed;
-# rd_shadow_box_ab_gl the same at 1x on OpenGL (llvmpipe).  No device: SKIP (77).
+# same draws and passes, the fixtures' declared properties shown (the path
+# ran); rd_shadow_box_ab_gl the same at 1x on OpenGL (llvmpipe).  No device:
+# SKIP (77).
+include(rd_fixture.cmake)
 if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
     set(_sb_env "")
     if(ICO_SANITIZE MATCHES "address")
         list(APPEND _sb_env "ASAN_OPTIONS=detect_leaks=0")
     endif()
+    set(_sb_fx -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool> "-DFIXTURES=${ICO_FIXTURE_DIR}"
+               "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+               "-DLIST=${ICO_FIXTURE_DIR}/lists/shadow_box.txt")
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/shadow_box_ab")
     add_test(NAME rd_shadow_box_ab
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/shadow_box_dumps.txt"
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> ${_sb_fx}
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/shadow_box_ab" -DBACKEND=vulkan
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_shadow_box_ab.cmake")
     set_tests_properties(rd_shadow_box_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 7200)
@@ -46,8 +51,7 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
     if(ICO_RHI_OPENGL AND ICO_SHADERS_GLSL AND TARGET ico_rhi_opengl)
         file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/gl/shadow_box_ab")
         add_test(NAME rd_shadow_box_ab_gl
-                 COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                         "-DLIST=${CMAKE_SOURCE_DIR}/tools/shadow_box_dumps.txt"
+                 COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> ${_sb_fx}
                          "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/gl/shadow_box_ab" -DBACKEND=opengl
                          -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_shadow_box_ab.cmake")
         set_tests_properties(rd_shadow_box_ab_gl PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"

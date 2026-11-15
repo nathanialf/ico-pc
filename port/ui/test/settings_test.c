@@ -47,16 +47,10 @@ static void testBuild(void)
     static const int apiStrs[] = {UI_STR_OPT_GRAPHICS_API, UI_STR_OPT_GRAPHICS_ADAPTER,
                                   UI_STR_GRAPHICS_APPLY,   UI_STR_GRAPHICS_KEEP,
                                   UI_STR_GRAPHICS_REVERT,  UI_STR_BACK};
-    static const int fxOpts[] = {UI_OPT_EFFECT_GLOW,
-                                 UI_OPT_EFFECT_GLOW_SMOOTH,
-                                 UI_OPT_EFFECT_DEPTH_OF_FIELD,
-                                 UI_OPT_EFFECT_SOFTENING,
-                                 UI_OPT_EFFECT_MOTION_BLUR,
-                                 UI_OPT_EFFECT_MOTION_BLUR_STRENGTH,
-                                 UI_OPT_EFFECT_FOG,
-                                 UI_OPT_EFFECT_WATER,
-                                 UI_OPT_EFFECT_CINEMATIC_BARS,
-                                 UI_OPT_BACK};
+    static const int fxOpts[] = {
+        UI_OPT_EFFECT_GLOW,      UI_OPT_EFFECT_GLOW_SMOOTH,    UI_OPT_EFFECT_DEPTH_OF_FIELD,
+        UI_OPT_EFFECT_SOFTENING, UI_OPT_EFFECT_MOTION_BLUR,    UI_OPT_EFFECT_MOTION_BLUR_STRENGTH,
+        UI_OPT_EFFECT_FOG,       UI_OPT_EFFECT_CINEMATIC_BARS, UI_OPT_BACK};
     static const int fxStrs[] = {UI_STR_OPT_EFFECT_GLOW,
                                  UI_STR_OPT_EFFECT_GLOW_SMOOTH,
                                  UI_STR_OPT_EFFECT_DEPTH_OF_FIELD,
@@ -64,7 +58,6 @@ static void testBuild(void)
                                  UI_STR_OPT_EFFECT_MOTION_BLUR,
                                  UI_STR_OPT_EFFECT_MOTION_BLUR_STRENGTH,
                                  UI_STR_OPT_EFFECT_FOG,
-                                 UI_STR_OPT_EFFECT_WATER,
                                  UI_STR_OPT_EFFECT_CINEMATIC_BARS,
                                  UI_STR_BACK};
     static const int picOpts[] = {UI_OPT_ANTI_ALIAS,
@@ -231,7 +224,7 @@ static void testBuild(void)
     ui_settings_install();
     CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 16), "main page rows");
     CHECK(labelsAre(UI_PAGE_GRAPHICS, apiOpts, apiStrs, 6), "Graphics page rows");
-    CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 10), "effects rows");
+    CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 9), "effects rows");
     CHECK(labelsAre(UI_PAGE_PICTURE, picOpts, picStrs, 18), "picture rows");
     CHECK(labelsAre(UI_PAGE_DEVELOPER, devOpts, devStrs, 6), "developer rows");
     {

@@ -1,10 +1,11 @@
 # rd_shadow_box_ab: the shadow count and composites drawn whole
 # (ICO_RD_SHADOW_BOX=0) against over the volumes' box (=1;
 # port/render/rd_shadow_box.c, docs/port/WORK_BUFFERS.md "The shadows over the
-# volumes' box"), byte for byte.  For every dump the list names
-# (tools/shadow_box_dumps.txt: a path, '*' globs allowed, optionally the counts
-# and composites the box takes at the phone setting; a listed dump that is
-# absent FAILS), rd_replay_tool's --pass-dump with --stats under the store plan
+# volumes' box"), byte for byte.  For every fixture the list names
+# (port/render/test/fixtures/lists/shadow_box.txt: fixture names of the
+# repository, docs/port/TESTING_FIXTURES.md; a listed fixture that is absent
+# or does not expand to its pinned SHA-256 FAILS), expanded into OUT, then
+# rd_replay_tool's --pass-dump with --stats under the store plan
 # (ICO_RD_STORE_PLAN=1), the empty composites off (ICO_RD_EMPTY_SKIP=0: the
 # box on would skip them) and the programs' own entries (ICO_RD_VU_PREPASS=0),
 # at:
@@ -20,64 +21,41 @@
 #            presented 1280x720;
 #   gl       -DBACKEND=opengl (rd_shadow_box_ab_gl): 1x on OpenGL, presented
 #            1280x720;
-# a dump a setting cannot show ("cannot show") is skipped there.  Each pair:
+# a fixture a setting cannot show ("cannot show") is skipped there.  Each pair:
 #   - every PNG the =0 run writes (SCENE, SHADOW0-2, the count target,
 #     DISPLAY, PRESENT, every other target) the =1 run's byte for byte, the
 #     same number;
-#   - the same draws and passes;
+#   - the same draws and passes; for a fixture that declares no volume
+#     (shadow_volume_draws=0) the box is empty and takes work away instead:
+#     never more draws or passes, fewer draws when it boxed the count, every
+#     boxed composite with nothing to draw, no texel boxed;
 #   - =0 says "shadow box off: 0 counts and 0 composites", =1 "shadow box on";
-#   - at the phone setting a dump with expected figures takes exactly them;
-# and over the dumps the phone setting boxes at least one count and one
-# composite.  No device: SKIP (77).
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
-# -DBACKEND=vulkan|opengl
-# The lists name dumps of the build machine alone (the owner's rule there: a
-# listed dump that is absent FAILS). A machine without that folder has none of
-# them: the test is skipped as the older dump tests are.
-if(NOT IS_DIRECTORY "/primary/dev/ico-dumps")
-  message(STATUS "SKIP: no dump folder on this machine (/primary/dev/ico-dumps): the list's dumps are the build machine's")
-  return()
-endif()
-set(dumps "")
+# the path ran: at the phone setting (gl: its one setting) the =1 run shows
+# every property the fixture declares among shadow_volume_draws,
+# shadow_box_counts and shadow_box_composites (rd_fixture_require: a fixture
+# with a character's volumes boxes its counts and composites, one without
+# volumes draws none), and over the fixtures the phone setting boxes at least
+# one count and one composite.  No device: SKIP (77).
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the
+# fixtures folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<a
+# fixture list> -DOUT=<a folder the test may write> -DBACKEND=vulkan|opengl
+include("${FIXTURE_HELPERS}")
 set(failures 0)
-if("${LIST}" STREQUAL "" OR NOT EXISTS "${LIST}")
-  message(FATAL_ERROR "rd_shadow_box_ab: no dump list ${LIST}")
-endif()
-get_filename_component(listDir "${LIST}" DIRECTORY)
-file(STRINGS "${LIST}" lines)
-foreach(l IN LISTS lines)
-  string(STRIP "${l}" l)
-  if(l STREQUAL "" OR l MATCHES "^#")
-    continue()
-  endif()
-  set(want "")
-  if(l MATCHES "^([^ \t]+)[ \t]+([0-9]+)[ \t]+([0-9]+)$")
-    set(l "${CMAKE_MATCH_1}")
-    set(want "${CMAKE_MATCH_2} ${CMAKE_MATCH_3}")
-  endif()
-  if(NOT IS_ABSOLUTE "${l}")
-    set(l "${listDir}/${l}")
-  endif()
-  if(l MATCHES "[*]")
-    file(GLOB found "${l}")
-    list(SORT found)
-    if(NOT found)
-      message(SEND_ERROR "${l}: no dump matches (a listed dump must exist)")
-      math(EXPR failures "${failures} + 1")
-    endif()
-    foreach(d IN LISTS found)
-      list(APPEND dumps "${d}")
-      set(want_${d} "${want}")
-    endforeach()
-  elseif(EXISTS "${l}")
-    list(APPEND dumps "${l}")
-    set(want_${l} "${want}")
-  else()
-    message(SEND_ERROR "${l}: no such dump (a listed dump must exist)")
-    math(EXPR failures "${failures} + 1")
+rd_fixture_list("${LIST}" names)
+set(dumps "")
+foreach(name IN LISTS names)
+  rd_fixture_expand(${name} "${OUT}/fixtures" d)
+  list(APPEND dumps "${d}")
+  set(name_${d} "${name}")
+  # a fixture that declares no volume (shadow_volume_draws=0): its box is
+  # empty (below)
+  execute_process(COMMAND "${FIXTURE_TOOL}" props "${FIXTURES}/${name}.rdfix"
+                  OUTPUT_VARIABLE p RESULT_VARIABLE rc)
+  set(novolume_${d} FALSE)
+  if(rc EQUAL 0 AND p MATCHES "(^|\n)shadow_volume_draws=0(\n|$)")
+    set(novolume_${d} TRUE)
   endif()
 endforeach()
-list(REMOVE_DUPLICATES dumps)
 list(LENGTH dumps ndumps)
 
 # the empty composites off (ICO_RD_EMPTY_SKIP=0, rd_shadow_box.c): with the
@@ -138,6 +116,7 @@ foreach(dump IN LISTS dumps)
         set(skipped TRUE)
         continue()
       endif()
+      set(out_${box} "${out}")
       string(REPLACE ";" "," flat "${out}")
       if(NOT flat MATCHES "${drawsRe}" OR NOT flat MATCHES "${boxRe}")
         message(SEND_ERROR "${dump} ${s} box ${box}: no draws or shadow box line:\n${out}")
@@ -152,6 +131,7 @@ foreach(dump IN LISTS dumps)
       set(word_${box} "${CMAKE_MATCH_1}")
       set(counts_${box} "${CMAKE_MATCH_2}")
       set(comps_${box} "${CMAKE_MATCH_3}")
+      set(empty_${box} "${CMAKE_MATCH_4}")
       set(texels_${box} "${CMAKE_MATCH_5}")
       set(all_${box} "${CMAKE_MATCH_6}")
       set(whole_${box} "${CMAKE_MATCH_7}")
@@ -169,20 +149,50 @@ foreach(dump IN LISTS dumps)
                          "composites), =1 says ${word_1}: off with nothing, then on, expected")
       math(EXPR failures "${failures} + 1")
     endif()
-    if(NOT draws_0 EQUAL draws_1 OR NOT passes_0 EQUAL passes_1)
+    if(NOT novolume_${dump} AND (NOT draws_0 EQUAL draws_1 OR NOT passes_0 EQUAL passes_1))
       message(SEND_ERROR "${dump} ${s}: ${draws_1} draws, ${passes_1} passes with the box; "
                          "${draws_0} and ${passes_0} without")
       math(EXPR failures "${failures} + 1")
     endif()
+    if(novolume_${dump})
+      # no volume: the volumes' box is empty, and the box takes work away
+      # without changing a byte: the count's one draw is the clear alone
+      # (rd_shadow_one.c: "an empty box: the clear alone"), a level or
+      # composite sprite whose box is empty gets an empty scissor and is not
+      # drawn (rd_replay.c bindDrawEx: no texture group), its DATE set-up with
+      # it, and above 1x the levels' chain draws no step for an empty count
+      # (rd_shadowres.c): never more draws or passes with the box, fewer draws
+      # when the count was boxed, every boxed composite with nothing to draw
+      # and no texel boxed
+      if(draws_1 GREATER draws_0 OR passes_1 GREATER passes_0)
+        message(SEND_ERROR "${dump} ${s}: no volume: ${draws_1} draws, ${passes_1} passes with "
+                           "the box, ${draws_0} and ${passes_0} without: the box may only take "
+                           "work away")
+        math(EXPR failures "${failures} + 1")
+      endif()
+      if(counts_1 GREATER 0 AND NOT draws_1 LESS draws_0)
+        message(SEND_ERROR "${dump} ${s}: no volume: the count was boxed (${counts_1}) and "
+                           "${draws_1} draws remain of ${draws_0}: the empty box's count draw "
+                           "was drawn")
+        math(EXPR failures "${failures} + 1")
+      endif()
+      if(NOT empty_1 EQUAL comps_1 OR NOT texels_1 EQUAL 0)
+        message(SEND_ERROR "${dump} ${s}: no volume: ${empty_1} of ${comps_1} boxed composites "
+                           "with nothing to draw, ${texels_1} texels boxed: an empty box expected")
+        math(EXPR failures "${failures} + 1")
+      endif()
+      message(STATUS "${dump} ${s}: no volume: the box took ${draws_0} - ${draws_1} draws and "
+                     "${passes_0} - ${passes_1} passes away, the same bytes (below)")
+    endif()
     if(s STREQUAL "phone")
       math(EXPR phoneCounts "${phoneCounts} + ${counts_1}")
       math(EXPR phoneComposites "${phoneComposites} + ${comps_1}")
-      set(want "${want_${dump}}")
-      if(NOT want STREQUAL "" AND NOT "${counts_1} ${comps_1}" STREQUAL "${want}")
-        message(SEND_ERROR "${dump} phone: ${counts_1} counts and ${comps_1} composites over "
-                           "the box, ${want} expected")
-        math(EXPR failures "${failures} + 1")
-      endif()
+    endif()
+    if(s STREQUAL "phone" OR s STREQUAL "gl")
+      # the path ran: the fixture's declared properties on the =1 run
+      rd_fixture_require(${name_${dump}} "${out_1}" shadow_volume_draws shadow_box_counts
+                         shadow_box_composites)
+      set(required_${dump} TRUE)
     endif()
     set(dirOff "${OUT}/${index}-${s}-0")
     set(dirOn "${OUT}/${index}-${s}-1")
@@ -207,14 +217,22 @@ foreach(dump IN LISTS dumps)
 endforeach()
 if(NOT "${BACKEND}" STREQUAL "opengl" AND (phoneCounts EQUAL 0 OR phoneComposites EQUAL 0))
   message(SEND_ERROR "rd_shadow_box_ab: the phone setting boxed ${phoneCounts} counts and "
-                     "${phoneComposites} composites over ${ndumps} dumps")
+                     "${phoneComposites} composites over ${ndumps} fixtures")
   math(EXPR failures "${failures} + 1")
 endif()
+foreach(dump IN LISTS dumps)
+  if(NOT required_${dump})
+    message(SEND_ERROR "${name_${dump}}: its properties were never checked (the phone or gl "
+                       "setting could not show it): a fixture this test cannot measure is no test")
+    math(EXPR failures "${failures} + 1")
+  endif()
+endforeach()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(failures GREATER 0)
-  message(FATAL_ERROR "rd_shadow_box_ab: ${failures} failures over ${ndumps} dumps")
+  message(FATAL_ERROR "rd_shadow_box_ab: ${failures} failures over ${ndumps} fixtures")
 endif()
 if(compared EQUAL 0)
-  message(FATAL_ERROR "rd_shadow_box_ab: no target compared over ${ndumps} dumps")
+  message(FATAL_ERROR "rd_shadow_box_ab: no target compared over ${ndumps} fixtures")
 endif()
-message(STATUS "rd_shadow_box_ab: ${compared} targets the same bytes over ${ndumps} dumps; the "
+message(STATUS "rd_shadow_box_ab: ${compared} targets the same bytes over ${ndumps} fixtures; the "
                "phone setting boxed ${phoneCounts} counts and ${phoneComposites} composites")

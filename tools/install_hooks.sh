@@ -44,6 +44,10 @@ cat > "$HOOK" <<'EOF'
 #                                          and the region glue are fresh; raw
 #                                          VERSION_ blocks that are all hand
 #                                          items (exit 2) only warn
+#   9. tools/check_test_paths.py           no test list or test script names a
+#                                          path outside the repository (its
+#                                          allow-list: the lists not converted
+#                                          to fixtures yet, which only shrinks)
 set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
 
@@ -102,6 +106,12 @@ elif [[ $rc != 0 ]]; then
     echo "pre-commit: ico2/ breaks a region rule: write the run-time form (docs/port/GAME_CODE.md \"Regions\")" >&2
     exit 1
 fi
+
+"$PY" -I "$ROOT/tools/check_test_paths.py" >/dev/null || {
+    "$PY" -I "$ROOT/tools/check_test_paths.py" | tail -n 40
+    echo "pre-commit: a test reads from outside the repository: see docs/port/TESTING_FIXTURES.md" >&2
+    exit 1
+}
 EOF
 chmod +x "$HOOK"
 echo "Installed pre-commit hook at $HOOK"

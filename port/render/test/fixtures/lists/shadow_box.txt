@@ -1,0 +1,9 @@
+# Fixtures for rd_shadow_box_ab and rd_shadow_box_ab_gl
+# (port/render/test/rd_shadow_box_ab.cmake: the shadow count and composites
+# over the volumes' box against drawn whole, byte for byte): fixture names of
+# this repository (port/render/test/fixtures/NAME.rdfix), a name a line.
+#
+# a character's shadow at 21:9: the box takes the count and the composites
+fx-shadow-wide
+# a shadow window with no volume: the box over nothing
+fx-lamps-novolume

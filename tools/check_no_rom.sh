@@ -25,6 +25,8 @@
 #   7. Signing keys: a tracked *.jks, *.keystore, *.p12 or *.pem, anything
 #      under android-keystores/, or a file naming the release keystore or
 #      holding a keystore password (outside tools/package_android.sh).
+#   8. A tracked test fixture (*.rdfix) that does not parse as one with no
+#      art section (tools/rdfix_check.py).
 #
 # In pre-commit mode (something is staged) the content rules (3, 4, 5, 5b)
 # read the staged blobs (`git show :path`), not the working tree: what is
@@ -228,6 +230,25 @@ for f in "${files[@]}"; do
     have "$f" || continue
     if blob "$f" 2>/dev/null | grep -IE "$key_text_re" >/dev/null; then
         note "names the release keystore or a keystore password: $f"
+    fi
+done
+
+# --- 8. test fixtures ---
+# A committed test frame (*.rdfix, docs/port/TESTING_FIXTURES.md) is a frame
+# dump's skeleton with no art in it: every texture a pattern name, every mesh
+# a generator name, no texel or vertex array. tools/rdfix_check.py walks its
+# sections to their end; an art array in place of a name breaks the walk.
+for f in "${files[@]}"; do
+    [[ -z "$f" ]] && continue
+    case "$f" in *.rdfix) ;; *) continue ;; esac
+    have "$f" || continue
+    py="$(command -v python3 || true)"
+    if [[ -z "$py" ]]; then
+        note "rule 8 needs python3 (tools/rdfix_check.py)"
+        break
+    fi
+    if ! out="$(blob "$f" | "$py" -I "$(dirname "${BASH_SOURCE[0]}")/rdfix_check.py" --stdin "$f")"; then
+        note "test fixture with art or not a fixture: $out"
     fi
 done
 

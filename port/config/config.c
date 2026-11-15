@@ -42,24 +42,27 @@ void ico_config_reset(const char *toml_path, const char *ini_path)
    they always keep their texels. [dev] hand_probe names a log of the
    characters' hand-holding numbers, which the port does not write.
    [video] effect_glow_size named the glow's size above 1x; the glow is
-   drawn at the PS2's size at every resolution.  The fifteen gameplay keys
+   drawn at the PS2's size at every resolution.  [video] effect_water_sharp
+   was v0.11.6's Water reflections row; since v0.11.7 the reflections in
+   water and the queen barrier's picture always take the scene's scale
+   (port/render/rd_core.c rd__target_scale_of).  The fifteen gameplay keys
    from [gameplay] yorda_safe to [variants] peaceful_shadows are rows of each
    save's difficulty record since v0.11.3 (port/game/difficulty.h, chosen on
    the New Game screen); their getters still read them, once, for the
    carry-over of a save that has no record yet, and no file is rewritten. */
 static const char *const retired_keys[] = {
-    "game.classic_menu_text",   "game.port_font",       "dev.hand_probe",
-    "video.effect_glow_size",   "gameplay.yorda_safe",  "gameplay.pit_time",
-    "gameplay.shadow_speed",    "gameplay.yorda_trips", "gameplay.shadows_together",
-    "variants.shade_toughness", "variants.one_hit",     "variants.never_dodge",
-    "variants.aggression",      "variants.no_hints",    "variants.barrier_hits",
-    "variants.auto_guard",      "variants.attack_turn", "variants.shadows_wait_down",
-    "variants.peaceful_shadows"};
+    "game.classic_menu_text",     "game.port_font",           "dev.hand_probe",
+    "video.effect_glow_size",     "video.effect_water_sharp", "gameplay.yorda_safe",
+    "gameplay.pit_time",          "gameplay.shadow_speed",    "gameplay.yorda_trips",
+    "gameplay.shadows_together",  "variants.shade_toughness", "variants.one_hit",
+    "variants.never_dodge",       "variants.aggression",      "variants.no_hints",
+    "variants.barrier_hits",      "variants.auto_guard",      "variants.attack_turn",
+    "variants.shadows_wait_down", "variants.peaceful_shadows"};
 
 /* the first of retired_keys that is one of the fifteen gameplay keys */
-#define RETIRED_GAMEPLAY_FIRST 4
+#define RETIRED_GAMEPLAY_FIRST 5
 _Static_assert(sizeof(retired_keys) / sizeof(retired_keys[0]) == RETIRED_GAMEPLAY_FIRST + 15,
-               "four keys nothing reads, then the fifteen gameplay keys");
+               "five keys nothing reads, then the fifteen gameplay keys");
 
 /* one line for the keys nothing reads; one line naming the fifteen gameplay
    keys the file holds, which are read still (once, for a save's carry-over) */
@@ -398,10 +401,6 @@ static const char first_run_text[] =
     "effect_fog = true\n"
     "# Cinematic bars: the black bars above and below the picture in cutscenes.\n"
     "effect_cinematic_bars = true\n"
-    "# Water reflections: true draws the reflections in water (and the picture\n"
-    "# through the queen's barrier) at the game's resolution; false keeps the\n"
-    "# PS2's softer ones.\n"
-    "effect_water_sharp = false\n"
     "# The colour of the picture, the Picture page's Gamma, Picture brightness,\n"
     "# Contrast and Saturation rows. 50 is the game's own picture; 1 to 100.\n"
     "gamma = 50\n"

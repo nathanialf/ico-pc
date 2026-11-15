@@ -86,10 +86,12 @@
  *                                       faster; a value off the tens is rounded to one,
  *                                       outside 10..100 clamped
  *   [video] effect_water_sharp
- *                           false       the reflections in water (and the picture through
- *                                       the queen's barrier) at the scene's resolution;
- *                                       false keeps the PS2's size (Water reflections:
- *                                       Original)
+ *                           (retired)   v0.11.6's Water reflections; not read since
+ *                                       v0.11.7, which draws the reflections in water
+ *                                       (and the picture through the queen's barrier)
+ *                                       at the scene's resolution always; a file's line
+ *                                       is kept and logged as not used (config.c
+ *                                       retired_keys)
  *   [video] effects_depth   true        config only: the scene's depth beside
  *                                       the picture for an effects program (ReShade's depth
  *                                       effects), drawn only when one is loaded; not with
@@ -248,10 +250,6 @@ typedef struct IcoVideoOptions {
     int effectGlowSmooth;
     int effectFog;           /* the depth fog (ZFog.c fog_DrawFog) */
     int effectCinematicBars; /* the cutscene bars (GsBase.c); 1 = on */
-    /* the water's reflections (puddle.c, pool.c) and the queen barrier's
-       picture at the scene's resolution (rd.h RdSettings.waterSharp);
-       0 = Original, the PS2's size: the one effect row whose default is 0 */
-    int effectWaterSharp;
     /* an output-size depth buffer in the presentation for an
        effects program (rd.h RdSettings.effectsDepth); 1 = on */
     int effectsDepth;
@@ -369,9 +367,6 @@ int ico_video_effect_softening(void);
 int ico_video_effect_motion_blur(void);
 int ico_video_effect_fog(void);
 int ico_video_effect_cinematic_bars(void);
-/* [video] effect_water_sharp, 1 (Sharp) or 0 (Original): the host hands it
-   to the renderer (window_host.c video_settings, RdSettings.waterSharp) */
-int ico_video_effect_water_sharp(void);
 /* 1 when the motion blur is on and Smooth ([video] effect_motion_blur =
    true, effect_motion_blur_mode = "smooth"): the host hands it to the
    renderer (window_host.c video_settings, RdSettings.motionBlurSmooth);

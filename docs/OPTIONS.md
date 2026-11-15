@@ -66,8 +66,9 @@ The window, the picture's size and shape, and the speed.
   Original makes it Original, and changing that row yourself makes the
   Preset say **Custom**.
 - **Resolution** is how sharp the picture is: 1x is the PS2's, up to 16x,
-  or the size of your window. Very high values need a lot of graphics
-  memory; when your graphics card cannot hold the picture, the game lowers
+  or the size of your window. The reflections in water and the picture
+  seen through the Queen's barrier are drawn as sharp as the rest. Very
+  high values need a lot of graphics memory; when your graphics card cannot hold the picture, the game lowers
   it on its own and the row shows both, for example **16x (8x)**. **Auto**
   starts at the size of your window and steps down (3x, then 2x, then 1x)
   when your computer or phone cannot draw the pictures in time. It never
@@ -295,11 +296,10 @@ This page is in the Options menu, right under Picture.
 The game's own picture effects.
 
 The game's own effects are each On or Off (Motion blur is Off, Original
-or Smooth, Water reflections is Original or Sharp, and Glow between frames
-is Original or Smooth). All On, with Motion blur, Water reflections and
-Glow between frames at Original, is the picture the PS2 gives you, and that
-is how the game starts, with Motion blur strength at 100 %. The Preset does
-not change these rows, except Glow between frames.
+or Smooth, and Glow between frames is Original or Smooth). All On, with
+Motion blur and Glow between frames at Original, is the picture the PS2
+gives you, and that is how the game starts, with Motion blur strength at
+100 %. The Preset does not change these rows, except Glow between frames.
 
 - **Glow:** the soft glow around bright light, and the flare of the sun.
   It is drawn at the PlayStation 2's size at every Resolution and spread
@@ -331,12 +331,6 @@ not change these rows, except Glow between frames.
   trail lasts, not how far it spreads, and works the same with Original and
   Smooth.
 - **Fog:** the haze that hides the distance.
-- **Water reflections:** Original or Sharp. Original is the PS2's
-  reflection in puddles, pools and the water at the mill, which looks soft
-  when the rest of the picture is sharper than the PS2's. Sharp draws the
-  reflections as sharp as the rest of the picture, and also the picture you
-  see through the Queen's barrier. At the PS2's resolution (1x) the two look
-  the same. Original is how the game starts.
 - **Cinematic bars:** the black bars at the top and bottom of the picture
   during cutscenes. With them Off you see the whole picture, and the
   subtitles are not dimmed.
@@ -1240,7 +1234,7 @@ Under `[video]`:
 | `effect_glow_mode = "original"` | How the glow is made for the frames shown between the game's own: `"original"` or `"smooth"`. It only matters above Frame rate Original, with `effect_glow = true`. The Enhanced Preset writes `"smooth"`. A file without this line gets `"smooth"` when its Display rows are the Enhanced Preset's, and `"original"` otherwise. |
 | `effect_motion_blur_mode = "original"` | How Motion blur moves while it is on: `"original"` or `"smooth"`. `effect_motion_blur = false` is Off whatever this says. |
 | `effect_motion_blur_strength = 100` | The Motion blur strength row: `10` to `100` in steps of 10. Lower values make the trail fade faster; `100` is the PS2's. A number between the steps is rounded to the nearest step. |
-| `effect_water_sharp = false` | Water reflections on the Effects page: `false` is Original, `true` is Sharp. |
+| `effect_water_sharp` | Not used: the reflections in water, and the picture seen through the Queen's barrier, are always drawn as sharp as the rest of the picture, so there is no Water reflections row. A file that has this line keeps it, and the game ignores it. |
 | `crt = false`, `crt_mode = "consumer"`, `crt_strength = 1.0` | The CRT filter and CRT strength rows. `crt_mode` is `"scanlines"`, `"consumer"`, `"trinitron"`, `"pvm"` or `"shadow"`. `crt_strength` goes from `0.0` to `1.0`. |
 | `crt_scanlines`, `crt_mask`, `crt_halation`, `crt_bloom` | Fine tuning of the CRT filter, each from `0.0` to `1.0`: how strong the dark lines are, how strong the fine pattern of dots or stripes is, how much glow surrounds bright spots and how much bright areas spread softly. A line that is missing, or a negative number, keeps the chosen style's own value. |
 | `crt_curvature` | How much the screen bulges, from `0.0` to `0.25`. Missing keeps the style's own value. |

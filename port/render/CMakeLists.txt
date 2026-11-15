@@ -1782,13 +1782,42 @@ if(ICO_RUN_TESTS)
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_ripple_447.png"
                      "-DARGS=${_rip_args}" "-DEXPECT=REPEAT 2, 2 of them kept on REPEAT"
                      -DBOX=90,700,400,1080 -DMAXBRIGHT=0 ${_rip_py} -P "${_rip}")
+    # the puddle's block at the scene's scale (rd_core.c rd__target_scale_of, since
+    # v0.11.7): the SHA-256 is v0.11.6's with Water reflections: Sharp
+    # (--water-sharp); _ps2 (--water-ps2, ICO_RD_WATER_SCALE=0) is v0.11.6's
+    # Original, the SHA-256 this test pinned before; _1x and _1x_ps2 the same
+    # picture at 1x (one SHA-256: nothing changes there)
     add_test(NAME rd_replay_tool_ripple_436
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      "-DDUMP=${_rip_dir}/ripple/frame-20261024-100436-v83439.zip"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_ripple_436.png"
                      "-DARGS=${_rip_args}" "-DEXPECT=REPEAT 2, 2 of them kept on REPEAT"
+                     "-DEXPECT2=block 344x256 GS with depth at 1920x1234 texels \\(5.5814x4.82143, the scene's scale\\)"
+                     -DSHA=09e354461f59199e697c33cf86cc3ea58f8409263bcde7d68789c8756ab0473f
+                     ${_rip_py} -P "${_rip}")
+    add_test(NAME rd_replay_tool_ripple_436_ps2
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DDUMP=${_rip_dir}/ripple/frame-20261024-100436-v83439.zip"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_ripple_436_ps2.png"
+                     "-DARGS=${_rip_args}|--water-ps2"
+                     "-DEXPECT=water reflections at their GS size \\(ICO_RD_WATER_SCALE=0\\)"
+                     "-DEXPECT2=block 344x256 GS with depth at 344x256 texels \\(1x1, not the scene's scale\\)"
                      -DSHA=984695adef5d6d26cc065d7bff996b0234b600cc2c0fd87cd50c365a3cc083aa
                      ${_rip_py} -P "${_rip}")
+    foreach(_w "" _ps2)
+        set(_wa "")
+        if(_w)
+            set(_wa "|--water-ps2")
+        endif()
+        add_test(NAME rd_replay_tool_ripple_436_1x${_w}
+                 COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                         "-DDUMP=${_rip_dir}/ripple/frame-20261024-100436-v83439.zip"
+                         "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_ripple_436_1x${_w}.png"
+                         "-DARGS=--enhanced|--aspect|16:9|--resolution|1x|--full-pixel|--present|1920x1080|--list${_wa}"
+                         "-DEXPECT=block 344x256 GS with depth at 344x256 texels \\(1x1, the scene's scale\\)"
+                         -DSHA=091a188b31b5f06e572725e08839e38f55c38ceca29b8b82e431092d08ff52c6
+                         ${_rip_py} -P "${_rip}")
+    endforeach()
     add_test(NAME rd_replay_tool_mirror_floor
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      "-DDUMP=${_rip_dir}/puddle/rd-00200.rddump"
@@ -1801,10 +1830,13 @@ if(ICO_RUN_TESTS)
     # brightness step folded into the reduction (GPUROUND) moves the ripple frame's
     # pixels by one level (591,187 of them on v83439), inside the fold's bound, which
     # rd_fades_fold_ab tests; these tests pin the water's exact bytes
+    # (and of the shadow's levels at the PS2's size, ICO_RD_SHADOW_FINE=0: the
+    # SHA-256s were taken before them)
     set_tests_properties(rd_replay_tool_ripple rd_replay_tool_ripple_447 rd_replay_tool_ripple_436
-                         rd_replay_tool_mirror_floor
+                         rd_replay_tool_ripple_436_ps2 rd_replay_tool_ripple_436_1x
+                         rd_replay_tool_ripple_436_1x_ps2 rd_replay_tool_mirror_floor
                          PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 600
-                                    ENVIRONMENT "ICO_RD_FADES_FOLD=0")
+                                    ENVIRONMENT "ICO_RD_FADES_FOLD=0;ICO_RD_SHADOW_FINE=0")
     # the still re-present (rd_reshow.c): a corpus dump as its own tick before
     # (nothing moves), 4 presents at Enhanced 4:3 2x at 1280x960: presents
     # 1..3 shown again, all 4 pictures byte for byte the ones rendered with

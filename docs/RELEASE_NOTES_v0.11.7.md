@@ -7,6 +7,7 @@
 - The log now follows, second by second, which processor cores the game's main threads ran on and how fast those cores were running whenever the picture rate drops to one picture per game frame.
 - The log now follows each request the game makes to Android for more speed for five seconds, so the next log shows whether the request helped.
 - Above the original resolution, characters' shadows are now drawn at the picture's resolution and no longer look blocky; they keep the original's softness. At the original resolution nothing changes.
+- Reflections in water, and the picture seen through the Queen's barrier, are now always drawn as sharp as the rest of the picture; the Water reflections option is gone. At the original resolution nothing changes.
 
 ## Fixed
 

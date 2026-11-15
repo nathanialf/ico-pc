@@ -667,10 +667,6 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_BACKUP_WHY_TOO_BIG] = NULL,    /* newer than the CSV: English */
     [UI_STR_BACKUP_WHY_NO_DIALOG] = NULL,  /* newer than the CSV: English */
     [UI_STR_BACKUP_WHY_NO_SPACE] = NULL,   /* newer than the CSV: English */
-    [UI_STR_OPT_EFFECT_WATER] = "Reflexos da água",
-    [UI_STR_VAL_SHARP] = "Nítidos",
-    [UI_STR_EFFECT_WATER_NOTE] =
-        "Nítidos renderiza os reflexos na água na resolução selecionada. \"Original\" mantém os reflexos suaves do PS2.", /* [cobra838] */
     [UI_STR_VAL_SMOOTH] = "Suave",
     [UI_STR_OPT_SHOW_FPS] = "Contador de FPS",
     [UI_STR_EFFECT_MOTION_BLUR_NOTE] =

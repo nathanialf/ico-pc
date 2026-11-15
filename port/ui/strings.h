@@ -835,10 +835,6 @@ typedef enum UiStrId {
     UI_STR_BACKUP_WHY_TOO_BIG,
     UI_STR_BACKUP_WHY_NO_DIALOG,
     UI_STR_BACKUP_WHY_NO_SPACE,
-    /* Effects > Water reflections: Original (UI_STR_VAL_ORIGINAL) or Sharp */
-    UI_STR_OPT_EFFECT_WATER,
-    UI_STR_VAL_SHARP,
-    UI_STR_EFFECT_WATER_NOTE,
     /* Effects > Motion blur: Off (UI_STR_OFF), Original (UI_STR_VAL_ORIGINAL)
        or Smooth, and the note under the row */
     UI_STR_VAL_SMOOTH,

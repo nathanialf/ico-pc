@@ -1065,10 +1065,11 @@ static int spit(const char *path, const uint8_t *buf, long size)
     return ok;
 }
 
-/* Water reflections: a block rd_block_target made is marked
+/* The blocks: a block rd_block_target made is marked
  * (RdTargetRec.block), a plain temporary target is not, and the mark goes
  * through a dump in the keep word's bit 1 with keepAcross unchanged, so a
- * replay with --water-sharp scales the same targets the game did */
+ * replay scales the same targets the game did (the scene's scale; their GS
+ * size with --water-ps2) */
 static void testDumpBlock(const char *dir)
 {
     rd_begin_frame();
