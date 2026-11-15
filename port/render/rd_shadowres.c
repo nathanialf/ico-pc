@@ -163,12 +163,14 @@ static struct {
     /* the cuts (cutsOn): this chain's count box known (boxed) and empty, each
      * level's GS box (glo, ghi per axis) and its fine pre-tent and final
      * boxes; the final level is tmp[k] under the cuts (the fused tent writes
-     * it), lvl[k] without; zero[k]: the final texture holds 0 everywhere (a
-     * clear pass of an empty chain made it and nothing has written it since) */
+     * it), lvl[k] without */
     bool boxed, empty;
     int glo[RD_SR_LEVELS][2], ghi[RD_SR_LEVELS][2];
     RhiRect pre[RD_SR_LEVELS], fin[RD_SR_LEVELS];
-    bool cuts, zero[RD_SR_LEVELS];
+    bool cuts;
+    /* each texture's texels that may be nonzero (rd_shadowres.c "The render
+     * area"): known false until a pass covered the whole texture */
+    RdSrTrack trLvl[RD_SR_LEVELS], trTmp[RD_SR_LEVELS];
     bool refused;          /* the pipelines failed: the PS2's sizes for the run */
     uint32_t whyEvents;    /* the refusals so far (logged: 8, then every 100th) */
     uint32_t fineSince;    /* the shadows at the scene's scale since the last refusal */
@@ -277,7 +279,7 @@ static void destroyAll(void)
         s_sr.lvl[k] = s_sr.tmp[k] = (RhiTexture){0};
         s_sr.w[k] = s_sr.h[k] = 0;
         s_sr.made[k] = 0;
-        s_sr.zero[k] = false;
+        s_sr.trLvl[k].known = s_sr.trTmp[k].known = false;
     }
     s_sr.ready = false;
 }
@@ -448,19 +450,29 @@ static bool texturesFor(int k, uint32_t w, uint32_t h)
     s_sr.w[k] = w;
     s_sr.h[k] = h;
     s_sr.made[k] = 0;
-    s_sr.zero[k] = false;
+    s_sr.trLvl[k].known = s_sr.trTmp[k].known = false;
     return s_sr.lvl[k].id && s_sr.tmp[k].id;
 }
 
 /* one pass of one triangle over dst (w x h) reading src (and mask, the
- * step's empty-area mask, when it has an id) through pipe; with box, the
- * pass clears dst to 0 and draws inside box alone (nothing outside it can be
- * other than 0: rd_shadowres.c "The cuts"); a box of no texels: the clear
- * alone (no pipe needed) */
+ * step's empty-area mask, when it has an id) through pipe.  Without box:
+ * every texel drawn (DONT_CARE).  With box: the texels outside it are 0
+ * after the pass (nothing outside it can be other than 0: "The cuts"), and
+ * the pass touches only what it must: its render area is the union of box
+ * and the texels the texture may still hold nonzero from before (tr), a
+ * CLEAR load clearing that area, so a tile-based GPU loads, shades and
+ * stores those tiles alone ("The render area"); a union of no texels (the
+ * texture is 0 and the box empty) needs no pass.  A box of no texels: the
+ * clear alone (no pipe needed) */
 static void drawPass(struct Replay *r, RhiPipeline pipe, RhiTexture dst, RhiState *dstState,
                      RhiTexture src, RhiState *srcState, uint32_t w, uint32_t h, uint32_t name,
-                     const IcoDrawCB *cb, const RhiRect *box, RhiTexture mask)
+                     const IcoDrawCB *cb, const RhiRect *box, RhiTexture mask, RdSrTrack *tr)
 {
+    const RhiRect all = {0, 0, w, h};
+    RhiRect area;
+    if (!rd_sr_area(&tr->last, &tr->known, s_sr.cuts ? box : NULL, w, h, &area)) {
+        return; /* 0 already, nothing to draw */
+    }
     RhiCommandList cl = rd__replay_cl();
     if (src.id) {
         rd__transition(cl, src, srcState, RHI_STATE_SHADER_READ);
@@ -472,17 +484,19 @@ static void drawPass(struct Replay *r, RhiPipeline pipe, RhiTexture dst, RhiStat
     RhiRenderPassDesc p;
     memset(&p, 0, sizeof(p));
     p.color[0].texture = dst;
-    /* every texel is written (DONT_CARE), or the outside of the box is 0
+    /* every texel is written (DONT_CARE), or the area outside the box is 0
      * (CLEAR: clear[] zeroed) */
     p.color[0].load = box ? RHI_LOAD_CLEAR : RHI_LOAD_DONT_CARE;
     p.colorCount = 1;
     p.width = w;
     p.height = h;
+    if (area.w != w || area.h != h) {
+        p.area = area; /* the backends without tiles take the whole: the same bytes */
+    }
     rhi_cmd_begin_render_pass(cl, &p);
     const bool draw = !box || (box->w && box->h);
     if (draw) {
         rd__replay_viewport(w, h);
-        const RhiRect all = {0, 0, w, h};
         rhi_cmd_set_scissor(cl, box ? box : &all);
         rd__set_pipeline(cl, pipe, NULL); /* makePipe: every state static */
         rd__bind_uniform(cl, 0, rd__frame_group(w, h, 0.0f, 0.0f));
@@ -496,6 +510,7 @@ static void drawPass(struct Replay *r, RhiPipeline pipe, RhiTexture dst, RhiStat
         g_rdPerf.shadowFineTexels += box ? box->w * box->h : w * h;
     }
     g_rdPerf.shadowFineArea += w * h;
+    g_rdPerf.shadowFineRendered += area.w * area.h;
     rhi_cmd_end_render_pass(cl);
     rd__transition(cl, dst, dstState, RHI_STATE_SHADER_READ);
     g_rdPerf.shadowFinePasses++;
@@ -594,7 +609,6 @@ static void ps2Line(float cx, float cy)
 /* the tent across (level -> temporary) and down (temporary -> level) */
 static void tent(struct Replay *r, int k, uint32_t name)
 {
-    s_sr.zero[k] = false; /* the temporary written */
     for (int down = 0; down < 2; down++) {
         IcoDrawCB cb;
         memset(&cb, 0, sizeof(cb));
@@ -606,10 +620,12 @@ static void tent(struct Replay *r, int k, uint32_t name)
         cb.tex[3] = 1.0f / (float)s_sr.h[k];
         if (down) {
             drawPass(r, s_sr.pipeTent, s_sr.lvl[k], &s_sr.lvlState[k], s_sr.tmp[k],
-                     &s_sr.tmpState[k], s_sr.w[k], s_sr.h[k], name, &cb, NULL, (RhiTexture){0});
+                     &s_sr.tmpState[k], s_sr.w[k], s_sr.h[k], name, &cb, NULL, (RhiTexture){0},
+                     &s_sr.trLvl[k]);
         } else {
             drawPass(r, s_sr.pipeTent, s_sr.tmp[k], &s_sr.tmpState[k], s_sr.lvl[k],
-                     &s_sr.lvlState[k], s_sr.w[k], s_sr.h[k], name, &cb, NULL, (RhiTexture){0});
+                     &s_sr.lvlState[k], s_sr.w[k], s_sr.h[k], name, &cb, NULL, (RhiTexture){0},
+                     &s_sr.trTmp[k]);
         }
     }
 }
@@ -627,8 +643,8 @@ static void tent2(struct Replay *r, int k, uint32_t name)
     cb.tex[2] = 1.0f / (float)s_sr.w[k];
     cb.tex[3] = 1.0f / (float)s_sr.h[k];
     drawPass(r, s_sr.pipeTent2, s_sr.tmp[k], &s_sr.tmpState[k], s_sr.lvl[k], &s_sr.lvlState[k],
-             s_sr.w[k], s_sr.h[k], name, &cb, s_sr.boxed ? &s_sr.fin[k] : NULL, (RhiTexture){0});
-    s_sr.zero[k] = s_sr.boxed && (s_sr.fin[k].w == 0 || s_sr.fin[k].h == 0);
+             s_sr.w[k], s_sr.h[k], name, &cb, s_sr.boxed ? &s_sr.fin[k] : NULL, (RhiTexture){0},
+             &s_sr.trTmp[k]);
 }
 
 /* level k's boxes from its source's GS box (the count's, or level k - 1's):
@@ -810,7 +826,7 @@ void rd__shadow_fine_screen(const RdStateBlock *st, const RdCmd *c, const RdScre
     }
     if (!(s_sr.cuts && s_sr.empty)) {
         drawPass(r, s_sr.pipeStep, s_sr.lvl[k], &s_sr.lvlState[k], stex, sstate, w, h, st->color,
-                 &cb, s_sr.cuts && s_sr.boxed ? &s_sr.pre[k] : NULL, mask);
+                 &cb, s_sr.cuts && s_sr.boxed ? &s_sr.pre[k] : NULL, mask, &s_sr.trLvl[k]);
     }
     s_sr.made[k] = s_sr.chain + 1u;
     if (k + 1 < RD_SR_LEVELS) {
@@ -822,12 +838,12 @@ void rd__shadow_fine_screen(const RdStateBlock *st, const RdCmd *c, const RdScre
             tent(r, j, name);
         } else if (!s_sr.empty) {
             tent2(r, j, name);
-        } else if (!s_sr.zero[j]) {
-            /* an empty count: every level 0; the final texture cleared once,
-             * kept while nothing writes it */
+        } else {
+            /* an empty count: every level 0; the final texture's nonzero area
+             * cleared, no pass once it holds 0 */
             drawPass(r, (RhiPipeline){0}, s_sr.tmp[j], &s_sr.tmpState[j], (RhiTexture){0}, NULL,
-                     s_sr.w[j], s_sr.h[j], name, NULL, &(RhiRect){0, 0, 0, 0}, (RhiTexture){0});
-            s_sr.zero[j] = true;
+                     s_sr.w[j], s_sr.h[j], name, NULL, &(RhiRect){0, 0, 0, 0}, (RhiTexture){0},
+                     &s_sr.trTmp[j]);
         }
     }
     s_sr.ready = true;

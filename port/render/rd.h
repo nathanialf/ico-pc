@@ -2989,6 +2989,9 @@ typedef struct RdPerfRecord {
      * replay (their boxes) and the texels of the targets those passes cover
      * (the levels' and temporaries' whole area, a pass each) */
     uint32_t shadowFineTexels, shadowFineArea;
+    /* of shadowFineArea, the texels of the passes' render areas (the box and
+     * what the texture still held nonzero: a tile-based GPU's work) */
+    uint32_t shadowFineRendered;
     /* of shadowOne, the draws that read the stencil four texels a gather
      * (the rest a texel a load: g_rd.shadowLoad, rd_shadow_selftest.c) */
     uint32_t shadowGathered;

@@ -270,7 +270,7 @@ int rd_sr_recognise(const RdSrSprite *sp, int *ox, int *oy, float *fx, float *fy
 /* ------------------------------------------------------------ the lines */
 
 static struct {
-    uint64_t chains, passes, original, why[RD_SR_WHY_N], texels, area;
+    uint64_t chains, passes, original, why[RD_SR_WHY_N], texels, area, rendered;
     uint32_t replays;
 } s_sum;
 
@@ -281,6 +281,7 @@ void rd__shadow_fine_pop(const RdPerfRecord *rec)
     s_sum.original += rec->shadowFineRefused;
     s_sum.texels += rec->shadowFineTexels;
     s_sum.area += rec->shadowFineArea;
+    s_sum.rendered += rec->shadowFineRendered;
     for (int k = 0; k < RD_SR_WHY_N; k++) {
         s_sum.why[k] += rec->shadowFineWhy[k];
     }
@@ -318,10 +319,11 @@ void rd__shadow_fine_text(char *out, size_t size, size_t *at)
         out + *at, size - *at,
         "; shadow levels: %llu shadows at the scene's scale, %llu at the PS2's "
         "size%s in %u replays (%.1f passes a shadow, drawing %.1f %% of their targets' "
-        "texels, %.2f M texels a shadow)",
+        "texels in render areas of %.1f %%, %.2f M texels a shadow)",
         (unsigned long long)s_sum.chains, (unsigned long long)s_sum.original, why,
         (unsigned)s_sum.replays, s_sum.chains ? (double)s_sum.passes / (double)s_sum.chains : 0.0,
         s_sum.area ? 100.0 * (double)s_sum.texels / (double)s_sum.area : 0.0,
+        s_sum.area ? 100.0 * (double)s_sum.rendered / (double)s_sum.area : 0.0,
         s_sum.chains ? (double)s_sum.texels / (double)s_sum.chains / 1.0e6 : 0.0);
     rd_clause_done(out, size, at, w);
     memset(&s_sum, 0, sizeof(s_sum));
@@ -442,8 +444,43 @@ bool rd_sr_mask_empty(const uint8_t *mask, uint32_t mw, uint32_t mh, uint32_t sw
 
 void rd__shadow_fine_drawn(const RdPerfRecord *rec, char *out, size_t size)
 {
-    snprintf(
-        out, size, "shadow levels drawn: %u texels of the %u their passes' targets hold (%.1f %%)",
-        rec->shadowFineTexels, rec->shadowFineArea,
-        rec->shadowFineArea ? 100.0 * (double)rec->shadowFineTexels / rec->shadowFineArea : 0.0);
+    snprintf(out, size,
+             "shadow levels drawn: %u texels of the %u their passes' targets hold (%.1f %%), "
+             "render areas %u texels",
+             rec->shadowFineTexels, rec->shadowFineArea,
+             rec->shadowFineArea ? 100.0 * (double)rec->shadowFineTexels / rec->shadowFineArea
+                                 : 0.0,
+             rec->shadowFineRendered);
+}
+
+/* the smallest rectangle holding a and b (an empty one adds nothing) */
+RhiRect rd_sr_rect_union(RhiRect a, RhiRect b)
+{
+    if (!a.w || !a.h) {
+        return b;
+    }
+    if (!b.w || !b.h) {
+        return a;
+    }
+    const int32_t x0 = a.x < b.x ? a.x : b.x, y0 = a.y < b.y ? a.y : b.y;
+    const int32_t ax1 = a.x + (int32_t)a.w, bx1 = b.x + (int32_t)b.w;
+    const int32_t ay1 = a.y + (int32_t)a.h, by1 = b.y + (int32_t)b.h;
+    const int32_t x1 = ax1 > bx1 ? ax1 : bx1, y1 = ay1 > by1 ? ay1 : by1;
+    return (RhiRect){x0, y0, (uint32_t)(x1 - x0), (uint32_t)(y1 - y0)};
+}
+
+bool rd_sr_area(RhiRect *last, bool *known, const RhiRect *box, uint32_t w, uint32_t h,
+                RhiRect *area)
+{
+    const RhiRect all = {0, 0, w, h};
+    *area = all;
+    if (box && *known) {
+        *area = rd_sr_rect_union(*last, *box);
+        if (!area->w || !area->h) {
+            return false;
+        }
+    }
+    *known = true;
+    *last = box ? *box : all;
+    return true;
 }

@@ -748,6 +748,65 @@ static void testBoxes(void)
     }
 }
 
+/* the render area: a level texture over 200 pictures whose boxes move,
+ * shrink, empty and grow, its passes clearing the area rd_sr_area gives (as
+ * Vulkan clears the render area alone; and, the second time, as a backend
+ * without tiles clears the whole) and drawing inside the box: after every
+ * pass the texture is 0 outside the box and the draw's bytes inside it (the
+ * texture as a pass over the whole would leave it), and an empty box over a
+ * texture already 0 takes no pass */
+static void testArea(void)
+{
+    enum { AW = 40, AH = 30 };
+
+    static uint8_t tex[AW * AH], want[AW * AH];
+    for (int whole = 0; whole < 2; whole++) {
+        RdSrTrack tr;
+        memset(&tr, 0, sizeof(tr));
+        memset(tex, 0xAB, sizeof tex); /* a new texture's contents: anything */
+        int bad = 0, skipped = 0;
+        for (int f = 0; f < 200; f++) {
+            RhiRect box = {0, 0, 0, 0};
+            if (rnd() % 5u != 0u) {
+                box.x = (int32_t)(rnd() % AW);
+                box.y = (int32_t)(rnd() % AH);
+                box.w = 1u + rnd() % (uint32_t)(AW - box.x);
+                box.h = 1u + rnd() % (uint32_t)(AH - box.y);
+            }
+            memset(want, 0, sizeof want);
+            for (uint32_t y = 0; y < box.h; y++) {
+                for (uint32_t x = 0; x < box.w; x++) {
+                    want[(box.y + (int32_t)y) * AW + box.x + (int32_t)x] =
+                        (uint8_t)(rnd() % 3u ? rnd() & 255u : 0u);
+                }
+            }
+            RhiRect area;
+            if (!rd_sr_area(&tr.last, &tr.known, &box, AW, AH, &area)) {
+                skipped++;
+            } else {
+                for (int y = 0; y < AH; y++) {
+                    for (int x = 0; x < AW; x++) {
+                        const int in = x >= area.x && x < area.x + (int)area.w && y >= area.y &&
+                                       y < area.y + (int)area.h;
+                        if (in || whole) {
+                            tex[y * AW + x] = 0; /* the CLEAR */
+                        }
+                    }
+                }
+                for (uint32_t y = 0; y < box.h; y++) {
+                    for (uint32_t x = 0; x < box.w; x++) {
+                        const int i = (box.y + (int32_t)y) * AW + box.x + (int32_t)x;
+                        tex[i] = want[i]; /* the draw */
+                    }
+                }
+            }
+            bad += memcmp(tex, want, sizeof tex) != 0;
+        }
+        CHECK(bad == 0 && skipped > 0, "the render area (%s): %d pictures wrong, %d passes skipped",
+              whole ? "the whole cleared" : "the area cleared", bad, skipped);
+    }
+}
+
 static void testLines(void)
 {
     RdPerfRecord rec;
@@ -758,6 +817,7 @@ static void testLines(void)
     rec.shadowFineWhy[RD_SR_WHY_FILTER] = 2;
     rec.shadowFineTexels = 250000;
     rec.shadowFineArea = 1000000;
+    rec.shadowFineRendered = 400000;
     rd__shadow_fine_pop(&rec);
     char text[512];
     size_t at = 0;
@@ -766,7 +826,7 @@ static void testLines(void)
     printf("  10 s clause: %s\n", text);
     CHECK(strcmp(text, "; shadow levels: 1 shadows at the scene's scale, 2 at the PS2's size "
                        "(filter 2) in 1 replays (10.0 passes a shadow, drawing 25.0 % of their "
-                       "targets' texels, 0.25 M texels a shadow)") == 0,
+                       "targets' texels in render areas of 40.0 %, 0.25 M texels a shadow)") == 0,
           "the 10 s clause: %s", text);
     const size_t was = at;
     rd__shadow_fine_text(text, sizeof text, &at);
@@ -779,7 +839,7 @@ static void testLines(void)
           "the stats words: %s", st);
     rd__shadow_fine_drawn(&rec, st, sizeof st);
     CHECK(strcmp(st, "shadow levels drawn: 250000 texels of the 1000000 their passes' targets "
-                     "hold (25.0 %)") == 0,
+                     "hold (25.0 %), render areas 400000 texels") == 0,
           "the drawn words: %s", st);
 }
 
@@ -795,6 +855,7 @@ int main(void)
     testTent2();
     testMask();
     testBoxes();
+    testArea();
     testLines();
     if (failures) {
         printf("rd_shadow_fine_test: %d failures\n", failures);

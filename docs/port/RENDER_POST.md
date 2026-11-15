@@ -1591,7 +1591,12 @@ making every weight whole and no quotient a half. An empty count draws no step o
 each final level once. So 6 passes a shadow (7 with the one draw's full-size count) instead of 9
 (10). At the main gate the volumes' box is the whole frame (the volumes sweep open space), so there
 the step's empty areas are the cut that counts: the reporter's frame has 0.83 % of its count's
-texels nonzero.
+texels nonzero. The render area: each texture is 0 outside the box its last pass drew, so a pass's
+render area is the union of that box and its own (`rd_sr_area`), cleared by its CLEAR load and
+drawn inside its box; a tile-based GPU loads, shades and stores those tiles alone (the RHI's
+`RhiRenderPassDesc.area`; backends without tiles clear the whole, the same bytes), and a texture
+that is 0 with an empty box takes no pass. The 10 s clause adds the render areas' share of the
+targets.
 
 Lines: at start `rd: shadow levels: at the scene's scale above 1x (the smallest odd whole one at or
 above it on each axis: ...); at 1x the PS2's sizes`; at each change `rd: shadow levels: at the

@@ -144,6 +144,21 @@ void rd_sr_tent2_texel(const uint8_t *src, uint32_t w, uint32_t h, int lx, int l
 bool rd_sr_mask_empty(const uint8_t *mask, uint32_t mw, uint32_t mh, uint32_t sw, uint32_t sh,
                       float ax, float ay, float sx, float sy, float ox);
 
+/* The render area ("The render area"): a texture is 0 outside *last once
+ * *known.  A pass that leaves it 0 outside box (NULL: draws every texel)
+ * clears and draws the area rd_sr_area gives (the union of *last and box;
+ * the whole texture until *known), then *last = box; false: no pass (the
+ * texture is 0 and box holds nothing).  The tracking of the textures
+ * rd_shadowres.c's level passes write, the CPU test's */
+typedef struct RdSrTrack {
+    RhiRect last;
+    bool known;
+} RdSrTrack;
+
+RhiRect rd_sr_rect_union(RhiRect a, RhiRect b);
+bool rd_sr_area(RhiRect *last, bool *known, const RhiRect *box, uint32_t w, uint32_t h,
+                RhiRect *area);
+
 /* rd_replay.c: the count of target color box-reduced to its GS size this
  * replay ({0} when it was not made: an unscaled count) */
 RhiTexture rd__shadow_red_of(uint32_t color);

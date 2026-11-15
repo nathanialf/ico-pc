@@ -61,6 +61,8 @@
 #      chain as dbedd6025 drew it): every PNG the same bytes; the cuts' own
 #      passes 6 + the full-size count, at most 6 draws; without them 9 + it,
 #      9 draws;
+#   7. above 1x three replays in a row with the cuts and without: the
+#      presented pictures the same bytes (the render area's tracking);
 #   5. force: the fine chain at 1x, one shadow, 6 passes of its own, SCENE
 #      within one level of the default's at every channel (png_level_diff.py:
 #      the step's own rounding of 0.75 / 0.25 against the GS sprite's bilinear
@@ -433,6 +435,25 @@ foreach(dump IN LISTS dumps)
                              "${fpasses_hc} passes (${wantNc}), ${draws_hc} draws (${wantNcDraws})")
           set(sfFail TRUE)
         endif()
+      endif()
+      # 7. the render area across pictures: three replays in a row (the second
+      # and third pass over the union of the box and what the texture held),
+      # the presented picture the same bytes as the chain without the cuts
+      foreach(cv 1 0)
+        execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${env_${s}} ICO_RD_SHADOW_FINE_CUTS=${cv}
+                                "${TOOL}" "${dump}" "${base}-repeat-${cv}.png" --repeat 3
+                                ${args_${s}}
+                        RESULT_VARIABLE rrc OUTPUT_VARIABLE rout ERROR_VARIABLE rerr)
+        if(NOT rrc EQUAL 0)
+          message(SEND_ERROR "${dumpName} ${s}: --repeat 3 with the cuts ${cv}: exit ${rrc}\n${rerr}")
+          set(sfFail TRUE)
+        endif()
+      endforeach()
+      execute_process(COMMAND "${CMAKE_COMMAND}" -E compare_files "${base}-repeat-1.png"
+                              "${base}-repeat-0.png" RESULT_VARIABLE rdiffer)
+      if(NOT rdiffer EQUAL 0)
+        message(SEND_ERROR "${dumpName} ${s}: the third replay with the cuts is not the chain's")
+        set(sfFail TRUE)
       endif()
       if(s STREQUAL "bspline")
         # 4. the B-spline does nothing to a fine level
