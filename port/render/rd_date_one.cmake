@@ -31,21 +31,23 @@ if(ICO_RUN_TESTS)
 endif()
 
 # rd_date_one_ab, rd_empty_skip_ab, rd_no_volume_break_ab
-# (test/rd_shadow_cuts_ab.cmake, -DITEM=dateone|emptyskip|novolbreak): the dumps
-# of tools/shadow_cuts_dumps.txt (the Mali reporter's four, the Pixel's three
-# opening dumps) and of tools/date_cut_dumps.txt, tools/shadow_box_dumps.txt and
-# tools/no_volume_dumps.txt (machine-local; a listed dump that is absent fails)
-# with the item off and on, the other two items off in both runs, at the
-# profiles each item's test names: every target the same bytes, the passes,
-# draws, snapshots and set-ups by what the code leaves out.  The _gl twins: the
-# same at 1x on OpenGL (llvmpipe: DATE by the snapshot).  No device: SKIP (77).
+# (test/rd_shadow_cuts_ab.cmake, -DITEM=dateone|emptyskip|novolbreak): the
+# fixtures of test/fixtures/lists/shadow_cuts.txt (committed frames,
+# rd_fixture.cmake, docs/port/TESTING_FIXTURES.md; a listed fixture that is
+# absent fails) with the item off and on, the other two items off in both
+# runs, at the profiles each item's test names: every target the same bytes,
+# the passes, draws, snapshots and set-ups by what the code leaves out, the
+# fixtures' declared properties shown (the path ran).  The _gl twins: the same
+# at 1x on OpenGL (llvmpipe: DATE by the snapshot).  No device: SKIP (77).
+include(rd_fixture.cmake)
 if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
     set(_sc_env "")
     if(ICO_SANITIZE MATCHES "address")
         list(APPEND _sc_env "ASAN_OPTIONS=detect_leaks=0")
     endif()
-    set(_sc_lists
-        "${CMAKE_SOURCE_DIR}/tools/shadow_cuts_dumps.txt|${CMAKE_SOURCE_DIR}/tools/date_cut_dumps.txt|${CMAKE_SOURCE_DIR}/tools/shadow_box_dumps.txt|${CMAKE_SOURCE_DIR}/tools/no_volume_dumps.txt")
+    set(_sc_fx -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool> "-DFIXTURES=${ICO_FIXTURE_DIR}"
+               "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+               "-DLIST=${ICO_FIXTURE_DIR}/lists/shadow_cuts.txt")
     foreach(_sc_item dateone emptyskip novolbreak)
         if(_sc_item STREQUAL "dateone")
             set(_sc_name rd_date_one_ab)
@@ -57,7 +59,7 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
         file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${_sc_name}")
         add_test(NAME ${_sc_name}
                  COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                         "-DLISTS=${_sc_lists}" "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/${_sc_name}"
+                         ${_sc_fx} "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/${_sc_name}"
                          -DBACKEND=vulkan -DITEM=${_sc_item}
                          -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_shadow_cuts_ab.cmake")
         set_tests_properties(${_sc_name} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
@@ -69,7 +71,7 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
             file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/gl/${_sc_name}")
             add_test(NAME ${_sc_name}_gl
                      COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                             "-DLISTS=${_sc_lists}"
+                             ${_sc_fx}
                              "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/gl/${_sc_name}" -DBACKEND=opengl
                              -DITEM=${_sc_item}
                              -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_shadow_cuts_ab.cmake")

@@ -190,6 +190,9 @@ add a row when a family needs one):
 | `frustum_culled`, `occluded` | `scene draws skipped (N frustum, M occluded` |
 | `vu_merge_draws`, `vu_fuse_pairs`, `prepass_vertices`, `region_rule_draws` | the VU merge, fuse, pre-pass and region rule lines |
 | `fades_folded` | `fades fold on: N sprites folded` |
+| `date_one_shared`, `empty_composites_skipped` | `DATE one set-up on: N shared`, `empty composites on: N skipped` |
+| `no_volume_kept`, `no_volume_break_taken` | `no volume on: N kept`, `break on: N taken` |
+| `stencil_window_stores` | `stencil inside the shadow window only: N stores` |
 
 The fixtures' declared properties are their manifest line's; `rd_fixtures_check` holds the two
 equal.
@@ -280,3 +283,6 @@ expansion does not change); its manifest line must say the same.
 | test | list | fixtures | the properties it checks |
 | --- | --- | --- | --- |
 | `rd_shadow_box_ab`, `rd_shadow_box_ab_gl` | `lists/shadow_box.txt` | `fx-shadow-wide` (a character's shadow at 21:9: `shadow_volume_draws>=1`, `shadow_box_counts>=1`, `shadow_box_composites>=1`), `fx-lamps-novolume` (a shadow window with no volume: `shadow_volume_draws=0`) | `shadow_volume_draws`, `shadow_box_counts`, `shadow_box_composites` on the box-on replay at the phone setting (OpenGL: its one setting); every target byte for byte; equal draws and passes with volumes, with none (an empty box) fewer or equal, fewer where the count was boxed |
+| `rd_date_one_ab`, `rd_empty_skip_ab`, `rd_no_volume_break_ab` and their `_gl` twins | `lists/shadow_cuts.txt` | `fx-shadow-wide`, `fx-opening-dark`, `fx-opening-sun`, `fx-mali-frame`, `fx-mali-slow541` (shadow windows with volumes: `shadow_volume_draws>=1`, `date_snapshots>=1`, `date_stencil_draws>=1`, `date_one_shared>=1`, `empty_composites_skipped=0`, `no_volume_break_taken=0`), `fx-lamps-novolume` (no volume: `shadow_volume_draws=0`, `date_one_shared>=1`, `empty_composites_skipped>=1`, `no_volume_break_taken>=1`) | on the on run the item's quantity (`date_one_shared`, `empty_composites_skipped`, or `no_volume_break_taken` where DATE takes the stencil bit) with `shadow_volume_draws`; on the off run `date_snapshots` or `date_stencil_draws` by the setting's DATE path where declared; every target byte for byte and the counts the code leaves out |
+| `rd_no_volume_ab`, `rd_no_volume_ab_gl` | `lists/no_volume.txt` | `fx-boot-0400`, `fx-boot-0600`, `fx-lamps-novolume` (`shadow_volume_draws=0`, `no_volume_kept>=1`), `fx-boot-0200`, `fx-shadow-wide` (`shadow_volume_draws>=1`, `no_volume_kept=0`) | `no_volume_kept` and `shadow_volume_draws` on the `=1` run where DATE takes the stencil bit, `shadow_volume_draws` elsewhere; the declared `no_volume_kept` is the windows the test expects taken |
+| `rd_stencil_ab` | `lists/stencil.txt` | `fx-shadow-wide`, `fx-opening-dark`, `fx-opening-sun`, `fx-mali-frame` (`shadow_volume_draws>=1`, `stencil_window_stores>=1`) | `shadow_volume_draws` and `stencil_window_stores` on the `=0` run at both settings |

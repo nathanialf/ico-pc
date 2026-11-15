@@ -1,0 +1,22 @@
+# Fixtures for rd_date_one_ab, rd_empty_skip_ab and rd_no_volume_break_ab and
+# their OpenGL twins (port/render/test/rd_shadow_cuts_ab.cmake: one DATE set-up
+# for the shadow composites, the empty composites skipped, a shadow window with
+# no volume taken with SCENE's pass ended at the resolve; each off against on,
+# byte for byte): fixture names of this repository
+# (port/render/test/fixtures/NAME.rdfix), a name a line.  The word after a
+# name: "volume" (one shadow window with volumes, the three composites) or
+# "novolume" (one window without a volume, the three composites).  A third
+# word: the passes fewer at the Mali setting with the empty composites on
+# (three R8 passes and three SCENE passes of no draw: measured on the fixture,
+# 38 against 32).
+#
+# a character's shadow at 21:9
+fx-shadow-wide volume
+# the opening's lamps view: a shadow window with no volume
+fx-lamps-novolume novolume 6
+# the opening's dark room and the sun
+fx-opening-dark volume
+fx-opening-sun volume
+# the Mali-G52's F12 frame and a slow-scene capture
+fx-mali-frame volume
+fx-mali-slow541 volume

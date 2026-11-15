@@ -9,13 +9,14 @@
 #               against 1): rd_no_volume_break_ab;
 # the other two cuts off in both runs, and the no-volume window's open mode
 # (ICO_RD_NO_VOLUME=0), so each pair moves by its own cut alone.  For every
-# dump the lists name (-DLISTS, '|' between them: tools/shadow_cuts_dumps.txt
-# first, whose second field is "volume" or "novolume"; tools/no_volume_dumps.txt,
-# whose 1 is "novolume" and 0 "volume"; tools/date_cut_dumps.txt, whose 2 is
-# "volume"; any other dump is of no known class: the rules alone apply), a
-# listed dump that is absent FAILS, rd_replay_tool's --pass-dump with --stats
-# under the store plan (ICO_RD_STORE_PLAN=1) and the programs' own entries
-# (ICO_RD_VU_PREPASS=0), at the settings each item names:
+# fixture the list names (-DLIST: port/render/test/fixtures/lists/
+# shadow_cuts.txt, fixture names of the repository, docs/port/
+# TESTING_FIXTURES.md; a listed fixture that is absent or does not expand to
+# its pinned SHA-256 FAILS; the word after a name is "volume" or "novolume",
+# and a third word the passes fewer at the Mali setting with the empty
+# composites on), expanded into OUT, then rd_replay_tool's --pass-dump with
+# --stats under the store plan (ICO_RD_STORE_PLAN=1) and the programs' own
+# entries (ICO_RD_VU_PREPASS=0), at the settings each item names:
 #   mali       the Mali-G52's: ICO_VK_FAKE_LIMITS=mali ICO_VK_FAKE_NO_DST=1
 #              ICO_VK_FAKE_NO_DUAL=1, 1x, presented 1612x720, DATE by the R8
 #              snapshot (ICO_RD_DATE_PATH=snapshot), the fixed-function blend
@@ -40,7 +41,7 @@
 #   gl         -DBACKEND=opengl (the _gl twins): 1x on OpenGL, presented
 #              1280x720 (DATE by the snapshot).
 # dateone: mali, adreno, phonesnap, phone (gl); emptyskip: mali, phone (gl);
-# novolbreak: phone, dstencil, phonepoison, phonerepeat, mali (gl).  A dump a
+# novolbreak: phone, dstencil, phonepoison, phonerepeat, mali (gl).  A fixture a
 # setting cannot show ("cannot show") is skipped there.  Each pair, every PNG
 # the off run writes the on run's byte for byte (SCENE, DISPLAY, PRESENT,
 # SHADOW0-2, every other target), and, from the code:
@@ -58,7 +59,7 @@
 #               composite's pass at phonesnap (those passes had the depth); the
 #               DATE cut's passes no more than off's; at phone S set-ups fewer,
 #               2 S draws fewer (a set-up is two draws), the same passes and
-#               traffic; "volume" and "novolume" dumps share 2 at every
+#               traffic; "volume" and "novolume" fixtures share 2 at every
 #               setting; --keys at mali: on asks for no pipeline the start-up
 #               set lacks that off does not;
 #   emptyskip   off skips nothing; on skips K composites, D of them with DATE:
@@ -67,14 +68,17 @@
 #               passes of no draw where the next draw begins its own: exactly
 #               the list's third field where it has one); at phone D set-ups
 #               fewer, 2 D draws fewer, the passes the same or one fewer
-#               (a "novolume" dump: the same, and the same traffic); "novolume"
-#               dumps skip 3 (3 with DATE), "volume" dumps none;
+#               (a "novolume" fixture: the same, and the same traffic); "novolume"
+#               fixtures skip 3 (3 with DATE), "volume" fixtures none;
 #   novolbreak  off takes no window; on takes the listed windows at the stencil
 #               settings ("novolume" 1, "volume" 0) and none at mali or gl (the
 #               composites' DATE by the snapshot): a taken window draws no count
 #               pass and no level passes (4 passes fewer) and records its zero
 #               clears (C, its clause), so the passes are off's less 4 W plus
-#               C, and at dstencil less W more: off draws the window's
+#               C, less the passes of the levels' chain at the scene's scale
+#               that off draws above 1x and on does not (rd_shadowres.c; the
+#               stats' "shadow levels: ... P passes", off's P less on's), and
+#               at dstencil less W more: off draws the window's
 #               composites (the empty composites pinned off) in list 3's SCENE
 #               pass, the break mode skips them, and the fog after them reads
 #               the depth outside the pass there (not the local read:
@@ -85,81 +89,42 @@
 #               phonerepeat no clear (C 0) and the targets found holding zero
 #               counted; a setting that takes none: the same passes and
 #               traffic.
-# Over the dumps the item does something at least once.  No device: SKIP (77).
-# -DTOOL=<rd_replay_tool> -DLISTS=<list|list...> -DOUT=<a folder the test may
-# write> -DBACKEND=vulkan|opengl -DITEM=dateone|emptyskip|novolbreak
-# The lists name dumps of the build machine alone (the owner's rule there: a
-# listed dump that is absent FAILS). A machine without that folder has none of
-# them: the test is skipped as the older dump tests are.
-if(NOT IS_DIRECTORY "/primary/dev/ico-dumps")
-  message(STATUS "SKIP: no dump folder on this machine (/primary/dev/ico-dumps): the list's dumps are the build machine's")
-  return()
-endif()
+# The path ran (rd_fixture_require, the fixtures' declared properties): on the
+# on run, dateone shows date_one_shared, emptyskip empty_composites_skipped,
+# novolbreak no_volume_break_taken at the stencil settings (a snapshot setting
+# takes none), each with shadow_volume_draws; on the off run a fixture that
+# declares it shows date_snapshots at the snapshot settings and
+# date_stencil_draws at the stencil ones (the composites' DATE was there to
+# cut).  A fixture whose properties no setting checked FAILS.  Over the
+# fixtures the item does something at least once.  No device: SKIP (77).
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the
+# fixtures folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<a
+# fixture list> -DOUT=<a folder the test may write> -DBACKEND=vulkan|opengl
+# -DITEM=dateone|emptyskip|novolbreak
+include("${FIXTURE_HELPERS}")
 set(failures 0)
+rd_fixture_list("${LIST}" names)
 set(dumps "")
-string(REPLACE "|" ";" lists "${LISTS}")
-foreach(list IN LISTS lists)
-  if(NOT EXISTS "${list}")
-    message(FATAL_ERROR "rd_shadow_cuts_ab: no dump list ${list}")
+foreach(name IN LISTS names)
+  rd_fixture_expand(${name} "${OUT}/fixtures" d)
+  list(APPEND dumps "${d}")
+  set(name_${d} "${name}")
+  string(REGEX REPLACE "[ \t]+" ";" fields "${RDFX_FIELDS_${name}}")
+  list(LENGTH fields nf)
+  set(class "")
+  set(third "")
+  if(nf GREATER 0)
+    list(GET fields 0 class)
   endif()
-  get_filename_component(listDir "${list}" DIRECTORY)
-  get_filename_component(listName "${list}" NAME)
-  file(STRINGS "${list}" lines)
-  foreach(l IN LISTS lines)
-    string(STRIP "${l}" l)
-    if(l STREQUAL "" OR l MATCHES "^#")
-      continue()
-    endif()
-    string(REGEX REPLACE "[ \t]+" ";" fields "${l}")
-    list(GET fields 0 path)
-    list(LENGTH fields nf)
-    set(class "")
-    set(third "")
-    if(nf GREATER 1)
-      list(GET fields 1 f1)
-      if(listName STREQUAL "shadow_cuts_dumps.txt")
-        set(class "${f1}")
-        if(nf GREATER 2)
-          list(GET fields 2 third)
-        endif()
-      elseif(listName STREQUAL "no_volume_dumps.txt")
-        if(f1 STREQUAL "1")
-          set(class novolume)
-        elseif(f1 STREQUAL "0")
-          set(class volume)
-        endif()
-      elseif(listName STREQUAL "date_cut_dumps.txt" AND f1 STREQUAL "2")
-        set(class volume)
-      endif()
-    endif()
-    if(NOT IS_ABSOLUTE "${path}")
-      set(path "${listDir}/${path}")
-    endif()
-    set(found "")
-    if(path MATCHES "[*]")
-      file(GLOB found "${path}")
-      list(SORT found)
-      if(NOT found)
-        message(SEND_ERROR "${path} (${listName}): no dump matches (a listed dump must exist)")
-        math(EXPR failures "${failures} + 1")
-      endif()
-    elseif(EXISTS "${path}")
-      set(found "${path}")
-    else()
-      message(SEND_ERROR "${path} (${listName}): no such dump (a listed dump must exist)")
-      math(EXPR failures "${failures} + 1")
-    endif()
-    foreach(d IN LISTS found)
-      list(FIND dumps "${d}" at)
-      if(at LESS 0)
-        list(APPEND dumps "${d}")
-        set(class_${d} "${class}")
-        set(third_${d} "${third}")
-      elseif("${class_${d}}" STREQUAL "" AND NOT class STREQUAL "")
-        set(class_${d} "${class}") # the first list that knows it
-      endif()
-    endforeach()
-  endforeach()
+  if(nf GREATER 1)
+    list(GET fields 1 third)
+  endif()
+  if(NOT class STREQUAL "volume" AND NOT class STREQUAL "novolume")
+    message(SEND_ERROR "${name}: the list's word after it is '${class}': volume or novolume")
+    math(EXPR failures "${failures} + 1")
+  endif()
+  set(class_${d} "${class}")
+  set(third_${d} "${third}")
 endforeach()
 list(LENGTH dumps ndumps)
 
@@ -225,6 +190,8 @@ set(depthRe "MB stored, depth and stencil ([0-9]+)\\.([0-9][0-9])/([0-9]+)\\.([0
 set(breakRe "break (on|off): ([0-9]+) taken \\(([0-9]+) zero clears, ([0-9]+) targets holding zero\\)")
 set(emptyRe "empty composites (on|off): ([0-9]+) skipped \\(([0-9]+) with DATE\\)")
 set(oneRe "DATE one set-up (on|off|force): ([0-9]+) shared \\(([0-9]+) texels\\), ([0-9]+) kept their own")
+# (optional: the levels' chain at the scene's scale, rd_shadowres.c)
+set(levelsRe "shadow levels: [0-9]+ shadows at the scene's scale, ([0-9]+) passes")
 set(keysRe "keys: [0-9]+ asked in [0-9]+ rounds, [0-9]+ in the set of [0-9]+, ([0-9]+) missing")
 
 # hundredths of a MB from the integer and fraction a figure printed
@@ -282,6 +249,7 @@ foreach(dump IN LISTS dumps)
         set(skipped TRUE)
         continue()
       endif()
+      set(out_${v} "${out}")
       string(REPLACE ";" "," flat "${out}")
       set(ok TRUE)
       foreach(re drawsRe dateRe cutRe trafficRe breakRe emptyRe oneRe)
@@ -325,6 +293,10 @@ foreach(dump IN LISTS dumps)
       set(eword_${v} "${CMAKE_MATCH_1}")
       set(skip_${v} "${CMAKE_MATCH_2}")
       set(skipDate_${v} "${CMAKE_MATCH_3}")
+      set(chain_${v} 0)
+      if(flat MATCHES "${levelsRe}")
+        set(chain_${v} "${CMAKE_MATCH_1}")
+      endif()
       string(REGEX MATCH "${oneRe}" m "${flat}")
       set(oword_${v} "${CMAKE_MATCH_1}")
       set(shared_${v} "${CMAKE_MATCH_2}")
@@ -469,7 +441,12 @@ foreach(dump IN LISTS dumps)
       endif()
       if(W GREATER 0)
         math(EXPR acted "${acted} + 1")
-        math(EXPR wantPasses "${passes_0} - 4 * ${W} + ${clears_1}")
+        # above 1x the levels are drawn at the scene's scale by their own
+        # chain (rd_shadowres.c; the stats' "shadow levels: N shadows at the
+        # scene's scale, P passes"): the off run draws the empty count's chain
+        # (P passes more than the PS2-size levels alone), a taken window none
+        math(EXPR wantPasses
+             "${passes_0} - 4 * ${W} + ${clears_1} - (${chain_0} - ${chain_1})")
         if(fogown_${s})
           math(EXPR wantPasses "${wantPasses} - ${W}") # list 3's composites' pass
         endif()
@@ -503,6 +480,29 @@ foreach(dump IN LISTS dumps)
     endif()
     if(scFail)
       math(EXPR failures "${failures} + 1")
+    endif()
+    # ------------------------------------------------------ the path ran
+    # the cut's own quantity on the on run (the break mode's at the stencil
+    # settings alone: a snapshot setting takes no window, above)
+    set(nm "${name_${dump}}")
+    if(ITEM STREQUAL "dateone")
+      rd_fixture_require(${nm} "${out_1}" date_one_shared shadow_volume_draws)
+    elseif(ITEM STREQUAL "emptyskip")
+      rd_fixture_require(${nm} "${out_1}" empty_composites_skipped shadow_volume_draws)
+    elseif(stencil)
+      rd_fixture_require(${nm} "${out_1}" no_volume_break_taken shadow_volume_draws)
+    else()
+      rd_fixture_require(${nm} "${out_1}" shadow_volume_draws)
+    endif()
+    set(required_${dump} TRUE)
+    # the composites' DATE on the off run, where the fixture declares it
+    if(stencil)
+      set(dq date_stencil_draws)
+    else()
+      set(dq date_snapshots)
+    endif()
+    if(";${RDFX_PROPS_${nm}};" MATCHES ";${dq}[<>=!]")
+      rd_fixture_require(${nm} "${out_0}" ${dq})
     endif()
     # ------------------------------------------------------- the bytes
     set(dirOff "${OUT}/${index}-${s}-0")
@@ -555,11 +555,19 @@ foreach(dump IN LISTS dumps)
     endif()
   endif()
 endforeach()
+foreach(dump IN LISTS dumps)
+  if(NOT required_${dump})
+    message(SEND_ERROR "${name_${dump}}: its properties were never checked (no setting could "
+                       "show it): a fixture this test cannot measure is no test")
+    math(EXPR failures "${failures} + 1")
+  endif()
+endforeach()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(failures GREATER 0)
-  message(FATAL_ERROR "rd_shadow_cuts_ab ${ITEM}: ${failures} failures over ${ndumps} dumps")
+  message(FATAL_ERROR "rd_shadow_cuts_ab ${ITEM}: ${failures} failures over ${ndumps} fixtures")
 endif()
 if(compared EQUAL 0)
-  message(FATAL_ERROR "rd_shadow_cuts_ab ${ITEM}: no target compared over ${ndumps} dumps")
+  message(FATAL_ERROR "rd_shadow_cuts_ab ${ITEM}: no target compared over ${ndumps} fixtures")
 endif()
 if(ITEM STREQUAL "novolbreak" AND "${BACKEND}" STREQUAL "opengl")
   # OpenGL takes DATE by the snapshot: the break mode takes no window there,
@@ -568,7 +576,7 @@ if(ITEM STREQUAL "novolbreak" AND "${BACKEND}" STREQUAL "opengl")
     message(FATAL_ERROR "rd_shadow_cuts_ab ${ITEM}: the break mode acted on OpenGL (${acted} pairs)")
   endif()
 elseif(acted EQUAL 0)
-  message(FATAL_ERROR "rd_shadow_cuts_ab ${ITEM}: the cut did nothing over ${ndumps} dumps")
+  message(FATAL_ERROR "rd_shadow_cuts_ab ${ITEM}: the cut did nothing over ${ndumps} fixtures")
 endif()
 message(STATUS "rd_shadow_cuts_ab ${ITEM}: ${compared} targets the same bytes over ${ndumps} "
-               "dumps; ${acted} pairs where it acted")
+               "fixtures; ${acted} pairs where it acted")
