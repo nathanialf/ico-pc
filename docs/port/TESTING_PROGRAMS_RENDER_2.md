@@ -312,17 +312,21 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
 - `rd_vu_compact_ab.cmake` (`rd_vu_compact_ab`, `rd_vu_compact_ab_pixel`; `rd_vu_compact.cmake`):
   the index compaction ([PIPELINES.md](PIPELINES.md#the-index-compaction)) on against off,
   `ICO_RD_VU_COMPACT=1` against `=0`, the record by compute in both (`ICO_RD_VU_RECORD=compute`),
-  `--pass-dump --stats`, on every dump of `tools/vu_flat0_dumps.txt` (a listed dump that is absent
-  FAILS where `/primary/dev/ico-dumps` exists): the corpus profile (Original 4:3 at 1x, Enhanced
-  16:9 at 2x, at 16:9 with MSAA 4x, at 16:9 and 1280x720), the Arm fakes on issue 179's four
-  Mali-G52 dumps at their settings, the Pixel's three opening dumps at its setting; with the draw
-  merge, and without it at the first two corpus settings and the phones'. Every target's PNG the
-  same bytes, the off run's `stats: VU index compaction off by default: not run`, the on run's
-  `stats: VU index compaction on: N of M list 0 triangles left out (drop D, outside O)` with M above
-  0 on the phones' dumps and N above 0 on the Mali's; the counts matched where
-  `tools/vu_compact_counts.txt` has a line for the dump, profile, setting and merge, printed
-  (`rd_vu_compact_ab: count ...`) where it has none. `rd_vu_compact_ab_pixel`: rd_pixel's frames,
-  the corpus profile. No device: SKIP.
+  `--pass-dump --stats`, on every fixture of `port/render/test/fixtures/lists/vu_flat0.txt`
+  ([TESTING_FIXTURES.md](TESTING_FIXTURES.md); a listed fixture that is absent FAILS): the corpus
+  profile (Original 4:3 at 1x, Enhanced 16:9 at 2x, at 16:9 with MSAA 4x, at 16:9 and 1280x720),
+  the Arm fakes on issue 179's two Mali-G52 frames at their settings, the Pixel's three opening
+  frames at its setting; with the draw merge, and without it at the first two corpus settings and
+  the phones'. Every target's PNG the same bytes, the off run's `stats: VU index compaction off by
+  default: not run`, the on run's `stats: VU index compaction on: N of M list 0 triangles left out
+  (drop D, outside O)` with M above 0 on the phones' frames and N above 0 on the Mali's; every
+  pair's counts equal to its line of `port/render/test/fixtures/lists/vu_compact_counts.txt`
+  (fixture, profile, setting, merge, then N M D O, each re-derived from a run of the fixture): a
+  pair without a line prints it (`rd_vu_compact_ab: count ...`) and fails, a line no pair took
+  fails. The path ran: `vu_compact_left_out` (N) and `region_rule_draws` against each fixture's
+  declared bounds on every on run compared; a fixture with no pair compared under one of its
+  profiles fails. `rd_vu_compact_ab_pixel`: rd_pixel's frames (a list of build-tree names), the
+  corpus profile, the counts printed. No device: SKIP.
 - `rd_vu_audit.cmake` (`rd_vu_audit`; `port/render/rd_vu_audit.cmake`): the VU record path's bounds
   audit (`ICO_RD_VU_AUDIT=1`, `port/render/rd_vu_audit.h`; issue 179) on the reporter's two loss dumps
   (`/primary/dev/ico-dumps/v0117-mali179/`) and four earlier captures (`v0116-mali179/`) under
@@ -348,22 +352,25 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   `rd_vu_flat0.cmake`): `vu_main_vs` and `vu_merge_main_vs` reading the planes at corner 0 alone
   ([PIPELINES.md](PIPELINES.md#flat-outputs-at-the-provoking-corner)) against their twins with
   every corner computing them, `ICO_RD_VU_FLAT0=1` against `=0`, `--pass-dump --stats`, each with
-  the draw merge and without it (`ICO_RD_VU_MERGE=0`), on every dump of
-  `tools/vu_flat0_dumps.txt` (machine-local; each line its profiles and a path; a listed dump that
-  is absent FAILS where `/primary/dev/ico-dumps` exists): the corpus profile (Original 4:3 at 1x,
-  Enhanced 16:9 at 2x) on the 2026-10-07 captures, three reporters' frames and issue 179's four
-  Mali-G52 dumps; those four again under the Arm fakes (`ICO_VK_FAKE_LIMITS=mali
+  the draw merge and without it (`ICO_RD_VU_MERGE=0`), on every fixture of
+  `port/render/test/fixtures/lists/vu_flat0.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md); each
+  line a fixture, its profiles and its properties; a listed fixture that is absent FAILS): the
+  corpus profile (Original 4:3 at 1x, Enhanced 16:9 at 2x) on a Mac reporter's 16:9 frame and issue
+  179's two Mali-G52 frames; those two again under the Arm fakes (`ICO_VK_FAKE_LIMITS=mali
   ICO_VK_FAKE_VENDOR=0x13B5`, the record by compute, 1x, 21:9, half height); the Pixel's three
-  opening dumps at its setting (`ICO_VK_FAKE_LIMITS=moltenvk`, Enhanced 2364x1080, full height,
+  opening frames at its setting (`ICO_VK_FAKE_LIMITS=moltenvk`, Enhanced 2364x1080, full height,
   full pixel). Every target's PNG (SCENE and DISPLAY among them) the same bytes, each run's line
   (`rd: VU flat outputs: every corner`, `... provoking corner only (9 loads ...`), `merge on)` or
   `merge off)`, a frame drawing nothing through the record (no `stats: VU pre-pass on: [1-9]`)
   skipped, a 4:3 frame the 16:9 setting cannot show skipped, targets compared under every profile
-  with a dump. `rd_vu_flat0_ab_pixel`: rd_pixel's `rd_pixel_vu`, `rd_pixel_vu36` and
-  `rd_pixel_frame` (every machine; CI's Direct3D 11 job runs the same on WARP,
+  with a frame. The path ran: the fixture's `prepass_vertices` (the mesh and grid vertices the
+  record holds, every one drawn by the provoking corner's shader) against its declared bound on
+  every `=1` run compared; a fixture with no pair compared under one of its profiles fails.
+  `rd_vu_flat0_ab_pixel`: rd_pixel's `rd_pixel_vu`, `rd_pixel_vu36` and `rd_pixel_frame` (a list of
+  build-tree names; every machine; CI's Direct3D 11 job runs the same on WARP,
   `tools/ci_d3d11_warp.sh`, `-DBACKEND=d3d11`, the debug layer's errors failing it).
-  `rd_vu_flat0_gl`: the list on OpenGL (llvmpipe), every dump at the corpus settings (the fakes are
-  Vulkan's). No device: SKIP.
+  `rd_vu_flat0_gl`: the list on OpenGL (llvmpipe), every fixture at the corpus settings (the fakes
+  are Vulkan's). No device: SKIP.
 - `rd_smallcuts_test.c` (`rd_smallcuts`; `rd_smallcuts.cmake`, CPU): the pure parts of the turn in
   the present's blit and the VU record by compute on the PowerVR class: `rd__turn_rect` for every
   quarter turn against `rd_prerotate.c`'s pixel table (every pixel of the rect lands inside the
