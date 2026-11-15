@@ -245,6 +245,12 @@ add a row when a family needs one):
 | `store_depth_dropped` | `stores: N depth and M colour stores dropped` |
 | `constant_reads_served` | `constant reads on: N sprites drawn in a cleared source's colour` |
 | `vu_record_dispatches` | `C copies, N dispatches` (the first stats line: the record by compute dispatches) |
+| `water_blocks_kept`, `water_targets_clamped` | the water line (`--list`) with Full pixel on: `N render-target reads clamped, M block reads kept on REPEAT` |
+| `aura_paste_split` | `aura paste on: N split` |
+| `noplanes_fallback` | `sprite no-planes N` (the commands through the plain sprite builds) |
+| `prerotate_turned` | the log's `turned twin: the WxH picture turned N degrees` |
+| `turn_fold_cases`, `turn_fold_turned` | the log's `turn in the blit: self-test passed (N cases`, `picture's box blit drawn turned N degrees` |
+| `bench_variants` | `bench: done; every variant ran: N of M` |
 
 The fixtures' declared properties are their manifest line's; `rd_fixtures_check` holds the two
 equal.
@@ -381,3 +387,10 @@ expansion does not change); its manifest line must say the same.
 | `rd_scope_ab`, `rd_scope_ab_tiler` | `lists/scope.txt` | the three captures, `fx-loss95`, `fx-scope-179-lost`, `fx-scope-179-before` (issue 179's Mali-G52 loss frames at the first 3D scene) (`prepass_vertices>=1`) | `prepass_vertices` on both runs |
 | `rd_vu_rec_size_ab`, `_mali` | `lists/vu_rec_size.txt` | `fx-mali-slow541`, `fx-mali-frame`, `fx-lamps-novolume`, `fx-opening-dark`, `fx-opening-sun`, `fx-vu-plain-0300` (the corpus's largest pre-pass record) (`prepass_vertices>=1`, `vu_record_dispatches>=1`) | `prepass_vertices` on both runs, `vu_record_dispatches` on `_mali`'s |
 | `rd_vurecord_ab_compute_class_opening` | `lists/vu_opening.txt` | `fx-lamps-novolume`, `fx-opening-dark`, `fx-opening-sun` | `prepass_vertices` on both runs, `vu_record_dispatches` on the compute run |
+| `rd_replay_tool_ripple`, `_447`, `_436`, `_436_ps2`, `_436_1x`, `_436_1x_ps2`, `rd_replay_tool_mirror_floor` | the registration's `-DFIXTURE` (port/render/CMakeLists.txt) | `fx-ripple-13782`, `fx-ripple-84109`, `fx-ripple-83439` (issue 106's drained room: the puddle's block read by the ripples on REPEAT, `water_blocks_kept>=1`), `fx-puddle-0200` (the pool's grids over its scene copy, no block: `water_blocks_kept=0`, `water_targets_clamped>=1`) | the declared water quantities on the replay's water line; every block read on REPEAT kept; the block's scale in the log; the picture's PNG the fixture's own as the release before's tool drew it. The block's reflection does not reach a fixture's picture (the scene's scale and the GS size give one picture), so the picture pins the frame as a whole, not the water |
+| `rd_fades_fold_ab` | `lists/fades_fold.txt` | `fx-phone-4657`, `fx-ripple-83439`, `fx-mobile-164`, `fx-vu-3086` (`fades_folded>=1`, the line's) | `fades_folded` on every folded run; VD-27's rule on every target |
+| `rd_aura_paste_ab` | `lists/aura_paste.txt` | `fx-phone-4657`, `fx-shadow-wide`, `fx-mobile-164`, `fx-163-blended` (`aura_paste_split=1`), `fx-vu-3086` (`aura_paste_split=0`: the paste drawn whole) | `aura_paste_split` on the on run at the phone's setting; every PNG byte for byte, the passes and traffic equal |
+| `rd_noplanes_ab` | `lists/noplanes.txt` (`expect=`, then the tool's arguments) | `fx-title-0200`, `fx-title-0350`, `fx-boot-0600` (`noplanes_fallback=2`), `fx-vu-3112` (`noplanes_fallback=0`) | `noplanes_fallback` on the run without the builds; every target byte for byte |
+| `rd_replay_tool_prerotate` | `lists/prerotate.txt` | `fx-phone-4657`, `fx-boot-0200` (`prerotate_turned>=90`) | `prerotate_turned` on every turned run; each turned present the identity's bytes |
+| `rd_turn_fold_ab` | `lists/turn_fold.txt` (`win43`: also at 1024x768) | `fx-lamps-novolume`, `fx-opening-dark`, `fx-opening-sun`, `fx-mali-slow541`, `fx-mali-frame` (cropped: the turn pass kept, `turn_fold_cases=6`), `fx-vu-3086` (`win43`, `turn_fold_turned>=90`) | `turn_fold_cases` on every fold run, `turn_fold_turned` where it folded; every PNG byte for byte |
+| `rd_bench_ab` | `lists/bench.txt` (the variant lines after a bar) | `fx-lamps-novolume`, `fx-opening-sun` (`bench_variants`) | `bench_variants` on the bench run; every variant ran, the picture after the bench the one before |

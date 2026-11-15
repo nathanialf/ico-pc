@@ -123,3 +123,17 @@ fx-scope-179-before build-host-tmp/v0114/evidence/179/loss/loss-20261110-184556-
 # the corpus's largest VU pre-pass record (the plain room, 2026-10-06, 512x448
 # GS, dump version 4: 84649 vertices, 168322 triangle slots in the source)
 fx-vu-plain-0300 build-host-tmp/corpus/dumps/plain/rd-00300.rddump rules=vu_opaque.rules.txt prepass_vertices>=1 vu_record_dispatches>=1 store_depth_dropped>=1
+# issue 106's drained room (FIX-P5b; dump version 12, 688x448 GS): the
+# reporter's three frames, each a puddle's block (344x256 GS with depth) read
+# by the ripples' two screen prims on REPEAT; the corpus's puddle room (dump
+# version 4, 512x512 GS): the pool's grids over its scene copy, no block.
+# water_blocks_kept and water_targets_clamped from the water line (--list)
+# with Full pixel on; the title's e2e frames 200 and 350 (dump version 5,
+# 512x512 GS): a screen-prim triangle key with planes, noplanes_fallback with
+# ICO_RD_NO_SPRITE_PLANES=1 at the tool's default setting.
+fx-ripple-13782 build-host-tmp/corpus/dumps/ripple/frame-20261024-094512-v13782.zip water_blocks_kept>=1
+fx-ripple-83439 build-host-tmp/corpus/dumps/ripple/frame-20261024-100436-v83439.zip water_blocks_kept>=1
+fx-ripple-84109 build-host-tmp/corpus/dumps/ripple/frame-20261024-100447-v84109.zip water_blocks_kept>=1
+fx-puddle-0200 build-host-tmp/corpus/dumps/puddle/rd-00200.rddump water_blocks_kept=0 water_targets_clamped>=1
+fx-title-0200 build-host-tmp/e2e/run-title-on/dumps/rd-00200.rddump noplanes_fallback=2
+fx-title-0350 build-host-tmp/e2e/run-title-on/dumps/rd-00350.rddump noplanes_fallback=2

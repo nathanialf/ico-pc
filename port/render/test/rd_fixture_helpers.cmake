@@ -81,6 +81,17 @@ set(_rdfx_q_vu_merged_draws "VU merge: [0-9]+ draws in [0-9]+ GPU draws \\(([0-9
 set(_rdfx_q_store_depth_dropped "stats: stores: ([0-9]+) depth and [0-9]+ colour stores dropped")
 set(_rdfx_q_constant_reads_served "constant reads on: ([0-9]+) sprites drawn in a cleared source's colour")
 set(_rdfx_q_vu_record_dispatches "[0-9]+ copies, ([0-9]+) dispatches")
+# the water's blocks and the mirror floor, the aura's paste split, the sprite
+# planes' fallback, the turned present and the turn fold, the bench (the last
+# four read the tool's log lines as well as its stats)
+set(_rdfx_q_water_blocks_kept "([0-9]+) block reads kept on REPEAT")
+set(_rdfx_q_water_targets_clamped "([0-9]+) render-target reads clamped")
+set(_rdfx_q_aura_paste_split "aura paste on: ([0-9]+) split")
+set(_rdfx_q_noplanes_fallback "sprite no-planes ([0-9]+)")
+set(_rdfx_q_prerotate_turned "turned twin: the [0-9]+x[0-9]+ picture turned ([0-9]+) degrees")
+set(_rdfx_q_turn_fold_cases "turn in the blit: self-test passed \\(([0-9]+) cases")
+set(_rdfx_q_turn_fold_turned "picture's box blit drawn turned ([0-9]+) degrees")
+set(_rdfx_q_bench_variants "bench: done, every variant ran: ([0-9]+) of")
 
 set(RDFX_FAILURES 0)
 

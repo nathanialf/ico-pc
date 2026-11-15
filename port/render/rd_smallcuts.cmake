@@ -24,10 +24,10 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_smallcuts COMMAND rd_smallcuts_test)
 endif()
 
-# rd_turn_fold_ab (test/rd_turn_fold_ab.cmake): rd_pixel's dump and every dump
-# of the machine-local tools/turn_fold_dumps.txt (the PowerVR phone's three
-# opening dumps, issue 179's three Mali-G52 dumps; a listed dump that is absent
-# fails where /primary/dev/ico-dumps exists) through the headless twin at 90,
+# rd_turn_fold_ab (test/rd_turn_fold_ab.cmake): rd_pixel's dump and the
+# fixtures of test/fixtures/lists/turn_fold.txt (the PowerVR phone's three
+# opening frames, issue 179's two Mali-G52 frames, 4:3 frames folded at
+# 1024x768; a listed fixture that is absent fails) through the headless twin at 90,
 # 180 and 270 degrees: the present drawn turned by its box blit
 # (ICO_RD_TURN_FOLD=1) against the turn pass (unset), every PNG byte for byte;
 # the fold's self-test passed; the phone's setting and a 16:9 desktop window
@@ -39,7 +39,9 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
     add_test(NAME rd_turn_fold_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/turn_fold_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                     "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/turn_fold.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/turn_fold_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_turn_fold_ab.cmake")
     set_tests_properties(rd_turn_fold_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"

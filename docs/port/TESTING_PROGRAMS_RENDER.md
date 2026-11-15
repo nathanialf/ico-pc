@@ -611,14 +611,16 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   into 110 on the 164 frame's) and each fixture's declared `vu_merged_draws` on the plain run
   (`rd_vumerge_mali`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge-without-dual-source-blending)).
   SKIP as `rd_vustage_ab`.
-- `rd_noplanes_ab.cmake`: the dumps of `tools/noplanes_dumps.txt` (the title's and the boot's
-  frames, each drawing one screen-prim triangle key with planes, and a capture drawing none; a line
-  is the dump, `expect=same|fallback:N|report` and the tool's setting arguments) with the sprite
+- `rd_noplanes_ab.cmake`: the fixtures of `port/render/test/fixtures/lists/noplanes.txt`
+  ([TESTING_FIXTURES.md](TESTING_FIXTURES.md): the title's and the boot's frames, each drawing one
+  screen-prim triangle key with planes, and a capture drawing none; a line is the fixture,
+  `expect=same|fallback:N|report`, its `noplanes_fallback` and the tool's setting arguments) with the sprite
   planes builds and under `ICO_RD_NO_SPRITE_PLANES=1` (issue 161's fallback): the second run's line
   that the builds are off, `sprite no-planes 0` in the first; `expect=same` every named target's PNG
   byte for byte and no command through the fallback, `expect=fallback:N` byte for byte with N
   commands through it (the title's and the boot's dumps: 2), `expect=report` at least one command
-  through it and the targets that differ listed (`rd_noplanes_ab`;
+  through it and the targets that differ listed; the path ran: each fixture's declared
+  `noplanes_fallback` on the run without the builds (`rd_noplanes_ab`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#without-the-sprite-planes)). SKIP as `rd_vustage_ab`.
 - `rd_occlusion_tool.cmake`: `rd_replay_tool --occlusion` ([RENDER.md](RENDER_PERF.md#culling)) on the
   first dump of the machine-local list `tools/occlusion_corpus.txt` that is here, at Original 4:3
@@ -1567,8 +1569,9 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   (`ICO_VK_FAKE_TRANSFORM=90`, `180`, `270`: the picture turned into a texture of the turned size
   by the swapchain path's own pass and read back turned back on the CPU, `port/render/rd_prerotate.c`)
   is the identity present byte for byte, and each turned run names its twin; that dump at 640x480,
-  1280x720, with `--overlay-test` (the port's UI layer) and with `--crt pvm`, and the dumps of
-  `tools/prerotate_dumps.txt` that are on the machine at 640x480 and 2400x1080
+  1280x720, with `--overlay-test` (the port's UI layer) and with `--crt pvm`, and the fixtures of
+  `port/render/test/fixtures/lists/prerotate.txt` (the PowerVR phone's frame, the title's castle;
+  the path ran: `prerotate_turned` on every turned run) at 640x480 and 2400x1080
   ([DISPLAY.md](DISPLAY.md#the-turned-swapchain)) (`rd_replay_tool_prerotate`).
 - `rd_replay_tool_pass_merge.cmake`: that dump under `ICO_RD_BLEND=storage` with the storage pass
   merge draws `ICO_RD_PASS_MERGE=0`'s DISPLAY picture byte for byte at 1x and 2x, with no more

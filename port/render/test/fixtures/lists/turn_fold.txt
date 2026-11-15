@@ -1,0 +1,20 @@
+# Fixtures for rd_turn_fold_ab (port/render/test/rd_turn_fold_ab.cmake: the
+# present's turn drawn by its box blit against the turn pass, byte for byte,
+# through the headless twin): fixture names of this repository
+# (port/render/test/fixtures/NAME.rdfix), a name a line, then the word win43
+# (also replayed at 1024x768, where a 4:3 frame fills the window one texel a
+# pixel and must fold) and the line's own properties (rd_fixture_list_props.cmake):
+# turn_fold_cases, the fold's self-test cases, on every fold run;
+# turn_fold_turned on a run that folded (a line that declares it must fold).
+#
+# the PowerVR phone's opening (v0.11.5 rc): lamps, dark, whole; 848 GS pixels
+# for 840.53 at its aspect: cropped, the turn pass kept
+fx-lamps-novolume turn_fold_cases=6
+fx-opening-dark turn_fold_cases=6
+fx-opening-sun turn_fold_cases=6
+# issue 179's Mali-G52 (a turned phone too): a stage 42 slow capture and the
+# stage 3 frame; 912 GS pixels for 910.22: cropped
+fx-mali-slow541 turn_fold_cases=6
+fx-mali-frame turn_fold_cases=6
+# a 2026-10-07 capture (4:3, 512x448 GS): folds at 1024x768
+fx-vu-3086 win43 turn_fold_cases=6 turn_fold_turned>=90
