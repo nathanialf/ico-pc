@@ -1,0 +1,12 @@
+# The VU family's frames (rd_vustage_ab, rd_vubatch_ab, rd_vumerge_ab and _uber,
+# rd_vurecord_ab, _compute, _compute_class, rd_vuprepass_min_ab,
+# rd_vu_rec_early_ab, _compute, _targets; docs/port/TESTING_FIXTURES.md): each
+# draws VU commands through the pre-pass (prepass_vertices, prepass_draws) and
+# joins draws in the merge through the record (vu_merged_draws).
+# the 2026-10-07 captures (512x448 GS, 4:3)
+fx-vu-3086
+fx-vu-3112
+fx-vu-1985
+# a device-loss frame (issue 95) and the deja vu 48:9 frame
+fx-loss95
+fx-deja

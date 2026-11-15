@@ -19,23 +19,28 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_vu_flat0 COMMAND rd_vu_flat0_test)
 endif()
 
-# rd_vu_flat0_ab (test/rd_vu_flat0_ab.cmake): every dump of the machine-local
-# tools/vu_flat0_dumps.txt (the 2026-10-07 captures, three reporters' frames,
-# issue 179's four Mali-G52 dumps under the Arm fakes at its settings, the
-# Pixel's three opening dumps at its setting; a listed dump that is absent
-# fails where /primary/dev/ico-dumps exists) with the flat outputs at the
-# provoking corner (ICO_RD_VU_FLAT0=1, the shipped build) against every
-# corner computing them (=0, the twins), merged and one draw a command: every
-# target byte for byte.  rd_vu_flat0_ab_pixel: the same on the frames rd_pixel
-# leaves (every machine, CI's Direct3D 11 job too: tools/ci_d3d11_warp.sh).
+# rd_vu_flat0_ab (test/rd_vu_flat0_ab.cmake): every fixture of
+# test/fixtures/lists/vu_flat0.txt (committed frames, rd_fixture.cmake,
+# docs/port/TESTING_FIXTURES.md; a listed fixture that is absent fails: a
+# Mac reporter's 16:9 frame, issue 179's Mali-G52 frames under the Arm fakes
+# at its settings, the Pixel's three opening frames at its setting) with the
+# flat outputs at the provoking corner (ICO_RD_VU_FLAT0=1, the shipped
+# build) against every corner computing them (=0, the twins), merged and one
+# draw a command: every target byte for byte, and the vertices the record
+# holds each fixture declares (the path ran).  rd_vu_flat0_ab_pixel: the
+# same on the frames rd_pixel leaves (a list of build-tree names, every
+# machine, CI's Direct3D 11 job too: tools/ci_d3d11_warp.sh).
 # rd_vu_flat0_gl: the list on OpenGL (llvmpipe), the corpus settings.  No
 # device: SKIP.
+include(rd_fixture.cmake)
 if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vu_flat0_ab"
          "${CMAKE_CURRENT_BINARY_DIR}/vu_flat0_ab_pixel")
     add_test(NAME rd_vu_flat0_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/vu_flat0_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                     "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/vu_flat0.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_flat0_ab" -DBACKEND=vulkan
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_flat0_ab.cmake")
     set_tests_properties(rd_vu_flat0_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
@@ -56,7 +61,9 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
         file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/gl/vu_flat0_ab")
         add_test(NAME rd_vu_flat0_gl
                  COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                         "-DLIST=${CMAKE_SOURCE_DIR}/tools/vu_flat0_dumps.txt"
+                         -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                         "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                         "-DLIST=${ICO_FIXTURE_DIR}/lists/vu_flat0.txt"
                          "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/gl/vu_flat0_ab" -DBACKEND=opengl
                          -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_flat0_ab.cmake")
         set_tests_properties(rd_vu_flat0_gl PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"

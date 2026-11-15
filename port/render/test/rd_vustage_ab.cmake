@@ -1,7 +1,8 @@
 # rd_vustage_ab: the per-triangle record against the old way, byte for byte
 # (docs/port/PIPELINES.md, "The vertex and triangle pre-passes").  For every
-# dump the list names (tools/vustage_dumps.txt: one path a line, relative to
-# the list's folder unless absolute, '*' globs, '#' comments), at the Original preset at 4:3 and 1x and at the Enhanced
+# frame the list names (rd_vu_inputs.cmake: the fixtures of
+# port/render/test/fixtures/lists/vustage.txt, or a list of the dumps the build
+# writes), at the Original preset at 4:3 and 1x and at the Enhanced
 # preset at 4:3 and 2x, rd_replay_tool's --pass-dump with --stats twice
 # under ICO_RD_BLEND=fixed: with ICO_RD_VU_PREPASS=0 (every VU draw through
 # its program's entry and vu_ps) and with the pre-passes (vu_main_vs,
@@ -12,40 +13,19 @@
 # drops the call it names; tools/ci_d3d11_warp.sh runs this script on WARP,
 # where the record is copied by the backend's compute shader), nor a copy
 # into the record the backend refused (`rhi_cmd_copy_texture_to_buffer: ...
-# skipped`).
-# Each run's stats lines are printed as the release's structural record.  A
-# missing list or dump is named and skipped; no dump read, or no device:
-# SKIP (77).
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
-if(NOT EXISTS "${LIST}")
+# skipped`).  The path ran: on the record's run every fixture's declared
+# prepass_vertices (rd_fixture_require), and every fixture checked.
+# Each run's stats lines are printed as the release's structural record.  No
+# dump, or no device: SKIP (77).
+# -DTOOL=<rd_replay_tool> -DLIST=<list> -DOUT=<a folder the test may write>
+# [-DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<folder> -DFIXTURE_HELPERS=<file>]
+include("${CMAKE_CURRENT_LIST_DIR}/rd_vu_inputs.cmake")
+if(NOT vuFixtures AND NOT EXISTS "${LIST}")
   message(STATUS "SKIP: ${LIST}: no dump list")
   return()
 endif()
-get_filename_component(listDir "${LIST}" DIRECTORY)
-file(STRINGS "${LIST}" lines)
-set(dumps "")
-foreach(l IN LISTS lines)
-  string(STRIP "${l}" l)
-  if(l STREQUAL "" OR l MATCHES "^#")
-    continue()
-  endif()
-  if(NOT IS_ABSOLUTE "${l}")
-    set(l "${listDir}/${l}")
-  endif()
-  if(l MATCHES "[*]")
-    file(GLOB matched "${l}")
-    list(SORT matched)
-    if(matched)
-      list(APPEND dumps ${matched})
-    else()
-      message(STATUS "${l}: no dump matches, skipped")
-    endif()
-  elseif(EXISTS "${l}")
-    list(APPEND dumps "${l}")
-  else()
-    message(STATUS "${l}: no such dump, skipped")
-  endif()
-endforeach()
+rd_vu_inputs("${LIST}")
+set(dumps "${vuDumps}")
 list(LENGTH dumps ndumps)
 if(ndumps EQUAL 0)
   message(STATUS "SKIP: no dump of ${LIST} is here")
@@ -99,6 +79,8 @@ foreach(dump IN LISTS dumps)
       message(SEND_ERROR "${dump} ${s}: the pre-passes did not draw every VU command:\n${statsText}")
       math(EXPR failures "${failures} + 1")
     endif()
+    # the path ran: the record's vertices (a fixture's declared prepass_vertices)
+    rd_vu_require(${index} "${outNew}" prepass_vertices)
     file(GLOB pngs RELATIVE "${dirOld}" "${dirOld}/*.png")
     list(LENGTH pngs npng)
     if(npng EQUAL 0)
@@ -121,6 +103,7 @@ foreach(dump IN LISTS dumps)
     endforeach()
   endforeach()
 endforeach()
+rd_vu_inputs_done(failures)
 if(failures GREATER 0)
   message(FATAL_ERROR "rd_vustage_ab: ${failures} failures over ${ndumps} dumps")
 endif()

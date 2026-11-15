@@ -1,7 +1,7 @@
 # rd_store_plan_ab: the store plan against every depth store kept, byte for byte
-# (docs/port/WORK_BUFFERS.md, "The store plan").  For every dump the lists name
-# (tools/vustage_dumps.txt and tools/vufuse_dumps.txt, read as rd_vufuse_ab.cmake
-# reads them), under ICO_RD_BLEND=fixed and ICO_RD_STORE_POISON=1 (a depth or
+# (docs/port/WORK_BUFFERS.md, "The store plan").  For every frame the list names
+# (lists/store_plan.txt's fixtures, read by rd_vu_inputs.cmake), under
+# ICO_RD_BLEND=fixed and ICO_RD_STORE_POISON=1 (a depth or
 # stencil load the plan leaves undefined clears to garbage instead: lavapipe
 # itself keeps an attachment's contents whatever its store op says),
 # rd_replay_tool's --pass-dump with --stats three times: with ICO_RD_STORE_PLAN=0
@@ -23,42 +23,15 @@
 # depth dropped, both with the same colour stores dropped (the shadow count's
 # colour while it is made, poisoned to 0x5A: no named target may show it); over every dump and setting the plan must drop depth stores,
 # and the wrong plan must change at least one target (proof the poison shows a
-# dropped store that is read).  Each run's counts are printed.  A missing list
-# or dump is named and skipped; no dump read, or no device: SKIP (77).
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DEXTRA=<a second dump list>
+# dropped store that is read).  The path ran: on the planned run every
+# fixture's declared store_depth_dropped, every fixture checked.  Each run's
+# counts are printed.  No dump, or no device: SKIP (77).
+# -DTOOL=<rd_replay_tool> -DLIST=<list> [-DEXTRA=<a second list>]
 # -DOUT=<a folder the test may write>
-set(dumps "")
-foreach(list IN ITEMS "${LIST}" "${EXTRA}")
-  if(list STREQUAL "" OR NOT EXISTS "${list}")
-    message(STATUS "${list}: no dump list, skipped")
-    continue()
-  endif()
-  get_filename_component(listDir "${list}" DIRECTORY)
-  file(STRINGS "${list}" lines)
-  foreach(l IN LISTS lines)
-    string(STRIP "${l}" l)
-    if(l STREQUAL "" OR l MATCHES "^#")
-      continue()
-    endif()
-    if(NOT IS_ABSOLUTE "${l}")
-      set(l "${listDir}/${l}")
-    endif()
-    if(l MATCHES "[*]")
-      file(GLOB matched "${l}")
-      list(SORT matched)
-      if(matched)
-        list(APPEND dumps ${matched})
-      else()
-        message(STATUS "${l}: no dump matches, skipped")
-      endif()
-    elseif(EXISTS "${l}")
-      list(APPEND dumps "${l}")
-    else()
-      message(STATUS "${l}: no such dump, skipped")
-    endif()
-  endforeach()
-endforeach()
-list(REMOVE_DUPLICATES dumps)
+# [-DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<folder> -DFIXTURE_HELPERS=<file>]
+include("${CMAKE_CURRENT_LIST_DIR}/rd_vu_inputs.cmake")
+rd_vu_inputs("${LIST}" "${EXTRA}")
+set(dumps "${vuDumps}")
 list(LENGTH dumps ndumps)
 if(ndumps EQUAL 0)
   message(STATUS "SKIP: no dump of ${LIST} or ${EXTRA} is here")
@@ -93,8 +66,8 @@ foreach(dump IN LISTS dumps)
       file(REMOVE_RECURSE "${dir_${run}}")
       file(MAKE_DIRECTORY "${dir_${run}}")
       execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_STORE_POISON=1
-                              ICO_RD_STORE_PLAN=${plan_${run}} ${env_${s}} "${TOOL}" "${dump}" -
-                              --pass-dump "${dir_${run}}" --stats ${args_${s}}
+                              ICO_RD_STORE_PLAN=${plan_${run}} ${env_${s}} "${TOOL}" "${dump}"
+                              "${dir_${run}}.png" --pass-dump "${dir_${run}}" --stats ${args_${s}}
                       RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
       if(rc EQUAL 77)
         message(STATUS "SKIP: no device: ${err}")
@@ -123,6 +96,7 @@ foreach(dump IN LISTS dumps)
       set(passes_${run} "${CMAKE_MATCH_3}")
       set(withDepth_${run} "${CMAKE_MATCH_4}")
       set(state_${run} "${CMAKE_MATCH_5}")
+      set(out_${run} "${out}")
     endforeach()
     if(skipped)
       continue()
@@ -131,6 +105,9 @@ foreach(dump IN LISTS dumps)
       math(EXPR failures "${failures} + 1")
       continue()
     endif()
+    # the path ran: the plan's depth stores dropped (a fixture's declared
+    # store_depth_dropped)
+    rd_vu_require(${index} "${out_on}" store_depth_dropped)
     message(STATUS "${dump} ${s}: ${passes_on} passes, ${withDepth_on} with a depth; depth "
                    "stores dropped: kept ${depth_off}, planned ${depth_on}, all ${depth_all}; "
                    "the shadow count's colour: ${colour_on}")
@@ -207,6 +184,7 @@ if(NOT wrongDiffer GREATER 0)
                      "changed no target: the poison does not show a dropped store")
   math(EXPR failures "${failures} + 1")
 endif()
+rd_vu_inputs_done(failures)
 if(failures GREATER 0)
   message(FATAL_ERROR "rd_store_plan_ab: ${failures} failures over ${ndumps} dumps")
 endif()

@@ -1,0 +1,12 @@
+# rd_scope_ab and rd_scope_ab_tiler (docs/port/TESTING_FIXTURES.md): frames
+# drawing VU commands through the pre-pass (prepass_vertices), the texture
+# uploads before it or after it by the barrier scopes
+# the 2026-10-07 captures
+fx-vu-3086
+fx-vu-3112
+fx-vu-1985
+# issue 179's Mali-G52 loss frames (the first 3D scene, v0.11.3)
+fx-scope-179-lost
+fx-scope-179-before
+# a device-loss frame (issue 95)
+fx-loss95

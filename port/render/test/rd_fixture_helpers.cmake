@@ -72,6 +72,15 @@ set(_rdfx_q_present_scene_skipped "present from SCENE on: ([0-9]+) reductions no
 set(_rdfx_q_lamps_area_passes "\\): ([0-9]+) passes with the lamps' area")
 set(_rdfx_q_lamps_bands_lazy "([0-9]+) bands left lazy")
 set(_rdfx_q_lamps_owed "([0-9]+) WORK0 alpha sprites owed")
+# the index compaction: list 0's triangles it left out
+set(_rdfx_q_vu_compact_left_out "VU index compaction on: ([0-9]+) of [0-9]+ list 0 triangles left out")
+# the VU family: the pre-pass's draws, the merge's joined draws, the store plan,
+# the cleared sources read as their colour, the record by compute dispatches
+set(_rdfx_q_prepass_draws "VU pre-pass on: [0-9]+ passes, [0-9]+ vertices in ([0-9]+) draws")
+set(_rdfx_q_vu_merged_draws "VU merge: [0-9]+ draws in [0-9]+ GPU draws \\(([0-9]+) merged into")
+set(_rdfx_q_store_depth_dropped "stats: stores: ([0-9]+) depth and [0-9]+ colour stores dropped")
+set(_rdfx_q_constant_reads_served "constant reads on: ([0-9]+) sprites drawn in a cleared source's colour")
+set(_rdfx_q_vu_record_dispatches "[0-9]+ copies, ([0-9]+) dispatches")
 
 set(RDFX_FAILURES 0)
 

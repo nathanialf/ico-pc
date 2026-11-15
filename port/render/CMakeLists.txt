@@ -2593,16 +2593,18 @@ if(ICO_RUN_TESTS)
                          PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_PREPASS_SABOTAGE=ticks")
     set_tests_properties(rd_vuprepass_selftest_sabotage_tri
                          PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_PREPASS_SABOTAGE=tri")
-    # rd_vustage_ab (test/rd_vustage_ab.cmake): every dump of the
-    # machine-local list tools/vustage_dumps.txt replayed the old way
+    # rd_vustage_ab (test/rd_vustage_ab.cmake): the fixtures of
+    # test/fixtures/lists/vustage.txt (rd_fixture.cmake; _vu_fx the tool,
+    # the folder and the helpers) replayed the old way
     # (ICO_RD_VU_PREPASS=0, the programs' entries) and through the record,
     # at Original 4:3 1x and Enhanced 4:3 2x under ICO_RD_BLEND=fixed: every
-    # named target byte for byte; SKIP without the list, its dumps or a
-    # device
+    # named target byte for byte, the record's vertices; SKIP without a device
+    set(_vu_fx -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool> "-DFIXTURES=${ICO_FIXTURE_DIR}"
+               "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}")
+    set(_vu_list "-DLIST=${ICO_FIXTURE_DIR}/lists/vustage.txt")
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vustage_ab")
     add_test(NAME rd_vustage_ab
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/vustage_dumps.txt"
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> ${_vu_fx} "${_vu_list}"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vustage_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vustage_ab.cmake")
     set_tests_properties(rd_vustage_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
@@ -2617,8 +2619,7 @@ if(ICO_RUN_TESTS)
     # vertices, fewer pre-pass draws batched; SKIP as rd_vustage_ab
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vubatch_ab")
     add_test(NAME rd_vubatch_ab
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/vustage_dumps.txt"
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> ${_vu_fx} "${_vu_list}"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vubatch_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vubatch_ab.cmake")
     set_tests_properties(rd_vubatch_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
@@ -2626,20 +2627,21 @@ if(ICO_RUN_TESTS)
         set_tests_properties(rd_vubatch_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
     # rd_vurecord_ab (test/rd_vu_env_ab.cmake): rd_pixel's dump and the same
-    # dumps with the VU record drawn into the render targets and copied
+    # fixtures with the VU record drawn into the render targets and copied
     # (ICO_RD_VU_RECORD=targets) and stored by the vertex shaders (=stores;
     # rd_vu_record.h) at Original 4:3 1x and Enhanced 16:9 2x under
     # ICO_RD_BLEND=fixed: every named target byte for byte, both runs every VU
-    # command through the record, each naming its write.  rd_vuprepass_min_ab:
-    # the same dumps with [dev] vu_prepass_min under every frame
+    # command through the record, each naming its write, each fixture's
+    # record vertices (FX_A, FX_B).  rd_vuprepass_min_ab:
+    # the same fixtures with [dev] vu_prepass_min under every frame
     # (ICO_RD_VU_PREPASS_MIN=0) and above every frame (2147483647: each frame
     # skipped, every VU command the old way): byte for byte, the skips counted
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vurecord_ab"
          "${CMAKE_CURRENT_BINARY_DIR}/vuprepass_min_ab")
     add_test(NAME rd_vurecord_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> -DNAME=rd_vurecord_ab
-                     "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/vustage_dumps.txt"
+                     "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump" ${_vu_fx} "${_vu_list}"
+                     -DFX_A=prepass_vertices -DFX_B=prepass_vertices
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vurecord_ab"
                      "-DENV_A=ICO_RD_VU_RECORD=targets" "-DENV_B=ICO_RD_VU_RECORD=stores"
                      "-DREQ_A=0 mesh and grid draws the old way.*stats: VU record targets: drawn into 3"
@@ -2648,11 +2650,10 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_vuprepass_min_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      -DNAME=rd_vuprepass_min_ab
-                     # no fixture dump: rd_pixel_frame.rddump has no VU draws (0 passes either way);
-                     # the list's dumps alone, SKIP where none exist, and a listed frame without
-                     # VU commands (the corpus's 2D-only frames: 0 passes with the floor at 0,
-                     # nothing to skip above it) skipped
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/vustage_dumps.txt"
+                     # no rd_pixel dump: rd_pixel_frame.rddump has no VU draws (0 passes either
+                     # way); the list's fixtures alone, each with VU commands (a frame without
+                     # them would be skipped: 0 passes with the floor at 0, nothing to skip)
+                     ${_vu_fx} "${_vu_list}" -DFX_A=prepass_vertices
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vuprepass_min_ab"
                      "-DSKIP_UNLESS=stats: VU pre-pass on: [1-9][0-9]* passes"
                      "-DENV_A=ICO_RD_VU_PREPASS_MIN=0" "-DENV_B=ICO_RD_VU_PREPASS_MIN=2147483647"
@@ -2677,27 +2678,27 @@ if(ICO_RUN_TESTS)
     # joined; SKIP as rd_vustage_ab
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vumerge_ab")
     add_test(NAME rd_vumerge_ab
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/vustage_dumps.txt"
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> ${_vu_fx} "${_vu_list}"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vumerge_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vumerge_ab.cmake")
     set_tests_properties(rd_vumerge_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
     if(_env)
         set_tests_properties(rd_vumerge_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
-    # rd_vumerge_mali (test/rd_vumerge_mali.cmake, issue 164): the dumps of
-    # the machine-local list tools/vumerge_mali_dumps.txt (the Mali-G52
-    # reporter's frame, /primary/dev/ico-dumps/164/, the phone frames and a
-    # capture) on the plain device and under a phone GPU's limits without
+    # rd_vumerge_mali (test/rd_vumerge_mali.cmake, issue 164): the fixtures
+    # of test/fixtures/lists/vumerge_mali.txt (the Mali-G52 reporter's
+    # frame, the phone frames and a capture, each with its expect= figure)
+    # on the plain device and under a phone GPU's limits without
     # dual-source blending (ICO_VK_FAKE_LIMITS=mali ICO_VK_FAKE_NO_DUAL=1:
     # every lerp draw two passes), under ICO_RD_BLEND=fixed: every named
     # target byte for byte, the draw merge's figures and the fused pairs the
-    # plain device's (826 draws merged into 87 on the 164 frame); label
+    # plain device's (the list's figure: 1012 draws merged into 110 on the
+    # 164 frame's fixture, the cull off); label
     # mali; SKIP as rd_vustage_ab
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vumerge_mali")
     add_test(NAME rd_vumerge_mali
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/vumerge_mali_dumps.txt"
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> ${_vu_fx}
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/vumerge_mali.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vumerge_mali"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vumerge_mali.cmake")
     set_tests_properties(rd_vumerge_mali PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800
@@ -3025,9 +3026,9 @@ if(ICO_RUN_TESTS)
     if(_env)
         set_tests_properties(rd_noplanes_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
-    # rd_vufuse_ab (test/rd_vufuse_ab.cmake): the same dumps and the phone's
-    # frames (tools/vufuse_dumps.txt) with code 36's kicks under their own
-    # pipelines (ICO_RD_VU_FUSE=0) and with the fused scissor pair
+    # rd_vufuse_ab (test/rd_vufuse_ab.cmake): the fixtures of
+    # test/fixtures/lists/vufuse.txt (the phone's frames marked) with code
+    # 36's kicks under their own pipelines (ICO_RD_VU_FUSE=0) and with the fused scissor pair
     # (rd_replay_vu.c vuFuseVerdict), at the phone's profile (the programs'
     # entries, 2x at 2.189 presented at 2364x1080, and Resolution Auto: the
     # no-planes twins) and Enhanced 2x 4:3 and 16:9 through the entries and
@@ -3037,9 +3038,8 @@ if(ICO_RUN_TESTS)
     # by what the merge joined; SKIP as rd_vustage_ab
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vufuse_ab")
     add_test(NAME rd_vufuse_ab
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/vustage_dumps.txt"
-                     "-DEXTRA=${CMAKE_SOURCE_DIR}/tools/vufuse_dumps.txt"
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> ${_vu_fx}
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/vufuse.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vufuse_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vufuse_ab.cmake")
     set_tests_properties(rd_vufuse_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 5400)
@@ -3084,7 +3084,7 @@ if(ICO_RUN_TESTS)
     # ICO_RD_UBER=on: lavapipe orders the attachment read): the VU draws
     # through the colour read, merged and fused, byte for byte as one GPU
     # draw a draw and as the kicks apart; on rd_pixel's frames and on the
-    # corpus lists (SKIP without them)
+    # fixture lists
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vumerge_ab_pixel_uber"
          "${CMAKE_CURRENT_BINARY_DIR}/vufuse_ab_pixel_uber"
          "${CMAKE_CURRENT_BINARY_DIR}/vumerge_ab_uber" "${CMAKE_CURRENT_BINARY_DIR}/vufuse_ab_uber")
@@ -3102,15 +3102,13 @@ if(ICO_RUN_TESTS)
                          PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" FIXTURES_REQUIRED rd_dump
                                     TIMEOUT 600)
     add_test(NAME rd_vumerge_ab_uber
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/vustage_dumps.txt"
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> ${_vu_fx} "${_vu_list}"
                      "-DBLEND_ENV=ICO_RD_UBER=on"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vumerge_ab_uber"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vumerge_ab.cmake")
     add_test(NAME rd_vufuse_ab_uber
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/vustage_dumps.txt"
-                     "-DEXTRA=${CMAKE_SOURCE_DIR}/tools/vufuse_dumps.txt"
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> ${_vu_fx}
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/vufuse.txt"
                      "-DBLEND_ENV=ICO_RD_UBER=on"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vufuse_ab_uber"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vufuse_ab.cmake")
@@ -3137,9 +3135,9 @@ if(ICO_RUN_TESTS)
         set_tests_properties(rd_vumerge_ab_pixel rd_vufuse_ab_pixel rd_vustage_ab_pixel
                              rd_vumerge_fallback PROPERTIES ENVIRONMENT "${_env}")
     endif()
-    # rd_store_plan_ab (test/rd_store_plan_ab.cmake): the same dumps and the
-    # phone's frame with every depth store kept (ICO_RD_STORE_PLAN=0), with the
-    # store plan (rd_store_plan.c) and with every depth store dropped
+    # rd_store_plan_ab (test/rd_store_plan_ab.cmake): the fixtures of
+    # test/fixtures/lists/store_plan.txt with every depth store kept
+    # (ICO_RD_STORE_PLAN=0), with the store plan (rd_store_plan.c) and with every depth store dropped
     # (ICO_RD_STORE_PLAN=all), under ICO_RD_STORE_POISON=1 (a load the plan
     # leaves undefined clears to garbage: lavapipe keeps the contents itself),
     # at the phone's profile and the desktop's at 4:3 and 16:9 2x, under
@@ -3148,9 +3146,8 @@ if(ICO_RUN_TESTS)
     # rd_vustage_ab
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/store_plan_ab")
     add_test(NAME rd_store_plan_ab
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/vustage_dumps.txt"
-                     "-DEXTRA=${CMAKE_SOURCE_DIR}/tools/vufuse_dumps.txt"
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> ${_vu_fx}
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/store_plan.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/store_plan_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_store_plan_ab.cmake")
     set_tests_properties(rd_store_plan_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
@@ -3195,26 +3192,25 @@ if(ICO_RUN_TESTS)
     if(_env)
         set_tests_properties(rd_vis_hiz_corpus PROPERTIES ENVIRONMENT "${_env}")
     endif()
-    # rd_thread_ab (test/rd_thread_ab.cmake): the same dumps through
-    # rd_replay_tool --render-thread off, sync and on (the replays, the
-    # interpolation and the renderer's calls on a thread of their own,
-    # rd_thread.h), at Original and Enhanced 2x and, for the F12 zips, the
-    # blended present at 0.5: every target's PNG byte for byte; SKIP as
-    # rd_vustage_ab
+    # rd_thread_ab (test/rd_thread_ab.cmake): test/fixtures/lists/thread.txt
+    # through rd_replay_tool --render-thread off, sync and on (the replays,
+    # the interpolation and the renderer's calls on a thread of their own,
+    # rd_thread.h), at Original and Enhanced 2x and, for the fixture with its
+    # tick before (prev=), the blended present at 0.5: every target's PNG
+    # byte for byte; SKIP as rd_vustage_ab
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/thread_ab")
     add_test(NAME rd_thread_ab
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/vustage_dumps.txt"
-                     "-DEXTRA=${CMAKE_SOURCE_DIR}/tools/vufuse_dumps.txt"
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> ${_vu_fx}
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/thread.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/thread_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_thread_ab.cmake")
     set_tests_properties(rd_thread_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
     if(_env)
         set_tests_properties(rd_thread_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
-    # rd_constant_reads_ab (test/rd_constant_reads_ab.cmake): the same dumps
-    # and the phone's frames (tools/constant_reads_dumps.txt) with every post
-    # sprite reading its source (ICO_RD_CONSTANT_READS=0) and with a source
+    # rd_constant_reads_ab (test/rd_constant_reads_ab.cmake): the fixtures
+    # of test/fixtures/lists/constant_reads.txt (the phone's marked) with
+    # every post sprite reading its source (ICO_RD_CONSTANT_READS=0) and with a source
     # that holds only its clear drawn as its colour (rd_const_read.c), at the
     # phone's profile at 2x and at its Resolution Auto size and at the
     # desktop's Enhanced 2x 4:3 and 16:9, under ICO_RD_BLEND=fixed: every
@@ -3222,9 +3218,8 @@ if(ICO_RUN_TESTS)
     # phone's frames served; SKIP as rd_vustage_ab
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/constant_reads_ab")
     add_test(NAME rd_constant_reads_ab
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/vustage_dumps.txt"
-                     "-DEXTRA=${CMAKE_SOURCE_DIR}/tools/constant_reads_dumps.txt"
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> ${_vu_fx}
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/constant_reads.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/constant_reads_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_constant_reads_ab.cmake")
     set_tests_properties(rd_constant_reads_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"

@@ -92,23 +92,29 @@ if(ICO_RUN_TESTS AND TARGET rd_vuprepass_selftest_test AND DEFINED _vst)
                          PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_RECORD=stores")
 endif()
 
-# rd_vu_compact_ab (test/rd_vu_compact_ab.cmake): every dump of the
-# machine-local tools/vu_flat0_dumps.txt (the 2026-10-07 captures, three
-# reporters' frames, issue 179's four Mali-G52 dumps under the Arm fakes at
-# its settings, the Pixel's three opening dumps at its setting; a listed dump
-# that is absent fails where /primary/dev/ico-dumps exists) with the record by
-# compute dispatches, the compaction on (ICO_RD_VU_COMPACT=1) against off
-# (=0): every target byte for byte, merged and one draw a command, MSAA and a
-# fractional scale among the corpus settings; the counts printed and, where
-# tools/vu_compact_counts.txt has a line, matched.  rd_vu_compact_ab_pixel:
-# the same on the frames rd_pixel leaves.  No device: SKIP.
+# rd_vu_compact_ab (test/rd_vu_compact_ab.cmake): every fixture of
+# test/fixtures/lists/vu_flat0.txt (committed frames, rd_fixture.cmake,
+# docs/port/TESTING_FIXTURES.md; a listed fixture that is absent fails: a
+# Mac reporter's 16:9 frame, issue 179's Mali-G52 frames under the Arm fakes
+# at its settings, the Pixel's three opening frames at its setting) with the
+# record by compute dispatches, the compaction on (ICO_RD_VU_COMPACT=1)
+# against off (=0): every target byte for byte, merged and one draw a
+# command, MSAA and a fractional scale among the corpus settings; every
+# pair's counts matched against its line of
+# test/fixtures/lists/vu_compact_counts.txt, the triangles left out and the
+# camera rule's draws each fixture declares (the path ran).
+# rd_vu_compact_ab_pixel: the same on the frames rd_pixel leaves (a list of
+# build-tree names, the counts printed).  No device: SKIP.
+include(rd_fixture.cmake)
 if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vu_compact_ab"
          "${CMAKE_CURRENT_BINARY_DIR}/vu_compact_ab_pixel")
     add_test(NAME rd_vu_compact_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/vu_flat0_dumps.txt"
-                     "-DCOUNTS=${CMAKE_SOURCE_DIR}/tools/vu_compact_counts.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                     "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/vu_flat0.txt"
+                     "-DCOUNTS=${ICO_FIXTURE_DIR}/lists/vu_compact_counts.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_compact_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_compact_ab.cmake")
     set_tests_properties(rd_vu_compact_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
