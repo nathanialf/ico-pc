@@ -162,3 +162,6 @@ fx-scope-179-before build-host-tmp/v0114/evidence/179/loss/loss-20261110-184556-
 # the corpus's largest VU pre-pass record (the plain room, 2026-10-06, 512x448
 # GS, dump version 4: 84649 vertices, 168322 triangle slots in the source)
 fx-vu-plain-0300 build-host-tmp/corpus/dumps/plain/rd-00300.rddump rules=vu_opaque.rules.txt prepass_vertices>=1 vu_record_dispatches>=1 store_depth_dropped>=1
+# the wide frames (FIX-P6b): the phone's one 4:3 frame (2026-11-02, GS 512x448, dump
+# version 14), the side bands' and the camera rule's control: at 4:3 the band is the frame
+fx-wide-6818 dumps/phone/frame-20261102-152033-v6818.zip region_rule_draws>=1

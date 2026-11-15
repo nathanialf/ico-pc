@@ -31,6 +31,5 @@ tools/occlusion_corpus.txt
 tools/prerotate_dumps.txt
 tools/shadow_box_dumps.txt
 tools/shadow_cuts_dumps.txt
-tools/sideband_dumps.txt
 tools/turn_fold_dumps.txt
 tools/vustage_dumps.txt

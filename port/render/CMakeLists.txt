@@ -2942,18 +2942,20 @@ if(ICO_RUN_TESTS)
         set_tests_properties(rd_region_stats PROPERTIES ENVIRONMENT "${_env}")
     endif()
     # rd_sideband_ab (test/rd_sideband_ab.cmake, issue 29, docs/port/VU1_PROGRAMS.md
-    # "The region rule"): the dumps of the machine-local list
-    # tools/sideband_dumps.txt at their own aspect, Original 1x and Enhanced
-    # 2x, with the PS2's drop on every VU draw (ICO_RD_VU_BESIDE=0) and with
-    # the side bands: tools/cmp_dirs_band.py holds SCENE's centre 512 GS
-    # pixels byte for byte and every changed side pixel to one the drop left
-    # at the fog colour; SKIP without the list, a dump or a device
+    # "The region rule"): the committed fixtures of lists/wide.txt at their own
+    # aspect, Original 1x and Enhanced 2x, with the PS2's drop on every VU draw
+    # (ICO_RD_VU_BESIDE=0) and with the side bands: tools/cmp_dirs_band.py holds
+    # SCENE's centre 512 GS pixels byte for byte and every changed side pixel to
+    # one the drop left at the fog colour; the side bands' mode as each fixture
+    # declares (side_band_card_draws); SKIP without a device
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/sideband_ab")
     add_test(NAME rd_sideband_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      "-DPYTHON=${Python3_EXECUTABLE}"
                      "-DCMP=${CMAKE_SOURCE_DIR}/tools/cmp_dirs_band.py"
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/sideband_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool> "-DFIXTURES=${ICO_FIXTURE_DIR}"
+                     "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/wide.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/sideband_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_sideband_ab.cmake")
     set_tests_properties(rd_sideband_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
@@ -2988,20 +2990,22 @@ if(ICO_RUN_TESTS)
     endif()
     # rd_region_camera_ab (test/rd_region_camera_ab.cmake, docs/port/VU1_PROGRAMS.md
     # "The region rule", DIVERGENCES.md VD-29): the camera rule against the
-    # PS2's region rule on the dumps of tools/sideband_dumps.txt at their own
+    # PS2's region rule on the committed fixtures of lists/wide.txt at their own
     # aspect, Original 1x and Enhanced 2x: tools/region_camera_report.py holds
     # every SCENE pixel the camera rule changes to the CPU oracle's mask
-    # (--region-mask) and every target byte for byte where the mask is empty;
-    # and --region-stats under the camera rule gives the same verdicts at the
-    # Original preset and Enhanced at 1x; SKIP without the list, a dump or a
-    # device
+    # (--region-mask) and every target byte for byte where the mask is empty,
+    # the camera rule's mode on each (region_rule_draws); and --region-stats
+    # under the camera rule gives the same verdicts at the Original preset and
+    # Enhanced at 1x; SKIP without a device
     if(Python3_FOUND)
         file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/region_camera_ab")
         add_test(NAME rd_region_camera_ab
                  COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                          "-DPYTHON=${Python3_EXECUTABLE}"
                          "-DREPORT=${CMAKE_SOURCE_DIR}/tools/region_camera_report.py"
-                         "-DLIST=${CMAKE_SOURCE_DIR}/tools/sideband_dumps.txt"
+                         -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                         "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                         "-DLIST=${ICO_FIXTURE_DIR}/lists/wide.txt"
                          "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/region_camera_ab"
                          -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_region_camera_ab.cmake")
         set_tests_properties(rd_region_camera_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"

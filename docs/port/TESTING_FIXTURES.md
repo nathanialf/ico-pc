@@ -249,6 +249,7 @@ add a row when a family needs one):
 | `store_depth_dropped` | `stores: N depth and M colour stores dropped` |
 | `constant_reads_served` | `constant reads on: N sprites drawn in a cleared source's colour` |
 | `vu_record_dispatches` | `C copies, N dispatches` (the first stats line: the record by compute dispatches) |
+| `side_band_card_draws` | `side bands: N draws with cards` (under `ICO_RD_REGION_RULE=ps2`: the draws the side bands' mode holds that carry card verdicts; 0 where the frame is not wider than 4:3) |
 
 The fixtures' declared properties are their manifest line's; `rd_fixtures_check` holds the two
 equal.
@@ -394,3 +395,4 @@ expansion does not change); its manifest line must say the same.
 | `rd_scope_ab`, `rd_scope_ab_tiler` | `lists/scope.txt` | the three captures, `fx-loss95`, `fx-scope-179-lost`, `fx-scope-179-before` (issue 179's Mali-G52 loss frames at the first 3D scene) (`prepass_vertices>=1`) | `prepass_vertices` on both runs |
 | `rd_vu_rec_size_ab`, `_mali` | `lists/vu_rec_size.txt` | `fx-mali-slow541`, `fx-mali-frame`, `fx-lamps-novolume`, `fx-opening-dark`, `fx-opening-sun`, `fx-vu-plain-0300` (the corpus's largest pre-pass record) (`prepass_vertices>=1`, `vu_record_dispatches>=1`) | `prepass_vertices` on both runs, `vu_record_dispatches` on `_mali`'s |
 | `rd_vurecord_ab_compute_class_opening` | `lists/vu_opening.txt` | `fx-lamps-novolume`, `fx-opening-dark`, `fx-opening-sun` | `prepass_vertices` on both runs, `vu_record_dispatches` on the compute run |
+| `rd_sideband_ab`, `rd_region_camera_ab` | `lists/wide.txt` (after a name the frame's aspect, the replays' `--aspect`) | `fx-wide-6818` (the PowerVR phone's one 4:3 frame: the control; `side_band_card_draws=0`), `fx-phone-4657` (2.189), `fx-wide-189` (16:10), `fx-mali-frame` (2.37), `fx-maingate` (48:9) (`side_band_card_draws>=1`; all `region_rule_draws>=1`) | `side_band_card_draws` on the side bands' replay at both settings (`rd_sideband_ab`), `region_rule_draws` on the camera rule's replay at both settings (`rd_region_camera_ab`): the modes in force. The generated geometry drops no triangle either rule decides (`--region-stats`: drop 0, beside 0, drawn by the camera rule 0 on every committed fixture), so a drop drawn beside the picture or by the camera rule is not exercised; on the game's frames the old list had none for the side bands and three cards (issue 189) for the camera rule |
