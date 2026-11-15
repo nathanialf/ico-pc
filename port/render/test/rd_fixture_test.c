@@ -709,10 +709,13 @@ int main(int argc, char **argv)
        The triangle reads the block on REPEAT in S only: S from 12 / 16 by
        sixteenths along the ribbon's columns, T as before (0, then 1) */
     static const char waterRules[] = "alpha_ramp ate\nchecker\n@water place\n";
+    /* the same texture rules without the line: the skeleton the section follows */
+    static const char waterTexRules[] = "alpha_ramp ate\nchecker\n";
     RdFxBuf dwa = {0};
     buildWaterDump(&dwa, true);
     CHECK(!dwa.bad);
-    CHECK(rd_fixture_make(dwa.p, dwa.n, NULL, &fx, report, sizeof(report), why, sizeof(why)));
+    CHECK(rd_fixture_make(dwa.p, dwa.n, waterTexRules, &fx, report, sizeof(report), why,
+                          sizeof(why)));
     const size_t waterPlain = fx.skelBytes;
     rd_fixture_free(&fx);
     CHECK(rd_fixture_make(dwa.p, dwa.n, waterRules, &fx, report, sizeof(report), why, sizeof(why)));
