@@ -237,6 +237,11 @@ static bool cutsOn(void)
     return s_on == 1;
 }
 
+bool rd__shadow_fine_cuts(void)
+{
+    return cutsOn();
+}
+
 static const char *backendName(void)
 {
     switch (rhi_backend()) {

@@ -339,7 +339,13 @@ bool rd__shadow_one_draw(Replay *r, RdTargetRec *tc, RdTargetRec *td, uint32_t s
     if (dst.id == tc->color.id) {
         rd__shadow_fine_count_full(r->st.color); /* at scale 1 the count is its full size */
     } else if (rd__shadow_fine_count_wanted(tc)) {
-        fullPass(r, tc, pipe, &k, g2, &cb, boxed ? &box : NULL);
+        if (boxed && (!box.w || !box.h) && rd__shadow_fine_cuts()) {
+            /* an empty box: the chain draws no step (rd_shadowres.c's empty
+             * count), so the full-size count is never read: no pass */
+            rd__shadow_fine_count_full(r->st.color);
+        } else {
+            fullPass(r, tc, pipe, &k, g2, &cb, boxed ? &box : NULL);
+        }
     }
     g_rdPerf.shadowOne++;
     g_rdPerf.shadowGathered += load ? 0u : 1u;

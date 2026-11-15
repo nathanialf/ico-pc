@@ -603,7 +603,7 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   one shadow at the scene's scale and none at the PS2's size on every dump (any reason in the stats
   line fails), its 9 or 10 passes and 9 draws and nothing else, the
   levels' scale the setting's, the change confined (with lists 4-12 left out) to within reach of
-  the texels the PS2's levels darken and the darkness within 3 % (`test/shadow_fine_check.py`), the
+  the texels the PS2's levels darken and the darkness within 10 % (the PS2-size chain's own spread over the level grid's placements: up to 9.2 % on the owner's gate frame; `test/shadow_fine_check.py`), the
   B-spline doing nothing to it, the cuts against `ICO_RD_SHADOW_FINE_CUTS=0` every PNG the same
   bytes (6 passes against 9), three replays in a row with and without the cuts the same presented
   bytes; the forced chain at 1x within a level of the default on SCENE

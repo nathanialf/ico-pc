@@ -72,7 +72,7 @@ endif()
 foreach(_t rd_shadow rd_shadow_edges rd_shadow_nodual rd_shadow_vk11 rd_shadow_vk11s
            rd_shadow_vk10 rd_ssaa_shadow rd_ssaa_shadow_4096 rd_shadow_tile_ab
            rd_shadow_tile_selftest rd_glow_cheap_ab rd_crack_late_ab native_frame_gate_a
-           native_frame_gate_b)
+           native_frame_gate_b rd_no_volume_ab rd_no_volume_ab_gl)
     if(TEST ${_t})
         set_property(TEST ${_t} APPEND PROPERTY ENVIRONMENT "ICO_RD_SHADOW_FINE=0")
     endif()

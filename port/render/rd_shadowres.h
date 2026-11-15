@@ -172,6 +172,8 @@ void rd__shadow_fine_reset(uint32_t color);
 /* rd_shadow_one.c: the count target tc (scaled) is to be drawn at its full
  * size too (a scale above 1 on an axis, not refused) */
 bool rd__shadow_fine_count_wanted(const struct RdTargetRec *tc);
+/* the cuts are in force (ICO_RD_SHADOW_FINE_CUTS is not 0) */
+bool rd__shadow_fine_cuts(void);
 /* the count of target color holds the full size (the seven draws, MSAA,
  * the one draw's full-size pass) */
 void rd__shadow_fine_count_full(uint32_t color);

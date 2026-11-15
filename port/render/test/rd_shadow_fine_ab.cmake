@@ -52,21 +52,34 @@
 #      not the same bytes; and with lists 4-12 left out (SCENE right after
 #      list 3) every SCENE texel the fine levels change lies within D of a
 #      texel the PS2's levels darken, and the darkness (the RGB levels the
-#      composites take away, summed) within 3 % of the PS2's
-#      (shadow_fine_check.py; the edge model's: under 0.2 %);
+#      composites take away, summed) within 10 % of the PS2's
+#      (shadow_fine_check.py).  The bound is the PS2 chain's own spread: its
+#      darkness depends on where the level grid falls against the shadow, and
+#      the fine chain is that picture averaged over the grid's placements.
+#      Measured on the owner's gate frame (build-host/tmp/v0117/shadowres/r7/
+#      probe.c on its dumped count): the count moved by whole texels changes
+#      the PS2 chain's level-1 alpha by up to 7.6 % and its three composites'
+#      summed darkening by up to 9.2 % (composite 2 alone 17.5 %), the dumped
+#      placement among the darkest; the fine chain sat 5.4 % under it (rc5's
+#      run: 0.944..1.002 over the dumps; a half-plane edge, the model: 0.2 %);
 #   4. bspline: also the default with [dev] shadow_bspline against the
 #      default without it at 2x, every PNG (the B-spline does nothing to a
 #      fine level);
 #   6. above 1x the cuts (the default) against ICO_RD_SHADOW_FINE_CUTS=0 (the
 #      chain as dbedd6025 drew it): every PNG the same bytes; the cuts' own
-#      passes 6 + the full-size count, at most 6 draws; without them 9 + it,
-#      9 draws;
+#      passes 6 + the full-size count, at most 6 draws + its one; without
+#      them 9 + it, 9 draws + its one;
 #   7. above 1x three replays in a row with the cuts and without: the
 #      presented pictures the same bytes (the render area's tracking);
 #   5. force: the fine chain at 1x, one shadow, 6 passes of its own, SCENE
-#      within one level of the default's at every channel (png_level_diff.py:
-#      the step's own rounding of 0.75 / 0.25 against the GS sprite's bilinear
-#      tap, then the composite's; no texel more than a level).
+#      at most 6 levels from the default's at any channel (png_level_diff.py).
+#      At 1x the fine chain is the GS step exactly; the PS2-size chain on the
+#      GPU is the sprite's hardware bilinear, which lavapipe rounds up by 1
+#      level on about 10 % of the nonzero level texels (measured from the
+#      dumped SHADOW0..2 of rc5's run: 19 of 252 and 19 of 86 above the exact
+#      step, 1 below).  A level off by 1 changes a composite's As by at most 1
+#      ((a w) >> 7, w <= 128), so SCENE by at most ceil(255 / 128) = 2 a
+#      composite, 6 over the three (rc5's run: largest 4, 1011 pixels).
 # No device: SKIP (77).  -DTOOL -DLIST -DGOLDENS -DPY -DCHECK -DDIFF -DOUT -DBACKEND
 if(NOT IS_DIRECTORY "/primary/dev/ico-dumps")
   message(STATUS "SKIP: no dump folder on this machine (/primary/dev/ico-dumps): the list's dumps are the build machine's")
@@ -173,7 +186,7 @@ set(drawsRe "stats: ([0-9]+) draws, ([0-9]+) passes")
 set(fineRe "stats: shadow levels: ([0-9]+) shadows at the scene's scale, ([0-9]+) passes, ([0-9]+) at the PS2's size([^\n,]*)")
 set(oneRe "stats: shadow count: ([0-9]+) in one draw")
 set(sizeRe "shadow levels: at the scene's scale: SHADOW0 [0-9]+x[0-9]+, SHADOW1 [0-9]+x[0-9]+, SHADOW2 [0-9]+x[0-9]+ \\(([0-9.]+)x([0-9.]+) texels a GS pixel\\) from the count's ([0-9.]+)x([0-9.]+) texels a GS pixel")
-set(diffRe "png_level_diff: [0-9]+ x [0-9]+, [0-9]+ channels: [0-9]+ equal, [0-9]+ one level apart, ([0-9]+) more")
+set(diffRe "png_level_diff: [0-9]+ x [0-9]+, [0-9]+ channels: [0-9]+ equal, [0-9]+ one level apart, ([0-9]+) more \\(largest ([0-9]+)\\)")
 set(nopRest "4:0-1000000,5:0-1000000,6:0-1000000,7:0-1000000,8:0-1000000,9:0-1000000,10:0-1000000,11:0-1000000,12:0-1000000")
 
 # one run: -> ok_<name> draws_<name> passes_<name> chains_<name> fpasses_<name>
@@ -300,8 +313,8 @@ foreach(dump IN LISTS dumps)
                       RESULT_VARIABLE drc OUTPUT_VARIABLE dout ERROR_VARIABLE derr)
       message(STATUS "${dumpName} force: ${dout}${derr}")
       string(REGEX MATCH "${diffRe}" m "${dout}")
-      if(NOT drc EQUAL 0 OR m STREQUAL "" OR NOT CMAKE_MATCH_1 EQUAL 0)
-        message(SEND_ERROR "${dumpName} force: SCENE more than a level from the default's")
+      if(NOT drc EQUAL 0 OR m STREQUAL "" OR CMAKE_MATCH_2 GREATER 6)
+        message(SEND_ERROR "${dumpName} force: SCENE more than 6 levels from the default's")
         set(sfFail TRUE)
       endif()
       if(sfFail)
@@ -356,7 +369,8 @@ foreach(dump IN LISTS dumps)
       # holds nothing: its clear alone, no draw)
       math(EXPR wantPasses "6 + ${full}")
       math(EXPR wantAll "${passes_p} + ${fpasses_h}")
-      math(EXPR wantDraws "${draws_p} + 6 * ${chains_h}")
+      # every draw the RHI records counts, the one draw's full-size count's too
+      math(EXPR wantDraws "${draws_p} + 6 * ${chains_h} + ${full}")
       if(NOT whys_h STREQUAL "")
         message(SEND_ERROR "${dumpName} ${s}: drawn at the PS2's size for${whys_h}:\n${err_h}")
         set(sfFail TRUE)
@@ -408,7 +422,7 @@ foreach(dump IN LISTS dumps)
         else()
           execute_process(COMMAND "${PY}" -I "${CHECK}" "${base}-ps2-a/SCENE.png"
                                   "${base}-ps2-b/SCENE.png" "${base}-fine-a/SCENE.png"
-                                  --scale "${scale}" --dark-tol 0.03
+                                  --scale "${scale}" --dark-tol 0.10
                           RESULT_VARIABLE crc OUTPUT_VARIABLE cout ERROR_VARIABLE cerr)
           message(STATUS "${dumpName} ${s}: ${cout}${cerr}")
           if(NOT crc EQUAL 0)
@@ -429,7 +443,7 @@ foreach(dump IN LISTS dumps)
         sf_same("${dumpName} ${s}: the cuts against the chain without them" "${base}-fine-nocuts"
                 "${base}-fine")
         math(EXPR wantNc "9 + ${full}")
-        math(EXPR wantNcDraws "${draws_p} + 9")
+        math(EXPR wantNcDraws "${draws_p} + 9 + ${full}")
         if(NOT chains_hc EQUAL 1 OR NOT fpasses_hc EQUAL wantNc OR NOT draws_hc EQUAL wantNcDraws)
           message(SEND_ERROR "${dumpName} ${s}: without the cuts ${chains_hc} shadows, "
                              "${fpasses_hc} passes (${wantNc}), ${draws_hc} draws (${wantNcDraws})")
