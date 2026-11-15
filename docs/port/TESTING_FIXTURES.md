@@ -160,8 +160,9 @@ expanded dump's version, the expansion's SHA-256 and size), the notes (`key=valu
 `maker=`, `rule=`, `selfcheck=`, `expect=`), and the deflated skeleton: the dump's own layout with
 every texture's texels replaced by its pattern name, every mesh's name and stream by the generator's
 name, its size exponent and bone count, the facing tables by their sizes, and at the end the size
-exponent of each grid and particle draw. A fixture is made from a dump of version 9 or later and
-expands to that version.
+exponent of each grid and particle draw. A fixture is made from a dump of any version the loader
+reads (3 on: the 80- and 84-byte state blocks of versions 3 and 4 to 8, no GS levels field before
+9) and expands to that version's layout.
 
 ## Declared properties: the path ran
 
@@ -254,7 +255,8 @@ expansion does not change); its manifest line must say the same.
 
 ## The checks
 
-- `rd_fixture_format` (`rd_fixture_test.c`, CPU): a version 17 frame built in memory with
+- `rd_fixture_format` (`rd_fixture_test.c`, CPU): a version 17 frame (and the same frame as
+  version 8, its own layout and size) built in memory with
   pseudo-random art: made, checked, expanded twice to the same bytes and its pin; the structure kept
   byte for byte; each generator's output as described above; the window check clean; art written
   into a generated range and a changed pin refused; the file round trip; SHA-256 against FIPS

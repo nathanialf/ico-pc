@@ -20,7 +20,7 @@
  * File (little-endian):
  *   char[8]  "ICORDFX1"
  *   u32      format (RD_FIXTURE_FORMAT)
- *   u32      the expanded dump's version (9 .. RD_DUMP_VERSION)
+ *   u32      the expanded dump's version (3 .. RD_DUMP_VERSION)
  *   u8[32]   SHA-256 of the expansion
  *   u32 lo, hi  the expansion's size in bytes
  *   u32      note count; per note: u16 length, UTF-8 "key=value" (no NUL):
@@ -35,7 +35,9 @@
  *   load), the payload with every generated range zero (rd_fx_payload_spans:
  *   only the ranges a command names as structure are copied, the text items'
  *   characters become 'x'), per texture its 8 header words and, for an image,
- *   u8 length + pattern name and u32 levels (no texels), the temporary
+ *   u8 length + pattern name and u32 levels (1 below version 9, whose
+ *   dumps have no levels field: the expansion writes it from version 9 on;
+ *   no texels), the temporary
  *   targets as dumped, per mesh its 5 header words, u8 length + generator
  *   name, i32 size exponent, u32 bone count, the index list and the batch
  *   records (no name, no stream), the tick cameras (version 14), per facing
@@ -57,8 +59,8 @@ extern "C" {
 
 #define RD_FIXTURE_MAGIC "ICORDFX1"
 #define RD_FIXTURE_FORMAT 1u
-/* the oldest dump version a fixture is made from (the GS levels' field) */
-#define RD_FIXTURE_DUMP_MIN 9u
+/* the oldest dump version a fixture is made from (rd_dump.c reads 3 on) */
+#define RD_FIXTURE_DUMP_MIN 3u
 #define RD_FIXTURE_NOTES_MAX 64
 #define RD_FIXTURE_NOTE_BYTES 256
 
@@ -89,8 +91,10 @@ void rd_fx_set32(uint8_t *p, uint32_t v);
 void rd_fx_sha256(const void *data, size_t n, uint8_t out[32]);
 void rd_fx_sha_hex(const uint8_t sha[32], char out[65]);
 
-/* The dump head's size for version ver (magic .. endState: rd_dump.c). */
+/* The dump head's size for version ver (magic .. endState: rd_dump.c), and
+ * its state blocks' (version 3: 80 bytes, 4 to 8: 84, then RdStateBlock). */
 size_t rd_fx_head_bytes(uint32_t ver);
+uint32_t rd_fx_state_bytes(uint32_t ver);
 
 /* The bits of the float m * 2^e for |m| < 2^24 (exact; 0 for m == 0). */
 uint32_t rd_fx_f32(int32_t m, int e);
@@ -180,7 +184,7 @@ bool rd_fixture_check(const RdFixture *fx, char *why, size_t whySize, char *stat
                       size_t statsSize);
 
 /* ------------------------------------------------------------- making
- * rd_fixture_make.c: a fixture from a frame dump (version 9 ..
+ * rd_fixture_make.c: a fixture from a frame dump (version 3 ..
  * RD_DUMP_VERSION).  rules: the texture rule text (NULL: rd_fx_default_rules;
  * syntax in TESTING_FIXTURES.md).  The dump's texels and vertices are never
  * read: only its commands, state, sizes, formats, counts and topology, and

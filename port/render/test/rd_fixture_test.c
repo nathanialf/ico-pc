@@ -75,21 +75,27 @@ static RdCmd cmd(uint8_t type)
     return c;
 }
 
-/* the frame dump (version 17), into b; its art ranges filled from the stream */
-static void buildDump(RdFxBuf *b)
+/* the frame dump (version ver: 17, or 8 without the frame fields, the
+ * region, the GS levels, the tick cameras and the facing tables, its state
+ * blocks 84 bytes), into b; its art ranges filled from the stream */
+static void buildDump(RdFxBuf *b, uint32_t ver)
 {
     rd_fx_put(b, RD_DUMP_MAGIC, 8);
-    rd_fx_put32(b, 17);
+    rd_fx_put32(b, ver);
     rd_fx_put32(b, sizeof(RdCmd));
-    rd_fx_put32(b, sizeof(RdStateBlock));
+    rd_fx_put32(b, rd_fx_state_bytes(ver));
     rd_fx_put32(b, sizeof(RdScreenVtx));
     rd_fx_put32(b, 512);
     rd_fx_put32(b, 448);
-    putf(b, 4.0f / 3.0f);
-    putf(b, 512.0f);
-    rd_fx_put32(b, 512);
+    if (ver >= 10) {
+        putf(b, 4.0f / 3.0f);
+        putf(b, 512.0f);
+        rd_fx_put32(b, 512);
+    }
     char region[RD_DUMP_REGION_BYTES] = "pal";
-    rd_fx_put(b, region, sizeof(region));
+    if (ver >= 12) {
+        rd_fx_put(b, region, sizeof(region));
+    }
     rd_fx_put32(b, 1);
     rd_fx_put32(b, 0);
     rd_fx_put32(b, 0);
@@ -100,8 +106,8 @@ static void buildDump(RdFxBuf *b)
     memset(&st, 0, sizeof(st));
     st.gsW = 512;
     st.gsH = 448;
-    rd_fx_put(b, &st, sizeof(st));
-    rd_fx_put(b, &st, sizeof(st));
+    rd_fx_put(b, &st, rd_fx_state_bytes(ver));
+    rd_fx_put(b, &st, rd_fx_state_bytes(ver));
     /* list 0 */
     RdCmd c[16];
     int n = 0;
@@ -195,14 +201,18 @@ static void buildDump(RdFxBuf *b)
     }
     fillArt(px, 8 * 4 * 4);
     rd_fx_put(b, px, 8 * 4 * 4);
-    rd_fx_put32(b, 1);
+    if (ver >= 9) {
+        rd_fx_put32(b, 1);
+    }
     for (int k = 0; k < 8; k++) {
         rd_fx_put32(b, th[1][k]);
     }
     fillArt(px, sizeof(px));
     rd_fx_put(b, px, 16 * 16 * 4);
-    rd_fx_put32(b, 2);
-    rd_fx_put(b, px + 16 * 16 * 4, 8 * 8 * 4);
+    if (ver >= 9) {
+        rd_fx_put32(b, 2);
+        rd_fx_put(b, px + 16 * 16 * 4, 8 * 8 * 4);
+    }
     rd_fx_put32(b, 0); /* temporary targets */
     /* mesh 7: 5 prelit vertices, one strip (kicks at 2, 3, 4) */
     rd_fx_put32(b, 1);
@@ -225,21 +235,25 @@ static void buildDump(RdFxBuf *b)
     br.indexCount = 9;
     br.vertexCount = 5;
     rd_fx_put(b, &br, sizeof(br));
-    rd_fx_put32(b, 0); /* no tick cameras */
-    for (int k = 0; k < 32; k++) {
-        rd_fx_put32(b, 0);
+    if (ver >= 14) {
+        rd_fx_put32(b, 0); /* no tick cameras */
+        for (int k = 0; k < 32; k++) {
+            rd_fx_put32(b, 0);
+        }
     }
-    rd_fx_put32(b, 1); /* one facing table */
-    rd_fx_put32(b, 7);
-    rd_fx_put32(b, 5);
-    const uint8_t bits = 0x1F;
-    rd_fx_put(b, &bits, 1);
+    if (ver >= 15) {
+        rd_fx_put32(b, 1); /* one facing table */
+        rd_fx_put32(b, 7);
+        rd_fx_put32(b, 5);
+        const uint8_t bits = 0x1F;
+        rd_fx_put(b, &bits, 1);
+    }
 }
 
-/* the offset of the payload in a version 17 dump with this frame's lists */
-static size_t payloadAt(const uint8_t *d)
+/* the offset of the payload in a version ver dump with this frame's lists */
+static size_t payloadAt(const uint8_t *d, uint32_t ver)
 {
-    size_t o = rd_fx_head_bytes(17);
+    size_t o = rd_fx_head_bytes(ver);
     for (int l = 0; l < RD_LIST_COUNT; l++) {
         const uint32_t n = rd_fx_get32(d + o);
         o += 4 + (size_t)n * sizeof(RdCmd);
@@ -278,7 +292,7 @@ int main(int argc, char **argv)
     CHECK(rd_fx_f32(0, 3) == 0u);
 
     RdFxBuf d = {0};
-    buildDump(&d);
+    buildDump(&d, 17);
     CHECK(!d.bad);
     RdFixture fx;
     char why[512] = "", report[1024] = "";
@@ -299,6 +313,7 @@ int main(int argc, char **argv)
     CHECK(rd_fixture_expand(&fx, true, &x, &xn, why, sizeof(why)));
     CHECK(rd_fixture_expand(&fx, true, &y, &yn, why, sizeof(why)));
     CHECK(x && y && xn == yn && memcmp(x, y, xn) == 0 && xn == fx.expandedBytes);
+    CHECK(xn == d.n); /* every art array its source's size */
     free(y);
     if (!x) {
         return 1;
@@ -306,7 +321,7 @@ int main(int argc, char **argv)
     /* the structure as the dump's: the head, the lists but the mesh's size */
     const size_t head = rd_fx_head_bytes(17);
     CHECK(memcmp(x, d.p, head) == 0);
-    const size_t px = payloadAt(x), pd = payloadAt(d.p);
+    const size_t px = payloadAt(x, 17), pd = payloadAt(d.p, 17);
     CHECK(px == pd);
     RdCmd mesh;
     memcpy(&mesh, x + head + 4 + 7 * sizeof(RdCmd), sizeof(mesh));
@@ -398,7 +413,7 @@ int main(int argc, char **argv)
     rd_fixture_free(&back);
 
     /* art written into a generated range: refused by the check */
-    const size_t skelPay = payloadAt(fx.skel);
+    const size_t skelPay = payloadAt(fx.skel, 17);
     fx.skel[skelPay + OFF_TRI + 5] = 0x5A;
     CHECK(!rd_fixture_check(&fx, why, sizeof(why), NULL, 0));
     printf("refused as expected: %s\n", why);
@@ -410,6 +425,33 @@ int main(int argc, char **argv)
     printf("refused as expected: %s\n", why);
     rd_fixture_free(&fx);
     rd_fx_free(&d);
+
+    /* a version 8 dump (no frame fields, region, GS levels, tick cameras or
+       facing tables; 84-byte state blocks): made, checked, expanded to its
+       pin at its own layout and size, the structure kept, the art generated */
+    RdFxBuf d8 = {0};
+    buildDump(&d8, 8);
+    CHECK(rd_fixture_make(d8.p, d8.n, NULL, &fx, report, sizeof(report), why, sizeof(why)));
+    printf("version 8: %s %s\n", report, why);
+    CHECK(fx.dumpVersion == 8);
+    CHECK(rd_fixture_check(&fx, why, sizeof(why), NULL, 0));
+    x = NULL;
+    CHECK(rd_fixture_expand(&fx, true, &x, &xn, why, sizeof(why)));
+    if (x) {
+        const size_t h8 = rd_fx_head_bytes(8), p8 = payloadAt(x, 8);
+        CHECK(h8 == rd_fx_head_bytes(17) - 12 - RD_DUMP_REGION_BYTES - 8);
+        CHECK(xn == d8.n && memcmp(x, d8.p, h8) == 0 && p8 == payloadAt(d8.p, 8));
+        CHECK(memcmp(x + p8 + OFF_RECT, d8.p + p8 + OFF_RECT, 2 * 28) == 0);
+        CHECK(memcmp(x + p8 + OFF_TEXT, "xxxxx", 6) == 0);
+        /* texture 1's alpha ramp right after the payload's texture header */
+        const size_t t8 = p8 + PAY_BYTES + 4 + 32;
+        CHECK(x[t8 + 3] == 0 && x[t8 + 7 * 4 + 3] == 255);
+        CHECK(rd_fixture_selfcheck(d8.p, d8.n, x, xn, &windows, &hits, why, sizeof(why)));
+        CHECK(windows > 0 && hits == 0);
+        free(x);
+    }
+    rd_fixture_free(&fx);
+    rd_fx_free(&d8);
     printf("rd_fixture_test: %s\n", s_fail ? "FAILED" : "all passed");
     return s_fail ? 1 : 0;
 }

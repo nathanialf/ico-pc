@@ -731,10 +731,16 @@ static bool rname(Rd *r, char *out, size_t size)
     return true;
 }
 
+uint32_t rd_fx_state_bytes(uint32_t ver)
+{
+    return ver == 3u ? RD_STATE_BLOCK_V3_SIZE
+                     : (ver <= 8u ? RD_STATE_BLOCK_V8_SIZE : (uint32_t)sizeof(RdStateBlock));
+}
+
 size_t rd_fx_head_bytes(uint32_t ver)
 {
     return 8 + 16 + 8 + (ver >= 10u ? 12u : 0u) + (ver >= 12u ? (size_t)RD_DUMP_REGION_BYTES : 0u) +
-           12 + sizeof(RdCamera) + 2 * sizeof(RdStateBlock);
+           12 + sizeof(RdCamera) + 2 * (size_t)rd_fx_state_bytes(ver);
 }
 
 static void skFree(Sk *s)
@@ -755,14 +761,16 @@ static bool skParse(const RdFixture *fx, Sk *s, char *why, size_t whySize)
     s->head = rraw(&r, s->headBytes);
     if (!s->head || memcmp(s->head, RD_DUMP_MAGIC, 8) != 0 || rd_fx_get32(s->head + 8) != s->ver ||
         rd_fx_get32(s->head + 12) != sizeof(RdCmd) ||
-        rd_fx_get32(s->head + 16) != sizeof(RdStateBlock) ||
+        rd_fx_get32(s->head + 16) != rd_fx_state_bytes(s->ver) ||
         rd_fx_get32(s->head + 20) != sizeof(RdScreenVtx)) {
         setWhy(why, whySize, "the skeleton's dump head is not this build's layout");
         return false;
     }
     s->gsW = rd_fx_get32(s->head + 24);
     s->gsH = rd_fx_get32(s->head + 28);
-    memcpy(&s->start, s->head + s->headBytes - 2 * sizeof(RdStateBlock), sizeof(RdStateBlock));
+    memset(&s->start, 0, sizeof(s->start)); /* an older block: the fields after it 0, as loaded */
+    memcpy(&s->start, s->head + s->headBytes - 2 * (size_t)rd_fx_state_bytes(s->ver),
+           rd_fx_state_bytes(s->ver));
     for (int l = 0; l < RD_LIST_COUNT; l++) {
         s->listCount[l] = r32(&r);
         if (s->listCount[l] >= (1u << 24)) {
@@ -1147,7 +1155,7 @@ static bool genSpan(void *user, const RdCmd *c, const RdFxSpan *s)
     return true;
 }
 
-static void putTexture(RdFxBuf *o, const SkTex *t)
+static void putTexture(RdFxBuf *o, const SkTex *t, uint32_t ver)
 {
     for (int k = 0; k < 8; k++) {
         rd_fx_put32(o, t->hdr[k]);
@@ -1160,6 +1168,9 @@ static void putTexture(RdFxBuf *o, const SkTex *t)
     const uint32_t bpp = fmt == RD_TEXEL_R8 || fmt == RD_TEXEL_SHEET ? 1u : 4u;
     uint32_t w = t->hdr[4], h = t->hdr[5];
     putPattern(o, pat, w, h, bpp);
+    if (ver < 9u) {
+        return; /* no levels field (and no levels) before version 9 */
+    }
     rd_fx_put32(o, t->levels);
     for (uint32_t l = 1; l < t->levels; l++) {
         /* each GS level is the pattern at its own size (RGBA8: the loader
@@ -1211,7 +1222,7 @@ bool rd_fixture_expand(const RdFixture *fx, bool checkSha, uint8_t **out, size_t
     free(pay);
     rd_fx_put32(&o, sk.nt);
     for (uint32_t i = 0; ok && i < sk.nt; i++) {
-        putTexture(&o, &sk.tex[i]);
+        putTexture(&o, &sk.tex[i], sk.ver);
     }
     rd_fx_put32(&o, sk.nr);
     rd_fx_put(&o, sk.temps, (size_t)sk.nr * 20u);

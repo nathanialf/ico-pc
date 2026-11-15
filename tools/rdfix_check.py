@@ -27,7 +27,7 @@ PATTERNS = {"grey", "gradient", "checker", "bright", "alpha_ramp", "date_split",
 MESH_GEN = "strips"
 CMD, STATE, VTX, CAMERA, REGION = 40, 88, 28, 148, 8
 LISTS = 13
-DUMP_MIN, DUMP_MAX = 9, 17
+DUMP_MIN, DUMP_MAX = 3, 17
 
 
 class Bad(Exception):
@@ -57,15 +57,19 @@ class Cur:
         return self.raw(n).decode("ascii", "replace")
 
 
+def state_bytes(ver):
+    return 80 if ver == 3 else (84 if ver <= 8 else STATE)
+
+
 def head_bytes(ver):
     return 8 + 16 + 8 + (12 if ver >= 10 else 0) + (REGION if ver >= 12 else 0) + 12 + CAMERA + \
-        2 * STATE
+        2 * state_bytes(ver)
 
 
 def skeleton(sk, ver):
     c = Cur(sk)
     h = c.raw(head_bytes(ver))
-    if h[:8] != b"ICORDMP\0" or struct.unpack_from("<4I", h, 8) != (ver, CMD, STATE, VTX):
+    if h[:8] != b"ICORDMP\0" or struct.unpack_from("<4I", h, 8) != (ver, CMD, state_bytes(ver), VTX):
         raise Bad("the skeleton's dump head is not a version %d head of this layout" % ver)
     for _ in range(LISTS):
         c.raw(c.u32() * CMD)

@@ -260,7 +260,7 @@ static bool mapDump(const uint8_t *p, size_t n, DMap *m, char *why, size_t whySi
     }
     m->ver = rd_fx_get32(p + 8);
     if (m->ver < RD_FIXTURE_DUMP_MIN || m->ver > RD_DUMP_VERSION ||
-        rd_fx_get32(p + 12) != sizeof(RdCmd) || rd_fx_get32(p + 16) != sizeof(RdStateBlock) ||
+        rd_fx_get32(p + 12) != sizeof(RdCmd) || rd_fx_get32(p + 16) != rd_fx_state_bytes(m->ver) ||
         rd_fx_get32(p + 20) != sizeof(RdScreenVtx)) {
         snprintf(why, whySize, "dump version %u: a fixture is made from versions %u to %u", m->ver,
                  RD_FIXTURE_DUMP_MIN, RD_DUMP_VERSION);
@@ -300,7 +300,7 @@ static bool mapDump(const uint8_t *p, size_t n, DMap *m, char *why, size_t whySi
         const uint32_t bpp = fmt == RD_TEXEL_R8 || fmt == RD_TEXEL_SHEET ? 1u : 4u;
         t->texLen = (size_t)w * h * bpp;
         t->texOff = cskip(&c, t->texLen);
-        t->levels = c32(&c);
+        t->levels = m->ver >= 9u ? c32(&c) : 1u; /* version 9: the GS levels */
         if (t->levels < 1 || t->levels > 16) {
             c.bad = true;
             break;
@@ -520,7 +520,9 @@ static bool isAdditive(uint8_t blend)
 static bool walk(DMap *m, RdFxBuf *exps, uint32_t *nexp)
 {
     RdStateBlock st;
-    memcpy(&st, m->p + m->headBytes - 2 * sizeof(RdStateBlock), sizeof(st));
+    memset(&st, 0, sizeof(st)); /* an older block: the fields after it 0, as loaded */
+    memcpy(&st, m->p + m->headBytes - 2 * (size_t)rd_fx_state_bytes(m->ver),
+           rd_fx_state_bytes(m->ver));
     const uint8_t *pay = m->p + m->payOff;
     uint32_t *seen = NULL, nseen = 0;
     bool ok = true;
