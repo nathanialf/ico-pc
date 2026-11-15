@@ -982,8 +982,8 @@ stream's hash and found again, a vertex without a normal voiding it, two tables 
 leaving none; the reasons a mesh has no facing: a prelit stream built again without its strip
 records counted as a miss, a prelit replacement, a copy of another index list) and, with the disc image, measures the disc's winding and the EE's table's agreement
 with the normals ([The winding mark](#the-winding-mark)). `rd_region_stats`
-(`port/render/test/rd_region_stats.cmake`) runs `rd_replay_tool --region-stats` on the first two
-dumps of `tools/occlusion_corpus.txt` at Original 4:3 1x and Enhanced 4:3 2x, under each rule: the
+(`port/render/test/rd_region_stats.cmake`) runs `rd_replay_tool --region-stats` on the two
+fixtures of `test/fixtures/lists/region_stats.txt` at Original 4:3 1x and Enhanced 4:3 2x, under each rule: the
 lines' shapes, and every pass dump the same with the draws the stats say draw nothing left out
 ([Region statistics](#region-statistics)). `rd_region_camera_ab`
 (`port/render/test/rd_region_camera_ab.cmake`) replays the dumps of `tools/sideband_dumps.txt` at

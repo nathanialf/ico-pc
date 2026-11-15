@@ -72,6 +72,8 @@ set(_rdfx_q_present_scene_skipped "present from SCENE on: ([0-9]+) reductions no
 set(_rdfx_q_lamps_area_passes "\\): ([0-9]+) passes with the lamps' area")
 set(_rdfx_q_lamps_bands_lazy "([0-9]+) bands left lazy")
 set(_rdfx_q_lamps_owed "([0-9]+) WORK0 alpha sprites owed")
+# the visibility test: the draws MSAA keeps (they may close the epoch)
+set(_rdfx_q_msaa_epoch_kept "kept: may close the MSAA epoch ([0-9]+)")
 
 set(RDFX_FAILURES 0)
 

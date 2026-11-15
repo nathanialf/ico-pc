@@ -156,7 +156,7 @@ The script tests under `port/render/test/` run the tool or a test program and ch
 and `rd_vuprepass_selftest.cmake`, which matches the `VU pre-pass: on|off (self-test ...)` line
 of the pre-passes', and `rd_crack.cmake`, which matches the crack filler's `crack fill:` lines,
 and `rd_vustage_ab.cmake` and `rd_vubatch_ab.cmake` over the dump corpus, and `rd_cull_ab.cmake`
-over the dumps of `tools/occlusion_corpus.txt` and `tools/native_frame_dumps.txt`: the scene draws'
+over the fixtures of `test/fixtures/lists/cull.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md)): the scene draws'
 visibility test (`ICO_RD_CULL=frustum`, and `full` with list 0's occlusion test) against every draw
 replayed (`off`) under `ICO_RD_BLEND=fixed`, `--pass-dump --stats` at Original 4:3 presented at
 640x480, Enhanced 4:3 2x, Enhanced 2x at a wide dump's own aspect and once with `--aa msaa4`: every

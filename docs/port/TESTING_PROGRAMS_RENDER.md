@@ -613,13 +613,14 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   through it and the targets that differ listed (`rd_noplanes_ab`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#without-the-sprite-planes)). SKIP as `rd_vustage_ab`.
 - `rd_occlusion_tool.cmake`: `rd_replay_tool --occlusion` ([RENDER.md](RENDER_PERF.md#culling)) on the
-  first dump of the machine-local list `tools/occlusion_corpus.txt` that is here, at Original 4:3
+  fixture of `test/fixtures/lists/occlusion_tool.txt` (`fx-scene-boot0200`, cubes behind
+  `@scene place`'s sheets), at Original 4:3
   1x: the line `occlusion: hidden N of M list-0 draws, T of U triangles (index count / 3); hidden
-  commands: S` with M above 0, N at most M, T at most U and S `none` or a `--nop` spec of list 0,
+  commands: S` with M above 0, N above 0 (the path ran) and at most M, T at most U and S `none` or a `--nop` spec of list 0,
   the second line, the settings note, `--occlusion-out` holding S and `--occlusion-csv` its header
   and a line a command; then the plain replay and the replay with `--nop @SPEC`, each `--pass-dump`
   with `--present 640x480` under `ICO_RD_BLEND=fixed`: DISPLAY.png and PRESENT.png byte for byte
-  (`rd_occlusion_tool`). SKIP without the list, a dump of it or a device.
+  (`rd_occlusion_tool`). SKIP without a device.
 - `rd_vu_skin_check_dump.cmake`: `rd_replay_tool --skin-check`
   ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)) at the tool's default settings: on the machine-local
   corpus dump `frame-20261007-200706-v3086` (46 skinned commands) every command the replay draws
@@ -679,8 +680,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   picture byte for byte; also on issue 123's blended dump (`rd_vu_skin_check_ab`). SKIP
   without the dumps or a device.
 - `rd_region_stats.cmake`: `rd_replay_tool --region-stats`
-  ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#region-statistics)) on the first two dumps of
-  `tools/occlusion_corpus.txt` that are here, each at Original 4:3 1x and Enhanced 4:3 2x with a
+  ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#region-statistics)) on the fixtures of
+  `test/fixtures/lists/region_stats.txt` (`fx-scene-boot0200`, `fx-scene-4657`), each at Original 4:3 1x and Enhanced 4:3 2x with a
   present: the frame's line (draws and triangles under the rule above 0, the draws drawing nothing a
   `--nop` spec of lists 0-6 or `none`, as many items as it counts, `--region-out` holding it), a
   draw's line and a list's in their shapes; then `--pass-dump` plain and with `--nop @SPEC`, every
@@ -692,7 +693,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   parenthesis, the camera rule's group (`, drawn by the camera rule M (behind-eye b, out-of-box x,
   card k)`) and the draw line's closing `; drawn by the camera rule M`, and every step runs under
   each region rule (`ICO_RD_REGION_RULE` ps2 and camera: the camera rule's drawn drops make their
-  draws draw, so each rule's spec is its own). SKIP without the list, a dump of it or a device.
+  draws draw, so each rule's spec is its own). On both fixtures (as on their source frames) no
+  draw draws nothing at these settings, so the `--nop` spec is `none`. SKIP without a device.
 - `rd_region_camera_ab.cmake` ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-camera-rule),
   [DIVERGENCES.md](DIVERGENCES.md) VD-29): the camera rule against the PS2's region rule on the
   dumps of `tools/sideband_dumps.txt` at their own aspect. 1. `tools/region_camera_report.py` at

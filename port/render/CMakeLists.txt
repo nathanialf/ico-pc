@@ -1053,8 +1053,8 @@ target_link_libraries(texpack_export_test PRIVATE ico_texpack_export)
 # stream bounds audit"): every stream index the VU vertex shaders can read for
 # every VU draw of the dumps, computed on the CPU and checked against the
 # draw's stream; a self-test (a stream one vertex short fails) always runs.
-# The dumps are machine-local (tools/native_frame_dumps.txt, the boot
-# corpus's title frame): 77 when none is there.
+# rd_stream_audit runs it on the fixtures of test/fixtures/lists/stream_audit.txt
+# (test/rd_stream_audit.cmake).
 add_executable(rd_stream_audit_test test/rd_stream_audit_test.c ../platform/dump_zip.c)
 target_compile_options(rd_stream_audit_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_include_directories(rd_stream_audit_test PRIVATE ../platform
@@ -1064,6 +1064,10 @@ target_link_libraries(rd_stream_audit_test PRIVATE ico_render ico_vu1_ref ico_mi
 include(rd_perf_clock.cmake) # the slot clock (ico_render) and rd_perf_clock_test
 include(rd_msaa_shadow.cmake) # the shadow count in MSAA
 include(rd_present_scene.cmake)
+# the committed fixtures' arguments for the visibility test's family
+include(rd_fixture.cmake)
+set(_ico_vis_fx -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool> "-DFIXTURES=${ICO_FIXTURE_DIR}"
+                "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}")
 
 # Windows: SDL3.dll beside the programs
 ico_copy_sdl3_dll(texpack_test texpack_e2e_test texpack_export_test rd_replay_tool rd_state_test
@@ -1092,11 +1096,13 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_layout PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_mip COMMAND rd_mip_test)
     add_test(NAME rd_passring COMMAND rd_passring_test)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/stream_audit")
     add_test(NAME rd_stream_audit
-             COMMAND rd_stream_audit_test --list "${CMAKE_SOURCE_DIR}/tools/native_frame_dumps.txt"
-                     "${CMAKE_SOURCE_DIR}/build-host/tmp/corpus/dumps/boot/rd-00200.rddump"
-             WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
-    set_tests_properties(rd_stream_audit PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+             COMMAND "${CMAKE_COMMAND}" -DTEST=$<TARGET_FILE:rd_stream_audit_test> ${_ico_vis_fx}
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/stream_audit.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/stream_audit"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_stream_audit.cmake")
+    set_tests_properties(rd_stream_audit PROPERTIES TIMEOUT 600)
     add_test(NAME rd_tex COMMAND rd_tex_test)
     add_test(NAME texpack COMMAND texpack_test "${CMAKE_CURRENT_BINARY_DIR}")
     get_filename_component(_ico_texpack_textures "${ICO_TEXPACK_DIR}/../.." ABSOLUTE)
@@ -2706,15 +2712,14 @@ if(ICO_RUN_TESTS)
         set_tests_properties(rd_vumerge_mali PROPERTIES ENVIRONMENT "${_env}")
     endif()
     # rd_occlusion_tool (test/rd_occlusion_tool.cmake, docs/port/RENDER.md
-    # "Culling"): rd_replay_tool --occlusion on the first dump of the
-    # machine-local list tools/occlusion_corpus.txt here, at Original 4:3 1x:
-    # the hidden-draw line's shape and its --nop spec, then the plain replay
-    # and the replay with the hidden commands NOPs, DISPLAY and PRESENT byte
-    # for byte under ICO_RD_BLEND=fixed; SKIP without the list, a dump or a
-    # device
+    # "Culling"): rd_replay_tool --occlusion on the fixture of
+    # test/fixtures/lists/occlusion_tool.txt, at Original 4:3 1x: the
+    # hidden-draw line's shape (a draw hidden) and its --nop spec, then the
+    # plain replay and the replay with the hidden commands NOPs, DISPLAY and
+    # PRESENT byte for byte under ICO_RD_BLEND=fixed; SKIP without a device
     add_test(NAME rd_occlusion_tool
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/occlusion_corpus.txt"
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> ${_ico_vis_fx}
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/occlusion_tool.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/occlusion_tool"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_occlusion_tool.cmake")
     set_tests_properties(rd_occlusion_tool PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800)
@@ -2922,16 +2927,15 @@ if(ICO_RUN_TESTS)
         set_tests_properties(rd_vu_bones_ring_ab_prepass PROPERTIES ENVIRONMENT "${_env}")
     endif()
     # rd_region_stats (test/rd_region_stats.cmake, docs/port/VU1_PROGRAMS.md
-    # "The region rule"): rd_replay_tool --region-stats on the first two
-    # dumps of the machine-local list tools/occlusion_corpus.txt here, at
-    # Original 4:3 1x and Enhanced 4:3 2x: the lines' shapes, then the
-    # pass dumps of the plain replay and of the replay with the draws the
-    # CPU oracle says draw nothing NOPs (--region-out's spec), byte for
-    # byte; the orig setting's spec the same without a device; SKIP
-    # without the list, a dump or a device
+    # "The region rule"): rd_replay_tool --region-stats on the fixtures of
+    # test/fixtures/lists/region_stats.txt, at Original 4:3 1x and Enhanced
+    # 4:3 2x: the lines' shapes, then the pass dumps of the plain replay and
+    # of the replay with the draws the CPU oracle says draw nothing NOPs
+    # (--region-out's spec), byte for byte; the orig setting's spec the same
+    # without a device; SKIP without a device
     add_test(NAME rd_region_stats
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/occlusion_corpus.txt"
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> ${_ico_vis_fx}
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/region_stats.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/region_stats"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_region_stats.cmake")
     set_tests_properties(rd_region_stats PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800)
@@ -3159,19 +3163,16 @@ if(ICO_RUN_TESTS)
     endif()
     # rd_cull_ab (test/rd_cull_ab.cmake): the scene draws' visibility test
     # (rd_vis.c, rd_vis_hiz.c) against every draw replayed, byte for byte: the
-    # dumps of tools/occlusion_corpus.txt and tools/native_frame_dumps.txt that
-    # exist, under ICO_RD_BLEND=fixed, with ICO_RD_CULL=off, frustum and full, through
-    # --pass-dump --stats at Original 4:3 640x480, Enhanced 4:3 2x, Enhanced
-    # 2x at the dump's own aspect where it is wider than 4:3, and MSAA 4x on
-    # the first dump and on tools/cull_msaa_dumps.txt's (the epoch closed
-    # inside a list by a read of SCENE): every target's PNG equal, the stats
-    # line read, draws skipped over the corpus; SKIP as rd_vustage_ab
+    # fixtures of test/fixtures/lists/cull.txt, under ICO_RD_BLEND=fixed, with
+    # ICO_RD_CULL=off, frustum and full, through --pass-dump --stats at Original
+    # 4:3 640x480, Enhanced 4:3 2x, Enhanced 2x at the frame's own aspect where
+    # it is wider than 4:3, and MSAA 4x on the first fixture and on the list's
+    # msaa lines: every target's PNG equal, the stats line read, the declared
+    # frustum and occluded counts, draws skipped and hidden over the list
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/cull_ab")
     add_test(NAME rd_cull_ab
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/occlusion_corpus.txt"
-                     "-DEXTRA=${CMAKE_SOURCE_DIR}/tools/native_frame_dumps.txt"
-                     "-DMSAA_LIST=${CMAKE_SOURCE_DIR}/tools/cull_msaa_dumps.txt"
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> ${_ico_vis_fx}
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/cull.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/cull_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_cull_ab.cmake")
     set_tests_properties(rd_cull_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 5400)
@@ -3179,15 +3180,15 @@ if(ICO_RUN_TESTS)
         set_tests_properties(rd_cull_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
     # rd_vis_hiz_corpus (test/rd_vis_hiz_corpus.cmake): the occlusion test's
-    # cheaper collect over the occlusion corpus: for every row of
-    # test/rd_vis_hiz_corpus.txt whose dump is here (Original 4:3, Enhanced
-    # 4:3 2x, and the same with --repeat 3: the collect cache's), --cull full
-    # --stats under ICO_RD_CULL_HIZ_FAST=0 and under the fast collect with
+    # cheaper collect over the visibility test's fixtures: for every row of
+    # test/rd_vis_hiz_corpus.txt (Original 4:3, Enhanced 4:3 2x, and the same
+    # with --repeat 3: the collect cache's), --cull full --stats under
+    # ICO_RD_CULL_HIZ_FAST=0 and under the fast collect with
     # ICO_RD_CULL_HIZ_CHECK=1: the same counts as each other and as the
-    # table, no check wrong; SKIP as rd_cull_ab
+    # table, no check wrong, a row hiding draws; SKIP as rd_cull_ab
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vis_hiz_corpus")
     add_test(NAME rd_vis_hiz_corpus
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> ${_ico_vis_fx}
                      "-DTABLE=${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vis_hiz_corpus.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vis_hiz_corpus"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vis_hiz_corpus.cmake")

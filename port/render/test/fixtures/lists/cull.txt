@@ -1,0 +1,13 @@
+# rd_cull_ab, rd_cull_ab_gl (port/render/test/rd_cull_ab.cmake): the visibility test's frames.
+# The first fixture also runs the msaa setting, and so does a line with the word msaa (a frame
+# whose MSAA epoch closes by a read of SCENE).  frustum_culled and occluded are checked on the
+# full run at every setting: the fixture's own, or this line's words.
+# issue 102's gate at 16:9, @scene place (13 sheets, 56 cubes behind them): msaa; its epoch
+# closes at list 3, after the lists the test walks, so no draw is kept for it (the source too)
+fx-scene-gate102 msaa msaa_epoch_kept=0
+# the PowerVR phone's frame and the title's castle, @scene place
+fx-scene-4657
+fx-scene-boot0200
+# an issue 91 frame as every other family makes it (cubes about the models' origins): the frustum
+# test culls, the occlusion test finds no occluder (its triangles are under a 64th of the frame)
+fx-issue91-1279 frustum_culled>=1 occluded=0
