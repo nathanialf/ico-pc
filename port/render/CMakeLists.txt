@@ -1831,62 +1831,6 @@ if(ICO_RUN_TESTS)
                          rd_replay_tool_ripple_436_1x_ps2 rd_replay_tool_mirror_floor
                          PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 600
                                     ENVIRONMENT "ICO_RD_FADES_FOLD=0;ICO_RD_SHADOW_FINE=0")
-    # the still re-present (rd_reshow.c): a corpus dump as its own tick before
-    # (nothing moves), 4 presents at Enhanced 4:3 2x at 1280x960: presents
-    # 1..3 shown again, all 4 pictures byte for byte the ones rendered with
-    # ICO_RD_STILL_REPRESENT=0 (the lavapipe A/B; Not Run without the dump)
-    add_test(NAME rd_replay_tool_still
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMP=${CMAKE_SOURCE_DIR}/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-00428.rddump"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_still" -DPRESENTS=4
-                     "-DARGS=--enhanced|--aspect|4:3|--resolution|2x|--present|1280x960"
-                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_still.cmake")
-    set_tests_properties(rd_replay_tool_still PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 600)
-    # the glow held between ticks (rd_glow_hold.c) against its chain drawn at
-    # every present (ICO_RD_GLOW_REDRAW=1), 2 presents a tick at Enhanced 4:3
-    # 2x, every present rendered: a still tick (rd-01076 as its own tick
-    # before) the same bytes both ways, SCENE and the presented picture; a
-    # moving one (rd-01076 then rd-01077) the first present the same bytes and
-    # the later one differing only within 128 texels of the glow's mask (WORK2)
-    # (the lavapipe A/B; Not Run without the dumps)
-    set(_gh "${CMAKE_SOURCE_DIR}/build-host/tmp/pcsx2cmp/godrays/port2/keep")
-    set(_gh_py "")
-    if(Python3_FOUND)
-        set(_gh_py "-DPYTHON=${Python3_EXECUTABLE}")
-    endif()
-    add_test(NAME rd_replay_tool_glow_hold
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DSTILL=${_gh}/rd-01076.rddump" "-DPREV=${_gh}/rd-01076.rddump"
-                     "-DMOVE=${_gh}/rd-01077.rddump"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_glow_hold" -DPRESENTS=2
-                     -DREACH=128 "-DARGS=--enhanced|--aspect|4:3|--resolution|2x" ${_gh_py}
-                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_glow_hold.cmake")
-    set_tests_properties(rd_replay_tool_glow_hold PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
-                                                             TIMEOUT 900)
-    # the blended present's frame F12 saves (rd.h rd_dump_blended_arm),
-    # written by --save-blended from --interp T PREV, replayed on its own:
-    # SCENE and the presented picture byte for byte the --interp run's, and
-    # the same --interp run with the interpolation and the replays on the
-    # render thread (--render-thread sync and on: the picture and the saved
-    # frame byte for byte the main thread's).
-    # rd-01076 then rd-01077 at alpha 0.5, Enhanced 4:3 2x; the issue 163
-    # pair (the tablet's tick and the tick before) at its present's alpha
-    # 0.999000013 (the lavapipe A/B; Not Run without the dumps)
-    add_test(NAME rd_replay_tool_save_blended
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DPREV=${_gh}/rd-01076.rddump" "-DCUR=${_gh}/rd-01077.rddump" -DT=0.5
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_save_blended"
-                     "-DARGS=--enhanced|--aspect|4:3|--resolution|2x" "-DRT=sync|on"
-                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_save_blended.cmake")
-    set(_sb163 "${CMAKE_SOURCE_DIR}/build-host/tmp/v097/evidence/163/frame/frame-20261031-211530-v10103")
-    add_test(NAME rd_replay_tool_save_blended_163
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DPREV=${_sb163}-prev.rddump" "-DCUR=${_sb163}.rddump" -DT=0.999000013
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_save_blended_163"
-                     "-DARGS=--resolution|2x|--full-height|--full-pixel" "-DRT=sync|on"
-                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_save_blended.cmake")
-    set_tests_properties(rd_replay_tool_save_blended rd_replay_tool_save_blended_163
-                         PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 900)
     # the fog on the depth's words copied out through a buffer
     # (ICO_RD_FOG_PATH=buffer, rd_fog_path.c: the fallback of a device whose
     # depth reads fail), on D32S8 and on D24S8 (the top byte masked off):
@@ -2422,26 +2366,11 @@ if(ICO_RUN_TESTS)
     if(_env)
         set_tests_properties(rd_fog_selftest PROPERTIES ENVIRONMENT "${_env}")
     endif()
-    # a player dump with the fog (the dark hall) replayed with the depth in
-    # place and with its copy: SCENE byte for byte the same, on D32S8 and
-    # on D24S8.  Not Run without the dump (dist/dumps is not in the tree)
-    set(ICO_FOG_DUMP "${CMAKE_SOURCE_DIR}/dist/dumps/frame-20261009-083248-v13836.rddump"
-        CACHE FILEPATH "a player dump with the depth fog, for rd_fog_depth_copy_dump")
-    add_test(NAME rd_fog_depth_copy_dump
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMP=${ICO_FOG_DUMP}" "-DOUT=${_dc}/dump"
-                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_depth_copy_dump.cmake")
-    add_test(NAME rd_fog_depth_copy_dump_d24s8
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMP=${ICO_FOG_DUMP}" "-DOUT=${_dc}/dump_d24s8"
-                     "-DEXTRA_ENV=ICO_VK_FAKE_D24S8=1" -DNO_BUFFER=1
-                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_depth_copy_dump.cmake")
-    set_tests_properties(rd_fog_depth_copy_dump rd_fog_depth_copy_dump_d24s8
-                         PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 600)
-    if(_env)
-        set_tests_properties(rd_fog_depth_copy_dump rd_fog_depth_copy_dump_d24s8
-                             PROPERTIES ENVIRONMENT "${_env}")
-    endif()
+    # the replay tool's still re-present, held glow and saved blended frame
+    # (rd_replay_tool_still, _glow_hold, _save_blended, _save_blended_163) and
+    # a fogged frame with the depth in place, its copy and its words through a
+    # buffer (rd_fog_depth_copy_dump, _d24s8), on the committed fixtures
+    include(rd_replay_tool_fixtures.cmake)
     # the same tests and expectations on a device with a
     # phone GPU's limits (ICO_VK_FAKE_LIMITS=mali, port/rhi/vk/vk_device.c:
     # four descriptor sets, 16 sampled images a stage, 256-byte storage

@@ -8,9 +8,6 @@
 # the old tools/shadow_box_dumps.txt stays below while the other tests that
 # read it are not converted).
 port/render/CMakeLists.txt
-port/render/test/rd_replay_tool_glow_hold.cmake
-port/render/test/rd_replay_tool_save_blended.cmake
-port/render/test/rd_replay_tool_still.cmake
 port/render/test/rd_vis_hiz_corpus.txt
 port/render/test/rd_vu_audit.cmake
 tools/coverage_corpus.txt
