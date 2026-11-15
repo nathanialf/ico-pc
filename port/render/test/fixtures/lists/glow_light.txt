@@ -1,0 +1,18 @@
+# rd_glow_light_ab (port/render/test/rd_glow_light_ab.cmake): the glow's light
+# plan against the chain drawn whole.  A name a line; the words after it are
+# this test's: nocull replays the fixture with ICO_RD_CULL=off in both runs
+# (the generated lamps are in the chain then: the LAMPS plan), a QUANTITY OP
+# VALUE word declares what the fixture shows here (it replaces the fixture's
+# own word for that quantity: rd_fixture_list_props.cmake).
+#
+# WHOLE: the sun's fans on the picture
+fx-opening-sun glow_plan=whole
+fx-gate-102
+# DARK: no fans, no lamps (the lamps' meshes dropped by the visibility test)
+fx-opening-dark glow_plan=dark
+fx-phone-rc4-blended
+fx-wide-189
+fx-boot-0400 glow_plan=dark
+# LAMPS: the lamps' meshes drawn into WORK2 after the mask (the cull off)
+fx-lamps-novolume nocull glow_plan=lamps
+fx-163-blended nocull glow_plan=lamps

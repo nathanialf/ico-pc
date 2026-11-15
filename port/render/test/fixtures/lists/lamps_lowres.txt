@@ -1,0 +1,14 @@
+# rd_lamps_lowres_ab (port/render/test/rd_lamps_lowres_ab.cmake): the lamps'
+# glow at the GS frame's size above 1x against today's chain.  A name a line;
+# the words after it are this test's: nocull replays the fixture with
+# ICO_RD_CULL=off in every run (the generated lamps drawn into WORK2: the
+# LAMPS plan), lamps marks a lamps frame (no single-sampled WORK2 pass under
+# lowresms), a QUANTITY OP VALUE word declares what the fixture shows here
+# (rd_fixture_list_props.cmake).  Thirty settings a fixture: keep the list
+# short (about a quarter of an hour a fixture on the build machine).
+#
+# the sun's fans drawn into WORK2 at the GS size (a white ribbon: light)
+fx-opening-sun lamps_own_depth_draws>=1
+fx-boot-0200 lamps_own_depth_draws>=1
+# the lamps' meshes on WORK2's own depth (the cull off)
+fx-163-blended nocull lamps lamps_own_depth_draws>=1

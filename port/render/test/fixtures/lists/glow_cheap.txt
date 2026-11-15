@@ -1,0 +1,12 @@
+# rd_glow_cheap_ab (port/render/test/rd_glow_cheap_ab.cmake): the glow's
+# cheaper passes against the passes drawn without them, and the glow's mask
+# folded into its reduction.  A name a line (a QUANTITY OP VALUE word after it
+# would declare what the fixture shows here: rd_fixture_list_props.cmake).
+#
+# the sun's fans drawn before the mask: cleanUpFB's two passes fewer
+fx-gate-102
+fx-issue91-1279
+fx-issue91-1358
+# no fans: the WORK2 fill in the mask's pass too, three passes fewer
+fx-163-blended
+fx-wide-189

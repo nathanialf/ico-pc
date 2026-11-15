@@ -1,0 +1,21 @@
+# rd_glow_blur_ab, rd_glow_blur_gl (port/render/test/rd_glow_blur_ab.cmake):
+# the glow's blur in two passes against today's chain.  A name a line; the
+# words after it are this test's: nocull replays the fixture with
+# ICO_RD_CULL=off in both arms (the generated lamps in the chain: the LAMPS
+# plan's chain, no light of the lamps' own), a QUANTITY OP VALUE word declares
+# what the fixture shows here (rd_fixture_list_props.cmake).
+#
+# the chain drawn whole: the sun's fans, a white ribbon over the middle of
+# WORK2, at 3:2 and 512x512.  Not fx-opening-sun: its generated fans saturate
+# 1236 WORK0 texels against its source's 259, and the 48 / 36 bounds were
+# measured on the game's frames (60 / 40 on it, 45 / 34 on the source)
+fx-gate-102
+fx-boot-0200 glow_chains>=1
+# the lamps' chain (the cull off)
+fx-163-blended nocull glow_chains>=1
+fx-boot-0400 nocull glow_chains>=1
+# no chain in two passes (a dark plan): drawn as recorded, the same bytes
+fx-opening-dark glow_chains=0
+fx-lamps-novolume glow_chains=0
+fx-phone-rc4-blended glow_chains=0
+fx-wide-189 glow_chains=0

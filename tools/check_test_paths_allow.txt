@@ -12,13 +12,8 @@ port/render/test/rd_aura_paste_ab.cmake
 port/render/test/rd_bench_ab.cmake
 port/render/test/rd_crack_work_ab.cmake
 port/render/test/rd_fill11_ab.cmake
-port/render/test/rd_glow_blur_ab.cmake
-port/render/test/rd_glow_cheap_ab.cmake
-port/render/test/rd_glow_light_ab.cmake
-port/render/test/rd_lamps_lowres_ab.cmake
 port/render/test/rd_late_pass_ab.cmake
 port/render/test/rd_pass_objects_ab.cmake
-port/render/test/rd_paste_spec_ab.cmake
 port/render/test/rd_replay_tool_glow_hold.cmake
 port/render/test/rd_replay_tool_ripple.cmake
 port/render/test/rd_replay_tool_save_blended.cmake
@@ -39,8 +34,6 @@ tools/cull_msaa_dumps.txt
 tools/date_cut_dumps.txt
 tools/fades_fold_dumps.txt
 tools/fill11_dumps.txt
-tools/glow_cheap_dumps.txt
-tools/glow_light_dumps.txt
 tools/lamps_dumps.txt
 tools/late_pass_dumps.txt
 tools/native_frame_dumps.txt
