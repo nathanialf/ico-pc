@@ -1,10 +1,15 @@
 # rd_glow_light_ab: the glow's light plan (port/render/rd_glow_light.c;
 # docs/port/RENDER_POST.md, "The glow where it adds light") against the chain
-# drawn whole (ICO_RD_GLOW_LIGHT=0), on every glow dump of the list
-# (tools/glow_light_dumps.txt, machine-local, read as rd_glow_cheap_ab.cmake
-# reads its list, except that a listed dump that is absent FAILS: the owner's
-# rule for v0.11.5).  For every dump, rd_replay_tool --pass-dump --stats
-# twice (the chain whole, then the plan) at three settings:
+# drawn whole (ICO_RD_GLOW_LIGHT=0), on every fixture of the list
+# (port/render/test/fixtures/lists/glow_light.txt: committed frames with no
+# art, docs/port/TESTING_FIXTURES.md).  A line's word nocull replays that
+# fixture with ICO_RD_CULL=off in both runs: the generated meshes sit about
+# their models' origins, so the visibility test drops the lamps' meshes the
+# real frame kept (a frame whose lamps are dropped is a DARK one, which the
+# other fixtures cover), and with it off the lamps are in the chain and the
+# plan is LAMPS (the lamps' own light is not in a fixture: their cubes do not
+# reach WORK2's picture).  For every fixture, rd_replay_tool --pass-dump
+# --stats twice (the chain whole, then the plan) at these settings:
 #   phone   the PowerVR phone's profile on lavapipe (ICO_VK_FAKE_LIMITS=moltenvk,
 #           ICO_RD_VU_PREPASS=0) at 2364x1080, Full height, Full pixel,
 #           presented at 2364x1080;
@@ -23,8 +28,9 @@
 #     change an alpha (rd_glow_light.c's header);
 #   - at every row, 1x included, the same rules (RGB 0 levels, the alpha only
 #     where the fill was kept).
-# A fourth row, phonedef, the phone's setting with every other package's
-# switch at its default (above: the late pass's join, VD-31, within its bound).
+# Two more rows, phonedef and origdef, the phone's setting and Original 4:3
+# with every other package's switch at its default (above: the late pass's
+# join, VD-31, within its bound).
 # The stats ("glow N passes", "glow: light plan on: <plan>; N passes in the
 # chain"): a dark run's chain begins at most one pass (WORK1's zero draw over
 # the first blur pass's rect, its strip and the sun's shrink: a fresh
@@ -32,42 +38,23 @@
 # are lazy clears, WORK0's drawn as the load of the aura's pass where the aura
 # runs) and its glow passes are fewer than the whole run's (cleanUpFB's
 # sprites stay: they are SCENE's, in the fog's pass on the phone's profile), a
-# lamps run at least one fewer than the whole run, any other at most as many; at least one dark run at the phone's setting and at
-# Enhanced 2x (the phone's own frame v3677 among them).  No device: SKIP (77).
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DPY=<python3>
-# -DDIFF=<png_level_diff.py> -DOUT=<a folder the test may write>
-# The lists name dumps of the build machine alone (the owner's rule there: a
-# listed dump that is absent FAILS). A machine without that folder has none of
-# them: the test is skipped as the older dump tests are.
-if(NOT IS_DIRECTORY "/primary/dev/ico-dumps")
-  message(STATUS "SKIP: no dump folder on this machine (/primary/dev/ico-dumps): the list's dumps are the build machine's")
-  return()
-endif()
-set(dumps "")
+# lamps run at least one fewer than the whole run, any other at most as many.
+# The path ran: at every setting the plan's run shows the plan the fixture
+# declares (glow_plan, on the fixture or on its list line: rd_fixture_require),
+# and over the list each of the five pinned settings has a dark run, a lamps
+# run and a whole run.  No device: SKIP (77).
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the
+# fixtures' folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<the
+# list> -DPY=<python3> -DDIFF=<png_level_diff.py> -DOUT=<a folder the test
+# may write>
+include("${FIXTURE_HELPERS}")
+include("${CMAKE_CURRENT_LIST_DIR}/rd_fixture_list_props.cmake")
 set(failures 0)
-if(NOT "${LIST}" STREQUAL "" AND EXISTS "${LIST}")
-  get_filename_component(listDir "${LIST}" DIRECTORY)
-  file(STRINGS "${LIST}" lines)
-  foreach(l IN LISTS lines)
-    string(STRIP "${l}" l)
-    if(l STREQUAL "" OR l MATCHES "^#")
-      continue()
-    endif()
-    if(NOT IS_ABSOLUTE "${l}")
-      set(l "${listDir}/${l}")
-    endif()
-    if(EXISTS "${l}")
-      list(APPEND dumps "${l}")
-    else()
-      message(SEND_ERROR "${l}: listed but absent (the list names only dumps present)")
-      math(EXPR failures "${failures} + 1")
-    endif()
-  endforeach()
-else()
-  message(FATAL_ERROR "rd_glow_light_ab: no dump list ${LIST}")
+if("${PY}" STREQUAL "" OR "${DIFF}" STREQUAL "")
+  message(FATAL_ERROR "rd_glow_light_ab: -DPY and -DDIFF are needed")
 endif()
-list(REMOVE_DUPLICATES dumps)
-list(LENGTH dumps ndumps)
+rd_fixture_list("${LIST}" names)
+list(LENGTH names ndumps)
 
 set(settings phone orig enh2x43 phonedef enh1x mali1x origdef)
 # The plan alone: every run but phonedef pins the other packages' switches
@@ -91,11 +78,8 @@ set(pins ICO_RD_LATE_PASS=0 ICO_RD_AURA_PASTE=0 ICO_RD_CRACK_SWAP=0 ICO_RD_PRESE
 # phonedef: the phone's setting with every switch at its default, the
 # interaction itself pinned: SCENE, DISPLAY and PRESENT within VD-31's bound
 # (at most 3 levels on at most 800 pixels), every other target's RGB the same
-set(args_phonedef ${args_phone})
-set(env_phonedef ${env_phone})
+# (their arguments are set below, after the rows they copy)
 # origdef: Original 4:3 at 1x at the defaults, the same bound
-set(args_origdef ${args_orig})
-set(env_origdef ${env_orig})
 set(defMaxLevel 3)
 set(defMaxPixels 800)
 set(defTargets SCENE.png DISPLAY.png PRESENT.png)
@@ -109,6 +93,10 @@ set(args_mali1x --enhanced --resolution 1x --present 1600x720)
 set(env_mali1x ICO_VK_FAKE_VENDOR=0x13B5 ICO_VK_FAKE_LIMITS=mali ICO_RD_VU_PREPASS=0)
 set(args_enh2x43 --enhanced --aspect 4:3 --resolution 2x --present 1280x960)
 set(env_enh2x43 "")
+set(args_phonedef ${args_phone})
+set(env_phonedef ${env_phone})
+set(args_origdef ${args_orig})
+set(env_origdef ${env_orig})
 set(glowRe "glow ([0-9]+) passes")
 set(planRe "glow: light plan (on|off): ([a-z]+)")
 set(chainRe "; ([0-9]+) passes in the chain,")
@@ -123,8 +111,14 @@ set(dark_enh1x 0)
 set(dark_mali1x 0)
 set(dark_phonedef 0)
 set(dark_origdef 0)
-set(lamps 0)
-set(whole 0)
+foreach(s IN LISTS settings)
+  set(nLamps_${s} 0)
+  set(nWhole_${s} 0)
+endforeach()
+# (not "lamps" and "whole": a -P script runs under the old policies, where
+# if(plan STREQUAL "lamps") would read a variable of that name)
+set(nLamps 0)
+set(nWhole 0)
 
 # png_level_diff over channels _ch of _a and _b: _lv the largest level, _px
 # the pixels that differ (-1 when unread)
@@ -141,12 +135,14 @@ function(level_diff _a _b _ch _lv _px)
   set(${_px} "${CMAKE_MATCH_2}" PARENT_SCOPE)
 endfunction()
 
-foreach(dump IN LISTS dumps)
-  get_filename_component(dir "${dump}" DIRECTORY)
-  get_filename_component(dirName "${dir}" NAME)
-  get_filename_component(full "${dump}" NAME)
-  string(REGEX REPLACE "[.](rddump|zip)$" "" base "${full}")
-  set(name "${dirName}-${base}")
+foreach(name IN LISTS names)
+  rd_fixture_expand(${name} "${OUT}/fixtures" dump)
+  rd_fixture_list_props(${name})
+  rd_fixture_list_word(${name} nocull nocull)
+  set(cull "")
+  if(nocull)
+    set(cull ICO_RD_CULL=off)
+  endif()
   foreach(s IN LISTS settings)
     set(dirW "${OUT}/${name}-${s}-whole")
     set(dirP "${OUT}/${name}-${s}-plan")
@@ -156,7 +152,7 @@ foreach(dump IN LISTS dumps)
     if(s MATCHES "def$")
       set(pin "")
     endif()
-    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_GLOW_LIGHT=0 ICO_RD_LAMPS=noglowblur ${pin} ${env_${s}} "${TOOL}"
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_GLOW_LIGHT=0 ICO_RD_LAMPS=noglowblur ${cull} ${pin} ${env_${s}} "${TOOL}"
                             "${dump}" "${dirW}/out.png" --pass-dump "${dirW}" --stats
                             ${args_${s}}
                     RESULT_VARIABLE rc OUTPUT_VARIABLE wout ERROR_VARIABLE werr)
@@ -164,7 +160,7 @@ foreach(dump IN LISTS dumps)
       message(STATUS "SKIP: no device: ${werr}")
       return()
     endif()
-    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_LAMPS=noglowblur ${pin} ${env_${s}} "${TOOL}" "${dump}"
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_LAMPS=noglowblur ${cull} ${pin} ${env_${s}} "${TOOL}" "${dump}"
                             "${dirP}/out.png" --pass-dump "${dirP}" --stats ${args_${s}}
                     RESULT_VARIABLE prc OUTPUT_VARIABLE pout ERROR_VARIABLE perr)
     if(NOT rc EQUAL 0 OR NOT prc EQUAL 0)
@@ -193,6 +189,8 @@ foreach(dump IN LISTS dumps)
       continue()
     endif()
     set(plan "${CMAKE_MATCH_2}")
+    # the path ran: the plan the fixture declares
+    rd_fixture_require(${name} "${pout}" glow_plan)
     set(chainP 0)
     if(pflat MATCHES "${chainRe}")
       set(chainP "${CMAKE_MATCH_1}")
@@ -206,7 +204,8 @@ foreach(dump IN LISTS dumps)
         math(EXPR failures "${failures} + 1")
       endif()
     elseif(plan STREQUAL "lamps")
-      math(EXPR lamps "${lamps} + 1")
+      math(EXPR nLamps "${nLamps} + 1")
+      math(EXPR nLamps_${s} "${nLamps_${s}} + 1")
       math(EXPR most "${glowW} - 1")
       if(glowP GREATER most)
         message(SEND_ERROR "${name} ${s}: lamps, ${glowP} glow passes against ${glowW} whole "
@@ -215,7 +214,8 @@ foreach(dump IN LISTS dumps)
       endif()
     else()
       if(plan STREQUAL "whole")
-        math(EXPR whole "${whole} + 1")
+        math(EXPR nWhole "${nWhole} + 1")
+        math(EXPR nWhole_${s} "${nWhole_${s}} + 1")
       endif()
       if(glowP GREATER glowW)
         message(SEND_ERROR "${name} ${s}: ${plan}, ${glowP} glow passes against ${glowW} whole")
@@ -283,21 +283,18 @@ foreach(dump IN LISTS dumps)
                    "pixels)")
   endforeach()
 endforeach()
-if(runs GREATER 0)
-  foreach(s phone enh2x43 orig enh1x mali1x)
-    if(dark_${s} EQUAL 0)
-      message(SEND_ERROR "rd_glow_light_ab: no dark run at ${s}")
+foreach(s phone enh2x43 orig enh1x mali1x)
+  foreach(p dark nLamps nWhole)
+    if(${p}_${s} EQUAL 0)
+      message(SEND_ERROR "rd_glow_light_ab: no ${p} run at ${s} (dark, lamps, whole)")
       math(EXPR failures "${failures} + 1")
     endif()
   endforeach()
-endif()
+endforeach()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(failures GREATER 0)
-  message(FATAL_ERROR "rd_glow_light_ab: ${failures} failures over ${ndumps} dumps")
+  message(FATAL_ERROR "rd_glow_light_ab: ${failures} failures over ${ndumps} fixtures")
 endif()
-if(runs EQUAL 0)
-  message(STATUS "SKIP: nothing ran")
-  return()
-endif()
-message(STATUS "rd_glow_light_ab: ${runs} runs over ${ndumps} dumps: dark ${dark_phone} at the "
-               "phone's setting and ${dark_enh2x43} at Enhanced 2x, lamps ${lamps}, whole "
-               "${whole}; RGB the same everywhere")
+message(STATUS "rd_glow_light_ab: ${runs} runs over ${ndumps} fixtures: dark ${dark_phone} at the "
+               "phone's setting and ${dark_enh2x43} at Enhanced 2x, lamps ${nLamps}, whole "
+               "${nWhole}; RGB the same everywhere; every fixture's declared plan seen")

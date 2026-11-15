@@ -1,6 +1,6 @@
 # rd_glow_cheap_ab: the glow's cheaper passes (docs/port/RENDER.md, "The
-# glow's passes") against the pass dumps the build before them stored, level
-# for level, with fewer glow passes at the phone's setting.  The two cuts:
+# glow's passes") against the passes drawn without them, byte for byte, with
+# fewer glow passes at the phone's setting.  The two cuts:
 #   - the glow's WORK2 fill (staticBlur.c fillWork2's sprite, a clear) is the
 #     load op of the mask's pass (rd_fx_plan.c fxDraw and rd_blur_border.c
 #     sceneRepeat end the open pass for SCENE's read through
@@ -10,107 +10,78 @@
 #     and unused), not two passes of their own.
 # Both are the same bytes by construction, so the bound is 0 levels on every
 # target and the present: -DBOUND (default 0) is the largest level
-# difference allowed per channel.  No switch turns them off, so the A/B is
-# against stored pass dumps (a baseline refresh is the orchestrator's): for
-# every dump the list names (tools/glow_cheap_dumps.txt, read as
-# rd_pass_area_ab.cmake reads its list), rd_replay_tool's --pass-dump with
-# --stats under ICO_RD_BLEND=fixed and ICO_RD_FADES_FOLD=0 (the gate's), at
-# three settings, each against its baseline folder when it has one:
+# difference allowed per channel.  No switch turns the cuts alone off; what
+# each rides on has one: ICO_RD_CLEAR_CARRY=0 (rd_pass_cut.c: a pending clear
+# flushed as a pass of its own before a source's read: the fill's pass back,
+# the same bytes) and ICO_RD_FX_PLAN=0 (the post sprites' plan, rd_fx_plan.c:
+# cleanUpFB's sprites through the snapshot path, each a pass of its own on
+# SCENE; the plan's other sprites change too, and its pictures are not the
+# plan's bytes on a frame with the sun's fans: 1 to 3 levels on about 500
+# pixels of SCENE on the game's frame and on its fixture alike, so that run
+# gives the passes only).  For every fixture of the list
+# (port/render/test/fixtures/lists/glow_cheap.txt: committed frames with no
+# art, docs/port/TESTING_FIXTURES.md), rd_replay_tool under ICO_RD_BLEND=fixed
+# and ICO_RD_FADES_FOLD=0 at three settings: a count run (--stats, both
+# switches off: the glow's passes without the cuts), the before run
+# (--pass-dump --stats, the clear carry off) and the run at the defaults:
 #   phone   the PowerVR phone's profile on lavapipe (ICO_VK_FAKE_LIMITS=moltenvk:
 #           the tile class, its clear carry and its local fog) at 2364x1080,
-#           Full height, Full pixel, the dump's own aspect, presented at
-#           2364x1080, ICO_RD_VU_PREPASS=0; baseline -DBASE_PHONE/<name>
-#           and its log <name>.log (build-host/tmp/v098/evidence/glow/pd-phone,
-#           made by the tool of main e2484dfdd);
-#   orig    Original 4:3 (the gate's "orig"); baseline -DBASE_DESK/<name>-orig;
-#   enh2x43 Enhanced 2x 4:3 presented at 1280x960 (the gate's "enh2x43");
-#           baseline -DBASE_DESK/<name>-enh2x43 (build-host/tmp/v095/after/w3/pd).
-# <name> is the dump's folder and name joined as gate-wave.sh joins them.
-# Every PNG of the baseline folder must be the new one's bytes or within
-# BOUND levels of it (port/render/test/png_level_diff.py); the glow's passes ("glow N
-# passes") at most the baseline's at orig and enh2x43 (the desktop profile:
-# the clear carry is off there, and cleanUpFB joins the fog's pass only where
-# that pass has the depth attached) and at least 2 fewer at the phone's
-# setting (cleanUpFB's two passes; 3 where the fill had a pass of its own).
-# The lines print each dump's passes before and after and its largest
-# level.  A missing list, dump or baseline is named and skipped; nothing
-# compared, or no device: SKIP (77).
+#           Full height, Full pixel, the frame's own aspect, presented at
+#           2364x1080, ICO_RD_VU_PREPASS=0;
+#   orig    Original 4:3;
+#   enh2x43 Enhanced 2x 4:3 presented at 1280x960.
+# Every PNG of the before run must be the new one's bytes or within BOUND
+# levels of it (port/render/test/png_level_diff.py); the glow's passes ("glow
+# N passes") at most the count run's at orig and enh2x43 (the desktop
+# profile: the clear carry is off there, and cleanUpFB joins the fog's pass
+# only where that pass has the depth attached) and at least 2 fewer at the
+# phone's setting (cleanUpFB's two passes; 3 where the fill had a pass of its
+# own: a frame without the sun's fans, and at least one such run over the
+# list).  The lines print each fixture's passes before and after and its
+# largest level.
 # The crack fill after lists 4-6 (rd_crack_fill.c, CHEAPPASSES; DIVERGENCES.md
-# VD-20) came after these baselines.  It is drawn after cleanUpFB's two
-# sprites (rd__crack_fill_place: they write SCENE's alpha alone, so the fill
-# after them writes RGB alone, the same bytes), which stay in the fog's pass,
-# and it leaves the crack's depth, which cleanUpFB's Z-tested sprite and so
-# the glow's mask (WORK2) read.  So:
-#   - the run's own glow passes meet the rule above with the fill drawn (at
-#     least 2 fewer at the phone's setting), and at the phone's setting a run
-#     whose stats say the fill was drawn ("1 fills after lists 4-6") says it
-#     was drawn after the glow's alpha ("1 fills after the glow's alpha");
-#   - the PNGs of a frame the fill changed are compared with -DBASE_REFRESH/
-#     <name>-<setting> where that folder is (build-host/tmp/v098/evidence/glow/
-#     pd-w15: main 7832a2e4f's pictures, each checked first to have the
-#     no-fill replay's WORK2 and no target farther from the old baseline than
-#     the no-fill replay: verify.txt in build-host/tmp/v098/evidence/fixab/
-#     glow), the old baseline's log still giving the passes before; at 0
-#     levels as the rest.
+# VD-20) is drawn after cleanUpFB's two sprites (rd__crack_fill_place: they
+# write SCENE's alpha alone, so the fill after them writes RGB alone, the
+# same bytes), which stay in the fog's pass, and it leaves the crack's depth,
+# which cleanUpFB's Z-tested sprite and so the glow's mask (WORK2) read.  So
+# at the phone's setting a run whose stats say the fill was drawn ("1 fills
+# after lists 4-6") says it was drawn after the glow's alpha ("1 fills after
+# the glow's alpha").
 # The glow's mask folded into its reduction (rd_glow_fold.c, [dev] glow_fold;
-# docs/port/RENDER_POST.md, "The glow's mask in its reduction") came after
-# them too.  The tool's --pass-dump reads every target back, so the fold is
-# off there unless asked for: the run above is made with ICO_RD_GLOW_FOLD=0
-# (the chain as drawn, the baselines' comparison), and each dump at each
-# setting is run again with ICO_RD_GLOW_FOLD=1 into <name>-<setting>-fold:
+# docs/port/RENDER_POST.md, "The glow's mask in its reduction").  The tool's
+# --pass-dump reads every target back, so the fold is off there unless asked
+# for: the runs above are made with ICO_RD_GLOW_FOLD=0 (the chain as drawn),
+# and each fixture at each setting is run again with ICO_RD_GLOW_FOLD=1 into
+# <name>-<setting>-fold:
 #   - every PNG of the run without the fold (PRESENT.png too where the
 #     setting presents) but WORK2.png the same bytes with it (WORK2 is what
 #     the fold leaves undrawn: not compared);
 #   - its stats' "glow: WORK2 fold on: N folded, M kept (why)": a folded run
 #     has at least one glow pass fewer than the run without it (with the
-#     sun's fans, 6 of the 14 frames, the mask alone is folded and WORK2
-#     read where it keeps a texel), a kept one as many, and only for the
-#     lamps' reason (their meshes draw into WORK2 after the mask in 3 of
-#     the 14 frames): any other reason fails;
-#   - at least one run folded at each setting where any was compared.
-# Every run sets ICO_RD_GLOW_LIGHT=0 (the chain drawn whole, as the
-# baselines and the WORK2 fold need it): the light plan (rd_glow_light.c,
-# VD-30) came after them; rd_glow_light_ab holds it against the chain drawn.
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DBASE_PHONE=<dir> -DBASE_DESK=<dir>
-# -DBASE_REFRESH=<dir> -DPY=<python3> -DDIFF=<png_level_diff.py>
-# -DOUT=<a folder the test may write>
+#     sun's fans the mask alone is folded and WORK2 read where it keeps a
+#     texel), a kept one as many, and only for the lamps' reason (their
+#     meshes draw into WORK2 after the mask): any other reason fails;
+#   - at least one run folded at each setting.
+# Every run sets ICO_RD_GLOW_LIGHT=0 (the chain drawn whole, as the cuts and
+# the WORK2 fold need it): rd_glow_light_ab holds the light plan
+# (rd_glow_light.c, VD-30) against the chain drawn.
+# The path ran: the run at the defaults shows the glow's passes the fixture
+# declares (glow_passes) and the fold's run the folds (glow_fold_folded), at
+# every setting (rd_fixture_require).  No device: SKIP (77).
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the
+# fixtures' folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<the
+# list> -DPY=<python3> -DDIFF=<png_level_diff.py> -DOUT=<a folder the test
+# may write>
+include("${FIXTURE_HELPERS}")
+include("${CMAKE_CURRENT_LIST_DIR}/rd_fixture_list_props.cmake")
 if("${BOUND}" STREQUAL "")
   set(BOUND 0)
 endif()
-set(dumps "")
-if(NOT "${LIST}" STREQUAL "" AND EXISTS "${LIST}")
-  get_filename_component(listDir "${LIST}" DIRECTORY)
-  file(STRINGS "${LIST}" lines)
-  foreach(l IN LISTS lines)
-    string(STRIP "${l}" l)
-    if(l STREQUAL "" OR l MATCHES "^#")
-      continue()
-    endif()
-    if(NOT IS_ABSOLUTE "${l}")
-      set(l "${listDir}/${l}")
-    endif()
-    if(l MATCHES "[*]")
-      file(GLOB found "${l}")
-      list(SORT found)
-      if(NOT found)
-        message(STATUS "${l}: no dump matches, skipped")
-      endif()
-      list(APPEND dumps ${found})
-    elseif(EXISTS "${l}")
-      list(APPEND dumps "${l}")
-    else()
-      message(STATUS "${l}: no such dump, skipped")
-    endif()
-  endforeach()
-else()
-  message(STATUS "${LIST}: no dump list, skipped")
+if("${PY}" STREQUAL "" OR "${DIFF}" STREQUAL "")
+  message(FATAL_ERROR "rd_glow_cheap_ab: -DPY and -DDIFF are needed")
 endif()
-list(REMOVE_DUPLICATES dumps)
-list(LENGTH dumps ndumps)
-if(ndumps EQUAL 0)
-  message(STATUS "SKIP: no dump of ${LIST} is here")
-  return()
-endif()
+rd_fixture_list("${LIST}" names)
+list(LENGTH names ndumps)
 
 set(settings phone orig enh2x43)
 set(args_phone --enhanced --resolution 2364x1080 --full-height --full-pixel --present 2364x1080)
@@ -124,42 +95,53 @@ set(lateRe "stats: crack fill on: [01] passes, [0-9]+ pixels filled \\([^)]*, 1 
 set(alphaRe ", 1 fills after the glow's alpha\\)")
 set(foldRe "glow: WORK2 fold on: ([0-9]+) folded \\(([0-9]+) reading the sun's fans' WORK2\\), ([0-9]+) kept")
 set(diffRe "png_level_diff: [0-9]+ x [0-9]+, [0-9]+ channels: [0-9]+ equal, [0-9]+ one level apart, [0-9]+ more \\(largest ([0-9]+)\\), ([0-9]+) pixels differ")
+set(before ICO_RD_CLEAR_CARRY=0)
+set(countRun ICO_RD_FX_PLAN=0 ICO_RD_CLEAR_CARRY=0)
 set(failures 0)
 set(compared 0)
 set(runs 0)
 set(fewer 0)
+set(fewer3 0)
 set(folded 0)
 set(foldedIn "")
 set(foldRan "")
 set(foldedRead 0)
 set(kept 0)
-foreach(dump IN LISTS dumps)
-  # gate-wave.sh's name: the dump's folder, '-', its name without .rddump,
-  # less the folder prefixes it strips
-  get_filename_component(dir "${dump}" DIRECTORY)
-  get_filename_component(dirName "${dir}" NAME)
-  get_filename_component(full "${dump}" NAME)
-  string(REGEX REPLACE "[.]rddump$" "" base "${full}")
-  set(name "${dirName}-${base}")
-  string(REGEX REPLACE "^(ico-dumps|102|95|deja|keep)-" "" name "${name}")
+foreach(name IN LISTS names)
+  rd_fixture_expand(${name} "${OUT}/fixtures" dump)
+  rd_fixture_list_props(${name})
   foreach(s IN LISTS settings)
-    if(s STREQUAL "phone")
-      set(baseDir "${BASE_PHONE}/${name}")
-      set(baseLog "${BASE_PHONE}/${name}.log")
-    else()
-      set(baseDir "${BASE_DESK}/${name}-${s}")
-      set(baseLog "${BASE_DESK}/${name}-${s}.log")
+    # the count run: the glow's passes without the cuts
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0 ICO_RD_GLOW_LIGHT=0
+                            ICO_RD_GLOW_FOLD=0 ${countRun}
+                            ${env_${s}} "${TOOL}" "${dump}" "${OUT}/${name}-${s}-count.png" --stats
+                            ${args_${s}}
+                    RESULT_VARIABLE rc OUTPUT_VARIABLE countText ERROR_VARIABLE err)
+    if(rc EQUAL 77)
+      message(STATUS "SKIP: no device: ${err}")
+      return()
     endif()
-    if(NOT IS_DIRECTORY "${baseDir}" OR NOT EXISTS "${baseLog}")
-      message(STATUS "${name} ${s}: no baseline (${baseDir}), skipped")
-      continue()
-    endif()
-    file(READ "${baseLog}" baseText)
-    if(NOT baseText MATCHES "${glowRe}")
-      message(STATUS "${name} ${s}: the baseline's log has no glow pass count, skipped")
+    string(REPLACE ";" "," countText "${countText}")
+    if(NOT rc EQUAL 0 OR NOT countText MATCHES "${glowRe}")
+      message(SEND_ERROR "${name} ${s} count run: exit ${rc}, or no glow pass count:\n${err}")
+      math(EXPR failures "${failures} + 1")
       continue()
     endif()
     set(glowBase "${CMAKE_MATCH_1}")
+    # the before run: the fill's pass back, the same bytes
+    set(baseDir "${OUT}/${name}-${s}-before")
+    file(REMOVE_RECURSE "${baseDir}")
+    file(MAKE_DIRECTORY "${baseDir}")
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0 ICO_RD_GLOW_LIGHT=0
+                            ICO_RD_GLOW_FOLD=0 ${before}
+                            ${env_${s}} "${TOOL}" "${dump}" "${baseDir}/out.png" --pass-dump
+                            "${baseDir}" --stats ${args_${s}}
+                    RESULT_VARIABLE rc OUTPUT_VARIABLE baseText ERROR_VARIABLE err)
+    if(NOT rc EQUAL 0)
+      message(SEND_ERROR "${name} ${s} before: exit ${rc}:\n${err}")
+      math(EXPR failures "${failures} + 1")
+      continue()
+    endif()
     set(dirNew "${OUT}/${name}-${s}")
     file(REMOVE_RECURSE "${dirNew}")
     file(MAKE_DIRECTORY "${dirNew}")
@@ -168,10 +150,6 @@ foreach(dump IN LISTS dumps)
                             ${env_${s}} "${TOOL}" "${dump}" "${dirNew}/out.png" --pass-dump
                             "${dirNew}" --stats ${args_${s}}
                     RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
-    if(rc EQUAL 77)
-      message(STATUS "SKIP: no device: ${err}")
-      return()
-    endif()
     if(NOT rc EQUAL 0)
       message(SEND_ERROR "${name} ${s}: exit ${rc}:\n${err}")
       math(EXPR failures "${failures} + 1")
@@ -185,6 +163,8 @@ foreach(dump IN LISTS dumps)
       continue()
     endif()
     set(glowNew "${CMAKE_MATCH_1}")
+    # the path ran: the glow drawn
+    rd_fixture_require(${name} "${out}" glow_passes)
     # the passes the cuts are judged by: this run's, the crack fill drawn
     # (rd_crack_fill.c rd__crack_fill_place: after cleanUpFB's two sprites,
     # which stay in the fog's pass, its RGB alone)
@@ -214,12 +194,11 @@ foreach(dump IN LISTS dumps)
     if(glowCut LESS glowBase)
       math(EXPR fewer "${fewer} + 1")
     endif()
-    # the pictures: the refreshed baseline of a frame the crack fill changed
-    set(picDir "${baseDir}")
-    if(NOT "${BASE_REFRESH}" STREQUAL "" AND IS_DIRECTORY "${BASE_REFRESH}/${name}-${s}")
-      set(picDir "${BASE_REFRESH}/${name}-${s}")
+    math(EXPR three "${glowBase} - 3")
+    if(s STREQUAL "phone" AND NOT glowCut GREATER three)
+      math(EXPR fewer3 "${fewer3} + 1")
     endif()
-    set(baseDir "${picDir}")
+    # the pictures
     file(GLOB pngs RELATIVE "${baseDir}" "${baseDir}/*.png")
     set(largest 0)
     set(differ 0)
@@ -229,7 +208,7 @@ foreach(dump IN LISTS dumps)
         continue()
       endif()
       if(NOT EXISTS "${dirNew}/${png}")
-        message(SEND_ERROR "${name} ${s}: ${png} in the baseline, not written now")
+        message(SEND_ERROR "${name} ${s}: ${png} in the before run, not written now")
         math(EXPR failures "${failures} + 1")
         continue()
       endif()
@@ -292,6 +271,8 @@ foreach(dump IN LISTS dumps)
     set(nFolded "${CMAKE_MATCH_1}")
     set(nRead "${CMAKE_MATCH_2}")
     set(nKept "${CMAKE_MATCH_3}")
+    # the path ran: the mask folded
+    rd_fixture_require(${name} "${fout}" glow_fold_folded)
     list(APPEND foldRan "${s}")
     set(foldWhy "")
     if(fflat MATCHES "WORK2\\), [0-9]+ kept \\(([^)]*)\\)")
@@ -311,9 +292,9 @@ foreach(dump IN LISTS dumps)
       endif()
     else()
       math(EXPR kept "${kept} + 1")
-      # the corpus keeps the chain only where the lamps draw into WORK2 after
-      # the mask (the issue 163 rooms); any other reason is a refusal the
-      # fold was not meant to have
+      # the chain is kept only where the lamps draw into WORK2 after the mask
+      # (the issue 163 rooms); any other reason is a refusal the fold was not
+      # meant to have
       if(NOT foldWhy MATCHES "the lamps")
         message(SEND_ERROR "${name} ${s} fold: kept${foldWhy}: only the lamps' frames keep the "
                            "chain")
@@ -354,27 +335,30 @@ foreach(dump IN LISTS dumps)
                    "${fdiffer} differ")
   endforeach()
 endforeach()
-if(failures GREATER 0)
-  message(FATAL_ERROR "rd_glow_cheap_ab: ${failures} failures over ${ndumps} dumps")
+if(compared EQUAL 0 OR runs EQUAL 0)
+  message(SEND_ERROR "rd_glow_cheap_ab: nothing was compared")
+  math(EXPR failures "${failures} + 1")
 endif()
-if(compared EQUAL 0)
-  message(STATUS "SKIP: no dump of ${LIST} had a baseline to compare")
-  return()
+if(fewer3 EQUAL 0)
+  message(SEND_ERROR "rd_glow_cheap_ab: no run at the phone's setting with three glow passes "
+                     "fewer (the WORK2 fill in the mask's pass: a frame without the sun's fans)")
+  math(EXPR failures "${failures} + 1")
 endif()
 # list(FIND), not if(IN_LIST): a cmake -P script runs under the old policies
 # (CMP0057), where IN_LIST is not an operator
 foreach(s IN LISTS settings)
-  list(FIND foldRan "${s}" ran)
   list(FIND foldedIn "${s}" did)
-  if(ran GREATER -1 AND did EQUAL -1)
+  if(did EQUAL -1)
     message(SEND_ERROR "rd_glow_cheap_ab: no run folded the glow's mask at ${s}")
     math(EXPR failures "${failures} + 1")
   endif()
 endforeach()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(failures GREATER 0)
-  message(FATAL_ERROR "rd_glow_cheap_ab: ${failures} failures over ${ndumps} dumps")
+  message(FATAL_ERROR "rd_glow_cheap_ab: ${failures} failures over ${ndumps} fixtures")
 endif()
 message(STATUS "rd_glow_cheap_ab: ${compared} targets within ${BOUND} levels in ${runs} runs over "
-               "${ndumps} dumps, ${fewer} runs with fewer glow passes; the glow fold: ${folded} "
+               "${ndumps} fixtures, ${fewer} runs with fewer glow passes (${fewer3} at the phone's "
+               "setting with three fewer); the glow fold: ${folded} "
                "runs folded (${foldedRead} reading the sun's fans' WORK2), ${kept} kept, every target but "
                "WORK2 the same bytes")

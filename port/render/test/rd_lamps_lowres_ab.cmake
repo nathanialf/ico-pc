@@ -4,9 +4,13 @@
 # docs/port/DIVERGENCES.md VD-32) against today's chain, both arms with the
 # byte-identical items pad+owed+wholepad (the tile class's default but the
 # area, which the MoltenVK fake's Apple class leaves off; the lowres arm with
-# no fillhold: off by default), on every glow
-# dump of tools/glow_light_dumps.txt (machine-local; a listed dump that is
-# absent FAILS), rd_replay_tool --pass-dump --stats, ICO_RD_VU_PREPASS=0, at:
+# no fillhold: off by default), on every fixture of the list
+# (port/render/test/fixtures/lists/lamps_lowres.txt: committed frames with no
+# art, docs/port/TESTING_FIXTURES.md; a line's word nocull replays that
+# fixture with ICO_RD_CULL=off in every run: the generated lamps are drawn
+# into WORK2 then, the LAMPS plan, with no light of their own; its word lamps
+# marks a lamps frame, which must have no single-sampled WORK2 pass under
+# lowresms), rd_replay_tool --pass-dump --stats, ICO_RD_VU_PREPASS=0, at:
 #   phone   the PowerVR phone's Resolution Auto (Enhanced 2364x1080, Full
 #           height, Full pixel, presented at 2364x1080) under
 #           ICO_VK_FAKE_LIMITS=moltenvk;
@@ -39,43 +43,23 @@
 # setting's maxima at the end, for the record; each form's WORK3 against
 # the dump's Original 1x WORK3 ("lowres original: ..."), and it FAILS where
 # lowres's default form is farther from it than today's (the criterion
-# below, docs/port/DIVERGENCES.md VD-32).  No device: SKIP (77).
+# below, docs/port/DIVERGENCES.md VD-32).  The path ran: at every measured
+# setting the lowres arm shows the draws on WORK2's own depth the fixture
+# declares (lamps_own_depth_draws, on the fixture or its list line:
+# rd_fixture_require); a fixture no setting checked fails.  No device: SKIP
+# (77).
 # -DPY=<python3> -DDIFF=<png_level_diff.py>
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
-# The lists name dumps of the build machine alone (the owner's rule there: a
-# listed dump that is absent FAILS). A machine without that folder has none of
-# them: the test is skipped as the older dump tests are.
-if(NOT IS_DIRECTORY "/primary/dev/ico-dumps")
-  message(STATUS "SKIP: no dump folder on this machine (/primary/dev/ico-dumps): the list's dumps are the build machine's")
-  return()
-endif()
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the
+# fixtures' folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<the
+# list> -DOUT=<a folder the test may write>
+include("${FIXTURE_HELPERS}")
+include("${CMAKE_CURRENT_LIST_DIR}/rd_fixture_list_props.cmake")
 set(failures 0)
-set(dumps "")
-if("${LIST}" STREQUAL "" OR NOT EXISTS "${LIST}")
-  message(FATAL_ERROR "rd_lamps_lowres_ab: no dump list ${LIST}")
-endif()
 if("${PY}" STREQUAL "" OR "${DIFF}" STREQUAL "")
   message(FATAL_ERROR "rd_lamps_lowres_ab: -DPY and -DDIFF are needed")
 endif()
-get_filename_component(listDir "${LIST}" DIRECTORY)
-file(STRINGS "${LIST}" lines)
-foreach(l IN LISTS lines)
-  string(STRIP "${l}" l)
-  if(l STREQUAL "" OR l MATCHES "^#")
-    continue()
-  endif()
-  if(NOT IS_ABSOLUTE "${l}")
-    set(l "${listDir}/${l}")
-  endif()
-  if(EXISTS "${l}")
-    list(APPEND dumps "${l}")
-  else()
-    message(SEND_ERROR "${l}: listed but absent (the list names only dumps present)")
-    math(EXPR failures "${failures} + 1")
-  endif()
-endforeach()
-list(REMOVE_DUPLICATES dumps)
-list(LENGTH dumps ndumps)
+rd_fixture_list("${LIST}" names)
+list(LENGTH names ndumps)
 
 # The criterion (DIVERGENCES.md VD-32: the lamps' glow is the original's
 # (1x) glow at every scale, the goal-first rule): WORK3, the glow the paste
@@ -180,13 +164,21 @@ foreach(s IN LISTS settings)
   set(maxWhere_${s} "")
 endforeach()
 set(holdMore 0)
-set(index 0)
-foreach(dump IN LISTS dumps)
-  math(EXPR index "${index} + 1")
+foreach(index IN LISTS names)
+  rd_fixture_expand(${index} "${OUT}/fixtures" dump)
+  set(fx "${index}")
+  rd_fixture_list_props(${index})
+  rd_fixture_list_word(${index} nocull nocull)
+  rd_fixture_list_word(${index} lamps isLamps)
+  set(cull "")
+  if(nocull)
+    set(cull ICO_RD_CULL=off)
+  endif()
+  set(checked FALSE)
   set(origDir "${OUT}/${index}-orig")
   file(REMOVE_RECURSE "${origDir}")
   file(MAKE_DIRECTORY "${origDir}")
-  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${common} ${fake} "${lampsOff}"
+  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${common} ${cull} ${fake} "${lampsOff}"
                           "${TOOL}" "${dump}" - --pass-dump "${origDir}" ${args_orig}
                   RESULT_VARIABLE orc OUTPUT_QUIET ERROR_QUIET)
   foreach(s IN LISTS settings)
@@ -195,9 +187,9 @@ foreach(dump IN LISTS dumps)
       if(skipped)
         break()
       endif()
-      set(env ${common} ${fake})
+      set(env ${common} ${cull} ${fake})
       if(s MATCHES "^ms")
-        set(env ${common})
+        set(env ${common} ${cull})
       endif()
       if(s STREQUAL "mspoison")
         list(APPEND env "${lampsMS}")
@@ -249,13 +241,13 @@ foreach(dump IN LISTS dumps)
         return()
       endif()
       if(NOT rc EQUAL 0 AND arm EQUAL 0 AND "${err}" MATCHES "cannot show")
-        message(STATUS "${dump} ${s}: skipped (drawn narrower than the setting's aspect)")
+        message(STATUS "${fx} ${s}: skipped (drawn narrower than the setting's aspect)")
         set(skipped TRUE)
         continue()
       endif()
       string(REPLACE ";" "," flat "${out}")
       if(NOT rc EQUAL 0 OR NOT flat MATCHES "${lowresRe}")
-        message(SEND_ERROR "${dump} ${s} arm ${arm}: exit ${rc}, no lowres line:\n${out}\n${err}")
+        message(SEND_ERROR "${fx} ${s} arm ${arm}: exit ${rc}, no lowres line:\n${out}\n${err}")
         math(EXPR failures "${failures} + 1")
         set(skipped TRUE)
         continue()
@@ -267,6 +259,7 @@ foreach(dump IN LISTS dumps)
       set(draws_${arm} "${CMAKE_MATCH_6}")
       set(fills_${arm} "${CMAKE_MATCH_7}")
       set(dropped_${arm} "${CMAKE_MATCH_8}")
+      set(out_${arm} "${out}")
       set(held_${arm} 0)
       if(flat MATCHES "${lateRe}")
         set(held_${arm} "${CMAKE_MATCH_1}")
@@ -282,33 +275,39 @@ foreach(dump IN LISTS dumps)
     endif()
     if(NOT word_0 STREQUAL wantWord0 OR NOT word_1 STREQUAL "on" OR
        (NOT draws_0 EQUAL 0 AND wantWord0 STREQUAL "off"))
-      message(SEND_ERROR "${dump} ${s}: lowres ${word_0} (${draws_0} draws) and ${word_1}: "
+      message(SEND_ERROR "${fx} ${s}: lowres ${word_0} (${draws_0} draws) and ${word_1}: "
                          "${wantWord0} and on expected, no draw on WORK2's own depth off")
       math(EXPR failures "${failures} + 1")
     endif()
     if(NOT dropped_1 EQUAL 0)
-      message(SEND_ERROR "${dump} ${s}: ${dropped_1} draws into WORK2 without a depth")
+      message(SEND_ERROR "${fx} ${s}: ${dropped_1} draws into WORK2 without a depth")
       math(EXPR failures "${failures} + 1")
     endif()
     if(s STREQUAL "x1" AND (NOT draws_1 EQUAL 0 OR NOT fills_1 EQUAL 0 OR
                             NOT w2w_1 EQUAL scw_1))
-      message(SEND_ERROR "${dump} x1: ${draws_1} draws on WORK2's own depth, ${fills_1} fills, "
+      message(SEND_ERROR "${fx} x1: ${draws_1} draws on WORK2's own depth, ${fills_1} fills, "
                          "WORK2 ${w2w_1} wide under SCENE ${scw_1}: at 1x nothing changes")
       math(EXPR failures "${failures} + 1")
     endif()
     if(draws_1 GREATER 0 AND fills_1 EQUAL 0)
-      message(SEND_ERROR "${dump} ${s}: ${draws_1} draws on WORK2's own depth, no fill of it")
+      message(SEND_ERROR "${fx} ${s}: ${draws_1} draws on WORK2's own depth, no fill of it")
       math(EXPR failures "${failures} + 1")
+    endif()
+    # the path ran: the draws on WORK2's own depth the fixture declares
+    list(FIND measured "${s}" isMeasured)
+    if(isMeasured GREATER -1)
+      rd_fixture_require(${index} "${out_1}" lamps_own_depth_draws)
+      set(checked TRUE)
     endif()
     math(EXPR onDraws_${s} "${onDraws_${s}} + ${draws_1}")
     if(s STREQUAL "hold")
       if(held_1 LESS held_0)
-        message(SEND_ERROR "${dump} hold: ${held_1} crack fills held with fillhold, ${held_0} "
+        message(SEND_ERROR "${fx} hold: ${held_1} crack fills held with fillhold, ${held_0} "
                            "without")
         math(EXPR failures "${failures} + 1")
       endif()
       math(EXPR holdMore "${holdMore} + ${held_1} - ${held_0}")
-      message(STATUS "${dump} hold: ${held_0} crack fills held without fillhold, ${held_1} with")
+      message(STATUS "${fx} hold: ${held_0} crack fills held without fillhold, ${held_1} with")
     endif()
     # the pictures
     set(d0 "${OUT}/${index}-${s}-0")
@@ -318,7 +317,7 @@ foreach(dump IN LISTS dumps)
     list(LENGTH pngs n0)
     list(LENGTH pngs1 n1)
     if(n0 EQUAL 0 OR NOT n0 EQUAL n1)
-      message(SEND_ERROR "${dump} ${s}: ${n0} PNGs in one arm, ${n1} in the other")
+      message(SEND_ERROR "${fx} ${s}: ${n0} PNGs in one arm, ${n1} in the other")
       math(EXPR failures "${failures} + 1")
       continue()
     endif()
@@ -336,13 +335,13 @@ foreach(dump IN LISTS dumps)
       endif()
       if(exact)
         if(NOT same EQUAL 0)
-          message(SEND_ERROR "${dump} ${s}: ${png} differs: it must be the same bytes")
+          message(SEND_ERROR "${fx} ${s}: ${png} differs: it must be the same bytes")
           math(EXPR failures "${failures} + 1")
         endif()
         continue()
       endif()
       if(png MATCHES "^(SHADOW[0-2]|WORK2_PAD)\\.png$" AND NOT same EQUAL 0)
-        message(SEND_ERROR "${dump} ${s}: ${png} differs: the lamps' WORK2 does not reach it")
+        message(SEND_ERROR "${fx} ${s}: ${png} differs: the lamps' WORK2 does not reach it")
         math(EXPR failures "${failures} + 1")
       endif()
       if(NOT png MATCHES "^(DISPLAY|PRESENT)\\.png$")
@@ -355,7 +354,7 @@ foreach(dump IN LISTS dumps)
         execute_process(COMMAND "${PY}" -I "${DIFF}" --channels RGB "${d0}/${png}" "${d1}/${png}"
                         OUTPUT_VARIABLE dout RESULT_VARIABLE drc)
         if(NOT drc EQUAL 0 OR NOT dout MATCHES "${diffRe}")
-          message(SEND_ERROR "${dump} ${s}: ${png}: png_level_diff failed: ${dout}")
+          message(SEND_ERROR "${fx} ${s}: ${png}: png_level_diff failed: ${dout}")
           math(EXPR failures "${failures} + 1")
           continue()
         endif()
@@ -366,12 +365,12 @@ foreach(dump IN LISTS dumps)
       math(EXPR pct10 "${pixels} * 1000 / ${total}")
       math(EXPR pctWhole "${pct10} / 10")
       math(EXPR pctTenth "${pct10} % 10")
-      message(STATUS "lowres measure: ${s} ${dump} ${png}: ${pixels} pixels apart "
+      message(STATUS "lowres measure: ${s} ${fx} ${png}: ${pixels} pixels apart "
                      "(${pctWhole}.${pctTenth} %), largest ${largest} levels; ${draws_1} draws on "
                      "WORK2's own depth")
       if(largest GREATER maxLevel_${s})
         set(maxLevel_${s} "${largest}")
-        set(maxWhere_${s} "${dump} ${png}")
+        set(maxWhere_${s} "${fx} ${png}")
       endif()
       if(pct10 GREATER maxPct10_${s})
         set(maxPct10_${s} "${pct10}")
@@ -379,7 +378,7 @@ foreach(dump IN LISTS dumps)
     endforeach()
     if(apart)
       string(REPLACE ";" " " apartText "${apart}")
-      message(STATUS "${dump} ${s}: apart: ${apartText}")
+      message(STATUS "${fx} ${s}: apart: ${apartText}")
     endif()
     # the reference: WORK3 against Original 1x's (asserted at the asserted settings)
     if(orc EQUAL 0 AND NOT exact AND EXISTS "${origDir}/WORK3.png")
@@ -405,7 +404,7 @@ foreach(dump IN LISTS dumps)
           string(APPEND origText " arm ${arm}: not comparable;")
         endif()
       endforeach()
-      message(STATUS "lowres original: ${s} ${dump} WORK3 against Original 1x (arm 0 today, "
+      message(STATUS "lowres original: ${s} ${fx} WORK3 against Original 1x (arm 0 today, "
                      "arm 1 lowres):${origText}")
       # lowres2x against today's WORK3, and its shimmer
       list(FIND ssSettings "${s}" isSS)
@@ -421,14 +420,14 @@ foreach(dump IN LISTS dumps)
           set(formName lowresms8)
         endif()
         if(NOT flat MATCHES "lowresms on: [1-9]")
-          message(SEND_ERROR "${dump} ${s}: lowresms not in force or no pass with 4 samples:\n${flat}")
+          message(SEND_ERROR "${fx} ${s}: lowresms not in force or no pass with 4 samples:\n${flat}")
           math(EXPR failures "${failures} + 1")
         elseif(flat MATCHES "resolved in the pass, ([1-9][0-9]*) single-sampled")
           # a pass that loads WORK2 (the mask after the fans, a whole frame's
           # second pass): printed; a lamps dump must have none
-          message(STATUS "${dump} ${s}: ${CMAKE_MATCH_1} WORK2 passes single-sampled")
-          if(dump MATCHES "/163/|rd-00400")
-            message(SEND_ERROR "${dump} ${s}: a lamps dump with a single-sampled WORK2 pass")
+          message(STATUS "${fx} ${s}: ${CMAKE_MATCH_1} WORK2 passes single-sampled")
+          if(isLamps)
+            message(SEND_ERROR "${fx} ${s}: a lamps dump with a single-sampled WORK2 pass")
             math(EXPR failures "${failures} + 1")
           endif()
         endif()
@@ -443,10 +442,10 @@ foreach(dump IN LISTS dumps)
           set(tMax "${CMAKE_MATCH_3}")
           set(tN "${CMAKE_MATCH_4}")
         endif()
-        message(STATUS "${formName} today: ${s} ${dump} WORK3 against today's: ${tN} texels apart, "
+        message(STATUS "${formName} today: ${s} ${fx} WORK3 against today's: ${tN} texels apart, "
                        "largest ${tMax} (the bound ${ssLevels})")
         if(tMax GREATER ssLevels)
-          message(SEND_ERROR "${dump} ${s}: ${formName}'s WORK3 ${tMax} levels from today's: the "
+          message(SEND_ERROR "${fx} ${s}: ${formName}'s WORK3 ${tMax} levels from today's: the "
                              "bound is ${ssLevels} (DIVERGENCES.md VD-32)")
           math(EXPR failures "${failures} + 1")
         endif()
@@ -461,9 +460,9 @@ foreach(dump IN LISTS dumps)
             if(isMS GREATER -1)
               set(jfake "")
             endif()
-            set(jenv ${common} ${jfake} "${lampsOff}")
+            set(jenv ${common} ${cull} ${jfake} "${lampsOff}")
             if(arm EQUAL 1)
-              set(jenv ${common} ${jfake} "${armWord}")
+              set(jenv ${common} ${cull} ${jfake} "${armWord}")
             endif()
             execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${jenv} "${TOOL}" "${dump}" -
                                     --pass-dump "${jdir}" ${args_${s}} --jitter 0.5,0.5
@@ -480,12 +479,12 @@ foreach(dump IN LISTS dumps)
               endif()
             endif()
           endforeach()
-          message(STATUS "${formName} shimmer: ${s} ${dump} WORK3 under half a SCENE texel's shift "
+          message(STATUS "${formName} shimmer: ${s} ${fx} WORK3 under half a SCENE texel's shift "
                          "(arm 0 today, arm 1 ${formName}):${shimText}")
           if(jMax_0 GREATER -1 AND jMax_1 GREATER -1)
             math(EXPR shimAllowed "${jMax_0} * ${ssShimmer} / 2 + 4")
             if(jMax_1 GREATER shimAllowed)
-              message(SEND_ERROR "${dump} ${s}: ${formName}'s WORK3 moves ${jMax_1} levels under "
+              message(SEND_ERROR "${fx} ${s}: ${formName}'s WORK3 moves ${jMax_1} levels under "
                                  "the shift, today's ${jMax_0}: at most ${ssShimmer}/2 times "
                                  "today's + 4 (DIVERGENCES.md VD-32)")
               math(EXPR failures "${failures} + 1")
@@ -498,7 +497,7 @@ foreach(dump IN LISTS dumps)
         math(EXPR maxAllowed "${oMax_0} + ${origLevels}")
         math(EXPR nAllowed "${oN_0} + ${oN_0} * ${origPct} / 100 + ${origTexels}")
         if(oMax_1 GREATER maxAllowed OR oN_1 GREATER nAllowed)
-          message(SEND_ERROR "${dump} ${s}: WORK3 ${oN_1} texels from Original 1x's, largest "
+          message(SEND_ERROR "${fx} ${s}: WORK3 ${oN_1} texels from Original 1x's, largest "
                              "${oMax_1}, with lowres; today's ${oN_0}, largest ${oMax_0}: lowres "
                              "must be no farther (margin ${origLevels} levels, ${origTexels} "
                              "texels + ${origPct} %; DIVERGENCES.md VD-32)")
@@ -507,11 +506,15 @@ foreach(dump IN LISTS dumps)
       endif()
     endif()
   endforeach()
+  if(NOT checked)
+    message(SEND_ERROR "${index}: its declared properties were checked at no setting")
+    math(EXPR failures "${failures} + 1")
+  endif()
 endforeach()
 foreach(s IN LISTS measured)
   if(onDraws_${s} EQUAL 0)
     message(SEND_ERROR "rd_lamps_lowres_ab: ${s}: no draw on WORK2's own depth over ${ndumps} "
-                       "dumps")
+                       "fixtures")
     math(EXPR failures "${failures} + 1")
   endif()
   math(EXPR w "${maxPct10_${s}} / 10")
@@ -521,11 +524,12 @@ foreach(s IN LISTS measured)
 endforeach()
 message(STATUS "lowres hold: ${holdMore} crack fills more held with fillhold over the list")
 if(holdMore LESS 1)
-  message(SEND_ERROR "rd_lamps_lowres_ab: fillhold held no crack fill more over ${ndumps} dumps")
+  message(SEND_ERROR "rd_lamps_lowres_ab: fillhold held no crack fill more over ${ndumps} fixtures")
   math(EXPR failures "${failures} + 1")
 endif()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(failures GREATER 0)
-  message(FATAL_ERROR "rd_lamps_lowres_ab: ${failures} failures over ${ndumps} dumps")
+  message(FATAL_ERROR "rd_lamps_lowres_ab: ${failures} failures over ${ndumps} fixtures")
 endif()
-message(STATUS "rd_lamps_lowres_ab: ${ndumps} dumps: lowres's WORK3 no farther from Original 1x's "
+message(STATUS "rd_lamps_lowres_ab: ${ndumps} fixtures: lowres's WORK3 no farther from Original 1x's "
                "than today's (VD-32); 1x, the hold and the poison the same bytes")

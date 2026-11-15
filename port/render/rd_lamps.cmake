@@ -56,15 +56,21 @@ endif()
 
 # rd_lamps_lowres_ab (test/rd_lamps_lowres_ab.cmake): the lamps' glow at the
 # GS frame's size above 1x (RD_LAMPS_LOWRES, DIVERGENCES.md VD-32) against
-# today's chain on every glow dump of tools/glow_light_dumps.txt at the
-# phone's setting, Enhanced 2x, 3x and 4x at 4:3: DISPLAY and PRESENT
-# measured and printed per dump, FAILS above VD-32's bound; at 1x and under
-# the poison every PNG the same bytes.  No device: SKIP.
+# today's chain on the fixtures of test/fixtures/lists/lamps_lowres.txt
+# (committed frames, rd_fixture.cmake, docs/port/TESTING_FIXTURES.md; a
+# listed fixture that is absent fails) at the phone's setting, Enhanced 2x,
+# 3x and 4x at 4:3: DISPLAY and PRESENT measured and printed per fixture,
+# FAILS above VD-32's bound; at 1x and under the poison every PNG the same
+# bytes; the draws on WORK2's own depth each fixture declares (the path
+# ran).  Thirty settings a fixture: not in a merge check.  No device: SKIP.
+include(rd_fixture.cmake)
 if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/lamps_lowres_ab")
     add_test(NAME rd_lamps_lowres_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/glow_light_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                     "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/lamps_lowres.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/lamps_lowres_ab"
                      "-DPY=${Python3_EXECUTABLE}"
                      "-DDIFF=${CMAKE_CURRENT_SOURCE_DIR}/test/png_level_diff.py"

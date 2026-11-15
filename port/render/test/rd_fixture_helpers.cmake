@@ -58,6 +58,11 @@ set(_rdfx_q_comp_spec_seen "composites and levels by sprite_comp_ps of ([0-9]+)"
 set(_rdfx_q_comp_spec_taken "comp spec on \\(self-test [^)]*\\): ([0-9]+) composites and levels by sprite_comp_ps")
 set(_rdfx_q_shadow_tile_composites "shadow tiles on: ([0-9]+) composites over the tile mask")
 set(_rdfx_q_shadow_merge_counts "shadow volumes in the scene's pass on: ([0-9]+) of [0-9]+ counts")
+# the glow's chain: its paste by fx_paste_ps, the lamps on WORK2's own depth, the mask folded
+set(_rdfx_q_paste_spec_seen "pastes by fx_paste_ps of ([0-9]+)")
+set(_rdfx_q_paste_spec_taken "paste spec on \\(self-test [^)]*\\): ([0-9]+) pastes by fx_paste_ps")
+set(_rdfx_q_lamps_own_depth_draws "lamps lowres on: WORK2 [0-9]+x[0-9]+ under SCENE [0-9]+x[0-9]+, ([0-9]+) draws into WORK2 on its own depth")
+set(_rdfx_q_glow_fold_folded "glow: WORK2 fold on: ([0-9]+) folded")
 
 set(RDFX_FAILURES 0)
 

@@ -43,3 +43,26 @@ fx-boot-0600 build-host-tmp/corpus/dumps/boot/rd-00600.rddump shadow_volume_draw
 fx-maingate dumps/maingate/frame-20261104-123603-v10827.rddump shadow_volume_draws>=1 volume_fs_taken>=1 comp_spec_seen>=1 comp_spec_taken>=1 shadow_tile_composites>=1 shadow_merge_counts>=1 stencil_window_stores>=1
 fx-phone-4657 dumps/phone/frame-20261028-173610-v4657.zip shadow_volume_draws>=1 shadow_tile_composites>=1 shadow_merge_counts>=1 stencil_window_stores>=1
 fx-tile-2809 build-host-tmp/v0115/evidence/rc3/x/frame-20261111-121314-v2809/frame-20261111-121314-v2809.rddump shadow_volume_draws>=1 shadow_tile_composites>=1 shadow_merge_counts>=1
+# the glow's frames.  glow_plan is the light plan at the defaults (the
+# generated lamps are dropped by the visibility test, so a lamps room is dark
+# here; the glow's lists replay it with the cull off, their nocull word, and
+# declare glow_plan=lamps on their own lines); paste_spec_seen and
+# paste_spec_taken at the PowerVR phone's setting, the second with
+# ICO_RD_PASTE_SPEC=1; glow_chains with the glow's blur in two passes;
+# lamps_own_depth_draws with ICO_RD_LAMPS=...+lowres above 1x;
+# glow_fold_folded with ICO_RD_GLOW_FOLD=1 and the chain drawn whole
+# (ICO_RD_GLOW_LIGHT=0); glow_passes with the chain drawn whole.
+# issue 163's lamps room at 3:2 (576x512 GS, dump version 15, a blended frame)
+fx-163-blended dumps/163/frame-20261105-195124-v6171-blended.rddump glow_plan=dark glow_passes>=1 paste_spec_seen>=1 glow_fold_folded>=1
+# the PowerVR phone's rc4 frame (848x448 GS, dump version 15): the tick's
+# frame, the one before it and the blended one
+fx-phone-rc4 dumps/phone/rc4/frame-20261104-124548-v4861.rddump glow_plan=dark glow_passes>=1 paste_spec_seen>=1
+fx-phone-rc4-prev dumps/phone/rc4/frame-20261104-124548-v4861-prev.rddump glow_plan=dark glow_passes>=1 paste_spec_seen>=1
+fx-phone-rc4-blended dumps/phone/rc4/frame-20261104-124548-v4861-blended.rddump glow_plan=dark glow_passes>=1 paste_spec_seen>=1
+# issue 189's frame (624x448 GS, dump version 15): the background marked
+fx-wide-189 dumps/189/frame-20261104-120509-v130039.rddump glow_plan=dark glow_passes>=1 paste_spec_seen=0 glow_fold_folded>=1
+# the sun's fans on the picture (dump version 11, 688x448 GS): issue 102's
+# gate frame at 16:9, the two issue 91 frames
+fx-gate-102 build-host-tmp/evidence-v079/102/frame-20261015-161933-v4251.rddump glow_plan=whole glow_passes>=1 glow_chains>=1 paste_spec_seen>=1 paste_spec_taken>=1 lamps_own_depth_draws>=1 glow_fold_folded>=1
+fx-issue91-1279 build-host-tmp/issue-drafts/issue-91/rc1/frame-20261013-181358-v1279.rddump glow_plan=whole glow_passes>=1 glow_chains>=1 paste_spec_seen>=1 paste_spec_taken>=1 lamps_own_depth_draws>=1 glow_fold_folded>=1
+fx-issue91-1358 build-host-tmp/issue-drafts/issue-91/rc1/frame-20261013-181400-v1358.rddump glow_plan=whole glow_passes>=1 glow_chains>=1 paste_spec_seen>=1 paste_spec_taken>=1 lamps_own_depth_draws>=1 glow_fold_folded>=1

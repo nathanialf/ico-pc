@@ -19,21 +19,24 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_glow_blur COMMAND rd_glow_blur_test)
 endif()
 
-# rd_glow_blur_ab (test/rd_glow_blur_ab.cmake): every dump of
-# tools/glow_light_dumps.txt and tools/lamps_dumps.txt (machine-local; a
-# listed dump that is absent fails) with the glow's blur in two passes against
-# today's chain at the phone's setting, Enhanced 2x, 3x and 4x at 4:3 and the
-# Mali fakes, Original 4:3 at 1x and Enhanced 1x: WORK3, WORK0, DISPLAY and
-# PRESENT within VD-33's bounds, the passes fewer by the chain's as today
-# draws them less two, the shimmer at the phone's setting, 2x and both 1x
-# rows; under the poison every PNG the same bytes; rd_glow_blur_gl the phone's
-# setting on OpenGL (llvmpipe).  No device: SKIP.
+# rd_glow_blur_ab (test/rd_glow_blur_ab.cmake): the fixtures of
+# test/fixtures/lists/glow_blur.txt (committed frames, rd_fixture.cmake,
+# docs/port/TESTING_FIXTURES.md; a listed fixture that is absent fails) with
+# the glow's blur in two passes against today's chain at the phone's setting,
+# Enhanced 2x, 3x and 4x at 4:3 and the Mali fakes, Original 4:3 at 1x and
+# Enhanced 1x: WORK3, WORK0, DISPLAY and PRESENT within VD-33's bounds, the
+# passes fewer by the chain's as today draws them less two, the shimmer at
+# the phone's setting, 2x and both 1x rows, the chains each fixture declares
+# (the path ran); under the poison every PNG the same bytes; rd_glow_blur_gl
+# the phone's setting on OpenGL (llvmpipe).  No device: SKIP.
+include(rd_fixture.cmake)
 if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/glow_blur_ab")
     add_test(NAME rd_glow_blur_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/glow_light_dumps.txt"
-                     "-DLIST2=${CMAKE_SOURCE_DIR}/tools/lamps_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                     "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/glow_blur.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/glow_blur_ab" -DBACKEND=vulkan
                      "-DPY=${Python3_EXECUTABLE}"
                      "-DDIFF=${CMAKE_CURRENT_SOURCE_DIR}/test/png_level_diff.py"
@@ -47,8 +50,9 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
         file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/gl/glow_blur_ab")
         add_test(NAME rd_glow_blur_gl
                  COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                         "-DLIST=${CMAKE_SOURCE_DIR}/tools/glow_light_dumps.txt"
-                         "-DLIST2=${CMAKE_SOURCE_DIR}/tools/lamps_dumps.txt"
+                         -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                         "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                         "-DLIST=${ICO_FIXTURE_DIR}/lists/glow_blur.txt"
                          "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/gl/glow_blur_ab" -DBACKEND=opengl
                          "-DPY=${Python3_EXECUTABLE}"
                          "-DDIFF=${CMAKE_CURRENT_SOURCE_DIR}/test/png_level_diff.py"

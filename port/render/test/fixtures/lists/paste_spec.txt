@@ -1,0 +1,19 @@
+# rd_paste_spec_ab, rd_paste_spec_gl, rd_paste_spec_sabotage
+# (port/render/test/rd_paste_spec_ab.cmake): the glow's paste by fx_paste_ps
+# against fx_frame_ps.  A name a line; the words after it are this test's:
+# nocull replays the fixture with ICO_RD_CULL=off in both arms (the generated
+# lamps in the chain: the LAMPS plan's paste), a QUANTITY OP VALUE word
+# declares what the fixture shows here (rd_fixture_list_props.cmake).  The
+# pastes are the ones the phone's setting shows.
+#
+# the chain drawn whole (the sun's fans): the glow's paste, the sun's ghosts
+fx-opening-sun paste_spec_seen>=1 paste_spec_taken>=1
+fx-gate-102
+fx-boot-0200 paste_spec_seen>=1 paste_spec_taken>=1
+# the lamps' chain (the cull off)
+fx-lamps-novolume nocull paste_spec_seen>=1 paste_spec_taken>=1
+fx-163-blended nocull paste_spec_taken>=1
+# a dark plan: no paste of the glow's
+fx-opening-dark paste_spec_seen=0
+fx-wide-189
+fx-phone-rc4-blended
