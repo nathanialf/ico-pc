@@ -175,7 +175,8 @@ static void testWaterRetired(void)
         char cfg[160];
         snprintf(cfg, sizeof(cfg), "version = 1\n[video]\n%seffect_fog = true\n", kLine[sharp]);
         useConfig(cfg);
-        const int mainL = enterMain(0);
+        /* enterMain would write "version = 1" over the file: the file as it is */
+        const int mainL = enterMainKeep(0);
         openPage(mainL, 1, UI_PAGE_EFFECTS);
         CHECK(rowWithText(UI_PAGE_EFFECTS, "Water reflections") < 0, "water %d: no row", sharp);
         CHECK(noteStarting(UI_PAGE_EFFECTS, "Sharp draws") < 0, "water %d: no note", sharp);

@@ -552,8 +552,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `test_players_slots` (selects each 2001 disc and checks the `[players]` count kept
   per save slot and sum, a missing entry or another sum loading as one player, a later save
   winning, each disc's prefix in the file), the video effects' keys (the
-  retired `effect_water_sharp`, `true` or `false`, read as a file without it and kept by a save
-  as written, never written by the game; Motion blur's
+  retired `effect_water_sharp`, `true` or `false`, read as a file without it, kept by a save
+  as written, never written by the game, the saved file loaded again and saved byte for byte the same; Motion blur's
   `effect_motion_blur_mode`: `"original"` with no key, `"original"` and `"smooth"` read in any
   case, an unknown word as `"original"`, Smooth only with the switch on for the getter, kept
   under Off, saved and read back, outside the preset; a leftover
