@@ -385,6 +385,27 @@ counted +1 or -1 by its last vertex's colour, one call per object), and `shadow_
 their state leaks into the rest of list 3 as on the GS (`ico2/seki/src/Shadow.c`
 (`shadowHostFlush`)). The stencil count is [RENDER_POST.md](RENDER_POST.md#shadows).
 
+**The volumes' edge clip.** `clipVolumeEdge` clips each projected edge of a volume's prism to a box
+about the screen centre before the prism is packed: an edge with both ends past one side of the box
+is marked away and the prisms that use it are not drawn, and an edge crossing the box has its ends
+moved onto it, so a box smaller than the console's draws less shadow inside the picture (a prism
+left out, or the part of one past the line joining two moved ends) and never more. The box is each
+disc's own: `ScreenWidth` by `ScreenHeight` (512 by 448, or 512 by 512 in the tall mode) on the
+European, Japanese, Korean and Asian discs, and three halves of both (768 by 672, or 768 by 768) on
+the North American disc and the two 2001 previews. On the host the frame's width stands for
+`ScreenWidth`, so at 4:3 the box is the disc's to the pixel and at a wider frame it lies as many
+picture widths past the picture's side as on the console; across it is at most
+`GSB_SHADOW_CLIP_MAX` (2046), so an end moved onto it passes the packer's range test
+(`volumeVertsOutOfRange`), and down it is the disc's at every width
+(`port/include/ico_shadow_clip.h` (`ico_shadow_clip_x`, `ico_shadow_clip_y`);
+`ico2/seki/src/GsBase.c` (`gsb_HostShadowClipX`, `gsb_HostShadowClipY`); `ico2/seki/src/Shadow.c`
+(`clipVolumeEdge`)). Where the box is not the European disc's proportion of the frame the frame
+latch logs it, at `gsb_Init` and at each change of the frame: `shadow: the volumes' edges are
+clipped to this disc's own box, +-768 by +-672 GS pixels about the centre of the 512 x 448 frame
+(three halves of it; the European disc's is +-512 by +-448; logged at each change of the frame)`
+(`ico2/seki/src/GsBase.c` (`gsbHostShadowClipNote`)). ctest `shadow_clip` checks the box of each
+disc at every width, `gsb_cull` `GsBase.c`'s two functions under each disc.
+
 ## Effects recorded on rd directly
 
 Some files record their register writes as rd state themselves, because the decoder's generic
