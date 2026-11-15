@@ -1050,17 +1050,21 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   input. The pictures: `rd_replay_tool DUMP out.png --interp 0.9 DUMP --interp-any --presents 3
   --present WxH` (a dump as its own tick before: nothing moves) writes the same PNGs with and without
   `ICO_RD_STILL_REPRESENT=0`, and its lines say which presents were `shown again`.
-- `rd_replay_tool_still.cmake` (`rd_replay_tool_still`): the still re-present on a corpus dump as its own tick
+- `rd_replay_tool_still.cmake` (`rd_replay_tool_still`): the still re-present on the fixtures of
+  `port/render/test/fixtures/lists/replay_still.txt` (the title's castle, `fx-boot-0200`), each as its own tick
   before, 4 presents at Enhanced 4:3 2x at 1280x960: presents 1 to 3 end `; shown again`, and all four pictures are the same bytes
-  as with `ICO_RD_STILL_REPRESENT=0` (Not Run without the dump).
+  as with `ICO_RD_STILL_REPRESENT=0`. The path ran: those lines, and the list line's `draws>=1` on the run's `--stats`.
 - `rd_replay_tool_glow_hold.cmake`: the glow held between ticks (`port/render/rd_glow_hold.c`)
-  against its chain drawn at every present (`ICO_RD_GLOW_REDRAW=1`), on two consecutive godrays
-  dumps (`build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-01076` and `rd-01077`; Not Run without
-  them) at Enhanced 4:3 2x, `--presents 2` with `ICO_RD_STILL_REPRESENT=0` (every present
-  rendered) (`rd_replay_tool_glow_hold`). A still tick (rd-01076 as its own tick before): the lines
+  against its chain drawn at every present (`ICO_RD_GLOW_REDRAW=1`), on the fixtures of
+  `port/render/test/fixtures/lists/glow_hold.txt` (the still case `fx-boot-0200`, the title's castle at 512 GS pixels with the sun's
+  fans: the chain drawn whole; the moving case `fx-adreno-prev` then `fx-adreno`, two consecutive ticks, with
+  `ICO_RD_CULL=off`: the generated lamps in the chain) at Enhanced 4:3 2x, `--presents 2` with
+  `ICO_RD_STILL_REPRESENT=0` (every present rendered) (`rd_replay_tool_glow_hold`). The path ran:
+  each fixture replayed alone at its case's setting shows its list line's `glow_chains>=1` and
+  `glow_plan`. A still tick (the frame as its own tick before): the lines
   say `glow drawn (the tick's first present)` for present 0 and `glow held` (or, with the switch,
   `glow redrawn ([dev] glow_redraw)`) for present 1, and SCENE and the presented picture of both
-  presents are the same bytes held and redrawn. A moving tick (rd-01076 then rd-01077): present 0
+  presents are the same bytes held and redrawn. A moving tick (the tick before, then the tick): present 0
   the same bytes both ways, and every pixel of present 1's SCENE that differs lies within 128
   texels of the glow's mask (WORK2 not at its fill level, either run's) (with Python and Pillow).
   `build-host/tmp/v094/after/v2-ab.sh` is the A/B over more pairs (statistics, crops, the region
@@ -1069,10 +1073,13 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   (`rd_dump_blended_arm`) replays alone as drawn: `rd_replay_tool CUR --interp T PREV
   --save-blended B` writes the frame built between the two after its replay, `rd_replay_tool B`
   replays it without `--interp`, and SCENE and the presented picture (1280x960) are the same bytes
-  as the `--interp` run's. `rd_replay_tool_save_blended`: rd-01076 then rd-01077 (the godrays pair
-  above) at alpha 0.5, Enhanced 4:3 2x; `rd_replay_tool_save_blended_163`: issue 163's pair
-  (`build-host/tmp/v097/evidence/163/frame/`) at its present's alpha 0.999000013, 2x, full height,
-  Full pixel (Not Run without the dumps). Both run the `--interp` again with `--render-thread
+  as the `--interp` run's. `rd_replay_tool_save_blended`: the fixtures of
+  `port/render/test/fixtures/lists/save_blended.txt` (`fx-gate-prev` then `fx-gate`, the main gate's two
+  ticks) at alpha 0.5, Enhanced 4:3 2x; `rd_replay_tool_save_blended_163`: those of `save_blended_163.txt`
+  (`fx-adreno-prev` then `fx-adreno`, a tablet's two ticks with the ticks' cameras) at issue 163's
+  present alpha 0.999000013, 2x, full height, Full pixel. The path ran: the `--interp` run's
+  `--stats` show the list line's `interp_keyed_blended>=1` (and on the second
+  `interp_tick_cam_draws>=1`: VU draws with the ticks' cameras). Both run the `--interp` again with `--render-thread
   sync` and `on` (`-DRT`): the interpolation and the replays on the render thread give the same
   picture and the same saved blended frame, byte for byte (the payload's alignment gaps are zeroed
   for this: the first threaded run's dump differed in 3 padding bytes the main thread's heap left).
@@ -1614,8 +1621,13 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   step's verdict, a killed step counted as lost, a step without a verdict planned again,
   contradicting prefixes ending the plan, 1,000 random oracles ending within 16 steps
   (`rd_bisect_plan`).
-- `rd_depth_copy_dump.cmake`: a player dump with the fog replayed with the depth in place, copied
-  and through a buffer, SCENE byte for byte the same (`rd_fog_depth_copy_dump`, `_d24s8`).
+- `rd_depth_copy_dump.cmake`: the fixtures of `port/render/test/fixtures/lists/fog_depth_copy.txt`
+  (`fx-adreno`: list 4's fog on SCENE reading SCENE's depth, list 8's aura on that depth after it)
+  replayed with the depth in place, copied and through a buffer, SCENE byte for byte the same
+  (`rd_fog_depth_copy_dump`; `_d24s8` on `ICO_VK_FAKE_D24S8=1` without the buffer). The path ran:
+  each run's `--stats` name the path asked for (`fog path inplace`, `copy`, `buffer`), the copy's run
+  shows the list line's `draws>=1` and `aura_pastes_whole>=1`, and a run through the copy with
+  `ICO_RD_FOG_SABOTAGE=copy` (the depth reads give 0) gives a SCENE that differs from the copy's.
 - `rd_shadow_test.c`: the shadow count on the stencil (`rd_shadow`); at scene scale 4 each
   composite, not flagged above 1x, against the float bilinear of its level within 3 LSB, then with
   `RdProfile.shadowBspline` ([dev] `shadow_bspline`) against the CPU B-spline within 3 (4 on the

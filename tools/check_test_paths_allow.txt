@@ -13,10 +13,7 @@ port/render/test/rd_bench_ab.cmake
 port/render/test/rd_crack_work_ab.cmake
 port/render/test/rd_fill11_ab.cmake
 port/render/test/rd_late_pass_ab.cmake
-port/render/test/rd_replay_tool_glow_hold.cmake
 port/render/test/rd_replay_tool_ripple.cmake
-port/render/test/rd_replay_tool_save_blended.cmake
-port/render/test/rd_replay_tool_still.cmake
 port/render/test/rd_turn_fold_ab.cmake
 port/render/test/rd_vis_hiz_corpus.txt
 port/render/test/rd_vu_audit.cmake

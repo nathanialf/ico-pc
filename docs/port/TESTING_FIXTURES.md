@@ -248,6 +248,10 @@ add a row when a family needs one):
 | `store_depth_dropped` | `stores: N depth and M colour stores dropped` |
 | `constant_reads_served` | `constant reads on: N sprites drawn in a cleared source's colour` |
 | `vu_record_dispatches` | `C copies, N dispatches` (the first stats line: the record by compute dispatches) |
+| `fog_path` | `fog local draws N (fog path P)` (the word: the fog's depth path in force) |
+| `aura_pastes_whole` | `aura paste on: S split (...), N drawn whole` |
+| `interp_keyed_blended` | `K keyed draws: N blended` (the `--interp` run's first line) |
+| `interp_tick_cam_draws` | `...beside blended ones; N VU draws with the ticks' cameras` (the `--interp` run's) |
 
 The fixtures' declared properties are their manifest line's; `rd_fixtures_check` holds the two
 equal.
@@ -388,3 +392,7 @@ expansion does not change); its manifest line must say the same.
 | `rd_scope_ab`, `rd_scope_ab_tiler` | `lists/scope.txt` | the three captures, `fx-loss95`, `fx-scope-179-lost`, `fx-scope-179-before` (issue 179's Mali-G52 loss frames at the first 3D scene) (`prepass_vertices>=1`) | `prepass_vertices` on both runs |
 | `rd_vu_rec_size_ab`, `_mali` | `lists/vu_rec_size.txt` | `fx-mali-slow541`, `fx-mali-frame`, `fx-lamps-novolume`, `fx-opening-dark`, `fx-opening-sun`, `fx-vu-plain-0300` (the corpus's largest pre-pass record) (`prepass_vertices>=1`, `vu_record_dispatches>=1`) | `prepass_vertices` on both runs, `vu_record_dispatches` on `_mali`'s |
 | `rd_vurecord_ab_compute_class_opening` | `lists/vu_opening.txt` | `fx-lamps-novolume`, `fx-opening-dark`, `fx-opening-sun` | `prepass_vertices` on both runs, `vu_record_dispatches` on the compute run |
+| `rd_replay_tool_still` | `lists/replay_still.txt` | `fx-boot-0200` (`draws>=1` on the line) | `draws` on the run with the re-show on; presents 1 to 3 shown again, every picture byte for byte |
+| `rd_replay_tool_glow_hold` | `lists/glow_hold.txt` (a role a fixture: `still`, `prev`, `move`; `nocull`: `ICO_RD_CULL=off` for that case) | `fx-boot-0200` (`still`: `glow_chains>=1`, `glow_plan=whole`), `fx-adreno-prev`, `fx-adreno` (`prev`, `move`, `nocull`: `glow_chains>=1`, `glow_plan=lamps`) | `glow_chains` and `glow_plan` on each fixture replayed alone at its case's setting; the held and redrawn lines, the pictures as before |
+| `rd_replay_tool_save_blended`, `rd_replay_tool_save_blended_163` | `lists/save_blended.txt`, `lists/save_blended_163.txt` (a role a fixture: `prev`, `cur`) | `fx-gate-prev`, `fx-gate` (`interp_keyed_blended>=1`); `fx-adreno-prev`, `fx-adreno` (`interp_keyed_blended>=1`, `interp_tick_cam_draws>=1`) | on the `--interp` run of SCENE; the saved frame replayed alone, and on the render thread, byte for byte |
+| `rd_fog_depth_copy_dump`, `_d24s8` | `lists/fog_depth_copy.txt` | `fx-adreno` (`draws>=1`, `aura_pastes_whole>=1`) | `fog_path` on every run (the path asked for), `draws` and `aura_pastes_whole` on the copy's run; a run with the copy's reads sabotaged changes SCENE; SCENE byte for byte in place, copied, through a buffer |

@@ -88,6 +88,11 @@ set(_rdfx_q_vu_merged_draws "VU merge: [0-9]+ draws in [0-9]+ GPU draws \\(([0-9
 set(_rdfx_q_store_depth_dropped "stats: stores: ([0-9]+) depth and [0-9]+ colour stores dropped")
 set(_rdfx_q_constant_reads_served "constant reads on: ([0-9]+) sprites drawn in a cleared source's colour")
 set(_rdfx_q_vu_record_dispatches "[0-9]+ copies, ([0-9]+) dispatches")
+# the fog's depth read, the aura's paste after it, the blended frame between two ticks
+set(_rdfx_q_fog_path "fog local draws [0-9]+ \\(fog path ([a-z]+)\\)")
+set(_rdfx_q_aura_pastes_whole "aura paste [a-z]+: [0-9]+ split \\([^)]*\\), ([0-9]+) drawn whole")
+set(_rdfx_q_interp_keyed_blended "keyed draws: ([0-9]+) blended")
+set(_rdfx_q_interp_tick_cam_draws "beside blended ones, ([0-9]+) VU draws with the ticks' cameras")
 
 set(RDFX_FAILURES 0)
 

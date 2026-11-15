@@ -1,0 +1,8 @@
+# rd_replay_tool_save_blended_163 (port/render/test/rd_replay_tool_save_blended.cmake):
+# as save_blended.txt, at a present's alpha next to 1 under Full pixel, on a
+# pair with the ticks' cameras (dump version 14 and later): the VU draws with
+# the ticks' cameras in the blended frame.
+#
+# issue 123's Adreno 740 tablet (576x448 GS, 3:2), frame 6312 then 6313
+fx-adreno-prev prev
+fx-adreno cur interp_keyed_blended>=1 interp_tick_cam_draws>=1
