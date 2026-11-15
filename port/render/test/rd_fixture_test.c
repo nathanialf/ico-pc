@@ -571,7 +571,9 @@ int main(int argc, char **argv)
     buildDump(&dp, 17);
     s_persp = false;
     CHECK(!dp.bad);
-    CHECK(rd_fixture_make(dp.p, dp.n, NULL, &fx, report, sizeof(report), why, sizeof(why)));
+    /* the plain make with the same texture rules (the patterns' names are in
+       the skeleton: other rules, another length) */
+    CHECK(rd_fixture_make(dp.p, dp.n, "checker\n", &fx, report, sizeof(report), why, sizeof(why)));
     const size_t perspSkel = fx.skelBytes;
     rd_fixture_free(&fx);
     static const char dropRules[] = "checker\n@scene drops\n";
