@@ -54,6 +54,12 @@ set(_rdfx_q_no_volume_break_taken "break on: ([0-9]+) taken")
 set(_rdfx_q_stencil_window_stores "stencil inside the shadow window only: ([0-9]+) stores")
 # DATE's passes without the depth
 set(_rdfx_q_date_cut_passes "DATE cut on: ([0-9]+) passes begun without the depth")
+# the volumes' and composites' own entries, the shadow tiles, the volumes in the scene's pass
+set(_rdfx_q_volume_fs_taken "volume fs on \\(self-test [^)]*\\): ([0-9]+) volume draws by date_clear_ps")
+set(_rdfx_q_comp_spec_seen "composites and levels by sprite_comp_ps of ([0-9]+)")
+set(_rdfx_q_comp_spec_taken "comp spec on \\(self-test [^)]*\\): ([0-9]+) composites and levels by sprite_comp_ps")
+set(_rdfx_q_shadow_tile_composites "shadow tiles on: ([0-9]+) composites over the tile mask")
+set(_rdfx_q_shadow_merge_counts "shadow volumes in the scene's pass on: ([0-9]+) of [0-9]+ counts")
 
 set(RDFX_FAILURES 0)
 

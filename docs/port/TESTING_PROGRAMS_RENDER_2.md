@@ -242,8 +242,8 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   is Vulkan's alone), the same bytes.
 - `rd_volume_fs_test.c` (`rd_volume_fs`; `rd_volume_fs.cmake`, CPU): the shadow volumes' stencil-only entry (`rd_volume_fs.c`): the gate's reasons in order, the `date_clear_ps` twin (the fragment entry alone differs), the volume key without a device (`sprite_ps`, seen, none taken), no twin in the start-up set there, `ICO_RD_VOLUME_FS`'s words, the bench's force, the ledger's row.
 - `rd_comp_spec_test.c` (`rd_comp_spec`; `rd_comp_spec.cmake`, CPU): the composites' own entry (`rd_comp_spec.c`): the planner's composite and level keys take their forms, each held field refused alone; the DrawCB's flags (each one `sprite_ps` reads refused, the others taken, the TEXA word); the twin; no device: seen, kept, none taken, no twin; the words; the ledger.
-- `rd_comp_spec_ab.cmake` (`rd_comp_spec_ab`, `rd_comp_spec_sabotage`; `rd_comp_spec.cmake`): the lists of `rd_volume_fs_ab` and `glow_light_dumps.txt`, `ICO_RD_COMP_SPEC=0` against `=1` at the phone's setting and Enhanced 2x 16:9, the first list at the Mali class (off) and MSAA 4x: every PNG, draws, passes and traffic the same, arm 1 on, a draw by it on each volume dump at the phone. `rd_comp_spec_selftest`, `_selftest_sabotage`: as the volumes'.
-- `rd_volume_fs_ab.cmake` (`rd_volume_fs_ab`, `rd_volume_fs_sabotage`; `rd_volume_fs.cmake`): every dump of `tools/shadow_cuts_dumps.txt`, `date_cut_dumps.txt`, `shadow_box_dumps.txt`, `no_volume_dumps.txt` and `lamps_dumps.txt` (an absent one FAILS), `ICO_RD_VOLUME_FS=0` against `=1` at the phone's setting, Enhanced 2x 16:9, the Mali class at 1x and MSAA 4x at 2x: every PNG, the draws, passes and traffic the same, arm 1's self-test passed, every single-sampled volume draw by `date_clear_ps`. `_sabotage`: the phone's setting: refused, the same bytes. `rd_volume_fs_selftest` and `_selftest_sabotage` (`test/rd_shadow_selftest.cmake` through `rd_fog_selftest_test`): the device self-test's passed line and the entry on; sabotaged, the Z ALWAYS frame differs and it stays off.
+- `rd_comp_spec_ab.cmake` (`rd_comp_spec_ab`, `rd_comp_spec_sabotage`; `rd_comp_spec.cmake`): the fixtures of `test/fixtures/lists/comp_spec.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md); the frames of `rd_volume_fs_ab`), `ICO_RD_COMP_SPEC=0` against `=1` at the phone's setting, Enhanced 2x 16:9, the Mali class (off) and MSAA 4x: every PNG, draws, passes and traffic the same, arm 1 on, a draw by it at the phone on each fixture whose run shows volume draws. The path ran: at the phone's setting arm 1 shows each fixture's declared `shadow_volume_draws`, `comp_spec_seen` and `comp_spec_taken`; a fixture the phone's setting did not check fails. `_sabotage`: the phone's setting: refused, the same bytes, the declared `shadow_volume_draws` and `comp_spec_seen` shown. `rd_comp_spec_selftest`, `_selftest_sabotage`: as the volumes'.
+- `rd_volume_fs_ab.cmake` (`rd_volume_fs_ab`, `rd_volume_fs_sabotage`; `rd_volume_fs.cmake`): the fixtures of `test/fixtures/lists/volume_fs.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md): a character's shadow at 21:9, the opening's lamps view with no volume, the opening's sun, the Mali-G52's frame, the main gate at 32:9; an absent one FAILS), `ICO_RD_VOLUME_FS=0` against `=1` at the phone's setting, Enhanced 2x 16:9, the Mali class at 1x and MSAA 4x at 2x: every PNG, the draws, passes and traffic the same, arm 1's self-test passed, every single-sampled volume draw by `date_clear_ps`. The path ran: at the three single-sampled settings arm 1 shows each fixture's declared `shadow_volume_draws` (none on the lamps view) and `volume_fs_taken`; a fixture no setting checked fails. `_sabotage`: the phone's setting: refused, the same bytes, the declared `shadow_volume_draws` shown. `rd_volume_fs_selftest` and `_selftest_sabotage` (`test/rd_shadow_selftest.cmake` through `rd_fog_selftest_test`): the device self-test's passed line and the entry on; sabotaged, the Z ALWAYS frame differs and it stays off.
 - `rd_vu_compact_test.c` (`rd_vu_compact`; `rd_vu_compact.cmake`, CPU): the index compaction's pure
   parts (`rd_vu_compact.c`): the plan's places (two calls one after the other in the plane, their
   workgroups), its raises (the first call's values from 0, the next one's past them, mod 2^32),
@@ -560,16 +560,19 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   SCENE byte for byte with the tiles off and on (a later DATE DATM 1 sprite included), the corner's
   and the edges' composite over a mask with dead tiles; `startup` runs `rd_fog_selftest`, whose
   first run takes the tiles' self-test, and checks it passed; no validation error.
-- `rd_shadow_tile_ab.cmake` (`rd_shadow_tile_ab`): the dumps of `tools/shadow_tile_dumps.txt`
-  (machine-local; a listed dump that is absent FAILS: `tools/shadow_box_dumps.txt`'s and the
-  bridge v2809 and cage v4405 captures) with `ICO_RD_SHADOW_TILE=0` and `1`, `--pass-dump --stats`,
+- `rd_shadow_tile_ab.cmake` (`rd_shadow_tile_ab`): the fixtures of
+  `test/fixtures/lists/shadow_tile.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md): a character's
+  shadow at 21:9, the bridge capture, the main gate at 32:9, the PowerVR phone's F12 frame; an
+  absent one FAILS) with `ICO_RD_SHADOW_TILE=0` and `1`, `--pass-dump --stats`,
   under `ICO_RD_STORE_PLAN=1`, `ICO_RD_VU_PREPASS=0`, at the PowerVR phone's profile
   (`ICO_VK_FAKE_LIMITS=moltenvk`), the Mali-G52's (`ICO_VK_FAKE_LIMITS=mali`, `ICO_VK_FAKE_NO_DST=1`:
   nothing tiled) and the B-spline composites at Enhanced 2x, 3x and 4x (`ICO_RD_SHADOW_BSPLINE=1`,
   `ICO_RD_DATE_PATH=stencil`). Each pair: every PNG byte for byte, `=0` off with nothing, the
-  passes more by at most the masks; at the phone setting v3677 and v2809 3 composites over the mask,
-  v2809's mask texels live at most 3717 (SHADOW0), 1023 (SHADOW1) and 289 (SHADOW2) by its measured
-  alpha boxes. No OpenGL twin: the path needs DATE's stencil bit. No device: SKIP.
+  passes more by at most the masks; at the phone setting each fixture draws its list's 3 composites
+  over the mask with its mask texels live under the list's bounds (from the fixture's own alpha
+  boxes; the list says how). The path ran: the `=1` run at the phone setting shows each fixture's
+  declared `shadow_volume_draws` and `shadow_tile_composites`; a fixture that setting could not
+  show fails. No OpenGL twin: the path needs DATE's stencil bit. No device: SKIP.
 - `rd_shadow_box_test.c` (`rd_shadow_box`, CPU): the shadows over the volumes' box
   (`rd_shadow_box.c`): the count's box from 12.4 vertices (margins, a clamped vertex, clipping);
   one axis through a sprite (the Pixel frame's level 0 across and down, its rows past the count's
@@ -774,7 +777,7 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   no validation error.
 - `rd_stencil_ab.cmake` (`rd_stencil_ab`): the fixtures of `lists/stencil.txt`
   ([TESTING_FIXTURES.md](TESTING_FIXTURES.md); a listed fixture that is absent FAILS:
-  `fx-shadow-wide`, `fx-opening-dark`, `fx-opening-sun`, `fx-mali-frame`) with `ICO_RD_STENCIL_PACKED=1` and `0`,
+  `fx-shadow-wide`, `fx-opening-dark`, `fx-opening-sun`, `fx-mali-frame`, `fx-maingate`, `fx-phone-4657`) with `ICO_RD_STENCIL_PACKED=1` and `0`,
   `--pass-dump --stats`, under `ICO_RD_STORE_PLAN=1`, `ICO_RD_STORE_POISON=1`,
   `ICO_RD_VU_PREPASS=0`, at the PowerVR phone's profile (`ICO_VK_FAKE_LIMITS=moltenvk`, Enhanced
   2364x1080, Full height and pixel) and the Mali-G52's (`ICO_VK_FAKE_LIMITS=mali`,
@@ -924,17 +927,18 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   own texture, never written) byte for byte, `aura box off: 0` against `on`, the two-pass run's
   passes and draws the other's plus one each a read in two passes; some dump must read in two
   passes (`rd_aura_box_ab`). SKIP as `rd_vustage_ab`.
-- `rd_shadow_merge_ab.cmake`: the dumps of `tools/shadow_merge_dumps.txt` (`tools/vustage_dumps.txt`'s,
-  the PowerVR phone's three F12 zips and its F12 frame of the heavy stage 6 room `frame-20261102-222516-v2325.zip` in
-  the effort's evidence folder; machine-local, a missing one skipped) replayed with `--pass-dump
+- `rd_shadow_merge_ab.cmake`: the fixtures of `test/fixtures/lists/shadow_merge.txt`
+  ([TESTING_FIXTURES.md](TESTING_FIXTURES.md): the PowerVR phone's F12 frame of 2026-10-28, the
+  main gate at 32:9, the bridge capture; an absent one FAILS) replayed with `--pass-dump
   --stats` under `ICO_RD_BLEND=fixed` and `ICO_RD_STORE_POISON=1` with the shadow volumes in a pass
   of their own (`ICO_RD_SHADOW_MERGE=0`) and in the scene's open pass (`=1`, `rd_shadow_merge.c`),
   at the phone's Resolution Auto under the MoltenVK fakes (a tile-based class) and at Enhanced 2x
   4:3: every PNG byte for byte (the count targets' clears the on run leaves undrawn are drawn with
   the poison's 0x5A there, so a reader would show), `shadow volumes in the scene's pass off: 0 of R
   counts, 0 passes armed; 0 count targets' clears not drawn` against `on: M of R`, the same draws,
-  the on run's passes the off run's less M; some reset must be taken (`rd_shadow_merge_ab`). SKIP
-  as `rd_vustage_ab`.
+  the on run's passes the off run's less M. The path ran: the on run of each setting shows each
+  fixture's declared `shadow_volume_draws` and `shadow_merge_counts` (a reset taken, so one pass
+  fewer); a fixture no setting checked fails (`rd_shadow_merge_ab`). No device: SKIP.
 - `rd_pass_area_ab.cmake`: the dumps of `tools/pass_area_dumps.txt` (`tools/vustage_dumps.txt`'s,
   the PowerVR phone's three F12 zips and its F12 frame of 2026-11-02
   `frame-20261102-091017-v15677.rddump` in the effort's evidence folder; machine-local, a

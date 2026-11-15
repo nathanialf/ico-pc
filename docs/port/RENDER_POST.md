@@ -1725,8 +1725,8 @@ in the fragment shader is not the interpolated one either, so either form can mo
 weight's last bit. Nothing exact is left to cut here on such a GPU.
 
 **The tests.** `rd_shadow_tile` and `rd_shadow_tile_selftest` (`port/render/test/rd_shadow_tile_test.c`)
-and `rd_shadow_tile_ab` (`tools/shadow_tile_dumps.txt`, the bridge frame's live texels under the
-bounds above) ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
+and `rd_shadow_tile_ab` (the fixtures of `test/fixtures/lists/shadow_tile.txt`, each one's live
+texels under the bounds its own alpha boxes give) ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
 
 ### A shadow window with no volume
 

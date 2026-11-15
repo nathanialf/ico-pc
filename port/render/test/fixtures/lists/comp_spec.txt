@@ -1,0 +1,16 @@
+# Fixtures for rd_comp_spec_ab and rd_comp_spec_sabotage
+# (port/render/test/rd_comp_spec_ab.cmake: the shadow composites and levels by
+# their own entry against sprite_ps, byte for byte): fixture names of this
+# repository (port/render/test/fixtures/NAME.rdfix), a name a line.
+#
+# a character's shadow at 21:9 (the count, three levels, three composites)
+fx-shadow-wide
+# the opening's lamps view: a shadow window with no volume (its levels and
+# composites still drawn)
+fx-lamps-novolume
+# the opening's sun
+fx-opening-sun
+# the Mali-G52's F12 frame
+fx-mali-frame
+# the main gate at 32:9
+fx-maingate

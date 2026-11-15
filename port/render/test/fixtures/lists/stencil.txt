@@ -11,3 +11,7 @@ fx-opening-dark
 fx-opening-sun
 # the Mali-G52's F12 frame (three volume commands)
 fx-mali-frame
+# the main gate at 32:9 and the PowerVR phone's F12 frame of 2026-10-28 (four
+# volume triangle sets each, the volumes in the scene's pass)
+fx-maingate
+fx-phone-4657

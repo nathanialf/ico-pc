@@ -10,7 +10,6 @@
 port/render/CMakeLists.txt
 port/render/test/rd_aura_paste_ab.cmake
 port/render/test/rd_bench_ab.cmake
-port/render/test/rd_comp_spec_ab.cmake
 port/render/test/rd_crack_work_ab.cmake
 port/render/test/rd_fill11_ab.cmake
 port/render/test/rd_glow_blur_ab.cmake
@@ -27,10 +26,8 @@ port/render/test/rd_replay_tool_glow_hold.cmake
 port/render/test/rd_replay_tool_ripple.cmake
 port/render/test/rd_replay_tool_save_blended.cmake
 port/render/test/rd_replay_tool_still.cmake
-port/render/test/rd_shadow_tile_ab.cmake
 port/render/test/rd_turn_fold_ab.cmake
 port/render/test/rd_vis_hiz_corpus.txt
-port/render/test/rd_volume_fs_ab.cmake
 port/render/test/rd_vu_audit.cmake
 port/render/test/rd_vu_compact_ab.cmake
 port/render/test/rd_vu_flat0_ab.cmake
@@ -61,8 +58,6 @@ tools/present_scene_dumps.txt
 tools/scope_dumps.txt
 tools/shadow_box_dumps.txt
 tools/shadow_cuts_dumps.txt
-tools/shadow_merge_dumps.txt
-tools/shadow_tile_dumps.txt
 tools/sideband_dumps.txt
 tools/sweep_cameras.txt
 tools/turn_fold_dumps.txt

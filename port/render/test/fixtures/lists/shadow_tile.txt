@@ -1,0 +1,26 @@
+# Fixtures for rd_shadow_tile_ab (port/render/test/rd_shadow_tile_ab.cmake:
+# the shadow composites drawn whole against over the GPU tile mask, byte for
+# byte): fixture names of this repository (port/render/test/fixtures/
+# NAME.rdfix), a name a line.  After the name: the composites drawn over the
+# tile mask in one replay at the phone setting (the frame's three), then the
+# bounds on the live texels of SHADOW0's, SHADOW1's and SHADOW2's masks
+# there.  A bound comes from the fixture's own pass dump at the phone setting
+# (the PS2-size levels): the box of the level's texels with alpha above 0,
+# (x0,y0)-(x1,y1); a mask texel i stands for level texels 2i - 3 .. 2i + 4
+# (its block of 2 and 3 texels about it), so it can be live only for
+# ceil((x0 - 4) / 2) <= i <= floor((x1 + 3) / 2), and the same down.
+#
+# a character's shadow at 21:9: SHADOW0 (110,85)-(317,139) of 424x256, 108 x
+# 31; SHADOW1 (55,43)-(158,69) of 212x128, 55 x 17; SHADOW2 (38,31)-(79,34)
+# of 106x64, 25 x 5
+fx-shadow-wide 3 3348 935 125
+# the rc3 bridge capture: SHADOW0 (106,84)-(287,139), 95 x 32; SHADOW1
+# (54,42)-(140,69), 47 x 18; SHADOW2 (27,21)-(70,34), 25 x 10
+fx-tile-2809 3 3040 846 250
+# the main gate at 32:9: SHADOW0 (345,84)-(704,139) of 1024x256, 183 x 32;
+# SHADOW1 (172,42)-(352,69) of 512x128, 94 x 18; SHADOW2 (86,21)-(176,34) of
+# 256x64, 49 x 10
+fx-maingate 3 5856 1692 490
+# the PowerVR phone's F12 frame of 2026-10-28: SHADOW0 (108,84)-(264,139),
+# 82 x 32; SHADOW1 (59,42)-(132,69), 40 x 18; SHADOW2 (30,21)-(65,34), 22 x 10
+fx-phone-4657 3 2624 720 220
