@@ -148,6 +148,12 @@ jobs:
       - name: The test shard split
         run: python3 -I tools/ci_shard.py --selftest
 
+      # no test reads from outside the repository (docs/port/TESTING_FIXTURES.md)
+      - name: No test names a path outside the repository
+        run: |
+          python3 -I tools/check_test_paths.py --selftest
+          python3 -I tools/check_test_paths.py
+
       - name: Generated files are fresh
         run: |
           .venv/bin/python tools/gen_data_desc.py --check

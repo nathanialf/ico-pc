@@ -795,9 +795,12 @@ static bool payloadRange(uint32_t psz, uint32_t off, uint64_t size)
 /* Every payload range a loaded command names lies inside the payload, and
  * the parts of a VU payload inside its command's range, as rd_replay.c reads
  * them: a corrupt dump is refused instead of read past at replay. */
-static bool cmdValid(const RdFrame *f, const RdCmd *c)
+bool rd__dump_cmd_valid(const uint8_t *payload, uint32_t psz, const RdCmd *c);
+
+/* on a payload alone (rd_fixture.h: the fixtures' maker and expansion read
+   the same rule) */
+bool rd__dump_cmd_valid(const uint8_t *payload, uint32_t psz, const RdCmd *c)
 {
-    const uint32_t psz = f->payloadSize;
     switch (c->type) {
     case RDC_SCREEN:
         return payloadRange(psz, c->u[0], (uint64_t)c->u[1] * sizeof(RdScreenVtx));
@@ -812,7 +815,7 @@ static bool cmdValid(const RdFrame *f, const RdCmd *c)
             return false;
         }
         RdVuPayload p;
-        memcpy(&p, f->payload + c->u[1], sizeof(p));
+        memcpy(&p, payload + c->u[1], sizeof(p));
         if (head + ((uint64_t)p.boneQw + p.streamQw) * 16 > c->u[2]) {
             return false;
         }
@@ -836,7 +839,7 @@ static bool cmdValid(const RdFrame *f, const RdCmd *c)
             return false;
         }
         RdPostRec r;
-        memcpy(&r, f->payload + c->u[1], sizeof(r));
+        memcpy(&r, payload + c->u[1], sizeof(r));
         /* the fog's LUT, or the reduction's four screen vertices */
         const uint64_t n =
             c->b[0] == RD_POST_REDUCTION ? 4 * (uint64_t)sizeof(RdScreenVtx) : 256 * 4;
@@ -851,6 +854,11 @@ static bool cmdValid(const RdFrame *f, const RdCmd *c)
     default:
         return c->type < RDC_COUNT;
     }
+}
+
+static bool cmdValid(const RdFrame *f, const RdCmd *c)
+{
+    return rd__dump_cmd_valid(f->payload, f->payloadSize, c);
 }
 
 /* A dumped VU mesh as rd_create_vu_mesh builds them: every index a kick

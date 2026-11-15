@@ -47,6 +47,7 @@ In reading order.
 | [HARD_MODE.md](HARD_MODE.md) | The difficulty's levers and presets: every row by Customize page with its mechanism and discs, the knock-down limit, Permadeath and the presets as shipped. |
 | [PACKS.md](PACKS.md) | Texture and model packs: names, loading, formats, log lines and dumping. |
 | [TESTING.md](TESTING.md) | The test framework, the render gates, the suites per backend, the disc tests, switches, dumps, traces, audits and CI. |
+| [TESTING_FIXTURES.md](TESTING_FIXTURES.md) | The committed test frames: what a fixture keeps and holds not, the patterns and rules, the generated geometry, declared properties, making one, the checks. |
 | [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md) | Every test program by area: what it checks and its ctest names. |
 | [TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md) | The renderer's test programs (the port/render/test section in its own file). |
 | [TESTING_PROGRAMS_RENDER_2.md](TESTING_PROGRAMS_RENDER_2.md) | The renderer's test programs, continued (the store plan to the glow light entries). |
