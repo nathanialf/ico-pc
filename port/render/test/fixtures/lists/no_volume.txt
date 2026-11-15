@@ -1,0 +1,20 @@
+# Fixtures for rd_no_volume_ab and rd_no_volume_ab_gl
+# (port/render/test/rd_no_volume_ab.cmake: a shadow window with no volume
+# drawn as before against SCENE's pass kept open and the count and levels
+# written as zero clears, byte for byte): fixture names of this repository
+# (port/render/test/fixtures/NAME.rdfix), a name a line.  The windows a replay
+# takes at the phone setting (and at dstencil) are each fixture's declared
+# no_volume_kept (port/render/test/fixtures/fixtures.txt): >=1 for a window
+# with no volume, =0 for a frame whose window has volumes (nothing may change
+# there).
+#
+# the title's castle scene (512x512 GS): a reset and the resolve with no strip
+# between, three levels, three composites
+fx-boot-0400
+fx-boot-0600
+# the same scene with the sun's volumes (two strips)
+fx-boot-0200
+# a character's shadow at 21:9 (one reset, seven strips)
+fx-shadow-wide
+# the opening's lamps view: a window with no volume
+fx-lamps-novolume

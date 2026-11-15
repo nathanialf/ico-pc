@@ -7,10 +7,29 @@
 # the fixture is meant to carry, QUANTITY OP VALUE (rd_fixture_helpers.cmake's
 # quantities), checked against the replays of every test that names it.
 # Regenerate: rd_fixture_tool remake fixtures.txt <sources> <this folder>.
+# A property holds at the settings its tests check it at: date_snapshots where
+# DATE takes the R8 snapshot and date_stencil_draws where it takes the stencil
+# bit (the composites' own, before the shadow cuts), date_one_shared,
+# empty_composites_skipped, no_volume_kept and no_volume_break_taken on the run
+# with that cut on (the last two where DATE takes the stencil bit: a snapshot
+# setting takes no window), stencil_window_stores with ICO_RD_STENCIL_PACKED=0.
 #
 # stage 4, the Pixel 10 Pro Fold's F12 frame (v0.11.4): a character's shadow
 # (seven volume commands, the count, three levels, three composites) at 21:9
-fx-shadow-wide build-host-tmp/v0115/evidence/datecut/pixel/frame-20261110-194925-v3677.rddump shadow_volume_draws>=1 shadow_box_counts>=1 shadow_box_composites>=1
+fx-shadow-wide build-host-tmp/v0115/evidence/datecut/pixel/frame-20261110-194925-v3677.rddump shadow_volume_draws>=1 shadow_box_counts>=1 shadow_box_composites>=1 date_snapshots>=1 date_stencil_draws>=1 date_one_shared>=1 empty_composites_skipped=0 no_volume_kept=0 no_volume_break_taken=0 stencil_window_stores>=1
 # the opening's lamps frame (v0.11.5 rc, the Pixel): a shadow window (the
 # reset and resolve) with no volume in it, at 21:9
-fx-lamps-novolume dumps/v0115-opening/frame-20261112-110824-v746.zip shadow_volume_draws=0
+fx-lamps-novolume dumps/v0115-opening/frame-20261112-110824-v746.zip shadow_volume_draws=0 date_one_shared>=1 empty_composites_skipped>=1 no_volume_kept>=1 no_volume_break_taken>=1
+# the opening on the Pixel 10 Pro Fold (v0.11.5 rc): the dark room and the sun,
+# each a shadow window with volumes and the three composites under DATE
+fx-opening-dark dumps/v0115-opening/frame-20261112-110838-v1545.zip shadow_volume_draws>=1 date_snapshots>=1 date_stencil_draws>=1 date_one_shared>=1 empty_composites_skipped=0 no_volume_break_taken=0 stencil_window_stores>=1
+fx-opening-sun dumps/v0115-opening/frame-20261112-110852-v2278.zip shadow_volume_draws>=1 date_snapshots>=1 date_stencil_draws>=1 date_one_shared>=1 empty_composites_skipped=0 no_volume_break_taken=0 stencil_window_stores>=1
+# issue 179's Mali-G52 on v0.11.5 (moto g24 power): its F12 frame (stage 3) and
+# a slow-scene capture (stage 42), both with volumes
+fx-mali-frame dumps/v0116-mali179/frame-20261112-195947-v17565.zip shadow_volume_draws>=1 date_snapshots>=1 date_stencil_draws>=1 date_one_shared>=1 empty_composites_skipped=0 no_volume_break_taken=0 stencil_window_stores>=1
+fx-mali-slow541 dumps/v0116-mali179/slow-20261112-195541.zip shadow_volume_draws>=1 date_snapshots>=1 date_stencil_draws>=1 date_one_shared>=1 empty_composites_skipped=0 no_volume_break_taken=0
+# the title's castle scene, 2026-10-06 boot frames (512x512 GS, dump version
+# 4): the sun's two volumes (0200), and the window with no volume (0400, 0600)
+fx-boot-0200 build-host-tmp/corpus/dumps/boot/rd-00200.rddump shadow_volume_draws>=1 no_volume_kept=0
+fx-boot-0400 build-host-tmp/corpus/dumps/boot/rd-00400.rddump shadow_volume_draws=0 no_volume_kept>=1
+fx-boot-0600 build-host-tmp/corpus/dumps/boot/rd-00600.rddump shadow_volume_draws=0 no_volume_kept>=1

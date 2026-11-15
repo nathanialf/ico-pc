@@ -1805,7 +1805,7 @@ pass open over WxH, depth yes|no; C zero clears, L level texels; D draws not dra
 volumes, R not taken (...)`.
 
 **The tests.** `rd_no_volume` (`port/render/test/rd_no_volume_test.c`, the scan, the gate and the
-lines on the CPU) and `rd_no_volume_ab` / `_gl` (`tools/no_volume_dumps.txt`)
+lines on the CPU) and `rd_no_volume_ab` / `_gl` (the fixtures of `lists/no_volume.txt`)
 ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
 
 **The break mode.** The same window, taken with SCENE's pass ended where the count ends
@@ -1912,8 +1912,7 @@ line): `; empty composites on|off: K skipped (D with DATE); DATE one set-up on|o
 
 **The tests.** `rd_date_one` (`port/render/test/rd_date_one_test.c`: the bound and the rule on the
 CPU, then frames in the shadow's shape on lavapipe), `rd_date_one_ab`, `rd_empty_skip_ab` and their
-`_gl` twins (`port/render/test/rd_shadow_cuts_ab.cmake`, `tools/shadow_cuts_dumps.txt` with the
-DATE cut's, the box's and the no-volume window's lists)
+`_gl` twins (`port/render/test/rd_shadow_cuts_ab.cmake`, the fixtures of `lists/shadow_cuts.txt`)
 ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
 
 ### The shadow volumes' stencil-only entry

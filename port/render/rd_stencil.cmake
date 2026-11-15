@@ -44,18 +44,23 @@ if(ICO_RUN_TESTS)
                          "${_sc_env};ICO_RD_FOG_PATH=local;ICO_RD_STENCIL_PACKED=0;ICO_RD_STORE_POISON=1")
 endif()
 
-# rd_stencil_ab (test/rd_stencil_ab.cmake): the dumps of tools/stencil_dumps.txt
-# (machine-local; a listed dump that is absent fails) with the stencil forced
-# (ICO_RD_STENCIL_PACKED=1) and inside the shadow window only (=0) at the
-# PowerVR phone's profile on lavapipe and the Mali's, under the store plan's
-# poison: every target the same bytes, the same draws, passes and colour MB,
-# the depth and stencil MB stored and loaded lower by exactly what the cut's
-# stats name.  No device: SKIP (77).
+# rd_stencil_ab (test/rd_stencil_ab.cmake): the fixtures of
+# test/fixtures/lists/stencil.txt (committed frames, rd_fixture.cmake,
+# docs/port/TESTING_FIXTURES.md; a listed fixture that is absent fails) with
+# the stencil forced (ICO_RD_STENCIL_PACKED=1) and inside the shadow window
+# only (=0) at the PowerVR phone's profile on lavapipe and the Mali's, under
+# the store plan's poison: every target the same bytes, the same draws, passes
+# and colour MB, the depth and stencil MB stored and loaded lower by exactly
+# what the cut's stats name, the fixtures' declared properties shown (the path
+# ran).  No device: SKIP (77).
+include(rd_fixture.cmake)
 if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/stencil_ab")
     add_test(NAME rd_stencil_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/stencil_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool> "-DFIXTURES=${ICO_FIXTURE_DIR}"
+                     "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/stencil.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/stencil_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_stencil_ab.cmake")
     set_tests_properties(rd_stencil_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 5400)

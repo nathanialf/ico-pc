@@ -2,8 +2,10 @@
 # (ICO_RD_STENCIL_PACKED=1, v0.11.4's tile-based GPUs) against inside the
 # shadow window only (=0; port/render/rd_stencil_selftest.c,
 # docs/port/WORK_BUFFERS.md "The stencil outside the shadow window"), byte for
-# byte.  For every dump the list names (tools/stencil_dumps.txt: a path, '*'
-# globs allowed; a listed dump that is absent FAILS), rd_replay_tool's
+# byte.  For every fixture the list names (port/render/test/fixtures/lists/
+# stencil.txt: fixture names of the repository, docs/port/TESTING_FIXTURES.md;
+# a listed fixture that is absent or does not expand to its pinned SHA-256
+# FAILS), expanded into OUT, then rd_replay_tool's
 # --pass-dump with --stats under the store plan (ICO_RD_STORE_PLAN=1) and its
 # poison (ICO_RD_STORE_POISON=1: a stencil load the cut leaves undefined
 # clears to 0x5A, so a stencil the cut lost would show; lavapipe keeps
@@ -17,7 +19,7 @@
 #          at 1612x720, the fake Mali limits without the in-pass read
 #          (ICO_VK_FAKE_LIMITS=mali, ICO_VK_FAKE_NO_DST=1: the fog's copy path,
 #          DATE by the snapshot);
-# a dump a setting cannot show ("cannot show") is skipped there.  Each pair:
+# a fixture a setting cannot show ("cannot show") is skipped there.  Each pair:
 #   - every PNG the =1 run writes (SCENE, DISPLAY, PRESENT, SHADOW0-2 and
 #     every other target) the =0 run's byte for byte, the same number;
 #   - the same draws and passes; colour MB loaded and stored and MB copied
@@ -32,47 +34,24 @@
 #     cleared rise by at most its "MB loaded" (each load the cut poisons is a
 #     clear; the store plan's own poison clears the stencil of a pass it
 #     left undefined in the =1 run only, where that stencil was asked);
-# and over the dumps each setting that compared a pair leaves out at least
-# one stencil store with =0, and the phone setting compares at least one.  No device: SKIP (77).
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
-# The lists name dumps of the build machine alone (the owner's rule there: a
-# listed dump that is absent FAILS). A machine without that folder has none of
-# them: the test is skipped as the older dump tests are.
-if(NOT IS_DIRECTORY "/primary/dev/ico-dumps")
-  message(STATUS "SKIP: no dump folder on this machine (/primary/dev/ico-dumps): the list's dumps are the build machine's")
-  return()
-endif()
+# the path ran (rd_fixture_require on the =0 run, each setting): the fixture's
+# declared shadow_volume_draws (a shadow window with volumes: the stencil has
+# a use) and stencil_window_stores (the cut left stencil stores out); a
+# fixture whose properties no setting checked FAILS; and over the fixtures
+# each setting that compared a pair leaves out at least one stencil store with
+# =0, and the phone setting compares at least one.  No device: SKIP (77).
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the
+# fixtures folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<a
+# fixture list> -DOUT=<a folder the test may write>
+include("${FIXTURE_HELPERS}")
 set(dumps "")
 set(failures 0)
-if("${LIST}" STREQUAL "" OR NOT EXISTS "${LIST}")
-  message(FATAL_ERROR "rd_stencil_ab: no dump list ${LIST}")
-endif()
-get_filename_component(listDir "${LIST}" DIRECTORY)
-file(STRINGS "${LIST}" lines)
-foreach(l IN LISTS lines)
-  string(STRIP "${l}" l)
-  if(l STREQUAL "" OR l MATCHES "^#")
-    continue()
-  endif()
-  if(NOT IS_ABSOLUTE "${l}")
-    set(l "${listDir}/${l}")
-  endif()
-  if(l MATCHES "[*]")
-    file(GLOB found "${l}")
-    list(SORT found)
-    if(NOT found)
-      message(SEND_ERROR "${l}: no dump matches (a listed dump must exist)")
-      math(EXPR failures "${failures} + 1")
-    endif()
-    list(APPEND dumps ${found})
-  elseif(EXISTS "${l}")
-    list(APPEND dumps "${l}")
-  else()
-    message(SEND_ERROR "${l}: no such dump (a listed dump must exist)")
-    math(EXPR failures "${failures} + 1")
-  endif()
+rd_fixture_list("${LIST}" names)
+foreach(name IN LISTS names)
+  rd_fixture_expand(${name} "${OUT}/fixtures" d)
+  list(APPEND dumps "${d}")
+  set(name_${d} "${name}")
 endforeach()
-list(REMOVE_DUPLICATES dumps)
 list(LENGTH dumps ndumps)
 
 set(common ICO_RD_STORE_PLAN=1 ICO_RD_STORE_POISON=1 ICO_RD_VU_PREPASS=0)
@@ -129,7 +108,7 @@ foreach(dump IN LISTS dumps)
         return()
       endif()
       if(NOT rc EQUAL 0 AND packed EQUAL 1 AND "${err}" MATCHES "cannot show")
-        message(STATUS "${dump} ${s}: skipped (drawn narrower than the setting's aspect)")
+        message(STATUS "${dump} ${s}: skipped (the setting cannot show it)")
         set(skipped TRUE)
         continue()
       endif()
@@ -139,6 +118,7 @@ foreach(dump IN LISTS dumps)
         set(skipped TRUE)
         continue()
       endif()
+      set(out_${packed} "${out}")
       string(REPLACE ";" "," flat "${out}")
       set(ok TRUE)
       foreach(re drawsRe trafficRe stencilRe)
@@ -188,6 +168,9 @@ foreach(dump IN LISTS dumps)
       message(SEND_ERROR "${dump} ${s}: packed 0 says the stencil ${word_0}")
       math(EXPR failures "${failures} + 1")
     endif()
+    # the path ran: volumes in the shadow window, stencil stores left out
+    rd_fixture_require(${name_${dump}} "${out_0}" shadow_volume_draws stencil_window_stores)
+    set(required_${dump} TRUE)
     math(EXPR cutStores_${s} "${cutStores_${s}} + ${ns_0}")
     math(EXPR pairs_${s} "${pairs_${s}} + 1")
     if(NOT draws_0 EQUAL draws_1 OR NOT passes_0 EQUAL passes_1)
@@ -258,11 +241,19 @@ if(pairs_phone EQUAL 0)
   message(SEND_ERROR "rd_stencil_ab: the phone setting compared no pair")
   math(EXPR failures "${failures} + 1")
 endif()
+foreach(dump IN LISTS dumps)
+  if(NOT required_${dump})
+    message(SEND_ERROR "${name_${dump}}: its properties were never checked (no setting could "
+                       "show it): a fixture this test cannot measure is no test")
+    math(EXPR failures "${failures} + 1")
+  endif()
+endforeach()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(failures GREATER 0)
-  message(FATAL_ERROR "rd_stencil_ab: ${failures} failures over ${ndumps} dumps")
+  message(FATAL_ERROR "rd_stencil_ab: ${failures} failures over ${ndumps} fixtures")
 endif()
 if(compared EQUAL 0)
-  message(FATAL_ERROR "rd_stencil_ab: no target compared over ${ndumps} dumps")
+  message(FATAL_ERROR "rd_stencil_ab: no target compared over ${ndumps} fixtures")
 endif()
-message(STATUS "rd_stencil_ab: ${compared} targets the same bytes over ${ndumps} dumps; stencil "
+message(STATUS "rd_stencil_ab: ${compared} targets the same bytes over ${ndumps} fixtures; stencil "
                "stores left out: ${cutStores_phone} (phone), ${cutStores_mali} (mali)")

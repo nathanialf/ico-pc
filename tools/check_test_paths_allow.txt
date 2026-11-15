@@ -21,7 +21,6 @@ port/render/test/rd_lamps_ab.cmake
 port/render/test/rd_lamps_fillpaste_ab.cmake
 port/render/test/rd_lamps_lowres_ab.cmake
 port/render/test/rd_late_pass_ab.cmake
-port/render/test/rd_no_volume_ab.cmake
 port/render/test/rd_pass_objects_ab.cmake
 port/render/test/rd_paste_spec_ab.cmake
 port/render/test/rd_present_scene_ab.cmake
@@ -29,9 +28,7 @@ port/render/test/rd_replay_tool_glow_hold.cmake
 port/render/test/rd_replay_tool_ripple.cmake
 port/render/test/rd_replay_tool_save_blended.cmake
 port/render/test/rd_replay_tool_still.cmake
-port/render/test/rd_shadow_cuts_ab.cmake
 port/render/test/rd_shadow_tile_ab.cmake
-port/render/test/rd_stencil_ab.cmake
 port/render/test/rd_subpass_ab.cmake
 port/render/test/rd_turn_fold_ab.cmake
 port/render/test/rd_vis_hiz_corpus.txt
@@ -70,7 +67,6 @@ tools/shadow_cuts_dumps.txt
 tools/shadow_merge_dumps.txt
 tools/shadow_tile_dumps.txt
 tools/sideband_dumps.txt
-tools/stencil_dumps.txt
 tools/sweep_cameras.txt
 tools/turn_fold_dumps.txt
 tools/vu_flat0_dumps.txt

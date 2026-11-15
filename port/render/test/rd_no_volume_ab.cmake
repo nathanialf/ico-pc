@@ -1,11 +1,15 @@
 # rd_no_volume_ab: a shadow window with no volume drawn as before
 # (ICO_RD_NO_VOLUME=0) against SCENE's pass kept open and the count and levels
 # written as zero clears (=1; port/render/rd_no_volume.c, docs/port/RENDER_POST.md
-# "A shadow window with no volume"), byte for byte.  For every dump the list
-# names (tools/no_volume_dumps.txt: a path, '*' globs allowed, and the windows a
-# replay takes at the phone setting, 1 or 0; a listed dump that is absent
-# FAILS), rd_replay_tool's --pass-dump with --stats under the store plan
-# (ICO_RD_STORE_PLAN=1) and the programs' own entries (ICO_RD_VU_PREPASS=0), at:
+# "A shadow window with no volume"), byte for byte.  For every fixture the list
+# names (port/render/test/fixtures/lists/no_volume.txt: fixture names of the
+# repository, docs/port/TESTING_FIXTURES.md; a listed fixture that is absent
+# or does not expand to its pinned SHA-256 FAILS; the windows a replay takes
+# at the phone setting are the fixture's declared no_volume_kept: 1 where it
+# declares >=1, 0 where =0, and a fixture that declares neither FAILS),
+# expanded into OUT, then rd_replay_tool's --pass-dump with --stats under the
+# store plan (ICO_RD_STORE_PLAN=1) and the programs' own entries
+# (ICO_RD_VU_PREPASS=0), at:
 #   phone     the PowerVR phone's profile on lavapipe (ICO_VK_FAKE_LIMITS=
 #             moltenvk ICO_RD_LATE_PASS=1: DATE through the stencil bit, the
 #             count in one draw, the late passes as the phone has them):
@@ -19,15 +23,15 @@
 #             DATE by the R8 snapshot), presented 1612x720: not taken (DATE);
 #   gl        -DBACKEND=opengl (rd_no_volume_ab_gl): 1x on OpenGL, presented
 #             1280x720: not taken (DATE by the snapshot);
-# a dump a setting cannot show ("cannot show") is skipped there.  Each pair:
+# a fixture a setting cannot show ("cannot show") is skipped there.  Each pair:
 #   - every PNG the =0 run writes (SCENE, SHADOW0-2, DISPLAY, PRESENT, every
 #     other target) the =1 run's byte for byte, the same number;
 #   - =0 says "no volume off: 0 kept"; a window with volumes is counted in
 #     both runs and never taken;
 #   - where the =1 run takes none: the same passes and the same traffic, to
 #     the last printed figure;
-#   - where it takes K (a dump listed with 1 at phone and dstencil, 0 on the
-#     others), from rd_replay.c and rd_no_volume.c: the pass count falls by
+#   - where it takes K (a fixture declaring a window at phone and dstencil, 0 on
+#     the others), from rd_replay.c and rd_no_volume.c: the pass count falls by
 #     K at phone (the count's pass, the three levels' and list 3's pass on
 #     SCENE not begun, four zero clears begun: the reduced count's and the
 #     three levels') and by 2K - S at dstencil (the shadow reset's own stencil
@@ -55,61 +59,37 @@
 #     and stored with the depth, rd_stencil_selftest.c); each printed MB
 #     figure is rounded to 0.01, so a difference is taken within 0.02 MB of
 #     the bytes;
-# and over the dumps the phone setting takes at least one window.  No device:
-# SKIP (77).
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
-# -DBACKEND=vulkan|opengl
-# The lists name dumps of the build machine alone (the owner's rule there: a
-# listed dump that is absent FAILS). A machine without that folder has none of
-# them: the test is skipped as the older dump tests are.
-if(NOT IS_DIRECTORY "/primary/dev/ico-dumps")
-  message(STATUS "SKIP: no dump folder on this machine (/primary/dev/ico-dumps): the list's dumps are the build machine's")
-  return()
-endif()
+# the path ran (rd_fixture_require on the =1 run): at phone and dstencil each
+# fixture shows its declared no_volume_kept and shadow_volume_draws, at the
+# settings that take none (desktop, mali, gl) its shadow_volume_draws, and
+# there a fixture without a volume counts its window as not taken; a fixture
+# whose properties no setting checked FAILS; and over the fixtures the phone
+# setting takes at least one window.  No device: SKIP (77).
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the
+# fixtures folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<a
+# fixture list> -DOUT=<a folder the test may write> -DBACKEND=vulkan|opengl
+include("${FIXTURE_HELPERS}")
 set(dumps "")
 set(failures 0)
-if("${LIST}" STREQUAL "" OR NOT EXISTS "${LIST}")
-  message(FATAL_ERROR "rd_no_volume_ab: no dump list ${LIST}")
-endif()
-get_filename_component(listDir "${LIST}" DIRECTORY)
-file(STRINGS "${LIST}" lines)
-foreach(l IN LISTS lines)
-  string(STRIP "${l}" l)
-  if(l STREQUAL "" OR l MATCHES "^#")
-    continue()
-  endif()
-  set(want "")
-  if(l MATCHES "^([^ \t]+)[ \t]+([0-9]+)$")
-    set(l "${CMAKE_MATCH_1}")
-    set(want "${CMAKE_MATCH_2}")
+rd_fixture_list("${LIST}" names)
+foreach(name IN LISTS names)
+  rd_fixture_expand(${name} "${OUT}/fixtures" d)
+  list(APPEND dumps "${d}")
+  set(name_${d} "${name}")
+  # the windows a replay takes where the setting takes them: the fixture's
+  # declared no_volume_kept
+  execute_process(COMMAND "${FIXTURE_TOOL}" props "${FIXTURES}/${name}.rdfix"
+                  OUTPUT_VARIABLE p RESULT_VARIABLE rc)
+  if(rc EQUAL 0 AND p MATCHES "(^|\n)no_volume_kept>=1(\n|$)")
+    set(want_${d} 1)
+  elseif(rc EQUAL 0 AND p MATCHES "(^|\n)no_volume_kept=0(\n|$)")
+    set(want_${d} 0)
   else()
-    message(SEND_ERROR "${l}: a dump line is a path and the windows taken at the phone setting")
+    message(SEND_ERROR "${name}: declares neither no_volume_kept>=1 nor no_volume_kept=0")
     math(EXPR failures "${failures} + 1")
-    continue()
-  endif()
-  if(NOT IS_ABSOLUTE "${l}")
-    set(l "${listDir}/${l}")
-  endif()
-  if(l MATCHES "[*]")
-    file(GLOB found "${l}")
-    list(SORT found)
-    if(NOT found)
-      message(SEND_ERROR "${l}: no dump matches (a listed dump must exist)")
-      math(EXPR failures "${failures} + 1")
-    endif()
-    foreach(d IN LISTS found)
-      list(APPEND dumps "${d}")
-      set(want_${d} "${want}")
-    endforeach()
-  elseif(EXISTS "${l}")
-    list(APPEND dumps "${l}")
-    set(want_${l} "${want}")
-  else()
-    message(SEND_ERROR "${l}: no such dump (a listed dump must exist)")
-    math(EXPR failures "${failures} + 1")
+    set(want_${d} 0)
   endif()
 endforeach()
-list(REMOVE_DUPLICATES dumps)
 list(LENGTH dumps ndumps)
 
 set(common ICO_RD_STORE_PLAN=1 ICO_RD_VU_PREPASS=0)
@@ -212,6 +192,7 @@ foreach(dump IN LISTS dumps)
         set(skipped TRUE)
         continue()
       endif()
+      set(out_${nv} "${out}")
       string(REPLACE ";" "," flat "${out}")
       if(NOT flat MATCHES "${drawsRe}" OR NOT flat MATCHES "${trafficRe}" OR
          NOT flat MATCHES "${nvRe}" OR NOT flat MATCHES "${nvDrawsRe}" OR
@@ -268,6 +249,14 @@ foreach(dump IN LISTS dumps)
     if(NOT takes_${s})
       set(want 0)
     endif()
+    # the path ran: the declared window count where the setting takes
+    # windows, the volumes everywhere
+    if(takes_${s})
+      rd_fixture_require(${name_${dump}} "${out_1}" no_volume_kept shadow_volume_draws)
+    else()
+      rd_fixture_require(${name_${dump}} "${out_1}" shadow_volume_draws)
+    endif()
+    set(required_${dump} TRUE)
     if(NOT word_0 STREQUAL "off" OR NOT kept_0 EQUAL 0 OR NOT kept_1 EQUAL want OR
        NOT with_0 EQUAL with_1)
       message(SEND_ERROR "${dump} ${s}: =0 says ${word_0} with ${kept_0} kept, =1 ${kept_1} "
@@ -364,14 +353,22 @@ foreach(dump IN LISTS dumps)
   endforeach()
 endforeach()
 if(NOT "${BACKEND}" STREQUAL "opengl" AND phoneKept EQUAL 0)
-  message(SEND_ERROR "rd_no_volume_ab: the phone setting took no window over ${ndumps} dumps")
+  message(SEND_ERROR "rd_no_volume_ab: the phone setting took no window over ${ndumps} fixtures")
   math(EXPR failures "${failures} + 1")
 endif()
+foreach(dump IN LISTS dumps)
+  if(NOT required_${dump})
+    message(SEND_ERROR "${name_${dump}}: its properties were never checked (no setting could "
+                       "show it): a fixture this test cannot measure is no test")
+    math(EXPR failures "${failures} + 1")
+  endif()
+endforeach()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(failures GREATER 0)
-  message(FATAL_ERROR "rd_no_volume_ab: ${failures} failures over ${ndumps} dumps")
+  message(FATAL_ERROR "rd_no_volume_ab: ${failures} failures over ${ndumps} fixtures")
 endif()
 if(compared EQUAL 0)
-  message(FATAL_ERROR "rd_no_volume_ab: no target compared over ${ndumps} dumps")
+  message(FATAL_ERROR "rd_no_volume_ab: no target compared over ${ndumps} fixtures")
 endif()
-message(STATUS "rd_no_volume_ab: ${compared} targets the same bytes over ${ndumps} dumps; the "
+message(STATUS "rd_no_volume_ab: ${compared} targets the same bytes over ${ndumps} fixtures; the "
                "phone setting took ${phoneKept} windows")

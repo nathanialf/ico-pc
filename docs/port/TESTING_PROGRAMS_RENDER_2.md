@@ -513,11 +513,11 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   (`rd__shadow_box_empty_force`): SCENE byte for byte, 3 skipped with DATE, snapshots 3 against 0,
   5 passes and 3 draws fewer; no validation error.
 - `rd_shadow_cuts_ab.cmake` (`rd_date_one_ab`, `rd_empty_skip_ab`, `rd_no_volume_break_ab` and their
-  `_gl` twins, `-DITEM=dateone|emptyskip|novolbreak`): the dumps of `tools/shadow_cuts_dumps.txt`
-  (the Mali reporter's four dumps and the Pixel's three opening dumps, each "volume" or
-  "novolume", v746 with the Mali setting's passes fewer under the empty composites, 6), then of
-  `tools/date_cut_dumps.txt`, `tools/shadow_box_dumps.txt` and `tools/no_volume_dumps.txt` (their
-  classes where those lists give them; machine-local; a listed dump that is absent FAILS), each item
+  `_gl` twins, `-DITEM=dateone|emptyskip|novolbreak`): the fixtures of `lists/shadow_cuts.txt`
+  ([TESTING_FIXTURES.md](TESTING_FIXTURES.md): `fx-shadow-wide`, `fx-opening-dark`,
+  `fx-opening-sun`, `fx-mali-frame` and `fx-mali-slow541`, each "volume", and `fx-lamps-novolume`,
+  "novolume", with the Mali setting's passes fewer under the empty composites, 6; a listed
+  fixture that is absent FAILS), each item
   off against on with the other two items and the no-volume window's open mode off in both runs,
   `--pass-dump --stats` under `ICO_RD_STORE_PLAN=1`, `ICO_RD_VU_PREPASS=0`. Settings: dateone the
   Mali-G52's (`ICO_VK_FAKE_LIMITS=mali ICO_VK_FAKE_NO_DST=1 ICO_VK_FAKE_NO_DUAL=1`, 1x), the Adreno
@@ -532,17 +532,22 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   the snapshot S shared means S snapshots and S draws fewer, 2 S passes fewer, the colour loaded and
   stored each S x 5 bytes a texel of the shared targets fewer, the depth and stencil the same at the
   integer scales and 4 to 5 bytes a texel fewer at the fractional one; by the stencil bit S set-ups
-  and 2 S draws fewer, the same passes and traffic; "volume" and "novolume" dumps share 2;
+  and 2 S draws fewer, the same passes and traffic; "volume" and "novolume" fixtures share 2;
   `--keys` at the Mali's: no key more missing; emptyskip: K skipped, D with DATE: by the snapshot D
-  snapshots and draws fewer and D to 2 D passes fewer (v746 at the Mali's: 6), by the stencil bit D
-  set-ups and 2 D draws fewer, the passes the same or one fewer (a "novolume" dump the same, and
-  its traffic); "novolume" dumps skip 3, "volume" none; novolbreak: the listed windows taken at the
-  stencil settings, none by the snapshot; a taken window: the passes off's less 4 a window plus the
-  zero clears it recorded, at lavapipe 1x one fewer again (its fog reads the depth outside the pass:
+  snapshots and draws fewer and D to 2 D passes fewer (`fx-lamps-novolume` at the Mali's: 6), by the stencil bit D
+  set-ups and 2 D draws fewer, the passes the same or one fewer (a "novolume" fixture the same, and
+  its traffic); "novolume" fixtures skip 3, "volume" none; novolbreak: the listed windows taken at
+  the stencil settings, none by the snapshot; a taken window: the passes off's less 4 a window plus
+  the zero clears it recorded, less the passes of the levels' chain at the scene's scale that off
+  draws above 1x and on does not (the stats' "shadow levels: ... P passes"), at lavapipe 1x one fewer again (its fog reads the depth outside the pass:
   list 3's SCENE pass of the skipped composites is begun by nothing), the set-ups 3 fewer a
   "novolume" window, at `--repeat 2` no clear and
   the targets holding zero counted, none counted in a first replay; nothing taken: the same passes
-  and traffic. Each item does something over the dumps. No device: SKIP.
+  and traffic. The path ran (`rd_fixture_require`, the fixtures' declared properties): on the on
+  run `date_one_shared`, `empty_composites_skipped` or (at the stencil settings)
+  `no_volume_break_taken`, each with `shadow_volume_draws`; on the off run `date_snapshots` at the
+  snapshot settings and `date_stencil_draws` at the stencil ones where the fixture declares them;
+  a fixture no setting checked FAILS. Each item does something over the fixtures. No device: SKIP.
 - `rd_shadow_tile_test.c` (`rd_shadow_tile` with `frames`, `rd_shadow_tile_selftest` with
   `startup` and `ICO_RD_SHADOW_TILE=1`; both `ICO_RD_DATE_PATH=stencil`, lavapipe; 77 without a
   device, DATE's stencil bit or the one-draw count, after the CPU words): the shadow tiles
@@ -721,10 +726,11 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   matter); SHADOW0 or the count target cleared before the window (the chain); no window; the gate
   (the class, `ICO_RD_NO_VOLUME=0|1`, MSAA, the pass window, the exact blend, GS state as shader
   data, DATE); the 10 s clause and the `--stats` words from made-up records.
-- `rd_no_volume_ab.cmake` (`rd_no_volume_ab`, `rd_no_volume_ab_gl`): the dumps of
-  `tools/no_volume_dumps.txt` (machine-local; a listed dump that is absent FAILS: the corpus boot
-  frames rd-00400 and rd-00600 and the Pixel's opening v746, a window with no volume, and rd-00200,
-  the Pixel's v3677 and the cage frame v4651, windows with volumes) with `ICO_RD_NO_VOLUME=0` and
+- `rd_no_volume_ab.cmake` (`rd_no_volume_ab`, `rd_no_volume_ab_gl`): the fixtures of
+  `lists/no_volume.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md); a listed fixture that is
+  absent FAILS: `fx-boot-0400`, `fx-boot-0600` and `fx-lamps-novolume`, a window with no volume
+  (declared `no_volume_kept>=1`), and `fx-boot-0200` and `fx-shadow-wide`, windows with volumes
+  (`no_volume_kept=0`)) with `ICO_RD_NO_VOLUME=0` and
   `1`, `--pass-dump --stats`,
   under `ICO_RD_STORE_PLAN=1`, `ICO_RD_VU_PREPASS=0`, at the PowerVR phone's profile with its late
   passes (`ICO_VK_FAKE_LIMITS=moltenvk ICO_RD_LATE_PASS=1`, Enhanced 2364x1080, Full height and
@@ -740,7 +746,10 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   for those windows), the colour loaded by that and the levels' texels x 4,
   at the phone setting the cleared up by the levels' and the depth and stencil each way down by W x
   H x 5 (the Apple class loads and stores the stencil with the depth), each within the 0.01 MB
-  rounding of two printed figures; the phone setting takes at least one window. No device: SKIP.
+  rounding of two printed figures; the path ran (`rd_fixture_require` on the `=1` run): the
+  declared `no_volume_kept` and `shadow_volume_draws` at the phone setting and the stencil row,
+  `shadow_volume_draws` at the others; a fixture no setting checked FAILS; the phone setting takes
+  at least one window. No device: SKIP.
 - `rd_stencil_selftest_test.c` (`rd_stencil_selftest`, `rd_stencil_selftest_poison`, lavapipe with
   `ICO_RD_FOG_PATH=local` and `ICO_RD_STENCIL_PACKED=0`, the second also `ICO_RD_STORE_POISON=1`;
   77 without a device or the local read, after its CPU cases): the stencil outside the shadow window
@@ -751,9 +760,9 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   a SCENE of texels); the decision on the desktop class: `=1` forced, unset with the local path
   forced (not the PowerVR class), the in-place path not, the copy and buffer paths forced, `=0` not;
   no validation error.
-- `rd_stencil_ab.cmake` (`rd_stencil_ab`): the dumps of `tools/stencil_dumps.txt` (machine-local; a
-  listed dump that is absent FAILS: the Pixel's v3677 and v4287, the PowerVR phone's v4657,
-  the main gate, the drained-room ripples' 223424) with `ICO_RD_STENCIL_PACKED=1` and `0`,
+- `rd_stencil_ab.cmake` (`rd_stencil_ab`): the fixtures of `lists/stencil.txt`
+  ([TESTING_FIXTURES.md](TESTING_FIXTURES.md); a listed fixture that is absent FAILS:
+  `fx-shadow-wide`, `fx-opening-dark`, `fx-opening-sun`, `fx-mali-frame`) with `ICO_RD_STENCIL_PACKED=1` and `0`,
   `--pass-dump --stats`, under `ICO_RD_STORE_PLAN=1`, `ICO_RD_STORE_POISON=1`,
   `ICO_RD_VU_PREPASS=0`, at the PowerVR phone's profile (`ICO_VK_FAKE_LIMITS=moltenvk`, Enhanced
   2364x1080, Full height and pixel) and the Mali-G52's (`ICO_VK_FAKE_LIMITS=mali`,
@@ -761,8 +770,10 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   passes, colour and copy MB; `=1` with the depth and nothing not asked; `=0` inside the window
   only; the depth and stencil MB stored and loaded fall by exactly the `=0` run's stats (MB
   stored, MB loaded) within two hundredths, the MB cleared rise by at most its MB loaded (the
-  poisoned loads); each setting that compared a pair leaves out a stencil store. No device: SKIP.
-- `rd_store_plan_ab.cmake`: the same dumps and those of `tools/vufuse_dumps.txt` (the phone's three
+  poisoned loads); the path ran (`rd_fixture_require` on the `=0` run, each setting): the declared
+  `shadow_volume_draws` and `stencil_window_stores`; each setting that compared a pair leaves out
+  a stencil store. No device: SKIP.
+- `rd_store_plan_ab.cmake`: the dumps of `tools/vustage_dumps.txt` and those of `tools/vufuse_dumps.txt` (the phone's three
   frames) three times under
   `ICO_RD_BLEND=fixed` and `ICO_RD_STORE_POISON=1` (a depth or stencil load the plan leaves
   undefined clears to 0.5 and 0x5A instead: lavapipe keeps an attachment's contents whatever its

@@ -1606,7 +1606,7 @@ had 3 passes with a depth, one of them the window's.
 (`port/render/test/rd_stencil_selftest_test.c`, lavapipe on the local path with
 `ICO_RD_STENCIL_PACKED=0`, the second under the poison): the 10 s and `--stats` words, the self-test
 passed, the stencil not forced, the counters, the decision by path and switch on the desktop class.
-`rd_stencil_ab` replays `tools/stencil_dumps.txt` with `ICO_RD_STENCIL_PACKED=1` and `=0` at the
+`rd_stencil_ab` replays the fixtures of `lists/stencil.txt` with `ICO_RD_STENCIL_PACKED=1` and `=0` at the
 PowerVR phone's profile and the Mali's under the poison: every target byte for byte, the same draws,
 passes and colour MB, the depth and stencil MB stored and loaded lower by exactly what the stats
 name ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
