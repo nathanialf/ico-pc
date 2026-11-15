@@ -344,6 +344,7 @@ static struct {
     char blockText[1024];
 } s_keepOut;
 
+static int s_keepRelease; /* __atomic: the game thread's wish, the pins let go (pin_release.h) */
 static unsigned s_keepMoved, s_keepEnded; /* the log thread's: threads moved off the kept cores */
 static unsigned s_sweepMoved, s_sweepFailed; /* the log thread's: the few-cores rule's sweep */
 
@@ -431,6 +432,7 @@ static void keep_tick(const CpuThreads *list)
             cpu_keep_block_reset(&s_keep);
         }
     }
+    (void)cpu_keep_release(&s_keep, __atomic_load_n(&s_keepRelease, __ATOMIC_ACQUIRE) != 0);
     const bool tried = cpu_keep_tick(&s_keep, &ops, ico_thread_now_ms(), why, allowed, rtid,
                                      stat_tid(2), s_place.gameTid);
     const uint64_t held = cpu_keep_held(&s_keep);
@@ -547,6 +549,25 @@ void ico_render_thread_place_scene(bool play)
 void ico_render_thread_place_focus(void)
 {
     keep_request(CPU_KEEP_WHY_FOCUS);
+}
+
+void ico_render_thread_pin_release(bool on)
+{
+    __atomic_store_n(&s_keepRelease, on ? 1 : 0, __ATOMIC_RELEASE);
+}
+
+int ico_render_thread_pin_release_rule(void)
+{
+    if (!__atomic_load_n(&s_keepOn, __ATOMIC_ACQUIRE)) {
+        return 0;
+    }
+    /* s_keep.few is written before s_keepOn's release store (place_init) */
+    return s_keep.few ? 2 : 1;
+}
+
+long ico_render_thread_render_tid(void)
+{
+    return stat_tid(1);
 }
 
 int ico_render_thread_render_core(void)

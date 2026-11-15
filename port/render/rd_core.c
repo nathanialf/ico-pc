@@ -41,6 +41,7 @@
 #include "rd_mesh.h"
 #include "rd_present_scene.h"
 #include "rd_shadow_tile.h" /* rd__shadow_tile_shutdown */
+#include "rd_shadowres.h"   /* the shadow levels' start line */
 #include "rd_tex.h"
 #include "rd_tex_decode.h"
 #include "rd_tone.h"
@@ -1942,7 +1943,8 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
                                 "the tests' switch)"
                               : "the blocks at the scene's scale (at 1x their GS size)");
     }
-    rd__apply_display(); /* the scales the named targets take */
+    rd__shadow_fine_log(); /* the shadow's levels (rd_shadowres.c) */
+    rd__apply_display();   /* the scales the named targets take */
     if (g_rd.settings.motionBlurSmooth) {
         logMotionBlur(""); /* made at its first sprite (rd_blur_smooth.c) */
     }

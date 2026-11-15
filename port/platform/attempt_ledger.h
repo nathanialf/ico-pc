@@ -175,12 +175,12 @@ enum {
        signalled finished, second count the GPU clock restarts with work
        queued (an idle GPU's are not counted) */
     ICO_ATT_PICTURE_HEALTH,
-    /* clock_trap.h (window_clock_trap.c, window_perf_hint.c; the owner's
-       Pixel, v0.11.7): a second at one picture a tick behind the step rule
-       told to the system as a heavier CPU and GPU load
-       (APerformanceHint_notifyWorkloadIncrease, Android 16 and later); count
-       the lifts asked, second count those the system took */
-    ICO_ATT_CLOCK_LIFT,
+    /* pin_release.h (window_clock_trap.c, cpu_keep.h; the owner's Pixel,
+       v0.11.7): the render and game threads' single-core pins let go while
+       the game is at one picture a tick with a picture's CPU raised, taken
+       again after 10 s without; count the times let go, second count the
+       times taken again */
+    ICO_ATT_PIN_RELEASE,
     ICO_ATT_COUNT
 };
 
@@ -418,10 +418,11 @@ void ico_attempt_decide_skin_skip(int on);
    record): on where the records carry the slot clock's signs (Vulkan),
    counting; else not applicable */
 void ico_attempt_decide_picture_health(int vulkan);
-/* the clock lift (window_perf_hint.c every block): android the build is
-   Android's, offered the system has APerformanceHint_notifyWorkloadIncrease
-   (API 36 and later), session a performance hint session was made and not
-   refused.  All three: on; else not applicable with the missing one */
-void ico_attempt_decide_clock_lift(int android, int offered, int session);
+/* the pins let go at one picture a tick (window_clock_trap.c every block):
+   android the build is Android's, rule the keeper's rule in force
+   (render_thread.h ico_render_thread_pin_release_rule: 0 none, 1 three or
+   more faster cores, 2 the few-cores rule).  On with rule 1; else not
+   applicable with the reason */
+void ico_attempt_decide_pin_release(int android, int rule);
 
 #endif

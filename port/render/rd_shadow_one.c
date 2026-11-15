@@ -44,6 +44,7 @@
 #include "rd_internal.h"
 #include "rd_replay.h"
 #include "rd_shadow_box.h"
+#include "rd_shadowres.h" /* the fine levels' full-size count */
 
 bool rd__shadow_count_loads(void)
 {
@@ -137,6 +138,7 @@ void rd__shadow_reduce_cb(const RdTargetRec *tc, IcoDrawCB *cb)
 
 void rd__shadow_one_shutdown(void)
 {
+    rd__shadow_fine_shutdown(); /* the fine levels and their pipelines */
     for (int i = 0; i < 2; i++) {
         if (s_table[i].id) {
             rhi_destroy_texture(s_table[i]);
@@ -183,6 +185,56 @@ static bool tableMake(RhiCommandList cl, int i)
     rd__transition(cl, s_table[i], &s_tableState[i], RHI_STATE_SHADER_READ);
     s_tableReady[i] = true;
     return true;
+}
+
+/* The shadow's levels at the scene's scale (rd_shadowres.c): after the count at its GS size,
+ * the count drawn again into the count target at its own texels (the box of
+ * one texel: the stencil's table texel itself, as at scale 1), over the
+ * volumes' box in texels where the GS-size pass had one (gsBox; the rest
+ * cleared to 0), the same pipeline and stencil view: one pass more, its
+ * pass "shadow count WxH" at the texels */
+static void fullPass(Replay *r, RdTargetRec *tc, RhiPipeline pipe, const RdPipeKeyInt *k,
+                     RhiBindGroup g2, const IcoDrawCB *reduce, const RhiRect *gsBox)
+{
+    RhiCommandList cl = rd__replay_cl();
+    const RhiRect all = {0, 0, tc->tw, tc->th};
+    RhiRect box = all;
+    if (gsBox && (!gsBox->w || !gsBox->h ||
+                  !rd__gs_rect_texels(tc, gsBox->x, gsBox->y, gsBox->x + (int32_t)gsBox->w - 1,
+                                      gsBox->y + (int32_t)gsBox->h - 1, 0, &box))) {
+        box = (RhiRect){0, 0, 0, 0};
+    }
+    r->writeSerial++;
+    rd__transition(cl, tc->color, &tc->colorState, RHI_STATE_RENDER_TARGET);
+    RhiRenderPassDesc p;
+    memset(&p, 0, sizeof(p));
+    p.color[0].texture = tc->color;
+    p.color[0].load = gsBox ? RHI_LOAD_CLEAR : RHI_LOAD_DONT_CARE; /* clear[] zeroed */
+    p.colorCount = 1;
+    p.width = tc->tw;
+    p.height = tc->th;
+    rd__perf_pass(cl, RD_PERF_PASS_RENDER, RD_PERF_ID_SHADOW_COUNT, tc->tw, tc->th, r->perfPost);
+    rhi_cmd_checkpoint(cl, rd__replay_pass_push(RD_PASSK_PASS, r->st.color, tc->tw, tc->th, 0, 0, 0,
+                                                0, r->perfPost));
+    rhi_cmd_begin_render_pass(cl, &p);
+    (void)rd__get_pipeline(k);
+    rd__replay_viewport(tc->tw, tc->th);
+    rhi_cmd_set_scissor(cl, gsBox ? &box : &all);
+    IcoDrawCB cb = *reduce;
+    cb.param[0] = cb.param[1] = 1.0f;
+    cb.param[2] = (float)tc->tw;
+    cb.param[3] = (float)tc->th;
+    cb.scale[2] = 0.0f;
+    rd__set_pipeline(cl, pipe, k);
+    rd__bind_uniform(cl, 0, rd__frame_group(tc->tw, tc->th, 0.0f, 0.0f));
+    rd__bind_uniform(cl, 1, rd__draw_group(&cb));
+    rhi_cmd_set_bind_group(cl, 2, g2);
+    if (box.w && box.h) {
+        rd__replay_draw(cl, 3, 0, 1);
+    }
+    rhi_cmd_end_render_pass(cl);
+    g_rdPerf.shadowFinePasses++;
+    rd__shadow_fine_count_full(r->st.color);
 }
 
 RhiPipeline rd__get_pipeline_held(const RdPipeKeyInt *k)
@@ -284,6 +336,17 @@ bool rd__shadow_one_draw(Replay *r, RdTargetRec *tc, RdTargetRec *td, uint32_t s
         rd__replay_draw(cl, 3, 0, 1); /* an empty box: the clear alone */
     }
     rhi_cmd_end_render_pass(cl);
+    if (dst.id == tc->color.id) {
+        rd__shadow_fine_count_full(r->st.color); /* at scale 1 the count is its full size */
+    } else if (rd__shadow_fine_count_wanted(tc)) {
+        if (boxed && (!box.w || !box.h) && rd__shadow_fine_cuts()) {
+            /* an empty box: the chain draws no step (rd_shadowres.c's empty
+             * count), so the full-size count is never read: no pass */
+            rd__shadow_fine_count_full(r->st.color);
+        } else {
+            fullPass(r, tc, pipe, &k, g2, &cb, boxed ? &box : NULL);
+        }
+    }
     g_rdPerf.shadowOne++;
     g_rdPerf.shadowGathered += load ? 0u : 1u;
     rd__shadow_msaa_note(1, g_rdPerf.msaaSamples);

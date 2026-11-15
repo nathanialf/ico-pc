@@ -332,7 +332,9 @@ covers on the PS2 at every aspect (`port/render/rd_core.c` (`namedTargetDesc`, `
 | FEED_HELD, DISPLAY_HELD | as FEED128, DISPLAY | host only: a [tick](ARCHITECTURE.md#terms)'s first present's copy |
 
 **Scale.** A scene-class target's texture is its GS size times the scene scale; the work buffers
-and the shadow levels keep their GS sizes, the PS2's, at every scale ([below](#the-glow-size);
+and the named shadow levels keep their GS sizes, the PS2's, at every scale ([below](#the-glow-size);
+above 1x the composites read twins at the scene's scale,
+[RENDER_POST.md](RENDER_POST.md#the-shadows-levels-above-1x);
 `port/render/rd_core.c` (`rd__target_scale_of`)). A temporary target of any other size is drawn
 at its GS size, except a render-to-texture block, which takes the scene's scale
 ([below](RENDER_POST.md#water-and-render-to-texture-blocks)). Under

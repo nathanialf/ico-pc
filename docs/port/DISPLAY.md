@@ -1016,7 +1016,7 @@ at reads of 8, 9.5 and 11 ms, 30 at 12, 16, 20, 24 and 30 ms, the bound 11.52499
 nanosecond; with S = 6 ms the step after binds at 17.177777 ms (`clock_trap_test`, on
 `pace_rt_further_trace`). The rate is not proportional to the cost: it steps at the bound. The
 owner's Pixel crossed it in the cage when its reads went from 8-10 to 16.8 ms for the same pictures
-at lower CPU clocks ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-clock-lift-and-the-worst-second-the-owners-pixel)).
+at lower CPU clocks ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#one-picture-a-tick-and-the-worst-second-the-owners-pixel)).
 The render thread's times say how long a picture's reads will take: its interpolation, its waits
 for the submit thread and for the GPU's slot fences (2 pictures in flight at most), at the GPU's
 measured time a picture, and its own reads (`port/platform/pace_policy.h` (`pace_rt_further_ask`,

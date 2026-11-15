@@ -71,6 +71,17 @@
  * the GPU) off the two cores too: they share the six slow cores with the
  * audio threads and the workers, not the game and render threads' two.
  *
+ * RELEASED (cpu_keep_release; v0.11.7, the owner's Pixel): while the
+ *   window finds the game at one picture a tick with a picture's CPU raised
+ *   (pin_release.h), the render, game and submit threads may run on every
+ *   allowed faster core (F) and every other thread on the allowed cores:
+ *   no single-core pin, the system's scheduler places them.  The ALONE
+ *   level's measured gain on that phone was core 7 alone against the
+ *   render thread spread over 2-7 (v0.11.5 rc9 against rc11, the bridge:
+ *   reads 6.0-6.4 ms against 8.3-8.6), so the pins are let go only in the
+ *   stuck state and taken again (the ideal asked first) once it has passed.
+ *   Not under the few-cores rule (its pins stand).
+ *
  * The keeper (cpu_keep_tick), once a second on the log thread:
  *   - reads back the render and game threads' cores; one that differs from
  *     what was read back after the last pin is a change the system made
@@ -99,7 +110,12 @@
 /* the time between tries while the render thread is not on the ideal core */
 #define CPU_KEEP_RETRY_MS 10000.0
 
-typedef enum CpuKeepLevel { CPU_KEEP_ALONE = 0, CPU_KEEP_PAIR, CPU_KEEP_FAST } CpuKeepLevel;
+typedef enum CpuKeepLevel {
+    CPU_KEEP_ALONE = 0,
+    CPU_KEEP_PAIR,
+    CPU_KEEP_FAST,
+    CPU_KEEP_RELEASED /* the pins let go (cpu_keep_release) */
+} CpuKeepLevel;
 
 typedef struct CpuKeepSets {
     CpuKeepLevel level;
@@ -125,20 +141,25 @@ bool cpu_keep_few(const CpuClasses *c);
    be chosen at that level.  Under the few-cores rule: ALONE as the header
    says (with two faster cores and the other one refused to the game
    thread, the game thread on both); PAIR the render and game threads on
-   both faster cores (false with one); FAST as for three or more */
+   both faster cores (false with one); FAST as for three or more.
+   RELEASED: the render, game and submit threads on the allowed faster
+   cores, every other thread on the allowed cores; false under the
+   few-cores rule */
 bool cpu_keep_choose(const CpuClasses *c, uint64_t allowed, uint64_t refused, uint64_t gameRefused,
                      CpuKeepLevel level, CpuKeepSets *out);
 
 /* why a try was made (bits) */
 enum {
-    CPU_KEEP_WHY_START = 1u,    /* the first tick with the render thread's id, or a new thread */
-    CPU_KEEP_WHY_SCENE = 2u,    /* a 3D scene began (the game's play layout) */
-    CPU_KEEP_WHY_FOCUS = 4u,    /* the window gained the focus */
-    CPU_KEEP_WHY_RESUME = 8u,   /* back from the background (the render thread goes on) */
-    CPU_KEEP_WHY_CHANGED = 16u, /* the system changed the render or game thread's cores */
-    CPU_KEEP_WHY_ALLOWED = 32u, /* the cores the process or the cpuset allows changed */
-    CPU_KEEP_WHY_RETRY = 64u,   /* the 10 s retry */
-    CPU_KEEP_WHY_THREAD = 128u  /* the submit thread started */
+    CPU_KEEP_WHY_START = 1u,     /* the first tick with the render thread's id, or a new thread */
+    CPU_KEEP_WHY_SCENE = 2u,     /* a 3D scene began (the game's play layout) */
+    CPU_KEEP_WHY_FOCUS = 4u,     /* the window gained the focus */
+    CPU_KEEP_WHY_RESUME = 8u,    /* back from the background (the render thread goes on) */
+    CPU_KEEP_WHY_CHANGED = 16u,  /* the system changed the render or game thread's cores */
+    CPU_KEEP_WHY_ALLOWED = 32u,  /* the cores the process or the cpuset allows changed */
+    CPU_KEEP_WHY_RETRY = 64u,    /* the 10 s retry */
+    CPU_KEEP_WHY_THREAD = 128u,  /* the submit thread started */
+    CPU_KEEP_WHY_RELEASE = 256u, /* the pins let go (one picture a tick) */
+    CPU_KEEP_WHY_RESTORE = 512u  /* the pins taken again */
 };
 
 typedef struct CpuKeepOps {
@@ -162,7 +183,8 @@ typedef struct CpuKeepPin {
 
 typedef struct CpuKeep {
     bool on;
-    bool few; /* the few-cores rule (cpu_keep_few) */
+    bool few;     /* the few-cores rule (cpu_keep_few) */
+    bool release; /* the pins let go (cpu_keep_release) */
     CpuClasses classes;
     long renderTid, submitTid;         /* the threads the state is of (0: none yet) */
     bool have;                         /* sets applied */
@@ -188,6 +210,13 @@ typedef struct CpuKeep {
 
 /* off when neither rule applies (cpu_keep_applies, cpu_keep_few) */
 void cpu_keep_init(CpuKeep *k, const CpuClasses *c);
+/* The pins let go (on) or taken again (off) from the next tick: a try is
+   due when the wish changes (CPU_KEEP_WHY_RELEASE, CPU_KEEP_WHY_RESTORE).
+   While let go the threads are on the RELEASED sets, no ideal is asked
+   and there is no 10 s retry; taken again, the try asks the ideal first.
+   False (nothing changes) with the keeper off, under the few-cores rule
+   or with the wish unchanged */
+bool cpu_keep_release(CpuKeep *k, bool on);
 /* One tick at nowMs (ms on any steady clock), why: the requests since the
    last tick, allowed: the cores the process and its cpuset allow (0: not
    known: every core with a speed); the threads' ids (0 or less: not

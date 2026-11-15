@@ -104,8 +104,18 @@ bool cpu_keep_choose(const CpuClasses *c, uint64_t allowed, uint64_t refused, ui
     if ((!cpu_keep_applies(c) && !few) || f == 0) {
         return false;
     }
+    if (few && level == CPU_KEEP_RELEASED) {
+        return false; /* the few-cores rule keeps its pins */
+    }
     if (few && level != CPU_KEEP_FAST) {
         return few_choose(c, a, f, refused, gameRefused, level, out);
+    }
+    if (level == CPU_KEEP_RELEASED) {
+        /* no single-core pin: the scheduler places the three threads on the
+           faster cores, every other thread anywhere it may run */
+        out->render = out->game = out->submit = f;
+        out->others = a;
+        return true;
     }
     if (level == CPU_KEEP_FAST) {
         /* the start's rule on the allowed cores, the render thread on
@@ -160,6 +170,16 @@ void cpu_keep_init(CpuKeep *k, const CpuClasses *c)
     k->on = cpu_keep_applies(c) || k->few;
 }
 
+bool cpu_keep_release(CpuKeep *k, bool on)
+{
+    if (!k->on || k->few || k->release == on) {
+        return false;
+    }
+    k->release = on;
+    k->pending |= on ? CPU_KEEP_WHY_RELEASE : CPU_KEEP_WHY_RESTORE;
+    return true;
+}
+
 static bool pin_kept(const CpuKeepPin *p)
 {
     return p->res == CPU_PIN_KEPT || p->res == CPU_PIN_UNKNOWN;
@@ -204,6 +224,44 @@ static void watch(CpuKeep *k, uint64_t now, uint64_t expect, uint64_t *seen, boo
     *seen = now;
 }
 
+/* the chosen sets in force: the other threads off the render and game
+   threads' cores first (the registered workers, the log thread), then the
+   game and submit threads (a registered submit thread is skipped by the
+   caller's keep_free, and pinned after it here); true (a try was made) */
+static bool apply(CpuKeep *k, const CpuKeepOps *ops, const CpuKeepSets *sp, long submitTid,
+                  long gameTid)
+{
+    const CpuKeepSets s = *sp;
+
+    k->sets = s;
+    k->have = true;
+    k->renderExpect = k->renderSeen = pin_expect(&k->render);
+    if (ops->keep_free != NULL) {
+        ops->keep_free(ops->u, s.others);
+    }
+    {
+        int err = 0;
+
+        (void)ops->pin(ops->u, 0, s.others, &err); /* the calling (log) thread */
+    }
+    if (gameTid > 0) {
+        k->game = pin_read(ops, gameTid, s.game != 0 ? s.game : s.others);
+        k->gameExpect = k->gameSeen = pin_expect(&k->game);
+        if (s.game != 0 && popcount64(s.game) == 1 && !pin_kept(&k->game)) {
+            /* the game thread's own core widened: another one at the next
+               tick (a core refused to the game thread is not asked for it
+               again in the run: at most one try a faster core) */
+            k->gameRefused |= s.game;
+            k->pending |= CPU_KEEP_WHY_CHANGED;
+        }
+    }
+    if (submitTid > 0) {
+        k->submit = pin_read(ops, submitTid, s.submit != 0 ? s.submit : s.others);
+        k->submitTid = submitTid;
+    }
+    return true;
+}
+
 bool cpu_keep_tick(CpuKeep *k, const CpuKeepOps *ops, double nowMs, unsigned why, uint64_t allowed,
                    long renderTid, long submitTid, long gameTid)
 {
@@ -244,6 +302,33 @@ bool cpu_keep_tick(CpuKeep *k, const CpuKeepOps *ops, double nowMs, unsigned why
         if (gameTid > 0) {
             watch(k, ops->read(ops->u, gameTid), k->gameExpect, &k->gameSeen, true);
         }
+    }
+    if (k->release) {
+        /* the pins let go: the RELEASED sets, tried when asked (the
+           release itself, a new thread, a change the system made, new
+           cores allowed), never retried for the ideal */
+        const unsigned must = CPU_KEEP_WHY_START | CPU_KEEP_WHY_CHANGED | CPU_KEEP_WHY_ALLOWED |
+                              CPU_KEEP_WHY_THREAD | CPU_KEEP_WHY_RELEASE;
+
+        if (!cpu_keep_choose(&k->classes, allowed, 0, 0, CPU_KEEP_RELEASED, &s)) {
+            return false;
+        }
+        if (k->have && k->sets.level == CPU_KEEP_RELEASED && k->sets.render == s.render &&
+            k->renderSeen == k->renderExpect && (k->pending & must) == 0) {
+            k->pending = 0;
+            return false;
+        }
+        k->why = k->pending;
+        k->pending = 0;
+        k->lastTryMs = nowMs;
+        k->tries++;
+        k->blockTries++;
+        memset(&k->ideal, 0, sizeof(k->ideal));
+        memset(&k->game, 0, sizeof(k->game));
+        memset(&k->submit, 0, sizeof(k->submit));
+        k->idealKept = false;
+        k->render = pin_read(ops, renderTid, s.render);
+        return apply(k, ops, &s, submitTid, gameTid);
     }
     if (!cpu_keep_choose(&k->classes, allowed, 0, k->gameRefused, CPU_KEEP_ALONE, &ideal)) {
         return false; /* no faster core allowed: nothing to keep */
@@ -290,7 +375,8 @@ bool cpu_keep_tick(CpuKeep *k, const CpuKeepOps *ops, double nowMs, unsigned why
     } else {
         /* the walk, from the level in force (the start: ALONE), at most
            one pin a level step and three after the ideal */
-        CpuKeepLevel lv = k->have ? k->sets.level : CPU_KEEP_ALONE;
+        CpuKeepLevel lv =
+            k->have && k->sets.level != CPU_KEEP_RELEASED ? k->sets.level : CPU_KEEP_ALONE;
 
         k->refused |= ideal.render;
         for (int n = 0; n < 4 && !chosen; n++) {
@@ -318,37 +404,7 @@ bool cpu_keep_tick(CpuKeep *k, const CpuKeepOps *ops, double nowMs, unsigned why
         k->have = false;
         return true;
     }
-    k->sets = s;
-    k->have = true;
-    k->renderExpect = k->renderSeen = pin_expect(&k->render);
-    /* the other threads off the render and game threads' cores first (the
-       registered workers, the log thread), then the game and submit
-       threads (a registered submit thread is skipped by the caller's
-       keep_free, and pinned after it here) */
-    if (ops->keep_free != NULL) {
-        ops->keep_free(ops->u, s.others);
-    }
-    {
-        int err = 0;
-
-        (void)ops->pin(ops->u, 0, s.others, &err); /* the calling (log) thread */
-    }
-    if (gameTid > 0) {
-        k->game = pin_read(ops, gameTid, s.game != 0 ? s.game : s.others);
-        k->gameExpect = k->gameSeen = pin_expect(&k->game);
-        if (s.game != 0 && popcount64(s.game) == 1 && !pin_kept(&k->game)) {
-            /* the game thread's own core widened: another one at the next
-               tick (a core refused to the game thread is not asked for it
-               again in the run: at most one try a faster core) */
-            k->gameRefused |= s.game;
-            k->pending |= CPU_KEEP_WHY_CHANGED;
-        }
-    }
-    if (submitTid > 0) {
-        k->submit = pin_read(ops, submitTid, s.submit != 0 ? s.submit : s.others);
-        k->submitTid = submitTid;
-    }
-    return true;
+    return apply(k, ops, &s, submitTid, gameTid);
 }
 
 /* append to out at *len (the text cut at cap, *len the length it would
@@ -381,21 +437,23 @@ static size_t done(char *out, size_t cap, size_t len)
 
 size_t cpu_keep_why_text(unsigned why, char *out, size_t cap)
 {
-    static const char *const words[8] = {"the start",
-                                         "a 3D scene began",
-                                         "focus gained",
-                                         "back from the background",
-                                         "the system changed the threads' cores",
-                                         "the cores the process may run on changed",
-                                         "the 10 s retry",
-                                         "the submit thread started"};
+    static const char *const words[10] = {"the start",
+                                          "a 3D scene began",
+                                          "focus gained",
+                                          "back from the background",
+                                          "the system changed the threads' cores",
+                                          "the cores the process may run on changed",
+                                          "the 10 s retry",
+                                          "the submit thread started",
+                                          "the pins let go at one picture a tick",
+                                          "the pins taken again"};
     size_t len = 0;
     bool any = false;
 
     if (cap > 0) {
         out[0] = '\0';
     }
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < 10; i++) {
         if (why & (1u << i)) {
             put(out, cap, &len, "%s%s", any ? ", " : "", words[i]);
             any = true;
@@ -435,6 +493,8 @@ static void render_words(char *out, size_t cap, size_t *len, const CpuKeepSets *
         put(out, cap, len, "%s alone", m);
     } else if (s->level == CPU_KEEP_PAIR) {
         put(out, cap, len, "the two fastest %s", m);
+    } else if (s->level == CPU_KEEP_RELEASED) {
+        put(out, cap, len, "the faster cores %s (the pins let go)", m);
     } else {
         put(out, cap, len, "the faster cores %s", m);
     }
@@ -460,6 +520,39 @@ size_t cpu_keep_try_text(const CpuKeep *k, const char *sys, char *out, size_t ca
 
     if (cap > 0) {
         out[0] = '\0';
+    }
+    if (k->have && k->sets.level == CPU_KEEP_RELEASED) {
+        /* no ideal asked: the three threads on the faster cores */
+        (void)cpu_place_mask_text(k->allowed, a, sizeof(a));
+        put(out, cap, &len, "the pins let go; the process may run on %s; the render thread on ",
+            k->allowed != 0 ? a : "not known");
+        (void)cpu_place_mask_text(k->render.asked, a, sizeof(a));
+        put(out, cap, &len, "%s (", a);
+        pin_words(out, cap, &len, &k->render);
+        put(out, cap, &len, ")");
+        if (sys != NULL && sys[0] != '\0') {
+            put(out, cap, &len, ", %s", sys);
+        }
+        (void)cpu_place_mask_text(k->game.asked, a, sizeof(a));
+        if (k->game.done) {
+            put(out, cap, &len, "; the game thread on %s (", a);
+            pin_words(out, cap, &len, &k->game);
+            put(out, cap, &len, ")");
+        } else {
+            put(out, cap, &len, "; the game thread not known");
+        }
+        (void)cpu_place_mask_text(k->submit.asked, a, sizeof(a));
+        if (k->submit.done) {
+            put(out, cap, &len, ", the submit thread on %s (", a);
+            pin_words(out, cap, &len, &k->submit);
+            put(out, cap, &len, ")");
+        } else {
+            put(out, cap, &len, ", the submit thread not started yet");
+        }
+        (void)cpu_place_mask_text(k->sets.others, a, sizeof(a));
+        (void)cpu_keep_why_text(k->why, w, sizeof(w));
+        put(out, cap, &len, ", every other thread on %s; why: %s", a, w);
+        return done(out, cap, len);
     }
     (void)cpu_place_mask_text(k->ideal.asked, a, sizeof(a));
     (void)cpu_place_mask_text(k->ideal.got, b, sizeof(b));

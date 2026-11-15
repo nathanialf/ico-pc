@@ -86,6 +86,7 @@
 #include "rd_bench.h" /* the bench's switch (rd__shadow_box_bench_force) */
 #include "rd_internal.h"
 #include "rd_shadow_box.h"
+#include "rd_shadowres.h" /* the shadow's levels at the scene's scale */
 
 static int32_t floorDiv16(int32_t a)
 {
@@ -663,6 +664,7 @@ static void whole(uint8_t why)
 
 void rd__shadow_box_reset(uint32_t color)
 {
+    rd__shadow_fine_reset(color); /* the fine levels' chain (rd_shadowres.c) */
     s_rep.winReplay = g_rd.replayCounter;
     s_rep.winColor = color;
     s_rep.winBad = false;
@@ -752,6 +754,7 @@ void rd__shadow_box_count_done(uint32_t color)
 void rd__shadow_box_count_whole(uint32_t color, bool msaa)
 {
     const uint8_t why = !s_scan.env ? RD_SB_WHY_OFF : msaa ? RD_SB_WHY_MSAA : RD_SB_WHY_SEVEN;
+    rd__shadow_fine_count_full(color); /* the seven draws' count is at its full size */
     madeAdd(color, (RdSbBox){0, 0, 0, 0, 1}, why);
     whole(why);
 }
@@ -779,6 +782,9 @@ static RdSbBox sprites(const RdStateBlock *st, const RdScreenVtx *v, uint32_t n,
 bool rd__shadow_box_screen(const RdStateBlock *st, const RdCmd *c, const RdScreenVtx *v, uint32_t n,
                            RhiRect *rect)
 {
+    /* above 1x a level sprite is drawn at the scene's scale too,
+     * before this draw's pass (rd_shadowres.c) */
+    rd__shadow_fine_screen(st, c, v, n);
     s_rep.qRole = ROLE_NONE;
     s_rep.qOrd = g_rdStoreOrd;
     uint32_t src = 0;
@@ -965,6 +971,7 @@ void rd__shadow_box_pop(const RdPerfRecord *rec)
     s_sum.skipped += rec->emptySkipped;
     s_sum.skippedDate += rec->emptySkippedDate;
     s_sum.replays++;
+    rd__shadow_fine_pop(rec); /* the fine levels' clause (rd_shadowres.c) */
 }
 
 /* "off 1.0, seven draws 0.5" (the reasons above 0), n the replays */
@@ -988,6 +995,7 @@ static void whyText(char *out, size_t size, const uint64_t *why, double n, bool 
 
 void rd__shadow_box_text(char *out, size_t size, size_t *at)
 {
+    rd__shadow_fine_text(out, size, at); /* "; shadow levels: ..." (rd_shadowres.c) */
     uint64_t k = 0;
     for (int i = 0; i < RD_SHADOW_BOX_WHYS; i++) {
         k += s_sum.why[i];
