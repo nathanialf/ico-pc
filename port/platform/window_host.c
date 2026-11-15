@@ -347,8 +347,6 @@ static void video_settings(RdSettings *rs, int w, int h)
     rs->fullPixel = (uint8_t)(o.fullPixel != 0);
     /* off: the same picture, the game's border masked over it */
     rs->borderMask = (uint8_t)(o.fullPixel == 0);
-    /* Water reflections: Sharp, in either preset (at 1x it changes nothing) */
-    rs->waterSharp = (uint8_t)(o.effectWaterSharp != 0);
     /* Motion blur: Smooth, in either preset; Off and Original are the
        game's (staticBlur.c reads the switch) */
     rs->motionBlurSmooth = (uint8_t)(o.effectMotionBlur != 0 && o.effectMotionBlurSmooth != 0);

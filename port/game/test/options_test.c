@@ -1439,34 +1439,67 @@ static void test_video_effects(const char *dir)
         ico_video_set_preset(&o, ICO_VIDEO_ENHANCED);
         CHECK(*fx[i] == 0 && ico_video_preset(&o) == ICO_VIDEO_ENHANCED);
     }
-    /* Water reflections: Original (0) by default and with no key, Sharp
-       read, sanitized, saved and read back; outside the preset as the six */
-    ico_video_defaults(&d);
-    CHECK(d.effectWaterSharp == 0);
-    f = fopen(path, "wb");
-    if (f != NULL) {
-        fputs("[video]\neffect_fog = false\n", f);
-        fclose(f);
+    /* [video] effect_water_sharp, v0.11.6's Water reflections, retired in
+       v0.11.7 (the reflections always take the scene's scale): a file with
+       it, true or false, reads as the same file without it (every option,
+       the preset); a save keeps its line exactly as it was, written neither
+       way by the game; the saved file loads again the same way and a second
+       save leaves it byte for byte.  read_text returns its own static
+       buffer: the texts are copied, never freed */
+    {
+        static const char *const kLine[2] = {"effect_water_sharp = false\n",
+                                             "effect_water_sharp = true\n"};
+        static char first[16384];
+        IcoVideoOptions plain, fogOn;
+        const char *wt;
+
+        f = fopen(path, "wb");
+        if (f != NULL) {
+            fputs("[video]\neffect_fog = false\n", f);
+            fclose(f);
+        }
+        ico_config_reset(path, "/nonexistent/options_test.ini");
+        ico_video_reload();
+        ico_video_get(&plain);
+        fogOn = plain;
+        fogOn.effectFog = 1;
+        CHECK(ico_video_save() == 0);
+        wt = read_text(path);
+        CHECK(wt != NULL && strstr(wt, "effect_water_sharp") == NULL);
+        for (int sharp = 0; sharp < 2; sharp++) {
+            f = fopen(path, "wb");
+            if (f != NULL) {
+                fputs("[video]\n", f);
+                fputs(kLine[sharp], f);
+                fputs("effect_fog = false\n", f);
+                fclose(f);
+            }
+            /* load */
+            ico_config_reset(path, "/nonexistent/options_test.ini");
+            ico_video_reload();
+            ico_video_get(&o);
+            CHECK(memcmp(&o, &plain, sizeof(o)) == 0 &&
+                  ico_video_preset(&o) == ico_video_preset(&plain));
+            /* save a change */
+            o.effectFog = 1;
+            ico_video_set(&o);
+            CHECK(ico_video_save() == 0);
+            wt = read_text(path);
+            CHECK(wt != NULL && strstr(wt, kLine[sharp]) != NULL &&
+                  strstr(wt, kLine[!sharp]) == NULL && strstr(wt, "effect_fog = true") != NULL);
+            snprintf(first, sizeof(first), "%s", wt != NULL ? wt : "");
+            /* reload what was saved, save again: the same options, the same bytes */
+            ico_config_reset(path, "/nonexistent/options_test.ini");
+            ico_video_reload();
+            ico_video_get(&o);
+            CHECK(effects_are(&o, plain.effectGlow, plain.effectDepthOfField, plain.effectSoftening,
+                              plain.effectMotionBlur, 1, plain.effectCinematicBars) &&
+                  ico_video_preset(&o) == ico_video_preset(&fogOn));
+            CHECK(ico_video_save() == 0);
+            wt = read_text(path);
+            CHECK(wt != NULL && strcmp(wt, first) == 0);
+        }
     }
-    ico_config_reset(path, "/nonexistent/options_test.ini");
-    ico_video_reload();
-    ico_video_get(&o);
-    CHECK(o.effectWaterSharp == 0 && ico_video_effect_water_sharp() == 0);
-    o.effectWaterSharp = 3;
-    ico_video_set(&o);
-    ico_video_get(&o);
-    CHECK(o.effectWaterSharp == 1 && ico_video_effect_water_sharp() == 1);
-    CHECK(ico_video_save() == 0);
-    text = read_text(path);
-    CHECK(text != NULL && strstr(text, "effect_water_sharp = true") != NULL);
-    ico_config_reset(path, "/nonexistent/options_test.ini");
-    ico_video_reload();
-    ico_video_get(&o);
-    CHECK(o.effectWaterSharp == 1 && ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
-    ico_video_set_preset(&o, ICO_VIDEO_ENHANCED);
-    CHECK(o.effectWaterSharp == 1 && ico_video_preset(&o) == ICO_VIDEO_ENHANCED);
-    ico_video_set_preset(&o, ICO_VIDEO_ORIGINAL);
-    CHECK(o.effectWaterSharp == 1);
     /* Motion blur's way ([video] effect_motion_blur_mode): Original with no
        key (a file from before it), "original" and "smooth" read in any
        case, anything else Original (with a stderr line); Smooth only while
@@ -1857,8 +1890,7 @@ static void test_video_effects(const char *dir)
     ico_config_reset(path, "/nonexistent/options_test.ini");
     ico_video_reload();
     ico_video_get(&o);
-    CHECK(effects_are(&o, 1, 1, 1, 1, 1, 1) && o.effectWaterSharp == 0 &&
-          ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
+    CHECK(effects_are(&o, 1, 1, 1, 1, 1, 1) && ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
     remove(path);
     ico_config_reset(path, "/nonexistent/options_test.ini");
     ico_video_reload();

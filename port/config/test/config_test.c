@@ -333,6 +333,46 @@ static void test_save(void)
     CHECK(text != NULL && strstr(text, "classic_menu_text = true\n") != NULL &&
           strstr(text, "port_font = \"arimo\"\n") != NULL);
     free(text);
+    /* [video] effect_water_sharp, retired in v0.11.7, true or false: one
+       "is not used; ignored" line a load and nothing else said of it, kept
+       by a save exactly as it was (never rewritten or deleted) */
+    for (int sharp = 0; sharp < 2; sharp++) {
+        char log[ICO_PATH_MAX];
+        const char *const line =
+            sharp ? "effect_water_sharp = true\n" : "effect_water_sharp = false\n";
+        char body[160];
+        int saved;
+        char *got;
+
+        snprintf(body, sizeof(body), "version = 1\n[video]\n%seffect_fog = true\n", line);
+        write_file(toml, body);
+        ico_config_reset(toml, "no-such.ini");
+        path_in(log, "retired_water.log");
+        fflush(stderr);
+        saved = dup(2);
+        CHECK(saved >= 0 && freopen(log, "w", stderr) != NULL);
+        CHECK(ico_config_get_bool("video.effect_fog", 0) == 1);
+        fflush(stderr);
+        dup2(saved, 2);
+        close(saved);
+        clearerr(stderr);
+        got = read_file(log);
+        CHECK(got != NULL &&
+              strstr(got, "config: video.effect_water_sharp is not used; ignored\n") != NULL);
+        {
+            /* the key is named once, in that line alone */
+            const char *first = got != NULL ? strstr(got, "effect_water_sharp") : NULL;
+            CHECK(first != NULL && strstr(first + 1, "effect_water_sharp") == NULL);
+        }
+        free(got);
+        remove(log);
+        ico_config_set_bool("video.effect_fog", 0);
+        CHECK(ico_config_save() == 0);
+        text = read_file(toml);
+        CHECK(text != NULL && strstr(text, line) != NULL &&
+              strstr(text, "effect_fog = false\n") != NULL);
+        free(text);
+    }
     /* the fifteen gameplay keys retired in v0.11.3 (each save's difficulty
        record holds them, port/game/difficulty.h): still read (a save's
        one-time carry-over), kept by a save, the file never rewritten */
@@ -526,8 +566,10 @@ static void test_first_run(void)
     CHECK(text != NULL && strstr(text, "upscaling = \"off\"") != NULL &&
           strstr(text, "\nupscaling_sharpness = 80\n") != NULL);
     CHECK(ico_config_get_bool("video.effect_cinematic_bars", 0) == 1);
-    /* Water reflections: Original (the PS2's size) by default */
-    CHECK(ico_config_get_bool("video.effect_water_sharp", 1) == 0);
+    /* no Water reflections key (retired in v0.11.7: the reflections take
+       the scene's scale always) */
+    CHECK(ico_config_get_string("video.effect_water_sharp", NULL) == NULL);
+    CHECK(text != NULL && strstr(text, "water") == NULL);
     /* no Glow size key: the glow is drawn at the PS2's size at every resolution */
     CHECK(strcmp(ico_config_get_string("video.effect_glow_size", "none"), "none") == 0);
     CHECK(ico_config_get_bool("video.effects_depth", 0) == 1);

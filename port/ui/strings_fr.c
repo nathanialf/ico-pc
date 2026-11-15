@@ -530,10 +530,6 @@ const char *const
             [UI_STR_VAL_WINDOWED] = "Fenêtré",
             [UI_STR_VAL_BORDERLESS] = "Sans bordure",
             /* Effects > Cinematic bars */
-            [UI_STR_OPT_EFFECT_WATER] = "Reflets de l’eau",
-            [UI_STR_VAL_SHARP] = "Net",
-            [UI_STR_EFFECT_WATER_NOTE] =
-                "Net dessine les reflets dans l’eau à la résolution choisie ; Original garde les reflets plus doux de la PS2.",
             [UI_STR_VAL_SMOOTH] = "Fluide",
             [UI_STR_OPT_SHOW_FPS] = "Compteur d’images",
             [UI_STR_EFFECT_MOTION_BLUR_NOTE] =
@@ -776,7 +772,8 @@ const char *const
             [UI_STR_STATES_SAVE_FAILED] = "L'état n'a pas pu être enregistré",
             [UI_STR_STATES_XB_OLD] =
                 "Cet état a été créé par la version %s,\navant que les états sauvegardés puissent\npasser aux versions plus récentes.\nVos sauvegardes sur memory card fonctionnent toujours.",
-            [UI_STR_STATES_XB_CODE] = "Cet état a été créé par la version %s.\nLa version %s a modifié la partie du jeu\noù il a été sauvegardé, il ne peut donc pas\nêtre repris.\nVos sauvegardes sur memory card fonctionnent toujours.",
+            [UI_STR_STATES_XB_CODE] =
+                "Cet état a été créé par la version %s.\nLa version %s a modifié la partie du jeu\noù il a été sauvegardé, il ne peut donc pas\nêtre repris.\nVos sauvegardes sur memory card fonctionnent toujours.",
             [UI_STR_STATES_XB_DATA] =
                 "Cet état a été créé par la version %s.\nLa version %s a modifié la façon dont le jeu\ngarde sa progression en mémoire, il ne peut\ndonc pas être repris.\nVos sauvegardes sur memory card fonctionnent toujours.",
             [UI_STR_STATES_XB_PINNED] =

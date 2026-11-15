@@ -673,10 +673,6 @@ const char *const ui_strings_ru_bobttz[UI_STR_COUNT] = {
     [UI_STR_BACKUP_WHY_TOO_BIG] = "Размер резервной копии превышает допустимый лимит игры.",
     [UI_STR_BACKUP_WHY_NO_DIALOG] = "Не удалось открыть окно выбора файла.",
     [UI_STR_BACKUP_WHY_NO_SPACE] = "На устройстве недостаточно свободного места.",
-    [UI_STR_OPT_EFFECT_WATER] = "Отражения воды",
-    [UI_STR_VAL_SHARP] = "Резкие",
-    [UI_STR_EFFECT_WATER_NOTE] =
-        "«Резкие» рендерит отражения в воде в выбранном разрешении; «Исходный» сохраняет мягкие отражения PS2",
     [UI_STR_VAL_SMOOTH] = "Плавное",
     [UI_STR_OPT_SHOW_FPS] = "Счётчик кадров",
     [UI_STR_EFFECT_MOTION_BLUR_NOTE] =

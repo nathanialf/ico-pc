@@ -530,10 +530,6 @@ const char *const
             [UI_STR_VAL_WINDOWED] = "Fenster",
             [UI_STR_VAL_BORDERLESS] = "Randlos",
             /* Effects > Cinematic bars */
-            [UI_STR_OPT_EFFECT_WATER] = "Wasserspiegelungen",
-            [UI_STR_VAL_SHARP] = "Scharf",
-            [UI_STR_EFFECT_WATER_NOTE] =
-                "Scharf zeichnet die Spiegelungen im Wasser in der gewählten Auflösung; Original behält die weicheren Spiegelungen der PS2.",
             [UI_STR_VAL_SMOOTH] = "Flüssig",
             [UI_STR_OPT_SHOW_FPS] = "Bildraten-Anzeige",
             [UI_STR_EFFECT_MOTION_BLUR_NOTE] =
@@ -828,7 +824,8 @@ const char *const
             [UI_STR_STATES_SAVE_FAILED] = "Der Zustand konnte nicht gespeichert werden",
             [UI_STR_STATES_XB_OLD] =
                 "Dieser Spielzustand stammt aus Version %s,\nbevor Spielzustände in neuere Versionen\nübernommen werden konnten.\nDeine Speicherstände auf der Memory Card\nfunktionieren weiterhin.",
-            [UI_STR_STATES_XB_CODE] = "Dieser Spielzustand stammt aus Version %s.\nVersion %s hat den Teil des Spiels geändert,\nin dem er gespeichert wurde, deshalb kann er\nnicht fortgesetzt werden.\nDeine Speicherstände auf der Memory Card\nfunktionieren weiterhin.",
+            [UI_STR_STATES_XB_CODE] =
+                "Dieser Spielzustand stammt aus Version %s.\nVersion %s hat den Teil des Spiels geändert,\nin dem er gespeichert wurde, deshalb kann er\nnicht fortgesetzt werden.\nDeine Speicherstände auf der Memory Card\nfunktionieren weiterhin.",
             [UI_STR_STATES_XB_DATA] =
                 "Dieser Spielzustand stammt aus Version %s.\nVersion %s hat geändert, wie das Spiel seinen\nFortschritt im Speicher hält, deshalb kann er\nnicht fortgesetzt werden.\nDeine Speicherstände auf der Memory Card\nfunktionieren weiterhin.",
             [UI_STR_STATES_XB_PINNED] =
