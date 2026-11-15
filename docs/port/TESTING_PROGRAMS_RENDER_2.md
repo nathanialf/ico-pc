@@ -167,9 +167,12 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   with every point between its vertices inside; a vertex behind the eye and a lane not finite
   refused), and the area's pick (the region unknown, nothing lit, WORK2 but a tile, the tiles
   round both).
-- `rd_lamps_ab.cmake` (`rd_lamps_ab`, `rd_lamps_gl`; `rd_lamps.cmake`): the lamps dumps of
-  `tools/lamps_dumps.txt` (machine-local; a listed dump that is absent FAILS: issue 163's two
-  frames and the title's castle in four boot runs, 512 x 512 GS, not the phone's 848 x 448), each
+- `rd_lamps_ab.cmake` (`rd_lamps_ab`, `rd_lamps_gl`; `rd_lamps.cmake`): the fixtures of
+  `port/render/test/fixtures/lists/lamps_ab.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md); a
+  listed fixture that is absent fails: the title's castle with its lamps, 512 x 512 GS, and the
+  Pixel's opening lamps frame, 848 x 448, both with the lamps generated on WORK2 by the placement
+  rules; the title with the sun off the picture and the opening's dark room; the title's and the
+  opening's sun; the visibility test at its default), each
   replayed twice in one run (`--repeat 2`: the first lamps replay of a renderer is whole, the area
   from the second) with `ICO_RD_LAMPS=0` and with the parts on (the Mali and OpenGL rows' "on" the
   class's defaults as `ICO_RD_LAMPS=noglowblur`: the glow blur, on by default, is not
@@ -178,9 +181,10 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   `ICO_RD_LATE_PASS=1`, Enhanced 2364x1080, Full height and pixel, `ICO_RD_LAMPS=1`), the same
   under `ICO_RD_LAMPS_POISON=1` and `ICO_RD_STORE_POISON=1`, lavapipe's desktop profile at
   Enhanced 2x 4:3 (`ICO_RD_LAMPS=1`) and the Mali fakes (`ICO_VK_FAKE_LIMITS=mali`,
-  `ICO_VK_FAKE_VENDOR=0x13B5`, the class's default: no area); and two sequences on the boot
-  corpus (`--prev rd-00200`, a whole frame, then `rd-00400` twice; `--prev rd-00400 --prev
-  rd-00600`, a dark frame between, then `rd-00400`: the area on the last replay of each); the
+  `ICO_VK_FAKE_VENDOR=0x13B5`, the class's default: no area); and two sequences on the title's
+  frames, named by the list's `seq=` words (`--prev` the whole frame, then the lamps frame twice;
+  `--prev` the lamps frame `--prev` the dark frame, then the lamps frame: the area on the last
+  replay of each); the
   `_gl` twin the desktop setting on OpenGL (llvmpipe, the area off, the band lazy). Each pair:
   every PNG byte for byte, the same draws, the passes fewer by the bands left lazy exactly, the
   colour loaded the same, the colour stored and cleared fewer by the stats' saved bytes and the
@@ -188,8 +192,10 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   bytes (two hundredths of a MB; not under the poison), the saved colour bytes 4 x the texels the
   area left; the off run no area and no band; one planned lamps pass a lamps replay, never whole
   for the region unknown; an area at least once at the phone, poison and desktop settings and in
-  both sequences, none at the Mali and OpenGL settings, a band at every setting. Round 3 adds the
-  corpus's dark (`rd-00600`) and whole (`rd-00200`) title frames: the passes fewer also by the dark
+  both sequences, none at the Mali and OpenGL settings, a band at every setting; the path ran:
+  each fixture's declared `glow_plan`, `lamps_bands_lazy` and `lamps_owed` on the run with the
+  parts on at every setting, and its `lamps_area_passes` where the area is on. The dark and whole
+  frames: the passes fewer also by the dark
   plan's WORK0 alpha sprites owed and by the passes of two blur pairs (`fx_blur4_ps`), the same
   pairs folded as the off run, four passes of two where the off run folded nine pairs (at the
   phone, poison, desktop settings and the sequences; none at Mali and OpenGL), the colour loaded

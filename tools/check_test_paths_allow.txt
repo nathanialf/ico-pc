@@ -15,7 +15,6 @@ port/render/test/rd_fill11_ab.cmake
 port/render/test/rd_glow_blur_ab.cmake
 port/render/test/rd_glow_cheap_ab.cmake
 port/render/test/rd_glow_light_ab.cmake
-port/render/test/rd_lamps_ab.cmake
 port/render/test/rd_lamps_lowres_ab.cmake
 port/render/test/rd_late_pass_ab.cmake
 port/render/test/rd_pass_objects_ab.cmake

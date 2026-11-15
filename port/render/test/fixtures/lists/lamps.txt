@@ -16,6 +16,10 @@
 fx-lamps-novolume nocull
 fx-opening-dark nocull
 fx-boot-0400 nocull
+# the lamps' frames with the lamps generated on WORK2 (the placement rules):
+# the cull on, the fill lands the same way
+fx-lamps-title
+fx-lamps-opening
 # the chain drawn whole (the sun's fans on the picture): the opening's sun,
 # the title's castle twice: nothing lands, the same bytes, no more loaded
 fx-opening-sun

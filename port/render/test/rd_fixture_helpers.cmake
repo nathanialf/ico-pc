@@ -63,6 +63,10 @@ set(_rdfx_q_shadow_merge_counts "shadow volumes in the scene's pass on: ([0-9]+)
 # the lamps' crack fill in the glow's paste pass, the present from SCENE
 set(_rdfx_q_lamps_fillpaste_fills "lamps fillpaste on: ([0-9]+) crack fills drawn in the paste's pass")
 set(_rdfx_q_present_scene_skipped "present from SCENE on: ([0-9]+) reductions not drawn")
+# the lamps' pass area, WORK2_PAD's band left lazy, WORK0's alpha sprite owed
+set(_rdfx_q_lamps_area_passes "\\): ([0-9]+) passes with the lamps' area")
+set(_rdfx_q_lamps_bands_lazy "([0-9]+) bands left lazy")
+set(_rdfx_q_lamps_owed "([0-9]+) WORK0 alpha sprites owed")
 
 set(RDFX_FAILURES 0)
 

@@ -1,10 +1,13 @@
 # rd_lamps_ab: the lamps' glow for less (port/render/rd_lamps.c, rd_lamps.h;
 # docs/port/RENDER_POST.md, "The lamps' glow for less") against it off
-# (ICO_RD_LAMPS=0) on the lamps dumps of tools/lamps_dumps.txt (machine-local;
-# a listed dump that is absent FAILS: the owner's rule for v0.11.5), each
+# (ICO_RD_LAMPS=0) on the fixtures the list names
+# (port/render/test/fixtures/lists/lamps_ab.txt: fixture names of the
+# repository, docs/port/TESTING_FIXTURES.md; a listed fixture that is absent or
+# does not expand to its pinned SHA-256 FAILS), expanded into OUT, each
 # replayed twice in one run (--repeat 2: the first lamps replay of a renderer
 # is drawn whole, the region it lit then known; the stats are the second's),
-# rd_replay_tool --pass-dump --stats, at the settings:
+# rd_replay_tool --pass-dump --stats, the visibility test at its default, at
+# the settings:
 #   phone   the PowerVR phone's profile on lavapipe (ICO_VK_FAKE_LIMITS=moltenvk,
 #           ICO_RD_VU_PREPASS=0, ICO_RD_LATE_PASS=1) at 2364x1080, Full height,
 #           Full pixel, presented at 2364x1080; ICO_RD_LAMPS=1 (the MoltenVK
@@ -20,12 +23,14 @@
 #           (rule: no new kind of work on the Arm class), the band lazy;
 #   gl      (BACKEND opengl) the desk setting on llvmpipe with the default:
 #           the area off (OpenGL ignores a render area), the band lazy.
-# And two sequences (phone, ICO_RD_LAMPS=1) on the boot corpus title frames:
-#   seqw    --prev rd-00200 (WHOLE: the sun's fans, the mask over WORK2) then
-#           rd-00400 twice: the WHOLE frame's WORK2 forgets the region, so the
-#           first lamps replay is whole and the second takes the area;
-#   seqd    --prev rd-00400 --prev rd-00600 (DARK: nothing drawn into WORK2)
-#           then rd-00400: the region survives the dark frame, the area taken.
+# And two sequences (phone, ICO_RD_LAMPS=1) on the title's three frames, named
+# by the list's words seq=whole, seq=lamps and seq=dark:
+#   seqw    --prev the whole frame (the sun's fans, the mask over WORK2) then
+#           the lamps frame twice: the WHOLE frame's WORK2 forgets the region,
+#           so the first lamps replay is whole and the second takes the area;
+#   seqd    --prev the lamps frame --prev the dark frame (nothing drawn into
+#           WORK2) then the lamps frame: the region survives the dark frame,
+#           the area taken.
 # For every run: every PNG (each target and PRESENT) byte for byte; draws
 # fewer by the passes of two pairs (one draw each where two were); passes
 # fewer by the bands left lazy, the owed sprites and the passes of two pairs
@@ -40,57 +45,36 @@
 # no band; on a lamps plan the on run exactly one planned pass (an area or
 # whole), never whole for the region unknown on the second replay; an area
 # at least once a setting where it is on (phone, phonep, desk, seqw, seqd),
-# none at mali and gl, a band at every setting.  No device: SKIP (77).
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
-# -DBACKEND=vulkan|opengl (the sequences' rd-00200 and rd-00600 beside the
-# list's corpus/dumps/boot/rd-00400.rddump)
-# The lists name dumps of the build machine alone (the owner's rule there: a
-# listed dump that is absent FAILS). A machine without that folder has none of
-# them: the test is skipped as the older dump tests are.
-if(NOT IS_DIRECTORY "/primary/dev/ico-dumps")
-  message(STATUS "SKIP: no dump folder on this machine (/primary/dev/ico-dumps): the list's dumps are the build machine's")
-  return()
-endif()
+# none at mali and gl, a band at every setting.  The path ran
+# (rd_fixture_require on the on run of every pair): each fixture's declared
+# glow_plan, lamps_bands_lazy and lamps_owed at every setting, and its
+# lamps_area_passes where the area is on (phone, phonep, desk, the
+# sequences); a fixture no run checked FAILS.  No device: SKIP (77).
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the
+# fixtures folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<a
+# fixture list> -DOUT=<a folder the test may write> -DBACKEND=vulkan|opengl
+include("${FIXTURE_HELPERS}")
 set(failures 0)
 set(dumps "")
-if(NOT "${LIST}" STREQUAL "" AND EXISTS "${LIST}")
-  get_filename_component(listDir "${LIST}" DIRECTORY)
-  file(STRINGS "${LIST}" lines)
-  foreach(l IN LISTS lines)
-    string(STRIP "${l}" l)
-    if(l STREQUAL "" OR l MATCHES "^#")
-      continue()
-    endif()
-    if(NOT IS_ABSOLUTE "${l}")
-      set(l "${listDir}/${l}")
-    endif()
-    if(EXISTS "${l}")
-      list(APPEND dumps "${l}")
-    else()
-      message(SEND_ERROR "${l}: listed but absent (the list names only dumps present)")
+rd_fixture_list("${LIST}" names)
+foreach(name IN LISTS names)
+  rd_fixture_expand(${name} "${OUT}/fixtures" d)
+  list(APPEND dumps "${d}")
+  set(name_${d} "${name}")
+  set(checked_${name} FALSE)
+  # the sequences' frames: the list's seq= words
+  if(" ${RDFX_FIELDS_${name}} " MATCHES " seq=(whole|lamps|dark) ")
+    if(DEFINED seq_${CMAKE_MATCH_1})
+      message(SEND_ERROR "rd_lamps_ab: the list names two seq=${CMAKE_MATCH_1} frames")
       math(EXPR failures "${failures} + 1")
     endif()
-  endforeach()
-else()
-  message(FATAL_ERROR "rd_lamps_ab: no dump list ${LIST}")
-endif()
-list(REMOVE_DUPLICATES dumps)
-list(LENGTH dumps ndumps)
-# the sequences' frames: beside the list's boot corpus title frame
-set(CORPUS "")
-foreach(d IN LISTS dumps)
-  if(d MATCHES "/corpus/dumps/boot/rd-00400[.]rddump$")
-    get_filename_component(CORPUS "${d}" DIRECTORY)
+    set(seq_${CMAKE_MATCH_1} "${d}")
   endif()
 endforeach()
-if(CORPUS STREQUAL "")
-  message(SEND_ERROR "rd_lamps_ab: the list names no corpus/dumps/boot/rd-00400.rddump")
-  math(EXPR failures "${failures} + 1")
-endif()
-foreach(b rd-00200 rd-00400 rd-00600)
-  if(NOT EXISTS "${CORPUS}/${b}.rddump")
-    message(SEND_ERROR "${CORPUS}/${b}.rddump: the sequences' frame is absent")
-    math(EXPR failures "${failures} + 1")
+list(LENGTH dumps ndumps)
+foreach(k whole lamps dark)
+  if(NOT DEFINED seq_${k})
+    message(FATAL_ERROR "rd_lamps_ab: the list names no seq=${k} frame (the sequences' frames)")
   endif()
 endforeach()
 
@@ -198,6 +182,9 @@ macro(lamps_ab _name _s _pre _dump _rep)
       set(_ok FALSE)
       break()
     endif()
+    if(w EQUAL 1)
+      set(out_on "${out}")
+    endif()
     string(REPLACE ";" "," flat "${out}")
     foreach(re drawsRe trafficRe planRe lampsRe savedRe padsRe owedRe fold4Re foldsRe)
       if(_ok AND NOT flat MATCHES "${${re}}")
@@ -252,6 +239,16 @@ macro(lamps_ab _name _s _pre _dump _rep)
   endforeach()
   if(_ok)
     math(EXPR runs "${runs} + 1")
+    # the path ran: what the fixture declares, on the run with the parts on
+    set(_fx "${name_${_dump}}")
+    list(FIND areaSettings "${_s}" _isArea)
+    if(_isArea EQUAL -1)
+      rd_fixture_require(${_fx} "${out_on}" glow_plan lamps_bands_lazy lamps_owed)
+    else()
+      rd_fixture_require(${_fx} "${out_on}" glow_plan lamps_bands_lazy lamps_owed
+                         lamps_area_passes)
+    endif()
+    set(checked_${_fx} TRUE)
     # the pictures: every PNG byte for byte
     file(GLOB pngs RELATIVE "${dir_0}" "${dir_0}/*.png")
     set(npng 0)
@@ -388,26 +385,19 @@ macro(lamps_ab _name _s _pre _dump _rep)
 endmacro()
 
 foreach(dump IN LISTS dumps)
-  get_filename_component(dir "${dump}" DIRECTORY)
-  get_filename_component(dirName "${dir}" NAME)
-  get_filename_component(up "${dir}" DIRECTORY)
-  get_filename_component(upName "${up}" NAME)
-  get_filename_component(full "${dump}" NAME)
-  string(REGEX REPLACE "[.](rddump|zip)$" "" base "${full}")
   foreach(s IN LISTS settings)
-    lamps_ab("${upName}-${dirName}-${base}-${s}" ${s} "" "${dump}" 2)
+    lamps_ab("${name_${dump}}-${s}" ${s} "" "${dump}" 2)
   endforeach()
 endforeach()
-if(NOT "${BACKEND}" STREQUAL "opengl" AND EXISTS "${CORPUS}/rd-00400.rddump")
+if(NOT "${BACKEND}" STREQUAL "opengl")
   set(on_seqw ${on_phone})
   set(env_seqw ${env_phone})
   set(args_seqw ${args_phone})
   set(on_seqd ${on_phone})
   set(env_seqd ${env_phone})
   set(args_seqd ${args_phone})
-  lamps_ab("seqw" seqw "--prev;${CORPUS}/rd-00200.rddump" "${CORPUS}/rd-00400.rddump" 2)
-  lamps_ab("seqd" seqd "--prev;${CORPUS}/rd-00400.rddump;--prev;${CORPUS}/rd-00600.rddump"
-           "${CORPUS}/rd-00400.rddump" 1)
+  lamps_ab("seqw" seqw "--prev;${seq_whole}" "${seq_lamps}" 2)
+  lamps_ab("seqd" seqd "--prev;${seq_lamps};--prev;${seq_dark}" "${seq_lamps}" 1)
   foreach(s seqw seqd)
     if(NOT areas_${s} EQUAL 1)
       message(SEND_ERROR "rd_lamps_ab: ${s}: ${areas_${s}} areas on the last replay (want 1)")
@@ -415,6 +405,12 @@ if(NOT "${BACKEND}" STREQUAL "opengl" AND EXISTS "${CORPUS}/rd-00400.rddump")
     endif()
   endforeach()
 endif()
+foreach(name IN LISTS names)
+  if(NOT checked_${name})
+    message(SEND_ERROR "${name}: its declared properties were never checked (no pair replayed it)")
+    math(EXPR failures "${failures} + 1")
+  endif()
+endforeach()
 if(runs GREATER 0)
   foreach(s IN LISTS settings)
     list(FIND areaSettings "${s}" isArea)
@@ -427,16 +423,17 @@ if(runs GREATER 0)
       math(EXPR failures "${failures} + 1")
     endif()
     if(owed_${s} EQUAL 0)
-      message(SEND_ERROR "rd_lamps_ab: no WORK0 alpha sprite owed at ${s} (the dark dumps)")
+      message(SEND_ERROR "rd_lamps_ab: no WORK0 alpha sprite owed at ${s} (the dark fixtures)")
       math(EXPR failures "${failures} + 1")
     endif()
   endforeach()
 endif()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(failures GREATER 0)
-  message(FATAL_ERROR "rd_lamps_ab: ${failures} failures over ${ndumps} dumps")
+  message(FATAL_ERROR "rd_lamps_ab: ${failures} failures over ${ndumps} fixtures")
 endif()
 if(runs EQUAL 0)
   message(STATUS "SKIP: nothing ran")
   return()
 endif()
-message(STATUS "rd_lamps_ab: ${runs} A/Bs over ${ndumps} dumps, every PNG the same")
+message(STATUS "rd_lamps_ab: ${runs} A/Bs over ${ndumps} fixtures, every PNG the same")

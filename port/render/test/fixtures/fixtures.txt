@@ -31,15 +31,15 @@ fx-shadow-wide build-host-tmp/v0115/evidence/datecut/pixel/frame-20261110-194925
 fx-lamps-novolume dumps/v0115-opening/frame-20261112-110824-v746.zip shadow_volume_draws=0 date_one_shared>=1 empty_composites_skipped>=1 no_volume_kept>=1 no_volume_break_taken>=1 lamps_fillpaste_fills>=1
 # the opening on the Pixel 10 Pro Fold (v0.11.5 rc): the dark room and the sun,
 # each a shadow window with volumes and the three composites under DATE
-fx-opening-dark dumps/v0115-opening/frame-20261112-110838-v1545.zip shadow_volume_draws>=1 date_snapshots>=1 date_stencil_draws>=1 date_one_shared>=1 empty_composites_skipped=0 no_volume_break_taken=0 stencil_window_stores>=1 lamps_fillpaste_fills>=1
-fx-opening-sun dumps/v0115-opening/frame-20261112-110852-v2278.zip shadow_volume_draws>=1 date_snapshots>=1 date_stencil_draws>=1 date_one_shared>=1 empty_composites_skipped=0 no_volume_break_taken=0 stencil_window_stores>=1 lamps_fillpaste_fills=0
+fx-opening-dark dumps/v0115-opening/frame-20261112-110838-v1545.zip shadow_volume_draws>=1 date_snapshots>=1 date_stencil_draws>=1 date_one_shared>=1 empty_composites_skipped=0 no_volume_break_taken=0 stencil_window_stores>=1 lamps_fillpaste_fills>=1 glow_plan=dark lamps_area_passes=0 lamps_bands_lazy=0 lamps_owed>=1
+fx-opening-sun dumps/v0115-opening/frame-20261112-110852-v2278.zip shadow_volume_draws>=1 date_snapshots>=1 date_stencil_draws>=1 date_one_shared>=1 empty_composites_skipped=0 no_volume_break_taken=0 stencil_window_stores>=1 lamps_fillpaste_fills=0 glow_plan=whole lamps_area_passes=0 lamps_bands_lazy>=1 lamps_owed=0
 # issue 179's Mali-G52 on v0.11.5 (moto g24 power): its F12 frame (stage 3) and
 # a slow-scene capture (stage 42), both with volumes
 fx-mali-frame dumps/v0116-mali179/frame-20261112-195947-v17565.zip shadow_volume_draws>=1 date_snapshots>=1 date_stencil_draws>=1 date_one_shared>=1 empty_composites_skipped=0 no_volume_break_taken=0 stencil_window_stores>=1
 fx-mali-slow541 dumps/v0116-mali179/slow-20261112-195541.zip shadow_volume_draws>=1 date_snapshots>=1 date_stencil_draws>=1 date_one_shared>=1 empty_composites_skipped=0 no_volume_break_taken=0
 # the title's castle scene, 2026-10-06 boot frames (512x512 GS, dump version
 # 4): the sun's two volumes (0200), and the window with no volume (0400, 0600)
-fx-boot-0200 build-host-tmp/corpus/dumps/boot/rd-00200.rddump shadow_volume_draws>=1 no_volume_kept=0 lamps_fillpaste_fills=0
+fx-boot-0200 build-host-tmp/corpus/dumps/boot/rd-00200.rddump shadow_volume_draws>=1 no_volume_kept=0 lamps_fillpaste_fills=0 glow_plan=whole lamps_area_passes=0 lamps_bands_lazy>=1 lamps_owed=0
 fx-boot-0400 build-host-tmp/corpus/dumps/boot/rd-00400.rddump shadow_volume_draws=0 no_volume_kept>=1 lamps_fillpaste_fills>=1
 fx-boot-0600 build-host-tmp/corpus/dumps/boot/rd-00600.rddump shadow_volume_draws=0 no_volume_kept>=1 lamps_fillpaste_fills=0
 # issue 179's Mali-G52 (moto g24 power): its v0.11.4 F12 frame and a slow-scene
@@ -70,3 +70,15 @@ fx-gate2-blended dumps/v0117-owner-rc3/frame-20261114-144508-v4245-blended.rddum
 fx-maingate dumps/maingate/frame-20261104-123603-v10827.rddump shadow_volume_draws>=1 volume_fs_taken>=1 comp_spec_seen>=1 comp_spec_taken>=1 shadow_tile_composites>=1 shadow_merge_counts>=1 stencil_window_stores>=1 present_scene_skipped=0
 fx-phone-4657 dumps/phone/frame-20261028-173610-v4657.zip shadow_volume_draws>=1 shadow_tile_composites>=1 shadow_merge_counts>=1 stencil_window_stores>=1 present_scene_skipped>=1
 fx-tile-2809 build-host-tmp/v0115/evidence/rc3/x/frame-20261111-121314-v2809/frame-20261111-121314-v2809.rddump shadow_volume_draws>=1 shadow_tile_composites>=1 shadow_merge_counts>=1 present_scene_skipped>=1
+# the lamps' frames with the placement rules (docs/port/TESTING_FIXTURES.md
+# "The placement rules"): the title's castle with its lamps (512x512 GS, dump
+# version 4: four lamp meshes generated on WORK2), the same castle with the
+# sun off the picture (its two fans generated beside WORK2: the glow's dark
+# plan), the Pixel's opening lamps frame (848x448 GS, six lamp meshes on
+# WORK2).  At the default cull.  lamps_area_passes on the second replay with
+# ICO_RD_LAMPS=1 where the class takes the area (the phone's and the desktop's
+# settings, not the Mali's or OpenGL); lamps_bands_lazy and lamps_owed with the
+# lamps' parts on at every setting; lamps_fillpaste_fills as above, the cull on.
+fx-lamps-title build-host-tmp/corpus/dumps/boot/rd-00400.rddump rules=lamps_place.rules.txt glow_plan=lamps lamps_area_passes>=1 lamps_bands_lazy>=1 lamps_owed=0 lamps_fillpaste_fills>=1
+fx-lamps-title-dark build-host-tmp/corpus/dumps/boot/rd-00600.rddump rules=fans_off.rules.txt glow_plan=dark lamps_area_passes=0 lamps_bands_lazy=0 lamps_owed>=1
+fx-lamps-opening dumps/v0115-opening/frame-20261112-110824-v746.zip rules=lamps_place.rules.txt glow_plan=lamps lamps_area_passes>=1 lamps_bands_lazy>=1 lamps_owed=0 lamps_fillpaste_fills>=1
