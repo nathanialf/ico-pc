@@ -471,7 +471,15 @@ EE address, which a heap block or a model's records hold. `tools/state_region_di
 
 The variants that force GPU paths a desktop driver does not take are in
 [../BUILDING.md](../BUILDING.md#tests)'s table (`ICO_RD_NO_DUAL`, `ICO_VK_FAKE_NO_DUAL`,
-`ICO_VK_FAKE_D24S8`, `ICO_VK_FAKE_LIMITS=mali|min|moltenvk`, `ICO_RD_BLEND=storage|fixed`). The other
+`ICO_VK_FAKE_D24S8`, `ICO_VK_FAKE_LIMITS=mali|min|moltenvk`, `ICO_RD_BLEND=storage|fixed`). The
+switches that stand for a device (`ICO_VK_FAKE_VENDOR`, `ICO_VK_FAKE_PASS_ROW`,
+`ICO_VK_FAKE_QUEUE_PRIORITY`, `ICO_VK_FAKE_ADRENO`, `ICO_VK_FAKE_SERIAL`, `ICO_VK_FAKE_NO_PREPASS`,
+`ICO_RD_VU_COMPACT_ARM`, `ICO_VK_FAKE_LIMITS=moltenvk`) fake one choice or one identity field of
+the device table, each with the scope it had before the table; the rows they stand for, and the
+proof that the table gives every device what the old rules gave (`rhi_device_table_equiv`), are in
+[DEVICE_TABLE.md](DEVICE_TABLE.md#the-tests-fakes). The platform's device rules (the free-memory
+floor's driver class, the present fallback's drivers, the Android build's stock driver hint) have
+no fake: `memory_floor_test` and `present_fallback_test` hand their predicates the ids and texts. The other
 switches the tests and their registrations use:
 
 | variable | read in | effect |

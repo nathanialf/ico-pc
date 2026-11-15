@@ -67,7 +67,9 @@ typedef enum IcoMemoryFloorDriver {
    driver gives none) is not Turnip's, 18 (a renamed Turnip build keeps it:
    issue 209's "PurpleVK public driver"; port/render/rd_profile.c
    rd__driver_is_turnip's rule) Qualcomm's own; vendor 0 unknown; any other
-   other */
+   other.  The device table's MEMORY_FLOOR_CLASS (port/rhi/
+   rhi_device_table.c, docs/port/DEVICE_TABLE.md: the rows vendor-unknown and
+   qualcomm-text) read on an identity of the arguments */
 int ico_memory_floor_driver(unsigned vendor_id, unsigned driver_id, const char *driver_text);
 /* The class's words for the log lines: "Qualcomm's own driver", "another
    driver than Qualcomm's own", "the driver not known yet" */

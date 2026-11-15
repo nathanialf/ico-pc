@@ -1621,52 +1621,50 @@ of the renderer branches on a vendor (`port/render/rd_profile.c`). The classes (
 OpenGL and Direct3D 11): D3D12 (the backend), Apple /
 MoltenVK (`RhiLimits.moltenvk`), Adreno on Qualcomm's driver and Adreno on Turnip (vendor 0x5143;
 Turnip by its Vulkan driver id, 18, which a renamed build keeps, such as the "PurpleVK public driver" of issue 209, or from a driver without the id by its name in the driver text; the profile line ends with `; turnip: Mesa 25.3.0-devel` from `RhiLimits.mesa`, or `; turnip: Mesa version not named by the driver`), Mali (0x13B5), PowerVR (0x1010), any other tile-based GPU
-(`RhiLimits.tiler`: Samsung, Broadcom, every Android GPU) on the PowerVR row, and the desktop
+(`RhiLimits.tiler`: Samsung, Broadcom, every Android GPU), and the desktop
 immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan. OpenGL and Direct3D 11:
 [BACKENDS.md](BACKENDS.md#the-device-profile-on-opengl-and-direct3d-11).
 
-| flag | desktop Vulkan | D3D12 | Adreno (Qualcomm's driver) | Adreno (Turnip) | Mali | PowerVR, other tile-based | Apple / MoltenVK |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| blend | fixed-function; `[dev] blend` opts into an exact mode | fixed-function; `[dev] blend = storage` opts into the ROV | fixed-function | fixed-function | fixed-function | fixed-function | fixed-function |
-| `fogLocal` | on (probe) | off | on where local read is offered | same | same | same | same |
-| `dateStencil` | on (probe) | off | on where local read is offered | same | same | same | same |
-| `storePlan` | on | on | on | on | on | on | on |
-| `blurFold` | on | on | on | on | off (the G52 is bound by its ALU: the profile's reason, no measurement cited) | on | on |
-| `glowFold` (`[dev] glow_fold`) | on | on | off | off | off | off (the folded reduction cost the PowerVR phone 8 ms a glow picture; the Adreno, Mali and Apple columns are that class rule, not measured on them) | off |
-| robust access | off | its own bounds rules | off | off | off | off | off |
-| `localRead` | as offered | none | as offered | as offered | as offered | as offered | as offered |
-| `uintViewWork`, `uintViewScene` | on where the backend has the view | off (`RhiLimits.uintView` false on D3D12) | off | off | off | off | off |
-| `carefulSet` | off | off | off | off | off | off | off |
-| the record path (the triangle pre-pass, `[dev] vu_prepass`) | on | on | on, except the Adreno 740 (off by the device table, issue 123: its row `adreno-740-qualcomm`; `[dev] vu_prepass = true` draws with it anyway); off for the run when the start-up self-test's four replays fail, and for one start after a lost one on a tile-based phone GPU ([PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)) | on, the same | on, the same | on, the same | on, the same; off on an Apple A9 or A10 (32 bytes of colour targets a pixel) under the targets |
-| the record's write (`[dev] vu_record`) | stored by the vertex shaders where Vulkan offers `vertexPipelineStoresAndAtomics`, else by compute dispatches | render targets and copies (no vertex or compute stores this release; Direct3D 11 never stores from its vertex shaders) | stored where offered, else compute dispatches, else targets ([PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes), the record's three writes) | same | same (the Mali-G52 of issue 179: compute dispatches, no vertex stores) | same | same |
-| dynamic state (`[dev] dynamic_state`) | on where offered | none | off | off | off | off (the PowerVR phone whose pictures shook; the rule is every tile-based GPU's, and every GPU on Android, unmeasured on the others: `vk_device.c`; `[dev] dynamic_state = true` turns it on) | off |
-| `alphaPlan` (`[dev] alpha_plan`) | on | on | on | on | on | on | on |
-| `fxPlan` (`[dev] fx_plan`) | on | on | on | on | on | on | on |
-| `fxDstLocal` (`[dev] fx_dst_local`) | on (probe) | off | on where local read is offered | same | same | same | same |
-| `vuPlanesFrac` (`[dev] vu_planes`) | on | on | on | on | on | on | on |
-| `crackFill` (`[dev] crack_fill`) | on | on | on | on | on | on | on |
-| `shadowOne` (`[dev] shadow_one`) | on | off | on | on | on | on | on |
-| `shadowBspline` (`[dev] shadow_bspline`) | off | off | off | off | off | off | off |
-| `auraBox` (`[dev] aura_box`; [WORK_BUFFERS.md](WORK_BUFFERS.md#the-auras-feedback-read)) | off (not measured there) | off | on | on | on | on | on |
-| `passArea` (`[dev] pass_area`; [WORK_BUFFERS.md](WORK_BUFFERS.md#the-pass-area)) | off | off | on | on | on | on | on |
-| `passCut` (`[dev] clear_carry`, `clear_skip`, `last_store`; [WORK_BUFFERS.md](WORK_BUFFERS.md#passes-cut)) | off | off | on | on | on | on | on |
-| `shadowMerge` (the shadow volumes in the scene's pass, `ICO_RD_SHADOW_MERGE` for the tests; [WORK_BUFFERS.md](WORK_BUFFERS.md#the-shadow-volumes-in-the-scenes-pass)) | off | off | on | on | on | on | on |
-| `sheetBake2x` (menu text baked at scale 2) | off | off | on | on | on | on | on |
-| the one DATE set-up for the shadow composites (`ICO_RD_DATE_ONE`, tests only; [RENDER_POST.md](RENDER_POST.md#one-date-set-up-for-the-shadow-composites)) | on | on | on | on | on | on | on |
-| the empty composites skipped (`ICO_RD_EMPTY_SKIP`, tests only; needs the shadow box, which needs the one-draw count) | on | off (no box: the seven-draw count) | on | on | on | on | on |
-| the culler's default (`rd_vis.c` `rd__vis_profile_default`, `RdProfile.tiler`: the table's `TILER`) | frustum and occlusion | frustum and occlusion | frustum alone | frustum alone | frustum alone | frustum alone | frustum alone on Apple silicon; frustum and occlusion on an Intel or AMD Mac |
-| the late pass's fill hold and deferred paste (`rd_late_pass.c`, `RdProfile.tiler` under Vulkan), shot late (`rd_present.c`, the table's `SHOT_LATE`) | off | off | on | on | on | on | on for Apple silicon; off on an Intel or AMD Mac |
-| the VU record by compute in place of the vertex stores (`rd_vu_class.c`; [RENDER_POST.md](RENDER_POST.md#the-vu-record-by-compute-on-the-powervr-d-series-dxt)) | off | off | off | off | off (no vertex stores: auto's compute already) | on on the PowerVR D-Series DXT-48-1536 (`RD_VU_COMPUTE_CLASS_DEFAULT` 1, the device it ran on); off by default on the rest of the PowerVR class (Imagination's vendor id, not the other tile-based) | off |
-| the subpass read (DATE's set-up inside the scene's pass on `VkRenderPass` objects without local read; [The subpass read's probe](#the-subpass-reads-probe)) | the Intel driver row's devices: by the probe at their first start; elsewhere not this route (local read, or dynamic rendering without it) | none | off by default this release on Qualcomm's own driver (`RHI_SUBPASS_PROBE_QCOM_DEFAULT` 0: a driver that lost the device before; one pass a picture), no probe | not this route (local read) | off by default this release on Vulkan 1.1 drivers (issue 179's r32p1; `RHI_SUBPASS_PROBE_ARM_DEFAULT` 0), no probe; a driver with dynamic rendering (r38p1): not this route | the B-Series (Vulkan 1.1): off, no GPU timestamps to time the probe; the D-Series: not this route (local read) | not this route (dynamic rendering) |
-| the turn in the present's blit (`rd_turn_fold.c`; [RENDER_POST.md](RENDER_POST.md#the-turn-in-the-presents-blit-off-by-default-until-a-phone-rc)) | no turned swapchain | no turned swapchain | off (`RD_TURN_FOLD_DEFAULT` 0 until a phone rc) | off, the same | off, the same | off, the same | no turned swapchain on a Mac |
-| the index compaction (`rd_vu_compact.c`; [PIPELINES.md](PIPELINES.md#the-index-compaction)) | not applicable (the vertex stores) | not applicable (no compute record) | not applicable (the vertex stores) | not applicable, the same | off by default on the Mali-G52 (by its device name; `RD_VU_COMPACT_ARM_DEFAULT` 0: it blacked out the picture there, issue 179, [ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-picture-health-report-issue-179)); off by default on every other Mali (measured on the Mali-G52 only) | on the PowerVR D-Series DXT-48-1536 with the PowerVR rule's compute record where the start-up self-test passes (`RD_VU_COMPACT_DEFAULT` 1); not applicable on the rest of the class (the vertex stores) | not applicable where the vertex stores are offered |
-| the glow's paste by its own entry, `fx_paste_ps` (`rd_paste_spec.c`; [RENDER_POST.md](RENDER_POST.md#the-glows-paste-by-its-own-entry)) | on where the start-up self-test passes | off (the module is made under Vulkan alone) | on where the start-up self-test passes | on, the same | on, the same | on, the same | on, the same |
-| the shadow volumes' stencil-only entry, `date_clear_ps` in place of `sprite_ps` (`rd_volume_fs.c`; [RENDER_POST.md](RENDER_POST.md#the-shadow-volumes-stencil-only-entry)) | on where the start-up self-test passes (single-sampled passes) | off (Vulkan alone) | on where the start-up self-test passes (single-sampled passes) | on, the same | on, the same | on, the same | on, the same |
-| the shadow composites and levels by their own entry, `sprite_comp_ps` in place of `sprite_ps` (`rd_comp_spec.c`; [RENDER_POST.md](RENDER_POST.md#the-shadow-composites-by-their-own-entry)) | on where the start-up self-test passes (dual-source blend, single-sampled passes) | off (Vulkan alone) | on where the start-up self-test passes (the same) | on, the same | on, the same; off without dual-source blending (the Mali reporter's class: the two-pass blend keeps `sprite_ps`) | on, the same | on, the same |
+Which class a device is in, and every value a class or a single device takes, is the device
+table's: [DEVICE_TABLE.md](DEVICE_TABLE.md#the-list) lists each row with what it matches, what it
+sets, its issue, its evidence and the condition to look at it again, and
+[Who reads the table](DEVICE_TABLE.md#who-reads-the-table) names the call site of each choice. The
+profile's flags and the renderer's other class rules, each with what decides it (a choice of the
+table in capitals, a capability of the device, a self-test, or nothing: the same on every device):
 
-Two meanings of "tile-based" meet in this table. The flags from `auraBox` to `sheetBake2x` follow
+| flag or rule | what decides it |
+| --- | --- |
+| blend | fixed-function on every device; `[dev] blend` opts into an exact mode (Direct3D 12: `[dev] blend = storage` opts into the ROV) |
+| `fogLocal`, `dateStencil`, `fxDstLocal` (`[dev] fx_dst_local`) | the local read (`RhiLimits.localRead`; none on Direct3D 12): on where it is offered on the classes with `TILE_COLUMNS`, and on desktop Vulkan by its probe; then each path's self-test |
+| `storePlan` | on, every device |
+| `blurFold` | on; off with `BLUR_FOLD_OFF` (the row `mali`: the G52 is bound by its ALU, the profile's reason, no measurement cited) |
+| `glowFold` (`[dev] glow_fold`) | on; off with `TILE_COLUMNS` (the folded reduction cost the PowerVR phone 8 ms a glow picture; the other tile-based classes take that class rule, not measured on them) |
+| robust access | off; Direct3D 12 has its own bounds rules |
+| `localRead` | as the device offers it; none on Direct3D 12 |
+| `uintViewWork`, `uintViewScene` | on where the backend has the view (`RhiLimits.uintView`, false on Direct3D 12); off with `TILE_COLUMNS` |
+| `carefulSet` | off, every device |
+| the record path (the triangle pre-pass, `[dev] vu_prepass`) | on; off with `VU_PREPASS_OFF` (the row `adreno-740-qualcomm`, issue 123; `[dev] vu_prepass = true` draws with it anyway); off for the run when the start-up self-test's four replays fail, and for one start after a lost one with `TILE_PHONE` ([PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)); off on an Apple A9 or A10 (32 bytes of colour targets a pixel) under the targets |
+| the record's write (`[dev] vu_record`) | a capability: stored by the vertex shaders where Vulkan offers `vertexPipelineStoresAndAtomics`, else by compute dispatches, else targets ([PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes), the record's three writes; the Mali-G52 of issue 179: compute dispatches, no vertex stores); Direct3D 12: render targets and copies (no vertex or compute stores this release; Direct3D 11 never stores from its vertex shaders) |
+| dynamic state (`[dev] dynamic_state`) | on where offered (none on Direct3D 12); off with `DYNAMIC_STATE_OFF` (the row `tiler`: the PowerVR phone whose pictures shook; the rule is every tile-based GPU's, and every GPU on Android, unmeasured on the others: `vk_device.c`; `[dev] dynamic_state = true` turns it on) |
+| `alphaPlan` (`[dev] alpha_plan`), `fxPlan` (`[dev] fx_plan`), `vuPlanesFrac` (`[dev] vu_planes`), `crackFill` (`[dev] crack_fill`) | on, every device |
+| `shadowOne` (`[dev] shadow_one`) | a capability (the stencil view of a sampled depth): on under Vulkan, off on Direct3D 12 |
+| `shadowBspline` (`[dev] shadow_bspline`) | off, every device |
+| `auraBox` (`[dev] aura_box`; [WORK_BUFFERS.md](WORK_BUFFERS.md#the-auras-feedback-read)), `passArea` (`[dev] pass_area`; [WORK_BUFFERS.md](WORK_BUFFERS.md#the-pass-area)), `passCut` (`[dev] clear_carry`, `clear_skip`, `last_store`; [WORK_BUFFERS.md](WORK_BUFFERS.md#passes-cut)), `shadowMerge` (the shadow volumes in the scene's pass, `ICO_RD_SHADOW_MERGE` for the tests; [WORK_BUFFERS.md](WORK_BUFFERS.md#the-shadow-volumes-in-the-scenes-pass)), `sheetBake2x` (menu text baked at scale 2) | on with `TILE_COLUMNS`; off elsewhere (desktop Vulkan: not measured there) |
+| the one DATE set-up for the shadow composites (`ICO_RD_DATE_ONE`, tests only; [RENDER_POST.md](RENDER_POST.md#one-date-set-up-for-the-shadow-composites)) | on, every device |
+| the empty composites skipped (`ICO_RD_EMPTY_SKIP`, tests only; needs the shadow box, which needs the one-draw count) | on; off on Direct3D 12 (no box: the seven-draw count) |
+| the culler's default (`rd_vis.c` `rd__vis_profile_default`, `RdProfile.tiler`: the table's `TILER`) | frustum alone with `TILER`, else frustum and occlusion (Apple silicon is a tile-based vendor's; an Intel or AMD Mac is not) |
+| the late pass's fill hold and deferred paste (`rd_late_pass.c`, `RdProfile.tiler` under Vulkan), shot late (`rd_present.c`, `SHOT_LATE`) | on with `TILER` (the row `tiler`), else off |
+| the VU record by compute in place of the vertex stores (`rd_vu_class.c`; [RENDER_POST.md](RENDER_POST.md#the-vu-record-by-compute-on-the-powervr-d-series-dxt)) | `VU_COMPUTE_CLASS`: on on the measured device (the row `powervr-dxt-48-1536`; `RD_VU_COMPUTE_CLASS_DEFAULT` 1, the device it ran on); off by default on the rest of the PowerVR class (the row `powervr`: Imagination's vendor id, not the other tile-based); off elsewhere (a Mali without vertex stores is on auto's compute already) |
+| the subpass read (DATE's set-up inside the scene's pass on `VkRenderPass` objects without local read; [The subpass read's probe](#the-subpass-reads-probe)) | `SUBPASS_CLASS`: the Intel driver row's devices by the probe at their first start; off by default this release, no probe, on Qualcomm's own driver (`RHI_SUBPASS_PROBE_QCOM_DEFAULT` 0: a driver that lost the device before; one pass a picture) and on Arm's Vulkan 1.1 drivers (issue 179's r32p1; `RHI_SUBPASS_PROBE_ARM_DEFAULT` 0); off on a PowerVR B-Series (Vulkan 1.1: no GPU timestamps to time the probe); not this route where the device has local read or dynamic rendering (the desktop cards, Turnip, a Mali r38p1, the PowerVR D-Series, MoltenVK); none on Direct3D 12 |
+| the turn in the present's blit (`rd_turn_fold.c`; [RENDER_POST.md](RENDER_POST.md#the-turn-in-the-presents-blit-off-by-default-until-a-phone-rc)) | off on a turned swapchain (`RD_TURN_FOLD_DEFAULT` 0 until a phone rc); no turned swapchain on a desktop or a Mac |
+| the index compaction (`rd_vu_compact.c`; [PIPELINES.md](PIPELINES.md#the-index-compaction)) | `COMPACTION_CLASS` and `COMPACTION_DEFAULT`, with the compute record: off by default on the Mali-G52 (the row `mali-g52`, by its device name; `RD_VU_COMPACT_ARM_DEFAULT` 0: it blacked out the picture there, issue 179, [ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-picture-health-report-issue-179)); on the PowerVR D-Series DXT-48-1536 (the row `powervr-dxt-48-1536`) with the PowerVR rule's compute record where the start-up self-test passes (`RD_VU_COMPACT_DEFAULT` 1); off by default on every other device (measured on the Mali-G52 only); not applicable where the vertex stores write the record or there is no compute record (Direct3D 12) |
+| the glow's paste by its own entry, `fx_paste_ps` (`rd_paste_spec.c`; [RENDER_POST.md](RENDER_POST.md#the-glows-paste-by-its-own-entry)) | on where the start-up self-test passes; off on Direct3D 12 (the module is made under Vulkan alone) |
+| the shadow volumes' stencil-only entry, `date_clear_ps` in place of `sprite_ps` (`rd_volume_fs.c`; [RENDER_POST.md](RENDER_POST.md#the-shadow-volumes-stencil-only-entry)) | on where the start-up self-test passes (single-sampled passes); off on Direct3D 12 (Vulkan alone) |
+| the shadow composites and levels by their own entry, `sprite_comp_ps` in place of `sprite_ps` (`rd_comp_spec.c`; [RENDER_POST.md](RENDER_POST.md#the-shadow-composites-by-their-own-entry)) | on where the start-up self-test passes (dual-source blend, single-sampled passes); off without dual-source blending (the Mali reporter's class: the two-pass blend keeps `sprite_ps`); off on Direct3D 12 (Vulkan alone) |
+
+Two meanings of "tile-based" meet in this list. The flags from `auraBox` to `sheetBake2x` follow
 the profile's class (the table's `TILE_COLUMNS`: every class but desktop Vulkan, D3D12, OpenGL and
-Direct3D 11, so an Intel or AMD Mac under MoltenVK is on the Apple column and takes them); the
+Direct3D 11, so an Intel or AMD Mac under MoltenVK is in the Apple class and takes them); the
 culler's and the late pass's rows follow the table's `TILER` fact, and shot late its `SHOT_LATE`
 (the row `tiler`), which are false on such a Mac (the device table's `tile-vendors` row names the
 vendors, [DEVICE_TABLE.md](DEVICE_TABLE.md)).
@@ -1678,7 +1676,7 @@ flags are decisions: `fogLocal` offers the fog's `local` path, tried first by it
 `dateStencil` DATE through the stencil bit, decided by its self-test, `blurFold` the folded
 staticBlur pairs ([The replay](#the-replay)), `glowFold` the glow's mask computed in its reduction
 ([The glow's mask in its reduction](RENDER_POST.md#the-glows-mask-in-its-reduction); D3D11 and
-OpenGL take the desktop column); `storePlan` [the store plan](WORK_BUFFERS.md#the-store-plan). `alphaPlan` offers the alpha/blend
+OpenGL take the desktop class's values); `storePlan` [the store plan](WORK_BUFFERS.md#the-store-plan). `alphaPlan` offers the alpha/blend
 planner ([The alpha plan](#pipelines)), `fxPlan` the frame-size post sprites drawn without their snapshot
 ([Post passes](RENDER_POST.md#post-passes)), `fxDstLocal` the post sprites that read their destination by the local read
 inside the open pass (it needs `fx_local_ps` and is decided

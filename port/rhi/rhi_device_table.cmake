@@ -8,6 +8,14 @@ add_library(ico_device_table STATIC rhi_device_table.c)
 target_include_directories(ico_device_table PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(ico_device_table PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 
+# The platform's reads (the top-level CMakeLists.txt makes both libraries
+# before this directory; the pass breadcrumb's library is linked to
+# ico_platform from here the same way): ico_thread holds attempt_ledger.c
+# (the words where no row sets a choice), ico_platform memory_floor.c and
+# present_fallback.c (the driver classes); their tests link those libraries
+target_link_libraries(ico_thread PUBLIC ico_device_table)
+target_link_libraries(ico_platform PUBLIC ico_device_table)
+
 # The pure predicates that read the table and keep their signatures
 # (rhi_pass_row.c, rhi_driver_version.c, rhi_tile_rule.c): their tests,
 # registered in port/rhi/CMakeLists.txt before this file, link it too
@@ -35,11 +43,14 @@ target_link_libraries(rhi_device_table_test PRIVATE ico_device_table)
 # devices; the pure files the copies come from are linked in and compared
 # with their copies; the renderer's reads (port/render/rd_device_rows.c, pure)
 # are linked too and compared with their call sites' old rules, with no
-# device and on the logged devices at the edge Vulkan versions.
+# device and on the logged devices at the edge Vulkan versions; the
+# platform's reads (memory_floor.c, present_fallback.c and the attempt
+# ledger's words, attempt_ledger.c) against copies of theirs.
 add_executable(rhi_device_table_equiv_test
                test/rhi_device_table_equiv_test.c rhi_pass_row.c rhi_driver_version.c
                rhi_tile_rule.c rhi_qprio.c "${CMAKE_SOURCE_DIR}/port/platform/memory_floor.c"
                "${CMAKE_SOURCE_DIR}/port/platform/present_fallback.c"
+               "${CMAKE_SOURCE_DIR}/port/platform/attempt_ledger.c"
                "${CMAKE_SOURCE_DIR}/port/render/rd_device_rows.c")
 target_include_directories(rhi_device_table_equiv_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
                            "${CMAKE_CURRENT_SOURCE_DIR}/test" "${CMAKE_SOURCE_DIR}/port/platform"

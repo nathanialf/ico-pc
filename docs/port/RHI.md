@@ -288,7 +288,8 @@ device is picked and before it is made (`vk_device.c` `vkr_tile_rule_apply`, the
   unwritten stamps are still measured.
 
 There is no setting: both are `wide` and `single` on every tile-based phone GPU
-(`rhi_tile_phone`: every Android GPU, and iOS through MoltenVK) and `narrow` with the polled wait
+(`rhi_tile_phone`: every Android GPU, and iOS through MoltenVK; the device table's `TILE_PHONE`,
+rows `android` and `ios`, [DEVICE_TABLE.md](DEVICE_TABLE.md)) and `narrow` with the polled wait
 elsewhere, Macs (MoltenVK on macOS, whatever the GPU) and Qualcomm or Turnip desktops included. The
 loss ladder (`ICO_LOSS_ROW` from `port/platform/diag_host.c`, the line `ico_pc: loss ladder:
 ...`; never written to the settings): on a desktop a start after a lost one runs the wide scopes,
@@ -522,7 +523,8 @@ careful start-up set taking 1 ([RENDER.md](PIPELINES.md#the-start-up-set)). `rhi
 `port/rhi/d3d12/d3d12_pipeline.c`).
 
 **One compile at a time.** On a driver whose compiler is not thread-safe
-(`rhi_driver_compiler_serial` in `port/rhi/rhi_driver_version.c`: Imagination's PowerVR, vendor
+(`rhi_driver_compiler_serial` in `port/rhi/rhi_driver_version.c`, the device table's row
+`powervr-b-series`, [DEVICE_TABLE.md](DEVICE_TABLE.md): Imagination's PowerVR, vendor
 0x1010, whose driver text names the B-Series, at any Vulkan version; issue 188,
 Moto G54 with a BXM-8-256 on driver 1.15@6133110, where Imagination's answer on that driver is to
 keep shader module and pipeline creation off two threads at once) Vulkan compiles on one thread
@@ -565,8 +567,8 @@ whole texture synchronously for dumps and tests (`port/rhi/rhi.h`, commands, ver
 target, dual-source blending (optional: without it rd blends in two passes), `depth32Attachment` (D32F can be a depth attachment; false on a Vulkan driver without the bit), depth readback and
 sampling of the depth-stencil format, copy pitch and offset alignment (D3D12 256 and 512, Vulkan 1
 and 4), mips and anisotropy, dynamic uniforms and the storage range, BC textures, `tiler` (a
-tile-based phone GPU: Qualcomm, ARM, Imagination, Samsung, Apple, Broadcom or any Android device;
-false on D3D12), the MSAA counts every renderer target supports and sample-rate shading, and the
+tile-based phone GPU: Qualcomm, ARM, Imagination, Samsung, Apple, Broadcom or any Android device,
+the device table's `TILER`, [DEVICE_TABLE.md](DEVICE_TABLE.md); false on D3D12), the MSAA counts every renderer target supports and sample-rate shading, and the
 destination read's three bits: `fragmentInterlock` (Vulkan), `rov` (D3D12) and
 `rasterOrderAttachment` (Vulkan), and `rasterOrderOff`, why the attachment read is off on a device
 that has it (`attachment read off: Qualcomm driver <version>`, NULL otherwise), and
@@ -630,7 +632,7 @@ when it is not offered (or answers a budget of 0) the fields read 0 and the init
 `VK_EXT_memory_budget` where the device offers it (enabled for nothing else; vk_device.c
 `vkr_budget_read`): the budget and the use of the device-local heaps summed, the free part the
 budget less the use, read at most every 250 ms (a physical-device query, not after a loss); not
-asked on a tile-based phone GPU (`RhiLimits.tilePhone`), whose device is made as before and whose
+asked on a tile-based phone GPU (`RhiLimits.tilePhone`; the device table's `MEMORY_BUDGET_OFF`), whose device is made as before and whose
 free memory is the system's own measure. One line at the device's start: `rhi_vk: memory budget:
 VK_EXT_memory_budget: the device-local heaps' budget B MB, U MB in use, F MB free: ...`, or `...:
 not asked (a tile-based phone GPU: ...)` / `not offered (...)`. 0 on OpenGL. The window prints them
@@ -702,7 +704,7 @@ D3D11 and OpenGL ignore it). The window sets it when presents keep blocking unde
 ([DISPLAY.md](DISPLAY.md#the-fifo-fallback)). `rhi_present_fifo_start(fn)` gives the Vulkan
 backend a question (`fn(vendorId, driverText)`, kept across `rhi_init`, NULL asks nothing): with
 vsync off a swapchain whose device answers yes is FIFO at the fewest images from the first one
-(Qualcomm's own driver; the window asks only on Android; the other backends ignore it). `RhiStats.swapImages` is the current swapchain's
+(Qualcomm's own driver, the device table's `FIFO_FROM_START`, row `qualcomm-text-android`, [DEVICE_TABLE.md](DEVICE_TABLE.md); the window asks only on Android; the other backends ignore it). `RhiStats.swapImages` is the current swapchain's
 image count (Vulkan; 0 elsewhere). `rhi_present_timing`, `rhi_present_timing_use`, `rhi_present_last_id` and
 `rhi_present_timing_next` are the display's timing of presents (Vulkan's present wait, below; D3D12:
 false, nothing, 0, -1).
@@ -1350,7 +1352,8 @@ read is not offered on Qualcomm's own Adreno driver (vendor 0x5143, `VkDriverId`
 `QUALCOMM_PROPRIETARY` or unknown; not Mesa's Turnip): its reads return wrong colours (issue 89,
 Adreno 830 on driver 512.800.72), and the device line says `rasterization-order attachment read off
 on this driver (Qualcomm driver <version>: wrong results on Adreno; ICO_VK_ATTACHMENT_READ=1 tries
-it)` (`port/rhi/rhi_driver_version.h` (`rhi_driver_is_qualcomm_proprietary`);
+it)` (`port/rhi/rhi_driver_version.h` (`rhi_driver_is_qualcomm_proprietary`); the device table's
+`ATTACHMENT_READ_OFF`, row `qualcomm`, [DEVICE_TABLE.md](DEVICE_TABLE.md);
 [RENDER.md](RENDER.md#destination-reads-and-blend-paths)). The scene's
 depth-stencil is D32_SFLOAT_S8_UINT, or D24_UNORM_S8_UINT when only that has the sampled and
 transfer features (`vkr_choose_depth_stencil`).
@@ -1566,7 +1569,9 @@ Vulkan 1.3.215 or older, the final drivers for 6th to 10th gen graphics, whose `
 crashed in the first picture after a live switch from 1x to 2x: issue 123's Intel HD 530 report,
 `igvk64.dll+0x5cfab9` reading 0x68, and other ports' reports on the same drivers) and by any device
 with `[dev] legacy_passes = true` (`ICO_VK_LEGACY_PASSES=1`); `legacy_passes = false` (`0`) keeps
-dynamic rendering wherever the device offers it (`vk_device.c` (`vkr_pass_row_apply`)). A second
+dynamic rendering wherever the device offers it (`vk_device.c` (`vkr_pass_row_apply`)). Both rows
+are the device table's `PASS_OBJECTS` (`intel-windows-1.3.215` and `qualcomm-android`,
+[DEVICE_TABLE.md](DEVICE_TABLE.md)). A second
 row (`rhi_vk_pass_row_qualcomm`, issue 123; on Android alone, its evidence's platform: on Windows on Snapdragon the driver keeps dynamic rendering and the device start says `render passes: dynamic rendering on Qualcomm's own driver: its row (VkRenderPass objects, issue 123) is Android's alone, ...`) takes it on Qualcomm's own driver (vendor 0x5143 with
 `VK_DRIVER_ID_QUALCOMM_PROPRIETARY` or no driver id; every Adreno, every version; Turnip keeps
 dynamic rendering): the Adreno 740 of issue 123 and the Adreno 710 of issue 211 hang inside a pass
@@ -1608,7 +1613,7 @@ read-only depth stored with STORE_OP_NONE|STORE (no store op none)`; a pass whos
 made is not begun (`rhi_vk: render pass: no VkRenderPass or framebuffer for ...`).
 
 **Queue priority.** On the same devices as Qualcomm's row, on Android alone (`rhi_pass_row.h`
-`rhi_vk_qprio_row`; issue 123's second attempt), the game's one queue is created at high
+`rhi_vk_qprio_row`, the device table's `QUEUE_PRIORITY_HIGH` in the same row; issue 123's second attempt), the game's one queue is created at high
 global priority (`vk_qprio.c`, `rhi_qprio.h`): `VkDeviceQueueGlobalPriorityCreateInfo` at
 `VK_QUEUE_GLOBAL_PRIORITY_HIGH` chained on the queue's create info, through
 `VK_KHR_global_priority` (or `VK_EXT_global_priority` where KHR is not listed), where the game's

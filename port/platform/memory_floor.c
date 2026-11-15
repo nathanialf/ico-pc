@@ -5,40 +5,34 @@
  */
 #include "memory_floor.h"
 
+#include "rhi_device_table.h" /* port/rhi: the driver class's rows */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-/* word anywhere in s, any case (the driver texts' own spelling varies:
-   "turnip Mesa driver", "Mesa 25.1.0") */
-static int has_word(const char *s, const char *word)
-{
-    const size_t n = strlen(word);
-
-    for (; s != NULL && *s != '\0'; s++) {
-        size_t i = 0;
-
-        while (i < n && s[i] != '\0' && (s[i] | 0x20) == (word[i] | 0x20)) {
-            i++;
-        }
-        if (i == n) {
-            return 1;
-        }
-    }
-    return 0;
-}
+/* The class is the device table's MEMORY_FLOOR_CLASS (port/rhi/
+   rhi_device_table.c: the rows vendor-unknown and qualcomm-text, another
+   driver the default) on an identity of the arguments; the rule this
+   function held before, vendor 0 unknown, vendor 0x5143 with a driver id
+   other than 18 (Turnip's) and neither "mesa" nor "turnip" in the driver
+   text Qualcomm's own, is those rows' match, and
+   port/rhi/test/rhi_device_table_equiv_test.c compares the two on every
+   identity of its matrix */
+_Static_assert((int)ICO_MEMORY_FLOOR_DRIVER_UNKNOWN == (int)RHI_DT_FLOOR_UNKNOWN &&
+                   (int)ICO_MEMORY_FLOOR_DRIVER_QUALCOMM == (int)RHI_DT_FLOOR_QUALCOMM &&
+                   (int)ICO_MEMORY_FLOOR_DRIVER_OTHER == (int)RHI_DT_FLOOR_OTHER,
+               "the table's floor classes are IcoMemoryFloorDriver's values");
 
 int ico_memory_floor_driver(unsigned vendor_id, unsigned driver_id, const char *driver_text)
 {
-    if (vendor_id == 0u) {
-        return ICO_MEMORY_FLOOR_DRIVER_UNKNOWN;
-    }
-    /* 18: VkDriverId VK_DRIVER_ID_MESA_TURNIP (port/rhi/rhi_driver_version.h) */
-    if (vendor_id == 0x5143u && driver_id != 18u && !has_word(driver_text, "mesa") &&
-        !has_word(driver_text, "turnip")) {
-        return ICO_MEMORY_FLOOR_DRIVER_QUALCOMM;
-    }
-    return ICO_MEMORY_FLOOR_DRIVER_OTHER;
+    RhiDeviceId id;
+
+    memset(&id, 0, sizeof id);
+    id.vendorId = vendor_id;
+    id.driverId = driver_id;
+    id.driverText = driver_text;
+    return (int)rhi_device_table_choice(&id, RHI_DC_MEMORY_FLOOR_CLASS, NULL);
 }
 
 const char *ico_memory_floor_driver_words(int driver)

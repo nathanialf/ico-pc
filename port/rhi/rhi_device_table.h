@@ -330,6 +330,16 @@ const char *rhi_device_choice_name(RhiDeviceChoice choice);
 const char *rhi_device_choice_value_name(RhiDeviceChoice choice, int32_t value);
 /* the default's words ("no", "by backend", ...) */
 const char *rhi_device_choice_default_words(RhiDeviceChoice choice);
+/* The words the attempt ledger (port/platform/attempt_ledger.c) gives its
+   row where no table row sets the choice on this device, each the phrase
+   its decider held before the table, byte for byte; NULL where no ledger
+   row asks about the choice:
+     PASS_OBJECTS      ico_attempt_decide_pass_objects (not applicable here)
+     VU_COMPUTE_CLASS  ico_attempt_decide_vu_compute (not applicable here)
+     NO_VOLUME_CLASS   ico_attempt_decide_no_volume_break (not applicable here)
+     COMPACTION_CLASS  ico_attempt_decide_compaction (off by default: the
+                       class of a device with no compaction row) */
+const char *rhi_device_choice_na_words(RhiDeviceChoice choice);
 
 /* one of the named driver tests on id (RHI_DT_DRV_*), and the any-case word
    test they use (s NULL: no) */

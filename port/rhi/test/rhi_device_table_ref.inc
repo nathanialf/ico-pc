@@ -669,3 +669,62 @@ static RefIn ref_no_device(int backend)
     in.os = RHI_DT_LINUX; /* no OS row: the zeroed limits' tiler false on every OS */
     return in;
 }
+
+/* ---- DT4: the platform's call sites, as they read at int/v0117 c91c64d9d
+   (before they read the table) ---- */
+
+/* port/platform/present_fallback.c:54-72 ico_present_fallback_gate (the
+   mode's values auto 0, off 1, fifo 2; the gate's no 0, yes 1, kept 2, other
+   3: present_fallback.h) */
+static int ref_fallback_gate(int vsync, int mailbox, int vulkan, unsigned vendorId,
+                             unsigned driverId, const char *driverText, int mode)
+{
+    if (vsync || !mailbox || !vulkan || !ref_fallback_eligible(vendorId, driverId, driverText) ||
+        mode == 2) {
+        return 0;
+    }
+    if (mode == 1) {
+        return 2;
+    }
+    return ref_qualcomm_own(vendorId, driverId, driverText) ? 1 : 3;
+}
+
+/* port/platform/present_fallback.c:74-84 ico_present_fallback_start_asked
+   and ico_present_fallback_start */
+static int ref_fallback_start(int mode, int android, int vsync, unsigned vendorId,
+                              unsigned driverId, const char *driverText)
+{
+    return (mode == 0 && android) && !vsync && ref_qualcomm_own(vendorId, driverId, driverText);
+}
+
+/* port/platform/window_present_fallback.c:24-29 qualcomm_own_now, the
+   question window_fifo_set (:52-54) hands the rhi where
+   ico_present_fallback_start_asked(s_mode, ICO_PRESENT_FALLBACK_ANDROID);
+   -1: no question handed over (the first swapchain as the options say) */
+static int ref_window_fifo_question(int mode, int androidBuild, unsigned vendorId,
+                                    unsigned limitsDriverId, const char *driverText)
+{
+    if (!(mode == 0 && androidBuild)) {
+        return -1;
+    }
+    return ref_qualcomm_own(vendorId, limitsDriverId, driverText);
+}
+
+/* port/platform/android/gpu_driver_android.c:822-823 s_onStock (the Android
+   build's file), rhi_limits() NULL or not */
+static bool ref_on_stock(bool customDriver, bool haveLimits, uint32_t vendorId)
+{
+    return !customDriver && haveLimits && vendorId == 0x5143u;
+}
+
+/* port/platform/attempt_ledger.c: the words of a row no device rule holds */
+/* :393 ico_attempt_decide_no_volume_break */
+#define REF_NA_NO_VOLUME "not the PowerVR or MoltenVK class under Vulkan"
+/* :519 ico_attempt_decide_pass_objects */
+#define REF_NA_PASS_OBJECTS "not Qualcomm's own driver"
+/* :557 ico_attempt_decide_vu_compute */
+#define REF_NA_VU_COMPUTE "not the PowerVR class under Vulkan"
+/* :632-633 ico_attempt_decide_compaction */
+#define REF_NA_COMPACTION                                                                          \
+    "off by default: measured on the Mali-G52 only (and on the PowerVR D-Series "                  \
+    "DXT-48-1536's compute record)"

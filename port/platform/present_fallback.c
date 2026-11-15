@@ -3,6 +3,7 @@
 #include "present_fallback.h"
 #include <stdio.h>
 #include <string.h>
+#include "rhi_device_table.h" /* port/rhi: the driver tests' rows */
 
 IcoPresentFallbackMode ico_present_fallback_mode(const char *value)
 {
@@ -19,36 +20,41 @@ IcoPresentFallbackMode ico_present_fallback_mode(const char *value)
     return ICO_PRESENT_FALLBACK_AUTO;
 }
 
-/* word anywhere in s, any case (the driver texts' own spelling varies:
-   "turnip Mesa driver", "Mesa 25.1.0") */
-static int has_word(const char *s, const char *word)
+/* The driver tests are the device table's (port/rhi/rhi_device_table.c): each
+   predicate builds an identity of its arguments and reads its choice there.
+   FALLBACK_ELIGIBLE is off on the rows vendor-unknown (vendor 0) and
+   mesa-drivers (driver id 18, or "mesa" or "turnip" in the driver text);
+   FALLBACK_SWITCH is yes on the row qualcomm-text (vendor 0x5143 and
+   eligible); FIFO_FROM_START is the row qualcomm-text-android's (the same
+   test on an Android build).  They are the rules these functions held
+   before, and port/rhi/test/rhi_device_table_equiv_test.c compares the two
+   on every identity of its matrix. */
+static RhiDeviceId driver_id_of(unsigned vendorId, unsigned driverId, const char *driverText,
+                                int android)
 {
-    const size_t n = strlen(word);
+    RhiDeviceId id;
 
-    for (; s != NULL && *s != '\0'; s++) {
-        size_t i = 0;
-
-        while (i < n && s[i] != '\0' && (s[i] | 0x20) == (word[i] | 0x20)) {
-            i++;
-        }
-        if (i == n) {
-            return 1;
-        }
-    }
-    return 0;
+    memset(&id, 0, sizeof id);
+    id.os = (uint8_t)(android ? RHI_DT_ANDROID : RHI_DT_LINUX);
+    id.vendorId = vendorId;
+    id.driverId = driverId;
+    id.driverText = driverText;
+    return id;
 }
 
 int ico_present_fallback_driver_eligible(unsigned vendorId, unsigned driverId,
                                          const char *driverText)
 {
-    return vendorId != 0 && driverId != ICO_PRESENT_FALLBACK_TURNIP_ID &&
-           !has_word(driverText, "mesa") && !has_word(driverText, "turnip");
+    const RhiDeviceId id = driver_id_of(vendorId, driverId, driverText, 0);
+
+    return rhi_device_table_choice(&id, RHI_DC_FALLBACK_ELIGIBLE, NULL) != 0;
 }
 
 int ico_present_fallback_qualcomm_own(unsigned vendorId, unsigned driverId, const char *driverText)
 {
-    return vendorId == ICO_PRESENT_FALLBACK_QCOM_VENDOR &&
-           ico_present_fallback_driver_eligible(vendorId, driverId, driverText);
+    const RhiDeviceId id = driver_id_of(vendorId, driverId, driverText, 0);
+
+    return rhi_device_table_choice(&id, RHI_DC_FALLBACK_SWITCH, NULL) == RHI_DT_SWITCH_YES;
 }
 
 IcoPresentFallbackGate ico_present_fallback_gate(int vsync, int mailbox, int vulkan,
@@ -79,8 +85,12 @@ int ico_present_fallback_start_asked(IcoPresentFallbackMode mode, int android)
 int ico_present_fallback_start(IcoPresentFallbackMode mode, int android, int vsync,
                                unsigned vendorId, unsigned driverId, const char *driverText)
 {
+    /* the row is Android's: android 0 never matches it, as mode auto asks
+       on an Android build alone */
+    const RhiDeviceId id = driver_id_of(vendorId, driverId, driverText, android);
+
     return ico_present_fallback_start_asked(mode, android) && !vsync &&
-           ico_present_fallback_qualcomm_own(vendorId, driverId, driverText);
+           rhi_device_table_choice(&id, RHI_DC_FIFO_FROM_START, NULL) != 0;
 }
 
 void ico_present_fallback_start_line(char *out, size_t size)

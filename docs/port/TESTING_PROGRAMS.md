@@ -1879,8 +1879,16 @@ The renderer's test programs have a page of their own:
   Vulkan version of the matrix's edges with the profile's run inputs; and with no device (the
   zeroed limits) on every backend, whatever evaluation an earlier device left; and
   `rd__driver_is_turnip`, `rd__profile_vendor_adreno` and `rd__vu_class_measured` against their
-  copies. It fails when a row is in force on no identity, an override link decides none, or two
-  matching rows differ without a link. About 15 s at -O2, about 2 minutes under the address and
+  copies. The platform's reads (`port/platform/attempt_ledger.c` linked in too): on every vendor,
+  driver id and driver text of the matrix, `ico_present_fallback_gate` on every combination of
+  vsync, mailbox, backend and mode, `ico_present_fallback_start` on every mode, build and vsync,
+  the window's swapchain question (`window_present_fallback.c` `fifo_start_now`) and the Android
+  build's stock driver hint (`gpu_driver_android.c` `on_stock_qualcomm`) as those call sites
+  compose them, against copies taken before they read the table; and the attempt ledger's four
+  phrases where no row holds (`rhi_device_choice_na_words`), from the table and as
+  `ico_attempt_decide_no_volume_break`, `_pass_objects`, `_vu_compute` and `_compaction` write
+  them, byte for byte. It fails when a row is in force on no identity, an override link decides none, or two
+  matching rows differ without a link. About 19 s at -O2, about 2.5 minutes under the address and
   undefined-behaviour sanitizers at -O1 (hand-measured).
 - `rhi_subpass_verdict_test.c`: the subpass read's decision at a Vulkan start and its verdict file
   (`port/rhi/rhi_subpass_verdict.h`), pure: every branch of `rhi_subpass_decide` in its order
