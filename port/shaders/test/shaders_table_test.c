@@ -699,7 +699,8 @@ int main(void)
     const size_t nAll = sizeof(expected) / sizeof(expected[0]) + nAa + nNoDual + nVariants + nDst +
                         nUint + nTiler + nDiet + nPlanes + nPlain + nPrepass + nBatch + nMerge +
                         nSmooth + nCrack + nShadowLoad + nAuraBox + nBaked + nTone + nFsr1 +
-                        nVelocity + nStore + nCompute + nPresentScene + nShadowTile;
+                        nVelocity + nStore + nCompute + nPresentScene + nShadowTile +
+                        sizeof(expectedShadowFine) / sizeof(expectedShadowFine[0]);
     if (g_icoShaderCount != nAll) {
         printf("FAIL table has %u entries, expected %zu\n", g_icoShaderCount, nAll);
         failures++;
