@@ -48,8 +48,9 @@
 #     (glow_chains, on the fixture or its list line: rd_fixture_require) at
 #     every measured setting it runs at; a fixture no setting checked fails.
 # The bounds, from measurements on the game's frames (the WORK buffers' and
-# the screen's apart; kept unchanged on the fixtures, whose fans are a white
-# ribbon: a saturated core far larger than the sun frame's):
+# the screen's apart; kept unchanged on the fixtures.  Their fans are a white
+# ribbon, a saturated core larger than any real frame's: fx-opening-sun's is
+# past these bounds, 60 and 40, and is not in the list):
 # the fit on the lamps frames (the evidence's Python model, exact against the
 # replay: WORK3 at most 14 and 18 levels on the title and issue 163, 16 and
 # 16 at Original 1x) is not the largest; the phone's sun frame v2278 (a WHOLE

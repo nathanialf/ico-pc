@@ -210,8 +210,7 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   WORK0, one pair, a constant added).
 - `rd_glow_blur_ab.cmake` (`rd_glow_blur_ab`, `rd_glow_blur_gl`; `rd_glow_blur.cmake`): the glow's
   blur in two passes (DIVERGENCES.md VD-33) on the fixtures of `test/fixtures/lists/glow_blur.txt`
-  ([TESTING_FIXTURES.md](TESTING_FIXTURES.md): three frames with the sun's fans, a white ribbon whose
-  saturated core is the bounds' worst case; two lamps rooms replayed with the cull off, the list's
+  ([TESTING_FIXTURES.md](TESTING_FIXTURES.md): two frames with the sun's fans, a white ribbon; two lamps rooms replayed with the cull off, the list's
   `nocull` word, whose chain carries no light; four dark frames),
   `ICO_RD_LAMPS=pad+owed+wholepad` against `...+glowblur`, `--pass-dump --stats`,
   `ICO_RD_VU_PREPASS=0 ICO_RD_LATE_PASS=1`, at the phone's Resolution Auto under
