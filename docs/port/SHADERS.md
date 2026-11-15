@@ -731,7 +731,9 @@ of the region rule (`vu_region_rule_cut`'s `VU_F_EXTENDED` branch) and the two t
 (`vu_tick_shown`). Both have the region rule's last step (`vu_rule_beside`, `vu_drop_fate`: the
 camera rule, `VU_F_CAMERA`, and the side bands), so under the camera rule
 ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-camera-rule)), which has no card test either, the plain and
-the extended set give the same verdict on a draw without the tick cameras. The renderer takes the plain ones for the fallback on a device of the table and
+the extended set give the same verdict on a draw without the tick cameras. The renderer takes the plain ones for the fallback on a device of the device table (its
+`VU_FALLBACK_PLAIN`: the rows `adreno-740-qualcomm` and `turnip`,
+[DEVICE_TABLE.md](DEVICE_TABLE.md)), so on the Adreno 740 under Qualcomm's own driver and
 under Mesa's Turnip driver, and the extended ones everywhere else, once a run
 ([RENDER.md](PIPELINES.md#the-fallback-entries));
 `vu_particle_vs` has the one build. The cut against the camera's picture stays in
@@ -765,9 +767,10 @@ under Turnip the fallback takes the plain set, which hides the vertex as the sto
 does; it does not remove whatever placed it. What Turnip gives up is the card test (a wide picture's edge at
 the old 4:3 border may open) and the tick cameras' re-test (the pictures between two ticks take the
 blended camera's rule alone) on the fallback's draws; the record path's modules, which every device runs while its pre-pass is on
-(tile-based GPUs too), keep both. Turnip is no row of the device table, which
-matches Qualcomm's own driver alone: the rule is the renderer's (`rd__driver_is_turnip`, the test
-the device profile's Turnip class makes, `port/render/rd_profile.c`), and the summary line's VU
+(tile-based GPUs too), keep both. Turnip has a row of its own in the device table (`turnip`,
+whatever the vendor; the Adreno 740's row matches Qualcomm's own driver alone and wins where both
+hold): the renderer applies it (`rd__driver_is_turnip`, the table's Turnip test, which the
+device profile's Turnip class shares, `port/render/rd_device_rows.c`), and the summary line's VU
 shaders read `one set, fallback plain (Turnip driver, issue 163)` (the table's row `(Adreno 740,
 issue 107)`; `port/render/rd_core.c` (`rd_summary_text`)). `[dev] vu_set = extended`
 (`ICO_RD_VU_EXTENDED=1`) gives the extended set back, for a comparison. The card and tick steps only choose

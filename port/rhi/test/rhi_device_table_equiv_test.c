@@ -19,7 +19,12 @@
  * rhi_driver_version.c, rhi_tile_rule.c, rhi_qprio.c, memory_floor.c,
  * present_fallback.c) are linked in and compared with their copy over the
  * whole matrix; the copies of statics inside large files are compared with
- * their source lines by the DT1 hand-back's diff.
+ * their source lines by the DT1 hand-back's diff.  Those files read the
+ * table now, so the comparison is the proof of the move.  The platform's
+ * other reads (the present fallback's gate and start on every argument, the
+ * window's swapchain question, the Android build's stock driver hint, the
+ * attempt ledger's words where no row holds, attempt_ledger.c linked in)
+ * are compared with copies taken at int/v0117 c91c64d9d (platform()).
  *
  * Also: every row is in force on some identity, every override link
  * decides some identity, and no identity has two matching rows that differ
@@ -30,6 +35,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "attempt_ledger.h"
 #include "memory_floor.h"
 #include "present_fallback.h"
 #include "rd_device_rows.h"
@@ -997,6 +1003,137 @@ static unsigned long choices(void)
     return n;
 }
 
+/* DT4: the platform's reads.  The pure predicates (memory_floor.c,
+   present_fallback.c) are compared with their copies on every identity of
+   the matrix in live(); here, on every vendor, driver id and driver text of
+   the matrix: the gate and FIFO from the start on every combination of
+   their other arguments, the window's swapchain question
+   (window_present_fallback.c fifo_start_now) and the Android build's stock
+   driver hint (gpu_driver_android.c on_stock_qualcomm) as those call sites
+   compose them now, and the attempt ledger's words where no row holds
+   (attempt_ledger.c, linked in) */
+static int windowFifoQuestion(int mode, int androidBuild, unsigned vendorId,
+                              unsigned limitsDriverId, const char *driverText)
+{
+    /* window_fifo_set hands the question over where
+       ico_present_fallback_start_asked says so; fifo_start_now's answer */
+    if (!ico_present_fallback_start_asked((IcoPresentFallbackMode)mode, androidBuild)) {
+        return -1;
+    }
+    return ico_present_fallback_start((IcoPresentFallbackMode)mode, androidBuild, 0, vendorId,
+                                      limitsDriverId, driverText);
+}
+
+static int onStockQualcomm(int osBuild, int customDriver, bool haveLimits, uint32_t vendorId)
+{
+    /* gpu_driver_android.c on_stock_qualcomm (osBuild: RHI_DT_OS_BUILD) */
+    RhiDeviceId id;
+    memset(&id, 0, sizeof id);
+    id.os = (uint8_t)osBuild;
+    id.customDriver = (uint8_t)(customDriver != 0);
+    id.vendorId = haveLimits ? vendorId : 0u;
+    return rhi_device_table_choice(&id, RHI_DC_TURNIP_NOTE, NULL) != 0;
+}
+
+static unsigned long platform(void)
+{
+    unsigned long n = 0;
+    _Static_assert(ICO_PRESENT_FALLBACK_AUTO == 0 && ICO_PRESENT_FALLBACK_OFF == 1 &&
+                       ICO_PRESENT_FALLBACK_FIFO == 2 && ICO_PRESENT_FALLBACK_GATE_NO == 0 &&
+                       ICO_PRESENT_FALLBACK_GATE_YES == 1 && ICO_PRESENT_FALLBACK_GATE_KEPT == 2 &&
+                       ICO_PRESENT_FALLBACK_GATE_OTHER == 3,
+                   "the copies' numbers are present_fallback.h's");
+    for (size_t vi = 0; vi < NN(kVendors); vi++) {
+        for (size_t ii = 0; ii < NN(kDriverIds); ii++) {
+            for (size_t ti = 0; ti < NN(kTexts); ti++) {
+                RefIn in;
+                memset(&in, 0, sizeof in);
+                in.vendor = kVendors[vi].vendor;
+                in.driverId = kDriverIds[ii];
+                in.text = kTexts[ti];
+                const unsigned v = in.vendor, d = in.driverId;
+                const char *t = in.text;
+                for (int mode = 0; mode < 3; mode++) {
+                    for (int bits = 0; bits < 8; bits++) {
+                        const int vsync = bits & 1, mailbox = (bits >> 1) & 1,
+                                  vulkan = (bits >> 2) & 1;
+                        SAME(&in, "live ico_present_fallback_gate (every argument)",
+                             ref_fallback_gate(vsync, mailbox, vulkan, v, d, t, mode),
+                             ico_present_fallback_gate(vsync, mailbox, vulkan, v, d, t,
+                                                       (IcoPresentFallbackMode)mode));
+                    }
+                    for (int bits = 0; bits < 4; bits++) {
+                        const int android = bits & 1, vsync = (bits >> 1) & 1;
+                        SAME(&in, "live ico_present_fallback_start (every argument)",
+                             ref_fallback_start(mode, android, vsync, v, d, t),
+                             ico_present_fallback_start((IcoPresentFallbackMode)mode, android,
+                                                        vsync, v, d, t));
+                    }
+                    for (int android = 0; android < 2; android++) {
+                        /* the limits' driver id beside the rhi's vendor and text */
+                        SAME(&in, "window_present_fallback.c fifo_start_now",
+                             ref_window_fifo_question(mode, android, v, d, t),
+                             windowFifoQuestion(mode, android, v, d, t));
+                    }
+                }
+                n++;
+            }
+        }
+        for (int bits = 0; bits < 4; bits++) {
+            RefIn in;
+            memset(&in, 0, sizeof in);
+            in.os = RHI_DT_ANDROID;
+            in.vendor = kVendors[vi].vendor;
+            in.customDriver = (bits & 1) != 0;
+            const bool haveLimits = (bits & 2) != 0;
+            SAME(&in, "gpu_driver_android.c on_stock_qualcomm",
+                 ref_on_stock(in.customDriver, haveLimits, in.vendor),
+                 onStockQualcomm(RHI_DT_ANDROID, in.customDriver, haveLimits, in.vendor));
+        }
+    }
+    /* the ledger's words: the table's, and what the deciders write with them */
+    RefIn none;
+    memset(&none, 0, sizeof none);
+    sameWords(&none, "na words NO_VOLUME_CLASS", REF_NA_NO_VOLUME,
+              rhi_device_choice_na_words(RHI_DC_NO_VOLUME_CLASS));
+    sameWords(&none, "na words PASS_OBJECTS", REF_NA_PASS_OBJECTS,
+              rhi_device_choice_na_words(RHI_DC_PASS_OBJECTS));
+    sameWords(&none, "na words VU_COMPUTE_CLASS", REF_NA_VU_COMPUTE,
+              rhi_device_choice_na_words(RHI_DC_VU_COMPUTE_CLASS));
+    sameWords(&none, "na words COMPACTION_CLASS", REF_NA_COMPACTION,
+              rhi_device_choice_na_words(RHI_DC_COMPACTION_CLASS));
+    ico_attempt_reset();
+    /* another class than the window's, the tests' switch unset or 0 for it */
+    ico_attempt_decide_no_volume_break(-1, 0, 0, 1, NULL);
+    SAME(&none, "ledger no-volume break state", ICO_ATT_NA,
+         ico_attempt_state_of(ICO_ATT_NO_VOLUME_BREAK));
+    sameWords(&none, "ledger no-volume break", REF_NA_NO_VOLUME,
+              ico_attempt_why_of(ICO_ATT_NO_VOLUME_BREAK));
+    /* no pass row */
+    ico_attempt_decide_pass_objects(NULL);
+    SAME(&none, "ledger pass objects state", ICO_ATT_NA, ico_attempt_state_of(ICO_ATT_ADRENO_A));
+    sameWords(&none, "ledger pass objects", REF_NA_PASS_OBJECTS,
+              ico_attempt_why_of(ICO_ATT_ADRENO_A));
+    /* vertex and compute stores, the tests' switch unset, not the PowerVR class */
+    SAME(&none, "ledger VU compute off", 0, ico_attempt_decide_vu_compute(0, 1, 1, 0, 0, -1, 1));
+    SAME(&none, "ledger VU compute state", ICO_ATT_NA,
+         ico_attempt_state_of(ICO_ATT_VU_COMPUTE_CLASS));
+    sameWords(&none, "ledger VU compute", REF_NA_VU_COMPUTE,
+              ico_attempt_why_of(ICO_ATT_VU_COMPUTE_CLASS));
+    /* the compute record, another device's class, the switch unset, the
+       self-test passed or not run */
+    for (int selftest = -1; selftest <= 1; selftest += 2) {
+        SAME(&none, "ledger compaction off", 0,
+             ico_attempt_decide_compaction(1, NULL, ICO_ATT_CMP_OTHER, -1, 1, 1, selftest));
+        SAME(&none, "ledger compaction state", ICO_ATT_OFF_DEFAULT,
+             ico_attempt_state_of(ICO_ATT_COMPACTION));
+        sameWords(&none, "ledger compaction", REF_NA_COMPACTION,
+                  ico_attempt_why_of(ICO_ATT_COMPACTION));
+    }
+    ico_attempt_reset();
+    return n;
+}
+
 int main(void)
 {
     const unsigned long ids = matrix();
@@ -1005,6 +1142,7 @@ int main(void)
     const unsigned long one = choices();
     const unsigned long rk = rendererKnown();
     const unsigned long nd = noDevice();
+    const unsigned long pf = platform();
     size_t rowCount;
     const RhiDeviceRow *rows = rhi_device_table_rows(&rowCount);
     for (size_t r = 0; r < rowCount; r++) {
@@ -1045,7 +1183,7 @@ int main(void)
     }
     printf("rhi_device_table_equiv: %lu identities, %lu with the tests' fakes, %lu one choice at "
            "a time, %lu renderer identities at the edge versions, %lu without a device, %lu "
-           "checks, %lu failures\n",
-           ids, faked, one, rk, nd, s_checks, s_failures);
+           "platform drivers, %lu checks, %lu failures\n",
+           ids, faked, one, rk, nd, pf, s_checks, s_failures);
     return s_failures ? 1 : 0;
 }

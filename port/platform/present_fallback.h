@@ -27,12 +27,6 @@
 /* a present over this counts after the switch (the window's own threshold
    for a blocked present) */
 #define ICO_PRESENT_FALLBACK_SLOW_MS 50.0
-/* the PCI vendor id Qualcomm's Adreno driver reports */
-#define ICO_PRESENT_FALLBACK_QCOM_VENDOR 0x5143u
-/* VkDriverId VK_DRIVER_ID_MESA_TURNIP (port/rhi/rhi_driver_version.h
-   RHI_DRIVER_ID_MESA_TURNIP): a Turnip build keeps it when it renames
-   itself (issue 209's "PurpleVK public driver") */
-#define ICO_PRESENT_FALLBACK_TURNIP_ID 18u
 
 /* [dev] present_fallback (ICO_PRESENT_FALLBACK, host_config.c) */
 typedef enum IcoPresentFallbackMode {
@@ -78,20 +72,25 @@ typedef struct IcoPresentFallback {
    (unset, "auto") auto */
 IcoPresentFallbackMode ico_present_fallback_mode(const char *value);
 
+/* The driver tests below are the device table's choices
+   (port/rhi/rhi_device_table.c, docs/port/DEVICE_TABLE.md), read on an
+   identity of the arguments: FALLBACK_ELIGIBLE (off on the rows
+   vendor-unknown and mesa-drivers), FALLBACK_SWITCH (yes on the row
+   qualcomm-text) and FIFO_FROM_START (the row qualcomm-text-android). */
+
 /* Whether the driver may take the switch: a device (vendorId not 0) whose
    driver text names neither "Mesa" nor "turnip" (any case) and whose Vulkan
-   driver id (driverId, 0 when the driver gives none) is not Turnip's (18),
-   the rule port/render/rd_profile.c rd__driver_is_turnip has.  Mesa's
-   drivers (Turnip on the same Adreno) block far less under mailbox; a few
-   blocks of 230 ms there are not the stock driver's queue wait. */
+   driver id (driverId, 0 when the driver gives none) is not Turnip's (18:
+   a Turnip build keeps it when it renames itself, issue 209's "PurpleVK
+   public driver").  Mesa's drivers (Turnip on the same Adreno) block far
+   less under mailbox; a few blocks of 230 ms there are not the stock
+   driver's queue wait. */
 int ico_present_fallback_driver_eligible(unsigned vendorId, unsigned driverId,
                                          const char *driverText);
 
-/* Qualcomm's own driver: vendorId 0x5143 (ICO_PRESENT_FALLBACK_QCOM_VENDOR)
-   and an eligible driver (neither Mesa nor Turnip by its text, not Turnip by
-   its driver id).  The window's rhi_present_fifo_start callback
-   (window_present_fallback.c) asks it with rhi_limits()'s driver id when the
-   rhi makes a swapchain, before any present. */
+/* Qualcomm's own driver: vendorId 0x5143 and an eligible driver (neither
+   Mesa nor Turnip by its text, not Turnip by its driver id): the driver the
+   switch is allowed on. */
 int ico_present_fallback_qualcomm_own(unsigned vendorId, unsigned driverId, const char *driverText);
 
 /* The window's gate for the present it notes (window_present_fallback.c):
@@ -116,7 +115,7 @@ IcoPresentFallbackGate ico_present_fallback_gate(int vsync, int mailbox, int vul
 #endif
 
 /* Whether the window hands the rhi the driver question
-   (rhi_present_fifo_start with ico_present_fallback_qualcomm_own): mode
+   (rhi_present_fifo_start with ico_present_fallback_start): mode
    auto on Android only.  Windows on Snapdragon reports the same vendor id
    with Qualcomm's own Vulkan driver, and there the surface offers
    immediate mode, so Vsync Off was immediate; FIFO from the start would
@@ -126,7 +125,11 @@ int ico_present_fallback_start_asked(IcoPresentFallbackMode mode, int android);
 /* Whether the first swapchain presents FIFO at the driver's fewest images:
    the question asked (mode auto on Android: not off, which keeps mailbox
    for the whole run; fifo is FIFO from the start whatever the driver, a
-   path of its own), vsync off, and Qualcomm's own driver.  Qualcomm's Adreno guide advises FIFO with the
+   path of its own), vsync off, and Qualcomm's own driver on an Android
+   build.  The window's rhi_present_fifo_start callback
+   (window_present_fallback.c) asks it with rhi_limits()'s driver id when
+   the rhi makes a swapchain, before any present (the rhi tests vsync
+   itself).  Qualcomm's Adreno guide advises FIFO with the
    minimum image count and says mailbox costs battery and heat for no
    benefit; with it no mailbox to FIFO switch happens mid-run and the GPU
    draws nothing that is never shown.  It is not known to remove the

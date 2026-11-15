@@ -242,6 +242,16 @@ float gsb_HostShadowClipX(void)
     return x > GSB_SHADOW_CLIP_MAX ? GSB_SHADOW_CLIP_MAX : x;
 }
 
+/* GsBase.c: the same clip down.  This program's volumes are clipped to the
+   European disc's box under every region it records with (the frame's
+   width by ScreenHeight), so its recordings do not depend on the disc's
+   box; shadow_clip_test checks the box of each disc and gsb_cull_test
+   GsBase.c's own */
+float gsb_HostShadowClipY(void)
+{
+    return (float)ScreenHeight;
+}
+
 float GetTableSin(short angle)
 {
     return sinf((float)angle * (3.14159265f / 32768.0f));

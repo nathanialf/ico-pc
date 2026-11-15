@@ -86,6 +86,12 @@
  *            2046 (GSB_SHADOW_CLIP_MAX): a clipped end
  *            at 2048 -+ the clip packs into Shadow.c's range test (0x11 ..
  *            0xFFEF sixteenths); 2047 does not.
+ *            Under each disc (ico_region set around the two reads only)
+ *            GsBase.c's box is port/include/ico_shadow_clip.h's for that
+ *            disc: W by ScreenHeight on the European, Japanese, Korean
+ *            and Asian discs, three halves of both on the North American
+ *            disc and the two 2001 previews (768 by 672 at 4:3, the
+ *            console's), never inside the European disc's.
  *   stage    (--stage DISC, ctest gsb_cull_stage; 77 without the disc image)
  *            st18a's parts from the disc, culled as the game culls
  *            them, at the camera of the reporter's dump i76 (the parts it
@@ -1447,6 +1453,42 @@ static void checkShadows(const char *what, int winW, int winH, float want)
     const int lo = (int)((2048.0f - x) * 16.0f), hi = (int)((2048.0f + x) * 16.0f);
     CHECK(lo >= 0x11 && hi <= 0xFFEF, "shadows %s: clipped ends at %d and %d sixteenths", what, lo,
           hi);
+}
+
+/* GsBase.c's box under each disc, at the frame of a winW x winH window:
+   wantX by wantY on the three discs whose own code clips at three halves
+   of the frame, the European disc's box on the others.  The frame is
+   made under the European disc; ico_region is another row only around the
+   two reads (they read ico_region, gsFrame.w and ScreenHeight alone) */
+static void checkShadowDiscs(const char *what, int winW, int winH, float wantX, float wantY)
+{
+    const int keep = ico_region;
+
+    setOptions(ICO_FRAMERATE_UNCAPPED, winW, winH);
+    ico_region = ICO_REGION_PAL;
+    const float px = gsb_HostShadowClipX(), py = gsb_HostShadowClipY();
+    CHECK(py == (float)ScreenHeight, "shadows %s: the European disc's clip down %g, want %d", what,
+          (double)py, ScreenHeight);
+    for (int r = 0; r < ICO_REGION_COUNT; r++) {
+        const int wide = r == ICO_REGION_NTSC || r == ICO_REGION_AUG6 || r == ICO_REGION_JUN26;
+        ico_region = r;
+        const float x = gsb_HostShadowClipX(), y = gsb_HostShadowClipY();
+        ico_region = ICO_REGION_PAL;
+        CHECK(x == (wide ? wantX : px) && y == (wide ? wantY : py),
+              "shadows %s: region %d clips at %g by %g, want %g by %g", what, r, (double)x,
+              (double)y, (double)(wide ? wantX : px), (double)(wide ? wantY : py));
+        CHECK(x == ico_shadow_clip_x(r, gsFrame.w) && y == ico_shadow_clip_y(r, ScreenHeight),
+              "shadows %s: region %d: GsBase.c's box %g by %g is not the header's", what, r,
+              (double)x, (double)y);
+        CHECK(x >= px && y >= py, "shadows %s: region %d clips inside the European disc's box",
+              what, r);
+        /* a clipped end packs into Shadow.c's range test on both axes */
+        CHECK((int)((2048.0f - x) * 16.0f) >= 0x11 && (int)((2048.0f + x) * 16.0f) <= 0xFFEF &&
+                  (int)((2048.0f - y) * 16.0f) >= 0x11 && (int)((2048.0f + y) * 16.0f) <= 0xFFEF,
+              "shadows %s: region %d: a clipped end at %g by %g is outside the range test", what, r,
+              (double)x, (double)y);
+    }
+    ico_region = keep;
 }
 
 /* ------------------------------------------------------------ bank fill */
@@ -4331,6 +4373,13 @@ int main(int argc, char **argv)
     checkShadows("32:9", 3200, 900, 1376.0f);
     checkShadows("48:9", 4800, 900, 2046.0f);
     checkShadows("the widest", 8000, 900, 2046.0f);
+    /* the discs' own boxes (ScreenHeight 448 here): 512 x 3 / 2 by 448 x 3
+       / 2 at 4:3, the console's; 688 x 3 / 2 at 16:9; the cap from 1376 x 3
+       / 2 = 2064 on */
+    checkShadowDiscs("4:3", 640, 480, 768.0f, 672.0f);
+    checkShadowDiscs("16:9", 1920, 1080, 1032.0f, 672.0f);
+    checkShadowDiscs("32:9", 3200, 900, 2046.0f, 672.0f);
+    checkShadowDiscs("the widest", 8000, 900, 2046.0f, 672.0f);
     checkMargin();
     checkSpanNear();
     checkBankFill();

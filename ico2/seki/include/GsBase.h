@@ -10,6 +10,8 @@
 
 /* PC port: the native frame's type (IcoFrame) */
 #include "../../../port/include/ico_frame.h"
+/* PC port: the shadow volumes' clip box by disc (ico_shadow_clip_x/_y) */
+#include "../../../port/include/ico_shadow_clip.h"
 
 /* GsBase.c's globals */
 extern int currentFocusDistance;
@@ -89,10 +91,11 @@ int gsb_HostCullOneWhy(void);
 int gsb_HostDotVisible(const int *ip, const float *pos);
 float gsb_HostLineHalfWidth(void);
 float gsb_HostShadowClipX(void);
+float gsb_HostShadowClipY(void);
 
 /* the largest edge clip gsb_HostShadowClipX gives (GsBase.c: a clipped end
    at GS x 2 or 4094 passes Shadow.c's range test) */
-#define GSB_SHADOW_CLIP_MAX 2046.0f
+#define GSB_SHADOW_CLIP_MAX ICO_SHADOW_CLIP_X_MAX
 /* gsb_ClipBox drops a box only when every corner is past a plane by
    |w| GSB_DROP_REL + GSB_DROP_ABS (GsBase.c gsbHostDropFlags) */
 #define GSB_DROP_REL (1.0f / 65536.0f)

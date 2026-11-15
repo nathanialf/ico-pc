@@ -380,7 +380,7 @@ A Mali-G52 MC2 (Arm's driver) and an Adreno 710 (Qualcomm's driver) lost the gra
 first pictures of the first 3D scene, three starts in a row each, on the release that narrowed the
 buffer barriers and brought the polled submission wait. The Mali ran the release before there
 without a loss (its log); there is no log of the Adreno 710 on the release before. Every tile-based
-phone GPU (every Android GPU, iOS through MoltenVK) now runs the wide barrier scopes, the texture
+phone GPU (every Android GPU, iOS through MoltenVK: [DEVICE_TABLE.md](DEVICE_TABLE.md)) now runs the wide barrier scopes, the texture
 uploads before the VU pre-pass and the single submission wait (RHI.md "Barrier scopes and the
 submission wait"); Macs and desktops keep the narrow scopes and the polled wait. The start of a log
 says which ran and why, one line each:
@@ -2373,6 +2373,9 @@ print it:
   out. Where the Adreno row is reported, the stalls clause adds `(the Adreno attempt on)` or `off`,
   and with the high queue priority's row reported too `(the Adreno attempt on, high queue priority
   granted)` (`refused`, `not asked`).
+
+Which device gets which attempt is the device table's ([DEVICE_TABLE.md](DEVICE_TABLE.md)), and
+so are a row's words where no row of it holds (`rhi_device_choice_na_words`).
 
 To add a row, a package adds one enum value and one table row with its words, a decider
 (`ico_attempt_decide_*`: the row's state and its reason from the facts its owner has, so the unit

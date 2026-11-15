@@ -13,9 +13,10 @@ stay there too.
 | --- | --- |
 | `port/rhi/rhi_device_table.h` | The identity, the choices and their values, the row and setting structs, the evaluation, the start-up lines and the summary clause. |
 | `port/rhi/rhi_device_table.c` | The rows, the matcher, the defaults, the tests' fakes, the lines. Pure C: no Vulkan, SDL, I/O or environment. |
-| `port/rhi/rhi_device_table.cmake` | The library `ico_device_table` (linked PUBLIC by `ico_rhi` and every backend library) and its three tests; the pure predicates' tests link it too. |
+| `port/rhi/rhi_device_table.cmake` | The library `ico_device_table` (linked PUBLIC by `ico_rhi`, every backend library, `ico_platform` and `ico_thread`, which holds the attempt ledger) and its three tests; the pure predicates' tests link it too. |
 | `port/rhi/vk/vk_device_table.c` | The Vulkan backend's one evaluation of the picked device with the tests' fakes (`g_vkr.devTable`), and its start-up lines. |
 | `port/rhi/gl/gl_device.c`, `d3d11/d3d11_device.c`, `d3d12/d3d12_device.c` | The other backends' evaluation (no fakes) and start-up lines, after their device line. |
+| `port/platform/memory_floor.c`, `present_fallback.c`, `window_present_fallback.c`, `android/gpu_driver_android.c`, `attempt_ledger.c` | The platform's reads: the free-memory floor's driver class, the present fallback's drivers, FIFO from the first swapchain, the Android build's stock driver hint, and the attempt ledger's words where no row holds. |
 | `port/render/rd_device_rows.c`, `rd_device_rows.h` | The renderer's reads: `rd__device_value` (in `rd_profile.c`) gives a choice of the current device, or with no device the backend's defaults; the renderer's pure predicates that keep their signatures. |
 | `port/rhi/test/rhi_device_table_test.c` | The table's own rules, the lines of five devices, and the list below (`--docs`, `--check-docs`). |
 | `port/rhi/test/rhi_device_table_equiv_test.c`, `rhi_device_table_ref.inc` | The proof that the table changes no behaviour (below). |
@@ -178,8 +179,51 @@ of their arguments (`rd_device_rows.c`): `rd__driver_is_turnip` (the table's Tur
 `rd__profile_vendor_adreno` (`PROFILE_CLASS` on a Vulkan identity of that vendor),
 `rd__vu_class_measured` (`VU_COMPUTE_CLASS` on an Imagination identity of that name). Their tests
 (`rd_state`, `rd_vu_skin_check_judge` and the rest of `rd_vu_skin_check_test`, `rd_smallcuts`) are
-unchanged. The platform's choices are still decided by the rule the table copies, at their call
-sites (`rhi_device_table_equiv` proves they agree).
+unchanged.
+
+The platform reads its choices through pure predicates that keep their names and signatures and
+build an identity of their arguments (the vendor id, the Vulkan driver id and
+`RhiLimits.driverText`, which the window and the diagnostics hand them from `rhi_limits()`), so
+their tests (`memory_floor`, `present_fallback`) are unchanged:
+
+| Choice | Call site (`port/platform/`) |
+| --- | --- |
+| `MEMORY_FLOOR_CLASS` | `memory_floor.c` `ico_memory_floor_driver` (asked by `diag_host.c` `ico_diag_set_memory_floor_driver`, which keeps the class it is handed: the floor's cap, and whether a stop carries over to the next start; `[dev] pipeline_memory_floor_mb` stays over it) |
+| `FALLBACK_ELIGIBLE` | `present_fallback.c` `ico_present_fallback_driver_eligible`, the first test of `ico_present_fallback_gate` |
+| `FALLBACK_SWITCH` | `present_fallback.c` `ico_present_fallback_qualcomm_own`: the gate's yes, or its "other" on an eligible driver (`[dev] present_fallback`, vsync, the mailbox mode and the backend stay the gate's own terms) |
+| `FIFO_FROM_START` | `present_fallback.c` `ico_present_fallback_start` (with the mode and vsync), and through it the question `window_present_fallback.c` hands the Vulkan backend for its first swapchain (`fifo_start_now`, with `rhi_limits()`'s driver id) |
+| `TURNIP_NOTE` | `android/gpu_driver_android.c` `on_stock_qualcomm` (the Android build's OS, the driver package the window names, the device's vendor id): the hang and loss boxes' sentence about a Turnip package |
+
+The attempt ledger (`attempt_ledger.c`, in `ico_thread`) takes from the table the words of a row
+of its own where no table row sets the choice on the device, `rhi_device_choice_na_words`, each
+the phrase its decider held before, byte for byte (the third column of the choices' list below):
+`PASS_OBJECTS` (the row "Qualcomm passes as VkRenderPass objects"), `VU_COMPUTE_CLASS` ("VU record
+by compute on the PowerVR"), `NO_VOLUME_CLASS` ("no-volume break") and `COMPACTION_CLASS` ("index
+compaction", whose other-class words are an "off by default"). Where a row holds, the ledger's
+reason is the row's own (`RhiLimits.passObjectsRow`, `queuePriorityWhy`: the settings' reasons).
+
+Left where they are, and why:
+
+- `port/platform/window_host.c` and `diag_host.c` are not touched (both are close to the 262,144
+  byte cap on a source file). They hold no device rule of their own: `diag_host.c` asks
+  `ico_memory_floor_driver` and keeps its answer, and `window_host.c` reads `RhiLimits.tiler` for
+  the performance lines' words and hands `ico_gpu_driver_android_device_up` the driver package.
+- Words only, no decision: `gpu_driver.c` (the last-seen file's "Qualcomm" and "Turnip" words),
+  `window_stall.c` (the phone model in a log line), `window_lines.c` and `window_perf_rank.c`
+  (the tile-based words of the performance lines), `memory_floor.c`'s and `present_fallback.c`'s
+  line texts ("Qualcomm's own driver").
+- The ledger's sentences that name a device inside a longer reason ("the PowerVR D-Series
+  DXT-48-1536: compute dispatches in place of the vertex stores", "the Mali-G52, its start-up
+  self-test passed") and the compaction's "off by default on the Mali-G52: ..." stay in
+  `attempt_ledger.c`: the last is also the `mali-g52` row's reason, but the decider is handed the
+  class's default as an argument (its test passes 0 whatever `RD_VU_COMPACT_ARM_DEFAULT` the build
+  has), so it cannot read a row whose text follows the build's define.
+- The subpass read's two off-by-default sentences (`port/rhi/rhi_subpass_verdict.h`) and the queue
+  priority's "not Qualcomm's own driver on Android" (`port/rhi/rhi_qprio.c`) stay with their
+  deciders in the RHI, which hand them to the ledger.
+- Measured or persisted facts are not rows: the few-cores rule (measured core speeds), the hang
+  limits, the pipeline-skip record, the loss ladder, the `[dev] turnip_debug` step (the loaded
+  package's library name).
 
 ## Adding a row
 
@@ -201,7 +245,8 @@ sites (`rhi_device_table_equiv` proves they agree).
 ## Tests
 
 - `rhi_device_table` (`port/rhi/test/rhi_device_table_test.c`, pure): unique row ids, every
-  setting's evidence, release and revisit condition, a row sets a choice once, rows read only the
+  setting's evidence, release and revisit condition, a row sets a choice once, the attempt
+  ledger's words are one line and belong to a choice some row sets, rows read only the
   facts resolved before what they set, every override link names a row it shares a choice with,
   the start-up lines and the summary clause of the Mali-G52, the Adreno 740 on Qualcomm's driver,
   the PowerVR DXT-48-1536, the Intel HD 530 and an RTX 3090 word for word, the clause's cut, the
@@ -230,8 +275,14 @@ sites (`rhi_device_table_equiv` proves they agree).
   words, the tile-based limits and orders) on every identity, again on every logged GPU of
   `DEVICES.md` at each Vulkan version of the matrix's edges with the profile's run inputs, and with
   no device (whatever an earlier device left) on every backend; the renderer's three pure
-  predicates against their copies; every row in force somewhere, every override link deciding
-  some identity, no unlinked conflict.
+  predicates against their copies; the platform's reads: `ico_memory_floor_driver` and the
+  present fallback's three driver tests against their copies on every identity, then on every
+  vendor, driver id and driver text the gate on every combination of vsync, mailbox, backend and
+  `[dev] present_fallback`, FIFO from the start on every mode, build and vsync, the window's
+  swapchain question and the Android build's stock driver hint as their call sites compose them
+  (copies taken before the move), and the attempt ledger's four phrases, from the table and as the
+  deciders write them (`attempt_ledger.c` linked in); every row in force somewhere, every override
+  link deciding some identity, no unlinked conflict.
 - `rhi_device_table_docs`: the list below against the table.
 
 ## The list
@@ -241,52 +292,52 @@ sites (`rhi_device_table_equiv` proves they agree).
 
 ### The choices
 
-| Choice | Default (no row) |
-| --- | --- |
-| `TILER` | no |
-| `TILE_PHONE` | no |
-| `PROFILE_CLASS` | by backend: desktop (Vulkan), d3d12, opengl, d3d11 |
-| `TILE_CLASS` | 2 on the desktop classes, else 0 |
-| `DYNAMIC_STATE_OFF` | no |
-| `MEMORY_BUDGET_OFF` | no |
-| `PASS_OBJECTS` | none |
-| `QUEUE_PRIORITY_HIGH` | no |
-| `SUBPASS_CLASS` | other |
-| `ATTACHMENT_READ_OFF` | no |
-| `VU_FALLBACK_PLAIN` | extended |
-| `CAREFUL_PIPELINES` | no |
-| `VU_PREPASS_OFF` | no |
-| `COMPUTE_RECORD_OFF` | no |
-| `COMPILER_SERIAL` | no |
-| `PIPE_ROBUST_ASK` | no |
-| `FIFO_FROM_START` | no |
-| `FALLBACK_ELIGIBLE` | yes |
-| `FALLBACK_SWITCH` | other |
-| `MEMORY_FLOOR_CLASS` | other |
-| `TURNIP_NOTE` | no |
-| `SKIN_CHECK_DEFAULT` | no |
-| `SKIN_AS_BEFORE` | no |
-| `BLUR_FOLD_OFF` | no |
-| `TILE_COLUMNS` | no |
-| `LAMPS_MS` | no |
-| `LAMPS_FILLPASTE` | no |
-| `LAMPS_AREA` | yes on tile class 2 off a tile-based phone |
-| `FILL11_CLASS` | 1 on tile class 1, 2 on tile class 2 off a tile-based phone, else 0 |
-| `SHADOW_TILE_CLASS` | TILE_CLASS |
-| `STENCIL_CUT` | no |
-| `VU_COMPUTE_CLASS` | none |
-| `NO_VOLUME_CLASS` | no |
-| `NO_VOLUME_BREAK` | no |
-| `COMPACTION_CLASS` | other |
-| `COMPACTION_DEFAULT` | the class's: RD_VU_COMPACT_ARM_DEFAULT on g52, RD_VU_COMPACT_DEFAULT on dxt, else no |
-| `MSAA_MAX4` | no |
-| `SCENE_CAP_4096` | no |
-| `MSAA_BUDGET` | no |
-| `SHOT_LATE` | no |
-| `LATE_PASS_TILER` | no |
-| `UBER_AUTO` | no |
-| `FOG_ORDER_TILER` | no |
-| `CULL_FRUSTUM` | no |
+| Choice | Default (no row) | The attempt ledger's words where no row sets it |
+| --- | --- | --- |
+| `TILER` | no | - |
+| `TILE_PHONE` | no | - |
+| `PROFILE_CLASS` | by backend: desktop (Vulkan), d3d12, opengl, d3d11 | - |
+| `TILE_CLASS` | 2 on the desktop classes, else 0 | - |
+| `DYNAMIC_STATE_OFF` | no | - |
+| `MEMORY_BUDGET_OFF` | no | - |
+| `PASS_OBJECTS` | none | not Qualcomm's own driver |
+| `QUEUE_PRIORITY_HIGH` | no | - |
+| `SUBPASS_CLASS` | other | - |
+| `ATTACHMENT_READ_OFF` | no | - |
+| `VU_FALLBACK_PLAIN` | extended | - |
+| `CAREFUL_PIPELINES` | no | - |
+| `VU_PREPASS_OFF` | no | - |
+| `COMPUTE_RECORD_OFF` | no | - |
+| `COMPILER_SERIAL` | no | - |
+| `PIPE_ROBUST_ASK` | no | - |
+| `FIFO_FROM_START` | no | - |
+| `FALLBACK_ELIGIBLE` | yes | - |
+| `FALLBACK_SWITCH` | other | - |
+| `MEMORY_FLOOR_CLASS` | other | - |
+| `TURNIP_NOTE` | no | - |
+| `SKIN_CHECK_DEFAULT` | no | - |
+| `SKIN_AS_BEFORE` | no | - |
+| `BLUR_FOLD_OFF` | no | - |
+| `TILE_COLUMNS` | no | - |
+| `LAMPS_MS` | no | - |
+| `LAMPS_FILLPASTE` | no | - |
+| `LAMPS_AREA` | yes on tile class 2 off a tile-based phone | - |
+| `FILL11_CLASS` | 1 on tile class 1, 2 on tile class 2 off a tile-based phone, else 0 | - |
+| `SHADOW_TILE_CLASS` | TILE_CLASS | - |
+| `STENCIL_CUT` | no | - |
+| `VU_COMPUTE_CLASS` | none | not the PowerVR class under Vulkan |
+| `NO_VOLUME_CLASS` | no | not the PowerVR or MoltenVK class under Vulkan |
+| `NO_VOLUME_BREAK` | no | - |
+| `COMPACTION_CLASS` | other | off by default: measured on the Mali-G52 only (and on the PowerVR D-Series DXT-48-1536's compute record) |
+| `COMPACTION_DEFAULT` | the class's: RD_VU_COMPACT_ARM_DEFAULT on g52, RD_VU_COMPACT_DEFAULT on dxt, else no | - |
+| `MSAA_MAX4` | no | - |
+| `SCENE_CAP_4096` | no | - |
+| `MSAA_BUDGET` | no | - |
+| `SHOT_LATE` | no | - |
+| `LATE_PASS_TILER` | no | - |
+| `UBER_AUTO` | no | - |
+| `FOG_ORDER_TILER` | no | - |
+| `CULL_FRUSTUM` | no | - |
 
 ### The rows (27, in table order)
 

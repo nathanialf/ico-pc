@@ -26,6 +26,7 @@ the other documents in `docs/port/` go deeper into each part. The glossary is th
 | `port/config/`, `port/game/`, `port/ui/` | `config.toml`, the options, the port's own menus and features |
 | `port/core/`, `config/regions.txt` | the game region: which disc is being played, and each disc's numbers |
 | `port/include/ico_frame.h` | the native frame's arithmetic, shared by `ico2/` and `port/` |
+| `port/include/ico_shadow_clip.h` | the box the shadow volumes' edges are clipped to, by disc and frame size ([GS.md](GS.md#primitives-and-shadows)) |
 | `cmake/IcoFlags.cmake` | the compile options that give the game its EE semantics |
 | `CMakeLists.txt` | the game libraries, the data tables, the program |
 

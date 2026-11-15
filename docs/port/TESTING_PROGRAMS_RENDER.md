@@ -19,7 +19,9 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
 - `gltf_test.c`: the glTF reader and writer, bit-exact round trips, GLB, a Blender-style file,
   refusals (`gltf`).
 - `gsb_cull_test.c`: the game's cull against the blended pictures' cameras and the windows that
-  scale with the width; with the disc, a stage (`gsb_cull`, `gsb_cull_stage`), and the disc-wide
+  scale with the width (the shadow volumes' edge clip under each disc among them: `GsBase.c`'s box
+  is `port/include/ico_shadow_clip.h`'s, 768 by 672 at 4:3 on the North American disc and the two
+  2001 previews); with the disc, a stage (`gsb_cull`, `gsb_cull_stage`), and the disc-wide
   sweep (`gsb_cull_sweep.1of8` .. `8of8`, 77 without the disc image). `--stage DISC` is st18a at
   the camera of the reporter's dump i76 and the 768 camera steps about it (every part a picture
   between the ticks shows is registered by this tick; the one-camera control leaves some out).
@@ -336,7 +338,7 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   `rd_vuprepass_selftest_plain`, `rd_vuprepass_selftest_sabotage`,
   `rd_vuprepass_selftest_sabotage_tri`, `rd_vuprepass_selftest_ticks`,
   `rd_vuprepass_selftest_off`); the device profile's class ends with the backend's name (`Vulkan):`,
-  `OpenGL):`) and is the desktop column on OpenGL and Direct3D 11. With the pre-pass on, its draws
+  `OpenGL):`) and takes the desktop class's values on OpenGL and Direct3D 11. With the pre-pass on, its draws
   are batched (`g_rd.vuPreBatch`) unless `ICO_RD_VU_PREPASS_BATCH=0`, which
   `rd_vuprepass_selftest_unbatched` sets (the self-test one draw an entry and stage). The draw
   merge is on (`g_rd.vuMerge`, the summary's `VU merge on`) unless `ICO_RD_VU_MERGE=0`, which
