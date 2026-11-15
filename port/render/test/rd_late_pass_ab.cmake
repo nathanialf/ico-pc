@@ -1,12 +1,15 @@
 # rd_late_pass_ab: fewer late full-size passes on SCENE, the same bytes
 # (port/render/rd_late_pass.c; docs/port/RENDER_POST.md, "The late passes on
 # SCENE"): the late pass off (ICO_RD_LATE_PASS=0) against on (=1).
-# For every dump the list names (tools/late_pass_dumps.txt: a path, '*' globs
-# allowed, optionally the crack fills one replay holds at the phone's setting,
-# and optionally joinN, the passes list 11's draws join at the phone's setting
-# instead of beginning one with SCENE's depth; a listed dump that is absent
-# FAILS), rd_replay_tool's --pass-dump
-# with --stats and ICO_RD_VU_PREPASS=0 (the programs' own entries), at:
+# For every fixture the list names (port/render/test/fixtures/lists/
+# late_pass.txt: fixture names of the repository, docs/port/TESTING_FIXTURES.md;
+# a listed fixture that is absent or does not expand to its pinned SHA-256
+# FAILS; after each name optionally heldN, the crack fills one replay holds at
+# the phone's setting, and joinN, the passes list 11's draws join at the phone's
+# setting instead of beginning one with SCENE's depth, both re-derived from a
+# run of the fixture, and the line's own properties, rd_fixture_list_props.cmake),
+# expanded into OUT, rd_replay_tool's --pass-dump with --stats and
+# ICO_RD_VU_PREPASS=0 (the programs' own entries), at:
 #   phone   the PowerVR phone's Resolution Auto (Enhanced, 2364x1080, Full height,
 #           Full pixel, presented at 2364x1080) under the tile class's fakes
 #           (ICO_VK_FAKE_LIMITS=moltenvk);
@@ -20,90 +23,71 @@
 #           held into the glow's paste pass, drawn past SCENE's border repeat
 #           with a draw for each repeated block; list 11's draws are not
 #           joined there, rd_late_pass.c);
-# a dump drawn narrower than a setting's aspect cannot show it and is skipped
-# there.  Each pair: every PNG the off run writes (SCENE, DISPLAY, PRESENT and
-# every other named target) the on run's byte for byte (but the join's, below); the same draws but
-# those the stats name for the border's blocks (a held fill drawn past SCENE's
-# border repeat: one draw for the middle and one a repeated block); the
-# off run says "off" and holds, defers and joins nothing; the on run says "on"; its
-# render passes fewer than the off run's by exactly the fills it held into a
-# paste pass (the aura's or the glow's), the glow pastes it drew in the aura's
-# paste pass and the passes list 11's draws joined, the crack fill's own passes
-# by the fills held; its colour MB loaded and stored each fewer by at least the
-# MB its stats name for the held fills and the deferred pastes and at most that
-# and the MB it names for the joined passes (within 0.02, the two
-# decimals' rounding: a pass the join saves may have had a render area), its
-# depth and stencil MB loaded not higher, stored not higher but by up to 1.25
-# times the held fills' MB where a fill was held into the glow's paste pass or
-# the glow's paste deferred (the lamps' pass keeps its depth store for the
-# fill's read), the same without a join, a fill in the glow's pass or a
-# deferred paste, its copies the same; at the
-# phone's setting a dump the list marks holds that many fills where the off
-# run draws a fill in its own pass (on OpenGL none held or drawn early: no
-# paste there takes a fill in these DARK rooms), and joins as many passes
-# as it marks.  Where the on run joined list 11's draws to a pass, SCENE,
-# DISPLAY and PRESENT may differ within the accepted bound (DIVERGENCES.md
-# VD-31: at most joinPixels pixels apart by at most joinLevels levels,
-# png_level_diff.py; -DPY, -DDIFF), every other target the same bytes.  On
-# Vulkan at least one fill held and one pass joined over the list.  No
+# a fixture drawn narrower than a setting's aspect cannot show it and is
+# skipped there.  Each pair: every PNG the off run writes (SCENE, DISPLAY,
+# PRESENT and every other named target) the on run's byte for byte (but the
+# join's, below); the same draws but those the stats name for the border's
+# blocks (a held fill drawn past SCENE's border repeat: one draw for the middle
+# and one a repeated block); the off run says "off" and holds, defers and joins
+# nothing; the on run says "on"; its render passes fewer than the off run's by
+# exactly the fills it held into a paste pass (the aura's or the glow's), the
+# glow pastes it drew in the aura's paste pass and the passes list 11's draws
+# joined, the crack fill's own passes by the fills held; its colour MB loaded
+# and stored each fewer by at least the MB its stats name for the held fills
+# and the deferred pastes and at most that and the MB it names for the joined
+# passes (within 0.02, the two decimals' rounding: a pass the join saves may
+# have had a render area), its depth and stencil MB loaded not higher, stored
+# not higher but by up to 1.25 times the held fills' MB where a fill was held
+# into the glow's paste pass or the glow's paste deferred (the lamps' pass keeps
+# its depth store for the fill's read), the same without a join, a fill in the
+# glow's pass or a deferred paste, its copies the same; at the phone's setting
+# a fixture the list marks holds that many fills where the off run draws a fill
+# in its own pass (on OpenGL none held or drawn early: no paste there takes a
+# fill in these DARK rooms), and joins as many passes as it marks.  Where the
+# on run joined list 11's draws to a pass, SCENE, DISPLAY and PRESENT may differ
+# within the accepted bound (DIVERGENCES.md VD-31: at most joinPixels pixels
+# apart by at most joinLevels levels, png_level_diff.py; -DPY, -DDIFF), every
+# other target the same bytes.  The path ran: the generated geometry decides
+# where the cracks are, so on the on run of every pair the fixture's declared
+# crack_pixels (>=1: the fill drew at that setting) is checked
+# (rd_fixture_require); at the phone's setting every fixture's late pass acts
+# (a fill held or drawn early, a glow paste deferred, or a pass joined), but on
+# a fixture the list marks none (the fill drawn first in the aura's paste pass:
+# nothing to hold), where it must do none of these; a
+# fixture the phone's setting (OpenGL: its one setting) did not replay fails.
+# On Vulkan at least one fill held and one pass joined over the list.  No
 # device: SKIP (77).
 # -DPY=<python3> -DDIFF=<png_level_diff.py>
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
-# -DBACKEND=vulkan|opengl
-# The lists name dumps of the build machine alone (the owner's rule there: a
-# listed dump that is absent FAILS). A machine without that folder has none of
-# them: the test is skipped as the older dump tests are.
-if(NOT IS_DIRECTORY "/primary/dev/ico-dumps")
-  message(STATUS "SKIP: no dump folder on this machine (/primary/dev/ico-dumps): the list's dumps are the build machine's")
-  return()
-endif()
-set(dumps "")
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the
+# fixtures folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<a
+# fixture list> -DOUT=<a folder the test may write> -DBACKEND=vulkan|opengl
+include("${FIXTURE_HELPERS}")
+include("${CMAKE_CURRENT_LIST_DIR}/rd_fixture_list_props.cmake")
 set(failures 0)
-if("${LIST}" STREQUAL "" OR NOT EXISTS "${LIST}")
-  message(FATAL_ERROR "rd_late_pass_ab: no dump list ${LIST}")
-endif()
-get_filename_component(listDir "${LIST}" DIRECTORY)
-file(STRINGS "${LIST}" lines)
-foreach(l IN LISTS lines)
-  string(STRIP "${l}" l)
-  if(l STREQUAL "" OR l MATCHES "^#")
-    continue()
-  endif()
+rd_fixture_list("${LIST}" names)
+set(dumps "")
+foreach(name IN LISTS names)
+  rd_fixture_list_props(${name})
   set(want "")
   set(wantJoin "")
-  if(l MATCHES "^(.*[^ \t])[ \t]+join([0-9]+)$")
-    set(l "${CMAKE_MATCH_1}")
-    set(wantJoin "${CMAKE_MATCH_2}")
-  endif()
-  if(l MATCHES "^([^ \t]+)[ \t]+([0-9]+)$")
-    set(l "${CMAKE_MATCH_1}")
-    set(want "${CMAKE_MATCH_2}")
-  endif()
-  if(NOT IS_ABSOLUTE "${l}")
-    set(l "${listDir}/${l}")
-  endif()
-  if(l MATCHES "[*]")
-    file(GLOB found "${l}")
-    list(SORT found)
-    if(NOT found)
-      message(SEND_ERROR "${l}: no dump matches (a listed dump must exist)")
-      math(EXPR failures "${failures} + 1")
+  set(isNone FALSE)
+  string(REGEX REPLACE "[ \t]+" ";" words "${RDFX_FIELDS_${name}}")
+  foreach(w IN LISTS words)
+    if(w MATCHES "^held([0-9]+)$")
+      set(want "${CMAKE_MATCH_1}")
+    elseif(w MATCHES "^join([0-9]+)$")
+      set(wantJoin "${CMAKE_MATCH_1}")
+    elseif(w STREQUAL "none")
+      set(isNone TRUE)
     endif()
-    foreach(d IN LISTS found)
-      list(APPEND dumps "${d}")
-      set(want_${d} "${want}")
-      set(wantJoin_${d} "${wantJoin}")
-    endforeach()
-  elseif(EXISTS "${l}")
-    list(APPEND dumps "${l}")
-    set(want_${l} "${want}")
-    set(wantJoin_${l} "${wantJoin}")
-  else()
-    message(SEND_ERROR "${l}: no such dump (a listed dump must exist)")
-    math(EXPR failures "${failures} + 1")
-  endif()
+  endforeach()
+  rd_fixture_expand(${name} "${OUT}/fixtures" d)
+  list(APPEND dumps "${d}")
+  set(name_${d} "${name}")
+  set(want_${d} "${want}")
+  set(wantJoin_${d} "${wantJoin}")
+  set(none_${d} ${isNone})
 endforeach()
-list(REMOVE_DUPLICATES dumps)
 list(LENGTH dumps ndumps)
 
 # the crack fill's swap off in both runs (rd_crack_fill.c FILLSWAP: refused for a
@@ -161,7 +145,7 @@ foreach(dump IN LISTS dumps)
       file(REMOVE_RECURSE "${dir}")
       file(MAKE_DIRECTORY "${dir}")
       execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${common} ${env_${s}} ICO_RD_LATE_PASS=${lp}
-                              "${TOOL}" "${dump}" - --pass-dump "${dir}" --stats ${args_${s}}
+                              "${TOOL}" "${dump}" "${dir}-out.png" --pass-dump "${dir}" --stats ${args_${s}}
                       RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
       if(rc EQUAL 77)
         message(STATUS "SKIP: no device: ${err}")
@@ -178,6 +162,7 @@ foreach(dump IN LISTS dumps)
         set(skipped TRUE)
         continue()
       endif()
+      set(out_${lp} "${out}")
       string(REPLACE ";" "," flat "${out}")
       set(ok TRUE)
       foreach(re drawsRe lateRe deferRe joinRe crackRe trafficRe)
@@ -308,6 +293,27 @@ foreach(dump IN LISTS dumps)
                          "expected (the pause menu after the aura's paste)")
       math(EXPR failures "${failures} + 1")
     endif()
+    # the path ran: the fill drew at this setting on the fixture's generated
+    # geometry (its declared crack_pixels); at the phone's setting the late
+    # pass acted on it
+    set(n "${name_${dump}}")
+    rd_fixture_require(${n} "${out_1}" crack_pixels)
+    if(s STREQUAL "phone" OR s STREQUAL "gl")
+      set(required_${dump} TRUE)
+    endif()
+    if(s STREQUAL "phone")
+      math(EXPR acted "${held_1} + ${early_1} + ${deferred_1} + ${deferEarly_1} + ${joinPasses_1}")
+      if(none_${dump} AND NOT acted EQUAL 0)
+        message(SEND_ERROR "${n} ${s}: the late pass acted ${acted} times on a fixture the list "
+                           "marks none (nothing to hold, defer or join)")
+        math(EXPR failures "${failures} + 1")
+      elseif(NOT none_${dump} AND acted EQUAL 0)
+        message(SEND_ERROR "${n} ${s}: the late pass held, drew early, deferred and joined "
+                           "nothing: it did not act on this fixture (mark it none if that is "
+                           "what it shows)")
+        math(EXPR failures "${failures} + 1")
+      endif()
+    endif()
     math(EXPR heldTotal "${heldTotal} + ${held_1}")
     math(EXPR joinTotal "${joinTotal} + ${joinPasses_1}")
     set(dirOff "${OUT}/${index}-${s}-0")
@@ -361,16 +367,24 @@ foreach(dump IN LISTS dumps)
     endforeach()
   endforeach()
 endforeach()
+foreach(dump IN LISTS dumps)
+  if(NOT required_${dump})
+    message(SEND_ERROR "${name_${dump}}: never replayed at the phone's setting (OpenGL: its one "
+                       "setting): a fixture this test cannot measure is no test")
+    math(EXPR failures "${failures} + 1")
+  endif()
+endforeach()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(failures GREATER 0)
-  message(FATAL_ERROR "rd_late_pass_ab: ${failures} failures over ${ndumps} dumps")
+  message(FATAL_ERROR "rd_late_pass_ab: ${failures} failures over ${ndumps} fixtures")
 endif()
 if(compared EQUAL 0)
-  message(FATAL_ERROR "rd_late_pass_ab: no target compared over ${ndumps} dumps")
+  message(FATAL_ERROR "rd_late_pass_ab: no target compared over ${ndumps} fixtures")
 endif()
 if(NOT "${BACKEND}" STREQUAL "opengl" AND (heldTotal EQUAL 0 OR joinTotal EQUAL 0))
   message(FATAL_ERROR "rd_late_pass_ab: ${heldTotal} crack fills held and ${joinTotal} passes "
-                      "joined over ${ndumps} dumps: one of each at least expected")
+                      "joined over ${ndumps} fixtures: one of each at least expected")
 endif()
-message(STATUS "rd_late_pass_ab: ${compared} targets the same bytes (or within VD-31's bound) over ${ndumps} dumps; "
+message(STATUS "rd_late_pass_ab: ${compared} targets the same bytes (or within VD-31's bound) over ${ndumps} fixtures; "
                "${heldTotal} crack fills held into the aura's paste pass, ${joinTotal} passes "
                "joined by list 11's draws")

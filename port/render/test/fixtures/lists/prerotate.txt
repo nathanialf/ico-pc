@@ -1,0 +1,12 @@
+# Fixtures for rd_replay_tool_prerotate (port/render/test/rd_replay_tool_prerotate.cmake:
+# the present turned into a pre-rotated swapchain's twin and read back turned
+# back, byte for byte the identity present), replayed at 640x480 and the
+# PowerVR phone's 2400x1080 beside rd_pixel's own dump: fixture names of this
+# repository (port/render/test/fixtures/NAME.rdfix), a name a line, then the
+# line's own property (rd_fixture_list_props.cmake): prerotate_turned, the
+# twin's turn on every turned run.
+#
+# the PowerVR phone's F12 frame of 2026-10-28 (stage 6 in play, 848x448 GS)
+fx-phone-4657 prerotate_turned>=90
+# the title's castle (512x512 GS, the sun's fans)
+fx-boot-0200 prerotate_turned>=90

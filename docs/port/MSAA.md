@@ -244,9 +244,9 @@ holds at most 5 % of the clear's-depth texels of the frame without anti-aliasing
 wider than a pixel keeps the clear's fog; its frame has no shadow, so the epoch is open at the fog
 and the filler's skip line is matched. `rd_crack_resolved_msaa2` and `rd_crack_resolved_msaa4`
 (`port/render/CMakeLists.txt`, `port/render/test/rd_crack.cmake`): the replay tool on the corpus
-room `lightning/rd-00300.rddump` at Enhanced 2x with `--aa msaa2` / `msaa4 --stats`, the fill drawn
-after the resolve with more than 0 pixels filled (SKIP without the dump or where the count is not
-offered).
+room's fixture `fx-lightning-0300` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md)) at Enhanced 2x with
+`--aa msaa2` / `msaa4 --stats`, the fill drawn after the resolve with more than 0 pixels filled
+(SKIP where the count is not offered).
 
 ## Measurements
 

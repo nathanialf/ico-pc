@@ -8,8 +8,10 @@
 # the spec's table.  Each run's PNG must be the identity run's byte for byte
 # (a turn read the wrong way round, off by a texel or filtered changes it),
 # and the turned runs must say they drew the twin (`turned twin: ... turned
-# 90 degrees into HxW`).  Runs, for rd_pixel's dump (DUMP) and each dump of
-# LIST that is here:
+# 90 degrees into HxW`).  Runs, for rd_pixel's dump (DUMP) and each fixture
+# LIST names (port/render/test/fixtures/lists/prerotate.txt: fixture names of
+# the repository, docs/port/TESTING_FIXTURES.md; a listed fixture that is
+# absent or does not expand to its pinned SHA-256 FAILS):
 #   plain     --present 640x480
 #   wide      --present 1280x720 (the bars beside the box; the turned size
 #             is not square)
@@ -19,9 +21,16 @@
 #   crt       --present 640x480 --crt pvm (the CRT filter's own passes into
 #             the output), rd_pixel's dump only
 #   phone     --present 2400x1080 (the PowerVR phone's window, issue 188's log), the
-#             list's dumps only
-# -DTOOL=<rd_replay_tool> -DDUMP=<rddump> -DLIST=<dump list> -DOUT=<a folder the test may write>
+#             list's fixtures only
+# The path ran (rd_fixture_require on every turned run of a fixture, the
+# line's own properties, rd_fixture_list_props.cmake): prerotate_turned, the
+# turn of the twin's line.
+# -DTOOL=<rd_replay_tool> -DDUMP=<rddump> -DFIXTURE_TOOL=<rd_fixture_tool>
+# -DFIXTURES=<the fixtures folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake>
+# -DLIST=<a fixture list> -DOUT=<a folder the test may write>
 # Exit 77 of the first run (no device) skips.
+include("${FIXTURE_HELPERS}")
+include("${CMAKE_CURRENT_LIST_DIR}/rd_fixture_list_props.cmake")
 if(NOT EXISTS "${DUMP}")
   message(STATUS "SKIP: ${DUMP}: no dump (rd_pixel skipped)")
   return()
@@ -30,28 +39,13 @@ file(REMOVE_RECURSE "${OUT}")
 file(MAKE_DIRECTORY "${OUT}")
 
 set(extra "")
-if(NOT "${LIST}" STREQUAL "" AND EXISTS "${LIST}")
-  get_filename_component(listDir "${LIST}" DIRECTORY)
-  file(STRINGS "${LIST}" lines)
-  foreach(l IN LISTS lines)
-    string(STRIP "${l}" l)
-    if(l STREQUAL "" OR l MATCHES "^#")
-      continue()
-    endif()
-    if(NOT IS_ABSOLUTE "${l}")
-      set(l "${listDir}/${l}")
-    endif()
-    if(l MATCHES "[*]")
-      file(GLOB found "${l}")
-      list(SORT found)
-      list(APPEND extra ${found})
-    elseif(EXISTS "${l}")
-      list(APPEND extra "${l}")
-    else()
-      message(STATUS "${l}: no such dump, skipped")
-    endif()
-  endforeach()
-endif()
+rd_fixture_list("${LIST}" names)
+foreach(name IN LISTS names)
+  rd_fixture_expand(${name} "${OUT}/fixtures" d)
+  rd_fixture_list_props(${name})
+  list(APPEND extra "${d}")
+  set(name_${d} "${name}")
+endforeach()
 
 set(args_plain --present 640x480)
 set(size_plain 640x480)
@@ -110,6 +104,10 @@ foreach(dump "${DUMP}" ${extra})
       if(NOT "${out}${err}" MATCHES "turned twin: the ${pw}x${ph} picture turned ${deg} degrees into ${tw}x${th}")
         message(FATAL_ERROR "${dump} ${cfg}: ICO_VK_FAKE_TRANSFORM=${deg} drew no ${tw}x${th} twin:\n${out}\n${err}")
       endif()
+      if(NOT dump STREQUAL "${DUMP}")
+        # the path ran: the twin drawn turned for this fixture
+        rd_fixture_require(${name_${dump}} "${out}${err}" prerotate_turned)
+      endif()
       file(SHA256 "${OUT}/${tag}-${deg}.png" got)
       if(NOT got STREQUAL want)
         message(FATAL_ERROR "${dump} ${cfg}: turned ${deg} and back is not the identity present "
@@ -120,5 +118,8 @@ foreach(dump "${DUMP}" ${extra})
   endforeach()
   math(EXPR i "${i} + 1")
 endforeach()
+if(RDFX_FAILURES GREATER 0)
+  message(FATAL_ERROR "rd_replay_tool_prerotate: ${RDFX_FAILURES} fixtures' declared properties did not hold")
+endif()
 message(STATUS "rd_replay_tool_prerotate: ${runs} turned presents, each the identity present byte "
                "for byte")

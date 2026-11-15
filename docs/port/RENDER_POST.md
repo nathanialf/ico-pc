@@ -990,7 +990,7 @@ rd: fades fold: the reduction took another way (the hardware sprite, not as plan
 
 ctest `rd_fades_fold` (the step against the GS blend, rd_gsbase's fade, brightness and letterbox
 cases stepped texel by texel against the sprites' bytes, the plan on recorded frames) and
-`rd_fades_fold_ab` (the fade dumps with and without the fold,
+`rd_fades_fold_ab` (the fade fixtures with and without the fold,
 [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)). Not built:
 a frame differing from the last only in a fade's level could rerun the reduction and the present
 alone (the still re-present shows a picture again only on an unchanged frame hash,
@@ -2299,8 +2299,8 @@ picture, the glow's mask flipping at the cracks (above); at the PowerVR phone's
 Resolution Auto (2364 x 1080, its profile's fakes) the phone's seven F12 frames hold 112 to 285
 cracks (0.004 to 0.011 %), 98 to 99.6 % of them the same bytes, at most three a frame apart, by up
 to 20 levels; the deja vu 48:9 frame 469 cracks (0.018 %), most of them one to seven levels apart,
-the largest 14 ([DIVERGENCES.md](DIVERGENCES.md) VD-20). ctest `rd_crack_late_ab` measures the
-whole picture against the earlier build's pass dumps.
+the largest 14 ([DIVERGENCES.md](DIVERGENCES.md) VD-20). ctest `rd_crack_late_ab` holds the late
+fill's whole picture on committed fixtures to the release before's, byte for byte.
 
 ### The fill's place after list 7
 
@@ -2799,7 +2799,7 @@ Counters `RdPerfRecord.auraPasteSplit`, `auraPasteRows`, `auraPasteBand`, `auraP
 rows A-B (...), as the paste over the other N rows`; the 10 s line `window: aura paste: P drawn as
 the alpha alone (B band rows each), K read whole (why)` (when any aura paste was seen); `--stats`
 `stats: aura paste on|off: S split (R rows as the alpha alone, B band rows), K drawn whole (why)`.
-`rd_aura_paste` (CPU) and `rd_aura_paste_ab` (dumps) check it
+`rd_aura_paste` (CPU) and `rd_aura_paste_ab` (committed fixtures) check it
 ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
 
 ## Start-up

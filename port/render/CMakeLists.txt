@@ -1319,12 +1319,14 @@ if(ICO_RUN_TESTS)
     # the present turned into a pre-rotated swapchain's headless twin
     # (ICO_VK_FAKE_TRANSFORM=90, 180, 270; rd_prerotate.c) and read back turned
     # back is the identity present byte for byte: rd_pixel's dump plain, wide,
-    # with the overlay test pattern and under the CRT filter, and the dumps of
-    # tools/prerotate_dumps.txt that are here
+    # with the overlay test pattern and under the CRT filter, and the fixtures
+    # of test/fixtures/lists/prerotate.txt (the twin drawn: prerotate_turned)
     add_test(NAME rd_replay_tool_prerotate
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/prerotate_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                     "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/prerotate.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_prerotate"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_prerotate.cmake")
     set_tests_properties(rd_replay_tool_prerotate PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
@@ -1731,20 +1733,22 @@ if(ICO_RUN_TESTS)
                      -P "${_crk}")
     set_tests_properties(rd_replay_tool_crack PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                          FIXTURES_REQUIRED rd_dump)
-    # the filler after the MSAA resolve (issue 26 with MSAA on): a corpus
-    # room (lightning rd-00300, machine-local, SKIP without it) whose MSAA
+    # the filler after the MSAA resolve (issue 26 with MSAA on): the corpus
+    # room's fixture fx-lightning-0300 (test/fixtures, no art), whose MSAA
     # epoch closes at the shadow count's pass in list 3, before the fog, at
     # Enhanced 2x with --aa msaa2 and msaa4: the state line says the fill
     # was drawn after the resolve, the --stats line counts one fill pass
     # with more than 0 pixels filled, none left unfilled, that fill after
-    # the resolve; SKIP where the device does not offer the count (no
+    # the resolve, the fixture's declared crack_pixels and crack_msaa_fills
+    # (the path ran); SKIP where the device does not offer the count (no
     # "rd: msaa: N samples" line: lavapipe offers 4 only)
-    set(_crk_room "${CMAKE_SOURCE_DIR}/build-host/tmp/corpus/dumps/lightning/rd-00300.rddump")
     foreach(_s 2 4)
         add_test(NAME rd_crack_resolved_msaa${_s}
                  COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                         "-DARGS=${_crk_room}|${CMAKE_CURRENT_BINARY_DIR}/rd_crack_resolved_msaa${_s}.png|--enhanced|--resolution|2x|--aa|msaa${_s}|--stats"
-                         "-DNEED_FILE=${_crk_room}"
+                         "-DARGS=%FIXTURE%|${CMAKE_CURRENT_BINARY_DIR}/rd_crack_resolved_msaa${_s}.png|--enhanced|--resolution|2x|--aa|msaa${_s}|--stats"
+                         -DFIXTURE=fx-lightning-0300 -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                         "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                         "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/crack_resolved_msaa${_s}"
                          "-DNEED=rd: msaa: ${_s} samples"
                          "-DEXPECT=${_crk_on} 2x2, reach 1x1 ${_crk_tail} \\(drawn after the MSAA resolve\\)"
                          "-DEXPECT2=stats: crack fill on: 1 passes, [1-9][0-9]* pixels filled \\(1 replays counted; scale 2x2, reach 1x1 texels; 0 fogged replays above 1x not filled; 1 fills after lists 4-6; 1 fills after the MSAA resolve; 0 fills in the aura's paste pass; 0 fills after the glow's alpha\\)"
@@ -1753,85 +1757,75 @@ if(ICO_RUN_TESTS)
                                                                      TIMEOUT 600)
     endforeach()
 
-    # issue 106: the reporter's drained-room dumps (copied into the corpus,
-    # build-host/tmp/corpus/dumps/ripple) at their settings with Full pixel
-    # on: the ripples' read of the puddle's block keeps REPEAT (rd_water.c
-    # rd__block_keeps_repeat), so the ring area holds no near-white pixel
-    # (2089 and 3014 before the fix), and the water line names the clamp's
-    # counts; the ripple wholly past the first period (10:04:36) and the
-    # mirror floor (the pool's grids over its scene copy, corpus puddle
-    # rd-00200) byte for byte as before on lavapipe.  Not Run without the dumps
+    # issue 106: the reporter's drained-room frames as committed fixtures
+    # (test/fixtures, docs/port/TESTING_FIXTURES.md) at their settings with
+    # Full pixel on: the ripples' read of the puddle's block keeps REPEAT
+    # (rd_water.c rd__block_keeps_repeat; the water line's counts, the path
+    # ran: water_blocks_kept), the ripple wholly past the first period
+    # (10:04:36) at the scene's scale, its GS size (--water-ps2) and 1x, and
+    # the mirror floor (the pool's grids over its scene copy, corpus puddle
+    # rd-00200: water_targets_clamped); each picture the fixture's own as
+    # v0.11.6's tool drew it (--water-sharp for the scene's scale), byte for
+    # byte on lavapipe.  On the fixtures the block's reflection does not reach
+    # the picture (generated geometry: the scene's scale and the GS size give
+    # one picture), so the scale and the kept REPEAT are checked by the water
+    # line, the picture as a whole by the pin
     set(_rip "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_ripple.cmake")
-    set(_rip_dir "${CMAKE_SOURCE_DIR}/build-host/tmp/corpus/dumps")
+    set(_rip_fx -DTOOL=$<TARGET_FILE:rd_replay_tool> -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}")
+    set(_rip_out "${CMAKE_CURRENT_BINARY_DIR}/ripple")
     set(_rip_args "--enhanced|--aspect|16:9|--resolution|1920x1080|--full-height|--full-pixel|--aa|ssaa2|--present|1920x1080|--list")
-    set(_rip_py "")
-    if(Python3_FOUND)
-        set(_rip_py "-DPYTHON=${Python3_EXECUTABLE}")
-    endif()
     add_test(NAME rd_replay_tool_ripple
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMP=${_rip_dir}/ripple/frame-20261024-094512-v13782.zip"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_ripple.png"
-                     "-DARGS=${_rip_args}"
+             COMMAND "${CMAKE_COMMAND}" ${_rip_fx} -DFIXTURE=fx-ripple-13782
+                     "-DOUT=${_rip_out}/rd_replay_tool_ripple.png" "-DARGS=${_rip_args}"
                      "-DEXPECT=Full pixel on, border mask off: [0-9]+ render-target reads clamped, 2 block reads kept on REPEAT"
                      "-DEXPECT2=block 344x256 GS with depth [^;]*REPEAT 2, 2 of them kept on REPEAT"
-                     -DBOX=870,430,1210,890 -DMAXBRIGHT=0 ${_rip_py} -P "${_rip}")
+                     -DREQUIRE=water_blocks_kept -DSHA=370e68e29ee91107ce1732febaa6f0e9a82ba283291cb31de88e8c0d8f2e6af5 -P "${_rip}")
     add_test(NAME rd_replay_tool_ripple_447
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMP=${_rip_dir}/ripple/frame-20261024-100447-v84109.zip"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_ripple_447.png"
-                     "-DARGS=${_rip_args}" "-DEXPECT=REPEAT 2, 2 of them kept on REPEAT"
-                     -DBOX=90,700,400,1080 -DMAXBRIGHT=0 ${_rip_py} -P "${_rip}")
+             COMMAND "${CMAKE_COMMAND}" ${_rip_fx} -DFIXTURE=fx-ripple-84109
+                     "-DOUT=${_rip_out}/rd_replay_tool_ripple_447.png" "-DARGS=${_rip_args}"
+                     "-DEXPECT=REPEAT 2, 2 of them kept on REPEAT" -DREQUIRE=water_blocks_kept
+                     -DSHA=bad9eda099e34b11a9fc810928c99e556e30b2fcb6f1d0689c8d661eb570ef2a -P "${_rip}")
     # the puddle's block at the scene's scale (rd_core.c rd__target_scale_of, since
-    # v0.11.7): the SHA-256 is v0.11.6's with Water reflections: Sharp
-    # (--water-sharp); _ps2 (--water-ps2, ICO_RD_WATER_SCALE=0) is v0.11.6's
-    # Original, the SHA-256 this test pinned before; _1x and _1x_ps2 the same
-    # picture at 1x (one SHA-256: nothing changes there)
+    # v0.11.7); _ps2 (--water-ps2, ICO_RD_WATER_SCALE=0) at its GS size, v0.11.6's
+    # Original; _1x and _1x_ps2 the same picture at 1x (one SHA-256: nothing
+    # changes there)
     add_test(NAME rd_replay_tool_ripple_436
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMP=${_rip_dir}/ripple/frame-20261024-100436-v83439.zip"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_ripple_436.png"
-                     "-DARGS=${_rip_args}" "-DEXPECT=REPEAT 2, 2 of them kept on REPEAT"
+             COMMAND "${CMAKE_COMMAND}" ${_rip_fx} -DFIXTURE=fx-ripple-83439
+                     "-DOUT=${_rip_out}/rd_replay_tool_ripple_436.png" "-DARGS=${_rip_args}"
+                     "-DEXPECT=REPEAT 2, 2 of them kept on REPEAT"
                      "-DEXPECT2=block 344x256 GS with depth at 1920x1234 texels \\(5.5814x4.82143, the scene's scale\\)"
-                     -DSHA=09e354461f59199e697c33cf86cc3ea58f8409263bcde7d68789c8756ab0473f
-                     ${_rip_py} -P "${_rip}")
+                     -DREQUIRE=water_blocks_kept -DSHA=928c7c4f822c0163088a96d349596ef99c32e3db0ccf475bfd5eff92ed07e969 -P "${_rip}")
     add_test(NAME rd_replay_tool_ripple_436_ps2
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMP=${_rip_dir}/ripple/frame-20261024-100436-v83439.zip"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_ripple_436_ps2.png"
+             COMMAND "${CMAKE_COMMAND}" ${_rip_fx} -DFIXTURE=fx-ripple-83439
+                     "-DOUT=${_rip_out}/rd_replay_tool_ripple_436_ps2.png"
                      "-DARGS=${_rip_args}|--water-ps2"
                      "-DEXPECT=water reflections at their GS size \\(ICO_RD_WATER_SCALE=0\\)"
                      "-DEXPECT2=block 344x256 GS with depth at 344x256 texels \\(1x1, not the scene's scale\\)"
-                     -DSHA=984695adef5d6d26cc065d7bff996b0234b600cc2c0fd87cd50c365a3cc083aa
-                     ${_rip_py} -P "${_rip}")
+                     -DREQUIRE=water_blocks_kept -DSHA=928c7c4f822c0163088a96d349596ef99c32e3db0ccf475bfd5eff92ed07e969 -P "${_rip}")
     foreach(_w "" _ps2)
         set(_wa "")
         if(_w)
             set(_wa "|--water-ps2")
         endif()
         add_test(NAME rd_replay_tool_ripple_436_1x${_w}
-                 COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                         "-DDUMP=${_rip_dir}/ripple/frame-20261024-100436-v83439.zip"
-                         "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_ripple_436_1x${_w}.png"
+                 COMMAND "${CMAKE_COMMAND}" ${_rip_fx} -DFIXTURE=fx-ripple-83439
+                         "-DOUT=${_rip_out}/rd_replay_tool_ripple_436_1x${_w}.png"
                          "-DARGS=--enhanced|--aspect|16:9|--resolution|1x|--full-pixel|--present|1920x1080|--list${_wa}"
                          "-DEXPECT=block 344x256 GS with depth at 344x256 texels \\(1x1, the scene's scale\\)"
-                         -DSHA=091a188b31b5f06e572725e08839e38f55c38ceca29b8b82e431092d08ff52c6
-                         ${_rip_py} -P "${_rip}")
+                         -DREQUIRE=water_blocks_kept -DSHA=440dc0e51c32a760e88a304b053668e5abb3b4482e639341de1fc45ac1e28acc -P "${_rip}")
     endforeach()
     add_test(NAME rd_replay_tool_mirror_floor
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMP=${_rip_dir}/puddle/rd-00200.rddump"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_mirror_floor.png"
+             COMMAND "${CMAKE_COMMAND}" ${_rip_fx} -DFIXTURE=fx-puddle-0200
+                     "-DOUT=${_rip_out}/rd_replay_tool_mirror_floor.png"
                      "-DARGS=--enhanced|--resolution|2x|--full-pixel|--present|1024x896|--list"
                      "-DEXPECT=Full pixel on, border mask off: [0-9]+ render-target reads clamped, 0 block reads kept on REPEAT"
-                     -DSHA=613d1be7e8d7c1437ffa90c237eed6dfb7db2995e39a708270403afee18e1d28
-                     ${_rip_py} -P "${_rip}")
-    # the pinned SHA-256s are of the pictures without the fades fold: above 1x the
-    # brightness step folded into the reduction (GPUROUND) moves the ripple frame's
-    # pixels by one level (591,187 of them on v83439), inside the fold's bound, which
-    # rd_fades_fold_ab tests; these tests pin the water's exact bytes
-    # (and of the shadow's levels at the PS2's size, ICO_RD_SHADOW_FINE=0: the
-    # SHA-256s were taken before them)
+                     "-DREQUIRE=water_targets_clamped|water_blocks_kept" -DSHA=1bf91cb49971f536ee0fac57ce0904b2ac790b02e06a2de0b5da5598f1305bb0
+                     -P "${_rip}")
+    # the pinned SHA-256s are of the pictures without the fades fold (rd_fades_fold_ab
+    # tests the fold) and with the shadow's levels at the PS2's size
+    # (ICO_RD_SHADOW_FINE=0, rd_shadow_fine_ab tests the levels): these tests pin the
+    # water's exact bytes
     set_tests_properties(rd_replay_tool_ripple rd_replay_tool_ripple_447 rd_replay_tool_ripple_436
                          rd_replay_tool_ripple_436_ps2 rd_replay_tool_ripple_436_1x
                          rd_replay_tool_ripple_436_1x_ps2 rd_replay_tool_mirror_floor
@@ -2937,18 +2931,19 @@ if(ICO_RUN_TESTS)
             set_tests_properties(rd_region_camera_ab PROPERTIES ENVIRONMENT "${_env}")
         endif()
     endif()
-    # rd_noplanes_ab (test/rd_noplanes_ab.cmake, issue 161): the dumps of the
-    # machine-local list tools/noplanes_dumps.txt (the title and the boot,
-    # each drawing one screen-prim triangle key with planes, and a capture
-    # that draws none) with the sprite planes builds and without them
-    # (ICO_RD_NO_SPRITE_PLANES=1, the fallback [dev] pipeline_skip turns on):
-    # every target byte for byte on all four, the title's and the boot's 2
-    # commands each through the plain builds (none on the capture); SKIP as
-    # rd_vustage_ab
+    # rd_noplanes_ab (test/rd_noplanes_ab.cmake, issue 161): the fixtures of
+    # test/fixtures/lists/noplanes.txt (the title and the boot, each drawing
+    # screen-prim triangle keys with planes, and a capture that draws none)
+    # with the sprite planes builds and without them (ICO_RD_NO_SPRITE_PLANES=1,
+    # the fallback [dev] pipeline_skip turns on): every target byte for byte,
+    # the commands each line names through the plain builds (the path ran:
+    # noplanes_fallback); SKIP without a device
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/noplanes_ab")
     add_test(NAME rd_noplanes_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/noplanes_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                     "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/noplanes.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/noplanes_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_noplanes_ab.cmake")
     set_tests_properties(rd_noplanes_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800)
@@ -3156,9 +3151,9 @@ if(ICO_RUN_TESTS)
     if(_env)
         set_tests_properties(rd_constant_reads_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
-    # rd_fades_fold_ab (test/rd_fades_fold_ab.cmake): the fade dumps
-    # (tools/fades_fold_dumps.txt) and, with ICO_BOOT_DUMP_DIR, the start-up's
-    # frames 115 to 123, with list 11's last full-frame lerp sprites drawn
+    # rd_fades_fold_ab (test/rd_fades_fold_ab.cmake): the fixtures of
+    # test/fixtures/lists/fades_fold.txt (the path ran: fades_folded), with
+    # list 11's last full-frame lerp sprites drawn
     # into SCENE (ICO_RD_FADES_FOLD=0, the tests' way) and applied by the
     # reduction (rd_fades_fold.c, the default on every device), under
     # ICO_RD_BLEND=attachment and fixed, at Original, Enhanced 2x and the
@@ -3169,8 +3164,9 @@ if(ICO_RUN_TESTS)
         file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/fades_fold_ab")
         add_test(NAME rd_fades_fold_ab
                  COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                         "-DLIST=${CMAKE_SOURCE_DIR}/tools/fades_fold_dumps.txt"
-                         "-DBOOT=${ICO_BOOT_DUMP_DIR}" "-DPY=${Python3_EXECUTABLE}"
+                         -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                         "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                         "-DLIST=${ICO_FIXTURE_DIR}/lists/fades_fold.txt" "-DPY=${Python3_EXECUTABLE}"
                          "-DDIFF=${CMAKE_CURRENT_SOURCE_DIR}/test/png_level_diff.py"
                          "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/fades_fold_ab"
                          -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_fades_fold_ab.cmake")
@@ -3180,27 +3176,25 @@ if(ICO_RUN_TESTS)
             set_tests_properties(rd_fades_fold_ab PROPERTIES ENVIRONMENT "${_env}")
         endif()
     endif()
-    # rd_crack_late_ab (test/rd_crack_late_ab.cmake): the dumps and baselines of
-    # tools/crack_late_dumps.txt (machine-local: the gate's Enhanced 2x pass
-    # dumps and the PowerVR phone's frames at its Resolution Auto, made by the
-    # build that drew the crack fill before the fog) replayed with the fill
-    # after lists 4-6 (rd_crack_fill.c): every target within the measured bound
-    # (DIVERGENCES.md VD-20), the fill drawn once after lists 4-6, at the
-    # phone's setting one copy fewer and no pass more; SKIP as rd_vustage_ab
-    if(Python3_FOUND)
-        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/crack_late_ab")
-        add_test(NAME rd_crack_late_ab
-                 COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                         "-DLIST=${CMAKE_SOURCE_DIR}/tools/crack_late_dumps.txt"
-                         "-DPY=${Python3_EXECUTABLE}"
-                         "-DDIFF=${CMAKE_CURRENT_SOURCE_DIR}/test/png_level_diff.py"
-                         "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/crack_late_ab"
-                         -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_crack_late_ab.cmake")
-        set_tests_properties(rd_crack_late_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
-                             TIMEOUT 3600)
-        if(_env)
-            set_tests_properties(rd_crack_late_ab PROPERTIES ENVIRONMENT "${_env}")
-        endif()
+    # rd_crack_late_ab (test/rd_crack_late_ab.cmake): the fixtures of
+    # test/fixtures/lists/crack_late.txt at the gate's Enhanced 2x and the
+    # PowerVR phone's Resolution Auto with the fill after lists 4-6
+    # (rd_crack_fill.c): the fill drawn once after lists 4-6 with the declared
+    # crack_pixels, every PNG the release before's (crack_late_goldens.txt),
+    # the same bytes with the fill at the start of list 7; SKIP without a device
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/crack_late_ab")
+    add_test(NAME rd_crack_late_ab
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool> "-DFIXTURES=${ICO_FIXTURE_DIR}"
+                     "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/crack_late.txt"
+                     "-DGOLDENS=${ICO_FIXTURE_DIR}/lists/crack_late_goldens.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/crack_late_ab"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_crack_late_ab.cmake")
+    set_tests_properties(rd_crack_late_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                         TIMEOUT 3600)
+    if(_env)
+        set_tests_properties(rd_crack_late_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
     # rd_aura_box_ab (test/rd_aura_box_ab.cmake): lists/aura_box.txt's fixtures
     # with the aura's read into FEED128 in one pass and in two: the same bytes

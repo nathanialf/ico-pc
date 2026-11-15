@@ -7,12 +7,22 @@
 #   feedback effect: then not compared)
 # and hold a baseline line and every variant line its list entry names.
 # The dumps: DUMP (rd_pixel's, may be absent) at the tool's own setting with
-# a 640x480 present, and LIST's at the PowerVR phone's setting
-# (ICO_VK_FAKE_LIMITS=moltenvk, Enhanced, --resolution 2364x1080
-# --full-height --full-pixel --present 2364x1080); where
-# /primary/dev/ico-dumps exists a listed dump that is absent fails.  No
-# device (77): SKIP.
-# -DTOOL=<rd_replay_tool> -DDUMP=<rddump> -DLIST=<dump list> -DOUT=<a folder the test may write>
+# a 640x480 present, and the fixtures LIST names
+# (port/render/test/fixtures/lists/bench.txt: fixture names of the
+# repository, docs/port/TESTING_FIXTURES.md; a listed fixture that is absent or
+# does not expand to its pinned SHA-256 FAILS; after the name the line's own
+# properties, rd_fixture_list_props.cmake, then '|' and the variant lines
+# its run must hold, '|'-separated, from the frame's own command listing:
+# rd_replay_tool --list --no-device; the fixture keeps every command) at the
+# PowerVR phone's setting (ICO_VK_FAKE_LIMITS=moltenvk, Enhanced, --resolution
+# 2364x1080 --full-height --full-pixel --present 2364x1080).  The path ran
+# (rd_fixture_require on a fixture's bench run): bench_variants, the variants
+# the bench ran (every one of them, above).  No device (77): SKIP.
+# -DTOOL=<rd_replay_tool> -DDUMP=<rddump> -DFIXTURE_TOOL=<rd_fixture_tool>
+# -DFIXTURES=<the fixtures folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake>
+# -DLIST=<a fixture list> -DOUT=<a folder the test may write>
+include("${FIXTURE_HELPERS}")
+include("${CMAKE_CURRENT_LIST_DIR}/rd_fixture_list_props.cmake")
 file(REMOVE_RECURSE "${OUT}")
 file(MAKE_DIRECTORY "${OUT}")
 set(dumps "")
@@ -21,33 +31,21 @@ if(DUMP AND EXISTS "${DUMP}")
   list(APPEND dumps "${DUMP}")
   list(APPEND wants "-")
 endif()
-if(LIST AND EXISTS "${LIST}")
-  file(STRINGS "${LIST}" lines)
-  foreach(l IN LISTS lines)
-    string(STRIP "${l}" l)
-    if(l STREQUAL "" OR l MATCHES "^#")
-      continue()
-    endif()
-    string(FIND "${l}" "|" bar)
-    if(bar LESS 0)
-      set(path "${l}")
-      set(names "-")
-    else()
-      string(SUBSTRING "${l}" 0 ${bar} path)
-      math(EXPR from "${bar} + 1")
-      string(SUBSTRING "${l}" ${from} -1 names)
-      string(REPLACE "|" "@@" names "${names}")
-    endif()
-    if(EXISTS "${path}")
-      list(APPEND dumps "${path}")
-      list(APPEND wants "${names}")
-    elseif(EXISTS "/primary/dev/ico-dumps")
-      message(FATAL_ERROR "${LIST} names ${path}, which is not here")
-    else()
-      message(STATUS "${path}: not here (no dump folder): skipped")
-    endif()
-  endforeach()
-endif()
+rd_fixture_list("${LIST}" fxNames)
+foreach(name IN LISTS fxNames)
+  rd_fixture_expand(${name} "${OUT}/fixtures" d)
+  rd_fixture_list_props(${name})
+  set(names "-")
+  string(FIND "${RDFX_FIELDS_${name}}" "|" bar)
+  if(bar GREATER_EQUAL 0)
+    math(EXPR from "${bar} + 1")
+    string(SUBSTRING "${RDFX_FIELDS_${name}}" ${from} -1 names)
+    string(REPLACE "|" "@@" names "${names}")
+  endif()
+  list(APPEND dumps "${d}")
+  list(APPEND wants "${names}")
+  set(name_${d} "${name}")
+endforeach()
 list(LENGTH dumps ndumps)
 if(ndumps EQUAL 0)
   message(STATUS "SKIP: no dump is here")
@@ -85,6 +83,10 @@ foreach(i RANGE ${last})
     message(FATAL_ERROR "${dump}: ${CMAKE_MATCH_1} of ${CMAKE_MATCH_2} variants ran")
   endif()
   set(nvar ${CMAKE_MATCH_2})
+  if(NOT dump STREQUAL "${DUMP}")
+    # the path ran: the variants the bench ran on this fixture
+    rd_fixture_require(${name_${dump}} "${out}" bench_variants)
+  endif()
   if(NOT out MATCHES "bench: the picture after the bench: the same bytes as before it" AND
      NOT out MATCHES "bench: the frame's picture differs from one baseline replay to the next")
     message(FATAL_ERROR "${dump}: the picture after the bench is not the one before it "
@@ -104,3 +106,6 @@ foreach(i RANGE ${last})
   endif()
   message(STATUS "${dump}: ${nvar} variants ran, the picture after the bench the one before it")
 endforeach()
+if(RDFX_FAILURES GREATER 0)
+  message(FATAL_ERROR "rd_bench_ab: ${RDFX_FAILURES} fixtures' declared properties did not hold")
+endif()

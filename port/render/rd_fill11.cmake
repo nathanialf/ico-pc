@@ -57,27 +57,33 @@ if(ICO_RUN_TESTS AND TARGET rd_crack_test)
                          ENVIRONMENT "${_dc_env};ICO_VK_FAKE_LIMITS=moltenvk;ICO_RD_FILL11_POISON=1")
 endif()
 
-# rd_fill11_ab (test/rd_fill11_ab.cmake): the dumps of tools/fill11_dumps.txt
-# (machine-local; a listed dump that is absent fails) replayed by rd_replay_tool
-# --pass-dump --stats with ICO_RD_FILL11=0 against the switch on: at the PowerVR
-# phone's profile on lavapipe (ICO_VK_FAKE_LIMITS=moltenvk, ICO_RD_LATE_PASS=1,
-# ICO_RD_VU_PREPASS=0, Enhanced, 2364x1080, Full height, Full pixel) and at
-# Enhanced 2x 4:3 on lavapipe's own (desktop) profile, the on runs with
-# ICO_RD_FILL11=1 (off by default in this release), and with the Mali-G68's limits
-# on an Arm phone's vendor (ICO_VK_FAKE_LIMITS=mali, ICO_VK_FAKE_VENDOR=0x13B5), the
-# on run with nothing set (off: nothing may change): every target and PRESENT byte for
-# byte, the same draws, the passes fewer by the fills drawn in list 11's pass
-# exactly, the crack fill's own passes fewer by them too, the colour MB loaded
-# and stored each fewer by the MB the stats name for them, the depth and stencil
-# MB not more, the copies the same; the self-test passed where it ran; the dumps
-# the list marks draw that many fills in list 11's pass; at least one over the
-# list; rd_fill11_gl: the 4:3 setting on OpenGL (llvmpipe, ICO_RD_FILL11=1), the
-# same pairs.  No device: SKIP.
+# rd_fill11_ab (test/rd_fill11_ab.cmake): the fixtures of
+# test/fixtures/lists/fill11.txt (committed frames with no art,
+# docs/port/TESTING_FIXTURES.md; a listed fixture that is absent fails) replayed
+# by rd_replay_tool --pass-dump --stats with ICO_RD_FILL11=0 against the switch
+# on: at the PowerVR phone's profile on lavapipe (ICO_VK_FAKE_LIMITS=moltenvk,
+# ICO_RD_LATE_PASS=1, ICO_RD_VU_PREPASS=0, Enhanced, 2364x1080, Full height, Full
+# pixel) and at Enhanced 2x 4:3 on lavapipe's own (desktop) profile, the on runs
+# with ICO_RD_FILL11=1 (off by default in this release), and with the Mali-G68's
+# limits on an Arm phone's vendor (ICO_VK_FAKE_LIMITS=mali,
+# ICO_VK_FAKE_VENDOR=0x13B5), the on run with nothing set (off: nothing may
+# change): every target and PRESENT byte for byte, the same draws, the passes
+# fewer by the fills drawn in list 11's pass exactly, the crack fill's own
+# passes fewer by them too, the colour MB loaded and stored each fewer by the MB
+# the stats name for them, the depth and stencil MB not more, the copies the
+# same; the self-test passed where it ran; the list's counts drawn in list 11's
+# pass at each setting; at least one over the list; the path ran: each
+# fixture's declared crack_pixels on every on run, the switch deciding each
+# fixture's fill on at least one; rd_fill11_gl: the 4:3 setting on OpenGL
+# (llvmpipe, ICO_RD_FILL11=1), the same pairs.  No device: SKIP.
+include(rd_fixture.cmake)
 if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
+    set(_f11_fx -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool> "-DFIXTURES=${ICO_FIXTURE_DIR}"
+                "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                "-DLIST=${ICO_FIXTURE_DIR}/lists/fill11.txt")
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/fill11_ab")
     add_test(NAME rd_fill11_ab
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/fill11_dumps.txt"
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> ${_f11_fx}
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/fill11_ab" -DBACKEND=vulkan
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_fill11_ab.cmake")
     set_tests_properties(rd_fill11_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 7200)
@@ -87,8 +93,7 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
     if(ICO_RHI_OPENGL AND ICO_SHADERS_GLSL AND TARGET ico_rhi_opengl)
         file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/gl/fill11_ab")
         add_test(NAME rd_fill11_gl
-                 COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                         "-DLIST=${CMAKE_SOURCE_DIR}/tools/fill11_dumps.txt"
+                 COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> ${_f11_fx}
                          "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/gl/fill11_ab" -DBACKEND=opengl
                          -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_fill11_ab.cmake")
         set_tests_properties(rd_fill11_gl PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
