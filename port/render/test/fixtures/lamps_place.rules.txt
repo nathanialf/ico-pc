@@ -1,0 +1,13 @@
+# Rules for the lamps' fixtures (docs/port/TESTING_FIXTURES.md "The placement
+# rules"): the default texture rules, and the lamps' meshes (the meshes drawn
+# into WORK2) generated on WORK2 instead of about the room's origin
+glyphs     sheet
+ramp       r8
+date_split date
+alpha_ramp ate
+bright     additive
+gradient   abe
+checker    sprite
+grey       unused
+checker
+@lamps place

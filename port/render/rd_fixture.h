@@ -43,7 +43,13 @@
  *   records (no name, no stream), the tick cameras (version 14), per facing
  *   table its mesh id and vertex count (version 15: the bits are generated
  *   zero), then u32 count and per grid / particle draw (u32 payload offset,
- *   i32 size exponent). */
+ *   i32 size exponent).  A fixture made with a placement rule (below) ends
+ *   with one more section, absent otherwise (so a fixture without the rules
+ *   is the same bytes as before they existed): u32 RD_FX_PLACE_TAG, u32
+ *   count and per placed mesh (u32 mesh id, i32 x, y, z: the cube's centre
+ *   in units of its lattice step 2^(size exponent - 3), in place of the
+ *   model's origin), u32 count and per CPU-projected prim generated beside
+ *   the target (u32 payload offset of its vertices). */
 #ifndef PORT_RENDER_RD_FIXTURE_H
 #define PORT_RENDER_RD_FIXTURE_H
 
@@ -154,6 +160,10 @@ void rd_fx_pattern_texel(const char *name, uint32_t x, uint32_t y, uint32_t w, u
                          uint8_t rgba[4]);
 /* the mesh generator's one name ("strips") */
 #define RD_FX_MESH_GEN "strips"
+/* the placement section's tag ("FXP1"), and the largest |centre| word: the
+ * lattice adds at most 8, and the sum must stay an exact float (2^24) */
+#define RD_FX_PLACE_TAG 0x31505846u
+#define RD_FX_PLACE_MAX ((1 << 23) - 16)
 
 /* ------------------------------------------------------------- the file */
 
@@ -189,7 +199,20 @@ bool rd_fixture_check(const RdFixture *fx, char *why, size_t whySize, char *stat
  * syntax in TESTING_FIXTURES.md).  The dump's texels and vertices are never
  * read: only its commands, state, sizes, formats, counts and topology, and
  * the VU blocks' matrices (to size the generated meshes so they reach the
- * screen).  report (may be NULL) gets a line per decision kind. */
+ * screen).  report (may be NULL) gets a line per decision kind.
+ *
+ * Two rule lines place generated geometry for a test of the glow's light
+ * (opt-in: a rule file that has neither makes the fixture it always made):
+ *   @lamps place   every mesh a non-skinned draw puts into WORK2 (the glow's
+ *                  lamps) is generated about a point that lands on WORK2
+ *                  instead of about its model's origin: read from that draw
+ *                  alone, its placement matrix (VU mem 16..19), the state's
+ *                  scissor and target size, and its ordinal among such
+ *                  meshes; see rd_fixture_make.c placeAt
+ *   @fans off      every CPU-projected prim (not a sprite, not text) drawn
+ *                  into WORK2 (the sun's fans) is generated beside the
+ *                  target, as the fans of a sun that is off the picture
+ * A rule that matches no draw fails the make. */
 extern const char rd_fx_default_rules[];
 bool rd_fixture_make(const uint8_t *dump, size_t n, const char *rules, RdFixture *fx, char *report,
                      size_t reportSize, char *why, size_t whySize);
