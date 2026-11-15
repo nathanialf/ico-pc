@@ -2724,206 +2724,37 @@ if(ICO_RUN_TESTS)
     if(_env)
         set_tests_properties(rd_occlusion_tool PROPERTIES ENVIRONMENT "${_env}")
     endif()
-    # rd_vu_skin_check_dump (test/rd_vu_skin_check_dump.cmake, issue 163,
-    # docs/port/VU_SKIN_CHECK.md): rd_replay_tool --skin-check on a
-    # machine-local corpus dump with 46 skinned commands (the queen's
-    # among them): every command the replay draws checked (a culled one is
-    # not drawn), none wrong, the bytes equal, no box sample outside on
-    # lavapipe; rd_vu_skin_check_163*: the reporter's
-    # blended dump (machine-local, /primary/dev/ico-dumps/163/): clean, then
-    # with the bone at address 200 read as zeros by the probe (the device's
-    # failure as the check would see it: address 200 named, H1
-    # address-dependent) and in the ring (H2), and the deep dive's patched
-    # copy (its stream's lanes on 200 moved to 252: the CPU and the GPU
-    # read the same stream, so the check finds nothing there: it compares
-    # the device with the CPU, not with the clean dump); SKIP without the
-    # dump or a device
+    # the skinned draws' checks on the committed fixtures (issue 163, issue
+    # 123's ladder): rd_vu_skin_check_dump, _163_probe, _163_ring, the
+    # rd_vu_skin_check_123* rows, rd_vu_skin_check_ab, rd_vu_bones_ring_ab
+    # and _prepass (test/rd_vu_skin_fx_tests.cmake).  rd_vu_skin_check_163
+    # and _163_patched (test/rd_vu_skin_check_dump.cmake on a dump): issue
+    # 163's blended dump and the deep dive's patched copy (its stream's
+    # lanes on 200 moved to 252: the CPU and the GPU read the same stream,
+    # so the check finds nothing there), clean, every command the replay
+    # draws checked, no box sample outside on lavapipe; machine-local (not
+    # converted: the clean line's box clause on the fixture, FIX-P6a's
+    # hand-back); SKIP without the dump or a device
     set(_vskd "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_skin_check_dump.cmake")
     set(_vskd_clean "[0-9]+ skinned commands, [1-9][0-9]* checks, 0 wrong \\(address 0\\), 0 blocks whose bytes differed \\(0 changed after the draw\\), 0 of [0-9]+ box checks with samples outside")
     set(_vsk163 "/primary/dev/ico-dumps/163")
-    # a wrong check's mismatch line for Yorda's mesh at bone address 200
-    # (review2 S5: the H2 run's 42 changed blocks must not use up its lines)
-    set(_vsk163_wrong "rd: VU skin check: frame [0-9]+ command 0:[0-9]+ mesh testmodel #[0-9]+ \\([0-9]+ vertices\\): [0-9]+ vertices wrong of [0-9]+, address 200: ")
-    add_test(NAME rd_vu_skin_check_dump
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMP=/primary/dev/ico-dumps/frame-20261007-200706-v3086.rddump"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_dump"
-                     "-DLINE=46 skinned commands, [1-9][0-9]* checks, 0 wrong \\(address 0\\), 0 blocks whose bytes differed \\(0 changed after the draw\\), 0 of [0-9]+ box checks with samples outside"
-                     -P "${_vskd}")
     add_test(NAME rd_vu_skin_check_163
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      "-DDUMP=${_vsk163}/frame-20261105-195124-v6171-blended.rddump"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_163"
                      "-DLINE=${_vskd_clean}" -P "${_vskd}")
-    add_test(NAME rd_vu_skin_check_163_probe
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMP=${_vsk163}/frame-20261105-195124-v6171-blended.rddump"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_163_probe"
-                     "-DLINE=[0-9]+ skinned commands, [0-9]+ checks, [1-9][0-9]* wrong \\(address 200\\), 0 blocks whose bytes differed \\(0 changed after the draw\\).*reads as: H1, address-dependent"
-                     "-DLOG=${_vsk163_wrong}" -P "${_vskd}")
-    add_test(NAME rd_vu_skin_check_163_ring
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMP=${_vsk163}/frame-20261105-195124-v6171-blended.rddump"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_163_ring"
-                     "-DLINE=[0-9]+ skinned commands, [0-9]+ checks, [1-9][0-9]* wrong \\(address 200\\), [1-9][0-9]* blocks whose bytes differed \\([1-9][0-9]* changed after the draw\\).*reads as: H2, a port race"
-                     "-DLOG=${_vsk163_wrong}" -P "${_vskd}")
     add_test(NAME rd_vu_skin_check_163_patched
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      "-DDUMP=${_vsk163}/blended-750-a200.rddump"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_163_patched"
                      "-DLINE=${_vskd_clean}" -P "${_vskd}")
-    # rd_vu_skin_check_123*: issue 123's v0.10.4 blended dump (Yorda's
-    # shin missing on the device; machine-local, copied into the same
-    # folder): clean (the twins equal), and with the bone at 200 made NaN in
-    # the ring after its bytes were kept (the device's picture's form, B0):
-    # wrong at address 200 with the wrong vertices dropped, H2, the twins
-    # differing
-    set(_vsk123 "${_vsk163}/frame-20261106-080033-v3910-blended.rddump")
-    add_test(NAME rd_vu_skin_check_123
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> "-DDUMP=${_vsk123}"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_123"
-                     "-DLINE=${_vskd_clean}.*twins: [1-9][0-9]* read \\([0-9]+ through the draw's own pipeline\\), 0 differ"
-                     -P "${_vskd}")
-    add_test(NAME rd_vu_skin_check_123_nan
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> "-DDUMP=${_vsk123}"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_123_nan"
-                     "-DLINE=[0-9]+ skinned commands, [0-9]+ checks, [1-9][0-9]* wrong \\(address 200\\).*reads as: H2, a port race.*twins: [1-9][0-9]* read \\([0-9]+ through the draw's own pipeline\\), [1-9][0-9]* differ.*[1-9][0-9]* wrong vertices dropped"
-                     "-DLOG=${_vsk163_wrong}.*reads as non-finite / dropped" -P "${_vskd}")
-    # _attach: the same two under the Turnip reporter's profile on lavapipe
-    # (the attachment read, GS state as shader data, the VU pre-pass off as
-    # on a tile-based GPU), so the draws whose first pass reads the
-    # attachment with Z writes off are twinned through their own pipelines
-    # with the write mask cleared: clean every twin equal with at least one
-    # through the draw's own pipeline; with the NaN bone the same and the
-    # twins differing (on this dump the three draws on bone 200 are not
-    # among the own-pipeline ones: each event line says why)
-    set(_vsk_attach "ICO_RD_VU_PREPASS=0;ICO_VK_FAKE_NO_INTERLOCK=1;ICO_RD_BLEND=attachment;ICO_RD_UBER=on")
-    add_test(NAME rd_vu_skin_check_123_attach
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> "-DDUMP=${_vsk123}"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_123_attach"
-                     "-DLINE=${_vskd_clean}.*twins: [1-9][0-9]* read \\([1-9][0-9]* through the draw's own pipeline\\), 0 differ"
-                     -P "${_vskd}")
-    add_test(NAME rd_vu_skin_check_123_nan_attach
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> "-DDUMP=${_vsk123}"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_123_nan_attach"
-                     "-DLINE=[0-9]+ skinned commands, [0-9]+ checks, [1-9][0-9]* wrong \\(address 200\\).*twins: [1-9][0-9]* read \\([1-9][0-9]* through the draw's own pipeline\\), [1-9][0-9]* differ"
-                     "-DLOG=twins differ: A \\(the draw's offset, page phase [0-9]+\\) [0-9]+ samples, B \\(fresh, phase [0-9]+\\) [0-9]+ samples(, C \\(ring read\\) [0-9]+ samples)?[;,] through [a-z0-9_]+ with " -P "${_vskd}")
-    # issue 123's ladder on the same dump under the plain set with the
-    # pre-pass off (the Turnip profile's program entries): _123_c3 the
-    # probe's sabotage (the draw's bytes right): wrong at 200, H1, the
-    # probe's column 3 (the bones through the ring at the draw's block)
-    # right and every twin C equal to B; _123_nan_c the ring's NaN: twin C
-    # reads it as A does (differs from B); _123_bones_ring the ring builds in
-    # force ([dev] vu_bones = ring): clean, the start line, "the ring read:
-    # healed"; _123_bones_ring_nan with the NaN: the twins (both ring reads)
-    # differ, "not healed"
-    set(_vsk_ringenv "ICO_RD_VU_SET=plain;ICO_RD_VU_PREPASS=0")
-    add_test(NAME rd_vu_skin_check_123_c3
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> "-DDUMP=${_vsk123}"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_123_c3"
-                     "-DLINE=[0-9]+ skinned commands, [0-9]+ checks, [1-9][0-9]* wrong \\(address 200\\), 0 blocks whose bytes differed \\(0 changed after the draw\\).*reads as: H1, address-dependent.*the ring read: c3 right [1-9][0-9]* \\(c3 drawn in [1-9][0-9]*\\), ring twins [1-9][0-9]* read, 0 differ from B"
-                     "-DLOG=\\(c3\\) the bones through the ring: right \\(0 wrong\\)" -P "${_vskd}")
-    add_test(NAME rd_vu_skin_check_123_nan_c
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> "-DDUMP=${_vsk123}"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_123_nan_c"
-                     "-DLINE=[0-9]+ skinned commands, [0-9]+ checks, [1-9][0-9]* wrong \\(address 200\\).*reads as: H2, a port race.*ring twins [1-9][0-9]* read, [1-9][0-9]* differ from B"
-                     "-DLOG=B \\(fresh, phase [0-9]+\\) [0-9]+ samples, C \\(ring read\\) [0-9]+ samples" -P "${_vskd}")
-    add_test(NAME rd_vu_skin_check_123_bones_ring
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> "-DDUMP=${_vsk123}"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_123_bones_ring"
-                     "-DLINE=${_vskd_clean}.*twins: [1-9][0-9]* read \\([0-9]+ through the draw's own pipeline\\), 0 differ"
-                     "-DLOG=rd: VU bones: through the ring \\(storage buffer\\) on the skinned entries.*rd: VU skin check: the ring read: healed \\(0 of [1-9][0-9]* twins differ" -P "${_vskd}")
-    add_test(NAME rd_vu_skin_check_123_bones_ring_nan
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> "-DDUMP=${_vsk123}"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_123_bones_ring_nan"
-                     "-DLINE=[0-9]+ skinned commands, [0-9]+ checks, [1-9][0-9]* wrong \\(address 200\\).*twins: [1-9][0-9]* read \\([0-9]+ through the draw's own pipeline\\), [1-9][0-9]* differ"
-                     "-DLOG=A and B read the bones through the ring: step 1 of the ladder in force.*rd: VU skin check: the ring read: not healed \\([1-9][0-9]* of [1-9][0-9]* twins differ" -P "${_vskd}")
-    set_tests_properties(rd_vu_skin_check_123_c3 PROPERTIES ENVIRONMENT
-                         "${_env};${_vsk_ringenv};ICO_RD_VU_SKIN_SABOTAGE=200")
-    set_tests_properties(rd_vu_skin_check_123_nan_c PROPERTIES ENVIRONMENT
-                         "${_env};${_vsk_ringenv};ICO_RD_VU_SKIN_SABOTAGE=200,nan")
-    set_tests_properties(rd_vu_skin_check_123_bones_ring PROPERTIES ENVIRONMENT
-                         "${_env};${_vsk_ringenv};ICO_RD_VU_BONES=ring")
-    set_tests_properties(rd_vu_skin_check_123_bones_ring_nan PROPERTIES ENVIRONMENT
-                         "${_env};${_vsk_ringenv};ICO_RD_VU_BONES=ring;ICO_RD_VU_SKIN_SABOTAGE=200,nan")
-    set(_vskd_tests rd_vu_skin_check_dump rd_vu_skin_check_163 rd_vu_skin_check_163_probe
-                    rd_vu_skin_check_163_ring rd_vu_skin_check_163_patched rd_vu_skin_check_123
-                    rd_vu_skin_check_123_nan rd_vu_skin_check_123_attach
-                    rd_vu_skin_check_123_nan_attach rd_vu_skin_check_123_c3
-                    rd_vu_skin_check_123_nan_c rd_vu_skin_check_123_bones_ring
-                    rd_vu_skin_check_123_bones_ring_nan)
-    set_tests_properties(${_vskd_tests} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800)
+    set_tests_properties(rd_vu_skin_check_163 rd_vu_skin_check_163_patched
+                         PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800)
     if(_env)
-        set_tests_properties(rd_vu_skin_check_dump rd_vu_skin_check_163
-                             rd_vu_skin_check_163_patched rd_vu_skin_check_123
+        set_tests_properties(rd_vu_skin_check_163 rd_vu_skin_check_163_patched
                              PROPERTIES ENVIRONMENT "${_env}")
     endif()
-    set_tests_properties(rd_vu_skin_check_163_probe
-                         PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_SKIN_SABOTAGE=200")
-    set_tests_properties(rd_vu_skin_check_163_ring
-                         PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_SKIN_SABOTAGE=200,ring")
-    set_tests_properties(rd_vu_skin_check_123_nan
-                         PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_SKIN_SABOTAGE=200,nan")
-    set_tests_properties(rd_vu_skin_check_123_attach PROPERTIES ENVIRONMENT "${_env};${_vsk_attach}")
-    set_tests_properties(rd_vu_skin_check_123_nan_attach
-                         PROPERTIES ENVIRONMENT
-                                    "${_env};${_vsk_attach};ICO_RD_VU_SKIN_SABOTAGE=200,nan")
-    # rd_vu_skin_check_ab (test/rd_vu_skin_check_ab.cmake, review2 S6): the
-    # picture with the check on for every skinned command (ICO_RD_VU_SKIN_CHECK=2)
-    # against off, every pass-dump PNG byte for byte, at Original, with the
-    # attachment read and GS state as shader data (the Turnip reporter's
-    # profile on lavapipe) and at Enhanced 2x MSAA 4, on the corpus dump of
-    # tools/vustage_dumps.txt's /primary/dev/ico-dumps/*.rddump with the
-    # most skinned commands (frame-20261007-200706-v3086: 46), issue 163's
-    # blended dump (Yorda's draws) and issue 123's; the twins (every skinned
-    # draw twinned in its pass) drawn in the plain and attach runs and, in
-    # the attach runs, through the draws' own pipelines with the write mask
-    # cleared; SKIP without them or a device
-    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_ab")
-    add_test(NAME rd_vu_skin_check_ab
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMPS=/primary/dev/ico-dumps/frame-20261007-200706-v3086.rddump|${_vsk163}/frame-20261105-195124-v6171-blended.rddump|${_vsk163}/frame-20261106-080033-v3910-blended.rddump"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_ab"
-                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_skin_check_ab.cmake")
-    set_tests_properties(rd_vu_skin_check_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800)
-    if(_env)
-        set_tests_properties(rd_vu_skin_check_ab PROPERTIES ENVIRONMENT "${_env}")
-    endif()
-    # rd_vu_bones_ring_ab (test/rd_vu_bones_ring_ab.cmake, issue 123's
-    # ladder, docs/port/VU_SKIN_CHECK.md "The ladder"): the three dumps of
-    # /primary/dev/ico-dumps/163/ (issue 163's blended dump, its patched
-    # copy, issue 123's v0.10.4 blended dump) replayed under the plain set
-    # with the VU pre-pass off, the bones through VuBoneCB and through the
-    # ring ([dev] vu_bones = ring): every pass-dump PNG byte for byte, at
-    # Original and with the attachment read and GS state as shader data;
-    # SKIP without them or a device
-    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vu_bones_ring_ab")
-    add_test(NAME rd_vu_bones_ring_ab
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMPS=${_vsk163}/frame-20261105-195124-v6171-blended.rddump|${_vsk163}/blended-750-a200.rddump|${_vsk163}/frame-20261106-080033-v3910-blended.rddump"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_bones_ring_ab"
-                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_bones_ring_ab.cmake")
-    set_tests_properties(rd_vu_bones_ring_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800)
-    if(_env)
-        set_tests_properties(rd_vu_bones_ring_ab PROPERTIES ENVIRONMENT "${_env}")
-    endif()
-    # rd_vu_bones_ring_ab_prepass: the same dumps with the VU pre-pass on (every
-    # tile-based GPU since v0.11.0): the ring runs byte for byte as the
-    # cbuffer runs under the pre-pass's batch builds (which read the bones
-    # through t5 either way) and with them off (the skinned commands then
-    # drawn the old way through the ring builds); the twins of the record
-    # draws read the bones through the ring as the record did
-    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vu_bones_ring_ab_prepass")
-    add_test(NAME rd_vu_bones_ring_ab_prepass
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> -DPREPASS=1
-                     "-DDUMPS=${_vsk163}/frame-20261105-195124-v6171-blended.rddump|${_vsk163}/blended-750-a200.rddump|${_vsk163}/frame-20261106-080033-v3910-blended.rddump"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_bones_ring_ab_prepass"
-                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_bones_ring_ab.cmake")
-    set_tests_properties(rd_vu_bones_ring_ab_prepass PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
-                                                                 TIMEOUT 2700)
-    if(_env)
-        set_tests_properties(rd_vu_bones_ring_ab_prepass PROPERTIES ENVIRONMENT "${_env}")
-    endif()
+    include("${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_skin_fx_tests.cmake")
     # rd_region_stats (test/rd_region_stats.cmake, docs/port/VU1_PROGRAMS.md
     # "The region rule"): rd_replay_tool --region-stats on the first two
     # dumps of the machine-local list tools/occlusion_corpus.txt here, at

@@ -629,40 +629,48 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   with `--present 640x480` under `ICO_RD_BLEND=fixed`: DISPLAY.png and PRESENT.png byte for byte
   (`rd_occlusion_tool`). SKIP without the list, a dump of it or a device.
 - `rd_vu_skin_check_dump.cmake`: `rd_replay_tool --skin-check`
-  ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)) at the tool's default settings: on the machine-local
-  corpus dump `frame-20261007-200706-v3086` (46 skinned commands) every command the replay draws
-  checked, none wrong, the bytes equal and no box sample outside (`rd_vu_skin_check_dump`); on the
-  issue 163 reporter's blended dump (`/primary/dev/ico-dumps/163/`) the same clean
-  (`rd_vu_skin_check_163`), with `ICO_RD_VU_SKIN_SABOTAGE=200` the probe's zero matrix at address
-  200 named with the bytes equal and `reads as: H1, address-dependent`
+  ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)) at the tool's default settings, on committed fixtures
+  ([TESTING_FIXTURES.md](TESTING_FIXTURES.md)): each test names its fixture by the word on its line
+  of `test/fixtures/lists/skin_check.txt` and asserts the path ran (`-DREQUIRE`: the skin check's
+  quantities read from the summary line, as the fixture or its line declares them). The fixtures
+  keep the poses and generate the skinned vertices (half on two bones, which reach address 200 on
+  both reporter frames), so the counts are the fixtures' and the mismatch line names the generated
+  mesh (`m0001`...). On `fx-vu-3086` (46 skinned commands) every command the replay draws checked,
+  none wrong, the bytes equal and no box sample outside (`rd_vu_skin_check_dump`); on issue 163's
+  blended frame (`fx-163-blended`) with `ICO_RD_VU_SKIN_SABOTAGE=200` the probe's zero matrix at
+  address 200 named with the bytes equal and `reads as: H1, address-dependent`
   (`rd_vu_skin_check_163_probe`), with `=200,ring` the bytes differing as the GPU copied them and as
-  the CPU reads them and `reads as: H2, a port race` (`rd_vu_skin_check_163_ring`), and the deep
-  dive's patched copy (its lanes on 200 moved to a zero bone) checked right, the CPU and the GPU
-  reading the same stream (`rd_vu_skin_check_163_patched`); on issue 123's blended dump
-  `frame-20261106-080033-v3910-blended` (copied to the same folder) clean with every twin equal (`rd_vu_skin_check_123`) and with
-  `=200,nan` wrong at address 200, H2, the twins differing and the wrong vertices dropped
-  (`rd_vu_skin_check_123_nan`); the same two under the Turnip reporter's profile on lavapipe (the
-  attachment read, GS state as shader data, the VU pre-pass off), where the twins of the draws
-  whose first pass reads the attachment with Z writes off go through their own pipelines: every twin
-  equal and at least one through the draw's own pipeline (`rd_vu_skin_check_123_attach`), and with
-  `=200,nan` the same with the twins differing and a `twins differ` line
-  (`rd_vu_skin_check_123_nan_attach`; on this dump the three draws on bone 200 are twinned through
-  the box check's pipeline, and each line says why). The summary line ends `twins: T read (O through
-  the draw's own pipeline), D differ (E of them through it); V wrong vertices dropped
-  (non-finite); the ring read: c3 right K (c3 drawn in M), ring twins R read, E differ from B`. Issue
-  123's ladder on the same dump under the plain set with the pre-pass off
-  (`ICO_RD_VU_SET=plain ICO_RD_VU_PREPASS=0`): with `=200` H1 with column 3 right and every twin C
-  equal to B (`rd_vu_skin_check_123_c3`); with `=200,nan` twin C differing from B
-  (`rd_vu_skin_check_123_nan_c`); with `ICO_RD_VU_BONES=ring` clean, the `rd: VU bones: through the
-  ring` start line and `the ring read: healed (0 of T ...)` (`rd_vu_skin_check_123_bones_ring`), and
-  with the NaN too the twins (both ring reads) differing and `not healed`
-  (`rd_vu_skin_check_123_bones_ring_nan`). SKIP without the dump or a device.
+  the CPU reads them and `reads as: H2, a port race` (`rd_vu_skin_check_163_ring`); on issue 123's
+  blended frame (`fx-123-blended`, its blended VU textures clear: `skin_twins.rules.txt`) clean
+  with every twin equal (`rd_vu_skin_check_123`) and with `=200,nan` wrong at address 200, H2, the
+  twins differing and the wrong vertices dropped (`rd_vu_skin_check_123_nan`); the same two under
+  the Turnip reporter's profile on lavapipe (the attachment read, GS state as shader data, the VU
+  pre-pass off), where the twins of the draws whose first pass reads the attachment with Z writes
+  off go through their own pipelines: every twin equal and at least one through the draw's own
+  pipeline (`rd_vu_skin_check_123_attach`), and with `=200,nan` the same with the twins differing
+  and a `twins differ` line (`rd_vu_skin_check_123_nan_attach`; the fixture's clear textures make
+  the blended skinned draws' one pass fail the alpha test and write no Z, so both kinds of twin are
+  drawn, and each line says which). The summary line ends `twins: T read (O through the draw's own
+  pipeline), D differ (E of them through it); V wrong vertices dropped (non-finite); the ring read:
+  c3 right K (c3 drawn in M), ring twins R read, E differ from B`. Issue 123's ladder on the same
+  fixture under the plain set with the pre-pass off (`ICO_RD_VU_SET=plain ICO_RD_VU_PREPASS=0`):
+  with `=200` H1 with column 3 right and every twin C equal to B (`rd_vu_skin_check_123_c3`); with
+  `=200,nan` twin C differing from B (`rd_vu_skin_check_123_nan_c`); with `ICO_RD_VU_BONES=ring`
+  clean, the `rd: VU bones: through the ring` start line and `the ring read: healed (0 of T ...)`
+  (`rd_vu_skin_check_123_bones_ring`), and with the NaN too the twins (both ring reads) differing
+  and `not healed` (`rd_vu_skin_check_123_bones_ring_nan`). Still on the machine-local dumps of
+  `/primary/dev/ico-dumps/163/` (`-DDUMP`): issue 163's blended dump clean
+  (`rd_vu_skin_check_163`) and the deep dive's patched copy (its lanes on 200 moved to a zero bone)
+  checked right, the CPU and the GPU reading the same stream (`rd_vu_skin_check_163_patched`); on
+  `fx-163-blended` the clean line's box clause does not hold (a 1448-vertex draw's box is made from
+  its first 1,024 vertices' batches while the box check draws the whole command). SKIP without the
+  dump or a device.
 - `rd_vu_bones_ring_ab.cmake`: issue 123's ladder, step 1 ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md#the-ladder)):
-  the three dumps of `/primary/dev/ico-dumps/163/` (issue 163's blended dump, its patched copy,
-  issue 123's blended dump of 2026-11-06) through `rd_replay_tool --pass-dump --present 640x480` under the
+  the fixtures of `test/fixtures/lists/bones_ring.txt` (issue 163's blended frame
+  `fx-163-blended`, issue 123's blended frame of 2026-11-06 `fx-123-blended`) through `rd_replay_tool --pass-dump --present 640x480` under the
   plain set with the VU pre-pass off, `ICO_RD_VU_BONES=cbuffer` with the skin check off against
   `=ring` with it off, `cbuffer` with it on for every skinned command (`ICO_RD_VU_SKIN_CHECK=2`:
-  column 3 and twin C drawn, at least one twin C over the dumps) and `ring` with it on, at Original
+  column 3 and twin C drawn, at least one twin C over the fixtures) and `ring` with it on, at Original
   and with the attachment read and GS state as shader data: every PNG byte for byte, each run's
   start line (`rd: VU bones: through VuBoneCB`, `rd: VU bones: through the ring (storage buffer) on
   the skinned entries`) (`rd_vu_bones_ring_ab`). With `-DPREPASS=1` the same with the pre-pass on
@@ -671,12 +679,16 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   the old way through the ring builds, the line `rd: VU pre-pass: the skinned commands are drawn the
   old way, through their entries' ring builds` asked of the ring runs), every PNG byte for byte, at
   least one twin drawn over the check runs (the record draws' twins read the bones through the ring,
-  no C) (`rd_vu_bones_ring_ab_prepass`). SKIP without the dumps or a device.
+  no C) (`rd_vu_bones_ring_ab_prepass`). The path ran, per fixture: on every check run its declared
+  `skin_checks_drawn` and `skin_ring_twins_drawn` (with the pre-pass `skin_twins_drawn`). The
+  patched copy of issue 163's dump is not carried: its fixture would expand to `fx-163-blended`'s
+  bytes (the stream it patched is generated). SKIP without a device.
 - `rd_vu_skin_check_ab.cmake`: the skin check is designed not to change the picture
   ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)); `rd_replay_tool --pass-dump` with it off
   (`ICO_RD_VU_SKIN_CHECK=0`) and on for every skinned command of every replay (`=2`: the probes,
-  the box check inside the scene pass, the checked draw out of the draw merge) on the corpus dump
-  `frame-20261007-200706-v3086` (46 skinned commands) and issue 163's blended dump, at Original
+  the box check inside the scene pass, the checked draw out of the draw merge) on the fixtures of
+  `test/fixtures/lists/skin_check_ab.txt` (`fx-vu-3086`, 46 skinned commands, and issue 163's and
+  issue 123's blended frames), at Original
   presented at 640x480, the same with the attachment read and GS state as shader data
   (`ICO_RD_BLEND=attachment`, `ICO_RD_UBER=on`, the interlock faked off, the VU pre-pass off as on
   a tile-based GPU; the on run must say `GS state as shader data: on`) and at Enhanced 4:3 2x with MSAA 4: every PNG byte for byte, each on
@@ -684,8 +696,10 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   check drawn over all, the twins drawn in every on run (`VU skin check: twins at the end of the
   run: T drawn (O through the draw's own pipeline with its attachment read)`) and O above 0 over the
   attach runs: the twins through the draws' own pipelines with the write mask cleared leave every
-  picture byte for byte; also on issue 123's blended dump (`rd_vu_skin_check_ab`). SKIP
-  without the dumps or a device.
+  picture byte for byte (`rd_vu_skin_check_ab`; on `fx-123-blended` with the twins through the
+  draws' own pipelines). The path ran, per fixture: on every on run its declared `skin_checks_drawn`,
+  `skin_twins_drawn` at Original and with the attachment read, `skin_twins_own_drawn` there where
+  declared. SKIP without a device.
 - `rd_region_stats.cmake`: `rd_replay_tool --region-stats`
   ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#region-statistics)) on the first two dumps of
   `tools/occlusion_corpus.txt` that are here, each at Original 4:3 1x and Enhanced 4:3 2x with a

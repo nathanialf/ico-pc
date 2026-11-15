@@ -1,12 +1,13 @@
 # rd_vu_skin_check_ab: the skinned draws' bone-block check (issue 163;
 # port/render/rd_vu_skin_check.c, docs/port/VU_SKIN_CHECK.md) is designed
-# not to change the picture; this measures it. For each dump of DUMPS that
-# is here, rd_replay_tool --pass-dump with the check off
-# (ICO_RD_VU_SKIN_CHECK=0) and with it on for every skinned command of every
-# replay (=2: the probes after the last pass, the box check S3 drawn inside
-# the scene pass, the checked draw kept out of the draw merge), at three
-# settings:
-#   plain   Original at the dump's aspect, presented at 640x480;
+# not to change the picture; this measures it. For each fixture of LIST
+# (committed frames, docs/port/TESTING_FIXTURES.md: the generated geometry's
+# skinned draws, the poses kept), rd_replay_tool --pass-dump with the check
+# off (ICO_RD_VU_SKIN_CHECK=0) and with it on for every skinned command of
+# every replay (=2: the probes after the last pass, the box check S3 drawn
+# inside the scene pass, the checked draw kept out of the draw merge), at
+# three settings:
+#   plain   Original at the frame's aspect, presented at 640x480;
 #   attach  the same with the attachment read and GS state as shader data
 #           (ICO_RD_BLEND=attachment, ICO_RD_UBER=on, the interlock faked
 #           off, the VU pre-pass off as on a tile-based GPU before
@@ -23,23 +24,26 @@
 # attachment read)", T at least 1; none in msaa's multisampled passes),
 # and over the attach runs O must be at least 1: the twins went through
 # the draw's own pipeline with its write mask cleared, and the pictures
-# above stayed byte for byte. A missing dump is named and skipped; no
-# dump, or no device (77): SKIP.
-# -DTOOL=<rd_replay_tool> -DDUMPS=<dump|dump...> -DOUT=<a folder the test may write>
-string(REPLACE "|" ";" DUMPS "${DUMPS}")
+# above stayed byte for byte.  The path ran, per fixture: on every on run
+# the fixture's declared skin_checks_drawn (and skin_twins_drawn at plain
+# and attach, skin_twins_own_drawn at attach where it declares it;
+# rd_fixture_helpers.cmake), and a fixture no on run checked fails.  No
+# device (77): SKIP.
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<dir>
+# -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<lists/skin_check_ab.txt>
+# -DOUT=<a folder the test may write>
+include("${FIXTURE_HELPERS}")
+include("${CMAKE_CURRENT_LIST_DIR}/rd_fixture_list_props.cmake")
+rd_fixture_list("${LIST}" names)
 set(dumps "")
-foreach(d IN LISTS DUMPS)
-  if(EXISTS "${d}")
-    list(APPEND dumps "${d}")
-  else()
-    message(STATUS "${d}: no such dump, skipped")
-  endif()
+foreach(n IN LISTS names)
+  rd_fixture_list_props(${n})
+  rd_fixture_expand(${n} "${OUT}/fixtures" d)
+  list(APPEND dumps "${d}")
+  set(fx_${d} "${n}")
+  set(seen_${n} 0)
 endforeach()
 list(LENGTH dumps ndumps)
-if(ndumps EQUAL 0)
-  message(STATUS "SKIP: none of the dumps is here")
-  return()
-endif()
 
 set(settings "plain" "attach" "msaa")
 set(args_plain --present 640x480)
@@ -67,7 +71,8 @@ foreach(dump IN LISTS dumps)
       file(REMOVE_RECURSE "${dir_${run}}")
       file(MAKE_DIRECTORY "${dir_${run}}")
       execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_VU_SKIN_CHECK=${mode} ${env_${s}}
-                              "${TOOL}" "${dump}" - --pass-dump "${dir_${run}}" ${args_${s}}
+                              "${TOOL}" "${dump}" "${dir_${run}}.png" --pass-dump "${dir_${run}}"
+                              ${args_${s}}
                       RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
       if(rc EQUAL 77)
         message(STATUS "SKIP: no device: ${err}")
@@ -104,6 +109,17 @@ foreach(dump IN LISTS dumps)
         if(s STREQUAL "attach")
           math(EXPR ownTwins "${ownTwins} + ${twinsOwn}")
         endif()
+        # the path ran (the fixture's declared quantities)
+        set(fx "${fx_${dump}}")
+        if(s STREQUAL "msaa")
+          rd_fixture_require(${fx} "${flat}" skin_checks_drawn)
+        elseif(s STREQUAL "attach")
+          rd_fixture_require(${fx} "${flat}" skin_checks_drawn skin_twins_drawn
+                             skin_twins_own_drawn)
+        else()
+          rd_fixture_require(${fx} "${flat}" skin_checks_drawn skin_twins_drawn)
+        endif()
+        math(EXPR seen_${fx} "${seen_${fx}} + 1")
         if(s STREQUAL "attach" AND NOT flat MATCHES "GS state as shader data: on")
           message(SEND_ERROR "${dump} attach on: GS state as shader data is not on:\n${err}")
           set(ok FALSE)
@@ -144,6 +160,13 @@ foreach(dump IN LISTS dumps)
                    "pipeline) = off")
   endforeach()
 endforeach()
+foreach(n IN LISTS names)
+  if(seen_${n} EQUAL 0)
+    message(SEND_ERROR "${n}: no on run checked it")
+    math(EXPR failures "${failures} + 1")
+  endif()
+endforeach()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(failures EQUAL 0 AND boxes EQUAL 0)
   message(SEND_ERROR "no box check was drawn in any run")
   set(failures 1)
@@ -152,7 +175,7 @@ if(failures EQUAL 0 AND ownTwins EQUAL 0)
   message(SEND_ERROR "no twin went through the draw's own pipeline in the attach runs")
   set(failures 1)
 endif()
-message(STATUS "rd_vu_skin_check_ab: ${compared} pictures compared over ${ndumps} dumps, "
+message(STATUS "rd_vu_skin_check_ab: ${compared} pictures compared over ${ndumps} fixtures, "
                "${boxes} box checks drawn, ${ownTwins} twins through the draw's own pipeline "
                "(attach)")
 if(failures GREATER 0)

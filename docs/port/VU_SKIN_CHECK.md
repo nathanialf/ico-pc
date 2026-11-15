@@ -4,7 +4,7 @@ The skinned draws' bone-block check (issue 163): on an Adreno with a window (Qua
 Turnip, issue 163's devices), the renderer draws one skinned command again every 100 ms as a probe
 of its own and compares what the GPU computed with the CPU's copy of the same program, so a
 reporter's log names the layer that placed a skinned vertex wrong without anything to switch on.
-It is designed not to change the picture (`rd_vu_skin_check_ab` replays the dumps with it on for
+It is designed not to change the picture (`rd_vu_skin_check_ab` replays fixtures with it on for
 every skinned command and compares the pictures byte for byte). Off on every other device: issue
 179's Mali-G52 is GPU-bound, and the check's GPU work is not spent there.
 
@@ -730,9 +730,10 @@ and `rd_vu_skin_check_dump.cmake` (`rd_vu_skin_check_dump`, `rd_vu_skin_check_16
 `rd_vu_skin_check_163_probe`, `rd_vu_skin_check_163_ring`, `rd_vu_skin_check_163_patched`, `rd_vu_skin_check_123`,
 `rd_vu_skin_check_123_nan`, `rd_vu_skin_check_123_attach`, `rd_vu_skin_check_123_nan_attach`,
 `rd_vu_skin_check_123_c3`, `rd_vu_skin_check_123_nan_c`, `rd_vu_skin_check_123_bones_ring`,
-`rd_vu_skin_check_123_bones_ring_nan` on issue 123's blended dump
-`frame-20261106-080033-v3910-blended`), `rd_vu_bones_ring_ab.cmake` (`rd_vu_bones_ring_ab`: the
-three dumps of `/primary/dev/ico-dumps/163/` under the plain set with the pre-pass off, the bones
+`rd_vu_skin_check_123_bones_ring_nan` on committed fixtures of the reporters' frames, the poses
+kept and the skinned vertices generated: `docs/port/TESTING_FIXTURES.md`; `_163` and `_163_patched`
+still on issue 163's dumps), `rd_vu_bones_ring_ab.cmake` (`rd_vu_bones_ring_ab`: the
+fixtures of issue 163's and issue 123's blended frames under the plain set with the pre-pass off, the bones
 through the ring against VuBoneCB, and both with the check on for every skinned command (column 3
 and twin C drawn, the twins through the ring), every picture byte for byte;
 `rd_vu_bones_ring_ab_prepass` the same with the pre-pass on, its batch builds on and off),
