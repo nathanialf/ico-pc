@@ -556,16 +556,16 @@ int main(int argc, char **argv)
        by 2048 -+ 224 (the command names none), the target 512 wide (W 256).
        Mesh 7 (prelit with a facing table, list 0's first draw) takes the
        first role.  @scene drops: the floor; its corners (x - 2048 w, y - 2048
-       w, w) A (-1024, 672, 4), B (1024, 672, 4), C (1024, 672, -2), D
-       (-1024, 672, -2); det(A, B, C) = (-1024)(-4032) - 672 (-6144) =
-       8257536 > 0: away from the eye, so the order A D C B (det -8257536,
-       facing).  Solving: z = w - 4, x = (x - 2048 w) / 100, y likewise: A
-       (-10.24, 6.72, 0), D (-10.24, 6.72, -6), C (10.24, 6.72, -6), B
-       (10.24, 6.72, 0); the largest 10.24 = 0.64 * 2^4, e = 4 - 21 = -17:
-       x -10.24 * 2^17 = -1342177.28 -> -1342177, y 6.72 * 2^17 = 880803.84
-       -> 880804, z -6 * 2^17 = -786432.  The normal cross(D - A, C - A) =
-       cross((0, 0, -6), (20.48, 0, -6)) = (0, -122.88, 0) -> (0, -2^20, 0),
-       towards the eye (y 0).  The strip's five vertices: A D C B A. */
+       w, w), P 256 and H 224: A (-512, 112, 4), B (512, 112, 4), C (512,
+       112, -2), D (-512, 112, -2); det(A, B, C) = (-512)(-672) - 112 (-3072)
+       = 688128 > 0: away from the eye, so the order A D C B (facing).
+       Solving: z = w - 4, x = (x - 2048 w) / 100, y likewise: A (-5.12,
+       1.12, 0), D (-5.12, 1.12, -6), C (5.12, 1.12, -6), B (5.12, 1.12, 0);
+       the largest |z| 6 = 0.75 * 2^3, e = 3 - 21 = -18: x -5.12 * 2^18 =
+       -1342177.28 -> -1342177, y 1.12 * 2^18 = 293601.28 -> 293601, z -6 *
+       2^18 = -1572864.  The normal cross(D - A, C - A) = cross((0, 0, -6),
+       (10.24, 0, -6)) = (0, -61.44, 0) -> (0, -2^20, 0), towards the eye (y
+       0).  The strip's five vertices: A D C B A. */
     s_persp = true;
     RdFxBuf dp = {0};
     buildDump(&dp, 17);
@@ -584,9 +584,9 @@ int main(int argc, char **argv)
     CHECK(fx.skelBytes == perspSkel + 8 + 72);
     {
         const uint8_t *q = fx.skel + perspSkel;
-        static const int32_t want[18] = {7,        0,      -17,     -1342177, 880804,   0,
-                                         -1342177, 880804, -786432, 1342177,  880804,   -786432,
-                                         1342177,  880804, 0,       0,        -1048576, 0};
+        static const int32_t want[18] = {7,        0,      -18,      -1342177, 293601,   0,
+                                         -1342177, 293601, -1572864, 1342177,  293601,   -1572864,
+                                         1342177,  293601, 0,        0,        -1048576, 0};
         CHECK(rd_fx_get32(q) == RD_FX_PLACE_TAG4 && rd_fx_get32(q + 4) == 1);
         for (int k = 0; k < 18; k++) {
             CHECK((int32_t)rd_fx_get32(q + 8 + 4 * k) == want[k]);
@@ -601,7 +601,7 @@ int main(int argc, char **argv)
         CHECK(xn == dp.n);
         size_t op = pp + PAY_BYTES + 4 + 32 + 8 * 4 * 4 + 4 + 32 + 16 * 16 * 4 + 4 + 8 * 8 * 4;
         op += 4 + 4 + 20 + 24;
-        const float ax = -1342177.0f / 131072.0f, ay = 880804.0f / 131072.0f;
+        const float ax = -1342177.0f / 262144.0f, ay = 293601.0f / 262144.0f;
         static const int corner[5] = {0, 1, 2, 3, 0}; /* A D C B A */
         const float cx[4] = {ax, ax, -ax, -ax}, cz[4] = {0.0f, -6.0f, -6.0f, 0.0f};
         for (int j = 0; j < 5; j++) {

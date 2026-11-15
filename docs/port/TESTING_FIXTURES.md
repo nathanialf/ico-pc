@@ -188,8 +188,9 @@ would never draw one. Two more lines make the drops (`port/render/rd_fixture_mak
 the derivation from the region rule's code, `vu1_ref.c` vu1ref_region_draw and
 vu1ref_region_facing):
 
-- `@scene drops`: the first four meshes whose first draw is a non-skinned draw of list 0 with
-  winding marks (a lit stream, whose marks the expander's normals give; or a prelit one with a
+- `@scene drops`: the first four meshes whose first draw is a non-skinned draw of list 0 that the
+  region rule decides (clip mode region, a prelit, lit or reflecting program: not code 34 or 36)
+  with winding marks (a lit stream, whose marks the expander's normals give; or a prelit one with a
   facing table, version 15 on, whose bits are generated zero) are generated as drop sheets, by
   their ordinal: (0) a floor across the eye plane facing the eye, (1) a card facing the eye, (2)
   the floor facing away, (3) the card facing away. Every strip of a sheet zigzags over its four
@@ -201,13 +202,17 @@ vu1ref_region_facing):
   X = -1024 and 5120, beyond the GS window on both sides (every triangle has a corner outside the
   region and its strip none inside: a card the PS2 drops, kept off the sides by the side bands,
   drawn by the camera rule when it faces the eye; at the Original preset 4:3 1x the same
-  triangles are out-of-box drops); the floor a plane below the eye from a far edge three quarters
-  down the picture at w0 to w0 / 2 behind the eye, as wide as the target there (every triangle
-  has a corner behind the eye: a drop the side bands draw beside the picture on a wider frame and
-  the camera rule draws whole, when it faces the eye). A sheet facing away keeps the drop under
+  triangles are out-of-box drops); the floor a plane below the eye from a far edge an eighth of
+  the picture's height below its middle and half its width wide, at w0, to w0 / 2 behind the eye
+  (every triangle has a corner behind the eye: a drop the side bands draw beside the picture on a
+  wider frame and the camera rule draws whole, when it faces the eye). Every triangle holds a far
+  corner inside the picture, so its cut reaches it (a game's strip is often three or four
+  vertices long, so its triangles are the quad's first two); toward the eye the floor widens as
+  1 / w, four half-widths each side at the picture's bottom row, beside the picture there. A sheet facing away keeps the drop under
   both rules. The model points solve the matrix's x, y and w rows, are rounded to units of 2^e (e
   keeps the largest under 2^21 units) and checked again (the card's corners in front and outside,
-  the floor's far corners in front within the depth range and its near ones behind, the facing);
+  the floor's far corners in front at a GS depth the cut keeps and its near ones behind, the
+  facing);
   a mesh that fails a check keeps its cube and the role goes to the next mesh. No vertex, bound or
   statistic of the model is read.
 - `@scene cards`: the two cards alone (roles 1 and 3), for a test that holds every picture the

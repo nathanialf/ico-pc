@@ -629,27 +629,35 @@ static bool placeAt(const uint8_t *pay, const RdCmd *c, const RdStateBlock *st, 
  * index in units of 2^e along (1, 1, 1) so no two strips share a position
  * (no strip joined).
  * The corners, as (x - 2048 w, y - 2048 w, w) at w0 = |w of the model's
- * origin| (placeAt's distance), H the picture's half-height, W the target's
+ * origin| (placeAt's distance), H the picture's half-height, P its
  * half-width:
  *   card   (-3072 w0, -H w0 / 8, w0), (3072 w0, -H w0 / 8, w0),
  *          (3072 w0, H w0 / 8, w0), (-3072 w0, H w0 / 8, w0): a band across
  *          the picture's middle a quarter of its height tall whose corners
  *          lie at X = -1024 and 5120, beyond the GS window on both sides:
  *          every triangle has a corner outside the region (a card);
- *   floor  (-W w0, 3 H w0 / 4, w0), (W w0, 3 H w0 / 4, w0),
- *          (W w0, 3 H w0 / 4, -w0 / 2), (-W w0, 3 H w0 / 4, -w0 / 2): a
- *          plane below the eye from a far edge three quarters down the
- *          picture at w0 to behind the eye (every triangle has a corner
- *          behind it); seen from the eye it fills the picture's lowest
- *          eighth and, its width growing as 1 / w, the frame's sides there.
+ *   floor  (-P w0 / 2, H w0 / 8, w0), (P w0 / 2, H w0 / 8, w0),
+ *          (P w0 / 2, H w0 / 8, -w0 / 2), (-P w0 / 2, H w0 / 8, -w0 / 2): a
+ *          plane below the eye from a far edge an eighth of the picture's
+ *          height below its middle, half its width wide, at w0, to behind
+ *          the eye (every triangle has a corner behind it).  Every cyclic
+ *          triple holds a far corner, which lies inside the picture, so
+ *          each triangle's cut reaches it (a source strip is often three or
+ *          four vertices long: A B C and B C D must reach it as well as C D
+ *          A); toward the eye the floor widens as 1 / w (at the picture's
+ *          bottom row, w0 / 8, four half-widths each side), so on a wider
+ *          frame its lower rows lie beside the picture too.
  * The order is A B C D, or A D C B when that one faces the eye and the role
  * asks for it (or does not, for the back roles).  Each corner's model point
  * solves M's x, y and w rows for its (x, y, w); the corners are rounded to
  * units of 2^e, e the exponent that keeps the largest coordinate under 2^21
  * units, and checked again after the rounding: the card's corners and the
- * floor's far corners in front with 0 <= z <= 2^32 w (the cut keeps them),
- * the card's outside, the floor's near corners behind, the facing the
- * role's.  False (the mesh keeps its
+ * floor's far corners in front at a GS depth the cut keeps (rd_replay_region.c
+ * regionFinish: GS Z = 16 z / w, 0 <= it < 2^31), the card's outside, the
+ * floor's near corners behind, the facing the role's.
+ * The draw must be one the region rule decides (rd_replay_region.c
+ * regionKind): clip mode RD_VU_CLIP_REGION and a prelit, lit or reflecting
+ * program (a code 34 or 36 draw keeps every triangle: no drop).  False (the mesh keeps its
  * cube) when the origin's w is 0, the equations are singular, or a check
  * fails. */
 static double facingDet(const double a[3], const double b[3], const double c[3])
@@ -663,6 +671,13 @@ static double facingDet(const double a[3], const double b[3], const double c[3])
 static bool dropSheet(const uint8_t *pay, const RdCmd *c, const RdStateBlock *st, uint32_t role,
                       DMesh *d)
 {
+    RdVuPayload vp;
+    memcpy(&vp, pay + c->u[1], sizeof(vp));
+    if (vp.clip != RD_VU_CLIP_REGION ||
+        (vp.prog != RD_PROG_PRELIT && vp.prog != RD_PROG_LIT && vp.prog != RD_PROG_LIT_SPEC &&
+         vp.prog != RD_PROG_REFLECT)) {
+        return false;
+    }
     double M[4][4];
     cols(pay + c->u[1] + sizeof(RdVuPayload) + 16 * 16, M);
     const double w0 = fabs(M[3][3]);
@@ -672,7 +687,7 @@ static bool dropSheet(const uint8_t *pay, const RdCmd *c, const RdStateBlock *st
     const bool card = role == RD_FX_DROP_CARD || role == RD_FX_DROP_CARD_BACK;
     const bool front = role == RD_FX_DROP_FLOOR || role == RD_FX_DROP_CARD;
     const double H = c->b[6] ? (double)c->b[6] : (double)(st->gsH >> 1);
-    const double W = (double)(st->gsW >> 1);
+    const double P = c->b[3] ? (double)c->b[3] : 256.0;
     double q[4][3]; /* the corners' (x - 2048 w, y - 2048 w, w), in A B C D order */
     if (card) {
         const double xs[4] = {-3072, 3072, 3072, -3072}, ys[4] = {-H / 8, -H / 8, H / 8, H / 8};
@@ -682,10 +697,10 @@ static bool dropSheet(const uint8_t *pay, const RdCmd *c, const RdStateBlock *st
             q[k][2] = w0;
         }
     } else {
-        const double xs[4] = {-W, W, W, -W}, ws[4] = {w0, w0, -w0 / 2, -w0 / 2};
+        const double xs[4] = {-P / 2, P / 2, P / 2, -P / 2}, ws[4] = {w0, w0, -w0 / 2, -w0 / 2};
         for (int k = 0; k < 4; k++) {
             q[k][0] = xs[k] * w0;
-            q[k][1] = 3 * H / 4 * w0;
+            q[k][1] = H / 8 * w0;
             q[k][2] = ws[k];
         }
     }
@@ -753,7 +768,7 @@ static bool dropSheet(const uint8_t *pay, const RdCmd *c, const RdStateBlock *st
             if (card && X > 0.0 && X < 4094.0) {
                 return false;
             }
-            if (!(h[2] >= 0.0 && h[2] <= ldexp(h[3], 32))) {
+            if (!(h[2] >= 0.0 && 16.0 * h[2] < ldexp(h[3], 31))) {
                 return false;
             }
         } else if (!(h[3] < 0.0)) {
