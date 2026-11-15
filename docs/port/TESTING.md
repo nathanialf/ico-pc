@@ -152,7 +152,7 @@ reports it. `seed` overwrites every baseline after a build that is accepted
 The script tests under `port/render/test/` run the tool or a test program and check its output:
 `rd_replay_tool_list.cmake`, `rd_replay_tool_pass_dump.cmake`,
 `rd_replay_tool_loss_bisect.cmake`, `rd_replay_tool_pass_split.cmake`,
-`rd_replay_tool_pass_merge.cmake` and `rd_replay_tool_snap_swap.cmake` on the dump `rd_pixel` leaves behind, `rd_replay_tool_velocity.cmake` on the one `rd_velocity` leaves (and `rd_pixel`'s), `rd_replay_tool_glow_hold.cmake` and `rd_replay_tool_save_blended.cmake` on two godrays dumps, `rd_depth_copy_dump.cmake` on a player dump with the depth fog (`ICO_FOG_DUMP`), and
+`rd_replay_tool_pass_merge.cmake` and `rd_replay_tool_snap_swap.cmake` on the dump `rd_pixel` leaves behind, `rd_replay_tool_velocity.cmake` on the one `rd_velocity` leaves (and `rd_pixel`'s), `rd_replay_tool_still.cmake`, `rd_replay_tool_glow_hold.cmake`, `rd_replay_tool_save_blended.cmake` and `rd_depth_copy_dump.cmake` on committed fixtures ([TESTING_FIXTURES.md](TESTING_FIXTURES.md)), and
 `rd_fog_selftest.cmake`, which matches the `fog: depth path` line of the self-test, and
 `rd_blend_selftest.cmake`, which matches the `blend: ... (self-test: ...)` line of the blend's,
 and `rd_vuprepass_selftest.cmake`, which matches the `VU pre-pass: on|off (self-test ...)` line
@@ -413,8 +413,6 @@ has their defaults; the registrations are in `port/*/CMakeLists.txt`):
   pyelftools) check the model viewer's Japanese column, which the Korean disc shares.
 - `ICO_TEXPACK_DIR`, a PCSX2 pack's replacements folder: `texpack_disc`, `texpack_e2e`,
   `texpack_pack_files`.
-- `ICO_FOG_DUMP`, a player dump with the depth fog: `rd_fog_depth_copy_dump` and `_d24s8` (skipped
-  without it).
 - `ICO_BOOT_DUMP_DIR`, a start-up's frame dumps: `rd_boot_present`; `ICO_BOOT_DUMP_OLD` sets
   `ICO_BOOT_OLD=1` for dumps whose frames 118 to 120 draw stage 1 (`port/render/CMakeLists.txt`).
 

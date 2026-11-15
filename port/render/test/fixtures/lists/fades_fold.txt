@@ -1,0 +1,16 @@
+# Fixtures for rd_fades_fold_ab (port/render/test/rd_fades_fold_ab.cmake: the
+# fades fold on against off, under the exact and the fixed-function blend, at
+# Original, Enhanced 2x and the phone's Resolution Auto): fixture names of
+# this repository (port/render/test/fixtures/NAME.rdfix), a name a line, then
+# the line's own property (rd_fixture_list_props.cmake): fades_folded, the
+# sprites of list 11's end folded into the reduction on every folded run
+# (each measured on the fixture, the same as on its source dump).
+#
+# the PowerVR phone's F12 frame of 2026-10-28 (Resolution Auto)
+fx-phone-4657 fades_folded>=1
+# issue 106's drained room (the ripple past its first period, 688x448 GS)
+fx-ripple-83439 fades_folded>=1
+# issue 164's paused frame (Mali-G52, 912x512 GS)
+fx-mobile-164 fades_folded>=1
+# a 2026-10-07 capture (4:3, 512 GS pixels: not at the phone's aspect)
+fx-vu-3086 fades_folded>=1
