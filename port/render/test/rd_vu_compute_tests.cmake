@@ -2,7 +2,8 @@
 # (rd_vu_record.h; issue 179: the Mali-G52 MC2 offers no
 # vertexPipelineStoresAndAtomics), included from port/render/CMakeLists.txt
 # inside if(ICO_RUN_TESTS), after the self-test's rows (_vst, _vst_on,
-# _vst_stale, _env, _env_mali_pre) and rd_vurecord_ab (the rd_dump fixture).
+# _vst_stale, _env, _env_mali_pre) and rd_vurecord_ab (the rd_dump fixture;
+# _vu_fx and _vu_list: the committed fixtures' arguments and the VU list).
 # A file of its own: port/render/CMakeLists.txt is within a few KB of the
 # 256 KiB cap (tools/check_no_rom.sh).
 #
@@ -30,7 +31,8 @@
 #                      dynamic state (the dispatches outside the legacy passes)
 #   rd_vurecord_ab_compute  rd_vurecord_ab with A the render targets and B the
 #                      compute dispatches: every named target byte for byte,
-#                      B's stats naming the write and counting dispatches
+#                      B's stats naming the write and counting dispatches (each
+#                      fixture's declared vu_record_dispatches)
 #   rd_vuprepass_selftest_sink_fail  the store passes' targets refused: the
 #                      stores off for the run, the compute dispatches (below)
 set(_vst_compute_line "rd: VU pre-pass: on \\(self-test: [^\n]* ms, record compute")
@@ -84,8 +86,8 @@ set_tests_properties(
 add_test(NAME rd_vurecord_ab_compute
          COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                  -DNAME=rd_vurecord_ab_compute
-                 "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
-                 "-DLIST=${CMAKE_SOURCE_DIR}/tools/vustage_dumps.txt"
+                 "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump" ${_vu_fx} "${_vu_list}"
+                 -DFX_A=prepass_vertices "-DFX_B=prepass_vertices|vu_record_dispatches"
                  "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vurecord_ab_compute"
                  "-DENV_A=ICO_RD_VU_RECORD=targets" "-DENV_B=ICO_RD_VU_RECORD=compute"
                  "-DREQ_A=0 mesh and grid draws the old way.*stats: VU record targets: drawn into 3"
@@ -148,27 +150,27 @@ set_tests_properties(rd_vuprepass_selftest_lossrung_desktop
 # the rule since v0.11.4), the wide run by the tile rule with Arm faked, the
 # narrow one faked.  Each run must print the backend's barriers line of the
 # scopes it was meant to run (stderr), so a switch that did nothing fails.
-# The dumps: rd_pixel's, and tools/scope_dumps.txt's (the VU stage list's
-# and issue 179's two loss frames, machine-local; LIST_STRICT: where any is
-# here, a missing one is an error)
+# The dumps: rd_pixel's, and the fixtures of test/fixtures/lists/scope.txt
+# (the VU stage list's captures and loss frame and issue 179's two loss
+# frames), each fixture's record vertices on both runs (FX_A, FX_B)
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/scope_ab" "${CMAKE_CURRENT_BINARY_DIR}/scope_ab_tiler")
 add_test(NAME rd_scope_ab
          COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> -DNAME=rd_scope_ab
-                 "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
-                 "-DLIST=${CMAKE_SOURCE_DIR}/tools/scope_dumps.txt"
-                 "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/scope_ab"
+                 "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump" ${_vu_fx}
+                 "-DLIST=${ICO_FIXTURE_DIR}/lists/scope.txt" -DFX_A=prepass_vertices
+                 -DFX_B=prepass_vertices "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/scope_ab"
                  "-DENV_A=ICO_VK_FAKE_SCOPES=narrow" "-DENV_B=ICO_VK_FAKE_VENDOR=0x13B5"
                  "-DREQ_A=rhi_vk: barriers: narrow \\(ICO_VK_FAKE_SCOPES=narrow" "-DREQ_B=rhi_vk: barriers: wide \\(a tile-based phone GPU, Arm"
-                 -DLIST_STRICT=1 -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_env_ab.cmake")
+                 -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_env_ab.cmake")
 add_test(NAME rd_scope_ab_tiler
          COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> -DNAME=rd_scope_ab_tiler
-                 "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
-                 "-DLIST=${CMAKE_SOURCE_DIR}/tools/scope_dumps.txt"
-                 "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/scope_ab_tiler"
+                 "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump" ${_vu_fx}
+                 "-DLIST=${ICO_FIXTURE_DIR}/lists/scope.txt" -DFX_A=prepass_vertices
+                 -DFX_B=prepass_vertices "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/scope_ab_tiler"
                  "-DENV_A=ICO_VK_FAKE_LIMITS=moltenvk|ICO_VK_FAKE_SCOPES=narrow"
                  "-DENV_B=ICO_VK_FAKE_LIMITS=moltenvk|ICO_VK_FAKE_VENDOR=0x13B5"
                  "-DREQ_A=rhi_vk: barriers: narrow \\(ICO_VK_FAKE_SCOPES=narrow" "-DREQ_B=rhi_vk: barriers: wide \\(a tile-based phone GPU, MoltenVK"
-                 -DLIST_STRICT=1 -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_env_ab.cmake")
+                 -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_env_ab.cmake")
 set_tests_properties(rd_scope_ab rd_scope_ab_tiler PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                    TIMEOUT 3600 FIXTURES_REQUIRED rd_dump)
 if(_env)

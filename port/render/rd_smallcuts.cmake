@@ -63,8 +63,10 @@ endif()
 #   rd_vurecord_ab_compute_class  rd_vu_env_ab: the switch at 0 (the stores)
 #                      against 1 (the compute dispatches by the rule), every
 #                      named target byte for byte, B's stats naming the rule
-#   rd_vurecord_ab_compute_class_opening  the same over tools/lamps_dumps.txt
-#                      (the phone's opening dumps among them; LIST_STRICT)
+#   rd_vurecord_ab_compute_class_opening  the same over the fixtures of
+#                      test/fixtures/lists/vu_opening.txt (the phone's opening
+#                      and the title's castle); each fixture's record vertices
+#                      on both runs and its compute dispatches on B
 if(ICO_RUN_TESTS AND TARGET rd_vuprepass_selftest_test AND DEFINED _vst)
     set(_vcc_line "rd: VU record: the PowerVR class's rule: the compute dispatches in place of the vertex stores \\(ICO_RD_VU_COMPUTE_CLASS=1: the tests' switch on another class, RD_VU_COMPUTE_CLASS_DEFAULT [01]\\)")
     set(_vcc_rec "rd: VU pre-pass: on \\(self-test: [^\n]* ms, record compute")
@@ -94,27 +96,28 @@ if(ICO_RUN_TESTS AND TARGET rd_vuprepass_selftest_test AND DEFINED _vst)
                          PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_COMPUTE_CLASS=0")
 endif()
 if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
+    include(rd_fixture.cmake)
     foreach(_vcc ab opening)
         if(_vcc STREQUAL "ab")
             set(_vcc_name rd_vurecord_ab_compute_class)
-            set(_vcc_list "${CMAKE_SOURCE_DIR}/tools/vustage_dumps.txt")
-            set(_vcc_strict "")
+            set(_vcc_list "${ICO_FIXTURE_DIR}/lists/vustage.txt")
         else()
             set(_vcc_name rd_vurecord_ab_compute_class_opening)
-            set(_vcc_list "${CMAKE_SOURCE_DIR}/tools/lamps_dumps.txt")
-            set(_vcc_strict -DLIST_STRICT=1)
+            set(_vcc_list "${ICO_FIXTURE_DIR}/lists/vu_opening.txt")
         endif()
         file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${_vcc_name}")
         add_test(NAME ${_vcc_name}
                  COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                          -DNAME=${_vcc_name}
                          "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
-                         "-DLIST=${_vcc_list}"
+                         -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                         "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                         "-DLIST=${_vcc_list}" -DFX_A=prepass_vertices
+                         "-DFX_B=prepass_vertices|vu_record_dispatches"
                          "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/${_vcc_name}"
                          "-DENV_A=ICO_RD_VU_COMPUTE_CLASS=0" "-DENV_B=ICO_RD_VU_COMPUTE_CLASS=1"
                          "-DREQ_A=stats: VU record stores: stored by the vertex shaders"
                          "-DREQ_B=copies, [0-9]+ dispatches.*stats: VU record compute: stored by compute dispatches into the frame slot's record buffer: no render targets, no copies \\(the PowerVR class's rule"
-                         ${_vcc_strict}
                          -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_env_ab.cmake")
         set_tests_properties(${_vcc_name} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                      TIMEOUT 3600 FIXTURES_REQUIRED rd_dump)

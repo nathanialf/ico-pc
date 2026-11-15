@@ -413,9 +413,10 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
 - `rd_vurecord_ab_compute_class`, `_opening` (`rd_smallcuts.cmake`, through
   `test/rd_vu_env_ab.cmake`): `ICO_RD_VU_COMPUTE_CLASS=0` (the stores) against `=1` (the compute
   dispatches by the rule), every named target byte for byte, A's stats `VU record stores`, B's
-  `VU record compute: ... (the PowerVR class's rule`; on rd_pixel's dump and
-  `tools/vustage_dumps.txt`, and on `tools/lamps_dumps.txt` (the Pixel's opening dumps among them;
-  `LIST_STRICT`). No device: SKIP.
+  `VU record compute: ... (the PowerVR class's rule`, each fixture's `prepass_vertices` on both
+  runs and `vu_record_dispatches` on B; on rd_pixel's dump and the fixtures of
+  `port/render/test/fixtures/lists/vustage.txt`, and on those of `lists/vu_opening.txt` (the
+  Pixel's opening: lamps, dark, sun; [TESTING_FIXTURES.md](TESTING_FIXTURES.md)). No device: SKIP.
 - `rd_lamps_lowres_ab.cmake` (`rd_lamps_lowres_ab`; `rd_lamps.cmake`): the lamps' glow at the GS
   frame's size above 1x (`RD_LAMPS_LOWRES`, DIVERGENCES.md VD-32) on the fixtures of
   `test/fixtures/lists/lamps_lowres.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md): two frames
@@ -818,8 +819,8 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   poisoned loads); the path ran (`rd_fixture_require` on the `=0` run, each setting): the declared
   `shadow_volume_draws` and `stencil_window_stores`; each setting that compared a pair leaves out
   a stencil store. No device: SKIP.
-- `rd_store_plan_ab.cmake`: the dumps of `tools/vustage_dumps.txt` and those of `tools/vufuse_dumps.txt` (the phone's three
-  frames) three times under
+- `rd_store_plan_ab.cmake`: the fixtures of `port/render/test/fixtures/lists/store_plan.txt` (each
+  dropping a depth store under the plan at every setting it shows) three times under
   `ICO_RD_BLEND=fixed` and `ICO_RD_STORE_POISON=1` (a depth or stencil load the plan leaves
   undefined clears to 0.5 and 0x5A instead: lavapipe keeps an attachment's contents whatever its
   load and store ops say, measured on Mesa 25.0.7, so without the poison a wrong plan draws the same
@@ -832,7 +833,8 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   passes and passes with a depth and the same colour stores dropped (the shadow count's colour,
   poisoned to 0x5A: no named target may show it), `all` dropping every depth store, the plan dropping some over the
   whole list, and the wrong plan changing at least one target over the whole list (the poison shows
-  a dropped store that a later pass reads); each run's counts printed (`rd_store_plan_ab`;
+  a dropped store that a later pass reads), each fixture's declared `store_depth_dropped` on the
+  planned run; each run's counts printed (`rd_store_plan_ab`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#the-store-plan)). SKIP as `rd_vustage_ab`.
 - `rd_cull_ab.cmake`: the dumps of `tools/occlusion_corpus.txt` and `tools/native_frame_dumps.txt`
   (the missing ones named and skipped) under `ICO_RD_BLEND=fixed` with `--pass-dump --stats`
@@ -859,12 +861,14 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   each row's cull, occlusion and collect ms of both runs printed, and their sums (the table made by
   the plain pass; made again only when the culler's rules change)
   (`rd_vis_hiz_corpus`, TIMEOUT 1800; [RENDER.md](RENDER_PERF.md#culling)). SKIP as `rd_vustage_ab`.
-- `rd_thread_ab.cmake`: the same dumps and those of `tools/vufuse_dumps.txt` through
-  `rd_replay_tool --render-thread off`, `sync` and `on` (every replay, the interpolation and the
-  renderer's calls on a thread of the renderer's own, `port/render/rd_thread.h`), with
-  `--pass-dump` at Original (640x480) and Enhanced 4:3 2x (1280x960), and for every F12 zip the
-  blended present at 0.5 between its two frames: every target's PNG of `sync` and `on` byte for
-  byte `off`'s, and the threaded runs saying `render thread: sync` / `on`; the blended present is
+- `rd_thread_ab.cmake`: the fixtures of `lists/thread.txt` (the VU family's and two phone frames)
+  through `rd_replay_tool --render-thread off`, `sync` and `on` (every replay, the interpolation
+  and the renderer's calls on a thread of the renderer's own, `port/render/rd_thread.h`), with
+  `--pass-dump --stats` at Original (640x480) and Enhanced 4:3 2x (1280x960), and for the fixture
+  whose list words name the tick before's (`fx-gate prev=fx-gate-prev`; an F12 zip in a list of
+  paths) the blended present at 0.5 between its two frames: every target's PNG of `sync` and `on`
+  byte for byte `off`'s, the threaded runs saying `render thread: sync` / `on`, and each fixture's
+  declared `prepass_vertices` on the `on` run at both settings; the blended present is
   made three times in a row in every mode (`--repeat 3`), the `on` run handing the three over
   back to back as the window does, and must say `submit thread: ended (N` with N at least 3
   (their submit and present on the submit thread, `port/render/rd_submit_thread.h`) and, where
@@ -872,16 +876,18 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   and third recorded while the one before is submitted, RHI.md "Frame slots and the submit
   thread"); the last picture's PNG byte for byte `off`'s
   (`rd_thread_ab`; [PLATFORM.md](PLATFORM.md#the-render-thread)). SKIP as `rd_vustage_ab`.
-- `rd_constant_reads_ab.cmake`: the same dumps and those of `tools/constant_reads_dumps.txt` (the
-  PowerVR phone's two frames, the aura with no aura object) twice, every post sprite reading
+- `rd_constant_reads_ab.cmake`: the fixtures of `lists/constant_reads.txt` (the PowerVR phone's
+  three frames marked `extra`, issue 164's Mali-G52 frame and the deja vu frame: the aura with no
+  aura object) twice, every post sprite reading
   its source (`ICO_RD_CONSTANT_READS=0`) and a source holding only its clear drawn as its colour, at
   four settings under `ICO_RD_BLEND=fixed`: the phone's profile (`ICO_RD_VU_PREPASS=0`) at 2x
   (`--enhanced --resolution 2x --aspect 2.189 --present 2364x1080`) and at its Resolution Auto size
   (`--resolution 2364x1080 --full-height --full-pixel`, the same aspect and present; a narrower dump
   skips both), and the record at Enhanced 4:3 and 16:9 2x: every named target's PNG (and
   `PRESENT.png`) byte for byte, `constant reads off` with none served against `on`, the same target
-  reads counted by both (served plus kept against the other's kept), and every phone frame served at
-  both phone settings; each pair's counts printed (`rd_constant_reads_ab`;
+  reads counted by both (served plus kept against the other's kept), every phone frame served at
+  both phone settings, and each fixture's declared `constant_reads_served` on every default run;
+  each pair's counts printed (`rd_constant_reads_ab`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#a-cleared-source-read-as-its-colour)). SKIP as `rd_vustage_ab`.
 - `rd_fades_fold_ab.cmake`: the dumps of `tools/fades_fold_dumps.txt` (the forest's
   `rd-00720` and `rd-01076`, the queen's `rd-00100`, the PowerVR phone's F12 zip `frame-20261028-173610-v4657`; machine-local) and,
