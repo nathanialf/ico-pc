@@ -48,7 +48,11 @@
  * when the chain is drawn, so the paste lands on the repeated columns.  The
  * mask turned RDC_NOP keeps that place: rd__glow_hold marks it (b[6]
  * HELD_SCENE_READ, unused by every command type) and the list loop's RDC_NOP
- * (rd__glow_hold_nop) does the repeat there.  Without it a held present
+ * (rd__glow_hold_nop) does the repeat there.  The crack fill's walk
+ * (rd_crack_fill.c rd__crack_fill_at) takes that NOP as the sprite it was
+ * (rd__glow_hold_mask): a fill not placed yet lands before it, as before the
+ * mask, not after the repeat over the repeated columns' own depth (an RDC_NOP
+ * is a state command to its placement: rd__cmd_is_state).  Without it a held present
  * repeated them at the next sprite reading SCENE, after the paste, or not at
  * all, on every frame wider than the PS2's 512 GS pixels (the columns differ
  * from the chain drawn by up to 121 levels).
@@ -262,10 +266,15 @@ int rd__glow_hold(RdFrame *f, int firstOfTick)
     return outcome(RD_GLOW_HELD);
 }
 
+bool rd__glow_hold_mask(const RdCmd *c)
+{
+    return c->type == RDC_NOP && c->b[6] == HELD_SCENE_READ &&
+           (c->b[0] == RD_POST_FLARE || c->b[0] == RD_POST_BLOOM || c->b[0] == RD_POST_EYE_BLUR);
+}
+
 void rd__glow_hold_nop(Replay *r, const RdCmd *c)
 {
-    if (c->b[6] == HELD_SCENE_READ &&
-        (c->b[0] == RD_POST_FLARE || c->b[0] == RD_POST_BLOOM || c->b[0] == RD_POST_EYE_BLUR)) {
+    if (rd__glow_hold_mask(c)) {
         rd__scene_border_due(r);
     }
 }

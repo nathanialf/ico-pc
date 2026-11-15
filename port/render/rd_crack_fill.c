@@ -1665,6 +1665,19 @@ static void fillAt(Replay *r, const RdFrame *f, const RdCmd *c, int list, bool m
 
 void rd__crack_fill_at(Replay *r, const RdFrame *f, const RdCmd *c, int list, bool msaaOpen)
 {
+    /* a held glow's mask (rd_glow_hold.c rd__glow_hold_mask): walked as the
+     * sprite it was, which reads SCENE, so the fill lands before it as at a
+     * present that draws the chain, ahead of SCENE's border repeat there
+     * (rd__glow_hold_nop); as an RDC_NOP its placement would hold it (a state
+     * command) to the next command, after the repeat, and fill the repeated
+     * columns by their own depth.  The copy lives until the next command:
+     * fillAt's s_at is taken by the draw it makes at once */
+    static RdCmd s_mask;
+    if (rd__glow_hold_mask(c)) {
+        s_mask = *c;
+        s_mask.type = RDC_POST_STUB;
+        c = &s_mask;
+    }
     rd__late_pass_cmd(c); /* the command walked (rd_late_pass.c's list 11 join) */
     /* FILLPASTE: the command that ends the fill's hold also draws the
      * deferred glow paste early (list 11's first draw into SCENE, rc30):

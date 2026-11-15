@@ -262,7 +262,11 @@ feedback head copies):
   "SCENE's outer columns"): the fog arms their repeat for the frame's first post sprite that
   samples SCENE, the mask when the chain is drawn, so the paste lands on the repeated columns.
   `rd__glow_hold` marks the mask's `RDC_NOP` (its `b[6]`) and the list loop's `RDC_NOP` case
-  (`rd__glow_hold_nop`, `rd__scene_border_due`) does the repeat there. Before, a held present
+  (`rd__glow_hold_nop`, `rd__scene_border_due`) does the repeat there. The crack fill's walk
+  (`rd__crack_fill_at`) takes that `RDC_NOP` as the mask it was (`rd__glow_hold_mask`), so a fill
+  not yet placed lands before it, as before the mask: an `RDC_NOP` is a state command to the fill's
+  placement, which would hold the fill to the next command, after the repeat, and fill the
+  repeated columns by their own depth (issue 102's v4251: one texel, one level). Before, a held present
   repeated them at the next sprite that samples SCENE (after the paste: column 2 with the glow
   over columns 0 and 1) or, in the measured moving pair, not at all (the game's own columns left),
   on every frame wider than 512 GS pixels: SCENE's texel columns 0-3 and W-4 .. W-1 at 2x differed
