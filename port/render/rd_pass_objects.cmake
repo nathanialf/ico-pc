@@ -5,20 +5,23 @@
 # near the 256 KiB cap, tools/check_no_rom.sh).  The row itself is tested in
 # port/rhi (rhi_vk_pass_row, rhi_vk_qcom_passes, rhi_vk_qcom_passes_off).
 #
-# rd_pass_objects_ab (test/rd_pass_objects_ab.cmake): every dump of the
-# machine-local tools/pass_objects_dumps.txt (stage 12 on the issue 123
-# tablet, the Pixel's opening, issue 179's four Mali-G52 dumps; a listed dump
-# that is absent fails where /primary/dev/ico-dumps exists) replayed with
-# dynamic rendering (ICO_VK_LEGACY_PASSES=0) against lavapipe put on the row
-# (ICO_VK_FAKE_PASS_ROW=qualcomm), at the 123 tablet's setting under a
-# Qualcomm phone's tile rule and at the 179 phone's under the Arm fakes:
-# every target byte for byte, the same draws and passes, each run's device
-# line naming its path.  No device: SKIP.
+# rd_pass_objects_ab (test/rd_pass_objects_ab.cmake): the fixtures of
+# test/fixtures/lists/pass_objects.txt (issue 163's lamps room, the Pixel's
+# opening, issue 179's Mali-G52 frames; docs/port/TESTING_FIXTURES.md; an
+# absent one FAILS) replayed with dynamic rendering (ICO_VK_LEGACY_PASSES=0)
+# against lavapipe put on the row (ICO_VK_FAKE_PASS_ROW=qualcomm), at the 123
+# tablet's setting under a Qualcomm phone's tile rule and at the 179 phone's
+# under the Arm fakes: every target byte for byte, the same draws and passes,
+# each run's device line naming its path, the row's passes on every fixture
+# (the path ran).  No device: SKIP.
+include(rd_fixture.cmake)
 if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/pass_objects_ab")
     add_test(NAME rd_pass_objects_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/pass_objects_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                     "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/pass_objects.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/pass_objects_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_pass_objects_ab.cmake")
     set_tests_properties(rd_pass_objects_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"

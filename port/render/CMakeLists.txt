@@ -1733,20 +1733,22 @@ if(ICO_RUN_TESTS)
                      -P "${_crk}")
     set_tests_properties(rd_replay_tool_crack PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                          FIXTURES_REQUIRED rd_dump)
-    # the filler after the MSAA resolve (issue 26 with MSAA on): a corpus
-    # room (lightning rd-00300, machine-local, SKIP without it) whose MSAA
+    # the filler after the MSAA resolve (issue 26 with MSAA on): the corpus
+    # room's fixture fx-lightning-0300 (test/fixtures, no art), whose MSAA
     # epoch closes at the shadow count's pass in list 3, before the fog, at
     # Enhanced 2x with --aa msaa2 and msaa4: the state line says the fill
     # was drawn after the resolve, the --stats line counts one fill pass
     # with more than 0 pixels filled, none left unfilled, that fill after
-    # the resolve; SKIP where the device does not offer the count (no
+    # the resolve, the fixture's declared crack_pixels and crack_msaa_fills
+    # (the path ran); SKIP where the device does not offer the count (no
     # "rd: msaa: N samples" line: lavapipe offers 4 only)
-    set(_crk_room "${CMAKE_SOURCE_DIR}/build-host/tmp/corpus/dumps/lightning/rd-00300.rddump")
     foreach(_s 2 4)
         add_test(NAME rd_crack_resolved_msaa${_s}
                  COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                         "-DARGS=${_crk_room}|${CMAKE_CURRENT_BINARY_DIR}/rd_crack_resolved_msaa${_s}.png|--enhanced|--resolution|2x|--aa|msaa${_s}|--stats"
-                         "-DNEED_FILE=${_crk_room}"
+                         "-DARGS=%FIXTURE%|${CMAKE_CURRENT_BINARY_DIR}/rd_crack_resolved_msaa${_s}.png|--enhanced|--resolution|2x|--aa|msaa${_s}|--stats"
+                         -DFIXTURE=fx-lightning-0300 -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                         "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                         "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/crack_resolved_msaa${_s}"
                          "-DNEED=rd: msaa: ${_s} samples"
                          "-DEXPECT=${_crk_on} 2x2, reach 1x1 ${_crk_tail} \\(drawn after the MSAA resolve\\)"
                          "-DEXPECT2=stats: crack fill on: 1 passes, [1-9][0-9]* pixels filled \\(1 replays counted; scale 2x2, reach 1x1 texels; 0 fogged replays above 1x not filled; 1 fills after lists 4-6; 1 fills after the MSAA resolve; 0 fills in the aura's paste pass; 0 fills after the glow's alpha\\)"
@@ -3245,39 +3247,34 @@ if(ICO_RUN_TESTS)
             set_tests_properties(rd_fades_fold_ab PROPERTIES ENVIRONMENT "${_env}")
         endif()
     endif()
-    # rd_crack_late_ab (test/rd_crack_late_ab.cmake): the dumps and baselines of
-    # tools/crack_late_dumps.txt (machine-local: the gate's Enhanced 2x pass
-    # dumps and the PowerVR phone's frames at its Resolution Auto, made by the
-    # build that drew the crack fill before the fog) replayed with the fill
-    # after lists 4-6 (rd_crack_fill.c): every target within the measured bound
-    # (DIVERGENCES.md VD-20), the fill drawn once after lists 4-6, at the
-    # phone's setting one copy fewer and no pass more; SKIP as rd_vustage_ab
-    if(Python3_FOUND)
-        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/crack_late_ab")
-        add_test(NAME rd_crack_late_ab
-                 COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                         "-DLIST=${CMAKE_SOURCE_DIR}/tools/crack_late_dumps.txt"
-                         "-DPY=${Python3_EXECUTABLE}"
-                         "-DDIFF=${CMAKE_CURRENT_SOURCE_DIR}/test/png_level_diff.py"
-                         "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/crack_late_ab"
-                         -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_crack_late_ab.cmake")
-        set_tests_properties(rd_crack_late_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
-                             TIMEOUT 3600)
-        if(_env)
-            set_tests_properties(rd_crack_late_ab PROPERTIES ENVIRONMENT "${_env}")
-        endif()
+    # rd_crack_late_ab (test/rd_crack_late_ab.cmake): the fixtures of
+    # test/fixtures/lists/crack_late.txt at the gate's Enhanced 2x and the
+    # PowerVR phone's Resolution Auto with the fill after lists 4-6
+    # (rd_crack_fill.c): the fill drawn once after lists 4-6 with the declared
+    # crack_pixels, every PNG the release before's (crack_late_goldens.txt),
+    # the same bytes with the fill at the start of list 7; SKIP without a device
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/crack_late_ab")
+    add_test(NAME rd_crack_late_ab
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool> "-DFIXTURES=${ICO_FIXTURE_DIR}"
+                     "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/crack_late.txt"
+                     "-DGOLDENS=${ICO_FIXTURE_DIR}/lists/crack_late_goldens.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/crack_late_ab"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_crack_late_ab.cmake")
+    set_tests_properties(rd_crack_late_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                         TIMEOUT 3600)
+    if(_env)
+        set_tests_properties(rd_crack_late_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
-    # rd_aura_box_ab (test/rd_aura_box_ab.cmake): the dumps of
-    # tools/aura_box_dumps.txt (vustage_dumps.txt's and the PowerVR phone's
-    # three F12 frames) with the aura's read of the picture into FEED128 in
-    # one pass (ICO_RD_AURA_BOX=0) and in two (=1, rd_aura_box.c), under
-    # ICO_RD_BLEND=fixed at the phone's Resolution Auto and Enhanced 2x 4:3:
-    # every target byte for byte, one pass and one draw more a read in two
-    # passes; SKIP as rd_vustage_ab
+    # rd_aura_box_ab (test/rd_aura_box_ab.cmake): lists/aura_box.txt's fixtures
+    # with the aura's read into FEED128 in one pass and in two: the same bytes
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/aura_box_ab")
     add_test(NAME rd_aura_box_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/aura_box_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                     "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DLIST=${ICO_FIXTURE_DIR}/lists/aura_box.txt"
+                     "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/aura_box_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_aura_box_ab.cmake")
     set_tests_properties(rd_aura_box_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
@@ -3303,19 +3300,14 @@ if(ICO_RUN_TESTS)
     if(_env)
         set_tests_properties(rd_shadow_merge_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
-    # rd_pass_area_ab (test/rd_pass_area_ab.cmake): the dumps of
-    # tools/pass_area_dumps.txt (vustage_dumps.txt's, the PowerVR phone's
-    # three F12 frames and its rc3 frame) with the passes' render areas off
-    # (ICO_RD_PASS_AREA=0) and on (=1, rd_pass_area.c), under
-    # ICO_RD_BLEND=fixed at the phone's Resolution Auto and Enhanced 2x 4:3:
-    # every target byte for byte (lavapipe clips to the area, so a wrong
-    # area would show), the same passes and draws but for the passes ended
-    # early, and some pass with an area on the phone's frames; SKIP as
-    # rd_vustage_ab
+    # rd_pass_area_ab (test/rd_pass_area_ab.cmake): lists/pass_area.txt's
+    # fixtures with the passes' render areas off and on: the same bytes
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/pass_area_ab")
     add_test(NAME rd_pass_area_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/pass_area_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                     "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DLIST=${ICO_FIXTURE_DIR}/lists/pass_area.txt"
+                     "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/pass_area_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_pass_area_ab.cmake")
     set_tests_properties(rd_pass_area_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
@@ -3346,19 +3338,14 @@ if(ICO_RUN_TESTS)
             set_tests_properties(rd_glow_cheap_ab PROPERTIES ENVIRONMENT "${_env}")
         endif()
     endif()
-    # rd_pass_cut_ab (test/rd_pass_cut_ab.cmake): the dumps of
-    # tools/pass_cut_dumps.txt with every pass cut off and each on alone and
-    # all on (rd_pass_cut.c: ICO_RD_CLEAR_CARRY, ICO_RD_CLEAR_SKIP,
-    # ICO_RD_LAST_STORE), under ICO_RD_BLEND=fixed, the store plan and its
-    # poison, at the phone's Resolution Auto with its paths and Enhanced 2x
-    # 4:3: every target and the present byte for byte, the passes fewer by
-    # the clears carried and skipped, the depth stores dropped more by those
-    # at the last touch, and each cut cutting something on the phone's
-    # frames; SKIP as rd_vustage_ab
+    # rd_pass_cut_ab (test/rd_pass_cut_ab.cmake): lists/pass_cut.txt's
+    # fixtures with every pass cut off, each alone and all on: the same bytes
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/pass_cut_ab")
     add_test(NAME rd_pass_cut_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/pass_cut_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                     "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DLIST=${ICO_FIXTURE_DIR}/lists/pass_cut.txt"
+                     "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/pass_cut_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_pass_cut_ab.cmake")
     set_tests_properties(rd_pass_cut_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)

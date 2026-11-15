@@ -9,9 +9,20 @@
 #   machine-local corpus dump)
 # -DNEED=<regex> (optional): SKIP when the run does not log it (an MSAA
 #   count the device does not offer is drawn as off)
+# -DFIXTURE=<name> (optional) with -DFIXTURE_TOOL, -DFIXTURES,
+#   -DFIXTURE_HELPERS and -DOUT: the committed fixture NAME
+#   (docs/port/TESTING_FIXTURES.md) expanded into OUT, its path in place of
+#   %FIXTURE% in ARGS; after the run the fixture's declared crack_pixels and
+#   crack_msaa_fills are checked against the --stats lines (the path ran,
+#   rd_fixture_require)
 if(NEED_FILE AND NOT EXISTS "${NEED_FILE}")
   message(STATUS "SKIP: ${NEED_FILE} is not on this machine")
   return()
+endif()
+if(FIXTURE)
+  include("${FIXTURE_HELPERS}")
+  rd_fixture_expand(${FIXTURE} "${OUT}" fixtureDump)
+  string(REPLACE "%FIXTURE%" "${fixtureDump}" ARGS "${ARGS}")
 endif()
 if(ARGS)
   string(REPLACE "|" ";" ARGS "${ARGS}")
@@ -46,6 +57,13 @@ if(DENY)
   list(LENGTH ds nd)
   if(NOT nd EQUAL 0)
     message(FATAL_ERROR "a \"${DENY}\" line:\n${err}")
+  endif()
+endif()
+if(FIXTURE)
+  rd_fixture_require(${FIXTURE} "${out}" crack_pixels crack_msaa_fills)
+  if(RDFX_FAILURES GREATER 0)
+    message(FATAL_ERROR "${FIXTURE}: ${RDFX_FAILURES} declared properties not shown: the path did "
+                        "not run on the fixture")
   endif()
 endif()
 message(STATUS "${TOOL}: the crack filler's lines logged")

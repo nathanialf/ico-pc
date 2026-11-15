@@ -1,14 +1,15 @@
 # rd_crack_late_ab: the crack fill drawn after lists 4-6 (port/render/rd_crack_fill.c;
 # docs/port/RENDER_POST.md, "Crack filling above 1x"; docs/port/DIVERGENCES.md VD-20)
-# against pass dumps of the build that drew it before the fog.  Each line of the list
-# (tools/crack_late_dumps.txt: "<setting> <dump> <baseline folder>") is replayed with
-# rd_replay_tool --pass-dump --stats under ICO_RD_BLEND=fixed, ICO_RD_FADES_FOLD=0 and
-# ICO_RD_CULL=off (the baselines' own: the fades fold has its own A/B, rd_fades_fold_ab;
-# the baselines replayed every draw, and the visibility test (rd_vis.c) leaves draws out
-# of the replay, which keeps every pixel but drops their texture and buffer copies, so the
-# phone's copy count below is the baseline's minus one only with every draw replayed: at
-# the default frustum v4103 makes 237 copies against 274 with the culler off, the same
-# PNGs byte for byte; the culler's own gate is rd_cull_ab) at the setting:
+# on committed fixtures, against the pictures the release before (v0.11.6) drew of
+# them.  Each line of the list (port/render/test/fixtures/lists/crack_late.txt:
+# "<fixture> <setting>[,<setting>...]" and the line's own properties,
+# rd_fixture_list_props.cmake; a listed fixture that is absent or does not expand to
+# its pinned SHA-256 FAILS) is expanded into OUT and replayed at each setting with
+# rd_replay_tool --pass-dump --stats under ICO_RD_BLEND=fixed, ICO_RD_FADES_FOLD=0,
+# ICO_RD_GLOW_LIGHT=0, ICO_RD_CRACK_SWAP=0 and ICO_RD_CULL=off (the environment the
+# goldens were made under: the fades fold, the light plan, the swap and the culler
+# have their own A/Bs, rd_fades_fold_ab, rd_glow_light_ab, rd_crack_work_ab,
+# rd_cull_ab; the registration adds ICO_RD_SHADOW_FINE=0, rd_shadowres.cmake) at:
 #   enh2x43  Enhanced 2x at 4:3, presented at 1280x960 (the pass-dump gate's);
 #   phone    the PowerVR phone's Resolution Auto (2364x1080, Full height, Full pixel,
 #            aspect 2.189, presented at 2364x1080) under its profile's fakes (the local
@@ -16,84 +17,76 @@
 #            views, the VU planes at whole scales only, the shadow count's one draw, the
 #            vertex pre-pass off, no dynamic state).
 # The run must say "crack fill on: P passes" (P 0 where the fill was the first draw of the
-# aura's paste pass, else 1) and "1 fills after lists 4-6", unless the
-# dump has no fog of SCENE above 1x at all (the stats line's "0 passes, 0 pixels filled (0
-# replays counted, scale 0x0, ..., 0 fogged replays above 1x not filled, 0 fills after
-# lists 4-6": the v3086-v1985 group, whose effects line times the fog at 0.000): neither
-# build armed a fill there, and every target must then be the baseline's bytes.  Every
-# target's PNG of the baseline is compared with the run's (png_level_diff.py): the
-# pixels that differ at most MAX_SHARE parts per million of the target, no channel more
-# than MAX_LEVEL levels apart (the measured bound, VD-20: the crack texels take their
-# neighbour's colour as the fog and lists 4-6 left it; the downstream effects that read
-# SCENE carry it on).  The glow's mask (staticBlur.c cleanUpFB, MASK_TARGET) tests
-# SCENE's depth, which the old fill wrote at the cracks and the late fill leaves as it
-# was (VD-20), so on a frame with the glow the mask's texels at a crack flip (0 against
-# 255) and its reductions, blurs and the targets it is added into carry that over the
-# blur's footprint (the godrays frame rd-00720: WORK0-3 up to 31 levels on 3.4 %, SCENE,
-# DISPLAY and PRESENT up to 10 levels on 1.2 %).  A run with a target past the bound is
-# replayed once more without the fill (ICO_RD_CRACK_FILL=0) and passes only when its
-# mask is the no-fill run's byte for byte (the mechanism) and every target past the bound
-# is no farther from the baseline than the no-fill run's is (no more pixels apart, no
-# larger difference: the late fill never takes a target farther from the old fill's
-# picture than no fill does).  At the phone's setting the stats line's copies are one fewer than
-# the baseline's (the depth no longer copied for the fill) and its passes no more (the
-# fill's swap off in every run, ICO_RD_CRACK_SWAP=0: it saves the colour's copy too,
-# rd_crack_work_ab checks it).  The
-# differing pixels and the largest difference are printed per target.  Every run that
-# drew the fill is replayed once more with ICO_RD_CRACK_PLACE=7 (the fill at the start of
-# list 7, its place before; rd_crack_fill.c rd__crack_fill_place moves it after the
-# glow's sprites of SCENE's alpha alone, or into the aura's paste pass): every PNG must
-# be that replay's bytes, and the run's passes no more than its; at the phone's setting a
-# run whose stats place the fill later ("1 fills in the aura's paste pass" or "1 fills
-# after the glow's alpha") has at least one pass fewer.  A line whose dump
-# or baseline is missing is named and skipped; none compared, or no device: SKIP.
-# Every run sets ICO_RD_GLOW_LIGHT=0 (the glow's chain drawn whole, as the
-# baselines drew it): the light plan (rd_glow_light.c, VD-30) came after them
-# and changes the alpha of the glow's buffers and SCENE in frames with a
-# marked background; rd_glow_light_ab holds it against the chain drawn.
-# -DTOOL=<rd_replay_tool> -DLIST=<the list> -DPY=<python3> -DDIFF=<png_level_diff.py>
-# -DOUT=<a folder the test may write>
-set(MAX_LEVEL 64)
-set(MAX_SHARE 2000) # parts per million: 0.2 % of a target's pixels
-set(MASK_TARGET WORK2.png) # the glow's mask (cleanUpFB), depth tested against SCENE
+# aura's paste pass, else 1) and "1 fills after lists 4-6", and the path ran: the
+# generated geometry decides where the cracks are, so the fixture's declared
+# crack_pixels (>=1) is checked on the run (rd_fixture_require).  Every PNG the run
+# writes must be the golden's byte for byte (-DGOLDENS, port/render/test/fixtures/
+# lists/crack_late_goldens.txt: "<fixture> <setting> <png> <sha256>", the SHA-256 of
+# every PNG v0.11.6's rd_replay_tool wrote with the same environment and arguments on
+# the expanded fixture); a PNG without a golden, a golden no run wrote and a (fixture,
+# setting) without goldens fail.  These replace the old build's pass dumps outside the
+# repository (the fill before the fog, compared within VD-20's measured bound, which
+# stays a measurement of the game's frames in DIVERGENCES.md): owner's decision 3, the
+# fixture's own picture.  Every run is replayed once more with ICO_RD_CRACK_PLACE=7 (the
+# fill at the start of list 7, its place before; rd_crack_fill.c rd__crack_fill_place
+# moves it after the glow's sprites of SCENE's alpha alone, or into the aura's paste
+# pass): every PNG must be that replay's bytes, and the run's passes no more than its;
+# at the phone's setting a run whose stats place the fill later ("1 fills in the aura's
+# paste pass" or "1 fills after the glow's alpha") has at least one pass fewer.  A
+# fixture no setting replayed fails.  No device: SKIP (77).
+# -DMAKE_GOLDENS=<file> (by hand, with TOOL the release before's rd_replay_tool): the
+# goldens written to that file instead of checked, nothing else asserted.
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the fixtures
+# folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<a fixture list>
+# -DGOLDENS=<the goldens> -DOUT=<a folder the test may write>
+include("${FIXTURE_HELPERS}")
+include("${CMAKE_CURRENT_LIST_DIR}/rd_fixture_list_props.cmake")
+set(failures 0)
+rd_fixture_list("${LIST}" names)
 set(runs "")
-if(NOT "${LIST}" STREQUAL "" AND EXISTS "${LIST}")
-  get_filename_component(listDir "${LIST}" DIRECTORY)
-  file(STRINGS "${LIST}" lines)
-  foreach(l IN LISTS lines)
+foreach(name IN LISTS names)
+  rd_fixture_list_props(${name})
+  string(REGEX REPLACE "[ \t]+" ";" words "${RDFX_FIELDS_${name}}")
+  set(settings "")
+  foreach(w IN LISTS words)
+    if(w MATCHES "^(enh2x43|phone)(,(enh2x43|phone))*$")
+      string(REPLACE "," ";" settings "${w}")
+    endif()
+  endforeach()
+  if(settings STREQUAL "")
+    message(FATAL_ERROR "${LIST}: ${name} names no setting (enh2x43, phone)")
+  endif()
+  rd_fixture_expand(${name} "${OUT}/fixtures" d)
+  set(name_${d} "${name}")
+  foreach(s IN LISTS settings)
+    list(APPEND runs "${s}|${d}")
+  endforeach()
+endforeach()
+list(LENGTH runs nruns)
+list(LENGTH names nnames)
+
+# the goldens: "<fixture> <setting> <png> <sha256>"
+set(goldenKeys "")
+if(NOT MAKE_GOLDENS)
+  if("${GOLDENS}" STREQUAL "" OR NOT EXISTS "${GOLDENS}")
+    message(FATAL_ERROR "rd_crack_late_ab: no golden list ${GOLDENS}")
+  endif()
+  file(STRINGS "${GOLDENS}" glines)
+  foreach(l IN LISTS glines)
     string(STRIP "${l}" l)
     if(l STREQUAL "" OR l MATCHES "^#")
       continue()
     endif()
-    string(REGEX REPLACE "[ \t]+" ";" parts "${l}")
-    list(LENGTH parts np)
-    if(NOT np EQUAL 3)
-      message(STATUS "${l}: not '<setting> <dump> <baseline>', skipped")
-      continue()
+    if(NOT l MATCHES "^([^ \t]+)[ \t]+([^ \t]+)[ \t]+([^ \t]+\\.png)[ \t]+([0-9a-f]+)$")
+      message(FATAL_ERROR "${GOLDENS}: not '<fixture> <setting> <png> <sha256>': ${l}")
     endif()
-    list(GET parts 0 s)
-    list(GET parts 1 d)
-    list(GET parts 2 b)
-    if(NOT IS_ABSOLUTE "${d}")
-      set(d "${listDir}/${d}")
-    endif()
-    if(NOT IS_ABSOLUTE "${b}")
-      set(b "${listDir}/${b}")
-    endif()
-    if(NOT EXISTS "${d}" OR NOT IS_DIRECTORY "${b}")
-      message(STATUS "${d} or ${b}: missing, skipped")
-      continue()
-    endif()
-    list(APPEND runs "${s}|${d}|${b}")
+    set(golden_${CMAKE_MATCH_1}__${CMAKE_MATCH_2}__${CMAKE_MATCH_3} "${CMAKE_MATCH_4}")
+    list(APPEND goldenKeys "${CMAKE_MATCH_1}__${CMAKE_MATCH_2}__${CMAKE_MATCH_3}")
   endforeach()
 else()
-  message(STATUS "${LIST}: no dump list, skipped")
+  file(WRITE "${MAKE_GOLDENS}" "")
 endif()
-list(LENGTH runs nruns)
-if(nruns EQUAL 0)
-  message(STATUS "SKIP: no dump and baseline of ${LIST} is here")
-  return()
-endif()
+set(goldenUsed "")
 
 set(args_enh2x43 --enhanced --aspect 4:3 --resolution 2x --present 1280x960)
 set(env_enh2x43 "")
@@ -102,61 +95,66 @@ set(args_phone --enhanced --resolution 2364x1080 --full-height --full-pixel --as
 set(env_phone ICO_RD_VU_PREPASS=0 ICO_VK_FAKE_NO_DYNAMIC=1 ICO_RD_FOG_PATH=local
               ICO_RD_DATE_PATH=stencil ICO_RD_STORE_PLAN=1 ICO_RD_BLUR_FOLD=1
               ICO_RD_FX_DST_LOCAL=1 ICO_RD_UINT_VIEW=0 ICO_RD_VU_PLANES=0 ICO_RD_SHADOW_ONE=1)
+set(common ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0 ICO_RD_GLOW_LIGHT=0 ICO_RD_CRACK_SWAP=0
+           ICO_RD_CULL=off)
 # (the outputs' semicolons read as commas: CMake's list separator replaced)
 set(lateRe "stats: crack fill on: [01] passes, [0-9]+ pixels filled \\([^)]*, 1 fills after lists 4-6,")
 set(placedRe ", 1 fills in the aura's paste pass,|, 1 fills after the glow's alpha\\)")
-set(countRe "stats: [0-9]+ draws, ([0-9]+) passes, [^\n]* ([0-9]+) copies,")
-set(unarmedRe "stats: crack fill on: 0 passes, 0 pixels filled \\(0 replays counted, scale 0x0, reach 0x0 texels, 0 fogged replays above 1x not filled, 0 fills after lists 4-6,")
-set(diffRe "png_level_diff: ([0-9]+) x ([0-9]+), [0-9]+ channels: [0-9]+ equal, [0-9]+ one level apart, [0-9]+ more \\(largest ([0-9]+)\\), ([0-9]+) pixels differ")
-set(failures 0)
+set(countRe "stats: [0-9]+ draws, ([0-9]+) passes")
 set(compared 0)
 set(index 0)
-set(worstLevel 0)
 foreach(run IN LISTS runs)
   string(REPLACE "|" ";" r "${run}")
   list(GET r 0 s)
   list(GET r 1 dump)
-  list(GET r 2 base)
+  set(n "${name_${dump}}")
   math(EXPR index "${index} + 1")
   set(dir "${OUT}/${index}-${s}")
   file(REMOVE_RECURSE "${dir}")
   file(MAKE_DIRECTORY "${dir}")
-  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0 ICO_RD_GLOW_LIGHT=0 ICO_RD_CRACK_SWAP=0
-                          ICO_RD_CULL=off ${env_${s}} "${TOOL}" "${dump}" - --pass-dump "${dir}"
-                          --stats ${args_${s}}
+  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${common} ${env_${s}} "${TOOL}" "${dump}"
+                          "${dir}-out.png" --pass-dump "${dir}" --stats ${args_${s}}
                   RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
   if(rc EQUAL 77)
     message(STATUS "SKIP: no device: ${err}")
     return()
   endif()
   if(NOT rc EQUAL 0)
-    message(SEND_ERROR "${dump} ${s}: exit ${rc}:\n${err}")
+    message(SEND_ERROR "${n} ${s}: exit ${rc}:\n${err}")
     math(EXPR failures "${failures} + 1")
     continue()
   endif()
+  set(replayed_${n} TRUE)
+  file(GLOB pngs RELATIVE "${dir}" "${dir}/*.png")
+  list(SORT pngs)
+  if(MAKE_GOLDENS)
+    foreach(png IN LISTS pngs)
+      file(SHA256 "${dir}/${png}" h)
+      file(APPEND "${MAKE_GOLDENS}" "${n} ${s} ${png} ${h}\n")
+    endforeach()
+    list(LENGTH pngs npng)
+    message(STATUS "${n} ${s}: ${npng} goldens written")
+    continue()
+  endif()
   string(REPLACE ";" "," flat "${out}")
-  set(unarmed FALSE)
-  if(flat MATCHES "${unarmedRe}")
-    # no fog of SCENE above 1x in this dump: no fill armed, now or before
-    set(unarmed TRUE)
-    message(STATUS "${dump} ${s}: no fog of SCENE above 1x: no fill armed, every target the "
-                   "baseline's bytes")
-  elseif(NOT flat MATCHES "${lateRe}")
-    message(SEND_ERROR "${dump} ${s}: the fill was not drawn once after lists 4-6:\n${out}")
+  if(NOT flat MATCHES "${lateRe}")
+    message(SEND_ERROR "${n} ${s}: the fill was not drawn once after lists 4-6:\n${out}")
     math(EXPR failures "${failures} + 1")
   endif()
-  if(NOT unarmed AND flat MATCHES "${lateRe}")
+  # the path ran: the fill drew on the fixture's generated geometry
+  rd_fixture_require(${n} "${out}" crack_pixels)
+  if(flat MATCHES "${lateRe}")
     # the same replay with the fill at the start of list 7: the same bytes
     set(pin "${dir}-pin")
     file(REMOVE_RECURSE "${pin}")
     file(MAKE_DIRECTORY "${pin}")
-    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0 ICO_RD_GLOW_LIGHT=0 ICO_RD_CRACK_SWAP=0
-                            ICO_RD_CULL=off ${env_${s}} ICO_RD_CRACK_PLACE=7 "${TOOL}" "${dump}" -
-                            --pass-dump "${pin}" --stats ${args_${s}}
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${common} ${env_${s}} ICO_RD_CRACK_PLACE=7
+                            "${TOOL}" "${dump}" "${pin}-out.png" --pass-dump "${pin}" --stats
+                            ${args_${s}}
                     RESULT_VARIABLE rcPin OUTPUT_VARIABLE outPin ERROR_VARIABLE errPin)
     string(REPLACE ";" "," flatPin "${outPin}")
     if(NOT rcPin EQUAL 0 OR NOT flatPin MATCHES "${countRe}" OR NOT flat MATCHES "${countRe}")
-      message(SEND_ERROR "${dump} ${s}: the replay with the fill at the start of list 7: exit "
+      message(SEND_ERROR "${n} ${s}: the replay with the fill at the start of list 7: exit "
                          "${rcPin}, no pass count:\n${errPin}")
       math(EXPR failures "${failures} + 1")
     else()
@@ -175,151 +173,71 @@ foreach(run IN LISTS runs)
                                 "${dir}/${png}" RESULT_VARIABLE samePin)
         if(NOT samePin EQUAL 0)
           math(EXPR pinDiffer "${pinDiffer} + 1")
-          message(SEND_ERROR "${dump} ${s}: ${png} differs from the replay with the fill at the "
+          message(SEND_ERROR "${n} ${s}: ${png} differs from the replay with the fill at the "
                              "start of list 7")
           math(EXPR failures "${failures} + 1")
         endif()
       endforeach()
-      message(STATUS "${dump} ${s}: ${runPasses} passes, ${pinPasses} with the fill at the start "
+      message(STATUS "${n} ${s}: ${runPasses} passes, ${pinPasses} with the fill at the start "
                      "of list 7 (placed later: ${placed}); ${pinDiffer} PNGs differ from it")
       if(runPasses GREATER pinPasses OR
          (placed AND s STREQUAL "phone" AND NOT runPasses LESS pinPasses))
-        message(SEND_ERROR "${dump} ${s}: ${runPasses} passes against ${pinPasses} with the fill "
+        message(SEND_ERROR "${n} ${s}: ${runPasses} passes against ${pinPasses} with the fill "
                            "at the start of list 7 (placed later: ${placed})")
         math(EXPR failures "${failures} + 1")
       endif()
     endif()
   endif()
-  if(s STREQUAL "phone" AND EXISTS "${base}.log")
-    # the baseline's own run log (ab.sh writes <baseline>.log next to the folder)
-    file(READ "${base}.log" baseLog)
-    string(REPLACE ";" "," baseLog "${baseLog}")
-    if(flat MATCHES "${countRe}")
-      set(passes "${CMAKE_MATCH_1}")
-      set(copies "${CMAKE_MATCH_2}")
-      if(baseLog MATCHES "${countRe}")
-        set(basePasses "${CMAKE_MATCH_1}")
-        set(baseCopies "${CMAKE_MATCH_2}")
-        math(EXPR wantCopies "${baseCopies} - 1")
-        message(STATUS "${dump} ${s}: ${passes} passes and ${copies} copies, the baseline "
-                       "${basePasses} and ${baseCopies}")
-        if(NOT copies EQUAL wantCopies OR passes GREATER basePasses)
-          message(SEND_ERROR "${dump} ${s}: ${passes} passes and ${copies} copies against the "
-                             "baseline's ${basePasses} and ${baseCopies} (one copy fewer, no "
-                             "pass more)")
-          math(EXPR failures "${failures} + 1")
-        endif()
-      endif()
-    endif()
-  endif()
-  file(GLOB pngs RELATIVE "${base}" "${base}/*.png")
-  set(over "")
+  # every PNG the release before's picture of the fixture, byte for byte
+  set(nGolden 0)
   foreach(png IN LISTS pngs)
-    if(NOT EXISTS "${dir}/${png}")
-      message(SEND_ERROR "${dump} ${s}: ${png} in the baseline only")
+    set(k "${n}__${s}__${png}")
+    if(NOT DEFINED golden_${k})
+      message(SEND_ERROR "${n} ${s}: ${png} has no golden in ${GOLDENS}")
       math(EXPR failures "${failures} + 1")
       continue()
     endif()
+    list(APPEND goldenUsed "${k}")
     math(EXPR compared "${compared} + 1")
-    execute_process(COMMAND "${CMAKE_COMMAND}" -E compare_files "${base}/${png}" "${dir}/${png}"
-                    RESULT_VARIABLE same)
-    if(same EQUAL 0)
-      continue()
-    endif()
-    if(unarmed)
-      message(SEND_ERROR "${dump} ${s}: ${png} differs from the baseline with no fill armed")
-      math(EXPR failures "${failures} + 1")
-      continue()
-    endif()
-    execute_process(COMMAND "${PY}" -I "${DIFF}" "${base}/${png}" "${dir}/${png}"
-                    RESULT_VARIABLE rcDiff OUTPUT_VARIABLE outDiff)
-    string(STRIP "${outDiff}" outDiff)
-    if(NOT rcDiff EQUAL 0 OR NOT outDiff MATCHES "${diffRe}")
-      message(SEND_ERROR "${dump} ${s}: ${png} differs and cannot be measured: ${outDiff}")
-      math(EXPR failures "${failures} + 1")
-      continue()
-    endif()
-    set(w "${CMAKE_MATCH_1}")
-    set(h "${CMAKE_MATCH_2}")
-    set(largest "${CMAKE_MATCH_3}")
-    set(pixels "${CMAKE_MATCH_4}")
-    math(EXPR ppm "${pixels} * 1000000 / (${w} * ${h})")
-    if(largest GREATER worstLevel)
-      set(worstLevel "${largest}")
-    endif()
-    message(STATUS "  ${dump} ${s} ${png}: ${pixels} pixels differ (${ppm} per million), the "
-                   "largest ${largest} levels")
-    if(largest GREATER MAX_LEVEL OR ppm GREATER MAX_SHARE)
-      list(APPEND over "${png}|${pixels}|${ppm}|${largest}")
-    endif()
-  endforeach()
-  if(over STREQUAL "")
-    continue()
-  endif()
-  # past the bound: the glow's mask?  The same replay without the fill
-  set(nofill "${dir}-nofill")
-  file(REMOVE_RECURSE "${nofill}")
-  file(MAKE_DIRECTORY "${nofill}")
-  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0 ICO_RD_GLOW_LIGHT=0 ICO_RD_CRACK_SWAP=0
-                          ICO_RD_CULL=off ${env_${s}} ICO_RD_CRACK_FILL=0 "${TOOL}" "${dump}" -
-                          --pass-dump "${nofill}" --stats ${args_${s}}
-                  RESULT_VARIABLE rcNo OUTPUT_VARIABLE outNo ERROR_VARIABLE errNo)
-  set(maskSame 1)
-  if(rcNo EQUAL 0 AND EXISTS "${dir}/${MASK_TARGET}" AND EXISTS "${nofill}/${MASK_TARGET}")
-    execute_process(COMMAND "${CMAKE_COMMAND}" -E compare_files "${dir}/${MASK_TARGET}"
-                            "${nofill}/${MASK_TARGET}" RESULT_VARIABLE maskSame)
-  endif()
-  if(NOT rcNo EQUAL 0 OR NOT maskSame EQUAL 0)
-    foreach(o IN LISTS over)
-      string(REPLACE "|" ";" o "${o}")
-      list(GET o 0 png)
-      list(GET o 1 pixels)
-      list(GET o 2 ppm)
-      list(GET o 3 largest)
-      message(SEND_ERROR "${dump} ${s}: ${png} has ${pixels} pixels apart (${ppm} per million, "
-                         "${MAX_SHARE} the bound), the largest ${largest} levels (${MAX_LEVEL} "
-                         "the bound); the glow's mask ${MASK_TARGET} is not the no-fill run's "
-                         "(exit ${rcNo}${errNo})")
-      math(EXPR failures "${failures} + 1")
-    endforeach()
-    continue()
-  endif()
-  foreach(o IN LISTS over)
-    string(REPLACE "|" ";" o "${o}")
-    list(GET o 0 png)
-    list(GET o 1 pixels)
-    list(GET o 2 ppm)
-    list(GET o 3 largest)
-    set(noPixels -1)
-    set(noLargest -1)
-    if(EXISTS "${nofill}/${png}")
-      execute_process(COMMAND "${PY}" -I "${DIFF}" "${base}/${png}" "${nofill}/${png}"
-                      RESULT_VARIABLE rcDiff OUTPUT_VARIABLE outDiff)
-      string(STRIP "${outDiff}" outDiff)
-      if(rcDiff EQUAL 0 AND outDiff MATCHES "${diffRe}")
-        set(noLargest "${CMAKE_MATCH_3}")
-        set(noPixels "${CMAKE_MATCH_4}")
-      endif()
-    endif()
-    message(STATUS "  ${dump} ${s} ${png}: past the bound with the glow's mask the no-fill "
-                   "run's; without the fill ${noPixels} pixels differ, the largest "
-                   "${noLargest} levels")
-    if(noPixels LESS 0 OR pixels GREATER noPixels OR largest GREATER noLargest)
-      message(SEND_ERROR "${dump} ${s}: ${png} has ${pixels} pixels apart (${ppm} per million, "
-                         "${MAX_SHARE} the bound), the largest ${largest} levels (${MAX_LEVEL} "
-                         "the bound), farther from the baseline than the run without the fill "
-                         "(${noPixels} pixels, the largest ${noLargest})")
+    math(EXPR nGolden "${nGolden} + 1")
+    file(SHA256 "${dir}/${png}" h)
+    if(NOT h STREQUAL "${golden_${k}}")
+      message(SEND_ERROR "${n} ${s}: ${png} is not v0.11.6's picture of the fixture (SHA-256 ${h}, "
+                         "the golden ${golden_${k}})")
       math(EXPR failures "${failures} + 1")
     endif()
   endforeach()
+  message(STATUS "${n} ${s}: ${nGolden} PNGs against v0.11.6's")
 endforeach()
-if(failures GREATER 0)
-  message(FATAL_ERROR "rd_crack_late_ab: ${failures} failures over ${nruns} runs")
-endif()
-if(compared EQUAL 0)
-  message(STATUS "SKIP: no target of ${LIST} could be compared")
+foreach(name IN LISTS names)
+  if(NOT replayed_${name})
+    message(SEND_ERROR "${name}: no setting replayed it: a fixture this test cannot measure is "
+                       "no test")
+    math(EXPR failures "${failures} + 1")
+  endif()
+endforeach()
+if(MAKE_GOLDENS)
+  if(failures GREATER 0)
+    message(FATAL_ERROR "rd_crack_late_ab: ${failures} failures making the goldens")
+  endif()
+  message(STATUS "rd_crack_late_ab: goldens of ${nruns} runs written to ${MAKE_GOLDENS}")
   return()
 endif()
-message(STATUS "rd_crack_late_ab: ${compared} targets within ${MAX_LEVEL} levels on at most "
-               "${MAX_SHARE} pixels a million, or past it with the glow's mask the no-fill "
-               "run's and no farther than it, over ${nruns} runs (the largest ${worstLevel})")
+# every golden matched: one no run wrote is a drifted list
+foreach(k IN LISTS goldenKeys)
+  list(FIND goldenUsed "${k}" at)
+  if(at LESS 0)
+    message(SEND_ERROR "${GOLDENS}: the golden ${k} was written by no run")
+    math(EXPR failures "${failures} + 1")
+  endif()
+endforeach()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
+if(failures GREATER 0)
+  message(FATAL_ERROR "rd_crack_late_ab: ${failures} failures over ${nruns} runs of ${nnames} "
+                      "fixtures")
+endif()
+if(compared EQUAL 0)
+  message(FATAL_ERROR "rd_crack_late_ab: no target compared over ${nruns} runs")
+endif()
+message(STATUS "rd_crack_late_ab: ${compared} targets v0.11.6's bytes over ${nruns} runs of "
+               "${nnames} fixtures, the fill drawn once after lists 4-6 in each")

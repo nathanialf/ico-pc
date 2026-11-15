@@ -105,6 +105,45 @@ fx-tile-2809 build-host-tmp/v0115/evidence/rc3/x/frame-20261111-121314-v2809/fra
 fx-lamps-title build-host-tmp/corpus/dumps/boot/rd-00400.rddump rules=lamps_place.rules.txt glow_plan=lamps lamps_area_passes>=1 lamps_bands_lazy>=1 lamps_owed=0 lamps_fillpaste_fills>=1
 fx-lamps-title-dark build-host-tmp/corpus/dumps/boot/rd-00600.rddump rules=fans_off.rules.txt glow_plan=dark lamps_area_passes=0 lamps_bands_lazy=0 lamps_owed>=1
 fx-lamps-opening dumps/v0115-opening/frame-20261112-110824-v746.zip rules=lamps_place.rules.txt glow_plan=lamps lamps_area_passes>=1 lamps_bands_lazy>=1 lamps_owed=0 lamps_fillpaste_fills>=1
+# the crack fills' frames (crack_pixels on the run with the fill on at every
+# setting the crack tests replay the fixture at: the cracks are where the
+# generated geometry leaves gaps; crack_msaa_fills at Enhanced 2x with MSAA):
+# the corpus's lightning room (512x448 GS, dump version 4: its MSAA epoch
+# closes at the shadow count's pass in list 3, before the fog), the PowerVR
+# phone's v0.11.5 frames on the bridge (no glow: the fill the first draw of
+# the aura's paste pass) and in the cage under the dark plan (the fill held),
+# the title's menus (e2e, dump version 5: the New Game item, the settings;
+# the settings frame's generated geometry leaves no crack at any setting the
+# crack tests use, 0 pixels against 519 to 2226 on the game's frame: no crack
+# list names it)
+fx-lightning-0300 build-host-tmp/corpus/dumps/lightning/rd-00300.rddump crack_pixels>=1 crack_msaa_fills>=1
+fx-phone-4761 build-host-tmp/v0115/evidence/rc2/x/frame-20261111-113349-v4761/frame-20261111-113349-v4761.rddump crack_pixels>=1
+fx-phone-7583 build-host-tmp/v0115/evidence/rc2/x/frame-20261111-113455-v7583/frame-20261111-113455-v7583.rddump crack_pixels>=1
+fx-title-0300 build-host-tmp/e2e/run-title-on/dumps/rd-00300.rddump crack_pixels>=1
+fx-title-0550 build-host-tmp/e2e/run-title-on/dumps/rd-00550.rddump crack_pixels=0
+# the title's menu frame with the sun off the picture (its two fans generated
+# beside WORK2, fans_off.rules.txt): the glow's dark plan with the menu's
+# cracks kept (the title's own dark frames, fx-boot-0600 and
+# fx-lamps-title-dark, leave no crack on their generated geometry)
+fx-title-dark-0300 build-host-tmp/e2e/run-title-on/dumps/rd-00300.rddump rules=fans_off.rules.txt crack_pixels>=1
+# the passes cut, the passes' areas, the aura's read in two passes.
+# clear_carried, clear_skipped and last_store_dropped on the run with that cut
+# on (ICO_RD_STORE_PLAN=1; the last store with the crack fill off,
+# ICO_RD_CRACK_FILL=0, on the phone's frames: the fill's read of SCENE's depth
+# keeps that store); pass_area_passes and pass_area_covered with
+# ICO_RD_PASS_AREA=1; aura_box_reads with ICO_RD_AURA_BOX=1 above 1x.
+# the dump corpus's first frames (512x512 GS, dump version 4): SCENE's clear
+# and DISPLAY drawn back over it, no 3D and no art (each expands to its
+# source's bytes; the four differ in their frame's counter alone)
+fx-corpus-lightning build-host-tmp/corpus/dumps/lightning/rd-00100.rddump clear_carried>=1 clear_skipped=0 last_store_dropped=0
+fx-corpus-plain build-host-tmp/corpus/dumps/plain/rd-00100.rddump clear_carried>=1 clear_skipped=0 last_store_dropped=0
+fx-corpus-puddle build-host-tmp/corpus/dumps/puddle/rd-00100.rddump clear_carried>=1 clear_skipped=0 last_store_dropped=0
+fx-corpus-queen build-host-tmp/corpus/dumps/queen/rd-00100.rddump clear_carried>=1 clear_skipped=0 last_store_dropped=0
+# the PowerVR phone's F12 frames of 2026-11-02 (stage 6 in play, 848x448 GS,
+# dump version 14): the aura's paste and read, AURA_WORK's clear, the
+# reduction's DISPLAY clear, the fog's pass holding the depth's last touch
+fx-phone-15677 dumps/phone/frame-20261102-091017-v15677.zip clear_carried>=1 clear_skipped>=1 last_store_dropped>=1 pass_area_passes=0 pass_area_covered>=1 aura_box_reads>=1
+fx-phone-2381 dumps/phone/frame-20261102-114223-v2381.zip clear_carried>=1 clear_skipped>=1 last_store_dropped>=1 pass_area_passes=0 pass_area_covered>=1 aura_box_reads>=1
 # the VU family (FIX-P4a): the 2026-10-07 captures (512x448 GS, dump version 6),
 # the Windows device-loss frame of issue 95 and the deja vu 48:9 frame (dump
 # version 11 and 10), the PowerVR phone's v0.9.4 rc1 and rc2 frames (version

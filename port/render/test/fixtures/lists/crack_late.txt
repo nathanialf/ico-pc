@@ -1,0 +1,19 @@
+# rd_crack_late_ab (port/render/test/rd_crack_late_ab.cmake): the crack fill
+# after lists 4-6 on fixtures, every PNG the release before's picture of the
+# fixture (crack_late_goldens.txt).  A fixture's name
+# (port/render/test/fixtures/NAME.rdfix), its settings (enh2x43, phone; comma
+# separated) and the line's own properties (QUANTITY OP VALUE: crack_pixels,
+# the fill drawn at those settings on the generated geometry).
+#
+# the gate's Enhanced 2x 4:3: the title's castle with the sun's fans (the glow
+# drawn: the fill after the glow's alpha; the glow's mask tests SCENE's depth),
+# the corpus's lightning room (no glow).  Not issue 91's or issue 102's fans
+# frames: their generated geometry leaves no crack at this setting (0 pixels
+# filled against 614 and 603 on the game's frames)
+fx-boot-0200 enh2x43 crack_pixels>=1
+fx-lightning-0300 enh2x43
+# the PowerVR phone's Resolution Auto: its F12 frame of 2026-10-28 (the fill in
+# a pass of its own), its bridge frame (the fill the first draw of the aura's
+# paste pass: one pass fewer than at the start of list 7)
+fx-phone-4657 phone crack_pixels>=1
+fx-phone-4761 phone

@@ -1,0 +1,16 @@
+# rd_pass_area_ab (port/render/test/rd_pass_area_ab.cmake): the passes'
+# render areas on against off, byte for byte.  A name a line; the word phone
+# marks a PowerVR phone's frame (over those, at the phone's setting, some pass
+# must take an area or be kept whole because its draws cover the picture);
+# then what the on run shows at every setting the fixture can show
+# (QUANTITY OP VALUE: rd_fixture_list_props.cmake).
+#
+# the PowerVR phone's F12 frames of 2026-10-28 and 2026-11-02 (stage 6): the
+# aura's paste and list 11's fades draw the frame's rect, so no pass on SCENE
+# spares a tile (rd_pass_area.c's head)
+fx-phone-4657 phone pass_area_passes=0 pass_area_covered>=1
+fx-phone-15677 phone
+fx-phone-2381 phone
+# issue 163's lamps room, a blended frame (3:2: Enhanced 2x alone): the
+# aura's paste over the frame's rect
+fx-163-blended pass_area_passes=0 pass_area_covered>=1
