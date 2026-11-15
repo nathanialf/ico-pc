@@ -1,0 +1,12 @@
+# Fixtures for rd_shadow_merge_ab (port/render/test/rd_shadow_merge_ab.cmake:
+# the shadow volumes drawn in the scene's open pass against their own pass,
+# byte for byte, one pass fewer a reset taken): fixture names of this
+# repository (port/render/test/fixtures/NAME.rdfix), a name a line.  Each
+# declares shadow_merge_counts>=1: its one reset is taken at both settings.
+#
+# the PowerVR phone's F12 frame of 2026-10-28 (dump version 13)
+fx-phone-4657
+# the main gate at 32:9 (dump version 15)
+fx-maingate
+# the rc3 bridge capture on the Pixel (dump version 17)
+fx-tile-2809

@@ -42,19 +42,23 @@ if(ICO_RUN_TESTS)
                          "${_tl_env};ICO_RD_DATE_PATH=stencil;ICO_RD_SHADOW_TILE=1")
 endif()
 
-# rd_shadow_tile_ab (test/rd_shadow_tile_ab.cmake): tools/shadow_tile_dumps.txt
-# (tools/shadow_box_dumps.txt's frames and the rc3 bridge and cage captures;
-# machine-local, a listed dump that is absent fails) with ICO_RD_SHADOW_TILE=0
-# and 1 at the PowerVR phone's profile, the Mali's (no stencil bit: nothing
-# tiled), and the B-spline at 2x, 3x and 4x: every target the same bytes, the
-# draws the same, the passes more by the masks drawn, the bridge's live tiles
-# under the bound its measured box gives.  No device: SKIP (77).  No OpenGL
-# twin: the tiles need DATE's stencil bit, which the OpenGL backend has not.
+# rd_shadow_tile_ab (test/rd_shadow_tile_ab.cmake): the fixtures of
+# test/fixtures/lists/shadow_tile.txt (committed frames, rd_fixture.cmake,
+# docs/port/TESTING_FIXTURES.md; a listed fixture that is absent fails) with
+# ICO_RD_SHADOW_TILE=0 and 1 at the PowerVR phone's profile, the Mali's (no
+# stencil bit: nothing tiled), and the B-spline at 2x, 3x and 4x: every target
+# the same bytes, the passes more by the masks drawn, each fixture's composites
+# over the mask and live tiles under its list's bounds, the fixtures' declared
+# properties shown (the path ran).  No device: SKIP (77).  No OpenGL twin: the
+# tiles need DATE's stencil bit, which the OpenGL backend has not.
+include(rd_fixture.cmake)
 if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/shadow_tile_ab")
     add_test(NAME rd_shadow_tile_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/shadow_tile_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool> "-DFIXTURES=${ICO_FIXTURE_DIR}"
+                     "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/shadow_tile.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/shadow_tile_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_shadow_tile_ab.cmake")
     set_tests_properties(rd_shadow_tile_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 7200)

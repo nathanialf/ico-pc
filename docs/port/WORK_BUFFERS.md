@@ -821,7 +821,7 @@ armed; C count targets' clears not drawn`. There is no setting: on the
 immediate-mode classes the volumes keep their own pass (it moves nothing through tiles);
 `ICO_RD_SHADOW_MERGE=0|1` is the tests' way. The tests: `rd_shadow_test` case m (the count, the
 levels and SCENE byte for byte off and on, one render pass fewer) and `rd_shadow_merge_ab` (every
-pass dump of the corpus and the phone's frames byte for byte, one pass fewer a reset taken).
+pass dump of its fixtures byte for byte, one pass fewer a reset taken, a reset taken on each).
 
 ## The shadow count's step
 

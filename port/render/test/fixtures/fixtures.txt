@@ -33,3 +33,13 @@ fx-mali-slow541 dumps/v0116-mali179/slow-20261112-195541.zip shadow_volume_draws
 fx-boot-0200 build-host-tmp/corpus/dumps/boot/rd-00200.rddump shadow_volume_draws>=1 no_volume_kept=0
 fx-boot-0400 build-host-tmp/corpus/dumps/boot/rd-00400.rddump shadow_volume_draws=0 no_volume_kept>=1
 fx-boot-0600 build-host-tmp/corpus/dumps/boot/rd-00600.rddump shadow_volume_draws=0 no_volume_kept>=1
+# the frames with volumes in the scene's pass: the main gate at 32:9 (2048x448
+# GS, dump version 15), the PowerVR phone's F12 frame of 2026-10-28 (dump
+# version 13); the rc3 bridge capture on the Pixel (the shadow tiles' frame).
+# volume_fs_taken and comp_spec_taken hold on the run with that entry on
+# (comp_spec_taken, comp_spec_seen at the phone setting), shadow_tile_composites
+# at the phone setting with ICO_RD_SHADOW_TILE=1 and the PS2-size levels
+# (ICO_RD_SHADOW_FINE=0), shadow_merge_counts with ICO_RD_SHADOW_MERGE=1
+fx-maingate dumps/maingate/frame-20261104-123603-v10827.rddump shadow_volume_draws>=1 volume_fs_taken>=1 comp_spec_seen>=1 comp_spec_taken>=1 shadow_tile_composites>=1 shadow_merge_counts>=1 stencil_window_stores>=1
+fx-phone-4657 dumps/phone/frame-20261028-173610-v4657.zip shadow_volume_draws>=1 shadow_tile_composites>=1 shadow_merge_counts>=1 stencil_window_stores>=1
+fx-tile-2809 build-host-tmp/v0115/evidence/rc3/x/frame-20261111-121314-v2809/frame-20261111-121314-v2809.rddump shadow_volume_draws>=1 shadow_tile_composites>=1 shadow_merge_counts>=1

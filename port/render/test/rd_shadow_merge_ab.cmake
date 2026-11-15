@@ -1,9 +1,11 @@
 # rd_shadow_merge_ab: the shadow volumes drawn in the scene's open pass
 # (port/render/rd_shadow_merge.c; docs/port/WORK_BUFFERS.md, "The shadow
 # volumes in the scene's pass") against their own pass, byte for byte.  For
-# every dump the list names (tools/shadow_merge_dumps.txt: vustage_dumps.txt's
-# dumps, the PowerVR phone's F12 frames and the heavy stage 6 room of 2026-11-02, read as
-# rd_aura_box_ab.cmake reads its list), rd_replay_tool's --pass-dump with
+# every fixture the list names (port/render/test/fixtures/lists/
+# shadow_merge.txt: fixture names of the repository,
+# docs/port/TESTING_FIXTURES.md; a listed fixture that is absent or does not
+# expand to its pinned SHA-256 FAILS), expanded into OUT, then
+# rd_replay_tool's --pass-dump with
 # --stats twice under ICO_RD_BLEND=fixed and ICO_RD_STORE_POISON=1, with
 # ICO_RD_SHADOW_MERGE=0 (the volumes' own pass) and ICO_RD_SHADOW_MERGE=1, at
 # two settings:
@@ -11,8 +13,8 @@
 #             pixel, aspect 2.189, presented at 2364x1080) under the MoltenVK
 #             fakes (a tile-based class: the local fog, DATE through the
 #             stencil, the pass area and the passes cut as the phone has
-#             them) and ICO_RD_VU_PREPASS=0; a dump drawn narrower than the
-#             aspect cannot show it and is skipped there;
+#             them) and ICO_RD_VU_PREPASS=0; a fixture drawn narrower than
+#             the aspect cannot show it and is skipped there;
 #   enh2x     Enhanced 2x at 4:3, presented at 1280x960, the desktop class.
 # Every PNG the first run writes (SCENE, the shadow levels, PRESENT and every
 # other named target) must be the second's byte for byte; the first run must
@@ -21,44 +23,23 @@
 # the second's draws must be the first's and its passes the first's less M
 # (the volumes' pass, one a reset taken; the count targets' clears it leaves
 # undrawn are drawn here with the poison's 0x5A, so a reader of them would
-# change a picture); some dump must take a reset at some setting (else the
-# gate saw nothing).  A missing list or dump is named and skipped; no dump read, or
-# no device: SKIP (77).
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
+# change a picture).  The path ran (rd_fixture_require on the second run of
+# each setting): the fixture's declared shadow_volume_draws and
+# shadow_merge_counts (a reset taken, so one pass fewer, at both settings); a
+# fixture whose properties no setting checked FAILS; and some fixture must
+# take a reset at some setting.  No device: SKIP (77).
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the
+# fixtures folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<a
+# fixture list> -DOUT=<a folder the test may write>
+include("${FIXTURE_HELPERS}")
 set(dumps "")
-if(NOT "${LIST}" STREQUAL "" AND EXISTS "${LIST}")
-  get_filename_component(listDir "${LIST}" DIRECTORY)
-  file(STRINGS "${LIST}" lines)
-  foreach(l IN LISTS lines)
-    string(STRIP "${l}" l)
-    if(l STREQUAL "" OR l MATCHES "^#")
-      continue()
-    endif()
-    if(NOT IS_ABSOLUTE "${l}")
-      set(l "${listDir}/${l}")
-    endif()
-    if(l MATCHES "[*]")
-      file(GLOB found "${l}")
-      list(SORT found)
-      if(NOT found)
-        message(STATUS "${l}: no dump matches, skipped")
-      endif()
-      list(APPEND dumps ${found})
-    elseif(EXISTS "${l}")
-      list(APPEND dumps "${l}")
-    else()
-      message(STATUS "${l}: no such dump, skipped")
-    endif()
-  endforeach()
-else()
-  message(STATUS "${LIST}: no dump list, skipped")
-endif()
-list(REMOVE_DUPLICATES dumps)
+rd_fixture_list("${LIST}" names)
+foreach(name IN LISTS names)
+  rd_fixture_expand(${name} "${OUT}/fixtures" d)
+  list(APPEND dumps "${d}")
+  set(name_${d} "${name}")
+endforeach()
 list(LENGTH dumps ndumps)
-if(ndumps EQUAL 0)
-  message(STATUS "SKIP: no dump of ${LIST} is here")
-  return()
-endif()
 
 set(settings phoneauto enh2x)
 set(args_phoneauto --enhanced --resolution 2364x1080 --full-height --full-pixel --aspect 2.189
@@ -142,6 +123,9 @@ foreach(dump IN LISTS dumps)
                          "reset taken (${mergedOn} of ${countsOn}) and the same draws")
       math(EXPR failures "${failures} + 1")
     endif()
+    # the path ran: volumes in the window, a reset taken in the scene's pass
+    rd_fixture_require(${name_${dump}} "${outOn}" shadow_volume_draws shadow_merge_counts)
+    set(required_${dump} TRUE)
     math(EXPR taken "${taken} + ${mergedOn}")
     message(STATUS "${dump} ${s}: ${mergedOn} of ${countsOn} resets in the scene's pass "
                    "(${armedOn} armed), ${clearsOn} count clears left (poisoned here); passes "
@@ -174,16 +158,23 @@ foreach(dump IN LISTS dumps)
     endforeach()
   endforeach()
 endforeach()
+foreach(dump IN LISTS dumps)
+  if(NOT required_${dump})
+    message(SEND_ERROR "${name_${dump}}: its properties were never checked (no setting could "
+                       "show it): a fixture this test cannot measure is no test")
+    math(EXPR failures "${failures} + 1")
+  endif()
+endforeach()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(failures GREATER 0)
-  message(FATAL_ERROR "rd_shadow_merge_ab: ${failures} failures over ${ndumps} dumps")
+  message(FATAL_ERROR "rd_shadow_merge_ab: ${failures} failures over ${ndumps} fixtures")
 endif()
 if(compared EQUAL 0)
-  message(STATUS "SKIP: no dump of ${LIST} could be compared")
-  return()
+  message(FATAL_ERROR "rd_shadow_merge_ab: no target compared over ${ndumps} fixtures")
 endif()
 if(taken EQUAL 0)
-  message(FATAL_ERROR "rd_shadow_merge_ab: no dump drew its volumes in the scene's pass at any "
-                      "setting: the gate saw nothing")
+  message(FATAL_ERROR "rd_shadow_merge_ab: no fixture drew its volumes in the scene's pass at "
+                      "any setting: the gate saw nothing")
 endif()
-message(STATUS "rd_shadow_merge_ab: ${compared} targets the same bytes over ${ndumps} dumps, "
+message(STATUS "rd_shadow_merge_ab: ${compared} targets the same bytes over ${ndumps} fixtures, "
                "${taken} resets in the scene's pass in all")

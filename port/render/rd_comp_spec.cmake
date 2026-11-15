@@ -61,25 +61,24 @@ if(ICO_RUN_TESTS AND TARGET rd_fog_selftest_test)
     set_tests_properties(rd_comp_spec_selftest_sabotage PROPERTIES ENVIRONMENT "${_cs_st_sab}")
 endif()
 
-# rd_comp_spec_ab (test/rd_comp_spec_ab.cmake): every dump of tools/shadow_cuts_dumps.txt,
-# tools/date_cut_dumps.txt, tools/shadow_box_dumps.txt, tools/no_volume_dumps.txt,
-# tools/lamps_dumps.txt and tools/glow_light_dumps.txt (machine-local; a listed dump that
-# is absent fails where /primary/dev/ico-dumps exists) with the composites and levels by
-# sprite_comp_ps (ICO_RD_COMP_SPEC=1) against sprite_ps (ICO_RD_COMP_SPEC=0) at the
-# PowerVR phone's setting and a desktop Enhanced 2x at 16:9, and the first list at the
-# Mali reporter's class (not offered: no dual-source blend) and MSAA 4x at 2x: every PNG
-# byte for byte, the same draws, passes and traffic, the self-test passed, at least one
-# draw by it; rd_comp_spec_sabotage the phone's setting with the self-test sabotaged
+# rd_comp_spec_ab (test/rd_comp_spec_ab.cmake): the fixtures of
+# test/fixtures/lists/comp_spec.txt (committed frames, rd_fixture.cmake,
+# docs/port/TESTING_FIXTURES.md; a listed fixture that is absent fails) with the
+# composites and levels by sprite_comp_ps (ICO_RD_COMP_SPEC=1) against sprite_ps
+# (ICO_RD_COMP_SPEC=0) at the PowerVR phone's setting, a desktop Enhanced 2x at 16:9,
+# the Mali reporter's class (not offered: no dual-source blend) and MSAA 4x at 2x: every
+# PNG byte for byte, the same draws, passes and traffic, the self-test passed, at least
+# one draw by it, the fixtures' declared properties shown (the path ran);
+# rd_comp_spec_sabotage the phone's setting with the self-test sabotaged
 # (ICO_RD_COMP_SPEC=sabotage): refused, the same bytes.  No device: SKIP.  (No OpenGL
 # twin: the entry is Vulkan's alone, and the tool runs its self-test only where
 # ICO_RD_COMP_SPEC is set.)
+include(rd_fixture.cmake)
 if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
     set(_cs_env "")
     if(ICO_SANITIZE MATCHES "address")
         list(APPEND _cs_env "ASAN_OPTIONS=detect_leaks=0")
     endif()
-    set(_cs_lists
-        "${CMAKE_SOURCE_DIR}/tools/shadow_cuts_dumps.txt|${CMAKE_SOURCE_DIR}/tools/date_cut_dumps.txt|${CMAKE_SOURCE_DIR}/tools/shadow_box_dumps.txt|${CMAKE_SOURCE_DIR}/tools/no_volume_dumps.txt|${CMAKE_SOURCE_DIR}/tools/lamps_dumps.txt|${CMAKE_SOURCE_DIR}/tools/glow_light_dumps.txt")
     foreach(_cs ab sabotage)
         file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/comp_spec_${_cs}")
         set(_cs_sab "")
@@ -88,7 +87,10 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
         endif()
         add_test(NAME rd_comp_spec_${_cs}
                  COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                         "-DLISTS=${_cs_lists}" "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/comp_spec_${_cs}"
+                         -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                         "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                         "-DLIST=${ICO_FIXTURE_DIR}/lists/comp_spec.txt"
+                         "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/comp_spec_${_cs}"
                          ${_cs_sab} -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_comp_spec_ab.cmake")
         set_tests_properties(rd_comp_spec_${_cs} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                              TIMEOUT 14400)

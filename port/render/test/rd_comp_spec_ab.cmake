@@ -1,10 +1,9 @@
 # rd_comp_spec_ab: the shadow composites and levels drawn by their own entry
 # (port/render/rd_comp_spec.c: sprite_comp_ps, sprite_ps's path for them alone)
-# against sprite_ps, byte for byte, on every dump of the lists (LISTS, "|" between:
-# tools/shadow_cuts_dumps.txt (the Mali reporter's four dumps, the Pixel's three opening
-# dumps, each "volume" or "novolume"), tools/date_cut_dumps.txt, tools/shadow_box_dumps.txt,
-# tools/no_volume_dumps.txt, tools/lamps_dumps.txt and tools/glow_light_dumps.txt;
-# machine-local, a listed dump that is absent FAILS, a pattern with no match FAILS),
+# against sprite_ps, byte for byte, on every fixture the list names
+# (port/render/test/fixtures/lists/comp_spec.txt: fixture names of the repository,
+# docs/port/TESTING_FIXTURES.md; a listed fixture that is absent or does not expand to
+# its pinned SHA-256 FAILS), expanded into OUT, then
 # rd_replay_tool --pass-dump --stats, arm 0 ICO_RD_COMP_SPEC=0 against arm 1
 # ICO_RD_COMP_SPEC=1 (ICO_RD_COMP_SPEC=sabotage with -DSABOTAGE=1), at:
 #   phone   the PowerVR phone's Resolution Auto (Enhanced 2364x1080, Full height, Full
@@ -14,11 +13,11 @@
 #   desk    lavapipe's own class, Enhanced 2x at 16:9 (the plain desktop);
 #   mali    the Mali reporter's class (ICO_VK_FAKE_LIMITS=mali, no destination read, no
 #           dual-source blending: the entry is not offered there, arm 1 "off") at 1x,
-#           presented at 1612x720 (the first list's dumps alone);
-#   msaa    Enhanced 2x under MSAA 4x (the MSAA epoch's draws keep sprite_ps; the first
-#           list's dumps alone).
-# With -DSABOTAGE=1 (rd_comp_spec_sabotage) the phone's setting alone, the first list.
-# Per dump and setting it asserts:
+#           presented at 1612x720;
+#   msaa    Enhanced 2x under MSAA 4x (the MSAA epoch's draws keep sprite_ps).
+# With -DSABOTAGE=1 (rd_comp_spec_sabotage) the phone's setting alone.
+# A fixture a setting cannot show ("cannot show") is skipped there.
+# Per fixture and setting it asserts:
 #   - every PNG of --pass-dump the same bytes in both arms (the same set of targets);
 #   - the same draws and passes ("stats: N draws, M passes") and the same traffic text;
 #   - the same draws of the two forms seen in both arms; arm 0 "stats: comp spec off"
@@ -26,75 +25,30 @@
 #   - arm 1 at phone and desk "comp spec on (self-test passed" with at most the draws
 #     seen by sprite_comp_ps (a draw of the forms with another flag keeps sprite_ps: a UI
 #     sprite of the composite's key under DECAL, DATE by the snapshot on the desktop
-#     class), at least one on a "volume" dump at phone (its three levels pass the gate:
-#     MODULATE with TCC from an RGBA32 target at scale 1, no blend, no depth);
+#     class), at least one at phone on a fixture whose run shows volume draws (its
+#     three levels pass the gate: MODULATE with TCC from an RGBA32 target at scale 1, no
+#     blend, no depth);
 #   - arm 1 at mali "comp spec off" with 0 (no dual-source blend), at msaa at most seen;
 #   - sabotage: arm 1 "off" with its self-test failed and 0 by sprite_comp_ps;
+#   - the path ran (rd_fixture_require on arm 1 at phone; under the sabotage too): the
+#     fixture's declared shadow_volume_draws and comp_spec_seen (draws of the two
+#     forms) and, not under the sabotage, its declared comp_spec_taken (draws by
+#     sprite_comp_ps); a fixture whose properties the phone's setting did not check
+#     FAILS;
 # and over the list, at least one draw by sprite_comp_ps at phone and desk.
 # No device: SKIP (77).
-# -DTOOL=<rd_replay_tool> -DLISTS=<list|list...> -DOUT=<a folder> [-DSABOTAGE=1]
-# The lists name dumps of the build machine alone (the owner's rule there: a listed
-# dump that is absent FAILS).  A machine without /primary/dev/ico-dumps has none of
-# them: the test is skipped as the other dump tests are.
-if(NOT IS_DIRECTORY "/primary/dev/ico-dumps")
-  message(STATUS "SKIP: no dump folder on this machine (/primary/dev/ico-dumps): the list's dumps are the build machine's")
-  return()
-endif()
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the fixtures
+# folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<a fixture list>
+# -DOUT=<a folder> [-DSABOTAGE=1]
+include("${FIXTURE_HELPERS}")
 set(failures 0)
 set(dumps "")
-set(firstList "")
-set(volumeDumps "")
-string(REPLACE "|" ";" lists "${LISTS}")
-set(listIndex 0)
-foreach(lst IN LISTS lists)
-  math(EXPR listIndex "${listIndex} + 1")
-  if("${lst}" STREQUAL "" OR NOT EXISTS "${lst}")
-    message(FATAL_ERROR "rd_comp_spec_ab: no dump list ${lst}")
-  endif()
-  get_filename_component(listDir "${lst}" DIRECTORY)
-  get_filename_component(listName "${lst}" NAME)
-  file(STRINGS "${lst}" lines)
-  foreach(l IN LISTS lines)
-    string(STRIP "${l}" l)
-    if(l STREQUAL "" OR l MATCHES "^#")
-      continue()
-    endif()
-    # the path is the line's first field (the lists' other fields are their own tests',
-    # but the first list's second: "volume" or "novolume")
-    string(REGEX REPLACE "[ \t|]+" ";" fields "${l}")
-    list(GET fields 0 path)
-    list(LENGTH fields nf)
-    set(cls "")
-    if(nf GREATER 1)
-      list(GET fields 1 cls)
-    endif()
-    if(NOT IS_ABSOLUTE "${path}")
-      set(path "${listDir}/${path}")
-    endif()
-    set(found "")
-    if(path MATCHES "[*]")
-      file(GLOB found "${path}")
-      list(SORT found)
-      if(NOT found)
-        message(SEND_ERROR "${path} (${listName}): no dump matches (a listed dump must exist)")
-        math(EXPR failures "${failures} + 1")
-      endif()
-    elseif(EXISTS "${path}")
-      set(found "${path}")
-    else()
-      message(SEND_ERROR "${path} (${listName}): listed but absent (the list names only dumps present)")
-      math(EXPR failures "${failures} + 1")
-    endif()
-    list(APPEND dumps ${found})
-    if(listIndex EQUAL 1)
-      list(APPEND firstList ${found})
-      if(cls STREQUAL "volume")
-        list(APPEND volumeDumps ${found})
-      endif()
-    endif()
-  endforeach()
+rd_fixture_list("${LIST}" names)
+foreach(name IN LISTS names)
+  rd_fixture_expand(${name} "${OUT}/fixtures" d)
+  list(APPEND dumps "${d}")
+  set(name_${d} "${name}")
 endforeach()
-list(REMOVE_DUPLICATES dumps)
 list(LENGTH dumps ndumps)
 
 set(args_phone --enhanced --resolution 2364x1080 --full-height --full-pixel --present 2364x1080)
@@ -108,10 +62,12 @@ set(env_msaa "")
 if(SABOTAGE)
   set(settings phone)
   set(needTaken "")
+  set(ranQuantities shadow_volume_draws comp_spec_seen)
   set(arm1 ICO_RD_COMP_SPEC=sabotage)
 else()
   set(settings phone desk mali msaa)
   set(needTaken phone desk)
+  set(ranQuantities shadow_volume_draws comp_spec_seen comp_spec_taken)
   set(arm1 ICO_RD_COMP_SPEC=1)
 endif()
 set(arm0 ICO_RD_COMP_SPEC=0)
@@ -129,12 +85,7 @@ set(compared 0)
 set(index 0)
 foreach(dump IN LISTS dumps)
   math(EXPR index "${index} + 1")
-  list(FIND firstList "${dump}" inFirst)
-  list(FIND volumeDumps "${dump}" isVolume)
   foreach(s IN LISTS settings)
-    if((s STREQUAL "mali" OR s STREQUAL "msaa" OR SABOTAGE) AND inFirst LESS 0)
-      continue() # the first list's dumps alone at these
-    endif()
     set(skipped FALSE)
     foreach(arm 0 1)
       set(env ${env_${s}} ${arm${arm}})
@@ -149,10 +100,11 @@ foreach(dump IN LISTS dumps)
         return()
       endif()
       if(NOT rc EQUAL 0 AND arm EQUAL 0 AND "${err}" MATCHES "cannot show")
-        message(STATUS "${dump} ${s}: skipped (drawn narrower than the setting's aspect)")
+        message(STATUS "${dump} ${s}: skipped (the setting cannot show it)")
         set(skipped TRUE)
         break()
       endif()
+      set(out_${arm} "${out}")
       string(REPLACE ";" "," flat "${out}")
       if(NOT rc EQUAL 0 OR NOT flat MATCHES "${specRe}")
         message(SEND_ERROR "${dump} ${s} arm ${arm}: exit ${rc}, no comp spec line:\n${out}\n${err}")
@@ -204,10 +156,16 @@ foreach(dump IN LISTS dumps)
         message(SEND_ERROR "${tag}: arm 1 (${arm1}) says ${word_1} (self-test ${test_1}) with ${taken_1} of ${seen_1} draws by sprite_comp_ps (want on, passed, at most every one)")
         math(EXPR failures "${failures} + 1")
       endif()
-      if(s STREQUAL "phone" AND isVolume GREATER -1 AND taken_1 EQUAL 0)
-        message(SEND_ERROR "${tag}: a volume dump with no draw by sprite_comp_ps at the phone's setting (its levels pass the gate)")
+      rd_fixture_quantity(shadow_volume_draws "${out_1}" volumeDraws)
+      if(s STREQUAL "phone" AND "${volumeDraws}" GREATER 0 AND taken_1 EQUAL 0)
+        message(SEND_ERROR "${tag}: ${volumeDraws} volume draws and no draw by sprite_comp_ps at the phone's setting (its levels pass the gate)")
         math(EXPR failures "${failures} + 1")
       endif()
+    endif()
+    # the path ran: the fixture's volume draws, the two forms' draws, the entry taken
+    if(s STREQUAL "phone")
+      rd_fixture_require(${name_${dump}} "${out_1}" ${ranQuantities})
+      set(required_${dump} TRUE)
     endif()
     if(NOT seen_0 EQUAL seen_1 OR NOT draws_0 EQUAL draws_1 OR NOT passes_0 EQUAL passes_1 OR draws_0 LESS 0)
       message(SEND_ERROR "${tag}: draws of the forms seen ${seen_0}/${seen_1}, draws ${draws_0}/${draws_1}, passes ${passes_0}/${passes_1} (arm 0/arm 1: want equal)")
@@ -252,19 +210,26 @@ foreach(dump IN LISTS dumps)
   endforeach()
 endforeach()
 foreach(s IN LISTS settings)
-  message(STATUS "rd_comp_spec_ab ${s}: ${taken_${s}} of ${seen_${s}} composite and level draws by sprite_comp_ps over ${ndumps} dumps")
+  message(STATUS "rd_comp_spec_ab ${s}: ${taken_${s}} of ${seen_${s}} composite and level draws by sprite_comp_ps over ${ndumps} fixtures")
 endforeach()
 foreach(s IN LISTS needTaken)
   if(taken_${s} EQUAL 0)
-    message(SEND_ERROR "${s}: no draw by sprite_comp_ps over the list (the shadow dumps draw levels)")
+    message(SEND_ERROR "${s}: no draw by sprite_comp_ps over the list (the shadow fixtures draw levels)")
     math(EXPR failures "${failures} + 1")
   endif()
 endforeach()
+foreach(dump IN LISTS dumps)
+  if(NOT required_${dump})
+    message(SEND_ERROR "${name_${dump}}: its properties were never checked (the phone's setting could not show it): a fixture this test cannot measure is no test")
+    math(EXPR failures "${failures} + 1")
+  endif()
+endforeach()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(compared EQUAL 0)
-  message(SEND_ERROR "rd_comp_spec_ab: no target compared over ${ndumps} dumps")
+  message(SEND_ERROR "rd_comp_spec_ab: no target compared over ${ndumps} fixtures")
   math(EXPR failures "${failures} + 1")
 endif()
 if(failures GREATER 0)
-  message(FATAL_ERROR "rd_comp_spec_ab: ${failures} failures over ${ndumps} dumps")
+  message(FATAL_ERROR "rd_comp_spec_ab: ${failures} failures over ${ndumps} fixtures")
 endif()
-message(STATUS "rd_comp_spec_ab: ${compared} targets the same bytes over ${ndumps} dumps")
+message(STATUS "rd_comp_spec_ab: ${compared} targets the same bytes over ${ndumps} fixtures")
