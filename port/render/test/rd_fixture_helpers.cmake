@@ -60,6 +60,9 @@ set(_rdfx_q_comp_spec_seen "composites and levels by sprite_comp_ps of ([0-9]+)"
 set(_rdfx_q_comp_spec_taken "comp spec on \\(self-test [^)]*\\): ([0-9]+) composites and levels by sprite_comp_ps")
 set(_rdfx_q_shadow_tile_composites "shadow tiles on: ([0-9]+) composites over the tile mask")
 set(_rdfx_q_shadow_merge_counts "shadow volumes in the scene's pass on: ([0-9]+) of [0-9]+ counts")
+# the lamps' crack fill in the glow's paste pass, the present from SCENE
+set(_rdfx_q_lamps_fillpaste_fills "lamps fillpaste on: ([0-9]+) crack fills drawn in the paste's pass")
+set(_rdfx_q_present_scene_skipped "present from SCENE on: ([0-9]+) reductions not drawn")
 
 set(RDFX_FAILURES 0)
 

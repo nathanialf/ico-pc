@@ -195,6 +195,19 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   phone, poison, desktop settings and the sequences; none at Mali and OpenGL), the colour loaded
   fewer by a WORK0 a pass of two pairs and stored fewer by that and the owed sprites' WORK0, an
   owed sprite at every setting. No device: SKIP.
+- `rd_lamps_fillpaste_ab.cmake` (`rd_lamps_fillpaste_ab`; `rd_lamps.cmake`): the crack fill drawn
+  in the glow's paste pass against a pass of its own, on the fixtures of
+  `port/render/test/fixtures/lists/lamps.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md); a listed
+  fixture that is absent fails; the word `nocull` after a name replays it with `ICO_RD_CULL=off`
+  in every arm, which keeps the generated lamps in the glow's chain), `--pass-dump --stats` at the
+  PowerVR phone's profile (`ICO_VK_FAKE_LIMITS=moltenvk`, `ICO_RD_VU_PREPASS=0`,
+  `ICO_RD_LATE_PASS=1`, `ICO_RD_CRACK_SWAP=1`, Enhanced 2364x1080, Full height and pixel) with
+  `ICO_RD_LAMPS=pad+owed+wholepad+lowres`, the same `+fillpaste`, and that under
+  `ICO_RD_LAMPS_POISON=1`: every PNG byte for byte, each fill drawn in the paste's pass one pass
+  fewer or (in an aura's paste pass) at least 9 MB of colour less loaded, never more colour
+  loaded; the path ran: each fixture's declared `lamps_fillpaste_fills` on the `+fillpaste` run
+  (`>=1` on the three lamps frames, `=0` where the chain is drawn whole), at least one fill landed
+  over the list. No device: SKIP.
 - `rd_glow_blur_test.c` (`rd_glow_blur`; `rd_glow_blur.cmake`, CPU): the glow's blur in two
   passes, its pure parts (`rd_glow_blur.c`): the word `glowblur` of `ICO_RD_LAMPS` (alone, with
   others, not in `1`), its text, the default bits by `RD_GLOW_BLUR_DEFAULT`, every reason's text;
@@ -872,22 +885,24 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   printed per target by `port/render/test/png_level_diff.py`;
   some dump must fold (`rd_fades_fold_ab`; [RENDER_POST.md](RENDER_POST.md#the-fades-fold),
   [DIVERGENCES.md](DIVERGENCES.md) VD-27). SKIP as `rd_vustage_ab`.
-- `rd_present_scene_ab.cmake`: the present from SCENE against the reduction drawn: the dumps of
-  `tools/present_scene_dumps.txt` (the PowerVR phone's F12 zip `frame-20261110-194925-v3677` and
-  its rc dump `v4287`, issue 164's paused frame, the main gate's frame; machine-local; a listed
-  dump that is absent fails) replayed by `--pass-dump --stats` with `ICO_RD_PRESENT_SCENE=0` and
+- `rd_present_scene_ab.cmake`: the present from SCENE against the reduction drawn: the fixtures of
+  `port/render/test/fixtures/lists/present_scene.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md):
+  a character's shadow at 21:9, the PowerVR phone's frame, the bridge capture, and the main gate
+  at 32:9, whose reduction is kept for its open border; a listed fixture that is absent fails) replayed by `--pass-dump --stats` with `ICO_RD_PRESENT_SCENE=0` and
   `=1` at the phone's Resolution Auto under its profile fakes (`ICO_VK_FAKE_LIMITS=moltenvk
   ICO_RD_VU_PREPASS=0`), a 16:9 window (1920 x 1080) and Enhanced 2x 4:3: every target's PNG but
   `PRESENT.png` byte for byte (DISPLAY drawn on demand for its read), `PRESENT.png` within two
   levels (`port/render/test/png_level_diff.py`, its counts printed), the off run `off` with none
   skipped, a run with the reduction not drawn one pass and some colour MB stored fewer, 2x kept;
-  on the first dump at the phone's setting the CRT filter, FSR 1.0, the test's temporal upscaler
+  on the first fixture at the phone's setting the CRT filter, FSR 1.0, the test's temporal upscaler
   and Downsampling keep the reduction with their reasons and every PNG byte for byte, and the
   mirror takes it; the crack fill's swap as often in the on run as in the off run, and at the
-  phone's setting some dump with the reduction not drawn and the swap taken in one replay (the
-  display layer's switch on, its default: the layer needs a temporal upscaler); the first dump
+  phone's setting some fixture with the reduction not drawn and the swap taken in one replay (the
+  display layer's switch on, its default: the layer needs a temporal upscaler); the first fixture
   presented 31 times (`--time 30`) prints the 10 s `present from SCENE: N a replay` line with N
-  above 0; some run must leave it undrawn (`rd_present_scene_ab`). SKIP without a device.
+  above 0; some run must leave it undrawn; the path ran: each fixture's declared
+  `present_scene_skipped` on the `=1` run at the phone's setting
+  (`rd_present_scene_ab`). SKIP without a device.
 - `rd_crack_late_ab.cmake`: the crack fill after lists 4-6 against pass dumps of the build that drew
   it before the fog: each line of `tools/crack_late_dumps.txt` (`<setting> <dump> <baseline
   folder>`, machine-local: six corpus dumps at the gate's Enhanced 2x 4:3 against

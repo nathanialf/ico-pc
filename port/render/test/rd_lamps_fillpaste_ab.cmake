@@ -1,7 +1,13 @@
 # rd_lamps_fillpaste_ab: the crack fill in the paste's pass (rd_lamps.h
 # RD_LAMPS_FILLPASTE, rd_crack_fill.c deferred) against it off, byte for byte.
-# For every dump of tools/lamps_dumps.txt (machine-local; a listed dump that is
-# absent FAILS), rd_replay_tool --pass-dump --stats at the PowerVR phone's
+# For every fixture the list names (port/render/test/fixtures/lists/lamps.txt:
+# fixture names of the repository, docs/port/TESTING_FIXTURES.md; a listed
+# fixture that is absent or does not expand to its pinned SHA-256 FAILS; a
+# line's word nocull replays that fixture with ICO_RD_CULL=off in every arm:
+# the generated lamps sit about their models' origins, off the picture, and
+# the visibility test drops them, so only with it off are they in the chain
+# and the glow's plan the lamps'), expanded into OUT, then rd_replay_tool
+# --pass-dump --stats at the PowerVR phone's
 # Resolution Auto (Enhanced 2364x1080, Full height and pixel) under the tile
 # class's fakes (ICO_VK_FAKE_LIMITS=moltenvk), ICO_RD_VU_PREPASS=0,
 # ICO_RD_LATE_PASS=1, ICO_RD_CRACK_SWAP=1, the lamps on WORK2's own depth by
@@ -13,43 +19,26 @@
 # Each on run against off: every PNG the same bytes; the stats' "lamps
 # fillpaste on" with L fills drawn in the paste's pass; per landing one pass
 # fewer (no aura) or the snapshot copy gone and at least 9 MB less colour
-# loaded (in an aura's paste pass, which the fill shared already); colour loaded never more than off (and fewer by about L SCENE
-# textures, printed).  At least
-# one fill drawn in the paste's pass over the list (issue 163's gate).  The
-# corpus title's lamps frame cannot land (a sprite reads SCENE before its
-# aura's paste: the fill must precede it): it must stay byte-equal and cost
-# no more.  No device: SKIP (77).
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
-# The lists name dumps of the build machine alone (the owner's rule there: a
-# listed dump that is absent FAILS). A machine without that folder has none of
-# them: the test is skipped as the older dump tests are.
-if(NOT IS_DIRECTORY "/primary/dev/ico-dumps")
-  message(STATUS "SKIP: no dump folder on this machine (/primary/dev/ico-dumps): the list's dumps are the build machine's")
-  return()
-endif()
+# loaded (in an aura's paste pass, which the fill shared already); colour
+# loaded never more than off.  The path ran (rd_fixture_require on the on
+# run): each fixture's declared lamps_fillpaste_fills (>=1 on the lamps'
+# frames: the fill lands in the glow's paste drawn at list 11's first draw
+# into SCENE; =0 where the chain is drawn whole for the sun's fans: it must
+# stay byte-equal and cost no more); a fixture whose property was not checked
+# FAILS; at least one fill drawn in the paste's pass over the list.  No
+# device: SKIP (77).
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the
+# fixtures folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<a
+# fixture list> -DOUT=<a folder the test may write>
+include("${FIXTURE_HELPERS}")
 set(failures 0)
 set(dumps "")
-if("${LIST}" STREQUAL "" OR NOT EXISTS "${LIST}")
-  message(FATAL_ERROR "rd_lamps_fillpaste_ab: no dump list ${LIST}")
-endif()
-get_filename_component(listDir "${LIST}" DIRECTORY)
-file(STRINGS "${LIST}" lines)
-foreach(l IN LISTS lines)
-  string(STRIP "${l}" l)
-  if(l STREQUAL "" OR l MATCHES "^#")
-    continue()
-  endif()
-  if(NOT IS_ABSOLUTE "${l}")
-    set(l "${listDir}/${l}")
-  endif()
-  if(EXISTS "${l}")
-    list(APPEND dumps "${l}")
-  else()
-    message(SEND_ERROR "${l}: listed but absent")
-    math(EXPR failures "${failures} + 1")
-  endif()
+rd_fixture_list("${LIST}" names)
+foreach(name IN LISTS names)
+  rd_fixture_expand(${name} "${OUT}/fixtures" d)
+  list(APPEND dumps "${d}")
+  set(name_${d} "${name}")
 endforeach()
-list(REMOVE_DUPLICATES dumps)
 set(common ICO_VK_FAKE_LIMITS=moltenvk ICO_RD_VU_PREPASS=0 ICO_RD_LATE_PASS=1 ICO_RD_CRACK_SWAP=1)
 set(args --enhanced --resolution 2364x1080 --full-height --full-pixel --present 2364x1080)
 set(env_off "ICO_RD_LAMPS=pad+owed+wholepad+lowres")
@@ -62,12 +51,19 @@ set(landedTotal 0)
 set(index 0)
 foreach(dump IN LISTS dumps)
   math(EXPR index "${index} + 1")
+  set(name "${name_${dump}}")
+  # the list's word: the cull off in every arm (the generated lamps kept)
+  set(cull "")
+  if(" ${RDFX_FIELDS_${name}} " MATCHES " nocull ")
+    set(cull ICO_RD_CULL=off)
+  endif()
+  set(checked FALSE)
   foreach(arm off on poison)
     set(dir "${OUT}/${index}-${arm}")
     file(REMOVE_RECURSE "${dir}")
     file(MAKE_DIRECTORY "${dir}")
-    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${common} ${env_${arm}} "${TOOL}" "${dump}" -
-                            --pass-dump "${dir}" --stats ${args}
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${common} ${cull} ${env_${arm}} "${TOOL}"
+                            "${dump}" "${dir}/out.png" --pass-dump "${dir}" --stats ${args}
                     RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
     if(rc EQUAL 77)
       message(STATUS "SKIP: no device: ${err}")
@@ -78,6 +74,11 @@ foreach(dump IN LISTS dumps)
       message(SEND_ERROR "${dump} ${arm}: exit ${rc}:\n${err}")
       math(EXPR failures "${failures} + 1")
       continue()
+    endif()
+    if(arm STREQUAL "on")
+      # the path ran: the fills this fixture declares, drawn in the paste's pass
+      rd_fixture_require(${name} "${out}" lamps_fillpaste_fills)
+      set(checked TRUE)
     endif()
     string(REGEX MATCH "${passRe}" m "${flat}")
     set(passes_${arm} "${CMAKE_MATCH_2}")
@@ -129,10 +130,8 @@ foreach(dump IN LISTS dumps)
     endif()
   endif()
   math(EXPR landedTotal "${landedTotal} + ${landed_on}")
-  # the phone's opening LAMPS frame (rc33 v746): the fill lands in the glow
-  # paste drawn at list 11's first draw into SCENE
-  if(dump MATCHES "v746[.]zip$" AND landed_on LESS 1)
-    message(SEND_ERROR "${dump}: the phone's opening lamps frame must land")
+  if(NOT checked)
+    message(SEND_ERROR "${name}: its declared fills were never checked (the on run did not replay)")
     math(EXPR failures "${failures} + 1")
   endif()
   foreach(arm on poison)
@@ -151,6 +150,7 @@ if(landedTotal EQUAL 0)
   message(SEND_ERROR "rd_lamps_fillpaste_ab: no crack fill drawn in a paste's pass over the list")
   math(EXPR failures "${failures} + 1")
 endif()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(failures GREATER 0)
   message(FATAL_ERROR "rd_lamps_fillpaste_ab: ${failures} failures")
 endif()
