@@ -26,6 +26,8 @@ tests a change needs. Every test program, by area, is
 | `tools/region_camera_report.py` | the camera rule against the PS2's region rule on saved frames: both rules' pass dumps, every SCENE pixel the camera rule changes held to `rd_replay_tool --region-mask`, a markdown report and the camera rule's baselines (`rd_region_camera_ab`, [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-camera-rule)) |
 | `tools/band_seam.py` | the mean luminance step across each edge of the 4:3 picture on a wide present, against a bound (`rd_sideband_cards`, issue 189, [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)) |
 | `port/render/tools/rd_replay_tool.c` | the replay tool |
+| `port/render/test/fixtures/`, `port/render/rd_fixture.h`, `port/render/tools/rd_fixture_tool.c` | the committed test frames, their format and tool ([TESTING_FIXTURES.md](TESTING_FIXTURES.md)) |
+| `tools/check_test_paths.py`, `tools/check_test_paths_allow.txt`, `tools/rdfix_check.py` | no test names a path outside the repository, its allow-list of the lists not converted yet, a fixture holds no art |
 | `tools/vu_variant_diff.py`, `tools/vu_variant_equiv.py`, `tools/test/vu1/` | the June 2001 demo's VU1 programs against the retail ones: the diff, its per-hunk table, the symbolic comparison |
 | `port/platform/hotkeys.h`, `port/platform/dump_zip.h`, `port/render/rd_dump.c` | F12, the aspect sweep, the dump format |
 | `port/input/pad_script.h`, `port/input/input_record.h`, `port/platform/trace_host.h` | pad scripts, recordings, the trace |
@@ -581,6 +583,7 @@ switches the tests and their registrations use:
 | `ICO_VU_REF_AT` | `rd_replay_tool.c` | the kicked triangles containing a GS point |
 | `ICO_BOOT_DUMPS`, `ICO_BOOT_OLD` | `rd_boot_present_test.c` | the start-up dumps (the folder when no argument is given), and `ICO_BOOT_OLD=1` for dumps whose frames 118 to 120 draw stage 1 |
 | `ICO_DUMPS`, `ICO_SWEEPS`, `ICO_COVERAGE_DIR`, `ICO_REPLAY_LOCK` | the gate tools | the dump list, the aspect sweeps, the coverage state, the lock |
+| `ICO_FIXTURE_SOURCES` | `rd_fixture_tool selfcheck-dir` (`rd_fixtures_selfcheck`) | the developer's folder of the dumps the fixtures were made from; unset: the window check skips ([TESTING_FIXTURES.md](TESTING_FIXTURES.md#the-checks)) |
 
 **Running the storage tests on a lavapipe with the interlock (no root).** The CI runners' Mesa 25.2 lavapipe has the fragment shader interlock, so `rd_pixel_storage`, `rd_fog_storage`, `rd_present_storage`, `rd_replay_tool_pass_merge` and `rd_blend_selftest_moltenvk_storage` run the exact storage path there (banner `blend exact (interlock)`); a lavapipe before 25.2 keeps the fixed-function blend and passes without exercising it. To reproduce on a machine with an older Mesa: download from snapshot.debian.org the trixie-backports `mesa-vulkan-drivers` and `mesa-libgallium` 25.2.6-1~bpo13+1 `.deb`s (into `build-host/tmp/lvp-interlock/deb/`; sid's 26.x needs a newer glibc), `dpkg-deb -x` both into `build-host/tmp/lvp-interlock/root`, copy `root/usr/share/vulkan/icd.d/lvp_icd*.json` and rewrite its `library_path` to the extracted `root/usr/lib/x86_64-linux-gnu/libvulkan_lvp.so`, then run the test from its build directory with `ICO_RD_BLEND=storage VK_ICD_FILENAMES=<that json> LD_LIBRARY_PATH=<root>/usr/lib/x86_64-linux-gnu` (the log's `blend:` line names the mode in force).
 
@@ -780,6 +783,16 @@ player guides, TODOs, and the package's list of player guides; `tools/check_docs
 the allowed exceptions (top-level `CMakeLists.txt`, `docs_check`; `tools/check_docs.py`,
 docstring). `python3 -I tools/check_docs.py` runs it without a build.
 
+`test_paths_check` runs `tools/check_test_paths.py`: no test list, test script or test registration
+(the lists under `tools/` and `port/**/test/`, every CMake file, the C and Python test sources'
+string literals) names an absolute path, a home folder, a path that climbs out of the tree or a
+machine-local dump folder; each hit is printed with its file and line. Its allow-list,
+`tools/check_test_paths_allow.txt`, names the files not converted to fixtures yet, and a listed file
+that names no such path any more fails too (the list only shrinks). `test_paths_selftest` runs its
+rules on fixed lines. `rdfix_check` runs `tools/rdfix_check.py --all`: every committed fixture
+parses with no art section ([TESTING_FIXTURES.md](TESTING_FIXTURES.md#the-checks)). All three need
+Python only, and the first runs in the pre-commit hook and CI's hygiene steps.
+
 `rc_tools_gate` runs `tools/check_rc_text.py --selftest`: the rc label rule (`-rc[0-9]+$`), the
 text search in a plain file and in a zip's inflated entries (UTF-8; UTF-16 for the absent check),
 `--label`, `--expect`, `--cmake-flag` and `--gradle-flag`, `strings_en.c`'s row text inside `#if
@@ -896,6 +909,9 @@ Arimo's ranges `tools/subset_font_arimo.py` (`font_subset_arimo`). A gameplay op
 - A port site that names a layout, menu row, story flag, stage or pad bit: `region_literals_check`
   (the number goes through `port/core/region.h`, or into the allow list with each disc's number).
 - A change to these documents: `docs_check`.
+- A change to a test list, a test script or a test's registration: `test_paths_check` (no path outside
+  the repository); to a fixture, its manifest or its tools: `rd_fixture_format`, `rd_fixtures_check`,
+  `rdfix_check`, and the tests that list it ([TESTING_FIXTURES.md](TESTING_FIXTURES.md)).
 
 ## CI
 

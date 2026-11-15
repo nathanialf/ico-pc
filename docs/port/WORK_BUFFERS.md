@@ -1682,7 +1682,7 @@ texels), K whole (...)`.
 **The tests.** `rd_shadow_box` (`port/render/test/rd_shadow_box_test.c`, CPU): the count's box,
 the axis map (level 0 of v3677, a clamped edge, a repeated edge, a box no UV reaches, a constant UV,
 a flipped sprite), a level's cover, a composite's box and the UV offset, the 10 s and `--stats`
-words. `rd_shadow_box_ab` / `_gl` replay `tools/shadow_box_dumps.txt` with `ICO_RD_SHADOW_BOX=0`
+words. `rd_shadow_box_ab` / `_gl` replay the fixtures of `port/render/test/fixtures/lists/shadow_box.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md)) with `ICO_RD_SHADOW_BOX=0`
 and `1` at the PowerVR phone's profile, the Mali's, the B-spline at 2x and MSAA 4x, and on OpenGL:
 every target byte for byte ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)). The shadow
 count's own self-test (`rd_shadow_selftest`) compares the one draw, now over its box, with the

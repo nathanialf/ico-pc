@@ -428,6 +428,8 @@ if(Python3_FOUND)
     # committed fixtures yet, docs/port/TESTING_FIXTURES.md; no build, no game)
     add_test(NAME test_paths_check COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/check_test_paths.py")
     add_test(NAME test_paths_selftest COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/check_test_paths.py" --selftest)
+    # every committed fixture parses with no art section (tools/rdfix_check.py)
+    add_test(NAME rdfix_check COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/rdfix_check.py" --all)
 endif()
 
 # the June 2001 demo's VU1 programs against the retail ones (tools/vu_variant_diff.py,

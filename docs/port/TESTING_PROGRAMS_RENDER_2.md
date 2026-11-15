@@ -560,18 +560,37 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   constant UV, a flipped sprite); a level's whole cover and one pixel short; a composite's box from
   SHADOW2 over the 848x448 frame, an empty source, the UV offset; union and clip; the 10 s clause
   and the `--stats` words from a made-up record.
-- `rd_shadow_box_ab.cmake` (`rd_shadow_box_ab`, `rd_shadow_box_ab_gl`): the dumps of
-  `tools/shadow_box_dumps.txt` (machine-local; a listed dump that is absent FAILS: the Pixel's
-  v3677 and v4287, the main gate, the PowerVR phone's v4657 and v2381) with `ICO_RD_SHADOW_BOX=0`
-  and `1`, `--pass-dump --stats`, under `ICO_RD_STORE_PLAN=1`, `ICO_RD_VU_PREPASS=0`,
-  `ICO_RD_EMPTY_SKIP=0` (with the box on an empty composite would be skipped, which the box off
-  cannot; `rd_empty_skip_ab` checks the skip), at the
-  PowerVR phone's profile (`ICO_VK_FAKE_LIMITS=moltenvk`, Enhanced 2364x1080, Full height and
-  pixel), the Mali-G52's (`ICO_VK_FAKE_LIMITS=mali`, `ICO_VK_FAKE_NO_DST=1`), the B-spline
-  composites at Enhanced 2x (`ICO_RD_SHADOW_BSPLINE=1`) and MSAA 4x at Enhanced 2x; the `_gl` twin
-  at 1x on OpenGL (llvmpipe). Each pair: every PNG byte for byte, the same draws and passes, `=0`
-  off with nothing boxed, `=1` on; v3677 at the phone setting 1 count and 3 composites boxed; the
-  phone setting boxes at least one of each over the dumps. No device: SKIP.
+- `rd_shadow_box_ab.cmake` (`rd_shadow_box_ab`, `rd_shadow_box_ab_gl`): the fixtures of
+  `port/render/test/fixtures/lists/shadow_box.txt` (committed frames,
+  [TESTING_FIXTURES.md](TESTING_FIXTURES.md); a listed fixture that is absent or does not expand
+  to its pin FAILS: `fx-shadow-wide`, the Pixel's stage 4 frame with a character's shadow at 21:9,
+  and `fx-lamps-novolume`, the opening's lamps frame, a shadow window with no volume) with
+  `ICO_RD_SHADOW_BOX=0` and `1`, `--pass-dump --stats`, under `ICO_RD_STORE_PLAN=1`,
+  `ICO_RD_VU_PREPASS=0`, `ICO_RD_EMPTY_SKIP=0` (with the box on an empty composite would be
+  skipped, which the box off cannot; `rd_empty_skip_ab` checks the skip), at the PowerVR phone's
+  profile (`ICO_VK_FAKE_LIMITS=moltenvk`, Enhanced 2364x1080, Full height and pixel), the
+  Mali-G52's (`ICO_VK_FAKE_LIMITS=mali`, `ICO_VK_FAKE_NO_DST=1`), the B-spline composites at
+  Enhanced 2x (`ICO_RD_SHADOW_BSPLINE=1`) and MSAA 4x at Enhanced 2x; the `_gl` twin at 1x on
+  OpenGL (llvmpipe). Each pair: every PNG byte for byte, the same draws and passes, `=0` off with
+  nothing boxed, `=1` on; the path ran: on the `=1` replay at the phone setting (`_gl`: its one
+  setting) each fixture's declared `shadow_volume_draws`, `shadow_box_counts` and
+  `shadow_box_composites` hold (`fx-shadow-wide` at least one volume draw, count and composite
+  boxed; `fx-lamps-novolume` no volume draw), every fixture is checked once, and the phone setting
+  boxes at least one count and one composite over the fixtures. No device: SKIP.
+- `rd_fixture_test.c` (`rd_fixture_format`, CPU; `rd_fixture.cmake`): the fixture format on a
+  version 17 frame built in memory with pseudo-random art (a CPU-projected triangle, a sprite, an
+  alpha-tested and an additive texture with a GS level, a prelit mesh with card verdicts and a
+  facing table, a shadow volume, a text item): made, checked (no art), expanded twice to the same
+  bytes and the pinned SHA-256; the head, lists (the mesh draw's size without its cards), sprite,
+  VU block and materials kept byte for byte; the alpha ramp and the bright patch with its level at
+  8x8, the mesh lattice at 2^-2 with its strip flags from the index list, the colour, `m0001`, the
+  volume's front faces at the farthest Z and back faces at 0 with their tags, the text `xxxxx`, the
+  cards and the facing bits zero; the window check clean (and full on the source against itself);
+  art in a generated range and a changed pin refused; the file round trip with its notes; SHA-256 on
+  FIPS 180-2's three vectors; exact float bits. `rd_fixtures_check` (`rd_fixture_tool check-dir`,
+  CPU): every committed fixture holds no art, declares a property, expands to its pin, and
+  `fixtures.txt` names exactly them with the same properties. `rd_fixtures_selfcheck`
+  (`selfcheck-dir`): the window check against each source in `ICO_FIXTURE_SOURCES`; unset: SKIP.
 - `rd_even_test.c` (`rd_even`, CPU): the pictures' evenness line (`rd_even.c`): ten made-up
   presents with GPU ends at the middles of their quarter-ms bins (1, 2, 3, 5 and under half a
   refresh of 8 ms apart, one end a bound, one present with none, a frame number that went back),
