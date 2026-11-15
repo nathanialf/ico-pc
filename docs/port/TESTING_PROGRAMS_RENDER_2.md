@@ -91,13 +91,15 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   chain on the Pixel frame's geometry: WORK0 rows 0-111 carried into FEED128 rows 0-111 (CLAMP; 1-111
   under REPEAT), the paste's rows [0, 1062) of 1080 (CLAMP both), [11, 1062) (the paste on REPEAT),
   [21, 1062) (command 47 on REPEAT), the measured band rows 1072-1079 inside the band.
-- `rd_aura_paste_ab.cmake` (`rd_aura_paste_ab`): the dumps of `tools/aura_paste_dumps.txt`
-  (machine-local; a listed dump that is absent FAILS) with `ICO_RD_AURA_PASTE=0` and `1`,
+- `rd_aura_paste_ab.cmake` (`rd_aura_paste_ab`): the fixtures of
+  `port/render/test/fixtures/lists/aura_paste.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md); a
+  listed fixture that is absent FAILS) with `ICO_RD_AURA_PASTE=0` and `1`,
   `--pass-dump --stats`, `ICO_RD_VU_PREPASS=0`, at the phone's Resolution Auto and Enhanced 2x 4:3
   (both `ICO_VK_FAKE_LIMITS=moltenvk`) and a desktop 16:9 window: every PNG byte for byte, the same
-  passes and attachment MB, the off run splitting nothing; the marked dump (the phone's cage frame) split once
-  at the phone's setting with at most 32 band rows; at least one split over the list. No device:
-  SKIP.
+  passes and attachment MB, the off run splitting nothing; at the phone's setting each fixture's
+  declared `aura_paste_split` (the path ran: 1 on the PowerVR phone's, the Pixel's, issue 164's and
+  issue 163's frames, 0 on a 4:3 capture whose paste is drawn whole) and every split with at most
+  32 band rows; at least one split over the list. No device: SKIP.
 - `rd_late_pass_test.c` (`rd_late_pass`, CPU, record-only): the late passes' predicate
   (`rd_late_pass.c` `rd__late_pass_class`) on made-up commands: state, NOPs, overlay text, a clear
   or copy of another target, a sprite into another target (untextured, from another target, the
@@ -400,16 +402,18 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   (the baseline, the six lists, the parts in order with the shadow chain's count, level and
   composite rows, no switch).
 - `rd_bench_ab.cmake` (`rd_bench_ab`; `rd_bench.cmake`): `rd_replay_tool --bench 1` on lavapipe over
-  rd_pixel's dump (640x480) and the machine-local `tools/bench_dumps.txt` (the Pixel's v746 and
-  v2278 at the phone's setting; a listed dump that is absent FAILS where `/primary/dev/ico-dumps`
-  exists): every variant ran, a baseline's presented picture after the bench byte for byte the one
+  rd_pixel's dump (640x480) and the fixtures of `port/render/test/fixtures/lists/bench.txt` (the
+  Pixel's opening lamps and sun frames at the phone's setting; a listed fixture that is absent
+  FAILS): every variant ran (the path ran: each fixture's declared `bench_variants`), a baseline's presented picture after the bench byte for byte the one
   before it (unless two baselines before it already differ: a feedback effect, said so), and each
   variant line the list names. No device: SKIP.
 - `rd_turn_fold_ab.cmake` (`rd_turn_fold_ab`; `rd_smallcuts.cmake`): the present's turn drawn by its
   box blit (`ICO_RD_TURN_FOLD=1`) against the turn pass (unset) through the headless twin
-  (`ICO_VK_FAKE_TRANSFORM=90`, `180`, `270`), rd_pixel's dump and every dump of the machine-local
-  `tools/turn_fold_dumps.txt` (the Pixel's three opening dumps and issue 179's three Mali-G52 dumps;
-  a listed dump that is absent FAILS where `/primary/dev/ico-dumps` exists): the phone's setting
+  (`ICO_VK_FAKE_TRANSFORM=90`, `180`, `270`), rd_pixel's dump and the fixtures of
+  `port/render/test/fixtures/lists/turn_fold.txt` (the Pixel's three opening frames, issue 179's two
+  Mali-G52 frames, a 4:3 capture also at 1024x768 where it must fold; a listed fixture that is
+  absent FAILS; the path ran: `turn_fold_cases` on every fold run, `turn_fold_turned` where a line
+  declares the fold): the phone's setting
   (`ICO_VK_FAKE_LIMITS=moltenvk`, Enhanced 2364x1080, full height, full pixel) and a 16:9 window at
   its own resolution (1280x720, full pixel) fold or keep the turn pass for drawn text where the
   scene fills the box one texel a pixel, and keep it (`the box blit not one texel a pixel`) where
@@ -921,9 +925,10 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   both phone settings, and each fixture's declared `constant_reads_served` on every default run;
   each pair's counts printed (`rd_constant_reads_ab`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#a-cleared-source-read-as-its-colour)). SKIP as `rd_vustage_ab`.
-- `rd_fades_fold_ab.cmake`: the dumps of `tools/fades_fold_dumps.txt` (the forest's
-  `rd-00720` and `rd-01076`, the queen's `rd-00100`, the PowerVR phone's F12 zip `frame-20261028-173610-v4657`; machine-local) and,
-  with `ICO_BOOT_DUMP_DIR`, the start-up's frames 115 to 123, each first listed (`--list
+- `rd_fades_fold_ab.cmake`: the fixtures of `port/render/test/fixtures/lists/fades_fold.txt`
+  ([TESTING_FIXTURES.md](TESTING_FIXTURES.md): the PowerVR phone's F12 frame, issue 106's drained
+  room, issue 164's paused frame, a 4:3 capture; the path ran: each fixture's declared
+  `fades_folded` on every folded run), each first listed (`--list
   --no-device`: list 11's last twelve commands in the log, so it shows which dumps end with the
   fade, the letterbox or the brightness), then replayed with `--pass-dump --stats` with list 11's
   last full-frame lerp sprites drawn into SCENE (`ICO_RD_FADES_FOLD=0`, the tests' way to draw
@@ -938,7 +943,7 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   says the steps met SCENE's texels before the GS filter, elsewhere within two levels on every
   channel (the measured bound, [DIVERGENCES.md](DIVERGENCES.md) VD-27), the channels a level apart
   printed per target by `port/render/test/png_level_diff.py`;
-  some dump must fold (`rd_fades_fold_ab`; [RENDER_POST.md](RENDER_POST.md#the-fades-fold),
+  some fixture must fold (`rd_fades_fold_ab`; [RENDER_POST.md](RENDER_POST.md#the-fades-fold),
   [DIVERGENCES.md](DIVERGENCES.md) VD-27). SKIP as `rd_vustage_ab`.
 - `rd_present_scene_ab.cmake`: the present from SCENE against the reduction drawn: the fixtures of
   `port/render/test/fixtures/lists/present_scene.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md):

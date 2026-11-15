@@ -1,0 +1,16 @@
+# Fixtures for rd_bench_ab (port/render/test/rd_bench_ab.cmake: the rc bench
+# over a frame through rd_replay_tool --bench, every variant run and the
+# picture after it byte for byte the one before): fixture names of this
+# repository (port/render/test/fixtures/NAME.rdfix), a name a line, then the
+# line's own property (rd_fixture_list_props.cmake): bench_variants, the
+# variants the bench ran; then '|' and the variant lines its run must hold
+# ('|'-separated names, as the tool prints them), from the frame's own
+# command listing (rd_replay_tool --list --no-device).
+#
+# the PowerVR phone's opening (v0.11.5 rc): v746 lamps without a volume
+# (list 7's WORK2 meshes, the WORK0/WORK1 chain, the paste of WORK3 into
+# SCENE, list 4's fog), v2278 the sun with volumes (list 3's strips; the
+# shadow chain a draw at a time: the resolve, the levels, the composites,
+# and the device's rows for them)
+fx-lamps-novolume bench_variants>=4 |without the lamps' meshes|without the blur chain|without the glow paste|without the fog (and the crack fill it arms)
+fx-opening-sun bench_variants>=12 |without the shadow volumes' draws|without the shadow composites|without the shadow count's draw (the levels read the count as it was)|without the shadow level SHADOW0|without the shadow level SHADOW1|without the shadow level SHADOW2|without the shadow composite of SHADOW2 (the first)|without the shadow composite of SHADOW1 (the second)|without the shadow composite of SHADOW0 (the third)|without DATE's stencil set-ups (each DATE draw tests the bit as it was)|the shadow box off (the count and the composites drawn whole)|without the shadow volumes' draws, the composites drawn whole (the box off)
