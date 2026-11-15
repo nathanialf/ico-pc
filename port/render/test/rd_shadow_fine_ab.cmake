@@ -54,17 +54,28 @@
 #      as the setting expects (3x3, or 1x3 at tall); the present (or SCENE)
 #      not the same bytes; and with lists 4-12 left out (SCENE right after
 #      list 3) every SCENE texel the fine levels change lies within D of a
-#      texel the PS2's levels darken, and the darkness (the RGB levels the
-#      composites take away, summed) within 10 % of the PS2's
-#      (shadow_fine_check.py).  The bound is the PS2 chain's own spread: its
-#      darkness depends on where the level grid falls against the shadow, and
-#      the fine chain is that picture averaged over the grid's placements.
-#      Measured on the owner's gate frame (the reference arithmetic of
-#      rd_shadowres_math.c on its dumped count): the count moved by whole texels changes
-#      the PS2 chain's level-1 alpha by up to 7.6 % and its three composites'
-#      summed darkening by up to 9.2 % (composite 2 alone 17.5 %), the dumped
-#      placement among the darkest; the fine chain sat 5.4 % under it (rc5's
-#      run: 0.944..1.002 over the dumps; a half-plane edge, the model: 0.2 %);
+#      texel the PS2's levels darken (shadow_fine_check.py; the darkness ratio
+#      it prints is not judged: below);
+#   3b. above 1x the levels themselves: rd_replay_tool --fine-check on the
+#      default (a replay of its own) reads back the count and each level's
+#      step and tent and compares them with the CPU reference
+#      (rd_shadowres_math.c) on the same input: every tent texel the
+#      reference's bytes (the tent is whole-number arithmetic), every step
+#      texel the reference's byte or, where the reference's value lies within
+#      the float bound of a rounding boundary, the byte beside it
+#      (tools/rd_replay_fine.c derives the bound from the shader); the line
+#      "fine check: 3 levels, 0 step texels outside the rule, 0 tent texels
+#      not the reference's: ok".  This replaces a bound on the picture's
+#      darkness against the PS2-size chain (10 % until the fixtures): the
+#      PS2-size chain's darkness on a shadow a few texels thin swings with
+#      where its 2:1 grid falls (the reference on a bar 2 GS rows tall moved
+#      over 16 rows: 0.73 to 1.36 of its mean; 6 rows: 0.91 to 1.08; 24 rows:
+#      0.985 to 1.011; the fine chain 0.92 to 1.06, 0.99 to 1.02 and 0.997 to
+#      1.004 of its own, its mean 0.974, 0.995 and 0.999 of the PS2 chain's
+#      mean), and the composites darken only the texels whose destination
+#      alpha passes DATE, so one picture's ratio is bounded for broad shadows
+#      on broad surfaces alone (the real frames: 0.944 to 1.002; the fixtures'
+#      generated slivers: 0.84 to 1.03);
 #   4. bspline: also the default with [dev] shadow_bspline against the
 #      default without it at 2x, every PNG (the B-spline does nothing to a
 #      fine level);
@@ -178,6 +189,7 @@ set(fineRe "stats: shadow levels: ([0-9]+) shadows at the scene's scale, ([0-9]+
 set(oneRe "stats: shadow count: ([0-9]+) in one draw")
 set(sizeRe "shadow levels: at the scene's scale: SHADOW0 [0-9]+x[0-9]+, SHADOW1 [0-9]+x[0-9]+, SHADOW2 [0-9]+x[0-9]+ \\(([0-9.]+)x([0-9.]+) texels a GS pixel\\) from the count's ([0-9.]+)x([0-9.]+) texels a GS pixel")
 set(diffRe "png_level_diff: [0-9]+ x [0-9]+, [0-9]+ channels: [0-9]+ equal, [0-9]+ one level apart, ([0-9]+) more \\(largest ([0-9]+)\\)")
+set(fineOkRe "fine check: 3 levels, 0 step texels outside the rule, 0 tent texels not the reference's: ok")
 set(nopRest "4:0-1000000,5:0-1000000,6:0-1000000,7:0-1000000,8:0-1000000,9:0-1000000,10:0-1000000,11:0-1000000,12:0-1000000")
 
 # one run: -> ok_<name> draws_<name> passes_<name> chains_<name> fpasses_<name>
@@ -420,15 +432,30 @@ foreach(dump IN LISTS dumps)
         else()
           execute_process(COMMAND "${PY}" -I "${CHECK}" "${base}-ps2-a/SCENE.png"
                                   "${base}-ps2-b/SCENE.png" "${base}-fine-a/SCENE.png"
-                                  --scale "${scale}" --dark-tol 0.10
+                                  --scale "${scale}" --dark-tol none
                           RESULT_VARIABLE crc OUTPUT_VARIABLE cout ERROR_VARIABLE cerr)
           message(STATUS "${dumpName} ${s}: ${cout}${cerr}")
           if(NOT crc EQUAL 0)
-            message(SEND_ERROR "${dumpName} ${s}: the change is not confined to the shadow or "
-                               "its darkness moved (exit ${crc}): ${cout}${cerr}")
+            message(SEND_ERROR "${dumpName} ${s}: the change is not confined to the shadow "
+                               "(exit ${crc}): ${cout}${cerr}")
             set(sfFail TRUE)
           endif()
         endif()
+      endif()
+      # 3b. the levels against the CPU reference on the same count
+      execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${env_${s}}
+                              "${TOOL}" "${dump}" "${base}-finecheck.png" --fine-check
+                              ${args_${s}}
+                      RESULT_VARIABLE frc OUTPUT_VARIABLE fout ERROR_VARIABLE ferr)
+      string(REPLACE ";" "," fflat "${fout}")
+      string(REGEX MATCHALL "fine check: [^\n]*" flines "${fflat}")
+      foreach(fl IN LISTS flines)
+        message(STATUS "${dumpName} ${s}: ${fl}")
+      endforeach()
+      if(NOT frc EQUAL 0 OR NOT fflat MATCHES "${fineOkRe}")
+        message(SEND_ERROR "${dumpName} ${s}: the levels are not the CPU reference's (exit "
+                           "${frc}):\n${fout}\n${ferr}")
+        set(sfFail TRUE)
       endif()
       # 6. the cuts against the chain without them (ICO_RD_SHADOW_FINE_CUTS=0:
       # nine passes over every texel): every PNG the same bytes, its passes

@@ -644,7 +644,13 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   line fails; the path ran: the fixture's declared `shadow_levels` and `shadow_level_texels` on the
   default run, and on the forced run at 1x), its 9 or 10 passes and 9 draws and nothing else, the
   levels' scale the setting's, the change confined (with lists 4-12 left out) to within reach of
-  the texels the PS2's levels darken and the darkness within 10 % (the PS2-size chain's own spread over the level grid's placements: up to 9.2 % on the owner's gate frame; `test/shadow_fine_check.py`), the
+  the texels the PS2's levels darken (`test/shadow_fine_check.py`; the darkness ratio it prints is
+  not judged: the PS2-size chain's darkness on a shadow a few texels thin swings with where its 2:1
+  grid falls, 0.73 to 1.36 of its mean for a bar 2 GS rows tall, and the composites darken only the
+  texels DATE lets them), the levels themselves the CPU reference's on the same count
+  (`rd_replay_tool --fine-check`, `tools/rd_replay_fine.c`: every tent texel the reference's bytes,
+  every step texel the reference's byte or the one beside it where the value lies within the float
+  bound of a rounding boundary), the
   B-spline doing nothing to it, the cuts against `ICO_RD_SHADOW_FINE_CUTS=0` every PNG the same
   bytes (6 passes against 9), three replays in a row with and without the cuts the same presented
   bytes; the forced chain at 1x within a level of the default on SCENE

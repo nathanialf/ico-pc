@@ -121,6 +121,14 @@ typedef struct RdSrStep {
 
 void rd_sr_step_texel(const uint8_t *src, uint32_t sw, uint32_t sh, const RdSrStep *p, uint32_t mx,
                       uint32_t my, uint8_t out[4]);
+/* the step's value before its rounding (the shader's sum * 255: the byte is
+ * floor(value + 0.5), then MODULATE) and the MODULATE of a rounded byte t by
+ * the sprite colour's col ((t col) >> 7, held to 255): what rd_sr_step_texel
+ * is made of (the replay tool's --fine-check judges a GPU byte one apart by
+ * how near the value is to a rounding boundary) */
+void rd_sr_step_value(const uint8_t *src, uint32_t sw, uint32_t sh, const RdSrStep *p, uint32_t mx,
+                      uint32_t my, float val[4]);
+uint8_t rd_sr_step_byte(uint32_t t, uint8_t col);
 void rd_sr_tent_texel(const uint8_t *src, uint32_t w, uint32_t h, int down, float s, uint32_t x,
                       uint32_t y, uint8_t out[4]);
 
@@ -190,6 +198,24 @@ bool rd__shadow_fine_tex(uint32_t texId);
 /* the level target holds a fine twin this replay (rd_shadow_tile.c steps
  * aside) */
 bool rd__shadow_fine_level(uint32_t target);
+
+/* The tests' readback (rd_replay_tool --fine-check, tools/rd_replay_fine.c),
+ * after a replay that drew the chain with the cuts: level k's step as it
+ * was drawn (the reference's inputs: rd_sr_step_value over the source's sw x
+ * sh texels, the count target `count` for level 0, the step of the level
+ * before for the others), the level's w x h texels and its tent's whole
+ * scales; false when this replay drew no chain in that form.  And the
+ * level's texels read back: the step's output (final false) or the level
+ * after its tent (true), w * h * 4 bytes */
+typedef struct RdSrProbe {
+    RdSrStep step;
+    uint32_t sw, sh, w, h;
+    int lx, ly;
+    uint32_t count;
+} RdSrProbe;
+
+bool rd__shadow_fine_probe(int k, RdSrProbe *out);
+bool rd__shadow_fine_read(int k, bool final, void *dst, size_t size);
 /* the rule's line at the renderer's start (and the tests' switch) */
 void rd__shadow_fine_log(void);
 void rd__shadow_fine_shutdown(void);

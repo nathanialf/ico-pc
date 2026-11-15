@@ -4,6 +4,11 @@
 # of port/render/CMakeLists.txt (a file of its own: that file is near the
 # 256 KiB cap, tools/check_no_rom.sh).
 target_sources(ico_render PRIVATE rd_shadowres.c rd_shadowres_math.c)
+# rd_replay_tool --fine-check: the levels the GPU drew against the CPU
+# reference (tools/rd_replay_fine.c; rd_shadow_fine_ab reads its lines)
+if(TARGET rd_replay_tool)
+    target_sources(rd_replay_tool PRIVATE tools/rd_replay_fine.c)
+endif()
 
 # rd_shadow_fine: CPU only: the scales (the count's, the levels' odd whole
 # one), the box weights and the tent, the step and the tent at scale 1 (the
@@ -30,7 +35,8 @@ endif()
 # (test/fixtures/lists/shadow_fine_goldens.txt), the default the same bytes at 1x, above
 # 1x (3x, 4.10 x 2.41, 2.8125 x 2.41, 1 x 2, MSAA 4x, the B-spline) one shadow at
 # the scene's scale with its passes and no other, its change confined to the
-# shadow with its darkness kept (test/shadow_fine_check.py), the forced chain
+# shadow (test/shadow_fine_check.py), its levels the CPU reference's on the
+# same count (rd_replay_tool --fine-check), the forced chain
 # at 1x within a level, each fixture's levels drawn at the scene's scale (the
 # path ran); rd_shadow_fine_ab_gl the 1x and 2x pairs on OpenGL (llvmpipe).
 # No device: SKIP (77).
