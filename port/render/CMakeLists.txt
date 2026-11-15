@@ -3295,18 +3295,18 @@ if(ICO_RUN_TESTS)
     if(_env)
         set_tests_properties(rd_aura_box_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
-    # rd_shadow_merge_ab (test/rd_shadow_merge_ab.cmake): the dumps of
-    # tools/shadow_merge_dumps.txt (vustage_dumps.txt's, the PowerVR phone's
-    # F12 frames and the heavy stage 6 room of 2026-11-02) with the shadow volumes in a pass
-    # of their own (ICO_RD_SHADOW_MERGE=0) and in the scene's open pass (=1,
-    # rd_shadow_merge.c), under ICO_RD_BLEND=fixed and ICO_RD_STORE_POISON=1
+    # rd_shadow_merge_ab (test/rd_shadow_merge_ab.cmake): the fixtures of
+    # test/fixtures/lists/shadow_merge.txt with the shadow volumes in a pass
+    # of their own (ICO_RD_SHADOW_MERGE=0) and in the scene's open pass (=1),
     # at the phone's Resolution Auto (the MoltenVK fakes) and Enhanced 2x
     # 4:3: every target byte for byte, the same draws, one pass fewer a reset
-    # taken, some reset taken; SKIP as rd_vustage_ab
+    # taken, a reset taken on each fixture (the path ran)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/shadow_merge_ab")
     add_test(NAME rd_shadow_merge_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/shadow_merge_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                     "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DLIST=${ICO_FIXTURE_DIR}/lists/shadow_merge.txt"
+                     "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/shadow_merge_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_shadow_merge_ab.cmake")
     set_tests_properties(rd_shadow_merge_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"

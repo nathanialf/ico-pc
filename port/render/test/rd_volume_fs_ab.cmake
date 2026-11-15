@@ -1,9 +1,8 @@
 # rd_volume_fs_ab: the shadow volumes drawn by date_clear_ps (port/render/rd_volume_fs.c:
-# no colour output, no discard) against sprite_ps, byte for byte, on every dump of the
-# lists (LISTS, "|" between: tools/shadow_cuts_dumps.txt (the Mali reporter's four
-# dumps, the Pixel's three opening dumps), tools/date_cut_dumps.txt,
-# tools/shadow_box_dumps.txt, tools/no_volume_dumps.txt and tools/lamps_dumps.txt;
-# machine-local, a listed dump that is absent FAILS, a pattern with no match FAILS),
+# no colour output, no discard) against sprite_ps, byte for byte, on every fixture the
+# list names (port/render/test/fixtures/lists/volume_fs.txt: fixture names of the
+# repository, docs/port/TESTING_FIXTURES.md; a listed fixture that is absent or does not
+# expand to its pinned SHA-256 FAILS), expanded into OUT, then
 # rd_replay_tool --pass-dump --stats, arm 0 ICO_RD_VOLUME_FS=0 against arm 1
 # ICO_RD_VOLUME_FS=1 (ICO_RD_VOLUME_FS=sabotage with -DSABOTAGE=1), at:
 #   phone   the PowerVR phone's Resolution Auto (Enhanced 2364x1080, Full height, Full
@@ -17,7 +16,8 @@
 #   msaa    Enhanced 2x under MSAA 4x (the volumes in a multisampled pass keep sprite_ps:
 #           the same bytes, the counts not asserted beyond taken <= seen).
 # With -DSABOTAGE=1 (rd_volume_fs_sabotage) the phone's setting alone.
-# Per dump and setting it asserts:
+# A fixture a setting cannot show ("cannot show") is skipped there.
+# Per fixture and setting it asserts:
 #   - every PNG of --pass-dump the same bytes in both arms (the same set of targets);
 #   - the same draws and passes ("stats: N draws, M passes") and the same traffic text
 #     (colour, depth and stencil loaded, stored and cleared);
@@ -27,56 +27,27 @@
 #     phone, desk and mali (single-sampled: nothing the gate refuses), at most every one
 #     at msaa;
 #   - sabotage: arm 1 "off" with its self-test failed and 0 by date_clear_ps;
+#   - the path ran (rd_fixture_require on arm 1 at phone, desk and mali; under the
+#     sabotage at phone): the fixture's declared shadow_volume_draws (a fixture with
+#     volumes shows volume draws, the one without shows none) and, not under the
+#     sabotage, its declared volume_fs_taken (draws by date_clear_ps); a fixture the
+#     run shows volume draws on has at least one by date_clear_ps there (every one,
+#     the rule above); a fixture whose properties no setting checked FAILS;
 # and over the list, at least one volume draw by date_clear_ps at phone, desk and mali
-# (the shadow dumps draw volumes; not under the sabotage).
+# (not under the sabotage).
 # No device: SKIP (77).
-# -DTOOL=<rd_replay_tool> -DLISTS=<list|list...> -DOUT=<a folder> [-DSABOTAGE=1]
-# The lists name dumps of the build machine alone (the owner's rule there: a listed
-# dump that is absent FAILS).  A machine without /primary/dev/ico-dumps has none of
-# them: the test is skipped as the other dump tests are.
-if(NOT IS_DIRECTORY "/primary/dev/ico-dumps")
-  message(STATUS "SKIP: no dump folder on this machine (/primary/dev/ico-dumps): the list's dumps are the build machine's")
-  return()
-endif()
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the fixtures
+# folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<a fixture list>
+# -DOUT=<a folder> [-DSABOTAGE=1]
+include("${FIXTURE_HELPERS}")
 set(failures 0)
 set(dumps "")
-string(REPLACE "|" ";" lists "${LISTS}")
-foreach(lst IN LISTS lists)
-  if("${lst}" STREQUAL "" OR NOT EXISTS "${lst}")
-    message(FATAL_ERROR "rd_volume_fs_ab: no dump list ${lst}")
-  endif()
-  get_filename_component(listDir "${lst}" DIRECTORY)
-  get_filename_component(listName "${lst}" NAME)
-  file(STRINGS "${lst}" lines)
-  foreach(l IN LISTS lines)
-    string(STRIP "${l}" l)
-    if(l STREQUAL "" OR l MATCHES "^#")
-      continue()
-    endif()
-    # the path is the line's first field (the lists' other fields are their own tests')
-    string(REGEX REPLACE "[ \t]+" ";" fields "${l}")
-    list(GET fields 0 path)
-    if(NOT IS_ABSOLUTE "${path}")
-      set(path "${listDir}/${path}")
-    endif()
-    set(found "")
-    if(path MATCHES "[*]")
-      file(GLOB found "${path}")
-      list(SORT found)
-      if(NOT found)
-        message(SEND_ERROR "${path} (${listName}): no dump matches (a listed dump must exist)")
-        math(EXPR failures "${failures} + 1")
-      endif()
-    elseif(EXISTS "${path}")
-      set(found "${path}")
-    else()
-      message(SEND_ERROR "${path} (${listName}): listed but absent (the list names only dumps present)")
-      math(EXPR failures "${failures} + 1")
-    endif()
-    list(APPEND dumps ${found})
-  endforeach()
+rd_fixture_list("${LIST}" names)
+foreach(name IN LISTS names)
+  rd_fixture_expand(${name} "${OUT}/fixtures" d)
+  list(APPEND dumps "${d}")
+  set(name_${d} "${name}")
 endforeach()
-list(REMOVE_DUPLICATES dumps)
 list(LENGTH dumps ndumps)
 
 set(args_phone --enhanced --resolution 2364x1080 --full-height --full-pixel --present 2364x1080)
@@ -90,10 +61,14 @@ set(env_msaa "")
 if(SABOTAGE)
   set(settings phone)
   set(needTaken "")
+  set(needRan phone)
+  set(ranQuantities shadow_volume_draws)
   set(arm1 ICO_RD_VOLUME_FS=sabotage)
 else()
   set(settings phone desk mali msaa)
   set(needTaken phone desk mali)
+  set(needRan phone desk mali)
+  set(ranQuantities shadow_volume_draws volume_fs_taken)
   set(arm1 ICO_RD_VOLUME_FS=1)
 endif()
 set(arm0 ICO_RD_VOLUME_FS=0)
@@ -126,10 +101,11 @@ foreach(dump IN LISTS dumps)
         return()
       endif()
       if(NOT rc EQUAL 0 AND arm EQUAL 0 AND "${err}" MATCHES "cannot show")
-        message(STATUS "${dump} ${s}: skipped (drawn narrower than the setting's aspect)")
+        message(STATUS "${dump} ${s}: skipped (the setting cannot show it)")
         set(skipped TRUE)
         break()
       endif()
+      set(out_${arm} "${out}")
       string(REPLACE ";" "," flat "${out}")
       if(NOT rc EQUAL 0 OR NOT flat MATCHES "${volRe}")
         message(SEND_ERROR "${dump} ${s} arm ${arm}: exit ${rc}, no volume fs line:\n${out}\n${err}")
@@ -180,6 +156,12 @@ foreach(dump IN LISTS dumps)
       message(SEND_ERROR "${tag}: volume draws seen ${seen_0}/${seen_1}, draws ${draws_0}/${draws_1}, passes ${passes_0}/${passes_1} (arm 0/arm 1: want equal)")
       math(EXPR failures "${failures} + 1")
     endif()
+    # the path ran: the fixture's volume draws, and the entry taken for them
+    list(FIND needRan "${s}" ranAt)
+    if(ranAt GREATER -1)
+      rd_fixture_require(${name_${dump}} "${out_1}" ${ranQuantities})
+      set(required_${dump} TRUE)
+    endif()
     if("${traffic_0}" STREQUAL "" OR NOT "${traffic_0}" STREQUAL "${traffic_1}")
       message(SEND_ERROR "${tag}: traffic \"${traffic_0}\" against \"${traffic_1}\" (want equal)")
       math(EXPR failures "${failures} + 1")
@@ -215,19 +197,26 @@ foreach(dump IN LISTS dumps)
   endforeach()
 endforeach()
 foreach(s IN LISTS settings)
-  message(STATUS "rd_volume_fs_ab ${s}: ${taken_${s}} of ${seen_${s}} volume draws by date_clear_ps over ${ndumps} dumps")
+  message(STATUS "rd_volume_fs_ab ${s}: ${taken_${s}} of ${seen_${s}} volume draws by date_clear_ps over ${ndumps} fixtures")
 endforeach()
 foreach(s IN LISTS needTaken)
   if(taken_${s} EQUAL 0)
-    message(SEND_ERROR "${s}: no volume draw by date_clear_ps over the list (the shadow dumps draw volumes)")
+    message(SEND_ERROR "${s}: no volume draw by date_clear_ps over the list (the shadow fixtures draw volumes)")
     math(EXPR failures "${failures} + 1")
   endif()
 endforeach()
+foreach(dump IN LISTS dumps)
+  if(NOT required_${dump})
+    message(SEND_ERROR "${name_${dump}}: its properties were never checked (no setting could show it): a fixture this test cannot measure is no test")
+    math(EXPR failures "${failures} + 1")
+  endif()
+endforeach()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(compared EQUAL 0)
-  message(SEND_ERROR "rd_volume_fs_ab: no target compared over ${ndumps} dumps")
+  message(SEND_ERROR "rd_volume_fs_ab: no target compared over ${ndumps} fixtures")
   math(EXPR failures "${failures} + 1")
 endif()
 if(failures GREATER 0)
-  message(FATAL_ERROR "rd_volume_fs_ab: ${failures} failures over ${ndumps} dumps")
+  message(FATAL_ERROR "rd_volume_fs_ab: ${failures} failures over ${ndumps} fixtures")
 endif()
-message(STATUS "rd_volume_fs_ab: ${compared} targets the same bytes over ${ndumps} dumps")
+message(STATUS "rd_volume_fs_ab: ${compared} targets the same bytes over ${ndumps} fixtures")
