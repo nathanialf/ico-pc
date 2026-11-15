@@ -22,6 +22,13 @@
 #   output at least once (ARGS should carry --list: the water line)
 # -DREQUIRE=<quantity|quantity...>: the fixture's declared properties checked
 # -DSHA=<hex> (optional): the SHA-256 of the PNG OUT
+# -DDIFFER=<hex> (optional): a SHA-256 the PNG must not have (the picture of
+#   the same fixture at another setting: the block at its GS size against
+#   the scene's scale, which a fixture made with @water place tells apart)
+# -DCLAMP_DIFFERS=1 (optional): replay again under ICO_RD_BLOCK_CLAMP=1 (the
+#   tests' sabotage of issue 106's fix, rd_water.c): its water line must say
+#   0 block reads kept and its picture must differ from OUT's, so the test's
+#   picture would show the block's reads clamped where the game keeps REPEAT
 include("${FIXTURE_HELPERS}")
 # (a folder of this test's own: the twins of one fixture may run at once)
 rd_fixture_expand(${FIXTURE} "${OUT}.fixture" dump)
@@ -74,5 +81,29 @@ if(SHA)
     message(FATAL_ERROR "the picture's SHA-256 ${sha}, not ${SHA} (the release before's picture "
                         "of ${FIXTURE})")
   endif()
+endif()
+if(DIFFER AND sha STREQUAL DIFFER)
+  message(FATAL_ERROR "the picture's SHA-256 ${sha} is the one this test must differ from: the "
+                      "block's scale did not reach the picture")
+endif()
+if(CLAMP_DIFFERS)
+  set(clampOut "${OUT}.clamp.png")
+  file(REMOVE "${clampOut}")
+  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLOCK_CLAMP=1 "${TOOL}" "${dump}"
+                          "${clampOut}" ${ARGS}
+                  RESULT_VARIABLE crc OUTPUT_VARIABLE cout ERROR_VARIABLE cerr)
+  if(NOT crc EQUAL 0 OR NOT EXISTS "${clampOut}")
+    message(FATAL_ERROR "the run under ICO_RD_BLOCK_CLAMP=1 exited ${crc}:\n${cout}\n${cerr}")
+  endif()
+  if(NOT "${cout}${cerr}" MATCHES "ICO_RD_BLOCK_CLAMP=1 \\(the tests' sabotage\\)" OR
+     NOT cout MATCHES " 0 block reads kept on REPEAT")
+    message(FATAL_ERROR "ICO_RD_BLOCK_CLAMP=1 did not take (no switch line, or reads kept)")
+  endif()
+  file(SHA256 "${clampOut}" csha)
+  if(csha STREQUAL sha)
+    message(FATAL_ERROR "${FIXTURE}: the block's reads clamped draw the same picture "
+                        "(${csha}): the test would not see issue 106's defect")
+  endif()
+  message(STATUS "${FIXTURE}: under ICO_RD_BLOCK_CLAMP=1 the picture differs (${csha})")
 endif()
 message(STATUS "${FIXTURE}: the log, the path and the picture checked")

@@ -1764,21 +1764,27 @@ if(ICO_RUN_TESTS)
     # the mirror floor (the pool's grids over its scene copy, corpus puddle
     # rd-00200: water_targets_clamped); each picture the fixture's own as
     # v0.11.6's tool drew it (--water-sharp for the scene's scale), byte for
-    # byte on lavapipe.  On the fixtures the block's reflection does not reach
-    # the picture (generated geometry: the scene's scale and the GS size give
-    # one picture), so the scale and the kept REPEAT are checked by the water
-    # line, the picture as a whole by the pin
+    # byte on lavapipe.  The ripple frames 09:45:12 and 10:04:36 are fixtures
+    # made with @water place (docs/port/TESTING_FIXTURES.md "The water's
+    # rule"): the block's reflection and the ripples' wrap reach the picture,
+    # so above 1x the scene's scale and the GS size draw different pictures
+    # (DIFFER), at 1x one, and the block's reads clamped (ICO_RD_BLOCK_CLAMP=1,
+    # CLAMP_DIFFERS) a different picture: issue 106's defect would be seen.
+    # 10:04:47 stays on its plain fixture (made with the rule, it reaches no
+    # pixel: its pin guards the frame as a whole)
     set(_rip "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_ripple.cmake")
     set(_rip_fx -DTOOL=$<TARGET_FILE:rd_replay_tool> -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
                 "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}")
     set(_rip_out "${CMAKE_CURRENT_BINARY_DIR}/ripple")
     set(_rip_args "--enhanced|--aspect|16:9|--resolution|1920x1080|--full-height|--full-pixel|--aa|ssaa2|--present|1920x1080|--list")
     add_test(NAME rd_replay_tool_ripple
-             COMMAND "${CMAKE_COMMAND}" ${_rip_fx} -DFIXTURE=fx-ripple-13782
+             COMMAND "${CMAKE_COMMAND}" ${_rip_fx} -DFIXTURE=fx-water-13782
                      "-DOUT=${_rip_out}/rd_replay_tool_ripple.png" "-DARGS=${_rip_args}"
                      "-DEXPECT=Full pixel on, border mask off: [0-9]+ render-target reads clamped, 2 block reads kept on REPEAT"
                      "-DEXPECT2=block 344x256 GS with depth [^;]*REPEAT 2, 2 of them kept on REPEAT"
-                     -DREQUIRE=water_blocks_kept -DSHA=370e68e29ee91107ce1732febaa6f0e9a82ba283291cb31de88e8c0d8f2e6af5 -P "${_rip}")
+                     -DREQUIRE=water_blocks_kept -DSHA=68228c420b97467859075e325e083d477bde0f902c70cd50927da0b53cccd8bf
+                     -DDIFFER=f0746b440f3a96f3fbd8fa2d95d30be88feb00e82b7ba43cd37d003c91382c57
+                     -DCLAMP_DIFFERS=1 -P "${_rip}")
     add_test(NAME rd_replay_tool_ripple_447
              COMMAND "${CMAKE_COMMAND}" ${_rip_fx} -DFIXTURE=fx-ripple-84109
                      "-DOUT=${_rip_out}/rd_replay_tool_ripple_447.png" "-DARGS=${_rip_args}"
@@ -1789,29 +1795,35 @@ if(ICO_RUN_TESTS)
     # Original; _1x and _1x_ps2 the same picture at 1x (one SHA-256: nothing
     # changes there)
     add_test(NAME rd_replay_tool_ripple_436
-             COMMAND "${CMAKE_COMMAND}" ${_rip_fx} -DFIXTURE=fx-ripple-83439
+             COMMAND "${CMAKE_COMMAND}" ${_rip_fx} -DFIXTURE=fx-water-83439
                      "-DOUT=${_rip_out}/rd_replay_tool_ripple_436.png" "-DARGS=${_rip_args}"
                      "-DEXPECT=REPEAT 2, 2 of them kept on REPEAT"
                      "-DEXPECT2=block 344x256 GS with depth at 1920x1234 texels \\(5.5814x4.82143, the scene's scale\\)"
-                     -DREQUIRE=water_blocks_kept -DSHA=928c7c4f822c0163088a96d349596ef99c32e3db0ccf475bfd5eff92ed07e969 -P "${_rip}")
+                     -DREQUIRE=water_blocks_kept -DSHA=7724423f63c22ccab2b918516da6d8699c3a7174eae0b60a1ef5d1b33c84d331
+                     -DDIFFER=82ed072acb6fcc5500ba9890add938766970778230afeb599dbcee396e1200f2
+                     -DCLAMP_DIFFERS=1 -P "${_rip}")
     add_test(NAME rd_replay_tool_ripple_436_ps2
-             COMMAND "${CMAKE_COMMAND}" ${_rip_fx} -DFIXTURE=fx-ripple-83439
+             COMMAND "${CMAKE_COMMAND}" ${_rip_fx} -DFIXTURE=fx-water-83439
                      "-DOUT=${_rip_out}/rd_replay_tool_ripple_436_ps2.png"
                      "-DARGS=${_rip_args}|--water-ps2"
                      "-DEXPECT=water reflections at their GS size \\(ICO_RD_WATER_SCALE=0\\)"
                      "-DEXPECT2=block 344x256 GS with depth at 344x256 texels \\(1x1, not the scene's scale\\)"
-                     -DREQUIRE=water_blocks_kept -DSHA=928c7c4f822c0163088a96d349596ef99c32e3db0ccf475bfd5eff92ed07e969 -P "${_rip}")
+                     -DREQUIRE=water_blocks_kept -DSHA=82ed072acb6fcc5500ba9890add938766970778230afeb599dbcee396e1200f2
+                     -DDIFFER=7724423f63c22ccab2b918516da6d8699c3a7174eae0b60a1ef5d1b33c84d331 -P "${_rip}")
     foreach(_w "" _ps2)
         set(_wa "")
+        set(_wc -DCLAMP_DIFFERS=1)
         if(_w)
             set(_wa "|--water-ps2")
+            set(_wc "")
         endif()
         add_test(NAME rd_replay_tool_ripple_436_1x${_w}
-                 COMMAND "${CMAKE_COMMAND}" ${_rip_fx} -DFIXTURE=fx-ripple-83439
+                 COMMAND "${CMAKE_COMMAND}" ${_rip_fx} -DFIXTURE=fx-water-83439
                          "-DOUT=${_rip_out}/rd_replay_tool_ripple_436_1x${_w}.png"
                          "-DARGS=--enhanced|--aspect|16:9|--resolution|1x|--full-pixel|--present|1920x1080|--list${_wa}"
                          "-DEXPECT=block 344x256 GS with depth at 344x256 texels \\(1x1, the scene's scale\\)"
-                         -DREQUIRE=water_blocks_kept -DSHA=440dc0e51c32a760e88a304b053668e5abb3b4482e639341de1fc45ac1e28acc -P "${_rip}")
+                         -DREQUIRE=water_blocks_kept ${_wc}
+                         -DSHA=747e5c2c0cfb190ee68154af541557b963ee2ef8a4911a083108099d93a6f747 -P "${_rip}")
     endforeach()
     add_test(NAME rd_replay_tool_mirror_floor
              COMMAND "${CMAKE_COMMAND}" ${_rip_fx} -DFIXTURE=fx-puddle-0200

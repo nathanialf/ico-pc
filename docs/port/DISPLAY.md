@@ -159,7 +159,8 @@ block reads kept on REPEAT` (ctest `rd_water`, the ripples; `rd_replay_tool_ripp
 `rd_replay_tool_ripple_447`, `rd_replay_tool_ripple_436` and its `_ps2`, `_1x`, `_1x_ps2` twins,
 `rd_replay_tool_mirror_floor`: committed fixtures of the reporter's frames and the corpus's
 puddle room, [TESTING_FIXTURES.md](TESTING_FIXTURES.md), each picture pinned as the release before
-drew the fixture).
+drew the fixture; on the two made with its water rule a replay with the block's reads clamped,
+`ICO_RD_BLOCK_CLAMP=1`, must draw a different picture).
 
 **The [scene scale](ARCHITECTURE.md#terms)** comes from the Resolution row in `rd__apply_display`:
 "Nx" is the GS size times N; "WxH" that size; "window" the presentation box (only with the Enhanced
