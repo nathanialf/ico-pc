@@ -105,3 +105,24 @@ fx-tile-2809 build-host-tmp/v0115/evidence/rc3/x/frame-20261111-121314-v2809/fra
 fx-lamps-title build-host-tmp/corpus/dumps/boot/rd-00400.rddump rules=lamps_place.rules.txt glow_plan=lamps lamps_area_passes>=1 lamps_bands_lazy>=1 lamps_owed=0 lamps_fillpaste_fills>=1
 fx-lamps-title-dark build-host-tmp/corpus/dumps/boot/rd-00600.rddump rules=fans_off.rules.txt glow_plan=dark lamps_area_passes=0 lamps_bands_lazy=0 lamps_owed>=1
 fx-lamps-opening dumps/v0115-opening/frame-20261112-110824-v746.zip rules=lamps_place.rules.txt glow_plan=lamps lamps_area_passes>=1 lamps_bands_lazy>=1 lamps_owed=0 lamps_fillpaste_fills>=1
+# the crack fills' frames (crack_pixels on the run with the fill on at every
+# setting the crack tests replay the fixture at: the cracks are where the
+# generated geometry leaves gaps; crack_msaa_fills at Enhanced 2x with MSAA):
+# the corpus's lightning room (512x448 GS, dump version 4: its MSAA epoch
+# closes at the shadow count's pass in list 3, before the fog), the PowerVR
+# phone's v0.11.5 frames on the bridge (no glow: the fill the first draw of
+# the aura's paste pass) and in the cage under the dark plan (the fill held),
+# the title's menus (e2e, dump version 5: the New Game item, the settings;
+# the settings frame's generated geometry leaves no crack at any setting the
+# crack tests use, 0 pixels against 519 to 2226 on the game's frame: no crack
+# list names it)
+fx-lightning-0300 build-host-tmp/corpus/dumps/lightning/rd-00300.rddump crack_pixels>=1 crack_msaa_fills>=1
+fx-phone-4761 build-host-tmp/v0115/evidence/rc2/x/frame-20261111-113349-v4761/frame-20261111-113349-v4761.rddump crack_pixels>=1
+fx-phone-7583 build-host-tmp/v0115/evidence/rc2/x/frame-20261111-113455-v7583/frame-20261111-113455-v7583.rddump crack_pixels>=1
+fx-title-0300 build-host-tmp/e2e/run-title-on/dumps/rd-00300.rddump crack_pixels>=1
+fx-title-0550 build-host-tmp/e2e/run-title-on/dumps/rd-00550.rddump crack_pixels=0
+# the title's menu frame with the sun off the picture (its two fans generated
+# beside WORK2, fans_off.rules.txt): the glow's dark plan with the menu's
+# cracks kept (the title's own dark frames, fx-boot-0600 and
+# fx-lamps-title-dark, leave no crack on their generated geometry)
+fx-title-dark-0300 build-host-tmp/e2e/run-title-on/dumps/rd-00300.rddump rules=fans_off.rules.txt crack_pixels>=1

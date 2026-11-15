@@ -1,0 +1,27 @@
+# rd_fill11_ab, rd_fill11_gl (port/render/test/rd_fill11_ab.cmake): the crack
+# fill and list 11 in one pass on SCENE against the switch off, byte for byte.
+# A fixture's name (port/render/test/fixtures/NAME.rdfix, one line each),
+# phoneN, deskN and glN (one replay's fills drawn in list 11's pass at that
+# setting, re-derived from a run of the fixture), optionally "nop SPEC"
+# (rd_replay_tool's --nop for both runs) and the line's own properties
+# (QUANTITY OP VALUE: crack_pixels, the fill drawn at every setting on the
+# generated geometry).  Not here, for no crack on their generated geometry
+# (0 pixels filled at the phone's and the desktop's setting): the title's
+# fixtures fx-boot-0400, fx-boot-0600, fx-title-0550, fx-lamps-title-dark,
+# and fx-shadow-wide.
+#
+# the title (512 GS pixels wide): the sun's fans (WHOLE: they write SCENE's
+# depth), the menu frame; no fill in list 11's pass at any setting
+fx-boot-0200 phone0 desk0 gl0 crack_pixels>=1
+fx-title-0300 phone0 desk0 gl0
+# the menu frame with the sun off the picture (DARK) with its motion blur
+# (7:380) and the menu's two text draws that test SCENE's depth (11:47, 11:55)
+# NOPs: list 11 holds sprites under Z ALWAYS alone, as the phone's title.  At
+# 4:3 (the PS2's border, no repeat) the fill is drawn in list 11's pass; at the
+# phone's Full pixel SCENE's border repeat draws the held fill in its own pass
+# first
+fx-title-dark-0300 phone0 desk1 gl1 nop 7:380,11:47,11:55
+# gameplay, where nothing may change: the PowerVR phone's bridge (the aura's
+# paste) and its cage under the dark plan
+fx-phone-4761 phone0 desk0 gl0
+fx-phone-7583 phone0 desk0 gl0
