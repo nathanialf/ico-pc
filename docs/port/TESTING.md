@@ -35,7 +35,7 @@ tests a change needs. Every test program, by area, is
 | `tools/check_docs.py`, `tools/check_docs_allow.txt` | the documentation gate and its allow-list |
 | `.github/workflows/ci.yml`, `ios.yml`, `apple-build.yml` | CI |
 | `tools/apple_precheck.py` | the Apple builds' Vulkan backend (linked to MoltenVK) compiled on a Linux host, before a push ([../BUILDING.md](../BUILDING.md#continuous-integration)) |
-| `tools/ci_shard.py`, `tools/ci_costs/*.txt` | CI's split of a ctest suite into shards and its cost tables, one a suite |
+| `tools/ci_shard.py`, `tools/ci_costs/*.txt`, `tools/ci_costs_update.py` | CI's split of a ctest suite into shards, the guard that every test has a cost, the cost tables (one a suite) and the script that fills and refreshes them |
 
 ## The framework
 
@@ -930,73 +930,137 @@ Arimo's ranges `tools/subset_font_arimo.py` (`font_subset_arimo`). A gameplay op
 | workflow | job | runner | what it runs |
 | --- | --- | --- | --- |
 | `ci.yml` | `linux` | `ubuntu-24.04` | the hygiene checks (no disc data, format, no `ICO_HOST` conditional, no region block, stack-layout, struct-cast and call-type audits, the shard split's self-test, generated files fresh), then the `win-x64` cross build (tests built; the renderer's Direct3D 11 set uploaded for `windows`) |
-| `ci.yml` | `tests` | `ubuntu-24.04` | eighteen runners: the `linux-x64` headless suite in 3 shards, `linux-x64` window in 4, `linux-x64-clang` in 3, `asan` in 5, `fptrap` in 3; each builds its preset's `all tests` and runs one shard of its `ctest` ([below](#the-ci-shards)) |
+| `ci.yml` | `tests` | `ubuntu-24.04` | nineteen runners: the `linux-x64` headless suite in 5 shards, `linux-x64` window in 3, `linux-x64-clang` in 3, `asan` in 5, `fptrap` in 3; each builds its preset's `all tests`, checks the suite's cost table and runs one shard of its `ctest` ([below](#the-ci-shards)) |
 | `ci.yml` | `windows` | `windows-2022` | after `linux`: the renderer's tests from the `win-x64` build on Direct3D 11 through WARP, the debug layer tried ([above](#the-render-suite-on-direct3d-11-warp)) |
 | `ci.yml` | `extra` | `ubuntu-24.04` | the `win-x64-clang` cross build |
-| `ci.yml` | `linux-arm64` | `ubuntu-24.04-arm` | the no-disc-data check, the `linux-arm64` preset with `ctest` (without the filtered-pixel render tests), the arm64 package on release tags (kept as an artifact and attached to the tag's release) |
+| `ci.yml` | `linux-arm64` | `ubuntu-24.04-arm` | the no-disc-data check, the `linux-arm64` preset with `ctest` (without the filtered-pixel render tests and the tests that replay the committed fixtures), the arm64 package on release tags (kept as an artifact and attached to the tag's release) |
 | `ci.yml` | `linux-arm64-filtered` | `ubuntu-24.04-arm` | the filtered-pixel render tests the `linux-arm64` job leaves out, in 2 shards, not gating (never run for a dispatched package) |
+| `ci.yml` | `linux-arm64-fixtures` | `ubuntu-24.04-arm` | the tests that replay the committed fixtures, which the `linux-arm64` job leaves out, in 3 gating shards (never run for a dispatched package) |
 | `ci.yml` | `android` | `ubuntu-24.04` | the debug APK (`assembleDebug`), `tools/check_android_flags.sh`, the APK structure checks |
 | `ci.yml` | `apple` (`macos`, `ios`) | `macos-15` | the macOS app and the unsigned iPhone IPA built and packaged (`apple-build.yml`), nothing kept; no test runs on the Mac |
 | `ios.yml` | `build-ios`, `publish-ios` | `macos-15`, `ubuntu-24.04` | the unsigned iPhone IPA for a published release (`apple-build.yml`), attached to it |
 | `ios.yml` | `build-macos`, `publish-macos` | `macos-15`, `ubuntu-24.04` | the macOS app for a published release (`apple-build.yml`), attached to it |
 | `ios.yml`, dispatched with `check_only` | `build-ios`, `build-macos` | `macos-15` | the dispatched branch's IPA and macOS app as the run's artifacts, no release, nothing attached |
 
-(`.github/workflows/ci.yml`, jobs `linux`, `tests`, `windows`, `extra`, `linux-arm64`, `linux-arm64-filtered`, `android`, `apple`;
+(`.github/workflows/ci.yml`, jobs `linux`, `tests`, `windows`, `extra`, `linux-arm64`, `linux-arm64-filtered`, `linux-arm64-fixtures`, `android`, `apple`;
 `.github/workflows/ios.yml`; `.github/workflows/apple-build.yml`, the Apple build both call.)
 
 The triggers, steps and caches are [../BUILDING.md](../BUILDING.md#continuous-integration)'s.
 
 ### The CI shards
 
-A `tests` runner lists its build's tests with `ctest --show-only=json-v1`, and
-`tools/ci_shard.py split --shards N --index K` writes shard K's names for `ctest --tests-from-file`.
-The split is a pure function of the test list, the cost table and N, so the N runners of a suite
-agree without talking: tests that share a fixture (`FIXTURES_SETUP`, `FIXTURES_REQUIRED`:
-`rd_pixel` with the `rd_replay_tool*` and `rd_vu*_ab_pixel` tests that read its dump,
-`state_recover_files` with its readers, `texpack_disc` with its) form one group, so ctest never
-runs a setup twice; groups go heaviest first to the shard with the least cost so far; a test the
-table does not name (a new one) counts at the table's median. Each runner prints every shard's
-test count and seconds and the tests the table lacked (`tools/ci_shard.py`, header). `--selftest`
-(the `linux` job) checks that every test lands in exactly one shard, a fixture's tests together,
-the same split twice, and that each committed table parses.
+A `tests` runner lists its build's tests with `ctest --show-only=json-v1`, checks them against its
+suite's cost table (`tools/ci_shard.py check`, the guard below), and
+`tools/ci_shard.py split --shards N --index K --parallel 4` writes shard K's names for
+`ctest --tests-from-file`. The split is a pure function of the test list, the cost table, N and the
+parallel level, so the N runners of a suite agree without talking: tests that share a fixture
+(`FIXTURES_SETUP`, `FIXTURES_REQUIRED`: `rd_pixel` with the `rd_replay_tool*` and `rd_vu*_ab_pixel`
+tests that read its dump, `state_recover_files` with its readers, `texpack_disc` with its) form one
+group, so ctest never runs a setup twice; groups go heaviest first to the shard whose estimated
+time grows least, a shard's time at `--parallel 4` being the larger of a quarter of its seconds
+and its longest test (a 50-minute test gets a shard of its own plus small tests in the other three
+slots, rather than a shard of average seconds that then waits on it); a test the table does not
+name counts at the table's median. `--cost-data` also writes the shard's tests and seconds as the
+build's `Testing/Temporary/CTestCostData.txt`, which ctest reads to start the costliest tests first
+under `--parallel` (CMake's `COST` test property: "tests in the test set will be run in descending
+order of cost"), so a long test does not start last and finish alone. Each runner prints every
+shard's test count, seconds, longest test and estimated minutes, and the tests the table lacked
+(`tools/ci_shard.py`, header). `--selftest` (the `linux` job) checks that every test lands in
+exactly one shard, a fixture's tests together, the same split twice, the parallel estimate, the
+selection switches and the guard, and that each committed table parses.
+
+Selection: `--include RE` and `--exclude RE` split only the matching or the other tests, and
+`--fixture-tests run|skip|only` keeps, leaves out or splits alone the tests that replay the
+committed fixtures (a `-DFIXTURES=` argument in the test's command,
+[TESTING_FIXTURES.md](TESTING_FIXTURES.md)). Each `tests` matrix line names its suite's
+`fixture_tests` (`run` in every suite); the `linux-arm64` job runs its gating tests with
+`--fixture-tests skip`, and the `linux-arm64-fixtures` job runs those tests alone in 3 gating
+shards, so the `linux-arm64` job (and a release tag's arm64 package after it) stays about 25
+minutes.
 
 The cost tables `tools/ci_costs/<suite>.txt` (one each for `linux-x64`, `linux-x64-window`,
 `linux-x64-clang`, `asan`, `fptrap` and `linux-arm64`) are `<name> <seconds>` per test, from that
-suite's own job logs of CI run 41695081644 (2026-11-03, `--parallel 4`). One table for all suites
-(the first version, from the asan job alone) misbalanced them: the same test costs 2 to 3 times
-as much under asan, and the first sharded run's shards of a plain suite ran 21 to 36 minutes
-apart. Refresh a table when the suite's shape changes (a new slow test, a shard far over its
-siblings in the printed seconds): `tools/ci_shard.py costs <every shard's job log of the suite>... >
-tools/ci_costs/<suite>.txt`, then put back the three comment lines at its top. The build tree's
-`Testing/Temporary/CTestCostData.txt` is read too, but its averages cover every run since the
-tree was made, most of them before a test's present cost (on the development machine on
-2026-11-03 it gave `settings_render` 0.26 s over 215 runs where the last run took 57 s, and 18
-minutes for a suite that took 2.8 hours), so it is not used for the tables.
+suite's own job logs of a green CI run (the run is named in the table's second line,
+`--parallel 4`). One table for all suites misbalanced them: the same test costs about 1.4 to 1.7
+times as much under asan as in the plain build (CI run 43558388684, the render tests), and the
+first sharded run's shards of a plain suite ran 21 to 36 minutes apart. A line ending in
+`# estimate: ...` is not a CI measurement: it is a test's newest passing time in the merge checks'
+logs (`build-host/tmp/release/logs/merge-*.{first,rest,lvp}.log`) times the suite's host-to-CI
+ratio, written by `tools/ci_costs_update.py` for a test CI has not timed yet (a new test, or a
+test that replays the committed fixtures and skipped in CI while it read a machine-local dump).
+The ratio is measured on the tests the table and the logs both time (at least 5 s in each): the
+sum of their CI seconds over the sum of their local seconds, one for the render tests and one for
+the rest. On the build host (4 cores, lavapipe, `-j1`, while other work runs) against CI run
+43558388684 it is 1.76 for `linux-x64` (116 tests, the per-test quartiles 1.28 to 2.08), 2.08 for
+the window build, 2.09 for clang, 2.94 for asan, 1.86 for fptrap and 1.55 for `linux-arm64`.
 
-Expected wall time a runner. A shard's tests take about a quarter of the summed seconds of its
-tests (the measured run: 1999 s for 7793 s), and a shard's fixed part is about 2.5 minutes (job
-setup and host packages about 40 s, the venv, the cache restores, the build from ccache 45 to 80
-seconds). Measured test totals a suite, in minutes of `--parallel 4` time: `linux-x64` 53, window
-67, clang 57, `asan` 116, `fptrap` 54, so the shards are:
+The guard: `tools/ci_shard.py check` fails a `tests` runner (and the `linux-arm64` job) when a test
+of the build has no line in the suite's table, or a test that replays the committed fixtures has
+less than 1 s in it (the `0.00` a test keeps from a CI run where it skipped). Such a test would otherwise be
+split by a guess, and one slow guess unbalances a suite. A package that adds or converts a test
+adds its lines:
 
-| suite | shards | tests a shard | job |
-| --- | --- | --- | --- |
-| `linux-x64` | 3 | 17.6 min | about 21 min |
-| `linux-x64-window` | 4 | 16.8 min | about 20 min |
-| `linux-x64-clang` | 3 | 18.7 min | about 22 min |
-| `asan` | 5 | 19.2 min | about 23 min |
-| `fptrap` | 3 | 18.1 min | about 21 min |
-| `linux-arm64` (build, gating tests) | 1 | 15 min | about 18 min, a release tag adds the packaging |
-| `linux-arm64-filtered` | 2 | 14.3 min | about 18 min |
-| `linux` | | | about 5 |
-| `windows` (after `linux`) | | | about 8 |
+```
+python3 -I tools/ci_costs_update.py update --build-dir build-host/int-linux-x64 --write
+```
 
-The ccache build is a small share (45 to 80 s warm); the fixed floor of a shard is the 2.5
-minutes, so a shard's time is that plus its tests, and a suite can only get faster by another
-shard. The run's wall time is the longest job, about 23 minutes, plus the time a job waits for a
-runner when more than 20 jobs run at once (the run has 23 jobs at the start; `extra`, `android`
-and `linux` end within 5 minutes, which frees their slots): about 28 minutes in all. A shard much
-longer than its siblings means its table is stale.
+which reads the build's `CTestTestfile.cmake` files (nothing is run), keeps every measured line,
+estimates the missing ones from the merge checks' logs (`--local-log` names other logs,
+`--assume NAME=SECONDS` gives a local time no log has, such as a by-hand measurement), prints each
+suite's ratio and the tests it could not time (a fixture test with no time gets the median of the
+other fixture estimates, any other test the table's median), and rewrites the tables.
+`tools/ci_costs_update.py plan --build-dir ...` then prints each suite's total, its shards'
+estimated minutes for the workflow's counts, and the fewest shards that keep a shard under a
+target (`--target-min`, default 25) or reach the suite's longest test.
+
+After the first green CI run that times the new tests, measure the tables from it:
+
+```
+python3 -I tools/ci_costs_update.py fetch-ci <run id> build-host/tmp/ci-logs/<run id>
+python3 -I tools/ci_costs_update.py update --build-dir build-host/int-linux-x64 \
+    --ci-logs build-host/tmp/ci-logs/<run id> --write
+```
+
+(`fetch-ci` saves the `tests`, `linux-arm64`, `linux-arm64-filtered` and `linux-arm64-fixtures` job
+logs with read-only `gh` queries; `update --ci-logs` takes every line from them, the largest time
+of a test that appears twice, and estimates only what that run did not time.) Refresh the tables
+this way when a suite's shape changes: a new slow test, or a shard far over its siblings in the
+printed minutes. The build tree's own `Testing/Temporary/CTestCostData.txt` is not a source: its
+averages cover every run since the tree was made, most of them before a test's present cost (on
+the development machine on 2026-11-03 it gave `settings_render` 0.26 s over 215 runs where the
+last run took 57 s).
+
+Expected wall time. A shard's tests take about a quarter of the summed seconds of its tests (CI run
+43558388684: 23.0 minutes of step for 22.5 of estimate, 27.9 for 26.8), at least its longest test,
+and a shard's fixed part is about 2.5 minutes (job setup and host packages about 40 s, the venv,
+the cache restores, the build from ccache 60 to 120 seconds). GitHub runs at most 20 jobs of the
+account at once on the Free plan ("Job concurrency limits for GitHub-hosted runners",
+docs.github.com/en/actions/reference/limits; macOS at most 5 of them), and a push's run has 31
+jobs, so the run's wall time is set by its total job-minutes over 20 runners as much as by its
+longest job; more shards add 2.5 fixed minutes each and help only while the run stays under 20
+jobs. Estimated test totals a suite with the fixture tests, in minutes of `--parallel 4` time
+(the tables above; `plan`): `linux-x64` 174, window 205, clang 205, `asan` 287, `fptrap` 184,
+`linux-arm64`'s fixture tests about 100; the longest test `rd_lamps_lowres_ab` (an assumed 1200 s
+local) at 35 to 59 minutes, `rd_glow_blur_ab` 30 to 50. So the shards are:
+
+| suite | shards | job (estimate) |
+| --- | --- | --- |
+| `linux-x64` | 5 | about 40 min |
+| `linux-x64-window` | 3 | about 74 min |
+| `linux-x64-clang` | 3 | about 74 min |
+| `asan` | 5 | about 64 min |
+| `fptrap` | 3 | about 66 min |
+| `linux-arm64` (build, gating tests without the fixture tests) | 1 | about 25 min, a release tag adds the packaging |
+| `linux-arm64-filtered` | 2 | about 24 min |
+| `linux-arm64-fixtures` | 3 | about 38 min |
+| `linux` | | about 6 |
+| `windows` (after `linux`) | | about 11 |
+
+The run is about 1370 job-minutes, so 20 runners need at least 69 minutes; a simulation of the
+queue (jobs started in the workflow's order as runners free) gives about 76. Before the fixture
+tests ran (runs of 2026-11-09 to 2026-11-14) it was 560 to 820 job-minutes and 42 to 70 minutes. A
+`tests` job's timeout is 120 minutes. A shard much longer than its siblings means its table is
+stale.
 
 ## Release process
 
