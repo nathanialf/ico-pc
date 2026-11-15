@@ -1,0 +1,12 @@
+# rd_vumerge_mali (docs/port/TESTING_FIXTURES.md): a fixture, then
+# expect=IN/GPU (the plain run's "IN merged into GPU" figure with the cull off,
+# asserted for both runs: re-derived from a run of the fixture, the generated
+# geometry's own), then rd_replay_tool's setting arguments (none: the tool's
+# defaults).  Each declares vu_merged_draws.
+# issue 164: the Mali-G52 reporter's frame (the settings over a paused room)
+fx-mobile-164 expect=1012/110 --aspect 21:9 --resolution 1x
+# the PowerVR phone's frames (code 36's fused pairs)
+fx-phone-2199 expect=651/80
+fx-phone-4103 expect=840/94
+# a 2026-10-07 capture
+fx-vu-3112 expect=38/8 --aspect 4:3

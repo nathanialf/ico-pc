@@ -1,7 +1,7 @@
 # rd_vubatch_ab: the pre-pass's batches against one draw an entry, byte for
-# byte (docs/port/VU1_PROGRAMS.md, "The pre-pass's batches").  For every dump
-# the list names (tools/vustage_dumps.txt, as rd_vustage_ab.cmake reads it),
-# at the Original preset at 4:3 and 1x, the Enhanced preset at 4:3 and 2x
+# byte (docs/port/VU1_PROGRAMS.md, "The pre-pass's batches").  For every frame
+# the list names (lists/vustage.txt's fixtures, as rd_vustage_ab.cmake reads
+# them), at the Original preset at 4:3 and 1x, the Enhanced preset at 4:3 and 2x
 # and at 16:9 and 2x, rd_replay_tool's --pass-dump with --stats twice under
 # ICO_RD_BLEND=fixed, both with the pre-passes: with
 # ICO_RD_VU_PREPASS_BATCH=0 (one point draw an entry and stage, the
@@ -12,39 +12,19 @@
 # both runs must draw every VU command through the record (no mesh or grid
 # draw the old way) with the same vertices; the batched run must make no
 # more pre-pass draws, and fewer wherever the one-an-entry run made two or
-# more.  Each run's pre-pass line is printed (the draws before and after).
-# A missing list or dump is named and skipped; no dump read, or no device:
-# SKIP (77).
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
-if(NOT EXISTS "${LIST}")
+# more.  The path ran: on the batched run every fixture's declared
+# prepass_vertices and prepass_draws, every fixture checked.  Each run's
+# pre-pass line is printed (the draws before and after).  No dump, or no
+# device: SKIP (77).
+# -DTOOL=<rd_replay_tool> -DLIST=<list> -DOUT=<a folder the test may write>
+# [-DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<folder> -DFIXTURE_HELPERS=<file>]
+include("${CMAKE_CURRENT_LIST_DIR}/rd_vu_inputs.cmake")
+if(NOT vuFixtures AND NOT EXISTS "${LIST}")
   message(STATUS "SKIP: ${LIST}: no dump list")
   return()
 endif()
-get_filename_component(listDir "${LIST}" DIRECTORY)
-file(STRINGS "${LIST}" lines)
-set(dumps "")
-foreach(l IN LISTS lines)
-  string(STRIP "${l}" l)
-  if(l STREQUAL "" OR l MATCHES "^#")
-    continue()
-  endif()
-  if(NOT IS_ABSOLUTE "${l}")
-    set(l "${listDir}/${l}")
-  endif()
-  if(l MATCHES "[*]")
-    file(GLOB matched "${l}")
-    list(SORT matched)
-    if(matched)
-      list(APPEND dumps ${matched})
-    else()
-      message(STATUS "${l}: no dump matches, skipped")
-    endif()
-  elseif(EXISTS "${l}")
-    list(APPEND dumps "${l}")
-  else()
-    message(STATUS "${l}: no such dump, skipped")
-  endif()
-endforeach()
+rd_vu_inputs("${LIST}")
+set(dumps "${vuDumps}")
 list(LENGTH dumps ndumps)
 if(ndumps EQUAL 0)
   message(STATUS "SKIP: no dump of ${LIST} is here")
@@ -109,6 +89,9 @@ foreach(dump IN LISTS dumps)
     endif()
     set(vertsBatch "${CMAKE_MATCH_1}")
     set(nBatch "${CMAKE_MATCH_2}")
+    # the path ran: the batched record's vertices and pre-pass draws (a
+    # fixture's declared prepass_vertices, prepass_draws)
+    rd_vu_require(${index} "${outBatch}" prepass_vertices prepass_draws)
     message(STATUS "${dump} ${s}: ${vertsOne} vertices, pre-pass draws ${nOne} one an entry, "
                    "${nBatch} batched")
     math(EXPR drawsOne "${drawsOne} + ${nOne}")
@@ -145,6 +128,7 @@ foreach(dump IN LISTS dumps)
     endforeach()
   endforeach()
 endforeach()
+rd_vu_inputs_done(failures)
 if(failures GREATER 0)
   message(FATAL_ERROR "rd_vubatch_ab: ${failures} failures over ${ndumps} dumps")
 endif()

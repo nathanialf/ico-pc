@@ -1,0 +1,13 @@
+# rd_store_plan_ab (docs/port/TESTING_FIXTURES.md): frames whose depth the
+# store plan leaves unstored (store_depth_dropped) at every setting they show.
+# The PowerVR phone's frames drop none here, their sources neither (v4103 at
+# Enhanced 4:3 2x: 0 of 4 passes with a depth): not listed.
+# the 2026-10-07 captures (4:3: the desktop's 4:3 setting alone)
+fx-vu-3086
+fx-vu-3112
+fx-vu-1985
+# the deja vu 48:9 frame and issue 164's Mali-G52 frame (all three settings)
+fx-deja
+fx-mobile-164
+# the corpus's plain room
+fx-vu-plain-0300

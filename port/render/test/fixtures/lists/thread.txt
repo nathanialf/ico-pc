@@ -1,0 +1,13 @@
+# rd_thread_ab (docs/port/TESTING_FIXTURES.md): the VU family's frames and the
+# phone's, each drawing VU commands through the pre-pass on the render thread
+# (prepass_vertices); prev=NAME: the tick before's fixture, the blended
+# present between the two
+fx-vu-3086
+fx-vu-3112
+fx-vu-1985
+fx-loss95
+fx-deja
+fx-phone-4103
+fx-phone-2199
+# the main gate on the owner's Pixel (v0.11.7) and the tick before it
+fx-gate prev=fx-gate-prev

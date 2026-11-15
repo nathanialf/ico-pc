@@ -23,3 +23,10 @@ fx-mali-slow541 mali,corpus prepass_vertices>=1 vu_compact_left_out>=1 region_ru
 fx-lamps-novolume pixel prepass_vertices>=1 vu_compact_left_out>=1 region_rule_draws>=1
 fx-opening-dark pixel prepass_vertices>=1 vu_compact_left_out>=1 region_rule_draws>=1
 fx-opening-sun pixel prepass_vertices>=1 vu_compact_left_out>=1 region_rule_draws>=1
+# the 2026-10-07 captures, a device-loss frame, the deja vu 48:9 frame, issue 164's paused frame
+fx-vu-3086 corpus prepass_vertices>=1 vu_compact_left_out>=1 region_rule_draws>=1
+fx-vu-3112 corpus prepass_vertices>=1 vu_compact_left_out>=1 region_rule_draws>=1
+fx-vu-1985 corpus prepass_vertices>=1 vu_compact_left_out>=1 region_rule_draws>=1
+fx-loss95 corpus prepass_vertices>=1 vu_compact_left_out>=1 region_rule_draws>=1
+fx-deja corpus prepass_vertices>=1 vu_compact_left_out>=1 region_rule_draws=0
+fx-mobile-164 corpus prepass_vertices>=1 vu_compact_left_out>=1 region_rule_draws>=1
