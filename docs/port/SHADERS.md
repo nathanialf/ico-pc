@@ -1064,8 +1064,9 @@ source at `DXC_COMMIT`, checked by the commit id and the SHA-256 of its `git arc
 `libdxil.so` (the arm64 presets compile no DXIL). `SKIP_DXC=1` skips it; each value can be
 overridden from the environment (`tools/fetch_deps.sh`, section 4).
 
-**The Mac build.** `.github/workflows/ios.yml` builds a host DXC on `macos-15` for the iOS and macOS
-jobs: v1.9.2602 at commit `21d28f727ad395b59394815ef76012e432f7e4e5`, cloned with its submodules,
-the `dxc` target alone in Release with SPIR-V code generation, cached under
+**The Mac build.** `.github/workflows/apple-build.yml` (the Apple builds of `ci.yml` and `ios.yml`)
+builds a host DXC on `macos-15` for the iOS and macOS jobs: v1.9.2602 at commit
+`21d28f727ad395b59394815ef76012e432f7e4e5` (`ICO_MAC_DXC_TAG`, `ICO_MAC_DXC_COMMIT`), cloned with
+its submodules, the `dxc` target alone in Release with SPIR-V code generation, cached under
 `tools/toolchain/deps/dxc-build`; the `ios-app` and `macos-app` presets point `ICO_DXC` at
-`tools/toolchain/deps/dxc-build/bin/dxc` (`.github/workflows/ios.yml`; `CMakePresets.json`).
+`tools/toolchain/deps/dxc-build/bin/dxc` (`.github/workflows/apple-build.yml`; `CMakePresets.json`).
