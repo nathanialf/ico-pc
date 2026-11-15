@@ -571,7 +571,9 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   profile (`ICO_VK_FAKE_LIMITS=moltenvk`, Enhanced 2364x1080, Full height and pixel), the
   Mali-G52's (`ICO_VK_FAKE_LIMITS=mali`, `ICO_VK_FAKE_NO_DST=1`), the B-spline composites at
   Enhanced 2x (`ICO_RD_SHADOW_BSPLINE=1`) and MSAA 4x at Enhanced 2x; the `_gl` twin at 1x on
-  OpenGL (llvmpipe). Each pair: every PNG byte for byte, the same draws and passes, `=0` off with
+  OpenGL (llvmpipe). Each pair: every PNG byte for byte, the same draws and passes (a fixture that
+  declares no volume: the empty box only takes work away: never more draws or passes, fewer draws
+  where it boxed the count, every boxed composite with nothing to draw, no texel boxed), `=0` off with
   nothing boxed, `=1` on; the path ran: on the `=1` replay at the phone setting (`_gl`: its one
   setting) each fixture's declared `shadow_volume_draws`, `shadow_box_counts` and
   `shadow_box_composites` hold (`fx-shadow-wide` at least one volume draw, count and composite

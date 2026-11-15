@@ -277,4 +277,4 @@ expansion does not change); its manifest line must say the same.
 
 | test | list | fixtures | the properties it checks |
 | --- | --- | --- | --- |
-| `rd_shadow_box_ab`, `rd_shadow_box_ab_gl` | `lists/shadow_box.txt` | `fx-shadow-wide` (a character's shadow at 21:9: `shadow_volume_draws>=1`, `shadow_box_counts>=1`, `shadow_box_composites>=1`), `fx-lamps-novolume` (a shadow window with no volume: `shadow_volume_draws=0`) | `shadow_volume_draws`, `shadow_box_counts`, `shadow_box_composites` on the box-on replay at the phone setting (OpenGL: its one setting) |
+| `rd_shadow_box_ab`, `rd_shadow_box_ab_gl` | `lists/shadow_box.txt` | `fx-shadow-wide` (a character's shadow at 21:9: `shadow_volume_draws>=1`, `shadow_box_counts>=1`, `shadow_box_composites>=1`), `fx-lamps-novolume` (a shadow window with no volume: `shadow_volume_draws=0`) | `shadow_volume_draws`, `shadow_box_counts`, `shadow_box_composites` on the box-on replay at the phone setting (OpenGL: its one setting); every target byte for byte; equal draws and passes with volumes, with none (an empty box) fewer or equal, fewer where the count was boxed |

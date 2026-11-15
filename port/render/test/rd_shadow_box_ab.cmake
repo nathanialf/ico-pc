@@ -25,7 +25,10 @@
 #   - every PNG the =0 run writes (SCENE, SHADOW0-2, the count target,
 #     DISPLAY, PRESENT, every other target) the =1 run's byte for byte, the
 #     same number;
-#   - the same draws and passes;
+#   - the same draws and passes; for a fixture that declares no volume
+#     (shadow_volume_draws=0) the box is empty and takes work away instead:
+#     never more draws or passes, fewer draws when it boxed the count, every
+#     boxed composite with nothing to draw, no texel boxed;
 #   - =0 says "shadow box off: 0 counts and 0 composites", =1 "shadow box on";
 # the path ran: at the phone setting (gl: its one setting) the =1 run shows
 # every property the fixture declares among shadow_volume_draws,
@@ -44,6 +47,14 @@ foreach(name IN LISTS names)
   rd_fixture_expand(${name} "${OUT}/fixtures" d)
   list(APPEND dumps "${d}")
   set(name_${d} "${name}")
+  # a fixture that declares no volume (shadow_volume_draws=0): its box is
+  # empty (below)
+  execute_process(COMMAND "${FIXTURE_TOOL}" props "${FIXTURES}/${name}.rdfix"
+                  OUTPUT_VARIABLE p RESULT_VARIABLE rc)
+  set(novolume_${d} FALSE)
+  if(rc EQUAL 0 AND p MATCHES "(^|\n)shadow_volume_draws=0(\n|$)")
+    set(novolume_${d} TRUE)
+  endif()
 endforeach()
 list(LENGTH dumps ndumps)
 
@@ -120,6 +131,7 @@ foreach(dump IN LISTS dumps)
       set(word_${box} "${CMAKE_MATCH_1}")
       set(counts_${box} "${CMAKE_MATCH_2}")
       set(comps_${box} "${CMAKE_MATCH_3}")
+      set(empty_${box} "${CMAKE_MATCH_4}")
       set(texels_${box} "${CMAKE_MATCH_5}")
       set(all_${box} "${CMAKE_MATCH_6}")
       set(whole_${box} "${CMAKE_MATCH_7}")
@@ -137,10 +149,40 @@ foreach(dump IN LISTS dumps)
                          "composites), =1 says ${word_1}: off with nothing, then on, expected")
       math(EXPR failures "${failures} + 1")
     endif()
-    if(NOT draws_0 EQUAL draws_1 OR NOT passes_0 EQUAL passes_1)
+    if(NOT novolume_${dump} AND (NOT draws_0 EQUAL draws_1 OR NOT passes_0 EQUAL passes_1))
       message(SEND_ERROR "${dump} ${s}: ${draws_1} draws, ${passes_1} passes with the box; "
                          "${draws_0} and ${passes_0} without")
       math(EXPR failures "${failures} + 1")
+    endif()
+    if(novolume_${dump})
+      # no volume: the volumes' box is empty, and the box takes work away
+      # without changing a byte: the count's one draw is the clear alone
+      # (rd_shadow_one.c: "an empty box: the clear alone"), a level or
+      # composite sprite whose box is empty gets an empty scissor and is not
+      # drawn (rd_replay.c bindDrawEx: no texture group), its DATE set-up with
+      # it, and above 1x the levels' chain draws no step for an empty count
+      # (rd_shadowres.c): never more draws or passes with the box, fewer draws
+      # when the count was boxed, every boxed composite with nothing to draw
+      # and no texel boxed
+      if(draws_1 GREATER draws_0 OR passes_1 GREATER passes_0)
+        message(SEND_ERROR "${dump} ${s}: no volume: ${draws_1} draws, ${passes_1} passes with "
+                           "the box, ${draws_0} and ${passes_0} without: the box may only take "
+                           "work away")
+        math(EXPR failures "${failures} + 1")
+      endif()
+      if(counts_1 GREATER 0 AND NOT draws_1 LESS draws_0)
+        message(SEND_ERROR "${dump} ${s}: no volume: the count was boxed (${counts_1}) and "
+                           "${draws_1} draws remain of ${draws_0}: the empty box's count draw "
+                           "was drawn")
+        math(EXPR failures "${failures} + 1")
+      endif()
+      if(NOT empty_1 EQUAL comps_1 OR NOT texels_1 EQUAL 0)
+        message(SEND_ERROR "${dump} ${s}: no volume: ${empty_1} of ${comps_1} boxed composites "
+                           "with nothing to draw, ${texels_1} texels boxed: an empty box expected")
+        math(EXPR failures "${failures} + 1")
+      endif()
+      message(STATUS "${dump} ${s}: no volume: the box took ${draws_0} - ${draws_1} draws and "
+                     "${passes_0} - ${passes_1} passes away, the same bytes (below)")
     endif()
     if(s STREQUAL "phone")
       math(EXPR phoneCounts "${phoneCounts} + ${counts_1}")
