@@ -22,19 +22,22 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_present_scene COMMAND rd_present_scene_test)
 endif()
 
-# rd_present_scene_ab (test/rd_present_scene_ab.cmake): the dumps of
-# tools/present_scene_dumps.txt (machine-local; a listed dump that is absent
-# fails) replayed by rd_replay_tool --pass-dump with ICO_RD_PRESENT_SCENE=0
+# rd_present_scene_ab (test/rd_present_scene_ab.cmake): the fixtures of
+# test/fixtures/lists/present_scene.txt (committed frames, rd_fixture.cmake,
+# docs/port/TESTING_FIXTURES.md; a listed fixture that is absent fails)
+# replayed by rd_replay_tool --pass-dump with ICO_RD_PRESENT_SCENE=0
 # and =1 at the PowerVR phone's profile on lavapipe (2364x1080, full height,
 # Full pixel, ICO_VK_FAKE_LIMITS=moltenvk, ICO_RD_VU_PREPASS=0), a 16:9
 # desktop window (1920x1080) and Enhanced 2x 4:3: every target byte for byte
 # (DISPLAY drawn on demand for its read), PRESENT within the derived bound
 # (two levels a channel; the levels' counts printed), the reduction not drawn
 # at the phone's setting (one pass fewer), kept at 2x with its reason; on the
-# first dump the readers: the CRT filter, FSR 1.0, the display layer (the
+# first fixture the readers: the CRT filter, FSR 1.0, the display layer (the
 # test's upscaler), Downsampling and the effects depth keep it (each its
-# reason, every target and PRESENT byte for byte), the mirror takes it.  No
-# device: SKIP (77); no dump list: SKIP.
+# reason, every target and PRESENT byte for byte), the mirror takes it; the
+# presents from SCENE each fixture declares at the phone's setting (the path
+# ran).  No device: SKIP (77).
+include(rd_fixture.cmake)
 if(ICO_RUN_TESTS AND TARGET rd_replay_tool AND Python3_FOUND)
     set(_ps_env "")
     if(ICO_SANITIZE MATCHES "address")
@@ -43,7 +46,9 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool AND Python3_FOUND)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/present_scene_ab")
     add_test(NAME rd_present_scene_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/present_scene_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                     "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/present_scene.txt"
                      "-DPY=${Python3_EXECUTABLE}"
                      "-DDIFF=${CMAKE_CURRENT_SOURCE_DIR}/test/png_level_diff.py"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/present_scene_ab"

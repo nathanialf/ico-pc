@@ -100,6 +100,21 @@ def skeleton(sk, ver):
         c.raw(c.u32() * 8)
     c.raw(c.u32() * 8)
     if c.o != len(sk):
+        # the placement section (rd_fixture.h): centres in lattice steps, payload offsets
+        if c.u32() != 0x31505846:
+            raise Bad("bytes after the skeleton's end that are no placement section")
+        placed = c.u32()
+        if placed > meshes:
+            raise Bad("%d meshes placed of %d" % (placed, meshes))
+        for _ in range(placed):
+            _id, x, y, z = struct.unpack("<I3i", c.raw(16))
+            if max(abs(x), abs(y), abs(z)) > (1 << 23) - 16:
+                raise Bad("a placed mesh's centre is past the lattice's range")
+        prims = c.u32()
+        if placed == 0 and prims == 0:
+            raise Bad("an empty placement section")
+        c.raw(prims * 4)
+    if c.o != len(sk):
         raise Bad("%d bytes after the skeleton's end" % (len(sk) - c.o))
     return images, meshes
 

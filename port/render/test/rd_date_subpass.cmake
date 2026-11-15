@@ -27,13 +27,14 @@
 #                                  fails, the profile's flag goes off
 #                                  ("DATE stencil off (self-test)") and the
 #                                  snapshot draws DATE for the run
-#   rd_date_subpass_ab             the dumps of tools/date_subpass_dumps.txt
+#   rd_date_subpass_ab             the fixtures of
+#                                  test/fixtures/lists/date_subpass.txt
 #                                  replayed through the bit and through the
 #                                  snapshot on the 1.1 tile-based profile: every
 #                                  named target byte for byte, no snapshot and
-#                                  fewer passes through the bit
-#                                  (test/rd_date_subpass_ab.cmake); SKIP without
-#                                  the dumps
+#                                  fewer passes through the bit, each fixture's
+#                                  DATE draws through the bit (the path ran)
+#                                  (test/rd_date_subpass_ab.cmake)
 #   rd_pixel_vk11_subpass          rd_pixel on the 1.1 profile with the read on:
 #                                  its DATE stencil case through the bit
 set(_ds_sub "-DEXTRA=render passes: the subpass read: a pass of one RGBA8 colour target")
@@ -80,10 +81,15 @@ add_test(NAME rd_pixel_vk11_subpass COMMAND rd_pixel_test "${_ds_pix}")
 set_tests_properties(rd_pixel_vk11_subpass PROPERTIES SKIP_RETURN_CODE 77
                      WORKING_DIRECTORY "${_ds_pix}" ENVIRONMENT "${_ds_env11}"
                      FAIL_REGULAR_EXPRESSION "DATE stencil: skipped")
+# the committed fixtures (rd_fixture.cmake has an include guard; relative to
+# port/render as every include here)
+include(rd_fixture.cmake)
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/date_subpass_ab")
 add_test(NAME rd_date_subpass_ab
          COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                 "-DLIST=${CMAKE_SOURCE_DIR}/tools/date_subpass_dumps.txt"
+                 -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                 "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                 "-DLIST=${ICO_FIXTURE_DIR}/lists/date_subpass.txt"
                  "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/date_subpass_ab"
                  -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_date_subpass_ab.cmake")
 set_tests_properties(rd_date_subpass_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600

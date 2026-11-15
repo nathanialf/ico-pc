@@ -1,13 +1,15 @@
 # rd_present_scene_ab: the present from SCENE (port/render/rd_present_scene.c;
 # docs/port/RENDER_POST.md "The present from SCENE (off by default until
-# measured)") against the reduction drawn into DISPLAY.  For every dump the
-# list names (tools/present_scene_dumps.txt; a listed dump that is absent
-# FAILS), rd_replay_tool --pass-dump --stats with ICO_RD_PRESENT_SCENE=0 (the
+# measured)") against the reduction drawn into DISPLAY.  For every fixture the
+# list names (port/render/test/fixtures/lists/present_scene.txt: fixture names
+# of the repository, docs/port/TESTING_FIXTURES.md; a listed fixture that is
+# absent or does not expand to its pinned SHA-256 FAILS), expanded into OUT,
+# then rd_replay_tool --pass-dump --stats with ICO_RD_PRESENT_SCENE=0 (the
 # reduction drawn, v0.11.5's default) and =1 at three settings:
 #   phone   the PowerVR phone's Resolution Auto on lavapipe (2364x1080, full
 #           height, Full pixel, ICO_VK_FAKE_LIMITS=moltenvk,
 #           ICO_RD_VU_PREPASS=0): the reduction not drawn ("1 reductions not
-#           drawn") on every dump the tool can show there, its pass and its
+#           drawn") on every fixture that declares it, its pass and its
 #           DISPLAY store gone ("N passes" fewer, "MB stored" less);
 #   desk    a 16:9 desktop window (1920x1080, full height, Full pixel);
 #   enh2x   Enhanced 2x at 4:3 into 1280x960: kept (the PS2's quarter pixel
@@ -15,8 +17,15 @@
 # every target's PNG but PRESENT byte for byte (DISPLAY drawn on demand from
 # SCENE for its read: the same bytes the reduction stores), PRESENT within
 # the bound (two levels a channel: one from g's rounding before the filter,
-# one where the sampler weighs the moved coordinate's taps differently;
-# png_level_diff.py, its counts printed).  On the first dump, at the phone's
+# one where the sampler weighs the moved coordinate's taps differently:
+# RENDER_POST.md "The bound"; png_level_diff.py, its counts printed).  The
+# path ran (rd_fixture_require on the on run at the phone's setting): each
+# fixture's declared present_scene_skipped (>=1: the reduction not drawn, the
+# present sampling SCENE; =0: kept there with its reason, the main gate's
+# open border); a fixture the phone's setting cannot show FAILS (its property
+# never checked).  (With --pass-dump the stats line says "0 presents from
+# SCENE" beside "1 reductions not drawn", 1 without it: the count the 10 s
+# line below shows on the first fixture.)  On the first fixture, at the phone's
 # setting, the readers that keep the reduction, each with its reason and
 # every target and PRESENT byte for byte: the CRT filter (--crt consumer; it
 # locks the scene to 1x, so kept as scale 1 or as the filter),
@@ -24,48 +33,25 @@
 # (--upscale-test 1.5), Downsampling (--downsample); and the mirror, which
 # takes it (PRESENT within the bound).  The off runs must say "present from
 # SCENE off".  The crack fill's swap (rd_crack_fill.c) as often in the on run
-# as in the off run, and at the phone's setting some dump with the reduction
+# as in the off run, and at the phone's setting some fixture with the reduction
 # not drawn and the swap taken in one replay (the display layer's switch on
 # in every run, its default: it keeps nothing without a temporal upscaler);
-# the first dump presented 31 times (--time 30) prints the 10 s line with a
-# rate above 0.  No device: SKIP (77); no list: SKIP.
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DPY=<python3>
-# -DDIFF=<png_level_diff.py> -DOUT=<a folder the test may write>
-# The lists name dumps of the build machine alone (the owner's rule there: a
-# listed dump that is absent FAILS). A machine without that folder has none of
-# them: the test is skipped as the older dump tests are.
-if(NOT IS_DIRECTORY "/primary/dev/ico-dumps")
-  message(STATUS "SKIP: no dump folder on this machine (/primary/dev/ico-dumps): the list's dumps are the build machine's")
-  return()
-endif()
+# the first fixture presented 31 times (--time 30) prints the 10 s line with a
+# rate above 0.  No device: SKIP (77).
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the
+# fixtures folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<a
+# fixture list> -DPY=<python3> -DDIFF=<png_level_diff.py>
+# -DOUT=<a folder the test may write>
+include("${FIXTURE_HELPERS}")
 set(dumps "")
 set(failures 0)
-if(NOT "${LIST}" STREQUAL "" AND EXISTS "${LIST}")
-  get_filename_component(listDir "${LIST}" DIRECTORY)
-  file(STRINGS "${LIST}" lines)
-  foreach(l IN LISTS lines)
-    string(STRIP "${l}" l)
-    if(l STREQUAL "" OR l MATCHES "^#")
-      continue()
-    endif()
-    if(NOT IS_ABSOLUTE "${l}")
-      set(l "${listDir}/${l}")
-    endif()
-    if(EXISTS "${l}")
-      list(APPEND dumps "${l}")
-    else()
-      message(SEND_ERROR "${l}: a listed dump is absent (the list names only dumps present)")
-      math(EXPR failures "${failures} + 1")
-    endif()
-  endforeach()
-else()
-  message(STATUS "SKIP: ${LIST}: no dump list")
-  return()
-endif()
+rd_fixture_list("${LIST}" names)
+foreach(name IN LISTS names)
+  rd_fixture_expand(${name} "${OUT}/fixtures" d)
+  list(APPEND dumps "${d}")
+  set(name_${d} "${name}")
+endforeach()
 list(LENGTH dumps ndumps)
-if(ndumps EQUAL 0)
-  message(FATAL_ERROR "no dump of ${LIST} is here")
-endif()
 file(MAKE_DIRECTORY "${OUT}/tmp")
 
 set(settings phone desk enh2x)
@@ -86,7 +72,8 @@ function(runOne var dump dir onoff env)
   file(REMOVE_RECURSE "${dir}")
   file(MAKE_DIRECTORY "${dir}")
   execute_process(COMMAND "${CMAKE_COMMAND}" -E env "TMPDIR=${OUT}/tmp" ICO_RD_PRESENT_SCENE=${onoff}
-                          ${env} "${TOOL}" "${dump}" - --pass-dump "${dir}" --stats ${ARGN}
+                          ${env} "${TOOL}" "${dump}" "${OUT}/tmp/out.png" --pass-dump "${dir}" --stats
+                          ${ARGN}
                   RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
   set(rc_${var} "${rc}" PARENT_SCOPE)
   set(out_${var} "${out}" PARENT_SCOPE)
@@ -141,6 +128,8 @@ set(phoneTaken 0)
 set(index 0)
 foreach(dump IN LISTS dumps)
   math(EXPR index "${index} + 1")
+  set(name "${name_${dump}}")
+  set(checked FALSE)
   foreach(s IN LISTS settings)
     set(tag "${index}-${s}")
     runOne(off "${dump}" "${OUT}/${tag}-off" 0 "${env_${s}}" ${args_${s}})
@@ -169,6 +158,11 @@ foreach(dump IN LISTS dumps)
     endif()
     set(skipped "${CMAKE_MATCH_2}")
     set(keptWhy "${CMAKE_MATCH_6}")
+    if(s STREQUAL "phone")
+      # the path ran: the reduction not drawn (or kept, as the fixture declares)
+      rd_fixture_require(${name} "${out_on}" present_scene_skipped)
+      set(checked TRUE)
+    endif()
     string(REGEX MATCH "${trafficRe}" t "${out_off}")
     set(storedOff "${CMAKE_MATCH_2}")
     set(passesOff "${CMAKE_MATCH_3}")
@@ -256,6 +250,10 @@ foreach(dump IN LISTS dumps)
       endforeach()
     endif()
   endforeach()
+  if(NOT checked)
+    message(SEND_ERROR "${name}: its declared presents from SCENE were never checked (the phone's setting did not replay it)")
+    math(EXPR failures "${failures} + 1")
+  endif()
 endforeach()
 # the phone's shape: the reduction not drawn and the crack fill's swap taken
 # in one replay (the display layer's switch on), on some dump
@@ -284,7 +282,8 @@ if(taken EQUAL 0)
   message(SEND_ERROR "no dump's reduction was left undrawn at any setting (the gate saw nothing)")
   math(EXPR failures "${failures} + 1")
 endif()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(failures GREATER 0)
   message(FATAL_ERROR "rd_present_scene_ab: ${failures} failures")
 endif()
-message(STATUS "rd_present_scene_ab: ${ndumps} dumps, ${taken} runs with the reduction not drawn")
+message(STATUS "rd_present_scene_ab: ${ndumps} fixtures, ${taken} runs with the reduction not drawn")

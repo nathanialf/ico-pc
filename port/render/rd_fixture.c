@@ -654,6 +654,7 @@ typedef struct SkMesh {
     char gen[32];
     int32_t sizeExp;
     uint32_t bones;
+    int32_t centre[3]; /* the placement section's: the cube's centre in lattice steps (else 0) */
     const uint8_t *idx, *batches;
 } SkMesh;
 
@@ -688,6 +689,9 @@ typedef struct Sk {
     uint32_t nf;
     SkExp *exps;
     uint32_t ne;
+    uint32_t placed;     /* the placement section's meshes */
+    const uint8_t *offs; /* and its prims generated beside the target: payload offsets */
+    uint32_t noff;
 } Sk;
 
 typedef struct Rd {
@@ -851,6 +855,46 @@ static bool skParse(const RdFixture *fx, Sk *s, char *why, size_t whySize)
         s->exps[i].off = r32(&r);
         s->exps[i].e = (int32_t)r32(&r);
     }
+    s->placed = s->noff = 0;
+    s->offs = NULL;
+    if (!r.bad && s->mesh && r.o != r.n) {
+        /* the placement section (a fixture made with @lamps place or
+         * @fans off); never empty, so a fixture has one encoding */
+        if (r32(&r) != RD_FX_PLACE_TAG) {
+            r.bad = true;
+        }
+        s->placed = r32(&r);
+        if (s->placed > s->nm) {
+            r.bad = true;
+        }
+        for (uint32_t i = 0; !r.bad && i < s->placed; i++) {
+            const uint32_t id = r32(&r);
+            int32_t c[3];
+            for (int a = 0; a < 3; a++) {
+                c[a] = (int32_t)r32(&r);
+                if (c[a] > RD_FX_PLACE_MAX || c[a] < -RD_FX_PLACE_MAX) {
+                    r.bad = true;
+                }
+            }
+            SkMesh *m = NULL;
+            for (uint32_t k = 0; k < s->nm; k++) {
+                if (s->mesh[k].id == id) {
+                    m = &s->mesh[k];
+                    break;
+                }
+            }
+            if (!m || r.bad) {
+                r.bad = true;
+                break;
+            }
+            memcpy(m->centre, c, sizeof(c));
+        }
+        s->noff = r32(&r);
+        if (s->noff > (1u << 20) || (s->placed == 0 && s->noff == 0)) {
+            r.bad = true;
+        }
+        s->offs = rraw(&r, (size_t)s->noff * 4u);
+    }
     if (r.bad || !s->tex || !s->mesh || (s->ver >= 15u && !s->facing) || !s->exps || r.o != r.n) {
         setWhy(why, whySize,
                r.o != r.n && !r.bad
@@ -877,13 +921,14 @@ static void putColour(uint8_t *q)
     rd_fx_set32(q + 12, rd_fx_f32(127, 0));
 }
 
-/* vertex j of strip s on the lattice of step 2^(e-3) inside [-2^e, 2^e]^3 */
-static void putPos(uint8_t *q, uint32_t s, uint32_t j, int e)
+/* vertex j of strip s on the lattice of step 2^(e-3) inside [-2^e, 2^e]^3
+ * about the centre c (lattice steps; the model's origin: 0, 0, 0) */
+static void putPos(uint8_t *q, uint32_t s, uint32_t j, int e, const int32_t c[3])
 {
     const uint32_t col = j >> 1, side = j & 1u;
-    const int32_t x = -8 + (int32_t)(col % 16u);
-    const int32_t y = -8 + (int32_t)((s + col / 16u) % 15u) + (int32_t)side;
-    const int32_t z = -8 + (int32_t)((s * 5u) % 17u);
+    const int32_t x = c[0] - 8 + (int32_t)(col % 16u);
+    const int32_t y = c[1] - 8 + (int32_t)((s + col / 16u) % 15u) + (int32_t)side;
+    const int32_t z = c[2] - 8 + (int32_t)((s * 5u) % 17u);
     rd_fx_set32(q, rd_fx_f32(x, e - 3));
     rd_fx_set32(q + 4, rd_fx_f32(y, e - 3));
     rd_fx_set32(q + 8, rd_fx_f32(z, e - 3));
@@ -949,7 +994,7 @@ static bool genMesh(RdFxBuf *o, const SkMesh *m)
             j++;
         }
         memset(qw, 0, sizeof(qw));
-        putPos(qw, s, j, m->sizeExp);
+        putPos(qw, s, j, m->sizeExp, m->centre);
         if (qpv >= 4) {
             putNormal(qw + 16, s);
         }
@@ -1083,9 +1128,16 @@ static bool genSpan(void *user, const RdCmd *c, const RdFxSpan *s)
                     fixedUv ? rd_fx_f32((int32_t)(128u * k), 0) : rd_fx_f32((int32_t)k, -3);
                 putVtx(o, gsX(w, cx), gsX(h, cy), 0xFFFFFFFFu, st, st, grey);
             } else {
-                /* a ribbon over the middle half of the target */
+                /* a ribbon over the middle half of the target; one the
+                 * placement section names: 64 GS pixels wide, 8 past the
+                 * target's right edge (the fans of a sun off the picture) */
                 const uint32_t col = v >> 1, side = v & 1u;
-                const uint32_t px = w / 4u + (col % 16u) * (w / 2u) / 16u;
+                bool beside = false;
+                for (uint32_t k = 0; s->gen == RD_FX_GEN_SCREEN && k < g->sk->noff; k++) {
+                    beside = beside || rd_fx_get32(g->sk->offs + 4u * k) == s->off;
+                }
+                const uint32_t px =
+                    beside ? w + 8u + (col % 16u) * 4u : w / 4u + (col % 16u) * (w / 2u) / 16u;
                 const uint32_t py = h / 4u + ((col / 16u) % 8u + side) * (h / 2u) / 8u;
                 const uint32_t ss = fixedUv ? rd_fx_f32((int32_t)((col % 16u) * 64u), 0)
                                             : rd_fx_f32((int32_t)(col % 16u), -4);
@@ -1131,7 +1183,8 @@ static bool genSpan(void *user, const RdCmd *c, const RdFxSpan *s)
         putColour(q);
         for (uint32_t v = 0; v < s->b; v++) {
             uint8_t *o = q + 16u + (size_t)v * hd.qwPerVertex * 16u;
-            putPos(o, s->a, v, e);
+            static const int32_t origin[3] = {0, 0, 0};
+            putPos(o, s->a, v, e, origin);
             if (hd.qwPerVertex >= 3) {
                 putNormal(o + 16, s->a);
             }
@@ -1346,11 +1399,16 @@ bool rd_fixture_check(const RdFixture *fx, char *why, size_t whySize, char *stat
         for (uint32_t i = 0; i < sk.nt; i++) {
             images += sk.tex[i].hdr[1] == RD_TEXKIND_IMAGE;
         }
-        snprintf(stats, statsSize,
-                 "dump version %u, %u commands, payload %u bytes (%llu structure, %llu text, %llu "
-                 "zero), %u textures (%u images as patterns), %u meshes generated, %u sized draws",
-                 sk.ver, cmds, sk.psz, (unsigned long long)kept, (unsigned long long)text,
-                 (unsigned long long)zero, sk.nt, images, sk.nm, sk.ne);
+        const int at = snprintf(
+            stats, statsSize,
+            "dump version %u, %u commands, payload %u bytes (%llu structure, %llu text, %llu "
+            "zero), %u textures (%u images as patterns), %u meshes generated, %u sized draws",
+            sk.ver, cmds, sk.psz, (unsigned long long)kept, (unsigned long long)text,
+            (unsigned long long)zero, sk.nt, images, sk.nm, sk.ne);
+        if ((sk.placed || sk.noff) && at > 0 && (size_t)at < statsSize) {
+            snprintf(stats + at, statsSize - (size_t)at,
+                     ", %u meshes placed on WORK2, %u prims beside it", sk.placed, sk.noff);
+        }
     }
     free(k.named);
     skFree(&sk);

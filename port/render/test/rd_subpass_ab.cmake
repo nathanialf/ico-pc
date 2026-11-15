@@ -1,13 +1,11 @@
 # rd_subpass_ab: the subpass read on against off, byte for byte, at the
 # reporters' profiles (v0.11.6: the read decided per device by its probe,
-# port/render/rd_subpass_probe.c, port/rhi/rhi_subpass_verdict.h).  The dumps:
-# every row of FLAT (tools/vu_flat0_dumps.txt: "profiles path", the rows
-# naming mali or pixel) and every row of CUTS (tools/shadow_cuts_dumps.txt:
-# "path kind ...", each under the pixel profile), machine-local: where
-# /primary/dev/ico-dumps exists a listed dump that is absent (a glob that
-# matches nothing) fails; elsewhere it is reported and skipped.  The
-# profiles, both on VkRenderPass objects (ICO_VK_FAKE_API=1.1: the read's
-# route):
+# port/render/rd_subpass_probe.c, port/rhi/rhi_subpass_verdict.h).  The frames:
+# every fixture of the list (port/render/test/fixtures/lists/subpass.txt: a
+# fixture's name and the profiles it is replayed under, comma-separated; the
+# frames are expanded into OUT/fixtures, docs/port/TESTING_FIXTURES.md; a
+# listed fixture that is absent FAILS).  The profiles, both on VkRenderPass
+# objects (ICO_VK_FAKE_API=1.1: the read's route):
 #   mali   issue 179's Mali-G52: the Arm fakes (ICO_VK_FAKE_LIMITS=mali,
 #          ICO_VK_FAKE_VENDOR=0x13B5, no dual-source blending:
 #          ICO_VK_FAKE_NO_DUAL=1), the record by compute dispatches
@@ -25,93 +23,52 @@
 # stencil draws than the off run drew snapshots, with fewer passes by at
 # least the off run's snapshots (each one ended SCENE's pass and began it
 # again; rd_date_subpass_ab's rule); no validation error.  Every profile
-# with a dump here must have compared targets.  No dump here, or no device
-# (77): SKIP.
-# -DTOOL=<rd_replay_tool> -DFLAT=<vu_flat0 list> -DCUTS=<shadow_cuts list>
-# -DOUT=<a folder the test may write>
+# must have compared targets.
+# The path ran (rd_fixture_require, every fixture at every profile of its):
+# the fixture's declared date_stencil_draws on the on run (DATE drawn through
+# the bit by the subpass read) and date_snapshots on the off run.  A fixture
+# whose list line says "nodate" is a shadow window with no volume (its
+# composites are skipped, so it draws no DATE): the pair must draw no DATE
+# either way (0 snapshots off, 0 stencil draws on) and its declared
+# shadow_volume_draws (=0) is checked instead; the list must name at least one
+# fixture that draws DATE at each profile.  No device (77): SKIP.
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the
+# fixtures' folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<the
+# fixture list> -DOUT=<a folder the test may write>
 cmake_policy(SET CMP0057 NEW) # if(... IN_LIST ...) in a -P script
 cmake_policy(SET CMP0054 NEW) # a quoted if() argument is a string, not a variable
-set(strict FALSE)
-if(EXISTS "/primary/dev/ico-dumps")
-  set(strict TRUE)
-endif()
+include("${FIXTURE_HELPERS}")
 set(failures 0)
 set(entries "")
-# one path of a list: absolute, or relative to the list's folder; a glob
-function(expand listDir path out)
-  if(NOT IS_ABSOLUTE "${path}")
-    set(path "${listDir}/${path}")
-  endif()
-  set(found "")
-  if(path MATCHES "[*]")
-    file(GLOB found "${path}")
-    list(SORT found)
-  elseif(EXISTS "${path}")
-    set(found "${path}")
-  endif()
-  set(${out} "${found}" PARENT_SCOPE)
-endfunction()
-function(missing what)
-  if(strict)
-    message(SEND_ERROR "${what}: no such dump (listed, and /primary/dev/ico-dumps exists)")
-    math(EXPR f "${failures} + 1")
-    set(failures ${f} PARENT_SCOPE)
-  else()
-    message(STATUS "${what}: no such dump, skipped")
-  endif()
-endfunction()
-foreach(which FLAT CUTS)
-  set(list "${${which}}")
-  if(list STREQUAL "" OR NOT EXISTS "${list}")
-    message(STATUS "${list}: no dump list")
-    continue()
-  endif()
-  get_filename_component(listDir "${list}" DIRECTORY)
-  file(STRINGS "${list}" lines)
-  foreach(l IN LISTS lines)
-    string(STRIP "${l}" l)
-    if(l STREQUAL "" OR l MATCHES "^#")
-      continue()
-    endif()
-    string(REGEX REPLACE "[ \t]+" ";" fields "${l}")
-    if(which STREQUAL "FLAT")
-      list(GET fields 0 profs)
-      list(GET fields 1 path)
-      string(REPLACE "," ";" profs "${profs}")
+rd_fixture_list("${LIST}" names)
+foreach(name IN LISTS names)
+  rd_fixture_expand(${name} "${OUT}/fixtures" dump_${name})
+  string(REGEX REPLACE "[ \t]+" ";" fields "${RDFX_FIELDS_${name}}")
+  set(profs "")
+  set(nodate_${name} FALSE)
+  foreach(f IN LISTS fields)
+    if(f STREQUAL "nodate")
+      set(nodate_${name} TRUE)
     else()
-      list(GET fields 0 path)
-      set(profs pixel)
+      string(REPLACE "," ";" profs "${f}")
     endif()
-    set(want "")
-    foreach(p IN LISTS profs)
-      if(p STREQUAL "mali" OR p STREQUAL "pixel")
-        list(APPEND want "${p}")
-      endif()
-    endforeach()
-    if(want STREQUAL "")
-      continue()
-    endif()
-    expand("${listDir}" "${path}" found)
-    if(found STREQUAL "")
-      missing("${path}")
-      continue()
-    endif()
-    foreach(p IN LISTS want)
-      foreach(f IN LISTS found)
-        list(APPEND entries "${p}|${f}")
-      endforeach()
-    endforeach()
   endforeach()
+  set(n 0)
+  foreach(p IN LISTS profs)
+    if(p STREQUAL "mali" OR p STREQUAL "pixel")
+      list(APPEND entries "${p}|${name}")
+      math(EXPR n "${n} + 1")
+    else()
+      message(SEND_ERROR "${name}: the list names a profile '${p}' (mali or pixel)")
+      math(EXPR failures "${failures} + 1")
+    endif()
+  endforeach()
+  if(n EQUAL 0)
+    message(SEND_ERROR "${name}: the list names no profile for it")
+    math(EXPR failures "${failures} + 1")
+  endif()
 endforeach()
 list(REMOVE_DUPLICATES entries)
-list(LENGTH entries nentries)
-if(nentries EQUAL 0)
-  if(failures GREATER 0)
-    message(FATAL_ERROR "rd_subpass_ab: ${failures} failures, no dump replayed")
-  endif()
-  message(STATUS "SKIP: no dump is here")
-  return()
-endif()
 
 set(env_mali ICO_VK_FAKE_LIMITS=mali ICO_VK_FAKE_VENDOR=0x13B5 ICO_VK_FAKE_NO_DUAL=1
              ICO_RD_VU_RECORD=compute)
@@ -122,12 +79,15 @@ set(dateRe "stats: DATE snapshots ([0-9]+), DATE stencil draws ([0-9]+) \\(([0-9
 set(passRe "stats: [0-9]+ draws, ([0-9]+) passes,")
 set(compared_mali 0)
 set(compared_pixel 0)
+set(date_mali 0)
+set(date_pixel 0)
 set(asked_mali 0)
 set(asked_pixel 0)
 set(index 0)
 foreach(e IN LISTS entries)
   string(REGEX REPLACE "\\|.*$" "" prof "${e}")
-  string(REGEX REPLACE "^[^|]*\\|" "" dump "${e}")
+  string(REGEX REPLACE "^[^|]*\\|" "" name "${e}")
+  set(dump "${dump_${name}}")
   math(EXPR index "${index} + 1")
   math(EXPR asked_${prof} "${asked_${prof}} + 1")
   set(ok TRUE)
@@ -182,6 +142,7 @@ foreach(e IN LISTS entries)
       break()
     endif()
     set(passes_${run} "${CMAKE_MATCH_1}")
+    set(out_${run} "${out}")
   endforeach()
   if(NOT ok)
     math(EXPR failures "${failures} + 1")
@@ -190,6 +151,18 @@ foreach(e IN LISTS entries)
   math(EXPR fewer "${passes_off} - ${passes_on}")
   message(STATUS "${dump} (${prof}): on ${passes_on} passes, ${snaps_on} DATE snapshots, "
                  "${bits_on} stencil draws; off ${passes_off} passes, ${snaps_off} snapshots")
+  if(nodate_${name})
+    rd_fixture_require(${name} "${out_on}" shadow_volume_draws)
+    if(NOT snaps_off EQUAL 0 OR NOT bits_on EQUAL 0)
+      message(SEND_ERROR "${dump} (${prof}): the list says nodate, the off run drew "
+                         "${snaps_off} snapshots and the on run ${bits_on} stencil draws")
+      math(EXPR failures "${failures} + 1")
+    endif()
+  else()
+    rd_fixture_require(${name} "${out_on}" date_stencil_draws)
+    rd_fixture_require(${name} "${out_off}" date_snapshots)
+    math(EXPR date_${prof} "${date_${prof}} + 1")
+  endif()
   if(NOT bits_off EQUAL 0 OR NOT snaps_on EQUAL 0)
     message(SEND_ERROR "${dump} (${prof}): the off run drew ${bits_off} DATE draws by the bit, "
                        "the on run ${snaps_on} snapshots")
@@ -222,11 +195,13 @@ foreach(e IN LISTS entries)
   endforeach()
 endforeach()
 foreach(p mali pixel)
-  if(asked_${p} GREATER 0 AND compared_${p} EQUAL 0)
-    message(SEND_ERROR "the ${p} profile compared no target")
+  if(compared_${p} EQUAL 0 OR date_${p} EQUAL 0)
+    message(SEND_ERROR "the ${p} profile compared ${compared_${p}} targets over "
+                       "${asked_${p}} fixtures, ${date_${p}} drawing DATE through the read")
     math(EXPR failures "${failures} + 1")
   endif()
 endforeach()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(failures GREATER 0)
   message(FATAL_ERROR "rd_subpass_ab: ${failures} failures")
 endif()

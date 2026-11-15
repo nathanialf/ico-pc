@@ -1,0 +1,13 @@
+# rd_date_cut_ab, rd_date_cut_ab_gl (port/render/test/rd_date_cut_ab.cmake):
+# DATE's passes without the depth, the cut off against on, byte for byte.
+# A fixture's name (port/render/test/fixtures/NAME.rdfix) and the passes the
+# cut begins without the depth in one replay of it where it acts (the shadow's
+# three composites in list 3 under DATE by the snapshot: the second and the
+# third), re-derived from a run of the fixture.  The word narrow: a frame drawn
+# narrower than 21:9, which the Mali setting (and so the OpenGL twin) cannot
+# show; it runs at the Adreno's and the phone's.
+fx-datecut-6100 2
+fx-datecut-slow137 2
+fx-mali-17008 2
+fx-shadow-wide 2 narrow
+fx-mali-frame 2

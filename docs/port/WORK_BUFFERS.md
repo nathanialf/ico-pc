@@ -1507,8 +1507,9 @@ GEQUAL draw after the third composite in its pass, one between the first two) wi
 on: SCENE byte for byte under the store plan's poison, the scan's runs by ordinal, a pass without
 the depth a run, the same passes, snapshots and store-plan drops, the depth and stencil bytes asked
 lower, the reasons, the 10 s text.
-`rd_date_cut_ab` and `rd_date_cut_ab_gl` replay `tools/date_cut_dumps.txt` (the Mali's F12 frame
-and its three slow-scene captures, the Pixel's frame, `tools/date_subpass_dumps.txt`'s frames)
+`rd_date_cut_ab` and `rd_date_cut_ab_gl` replay the fixtures of
+`port/render/test/fixtures/lists/date_cut.txt` (the Mali's frames and a slow-scene capture, the
+Pixel's frame; [TESTING_FIXTURES.md](TESTING_FIXTURES.md))
 with the cut off and on at the Mali's, the Adreno's and the PowerVR phone's settings without the
 in-pass read, and on OpenGL ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)). `ICO_RD_DATE_CUT=0` or
 `1` is the tests' switch ([TESTING.md](TESTING.md)); there is no setting.

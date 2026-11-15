@@ -1,0 +1,27 @@
+# Fixtures for rd_lamps_fillpaste_ab (port/render/test/rd_lamps_fillpaste_ab.cmake:
+# the crack fill drawn in the glow's paste pass against a pass of its own,
+# byte for byte): fixture names of this repository
+# (port/render/test/fixtures/NAME.rdfix), a name a line.  The word nocull
+# after a name replays that fixture with ICO_RD_CULL=off in every arm: a
+# generated mesh sits about its model's origin, which for a room's lamps is
+# off the picture, so the visibility test drops them and the glow's plan is
+# DARK; with it off the lamps are in the chain (the LAMPS plan, as on the
+# frames the fixtures were made from).  The fills each fixture lands in the
+# paste's pass are its declared lamps_fillpaste_fills
+# (port/render/test/fixtures/fixtures.txt).
+#
+# the lamps' frames: the Pixel's opening (848x448 GS), its dark room, the
+# title's castle (512x512 GS): the fill lands in the glow's paste (one pass
+# fewer)
+fx-lamps-novolume nocull
+fx-opening-dark nocull
+fx-boot-0400 nocull
+# the lamps' frames with the lamps generated on WORK2 (the placement rules):
+# the cull on, the fill lands the same way
+fx-lamps-title
+fx-lamps-opening
+# the chain drawn whole (the sun's fans on the picture): the opening's sun,
+# the title's castle twice: nothing lands, the same bytes, no more loaded
+fx-opening-sun
+fx-boot-0200
+fx-boot-0600

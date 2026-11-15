@@ -1,0 +1,30 @@
+# rd_shadow_fine_ab, rd_shadow_fine_ab_gl
+# (port/render/test/rd_shadow_fine_ab.cmake: the shadow's levels at the scene's
+# scale above 1x, port/render/rd_shadowres.c, against the PS2's sizes).
+# Fields: the fixture's name (port/render/test/fixtures/NAME.rdfix); the --nop
+# spec of the frame's three shadow composites (list 3's SHADOW2, SHADOW1 and
+# SHADOW0 sprites, as `rd_replay_tool FRAME x.png --list --no-device` prints
+# them: command positions, kept by the fixture), which the test leaves out to
+# find the texels the composites darken; the settings the fixture runs at,
+# comma-separated (the script's header names them; the OpenGL twin runs gl1x
+# and gl2x on every fixture instead).  Each frame has one shadow window with
+# volumes.
+#
+# issue 123's Adreno 740 tablet on v0.11.6 (Custom 3x, Full height, Full pixel):
+# the main gate, plain, the tick before and the blended picture between them
+# (count 3:6-3:29, levels 3:40/45/50, composites 3:58/63/68)
+fx-adreno 3:58,3:63,3:68 adreno,e1x,o1x
+fx-adreno-prev 3:58,3:63,3:68 adreno,e1x,o1x
+fx-adreno-blended 3:58,3:63,3:68 adreno,e1x,o1x,phone,msaa,bspline,force
+# the owner's Pixel at the main gate (848 GS wide; count 3:6-3:25, levels
+# 3:36/41/46 of 424x256, 212x128, 106x64, composites 3:54/59/64), at its
+# Resolution window (2385x1080: 2.8125 x 2.41071) and at 1 x 2 (848x896)
+fx-gate 3:54,3:59,3:64 owner,tall,e1x,pixel
+fx-gate-prev 3:54,3:59,3:64 owner,tall,e1x,pixel
+fx-gate-blended 3:54,3:59,3:64 owner,tall,e1x,pixel
+# the owner's Pixel on a later v0.11.7 build at the main gate (the same
+# chain's commands), as the device ran it: Enhanced, Resolution window 2364x1080 over
+# the 848-wide frame, Full height, Full pixel, anisotropic filter ("pixel")
+fx-gate2 3:54,3:59,3:64 pixel
+fx-gate2-prev 3:54,3:59,3:64 pixel
+fx-gate2-blended 3:54,3:59,3:64 pixel

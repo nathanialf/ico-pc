@@ -1,0 +1,15 @@
+# rd_subpass_ab (port/render/test/rd_subpass_ab.cmake): the subpass read on
+# against off, byte for byte, at the reporters' profiles.  A fixture's name
+# (port/render/test/fixtures/NAME.rdfix), the profiles it is replayed under
+# (comma-separated: mali, pixel; the script says what each is) and, for a
+# shadow window with no volume (no DATE draw: the composites are skipped),
+# the word nodate.
+#
+# issue 179's Mali-G52 on v0.11.5: a slow-scene capture and the F12 frame
+fx-mali-slow541 mali,pixel
+fx-mali-frame mali,pixel
+# the Pixel 10 Pro Fold's opening: the lamps view without a volume, the dark
+# room and the sun with volumes
+fx-lamps-novolume pixel nodate
+fx-opening-dark pixel
+fx-opening-sun pixel

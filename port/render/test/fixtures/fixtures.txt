@@ -13,26 +13,53 @@
 # empty_composites_skipped, no_volume_kept and no_volume_break_taken on the run
 # with that cut on (the last two where DATE takes the stencil bit: a snapshot
 # setting takes no window), stencil_window_stores with ICO_RD_STENCIL_PACKED=0.
+# date_cut_passes on the run with the cut on where it acts (DATE by the
+# snapshot, a whole scale: not at the phone's fractional one); shadow_levels and
+# shadow_level_texels on the default run above 1x (and the forced one at 1x).
+# lamps_fillpaste_fills on the run with ICO_RD_LAMPS=pad+owed+wholepad+lowres+
+# fillpaste at the PowerVR phone's setting, the cull off (ICO_RD_CULL=off, the
+# lamps list's nocull word) where it is >=1: the generated lamps are in the
+# glow's chain only then.
+# present_scene_skipped on the run with ICO_RD_PRESENT_SCENE=1 at the PowerVR
+# phone's setting (=0: the reduction kept there, the main gate's open border).
 #
 # stage 4, the Pixel 10 Pro Fold's F12 frame (v0.11.4): a character's shadow
 # (seven volume commands, the count, three levels, three composites) at 21:9
-fx-shadow-wide build-host-tmp/v0115/evidence/datecut/pixel/frame-20261110-194925-v3677.rddump shadow_volume_draws>=1 shadow_box_counts>=1 shadow_box_composites>=1 date_snapshots>=1 date_stencil_draws>=1 date_one_shared>=1 empty_composites_skipped=0 no_volume_kept=0 no_volume_break_taken=0 stencil_window_stores>=1
+fx-shadow-wide build-host-tmp/v0115/evidence/datecut/pixel/frame-20261110-194925-v3677.rddump shadow_volume_draws>=1 shadow_box_counts>=1 shadow_box_composites>=1 date_snapshots>=1 date_stencil_draws>=1 date_one_shared>=1 empty_composites_skipped=0 no_volume_kept=0 no_volume_break_taken=0 stencil_window_stores>=1 present_scene_skipped>=1
 # the opening's lamps frame (v0.11.5 rc, the Pixel): a shadow window (the
 # reset and resolve) with no volume in it, at 21:9
-fx-lamps-novolume dumps/v0115-opening/frame-20261112-110824-v746.zip shadow_volume_draws=0 date_one_shared>=1 empty_composites_skipped>=1 no_volume_kept>=1 no_volume_break_taken>=1
+fx-lamps-novolume dumps/v0115-opening/frame-20261112-110824-v746.zip shadow_volume_draws=0 date_one_shared>=1 empty_composites_skipped>=1 no_volume_kept>=1 no_volume_break_taken>=1 lamps_fillpaste_fills>=1
 # the opening on the Pixel 10 Pro Fold (v0.11.5 rc): the dark room and the sun,
 # each a shadow window with volumes and the three composites under DATE
-fx-opening-dark dumps/v0115-opening/frame-20261112-110838-v1545.zip shadow_volume_draws>=1 date_snapshots>=1 date_stencil_draws>=1 date_one_shared>=1 empty_composites_skipped=0 no_volume_break_taken=0 stencil_window_stores>=1
-fx-opening-sun dumps/v0115-opening/frame-20261112-110852-v2278.zip shadow_volume_draws>=1 date_snapshots>=1 date_stencil_draws>=1 date_one_shared>=1 empty_composites_skipped=0 no_volume_break_taken=0 stencil_window_stores>=1
+fx-opening-dark dumps/v0115-opening/frame-20261112-110838-v1545.zip shadow_volume_draws>=1 date_snapshots>=1 date_stencil_draws>=1 date_one_shared>=1 empty_composites_skipped=0 no_volume_break_taken=0 stencil_window_stores>=1 lamps_fillpaste_fills>=1 glow_plan=dark lamps_area_passes=0 lamps_bands_lazy=0 lamps_owed>=1
+fx-opening-sun dumps/v0115-opening/frame-20261112-110852-v2278.zip shadow_volume_draws>=1 date_snapshots>=1 date_stencil_draws>=1 date_one_shared>=1 empty_composites_skipped=0 no_volume_break_taken=0 stencil_window_stores>=1 lamps_fillpaste_fills=0 glow_plan=whole lamps_area_passes=0 lamps_bands_lazy>=1 lamps_owed=0
 # issue 179's Mali-G52 on v0.11.5 (moto g24 power): its F12 frame (stage 3) and
 # a slow-scene capture (stage 42), both with volumes
 fx-mali-frame dumps/v0116-mali179/frame-20261112-195947-v17565.zip shadow_volume_draws>=1 date_snapshots>=1 date_stencil_draws>=1 date_one_shared>=1 empty_composites_skipped=0 no_volume_break_taken=0 stencil_window_stores>=1
 fx-mali-slow541 dumps/v0116-mali179/slow-20261112-195541.zip shadow_volume_draws>=1 date_snapshots>=1 date_stencil_draws>=1 date_one_shared>=1 empty_composites_skipped=0 no_volume_break_taken=0
 # the title's castle scene, 2026-10-06 boot frames (512x512 GS, dump version
 # 4): the sun's two volumes (0200), and the window with no volume (0400, 0600)
-fx-boot-0200 build-host-tmp/corpus/dumps/boot/rd-00200.rddump shadow_volume_draws>=1 no_volume_kept=0
-fx-boot-0400 build-host-tmp/corpus/dumps/boot/rd-00400.rddump shadow_volume_draws=0 no_volume_kept>=1
-fx-boot-0600 build-host-tmp/corpus/dumps/boot/rd-00600.rddump shadow_volume_draws=0 no_volume_kept>=1
+fx-boot-0200 build-host-tmp/corpus/dumps/boot/rd-00200.rddump shadow_volume_draws>=1 no_volume_kept=0 lamps_fillpaste_fills=0 glow_plan=whole lamps_area_passes=0 lamps_bands_lazy>=1 lamps_owed=0
+fx-boot-0400 build-host-tmp/corpus/dumps/boot/rd-00400.rddump shadow_volume_draws=0 no_volume_kept>=1 lamps_fillpaste_fills>=1
+fx-boot-0600 build-host-tmp/corpus/dumps/boot/rd-00600.rddump shadow_volume_draws=0 no_volume_kept>=1 lamps_fillpaste_fills=0
+# issue 179's Mali-G52 (moto g24 power): its v0.11.4 F12 frame and a slow-scene
+# capture (the shadow's three composites under DATE), and its v0.11.2 frame
+fx-datecut-6100 build-host-tmp/v0115/evidence/179/x/frame-20261111-070230-v6100.rddump date_snapshots>=1 date_cut_passes>=1
+fx-datecut-slow137 build-host-tmp/v0115/evidence/datecut/slow/070137/slow-20261111-070137.rddump date_snapshots>=1 date_cut_passes>=1
+fx-mali-17008 build-host-tmp/v0113/evidence/179/zip/frame-20261110-003507-v17008.rddump date_snapshots>=1 date_stencil_draws>=1 date_cut_passes>=1
+# the main gate above 1x, each a tick, the tick before it and the blended
+# picture between them, one shadow window with volumes: the owner's Pixel on a
+# v0.11.7 build (848 GS wide), issue 123's Adreno 740 tablet on v0.11.6 (576 GS
+# wide), the owner's Pixel again on a later v0.11.7 build (fx-gate2)
+fx-gate dumps/v0117-owner-gate/frame-20261114-133111-v97707.rddump shadow_levels>=1 shadow_level_texels>=1
+fx-gate-prev dumps/v0117-owner-gate/frame-20261114-133111-v97707-prev.rddump shadow_levels>=1 shadow_level_texels>=1
+fx-gate-blended dumps/v0117-owner-gate/frame-20261114-133111-v97707-blended.rddump shadow_levels>=1 shadow_level_texels>=1
+fx-adreno dumps/v0117-adreno123/frame-20261114-101655-v12635.rddump shadow_levels>=1 shadow_level_texels>=1
+fx-adreno-prev dumps/v0117-adreno123/frame-20261114-101655-v12635-prev.rddump shadow_levels>=1 shadow_level_texels>=1
+fx-adreno-blended dumps/v0117-adreno123/frame-20261114-101655-v12635-blended.rddump shadow_levels>=1 shadow_level_texels>=1
+fx-gate2 dumps/v0117-owner-rc3/frame-20261114-144508-v4245.rddump shadow_levels>=1 shadow_level_texels>=1
+fx-gate2-prev dumps/v0117-owner-rc3/frame-20261114-144508-v4245-prev.rddump shadow_levels>=1 shadow_level_texels>=1
+fx-gate2-blended dumps/v0117-owner-rc3/frame-20261114-144508-v4245-blended.rddump shadow_levels>=1 shadow_level_texels>=1
 # the frames with volumes in the scene's pass: the main gate at 32:9 (2048x448
 # GS, dump version 15), the PowerVR phone's F12 frame of 2026-10-28 (dump
 # version 13); the rc3 bridge capture on the Pixel (the shadow tiles' frame).
@@ -66,3 +93,18 @@ fx-wide-189 dumps/189/frame-20261104-120509-v130039.rddump glow_plan=dark glow_p
 fx-gate-102 build-host-tmp/evidence-v079/102/frame-20261015-161933-v4251.rddump glow_plan=whole glow_passes>=1 glow_chains>=1 paste_spec_seen>=1 paste_spec_taken>=1 lamps_own_depth_draws>=1 glow_fold_folded>=1
 fx-issue91-1279 build-host-tmp/issue-drafts/issue-91/rc1/frame-20261013-181358-v1279.rddump glow_plan=whole glow_passes>=1 glow_chains>=1 paste_spec_seen>=1 paste_spec_taken>=1 lamps_own_depth_draws>=1 glow_fold_folded>=1
 fx-issue91-1358 build-host-tmp/issue-drafts/issue-91/rc1/frame-20261013-181400-v1358.rddump glow_plan=whole glow_passes>=1 glow_chains>=1 paste_spec_seen>=1 paste_spec_taken>=1 lamps_own_depth_draws>=1 glow_fold_folded>=1
+fx-maingate dumps/maingate/frame-20261104-123603-v10827.rddump shadow_volume_draws>=1 volume_fs_taken>=1 comp_spec_seen>=1 comp_spec_taken>=1 shadow_tile_composites>=1 shadow_merge_counts>=1 stencil_window_stores>=1 present_scene_skipped=0
+fx-phone-4657 dumps/phone/frame-20261028-173610-v4657.zip shadow_volume_draws>=1 shadow_tile_composites>=1 shadow_merge_counts>=1 stencil_window_stores>=1 present_scene_skipped>=1
+fx-tile-2809 build-host-tmp/v0115/evidence/rc3/x/frame-20261111-121314-v2809/frame-20261111-121314-v2809.rddump shadow_volume_draws>=1 shadow_tile_composites>=1 shadow_merge_counts>=1 present_scene_skipped>=1
+# the lamps' frames with the placement rules (docs/port/TESTING_FIXTURES.md
+# "The placement rules"): the title's castle with its lamps (512x512 GS, dump
+# version 4: four lamp meshes generated on WORK2), the same castle with the
+# sun off the picture (its two fans generated beside WORK2: the glow's dark
+# plan), the Pixel's opening lamps frame (848x448 GS, six lamp meshes on
+# WORK2).  At the default cull.  lamps_area_passes on the second replay with
+# ICO_RD_LAMPS=1 where the class takes the area (the phone's and the desktop's
+# settings, not the Mali's or OpenGL); lamps_bands_lazy and lamps_owed with the
+# lamps' parts on at every setting; lamps_fillpaste_fills as above, the cull on.
+fx-lamps-title build-host-tmp/corpus/dumps/boot/rd-00400.rddump rules=lamps_place.rules.txt glow_plan=lamps lamps_area_passes>=1 lamps_bands_lazy>=1 lamps_owed=0 lamps_fillpaste_fills>=1
+fx-lamps-title-dark build-host-tmp/corpus/dumps/boot/rd-00600.rddump rules=fans_off.rules.txt glow_plan=dark lamps_area_passes=0 lamps_bands_lazy=0 lamps_owed>=1
+fx-lamps-opening dumps/v0115-opening/frame-20261112-110824-v746.zip rules=lamps_place.rules.txt glow_plan=lamps lamps_area_passes>=1 lamps_bands_lazy>=1 lamps_owed=0 lamps_fillpaste_fills>=1

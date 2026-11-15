@@ -175,6 +175,12 @@ static struct {
     uint32_t whyEvents;    /* the refusals so far (logged: 8, then every 100th) */
     uint32_t fineSince;    /* the shadows at the scene's scale since the last refusal */
     uint32_t saidW, saidH; /* the size line's last SHADOW0 */
+    /* the tests' readback (rd__shadow_fine_probe): each step as it was drawn
+     * (the reference's inputs), its source's texels, the count's target */
+    RdSrStep step[RD_SR_LEVELS];
+    uint32_t stepSw[RD_SR_LEVELS], stepSh[RD_SR_LEVELS];
+    uint32_t stepCount;
+    bool stepDone; /* the three steps and their tents drawn (the latest chain) */
 } s_sr;
 
 /* a shadow above 1x drawn at the PS2's size: counted by reason, a line the
@@ -823,6 +829,26 @@ void rd__shadow_fine_screen(const RdStateBlock *st, const RdCmd *c, const RdScre
     for (int ch = 0; ch < 4; ch++) {
         cb.col[ch] = v[1].rgba[ch];
     }
+    s_sr.step[k] = (RdSrStep){.first = k == 0,
+                              .kx = cb.param[0],
+                              .ky = cb.param[1],
+                              .ax = cb.scale[0],
+                              .ay = cb.scale[1],
+                              .sx = ssx,
+                              .sy = ssy,
+                              .fx = wfx,
+                              .fy = wfy,
+                              .repS = repS,
+                              .repT = repT};
+    for (int ch = 0; ch < 4; ch++) {
+        s_sr.step[k].col[ch] = v[1].rgba[ch];
+    }
+    s_sr.stepSw[k] = sw;
+    s_sr.stepSh[k] = sh;
+    if (k == 0) {
+        s_sr.stepCount = t->target;
+        s_sr.stepDone = false;
+    }
     if (mask.id) {
         cb.mode[2] = 1u;
         cb.scale[2] = ox;
@@ -852,6 +878,7 @@ void rd__shadow_fine_screen(const RdStateBlock *st, const RdCmd *c, const RdScre
         }
     }
     s_sr.ready = true;
+    s_sr.stepDone = true;
     s_sr.readyChain = s_sr.chain;
     s_sr.readyReplay = g_rd.replayCounter;
     g_rdPerf.shadowFineChains++;
@@ -890,4 +917,58 @@ bool rd__shadow_fine_tex(uint32_t texId)
 bool rd__shadow_fine_level(uint32_t target)
 {
     return levelOf(target) >= 0 && rd__shadow_fine(target, 0).id != 0;
+}
+
+/* The tests' readback (rd_replay_tool --fine-check, after a replay): the
+ * chain's level k as it was drawn this replay. */
+bool rd__shadow_fine_probe(int k, RdSrProbe *out)
+{
+    if (k < 0 || k >= RD_SR_LEVELS || !s_sr.stepDone || !s_sr.cuts || s_sr.empty ||
+        !s_sr.lvl[k].id || !s_sr.tmp[k].id) {
+        return false; /* no chain this replay, or not the cuts' form (the step kept in lvl) */
+    }
+    out->step = s_sr.step[k];
+    out->sw = s_sr.stepSw[k];
+    out->sh = s_sr.stepSh[k];
+    out->w = s_sr.w[k];
+    out->h = s_sr.h[k];
+    out->lx = (int)(s_sr.sx[k] + 0.5f);
+    out->ly = (int)(s_sr.sy[k] + 0.5f);
+    out->count = s_sr.stepCount;
+    return true;
+}
+
+bool rd__shadow_fine_read(int k, bool final, void *dst, size_t size)
+{
+    if (k < 0 || k >= RD_SR_LEVELS || !s_sr.lvl[k].id || !s_sr.tmp[k].id) {
+        return false;
+    }
+    /* every level's two textures to COPY_SRC in one command list: a list a
+     * readback would pass the device's command lists a frame (8 on Vulkan)
+     * before the third level is read */
+    bool move = false;
+    for (int j = 0; j < RD_SR_LEVELS; j++) {
+        move = move || (s_sr.lvl[j].id && s_sr.lvlState[j] != RHI_STATE_COPY_SRC) ||
+               (s_sr.tmp[j].id && s_sr.tmpState[j] != RHI_STATE_COPY_SRC);
+    }
+    if (move) {
+        RhiCommandList cl = rhi_begin_commands();
+        if (!cl.id) {
+            return false;
+        }
+        for (int j = 0; j < RD_SR_LEVELS; j++) {
+            if (s_sr.lvl[j].id) {
+                rd__transition(cl, s_sr.lvl[j], &s_sr.lvlState[j], RHI_STATE_COPY_SRC);
+            }
+            if (s_sr.tmp[j].id) {
+                rd__transition(cl, s_sr.tmp[j], &s_sr.tmpState[j], RHI_STATE_COPY_SRC);
+            }
+        }
+        rhi_end_commands(cl);
+        rhi_submit(cl);
+    }
+    /* under the cuts the step's output stays in lvl and the tent's is tmp */
+    return rd__read_rhi_texture(final ? s_sr.tmp[k] : s_sr.lvl[k],
+                                final ? &s_sr.tmpState[k] : &s_sr.lvlState[k], s_sr.w[k], s_sr.h[k],
+                                dst, size);
 }

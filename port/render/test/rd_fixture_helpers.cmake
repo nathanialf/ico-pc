@@ -52,6 +52,8 @@ set(_rdfx_q_empty_composites_skipped "empty composites on: ([0-9]+) skipped")
 set(_rdfx_q_no_volume_kept "no volume on: ([0-9]+) kept")
 set(_rdfx_q_no_volume_break_taken "break on: ([0-9]+) taken")
 set(_rdfx_q_stencil_window_stores "stencil inside the shadow window only: ([0-9]+) stores")
+# DATE's passes without the depth
+set(_rdfx_q_date_cut_passes "DATE cut on: ([0-9]+) passes begun without the depth")
 # the volumes' and composites' own entries, the shadow tiles, the volumes in the scene's pass
 set(_rdfx_q_volume_fs_taken "volume fs on \\(self-test [^)]*\\): ([0-9]+) volume draws by date_clear_ps")
 set(_rdfx_q_comp_spec_seen "composites and levels by sprite_comp_ps of ([0-9]+)")
@@ -63,6 +65,13 @@ set(_rdfx_q_paste_spec_seen "pastes by fx_paste_ps of ([0-9]+)")
 set(_rdfx_q_paste_spec_taken "paste spec on \\(self-test [^)]*\\): ([0-9]+) pastes by fx_paste_ps")
 set(_rdfx_q_lamps_own_depth_draws "lamps lowres on: WORK2 [0-9]+x[0-9]+ under SCENE [0-9]+x[0-9]+, ([0-9]+) draws into WORK2 on its own depth")
 set(_rdfx_q_glow_fold_folded "glow: WORK2 fold on: ([0-9]+) folded")
+# the lamps' crack fill in the glow's paste pass, the present from SCENE
+set(_rdfx_q_lamps_fillpaste_fills "lamps fillpaste on: ([0-9]+) crack fills drawn in the paste's pass")
+set(_rdfx_q_present_scene_skipped "present from SCENE on: ([0-9]+) reductions not drawn")
+# the lamps' pass area, WORK2_PAD's band left lazy, WORK0's alpha sprite owed
+set(_rdfx_q_lamps_area_passes "\\): ([0-9]+) passes with the lamps' area")
+set(_rdfx_q_lamps_bands_lazy "([0-9]+) bands left lazy")
+set(_rdfx_q_lamps_owed "([0-9]+) WORK0 alpha sprites owed")
 
 set(RDFX_FAILURES 0)
 

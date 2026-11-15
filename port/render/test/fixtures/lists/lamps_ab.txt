@@ -1,0 +1,21 @@
+# Fixtures for rd_lamps_ab and rd_lamps_gl (port/render/test/rd_lamps_ab.cmake:
+# the lamps' pass area on WORK2, WORK2_PAD's band left lazy, WORK0's alpha
+# sprite owed and the passes of two blur pairs against all off, byte for
+# byte): fixture names of this repository (port/render/test/fixtures/
+# NAME.rdfix), a name a line, replayed with the visibility test at its
+# default.  The words seq=whole, seq=lamps and seq=dark name the three frames
+# of one scene and size the two sequences are made of.  What each fixture
+# shows (the glow's plan, the area, the band, the owed sprite) is its declared
+# glow_plan, lamps_area_passes, lamps_bands_lazy and lamps_owed
+# (port/render/test/fixtures/fixtures.txt).
+#
+# LAMPS: the lamps' meshes generated on WORK2 (the placement rules): the
+# title's castle (512x512 GS), the Pixel's opening (848x448 GS)
+fx-lamps-title seq=lamps
+fx-lamps-opening
+# DARK: the title with the sun off the picture, the opening's dark room
+fx-lamps-title-dark seq=dark
+fx-opening-dark
+# WHOLE: the sun's fans on the picture: the title, the opening's sun
+fx-boot-0200 seq=whole
+fx-opening-sun

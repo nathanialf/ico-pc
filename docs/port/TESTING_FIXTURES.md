@@ -153,6 +153,38 @@ nothing of a model's shape or extent is used:
 Every float is written from its bits (an integer times a power of two, exact), so no compiler or
 CPU changes a byte.
 
+### The placement rules (opt-in)
+
+A room's lamps are pieces of the room's model, whose origin is off the picture, so a lamp generated
+about that origin is dropped by the visibility test and never lights the glow; and a generated sun
+fan is always on the picture, so a frame whose sun was off it never has the glow's dark plan. A
+test of the glow's light chooses otherwise with two lines in its fixture's rule file. A rule file
+without them makes the fixture it always made, and every fixture made before they existed is the
+same bytes.
+
+- `@lamps place`: every mesh that a non-skinned draw puts into WORK2 (the glow's lamps) is
+  generated about a point that lands on WORK2. The rule reads only that draw: its placement matrix
+  M (VU memory 16..19), the scissor and the target's GS size in the state at the draw, and the
+  mesh's number n (0, 1, ...) among the meshes so drawn. The place is the scissor's box cut in four
+  each way, the meshes on its three inner columns and rows in turn: X = 2048 - gsW / 2 + x0 +
+  (x1 - x0 + 1) (1 + n mod 3) / 4, Y the same down with (n / 3) mod 3. The centre is the
+  model-space point M sends to (X, Y) at the w of the model's origin (the object keeps its
+  distance from the eye and moves across the picture; |w| for an origin behind the eye; for a
+  matrix without perspective the point of that line nearest the origin). The cube's size is found
+  about the centre as it is about an origin, and the centre is rounded to the cube's lattice step
+  (at most half a step, a sixteenth of the half side), so every vertex is still an exact float. No
+  vertex and no bound of the model is read. A mesh the rule cannot place (w 0, a singular matrix, a
+  centre behind the eye or past 2^23 steps) keeps its origin and is counted in the maker's line.
+- `@fans off`: every CPU-projected prim (not a rectangle, not text) drawn into WORK2 (the sun's
+  fans) is generated as the same ribbon 64 GS pixels wide, 8 pixels past the target's right edge:
+  the fans of a sun that is off the picture.
+
+A rule that matches no draw fails the make. The fixture keeps the result at the end of its
+skeleton (the placed meshes' ids and centres in lattice steps, the moved prims' payload offsets):
+`rd_fixture_tool info` says `N meshes placed on WORK2, N prims beside it`, the maker's line
+`placement: N meshes drawn into WORK2 generated on it (K kept their origin), N prims drawn into
+WORK2 generated beside it`.
+
 ## The format
 
 `port/render/rd_fixture.h` is the reference. In short: the head (`ICORDFX1`, the format, the
@@ -160,7 +192,8 @@ expanded dump's version, the expansion's SHA-256 and size), the notes (`key=valu
 `maker=`, `rule=`, `selfcheck=`, `expect=`), and the deflated skeleton: the dump's own layout with
 every texture's texels replaced by its pattern name, every mesh's name and stream by the generator's
 name, its size exponent and bone count, the facing tables by their sizes, and at the end the size
-exponent of each grid and particle draw. A fixture is made from a dump of any version the loader
+exponent of each grid and particle draw (then, only in a fixture made with a placement rule, the
+placement section). A fixture is made from a dump of any version the loader
 reads (3 on: the 80- and 84-byte state blocks of versions 3 and 4 to 8, no GS levels field before
 9) and expands to that version's layout.
 
@@ -193,6 +226,7 @@ add a row when a family needs one):
 | `date_one_shared`, `empty_composites_skipped` | `DATE one set-up on: N shared`, `empty composites on: N skipped` |
 | `no_volume_kept`, `no_volume_break_taken` | `no volume on: N kept`, `break on: N taken` |
 | `stencil_window_stores` | `stencil inside the shadow window only: N stores` |
+| `date_cut_passes` | `DATE cut on: N passes begun without the depth` |
 | `volume_fs_taken` | `volume fs on (...): N volume draws by date_clear_ps` (the on word alone) |
 | `comp_spec_seen`, `comp_spec_taken` | `M composites and levels by sprite_comp_ps of N` (N seen), `comp spec on (...): M composites and levels` (M taken, the on word alone) |
 | `shadow_tile_composites` | `shadow tiles on: N composites over the tile mask` |
@@ -200,6 +234,11 @@ add a row when a family needs one):
 | `paste_spec_seen`, `paste_spec_taken` | `M pastes by fx_paste_ps of N` (N seen), `paste spec on (...): M pastes by fx_paste_ps` (M taken, the on word alone) |
 | `lamps_own_depth_draws` | `lamps lowres on: WORK2 ... under SCENE ..., N draws into WORK2 on its own depth` (the on word alone) |
 | `glow_fold_folded` | `glow: WORK2 fold on: N folded` (the on word alone) |
+| `lamps_fillpaste_fills` | `lamps fillpaste on: N crack fills drawn in the paste's pass` |
+| `present_scene_skipped` | `present from SCENE on: N reductions not drawn` |
+| `lamps_area_passes` | `lamps ... (self-test ...): N passes with the lamps' area` |
+| `lamps_bands_lazy` | `N bands left lazy` |
+| `lamps_owed` | `N WORK0 alpha sprites owed` |
 
 The fixtures' declared properties are their manifest line's; `rd_fixtures_check` holds the two
 equal.
@@ -308,6 +347,10 @@ expansion does not change); its manifest line must say the same.
 | `rd_shadow_box_ab`, `rd_shadow_box_ab_gl` | `lists/shadow_box.txt` | `fx-shadow-wide` (a character's shadow at 21:9: `shadow_volume_draws>=1`, `shadow_box_counts>=1`, `shadow_box_composites>=1`), `fx-lamps-novolume` (a shadow window with no volume: `shadow_volume_draws=0`) | `shadow_volume_draws`, `shadow_box_counts`, `shadow_box_composites` on the box-on replay at the phone setting (OpenGL: its one setting); every target byte for byte; equal draws and passes with volumes, with none (an empty box) fewer or equal, fewer where the count was boxed |
 | `rd_date_one_ab`, `rd_empty_skip_ab`, `rd_no_volume_break_ab` and their `_gl` twins | `lists/shadow_cuts.txt` | `fx-shadow-wide`, `fx-opening-dark`, `fx-opening-sun`, `fx-mali-frame`, `fx-mali-slow541` (shadow windows with volumes: `shadow_volume_draws>=1`, `date_snapshots>=1`, `date_stencil_draws>=1`, `date_one_shared>=1`, `empty_composites_skipped=0`, `no_volume_break_taken=0`), `fx-lamps-novolume` (no volume: `shadow_volume_draws=0`, `date_one_shared>=1`, `empty_composites_skipped>=1`, `no_volume_break_taken>=1`) | on the on run the item's quantity (`date_one_shared`, `empty_composites_skipped`, or `no_volume_break_taken` where DATE takes the stencil bit) with `shadow_volume_draws`; on the off run `date_snapshots` or `date_stencil_draws` by the setting's DATE path where declared; every target byte for byte and the counts the code leaves out |
 | `rd_no_volume_ab`, `rd_no_volume_ab_gl` | `lists/no_volume.txt` | `fx-boot-0400`, `fx-boot-0600`, `fx-lamps-novolume` (`shadow_volume_draws=0`, `no_volume_kept>=1`), `fx-boot-0200`, `fx-shadow-wide` (`shadow_volume_draws>=1`, `no_volume_kept=0`) | `no_volume_kept` and `shadow_volume_draws` on the `=1` run where DATE takes the stencil bit, `shadow_volume_draws` elsewhere; the declared `no_volume_kept` is the windows the test expects taken |
+| `rd_date_cut_ab`, `rd_date_cut_ab_gl` | `lists/date_cut.txt` (a fixture, the passes the cut takes on it, `narrow` for a frame drawn narrower than 21:9) | `fx-datecut-6100`, `fx-datecut-slow137`, `fx-mali-17008` (the Mali-G52's frames, the shadow's three composites under DATE: `date_snapshots>=1`, `date_cut_passes>=1`), `fx-mali-frame`, `fx-shadow-wide` (`date_snapshots>=1`; narrow, so not at the Mali's setting nor on OpenGL) | `date_snapshots` on the on run of every pair and `date_cut_passes` where the cut acts (not at the phone's fractional scale); the list's passes (2: the second and third composite) pinned on every fixture; every target byte for byte |
+| `rd_date_subpass_ab` | `lists/date_subpass.txt` | `fx-mali-17008`, `fx-mali-frame`, `fx-shadow-wide` (`date_stencil_draws>=1`, `date_snapshots>=1`) | `date_stencil_draws` on the stencil run (DATE through the bit by the subpass read), `date_snapshots` on the snapshot run; every target byte for byte |
+| `rd_subpass_ab` | `lists/subpass.txt` (a fixture, its profiles, `nodate` for a window with no volume) | `fx-mali-slow541`, `fx-mali-frame` (both profiles), `fx-opening-dark`, `fx-opening-sun` (the Pixel's) (`date_stencil_draws>=1`, `date_snapshots>=1`), `fx-lamps-novolume` (`nodate`: `shadow_volume_draws=0`) | `date_stencil_draws` on the on run and `date_snapshots` on the off run; the `nodate` fixture draws no DATE either way and its `shadow_volume_draws` is checked; each profile has a fixture drawing DATE through the read; every target byte for byte |
+| `rd_shadow_fine_ab`, `rd_shadow_fine_ab_gl` | `lists/shadow_fine.txt` (a fixture, its composites' `--nop` spec, its settings), `lists/shadow_fine_goldens.txt` (the release before's pictures of the fixtures: a fixture, a setting, a PNG, its SHA-256) | `fx-adreno`, `fx-adreno-prev`, `fx-adreno-blended`, `fx-gate`, `fx-gate-prev`, `fx-gate-blended`, `fx-gate2`, `fx-gate2-prev`, `fx-gate2-blended` (the main gate above 1x, one shadow window with volumes: `shadow_levels>=1`, `shadow_level_texels>=1`) | `shadow_levels` and `shadow_level_texels` on the default run of every pair above 1x and on the forced run at 1x; every golden of the list matched by the `ICO_RD_SHADOW_FINE=0` run; the pairs' own checks |
 | `rd_stencil_ab` | `lists/stencil.txt` | `fx-shadow-wide`, `fx-opening-dark`, `fx-opening-sun`, `fx-mali-frame`, `fx-maingate`, `fx-phone-4657` (`shadow_volume_draws>=1`, `stencil_window_stores>=1`) | `shadow_volume_draws` and `stencil_window_stores` on the `=0` run at both settings |
 | `rd_volume_fs_ab`, `rd_volume_fs_sabotage` | `lists/volume_fs.txt` | `fx-shadow-wide`, `fx-opening-sun`, `fx-mali-frame`, `fx-maingate` (`shadow_volume_draws>=1`; `fx-maingate` also `volume_fs_taken>=1`), `fx-lamps-novolume` (`shadow_volume_draws=0`) | `shadow_volume_draws` and `volume_fs_taken` on the `=1` run at the phone, desktop and Mali settings (every volume draw the run shows is by the entry there); the sabotage twin `shadow_volume_draws` |
 | `rd_comp_spec_ab`, `rd_comp_spec_sabotage` | `lists/comp_spec.txt` | the same five (`fx-maingate` also `comp_spec_seen>=1`, `comp_spec_taken>=1`) | `shadow_volume_draws`, `comp_spec_seen` and `comp_spec_taken` on the `=1` run at the phone setting (a fixture whose run shows volume draws has a draw by the entry there); the sabotage twin without `comp_spec_taken` |
@@ -318,3 +361,6 @@ expansion does not change); its manifest line must say the same.
 | `rd_paste_spec_ab`, `rd_paste_spec_gl`, `rd_paste_spec_sabotage` | `lists/paste_spec.txt` | `fx-opening-sun`, `fx-gate-102`, `fx-boot-0200`, `fx-lamps-novolume` and `fx-163-blended` (the cull off) (`paste_spec_seen>=1`, `paste_spec_taken>=1`), the PowerVR phone's blended frame of 2026-11-04 (`paste_spec_seen>=1`), `fx-opening-dark`, `fx-wide-189` (`paste_spec_seen=0`) | `paste_spec_seen` and `paste_spec_taken` on arm 1 at the phone's setting (the OpenGL and sabotage twins `paste_spec_seen`); every target byte for byte |
 | `rd_lamps_lowres_ab` | `lists/lamps_lowres.txt` | `fx-opening-sun`, `fx-boot-0200` (the fans at the GS size), `fx-163-blended` (the cull off, a lamps frame) (`lamps_own_depth_draws>=1`) | `lamps_own_depth_draws` on the lowres arm at every measured setting; VD-32's bounds; not in a merge check (thirty settings a fixture) |
 | `rd_glow_cheap_ab` | `lists/glow_cheap.txt` | `fx-gate-102`, `fx-issue91-1279`, `fx-issue91-1358` (the fans), `fx-163-blended`, `fx-wide-189` (no fans) (`glow_passes>=1`, `glow_fold_folded>=1`) | `glow_passes` on the run at the defaults and `glow_fold_folded` on the fold's run at every setting; every target byte for byte against the run with the clear carry off, two glow passes fewer than the count run at the phone's setting (three without the fans) |
+| `rd_lamps_fillpaste_ab` | `lists/lamps.txt` (the word `nocull` after a name: `ICO_RD_CULL=off` in every arm, the generated lamps kept in the glow's chain) | `fx-lamps-novolume`, `fx-opening-dark`, `fx-boot-0400` (each `nocull`, `lamps_fillpaste_fills>=1`), `fx-lamps-title`, `fx-lamps-opening` (the cull on, `lamps_fillpaste_fills>=1`), `fx-opening-sun`, `fx-boot-0200`, `fx-boot-0600` (`lamps_fillpaste_fills=0`: the chain drawn whole) | `lamps_fillpaste_fills` on the `+fillpaste` run at the phone setting |
+| `rd_present_scene_ab` | `lists/present_scene.txt` | `fx-shadow-wide`, `fx-phone-4657`, `fx-tile-2809` (`present_scene_skipped>=1`), `fx-maingate` (`present_scene_skipped=0`: kept for the open border's repeated columns) | `present_scene_skipped` on the `=1` run at the phone setting |
+| `rd_lamps_ab`, `rd_lamps_gl` | `lists/lamps_ab.txt` (the words `seq=whole`, `seq=lamps`, `seq=dark`: the sequences' frames) | `fx-lamps-title`, `fx-lamps-opening` (the placement rules; `glow_plan=lamps`, `lamps_area_passes>=1`, `lamps_bands_lazy>=1`, `lamps_owed=0`), `fx-lamps-title-dark`, `fx-opening-dark` (`glow_plan=dark`, `lamps_owed>=1`, the others 0), `fx-boot-0200`, `fx-opening-sun` (`glow_plan=whole`, `lamps_bands_lazy>=1`, the others 0) | `glow_plan`, `lamps_bands_lazy`, `lamps_owed` on the run with the parts on at every setting; `lamps_area_passes` at the phone, poison and desktop settings and in both sequences |

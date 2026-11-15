@@ -2,8 +2,10 @@
 # path's subpass read (port/rhi/vk/vk_renderpass.c; RhiLimits.localReadSubpass)
 # against the R8 snapshot, byte for byte (issue 179: the Mali-G52's Vulkan 1.1
 # driver has no dynamic rendering, so before v0.11.3 every DATE draw ended the
-# scene's pass for its snapshot).  For every dump the list names (read as
-# rd_store_plan_ab.cmake reads its lists), rd_replay_tool's --pass-dump with
+# scene's pass for its snapshot).  For every fixture the list names
+# (port/render/test/fixtures/lists/date_subpass.txt: names; the frames are
+# expanded into OUT/fixtures, docs/port/TESTING_FIXTURES.md; a listed fixture
+# that is absent FAILS), rd_replay_tool's --pass-dump with
 # --stats twice under ICO_VK_FAKE_API=1.1 (VkRenderPass objects, the fence ring)
 # and ICO_VK_FAKE_LIMITS=moltenvk (a tile-based profile: DATE's stencil path is
 # the profile's own): ICO_RD_DATE_PATH=stencil and =snapshot, the fog in place
@@ -14,46 +16,21 @@
 # the snapshot run's; the stencil run says "the subpass read" (the device
 # line), the snapshot run "the subpass read off"; the stencil run draws no DATE snapshot
 # where the snapshot run drew some, with fewer passes by at least that many
-# (each snapshot ends the scene's pass and begins it again); over the list at
-# least one dump draws DATE through the bit.  No validation error in either
-# run.  Each dump's counts are printed.  A missing list or dump is named and
-# skipped; no dump read, or no device: SKIP (77).
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
-set(dumps "")
-if(NOT LIST STREQUAL "" AND EXISTS "${LIST}")
-  get_filename_component(listDir "${LIST}" DIRECTORY)
-  file(STRINGS "${LIST}" lines)
-  foreach(l IN LISTS lines)
-    string(STRIP "${l}" l)
-    if(l STREQUAL "" OR l MATCHES "^#")
-      continue()
-    endif()
-    if(NOT IS_ABSOLUTE "${l}")
-      set(l "${listDir}/${l}")
-    endif()
-    if(l MATCHES "[*]")
-      file(GLOB matched "${l}")
-      list(SORT matched)
-      if(matched)
-        list(APPEND dumps ${matched})
-      else()
-        message(STATUS "${l}: no dump matches, skipped")
-      endif()
-    elseif(EXISTS "${l}")
-      list(APPEND dumps "${l}")
-    else()
-      message(STATUS "${l}: no such dump, skipped")
-    endif()
-  endforeach()
-else()
-  message(STATUS "${LIST}: no dump list")
-endif()
-list(REMOVE_DUPLICATES dumps)
-list(LENGTH dumps ndumps)
-if(ndumps EQUAL 0)
-  message(STATUS "SKIP: no dump of ${LIST} is here")
-  return()
-endif()
+# (each snapshot ends the scene's pass and begins it again).  No validation
+# error in either run.  Each fixture's counts are printed.
+# The path ran (rd_fixture_require, every fixture): the fixture's declared
+# date_stencil_draws on the stencil run (DATE drawn through the bit by the
+# subpass read) and date_snapshots on the snapshot run; a fixture that declares
+# neither, or whose data draws no DATE, fails.  No device: SKIP (77).
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the
+# fixtures' folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<the
+# fixture list> -DOUT=<a folder the test may write>
+include("${FIXTURE_HELPERS}")
+rd_fixture_list("${LIST}" names)
+list(LENGTH names ndumps)
+foreach(name IN LISTS names)
+  rd_fixture_expand(${name} "${OUT}/fixtures" dump_${name})
+endforeach()
 
 set(runs "stencil" "snapshot")
 set(dateRe "stats: DATE snapshots ([0-9]+), DATE stencil draws ([0-9]+) \\(([0-9]+) setups\\)")
@@ -63,7 +40,8 @@ set(failures 0)
 set(viaBit 0)
 set(saved 0)
 set(index 0)
-foreach(dump IN LISTS dumps)
+foreach(name IN LISTS names)
+  set(dump "${dump_${name}}")
   math(EXPR index "${index} + 1")
   set(ok TRUE)
   foreach(run IN LISTS runs)
@@ -118,6 +96,7 @@ foreach(dump IN LISTS dumps)
       break()
     endif()
     set(passes_${run} "${CMAKE_MATCH_1}")
+    set(out_${run} "${out}")
   endforeach()
   if(NOT ok)
     math(EXPR failures "${failures} + 1")
@@ -126,6 +105,8 @@ foreach(dump IN LISTS dumps)
   message(STATUS "${dump}: stencil ${passes_stencil} passes, ${snaps_stencil} DATE snapshots, "
                  "${bits_stencil} stencil draws; snapshot ${passes_snapshot} passes, "
                  "${snaps_snapshot} DATE snapshots")
+  rd_fixture_require(${name} "${out_stencil}" date_stencil_draws)
+  rd_fixture_require(${name} "${out_snapshot}" date_snapshots)
   if(NOT bits_snapshot EQUAL 0)
     message(SEND_ERROR "${dump}: the snapshot run drew ${bits_snapshot} DATE draws by the bit")
     math(EXPR failures "${failures} + 1")
@@ -162,13 +143,15 @@ foreach(dump IN LISTS dumps)
     endif()
   endforeach()
 endforeach()
-if(compared EQUAL 0 AND failures EQUAL 0)
-  message(STATUS "SKIP: no dump of ${LIST} could be compared")
-  return()
-endif()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(viaBit EQUAL 0)
-  message(SEND_ERROR "no dump drew DATE (no snapshot in any snapshot run): nothing was compared "
-                     "through the bit")
+  message(SEND_ERROR "no fixture drew DATE (no snapshot in any snapshot run): nothing was "
+                     "compared through the bit")
+  math(EXPR failures "${failures} + 1")
 endif()
-message(STATUS "rd_date_subpass_ab: ${compared} targets byte for byte; ${viaBit} dumps drew DATE "
-               "through the subpass read, ${saved} passes fewer in all")
+if(failures GREATER 0 OR compared EQUAL 0)
+  message(FATAL_ERROR "rd_date_subpass_ab: ${failures} failures, ${compared} targets compared "
+                      "over ${ndumps} fixtures")
+endif()
+message(STATUS "rd_date_subpass_ab: ${compared} targets byte for byte over ${ndumps} fixtures; "
+               "${viaBit} drew DATE through the subpass read, ${saved} passes fewer in all")
