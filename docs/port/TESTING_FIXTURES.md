@@ -231,6 +231,9 @@ add a row when a family needs one):
 | `comp_spec_seen`, `comp_spec_taken` | `M composites and levels by sprite_comp_ps of N` (N seen), `comp spec on (...): M composites and levels` (M taken, the on word alone) |
 | `shadow_tile_composites` | `shadow tiles on: N composites over the tile mask` |
 | `shadow_merge_counts` | `shadow volumes in the scene's pass on: N of M counts` |
+| `paste_spec_seen`, `paste_spec_taken` | `M pastes by fx_paste_ps of N` (N seen), `paste spec on (...): M pastes by fx_paste_ps` (M taken, the on word alone) |
+| `lamps_own_depth_draws` | `lamps lowres on: WORK2 ... under SCENE ..., N draws into WORK2 on its own depth` (the on word alone) |
+| `glow_fold_folded` | `glow: WORK2 fold on: N folded` (the on word alone) |
 | `lamps_fillpaste_fills` | `lamps fillpaste on: N crack fills drawn in the paste's pass` |
 | `present_scene_skipped` | `present from SCENE on: N reductions not drawn` |
 | `lamps_area_passes` | `lamps ... (self-test ...): N passes with the lamps' area` |
@@ -244,6 +247,22 @@ add a row when a family needs one):
 
 The fixtures' declared properties are their manifest line's; `rd_fixtures_check` holds the two
 equal.
+
+### A list's own properties
+
+A property belongs on the fixture when it holds wherever the fixture is replayed. What one test's
+settings make of a fixture another family owns is declared on that test's list line instead, as the
+same `QUANTITY OP VALUE` words after the name: `rd_fixture_list_props(NAME)`
+(`port/render/test/rd_fixture_list_props.cmake`) joins them to the fixture's own before
+`rd_fixture_require`, a line's word replacing the fixture's for the same quantity. So a later
+family never rewrites a fixture file an earlier one pinned. A line may also carry the test's own
+switch for that fixture, read with `rd_fixture_list_word`: the glow's lists use `nocull`, which
+replays the fixture with `ICO_RD_CULL=off` in every run. The generated meshes sit about their
+models' origins, so the visibility test drops the lamps' meshes the game's frame kept, and a frame
+whose lamps are dropped takes the glow's dark plan; with the test off the lamps are drawn into
+WORK2 and the frame takes the lamps plan (mask not drawn, the chain drawn). Their cubes do not
+reach WORK2's picture, so a fixture's lamps carry no light of their own: the light in the glow's
+fixtures is the sun's fans', a white ribbon over the middle of the frame.
 
 ## Using fixtures in a test
 
@@ -342,6 +361,11 @@ expansion does not change); its manifest line must say the same.
 | `rd_comp_spec_ab`, `rd_comp_spec_sabotage` | `lists/comp_spec.txt` | the same five (`fx-maingate` also `comp_spec_seen>=1`, `comp_spec_taken>=1`) | `shadow_volume_draws`, `comp_spec_seen` and `comp_spec_taken` on the `=1` run at the phone setting (a fixture whose run shows volume draws has a draw by the entry there); the sabotage twin without `comp_spec_taken` |
 | `rd_shadow_tile_ab` | `lists/shadow_tile.txt` (the composites over the mask and the live-texel bounds a fixture) | `fx-shadow-wide`, `fx-tile-2809`, `fx-maingate`, `fx-phone-4657` (`shadow_volume_draws>=1`; the last three `shadow_tile_composites>=1`) | `shadow_volume_draws` and `shadow_tile_composites` on the `=1` run at the phone setting; the list's count (3) and bounds |
 | `rd_shadow_merge_ab` | `lists/shadow_merge.txt` | `fx-phone-4657`, `fx-maingate`, `fx-tile-2809` (`shadow_volume_draws>=1`, `shadow_merge_counts>=1`) | `shadow_volume_draws` and `shadow_merge_counts` on the `=1` run at both settings |
+| `rd_glow_light_ab` | `lists/glow_light.txt` | `fx-opening-sun`, `fx-gate-102` (the sun's fans: `glow_plan=whole`), `fx-opening-dark`, the PowerVR phone's blended frame of 2026-11-04, `fx-wide-189`, `fx-boot-0400` (`glow_plan=dark`), `fx-lamps-novolume`, `fx-163-blended` (the cull off, the list's `nocull`: `glow_plan=lamps`) | `glow_plan` on the plan's run at every setting; a dark, a lamps and a whole run at each of the five pinned settings; RGB the same against the chain drawn whole |
+| `rd_glow_blur_ab`, `rd_glow_blur_gl` | `lists/glow_blur.txt` | `fx-gate-102`, `fx-boot-0200` (the fans' chain; not `fx-opening-sun`, whose generated fans saturate five times the texels its source does, past bounds measured on the game's frames), `fx-163-blended`, `fx-boot-0400` (the cull off: the lamps' chain) (`glow_chains>=1`), `fx-opening-dark`, `fx-lamps-novolume`, the PowerVR phone's blended frame of 2026-11-04, `fx-wide-189` (`glow_chains=0`) | `glow_chains` on the glowblur arm at every measured setting the fixture runs at; VD-33's bounds, the passes, the shimmer |
+| `rd_paste_spec_ab`, `rd_paste_spec_gl`, `rd_paste_spec_sabotage` | `lists/paste_spec.txt` | `fx-opening-sun`, `fx-gate-102`, `fx-boot-0200`, `fx-lamps-novolume` and `fx-163-blended` (the cull off) (`paste_spec_seen>=1`, `paste_spec_taken>=1`), the PowerVR phone's blended frame of 2026-11-04 (`paste_spec_seen>=1`), `fx-opening-dark`, `fx-wide-189` (`paste_spec_seen=0`) | `paste_spec_seen` and `paste_spec_taken` on arm 1 at the phone's setting (the OpenGL and sabotage twins `paste_spec_seen`); every target byte for byte |
+| `rd_lamps_lowres_ab` | `lists/lamps_lowres.txt` | `fx-opening-sun`, `fx-boot-0200` (the fans at the GS size), `fx-163-blended` (the cull off, a lamps frame) (`lamps_own_depth_draws>=1`) | `lamps_own_depth_draws` on the lowres arm at every measured setting; VD-32's bounds; not in a merge check (thirty settings a fixture) |
+| `rd_glow_cheap_ab` | `lists/glow_cheap.txt` | `fx-gate-102`, `fx-issue91-1279`, `fx-issue91-1358` (the fans), `fx-163-blended`, `fx-wide-189` (no fans) (`glow_passes>=1`, `glow_fold_folded>=1`) | `glow_passes` on the run at the defaults and `glow_fold_folded` on the fold's run at every setting; every target byte for byte against the run with the clear carry off, two glow passes fewer than the count run at the phone's setting (three without the fans) |
 | `rd_lamps_fillpaste_ab` | `lists/lamps.txt` (the word `nocull` after a name: `ICO_RD_CULL=off` in every arm, the generated lamps kept in the glow's chain) | `fx-lamps-novolume`, `fx-opening-dark`, `fx-boot-0400` (each `nocull`, `lamps_fillpaste_fills>=1`), `fx-lamps-title`, `fx-lamps-opening` (the cull on, `lamps_fillpaste_fills>=1`), `fx-opening-sun`, `fx-boot-0200`, `fx-boot-0600` (`lamps_fillpaste_fills=0`: the chain drawn whole) | `lamps_fillpaste_fills` on the `+fillpaste` run at the phone setting |
 | `rd_present_scene_ab` | `lists/present_scene.txt` | `fx-shadow-wide`, `fx-phone-4657`, `fx-tile-2809` (`present_scene_skipped>=1`), `fx-maingate` (`present_scene_skipped=0`: kept for the open border's repeated columns) | `present_scene_skipped` on the `=1` run at the phone setting |
 | `rd_lamps_ab`, `rd_lamps_gl` | `lists/lamps_ab.txt` (the words `seq=whole`, `seq=lamps`, `seq=dark`: the sequences' frames) | `fx-lamps-title`, `fx-lamps-opening` (the placement rules; `glow_plan=lamps`, `lamps_area_passes>=1`, `lamps_bands_lazy>=1`, `lamps_owed=0`), `fx-lamps-title-dark`, `fx-opening-dark` (`glow_plan=dark`, `lamps_owed>=1`, the others 0), `fx-boot-0200`, `fx-opening-sun` (`glow_plan=whole`, `lamps_bands_lazy>=1`, the others 0) | `glow_plan`, `lamps_bands_lazy`, `lamps_owed` on the run with the parts on at every setting; `lamps_area_passes` at the phone, poison and desktop settings and in both sequences |

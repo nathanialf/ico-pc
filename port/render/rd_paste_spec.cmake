@@ -20,17 +20,19 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_paste_spec COMMAND rd_paste_spec_test)
 endif()
 
-# rd_paste_spec_ab (test/rd_paste_spec_ab.cmake): every dump of
-# tools/lamps_dumps.txt and tools/glow_light_dumps.txt (machine-local; a
-# listed dump that is absent fails where /primary/dev/ico-dumps exists) with
+# rd_paste_spec_ab (test/rd_paste_spec_ab.cmake): the fixtures of
+# test/fixtures/lists/paste_spec.txt (committed frames, rd_fixture.cmake,
+# docs/port/TESTING_FIXTURES.md; a listed fixture that is absent fails) with
 # the paste by fx_paste_ps (ICO_RD_PASTE_SPEC=1) against fx_frame_ps
 # (ICO_RD_PASTE_SPEC=0) at the PowerVR phone's setting (MoltenVK fakes, the
 # late pass on), a desktop Enhanced 2x at 16:9 and Original 4:3 at 1x: every
-# PNG byte for byte, the same draws and passes, the self-test passed, at least
-# one paste by it; rd_paste_spec_sabotage the phone's setting with the
-# self-test sabotaged (ICO_RD_PASTE_SPEC=sabotage): refused, the same bytes;
-# rd_paste_spec_gl the phone's setting on OpenGL (llvmpipe): off there (the
-# module is Vulkan's alone), the same bytes.  No device: SKIP.
+# PNG byte for byte, the same draws and passes, the self-test passed, the
+# pastes each fixture declares seen and drawn by it (the path ran);
+# rd_paste_spec_sabotage the phone's setting with the self-test sabotaged
+# (ICO_RD_PASTE_SPEC=sabotage): refused, the same bytes; rd_paste_spec_gl the
+# phone's setting on OpenGL (llvmpipe): off there (the module is Vulkan's
+# alone), the same bytes.  No device: SKIP.
+include(rd_fixture.cmake)
 if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
     foreach(_ps ab sabotage)
         file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/paste_spec_${_ps}")
@@ -40,8 +42,9 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
         endif()
         add_test(NAME rd_paste_spec_${_ps}
                  COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                         "-DLIST=${CMAKE_SOURCE_DIR}/tools/lamps_dumps.txt"
-                         "-DLIST2=${CMAKE_SOURCE_DIR}/tools/glow_light_dumps.txt"
+                         -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                         "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                         "-DLIST=${ICO_FIXTURE_DIR}/lists/paste_spec.txt"
                          "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/paste_spec_${_ps}" -DBACKEND=vulkan
                          ${_ps_sab} -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_paste_spec_ab.cmake")
         set_tests_properties(rd_paste_spec_${_ps} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
@@ -54,8 +57,9 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
         file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/gl/paste_spec_ab")
         add_test(NAME rd_paste_spec_gl
                  COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                         "-DLIST=${CMAKE_SOURCE_DIR}/tools/lamps_dumps.txt"
-                         "-DLIST2=${CMAKE_SOURCE_DIR}/tools/glow_light_dumps.txt"
+                         -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                         "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                         "-DLIST=${ICO_FIXTURE_DIR}/lists/paste_spec.txt"
                          "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/gl/paste_spec_ab" -DBACKEND=opengl
                          -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_paste_spec_ab.cmake")
         set_tests_properties(rd_paste_spec_gl PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"

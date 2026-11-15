@@ -1,9 +1,11 @@
 # rd_glow_blur_ab: the glow's blur pairs in two passes (port/render/rd_glow_blur.c,
 # ICO_RD_LAMPS=...+glowblur; identical to the eye, not byte-identical:
 # docs/port/DIVERGENCES.md VD-33) against today's chain, both arms with the
-# byte-identical items pad+owed+wholepad, on every dump of the lists (LIST
-# and LIST2: tools/glow_light_dumps.txt and tools/lamps_dumps.txt,
-# machine-local; a listed dump that is absent FAILS), rd_replay_tool
+# byte-identical items pad+owed+wholepad, on every fixture of the list
+# (port/render/test/fixtures/lists/glow_blur.txt: committed frames with no
+# art, docs/port/TESTING_FIXTURES.md; a line's word nocull replays that
+# fixture with ICO_RD_CULL=off in both arms: the generated lamps are in the
+# chain then, the LAMPS plan, with no light of their own), rd_replay_tool
 # --pass-dump --stats, ICO_RD_VU_PREPASS=0 ICO_RD_LATE_PASS=1, at:
 #   phone   the PowerVR phone's Resolution Auto (Enhanced 2364x1080, Full
 #           height, Full pixel, presented at 2364x1080) under
@@ -21,10 +23,10 @@
 #           ICO_RD_LAMPS_POISON=1 (WORK0 magenta before the down pass): every
 #           PNG the same bytes (the down pass writes every texel of WORK0).
 # With BACKEND opengl (rd_glow_blur_gl): the phone's setting on OpenGL alone.
-# A dump whose chain the first setting (phone; gl on OpenGL) leaves as
+# A fixture whose chain the first setting (phone; gl on OpenGL) leaves as
 # recorded (no glow, a dark plan, a refused form) is checked there (every
 # PNG the same bytes) and not run at the others.
-# Each measured setting, per dump, reads the tool's "stats: glow blur" line
+# Each measured setting, per fixture, reads the tool's "stats: glow blur" line
 # (this replay's chain in two passes and its pairs), "stats: N draws, M
 # passes" and "blur pairs folded F", and asserts:
 #   - the glowblur arm "on", today's "off", and today's no chain;
@@ -36,13 +38,19 @@
 #     chain, but a later sprite of the frame may take SCENE into it); WORK3,
 #     WORK0 (RGB) and
 #     DISPLAY and PRESENT (RGB) at most w3Max, w0Max and dispMax levels
-#     from today's (printed per dump as "glow blur measure: ...", with each
+#     from today's (printed per fixture as "glow blur measure: ...", with each
 #     setting's maxima at the end);
 #   - at the phone's setting, 2x, Original 1x and Enhanced 1x, the shimmer (WORK3's change under
 #     --jitter 0.5,0.5, the lamps package's measure) with glowblur at most
 #     shimNum/shimDen of today's plus shimPlus levels;
-#   - at least one chain in two passes over the list at each measured setting.
-# The bounds, from measurements (the WORK buffers' and the screen's apart):
+#   - at least one chain in two passes over the list at each measured setting;
+#   - the path ran: the glowblur arm shows the chains the fixture declares
+#     (glow_chains, on the fixture or its list line: rd_fixture_require) at
+#     every measured setting it runs at; a fixture no setting checked fails.
+# The bounds, from measurements on the game's frames (the WORK buffers' and
+# the screen's apart; kept unchanged on the fixtures.  Their fans are a white
+# ribbon, a saturated core larger than any real frame's: fx-opening-sun's is
+# past these bounds, 60 and 40, and is not in the list):
 # the fit on the lamps frames (the evidence's Python model, exact against the
 # replay: WORK3 at most 14 and 18 levels on the title and issue 163, 16 and
 # 16 at Original 1x) is not the largest; the phone's sun frame v2278 (a WHOLE
@@ -60,44 +68,17 @@
 # fit's 1.15 times).
 # No device: SKIP (77).
 # -DPY=<python3> -DDIFF=<png_level_diff.py>
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DLIST2=<dump list> -DOUT=<a folder>
-# -DBACKEND=vulkan|opengl
-# The lists name dumps of the build machine alone (the owner's rule there: a
-# listed dump that is absent FAILS). A machine without that folder has none of
-# them: the test is skipped as the older dump tests are.
-if(NOT IS_DIRECTORY "/primary/dev/ico-dumps")
-  message(STATUS "SKIP: no dump folder on this machine (/primary/dev/ico-dumps): the list's dumps are the build machine's")
-  return()
-endif()
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the
+# fixtures' folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<the
+# list> -DOUT=<a folder> -DBACKEND=vulkan|opengl
+include("${FIXTURE_HELPERS}")
+include("${CMAKE_CURRENT_LIST_DIR}/rd_fixture_list_props.cmake")
 set(failures 0)
-set(dumps "")
 if("${PY}" STREQUAL "" OR "${DIFF}" STREQUAL "")
   message(FATAL_ERROR "rd_glow_blur_ab: -DPY and -DDIFF are needed")
 endif()
-foreach(lst IN ITEMS "${LIST}" "${LIST2}")
-  if("${lst}" STREQUAL "" OR NOT EXISTS "${lst}")
-    message(FATAL_ERROR "rd_glow_blur_ab: no dump list ${lst}")
-  endif()
-  get_filename_component(listDir "${lst}" DIRECTORY)
-  file(STRINGS "${lst}" lines)
-  foreach(l IN LISTS lines)
-    string(STRIP "${l}" l)
-    if(l STREQUAL "" OR l MATCHES "^#")
-      continue()
-    endif()
-    if(NOT IS_ABSOLUTE "${l}")
-      set(l "${listDir}/${l}")
-    endif()
-    if(EXISTS "${l}")
-      list(APPEND dumps "${l}")
-    else()
-      message(SEND_ERROR "${l}: listed but absent (the list names only dumps present)")
-      math(EXPR failures "${failures} + 1")
-    endif()
-  endforeach()
-endforeach()
-list(REMOVE_DUPLICATES dumps)
-list(LENGTH dumps ndumps)
+rd_fixture_list("${LIST}" names)
+list(LENGTH names ndumps)
 
 set(w0Max 48)
 set(w3Max 36)
@@ -171,9 +152,16 @@ macro(level_diff out a b ch)
   endif()
 endmacro()
 
-set(index 0)
-foreach(dump IN LISTS dumps)
-  math(EXPR index "${index} + 1")
+foreach(index IN LISTS names)
+  rd_fixture_expand(${index} "${OUT}/fixtures" dump)
+  set(fx "${index}")
+  rd_fixture_list_props(${index})
+  rd_fixture_list_word(${index} nocull nocull)
+  set(cull "")
+  if(nocull)
+    set(cull ICO_RD_CULL=off)
+  endif()
+  set(checked FALSE)
   set(hasChain TRUE)
   foreach(s IN LISTS settings)
     # a dump whose chain the first setting drew as recorded (a dark plan, no
@@ -183,7 +171,7 @@ foreach(dump IN LISTS dumps)
     endif()
     set(skipped FALSE)
     foreach(arm 0 1)
-      set(env ${common} ${fake_${s}})
+      set(env ${common} ${cull} ${fake_${s}})
       if(s STREQUAL "poison")
         list(APPEND env "${armOn}")
         if(arm EQUAL 1)
@@ -208,13 +196,13 @@ foreach(dump IN LISTS dumps)
         return()
       endif()
       if(NOT rc EQUAL 0 AND arm EQUAL 0 AND "${err}" MATCHES "cannot show")
-        message(STATUS "${dump} ${s}: skipped (drawn narrower than the setting's aspect)")
+        message(STATUS "${fx} ${s}: skipped (drawn narrower than the setting's aspect)")
         set(skipped TRUE)
         break()
       endif()
       string(REPLACE ";" "," flat "${out}")
       if(NOT rc EQUAL 0 OR NOT flat MATCHES "${blurRe}")
-        message(SEND_ERROR "${dump} ${s} arm ${arm}: exit ${rc}, no glow blur line:\n${out}\n${err}")
+        message(SEND_ERROR "${fx} ${s} arm ${arm}: exit ${rc}, no glow blur line:\n${out}\n${err}")
         math(EXPR failures "${failures} + 1")
         set(skipped TRUE)
         break()
@@ -222,6 +210,7 @@ foreach(dump IN LISTS dumps)
       string(REGEX MATCH "${blurRe}" m "${flat}")
       set(word_${arm} "${CMAKE_MATCH_1}")
       set(chain_${arm} "${CMAKE_MATCH_2}")
+      set(out_${arm} "${out}")
       set(pairs_${arm} "${CMAKE_MATCH_3}")
       set(passes_${arm} -1)
       set(folds_${arm} 0)
@@ -243,23 +232,29 @@ foreach(dump IN LISTS dumps)
       set(wantWord0 on)
     endif()
     if(NOT word_0 STREQUAL wantWord0 OR NOT word_1 STREQUAL "on")
-      message(SEND_ERROR "${dump} ${s}: glow blur ${word_0} and ${word_1}: ${wantWord0} and on "
+      message(SEND_ERROR "${fx} ${s}: glow blur ${word_0} and ${word_1}: ${wantWord0} and on "
                          "expected")
       math(EXPR failures "${failures} + 1")
     endif()
     if(NOT s STREQUAL "poison" AND NOT chain_0 EQUAL 0)
-      message(SEND_ERROR "${dump} ${s}: ${chain_0} chains in two passes with glowblur off")
+      message(SEND_ERROR "${fx} ${s}: ${chain_0} chains in two passes with glowblur off")
       math(EXPR failures "${failures} + 1")
     endif()
     if(s STREQUAL "poison" AND NOT chain_0 EQUAL chain_1)
-      message(SEND_ERROR "${dump} poison: ${chain_0} chains in two passes, ${chain_1} poisoned")
+      message(SEND_ERROR "${fx} poison: ${chain_0} chains in two passes, ${chain_1} poisoned")
       math(EXPR failures "${failures} + 1")
+    endif()
+    # the path ran: the chains the fixture declares, with glowblur on
+    list(FIND measured "${s}" isMeasured)
+    if(isMeasured GREATER -1)
+      rd_fixture_require(${index} "${out_1}" glow_chains)
+      set(checked TRUE)
     endif()
     math(EXPR chains_${s} "${chains_${s}} + ${chain_1}")
     list(GET settings 0 firstSetting)
     if(s STREQUAL firstSetting AND chain_1 EQUAL 0)
       set(hasChain FALSE)
-      message(STATUS "${dump}: no chain in two passes at ${s} (drawn as recorded): the other "
+      message(STATUS "${fx}: no chain in two passes at ${s} (drawn as recorded): the other "
                      "settings not run")
     endif()
     file(GLOB pngs RELATIVE "${d0}" "${d0}/*.png")
@@ -267,7 +262,7 @@ foreach(dump IN LISTS dumps)
     list(LENGTH pngs n0)
     list(LENGTH pngs1 n1)
     if(n0 EQUAL 0 OR NOT n0 EQUAL n1)
-      message(SEND_ERROR "${dump} ${s}: ${n0} PNGs in one arm, ${n1} in the other")
+      message(SEND_ERROR "${fx} ${s}: ${n0} PNGs in one arm, ${n1} in the other")
       math(EXPR failures "${failures} + 1")
       continue()
     endif()
@@ -278,11 +273,11 @@ foreach(dump IN LISTS dumps)
     if(NOT exact)
       # the passes: the chain as today draws it against the two
       math(EXPR wantPasses "${passes_0} - (2 * ${pairs_1} - (${folds_0} - ${folds_1})) + 2")
-      message(STATUS "${dump} ${s}: ${pairs_1} pairs in two passes; passes ${passes_0} today, "
+      message(STATUS "${fx} ${s}: ${pairs_1} pairs in two passes; passes ${passes_0} today, "
                      "${passes_1} with glowblur (${wantPasses} expected); pairs folded ${folds_0} "
                      "and ${folds_1}")
       if(NOT passes_1 EQUAL wantPasses)
-        message(SEND_ERROR "${dump} ${s}: ${passes_1} passes with glowblur, ${wantPasses} "
+        message(SEND_ERROR "${fx} ${s}: ${passes_1} passes with glowblur, ${wantPasses} "
                            "expected (today ${passes_0}, ${pairs_1} pairs, pairs folded "
                            "${folds_0} and ${folds_1})")
         math(EXPR failures "${failures} + 1")
@@ -293,7 +288,7 @@ foreach(dump IN LISTS dumps)
                       RESULT_VARIABLE same)
       if(exact OR png MATCHES "^(SHADOW[0-2]|WORK2_PAD)\\.png$")
         if(NOT same EQUAL 0)
-          message(SEND_ERROR "${dump} ${s}: ${png} differs: it must be the same bytes")
+          message(SEND_ERROR "${fx} ${s}: ${png} differs: it must be the same bytes")
           math(EXPR failures "${failures} + 1")
         endif()
         continue()
@@ -311,23 +306,23 @@ foreach(dump IN LISTS dumps)
       endif()
       level_diff(ld "${d0}/${png}" "${d1}/${png}" RGB)
       if(NOT ld_ok)
-        message(SEND_ERROR "${dump} ${s}: ${png}: png_level_diff failed")
+        message(SEND_ERROR "${fx} ${s}: ${png}: png_level_diff failed")
         math(EXPR failures "${failures} + 1")
         continue()
       endif()
       math(EXPR pct10 "${ld_n} * 1000 / ${ld_t}")
       math(EXPR pctW "${pct10} / 10")
       math(EXPR pctT "${pct10} % 10")
-      message(STATUS "glow blur measure: ${s} ${dump} ${png}: ${ld_n} pixels apart "
+      message(STATUS "glow blur measure: ${s} ${fx} ${png}: ${ld_n} pixels apart "
                      "(${pctW}.${pctT} %), largest ${ld_max} levels (the bound ${bound})")
       if(ld_max GREATER bound)
-        message(SEND_ERROR "${dump} ${s}: ${png} ${ld_max} levels from today's: the bound is "
+        message(SEND_ERROR "${fx} ${s}: ${png} ${ld_max} levels from today's: the bound is "
                            "${bound} (DIVERGENCES.md VD-33)")
         math(EXPR failures "${failures} + 1")
       endif()
       if(ld_max GREATER max_${s}_${t})
         set(max_${s}_${t} "${ld_max}")
-        set(where_${s}_${t} "${dump}")
+        set(where_${s}_${t} "${fx}")
       endif()
     endforeach()
     # the shimmer: WORK3's change under half a SCENE texel's shift
@@ -338,9 +333,9 @@ foreach(dump IN LISTS dumps)
         set(jdir "${OUT}/${index}-${s}-${arm}-j")
         file(REMOVE_RECURSE "${jdir}")
         file(MAKE_DIRECTORY "${jdir}")
-        set(jenv ${common} ${fake_${s}} "${armOff}")
+        set(jenv ${common} ${cull} ${fake_${s}} "${armOff}")
         if(arm EQUAL 1)
-          set(jenv ${common} ${fake_${s}} "${armOn}")
+          set(jenv ${common} ${cull} ${fake_${s}} "${armOn}")
         endif()
         execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${jenv} "${TOOL}" "${dump}" -
                                 --pass-dump "${jdir}" ${args_${s}} --jitter 0.5,0.5
@@ -354,15 +349,15 @@ foreach(dump IN LISTS dumps)
           endif()
         endif()
       endforeach()
-      message(STATUS "glow blur shimmer: ${s} ${dump} WORK3 under half a SCENE texel's shift "
+      message(STATUS "glow blur shimmer: ${s} ${fx} WORK3 under half a SCENE texel's shift "
                      "(arm 0 today, arm 1 glowblur):${shimText}")
       if(jMax_0 LESS 0 OR jMax_1 LESS 0)
-        message(SEND_ERROR "${dump} ${s}: the shimmer could not be measured")
+        message(SEND_ERROR "${fx} ${s}: the shimmer could not be measured")
         math(EXPR failures "${failures} + 1")
       else()
         math(EXPR shimAllowed "${jMax_0} * ${shimNum} / ${shimDen} + ${shimPlus}")
         if(jMax_1 GREATER shimAllowed)
-          message(SEND_ERROR "${dump} ${s}: glowblur's WORK3 moves ${jMax_1} levels under the "
+          message(SEND_ERROR "${fx} ${s}: glowblur's WORK3 moves ${jMax_1} levels under the "
                              "shift, today's ${jMax_0}: at most ${shimNum}/${shimDen} of today's "
                              "+ ${shimPlus} (DIVERGENCES.md VD-33)")
           math(EXPR failures "${failures} + 1")
@@ -370,10 +365,14 @@ foreach(dump IN LISTS dumps)
       endif()
     endif()
   endforeach()
+  if(NOT checked)
+    message(SEND_ERROR "${index}: its declared properties were checked at no setting")
+    math(EXPR failures "${failures} + 1")
+  endif()
 endforeach()
 foreach(s IN LISTS measured)
   if(chains_${s} EQUAL 0)
-    message(SEND_ERROR "rd_glow_blur_ab: ${s}: no chain in two passes over ${ndumps} dumps")
+    message(SEND_ERROR "rd_glow_blur_ab: ${s}: no chain in two passes over ${ndumps} fixtures")
     math(EXPR failures "${failures} + 1")
   endif()
   foreach(t WORK3 WORK0 DISPLAY PRESENT)
@@ -381,8 +380,9 @@ foreach(s IN LISTS measured)
                    "(${where_${s}_${t}}); ${chains_${s}} chains in two passes")
   endforeach()
 endforeach()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(failures GREATER 0)
-  message(FATAL_ERROR "rd_glow_blur_ab: ${failures} failures over ${ndumps} dumps")
+  message(FATAL_ERROR "rd_glow_blur_ab: ${failures} failures over ${ndumps} fixtures")
 endif()
-message(STATUS "rd_glow_blur_ab: ${ndumps} dumps: the glow's blur in two passes within VD-33's "
+message(STATUS "rd_glow_blur_ab: ${ndumps} fixtures: the glow's blur in two passes within VD-33's "
                "bounds; every scale, Original 1x included; the poison the same bytes")

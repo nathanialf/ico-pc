@@ -1,20 +1,19 @@
 # rd_paste_spec_ab: the glow's paste drawn by its own entry (port/render/rd_paste_spec.c,
 # fx_paste_ps: fx_frame_ps's paste path alone) against fx_frame_ps, byte for byte, on
-# every dump of the lists (LIST and LIST2: tools/lamps_dumps.txt and
-# tools/glow_light_dumps.txt, machine-local, the PowerVR phone's opening dumps v746,
-# v1545 and v2278 among them; a listed dump that is absent FAILS), rd_replay_tool
-# --pass-dump --stats, arm 0 ICO_RD_PASTE_SPEC=0 against arm 1 ICO_RD_PASTE_SPEC=1
-# (ICO_RD_PASTE_SPEC=sabotage with -DSABOTAGE=1), at:
+# every fixture of the list (port/render/test/fixtures/lists/paste_spec.txt: committed
+# frames with no art, docs/port/TESTING_FIXTURES.md; a line's word nocull replays that
+# fixture with ICO_RD_CULL=off in both arms, the generated lamps in the chain: the
+# LAMPS plan's paste), rd_replay_tool --pass-dump --stats, arm 0 ICO_RD_PASTE_SPEC=0
+# against arm 1 ICO_RD_PASTE_SPEC=1 (ICO_RD_PASTE_SPEC=sabotage with -DSABOTAGE=1), at:
 #   phone   the PowerVR phone's Resolution Auto (Enhanced 2364x1080, Full height,
 #           Full pixel, presented at 2364x1080) under ICO_VK_FAKE_LIMITS=moltenvk with
 #           ICO_RD_LATE_PASS=1 (the paste deferred to list 11's pass, the crack fill in
 #           the paste's pass where it lands: the phone's shape);
 #   desk    lavapipe's own class, Enhanced 2x at 16:9;
-#   orig    Original 4:3 at 1x (LIST's dumps alone: tools/lamps_dumps.txt).
+#   orig    Original 4:3 at 1x.
 # With BACKEND opengl (rd_paste_spec_gl): the phone's setting on OpenGL alone; with
-# -DSABOTAGE=1 (rd_paste_spec_sabotage) the phone's setting alone; both over LIST's
-# dumps alone.
-# Per dump and setting it asserts:
+# -DSABOTAGE=1 (rd_paste_spec_sabotage) the phone's setting alone.
+# Per fixture and setting it asserts:
 #   - every PNG of --pass-dump the same bytes in both arms (the same set of targets);
 #   - the same draws and passes ("stats: N draws, M passes");
 #   - arm 0's "stats: paste spec off" with 0 pastes by fx_paste_ps;
@@ -22,48 +21,21 @@
 #     refuses, another key or form, keeps fx_frame_ps: counted, not failed);
 #   - OpenGL: arm 1 "off" with 0 pastes by it (the module is Vulkan's alone);
 #   - sabotage: arm 1 "off" with its self-test failed and 0 pastes by it;
-# and over the list, at least one paste seen at phone and desk (the lamps frames paste
-# the glow) and, on Vulkan without the sabotage, at least one drawn by fx_paste_ps.
+#   - the path ran: at the phone's setting (OpenGL: its one) arm 1 shows the pastes
+#     the fixture declares (paste_spec_seen, on the fixture or its list line) and,
+#     on Vulkan without the sabotage, the ones by fx_paste_ps (paste_spec_taken);
+#     a fixture no setting checked fails;
+# and over the list, at least one paste seen at phone and desk and, on Vulkan without
+# the sabotage, at least one drawn by fx_paste_ps.
 # No device: SKIP (77).
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DLIST2=<dump list> -DOUT=<a folder>
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the fixtures'
+# folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<the list> -DOUT=<a folder>
 # -DBACKEND=vulkan|opengl [-DSABOTAGE=1]
-# The lists name dumps of the build machine alone (the owner's rule there: a listed
-# dump that is absent FAILS).  A machine without /primary/dev/ico-dumps has none of
-# them: the test is skipped as the other dump tests are.
-if(NOT IS_DIRECTORY "/primary/dev/ico-dumps")
-  message(STATUS "SKIP: no dump folder on this machine (/primary/dev/ico-dumps): the list's dumps are the build machine's")
-  return()
-endif()
+include("${FIXTURE_HELPERS}")
+include("${CMAKE_CURRENT_LIST_DIR}/rd_fixture_list_props.cmake")
 set(failures 0)
-set(dumps "")
-set(lampsDumps "")
-foreach(lst IN ITEMS "${LIST}" "${LIST2}")
-  if("${lst}" STREQUAL "" OR NOT EXISTS "${lst}")
-    message(FATAL_ERROR "rd_paste_spec_ab: no dump list ${lst}")
-  endif()
-  get_filename_component(listDir "${lst}" DIRECTORY)
-  file(STRINGS "${lst}" lines)
-  foreach(l IN LISTS lines)
-    string(STRIP "${l}" l)
-    if(l STREQUAL "" OR l MATCHES "^#")
-      continue()
-    endif()
-    if(NOT IS_ABSOLUTE "${l}")
-      set(l "${listDir}/${l}")
-    endif()
-    if(EXISTS "${l}")
-      list(APPEND dumps "${l}")
-      if("${lst}" STREQUAL "${LIST}")
-        list(APPEND lampsDumps "${l}")
-      endif()
-    else()
-      message(SEND_ERROR "${l}: listed but absent (the list names only dumps present)")
-      math(EXPR failures "${failures} + 1")
-    endif()
-  endforeach()
-endforeach()
-list(REMOVE_DUPLICATES dumps)
-list(LENGTH dumps ndumps)
+rd_fixture_list("${LIST}" names)
+list(LENGTH names ndumps)
 
 set(args_phone --enhanced --resolution 2364x1080 --full-height --full-pixel --present 2364x1080)
 set(args_desk --enhanced --aspect 16:9 --resolution 2x)
@@ -98,17 +70,19 @@ foreach(s IN LISTS settings)
   set(taken_${s} 0)
 endforeach()
 
-set(index 0)
-foreach(dump IN LISTS dumps)
-  math(EXPR index "${index} + 1")
+foreach(index IN LISTS names)
+  rd_fixture_expand(${index} "${OUT}/fixtures" dump)
+  rd_fixture_list_props(${index})
+  rd_fixture_list_word(${index} nocull nocull)
+  set(cull "")
+  if(nocull)
+    set(cull ICO_RD_CULL=off)
+  endif()
+  set(checked FALSE)
   foreach(s IN LISTS settings)
-    list(FIND lampsDumps "${dump}" inLamps)
-    if((s STREQUAL "orig" OR s STREQUAL "gl" OR SABOTAGE) AND inLamps EQUAL -1)
-      continue()
-    endif()
     set(skipped FALSE)
     foreach(arm 0 1)
-      set(env ${env_${s}} ${arm${arm}})
+      set(env ${env_${s}} ${cull} ${arm${arm}})
       set(dir "${OUT}/${index}-${s}-${arm}")
       file(REMOVE_RECURSE "${dir}")
       file(MAKE_DIRECTORY "${dir}")
@@ -120,13 +94,13 @@ foreach(dump IN LISTS dumps)
         return()
       endif()
       if(NOT rc EQUAL 0 AND arm EQUAL 0 AND "${err}" MATCHES "cannot show")
-        message(STATUS "${dump} ${s}: skipped (drawn narrower than the setting's aspect)")
+        message(STATUS "${index} ${s}: skipped (drawn narrower than the setting's aspect)")
         set(skipped TRUE)
         break()
       endif()
       string(REPLACE ";" "," flat "${out}")
       if(NOT rc EQUAL 0 OR NOT flat MATCHES "${specRe}")
-        message(SEND_ERROR "${dump} ${s} arm ${arm}: exit ${rc}, no paste spec line:\n${out}\n${err}")
+        message(SEND_ERROR "${index} ${s} arm ${arm}: exit ${rc}, no paste spec line:\n${out}\n${err}")
         math(EXPR failures "${failures} + 1")
         set(skipped TRUE)
         break()
@@ -136,6 +110,7 @@ foreach(dump IN LISTS dumps)
       set(test_${arm} "${CMAKE_MATCH_2}")
       set(taken_${arm} "${CMAKE_MATCH_3}")
       set(seen_${arm} "${CMAKE_MATCH_4}")
+      set(out_${arm} "${out}")
       set(draws_${arm} -1)
       set(passes_${arm} -1)
       if(flat MATCHES "${drawsRe}")
@@ -146,7 +121,16 @@ foreach(dump IN LISTS dumps)
     if(skipped)
       continue()
     endif()
-    set(tag "${dump} ${s}")
+    set(tag "${index} ${s}")
+    # the path ran: the pastes the fixture declares, and the ones by fx_paste_ps
+    if(s STREQUAL "phone" OR s STREQUAL "gl")
+      if("${BACKEND}" STREQUAL "opengl" OR SABOTAGE)
+        rd_fixture_require(${index} "${out_1}" paste_spec_seen)
+      else()
+        rd_fixture_require(${index} "${out_1}" paste_spec_seen paste_spec_taken)
+      endif()
+      set(checked TRUE)
+    endif()
     # the words and the counts
     if(NOT word_0 STREQUAL "off" OR NOT taken_0 EQUAL 0)
       message(SEND_ERROR "${tag}: arm 0 (${arm0}) says ${word_0} with ${taken_0} pastes by fx_paste_ps")
@@ -198,9 +182,14 @@ foreach(dump IN LISTS dumps)
     endforeach()
     message(STATUS "${tag}: ${np} targets, ${seen_1} pastes seen, ${taken_1} by fx_paste_ps")
   endforeach()
+  if(NOT checked)
+    message(SEND_ERROR "${index}: its declared properties were checked at no setting (the "
+                       "phone's setting did not run it)")
+    math(EXPR failures "${failures} + 1")
+  endif()
 endforeach()
 foreach(s IN LISTS needSeen)
-  message(STATUS "rd_paste_spec_ab ${s}: ${taken_${s}} of ${seen_${s}} pastes by fx_paste_ps over ${ndumps} dumps")
+  message(STATUS "rd_paste_spec_ab ${s}: ${taken_${s}} of ${seen_${s}} pastes by fx_paste_ps over ${ndumps} fixtures")
   if(seen_${s} EQUAL 0)
     message(SEND_ERROR "${s}: no paste seen over the list (the lamps frames paste the glow)")
     math(EXPR failures "${failures} + 1")
@@ -210,6 +199,7 @@ foreach(s IN LISTS needSeen)
     math(EXPR failures "${failures} + 1")
   endif()
 endforeach()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(failures GREATER 0)
-  message(FATAL_ERROR "rd_paste_spec_ab: ${failures} failures over ${ndumps} dumps")
+  message(FATAL_ERROR "rd_paste_spec_ab: ${failures} failures over ${ndumps} fixtures")
 endif()

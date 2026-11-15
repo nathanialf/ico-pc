@@ -3328,25 +3328,20 @@ if(ICO_RUN_TESTS)
     if(_env)
         set_tests_properties(rd_pass_area_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
-    # rd_glow_cheap_ab (test/rd_glow_cheap_ab.cmake): the glow dumps of
-    # tools/glow_cheap_dumps.txt against the pass dumps the build before the
-    # glow's cheaper passes stored (machine-local: the phone's profile under
-    # build-host/tmp/v098/evidence/glow/pd-phone, Original and Enhanced 2x 4:3
-    # under build-host/tmp/v095/after/w3/pd): every target within 0 levels,
-    # at least two glow passes fewer at the phone's setting (WORK2's fill in
-    # the mask's pass, cleanUpFB in the fog's), none more elsewhere (counted
-    # in a replay without the crack fill where it is drawn: it ends the fog's
-    # pass before the glow); the frames the crack fill changed against their
-    # refreshed pictures (build-host/tmp/v098/evidence/glow/pd-w15); SKIP
-    # without the dumps or their baselines
+    # rd_glow_cheap_ab (test/rd_glow_cheap_ab.cmake): the fixtures of
+    # test/fixtures/lists/glow_cheap.txt with the glow's cheaper passes
+    # against the fill's pass back (ICO_RD_CLEAR_CARRY=0): every target
+    # within 0 levels; against the passes counted with ICO_RD_FX_PLAN=0 too:
+    # at least two glow passes fewer at the phone's setting (cleanUpFB in the
+    # fog's pass; three where WORK2's fill rides the mask's), none more
+    # elsewhere; the mask folded (ICO_RD_GLOW_FOLD=1) the same bytes but WORK2
     if(Python3_FOUND)
         file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/glow_cheap_ab")
         add_test(NAME rd_glow_cheap_ab
                  COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                         "-DLIST=${CMAKE_SOURCE_DIR}/tools/glow_cheap_dumps.txt"
-                         "-DBASE_PHONE=${CMAKE_SOURCE_DIR}/build-host/tmp/v098/evidence/glow/pd-phone"
-                         "-DBASE_DESK=${CMAKE_SOURCE_DIR}/build-host/tmp/v095/after/w3/pd"
-                         "-DBASE_REFRESH=${CMAKE_SOURCE_DIR}/build-host/tmp/v098/evidence/glow/pd-w15"
+                         -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                         "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                         "-DLIST=${ICO_FIXTURE_DIR}/lists/glow_cheap.txt"
                          "-DPY=${Python3_EXECUTABLE}"
                          "-DDIFF=${CMAKE_CURRENT_SOURCE_DIR}/test/png_level_diff.py"
                          "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/glow_cheap_ab"

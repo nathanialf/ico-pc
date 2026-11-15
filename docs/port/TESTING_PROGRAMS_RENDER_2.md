@@ -228,19 +228,22 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   Python mirror gave 21, 0.12 and 5); the refusals (a pass 1's colour, a pass 2 not covering
   WORK0, one pair, a constant added).
 - `rd_glow_blur_ab.cmake` (`rd_glow_blur_ab`, `rd_glow_blur_gl`; `rd_glow_blur.cmake`): the glow's
-  blur in two passes (DIVERGENCES.md VD-33) on every dump of `tools/glow_light_dumps.txt` and
-  `tools/lamps_dumps.txt` (machine-local; a listed dump that is absent FAILS),
+  blur in two passes (DIVERGENCES.md VD-33) on the fixtures of `test/fixtures/lists/glow_blur.txt`
+  ([TESTING_FIXTURES.md](TESTING_FIXTURES.md): two frames with the sun's fans, a white ribbon; two lamps rooms replayed with the cull off, the list's
+  `nocull` word, whose chain carries no light; four dark frames),
   `ICO_RD_LAMPS=pad+owed+wholepad` against `...+glowblur`, `--pass-dump --stats`,
   `ICO_RD_VU_PREPASS=0 ICO_RD_LATE_PASS=1`, at the phone's Resolution Auto under
   `ICO_VK_FAKE_LIMITS=moltenvk`, Enhanced 2x, 3x and 4x at 4:3, the Mali fakes (no blur fold),
-  Original 4:3 at 1x (`--aspect 4:3`), Enhanced 1x and the poison; a dump the phone's setting leaves as recorded is checked there (every
+  Original 4:3 at 1x (`--aspect 4:3`), Enhanced 1x and the poison; a fixture the phone's setting leaves as recorded is checked there (every
   PNG the same bytes) and not run at the others. Where a chain was drawn in two passes: the passes
   fewer by the chain's as today draws them less two (2 P less the pairs folded), SHADOW0..2 and
   WORK2_PAD the same bytes, WORK0 within 48 levels of today's, WORK3 within 36, DISPLAY and PRESENT
-  within 26 (RGB; measured: the sun frame v2278 46, 34 and 23; printed per dump, `glow blur measure:`, and as each setting's maxima), the
+  within 26 (RGB; the bounds are the game's frames', the sun frame v2278 46, 34 and 23; printed per fixture, `glow blur measure:`, and as each setting's maxima), the
   shimmer at the phone's setting, 2x, Original 1x and Enhanced 1x (WORK3's change under `--jitter 0.5,0.5`) at most 5/4 of
   today's + 4 (every scale takes it, Original 1x included); the poison every PNG the
-  same bytes; a chain in two passes over the list at each measured setting. `rd_glow_blur_gl`:
+  same bytes; a chain in two passes over the list at each measured setting. The path ran: at every
+  measured setting it runs at, the glowblur arm shows each fixture's declared `glow_chains` (on the
+  fixture or its list line); a fixture no setting checked fails. `rd_glow_blur_gl`:
   the phone's setting on OpenGL (llvmpipe). No device: SKIP.
 - `rd_paste_spec_test.c` (`rd_paste_spec`; `rd_paste_spec.cmake`, CPU): the glow's paste by its own
   entry (`port/render/rd_paste_spec.c`): the bits `fx_paste_ps` holds and reads; the gate on the
@@ -250,15 +253,19 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   `rd__fx_enumerate`'s premultiplied add, its twin added by the module's stand-in (one key more);
   `ICO_RD_PASTE_SPEC`'s words; the attempt ledger's row through its decider.
 - `rd_paste_spec_ab.cmake` (`rd_paste_spec_ab`, `rd_paste_spec_sabotage`, `rd_paste_spec_gl`;
-  `rd_paste_spec.cmake`): every dump of `tools/lamps_dumps.txt` and `tools/glow_light_dumps.txt`
-  (machine-local; a listed dump that is absent FAILS where `/primary/dev/ico-dumps` exists),
+  `rd_paste_spec.cmake`): the fixtures of `test/fixtures/lists/paste_spec.txt`
+  ([TESTING_FIXTURES.md](TESTING_FIXTURES.md): three frames with the sun's fans, two lamps rooms
+  replayed with the cull off, three dark frames),
   `ICO_RD_PASTE_SPEC=0` against `=1`, `--pass-dump --stats`, at the phone's Resolution Auto under
-  `ICO_VK_FAKE_LIMITS=moltenvk` with `ICO_RD_LATE_PASS=1`, Enhanced 2x at 16:9 and (the lamps list)
+  `ICO_VK_FAKE_LIMITS=moltenvk` with `ICO_RD_LATE_PASS=1`, Enhanced 2x at 16:9 and
   Original 4:3 at 1x: every PNG the same bytes, the same draws and passes and pastes seen, arm 0 off,
   arm 1 on with its self-test passed, at least one paste by `fx_paste_ps` at the phone's setting and
-  2x. `_sabotage`: the lamps list at the phone's setting with `=sabotage`: the self-test failed at a
-  texel, no paste by it, the same bytes. `_gl` (label gl): the lamps list on OpenGL: off (the module
-  is Vulkan's alone), the same bytes.
+  2x. The path ran: at the phone's setting arm 1 shows each fixture's declared `paste_spec_seen` and
+  `paste_spec_taken` (on the fixture or its list line); a fixture that setting did not check fails.
+  `_sabotage`: the phone's setting with `=sabotage`: the self-test failed at a
+  texel, no paste by it, the same bytes, the declared `paste_spec_seen` shown. `_gl` (label gl): the
+  phone's setting on OpenGL: off (the module is Vulkan's alone), the same bytes, the declared
+  `paste_spec_seen` shown.
 - `rd_volume_fs_test.c` (`rd_volume_fs`; `rd_volume_fs.cmake`, CPU): the shadow volumes' stencil-only entry (`rd_volume_fs.c`): the gate's reasons in order, the `date_clear_ps` twin (the fragment entry alone differs), the volume key without a device (`sprite_ps`, seen, none taken), no twin in the start-up set there, `ICO_RD_VOLUME_FS`'s words, the bench's force, the ledger's row.
 - `rd_comp_spec_test.c` (`rd_comp_spec`; `rd_comp_spec.cmake`, CPU): the composites' own entry (`rd_comp_spec.c`): the planner's composite and level keys take their forms, each held field refused alone; the DrawCB's flags (each one `sprite_ps` reads refused, the others taken, the TEXA word); the twin; no device: seen, kept, none taken, no twin; the words; the ledger.
 - `rd_comp_spec_ab.cmake` (`rd_comp_spec_ab`, `rd_comp_spec_sabotage`; `rd_comp_spec.cmake`): the fixtures of `test/fixtures/lists/comp_spec.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md); the frames of `rd_volume_fs_ab`), `ICO_RD_COMP_SPEC=0` against `=1` at the phone's setting, Enhanced 2x 16:9, the Mali class (off) and MSAA 4x: every PNG, draws, passes and traffic the same, arm 1 on, a draw by it at the phone on each fixture whose run shows volume draws. The path ran: at the phone's setting arm 1 shows each fixture's declared `shadow_volume_draws`, `comp_spec_seen` and `comp_spec_taken`; a fixture the phone's setting did not check fails. `_sabotage`: the phone's setting: refused, the same bytes, the declared `shadow_volume_draws` and `comp_spec_seen` shown. `rd_comp_spec_selftest`, `_selftest_sabotage`: as the volumes'.
@@ -411,19 +418,21 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   `port/render/test/fixtures/lists/vustage.txt`, and on those of `lists/vu_opening.txt` (the
   Pixel's opening: lamps, dark, sun; [TESTING_FIXTURES.md](TESTING_FIXTURES.md)). No device: SKIP.
 - `rd_lamps_lowres_ab.cmake` (`rd_lamps_lowres_ab`; `rd_lamps.cmake`): the lamps' glow at the GS
-  frame's size above 1x (`RD_LAMPS_LOWRES`, DIVERGENCES.md VD-32) on every glow dump of
-  `tools/glow_light_dumps.txt` (machine-local; a listed dump that is absent FAILS),
+  frame's size above 1x (`RD_LAMPS_LOWRES`, DIVERGENCES.md VD-32) on the fixtures of
+  `test/fixtures/lists/lamps_lowres.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md): two frames
+  with the sun's fans and a lamps room replayed with the cull off; thirty settings a fixture, so the
+  list is short and the test is in no merge check),
   `ICO_RD_LAMPS=pad+owed+wholepad` against `...+lowres`, `--pass-dump --stats`,
   `ICO_RD_VU_PREPASS=0`, `ICO_VK_FAKE_LIMITS=moltenvk`, at the phone's Resolution Auto
   (2364x1080, Full height and pixel; again with `lowresbox`, `lowresbias`, `lowreshy`, `lowres4` and `lowresp`,
-  printed only) Enhanced 2x, 2.5x (1440x1280), 3x and 4x at 4:3 and the Full height on a 16:9 window (1920x1080), and each dump once at Original 1x: the stats line
+  printed only) Enhanced 2x, 2.5x (1440x1280), 3x and 4x at 4:3 and the Full height on a 16:9 window (1920x1080), and each fixture once at Original 1x: the stats line
   `lamps lowres on|off`, no draw into WORK2 without a depth, a depth fill where a draw took
   WORK2's own, one such draw at least over the list at each setting, SHADOW0..2 and WORK2_PAD the
   same bytes; WORK3 (the glow the paste adds, one size at every scale) against Original 1x's
-  (`lowres original: <setting> <dump> WORK3 ...`): with lowres's default form no farther than
+  (`lowres original: <setting> <fixture> WORK3 ...`): with lowres's default form no farther than
   today's in its largest level difference and texels apart (margin 2 levels, 16 texels and 5 %),
   FAILING otherwise at the phone's, 2x, 3x and 4x; DISPLAY and PRESENT against today printed per
-  dump (`lowres measure: ...`, `lowres maxima: ...`), no bound; at Enhanced 1x every PNG the
+  fixture (`lowres measure: ...`, `lowres maxima: ...`), no bound; at Enhanced 1x every PNG the
   same bytes and no draw on WORK2's own depth; at the phone's setting `...+lowres` against
   `...+lowres2x` (WORK2 at twice the GS size) at each of those settings against today's: WORK3
   at most 32 levels from today's (`lowres2x today: ...`), and at the phone's setting and 2x its
@@ -436,7 +445,9 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   information only; at the phone's setting `...+lowres` against
   `...+lowres+fillhold` every PNG the same bytes with as many crack fills held at least (one
   more over the list), and `...+lowres` against it under `ICO_RD_LAMPS_POISON=1` every
-  PNG the same bytes. No device: SKIP.
+  PNG the same bytes. The path ran: at every measured setting the lowres arm shows each fixture's
+  declared `lamps_own_depth_draws` (on the fixture or its list line); a fixture no setting checked
+  fails. No device: SKIP.
 - `rd_crack_work_ab.cmake` (`rd_crack_work_ab`, `rd_crack_work_gl`; `rd_crack_work.cmake`): the
   crack fill's snapshot by the swap and its early leave (`rd_crack_fill.c` FILLSWAP, CRACKTAP). The
   dumps of `tools/crack_work_dumps.txt` (machine-local; a listed dump that is absent FAILS: the
@@ -980,40 +991,41 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   (the tool's `--stats` clause; the aura's paste and list 11's fades are full-frame sprites, so the
   stage 6 frames have no area to give) (`rd_pass_area_ab`). SKIP as `rd_vustage_ab`.
 - `rd_glow_cheap_ab.cmake`: the glow's cheaper passes ([RENDER.md](RENDER.md#the-glows-passes):
-  WORK2's fill in the mask's pass, cleanUpFB in the fog's) against stored pass dumps, as no switch
-  turns them off: the 14 glow dumps of `tools/glow_cheap_dumps.txt` (machine-local, a missing one
-  skipped) replayed with `--pass-dump --stats` under `ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0` at
+  WORK2's fill in the mask's pass, cleanUpFB in the fog's) against the passes drawn without them:
+  the fixtures of `test/fixtures/lists/glow_cheap.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md):
+  three frames with the sun's fans, two without) replayed with `--pass-dump --stats` under
+  `ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0` three times: a count run (`--stats` alone) with
+  `ICO_RD_FX_PLAN=0 ICO_RD_CLEAR_CARRY=0` (the post sprites' plan and the clear carry off, what the
+  two cuts ride on: cleanUpFB's sprites each a pass of their own, a pending fill flushed as one; the
+  plan's own pictures differ by a few levels on a frame with the fans, so this run gives the passes
+  only), the before run with `ICO_RD_CLEAR_CARRY=0` (the fill's pass back), and the defaults, at
   the PowerVR phone's profile on lavapipe (`ICO_VK_FAKE_LIMITS=moltenvk ICO_RD_VU_PREPASS=0`,
-  2364x1080, Full height, Full pixel, the dump's own aspect, presented at 2364x1080; baselines
-  `build-host/tmp/v098/evidence/glow/pd-phone`, made by the tool before the cuts) and at the gate's
-  Original and Enhanced 2x 4:3 (baselines `build-host/tmp/v095/after/w3/pd`, named as
-  `gate-wave.sh` names them): every baseline PNG the same bytes or within `-DBOUND` levels (0,
-  `png_level_diff.py`), the `glow N passes` count at least two fewer than the baseline's at the
-  phone's setting and no more at the others; each run's line prints the passes before and after
+  2364x1080, Full height, Full pixel, the frame's own aspect, presented at 2364x1080) and at
+  Original and Enhanced 2x 4:3: every PNG of the before run the same bytes or within `-DBOUND` levels
+  (0, `png_level_diff.py`), the `glow N passes` count at least two fewer than the count run's at the
+  phone's setting (three on a frame without the fans, the fill's own pass, and one such run at least
+  over the list) and no more at the others; each run's line prints the passes before and after
   and its largest difference. The run's own count meets the rule with the crack fill drawn (it
   is drawn after `cleanUpFB`'s two sprites, which stay in the fog's pass: [the fill's
   place](RENDER_POST.md#the-fills-place-after-list-7)), and at the phone's setting a run whose
-  stats say the fill was drawn says `1 fills after the glow's alpha`. The seven frames the
-  crack fill changed (v4251, the loss frame, rd-00720, the two issue-91 frames, v2567 and its
-  previous frame) are compared at the phone's setting and Enhanced 2x with refreshed pictures
-  (`-DBASE_REFRESH`, `build-host/tmp/v098/evidence/glow/pd-w15`: main 7832a2e4f's, each first
-  checked to have the no-fill replay's WORK2 and no target farther from the old baseline than
-  that replay), the old baseline's log still giving the passes before. A setting without a
-  baseline is skipped; nothing compared: SKIP (`rd_glow_cheap_ab`). A baseline refresh for a
-  later change to the glow's drawing replaces the folders. Those runs hold the glow's mask fold
-  off (`ICO_RD_GLOW_FOLD=0`), and each dump at each setting runs again with it on
+  stats say the fill was drawn says `1 fills after the glow's alpha`. Those runs hold the glow's
+  mask fold off (`ICO_RD_GLOW_FOLD=0`), and each fixture at each setting runs again with it on
   (`ICO_RD_GLOW_FOLD=1`, into `<name>-<setting>-fold`): every PNG but `WORK2.png` (which the fold
   leaves undrawn) the same bytes as the run without it, `PRESENT.png` too at the phone's setting;
   a run whose stats say `glow: WORK2 fold on: 1 folded` has at least one glow pass fewer, a kept
   one (only the lamps drawn into WORK2 after the mask may keep it: any other reason fails) as
-  many; the folds reading the sun's fans' WORK2 counted; at each setting that ran, at least
+  many; the folds reading the sun's fans' WORK2 counted; at each setting at least
   one run folded ([RENDER_POST.md](RENDER_POST.md#the-glows-mask-in-its-reduction)). Its runs
-  set `ICO_RD_GLOW_LIGHT=0` (the chain drawn whole, as the baselines drew it; so do
-  `rd_crack_late_ab`'s).
+  set `ICO_RD_GLOW_LIGHT=0` (the chain drawn whole, as the cuts and the fold need it; so do
+  `rd_crack_late_ab`'s). The path ran: at every setting the run at the defaults shows each
+  fixture's declared `glow_passes` and the fold's run its `glow_fold_folded` (`rd_glow_cheap_ab`;
+  SKIP without a device).
 - `rd_glow_light_ab.cmake`: the glow's light plan
   ([RENDER_POST.md](RENDER_POST.md#the-glow-where-it-adds-light)) against the chain drawn whole
-  (`ICO_RD_GLOW_LIGHT=0`) on the 55 glow dumps of `tools/glow_light_dumps.txt` (machine-local,
-  every glow dump on the maintainer's machine; a listed dump that is absent fails), each replayed
+  (`ICO_RD_GLOW_LIGHT=0`) on the fixtures of `test/fixtures/lists/glow_light.txt`
+  ([TESTING_FIXTURES.md](TESTING_FIXTURES.md): two frames with the sun's fans, the whole plan; four
+  dark ones; two lamps rooms replayed with the cull off, the list's `nocull` word, the lamps
+  plan), each replayed
   twice with `--pass-dump --stats` at the PowerVR phone's profile on lavapipe
   (`ICO_VK_FAKE_LIMITS=moltenvk ICO_RD_VU_PREPASS=0`, 2364x1080, Full height, Full pixel,
   presented at 2364x1080), at Original 4:3 and at Enhanced 2x 4:3 presented at 1280x960, each pair
@@ -1031,5 +1043,6 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   defaults with the VD-31 bound, besides the phone's and Enhanced 2x); at least one dark run at
   every row but the defaults'; under dark the stats' `N passes in the
   chain` at most 1 (WORK1's zero draw in a fresh renderer) and `glow N passes` fewer than the
-  whole run's, one fewer under lamps, no more otherwise; at least one dark run at the phone's setting and
-  at Enhanced 2x (`rd_glow_light_ab`; SKIP without a device).
+  whole run's, one fewer under lamps, no more otherwise. The path ran: at every row the plan's run
+  shows each fixture's declared `glow_plan` (on the fixture or its list line), and each of the five
+  pinned rows has a dark, a lamps and a whole run (`rd_glow_light_ab`; SKIP without a device).

@@ -6,14 +6,17 @@
 # in rd_blur_test.c's shards.
 target_sources(ico_render PRIVATE rd_glow_light.c)
 
-# rd_glow_light_ab (test/rd_glow_light_ab.cmake): every glow dump of
-# tools/glow_light_dumps.txt (machine-local; a listed dump that is absent
-# fails) with the plan and with the chain drawn whole (ICO_RD_GLOW_LIGHT=0)
-# at the phone's setting, Original and Enhanced 2x 4:3: RGB 0 levels on
-# every target and the present, the alpha only on WORK1, WORK2, WORK3,
-# WORK3_HELD and SCENE in frames whose WORK2 kept the fill, every byte at
-# 1x, the glow's passes by plan; under the validation layer where the
-# toolchain has it
+# rd_glow_light_ab (test/rd_glow_light_ab.cmake): the fixtures of
+# test/fixtures/lists/glow_light.txt (committed frames, rd_fixture.cmake,
+# docs/port/TESTING_FIXTURES.md; a listed fixture that is absent fails) with
+# the plan and with the chain drawn whole (ICO_RD_GLOW_LIGHT=0) at the
+# phone's setting, Original and Enhanced 2x 4:3, Enhanced 1x and the Mali
+# class at 1x: RGB 0 levels on every target and the present, the alpha only
+# on WORK1, WORK2, WORK3, WORK3_HELD and SCENE in frames whose WORK2 kept the
+# fill, every byte at 1x, the glow's passes by plan, the plan each fixture
+# declares (the path ran: a dark, a lamps and a whole run at each setting);
+# under the validation layer where the toolchain has it
+include(rd_fixture.cmake)
 if(ICO_RUN_TESTS AND Python3_FOUND)
     set(_gl_env "")
     if(NOT WIN32 AND EXISTS "${ICO_DEPS_DIR}/vulkan-validation/VkLayer_khronos_validation.json")
@@ -28,7 +31,9 @@ if(ICO_RUN_TESTS AND Python3_FOUND)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/glow_light_ab")
     add_test(NAME rd_glow_light_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/glow_light_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                     "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/glow_light.txt"
                      "-DPY=${Python3_EXECUTABLE}"
                      "-DDIFF=${CMAKE_CURRENT_SOURCE_DIR}/test/png_level_diff.py"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/glow_light_ab"
