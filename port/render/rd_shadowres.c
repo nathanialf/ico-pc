@@ -943,6 +943,30 @@ bool rd__shadow_fine_read(int k, bool final, void *dst, size_t size)
     if (k < 0 || k >= RD_SR_LEVELS || !s_sr.lvl[k].id || !s_sr.tmp[k].id) {
         return false;
     }
+    /* every level's two textures to COPY_SRC in one command list: a list a
+     * readback would pass the device's command lists a frame (8 on Vulkan)
+     * before the third level is read */
+    bool move = false;
+    for (int j = 0; j < RD_SR_LEVELS; j++) {
+        move = move || (s_sr.lvl[j].id && s_sr.lvlState[j] != RHI_STATE_COPY_SRC) ||
+               (s_sr.tmp[j].id && s_sr.tmpState[j] != RHI_STATE_COPY_SRC);
+    }
+    if (move) {
+        RhiCommandList cl = rhi_begin_commands();
+        if (!cl.id) {
+            return false;
+        }
+        for (int j = 0; j < RD_SR_LEVELS; j++) {
+            if (s_sr.lvl[j].id) {
+                rd__transition(cl, s_sr.lvl[j], &s_sr.lvlState[j], RHI_STATE_COPY_SRC);
+            }
+            if (s_sr.tmp[j].id) {
+                rd__transition(cl, s_sr.tmp[j], &s_sr.tmpState[j], RHI_STATE_COPY_SRC);
+            }
+        }
+        rhi_end_commands(cl);
+        rhi_submit(cl);
+    }
     /* under the cuts the step's output stays in lvl and the tent's is tmp */
     return rd__read_rhi_texture(final ? s_sr.tmp[k] : s_sr.lvl[k],
                                 final ? &s_sr.tmpState[k] : &s_sr.lvlState[k], s_sr.w[k], s_sr.h[k],
