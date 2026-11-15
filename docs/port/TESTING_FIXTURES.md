@@ -185,6 +185,40 @@ skeleton (the placed meshes' ids and centres in lattice steps, the moved prims' 
 `placement: N meshes drawn into WORK2 generated on it (K kept their origin), N prims drawn into
 WORK2 generated beside it`.
 
+#### The water's rule
+
+A puddle's reflection is a render-to-texture block (a temporary target the dump marks a block,
+smaller than the frame) that the room's meshes are drawn into, and the frame reads it twice:
+the ripples (CPU-projected triangles with ST and Q, on REPEAT, AA1) and the copy over the frame
+(a sprite inside the block's edges), both under DATE, so they land only where the puddle's
+surface, drawn with FBA on, set SCENE's alpha bit (`ico2/sugipon/src/puddle.c`;
+[RENDER_POST.md](RENDER_POST.md)). Generated as everything else, the block's meshes and the
+surface sit about their models' origins, off the block and off the picture, and the ripples are
+the ribbon with STs inside one period: the block holds its fill alone, no pixel of the frame has
+the bit, and neither the block's scale nor the wrap of its reads changes a pixel. One more line
+of a rule file chooses otherwise:
+
+- `@water place`: every mesh that a non-skinned draw puts into a block is generated about a point
+  on the block, the n-th on the block scissor's inner columns and rows as `@lamps place` places
+  WORK2's; every mesh that a non-skinned draw puts into SCENE with FBA on (the writer of the
+  alpha bit the DATE draws test) about a point on SCENE, the n-th at grid point (n + 4) mod 9 of
+  the same nine, so the first lies on the scissor's middle; every CPU-projected prim with ST and Q
+  whose texture is a block is generated as the ribbon, its S running 12/16 to 27/16 along the
+  ribbon's columns where its draw reads S on REPEAT, its T 6/8 to 15/8 down the rows where it
+  reads T on REPEAT (an axis on CLAMP keeps the ribbon's STs): the reads cross the block's period,
+  and the ribbon's middle, over the surface, reads the block's first quarter through the wrap,
+  where the first mesh drawn into it lies. What the rule reads: each draw's target and the
+  temporary targets' block mark and sizes, the scissor, FBA, the texture (a block's) and the wrap
+  in the state at the draw, the placement matrix and the mesh's number; no vertex, bound or
+  statistic. A frame without a block, a mask writer or a prim reading a block is refused.
+
+The fixture keeps it at the end of its skeleton under its own tag (`FXP3`): the placed meshes'
+ids and centres, then the prims read across a period with their axes. `rd_fixture_tool info`
+says `N meshes placed on a block or SCENE, 0 prims beside WORK2, N prims read across a block's
+period`, the maker's line `water: N meshes drawn into a block generated on it, N meshes setting
+SCENE's alpha bit generated on SCENE (K kept their origin), N prims reading a block generated
+across its period`.
+
 ## The format
 
 `port/render/rd_fixture.h` is the reference. In short: the head (`ICORDFX1`, the format, the

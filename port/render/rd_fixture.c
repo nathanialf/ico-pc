@@ -692,6 +692,9 @@ typedef struct Sk {
     uint32_t placed;     /* the placement section's meshes */
     const uint8_t *offs; /* and its prims generated beside the target: payload offsets */
     uint32_t noff;
+    bool water;           /* the section is RD_FX_PLACE_TAG3's (@water place) */
+    const uint8_t *woffs; /* its prims read across a block's period: (offset, axes) pairs */
+    uint32_t nwrap;
 } Sk;
 
 typedef struct Rd {
@@ -857,10 +860,16 @@ static bool skParse(const RdFixture *fx, Sk *s, char *why, size_t whySize)
     }
     s->placed = s->noff = 0;
     s->offs = NULL;
+    s->water = false;
+    s->woffs = NULL;
+    s->nwrap = 0;
     if (!r.bad && s->mesh && r.o != r.n) {
-        /* the placement section (a fixture made with @lamps place or
-         * @fans off); never empty, so a fixture has one encoding */
-        if (r32(&r) != RD_FX_PLACE_TAG) {
+        /* the placement section (a fixture made with @lamps place,
+         * @fans off or @water place); never empty, so a fixture has one
+         * encoding */
+        const uint32_t tag = r32(&r);
+        s->water = tag == RD_FX_PLACE_TAG3;
+        if (tag != RD_FX_PLACE_TAG && !s->water) {
             r.bad = true;
         }
         s->placed = r32(&r);
@@ -890,10 +899,24 @@ static bool skParse(const RdFixture *fx, Sk *s, char *why, size_t whySize)
             memcpy(m->centre, c, sizeof(c));
         }
         s->noff = r32(&r);
-        if (s->noff > (1u << 20) || (s->placed == 0 && s->noff == 0)) {
+        if (s->noff > (1u << 20) || (!s->water && s->placed == 0 && s->noff == 0)) {
             r.bad = true;
         }
         s->offs = rraw(&r, (size_t)s->noff * 4u);
+        if (s->water && !r.bad) {
+            /* @water place: the prims read across a block's period */
+            s->nwrap = r32(&r);
+            if (s->nwrap > (1u << 20) || (s->placed == 0 && s->noff == 0 && s->nwrap == 0)) {
+                r.bad = true;
+            }
+            s->woffs = rraw(&r, (size_t)s->nwrap * 8u);
+            for (uint32_t i = 0; s->woffs && !r.bad && i < s->nwrap; i++) {
+                const uint32_t axes = rd_fx_get32(s->woffs + 8u * i + 4u);
+                if (axes == 0 || axes > (RD_FX_ACROSS_S | RD_FX_ACROSS_T)) {
+                    r.bad = true;
+                }
+            }
+        }
     }
     if (r.bad || !s->tex || !s->mesh || (s->ver >= 15u && !s->facing) || !s->exps || r.o != r.n) {
         setWhy(why, whySize,
@@ -1136,13 +1159,30 @@ static bool genSpan(void *user, const RdCmd *c, const RdFxSpan *s)
                 for (uint32_t k = 0; s->gen == RD_FX_GEN_SCREEN && k < g->sk->noff; k++) {
                     beside = beside || rd_fx_get32(g->sk->offs + 4u * k) == s->off;
                 }
+                /* @water place: a prim reading a block across its period on
+                 * the axes the section names (ST with Q: S 12/16 to 27/16
+                 * along the ribbon's columns, T 6/8 to 15/8 down its rows,
+                 * so the ribbon's middle reads the block's first quarter
+                 * through the wrap: 20/16 and 10/8) */
+                uint32_t across = 0;
+                for (uint32_t k = 0; !fixedUv && s->gen == RD_FX_GEN_SCREEN && k < g->sk->nwrap;
+                     k++) {
+                    if (rd_fx_get32(g->sk->woffs + 8u * k) == s->off) {
+                        across = rd_fx_get32(g->sk->woffs + 8u * k + 4u);
+                    }
+                }
+                const uint32_t row = (col / 16u) % 8u;
                 const uint32_t px =
                     beside ? w + 8u + (col % 16u) * 4u : w / 4u + (col % 16u) * (w / 2u) / 16u;
-                const uint32_t py = h / 4u + ((col / 16u) % 8u + side) * (h / 2u) / 8u;
+                const uint32_t py = h / 4u + (row + side) * (h / 2u) / 8u;
                 const uint32_t ss = fixedUv ? rd_fx_f32((int32_t)((col % 16u) * 64u), 0)
-                                            : rd_fx_f32((int32_t)(col % 16u), -4);
-                const uint32_t tt =
-                    fixedUv ? rd_fx_f32((int32_t)(side * 64u), 0) : (side ? F_ONE : 0u);
+                                    : (across & RD_FX_ACROSS_S)
+                                        ? rd_fx_f32((int32_t)(12u + col % 16u), -4)
+                                        : rd_fx_f32((int32_t)(col % 16u), -4);
+                const uint32_t tt = fixedUv ? rd_fx_f32((int32_t)(side * 64u), 0)
+                                    : (across & RD_FX_ACROSS_T)
+                                        ? rd_fx_f32((int32_t)(6u + row + side), -3)
+                                        : (side ? F_ONE : 0u);
                 putVtx(o, gsX(w, px), gsX(h, py), 0xFFFFFFFFu, ss, tt, grey);
             }
         }
@@ -1405,7 +1445,12 @@ bool rd_fixture_check(const RdFixture *fx, char *why, size_t whySize, char *stat
             "zero), %u textures (%u images as patterns), %u meshes generated, %u sized draws",
             sk.ver, cmds, sk.psz, (unsigned long long)kept, (unsigned long long)text,
             (unsigned long long)zero, sk.nt, images, sk.nm, sk.ne);
-        if ((sk.placed || sk.noff) && at > 0 && (size_t)at < statsSize) {
+        if (sk.water && at > 0 && (size_t)at < statsSize) {
+            snprintf(stats + at, statsSize - (size_t)at,
+                     ", %u meshes placed on a block or SCENE, %u prims beside WORK2, %u prims "
+                     "read across a block's period",
+                     sk.placed, sk.noff, sk.nwrap);
+        } else if ((sk.placed || sk.noff) && at > 0 && (size_t)at < statsSize) {
             snprintf(stats + at, statsSize - (size_t)at,
                      ", %u meshes placed on WORK2, %u prims beside it", sk.placed, sk.noff);
         }

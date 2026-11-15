@@ -1,0 +1,14 @@
+# Rules for the water's fixtures (docs/port/TESTING_FIXTURES.md "The water's
+# rule"): the default texture rules, the meshes drawn into a render-to-texture
+# block generated on the block, the puddle surface (the mesh that sets SCENE's
+# alpha bit with FBA) on SCENE, and the ripples read across the block's period
+glyphs     sheet
+ramp       r8
+date_split date
+alpha_ramp ate
+bright     additive
+gradient   abe
+checker    sprite
+grey       unused
+checker
+@water place
