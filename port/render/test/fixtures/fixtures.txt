@@ -13,6 +13,9 @@
 # empty_composites_skipped, no_volume_kept and no_volume_break_taken on the run
 # with that cut on (the last two where DATE takes the stencil bit: a snapshot
 # setting takes no window), stencil_window_stores with ICO_RD_STENCIL_PACKED=0.
+# date_cut_passes on the run with the cut on where it acts (DATE by the
+# snapshot, a whole scale: not at the phone's fractional one); shadow_levels and
+# shadow_level_texels on the default run above 1x (and the forced one at 1x).
 #
 # stage 4, the Pixel 10 Pro Fold's F12 frame (v0.11.4): a character's shadow
 # (seven volume commands, the count, three levels, three composites) at 21:9
@@ -33,3 +36,21 @@ fx-mali-slow541 dumps/v0116-mali179/slow-20261112-195541.zip shadow_volume_draws
 fx-boot-0200 build-host-tmp/corpus/dumps/boot/rd-00200.rddump shadow_volume_draws>=1 no_volume_kept=0
 fx-boot-0400 build-host-tmp/corpus/dumps/boot/rd-00400.rddump shadow_volume_draws=0 no_volume_kept>=1
 fx-boot-0600 build-host-tmp/corpus/dumps/boot/rd-00600.rddump shadow_volume_draws=0 no_volume_kept>=1
+# issue 179's Mali-G52 (moto g24 power): its v0.11.4 F12 frame and a slow-scene
+# capture (the shadow's three composites under DATE), and its v0.11.2 frame
+fx-datecut-6100 build-host-tmp/v0115/evidence/179/x/frame-20261111-070230-v6100.rddump date_snapshots>=1 date_cut_passes>=1
+fx-datecut-slow137 build-host-tmp/v0115/evidence/datecut/slow/070137/slow-20261111-070137.rddump date_snapshots>=1 date_cut_passes>=1
+fx-mali-17008 build-host-tmp/v0113/evidence/179/zip/frame-20261110-003507-v17008.rddump date_snapshots>=1 date_stencil_draws>=1 date_cut_passes>=1
+# the main gate above 1x, each a tick, the tick before it and the blended
+# picture between them, one shadow window with volumes: the owner's Pixel on a
+# v0.11.7 build (848 GS wide), issue 123's Adreno 740 tablet on v0.11.6 (576 GS
+# wide), the owner's Pixel again on a later v0.11.7 build (fx-gate2)
+fx-gate dumps/v0117-owner-gate/frame-20261114-133111-v97707.rddump shadow_levels>=1 shadow_level_texels>=1
+fx-gate-prev dumps/v0117-owner-gate/frame-20261114-133111-v97707-prev.rddump shadow_levels>=1 shadow_level_texels>=1
+fx-gate-blended dumps/v0117-owner-gate/frame-20261114-133111-v97707-blended.rddump shadow_levels>=1 shadow_level_texels>=1
+fx-adreno dumps/v0117-adreno123/frame-20261114-101655-v12635.rddump shadow_levels>=1 shadow_level_texels>=1
+fx-adreno-prev dumps/v0117-adreno123/frame-20261114-101655-v12635-prev.rddump shadow_levels>=1 shadow_level_texels>=1
+fx-adreno-blended dumps/v0117-adreno123/frame-20261114-101655-v12635-blended.rddump shadow_levels>=1 shadow_level_texels>=1
+fx-gate2 dumps/v0117-owner-rc3/frame-20261114-144508-v4245.rddump shadow_levels>=1 shadow_level_texels>=1
+fx-gate2-prev dumps/v0117-owner-rc3/frame-20261114-144508-v4245-prev.rddump shadow_levels>=1 shadow_level_texels>=1
+fx-gate2-blended dumps/v0117-owner-rc3/frame-20261114-144508-v4245-blended.rddump shadow_levels>=1 shadow_level_texels>=1

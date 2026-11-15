@@ -943,8 +943,10 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   `ICO_VK_FAKE_LIMITS=moltenvk` at 1.1, the stencil path the profile's own and `fog local off` (on
   that class with dynamic rendering it is on); `rd_date_selftest_sabotage_vk11`, the same with
   `ICO_RD_DATE_SABOTAGE=1`: the stencil fails and `profile: DATE stencil off (self-test)`; and
-  `rd_date_subpass_ab` (`test/rd_date_subpass_ab.cmake`, the dumps of
-  `tools/date_subpass_dumps.txt`, issue 179's Mali frame first): each dump through the bit and
+  `rd_date_subpass_ab` (`test/rd_date_subpass_ab.cmake`, the fixtures of
+  `test/fixtures/lists/date_subpass.txt`, [TESTING_FIXTURES.md](TESTING_FIXTURES.md), issue 179's
+  Mali frame first; the path ran: each fixture's declared `date_stencil_draws` through the bit and
+  `date_snapshots` on the snapshot run): each frame through the bit and
   through the snapshot on that 1.1 tile-based profile with `--pass-dump` (the stencil run with the
   read on, the snapshot run with it off, as shipped), every named target byte for byte, no DATE
   snapshot and fewer passes through the bit where the snapshot run drew some, no validation error;
@@ -989,13 +991,15 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   and the file `probing`, the second off `refused for good: the start that probed it ended before
   its verdict` and the file so rewritten); no validation error in any run (label vk11).
   `rd_subpass_ab` (`test/rd_subpass_ab.cmake`): the read on against off byte for byte over the
-  machine-local `tools/vu_flat0_dumps.txt` rows naming the mali or pixel profile and every
-  `tools/shadow_cuts_dumps.txt` row (the pixel profile), at issue 179's setting under the Arm fakes
+  fixtures of `test/fixtures/lists/subpass.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md); each
+  line a fixture and its profiles), at issue 179's setting under the Arm fakes
   (`ICO_VK_FAKE_LIMITS=mali`, `ICO_VK_FAKE_VENDOR=0x13B5`, `ICO_VK_FAKE_NO_DUAL=1`,
   `ICO_RD_VU_RECORD=compute`, 21:9) and at the Pixel's under the MoltenVK fakes, both at
   `ICO_VK_FAKE_API=1.1`: every target the same, no DATE snapshot with the read on and the passes fewer
-  by at least the off run's snapshots; a listed dump that is absent fails where
-  `/primary/dev/ico-dumps` exists (label vk11).
+  by at least the off run's snapshots; the path ran: each fixture's declared `date_stencil_draws`
+  on the on run and `date_snapshots` on the off run (the window with no volume, `nodate` in the
+  list, draws no DATE either way and is checked for that); a listed fixture that is absent fails
+  (label vk11).
 - `rd_fog_test.c`: the depth fog of `fog_DrawFog` on the CPU and on the device, every depth path
   (`rd_fog`, `rd_fog_*`; the local read from the start in `rd_fog_local`, the other paths' replays
   the same bytes); at 2x a depth ramp's fog alpha equals the above-1x formula (the table

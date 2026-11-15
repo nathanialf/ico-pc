@@ -42,18 +42,21 @@ if(ICO_RUN_TESTS)
 endif()
 
 # rd_subpass_ab (test/rd_subpass_ab.cmake): the subpass read on against off,
-# byte for byte, over the machine-local tools/vu_flat0_dumps.txt rows that
-# name the mali or pixel profile and every tools/shadow_cuts_dumps.txt row
-# (the pixel profile), at issue 179's Mali-G52 setting under the Arm fakes and
-# at the Pixel's under the MoltenVK fakes, both on VkRenderPass objects: every
-# target the same bytes, no DATE snapshot with the read on and at least as
-# many passes fewer as the off run's snapshots.  No device: SKIP.
+# byte for byte, over the fixtures of test/fixtures/lists/subpass.txt
+# (docs/port/TESTING_FIXTURES.md; each with the profiles it runs under), at
+# issue 179's Mali-G52 setting under the Arm fakes and at the Pixel's under
+# the MoltenVK fakes, both on VkRenderPass objects: every target the same
+# bytes, no DATE snapshot with the read on and at least as many passes fewer
+# as the off run's snapshots, each fixture's DATE draws through the bit (the
+# path ran).  No device: SKIP.
+include(rd_fixture.cmake)
 if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/subpass_ab")
     add_test(NAME rd_subpass_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DFLAT=${CMAKE_SOURCE_DIR}/tools/vu_flat0_dumps.txt"
-                     "-DCUTS=${CMAKE_SOURCE_DIR}/tools/shadow_cuts_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                     "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/subpass.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/subpass_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_subpass_ab.cmake")
     set_tests_properties(rd_subpass_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600

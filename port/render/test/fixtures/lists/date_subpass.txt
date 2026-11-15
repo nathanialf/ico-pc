@@ -1,0 +1,8 @@
+# rd_date_subpass_ab (port/render/test/rd_date_subpass_ab.cmake): DATE through
+# the stencil bit on the VkRenderPass path's subpass read against the R8
+# snapshot, byte for byte.  Names of fixtures
+# (port/render/test/fixtures/NAME.rdfix), each a frame whose shadow composites
+# draw under DATE (date_stencil_draws>=1, date_snapshots>=1).
+fx-mali-17008
+fx-mali-frame
+fx-shadow-wide

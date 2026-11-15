@@ -23,22 +23,27 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_shadow_fine COMMAND rd_shadow_fine_test)
 endif()
 
-# rd_shadow_fine_ab (test/rd_shadow_fine_ab.cmake): the dumps of
-# tools/shadow_fine_dumps.txt (machine-local; a listed dump that is absent
-# fails), the default against ICO_RD_SHADOW_FINE=0: the PS2's sizes v0.11.6's
-# PNGs (tools/shadow_fine_goldens.txt), the default the same bytes at 1x, above
+# rd_shadow_fine_ab (test/rd_shadow_fine_ab.cmake): the fixtures of
+# test/fixtures/lists/shadow_fine.txt (docs/port/TESTING_FIXTURES.md; a listed
+# fixture that is absent fails), the default against ICO_RD_SHADOW_FINE=0: the
+# PS2's sizes v0.11.6's PNGs of the fixtures
+# (test/fixtures/lists/shadow_fine_goldens.txt), the default the same bytes at 1x, above
 # 1x (3x, 4.10 x 2.41, 2.8125 x 2.41, 1 x 2, MSAA 4x, the B-spline) one shadow at
 # the scene's scale with its passes and no other, its change confined to the
 # shadow with its darkness kept (test/shadow_fine_check.py), the forced chain
-# at 1x within a level; rd_shadow_fine_ab_gl the 1x and 2x pairs on OpenGL
-# (llvmpipe).  No device: SKIP (77).
+# at 1x within a level, each fixture's levels drawn at the scene's scale (the
+# path ran); rd_shadow_fine_ab_gl the 1x and 2x pairs on OpenGL (llvmpipe).
+# No device: SKIP (77).
+include(rd_fixture.cmake)
 if(ICO_RUN_TESTS AND TARGET rd_replay_tool AND Python3_FOUND)
     set(_sf_env "")
     if(ICO_SANITIZE MATCHES "address")
         list(APPEND _sf_env "ASAN_OPTIONS=detect_leaks=0")
     endif()
-    set(_sf_args "-DLIST=${CMAKE_SOURCE_DIR}/tools/shadow_fine_dumps.txt"
-                 "-DGOLDENS=${CMAKE_SOURCE_DIR}/tools/shadow_fine_goldens.txt"
+    set(_sf_args -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                 "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                 "-DLIST=${ICO_FIXTURE_DIR}/lists/shadow_fine.txt"
+                 "-DGOLDENS=${ICO_FIXTURE_DIR}/lists/shadow_fine_goldens.txt"
                  "-DPY=${Python3_EXECUTABLE}"
                  "-DCHECK=${CMAKE_CURRENT_SOURCE_DIR}/test/shadow_fine_check.py"
                  "-DDIFF=${CMAKE_CURRENT_SOURCE_DIR}/test/png_level_diff.py")

@@ -52,6 +52,8 @@ set(_rdfx_q_empty_composites_skipped "empty composites on: ([0-9]+) skipped")
 set(_rdfx_q_no_volume_kept "no volume on: ([0-9]+) kept")
 set(_rdfx_q_no_volume_break_taken "break on: ([0-9]+) taken")
 set(_rdfx_q_stencil_window_stores "stencil inside the shadow window only: ([0-9]+) stores")
+# DATE's passes without the depth
+set(_rdfx_q_date_cut_passes "DATE cut on: ([0-9]+) passes begun without the depth")
 
 set(RDFX_FAILURES 0)
 

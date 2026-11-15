@@ -12,7 +12,6 @@ port/render/test/rd_aura_paste_ab.cmake
 port/render/test/rd_bench_ab.cmake
 port/render/test/rd_comp_spec_ab.cmake
 port/render/test/rd_crack_work_ab.cmake
-port/render/test/rd_date_cut_ab.cmake
 port/render/test/rd_fill11_ab.cmake
 port/render/test/rd_glow_blur_ab.cmake
 port/render/test/rd_glow_cheap_ab.cmake
@@ -29,7 +28,6 @@ port/render/test/rd_replay_tool_ripple.cmake
 port/render/test/rd_replay_tool_save_blended.cmake
 port/render/test/rd_replay_tool_still.cmake
 port/render/test/rd_shadow_tile_ab.cmake
-port/render/test/rd_subpass_ab.cmake
 port/render/test/rd_turn_fold_ab.cmake
 port/render/test/rd_vis_hiz_corpus.txt
 port/render/test/rd_volume_fs_ab.cmake
@@ -45,7 +43,6 @@ tools/crack_late_dumps.txt
 tools/crack_work_dumps.txt
 tools/cull_msaa_dumps.txt
 tools/date_cut_dumps.txt
-tools/date_subpass_dumps.txt
 tools/fades_fold_dumps.txt
 tools/fill11_dumps.txt
 tools/glow_cheap_dumps.txt
@@ -74,6 +71,3 @@ tools/vu_rec_size_dumps.txt
 tools/vufuse_dumps.txt
 tools/vumerge_mali_dumps.txt
 tools/vustage_dumps.txt
-port/render/test/rd_shadow_fine_ab.cmake
-tools/shadow_fine_dumps.txt
-tools/shadow_fine_goldens.txt
