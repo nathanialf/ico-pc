@@ -5,6 +5,8 @@
  */
 #include "attempt_ledger.h"
 
+#include "rhi_device_table.h" /* port/rhi: the words where no row sets a choice */
+
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -390,7 +392,7 @@ void ico_attempt_decide_no_volume_break(int env, int classOk, int measured, int 
                           "ICO_RD_NO_VOLUME_BREAK=0: the tests' switch");
     } else if (env != 1 && !classOk) {
         ico_attempt_state(ICO_ATT_NO_VOLUME_BREAK, ICO_ATT_NA,
-                          "not the PowerVR or MoltenVK class under Vulkan");
+                          rhi_device_choice_na_words(RHI_DC_NO_VOLUME_CLASS));
     } else if (gateWhy != NULL) {
         ico_attempt_state(ICO_ATT_NO_VOLUME_BREAK, ICO_ATT_NA, gateWhy);
     } else if (env == 1) {
@@ -516,7 +518,7 @@ void ico_attempt_decide_pace_even(int asMade, int clock, int times, int on)
 void ico_attempt_decide_pass_objects(const char *row)
 {
     ico_attempt_state(ICO_ATT_ADRENO_A, row != NULL ? ICO_ATT_ON : ICO_ATT_NA,
-                      row != NULL ? row : "not Qualcomm's own driver");
+                      row != NULL ? row : rhi_device_choice_na_words(RHI_DC_PASS_OBJECTS));
 }
 
 void ico_attempt_decide_queue_priority(int state, const char *why)
@@ -554,7 +556,7 @@ int ico_attempt_decide_vu_compute(int byName, int stores, int compute, int power
         why = powervr ? "ICO_RD_VU_COMPUTE_CLASS=1 on the PowerVR class"
                       : "ICO_RD_VU_COMPUTE_CLASS=1: the tests' switch on another class";
     } else if (!powervr) {
-        why = "not the PowerVR class under Vulkan";
+        why = rhi_device_choice_na_words(RHI_DC_VU_COMPUTE_CLASS);
     } else if (!defaultOn) {
         st = ICO_ATT_OFF_DEFAULT;
         why = "RD_VU_COMPUTE_CLASS_DEFAULT 0: the vertex stores";
@@ -629,8 +631,7 @@ int ico_attempt_decide_compaction(int compute, const char *notWhy, int cls, int 
               "own index list";
     } else if (env != 1 && cls != ICO_ATT_CMP_G52 && cls != ICO_ATT_CMP_DXT) {
         st = ICO_ATT_OFF_DEFAULT;
-        why = "off by default: measured on the Mali-G52 only (and on the PowerVR D-Series "
-              "DXT-48-1536's compute record)";
+        why = rhi_device_choice_na_words(RHI_DC_COMPACTION_CLASS);
     } else if (env != 1 && !cmpClassDefault(cls, defaultOn, armDefaultOn)) {
         st = ICO_ATT_OFF_DEFAULT;
         why = cls == ICO_ATT_CMP_G52

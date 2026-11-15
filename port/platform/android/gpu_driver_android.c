@@ -23,6 +23,7 @@
 #include "host_fs.h"
 #include "iso_import.h"
 #include "rhi.h"
+#include "rhi_device_table.h"
 #include "rhi_driver_version.h"
 #include "strings.h" /* port/ui: the hang box's driver route (UI_STR_GPU_HANG_TURNIP) */
 
@@ -816,11 +817,28 @@ static void seen_write(const char *folder)
     info_forget();
 }
 
+/* The device table's TURNIP_NOTE (port/rhi/rhi_device_table.c, the row
+   stock-qualcomm-android: an Android build, no driver package, vendor
+   0x5143) on an identity of this start: the build's OS, the package the
+   window says was loaded and the device's vendor id (no limits: no vendor,
+   so no row).  The rule this file held before; port/rhi/test/
+   rhi_device_table_equiv_test.c compares the two. */
+static int on_stock_qualcomm(int customDriver)
+{
+    const RhiLimits *l = rhi_limits();
+    RhiDeviceId id;
+
+    memset(&id, 0, sizeof id);
+    id.os = RHI_DT_OS_BUILD;
+    id.customDriver = (uint8_t)(customDriver != 0);
+    id.vendorId = l != NULL ? l->vendorId : 0u;
+    return rhi_device_table_choice(&id, RHI_DC_TURNIP_NOTE, NULL) != 0;
+}
+
 void ico_gpu_driver_android_device_up(int customDriver)
 {
     seen_write(customDriver && s_active[0] != '\0' ? s_active : NULL);
-    s_onStock =
-        !customDriver && rhi_limits() != NULL && rhi_limits()->vendorId == RHI_VENDOR_QUALCOMM;
+    s_onStock = on_stock_qualcomm(customDriver);
     if (s_onStock && ico_diag_startup_end_count(ICO_DIAG_END_LOSS) > 0) {
         ico_gpu_driver_android_note_loss_on_stock();
     }

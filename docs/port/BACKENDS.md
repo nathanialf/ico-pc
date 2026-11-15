@@ -78,7 +78,7 @@ have static blend state only.
 
 ## The device profile on OpenGL and Direct3D 11
 
-Both classes take the desktop column whatever the vendor; what differs from desktop Vulkan comes
+Both classes take the desktop class's values whatever the vendor; what differs from desktop Vulkan comes
 from the limits above. [RENDER.md](RENDER.md#the-device-profile) has the other classes.
 
 | flag | OpenGL | Direct3D 11 |
@@ -233,7 +233,7 @@ debug flag) and refuses a window made without `SDL_WINDOW_OPENGL`. Android and i
 | `rd_present` scene fallback checks | run (`vkr_test_fail_texels_above`) | skipped | skipped |
 | `rd_fog` edge probe (`checkEdgeProbe`) | run | run | only on the buffer path (never) |
 | `rd_msaa` | the mask with and without `depth_resolve_ps` | the same | not run (Windows) |
-| `rd_vuprepass_selftest*` | the profile names `Vulkan` | names `OpenGL`, desktop column | not run (Windows) |
+| `rd_vuprepass_selftest*` | the profile names `Vulkan` | names `OpenGL`, the desktop class's values | not run (Windows) |
 
 The OpenGL runs of the renderer's suite are the `_gl` tests ([TESTING.md](TESTING.md)).
 

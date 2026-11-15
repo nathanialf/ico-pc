@@ -285,7 +285,8 @@ kick's own `0x00`; the kick drawn under the cut's DrawCB gives its marked pixels
 `VuVSOut.r.w` or the no-planes twin's negative plane), so its colour is Cs and its alpha, mask,
 PABE and FBA the pixel's own: what the kick's own pass stores, byte for byte.
 
-**The device rule.** Vulkan with `RhiLimits.rasterOrderAttachment` and local read: never on
+**The device rule.** Vulkan with `RhiLimits.rasterOrderAttachment` and local read (the device
+table's `ATTACHMENT_READ_OFF` and `UBER_AUTO`, [DEVICE_TABLE.md](DEVICE_TABLE.md)): never on
 Qualcomm's own driver (issue 89), on PowerVR (no rasterization order: `rhi_vk: destination read:
 interlock no, rasterization-order attachment read no; local read yes`) or under MoltenVK; Mali
 (`VK_ARM_rasterization_order_attachment_access`) and Turnip have it; lavapipe has it, which the
@@ -536,7 +537,9 @@ the rest made on first use`. A batch in flight is not cut short: the careful bat
 pipelines on one thread. The same function also says yes once the device's available memory is
 under the free-memory floor: on Qualcomm's own driver 17 % of its memory and at most 2048 MB on a
 device of more than 8 GB (issue 161's guard against that driver's compiler), on any other driver
-the set's need with a margin, at most 512 MB above 8 GB (`port/platform/memory_floor.h`;
+the set's need with a margin, at most 512 MB above 8 GB (`port/platform/memory_floor.h`; the
+driver's class is the device table's `MEMORY_FLOOR_CLASS`, rows `qualcomm-text` and
+`vendor-unknown`, [DEVICE_TABLE.md](DEVICE_TABLE.md);
 [WORK_BUFFERS.md](WORK_BUFFERS.md#without-the-sprite-planes) has the figures). A phone with much
 memory reports little of it available while it runs well (1823 to 2647 MB of 15552 MB on a PowerVR
 DXT-48-1536): a plain 17 % (2643 MB) stopped that phone's set after 33 of 1193 keys, so the title
@@ -804,7 +807,8 @@ start-up set there and are made on first use, a compile each the first time a sk
 The skin check's twins of a record draw go through the entry's ring build in the box check's form
 (the twin C table, `RD_VU_SKIN_RING_PIPES`, compiled in the background): no start-up key either.
 
-The table:
+The table (the device table's row `adreno-740-qualcomm`, its `VU_FALLBACK_PLAIN`;
+[DEVICE_TABLE.md](DEVICE_TABLE.md)):
 
 | device | match | reason |
 | --- | --- | --- |

@@ -1138,8 +1138,8 @@ const char *ico_dev_env_value(const char *key, const char *value)
     if (strcmp(key, "vu_prepass") == 0) {
         /* written in the file (the default, true, is never written): true
            exports "on", which also passes the device table's no-pre-pass
-           row (rd_replay_vu.c rd__vu_prepass_init, vk_device.c
-           kVuPlainOnly, issue 123); false "0" */
+           row (rd_replay_vu.c rd__vu_prepass_init, the row
+           adreno-740-qualcomm's VU_PREPASS_OFF, issue 123); false "0" */
         return value_is(value, on) ? "on" : value_is(value, off) ? "0" : NULL;
     }
     if (strcmp(key, "pass_split") == 0) {

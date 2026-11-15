@@ -20,12 +20,17 @@ static int s_pending; /* the switch asked for, applied at the step's end */
 /* the rhi's question when it makes a swapchain (rhi_present_fifo_start: the
    vendor id and driver text it passes), with the driver id from the same
    limits (rhi_limits() is filled before the first swapchain): a renamed
-   Turnip build is Turnip by its id, not Qualcomm's own driver */
-static int qualcomm_own_now(unsigned vendorId, const char *driverText)
+   Turnip build is Turnip by its id, not Qualcomm's own driver.  The answer
+   is the device table's FIFO_FROM_START on that identity
+   (ico_present_fallback_start; vsync is the rhi's own test, so 0 here; the
+   window hands this question over only where the mode and the build ask,
+   window_fifo_set) */
+static int fifo_start_now(unsigned vendorId, const char *driverText)
 {
     const RhiLimits *l = rhi_limits();
 
-    return ico_present_fallback_qualcomm_own(vendorId, l != NULL ? l->driverId : 0u, driverText);
+    return ico_present_fallback_start(s_mode, ICO_PRESENT_FALLBACK_ANDROID, 0, vendorId,
+                                      l != NULL ? l->driverId : 0u, driverText);
 }
 
 void window_fifo_set(void)
@@ -50,7 +55,7 @@ void window_fifo_set(void)
        mailbox, fifo needs no question; elsewhere (Windows on Snapdragon)
        no question, so Vsync Off stays immediate there */
     rhi_present_fifo_start(ico_present_fallback_start_asked(s_mode, ICO_PRESENT_FALLBACK_ANDROID)
-                               ? qualcomm_own_now
+                               ? fifo_start_now
                                : NULL);
 }
 

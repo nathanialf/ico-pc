@@ -710,6 +710,25 @@ const char *rhi_device_choice_default_words(RhiDeviceChoice choice)
     }
 }
 
+const char *rhi_device_choice_na_words(RhiDeviceChoice choice)
+{
+    /* attempt_ledger.c's phrases before the table, verbatim (the ledger's
+       tests and docs/port/ANDROID_DIAGNOSTICS.md hold them) */
+    switch (choice) {
+    case RHI_DC_PASS_OBJECTS:
+        return "not Qualcomm's own driver";
+    case RHI_DC_VU_COMPUTE_CLASS:
+        return "not the PowerVR class under Vulkan";
+    case RHI_DC_NO_VOLUME_CLASS:
+        return "not the PowerVR or MoltenVK class under Vulkan";
+    case RHI_DC_COMPACTION_CLASS:
+        return "off by default: measured on the Mali-G52 only (and on the PowerVR D-Series "
+               "DXT-48-1536's compute record)";
+    default:
+        return NULL;
+    }
+}
+
 /* ------------------------------------------------------------- the match */
 
 int rhi_device_text_has(const char *s, const char *word)

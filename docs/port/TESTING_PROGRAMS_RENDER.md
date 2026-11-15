@@ -336,7 +336,7 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   `rd_vuprepass_selftest_plain`, `rd_vuprepass_selftest_sabotage`,
   `rd_vuprepass_selftest_sabotage_tri`, `rd_vuprepass_selftest_ticks`,
   `rd_vuprepass_selftest_off`); the device profile's class ends with the backend's name (`Vulkan):`,
-  `OpenGL):`) and is the desktop column on OpenGL and Direct3D 11. With the pre-pass on, its draws
+  `OpenGL):`) and takes the desktop class's values on OpenGL and Direct3D 11. With the pre-pass on, its draws
   are batched (`g_rd.vuPreBatch`) unless `ICO_RD_VU_PREPASS_BATCH=0`, which
   `rd_vuprepass_selftest_unbatched` sets (the self-test one draw an entry and stage). The draw
   merge is on (`g_rd.vuMerge`, the summary's `VU merge on`) unless `ICO_RD_VU_MERGE=0`, which

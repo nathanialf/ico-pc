@@ -84,8 +84,9 @@ picker (pick N)`, `Add from the drivers folder: <name> (pick N)`, `the file pick
 <why>`, `a late answer for pick N (now M) ignored`, `the file picker could not open: <why>`, `Add a
 driver ended: ADDED|NOT A PACKAGE|NO SPACE|NO PICKER|NO PICKER APP|UNREADABLE|CANCELLED`, and the
 install thread's own. After a device loss on the phone's own Qualcomm driver (no package loaded;
-`ico_gpu_driver_android_device_up`, called by `window_host.c` after `rd_init`: `vendorId` Qualcomm and
-`ICO_DIAG_END_LOSS` above 0),
+`ico_gpu_driver_android_device_up`, called by `window_host.c` after `rd_init`: the device table's
+`TURNIP_NOTE`, row `stock-qualcomm-android` (an Android build, no package, `vendorId` Qualcomm;
+[DEVICE_TABLE.md](DEVICE_TABLE.md)), and `ICO_DIAG_END_LOSS` above 0),
 `gpu driver: the previous start lost the graphics device on this phone's own Qualcomm driver; a
 Turnip driver package ... is loaded by the game itself, without the system's driver` is logged
 once and the row's note becomes `UI_STR_GPU_DRIVER_NOTE_LOST` (a failed driver's note still wins).
