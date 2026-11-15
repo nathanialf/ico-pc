@@ -21,8 +21,8 @@ tests a change needs. Every test program, by area, is
 | `port/render/test/*.cmake` | script tests over the replay tool and the fog self-test |
 | `tools/native_frame_check.py`, `tools/native_frame_dumps.txt`, `docs/native_frame_baseline.json` | the native-frame gates, their dump list and their baseline |
 | `tools/coverage_check.py`, `tools/coverage_corpus.txt` | the regression renders and their corpus |
-| `tools/sweep_cameras.txt`, `tools/sweep_baseline.txt` | the disc-wide cull sweep's cameras (machine-local dump paths) and its stored counts (`gsb_cull_sweep`, [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)) |
-| `tools/sideband_dumps.txt`, `tools/cmp_dirs_band.py` | the wide dumps (machine-local paths and their aspects) the side bands' before/after compare replays, and the compare: the 4:3 band byte for byte, the side columns reported, a side pixel changed only over the fog (`rd_sideband_ab`, [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)) |
+| `tools/sweep_cameras.txt`, `tools/sweep_baseline.txt` | the disc-wide cull sweep's cameras (each a stage and a captured frame's view and zoom as numbers) and its stored counts (`gsb_cull_sweep`, [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)) |
+| `tools/cmp_dirs_band.py` | the side bands' before/after compare: the 4:3 band byte for byte, the side columns reported, a side pixel changed only over the fog (`rd_sideband_ab` on `port/render/test/fixtures/lists/wide.txt`, [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)) |
 | `tools/region_camera_report.py` | the camera rule against the PS2's region rule on saved frames: both rules' pass dumps, every SCENE pixel the camera rule changes held to `rd_replay_tool --region-mask`, a markdown report and the camera rule's baselines (`rd_region_camera_ab`, [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-camera-rule)) |
 | `tools/band_seam.py` | the mean luminance step across each edge of the 4:3 picture on a wide present, against a bound (`rd_sideband_cards`, issue 189, [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)) |
 | `port/render/tools/rd_replay_tool.c` | the replay tool |
@@ -113,7 +113,7 @@ console's picture. The camera rule, the renderer's default ([VU1_PROGRAMS.md](VU
 [--setting NAME=ARGS]...` replays each dump under both rules and holds every SCENE pixel that
 changes to the CPU oracle's mask (`rd_replay_tool --region-mask`), every target byte for byte
 where the mask is empty, and writes the per-dump report; ctest `rd_region_camera_ab` runs it over
-`tools/sideband_dumps.txt` and checks the camera rule's verdicts are the same under the Original
+the committed fixtures of `port/render/test/fixtures/lists/wide.txt` and checks the camera rule's verdicts are the same under the Original
 preset and Enhanced. With `ICO_RD_REGION_RULE=camera` gate-a lists the camera rule's changed
 targets (a report, not a gate).
 
@@ -122,8 +122,9 @@ folders of the same dumps' pictures, one drawn with the side bands off (`ICO_RD_
 one with them on: the centre 512-texel band (the 4:3 picture) must be identical byte for byte, hard;
 the side columns are reported, and a side pixel that changed must be one the picture without the
 bands left at the fog colour (never lose what was drawn). The ctest `rd_sideband_ab` runs it over
-`tools/sideband_dumps.txt`, which also takes each fresh issue-29 capture (dump version 15 or later:
-older dumps carry no facing for prelit meshes, so only lit and skinned drops can change).
+the committed fixtures of `port/render/test/fixtures/lists/wide.txt` (generated geometry: no triangle
+there is dropped where the side bands would draw it, so both gates hold the pictures the same with
+the side bands' and the camera rule's modes on; [TESTING_FIXTURES.md](TESTING_FIXTURES.md)).
 `rd_sideband_cards` holds issue 189's frame, whose only drops are cards, byte for byte with the side
 bands off and on, and its picture's edges within 1.5 levels by `tools/band_seam.py`; under the
 camera rule the three cards drawn over the whole frame and the edges again within 1.5 levels. The

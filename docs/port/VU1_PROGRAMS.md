@@ -987,8 +987,8 @@ with the normals ([The winding mark](#the-winding-mark)). `rd_region_stats`
 dumps of `tools/occlusion_corpus.txt` at Original 4:3 1x and Enhanced 4:3 2x, under each rule: the
 lines' shapes, and every pass dump the same with the draws the stats say draw nothing left out
 ([Region statistics](#region-statistics)). `rd_region_camera_ab`
-(`port/render/test/rd_region_camera_ab.cmake`) replays the dumps of `tools/sideband_dumps.txt` at
-their own aspect under both rules (`tools/region_camera_report.py`, Original 1x and Enhanced 2x):
+(`port/render/test/rd_region_camera_ab.cmake`) replays the committed fixtures of
+`port/render/test/fixtures/lists/wide.txt` at their own aspect under both rules (`tools/region_camera_report.py`, Original 1x and Enhanced 2x):
 every SCENE pixel the camera rule changes lies in `--region-mask`'s mask, every target the same
 where the mask is empty; and the camera rule's verdicts (drawn, dropped, rescued) the same under the
 Original preset and Enhanced at 1x ([The camera rule](#the-camera-rule)).
