@@ -200,6 +200,13 @@ enum {
        no PABE), behind its start-up self-test; count the pairs in one pass,
        second count the pairs kept two-pass */
     ICO_ATT_ONEPASS,
+    /* rd_hold.c (issue 123, v0.11.8): while the game is paused and its scene
+       is the one the last full picture drew, lists 11-12 drawn over a copy
+       of SCENE taken at list 11 (Vulkan, no joined list 11 passes, no MSAA,
+       exact blend or temporal upscaler), behind the first held picture's
+       check against the same picture in full; count the pictures held,
+       second count those drawn in full while paused */
+    ICO_ATT_SCENE_HOLD,
     ICO_ATT_COUNT
 };
 
@@ -447,5 +454,10 @@ void ico_attempt_decide_pin_release(int android, int rule);
    first shadowed scene above 1x (rd_shadow_count.c sets it again there);
    else not applicable */
 void ico_attempt_decide_shadow_count(int view);
+/* the paused scene held under the menu (rd_hold.c at the first paused
+   picture, and when the device's verdict changes): offWhy NULL, on; else not
+   applicable with offWhy (a static string: not Vulkan, list 11's passes
+   joined, MSAA, the exact blend, a temporal upscaler, ...) */
+void ico_attempt_decide_scene_hold(const char *offWhy);
 
 #endif

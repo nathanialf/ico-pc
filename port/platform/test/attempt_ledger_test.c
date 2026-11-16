@@ -433,6 +433,11 @@ static void test_classes(void)
            here reads the stencil through its view (the count in one draw) */
         ico_attempt_decide_shadow_count(1);
         CHECK(ico_attempt_state_of(ICO_ATT_SHADOW_COUNT) == ICO_ATT_ON);
+        /* the paused scene's hold (rd_hold.c): every class here is a Vulkan
+           device; the classes are not told whether list 11's draws join (the
+           device's fx plan), so on, as the reporter's Adreno 740 */
+        ico_attempt_decide_scene_hold(NULL);
+        CHECK(ico_attempt_state_of(ICO_ATT_SCENE_HOLD) == ICO_ATT_ON);
         /* the whole start line, its last row included, in the window's 4 KB
            parts (window_perf_rank.c ledger_lines, ico_attempt_start_part):
            one part, or two since the v0.11.7 rows, each whole rows */

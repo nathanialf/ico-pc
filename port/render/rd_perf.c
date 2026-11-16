@@ -31,6 +31,7 @@
 #include "rd_pace_even.h"
 #include "rd_pace_rules.h"
 #include "rd_internal.h"
+#include "rd_hold.h"
 #include "rd_passring.h"
 #include "rd_perf_clock.h"
 #include "rd_health.h"
@@ -1514,6 +1515,7 @@ void rd__perf_collect_gpu(void)
     const uint32_t slot = rhi_frame_slot();
     if (g_rd.hasDevice) {
         rd__shot_late_collect(slot);    /* the state picture this slot copied (rd_shot_late.h) */
+        rd__hold_collect(slot);         /* the paused scene's feedback readback (rd_hold.h) */
         rd__shadow_count_collect(slot); /* the shadow count's check (rd_shadow_count.h) */
     }
     if (!s_pendingValid[slot]) {

@@ -15,6 +15,7 @@
 #include "present_stall_block.h"
 #include "rd_perf_clock.h" /* RD_RESET_* */
 #include "rd_perf_rare.h"
+#include "rd.h"            /* rd_hold_replay_kind */
 #include "render_thread.h" /* ico_render_thread_tick */
 #include "rhi.h"
 #include "thermal_text.h"
@@ -511,6 +512,8 @@ static void moment_subs(StallMoment *m, double t0Ms, uint32_t replay)
                 const bool last = k + 1u == e->subAll;
                 o->signalKind = e->doneValid == 0 ? 0u : last ? e->doneValid : 3u;
                 o->signalMs = e->doneValid != 0 ? e->signalMs - t0Ms : 0.0;
+                /* the paused scene's hold (rd_hold.c): held or drawn in full */
+                o->scene = (uint8_t)rd_hold_replay_kind(e->replay);
             }
             break;
         }

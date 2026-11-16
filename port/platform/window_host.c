@@ -77,6 +77,7 @@
 #include "window_stall.h"
 #include "window_disc.h"
 #include "window_blended.h"
+#include "window_pause.h"
 #include "window_dump_auto.h"
 #include "dump_auto.h"
 #include "window_sweep.h"
@@ -1895,6 +1896,7 @@ static void window_attach(int mode)
     /* the replay, the present and the FMV picture run on the host stack in
        the host FP mode, not on the game's 256 KB fiber stacks */
     rd_set_host_call(ico_sched_call_on_host);
+    window_pause_hook();                 /* the paused scene's hold (rd_hold.c) */
     rd_set_probe_fn(ico_diag_set_probe); /* a probe's loss counts on no loss step */
     rd_set_replay_gate(orig_gate);
     /* the Vulkan pipeline cache in the per-user folder: a later start of a
@@ -5276,6 +5278,7 @@ static void perf_log(void)
     }
     rd_glow_light_line(); /* the glow drawn where it adds light (rd_glow_light.c) */
     rd_late_pass_line();  /* the crack fill held into the aura's pass (rd_late_pass.c) */
+    rd_hold_line();       /* the paused scene held under the menu (rd_hold.c) */
     rd_lamps_line();      /* the lamps' pass area (rd_lamps.c) */
     rd_aura_paste_line(); /* the aura's paste as the alpha alone (rd_aura_paste.c) */
     rd_cpu_phase_line();  /* the CPU phases a picture (rd_cpu_phase.c) */

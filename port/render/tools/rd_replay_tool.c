@@ -3012,6 +3012,7 @@ int main(int argc, char **argv)
             replayed = rd__replay_frame(rf, (int)rf->keep, pw != 0 && !passDir);
         }
     }
+    rd_hold_line(); /* the paused scene's hold, when a picture was taken as paused (rd_hold.c) */
     if (occlusion) {
         /* the counts before anything else recycles a frame slot */
         RdOccResult occ;

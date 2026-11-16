@@ -2750,6 +2750,14 @@ static void originalPicture(const RdFrame *f)
     }
 }
 
+/* rd_set_paused_source's: the game's pause, read as each frame closes */
+static int (*s_pausedFn)(void);
+
+void rd_set_paused_source(int (*fn)(void))
+{
+    s_pausedFn = fn;
+}
+
 void rd_end_frame(int keep)
 {
     rd__texlock_wait();
@@ -2763,6 +2771,7 @@ void rd_end_frame(int keep)
         return;
     }
     f->keep = keep ? 1 : 0;
+    f->paused = s_pausedFn && s_pausedFn() ? 1u : 0u; /* the paused scene's hold (rd_hold.h) */
     if (f->cut) {
         /* a plain cut, the camera's or the frame's, wins over a wall's */
         f->camera.cut = f->cut == RD_CAMERA_CUT_WALL && f->camera.cut != 1 ? RD_CAMERA_CUT_WALL : 1;

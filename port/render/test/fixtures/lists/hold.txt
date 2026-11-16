@@ -1,0 +1,14 @@
+# rd_hold_ab (port/render/test/rd_hold_ab.cmake): the paused scene's hold
+# (port/render/rd_hold.c) against every picture drawn in full, byte for byte,
+# over --repeat's ticks of one frame taken as paused (ICO_RD_SCENE_HOLD=paused).
+# A fixture's name (port/render/test/fixtures/NAME.rdfix, one line each) and
+# its word: "held" (pictures drawn from the held scene at every setting) or
+# "refused WHY" (none, and the 10 s line's count for WHY above 0: picture, the
+# scene reads the picture before; menu, lists 11-12 the hold cannot keep).
+#
+# issue 164's Mali-G52 frame: the settings over a paused room (the aura's
+# feedback into FEED128, list 11's last full-frame sprite folded into the
+# reduction by the fades fold)
+fx-mobile-164 held
+# the title's menu over the dark sun with its motion blur (7:380 reads DISPLAY)
+fx-title-dark-0300 refused picture

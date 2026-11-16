@@ -5695,13 +5695,29 @@ static double s_replayMaxMs;
 
 static uint32_t s_replayCount;
 
+/* rd_hold.h: what lists 0-10 left owed at list 11 (1 a clear, 2 a shadow reset) */
+uint32_t rd__replay_owed(void)
+{
+    return (s_pend.p.target ? 1u : 0u) | (s_stencil.colorTex || s_stencil.depthTex ? 2u : 0u);
+}
+
 bool rd__replay_frame_here(const RdFrame *f, int keep, bool present)
 {
+    /* the first held picture of a run: made held first, then this one in
+       full, and the two compared (rd_hold.c) */
+    const bool selftest = rd__hold_selftest_due(f, keep);
+    if (selftest) {
+        (void)rd__replay_frame_here(f, keep, false);
+        rd__hold_selftest_mid();
+    }
     const double t0 = rd__now_ms(), made0 = rd__pipeline_create_ms();
     rd__perf_begin(f, keep, present);
     rd__upscale_replay_begin(keep, present); /* the jitter, between replays (rd_upscale.c) */
     const bool ok = replayFrame(f, keep, present);
     rd__blur_smooth_replay_end(keep); /* the trail ends where no sprite drew */
+    if (selftest) {
+        rd__hold_selftest_end(ok);
+    }
     g_rdPerf.uploadBytes = s_ringOff;
     rd__perf_end();
     const double ms = rd__now_ms() - t0;
@@ -5750,8 +5766,9 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     g_rd.replayCounter++;
     rd__passring_frame(g_rdPerf.replay, f->number, keep); /* the loss report's names */
     rd__diag_frame(NULL, 0);
-    rd_cpu_start();             /* the upload's phases (rd_cpu_phase.c) */
-    f = rd__vis_frame(f, keep); /* the scene draws off the target: NOPs (rd_vis.c) */
+    rd_cpu_start();              /* the upload's phases (rd_cpu_phase.c) */
+    f = rd__hold_frame(f, keep); /* the paused scene's hold: lists 0-10 as NOPs (rd_hold.c) */
+    f = rd__vis_frame(f, keep);  /* the scene draws off the target: NOPs (rd_vis.c) */
     rd_cpu_mark(RD_CPU_U_CULL);
     /* the pass window's count starts again (rd__replay_set_window) */
     g_rdWin.passes = g_rdWin.lastDraws = g_rdWin.drawn = 0;
@@ -5828,6 +5845,9 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     uint32_t planBase = 0; /* the list's first command, counted as the store plan counts */
     for (int l = rd__first_list(keep); l < RD_LIST_COUNT; l++) {
         const RdCmdList *list = &f->lists[l];
+        if (l == RD_HOLD_LIST) {
+            rd__hold_list(&r, l); /* the paused scene's copy, or its copy back (rd_hold.c) */
+        }
         rd__passring_list(l);
         /* the list for the blur fold's look-ahead (rd_replay_tiler.c) */
         rd__replay_fold_list(list->cmds, list->count, l, headHalf);

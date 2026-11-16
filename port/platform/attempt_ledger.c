@@ -69,6 +69,8 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
     [ICO_ATT_SHADOW_COUNT] = {"the shadow levels' count from the stencil", "steps from the stencil",
                               "full-size passes drawn after all"},
     [ICO_ATT_ONEPASS] = {"the two-pass blend in one pass", "pairs", "kept two-pass"},
+    [ICO_ATT_SCENE_HOLD] = {"the paused scene held under the menu", "pictures held",
+                            "drawn in full while paused"},
 };
 
 /* the rows' live values (__atomic), and the block text's last counts (the
@@ -850,5 +852,14 @@ void ico_attempt_decide_picture_health(int vulkan)
     } else {
         ico_attempt_state(ICO_ATT_PICTURE_HEALTH, ICO_ATT_NA,
                           "only Vulkan's GPU stamps say a picture came back unfinished");
+    }
+}
+
+void ico_attempt_decide_scene_hold(const char *offWhy)
+{
+    if (offWhy == NULL) {
+        ico_attempt_state(ICO_ATT_SCENE_HOLD, ICO_ATT_ON, "while paused");
+    } else {
+        ico_attempt_state(ICO_ATT_SCENE_HOLD, ICO_ATT_NA, offWhy);
     }
 }

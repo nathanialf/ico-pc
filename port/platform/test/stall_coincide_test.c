@@ -316,10 +316,10 @@ int main(void)
         sm.pressure = -1;
         sm.headroom = -1.0;
         sm.subs = 4;
-        const StallSub s0 = {2074, 1, 2, 1, 0, 0, 1, 1, 0, 0, 12, 23, 25, 20, -21.5, 3, 365.4};
-        const StallSub s1 = {2074, 2, 2, 1, 1, 0, 0, 1, 1, -1, -1, 0, 5, 0, -21.1, 1, 365.4};
-        const StallSub s2 = {2075, 1, 2, 1, 0, 0, 0, 0, 0, -1, -1, 0, 0, 0, -1.2, 0, 0.0};
-        const StallSub s3 = {2075, 2, 2, 1, 1, 1, 0, 0, 0, -1, -1, 0, 0, 0, -0.4, 2, 2.0};
+        const StallSub s0 = {2074, 1, 2, 1, 0, 0, 1, 1, 0, 0, 12, 23, 25, 20, -21.5, 3, 365.4, 0};
+        const StallSub s1 = {2074, 2, 2, 1, 1, 0, 0, 1, 1, -1, -1, 0, 5, 0, -21.1, 1, 365.4, 0};
+        const StallSub s2 = {2075, 1, 2, 1, 0, 0, 0, 0, 0, -1, -1, 0, 0, 0, -1.2, 0, 0.0, 0};
+        const StallSub s3 = {2075, 2, 2, 1, 1, 1, 0, 0, 0, -1, -1, 0, 0, 0, -0.4, 2, 2.0, 0};
         sm.sub[0] = s0;
         sm.sub[1] = s1;
         sm.sub[2] = s2;
@@ -338,6 +338,15 @@ int main(void)
                 "the slot's wait began); in flight at the stall's start: 1 seen, 3 not known; "
                 "coincided with: none of these",
                 __LINE__);
+        /* under the pause menu (rd_hold_replay_kind): the scene drawn in full
+           by the hung replay, its next one held */
+        sm.sub[0].scene = 2;
+        sm.sub[2].scene = 1;
+        (void)stall_moment_text(&sm, t, sizeof t);
+        CHECK(strstr(t, "replay 2074's 1 of 2 (lists 0-12, menu open, scene replayed, 23 pieces; "
+                        "25 stamps, 20 unwritten;") != NULL);
+        CHECK(strstr(t, "replay 2075's 1 of 2 (1 list, menu open, scene held) submitted at "
+                        "-1.2 ms") != NULL);
     }
 
     /* the parsers */
