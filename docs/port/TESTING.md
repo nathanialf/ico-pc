@@ -955,12 +955,12 @@ Arimo's ranges `tools/subset_font_arimo.py` (`font_subset_arimo`). A gameplay op
 | workflow | job | runner | what it runs |
 | --- | --- | --- | --- |
 | `ci.yml` | `linux` | `ubuntu-24.04` | the hygiene checks (no disc data, format, no `ICO_HOST` conditional, no region block, stack-layout, struct-cast and call-type audits, the shard split's self-test, generated files fresh), then the `win-x64` cross build (tests built; the renderer's Direct3D 11 set uploaded for `windows`) |
-| `ci.yml` | `tests` | `ubuntu-24.04` | nineteen runners: the `linux-x64` headless suite in 5 shards, `linux-x64` window in 3, `linux-x64-clang` in 3, `asan` in 5, `fptrap` in 3; each builds its preset's `all tests`, checks the suite's cost table and runs one shard of its `ctest` ([below](#the-ci-shards)) |
+| `ci.yml` | `tests` | `ubuntu-24.04` | sixteen runners: the `linux-x64` headless suite in 4 shards, `linux-x64` window in 2, `linux-x64-clang` in 2, `asan` in 6, `fptrap` in 2; each builds its preset's `all tests`, checks the suite's cost table and runs one shard of its `ctest`; the tests that replay the committed fixtures run in `linux-x64` and `asan` only ([below](#the-ci-shards)) |
 | `ci.yml` | `windows` | `windows-2022` | after `linux`: the renderer's tests from the `win-x64` build on Direct3D 11 through WARP, the debug layer tried ([above](#the-render-suite-on-direct3d-11-warp)) |
 | `ci.yml` | `extra` | `ubuntu-24.04` | the `win-x64-clang` cross build |
 | `ci.yml` | `linux-arm64` | `ubuntu-24.04-arm` | the no-disc-data check, the `linux-arm64` preset with `ctest` (without the filtered-pixel render tests and the tests that replay the committed fixtures), the arm64 package on release tags (kept as an artifact and attached to the tag's release) |
 | `ci.yml` | `linux-arm64-filtered` | `ubuntu-24.04-arm` | the filtered-pixel render tests the `linux-arm64` job leaves out, in 2 shards, not gating (never run for a dispatched package) |
-| `ci.yml` | `linux-arm64-fixtures` | `ubuntu-24.04-arm` | the tests that replay the committed fixtures, which the `linux-arm64` job leaves out, in 3 gating shards (never run for a dispatched package) |
+| `ci.yml` | `linux-arm64-fixtures` | `ubuntu-24.04-arm` | the tests that replay the committed fixtures, which the `linux-arm64` job leaves out, in 4 gating shards, without the filtered-pixel names (never run for a dispatched package) |
 | `ci.yml` | `android` | `ubuntu-24.04` | the debug APK (`assembleDebug`), `tools/check_android_flags.sh`, the APK structure checks |
 | `ci.yml` | `apple` (`macos`, `ios`) | `macos-15` | the macOS app and the unsigned iPhone IPA built and packaged (`apple-build.yml`), nothing kept; no test runs on the Mac |
 | `ios.yml` | `build-ios`, `publish-ios` | `macos-15`, `ubuntu-24.04` | the unsigned iPhone IPA for a published release (`apple-build.yml`), attached to it |
@@ -994,14 +994,42 @@ shard's test count, seconds, longest test and estimated minutes, and the tests t
 exactly one shard, a fixture's tests together, the same split twice, the parallel estimate, the
 selection switches and the guard, and that each committed table parses.
 
-Selection: `--include RE` and `--exclude RE` split only the matching or the other tests, and
-`--fixture-tests run|skip|only` keeps, leaves out or splits alone the tests that replay the
-committed fixtures (a `-DFIXTURES=` argument in the test's command,
-[TESTING_FIXTURES.md](TESTING_FIXTURES.md)). Each `tests` matrix line names its suite's
-`fixture_tests` (`run` in every suite); the `linux-arm64` job runs its gating tests with
-`--fixture-tests skip`, and the `linux-arm64-fixtures` job runs those tests alone in 3 gating
-shards, so the `linux-arm64` job (and a release tag's arm64 package after it) stays about 25
-minutes.
+Selection: `--include RE` and `--exclude RE` (repeatable; an empty one excludes nothing) split
+only the matching or the other tests, and `--fixture-tests run|skip|only` keeps, leaves out or
+splits alone the tests that replay the committed fixtures (a `-DFIXTURES=` argument in the test's
+command, [TESTING_FIXTURES.md](TESTING_FIXTURES.md)). What each suite runs is one field a
+`tests` matrix line, `fixture_tests`, plus two workflow variables:
+
+| suite | the fixture tests | why |
+| --- | --- | --- |
+| `linux-x64` | run | the reference: every test once |
+| `asan` | run | AddressSanitizer and UBSan find a different class of defect (memory errors, undefined behaviour) on the paths only the fixture replays reach: glow chains, DATE cuts, shadow tiles, the VU record paths |
+| `linux-x64-window` | skip | a fixture test compares two render paths on lavapipe; the answer is the same under gcc, clang and the window build, so a second compiler or the window link adds no coverage of it |
+| `linux-x64-clang` | skip | the same |
+| `fptrap` | skip | the same; the float traps stay on every other test |
+| `linux-arm64` | skip | its gating tests and a release tag's package stay about 25 minutes |
+| `linux-arm64-fixtures` | only, in 4 gating shards | arm64's own float and lavapipe build on the fixture replays |
+| `linux-arm64-filtered` | the filtered-pixel names alone (`rd_present_scene_ab` is one), not gating | lavapipe on arm64 misses their comparisons by an LSB or two |
+
+Every other test runs in every suite. A skipping suite keeps every non-fixture test, the
+synthetic render tests among them; what it loses is that compiler's or that build's run of the
+fixture replays. To change a suite, flip its `fixture_tests` on each of its matrix lines and rerun
+`plan` for its shard count.
+
+`ICO_CI_EXCLUDE` (a regular expression in `ci.yml`'s `env`, passed as `--exclude` to every
+`tests` shard and the three `linux-arm64` jobs) names the tests left out of CI in every suite; they
+stay registered and run locally, and the guard still wants their lines. Today it names
+`rd_lamps_lowres_ab`: two of its rules are stale against the game's own frames (they fail with
+the renderer as it was before the fixtures too: "fillhold holds one crack fill more", which cannot hold where the late pass is
+the join alone, and lowresms's WORK3 bound of 48 levels, which the opening's sun frame exceeds at
+61), and it is the longest test (an assumed 1200 s locally, about 34 minutes in `linux-x64` and 56
+under `asan`). The repair of those rules removes it from `ICO_CI_EXCLUDE`.
+`ICO_ARM64_FILTERED` is the filtered-pixel names the two gating `linux-arm64` jobs leave out.
+
+Three tests are local-only by design and need no exclusion: `native_frame_gate_b`,
+`coverage_corpus` and `rd_boot_present` (label `local`) exit 77 with a `SKIP: local-only
+validation: ...` line naming the input they lack (`ICO_SWEEPS`, `ICO_COVERAGE_CORPUS`,
+`ICO_BOOT_DUMP_DIR`), which ctest reports as skipped (`SKIP_RETURN_CODE 77`), not failed.
 
 The cost tables `tools/ci_costs/<suite>.txt` (one each for `linux-x64`, `linux-x64-window`,
 `linux-x64-clang`, `asan`, `fptrap` and `linux-arm64`) are `<name> <seconds>` per test, from that
@@ -1016,8 +1044,9 @@ test that replays the committed fixtures and skipped in CI while it read a machi
 The ratio is measured on the tests the table and the logs both time (at least 5 s in each): the
 sum of their CI seconds over the sum of their local seconds, one for the render tests and one for
 the rest. On the build host (4 cores, lavapipe, `-j1`, while other work runs) against CI run
-43558388684 it is 1.76 for `linux-x64` (116 tests, the per-test quartiles 1.28 to 2.08), 2.08 for
-the window build, 2.09 for clang, 2.94 for asan, 1.86 for fptrap and 1.55 for `linux-arm64`.
+43558388684 and the merge checks up to 2026-11-16 it is 1.69 for `linux-x64` (118 tests, the
+per-test quartiles 1.25 to 2.10), 2.00 for the window build, 2.00 for clang, 2.82 for asan, 1.79
+for fptrap and 1.54 for `linux-arm64`.
 
 The guard: `tools/ci_shard.py check` fails a `tests` runner (and the `linux-arm64` job) when a test
 of the build has no line in the suite's table, or a test that replays the committed fixtures has
@@ -1036,7 +1065,9 @@ suite's ratio and the tests it could not time (a fixture test with no time gets 
 other fixture estimates, any other test the table's median), and rewrites the tables.
 `tools/ci_costs_update.py plan --build-dir ...` then prints each suite's total, its shards'
 estimated minutes for the workflow's counts, and the fewest shards that keep a shard under a
-target (`--target-min`, default 25) or reach the suite's longest test.
+target (`--target-min`, default 25) or reach the suite's longest test, over the tests the workflow
+gives the suite: it reads each suite's `fixture_tests`, the `linux-arm64-fixtures` shards and
+`ICO_CI_EXCLUDE` from `ci.yml` (`--fixture-tests` and `--exclude` override them).
 
 After the first green CI run that times the new tests, measure the tables from it:
 
@@ -1063,29 +1094,34 @@ account at once on the Free plan ("Job concurrency limits for GitHub-hosted runn
 docs.github.com/en/actions/reference/limits; macOS at most 5 of them), and a push's run has 31
 jobs, so the run's wall time is set by its total job-minutes over 20 runners as much as by its
 longest job; more shards add 2.5 fixed minutes each and help only while the run stays under 20
-jobs. Estimated test totals a suite with the fixture tests, in minutes of `--parallel 4` time
-(the tables above; `plan`): `linux-x64` 174, window 205, clang 205, `asan` 287, `fptrap` 184,
-`linux-arm64`'s fixture tests about 100; the longest test `rd_lamps_lowres_ab` (an assumed 1200 s
-local) at 35 to 59 minutes, `rd_glow_blur_ab` 30 to 50. So the shards are:
+jobs. Estimated test totals a suite, in minutes of `--parallel 4` time over the tests the
+workflow gives it (the tables above; `plan`, 2026-11-16, `ICO_CI_EXCLUDE` left out): `linux-x64`
+190, window 77, clang 77, `asan` 315, `fptrap` 69 (the last three without the fixture tests),
+`linux-arm64`'s fixture tests 115; the longest test in the run is `rd_glow_light_ab`, about 33
+minutes in `linux-x64`, 55 under `asan` and 30 on arm64. So the shards are (a job adds its fixed
+part, and the shard estimate times 1.04, the step-to-estimate factor above):
 
-| suite | shards | job (estimate) |
-| --- | --- | --- |
-| `linux-x64` | 5 | about 40 min |
-| `linux-x64-window` | 3 | about 74 min |
-| `linux-x64-clang` | 3 | about 74 min |
-| `asan` | 5 | about 64 min |
-| `fptrap` | 3 | about 66 min |
-| `linux-arm64` (build, gating tests without the fixture tests) | 1 | about 25 min, a release tag adds the packaging |
-| `linux-arm64-filtered` | 2 | about 24 min |
-| `linux-arm64-fixtures` | 3 | about 38 min |
-| `linux` | | about 6 |
-| `windows` (after `linux`) | | about 11 |
+| suite | shards | tests a shard (estimate) | job (model) |
+| --- | --- | --- | --- |
+| `linux-x64` | 4 | 47.5 min | about 52 min |
+| `linux-x64-window` | 2 | 38.7 min | about 43 min |
+| `linux-x64-clang` | 2 | 38.3 min | about 42 min |
+| `asan` | 6 | 54.5 min (its longest test: more shards do not shorten it; 5 would be 62.9) | about 59 min |
+| `fptrap` | 2 | 34.6 min | about 39 min |
+| `linux-arm64` (build, gating tests without the fixture tests) | 1 | | about 25 min, a release tag adds the packaging |
+| `linux-arm64-filtered` | 2 | | about 24 min |
+| `linux-arm64-fixtures` | 4 | 29.8 min (its longest test) | about 35 min |
+| `linux` | | | about 6 |
+| `windows` (after `linux`) | | | about 11 |
 
-The run is about 1370 job-minutes, so 20 runners need at least 69 minutes; a simulation of the
-queue (jobs started in the workflow's order as runners free) gives about 76. Before the fixture
-tests ran (runs of 2026-11-09 to 2026-11-14) it was 560 to 820 job-minutes and 42 to 70 minutes. A
-`tests` job's timeout is 120 minutes. A shard much longer than its siblings means its table is
-stale.
+The run is 29 jobs and about 1060 job-minutes, so 20 runners need at least 53 minutes, and the
+`asan` shards' floor (their longest test) puts it at least at 59. A simulation of the queue (jobs
+started in the workflow's order as runners free) gives about 61 minutes for these counts; one more
+or one fewer shard in `asan` or `linux-arm64-fixtures` gives 68 to 82, because a long job then
+waits for a runner. With every suite running the fixture tests the model gave about 76 minutes.
+Before the fixture tests ran (runs of 2026-11-09 to 2026-11-14) it was 560 to 820 job-minutes and
+42 to 70 minutes. A `tests` job's timeout is 120 minutes. A shard much longer than its siblings
+means its table is stale.
 
 ## Release process
 

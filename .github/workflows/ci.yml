@@ -47,6 +47,19 @@ env:
   ICO_CC: gcc-14
   # the ccache caches are saved per commit: keep each one to this size
   CCACHE_MAXSIZE: 5G
+  # The tests left out of CI in every suite (tools/ci_shard.py split
+  # --exclude in the `tests` shards and the three linux-arm64 jobs); they stay
+  # registered and run locally. Empty when none is left out. Today:
+  # rd_lamps_lowres_ab, two of whose rules are stale against the game's own
+  # frames (they fail with the code before the fixtures too) and which is the
+  # longest test (about 34 minutes in linux-x64, 56 under asan, estimated);
+  # the package that repairs those rules (STALERULES) removes it from here
+  # (docs/port/TESTING.md, "The CI shards").
+  ICO_CI_EXCLUDE: '^rd_lamps_lowres_ab$'
+  # lavapipe on arm64 misses these tests' filtered-pixel comparisons by an
+  # LSB or two (docs/BUILDING.md): linux-arm64 and linux-arm64-fixtures leave
+  # them out, linux-arm64-filtered runs them without gating
+  ICO_ARM64_FILTERED: '^(rd_(pixel|gsbase|present|crt)(_[a-z0-9_]+)?|rd_replay_tool(_list)?)$'
 
 jobs:
   # The hygiene checks and the win-x64 cross build (for the `windows` job);
@@ -201,52 +214,53 @@ jobs:
   # shard runs its part with ctest --tests-from-file. The shards of a suite
   # together run every test once (docs/port/TESTING.md, "CI"). Each suite has
   # its own table: the same test costs more under asan than in a plain build.
-  # `fixture_tests` (run or skip) is whether the suite runs the tests that
-  # replay the committed fixtures (docs/port/TESTING_FIXTURES.md); run in
-  # every suite. The shard counts (tools/ci_costs_update.py plan, and a
-  # simulation of the run against GitHub's 20 concurrent jobs: with every
-  # suite running the fixture tests the run is about 1370 job-minutes, so 20
-  # runners need at least 69 minutes whatever the counts, and more shards
-  # only add each one's 2.5 fixed minutes) are linux-x64 5 (about 40 minutes
-  # a shard), linux-x64-window 3 (74), linux-x64-clang 3 (74), asan 5 (64),
-  # fptrap 3 (66), the run about 76 minutes. Shard 1 of each suite saves its
-  # ccache.
+  # `fixture_tests` (run or skip, one field a matrix line) is whether the
+  # suite runs the tests that replay the committed fixtures
+  # (docs/port/TESTING_FIXTURES.md): linux-x64 and asan run them (and the
+  # linux-arm64-fixtures job), linux-x64-window, linux-x64-clang and fptrap
+  # skip them. A fixture test compares two render paths on lavapipe, which
+  # gives the same answer under gcc, clang and the window build; asan finds a
+  # different class of defect (memory errors on those paths), so it runs them
+  # too (docs/port/TESTING.md, "The CI shards"). Every suite leaves out
+  # ICO_CI_EXCLUDE's tests. The shard counts (tools/ci_costs_update.py plan,
+  # and a simulation of the run against GitHub's 20 concurrent jobs) are
+  # linux-x64 4 (about 48 minutes of tests a shard), linux-x64-window 2 (39),
+  # linux-x64-clang 2 (38), asan 6 (55: its longest test,
+  # rd_glow_light_ab, so more shards do not shorten it), fptrap 2 (35); the
+  # run about 61 minutes, modelled. Shard 1 of each suite saves its ccache.
   tests:
     if: github.event_name != 'workflow_dispatch'
     name: ${{ matrix.suite }} ${{ matrix.shard }}/${{ matrix.shards }}
     runs-on: ubuntu-24.04
-    # a shard is estimated at 40 to 75 minutes (tools/ci_costs_update.py
-    # plan; the host-to-CI ratio's quartiles put a 75-minute shard at up to
-    # about 95): two hours is a hang
+    # a shard is estimated at 35 to 55 minutes of tests (tools/ci_costs_update.py
+    # plan; the host-to-CI ratio's upper quartile puts asan's 55 at up to
+    # about 70): two hours is a hang
     timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
         include:
           # headless with the exe linked
-          - {suite: linux-x64, preset: linux-x64, dir: build-host/linux-x64, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', fixture_tests: run, shards: 5, shard: 1}
-          - {suite: linux-x64, preset: linux-x64, dir: build-host/linux-x64, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', fixture_tests: run, shards: 5, shard: 2}
-          - {suite: linux-x64, preset: linux-x64, dir: build-host/linux-x64, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', fixture_tests: run, shards: 5, shard: 3}
-          - {suite: linux-x64, preset: linux-x64, dir: build-host/linux-x64, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', fixture_tests: run, shards: 5, shard: 4}
-          - {suite: linux-x64, preset: linux-x64, dir: build-host/linux-x64, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', fixture_tests: run, shards: 5, shard: 5}
+          - {suite: linux-x64, preset: linux-x64, dir: build-host/linux-x64, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', fixture_tests: run, shards: 4, shard: 1}
+          - {suite: linux-x64, preset: linux-x64, dir: build-host/linux-x64, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', fixture_tests: run, shards: 4, shard: 2}
+          - {suite: linux-x64, preset: linux-x64, dir: build-host/linux-x64, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', fixture_tests: run, shards: 4, shard: 3}
+          - {suite: linux-x64, preset: linux-x64, dir: build-host/linux-x64, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', fixture_tests: run, shards: 4, shard: 4}
           # the window build
-          - {suite: linux-x64-window, preset: linux-x64, dir: build-host/linux-x64-window, args: '-DICO_HEADLESS=OFF -DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', fixture_tests: run, shards: 3, shard: 1}
-          - {suite: linux-x64-window, preset: linux-x64, dir: build-host/linux-x64-window, args: '-DICO_HEADLESS=OFF -DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', fixture_tests: run, shards: 3, shard: 2}
-          - {suite: linux-x64-window, preset: linux-x64, dir: build-host/linux-x64-window, args: '-DICO_HEADLESS=OFF -DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', fixture_tests: run, shards: 3, shard: 3}
+          - {suite: linux-x64-window, preset: linux-x64, dir: build-host/linux-x64-window, args: '-DICO_HEADLESS=OFF -DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', fixture_tests: skip, shards: 2, shard: 1}
+          - {suite: linux-x64-window, preset: linux-x64, dir: build-host/linux-x64-window, args: '-DICO_HEADLESS=OFF -DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', fixture_tests: skip, shards: 2, shard: 2}
           # the clang build
-          - {suite: linux-x64-clang, preset: linux-x64-clang, dir: build-host/linux-x64-clang, args: '-DICO_LINK_EXE=ON', fixture_tests: run, shards: 3, shard: 1}
-          - {suite: linux-x64-clang, preset: linux-x64-clang, dir: build-host/linux-x64-clang, args: '-DICO_LINK_EXE=ON', fixture_tests: run, shards: 3, shard: 2}
-          - {suite: linux-x64-clang, preset: linux-x64-clang, dir: build-host/linux-x64-clang, args: '-DICO_LINK_EXE=ON', fixture_tests: run, shards: 3, shard: 3}
+          - {suite: linux-x64-clang, preset: linux-x64-clang, dir: build-host/linux-x64-clang, args: '-DICO_LINK_EXE=ON', fixture_tests: skip, shards: 2, shard: 1}
+          - {suite: linux-x64-clang, preset: linux-x64-clang, dir: build-host/linux-x64-clang, args: '-DICO_LINK_EXE=ON', fixture_tests: skip, shards: 2, shard: 2}
           # AddressSanitizer + UBSan (Debug, -O1), headless with the exe linked
-          - {suite: asan, preset: asan, dir: build-host/asan, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', fixture_tests: run, shards: 5, shard: 1}
-          - {suite: asan, preset: asan, dir: build-host/asan, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', fixture_tests: run, shards: 5, shard: 2}
-          - {suite: asan, preset: asan, dir: build-host/asan, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', fixture_tests: run, shards: 5, shard: 3}
-          - {suite: asan, preset: asan, dir: build-host/asan, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', fixture_tests: run, shards: 5, shard: 4}
-          - {suite: asan, preset: asan, dir: build-host/asan, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', fixture_tests: run, shards: 5, shard: 5}
+          - {suite: asan, preset: asan, dir: build-host/asan, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', fixture_tests: run, shards: 6, shard: 1}
+          - {suite: asan, preset: asan, dir: build-host/asan, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', fixture_tests: run, shards: 6, shard: 2}
+          - {suite: asan, preset: asan, dir: build-host/asan, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', fixture_tests: run, shards: 6, shard: 3}
+          - {suite: asan, preset: asan, dir: build-host/asan, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', fixture_tests: run, shards: 6, shard: 4}
+          - {suite: asan, preset: asan, dir: build-host/asan, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', fixture_tests: run, shards: 6, shard: 5}
+          - {suite: asan, preset: asan, dir: build-host/asan, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', fixture_tests: run, shards: 6, shard: 6}
           # float divide-by-zero and invalid trap, headless with the exe linked
-          - {suite: fptrap, preset: fptrap, dir: build-host/fptrap, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', fixture_tests: run, shards: 3, shard: 1}
-          - {suite: fptrap, preset: fptrap, dir: build-host/fptrap, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', fixture_tests: run, shards: 3, shard: 2}
-          - {suite: fptrap, preset: fptrap, dir: build-host/fptrap, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', fixture_tests: run, shards: 3, shard: 3}
+          - {suite: fptrap, preset: fptrap, dir: build-host/fptrap, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', fixture_tests: skip, shards: 2, shard: 1}
+          - {suite: fptrap, preset: fptrap, dir: build-host/fptrap, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', fixture_tests: skip, shards: 2, shard: 2}
     steps:
       - uses: actions/checkout@v4
 
@@ -321,6 +335,7 @@ jobs:
           python3 -I tools/ci_shard.py split --tests "$RUNNER_TEMP/tests.json" \
             --costs tools/ci_costs/${{ matrix.suite }}.txt --shards ${{ matrix.shards }} \
             --index ${{ matrix.shard }} --parallel 4 --fixture-tests ${{ matrix.fixture_tests }} \
+            --exclude "$ICO_CI_EXCLUDE" \
             --cost-data ${{ matrix.dir }}/Testing/Temporary/CTestCostData.txt \
             --out "$RUNNER_TEMP/shard.txt"
           $CMAKE/ctest --test-dir ${{ matrix.dir }} --output-on-failure --parallel 4 \
@@ -530,14 +545,14 @@ jobs:
           $CMAKE/cmake --preset linux-arm64 -DCMAKE_C_COMPILER=$ICO_CC
           $CMAKE/cmake --build build-host/linux-arm64 --parallel --target all tests
           # the tests that replay the committed fixtures run in the
-          # linux-arm64-fixtures job's shards (about 100 minutes of
+          # linux-arm64-fixtures job's shards (about 115 minutes of
           # --parallel 4 time would put this job past its timeout)
           $CMAKE/ctest --test-dir build-host/linux-arm64 --show-only=json-v1 > "$RUNNER_TEMP/tests.json"
           python3 -I tools/ci_shard.py check --tests "$RUNNER_TEMP/tests.json" \
             --costs tools/ci_costs/linux-arm64.txt
           python3 -I tools/ci_shard.py split --tests "$RUNNER_TEMP/tests.json" \
             --costs tools/ci_costs/linux-arm64.txt --shards 1 --index 1 --parallel 4 \
-            --exclude '^(rd_(pixel|gsbase|present|crt)(_[a-z0-9_]+)?|rd_replay_tool(_list)?)$' \
+            --exclude "$ICO_ARM64_FILTERED" --exclude "$ICO_CI_EXCLUDE" \
             --fixture-tests skip --cost-data build-host/linux-arm64/Testing/Temporary/CTestCostData.txt \
             --out "$RUNNER_TEMP/gating.txt"
           $CMAKE/ctest --test-dir build-host/linux-arm64 --output-on-failure --parallel 4 \
@@ -637,8 +652,8 @@ jobs:
   # The tests the linux-arm64 job leaves out (lavapipe on arm64 misses their
   # pixel comparisons by an LSB or two), run for the log only: a failure here
   # does not fail the job, but their output shows what an arm64 change did.
-  # They are 53 tests of about 7200 s together (30 minutes under ctest
-  # --parallel 4, 50 minutes with the gating tests before the split), so they
+  # They are 59 tests of about 9400 s together (39 minutes under ctest
+  # --parallel 4; tools/ci_costs/linux-arm64.txt), so they
   # run in 2 shards by the cost table tools/ci_costs/linux-arm64.txt, as the
   # `tests` shards do; a fixture's tests (rd_pixel and the rd_replay_tool runs
   # on its dump) stay in one shard. Never run for a dispatched package.
@@ -697,11 +712,10 @@ jobs:
       - name: linux-arm64, filtered-pixel render tests, shard ${{ matrix.shard }} of 2 (not gating)
         continue-on-error: true
         run: |
-          filtered='^(rd_(pixel|gsbase|present|crt)(_[a-z0-9_]+)?|rd_replay_tool(_list)?)$'
           $CMAKE/ctest --test-dir build-host/linux-arm64 --show-only=json-v1 > "$RUNNER_TEMP/tests.json"
           python3 -I tools/ci_shard.py split --tests "$RUNNER_TEMP/tests.json" \
             --costs tools/ci_costs/linux-arm64.txt --shards 2 --index ${{ matrix.shard }} \
-            --include "$filtered" --parallel 4 \
+            --include "$ICO_ARM64_FILTERED" --exclude "$ICO_CI_EXCLUDE" --parallel 4 \
             --cost-data build-host/linux-arm64/Testing/Temporary/CTestCostData.txt \
             --out "$RUNNER_TEMP/shard.txt"
           $CMAKE/ctest --test-dir build-host/linux-arm64 --output-on-failure --parallel 4 \
@@ -711,18 +725,20 @@ jobs:
   # on arm64, gating, in shards by tools/ci_costs/linux-arm64.txt
   # (ci_shard.py split --fixture-tests only): the linux-arm64 job leaves them
   # out so that it (the gating tests and a tag's package) stays about 25
-  # minutes. Never run for a dispatched package.
+  # minutes. A fixture test the filtered-pixel names match
+  # (rd_present_scene_ab) runs in linux-arm64-filtered instead, as every test
+  # of those names does. Never run for a dispatched package.
   linux-arm64-fixtures:
     if: github.event_name != 'workflow_dispatch'
     name: linux-arm64 fixtures ${{ matrix.shard }}/${{ matrix.shards }}
     runs-on: ubuntu-24.04-arm
-    # a shard is estimated at about 38 minutes (tools/ci_costs_update.py plan)
+    # a shard is estimated at about 30 minutes (tools/ci_costs_update.py plan)
     timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
-        shards: [3]
-        shard: [1, 2, 3]
+        shards: [4]
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
 
@@ -771,6 +787,7 @@ jobs:
           $CMAKE/ctest --test-dir build-host/linux-arm64 --show-only=json-v1 > "$RUNNER_TEMP/tests.json"
           python3 -I tools/ci_shard.py split --tests "$RUNNER_TEMP/tests.json" \
             --costs tools/ci_costs/linux-arm64.txt --shards ${{ matrix.shards }} --index ${{ matrix.shard }} \
+            --exclude "$ICO_ARM64_FILTERED" --exclude "$ICO_CI_EXCLUDE" \
             --parallel 4 --fixture-tests only \
             --cost-data build-host/linux-arm64/Testing/Temporary/CTestCostData.txt \
             --out "$RUNNER_TEMP/shard.txt"

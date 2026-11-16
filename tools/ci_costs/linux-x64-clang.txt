@@ -44,7 +44,7 @@ camera_wall_stage 0.01
 capture_trigger 0.00
 cdvd_host 0.49
 charfile_image 0.00
-clock_trap 0.00  # estimate: 0.0 s local (merge-wt_PINFIX-20261114T225400Z.rest.log) x 1.26
+clock_trap 0.00  # estimate: 0.0 s local (merge-wt_PINFIX-20261114T225400Z.rest.log) x 1.15
 collision_carrier 0.02
 collision_carrier_disc 0.01
 collision_carrier_disc_aug6 0.01
@@ -122,7 +122,7 @@ eye_trail_jpn 0.01
 eye_trail_jun26 0.00
 eye_trail_kor 0.00
 eye_trail_ntsc 0.01
-ffx_link_test 1.04  # estimate: 0.8 s local (merge-wt_LINES-20261109T234326Z.lvp.log) x 1.26
+ffx_link_test 0.95  # estimate: 0.8 s local (merge-wt_LINES-20261109T234326Z.lvp.log) x 1.15
 fiber 0.02
 fiber_guard 0.38
 fmv 0.10
@@ -240,7 +240,7 @@ modelpack_gl 1.28
 mouse_camera 0.00
 movie_pad 0.00
 native_frame_check_selftest 0.17
-native_frame_gate_a 0.06
+native_frame_gate_a 101.56  # estimate: 50.7 s local (merge-wt_FIX-P6b2-20261116T024421Z.lvp.log) x 2.00
 native_frame_gate_b 0.08
 newlib 0.00
 no_shadows_census 0.08
@@ -252,7 +252,7 @@ no_shadows_disc_jun26 0.00
 no_shadows_disc_kor 0.00
 no_shadows_disc_ntsc 0.00
 null_devices 0.00
-offset_audit 79.17  # estimate: 63.0 s local (merge-wt_ROOMS4-20261106T021351Z.rest.log) x 1.26
+offset_audit 72.19  # estimate: 63.0 s local (merge-wt_ROOMS4-20261106T021351Z.rest.log) x 1.15
 options 0.15
 options_aug6 0.34
 options_cn 0.08
@@ -262,13 +262,13 @@ options_kor 0.18
 options_ntsc 0.20
 pace_loop 1.23
 pace_policy 0.01
-package_textures 0.75  # estimate: 0.6 s local (merge-wt_EXEICON-20261108T213830Z.rest.log) x 1.26
+package_textures 0.69  # estimate: 0.6 s local (merge-wt_EXEICON-20261108T213830Z.rest.log) x 1.15
 pad_mirror 0.00
 pad_script 0.00
 perf_block 0.00
 perf_hint 0.00
 photo 0.10
-pin_release 0.00  # estimate: 0.0 s local (merge-wt_PINFIX-20261114T225400Z.rest.log) x 1.26
+pin_release 0.00  # estimate: 0.0 s local (merge-wt_PINFIX-20261114T225400Z.rest.log) x 1.15
 pipe_resume 0.00
 pipeline_skip 0.00
 pit_dive_base 0.01
@@ -281,16 +281,16 @@ pit_dive_base_ntsc 0.01
 poly_flat 0.01
 present_fallback 0.00
 present_hist 0.00
-present_latency 0.00  # estimate: 0.0 s local (merge-wt_DIAG3-20261114T091810Z.rest.log) x 1.26
+present_latency 0.00  # estimate: 0.0 s local (merge-wt_DIAG3-20261114T091810Z.rest.log) x 1.15
 present_stall_block 0.00
 pump_watch 0.00
-rc_tools_binary 0.08  # estimate: 0.1 s local (merge-wt_BENCH-20261113T141851Z.rest.log) x 1.26
+rc_tools_binary 0.07  # estimate: 0.1 s local (merge-wt_BENCH-20261113T141851Z.rest.log) x 1.15
 rc_tools_gate 1.13
 rd_alpha_plan 5.85
 rd_as_made_timer 0.04
-rd_aura_box_ab 333.52  # estimate: 159.9 s local (merge-wt_FIX-P4d-20261115T205959Z.lvp.log) x 2.09
+rd_aura_box_ab 320.34  # estimate: 159.9 s local (merge-wt_FIX-P4d-20261115T205959Z.lvp.log) x 2.00
 rd_aura_paste 0.00
-rd_aura_paste_ab 0.00
+rd_aura_paste_ab 612.03  # estimate: 305.5 s local (merge-wt_GLOWHOLD-20261116T005054Z.lvp.log) x 2.00
 rd_bench 0.00
 rd_bench_ab 2.29
 rd_bisect_plan 0.00
@@ -323,11 +323,11 @@ rd_boot_present 0.00
 rd_boot_present_gl 0.00
 rd_cache_name 0.00
 rd_comp_spec 0.00
-rd_comp_spec_ab 613.35  # estimate: 294.0 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.09
-rd_comp_spec_sabotage 110.85  # estimate: 53.1 s local (merge-wt_FIX-P2b-20261115T065141Z.lvp.log) x 2.09
+rd_comp_spec_ab 589.11  # estimate: 294.0 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.00
+rd_comp_spec_sabotage 106.47  # estimate: 53.1 s local (merge-wt_FIX-P2b-20261115T065141Z.lvp.log) x 2.00
 rd_comp_spec_selftest 5.00
 rd_comp_spec_selftest_sabotage 5.15
-rd_constant_reads_ab 687.17  # estimate: 329.4 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.09
+rd_constant_reads_ab 660.02  # estimate: 329.4 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.00
 rd_cpu_phase 0.01
 rd_crack 2.02
 rd_crack_1x 0.54
@@ -358,23 +358,23 @@ rd_crack_glow 3.22
 rd_crack_held 12.23
 rd_crack_heldglow 9.28
 rd_crack_join 6.87
-rd_crack_late_ab 199.95  # estimate: 95.8 s local (merge-wt_FIX-P5a-20261115T213934Z.lvp.log) x 2.09
+rd_crack_late_ab 227.97  # estimate: 113.8 s local (merge-wt_GLOWHOLD-20261116T005054Z.lvp.log) x 2.00
 rd_crack_msaa 2.46
 rd_crack_msaa_gl 5.25
 rd_crack_nodual 4.00
 rd_crack_nodual_gl 5.46
-rd_crack_off 292.95  # estimate: unmeasured, the median of the fixture estimates
+rd_crack_off 145.38  # estimate: unmeasured, the median of the fixture estimates
 rd_crack_off_gl 1.91
 rd_crack_original 0.49
 rd_crack_original_gl 1.42
-rd_crack_resolved_msaa2 292.95  # estimate: unmeasured, the median of the fixture estimates
-rd_crack_resolved_msaa4 8.53  # estimate: 4.1 s local (merge-wt_FIX-P5a-20261115T213934Z.lvp.log) x 2.09
+rd_crack_resolved_msaa2 145.38  # estimate: unmeasured, the median of the fixture estimates
+rd_crack_resolved_msaa4 8.19  # estimate: 4.1 s local (merge-wt_FIX-P5a-20261115T213934Z.lvp.log) x 2.00
 rd_crack_tiler 1.94
 rd_crack_tiler_fold 2.42
 rd_crack_tiler_fold_mali 4.06
 rd_crack_tiler_on 2.54
-rd_crack_work_ab 760.48  # estimate: 364.6 s local (merge-wt_FIX-P5a-20261115T213934Z.lvp.log) x 2.09
-rd_crack_work_gl 115.90  # estimate: 55.6 s local (merge-wt_FIX-P5a-20261115T213934Z.lvp.log) x 2.09
+rd_crack_work_ab 1240.17  # estimate: 619.0 s local (merge-wt_GLOWHOLD-20261116T005054Z.lvp.log) x 2.00
+rd_crack_work_gl 111.32  # estimate: 55.6 s local (merge-wt_FIX-P5a-20261115T213934Z.lvp.log) x 2.00
 rd_crt 52.78
 rd_crt_attachment 48.90
 rd_crt_attachment_gl 124.83
@@ -385,14 +385,14 @@ rd_crt_mali 48.77
 rd_crt_vk10 81.71
 rd_crt_vk11 48.22
 rd_crt_vk11s 65.39
-rd_cull_ab 0.01
-rd_cull_ab_gl 0.01
+rd_cull_ab 957.06  # estimate: 477.7 s local (merge-wt_FIX-P6b2-20261116T024421Z.lvp.log) x 2.00
+rd_cull_ab_gl 981.92  # estimate: 490.1 s local (merge-wt_FIX-P5b2-20261116T020204Z.lvp.log) x 2.00
 rd_date_cut 5.70
-rd_date_cut_ab 837.10  # estimate: 401.3 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.09
-rd_date_cut_ab_gl 60.75  # estimate: 29.1 s local (merge-wt_FIX-P2c-20261115T073759Z.lvp.log) x 2.09
+rd_date_cut_ab 804.02  # estimate: 401.3 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.00
+rd_date_cut_ab_gl 58.35  # estimate: 29.1 s local (merge-wt_FIX-P2c-20261115T073759Z.lvp.log) x 2.00
 rd_date_one 1.45
-rd_date_one_ab 793.92  # estimate: 380.6 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.09
-rd_date_one_ab_gl 59.35  # estimate: 28.4 s local (merge-wt_FIX-P2a-20261115T053727Z.lvp.log) x 2.09
+rd_date_one_ab 762.54  # estimate: 380.6 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.00
+rd_date_one_ab_gl 57.00  # estimate: 28.4 s local (merge-wt_FIX-P2a-20261115T053727Z.lvp.log) x 2.00
 rd_date_selftest 6.44
 rd_date_selftest_sabotage 6.92
 rd_date_selftest_sabotage_vk11 6.05
@@ -400,7 +400,7 @@ rd_date_selftest_tiler_vk11 5.79
 rd_date_selftest_uber 7.42
 rd_date_selftest_vk10 12.93
 rd_date_selftest_vk11 6.31
-rd_date_subpass_ab 33.38  # estimate: 16.0 s local (merge-wt_FIX-P2c-20261115T073759Z.lvp.log) x 2.09
+rd_date_subpass_ab 32.06  # estimate: 16.0 s local (merge-wt_FIX-P2c-20261115T073759Z.lvp.log) x 2.00
 rd_debug 35.08
 rd_debug_gl 32.80
 rd_debug_mali 35.78
@@ -416,17 +416,17 @@ rd_display_change_gl 3.87
 rd_dst_usage 0.58
 rd_dst_usage_gl 1.28
 rd_early_plan 0.00
-rd_empty_skip_ab 264.89  # estimate: 127.0 s local (merge-wt_FIX-P2a-20261115T053727Z.lvp.log) x 2.09
-rd_empty_skip_ab_gl 62.19  # estimate: 29.8 s local (merge-wt_FIX-P2a-20261115T053727Z.lvp.log) x 2.09
+rd_empty_skip_ab 254.42  # estimate: 127.0 s local (merge-wt_FIX-P2a-20261115T053727Z.lvp.log) x 2.00
+rd_empty_skip_ab_gl 59.73  # estimate: 29.8 s local (merge-wt_FIX-P2a-20261115T053727Z.lvp.log) x 2.00
 rd_even 0.00
 rd_fades_fold 0.52
-rd_fades_fold_ab 0.00
-rd_fill11_ab 508.29  # estimate: 243.7 s local (merge-wt_FIX-P5a-20261115T213934Z.lvp.log) x 2.09
-rd_fill11_gl 99.15  # estimate: 47.5 s local (merge-wt_FIX-P5a-20261115T213934Z.lvp.log) x 2.09
+rd_fades_fold_ab 756.43  # estimate: 377.5 s local (merge-wt_FIX-P5b-20261115T232657Z.lvp.log) x 2.00
+rd_fill11_ab 488.21  # estimate: 243.7 s local (merge-wt_FIX-P5a-20261115T213934Z.lvp.log) x 2.00
+rd_fill11_gl 95.23  # estimate: 47.5 s local (merge-wt_FIX-P5a-20261115T213934Z.lvp.log) x 2.00
 rd_filter 0.00
-rd_fixture_format 0.06  # estimate: 0.0 s local (merge-wt_FIX-P3b2-20261115T103241Z.lvp.log) x 2.09
-rd_fixtures_check 9.26  # estimate: 4.4 s local (merge-wt_FIX-P5a-20261115T213934Z.lvp.log) x 2.09
-rd_fixtures_selfcheck 50.46  # estimate: 24.2 s local (merge-wt_FIX-P5a-20261115T213934Z.lvp.log) x 2.09
+rd_fixture_format 0.04  # estimate: 0.0 s local (merge-wt_FIX-P4d2-20261116T031841Z.lvp.log) x 2.00
+rd_fixtures_check 8.48  # estimate: 4.2 s local (merge-wt_FIX-P4d2-20261116T031841Z.lvp.log) x 2.00
+rd_fixtures_selfcheck 109.96  # estimate: 54.9 s local (merge-wt_FIX-P4d2-20261116T031841Z.lvp.log) x 2.00
 rd_fog 3.29
 rd_fog_attachment 3.42
 rd_fog_attachment_gl 4.03
@@ -435,8 +435,8 @@ rd_fog_buffer_d24s8 3.78
 rd_fog_buffer_gl 5.39
 rd_fog_d24s8 4.06
 rd_fog_depth_copy 3.37
-rd_fog_depth_copy_dump 0.00
-rd_fog_depth_copy_dump_d24s8 0.00
+rd_fog_depth_copy_dump 17.01  # estimate: 8.5 s local (merge-wt_FIX-P5c-20261115T235450Z.lvp.log) x 2.00
+rd_fog_depth_copy_dump_d24s8 10.66  # estimate: 5.3 s local (merge-wt_FIX-P5c-20261115T235450Z.lvp.log) x 2.00
 rd_fog_depth_copy_gl 4.09
 rd_fog_fixed 3.48
 rd_fog_fixed_gl 4.64
@@ -491,19 +491,19 @@ rd_fog_vk11s 3.91
 rd_fx_frame 1.53
 rd_glass 0.00
 rd_glow_blur 0.12
-rd_glow_blur_ab 2119.20  # estimate: 1015.9 s local (merge-wt_FIX-P3a-20261115T165211Z.lvp.log) x 2.09
-rd_glow_blur_gl 257.48  # estimate: 123.4 s local (merge-wt_FIX-P3a-20261115T165211Z.lvp.log) x 2.09
-rd_glow_cheap_ab 810.15  # estimate: 388.4 s local (merge-wt_FIX-P3a-20261115T165211Z.lvp.log) x 2.09
-rd_glow_light_ab 2048.33  # estimate: 981.9 s local (merge-wt_FIX-P3a-20261115T165211Z.lvp.log) x 2.09
+rd_glow_blur_ab 2035.45  # estimate: 1015.9 s local (merge-wt_FIX-P3a-20261115T165211Z.lvp.log) x 2.00
+rd_glow_blur_gl 247.31  # estimate: 123.4 s local (merge-wt_FIX-P3a-20261115T165211Z.lvp.log) x 2.00
+rd_glow_cheap_ab 927.48  # estimate: 462.9 s local (merge-wt_GLOWHOLD-20261116T005054Z.lvp.log) x 2.00
+rd_glow_light_ab 2322.99  # estimate: 1159.4 s local (merge-wt_GLOWHOLD-20261116T005054Z.lvp.log) x 2.00
 rd_gsbase 8.78
 rd_gsbase_gl 15.21
 rd_gsbase_mali 13.11
 rd_hash 0.01
-rd_health 0.00  # estimate: 0.0 s local (merge-wt_MALI179-20261114T175748Z.lvp.log) x 2.09
+rd_health 0.00  # estimate: 0.0 s local (merge-wt_MALI179-20261114T175748Z.lvp.log) x 2.00
 rd_icon_hold 1.00
 rd_icon_hold_gl 1.59
 rd_icon_pass 0.00
-rd_inames 0.00  # estimate: 0.0 s local (merge-wt_STEPPERS-20261114T200722Z.lvp.log) x 2.09
+rd_inames 0.00  # estimate: 0.0 s local (merge-wt_STEPPERS-20261114T200722Z.lvp.log) x 2.00
 rd_interp 8.32
 rd_interp_gl 13.86
 rd_interp_mali 11.12
@@ -517,13 +517,13 @@ rd_interp_vk11s 10.39
 rd_jitter 1.06
 rd_jitter_gl 2.81
 rd_lamps 0.00
-rd_lamps_ab 1031.54  # estimate: 494.5 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.09
-rd_lamps_fillpaste_ab 553.48  # estimate: 265.3 s local (merge-wt_FIX-P3a-20261115T165211Z.lvp.log) x 2.09
-rd_lamps_gl 127.73  # estimate: 61.2 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.09
-rd_lamps_lowres_ab 2503.29  # estimate: 1200.0 s local (assumed) x 2.09
+rd_lamps_ab 990.78  # estimate: 494.5 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.00
+rd_lamps_fillpaste_ab 686.02  # estimate: 342.4 s local (merge-wt_GLOWHOLD-20261116T005054Z.lvp.log) x 2.00
+rd_lamps_gl 122.68  # estimate: 61.2 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.00
+rd_lamps_lowres_ab 2404.36  # estimate: 1200.0 s local (assumed) x 2.00
 rd_late_pass 0.00
-rd_late_pass_ab 227.76  # estimate: 109.2 s local (merge-wt_FIX-P5a-20261115T213934Z.lvp.log) x 2.09
-rd_late_pass_gl 89.05  # estimate: 42.7 s local (merge-wt_FIX-P5a-20261115T213934Z.lvp.log) x 2.09
+rd_late_pass_ab 379.69  # estimate: 189.5 s local (merge-wt_GLOWHOLD-20261116T005054Z.lvp.log) x 2.00
+rd_late_pass_gl 144.82  # estimate: 72.3 s local (merge-wt_GLOWHOLD-20261116T005054Z.lvp.log) x 2.00
 rd_layout 0.56
 rd_layout_gl 19.87
 rd_layout_mali 1.66
@@ -585,23 +585,24 @@ rd_msaa_vk11s 6.57
 rd_native 94.28
 rd_native_gl 171.68
 rd_no_volume 0.01
-rd_no_volume_ab 336.67  # estimate: 161.4 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.09
-rd_no_volume_ab_gl 44.68  # estimate: 21.4 s local (merge-wt_FIX-P2a-20261115T053727Z.lvp.log) x 2.09
-rd_no_volume_break_ab 699.46  # estimate: 335.3 s local (merge-wt_FIX-P2a-20261115T053727Z.lvp.log) x 2.09
-rd_no_volume_break_ab_gl 63.31  # estimate: 30.4 s local (merge-wt_FIX-P2a-20261115T053727Z.lvp.log) x 2.09
-rd_noplanes_ab 0.00
-rd_occlusion_tool 0.01
+rd_no_volume_ab 323.37  # estimate: 161.4 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.00
+rd_no_volume_ab_gl 42.92  # estimate: 21.4 s local (merge-wt_FIX-P2a-20261115T053727Z.lvp.log) x 2.00
+rd_no_volume_break_ab 671.82  # estimate: 335.3 s local (merge-wt_FIX-P2a-20261115T053727Z.lvp.log) x 2.00
+rd_no_volume_break_ab_gl 60.81  # estimate: 30.4 s local (merge-wt_FIX-P2a-20261115T053727Z.lvp.log) x 2.00
+rd_noplanes_ab 33.40  # estimate: 16.7 s local (merge-wt_FIX-P5b-20261115T232657Z.lvp.log) x 2.00
+rd_occlusion_tool 15.57  # estimate: 7.8 s local (merge-wt_FIX-P5b2-20261116T020204Z.lvp.log) x 2.00
 rd_pace_gpu 0.02
 rd_pace_screen 0.69
-rd_pass_area_ab 204.46  # estimate: 98.0 s local (merge-wt_FIX-P4d-20261115T205959Z.lvp.log) x 2.09
+rd_pass_area_ab 196.38  # estimate: 98.0 s local (merge-wt_FIX-P4d-20261115T205959Z.lvp.log) x 2.00
+rd_pass_area_frame 0.17  # estimate: unmeasured, the table's median
 rd_pass_cut 1.45
-rd_pass_cut_ab 680.12  # estimate: 326.0 s local (merge-wt_FIX-P4d-20261115T205959Z.lvp.log) x 2.09
-rd_pass_objects_ab 292.95  # estimate: 140.4 s local (merge-wt_FIX-P4d-20261115T205959Z.lvp.log) x 2.09
+rd_pass_cut_ab 653.24  # estimate: 326.0 s local (merge-wt_FIX-P4d-20261115T205959Z.lvp.log) x 2.00
+rd_pass_objects_ab 281.37  # estimate: 140.4 s local (merge-wt_FIX-P4d-20261115T205959Z.lvp.log) x 2.00
 rd_passring 0.00
 rd_paste_spec 0.00
-rd_paste_spec_ab 438.85  # estimate: 210.4 s local (merge-wt_FIX-P3a-20261115T165211Z.lvp.log) x 2.09
-rd_paste_spec_gl 300.64  # estimate: 144.1 s local (merge-wt_FIX-P3a-20261115T165211Z.lvp.log) x 2.09
-rd_paste_spec_sabotage 349.35  # estimate: 167.5 s local (merge-wt_FIX-P3a-20261115T165211Z.lvp.log) x 2.09
+rd_paste_spec_ab 421.50  # estimate: 210.4 s local (merge-wt_FIX-P3a-20261115T165211Z.lvp.log) x 2.00
+rd_paste_spec_gl 288.76  # estimate: 144.1 s local (merge-wt_FIX-P3a-20261115T165211Z.lvp.log) x 2.00
+rd_paste_spec_sabotage 335.55  # estimate: 167.5 s local (merge-wt_FIX-P3a-20261115T165211Z.lvp.log) x 2.00
 rd_perf 65.45
 rd_perf_attachment 56.18
 rd_perf_attachment_gl 58.09
@@ -653,7 +654,7 @@ rd_present_minlimits 200.78
 rd_present_nodual 215.32
 rd_present_nodual_gl 459.74
 rd_present_scene 0.17
-rd_present_scene_ab 680.37  # estimate: 326.1 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.09
+rd_present_scene_ab 851.34  # estimate: 424.9 s local (merge-wt_GLOWHOLD-20261116T005054Z.lvp.log) x 2.00
 rd_present_storage 180.88
 rd_present_storage_gl 485.15
 rd_present_vk10 229.39
@@ -669,8 +670,8 @@ rd_raw_nodual_gl 9.17
 rd_raw_vk10 2.43
 rd_raw_vk11 2.71
 rd_raw_vk11s 1.92
-rd_region_camera_ab 0.06
-rd_region_stats 0.01
+rd_region_camera_ab 1103.00  # estimate: 550.5 s local (merge-wt_FIX-P6b2-20261116T024421Z.lvp.log) x 2.00
+rd_region_stats 175.00  # estimate: 87.3 s local (merge-wt_FIX-P6b2-20261116T024421Z.lvp.log) x 2.00
 rd_replay_tool 0.54
 rd_replay_tool_crack 1.24
 rd_replay_tool_downsample 1.04
@@ -679,26 +680,27 @@ rd_replay_tool_fsr3 0.57
 rd_replay_tool_fsr3_dump 0.36
 rd_replay_tool_fsr3_fp16 0.35
 rd_replay_tool_fsr3_keep 0.63
-rd_replay_tool_glow_hold 0.01
+rd_replay_tool_glow_hold 106.19  # estimate: 53.0 s local (merge-wt_GLOWHOLD-20261116T005054Z.lvp.log) x 2.00
+rd_replay_tool_glow_hold_wide 99.86  # estimate: 49.8 s local (merge-wt_GLOWHOLD-20261116T005054Z.lvp.log) x 2.00
 rd_replay_tool_jitter 13.28
 rd_replay_tool_keys 0.00
 rd_replay_tool_list 0.02
 rd_replay_tool_loss_bisect 5.23
-rd_replay_tool_mirror_floor 0.00
+rd_replay_tool_mirror_floor 2.70  # estimate: 1.4 s local (merge-wt_FIX-P5b2-20261116T020204Z.lvp.log) x 2.00
 rd_replay_tool_pass_dump 2.12
 rd_replay_tool_pass_merge 4.74
 rd_replay_tool_pass_split 1.12
 rd_replay_tool_prerotate 8.76
-rd_replay_tool_ripple 0.00
-rd_replay_tool_ripple_436 0.00
-rd_replay_tool_ripple_436_1x 2.27  # estimate: 1.1 s local (merge-wt_WATERSCALE-20261115T031227Z.lvp.log) x 2.09
-rd_replay_tool_ripple_436_1x_ps2 2.42  # estimate: 1.2 s local (merge-wt_WATERSCALE-20261115T031227Z.lvp.log) x 2.09
-rd_replay_tool_ripple_436_ps2 10.95  # estimate: 5.2 s local (merge-wt_WATERSCALE-20261115T031227Z.lvp.log) x 2.09
-rd_replay_tool_ripple_447 0.00
-rd_replay_tool_save_blended 0.01
-rd_replay_tool_save_blended_163 0.00
+rd_replay_tool_ripple 24.06  # estimate: 12.0 s local (merge-wt_FIX-P5b2-20261116T020204Z.lvp.log) x 2.00
+rd_replay_tool_ripple_436 25.49  # estimate: 12.7 s local (merge-wt_FIX-P6b2-20261116T024421Z.lvp.log) x 2.00
+rd_replay_tool_ripple_436_1x 6.15  # estimate: 3.1 s local (merge-wt_FIX-P5b2-20261116T020204Z.lvp.log) x 2.00
+rd_replay_tool_ripple_436_1x_ps2 2.99  # estimate: 1.5 s local (merge-wt_FIX-P5b2-20261116T020204Z.lvp.log) x 2.00
+rd_replay_tool_ripple_436_ps2 10.84  # estimate: 5.4 s local (merge-wt_FIX-P5b2-20261116T020204Z.lvp.log) x 2.00
+rd_replay_tool_ripple_447 12.16  # estimate: 6.1 s local (merge-wt_FIX-P5b2-20261116T020204Z.lvp.log) x 2.00
+rd_replay_tool_save_blended 69.29  # estimate: 34.6 s local (merge-wt_GLOWHOLD-20261116T005054Z.lvp.log) x 2.00
+rd_replay_tool_save_blended_163 62.13  # estimate: 31.0 s local (merge-wt_GLOWHOLD-20261116T005054Z.lvp.log) x 2.00
 rd_replay_tool_snap_swap 11.73
-rd_replay_tool_still 0.00
+rd_replay_tool_still 23.56  # estimate: 11.8 s local (merge-wt_GLOWHOLD-20261116T005054Z.lvp.log) x 2.00
 rd_replay_tool_traffic_stats 0.57
 rd_replay_tool_upscale_keep 3.70
 rd_replay_tool_upscale_test 2.03
@@ -708,16 +710,16 @@ rd_scope_ab_tiler 2.07
 rd_set_resume 3.04
 rd_shadow 86.28
 rd_shadow_box 0.00
-rd_shadow_box_ab 230.32  # estimate: 110.4 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.09
-rd_shadow_box_ab_gl 18.07  # estimate: 8.7 s local (merge-wt_FIX-P2a-20261115T053727Z.lvp.log) x 2.09
+rd_shadow_box_ab 221.22  # estimate: 110.4 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.00
+rd_shadow_box_ab_gl 17.35  # estimate: 8.7 s local (merge-wt_FIX-P2a-20261115T053727Z.lvp.log) x 2.00
 rd_shadow_edges 2.10
 rd_shadow_edges_gl 6.54
-rd_shadow_fine 0.71  # estimate: 0.3 s local (merge-wt_FIX-P2c-20261115T073759Z.lvp.log) x 2.09
-rd_shadow_fine_ab 1763.52  # estimate: 845.4 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.09
-rd_shadow_fine_ab_gl 753.03  # estimate: 361.0 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.09
+rd_shadow_fine 0.68  # estimate: 0.3 s local (merge-wt_FIX-P2c-20261115T073759Z.lvp.log) x 2.00
+rd_shadow_fine_ab 1693.83  # estimate: 845.4 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.00
+rd_shadow_fine_ab_gl 723.27  # estimate: 361.0 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.00
 rd_shadow_gl 104.02
 rd_shadow_mali 123.37
-rd_shadow_merge_ab 194.78  # estimate: 93.4 s local (merge-wt_FIX-P2b-20261115T065141Z.lvp.log) x 2.09
+rd_shadow_merge_ab 187.08  # estimate: 93.4 s local (merge-wt_FIX-P2b-20261115T065141Z.lvp.log) x 2.00
 rd_shadow_nodual 103.73
 rd_shadow_nodual_gl 99.16
 rd_shadow_selftest 4.62
@@ -729,28 +731,28 @@ rd_shadow_selftest_sabotage_gl 3.26
 rd_shadow_selftest_wide 3.87
 rd_shadow_selftest_wide_gl 4.84
 rd_shadow_tile 3.75
-rd_shadow_tile_ab 871.44  # estimate: 417.7 s local (merge-wt_FIX-P2b-20261115T065141Z.lvp.log) x 2.09
+rd_shadow_tile_ab 837.00  # estimate: 417.7 s local (merge-wt_FIX-P2b-20261115T065141Z.lvp.log) x 2.00
 rd_shadow_tile_selftest 10.79
 rd_shadow_vk10 86.23
 rd_shadow_vk11 120.39
 rd_shadow_vk11s 109.58
 rd_sheet_bake 31.51
-rd_sideband_ab 0.01
-rd_sideband_cards 0.00
+rd_sideband_ab 177.42  # estimate: 88.5 s local (merge-wt_FIX-P6b2-20261116T024421Z.lvp.log) x 2.00
+rd_sideband_cards 256.83  # estimate: 128.2 s local (merge-wt_FIX-P6b2-20261116T024421Z.lvp.log) x 2.00
 rd_smallcuts 0.05
 rd_ssaa_shadow 15.94
 rd_ssaa_shadow_4096 11.47
 rd_state 0.06
 rd_state_gl 0.07
-rd_stencil_ab 356.91  # estimate: 171.1 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.09
+rd_stencil_ab 342.80  # estimate: 171.1 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.00
 rd_stencil_selftest 5.05
 rd_stencil_selftest_poison 6.44
 rd_still 0.01
 rd_store_plan 13.57
-rd_store_plan_ab 338.21  # estimate: 162.1 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.09
-rd_stream_audit 0.00
+rd_store_plan_ab 324.85  # estimate: 162.1 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.00
+rd_stream_audit 4.75  # estimate: 2.4 s local (merge-wt_FIX-P5b2-20261116T020204Z.lvp.log) x 2.00
 rd_submit_queue 0.00
-rd_subpass_ab 238.90  # estimate: 114.5 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.09
+rd_subpass_ab 229.46  # estimate: 114.5 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.00
 rd_subpass_probe_end 6.76
 rd_subpass_probe_kept 13.83
 rd_subpass_probe_plain 14.57
@@ -761,7 +763,7 @@ rd_tex 7.45
 rd_tex_gl 22.80
 rd_tex_mali 7.25
 rd_tex_pool 0.52
-rd_thread_ab 449.55  # estimate: 215.5 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.09
+rd_thread_ab 431.78  # estimate: 215.5 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.00
 rd_turn_fold_ab 30.25
 rd_upscale 23.96
 rd_upscale_gl 20.94
@@ -775,50 +777,50 @@ rd_video_window 20.74
 rd_video_window_gl 16.59
 rd_vis 1.33
 rd_vis_hiz 0.31
-rd_vis_hiz_corpus 0.01
+rd_vis_hiz_corpus 456.25  # estimate: 227.7 s local (merge-wt_FIX-P5b2-20261116T020204Z.lvp.log) x 2.00
 rd_volume_fs 0.01
-rd_volume_fs_ab 616.27  # estimate: 295.4 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.09
-rd_volume_fs_sabotage 151.37  # estimate: 72.6 s local (merge-wt_FIX-P2b-20261115T065141Z.lvp.log) x 2.09
+rd_volume_fs_ab 591.91  # estimate: 295.4 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.00
+rd_volume_fs_sabotage 145.38  # estimate: 72.6 s local (merge-wt_FIX-P2b-20261115T065141Z.lvp.log) x 2.00
 rd_volume_fs_selftest 10.04
 rd_volume_fs_selftest_sabotage 5.94
-rd_vu_audit 85.95  # estimate: 41.2 s local (merge-wt_MALI179-20261114T175748Z.lvp.log) x 2.09
-rd_vu_bones_ring_ab 0.00
-rd_vu_bones_ring_ab_prepass 0.01
+rd_vu_audit 85.96  # estimate: 42.9 s local (merge-wt_FIX-P6a-20261116T004107Z.lvp.log) x 2.00
+rd_vu_bones_ring_ab 140.05  # estimate: 69.9 s local (merge-wt_FIX-P6a-20261116T004107Z.lvp.log) x 2.00
+rd_vu_bones_ring_ab_prepass 249.13  # estimate: 124.3 s local (merge-wt_FIX-P6a-20261116T004107Z.lvp.log) x 2.00
 rd_vu_compact 0.00
-rd_vu_compact_ab 576.90  # estimate: 276.6 s local (merge-wt_FIX-P4b-20261115T201517Z.lvp.log) x 2.09
+rd_vu_compact_ab 554.10  # estimate: 276.6 s local (merge-wt_FIX-P4b-20261115T201517Z.lvp.log) x 2.00
 rd_vu_compact_ab_pixel 7.38
 rd_vu_flat0 0.00
-rd_vu_flat0_ab 529.78  # estimate: 254.0 s local (merge-wt_FIX-P4b-20261115T201517Z.lvp.log) x 2.09
+rd_vu_flat0_ab 508.84  # estimate: 254.0 s local (merge-wt_FIX-P4b-20261115T201517Z.lvp.log) x 2.00
 rd_vu_flat0_ab_pixel 6.42
-rd_vu_flat0_gl 450.80  # estimate: 216.1 s local (merge-wt_FIX-P4b-20261115T201517Z.lvp.log) x 2.09
+rd_vu_flat0_gl 432.99  # estimate: 216.1 s local (merge-wt_FIX-P4b-20261115T201517Z.lvp.log) x 2.00
 rd_vu_frac 0.02
-rd_vu_rec_early_ab 74.70  # estimate: 35.8 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.09
-rd_vu_rec_early_ab_compute 61.81  # estimate: 29.6 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.09
-rd_vu_rec_early_ab_targets 63.48  # estimate: 30.4 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.09
-rd_vu_rec_size_ab 129.90  # estimate: 62.3 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.09
-rd_vu_rec_size_ab_mali 132.07  # estimate: 63.3 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.09
+rd_vu_rec_early_ab 71.75  # estimate: 35.8 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.00
+rd_vu_rec_early_ab_compute 59.37  # estimate: 29.6 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.00
+rd_vu_rec_early_ab_targets 60.97  # estimate: 30.4 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.00
+rd_vu_rec_size_ab 124.77  # estimate: 62.3 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.00
+rd_vu_rec_size_ab_mali 126.85  # estimate: 63.3 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.00
 rd_vu_skin_check 1.59
-rd_vu_skin_check_123 0.00
-rd_vu_skin_check_123_attach 0.01
-rd_vu_skin_check_123_bones_ring 5.05  # estimate: 2.4 s local (merge-wt_CULL-20261113T051955Z.lvp.log) x 2.09
-rd_vu_skin_check_123_bones_ring_nan 3.84  # estimate: 1.8 s local (merge-wt_CULL-20261113T051955Z.lvp.log) x 2.09
-rd_vu_skin_check_123_c3 0.01
-rd_vu_skin_check_123_nan 0.00
-rd_vu_skin_check_123_nan_attach 0.00
-rd_vu_skin_check_123_nan_c 0.01
+rd_vu_skin_check_123 13.50  # estimate: 6.7 s local (merge-wt_FIX-P6a-20261116T004107Z.lvp.log) x 2.00
+rd_vu_skin_check_123_attach 21.40  # estimate: 10.7 s local (merge-wt_FIX-P6a-20261116T004107Z.lvp.log) x 2.00
+rd_vu_skin_check_123_bones_ring 6.65  # estimate: 3.3 s local (merge-wt_FIX-P6a-20261116T004107Z.lvp.log) x 2.00
+rd_vu_skin_check_123_bones_ring_nan 8.92  # estimate: 4.5 s local (merge-wt_FIX-P6a-20261116T004107Z.lvp.log) x 2.00
+rd_vu_skin_check_123_c3 8.54  # estimate: 4.3 s local (merge-wt_FIX-P6a-20261116T004107Z.lvp.log) x 2.00
+rd_vu_skin_check_123_nan 13.20  # estimate: 6.6 s local (merge-wt_FIX-P6a-20261116T004107Z.lvp.log) x 2.00
+rd_vu_skin_check_123_nan_attach 8.30  # estimate: 4.1 s local (merge-wt_FIX-P6a-20261116T004107Z.lvp.log) x 2.00
+rd_vu_skin_check_123_nan_c 7.31  # estimate: 3.6 s local (merge-wt_FIX-P6a-20261116T004107Z.lvp.log) x 2.00
 rd_vu_skin_check_163 0.00
 rd_vu_skin_check_163_patched 0.01
-rd_vu_skin_check_163_probe 0.01
-rd_vu_skin_check_163_ring 0.00
-rd_vu_skin_check_ab 0.01
+rd_vu_skin_check_163_probe 18.73  # estimate: 9.3 s local (merge-wt_FIX-P6a-20261116T004107Z.lvp.log) x 2.00
+rd_vu_skin_check_163_ring 7.63  # estimate: 3.8 s local (merge-wt_FIX-P6a-20261116T004107Z.lvp.log) x 2.00
+rd_vu_skin_check_ab 177.84  # estimate: 88.8 s local (merge-wt_FIX-P6a-20261116T004107Z.lvp.log) x 2.00
 rd_vu_skin_check_capture 1.94
 rd_vu_skin_check_clean_phone 1.57
-rd_vu_skin_check_dump 0.01
+rd_vu_skin_check_dump 15.09  # estimate: 7.5 s local (merge-wt_FIX-P6a-20261116T004107Z.lvp.log) x 2.00
 rd_vu_skin_check_judge 0.02
 rd_vu_skin_check_probe 1.52
 rd_vu_skin_check_probe_c3 4.43
 rd_vu_skin_check_probe_robust 13.52
-rd_vu_skin_check_reset 2.57  # estimate: 1.2 s local (merge-wt_DT3-20261115T032221Z.lvp.log) x 2.09
+rd_vu_skin_check_reset 2.46  # estimate: 1.2 s local (merge-wt_DT3-20261115T032221Z.lvp.log) x 2.00
 rd_vu_skin_check_ring 1.60
 rd_vu_skin_check_robust 11.60
 rd_vu_skin_check_stale 1.35
@@ -830,23 +832,23 @@ rd_vu_skin_check_twin_bones_ring 2.36
 rd_vu_skin_check_twin_c 7.52
 rd_vu_skin_check_twin_nan 1.58
 rd_vu_skin_check_twin_record 1.50
-rd_vubatch_ab 145.90  # estimate: 69.9 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.09
-rd_vufuse_ab 664.00  # estimate: 318.3 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.09
+rd_vubatch_ab 140.13  # estimate: 69.9 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.00
+rd_vufuse_ab 637.76  # estimate: 318.3 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.00
 rd_vufuse_ab_pixel 16.67
 rd_vufuse_ab_pixel_uber 18.61
-rd_vufuse_ab_uber 593.13  # estimate: 284.3 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.09
-rd_vumerge_ab 376.35  # estimate: 180.4 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.09
+rd_vufuse_ab_uber 569.69  # estimate: 284.3 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.00
+rd_vumerge_ab 361.48  # estimate: 180.4 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.00
 rd_vumerge_ab_pixel 27.30
 rd_vumerge_ab_pixel_uber 32.06
-rd_vumerge_ab_uber 457.29  # estimate: 219.2 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.09
+rd_vumerge_ab_uber 439.22  # estimate: 219.2 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.00
 rd_vumerge_fallback 2.39
-rd_vumerge_mali 31.58  # estimate: 15.1 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.09
-rd_vuprepass_min_ab 75.47  # estimate: 36.2 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.09
+rd_vumerge_mali 30.33  # estimate: 15.1 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.00
+rd_vuprepass_min_ab 72.49  # estimate: 36.2 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.00
 rd_vuprepass_selftest 5.85
 rd_vuprepass_selftest_compact 2.89
 rd_vuprepass_selftest_compact_mali 3.70
 rd_vuprepass_selftest_compact_refused 3.06
-rd_vuprepass_selftest_compact_stamps 3.86  # estimate: 1.9 s local (merge-wt_DEVTABLE-20261114T185052Z.lvp.log) x 2.09
+rd_vuprepass_selftest_compact_stamps 3.71  # estimate: 1.9 s local (merge-wt_DEVTABLE-20261114T185052Z.lvp.log) x 2.00
 rd_vuprepass_selftest_compact_stores 1.92
 rd_vuprepass_selftest_compute 1.99
 rd_vuprepass_selftest_compute_class 1.97
@@ -894,14 +896,14 @@ rd_vurecord_ab 1.94
 rd_vurecord_ab_compute 2.04
 rd_vurecord_ab_compute_class 1.58
 rd_vurecord_ab_compute_class_opening 1.67
-rd_vustage_ab 121.20  # estimate: 58.1 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.09
+rd_vustage_ab 116.41  # estimate: 58.1 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.00
 rd_vustage_ab_pixel 13.83
 rd_water 13.20
 rd_water_gl 23.54
 rd_water_mali 17.41
 rd_water_nodual 12.31
 rd_water_nodual_gl 19.35
-rdfix_check 0.11  # estimate: 0.1 s local (merge-wt_FIX-P5a-20261115T213934Z.rest.log) x 1.26
+rdfix_check 0.18  # estimate: 0.2 s local (merge-wt_FIX-P4d2-20261116T031841Z.rest.log) x 1.15
 region_literals_check 8.86
 region_literals_selftest 0.45
 region_select 0.00
@@ -909,9 +911,9 @@ report 0.00
 rhi_adapter_match 0.00
 rhi_d3d11_shader_plan 0.45
 rhi_d3d12_plan 0.01
-rhi_device_table 0.01  # estimate: 0.0 s local (merge-wt_DT4-20261115T050130Z.lvp.log) x 1.26
-rhi_device_table_docs 0.05  # estimate: 0.0 s local (merge-wt_APPLECI-20261115T203240Z.lvp.log) x 1.26
-rhi_device_table_equiv 28.27  # estimate: 22.5 s local (merge-wt_DT4-20261115T050130Z.lvp.log) x 1.26
+rhi_device_table 0.01  # estimate: 0.0 s local (merge-wt_DT4-20261115T050130Z.lvp.log) x 1.15
+rhi_device_table_docs 0.05  # estimate: 0.0 s local (merge-wt_APPLECI-20261115T203240Z.lvp.log) x 1.15
+rhi_device_table_equiv 25.78  # estimate: 22.5 s local (merge-wt_DT4-20261115T050130Z.lvp.log) x 1.15
 rhi_driver_version 0.00
 rhi_gl 1.82
 rhi_gl_compute 0.12
@@ -947,10 +949,10 @@ rhi_vk_pipeline_stats 0.26
 rhi_vk_present_mode 0.00
 rhi_vk_qcom_passes 3.12
 rhi_vk_qcom_passes_off 0.35
-rhi_vk_qprio 0.00  # estimate: 0.0 s local (merge-wt_DT2-20261114T192922Z.lvp.log) x 1.26
-rhi_vk_qprio_granted 0.49  # estimate: 0.4 s local (merge-wt_DT2-20261114T192922Z.lvp.log) x 1.26
-rhi_vk_qprio_refused 0.55  # estimate: 0.4 s local (merge-wt_DT2-20261114T192922Z.lvp.log) x 1.26
-rhi_vk_qprio_unoffered 0.51  # estimate: 0.4 s local (merge-wt_DT2-20261114T192922Z.lvp.log) x 1.26
+rhi_vk_qprio 0.00  # estimate: 0.0 s local (merge-wt_DT2-20261114T192922Z.lvp.log) x 1.15
+rhi_vk_qprio_granted 0.45  # estimate: 0.4 s local (merge-wt_DT2-20261114T192922Z.lvp.log) x 1.15
+rhi_vk_qprio_refused 0.50  # estimate: 0.4 s local (merge-wt_DT2-20261114T192922Z.lvp.log) x 1.15
+rhi_vk_qprio_unoffered 0.47  # estimate: 0.4 s local (merge-wt_DT2-20261114T192922Z.lvp.log) x 1.15
 rhi_vk_scopes 0.10
 rhi_vk_scopes_arm 0.23
 rhi_vk_scopes_arm_narrow 0.14
@@ -1059,7 +1061,7 @@ shaders_pixel 5.38
 shaders_pixel_mali 4.13
 shaders_pixel_nodual 5.94
 shaders_table 0.00
-shadow_clip 0.00  # estimate: 0.0 s local (merge-wt_SHADOWCLIP-20261115T053047Z.lvp.log) x 2.09
+shadow_clip 0.00  # estimate: 0.0 s local (merge-wt_SHADOWCLIP-20261115T053047Z.lvp.log) x 2.00
 shadow_spawn 0.00
 share_report 0.01
 sim_keys 0.01
@@ -1111,9 +1113,9 @@ subtitles_ru_cobra838_kor 0.03
 subtitles_ru_jpn 0.02
 subtitles_ru_kor 0.03
 sys_cell 0.01
-template_audit 44.91  # estimate: 35.8 s local (merge-wt_DOCS-20261110T085625Z.rest.log) x 1.26
-test_paths_check 4.35  # estimate: 3.5 s local (merge-wt_FIX-P5a-20261115T213934Z.rest.log) x 1.26
-test_paths_selftest 0.03  # estimate: 0.0 s local (merge-wt_FIX-P5a-20261115T213934Z.rest.log) x 1.26
+template_audit 40.95  # estimate: 35.8 s local (merge-wt_DOCS-20261110T085625Z.rest.log) x 1.15
+test_paths_check 6.44  # estimate: 5.6 s local (merge-wt_FIX-P4d2-20261116T031841Z.rest.log) x 1.15
+test_paths_selftest 0.03  # estimate: 0.0 s local (merge-wt_FIX-P4d2-20261116T031841Z.rest.log) x 1.15
 texpack 0.32
 texpack_disc 0.00
 texpack_e2e 0.00
@@ -1183,7 +1185,7 @@ vu1 75.34
 vu1_mali 72.49
 vu1_variant_diff 0.17  # estimate: unmeasured, the table's median
 vu1_variant_equiv 0.17  # estimate: unmeasured, the table's median
-vu1_variant_table 0.06  # estimate: 0.1 s local (merge-wt_RECCOMP-20261109T223501Z.rest.log) x 1.26
+vu1_variant_table 0.06  # estimate: 0.1 s local (merge-wt_RECCOMP-20261109T223501Z.rest.log) x 1.15
 weapon_draw 0.01
 weapon_draw_aug6 0.01
 weapon_draw_cn 0.02

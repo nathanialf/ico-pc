@@ -2,7 +2,7 @@
 """Split a build's ctest suite into N shards of about equal measured cost.
 
     tools/ci_shard.py split --tests <ctest --show-only=json-v1 output> \
-        --costs tools/ci_costs/<suite>.txt --shards N --index K [--include RE] [--exclude RE] \
+        --costs tools/ci_costs/<suite>.txt --shards N --index K [--include RE] [--exclude RE]... \
         [--fixture-tests run|skip] [--parallel P] [--cost-data <file>] --out <file>
     tools/ci_shard.py check --tests <ctest --show-only=json-v1 output> --costs <table> [--floor S]
     tools/ci_shard.py costs <ctest output log>... > tools/ci_costs/<suite>.txt
@@ -29,8 +29,10 @@ test exactly once:
 - with --include RE only the tests whose names match the regular expression
   (re.search) are split (the linux-arm64 job's filtered tests), with
   --exclude RE the matching tests are left out (the linux-arm64 job's gating
-  list), with --fixture-tests skip the tests that replay the committed
-  fixtures (a `-DFIXTURES=` argument in the test's command,
+  list; repeatable, and an empty RE excludes nothing, so the workflow's
+  ICO_CI_EXCLUDE can be passed when it is empty), with --fixture-tests skip
+  the tests that replay the committed fixtures (a `-DFIXTURES=` argument in
+  the test's command,
   docs/port/TESTING_FIXTURES.md) are left out, and with --fixture-tests only
   they alone are split (the linux-arm64-fixtures job); the other tests are not
   in any shard;
@@ -200,14 +202,17 @@ def partition(tests, costs, shards, parallel=1):
 
 
 def select(full, include=None, exclude=None, fixture_tests="run"):
-    """The tests a split covers: --include, --exclude, --fixture-tests."""
+    """The tests a split covers: --include, --exclude (one regular expression
+    or a list of them; an empty one excludes nothing), --fixture-tests."""
     keep = re.compile(include) if include else None
-    drop = re.compile(exclude) if exclude else None
+    if isinstance(exclude, str):
+        exclude = [exclude]
+    drops = [re.compile(e) for e in exclude or [] if e]
     out = []
     for t in full:
         if keep and not keep.search(t["name"]):
             continue
-        if drop and drop.search(t["name"]):
+        if any(d.search(t["name"]) for d in drops):
             continue
         if fixture_tests == "skip" and reads_fixtures(t["command"]):
             continue
@@ -349,6 +354,10 @@ def selftest():
     check([t["name"] for t in select(full, fixture_tests="only")] == ["rd_a_ab"],
           "--fixture-tests only keeps the fixture test alone")
     check([t["name"] for t in select(full, exclude="^disc$")] == ["rd_a_ab", "unit"], "--exclude")
+    check([t["name"] for t in select(full, exclude=["^disc$", "", "^unit$"])] == ["rd_a_ab"],
+          "--exclude twice, an empty one ignored")
+    check([t["name"] for t in select(full, exclude="")] == ["rd_a_ab", "unit", "disc"],
+          "an empty --exclude excludes nothing")
     bad = check_table(full, {"rd_a_ab": 0.0, "unit": 1.0}, 1.0)
     check(sorted(n for n, _ in bad) == ["disc", "rd_a_ab"],
           f"check: a missing line and a fixture test at 0.00 fail ({bad})")
@@ -381,7 +390,8 @@ def main():
     sp.add_argument("--shards", type=int, required=True)
     sp.add_argument("--index", type=int, required=True, help="1-based shard number")
     sp.add_argument("--include", help="split only the tests whose name matches this regex")
-    sp.add_argument("--exclude", help="leave out the tests whose name matches this regex")
+    sp.add_argument("--exclude", action="append",
+                    help="leave out the tests whose name matches this regex (repeatable; an empty one excludes nothing)")
     sp.add_argument("--fixture-tests", choices=("run", "skip", "only"), default="run",
                     help="skip: leave out the tests that replay the committed fixtures; only: split them alone")
     sp.add_argument("--parallel", type=int, default=1,
