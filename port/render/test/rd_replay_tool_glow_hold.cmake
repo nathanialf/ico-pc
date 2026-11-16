@@ -15,16 +15,48 @@
 #           pixel within REACH texels of a pixel of WORK2 (the mask, of both
 #           runs' present) that is not WORK2's fill colour (with Python and
 #           Pillow; without either the picture check is skipped).
-# -DTOOL=<rd_replay_tool> -DSTILL=<dump> -DPREV=<dump> -DMOVE=<dump>
+# STILL, PREV and MOVE are committed fixtures (port/render/test/fixtures,
+# docs/port/TESTING_FIXTURES.md): LIST names them, each with its role word
+# (still, prev, move); the word nocull replays that case with ICO_RD_CULL=off.
+# The path ran: the lines above, and each fixture's declared quantities (its
+# list line's words: the glow's chains and plan) on a replay of it alone at
+# the case's setting with the chain drawn at every present.
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<dir>
+# -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<list>
 # -DOUT=<dir> -DARGS=<a|b|...> -DPRESENTS=<N> -DREACH=<texels>
 # -DPYTHON=<python3> (optional)
-foreach(_d STILL PREV MOVE)
-  if(NOT EXISTS "${${_d}}")
-    # ctest's SKIP_REGULAR_EXPRESSION maps this to Not Run
-    message(STATUS "SKIP: ${${_d}}: no dump (build-host/tmp is not in the tree)")
-    return()
+include("${FIXTURE_HELPERS}")
+include("${CMAKE_CURRENT_LIST_DIR}/rd_fixture_list_props.cmake")
+rd_fixture_list("${LIST}" fixtures)
+foreach(_r STILL PREV MOVE)
+  set(${_r} "")
+  set(${_r}_NOCULL FALSE)
+endforeach()
+foreach(fx IN LISTS fixtures)
+  set(_role "")
+  foreach(_r still prev move)
+    rd_fixture_list_word(${fx} ${_r} _is)
+    string(TOUPPER "${_r}" _R)
+    if(_is AND "${${_R}}" STREQUAL "")
+      set(_role ${_R})
+    endif()
+  endforeach()
+  if(_role STREQUAL "")
+    message(FATAL_ERROR "${LIST}: ${fx} has no role left (one still, one prev, one move)")
+  endif()
+  rd_fixture_list_props(${fx})
+  rd_fixture_expand(${fx} "${OUT}/fixtures" ${_role})
+  set(${_role}_FX ${fx})
+  rd_fixture_list_word(${fx} nocull ${_role}_NOCULL)
+endforeach()
+foreach(_r STILL PREV MOVE)
+  if("${${_r}}" STREQUAL "")
+    message(FATAL_ERROR "${LIST}: no fixture for ${_r}")
   endif()
 endforeach()
+if(NOT PREV_NOCULL STREQUAL MOVE_NOCULL)
+  message(FATAL_ERROR "${LIST}: prev and move must both be nocull or neither")
+endif()
 string(REPLACE "|" ";" ARGS "${ARGS}")
 math(EXPR last "${PRESENTS} - 1")
 
@@ -38,8 +70,13 @@ function(glow_run _case _mode _what)
   endif()
   if(_case STREQUAL "still")
     set(_in "${STILL}" --interp 0.9 "${STILL}" --interp-any)
+    set(_nocull ${STILL_NOCULL})
   else()
     set(_in "${MOVE}" --interp 1.0 "${PREV}")
+    set(_nocull ${MOVE_NOCULL})
+  endif()
+  if(_nocull)
+    list(APPEND _env ICO_RD_CULL=off)
   endif()
   if(_what STREQUAL "PRESENT")
     set(_t --present 1280x960)
@@ -83,6 +120,30 @@ function(glow_run _case _mode _what)
                         "(want ${_want_redrawn}):\n${out}")
   endif()
 endfunction()
+
+# the path ran: each fixture alone at its case's setting (one present: the
+# chain drawn) shows what its list line declares
+foreach(_r STILL PREV MOVE)
+  set(_env ICO_RD_STILL_REPRESENT=0)
+  if(${_r}_NOCULL)
+    list(APPEND _env ICO_RD_CULL=off)
+  endif()
+  file(MAKE_DIRECTORY "${OUT}/alone")
+  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${_env} "${TOOL}" "${${_r}}"
+                          "${OUT}/alone/${${_r}_FX}.png" ${ARGS} --stats
+                  RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
+  if(rc EQUAL 77 OR out MATCHES "SKIP:")
+    message(STATUS "SKIP: no usable Vulkan device or mode")
+    return()
+  endif()
+  if(NOT rc EQUAL 0)
+    message(FATAL_ERROR "${TOOL} (${${_r}_FX} alone) exited ${rc}:\n${out}\n${err}")
+  endif()
+  rd_fixture_require(${${_r}_FX} "${out}" glow_chains glow_plan)
+endforeach()
+if(RDFX_FAILURES GREATER 0)
+  message(FATAL_ERROR "${RDFX_FAILURES} fixtures did not take the glow's chain")
+endif()
 
 set(GLOW_SKIP 0)
 foreach(_case still moving)

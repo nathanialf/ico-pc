@@ -72,6 +72,17 @@ set(_rdfx_q_present_scene_skipped "present from SCENE on: ([0-9]+) reductions no
 set(_rdfx_q_lamps_area_passes "\\): ([0-9]+) passes with the lamps' area")
 set(_rdfx_q_lamps_bands_lazy "([0-9]+) bands left lazy")
 set(_rdfx_q_lamps_owed "([0-9]+) WORK0 alpha sprites owed")
+# the visibility test: the draws MSAA keeps (they may close the epoch)
+set(_rdfx_q_msaa_epoch_kept "kept: may close the MSAA epoch ([0-9]+)")
+# the crack fill after the MSAA resolve
+set(_rdfx_q_crack_msaa_fills "crack fill on: [^\n]*, ([0-9]+) fills after the MSAA resolve")
+# the passes' render areas, the passes cut, the aura's read in two passes
+set(_rdfx_q_pass_area_passes "pass area on: ([0-9]+) passes with an area")
+set(_rdfx_q_pass_area_covered "pass area on: [^\n]*[(,] ?([0-9]+) its draws cover the picture")
+set(_rdfx_q_clear_carried "clear carry on: ([0-9]+) clears taken by the next pass")
+set(_rdfx_q_clear_skipped "clear skip on: ([0-9]+) clears skipped")
+set(_rdfx_q_last_store_dropped "last store on: ([0-9]+) depth stores dropped at the last touch")
+set(_rdfx_q_aura_box_reads "aura box on: ([0-9]+) feedback reads in two passes")
 # the index compaction: list 0's triangles it left out
 set(_rdfx_q_vu_compact_left_out "VU index compaction on: ([0-9]+) of [0-9]+ list 0 triangles left out")
 # the VU family: the pre-pass's draws, the merge's joined draws, the store plan,
@@ -81,6 +92,13 @@ set(_rdfx_q_vu_merged_draws "VU merge: [0-9]+ draws in [0-9]+ GPU draws \\(([0-9
 set(_rdfx_q_store_depth_dropped "stats: stores: ([0-9]+) depth and [0-9]+ colour stores dropped")
 set(_rdfx_q_constant_reads_served "constant reads on: ([0-9]+) sprites drawn in a cleared source's colour")
 set(_rdfx_q_vu_record_dispatches "[0-9]+ copies, ([0-9]+) dispatches")
+# the wide frames: the side bands' mode
+set(_rdfx_q_side_band_card_draws "side bands: ([0-9]+) draws with cards")
+# the fog's depth read, the aura's paste after it, the blended frame between two ticks
+set(_rdfx_q_fog_path "fog local draws [0-9]+ \\(fog path ([a-z]+)\\)")
+set(_rdfx_q_aura_pastes_whole "aura paste [a-z]+: [0-9]+ split \\([^)]*\\), ([0-9]+) drawn whole")
+set(_rdfx_q_interp_keyed_blended "keyed draws: ([0-9]+) blended")
+set(_rdfx_q_interp_tick_cam_draws "beside blended ones, ([0-9]+) VU draws with the ticks' cameras")
 # the water's blocks and the mirror floor, the aura's paste split, the sprite
 # planes' fallback, the turned present and the turn fold, the bench (the last
 # four read the tool's log lines as well as its stats)

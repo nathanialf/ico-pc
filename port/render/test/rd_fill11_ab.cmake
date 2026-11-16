@@ -1,10 +1,14 @@
 # rd_fill11_ab: the crack fill and list 11 in one pass on SCENE (port/render/rd_fill11.c;
 # docs/port/RENDER_POST.md, "The crack fill in list 11's pass"): ICO_RD_FILL11=0
-# against the switch on.  For every line of the list (tools/fill11_dumps.txt: a
-# path, '*' globs allowed, then optionally phoneN, deskN, glN (one replay's fills
-# drawn in list 11's pass at that setting) and "nop SPEC" (rd_replay_tool's --nop,
-# given to both runs); a listed dump that is absent FAILS), rd_replay_tool's
-# --pass-dump with --stats and ICO_RD_VU_PREPASS=0, at:
+# against the switch on.  For every fixture the list names (port/render/test/
+# fixtures/lists/fill11.txt: fixture names of the repository,
+# docs/port/TESTING_FIXTURES.md; a listed fixture that is absent or does not
+# expand to its pinned SHA-256 FAILS, a name listed twice too), after each name
+# phoneN, deskN and glN (one replay's fills drawn in list 11's pass at that
+# setting, re-derived from a run of the fixture; each setting the fixture runs
+# at needs its count), "nop SPEC" (rd_replay_tool's --nop, given to both runs)
+# and the line's own properties (rd_fixture_list_props.cmake), expanded into
+# OUT, rd_replay_tool's --pass-dump with --stats and ICO_RD_VU_PREPASS=0, at:
 #   phone   the PowerVR phone's Resolution Auto (Enhanced, 2364x1080, Full height,
 #           Full pixel, presented at 2364x1080) under the tile class's fakes
 #           (ICO_VK_FAKE_LIMITS=moltenvk) and its late pass (ICO_RD_LATE_PASS=1):
@@ -20,7 +24,7 @@
 #           class off too were the default on);
 #   gl      -DBACKEND=opengl (rd_fill11_gl): the desk setting on OpenGL (llvmpipe),
 #           the on run with ICO_RD_FILL11=1;
-# a dump drawn narrower than a setting's aspect cannot show it and is skipped
+# a fixture drawn narrower than a setting's aspect cannot show it and is skipped
 # there.  Each pair: every PNG the off run writes (SCENE, DISPLAY, PRESENT and
 # every other named target) the on run's byte for byte; the same draws; the off
 # run's stats say the switch off with nothing drawn in list 11's pass and nothing
@@ -29,66 +33,49 @@
 # each fewer than the off run's by its fills drawn in list 11's pass exactly, its
 # colour MB loaded and stored each fewer by the MB its stats name for them
 # (within 0.02, two decimals' rounding), its depth and stencil MB loaded and
-# stored not more, its copies the same; the marked dumps draw that many fills in
-# list 11's pass at that setting.  Over the list: at least one fill drawn in list
-# 11's pass (desk, or gl).  No device: SKIP (77).
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
-# -DBACKEND=vulkan|opengl
-# The lists name dumps of the build machine alone (the owner's rule there: a
-# listed dump that is absent FAILS). A machine without that folder has none of
-# them: the test is skipped as the older dump tests are.
-if(NOT IS_DIRECTORY "/primary/dev/ico-dumps")
-  message(STATUS "SKIP: no dump folder on this machine (/primary/dev/ico-dumps): the list's dumps are the build machine's")
-  return()
-endif()
+# stored not more, its copies the same; the list's counts drawn in list 11's pass
+# at each setting.  The path ran: the generated geometry decides where the cracks
+# are, so on the on run of every pair the fixture's declared crack_pixels (>=1:
+# the fill drew at that setting) is checked (rd_fixture_require); every fixture
+# has at least one on run (phone, desk or gl) where the switch decided its fill
+# (drawn in list 11's pass, drawn in a pass of its own after all, or kept in its
+# own pass: rd_fill11.c counts each); a fixture no setting replayed fails.  Over
+# the list: at least one fill drawn in list 11's pass (desk, or gl).  No
+# device: SKIP (77).
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the
+# fixtures folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<a
+# fixture list> -DOUT=<a folder the test may write> -DBACKEND=vulkan|opengl
+include("${FIXTURE_HELPERS}")
+include("${CMAKE_CURRENT_LIST_DIR}/rd_fixture_list_props.cmake")
 set(failures 0)
-if("${LIST}" STREQUAL "" OR NOT EXISTS "${LIST}")
-  message(FATAL_ERROR "rd_fill11_ab: no dump list ${LIST}")
-endif()
-get_filename_component(listDir "${LIST}" DIRECTORY)
-file(STRINGS "${LIST}" lines)
-# the entries: entry_<n> its dump, nop_<n> its --nop spec, want_<n>_<setting>
+rd_fixture_list("${LIST}" names)
+# the entries: entry_<n> its dump, name_<n> its fixture, nop_<n> its --nop spec,
+# want_<n>_<setting>
 set(nentries 0)
-foreach(l IN LISTS lines)
-  string(STRIP "${l}" l)
-  if(l STREQUAL "" OR l MATCHES "^#")
-    continue()
+set(seen "")
+foreach(name IN LISTS names)
+  list(FIND seen "${name}" at)
+  if(NOT at LESS 0)
+    message(FATAL_ERROR "${LIST}: ${name} listed twice (one line a fixture)")
   endif()
+  list(APPEND seen "${name}")
+  rd_fixture_list_props(${name})
+  math(EXPR nentries "${nentries} + 1")
   set(nop "")
-  if(l MATCHES "^(.*[^ \t])[ \t]+nop[ \t]+([0-9:,-]+)$")
-    set(l "${CMAKE_MATCH_1}")
+  set(fields "${RDFX_FIELDS_${name}}")
+  if(fields MATCHES "(^|[ \t])nop[ \t]+([0-9:,-]+)")
     set(nop "${CMAKE_MATCH_2}")
   endif()
-  set(wants "")
-  while(l MATCHES "^(.*[^ \t])[ \t]+(phone|desk|gl)([0-9]+)$")
-    set(l "${CMAKE_MATCH_1}")
-    list(APPEND wants "${CMAKE_MATCH_2}=${CMAKE_MATCH_3}")
-  endwhile()
-  if(NOT IS_ABSOLUTE "${l}")
-    set(l "${listDir}/${l}")
-  endif()
-  set(found "")
-  if(l MATCHES "[*]")
-    file(GLOB found "${l}")
-    list(SORT found)
-  elseif(EXISTS "${l}")
-    set(found "${l}")
-  endif()
-  if(NOT found)
-    message(SEND_ERROR "${l}: no such dump (a listed dump must exist)")
-    math(EXPR failures "${failures} + 1")
-    continue()
-  endif()
-  foreach(d IN LISTS found)
-    math(EXPR nentries "${nentries} + 1")
-    set(entry_${nentries} "${d}")
-    set(nop_${nentries} "${nop}")
-    foreach(w IN LISTS wants)
-      string(REGEX REPLACE "=.*" "" ws "${w}")
-      string(REGEX REPLACE ".*=" "" wn "${w}")
-      set(want_${nentries}_${ws} "${wn}")
-    endforeach()
+  string(REGEX REPLACE "[ \t]+" ";" words "${fields}")
+  foreach(w IN LISTS words)
+    if(w MATCHES "^(phone|desk|gl)([0-9]+)$")
+      set(want_${nentries}_${CMAKE_MATCH_1} "${CMAKE_MATCH_2}")
+    endif()
   endforeach()
+  rd_fixture_expand(${name} "${OUT}/fixtures" d)
+  set(entry_${nentries} "${d}")
+  set(name_${nentries} "${name}")
+  set(nop_${nentries} "${nop}")
 endforeach()
 
 set(common ICO_RD_VU_PREPASS=0)
@@ -116,6 +103,7 @@ endif()
 
 set(drawsRe "stats: ([0-9]+) draws, ([0-9]+) passes")
 set(crackRe "stats: crack fill (on|off): ([0-9]+) passes")
+set(keptRe "stats: crack fill with list 11 [^\n]*, ([0-9]+) kept in their own pass")
 set(f11Re "stats: crack fill with list 11 (on|off) \\(self-test (passed|failed|not run)\\): ([0-9]+) drawn in list 11's pass \\(([0-9.]+) MB of colour not loaded and as many not stored\\), ([0-9]+) drawn in a pass of their own")
 set(trafficRe "stats: traffic: colour ([0-9.]+) MB loaded ([0-9.]+) MB stored, depth and stencil ([0-9.]+)/([0-9.]+) MB loaded/stored, [0-9.]+ MB cleared, ([0-9.]+) MB copied")
 
@@ -158,7 +146,7 @@ foreach(index IN LISTS indices)
         set(sw ${on_${s}} ICO_RD_FILL11_POISON=1)
       endif()
       execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${common} ${env_${s}} ${sw}
-                              "${TOOL}" "${dump}" - --pass-dump "${dir}" --stats ${args_${s}}
+                              "${TOOL}" "${dump}" "${dir}-out.png" --pass-dump "${dir}" --stats ${args_${s}}
                               ${nopArgs}
                       RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
       if(rc EQUAL 77)
@@ -176,9 +164,10 @@ foreach(index IN LISTS indices)
         set(skipped TRUE)
         continue()
       endif()
+      set(out_${w} "${out}")
       string(REPLACE ";" "," flat "${out}")
       set(ok TRUE)
-      foreach(re drawsRe crackRe f11Re trafficRe)
+      foreach(re drawsRe crackRe f11Re keptRe trafficRe)
         if(NOT flat MATCHES "${${re}}")
           message(SEND_ERROR "${dump} ${s} fill11 ${w}: no ${re} line:\n${out}")
           math(EXPR failures "${failures} + 1")
@@ -200,6 +189,8 @@ foreach(index IN LISTS indices)
       set(landed_${w} "${CMAKE_MATCH_3}")
       set(mb_${w} "${CMAKE_MATCH_4}")
       set(own_${w} "${CMAKE_MATCH_5}")
+      string(REGEX MATCH "${keptRe}" m "${flat}")
+      set(kept_${w} "${CMAKE_MATCH_1}")
       string(REGEX MATCH "${trafficRe}" m "${flat}")
       set(cl_${w} "${CMAKE_MATCH_1}")
       set(cs_${w} "${CMAKE_MATCH_2}")
@@ -272,9 +263,25 @@ foreach(index IN LISTS indices)
       math(EXPR failures "${failures} + 1")
     endif()
     set(want "${want_${index}_${s}}")
-    if(NOT want STREQUAL "" AND NOT landed_1 EQUAL want)
-      message(SEND_ERROR "${dump} ${s}: ${landed_1} fills in list 11's pass, ${want} expected")
+    if(s STREQUAL "mali")
+      set(want 0)
+    endif()
+    if(want STREQUAL "")
+      message(SEND_ERROR "${name_${index}} ${s}: no ${s}N field on its list line (the fills drawn "
+                         "in list 11's pass there, re-derived from a run of the fixture)")
       math(EXPR failures "${failures} + 1")
+    elseif(NOT landed_1 EQUAL want)
+      message(SEND_ERROR "${name_${index}} ${s}: ${landed_1} fills in list 11's pass, ${want} "
+                         "expected (the list's field)")
+      math(EXPR failures "${failures} + 1")
+    endif()
+    # the path ran: the fill drew at this setting on the fixture's generated
+    # geometry (its declared crack_pixels), and the switch decided it
+    rd_fixture_require(${name_${index}} "${out_1}" crack_pixels)
+    set(replayed_${index} TRUE)
+    math(EXPR decided "${landed_1} + ${own_1} + ${kept_1}")
+    if(NOT s STREQUAL "mali" AND decided GREATER 0)
+      set(decided_${index} TRUE)
     endif()
     if(NOT s STREQUAL "phone" AND NOT s STREQUAL "mali")
       math(EXPR landedTotal "${landedTotal} + ${landed_1}")
@@ -301,12 +308,25 @@ foreach(index IN LISTS indices)
     endforeach()
   endforeach()
 endforeach()
+foreach(index IN LISTS indices)
+  if(NOT replayed_${index})
+    message(SEND_ERROR "${name_${index}}: no setting replayed it: a fixture this test cannot "
+                       "measure is no test")
+    math(EXPR failures "${failures} + 1")
+  elseif(NOT decided_${index})
+    message(SEND_ERROR "${name_${index}}: no on run where the switch decided its fill (drawn in "
+                       "list 11's pass, in a pass of its own after all, or kept in its own pass): "
+                       "the path did not run on this fixture")
+    math(EXPR failures "${failures} + 1")
+  endif()
+endforeach()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(failures GREATER 0)
-  message(FATAL_ERROR "rd_fill11_ab: ${failures} failures over ${nentries} entries")
+  message(FATAL_ERROR "rd_fill11_ab: ${failures} failures over ${nentries} fixtures")
 endif()
 if(compared EQUAL 0 OR landedTotal EQUAL 0)
   message(FATAL_ERROR "rd_fill11_ab: ${compared} targets compared, ${landedTotal} fills drawn in "
-                      "list 11's pass over ${nentries} entries: one at least expected")
+                      "list 11's pass over ${nentries} fixtures: one at least expected")
 endif()
-message(STATUS "rd_fill11_ab: ${compared} targets the same bytes over ${nentries} entries; "
+message(STATUS "rd_fill11_ab: ${compared} targets the same bytes over ${nentries} fixtures; "
                "${landedTotal} fills drawn in list 11's pass")

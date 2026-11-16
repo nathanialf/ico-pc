@@ -1,40 +1,42 @@
 # Cameras for the disc-wide cull sweep (port/render/test/gsb_cull_test.c --sweep, the
 # gsb_cull_sweep ctest; docs/port/TESTING_PROGRAMS.md).  One line per camera: the stage's folder name
-# (object/sdf/<stage>/), then the dump whose frame camera (its view and zoom) the sweep is about:
-# the stage is the prefix of the dump's mesh names (rd_replay_tool --no-device --list shows them:
-# `mesh st17a_p1 ...`).  MACHINE-LOCAL: these are paths on the maintainer's machine, the dumps are
-# never committed.  A line whose dump is absent is skipped and said so.  A relative path is
-# relative to this file.  Every line is a 768-step sweep (every 4th pair by default) at 16:9 and
-# 48:9 for its stage, so a stage with many lines (st17a has 14) costs that many sweeps: drop
-# lines of near-identical cameras if its shard runs long.  A stage with no line is not swept.
+# (object/sdf/<stage>/), then the frame camera the sweep is about, as numbers:
+#   STAGE camera NAME V0 .. V15 zoom Z
+# the view (world to view, column-major, the translation in V12 .. V14) and the zoom of a captured
+# frame's camera (its dump header's RdCamera view and zoom, read once and written here with nine
+# significant digits, which give back each float exactly); NAME says which frame it was.  The stage
+# is the prefix of that frame's mesh names.  "STAGE builtin:i76" is the camera of the reporter's dump
+# i76 (gsb_cull_test.c kI76View).  A local list may also name a dump ("STAGE DUMP": its header is
+# read); this list names none, so the test reads nothing from outside the repository.  Every line is
+# a 768-step sweep (every 4th pair by default) at 16:9 and 48:9 for its stage, so a stage with many
+# lines (st17a has 14) costs that many sweeps: drop lines of near-identical cameras if its shard runs
+# long (phone-v3347, phone-v4651 and phone-v4657 are the same camera to 0.0003 units).  A stage with
+# no line is not swept.
 #
-# The frames of the v0.7.x corpus, /primary/dev/ico-dumps/frame-20261007-*.rddump, show the
-# queenmodel only (the ending): no stage, left out.
+# The frames of the v0.7.x corpus (the October 2026 VU captures) show the queenmodel only (the
+# ending): no stage, left out.  The issue 179 (st13b, v2915) and issue 182 (st26a, v3225) captures
+# are no longer on the maintainer's machine: their cameras are not here, so st26a has no line.
 #
-# st18a, issue 29's stage: the camera of the reporter's dump i76 (no dump of it on this machine)
+# st18a, issue 29's stage: the camera of the reporter's dump i76
 st18a builtin:i76
 #
-# the phone captures, an F12 zip each (the first .rddump of the zip)
-st13d /primary/dev/ico-dumps/phone/frame-20261022-232809-v5601.zip
-st17a /primary/dev/ico-dumps/phone/frame-20261028-105852-v4103.zip
-st17a /primary/dev/ico-dumps/phone/frame-20261028-151709-v2199.zip
-st17a /primary/dev/ico-dumps/phone/frame-20261028-173610-v4657.zip
-st17a /primary/dev/ico-dumps/phone/frame-20261028-204306-v2251.zip
-st17a /primary/dev/ico-dumps/phone/frame-20261102-091017-v15677.zip
-st17a /primary/dev/ico-dumps/phone/frame-20261102-114223-v2381.zip
-st17a /primary/dev/ico-dumps/phone/frame-20261102-122555-v3347.zip
-st17a /primary/dev/ico-dumps/phone/frame-20261102-134548-v4651.zip
-st17a /primary/dev/ico-dumps/phone/frame-20261102-152033-v6818.zip
-st17a /primary/dev/ico-dumps/phone/frame-20261102-165136-v4423.zip
-st17a /primary/dev/ico-dumps/phone/frame-20261102-173730-v5611.zip
-st17a /primary/dev/ico-dumps/phone/frame-20261102-181138-v2429.zip
-st17a /primary/dev/ico-dumps/phone/frame-20261102-194450-v2877.zip
-st17a /primary/dev/ico-dumps/phone/frame-20261102-210456-v2349.zip
+# the phone captures (F12 zips of 2026-10-22 to 2026-11-02, GS 848x448 at 2.189; v6818 at 4:3)
+st13d camera phone-v5601 -0.998427808 -0.0448989123 0.0333924629 0 0 0.596745491 0.80237335 0 -0.055957634 0.801111817 -0.595807254 0 2230.78735 -96.8588715 277.536041 1 zoom 473.026367
+st17a camera phone-v4103 0.945707381 -0.0845840201 0.313718021 0 0 0.965498567 0.260315776 0 -0.324928522 -0.246182546 0.913079083 0 -1215.26501 2451.14746 -505.375305 1 zoom 511.074463
+st17a camera phone-v2199 0.999930501 -0.00461080763 0.0107479533 0 0 0.918972373 0.394233644 0 -0.0116956225 -0.394206226 0.918908477 0 -1679.71936 2342.01172 494.408173 1 zoom 479.331085
+st17a camera phone-v4657 0.959007859 -0.0867912769 0.26965645 0 0 0.951882601 0.306371689 0 -0.283287525 -0.293812841 0.912862837 0 -1227.8125 2468.83618 -343.366241 1 zoom 503.035767
+st17a camera phone-v2251 0.852226675 0.28267011 -0.440111369 0 0 0.841366649 0.540384173 0 0.523091078 -0.460529804 0.717035055 0 -2079.29834 2010.99292 1250.55542 1 zoom 573.654846
+st17a camera phone-v15677 -0.955203354 -0.164644286 0.245798334 0 0 0.830796599 0.556496501 0 -0.295858622 0.531567276 -0.793579698 0 5279.02246 2317.68018 762.391418 1 zoom 573.654846
+st17a camera phone-v2381 0.812608123 -0.193620205 0.549607038 0 0 0.943154991 0.332262605 0 -0.582732499 -0.269999266 0.766415358 0 -750.283813 2603.54199 -592.812622 1 zoom 491.534973
+st17a camera phone-v3347 0.959007859 -0.0867912769 0.26965645 0 0 0.951882601 0.306371689 0 -0.283287525 -0.293812841 0.912862837 0 -1227.8125 2468.83594 -343.365936 1 zoom 503.035767
+st17a camera phone-v4651 0.959007859 -0.0867912769 0.26965645 0 0 0.951882601 0.306371689 0 -0.283287525 -0.293812841 0.912862837 0 -1227.8125 2468.83618 -343.366241 1 zoom 503.035767
+st17a camera phone-v6818 0.785294712 0.555964172 -0.272201717 0 0 0.439711004 0.898097098 0 0.619046867 -0.705270886 0.345302701 0 -1716.13062 526.868958 3121.01416 1 zoom 654.35022
+st17a camera phone-v4423 0.739434302 -0.192243919 0.645104527 0 0 0.958325922 0.285585225 0 -0.673157811 -0.211171508 0.708619058 0 -511.704651 2602.15723 -767.485718 1 zoom 473.445374
+st17a camera phone-v5611 0.0933351964 -0.407716811 0.908276677 0 0 0.912267148 0.409508109 0 -0.995625794 -0.0382215194 0.0851466283 0 671.407227 3770.27271 -2623.42993 1 zoom 573.654846
+st17a camera phone-v2429 0.949293435 -0.090048261 0.30111596 0 0 0.958051622 0.286503851 0 -0.314300358 -0.271976203 0.909472108 0 -1189.73779 2473.14282 -432.70752 1 zoom 502.495026
+st17a camera phone-v2877 0.999919951 0.00277840043 -0.012246903 0 0 0.975198448 0.221238941 0 0.0125583708 -0.221221223 0.975120366 0 -1572.55627 2299.99609 -109.194794 1 zoom 524.041687
+st17a camera phone-v2349 0.84793514 -0.179934114 0.49852398 0 0 0.940578341 0.33948645 0 -0.530018568 -0.28786248 0.797549427 0 -876.308594 2584.75098 -532.287109 1 zoom 500.551514
 # the Mali-G52 reporter's frame (issue 164)
-st13b /primary/dev/ico-dumps/164/frame-20261030-091938-v5836.rddump
-# the issue 179 and 182 captures (v0.10.1)
-st13b /primary/dev/ico-pc/build-host/tmp/v0101/evidence/179/frame-20261103-125544-v2915.rddump
-st26a /primary/dev/ico-pc/build-host/tmp/v0101/evidence/182/frame-20261103-163115-v3225.rddump
+st13b camera issue164-v5836 -0.669961333 0.494155407 -0.553908348 0 0 0.746173561 0.665679991 0 0.742331803 0.445979834 -0.499907404 0 -1524.44836 720.48645 174.707306 1 zoom 473.026367
 #
-# the 48:9 captures of issue 29 go here when they are on the machine
-# (/primary/dev/ico-dumps/29/): one line each, "STAGE /primary/dev/ico-dumps/29/<file>.rddump"
+# the 48:9 captures of issue 29 go here when they arrive: one numbered line each

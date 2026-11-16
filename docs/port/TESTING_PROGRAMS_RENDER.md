@@ -28,8 +28,10 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   `--sweep DISC` generalises it to every stage folder of the disc (`object/sdf/stNN?/model/`, the
   member index as the `rd_mesh` disc walk builds it, numbered in index order, shard q of 8 takes
   the stages numbered q mod 8) at the camera of every line of `tools/sweep_cameras.txt` (stage,
-  dump path; a .rddump or an F12 zip; the dump's view and zoom; a line whose dump is absent is
-  skipped; `builtin:i76` is the i76 camera of st18a) and the 768 steps about each, every 4th pair
+  `camera NAME`, the captured frame's view as 16 numbers and `zoom` and its zoom, read once from
+  the dump's header with nine significant digits, so the test reads nothing from outside the
+  repository; `builtin:i76` is the i76 camera of st18a; a local list may name a dump instead, a
+  .rddump or an F12 zip, whose view and zoom are read and which is skipped when absent) and the 768 steps about each, every 4th pair
   by default (`--sweep-step N`, 1 is the whole sweep), at 16:9 (688 GS pixels wide) and 48:9
   (2048). Per stage and aspect it counts the mechanisms that leave an in-view part or triangle
   undrawn: the box cull (parts a picture between the ticks shows that this tick did not
@@ -623,13 +625,14 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   `noplanes_fallback` on the run without the builds (`rd_noplanes_ab`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#without-the-sprite-planes)). SKIP as `rd_vustage_ab`.
 - `rd_occlusion_tool.cmake`: `rd_replay_tool --occlusion` ([RENDER.md](RENDER_PERF.md#culling)) on the
-  first dump of the machine-local list `tools/occlusion_corpus.txt` that is here, at Original 4:3
+  fixture of `test/fixtures/lists/occlusion_tool.txt` (`fx-scene-boot0200`, cubes behind
+  `@scene place`'s sheets), at Original 4:3
   1x: the line `occlusion: hidden N of M list-0 draws, T of U triangles (index count / 3); hidden
-  commands: S` with M above 0, N at most M, T at most U and S `none` or a `--nop` spec of list 0,
+  commands: S` with M above 0, N above 0 (the path ran) and at most M, T at most U and S `none` or a `--nop` spec of list 0,
   the second line, the settings note, `--occlusion-out` holding S and `--occlusion-csv` its header
   and a line a command; then the plain replay and the replay with `--nop @SPEC`, each `--pass-dump`
   with `--present 640x480` under `ICO_RD_BLEND=fixed`: DISPLAY.png and PRESENT.png byte for byte
-  (`rd_occlusion_tool`). SKIP without the list, a dump of it or a device.
+  (`rd_occlusion_tool`). SKIP without a device.
 - `rd_vu_skin_check_dump.cmake`: `rd_replay_tool --skin-check`
   ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)) at the tool's default settings: on the machine-local
   corpus dump `frame-20261007-200706-v3086` (46 skinned commands) every command the replay draws
@@ -689,8 +692,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   picture byte for byte; also on issue 123's blended dump (`rd_vu_skin_check_ab`). SKIP
   without the dumps or a device.
 - `rd_region_stats.cmake`: `rd_replay_tool --region-stats`
-  ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#region-statistics)) on the first two dumps of
-  `tools/occlusion_corpus.txt` that are here, each at Original 4:3 1x and Enhanced 4:3 2x with a
+  ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#region-statistics)) on the fixtures of
+  `test/fixtures/lists/region_stats.txt` (`fx-scene-boot0200`, `fx-scene-4657`), each at Original 4:3 1x and Enhanced 4:3 2x with a
   present: the frame's line (draws and triangles under the rule above 0, the draws drawing nothing a
   `--nop` spec of lists 0-6 or `none`, as many items as it counts, `--region-out` holding it), a
   draw's line and a list's in their shapes; then `--pass-dump` plain and with `--nop @SPEC`, every
@@ -702,41 +705,51 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   parenthesis, the camera rule's group (`, drawn by the camera rule M (behind-eye b, out-of-box x,
   card k)`) and the draw line's closing `; drawn by the camera rule M`, and every step runs under
   each region rule (`ICO_RD_REGION_RULE` ps2 and camera: the camera rule's drawn drops make their
-  draws draw, so each rule's spec is its own). SKIP without the list, a dump of it or a device.
+  draws draw, so each rule's spec is its own). On both fixtures (as on their source frames) no
+  draw draws nothing at these settings, so the `--nop` spec is `none`. SKIP without a device.
 - `rd_region_camera_ab.cmake` ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-camera-rule),
   [DIVERGENCES.md](DIVERGENCES.md) VD-29): the camera rule against the PS2's region rule on the
-  dumps of `tools/sideband_dumps.txt` at their own aspect. 1. `tools/region_camera_report.py` at
-  the Original preset 1x and Enhanced 2x (presented at 1280x960): `rd_replay_tool --pass-dump`
-  under `ICO_RD_REGION_RULE=ps2` with `--region-mask` and under `camera` with `--stats`; every PNG
-  compared; SCENE's differing pixels must all lie in the mask scaled to SCENE and grown by one GS
-  pixel (red the triangles the PS2's rule drops, or draws beside the picture only, that the camera
-  rule draws; green the back faces the card test drew that it drops; blue the sprites out of the
-  box), and with an empty mask every target must be byte for byte the same; the other targets
-  reported with how many of their changed pixels lie in the mask; the report in the build
-  folder's `region_camera_ab/report.md`. 2. `--region-stats` under the camera rule at the Original
-  preset 1x and Enhanced 1x, at the dump's aspect: the frame line's drawn (strip plus drawn by the
-  camera rule), dropped and rescued counts the same in both presets. A missing list or dump, or no
-  device: SKIP (77). TIMEOUT 3600 (`rd_region_camera_ab`). Under the PS2's rule these dumps drop
-  nothing but issue 189's three cards (`--region-stats` at their own aspect, both presets; the
-  phone frames' card test draws 0 to 2 triangles a frame).
+  committed fixtures of `port/render/test/fixtures/lists/wide.txt` (a fixture and its frame's
+  aspect a line: `fx-wide-6818` the PowerVR phone's one 4:3 frame, the control; `fx-phone-4657`
+  2.189; `fx-wide-189` 16:10; `fx-mali-frame` 2.37, the Mali-G52 frame at full height; `fx-maingate`
+  48:9), at their own aspect. 1.
+  `tools/region_camera_report.py` at the Original preset 1x and Enhanced 2x (presented at
+  1280x960): `rd_replay_tool --pass-dump` under `ICO_RD_REGION_RULE=ps2` with `--region-mask` and
+  under `camera` with `--stats`; every PNG compared; SCENE's differing pixels must all lie in the
+  mask scaled to SCENE and grown by one GS pixel (red the triangles the PS2's rule drops, or draws
+  beside the picture only, that the camera rule draws; green the back faces the card test drew that
+  it drops; blue the sprites out of the box), and with an empty mask every target must be byte for
+  byte the same; the other targets reported with how many of their changed pixels lie in the mask;
+  the report in the build folder's `region_camera_ab/report.md`. The path ran: each camera rule
+  replay's `region rule: the camera's: N VU draws` (`region_rule_draws`, the draws the camera rule's
+  mode holds) as the list line declares, at both settings. 2. `--region-stats` under the camera rule
+  at the Original preset 1x and Enhanced 1x, at the frame's aspect: the frame line's drawn (strip
+  plus drawn by the camera rule), dropped and rescued counts the same in both presets. A fixture no
+  setting checked fails; no device: SKIP (77). TIMEOUT 3600 (`rd_region_camera_ab`). The generated
+  geometry drops no triangle and no sprite under either rule (`--region-stats`: drop 0, beside 0,
+  drawn by the camera rule 0 on every committed fixture), so the mask is empty and every target is
+  held byte for byte with the camera rule's mode on: a dropped triangle the camera rule draws is
+  not exercised here (on the game's own frames the old list had one, issue 189's three cards; it is
+  `rd_sideband_cards`' camera half).
 - `rd_sideband_ab.cmake` (issue 29; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-region-rule), step 7):
   under the PS2's region rule (`ICO_RD_REGION_RULE=ps2` on both replays: the side bands are its),
-  the region rule's side bands against the PS2's drop on the wide dumps of the machine-local list
-  `tools/sideband_dumps.txt` (a path and the dump's own aspect a line: the PowerVR phone's 2.189
-  frames, issue 179's 16:9 frame, issue 182's 16:10 frame, issue 189's 16:10 frame, the phone's
-  one 4:3 frame as the control, and the issue-29 48:9 and 16:9 captures when they arrive under
-  `/primary/dev/ico-dumps/29/`). Every dump at its own aspect, Original 1x and Enhanced 2x:
-  `rd_replay_tool --pass-dump` with `ICO_RD_VU_BESIDE=0` (every VU draw keeps the PS2's drop) and
-  without, then `tools/cmp_dirs_band.py A B --gs-width W --band-files SCENE.png --fog-from-a`, W the
-  replay's `frame W GS wide`: SCENE's centre 512 GS pixels (512 x scale texels) identical byte for
-  byte, the side columns reported (changed pixels, largest channel difference, bounding box), and
-  every side pixel B changes one A left at its fog colour (A's most common side-column colour); the
-  other targets are reported, not held (the post effects read across the band's edge). At 4:3 the
-  band is the frame, so the whole SCENE must be identical. A missing list or dump is named and
-  skipped; none here, or no device: SKIP (77). TIMEOUT 3600; serial like `rd_region_stats`
-  (`rd_sideband_ab`). The dumps from before dump version 15 carry no EE facing table, so their
-  prelit meshes have no side bands: only their lit and skinned drops can change there; the fresh
-  captures carry the table.
+  the region rule's side bands against the PS2's drop on the committed fixtures of
+  `port/render/test/fixtures/lists/wide.txt` (the list `rd_region_camera_ab` reads). Every fixture
+  at its own aspect, Original 1x and Enhanced 2x: `rd_replay_tool --pass-dump` with
+  `ICO_RD_VU_BESIDE=0` (every VU draw keeps the PS2's drop) and without (with `--stats`), then
+  `tools/cmp_dirs_band.py A B --gs-width W --band-files SCENE.png --fog-from-a`, W the replay's
+  `frame W GS wide`: SCENE's centre 512 GS pixels (512 x scale texels) identical byte for byte, the
+  side columns reported (changed pixels, largest channel difference, bounding box), and every side
+  pixel B changes one A left at its fog colour (A's most common side-column colour); the other
+  targets are reported, not held (the post effects read across the band's edge). At 4:3 the band is
+  the frame, so the whole SCENE must be identical. The path ran: the side bands' replay's `side
+  bands: N draws with cards` (`side_band_card_draws`: counted only for a draw the side bands' mode
+  holds) as the list line declares, at least 1 on the wide fixtures and 0 on the 4:3 one (the mode
+  is off where the picture is the frame). A fixture no setting checked fails; no device: SKIP (77).
+  TIMEOUT 3600; serial like `rd_region_stats` (`rd_sideband_ab`). No committed fixture, and none of
+  the game's frames the old list named, has a triangle the side bands draw (`--region-stats`'s
+  `beside 0` on all of them), so the compare holds the pictures the same with the mode on; a drop
+  drawn beside the picture is not exercised.
 - `rd_sideband_cards.cmake` (issue 189; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-region-rule), step
   7): the reporter's frame near stage 32's exit (machine-local,
   `/primary/dev/ico-dumps/189/frame-20261104-120509-v130039.rddump`, GS 624x448 at 16:10), whose
@@ -839,13 +852,15 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   match); `rd_replay_tool_crack` runs the tool on `rd_pixel`'s dump with `--enhanced --resolution
   2x --stats --no-crack-fill` and matches `crack fill: off (the replay tool's --no-crack-fill)`
   and the `stats: crack fill off: 0 passes, 0 pixels filled` line. `rd_crack_resolved_msaa2` and
-  `rd_crack_resolved_msaa4` run the tool on the corpus room `lightning/rd-00300.rddump`
-  (machine-local under `build-host/tmp/corpus/dumps/`, SKIP without it) with `--enhanced
+  `rd_crack_resolved_msaa4` run the tool on the corpus room's fixture `fx-lightning-0300`
+  ([TESTING_FIXTURES.md](TESTING_FIXTURES.md), expanded by the script) with `--enhanced
   --resolution 2x --aa msaa2|msaa4 --stats`: its MSAA epoch closes at the shadow count's pass in
   list 3, before the fog, so the filler draws on the resolved picture: the state line ends `(drawn
   after the MSAA resolve)`, the stats line reads `crack fill on: 1 passes, M pixels filled` with M
-  above 0, no replay left unfilled, `1 fills after lists 4-6` and `1 fills after the MSAA resolve`, and no `not drawn` line
-  (`-DNEED_FILE`: SKIP without the dump; `-DNEED=rd: msaa: N samples`: SKIP where the device does
+  above 0, no replay left unfilled, `1 fills after lists 4-6` and `1 fills after the MSAA resolve`, and no `not drawn` line;
+  the fixture's declared `crack_pixels` and `crack_msaa_fills` (the path ran: the cracks are where
+  the generated geometry leaves gaps)
+  (`-DNEED=rd: msaa: N samples`: SKIP where the device does
   not offer the count, which it then draws as off: lavapipe offers 4 only)
   ([MSAA.md](MSAA.md#the-crack-filler-after-the-resolve)).
 - `rd_crt_test.c`: the CRT filter's options and its shader (`rd_crt`, `rd_crt_fixed`); downsampling
@@ -1052,17 +1067,21 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   input. The pictures: `rd_replay_tool DUMP out.png --interp 0.9 DUMP --interp-any --presents 3
   --present WxH` (a dump as its own tick before: nothing moves) writes the same PNGs with and without
   `ICO_RD_STILL_REPRESENT=0`, and its lines say which presents were `shown again`.
-- `rd_replay_tool_still.cmake` (`rd_replay_tool_still`): the still re-present on a corpus dump as its own tick
+- `rd_replay_tool_still.cmake` (`rd_replay_tool_still`): the still re-present on the fixtures of
+  `port/render/test/fixtures/lists/replay_still.txt` (the title's castle, `fx-boot-0200`), each as its own tick
   before, 4 presents at Enhanced 4:3 2x at 1280x960: presents 1 to 3 end `; shown again`, and all four pictures are the same bytes
-  as with `ICO_RD_STILL_REPRESENT=0` (Not Run without the dump).
+  as with `ICO_RD_STILL_REPRESENT=0`. The path ran: those lines, and the list line's `draws>=1` on the run's `--stats`.
 - `rd_replay_tool_glow_hold.cmake`: the glow held between ticks (`port/render/rd_glow_hold.c`)
-  against its chain drawn at every present (`ICO_RD_GLOW_REDRAW=1`), on two consecutive godrays
-  dumps (`build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-01076` and `rd-01077`; Not Run without
-  them) at Enhanced 4:3 2x, `--presents 2` with `ICO_RD_STILL_REPRESENT=0` (every present
-  rendered) (`rd_replay_tool_glow_hold`). A still tick (rd-01076 as its own tick before): the lines
+  against its chain drawn at every present (`ICO_RD_GLOW_REDRAW=1`), on the fixtures of
+  `port/render/test/fixtures/lists/glow_hold.txt` (the still case `fx-boot-0200`, the title's castle at 512 GS pixels with the sun's
+  fans: the chain drawn whole; the moving case `fx-adreno-prev` then `fx-adreno`, two consecutive ticks, with
+  `ICO_RD_CULL=off`: the generated lamps in the chain) at Enhanced 4:3 2x, `--presents 2` with
+  `ICO_RD_STILL_REPRESENT=0` (every present rendered) (`rd_replay_tool_glow_hold`). The path ran:
+  each fixture replayed alone at its case's setting shows its list line's `glow_chains>=1` and
+  `glow_plan`. A still tick (the frame as its own tick before): the lines
   say `glow drawn (the tick's first present)` for present 0 and `glow held` (or, with the switch,
   `glow redrawn ([dev] glow_redraw)`) for present 1, and SCENE and the presented picture of both
-  presents are the same bytes held and redrawn. A moving tick (rd-01076 then rd-01077): present 0
+  presents are the same bytes held and redrawn. A moving tick (the tick before, then the tick): present 0
   the same bytes both ways, and every pixel of present 1's SCENE that differs lies within 128
   texels of the glow's mask (WORK2 not at its fill level, either run's) (with Python and Pillow).
   `build-host/tmp/v094/after/v2-ab.sh` is the A/B over more pairs (statistics, crops, the region
@@ -1071,10 +1090,13 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   (`rd_dump_blended_arm`) replays alone as drawn: `rd_replay_tool CUR --interp T PREV
   --save-blended B` writes the frame built between the two after its replay, `rd_replay_tool B`
   replays it without `--interp`, and SCENE and the presented picture (1280x960) are the same bytes
-  as the `--interp` run's. `rd_replay_tool_save_blended`: rd-01076 then rd-01077 (the godrays pair
-  above) at alpha 0.5, Enhanced 4:3 2x; `rd_replay_tool_save_blended_163`: issue 163's pair
-  (`build-host/tmp/v097/evidence/163/frame/`) at its present's alpha 0.999000013, 2x, full height,
-  Full pixel (Not Run without the dumps). Both run the `--interp` again with `--render-thread
+  as the `--interp` run's. `rd_replay_tool_save_blended`: the fixtures of
+  `port/render/test/fixtures/lists/save_blended.txt` (`fx-gate-prev` then `fx-gate`, the main gate's two
+  ticks) at alpha 0.5, Enhanced 4:3 2x; `rd_replay_tool_save_blended_163`: those of `save_blended_163.txt`
+  (`fx-adreno-prev` then `fx-adreno`, a tablet's two ticks with the ticks' cameras) at issue 163's
+  present alpha 0.999000013, 2x, full height, Full pixel. The path ran: the `--interp` run's
+  `--stats` show the list line's `interp_keyed_blended>=1` (and on the second
+  `interp_tick_cam_draws>=1`: VU draws with the ticks' cameras). Both run the `--interp` again with `--render-thread
   sync` and `on` (`-DRT`): the interpolation and the replays on the render thread give the same
   picture and the same saved blended frame, byte for byte (the payload's alignment gaps are zeroed
   for this: the first threaded run's dump differed in 3 padding bytes the main thread's heap left).
@@ -1617,8 +1639,13 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   step's verdict, a killed step counted as lost, a step without a verdict planned again,
   contradicting prefixes ending the plan, 1,000 random oracles ending within 16 steps
   (`rd_bisect_plan`).
-- `rd_depth_copy_dump.cmake`: a player dump with the fog replayed with the depth in place, copied
-  and through a buffer, SCENE byte for byte the same (`rd_fog_depth_copy_dump`, `_d24s8`).
+- `rd_depth_copy_dump.cmake`: the fixtures of `port/render/test/fixtures/lists/fog_depth_copy.txt`
+  (`fx-adreno`: list 4's fog on SCENE reading SCENE's depth, list 8's aura on that depth after it)
+  replayed with the depth in place, copied and through a buffer, SCENE byte for byte the same
+  (`rd_fog_depth_copy_dump`; `_d24s8` on `ICO_VK_FAKE_D24S8=1` without the buffer). The path ran:
+  each run's `--stats` name the path asked for (`fog path inplace`, `copy`, `buffer`), the copy's run
+  shows the list line's `draws>=1` and `aura_pastes_whole>=1`, and a run through the copy with
+  `ICO_RD_FOG_SABOTAGE=copy` (the depth reads give 0) gives a SCENE that differs from the copy's.
 - `rd_shadow_test.c`: the shadow count on the stencil (`rd_shadow`); at scene scale 4 each
   composite, not flagged above 1x, against the float bilinear of its level within 3 LSB, then with
   `RdProfile.shadowBspline` ([dev] `shadow_bspline`) against the CPU B-spline within 3 (4 on the

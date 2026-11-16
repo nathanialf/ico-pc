@@ -8,32 +8,13 @@
 # the old tools/shadow_box_dumps.txt stays below while the other tests that
 # read it are not converted).
 port/render/CMakeLists.txt
-port/render/test/rd_crack_work_ab.cmake
-port/render/test/rd_fill11_ab.cmake
-port/render/test/rd_late_pass_ab.cmake
-port/render/test/rd_pass_objects_ab.cmake
-port/render/test/rd_replay_tool_glow_hold.cmake
-port/render/test/rd_replay_tool_save_blended.cmake
-port/render/test/rd_replay_tool_still.cmake
-port/render/test/rd_vis_hiz_corpus.txt
 port/render/test/rd_vu_audit.cmake
-tools/aura_box_dumps.txt
 tools/coverage_corpus.txt
-tools/crack_late_dumps.txt
-tools/crack_work_dumps.txt
-tools/cull_msaa_dumps.txt
 tools/date_cut_dumps.txt
-tools/fill11_dumps.txt
 tools/lamps_dumps.txt
-tools/late_pass_dumps.txt
 tools/native_frame_dumps.txt
 tools/no_volume_dumps.txt
 tools/occlusion_corpus.txt
-tools/pass_area_dumps.txt
-tools/pass_cut_dumps.txt
-tools/pass_objects_dumps.txt
 tools/shadow_box_dumps.txt
 tools/shadow_cuts_dumps.txt
-tools/sideband_dumps.txt
-tools/sweep_cameras.txt
 tools/vustage_dumps.txt

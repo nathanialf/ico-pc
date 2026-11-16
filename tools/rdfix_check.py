@@ -100,11 +100,12 @@ def skeleton(sk, ver):
         c.raw(c.u32() * 8)
     c.raw(c.u32() * 8)
     if c.o != len(sk):
-        # the placement section (rd_fixture.h): centres in lattice steps, payload offsets
+        # the placement section (rd_fixture.h): centres in lattice steps (FXP2,
+        # @scene place: each with its form, 0 the cube, 1 to 3 a sheet), payload offsets
         # (FXP3, @water place: then the prims read across a block's period, offset and axes)
         tag = c.u32()
         water = tag == 0x33505846
-        if tag != 0x31505846 and not water:
+        if tag not in (0x31505846, 0x32505846) and not water:
             raise Bad("bytes after the skeleton's end that are no placement section")
         placed = c.u32()
         if placed > meshes:
@@ -113,6 +114,8 @@ def skeleton(sk, ver):
             _id, x, y, z = struct.unpack("<I3i", c.raw(16))
             if max(abs(x), abs(y), abs(z)) > (1 << 23) - 16:
                 raise Bad("a placed mesh's centre is past the lattice's range")
+            if tag == 0x32505846 and c.u32() > 3:
+                raise Bad("a placed mesh's form is not the cube or a sheet")
         prims = c.u32()
         c.raw(prims * 4)
         wraps = 0

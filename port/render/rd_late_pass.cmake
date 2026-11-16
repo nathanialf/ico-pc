@@ -85,8 +85,9 @@ if(ICO_RUN_TESTS AND TARGET rd_crack_test)
                          ENVIRONMENT "${_dc_env};ICO_VK_FAKE_LIMITS=moltenvk")
 endif()
 
-# rd_late_pass_ab (test/rd_late_pass_ab.cmake): the dumps of
-# tools/late_pass_dumps.txt (machine-local; a listed dump that is absent fails)
+# rd_late_pass_ab (test/rd_late_pass_ab.cmake): the fixtures of
+# test/fixtures/lists/late_pass.txt (committed frames with no art,
+# docs/port/TESTING_FIXTURES.md; a listed fixture that is absent fails)
 # replayed by rd_replay_tool --pass-dump --stats with ICO_RD_LATE_PASS=0 and =1 at
 # the PowerVR phone's profile on lavapipe (ICO_VK_FAKE_LIMITS=moltenvk,
 # ICO_RD_VU_PREPASS=0, Enhanced, 2364x1080, Full height, Full pixel) and at
@@ -96,18 +97,22 @@ endif()
 # levels, png_level_diff.py), the same draws, passes fewer by the held
 # fills exactly, the crack fill's own passes fewer by them too, the colour bytes
 # loaded and stored fewer by SCENE's once a held fill each way, the copies the
-# same; the off run holds nothing; the dumps the list marks hold one fill and
-# join as many passes as they mark;
+# same; the off run holds nothing; the fixtures the list marks hold and join as
+# many as they mark; the path ran: each fixture's declared crack_pixels on every
+# on run, the late pass acting on every fixture at the phone's setting;
 # rd_late_pass_gl: the phone's setting on OpenGL (llvmpipe) with the late pass on
 # (the aura's paste reads a snapshot there: no fill held in a DARK room, one
 # held into the glow's paste pass in a LAMPS room, drawn past the border repeat
 # with a draw a repeated block; no list 11 join): the same bytes, the draws more
 # by the blocks' the stats name.  No device: SKIP.
+include(rd_fixture.cmake)
 if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
+    set(_lp_fx -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool> "-DFIXTURES=${ICO_FIXTURE_DIR}"
+               "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+               "-DLIST=${ICO_FIXTURE_DIR}/lists/late_pass.txt")
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/late_pass_ab")
     add_test(NAME rd_late_pass_ab
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/late_pass_dumps.txt"
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> ${_lp_fx}
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/late_pass_ab" -DBACKEND=vulkan
                      "-DPY=${Python3_EXECUTABLE}"
                      "-DDIFF=${CMAKE_CURRENT_SOURCE_DIR}/test/png_level_diff.py"
@@ -119,8 +124,7 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
     if(ICO_RHI_OPENGL AND ICO_SHADERS_GLSL AND TARGET ico_rhi_opengl)
         file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/gl/late_pass_ab")
         add_test(NAME rd_late_pass_gl
-                 COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                         "-DLIST=${CMAKE_SOURCE_DIR}/tools/late_pass_dumps.txt"
+                 COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> ${_lp_fx}
                          "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/gl/late_pass_ab" -DBACKEND=opengl
                          "-DPY=${Python3_EXECUTABLE}"
                          "-DDIFF=${CMAKE_CURRENT_SOURCE_DIR}/test/png_level_diff.py"

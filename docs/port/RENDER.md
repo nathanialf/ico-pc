@@ -1340,8 +1340,9 @@ passes of the loss bisect's window. The picture is the same byte for byte
 
 ### The stream bounds audit
 
-`rd_stream_audit_test` walks every VU draw of the dumps in `tools/native_frame_dumps.txt` and the
-boot corpus's title frame and computes on the CPU every vertex stream index the VU vertex shaders
+`rd_stream_audit_test` walks every VU draw of the frames it is given (the ctest `rd_stream_audit`:
+the fixtures of `test/fixtures/lists/stream_audit.txt`, [TESTING_FIXTURES.md](TESTING_FIXTURES.md))
+and computes on the CPU every vertex stream index the VU vertex shaders
 can read for it, the way the shaders compute it (`vu_vertex_qw`, `vu_batch_qw`): the triangle's
 three vertices (the clip plane's distance reads one of them), a grid's batch colour, a particle's
 header and two qwords. The shipped shaders scan no strip: the card test's verdicts are bits the CPU
@@ -1378,7 +1379,8 @@ D in G frames; ...` (`rd_index_span_text`), so a regression of the dense indices
 player's log. `ICO_AUDIT_SPANS=1` lists each draw past the bound. A stream one vertex short fails it, in a
 synthetic draw and on the first real mesh draw of the dumps (`port/render/test/rd_stream_audit_test.c`,
 header comment). On the 27 listed dumps present on the maintainer's machine and the title frame
-(2,964 VU draws, 115 of them the title's; 2026-10-15) no read leaves its stream.
+(2,964 VU draws, 115 of them the title's; 2026-10-15) no read leaves its stream. On the eight fixtures of its list (1,753 VU draws; the strip flags rebuilt from the kept index
+lists, the kicks, batches and index spans the frames' own) none does either.
 
 ### Made at start-up
 

@@ -1053,8 +1053,8 @@ target_link_libraries(texpack_export_test PRIVATE ico_texpack_export)
 # stream bounds audit"): every stream index the VU vertex shaders can read for
 # every VU draw of the dumps, computed on the CPU and checked against the
 # draw's stream; a self-test (a stream one vertex short fails) always runs.
-# The dumps are machine-local (tools/native_frame_dumps.txt, the boot
-# corpus's title frame): 77 when none is there.
+# rd_stream_audit runs it on the fixtures of test/fixtures/lists/stream_audit.txt
+# (test/rd_stream_audit.cmake).
 add_executable(rd_stream_audit_test test/rd_stream_audit_test.c ../platform/dump_zip.c)
 target_compile_options(rd_stream_audit_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_include_directories(rd_stream_audit_test PRIVATE ../platform
@@ -1064,6 +1064,10 @@ target_link_libraries(rd_stream_audit_test PRIVATE ico_render ico_vu1_ref ico_mi
 include(rd_perf_clock.cmake) # the slot clock (ico_render) and rd_perf_clock_test
 include(rd_msaa_shadow.cmake) # the shadow count in MSAA
 include(rd_present_scene.cmake)
+# the committed fixtures' arguments for the visibility test's family
+include(rd_fixture.cmake)
+set(_ico_vis_fx -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool> "-DFIXTURES=${ICO_FIXTURE_DIR}"
+                "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}")
 
 # Windows: SDL3.dll beside the programs
 ico_copy_sdl3_dll(texpack_test texpack_e2e_test texpack_export_test rd_replay_tool rd_state_test
@@ -1092,11 +1096,13 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_layout PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_mip COMMAND rd_mip_test)
     add_test(NAME rd_passring COMMAND rd_passring_test)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/stream_audit")
     add_test(NAME rd_stream_audit
-             COMMAND rd_stream_audit_test --list "${CMAKE_SOURCE_DIR}/tools/native_frame_dumps.txt"
-                     "${CMAKE_SOURCE_DIR}/build-host/tmp/corpus/dumps/boot/rd-00200.rddump"
-             WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
-    set_tests_properties(rd_stream_audit PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+             COMMAND "${CMAKE_COMMAND}" -DTEST=$<TARGET_FILE:rd_stream_audit_test> ${_ico_vis_fx}
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/stream_audit.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/stream_audit"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_stream_audit.cmake")
+    set_tests_properties(rd_stream_audit PROPERTIES TIMEOUT 600)
     add_test(NAME rd_tex COMMAND rd_tex_test)
     add_test(NAME texpack COMMAND texpack_test "${CMAKE_CURRENT_BINARY_DIR}")
     get_filename_component(_ico_texpack_textures "${ICO_TEXPACK_DIR}/../.." ABSOLUTE)
@@ -1733,20 +1739,22 @@ if(ICO_RUN_TESTS)
                      -P "${_crk}")
     set_tests_properties(rd_replay_tool_crack PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                          FIXTURES_REQUIRED rd_dump)
-    # the filler after the MSAA resolve (issue 26 with MSAA on): a corpus
-    # room (lightning rd-00300, machine-local, SKIP without it) whose MSAA
+    # the filler after the MSAA resolve (issue 26 with MSAA on): the corpus
+    # room's fixture fx-lightning-0300 (test/fixtures, no art), whose MSAA
     # epoch closes at the shadow count's pass in list 3, before the fog, at
     # Enhanced 2x with --aa msaa2 and msaa4: the state line says the fill
     # was drawn after the resolve, the --stats line counts one fill pass
     # with more than 0 pixels filled, none left unfilled, that fill after
-    # the resolve; SKIP where the device does not offer the count (no
+    # the resolve, the fixture's declared crack_pixels and crack_msaa_fills
+    # (the path ran); SKIP where the device does not offer the count (no
     # "rd: msaa: N samples" line: lavapipe offers 4 only)
-    set(_crk_room "${CMAKE_SOURCE_DIR}/build-host/tmp/corpus/dumps/lightning/rd-00300.rddump")
     foreach(_s 2 4)
         add_test(NAME rd_crack_resolved_msaa${_s}
                  COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                         "-DARGS=${_crk_room}|${CMAKE_CURRENT_BINARY_DIR}/rd_crack_resolved_msaa${_s}.png|--enhanced|--resolution|2x|--aa|msaa${_s}|--stats"
-                         "-DNEED_FILE=${_crk_room}"
+                         "-DARGS=%FIXTURE%|${CMAKE_CURRENT_BINARY_DIR}/rd_crack_resolved_msaa${_s}.png|--enhanced|--resolution|2x|--aa|msaa${_s}|--stats"
+                         -DFIXTURE=fx-lightning-0300 -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                         "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                         "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/crack_resolved_msaa${_s}"
                          "-DNEED=rd: msaa: ${_s} samples"
                          "-DEXPECT=${_crk_on} 2x2, reach 1x1 ${_crk_tail} \\(drawn after the MSAA resolve\\)"
                          "-DEXPECT2=stats: crack fill on: 1 passes, [1-9][0-9]* pixels filled \\(1 replays counted; scale 2x2, reach 1x1 texels; 0 fogged replays above 1x not filled; 1 fills after lists 4-6; 1 fills after the MSAA resolve; 0 fills in the aura's paste pass; 0 fills after the glow's alpha\\)"
@@ -1841,62 +1849,6 @@ if(ICO_RUN_TESTS)
                          rd_replay_tool_ripple_436_1x_ps2 rd_replay_tool_mirror_floor
                          PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 600
                                     ENVIRONMENT "ICO_RD_FADES_FOLD=0;ICO_RD_SHADOW_FINE=0")
-    # the still re-present (rd_reshow.c): a corpus dump as its own tick before
-    # (nothing moves), 4 presents at Enhanced 4:3 2x at 1280x960: presents
-    # 1..3 shown again, all 4 pictures byte for byte the ones rendered with
-    # ICO_RD_STILL_REPRESENT=0 (the lavapipe A/B; Not Run without the dump)
-    add_test(NAME rd_replay_tool_still
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMP=${CMAKE_SOURCE_DIR}/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-00428.rddump"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_still" -DPRESENTS=4
-                     "-DARGS=--enhanced|--aspect|4:3|--resolution|2x|--present|1280x960"
-                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_still.cmake")
-    set_tests_properties(rd_replay_tool_still PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 600)
-    # the glow held between ticks (rd_glow_hold.c) against its chain drawn at
-    # every present (ICO_RD_GLOW_REDRAW=1), 2 presents a tick at Enhanced 4:3
-    # 2x, every present rendered: a still tick (rd-01076 as its own tick
-    # before) the same bytes both ways, SCENE and the presented picture; a
-    # moving one (rd-01076 then rd-01077) the first present the same bytes and
-    # the later one differing only within 128 texels of the glow's mask (WORK2)
-    # (the lavapipe A/B; Not Run without the dumps)
-    set(_gh "${CMAKE_SOURCE_DIR}/build-host/tmp/pcsx2cmp/godrays/port2/keep")
-    set(_gh_py "")
-    if(Python3_FOUND)
-        set(_gh_py "-DPYTHON=${Python3_EXECUTABLE}")
-    endif()
-    add_test(NAME rd_replay_tool_glow_hold
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DSTILL=${_gh}/rd-01076.rddump" "-DPREV=${_gh}/rd-01076.rddump"
-                     "-DMOVE=${_gh}/rd-01077.rddump"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_glow_hold" -DPRESENTS=2
-                     -DREACH=128 "-DARGS=--enhanced|--aspect|4:3|--resolution|2x" ${_gh_py}
-                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_glow_hold.cmake")
-    set_tests_properties(rd_replay_tool_glow_hold PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
-                                                             TIMEOUT 900)
-    # the blended present's frame F12 saves (rd.h rd_dump_blended_arm),
-    # written by --save-blended from --interp T PREV, replayed on its own:
-    # SCENE and the presented picture byte for byte the --interp run's, and
-    # the same --interp run with the interpolation and the replays on the
-    # render thread (--render-thread sync and on: the picture and the saved
-    # frame byte for byte the main thread's).
-    # rd-01076 then rd-01077 at alpha 0.5, Enhanced 4:3 2x; the issue 163
-    # pair (the tablet's tick and the tick before) at its present's alpha
-    # 0.999000013 (the lavapipe A/B; Not Run without the dumps)
-    add_test(NAME rd_replay_tool_save_blended
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DPREV=${_gh}/rd-01076.rddump" "-DCUR=${_gh}/rd-01077.rddump" -DT=0.5
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_save_blended"
-                     "-DARGS=--enhanced|--aspect|4:3|--resolution|2x" "-DRT=sync|on"
-                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_save_blended.cmake")
-    set(_sb163 "${CMAKE_SOURCE_DIR}/build-host/tmp/v097/evidence/163/frame/frame-20261031-211530-v10103")
-    add_test(NAME rd_replay_tool_save_blended_163
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DPREV=${_sb163}-prev.rddump" "-DCUR=${_sb163}.rddump" -DT=0.999000013
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_save_blended_163"
-                     "-DARGS=--resolution|2x|--full-height|--full-pixel" "-DRT=sync|on"
-                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_save_blended.cmake")
-    set_tests_properties(rd_replay_tool_save_blended rd_replay_tool_save_blended_163
-                         PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 900)
     # the fog on the depth's words copied out through a buffer
     # (ICO_RD_FOG_PATH=buffer, rd_fog_path.c: the fallback of a device whose
     # depth reads fail), on D32S8 and on D24S8 (the top byte masked off):
@@ -2432,26 +2384,11 @@ if(ICO_RUN_TESTS)
     if(_env)
         set_tests_properties(rd_fog_selftest PROPERTIES ENVIRONMENT "${_env}")
     endif()
-    # a player dump with the fog (the dark hall) replayed with the depth in
-    # place and with its copy: SCENE byte for byte the same, on D32S8 and
-    # on D24S8.  Not Run without the dump (dist/dumps is not in the tree)
-    set(ICO_FOG_DUMP "${CMAKE_SOURCE_DIR}/dist/dumps/frame-20261009-083248-v13836.rddump"
-        CACHE FILEPATH "a player dump with the depth fog, for rd_fog_depth_copy_dump")
-    add_test(NAME rd_fog_depth_copy_dump
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMP=${ICO_FOG_DUMP}" "-DOUT=${_dc}/dump"
-                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_depth_copy_dump.cmake")
-    add_test(NAME rd_fog_depth_copy_dump_d24s8
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMP=${ICO_FOG_DUMP}" "-DOUT=${_dc}/dump_d24s8"
-                     "-DEXTRA_ENV=ICO_VK_FAKE_D24S8=1" -DNO_BUFFER=1
-                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_depth_copy_dump.cmake")
-    set_tests_properties(rd_fog_depth_copy_dump rd_fog_depth_copy_dump_d24s8
-                         PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 600)
-    if(_env)
-        set_tests_properties(rd_fog_depth_copy_dump rd_fog_depth_copy_dump_d24s8
-                             PROPERTIES ENVIRONMENT "${_env}")
-    endif()
+    # the replay tool's still re-present, held glow and saved blended frame
+    # (rd_replay_tool_still, _glow_hold, _save_blended, _save_blended_163) and
+    # a fogged frame with the depth in place, its copy and its words through a
+    # buffer (rd_fog_depth_copy_dump, _d24s8), on the committed fixtures
+    include(rd_replay_tool_fixtures.cmake)
     # the same tests and expectations on a device with a
     # phone GPU's limits (ICO_VK_FAKE_LIMITS=mali, port/rhi/vk/vk_device.c:
     # four descriptor sets, 16 sampled images a stage, 256-byte storage
@@ -2711,15 +2648,14 @@ if(ICO_RUN_TESTS)
         set_tests_properties(rd_vumerge_mali PROPERTIES ENVIRONMENT "${_env}")
     endif()
     # rd_occlusion_tool (test/rd_occlusion_tool.cmake, docs/port/RENDER.md
-    # "Culling"): rd_replay_tool --occlusion on the first dump of the
-    # machine-local list tools/occlusion_corpus.txt here, at Original 4:3 1x:
-    # the hidden-draw line's shape and its --nop spec, then the plain replay
-    # and the replay with the hidden commands NOPs, DISPLAY and PRESENT byte
-    # for byte under ICO_RD_BLEND=fixed; SKIP without the list, a dump or a
-    # device
+    # "Culling"): rd_replay_tool --occlusion on the fixture of
+    # test/fixtures/lists/occlusion_tool.txt, at Original 4:3 1x: the
+    # hidden-draw line's shape (a draw hidden) and its --nop spec, then the
+    # plain replay and the replay with the hidden commands NOPs, DISPLAY and
+    # PRESENT byte for byte under ICO_RD_BLEND=fixed; SKIP without a device
     add_test(NAME rd_occlusion_tool
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/occlusion_corpus.txt"
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> ${_ico_vis_fx}
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/occlusion_tool.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/occlusion_tool"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_occlusion_tool.cmake")
     set_tests_properties(rd_occlusion_tool PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800)
@@ -2927,16 +2863,15 @@ if(ICO_RUN_TESTS)
         set_tests_properties(rd_vu_bones_ring_ab_prepass PROPERTIES ENVIRONMENT "${_env}")
     endif()
     # rd_region_stats (test/rd_region_stats.cmake, docs/port/VU1_PROGRAMS.md
-    # "The region rule"): rd_replay_tool --region-stats on the first two
-    # dumps of the machine-local list tools/occlusion_corpus.txt here, at
-    # Original 4:3 1x and Enhanced 4:3 2x: the lines' shapes, then the
-    # pass dumps of the plain replay and of the replay with the draws the
-    # CPU oracle says draw nothing NOPs (--region-out's spec), byte for
-    # byte; the orig setting's spec the same without a device; SKIP
-    # without the list, a dump or a device
+    # "The region rule"): rd_replay_tool --region-stats on the fixtures of
+    # test/fixtures/lists/region_stats.txt, at Original 4:3 1x and Enhanced
+    # 4:3 2x: the lines' shapes, then the pass dumps of the plain replay and
+    # of the replay with the draws the CPU oracle says draw nothing NOPs
+    # (--region-out's spec), byte for byte; the orig setting's spec the same
+    # without a device; SKIP without a device
     add_test(NAME rd_region_stats
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/occlusion_corpus.txt"
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> ${_ico_vis_fx}
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/region_stats.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/region_stats"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_region_stats.cmake")
     set_tests_properties(rd_region_stats PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800)
@@ -2944,18 +2879,20 @@ if(ICO_RUN_TESTS)
         set_tests_properties(rd_region_stats PROPERTIES ENVIRONMENT "${_env}")
     endif()
     # rd_sideband_ab (test/rd_sideband_ab.cmake, issue 29, docs/port/VU1_PROGRAMS.md
-    # "The region rule"): the dumps of the machine-local list
-    # tools/sideband_dumps.txt at their own aspect, Original 1x and Enhanced
-    # 2x, with the PS2's drop on every VU draw (ICO_RD_VU_BESIDE=0) and with
-    # the side bands: tools/cmp_dirs_band.py holds SCENE's centre 512 GS
-    # pixels byte for byte and every changed side pixel to one the drop left
-    # at the fog colour; SKIP without the list, a dump or a device
+    # "The region rule"): the committed fixtures of lists/wide.txt at their own
+    # aspect, Original 1x and Enhanced 2x, with the PS2's drop on every VU draw
+    # (ICO_RD_VU_BESIDE=0) and with the side bands: tools/cmp_dirs_band.py holds
+    # SCENE's centre 512 GS pixels byte for byte and every changed side pixel to
+    # one the drop left at the fog colour; the side bands' mode as each fixture
+    # declares (side_band_card_draws); SKIP without a device
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/sideband_ab")
     add_test(NAME rd_sideband_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      "-DPYTHON=${Python3_EXECUTABLE}"
                      "-DCMP=${CMAKE_SOURCE_DIR}/tools/cmp_dirs_band.py"
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/sideband_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool> "-DFIXTURES=${ICO_FIXTURE_DIR}"
+                     "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/wide.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/sideband_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_sideband_ab.cmake")
     set_tests_properties(rd_sideband_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
@@ -2990,20 +2927,22 @@ if(ICO_RUN_TESTS)
     endif()
     # rd_region_camera_ab (test/rd_region_camera_ab.cmake, docs/port/VU1_PROGRAMS.md
     # "The region rule", DIVERGENCES.md VD-29): the camera rule against the
-    # PS2's region rule on the dumps of tools/sideband_dumps.txt at their own
+    # PS2's region rule on the committed fixtures of lists/wide.txt at their own
     # aspect, Original 1x and Enhanced 2x: tools/region_camera_report.py holds
     # every SCENE pixel the camera rule changes to the CPU oracle's mask
-    # (--region-mask) and every target byte for byte where the mask is empty;
-    # and --region-stats under the camera rule gives the same verdicts at the
-    # Original preset and Enhanced at 1x; SKIP without the list, a dump or a
-    # device
+    # (--region-mask) and every target byte for byte where the mask is empty,
+    # the camera rule's mode on each (region_rule_draws); and --region-stats
+    # under the camera rule gives the same verdicts at the Original preset and
+    # Enhanced at 1x; SKIP without a device
     if(Python3_FOUND)
         file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/region_camera_ab")
         add_test(NAME rd_region_camera_ab
                  COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                          "-DPYTHON=${Python3_EXECUTABLE}"
                          "-DREPORT=${CMAKE_SOURCE_DIR}/tools/region_camera_report.py"
-                         "-DLIST=${CMAKE_SOURCE_DIR}/tools/sideband_dumps.txt"
+                         -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                         "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                         "-DLIST=${ICO_FIXTURE_DIR}/lists/wide.txt"
                          "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/region_camera_ab"
                          -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_region_camera_ab.cmake")
         set_tests_properties(rd_region_camera_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
@@ -3161,19 +3100,16 @@ if(ICO_RUN_TESTS)
     endif()
     # rd_cull_ab (test/rd_cull_ab.cmake): the scene draws' visibility test
     # (rd_vis.c, rd_vis_hiz.c) against every draw replayed, byte for byte: the
-    # dumps of tools/occlusion_corpus.txt and tools/native_frame_dumps.txt that
-    # exist, under ICO_RD_BLEND=fixed, with ICO_RD_CULL=off, frustum and full, through
-    # --pass-dump --stats at Original 4:3 640x480, Enhanced 4:3 2x, Enhanced
-    # 2x at the dump's own aspect where it is wider than 4:3, and MSAA 4x on
-    # the first dump and on tools/cull_msaa_dumps.txt's (the epoch closed
-    # inside a list by a read of SCENE): every target's PNG equal, the stats
-    # line read, draws skipped over the corpus; SKIP as rd_vustage_ab
+    # fixtures of test/fixtures/lists/cull.txt, under ICO_RD_BLEND=fixed, with
+    # ICO_RD_CULL=off, frustum and full, through --pass-dump --stats at Original
+    # 4:3 640x480, Enhanced 4:3 2x, Enhanced 2x at the frame's own aspect where
+    # it is wider than 4:3, and MSAA 4x on the first fixture and on the list's
+    # msaa lines: every target's PNG equal, the stats line read, the declared
+    # frustum and occluded counts, draws skipped and hidden over the list
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/cull_ab")
     add_test(NAME rd_cull_ab
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/occlusion_corpus.txt"
-                     "-DEXTRA=${CMAKE_SOURCE_DIR}/tools/native_frame_dumps.txt"
-                     "-DMSAA_LIST=${CMAKE_SOURCE_DIR}/tools/cull_msaa_dumps.txt"
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> ${_ico_vis_fx}
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/cull.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/cull_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_cull_ab.cmake")
     set_tests_properties(rd_cull_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 5400)
@@ -3181,15 +3117,15 @@ if(ICO_RUN_TESTS)
         set_tests_properties(rd_cull_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
     # rd_vis_hiz_corpus (test/rd_vis_hiz_corpus.cmake): the occlusion test's
-    # cheaper collect over the occlusion corpus: for every row of
-    # test/rd_vis_hiz_corpus.txt whose dump is here (Original 4:3, Enhanced
-    # 4:3 2x, and the same with --repeat 3: the collect cache's), --cull full
-    # --stats under ICO_RD_CULL_HIZ_FAST=0 and under the fast collect with
+    # cheaper collect over the visibility test's fixtures: for every row of
+    # test/rd_vis_hiz_corpus.txt (Original 4:3, Enhanced 4:3 2x, and the same
+    # with --repeat 3: the collect cache's), --cull full --stats under
+    # ICO_RD_CULL_HIZ_FAST=0 and under the fast collect with
     # ICO_RD_CULL_HIZ_CHECK=1: the same counts as each other and as the
-    # table, no check wrong; SKIP as rd_cull_ab
+    # table, no check wrong, a row hiding draws; SKIP as rd_cull_ab
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vis_hiz_corpus")
     add_test(NAME rd_vis_hiz_corpus
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> ${_ico_vis_fx}
                      "-DTABLE=${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vis_hiz_corpus.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vis_hiz_corpus"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vis_hiz_corpus.cmake")
@@ -3257,39 +3193,34 @@ if(ICO_RUN_TESTS)
             set_tests_properties(rd_fades_fold_ab PROPERTIES ENVIRONMENT "${_env}")
         endif()
     endif()
-    # rd_crack_late_ab (test/rd_crack_late_ab.cmake): the dumps and baselines of
-    # tools/crack_late_dumps.txt (machine-local: the gate's Enhanced 2x pass
-    # dumps and the PowerVR phone's frames at its Resolution Auto, made by the
-    # build that drew the crack fill before the fog) replayed with the fill
-    # after lists 4-6 (rd_crack_fill.c): every target within the measured bound
-    # (DIVERGENCES.md VD-20), the fill drawn once after lists 4-6, at the
-    # phone's setting one copy fewer and no pass more; SKIP as rd_vustage_ab
-    if(Python3_FOUND)
-        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/crack_late_ab")
-        add_test(NAME rd_crack_late_ab
-                 COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                         "-DLIST=${CMAKE_SOURCE_DIR}/tools/crack_late_dumps.txt"
-                         "-DPY=${Python3_EXECUTABLE}"
-                         "-DDIFF=${CMAKE_CURRENT_SOURCE_DIR}/test/png_level_diff.py"
-                         "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/crack_late_ab"
-                         -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_crack_late_ab.cmake")
-        set_tests_properties(rd_crack_late_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
-                             TIMEOUT 3600)
-        if(_env)
-            set_tests_properties(rd_crack_late_ab PROPERTIES ENVIRONMENT "${_env}")
-        endif()
+    # rd_crack_late_ab (test/rd_crack_late_ab.cmake): the fixtures of
+    # test/fixtures/lists/crack_late.txt at the gate's Enhanced 2x and the
+    # PowerVR phone's Resolution Auto with the fill after lists 4-6
+    # (rd_crack_fill.c): the fill drawn once after lists 4-6 with the declared
+    # crack_pixels, every PNG the release before's (crack_late_goldens.txt),
+    # the same bytes with the fill at the start of list 7; SKIP without a device
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/crack_late_ab")
+    add_test(NAME rd_crack_late_ab
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool> "-DFIXTURES=${ICO_FIXTURE_DIR}"
+                     "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/crack_late.txt"
+                     "-DGOLDENS=${ICO_FIXTURE_DIR}/lists/crack_late_goldens.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/crack_late_ab"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_crack_late_ab.cmake")
+    set_tests_properties(rd_crack_late_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                         TIMEOUT 3600)
+    if(_env)
+        set_tests_properties(rd_crack_late_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
-    # rd_aura_box_ab (test/rd_aura_box_ab.cmake): the dumps of
-    # tools/aura_box_dumps.txt (vustage_dumps.txt's and the PowerVR phone's
-    # three F12 frames) with the aura's read of the picture into FEED128 in
-    # one pass (ICO_RD_AURA_BOX=0) and in two (=1, rd_aura_box.c), under
-    # ICO_RD_BLEND=fixed at the phone's Resolution Auto and Enhanced 2x 4:3:
-    # every target byte for byte, one pass and one draw more a read in two
-    # passes; SKIP as rd_vustage_ab
+    # rd_aura_box_ab (test/rd_aura_box_ab.cmake): lists/aura_box.txt's fixtures
+    # with the aura's read into FEED128 in one pass and in two: the same bytes
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/aura_box_ab")
     add_test(NAME rd_aura_box_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/aura_box_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                     "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DLIST=${ICO_FIXTURE_DIR}/lists/aura_box.txt"
+                     "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/aura_box_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_aura_box_ab.cmake")
     set_tests_properties(rd_aura_box_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
@@ -3315,19 +3246,14 @@ if(ICO_RUN_TESTS)
     if(_env)
         set_tests_properties(rd_shadow_merge_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
-    # rd_pass_area_ab (test/rd_pass_area_ab.cmake): the dumps of
-    # tools/pass_area_dumps.txt (vustage_dumps.txt's, the PowerVR phone's
-    # three F12 frames and its rc3 frame) with the passes' render areas off
-    # (ICO_RD_PASS_AREA=0) and on (=1, rd_pass_area.c), under
-    # ICO_RD_BLEND=fixed at the phone's Resolution Auto and Enhanced 2x 4:3:
-    # every target byte for byte (lavapipe clips to the area, so a wrong
-    # area would show), the same passes and draws but for the passes ended
-    # early, and some pass with an area on the phone's frames; SKIP as
-    # rd_vustage_ab
+    # rd_pass_area_ab (test/rd_pass_area_ab.cmake): lists/pass_area.txt's
+    # fixtures with the passes' render areas off and on: the same bytes
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/pass_area_ab")
     add_test(NAME rd_pass_area_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/pass_area_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                     "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DLIST=${ICO_FIXTURE_DIR}/lists/pass_area.txt"
+                     "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/pass_area_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_pass_area_ab.cmake")
     set_tests_properties(rd_pass_area_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
@@ -3358,19 +3284,14 @@ if(ICO_RUN_TESTS)
             set_tests_properties(rd_glow_cheap_ab PROPERTIES ENVIRONMENT "${_env}")
         endif()
     endif()
-    # rd_pass_cut_ab (test/rd_pass_cut_ab.cmake): the dumps of
-    # tools/pass_cut_dumps.txt with every pass cut off and each on alone and
-    # all on (rd_pass_cut.c: ICO_RD_CLEAR_CARRY, ICO_RD_CLEAR_SKIP,
-    # ICO_RD_LAST_STORE), under ICO_RD_BLEND=fixed, the store plan and its
-    # poison, at the phone's Resolution Auto with its paths and Enhanced 2x
-    # 4:3: every target and the present byte for byte, the passes fewer by
-    # the clears carried and skipped, the depth stores dropped more by those
-    # at the last touch, and each cut cutting something on the phone's
-    # frames; SKIP as rd_vustage_ab
+    # rd_pass_cut_ab (test/rd_pass_cut_ab.cmake): lists/pass_cut.txt's
+    # fixtures with every pass cut off, each alone and all on: the same bytes
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/pass_cut_ab")
     add_test(NAME rd_pass_cut_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/pass_cut_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                     "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DLIST=${ICO_FIXTURE_DIR}/lists/pass_cut.txt"
+                     "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/pass_cut_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_pass_cut_ab.cmake")
     set_tests_properties(rd_pass_cut_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)

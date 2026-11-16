@@ -1,0 +1,17 @@
+# rd_aura_box_ab (port/render/test/rd_aura_box_ab.cmake): the aura's read of
+# the picture into FEED128 in two passes against one, byte for byte.  A name
+# a line, then the reads in two passes the fixture shows at every setting it
+# can show (QUANTITY OP VALUE: rd_fixture_list_props.cmake): the aura reads
+# SCENE once a frame while the game is not paused (staticBlur.c
+# copyCurrentFBToFeedBackArea), so a frame with the aura in play reads once.
+#
+# the PowerVR phone's F12 frames: 2026-10-28 (dump version 13), 2026-11-02
+# (stage 6, version 14), 2026-11-04 (version 15)
+fx-phone-4657 aura_box_reads>=1
+fx-phone-15677
+fx-phone-2381
+fx-phone-rc4 aura_box_reads>=1
+# issue 163's lamps room, a blended frame (3:2: the phone's setting cannot show it)
+fx-163-blended aura_box_reads>=1
+# issue 179's Mali-G52, a slow-scene capture (stage 42)
+fx-mali-slow541 aura_box_reads>=1

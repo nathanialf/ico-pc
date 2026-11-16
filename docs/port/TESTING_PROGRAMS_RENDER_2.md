@@ -50,8 +50,9 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   list 0's pass (it takes SCENE's clear) and list 4's (full-frame sprites, one the frame's height)
   counted as kept whole (`passAreaWhy`: `2 passes kept whole (1 a clear as its load, 1 its draws
   cover the picture)`), none with the area off, SCENE byte for byte; no validation error.
-- `rd_pass_cut_ab.cmake`: the dumps of `tools/pass_cut_dumps.txt` (`tools/pass_area_dumps.txt`'s;
-  machine-local, a missing one skipped) replayed with `--pass-dump --stats` under
+- `rd_pass_cut_ab.cmake`: the fixtures of `test/fixtures/lists/pass_cut.txt`
+  ([TESTING_FIXTURES.md](TESTING_FIXTURES.md); the word `phone` marks the PowerVR phone's frames;
+  an absent one FAILS) replayed with `--pass-dump --stats` under
   `ICO_RD_BLEND=fixed`, `ICO_RD_STORE_PLAN=1`, `ICO_RD_STORE_POISON=1` and `ICO_RD_FADES_FOLD=0`
   (list 11's sprites drawn, as the gate draws them: with the fold list 11's pass goes and the
   reduction's DISPLAY clear has no barrier left to be carried past) five times: every cut off
@@ -66,7 +67,10 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   its setting each cut must cut something, the last touch counted on two more runs of those frames
   with `ICO_RD_CRACK_FILL=0` (every cut off, the last store alone on; compared byte for byte with
   each other), as the crack fill's read of SCENE's depth at list 7 keeps the fog's pass's depth
-  store wherever it is drawn (`rd_pass_cut_ab`). SKIP as `rd_vustage_ab`.
+  store wherever it is drawn. The path ran: each fixture's declared `clear_carried` and
+  `clear_skipped` on the all-on run, `last_store_dropped` on the `lastnf` run of a phone frame and
+  on the all-on run of any other; a fixture no setting checked fails (`rd_pass_cut_ab`). No
+  device: SKIP.
 - `rd_date_cut_test.c` (`rd_date_cut`, lavapipe, 77 without a device after its CPU cases): DATE's
   passes without the depth (`rd_date_cut.c`, `rd_date_cut.h`): the rule on made-up commands (the
   shadow's three composites then a mesh draw: two depth-free runs, the third undecided; a draw that
@@ -133,9 +137,10 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   without SCENE's depth (2 draws, 1 pass joined); against the join off
   (`rd__late_pass_force(RD_LATE_FILL)`) SCENE's colour and depth byte for byte, one render pass
   fewer.
-- `rd_late_pass_ab.cmake` (`rd_late_pass_ab`, `rd_late_pass_gl`): the dumps of
-  `tools/late_pass_dumps.txt` (machine-local; a listed dump that is absent FAILS, a glob that matches
-  none too) with `ICO_RD_LATE_PASS=0` and `1`, `--pass-dump --stats`, `ICO_RD_VU_PREPASS=0`, at the
+- `rd_late_pass_ab.cmake` (`rd_late_pass_ab`, `rd_late_pass_gl`): the fixtures of
+  `port/render/test/fixtures/lists/late_pass.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md); a
+  listed fixture that is absent FAILS; after a name `heldN` and `joinN`, re-derived from a run of the
+  fixture, and `none` for a fixture the late pass must leave alone) with `ICO_RD_LATE_PASS=0` and `1`, `--pass-dump --stats`, `ICO_RD_VU_PREPASS=0`, at the
   PowerVR phone's Resolution Auto (2364x1080, Full height and pixel) and at Enhanced 2x 4:3, both under
   `ICO_VK_FAKE_LIMITS=moltenvk`; the `_gl` twin the phone's setting on OpenGL (llvmpipe, the aura's
   paste through a snapshot: no fill held in a DARK room, one held into the glow's paste pass in a
@@ -147,12 +152,17 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   (within 0.02), the depth and stencil MB loaded not higher, stored not higher but by up to 1.25
   times the held fills' MB where a fill went into the glow's paste pass (the lamps' pass keeps its
   depth store), the same without a join or a glow pass fill, the copy MB the same,
-  the off run holding and joining nothing; the dumps the list marks hold that many fills at the
-  phone's setting (on OpenGL none held or drawn early) and join as many passes (`joinN`: issue 164's
-  paused frame and issue 102's frame); where the on run joined a pass, SCENE, DISPLAY and PRESENT may
+  the off run holding and joining nothing; the fixtures the list marks hold that many fills at the
+  phone's setting (on OpenGL none held or drawn early) and join as many passes (`joinN`); where the
+  on run joined a pass, SCENE, DISPLAY and PRESENT may
   differ by at most 3 levels on at most 800 pixels (`png_level_diff.py`; [DIVERGENCES.md](DIVERGENCES.md)
   VD-31, measured at most 537 pixels and 3 levels), every other target the same bytes; at least one
-  fill held and one pass joined over the list on Vulkan. No device: SKIP.
+  fill held and one pass joined over the list on Vulkan. The path ran: on the on run of every pair
+  the fixture's declared `crack_pixels` (the cracks are where the generated geometry leaves gaps, so
+  each fixture declares the fill drawn at the settings it runs at), at the phone's setting the late
+  pass acting on every fixture (a fill held or drawn early, a glow paste deferred or a pass joined;
+  none at all on a `none` fixture), a fixture the phone's setting (OpenGL: its one setting) did not
+  replay failing. No device: SKIP.
 - `rd_lamps_test.c` (`rd_lamps`; `rd_lamps.cmake`, CPU): the lamps' glow for less's pure parts
   (`rd_lamps.c`): `ICO_RD_LAMPS`'s words, the class's default (the band everywhere, the area on the
   PowerVR and desktop classes under Vulkan with the pass area, never another class, a faked phone
@@ -461,8 +471,9 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   fails. No device: SKIP.
 - `rd_crack_work_ab.cmake` (`rd_crack_work_ab`, `rd_crack_work_gl`; `rd_crack_work.cmake`): the
   crack fill's snapshot by the swap and its early leave (`rd_crack_fill.c` FILLSWAP, CRACKTAP). The
-  dumps of `tools/crack_work_dumps.txt` (machine-local; a listed dump that is absent FAILS: the
-  phone's bridge frame and three cage frames, issue 163's rooms, the corpus)
+  fixtures of `port/render/test/fixtures/lists/crack_work.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md);
+  a listed fixture that is absent FAILS; after each name `swapN` and `tapN`, re-derived from a run of
+  the fixture)
   with `ICO_RD_CRACK_SWAP` and `ICO_RD_CRACK_TAP2` both `0` and both `1`, `--pass-dump --stats`,
   `ICO_RD_VU_PREPASS=0`, at the PowerVR phone's Resolution Auto (`ICO_VK_FAKE_LIMITS=moltenvk` and `ICO_RD_LATE_PASS=1`, the
   phone's default: the fake leaves `RhiLimits.tiler` false on lavapipe) and
@@ -470,9 +481,13 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   own); the `_gl` twin the phone's setting on OpenGL. Each pair: every PNG byte for byte, the same
   draws, passes, fill passes and pixels filled, the off run swapping and leaving early nothing, the
   swap's self-test passed in both runs where the fill drew, the colour MB copied and loaded each
-  fewer by the swapped snapshots' MB (within 0.02), the rest the same; the marked dumps' swaps
-  (`swapN`: the bridge 1, a held fill 0) and early-leave draws (`tapN`) at the phone's setting; at
-  least one of each over the list. No device: SKIP.
+  fewer by the swapped snapshots' MB (within 0.02), the rest the same; each fixture's swaps
+  (`swapN`: 0 where the fill is held or its snapshot is an MSAA epoch's) and early-leave draws
+  (`tapN`) at the phone's setting; at least one of each over the list. The path ran: on the on run
+  of every pair the fixture's declared `crack_pixels` (the cracks are where the generated geometry
+  leaves gaps, so each fixture declares the fill drawn at the settings it runs at), a swap or an
+  early leave on every fixture over its settings, a fixture the phone's setting (OpenGL: its one
+  setting) did not replay failing. No device: SKIP.
 - `rd_crack_fill11`, `rd_crack_fill11_later`, `rd_crack_fill11_tiler`, `rd_crack_fill11_area`
   (`rd_crack_test 2 fill11`, `2 fill11z`, `2 fill11` under `ICO_VK_FAKE_LIMITS=moltenvk
   ICO_RD_PASS_AREA=0`, `2 fill11 area` under `ICO_VK_FAKE_LIMITS=moltenvk`; `rd_fill11.cmake`): the
@@ -489,16 +504,26 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   of its own at list 11's first draw (`RD_FILL11_WHY_LATER`, `RD_FILL11_WHY_AREA`), the same passes,
   the once line absent. Every `rd_crack_test` check of the filler holds too (the cracks filled, the
   count, the swap's `checkWork`).
-- `rd_pass_objects_ab.cmake` (`rd_pass_objects_ab`; `rd_pass_objects.cmake`): the dumps of
-  `tools/pass_objects_dumps.txt` (machine-local; a listed dump that is absent FAILS, a glob that
-  matches none too: stage 12 on the issue 123 tablet, the Pixel's opening, issue 179's four dumps)
-  replayed with `--pass-dump --stats` twice: dynamic rendering (`ICO_VK_LEGACY_PASSES=0`) and lavapipe
+- `rd_pass_objects_ab.cmake` (`rd_pass_objects_ab`; `rd_pass_objects.cmake`): the fixtures of
+  `test/fixtures/lists/pass_objects.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md): issue 163's
+  lamps room, the Pixel's opening, issue 179's two Mali-G52 frames; an absent one FAILS) replayed
+  with `--pass-dump --stats` twice: dynamic rendering (`ICO_VK_LEGACY_PASSES=0`) and lavapipe
   put on Qualcomm's driver row (`ICO_VK_FAKE_PASS_ROW=qualcomm`: every pass a `VkRenderPass` object),
   at the 123 tablet's setting (Enhanced 3x, Full height, Full pixel, 3048x2032; `ICO_VK_FAKE_VENDOR=
   0x5143`, `ICO_RD_VU_PREPASS=0`) and the 179 phone's (1x at 21:9, 2400x1080; the Arm fakes): every
   PNG byte for byte, the same draws and passes, each run's device line naming its path (`render
   passes dynamic`, `render passes legacy (Qualcomm's own driver`); a dump drawn narrower than a
   setting's aspect is skipped there; at least one target compared. No device: SKIP.
+- `rd_fill11_ab.cmake` (`rd_fill11_ab`, `rd_fill11_gl`; `rd_fill11.cmake`): the fixtures of
+  `port/render/test/fixtures/lists/fill11.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md); a listed
+  fixture that is absent or listed twice FAILS; a line gives `phoneN`, `deskN` and `glN`, re-derived
+  from a run of the fixture and required at each setting the fixture runs at, and may give
+  `nop SPEC`, the tool's `--nop` for both runs)
+  passes dynamic`, `render passes legacy (Qualcomm's own driver`); a fixture drawn narrower than a
+  setting's aspect is skipped there; at least one target compared. The path ran: the row's run
+  shows the passes its list line declares (every pass under the row is a `VkRenderPass` object,
+  `vk_renderpass.c`; the tool prints no count of its own); a fixture no setting checked fails.
+  No device: SKIP.
 - `rd_fill11_ab.cmake` (`rd_fill11_ab`, `rd_fill11_gl`; `rd_fill11.cmake`): the dumps of
   `tools/fill11_dumps.txt` (machine-local; a listed dump that is absent FAILS, a glob that matches none
   too; a line may give `phoneN`, `deskN`, `glN` and `nop SPEC`, the tool's `--nop` for both runs)
@@ -512,11 +537,11 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   passes each fewer by the fills drawn in list 11's pass exactly, the colour MB loaded and stored each
   fewer by the MB the stats name for them (within 0.02), the depth and stencil MB not more, the copies
   the same, the off run drawing and holding nothing, the self-test passed in every run that ran it;
-  the marked dumps' counts (the corpus title's DARK frame with its motion blur a NOP: one at 4:3 and
-  on OpenGL, none at the phone's Full pixel, whose border repeat at the mask draws the held fill
-  first; the title's WHOLE, LAMPS and motion-blurred DARK frames and the gameplay dumps none at the
-  settings marked); at least one fill drawn in list 11's pass over the list (desk or gl). No device:
-  SKIP.
+  each fixture's counts at each setting; at least one fill drawn in list 11's pass over the list
+  (desk or gl). The path ran: on the on run of every pair the fixture's declared `crack_pixels`, and
+  on every fixture at least one on run where the switch decided its fill (drawn in list 11's pass,
+  in a pass of its own after all, or kept in its own pass: `rd_fill11.c` counts each); a fixture no
+  setting replayed fails. No device: SKIP.
 - `rd_date_cut_ab.cmake` (`rd_date_cut_ab`, `rd_date_cut_ab_gl`): the fixtures of
   `port/render/test/fixtures/lists/date_cut.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md); each
   line a fixture and the passes the cut takes on it, re-derived from a run of the fixture; a listed
@@ -847,23 +872,27 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   a dropped store that a later pass reads), each fixture's declared `store_depth_dropped` on the
   planned run; each run's counts printed (`rd_store_plan_ab`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#the-store-plan)). SKIP as `rd_vustage_ab`.
-- `rd_cull_ab.cmake`: the dumps of `tools/occlusion_corpus.txt` and `tools/native_frame_dumps.txt`
-  (the missing ones named and skipped) under `ICO_RD_BLEND=fixed` with `--pass-dump --stats`
+- `rd_cull_ab.cmake`: the fixtures of `test/fixtures/lists/cull.txt`
+  ([TESTING_FIXTURES.md](TESTING_FIXTURES.md): `fx-scene-gate102`, `fx-scene-4657`,
+  `fx-scene-boot0200`, made with `@scene place`, and `fx-issue91-1279` as every family makes it)
+  under `ICO_RD_BLEND=fixed` with `--pass-dump --stats`
   three times, `ICO_RD_CULL=off`, `frustum` and `full`, at Original 4:3 presented at 640x480,
-  Enhanced 4:3 2x, Enhanced 2x at the dump's own aspect where `--no-device --list` says it is wider
-  than 4:3, and with `--aa msaa4` (Enhanced 4:3 2x) on the first dump and on the dumps of
-  `tools/cull_msaa_dumps.txt` (`-DMSAA_LIST`: frames whose MSAA epoch closes inside a list by a
-  read of SCENE; one the corpus lists do not name runs that setting only): every named target's PNG (and
+  Enhanced 4:3 2x, Enhanced 2x at the frame's own aspect where `--no-device --list` says it is wider
+  than 4:3, and with `--aa msaa4` (Enhanced 4:3 2x) on the first fixture and on the list's lines
+  with the word `msaa` (issue 102's gate, whose MSAA epoch closes at list 3 by a read of SCENE):
+  the path ran: on the full run at every setting the fixture's declared `frustum_culled` and
+  `occluded` (`fx-issue91-1279`'s line: `occluded=0`) and at msaa `msaa_epoch_kept=0` (the
+  epoch closes at list 3, after the lists the test walks), every named target's PNG (and
   `PRESENT.png`) of the frustum and the full runs byte for byte the off run's, the off run's `cull
   off: 0 of 0`, the frustum run's `cull frustum: N of M` with N at most M, the full run's `cull
   full: N of M (F frustum, O occluded)` with the frustum run's M, F its N and N = F + O, and draws
-  skipped over the corpus (the occluded total printed); each run's counts printed;
-  `-DMAX_DUMPS=n` takes the first n dumps (`rd_cull_ab`, TIMEOUT 5400, and its OpenGL twin
-  `rd_cull_ab_gl`; [RENDER.md](RENDER_PERF.md#culling)). SKIP as `rd_vustage_ab`.
-- `rd_vis_hiz_corpus.cmake`: the rows of `test/rd_vis_hiz_corpus.txt` (the dumps of
-  `tools/occlusion_corpus.txt` and issue 179's frame at Original 4:3 640x480, Enhanced 4:3 2x and Enhanced 4:3 2x with
-  `--repeat 3`, the last replay's counts, so the collect cache's; the missing dumps named and
-  skipped) through `rd_replay_tool --cull full --stats` under `ICO_RD_BLEND=fixed`, once with
+  skipped and draws hidden over the list; each run's counts printed;
+  `-DMAX_DUMPS=n` takes the first n fixtures (`rd_cull_ab`, TIMEOUT 5400, and its OpenGL twin
+  `rd_cull_ab_gl`; [RENDER.md](RENDER_PERF.md#culling)). SKIP without a device.
+- `rd_vis_hiz_corpus.cmake`: the rows of `test/rd_vis_hiz_corpus.txt` (the fixtures of the
+  visibility test, `fx-scene-gate102`, `fx-scene-4657`, `fx-scene-boot0200`, at Original 4:3
+  640x480, Enhanced 4:3 2x and Enhanced 4:3 2x with `--repeat 3`, the last replay's counts, so
+  the collect cache's; expanded into the build tree) through `rd_replay_tool --cull full --stats` under `ICO_RD_BLEND=fixed`, once with
   `ICO_RD_CULL_HIZ_FAST=0` (the plain pass) and once with the fast collect and
   `ICO_RD_CULL_HIZ_CHECK=1`: the 26 counts of `stats: cull full:` (draws skipped, walked, frustum,
   occluded, occluder triangles, past the budget, cells, tested, resets) and `stats: cull
@@ -938,6 +967,27 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   above 0; some run must leave it undrawn; the path ran: each fixture's declared
   `present_scene_skipped` on the `=1` run at the phone's setting
   (`rd_present_scene_ab`). SKIP without a device.
+- `rd_crack_late_ab.cmake`: the crack fill after lists 4-6 on the fixtures of
+  `port/render/test/fixtures/lists/crack_late.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md); a
+  fixture and its settings a line: `enh2x43`, the gate's Enhanced 2x 4:3, and `phone`, the PowerVR
+  phone's Resolution Auto, 2364x1080 at 2.189 under its profile's fakes) replayed with `--pass-dump
+  --stats` under `ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0 ICO_RD_GLOW_LIGHT=0 ICO_RD_CRACK_SWAP=0
+  ICO_RD_CULL=off` (and `ICO_RD_SHADOW_FINE=0`, `rd_shadowres.cmake`): the stats line says `crack fill
+  on: P passes` (P 0 where the fill was the first draw of the aura's paste pass, else 1) and `1 fills
+  after lists 4-6`, the fixture's declared `crack_pixels` (the path ran); every PNG the release
+  before's picture of the fixture byte for byte (`lists/crack_late_goldens.txt`, `<fixture>
+  <setting> <png> <sha256>`, made by the release before's `rd_replay_tool` with the same environment
+  and arguments through the script's `-DMAKE_GOLDENS=FILE`; a PNG without a golden, a golden no run
+  wrote, a fixture no setting replayed: each a failure). Every run is replayed again with
+  `ICO_RD_CRACK_PLACE=7` (the fill at the start of list 7, the place before `rd__crack_fill_place`
+  moved it after the glow's `cleanUpFB` or into the aura's paste pass): every PNG that replay's
+  bytes, the run's passes no more than its, and at the phone's setting a run whose stats place the
+  fill later (`1 fills in the aura's paste pass` or `1 fills after the glow's alpha`) at least one
+  pass fewer. The fill against the fill before the fog on the game's own frames is the measurement of
+  [DIVERGENCES.md](DIVERGENCES.md) VD-20, not this test's. No device: SKIP.
+- `rd_aura_box_ab.cmake`: the dumps of `tools/aura_box_dumps.txt` (`tools/vustage_dumps.txt`'s and
+  the PowerVR phone's three F12 zips `frame-20261028-{105852-v4103,151709-v2199,173610-v4657}`;
+  machine-local) replayed with `--pass-dump --stats` under `ICO_RD_BLEND=fixed` with the aura's
 - `rd_crack_late_ab.cmake`: the crack fill after lists 4-6 against pass dumps of the build that drew
   it before the fog: each line of `tools/crack_late_dumps.txt` (`<setting> <dump> <baseline
   folder>`, machine-local: six corpus dumps at the gate's Enhanced 2x 4:3 against
@@ -966,17 +1016,17 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   missing dump or baseline is skipped; none: SKIP. The baselines are pictures of the fill before the
   fog; another change to the picture needs baselines of its own before this test can tell the two
   apart.
-- `rd_aura_box_ab.cmake`: the dumps of `tools/aura_box_dumps.txt` (`tools/vustage_dumps.txt`'s and
-  the PowerVR phone's three F12 zips `frame-20261028-{105852-v4103,151709-v2199,173610-v4657}`;
-  machine-local) replayed with `--pass-dump --stats` under `ICO_RD_BLEND=fixed` with the aura's
+- `rd_aura_box_ab.cmake`: the fixtures of `test/fixtures/lists/aura_box.txt`
+  ([TESTING_FIXTURES.md](TESTING_FIXTURES.md); an absent one FAILS) replayed with `--pass-dump --stats` under `ICO_RD_BLEND=fixed` with the aura's
   read of the picture into FEED128 in one pass (`ICO_RD_AURA_BOX=0`) and in two
   (`ICO_RD_AURA_BOX=1`, `rd_aura_box.c`), at the phone's Resolution Auto (`--enhanced --resolution
   2364x1080 --full-height --full-pixel --aspect 2.189 --present 2364x1080`,
   `ICO_RD_VU_PREPASS=0`; a narrower dump skips it) and at Enhanced 2x 4:3 (`--present 1280x960`):
   every PNG (FEED128, SCENE, `PRESENT.png` and the other named targets; ROWBOX is the renderer's
   own texture, never written) byte for byte, `aura box off: 0` against `on`, the two-pass run's
-  passes and draws the other's plus one each a read in two passes; some dump must read in two
-  passes (`rd_aura_box_ab`). SKIP as `rd_vustage_ab`.
+  passes and draws the other's plus one each a read in two passes; some fixture must read in two
+  passes. The path ran: each fixture's declared `aura_box_reads` on the two-pass run of every
+  setting it shows; a fixture no setting checked fails (`rd_aura_box_ab`). No device: SKIP.
 - `rd_shadow_merge_ab.cmake`: the fixtures of `test/fixtures/lists/shadow_merge.txt`
   ([TESTING_FIXTURES.md](TESTING_FIXTURES.md): the PowerVR phone's F12 frame of 2026-10-28, the
   main gate at 32:9, the bridge capture; an absent one FAILS) replayed with `--pass-dump
@@ -989,19 +1039,19 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   the on run's passes the off run's less M. The path ran: the on run of each setting shows each
   fixture's declared `shadow_volume_draws` and `shadow_merge_counts` (a reset taken, so one pass
   fewer); a fixture no setting checked fails (`rd_shadow_merge_ab`). No device: SKIP.
-- `rd_pass_area_ab.cmake`: the dumps of `tools/pass_area_dumps.txt` (`tools/vustage_dumps.txt`'s,
-  the PowerVR phone's three F12 zips and its F12 frame of 2026-11-02
-  `frame-20261102-091017-v15677.rddump` in the effort's evidence folder; machine-local, a
-  missing one skipped) replayed with `--pass-dump --stats` under `ICO_RD_BLEND=fixed` with the
+- `rd_pass_area_ab.cmake`: the fixtures of `test/fixtures/lists/pass_area.txt`
+  ([TESTING_FIXTURES.md](TESTING_FIXTURES.md); the word `phone` marks the PowerVR phone's frames;
+  an absent one FAILS) replayed with `--pass-dump --stats` under `ICO_RD_BLEND=fixed` with the
   passes' render areas off (`ICO_RD_PASS_AREA=0`) and on (`=1`, `rd_pass_area.c`, on whatever the
   device: lavapipe clips every draw to the area, so an area that misses a texel shows), at the
   phone's Resolution Auto (as `rd_aura_box_ab`) and at Enhanced 2x 4:3: every PNG byte for byte,
   `pass area off: 0 passes` against `on`, the same draws, the on run's passes the off run's plus
-  at most its passes ended early; the phone's frames (`frame-20261028-*`, `frame-20261102-*`, the
-  phone's F12 frame of 2026-11-02 11:42 and its blended twin among them) at the phone's setting
-  must give some pass an area or name `its draws cover the picture` among the passes kept whole
-  (the tool's `--stats` clause; the aura's paste and list 11's fades are full-frame sprites, so the
-  stage 6 frames have no area to give) (`rd_pass_area_ab`). SKIP as `rd_vustage_ab`.
+  at most its passes ended early; the phone's frames at the phone's setting must give some pass an
+  area or name `its draws cover the picture` among the passes kept whole (the tool's `--stats`
+  clause; the aura's paste and list 11's fades are full-frame sprites, so the stage 6 frames have
+  no area to give). The path ran: each fixture's declared `pass_area_passes` and
+  `pass_area_covered` on the on run of every setting it shows; a fixture no setting checked fails
+  (`rd_pass_area_ab`). No device: SKIP.
 - `rd_glow_cheap_ab.cmake`: the glow's cheaper passes ([RENDER.md](RENDER.md#the-glows-passes):
   WORK2's fill in the mask's pass, cleanUpFB in the fog's) against the passes drawn without them:
   the fixtures of `test/fixtures/lists/glow_cheap.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md):
