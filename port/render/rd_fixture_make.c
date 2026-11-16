@@ -20,7 +20,11 @@
  * the target; @water place generates the meshes drawn into a
  * render-to-texture block on the block, the meshes that set SCENE's alpha
  * bit (FBA) on SCENE, and the CPU-projected prims that read a block across
- * its period (walk).  None reads a vertex. */
+ * its period (walk); @scene drops and @scene cards generate list 0's first
+ * meshes with winding marks as drop sheets (dropSheet below: a floor across
+ * the eye plane, a card beyond the GS window, each facing the eye or away,
+ * from the draw's placement matrix, the picture its command names and the
+ * target's size).  None reads a vertex. */
 #include "rd_fixture.h"
 
 #include <math.h>
@@ -104,7 +108,9 @@ enum {
     PLACE_LAMPS = 1u << 0,
     PLACE_FANS_OFF = 1u << 1,
     PLACE_SCENE = 1u << 2,
-    PLACE_WATER = 1u << 3
+    PLACE_WATER = 1u << 3,
+    PLACE_DROPS = 1u << 4, /* @scene drops: the floors and the cards */
+    PLACE_CARDS = 1u << 5  /* @scene cards: the cards alone */
 };
 
 static bool parseRules(const char *text, Rule *out, uint32_t *n, uint32_t *place, char *why,
@@ -136,7 +142,8 @@ static bool parseRules(const char *text, Rule *out, uint32_t *n, uint32_t *place
             continue;
         }
         if (tok[0] == '@') {
-            /* a placement rule: "@lamps place", "@fans off", "@scene place" */
+            /* a placement rule: "@lamps place", "@fans off", "@scene place",
+             * "@water place", "@scene drops", "@scene cards" */
             const char *arg = word(&save);
             if (strcmp(tok, "@lamps") == 0 && arg && strcmp(arg, "place") == 0 && !word(&save)) {
                 *place |= PLACE_LAMPS;
@@ -149,6 +156,12 @@ static bool parseRules(const char *text, Rule *out, uint32_t *n, uint32_t *place
             } else if (strcmp(tok, "@water") == 0 && arg && strcmp(arg, "place") == 0 &&
                        !word(&save)) {
                 *place |= PLACE_WATER;
+            } else if (strcmp(tok, "@scene") == 0 && arg && strcmp(arg, "drops") == 0 &&
+                       !word(&save)) {
+                *place |= PLACE_DROPS;
+            } else if (strcmp(tok, "@scene") == 0 && arg && strcmp(arg, "cards") == 0 &&
+                       !word(&save)) {
+                *place |= PLACE_CARDS;
             } else {
                 snprintf(why, whySize, "rule line %d: no placement rule '%s %s'", line, tok,
                          arg ? arg : "");
@@ -218,6 +231,10 @@ typedef struct DMesh {
     bool placed;       /* @lamps / @scene place: generated about centre, not the origin */
     int32_t centre[3]; /* in lattice steps 2^(sizeExp - 3) */
     uint32_t form;     /* @scene place: RD_FX_FORM_CUBE, or a sheet (RD_FX_FORM_SHEET + axis) */
+    bool drop;         /* @scene drops / cards: a drop sheet (dropSheet) */
+    uint32_t role;     /* RD_FX_DROP_* */
+    int32_t dropExp;   /* the corners' unit 2^dropExp */
+    int32_t corner[4][3], normal[3];
 } DMesh;
 
 typedef struct DFacing {
@@ -919,6 +936,210 @@ static bool scenePlace(const uint8_t *pay, const RdCmd *c, const RdStateBlock *s
     return true;
 }
 
+/* @scene drops / @scene cards: the region rule's verdicts a drop sheet is
+ * made for (rd_replay_tool --region-stats, port/render/tools/rd_replay_region.c;
+ * vu1_ref.c vu1ref_region_draw, vu1ref_region_facing; docs/port/VU1_PROGRAMS.md
+ * "The region rule").  A corner is inside the region when 0 < X < 4094,
+ * 0 < Y < 4094 (X = h.x / h.w, GS pixels) and 0 < h.w < 16777214, h = M (v, 1)
+ * with M the draw's placement matrix (VU mem 16..19, the normal and mesh
+ * programs' region test); a triangle with every corner inside is drawn as it
+ * is.  Else, when its cut to 0 <= z <= w (z the GS Z times 2^-32) reaches the
+ * picture (2048 -+ the half-width and half-height the command names in b[3]
+ * and b[6], 256 and half the target's height when 0):
+ *   - a corner at w <= 0: the PS2 drops it (behind-eye); a frame wider than
+ *     4:3 draws it beside the picture when it faces the eye (the side bands,
+ *     ICO_RD_REGION_RULE=ps2), the camera rule draws it when it faces the eye;
+ *   - every corner in front, on a frame drawn out of the box (Enhanced, wider
+ *     than 4:3 or above 1x: rd__vu_extended): the card test, which draws the
+ *     triangle when its strip has a triangle with every corner inside or is
+ *     joined (rd_mesh.c joinStrips: a strip that shares a position with a
+ *     strip of another shape); else a card the PS2 drops, also beside the
+ *     picture, and the camera rule draws when it faces the eye; at the
+ *     Original preset 4:3 1x (out of the box) the same triangle is an
+ *     out-of-box drop with the same two fates.
+ * Facing (vu_front_facing): the determinant of the three corners' (x - 2048 w,
+ * y - 2048 w, w), below 0, xor the matrix's mirror (vu1ref_region_mirror: the
+ * determinant of its x, y and w rows over the x, y, z columns below 0), xor
+ * the kick's winding mark, which is 0 here: a prelit mesh's facing table is
+ * generated zero, and a lit mesh's mark comes from its normals (rd_mesh.c
+ * windingFlip), which the expander writes along cross(b - a, c - a) of the
+ * sheet's corners.  Every strip of a sheet zigzags over the four corners in
+ * the order chosen here (A B C D A ...: every triangle a cyclic triple of a
+ * convex quad, so every one wound the same way), each strip moved by its
+ * index in units of 2^e along (1, 1, 1) so no two strips share a position
+ * (no strip joined).
+ * The corners, as (x - 2048 w, y - 2048 w, w) at w0 = |w of the model's
+ * origin| (placeAt's distance), H the picture's half-height, P its
+ * half-width:
+ *   card   (-3072 w0, -H w0 / 8, w0), (3072 w0, -H w0 / 8, w0),
+ *          (3072 w0, H w0 / 8, w0), (-3072 w0, H w0 / 8, w0): a band across
+ *          the picture's middle a quarter of its height tall whose corners
+ *          lie at X = -1024 and 5120, beyond the GS window on both sides:
+ *          every triangle has a corner outside the region (a card);
+ *   floor  (-P w0 / 2, H w0 / 8, w0), (P w0 / 2, H w0 / 8, w0),
+ *          (P w0 / 2, H w0 / 8, -w0 / 2), (-P w0 / 2, H w0 / 8, -w0 / 2): a
+ *          plane below the eye from a far edge an eighth of the picture's
+ *          height below its middle, half its width wide, at w0, to behind
+ *          the eye (every triangle has a corner behind it).  Every cyclic
+ *          triple holds a far corner, which lies inside the picture, so
+ *          each triangle's cut reaches it (a source strip is often three or
+ *          four vertices long: A B C and B C D must reach it as well as C D
+ *          A); toward the eye the floor widens as 1 / w (at the picture's
+ *          bottom row, w0 / 8, four half-widths each side), so on a wider
+ *          frame its lower rows lie beside the picture too.
+ * The order is A B C D, or A D C B when that one faces the eye and the role
+ * asks for it (or does not, for the back roles).  Each corner's model point
+ * solves M's x, y and w rows for its (x, y, w); the corners are rounded to
+ * units of 2^e, e the exponent that keeps the largest coordinate under 2^21
+ * units, and checked again after the rounding: the card's corners and the
+ * floor's far corners in front at a GS depth the cut keeps (rd_replay_region.c
+ * regionFinish: GS Z = 16 z / w, 0 <= it < 2^31), the card's outside, the
+ * floor's near corners behind, the facing the role's.
+ * The draw must be one the region rule decides (rd_replay_region.c
+ * regionKind): clip mode RD_VU_CLIP_REGION and a prelit, lit or reflecting
+ * program (a code 34 or 36 draw keeps every triangle: no drop).  False (the mesh keeps its
+ * cube) when the origin's w is 0, the equations are singular, or a check
+ * fails. */
+static double facingDet(const double a[3], const double b[3], const double c[3])
+{
+    const double m0 = b[1] * c[2] - b[2] * c[1];
+    const double m1 = b[0] * c[2] - b[2] * c[0];
+    const double m2 = b[0] * c[1] - b[1] * c[0];
+    return a[0] * m0 - a[1] * m1 + a[2] * m2;
+}
+
+static bool dropSheet(const uint8_t *pay, const RdCmd *c, const RdStateBlock *st, uint32_t role,
+                      DMesh *d)
+{
+    RdVuPayload vp;
+    memcpy(&vp, pay + c->u[1], sizeof(vp));
+    if (vp.clip != RD_VU_CLIP_REGION ||
+        (vp.prog != RD_PROG_PRELIT && vp.prog != RD_PROG_LIT && vp.prog != RD_PROG_LIT_SPEC &&
+         vp.prog != RD_PROG_REFLECT)) {
+        return false;
+    }
+    double M[4][4];
+    cols(pay + c->u[1] + sizeof(RdVuPayload) + 16 * 16, M);
+    const double w0 = fabs(M[3][3]);
+    if (!(w0 > 1e-9) || st->gsW == 0 || st->gsH == 0) {
+        return false;
+    }
+    const bool card = role == RD_FX_DROP_CARD || role == RD_FX_DROP_CARD_BACK;
+    const bool front = role == RD_FX_DROP_FLOOR || role == RD_FX_DROP_CARD;
+    const double H = c->b[6] ? (double)c->b[6] : (double)(st->gsH >> 1);
+    const double P = c->b[3] ? (double)c->b[3] : 256.0;
+    double q[4][3]; /* the corners' (x - 2048 w, y - 2048 w, w), in A B C D order */
+    if (card) {
+        const double xs[4] = {-3072, 3072, 3072, -3072}, ys[4] = {-H / 8, -H / 8, H / 8, H / 8};
+        for (int k = 0; k < 4; k++) {
+            q[k][0] = xs[k] * w0;
+            q[k][1] = ys[k] * w0;
+            q[k][2] = w0;
+        }
+    } else {
+        const double xs[4] = {-P / 2, P / 2, P / 2, -P / 2}, ws[4] = {w0, w0, -w0 / 2, -w0 / 2};
+        for (int k = 0; k < 4; k++) {
+            q[k][0] = xs[k] * w0;
+            q[k][1] = H / 8 * w0;
+            q[k][2] = ws[k];
+        }
+    }
+    /* the mirror: M's x, y, w rows over its x, y, z columns */
+    const double mir = M[0][0] * (M[1][1] * M[2][3] - M[1][3] * M[2][1]) -
+                       M[1][0] * (M[0][1] * M[2][3] - M[0][3] * M[2][1]) +
+                       M[2][0] * (M[0][1] * M[1][3] - M[0][3] * M[1][1]);
+    const bool mirror = mir < 0.0;
+    int order[4] = {0, 1, 2, 3};
+    if (((facingDet(q[0], q[1], q[2]) < 0.0) != mirror) != front) {
+        order[1] = 3;
+        order[3] = 1;
+    }
+    double v[4][3];
+    double big = 0.0;
+    for (int k = 0; k < 4; k++) {
+        const double *t = q[order[k]];
+        double A[3][3], b[3];
+        for (int a = 0; a < 3; a++) {
+            A[0][a] = M[a][0];
+            A[1][a] = M[a][1];
+            A[2][a] = M[a][3];
+        }
+        b[0] = t[0] + 2048.0 * t[2] - M[3][0];
+        b[1] = t[1] + 2048.0 * t[2] - M[3][1];
+        b[2] = t[2] - M[3][3];
+        if (!solve3(A, b, v[k])) {
+            return false;
+        }
+        for (int a = 0; a < 3; a++) {
+            big = fabs(v[k][a]) > big ? fabs(v[k][a]) : big;
+        }
+    }
+    if (!(big > 0.0) || !isfinite(big)) {
+        return false;
+    }
+    int p = 0;
+    (void)frexp(big, &p);
+    const int32_t e = p - 21;
+    double r[4][3];
+    for (int k = 0; k < 4; k++) {
+        for (int a = 0; a < 3; a++) {
+            const double u = floor(ldexp(v[k][a], -e) + 0.5);
+            if (!(fabs(u) < (double)(1 << 21))) {
+                return false;
+            }
+            d->corner[k][a] = (int32_t)u;
+            r[k][a] = ldexp(u, e);
+        }
+    }
+    /* the checks again on the rounded corners */
+    double cq[4][3];
+    for (int k = 0; k < 4; k++) {
+        const double pt[4] = {r[k][0], r[k][1], r[k][2], 1.0};
+        double h[4];
+        xf(M, pt, h);
+        cq[k][0] = h[0] - 2048.0 * h[3];
+        cq[k][1] = h[1] - 2048.0 * h[3];
+        cq[k][2] = h[3];
+        if (card || q[order[k]][2] > 0.0) {
+            if (!(h[3] > 1e-9)) {
+                return false;
+            }
+            const double X = h[0] / h[3];
+            if (card && X > 0.0 && X < 4094.0) {
+                return false;
+            }
+            if (!(h[2] >= 0.0 && 16.0 * h[2] < ldexp(h[3], 31))) {
+                return false;
+            }
+        } else if (!(h[3] < 0.0)) {
+            return false;
+        }
+    }
+    for (int k = 0; k < 4; k++) {
+        /* every cyclic triple the strips draw: the role's facing */
+        const double det = facingDet(cq[k], cq[(k + 1) % 4], cq[(k + 2) % 4]);
+        if (det == 0.0 || ((det < 0.0) != mirror) != front) {
+            return false;
+        }
+    }
+    /* the normal along cross(B - A, C - A), its largest component 2^20 */
+    const double e1[3] = {r[1][0] - r[0][0], r[1][1] - r[0][1], r[1][2] - r[0][2]};
+    const double e2[3] = {r[2][0] - r[0][0], r[2][1] - r[0][1], r[2][2] - r[0][2]};
+    const double n[3] = {e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2],
+                         e1[0] * e2[1] - e1[1] * e2[0]};
+    const double nb = fmax(fabs(n[0]), fmax(fabs(n[1]), fabs(n[2])));
+    if (!(nb > 0.0) || !isfinite(nb)) {
+        return false;
+    }
+    for (int a = 0; a < 3; a++) {
+        d->normal[a] = (int32_t)floor(n[a] / nb * 1048576.0 + 0.5);
+    }
+    d->dropExp = e;
+    d->role = role;
+    d->drop = true;
+    return true;
+}
+
 /* a VU draw's size from its block: the model matrix (mem 16..19), or for a
  * skinned draw its first bone (the bones after the block) then the common
  * block's world to screen (mem 4..7) */
@@ -1068,11 +1289,32 @@ static void waterDraw(const DMap *m, int l, const uint8_t *pay, const RdCmd *c,
     }
 }
 
+/* whether mesh id has a facing table (version 15) */
+static bool hasFacing(const DMap *m, uint32_t id)
+{
+    for (uint32_t i = 0; i < m->nf; i++) {
+        if (m->fac[i].id == id) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* the drop sheets' roles in the order their meshes take them */
+static const uint32_t s_dropRoles[RD_FX_DROP_ROLES] = {RD_FX_DROP_FLOOR, RD_FX_DROP_CARD,
+                                                       RD_FX_DROP_FLOOR_BACK, RD_FX_DROP_CARD_BACK};
+static const uint32_t s_cardRoles[2] = {RD_FX_DROP_CARD, RD_FX_DROP_CARD_BACK};
+
 /* the texture flags from every draw's state, the meshes' sizes and bones,
  * the grid and particle draws' sizes */
 static bool walk(DMap *m, RdFxBuf *exps, uint32_t *nexp, uint32_t place, RdFxBuf *offs,
-                 uint32_t *placed, uint32_t *notPlaced, uint32_t *noff, Scene *sc, Water *wa)
+                 uint32_t *placed, uint32_t *notPlaced, uint32_t *noff, Scene *sc, Water *wa,
+                 uint32_t *drops, uint32_t *dropsRefused)
 {
+    const uint32_t *roles = (place & PLACE_DROPS) ? s_dropRoles : s_cardRoles;
+    const uint32_t nroles = (place & PLACE_DROPS)   ? RD_FX_DROP_ROLES
+                            : (place & PLACE_CARDS) ? 2u
+                                                    : 0u;
     const uint32_t work2 = (uint32_t)RD_TARGET_WORK2 + 1u; /* rd_target's handle */
     RdStateBlock st;
     memset(&st, 0, sizeof(st)); /* an older block: the fields after it 0, as loaded */
@@ -1151,6 +1393,18 @@ static bool walk(DMap *m, RdFxBuf *exps, uint32_t *nexp, uint32_t place, RdFxBuf
                     if (place & PLACE_WATER) {
                         waterDraw(m, l, pay, &c, &st, how, d, wa);
                     }
+                    if (*drops < nroles && l == 0 && c.type == RDC_MESH && !d->sized &&
+                        d->nv >= 3 &&
+                        (d->qpv == RD_VU_QW_LIT ||
+                         (d->qpv == RD_VU_QW_PRELIT && hasFacing(m, d->id)))) {
+                        /* a drop sheet: list 0's first draw of a mesh with
+                         * winding marks, by the next role */
+                        if (dropSheet(pay, &c, &st, roles[*drops], d)) {
+                            (*drops)++;
+                        } else {
+                            (*dropsRefused)++;
+                        }
+                    }
                     if (!d->sized) {
                         d->sizeExp = drawSize(pay, &c);
                         d->sized = true;
@@ -1207,7 +1461,7 @@ bool rd_fixture_make(const uint8_t *dump, size_t n, const char *rules, RdFixture
         return false;
     }
     RdFxBuf exps = {0}, offs = {0};
-    uint32_t nexp = 0, placed = 0, notPlaced = 0, noff = 0;
+    uint32_t nexp = 0, placed = 0, notPlaced = 0, noff = 0, drops = 0, dropsRefused = 0;
     Scene sc;
     memset(&sc, 0, sizeof(sc));
     Water wa;
@@ -1218,8 +1472,20 @@ bool rd_fixture_make(const uint8_t *dump, size_t n, const char *rules, RdFixture
         mapFree(&m);
         return false;
     }
-    if (!walk(&m, &exps, &nexp, place, &offs, &placed, &notPlaced, &noff, &sc, &wa) || offs.bad ||
-        wa.wraps.bad) {
+    if ((place & (PLACE_DROPS | PLACE_CARDS)) &&
+        ((place & ~(PLACE_DROPS | PLACE_CARDS)) ||
+         ((place & PLACE_DROPS) && (place & PLACE_CARDS)))) {
+        /* the drop sheets write their own section (FXP4), one role list:
+         * not taken with another placement rule, nor with each other */
+        snprintf(why, whySize,
+                 "@scene drops and @scene cards combine with no other placement rule, nor with "
+                 "each other");
+        mapFree(&m);
+        return false;
+    }
+    if (!walk(&m, &exps, &nexp, place, &offs, &placed, &notPlaced, &noff, &sc, &wa, &drops,
+              &dropsRefused) ||
+        offs.bad || wa.wraps.bad) {
         snprintf(why, whySize, "a command's payload range does not hold");
         rd_fx_free(&exps);
         rd_fx_free(&offs);
@@ -1230,13 +1496,15 @@ bool rd_fixture_make(const uint8_t *dump, size_t n, const char *rules, RdFixture
     const uint32_t scenePlaced = sc.sheets + sc.behind + sc.left + sc.right + sc.grid;
     if (((place & PLACE_LAMPS) && placed == 0) || ((place & PLACE_FANS_OFF) && noff == 0) ||
         ((place & PLACE_SCENE) && scenePlaced == 0) ||
-        ((place & PLACE_WATER) && (wa.onBlock == 0 || wa.onScene == 0 || wa.nwrap == 0))) {
+        ((place & PLACE_WATER) && (wa.onBlock == 0 || wa.onScene == 0 || wa.nwrap == 0)) ||
+        ((place & (PLACE_DROPS | PLACE_CARDS)) && drops == 0)) {
         snprintf(why, whySize,
                  "a placement rule matched nothing (@lamps place: %u meshes placed, %u not; "
                  "@fans off: %u prims; @scene place: %u meshes placed, %u not; @water place: %u "
-                 "meshes on a block, %u on SCENE, %u not, %u prims read across a block)",
+                 "meshes on a block, %u on SCENE, %u not, %u prims read across a block; @scene "
+                 "drops / cards: %u sheets, %u meshes refused)",
                  placed, notPlaced, noff, scenePlaced, sc.kept, wa.onBlock, wa.onScene,
-                 wa.notPlaced, wa.nwrap);
+                 wa.notPlaced, wa.nwrap, drops, dropsRefused);
         rd_fx_free(&exps);
         rd_fx_free(&offs);
         rd_fx_free(&wa.wraps);
@@ -1365,6 +1633,26 @@ bool rd_fixture_make(const uint8_t *dump, size_t n, const char *rules, RdFixture
                 rd_fx_put32(&sk, wa.nwrap);
                 rd_fx_put(&sk, wa.wraps.p, wa.wraps.n);
             }
+        } else if (drops) {
+            /* the drop sheets' section (rd_fixture.h) */
+            rd_fx_put32(&sk, RD_FX_PLACE_TAG4);
+            rd_fx_put32(&sk, drops);
+            for (uint32_t i = 0; i < m.nm; i++) {
+                const DMesh *d = &m.mesh[i];
+                if (d->drop) {
+                    rd_fx_put32(&sk, d->id);
+                    rd_fx_put32(&sk, d->role);
+                    rd_fx_put32(&sk, (uint32_t)d->dropExp);
+                    for (int k = 0; k < 4; k++) {
+                        for (int a = 0; a < 3; a++) {
+                            rd_fx_put32(&sk, (uint32_t)d->corner[k][a]);
+                        }
+                    }
+                    for (int a = 0; a < 3; a++) {
+                        rd_fx_put32(&sk, (uint32_t)d->normal[a]);
+                    }
+                }
+            }
         }
         ok = !sk.bad;
         if (!ok) {
@@ -1434,11 +1722,25 @@ bool rd_fixture_make(const uint8_t *dump, size_t n, const char *rules, RdFixture
                            scenePlaced, sc.sheets, sc.behind, sc.left, sc.right, sc.grid, sc.kept);
         }
         if ((place & PLACE_WATER) && at > 0 && (size_t)at < reportSize) {
+            at +=
+                snprintf(report + at, reportSize - (size_t)at,
+                         "; water: %u meshes drawn into a block generated on it, %u meshes setting "
+                         "SCENE's alpha bit generated on SCENE (%u kept their origin), %u prims "
+                         "reading a block generated across its period",
+                         wa.onBlock, wa.onScene, wa.notPlaced, wa.nwrap);
+        }
+        if (drops && at > 0 && (size_t)at < reportSize) {
+            uint32_t by[RD_FX_DROP_ROLES] = {0};
+            for (uint32_t i = 0; i < m.nm; i++) {
+                if (m.mesh[i].drop && m.mesh[i].role < RD_FX_DROP_ROLES) {
+                    by[m.mesh[i].role]++;
+                }
+            }
             snprintf(report + at, reportSize - (size_t)at,
-                     "; water: %u meshes drawn into a block generated on it, %u meshes setting "
-                     "SCENE's alpha bit generated on SCENE (%u kept their origin), %u prims "
-                     "reading a block generated across its period",
-                     wa.onBlock, wa.onScene, wa.notPlaced, wa.nwrap);
+                     "; drop sheets: %u (floor %u, card %u, floor facing away %u, card facing "
+                     "away %u), %u meshes refused",
+                     drops, by[RD_FX_DROP_FLOOR], by[RD_FX_DROP_CARD], by[RD_FX_DROP_FLOOR_BACK],
+                     by[RD_FX_DROP_CARD_BACK], dropsRefused);
         }
     }
     if (!ok) {

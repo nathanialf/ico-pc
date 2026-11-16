@@ -358,14 +358,6 @@ int main(int argc, char **argv)
 #else
     setenv("ICO_RD_FADES_FOLD", "0", 1);
 #endif
-    const char *dir = argc > 1 && argv[1][0] ? argv[1] : getenv("ICO_BOOT_DUMPS");
-    if (!dir || !dir[0]) {
-        printf("SKIP: no dump folder (ICO_BOOT_DUMP_DIR, or ICO_BOOT_DUMPS)\n");
-        return 77;
-    }
-    snprintf(s_dir, sizeof(s_dir), "%s", dir);
-    const char *old = getenv("ICO_BOOT_OLD");
-    s_old = old && old[0] == '1';
     const char *range = getenv("ICO_BOOT_FRAMES");
     if (range && range[0]) {
         unsigned a = 0, b = 0;
@@ -376,11 +368,24 @@ int main(int argc, char **argv)
         s_first = a;
         s_last = b;
     }
+    /* local-only validation (docs/port/TESTING.md): a start-up's dumps are
+       kept outside the repository, and the ctest has none by default */
+    const char *dir = argc > 1 && argv[1][0] ? argv[1] : getenv("ICO_BOOT_DUMPS");
+    if (!dir || !dir[0]) {
+        printf("SKIP: local-only validation: no start-up dump folder (ICO_BOOT_DUMP_DIR, or "
+               "ICO_BOOT_DUMPS): 0 of the %u frames %u-%u\n",
+               s_last - s_first + 1, s_first, s_last);
+        return 77;
+    }
+    snprintf(s_dir, sizeof(s_dir), "%s", dir);
+    const char *old = getenv("ICO_BOOT_OLD");
+    s_old = old && old[0] == '1';
     char path[1100];
     for (uint32_t n = s_first; n <= s_last; n++) {
         dumpPath(n, path, sizeof(path));
         if (!fileExists(path)) {
-            printf("SKIP: %s is missing\n", path);
+            printf("SKIP: local-only validation: %s is missing (%u of the %u frames %u-%u found)\n",
+                   path, n - s_first, s_last - s_first + 1, s_first, s_last);
             return 77;
         }
     }

@@ -1,0 +1,6 @@
+# rd_sideband_cards (issue 189): a fixture whose only drops are cards, then the
+# counts a run of it shows (generated geometry: re-derived from a run of
+# rd_replay_tool --region-stats; the rule from the code): ps2drops (every drop
+# a card's under the PS2's rule), cameradrawn (the card facing the eye, drawn by
+# the camera rule), camerakept (the card facing away, its drop kept)
+fx-cards-189 ps2drops=580 cameradrawn=476 camerakept=104

@@ -83,6 +83,7 @@ set(_rdfx_q_clear_carried "clear carry on: ([0-9]+) clears taken by the next pas
 set(_rdfx_q_clear_skipped "clear skip on: ([0-9]+) clears skipped")
 set(_rdfx_q_last_store_dropped "last store on: ([0-9]+) depth stores dropped at the last touch")
 set(_rdfx_q_aura_box_reads "aura box on: ([0-9]+) feedback reads in two passes")
+set(_rdfx_q_pass_objects "render passes: [0-9]+ begun, ([0-9]+) as VkRenderPass objects")
 # the index compaction: list 0's triangles it left out
 set(_rdfx_q_vu_compact_left_out "VU index compaction on: ([0-9]+) of [0-9]+ list 0 triangles left out")
 # the VU family: the pre-pass's draws, the merge's joined draws, the store plan,
@@ -125,6 +126,10 @@ set(_rdfx_q_prerotate_turned "turned twin: the [0-9]+x[0-9]+ picture turned ([0-
 set(_rdfx_q_turn_fold_cases "turn in the blit: self-test passed \\(([0-9]+) cases")
 set(_rdfx_q_turn_fold_turned "picture's box blit drawn turned ([0-9]+) degrees")
 set(_rdfx_q_bench_variants "bench: done, every variant ran: ([0-9]+) of")
+# the region rule's drops (--region-stats' frame line: the PS2's drops kept, those drawn beside the picture, those the camera rule draws)
+set(_rdfx_q_region_drops "region: frame [^\n]* drop ([0-9]+) \\(")
+set(_rdfx_q_beside_tris "region: frame [^\n]*, beside ([0-9]+) \\(")
+set(_rdfx_q_camera_drawn_tris "region: frame [^\n]*drawn by the camera rule ([0-9]+) \\(")
 
 set(RDFX_FAILURES 0)
 

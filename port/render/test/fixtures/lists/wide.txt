@@ -1,22 +1,24 @@
 # The wide frames (rd_sideband_ab, rd_region_camera_ab): a fixture, its frame's
 # aspect (the replays' --aspect), then the line's own properties
-# (rd_fixture_list_props.cmake): side_band_card_draws on the side bands' replay
-# under the PS2's rule (0 at 4:3: the picture is the frame, the mode is off),
-# region_rule_draws on the camera rule's.  The generated geometry drops no
-# triangle the side bands or the camera rule would draw (--region-stats: drop
-# 0 on every committed fixture), so both tests hold the pictures the same with
-# those modes on (docs/port/TESTING_FIXTURES.md).
+# (rd_fixture_list_props.cmake), each under the rule its test replays:
+# side_band_card_draws (--stats) and region_drops, beside_tris (--region-stats)
+# under the PS2's rule, camera_drawn_tris (--region-stats) under the camera
+# rule; region_rule_draws is the fixture's own.  Every fixture is made with
+# @scene drops (docs/port/TESTING_FIXTURES.md, "The placement rules"): a floor
+# across the eye plane and a card beyond the GS window, each facing the eye and
+# facing away, so the PS2 drops triangles that the side bands draw beside the
+# picture (a frame wider than 4:3) and the camera rule draws.
 #
-# the PowerVR phone's one 4:3 frame: the control
-fx-wide-6818 4:3 side_band_card_draws=0 region_rule_draws>=1
+# the PowerVR phone's one 4:3 frame: the control (the band is the frame: no
+# side bands, nothing beside the picture; the camera rule draws the drops)
+fx-drops-6818 4:3 side_band_card_draws=0 region_drops>=1 beside_tris=0 camera_drawn_tris>=1
 # the PowerVR phone, GS 848x448 at 2.189
-fx-phone-4657 2.189 side_band_card_draws>=1 region_rule_draws>=1
+fx-drops-4657 2.189 side_band_card_draws>=1 region_drops>=1 beside_tris>=1 camera_drawn_tris>=1
 # issue 189, GS 624x448 at 16:10 (stage 32's exit)
-fx-wide-189 16:10 side_band_card_draws>=1 region_rule_draws>=1
+fx-drops-189 16:10 side_band_card_draws>=1 region_drops>=1 beside_tris>=1 camera_drawn_tris>=1
 # the Mali-G52 reporter's frame (issue 179), GS 912x512 at its own 2.3704 (full
-# height); a 16:9 fixture of a version 15+ dump does not exist: issue 102's
-# gate (version 11) has no facing tables, so the side bands' mode holds none of
-# its card draws (side_band_card_draws 0, measured)
-fx-mali-frame 2.3704 side_band_card_draws>=1 region_rule_draws>=1
+# height); a 16:9 fixture of a version 15+ dump does not exist (issue 102's gate,
+# version 11, has no facing tables: the side bands' mode holds none of its draws)
+fx-drops-mali 2.3704 side_band_card_draws>=1 region_drops>=1 beside_tris>=1 camera_drawn_tris>=1
 # the main gate, GS 2048x448 at 48:9
-fx-maingate 48:9 side_band_card_draws>=1 region_rule_draws>=1
+fx-drops-maingate 48:9 side_band_card_draws>=1 region_drops>=1 beside_tris>=1 camera_drawn_tris>=1

@@ -3112,6 +3112,10 @@ int main(int argc, char **argv)
                pr->textureGroups, pr->bindGroupBinds, pr->pipelineBinds,
                (unsigned long long)pr->uploadBytes, pr->barriers, pr->copies, pr->dispatches,
                pr->screenCmds, pr->screenDraws);
+        /* the passes begun as VkRenderPass objects (Vulkan under a driver row
+         * of rhi_pass_row.h: every pass the row begins; 0 elsewhere) */
+        printf("%s: stats: render passes: %u begun, %u as VkRenderPass objects\n", dump,
+               pr->renderPasses, pr->passObjects);
         printf("%s: stats: bind cache: %u pipeline, %u bind group and %u state repeats skipped\n",
                dump, pr->pipelineBindsSkipped, pr->bindGroupBindsSkipped, pr->stateSetsSkipped);
         /* the attachment bytes the passes asked for (rhi_traffic.c, the

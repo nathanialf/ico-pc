@@ -656,6 +656,9 @@ typedef struct SkMesh {
     uint32_t bones;
     int32_t centre[3]; /* the placement section's: the cube's centre in lattice steps (else 0) */
     uint32_t form;     /* the placement section's RD_FX_FORM_* (RD_FX_PLACE_TAG2; else the cube) */
+    bool drop;         /* the drop sheets' section's: its strips zigzag over corner[] */
+    uint32_t role;
+    int32_t dropExp, corner[4][3], normal[3];
     const uint8_t *idx, *batches;
 } SkMesh;
 
@@ -695,6 +698,7 @@ typedef struct Sk {
     bool scene;          /* the section is RD_FX_PLACE_TAG2's (@scene place) */
     const uint8_t *offs; /* and its prims generated beside the target: payload offsets */
     uint32_t noff;
+    uint32_t drops;       /* the drop sheets' section's meshes */
     bool water;           /* the section is RD_FX_PLACE_TAG3's (@water place) */
     const uint8_t *woffs; /* its prims read across a block's period: (offset, axes) pairs */
     uint32_t nwrap;
@@ -861,17 +865,52 @@ static bool skParse(const RdFixture *fx, Sk *s, char *why, size_t whySize)
         s->exps[i].off = r32(&r);
         s->exps[i].e = (int32_t)r32(&r);
     }
-    s->placed = s->noff = s->sheets = 0;
+    s->placed = s->noff = s->sheets = s->drops = 0;
     s->scene = false;
     s->offs = NULL;
     s->water = false;
     s->woffs = NULL;
     s->nwrap = 0;
-    if (!r.bad && s->mesh && r.o != r.n) {
+    const bool section = !r.bad && s->mesh && r.o != r.n;
+    const uint32_t tag = section ? r32(&r) : 0u;
+    if (section && tag == RD_FX_PLACE_TAG4) {
+        /* the drop sheets' section (@scene drops, @scene cards); never empty */
+        s->drops = r32(&r);
+        if (s->drops == 0 || s->drops > s->nm) {
+            r.bad = true;
+        }
+        for (uint32_t i = 0; !r.bad && i < s->drops; i++) {
+            const uint32_t id = r32(&r), role = r32(&r);
+            const int32_t e = (int32_t)r32(&r);
+            int32_t cv[15];
+            for (int k = 0; k < 15; k++) {
+                cv[k] = (int32_t)r32(&r);
+                if (cv[k] >= (k < 12 ? (1 << 21) : (1 << 20) + 1) ||
+                    cv[k] <= -(k < 12 ? (1 << 21) : (1 << 20) + 1)) {
+                    r.bad = true;
+                }
+            }
+            SkMesh *m = NULL;
+            for (uint32_t k = 0; k < s->nm; k++) {
+                if (s->mesh[k].id == id) {
+                    m = &s->mesh[k];
+                    break;
+                }
+            }
+            if (!m || m->drop || role >= RD_FX_DROP_ROLES || e < -60 || e > 60 || r.bad) {
+                r.bad = true;
+                break;
+            }
+            m->drop = true;
+            m->role = role;
+            m->dropExp = e;
+            memcpy(m->corner, cv, sizeof(m->corner));
+            memcpy(m->normal, cv + 12, sizeof(m->normal));
+        }
+    } else if (section) {
         /* the placement section (a fixture made with @lamps place,
          * @fans off, @scene place or @water place); never empty, so a
          * fixture has one encoding */
-        const uint32_t tag = r32(&r);
         s->scene = tag == RD_FX_PLACE_TAG2;
         s->water = tag == RD_FX_PLACE_TAG3;
         if (tag != RD_FX_PLACE_TAG && !s->scene && !s->water) {
@@ -1041,8 +1080,24 @@ static bool genMesh(RdFxBuf *o, const SkMesh *m)
             j++;
         }
         memset(qw, 0, sizeof(qw));
-        putPos(qw, s, j, m->sizeExp, m->centre, m->form);
-        if (qpv >= 4) {
+        if (m->drop) {
+            /* a drop sheet: the strip over its corners in turn, moved by its
+             * index along (1, 1, 1) (rd_fixture_make.c dropSheet); every
+             * word under 2^23 units, an exact float */
+            const int32_t *k = m->corner[j % 4u];
+            for (int a = 0; a < 3; a++) {
+                rd_fx_set32(qw + 4 * a, rd_fx_f32(k[a] + (int32_t)(s & 0x3FFFFFu), m->dropExp));
+            }
+            rd_fx_set32(qw + 12, F_ONE);
+        } else {
+            putPos(qw, s, j, m->sizeExp, m->centre, m->form);
+        }
+        if (qpv >= 4 && m->drop) {
+            for (int a = 0; a < 3; a++) {
+                rd_fx_set32(qw + 16 + 4 * a, rd_fx_f32(m->normal[a], -20));
+            }
+            rd_fx_set32(qw + 28, F_ONE);
+        } else if (qpv >= 4) {
             putNormal(qw + 16, s);
         }
         if (qpv >= 5) {
@@ -1481,6 +1536,8 @@ bool rd_fixture_check(const RdFixture *fx, char *why, size_t whySize, char *stat
         } else if ((sk.placed || sk.noff) && at > 0 && (size_t)at < statsSize) {
             snprintf(stats + at, statsSize - (size_t)at,
                      ", %u meshes placed on WORK2, %u prims beside it", sk.placed, sk.noff);
+        } else if (sk.drops && at > 0 && (size_t)at < statsSize) {
+            snprintf(stats + at, statsSize - (size_t)at, ", %u meshes as drop sheets", sk.drops);
         }
     }
     free(k.named);

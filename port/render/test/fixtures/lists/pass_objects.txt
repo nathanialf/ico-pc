@@ -1,16 +1,15 @@
 # rd_pass_objects_ab (port/render/test/rd_pass_objects_ab.cmake): every
 # render pass as a VkRenderPass object under Qualcomm's driver row against
-# dynamic rendering, byte for byte.  A name a line, then the passes the row's
-# run shows (QUANTITY OP VALUE: rd_fixture_list_props.cmake): every pass the
-# row begins is a VkRenderPass object (vk_renderpass.c), so the passes are
-# the objects begun.
+# dynamic rendering, byte for byte.  A name a line, then the VkRenderPass
+# objects the row's run begins (QUANTITY OP VALUE: rd_fixture_list_props.cmake;
+# the script also holds them equal to the passes begun).
 #
 # issue 163's lamps room, a blended frame (3:2: the Mali setting cannot show it)
-fx-163-blended passes>=1
+fx-163-blended pass_objects>=1
 # the Pixel's opening: the lamps, the dark room, the sun (21:9)
-fx-lamps-novolume passes>=1
-fx-opening-dark passes>=1
-fx-opening-sun passes>=1
+fx-lamps-novolume pass_objects>=1
+fx-opening-dark pass_objects>=1
+fx-opening-sun pass_objects>=1
 # issue 179's Mali-G52: a slow-scene capture (stage 42) and its F12 frame (stage 3)
-fx-mali-slow541 passes>=1
-fx-mali-frame passes>=1
+fx-mali-slow541 pass_objects>=1
+fx-mali-frame pass_objects>=1

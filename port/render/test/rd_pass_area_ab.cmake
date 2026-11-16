@@ -29,11 +29,12 @@
 # answer means the scan no longer sees those sprites).  The path ran
 # (rd_fixture_require on the on run of every setting the fixture shows): its
 # declared pass_area_passes and pass_area_covered; a fixture whose properties
-# no setting checked FAILS.  No device: SKIP (77).  (No committed fixture,
-# and no source dump measured for it, takes an area at these settings: the
-# stage 6 frames' passes are kept whole for their full-frame sprites, the
-# others for a 3D draw, the fog, a clear or a post sprite; the area itself is
-# covered on the CPU by rd_state and on lavapipe by rhi_vk and rd_pass_cut.)
+# no setting checked FAILS; over the list some pass must take an area (the
+# game's frames measured take none at these settings: the stage 6 frames'
+# passes are kept whole for their full-frame sprites, the others for a 3D
+# draw, the fog, a clear or a post sprite; fx-pass-area, recorded by
+# test/rd_pass_area_frame.c, is the frame whose passes take one).  No
+# device: SKIP (77).
 # -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the
 # fixtures folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<a
 # fixture list> -DOUT=<a folder the test may write>
@@ -210,6 +211,10 @@ if(phoneAreas EQUAL 0 AND phoneCovered EQUAL 0)
   message(FATAL_ERROR "rd_pass_area_ab: the phone's ${phoneCompared} frames gave no pass an area "
                       "at its setting and none was kept whole because its draws cover the "
                       "picture: the scan no longer sees the full-frame sprites")
+endif()
+if(areas EQUAL 0)
+  message(FATAL_ERROR "rd_pass_area_ab: no fixture gave any pass an area at any setting: the "
+                      "gate saw nothing")
 endif()
 message(STATUS "rd_pass_area_ab: ${compared} targets the same bytes over ${ndumps} fixtures, "
                "${areas} passes with an area in all (${phoneAreas} on the phone's frames at its "

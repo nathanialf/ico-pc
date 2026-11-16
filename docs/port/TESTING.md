@@ -23,7 +23,7 @@ tests a change needs. Every test program, by area, is
 | `tools/coverage_check.py`, `tools/coverage_corpus.txt` | the regression renders and their corpus |
 | `tools/sweep_cameras.txt`, `tools/sweep_baseline.txt` | the disc-wide cull sweep's cameras (each a stage and a captured frame's view and zoom as numbers) and its stored counts (`gsb_cull_sweep`, [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)) |
 | `tools/cmp_dirs_band.py` | the side bands' before/after compare: the 4:3 band byte for byte, the side columns reported, a side pixel changed only over the fog (`rd_sideband_ab` on `port/render/test/fixtures/lists/wide.txt`, [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)) |
-| `tools/region_camera_report.py` | the camera rule against the PS2's region rule on saved frames: both rules' pass dumps, every SCENE pixel the camera rule changes held to `rd_replay_tool --region-mask`, a markdown report and the camera rule's baselines (`rd_region_camera_ab`, [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-camera-rule)) |
+| `tools/region_camera_report.py` | the camera rule against the PS2's region rule on saved frames: both rules' pass dumps, every SCENE pixel the camera rule changes held to `rd_replay_tool --region-mask`, a markdown report and the camera rule's baselines; `--feedback-off` / `--feedback-nops` leave out the draws that sample a render target (`rd_region_camera_ab`, `rd_sideband_ab`, [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-camera-rule)) |
 | `tools/band_seam.py` | the mean luminance step across each edge of the 4:3 picture on a wide present, against a bound (`rd_sideband_cards`, issue 189, [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)) |
 | `port/render/tools/rd_replay_tool.c` | the replay tool |
 | `port/render/test/fixtures/`, `port/render/rd_fixture.h`, `port/render/tools/rd_fixture_tool.c` | the committed test frames, their format and tool ([TESTING_FIXTURES.md](TESTING_FIXTURES.md)) |
@@ -86,9 +86,11 @@ Every test program, one entry each by directory, is in [TESTING_PROGRAMS.md](TES
 ## Render gates
 
 The frame gates replay saved [.rddump](ARCHITECTURE.md#terms) files with the replay tool. Dumps
-hold game assets and are never committed, so the dump lists name paths on one machine; a missing
-file is reported and skipped, and every gate exits 77 when it has nothing to run
-(`tools/native_frame_check.py`, `tools/coverage_check.py`, docstrings).
+hold game assets and are never committed: `native_frame_gate_a` replays committed fixtures
+([TESTING_FIXTURES.md](TESTING_FIXTURES.md)); `native_frame_gate_b`, `coverage_corpus` and
+`rd_boot_present` are local-only validation on the game's own captures, kept outside the
+repository: labelled `local` (`ctest -L local`), they never gate, and each skips (77) with a line
+saying what it lacks and how many inputs it found when its input variable is unset (below).
 
 `tools/native_frame_check.py` has four commands (`tools/native_frame_check.py`, docstring):
 
@@ -97,12 +99,26 @@ file is reported and skipped, and every gate exits 77 when it has nothing to run
   each target's pixels to `docs/native_frame_baseline.json` with the harness commit
   (`cmd_baseline`).
 - `gate-a` renders again and compares with the manifest exactly, reporting dump, settings, target
-  and, with `--ref-dir`, the first differing pixel; exit 1 on any mismatch (ctest
-  `native_frame_gate_a`).
+  and, with `--ref-dir`, the first differing pixel; exit 1 on any mismatch. The ctest
+  `native_frame_gate_a` (`port/render/test/native_frame_gate_a.cmake`) runs it on the committed
+  fixtures of `port/render/test/fixtures/lists/native_frame.txt` (the three 2026-10-07 VU
+  captures, `fx-vu-3086`, `fx-vu-3112`, `fx-vu-1985`, and the title castle `fx-boot-0200`),
+  expanded into the build folder, against `docs/native_frame_baseline.json`: the release before's
+  pictures of those fixtures, every target at both settings, and the expansions' own SHA-256;
+  the path ran (one `--stats` replay a fixture: `prepass_vertices` or `shadow_volume_draws` as it
+  declares) and every one of the 144 targets checked. It held the real pictures of those
+  captures before; that manifest, made 2026-10-17, differed from the release before's own
+  pictures on 66 of its 396 targets (SCENE, DISPLAY and the present of all 11 captures at both
+  settings) while the ctest skipped without `ICO_DUMPS`, and the release being made equalled the
+  release before on all 396, so nothing of the game's look rode on it; now the pin is the release
+  before's picture of a frame with the game's command structure and generic art.
 - `gate-b` takes one game state captured at 4:3, 16:9, 32:9, 48:9 and 60:9 (an aspect sweep: a
   zip, a folder or PNGs with the aspect in the name, or `ICO_SWEEPS`) and checks the centre
   columns of every aspect equal the 4:3 picture byte for byte, with `--effects R` allowing a band
-  of R pixels at each edge of the 4:3 picture (ctest `native_frame_gate_b`).
+  of R pixels at each edge of the 4:3 picture. The ctest `native_frame_gate_b` is local-only: a
+  sweep is the game's own captures (a fixture holds one camera at one aspect and cannot make
+  one); without `ICO_SWEEPS` it skips with `SKIP: local-only validation: ICO_SWEEPS names no
+  aspect sweep (0 sweeps to check)`.
 - `selftest` checks the gate-b logic on synthetic pictures (ctest `native_frame_check_selftest`).
 
 The pictures these gates hold are the PS2's region rule's: `native_frame_check.py` replays under
@@ -122,24 +138,30 @@ folders of the same dumps' pictures, one drawn with the side bands off (`ICO_RD_
 one with them on: the centre 512-texel band (the 4:3 picture) must be identical byte for byte, hard;
 the side columns are reported, and a side pixel that changed must be one the picture without the
 bands left at the fog colour (never lose what was drawn). The ctest `rd_sideband_ab` runs it over
-the committed fixtures of `port/render/test/fixtures/lists/wide.txt` (generated geometry: no triangle
-there is dropped where the side bands would draw it, so both gates hold the pictures the same with
-the side bands' and the camera rule's modes on; [TESTING_FIXTURES.md](TESTING_FIXTURES.md)).
-`rd_sideband_cards` holds issue 189's frame, whose only drops are cards, byte for byte with the side
-bands off and on, and its picture's edges within 1.5 levels by `tools/band_seam.py`; under the
-camera rule the three cards drawn over the whole frame and the edges again within 1.5 levels. The
+the committed fixtures of `port/render/test/fixtures/lists/wide.txt`, made with the placement rule
+`@scene drops` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md#the-placement-rules-opt-in)): a floor
+across the eye plane, which the PS2 drops behind the eye and the side bands draw beside the picture
+(at least one SCENE side pixel must change), and a card beyond the GS window, each facing the eye
+and facing away. `rd_sideband_cards` holds issue 189's frame made with `@scene cards`
+(`fx-cards-189`), whose only drops are its two cards, byte for byte with the side bands off and on,
+and its picture's edges within 1.5 levels by `tools/band_seam.py`; under the camera rule the
+facing card drawn over the whole frame, the other kept, and the edges again within 1.5 levels. The
 disc-wide sweep `gsb_cull_sweep.*` (`gsb_cull_test --sweep`, main only, it needs the disc image)
 counts per stage and aspect the triangles the box cull, the blend span and the PS2's region rule
 leave out (the CPU oracle's `vu1ref_region_draw`: the camera rule is not swept; its drops are the
 back faces alone), against the stored counts of `tools/sweep_baseline.txt`; a count above its line fails, and the
 run prints "baseline can be lowered" when it falls ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
 
-The list is `tools/native_frame_dumps.txt`, or the list or folder `ICO_DUMPS` names; the ctests
-skip unless `ICO_DUMPS` is set. The baseline is updated by running `baseline` after a change whose
-pictures are accepted and committing the new manifest.
+By hand, the tool's list is the list or folder `--dumps` or `ICO_DUMPS` names (default
+`tools/native_frame_dumps.txt`, machine-local). The ctest's manifest is updated, after a change
+whose pictures are accepted, by expanding the fixtures of `lists/native_frame.txt` and running
+`baseline --dumps <their list> --tool <the release's rd_replay_tool>` (with `ICO_RD_SHADOW_FINE=0`,
+the ctest's environment) and committing it.
 
-`tools/coverage_check.py` (ctest `coverage_corpus`, `coverage_check_selftest`) renders every dump
-of `tools/coverage_corpus.txt` at its own aspect, `--enhanced --present 1376x896`, once with
+`tools/coverage_check.py` (ctest `coverage_corpus`, local-only; `coverage_check_selftest`) renders
+every dump of a corpus list (`--corpus` or `ICO_COVERAGE_CORPUS`; the ctest skips with `SKIP:
+local-only validation: ICO_COVERAGE_CORPUS names no corpus list (0 dumps to render)` without one)
+at its own aspect, `--enhanced --present 1376x896`, once with
 `--aa off` and once with `--aa msaa4`, plus the interpolated frame of a dump that names a `PREV`,
 and compares with the previous run: any mesh drawn fewer times than before fails, and more than
 `pixels` percent of pixels changed by more than `tol` fails (defaults 0.5 and 8). The previous
@@ -413,8 +435,11 @@ has their defaults; the registrations are in `port/*/CMakeLists.txt`):
   pyelftools) check the model viewer's Japanese column, which the Korean disc shares.
 - `ICO_TEXPACK_DIR`, a PCSX2 pack's replacements folder: `texpack_disc`, `texpack_e2e`,
   `texpack_pack_files`.
-- `ICO_BOOT_DUMP_DIR`, a start-up's frame dumps: `rd_boot_present`; `ICO_BOOT_DUMP_OLD` sets
-  `ICO_BOOT_OLD=1` for dumps whose frames 118 to 120 draw stage 1 (`port/render/CMakeLists.txt`).
+- `ICO_BOOT_DUMP_DIR`, a start-up's frame dumps: `rd_boot_present` (local-only: it needs the nine
+  consecutive frames 115 to 123 of a start-up dumped with `dump_every=1`, which no fixture holds;
+  without them it skips with `SKIP: local-only validation: ... 0 of the 9 frames 115-123`);
+  `ICO_BOOT_DUMP_OLD` sets `ICO_BOOT_OLD=1` for dumps whose frames 118 to 120 draw stage 1
+  (`port/render/CMakeLists.txt`).
 
 Five tests start the headless game itself, each in a fresh folder with its own `ico-pc.ini` and a
 pad script, `RUN_SERIAL` and with a long timeout:
@@ -594,7 +619,7 @@ switches the tests and their registrations use:
 | `ICO_RD_DUMP_EVERY`, `_DIR`, `_INTERP`, `_FROM` | `rd_core.c` | the frame dumps `ico-pc.ini` hands to rd |
 | `ICO_VU_REF_AT` | `rd_replay_tool.c` | the kicked triangles containing a GS point |
 | `ICO_BOOT_DUMPS`, `ICO_BOOT_OLD` | `rd_boot_present_test.c` | the start-up dumps (the folder when no argument is given), and `ICO_BOOT_OLD=1` for dumps whose frames 118 to 120 draw stage 1 |
-| `ICO_DUMPS`, `ICO_SWEEPS`, `ICO_COVERAGE_DIR`, `ICO_REPLAY_LOCK` | the gate tools | the dump list, the aspect sweeps, the coverage state, the lock |
+| `ICO_DUMPS`, `ICO_SWEEPS`, `ICO_COVERAGE_CORPUS`, `ICO_COVERAGE_DIR`, `ICO_REPLAY_LOCK` | the gate tools | the dump list, the aspect sweeps (`native_frame_gate_b`, local only), the corpus list (`coverage_corpus`, local only), the coverage state, the lock |
 | `ICO_FIXTURE_SOURCES` | `rd_fixture_tool selfcheck-dir` (`rd_fixtures_selfcheck`) | the developer's folder of the dumps the fixtures were made from; unset: the window check skips ([TESTING_FIXTURES.md](TESTING_FIXTURES.md#the-checks)) |
 
 **Running the storage tests on a lavapipe with the interlock (no root).** The CI runners' Mesa 25.2 lavapipe has the fragment shader interlock, so `rd_pixel_storage`, `rd_fog_storage`, `rd_present_storage`, `rd_replay_tool_pass_merge` and `rd_blend_selftest_moltenvk_storage` run the exact storage path there (banner `blend exact (interlock)`); a lavapipe before 25.2 keeps the fixed-function blend and passes without exercising it. To reproduce on a machine with an older Mesa: download from snapshot.debian.org the trixie-backports `mesa-vulkan-drivers` and `mesa-libgallium` 25.2.6-1~bpo13+1 `.deb`s (into `build-host/tmp/lvp-interlock/deb/`; sid's 26.x needs a newer glibc), `dpkg-deb -x` both into `build-host/tmp/lvp-interlock/root`, copy `root/usr/share/vulkan/icd.d/lvp_icd*.json` and rewrite its `library_path` to the extracted `root/usr/lib/x86_64-linux-gnu/libvulkan_lvp.so`, then run the test from its build directory with `ICO_RD_BLEND=storage VK_ICD_FILENAMES=<that json> LD_LIBRARY_PATH=<root>/usr/lib/x86_64-linux-gnu` (the log's `blend:` line names the mode in force).

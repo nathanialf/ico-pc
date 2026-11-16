@@ -1,7 +1,7 @@
 {
  "version": 1,
  "what": "SHA-256 of the RGBA pixels (with the size) of every rd_replay_tool target; hashes only",
- "harness_commit": "f4fcf70a5f45a2dbe3abcb61f817d04a4feae335",
+ "harness_commit": "d2638e7e5ff3b36ba15da5de8aad740a55db6f9f",
  "harness_dirty": false,
  "settings": {
   "original_4x3_1x": {
@@ -43,55 +43,55 @@
   "PRESENT"
  ],
  "dumps": {
-  "frame-20261007-200706-v3086.rddump": {
-   "size": 4379352,
-   "sha256": "fce16bdb045a4807a4ca9b363ca025d88d8c3e8bf6fa52bdf79e251a17259b71",
+  "fx-boot-0200.rddump": {
+   "size": 5705324,
+   "sha256": "cfaab6c0e390b6429be3ce80452e9482a5d84010cfe9c4ed31f78c3ee940590e",
    "results": {
     "original_4x3_1x": {
      "SCENE": {
       "w": 512,
-      "h": 448,
-      "sha256": "004ea1575102651bae104534d27003edd7b777c357b4e5d3765ddde78f3b95af"
+      "h": 512,
+      "sha256": "6fb788fce8e4846ff788d1656d6112bb2d11731cab7fadffd647e415ecd01184"
      },
      "DISPLAY": {
       "w": 512,
-      "h": 224,
-      "sha256": "c8ad9e0151ffa91fc64bd47bb72f302570052d8863afd3ceb39cf7c051e71b2d"
+      "h": 256,
+      "sha256": "e62181a36886100d18621be5fb36628394ae407245a143bc390e442c3ba33877"
      },
      "SHADOW0": {
       "w": 256,
       "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
+      "sha256": "ffff044e9c4cc67b60f4c60802cbbc181e1cb5e6e26cef50cb77a07db1a76f99"
      },
      "SHADOW1": {
       "w": 128,
       "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
+      "sha256": "da76f65ec86568f6663b06573ed2ff47c7f5211e675c195b9ce785b2a72eb881"
      },
      "SHADOW2": {
       "w": 64,
       "h": 64,
-      "sha256": "6e7aaec551362d498f234f4e53122635b61912cc4f18485bf818ee186e40a129"
+      "sha256": "4a142cd35fd02dc551c7a0298780266be113ad5070bcacce4f328ac9d481c5f1"
      },
      "WORK0": {
       "w": 256,
       "h": 128,
-      "sha256": "1d3a2dbba58a6882cf91923010ec35423bfc8533c4ea4c226622cf3435cb9510"
+      "sha256": "de0219d22e6e8872063ba9fe6bf61b9cff45477461ccdbae8f1f24a200c295b7"
      },
      "WORK1": {
       "w": 256,
       "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
+      "sha256": "0b95ce3e7c742fd526d123c6c5390bc88563c95416eca9f92cdeaaa11f8bd633"
      },
      "WORK2": {
       "w": 512,
-      "h": 448,
-      "sha256": "40b864c6d6d6864f5be5a88c940a6b575f1055d2b9142f7ab7f0b77772500d56"
+      "h": 512,
+      "sha256": "7bdd7a6c3ded1989056b9ce5e0b871d1acccca866fc305eb3f4d768bc0e223aa"
      },
      "WORK3": {
       "w": 256,
       "h": 128,
-      "sha256": "514390134bb80e03c2d3769e5907436edafa4c7508a6d42614908913c14896ce"
+      "sha256": "c39c954e4750dc15a3baa2ba7df977727d44282cc1b237c2b57f9b4a43415680"
      },
      "AA0": {
       "w": 256,
@@ -106,12 +106,12 @@
      "FEED128": {
       "w": 128,
       "h": 128,
-      "sha256": "b887c7803a2e0e8c16e9074006a5a29a2debe9ec3375fafe0f306958bdf1fab6"
+      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
      },
      "AURA_WORK": {
       "w": 512,
-      "h": 448,
-      "sha256": "4c4c468ab82f21bad72e2cce936ab74e77a2f541a141322345b63ad2dffb8b68"
+      "h": 512,
+      "sha256": "0d8cb17232433746e927f2c91aa66a474ce6ce3695de2d4d82e757e3039b04f5"
      },
      "AURA_TAP": {
       "w": 128,
@@ -121,7 +121,7 @@
      "WORK2_PAD": {
       "w": 256,
       "h": 64,
-      "sha256": "943ffe0e6fafd0cb2128080a56e342590604527f70492f479922bf8b3c2fc38b"
+      "sha256": "beb0cdae7c1b8efacb1e50495567c058218b4f2a82c5c7190de6f1915faa7814"
      },
      "FEED_HELD": {
       "w": 128,
@@ -130,60 +130,60 @@
      },
      "DISPLAY_HELD": {
       "w": 512,
-      "h": 224,
-      "sha256": "7b32513ece863fd0a837a6db0a4667404bccfc3bb05fef62d8b46b4af61a1a77"
+      "h": 256,
+      "sha256": "057432f2d2ba8eb1032a9b5fdc32e30cb480da292a26988b55c3ae75e31eb43a"
      },
      "PRESENT": {
       "w": 1440,
       "h": 1080,
-      "sha256": "313dcd0d155292618d4aeb6ff83d7a22c90273f943789cf19f93b72eb2efa569"
+      "sha256": "1e4e1397b4517708952ca7105f1ccfb25258ace928af07490dae606a4357cc83"
      }
     },
     "enhanced_4x3_2x": {
      "SCENE": {
       "w": 1024,
-      "h": 896,
-      "sha256": "872ea992345a7fe9949b21999d76bccc8ca4c5440216bfa20b4d1f84f284a5ca"
+      "h": 1024,
+      "sha256": "8f6ab7415f1ea04339648c064c5fac0b11e8ec5b9723885987c61048faacf0b0"
      },
      "DISPLAY": {
       "w": 1024,
-      "h": 448,
-      "sha256": "97b67cbc4c44f7bb5a770e45ca0478021ee8fe739db490bd358a66f7ecdf4813"
+      "h": 512,
+      "sha256": "216c128dc7bd895d69e5157efe39d53bcd36485821ade669c70f5cc9a52a2f86"
      },
      "SHADOW0": {
       "w": 256,
       "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
+      "sha256": "c6936fbc451466c153118eb3407038acf4b9c88dc09d2f66736128d100621c0d"
      },
      "SHADOW1": {
       "w": 128,
       "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
+      "sha256": "e8c72169c725839eceba836e95d2c01db93d4b6179d4ef9ff7c76f07306dfcd3"
      },
      "SHADOW2": {
       "w": 64,
       "h": 64,
-      "sha256": "6e7aaec551362d498f234f4e53122635b61912cc4f18485bf818ee186e40a129"
+      "sha256": "f1a1af1d7d009d7b93d5ee8028e916a90c60241740d037b6db781e399863bb2b"
      },
      "WORK0": {
       "w": 256,
       "h": 128,
-      "sha256": "c99d7e55c4031cd0179979a3ce5fddee1a2d208cb57777bf7a97a86f3ef5463b"
+      "sha256": "2a95332e677b7acf0a98fdb6435551a734e84e1e226a6b31e87ae508c73e48ad"
      },
      "WORK1": {
       "w": 256,
       "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
+      "sha256": "fd3218f802add709efa44c395b578f7e0affc09266a310d0c4942d7451469a7e"
      },
      "WORK2": {
       "w": 1024,
-      "h": 896,
-      "sha256": "2aef8420e87a2c598fbbae17e60a54aad27b50a7f23b5c28202d0fceaac5af39"
+      "h": 1024,
+      "sha256": "68461387fc17057302adb6e27984375cb3528799a1d37f80baac89960eeeab63"
      },
      "WORK3": {
       "w": 256,
       "h": 128,
-      "sha256": "514390134bb80e03c2d3769e5907436edafa4c7508a6d42614908913c14896ce"
+      "sha256": "c4b6975b2171b7110683aa0d17f7be8faf0b3d4a7fa0d3be66956773f7598ca7"
      },
      "AA0": {
       "w": 256,
@@ -198,12 +198,12 @@
      "FEED128": {
       "w": 128,
       "h": 128,
-      "sha256": "738ab10022510b1575740bcdc8c081df11d0734aba5e7f8a8fafb8f3353191ea"
+      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
      },
      "AURA_WORK": {
       "w": 1024,
-      "h": 896,
-      "sha256": "9b7d834debc1f62c3780265e57aa70ab383068af4d4db316e94b99ac29118244"
+      "h": 1024,
+      "sha256": "4ce7376163f2fa7b3a3ea31a0ea3a600e963492f4c59a5d4726ba4cdba8f5aff"
      },
      "AURA_TAP": {
       "w": 128,
@@ -213,7 +213,7 @@
      "WORK2_PAD": {
       "w": 256,
       "h": 64,
-      "sha256": "943ffe0e6fafd0cb2128080a56e342590604527f70492f479922bf8b3c2fc38b"
+      "sha256": "beb0cdae7c1b8efacb1e50495567c058218b4f2a82c5c7190de6f1915faa7814"
      },
      "FEED_HELD": {
       "w": 128,
@@ -222,1171 +222,31 @@
      },
      "DISPLAY_HELD": {
       "w": 1024,
-      "h": 448,
-      "sha256": "c10264d72f535a00572315bc52e3d671a3be16f0aca33c5e55a2da92e895203a"
+      "h": 512,
+      "sha256": "adc3b84bf1b9c8c978eb8070f03e2488dc162ffeeff0cd44afd0d59060e3ea05"
      },
      "PRESENT": {
       "w": 2880,
       "h": 2160,
-      "sha256": "4f10e045e43fec4aeb89703e02fe6cc583fe5bde83b9c97178a577d1db1b8ef2"
+      "sha256": "65de4cf94113307d7099a55854839b57323f20fd5e1e0c2096d891da309e53a7"
      }
     }
    }
   },
-  "frame-20261007-200706-v3100.rddump": {
-   "size": 4378680,
-   "sha256": "df3bb457f948a97450aac13431efa3c3c90fc495951518f6facd0fa1497ed926",
-   "results": {
-    "original_4x3_1x": {
-     "SCENE": {
-      "w": 512,
-      "h": 448,
-      "sha256": "e0170dd1ae93501de25fd27291054a1d06e48e3c9f23f8c78589b72176fece12"
-     },
-     "DISPLAY": {
-      "w": 512,
-      "h": 224,
-      "sha256": "5783a9ad99bd1a0d886df5b8d0e66d591e1ee1616f23a0d2c7103fbef698641d"
-     },
-     "SHADOW0": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "SHADOW1": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "SHADOW2": {
-      "w": 64,
-      "h": 64,
-      "sha256": "6e7aaec551362d498f234f4e53122635b61912cc4f18485bf818ee186e40a129"
-     },
-     "WORK0": {
-      "w": 256,
-      "h": 128,
-      "sha256": "4a30a18e3877228c9fcf49ec7cc2d18126df710451350f3bb9682a0afaa5096c"
-     },
-     "WORK1": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "WORK2": {
-      "w": 512,
-      "h": 448,
-      "sha256": "40b864c6d6d6864f5be5a88c940a6b575f1055d2b9142f7ab7f0b77772500d56"
-     },
-     "WORK3": {
-      "w": 256,
-      "h": 128,
-      "sha256": "514390134bb80e03c2d3769e5907436edafa4c7508a6d42614908913c14896ce"
-     },
-     "AA0": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "AA1": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "FEED128": {
-      "w": 128,
-      "h": 128,
-      "sha256": "d6b5eedddd7512222166bf4bce3b1df3aff57057af306f16aaf0a029b5ab5581"
-     },
-     "AURA_WORK": {
-      "w": 512,
-      "h": 448,
-      "sha256": "693b6ea4ebda8cd15e40ade3671a55dde4170fbba1629b31e8ac03600bf2adb8"
-     },
-     "AURA_TAP": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "WORK2_PAD": {
-      "w": 256,
-      "h": 64,
-      "sha256": "943ffe0e6fafd0cb2128080a56e342590604527f70492f479922bf8b3c2fc38b"
-     },
-     "FEED_HELD": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "DISPLAY_HELD": {
-      "w": 512,
-      "h": 224,
-      "sha256": "7b32513ece863fd0a837a6db0a4667404bccfc3bb05fef62d8b46b4af61a1a77"
-     },
-     "PRESENT": {
-      "w": 1440,
-      "h": 1080,
-      "sha256": "17f8fe7bbc69d23833aa8d76cc6d3e345a1ccc26e07f450b55f435fdb8b56272"
-     }
-    },
-    "enhanced_4x3_2x": {
-     "SCENE": {
-      "w": 1024,
-      "h": 896,
-      "sha256": "6fd0f19393c634c086cfbfee73e734f2a4ebd6464b9061e059d26ca8d480377c"
-     },
-     "DISPLAY": {
-      "w": 1024,
-      "h": 448,
-      "sha256": "14841c91c7864912bb6ab02c7bca0ba09ea7be5ccfadc15c6648c7a6128e5c52"
-     },
-     "SHADOW0": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "SHADOW1": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "SHADOW2": {
-      "w": 64,
-      "h": 64,
-      "sha256": "6e7aaec551362d498f234f4e53122635b61912cc4f18485bf818ee186e40a129"
-     },
-     "WORK0": {
-      "w": 256,
-      "h": 128,
-      "sha256": "b8e04a44285c0be83326d6e5e3e04969b32dcb31a431dffae0d2a6a05ba1974d"
-     },
-     "WORK1": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "WORK2": {
-      "w": 1024,
-      "h": 896,
-      "sha256": "2aef8420e87a2c598fbbae17e60a54aad27b50a7f23b5c28202d0fceaac5af39"
-     },
-     "WORK3": {
-      "w": 256,
-      "h": 128,
-      "sha256": "514390134bb80e03c2d3769e5907436edafa4c7508a6d42614908913c14896ce"
-     },
-     "AA0": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "AA1": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "FEED128": {
-      "w": 128,
-      "h": 128,
-      "sha256": "7cb9a2ca1a5fb11219972152bfcfd747daeb0f6e2c979f119c50569fa9f6bbf5"
-     },
-     "AURA_WORK": {
-      "w": 1024,
-      "h": 896,
-      "sha256": "2d41419d90058a069447db3136a8b362293b04270698dd9c2f935cda3e5f9011"
-     },
-     "AURA_TAP": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "WORK2_PAD": {
-      "w": 256,
-      "h": 64,
-      "sha256": "943ffe0e6fafd0cb2128080a56e342590604527f70492f479922bf8b3c2fc38b"
-     },
-     "FEED_HELD": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "DISPLAY_HELD": {
-      "w": 1024,
-      "h": 448,
-      "sha256": "c10264d72f535a00572315bc52e3d671a3be16f0aca33c5e55a2da92e895203a"
-     },
-     "PRESENT": {
-      "w": 2880,
-      "h": 2160,
-      "sha256": "0a3dd1a27c288aacf38f9680e3f2be3302af586e2e52a8e3e2b00aa1c62fd054"
-     }
-    }
-   }
-  },
-  "frame-20261007-200706-v3112.rddump": {
-   "size": 4380024,
-   "sha256": "6e494af63305a93ce82d17aab2a8b631dfaa693549a6308e883d9dbc5ede3839",
-   "results": {
-    "original_4x3_1x": {
-     "SCENE": {
-      "w": 512,
-      "h": 448,
-      "sha256": "e1e939b05c93a37621b2267f3cecf026fed603473dd5a9df55b1669ce7a2f2e7"
-     },
-     "DISPLAY": {
-      "w": 512,
-      "h": 224,
-      "sha256": "a1cce37bb8f34a4273124abb288999d9ca68a762a3aff9a92646211135fc623f"
-     },
-     "SHADOW0": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "SHADOW1": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "SHADOW2": {
-      "w": 64,
-      "h": 64,
-      "sha256": "6e7aaec551362d498f234f4e53122635b61912cc4f18485bf818ee186e40a129"
-     },
-     "WORK0": {
-      "w": 256,
-      "h": 128,
-      "sha256": "9a88805a5691a6de5919fb6759e5101498980b4445dbf0793bbdeb1db7789a98"
-     },
-     "WORK1": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "WORK2": {
-      "w": 512,
-      "h": 448,
-      "sha256": "40b864c6d6d6864f5be5a88c940a6b575f1055d2b9142f7ab7f0b77772500d56"
-     },
-     "WORK3": {
-      "w": 256,
-      "h": 128,
-      "sha256": "514390134bb80e03c2d3769e5907436edafa4c7508a6d42614908913c14896ce"
-     },
-     "AA0": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "AA1": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "FEED128": {
-      "w": 128,
-      "h": 128,
-      "sha256": "17ccc38e99b168ed549eba621284bff12364ebe7de57b9fff13a8871a291a002"
-     },
-     "AURA_WORK": {
-      "w": 512,
-      "h": 448,
-      "sha256": "cc597129afbe759ea51a086c902d5522dca6fc3e22dffca53fb3e2306334850e"
-     },
-     "AURA_TAP": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "WORK2_PAD": {
-      "w": 256,
-      "h": 64,
-      "sha256": "943ffe0e6fafd0cb2128080a56e342590604527f70492f479922bf8b3c2fc38b"
-     },
-     "FEED_HELD": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "DISPLAY_HELD": {
-      "w": 512,
-      "h": 224,
-      "sha256": "7b32513ece863fd0a837a6db0a4667404bccfc3bb05fef62d8b46b4af61a1a77"
-     },
-     "PRESENT": {
-      "w": 1440,
-      "h": 1080,
-      "sha256": "3d4c5e9011500f33c3bcf47dca82b38aff2b06519c909bcd9afafe70fe605dc0"
-     }
-    },
-    "enhanced_4x3_2x": {
-     "SCENE": {
-      "w": 1024,
-      "h": 896,
-      "sha256": "49b23e8dc1b96b37b62bfa5c71e63385fcd2f90865462738b1e459f2753b6fa9"
-     },
-     "DISPLAY": {
-      "w": 1024,
-      "h": 448,
-      "sha256": "0f334277e94d6497c7ca50d65043739e1c5028e0cbaa2c92f80d8fdaa26be63c"
-     },
-     "SHADOW0": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "SHADOW1": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "SHADOW2": {
-      "w": 64,
-      "h": 64,
-      "sha256": "6e7aaec551362d498f234f4e53122635b61912cc4f18485bf818ee186e40a129"
-     },
-     "WORK0": {
-      "w": 256,
-      "h": 128,
-      "sha256": "a874f0062bb00a7d362ecbcc65dac6ece461aee3ae449b3f02823aca1b98518c"
-     },
-     "WORK1": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "WORK2": {
-      "w": 1024,
-      "h": 896,
-      "sha256": "2aef8420e87a2c598fbbae17e60a54aad27b50a7f23b5c28202d0fceaac5af39"
-     },
-     "WORK3": {
-      "w": 256,
-      "h": 128,
-      "sha256": "514390134bb80e03c2d3769e5907436edafa4c7508a6d42614908913c14896ce"
-     },
-     "AA0": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "AA1": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "FEED128": {
-      "w": 128,
-      "h": 128,
-      "sha256": "dcab186f21790156dc1e7a566ca906bd126fa53de0f205829325447f1fac0691"
-     },
-     "AURA_WORK": {
-      "w": 1024,
-      "h": 896,
-      "sha256": "b1882722025f0dcba19e44810041d606ac54184aac591bf3c8a023aeba5a88e3"
-     },
-     "AURA_TAP": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "WORK2_PAD": {
-      "w": 256,
-      "h": 64,
-      "sha256": "943ffe0e6fafd0cb2128080a56e342590604527f70492f479922bf8b3c2fc38b"
-     },
-     "FEED_HELD": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "DISPLAY_HELD": {
-      "w": 1024,
-      "h": 448,
-      "sha256": "c10264d72f535a00572315bc52e3d671a3be16f0aca33c5e55a2da92e895203a"
-     },
-     "PRESENT": {
-      "w": 2880,
-      "h": 2160,
-      "sha256": "d27aa0aea94bfe6f7fd11aeec1e365f6ffa769ad74786c743c31e82355e1c1b5"
-     }
-    }
-   }
-  },
-  "frame-20261007-200706-v3126.rddump": {
-   "size": 4380024,
-   "sha256": "e8a5b77284d6b60d9c11f8feb720140ec14a7ee896ee2b5e701e3a76a89f882f",
-   "results": {
-    "original_4x3_1x": {
-     "SCENE": {
-      "w": 512,
-      "h": 448,
-      "sha256": "77868c66bb6edeb25e24980fb11c9ac4894a6da1dce74f21295e3185474cdb57"
-     },
-     "DISPLAY": {
-      "w": 512,
-      "h": 224,
-      "sha256": "151939a7a63350bba47b558ba5dfd6a084c7bdfaa869059a2ca398b12bd8e1b5"
-     },
-     "SHADOW0": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "SHADOW1": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "SHADOW2": {
-      "w": 64,
-      "h": 64,
-      "sha256": "6e7aaec551362d498f234f4e53122635b61912cc4f18485bf818ee186e40a129"
-     },
-     "WORK0": {
-      "w": 256,
-      "h": 128,
-      "sha256": "1ab53db730c29b8a1dfb152f96a62ac74938f556bf56dbfe70717ec1bde27bf6"
-     },
-     "WORK1": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "WORK2": {
-      "w": 512,
-      "h": 448,
-      "sha256": "40b864c6d6d6864f5be5a88c940a6b575f1055d2b9142f7ab7f0b77772500d56"
-     },
-     "WORK3": {
-      "w": 256,
-      "h": 128,
-      "sha256": "514390134bb80e03c2d3769e5907436edafa4c7508a6d42614908913c14896ce"
-     },
-     "AA0": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "AA1": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "FEED128": {
-      "w": 128,
-      "h": 128,
-      "sha256": "da7b1dd2eb3109326af2c3f231d1298143e09533b7356bde34b78aa5bcc9f387"
-     },
-     "AURA_WORK": {
-      "w": 512,
-      "h": 448,
-      "sha256": "f210f1e4fc354f047b4db764c2021260e406f40a16ddffd483d4c55745206b08"
-     },
-     "AURA_TAP": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "WORK2_PAD": {
-      "w": 256,
-      "h": 64,
-      "sha256": "943ffe0e6fafd0cb2128080a56e342590604527f70492f479922bf8b3c2fc38b"
-     },
-     "FEED_HELD": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "DISPLAY_HELD": {
-      "w": 512,
-      "h": 224,
-      "sha256": "7b32513ece863fd0a837a6db0a4667404bccfc3bb05fef62d8b46b4af61a1a77"
-     },
-     "PRESENT": {
-      "w": 1440,
-      "h": 1080,
-      "sha256": "84c703186ba60e0a991a63645d824a9f4d07796c8548da6c608c4a495d7a1701"
-     }
-    },
-    "enhanced_4x3_2x": {
-     "SCENE": {
-      "w": 1024,
-      "h": 896,
-      "sha256": "ed5a38946866238394905fa1ae9715ce84ddeebcbfcace707607de855e321d6f"
-     },
-     "DISPLAY": {
-      "w": 1024,
-      "h": 448,
-      "sha256": "2359048b803c81837b3817decdf9117b30075cfb5fcd38405c600a178cda6ce5"
-     },
-     "SHADOW0": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "SHADOW1": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "SHADOW2": {
-      "w": 64,
-      "h": 64,
-      "sha256": "6e7aaec551362d498f234f4e53122635b61912cc4f18485bf818ee186e40a129"
-     },
-     "WORK0": {
-      "w": 256,
-      "h": 128,
-      "sha256": "a308258b2c715c8b525f2ee2e3626b372cebb42ef3711c25636c6a6e259c7151"
-     },
-     "WORK1": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "WORK2": {
-      "w": 1024,
-      "h": 896,
-      "sha256": "2aef8420e87a2c598fbbae17e60a54aad27b50a7f23b5c28202d0fceaac5af39"
-     },
-     "WORK3": {
-      "w": 256,
-      "h": 128,
-      "sha256": "514390134bb80e03c2d3769e5907436edafa4c7508a6d42614908913c14896ce"
-     },
-     "AA0": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "AA1": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "FEED128": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c2ed540e9e40e1240e191800f4c4a2e1df3fc20dbeca94a17b859bca4adb1ce6"
-     },
-     "AURA_WORK": {
-      "w": 1024,
-      "h": 896,
-      "sha256": "1c8626852aadbab80664e7abf2c8e7ab33429ba5ddd42a89c2f74ba98d2717f2"
-     },
-     "AURA_TAP": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "WORK2_PAD": {
-      "w": 256,
-      "h": 64,
-      "sha256": "943ffe0e6fafd0cb2128080a56e342590604527f70492f479922bf8b3c2fc38b"
-     },
-     "FEED_HELD": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "DISPLAY_HELD": {
-      "w": 1024,
-      "h": 448,
-      "sha256": "c10264d72f535a00572315bc52e3d671a3be16f0aca33c5e55a2da92e895203a"
-     },
-     "PRESENT": {
-      "w": 2880,
-      "h": 2160,
-      "sha256": "857ef247b62aba344e3f1b7fcc7602407e10d875131006e49f69777ff25bdd0b"
-     }
-    }
-   }
-  },
-  "frame-20261007-200707-v3139.rddump": {
-   "size": 4380024,
-   "sha256": "dd69d1751a60486d6e1f754338b9be944a7e7266171315a56f8979e968e83025",
-   "results": {
-    "original_4x3_1x": {
-     "SCENE": {
-      "w": 512,
-      "h": 448,
-      "sha256": "0f631ad2b7e9f44da0d6284c001344a40e85ad434cb349c8d85875b52d7f4295"
-     },
-     "DISPLAY": {
-      "w": 512,
-      "h": 224,
-      "sha256": "e0515e035a4d23ad918b2290ef5617d0be1871303c742c284e7312346216370e"
-     },
-     "SHADOW0": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "SHADOW1": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "SHADOW2": {
-      "w": 64,
-      "h": 64,
-      "sha256": "6e7aaec551362d498f234f4e53122635b61912cc4f18485bf818ee186e40a129"
-     },
-     "WORK0": {
-      "w": 256,
-      "h": 128,
-      "sha256": "ae58577b5467168993c7142e76e8d4c5f6cbb4157914b01f6b1f9905272fb8da"
-     },
-     "WORK1": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "WORK2": {
-      "w": 512,
-      "h": 448,
-      "sha256": "40b864c6d6d6864f5be5a88c940a6b575f1055d2b9142f7ab7f0b77772500d56"
-     },
-     "WORK3": {
-      "w": 256,
-      "h": 128,
-      "sha256": "514390134bb80e03c2d3769e5907436edafa4c7508a6d42614908913c14896ce"
-     },
-     "AA0": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "AA1": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "FEED128": {
-      "w": 128,
-      "h": 128,
-      "sha256": "7d653d87bf197ee70d665b4d44686b2fadc221cb803c45ee2a7b66f7c8c5a8b3"
-     },
-     "AURA_WORK": {
-      "w": 512,
-      "h": 448,
-      "sha256": "7a67be4eb5f7b141b997da7e594abc637a559005d61248c7d8c143c007d183e0"
-     },
-     "AURA_TAP": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "WORK2_PAD": {
-      "w": 256,
-      "h": 64,
-      "sha256": "943ffe0e6fafd0cb2128080a56e342590604527f70492f479922bf8b3c2fc38b"
-     },
-     "FEED_HELD": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "DISPLAY_HELD": {
-      "w": 512,
-      "h": 224,
-      "sha256": "7b32513ece863fd0a837a6db0a4667404bccfc3bb05fef62d8b46b4af61a1a77"
-     },
-     "PRESENT": {
-      "w": 1440,
-      "h": 1080,
-      "sha256": "7d6effa60fe8d9679c5ba8e24e61913a44856cf7d74a714f65347b4f0f057f6c"
-     }
-    },
-    "enhanced_4x3_2x": {
-     "SCENE": {
-      "w": 1024,
-      "h": 896,
-      "sha256": "a6f32557057f4427e91319f4867a477c7f30778d4671a91bead875afed6e5c32"
-     },
-     "DISPLAY": {
-      "w": 1024,
-      "h": 448,
-      "sha256": "261c9ff3e2690635027e49be349b27b091cd6a21647910fd4ac49ad8561f5a01"
-     },
-     "SHADOW0": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "SHADOW1": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "SHADOW2": {
-      "w": 64,
-      "h": 64,
-      "sha256": "6e7aaec551362d498f234f4e53122635b61912cc4f18485bf818ee186e40a129"
-     },
-     "WORK0": {
-      "w": 256,
-      "h": 128,
-      "sha256": "65d7057005cdf47e12bf61dcc134921951a39ccfb4c3e277c3f44ff187aba2d5"
-     },
-     "WORK1": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "WORK2": {
-      "w": 1024,
-      "h": 896,
-      "sha256": "2aef8420e87a2c598fbbae17e60a54aad27b50a7f23b5c28202d0fceaac5af39"
-     },
-     "WORK3": {
-      "w": 256,
-      "h": 128,
-      "sha256": "514390134bb80e03c2d3769e5907436edafa4c7508a6d42614908913c14896ce"
-     },
-     "AA0": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "AA1": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "FEED128": {
-      "w": 128,
-      "h": 128,
-      "sha256": "acea3474e7ae31c3dab44ac3d544a7386bf9af15bfbc12add8def363a52e2206"
-     },
-     "AURA_WORK": {
-      "w": 1024,
-      "h": 896,
-      "sha256": "64c35b24d526e293761515dc70a5f56b829c1008df6369f094b6a6f797c5bfc6"
-     },
-     "AURA_TAP": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "WORK2_PAD": {
-      "w": 256,
-      "h": 64,
-      "sha256": "943ffe0e6fafd0cb2128080a56e342590604527f70492f479922bf8b3c2fc38b"
-     },
-     "FEED_HELD": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "DISPLAY_HELD": {
-      "w": 1024,
-      "h": 448,
-      "sha256": "c10264d72f535a00572315bc52e3d671a3be16f0aca33c5e55a2da92e895203a"
-     },
-     "PRESENT": {
-      "w": 2880,
-      "h": 2160,
-      "sha256": "7d0e06fb32cd543a19dcff5d43cd17925fcf7ab0574ee5fda1f8aa5a8b388f2a"
-     }
-    }
-   }
-  },
-  "frame-20261007-200707-v3153.rddump": {
-   "size": 4380024,
-   "sha256": "0eb4e08067855afcdab7851fd703ecf95a172374a0aabc2dc16dc3647171f8c7",
-   "results": {
-    "original_4x3_1x": {
-     "SCENE": {
-      "w": 512,
-      "h": 448,
-      "sha256": "ac55601ff949ef7b144ebb470b1122a53dd522fde12699a1691f9ad739650575"
-     },
-     "DISPLAY": {
-      "w": 512,
-      "h": 224,
-      "sha256": "5a5b18da2ab85f130dcd1a11a1b3d8ec9e64e2881d4d2ce12433186b2622e6ca"
-     },
-     "SHADOW0": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "SHADOW1": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "SHADOW2": {
-      "w": 64,
-      "h": 64,
-      "sha256": "6e7aaec551362d498f234f4e53122635b61912cc4f18485bf818ee186e40a129"
-     },
-     "WORK0": {
-      "w": 256,
-      "h": 128,
-      "sha256": "f28174b80921c092c1ffdaa3cc7c0f9e9316441afe4c7948f86edb57f299a845"
-     },
-     "WORK1": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "WORK2": {
-      "w": 512,
-      "h": 448,
-      "sha256": "40b864c6d6d6864f5be5a88c940a6b575f1055d2b9142f7ab7f0b77772500d56"
-     },
-     "WORK3": {
-      "w": 256,
-      "h": 128,
-      "sha256": "514390134bb80e03c2d3769e5907436edafa4c7508a6d42614908913c14896ce"
-     },
-     "AA0": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "AA1": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "FEED128": {
-      "w": 128,
-      "h": 128,
-      "sha256": "079c8d26c2f1867b7ace55bc065f9011bb3ee29ad22fbf60e51817a228842b7a"
-     },
-     "AURA_WORK": {
-      "w": 512,
-      "h": 448,
-      "sha256": "b2967d286f4fab55e4045187cd0e3360bfd160b5f100a480f9094deadd49fc7f"
-     },
-     "AURA_TAP": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "WORK2_PAD": {
-      "w": 256,
-      "h": 64,
-      "sha256": "943ffe0e6fafd0cb2128080a56e342590604527f70492f479922bf8b3c2fc38b"
-     },
-     "FEED_HELD": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "DISPLAY_HELD": {
-      "w": 512,
-      "h": 224,
-      "sha256": "7b32513ece863fd0a837a6db0a4667404bccfc3bb05fef62d8b46b4af61a1a77"
-     },
-     "PRESENT": {
-      "w": 1440,
-      "h": 1080,
-      "sha256": "9e3339123515abb71f2dabf5c6dd030da06045acee68623d0a602060dbc1cebd"
-     }
-    },
-    "enhanced_4x3_2x": {
-     "SCENE": {
-      "w": 1024,
-      "h": 896,
-      "sha256": "47d16b2cf5e6ef6259b8286e32d297fff83ed83116b7b5137ca32acfa73c56dd"
-     },
-     "DISPLAY": {
-      "w": 1024,
-      "h": 448,
-      "sha256": "ae73baf2afaa951aa1b66544cf1f6da38b0da64aae52433f56e4c433e6c732b4"
-     },
-     "SHADOW0": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "SHADOW1": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "SHADOW2": {
-      "w": 64,
-      "h": 64,
-      "sha256": "6e7aaec551362d498f234f4e53122635b61912cc4f18485bf818ee186e40a129"
-     },
-     "WORK0": {
-      "w": 256,
-      "h": 128,
-      "sha256": "e84dd574e70263bf26aab2ff254113e1b11195f9c076c1100cb87494b9a5153c"
-     },
-     "WORK1": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "WORK2": {
-      "w": 1024,
-      "h": 896,
-      "sha256": "2aef8420e87a2c598fbbae17e60a54aad27b50a7f23b5c28202d0fceaac5af39"
-     },
-     "WORK3": {
-      "w": 256,
-      "h": 128,
-      "sha256": "514390134bb80e03c2d3769e5907436edafa4c7508a6d42614908913c14896ce"
-     },
-     "AA0": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "AA1": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "FEED128": {
-      "w": 128,
-      "h": 128,
-      "sha256": "f805666c4d2390796d8b1e16f5cbb5414056d1bb10f3b5a30a3e45f3612773a0"
-     },
-     "AURA_WORK": {
-      "w": 1024,
-      "h": 896,
-      "sha256": "1e389e9dfb84fe77dc734293241d603a76280a35438e6abe90578e5c166c80bf"
-     },
-     "AURA_TAP": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "WORK2_PAD": {
-      "w": 256,
-      "h": 64,
-      "sha256": "943ffe0e6fafd0cb2128080a56e342590604527f70492f479922bf8b3c2fc38b"
-     },
-     "FEED_HELD": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "DISPLAY_HELD": {
-      "w": 1024,
-      "h": 448,
-      "sha256": "c10264d72f535a00572315bc52e3d671a3be16f0aca33c5e55a2da92e895203a"
-     },
-     "PRESENT": {
-      "w": 2880,
-      "h": 2160,
-      "sha256": "a2c072a3942fbcdcf71da144d149ab719c054e1570358ed76f5924d71b42f599"
-     }
-    }
-   }
-  },
-  "frame-20261007-200707-v3167.rddump": {
-   "size": 4380024,
-   "sha256": "35dfe39eae154b3fa624b9a24473d63cebbb6791fed624a0cf7fe2066521c95e",
-   "results": {
-    "original_4x3_1x": {
-     "SCENE": {
-      "w": 512,
-      "h": 448,
-      "sha256": "8aaee0e6df8ea06e0d904c7ebba45811ea742246ee678429bd6fb445a74cb562"
-     },
-     "DISPLAY": {
-      "w": 512,
-      "h": 224,
-      "sha256": "4a2d82e9575ce7c6932a381210bc72ca9f1cf109d154f499123326813c3f8e04"
-     },
-     "SHADOW0": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "SHADOW1": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "SHADOW2": {
-      "w": 64,
-      "h": 64,
-      "sha256": "6e7aaec551362d498f234f4e53122635b61912cc4f18485bf818ee186e40a129"
-     },
-     "WORK0": {
-      "w": 256,
-      "h": 128,
-      "sha256": "2c0359b0f71692d2dbb6677fe853dd95d13243dfc0b08c6c3bc225b2af0ef0d5"
-     },
-     "WORK1": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "WORK2": {
-      "w": 512,
-      "h": 448,
-      "sha256": "40b864c6d6d6864f5be5a88c940a6b575f1055d2b9142f7ab7f0b77772500d56"
-     },
-     "WORK3": {
-      "w": 256,
-      "h": 128,
-      "sha256": "514390134bb80e03c2d3769e5907436edafa4c7508a6d42614908913c14896ce"
-     },
-     "AA0": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "AA1": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "FEED128": {
-      "w": 128,
-      "h": 128,
-      "sha256": "87fc1780b4f8691929f6cc0196b57eeae33f48febbf57240bc65156ecabf2d06"
-     },
-     "AURA_WORK": {
-      "w": 512,
-      "h": 448,
-      "sha256": "3fcc02c1d4b84ffd38822e3e12ed46e5b7d3ad36f3f0e5cb366c41b4d0c73dac"
-     },
-     "AURA_TAP": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "WORK2_PAD": {
-      "w": 256,
-      "h": 64,
-      "sha256": "943ffe0e6fafd0cb2128080a56e342590604527f70492f479922bf8b3c2fc38b"
-     },
-     "FEED_HELD": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "DISPLAY_HELD": {
-      "w": 512,
-      "h": 224,
-      "sha256": "7b32513ece863fd0a837a6db0a4667404bccfc3bb05fef62d8b46b4af61a1a77"
-     },
-     "PRESENT": {
-      "w": 1440,
-      "h": 1080,
-      "sha256": "658030fd5f1aed45c9235053d8b257595a6f8b430c2720188550b29cc5d042b2"
-     }
-    },
-    "enhanced_4x3_2x": {
-     "SCENE": {
-      "w": 1024,
-      "h": 896,
-      "sha256": "4cb8796b573ebec79c51f500ac88d90f028a2b3ec75f7e3340b598c25cbc4673"
-     },
-     "DISPLAY": {
-      "w": 1024,
-      "h": 448,
-      "sha256": "9cdd3c75ad2faec1b6b238bc829e213d8bf5c37ff555e74114f1eea07b9ce84e"
-     },
-     "SHADOW0": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "SHADOW1": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "SHADOW2": {
-      "w": 64,
-      "h": 64,
-      "sha256": "6e7aaec551362d498f234f4e53122635b61912cc4f18485bf818ee186e40a129"
-     },
-     "WORK0": {
-      "w": 256,
-      "h": 128,
-      "sha256": "acbc1d027666864fbc2609ed9793c5df8a0d5b4fa63bf5fc9f5c07e72f0002b2"
-     },
-     "WORK1": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "WORK2": {
-      "w": 1024,
-      "h": 896,
-      "sha256": "2aef8420e87a2c598fbbae17e60a54aad27b50a7f23b5c28202d0fceaac5af39"
-     },
-     "WORK3": {
-      "w": 256,
-      "h": 128,
-      "sha256": "514390134bb80e03c2d3769e5907436edafa4c7508a6d42614908913c14896ce"
-     },
-     "AA0": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "AA1": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "FEED128": {
-      "w": 128,
-      "h": 128,
-      "sha256": "0447c5c512668974a99a4904172b40e2e747a6718244b6f4b47ed0a8e448a28f"
-     },
-     "AURA_WORK": {
-      "w": 1024,
-      "h": 896,
-      "sha256": "9cd5c524cb3ea5288deaeb4786f656effbebcd6dc28d19e1de161bec2f1982dc"
-     },
-     "AURA_TAP": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "WORK2_PAD": {
-      "w": 256,
-      "h": 64,
-      "sha256": "943ffe0e6fafd0cb2128080a56e342590604527f70492f479922bf8b3c2fc38b"
-     },
-     "FEED_HELD": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "DISPLAY_HELD": {
-      "w": 1024,
-      "h": 448,
-      "sha256": "c10264d72f535a00572315bc52e3d671a3be16f0aca33c5e55a2da92e895203a"
-     },
-     "PRESENT": {
-      "w": 2880,
-      "h": 2160,
-      "sha256": "7e6bd264253f9ce730dd05f955d91c563f8060bac789c9cd73796bb9c8bf916a"
-     }
-    }
-   }
-  },
-  "frame-20261007-210236-v1985.rddump": {
+  "fx-vu-1985.rddump": {
    "size": 4217040,
-   "sha256": "1a808950fb3618f0b8f1982ce7579cfa92ae118863bcbc204dfcb78d64d0cb59",
+   "sha256": "9878a9098a727bd7152dccec9f1b950b071aba9a1a0b906ea7d3b791c1ca81f5",
    "results": {
     "original_4x3_1x": {
      "SCENE": {
       "w": 512,
       "h": 448,
-      "sha256": "59662c11b68c1350952708af74871b64bc30705013ff955a17e9f4a73ff91f90"
+      "sha256": "0770bd1eac1b6cf8c0ea5c6a84be94561927d3e92d143b616da5e6035191da03"
      },
      "DISPLAY": {
       "w": 512,
       "h": 224,
-      "sha256": "061ecc01fa0ed51218409cb2f8388d663e7f6e9124373dcb50fc60c326a3e0f2"
+      "sha256": "89c85d105522bbd0527be586036e1c82ee45b2dcaf524e511f5cc148c01e20ea"
      },
      "SHADOW0": {
       "w": 256,
@@ -1406,7 +266,7 @@
      "WORK0": {
       "w": 256,
       "h": 128,
-      "sha256": "b059da18e48bbe38a9ff46298724282847375c68d6fcd8a4debbb00c97449685"
+      "sha256": "95b6557ecd4eb62c97cf1023f758dbd9b2e6eb6629cf8bcd1df23b4ada438a4e"
      },
      "WORK1": {
       "w": 256,
@@ -1436,12 +296,12 @@
      "FEED128": {
       "w": 128,
       "h": 128,
-      "sha256": "b628ecd6ab461f597510b130f5550357e93a57fba98adba65e5b8710ddd55769"
+      "sha256": "9352376e5957c07c16d75c3b44f54084916935728942f37801836b102def6896"
      },
      "AURA_WORK": {
       "w": 512,
       "h": 448,
-      "sha256": "8c519ff3155620d24cc5d04c3fce4fcd715d9ce6af8ed4e5fef1d0fe960f6a2f"
+      "sha256": "13cd3fc62afd2fae8d78182b99fe7ebb0c9ab883ea7beb586e26f7fd3ea779ac"
      },
      "AURA_TAP": {
       "w": 128,
@@ -1466,19 +326,19 @@
      "PRESENT": {
       "w": 1440,
       "h": 1080,
-      "sha256": "6164b9b1e0b207cb69b5958960b9fd12de3f55316473a4a8a1bc60ceea62e4fc"
+      "sha256": "6d7de2767d59810f2a5f37e2084c03ddcf406a9959249317d489d1aa0ee29184"
      }
     },
     "enhanced_4x3_2x": {
      "SCENE": {
       "w": 1024,
       "h": 896,
-      "sha256": "e5e4cf39eb7f83997754c2669b4ef1d63ef6a80cde76fd7242c865a241db7ffc"
+      "sha256": "ee93b7ef1f3ae7f30d2c327b462b00e3ecdb16f836d59a2690f9b16fd109309c"
      },
      "DISPLAY": {
       "w": 1024,
       "h": 448,
-      "sha256": "c7afa6b920b0269a31deaa2e1d03b17d43a71227996f337891f451e258a4ea39"
+      "sha256": "75dec69d79cd19f23909daf71c1ceab6053cbc43fca266064a02beae7717ac63"
      },
      "SHADOW0": {
       "w": 256,
@@ -1498,7 +358,7 @@
      "WORK0": {
       "w": 256,
       "h": 128,
-      "sha256": "f9d06f9a14628e902a2740c5ab0930937548452f784051b1a0808b1ff81d1c4f"
+      "sha256": "e17599006d46148f0d250c8e1fed1eea0619d3c4df686711b70ece01f505f546"
      },
      "WORK1": {
       "w": 256,
@@ -1528,12 +388,12 @@
      "FEED128": {
       "w": 128,
       "h": 128,
-      "sha256": "97e564a4843dcd61c852f77330be04990f54ba1bbc8f924c7296efcd679d31ae"
+      "sha256": "150e6816111575502d26519f835473c081c0096137516bc6669bdc2c4ca62dab"
      },
      "AURA_WORK": {
       "w": 1024,
       "h": 896,
-      "sha256": "32a5168146f7c4e8c424694016edc974faa08405190ad5a73a90e21ed96efa66"
+      "sha256": "ea3868b2806f4f4bdcf9ae93468657c9684e8667ade59a0b7df986da820daa4a"
      },
      "AURA_TAP": {
       "w": 128,
@@ -1558,25 +418,25 @@
      "PRESENT": {
       "w": 2880,
       "h": 2160,
-      "sha256": "70309c553dd3a5cba0800063947474f2884e9f673d96a62d9813f1bc077197b5"
+      "sha256": "cfd3db5dfbb62f0ee320e623a112d3eac6b98b9048ae06693830bfd075c4ec78"
      }
     }
    }
   },
-  "frame-20261007-210236-v1995.rddump": {
-   "size": 4215024,
-   "sha256": "1003e966997984bd92b2c0fa8f76314e6178fa1670f596b2b965b3920c85695c",
+  "fx-vu-3086.rddump": {
+   "size": 4379352,
+   "sha256": "a5892bbfbcd431f399f2e7d5caa532fd7120d09487612aba26dfde5f957b76b7",
    "results": {
     "original_4x3_1x": {
      "SCENE": {
       "w": 512,
       "h": 448,
-      "sha256": "5d8281f89e4afffce2e5d00d5f7f2546f7ac78ad49cf85d763c9934b3f5f10f5"
+      "sha256": "677fb359f95b577655248d30256507e87385066c61c3c47b4bf3a2c218370793"
      },
      "DISPLAY": {
       "w": 512,
       "h": 224,
-      "sha256": "881aed432f333f62d5b60ba87146c63c51c78a3719e0495123a7e6d52661ac98"
+      "sha256": "2c38c084ac4c77c5ce55eabb90d47ba41693b90f06a2eced3dec7f9016f7f3cb"
      },
      "SHADOW0": {
       "w": 256,
@@ -1596,7 +456,7 @@
      "WORK0": {
       "w": 256,
       "h": 128,
-      "sha256": "329c05a9411192968587d628bc72dc6eafe7451d847c44c6fedbb89108c3b0eb"
+      "sha256": "0c80a03ba63cdf913738d9142a3a668a93809be6a373e61b7e7817e4705d4f43"
      },
      "WORK1": {
       "w": 256,
@@ -1626,12 +486,12 @@
      "FEED128": {
       "w": 128,
       "h": 128,
-      "sha256": "465ed82dc6e6b114d0828b5374a76ba46810068f09a78ba9b5fbdf25e4554de8"
+      "sha256": "cf798ebc7e440ce997f7745b3753b0e9c113715f16ae9c7e12ae220f0d5600dc"
      },
      "AURA_WORK": {
       "w": 512,
       "h": 448,
-      "sha256": "1853910b9f1f16dfb7a15ad44bb1743802987dab7debccb35170f2032cbbbadf"
+      "sha256": "357f07a0c2f3c75b219d65bad02192856748ea8ba4119857ed3405efe1e19c1e"
      },
      "AURA_TAP": {
       "w": 128,
@@ -1656,19 +516,19 @@
      "PRESENT": {
       "w": 1440,
       "h": 1080,
-      "sha256": "be69b8fa709e242b4e4e0bc70543245a8baae0fc9310da283ab5ea1853a7a18d"
+      "sha256": "c35328c92e6bd1152eedd9f44af77af1b926f75130a6f1d67b22d68aa5d253a9"
      }
     },
     "enhanced_4x3_2x": {
      "SCENE": {
       "w": 1024,
       "h": 896,
-      "sha256": "a52df92bb7c14fae42c0a9d79f4c6b53178cf4850b0a4828f92108380f6780ae"
+      "sha256": "31065735755dc5dee2de8314487d83a63b4503a5f68bd7d468345f550bceb3fc"
      },
      "DISPLAY": {
       "w": 1024,
       "h": 448,
-      "sha256": "e7ca9ae916002da422358dd48db5c6717f349090d03cc10cddff60f15378dd19"
+      "sha256": "80e80119898182f8d25a58048de5519e49db0045ed613f2ccdfdd41fb1bdc910"
      },
      "SHADOW0": {
       "w": 256,
@@ -1688,7 +548,7 @@
      "WORK0": {
       "w": 256,
       "h": 128,
-      "sha256": "33245062a29cabec3a25a6be87b65ff49771d7d451ff49406a29bb64431c7705"
+      "sha256": "b43a893bb06d23ae68395a05f770b63c383e8fbf112ed0b894de9e55fa8d0331"
      },
      "WORK1": {
       "w": 256,
@@ -1718,12 +578,12 @@
      "FEED128": {
       "w": 128,
       "h": 128,
-      "sha256": "4c5628009ec8a0818dac3a1ddea35f6767e6e9be826e3254b56cd5f80cd06f7f"
+      "sha256": "bb2ae0f9e8f517dd56753772c38956bc063abfca9281eeacedcd412c480f5b81"
      },
      "AURA_WORK": {
       "w": 1024,
       "h": 896,
-      "sha256": "52e1037190f6501f929c3b523f4819991ac05781d5d13888c316ebd2dfb33787"
+      "sha256": "9a420a3722d8fa06ab930f847561d7a4df120b158ac286e15b4f0d5ac60bc50e"
      },
      "AURA_TAP": {
       "w": 128,
@@ -1748,25 +608,25 @@
      "PRESENT": {
       "w": 2880,
       "h": 2160,
-      "sha256": "85a51bb5c7d3970ae85a999fe4a3d457e35ee9ce3b2c1ee8a9693fe594fa78c1"
+      "sha256": "83593aea7c4f24ce1932fc5d868c99d0c7d0f8e67d3b52bc29089c83b52ed125"
      }
     }
    }
   },
-  "frame-20261007-210236-v2004.rddump": {
-   "size": 4215024,
-   "sha256": "47250cb5b43758c5b2fdaa935ccb79647b1c03dfcea25af894ec485bb6e48a2d",
+  "fx-vu-3112.rddump": {
+   "size": 4380024,
+   "sha256": "3ab1fd70fc73fe7ab41eb1f494b3727017821b056f7a38860eb56bcb1ec1cc4d",
    "results": {
     "original_4x3_1x": {
      "SCENE": {
       "w": 512,
       "h": 448,
-      "sha256": "72710325501d38276363d134128dfb38e207a716a2e61da02f865852aef7ba96"
+      "sha256": "677fb359f95b577655248d30256507e87385066c61c3c47b4bf3a2c218370793"
      },
      "DISPLAY": {
       "w": 512,
       "h": 224,
-      "sha256": "ff2a811d8ba6748a1389eb85470e5b7b70c65eda6cabc4a7ae40fc90284fc250"
+      "sha256": "2c38c084ac4c77c5ce55eabb90d47ba41693b90f06a2eced3dec7f9016f7f3cb"
      },
      "SHADOW0": {
       "w": 256,
@@ -1786,7 +646,7 @@
      "WORK0": {
       "w": 256,
       "h": 128,
-      "sha256": "4b61abf79e4df583c11bdd61c39e15d5b2f87e999eb88ef7e36635691145b64a"
+      "sha256": "0c80a03ba63cdf913738d9142a3a668a93809be6a373e61b7e7817e4705d4f43"
      },
      "WORK1": {
       "w": 256,
@@ -1816,12 +676,12 @@
      "FEED128": {
       "w": 128,
       "h": 128,
-      "sha256": "ed3b29350417aceb375cb135de83d00bd379b2aee1e03ee250509b54735a41b8"
+      "sha256": "cf798ebc7e440ce997f7745b3753b0e9c113715f16ae9c7e12ae220f0d5600dc"
      },
      "AURA_WORK": {
       "w": 512,
       "h": 448,
-      "sha256": "0a567d4b1d205d4f28fb55d0d7b0ef072f0ce0906f51b2746e6686defb7085f6"
+      "sha256": "357f07a0c2f3c75b219d65bad02192856748ea8ba4119857ed3405efe1e19c1e"
      },
      "AURA_TAP": {
       "w": 128,
@@ -1846,19 +706,19 @@
      "PRESENT": {
       "w": 1440,
       "h": 1080,
-      "sha256": "de5530e8ecb6cbfe46136d3b71e20599ba622bc8bb618c472da68216b02d3c41"
+      "sha256": "c35328c92e6bd1152eedd9f44af77af1b926f75130a6f1d67b22d68aa5d253a9"
      }
     },
     "enhanced_4x3_2x": {
      "SCENE": {
       "w": 1024,
       "h": 896,
-      "sha256": "88c8a9dbc0e82c701fa3bbc8d301018802e1a2ddaabc5a1c7ce852a54b4f617b"
+      "sha256": "31065735755dc5dee2de8314487d83a63b4503a5f68bd7d468345f550bceb3fc"
      },
      "DISPLAY": {
       "w": 1024,
       "h": 448,
-      "sha256": "0f992701cbb82888dcba6effd9d22fba0a06be104d5abdb88f45ceba8cccfd63"
+      "sha256": "80e80119898182f8d25a58048de5519e49db0045ed613f2ccdfdd41fb1bdc910"
      },
      "SHADOW0": {
       "w": 256,
@@ -1878,7 +738,7 @@
      "WORK0": {
       "w": 256,
       "h": 128,
-      "sha256": "1deb6c877e460aa16748149e36024a82e348173446beda13efe14c067c45cce3"
+      "sha256": "b43a893bb06d23ae68395a05f770b63c383e8fbf112ed0b894de9e55fa8d0331"
      },
      "WORK1": {
       "w": 256,
@@ -1908,12 +768,12 @@
      "FEED128": {
       "w": 128,
       "h": 128,
-      "sha256": "1d321f7f1c30c468da5de94969294359dbd6741fd0245b8290ff5c83cd2ad6f5"
+      "sha256": "bb2ae0f9e8f517dd56753772c38956bc063abfca9281eeacedcd412c480f5b81"
      },
      "AURA_WORK": {
       "w": 1024,
       "h": 896,
-      "sha256": "449ee2b886ded0cd99bba53f88d8f7c2711beaafb9ff02b4c88fad888d7b24fb"
+      "sha256": "9a420a3722d8fa06ab930f847561d7a4df120b158ac286e15b4f0d5ac60bc50e"
      },
      "AURA_TAP": {
       "w": 128,
@@ -1938,197 +798,7 @@
      "PRESENT": {
       "w": 2880,
       "h": 2160,
-      "sha256": "0ea4e46f57c3d97dcf8a8245611f7bd6787975fd80204a32735adac0f7310df4"
-     }
-    }
-   }
-  },
-  "frame-20261007-210236-v2011.rddump": {
-   "size": 4215696,
-   "sha256": "be131550b31de020f4973475b0642d7a4d2ff610d18c2925ad53b00b41df5d4c",
-   "results": {
-    "original_4x3_1x": {
-     "SCENE": {
-      "w": 512,
-      "h": 448,
-      "sha256": "c3801601147301d8dca86b41c6d3192aca24e7599a045bbfb626f8b5b7565965"
-     },
-     "DISPLAY": {
-      "w": 512,
-      "h": 224,
-      "sha256": "c09b34e02dc19b7259886abe510ac714a35bb92f9bb0b62e52ec49622eee9510"
-     },
-     "SHADOW0": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "SHADOW1": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "SHADOW2": {
-      "w": 64,
-      "h": 64,
-      "sha256": "6e7aaec551362d498f234f4e53122635b61912cc4f18485bf818ee186e40a129"
-     },
-     "WORK0": {
-      "w": 256,
-      "h": 128,
-      "sha256": "21152c19545813a7a7ad1ced815c4f7f23e2b7471ec857d45230e8f17c1948aa"
-     },
-     "WORK1": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "WORK2": {
-      "w": 512,
-      "h": 448,
-      "sha256": "40b864c6d6d6864f5be5a88c940a6b575f1055d2b9142f7ab7f0b77772500d56"
-     },
-     "WORK3": {
-      "w": 256,
-      "h": 128,
-      "sha256": "514390134bb80e03c2d3769e5907436edafa4c7508a6d42614908913c14896ce"
-     },
-     "AA0": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "AA1": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "FEED128": {
-      "w": 128,
-      "h": 128,
-      "sha256": "d5d369949bd3099d21ed99c8f7809d9cefcaf15395bfb73c54620dbd2c2447b1"
-     },
-     "AURA_WORK": {
-      "w": 512,
-      "h": 448,
-      "sha256": "ecb212adc390ee552b2e694d8aea6b1edb4f5c2f7fce22705b171bc957b23702"
-     },
-     "AURA_TAP": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "WORK2_PAD": {
-      "w": 256,
-      "h": 64,
-      "sha256": "943ffe0e6fafd0cb2128080a56e342590604527f70492f479922bf8b3c2fc38b"
-     },
-     "FEED_HELD": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "DISPLAY_HELD": {
-      "w": 512,
-      "h": 224,
-      "sha256": "7b32513ece863fd0a837a6db0a4667404bccfc3bb05fef62d8b46b4af61a1a77"
-     },
-     "PRESENT": {
-      "w": 1440,
-      "h": 1080,
-      "sha256": "48bd5f25e789c5cd564d2e8573afd28909f9400481483990db310680c08f1037"
-     }
-    },
-    "enhanced_4x3_2x": {
-     "SCENE": {
-      "w": 1024,
-      "h": 896,
-      "sha256": "09d081f2db79ba20ca42e01c5b5be1c5bde6dd028e0ff2144df11f67ad3e101f"
-     },
-     "DISPLAY": {
-      "w": 1024,
-      "h": 448,
-      "sha256": "4f0dbbc4ed61a8cc20e5aec24000d340d0919d15e19cb56b14ab4d6ce52beae6"
-     },
-     "SHADOW0": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "SHADOW1": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "SHADOW2": {
-      "w": 64,
-      "h": 64,
-      "sha256": "6e7aaec551362d498f234f4e53122635b61912cc4f18485bf818ee186e40a129"
-     },
-     "WORK0": {
-      "w": 256,
-      "h": 128,
-      "sha256": "9e26bf8f88402e3bd5579c72181fe471cb0c8e89b9b8935d928348e9faab3643"
-     },
-     "WORK1": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "WORK2": {
-      "w": 1024,
-      "h": 896,
-      "sha256": "2aef8420e87a2c598fbbae17e60a54aad27b50a7f23b5c28202d0fceaac5af39"
-     },
-     "WORK3": {
-      "w": 256,
-      "h": 128,
-      "sha256": "514390134bb80e03c2d3769e5907436edafa4c7508a6d42614908913c14896ce"
-     },
-     "AA0": {
-      "w": 256,
-      "h": 256,
-      "sha256": "0e2a7ca18a638fe820efdfdc8534979305afa9b1a1d73ee45f2512205788c7c9"
-     },
-     "AA1": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "FEED128": {
-      "w": 128,
-      "h": 128,
-      "sha256": "7e1b1fc445c1675e352401c885401d3ebde0690db129042157c21d94dcaa794a"
-     },
-     "AURA_WORK": {
-      "w": 1024,
-      "h": 896,
-      "sha256": "bdd182c9d5cbe43c25ebd60aedacfc17f6b23f69be307ab4dea7899b932f35bb"
-     },
-     "AURA_TAP": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "WORK2_PAD": {
-      "w": 256,
-      "h": 64,
-      "sha256": "943ffe0e6fafd0cb2128080a56e342590604527f70492f479922bf8b3c2fc38b"
-     },
-     "FEED_HELD": {
-      "w": 128,
-      "h": 128,
-      "sha256": "c99aa341e826403d51d3d5b7b9699b3f5c85a94466d3f68919b3fb75b82dbae9"
-     },
-     "DISPLAY_HELD": {
-      "w": 1024,
-      "h": 448,
-      "sha256": "c10264d72f535a00572315bc52e3d671a3be16f0aca33c5e55a2da92e895203a"
-     },
-     "PRESENT": {
-      "w": 2880,
-      "h": 2160,
-      "sha256": "1767ba2c153af86d2d33272c231d6b70ccd27a19deb314f4e085f5dda4205045"
+      "sha256": "83593aea7c4f24ce1932fc5d868c99d0c7d0f8e67d3b52bc29089c83b52ed125"
      }
     }
    }
