@@ -280,7 +280,9 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   miss, the box kept), back (hidden again), under a moved matrix (a miss) and after
   `rd__vis_hiz_cache_clear` (`rd_vis_hiz`).
 - `rd_boot_present_test.c`: a saved start-up through the presenter, present by present; needs
-  `ICO_BOOT_DUMP_DIR` (`rd_boot_present`).
+  `ICO_BOOT_DUMP_DIR` (`rd_boot_present`, local-only validation, label `local`: the nine
+  consecutive frames 115 to 123 of a start-up dumped with `dump_every=1`, kept outside the
+  repository; without them it skips saying how many it found).
 - `rd_blend_selftest_test.c` with `rd_blend_selftest.cmake`: the exact blend's start-up self-test
   and the attachment read's Qualcomm rule; the mode left in force, the forest's tint under it, the
   targets without the attachment read where it is off, the self-test again at a new scene size;
@@ -724,68 +726,73 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
 - `rd_region_camera_ab.cmake` ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-camera-rule),
   [DIVERGENCES.md](DIVERGENCES.md) VD-29): the camera rule against the PS2's region rule on the
   committed fixtures of `port/render/test/fixtures/lists/wide.txt` (a fixture and its frame's
-  aspect a line: `fx-wide-6818` the PowerVR phone's one 4:3 frame, the control; `fx-phone-4657`
-  2.189; `fx-wide-189` 16:10; `fx-mali-frame` 2.37, the Mali-G52 frame at full height; `fx-maingate`
-  48:9), at their own aspect. 1.
+  aspect a line, all made with `@scene drops`: `fx-drops-6818` the PowerVR phone's one 4:3 frame,
+  the control; `fx-drops-4657` 2.189; `fx-drops-189` 16:10; `fx-drops-mali` 2.37, the Mali-G52
+  frame at full height; `fx-drops-maingate` 48:9), at their own aspect. 1.
   `tools/region_camera_report.py` at the Original preset 1x and Enhanced 2x (presented at
   1280x960): `rd_replay_tool --pass-dump` under `ICO_RD_REGION_RULE=ps2` with `--region-mask` and
-  under `camera` with `--stats`; every PNG compared; SCENE's differing pixels must all lie in the
+  under `camera` with `--stats`, both with `--feedback-off` (the draws that sample a render target
+  left out, from `rd_replay_tool --list --no-device`: the shadows' pyramid and its composite, the
+  glow's chain, the softening, the fog's depth read; they resample SCENE at another scale and move
+  pixels up to their reach outside a drawn triangle: on `fx-drops-4657` Original 1x the shadow
+  composite moved 108 pixels up to 8 GS rows above the card, 0 without it; the VU draws are never
+  left out); every PNG compared; SCENE's differing pixels must all lie in the
   mask scaled to SCENE and grown by one GS pixel (red the triangles the PS2's rule drops, or draws
   beside the picture only, that the camera rule draws; green the back faces the card test drew that
   it drops; blue the sprites out of the box), and with an empty mask every target must be byte for
   byte the same; the other targets reported with how many of their changed pixels lie in the mask;
   the report in the build folder's `region_camera_ab/report.md`. The path ran: each camera rule
-  replay's `region rule: the camera's: N VU draws` (`region_rule_draws`, the draws the camera rule's
-  mode holds) as the list line declares, at both settings. 2. `--region-stats` under the camera rule
-  at the Original preset 1x and Enhanced 1x, at the frame's aspect: the frame line's drawn (strip
-  plus drawn by the camera rule), dropped and rescued counts the same in both presets. A fixture no
-  setting checked fails; no device: SKIP (77). TIMEOUT 3600 (`rd_region_camera_ab`). The generated
-  geometry drops no triangle and no sprite under either rule (`--region-stats`: drop 0, beside 0,
-  drawn by the camera rule 0 on every committed fixture), so the mask is empty and every target is
-  held byte for byte with the camera rule's mode on: a dropped triangle the camera rule draws is
-  not exercised here (on the game's own frames the old list had one, issue 189's three cards; it is
-  `rd_sideband_cards`' camera half).
+  replay's `region rule: the camera's: N VU draws` (`region_rule_draws`, the fixture's) at both
+  settings, and a fixture whose drops the camera rule draws must change SCENE at one setting at
+  least. 2. `--region-stats` under the camera rule at the Original preset 1x and Enhanced 1x, at the
+  frame's aspect: the frame line's drawn (strip plus drawn by the camera rule), dropped and rescued
+  counts the same in both presets, and `drawn by the camera rule N` (`camera_drawn_tris`) as the
+  list line declares (at least 1 on every fixture: the facing floor and card). A fixture no setting
+  checked fails; no device: SKIP (77). TIMEOUT 3600 (`rd_region_camera_ab`).
 - `rd_sideband_ab.cmake` (issue 29; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-region-rule), step 7):
   under the PS2's region rule (`ICO_RD_REGION_RULE=ps2` on both replays: the side bands are its),
   the region rule's side bands against the PS2's drop on the committed fixtures of
   `port/render/test/fixtures/lists/wide.txt` (the list `rd_region_camera_ab` reads). Every fixture
   at its own aspect, Original 1x and Enhanced 2x: `rd_replay_tool --pass-dump` with
-  `ICO_RD_VU_BESIDE=0` (every VU draw keeps the PS2's drop) and without (with `--stats`), then
+  `ICO_RD_VU_BESIDE=0` (every VU draw keeps the PS2's drop) and without (with `--stats`), both
+  with `--nop` of the draws that sample a render target (`tools/region_camera_report.py
+  --feedback-nops`, as `rd_region_camera_ab`'s `--feedback-off`: on `fx-drops-189` the composites
+  of lists 3, 7 and 10 carried the side columns' change one level into the band's two edge
+  columns, a reach the PS2's composites have as well; the side bands' rule is exact on SCENE's
+  geometry), then
   `tools/cmp_dirs_band.py A B --gs-width W --band-files SCENE.png --fog-from-a`, W the replay's
   `frame W GS wide`: SCENE's centre 512 GS pixels (512 x scale texels) identical byte for byte, the
   side columns reported (changed pixels, largest channel difference, bounding box), and every side
   pixel B changes one A left at its fog colour (A's most common side-column colour); the other
   targets are reported, not held (the post effects read across the band's edge). At 4:3 the band is
   the frame, so the whole SCENE must be identical. The path ran: the side bands' replay's `side
-  bands: N draws with cards` (`side_band_card_draws`: counted only for a draw the side bands' mode
-  holds) as the list line declares, at least 1 on the wide fixtures and 0 on the 4:3 one (the mode
-  is off where the picture is the frame). A fixture no setting checked fails; no device: SKIP (77).
-  TIMEOUT 3600; serial like `rd_region_stats` (`rd_sideband_ab`). No committed fixture, and none of
-  the game's frames the old list named, has a triangle the side bands draw (`--region-stats`'s
-  `beside 0` on all of them), so the compare holds the pictures the same with the mode on; a drop
-  drawn beside the picture is not exercised.
+  bands: N draws with cards` (`side_band_card_draws`) as the list line declares (at least 1 on the
+  wide fixtures, 0 at 4:3, where the mode is off); `--region-stats` under the PS2's rule (CPU only,
+  `--no-device`) shows the drops (`region_drops`) and the triangles drawn beside the picture
+  (`beside_tris`: at least 1 on the wide fixtures, the floor facing the eye; 0 at 4:3), and a
+  fixture with triangles beside the picture must change SCENE's side columns at one setting at
+  least. A fixture no setting checked fails; no device: SKIP (77). TIMEOUT 3600; serial like
+  `rd_region_stats` (`rd_sideband_ab`).
 - `rd_sideband_cards.cmake` (issue 189; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-region-rule), step
-  7): the reporter's frame near stage 32's exit (machine-local,
-  `/primary/dev/ico-dumps/189/frame-20261104-120509-v130039.rddump`, GS 624x448 at 16:10), whose
-  only triangles the region rule drops are three of the mist quads' (`wf_smoke1`, draws 5:11 and
-  5:22), cards. At Original 4:3, Enhanced 4:3 2x, Enhanced 16:10 1x and the reporter's settings
-  (Enhanced 16:10 at 1920x1200, full height, Full pixel): `rd_replay_tool --pass-dump` with
-  `ICO_RD_VU_BESIDE=0` and with the side bands, every target and the present byte for byte the same
-  (a card keeps the drop beside the picture; with the cards drawn beside it, the mist there changes
-  SCENE, AA0, DISPLAY and the present even at 4:3, since the dump's frame stays 624 GS pixels wide
-  there and the softening's work buffer reads across the picture's edge); `--stats`'s `side bands: N
-  draws with cards` at least 1; `--region-stats`'s frame line `drop 3 (behind-eye 0, out-of-box 0,
-  card 3; ...)` and `beside 0 (behind-eye 0, out-of-box 0, card 0)`; and on the two 16:10 presents
-  `tools/band_seam.py` (the mean luminance step across each edge of the picture, outside less
-  inside, the edge's own column left out) within 1.5 levels (7.3 and 7.2 with the cards drawn
-  beside the picture; 0.1 with the drop kept, the picture's own column-to-column step), all of
-  it under `ICO_RD_REGION_RULE=ps2`. Then the camera rule at each setting: `--pass-dump --stats
-  --region-stats` with `ICO_RD_REGION_RULE=camera`, the frame line `drop 0 (` and `drawn by the
-  camera rule 3 (behind-eye 0, out-of-box 0, card 3)` (the mist's cards face the eye: drawn over the
-  whole frame), `--stats`'s `region rule: the camera's: N VU draws` with N at least 1, and on the
-  16:10 presents `band_seam.py` within 1.5 levels again (the mist inside the picture and beside it
-  alike). No dump or no device: SKIP. TIMEOUT 900
-  (`rd_sideband_cards`).
+  7): the committed fixtures of `port/render/test/fixtures/lists/sideband_cards.txt`:
+  `fx-cards-189`, the reporter's frame near stage 32's exit (GS 624x448 at 16:10) made with
+  `@scene cards`, whose only triangles the region rule drops are its two cards (a band across the
+  picture's middle with every corner beyond the GS window, one facing the eye, one away; the
+  reporter's own frame had three mist-quad cards). The list line gives the counts a run shows:
+  `ps2drops=580 cameradrawn=476 camerakept=104`. At Original 4:3, Enhanced 4:3 2x, Enhanced 16:10
+  1x and the reporter's settings (Enhanced 16:10 at 1920x1200, full height, Full pixel):
+  `rd_replay_tool --pass-dump` with `ICO_RD_VU_BESIDE=0` and with the side bands, every target and
+  the present byte for byte the same (a card keeps the drop beside the picture); `--stats`'s `side
+  bands: N draws with cards` at least 1; `--region-stats`'s frame line `drop 580 (behind-eye 0,
+  out-of-box 0, card 580; ...)` and `beside 0 (behind-eye 0, out-of-box 0, card 0)`; and on the two
+  16:10 presents `tools/band_seam.py` (the mean luminance step across each edge of the picture,
+  outside less inside, the edge's own column left out) within 1.5 levels, all of it under
+  `ICO_RD_REGION_RULE=ps2`. Then the camera rule at each setting: `--pass-dump --stats
+  --region-stats` with `ICO_RD_REGION_RULE=camera`, the frame line `drop 104 (behind-eye 0,
+  out-of-box 0, card 104; ...)` and `drawn by the camera rule 476 (behind-eye 0, out-of-box 0, card
+  476)` (the facing card drawn over the whole frame, the other's back faces kept), `--stats`'s
+  `region rule: the camera's: N VU draws` with N at least 1, and on the 16:10 presents
+  `band_seam.py` within 1.5 levels again. No device: SKIP. TIMEOUT 900 (`rd_sideband_cards`).
 - `rd_vumerge_ab_pixel`, `rd_vufuse_ab_pixel` and `rd_vustage_ab_pixel`: the two scripts above and
   `rd_vustage_ab.cmake` on the frames `rd_pixel`
   leaves (fixture `rd_dump`; the list `rd_pixel_vu_dumps.txt` in the build folder):

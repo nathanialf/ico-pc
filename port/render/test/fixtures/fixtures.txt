@@ -191,9 +191,6 @@ fx-123-blended dumps/163/frame-20261106-080033-v3910-blended.rddump rules=skin_t
 # vu_audit_plane_draws with the index compaction on (ICO_RD_VU_COMPACT=1)
 fx-mali-loss dumps/v0117-mali179/loss-20261114-075659-lost.rddump rules=vu_opaque.rules.txt vu_audit_entries>=1 vu_audit_violations=0 vu_audit_lists>=1 vu_audit_plane_draws>=1
 fx-mali-loss-before dumps/v0117-mali179/loss-20261114-075659-before.rddump rules=vu_opaque.rules.txt vu_audit_entries>=1 vu_audit_violations=0 vu_audit_lists>=1 vu_audit_plane_draws>=1
-# the wide frames (FIX-P6b): the phone's one 4:3 frame (2026-11-02, GS 512x448, dump
-# version 14), the side bands' and the camera rule's control: at 4:3 the band is the frame
-fx-wide-6818 dumps/phone/frame-20261102-152033-v6818.zip region_rule_draws>=1
 # issue 106's drained room (FIX-P5b; dump version 12, 688x448 GS): the
 # reporter's three frames, each a puddle's block (344x256 GS with depth) read
 # by the ripples' two screen prims on REPEAT; the corpus's puddle room (dump
@@ -216,3 +213,12 @@ fx-title-0350 build-host-tmp/e2e/run-title-on/dumps/rd-00350.rddump noplanes_fal
 # reads reach the picture.  water_blocks_kept as for the fx-ripple fixtures.
 fx-water-13782 build-host-tmp/corpus/dumps/ripple/frame-20261024-094512-v13782.zip rules=water_place.rules.txt water_blocks_kept>=1
 fx-water-83439 build-host-tmp/corpus/dumps/ripple/frame-20261024-100436-v83439.zip rules=water_place.rules.txt water_blocks_kept>=1
+# the region rule's drops (FIX-P6b round 2): @scene drops makes list 0's first meshes the
+# region rule decides a floor across the eye plane and a card beyond the GS window, each facing
+# the eye and facing away; @scene cards the two cards alone (issue 189's frame)
+fx-drops-6818 dumps/phone/frame-20261102-152033-v6818.zip rules=scene_drops.rules.txt region_rule_draws>=1
+fx-drops-4657 dumps/phone/frame-20261028-173610-v4657.zip rules=scene_drops.rules.txt region_rule_draws>=1
+fx-drops-189 dumps/189/frame-20261104-120509-v130039.rddump rules=scene_drops.rules.txt region_rule_draws>=1
+fx-drops-mali dumps/v0116-mali179/frame-20261112-195947-v17565.zip rules=scene_drops.rules.txt region_rule_draws>=1
+fx-drops-maingate dumps/maingate/frame-20261104-123603-v10827.rddump rules=scene_drops.rules.txt region_rule_draws>=1
+fx-cards-189 dumps/189/frame-20261104-120509-v130039.rddump rules=scene_cards.rules.txt region_rule_draws>=1

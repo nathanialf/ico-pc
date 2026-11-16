@@ -271,6 +271,12 @@ def cmd_run(args, seed):
     if not os.access(tool, os.X_OK):
         print("coverage_check: SKIP: no rd_replay_tool at %s" % tool)
         return EXIT_SKIP
+    if getattr(args, "ctest", False) and not args.corpus and not os.environ.get("ICO_COVERAGE_CORPUS"):
+        # the ctest coverage_corpus is local-only validation: it renders dumps kept outside
+        # the repository, which a test never reads by default (docs/port/TESTING.md)
+        print("coverage_check: SKIP: local-only validation: ICO_COVERAGE_CORPUS names no corpus "
+              "list (0 dumps to render)")
+        return EXIT_SKIP
     corpus = args.corpus or os.environ.get("ICO_COVERAGE_CORPUS") or DEFAULT_CORPUS
     if not os.path.exists(corpus):
         print("coverage_check: SKIP: no corpus (%s)" % corpus)
@@ -285,7 +291,7 @@ def cmd_run(args, seed):
     if args.only:
         have = {p: k for p, k in have.items() if args.only in os.path.basename(p)}
     if not have:
-        print("coverage_check: SKIP: none of the corpus' dumps exists")
+        print("coverage_check: SKIP: none of the corpus' %d dumps exists" % len(entries))
         return EXIT_SKIP
     names = [os.path.basename(p) for p in have]
     if len(set(names)) != len(names):
@@ -432,7 +438,8 @@ def main():
         p.add_argument("--corpus", help="corpus file (default: ICO_COVERAGE_CORPUS, then tools/coverage_corpus.txt)")
         p.add_argument("--state-dir", help="the previous run's pictures (default: ICO_COVERAGE_DIR, then .coverage beside the corpus)")
         p.add_argument("--only", help="only dumps whose file name contains this text")
-        p.add_argument("--ctest", action="store_true", help="accepted for the ctest line; skips (77) as always")
+        p.add_argument("--ctest", action="store_true",
+                       help="the ctest: skip (77) unless --corpus or ICO_COVERAGE_CORPUS names a local list")
 
     common(sub.add_parser("check", help="render, compare with the previous run, roll forward what passed"))
     common(sub.add_parser("seed", help="render and overwrite every baseline"))

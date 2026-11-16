@@ -208,6 +208,51 @@ fixture made before they existed is the same bytes.
   (an occluder's: Z written, opaque, an alpha test the texture's pattern passes: the scene's
   fixtures pair it with `opaque vu`).
 
+A generated cube (24 to 48 GS pixels about its origin) never leaves the region the VU's region test
+holds (GS 0 to 4094 across and down, in front of the eye), so no generated frame has a triangle
+the region rule drops (measured: `--region-stats` drop 0 on every fixture made without the rules
+below), and the tests of what the port draws of those drops (`rd_sideband_ab`, the side bands
+under `ICO_RD_REGION_RULE=ps2`; `rd_region_camera_ab`, the camera rule; `rd_sideband_cards`)
+would never draw one. Two more lines make the drops (`port/render/rd_fixture_make.c` dropSheet has
+the derivation from the region rule's code, `vu1_ref.c` vu1ref_region_draw and
+vu1ref_region_facing):
+
+- `@scene drops`: the first four meshes whose first draw is a non-skinned draw of list 0 that the
+  region rule decides (clip mode region, a prelit, lit or reflecting program: not code 34 or 36)
+  with winding marks (a lit stream, whose marks the expander's normals give; or a prelit one with a
+  facing table, version 15 on, whose bits are generated zero) are generated as drop sheets, by
+  their ordinal: (0) a floor across the eye plane facing the eye, (1) a card facing the eye, (2)
+  the floor facing away, (3) the card facing away. Every strip of a sheet zigzags over its four
+  corners (every triangle a cyclic triple of the quad: all wound the same way), each strip moved
+  by its index so no two strips share a position (no strip joined, so the card test cannot pass
+  one). The corners, read from that draw alone (its placement matrix, the picture its command
+  names, the target's width), at w0 the w of the model's origin, as (x - 2048 w, y - 2048 w, w):
+  the card a band a quarter of the picture's height across its middle whose corners lie at
+  X = -1024 and 5120, beyond the GS window on both sides (every triangle has a corner outside the
+  region and its strip none inside: a card the PS2 drops, kept off the sides by the side bands,
+  drawn by the camera rule when it faces the eye; at the Original preset 4:3 1x the same
+  triangles are out-of-box drops); the floor a plane below the eye from a far edge an eighth of
+  the picture's height below its middle and half its width wide, at w0, to w0 / 2 behind the eye
+  (every triangle has a corner behind the eye: a drop the side bands draw beside the picture on a
+  wider frame and the camera rule draws whole, when it faces the eye). Every triangle holds a far
+  corner inside the picture, so its cut reaches it (a game's strip is often three or four
+  vertices long, so its triangles are the quad's first two); toward the eye the floor widens as
+  1 / w, four half-widths each side at the picture's bottom row, beside the picture there. A sheet facing away keeps the drop under
+  both rules. The model points solve the matrix's x, y and w rows, are rounded to units of 2^e (e
+  keeps the largest under 2^21 units) and checked again (the card's corners in front and outside,
+  the floor's far corners in front at a GS depth the cut keeps and its near ones behind, the
+  facing);
+  a mesh that fails a check keeps its cube and the role goes to the next mesh. No vertex, bound or
+  statistic of the model is read.
+- `@scene cards`: the two cards alone (roles 1 and 3), for a test that holds every picture the
+  same with the side bands on (nothing is drawn beside the picture).
+
+Neither combines with `@lamps place` or `@fans off`. The drop sheets' section (`RD_FX_PLACE_TAG4`,
+"FXP4": per sheet the mesh id, its role, the exponent, the corners and the normal) ends the
+skeleton in place of the placement section: `rd_fixture_tool info` says `N meshes as drop sheets`,
+the maker's line `drop sheets: N (floor F, card C, floor facing away F', card facing away C'), K
+meshes refused`.
+
 A rule that matches no draw fails the make. The fixture keeps the result at the end of its
 skeleton (the placed meshes' ids and centres in lattice steps, the moved prims' payload offsets;
 with `@scene place` each mesh's form, the cube or a sheet and its flat axis, in a section of its
@@ -334,6 +379,7 @@ add a row when a family needs one):
 | `prerotate_turned` | the log's `turned twin: the WxH picture turned N degrees` |
 | `turn_fold_cases`, `turn_fold_turned` | the log's `turn in the blit: self-test passed (N cases`, `picture's box blit drawn turned N degrees` |
 | `bench_variants` | `bench: done; every variant ran: N of M` |
+| `region_drops`, `beside_tris`, `camera_drawn_tris` | `--region-stats`' frame line (`region: frame ...`): `drop N (`, the triangles the rule in force keeps dropped; `beside N (`, those the side bands draw beside the picture (the PS2's rule); `drawn by the camera rule N (`, the PS2's drops the camera rule draws |
 
 The fixtures' declared properties are their manifest line's; `rd_fixtures_check` holds the two
 equal.
@@ -488,7 +534,6 @@ expansion does not change); its manifest line must say the same.
 | `rd_vu_skin_check_ab` | `lists/skin_check_ab.txt` | `fx-vu-3086`, `fx-163-blended`, `fx-123-blended` | `skin_checks_drawn` on every on run, `skin_twins_drawn` at Original and with the attachment read, `skin_twins_own_drawn` there where declared (`fx-123-blended`); every target byte for byte |
 | `rd_vu_bones_ring_ab`, `_prepass` | `lists/bones_ring.txt` | `fx-163-blended`, `fx-123-blended` | `skin_checks_drawn` and `skin_ring_twins_drawn` on every check run (with the pre-pass `skin_twins_drawn`); every target byte for byte |
 | `rd_vu_audit` | `lists/vu_audit.txt` | `fx-mali-loss`, `fx-mali-loss-before` (issue 179's Mali-G52 loss frames of 2026-11-14, made with `vu_opaque.rules.txt`), `fx-mali-frame`, `fx-mali-slow541` | `vu_audit_entries`, `vu_audit_violations=0` on every run, `vu_audit_lists`, `vu_audit_plane_draws` on the compaction's arms |
-| `rd_sideband_ab`, `rd_region_camera_ab` | `lists/wide.txt` (after a name the frame's aspect, the replays' `--aspect`) | `fx-wide-6818` (the PowerVR phone's one 4:3 frame: the control; `side_band_card_draws=0`), `fx-phone-4657` (2.189), `fx-wide-189` (16:10), `fx-mali-frame` (2.37), `fx-maingate` (48:9) (`side_band_card_draws>=1`; all `region_rule_draws>=1`) | `side_band_card_draws` on the side bands' replay at both settings (`rd_sideband_ab`), `region_rule_draws` on the camera rule's replay at both settings (`rd_region_camera_ab`): the modes in force. The generated geometry drops no triangle either rule decides (`--region-stats`: drop 0, beside 0, drawn by the camera rule 0 on every committed fixture), so a drop drawn beside the picture or by the camera rule is not exercised; on the game's frames the old list had none for the side bands and three cards (issue 189) for the camera rule |
 | `rd_replay_tool_still` | `lists/replay_still.txt` | `fx-boot-0200` (`draws>=1` on the line) | `draws` on the run with the re-show on; presents 1 to 3 shown again, every picture byte for byte |
 | `rd_replay_tool_glow_hold` | `lists/glow_hold.txt` (a role a fixture: `still`, `prev`, `move`; `nocull`: `ICO_RD_CULL=off` for that case) | `fx-boot-0200` (`still`: `glow_chains>=1`, `glow_plan=whole`), `fx-adreno-prev`, `fx-adreno` (`prev`, `move`, `nocull`: `glow_chains>=1`, `glow_plan=lamps`) | `glow_chains` and `glow_plan` on each fixture replayed alone at its case's setting; the held and redrawn lines, the pictures as before |
 | `rd_replay_tool_save_blended`, `rd_replay_tool_save_blended_163` | `lists/save_blended.txt`, `lists/save_blended_163.txt` (a role a fixture: `prev`, `cur`) | `fx-gate-prev`, `fx-gate` (`interp_keyed_blended>=1`); `fx-adreno-prev`, `fx-adreno` (`interp_keyed_blended>=1`, `interp_tick_cam_draws>=1`) | on the `--interp` run of SCENE; the saved frame replayed alone, and on the render thread, byte for byte |
@@ -500,3 +545,6 @@ expansion does not change); its manifest line must say the same.
 | `rd_replay_tool_prerotate` | `lists/prerotate.txt` | `fx-phone-4657`, `fx-boot-0200` (`prerotate_turned>=90`) | `prerotate_turned` on every turned run; each turned present the identity's bytes |
 | `rd_turn_fold_ab` | `lists/turn_fold.txt` (`win43`: also at 1024x768) | `fx-lamps-novolume`, `fx-opening-dark`, `fx-opening-sun`, `fx-mali-slow541`, `fx-mali-frame` (cropped: the turn pass kept, `turn_fold_cases=6`), `fx-vu-3086` (`win43`, `turn_fold_turned>=90`) | `turn_fold_cases` on every fold run, `turn_fold_turned` where it folded; every PNG byte for byte |
 | `rd_bench_ab` | `lists/bench.txt` (the variant lines after a bar) | `fx-lamps-novolume`, `fx-opening-sun` (`bench_variants`) | `bench_variants` on the bench run; every variant ran, the picture after the bench the one before |
+| `rd_sideband_ab`, `rd_region_camera_ab` | `lists/wide.txt` (after a name the frame's aspect, the replays' `--aspect`) | `fx-drops-6818` (the PowerVR phone's one 4:3 frame: the control; `side_band_card_draws=0`, `beside_tris=0`), `fx-drops-4657` (2.189), `fx-drops-189` (16:10), `fx-drops-mali` (2.37), `fx-drops-maingate` (48:9) (`side_band_card_draws>=1`, `beside_tris>=1`), all made with `@scene drops` (`region_rule_draws>=1`, `region_drops>=1`, `camera_drawn_tris>=1`) | `side_band_card_draws` on the side bands' replay at both settings, `region_drops` and `beside_tris` on `--region-stats` under the PS2's rule, and SCENE's side columns changed at one setting where `beside_tris` is at least 1 (`rd_sideband_ab`); `region_rule_draws` on the camera rule's replay at both settings, `camera_drawn_tris` on `--region-stats` under the camera rule in both presets, and SCENE changed at one setting inside the mask (`rd_region_camera_ab`) |
+| `rd_sideband_cards` | `lists/sideband_cards.txt` (after a name `ps2drops=N cameradrawn=D camerakept=K`, from a run of the fixture) | `fx-cards-189` (issue 189's frame made with `@scene cards`: its two cards are its only drops) | `side bands: N draws with cards` at least 1, every drop a card's and none beside under the PS2's rule, the facing card drawn and the other kept under the camera rule, at all four settings |
+| `native_frame_gate_a` | `lists/native_frame.txt`, `docs/native_frame_baseline.json` (the release before's pictures of the fixtures: every target at the two gate settings, made by `tools/native_frame_check.py baseline`) | `fx-vu-3086`, `fx-vu-3112`, `fx-vu-1985` (`prepass_vertices>=1`), `fx-boot-0200` (`shadow_volume_draws>=1`) | `prepass_vertices` or `shadow_volume_draws` on one `--stats` replay a fixture at Enhanced 4:3 2x; 144 targets checked |

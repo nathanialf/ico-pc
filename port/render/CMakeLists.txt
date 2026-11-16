@@ -1369,15 +1369,21 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_replay_tool_keys PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                         TIMEOUT 3600)
     # the native frame gates (tools/native_frame_check.py, docs/port/TESTING.md): gate-a
-    # re-renders the dump list ICO_DUMPS names and compares with
-    # docs/native_frame_baseline.json; gate-b checks the aspect sweeps ICO_SWEEPS names.
-    # Both skip (77) without the variable, the dumps, a device or Pillow; the selftest
-    # of the gate-b logic always runs.
+    # (test/native_frame_gate_a.cmake) renders the committed fixtures of
+    # lists/native_frame.txt and compares with docs/native_frame_baseline.json (the
+    # release before's pictures of them); gate-b checks the aspect sweeps ICO_SWEEPS names
+    # (local only: skips (77) without them). The selftest of the gate-b logic always runs.
     if(Python3_FOUND)
         set(ICO_NFC "${CMAKE_SOURCE_DIR}/tools/native_frame_check.py")
         add_test(NAME native_frame_gate_a
-                 COMMAND "${Python3_EXECUTABLE}" -I "${ICO_NFC}" gate-a --ctest
-                         --tool $<TARGET_FILE:rd_replay_tool>)
+                 COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                         "-DPYTHON=${Python3_EXECUTABLE}" "-DNFC=${ICO_NFC}"
+                         "-DMANIFEST=${CMAKE_SOURCE_DIR}/docs/native_frame_baseline.json"
+                         -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool> "-DFIXTURES=${ICO_FIXTURE_DIR}"
+                         "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                         "-DLIST=${ICO_FIXTURE_DIR}/lists/native_frame.txt"
+                         "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/native_frame_gate_a"
+                         -P "${CMAKE_CURRENT_SOURCE_DIR}/test/native_frame_gate_a.cmake")
         add_test(NAME native_frame_gate_b
                  COMMAND "${Python3_EXECUTABLE}" -I "${ICO_NFC}" gate-b --ctest)
         add_test(NAME native_frame_check_selftest
@@ -1385,11 +1391,12 @@ if(ICO_RUN_TESTS)
         set_tests_properties(native_frame_gate_a native_frame_gate_b native_frame_check_selftest
                              PROPERTIES SKIP_RETURN_CODE 77)
         set_tests_properties(native_frame_gate_a PROPERTIES TIMEOUT 3600)
-        # the regression renders (tools/coverage_check.py, tools/coverage_corpus.txt): every
-        # corpus dump at its own aspect, per-mesh draw counts and the pixel change against the
-        # previous run's pictures in tools/.coverage.  Seed the baseline after a build with
-        #   python3 -I tools/coverage_check.py seed --tool <rd_replay_tool>
-        # Skips (77) when the dumps, the tool or Pillow are absent.
+        # the regression renders (tools/coverage_check.py; local only: the corpus list
+        # ICO_COVERAGE_CORPUS names, dumps kept outside the repository): every corpus dump
+        # at its own aspect, per-mesh draw counts and the pixel change against the previous
+        # run's pictures (ICO_COVERAGE_DIR).  Seed the baseline after a build with
+        #   python3 -I tools/coverage_check.py seed --tool <rd_replay_tool> --corpus LIST
+        # Skips (77) without ICO_COVERAGE_CORPUS, the dumps, the tool or Pillow.
         set(ICO_COV "${CMAKE_SOURCE_DIR}/tools/coverage_check.py")
         add_test(NAME coverage_corpus
                  COMMAND "${Python3_EXECUTABLE}" -I "${ICO_COV}" check --ctest
@@ -1398,6 +1405,12 @@ if(ICO_RUN_TESTS)
                  COMMAND "${Python3_EXECUTABLE}" -I "${ICO_COV}" selftest)
         set_tests_properties(coverage_corpus coverage_check_selftest PROPERTIES SKIP_RETURN_CODE 77)
         set_tests_properties(coverage_corpus PROPERTIES TIMEOUT 3600)
+        # local-only validation on dumps kept outside the repository (docs/port/TESTING.md):
+        # the label `local` (ctest -L local runs them; they skip without their inputs)
+        foreach(_t native_frame_gate_b coverage_corpus)
+            get_test_property(${_t} LABELS _labels)
+            set_tests_properties(${_t} PROPERTIES LABELS "${_labels};local")
+        endforeach()
     endif()
     add_test(NAME rd_water COMMAND rd_water_test)
     set_tests_properties(rd_water PROPERTIES SKIP_RETURN_CODE 77)
@@ -1447,6 +1460,10 @@ if(ICO_RUN_TESTS)
     if(ICO_BOOT_DUMP_OLD)
         set_tests_properties(rd_boot_present PROPERTIES ENVIRONMENT "ICO_BOOT_OLD=1")
     endif()
+    # local-only validation (docs/port/TESTING.md): a start-up's dumps kept outside the
+    # repository; the label `local`
+    get_test_property(rd_boot_present LABELS _labels)
+    set_tests_properties(rd_boot_present PROPERTIES LABELS "${_labels};local")
     add_test(NAME rd_png_mem COMMAND rd_png_mem_test "${CMAKE_CURRENT_BINARY_DIR}")
     add_test(NAME texpack_load COMMAND texpack_load_test)
     add_test(NAME texpack_pack_files COMMAND texpack_load_test --pack "${ICO_TEXPACK_DIR}")
@@ -2731,16 +2748,15 @@ if(ICO_RUN_TESTS)
         set_tests_properties(rd_sideband_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
     # rd_sideband_cards (test/rd_sideband_cards.cmake, issue 189,
-    # docs/port/VU1_PROGRAMS.md "The region rule", step 7): the reporter's
-    # frame near stage 32's exit (machine-local, /primary/dev/ico-dumps/189),
-    # whose only dropped triangles are the mist quads' cards, at Original
+    # docs/port/VU1_PROGRAMS.md "The region rule", step 7): the committed
+    # fixtures of lists/sideband_cards.txt (fx-cards-189: the reporter's frame
+    # made with @scene cards, whose only drops are its cards), at Original
     # 4:3, Enhanced 4:3 2x, Enhanced 16:10 and the reporter's settings: every
     # target byte for byte with and without the side bands (a card keeps the
     # drop beside the picture), --stats's "side bands: N draws with cards",
-    # --region-stats's three card drops and nothing beside, and
-    # tools/band_seam.py's picture edges within 1.5 levels on the 16:10
-    # presents (7.3 with the cards drawn beside the picture); SKIP without
-    # the dump or a device
+    # --region-stats's card drops (the list's counts) and nothing beside, the
+    # camera rule drawing the facing card, and tools/band_seam.py's picture
+    # edges within 1.5 levels on the 16:10 presents; SKIP without a device
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/sideband_cards")
     set(_sbc_py "")
     if(Python3_FOUND)
@@ -2748,7 +2764,9 @@ if(ICO_RUN_TESTS)
     endif()
     add_test(NAME rd_sideband_cards
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMP=/primary/dev/ico-dumps/189/frame-20261104-120509-v130039.rddump"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool> "-DFIXTURES=${ICO_FIXTURE_DIR}"
+                     "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/sideband_cards.txt"
                      "-DSEAM=${CMAKE_SOURCE_DIR}/tools/band_seam.py" ${_sbc_py}
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/sideband_cards"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_sideband_cards.cmake")
