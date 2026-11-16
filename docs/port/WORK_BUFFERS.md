@@ -258,6 +258,20 @@ feedback head copies):
   the screen draws into WORK0, WORK1, WORK2, WORK2_PAD or WORK3 in the chain's list) and copy
   WORK3_HELD back into WORK3 in the last one's place: one 256 x 128 copy for 17 passes. The flare's
   draws into SCENE (`cleanUpFB`), the paste, the depth of field and the motion blur run as ever.
+- the mask's no-op keeps its place for SCENE's outer columns ([RENDER_POST.md](RENDER_POST.md),
+  "SCENE's outer columns"): the fog arms their repeat for the frame's first post sprite that
+  samples SCENE, the mask when the chain is drawn, so the paste lands on the repeated columns.
+  `rd__glow_hold` marks the mask's `RDC_NOP` (its `b[6]`) and the list loop's `RDC_NOP` case
+  (`rd__glow_hold_nop`, `rd__scene_border_due`) does the repeat there. The crack fill's walk
+  (`rd__crack_fill_at`) takes that `RDC_NOP` as the mask it was (`rd__glow_hold_mask`), so a fill
+  not yet placed lands before it, as before the mask: an `RDC_NOP` is a state command to the fill's
+  placement, which would hold the fill to the next command, after the repeat, and fill the
+  repeated columns by their own depth (issue 102's v4251: one texel, one level). Before, a held present
+  repeated them at the next sprite that samples SCENE (after the paste: column 2 with the glow
+  over columns 0 and 1) or, in the measured moving pair, not at all (the game's own columns left),
+  on every frame wider than 512 GS pixels: SCENE's texel columns 0-3 and W-4 .. W-1 at 2x differed
+  from the chain drawn by up to 10 levels on a still tick (issue 102's v4251) and up to 121 in
+  motion (the owner's gate v97707), outside the picture the present shows on those frames.
 
 The later presents' glow is the tick's first present's: the same bytes on a still tick (the chain is
 a function of the frame), and during a pan the halo half a tick's pan behind the scene, near the
