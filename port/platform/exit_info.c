@@ -36,8 +36,6 @@ static const char *const s_reason_name[EXIT_INFO_REASONS] = {
     "REASON_FREEZER",
     "REASON_PACKAGE_STATE_CHANGE",
     "REASON_PACKAGE_UPDATED",
-    "REASON_MEMORY_LIMITER",
-    "REASON_ANOMALY",
 };
 
 /* the plain words, by value (SIGNALED and EXIT_SELF take their status) */
@@ -59,14 +57,12 @@ static const char *const s_reason_words[EXIT_INFO_REASONS] = {
     "Android ended it while it was frozen in the background",
     "it was ended because the app was turned off or changed",
     "it was ended because the app was updated",
-    "Android ended it for going over the system's memory limit",
-    "Android ended it for breaking one of the system's resource rules",
 };
 
 const char *exit_info_reason_name(int reason)
 {
     return reason >= 0 && reason < EXIT_INFO_REASONS ? s_reason_name[reason]
-                                                     : "a reason newer than this build";
+                                                     : "a reason not known to this program";
 }
 
 static const char *signal_name(int sig)
@@ -105,7 +101,8 @@ void exit_info_reason_words(int reason, int status, int lmk, char *out, size_t s
     } else if (reason >= 0 && reason < EXIT_INFO_REASONS) {
         snprintf(out, size, "%s", s_reason_words[reason]);
     } else {
-        snprintf(out, size, "Android ended it for reason %d (newer than this build)", reason);
+        snprintf(out, size, "Android ended it for reason %d (a reason not known to this program)",
+                 reason);
     }
 }
 

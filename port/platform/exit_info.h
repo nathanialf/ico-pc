@@ -71,7 +71,8 @@
 /* one record's line in exit-info.txt and the log, with its NUL */
 #define EXIT_INFO_LINE_MAX 900
 
-/* ApplicationExitInfo's reasons (developer.android.com, ApplicationExitInfo) */
+/* ApplicationExitInfo's reasons, as the public SDK's android.jar defines
+   them (android-37.0: 0-16); any other number is printed as its number */
 enum {
     EXIT_INFO_REASON_UNKNOWN = 0,
     EXIT_INFO_REASON_EXIT_SELF = 1,
@@ -90,8 +91,6 @@ enum {
     EXIT_INFO_REASON_FREEZER = 14,
     EXIT_INFO_REASON_PACKAGE_STATE_CHANGE = 15,
     EXIT_INFO_REASON_PACKAGE_UPDATED = 16,
-    EXIT_INFO_REASON_MEMORY_LIMITER = 17,
-    EXIT_INFO_REASON_ANOMALY = 18,
     EXIT_INFO_REASONS
 };
 
@@ -147,7 +146,7 @@ typedef struct ExitInfoActivity {
 
 /* --- The pure part (tested on every platform) ------------------------------ */
 
-/* "REASON_LOW_MEMORY", or "a reason newer than this build" */
+/* "REASON_LOW_MEMORY", or "a reason not known to this program" */
 const char *exit_info_reason_name(int reason);
 /* the reason in plain words a player can read ("Android ended it because
    the device was low on memory"); status for a signal or an exit code,

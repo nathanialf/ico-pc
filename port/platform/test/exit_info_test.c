@@ -4,7 +4,7 @@
  * How the previous run ended (exit_info.h, issue 215):
  *   reasons  every ApplicationExitInfo reason's constant name and words, a
  *            signal with and without the device's low-memory report, an
- *            exit code, a reason newer than the build, the importances;
+ *            exit code, a number outside the SDK's 0-16, the importances;
  *   parse    the record text: the header lines, a trace, ten new records
  *            (the newest eight kept, newest first), records not newer than
  *            the last seen, malformed lines, Android before 11, a failed
@@ -166,8 +166,6 @@ static void reasons(void)
         "REASON_FREEZER",
         "REASON_PACKAGE_STATE_CHANGE",
         "REASON_PACKAGE_UPDATED",
-        "REASON_MEMORY_LIMITER",
-        "REASON_ANOMALY",
     };
     char w[256];
     for (int r = 0; r < EXIT_INFO_REASONS; r++) {
@@ -176,8 +174,8 @@ static void reasons(void)
         exit_info_reason_words(r, 0, 1, w, sizeof w);
         CHECK(w[0] != '\0');
     }
-    CHECK(text_is(exit_info_reason_name(EXIT_INFO_REASONS), "a reason newer than this build"));
-    CHECK(text_is(exit_info_reason_name(-1), "a reason newer than this build"));
+    CHECK(text_is(exit_info_reason_name(EXIT_INFO_REASONS), "a reason not known to this program"));
+    CHECK(text_is(exit_info_reason_name(-1), "a reason not known to this program"));
     exit_info_reason_words(EXIT_INFO_REASON_LOW_MEMORY, 0, 1, w, sizeof w);
     CHECK(text_is(w, "Android ended it because the device was low on memory"));
     exit_info_reason_words(EXIT_INFO_REASON_CRASH_NATIVE, 0, 1, w, sizeof w);
@@ -198,8 +196,10 @@ static void reasons(void)
     CHECK(text_is(w, "it was killed (signal 3)"));
     exit_info_reason_words(EXIT_INFO_REASON_EXIT_SELF, 3, 1, w, sizeof w);
     CHECK(text_is(w, "it closed itself (exit code 3)"));
+    exit_info_reason_words(17, 0, 1, w, sizeof w);
+    CHECK(text_is(w, "Android ended it for reason 17 (a reason not known to this program)"));
     exit_info_reason_words(42, 0, 1, w, sizeof w);
-    CHECK(text_is(w, "Android ended it for reason 42 (newer than this build)"));
+    CHECK(text_is(w, "Android ended it for reason 42 (a reason not known to this program)"));
     CHECK(text_is(exit_info_importance_words(100), "in front"));
     CHECK(text_is(exit_info_importance_words(200), "visible behind another window"));
     CHECK(text_is(exit_info_importance_words(325), "in front with the screen off"));

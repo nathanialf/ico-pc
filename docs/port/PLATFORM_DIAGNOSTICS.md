@@ -878,7 +878,7 @@ file's loss line); then Android's exit record whose pid is `last-run.txt`'s, in 
 responding (Android's "not responding")`, `it was closed from the recent apps list or with Force
 stop (or updated, before Android 14)`, `it was killed (signal 9, SIGKILL); this device does not
 report low-memory kills as such, so it may have been one`, ... one for each of
-`ApplicationExitInfo`'s 19 reasons); then the files alone (`without a word: no crash, device loss,
+`ApplicationExitInfo`'s 17 reasons in the public SDK, 0-16; another number is printed as its number, `a reason not known to this program`); then the files alone (`without a word: no crash, device loss,
 watchdog or clean end was written`, `without a word inside the start-up (its activity file was
 left; no last-run.txt)`, or `unknown: no last-run.txt and no start-up activity file ...`).
 `<Android's part>` is the matched record (`Android's record: REASON_LOW_MEMORY (3), status 9, in
