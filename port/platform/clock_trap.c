@@ -14,6 +14,19 @@ void clock_trap_reset(ClockTrap *c)
     memset(c, 0, sizeof(*c));
 }
 
+void clock_trap_target(ClockTrap *c, double hz)
+{
+    c->targetHz = hz > 0.0 ? hz : 0.0;
+}
+
+bool clock_trap_judged(const ClockTrapSecond *s, bool whole)
+{
+    if (s->targetHz > 0.0) {
+        return whole && s->pictures > 0u;
+    }
+    return s->frames >= CLOCK_TRAP_MIN_FRAMES;
+}
+
 bool clock_trap_one_a_tick(const ClockTrapSecond *s)
 {
     return s->asMade && s->frames >= CLOCK_TRAP_MIN_FRAMES &&
@@ -23,18 +36,28 @@ bool clock_trap_one_a_tick(const ClockTrapSecond *s)
 
 bool clock_trap_worse(const ClockTrapSecond *a, const ClockTrapSecond *b)
 {
-    const uint64_t pa = (uint64_t)a->pictures * b->frames, pb = (uint64_t)b->pictures * a->frames;
+    if (a->targetHz > 0.0 && b->targetHz > 0.0) {
+        const double sa = a->pictures / a->targetHz, sb = b->pictures / b->targetHz;
 
-    if (pa != pb) {
-        return pa < pb;
+        if (sa != sb) {
+            return sa < sb;
+        }
+    } else {
+        const uint64_t pa = (uint64_t)a->pictures * b->frames,
+                       pb = (uint64_t)b->pictures * a->frames;
+
+        if (pa != pb) {
+            return pa < pb;
+        }
     }
     const double ca = a->cpuN ? a->cpuMs / a->cpuN : 0.0, cb = b->cpuN ? b->cpuMs / b->cpuN : 0.0;
 
     return ca > cb;
 }
 
-/* the open second closed: judged into the block, the one-a-tick rule */
-static unsigned close_second(ClockTrap *c, ClockTrapSecond *closed)
+/* the open second closed (whole: by an event within the gap of its
+   start): judged into the block, the one-a-tick rule */
+static unsigned close_second(ClockTrap *c, ClockTrapSecond *closed, bool whole)
 {
     unsigned ev = CLOCK_TRAP_EV_CLOSED;
     ClockTrapBlock *b = &c->block;
@@ -45,6 +68,9 @@ static unsigned close_second(ClockTrap *c, ClockTrapSecond *closed)
     }
     if (s->frames >= CLOCK_TRAP_MIN_FRAMES) {
         b->seconds++;
+    }
+    if (clock_trap_judged(s, whole)) {
+        b->judged++;
         if (!b->haveWorst || clock_trap_worse(s, &b->worst)) {
             b->worst = *s;
             b->haveWorst = true;
@@ -72,8 +98,10 @@ static unsigned advance(ClockTrap *c, double tMs, ClockTrapSecond *closed)
     if (tMs < c->cur.t0Ms + 1000.0) {
         return 0;
     }
-    ev = close_second(c, closed);
-    const double next = tMs - c->cur.t0Ms < CLOCK_TRAP_GAP_RESET_MS ? c->cur.t0Ms + 1000.0 : tMs;
+    const bool whole = tMs - c->cur.t0Ms < CLOCK_TRAP_GAP_RESET_MS;
+
+    ev = close_second(c, closed, whole);
+    const double next = whole ? c->cur.t0Ms + 1000.0 : tMs;
 
     memset(&c->cur, 0, sizeof(c->cur));
     c->cur.t0Ms = next;
@@ -86,6 +114,7 @@ unsigned clock_trap_picture(ClockTrap *c, double tMs, uint32_t frame, double cpu
     const unsigned ev = advance(c, tMs, closed);
 
     c->cur.pictures++;
+    c->cur.targetHz = c->targetHz;
     c->block.pictures++;
     if (!c->haveFrame || frame != c->lastFrame) {
         c->cur.frames++;
@@ -339,13 +368,21 @@ int clock_trap_worst_text(const ClockTrapBlock *b, double blockStartMs, const Gp
 
     put(&o, "worst second of the block: ");
     if (!b->haveWorst) {
-        put(&o, "none judged (fewer than %u game frames in every second)", CLOCK_TRAP_MIN_FRAMES);
+        put(&o,
+            "none judged (no whole second with a picture at a known rate, and fewer than %u "
+            "game frames in every second)",
+            CLOCK_TRAP_MIN_FRAMES);
         return o.total;
     }
+    put(&o, "%u pictures for %u game frames (%.2f a tick", w->pictures, w->frames,
+        w->frames ? (double)w->pictures / w->frames : 0.0);
+    if (w->targetHz > 0.0) {
+        put(&o, "; %.0f %% of the %.1f a second in force; %u whole seconds judged",
+            100.0 * w->pictures / w->targetHz, w->targetHz, b->judged);
+    }
     put(&o,
-        "%u pictures for %u game frames (%.2f a tick), from %.1f s into the block; the step "
-        "rule held %u of %u further pictures asked; a picture's CPU ",
-        w->pictures, w->frames, w->frames ? (double)w->pictures / w->frames : 0.0,
+        "), from %.1f s into the block; the step rule held %u of %u further pictures asked; a "
+        "picture's CPU ",
         w->t0Ms > blockStartMs ? (w->t0Ms - blockStartMs) / 1000.0 : 0.0, w->held, w->asks);
     if (w->cpuN) {
         put(&o, "%.1f ms", w->cpuMs / w->cpuN);

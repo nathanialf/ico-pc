@@ -16,6 +16,13 @@
  *            made) at its edges, said at every such second's close;
  *   worst    the block's worst second: fewer pictures a frame, then more
  *            CPU a picture; the first of equals kept;
+ *   target   the worst second judged by presented pictures against the
+ *            rate in force (issue 179's v0.11.7 log, the 20-frame rule's
+ *            "none judged" on a 25 fps disc's dips): a 25 a second trace
+ *            with one second at 12 (the worst, 48 %, which the rule without
+ *            a rate never judges), a 60 a second trace at two a tick with
+ *            one second at 45 (75 %), a second followed by a gap not judged,
+ *            the line word for word;
  *   dips     the cores' clusters from the block's sums, and the dip against
  *            the median of the six blocks before over the owner's log's
  *            cores 2-6 averages from :3048 to :5449: a dip at :4251 (884
@@ -326,6 +333,86 @@ static void test_seconds(void)
     }
 }
 
+/* n pictures in the second from ms, each a new frame (perFrame 1) or two to
+   a frame (perFrame 2), 1000 / n ms apart from +0, each with 10 ms of CPU */
+static void feed_pictures(ClockTrap *c, double ms, unsigned n, unsigned perFrame, uint32_t *frame)
+{
+    ClockTrapSecond closed;
+
+    for (unsigned k = 0; k < n; k++) {
+        if (k % perFrame == 0) {
+            (*frame)++;
+        }
+        (void)clock_trap_picture(c, ms + (1000.0 / n) * k, *frame, 10.0, &closed);
+    }
+}
+
+static void test_target(void)
+{
+    ClockTrap c;
+    ClockTrapBlock b;
+    uint32_t frame = 1000;
+    const double base = 70000.0;
+    char line[512];
+
+    /* a 25 fps disc at Frame rate Original: 25 a second, second 4 at 12 */
+    clock_trap_reset(&c);
+    clock_trap_target(&c, 25.0);
+    for (unsigned s = 0; s < 10u; s++) {
+        feed_pictures(&c, base + 1000.0 * s, s == 4u ? 12u : 25u, 1u, &frame);
+    }
+    clock_trap_block_take(&c, &b);
+    /* seconds 0-8 closed (the tenth open): every one judged, the dip worst;
+       the 20-frame count leaves the dip out */
+    CHECK(b.judged == 9u && b.seconds == 8u && b.oneATick == 0u);
+    CHECK(b.haveWorst && b.worst.pictures == 12u && b.worst.frames == 12u);
+    CHECK(b.worst.t0Ms == base + 4000.0 && b.worst.targetHz == 25.0);
+    (void)clock_trap_worst_text(&b, base, NULL, line, sizeof line);
+    CHECK_STR(line, "worst second of the block: 12 pictures for 12 game frames (1.00 a tick; 48 % "
+                    "of the 25.0 a second in force; 9 whole seconds judged), from 4.0 s into the "
+                    "block; the step rule held 0 of 0 further pictures asked; a picture's CPU 10.0 "
+                    "ms (the block's 10.0); the CPU clocks not sampled here; 0 of 8 seconds at one "
+                    "a tick behind the step rule");
+    /* the same trace without a rate: v0.11.7's rule, the dip never judged */
+    clock_trap_reset(&c);
+    for (unsigned s = 0; s < 10u; s++) {
+        feed_pictures(&c, base + 1000.0 * s, s == 4u ? 12u : 25u, 1u, &frame);
+    }
+    clock_trap_block_take(&c, &b);
+    CHECK(b.judged == 8u && b.seconds == 8u);
+    CHECK(b.haveWorst && b.worst.pictures == 25u && b.worst.t0Ms == base);
+    /* 60 a second on a 60 Hz display at two a tick: second 2 at 45 */
+    clock_trap_reset(&c);
+    clock_trap_target(&c, 60.0);
+    for (unsigned s = 0; s < 4u; s++) {
+        feed_pictures(&c, base + 1000.0 * s, s == 2u ? 45u : 60u, s == 2u ? 1u : 2u, &frame);
+    }
+    clock_trap_block_take(&c, &b);
+    CHECK(b.judged == 3u && b.haveWorst && b.worst.pictures == 45u);
+    CHECK(b.worst.t0Ms == base + 2000.0);
+    /* a second closed after a gap of 2 s or more (the app away) is not
+       judged; the one after it is */
+    clock_trap_reset(&c);
+    clock_trap_target(&c, 25.0);
+    feed_pictures(&c, base, 3u, 1u, &frame);
+    feed_pictures(&c, base + 5000.0, 25u, 1u, &frame);
+    feed_pictures(&c, base + 6000.0, 25u, 1u, &frame);
+    clock_trap_block_take(&c, &b);
+    CHECK(b.judged == 1u && b.haveWorst && b.worst.pictures == 25u);
+    CHECK(b.worst.t0Ms == base + 5000.0);
+    /* worse with a rate: the smaller share, whatever the frames */
+    {
+        ClockTrapSecond x = sec(20, 20, 0, 0, false), y = sec(50, 25, 0, 0, false);
+
+        x.targetHz = 25.0; /* 80 % */
+        y.targetHz = 60.0; /* 83 % */
+        CHECK(clock_trap_worse(&x, &y) && !clock_trap_worse(&y, &x));
+        CHECK(clock_trap_judged(&x, true) && !clock_trap_judged(&x, false));
+        x.pictures = 0;
+        CHECK(!clock_trap_judged(&x, true));
+    }
+}
+
 /* --- the clusters and the dip ----------------------------------------------- */
 
 /* a block of 40 samples a core: cores 0-1, 2-6 and 7 at three top speeds */
@@ -498,8 +585,8 @@ static void test_lines(void)
                      "sampled here; 9 of 9 seconds at one a tick behind the step rule");
         memset(&blk, 0, sizeof(blk));
         (void)clock_trap_worst_text(&blk, 0.0, NULL, b, sizeof b);
-        CHECK_STR(b, "worst second of the block: none judged (fewer than 20 game frames in "
-                     "every second)");
+        CHECK_STR(b, "worst second of the block: none judged (no whole second with a picture "
+                     "at a known rate, and fewer than 20 game frames in every second)");
     }
 }
 
@@ -662,6 +749,7 @@ int main(void)
     test_rate();
     test_rule();
     test_seconds();
+    test_target();
     test_dips();
     test_lines();
     test_due();

@@ -750,3 +750,6 @@ function(_ico_backend_switch_test)
                          LABELS "platform;window")
 endfunction()
 cmake_language(DEFER DIRECTORY "${CMAKE_SOURCE_DIR}" CALL _ico_backend_switch_test)
+
+# what slow pictures and steps are judged against (slow_judge.c, issue 179)
+include(slow_judge.cmake)
