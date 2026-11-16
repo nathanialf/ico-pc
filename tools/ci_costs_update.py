@@ -6,7 +6,7 @@
         [--ci-logs <dir>] [--local-log <log>...] [--assume <test>=<seconds>...] \\
         [--floor S] [--write]
     tools/ci_costs_update.py plan (--build-dir <dir>... | --tests <json>...) \\
-        [--target-min M] [--parallel P]
+        [--target-min M] [--parallel P] [--fixture-tests run|skip|only] [--exclude RE]
     tools/ci_costs_update.py --selftest
 
 `fetch-ci` saves the `tests` and `linux-arm64*` job logs of a finished CI run
@@ -43,8 +43,12 @@ with --ci-logs after the first green CI run that runs them
 (docs/port/TESTING.md, "The CI shards").
 
 `plan` prints, per suite, the tests' total, the shards the workflow gives it
-(the `shards:` of its `tests` matrix lines in .github/workflows/ci.yml), each
-shard's estimated minutes at --parallel P (ci_shard.partition), and the
+(the `shards:` of its `tests` matrix lines in .github/workflows/ci.yml, and
+for linux-arm64 the linux-arm64-fixtures job's), each shard's estimated
+minutes at --parallel P (ci_shard.partition) over the tests the workflow
+gives the suite (its `fixture_tests`, `only` for linux-arm64, without the
+tests ci.yml's ICO_CI_EXCLUDE leaves out, and for linux-arm64 without
+ICO_ARM64_FILTERED's), and the
 fewest shards that keep every shard under --target-min minutes of tests (or,
 when the suite's longest test is longer, the fewest that reach that floor).
 """
@@ -325,14 +329,30 @@ def cmd_update(args):
 
 
 def workflow_shards():
-    """{suite: shards} from the `tests` matrix lines of ci.yml."""
-    out = {}
+    """{suite: (shards, fixture_tests)} from the `tests` matrix lines of
+    ci.yml, the linux-arm64-fixtures job as suite "linux-arm64" with
+    fixture_tests "only", the workflow's ICO_CI_EXCLUDE (the tests left out
+    of CI in every suite; "" when it names none) and ICO_ARM64_FILTERED (the
+    names the gating linux-arm64 jobs leave out)."""
+    out, exclude, filtered, armfx = {}, "", "", False
     with open(os.path.join(REPO, ".github", "workflows", "ci.yml"), encoding="utf-8") as f:
         for line in f:
-            m = re.search(r"\{suite: ([\w-]+),.*shards: (\d+), shard: \d+", line)
+            m = re.search(r"\{suite: ([\w-]+),.*fixture_tests: (\w+), shards: (\d+), shard: \d+", line)
             if m:
-                out[m.group(1)] = int(m.group(2))
-    return out
+                out[m.group(1)] = (int(m.group(3)), m.group(2))
+            m = re.match(r"\s*ICO_CI_EXCLUDE: '([^']*)'", line)
+            if m:
+                exclude = m.group(1)
+            m = re.match(r"\s*ICO_ARM64_FILTERED: '([^']*)'", line)
+            if m:
+                filtered = m.group(1)
+            if re.match(r"\s*linux-arm64-fixtures:", line):
+                armfx = True
+            m = re.match(r"\s*shards: \[(\d+)\]", line)
+            if armfx and m:
+                out["linux-arm64"] = (int(m.group(1)), "only")
+                armfx = False
+    return out, exclude, filtered
 
 
 def plan_suite(tests, costs, n, parallel):
@@ -345,14 +365,23 @@ def plan_suite(tests, costs, n, parallel):
 
 def cmd_plan(args):
     tests = read_all_tests(args.build_dir, args.tests)
-    shards = workflow_shards()
+    shards, exclude, filtered = workflow_shards()
+    if args.exclude is not None:
+        exclude = args.exclude
+    if exclude:
+        print(f"left out of every suite (ICO_CI_EXCLUDE): {exclude}")
     for suite in args.suite or SUITES:
         costs = ci_shard.read_costs(os.path.join(HERE, "ci_costs", suite + ".txt"))
-        mine = [t for t in tests if not (args.fixture_tests == "skip" and ci_shard.reads_fixtures(t["command"]))]
+        n, fixture_tests = shards.get(suite, (None, "run"))
+        if args.fixture_tests:
+            fixture_tests = args.fixture_tests
+        drop = [exclude] + ([filtered] if suite == "linux-arm64" else [])
+        mine = ci_shard.select(tests, exclude=drop, fixture_tests=fixture_tests)
         total = sum(costs.get(t["name"], 0) for t in mine)
         top = max((costs.get(t["name"], 0), t["name"]) for t in mine)
-        n = shards.get(suite)
-        line = f"{suite}: {total:.0f} s ({total / 60 / args.parallel:.1f} min at --parallel {args.parallel}), longest {top[1]} {top[0] / 60:.1f} min"
+        line = (f"{suite} (fixture tests: {fixture_tests}): {len(mine)} tests, {total:.0f} s "
+                f"({total / 60 / args.parallel:.1f} min at --parallel {args.parallel}), "
+                f"longest {top[1]} {top[0] / 60:.1f} min")
         if n:
             times = plan_suite(mine, costs, n, args.parallel)
             line += f"; {n} shards: " + " ".join(f"{t / 60:.1f}" for t in times) + " min"
@@ -455,7 +484,10 @@ def main():
         else:
             p.add_argument("--parallel", type=int, default=4)
             p.add_argument("--target-min", type=float, default=25.0)
-            p.add_argument("--fixture-tests", choices=("run", "skip"), default="run")
+            p.add_argument("--fixture-tests", choices=("run", "skip", "only"),
+                           help="every suite this way (default: each suite's `fixture_tests` in ci.yml; "
+                                "linux-arm64 is the linux-arm64-fixtures job, `only`)")
+            p.add_argument("--exclude", help="the tests left out of CI (default: ci.yml's ICO_CI_EXCLUDE)")
     f = sub.add_parser("fetch-ci")
     f.add_argument("run", help="the CI run's id (gh -R nathanialf/ico-pc run list --workflow ci.yml)")
     f.add_argument("dir")
