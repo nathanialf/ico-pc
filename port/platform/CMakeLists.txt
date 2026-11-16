@@ -13,6 +13,7 @@ target_sources(ico_platform PRIVATE
     core_share.c
     cpu_keep.c
     diag_host.c
+    exit_info.c
     fiber.c
     fps_counter.c
     frame_mailbox.c
@@ -352,6 +353,19 @@ target_compile_options(last_run_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_
 target_link_libraries(last_run_test PRIVATE ico_platform ico_host_fs)
 if(ICO_RUN_TESTS)
     add_test(NAME last_run COMMAND last_run_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
+# How the previous run ended (exit_info.c, issue 215): Android's exit
+# records' text parsed (every reason, a trace, the cap, older and malformed
+# lines), the reasons' words, the verdict's precedence table and its room,
+# the two issue 215 runs, and the start's part through ICO_TEST_EXIT_INFO
+# (the log's lines, exit-info.txt, the seen file, the report's verdict); it
+# writes under the build folder
+add_executable(exit_info_test test/exit_info_test.c)
+target_compile_options(exit_info_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(exit_info_test PRIVATE ico_platform ico_host_fs ico_miniz)
+if(ICO_RUN_TESTS)
+    add_test(NAME exit_info COMMAND exit_info_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
 # F12's zip (dump_zip.c): the dump and the log in one archive, read back

@@ -8,7 +8,9 @@
  * is stored as it is; both read back byte for byte with miniz's reader;
  * ico_report_last_bytes is the zip's size (the log line names it); the
  * logs folder's last-run.txt and last-run-previous.txt (last_run.h, issue
- * 215) go in byte for byte, and a report without them has neither entry.
+ * 215) go in byte for byte, and a report without them has neither entry;
+ * so do exit-info.txt and the newest exit trace (exit_info.h, issue 215),
+ * with the verdict line in report.txt's head.
  * argv[1]: a folder the test may write in (the build folder).
  */
 #include <stdio.h>
@@ -19,6 +21,12 @@
 #include "report.h"
 
 static int fails;
+
+/* exit_info.h's files and verdict, as exit_info_begin leaves them */
+static const char kExitInfo[] = "ico-pc exit info: read at the start of 2026-11-16 20:56:01 UTC\n"
+                                "the previous run ended: it was killed (signal 9, SIGKILL) ...\n";
+static const char kTrace[] = "\x08\x01\x12\x04tomb"; /* a tombstone's protobuf bytes */
+static const char kVerdict[] = "the previous run ended: it was killed (signal 9, SIGKILL) (...)";
 
 #define CHECK(cond)                                                                                \
     do {                                                                                           \
@@ -95,7 +103,13 @@ int main(int argc, char **argv)
         CHECK(put(p, kRun, sizeof kRun - 1) == 0);
         snprintf(p, sizeof p, "%s/last-run-previous.txt", dir);
         CHECK(put(p, kPrev, sizeof kPrev - 1) == 0);
+        /* how the run before ended: exit-info.txt and the newest trace */
+        snprintf(p, sizeof p, "%s/exit-info.txt", dir);
+        CHECK(put(p, kExitInfo, sizeof kExitInfo - 1) == 0);
+        snprintf(p, sizeof p, "%s/exit-trace-1794862215000.pb", dir);
+        CHECK(put(p, kTrace, sizeof kTrace - 1) == 0);
     }
+    ico_report_set_exit_info(kVerdict, "exit-trace-1794862215000.pb");
 
     ico_report_set_paths(dir, dir, dir, NULL);
     memset(&in, 0, sizeof in);
@@ -136,6 +150,28 @@ int main(int argc, char **argv)
         CHECK(entry(&z, "last-run.txt", (const unsigned char *)kRun, sizeof kRun - 1, &st));
         CHECK(entry(&z, "last-run-previous.txt", (const unsigned char *)kPrev, sizeof kPrev - 1,
                     &st));
+        CHECK(entry(&z, "exit-info.txt", (const unsigned char *)kExitInfo, sizeof kExitInfo - 1,
+                    &st));
+        CHECK(entry(&z, "exit-trace-1794862215000.pb", (const unsigned char *)kTrace,
+                    sizeof kTrace - 1, &st));
+    }
+    {
+        /* the verdict in report.txt's head, after the memory line */
+        size_t got = 0;
+        char *txt = mz_zip_reader_extract_file_to_heap(&z, "report.txt", &got, 0);
+        CHECK(txt != NULL);
+        if (txt != NULL) {
+            char *t = malloc(got + 1);
+            if (t != NULL) {
+                memcpy(t, txt, got);
+                t[got] = '\0';
+                const char *mem = strstr(t, "\nmemory: ");
+                const char *ver = strstr(t, "\nthe previous run ended: it was killed (signal 9");
+                CHECK(mem != NULL && ver != NULL && mem < ver);
+                free(t);
+            }
+            mz_free(txt);
+        }
     }
     mz_zip_reader_end(&z);
     {
@@ -145,7 +181,11 @@ int main(int argc, char **argv)
         (void)ico_remove(p);
         snprintf(p, sizeof p, "%s/last-run-previous.txt", dir);
         (void)ico_remove(p);
+        snprintf(p, sizeof p, "%s/exit-info.txt", dir);
+        (void)ico_remove(p);
+        /* the trace stays on disc: the report takes it only when named */
     }
+    ico_report_set_exit_info("", "");
 
     /* the log's key lines: the picture-health report's line first (issue
        179: a reporter's zip says at its top that the picture came back
@@ -173,6 +213,8 @@ int main(int argc, char **argv)
         CHECK(mz_zip_reader_init_file(&z, zipPath, 0));
         CHECK(mz_zip_reader_locate_file(&z, "last-run.txt", NULL, 0) < 0);
         CHECK(mz_zip_reader_locate_file(&z, "last-run-previous.txt", NULL, 0) < 0);
+        CHECK(mz_zip_reader_locate_file(&z, "exit-info.txt", NULL, 0) < 0);
+        CHECK(mz_zip_reader_locate_file(&z, "exit-trace-1794862215000.pb", NULL, 0) < 0);
         size_t got = 0;
         char *txt = mz_zip_reader_extract_file_to_heap(&z, "report.txt", &got, 0);
         CHECK(txt != NULL);

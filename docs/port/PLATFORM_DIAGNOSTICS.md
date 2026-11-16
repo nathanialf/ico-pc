@@ -860,6 +860,60 @@ read it, the kernel GPU driver's line around it ends with `; the GPU's reset cou
 (<a> before, <b> after)` (`port/platform/gpu_sysfs.c` (`gpu_sysfs_around_text`,
 `gpu_sysfs_resets_note`)). Nothing here changes behaviour. Tests: `last_run`, `gpu_sysfs`, `report`.
 
+### How the previous run ended
+
+At the window's start, before the start-up activity file and `last-run.txt` are read and
+rewritten, one line says how the previous run ended (`port/platform/exit_info.h`, `exit_info.c`,
+issue 215):
+
+```
+ico_pc: the previous run ended: <how> (<Android's part>); it was at <phase>, <s> s after its start at its last write; GPU resets <a> -> <b>; free memory <n> MB at its last write (lowest <l> MB, floor <f> MB)
+```
+
+`<how>` comes from the first of these that holds: our own end mark (`last-run.txt`'s end: `it
+crashed (signal 11)`, `the graphics device was lost`, `the graphics driver stopped responding (a
+GPU hang)`, `the watchdog ended it: <reason>`, `it was closed normally`; or the start-up activity
+file's loss line); then Android's exit record whose pid is `last-run.txt`'s, in plain words
+(`Android ended it because the device was low on memory`, `it crashed in native code`, `it stopped
+responding (Android's "not responding")`, `it was closed from the recent apps list or with Force
+stop (or updated, before Android 14)`, `it was killed (signal 9, SIGKILL); this device does not
+report low-memory kills as such, so it may have been one`, ... one for each of
+`ApplicationExitInfo`'s 19 reasons); then the files alone (`without a word: no crash, device loss,
+watchdog or clean end was written`, `without a word inside the start-up (its activity file was
+left; no last-run.txt)`, or `unknown: no last-run.txt and no start-up activity file ...`).
+`<Android's part>` is the matched record (`Android's record: REASON_LOW_MEMORY (3), status 9, in
+front (importance 100), pss 210 MB, rss 260 MB, at 2026-11-16 20:50:15 UTC, "<description>"`), or
+`no record from Android for pid <n>; <k> other new records`, or why there is none (`the system
+keeps no exit record (Android 11 and later only)` off Android, `Android API <n> keeps no exit
+record (...)` below Android 11, `Android's exit records not read: <why>`). The phase, seconds, GPU
+resets and free memory are `last-run.txt`'s last write; without the file, the record's own summary
+(`last_run.h`'s `setProcessStateSummary` text) or the activity file's note stands for the phase.
+The line is at most `EXIT_INFO_VERDICT_MAX` (1000) bytes, each part in its own room, so it is never
+cut in the log. Nothing changes behaviour by it.
+
+On Android 11 (API 30) and later the records come from
+`ActivityManager.getHistoricalProcessExitReasons` (`IcoActivity.exitRecords`, `ExitRecords.java`,
+called through `port/platform/android/exit_info_android.c` with the limits as arguments): only the
+records newer than the newest one an earlier start reported (`logs/exit-info-seen.txt`: its time
+in ms and the newest trace's name), the newest 8 of them. A record with a trace (an ANR's text;
+from Android 12 a native crash's tombstone, a protobuf) has at most 512 KB of it copied to
+`logs/exit-trace-<time ms>.txt` (`.pb` for a tombstone), for the newest two records that have one;
+only the newest two such files stay. Then:
+
+- `ico_pc: Android's exit records: <n> new since the last read (<t> held in all, <o> older, <b>
+  past the 8 kept, <m> lines not read); low-memory kills reported as such: yes | no (they show as
+  signal 9) | not said` (`ActivityManager.isLowMemoryKillReportSupported`);
+- `ico_pc: Android's exit record <i> of <n>: pid <p>, REASON_<NAME> (<code>): <words>; status <s>;
+  importance <i> (<words>); pss <n> MB, rss <n> MB; at <UTC> (<ms> ms); trace <file or none>;
+  description "<the system's text>"; summary "<the process's summary>"`, one a record;
+- `logs/exit-info.txt`: the verdict, the system's line, the record lines and the newest trace
+  kept, rewritten at every start. A report zip carries it and the newest trace, and `report.txt`
+  carries the verdict after its memory line (`ico_report_set_exit_info`).
+
+Off Android the system keeps no record: the line says so and uses the files alone
+(`ICO_TEST_EXIT_INFO` feeds records to the tests, [TESTING.md](TESTING.md)). Test: `exit_info`,
+`report`.
+
 ### The symbol lines
 
 A crash or watchdog report names, after its raw lines, every offset in the program it printed (the
@@ -916,6 +970,7 @@ the newest file in logs that starts with report-" and name it (`port/platform/di
 | `ico-pc-previous.log` | the run before's |
 | `startup-activity.txt` | when there is one |
 | `last-run.txt`, `last-run-previous.txt` | where this run is and where the run before was, when there are ([the last-run file](#the-last-run-file)) |
+| `exit-info.txt`, `exit-trace-<ms>.txt` or `.pb` | how the run before ended and Android's exit records read at this start; the newest trace Android kept with a record ([how the previous run ended](#how-the-previous-run-ended)) |
 | `config.toml`, `ico-pc.ini` | the settings |
 | `loss-<stamp>.zip` | this run's [loss dump](RENDER.md#the-loss-dump), else the one the previous run left, deflated |
 | `slow-<stamp>.zip` | this run's [slow-scene dumps](ANDROID_DIAGNOSTICS.md#issue-179s-lines-what-each-decides), up to three (the newest three are kept), each stored as it is |
