@@ -72,6 +72,26 @@ static uint32_t rowsFromEnv(uint32_t minRows, uint32_t maxRows)
     return (uint32_t)v;
 }
 
+void rd_set_size_need(uint64_t *recordBytes, uint64_t *arenaBytes)
+{
+    *recordBytes = 0;
+    *arenaBytes = 0;
+    if (!g_rd.hasDevice) {
+        return;
+    }
+    if (g_rd.vuPrepass) {
+        const uint32_t lo = rd__vu_rec_rows_min(), hi = rd__vu_rec_rows_max();
+        const uint32_t need =
+            rd_early_start_rows(rd_interpolation_active(), rd__velocity_on(), lo, hi, ICO_VU_REC_W);
+        if (need > rd__vu_rec_rows()) {
+            *recordBytes = (uint64_t)need * rd__vu_rec_row_bytes();
+        }
+    }
+    if (!rd__mesh_arena_ready()) {
+        *arenaBytes = rd__mesh_arena_chunk_bytes();
+    }
+}
+
 uint32_t rd_vu_record_early_rows(void)
 {
     return s_rows;

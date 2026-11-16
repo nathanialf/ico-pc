@@ -674,6 +674,77 @@ hand-over: the set made before play (resumed after a stop) is what keeps the com
 walk, and the background finisher (next section) where the floor allows. The lazy batch line's
 `N of them in the start-up set` says how many of a walk's compiles the set would have made.
 
+#### Sized by the memory fall
+
+Issue 215 (the Retroid Pocket 6, Adreno 740 on Qualcomm's driver 512.676.53) and issue 123 (the
+Adreno 740 tablet, 512.676.1): on Qualcomm's own driver the device's free memory falls with every
+pipeline made and does not come back during the run (about 24 MB a VU pipeline and 11-19 MB a 2D
+one on the handheld, even from the cache; about 14 MB a VU one and nothing for the 2D ones on the
+tablet). A set that runs to the floor, and a next start that resumes it, leave play below the
+floor on every start. So each start sizes its own set from what it measures (`port/platform/set_size.h`;
+the window's `window_pipe_finish.c` reads the memory and asks; `rd.h` `rd_set_set_size_fn`):
+
+- **Measure.** Before each batch the window reads the free memory (`MemAvailable`, as the floor
+  does). The fall over the batch since the last read, divided by its pipelines, is one sample of
+  the batch's family: 2D (every pipeline without a VU vertex shader) or VU; a batch of both
+  families is not counted. A family's figure is the median of its samples, trusted after 3
+  batches (`SET_SIZE_MIN_BATCHES`: the median of three outvotes one batch another process moved).
+- **Predict.** A family's rest = its pipelines not made yet x its figure, rounded to the MB. The
+  headroom = free memory now - the floor - play's known need. Play's known need is what the
+  renderer allocates for play after the set and before its first 3D picture, not made yet: the VU
+  pre-pass's record at the run's need (`rd_early_start_rows` rows x their bytes over every frame
+  slot, where the pre-pass is on and the record holds fewer rows) and the mesh arena's first chunk
+  (`RD_MESH_CHUNK`, 32 MB, where not made yet) (`rd_vu_rec_early.h` `rd_set_size_need`). The scene
+  and work targets are made before the set at the play size (the self-tests draw on them), so they
+  are already out of the free figure; the textures have no bound in bytes in the code (the
+  texture cache holds up to 1024 entries of any size), so the floor stays their guard, as for the
+  pipelines play makes itself.
+- **Decide.** The family of the next pipeline first, then the other: a family whose rest, added to
+  the rests kept so far, exceeds the headroom stops now; its keys are skipped for the rest of the
+  set and made on first use (a family not trusted yet is measured first; a stopped family stays
+  stopped). A family whose figure is 0 or below costs nothing and is never stopped, so on a
+  device whose free memory does not fall with pipelines nothing changes. When every family with
+  keys left is stopped the set stops at once; a set that went on with one family stopped stops at
+  its end as if at its first skipped key. Either way the rest is made on first use through the
+  lazy path (`rd_pipelines_lazy`: its batches, cache writes and lines), never in the background.
+- **For this start only.** The stop is the set's own, not a low-memory stop: no resume record is
+  kept (`ico_diag_startup_set_resume_part` answers 0; the line says `the next start makes the whole
+  set again`), so the next start measures again from its first pipeline. A start that resumes an
+  earlier low-memory stop measures the same way in the resumed order, and its rule stop clears that
+  record. The floor and the system's signal stay as they are: a family that fits can still meet
+  the floor, which then stops the set and records the place for the next start as before.
+- **Off** without a floor: on every system but Android, with `[dev] pipeline_memory_floor_mb = 0`,
+  or when the free memory cannot be read (the start line says which).
+
+The order of the set is unchanged (2D, then VU, then the careful set's sprite planes builds): the
+first scene's own keys are not known before its walk (a frame's lists hold commands, not keys:
+"Compiling ahead of the walk" above), and the pipeline cache file's contents are opaque to the
+renderer, so a cheap reorder by what play needs first is not available.
+
+The two devices' logs under the rule (every figure from their logs, the decisions from the rule;
+not measured on a device):
+
+- The handheld, a start from its first pipeline (7249 MB free, floor 1915 MB, need 32 MB, batches
+  of 8): after 3 2D batches at 15 MB a pipeline the 2D rest (418 x 15 = 6270 MB) does not fit in
+  4942 MB: 2D stops at pipeline 25; the VU batches are measured next (24 MB a pipeline: 218 x 24 =
+  5232 MB against 4366 MB) and stop at pipeline 358. 48 pipelines made, free about 6300 MB at the
+  set's end, against 1911 MB at the floor. Its first start after the release before's stop resumes
+  at that stop's place (VU first, batches of 4): VU stops after 12, the sprite planes builds (2D)
+  after 3, about 15 made.
+- The tablet (3751 MB, floor 1947 MB, 3x): the 2D head (340) shows no fall and goes on; VU stops
+  after 3 batches (218 x 14 = 3052 MB against about 1512 MB); the sprite planes builds go on. About
+  472 made (24 of them VU), free about 3490 MB at the set's end, against 1942 MB at the floor.
+  About 104 more VU pipelines than before move to first use; its log's VU compiles took
+  0.00-0.01 s from the cache and 0.15-0.23 s for one the cache missed, and play's own first-use
+  batches 0.00-0.15 s a pipeline.
+
+Lines: the start's `the start-up set's size by the device's memory fall: on (...)` or `off (...)`,
+one line at each family's first trusted figure and at each stop, the renderer's count at the set's
+end, the first picture's free memory, and the 10 s line's first-use count
+([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#the-start-up-sets-size)). Tests: `set_size`
+(the decision's table, both devices' starts word for word, no floor, no fall, noise), `diag` (a set
+the rule stopped is not resumed by the next start, which stops at the same place).
+
 ### The background finisher
 
 When the free-memory floor (not the system's signal) stopped the start-up set on another driver

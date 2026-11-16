@@ -39,6 +39,7 @@ target_sources(ico_platform PRIVATE
     pipeline_skip.c
     pipe_resume.c
     present_fallback.c
+    set_size.c
     pump_watch.c
     report.c
     robust_persist.c
@@ -368,6 +369,20 @@ target_compile_options(mem_breakdown_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_
 target_link_libraries(mem_breakdown_test PRIVATE ico_platform ico_host_fs)
 if(ICO_RUN_TESTS)
     add_test(NAME mem_breakdown COMMAND mem_breakdown_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
+# The start-up set sized by the device's own memory fall (set_size.c, issue
+# 215): the median, the decision's table (the issue 215 handheld's and the
+# issue 123 tablet's figures, no fall under the floor, too few batches, a
+# fit, the order of two families, no floor), a whole start of each of the
+# two devices with their lines word for word, a desktop without a floor and
+# a phone without a fall, a noisy batch, a mixed one, an unread one, and
+# every text at its widest within its buffer
+add_executable(set_size_test test/set_size_test.c)
+target_compile_options(set_size_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(set_size_test PRIVATE ico_platform)
+if(ICO_RUN_TESTS)
+    add_test(NAME set_size COMMAND set_size_test)
 endif()
 
 # How the previous run ended (exit_info.c, issue 215): Android's exit
