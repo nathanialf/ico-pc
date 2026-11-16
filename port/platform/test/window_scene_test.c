@@ -466,8 +466,8 @@ int main(void)
         CHECK(!window_slow_scene_due(&t));
         t.waitSumMs = 100.0;
         t.presentSumMs = 20.0;
-        /* each condition alone defeats it */
-        t.dominant = SCENE_PLAY;
+        /* each condition alone defeats it (play is the kept dump's: below) */
+        t.dominant = SCENE_PAUSE;
         CHECK(!window_slow_scene_due(&t));
         t.dominant = SCENE_SCENE;
         t.window = 0;
@@ -523,8 +523,13 @@ int main(void)
         CHECK(!window_slow_scene_due(&t));
         t.spanSumMs = 600.0 + 270.0; /* 75.0 */
         CHECK(window_slow_scene_due(&t));
-        t.count = 2;
+        t.count = 2; /* the third is kept for play while play has had none */
+        CHECK(window_slow_scene_scene_cap(&t) == SLOW_SCENE_DUMPS - 1);
+        CHECK(!window_slow_scene_due(&t));
+        t.playDone = 1; /* play's made: scenes may take the third */
+        CHECK(window_slow_scene_scene_cap(&t) == SLOW_SCENE_DUMPS);
         CHECK(window_slow_scene_due(&t));
+        t.playDone = 0;
         t.count = 3; /* three dumps a run, however heavy */
         CHECK(!window_slow_scene_due(&t));
         t.count = 1;
@@ -597,6 +602,53 @@ int main(void)
 
             CHECK(n < sizeof(c) && strlen(c) == n);
         }
+        /* issue 179's v0.11.7 log: the three dumps spent in the opening.
+           The third is kept for the first slow block of play: an opening of
+           ever heavier scene blocks takes two; play's first slow block takes
+           the third at any work over the bound, whatever the dumps before
+           it (not 1.5 times, not a new stage); a second play block is not
+           due; a play block under the bound is not; scenes after play's
+           take what is left (none here: three made) */
+        t.dominant = SCENE_SCENE;
+        t.count = 0;
+        t.playDone = 0;
+        t.stage = t.lastStage = 42;
+        t.spanSumMs = 600.0;              /* work 48.0 */
+        CHECK(window_slow_scene_due(&t)); /* scene dump 1 */
+        t.count = 1;
+        t.lastWorkMs = 32.0;
+        CHECK(window_slow_scene_due(&t)); /* scene dump 2 */
+        t.count = 2;
+        t.lastWorkMs = 1.0; /* any heavier scene: the third is play's */
+        t.stage = 43;       /* a new stage too */
+        CHECK(!window_slow_scene_due(&t));
+        t.dominant = SCENE_PLAY;
+        t.lastWorkMs = 99.0; /* play's at any work over the bound */
+        t.stage = 43;
+        CHECK(window_slow_scene_due(&t));
+        window_slow_scene_text(b, sizeof(b), &t, 9000, 9.0, 4.5, "slow-y.zip");
+        CHECK(text_is(b, "slow scene: the block's GPU work 48.0 ms a replay (bound 40; display "
+                         "wait 10.0, present 2.0, span 60.0) in play (the dump kept for play): "
+                         "frame 9000 (its vertex work 0.0 thousand against the block's mean 0.0 "
+                         "thousand) written to logs/slow-y.zip (dump 3 of 3 this run); attach it "
+                         "with the log"));
+        t.waitSumMs = 180.0; /* play under the bound: not due */
+        CHECK(!window_slow_scene_due(&t));
+        t.waitSumMs = 100.0;
+        t.playDone = 1; /* play's made: a second play block is not due */
+        t.count = 1;
+        CHECK(!window_slow_scene_due(&t));
+        /* play first: then scenes take up to three (play's counted) */
+        t.dominant = SCENE_SCENE;
+        t.count = 1;
+        t.lastWorkMs = 1000.0; /* play's own block: the first scene dump ignores it */
+        CHECK(window_slow_scene_due(&t));
+        t.count = 3;
+        CHECK(!window_slow_scene_due(&t));
+        t.count = 0;
+        t.playDone = 0;
+        t.stage = t.lastStage = 0;
+        t.lastWorkMs = 0.0;
     }
     /* the swapchain's images */
     window_scene_images_text(b, sizeof(b), 10, 1);

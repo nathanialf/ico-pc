@@ -5932,8 +5932,8 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
                 memcpy(s_out.vu.invView, s_cam.itf, sizeof(s_cam.itf));
             }
         }
-        rd__inames_first(firstOfTick);      /* names counted once a frame */
-        RdStateBlock rs = s_out.startState; /* the state each draw replays under */
+        rd__inames_first(firstOfTick, &s_out); /* names counted once a frame */
+        RdStateBlock rs = s_out.startState;    /* the state each draw replays under */
         for (int l = 0; l < RD_LIST_COUNT; l++) {
             for (uint32_t i = 0; i < s_out.lists[l].count; i++) {
                 RdCmd *c = &s_out.lists[l].cmds[i];

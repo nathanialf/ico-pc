@@ -163,8 +163,8 @@ question it decides:
   `...; the record stored by the vertex shaders into the frame slot's record buffer: no render
   targets, no copies (...)`, or `the record drawn into 3 RGBA32_UINT render targets and copied ...
   (no vertex stores: the device has no vertexPipelineStoresAndAtomics ...)`, with the Vulkan
-  backend's own `no vertexPipelineStoresAndAtomics: the VU record is drawn into render targets and
-  copied` before it (the driver does not offer the feature: the targets stay); the self-test's
+  backend's own `no vertexPipelineStoresAndAtomics: the VU record is not stored by the vertex
+  shaders (...)` before it (the driver does not offer the feature: compute or the targets); the self-test's
   verdict ending `, record stores` (or a line `rd: VU pre-pass: the record stored by the vertex
   shaders failed the self-test (<reason, first texel>) ...` and the verdict ending `, record
   targets, the stores failed the self-test`: the driver stores wrong, the targets were judged
@@ -2202,8 +2202,8 @@ counters in the hot path.
   and issue 123's logs had it armed for the rest of the run (19-46 stamps a picture). While both
   kinds of picture are in a block, its cost is measured from the pictures themselves:
   `window: pass timing's cost: GPU span median 67.4 ms with every pass stamped (37 pictures), 64.1
-  ms with the list stamps only (111 pictures): +3.3 ms (an estimate: different pictures of one
-  block)`.
+  ms with the list stamps only (111 pictures); against the pictures beside each without pass
+  timing: +3.3 ms (the median of 30 pairs)`.
 - **What the device offers** (`port/rhi/vk/vk_device.c` `vkr_offer_line`, once at the device's
   start, read-only queries, nothing enabled):
 
@@ -2351,6 +2351,7 @@ counter is an increment in a hot path, and none of them reads anything from the 
 | Pixel 10 Pro Fold under Uncapped in the cage: two 10 s blocks at exactly one picture a tick, the render thread's CPU and the GPU's work a picture up by half to double, the cores 2-6 clock down, the hint over target either way; the second release candidate's workload notices taken and nothing moved | Do stretches at one picture a tick remain with the threads unpinned? | The attempt ledger's `pins let go at one picture a tick on (...) N times let go (M taken again)`; `window: pins let go: ...` and `window: pins taken again: ...`; `window: pin trace (let go, second k): ...` (pictures a tick, the cores the render and game threads ran on, those cores' clocks, the cores each may run on) against the `pin trace (pinned, at one a tick)` seconds; `window: worst second of the block: ...; the render thread's cores: ...; pins let go ...` (seconds stuck pinned against stuck let go in each block); the ranked line's clock clause ([One picture a tick](#one-picture-a-tick-and-the-worst-second-the-owners-pixel)) |
 | The owner's "slow down on movement of objects like the cage": draws left at their tick's position were 0.1-0.5 % of keyed draws, unnamed; the first release candidate's stair-steppers (`chain4`, `pot`, `taimatsu1`) were still objects the test misjudged | Which objects are drawn at their tick's position, and does any really move every other tick? | `rd: interp names: draws left at their tick's position over 250 frames (...; counted at each frame's first present) ...`: the top five names of each reason and the stair-steppers with their cadence `[moved M of J, alternating A]` (A near M near half of J: a real every-other-tick object) ([by name](#the-draws-left-at-their-ticks-position-by-name)) |
 | Retroid Pocket 6 (issue 215): every run ends with no crash line, device loss or watchdog end | Who ended the run? | The start's `ico_pc: the previous run ended: <how> (<Android's part>); it was at <phase> ...` (Android's own exit record matched by the pid in `last-run.txt`, else our own end mark or the files alone), `ico_pc: Android's exit record <i> of <n>: ...` and `exit-info.txt` in the report ([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#how-the-previous-run-ended)) |
+| Mali-G52 and the Adreno 740 tablet: lines judged against the wrong interval, stalls of no class, the right wall | Their questions | [The issue ledger, continued](PLATFORM_DIAGNOSTICS.md#the-issue-ledger-continued) |
 | Pixel opening: lamps, dark and sun views | What does each block cost, and which cut fired? | `window: compare: ...; GPU ms a picture: ...; glow plans: lamps N, dark N, whole N`, `passes` and `breaks` a picture, and the ledger line's per-cut fired counts |
 
 ### The attempt ledger
@@ -2508,11 +2509,13 @@ poll apart, and the replay's GPU span. How long the present held past that span 
   log thread's last ask.
 - **The classes** (`coincided with:`): a core wait over 100 ms in the last second, memory under
   the floor, memory pressure rising (some avg10 above the reading before), the GPU clock under half
-  its fastest (where readable), the GPU's own sign of a reset, or none of these. Each block,
+  its fastest (where readable), the GPU's own sign of a reset, one piece grew, the GPU slow as a
+  whole ([the pieces](PLATFORM_DIAGNOSTICS.md#issue-179s-judging-lines)), or none of these. Each block,
   beside the attempt ledger: `window: stalls by what coincided: 3 in the block, 0 of them hangs
   (the GPU's own sign of a reset with a stamp unwritten) and 3 other; all 3 by class: a core wait
   over 100 ms 1, memory under the floor 2, memory pressure rising 1, the GPU clock low 0 (not
-  readable), the GPU's own sign of a reset 0, none of these 1`. The hangs are the stalls whose line
+  readable), the GPU's own sign of a reset 0, one piece grew 0, the GPU slow as a whole 0, none of
+  these 1`. The hangs are the stalls whose line
   ends its sign with `(a hang)`: as many as the block's `rd: GPU clock:` stall lines with stamps
   `came back unwritten` (13 in issue 123's log of 2026-11-14, against its tallies' 15 stalls).
 - **The GPU's own sign of a reset** (`rd_perf_clock.h` `rd_perf_reset_sign`, one test for these

@@ -36,6 +36,7 @@
 #include "rd_health.h"
 #include "rd_perf_gap.h"
 #include "rd_perf_hooks.h"
+#include "rd_list_draws.h"
 #include "rd_perf_rare.h"
 #include "rd_shadow_box.h"
 #include "rd_shadow_count.h" /* the count's trial (rd__shadow_count_trial) */
@@ -1813,6 +1814,7 @@ void rd__perf_end(void)
     }
     s_passOn = false;
     rareEnd(slot);
+    rd__list_draws_replay_end(); /* its lists' draws by entry (rd_list_draws.h) */
     s_pending[slot] = *r;
     s_pendingStamps[slot] = s_stamps;
     memcpy(s_pendingOrd[slot], s_ord, s_ordN);

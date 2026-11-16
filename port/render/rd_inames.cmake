@@ -8,7 +8,8 @@ target_sources(ico_render PRIVATE rd_inames.c rd_inames_live.c)
 
 # rd_inames_test: CPU only: the tally by name and reason (a name of 24
 # bytes and more cut, the table full counted), the top five of each reason
-# and the line word for word, a short buffer; the stair test's verdicts (an
+# and the line word for word (an unmatched name's texture scroll beside
+# it), a short buffer; the stair test's verdicts (an
 # object moved every other tick steps at each still tick after a move and
 # alternates from its fourth judged tick, one moved every tick never, one
 # that stops once, a key drawn twice in a tick judged once, a tick skipped

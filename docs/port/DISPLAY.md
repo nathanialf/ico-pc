@@ -445,7 +445,7 @@ only in the replays line's pass-timed replays (the replays line's `GPU` is the m
 field at 14.1 ms, then named `a presented replay`, beside a block mean of 1.44 ms), or `no
 GPU timestamps` where the backend has none, or `GPU not timed yet`;
 [The present allowance](#the-present-allowance)), the longest [replay](ARCHITECTURE.md#terms) and the replay count with how many
-were over a refresh, the slow
+were over their interval (the larger of the refresh and the picture interval in force), the slow
 steps, the frame rate option (with `(held to the display's X Hz)` while a cap above the refresh
 presents once a refresh, [the present gap](#pacing)), the present mode with, on Vulkan, the
 swapchain's images and those the game holds as the block ends (`present mailbox (images: 10, in use
@@ -725,7 +725,8 @@ the slow setting and one at 1x, and the log's start-up lines for the mechanisms 
 
 **The slow replay line**
 (`window: slow replay T ms (replay R, frame F, alpha A, about vsync V): ...`) is logged for a replay
-over the display's refresh, at most `SLOW_REPLAY_LINES` (5) a block: its phases with the fence wait
+over the larger of the display's refresh and the picture interval in force
+([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#issue-179s-judging-lines)), at most `SLOW_REPLAY_LINES` (5) a block: its phases with the fence wait
 inside `wait`, its uploads, pipeline creations, allocations, buffers and textures created and DATE
 snapshots, and its GPU time. When the cap kept the block's longest replay out, its line is written
 at the block's end, before the first stats line, ending `; the block's longest, past its 5 lines`
@@ -733,10 +734,10 @@ at the block's end, before the first stats line, ending `; the block's longest, 
 arrive two replays late, so the vsync is the one the record was drained at
 (`port/platform/window_host.c` (`slow_replay`, `perf_drain`)). A walk over 500 ms also gets the
 renderer's `rd: slow walk` line ([RENDER.md](PIPELINES.md#the-start-up-set)). `[dev] slow_step_ms`
-(default 8, 0 off) logs up to 5 `slow step` lines a block for simulation steps over it, split into
+(default 8, 0 off, scaled by that interval over the refresh) logs up to 5 `slow step` lines a block for simulation steps over it, split into
 the step's parts and the pump's, with the step's own card verdicts next to the game threads' time
 (`slow_step`). After the step's time, the game thread's own CPU time over the same span
-(`window: slow step 64.1 ms (CPU 9.8 ms of it) at vsync ...`; `cpu_place_thread_cpu_ns` read at
+(`window: slow step 64.1 ms (CPU 9.8 ms of it; 54.3 ms off the CPU: the thread waited or was not scheduled) at vsync ...`; `cpu_place_thread_cpu_ns` read at
 the end of one pace and the start of the next, left out where the system has no thread clock): a
 step far longer than its CPU time waited (a present, the render thread, a core), one near it
 computed (issue 179). The game threads' part names where that time went: `game threads 199.3 in 39

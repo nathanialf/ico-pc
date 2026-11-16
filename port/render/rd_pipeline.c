@@ -83,6 +83,7 @@
 #include "rd_hash.h"
 #include "rd_cpu_phase.h"
 #include "rd_device_rows.h" /* rd_device_rows_reason */
+#include "rd_list_draws.h"
 #include "rd_internal.h"
 #include "rd_passring.h"
 #include "rd_paste_spec.h"
@@ -1715,6 +1716,7 @@ static RhiPipeline keepPipeline(const RdPipeKeyInt *k, RhiPipeline p, uint32_t a
     s_hash[at] = (uint16_t)s_used;
     rd__stats_here()->pipelineCreates++;
     rd__passring_pipeline(p.id, k->vs, k->fs, k->dst);
+    rd__list_draws_note(k->fs, k->gs.stencil); /* the list's draws by entry (rd_list_draws.h) */
     return p;
 }
 
@@ -1909,6 +1911,7 @@ RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k)
         const RhiPipeline p = s_cache[s_hash[at] - 1].pipe;
         if (p.id) {
             rd__passring_pipeline(p.id, k->vs, k->fs, k->dst);
+            rd__list_draws_note(k->fs, k->gs.stencil); /* rd_list_draws.h */
         }
         return p;
     }
