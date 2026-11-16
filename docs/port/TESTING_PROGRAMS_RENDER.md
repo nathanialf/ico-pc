@@ -28,8 +28,10 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   `--sweep DISC` generalises it to every stage folder of the disc (`object/sdf/stNN?/model/`, the
   member index as the `rd_mesh` disc walk builds it, numbered in index order, shard q of 8 takes
   the stages numbered q mod 8) at the camera of every line of `tools/sweep_cameras.txt` (stage,
-  dump path; a .rddump or an F12 zip; the dump's view and zoom; a line whose dump is absent is
-  skipped; `builtin:i76` is the i76 camera of st18a) and the 768 steps about each, every 4th pair
+  `camera NAME`, the captured frame's view as 16 numbers and `zoom` and its zoom, read once from
+  the dump's header with nine significant digits, so the test reads nothing from outside the
+  repository; `builtin:i76` is the i76 camera of st18a; a local list may name a dump instead, a
+  .rddump or an F12 zip, whose view and zoom are read and which is skipped when absent) and the 768 steps about each, every 4th pair
   by default (`--sweep-step N`, 1 is the whole sweep), at 16:9 (688 GS pixels wide) and 48:9
   (2048). Per stage and aspect it counts the mechanisms that leave an in-view part or triangle
   undrawn: the box cull (parts a picture between the ticks shows that this tick did not
@@ -278,7 +280,9 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   miss, the box kept), back (hidden again), under a moved matrix (a miss) and after
   `rd__vis_hiz_cache_clear` (`rd_vis_hiz`).
 - `rd_boot_present_test.c`: a saved start-up through the presenter, present by present; needs
-  `ICO_BOOT_DUMP_DIR` (`rd_boot_present`).
+  `ICO_BOOT_DUMP_DIR` (`rd_boot_present`, local-only validation, label `local`: the nine
+  consecutive frames 115 to 123 of a start-up dumped with `dump_every=1`, kept outside the
+  repository; without them it skips saying how many it found).
 - `rd_blend_selftest_test.c` with `rd_blend_selftest.cmake`: the exact blend's start-up self-test
   and the attachment read's Qualcomm rule; the mode left in force, the forest's tint under it, the
   targets without the attachment read where it is off, the self-test again at a new scene size;
@@ -611,58 +615,69 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   into 110 on the 164 frame's) and each fixture's declared `vu_merged_draws` on the plain run
   (`rd_vumerge_mali`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge-without-dual-source-blending)).
   SKIP as `rd_vustage_ab`.
-- `rd_noplanes_ab.cmake`: the dumps of `tools/noplanes_dumps.txt` (the title's and the boot's
-  frames, each drawing one screen-prim triangle key with planes, and a capture drawing none; a line
-  is the dump, `expect=same|fallback:N|report` and the tool's setting arguments) with the sprite
+- `rd_noplanes_ab.cmake`: the fixtures of `port/render/test/fixtures/lists/noplanes.txt`
+  ([TESTING_FIXTURES.md](TESTING_FIXTURES.md): the title's and the boot's frames, each drawing one
+  screen-prim triangle key with planes, and a capture drawing none; a line is the fixture,
+  `expect=same|fallback:N|report`, its `noplanes_fallback` and the tool's setting arguments) with the sprite
   planes builds and under `ICO_RD_NO_SPRITE_PLANES=1` (issue 161's fallback): the second run's line
   that the builds are off, `sprite no-planes 0` in the first; `expect=same` every named target's PNG
   byte for byte and no command through the fallback, `expect=fallback:N` byte for byte with N
   commands through it (the title's and the boot's dumps: 2), `expect=report` at least one command
-  through it and the targets that differ listed (`rd_noplanes_ab`;
+  through it and the targets that differ listed; the path ran: each fixture's declared
+  `noplanes_fallback` on the run without the builds (`rd_noplanes_ab`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#without-the-sprite-planes)). SKIP as `rd_vustage_ab`.
 - `rd_occlusion_tool.cmake`: `rd_replay_tool --occlusion` ([RENDER.md](RENDER_PERF.md#culling)) on the
-  first dump of the machine-local list `tools/occlusion_corpus.txt` that is here, at Original 4:3
+  fixture of `test/fixtures/lists/occlusion_tool.txt` (`fx-scene-boot0200`, cubes behind
+  `@scene place`'s sheets), at Original 4:3
   1x: the line `occlusion: hidden N of M list-0 draws, T of U triangles (index count / 3); hidden
-  commands: S` with M above 0, N at most M, T at most U and S `none` or a `--nop` spec of list 0,
+  commands: S` with M above 0, N above 0 (the path ran) and at most M, T at most U and S `none` or a `--nop` spec of list 0,
   the second line, the settings note, `--occlusion-out` holding S and `--occlusion-csv` its header
   and a line a command; then the plain replay and the replay with `--nop @SPEC`, each `--pass-dump`
   with `--present 640x480` under `ICO_RD_BLEND=fixed`: DISPLAY.png and PRESENT.png byte for byte
-  (`rd_occlusion_tool`). SKIP without the list, a dump of it or a device.
+  (`rd_occlusion_tool`). SKIP without a device.
 - `rd_vu_skin_check_dump.cmake`: `rd_replay_tool --skin-check`
-  ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)) at the tool's default settings: on the machine-local
-  corpus dump `frame-20261007-200706-v3086` (46 skinned commands) every command the replay draws
-  checked, none wrong, the bytes equal and no box sample outside (`rd_vu_skin_check_dump`); on the
-  issue 163 reporter's blended dump (`/primary/dev/ico-dumps/163/`) the same clean
-  (`rd_vu_skin_check_163`), with `ICO_RD_VU_SKIN_SABOTAGE=200` the probe's zero matrix at address
-  200 named with the bytes equal and `reads as: H1, address-dependent`
+  ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)) at the tool's default settings, on committed fixtures
+  ([TESTING_FIXTURES.md](TESTING_FIXTURES.md)): each test names its fixture by the word on its line
+  of `test/fixtures/lists/skin_check.txt` and asserts the path ran (`-DREQUIRE`: the skin check's
+  quantities read from the summary line, as the fixture or its line declares them). The fixtures
+  keep the poses and generate the skinned vertices (half on two bones, which reach address 200 on
+  both reporter frames), so the counts are the fixtures' and the mismatch line names the generated
+  mesh (`m0001`...). On `fx-vu-3086` (46 skinned commands) every command the replay draws checked,
+  none wrong, the bytes equal and no box sample outside (`rd_vu_skin_check_dump`); on issue 163's
+  blended frame (`fx-163-blended`) with `ICO_RD_VU_SKIN_SABOTAGE=200` the probe's zero matrix at
+  address 200 named with the bytes equal and `reads as: H1, address-dependent`
   (`rd_vu_skin_check_163_probe`), with `=200,ring` the bytes differing as the GPU copied them and as
-  the CPU reads them and `reads as: H2, a port race` (`rd_vu_skin_check_163_ring`), and the deep
-  dive's patched copy (its lanes on 200 moved to a zero bone) checked right, the CPU and the GPU
-  reading the same stream (`rd_vu_skin_check_163_patched`); on issue 123's blended dump
-  `frame-20261106-080033-v3910-blended` (copied to the same folder) clean with every twin equal (`rd_vu_skin_check_123`) and with
-  `=200,nan` wrong at address 200, H2, the twins differing and the wrong vertices dropped
-  (`rd_vu_skin_check_123_nan`); the same two under the Turnip reporter's profile on lavapipe (the
-  attachment read, GS state as shader data, the VU pre-pass off), where the twins of the draws
-  whose first pass reads the attachment with Z writes off go through their own pipelines: every twin
-  equal and at least one through the draw's own pipeline (`rd_vu_skin_check_123_attach`), and with
-  `=200,nan` the same with the twins differing and a `twins differ` line
-  (`rd_vu_skin_check_123_nan_attach`; on this dump the three draws on bone 200 are twinned through
-  the box check's pipeline, and each line says why). The summary line ends `twins: T read (O through
-  the draw's own pipeline), D differ (E of them through it); V wrong vertices dropped
-  (non-finite); the ring read: c3 right K (c3 drawn in M), ring twins R read, E differ from B`. Issue
-  123's ladder on the same dump under the plain set with the pre-pass off
-  (`ICO_RD_VU_SET=plain ICO_RD_VU_PREPASS=0`): with `=200` H1 with column 3 right and every twin C
-  equal to B (`rd_vu_skin_check_123_c3`); with `=200,nan` twin C differing from B
-  (`rd_vu_skin_check_123_nan_c`); with `ICO_RD_VU_BONES=ring` clean, the `rd: VU bones: through the
-  ring` start line and `the ring read: healed (0 of T ...)` (`rd_vu_skin_check_123_bones_ring`), and
-  with the NaN too the twins (both ring reads) differing and `not healed`
-  (`rd_vu_skin_check_123_bones_ring_nan`). SKIP without the dump or a device.
+  the CPU reads them and `reads as: H2, a port race` (`rd_vu_skin_check_163_ring`); on issue 123's
+  blended frame (`fx-123-blended`, its blended VU textures clear: `skin_twins.rules.txt`) clean
+  with every twin equal (`rd_vu_skin_check_123`) and with `=200,nan` wrong at address 200, H2, the
+  twins differing and the wrong vertices dropped (`rd_vu_skin_check_123_nan`); the same two under
+  the Turnip reporter's profile on lavapipe (the attachment read, GS state as shader data, the VU
+  pre-pass off), where the twins of the draws whose first pass reads the attachment with Z writes
+  off go through their own pipelines: every twin equal and at least one through the draw's own
+  pipeline (`rd_vu_skin_check_123_attach`), and with `=200,nan` the same with the twins differing
+  and a `twins differ` line (`rd_vu_skin_check_123_nan_attach`; the fixture's clear textures make
+  the blended skinned draws' one pass fail the alpha test and write no Z, so both kinds of twin are
+  drawn, and each line says which). The summary line ends `twins: T read (O through the draw's own
+  pipeline), D differ (E of them through it); V wrong vertices dropped (non-finite); the ring read:
+  c3 right K (c3 drawn in M), ring twins R read, E differ from B`. Issue 123's ladder on the same
+  fixture under the plain set with the pre-pass off (`ICO_RD_VU_SET=plain ICO_RD_VU_PREPASS=0`):
+  with `=200` H1 with column 3 right and every twin C equal to B (`rd_vu_skin_check_123_c3`); with
+  `=200,nan` twin C differing from B (`rd_vu_skin_check_123_nan_c`); with `ICO_RD_VU_BONES=ring`
+  clean, the `rd: VU bones: through the ring` start line and `the ring read: healed (0 of T ...)`
+  (`rd_vu_skin_check_123_bones_ring`), and with the NaN too the twins (both ring reads) differing
+  and `not healed` (`rd_vu_skin_check_123_bones_ring_nan`). Still on the machine-local dumps of
+  `/primary/dev/ico-dumps/163/` (`-DDUMP`): issue 163's blended dump clean
+  (`rd_vu_skin_check_163`) and the deep dive's patched copy (its lanes on 200 moved to a zero bone)
+  checked right, the CPU and the GPU reading the same stream (`rd_vu_skin_check_163_patched`); on
+  `fx-163-blended` the clean line's box clause does not hold (a 1448-vertex draw's box is made from
+  its first 1,024 vertices' batches while the box check draws the whole command). SKIP without the
+  dump or a device.
 - `rd_vu_bones_ring_ab.cmake`: issue 123's ladder, step 1 ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md#the-ladder)):
-  the three dumps of `/primary/dev/ico-dumps/163/` (issue 163's blended dump, its patched copy,
-  issue 123's blended dump of 2026-11-06) through `rd_replay_tool --pass-dump --present 640x480` under the
+  the fixtures of `test/fixtures/lists/bones_ring.txt` (issue 163's blended frame
+  `fx-163-blended`, issue 123's blended frame of 2026-11-06 `fx-123-blended`) through `rd_replay_tool --pass-dump --present 640x480` under the
   plain set with the VU pre-pass off, `ICO_RD_VU_BONES=cbuffer` with the skin check off against
   `=ring` with it off, `cbuffer` with it on for every skinned command (`ICO_RD_VU_SKIN_CHECK=2`:
-  column 3 and twin C drawn, at least one twin C over the dumps) and `ring` with it on, at Original
+  column 3 and twin C drawn, at least one twin C over the fixtures) and `ring` with it on, at Original
   and with the attachment read and GS state as shader data: every PNG byte for byte, each run's
   start line (`rd: VU bones: through VuBoneCB`, `rd: VU bones: through the ring (storage buffer) on
   the skinned entries`) (`rd_vu_bones_ring_ab`). With `-DPREPASS=1` the same with the pre-pass on
@@ -671,12 +686,16 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   the old way through the ring builds, the line `rd: VU pre-pass: the skinned commands are drawn the
   old way, through their entries' ring builds` asked of the ring runs), every PNG byte for byte, at
   least one twin drawn over the check runs (the record draws' twins read the bones through the ring,
-  no C) (`rd_vu_bones_ring_ab_prepass`). SKIP without the dumps or a device.
+  no C) (`rd_vu_bones_ring_ab_prepass`). The path ran, per fixture: on every check run its declared
+  `skin_checks_drawn` and `skin_ring_twins_drawn` (with the pre-pass `skin_twins_drawn`). The
+  patched copy of issue 163's dump is not carried: its fixture would expand to `fx-163-blended`'s
+  bytes (the stream it patched is generated). SKIP without a device.
 - `rd_vu_skin_check_ab.cmake`: the skin check is designed not to change the picture
   ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)); `rd_replay_tool --pass-dump` with it off
   (`ICO_RD_VU_SKIN_CHECK=0`) and on for every skinned command of every replay (`=2`: the probes,
-  the box check inside the scene pass, the checked draw out of the draw merge) on the corpus dump
-  `frame-20261007-200706-v3086` (46 skinned commands) and issue 163's blended dump, at Original
+  the box check inside the scene pass, the checked draw out of the draw merge) on the fixtures of
+  `test/fixtures/lists/skin_check_ab.txt` (`fx-vu-3086`, 46 skinned commands, and issue 163's and
+  issue 123's blended frames), at Original
   presented at 640x480, the same with the attachment read and GS state as shader data
   (`ICO_RD_BLEND=attachment`, `ICO_RD_UBER=on`, the interlock faked off, the VU pre-pass off as on
   a tile-based GPU; the on run must say `GS state as shader data: on`) and at Enhanced 4:3 2x with MSAA 4: every PNG byte for byte, each on
@@ -684,11 +703,13 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   check drawn over all, the twins drawn in every on run (`VU skin check: twins at the end of the
   run: T drawn (O through the draw's own pipeline with its attachment read)`) and O above 0 over the
   attach runs: the twins through the draws' own pipelines with the write mask cleared leave every
-  picture byte for byte; also on issue 123's blended dump (`rd_vu_skin_check_ab`). SKIP
-  without the dumps or a device.
+  picture byte for byte (`rd_vu_skin_check_ab`; on `fx-123-blended` with the twins through the
+  draws' own pipelines). The path ran, per fixture: on every on run its declared `skin_checks_drawn`,
+  `skin_twins_drawn` at Original and with the attachment read, `skin_twins_own_drawn` there where
+  declared. SKIP without a device.
 - `rd_region_stats.cmake`: `rd_replay_tool --region-stats`
-  ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#region-statistics)) on the first two dumps of
-  `tools/occlusion_corpus.txt` that are here, each at Original 4:3 1x and Enhanced 4:3 2x with a
+  ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#region-statistics)) on the fixtures of
+  `test/fixtures/lists/region_stats.txt` (`fx-scene-boot0200`, `fx-scene-4657`), each at Original 4:3 1x and Enhanced 4:3 2x with a
   present: the frame's line (draws and triangles under the rule above 0, the draws drawing nothing a
   `--nop` spec of lists 0-6 or `none`, as many items as it counts, `--region-out` holding it), a
   draw's line and a list's in their shapes; then `--pass-dump` plain and with `--nop @SPEC`, every
@@ -700,63 +721,78 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   parenthesis, the camera rule's group (`, drawn by the camera rule M (behind-eye b, out-of-box x,
   card k)`) and the draw line's closing `; drawn by the camera rule M`, and every step runs under
   each region rule (`ICO_RD_REGION_RULE` ps2 and camera: the camera rule's drawn drops make their
-  draws draw, so each rule's spec is its own). SKIP without the list, a dump of it or a device.
+  draws draw, so each rule's spec is its own). On both fixtures (as on their source frames) no
+  draw draws nothing at these settings, so the `--nop` spec is `none`. SKIP without a device.
 - `rd_region_camera_ab.cmake` ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-camera-rule),
   [DIVERGENCES.md](DIVERGENCES.md) VD-29): the camera rule against the PS2's region rule on the
-  dumps of `tools/sideband_dumps.txt` at their own aspect. 1. `tools/region_camera_report.py` at
-  the Original preset 1x and Enhanced 2x (presented at 1280x960): `rd_replay_tool --pass-dump`
-  under `ICO_RD_REGION_RULE=ps2` with `--region-mask` and under `camera` with `--stats`; every PNG
-  compared; SCENE's differing pixels must all lie in the mask scaled to SCENE and grown by one GS
-  pixel (red the triangles the PS2's rule drops, or draws beside the picture only, that the camera
-  rule draws; green the back faces the card test drew that it drops; blue the sprites out of the
-  box), and with an empty mask every target must be byte for byte the same; the other targets
-  reported with how many of their changed pixels lie in the mask; the report in the build
-  folder's `region_camera_ab/report.md`. 2. `--region-stats` under the camera rule at the Original
-  preset 1x and Enhanced 1x, at the dump's aspect: the frame line's drawn (strip plus drawn by the
-  camera rule), dropped and rescued counts the same in both presets. A missing list or dump, or no
-  device: SKIP (77). TIMEOUT 3600 (`rd_region_camera_ab`). Under the PS2's rule these dumps drop
-  nothing but issue 189's three cards (`--region-stats` at their own aspect, both presets; the
-  phone frames' card test draws 0 to 2 triangles a frame).
+  committed fixtures of `port/render/test/fixtures/lists/wide.txt` (a fixture and its frame's
+  aspect a line, all made with `@scene drops`: `fx-drops-6818` the PowerVR phone's one 4:3 frame,
+  the control; `fx-drops-4657` 2.189; `fx-drops-189` 16:10; `fx-drops-mali` 2.37, the Mali-G52
+  frame at full height; `fx-drops-maingate` 48:9), at their own aspect. 1.
+  `tools/region_camera_report.py` at the Original preset 1x and Enhanced 2x (presented at
+  1280x960): `rd_replay_tool --pass-dump` under `ICO_RD_REGION_RULE=ps2` with `--region-mask` and
+  under `camera` with `--stats`, both with `--feedback-off` (the draws that sample a render target
+  left out, from `rd_replay_tool --list --no-device`: the shadows' pyramid and its composite, the
+  glow's chain, the softening, the fog's depth read; they resample SCENE at another scale and move
+  pixels up to their reach outside a drawn triangle: on `fx-drops-4657` Original 1x the shadow
+  composite moved 108 pixels up to 8 GS rows above the card, 0 without it; the VU draws are never
+  left out); every PNG compared; SCENE's differing pixels must all lie in the
+  mask scaled to SCENE and grown by one GS pixel (red the triangles the PS2's rule drops, or draws
+  beside the picture only, that the camera rule draws; green the back faces the card test drew that
+  it drops; blue the sprites out of the box), and with an empty mask every target must be byte for
+  byte the same; the other targets reported with how many of their changed pixels lie in the mask;
+  the report in the build folder's `region_camera_ab/report.md`. The path ran: each camera rule
+  replay's `region rule: the camera's: N VU draws` (`region_rule_draws`, the fixture's) at both
+  settings, and a fixture whose drops the camera rule draws must change SCENE at one setting at
+  least. 2. `--region-stats` under the camera rule at the Original preset 1x and Enhanced 1x, at the
+  frame's aspect: the frame line's drawn (strip plus drawn by the camera rule), dropped and rescued
+  counts the same in both presets, and `drawn by the camera rule N` (`camera_drawn_tris`) as the
+  list line declares (at least 1 on every fixture: the facing floor and card). A fixture no setting
+  checked fails; no device: SKIP (77). TIMEOUT 3600 (`rd_region_camera_ab`).
 - `rd_sideband_ab.cmake` (issue 29; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-region-rule), step 7):
   under the PS2's region rule (`ICO_RD_REGION_RULE=ps2` on both replays: the side bands are its),
-  the region rule's side bands against the PS2's drop on the wide dumps of the machine-local list
-  `tools/sideband_dumps.txt` (a path and the dump's own aspect a line: the PowerVR phone's 2.189
-  frames, issue 179's 16:9 frame, issue 182's 16:10 frame, issue 189's 16:10 frame, the phone's
-  one 4:3 frame as the control, and the issue-29 48:9 and 16:9 captures when they arrive under
-  `/primary/dev/ico-dumps/29/`). Every dump at its own aspect, Original 1x and Enhanced 2x:
-  `rd_replay_tool --pass-dump` with `ICO_RD_VU_BESIDE=0` (every VU draw keeps the PS2's drop) and
-  without, then `tools/cmp_dirs_band.py A B --gs-width W --band-files SCENE.png --fog-from-a`, W the
-  replay's `frame W GS wide`: SCENE's centre 512 GS pixels (512 x scale texels) identical byte for
-  byte, the side columns reported (changed pixels, largest channel difference, bounding box), and
-  every side pixel B changes one A left at its fog colour (A's most common side-column colour); the
-  other targets are reported, not held (the post effects read across the band's edge). At 4:3 the
-  band is the frame, so the whole SCENE must be identical. A missing list or dump is named and
-  skipped; none here, or no device: SKIP (77). TIMEOUT 3600; serial like `rd_region_stats`
-  (`rd_sideband_ab`). The dumps from before dump version 15 carry no EE facing table, so their
-  prelit meshes have no side bands: only their lit and skinned drops can change there; the fresh
-  captures carry the table.
+  the region rule's side bands against the PS2's drop on the committed fixtures of
+  `port/render/test/fixtures/lists/wide.txt` (the list `rd_region_camera_ab` reads). Every fixture
+  at its own aspect, Original 1x and Enhanced 2x: `rd_replay_tool --pass-dump` with
+  `ICO_RD_VU_BESIDE=0` (every VU draw keeps the PS2's drop) and without (with `--stats`), both
+  with `--nop` of the draws that sample a render target (`tools/region_camera_report.py
+  --feedback-nops`, as `rd_region_camera_ab`'s `--feedback-off`: on `fx-drops-189` the composites
+  of lists 3, 7 and 10 carried the side columns' change one level into the band's two edge
+  columns, a reach the PS2's composites have as well; the side bands' rule is exact on SCENE's
+  geometry), then
+  `tools/cmp_dirs_band.py A B --gs-width W --band-files SCENE.png --fog-from-a`, W the replay's
+  `frame W GS wide`: SCENE's centre 512 GS pixels (512 x scale texels) identical byte for byte, the
+  side columns reported (changed pixels, largest channel difference, bounding box), and every side
+  pixel B changes one A left at its fog colour (A's most common side-column colour); the other
+  targets are reported, not held (the post effects read across the band's edge). At 4:3 the band is
+  the frame, so the whole SCENE must be identical. The path ran: the side bands' replay's `side
+  bands: N draws with cards` (`side_band_card_draws`) as the list line declares (at least 1 on the
+  wide fixtures, 0 at 4:3, where the mode is off); `--region-stats` under the PS2's rule (CPU only,
+  `--no-device`) shows the drops (`region_drops`) and the triangles drawn beside the picture
+  (`beside_tris`: at least 1 on the wide fixtures, the floor facing the eye; 0 at 4:3), and a
+  fixture with triangles beside the picture must change SCENE's side columns at one setting at
+  least. A fixture no setting checked fails; no device: SKIP (77). TIMEOUT 3600; serial like
+  `rd_region_stats` (`rd_sideband_ab`).
 - `rd_sideband_cards.cmake` (issue 189; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-region-rule), step
-  7): the reporter's frame near stage 32's exit (machine-local,
-  `/primary/dev/ico-dumps/189/frame-20261104-120509-v130039.rddump`, GS 624x448 at 16:10), whose
-  only triangles the region rule drops are three of the mist quads' (`wf_smoke1`, draws 5:11 and
-  5:22), cards. At Original 4:3, Enhanced 4:3 2x, Enhanced 16:10 1x and the reporter's settings
-  (Enhanced 16:10 at 1920x1200, full height, Full pixel): `rd_replay_tool --pass-dump` with
-  `ICO_RD_VU_BESIDE=0` and with the side bands, every target and the present byte for byte the same
-  (a card keeps the drop beside the picture; with the cards drawn beside it, the mist there changes
-  SCENE, AA0, DISPLAY and the present even at 4:3, since the dump's frame stays 624 GS pixels wide
-  there and the softening's work buffer reads across the picture's edge); `--stats`'s `side bands: N
-  draws with cards` at least 1; `--region-stats`'s frame line `drop 3 (behind-eye 0, out-of-box 0,
-  card 3; ...)` and `beside 0 (behind-eye 0, out-of-box 0, card 0)`; and on the two 16:10 presents
-  `tools/band_seam.py` (the mean luminance step across each edge of the picture, outside less
-  inside, the edge's own column left out) within 1.5 levels (7.3 and 7.2 with the cards drawn
-  beside the picture; 0.1 with the drop kept, the picture's own column-to-column step), all of
-  it under `ICO_RD_REGION_RULE=ps2`. Then the camera rule at each setting: `--pass-dump --stats
-  --region-stats` with `ICO_RD_REGION_RULE=camera`, the frame line `drop 0 (` and `drawn by the
-  camera rule 3 (behind-eye 0, out-of-box 0, card 3)` (the mist's cards face the eye: drawn over the
-  whole frame), `--stats`'s `region rule: the camera's: N VU draws` with N at least 1, and on the
-  16:10 presents `band_seam.py` within 1.5 levels again (the mist inside the picture and beside it
-  alike). No dump or no device: SKIP. TIMEOUT 900
-  (`rd_sideband_cards`).
+  7): the committed fixtures of `port/render/test/fixtures/lists/sideband_cards.txt`:
+  `fx-cards-189`, the reporter's frame near stage 32's exit (GS 624x448 at 16:10) made with
+  `@scene cards`, whose only triangles the region rule drops are its two cards (a band across the
+  picture's middle with every corner beyond the GS window, one facing the eye, one away; the
+  reporter's own frame had three mist-quad cards). The list line gives the counts a run shows:
+  `ps2drops=580 cameradrawn=476 camerakept=104`. At Original 4:3, Enhanced 4:3 2x, Enhanced 16:10
+  1x and the reporter's settings (Enhanced 16:10 at 1920x1200, full height, Full pixel):
+  `rd_replay_tool --pass-dump` with `ICO_RD_VU_BESIDE=0` and with the side bands, every target and
+  the present byte for byte the same (a card keeps the drop beside the picture); `--stats`'s `side
+  bands: N draws with cards` at least 1; `--region-stats`'s frame line `drop 580 (behind-eye 0,
+  out-of-box 0, card 580; ...)` and `beside 0 (behind-eye 0, out-of-box 0, card 0)`; and on the two
+  16:10 presents `tools/band_seam.py` (the mean luminance step across each edge of the picture,
+  outside less inside, the edge's own column left out) within 1.5 levels, all of it under
+  `ICO_RD_REGION_RULE=ps2`. Then the camera rule at each setting: `--pass-dump --stats
+  --region-stats` with `ICO_RD_REGION_RULE=camera`, the frame line `drop 104 (behind-eye 0,
+  out-of-box 0, card 104; ...)` and `drawn by the camera rule 476 (behind-eye 0, out-of-box 0, card
+  476)` (the facing card drawn over the whole frame, the other's back faces kept), `--stats`'s
+  `region rule: the camera's: N VU draws` with N at least 1, and on the 16:10 presents
+  `band_seam.py` within 1.5 levels again. No device: SKIP. TIMEOUT 900 (`rd_sideband_cards`).
 - `rd_vumerge_ab_pixel`, `rd_vufuse_ab_pixel` and `rd_vustage_ab_pixel`: the two scripts above and
   `rd_vustage_ab.cmake` on the frames `rd_pixel`
   leaves (fixture `rd_dump`; the list `rd_pixel_vu_dumps.txt` in the build folder):
@@ -1052,17 +1088,21 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   input. The pictures: `rd_replay_tool DUMP out.png --interp 0.9 DUMP --interp-any --presents 3
   --present WxH` (a dump as its own tick before: nothing moves) writes the same PNGs with and without
   `ICO_RD_STILL_REPRESENT=0`, and its lines say which presents were `shown again`.
-- `rd_replay_tool_still.cmake` (`rd_replay_tool_still`): the still re-present on a corpus dump as its own tick
+- `rd_replay_tool_still.cmake` (`rd_replay_tool_still`): the still re-present on the fixtures of
+  `port/render/test/fixtures/lists/replay_still.txt` (the title's castle, `fx-boot-0200`), each as its own tick
   before, 4 presents at Enhanced 4:3 2x at 1280x960: presents 1 to 3 end `; shown again`, and all four pictures are the same bytes
-  as with `ICO_RD_STILL_REPRESENT=0` (Not Run without the dump).
+  as with `ICO_RD_STILL_REPRESENT=0`. The path ran: those lines, and the list line's `draws>=1` on the run's `--stats`.
 - `rd_replay_tool_glow_hold.cmake`: the glow held between ticks (`port/render/rd_glow_hold.c`)
-  against its chain drawn at every present (`ICO_RD_GLOW_REDRAW=1`), on two consecutive godrays
-  dumps (`build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-01076` and `rd-01077`; Not Run without
-  them) at Enhanced 4:3 2x, `--presents 2` with `ICO_RD_STILL_REPRESENT=0` (every present
-  rendered) (`rd_replay_tool_glow_hold`). A still tick (rd-01076 as its own tick before): the lines
+  against its chain drawn at every present (`ICO_RD_GLOW_REDRAW=1`), on the fixtures of
+  `port/render/test/fixtures/lists/glow_hold.txt` (the still case `fx-boot-0200`, the title's castle at 512 GS pixels with the sun's
+  fans: the chain drawn whole; the moving case `fx-adreno-prev` then `fx-adreno`, two consecutive ticks, with
+  `ICO_RD_CULL=off`: the generated lamps in the chain) at Enhanced 4:3 2x, `--presents 2` with
+  `ICO_RD_STILL_REPRESENT=0` (every present rendered) (`rd_replay_tool_glow_hold`). The path ran:
+  each fixture replayed alone at its case's setting shows its list line's `glow_chains>=1` and
+  `glow_plan`. A still tick (the frame as its own tick before): the lines
   say `glow drawn (the tick's first present)` for present 0 and `glow held` (or, with the switch,
   `glow redrawn ([dev] glow_redraw)`) for present 1, and SCENE and the presented picture of both
-  presents are the same bytes held and redrawn. A moving tick (rd-01076 then rd-01077): present 0
+  presents are the same bytes held and redrawn. A moving tick (the tick before, then the tick): present 0
   the same bytes both ways, and every pixel of present 1's SCENE that differs lies within 128
   texels of the glow's mask (WORK2 not at its fill level, either run's) (with Python and Pillow).
   `build-host/tmp/v094/after/v2-ab.sh` is the A/B over more pairs (statistics, crops, the region
@@ -1071,10 +1111,13 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   (`rd_dump_blended_arm`) replays alone as drawn: `rd_replay_tool CUR --interp T PREV
   --save-blended B` writes the frame built between the two after its replay, `rd_replay_tool B`
   replays it without `--interp`, and SCENE and the presented picture (1280x960) are the same bytes
-  as the `--interp` run's. `rd_replay_tool_save_blended`: rd-01076 then rd-01077 (the godrays pair
-  above) at alpha 0.5, Enhanced 4:3 2x; `rd_replay_tool_save_blended_163`: issue 163's pair
-  (`build-host/tmp/v097/evidence/163/frame/`) at its present's alpha 0.999000013, 2x, full height,
-  Full pixel (Not Run without the dumps). Both run the `--interp` again with `--render-thread
+  as the `--interp` run's. `rd_replay_tool_save_blended`: the fixtures of
+  `port/render/test/fixtures/lists/save_blended.txt` (`fx-gate-prev` then `fx-gate`, the main gate's two
+  ticks) at alpha 0.5, Enhanced 4:3 2x; `rd_replay_tool_save_blended_163`: those of `save_blended_163.txt`
+  (`fx-adreno-prev` then `fx-adreno`, a tablet's two ticks with the ticks' cameras) at issue 163's
+  present alpha 0.999000013, 2x, full height, Full pixel. The path ran: the `--interp` run's
+  `--stats` show the list line's `interp_keyed_blended>=1` (and on the second
+  `interp_tick_cam_draws>=1`: VU draws with the ticks' cameras). Both run the `--interp` again with `--render-thread
   sync` and `on` (`-DRT`): the interpolation and the replays on the render thread give the same
   picture and the same saved blended frame, byte for byte (the payload's alignment gaps are zeroed
   for this: the first threaded run's dump differed in 3 padding bytes the main thread's heap left).
@@ -1569,8 +1612,9 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   (`ICO_VK_FAKE_TRANSFORM=90`, `180`, `270`: the picture turned into a texture of the turned size
   by the swapchain path's own pass and read back turned back on the CPU, `port/render/rd_prerotate.c`)
   is the identity present byte for byte, and each turned run names its twin; that dump at 640x480,
-  1280x720, with `--overlay-test` (the port's UI layer) and with `--crt pvm`, and the dumps of
-  `tools/prerotate_dumps.txt` that are on the machine at 640x480 and 2400x1080
+  1280x720, with `--overlay-test` (the port's UI layer) and with `--crt pvm`, and the fixtures of
+  `port/render/test/fixtures/lists/prerotate.txt` (the PowerVR phone's frame, the title's castle;
+  the path ran: `prerotate_turned` on every turned run) at 640x480 and 2400x1080
   ([DISPLAY.md](DISPLAY.md#the-turned-swapchain)) (`rd_replay_tool_prerotate`).
 - `rd_replay_tool_pass_merge.cmake`: that dump under `ICO_RD_BLEND=storage` with the storage pass
   merge draws `ICO_RD_PASS_MERGE=0`'s DISPLAY picture byte for byte at 1x and 2x, with no more
@@ -1616,8 +1660,13 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   step's verdict, a killed step counted as lost, a step without a verdict planned again,
   contradicting prefixes ending the plan, 1,000 random oracles ending within 16 steps
   (`rd_bisect_plan`).
-- `rd_depth_copy_dump.cmake`: a player dump with the fog replayed with the depth in place, copied
-  and through a buffer, SCENE byte for byte the same (`rd_fog_depth_copy_dump`, `_d24s8`).
+- `rd_depth_copy_dump.cmake`: the fixtures of `port/render/test/fixtures/lists/fog_depth_copy.txt`
+  (`fx-adreno`: list 4's fog on SCENE reading SCENE's depth, list 8's aura on that depth after it)
+  replayed with the depth in place, copied and through a buffer, SCENE byte for byte the same
+  (`rd_fog_depth_copy_dump`; `_d24s8` on `ICO_VK_FAKE_D24S8=1` without the buffer). The path ran:
+  each run's `--stats` name the path asked for (`fog path inplace`, `copy`, `buffer`), the copy's run
+  shows the list line's `draws>=1` and `aura_pastes_whole>=1`, and a run through the copy with
+  `ICO_RD_FOG_SABOTAGE=copy` (the depth reads give 0) gives a SCENE that differs from the copy's.
 - `rd_shadow_test.c`: the shadow count on the stencil (`rd_shadow`); at scene scale 4 each
   composite, not flagged above 1x, against the float bilinear of its level within 3 LSB, then with
   `RdProfile.shadowBspline` ([dev] `shadow_bspline`) against the CPU B-spline within 3 (4 on the

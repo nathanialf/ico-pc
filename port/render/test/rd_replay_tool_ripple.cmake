@@ -1,27 +1,42 @@
-# rd_replay_tool_ripple*, rd_replay_tool_mirror_floor: a dump replayed by
-# rd_replay_tool at the given options, its log and its picture checked
-# (issue 106: with Full pixel on, the puddle's ripples drew as bright white
-# segments; rd_replay.c drawWrap, rd_water.c rd__block_keeps_repeat).
-# -DTOOL=<rd_replay_tool> -DDUMP=<dump> -DOUT=<png> -DARGS=<a|b|...>
-# -DEXPECT=<regex>, -DEXPECT2=<regex> (optional): each must match the
-#   tool's output at least once (ARGS should carry --list: the water line)
-# -DPYTHON=<python3> (optional, with Pillow; without either the picture
-#   checks are skipped with a message):
-#   -DBOX=x0,y0,x1,y1 -DMAXBRIGHT=<n>: the pixels of the box (given on a
-#     1920 x 1080 picture, scaled to OUT's size) whose three channels are
-#     all over 200 number at most n (the ring area of the reporter's shot)
-#   -DSHA=<hex>: the SHA-256 of OUT's RGB pixels; checked only on lavapipe
-#     (the tool's device line names llvmpipe), where it was taken
-if(NOT EXISTS "${DUMP}")
-  # ctest's SKIP_REGULAR_EXPRESSION maps this to Not Run
-  message(STATUS "SKIP: ${DUMP}: no dump (build-host/tmp/corpus is not in the tree)")
-  return()
-endif()
+# rd_replay_tool_ripple*, rd_replay_tool_mirror_floor: a committed fixture
+# (port/render/test/fixtures, docs/port/TESTING_FIXTURES.md) replayed by
+# rd_replay_tool at the given options, its log and its picture checked (issue
+# 106: with Full pixel on, the open border clamped every render-target read at
+# its edges, and the puddle's ripples, screen prims reading a block smaller
+# than the frame, took the block's edge texels: bright white segments on the
+# game's picture; rd_replay.c drawWrap, rd_water.c rd__block_keeps_repeat).
+# The fixture keeps the frame's commands (the block, the draws into it, the
+# ripples' screen prims and their REPEAT, the scene copy the mirror floor's
+# grids read) with generic textures and geometry, so the checks are:
+#   - the water line (--list): every block read on REPEAT kept on REPEAT, the
+#     block's scale; the path ran: the fixture's declared water quantities
+#     (rd_fixture_require on the replay's output, REQUIRE)
+#   - the picture: its PNG's SHA-256, the fixture's own picture as the release
+#     before drew it (v0.11.6's rd_replay_tool, the arguments of the
+#     registration; checked only on lavapipe, the tool's device line naming
+#     llvmpipe, where it was taken)
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the
+# fixtures folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake>
+# -DFIXTURE=<a fixture's name> -DOUT=<png> -DARGS=<a|b|...>
+# -DEXPECT=<regex>, -DEXPECT2=<regex> (optional): each must match the tool's
+#   output at least once (ARGS should carry --list: the water line)
+# -DREQUIRE=<quantity|quantity...>: the fixture's declared properties checked
+# -DSHA=<hex> (optional): the SHA-256 of the PNG OUT
+# -DDIFFER=<hex> (optional): a SHA-256 the PNG must not have (the picture of
+#   the same fixture at another setting: the block at its GS size against
+#   the scene's scale, which a fixture made with @water place tells apart)
+# -DCLAMP_DIFFERS=1 (optional): replay again under ICO_RD_BLOCK_CLAMP=1 (the
+#   tests' sabotage of issue 106's fix, rd_water.c): its water line must say
+#   0 block reads kept and its picture must differ from OUT's, so the test's
+#   picture would show the block's reads clamped where the game keeps REPEAT
+include("${FIXTURE_HELPERS}")
+# (a folder of this test's own: the twins of one fixture may run at once)
+rd_fixture_expand(${FIXTURE} "${OUT}.fixture" dump)
 if(ARGS)
   string(REPLACE "|" ";" ARGS "${ARGS}")
 endif()
 file(REMOVE "${OUT}")
-execute_process(COMMAND "${TOOL}" "${DUMP}" "${OUT}" ${ARGS} RESULT_VARIABLE rc
+execute_process(COMMAND "${TOOL}" "${dump}" "${OUT}" ${ARGS} RESULT_VARIABLE rc
                 OUTPUT_VARIABLE out ERROR_VARIABLE err)
 if(rc EQUAL 77 OR out MATCHES "SKIP:")
   message(STATUS "SKIP: no usable Vulkan device or mode")
@@ -40,49 +55,55 @@ foreach(_x EXPECT EXPECT2)
     endif()
   endif()
 endforeach()
-if(NOT PYTHON)
-  message(STATUS "${DUMP}: the log checked; no Python for the picture")
-  return()
+# every block read on REPEAT kept on REPEAT (rd__block_keeps_repeat: a block
+# smaller than the frame read by a screen prim)
+string(REGEX MATCHALL "REPEAT [0-9]+, [0-9]+ of them kept on REPEAT" reps "${water}")
+foreach(r IN LISTS reps)
+  if(r MATCHES "REPEAT ([0-9]+), ([0-9]+) of them" AND NOT CMAKE_MATCH_1 EQUAL CMAKE_MATCH_2)
+    message(FATAL_ERROR "${FIXTURE}: a block read on REPEAT was clamped (${r}):\n${water}")
+  endif()
+endforeach()
+# the path ran
+string(REPLACE "|" ";" REQUIRE "${REQUIRE}")
+rd_fixture_require(${FIXTURE} "${out}" ${REQUIRE})
+if(RDFX_FAILURES GREATER 0)
+  message(FATAL_ERROR "${FIXTURE}: ${RDFX_FAILURES} declared properties did not hold")
 endif()
-if(NOT BOX)
-  set(BOX "0,0,0,0")
+if(NOT EXISTS "${OUT}")
+  message(FATAL_ERROR "${TOOL} wrote no picture ${OUT}")
 endif()
-set(probe [=[
-import hashlib, sys
-try:
-    from PIL import Image
-except ImportError:
-    print('NOPIL')
-    sys.exit(0)
-im = Image.open(sys.argv[1]).convert('RGB')
-px = im.load()
-w, h = im.size
-x0, y0, x1, y1 = (int(v) for v in sys.argv[2].split(','))
-sx, sy = w / 1920, h / 1080
-n = sum(1 for y in range(int(y0 * sy), int(y1 * sy))
-        for x in range(int(x0 * sx), int(x1 * sx)) if min(px[x, y]) > 200)
-print('BRIGHT %d SHA %s' % (n, hashlib.sha256(im.tobytes()).hexdigest()))
-]=])
-execute_process(COMMAND "${PYTHON}" -I -c "${probe}" "${OUT}" "${BOX}" RESULT_VARIABLE prc
-                OUTPUT_VARIABLE pout ERROR_VARIABLE perr)
-if(pout MATCHES "NOPIL")
-  message(STATUS "${DUMP}: the log checked; no Pillow for the picture")
-  return()
-endif()
-if(NOT prc EQUAL 0 OR NOT pout MATCHES "BRIGHT ([0-9]+) SHA ([0-9a-f]+)")
-  message(FATAL_ERROR "the picture probe failed (${prc}):\n${pout}\n${perr}")
-endif()
-set(bright "${CMAKE_MATCH_1}")
-set(sha "${CMAKE_MATCH_2}")
-message(STATUS "${OUT}: ${bright} bright pixels in ${BOX}, RGB SHA-256 ${sha}")
-if(DEFINED MAXBRIGHT AND bright GREATER MAXBRIGHT)
-  message(FATAL_ERROR "${bright} bright pixels in the box ${BOX}, more than ${MAXBRIGHT}")
-endif()
+file(SHA256 "${OUT}" sha)
+message(STATUS "${OUT}: SHA-256 ${sha}")
 if(SHA)
   if(NOT err MATCHES "llvmpipe")
     message(STATUS "the picture's SHA-256 is lavapipe's: not compared on this device")
   elseif(NOT sha STREQUAL SHA)
-    message(FATAL_ERROR "the picture's SHA-256 ${sha}, not ${SHA}")
+    message(FATAL_ERROR "the picture's SHA-256 ${sha}, not ${SHA} (the release before's picture "
+                        "of ${FIXTURE})")
   endif()
 endif()
-message(STATUS "${DUMP}: the log and the picture checked")
+if(DIFFER AND sha STREQUAL DIFFER)
+  message(FATAL_ERROR "the picture's SHA-256 ${sha} is the one this test must differ from: the "
+                      "block's scale did not reach the picture")
+endif()
+if(CLAMP_DIFFERS)
+  set(clampOut "${OUT}.clamp.png")
+  file(REMOVE "${clampOut}")
+  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLOCK_CLAMP=1 "${TOOL}" "${dump}"
+                          "${clampOut}" ${ARGS}
+                  RESULT_VARIABLE crc OUTPUT_VARIABLE cout ERROR_VARIABLE cerr)
+  if(NOT crc EQUAL 0 OR NOT EXISTS "${clampOut}")
+    message(FATAL_ERROR "the run under ICO_RD_BLOCK_CLAMP=1 exited ${crc}:\n${cout}\n${cerr}")
+  endif()
+  if(NOT "${cout}${cerr}" MATCHES "ICO_RD_BLOCK_CLAMP=1 \\(the tests' sabotage\\)" OR
+     NOT cout MATCHES " 0 block reads kept on REPEAT")
+    message(FATAL_ERROR "ICO_RD_BLOCK_CLAMP=1 did not take (no switch line, or reads kept)")
+  endif()
+  file(SHA256 "${clampOut}" csha)
+  if(csha STREQUAL sha)
+    message(FATAL_ERROR "${FIXTURE}: the block's reads clamped draw the same picture "
+                        "(${csha}): the test would not see issue 106's defect")
+  endif()
+  message(STATUS "${FIXTURE}: under ICO_RD_BLOCK_CLAMP=1 the picture differs (${csha})")
+endif()
+message(STATUS "${FIXTURE}: the log, the path and the picture checked")

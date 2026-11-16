@@ -1,0 +1,12 @@
+# The drop sheets (rd_fixture_make.c dropSheet, docs/port/TESTING_FIXTURES.md "The placement
+# rules"): the default texture rules, then @scene cards
+glyphs sheet
+ramp r8
+date_split date
+alpha_ramp ate
+bright additive
+gradient abe
+checker sprite
+grey unused
+checker
+@scene cards

@@ -105,6 +105,17 @@ fx-tile-2809 build-host-tmp/v0115/evidence/rc3/x/frame-20261111-121314-v2809/fra
 fx-lamps-title build-host-tmp/corpus/dumps/boot/rd-00400.rddump rules=lamps_place.rules.txt glow_plan=lamps lamps_area_passes>=1 lamps_bands_lazy>=1 lamps_owed=0 lamps_fillpaste_fills>=1
 fx-lamps-title-dark build-host-tmp/corpus/dumps/boot/rd-00600.rddump rules=fans_off.rules.txt glow_plan=dark lamps_area_passes=0 lamps_bands_lazy=0 lamps_owed>=1
 fx-lamps-opening dumps/v0115-opening/frame-20261112-110824-v746.zip rules=lamps_place.rules.txt glow_plan=lamps lamps_area_passes>=1 lamps_bands_lazy>=1 lamps_owed=0 lamps_fillpaste_fills>=1
+# the visibility test's frames (FIX-P4c): list 0's meshes placed by @scene place
+# (scene_place.rules.txt: sheets, cubes behind them, across the left edge, past
+# the right edge, on the picture; opaque VU textures), so the frustum test culls
+# a part and the occlusion test hides the cubes behind the sheets: issue 102's
+# gate at 16:9 (688x448 GS, version 11; its MSAA epoch closes at list 3 by a
+# read of SCENE), the PowerVR phone's F12 frame of 2026-10-28 (version 13), the
+# title's castle (512x512 GS, version 4).  frustum_culled and occluded on the
+# --cull full run at the Original 4:3 and Enhanced 4:3 2x settings.
+fx-scene-gate102 build-host-tmp/evidence-v079/102/frame-20261015-161933-v4251.rddump rules=scene_place.rules.txt frustum_culled>=1 occluded>=1
+fx-scene-4657 dumps/phone/frame-20261028-173610-v4657.zip rules=scene_place.rules.txt frustum_culled>=1 occluded>=1
+fx-scene-boot0200 build-host-tmp/corpus/dumps/boot/rd-00200.rddump rules=scene_place.rules.txt frustum_culled>=1 occluded>=1
 # the crack fills' frames (crack_pixels on the run with the fill on at every
 # setting the crack tests replay the fixture at: the cracks are where the
 # generated geometry leaves gaps; crack_msaa_fills at Enhanced 2x with MSAA):
@@ -162,6 +173,55 @@ fx-scope-179-before build-host-tmp/v0114/evidence/179/loss/loss-20261110-184556-
 # the corpus's largest VU pre-pass record (the plain room, 2026-10-06, 512x448
 # GS, dump version 4: 84649 vertices, 168322 triangle slots in the source)
 fx-vu-plain-0300 build-host-tmp/corpus/dumps/plain/rd-00300.rddump rules=vu_opaque.rules.txt prepass_vertices>=1 vu_record_dispatches>=1 store_depth_dropped>=1
+# the skinned draws' check (FIX-P6a): issue 123's v0.10.4 blended frame
+# (Yorda's shin missing on the Adreno tablet; 576x512 GS, dump version 15),
+# its blended VU textures clear (skin_twins.rules.txt).  skin_checks on every
+# --skin-check run; skin_wrong with ICO_RD_VU_SKIN_SABOTAGE=200 (the
+# generated weights reach address 200: half on bones 16 + 4 (s mod n) and the
+# next); skin_changed with its ",ring" or ",nan" form; skin_dropped with
+# ",nan"; skin_twins_own with the attachment read and GS state as shader data
+# (the Turnip profile); skin_ring_twins under the plain set with the pre-pass
+# off; skin_checks_drawn, skin_twins_drawn with the check on for every
+# command (ICO_RD_VU_SKIN_CHECK=2), skin_twins_own_drawn there with the
+# Turnip profile, skin_ring_twins_drawn there under the plain set
+fx-123-blended dumps/163/frame-20261106-080033-v3910-blended.rddump rules=skin_twins.rules.txt skin_checks>=1 skin_wrong>=1 skin_changed>=1 skin_dropped>=1 skin_twins_own>=1 skin_ring_twins>=1 skin_checks_drawn>=1 skin_twins_drawn>=1 skin_twins_own_drawn>=1 skin_ring_twins_drawn>=1
+# issue 179's Mali-G52 on v0.11.6 (moto g24 power): the loss dump's frame and
+# the one before it (21:9).  The VU record's audit (ICO_RD_VU_AUDIT=1 under
+# the Arm fakes, the record by compute) at every arm; vu_audit_lists and
+# vu_audit_plane_draws with the index compaction on (ICO_RD_VU_COMPACT=1)
+fx-mali-loss dumps/v0117-mali179/loss-20261114-075659-lost.rddump rules=vu_opaque.rules.txt vu_audit_entries>=1 vu_audit_violations=0 vu_audit_lists>=1 vu_audit_plane_draws>=1
+fx-mali-loss-before dumps/v0117-mali179/loss-20261114-075659-before.rddump rules=vu_opaque.rules.txt vu_audit_entries>=1 vu_audit_violations=0 vu_audit_lists>=1 vu_audit_plane_draws>=1
+# issue 106's drained room (FIX-P5b; dump version 12, 688x448 GS): the
+# reporter's three frames, each a puddle's block (344x256 GS with depth) read
+# by the ripples' two screen prims on REPEAT; the corpus's puddle room (dump
+# version 4, 512x512 GS): the pool's grids over its scene copy, no block.
+# water_blocks_kept and water_targets_clamped from the water line (--list)
+# with Full pixel on; the title's e2e frames 200 and 350 (dump version 5,
+# 512x512 GS): a screen-prim triangle key with planes, noplanes_fallback with
+# ICO_RD_NO_SPRITE_PLANES=1 at the tool's default setting.
+fx-ripple-13782 build-host-tmp/corpus/dumps/ripple/frame-20261024-094512-v13782.zip water_blocks_kept>=1
+fx-ripple-83439 build-host-tmp/corpus/dumps/ripple/frame-20261024-100436-v83439.zip water_blocks_kept>=1
+fx-ripple-84109 build-host-tmp/corpus/dumps/ripple/frame-20261024-100447-v84109.zip water_blocks_kept>=1
+fx-puddle-0200 build-host-tmp/corpus/dumps/puddle/rd-00200.rddump water_blocks_kept=0 water_targets_clamped>=1
+fx-title-0200 build-host-tmp/e2e/run-title-on/dumps/rd-00200.rddump noplanes_fallback=2
+fx-title-0350 build-host-tmp/e2e/run-title-on/dumps/rd-00350.rddump noplanes_fallback=2
+# issue 106's drained room made with water_place.rules.txt (@water place,
+# docs/port/TESTING_FIXTURES.md "The water's rule"; dump version 12, 688x448
+# GS): the six meshes drawn into the puddle's block generated on the block,
+# the puddle surface (the FBA mesh of list 4) on SCENE's middle, the ripples
+# read across the block's period, so the block's scale and the wrap of its
+# reads reach the picture.  water_blocks_kept as for the fx-ripple fixtures.
+fx-water-13782 build-host-tmp/corpus/dumps/ripple/frame-20261024-094512-v13782.zip rules=water_place.rules.txt water_blocks_kept>=1
+fx-water-83439 build-host-tmp/corpus/dumps/ripple/frame-20261024-100436-v83439.zip rules=water_place.rules.txt water_blocks_kept>=1
+# the region rule's drops (FIX-P6b round 2): @scene drops makes list 0's first meshes the
+# region rule decides a floor across the eye plane and a card beyond the GS window, each facing
+# the eye and facing away; @scene cards the two cards alone (issue 189's frame)
+fx-drops-6818 dumps/phone/frame-20261102-152033-v6818.zip rules=scene_drops.rules.txt region_rule_draws>=1
+fx-drops-4657 dumps/phone/frame-20261028-173610-v4657.zip rules=scene_drops.rules.txt region_rule_draws>=1
+fx-drops-189 dumps/189/frame-20261104-120509-v130039.rddump rules=scene_drops.rules.txt region_rule_draws>=1
+fx-drops-mali dumps/v0116-mali179/frame-20261112-195947-v17565.zip rules=scene_drops.rules.txt region_rule_draws>=1
+fx-drops-maingate dumps/maingate/frame-20261104-123603-v10827.rddump rules=scene_drops.rules.txt region_rule_draws>=1
+fx-cards-189 dumps/189/frame-20261104-120509-v130039.rddump rules=scene_cards.rules.txt region_rule_draws>=1
 # the frame test/rd_pass_area_frame.c records (512x448 GS, flat sprites, no
 # art): two passes on SCENE that take a render area (rd_pass_area.c's rule),
 # at Enhanced 2x (4:3: the phone's setting cannot show it)

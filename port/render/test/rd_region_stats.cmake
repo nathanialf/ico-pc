@@ -1,13 +1,14 @@
 # rd_region_stats: rd_replay_tool --region-stats (port/render/tools/rd_replay_region.c,
-# docs/port/VU1_PROGRAMS.md "The region rule") on the first two dumps of the
-# machine-local list tools/occlusion_corpus.txt that are here (read as
-# rd_occlusion_tool.cmake reads it), each at two settings: Original 4:3 1x
+# docs/port/VU1_PROGRAMS.md "The region rule") on every committed fixture of LIST
+# (test/fixtures/lists/region_stats.txt; rd_fixture.cmake, docs/port/TESTING_FIXTURES.md:
+# expanded into OUT/fixtures, an absent one fails), each at two settings: Original 4:3 1x
 # and Enhanced 4:3 2x (tools/occlusion_corpus.py's orig and enh2x43), with
 # a present.
 #   1. --pass-dump PLAIN --region-out SPEC: the frame's region line
 #      ("<dump>: region: frame N, ... drawing nothing: K draws: S") with S
 #      "none" or L:I items of lists 0-6, K the items, SPEC holding S, and a
-#      line a draw and a list in the shape the tool documents;
+#      line a draw and a list in the shape the tool documents; the path ran:
+#      draws under the region rule and triangles above 0;
 #   2. --pass-dump NOP --nop @SPEC: every PNG of PLAIN equal to NOP's byte
 #      for byte (the draws the CPU oracle says draw nothing draw no pixel:
 #      the stats' verdicts agree with the shaders' there);
@@ -16,44 +17,18 @@
 #      display options, so the enh2x43 state is not its).
 # Each under both region rules (ICO_RD_REGION_RULE ps2 and camera: the
 # camera rule's drawn drops make a draw draw, so its spec is its own).
-# A missing list or dump, or no device (77): SKIP.
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
-if(NOT EXISTS "${LIST}")
-  message(STATUS "SKIP: ${LIST}: no dump list")
-  return()
-endif()
-get_filename_component(listDir "${LIST}" DIRECTORY)
-file(STRINGS "${LIST}" lines)
-set(dumps "")
-foreach(l IN LISTS lines)
-  string(STRIP "${l}" l)
-  if(l STREQUAL "" OR l MATCHES "^#")
-    continue()
-  endif()
-  if(NOT IS_ABSOLUTE "${l}")
-    set(l "${listDir}/${l}")
-  endif()
-  if(l MATCHES "[*]")
-    file(GLOB matched "${l}")
-    list(SORT matched)
-    list(APPEND dumps ${matched})
-  elseif(EXISTS "${l}")
-    list(APPEND dumps "${l}")
-  endif()
-  list(LENGTH dumps nd)
-  if(nd GREATER_EQUAL 2)
-    break()
-  endif()
-endforeach()
-list(LENGTH dumps nd)
-if(nd EQUAL 0)
-  message(STATUS "SKIP: no dump of ${LIST} is here")
-  return()
-endif()
-if(nd GREATER 2)
-  list(SUBLIST dumps 0 2 dumps)
-endif()
+# No device (77): SKIP.
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<folder>
+# -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<fixture list>
+# -DOUT=<a folder the test may write>
+include("${FIXTURE_HELPERS}")
+rd_fixture_list("${LIST}" names)
 file(REMOVE_RECURSE "${OUT}")
+set(dumps "")
+foreach(name IN LISTS names)
+  rd_fixture_expand(${name} "${OUT}/fixtures" d)
+  list(APPEND dumps "${d}")
+endforeach()
 
 set(settings_orig --aspect 4:3 --present 640x480)
 set(settings_enh2x43 --enhanced --aspect 4:3 --resolution 2x --present 1280x960)

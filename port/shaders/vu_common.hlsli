@@ -703,7 +703,9 @@ struct VuVSOut {
     // (vu_fused_out: the mark the no-planes twins read, which have no r).
     // y: 1 on a triangle drawn beside the picture (VU_RULE_CLIP_BESIDE),
     // whose pixels in the picture's columns vu_pixel_tests discards, else 0
-    // (a constant over the triangle: the interpolation is 1 or 0 to an ulp)
+    // (a constant over the triangle: the interpolation is 1 or 0 to an ulp;
+    // NaN on a part of a triangle Mesa's software clipper cut behind the
+    // eye, which vu_pixel_tests reads as beside)
     VK_LOC(2) noperspective float2 plane : TEXCOORD1;
     // The triangle's attribute planes (vu_attr_planes): col, stq and plane
     // at its first corner (a0: col, a1: stq, plane) and per texel across
@@ -2662,8 +2664,16 @@ void vu_pixel_tests(VuPSIn i)
     }
     // a triangle drawn beside the picture: none of its pixels inside it,
     // where the PS2 dropped it (written nowhere: no colour, depth or
-    // stencil, as the drop)
-    if (i.plane.y > 0.5 && vu_pixel_in_picture(i.pos)) {
+    // stencil, as the drop).  A flag that is not a number counts as
+    // beside: Mesa's software clipper (llvmpipe, lavapipe:
+    // draw_pipe_clip.c interp) takes a noperspective varying's factor at a
+    // new corner as (dst - out) / (in - out) of the corners' divided x or
+    // y, which is not finite where those coincide, and then every varying
+    // of that part of the triangle is NaN: on fx-drops-4657 a floor
+    // triangle with corners behind the eye drew colour 0 in the band, its
+    // flag failing the test above.  A GPU whose interpolation keeps the
+    // constant gives 1 or 0, and nothing changes there
+    if (!(i.plane.y < 0.5) && vu_pixel_in_picture(i.pos)) {
         GS_DISCARD;
     }
     if ((g_mode.x & DF_DATE) != 0u) {

@@ -1,0 +1,18 @@
+# Fixtures for rd_aura_paste_ab (port/render/test/rd_aura_paste_ab.cmake: the
+# aura's paste as the alpha alone, ICO_RD_AURA_PASTE=0 against 1, byte for
+# byte): fixture names of this repository (port/render/test/fixtures/NAME.rdfix),
+# a name a line, then the line's own property (rd_fixture_list_props.cmake):
+# aura_paste_split, the pastes split once a replay at the PowerVR phone's
+# setting (each measured on the fixture, the same as on its source dump).
+#
+# the PowerVR phone's F12 frame of 2026-10-28 (the old list's cage frame of
+# v0.11.5 has no fixture; this one splits the same way: 1072 rows, 8 band rows)
+fx-phone-4657 aura_paste_split=1
+# the Pixel's v0.11.4 F12 frame (stage 4)
+fx-shadow-wide aura_paste_split=1
+# issue 164's paused frame (Mali-G52)
+fx-mobile-164 aura_paste_split=1
+# issue 163's lamp room
+fx-163-blended aura_paste_split=1
+# a 2026-10-07 capture (4:3, 512 GS pixels): the paste drawn whole
+fx-vu-3086 aura_paste_split=0

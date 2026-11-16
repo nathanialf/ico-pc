@@ -1,0 +1,9 @@
+# native_frame_gate_a: the fixtures whose every target, at the Original preset 4:3 1x and
+# Enhanced 4:3 2x, must equal the release before's picture (docs/native_frame_baseline.json,
+# made with v0.11.6's rd_replay_tool by tools/native_frame_check.py baseline): the three
+# 2026-10-07 VU captures the old gate's real pictures came from (FIX-P4a's fixtures), and the
+# corpus boot frame (the title castle: a 512x512 frame with shadow volumes and the fans)
+fx-vu-3086
+fx-vu-3112
+fx-vu-1985
+fx-boot-0200

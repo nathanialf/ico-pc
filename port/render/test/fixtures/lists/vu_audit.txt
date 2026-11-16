@@ -1,0 +1,8 @@
+# rd_vu_audit (port/render/test/rd_vu_audit.cmake): issue 179's Mali-G52
+# frames: the v0.11.6 loss dump's frame and the one before it (this list's
+# own fixtures), the v0.11.5 F12 frame and the slow-scene capture (FIX-P2a's;
+# the audit's quantities on their lines, rd_fixture_list_props.cmake)
+fx-mali-loss
+fx-mali-loss-before
+fx-mali-frame vu_audit_entries>=1 vu_audit_violations=0 vu_audit_lists>=1 vu_audit_plane_draws>=1
+fx-mali-slow541 vu_audit_entries>=1 vu_audit_violations=0 vu_audit_lists>=1 vu_audit_plane_draws>=1

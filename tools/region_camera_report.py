@@ -6,6 +6,8 @@ docs/port/DIVERGENCES.md VD-29; port/shaders/vu_common.hlsli vu_drop_fate).
   python3 -I tools/region_camera_report.py --tool RD_REPLAY_TOOL --out DIR
           [--list FILE | DUMP...] [--setting NAME=ARGS]... [--own-aspect]
           [--keep-camera DIR] [--report FILE] [--dilate N] [--only TEXT]
+          [--feedback-off]
+  python3 -I tools/region_camera_report.py --tool RD_REPLAY_TOOL --feedback-nops DUMP
 
 For every dump and setting, rd_replay_tool twice, serially:
   A  ICO_RD_REGION_RULE=ps2:    --pass-dump DIR/<dump>-<setting>/ps2 and
@@ -28,6 +30,21 @@ Then every PNG of A against B's, and:
     many of them lie in the scaled, grown mask where its size allows (the
     post effects, the shadows and the reflections read the scene: their
     changes are reported, not held).
+--feedback-off holds SCENE before the game's scene-reading composites: both
+replays take --nop of every draw that samples a render target (a TEXTURE
+command naming "target", rd_replay_tool --list --no-device, and the non-VU
+draws after it that name its tex), as the shadows' pyramid and its
+composite (SHADOW0..2 back over SCENE), the glow's chain and the
+softening (AA0, AA1).  Those resample SCENE, its depth or a target made
+from them at another scale, so a triangle the camera rule draws moves
+pixels up to their reach outside the triangle (fx-drops-4657 Original 1x:
+108 pixels up to 8 GS rows above the card, by the shadow composite; 0 with
+list 3's draws left out), which the mask, the triangles alone, does not
+hold; with them left out SCENE is the geometry and the per-pixel passes,
+and every changed pixel must lie in the mask.  The VU draws are never left
+out (the rule under test); a VU draw that samples a target is counted in
+the report line.  --feedback-nops DUMP prints that --nop spec ("none"
+for none) and exits (rd_sideband_ab uses it).
 --keep-camera DIR copies B's PNGs to DIR/<name>-<setting>/ (the camera
 rule's new baselines, named as main-chain.sh's pass-dump compare names
 them). --report FILE writes a markdown table: a row a dump and setting with
@@ -38,7 +55,7 @@ Settings: NAME=ARGS (ARGS split on spaces), by default
   orig     --aspect 4:3 --present 1280x960   (the Original preset at 1x)
   enh2x43  --enhanced --aspect 4:3 --resolution 2x --present 1280x960
 (the pass-dump compare's two). --own-aspect appends --aspect A from a list
-line "path A" (tools/sideband_dumps.txt's form) to every setting instead.
+line "path A" (the form rd_region_camera_ab writes) to every setting instead.
 
 The replays hold the shared replay lock (build-host/tmp/replay.lock or
 ICO_REPLAY_LOCK) while they run.  Exit 0 when every hard rule holds, 1 on
@@ -163,6 +180,43 @@ def run(tool, dump, args, rule, extra):
     return r.returncode, r.stdout + r.stderr
 
 
+# the list's command lines: "L:I TYPE ..." (rd_replay_tool --list)
+VU_TYPES = ("MESH", "SKINNED", "GRID", "PARTICLES")
+
+
+def feedback_nops(tool, dump, scratch):
+    """([L:I of every non-VU draw that samples a render target], the VU
+    draws that do): from rd_replay_tool --list --no-device, a TEXTURE line
+    naming "target" makes its tex a target's; a later draw line naming
+    "tex N" of one samples it"""
+    r = subprocess.run([tool, dump, scratch, "--no-device", "--list"], capture_output=True,
+                       text=True, timeout=600)
+    if r.returncode != 0:
+        raise RuntimeError("%s: --list exited %d: %s" % (dump, r.returncode, r.stderr[-400:]))
+    targets, nops, vu = set(), [], 0
+    for line in r.stdout.splitlines():
+        f = line.split()
+        if len(f) < 2 or ":" not in f[0] or not f[0].replace(":", "").isdigit():
+            continue
+        kind = f[1]
+        tex = None
+        if "tex" in f[2:]:
+            k = f.index("tex", 2)
+            if k + 1 < len(f) and f[k + 1].isdigit():
+                tex = int(f[k + 1])
+        if kind == "TEXTURE":
+            if tex is not None and "target" in f[2:]:
+                targets.add(tex)
+            continue
+        if tex is None or tex not in targets:
+            continue
+        if kind in VU_TYPES:
+            vu += 1
+        else:
+            nops.append(f[0])
+    return nops, vu
+
+
 def grown_mask(mrows, mbpp, gw, gh, dilate):
     """the mask's set pixels (any of R, G, B) grown by dilate GS pixels: a
     list of bytearrays, 1 where set"""
@@ -208,7 +262,7 @@ def diff_count(ra, rb, w, h, bpp, mask=None, sx=0, sy=0):
 def main():
     args = sys.argv[1:]
     tool = out = report = keep = only = listf = None
-    dilate, own = 1, False
+    dilate, own, feedback, fbdump = 1, False, False, None
     settings, dumps = [], []
     i = 0
     try:
@@ -233,6 +287,10 @@ def main():
                 settings.append((name, rest)); i += 2
             elif a == "--own-aspect":
                 own = True; i += 1
+            elif a == "--feedback-off":
+                feedback = True; i += 1
+            elif a == "--feedback-nops":
+                fbdump = args[i + 1]; i += 2
             elif a.startswith("--"):
                 raise ValueError(a)
             # (one option a branch; the values follow their switch)
@@ -241,6 +299,18 @@ def main():
     except (IndexError, ValueError) as e:
         print("region_camera_report: bad arguments (%s); see the docstring" % e, file=sys.stderr)
         return 2
+    if tool and fbdump:
+        scratch = os.path.join(os.environ.get("TMPDIR", os.path.dirname(os.path.abspath(fbdump))),
+                               "feedback-list-%d.png" % os.getpid())
+        try:
+            nops, vu = feedback_nops(tool, fbdump, scratch)
+        except (RuntimeError, OSError, subprocess.SubprocessError) as e:
+            print("region_camera_report: %s" % e, file=sys.stderr)
+            return 1
+        print(",".join(nops) if nops else "none")
+        print("region_camera_report: %s: %d draws sample a render target and are left out, %d VU "
+              "draws sample one and are kept" % (fbdump, len(nops), vu), file=sys.stderr)
+        return 0
     if not tool or not out:
         print("region_camera_report: --tool and --out are needed", file=sys.stderr)
         return 2
@@ -261,6 +331,21 @@ def main():
     rows, fails, ran = [], 0, 0
     for dump, aspect in have:
         name = dump_name(dump)
+        fbextra, fbnote = [], ""
+        if feedback:
+            # the draws that sample a render target, left out of both replays
+            try:
+                nops, vu = feedback_nops(tool, dump, os.path.join(out, name + "-list.png"))
+            except (RuntimeError, OSError, subprocess.SubprocessError) as e:
+                print("FAIL %s: %s" % (name, e))
+                fails += 1
+                continue
+            spec = os.path.join(out, name + "-feedback-nop.txt")
+            with open(spec, "w") as f:
+                f.write((",".join(nops) if nops else "none") + "\n")
+            fbextra = ["--nop", "@" + spec]
+            fbnote = "; %d draws that sample a render target left out (%d VU draws sample one, kept)" % (
+                len(nops), vu)
         for sname, sargs in settings:
             sa = sargs.split()
             if own and aspect:
@@ -272,12 +357,12 @@ def main():
             for x in (da, db):
                 shutil.rmtree(x, ignore_errors=True)
                 os.makedirs(x)
-            rc, txt = run(tool, dump, sa + ["--pass-dump", da], "ps2", ["--region-mask", mask])
+            rc, txt = run(tool, dump, sa + ["--pass-dump", da] + fbextra, "ps2", ["--region-mask", mask])
             open(os.path.join(d, "ps2.log"), "w").write(txt)
             if rc == 77:
                 print("region_camera_report: SKIP: no device")
                 return 77
-            rc2, txt2 = run(tool, dump, sa + ["--pass-dump", db, "--stats"], "camera", [])
+            rc2, txt2 = run(tool, dump, sa + ["--pass-dump", db, "--stats"] + fbextra, "camera", [])
             open(os.path.join(d, "camera.log"), "w").write(txt2)
             if rc != 0 or rc2 != 0 or not os.path.exists(mask):
                 print("FAIL %s: the replays exited %d / %d (logs in %s)" % (tag, rc, rc2, d))
@@ -337,18 +422,19 @@ def main():
             status = "ok" if hard else "FAIL"
             fails += 0 if hard else 1
             mtext = mline.split("region: mask: ")[-1].split(" -> ")[0] if mline else "no mask line"
-            print("%s %s: SCENE %d pixels changed (%d outside the mask); present %d; mask: %s; %s%s" %
+            print("%s %s: SCENE %d pixels changed (%d outside the mask); present %d; mask: %s; %s%s%s" %
                   (status, tag, scene[0], outside, present, mtext,
                    ", ".join(changed) or "every target the same",
-                   ("; " + "; ".join(notes)) if notes else ""))
+                   ("; " + "; ".join(notes)) if notes else "", fbnote))
             rows.append((tag, scene[0], outside, present, mline, changed, notes, hard))
     if report:
         with open(report, "w", encoding="utf-8") as f:
             f.write("# The camera rule against the PS2's region rule\n\n")
-            f.write("Made by `tools/region_camera_report.py` (rd_replay_tool %s, dilate %d GS pixel%s).\n"
+            f.write("Made by `tools/region_camera_report.py` (rd_replay_tool %s, dilate %d GS pixel%s%s).\n"
                     "SCENE's differing pixels must lie in the CPU oracle's mask "
                     "(`--region-mask`); the other targets are reported.\n\n" %
-                    (tool, dilate, "" if dilate == 1 else "s"))
+                    (tool, dilate, "" if dilate == 1 else "s",
+                     ", the draws that sample a render target left out" if feedback else ""))
             f.write("| dump-setting | SCENE pixels changed | outside the mask | present pixels changed | mask | targets changed | result |\n")
             f.write("| --- | --- | --- | --- | --- | --- | --- |\n")
             for tag, n, o, p, ml, ch, notes, hard in rows:

@@ -1,0 +1,12 @@
+# rd_vu_skin_check_dump and the issue 163 and 123 rows
+# (port/render/test/rd_vu_skin_check_dump.cmake): each test names its
+# fixture by the word on its line (corpus, 163, 123); the properties after
+# it are what this list's tests make of a fixture another package owns
+# (rd_fixture_list_props.cmake), as fixtures.txt says of the skin_*
+# quantities
+# the 2026-10-07 capture with the most skinned commands (46; FIX-P4a's)
+fx-vu-3086 corpus skin_checks>=1
+# issue 163's blended frame on the Adreno 740 (Yorda's draws; FIX-P3a's)
+fx-163-blended 163 skin_checks>=1 skin_wrong>=1 skin_changed>=1
+# issue 123's v0.10.4 blended frame (this list's own fixture)
+fx-123-blended 123
