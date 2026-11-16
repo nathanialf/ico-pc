@@ -399,12 +399,28 @@ void last_run_summary_text(const char *phase, int resetsStart, int resetsNow, lo
         snprintf(free_, sizeof free_, "free unknown");
     }
     {
-        /* the figures first in the room: the phase is cut, never them */
-        char tail[128];
+        /* the figures first in the room: the phase is cut, never them.  The
+           whole text is made first (the tail at most 6 + 47 + 63 bytes),
+           then cut by hand to the system's 128 bytes: the cut is the
+           phase's alone */
+        char tail[sizeof resets + sizeof free_ + 8];
         const int t = snprintf(tail, sizeof tail, " | %s | %s", resets, free_);
+        const size_t tlen = t <= 0 ? 0 : (size_t)t < sizeof tail ? (size_t)t : sizeof tail - 1;
         const size_t cap = size < LAST_RUN_SUMMARY_MAX ? size : LAST_RUN_SUMMARY_MAX;
-        const size_t room = 7 + (size_t)(t > 0 ? t : 0) < cap ? cap - 7 - (size_t)t - 1 : 0;
-        snprintf(out, cap, "ico-pc %.*s%s", (int)room, phase != NULL ? phase : "", tail);
+        const char *ph = phase != NULL ? phase : "";
+        const size_t plen = strlen(ph);
+        const size_t room = 7 + tlen < cap ? cap - 7 - tlen - 1 : 0;
+        const size_t pk = plen < room ? plen : room;
+        size_t k = 0;
+        memcpy(out, "ico-pc ", 7 < cap - 1 ? 7 : cap - 1);
+        k = 7 < cap - 1 ? 7 : cap - 1;
+        if (k + pk + tlen <= cap - 1) {
+            memcpy(out + k, ph, pk);
+            k += pk;
+            memcpy(out + k, tail, tlen);
+            k += tlen;
+        }
+        out[k] = '\0';
     }
 }
 
@@ -553,7 +569,10 @@ static void phase_value(char *out, size_t size)
 /* the image from the state (under the lock) */
 static void compose(void)
 {
-    static char v[LAST_RUN_SLOTS][LAST_RUN_VALUE_MAX];
+    /* each value whole before its slot cuts it to the slot's room
+       (last_run_slot_build: the file's fixed layout is the one intended
+       cut; the pipeline note alone, up to 439 bytes, can reach it) */
+    static char v[LAST_RUN_SLOTS][LAST_RUN_VALUE_MAX + 256];
     const char *vals[LAST_RUN_SLOTS];
     const LastRunBeat *b = &s_beat;
     snprintf(v[LAST_RUN_HEADER], sizeof v[0], "%s (rewritten in place while the game runs)",
