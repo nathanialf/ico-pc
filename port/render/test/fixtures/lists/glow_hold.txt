@@ -1,0 +1,21 @@
+# rd_replay_tool_glow_hold (port/render/test/rd_replay_tool_glow_hold.cmake):
+# the glow held between ticks against its chain drawn at every present.  A
+# name a line, with its role: still (the still case: the frame as its own tick
+# before), prev and move (the moving case: two consecutive ticks, prev the
+# tick before; one of each).  nocull replays that case with ICO_RD_CULL=off
+# (the generated lamps are in the chain then: the LAMPS plan); a QUANTITY OP
+# VALUE word declares what the fixture shows at the test's setting
+# (rd_fixture_list_props.cmake), checked on a replay of the fixture alone
+# with the chain drawn at every present.
+#
+# the still case: the title's castle, a corpus frame of 2026-10-06 (512x512
+# GS, as the lost godrays frames: no columns cropped at 4:3), the sun's fans on
+# the picture (the chain drawn whole)
+fx-boot-0200 still glow_chains>=1 glow_plan=whole
+# the moving case: issue 123's Adreno 740 tablet, frame 6312 then 6313 (576x448
+# GS), the lamps' chain.  On the generated frames the held glow of present 1 is
+# the redrawn one byte for byte and WORK2 holds no mask (DIFF 0, MASK 0): the
+# moving case checks the lines and present 0, its region rule has nothing to
+# bound here
+fx-adreno-prev prev nocull glow_chains>=1 glow_plan=lamps
+fx-adreno move nocull glow_chains>=1 glow_plan=lamps

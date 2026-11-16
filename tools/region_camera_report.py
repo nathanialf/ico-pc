@@ -38,7 +38,7 @@ Settings: NAME=ARGS (ARGS split on spaces), by default
   orig     --aspect 4:3 --present 1280x960   (the Original preset at 1x)
   enh2x43  --enhanced --aspect 4:3 --resolution 2x --present 1280x960
 (the pass-dump compare's two). --own-aspect appends --aspect A from a list
-line "path A" (tools/sideband_dumps.txt's form) to every setting instead.
+line "path A" (the form rd_region_camera_ab writes) to every setting instead.
 
 The replays hold the shared replay lock (build-host/tmp/replay.lock or
 ICO_REPLAY_LOCK) while they run.  Exit 0 when every hard rule holds, 1 on

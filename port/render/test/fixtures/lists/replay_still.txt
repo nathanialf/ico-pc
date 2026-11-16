@@ -1,0 +1,7 @@
+# rd_replay_tool_still (port/render/test/rd_replay_tool_still.cmake): the still
+# re-present on a frame replayed as its own tick before.  A name a line; a
+# QUANTITY OP VALUE word after it declares what the fixture shows here
+# (rd_fixture_list_props.cmake), checked on the run with the re-show on.
+#
+# the title's castle, a corpus frame of 2026-10-06 (512x512 GS, dump version 4)
+fx-boot-0200 draws>=1

@@ -17,19 +17,22 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_aura_paste COMMAND rd_aura_paste_test)
 endif()
 
-# rd_aura_paste_ab (test/rd_aura_paste_ab.cmake): the dumps of
-# tools/aura_paste_dumps.txt (machine-local; a listed dump that is absent
-# fails) with ICO_RD_AURA_PASTE=0 and =1, --pass-dump --stats, at the PowerVR
+# rd_aura_paste_ab (test/rd_aura_paste_ab.cmake): the fixtures of
+# test/fixtures/lists/aura_paste.txt (rd_fixture.cmake; a listed fixture that
+# is absent fails) with ICO_RD_AURA_PASTE=0 and =1, --pass-dump --stats, at the PowerVR
 # phone's profile (ICO_VK_FAKE_LIMITS=moltenvk), Enhanced 2x 4:3 under the same
 # fakes and a desktop 16:9 window without them (no local read: the paste whole):
 # every target and PRESENT byte for byte, the same passes and attachment bytes,
-# the off run splitting nothing, the dumps the list marks split once.  No
-# device: SKIP.
+# the off run splitting nothing, each fixture's declared splits at the phone's
+# setting (the path ran: aura_paste_split).  No device: SKIP.
+include(rd_fixture.cmake)
 if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/aura_paste_ab")
     add_test(NAME rd_aura_paste_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/aura_paste_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                     "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/aura_paste.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/aura_paste_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_aura_paste_ab.cmake")
     set_tests_properties(rd_aura_paste_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 7200)

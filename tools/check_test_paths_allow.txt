@@ -8,28 +8,13 @@
 # the old tools/shadow_box_dumps.txt stays below while the other tests that
 # read it are not converted).
 port/render/CMakeLists.txt
-port/render/test/rd_aura_paste_ab.cmake
-port/render/test/rd_bench_ab.cmake
-port/render/test/rd_replay_tool_glow_hold.cmake
-port/render/test/rd_replay_tool_ripple.cmake
-port/render/test/rd_replay_tool_save_blended.cmake
-port/render/test/rd_replay_tool_still.cmake
-port/render/test/rd_turn_fold_ab.cmake
 port/render/test/rd_vu_audit.cmake
-tools/aura_paste_dumps.txt
-tools/bench_dumps.txt
 tools/coverage_corpus.txt
 tools/date_cut_dumps.txt
-tools/fades_fold_dumps.txt
 tools/lamps_dumps.txt
 tools/native_frame_dumps.txt
 tools/no_volume_dumps.txt
-tools/noplanes_dumps.txt
 tools/occlusion_corpus.txt
-tools/prerotate_dumps.txt
 tools/shadow_box_dumps.txt
 tools/shadow_cuts_dumps.txt
-tools/sideband_dumps.txt
-tools/sweep_cameras.txt
-tools/turn_fold_dumps.txt
 tools/vustage_dumps.txt
