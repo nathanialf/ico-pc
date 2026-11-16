@@ -32,5 +32,9 @@ bool gpu_sysfs_android_around(double t0Ms, double t1Ms, int core, GpuSysfsAround
 /* A copy of the ring (the worst second's clock samples, clock_trap.h);
    false when nothing is sampled */
 bool gpu_sysfs_android_ring(GpuSysfsRing *out);
+/* What the start found of this process's GPU memory in the kernel driver
+   (/sys/class/kgsl/kgsl/proc/<pid>/, last-run.txt's field), one line
+   without "window: "; "" before gpu_sysfs_android_start */
+const char *gpu_sysfs_android_proc_text(void);
 
 #endif /* ICO_PLATFORM_GPU_SYSFS_ANDROID_H */

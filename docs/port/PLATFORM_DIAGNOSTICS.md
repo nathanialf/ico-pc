@@ -805,6 +805,61 @@ it, at the first failing call ([RHI.md](RHI.md#device-loss)).
 `port/platform/assert_host.c` is newlib's `__assert` as the game calls it: the same message on
 stderr, then `abort`, which the crash handler reports.
 
+### The last-run file
+
+`logs/last-run.txt` says where a run was when it ended without a word: the system ending the app,
+a driver ending the process, anything that leaves no crash line, device loss or watchdog end
+(issue 215). It is written on every platform from the start of the window's start-up
+(`ico_diag_startup_activity_begin`) to the end of the run (`port/platform/last_run.h`,
+`last_run.c`). The file has a fixed size and layout: one line a field, each in a slot of its own
+width at its own offset, `<field>: <value>` padded with blanks and ended by a check of the slot's
+bytes (`[3fa1c2d0]`, 32-bit FNV-1a with the slot's index mixed in). It is rewritten in place with
+one positional write of the whole file at every heartbeat (2 s, not synced: a process the system
+kills leaves the system's page cache, which still reaches the disc) and at every phase change
+(synced, about ten a run). A write the process did not finish leaves every slot whole, from one
+write or the other, or failing its check, which the reader marks as such: never a mix.
+
+| field | value |
+| --- | --- |
+| `version` | the version and commit |
+| `pid`, `started` | the process id; the start in UTC |
+| `seconds since start` | at the write |
+| `phase` | `starting: <the start's last step>`, `the start-up set: pipeline <n> of <m>`, `a self-test: <its step>`, `the game starting`, `the first picture`, `play: stage <n>, Main tick <t>` (the tick of the last heartbeat), each with `(since <s> s)`; a step that does not change the phase (the set's own, a renderer switch in play) is added as `; the last step: <step>` |
+| `app` | `in front` or `in the background`, since when |
+| `last trim signal` | the last `onTrimMemory` level, its name, when, how many in all; `none` |
+| `GPU resets` | `<a> at start, <b> now (+<d>)` from the kernel GPU driver's `reset_count` (Android's sampler, every 250 ms), else why not (`not readable (EACCES)`, `not available on this system ...`) |
+| `free memory` | `MemAvailable` now, the run's lowest and when, the start-up set's free-memory floor (Android) |
+| `process memory` | `VmRSS` now and `VmHWM` |
+| `GPU memory` | this process's files in the kernel driver's `/sys/class/kgsl/kgsl/proc/<pid>/` (each read as its first integer and taken for bytes), read on the sampler's thread every 2 s; or why not |
+| `pipelines` | the start-up set's count, the pipelines made as the frames needed them, the last pipeline note |
+| `end` | `running (...)` until an end is written: `clean` (the window's clean close; `clean, after: <words>` after a loss), `crash (signal <n>)` (POSIX; `crash (exception 0x<code>)` on Windows) written by the crash handler with async-signal-safe calls only (a slot built by hand, one `pwrite`, a bounded wait for a heartbeat's write in flight), `graphics device lost`, `the graphics driver stopped responding (a GPU hang)`, `the watchdog: <reason>` |
+
+At the next start the file is read before it is rewritten, copied to `logs/last-run-previous.txt`,
+and each field goes to the log beside the activity file's lines:
+`ico_pc: the previous run: <field>: <value>`, a field the file does not hold whole
+`... not readable (the file ends before it)` or `(a write the run did not finish)`, and a run that
+wrote no end `ico_pc: the previous run: end: none written: the run ended without a word (no clean
+end, crash, device loss or watchdog end was written; the fields above are its last write, <s> s
+after its start)`. Without the file the line is `ico_pc: the previous run: no last-run.txt (the
+first start with it, or the file was deleted)` and an older copy is deleted. `last_run_parse`
+gives the facts (`LastRunFacts`: pid, seconds, phase with stage and tick, background, trim level,
+resets, free memory, the end and a crash's signal) for the verdict of the next start.
+
+On Android 11 and later each phase change also hands at most 128 bytes (`ico-pc <phase> | resets
+47->66 | free 1911 MB, lowest 1897`) to `ActivityManager.setProcessStateSummary`
+(`IcoActivity.processStateSummary`, `port/platform/android/last_run_android.c`), which the system
+keeps in the process's exit record (`ApplicationExitInfo.getProcessStateSummary`) even when the
+app's files are lost; the first outcome is logged once (`ico_pc: last-run: the system keeps a
+summary ...` or `ico_pc: last-run: no summary in the system's exit record: <why>`). At the
+window's open Android logs `window: kernel GPU driver: this process's GPU memory: <folder>:
+readable <name> (<value>), ...` once, and one line for the stall lines: `window: stalls: the GPU's
+reset count (reset_count, <n> at the start) is sampled every 250 ms: the kernel GPU driver's line
+around each stall gives its change across it`, or `window: stalls: the GPU's reset count is not
+readable here (<why>): the stall lines carry no change of it`. Where both samples around a stall
+read it, the kernel GPU driver's line around it ends with `; the GPU's reset count +<d> across it
+(<a> before, <b> after)` (`port/platform/gpu_sysfs.c` (`gpu_sysfs_around_text`,
+`gpu_sysfs_resets_note`)). Nothing here changes behaviour. Tests: `last_run`, `gpu_sysfs`, `report`.
+
 ### The symbol lines
 
 A crash or watchdog report names, after its raw lines, every offset in the program it printed (the
@@ -860,6 +915,7 @@ the newest file in logs that starts with report-" and name it (`port/platform/di
 | `ico-pc.log` | the log so far |
 | `ico-pc-previous.log` | the run before's |
 | `startup-activity.txt` | when there is one |
+| `last-run.txt`, `last-run-previous.txt` | where this run is and where the run before was, when there are ([the last-run file](#the-last-run-file)) |
 | `config.toml`, `ico-pc.ini` | the settings |
 | `loss-<stamp>.zip` | this run's [loss dump](RENDER.md#the-loss-dump), else the one the previous run left, deflated |
 | `slow-<stamp>.zip` | this run's [slow-scene dumps](ANDROID_DIAGNOSTICS.md#issue-179s-lines-what-each-decides), up to three (the newest three are kept), each stored as it is |

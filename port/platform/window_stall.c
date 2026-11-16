@@ -623,7 +623,7 @@ void window_stall_poll(void)
 
     for (unsigned i = 0; i < s_around.n; i++) {
         GpuSysfsAround a;
-        char text[512];
+        char text[640]; /* the reset count's clause (about 60 bytes) on top */
 
         if (!gpu_sysfs_android_around(s_around.q[i].t0Ms, s_around.q[i].t1Ms, s_around.q[i].core,
                                       &a)) {
@@ -657,6 +657,12 @@ void window_stall_gpu_open(void)
     s_said = 1;
     gpu_sysfs_open_text(&info, text, sizeof(text));
     fprintf(stderr, "window: %s\n", text);
+    /* issue 123: the reset count's change across each stall, or once here
+       why the stall lines have none; issue 215: this process's GPU memory
+       for last-run.txt */
+    gpu_sysfs_resets_note(&info, text, sizeof(text));
+    fprintf(stderr, "window: %s\n", text);
+    fprintf(stderr, "window: %s\n", gpu_sysfs_android_proc_text());
     {
         /* what the device runs (issues 123, 179: their logs did not say;
            the performance hints need API 33): the system properties,

@@ -248,5 +248,12 @@ void gpu_sysfs_ring_around(const GpuSysfsRing *r, double t0Ms, double t1Ms, int 
 int gpu_sysfs_open_text(const GpuSysfsInfo *info, char *buf, size_t size);
 int gpu_sysfs_block_text(const GpuSysfsBlock *b, char *buf, size_t size);
 int gpu_sysfs_around_text(const GpuSysfsAround *a, unsigned replay, char *buf, size_t size);
+/* Why the GPU's reset count (reset_count) is not readable, NULL when it is
+   ("EACCES", "no reset_count node", ...); and the start's one line about
+   it for the stall lines (said once at the window's open, not per stall;
+   the around line then carries "the GPU's reset count +N across it (A
+   before, B after)" where both samples read it) */
+const char *gpu_sysfs_resets_why(const GpuSysfsInfo *info);
+int gpu_sysfs_resets_note(const GpuSysfsInfo *info, char *buf, size_t size);
 
 #endif /* ICO_PLATFORM_GPU_SYSFS_H */
