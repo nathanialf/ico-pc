@@ -153,6 +153,14 @@ typedef struct RdPerfRankBlock {
     double slowMs;
     uint32_t slowReplay, slowFrame, slowN;
     RdPerfPass slow[RD_PERF_RANK_SLOW_MAX];
+    /* "bound by waits elsewhere" named (issue 179's v0.11.7 log, the keep
+       frame blocks): the keep frames' GPU work apart (of gpuN and workMs:
+       keepGpuN of them, keepWorkMs their work), and the GPU idle before a
+       timed picture's first stamp after the one before's last
+       (RdPerfRecord.gpuGapNs over 0: gapN pictures of the gapAll timed
+       after another, gapIdleMs summed) */
+    uint32_t keepGpuN, gapN, gapAll;
+    double keepWorkMs, gapIdleMs;
 } RdPerfRankBlock;
 
 void rd_perf_rank_block_reset(RdPerfRankBlock *b);
@@ -204,8 +212,13 @@ typedef struct RdPerfRankRates {
     uint32_t smallN;
     bool copyRate; /* the copies moved 0.5 MB or more */
     double copyMbMs;
-    bool vuFit; /* the vertex fit holds (8 replays, a spread) */
+    bool vuFit; /* the vertex fit holds (8 replays, a spread, its base determined) */
     double vuBaseMs, vuPerK, vuR2;
+    /* the fit was made but its base is not determined by the spread of its
+       invocations (rd_perf_rank_fit_spread): no line printed from it; the
+       base's standard error and the pictures' mean work (ms) */
+    bool vuNoSpread;
+    double vuBaseSe, vuMeanY;
     double vuXMin, vuXMax; /* the invocations' range, thousands a picture */
     /* the fit is good enough for an estimate: a slope above 0, R^2
        RD_PERF_RANK_VU_R2 or over, the largest x twice the smallest */
@@ -219,6 +232,21 @@ typedef struct RdPerfRankRates {
 
 /* earlierMbMs: RdPerfRankInfo.earlierMbMs */
 void rd_perf_rank_rates(const RdPerfRankBlock *b, double earlierMbMs, RdPerfRankRates *out);
+
+/* The spread rule of a least-squares line y = a + s x over n points (the
+   sums of x, y, x^2, xy, y^2; s and a the fit's), from the fit's own
+   conditioning (issue 179's v0.11.7 log: "-9224.2 ms + 147.916 ms a
+   thousand vertex invocations" from invocations of 62.7k to 62.7k a
+   picture).  The base a is the line carried from the mean x to x = 0; its
+   standard error is sigma sqrt(1/n + mean(x)^2 / Sxx), sigma^2 the
+   residual's sum of squares over n - 2 and Sxx the sum of (x - mean x)^2,
+   so it grows as the invocations' spread shrinks against their mean.  The
+   fit says something of the base only when that error is under the mean
+   work it splits (mean y): true then; false (not enough spread) else, or
+   with n under 3 or no spread at all.  *seBase the error (0 where not
+   computed) */
+bool rd_perf_rank_fit_spread(uint32_t n, double sx, double sy, double sxx, double sxy, double syy,
+                             double s, double a, double *seBase);
 
 /* The verdict: the bound, below the rate or not, the candidates ranked */
 #define RD_PERF_RANK_TOP 3
@@ -236,6 +264,10 @@ typedef struct RdPerfRankVerdict {
     int bound;
     bool below; /* the presents or the game under 95 % of their rate */
     double periodMs, workMs, ownMs, stepCpuMs, tickMs;
+    /* the GPU's work of the pictures drawn anew and of the keep frames
+       (each 0 with none), the GPU idle a picture (gapIdleMs over the
+       pictures timed after another; 0 none): the waits named */
+    double drawnWorkMs, keepWorkMs, idleMs;
     uint32_t count;
     RdPerfRankCand c[RD_PERF_RANK_CANDIDATES]; /* the most first */
     /* why the GPU's candidates have no vertex estimate ("" when they have
@@ -314,14 +346,22 @@ const char *rd_perf_rank_hist_more(const uint32_t *hist);
 
 /* What the per-pass stamps cost, from the block's own pictures (issue 179:
    on a job-manager Mali a timestamp may end a job chain): the GPU spans of
-   the pictures timed pass by pass (stamped) against those with the list
-   stamps only (plain), each set's median; the sets are sorted in place.
-   "pass timing's cost: GPU span median 67.4 ms with every pass stamped (37
-   pictures), 64.1 ms with the list stamps only (111 pictures): +3.3 ms (an
-   estimate: different pictures of one block)"; 0 and nothing written when
-   either set has fewer than RD_PERF_RANK_STAMP_MIN */
+   the presented pictures' GPU spans in the block's order (span[0..count),
+   stamped[i] 1 for a picture timed pass by pass, 0 for one with the list
+   stamps only; keep frames left out by the caller).  The two sets' medians
+   compare different pictures (issue 179's v0.11.7 log: "+36.1" and "-21.1
+   ms" in one run), so the cost is the median of the differences of each
+   stamped picture against the mean of its neighbours in the order that
+   were not stamped (one or two; a stamped picture with none is no pair).
+   "pass timing's cost: GPU span median 70.0 ms with every pass stamped (5
+   pictures), 62.0 ms with the list stamps only (9 pictures); against the
+   pictures beside each without pass timing: +10.0 ms (the median of 5
+   pairs)"; 0 and nothing written when either set or the pairs number
+   fewer than RD_PERF_RANK_STAMP_MIN.  At most RD_PERF_RANK_STAMP_SEQ
+   pictures are read */
 #define RD_PERF_RANK_STAMP_MIN 5u
-int rd_perf_rank_stamp_cost_text(float *stamped, uint32_t ns, float *plain, uint32_t np, char *buf,
-                                 size_t n);
+#define RD_PERF_RANK_STAMP_SEQ 1024u
+int rd_perf_rank_stamp_cost_text(const float *span, const uint8_t *stamped, uint32_t count,
+                                 char *buf, size_t n);
 
 #endif /* RD_PERF_RANK_H */

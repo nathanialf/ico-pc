@@ -3,7 +3,8 @@
  * objects like the cage").  CPU only:
  *   tally   names by reason, a long name cut to the record's 24 bytes, the
  *           table full counted, the top five of each reason, the line word
- *           for word, a short buffer cut and terminated;
+ *           for word, a short buffer cut and terminated, an unmatched
+ *           name's texture scroll beside its count;
  *   stairs  an object moved every other tick steps at each still tick after
  *           a move and alternates from its fourth judged tick; one moved
  *           every tick, and a still one, never; one that stops counts once;
@@ -69,6 +70,14 @@ static void test_tally(void)
 
         CHECK(n == (int)strlen(b) && strlen(s) == 19u && strncmp(s, b, 19) == 0);
     }
+    /* issue 123's right wall: an unmatched name whose draws scrolled their
+       texture says so beside its count; a name not in the table, nothing */
+    rd_inames_scroll(&s_t, "cage", 2);
+    rd_inames_scroll(&s_t, "cage", 1);
+    rd_inames_scroll(&s_t, "4a_gate_sp_cc", 1);
+    (void)rd_inames_text(&s_t, 250, 348, NULL, b, sizeof b);
+    CHECK(strstr(b, "unmatched 9 (cage 5 [scroll 3], ico part 2 3, a screen prim 1); mismatched 0; "
+                    "jumped 2 (cage 2); ") != NULL);
     /* the top five, the most first; a NULL or empty name "a draw" */
     rd_inames_reset(&s_t);
     for (unsigned i = 0; i < 7u; i++) {

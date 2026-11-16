@@ -19,6 +19,7 @@
 #include "rd_thread.h"
 #include "render_thread.h"
 #include "rhi.h"
+#include "slow_judge.h"
 #include "ui_fps.h"
 #include "video_options.h"
 #include "window_disc.h"
@@ -963,6 +964,7 @@ void window_present_pace(int hz)
                (rd_pace_gpu_test testLockTransition); s_pres.asMade 0 so a
                return to as made logs its line and starts its allowance again */
             s_pres.asMade = 0;
+            s_pres.pictureNs = 0; /* one picture a refresh (slow_judge.h) */
             rd_present_as_made(false);
             pace_locked(n, period);
             return;
@@ -1014,6 +1016,11 @@ void window_present_pace(int hz)
 
         s_pres.frameSteps = n <= 4u ? n : 0u;
         s_pres.sinceClose = 0;
+        if (!rd_interpolation_active() && s_pres.frameSteps != 0u) {
+            /* one picture a game frame: the interval slow pictures are
+               judged against (slow_judge.h; the last known through a load) */
+            s_pres.pictureNs = (Uint64)s_pres.frameSteps * period;
+        }
     } else {
         s_pres.sinceClose++;
     }
@@ -1072,6 +1079,7 @@ void window_present_pace(int hz)
         gap = s_pres.fifoLock ? 0
                               : pace_present_gap(s_pres.framerate, uncappedMailbox != 0,
                                                  rhi_present_mailbox(), refresh);
+        s_pres.pictureNs = gap; /* a cap's gap (slow_judge.h), 0: a refresh */
         if (!gap) {
             s_pres.nextPresent = 0;
         }
@@ -1315,4 +1323,51 @@ void window_present_pace(int hz)
     if (now > s_deadline && now - s_deadline > RESYNC_NS) {
         resync(now);
     }
+}
+
+/* --- what slow pictures and steps are judged against (slow_judge.h) ----- */
+
+double window_slow_replay_ms(void)
+{
+    static Uint64 s_refresh = ~(Uint64)0, s_picture = ~(Uint64)0;
+    static double s_key = -1.0;
+    static unsigned s_lines;
+    const Uint64 refresh = window_refresh_ns(0);
+
+    if (refresh != s_refresh || s_pres.pictureNs != s_picture || s_pres.slowMs != s_key) {
+        /* a change of the interval in force (a frame rate, a display):
+           said, the first 8 times then every 100th */
+        s_refresh = refresh;
+        s_picture = s_pres.pictureNs;
+        s_key = s_pres.slowMs;
+        s_lines++;
+        if (s_lines <= 8u || s_lines % 100u == 0u) {
+            char text[320];
+
+            (void)slow_judge_text(text, sizeof(text), refresh, s_pres.pictureNs, s_pres.slowMs);
+            fprintf(stderr, "window: %s (change %u of the run)\n", text, s_lines);
+        }
+    }
+    return slow_judge_replay_ms(refresh, s_pres.pictureNs);
+}
+
+double window_slow_step_ms(void)
+{
+    return slow_judge_step_ms(s_pres.slowMs, window_refresh_ns(0), s_pres.pictureNs);
+}
+
+double window_slow_target_hz(void)
+{
+    return slow_judge_target_hz(window_refresh_ns(0), s_pres.pictureNs);
+}
+
+double window_block_game_fps(double sec)
+{
+    /* the close before this block's first: the last block's last close
+       (0: the first block, counted over its wall time) */
+    static Uint64 s_first;
+    const double fps = slow_judge_game_fps(s_pres.statFrames, s_first, s_pres.tickAt, sec);
+
+    s_first = s_pres.tickAt;
+    return fps;
 }

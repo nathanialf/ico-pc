@@ -386,7 +386,7 @@ replay 10911 drew frame 6514), so `rd_perf.c` keeps the counter with each pendin
 
 The counts: the 10 s line's `K skipped after a reset`, the end-of-run line's `K checks skipped
 after a reset`, and the attempt ledger's row `no capture after a stall on (a skin check read after a
-GPU reset is skipped, not captured) K checks skipped after a reset` ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-attempt-ledger)).
+GPU reset is skipped, not captured) K checks skipped after a reset` ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS_LEDGERS.md#the-attempt-ledger)).
 Not covered: the twins (their occlusion counts after a reset still make a twin event); the
 reporter's device has none drawn (its pipelines not made under the careful rule).
 

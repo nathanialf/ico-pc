@@ -11,8 +11,10 @@
 #include <string.h>
 #include <SDL3/SDL_filesystem.h>
 #include <SDL3/SDL_time.h>
+#include "attempt_ledger.h"
 #include "diag_host.h"
 #include "host_config.h"
+#include "last_run.h"
 #include "memory_floor.h"
 #include "pipe_resume.h"
 #include "rd.h"
@@ -20,6 +22,7 @@
 #include "rd_made_outside.h"
 #include "rd_vu_rec_early.h"
 #include "rhi.h"
+#include "set_size.h"
 
 /* this start resumed the set (window_pipe_floor_retry), and the stop it
    resumed after (its count steps the next stop's) */
@@ -70,13 +73,109 @@ static void resume_note_stop(void)
             st.at + 1u, ico_pipe_resume_batch(st.batch));
 }
 
+/* Issue 215 (set_size.h): the start-up set sized by the device's own memory
+   fall.  The memory as the set's floor reads it (diag_host.c
+   memory_floor_stop: MemAvailable against the floor of memory_floor.h with
+   [dev] pipeline_memory_floor_mb as ICO_PIPELINE_MEMORY_FLOOR_MB): 0 with
+   the figures, else -1 with why the rule is off */
+static int size_memory(long *freeMb, long *totalMb, long *floorMb, const char **offWhy)
+{
+#ifdef __ANDROID__
+    long availKb, totalKb;
+    long setting = ico_memory_floor_setting(getenv("ICO_PIPELINE_MEMORY_FLOOR_MB"));
+    if (setting == -2) {
+        setting = -1; /* not a number: the default, as the set reads it */
+    }
+    if (setting == 0) {
+        *offWhy = "the free-memory floor is off ([dev] pipeline_memory_floor_mb = 0)";
+        return -1;
+    }
+    if (ico_diag_device_memory(&availKb, &totalKb) != 0) {
+        *offWhy = "the device's free memory could not be read";
+        return -1;
+    }
+    *freeMb = availKb / 1024;
+    *totalMb = totalKb / 1024;
+    *floorMb = ico_memory_floor_mb(*totalMb, setting, ico_diag_memory_floor_driver());
+    if (*floorMb <= 0) {
+        *offWhy = "no free-memory floor on this device";
+        return -1;
+    }
+    return 0;
+#else
+    (void)freeMb;
+    (void)totalMb;
+    (void)floorMb;
+    *offWhy = "no free-memory floor on this system (Android's only)";
+    return -1;
+#endif
+}
+
+/* the set's measurement (32 KB of samples: static) */
+static SetSizeRun s_size;
+
+/* rd.h RdSetSizeFn: before each batch of the start-up set */
+static unsigned size_ask(const RdSetSizeAsk *a, char *why, size_t size)
+{
+    const long mb = 1024L * 1024L;
+    const long recMb = (long)((a->needRecordBytes + (uint64_t)mb - 1u) / (uint64_t)mb);
+    const long arenaMb = (long)((a->needArenaBytes + (uint64_t)mb - 1u) / (uint64_t)mb);
+    long freeMb = -1, totalMb = -1, floorMb = -1;
+    const char *offWhy = NULL;
+    const int have = size_memory(&freeMb, &totalMb, &floorMb, &offWhy) == 0;
+    static char line[SET_SIZE_LINE_MAX];
+    char words[SET_SIZE_WORDS_MAX];
+    SetSizeAsk q;
+    unsigned was, mask;
+
+    if (a->begin) {
+        set_size_begin(&s_size, have ? freeMb : -1, have ? floorMb : 0);
+        (void)set_size_rule_text(line, sizeof line, s_size.active, offWhy, a->left[0] + a->left[1],
+                                 freeMb, floorMb, recMb, arenaMb);
+        ico_diag_log("%s", line);
+        set_size_publish(s_size.active, floorMb, freeMb, "");
+    }
+    if (!s_size.active) {
+        return 0u;
+    }
+    memset(&q, 0, sizeof q);
+    q.freeMb = have ? freeMb : -1;
+    q.made[0] = a->made[0];
+    q.made[1] = a->made[1];
+    q.left[0] = a->left[0];
+    q.left[1] = a->left[1];
+    q.next = a->next;
+    q.needMb = recMb + arenaMb;
+    q.place = a->place;
+    q.total = a->total;
+    was = s_size.stopped | s_size.said;
+    mask = set_size_ask(&s_size, &q, line, sizeof line, why, size);
+    if (line[0] != '\0') {
+        ico_diag_log("%s", line);
+    }
+    /* the decision in last-run.txt's phase (when it changes) and the first
+       picture's line */
+    (void)set_size_words(&s_size, words, sizeof words);
+    if ((s_size.stopped | s_size.said) != was) {
+        last_run_set_size_words(words);
+    }
+    set_size_publish(1, s_size.floorMb, s_size.lowMb, words);
+    return mask;
+}
+
 void window_pipe_floor_driver(void)
 {
     const RhiLimits *l = rhi_limits();
+    long freeMb, totalMb, floorMb;
+    const char *offWhy = NULL;
 
     ico_diag_set_memory_floor_driver(l != NULL ? l->vendorId : 0u, l != NULL ? l->driverId : 0u,
                                      l != NULL ? l->driverText : NULL);
     ico_diag_set_pipe_compiler_serial(l != NULL ? l->serialPipelines : NULL);
+    /* issue 215: the set sized by the device's memory fall, where a floor
+       applies (the ledger's row; the rule's own line at the set's start) */
+    rd_set_set_size_fn(size_ask);
+    ico_attempt_decide_set_size(size_memory(&freeMb, &totalMb, &floorMb, &offWhy) == 0);
 }
 
 void window_pipe_finish_start(void)

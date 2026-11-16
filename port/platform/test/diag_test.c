@@ -178,6 +178,7 @@
 #include "rd_bisect_plan.h"
 #include "report.h"
 #include "sched.h"
+#include "set_size.h"
 #include "startup_retry.h"
 #include "symmap.h"
 
@@ -726,6 +727,39 @@ static void pipeset_then(int set)
         if (strcmp(then, "lowmem") == 0) {
             _exit(0);
         }
+        ico_diag_startup_activity_exit();
+        return;
+    } else if (strcmp(then, "setsize") == 0) {
+        /* issue 215: the set's size rule stopped the set (set_size.h: the
+           issue 215 handheld's start, 15 MB a 2D pipeline from 7249 MB with
+           the floor 1915 MB, as the window feeds it before each batch):
+           not a low-memory stop, so for this start only; the window's
+           budget_stop and resume part, then a clean exit */
+        static SetSizeRun run;
+        static const long freeMb[] = {7249, 7129, 7009, 6889};
+        char line[SET_SIZE_LINE_MAX];
+        unsigned m = 0, b;
+        set_size_begin(&run, 7249, 1915);
+        for (b = 0; b < 4u; b++) {
+            SetSizeAsk a;
+            memset(&a, 0, sizeof a);
+            a.freeMb = freeMb[b];
+            a.made[0] = b * 8u;
+            a.left[0] = 442u - b * 8u;
+            a.left[1] = 242u;
+            a.needMb = 32;
+            a.place = b * 8u;
+            a.total = 684u;
+            m = set_size_ask(&run, &a, line, sizeof line, NULL, 0);
+        }
+        ico_diag_log("test: set size stop %u at pipeline %u", m, run.placeAtStop[0] + 1u);
+        ico_diag_set_activity(NOTE_2D);
+        ico_diag_startup_activity_budget_stop();
+        ico_diag_log("test: resume part %d",
+                     ico_diag_startup_set_resume_part(
+                         "; resume at pipeline 25 of 684, batches of 8, stop 1, 2026-11-16 20:55"));
+        ico_diag_set_activity("creating pipeline fog test");
+        ico_diag_clear_activity();
         ico_diag_startup_activity_exit();
         return;
     } else if (strcmp(then, "cleanvupre") == 0) {
@@ -3141,6 +3175,42 @@ int main(int argc, char **argv)
         s = read_file(log);
         CHECK(strstr(s, "this one tries the start-up set again") != NULL);
         CHECK(strstr(s, "test: pipeline set 6\n") != NULL);
+        remove(act);
+        /* issue 215: a set the size rule stopped (set_size.h) is not resumed
+           by the next start: after a v0.11.7-style low-memory stop the next
+           start resumes, its set is stopped by the rule (2D at pipeline 25:
+           6270 MB of rest against 4942 MB), no resume part is kept, and the
+           two starts after it make the whole set again and stop at the same
+           place under the same measurement */
+        remove(ends);
+        setenv("ICO_TEST_THEN", "lowmemclean", 1);
+        r = run(argv[0], "actpipeset", log);
+        CHECK(strstr(read_file(log), "test: resume part 1\n") != NULL);
+        setenv("ICO_TEST_THEN", "setsize", 1);
+        setenv("ICO_TEST_RESUME", "1", 1);
+        r = run(argv[0], "actpipeset", log);
+        unsetenv("ICO_TEST_RESUME");
+        s = read_file(log);
+        CHECK(r == 0);
+        CHECK(strstr(s, "test: pipeline set 7\n") != NULL && strstr(s, "test: resumed\n") != NULL);
+        CHECK(strstr(s, "test: set size stop 1 at pipeline 25\n") != NULL);
+        CHECK(strstr(s, "test: resume part 0\n") != NULL);
+        s = read_file(act);
+        CHECK(strstr(s, "set: stopped at the system's low-memory signal") == NULL);
+        CHECK(strstr(s, "exited with the pipelines created as the frames needed them for that "
+                        "start only") != NULL);
+        for (int again = 0; again < 2; again++) {
+            r = run(argv[0], "actpipeset", log);
+            s = read_file(log);
+            CHECK(r == 0);
+            CHECK(strstr(s, "this one tries the start-up set again") != NULL);
+            CHECK(strstr(s, "this start resumes them where it stopped") == NULL);
+            CHECK(strstr(s, "test: pipeline set 0\n") != NULL);
+            CHECK(strstr(s, "test: set size stop 1 at pipeline 25\n") != NULL);
+            CHECK(strstr(s, "test: resume part 0\n") != NULL);
+        }
+        unsetenv("ICO_TEST_THEN");
+        CHECK(read_file(ends)[0] == '\0');
         remove(act);
         /* issue 128: the signals that stop the set */
         remove(ends);

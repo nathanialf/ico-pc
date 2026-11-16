@@ -43,6 +43,7 @@
 #include "last_run.h"
 #include "mem_breakdown.h"
 #include "mem_watch.h"
+#include "set_size.h" /* set_size_first_picture */
 #include "rd_bisect_plan.h"
 #include "rd_passring.h"
 #include "report.h"
@@ -5591,7 +5592,9 @@ static unsigned long long present_excused(unsigned long long d)
 void ico_diag_present_enter(void)
 {
     present_since_ns = ico_diag_now_ns();
-    last_run_present(); /* the first picture after the start (one compare after it) */
+    if (last_run_present()) {     /* the first picture after the start (one compare after it) */
+        set_size_first_picture(); /* issue 215: its free memory, once */
+    }
 }
 
 void ico_diag_present_leave(void)

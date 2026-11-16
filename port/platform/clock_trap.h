@@ -55,7 +55,9 @@
 
 #include "gpu_sysfs.h"
 
-/* a second with fewer game frames is not judged (a load, a pause, a menu) */
+/* a second with fewer game frames is not at one a tick (a load, a pause, a
+   menu); nor judged for the worst second where the rate in force is not
+   known (below) */
 #define CLOCK_TRAP_MIN_FRAMES 20u
 /* nothing for this long since the second's start: the next second starts at
    the next event (the app in the background, a pause) */
@@ -78,12 +80,29 @@ typedef struct ClockTrapSecond {
     double cpuMs;
     unsigned cpuN;
     bool asMade;
+    /* the pictures a second the presents aimed at, at the second's last
+       picture (clock_trap_target; 0 not known) */
+    double targetHz;
 } ClockTrapSecond;
+
+/* The worst second (issue 179's v0.11.7 log): the 20-frame rule skipped
+   every second of a 25 fps disc's dips (12-13 pictures a second, "none
+   judged") and a second at one picture a frame read 1.00 a tick however
+   few frames the game made.  A second is judged by its presented pictures
+   against the rate in force (Frame rate Original's game frames a second,
+   a cap, the refresh: slow_judge.h) when that rate is known: every whole
+   second (closed by an event within CLOCK_TRAP_GAP_RESET_MS of its start,
+   so not one the app spent away) with a picture; the worst has the
+   smallest share of the rate, then more CPU a picture.  Where the rate is
+   not known, v0.11.7's rule: seconds of CLOCK_TRAP_MIN_FRAMES frames or
+   more, the fewest pictures a frame. */
 
 typedef struct ClockTrapBlock {
     bool haveWorst;
     ClockTrapSecond worst;
-    unsigned seconds, oneATick;
+    /* seconds of CLOCK_TRAP_MIN_FRAMES frames or more, those of them at
+       one a tick; judged the seconds judged for the worst */
+    unsigned seconds, oneATick, judged;
     double cpuMs;
     unsigned cpuN;
     unsigned pictures, frames; /* the block's (every picture drained, every new frame) */
@@ -95,6 +114,7 @@ typedef struct ClockTrap {
     uint32_t lastFrame;
     bool haveFrame;
     ClockTrapBlock block;
+    double targetHz; /* clock_trap_target's */
 } ClockTrap;
 
 enum {
@@ -103,6 +123,9 @@ enum {
 };
 
 void clock_trap_reset(ClockTrap *c);
+/* The pictures a second the presents aim at from now (0 not known): each
+   picture's second takes it */
+void clock_trap_target(ClockTrap *c, double hz);
 
 /* The rule: an as-made second of at least CLOCK_TRAP_MIN_FRAMES frames with
    at most 1.1 pictures a frame (pictures x 10 <= frames x 11), at least half
@@ -118,8 +141,13 @@ unsigned clock_trap_picture(ClockTrap *c, double tMs, uint32_t frame, double cpu
                             ClockTrapSecond *closed);
 unsigned clock_trap_ask(ClockTrap *c, double tMs, bool held, bool asMade, ClockTrapSecond *closed);
 
-/* a worse than b: fewer pictures a frame, then more CPU a picture */
+/* a worse than b: both with a rate in force, the smaller share of it
+   (pictures / targetHz); else fewer pictures a frame; then more CPU a
+   picture */
 bool clock_trap_worse(const ClockTrapSecond *a, const ClockTrapSecond *b);
+/* whether a closed second is judged for the worst (whole: closed by an
+   event within CLOCK_TRAP_GAP_RESET_MS of its start) */
+bool clock_trap_judged(const ClockTrapSecond *s, bool whole);
 
 /* The block's numbers since the last take, then zeroed */
 void clock_trap_block_take(ClockTrap *c, ClockTrapBlock *out);

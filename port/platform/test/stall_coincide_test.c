@@ -4,7 +4,8 @@
  * What a stall coincided with (stall_coincide.h): the block's medians (none
  * before five, the ring's last 64, a full table), the spike rule at its
  * bounds, the classes of a moment (issue 179's: memory under the floor;
- * a core wait; pressure rising; the GPU clock low; none), the tally and
+ * a core wait; pressure rising; the GPU clock low; none; one piece grew and
+ * the GPU slow as a whole from the pieces against their medians), the tally and
  * moment texts word for word, the pressure and status parsers, the
  * driver's thread names (CPU only).
  */
@@ -110,6 +111,98 @@ static void budget_cases(void)
     CHECK(t.written == 6u && t.leftOut == 594u); /* the last block: the 100ths alone */
 }
 
+/* issue 179's classes (the v0.11.7 log's stalls all "none of these"): the
+   pieces against their medians, the two classes at their edges, the line's
+   clauses word for word, the median peeked without adding */
+static void pieces_cases(void)
+{
+    StallMoment m;
+    char t[1024];
+    /* list 0 at 6x its median, the others near theirs: one piece grew */
+    {
+        const double ms[4] = {120.0, 9.0, 2.5, 2.0}, med[4] = {20.0, 8.0, 2.0, 2.0};
+        memset(&m, 0, sizeof m);
+        m.gameCore = m.renderCore = -1;
+        m.gpuMhz = m.gpuMaxMhz = -1;
+        m.availMb = m.floorMb = -1;
+        m.pressure = -1;
+        m.headroom = -1.0;
+        CHECK(stall_pieces_judge(&m, ms, med, 4) == 0);
+        CHECK(m.pieceN == 4u && m.grown == 1u && m.pieceFactor == 6.0);
+        CHECK(m.othersFactor == 1.125); /* 1.0, 1.125, 1.25: the middle */
+        CHECK(stall_classes(&m) == 1u << STALL_CLASS_ONE_PIECE);
+        snprintf(m.pieceName, sizeof m.pieceName, "list 0");
+        m.idleKnown = true;
+        m.idleBeforeMs = 0.2;
+        m.trisKnown = true;
+        m.tris = 13000.0;
+        m.trisMedian = 12000.0;
+        (void)stall_moment_text(&m, t, sizeof t);
+        text_is(t,
+                "the game thread's core not known; the core waits not sampled; device memory not "
+                "known; its 4 timed pieces against their block medians: list 0 x6.0, the others "
+                "x1.1 (their median; 1 of 4 at x2 or more); the GPU idle 0.2 ms before its "
+                "work; 13000 VU triangles against the block's median 12000 (x1.08); coincided "
+                "with: one piece grew",
+                __LINE__);
+        /* the others' median at the bound: not one piece */
+        const double ms2[3] = {120.0, 16.0, 1.0}, med2[3] = {20.0, 8.0, 1.0};
+        (void)stall_pieces_judge(&m, ms2, med2, 3);
+        CHECK(m.pieceN == 3u && m.grown == 2u && m.othersFactor == 1.5);
+        CHECK(stall_classes(&m) == 1u << STALL_CLASS_ONE_PIECE);
+        const double ms3[3] = {120.0, 16.0, 2.0}, med3[3] = {20.0, 8.0, 1.0};
+        (void)stall_pieces_judge(&m, ms3, med3, 3);
+        CHECK(m.othersFactor == 2.0 && m.grown == 3u);
+        CHECK(stall_classes(&m) == 1u << STALL_CLASS_GPU_WHOLE);
+    }
+    /* every piece grew: the GPU slow as a whole, the range of factors; a
+       piece with no median left out; begun before the one before ended */
+    {
+        const double ms[4] = {60.0, 9.0, 5.0, 7.0}, med[4] = {20.0, 3.0, -1.0, 2.0};
+        memset(&m, 0, sizeof m);
+        m.gameCore = m.renderCore = -1;
+        m.gpuMhz = m.gpuMaxMhz = -1;
+        m.availMb = m.floorMb = -1;
+        m.pressure = -1;
+        m.headroom = -1.0;
+        CHECK(stall_pieces_judge(&m, ms, med, 4) == 3); /* 3.5x */
+        CHECK(m.pieceN == 3u && m.grown == 3u && m.factorMin == 3.0 && m.factorMax == 3.5);
+        CHECK(stall_classes(&m) == 1u << STALL_CLASS_GPU_WHOLE);
+        m.idleKnown = true;
+        m.idleBeforeMs = -1.5;
+        (void)stall_moment_text(&m, t, sizeof t);
+        text_is(t,
+                "the game thread's core not known; the core waits not sampled; device memory not "
+                "known; its 3 timed pieces against their block medians: every piece grew, x3.0 "
+                "to x3.5; its work begun 1.5 ms before the picture before ended; coincided with: "
+                "the GPU slow as a whole",
+                __LINE__);
+    }
+    /* one piece alone: no class of the two; none with a median: nothing */
+    {
+        const double ms[1] = {90.0}, med[1] = {10.0};
+        memset(&m, 0, sizeof m);
+        m.availMb = m.floorMb = -1;
+        m.gpuMhz = m.gpuMaxMhz = -1;
+        CHECK(stall_pieces_judge(&m, ms, med, 1) == 0 && m.pieceN == 1u);
+        CHECK(stall_classes(&m) == 1u << STALL_CLASS_NONE);
+        const double none[1] = {-1.0};
+        CHECK(stall_pieces_judge(&m, ms, none, 1) == -1 && m.pieceN == 0u);
+    }
+    /* the median peeked: as add's, nothing added */
+    {
+        StallMedians md;
+        stall_medians_reset(&md);
+        CHECK(stall_medians_peek(&md, 3) < 0.0);
+        for (int i = 0; i < 5; i++) {
+            (void)stall_medians_add(&md, 3, 10.0 + i);
+        }
+        CHECK(stall_medians_peek(&md, 3) == 12.0 && md.k[0].n == 5u);
+        CHECK(stall_medians_add(&md, 3, 1.0) == 12.0);
+        CHECK(stall_medians_peek(&md, 4) < 0.0);
+    }
+}
+
 int main(void)
 {
     StallMedians md;
@@ -173,7 +266,8 @@ int main(void)
             "stalls by what coincided: 3 in the block, 0 of them hangs (the GPU's own sign of a "
             "reset with a stamp unwritten) and 3 other; all 3 by class: a core wait over 100 ms "
             "1, memory under the floor 2, memory pressure rising 1, the GPU clock low 0 (not "
-            "readable), the GPU's own sign of a reset 0, none of these 1",
+            "readable), the GPU's own sign of a reset 0, one piece grew 0, the GPU slow as a "
+            "whole 0, none of these 1",
             __LINE__);
     /* the GPU clock where readable */
     m.gpuMhz = 300;
@@ -284,7 +378,8 @@ int main(void)
                 "stalls by what coincided: 4 in the block, 3 of them hangs (the GPU's own sign of "
                 "a reset with a stamp unwritten) and 1 other; all 4 by class: a core wait over 100 "
                 "ms 0, memory under the floor 0, memory pressure rising 0, the GPU clock low 0 "
-                "(not readable), the GPU's own sign of a reset 4, none of these 0",
+                "(not readable), the GPU's own sign of a reset 4, one piece grew 0, the GPU slow "
+                "as a whole 0, none of these 0",
                 __LINE__);
         /* a block of 352 stalls on a fresh run: its first 16 by the rare
            rule, then v0.11.6's rule over the 336 others (the first 8, the
@@ -362,6 +457,7 @@ int main(void)
     }
 
     budget_cases();
+    pieces_cases();
 
     /* the driver's thread names */
     CHECK(stall_driver_name("mali-cmar-backe"));

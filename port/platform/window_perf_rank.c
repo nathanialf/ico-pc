@@ -14,6 +14,7 @@
 #include "log_cost.h"
 #include "rd_perf_more.h"
 #include "rd.h" /* rd_vu_prepass_on */
+#include "rd_list_draws.h"
 #include "rd_perf_rank.h"
 #include "rhi.h"
 #include "window_clock_trap.h" /* window_clock_trap_ranked */
@@ -42,11 +43,12 @@ static bool s_haveLast;
 /* the last block's records, and those through the submit thread */
 static uint32_t s_lastN, s_lastSubN;
 
-/* the block's presented pictures' GPU spans, timed pass by pass or not
-   (rd_perf_rank_stamp_cost_text: what the stamps cost) */
-#define STAMP_SPANS 1024u
-static float s_stamped[STAMP_SPANS], s_plain[STAMP_SPANS];
-static uint32_t s_stampedN, s_plainN;
+/* the block's presented pictures' GPU spans in order, each timed pass by
+   pass or not (rd_perf_rank_stamp_cost_text: what the stamps cost, each
+   stamped picture against its neighbours) */
+static float s_span[RD_PERF_RANK_STAMP_SEQ];
+static uint8_t s_spanStamped[RD_PERF_RANK_STAMP_SEQ];
+static uint32_t s_spanN;
 
 /* the cost counters' block (rd_perf_more.h): the costs and compare lines */
 static RdPerfMore s_more;
@@ -66,12 +68,9 @@ void window_perf_rank_record(const RdPerfRecord *r, double vuInvocations)
     if (ico_attempt_state_of(ICO_ATT_SUBPASS) == ICO_ATT_ON) {
         ico_attempt_fire(ICO_ATT_SUBPASS, r->dateStencilTakes);
     }
-    if (r->presented && r->gpuValid && !r->keep) {
-        if (r->passTimed && s_stampedN < STAMP_SPANS) {
-            s_stamped[s_stampedN++] = (float)r->gpuMs;
-        } else if (!r->passTimed && s_plainN < STAMP_SPANS) {
-            s_plain[s_plainN++] = (float)r->gpuMs;
-        }
+    if (r->presented && r->gpuValid && !r->keep && s_spanN < RD_PERF_RANK_STAMP_SEQ) {
+        s_span[s_spanN] = (float)r->gpuMs;
+        s_spanStamped[s_spanN++] = r->passTimed ? 1u : 0u;
     }
     SDL_UnlockSpinlock(&s_lock);
 }
@@ -103,6 +102,32 @@ static void sceneName(SceneKind kind, int stage, const char *stageName, char *bu
 {
     const bool keep = s_block.n && 2u * s_block.keep > s_block.n;
     (void)window_scene_key(buf, n, kind, stage, stageName, keep);
+}
+
+/* The block's most expensive list's draws by fragment entry and DATE mode
+   when it is not list 0 (rd_list_draws.h; issue 179's list 3 in the deja
+   scene); the block's look-ups taken every block.  On a tile-based GPU the
+   stretch before list 0 is list 0's (the classes line's "before list 0 +
+   list 0") */
+static void list_draws_line(char *line, size_t cap)
+{
+    static RdListDraws d;
+    double ms[RD_LIST_COUNT];
+
+    rd_list_draws_take(&d);
+    if (s_block.gpuN == 0) {
+        return;
+    }
+    for (int l = 0; l < RD_LIST_COUNT; l++) {
+        ms[l] = s_block.listMs[l] / (double)s_block.gpuN;
+    }
+    if (s_block.tiler) {
+        ms[0] += s_block.uploadGpuMs / (double)s_block.gpuN;
+    }
+    const int pick = rd_list_draws_pick(ms, RD_LIST_COUNT);
+    if (pick > 0 && rd_list_draws_text(&d, pick, ms[pick], rd_list_draws_fs_name, line, cap) > 0) {
+        fprintf(stderr, "window: %s\n", line);
+    }
 }
 
 /* the profile's lines; the caller holds the lock.  partial: the block in
@@ -228,7 +253,7 @@ static void window_perf_rank_block_lines(const WindowPerfBlock *in)
         rd_perf_rank_block_reset(&s_block);
         rd_perf_more_reset(&s_more);
         window_scene_reset(&s_share);
-        s_stampedN = s_plainN = 0;
+        s_spanN = 0;
         s_lastN = s_lastSubN = 0;
         SDL_UnlockSpinlock(&s_lock);
         return; /* no replays: a movie, a pause in the background */
@@ -262,12 +287,12 @@ static void window_perf_rank_block_lines(const WindowPerfBlock *in)
     s_block.tiler = info.tiler; /* before list 0 and list 0 as one there */
     (void)rd_perf_rank_classes_text(&s_block, rd_perf_pass_label, 6, line, sizeof line);
     fprintf(stderr, "window: %s\n", line);
+    list_draws_line(line, sizeof line);
     (void)rd_perf_rank_rates_text(&s_block, &rates, line, sizeof line);
     fprintf(stderr, "window: %s\n", line);
     (void)rd_perf_rank_slowest_text(&s_block, rd_perf_pass_label, 5, line, sizeof line);
     fprintf(stderr, "window: %s\n", line);
-    if (rd_perf_rank_stamp_cost_text(s_stamped, s_stampedN, s_plain, s_plainN, line, sizeof line) >
-        0) {
+    if (rd_perf_rank_stamp_cost_text(s_span, s_spanStamped, s_spanN, line, sizeof line) > 0) {
         fprintf(stderr, "window: %s\n", line); /* both kinds in the block */
     }
     (void)rd_perf_rank_ranked_text(&info, &v, ranked, sizeof ranked);
@@ -300,7 +325,7 @@ static void window_perf_rank_block_lines(const WindowPerfBlock *in)
     }
     rd_perf_rank_block_reset(&s_block);
     window_scene_reset(&s_share);
-    s_stampedN = s_plainN = 0;
+    s_spanN = 0;
     SDL_UnlockSpinlock(&s_lock);
 }
 

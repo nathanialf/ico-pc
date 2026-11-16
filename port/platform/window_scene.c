@@ -530,20 +530,32 @@ double window_slow_scene_work_ms(const SlowSceneBlock *b)
     return w > 0.0 ? w : 0.0;
 }
 
+int window_slow_scene_scene_cap(const SlowSceneBlock *b)
+{
+    return b->playDone ? SLOW_SCENE_DUMPS : SLOW_SCENE_DUMPS - 1;
+}
+
 bool window_slow_scene_due(const SlowSceneBlock *b)
 {
-    if (!(b->boundMs > 0.0 && b->window && !b->movie && b->dominant == SCENE_SCENE &&
+    if (!(b->boundMs > 0.0 && b->window && !b->movie &&
+          (b->dominant == SCENE_SCENE || b->dominant == SCENE_PLAY) &&
           b->uptimeS >= SLOW_SCENE_UPTIME_MIN_S && b->gpuN >= SLOW_SCENE_GPU_MIN)) {
         return false;
     }
     const double work = window_slow_scene_work_ms(b);
 
-    if (!(work > b->boundMs)) {
+    if (!(work > b->boundMs) || b->count >= SLOW_SCENE_DUMPS) {
         return false;
     }
-    return b->count == 0 ||
-           (b->count < SLOW_SCENE_DUMPS &&
-            (window_slow_scene_new_stage(b) || work >= SLOW_SCENE_STEP * b->lastWorkMs));
+    if (b->dominant == SCENE_PLAY) {
+        return !b->playDone; /* the first slow block of play takes the one kept */
+    }
+    if (b->count >= window_slow_scene_scene_cap(b)) {
+        return false;
+    }
+    /* the scene dumps made: the count less the play block's */
+    return b->count - (b->playDone ? 1 : 0) == 0 || window_slow_scene_new_stage(b) ||
+           work >= SLOW_SCENE_STEP * b->lastWorkMs;
 }
 
 bool window_slow_scene_new_stage(const SlowSceneBlock *b)
@@ -566,7 +578,9 @@ size_t window_slow_scene_text(char *out, size_t cap, const SlowSceneBlock *b, un
     const double mean = b->spanSumMs / n;
     char which[160], layout[96] = "";
 
-    if (window_slow_scene_new_stage(b)) {
+    if (b->dominant == SCENE_PLAY) {
+        snprintf(layout, sizeof(layout), " (the dump kept for play)");
+    } else if (window_slow_scene_new_stage(b)) {
         snprintf(layout, sizeof(layout), " (the first slow block of stage %d)", b->stage);
     }
     snprintf(which, sizeof(which),
@@ -575,10 +589,11 @@ size_t window_slow_scene_text(char *out, size_t cap, const SlowSceneBlock *b, un
     const int c =
         snprintf(out, cap,
                  "slow scene: the block's GPU work %.1f ms a replay (bound %.0f; display "
-                 "wait %.1f, present %.1f, span %.1f) in a scene layout%s: frame %u (%s) "
+                 "wait %.1f, present %.1f, span %.1f) in %s%s: frame %u (%s) "
                  "written to logs/%s (dump %d of %d this run); attach it with the log",
                  window_slow_scene_work_ms(b), b->boundMs, b->waitSumMs / n, b->presentSumMs / n,
-                 mean, layout, frame, which, zipName, b->count + 1, SLOW_SCENE_DUMPS);
+                 mean, b->dominant == SCENE_PLAY ? "play" : "a scene layout", layout, frame, which,
+                 zipName, b->count + 1, SLOW_SCENE_DUMPS);
 
     return c < 0 ? 0 : ((size_t)c < cap ? (size_t)c : cap - 1);
 }
