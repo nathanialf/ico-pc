@@ -11,7 +11,14 @@
 #      the triangles the PS2's rule drops, or draws beside the 4:3 picture
 #      only, that the camera rule draws; the back faces the card test drew
 #      that it drops; the sprites out of the box), every target byte for
-#      byte where the mask is empty; the report in OUT/report.md.  The path
+#      byte where the mask is empty; the report in OUT/report.md.  Both
+#      replays leave out the draws that sample a render target
+#      (--feedback-off: the shadows' pyramid and composite, the glow, the
+#      softening, the fog's depth read), which resample SCENE at another
+#      scale and move pixels up to their reach outside a triangle the
+#      camera rule draws (fx-drops-4657 Original 1x: 108 pixels up to 8 GS
+#      rows above the card through the shadow composite, 0 without it), so
+#      the mask holds SCENE's geometry exactly.  The path
 #      ran: the camera rule's replay (the report's camera.log, --stats) at
 #      every setting shows the fixture's region_rule_draws ("region rule: the
 #      camera's: N VU draws", the draws the camera rule's mode holds,
@@ -62,6 +69,7 @@ set(RDFX_FAILURES 0)
 # 1. the pictures
 execute_process(COMMAND "${PYTHON}" -I "${REPORT}" --tool "${TOOL}" --out "${OUT}/ab"
                         --list "${OUT}/dumps.txt" --own-aspect --report "${OUT}/report.md"
+                        --feedback-off
                         --setting "orig=--present 1280x960"
                         --setting "enh2x=--enhanced --resolution 2x --present 1280x960"
                 RESULT_VARIABLE rcR OUTPUT_VARIABLE outR ERROR_VARIABLE errR)

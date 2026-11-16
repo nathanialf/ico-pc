@@ -13,7 +13,18 @@
 # 512 GS pixels (512 * scale texels) identical byte for byte, its side
 # columns reported, and every side pixel B changes one A left at its fog
 # colour (A's most common side colour); every other target reported, not
-# held (the post effects read across the band's edge).
+# held (the post effects read across the band's edge).  Both replays leave
+# out the draws that sample a render target (tools/region_camera_report.py
+# --feedback-nops, from rd_replay_tool --list --no-device: the shadows'
+# pyramid and its composite back over SCENE, the glow's chain, the
+# softening, the fog's depth read): those resample SCENE or targets made
+# from it at another scale and carry the side columns' change into the
+# band up to their reach (fx-drops-189 Original 1x: the band's two edge
+# columns, one level, through the composites of lists 3, 7 and 10), which
+# the PS2 would show as well (its composites read whatever the side held).
+# SCENE is then the geometry, and the side bands' rule is exact on it: no
+# pixel of a triangle drawn beside the picture lands in the band.  The VU
+# draws are never left out.
 # The path ran: on B at every setting the fixture's side_band_card_draws
 # ("side bands: N draws with cards", counted only for a draw the side bands'
 # mode holds: rd_replay_vu.c vuSource's RD_DROPS_BESIDE branch), at least 1
@@ -36,6 +47,9 @@
 # -DOUT=<a folder the test may write>
 include("${FIXTURE_HELPERS}")
 get_filename_component(_sb_here "${CMAKE_CURRENT_LIST_FILE}" DIRECTORY)
+# tools/region_camera_report.py, beside CMP (tools/cmp_dirs_band.py)
+get_filename_component(_sb_tools "${CMP}" DIRECTORY)
+set(_sb_report "${_sb_tools}/region_camera_report.py")
 include("${_sb_here}/rd_fixture_list_props.cmake")
 file(REMOVE_RECURSE "${OUT}")
 rd_fixture_list("${LIST}" names)
@@ -78,13 +92,22 @@ foreach(i RANGE ${last})
   message(STATUS "rd_sideband_ab: ${name}: ${frameR}")
   rd_fixture_require(${name} "${outR}" region_drops beside_tris)
   rd_fixture_quantity(beside_tris "${outR}" besideN)
+  # the draws that sample a render target, left out of both replays (above)
+  execute_process(COMMAND "${PYTHON}" -I "${_sb_report}" --tool "${TOOL}" --feedback-nops "${dump}"
+                  RESULT_VARIABLE rcF OUTPUT_VARIABLE outF ERROR_VARIABLE errF)
+  string(STRIP "${outF}" outF)
+  if(NOT rcF EQUAL 0 OR outF STREQUAL "")
+    message(FATAL_ERROR "${name}: --feedback-nops exited ${rcF}:\n${outF}\n${errF}")
+  endif()
+  file(WRITE "${OUT}/${name}-feedback-nop.txt" "${outF}\n")
+  message(STATUS "rd_sideband_ab: ${name}: ${errF}")
   foreach(s IN LISTS settings)
     set(dirA "${OUT}/${name}-${s}-drop")
     set(dirB "${OUT}/${name}-${s}-beside")
     file(MAKE_DIRECTORY "${dirA}" "${dirB}")
     execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_VU_BESIDE=0 ICO_RD_REGION_RULE=ps2
                             "${TOOL}" "${dump}" "${dirA}-out.png" --pass-dump "${dirA}"
-                            --aspect ${aspect} ${args_${s}}
+                            --aspect ${aspect} ${args_${s}} --nop "@${OUT}/${name}-feedback-nop.txt"
                     RESULT_VARIABLE rcA OUTPUT_VARIABLE outA ERROR_VARIABLE errA)
     if(rcA EQUAL 77)
       message(STATUS "SKIP: no device: ${errA}")
@@ -96,6 +119,7 @@ foreach(i RANGE ${last})
     execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_REGION_RULE=ps2
                             "${TOOL}" "${dump}" "${dirB}-out.png" --pass-dump "${dirB}"
                             --aspect ${aspect} ${args_${s}} --stats
+                            --nop "@${OUT}/${name}-feedback-nop.txt"
                     RESULT_VARIABLE rcB OUTPUT_VARIABLE outB ERROR_VARIABLE errB)
     if(NOT rcB EQUAL 0)
       message(FATAL_ERROR "${name} (${s}): the side bands' replay exit ${rcB}:\n${outB}\n${errB}")

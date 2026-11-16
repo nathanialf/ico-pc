@@ -713,7 +713,12 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   frame at full height; `fx-drops-maingate` 48:9), at their own aspect. 1.
   `tools/region_camera_report.py` at the Original preset 1x and Enhanced 2x (presented at
   1280x960): `rd_replay_tool --pass-dump` under `ICO_RD_REGION_RULE=ps2` with `--region-mask` and
-  under `camera` with `--stats`; every PNG compared; SCENE's differing pixels must all lie in the
+  under `camera` with `--stats`, both with `--feedback-off` (the draws that sample a render target
+  left out, from `rd_replay_tool --list --no-device`: the shadows' pyramid and its composite, the
+  glow's chain, the softening, the fog's depth read; they resample SCENE at another scale and move
+  pixels up to their reach outside a drawn triangle: on `fx-drops-4657` Original 1x the shadow
+  composite moved 108 pixels up to 8 GS rows above the card, 0 without it; the VU draws are never
+  left out); every PNG compared; SCENE's differing pixels must all lie in the
   mask scaled to SCENE and grown by one GS pixel (red the triangles the PS2's rule drops, or draws
   beside the picture only, that the camera rule draws; green the back faces the card test drew that
   it drops; blue the sprites out of the box), and with an empty mask every target must be byte for
@@ -731,7 +736,12 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   the region rule's side bands against the PS2's drop on the committed fixtures of
   `port/render/test/fixtures/lists/wide.txt` (the list `rd_region_camera_ab` reads). Every fixture
   at its own aspect, Original 1x and Enhanced 2x: `rd_replay_tool --pass-dump` with
-  `ICO_RD_VU_BESIDE=0` (every VU draw keeps the PS2's drop) and without (with `--stats`), then
+  `ICO_RD_VU_BESIDE=0` (every VU draw keeps the PS2's drop) and without (with `--stats`), both
+  with `--nop` of the draws that sample a render target (`tools/region_camera_report.py
+  --feedback-nops`, as `rd_region_camera_ab`'s `--feedback-off`: on `fx-drops-189` the composites
+  of lists 3, 7 and 10 carried the side columns' change one level into the band's two edge
+  columns, a reach the PS2's composites have as well; the side bands' rule is exact on SCENE's
+  geometry), then
   `tools/cmp_dirs_band.py A B --gs-width W --band-files SCENE.png --fog-from-a`, W the replay's
   `frame W GS wide`: SCENE's centre 512 GS pixels (512 x scale texels) identical byte for byte, the
   side columns reported (changed pixels, largest channel difference, bounding box), and every side
