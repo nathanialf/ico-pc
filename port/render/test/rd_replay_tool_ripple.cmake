@@ -13,8 +13,10 @@
 #     (rd_fixture_require on the replay's output, REQUIRE)
 #   - the picture: its PNG's SHA-256, the fixture's own picture as the release
 #     before drew it (v0.11.6's rd_replay_tool, the arguments of the
-#     registration; checked only on lavapipe, the tool's device line naming
-#     llvmpipe, where it was taken)
+#     registration; checked only on x86-64's lavapipe, the tool's device line
+#     naming llvmpipe at 256 bits, where it was taken and where Mesa 25.0.7 and
+#     25.2.8 draw the same bytes; arm64's llvmpipe, 128 bits, draws others: CI
+#     run 43805687280)
 # -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the
 # fixtures folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake>
 # -DFIXTURE=<a fixture's name> -DOUT=<png> -DARGS=<a|b|...>
@@ -75,8 +77,9 @@ endif()
 file(SHA256 "${OUT}" sha)
 message(STATUS "${OUT}: SHA-256 ${sha}")
 if(SHA)
-  if(NOT err MATCHES "llvmpipe")
-    message(STATUS "the picture's SHA-256 is lavapipe's: not compared on this device")
+  if(NOT err MATCHES "llvmpipe \\(LLVM [0-9.]+, 256 bits\\)")
+    message(STATUS "the picture's SHA-256 is x86-64 lavapipe's (llvmpipe, 256 bits): not "
+                   "compared on this device")
   elseif(NOT sha STREQUAL SHA)
     message(FATAL_ERROR "the picture's SHA-256 ${sha}, not ${SHA} (the release before's picture "
                         "of ${FIXTURE})")

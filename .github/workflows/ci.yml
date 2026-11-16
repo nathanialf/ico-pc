@@ -555,8 +555,13 @@ jobs:
             --exclude "$ICO_ARM64_FILTERED" --exclude "$ICO_CI_EXCLUDE" \
             --fixture-tests skip --cost-data build-host/linux-arm64/Testing/Temporary/CTestCostData.txt \
             --out "$RUNNER_TEMP/gating.txt"
+          # --exclude-regex: ctest adds a listed test's fixture set-up
+          # (rd_pixel, set-up of rd_dump) to the run unless a regex excludes
+          # it; the filtered-pixel names stay out of this gating job (CI run
+          # 43805687280 ran rd_pixel here through 25 tests' FIXTURES_REQUIRED)
           $CMAKE/ctest --test-dir build-host/linux-arm64 --output-on-failure --parallel 4 \
-            --no-tests=error --tests-from-file "$RUNNER_TEMP/gating.txt"
+            --no-tests=error --tests-from-file "$RUNNER_TEMP/gating.txt" \
+            --exclude-regex "$ICO_ARM64_FILTERED"
 
       # A pushed release tag (never a pull request): the Linux arm64 package
       # (normal and portable archives, and the aarch64 AppImage) of the tagged commit, which the maintainer's x86-64 machine cannot
@@ -791,8 +796,11 @@ jobs:
             --parallel 4 --fixture-tests only \
             --cost-data build-host/linux-arm64/Testing/Temporary/CTestCostData.txt \
             --out "$RUNNER_TEMP/shard.txt"
+          # the filtered-pixel names out of the fixture set-ups ctest adds
+          # (rd_pixel for rd_dump), as in the linux-arm64 job
           $CMAKE/ctest --test-dir build-host/linux-arm64 --output-on-failure --parallel 4 \
-            --no-tests=error --tests-from-file "$RUNNER_TEMP/shard.txt"
+            --no-tests=error --tests-from-file "$RUNNER_TEMP/shard.txt" \
+            --exclude-regex "$ICO_ARM64_FILTERED"
 
   # The Android APK (arm64-v8a), debug-signed, built with the Gradle project in
   # android/ and checked structurally; the game is not run. The toolchain

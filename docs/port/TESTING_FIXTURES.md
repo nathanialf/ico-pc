@@ -506,6 +506,16 @@ expansion does not change); its manifest line must say the same.
 
 ## The tests on fixtures
 
+A picture pinned by SHA-256 (a golden list, `lists/*_goldens.txt`, or a test's `-DSHA`) is the
+bytes of one renderer: another lavapipe build or CPU architecture rounds the same draws
+differently (CI run 43805687280: arm64's llvmpipe, 128 bits, moved every pinned picture; Mesa
+25.2.8 on x86-64 moved `rd_shadow_fine_ab`'s anisotropic `pixel` setting). A golden list's
+`# driver: <regex>` line names the replay tool's device line (`rhi_vk: device table: ...`) the
+bytes are compared on; on any other device the test still checks the set of PNGs and every
+relation between runs of the same job, and says the bytes were not compared.
+`rd_replay_tool_ripple*` and `rd_replay_tool_mirror_floor` compare their `-DSHA` on x86-64's
+llvmpipe (256 bits) alone.
+
 | test | list | fixtures | the properties it checks |
 | --- | --- | --- | --- |
 | `rd_shadow_box_ab`, `rd_shadow_box_ab_gl` | `lists/shadow_box.txt` | `fx-shadow-wide` (a character's shadow at 21:9: `shadow_volume_draws>=1`, `shadow_box_counts>=1`, `shadow_box_composites>=1`), `fx-lamps-novolume` (a shadow window with no volume: `shadow_volume_draws=0`) | `shadow_volume_draws`, `shadow_box_counts`, `shadow_box_composites` on the box-on replay at the phone setting (OpenGL: its one setting); every target byte for byte; equal draws and passes with volumes, with none (an empty box) fewer or equal, fewer where the count was boxed |

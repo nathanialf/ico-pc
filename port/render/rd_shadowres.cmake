@@ -79,12 +79,22 @@ endif()
 # shadow kernels or composites at 2x and 4x, the shadow tiles' masks of the
 # named levels, and the stored pass dumps and baselines made before the rule)
 # keep it: ICO_RD_SHADOW_FINE=0 (the tests' switch).  Each is in this list by
-# name; one that does not exist in a configuration is left out.
+# name; one that does not exist in a configuration is left out.  A test's
+# OpenGL twin (ico_rd_gl_twin, CMakeLists.txt) copied its environment before
+# this file is included, so the twin (<name>_gl) takes the switch here too:
+# CI run 43805687280 failed rd_shadow_edges_gl in every Linux job (its B-spline
+# pass counts are the PS2-size chain's; at the scene's scale the levels take
+# no B-spline pass).
 foreach(_t rd_shadow rd_shadow_edges rd_shadow_nodual rd_shadow_vk11 rd_shadow_vk11s
            rd_shadow_vk10 rd_ssaa_shadow rd_ssaa_shadow_4096 rd_shadow_tile_ab
            rd_shadow_tile_selftest rd_glow_cheap_ab rd_crack_late_ab native_frame_gate_a
            native_frame_gate_b rd_no_volume_ab rd_no_volume_ab_gl)
-    if(TEST ${_t})
-        set_property(TEST ${_t} APPEND PROPERTY ENVIRONMENT "ICO_RD_SHADOW_FINE=0")
-    endif()
+    foreach(_v ${_t} ${_t}_gl)
+        if(TEST ${_v})
+            get_test_property(${_v} ENVIRONMENT _sfenv)
+            if(NOT "ICO_RD_SHADOW_FINE=0" IN_LIST _sfenv)
+                set_property(TEST ${_v} APPEND PROPERTY ENVIRONMENT "ICO_RD_SHADOW_FINE=0")
+            endif()
+        endif()
+    endforeach()
 endforeach()
