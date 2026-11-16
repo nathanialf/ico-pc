@@ -44,6 +44,10 @@
 # [-DBACKEND=vulkan|opengl|d3d11 (default vulkan)] [-DFIXTURE_TOOL=...
 # -DFIXTURES=... -DFIXTURE_HELPERS=...]
 cmake_policy(SET CMP0057 NEW) # if(... IN_LIST ...) in a -P script
+# an entry's empty name field (a path list's "prof|dump|") kept as an element:
+# CMake 4 has no OLD behaviour, the Windows runner's CMake 3 dropped it and
+# list(GET ef 2) failed (CI run 43805687280, windows job, D3D11 on WARP)
+cmake_policy(SET CMP0007 NEW)
 if(NOT BACKEND)
   set(BACKEND vulkan)
 endif()
