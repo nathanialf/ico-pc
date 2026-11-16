@@ -757,7 +757,9 @@ What the plain set hides (issues 163 and 164): a triangle that fails the region 
 into the picture is dropped by the plain set (`VU_RULE_DROP`), as on the PS2, and drawn clipped by
 the extended one (`VU_RULE_STRIP`) unless it is a card, under `[dev] region_rule = ps2`; under the
 camera rule both sets draw it when it faces the eye, which is why such a device keeps the PS2's
-drops (`g_rd.vuNoBeside`: no camera rule and no side bands on it). So a vertex placed far off the screen, in
+drops on its skinned draws (`g_rd.vuNoBeside`: no camera rule on them and no side bands on any
+draw; its static meshes and grids, which read no bone, take the camera rule,
+`port/render/rd_plain_camera.h`, issue 123). So a vertex placed far off the screen, in
 front of the eye, by anything the two sets share (the program's arithmetic, the stream, VuCB,
 VuBoneCB) is invisible through the plain set and drawn as a long sliver through the extended one;
 a clean picture through the plain set does not place a fault in the extended-only code. The

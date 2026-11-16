@@ -384,9 +384,11 @@ A draw with neither `VU_F_EXTENDED` nor `VU_F_TICKS` takes the plain one and get
 A device the renderer keeps to the plain ones (the Adreno 740 on Qualcomm's driver, whose driver
 froze the whole device compiling the extended ones; Mesa's Turnip driver, where the extended ones
 drew a stray vertex as a sliver; or `[dev] vu_set = plain`) draws every state with the plain
-variant: there a triangle that reaches into the picture and fails the region test is not drawn
-inside the picture in any state (no card test: the wide picture's edge at the old 4:3 border may
-open), and the pictures between two ticks take the blended camera's rule alone
+variant: there, under `[dev] region_rule = ps2`, a triangle that reaches into the picture and
+fails the region test is not drawn inside the picture in any state (no card test: the wide
+picture's edge at the old 4:3 border may open; under the camera rule, the default, a static mesh's
+or a grid's is drawn when it faces the eye and a skinned draw's stays dropped, The camera rule
+below), and the pictures between two ticks take the blended camera's rule alone
 ([RENDER.md](PIPELINES.md#the-fallback-entries)). The side bands (step 7) follow the reason: where
 the device keeps the plain set (the table's Adreno 740 row, Turnip) they are off on every VU draw
 (`g_rd.vuNoBeside`, `ICO_VU_NO_BESIDE`; `rd_replay_vu.c` `vuBesideOn`), because they would draw the
@@ -420,10 +422,18 @@ last step is the camera's:
 
 A draw the camera rule cannot take keeps the PS2's rule: a mesh without winding marks
 (`RdMeshRec.facingFrom` none: a prelit stream the EE gave no table, a save state loaded into a
-fresh run; counted by why in the 10 s line, below) and every VU draw on a device that keeps the
-plain set (`g_rd.vuNoBeside`: the Adreno 740 row, Turnip; issue 163: the plain set hides the
-stray vertex the extended set's clipped triangles showed, and drawing the drops clipped would
-bring it back), whose start line says "off on this device's plain set". A sprite the VU skips
+fresh run; counted by why in the 10 s line, below) and, on a device that keeps the plain set
+(`g_rd.vuNoBeside`: the Adreno 740 row, Turnip), its skinned draws (issue 163: the plain set
+hides the stray vertex a skinned draw's clipped triangles showed, a bone's address or matrix read
+wrong, and drawing the drops clipped would bring it back). The static meshes and grids there take
+the camera rule as on every other device (issue 123's right wall at 3:2: a wall
+triangle the PS2 drops near the sides or the camera was lost whole): issue 163's vertex came from
+a skinned draw's bones (Ico's leg), which they do not read, and the camera rule is a draw flag the plain modules
+already hold, so no module or pipeline is new (`port/render/rd_plain_camera.c`,
+`rd__plain_keeps_drops`; `vuDropMode`). The plain modules have no tick re-test, so between two
+ticks such a draw takes the blended camera's verdict alone: a back face a tick showed stays
+dropped there, where the extended set draws it. Under `[dev] region_rule = ps2` every draw on
+such a device keeps the drops, with no side bands. A sprite the VU skips
 for its x/y window is drawn whole in every state, as outside out of the box (`vu_particle_vs`,
 `vu1ref_particle_draw` with the state's flag or `VU_F_CAMERA`). The EE's strips
 (`gif_DrawStripF`) keep their rule ([CPU strips](#the-region-rule)). The plain shader set has
@@ -434,7 +444,13 @@ no effect under it. The CPU mirror is `vu1ref_region_camera` (`port/render/vu1_r
 **The lines.** The start line names the rule: `rd: region rule: the camera decides (triangles
 the PS2 drops are drawn clipped when they face the eye; [dev] region_rule = ps2 keeps the PS2's
 drops)` (or `rd: region rule: the PS2's ([dev] region_rule = ps2: ...)`). The 10 s line counts
-the draws under it, `region rule: the camera's: N VU draws a replay drawn by the camera rule`,
+the draws under it, `region rule: the camera's: N VU draws a replay drawn by the camera rule`
+(the device's plain set: `rd: region rule: the camera decides for static meshes on this device's
+plain set; skinned draws keep the PS2's drops (issue 163); [dev] region_rule = ps2 keeps the PS2's
+drops on every draw` at start, and the 10 s line's `plain set (issue 163): S static and grid draws
+a replay by the camera rule, K skinned draws a replay keep the PS2's drops`, `--stats`' `stats:
+plain set: S static and grid draws by the camera rule, K skinned draws kept the PS2's drops`, the
+attempt ledger's row `the camera rule for static meshes on the plain set`),
 and `camera rule: N draws without facing data (A prelit rebuilt without the EE's table, ...)`
 for the draws that kept the PS2's drops for want of facing (`RdPerfRecord.vuCameraDraws`,
 `vuBesideNoFacing`; `port/render/rd_perf.c`). The GPU decides each triangle, so the line counts

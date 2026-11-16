@@ -1235,3 +1235,27 @@ window: on the glass in 10 s: P pictures with a display id, S shown with the dis
 No clock is read for it; the display's times are the driver's (its own clock: only differences are
 used). Nothing is printed where no picture carried an id (another backend, the extension not
 offered) unless the screen's rule ran (above).
+
+## Issue 123's right wall: the camera rule on the plain set
+
+The issue ledger's rows for it ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-issue-ledger)
+is at its size cap) and the attempt ledger's row ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-camera-rule),
+`port/render/rd_plain_camera.c`).
+
+| Problem the logs showed | The question the next log answers | The line and field that answers it |
+| --- | --- | --- |
+| Adreno 740 on Qualcomm's driver at 3:2 (issue 123): a wall on the right of the main gate shifting or opening in a recording; the device's plain set kept the PS2's drops on every 3D draw (`rd: region rule: the camera decides (...); off on this device's plain set (issue 163): the PS2's drops`) | Did the camera rule hold the walls and floors there this run, and did the skinned draws keep their drops? | The start's `rd: region rule: the camera decides for static meshes on this device's plain set; skinned draws keep the PS2's drops (issue 163); [dev] region_rule = ps2 keeps the PS2's drops on every draw`; the 10 s line's `plain set (issue 163): S static and grid draws a replay by the camera rule, K skinned draws a replay keep the PS2's drops` (S above 0 in play: the path ran) beside `region rule: the camera's: N VU draws a replay` (N counts the particles too) |
+| The same wall, should it stay | Is the wall still drawn by the camera rule while it shows, and is it the region rule at all? | The same two lines in the block of the recording, with the attempt ledger's row below; a wall that still shifts with S above 0 is not a region drop (the other candidates of the diagnosis: the held glow's camera against the present's and an unmatched part's texture scroll, which lines of their own report) |
+| Issue 163's sliver (Turnip, a skinned draw's vertex thrown off) | Did the change bring it back? | The sliver came from a skinned draw's bones, which a static draw does not read; the skinned draws keep the drop: `K skinned draws a replay keep the PS2's drops` above 0, and the skin check's lines as before ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)) |
+
+The attempt ledger's row: `the camera rule for static meshes on the plain set on (static meshes and
+grids by the camera, skinned draws keep the PS2's drops (issue 163))` on a device that keeps the
+plain set under the camera rule, `not applicable here ([dev] region_rule = ps2: the PS2's drops on
+every draw)` under the PS2's rule there, `not applicable here (this device draws with the extended
+set or by choice with the plain one: the camera decides on every draw)` elsewhere (set at each
+device start by `rd_pipeline.c` `rd__vu_policy_init`, `ico_attempt_decide_plain_camera`); its
+counts in each block, `N mesh and grid draws by the camera (K skinned draws kept)`, are the draws
+of the replays (`rd_plain_camera.c` `rd__plain_camera_note`, from `rd_replay_vu.c` `doVuDraw`).
+The GPU decides each triangle, so the lines count draws; the triangles a dump's frame has dropped
+or drawn per draw are `rd_replay_tool --region-stats`' on that frame (its oracle holds the plain
+set's rule: no card test, no tick re-test, the skinned draws' drops kept).
