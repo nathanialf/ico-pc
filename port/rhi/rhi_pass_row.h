@@ -61,15 +61,6 @@ const char *rhi_vk_pass_row(uint32_t vendorId, uint32_t driverId, uint32_t apiVe
  * reason, a phrase for the device line. */
 const char *rhi_vk_pass_row_qualcomm(uint32_t vendorId, uint32_t driverId, int android);
 
-/* Issue 123's second attempt beside the row (port/rhi/rhi_qprio.h): the
- * game's queue asked at high global priority on the same devices, Qualcomm's
- * own driver (vendor 0x5143 with VK_DRIVER_ID_QUALCOMM_PROPRIETARY, or with
- * no driver id) on an Android build (android nonzero), so the system's own
- * GPU work at a lower priority does not preempt the game's inside a pass.
- * Turnip and every other driver, and any non-Android build, are not asked.
- * NULL off the row; else the reason, a phrase for the start line. */
-const char *rhi_vk_qprio_row(uint32_t vendorId, uint32_t driverId, int android);
-
 /* The override's value: -1 none (NULL, empty, "auto" or anything else), 0
  * ("0", "false", "no", "off"), 1 ("1", "true", "yes", "on"); case does not
  * matter. */

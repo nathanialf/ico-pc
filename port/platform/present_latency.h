@@ -11,16 +11,14 @@
  * ran (a wait for the GPU, at most) and the part after its end (the
  * display's), where the picture's GPU end is known exactly (its slot's
  * wait blocked and saw it end: rd.h RdPerfRecord.gpuSignalMs with
- * gpuDoneValid 1).  Beside it the queue's global priority as the device's
- * creation got it (rhi.h RhiLimits.queuePriority, issue 123's second
- * attempt).  One line a block, after the present stalls' line:
+ * gpuDoneValid 1).  One line a block, after the present stalls' line:
  *   present latency in the block: 519 presents (519 from the hand-over),
  *     mean 34.6 ms, longest 365.2 ms (replay 2075); of the mean: before
  *     the present 18.0 ms (the slot's wait for the GPU 15.6 ms, the
  *     acquire 0.0 ms), the present 16.6 ms, the driver's present call 15.4
  *     ms of it; over 518 presents with the picture's GPU end seen, the call
  *     12.0 ms while the picture's GPU work still ran and 3.4 ms after its
- *     end (the display's); the queue's priority: high, granted
+ *     end (the display's)
  * Pure (port/platform/test/present_latency_test.c); the window adds each
  * presented record (window_stall.c window_stall_after: a few adds) and
  * writes the line at the block's end.
@@ -55,8 +53,9 @@ typedef struct PresentLatency {
 /* a presented record (endMs > 0 and fromMs > 0, end after from; others
    are left out) */
 void present_latency_add(PresentLatency *p, const PresentLatencyRec *r);
-/* the line after "window: " (nothing with no present: 0); queuePriority
-   rhi.h RhiLimits.queuePriority (0 not asked, 1 granted, 2 refused) */
-size_t present_latency_text(const PresentLatency *p, int queuePriority, char *out, size_t cap);
+/* the line after "window: " (nothing with no present: 0).  (v0.11.7's
+   clause on the queue's global priority went with the priority, v0.11.8:
+   the queue is made at the driver's default on every device) */
+size_t present_latency_text(const PresentLatency *p, char *out, size_t cap);
 
 #endif /* ICO_PLATFORM_PRESENT_LATENCY_H */

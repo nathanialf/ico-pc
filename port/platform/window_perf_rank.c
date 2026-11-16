@@ -166,7 +166,10 @@ static void ledger_lines(void)
            row, every block (a switch of the graphics API makes a device
            again); its count the block's growth of the passes begun as
            VkRenderPass objects, only while the row holds (the counters
-           start from 0 when the backend is made again) */
+           start from 0 when the backend is made again); its second the
+           block's stalls (ico_attempt_block_text: the high queue
+           priority's row that counted them was taken off, issues 215 and
+           123) */
         static uint64_t s_passLast;
         const char *row = rhi_limits()->passObjectsRow;
         RhiStats st;
@@ -178,11 +181,6 @@ static void ledger_lines(void)
                                                    : st.passObjects);
         }
         s_passLast = st.passObjects;
-        /* issue 123's second attempt (rhi_qprio.h): the queue's global
-           priority as the device's creation got it; its count the block's
-           stalls (ico_attempt_block_text) */
-        ico_attempt_decide_queue_priority(rhi_limits()->queuePriority,
-                                          rhi_limits()->queuePriorityWhy);
         /* the flat outputs reach the device only with the VU pre-pass on
            (the Adreno 740's is off by its device table; a self-test or
            the record can turn it off after the start) */

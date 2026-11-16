@@ -6,8 +6,8 @@
  * part before the present and the present's own, the driver's call split
  * at the picture's GPU end (all before it, all after it, across it), the
  * records left out (no present end, an end before the start), the line
- * word for word with each queue priority, and nothing with no present
- * (CPU only).
+ * word for word (no queue priority clause since v0.11.8: the priority was
+ * taken off), and nothing with no present (CPU only).
  */
 #include <stdio.h>
 #include <string.h>
@@ -38,7 +38,7 @@ int main(void)
     PresentLatency p;
     char t[1024];
     memset(&p, 0, sizeof p);
-    CHECK(present_latency_text(&p, 1, t, sizeof t) == 0 && t[0] == '\0');
+    CHECK(present_latency_text(&p, t, sizeof t) == 0 && t[0] == '\0');
 
     /* a: handed over at 1000, presented by 1030 (the present 16 ms, its
        call 12 ms from 1018 to 1030), the slot's wait 10 ms, the acquire
@@ -73,31 +73,27 @@ int main(void)
     /* the split over a, b, c: 8 + 0 + 365 = 373 before the GPU end (124.33),
        4 + 40 + 0 = 44 after (14.67) */
     CHECK(p.callGpu == 373.0 && p.callAfter == 44.0);
-    (void)present_latency_text(&p, 1, t, sizeof t);
+    (void)present_latency_text(&p, t, sizeof t);
     text_is(t,
             "present latency in the block: 4 presents (3 from the hand-over, 1 from the replay's "
             "start), mean 127.5 ms, longest 400.0 ms (replay 102); of the mean: before the present "
             "20.0 ms (the slot's wait for the GPU 11.5 ms, the acquire 0.1 ms), the present 107.5 "
             "ms, the driver's present call 106.5 ms of it; over 3 presents with the picture's GPU "
             "end seen, the call 124.3 ms while the picture's GPU work still ran and 14.7 ms after "
-            "its end (the display's); the queue's priority: high, granted",
+            "its end (the display's)",
             __LINE__);
-    (void)present_latency_text(&p, 2, t, sizeof t);
-    CHECK(strstr(t, "; the queue's priority: the driver's default (high refused)") != NULL);
-    (void)present_latency_text(&p, 0, t, sizeof t);
-    CHECK(strstr(t, "; the queue's priority: the driver's default (high not asked)") != NULL);
+    CHECK(strstr(t, "priority") == NULL);
 
     /* no GPU end seen: the call not split; all handed over */
     memset(&p, 0, sizeof p);
     present_latency_add(&p, &d);
-    (void)present_latency_text(&p, 0, t, sizeof t);
+    (void)present_latency_text(&p, t, sizeof t);
     text_is(t,
             "present latency in the block: 1 presents (1 from the hand-over), mean 30.0 ms, "
             "longest 30.0 ms (replay 103); of the mean: before the present 21.0 ms (the slot's "
             "wait for the GPU 16.0 ms, the acquire 0.0 ms), the present 9.0 ms, the driver's "
             "present call 9.0 ms of it; the picture's GPU end not seen exactly (its slot's wait "
-            "did not block): the call not split; the queue's priority: the driver's default "
-            "(high not asked)",
+            "did not block): the call not split",
             __LINE__);
 
     if (failures) {

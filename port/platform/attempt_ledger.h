@@ -48,11 +48,18 @@ typedef enum IcoAttemptState {
     /* not in this build: a row kept for an attempt not built yet (its lines
        say so at the start and leave it out of the blocks) */
     ICO_ATT_NOT_BUILT,
-    /* refused by the driver: the attempt asked the driver for something it
-       declined (the high queue priority's VK_ERROR_NOT_PERMITTED), the
-       behaviour before it kept */
-    ICO_ATT_DRIVER_REFUSED
+    /* removed: an attempt a later release took off (the high queue
+       priority, v0.11.8); the row is kept so two releases' logs compare row
+       by row, its start words say when and why, and it is left out of the
+       blocks */
+    ICO_ATT_REMOVED
 } IcoAttemptState;
+
+/* the high queue priority's row's words since its removal (its why at
+   every start) */
+#define ICO_ATT_QPRIO_REMOVED_WHY                                                                  \
+    "taken off for issues 215 and 123: no queue asked a high global priority; the block's "        \
+    "stalls counted on the passes' row"
 
 /* The rows, in the lines' order */
 enum {
@@ -81,14 +88,16 @@ enum {
     /* the Adreno 740 attempt (rhi_pass_row.h): every render pass a
        VkRenderPass object on Qualcomm's own driver; state from
        RhiLimits.passObjectsRow, count the block's growth of
-       RhiStats.passObjects (window_perf_rank.c) */
+       RhiStats.passObjects (window_perf_rank.c), second count the block's
+       stalls whatever the state (ico_attempt_block_text's stalls,
+       window_stall_tally_take's) */
     ICO_ATT_ADRENO_A,
-    /* issue 123's second attempt (port/rhi/rhi_qprio.h, vk_qprio.c): the
-       game's queue at high global priority on Qualcomm's own driver under
-       Android; state from RhiLimits.queuePriority (on granted, refused by
-       the driver, not applicable here with the reason) every block
-       (window_perf_rank.c); count the block's stalls whatever the state
-       (ico_attempt_block_text's stalls, window_stall_tally_take's) */
+    /* issue 123's second attempt, v0.11.7: the game's queue at high global
+       priority on Qualcomm's own driver under Android.  Removed in v0.11.8
+       (issues 215 and 123: the hangs did not change, and it was new on a
+       handheld that ended at every start): state ICO_ATT_REMOVED from the
+       start, why ICO_ATT_QPRIO_REMOVED_WHY, no count (its stall count moved
+       to ICO_ATT_ADRENO_A's second) */
     ICO_ATT_ADRENO_B,
     /* the subpass read (port/rhi/rhi_subpass_verdict.h,
        port/render/rd_subpass_probe.c): DATE's stencil set-up inside the
@@ -198,8 +207,7 @@ const char *ico_attempt_why_of(int id);
 /* the row's words ("few-cores rule"), NULL out of range */
 const char *ico_attempt_name(int id);
 /* the state's word: "not reported", "on", "off by default", "refused by
-   its self-test", "not applicable here", "not in this build", "refused by
-   the driver" */
+   its self-test", "not applicable here", "not in this build", "removed" */
 const char *ico_attempt_state_word(IcoAttemptState s);
 /* moves at every state change (the start line printed again) */
 uint32_t ico_attempt_serial(void);
@@ -212,15 +220,14 @@ size_t ico_attempt_start_text(char *out, size_t cap);
    the last call (each row's counts taken: the next call starts from
    here); rows not reported left out; stalls >= 0 adds "; stalls N in the
    block" and, where the Adreno row is reported, "(the Adreno attempt on)"
-   or "(the Adreno attempt off)", with ", high queue priority granted",
-   "refused" or "not asked" inside where the priority's row is reported
-   too ("(high queue priority ...)" alone without the Adreno row); stalls
-   > 0 also counts on the priority's row; "" when no row is reported and
-   stalls < 0; the length written */
+   or "(the Adreno attempt off)"; stalls > 0 also counts on the Adreno
+   row's second count ("(N stalls in the block)" after its passes); rows
+   not in this build or removed are left out; "" when no row is reported
+   and stalls < 0; the length written */
 size_t ico_attempt_block_text(char *out, size_t cap, int stalls);
 
 /* every row back to its state at the start (NOT_SET, the rows not built
-   NOT_BUILT) and 0 (the tests) */
+   NOT_BUILT, the removed rows REMOVED with their why) and 0 (the tests) */
 void ico_attempt_reset(void);
 
 /* The start line in parts that each fit cap (window_perf_rank.c: a 4 KB
@@ -268,12 +275,6 @@ void ico_attempt_decide_empty_skip(int box, int mode);
    device's RhiLimits.passObjectsRow (its reason while Qualcomm's row holds
    the passes; NULL otherwise, and on the other backends) */
 void ico_attempt_decide_pass_objects(const char *row);
-/* the high queue priority (window_perf_rank.c every block): state
-   RhiLimits.queuePriority (1 granted: on; 2 refused: refused by the driver;
-   anything else: not applicable here), why its queuePriorityWhy (a static
-   phrase; NULL: the fixed words, "not asked on this graphics API (Vulkan's
-   alone)" where not asked) */
-void ico_attempt_decide_queue_priority(int state, const char *why);
 /* the record sized from need (rd_vu_rec_early.c rd_vu_record_prepare, once
    at start-up): wanted the pre-pass is on, made the rows made at start-up
    (0 none), bound the rows the memory bound alone allowed, need the run's

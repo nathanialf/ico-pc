@@ -5,8 +5,10 @@
  * start, a state with its why, the serial moving only on a change, the
  * block line's counts taken per block (the next block starts from 0), a
  * static row, rows not reported left out of the block line, the stalls
- * clause with and without an Adreno row, out-of-range ids ignored and a
- * short buffer cut and terminated.
+ * clause with and without an Adreno row and the block's stalls on that row's
+ * second count, the high queue priority's row removed (v0.11.8: its start
+ * words, left out of the blocks), out-of-range ids ignored and a short
+ * buffer cut and terminated.
  */
 #include <stdio.h>
 #include <string.h>
@@ -357,14 +359,6 @@ static void test_classes(void)
         ico_attempt_decide_no_volume_break(d->nvEnv, d->nvClass, kShip[c].measured, d->nvDefault,
                                            d->nvGate);
         ico_attempt_decide_pass_objects(d->passRow);
-        /* the high queue priority: on Qualcomm's own driver under Android
-           (the classes with the pass row) asked; granted here (the
-           refusal's state below), RhiLimits.queuePriorityWhy's words */
-        ico_attempt_decide_queue_priority(
-            d->passRow ? 1 : 0,
-            d->passRow ? "high granted through VK_KHR_global_priority: Qualcomm's own driver on "
-                         "Android"
-                       : "not Qualcomm's own driver on Android");
         /* the VU record by compute with the shipped default (1) */
         CHECK(ico_attempt_decide_vu_compute(0, d->vuStores, 1, d->vuPowervr, kShip[c].measured, -1,
                                             1) == (d->wantVu == ICO_ATT_ON ? 1 : 0));
@@ -465,7 +459,8 @@ static void test_classes(void)
         CHECK(ico_attempt_state_of(ICO_ATT_PIPE_SET_CORES) == d->wantCores);
         CHECK(ico_attempt_state_of(ICO_ATT_NO_VOLUME_BREAK) == d->wantNoVolume);
         CHECK(ico_attempt_state_of(ICO_ATT_ADRENO_A) == (d->passRow ? ICO_ATT_ON : ICO_ATT_NA));
-        CHECK(ico_attempt_state_of(ICO_ATT_ADRENO_B) == (d->passRow ? ICO_ATT_ON : ICO_ATT_NA));
+        /* the high queue priority: removed on every device (v0.11.8) */
+        CHECK(ico_attempt_state_of(ICO_ATT_ADRENO_B) == ICO_ATT_REMOVED);
         CHECK(ico_attempt_state_of(ICO_ATT_BLEND_CONST) == ICO_ATT_NOT_BUILT);
         CHECK(ico_attempt_state_of(ICO_ATT_PASTE_SPEC) == ICO_ATT_ON);
         CHECK(ico_attempt_state_of(ICO_ATT_CHAIN3) == ICO_ATT_NOT_BUILT);
@@ -1058,6 +1053,10 @@ int main(void)
     CHECK(strstr(b, "; the glow chain in three passes not in this build") != NULL);
     CHECK(strstr(b, "; the shadow volumes by the stencil-only entry not reported") != NULL);
     CHECK(strstr(b, "; subpass read not reported") != NULL);
+    /* the high queue priority's row: removed from the start, with its words */
+    CHECK(strstr(b, "; Qualcomm queue at high priority removed (taken off for issues 215 and "
+                    "123: no queue asked a high global priority; the block's stalls counted on "
+                    "the passes' row); ") != NULL);
     CHECK(ico_attempt_state_of(ICO_ATT_SUBPASS) == ICO_ATT_NOT_SET);
     CHECK(ico_attempt_state_of(ICO_ATT_BLEND_CONST) == ICO_ATT_NOT_BUILT);
     /* and the block line is empty, with no stalls asked */
@@ -1117,54 +1116,49 @@ int main(void)
     ico_attempt_decide_pass_objects(NULL);
     (void)ico_attempt_block_text(b, sizeof(b), 2);
     CHECK(strstr(b, "; stalls 2 in the block (the Adreno attempt off)") != NULL);
-    CHECK(strstr(b, "Qualcomm passes as VkRenderPass objects not applicable here 0 passes") !=
-          NULL);
+    /* the block's stalls on the Adreno row's second count, whatever its
+       state (the 4 of the block before were that block's) */
+    CHECK(strstr(b, "Qualcomm passes as VkRenderPass objects not applicable here 0 passes (2 "
+                    "stalls in the block)") != NULL);
     ico_attempt_decide_pass_objects("Qualcomm's own driver");
     ico_attempt_fire(ICO_ATT_ADRENO_A, 120);
     (void)ico_attempt_block_text(b, sizeof(b), 1);
     CHECK(strstr(b, "; stalls 1 in the block (the Adreno attempt on)") != NULL);
-    CHECK(strstr(b, "Qualcomm passes as VkRenderPass objects on 120 passes") != NULL);
-    CHECK(strstr(b, "Qualcomm queue at high priority") == NULL); /* not reported: left out */
+    CHECK(strstr(b, "Qualcomm passes as VkRenderPass objects on 120 passes (1 stalls in the "
+                    "block)") != NULL);
+    CHECK(strstr(b, "Qualcomm queue at high priority") == NULL); /* removed: left out */
 
-    /* the high queue priority's row (issue 123's second attempt): its state
-       in the stalls clause beside the Adreno row's, its count the block's
-       stalls whatever its state */
-    ico_attempt_decide_queue_priority(1, "high granted through VK_KHR_global_priority: "
-                                         "Qualcomm's own driver on Android");
-    CHECK(ico_attempt_state_of(ICO_ATT_ADRENO_B) == ICO_ATT_ON);
-    (void)ico_attempt_block_text(b, sizeof(b), 3);
-    CHECK(strstr(b, "; Qualcomm queue at high priority on 3 stalls in the block;") != NULL);
-    CHECK(strstr(b, "; stalls 3 in the block (the Adreno attempt on, high queue priority "
-                    "granted)") != NULL);
-    /* the next block counts its own stalls only; none asked (-1): 0 */
-    (void)ico_attempt_block_text(b, sizeof(b), 1);
-    CHECK(strstr(b, "; Qualcomm queue at high priority on 1 stalls in the block;") != NULL);
-    (void)ico_attempt_block_text(b, sizeof(b), -1);
-    CHECK(strstr(b, "Qualcomm queue at high priority on 0 stalls in the block") != NULL);
-    CHECK(strstr(b, "; stalls") == NULL);
-    /* refused by the driver (VK_ERROR_NOT_PERMITTED): its own state word */
-    ico_attempt_decide_queue_priority(2, "high asked, the driver answered not permitted: the "
-                                         "driver's default (medium)");
-    CHECK(ico_attempt_state_of(ICO_ATT_ADRENO_B) == ICO_ATT_DRIVER_REFUSED);
-    CHECK(strcmp(ico_attempt_state_word(ICO_ATT_DRIVER_REFUSED), "refused by the driver") == 0);
+    /* the high queue priority's row (v0.11.7's second attempt at issue
+       123, removed in v0.11.8): "removed" with its words at the start,
+       never in a block; the stalls clause names the Adreno row alone and
+       the stalls are counted on it, one block at a time */
+    CHECK(ico_attempt_state_of(ICO_ATT_ADRENO_B) == ICO_ATT_REMOVED);
+    CHECK(strcmp(ico_attempt_state_word(ICO_ATT_REMOVED), "removed") == 0);
+    CHECK(strcmp(ico_attempt_why_of(ICO_ATT_ADRENO_B), ICO_ATT_QPRIO_REMOVED_WHY) == 0);
     (void)ico_attempt_start_text(b, sizeof(b));
-    CHECK(strstr(b, "; Qualcomm queue at high priority refused by the driver (high asked, the "
-                    "driver answered not permitted: the driver's default (medium));") != NULL);
-    (void)ico_attempt_block_text(b, sizeof(b), 2);
-    CHECK(strstr(b, "; Qualcomm queue at high priority refused by the driver 2 stalls in the "
-                    "block;") != NULL);
-    CHECK(strstr(b, "(the Adreno attempt on, high queue priority refused)") != NULL);
-    /* not asked: not applicable here; a NULL why takes the fixed words */
-    ico_attempt_decide_queue_priority(0, NULL);
-    CHECK(ico_attempt_state_of(ICO_ATT_ADRENO_B) == ICO_ATT_NA);
-    CHECK(strcmp(ico_attempt_why_of(ICO_ATT_ADRENO_B),
-                 "not asked on this graphics API (Vulkan's alone)") == 0);
+    CHECK(strstr(b, "; Qualcomm queue at high priority removed (taken off for issues 215 and "
+                    "123: no queue asked a high global priority; the block's stalls counted on "
+                    "the passes' row); ") != NULL);
+    (void)ico_attempt_block_text(b, sizeof(b), 3);
+    CHECK(strstr(b, "Qualcomm passes as VkRenderPass objects on 0 passes (3 stalls in the "
+                    "block)") != NULL);
+    CHECK(strstr(b, "; stalls 3 in the block (the Adreno attempt on)") != NULL);
+    CHECK(strstr(b, "Qualcomm queue at high priority") == NULL);
+    CHECK(strstr(b, "priority") == NULL);
+    /* the next block counts its own stalls only; none asked (-1): 0 */
+    (void)ico_attempt_block_text(b, sizeof(b), -1);
+    CHECK(strstr(b, "Qualcomm passes as VkRenderPass objects on 0 passes (0 stalls in the "
+                    "block)") != NULL);
+    CHECK(strstr(b, "; stalls") == NULL);
     ico_attempt_decide_pass_objects(NULL);
     (void)ico_attempt_block_text(b, sizeof(b), 0);
-    CHECK(strstr(b, "; stalls 0 in the block (the Adreno attempt off, high queue priority not "
-                    "asked)") != NULL);
-    CHECK(strstr(b, "Qualcomm queue at high priority not applicable here 0 stalls in the "
-                    "block") != NULL);
+    CHECK(strstr(b, "; stalls 0 in the block (the Adreno attempt off)") != NULL);
+    CHECK(strstr(b, "Qualcomm passes as VkRenderPass objects not applicable here 0 passes (0 "
+                    "stalls in the block)") != NULL);
+    /* a reset keeps the row removed, with its words */
+    ico_attempt_reset();
+    CHECK(ico_attempt_state_of(ICO_ATT_ADRENO_B) == ICO_ATT_REMOVED);
+    CHECK(strcmp(ico_attempt_why_of(ICO_ATT_ADRENO_B), ICO_ATT_QPRIO_REMOVED_WHY) == 0);
     CHECK(strcmp(ico_attempt_state_word(ICO_ATT_REFUSED), "refused by its self-test") == 0);
     CHECK(strcmp(ico_attempt_state_word(ICO_ATT_NA), "not applicable here") == 0);
 

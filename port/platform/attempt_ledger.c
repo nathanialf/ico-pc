@@ -32,8 +32,14 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
     [ICO_ATT_DATE_ONE] = {"one DATE set-up", "shared", "retaken by the guard"},
     [ICO_ATT_EMPTY_SKIP] = {"empty composites skipped", "skipped", NULL},
     [ICO_ATT_NO_VOLUME_BREAK] = {"no-volume break", "pictures", NULL},
-    [ICO_ATT_ADRENO_A] = {"Qualcomm passes as VkRenderPass objects", "passes", NULL},
-    [ICO_ATT_ADRENO_B] = {"Qualcomm queue at high priority", "stalls in the block", NULL},
+    /* the second count the block's stalls (ico_attempt_block_text's), on
+       the row that judges the hangs (the queue priority's row counted them
+       until its removal in v0.11.8) */
+    [ICO_ATT_ADRENO_A] = {"Qualcomm passes as VkRenderPass objects", "passes",
+                          "stalls in the block"},
+    /* removed in v0.11.8 (issues 215 and 123): the row stays so two logs
+       compare row by row; no count */
+    [ICO_ATT_ADRENO_B] = {"Qualcomm queue at high priority", NULL, NULL},
     [ICO_ATT_SUBPASS] = {"subpass read", "DATE set-ups in the pass", NULL},
     [ICO_ATT_BLEND_CONST] = {"blend constant", "draws", NULL},
     [ICO_ATT_COMPACTION] = {"index compaction", "triangles left out", NULL},
@@ -70,6 +76,7 @@ static struct {
     uint64_t n, n2;
     uint64_t lastN, lastN2;
 } s_att[ICO_ATT_COUNT] = {
+    [ICO_ATT_ADRENO_B] = {ICO_ATT_REMOVED, ICO_ATT_QPRIO_REMOVED_WHY, 0, 0, 0, 0},
     [ICO_ATT_BLEND_CONST] = {ICO_ATT_NOT_BUILT, NULL, 0, 0, 0, 0},
     [ICO_ATT_CHAIN3] = {ICO_ATT_NOT_BUILT, NULL, 0, 0, 0, 0},
 };
@@ -78,10 +85,18 @@ static struct {
    said at its start (-1: not said yet) */
 static int s_flat0On = -1;
 
-/* a row's state at the start */
+/* a row's state and why at the start */
 static int startState(int i)
 {
+    if (i == ICO_ATT_ADRENO_B) {
+        return ICO_ATT_REMOVED;
+    }
     return i == ICO_ATT_BLEND_CONST || i == ICO_ATT_CHAIN3 ? ICO_ATT_NOT_BUILT : ICO_ATT_NOT_SET;
+}
+
+static const char *startWhy(int i)
+{
+    return i == ICO_ATT_ADRENO_B ? ICO_ATT_QPRIO_REMOVED_WHY : NULL;
 }
 
 static uint32_t s_serial; /* __atomic */
@@ -145,8 +160,8 @@ const char *ico_attempt_state_word(IcoAttemptState s)
         return "not applicable here";
     case ICO_ATT_NOT_BUILT:
         return "not in this build";
-    case ICO_ATT_DRIVER_REFUSED:
-        return "refused by the driver";
+    case ICO_ATT_REMOVED:
+        return "removed";
     default:
         return "not reported";
     }
@@ -247,11 +262,10 @@ size_t ico_attempt_block_text(char *out, size_t cap, int stalls)
     out[0] = '\0';
     int shown = 0;
     int adreno = -1; /* -1 the Adreno row not reported, 0 reported and not on, 1 on */
-    /* the high queue priority's row (issue 123's second attempt): its state
-       as reported, NOT_SET when not; its count the block's stalls */
-    const IcoAttemptState prio = ico_attempt_state_of(ICO_ATT_ADRENO_B);
+    /* the block's stalls on the Adreno row's second count (the row that
+       judges the hangs), whatever its state */
     if (stalls > 0) {
-        ico_attempt_fire(ICO_ATT_ADRENO_B, (uint64_t)stalls);
+        ico_attempt_fire2(ICO_ATT_ADRENO_A, (uint64_t)stalls);
     }
     for (int i = 0; i < ICO_ATT_COUNT; i++) {
         const IcoAttemptState st = ico_attempt_state_of(i);
@@ -260,7 +274,7 @@ size_t ico_attempt_block_text(char *out, size_t cap, int stalls)
         const uint64_t d = n - s_att[i].lastN, d2 = n2 - s_att[i].lastN2;
         s_att[i].lastN = n;
         s_att[i].lastN2 = n2;
-        if (st == ICO_ATT_NOT_SET || st == ICO_ATT_NOT_BUILT) {
+        if (st == ICO_ATT_NOT_SET || st == ICO_ATT_NOT_BUILT || st == ICO_ATT_REMOVED) {
             continue;
         }
         if (i == ICO_ATT_ADRENO_A) {
@@ -279,17 +293,8 @@ size_t ico_attempt_block_text(char *out, size_t cap, int stalls)
     }
     if (stalls >= 0) {
         put(&p, "%sstalls %d in the block", shown ? "; " : "attempts: ", stalls);
-        const char *prioWord = prio == ICO_ATT_ON               ? "granted"
-                               : prio == ICO_ATT_DRIVER_REFUSED ? "refused"
-                               : prio == ICO_ATT_NOT_SET        ? NULL
-                                                                : "not asked";
-        if (adreno >= 0 && prioWord != NULL) {
-            put(&p, " (the Adreno attempt %s, high queue priority %s)", adreno ? "on" : "off",
-                prioWord);
-        } else if (adreno >= 0) {
+        if (adreno >= 0) {
             put(&p, " (the Adreno attempt %s)", adreno ? "on" : "off");
-        } else if (prioWord != NULL) {
-            put(&p, " (high queue priority %s)", prioWord);
         }
         shown++;
     }
@@ -300,7 +305,7 @@ void ico_attempt_reset(void)
 {
     for (int i = 0; i < ICO_ATT_COUNT; i++) {
         __atomic_store_n(&s_att[i].state, startState(i), __ATOMIC_RELEASE);
-        __atomic_store_n(&s_att[i].why, (const char *)NULL, __ATOMIC_RELEASE);
+        __atomic_store_n(&s_att[i].why, startWhy(i), __ATOMIC_RELEASE);
         __atomic_store_n(&s_att[i].n, 0u, __ATOMIC_RELEASE);
         __atomic_store_n(&s_att[i].n2, 0u, __ATOMIC_RELEASE);
         s_att[i].lastN = s_att[i].lastN2 = 0;
@@ -519,20 +524,6 @@ void ico_attempt_decide_pass_objects(const char *row)
 {
     ico_attempt_state(ICO_ATT_ADRENO_A, row != NULL ? ICO_ATT_ON : ICO_ATT_NA,
                       row != NULL ? row : rhi_device_choice_na_words(RHI_DC_PASS_OBJECTS));
-}
-
-void ico_attempt_decide_queue_priority(int state, const char *why)
-{
-    /* RhiLimits.queuePriority: 1 granted, 2 refused (rhi_qprio.h) */
-    if (state == 1) {
-        ico_attempt_state(ICO_ATT_ADRENO_B, ICO_ATT_ON, why != NULL ? why : "high granted");
-    } else if (state == 2) {
-        ico_attempt_state(ICO_ATT_ADRENO_B, ICO_ATT_DRIVER_REFUSED,
-                          why != NULL ? why : "high asked, the device's creation failed with it");
-    } else {
-        ico_attempt_state(ICO_ATT_ADRENO_B, ICO_ATT_NA,
-                          why != NULL ? why : "not asked on this graphics API (Vulkan's alone)");
-    }
 }
 
 int ico_attempt_decide_vu_compute(int byName, int stores, int compute, int powervr, int measured,

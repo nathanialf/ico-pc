@@ -1289,7 +1289,7 @@ row ([OPTIONS.md](../OPTIONS.md#choosing-the-graphics-card)) is how a player pic
 After the device line the Vulkan backend evaluates the device table once for the picked device,
 with the tests' fakes (`vk_device_table.c`, `g_vkr.devTable`: the tile rule, the dynamic state, the
 memory budget, the driver rows, the subpass class, the attachment read, the robustness ask, the VU
-rows, the queue's priority and the serial compiles read it), and prints its lines: the rows in force
+rows and the serial compiles read it), and prints its lines: the rows in force
 out of the table's count, then one line a row with what it sets, its issue, the release it came in
 and the condition to revisit it. OpenGL, Direct3D 11 and Direct3D 12 print the same lines after
 theirs (no row is keyed on them). The renderer's summary ends with the rows' count; the header names
@@ -1377,7 +1377,6 @@ transfer features (`vkr_choose_depth_stencil`).
 | `ICO_VK_ATTACHMENT_READ` | 1 offers the attachment read on Qualcomm's driver too; ico-pc.ini `attachment_read` |
 | `ICO_VK_LEGACY_PASSES` | 1 records the render passes as `VkRenderPass` objects on any device (the Intel driver row's path, `rd_display_change_2x_legacy`), 0 keeps dynamic rendering on a device of the row; unset, the row; ico-pc.ini `[dev] legacy_passes` ([Vulkan](#vulkan), **Render passes**) |
 | `ICO_VK_FAKE_PASS_ROW` | tests only: `qualcomm` puts the device on Qualcomm's driver row alone (its passes `VkRenderPass` objects, `RhiLimits.passObjectsRow` set; nothing else of the driver faked): `rhi_vk_qcom_passes`, `_off`, `rd_pass_objects_ab` ([Vulkan](#vulkan), **Render passes**) |
-| `ICO_VK_FAKE_QUEUE_PRIORITY` | tests only: puts the device on the high queue priority's row alone (**Queue priority**; nothing else of Qualcomm's driver faked): `grant` the real offer read and the real call made (lavapipe grants), `refuse` the creation that asks answered `VK_ERROR_NOT_PERMITTED` without calling the driver (the fallback's creation is the real one), `unoffered` the offer read as none (not asked): `rhi_vk_qprio_granted`, `_refused`, `_unoffered` |
 | `ICO_VK_SUBPASS_READ` | `[dev] subpass_read`: 1 turns [the subpass read](#local-read) on without its probe on any `VkRenderPass` path (the device's own, the driver rows' and `[dev] legacy_passes`': `rhi_vk_subpass_vk11`, `_legacy_on`); 0 off; unset, [the probe's verdict](#the-subpass-reads-probe) decides |
 | `ICO_VK_SUBPASS_PROBE_CLASS` | tests only: 1 runs [the subpass read's probe](#the-subpass-reads-probe) on a class off by default this release (Arm's under `ICO_VK_FAKE_VENDOR=0x13B5`, lavapipe's own), 0 keeps it off on any class: `rhi_vk_subpass_verdict`, `rd_subpass_probe_*` |
 | `ICO_VK_SUBPASS_VERDICT` | tests only: the subpass read's verdict file (the game's is `ico-subpass-read.txt` beside its pipeline cache file; without either the read is off): `rhi_vk_subpass_verdict`, `rd_subpass_probe_*` |
@@ -1614,28 +1613,19 @@ render passes: VkRenderPass objects (no dynamic rendering), the first with N col
 read-only depth stored with STORE_OP_NONE|STORE (no store op none)`; a pass whose objects could not be
 made is not begun (`rhi_vk: render pass: no VkRenderPass or framebuffer for ...`).
 
-**Queue priority.** On the same devices as Qualcomm's row, on Android alone (`rhi_pass_row.h`
-`rhi_vk_qprio_row`, the device table's `QUEUE_PRIORITY_HIGH` in the same row; issue 123's second attempt), the game's one queue is created at high
-global priority (`vk_qprio.c`, `rhi_qprio.h`): `VkDeviceQueueGlobalPriorityCreateInfo` at
-`VK_QUEUE_GLOBAL_PRIORITY_HIGH` chained on the queue's create info, through
-`VK_KHR_global_priority` (or `VK_EXT_global_priority` where KHR is not listed), where the game's
-queue family's list of priorities (read through `VkQueueFamilyGlobalPriorityProperties` where KHR
-or the query extension is listed) holds high or cannot be read. Realtime is never asked. The aim:
-the system's own GPU work at a lower priority does not preempt the game's inside a pass (the
-analysis in [ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#issue-123-the-hang-detector-and-the-pass-path)).
-A creation that fails with it (`VK_ERROR_NOT_PERMITTED` for a caller without the right, or any
-other failure) is made once more without the structure and the extension, as before; only that
-one's failure fails the device. The picture is the same either way. Every device creation logs one
-line: `rhi_vk: queue priority: high, asked and granted (Qualcomm's own driver on Android, issue
-123: ...; through VK_KHR_global_priority; queue family 0 offers low, medium, high)`, `rhi_vk: queue
-priority: high asked and refused (VkResult -1000174001, not permitted): the device made again
-without it, at the driver's default (medium) (...)` or `rhi_vk: queue priority: the driver's
-default (medium), high not asked: <why>` (`not Qualcomm's own driver on Android`, `... global queue
-priority not offered`, `... the game's queue family does not list high`); the offer line's last
-clause says the same (`the game's one queue made at priority 1.0 with global priority high asked
-and granted (VK_KHR_global_priority)`). `RhiLimits.queuePriority` (`RHI_QPRIO_NOT_ASKED`,
-`_GRANTED`, `_REFUSED`), `queuePriorityResult` and `queuePriorityWhy` carry it to the attempt
-ledger. No key; the tests' fake is `ICO_VK_FAKE_QUEUE_PRIORITY` (below).
+**Queue priority.** The game's one queue is made at the driver's default global priority on every
+device: no `VkDeviceQueueGlobalPriorityCreateInfo` is chained and no global priority extension is
+enabled. The previous release asked high on Qualcomm's own driver under Android (issue 123's
+second attempt); it was taken off (issues 215 and 123: the issue 123 tablet's hangs did not change
+and its reporter saw the whole tablet slow down while the game ran, and it was new on the issue 215
+handheld that ends at every start). A read-only start line keeps the device's offer in the log:
+`rhi_vk: queue priority: the driver's default (medium), not asked: global queue priority KHR and
+EXT offered (the game's queue family 0's priorities: 3: low, medium, high); the game asks no device
+for a global priority (the high priority asked on Qualcomm's own driver under Android taken off,
+issues 215 and 123)`, beside the offer line's `the game's one queue made at priority 1.0 with no
+global priority asked (the driver's default, medium)`. The ctests `rhi_vk_qprio_none` (lavapipe on
+Qualcomm's row, passing on that line) and `rhi_vk_qprio_source` (no source under `port/` names the
+structure) hold it.
 
 **Android surface.** With a driver the app loaded itself the instance belongs to another loader, so
 `vk_surface_android.c` makes the surface through the `vkGetInstanceProcAddr` given to volk instead
