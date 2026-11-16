@@ -17,6 +17,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_tex.h`, `rd_tex.c` | the texture cache: GS formats decoded into rd textures |
 | `port/render/rd_mesh.h`, `rd_mesh.c` | the VU mesh path (VU1_PROGRAMS.md) |
 | `port/render/rd_replay.c` | a frame onto the RHI: every command's replay |
+| `port/render/rd_readback.c` | the readbacks: a texture, a named target's colour or depth, the presented output read back to the CPU (dumps, screenshots, tests; moved from `rd_replay.c` for the file cap) |
 | `port/render/rd_jitter.h`, `rd_jitter.c` | the scene's sub-pixel jitter after the GS's snap ([Jitter](#jitter)) and the Halton (2, 3) table |
 | `port/render/rd_shader_plan.c` | the size of `rd__gpu_init`'s shader set, counted before it is made, for the progress screens (`rhi_plan_shaders`) |
 | `port/render/rd_submit.c`, `rd_submit.h` | a replay's end: the present's pass recorded, the list ended and submitted, the picture presented and the capture it copied written out |

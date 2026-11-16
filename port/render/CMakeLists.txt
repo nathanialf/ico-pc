@@ -228,6 +228,7 @@ add_library(ico_render STATIC
     rd_present_info.c # rd_last_present_info's record: what the last present drew
     rd_icon_hold.c # the title's last picture held on screen while the icon capture's frames are drawn
     rd_replay.c
+    rd_readback.c # the readbacks (moved from rd_replay.c for the file cap)
     rd_replay_tiler.c # the replay's tiler passes: DATE through the stencil bit, the blur fold
     rd_replay_vu.c # the replay's VU draws
     rd_vuprepass_selftest.c # the VU vertex pre-pass's start-up check on the device
