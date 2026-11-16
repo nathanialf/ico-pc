@@ -197,6 +197,9 @@ void last_run_trim(int level, const char *name);
    readable, else why not), then each sample's */
 void last_run_set_gpu_resets_start(int32_t start, const char *why);
 void last_run_set_gpu_resets(int32_t now);
+/* the activity note (diag_host.c ico_diag_set_activity, "" cleared):
+   copied only, written with the next write */
+void last_run_set_note(const char *note);
 /* the driver's GPU memory for this process, as the sampler words it */
 void last_run_set_gpu_memory(const char *text);
 /* the system's summary hook (Android 11+, android/last_run_android.c) */

@@ -20,9 +20,10 @@
  *            the start-up set and its own steps, a self-test, the game, the
  *            first picture, play with the stage and the beat's tick, the
  *            background, a trim, the resets, the GPU memory, the memory
- *            figures), the crash's end (the async-signal-safe write), the
- *            next start's lines and its copy to last-run-previous.txt, a
- *            run that ended without a word, the clean end after a loss.
+ *            figures, the activity note between heartbeats), the crash's
+ *            end (the async-signal-safe write), the next start's lines and
+ *            its copy to last-run-previous.txt, a run that ended without a
+ *            word, the clean end after a loss.
  * argv[1]: a folder the test may write in (the build folder).
  */
 #include <stdio.h>
@@ -441,6 +442,15 @@ static void run(const char *base)
           strstr(s_f.value[LAST_RUN_PHASE], "; the last step: window: switch: the vulkan "
                                             "renderer") != NULL);
 
+    /* the activity note between two heartbeats: the next write has it */
+    last_run_set_note("creating pipeline b");
+    last_run_milestone("stage_no 1 -> 2");
+    (void)read_file(cur, buf, sizeof buf, &s_f);
+    CHECK(s_f.phase == LAST_RUN_PHASE_PLAY && s_f.stage == 2 &&
+          strstr(s_f.value[LAST_RUN_PIPELINES], "the last pipeline note: creating pipeline b") !=
+              NULL);
+    CHECK(strstr(s_f.value[LAST_RUN_PHASE], "the last step") == NULL);
+
     /* the crash's end, then the next start */
     last_run_end_crash(11);
     n = read_file(cur, before, sizeof before, &s_f);
@@ -455,7 +465,7 @@ static void run(const char *base)
     s_log[0] = '\0';
     last_run_begin(act, "v0.11.8 (commit test)", log_line);
     CHECK(strstr(s_log, "the previous run: version: v0.11.8 (commit test)\n") != NULL);
-    CHECK(strstr(s_log, "the previous run: phase: play: stage 1, Main tick 4 (since ") != NULL);
+    CHECK(strstr(s_log, "the previous run: phase: play: stage 2, Main tick 4 (since ") != NULL);
     CHECK(strstr(s_log, "the previous run: GPU resets: 47 at start, 66 now (+19)\n") != NULL);
     CHECK(strstr(s_log, "the previous run: GPU memory: kernel 12 MB\n") != NULL);
 #ifndef _WIN32

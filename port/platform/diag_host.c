@@ -1751,6 +1751,7 @@ void ico_diag_set_activity(const char *fmt, ...)
     vsnprintf(activity, sizeof activity, fmt, ap);
     va_end(ap);
     activity_seq++;
+    last_run_set_note(activity); /* copied, written with the next write */
     /* the start-up set's own "(i of m)" notes between two pipelines are
        left out: the pipeline's note names its place in the set, and this
        halves the writes */
@@ -1768,6 +1769,7 @@ void ico_diag_clear_activity(void)
 {
     activity[0] = '\0';
     activity_seq++;
+    last_run_set_note("");
     /* the start-up set's mode keeps the last note: a frame the progress
        screen presents between two of its pipelines clears it, and the
        next one follows at once */

@@ -758,12 +758,19 @@ void last_run_beat(const LastRunBeat *b)
     }
     s_beat = *b;
     s_beat.note = NULL;
-    snprintf(s_note, sizeof s_note, "%s", b->note != NULL ? b->note : "");
+    if (b->note != NULL) {
+        last_run_set_note(b->note);
+    }
     if (avail >= 0 && (s_lowMb < 0 || avail < s_lowMb)) {
         s_lowMb = avail;
         s_lowAt = ico_diag_uptime();
     }
     write_all(0);
+}
+
+void last_run_set_note(const char *note)
+{
+    snprintf(s_note, sizeof s_note, "%s", note != NULL ? note : "");
 }
 
 void last_run_step(const char *step)
