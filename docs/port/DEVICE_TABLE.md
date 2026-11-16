@@ -69,10 +69,10 @@ without a row.
 The table reads no environment. The backend hands it the fakes it reads (`RhiDeviceFakes`, parsed
 by `rhi_device_fakes_parse` as each call site parsed its variable before the table), each with its
 exact scope: `ICO_VK_FAKE_VENDOR` (the tile-based phone, and the subpass class's Arm and Qualcomm
-parts, not over the Intel row), `ICO_VK_FAKE_PASS_ROW=qualcomm`, `ICO_VK_FAKE_QUEUE_PRIORITY`,
-`ICO_VK_FAKE_ADRENO`, `ICO_VK_FAKE_SERIAL`, `ICO_VK_FAKE_NO_PREPASS` (a row's own words replace it)
-and `ICO_RD_VU_COMPACT_ARM` (the Mali-G52's compaction class and its default). The Vulkan backend
-reads the first six once, when the device is picked (`vk_device_table.c`); `ICO_RD_VU_COMPACT_ARM`
+parts, not over the Intel row), `ICO_VK_FAKE_PASS_ROW=qualcomm`, `ICO_VK_FAKE_ADRENO`,
+`ICO_VK_FAKE_SERIAL`, `ICO_VK_FAKE_NO_PREPASS` (a row's own words replace it) and
+`ICO_RD_VU_COMPACT_ARM` (the Mali-G52's compaction class and its default). The Vulkan backend
+reads the first five once, when the device is picked (`vk_device_table.c`); `ICO_RD_VU_COMPACT_ARM`
 is the renderer's, read where the compaction decides (`port/render/rd_vu_compact.c`). The other
 backends have no fakes. The start-up lines come from that one evaluation: a row's line says
 "replaced by <variable>, a test" where a fake changed its value.
@@ -125,14 +125,13 @@ library's call-site reads (`rhi_device_choice_why`, `rhi_device_pass_rows`,
 | `ATTACHMENT_READ_OFF` | `vk_device.c` (the rasterization-order attachment read; `ICO_VK_ATTACHMENT_READ` stays there) |
 | `PIPE_ROBUST_ASK` | `vk_device.c` (`VK_EXT_pipeline_robustness` with `ICO_RD_VU_SKIN_CHECK` unset) |
 | `VU_FALLBACK_PLAIN` (table), `CAREFUL_PIPELINES`, `VU_PREPASS_OFF`, `COMPUTE_RECORD_OFF` | `vk_device.c` `vkr_vu_plain_only` (`RhiLimits.vuFallbackPlain`, `carefulPipelines`, `vuPrepassOff`, `computeStoresOff`) |
-| `QUEUE_PRIORITY_HIGH` | `vk_qprio.c` (the fake's grant, refuse and unoffered stay there) |
 | `COMPILER_SERIAL` | `vk_pipeline.c` `vkr_compile_serial_init` |
 
 The pure predicates keep their names and signatures, and build an identity of their arguments to
-read one choice (`rhi_device_table_choice`): `rhi_vk_pass_row`, `rhi_vk_pass_row_qualcomm`,
-`rhi_vk_qprio_row` (`rhi_pass_row.c`), `rhi_driver_compiler_serial`, `rhi_driver_is_qualcomm_proprietary`
+read one choice (`rhi_device_table_choice`): `rhi_vk_pass_row`, `rhi_vk_pass_row_qualcomm`
+(`rhi_pass_row.c`), `rhi_driver_compiler_serial`, `rhi_driver_is_qualcomm_proprietary`
 (the table's test by id; `rhi_driver_version.c`), `rhi_tile_phone`, `rhi_tile_vendor_name`
-(`rhi_tile_rule.c`). Their tests (`rhi_vk_pass_row`, `rhi_vk_qprio`, `rhi_driver_version`,
+(`rhi_tile_rule.c`). Their tests (`rhi_vk_pass_row`, `rhi_driver_version`,
 `rhi_vk_tile_rule`) are unchanged.
 
 The renderer reads the current device's choices (`rhi_device_table_current`, the backend's one
@@ -200,7 +199,7 @@ the phrase its decider held before, byte for byte (the third column of the choic
 `PASS_OBJECTS` (the row "Qualcomm passes as VkRenderPass objects"), `VU_COMPUTE_CLASS` ("VU record
 by compute on the PowerVR"), `NO_VOLUME_CLASS` ("no-volume break") and `COMPACTION_CLASS` ("index
 compaction", whose other-class words are an "off by default"). Where a row holds, the ledger's
-reason is the row's own (`RhiLimits.passObjectsRow`, `queuePriorityWhy`: the settings' reasons).
+reason is the row's own (`RhiLimits.passObjectsRow`: the setting's reason).
 
 Left where they are, and why:
 
@@ -218,9 +217,8 @@ Left where they are, and why:
   `attempt_ledger.c`: the last is also the `mali-g52` row's reason, but the decider is handed the
   class's default as an argument (its test passes 0 whatever `RD_VU_COMPACT_ARM_DEFAULT` the build
   has), so it cannot read a row whose text follows the build's define.
-- The subpass read's two off-by-default sentences (`port/rhi/rhi_subpass_verdict.h`) and the queue
-  priority's "not Qualcomm's own driver on Android" (`port/rhi/rhi_qprio.c`) stay with their
-  deciders in the RHI, which hand them to the ledger.
+- The subpass read's two off-by-default sentences (`port/rhi/rhi_subpass_verdict.h`) stay with
+  their decider in the RHI, which hands them to the ledger.
 - Measured or persisted facts are not rows: the few-cores rule (measured core speeds), the hang
   limits, the pipeline-skip record, the loss ladder, the `[dev] turnip_debug` step (the loaded
   package's library name).
@@ -265,7 +263,7 @@ Left where they are, and why:
   predicates (`rhi_tile_phone` on every combination of its arguments, `rhi_tile_vendor`, the
   serial rule at any Vulkan version), the Vulkan call sites' reads as the backend composes them
   (the two pass rows, the subpass class with every way its Qualcomm row can apply, the VU rows,
-  the queue's row, the serial rule's reason, the fakes' parse), and the one-choice read and the
+  the serial rule's reason, the fakes' parse), and the one-choice read and the
   backends' evaluation against the whole evaluation on the logged devices on every backend and
   OS; the renderer's reads as its call sites compose them (`port/render/rd_device_rows.c` linked
   in: the class and its Adreno and PowerVR tests, the tile class and columns, the lamps' three
@@ -282,7 +280,12 @@ Left where they are, and why:
   swapchain question and the Android build's stock driver hint as their call sites compose them
   (copies taken before the move), and the attempt ledger's four phrases, from the table and as the
   deciders write them (`attempt_ledger.c` linked in); every row in force somewhere, every override
-  link deciding some identity, no unlinked conflict.
+  link deciding some identity, no unlinked conflict. The one change since the copies were taken:
+  v0.11.8 took off the queue's high global priority (issues 215 and 123: the `qualcomm-android`
+  row's second setting, the choice `QUEUE_PRIORITY_HIGH`, its fake and `rhi_qprio.c`). The copy
+  of its rule stays; the test counts the identities it asked on (it fails on none, a matrix that
+  missed the row) and fails on any choice whose name holds `PRIORITY`. Every other comparison is
+  the one made against v0.11.7's rules, so a pass shows the table's only change is that choice.
 - `rhi_device_table_docs`: the list below against the table.
 
 ## The list
@@ -301,7 +304,6 @@ Left where they are, and why:
 | `DYNAMIC_STATE_OFF` | no | - |
 | `MEMORY_BUDGET_OFF` | no | - |
 | `PASS_OBJECTS` | none | not Qualcomm's own driver |
-| `QUEUE_PRIORITY_HIGH` | no | - |
 | `SUBPASS_CLASS` | other | - |
 | `ATTACHMENT_READ_OFF` | no | - |
 | `VU_FALLBACK_PLAIN` | extended | - |
@@ -407,7 +409,6 @@ Matches Vulkan on Android, Qualcomm's own driver by its id: backend Vulkan; OS A
 | Choice | Value | What | Issue | Since | Evidence | Revisit |
 | --- | --- | --- | --- | --- | --- | --- |
 | `PASS_OBJECTS` | qualcomm | render passes as VkRenderPass objects ("Qualcomm's own driver (issue 123: its GPU hangs inside a pass begun with vkCmdBeginRendering; VkRenderPass objects are the driver's oldest path, the same picture)") | issue 123 | v0.11.6 | the Adreno 740 (512.676) and Adreno 710 (512.800) hang inside a pass begun with vkCmdBeginRendering (v0117/evidence/123) | the reporter's next log: no hang inside a pass |
-| `QUEUE_PRIORITY_HIGH` | yes | the queue asked at high global priority ("Qualcomm's own driver on Android, issue 123: the system's own GPU work at a lower priority does not preempt the game's") | issue 123 | v0.11.7 | commit 60138b4b6 (v0117/evidence/123) | the reporter's next log: the priority granted, and the stalls a block |
 
 #### `qualcomm`
 
