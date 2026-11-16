@@ -222,3 +222,7 @@ fx-drops-189 dumps/189/frame-20261104-120509-v130039.rddump rules=scene_drops.ru
 fx-drops-mali dumps/v0116-mali179/frame-20261112-195947-v17565.zip rules=scene_drops.rules.txt region_rule_draws>=1
 fx-drops-maingate dumps/maingate/frame-20261104-123603-v10827.rddump rules=scene_drops.rules.txt region_rule_draws>=1
 fx-cards-189 dumps/189/frame-20261104-120509-v130039.rddump rules=scene_cards.rules.txt region_rule_draws>=1
+# the frame test/rd_pass_area_frame.c records (512x448 GS, flat sprites, no
+# art): two passes on SCENE that take a render area (rd_pass_area.c's rule),
+# at Enhanced 2x (4:3: the phone's setting cannot show it)
+fx-pass-area synthetic/rd_pass_area_frame.rddump pass_area_passes>=1
