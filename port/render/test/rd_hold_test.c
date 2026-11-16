@@ -201,6 +201,9 @@ static void testCounters(void)
 
 static void testKeys(void)
 {
+    /* the start state is the frame before's end: one frame first, so every
+       frame compared starts from the same */
+    (void)keyOf(90, 200, 0);
     const uint64_t base = keyOf(90, 200, 0);
     CHECK(keyOf(90, 200, 0) == base, "the same scene and menu, the next tick: one key");
     CHECK(keyOf(90, 10, 0) == base, "another menu: the same key");
