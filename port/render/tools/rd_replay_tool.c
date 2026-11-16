@@ -567,6 +567,7 @@
 #include "rd_paste_spec.h"       /* --stats: the glow's paste by its own entry */
 #include "rd_volume_fs.h"        /* --stats: the shadow volumes' stencil-only entry */
 #include "rd_comp_spec.h"        /* --stats: the shadow composites' own entry */
+#include "rd_onepass.h"          /* --stats: the two-pass blend's pairs in one pass */
 #include "rd_turn_fold.h"        /* the turn in the present's blit's self-test */
 #include "rd_fill11.h"           /* --stats: the crack fill in list 11's pass */
 #include "rd_present_scene.h"    /* --stats: the present from SCENE */
@@ -2806,6 +2807,12 @@ int main(int argc, char **argv)
         if (getenv("ICO_RD_COMP_SPEC") != NULL) {
             (void)rd__comp_spec_selftest();
         }
+        /* the two-pass blend's one-pass rule where ICO_RD_ONEPASS asks
+         * (rd_onepass.c: the game runs it after the VU pre-pass's
+         * self-test; its replays on SCENE are left out of every count) */
+        if (getenv("ICO_RD_ONEPASS") != NULL) {
+            (void)rd__onepass_selftest();
+        }
     }
     if (!noDevice && getenv("ICO_RD_EARLY_PREPARE") != NULL &&
         strcmp(getenv("ICO_RD_EARLY_PREPARE"), "1") == 0) {
@@ -3482,6 +3489,27 @@ int main(int argc, char **argv)
                    (unsigned long long)cs, ct < cs ? ", last kept on sprite_ps: " : "",
                    ct < cs ? rd__comp_spec_why_text(cw) : "");
         }
+        /* the two-pass blend's pairs in one pass (rd_onepass.c): this
+         * replay's pairs in one pass of its pairs; the run's, by reason */
+        {
+            RdOnepassCounts oc;
+            uint32_t ro = 0, rp = 0;
+            const char *otw = NULL;
+            rd__onepass_counts(&oc);
+            rd__onepass_replay(&ro, &rp);
+            (void)rd__onepass_test_state(&otw);
+            printf("%s: stats: one pass %s (self-test %s): %u pairs in one pass of %u; the run: "
+                   "%llu of %llu, kept: alpha %llu, fba %llu, pabe %llu, fix %llu, other %llu, "
+                   "off %llu; %llu vertex invocations saved\n",
+                   dump, rd__onepass_on() ? "on" : "off", otw, ro, rp,
+                   (unsigned long long)oc.onePass, (unsigned long long)oc.pairs,
+                   (unsigned long long)oc.kept[RD_ONEPASS_WHY_ALPHA],
+                   (unsigned long long)oc.kept[RD_ONEPASS_WHY_FBA],
+                   (unsigned long long)oc.kept[RD_ONEPASS_WHY_PABE],
+                   (unsigned long long)oc.kept[RD_ONEPASS_WHY_FIX],
+                   (unsigned long long)oc.kept[RD_ONEPASS_WHY_OTHER],
+                   (unsigned long long)oc.kept[RD_ONEPASS_WHY_OFF], (unsigned long long)oc.saved);
+        }
         /* the aura's paste as the alpha alone (rd_aura_paste.c) */
         printf("%s: stats: aura paste %s: %u split (%u rows as the alpha alone, %u band rows), %u "
                "drawn whole%s%s%s\n",
@@ -3777,6 +3805,9 @@ int main(int argc, char **argv)
             }
             if (getenv("ICO_RD_COMP_SPEC") != NULL) {
                 (void)rd__comp_spec_selftest(); /* the new renderer's (rd_comp_spec.c) */
+            }
+            if (getenv("ICO_RD_ONEPASS") != NULL) {
+                (void)rd__onepass_selftest(); /* the new renderer's (rd_onepass.c) */
             }
             if (overlay) {
                 rd_set_present_overlay(overlayTest, NULL);
