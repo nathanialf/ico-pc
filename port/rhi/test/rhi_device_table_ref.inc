@@ -6,7 +6,14 @@
  * are RefIn's strings (NULL unset), parsed exactly as the source does.
  *
  * Kept as they are: when DT2 to DT4 move a call site onto the table, its
- * copy here stays the proof of the old behaviour.  Do not "fix" a copy. */
+ * copy here stays the proof of the old behaviour.  Do not "fix" a copy.
+ *
+ * One change since (v0.11.8, issues 215 and 123): the queue's high global
+ * priority was taken off with its choice (QUEUE_PRIORITY_HIGH), its fake
+ * (ICO_VK_FAKE_QUEUE_PRIORITY) and rhi_qprio.c.  RefIn's fakeQprio and the
+ * copy of vk_qprio.c's row (ref_qprio) went with them; ref_qprio_row stays
+ * as it was, and the test counts the identities it asked on (the only
+ * behaviour the table no longer has). */
 
 typedef struct RefIn {
     int backend; /* RHI_DT_VULKAN, ...: rhi_backend() */
@@ -19,7 +26,6 @@ typedef struct RefIn {
     /* the tests' environment (NULL unset) */
     const char *fakeVendor;    /* ICO_VK_FAKE_VENDOR */
     const char *fakePassRow;   /* ICO_VK_FAKE_PASS_ROW */
-    const char *fakeQprio;     /* ICO_VK_FAKE_QUEUE_PRIORITY */
     const char *fakeAdreno;    /* ICO_VK_FAKE_ADRENO */
     const char *fakeSerial;    /* ICO_VK_FAKE_SERIAL */
     const char *fakeNoPrepass; /* ICO_VK_FAKE_NO_PREPASS */
@@ -167,7 +173,8 @@ static const char *ref_pass_row_qualcomm(uint32_t vendorId, uint32_t driverId, i
            "picture)";
 }
 
-/* port/rhi/rhi_pass_row.c:38-48 rhi_vk_qprio_row */
+/* port/rhi/rhi_pass_row.c:38-48 rhi_vk_qprio_row (v0.11.7; removed in v0.11.8:
+   rhi_device_table_equiv_test.c counts where it asked) */
 static const char *ref_qprio_row(uint32_t vendorId, uint32_t driverId, int android)
 {
     if (!android || vendorId != 0x5143u || (driverId != 8u && driverId != 0)) {
@@ -210,16 +217,6 @@ static bool ref_pass_row_qcom_applied(const char *qcomRow, bool deviceLegacy, in
         return false;
     }
     return qcomRow != NULL;
-}
-
-/* port/rhi/vk/vk_qprio.c:65-74 the row (rhi_vk_qprio_fake: rhi_qprio.c:28-43) */
-static const char *ref_qprio(const RefIn *in, int fake)
-{
-    if (!REF_VULKAN(in)) {
-        return NULL;
-    }
-    return fake != 0 ? ref_qprio_row(0x5143u, 8u, 1)
-                     : ref_qprio_row(in->vendor, in->driverId, REF_ANDROID(in));
 }
 
 /* port/rhi/vk/vk_device.c:1781-1797 vkr_subpass_read_decide's class */

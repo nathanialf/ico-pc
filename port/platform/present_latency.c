@@ -59,7 +59,7 @@ static void put(Out *o, const char *fmt, ...)
     }
 }
 
-size_t present_latency_text(const PresentLatency *p, int queuePriority, char *out, size_t cap)
+size_t present_latency_text(const PresentLatency *p, char *out, size_t cap)
 {
     Out o = {out, cap, 0};
     if (cap > 0) {
@@ -89,9 +89,5 @@ size_t present_latency_text(const PresentLatency *p, int queuePriority, char *ou
         put(&o, "; the picture's GPU end not seen exactly (its slot's wait did not block): the "
                 "call not split");
     }
-    put(&o, "; the queue's priority: %s",
-        queuePriority == 1   ? "high, granted"
-        : queuePriority == 2 ? "the driver's default (high refused)"
-                             : "the driver's default (high not asked)");
     return o.at;
 }

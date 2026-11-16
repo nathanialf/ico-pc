@@ -1525,8 +1525,6 @@ static int budgetCell(void)
 int rhi_vk_scope_cell(const RhiTestConfig *cfg);
 /* rhi_vk_subpass.c: the pass's own colour read with a depth target bound */
 int rhi_vk_subpass_cell(const RhiTestConfig *cfg);
-/* rhi_vk_qprio.c: the queue's global priority under its fake (ICO_TEST_QPRIO) */
-int rhi_vk_qprio_cell(const RhiTestConfig *cfg);
 
 int main(int argc, char **argv)
 {
@@ -1546,11 +1544,6 @@ int main(int argc, char **argv)
         }
         rhi_shutdown();
         return clockCell() ? 1 : 0;
-    }
-    if (argc > 1 && strcmp(argv[1], "qprio") == 0) {
-        /* rhi_vk_qprio_*: the queue's global priority asked, granted,
-           refused and not offered (rhi_vk_qprio.c), 77 without a device */
-        return rhi_vk_qprio_cell(&cfg);
     }
     if (argc > 1 && strcmp(argv[1], "budget") == 0) {
         /* rhi_vk_budget*: VK_EXT_memory_budget's numbers alone */

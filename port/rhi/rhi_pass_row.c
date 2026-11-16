@@ -43,14 +43,6 @@ const char *rhi_vk_pass_row_qualcomm(uint32_t vendorId, uint32_t driverId, int a
                                                                                            : NULL;
 }
 
-const char *rhi_vk_qprio_row(uint32_t vendorId, uint32_t driverId, int android)
-{
-    /* the same devices as rhi_vk_pass_row_qualcomm's (the same row) */
-    const RhiDeviceId id = passId(vendorId, driverId, 0u, android ? RHI_DT_ANDROID : RHI_DT_LINUX);
-    const char *why = NULL;
-    return rhi_device_table_choice(&id, RHI_DC_QUEUE_PRIORITY_HIGH, &why) ? why : NULL;
-}
-
 static int word_is(const char *v, const char *w)
 {
     size_t i = 0;

@@ -21,7 +21,6 @@ target_link_libraries(ico_platform PUBLIC ico_device_table)
 # registered in port/rhi/CMakeLists.txt before this file, link it too
 target_link_libraries(rhi_driver_version_test PRIVATE ico_device_table)
 target_link_libraries(rhi_vk_pass_row_test PRIVATE ico_device_table)
-target_link_libraries(rhi_vk_qprio_test PRIVATE ico_device_table)
 target_link_libraries(rhi_vk_tile_rule_test PRIVATE ico_device_table)
 
 # rhi_device_table_test (CPU only, every target): unique ids, every setting's
@@ -48,7 +47,7 @@ target_link_libraries(rhi_device_table_test PRIVATE ico_device_table)
 # ledger's words, attempt_ledger.c) against copies of theirs.
 add_executable(rhi_device_table_equiv_test
                test/rhi_device_table_equiv_test.c rhi_pass_row.c rhi_driver_version.c
-               rhi_tile_rule.c rhi_qprio.c "${CMAKE_SOURCE_DIR}/port/platform/memory_floor.c"
+               rhi_tile_rule.c "${CMAKE_SOURCE_DIR}/port/platform/memory_floor.c"
                "${CMAKE_SOURCE_DIR}/port/platform/present_fallback.c"
                "${CMAKE_SOURCE_DIR}/port/platform/attempt_ledger.c"
                "${CMAKE_SOURCE_DIR}/port/render/rd_device_rows.c")

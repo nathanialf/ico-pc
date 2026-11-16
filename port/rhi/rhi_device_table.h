@@ -108,7 +108,6 @@ typedef enum RhiDeviceChoice {
     RHI_DC_DYNAMIC_STATE_OFF,   /* bool: dynamic depth/blend state off by default */
     RHI_DC_MEMORY_BUDGET_OFF,   /* bool: VK_EXT_memory_budget not asked */
     RHI_DC_PASS_OBJECTS,        /* RHI_DT_PASS_*: the driver rows (rhi_pass_row.h) */
-    RHI_DC_QUEUE_PRIORITY_HIGH, /* bool: the queue asked at high global priority */
     RHI_DC_SUBPASS_CLASS,       /* RHI_DT_SUBPASS_*: rhi_subpass_verdict.h's class */
     RHI_DC_ATTACHMENT_READ_OFF, /* bool: the rasterization-order attachment read not offered */
     RHI_DC_VU_FALLBACK_PLAIN,   /* RHI_DT_VUSET_*: the VU fallback's plain set */
@@ -258,7 +257,6 @@ typedef struct RhiDeviceRow {
  *                     Qualcomm parts from that id (not over the Intel row)
  *   passRowQualcomm   ICO_VK_FAKE_PASS_ROW=qualcomm: PASS_OBJECTS Qualcomm's
  *                     unless the Intel row holds
- *   queuePriority     ICO_VK_FAKE_QUEUE_PRIORITY set to a fake: QUEUE_PRIORITY_HIGH
  *   adreno            ICO_VK_FAKE_ADRENO=1: ATTACHMENT_READ_OFF
  *   serial            ICO_VK_FAKE_SERIAL=1: COMPILER_SERIAL where no row sets it
  *   noPrepass         ICO_VK_FAKE_NO_PREPASS=1: VU_PREPASS_OFF where no row sets it
@@ -267,7 +265,7 @@ typedef struct RhiDeviceRow {
 typedef struct RhiDeviceFakes {
     uint8_t vendorSet;
     uint32_t vendor;
-    uint8_t passRowQualcomm, queuePriority, adreno, serial, noPrepass, compactArm;
+    uint8_t passRowQualcomm, adreno, serial, noPrepass, compactArm;
 } RhiDeviceFakes;
 
 /* The fakes' environment as the backend read it (NULL unset), each parsed
@@ -279,12 +277,9 @@ typedef struct RhiDeviceFakes {
  *   adreno      ICO_VK_FAKE_ADRENO: set, not empty, not starting with '0'
  *   serial      ICO_VK_FAKE_SERIAL: starting with '1' (vk_pipeline.c)
  *   noPrepass   ICO_VK_FAKE_NO_PREPASS: as adreno
- *   compactArm  ICO_RD_VU_COMPACT_ARM: "1" (the renderer's, rd_vu_compact.c)
- *   queuePriority  ICO_VK_FAKE_QUEUE_PRIORITY already read by rhi_qprio.h
- *               rhi_vk_qprio_fake: non-zero a fake word */
+ *   compactArm  ICO_RD_VU_COMPACT_ARM: "1" (the renderer's, rd_vu_compact.c) */
 typedef struct RhiDeviceFakeEnv {
     const char *vendor, *passRow, *adreno, *serial, *noPrepass, *compactArm;
-    int queuePriority;
 } RhiDeviceFakeEnv;
 
 void rhi_device_fakes_parse(const RhiDeviceFakeEnv *env, RhiDeviceFakes *out);
@@ -294,7 +289,6 @@ enum {
     RHI_DT_FAKE_NONE = 0,
     RHI_DT_FAKE_VENDOR,
     RHI_DT_FAKE_PASS_ROW,
-    RHI_DT_FAKE_QUEUE_PRIORITY,
     RHI_DT_FAKE_ADRENO,
     RHI_DT_FAKE_SERIAL,
     RHI_DT_FAKE_NO_PREPASS,
@@ -362,8 +356,8 @@ const char *rhi_device_choice_reason(const RhiDeviceChoices *c, RhiDeviceChoice 
 /* The call sites' reads (the Vulkan backend's, and the equivalence test's
  * proof of them, port/rhi/test/rhi_device_table_equiv_test.c):
  *   rhi_device_choice_why   the reason where the choice is non-zero, else
- *                           NULL (COMPILER_SERIAL, QUEUE_PRIORITY_HIGH,
- *                           CAREFUL_PIPELINES, VU_PREPASS_OFF, ...)
+ *                           NULL (COMPILER_SERIAL, CAREFUL_PIPELINES,
+ *                           VU_PREPASS_OFF, ...)
  *   rhi_device_pass_rows    PASS_OBJECTS as vk_device.c's two driver rows:
  *                           Intel's reason or NULL, Qualcomm's or NULL
  *   rhi_device_subpass_class  SUBPASS_CLASS with the run's passRowQcom

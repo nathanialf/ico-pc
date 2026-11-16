@@ -16,8 +16,7 @@
  * environment fakes and of the profile's run inputs.
  *
  * The copies' fidelity: the pure files the copies come from (rhi_pass_row.c,
- * rhi_driver_version.c, rhi_tile_rule.c, rhi_qprio.c, memory_floor.c,
- * present_fallback.c) are linked in and compared with their copy over the
+ * rhi_driver_version.c, rhi_tile_rule.c, memory_floor.c, present_fallback.c) are linked in and compared with their copy over the
  * whole matrix; the copies of statics inside large files are compared with
  * their source lines by the DT1 hand-back's diff.  Those files read the
  * table now, so the comparison is the proof of the move.  The platform's
@@ -28,7 +27,14 @@
  *
  * Also: every row is in force on some identity, every override link
  * decides some identity, and no identity has two matching rows that differ
- * without a link. */
+ * without a link.
+ *
+ * v0.11.8 (issues 215 and 123) took the queue's high global priority off:
+ * the choice QUEUE_PRIORITY_HIGH, its fake and rhi_qprio.c are gone.  Every
+ * other comparison is as it was against v0.11.7's copies, so the test shows
+ * the table's only change; the identities v0.11.7's rule asked the priority
+ * on are counted (none would be a matrix that missed the row) and no
+ * choice of the table may name a priority. */
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -42,7 +48,6 @@
 #include "rhi_device_table.h"
 #include "rhi_driver_version.h"
 #include "rhi_pass_row.h"
-#include "rhi_qprio.h"
 #include "rhi_tile_rule.h"
 
 #include "rhi_device_table_ref.inc"
@@ -53,15 +58,14 @@ static void describe(const RefIn *in, char *out, size_t cap)
 {
     snprintf(out, cap,
              "backend %d os %d mvk %d custom %d vendor 0x%X device 0x%X id %u api 0x%X name '%s' "
-             "text '%s' fakes vendor=%s passrow=%s qprio=%s adreno=%s serial=%s noprepass=%s "
+             "text '%s' fakes vendor=%s passrow=%s adreno=%s serial=%s noprepass=%s "
              "compactarm=%s",
              in->backend, in->os, in->moltenvk, in->customDriver, (unsigned)in->vendor,
              (unsigned)in->device, (unsigned)in->driverId, (unsigned)in->api,
              in->name ? in->name : "(null)", in->text ? in->text : "(null)",
              in->fakeVendor ? in->fakeVendor : "-", in->fakePassRow ? in->fakePassRow : "-",
-             in->fakeQprio ? in->fakeQprio : "-", in->fakeAdreno ? in->fakeAdreno : "-",
-             in->fakeSerial ? in->fakeSerial : "-", in->fakeNoPrepass ? in->fakeNoPrepass : "-",
-             in->compactArm ? in->compactArm : "-");
+             in->fakeAdreno ? in->fakeAdreno : "-", in->fakeSerial ? in->fakeSerial : "-",
+             in->fakeNoPrepass ? in->fakeNoPrepass : "-", in->compactArm ? in->compactArm : "-");
 }
 
 static void fail(const RefIn *in, const char *what, long oldV, long newV)
@@ -123,7 +127,6 @@ static void newEval(const RefIn *in, RhiDeviceChoices *c)
         /* the Vulkan backend's reads (vk_device_table.c) */
         env.vendor = in->fakeVendor;
         env.passRow = in->fakePassRow;
-        env.queuePriority = rhi_vk_qprio_fake(in->fakeQprio) != RHI_QPRIO_FAKE_NONE;
         env.adreno = in->fakeAdreno;
         env.serial = in->fakeSerial;
         env.noPrepass = in->fakeNoPrepass;
@@ -200,6 +203,9 @@ static RefVuSet callSiteVuSet(const RefIn *in, const char *vuFallbackPlain)
 static unsigned long s_rowApplied[RHI_DT_MAX_ROWS];
 static unsigned long s_linkUsed[RHI_DT_MAX_ROWS][RHI_DT_MAX_ROWS];
 static unsigned long s_conflicts;
+/* the identities v0.11.7's queue priority rule asked high on (ref_qprio_row
+   on Vulkan): the priority taken off in v0.11.8 */
+static unsigned long s_qprioOld;
 
 static void noteRows(const RefIn *in, const RhiDeviceChoices *c)
 {
@@ -262,8 +268,6 @@ static void live(const RefIn *in)
     sameWords(in, "live rhi_vk_pass_row_qualcomm",
               rhi_vk_pass_row_qualcomm(in->vendor, in->driverId, android),
               ref_pass_row_qualcomm(in->vendor, in->driverId, android));
-    sameWords(in, "live rhi_vk_qprio_row", rhi_vk_qprio_row(in->vendor, in->driverId, android),
-              ref_qprio_row(in->vendor, in->driverId, android));
     SAME(in, "live rhi_driver_is_qualcomm_proprietary",
          rhi_driver_is_qualcomm_proprietary(in->vendor, in->driverId),
          ref_qcom_prop(in->vendor, in->driverId));
@@ -463,14 +467,13 @@ static void compare(const RefIn *in, bool withRun)
                      rhi_device_subpass_class(&c, qcomApplied));
             }
         }
-        /* vk_qprio.c's row (rhi_device_choice_why) */
-        const char *q = ref_qprio(in, rhi_vk_qprio_fake(in->fakeQprio));
-        SAME(in, "QUEUE_PRIORITY_HIGH", q != NULL, v[RHI_DC_QUEUE_PRIORITY_HIGH]);
-        sameWords(in, "QUEUE_PRIORITY_HIGH", q,
-                  rhi_device_choice_why(&c, RHI_DC_QUEUE_PRIORITY_HIGH));
+        /* v0.11.7's vk_qprio.c row (taken off in v0.11.8): counted where
+           its rule asked; the table has no such choice */
+        if (ref_qprio_row(in->vendor, in->driverId, REF_ANDROID(in)) != NULL) {
+            s_qprioOld++;
+        }
     } else {
         SAME(in, "PASS_OBJECTS off Vulkan", RHI_DT_PASS_NONE, v[RHI_DC_PASS_OBJECTS]);
-        SAME(in, "QUEUE_PRIORITY_HIGH off Vulkan", 0, v[RHI_DC_QUEUE_PRIORITY_HIGH]);
     }
     SAME(in, "ATTACHMENT_READ_OFF", ref_attachment_read_off(in), v[RHI_DC_ATTACHMENT_READ_OFF]);
     {
@@ -805,40 +808,36 @@ static unsigned long fakes(void)
 {
     static const char *const fv[] = {NULL, "0x13B5", "0x5143", "0x1010", "0x10DE", "junk"};
     static const char *const pr[] = {NULL, "qualcomm", "other"};
-    static const char *const qp[] = {NULL, "grant", "junk"};
     static const char *const onOff[] = {NULL, "0", "1"};
     unsigned long n = 0;
     for (size_t k = 0; k < NN(kKnown); k++) {
         for (int custom = 0; custom < 2; custom++) {
             for (size_t a = 0; a < NN(fv); a++) {
                 for (size_t b = 0; b < NN(pr); b++) {
-                    for (size_t q = 0; q < NN(qp); q++) {
-                        for (int bits = 0; bits < 81; bits++) { /* 4 switches of 3 */
-                            for (int lim = 0; lim < 2; lim++) {
-                                RefIn in;
-                                memset(&in, 0, sizeof in);
-                                in.backend = kKnown[k].backend;
-                                in.os = kKnown[k].os;
-                                /* ICO_VK_FAKE_LIMITS=moltenvk: RhiLimits.moltenvk */
-                                in.moltenvk = kKnown[k].moltenvk ||
-                                              (lim && kKnown[k].backend == RHI_DT_VULKAN);
-                                in.customDriver = custom != 0;
-                                in.vendor = kKnown[k].vendor;
-                                in.device = kKnown[k].device;
-                                in.driverId = kKnown[k].driverId;
-                                in.api = kKnown[k].api;
-                                in.name = kKnown[k].name;
-                                in.text = kKnown[k].text;
-                                in.fakeVendor = fv[a];
-                                in.fakePassRow = pr[b];
-                                in.fakeQprio = qp[q];
-                                in.fakeAdreno = onOff[bits % 3];
-                                in.fakeSerial = onOff[(bits / 3) % 3];
-                                in.fakeNoPrepass = onOff[(bits / 9) % 3];
-                                in.compactArm = onOff[(bits / 27) % 3];
-                                compare(&in, bits == 0 && b == 0 && q == 0);
-                                n++;
-                            }
+                    for (int bits = 0; bits < 81; bits++) { /* 4 switches of 3 */
+                        for (int lim = 0; lim < 2; lim++) {
+                            RefIn in;
+                            memset(&in, 0, sizeof in);
+                            in.backend = kKnown[k].backend;
+                            in.os = kKnown[k].os;
+                            /* ICO_VK_FAKE_LIMITS=moltenvk: RhiLimits.moltenvk */
+                            in.moltenvk =
+                                kKnown[k].moltenvk || (lim && kKnown[k].backend == RHI_DT_VULKAN);
+                            in.customDriver = custom != 0;
+                            in.vendor = kKnown[k].vendor;
+                            in.device = kKnown[k].device;
+                            in.driverId = kKnown[k].driverId;
+                            in.api = kKnown[k].api;
+                            in.name = kKnown[k].name;
+                            in.text = kKnown[k].text;
+                            in.fakeVendor = fv[a];
+                            in.fakePassRow = pr[b];
+                            in.fakeAdreno = onOff[bits % 3];
+                            in.fakeSerial = onOff[(bits / 3) % 3];
+                            in.fakeNoPrepass = onOff[(bits / 9) % 3];
+                            in.compactArm = onOff[(bits / 27) % 3];
+                            compare(&in, bits == 0 && b == 0);
+                            n++;
                         }
                     }
                 }
@@ -1176,14 +1175,32 @@ int main(void)
             s += k;
         }
     }
+    /* the queue's priority taken off (v0.11.8): v0.11.7's rule asked on
+       some identity of the matrix (Qualcomm's own driver on Android), and no
+       choice of the table names a priority any more */
+    s_checks++;
+    if (s_qprioOld == 0) {
+        s_failures++;
+        printf("FAIL v0.11.7's queue priority rule asked on no identity of the matrix\n");
+    }
+    for (int ch = 0; ch < RHI_DC_COUNT; ch++) {
+        s_checks++;
+        if (strstr(rhi_device_choice_name((RhiDeviceChoice)ch), "PRIORITY") != NULL) {
+            s_failures++;
+            printf("FAIL choice %s names a priority\n",
+                   rhi_device_choice_name((RhiDeviceChoice)ch));
+        }
+    }
     s_checks++;
     if (s_conflicts != 0) {
         s_failures++;
         printf("FAIL %lu identities with an unlinked conflict\n", s_conflicts);
     }
-    printf("rhi_device_table_equiv: %lu identities, %lu with the tests' fakes, %lu one choice at "
-           "a time, %lu renderer identities at the edge versions, %lu without a device, %lu "
-           "platform drivers, %lu checks, %lu failures\n",
-           ids, faked, one, rk, nd, pf, s_checks, s_failures);
+    printf(
+        "rhi_device_table_equiv: %lu identities, %lu with the tests' fakes, %lu one choice at "
+        "a time, %lu renderer identities at the edge versions, %lu without a device, %lu "
+        "platform drivers, %lu where the old rule asked the queue's high priority (none now), %lu "
+        "checks, %lu failures\n",
+        ids, faked, one, rk, nd, pf, s_qprioOld, s_checks, s_failures);
     return s_failures ? 1 : 0;
 }

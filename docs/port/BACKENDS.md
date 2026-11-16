@@ -263,11 +263,10 @@ The OpenGL runs of the renderer's suite are the `_gl` tests ([TESTING.md](TESTIN
   `ICO_VK_FAKE_PASS_ROW=qualcomm`), the row's choice in `rhi_vk_pass_row`; no Adreno on
   Qualcomm's driver has run it, and whether it changes the hangs it is aimed at is for the next
   reporter log to say.
-- The high queue priority on Vulkan (`rhi_pass_row.h` `rhi_vk_qprio_row`, `vk_qprio.c`, issue 123:
-  Qualcomm's own driver under Android asks for its queue at high global priority): asked, granted,
-  refused (the fallback's creation) and not offered run on lavapipe under
-  `ICO_VK_FAKE_QUEUE_PRIORITY` (`rhi_vk_qprio_*`); whether Qualcomm's driver on Android grants high
-  to an app, and whether it changes the hangs, is for the next reporter log to say.
+- The queue's global priority on Vulkan: no device is asked one (the high priority Qualcomm's own
+  driver under Android was asked for issue 123 was taken off, issues 215 and 123); the read-only
+  start line runs on lavapipe on Qualcomm's row (`rhi_vk_qprio_none`). Whether the issue 215
+  handheld still ends at start without it is for its next log to say.
 - Direct3D 11: nothing has run on Windows; the profile text, the pre-pass line and the robust
   words are from the limits `d3d11_device.c` reports.
 - The VU vertex pre-pass on Direct3D 11 on hardware: CI's WARP job runs its self-test (batched,

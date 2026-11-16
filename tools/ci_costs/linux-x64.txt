@@ -949,10 +949,8 @@ rhi_vk_pipeline_stats 0.32
 rhi_vk_present_mode 0.00
 rhi_vk_qcom_passes 4.55
 rhi_vk_qcom_passes_off 0.26
-rhi_vk_qprio 0.00  # estimate: 0.0 s local (merge-wt_DT2-20261114T192922Z.lvp.log) x 1.31
-rhi_vk_qprio_granted 0.51  # estimate: 0.4 s local (merge-wt_DT2-20261114T192922Z.lvp.log) x 1.31
-rhi_vk_qprio_refused 0.58  # estimate: 0.4 s local (merge-wt_DT2-20261114T192922Z.lvp.log) x 1.31
-rhi_vk_qprio_unoffered 0.54  # estimate: 0.4 s local (merge-wt_DT2-20261114T192922Z.lvp.log) x 1.31
+rhi_vk_qprio_none 0.26  # estimate: unmeasured, as rhi_vk_qcom_passes_off (the same clock run on the same row)
+rhi_vk_qprio_source 0.20  # estimate: unmeasured, a CMake scan of port/'s sources
 rhi_vk_scopes 0.25
 rhi_vk_scopes_arm 0.08
 rhi_vk_scopes_arm_narrow 0.06

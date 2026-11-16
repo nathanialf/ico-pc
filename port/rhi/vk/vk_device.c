@@ -1876,50 +1876,6 @@ static const char *vkr_priority_word(VkQueueGlobalPriorityKHR p)
     }
 }
 
-/* What the device offers for the queue's global priority (VkrQprioOffer):
- * the extensions listed, and the game's queue family's priorities where
- * they can be read (VK_KHR_global_priority or the query extension listed,
- * through the core 1.1 call only on a 1.1 device: props2 may be the KHR
- * pair of a 1.0 device, where a 1.1 loader still hands out the core
- * pointer).  Read before the device is made (vk_qprio.c asks from it) and
- * again for the offer line; read-only queries */
-static void vkr_qprio_offer_read(VkrQprioOffer *o)
-{
-    memset(o, 0, sizeof *o);
-    const bool props2 = vkr_has_props2(g_vkr.phys);
-    const bool khrListed = vkr_device_has_ext(g_vkr.phys, VK_KHR_GLOBAL_PRIORITY_EXTENSION_NAME);
-    /* VK_KHR_global_priority needs Vulkan 1.1 or the properties2 queries */
-    o->khr = khrListed && props2;
-    o->ext = vkr_device_has_ext(g_vkr.phys, VK_EXT_GLOBAL_PRIORITY_EXTENSION_NAME);
-    o->query = vkr_device_has_ext(g_vkr.phys, VK_EXT_GLOBAL_PRIORITY_QUERY_EXTENSION_NAME);
-    if (!props2 || !(khrListed || o->query) || !vkr_props2_core(g_vkr.phys) ||
-        !VKR_FUNCTION_AVAILABLE(vkGetPhysicalDeviceQueueFamilyProperties2)) {
-        return;
-    }
-    uint32_t qn = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties2(g_vkr.phys, &qn, NULL);
-    VkQueueFamilyProperties2 *qp = calloc(qn ? qn : 1, sizeof(*qp));
-    VkQueueFamilyGlobalPriorityPropertiesKHR *gp = calloc(qn ? qn : 1, sizeof(*gp));
-    if (qp && gp && g_vkr.queueFamily < qn) {
-        for (uint32_t i = 0; i < qn; i++) {
-            gp[i].sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_GLOBAL_PRIORITY_PROPERTIES_KHR;
-            qp[i].sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2;
-            qp[i].pNext = &gp[i];
-        }
-        vkGetPhysicalDeviceQueueFamilyProperties2(g_vkr.phys, &qn, qp);
-        const VkQueueFamilyGlobalPriorityPropertiesKHR *g = &gp[g_vkr.queueFamily];
-        o->queried = true;
-        o->count = g->priorityCount < VK_MAX_GLOBAL_PRIORITY_SIZE_KHR
-                       ? g->priorityCount
-                       : VK_MAX_GLOBAL_PRIORITY_SIZE_KHR;
-        for (uint32_t i = 0; i < o->count; i++) {
-            o->priorities[i] = g->priorities[i];
-        }
-    }
-    free(qp);
-    free(gp);
-}
-
 static void vkr_offer_line(float queuePriority)
 {
     const bool props2 = vkr_has_props2(g_vkr.phys);
@@ -1949,19 +1905,37 @@ static void vkr_offer_line(float queuePriority)
             snprintf(dom, sizeof dom, "offered, its domains not readable");
         }
     }
-    VkrQprioOffer qo;
-    vkr_qprio_offer_read(&qo);
     const bool gpKhr = vkr_device_has_ext(g_vkr.phys, VK_KHR_GLOBAL_PRIORITY_EXTENSION_NAME);
-    const bool gpExt = qo.ext;
-    const bool gpQuery = qo.query;
+    const bool gpExt = vkr_device_has_ext(g_vkr.phys, VK_EXT_GLOBAL_PRIORITY_EXTENSION_NAME);
+    const bool gpQuery =
+        vkr_device_has_ext(g_vkr.phys, VK_EXT_GLOBAL_PRIORITY_QUERY_EXTENSION_NAME);
     char fam[160] = "not queried (no priority query offered)";
-    if (qo.queried) {
-        size_t at = (size_t)snprintf(fam, sizeof fam, "%u:", qo.count);
-        for (uint32_t i = 0; i < qo.count && i < VK_MAX_GLOBAL_PRIORITY_SIZE_KHR && at < sizeof fam;
-             i++) {
-            at += (size_t)snprintf(fam + at, sizeof fam - at, "%s %s", i ? "," : "",
-                                   vkr_priority_word(qo.priorities[i]));
+    /* the core 1.1 call only on a 1.1 device (props2 may be the KHR pair of
+       a 1.0 device, where a 1.1 loader still hands out the core pointer) */
+    if (props2 && (gpKhr || gpQuery) && vkr_props2_core(g_vkr.phys) &&
+        VKR_FUNCTION_AVAILABLE(vkGetPhysicalDeviceQueueFamilyProperties2)) {
+        uint32_t qn = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties2(g_vkr.phys, &qn, NULL);
+        VkQueueFamilyProperties2 *qp = calloc(qn ? qn : 1, sizeof(*qp));
+        VkQueueFamilyGlobalPriorityPropertiesKHR *gp = calloc(qn ? qn : 1, sizeof(*gp));
+        if (qp && gp && g_vkr.queueFamily < qn) {
+            for (uint32_t i = 0; i < qn; i++) {
+                gp[i].sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_GLOBAL_PRIORITY_PROPERTIES_KHR;
+                qp[i].sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2;
+                qp[i].pNext = &gp[i];
+            }
+            vkGetPhysicalDeviceQueueFamilyProperties2(g_vkr.phys, &qn, qp);
+            const VkQueueFamilyGlobalPriorityPropertiesKHR *g = &gp[g_vkr.queueFamily];
+            size_t at = (size_t)snprintf(fam, sizeof fam, "%u:", g->priorityCount);
+            for (uint32_t i = 0;
+                 i < g->priorityCount && i < VK_MAX_GLOBAL_PRIORITY_SIZE_KHR && at < sizeof fam;
+                 i++) {
+                at += (size_t)snprintf(fam + at, sizeof fam - at, "%s %s", i ? "," : "",
+                                       vkr_priority_word(g->priorities[i]));
+            }
         }
+        free(qp);
+        free(gp);
     }
     const char *gp = gpKhr && gpExt ? "KHR and EXT offered"
                      : gpKhr        ? "KHR offered"
@@ -1979,11 +1953,22 @@ static void vkr_offer_line(float queuePriority)
     }
     VKR_LOG("offered (read only, nothing enabled for it): calibrated time domains %s; global "
             "queue priority %s%s (the game's queue family %u's priorities: %s); the game's one "
-            "queue made at priority %.1f with %s; display timing: %s %s, %s %s, %s %s, %s %s",
+            "queue made at priority %.1f with no global priority asked (the driver's default, "
+            "medium); display timing: %s %s, %s %s, %s %s, %s %s",
             dom, gp, gpQuery ? ", its query too" : "", g_vkr.queueFamily, fam,
-            (double)queuePriority, vkr_qprio_said(), dt[0], dtHas[0] ? "yes" : "no", dt[1],
-            dtHas[1] ? "yes" : "no", dt[2], dtHas[2] ? "yes" : "no", dt[3],
-            dtHas[3] ? "yes" : "no");
+            (double)queuePriority, dt[0], dtHas[0] ? "yes" : "no", dt[1], dtHas[1] ? "yes" : "no",
+            dt[2], dtHas[2] ? "yes" : "no", dt[3], dtHas[3] ? "yes" : "no");
+    /* the queue's global priority: read only.  v0.11.7 asked high on
+       Qualcomm's own driver under Android (issue 123); taken off in v0.11.8
+       (issues 215 and 123: the hangs did not change, a tablet slowed down
+       around the game, and the Retroid Pocket 6 ended at every start with
+       it granted).  No device is asked any more: the line keeps the
+       device's offer in the log */
+    VKR_LOG("queue priority: the driver's default (medium), not asked: global queue priority %s "
+            "(the game's queue family %u's priorities: %s); the game asks no device for a "
+            "global priority (the high priority asked on Qualcomm's own driver under Android "
+            "taken off, issues 215 and 123)",
+            gp, g_vkr.queueFamily, fam);
 }
 
 static bool vkr_create_device(void)
@@ -3015,13 +3000,7 @@ static bool vkr_create_device(void)
         ci.pNext = f2.pNext;
         ci.pEnabledFeatures = &f2.features;
     }
-    /* issue 123's second attempt: the queue at high global priority on
-       Qualcomm's own driver under Android, made again without it when
-       refused (vk_qprio.c) */
-    VkrQprioOffer qprioOffer;
-    vkr_qprio_offer_read(&qprioOffer);
-    if (!vkr_qprio_create_device(&ci, &qci, exts, (uint32_t)(sizeof exts / sizeof exts[0]),
-                                 &qprioOffer)) {
+    if (!VKR_CHECK(vkCreateDevice(g_vkr.phys, &ci, NULL, &g_vkr.device))) {
         return false;
     }
 #ifndef ICO_RHI_MOLTENVK
@@ -3305,10 +3284,6 @@ static void vkr_fill_limits(void)
     /* Qualcomm's row (rhi_pass_row.h, issue 123): its reason while it holds
        the device's passes on VkRenderPass objects */
     o->passObjectsRow = g_vkr.passRowQcom && g_vkr.legacyPasses ? g_vkr.legacyWhy : NULL;
-    /* the queue's global priority (vk_qprio.c, rhi_qprio.h) */
-    o->queuePriority = g_vkr.qprio;
-    o->queuePriorityResult = g_vkr.qprioResult;
-    o->queuePriorityWhy = g_vkr.qprioWhy;
     o->vuPrepassLoss = g_vkr.tile.noPrepass ? g_vkr.tile.prepassWhy : NULL;
     /* v0.7.10: the device profile's facts (rhi.h) */
     /* either path's read (RhiLimits.localReadSubpass: the subpass read,
