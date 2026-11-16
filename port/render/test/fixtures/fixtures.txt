@@ -180,3 +180,9 @@ fx-123-blended dumps/163/frame-20261106-080033-v3910-blended.rddump rules=skin_t
 # vu_audit_plane_draws with the index compaction on (ICO_RD_VU_COMPACT=1)
 fx-mali-loss dumps/v0117-mali179/loss-20261114-075659-lost.rddump rules=vu_opaque.rules.txt vu_audit_entries>=1 vu_audit_violations=0 vu_audit_lists>=1 vu_audit_plane_draws>=1
 fx-mali-loss-before dumps/v0117-mali179/loss-20261114-075659-before.rddump rules=vu_opaque.rules.txt vu_audit_entries>=1 vu_audit_violations=0 vu_audit_lists>=1 vu_audit_plane_draws>=1
+# issue 163's patched blended frame (the deep dive's copy, its lanes on 200
+# moved to 252): fx-163-blended's rules and the move as @skin lane 200 252
+# (skin_patched.rules.txt).  skin_checks, skin_past and skin_past_boxed (the
+# 1448-vertex command boxed over every batch) on every --skin-check run; the
+# check's drawn counts as fx-123-blended's
+fx-163-patched dumps/163/blended-750-a200.rddump rules=skin_patched.rules.txt skin_checks>=1 skin_past>=1 skin_past_boxed>=1 skin_checks_drawn>=1 skin_twins_drawn>=1 skin_ring_twins_drawn>=1

@@ -2728,35 +2728,11 @@ if(ICO_RUN_TESTS)
         set_tests_properties(rd_occlusion_tool PROPERTIES ENVIRONMENT "${_env}")
     endif()
     # the skinned draws' checks on the committed fixtures (issue 163, issue
-    # 123's ladder): rd_vu_skin_check_dump, _163_probe, _163_ring, the
-    # rd_vu_skin_check_123* rows, rd_vu_skin_check_ab, rd_vu_bones_ring_ab
-    # and _prepass (test/rd_vu_skin_fx_tests.cmake).  rd_vu_skin_check_163
-    # and _163_patched (test/rd_vu_skin_check_dump.cmake on a dump): issue
-    # 163's blended dump and the deep dive's patched copy (its stream's
-    # lanes on 200 moved to 252: the CPU and the GPU read the same stream,
-    # so the check finds nothing there), clean, every command the replay
-    # draws checked, no box sample outside on lavapipe; machine-local (not
-    # converted: the clean line's box clause on the fixture, FIX-P6a's
-    # hand-back); SKIP without the dump or a device
+    # 123's ladder): rd_vu_skin_check_dump, the rd_vu_skin_check_163* and
+    # rd_vu_skin_check_123* rows, rd_vu_skin_check_ab, rd_vu_bones_ring_ab and
+    # _prepass (test/rd_vu_skin_fx_tests.cmake)
     set(_vskd "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_skin_check_dump.cmake")
     set(_vskd_clean "[0-9]+ skinned commands, [1-9][0-9]* checks, 0 wrong \\(address 0\\), 0 blocks whose bytes differed \\(0 changed after the draw\\), 0 of [0-9]+ box checks with samples outside")
-    set(_vsk163 "/primary/dev/ico-dumps/163")
-    add_test(NAME rd_vu_skin_check_163
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMP=${_vsk163}/frame-20261105-195124-v6171-blended.rddump"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_163"
-                     "-DLINE=${_vskd_clean}" -P "${_vskd}")
-    add_test(NAME rd_vu_skin_check_163_patched
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMP=${_vsk163}/blended-750-a200.rddump"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_163_patched"
-                     "-DLINE=${_vskd_clean}" -P "${_vskd}")
-    set_tests_properties(rd_vu_skin_check_163 rd_vu_skin_check_163_patched
-                         PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800)
-    if(_env)
-        set_tests_properties(rd_vu_skin_check_163 rd_vu_skin_check_163_patched
-                             PROPERTIES ENVIRONMENT "${_env}")
-    endif()
     include("${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_skin_fx_tests.cmake")
     # rd_region_stats (test/rd_region_stats.cmake, docs/port/VU1_PROGRAMS.md
     # "The region rule"): rd_replay_tool --region-stats on the first two

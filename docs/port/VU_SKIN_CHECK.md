@@ -745,9 +745,10 @@ and `rd_vu_skin_check_dump.cmake` (`rd_vu_skin_check_dump`, `rd_vu_skin_check_16
 `rd_vu_skin_check_123_nan`, `rd_vu_skin_check_123_attach`, `rd_vu_skin_check_123_nan_attach`,
 `rd_vu_skin_check_123_c3`, `rd_vu_skin_check_123_nan_c`, `rd_vu_skin_check_123_bones_ring`,
 `rd_vu_skin_check_123_bones_ring_nan` on committed fixtures of the reporters' frames, the poses
-kept and the skinned vertices generated: `docs/port/TESTING_FIXTURES.md`; `_163` and `_163_patched`
-still on issue 163's dumps), `rd_vu_bones_ring_ab.cmake` (`rd_vu_bones_ring_ab`: the
-fixtures of issue 163's and issue 123's blended frames under the plain set with the pre-pass off, the bones
+kept and the skinned vertices generated: `docs/port/TESTING_FIXTURES.md`; `_163_patched` on the
+patched copy's fixture, its lanes moved by `@skin lane 200 252`), `rd_vu_bones_ring_ab.cmake`
+(`rd_vu_bones_ring_ab`: the fixtures of issue 163's blended frame, its patched copy and issue 123's
+blended frame under the plain set with the pre-pass off, the bones
 through the ring against VuBoneCB, and both with the check on for every skinned command (column 3
 and twin C drawn, the twins through the ring), every picture byte for byte;
 `rd_vu_bones_ring_ab_prepass` the same with the pre-pass on, its batch builds on and off),

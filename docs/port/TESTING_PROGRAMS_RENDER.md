@@ -637,7 +637,11 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   both reporter frames), so the counts are the fixtures' and the mismatch line names the generated
   mesh (`m0001`...). On `fx-vu-3086` (46 skinned commands) every command the replay draws checked,
   none wrong, the bytes equal and no box sample outside (`rd_vu_skin_check_dump`); on issue 163's
-  blended frame (`fx-163-blended`) with `ICO_RD_VU_SKIN_SABOTAGE=200` the probe's zero matrix at
+  blended frame (`fx-163-blended`) clean the same, its 1448-vertex command (Ico's) past the probe's
+  1,024 rows boxed over every batch it draws (`skin_past`, `skin_past_boxed`;
+  `rd_vu_skin_check_163`), the deep dive's patched copy (`fx-163-patched`: the generated lanes on
+  200 moved to 252 by `@skin lane 200 252`) checked right the same, the CPU and the GPU reading the
+  same stream (`rd_vu_skin_check_163_patched`), with `ICO_RD_VU_SKIN_SABOTAGE=200` the probe's zero matrix at
   address 200 named with the bytes equal and `reads as: H1, address-dependent`
   (`rd_vu_skin_check_163_probe`), with `=200,ring` the bytes differing as the GPU copied them and as
   the CPU reads them and `reads as: H2, a port race` (`rd_vu_skin_check_163_ring`); on issue 123's
@@ -658,16 +662,11 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   `=200,nan` twin C differing from B (`rd_vu_skin_check_123_nan_c`); with `ICO_RD_VU_BONES=ring`
   clean, the `rd: VU bones: through the ring` start line and `the ring read: healed (0 of T ...)`
   (`rd_vu_skin_check_123_bones_ring`), and with the NaN too the twins (both ring reads) differing
-  and `not healed` (`rd_vu_skin_check_123_bones_ring_nan`). Still on the machine-local dumps of
-  `/primary/dev/ico-dumps/163/` (`-DDUMP`): issue 163's blended dump clean
-  (`rd_vu_skin_check_163`) and the deep dive's patched copy (its lanes on 200 moved to a zero bone)
-  checked right, the CPU and the GPU reading the same stream (`rd_vu_skin_check_163_patched`); on
-  `fx-163-blended` the clean line's box clause does not hold (a 1448-vertex draw's box is made from
-  its first 1,024 vertices' batches while the box check draws the whole command). SKIP without the
-  dump or a device.
+  and `not healed` (`rd_vu_skin_check_123_bones_ring_nan`). SKIP without a device.
 - `rd_vu_bones_ring_ab.cmake`: issue 123's ladder, step 1 ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md#the-ladder)):
   the fixtures of `test/fixtures/lists/bones_ring.txt` (issue 163's blended frame
-  `fx-163-blended`, issue 123's blended frame of 2026-11-06 `fx-123-blended`) through `rd_replay_tool --pass-dump --present 640x480` under the
+  `fx-163-blended`, its patched copy `fx-163-patched`, issue 123's blended frame of 2026-11-06
+  `fx-123-blended`) through `rd_replay_tool --pass-dump --present 640x480` under the
   plain set with the VU pre-pass off, `ICO_RD_VU_BONES=cbuffer` with the skin check off against
   `=ring` with it off, `cbuffer` with it on for every skinned command (`ICO_RD_VU_SKIN_CHECK=2`:
   column 3 and twin C drawn, at least one twin C over the fixtures) and `ring` with it on, at Original
@@ -680,9 +679,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   old way, through their entries' ring builds` asked of the ring runs), every PNG byte for byte, at
   least one twin drawn over the check runs (the record draws' twins read the bones through the ring,
   no C) (`rd_vu_bones_ring_ab_prepass`). The path ran, per fixture: on every check run its declared
-  `skin_checks_drawn` and `skin_ring_twins_drawn` (with the pre-pass `skin_twins_drawn`). The
-  patched copy of issue 163's dump is not carried: its fixture would expand to `fx-163-blended`'s
-  bytes (the stream it patched is generated). SKIP without a device.
+  `skin_checks_drawn` and `skin_ring_twins_drawn` (with the pre-pass `skin_twins_drawn`). SKIP
+  without a device.
 - `rd_vu_skin_check_ab.cmake`: the skin check is designed not to change the picture
   ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)); `rd_replay_tool --pass-dump` with it off
   (`ICO_RD_VU_SKIN_CHECK=0`) and on for every skinned command of every replay (`=2`: the probes,
