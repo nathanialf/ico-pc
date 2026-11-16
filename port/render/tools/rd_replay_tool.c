@@ -3623,6 +3623,14 @@ int main(int argc, char **argv)
                        "draws without facing data\n",
                        dump, pr->vuBesideCards, nf);
             }
+            if (g_rd.vuNoBeside) {
+                /* the device's plain set (rd_plain_camera.h, issue 123):
+                 * the meshes and grids the camera rule held, the skinned
+                 * draws that kept the PS2's drops (issue 163) */
+                printf("%s: stats: plain set: %u static and grid draws by the camera rule, %u "
+                       "skinned draws kept the PS2's drops\n",
+                       dump, pr->vuPlainCamera, pr->vuPlainKept);
+            }
         }
         /* the draw-merge count (rd_replay_vu.c vuMergeNote): how many VU
          * draws could join the draw before them (same pipeline, textures,

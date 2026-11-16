@@ -71,6 +71,8 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
     [ICO_ATT_ONEPASS] = {"the two-pass blend in one pass", "pairs", "kept two-pass"},
     [ICO_ATT_SET_SIZE] = {"the start-up set sized by the memory fall", "left to first use",
                           "made on first use"},
+    [ICO_ATT_PLAIN_CAMERA] = {"the camera rule for static meshes on the plain set",
+                              "mesh and grid draws by the camera", "skinned draws kept"},
     [ICO_ATT_SCENE_HOLD] = {"the paused scene held under the menu", "pictures held",
                             "drawn in full while paused"},
 };
@@ -866,6 +868,22 @@ void ico_attempt_decide_set_size(int floorOn)
     } else {
         ico_attempt_state(ICO_ATT_SET_SIZE, ICO_ATT_NA,
                           "no free-memory floor here: the set as before");
+    }
+}
+
+void ico_attempt_decide_plain_camera(int plainRow, int camera)
+{
+    if (!plainRow) {
+        ico_attempt_state(ICO_ATT_PLAIN_CAMERA, ICO_ATT_NA,
+                          "this device draws with the extended set or by choice with the plain "
+                          "one: the camera decides on every draw");
+    } else if (!camera) {
+        ico_attempt_state(ICO_ATT_PLAIN_CAMERA, ICO_ATT_NA,
+                          "[dev] region_rule = ps2: the PS2's drops on every draw");
+    } else {
+        ico_attempt_state(ICO_ATT_PLAIN_CAMERA, ICO_ATT_ON,
+                          "static meshes and grids by the camera, skinned draws keep the PS2's "
+                          "drops (issue 163)");
     }
 }
 

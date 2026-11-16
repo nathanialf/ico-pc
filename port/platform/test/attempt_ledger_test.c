@@ -439,6 +439,16 @@ static void test_classes(void)
         ico_attempt_decide_set_size(kShip[c].android);
         CHECK(ico_attempt_state_of(ICO_ATT_SET_SIZE) ==
               (kShip[c].android ? ICO_ATT_ON : ICO_ATT_NA));
+        /* the camera rule for static meshes on the plain set (rd_pipeline.c):
+           the classes with Qualcomm's pass row are the Adreno 740 on its own
+           driver, which keeps the plain set (the device table's row); on
+           there under the camera rule, not applicable elsewhere and under
+           region_rule = ps2 */
+        ico_attempt_decide_plain_camera(d->passRow != NULL, 0);
+        CHECK(ico_attempt_state_of(ICO_ATT_PLAIN_CAMERA) == ICO_ATT_NA);
+        ico_attempt_decide_plain_camera(d->passRow != NULL, 1);
+        CHECK(ico_attempt_state_of(ICO_ATT_PLAIN_CAMERA) ==
+              (d->passRow != NULL ? ICO_ATT_ON : ICO_ATT_NA));
         /* the paused scene's hold (rd_hold.c): every class here is a Vulkan
            device; the classes are not told whether list 11's draws join (the
            device's fx plan), so on, as the reporter's Adreno 740 */

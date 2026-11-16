@@ -167,6 +167,16 @@ The release-wide switches the renderer ANDs with a class (`RD_LAMPS_MS_DEFAULT`,
 `RD_LATE_DEFAULT`) stay in their files: the rows hold the class, the call site the switch, and the
 table never reads their values (unlike the compaction's two, which are the rows' values).
 
+`VU_FALLBACK_PLAIN` (the `adreno-740-qualcomm` row and `turnip`) decides more than the modules: a
+device it puts on the plain set has no side bands, and its skinned draws keep the PS2's region
+drops under the camera rule (`g_rd.vuNoBeside`, issue 163). Its static meshes and grids
+take the camera rule there as everywhere (issue 123's right wall;
+`port/render/rd_plain_camera.c`, the attempt ledger's row `the camera rule for static meshes on
+the plain set`): the choice's value and words are unchanged, so the table, its rows and
+`rhi_device_table_equiv` are too. The tests put lavapipe on that reading with
+`ICO_RD_VU_PLAIN=row` (the renderer's, not one of the table's fakes: the plain set by `[dev]` with
+the row's drops; ctest `rd_plain_camera_ab`).
+
 Two readers still read the profile's `TILER` fact (`RdProfile.tiler`, which the table sets) rather
 than their own choice: `rd_late_pass.c` (`LATE_PASS_TILER`) and `rd_vis.c` (`CULL_FRUSTUM`). Their
 tests set `RdProfile.tiler` by hand to stand for a tile-based GPU (`rd_vis_test`, and the

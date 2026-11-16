@@ -207,6 +207,12 @@ enum {
        pipelines left to first use, second count those made on first use
        after the stop */
     ICO_ATT_SET_SIZE,
+    /* rd_plain_camera.c, rd_pipeline.c (issue 123, v0.11.8): on a device
+       that keeps the VU plain set (the Adreno 740 on Qualcomm's driver,
+       Turnip) the static meshes and grids take the camera rule, the skinned
+       draws keep the PS2's drops (issue 163); count the mesh and grid draws
+       by the camera, second count the skinned draws kept */
+    ICO_ATT_PLAIN_CAMERA,
     /* rd_hold.c (issue 123, v0.11.8): while the game is paused and its scene
        is the one the last full picture drew, lists 11-12 drawn over a copy
        of SCENE taken at list 11 (Vulkan, no joined list 11 passes, no MSAA,
@@ -465,6 +471,11 @@ void ico_attempt_decide_shadow_count(int view);
    window registers it before the set): floorOn the free-memory floor
    applies (Android, the floor not set off): on; else not applicable */
 void ico_attempt_decide_set_size(int floorOn);
+/* the camera rule on the plain set (rd_pipeline.c rd__vu_policy_init, at
+   each device start): plainRow the device keeps the VU plain set
+   (g_rd.vuNoBeside), camera the camera rule in force ([dev] region_rule).
+   On with both; not applicable with the reason otherwise */
+void ico_attempt_decide_plain_camera(int plainRow, int camera);
 /* the paused scene held under the menu (rd_hold.c at the first paused
    picture, and when the device's verdict changes): offWhy NULL, on; else not
    applicable with offWhy (a static string: not Vulkan, list 11's passes

@@ -78,6 +78,7 @@
 
 #include "rd_internal.h"
 #include "rd_mesh.h"
+#include "rd_plain_camera.h"
 #include "rd_replay_region.h"
 #include "../vu1_ref/vu1_ref.h"
 #include "../../shaders/shader_consts.h"
@@ -723,9 +724,15 @@ static void regionCmd(void *user, int l, uint32_t idx, const RdCmd *c, const RdS
                      m && m->facingFrom != RD_MESH_FACING_NONE &&
                      !(besideEnv && strcmp(besideEnv, "0") == 0) && !g_rd.vuNoBeside;
     /* the camera rule's (RD_DROPS_CAMERA): a mesh with facing data, or a grid (two-sided:
-       ICO_VU_TWO_SIDED), not the device's plain set */
+       ICO_VU_TWO_SIDED), not a skinned draw on the device's plain set (rd_plain_camera.h
+       rd__plain_keeps_drops, issue 163) */
     const int twoSided = c->type == RDC_GRID;
-    const int camOk = !g_rd.vuNoBeside && (twoSided || (m && m->facingFrom != RD_MESH_FACING_NONE));
+    const int camOk = !rd__plain_keeps_drops(g_rd.vuNoBeside, true, c->type == RDC_SKINNED) &&
+                      (twoSided || (m && m->facingFrom != RD_MESH_FACING_NONE));
+    /* the plain modules have no card test and no tick re-test (vu_common.hlsli
+       ICO_VU_PLAIN): a draw through them (the fallback's plain set with the pre-pass off)
+       takes the blended camera's verdict alone under either rule */
+    const int fullRule = !(g_rd.vuFallbackPlain && !g_rd.vuPrepass);
     const int det = regionDet(kind == VU1REF_CARD_CLUSTER ? mem + 4 : mem + 16);
     RegionCount d;
     memset(&d, 0, sizeof(d));
@@ -756,11 +763,11 @@ static void regionCmd(void *user, int l, uint32_t idx, const RdCmd *c, const RdS
         const int joined = (marks & ICO_VU_MARK_JOINED) != 0u;
         /* the PS2's rule ([dev] region_rule = ps2): drawn whole (the card test, a tick),
            beside the picture, or dropped */
-        const int strip = w->extended && front;
+        const int strip = w->extended && front && fullRule;
         const int passes =
             strip && (joined || vu1ref_strip_passes(gv, stw, first, (int)nv, (int)k));
         int ps2Rescued = 0;
-        if (!strip && ticks) {
+        if (!strip && ticks && fullRule) {
             /* VU_RULE_DROP at the blended camera: a tick that showed it */
             const int s0 = regionTickShown(w, 0, 0, a, b, cc, lo, hi, pic, frame);
             const int s1 = s0 == 2 ? 2 : regionTickShown(w, 0, 1, a, b, cc, lo, hi, pic, frame);
@@ -781,12 +788,13 @@ static void regionCmd(void *user, int l, uint32_t idx, const RdCmd *c, const RdS
            test's) */
         const int ps2Beside = !ps2Drawn && wide && why != R_CARD && facing;
         /* the camera rule: no card test, the ticks on every drop, then what faces the eye
-           (vu_drop_fate); a draw it cannot take (no facing data, the device's plain set)
-           keeps the PS2's rule under it too (rd_replay_vu.c RD_DROPS_KEPT) */
+           (vu_drop_fate); a draw it cannot take (no facing data, a skinned draw on the
+           device's plain set) keeps the PS2's rule under it too (rd_replay_vu.c
+           RD_DROPS_KEPT) */
         int camRescued = ps2Rescued, camFront = 0, camDrawn = ps2Drawn;
         if (camOk) {
             camRescued = 0;
-            if (ticks) {
+            if (ticks && fullRule) {
                 const int s0 = regionTickShown(w, 1, 0, a, b, cc, lo, hi, pic, frame);
                 camRescued = s0 == 2 || regionTickShown(w, 1, 1, a, b, cc, lo, hi, pic, frame) == 2;
             }

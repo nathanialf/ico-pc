@@ -747,6 +747,35 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   counts the same in both presets, and `drawn by the camera rule N` (`camera_drawn_tris`) as the
   list line declares (at least 1 on every fixture: the facing floor and card). A fixture no setting
   checked fails; no device: SKIP (77). TIMEOUT 3600 (`rd_region_camera_ab`).
+- `rd_plain_camera_ab.cmake` (issue 123's right wall; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-camera-rule),
+  [DIVERGENCES.md](DIVERGENCES.md) VD-21 and VD-29; `port/render/rd_plain_camera.cmake`): the
+  camera rule for static meshes and grids on a device that keeps the VU plain set, on the
+  fixtures of `port/render/test/fixtures/lists/plain_camera.txt` (the five `@scene drops`
+  fixtures of `lists/wide.txt`, each drawing 16 to 50 skinned commands) at their own aspect, all
+  under `ICO_RD_VU_PLAIN=row ICO_VK_FAKE_NO_PREPASS=1` (lavapipe on the plain set with the device
+  table's row's drops, every VU draw through the plain program entries, as on the issue 123
+  tablet). 1. `tools/region_camera_report.py` at the Original preset 1x and Enhanced 2x with
+  `--feedback-off`, as `rd_region_camera_ab`: every SCENE pixel the camera rule changes against
+  `region_rule = ps2` there lies in the CPU oracle's mask, which on the device's plain set holds no
+  skinned triangle (`port/render/tools/rd_replay_region.c`, `rd__plain_keeps_drops`; the plain
+  modules' rule: no card test, no tick re-test), so a changed skinned pixel fails. 2. The path ran:
+  each camera replay's start line `rd: region rule: the camera decides for static meshes on this
+  device's plain set; skinned draws keep the PS2's drops (issue 163); ...`, the stand-in's line
+  `rd: VU shaders: ICO_RD_VU_PLAIN=row: ...`, `region_rule_draws`, and `--stats`' `stats: plain
+  set: N static and grid draws by the camera rule, K skinned draws kept the PS2's drops` with N at
+  least 1 and at most the camera rule's draws (which count the particles too) and K at least 1;
+  `--region-stats` under the camera rule shows `camera_drawn_tris` as the list line declares, and
+  a fixture whose oracle draws one must change SCENE at a setting. 3. `region_rule = ps2` on the
+  row is the old flags': each fixture at both settings with `--pass-dump` under `ICO_RD_VU_PLAIN=row
+  ICO_RD_REGION_RULE=ps2` and under `ICO_RD_VU_PLAIN=1 ICO_RD_VU_BESIDE=0 ICO_RD_REGION_RULE=ps2`
+  (the plain set with every drop kept and no side band: the draw flags the row's draws had before), every
+  target byte for byte; the first's start line `... dropped, with no side bands on this device's
+  plain set (issue 163))` and its `stats: plain set: 0 static and grid draws ..., K skinned draws
+  kept` (K at least 1). A fixture no setting checked fails; no device: SKIP (77). TIMEOUT 3600
+  (`rd_plain_camera_ab`). The CPU half is `rd_plain_camera` (`test/rd_plain_camera_test.c`: the
+  decision over every device, rule and draw; the counts and the attempt ledger's row, its states
+  and block words; the 10 s line's words, empty without counts or replays, cut in a short buffer;
+  the start line's words).
 - `rd_sideband_ab.cmake` (issue 29; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-region-rule), step 7):
   under the PS2's region rule (`ICO_RD_REGION_RULE=ps2` on both replays: the side bands are its),
   the region rule's side bands against the PS2's drop on the committed fixtures of
