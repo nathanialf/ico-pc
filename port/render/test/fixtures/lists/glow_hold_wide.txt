@@ -1,0 +1,22 @@
+# rd_replay_tool_glow_hold_wide (port/render/test/rd_replay_tool_glow_hold.cmake,
+# the same script as rd_replay_tool_glow_hold): the glow held between ticks
+# against its chain drawn at every present on frames wider than the PS2's 512
+# GS pixels, where the fog arms the repeat of SCENE's two outer GS columns a
+# side (rd_blur_border.c, issue 129) for the frame's first post sprite that
+# samples SCENE: the glow's mask, which a held present turns RDC_NOP.  Before
+# rd__glow_hold_nop a held present repeated them after the paste or not at all:
+# SCENE's texel columns 0-3 and W-4..W-1 at 2x differed from the chain drawn
+# (the still case 7048 pixels by up to 10 levels; the moving case 6831 pixels by
+# up to 121 with an empty mask, which the region rule fails).  Roles and words
+# as in glow_hold.txt.
+#
+# the still case: issue 102's frame v4251 (688x448 GS, 16:9; the sun's fans,
+# the chain drawn whole)
+fx-gate-102 still glow_chains>=1 glow_plan=whole
+# the moving case: the owner's phone, the main gate, v97707-prev then v97707
+# (848x448 GS), the glow's light plan dark (the chain not drawn, 0 chains).  On the
+# fixtures this pair did not show the defect (DIFF 0 held vs redrawn with int's
+# tool, 2026-11-15); the real source pair does (6831 pixels): the still line is
+# the guard, this pair covers the wide moving case's lines and present 0
+fx-gate-prev prev glow_plan=dark
+fx-gate move glow_plan=dark
