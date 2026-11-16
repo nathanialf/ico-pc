@@ -31,7 +31,7 @@
  * count and MEM_WATCH_STEP_LINES + 1 by a fall (each such clause lowers the
  * lowest shown by more than stepMb, and the set stops at the floor), plus
  * its start, rule, end and summary lines: 37 for any set, the 684 of issue
- * 215 included.
+ * 215 included (and the sources' line, once a run).
  */
 #ifndef ICO_PLATFORM_MEM_WATCH_H
 #define ICO_PLATFORM_MEM_WATCH_H

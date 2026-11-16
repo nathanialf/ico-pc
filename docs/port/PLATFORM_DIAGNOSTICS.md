@@ -901,7 +901,7 @@ the floor) / 16)` MB, at least 1 (no floor: the free memory itself); any clause 
 again, and a fall is measured from the lowest free memory a clause or the start line showed. So a
 set carries at most 16 clauses by count and 17 by a fall (each lowers the lowest shown by more than
 the step, and the set stops at the floor): with the start, rule, end and summary lines at most 37
-lines for any set (the 684 pipelines of issue 215: every 43 pipelines and 334 MB). Nothing here
+lines for any set (38 with the sources' line, once a run) (the 684 pipelines of issue 215: every 43 pipelines and 334 MB). Nothing here
 changes behaviour. Test: `mem_breakdown`.
 
 ### The symbol lines
