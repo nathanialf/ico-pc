@@ -66,6 +66,8 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
     [ICO_ATT_PICTURE_HEALTH] = {"picture health", "3D pictures with stamps unwritten",
                                 "GPU clock restarts"},
     [ICO_ATT_PIN_RELEASE] = {"pins let go at one picture a tick", "times let go", "taken again"},
+    [ICO_ATT_SHADOW_COUNT] = {"the shadow levels' count from the stencil", "steps from the stencil",
+                              "full-size passes drawn after all"},
     [ICO_ATT_ONEPASS] = {"the two-pass blend in one pass", "pairs", "kept two-pass"},
 };
 
@@ -826,6 +828,17 @@ void ico_attempt_decide_pin_release(int android, int rule)
                           "a second at one picture a tick with a picture's CPU raised lets the "
                           "render and game threads run on any faster core until 10 s pass "
                           "without one");
+    }
+}
+
+void ico_attempt_decide_shadow_count(int view)
+{
+    if (view) {
+        ico_attempt_state(ICO_ATT_SHADOW_COUNT, ICO_ATT_ON,
+                          "above 1x, checked and timed at the first shadowed scene");
+    } else {
+        ico_attempt_state(ICO_ATT_SHADOW_COUNT, ICO_ATT_NA,
+                          "no stencil view here: the seven draws make the count");
     }
 }
 

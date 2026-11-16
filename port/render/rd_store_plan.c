@@ -84,6 +84,7 @@
 #include "rd_layer.h"
 #include "rd_replay.h"
 #include "rd_shadow_box.h"
+#include "rd_shadowres.h" /* rd__shadow_count_end */
 #include "rd_upscale.h"
 
 /* the command the walk replays (rd_replay.c replayFrame), counted as the
@@ -893,6 +894,7 @@ void rd__store_plan_end(void)
     rd__glow_fold_end();         /* the glow's likewise (rd_glow_fold.c) */
     rd__last_store_replay_end(); /* why a last touch's pass kept its store (rd_pass_cut.c) */
     rd__date_cut_end();          /* no run outside the walk (rd_date_cut.c) */
+    rd__shadow_count_end();      /* the count's guard (rd_shadow_one.c) */
     planNothingDropped();
     s_plan.nPrevDropped = 0;
     for (uint32_t i = 0; i < s_plan.n; i++) {

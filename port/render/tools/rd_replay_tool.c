@@ -196,7 +196,10 @@
  *                         scene's scale read back and compared with the CPU
  *                         reference on the same count (tools/rd_replay_fine.c
  *                         says the rule and the lines); exit 1 outside the
- *                         rule or with no chain to check
+ *                         rule or with no chain to check.  A step from the
+ *                         stencil (rd_shadow_count.h) also has the full-size
+ *                         count drawn after it, so the count it stood for is
+ *                         read back (the stencil-to-table equality)
  *   --list                prints every command of the replayed lists: the
  *                         list, index, type and key; for a draw its texture
  *                         (id and size), and for screen prims the prim,
@@ -577,6 +580,7 @@
 #include "rd_shadow_tile.h"      /* --stats: the shadow composites over the tile mask */
 #include "rd_replay_fine.h"      /* --fine-check */
 #include "rd_shadowres.h"        /* --stats: the shadow's levels above 1x */
+#include "rd_shadow_count.h"     /* --stats, --fine-check: the full-size count's form */
 #include "rd_no_volume.h"        /* --stats: a shadow window with no volume */
 #include "rd_upscale.h"
 #include "rd_upscale_capture.h" /* --fsr3-dump */
@@ -2436,6 +2440,7 @@ int main(int argc, char **argv)
             tempsDir = argv[++i];
         } else if (strcmp(argv[i], "--fine-check") == 0) {
             fineCheck = true;
+            rd__shadow_count_set_keep(true); /* the count the step stood for, read back */
         } else if (strcmp(argv[i], "--aspect") == 0 && i + 1 < argc) {
             unsigned a = 0, b = 0;
             aspectGiven = true;
@@ -3303,6 +3308,8 @@ int main(int argc, char **argv)
             rd__shadow_fine_stats(pr, sc, sizeof sc); /* rd_shadowres.c */
             printf("%s: stats: %s\n", dump, sc);
             rd__shadow_fine_drawn(pr, sc, sizeof sc);
+            printf("%s: stats: %s\n", dump, sc);
+            rd__shadow_count_stats(pr, sc, sizeof sc); /* rd_shadow_count.c */
             printf("%s: stats: %s\n", dump, sc);
         }
         /* a cleared source read as its colour (rd_const_read.c) */

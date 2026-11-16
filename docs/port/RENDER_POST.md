@@ -1551,9 +1551,11 @@ and nothing above it was measured on hardware; above it the PS2's sizes, the rel
 reason `scale` and `rd: shadow levels: the PS2's sizes: the scene at CxC texels a GS pixel, above
 the cap of 3 ...` at each change; `rd_shadow_fine_ab` check 8):
 
-1. the count is also kept at its full size (the one draw draws it again at the count target's own
-   texels, `port/render/rd_shadow_one.c`; the seven draws and the MSAA epoch's covered-majority
-   resolve, `rd_msaa_shadow.c`, leave it there already);
+1. the count is also kept at its full size (after the one draw the first level's step reads it from
+   the stencil, or a pass draws it again at the count target's own texels, as the device's own
+   timing chose: [The count from the stencil](WORK_BUFFERS.md#the-count-from-the-stencil); the
+   seven draws and the MSAA epoch's covered-majority resolve, `rd_msaa_shadow.c`,
+   leave it there already);
 2. at each of the game's three level sprites (`rd_shadow_box.c` `rd__shadow_box_screen`, before the
    sprite's pass) the level is drawn again into a texture of its own at S texels a GS pixel on each
    axis, S the smallest odd whole number at or above the scene's scale on that axis (3 at 2x, 2.41x,

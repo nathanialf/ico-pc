@@ -41,6 +41,7 @@
 #include <string.h>
 
 #include "rd_internal.h"
+#include "rd_shadow_count.h"
 #include "rd_shadowres.h"
 #include "rd_shadow_fine_vectors.h"
 #include "rd_shadow_fine_sprite.h"
@@ -827,6 +828,9 @@ static void testLines(void)
     rec.shadowFineTexels = 250000;
     rec.shadowFineArea = 1000000;
     rec.shadowFineRendered = 400000;
+    rec.shadowCountStencil = 1;
+    rec.shadowCountGuard = 0;
+    rec.shadowCountForm = RD_SC_STENCIL + 1;
     rd__shadow_fine_pop(&rec);
     char text[512];
     size_t at = 0;
@@ -835,7 +839,9 @@ static void testLines(void)
     printf("  10 s clause: %s\n", text);
     CHECK(strcmp(text, "; shadow levels: 1 shadows at the scene's scale, 2 at the PS2's size "
                        "(filter 2) in 1 replays (10.0 passes a shadow, drawing 25.0 % of their "
-                       "targets' texels in render areas of 40.0 %, 0.25 M texels a shadow)") == 0,
+                       "targets' texels in render areas of 40.0 %, 0.25 M texels a shadow; the "
+                       "count 1 from the stencil, 0 full-size passes, 0 seven draws, 0 guard "
+                       "fallbacks, form stencil)") == 0,
           "the 10 s clause: %s", text);
     const size_t was = at;
     rd__shadow_fine_text(text, sizeof text, &at);
@@ -852,6 +858,142 @@ static void testLines(void)
           "the drawn words: %s", st);
 }
 
+/* the full-size count's form (rd_shadow_count.c): the trial's order, the
+ * median, the choice and its ties, list 3's time from a timed replay's
+ * pieces (an unstamped piece leaves the sample out), the --stats words */
+static void testCountForms(void)
+{
+    uint8_t got[RD_SC_FORMS] = {0, 0, 0};
+    /* the turn: the stencil step, the seven draws, the full-size pass */
+    CHECK(rd_sc_trial_next(0, got) == RD_SC_STENCIL && rd_sc_trial_next(1, got) == RD_SC_SEVEN &&
+              rd_sc_trial_next(2, got) == RD_SC_FULL && rd_sc_trial_next(3, got) == RD_SC_STENCIL,
+          "the trial's turn");
+    got[RD_SC_SEVEN] = RD_SC_TRIAL_N; /* the seven draws' samples in: left out */
+    CHECK(rd_sc_trial_next(1, got) == RD_SC_FULL, "a form whose samples are in is left out");
+    got[RD_SC_STENCIL] = got[RD_SC_FULL] = RD_SC_TRIAL_N;
+    CHECK(rd_sc_trial_next(0, got) == -1, "every sample in: no form");
+    const float v3[3] = {9.0f, 4.0f, 30.0f};
+    const float v2[2] = {5.0f, 3.0f};
+    CHECK(rd_sc_median(v3, 3) == 9.0f && rd_sc_median(v2, 2) == 3.0f && rd_sc_median(v3, 1) == 9.0f,
+          "the median");
+
+    /* the choice by table (rd_sc_choose): samples [stencil, full, seven],
+     * counts, the form and margin wanted (margin: the larger of 10 % of the
+     * stencil step's median and the widest spread) */
+    static const struct {
+        float ms[RD_SC_FORMS][RD_SC_TRIAL_N]; /* indexed by RD_SC_FULL, _STENCIL, _SEVEN */
+        uint8_t n[RD_SC_FORMS];
+        int want;
+        float margin;
+        const char *what;
+    } k_choose[] = {
+        /* full 9.5-10, stencil 4.0-4.2, seven 7.0-7.5: spread 0.5 > 0.41 */
+        {{{9.8f, 9.5f, 10.0f}, {4.0f, 4.2f, 4.1f}, {7.3f, 7.0f, 7.5f}},
+         {3, 3, 3},
+         RD_SC_STENCIL,
+         0.5f,
+         "the stencil step the cheapest"},
+        /* stencil 12 (margin 1.2 > spread 0.7): full 9.2 < 10.8 */
+        {{{9.0f, 9.4f, 9.2f}, {12.0f, 12.5f, 11.75f}, {10.0f, 10.25f, 10.125f}},
+         {3, 3, 3},
+         RD_SC_FULL,
+         1.2f,
+         "the full-size pass clearly cheaper"},
+        /* a marginal win: full 4.75 against 5.0 - 0.5 */
+        {{{4.75f, 4.875f, 4.625f}, {5.0f, 5.125f, 4.875f}, {6.0f, 6.0f, 6.0f}},
+         {3, 3, 3},
+         RD_SC_STENCIL,
+         0.5f,
+         "a marginal win keeps the stencil step"},
+        /* noisy stencil samples (spread 4): full 4.125 not under 6 - 4 */
+        {{{4.0f, 4.125f, 4.25f}, {5.0f, 9.0f, 6.0f}, {8.0f, 8.0f, 8.0f}},
+         {3, 3, 3},
+         RD_SC_STENCIL,
+         4.0f,
+         "a noisy stencil step keeps it"},
+        /* the seven draws left out (n 0): full 7 < 10 - 1 */
+        {{{7.0f, 7.0f, 7.0f}, {10.0f, 10.0f, 10.0f}, {0.0f, 0.0f, 0.0f}},
+         {3, 3, 0},
+         RD_SC_FULL,
+         1.0f,
+         "the seven draws left out"},
+        /* both under by the margin, equal: the full-size pass */
+        {{{7.0f, 7.0f, 7.0f}, {10.0f, 10.0f, 10.0f}, {7.0f, 7.0f, 7.0f}},
+         {3, 3, 3},
+         RD_SC_FULL,
+         1.0f,
+         "equal alternatives: the full-size pass"},
+        /* the seven draws the lower */
+        {{{7.0f, 7.0f, 7.0f}, {10.0f, 10.0f, 10.0f}, {6.0f, 6.0f, 6.0f}},
+         {3, 3, 3},
+         RD_SC_SEVEN,
+         1.0f,
+         "the seven draws the lowest"},
+        /* the stencil step not measured */
+        {{{7.0f, 7.0f, 7.0f}, {10.0f, 10.0f, 0.0f}, {6.0f, 6.0f, 6.0f}},
+         {3, 2, 3},
+         -1,
+         0.0f,
+         "the stencil step not measured"},
+    };
+
+    for (size_t i = 0; i < sizeof k_choose / sizeof k_choose[0]; i++) {
+        float med[RD_SC_FORMS], margin = -1.0f;
+        const int got = rd_sc_choose(k_choose[i].ms, k_choose[i].n, med, &margin);
+        CHECK(got == k_choose[i].want && fabsf(margin - k_choose[i].margin) < 1.0e-4f,
+              "the choice (%s): %d (%d), margin %.4f (%.4f)", k_choose[i].what, got,
+              k_choose[i].want, (double)margin, (double)k_choose[i].margin);
+    }
+    /* the check's comparison (rd_sc_check_differ): rows pitch 12 bytes,
+     * 2 x 2 texels, one texel off */
+    {
+        uint8_t a[24], b[24];
+        memset(a, 0, sizeof a);
+        memset(a + 4, 0x80, 4);
+        memcpy(b, a, sizeof b);
+        uint32_t fx = 0, fy = 0;
+        CHECK(rd_sc_check_differ(a, b, 2, 2, 12, &fx, &fy) == 0, "the same texels");
+        b[12 + 4 + 3] = 0x7F; /* texel (1, 1) */
+        b[8] = 0xFF;          /* past the row's texels: not compared */
+        CHECK(rd_sc_check_differ(a, b, 2, 2, 12, &fx, &fy) == 1 && fx == 1 && fy == 1,
+              "one texel apart at (1,1): (%u,%u)", (unsigned)fx, (unsigned)fy);
+    }
+    RdPerfPass p[4];
+    memset(p, 0, sizeof(p));
+    p[0].list = 2;
+    p[0].gpuUs = 1000.0f;
+    p[1].list = 3;
+    p[1].gpuUs = 1500.0f;
+    p[2].list = 3;
+    p[2].gpuUs = 2500.0f;
+    p[3].list = 4;
+    p[3].gpuUs = 700.0f;
+    bool written = false;
+    const double ms = rd_sc_list_ms(p, 4, 3, &written);
+    CHECK(written && ms == 4.0, "list 3's time: %.3f ms (4.000), written %d", ms, (int)written);
+    p[2].gpuUs = -1.0f; /* its stamps unwritten */
+    (void)rd_sc_list_ms(p, 4, 3, &written);
+    CHECK(!written, "an unstamped piece: no sample");
+    (void)rd_sc_list_ms(p, 4, 5, &written);
+    CHECK(!written, "no piece of the list: no sample");
+    RdPerfRecord rec;
+    memset(&rec, 0, sizeof(rec));
+    rec.shadowCountStencil = 1;
+    rec.shadowCountFull = 2;
+    rec.shadowCountSeven = 3;
+    rec.shadowCountGuard = 4;
+    rec.shadowCountForm = RD_SC_SEVEN + 1;
+    char st[256];
+    rd__shadow_count_stats(&rec, st, sizeof st);
+    printf("  --stats: %s\n", st);
+    CHECK(strcmp(st, "shadow count above 1x: 1 from the stencil, 2 full-size passes, 3 seven "
+                     "draws, 4 guard fallbacks (form seven)") == 0,
+          "the count's stats words: %s", st);
+    rec.shadowCountForm = 0;
+    rd__shadow_count_stats(&rec, st, sizeof st);
+    CHECK(strstr(st, "(form none)") != NULL, "no form: %s", st);
+}
+
 int main(void)
 {
     printf("rd_shadow_fine_test\n");
@@ -866,6 +1008,7 @@ int main(void)
     testBoxes();
     testArea();
     testLines();
+    testCountForms();
     if (failures) {
         printf("rd_shadow_fine_test: %d failures\n", failures);
         return 1;
