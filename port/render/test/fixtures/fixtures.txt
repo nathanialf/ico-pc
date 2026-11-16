@@ -162,3 +162,7 @@ fx-scope-179-before build-host-tmp/v0114/evidence/179/loss/loss-20261110-184556-
 # the corpus's largest VU pre-pass record (the plain room, 2026-10-06, 512x448
 # GS, dump version 4: 84649 vertices, 168322 triangle slots in the source)
 fx-vu-plain-0300 build-host-tmp/corpus/dumps/plain/rd-00300.rddump rules=vu_opaque.rules.txt prepass_vertices>=1 vu_record_dispatches>=1 store_depth_dropped>=1
+# the frame test/rd_pass_area_frame.c records (512x448 GS, flat sprites, no
+# art): two passes on SCENE that take a render area (rd_pass_area.c's rule),
+# at Enhanced 2x (4:3: the phone's setting cannot show it)
+fx-pass-area synthetic/rd_pass_area_frame.rddump pass_area_passes>=1

@@ -24,3 +24,6 @@ fx-deja pass_area_passes=0 pass_area_covered>=1
 # the PowerVR phone's F12 frames of 2026-10-28 v4103 and v2199
 fx-phone-4103 phone pass_area_passes=0 pass_area_covered>=1
 fx-phone-2199 phone pass_area_passes=0 pass_area_covered>=1
+# the frame rd_pass_area_frame records (4:3: Enhanced 2x alone): two passes of
+# flat sprites on SCENE after a draw on WORK0, each with an area of its tiles
+fx-pass-area pass_area_passes>=1
