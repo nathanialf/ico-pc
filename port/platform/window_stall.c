@@ -623,7 +623,7 @@ void window_stall_poll(void)
 
     for (unsigned i = 0; i < s_around.n; i++) {
         GpuSysfsAround a;
-        char text[512];
+        char text[640]; /* the reset count's clause (about 60 bytes) on top */
 
         if (!gpu_sysfs_android_around(s_around.q[i].t0Ms, s_around.q[i].t1Ms, s_around.q[i].core,
                                       &a)) {
