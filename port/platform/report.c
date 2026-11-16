@@ -969,6 +969,13 @@ int ico_report_write(const IcoReportInputs *in, char *name, size_t name_size)
     if (join(path, sizeof path, s_logs, "startup-activity.txt") == 0) {
         (void)zip_add_file("startup-activity.txt", path, 0);
     }
+    /* where this run and the one before were (last_run.h, issue 215) */
+    if (join(path, sizeof path, s_logs, "last-run.txt") == 0) {
+        (void)zip_add_file("last-run.txt", path, 0);
+    }
+    if (join(path, sizeof path, s_logs, "last-run-previous.txt") == 0) {
+        (void)zip_add_file("last-run-previous.txt", path, 0);
+    }
     if (join(path, sizeof path, s_pref, "config.toml") == 0) {
         (void)zip_add_file("config.toml", path, 0);
     }

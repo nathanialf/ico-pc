@@ -40,6 +40,7 @@
 #include "pipeline_skip.h"
 #include "memory_floor.h"
 #include "host_fs.h"
+#include "last_run.h"
 #include "rd_bisect_plan.h"
 #include "rd_passring.h"
 #include "report.h"
@@ -530,6 +531,7 @@ void ico_diag_set_pipelines(unsigned int done, unsigned int total, unsigned int 
     pipes_done = done;
     pipes_longest_ms = longest_ms;
     pipes_total = total;
+    last_run_set_pipelines(done, total);
 }
 
 void ico_diag_set_exit_hook(void (*fn)(const char *reason))
@@ -1065,6 +1067,8 @@ static char last_body[1024];
 
 static unsigned int same_beats;
 
+static void last_run_beat_now(void); /* logs/last-run.txt (last_run.h), below */
+
 static void heartbeat(int fatal_path)
 {
     static char body[1024];
@@ -1118,6 +1122,9 @@ static void heartbeat(int fatal_path)
     } else {
         ico_diag_log("ico_pc: heartbeat %.1f s | %s%s", ico_diag_uptime(), body, mem);
     }
+    if (!fatal_path) {
+        last_run_beat_now(); /* not on a crash's path: it formats and locks */
+    }
 }
 
 /* --- Milestones and the game's hooks --------------------------------------------- */
@@ -1145,6 +1152,7 @@ void ico_diag_step(const char *fmt, ...)
     ico_diag_log("%s", msg);
     memcpy(step_line, msg, sizeof step_line);
     sw_progress++;
+    last_run_step(msg);
 }
 
 const char *ico_diag_last_step(void)
@@ -1205,6 +1213,7 @@ void ico_diag_milestone(const char *fmt, ...)
     prefix(p, sizeof p);
     flush_stdio_if_main();
     ico_diag_log("ico_pc: %s %s", p, msg);
+    last_run_milestone(msg); /* trace_host.c's stage lines: play */
 }
 
 void ico_host_milestone(const char *what)
@@ -2260,6 +2269,7 @@ static void bg_mark(int before)
 
 void ico_diag_startup_activity_background(int background)
 {
+    last_run_background(background);
     if (!background) {
         act_in_bg = 0;
         if (act_bg && bg_remove()) {
@@ -2426,6 +2436,7 @@ void ico_diag_set_pipe_compiler_serial(const char *why)
 void ico_diag_set_selftest(int on)
 {
     in_selftest = on != 0;
+    last_run_selftest(on);
 }
 
 int ico_diag_memory_floor_driver(void)
@@ -2453,6 +2464,29 @@ static long floor_setting_read(void)
     return floor_setting;
 }
 #endif
+
+static void last_run_beat_now(void)
+{
+    LastRunBeat b;
+    char note[sizeof activity];
+    memcpy(note, activity, sizeof note);
+    note[sizeof note - 1] = '\0';
+    b.ticks = ticks_fn != NULL ? ticks_fn() : 0u;
+    b.pipesMade = pipes_made;
+    b.note = note;
+    (void)ico_diag_process_memory(&b.rssKb, &b.peakKb);
+    (void)ico_diag_device_memory(&b.availKb, &b.totalKb);
+    b.floorMb = -1;
+#ifdef __ANDROID__
+    /* the start-up set's floor (memory_floor.h): the setting once the set
+       read it, else the default */
+    if (b.totalKb > 0) {
+        b.floorMb = ico_memory_floor_mb(b.totalKb / 1024, floor_setting >= -1 ? floor_setting : -1,
+                                        floor_driver);
+    }
+#endif
+    last_run_beat(&b);
+}
 
 static int memory_floor_stop(void)
 {
@@ -2595,6 +2629,7 @@ void ico_diag_note_low_memory(int level)
     snprintf(line, sizeof line, "%s (%s; signal %u of this run) %s; %s", trim_kind(level), lv, nth,
              pipes, mem);
     ico_diag_log("ico_pc: the system asked the app to free memory: %s", line);
+    last_run_trim(level, level >= 0 ? trim_name(level) : "no level given");
     /* 20 and above: the app left the foreground (the lifecycle's event may
        come later, or not reach a held main thread); the line goes into the
        mark at once, from this thread */
@@ -2800,6 +2835,11 @@ const char *ico_diag_startup_activity_prev(void)
     return act_prev;
 }
 
+static void last_run_log(const char *line)
+{
+    ico_diag_log("ico_pc: %s", line);
+}
+
 int ico_diag_startup_activity_begin(const char *path, int relaunched)
 {
     static char buf[sizeof act_version + 1 + sizeof activity + 1 + sizeof act_set_careful + 1 +
@@ -2845,6 +2885,7 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
         return 0;
     }
     memcpy(act_path, path, strlen(path) + 1);
+    last_run_begin(act_path, act_version, last_run_log); /* "the previous run: ..." first */
     act_sibling(act_ends_path, sizeof act_ends_path, "-ends.txt");
     act_sibling(act_bg_path, sizeof act_bg_path, "-background.txt");
     act_sibling(act_stall_path, sizeof act_stall_path, "-stall.txt");
@@ -3386,6 +3427,7 @@ int ico_diag_startup_end_persist(int kind, const char *table, int (*persist)(voi
 
 void ico_diag_startup_activity_exit(void)
 {
+    last_run_end_clean();
     if (act_loss[0] == '\0') {
         ico_diag_set_probe(NULL); /* an exit without a loss: no probe ended the run */
     }
@@ -3501,6 +3543,8 @@ void ico_diag_note_device_loss(const char *dump_zip)
     } else {
         snprintf(act_loss, sizeof act_loss, "%s", hang ? act_loss_hang_none : act_loss_none);
     }
+    last_run_end_words(hang ? "the graphics driver stopped responding (a GPU hang)"
+                            : "graphics device lost");
     /* written now, the run's note kept (the process may be ended before
        its exit) */
     if (act_mode == ICO_DIAG_ACTIVITY_LAZY) {
@@ -5529,6 +5573,7 @@ static unsigned long long present_excused(unsigned long long d)
 void ico_diag_present_enter(void)
 {
     present_since_ns = ico_diag_now_ns();
+    last_run_present(); /* the first picture after the start (one compare after it) */
 }
 
 void ico_diag_present_leave(void)
@@ -5885,6 +5930,7 @@ static void watchdog_fire(const char *reason)
             snprintf(what, sizeof what, "the watchdog: %s", reason);
             /* not a clean start for the robust step (review 2 N5) */
             watchdog_mark_write(reason);
+            last_run_end_words(what);
         }
         report_file(what, 1);
     }
@@ -6521,6 +6567,7 @@ static void crash_from_exception(EXCEPTION_POINTERS *ep)
     }
     crash.what = exception_name(r->ExceptionCode);
     crash.code = r->ExceptionCode;
+    last_run_end_crash(r->ExceptionCode);
     crash.pc = (uintptr_t)r->ExceptionAddress;
 #if defined(_M_X64) || defined(__x86_64__)
     crash.sp = (uintptr_t)c->Rsp;
@@ -6716,6 +6763,7 @@ ICO_ENTRY static void crash_handler(int sig, siginfo_t *si, void *ucv)
     }
     crash.what = signal_name(sig);
     crash.code = (unsigned long)sig;
+    last_run_end_crash((unsigned long)sig); /* async-signal-safe */
 #if defined(__APPLE__) && defined(__aarch64__)
     crash.pc = (uintptr_t)uc->uc_mcontext->__ss.__pc;
     crash.sp = (uintptr_t)uc->uc_mcontext->__ss.__sp;

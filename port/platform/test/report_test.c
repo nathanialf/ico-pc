@@ -6,7 +6,9 @@
  * report takes it, so a report of issue 123's 28 MB stored loss zip fits
  * GitHub's 25 MB attachment limit; the slow-scene zip (already deflated)
  * is stored as it is; both read back byte for byte with miniz's reader;
- * ico_report_last_bytes is the zip's size (the log line names it).
+ * ico_report_last_bytes is the zip's size (the log line names it); the
+ * logs folder's last-run.txt and last-run-previous.txt (last_run.h, issue
+ * 215) go in byte for byte, and a report without them has neither entry.
  * argv[1]: a folder the test may write in (the build folder).
  */
 #include <stdio.h>
@@ -84,6 +86,16 @@ int main(int argc, char **argv)
     snprintf(slowPath, sizeof slowPath, "%s/slow-20261109-000000.zip", dir);
     CHECK(put(lossPath, loss, sizeof loss) == 0);
     CHECK(put(slowPath, slow, sizeof slow) == 0);
+    {
+        /* last-run.txt and its previous run's copy, beside the log */
+        static const char kRun[] = "ico-pc last run: this run's slots\n";
+        static const char kPrev[] = "ico-pc last run: the run before's slots\n";
+        char p[600];
+        snprintf(p, sizeof p, "%s/last-run.txt", dir);
+        CHECK(put(p, kRun, sizeof kRun - 1) == 0);
+        snprintf(p, sizeof p, "%s/last-run-previous.txt", dir);
+        CHECK(put(p, kPrev, sizeof kPrev - 1) == 0);
+    }
 
     ico_report_set_paths(dir, dir, dir, NULL);
     memset(&in, 0, sizeof in);
@@ -117,7 +129,23 @@ int main(int argc, char **argv)
     CHECK(entry(&z, "slow-20261109-000000.zip", slow, sizeof slow, &st));
     CHECK(st.m_method == 0);
     CHECK(st.m_comp_size == SLOW_BYTES);
+    /* the last-run files, byte for byte */
+    {
+        static const char kRun[] = "ico-pc last run: this run's slots\n";
+        static const char kPrev[] = "ico-pc last run: the run before's slots\n";
+        CHECK(entry(&z, "last-run.txt", (const unsigned char *)kRun, sizeof kRun - 1, &st));
+        CHECK(entry(&z, "last-run-previous.txt", (const unsigned char *)kPrev, sizeof kPrev - 1,
+                    &st));
+    }
     mz_zip_reader_end(&z);
+    {
+        /* the next report has neither once the files are gone */
+        char p[600];
+        snprintf(p, sizeof p, "%s/last-run.txt", dir);
+        (void)ico_remove(p);
+        snprintf(p, sizeof p, "%s/last-run-previous.txt", dir);
+        (void)ico_remove(p);
+    }
 
     /* the log's key lines: the picture-health report's line first (issue
        179: a reporter's zip says at its top that the picture came back
@@ -143,6 +171,8 @@ int main(int argc, char **argv)
         snprintf(zipPath, sizeof zipPath, "%s/%s", dir, name);
         memset(&z, 0, sizeof z);
         CHECK(mz_zip_reader_init_file(&z, zipPath, 0));
+        CHECK(mz_zip_reader_locate_file(&z, "last-run.txt", NULL, 0) < 0);
+        CHECK(mz_zip_reader_locate_file(&z, "last-run-previous.txt", NULL, 0) < 0);
         size_t got = 0;
         char *txt = mz_zip_reader_extract_file_to_heap(&z, "report.txt", &got, 0);
         CHECK(txt != NULL);

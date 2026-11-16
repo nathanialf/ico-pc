@@ -1381,6 +1381,19 @@ static int run(const char *self, const char *mode, const char *log)
     pid_t pid;
     int st;
     remove(log);
+    {
+        /* each child starts without logs/last-run.txt (last_run.h): the
+           children share the log's folder, and one child's end words (a
+           watchdog's reason, a GPU hang's) in the next one's "the previous
+           run: ..." lines would meet its checks for their absence */
+        const char *slash = strrchr(log, '/');
+        const int dir = slash != NULL ? (int)(slash - log + 1) : 0;
+        char p[600];
+        snprintf(p, sizeof p, "%.*slast-run.txt", dir, log);
+        remove(p);
+        snprintf(p, sizeof p, "%.*slast-run-previous.txt", dir, log);
+        remove(p);
+    }
     pid = fork();
     if (pid == 0) {
         execl(self, self, mode, log, (char *)NULL);

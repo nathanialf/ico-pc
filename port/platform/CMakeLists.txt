@@ -22,6 +22,7 @@ target_sources(ico_platform PRIVATE
     thermal_text.c
     hotkeys.c
     kernel_host.c
+    last_run.c
     log_cost.c
     pace_policy.c
     perf_hint.c
@@ -339,6 +340,18 @@ target_compile_options(report_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WA
 target_link_libraries(report_test PRIVATE ico_platform ico_host_fs ico_miniz)
 if(ICO_RUN_TESTS)
     add_test(NAME report COMMAND report_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
+# logs/last-run.txt (last_run.c, issue 215): the slots' text and parse, a
+# file cut and a write torn at every byte offset, the previous run's lines,
+# the phase rules and the summary, and the run's own file through its calls
+# (the crash's end, the next start's lines and copy); it writes under the
+# build folder
+add_executable(last_run_test test/last_run_test.c)
+target_compile_options(last_run_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(last_run_test PRIVATE ico_platform ico_host_fs)
+if(ICO_RUN_TESTS)
+    add_test(NAME last_run COMMAND last_run_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
 # F12's zip (dump_zip.c): the dump and the log in one archive, read back

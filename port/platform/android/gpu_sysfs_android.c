@@ -23,6 +23,8 @@
 #include "cpu_place.h"
 #include "diag_host.h"
 #include "ico_thread.h"
+#include "last_run.h"
+#include "last_run_android.h"
 
 static pthread_mutex_t s_lock = PTHREAD_MUTEX_INITIALIZER;
 static GpuSysfsRing s_ring; /* under s_lock */
@@ -39,6 +41,20 @@ static SDL_Thread *s_thread;
 static SDL_Mutex *s_waitLock;
 static SDL_Condition *s_wake;
 static int s_stop;
+/* The driver's GPU memory for this process (last-run.txt, issue 215):
+   KGSL's per-process folder, /sys/class/kgsl/kgsl/proc/<pid>/, its
+   readable files (their names as the kernel gives them; each read as its
+   first integer, taken for bytes: not verified on a device), read every
+   PROC_EVERY samples on this thread, never the watchdog's.  s_procText:
+   what the start found, for the window's line */
+#define PROC_FILES 6
+#define PROC_EVERY 8 /* 2 s at 250 ms */
+static char s_procDir[64];
+static char s_procNames[PROC_FILES][32];
+static char s_procPaths[PROC_FILES][112];
+static int s_procN;
+static unsigned s_procTick;
+static char s_procText[512];
 
 /* the node's first integer (last: its last, MediaTek GED's
    current_freqency); text (NULL: not kept) its first textCap - 1 bytes,
@@ -170,6 +186,112 @@ static int32_t value_of(int node, long long v)
     return v < 0 ? -1 : v > 2147483647ll ? 2147483647 : (int32_t)v;
 }
 
+/* this process's GPU memory now into last-run.txt ("kernel 12 MB,
+   gpumem_mapped 210 MB"; a file that stopped reading says so) */
+static void proc_sample(void)
+{
+    char text[176];
+    size_t n = 0;
+
+    text[0] = '\0';
+    for (int i = 0; i < s_procN && n < sizeof(text); i++) {
+        long long v = 0;
+        const int e = read_node(s_procPaths[i], &v);
+        int k;
+
+        if (e == 0) {
+            k = snprintf(text + n, sizeof(text) - n, "%s%s %lld MB", i ? ", " : "", s_procNames[i],
+                         (v + (1ll << 19)) >> 20);
+        } else {
+            k = snprintf(text + n, sizeof(text) - n, "%s%s not read (errno %d)", i ? ", " : "",
+                         s_procNames[i], e);
+        }
+        n = k > 0 ? n + (size_t)k : n;
+    }
+    last_run_set_gpu_memory(text);
+}
+
+/* the per-process folder probed once: its readable files kept */
+static void proc_probe(void)
+{
+    DIR *d;
+    struct dirent *e;
+    size_t n;
+    int bad = 0, badErr = 0;
+
+    snprintf(s_procDir, sizeof(s_procDir), "/sys/class/kgsl/kgsl/proc/%d", (int)getpid());
+    d = opendir(s_procDir);
+    if (d == NULL) {
+        const int err = errno;
+
+        snprintf(s_procText, sizeof(s_procText),
+                 "kernel GPU driver: this process's GPU memory: %s not readable (errno %d%s); "
+                 "last-run.txt says so",
+                 s_procDir, err,
+                 err == ENOENT   ? ", not present"
+                 : err == EACCES ? ", EACCES"
+                                 : "");
+        {
+            char why[96];
+
+            snprintf(why, sizeof(why), "not readable (%s: errno %d)", s_procDir, err);
+            last_run_set_gpu_memory(why);
+        }
+        return;
+    }
+    n = (size_t)snprintf(s_procText, sizeof(s_procText),
+                         "kernel GPU driver: this process's GPU memory: %s: readable", s_procDir);
+    while ((e = readdir(d)) != NULL && s_procN < PROC_FILES) {
+        char path[sizeof(s_procPaths[0])];
+        long long v = 0;
+        int err;
+
+        if (e->d_name[0] == '.' || strlen(e->d_name) >= sizeof(s_procNames[0])) {
+            continue;
+        }
+        snprintf(path, sizeof(path), "%s/%s", s_procDir, e->d_name);
+        err = read_node(path, &v);
+        if (err != 0) {
+            bad++;
+            badErr = err;
+            continue;
+        }
+        memcpy(s_procPaths[s_procN], path, sizeof(path));
+        snprintf(s_procNames[s_procN], sizeof(s_procNames[0]), "%s", e->d_name);
+        if (n < sizeof(s_procText)) {
+            const int k = snprintf(s_procText + n, sizeof(s_procText) - n, "%s %s (%lld)",
+                                   s_procN ? "," : "", e->d_name, v);
+            n = k > 0 ? n + (size_t)k : n;
+        }
+        s_procN++;
+    }
+    closedir(d);
+    if (s_procN == 0 && n < sizeof(s_procText)) {
+        snprintf(s_procText + n, sizeof(s_procText) - n, " none");
+    }
+    n = strlen(s_procText);
+    if (bad > 0 && n < sizeof(s_procText)) {
+        snprintf(s_procText + n, sizeof(s_procText) - n,
+                 "; %d other entries not read (the last errno %d)", bad, badErr);
+    }
+    n = strlen(s_procText);
+    if (n < sizeof(s_procText)) {
+        snprintf(s_procText + n, sizeof(s_procText) - n,
+                 "; read every %u ms into last-run.txt, each value taken for bytes",
+                 PROC_EVERY * GPU_SYSFS_PERIOD_MS);
+    }
+    if (s_procN == 0) {
+        last_run_set_gpu_memory("none of the driver's per-process files readable");
+    } else {
+        proc_sample();
+    }
+}
+
+const char *gpu_sysfs_android_proc_text(void)
+{
+    return s_procText;
+}
+
 /* the sampler thread's step: one sample of the readable nodes */
 static void sample(void)
 {
@@ -189,6 +311,10 @@ static void sample(void)
     }
     if (s_info.state[GPU_SYSFS_RESETS] == 1 && read_node(s_paths[GPU_SYSFS_RESETS], &v) == 0) {
         s.resets = value_of(GPU_SYSFS_RESETS, v);
+        last_run_set_gpu_resets(s.resets); /* last-run.txt's count now */
+    }
+    if (s_procN > 0 && s_procTick++ % PROC_EVERY == 0) {
+        proc_sample();
     }
     if (s_info.state[GPU_SYSFS_THERMAL] == 1 && read_node(s_paths[GPU_SYSFS_THERMAL], &v) == 0) {
         s.thermal = value_of(GPU_SYSFS_THERMAL, v);
@@ -373,6 +499,11 @@ void gpu_sysfs_android_start(GpuSysfsInfo *info)
     }
     gpu_sysfs_ring_reset(&s_ring);
     probe_cpus();
+    /* last-run.txt (issue 215): the reset count at the start or why not,
+       this process's GPU memory, Android's process state summary */
+    last_run_set_gpu_resets_start(s_info.resets, gpu_sysfs_resets_why(&s_info));
+    proc_probe();
+    last_run_android_start();
     *info = s_info;
     if (gpu_sysfs_any_sampled(&s_info)) {
         s_sampling = 1;

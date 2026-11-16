@@ -141,6 +141,34 @@ public class IcoActivity extends SDLActivity {
         return -1;
     }
 
+    // last-run.txt's summary (port/platform/last_run.h, issue 215) to
+    // ActivityManager.setProcessStateSummary (Android 11, API 30; at most
+    // 128 bytes), so the system's exit record of this process
+    // (ApplicationExitInfo.getProcessStateSummary) says where the run was
+    // even when the app's files are lost. Called from native code at each
+    // phase change (port/platform/android/last_run_android.c): null when
+    // the system took it, else why not.
+    public static String processStateSummary(byte[] state) {
+        if (Build.VERSION.SDK_INT < 30) {
+            return "Android " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT
+                    + ") has no process state summary (API 30)";
+        }
+        if (sInstance == null) {
+            return "no activity";
+        }
+        try {
+            ActivityManager am = (ActivityManager)
+                    sInstance.getSystemService(Context.ACTIVITY_SERVICE);
+            if (am == null) {
+                return "no ActivityManager";
+            }
+            am.setProcessStateSummary(state);
+            return null;
+        } catch (RuntimeException e) {
+            return "setProcessStateSummary: " + e;
+        }
+    }
+
     // GameManager.getGameMode: 0 unsupported, 1 standard, 2 performance, 3
     // battery, 4 custom; -1 before Android 12 (API 31), -2 when the system
     // gives none. Asked once at the window's open, for the performance
