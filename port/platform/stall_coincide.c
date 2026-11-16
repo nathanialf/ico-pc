@@ -91,14 +91,22 @@ void stall_tally_add(StallTally *t, const StallMoment *m)
     t->hangs += m->hangReplay != 0 ? 1u : 0u;
 }
 
-bool stall_tally_line_due(StallTally *t)
+bool stall_line_due(StallTally *t, StallLineBudget *b)
 {
-    if (t->written < STALL_BLOCK_LINES) {
-        t->written++;
-        return true;
+    bool due;
+    if (t->written + t->leftOut < STALL_RARE_LINES && b->rare < STALL_RUN_LINES) {
+        b->rare++;
+        due = true; /* rare: every one */
+    } else {
+        b->excess++; /* v0.11.6's rule over the others */
+        due = b->excess <= STALL_EXCESS_FIRST || b->excess % STALL_EXCESS_EVERY == 0u;
     }
-    t->leftOut++;
-    return false;
+    if (due) {
+        t->written++;
+    } else {
+        t->leftOut++;
+    }
+    return due;
 }
 
 typedef struct Out {
@@ -147,7 +155,11 @@ size_t stall_tally_text(const StallTally *t, char *out, size_t cap)
         }
     }
     if (t->leftOut > 0) {
-        put(&o, "; %u stall lines left out (the block's first %u written)", t->leftOut, t->written);
+        put(&o,
+            "; %u stall lines left out (%u written: a block's first %u while the run has written "
+            "fewer than %u, then the first %u and every %uth of the others)",
+            t->leftOut, t->written, STALL_RARE_LINES, STALL_RUN_LINES, STALL_EXCESS_FIRST,
+            STALL_EXCESS_EVERY);
     }
     return o.at;
 }

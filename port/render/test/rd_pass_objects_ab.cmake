@@ -22,9 +22,12 @@
 # Each pair: every PNG the A run writes (SCENE, DISPLAY, PRESENT and every other
 # named target) the B run's byte for byte, the same draws and passes; A's log
 # says "render passes dynamic", B's "render passes legacy (Qualcomm's own
-# driver".  The path ran (rd_fixture_require on B): the line's passes (every
-# pass B begins is a VkRenderPass object under the row, vk_renderpass.c, so
-# B's passes are the objects begun; rd_replay_tool prints no count of its own).
+# driver"; the stats line "render passes: N begun, M as VkRenderPass objects"
+# M 0 on A and M = N on B (vk_cmd.c counts a pass begun only after
+# vkr_pass_begin succeeds, and vk_renderpass.c counts an object at each
+# vkCmdBeginRenderPass of the legacy path: under the row every pass begun is
+# one object).  The path ran (rd_fixture_require on B): the line's
+# pass_objects.
 # A fixture whose properties no setting checked FAILS.  Over the list: at least
 # one target compared.  No device: SKIP (77).
 # -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the
@@ -54,6 +57,7 @@ set(path_0 "render passes dynamic")
 set(path_1 "render passes legacy \\(Qualcomm's own driver")
 
 set(drawsRe "stats: ([0-9]+) draws, ([0-9]+) passes")
+set(objectsRe "stats: render passes: ([0-9]+) begun, ([0-9]+) as VkRenderPass objects")
 
 set(compared 0)
 set(indices "")
@@ -105,12 +109,31 @@ foreach(index IN LISTS indices)
                            "\"${path_${w}}\" (the run's passes are not on the path asked for)")
         math(EXPR failures "${failures} + 1")
       endif()
+      if(NOT flat MATCHES "${objectsRe}")
+        message(SEND_ERROR "${dump} ${s} path ${w}: no render passes line:\n${out}")
+        math(EXPR failures "${failures} + 1")
+        set(skipped TRUE)
+        continue()
+      endif()
+      set(begun "${CMAKE_MATCH_1}")
+      set(objects "${CMAKE_MATCH_2}")
+      if(w EQUAL 0)
+        set(wantObjects 0)
+      else()
+        set(wantObjects "${begun}")
+      endif()
+      if(NOT objects EQUAL wantObjects OR begun EQUAL 0)
+        message(SEND_ERROR "${dump} ${s} path ${w}: ${objects} of ${begun} passes begun as "
+                           "VkRenderPass objects, ${wantObjects} expected")
+        math(EXPR failures "${failures} + 1")
+      endif()
       if(w EQUAL 1)
         # the path ran: B's passes, each begun as a VkRenderPass object
-        rd_fixture_require(${name_${index}} "${out}" passes)
+        rd_fixture_require(${name_${index}} "${out}" pass_objects)
         set(required_${index} TRUE)
       endif()
-      message(STATUS "${dump} ${s} path ${w}: ${passes_${w}} passes, ${draws_${w}} draws")
+      message(STATUS "${dump} ${s} path ${w}: ${passes_${w}} passes, ${draws_${w}} draws, "
+                     "${objects} as VkRenderPass objects")
     endforeach()
     if(skipped)
       continue()
