@@ -761,13 +761,60 @@ static void putName(RdFxBuf *b, const char *s)
     rd_fx_put(b, s, n);
 }
 
+/* the rule text with its "@skin lane A B" lines blanked (rd_fixture.h: not
+ * a texture or placement rule; the expansion reads them from the rule=
+ * notes) into lanes; NULL (why) on a malformed one, two naming one lane, or
+ * a text past the buffer */
+static const char *skinLines(const char *rules, RdFxSkinLanes *lanes, char *why, size_t whySize)
+{
+    static char buf[16384];
+    memset(lanes, 0, sizeof(*lanes));
+    const size_t len = strlen(rules);
+    if (len >= sizeof(buf)) {
+        snprintf(why, whySize, "the rule text is longer than %zu bytes", sizeof(buf) - 1u);
+        return NULL;
+    }
+    memcpy(buf, rules, len + 1u);
+    int line = 0;
+    for (char *p = buf; *p;) {
+        char *e = strchr(p, '\n');
+        line++;
+        if (e) {
+            *e = '\0';
+        }
+        uint32_t a = 0, b = 0;
+        const int r = rd_fx_skin_lane_line(p, &a, &b);
+        if (r < 0) {
+            snprintf(why, whySize,
+                     "rule line %d: no \"@skin lane A B\" (A, B multiples of 4 in "
+                     "16..252, A != B)",
+                     line);
+            return NULL;
+        }
+        if (r > 0) {
+            if (!rd_fx_skin_lane_add(lanes, a, b, why, whySize)) {
+                return NULL;
+            }
+            memset(p, ' ', strlen(p));
+        }
+        if (!e) {
+            break;
+        }
+        *e = '\n';
+        p = e + 1;
+    }
+    return buf;
+}
+
 bool rd_fixture_make(const uint8_t *dump, size_t n, const char *rules, RdFixture *fx, char *report,
                      size_t reportSize, char *why, size_t whySize)
 {
     memset(fx, 0, sizeof(*fx));
     static Rule rl[RULES_MAX];
     uint32_t nrules = 0, place = 0;
-    if (!parseRules(rules ? rules : rd_fx_default_rules, rl, &nrules, &place, why, whySize)) {
+    RdFxSkinLanes lanes;
+    const char *texRules = skinLines(rules ? rules : rd_fx_default_rules, &lanes, why, whySize);
+    if (!texRules || !parseRules(texRules, rl, &nrules, &place, why, whySize)) {
         return false;
     }
     DMap m;
@@ -928,7 +975,18 @@ bool rd_fixture_make(const uint8_t *dump, size_t n, const char *rules, RdFixture
         }
         uint8_t *x = NULL;
         size_t xn = 0;
-        ok = rd_fixture_expand(fx, false, &x, &xn, why, whySize);
+        ok = rd_fixture_expand_lanes(fx, false, &x, &xn, &lanes, why, whySize);
+        for (uint32_t i = 0; ok && i < lanes.n; i++) {
+            /* a lane line that moved nothing fails the make, as a placement
+             * rule that placed nothing */
+            if (lanes.hits[i] == 0) {
+                snprintf(why, whySize,
+                         "@skin lane %u %u moved no lane: no generated skinned vertex is on "
+                         "bone address %u",
+                         (unsigned)lanes.from[i], (unsigned)lanes.to[i], (unsigned)lanes.from[i]);
+                ok = false;
+            }
+        }
         if (ok) {
             rd_fx_sha256(x, xn, fx->sha);
             fx->expandedBytes = xn;
@@ -974,6 +1032,14 @@ bool rd_fixture_make(const uint8_t *dump, size_t n, const char *rules, RdFixture
     free(k.kept);
     free(k.gen);
     mapFree(&m);
+    for (uint32_t i = 0; ok && report && reportSize && i < lanes.n; i++) {
+        const size_t at = strlen(report);
+        if (at < reportSize) {
+            snprintf(report + at, reportSize - at, "; @skin lane %u %u: %llu lanes moved",
+                     (unsigned)lanes.from[i], (unsigned)lanes.to[i],
+                     (unsigned long long)lanes.hits[i]);
+        }
+    }
     return ok;
 }
 

@@ -30,6 +30,26 @@ LISTS = 13
 DUMP_MIN, DUMP_MAX = 3, 17
 
 
+def skin_lanes(notes):
+    """The opt-in "@skin lane A B" rule lines (rd_fixture.h: kept as rule=
+    notes, read by the expansion): A, B multiples of 4 in 16..252, A != B, at
+    most 8 lines, each A once."""
+    seen = set()
+    for n in notes:
+        if not n.startswith("rule="):
+            continue
+        words = n[5:].split("#")[0].split()
+        if not words or words[0] != "@skin":
+            continue
+        ok = len(words) == 4 and words[1] == "lane" and words[2].isdigit() and words[3].isdigit()
+        a, b = (int(words[2]), int(words[3])) if ok else (0, 0)
+        if not ok or a == b or any(v < 16 or v > 252 or v % 4 for v in (a, b)) or a in seen:
+            raise Bad("the rule note '%s' is no valid \"@skin lane A B\"" % n[5:])
+        seen.add(a)
+    if len(seen) > 8:
+        raise Bad("more than 8 @skin lane lines")
+
+
 class Bad(Exception):
     pass
 
@@ -135,6 +155,7 @@ def check(path, b=None):
         notes.append(c.raw(n).decode("utf-8", "replace"))
     if not any(n.startswith("expect=") for n in notes):
         raise Bad("declares no property (expect=)")
+    skin_lanes(notes)
     raw, z = c.u32(), c.u32()
     data = c.raw(z)
     if c.o != len(b):

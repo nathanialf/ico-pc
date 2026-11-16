@@ -15,7 +15,8 @@
  * facing bits zero); the window check (no 32-byte window of the generated
  * bytes in the source's art); a fixture with art written into a generated
  * range or a changed pin refused; the file round trip with its notes; SHA-256
- * against FIPS 180-2's two short vectors; rd_fx_f32 on exact values.
+ * against FIPS 180-2's two short vectors; rd_fx_f32 on exact values; the
+ * "@skin lane A B" rule on a frame of one skinned command (skinLaneTests).
  * argv[1]: a folder the test may write. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -280,6 +281,206 @@ static uint32_t fbits(float f)
     return u;
 }
 
+/* the "@skin lane A B" rule's frame (version 17): list 0 one skinned
+ * command of mesh 7 (cluster code 20, 3 bones: boneQw 12, the pose the
+ * identity, mem 4..7 the mesh test's matrix: x' = 2048 + 100 x), mesh 7 8
+ * skinned vertices (5 qwords) in one batch, two strips: kicks at 2, 3 and 6, 7
+ * (the index list's words k * 4 + corner), its stream art; no texture */
+static void buildSkinDump(RdFxBuf *b)
+{
+    const uint32_t ver = 17;
+    rd_fx_put(b, RD_DUMP_MAGIC, 8);
+    rd_fx_put32(b, ver);
+    rd_fx_put32(b, sizeof(RdCmd));
+    rd_fx_put32(b, rd_fx_state_bytes(ver));
+    rd_fx_put32(b, sizeof(RdScreenVtx));
+    rd_fx_put32(b, 512);
+    rd_fx_put32(b, 448);
+    putf(b, 4.0f / 3.0f);
+    putf(b, 512.0f);
+    rd_fx_put32(b, 512);
+    char region[RD_DUMP_REGION_BYTES] = "pal";
+    rd_fx_put(b, region, sizeof(region));
+    rd_fx_put32(b, 1);
+    rd_fx_put32(b, 0);
+    rd_fx_put32(b, 0);
+    RdCamera cam;
+    memset(&cam, 0, sizeof(cam));
+    rd_fx_put(b, &cam, sizeof(cam));
+    RdStateBlock st;
+    memset(&st, 0, sizeof(st));
+    st.gsW = 512;
+    st.gsH = 448;
+    rd_fx_put(b, &st, rd_fx_state_bytes(ver));
+    rd_fx_put(b, &st, rd_fx_state_bytes(ver));
+    const uint32_t size = 32 + 576 + 12 * 16 + 24 + 32;
+    RdCmd c = cmd(RDC_SKINNED);
+    c.b[0] = RD_PROG_SKIN;
+    c.b[1] = 20;
+    c.u[0] = 7;
+    c.u[1] = 0;
+    c.u[2] = size;
+    c.keyLo = 1;
+    rd_fx_put32(b, 1);
+    rd_fx_put(b, &c, sizeof(c));
+    for (int l = 1; l < RD_LIST_COUNT; l++) {
+        rd_fx_put32(b, 0);
+    }
+    uint8_t pay[32 + 576 + 12 * 16 + 24 + 32];
+    memset(pay, 0, sizeof(pay));
+    RdVuPayload h;
+    memset(&h, 0, sizeof(h));
+    h.code = 20;
+    h.prog = RD_PROG_SKIN;
+    h.batchCount = 1;
+    h.boneQw = 12;
+    h.qwPerVertex = 5;
+    h.materialCount = 1;
+    memcpy(pay, &h, sizeof(h));
+    float m[4][4] = {{100, 0, 0, 0}, {0, 100, 0, 0}, {0, 0, 1, 0}, {2048, 2048, 0, 1}};
+    memcpy(pay + 32 + 4 * 16, m, sizeof(m));
+    for (int bone = 0; bone < 3; bone++) {
+        float id[4][4] = {{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}};
+        memcpy(pay + 32 + 576 + bone * 64, id, sizeof(id));
+    }
+    RdMaterial mat;
+    memset(&mat, 0, sizeof(mat));
+    memcpy(pay + 32 + 576 + 12 * 16, &mat, sizeof(mat));
+    rd_fx_put32(b, (uint32_t)sizeof(pay));
+    rd_fx_put(b, pay, sizeof(pay));
+    rd_fx_put32(b, 0); /* textures */
+    rd_fx_put32(b, 0); /* temporary targets */
+    rd_fx_put32(b, 1);
+    const uint32_t mh[5] = {7, 8, 5, 12, 1};
+    for (int k = 0; k < 5; k++) {
+        rd_fx_put32(b, mh[k]);
+    }
+    char name[24] = "secret_skin";
+    rd_fx_put(b, name, 24);
+    uint8_t stream[8 * 5 * 16];
+    fillArt(stream, sizeof(stream));
+    rd_fx_put(b, stream, sizeof(stream));
+    const uint32_t kicks[4] = {2, 3, 6, 7};
+    for (int k = 0; k < 4; k++) {
+        for (uint32_t corner = 0; corner < 3; corner++) {
+            rd_fx_put32(b, kicks[k] * 4u + corner);
+        }
+    }
+    RdVuBatchRec br;
+    memset(&br, 0, sizeof(br));
+    br.indexCount = 12;
+    br.vertexCount = 8;
+    rd_fx_put(b, &br, sizeof(br));
+    rd_fx_put32(b, 0); /* no tick cameras */
+    for (int k = 0; k < 32; k++) {
+        rd_fx_put32(b, 0);
+    }
+    rd_fx_put32(b, 0); /* no facing table */
+}
+
+/* "@skin lane A B" (rd_fixture.h): the skin frame made with "checker" and
+ * with "checker" + the lane line (the same texture rules, so the skeletons
+ * are the same bytes and only the lanes move).  The generator's lanes, from
+ * genMesh: strip s of the mesh's n = 3 bones, lanes 16 + 4 (s mod 3) and
+ * 16 + 4 ((s + 1) mod 3); the strips (a vertex starts one where neither it
+ * nor the next kicks): vertices 0..3 strip 0 (lanes 16, 20), 4..7 strip 1
+ * (lanes 20, 24).  "@skin lane 20 252" moves vertices 0..3's second lane and
+ * 4..7's first: 8 lanes, each word's low byte 0x14 -> 0xFC, nothing else */
+static void skinLaneTests(void)
+{
+    uint32_t a = 0, b = 0;
+    CHECK(rd_fx_skin_lane_line("  @skin lane 200 252 # issue 163", &a, &b) == 1 && a == 200 &&
+          b == 252);
+    CHECK(rd_fx_skin_lane_line("checker sprite", &a, &b) == 0);
+    CHECK(rd_fx_skin_lane_line("@skinny lane 20 24", &a, &b) == 0);
+    CHECK(rd_fx_skin_lane_line("@skin lane 200", &a, &b) == -1);
+    CHECK(rd_fx_skin_lane_line("@skin lane 201 252", &a, &b) == -1);
+    CHECK(rd_fx_skin_lane_line("@skin lane 20 256", &a, &b) == -1);
+    CHECK(rd_fx_skin_lane_line("@skin lane 20 20", &a, &b) == -1);
+    CHECK(rd_fx_skin_lane_line("@skin lane 20 24 28", &a, &b) == -1);
+    CHECK(rd_fx_skin_lane_line("@skin move 20 24", &a, &b) == -1);
+    RdFxBuf d = {0};
+    buildSkinDump(&d);
+    CHECK(!d.bad);
+    RdFixture f0, f1;
+    char why[512] = "", report[1024] = "";
+    const bool m0 =
+        rd_fixture_make(d.p, d.n, "checker\n", &f0, report, sizeof(report), why, sizeof(why));
+    CHECK(m0);
+    if (!m0) {
+        fprintf(stderr, "skin make: %s\n", why);
+        rd_fx_free(&d);
+        return;
+    }
+    const bool m1 = rd_fixture_make(d.p, d.n, "checker\n@skin lane 20 252\n", &f1, report,
+                                    sizeof(report), why, sizeof(why));
+    CHECK(m1);
+    if (!m1) {
+        fprintf(stderr, "skin lane make: %s\n", why);
+        rd_fixture_free(&f0);
+        rd_fx_free(&d);
+        return;
+    }
+    printf("skin lane: %s\n", report);
+    CHECK(strstr(report, "; @skin lane 20 252: 8 lanes moved") != NULL);
+    /* not a section: the skeletons are the same bytes; the line is a note */
+    CHECK(f0.skelBytes == f1.skelBytes && memcmp(f0.skel, f1.skel, f0.skelBytes) == 0);
+    bool noted = false;
+    for (uint32_t i = 0; i < f1.noteCount; i++) {
+        noted = noted || strcmp(f1.notes[i], "rule=@skin lane 20 252") == 0;
+    }
+    CHECK(noted);
+    char stats[512] = "";
+    CHECK(rd_fixture_check(&f1, why, sizeof(why), stats, sizeof(stats)));
+    uint8_t *x0 = NULL, *x1 = NULL;
+    size_t n0 = 0, n1 = 0;
+    RdFxSkinLanes moved;
+    CHECK(rd_fixture_expand(&f0, true, &x0, &n0, why, sizeof(why)));
+    CHECK(rd_fixture_expand_lanes(&f1, true, &x1, &n1, &moved, why, sizeof(why)));
+    CHECK(moved.n == 1 && moved.from[0] == 20 && moved.to[0] == 252 && moved.hits[0] == 8);
+    if (x0 && x1 && n0 == n1) {
+        /* the stream: after the mesh's generated name "m0001" (24 bytes) */
+        size_t at = 0;
+        for (size_t i = 0; i + 5 <= n0 && !at; i++) {
+            at = memcmp(x0 + i, "m0001", 5) == 0 ? i + 24 : 0;
+        }
+        CHECK(at != 0);
+        static const uint32_t want0[8][2] = {{16, 20}, {16, 20}, {16, 20}, {16, 20},
+                                             {20, 24}, {20, 24}, {20, 24}, {20, 24}};
+        static const uint32_t want1[8][2] = {{16, 252}, {16, 252}, {16, 252}, {16, 252},
+                                             {252, 24}, {252, 24}, {252, 24}, {252, 24}};
+        for (uint32_t v = 0; at && v < 8; v++) {
+            const uint8_t *q0 = x0 + at + v * 80u, *q1 = x1 + at + v * 80u;
+            CHECK(rd_fx_get32(q0 + 32) == want0[v][0] && rd_fx_get32(q0 + 40) == want0[v][1]);
+            CHECK(rd_fx_get32(q1 + 32) == want1[v][0] && rd_fx_get32(q1 + 40) == want1[v][1]);
+            CHECK(rd_fx_get32(q0 + 36) == fbits(0.5f) && rd_fx_get32(q1 + 44) == fbits(0.5f));
+        }
+        size_t differ = 0;
+        for (size_t i = 0; i < n0; i++) {
+            differ += x0[i] != x1[i];
+        }
+        CHECK(differ == 8);
+    } else {
+        CHECK(0);
+    }
+    free(x0);
+    free(x1);
+    rd_fixture_free(&f0);
+    rd_fixture_free(&f1);
+    /* refused: a lane no generated vertex is on (3 bones: 16, 20, 24 only),
+       a malformed line, one lane named twice */
+    RdFixture fr;
+    CHECK(!rd_fixture_make(d.p, d.n, "checker\n@skin lane 28 32\n", &fr, report, sizeof(report),
+                           why, sizeof(why)));
+    CHECK(strstr(why, "moved no lane") != NULL);
+    CHECK(!rd_fixture_make(d.p, d.n, "checker\n@skin lane 21 252\n", &fr, report, sizeof(report),
+                           why, sizeof(why)));
+    CHECK(!rd_fixture_make(d.p, d.n, "checker\n@skin lane 20 252\n@skin lane 20 248\n", &fr, report,
+                           sizeof(report), why, sizeof(why)));
+    CHECK(strstr(why, "named twice") != NULL);
+    rd_fx_free(&d);
+}
+
 int main(int argc, char **argv)
 {
     /* SHA-256: FIPS 180-2's "abc" and the empty message */
@@ -302,6 +503,7 @@ int main(int argc, char **argv)
     CHECK(rd_fx_f32(3, -4) == fbits(0.1875f));
     CHECK(rd_fx_f32(0xFFFFFF, 8) == fbits(4294967040.0f));
     CHECK(rd_fx_f32(0, 3) == 0u);
+    skinLaneTests();
 
     RdFxBuf d = {0};
     buildDump(&d, 17);

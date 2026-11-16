@@ -186,6 +186,34 @@ void rd_fixture_drop_notes(RdFixture *fx, const char *key);
 bool rd_fixture_expand(const RdFixture *fx, bool checkSha, uint8_t **out, size_t *outLen, char *why,
                        size_t whySize);
 
+/* The opt-in rule "@skin lane A B" (A, B multiples of 4 in 16..252, A != B;
+ * at most RD_FX_SKIN_LANES_MAX lines, each A once): every generated skinned
+ * vertex's bone lane (its two weight lanes, rd_fixture.c genMesh: bones
+ * 16 + 4 (s mod n) and 16 + 4 ((s + 1) mod n)) that would be A is written B,
+ * as a test that needs a bone index moved writes it in its rule file (issue
+ * 163's patched frame: the lanes on 200 moved to 252).  The values are the
+ * rule line's; nothing of the game's data is read.  Not a placement: no
+ * skeleton section; the expansion reads the lines from the fixture's own
+ * rule= notes (which the expansion's SHA-256 pins with the rest), the maker
+ * strips them from the texture rules and fails a line that moved no lane. */
+#define RD_FX_SKIN_LANES_MAX 8
+
+typedef struct RdFxSkinLanes {
+    uint32_t n;
+    uint32_t from[RD_FX_SKIN_LANES_MAX], to[RD_FX_SKIN_LANES_MAX];
+    uint64_t hits[RD_FX_SKIN_LANES_MAX]; /* the lanes the expansion moved, per line */
+} RdFxSkinLanes;
+
+/* line (a rule line, or a rule= note's value): 0 not an @skin line, 1 one
+ * read into *from, *to, -1 an @skin line that is not "@skin lane A B" with
+ * valid values */
+int rd_fx_skin_lane_line(const char *line, uint32_t *from, uint32_t *to);
+/* a lane line added to l: false (why) past the limit or A named twice */
+bool rd_fx_skin_lane_add(RdFxSkinLanes *l, uint32_t from, uint32_t to, char *why, size_t whySize);
+/* the expansion with the lanes it moved (lanes may be NULL: rd_fixture_expand) */
+bool rd_fixture_expand_lanes(const RdFixture *fx, bool checkSha, uint8_t **out, size_t *outLen,
+                             RdFxSkinLanes *lanes, char *why, size_t whySize);
+
 /* The fixture holds no art: the skeleton parses to its end, every texture
  * names a known pattern and every mesh the generator, every payload byte a
  * command does not name as structure is zero, every text character 'x';

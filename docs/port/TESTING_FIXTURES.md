@@ -185,6 +185,24 @@ skeleton (the placed meshes' ids and centres in lattice steps, the moved prims' 
 `placement: N meshes drawn into WORK2 generated on it (K kept their origin), N prims drawn into
 WORK2 generated beside it`.
 
+### The skinned lanes rule (opt-in)
+
+The generated skinned vertices weight half each to the bones at VU addresses 16 + 4 (s mod n) and
+16 + 4 ((s + 1) mod n), s the vertex's strip and n the fewest bones of the mesh's skinned draws.
+A test whose source frame moved a bone index by hand (issue 163's deep dive copied its blended frame
+with Yorda's lanes on 200 moved to 252) writes the move in its rule file:
+
+- `@skin lane A B` (A and B multiples of 4 in 16..252, A not B; at most 8 lines, each A once):
+  every generated lane that would be A is written B. The values are the line's; nothing of the
+  game's data is read.
+
+It is not a placement: the skeleton is the same bytes as without it (no section). The line is kept
+as the fixture's `rule=` note, which the expansion reads (the expansion's SHA-256 pins the result,
+so a changed note fails `rd_fixture_tool check`); the maker strips it from the texture rules, fails
+a malformed line or a lane named twice, and fails a line that moved no lane (no generated vertex on
+A: a mesh whose palette does not reach it); its line ends `@skin lane A B: N lanes moved`.
+`tools/rdfix_check.py` checks the notes' form.
+
 ## The format
 
 `port/render/rd_fixture.h` is the reference. In short: the head (`ICORDFX1`, the format, the
