@@ -828,7 +828,7 @@ write or the other, or failing its check, which the reader marks as such: never 
 | `app` | `in front` or `in the background`, since when |
 | `last trim signal` | the last `onTrimMemory` level, its name, when, how many in all; `none` |
 | `GPU resets` | `<a> at start, <b> now (+<d>)` from the kernel GPU driver's `reset_count` (Android's sampler, every 250 ms), else why not (`not readable (EACCES)`, `not available on this system ...`) |
-| `free memory` | `MemAvailable` now, the run's lowest and when, the start-up set's free-memory floor (Android) |
+| `free memory` | `MemAvailable` now, the run's lowest and when, the start-up set's free-memory floor (Android), then the system's split from the same read (issue 215, [where the memory is](#where-the-memory-is)): `; file cache <n>, anon <n>, kernel <n>, GPU <n or ?>, rest <n>, swap used <n> MB` (the GPU figure the last full read's: the heartbeat reads `/proc` only) |
 | `process memory` | `VmRSS` now and `VmHWM` |
 | `GPU memory` | this process's files in the kernel driver's `/sys/class/kgsl/kgsl/proc/<pid>/` (each read as its first integer and taken for bytes), read on the sampler's thread every 2 s; or why not |
 | `pipelines` | the start-up set's count, the pipelines made as the frames needed them, the last pipeline note |
@@ -859,6 +859,50 @@ readable here (<why>): the stall lines carry no change of it`. Where both sample
 read it, the kernel GPU driver's line around it ends with `; the GPU's reset count +<d> across it
 (<a> before, <b> after)` (`port/platform/gpu_sysfs.c` (`gpu_sysfs_around_text`,
 `gpu_sysfs_resets_note`)). Nothing here changes behaviour. Tests: `last_run`, `gpu_sysfs`, `report`.
+
+### Where the memory is
+
+Issue 215: on the Retroid Pocket 6 the device's free memory (`MemAvailable`) fell from 7249 to
+1911 MB while the start-up set made 290 pipelines, and the process grew only 168 -> 260 MB; on the
+issue 123 tablet the same fall came in the VU batches alone. `MemAvailable` cannot say what holds
+the memory, so `port/platform/mem_breakdown.c` reads the system's own split and
+`port/platform/mem_watch.c` prints it around the start-up set (Linux and Android; "not available"
+elsewhere). Each call reads each file once (open, read to its end or the buffer's, close; no
+allocation): `/proc/meminfo` (`MemTotal`, `MemFree`, `MemAvailable`, `Buffers`, `Cached`,
+`SwapCached`, `AnonPages`, `Shmem`, `Slab`, `KernelStack`, `PageTables`, `SwapTotal`,
+`SwapFree`), `/proc/self/status` (`VmRSS`, `VmHWM`, `RssAnon`, `RssFile`, `RssShmem`, `VmSwap`),
+and the `/sys` nodes where readable: the kernel GPU driver's totals
+`/sys/class/kgsl/kgsl/{page_alloc,vmalloc,coherent,secure}` summed (taken for bytes), the dma-buf
+heaps' pools `/sys/kernel/dma_heap/total_pools_kb` and ION's `/sys/kernel/ion/total_heaps_kb`, and
+zram's memory (`/sys/block/zram0/mm_stat`'s third field). A read cut inside a line keeps the
+lines before it; a file that cannot be read keeps its errno for the sources' line. The heartbeat
+(the watchdog's thread) reads `/proc` only and takes the last `/sys` figures another read made.
+
+The memory in use (`MemTotal - MemFree`) is split into the file cache (`Buffers + Cached -
+Shmem`), shared (`Shmem`), anonymous (`AnonPages`, every process's), the swap cache, the kernel
+(`Slab + KernelStack + PageTables`), the GPU (the KGSL totals), dma-buf, zram, and the rest: what
+is in use but in none of these. The rest is the remainder, so the parts sum to the memory in use;
+a part not readable is in the rest (on a phone whose KGSL nodes are denied, the GPU driver's own
+memory shows there), and two sources that overlap show as a rest below zero.
+
+| line | when |
+| --- | --- |
+| `ico_pc: memory: the system's memory split read from: <paths>; not readable: <path> (errno <n>, ...)` | once a run, at the first full read |
+| `ico_pc: memory before the start-up set (<m> pipelines): free <a> MB of <t> MB (MemAvailable; MemFree <f> MB); in use <u> MB: file cache <n> MB, shared ..., the rest <n> MB (in none of these); swap used <s> of <t> MB; this process <r> MB resident (...)` (Android adds `; this process's GPU memory: <the last-run file's GPU memory text>`) | the set's start (`ico_diag_set_pipelines` with a total after none) |
+| `ico_pc: memory: the start-up set's batch lines carry the system's memory every <N> pipelines (<m> pipelines in 16 lines) and whenever free memory falls more than <step> MB below the lowest shown (free <a> MB less the floor <f> MB in 16 steps): at most 16 + 17 lines` | the set's start |
+| `rd: pipelines: compiled ... batch ...; system: free 5059 MB (-2190 since the set began), file cache ..., GPU ..., the rest ... MB, swap used ... MB; each (s): ...` | the batches the rule picks (`rd_set_memory_clause_fn`; not in the activity file's copy) |
+| `ico_pc: memory at the start-up set's end (<k> of <m> pipelines made; <c> clauses on its batch lines, <a> by count and <b> by a fall): ...` | the set's end (a total of 0 after one) |
+| `ico_pc: memory over the start-up set: <k> pipelines made in <s> s; free memory <a> -> <b> MB: <x> MB lost a pipeline; the memory in use <+d> MB, what grew a pipeline (they sum to it): file cache <+x>, shared ..., the rest <+x> MB; swapped out <+x> MB a pipeline; this process <+x> MB a pipeline (resident); the most: <part>` | after it |
+| `ico_pc: memory at the system's signal (onTrimMemory level <n>): ...` | each `onTrimMemory` |
+| `window: memory in the block: ...; the system now: free ... MB (... since the set began), file cache ..., the rest ... MB, swap used ... MB` | the 10 s block line (Android) |
+
+The batch lines' rule: `N = ceil(m / 16)` pipelines and `step = ceil((free at the set's start -
+the floor) / 16)` MB, at least 1 (no floor: the free memory itself); any clause starts both counts
+again, and a fall is measured from the lowest free memory a clause or the start line showed. So a
+set carries at most 16 clauses by count and 17 by a fall (each lowers the lowest shown by more than
+the step, and the set stops at the floor): with the start, rule, end and summary lines at most 37
+lines for any set (38 with the sources' line, once a run) (the 684 pipelines of issue 215: every 43 pipelines and 334 MB). Nothing here
+changes behaviour. Test: `mem_breakdown`.
 
 ### How the previous run ended
 

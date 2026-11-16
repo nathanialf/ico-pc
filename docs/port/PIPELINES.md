@@ -599,7 +599,7 @@ pipelines: compiled 2D batch 193-224 of 527 (compiler ...): 32 pipelines 0.02-0.
 resident memory and its peak (`rd_set_memory_fn`, `ico_diag_process_memory`; `memory unknown`
 where the system does not say), the cache's size `rhi_pipeline_cache_size` (Vulkan's data size, 0
 on Direct3D 12) on a phone or a tablet, on the lazy path and on a device of the table (`pipeline
-cache 3104 KB`), `not measured` in a desktop's set (the paragraph above). A start the system ended shows whether the memory grew with the batches, and the
+cache 3104 KB`), `not measured` in a desktop's set (the paragraph above). On the batches the rule of [where the memory is](PLATFORM_DIAGNOSTICS.md#where-the-memory-is) picks (Linux and Android, issue 215), the log's line also carries the system's memory before the times (`; system: free 5059 MB (-2190 since the set began), file cache ..., GPU ..., the rest ... MB, swap used ... MB`; `rd_set_memory_clause_fn`, `mem_watch_batch_clause`), not the activity file's copy. A start the system ended shows whether the memory grew with the batches, and the
 next start logs the last one again as `ico_pc: the previous run's last finished batch: <line>`.
 
 #### Stop and resume

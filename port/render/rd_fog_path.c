@@ -87,6 +87,8 @@
 #include "rd_shadow_tile.h"
 #include "rd_volume_fs.h" /* the volumes' stencil-only entry's self-test */
 #include "rd_comp_spec.h" /* the shadow composites' own entry's self-test */
+/* the one-pass rule's self-test at a new SCENE size */
+#include "rd_onepass.h"
 
 static const char *const s_pathNames[RD_FOG_PATH_COUNT] = {"inplace", "copy", "buffer", "local"};
 
@@ -1511,6 +1513,8 @@ void rd__fog_scene_remade(void)
         return;
     }
     rd__blend_scene_remade(); /* the blend's self-test first, as at start */
+    /* the two-pass blend's one-pass rule at the new size (the play's) */
+    rd__onepass_scene_remade();
     const RdTargetRec *t = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
     if (!t || (t->w == s_st.w && t->h == s_st.h && t->tw == s_st.tw && t->th == s_st.th)) {
         return;

@@ -1,0 +1,16 @@
+# Rules for the one-pass fixtures (rd_onepass_ab): a texture a VU draw samples is
+# `date_split` (alpha 0x80 on the left half, 0x40 on the right), so the alpha plan
+# (rd_alpha_plan.c) proves a LERP As VU draw's alpha at most 128 (the default rules give an
+# alpha-tested draw `alpha_ramp`, alpha 0 to 255, which proves nothing) while its range still
+# spans two values (a range of one value 0x80 is the alpha plan's own one-pass rule); the
+# default rules otherwise
+glyphs     sheet
+ramp       r8
+date_split date
+date_split vu
+alpha_ramp ate
+bright     additive
+gradient   abe
+checker    sprite
+grey       unused
+checker

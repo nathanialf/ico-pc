@@ -111,6 +111,7 @@
 #include "rd_early_plan.h" /* rd_early_start_rows: the play record's size */
 #include "rd_health.h"     /* the test's own pictures' stamps */
 #include "rd_mesh.h"
+#include "rd_onepass.h"
 #include "rd_vu_compact.h"
 #include "rd_vu_rec_early.h"
 #include "rd_vu_record.h"
@@ -811,7 +812,22 @@ bool rd__vu_prepass_selftest_running(void)
     return s_vtRunning;
 }
 
+static bool vuPrepassSelftest(void);
+
+/* the pre-pass's self-test, then the two-pass blend's one-pass rule's
+ * (rd_onepass.c): its VU draws go through the pre-pass as decided here,
+ * and both are decided before the start-up set, which then holds the
+ * colour passes' keys as the draws will ask for them */
 bool rd_vuprepass_selftest(void)
+{
+    const bool on = vuPrepassSelftest();
+    if (g_rd.inited && g_rd.hasDevice) {
+        (void)rd__onepass_selftest();
+    }
+    return on;
+}
+
+static bool vuPrepassSelftest(void)
 {
     if (!g_rd.inited || !g_rd.hasDevice) {
         return false;

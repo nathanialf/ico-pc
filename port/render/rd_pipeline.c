@@ -88,6 +88,7 @@
 #include "rd_passring.h"
 #include "rd_paste_spec.h"
 #include "rd_comp_spec.h"
+#include "rd_onepass.h"
 #include "rd_pipe_finish.h"
 #include "rd_present_scene.h"
 #include "rd_shadow_tile.h"
@@ -599,7 +600,14 @@ int rd__expand_no_dual(const RdDrawPass *in, int n, RdDrawPass out[4])
             continue;
         }
         RdDrawPass c = p;
-        c.key.gs.colorMask = mask & 7;
+        /* a LERP's colour pass carries A where the one-pass rule is in
+         * force (rd_onepass.c): its alpha (As/128) * (128/255) through the
+         * blend constant, which the alpha pass after it overwrites (it
+         * admits every fragment the colour pass wrote) or, where the draw
+         * is proven to give As there, replaces */
+        const bool carry = bp == RD_BP_LERP && (mask & 8) && rd__onepass_carry();
+        c.key.gs.colorMask = carry ? mask : mask & 7;
+        c.key.gs.nodual = carry ? (uint8_t)RD_NODUAL_CARRY : 1u;
         c.flags |= ICO_DF_NODUAL_FACTOR;
         out[m++] = c;
         if (mask & 8) {
@@ -638,6 +646,12 @@ static RhiBlendState blendState(RdBlendPath bp, uint8_t mask, uint8_t nodual)
     b.alphaOp = RHI_BO_ADD;
     b.colorOp = RHI_BO_ADD;
     b.enable = bp != RD_BP_NONE;
+    if (bp == RD_BP_LERP && nodual == RD_NODUAL_CARRY && (mask & 8u)) {
+        /* the two-pass blend's colour pass carrying A (rd_onepass.c): c0.a
+         * is the factor As/128, stored as (As/128) * the constant's alpha
+         * 128/255 (rd__set_pipeline sets the constant) */
+        b.srcAlpha = RHI_BF_CONSTANT;
+    }
     switch (bp) {
     case RD_BP_LERP:
         /* no dual-source blending: the colour pass's c0.a is the factor */
@@ -1062,6 +1076,15 @@ void rd_set_memory_fn(RdMemoryFn fn)
     s_memoryFn = fn;
 }
 
+/* rd_set_memory_clause_fn: the system's memory on a start-up batch's line
+   (issue 215) */
+static RdMemoryClauseFn s_memClauseFn;
+
+void rd_set_memory_clause_fn(RdMemoryClauseFn fn)
+{
+    s_memClauseFn = fn;
+}
+
 /* rd_set_low_memory_fn: the system's low-memory signal stops the start-up
  * set between two batches (issue 128) */
 static RdLowMemoryFn s_lowMemoryFn;
@@ -1439,6 +1462,9 @@ void rd__key_dynamic_normalise(RdPipeKeyInt *k)
     if (bits & RHI_DYN_BLEND) {
         k->gs.blend = RD_BLEND_COUNT;
         k->gs.colorMask = 0xF;
+        /* a colour pass carrying A (rd_onepass.c) draws with the _nodual
+         * module too; its blend state is the bind's: one pipeline */
+        k->gs.nodual = k->gs.nodual == RD_NODUAL_CARRY ? 1u : k->gs.nodual;
     }
 }
 
@@ -1856,6 +1882,7 @@ void rd__set_pipeline(RhiCommandList cl, RhiPipeline p, const RdPipeKeyInt *k)
      * pipeline, every fixed-function state the same (rd_comp_spec.c) */
     p = rd__comp_spec_turn(p, k);
     rhi_cmd_set_pipeline(cl, p);
+    rd__onepass_bind(cl, k); /* the blend constant of a colour pass carrying A (rd_onepass.c) */
     if (k == NULL || !p.id || (!g_rd.dynDepth && !g_rd.dynBlend)) {
         return;
     }
@@ -2255,7 +2282,7 @@ static void batchTimes(const RdPipeKeyInt *keys, const float *ms, uint32_t n, ui
                        uint32_t last, uint32_t total, double wallMs, uint32_t threads,
                        const char *what)
 {
-    char line[600], mem[96];
+    char line[1000], mem[96];
     size_t at = 0;
     float lo = 0.0f, hi = 0.0f;
     double sum = 0.0;
@@ -2321,7 +2348,15 @@ static void batchTimes(const RdPipeKeyInt *keys, const float *ms, uint32_t n, ui
     if (s_batchFn != NULL) {
         s_batchFn(line);
     }
-    /* the log: the same and each pipeline's time */
+    /* the log: the same, the system's memory where the rule picks this
+       batch (issue 215: the free memory the process's own figure misses),
+       and each pipeline's time */
+    if (s_memClauseFn != NULL) {
+        char sys[400];
+        if (s_memClauseFn(first, last, total, sys, sizeof(sys))) {
+            BT_PUT("; system: %s", sys);
+        }
+    }
     BT_PUT("; each (s):");
     for (uint32_t j = 0; j < n; j++) {
         BT_PUT(" %.2f", ms[j] / 1000.0);

@@ -11,6 +11,7 @@
 #include "../core/region.h" /* ico_region: the June 2001 demo draws its own VU programs */
 #include "rd_internal.h"
 #include "rd_mesh.h"
+#include "rd_onepass.h"
 #include "rd_passring.h"
 #include "rd_perf_hooks.h"
 #include "rd_replay.h"
@@ -1076,6 +1077,7 @@ static bool vuNoDualJoin(const RdDrawPass *cut, int nc, RdDrawPass *one)
     }
     *one = cut[0];
     one->flags &= ~(uint32_t)ICO_DF_NODUAL_FACTOR;
+    one->key.gs.nodual = 1; /* a colour pass carrying A (rd_onepass.c) is the same plan */
     if (nc == 2) {
         one->key.gs.colorMask |= cut[1].key.gs.colorMask;
     }
@@ -1201,6 +1203,11 @@ static int vuFuseVerdict(const Replay *r, const RdStateBlock *fan, const DrawSet
        vu_common.hlsli vu_dual_out_f's fused argument */
     RdDrawPass joined;
     const bool split = vuNoDualJoin(cut, nc, &joined);
+    if (split && rd__onepass_unfuse(cut, nc, s_vuAlpha.hi)) {
+        /* the cut's pair in one pass (rd_onepass.c): not fused, so it draws
+         * once and the kick once, each under its own state */
+        return RD_VU_FUSE_PASSES;
+    }
     if ((!split && nc != 1) || nk != 1) {
         return RD_VU_FUSE_PASSES;
     }
@@ -1298,7 +1305,10 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
     }
     const uint64_t ua = rhi_limits()->uniformAlign;
     RdDrawPass dp[8];
-    const int np = vuPlan(r, s, ds, prog, vs, vcb, dp);
+    int np = vuPlan(r, s, ds, prog, vs, vcb, dp);
+    /* a pair proven to store the same bytes in one pass, its alpha pass
+     * dropped (rd_onepass.c; counted either way) */
+    rd__onepass_take(dp, &np, s_vuAlpha.hi, vcb->draw[2], count);
     rd__perf_vu_draw(np == 2 && rd__no_dual_second(dp, 1),
                      np == 1 && (dp[0].flags & ICO_DF_NODUAL_FACTOR) != 0, count / 3u);
     for (int i = 0; i < np; i++) {
