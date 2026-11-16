@@ -1,0 +1,16 @@
+# Rules for the visibility test's fixtures (FIX-P4c; docs/port/TESTING_FIXTURES.md "The placement
+# rules"): a texture a VU draw samples is `opaque` (alpha 128 on every texel, so the occlusion
+# test's alpha proof passes for an alpha-tested opaque mesh: rd_vis.c hizAlphaPasses), the
+# default rules otherwise; and list 0's meshes placed by @scene place (sheets, cubes behind them,
+# across the left edge, past the right edge, on the picture)
+glyphs     sheet
+ramp       r8
+date_split date
+opaque     vu
+alpha_ramp ate
+bright     additive
+gradient   abe
+checker    sprite
+grey       unused
+checker
+@scene place

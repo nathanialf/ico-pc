@@ -746,8 +746,9 @@ cost no pre-pass entry, no VU draw, no ring bytes and no GPU work.
   close, which the replay of every draw draws single-sampled (other edge pixels after the
   covered-majority resolve). The rule holds whether the epoch is open at that draw or not
   (conservative). `rd_vis` checks it on a recorded frame; `rd_cull_ab` compares byte for byte under
-  MSAA 4x on the first dump and on the dumps of `tools/cull_msaa_dumps.txt`, chosen where the epoch
-  closes inside lists 0 to 2.
+  MSAA 4x on the first fixture of its list and on the lines marked `msaa` (issue 102's gate, whose
+  epoch closes at list 3 by a read of SCENE: no frame of the 2026-11-04 corpus closed it inside
+  lists 0 to 2).
 - *Under either region rule.* The argument above is about what the GPU draws of a triangle,
   exactly or clipped, so it holds for the triangles the camera rule draws where the PS2 dropped
   them ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-camera-rule)): they are clipped triangles of the same
@@ -915,11 +916,13 @@ cost no pre-pass entry, no VU draw, no ring bytes and no GPU work.
   `rd_vis` checks the default per class). If it must pay, the next steps are
   a union rule over adjacent triangles (a cell is covered today only by one triangle whole, so the
   cells on a wall's internal diagonals never count) and the occludee's box per batch.
-- *The gate.* `rd_cull_ab` ([TESTING.md](TESTING.md)) replays the dumps of
-  `tools/occlusion_corpus.txt` and `tools/native_frame_dumps.txt` with the test off, frustum and
-  full at Original 4:3, Enhanced 4:3 2x, Enhanced 2x at a wide dump's own aspect and once with MSAA
+- *The gate.* `rd_cull_ab` ([TESTING.md](TESTING.md)) replays the fixtures of
+  `test/fixtures/lists/cull.txt` (frames whose list 0 is placed by `@scene place`:
+  [TESTING_FIXTURES.md](TESTING_FIXTURES.md#the-placement-rules-opt-in)) with the test off, frustum and
+  full at Original 4:3, Enhanced 4:3 2x, Enhanced 2x at a wide frame's own aspect and once with MSAA
   4x: every target's PNG of both byte for byte the off run's, the full run's frustum count the
-  frustum run's, and draws skipped over the corpus (the occluded total reported). The A/B is meant to run on both lavapipe backends, Vulkan and OpenGL (the OpenGL run waits on a
+  frustum run's, each fixture's declared frustum and occluded counts, and draws skipped and hidden
+  over the list. The A/B is meant to run on both lavapipe backends, Vulkan and OpenGL (the OpenGL run waits on a
   fix to the cull path under that backend, to be written up when it lands). `rd_vis` holds the
   bounds, the planes under random cameras and the VU references (`vu1_ref`) as the oracle, and the
   occlusion test's vertex and occludee bounds against the float product, the rasterisation's

@@ -1,49 +1,29 @@
 # rd_occlusion_tool: rd_replay_tool --occlusion (docs/port/RENDER.md, "Culling";
-# port/render/rd_occlusion.c) on the first dump of the machine-local list
-# tools/occlusion_corpus.txt that is here (read as rd_vustage_ab.cmake reads
-# its list).  At the Original preset at 4:3 and 1x:
+# port/render/rd_occlusion.c) on the committed fixture LIST names
+# (test/fixtures/lists/occlusion_tool.txt, one name; rd_fixture.cmake,
+# docs/port/TESTING_FIXTURES.md: expanded into OUT/fixtures, an absent one fails).
+# At the Original preset at 4:3 and 1x:
 #   1. --occlusion --occlusion-out SPEC --occlusion-csv CSV: the line
 #      "<dump>: occlusion: hidden N of M list-0 draws, T of U triangles (index
 #      count / 3); hidden commands: S" with M > 0, N <= M, T <= U, S "none" or
 #      L:A[-B] items of list 0, the second line, the settings note, SPEC
-#      holding S and CSV its header and a line a command;
+#      holding S and CSV its header and a line a command; the path ran: N > 0
+#      (a draw the queries found hidden);
 #   2. the plain replay and the replay with --nop @SPEC, each --pass-dump with
 #      --present 640x480 under ICO_RD_BLEND=fixed: DISPLAY.png and PRESENT.png
 #      equal byte for byte (a hidden draw drew no pixel).
-# A missing list or dump, or no device (77): SKIP.
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
-if(NOT EXISTS "${LIST}")
-  message(STATUS "SKIP: ${LIST}: no dump list")
-  return()
-endif()
-get_filename_component(listDir "${LIST}" DIRECTORY)
-file(STRINGS "${LIST}" lines)
-set(dump "")
-foreach(l IN LISTS lines)
-  string(STRIP "${l}" l)
-  if(l STREQUAL "" OR l MATCHES "^#")
-    continue()
-  endif()
-  if(NOT IS_ABSOLUTE "${l}")
-    set(l "${listDir}/${l}")
-  endif()
-  if(l MATCHES "[*]")
-    file(GLOB matched "${l}")
-    list(SORT matched)
-    if(matched)
-      list(GET matched 0 dump)
-      break()
-    endif()
-  elseif(EXISTS "${l}")
-    set(dump "${l}")
-    break()
-  endif()
-endforeach()
-if(dump STREQUAL "")
-  message(STATUS "SKIP: no dump of ${LIST} is here")
-  return()
+# No device (77): SKIP.
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<folder>
+# -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<fixture list>
+# -DOUT=<a folder the test may write>
+include("${FIXTURE_HELPERS}")
+rd_fixture_list("${LIST}" names)
+list(LENGTH names nn)
+if(NOT nn EQUAL 1)
+  message(FATAL_ERROR "${LIST}: names ${nn} fixtures, one wanted")
 endif()
 file(REMOVE_RECURSE "${OUT}")
+rd_fixture_expand(${names} "${OUT}/fixtures" dump)
 file(MAKE_DIRECTORY "${OUT}/plain" "${OUT}/nop")
 set(spec "${OUT}/hidden.txt")
 
@@ -67,8 +47,9 @@ set(m "${CMAKE_MATCH_2}")
 set(t "${CMAKE_MATCH_3}")
 set(u "${CMAKE_MATCH_4}")
 set(s "${CMAKE_MATCH_5}")
-if(m EQUAL 0)
-  message(FATAL_ERROR "${dump}: no list-0 draw measured:\n${out}")
+if(m EQUAL 0 OR n EQUAL 0)
+  message(FATAL_ERROR "${dump}: hidden ${n} of ${m} list-0 draws: the queries found nothing "
+                      "hidden (the path did not run):\n${out}")
 endif()
 if(n GREATER m OR t GREATER u)
   message(FATAL_ERROR "${dump}: hidden ${n} of ${m} draws, ${t} of ${u} triangles")

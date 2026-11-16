@@ -556,8 +556,6 @@ which passes ([port/TESTING.md](port/TESTING.md#the-framework)): the disc (`vfs_
   match the pack's files against the disc's textures. No pack file is ever committed.
 - `ICO_BASE_ELF` adds the data loader's reference tests
   ([Appendix](#appendix-maintainers-the-base-elf)).
-- `ICO_FOG_DUMP` (cache variable, default `dist/dumps/frame-20261009-083248-v13836.rddump`) is a
-  player dump with the depth fog for `rd_fog_depth_copy_dump` (skipped without it).
 - `ICO_BOOT_DUMP_DIR` (cache variable, default empty) is a start-up's frame dumps for
   `rd_boot_present`; `ICO_BOOT_DUMP_OLD` (default `OFF`) says they come from a build whose frames 118
   to 120 draw stage 1 (`port/render/CMakeLists.txt`).
@@ -668,8 +666,9 @@ covers neither Apple's own clang, nor code under `__APPLE__` or `ICO_IOS`, nor t
 `.github/workflows/ci.yml` runs on every push to main, every pull request and
 every pushed `v*` tag (which also packages for arm64, see
 [Packages](#packages)): the `linux` job (`ubuntu-24.04`), the `tests` matrix
-of eighteen `ubuntu-24.04` runners (five suites in 3 to 5 shards each), the `extra` job, the
-`linux-arm64` job and the `linux-arm64-filtered` job (two shards) on `ubuntu-24.04-arm`, the
+of nineteen `ubuntu-24.04` runners (five suites in 3 to 5 shards each), the `extra` job, the
+`linux-arm64` job, the `linux-arm64-filtered` job (two shards) and the `linux-arm64-fixtures` job
+(three shards) on `ubuntu-24.04-arm`, the
 `android` job and the two `apple` jobs on `macos-15` (above) side by side, then the `windows` job
 (`windows-2022`) after `linux`, no secrets, no disc image. `linux` runs the
 hygiene checks and the `win-x64` cross build below in order. Each `tests`
@@ -690,22 +689,27 @@ described after the table.
 | `tools/stack_overread_audit.py` (`--selftest`, then the tree) | no game code in `ico2/` that relies on the PS2's stack layout: a matrix or vector call that reads or writes past the local it is given, or a local that is only written; checked exceptions are in `tools/stack_overread_allow.txt` |
 | `tools/struct_cast_audit.py` (`--selftest`, then the tree) | no fixed array, buffer or smaller record in `ico2/` cast to a struct whose host size is larger (records holding pointers are wider on the host than the [EE](port/ARCHITECTURE.md#terms)'s 4-byte pointers: `ClipWork` is 0xF0 bytes, not 0xC0), sized by compiling the file with the host compiler; checked exceptions are in `tools/struct_cast_allow.txt` |
 | `tools/check_call_types.py` | no call through a function-pointer cast that passes fewer arguments than the function it reaches reads, and no `extern` in an `ico2/` `.c` file that differs from its definition in parameter count, integer width or return width; checked exceptions are in `tools/check_call_types_allow.txt` |
-| `tools/ci_shard.py --selftest` | the shard split runs every test once, keeps a fixture's tests together and gives the same split twice |
+| `tools/ci_shard.py --selftest` | the shard split runs every test once, keeps a fixture's tests together, gives the same split twice, estimates a shard at `--parallel 4`, and the selection switches and the cost guard work |
 | `gen_data_desc.py`, `gen_layout_asserts.py`, `gen_sources.py` with `--check` | the generated files are fresh |
 | `win-x64` | cross-compile the window build; `ico_pc.exe` and `SDL3.dll` must exist; the tests are built, and the renderer's Direct3D 11 set with `SDL3.dll` is uploaded as the artifact `win-x64-warp-tests` (`tools/ci_d3d11_warp.sh stage`) for the `windows` job |
-| `tests`: `linux-x64`, 3 shards | headless, configure with `-DICO_LINK_EXE=ON`, build `all tests` (the targets `all` and `tests`), `ctest` on the shard's tests; shard 1 also builds `shaders_d3d11_check` |
-| `tests`: `linux-x64-window`, 4 shards | `-DICO_HEADLESS=OFF -DICO_LINK_EXE=ON` into `build-host/linux-x64-window`, build, `ctest` on the shard's tests |
+| `tests`: `linux-x64`, 5 shards | headless, configure with `-DICO_LINK_EXE=ON`, build `all tests` (the targets `all` and `tests`), `ctest` on the shard's tests; shard 1 also builds `shaders_d3d11_check` |
+| `tests`: `linux-x64-window`, 3 shards | `-DICO_HEADLESS=OFF -DICO_LINK_EXE=ON` into `build-host/linux-x64-window`, build, `ctest` on the shard's tests |
 | `tests`: `linux-x64-clang`, 3 shards | build, `ctest` on the shard's tests |
 | `tests`: `asan`, 5 shards | AddressSanitizer + UBSan (Debug, `-O1`), headless with `-DICO_LINK_EXE=ON`, build, `ctest` on the shard's tests |
 | `tests`: `fptrap`, 3 shards | float divide-by-zero and invalid trap, headless with `-DICO_LINK_EXE=ON`, build, `ctest` on the shard's tests |
 | `extra`: `win-x64-clang` | cross-compile the window build (`-DICO_HEADLESS=OFF`) with llvm-mingw clang; `ico_pc.exe` and `SDL3.dll` must exist |
 
-A shard's tests: `ctest --show-only=json-v1` lists the build's tests, `tools/ci_shard.py split`
-divides them into the suite's N shards by the seconds in the suite's own table `tools/ci_costs/<suite>.txt` (heaviest
-first to the lightest shard; tests that share a fixture, such as `rd_pixel` and the
-`rd_replay_tool` tests that read its dump, in one shard; a test the table lacks at the table's
-median) and `ctest --tests-from-file` runs this shard's part at `--parallel 4`
-([TESTING.md](port/TESTING.md#ci)).
+A shard's tests: `ctest --show-only=json-v1` lists the build's tests, `tools/ci_shard.py check`
+fails the job when a test has no line in the suite's own table `tools/ci_costs/<suite>.txt` (or a
+test that replays the committed fixtures has 0 s there; `tools/ci_costs_update.py` adds the
+lines), `tools/ci_shard.py split` divides the tests into the suite's N shards by those seconds
+(heaviest first to the shard whose estimated time at `--parallel 4` grows least; tests that share
+a fixture, such as `rd_pixel` and the `rd_replay_tool` tests that read its dump, in one shard; the
+matrix line's `fixture_tests` says whether the tests that replay the committed fixtures run, `run`
+in every suite) and writes the shard's `CTestCostData.txt` so ctest starts the costliest first,
+and `ctest --tests-from-file` runs this shard's part at `--parallel 4`. A `tests` job's timeout is
+120 minutes ([TESTING.md](port/TESTING.md#the-ci-shards) has the estimates, the tables' refresh
+and the guard).
 
 The `windows` job (`windows-2022`) starts when `linux` has finished: it downloads
 `win-x64-warp-tests`, tries to add the Direct3D 11 debug layer (Windows' optional feature
@@ -727,13 +731,14 @@ lavapipe on an arm64 host filters a step differently from lavapipe on
 x86-64 and misses them by an LSB or two. A second step runs those tests
 alone, in the `linux-arm64-filtered` job (two shards of `ci_shard.py split --include`, the
 cost table `tools/ci_costs/linux-arm64.txt`, a build on each), and does not gate
-(`continue-on-error`), so their output is still in the log; the `linux-arm64` job itself
-(build, the gating tests, and on a release tag the package) is about 18 minutes before the
-packaging. The rest gate as on `linux`: `fog_lut` runs natively,
+(`continue-on-error`), so their output is still in the log. The tests that replay the committed
+fixtures are left out of the `linux-arm64` job too (`ci_shard.py split --fixture-tests skip`) and
+run gating in the `linux-arm64-fixtures` job (three shards of `--fixture-tests only`, a build on
+each, never for a dispatched package), so the `linux-arm64` job itself (build, the gating tests,
+and on a release tag the package) stays about 25 minutes before the packaging. The rest gate as on `linux`: `fog_lut` runs natively,
 `fog_lut_arm64` skips (it looks for an x86-64 NDK and qemu), and the tests
-that need the disc or saved frames skip (`fmv_fields`, `rd_boot_present`,
-`rd_fog_depth_copy_dump`) or run only their synthetic part (`shadow_spawn`,
-`sndn2`, `fmv`).
+that need the disc or saved frames skip (`fmv_fields`, `rd_boot_present`) or
+run only their synthetic part (`shadow_spawn`, `sndn2`, `fmv`).
 
 The `android` job (90 minutes at most) builds the debug APK and checks its
 structure; the game is not run:

@@ -72,6 +72,8 @@ set(_rdfx_q_present_scene_skipped "present from SCENE on: ([0-9]+) reductions no
 set(_rdfx_q_lamps_area_passes "\\): ([0-9]+) passes with the lamps' area")
 set(_rdfx_q_lamps_bands_lazy "([0-9]+) bands left lazy")
 set(_rdfx_q_lamps_owed "([0-9]+) WORK0 alpha sprites owed")
+# the visibility test: the draws MSAA keeps (they may close the epoch)
+set(_rdfx_q_msaa_epoch_kept "kept: may close the MSAA epoch ([0-9]+)")
 # the crack fill after the MSAA resolve
 set(_rdfx_q_crack_msaa_fills "crack fill on: [^\n]*, ([0-9]+) fills after the MSAA resolve")
 # the passes' render areas, the passes cut, the aura's read in two passes
@@ -105,6 +107,24 @@ set(_rdfx_q_vu_audit_entries "rd: VU audit: ([0-9]+) entries")
 set(_rdfx_q_vu_audit_lists "rd: VU audit: [0-9]+ entries \\([0-9]+ index values\\), ([0-9]+) compacted lists")
 set(_rdfx_q_vu_audit_plane_draws "rd: VU audit: [^\n]*draws: ([0-9]+) of the fourth plane")
 set(_rdfx_q_vu_audit_violations "rd: VU audit: [0-9]+ entries[^\n]*, ([0-9]+) violations")
+# the wide frames: the side bands' mode
+set(_rdfx_q_side_band_card_draws "side bands: ([0-9]+) draws with cards")
+# the fog's depth read, the aura's paste after it, the blended frame between two ticks
+set(_rdfx_q_fog_path "fog local draws [0-9]+ \\(fog path ([a-z]+)\\)")
+set(_rdfx_q_aura_pastes_whole "aura paste [a-z]+: [0-9]+ split \\([^)]*\\), ([0-9]+) drawn whole")
+set(_rdfx_q_interp_keyed_blended "keyed draws: ([0-9]+) blended")
+set(_rdfx_q_interp_tick_cam_draws "beside blended ones, ([0-9]+) VU draws with the ticks' cameras")
+# the water's blocks and the mirror floor, the aura's paste split, the sprite
+# planes' fallback, the turned present and the turn fold, the bench (the last
+# four read the tool's log lines as well as its stats)
+set(_rdfx_q_water_blocks_kept "([0-9]+) block reads kept on REPEAT")
+set(_rdfx_q_water_targets_clamped "([0-9]+) render-target reads clamped")
+set(_rdfx_q_aura_paste_split "aura paste on: ([0-9]+) split")
+set(_rdfx_q_noplanes_fallback "sprite no-planes ([0-9]+)")
+set(_rdfx_q_prerotate_turned "turned twin: the [0-9]+x[0-9]+ picture turned ([0-9]+) degrees")
+set(_rdfx_q_turn_fold_cases "turn in the blit: self-test passed \\(([0-9]+) cases")
+set(_rdfx_q_turn_fold_turned "picture's box blit drawn turned ([0-9]+) degrees")
+set(_rdfx_q_bench_variants "bench: done, every variant ran: ([0-9]+) of")
 
 set(RDFX_FAILURES 0)
 

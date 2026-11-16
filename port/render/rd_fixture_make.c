@@ -97,7 +97,7 @@ static char *word(char **s)
     return w;
 }
 
-enum { PLACE_LAMPS = 1u << 0, PLACE_FANS_OFF = 1u << 1 };
+enum { PLACE_LAMPS = 1u << 0, PLACE_FANS_OFF = 1u << 1, PLACE_SCENE = 1u << 2 };
 
 static bool parseRules(const char *text, Rule *out, uint32_t *n, uint32_t *place, char *why,
                        size_t whySize)
@@ -128,10 +128,13 @@ static bool parseRules(const char *text, Rule *out, uint32_t *n, uint32_t *place
             continue;
         }
         if (tok[0] == '@') {
-            /* a placement rule: "@lamps place", "@fans off" */
+            /* a placement rule: "@lamps place", "@fans off", "@scene place" */
             const char *arg = word(&save);
             if (strcmp(tok, "@lamps") == 0 && arg && strcmp(arg, "place") == 0 && !word(&save)) {
                 *place |= PLACE_LAMPS;
+            } else if (strcmp(tok, "@scene") == 0 && arg && strcmp(arg, "place") == 0 &&
+                       !word(&save)) {
+                *place |= PLACE_SCENE;
             } else if (strcmp(tok, "@fans") == 0 && arg && strcmp(arg, "off") == 0 &&
                        !word(&save)) {
                 *place |= PLACE_FANS_OFF;
@@ -201,8 +204,9 @@ typedef struct DMesh {
     int32_t sizeExp;
     bool sized;
     uint32_t bones;
-    bool placed;       /* @lamps place: generated about centre, not the origin */
+    bool placed;       /* @lamps / @scene place: generated about centre, not the origin */
     int32_t centre[3]; /* in lattice steps 2^(sizeExp - 3) */
+    uint32_t form;     /* @scene place: RD_FX_FORM_CUBE, or a sheet (RD_FX_FORM_SHEET + axis) */
 } DMesh;
 
 typedef struct DFacing {
@@ -495,50 +499,14 @@ static bool solve3(double A[3][3], const double b[3], double v[3])
     return true;
 }
 
-/* @lamps place: where mesh number n (0, 1, ...: the meshes drawn into WORK2,
- * in the order of their first such draw) is generated.  Read: the draw's
- * placement matrix M (VU mem 16..19: model to GS pixels, x / w and y / w
- * about 2048), the state's scissor (GS pixels of the target, inclusive) and
- * the target's GS size.  The place on the target: the scissor's box cut in
- * four each way, the meshes on its three inner columns and rows in turn,
- *   X = 2048 - gsW / 2 + x0 + (x1 - x0 + 1) (1 + n mod 3) / 4
- *   Y = 2048 - gsH / 2 + y0 + (y1 - y0 + 1) (1 + (n / 3) mod 3) / 4.
- * The centre v is the model-space point that M sends to (X, Y) at the w of
- * the model's origin (the object keeps its distance from the eye and moves
- * across the picture; an origin behind the eye: at |w|, as far in front):
- * the three linear equations
- *   (Mx - X Mw) . (v, 1) = 0, (My - Y Mw) . (v, 1) = 0, Mw . (v, 1) = |w|
- * (a matrix whose w does not depend on the position: the third is instead
- * the plane through the origin across the line the first two give).
- * The size k is sizeAt's about v; the centre is then rounded to the cube's
- * lattice step 2^(k - 3) (so every vertex stays an exact float), which moves
- * it by at most half a step, a sixteenth of the cube's half side.  False (the
- * mesh keeps its origin) when the origin's w is 0, the equations are
- * singular, the centre is not in front of the eye, or it is past
- * RD_FX_PLACE_MAX steps. */
-static bool placeAt(const uint8_t *pay, const RdCmd *c, const RdStateBlock *st, uint32_t n,
-                    int32_t *sizeExp, int32_t centre[3])
+/* the model-space point v that M sends to (X, Y) at w = W: the three linear
+ * equations (Mx - X Mw) . (v, 1) = 0, (My - Y Mw) . (v, 1) = 0,
+ * Mw . (v, 1) = W; for a matrix whose w does not depend on the position the
+ * third is instead the plane through the origin across the line the first
+ * two give.  False when singular or v is not in front of the eye */
+static bool solveAt(const double M[4][4], double X, double Y, double W, double v[3])
 {
-    double M[4][4];
-    cols(pay + c->u[1] + sizeof(RdVuPayload) + 16 * 16, M);
-    /* the origin's w; an origin behind the eye: as far in front of it */
-    const double w0 = fabs(M[3][3]);
-    if (!(w0 > 1e-9) || st->gsW == 0 || st->gsH == 0) {
-        return false;
-    }
-    int32_t x0 = st->scissor[0], y0 = st->scissor[1], x1 = st->scissor[2], y1 = st->scissor[3];
-    x0 = x0 < 0 ? 0 : x0;
-    y0 = y0 < 0 ? 0 : y0;
-    x1 = x1 >= (int32_t)st->gsW ? (int32_t)st->gsW - 1 : x1;
-    y1 = y1 >= (int32_t)st->gsH ? (int32_t)st->gsH - 1 : y1;
-    if (x1 < x0 || y1 < y0) {
-        return false;
-    }
-    const double X =
-        2048.0 - (double)(st->gsW / 2u) + x0 + (double)(x1 - x0 + 1) * (1 + n % 3u) / 4.0;
-    const double Y =
-        2048.0 - (double)(st->gsH / 2u) + y0 + (double)(y1 - y0 + 1) * (1 + (n / 3u) % 3u) / 4.0;
-    double A[3][3], b[3], v[3];
+    double A[3][3], b[3];
     for (int k = 0; k < 3; k++) {
         A[0][k] = M[k][0] - X * M[k][3];
         A[1][k] = M[k][1] - Y * M[k][3];
@@ -546,7 +514,7 @@ static bool placeAt(const uint8_t *pay, const RdCmd *c, const RdStateBlock *st, 
     }
     b[0] = -(M[3][0] - X * M[3][3]);
     b[1] = -(M[3][1] - Y * M[3][3]);
-    b[2] = w0 - M[3][3];
+    b[2] = W - M[3][3];
     if (!solve3(A, b, v)) {
         /* w does not depend on the position (no perspective in M): the
          * point of the line through (X, Y) nearest the model's origin */
@@ -559,10 +527,13 @@ static bool placeAt(const uint8_t *pay, const RdCmd *c, const RdStateBlock *st, 
         }
     }
     const double wv = M[0][3] * v[0] + M[1][3] * v[1] + M[2][3] * v[2] + M[3][3];
-    if (!(wv > 1e-9)) {
-        return false;
-    }
-    const int32_t k = sizeAt((const double (*)[4])M, NULL, v);
+    return wv > 1e-9;
+}
+
+/* v rounded to the lattice step 2^(k - 3), in steps; false past
+ * RD_FX_PLACE_MAX steps */
+static bool roundCentre(const double v[3], int32_t k, int32_t centre[3])
+{
     const double step = ldexp(1.0, k - 3);
     for (int a = 0; a < 3; a++) {
         const double q = floor(v[a] / step + 0.5);
@@ -571,7 +542,369 @@ static bool placeAt(const uint8_t *pay, const RdCmd *c, const RdStateBlock *st, 
         }
         centre[a] = (int32_t)q;
     }
+    return true;
+}
+
+/* the scissor's box (GS pixels of the target, inclusive, clamped to it) and
+ * its place in GS space: false when empty */
+static bool scissorBox(const RdStateBlock *st, double *left, double *top, int32_t box[4])
+{
+    if (st->gsW == 0 || st->gsH == 0) {
+        return false;
+    }
+    int32_t x0 = st->scissor[0], y0 = st->scissor[1], x1 = st->scissor[2], y1 = st->scissor[3];
+    x0 = x0 < 0 ? 0 : x0;
+    y0 = y0 < 0 ? 0 : y0;
+    x1 = x1 >= (int32_t)st->gsW ? (int32_t)st->gsW - 1 : x1;
+    y1 = y1 >= (int32_t)st->gsH ? (int32_t)st->gsH - 1 : y1;
+    if (x1 < x0 || y1 < y0) {
+        return false;
+    }
+    box[0] = x0;
+    box[1] = y0;
+    box[2] = x1;
+    box[3] = y1;
+    *left = 2048.0 - (double)(st->gsW / 2u);
+    *top = 2048.0 - (double)(st->gsH / 2u);
+    return true;
+}
+
+/* @lamps place: where mesh number n (0, 1, ...: the meshes drawn into WORK2,
+ * in the order of their first such draw) is generated.  Read: the draw's
+ * placement matrix M (VU mem 16..19: model to GS pixels, x / w and y / w
+ * about 2048), the state's scissor (GS pixels of the target, inclusive) and
+ * the target's GS size.  The place on the target: the scissor's box cut in
+ * four each way, the meshes on its three inner columns and rows in turn,
+ *   X = 2048 - gsW / 2 + x0 + (x1 - x0 + 1) (1 + n mod 3) / 4
+ *   Y = 2048 - gsH / 2 + y0 + (y1 - y0 + 1) (1 + (n / 3) mod 3) / 4.
+ * The centre v is the model-space point that M sends to (X, Y) at the w of
+ * the model's origin (the object keeps its distance from the eye and moves
+ * across the picture; an origin behind the eye: at |w|, as far in front):
+ * solveAt.  The size k is sizeAt's about v; the centre is then rounded to the
+ * cube's lattice step 2^(k - 3) (so every vertex stays an exact float), which
+ * moves it by at most half a step, a sixteenth of the cube's half side.  False
+ * (the mesh keeps its origin) when the origin's w is 0, the equations are
+ * singular, the centre is not in front of the eye, or it is past
+ * RD_FX_PLACE_MAX steps. */
+static bool placeAt(const uint8_t *pay, const RdCmd *c, const RdStateBlock *st, uint32_t n,
+                    int32_t *sizeExp, int32_t centre[3])
+{
+    double M[4][4];
+    cols(pay + c->u[1] + sizeof(RdVuPayload) + 16 * 16, M);
+    /* the origin's w; an origin behind the eye: as far in front of it */
+    const double w0 = fabs(M[3][3]);
+    double left, top;
+    int32_t box[4];
+    if (!(w0 > 1e-9) || !scissorBox(st, &left, &top, box)) {
+        return false;
+    }
+    const double X = left + box[0] + (double)(box[2] - box[0] + 1) * (1 + n % 3u) / 4.0;
+    const double Y = top + box[1] + (double)(box[3] - box[1] + 1) * (1 + (n / 3u) % 3u) / 4.0;
+    double v[3];
+    if (!solveAt((const double (*)[4])M, X, Y, w0, v)) {
+        return false;
+    }
+    const int32_t k = sizeAt((const double (*)[4])M, NULL, v);
+    if (!roundCentre(v, k, centre)) {
+        return false;
+    }
     *sizeExp = k;
+    return true;
+}
+
+/* ------------------------------------------------------------ @scene place */
+
+/* M (p, 1) and its GS place: x / w, y / w, Z = 16 z / w (rd_vis_hiz.c's), w */
+static void gsOf(const double M[4][4], const double p[3], double g[4])
+{
+    const double v[4] = {p[0], p[1], p[2], 1.0};
+    double h[4];
+    xf(M, v, h);
+    g[0] = h[0] / h[3];
+    g[1] = h[1] / h[3];
+    g[2] = 16.0 * h[2] / h[3];
+    g[3] = h[3];
+}
+
+/* a GS place an exact vertex may have (rd_vis_hiz.c: 0 < x, y < 4094), with
+ * 16 pixels to spare, in front of the eye at more than wMin */
+static bool gsUsable(const double g[4], double wMin)
+{
+    return g[3] > wMin && g[0] > 16.0 && g[0] < 4078.0 && g[1] > 16.0 && g[1] < 4078.0 &&
+           isfinite(g[2]);
+}
+
+/* the last sheet placed (its draw's matrix, its centre in model units, its
+ * half side, its two axes) */
+typedef struct Sheet {
+    bool have;
+    double M[4][4];
+    double c[3];
+    double h;
+    int a1, a2;
+} Sheet;
+
+typedef struct Scene {
+    uint32_t n; /* the meshes the rule has seen */
+    uint32_t sheets, behind, left, right, grid, kept;
+    Sheet last;
+} Scene;
+
+/* sheet corner i (0 A: -,-; 1 B: -,+; 2 C: +,-; 3 D: +,+ along a1, a2: the
+ * order rd_fixture.c's sheet strip visits them) at its GS place */
+static void sheetCorner(const Sheet *s, int i, double g[4])
+{
+    double p[3] = {s->c[0], s->c[1], s->c[2]};
+    p[s->a1] += i & 2 ? s->h : -s->h;
+    p[s->a2] += i & 1 ? s->h : -s->h;
+    gsOf((const double (*)[4])s->M, p, g);
+}
+
+/* A sheet about (X, Y) at w = W: a square of half side 2^k across two of the
+ * model's axes, flat along the third (rd_fixture.c sheetPos).  The flat axis:
+ * of the three, in order of the area the other two span on screen at the
+ * centre (the matrix's derivatives there), the first for which a k exists
+ * whose square reaches R GS pixels along both axes with its four corners
+ * usable (gsUsable, w above half the centre's).  The centre is rounded to
+ * the step 2^(k - 3) and the corners checked again about it. */
+static bool sheetAt(const double M[4][4], double X, double Y, double W, double R, int32_t *sizeExp,
+                    int32_t centre[3], uint32_t *form, Sheet *out)
+{
+    double v[3], g[4];
+    if (!solveAt(M, X, Y, W, v)) {
+        return false;
+    }
+    gsOf(M, v, g);
+    double J[3][2];
+    for (int a = 0; a < 3; a++) {
+        J[a][0] = (M[a][0] - g[0] * M[a][3]) / g[3];
+        J[a][1] = (M[a][1] - g[1] * M[a][3]) / g[3];
+    }
+    double score[3];
+    for (int f = 0; f < 3; f++) {
+        const int a1 = (f + 1) % 3, a2 = (f + 2) % 3;
+        score[f] = fabs(J[a1][0] * J[a2][1] - J[a1][1] * J[a2][0]);
+    }
+    bool tried[3] = {false, false, false};
+    for (int t = 0; t < 3; t++) {
+        int f = -1;
+        for (int k = 0; k < 3; k++) {
+            if (!tried[k] && (f < 0 || score[k] > score[f])) {
+                f = k;
+            }
+        }
+        tried[f] = true;
+        if (!(score[f] > 0.0) || !isfinite(score[f])) {
+            continue;
+        }
+        Sheet s;
+        memset(&s, 0, sizeof(s));
+        memcpy(s.M, M, sizeof(s.M));
+        s.a1 = (f + 1) % 3;
+        s.a2 = (f + 2) % 3;
+        int32_t kFound = 99;
+        for (int32_t k = -12; k <= 24 && kFound == 99; k++) {
+            memcpy(s.c, v, sizeof(s.c));
+            s.h = ldexp(1.0, k);
+            bool usable = true;
+            for (int i = 0; i < 4 && usable; i++) {
+                double gc[4];
+                sheetCorner(&s, i, gc);
+                usable = gsUsable(gc, 0.5 * g[3]);
+            }
+            if (!usable) {
+                break; /* a larger square only reaches further */
+            }
+            double reach[2];
+            for (int e = 0; e < 2; e++) {
+                double p[3] = {v[0], v[1], v[2]}, ge[4];
+                p[e ? s.a2 : s.a1] += s.h;
+                gsOf(M, p, ge);
+                const double dx = fabs(ge[0] - g[0]), dy = fabs(ge[1] - g[1]);
+                reach[e] = dx > dy ? dx : dy;
+            }
+            if (reach[0] >= R && reach[1] >= R) {
+                kFound = k;
+            }
+        }
+        if (kFound == 99 || !roundCentre(v, kFound, centre)) {
+            continue;
+        }
+        const double step = ldexp(1.0, kFound - 3);
+        for (int a = 0; a < 3; a++) {
+            s.c[a] = centre[a] * step;
+        }
+        bool usable = true;
+        for (int i = 0; i < 4 && usable; i++) {
+            double gc[4];
+            sheetCorner(&s, i, gc);
+            usable = gsUsable(gc, 0.0);
+        }
+        if (!usable) {
+            continue;
+        }
+        s.have = true;
+        *out = s;
+        *sizeExp = kFound;
+        *form = RD_FX_FORM_SHEET + (uint32_t)f;
+        return true;
+    }
+    return false;
+}
+
+/* the signed distance of p from the line a -> b, positive on the side of c */
+static double sideOf(const double a[4], const double b[4], const double c[4], double px, double py)
+{
+    const double ex = b[0] - a[0], ey = b[1] - a[1];
+    const double len = sqrt(ex * ex + ey * ey);
+    if (!(len > 0.0)) {
+        return -1.0;
+    }
+    const double d = (ex * (py - a[1]) - ey * (px - a[0])) / len;
+    const double dc = ex * (c[1] - a[1]) - ey * (c[0] - a[0]);
+    return dc < 0.0 ? -d : d;
+}
+
+/* A cube behind the last sheet, in quadrant q of it (0: -,-; 1: +,+; 2:
+ * +,-; 3: -,+ along its axes: inside its triangle ABC, BCD, CDA or DAB, the
+ * order a strip draws them, so a strip of three vertices has the first).
+ * The quadrant's centre, half a half side from the sheet's along both axes,
+ * at its GS place (X, Y); the cube about the point of this draw's matrix at
+ * (X, Y) at w = 2 wFar, 4 wFar, ... (wFar the sheet's farthest corner), the
+ * first of six whose cube (its 8 corners, sizeAt's k about the rounded
+ * centre, the lattice's reach of 8 steps each way) is wholly farther than
+ * 1.25 wFar, whose GS box lies 8 pixels inside the triangle, and whose
+ * largest Z is below the triangle's least by twice rd_vis_hiz.c's margin
+ * (4096 + Z / 2^17) and 64 more.  So the occlusion test can find it hidden
+ * once the sheet is drawn (when the sheet's draw is an occluder). */
+static bool behindAt(const Sheet *s, uint32_t q, const double M[4][4], int32_t *sizeExp,
+                     int32_t centre[3])
+{
+    static const int qu[4] = {-1, 1, 1, -1}, qv[4] = {-1, 1, -1, 1};
+    static const int tri[4][3] = {{0, 1, 2}, {1, 2, 3}, {2, 3, 0}, {3, 0, 1}};
+    double corner[4][4], wFar = 0.0;
+    for (int i = 0; i < 4; i++) {
+        sheetCorner(s, i, corner[i]);
+        wFar = corner[i][3] > wFar ? corner[i][3] : wFar;
+    }
+    const double *T[3] = {corner[tri[q][0]], corner[tri[q][1]], corner[tri[q][2]]};
+    const double zTri = fmin(T[0][2], fmin(T[1][2], T[2][2]));
+    double p[3] = {s->c[0], s->c[1], s->c[2]}, gq[4];
+    p[s->a1] += qu[q] * 0.5 * s->h;
+    p[s->a2] += qv[q] * 0.5 * s->h;
+    gsOf((const double (*)[4])s->M, p, gq);
+    for (int i = 0; i < 6; i++) {
+        double v[3];
+        if (!solveAt(M, gq[0], gq[1], ldexp(2.0 * wFar, i), v)) {
+            return false;
+        }
+        const int32_t k = sizeAt(M, NULL, v);
+        int32_t cr[3];
+        if (!roundCentre(v, k, cr)) {
+            return false;
+        }
+        const double step = ldexp(1.0, k - 3);
+        double x0 = 0.0, x1 = 0.0, y0 = 0.0, y1 = 0.0, zMax = 0.0;
+        bool ok = true;
+        for (int j = 0; j < 8 && ok; j++) {
+            const double pc[3] = {(cr[0] + (j & 1 ? 8 : -8)) * step,
+                                  (cr[1] + (j & 2 ? 8 : -8)) * step,
+                                  (cr[2] + (j & 4 ? 8 : -8)) * step};
+            double gc[4];
+            gsOf(M, pc, gc);
+            ok = gsUsable(gc, 1.25 * wFar);
+            x0 = j == 0 || gc[0] < x0 ? gc[0] : x0;
+            x1 = j == 0 || gc[0] > x1 ? gc[0] : x1;
+            y0 = j == 0 || gc[1] < y0 ? gc[1] : y0;
+            y1 = j == 0 || gc[1] > y1 ? gc[1] : y1;
+            zMax = j == 0 || gc[2] > zMax ? gc[2] : zMax;
+        }
+        for (int j = 0; j < 4 && ok; j++) {
+            const double px = j & 1 ? x1 : x0, py = j & 2 ? y1 : y0;
+            for (int e = 0; e < 3 && ok; e++) {
+                ok = sideOf(T[e], T[(e + 1) % 3], T[(e + 2) % 3], px, py) >= 8.0;
+            }
+        }
+        const double margin = 4096.0 + fabs(zMax) / 131072.0;
+        if (ok && zMax + 2.0 * margin + 64.0 < zTri) {
+            memcpy(centre, cr, sizeof(cr));
+            *sizeExp = k;
+            return true;
+        }
+    }
+    return false;
+}
+
+/* @scene place: mesh number n (0, 1, ...: the meshes whose first draw is a
+ * non-skinned draw of list 0, in that order) is generated by its role,
+ * n mod 8, at grid point g = (n / 8) mod 9 (the scissor's box cut in four
+ * each way, its three inner columns and rows in turn, as @lamps place).
+ * Read: that draw's placement matrix M (VU mem 16..19), the state's
+ * scissor and the target's GS size, n, and for role 1 to 4 the last sheet
+ * this rule placed (its draw's matrix, its centre, size and axes).
+ *   0     a sheet about g at the origin's w (|w|): sheetAt, R a third of the
+ *         target's smaller side (its lattice triangles then span far more
+ *         than the 64th of the frame an occluder's must, rd_vis_hiz.c);
+ *   1..4  a cube behind the last sheet, in its quadrant n mod 8 - 1:
+ *         behindAt;
+ *   5     a cube about the scissor's left edge at g's row (partly outside);
+ *   6     a cube 192 GS pixels past the scissor's right edge at g's row
+ *         (wholly outside: a cube reaches under 48 pixels, sizeAt);
+ *   7     a cube about g.
+ * A role that cannot be taken (no sheet yet, no fit, singular equations)
+ * falls to a cube about g; the cubes are at the origin's w, sized by sizeAt
+ * about their centres.  False (the mesh keeps its origin) as placeAt. */
+static bool scenePlace(const uint8_t *pay, const RdCmd *c, const RdStateBlock *st, Scene *sc,
+                       int32_t *sizeExp, int32_t centre[3], uint32_t *form)
+{
+    const uint32_t n = sc->n++;
+    double M[4][4];
+    cols(pay + c->u[1] + sizeof(RdVuPayload) + 16 * 16, M);
+    const double w0 = fabs(M[3][3]);
+    double left, top;
+    int32_t box[4];
+    *form = RD_FX_FORM_CUBE;
+    if (!(w0 > 1e-9) || !scissorBox(st, &left, &top, box)) {
+        sc->kept++;
+        return false;
+    }
+    const uint32_t role = n % 8u, g = (n / 8u) % 9u;
+    double X = left + box[0] + (double)(box[2] - box[0] + 1) * (1 + g % 3u) / 4.0;
+    const double Y = top + box[1] + (double)(box[3] - box[1] + 1) * (1 + g / 3u) / 4.0;
+    const double side = (double)(st->gsW < st->gsH ? st->gsW : st->gsH);
+    if (role == 0 &&
+        sheetAt((const double (*)[4])M, X, Y, w0, side / 3.0, sizeExp, centre, form, &sc->last)) {
+        sc->sheets++;
+        return true;
+    }
+    if (role >= 1 && role <= 4 && sc->last.have &&
+        behindAt(&sc->last, role - 1u, (const double (*)[4])M, sizeExp, centre)) {
+        sc->behind++;
+        return true;
+    }
+    if (role == 5) {
+        X = left + box[0];
+    } else if (role == 6) {
+        X = left + box[2] + 1 + 192;
+    }
+    double v[3];
+    if (!solveAt((const double (*)[4])M, X, Y, w0, v)) {
+        sc->kept++;
+        return false;
+    }
+    const int32_t k = sizeAt((const double (*)[4])M, NULL, v);
+    if (!roundCentre(v, k, centre)) {
+        sc->kept++;
+        return false;
+    }
+    *sizeExp = k;
+    if (role == 5) {
+        sc->left++;
+    } else if (role == 6) {
+        sc->right++;
+    } else {
+        sc->grid++;
+    }
     return true;
 }
 
@@ -658,7 +991,7 @@ static bool isAdditive(uint8_t blend)
 /* the texture flags from every draw's state, the meshes' sizes and bones,
  * the grid and particle draws' sizes */
 static bool walk(DMap *m, RdFxBuf *exps, uint32_t *nexp, uint32_t place, RdFxBuf *offs,
-                 uint32_t *placed, uint32_t *notPlaced, uint32_t *noff)
+                 uint32_t *placed, uint32_t *notPlaced, uint32_t *noff, Scene *sc)
 {
     const uint32_t work2 = (uint32_t)RD_TARGET_WORK2 + 1u; /* rd_target's handle */
     RdStateBlock st;
@@ -719,6 +1052,13 @@ static bool walk(DMap *m, RdFxBuf *exps, uint32_t *nexp, uint32_t place, RdFxBuf
                             (*notPlaced)++;
                         }
                     }
+                    if ((place & PLACE_SCENE) && l == 0 && c.type == RDC_MESH && !d->sized) {
+                        /* the scene: about a point this draw's state gives
+                         * (its role by its ordinal; scenePlace) */
+                        if (scenePlace(pay, &c, &st, sc, &d->sizeExp, d->centre, &d->form)) {
+                            d->placed = d->sized = true;
+                        }
+                    }
                     if (!d->sized) {
                         d->sizeExp = drawSize(pay, &c);
                         d->sized = true;
@@ -776,18 +1116,22 @@ bool rd_fixture_make(const uint8_t *dump, size_t n, const char *rules, RdFixture
     }
     RdFxBuf exps = {0}, offs = {0};
     uint32_t nexp = 0, placed = 0, notPlaced = 0, noff = 0;
-    if (!walk(&m, &exps, &nexp, place, &offs, &placed, &notPlaced, &noff) || offs.bad) {
+    Scene sc;
+    memset(&sc, 0, sizeof(sc));
+    if (!walk(&m, &exps, &nexp, place, &offs, &placed, &notPlaced, &noff, &sc) || offs.bad) {
         snprintf(why, whySize, "a command's payload range does not hold");
         rd_fx_free(&exps);
         rd_fx_free(&offs);
         mapFree(&m);
         return false;
     }
-    if (((place & PLACE_LAMPS) && placed == 0) || ((place & PLACE_FANS_OFF) && noff == 0)) {
+    const uint32_t scenePlaced = sc.sheets + sc.behind + sc.left + sc.right + sc.grid;
+    if (((place & PLACE_LAMPS) && placed == 0) || ((place & PLACE_FANS_OFF) && noff == 0) ||
+        ((place & PLACE_SCENE) && scenePlaced == 0)) {
         snprintf(why, whySize,
                  "a placement rule matched nothing (@lamps place: %u meshes placed, %u not; "
-                 "@fans off: %u prims)",
-                 placed, notPlaced, noff);
+                 "@fans off: %u prims; @scene place: %u meshes placed, %u not)",
+                 placed, notPlaced, noff, scenePlaced, sc.kept);
         rd_fx_free(&exps);
         rd_fx_free(&offs);
         mapFree(&m);
@@ -886,16 +1230,22 @@ bool rd_fixture_make(const uint8_t *dump, size_t n, const char *rules, RdFixture
         }
         rd_fx_put32(&sk, nexp);
         rd_fx_put(&sk, exps.p, exps.n);
-        if (placed || noff) {
-            /* the placement section (rd_fixture.h) */
-            rd_fx_put32(&sk, RD_FX_PLACE_TAG);
-            rd_fx_put32(&sk, placed);
+        if (placed || noff || scenePlaced) {
+            /* the placement section (rd_fixture.h): RD_FX_PLACE_TAG as it
+             * always was; with @scene place RD_FX_PLACE_TAG2, each mesh's
+             * form after its centre */
+            const bool scene = (place & PLACE_SCENE) != 0;
+            rd_fx_put32(&sk, scene ? RD_FX_PLACE_TAG2 : RD_FX_PLACE_TAG);
+            rd_fx_put32(&sk, placed + scenePlaced);
             for (uint32_t i = 0; i < m.nm; i++) {
                 const DMesh *d = &m.mesh[i];
                 if (d->placed) {
                     rd_fx_put32(&sk, d->id);
                     for (int a = 0; a < 3; a++) {
                         rd_fx_put32(&sk, (uint32_t)d->centre[a]);
+                    }
+                    if (scene) {
+                        rd_fx_put32(&sk, d->form);
                     }
                 }
             }
@@ -956,11 +1306,18 @@ bool rd_fixture_make(const uint8_t *dump, size_t n, const char *rules, RdFixture
                                rd_fx_pattern_name(q), perPattern[q]);
             }
         }
-        if (place && at > 0 && (size_t)at < reportSize) {
+        if ((place & (PLACE_LAMPS | PLACE_FANS_OFF)) && at > 0 && (size_t)at < reportSize) {
+            at += snprintf(report + at, reportSize - (size_t)at,
+                           "; placement: %u meshes drawn into WORK2 generated on it (%u kept their "
+                           "origin), %u prims drawn into WORK2 generated beside it",
+                           placed, notPlaced, noff);
+        }
+        if ((place & PLACE_SCENE) && at > 0 && (size_t)at < reportSize) {
             snprintf(report + at, reportSize - (size_t)at,
-                     "; placement: %u meshes drawn into WORK2 generated on it (%u kept their "
-                     "origin), %u prims drawn into WORK2 generated beside it",
-                     placed, notPlaced, noff);
+                     "; scene: %u meshes of list 0 placed (%u sheets, %u behind a sheet, %u "
+                     "across the left edge, %u past the right edge, %u on the picture), %u kept "
+                     "their origin",
+                     scenePlaced, sc.sheets, sc.behind, sc.left, sc.right, sc.grid, sc.kept);
         }
     }
     if (!ok) {
