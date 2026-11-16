@@ -18,6 +18,7 @@
 #include "diag_host.h"
 #include "display_clock.h"
 #include "dump_zip.h"
+#include "exit_info.h"
 #include "font.h" /* port/ui: ico_window_progress's text and bar */
 #include "host_config.h"
 #include "host_fs.h"
@@ -2007,6 +2008,7 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
 
         if (ico_host_logs_dir(logs, sizeof(logs)) == 0 &&
             ico_path_join(act, sizeof(act), logs, "startup-activity.txt") == 0) {
+            exit_info_begin(logs, act); /* "the previous run ended: ..." (issue 215) */
             lazyStart = ico_diag_startup_activity_begin(act, retry != STARTUP_RETRY_NONE) != 0;
         }
     }

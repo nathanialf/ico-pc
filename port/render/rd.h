@@ -3000,6 +3000,15 @@ typedef struct RdPerfRecord {
     /* of shadowOne, the draws that read the stencil four texels a gather
      * (the rest a texel a load: g_rd.shadowLoad, rd_shadow_selftest.c) */
     uint32_t shadowGathered;
+    /* The count at its full size above 1x (rd_shadow_count.h; issue 123,
+     * v0.11.8): shadowCountStencil the first levels stepped from the
+     * stencil (no full-size pass), shadowCountFull the full-size count
+     * passes drawn (rd_shadow_one.c fullPass), shadowCountSeven the counts
+     * above 1x the seven draws made by the form's choice, shadowCountGuard
+     * the guard's fallbacks (the pass after all, or a chain refused);
+     * shadowCountForm the form asked this replay + 1 (RD_SC_*; 0 none) */
+    uint16_t shadowCountStencil, shadowCountFull, shadowCountSeven, shadowCountGuard;
+    uint8_t shadowCountForm;
     /* The one draw's pass (rd_shadow_one.c): its colour, written whole,
      * shadowOneW x shadowOneH (no depth attachment), and the stencil it
      * reads through its view, shadowReadW x shadowReadH texels (the last

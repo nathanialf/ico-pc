@@ -35,6 +35,9 @@ static char s_exe[PATH_BYTES];
 static char s_pref[PATH_BYTES];
 static char s_ini[PATH_BYTES];
 static char s_version_text[256];
+/* the run before's end (ico_report_set_exit_info) */
+static char s_exit_verdict[1024];
+static char s_exit_trace[128];
 /* Linux: VERSION.txt where the AppImage keeps it, beside the program in
    the mount (<program's folder>/../share/doc/ico-pc/), "" none */
 static char s_version_pkg[PATH_BYTES + 32];
@@ -89,6 +92,12 @@ void ico_report_set_paths(const char *logs_dir, const char *exe_dir, const char 
 void ico_report_set_version_text(const char *text)
 {
     snprintf(s_version_text, sizeof s_version_text, "%s", text != NULL ? text : "");
+}
+
+void ico_report_set_exit_info(const char *verdict, const char *trace)
+{
+    snprintf(s_exit_verdict, sizeof s_exit_verdict, "%s", verdict != NULL ? verdict : "");
+    snprintf(s_exit_trace, sizeof s_exit_trace, "%s", trace != NULL ? trace : "");
 }
 
 /* dir + "/" + name into out: 0, or -1 when it does not fit or dir is "" */
@@ -866,6 +875,10 @@ static void build_text(const IcoReportInputs *in)
        system ends the app on the device's memory, not the app's) */
     text_kv("memory: ",
             in->memory != NULL && in->memory[0] != '\0' ? in->memory : "(unknown on this system)");
+    /* issue 215: how the run before ended (exit_info.h) */
+    if (s_exit_verdict[0] != '\0') {
+        text_line(s_exit_verdict);
+    }
 
     memset(s_key, 0, sizeof s_key);
     s_perf_n = 0;
@@ -975,6 +988,14 @@ int ico_report_write(const IcoReportInputs *in, char *name, size_t name_size)
     }
     if (join(path, sizeof path, s_logs, "last-run-previous.txt") == 0) {
         (void)zip_add_file("last-run-previous.txt", path, 0);
+    }
+    /* how the run before ended, and the newest trace Android kept
+       (exit_info.h, issue 215) */
+    if (join(path, sizeof path, s_logs, "exit-info.txt") == 0) {
+        (void)zip_add_file("exit-info.txt", path, 0);
+    }
+    if (s_exit_trace[0] != '\0' && join(path, sizeof path, s_logs, s_exit_trace) == 0) {
+        (void)zip_add_file(s_exit_trace, path, 0);
     }
     if (join(path, sizeof path, s_pref, "config.toml") == 0) {
         (void)zip_add_file("config.toml", path, 0);

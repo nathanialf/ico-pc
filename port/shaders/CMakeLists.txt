@@ -322,6 +322,12 @@ ico_add_shader(fx_glowblur_ps fx_glowblur.hlsl fx_glowblur_ps fragment)
 ico_add_shader(shadowres_step_ps shadowres.hlsl shadowres_step_ps fragment)
 ico_add_shader(shadowres_tent_ps shadowres.hlsl shadowres_tent_ps fragment)
 ico_add_shader(shadowres_tent2_ps shadowres.hlsl shadowres_tent2_ps fragment)
+# the first level's step reading the count from the depth-stencil's stencil
+# through the count's table (SHADOWRES_FROM_STENCIL: no full-size count pass;
+# rd_shadowres.c "The count from the stencil"), the same bytes; on every
+# backend with the stencil view
+ico_add_shader(shadowres_step_stencil_ps shadowres.hlsl shadowres_step_ps fragment
+               DEFINES SHADOWRES_FROM_STENCIL=1)
 # Motion blur: Smooth's accumulator (port/render/rd_blur_smooth.c): its step
 # and its resolve into the RGBA8 target the motion blur's sprite reads, behind
 # blit_vs; used on both backends

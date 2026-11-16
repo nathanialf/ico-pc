@@ -188,6 +188,13 @@ enum {
        again after 10 s without; count the times let go, second count the
        times taken again */
     ICO_ATT_PIN_RELEASE,
+    /* rd_shadow_count.c, rd_shadowres.c (issue 123, v0.11.8): above 1x the
+       first shadow level's step reads the count from the depth-stencil's
+       stencil, with no full-size count pass, where the device's own timing
+       found it the cheapest of the three forms (refused with the form it
+       kept otherwise); count the steps from the stencil, second count the
+       full-size passes the guard drew after all */
+    ICO_ATT_SHADOW_COUNT,
     ICO_ATT_COUNT
 };
 
@@ -423,5 +430,11 @@ void ico_attempt_decide_picture_health(int vulkan);
    more faster cores, 2 the few-cores rule).  On with rule 1; else not
    applicable with the reason */
 void ico_attempt_decide_pin_release(int android, int rule);
+/* the shadow count from the stencil (rd_shadow_count.c at the renderer's
+   start): view the device reads the stencil through a view of its own (the
+   count in one draw, RhiLimits.stencilView): on, the form timed at the
+   first shadowed scene above 1x (rd_shadow_count.c sets it again there);
+   else not applicable */
+void ico_attempt_decide_shadow_count(int view);
 
 #endif

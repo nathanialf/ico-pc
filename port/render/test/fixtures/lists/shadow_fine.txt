@@ -28,3 +28,9 @@ fx-gate-blended 3:54,3:59,3:64 owner,tall,e1x,pixel
 fx-gate2 3:54,3:59,3:64 pixel
 fx-gate2-prev 3:54,3:59,3:64 pixel
 fx-gate2-blended 3:54,3:59,3:64 pixel
+# a blended main gate picture from the Adreno 740 dumps (fixtures.txt:
+# dumps/163/frame-20261106-080033-v3910-blended; count 3:6-3:29, levels
+# 3:40/45/50, composites 3:58/63/68): the full-size count's forms alone at
+# the tablet's path
+# (rd_shadow_fine_ab check 9; no goldens)
+fx-123-blended 3:58,3:63,3:68 forms
