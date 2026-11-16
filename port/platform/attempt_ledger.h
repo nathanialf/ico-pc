@@ -200,6 +200,12 @@ enum {
        no PABE), behind its start-up self-test; count the pairs in one pass,
        second count the pairs kept two-pass */
     ICO_ATT_ONEPASS,
+    /* rd_plain_camera.c, rd_pipeline.c (issue 123, v0.11.8): on a device
+       that keeps the VU plain set (the Adreno 740 on Qualcomm's driver,
+       Turnip) the static meshes and grids take the camera rule, the skinned
+       draws keep the PS2's drops (issue 163); count the mesh and grid draws
+       by the camera, second count the skinned draws kept */
+    ICO_ATT_PLAIN_CAMERA,
     ICO_ATT_COUNT
 };
 
@@ -447,5 +453,10 @@ void ico_attempt_decide_pin_release(int android, int rule);
    first shadowed scene above 1x (rd_shadow_count.c sets it again there);
    else not applicable */
 void ico_attempt_decide_shadow_count(int view);
+/* the camera rule on the plain set (rd_pipeline.c rd__vu_policy_init, at
+   each device start): plainRow the device keeps the VU plain set
+   (g_rd.vuNoBeside), camera the camera rule in force ([dev] region_rule).
+   On with both; not applicable with the reason otherwise */
+void ico_attempt_decide_plain_camera(int plainRow, int camera);
 
 #endif

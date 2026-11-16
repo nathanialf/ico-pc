@@ -433,6 +433,16 @@ static void test_classes(void)
            here reads the stencil through its view (the count in one draw) */
         ico_attempt_decide_shadow_count(1);
         CHECK(ico_attempt_state_of(ICO_ATT_SHADOW_COUNT) == ICO_ATT_ON);
+        /* the camera rule for static meshes on the plain set (rd_pipeline.c):
+           the classes with Qualcomm's pass row are the Adreno 740 on its own
+           driver, which keeps the plain set (the device table's row); on
+           there under the camera rule, not applicable elsewhere and under
+           region_rule = ps2 */
+        ico_attempt_decide_plain_camera(d->passRow != NULL, 0);
+        CHECK(ico_attempt_state_of(ICO_ATT_PLAIN_CAMERA) == ICO_ATT_NA);
+        ico_attempt_decide_plain_camera(d->passRow != NULL, 1);
+        CHECK(ico_attempt_state_of(ICO_ATT_PLAIN_CAMERA) ==
+              (d->passRow != NULL ? ICO_ATT_ON : ICO_ATT_NA));
         /* the whole start line, its last row included, in the window's 4 KB
            parts (window_perf_rank.c ledger_lines, ico_attempt_start_part):
            one part, or two since the v0.11.7 rows, each whole rows */

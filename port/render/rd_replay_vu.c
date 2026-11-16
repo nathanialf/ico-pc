@@ -14,6 +14,7 @@
 #include "rd_onepass.h"
 #include "rd_passring.h"
 #include "rd_perf_hooks.h"
+#include "rd_plain_camera.h"
 #include "rd_replay.h"
 #include "rd_velocity.h"
 #include "rd_vu_audit.h"
@@ -1559,12 +1560,16 @@ typedef struct VuSource {
  * RD_DROPS_KEPT, the PS2's drop (ICO_VU_NO_BESIDE): those cases, a mesh
  * without winding marks (RdMeshRec.facingFrom none: a prelit stream the EE
  * gave no table, an older dump's prelit meshes; counted by why, noFacing),
- * and the device's plain set under either mode (g_rd.vuNoBeside: a
- * device-table row or Turnip, issue 163: the plain set hides the stray
- * vertex the extended set's clipped triangles showed there, and either
- * rule would draw those triangles clipped again; the profile line says
- * "side bands: off ...", the region rule's start line "off on this
- * device's plain set"). */
+ * and on the device's plain set (g_rd.vuNoBeside: a device-table row or
+ * Turnip, issue 163) its skinned draws under the camera rule and every
+ * draw under region_rule = ps2 (rd_plain_camera.h rd__plain_keeps_drops):
+ * the plain set hides the stray vertex a skinned draw's clipped triangles
+ * showed there (a bone's address or matrix read wrong: a static mesh or a
+ * grid reads no bone), and the side bands would draw those triangles
+ * clipped again; the static meshes and grids take the camera rule there
+ * as everywhere (issue 123's right wall at 3:2).  The profile line says
+ * "side bands: off ...", the region rule's start line "the camera decides
+ * for static meshes on this device's plain set". */
 enum { RD_DROPS_KEPT, RD_DROPS_BESIDE, RD_DROPS_CAMERA, RD_DROPS_CAMERA_TWO_SIDED };
 
 static int s_besideEnv = -1;
@@ -1583,7 +1588,9 @@ static int vuDropMode(const RdCmd *c, const RdMeshRec *m, uint8_t *noFacing)
                     s_besideEnv ? "on" : "off (ICO_RD_VU_BESIDE=0)");
         }
     }
-    if (g_rd.vuNoBeside) {
+    if (rd__plain_keeps_drops(g_rd.vuNoBeside, camera, c->type == RDC_SKINNED)) {
+        /* the device's plain set (rd_plain_camera.h): its skinned draws,
+         * and every draw under region_rule = ps2 (no side bands there) */
         return RD_DROPS_KEPT;
     }
     if (camera && c->type == RDC_GRID) {
@@ -4043,6 +4050,12 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     g_rdPerf.vuBesideCards += src->besideCards;
     g_rdPerf.vuCameraDraws += src->camera;
+    if (g_rd.vuNoBeside && c->type != RDC_PARTICLES) {
+        /* the device's plain set: the meshes and grids the camera rule
+           holds, the skinned draws that keep the PS2's drops (vuDropMode) */
+        rd__plain_camera_note(src->camera != 0u, c->type == RDC_SKINNED, &g_rdPerf.vuPlainCamera,
+                              &g_rdPerf.vuPlainKept);
+    }
     DrawSetup ds;
     if (!rd__replay_prepare_draw(r, &ds, NULL)) {
         return;

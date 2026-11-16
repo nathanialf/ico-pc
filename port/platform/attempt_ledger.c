@@ -69,6 +69,8 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
     [ICO_ATT_SHADOW_COUNT] = {"the shadow levels' count from the stencil", "steps from the stencil",
                               "full-size passes drawn after all"},
     [ICO_ATT_ONEPASS] = {"the two-pass blend in one pass", "pairs", "kept two-pass"},
+    [ICO_ATT_PLAIN_CAMERA] = {"the camera rule for static meshes on the plain set",
+                              "mesh and grid draws by the camera", "skinned draws kept"},
 };
 
 /* the rows' live values (__atomic), and the block text's last counts (the
@@ -850,5 +852,21 @@ void ico_attempt_decide_picture_health(int vulkan)
     } else {
         ico_attempt_state(ICO_ATT_PICTURE_HEALTH, ICO_ATT_NA,
                           "only Vulkan's GPU stamps say a picture came back unfinished");
+    }
+}
+
+void ico_attempt_decide_plain_camera(int plainRow, int camera)
+{
+    if (!plainRow) {
+        ico_attempt_state(ICO_ATT_PLAIN_CAMERA, ICO_ATT_NA,
+                          "this device draws with the extended set or by choice with the plain "
+                          "one: the camera decides on every draw");
+    } else if (!camera) {
+        ico_attempt_state(ICO_ATT_PLAIN_CAMERA, ICO_ATT_NA,
+                          "[dev] region_rule = ps2: the PS2's drops on every draw");
+    } else {
+        ico_attempt_state(ICO_ATT_PLAIN_CAMERA, ICO_ATT_ON,
+                          "static meshes and grids by the camera, skinned draws keep the PS2's "
+                          "drops (issue 163)");
     }
 }

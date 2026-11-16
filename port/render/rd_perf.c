@@ -37,6 +37,7 @@
 #include "rd_perf_gap.h"
 #include "rd_perf_hooks.h"
 #include "rd_perf_rare.h"
+#include "rd_plain_camera.h"
 #include "rd_shadow_box.h"
 #include "rd_shadow_count.h" /* the count's trial (rd__shadow_count_trial) */
 #include "rd_shadow_tile.h"
@@ -266,6 +267,8 @@ static uint64_t s_besideNoFacing[RD_VU_NOFACE_COUNT];
 static uint64_t s_besideCards;
 /* the VU draws under the camera rule (RdPerfRecord.vuCameraDraws) */
 static uint64_t s_cameraDraws;
+/* on the device's plain set (RdPerfRecord.vuPlainCamera, vuPlainKept) */
+static uint64_t s_plainCamera, s_plainKept;
 /* the store plan's (RdPerfRecord storePasses, storeDepthDropped,
  * storeColorDropped) and the replays it planned */
 static uint64_t s_storePasses, s_storeDepth, s_storeColor;
@@ -319,6 +322,8 @@ bool rd_perf_pop(RdPerfRecord *out)
     }
     s_besideCards += s_queue[s_head].vuBesideCards;
     s_cameraDraws += s_queue[s_head].vuCameraDraws;
+    s_plainCamera += s_queue[s_head].vuPlainCamera;
+    s_plainKept += s_queue[s_head].vuPlainKept;
     s_fuseSame += s_queue[s_head].vuFuseSame;
     for (int k = 0; k < RD_VU_FUSE_WHY_COUNT; k++) {
         s_fuseKept[k] += s_queue[s_head].vuFuseKept[k];
@@ -631,6 +636,14 @@ const char *rd_perf_backend_text(void)
                                (double)s_cameraDraws / (double)s_backendReplays);
         at += k > 0 && (size_t)k < sizeof(s_text) - at ? (size_t)k : 0;
     }
+    {
+        /* the device's plain set (rd_plain_camera.h, issue 123): the
+           meshes and grids the camera rule held, the skinned draws that
+           kept the PS2's drops (issue 163); nothing on other devices */
+        const size_t k = rd__plain_camera_text(s_text + at, sizeof(s_text) - at, s_plainCamera,
+                                               s_plainKept, s_backendReplays);
+        at += k < sizeof(s_text) - at ? k : 0;
+    }
     if (noFacing) {
         /* the side bands or the camera rule (rd_replay_vu.c vuDropMode):
            the draws that kept the PS2's drops because their mesh has no
@@ -790,6 +803,7 @@ const char *rd_perf_backend_text(void)
     memset(s_besideNoFacing, 0, sizeof(s_besideNoFacing));
     s_besideCards = 0;
     s_cameraDraws = 0;
+    s_plainCamera = s_plainKept = 0;
     s_cutCarried = s_cutSkipped = s_cutLast = 0;
     memset(s_cutLastWhy, 0, sizeof(s_cutLastWhy));
     s_smMerged = s_smArmed = s_smResets = s_smClears = 0;
