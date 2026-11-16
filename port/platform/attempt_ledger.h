@@ -57,9 +57,7 @@ typedef enum IcoAttemptState {
 
 /* the high queue priority's row's words since its removal (its why at
    every start) */
-#define ICO_ATT_QPRIO_REMOVED_WHY                                                                  \
-    "taken off for issues 215 and 123: no queue asked a high global priority; the block's "        \
-    "stalls counted on the passes' row"
+#define ICO_ATT_QPRIO_REMOVED_WHY "taken off, issues 215 and 123"
 
 /* The rows, in the lines' order */
 enum {

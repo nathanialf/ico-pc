@@ -2376,8 +2376,10 @@ print it:
   is the block's stalls (`Qualcomm passes as VkRenderPass objects on 812 passes (2 stalls in the
   block)`).
 - A removed row keeps its place so two logs compare row by row: it says `removed` at the start
-  with why (`Qualcomm queue at high priority removed (taken off for issues 215 and 123: no queue
-  asked a high global priority; the block's stalls counted on the passes' row)`) and has no count.
+  with why (`Qualcomm queue at high priority removed (taken off, issues 215 and 123)`) and has no
+  count; the block's stalls are counted on the passes' row. The start line is written in 4 KB
+  parts of whole rows (`ico_attempt_start_part`), so a longer line takes another part and is never
+  cut.
 
 Which device gets which attempt is the device table's ([DEVICE_TABLE.md](DEVICE_TABLE.md)), and
 so are a row's words where no row of it holds (`rhi_device_choice_na_words`).

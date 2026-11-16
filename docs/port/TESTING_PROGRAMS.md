@@ -1196,7 +1196,7 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   second count whatever its state (`(2 stalls in the block)` not applicable, `(1 ...)` and `(3
   ...)` on, then 0 with no stalls asked and 0 off), the high queue priority's row `removed` on
   every class (taken off, issues 215 and 123) with its words in the start line (`Qualcomm queue at
-  high priority removed (taken off for issues 215 and 123: ...)`), left out of every block line and
+  high priority removed (taken off, issues 215 and 123)`), left out of every block line and
   still removed after a reset, the VU record by compute's and
   the turn fold's states per class (the VU record by compute on with the shipped default on the
   Pixel's D-Series DXT, off by default on the PowerVR B, which never ran it; the Mali and the Adreno

@@ -496,7 +496,7 @@ static void test_classes(void)
                    ico_attempt_state_word(ico_attempt_state_of(ICO_ATT_PACE_GPU)));
             failures++;
         }
-        char b[2048], want[256];
+        char b[8192], want[256];
         (void)ico_attempt_start_text(b, sizeof b);
         snprintf(want, sizeof want, "; no-volume break %s (%s)",
                  ico_attempt_state_word(d->wantNoVolume), d->wantNoVolumeWhy);
@@ -514,7 +514,7 @@ static void test_classes(void)
                                "start-up on a driver that lost the device before; one pass a "
                                "picture");
     {
-        char b[2048];
+        char b[8192];
         (void)ico_attempt_start_text(b, sizeof b);
         CHECK(strstr(b, "; subpass read off by default (off on this driver this release: a new "
                         "kind of GPU work at start-up on a driver that lost the device before; "
@@ -631,7 +631,7 @@ static void test_classes(void)
     CHECK(ico_attempt_decide_compaction(1, NULL, G, -1, 1, 1, 1) == 1);
     ico_attempt_fire(ICO_ATT_COMPACTION, 9866);
     {
-        char b[2048];
+        char b[8192];
         (void)ico_attempt_start_text(b, sizeof b);
         CHECK(strstr(b, "; index compaction on (the Mali-G52, its start-up self-test passed)") !=
               NULL);
@@ -654,7 +654,7 @@ static void test_classes(void)
     ico_attempt_fire(ICO_ATT_PACE_GPU, 598);
     ico_attempt_fire2(ICO_ATT_PACE_GPU, 3);
     {
-        char b[2048];
+        char b[8192];
         (void)ico_attempt_start_text(b, sizeof b);
         CHECK(strstr(b, "; in-between pictures for the GPU's predicted end on (ICO_RD_PACE_GPU=1: "
                         "each picture drawn for its GPU work's predicted end)") != NULL);
@@ -673,7 +673,7 @@ static void test_classes(void)
     ico_attempt_fire(ICO_ATT_AS_MADE_TIMER, 600);
     ico_attempt_fire2(ICO_ATT_AS_MADE_TIMER, 4);
     {
-        char b[2048];
+        char b[8192];
         (void)ico_attempt_block_text(b, sizeof b, -1);
         CHECK(strstr(b, "; in-between pictures on their own timer on 600 pictures timed (4 held "
                         "in their frame's tick)") != NULL);
@@ -695,7 +695,7 @@ static void test_classes(void)
     ico_attempt_fire(ICO_ATT_PACE_SCREEN, 700);
     ico_attempt_fire2(ICO_ATT_PACE_SCREEN, 2);
     {
-        char b[2048];
+        char b[8192];
         (void)ico_attempt_block_text(b, sizeof b, -1);
         CHECK(strstr(b, "; in-between pictures for the screen's refresh on 700 pictures placed (2 "
                         "held at their frame's edges)") != NULL);
@@ -723,7 +723,7 @@ static void test_classes(void)
     ico_attempt_fire(ICO_ATT_PACE_EVEN, 600);
     ico_attempt_fire2(ICO_ATT_PACE_EVEN, 3);
     {
-        char b[2048];
+        char b[8192];
         (void)ico_attempt_block_text(b, sizeof b, -1);
         CHECK(strstr(b, "; an even number of refreshes a picture on 600 pictures aimed (3 late for "
                         "their refresh)") != NULL);
@@ -755,7 +755,7 @@ static void test_classes(void)
     CHECK(ico_attempt_state_of(ICO_ATT_REC_NEED) == ICO_ATT_ON);
     ico_attempt_fire(ICO_ATT_REC_NEED, 2);
     {
-        char b[2048];
+        char b[8192];
         (void)ico_attempt_start_text(b, sizeof b);
         CHECK(strstr(b, "; VU record sized from need on (made at the run's need, less than the "
                         "memory bound allowed)") != NULL);
@@ -780,7 +780,7 @@ static void test_classes(void)
     ico_attempt_fire(ICO_ATT_VOLUME_FS, 8);
     ico_attempt_fire2(ICO_ATT_VOLUME_FS, 2);
     {
-        char b[2048];
+        char b[8192];
         (void)ico_attempt_start_text(b, sizeof b);
         CHECK(strstr(b, "; the shadow volumes by the stencil-only entry on (ICO_RD_VOLUME_FS=1, "
                         "self-test passed)") != NULL);
@@ -808,7 +808,7 @@ static void test_classes(void)
     ico_attempt_fire(ICO_ATT_COMP_SPEC, 9);
     ico_attempt_fire2(ICO_ATT_COMP_SPEC, 1);
     {
-        char b[2048];
+        char b[8192];
         (void)ico_attempt_start_text(b, sizeof b);
         CHECK(strstr(b, "; the shadow composites by their own entry on (ICO_RD_COMP_SPEC=1, "
                         "self-test passed)") != NULL);
@@ -978,6 +978,29 @@ static void test_start_parts(void)
     }
     /* 25 rows of over 600 bytes: more than one part */
     CHECK(row == ICO_ATT_COUNT && seen == ICO_ATT_COUNT && parts >= 2);
+    /* the removed row among every other row at a 600-byte reason (longer
+       than any decider's words): its start words come whole in one part,
+       each part within the window's 4 KB buffer */
+    ico_attempt_reset();
+    for (int i = 0; i < ICO_ATT_COUNT; i++) {
+        if (i != ICO_ATT_ADRENO_B) {
+            ico_attempt_state(i, ICO_ATT_ON, why);
+        }
+    }
+    row = 0;
+    parts = 0;
+    int removedSeen = 0;
+    while (row < ICO_ATT_COUNT && parts < 100) {
+        const int from = row;
+        const size_t n = ico_attempt_start_part(b, sizeof b, &row);
+        CHECK(n + 1u <= sizeof b && n == strlen(b) && row > from);
+        if (strstr(b, "Qualcomm queue at high priority removed (taken off, issues 215 and 123)") !=
+            NULL) {
+            removedSeen++;
+        }
+        parts++;
+    }
+    CHECK(row == ICO_ATT_COUNT && removedSeen == 1);
     /* a row over a whole buffer: cut there, the next part from the row after */
     char s[64];
     row = 0;
@@ -1040,7 +1063,7 @@ int main(void)
     test_flat0_capture();
     test_health();
     test_start_parts();
-    char b[2048];
+    char b[8192];
 
     ico_attempt_reset();
     /* nothing reported: the start line names every row */
@@ -1054,9 +1077,9 @@ int main(void)
     CHECK(strstr(b, "; the shadow volumes by the stencil-only entry not reported") != NULL);
     CHECK(strstr(b, "; subpass read not reported") != NULL);
     /* the high queue priority's row: removed from the start, with its words */
-    CHECK(strstr(b, "; Qualcomm queue at high priority removed (taken off for issues 215 and "
-                    "123: no queue asked a high global priority; the block's stalls counted on "
-                    "the passes' row); ") != NULL);
+    CHECK(
+        strstr(b, "; Qualcomm queue at high priority removed (taken off, issues 215 and 123); ") !=
+        NULL);
     CHECK(ico_attempt_state_of(ICO_ATT_SUBPASS) == ICO_ATT_NOT_SET);
     CHECK(ico_attempt_state_of(ICO_ATT_BLEND_CONST) == ICO_ATT_NOT_BUILT);
     /* and the block line is empty, with no stalls asked */
@@ -1136,9 +1159,9 @@ int main(void)
     CHECK(strcmp(ico_attempt_state_word(ICO_ATT_REMOVED), "removed") == 0);
     CHECK(strcmp(ico_attempt_why_of(ICO_ATT_ADRENO_B), ICO_ATT_QPRIO_REMOVED_WHY) == 0);
     (void)ico_attempt_start_text(b, sizeof(b));
-    CHECK(strstr(b, "; Qualcomm queue at high priority removed (taken off for issues 215 and "
-                    "123: no queue asked a high global priority; the block's stalls counted on "
-                    "the passes' row); ") != NULL);
+    CHECK(
+        strstr(b, "; Qualcomm queue at high priority removed (taken off, issues 215 and 123); ") !=
+        NULL);
     (void)ico_attempt_block_text(b, sizeof(b), 3);
     CHECK(strstr(b, "Qualcomm passes as VkRenderPass objects on 0 passes (3 stalls in the "
                     "block)") != NULL);
