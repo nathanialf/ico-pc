@@ -64,7 +64,8 @@ static const char *const kA[LAST_RUN_SLOTS] = {
     "in the background since 12.5 s",
     "level 15 (running critical) at 3.9 s, 1 in all",
     "47 at start, 66 now (+19)",
-    "1911 MB now of 11265 MB, lowest 1897 MB at 4.1 s, floor 1915 MB",
+    ("1911 MB now of 11265 MB, lowest 1897 MB at 4.1 s, floor 1915 MB; file cache 2104, anon "
+     "3012, kernel 640, GPU 4210, rest 980, swap used 1200 MB"),
     "251 MB now, peak 260 MB",
     "kernel 12 MB",
     "start-up set 290 of 684; 27 made as the frames needed them; the last pipeline note: none",
@@ -403,6 +404,9 @@ static void run(const char *base)
     b.availKb = 1897 * 1024;
     last_run_beat(&b);
     b.availKb = 1903 * 1024;
+    /* the system's split after the free figure (mem_breakdown.h, issue 215) */
+    snprintf(b.memText, sizeof b.memText,
+             "file cache 2104, anon 3012, kernel 640, GPU ?, rest 5190, swap used 1200 MB");
     last_run_beat(&b);
 
     /* the game, its first picture, play */
@@ -428,6 +432,11 @@ static void run(const char *base)
     CHECK(s_f.resetsStart == 47 && s_f.resetsNow == 66 &&
           text_is(s_f.value[LAST_RUN_RESETS], "47 at start, 66 now (+19)"));
     CHECK(s_f.freeMb == 1903 && s_f.freeLowMb == 1897 && s_f.floorMb == 1915);
+    CHECK(strncmp(s_f.value[LAST_RUN_FREE], "1903 MB now of 11265 MB, lowest 1897 MB at ", 43) ==
+              0 &&
+          strstr(s_f.value[LAST_RUN_FREE],
+                 " s, floor 1915 MB; file cache 2104, anon 3012, "
+                 "kernel 640, GPU ?, rest 5190, swap used 1200 MB") != NULL);
     CHECK(s_f.rssMb == 251 && s_f.peakMb == 260);
     CHECK(text_is(s_f.value[LAST_RUN_PROCESS], "251 MB now, peak 260 MB"));
     CHECK(text_is(s_f.value[LAST_RUN_GPU_MEMORY], "kernel 12 MB"));

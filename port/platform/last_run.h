@@ -174,6 +174,10 @@ typedef struct LastRunBeat {
     const char *note;   /* the activity note, "" none */
     long rssKb, peakKb, availKb, totalKb;
     long floorMb; /* -1 no floor on this system, 0 off */
+    /* the system's split after the free figure (mem_breakdown.h
+       mem_breakdown_last_run_text: "file cache 2104, anon 3012, ..."; ""
+       none) */
+    char memText[112];
 } LastRunBeat;
 
 /* Reads the previous run's file beside activityPath (each line through
@@ -202,6 +206,8 @@ void last_run_set_gpu_resets(int32_t now);
 void last_run_set_note(const char *note);
 /* the driver's GPU memory for this process, as the sampler words it */
 void last_run_set_gpu_memory(const char *text);
+/* the text last set (mem_watch.c's lines) */
+const char *last_run_gpu_memory_text(void);
 /* the system's summary hook (Android 11+, android/last_run_android.c) */
 void last_run_set_summary_hook(void (*fn)(const char *summary));
 /* Ends: written and synced.  last_run_end_crash: async-signal-safe (the

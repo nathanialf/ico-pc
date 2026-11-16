@@ -24,6 +24,8 @@ target_sources(ico_platform PRIVATE
     kernel_host.c
     last_run.c
     log_cost.c
+    mem_breakdown.c
+    mem_watch.c
     pace_policy.c
     perf_hint.c
     memory_floor.c
@@ -352,6 +354,19 @@ target_compile_options(last_run_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_
 target_link_libraries(last_run_test PRIVATE ico_platform ico_host_fs)
 if(ICO_RUN_TESTS)
     add_test(NAME last_run COMMAND last_run_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
+# Where the device's memory is (mem_breakdown.c, mem_watch.c, issue 215):
+# /proc/meminfo, /proc/self/status and the /sys nodes parsed from a fake
+# tree under the build folder (short reads, missing fields, unreadable and
+# missing files), the parts and their texts word for word, the batch
+# lines' every-Nth and fell-by-step rules and their bound, the set's
+# summary arithmetic, and last-run.txt's memory field through a round trip
+add_executable(mem_breakdown_test test/mem_breakdown_test.c)
+target_compile_options(mem_breakdown_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(mem_breakdown_test PRIVATE ico_platform ico_host_fs)
+if(ICO_RUN_TESTS)
+    add_test(NAME mem_breakdown COMMAND mem_breakdown_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
 # F12's zip (dump_zip.c): the dump and the log in one archive, read back

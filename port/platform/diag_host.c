@@ -41,6 +41,8 @@
 #include "memory_floor.h"
 #include "host_fs.h"
 #include "last_run.h"
+#include "mem_breakdown.h"
+#include "mem_watch.h"
 #include "rd_bisect_plan.h"
 #include "rd_passring.h"
 #include "report.h"
@@ -532,6 +534,7 @@ void ico_diag_set_pipelines(unsigned int done, unsigned int total, unsigned int 
     pipes_longest_ms = longest_ms;
     pipes_total = total;
     last_run_set_pipelines(done, total);
+    mem_watch_set_pipelines(done, total); /* the system's memory over the set (issue 215) */
 }
 
 void ico_diag_set_exit_hook(void (*fn)(const char *reason))
@@ -2476,8 +2479,20 @@ static void last_run_beat_now(void)
     b.ticks = ticks_fn != NULL ? ticks_fn() : 0u;
     b.pipesMade = pipes_made;
     b.note = note;
-    (void)ico_diag_process_memory(&b.rssKb, &b.peakKb);
-    (void)ico_diag_device_memory(&b.availKb, &b.totalKb);
+    {
+        /* one read of each /proc file, the system's split with them (issue 215;
+           the /sys figures the last full read's: none read on this thread) */
+        MemBreakdown m;
+        (void)mem_breakdown_read("", MEM_BD_PROC, &m, NULL);
+        b.rssKb = m.rssKb;
+        b.peakKb = m.hwmKb;
+        b.availKb = m.availKb;
+        b.totalKb = m.totalKb;
+        if (b.availKb < 0 || b.totalKb < 0) {
+            b.availKb = b.totalKb = -1;
+        }
+        mem_breakdown_last_run_text(&m, b.memText, sizeof b.memText);
+    }
     b.floorMb = -1;
 #ifdef __ANDROID__
     /* the start-up set's floor (memory_floor.h): the setting once the set
@@ -2631,6 +2646,7 @@ void ico_diag_note_low_memory(int level)
     snprintf(line, sizeof line, "%s (%s; signal %u of this run) %s; %s", trim_kind(level), lv, nth,
              pipes, mem);
     ico_diag_log("ico_pc: the system asked the app to free memory: %s", line);
+    mem_watch_trim(level); /* what holds the memory then (issue 215) */
     last_run_trim(level, level >= 0 ? trim_name(level) : "no level given");
     /* 20 and above: the app left the foreground (the lifecycle's event may
        come later, or not reach a held main thread); the line goes into the

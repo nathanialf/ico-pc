@@ -804,6 +804,15 @@ void rd_set_batch_fn(RdActivityFn fn);
  * default): "memory unknown". */
 typedef int (*RdMemoryFn)(long *rssKb, long *peakKb);
 void rd_set_memory_fn(RdMemoryFn fn);
+/* The system's memory for a start-up batch's log line (issue 215,
+ * port/platform/mem_watch.h mem_watch_batch_clause): fn(first, last, total,
+ * out, size) is asked after each batch and returns nonzero with "free 5059
+ * MB (-2190 since the set began), file cache 2104, ..." in out when the
+ * line carries it ("; system: ..." before the pipelines' times; not in the
+ * activity file's copy).  NULL (the default): none. */
+typedef int (*RdMemoryClauseFn)(uint32_t first, uint32_t last, uint32_t total, char *out,
+                                size_t size);
+void rd_set_memory_clause_fn(RdMemoryClauseFn fn);
 /* Whether the system reported low memory (issue 128; diag_host.h
  * ico_diag_low_memory_stop: Android's onTrimMemory "running critical"):
  * fn(why, size) returns nonzero with the level's name in why.  The

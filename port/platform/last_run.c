@@ -49,7 +49,7 @@ static const char *const s_key[LAST_RUN_SLOTS] = {
 
 /* the widths: LAST_RUN_BYTES in all (checked by last_run_test) */
 static const unsigned short s_width[LAST_RUN_SLOTS] = {
-    80, 160, 32, 64, 48, 384, 80, 112, 112, 144, 80, 192, 440, 192,
+    80, 160, 32, 64, 48, 320, 80, 112, 112, 208, 80, 192, 440, 192,
 };
 
 const char *last_run_slot_key(int slot)
@@ -607,8 +607,12 @@ static void compose(void)
             snprintf(floor_, sizeof floor_, "%s",
                      b->floorMb == 0 ? "the floor off" : "no floor on this system");
         }
-        snprintf(v[LAST_RUN_FREE], sizeof v[0], "%ld MB now of %ld MB, lowest %ld MB at %.1f s, %s",
-                 b->availKb / 1024, b->totalKb / 1024, s_lowMb, s_lowAt, floor_);
+        /* then the system's split (mem_breakdown.h, issue 215): what holds
+           the memory the free figure misses */
+        snprintf(v[LAST_RUN_FREE], sizeof v[0],
+                 "%ld MB now of %ld MB, lowest %ld MB at %.1f s, %s%s%s", b->availKb / 1024,
+                 b->totalKb / 1024, s_lowMb, s_lowAt, floor_, b->memText[0] != '\0' ? "; " : "",
+                 b->memText);
     } else {
         snprintf(v[LAST_RUN_FREE], sizeof v[0], "unknown on this system");
     }
@@ -896,6 +900,11 @@ void last_run_set_gpu_resets(int32_t now)
         s_resetsStart = now;
     }
     s_resetsNow = now;
+}
+
+const char *last_run_gpu_memory_text(void)
+{
+    return s_gpuMem[__atomic_load_n(&s_gpuMemAt, __ATOMIC_ACQUIRE) & 1];
 }
 
 void last_run_set_gpu_memory(const char *text)

@@ -1061,6 +1061,15 @@ void rd_set_memory_fn(RdMemoryFn fn)
     s_memoryFn = fn;
 }
 
+/* rd_set_memory_clause_fn: the system's memory on a start-up batch's line
+   (issue 215) */
+static RdMemoryClauseFn s_memClauseFn;
+
+void rd_set_memory_clause_fn(RdMemoryClauseFn fn)
+{
+    s_memClauseFn = fn;
+}
+
 /* rd_set_low_memory_fn: the system's low-memory signal stops the start-up
  * set between two batches (issue 128) */
 static RdLowMemoryFn s_lowMemoryFn;
@@ -2252,7 +2261,7 @@ static void batchTimes(const RdPipeKeyInt *keys, const float *ms, uint32_t n, ui
                        uint32_t last, uint32_t total, double wallMs, uint32_t threads,
                        const char *what)
 {
-    char line[600], mem[96];
+    char line[1000], mem[96];
     size_t at = 0;
     float lo = 0.0f, hi = 0.0f;
     double sum = 0.0;
@@ -2318,7 +2327,15 @@ static void batchTimes(const RdPipeKeyInt *keys, const float *ms, uint32_t n, ui
     if (s_batchFn != NULL) {
         s_batchFn(line);
     }
-    /* the log: the same and each pipeline's time */
+    /* the log: the same, the system's memory where the rule picks this
+       batch (issue 215: the free memory the process's own figure misses),
+       and each pipeline's time */
+    if (s_memClauseFn != NULL) {
+        char sys[400];
+        if (s_memClauseFn(first, last, total, sys, sizeof(sys))) {
+            BT_PUT("; system: %s", sys);
+        }
+    }
     BT_PUT("; each (s):");
     for (uint32_t j = 0; j < n; j++) {
         BT_PUT(" %.2f", ms[j] / 1000.0);
