@@ -17,7 +17,10 @@
  * that lands on WORK2 (placeAt below: from that draw's placement matrix, the
  * state's scissor and target size and the mesh's ordinal among them, nothing
  * else); @fans off generates the CPU-projected prims drawn into WORK2 beside
- * the target.  Neither reads a vertex. */
+ * the target; @water place generates the meshes drawn into a
+ * render-to-texture block on the block, the meshes that set SCENE's alpha
+ * bit (FBA) on SCENE, and the CPU-projected prims that read a block across
+ * its period (walk).  None reads a vertex. */
 #include "rd_fixture.h"
 
 #include <math.h>
@@ -97,7 +100,12 @@ static char *word(char **s)
     return w;
 }
 
-enum { PLACE_LAMPS = 1u << 0, PLACE_FANS_OFF = 1u << 1, PLACE_SCENE = 1u << 2 };
+enum {
+    PLACE_LAMPS = 1u << 0,
+    PLACE_FANS_OFF = 1u << 1,
+    PLACE_SCENE = 1u << 2,
+    PLACE_WATER = 1u << 3
+};
 
 static bool parseRules(const char *text, Rule *out, uint32_t *n, uint32_t *place, char *why,
                        size_t whySize)
@@ -138,6 +146,9 @@ static bool parseRules(const char *text, Rule *out, uint32_t *n, uint32_t *place
             } else if (strcmp(tok, "@fans") == 0 && arg && strcmp(arg, "off") == 0 &&
                        !word(&save)) {
                 *place |= PLACE_FANS_OFF;
+            } else if (strcmp(tok, "@water") == 0 && arg && strcmp(arg, "place") == 0 &&
+                       !word(&save)) {
+                *place |= PLACE_WATER;
             } else {
                 snprintf(why, whySize, "rule line %d: no placement rule '%s %s'", line, tok,
                          arg ? arg : "");
@@ -988,10 +999,79 @@ static bool isAdditive(uint8_t blend)
            blend == RD_BLEND_CS_AS_ADD_CD || blend == RD_BLEND_CS_AD_ADD_CD;
 }
 
+/* @water place (rd_fixture.h): what it placed and marked.  A block is a
+ * temporary target the dump marks a render-to-texture block (keep's bit 1,
+ * RdTargetRec.block) whose size is not the frame's (rd_water.c
+ * rd__block_keeps_repeat: the reads the open border leaves on REPEAT) */
+typedef struct Water {
+    uint32_t onBlock, onScene, notPlaced; /* meshes placed on a block, on SCENE; refused */
+    bool blockList[RD_LIST_COUNT];        /* the lists with a TARGET of a block */
+    RdFxBuf wraps;                        /* (payload offset, axes) per prim read across */
+    uint32_t nwrap;
+} Water;
+
+static bool isBlock(const DMap *m, uint32_t id)
+{
+    const uint32_t frameW = rd_fx_get32(m->p + 24), frameH = rd_fx_get32(m->p + 28);
+    for (uint32_t i = 0; id && i < m->nr; i++) {
+        const uint8_t *t = m->p + m->tempsOff + (size_t)i * 20u;
+        if (rd_fx_get32(t) == id) {
+            return (rd_fx_get32(t + 16) & 2u) != 0 &&
+                   !(rd_fx_get32(t + 4) == frameW && rd_fx_get32(t + 8) == frameH);
+        }
+    }
+    return false;
+}
+
+/* @water place on one draw (of list l): a mesh into a block about a point
+ * on the block (placeAt with the block's scissor and size, the n-th such
+ * mesh on the scissor's inner columns and rows in @lamps place's order); a
+ * mesh into SCENE with FBA on, in a list that draws into a block (the
+ * puddle's own list, whose full-frame clear of SCENE's alpha comes before
+ * its surface: an FBA mesh of another list sets no bit the DATE draws
+ * read), about a point on SCENE (the n-th such at grid point (n + 4) mod 9:
+ * the first on the scissor's middle, where the generated ribbon of a prim
+ * reading the block lies); a CPU-projected prim with ST and
+ * Q whose texture is a block: its payload offset and the axes its draw
+ * reads on REPEAT (none: not marked) */
+static void waterDraw(const DMap *m, int l, const uint8_t *pay, const RdCmd *c,
+                      const RdStateBlock *st, uint32_t how, DMesh *d, Water *wa)
+{
+    const uint32_t scene = (uint32_t)RD_TARGET_SCENE + 1u; /* rd_target's handle */
+    if (how == C_SCREEN && c->b[2] == 0 && st->ds.texEnabled && st->tex) {
+        const int t = texIndex(m, st->tex);
+        if (t >= 0 && m->tex[t].hdr[1] == RD_TEXKIND_TARGET && isBlock(m, m->tex[t].hdr[6])) {
+            const uint32_t axes = (st->ds.wrap.s == RD_WRAP_REPEAT ? RD_FX_ACROSS_S : 0u) |
+                                  (st->ds.wrap.t == RD_WRAP_REPEAT ? RD_FX_ACROSS_T : 0u);
+            if (axes) {
+                rd_fx_put32(&wa->wraps, c->u[0]);
+                rd_fx_put32(&wa->wraps, axes);
+                wa->nwrap++;
+            }
+        }
+        return;
+    }
+    if (!d || d->placed || c->type != RDC_MESH) {
+        return;
+    }
+    const bool block = isBlock(m, st->color);
+    const bool alpha = !block && wa->blockList[l] && st->color == scene && st->ds.fba;
+    if (!block && !alpha) {
+        return;
+    }
+    const uint32_t n = block ? wa->onBlock : (wa->onScene + 4u) % 9u;
+    if (placeAt(pay, c, st, n, &d->sizeExp, d->centre)) {
+        d->placed = d->sized = true;
+        (*(block ? &wa->onBlock : &wa->onScene))++;
+    } else {
+        wa->notPlaced++;
+    }
+}
+
 /* the texture flags from every draw's state, the meshes' sizes and bones,
  * the grid and particle draws' sizes */
 static bool walk(DMap *m, RdFxBuf *exps, uint32_t *nexp, uint32_t place, RdFxBuf *offs,
-                 uint32_t *placed, uint32_t *notPlaced, uint32_t *noff, Scene *sc)
+                 uint32_t *placed, uint32_t *notPlaced, uint32_t *noff, Scene *sc, Water *wa)
 {
     const uint32_t work2 = (uint32_t)RD_TARGET_WORK2 + 1u; /* rd_target's handle */
     RdStateBlock st;
@@ -1001,6 +1081,12 @@ static bool walk(DMap *m, RdFxBuf *exps, uint32_t *nexp, uint32_t place, RdFxBuf
     const uint8_t *pay = m->p + m->payOff;
     uint32_t *seen = NULL, nseen = 0;
     bool ok = true;
+    for (int l = 0; (place & PLACE_WATER) && l < RD_LIST_COUNT; l++) {
+        for (uint32_t i = 0; i < m->listN[l]; i++) {
+            const RdCmd c = cmdAt(m, l, i);
+            wa->blockList[l] = wa->blockList[l] || (c.type == RDC_TARGET && isBlock(m, c.u[0]));
+        }
+    }
     for (int l = 0; ok && l < RD_LIST_COUNT; l++) {
         for (uint32_t i = 0; ok && i < m->listN[l]; i++) {
             const RdCmd c = cmdAt(m, l, i);
@@ -1037,6 +1123,9 @@ static bool walk(DMap *m, RdFxBuf *exps, uint32_t *nexp, uint32_t place, RdFxBuf
                 rd_fx_put32(offs, c.u[0]); /* the sun's fans: beside the target */
                 (*noff)++;
             }
+            if ((place & PLACE_WATER) && how == C_SCREEN) {
+                waterDraw(m, l, pay, &c, &st, how, NULL, wa);
+            }
             if (c.type == RDC_MESH || c.type == RDC_SKINNED) {
                 const int k = meshIndex(m, c.u[0]);
                 if (k >= 0) {
@@ -1058,6 +1147,9 @@ static bool walk(DMap *m, RdFxBuf *exps, uint32_t *nexp, uint32_t place, RdFxBuf
                         if (scenePlace(pay, &c, &st, sc, &d->sizeExp, d->centre, &d->form)) {
                             d->placed = d->sized = true;
                         }
+                    }
+                    if (place & PLACE_WATER) {
+                        waterDraw(m, l, pay, &c, &st, how, d, wa);
                     }
                     if (!d->sized) {
                         d->sizeExp = drawSize(pay, &c);
@@ -1118,25 +1210,41 @@ bool rd_fixture_make(const uint8_t *dump, size_t n, const char *rules, RdFixture
     uint32_t nexp = 0, placed = 0, notPlaced = 0, noff = 0;
     Scene sc;
     memset(&sc, 0, sizeof(sc));
-    if (!walk(&m, &exps, &nexp, place, &offs, &placed, &notPlaced, &noff, &sc) || offs.bad) {
+    Water wa;
+    memset(&wa, 0, sizeof(wa));
+    if ((place & PLACE_SCENE) && (place & PLACE_WATER)) {
+        /* each writes its own section (FXP2, FXP3): not taken together */
+        snprintf(why, whySize, "@scene place and @water place are not taken together");
+        mapFree(&m);
+        return false;
+    }
+    if (!walk(&m, &exps, &nexp, place, &offs, &placed, &notPlaced, &noff, &sc, &wa) || offs.bad ||
+        wa.wraps.bad) {
         snprintf(why, whySize, "a command's payload range does not hold");
         rd_fx_free(&exps);
         rd_fx_free(&offs);
+        rd_fx_free(&wa.wraps);
         mapFree(&m);
         return false;
     }
     const uint32_t scenePlaced = sc.sheets + sc.behind + sc.left + sc.right + sc.grid;
     if (((place & PLACE_LAMPS) && placed == 0) || ((place & PLACE_FANS_OFF) && noff == 0) ||
-        ((place & PLACE_SCENE) && scenePlaced == 0)) {
+        ((place & PLACE_SCENE) && scenePlaced == 0) ||
+        ((place & PLACE_WATER) && (wa.onBlock == 0 || wa.onScene == 0 || wa.nwrap == 0))) {
         snprintf(why, whySize,
                  "a placement rule matched nothing (@lamps place: %u meshes placed, %u not; "
-                 "@fans off: %u prims; @scene place: %u meshes placed, %u not)",
-                 placed, notPlaced, noff, scenePlaced, sc.kept);
+                 "@fans off: %u prims; @scene place: %u meshes placed, %u not; @water place: %u "
+                 "meshes on a block, %u on SCENE, %u not, %u prims read across a block)",
+                 placed, notPlaced, noff, scenePlaced, sc.kept, wa.onBlock, wa.onScene,
+                 wa.notPlaced, wa.nwrap);
         rd_fx_free(&exps);
         rd_fx_free(&offs);
+        rd_fx_free(&wa.wraps);
         mapFree(&m);
         return false;
     }
+    /* the water's meshes are written in the section with the lamps' */
+    placed += wa.onBlock + wa.onScene;
     /* the payload: structure only */
     MakeCtx k;
     memset(&k, 0, sizeof(k));
@@ -1230,12 +1338,14 @@ bool rd_fixture_make(const uint8_t *dump, size_t n, const char *rules, RdFixture
         }
         rd_fx_put32(&sk, nexp);
         rd_fx_put(&sk, exps.p, exps.n);
-        if (placed || noff || scenePlaced) {
+        const bool water = (place & PLACE_WATER) != 0;
+        if (placed || noff || scenePlaced || water) {
             /* the placement section (rd_fixture.h): RD_FX_PLACE_TAG as it
              * always was; with @scene place RD_FX_PLACE_TAG2, each mesh's
-             * form after its centre */
+             * form after its centre; with @water place RD_FX_PLACE_TAG3 and
+             * its list */
             const bool scene = (place & PLACE_SCENE) != 0;
-            rd_fx_put32(&sk, scene ? RD_FX_PLACE_TAG2 : RD_FX_PLACE_TAG);
+            rd_fx_put32(&sk, scene ? RD_FX_PLACE_TAG2 : water ? RD_FX_PLACE_TAG3 : RD_FX_PLACE_TAG);
             rd_fx_put32(&sk, placed + scenePlaced);
             for (uint32_t i = 0; i < m.nm; i++) {
                 const DMesh *d = &m.mesh[i];
@@ -1251,6 +1361,10 @@ bool rd_fixture_make(const uint8_t *dump, size_t n, const char *rules, RdFixture
             }
             rd_fx_put32(&sk, noff);
             rd_fx_put(&sk, offs.p, offs.n);
+            if (water) {
+                rd_fx_put32(&sk, wa.nwrap);
+                rd_fx_put(&sk, wa.wraps.p, wa.wraps.n);
+            }
         }
         ok = !sk.bad;
         if (!ok) {
@@ -1310,14 +1424,21 @@ bool rd_fixture_make(const uint8_t *dump, size_t n, const char *rules, RdFixture
             at += snprintf(report + at, reportSize - (size_t)at,
                            "; placement: %u meshes drawn into WORK2 generated on it (%u kept their "
                            "origin), %u prims drawn into WORK2 generated beside it",
-                           placed, notPlaced, noff);
+                           placed - wa.onBlock - wa.onScene, notPlaced, noff);
         }
         if ((place & PLACE_SCENE) && at > 0 && (size_t)at < reportSize) {
+            at += snprintf(report + at, reportSize - (size_t)at,
+                           "; scene: %u meshes of list 0 placed (%u sheets, %u behind a sheet, %u "
+                           "across the left edge, %u past the right edge, %u on the picture), %u "
+                           "kept their origin",
+                           scenePlaced, sc.sheets, sc.behind, sc.left, sc.right, sc.grid, sc.kept);
+        }
+        if ((place & PLACE_WATER) && at > 0 && (size_t)at < reportSize) {
             snprintf(report + at, reportSize - (size_t)at,
-                     "; scene: %u meshes of list 0 placed (%u sheets, %u behind a sheet, %u "
-                     "across the left edge, %u past the right edge, %u on the picture), %u kept "
-                     "their origin",
-                     scenePlaced, sc.sheets, sc.behind, sc.left, sc.right, sc.grid, sc.kept);
+                     "; water: %u meshes drawn into a block generated on it, %u meshes setting "
+                     "SCENE's alpha bit generated on SCENE (%u kept their origin), %u prims "
+                     "reading a block generated across its period",
+                     wa.onBlock, wa.onScene, wa.notPlaced, wa.nwrap);
         }
     }
     if (!ok) {
@@ -1327,6 +1448,7 @@ bool rd_fixture_make(const uint8_t *dump, size_t n, const char *rules, RdFixture
     rd_fx_free(&lists);
     rd_fx_free(&exps);
     rd_fx_free(&offs);
+    rd_fx_free(&wa.wraps);
     free(k.out);
     free(k.kept);
     free(k.gen);

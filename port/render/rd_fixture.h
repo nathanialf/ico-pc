@@ -51,7 +51,12 @@
  *   model's origin), u32 count and per CPU-projected prim generated beside
  *   the target (u32 payload offset of its vertices).  With @scene place the
  *   tag is RD_FX_PLACE_TAG2 and each placed mesh's record has a u32 form
- *   after its centre (RD_FX_FORM_*). */
+ *   after its centre (RD_FX_FORM_*).  With @water place the tag is
+ *   RD_FX_PLACE_TAG3 and the section ends with one more list: u32 count and
+ *   per CPU-projected prim that reads a render-to-texture block (u32 payload
+ *   offset of its vertices, u32 axes: bit 0 S, bit 1 T, the axes its draw
+ *   reads on REPEAT), whose STs are generated across the block's period on
+ *   those axes.  The two rules are not taken together (the make refuses). */
 #ifndef PORT_RENDER_RD_FIXTURE_H
 #define PORT_RENDER_RD_FIXTURE_H
 
@@ -160,6 +165,11 @@ const char *rd_fx_pattern_name(int i); /* NULL past the last */
 /* texel (x, y) of the w x h pattern as RGBA */
 void rd_fx_pattern_texel(const char *name, uint32_t x, uint32_t y, uint32_t w, uint32_t h,
                          uint8_t rgba[4]);
+/* the section of a fixture made with @water place ("FXP3"): RD_FX_PLACE_TAG's
+ * layout, then the prims read across a block's period (rd_fixture.c genSpan) */
+#define RD_FX_PLACE_TAG3 0x33505846u
+#define RD_FX_ACROSS_S 1u
+#define RD_FX_ACROSS_T 2u
 /* the mesh generator's one name ("strips") */
 #define RD_FX_MESH_GEN "strips"
 /* the placement section's tag ("FXP1"), and the largest |centre| word: the
@@ -228,6 +238,21 @@ bool rd_fixture_check(const RdFixture *fx, char *why, size_t whySize, char *stat
  *                  edge, or on the picture; read from that draw (its matrix,
  *                  scissor and target size), its ordinal and the last sheet
  *                  placed; see rd_fixture_make.c scenePlace
+ *   @water place   for a test of the render-to-texture blocks (the puddle's
+ *                  reflection, issue 106): every mesh a non-skinned draw
+ *                  puts into a block (a temporary target the dump marks a
+ *                  block, smaller than the frame) is generated about a point
+ *                  on the block, as @lamps place does on WORK2; every mesh a
+ *                  non-skinned draw puts into SCENE with FBA on in a list
+ *                  that draws into a block (the alpha bit the DATE draws
+ *                  over the frame test) about a point on SCENE, the first
+ *                  on the scissor's middle; every
+ *                  CPU-projected prim (ST with Q) whose texture is a block
+ *                  reads it across the block's period on each axis its
+ *                  draw reads on REPEAT.  Read from each draw alone: its
+ *                  target and the temporary targets' block mark and size,
+ *                  its scissor, FBA, texture and wrap, its placement matrix
+ *                  and its ordinal; see rd_fixture_make.c (walk)
  * A rule that matches no draw fails the make. */
 extern const char rd_fx_default_rules[];
 bool rd_fixture_make(const uint8_t *dump, size_t n, const char *rules, RdFixture *fx, char *report,

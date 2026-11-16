@@ -217,6 +217,43 @@ generated on it (K kept their origin), N prims drawn into WORK2 generated beside
 meshes of list 0 placed (S sheets, B behind a sheet, L across the left edge, R past the right
 edge, G on the picture), K kept their origin`).
 
+#### The water's rule
+
+A puddle's reflection is a render-to-texture block (a temporary target the dump marks a block,
+smaller than the frame) that the room's meshes are drawn into, and the frame reads it twice:
+the ripples (CPU-projected triangles with ST and Q, on REPEAT, AA1) and the copy over the frame
+(a sprite inside the block's edges), both under DATE, so they land only where the puddle's
+surface, drawn with FBA on, set SCENE's alpha bit (`ico2/sugipon/src/puddle.c`;
+[RENDER_POST.md](RENDER_POST.md)). Generated as everything else, the block's meshes and the
+surface sit about their models' origins, off the block and off the picture, and the ripples are
+the ribbon with STs inside one period: the block holds its fill alone, no pixel of the frame has
+the bit, and neither the block's scale nor the wrap of its reads changes a pixel. One more line
+of a rule file chooses otherwise:
+
+- `@water place`: every mesh that a non-skinned draw puts into a block is generated about a point
+  on the block, the n-th on the block scissor's inner columns and rows as `@lamps place` places
+  WORK2's; every mesh that a non-skinned draw puts into SCENE with FBA on, in a list that draws into
+  a block (the writer of the alpha bit the DATE draws test: the puddle's list clears SCENE's alpha
+  before its surface, so an FBA mesh of another list sets no bit they read), about a point on
+  SCENE, the n-th such at grid point (n + 4) mod 9 of the same nine, so the first lies on the
+  scissor's middle; every CPU-projected prim with ST and Q
+  whose texture is a block is generated as the ribbon, its S running 12/16 to 27/16 along the
+  ribbon's columns where its draw reads S on REPEAT, its T 6/8 to 15/8 down the rows where it
+  reads T on REPEAT (an axis on CLAMP keeps the ribbon's STs): the reads cross the block's period,
+  and the ribbon's middle, over the surface, reads the block's first quarter through the wrap,
+  where the first mesh drawn into it lies. What the rule reads: each draw's target and the
+  temporary targets' block mark and sizes, the scissor, FBA, the texture (a block's) and the wrap
+  in the state at the draw, the placement matrix and the mesh's number; no vertex, bound or
+  statistic. A frame without a block, a mask writer or a prim reading a block is refused, and so is
+a rule file with both `@scene place` and `@water place` (each keeps its own section).
+
+The fixture keeps it at the end of its skeleton under its own tag (`FXP3`): the placed meshes'
+ids and centres, then the prims read across a period with their axes. `rd_fixture_tool info`
+says `N meshes placed on a block or SCENE, 0 prims beside WORK2, N prims read across a block's
+period`, the maker's line `water: N meshes drawn into a block generated on it, N meshes setting
+SCENE's alpha bit generated on SCENE (K kept their origin), N prims reading a block generated
+across its period`.
+
 ## The format
 
 `port/render/rd_fixture.h` is the reference. In short: the head (`ICORDFX1`, the format, the
@@ -456,7 +493,7 @@ expansion does not change); its manifest line must say the same.
 | `rd_replay_tool_glow_hold` | `lists/glow_hold.txt` (a role a fixture: `still`, `prev`, `move`; `nocull`: `ICO_RD_CULL=off` for that case) | `fx-boot-0200` (`still`: `glow_chains>=1`, `glow_plan=whole`), `fx-adreno-prev`, `fx-adreno` (`prev`, `move`, `nocull`: `glow_chains>=1`, `glow_plan=lamps`) | `glow_chains` and `glow_plan` on each fixture replayed alone at its case's setting; the held and redrawn lines, the pictures as before |
 | `rd_replay_tool_save_blended`, `rd_replay_tool_save_blended_163` | `lists/save_blended.txt`, `lists/save_blended_163.txt` (a role a fixture: `prev`, `cur`) | `fx-gate-prev`, `fx-gate` (`interp_keyed_blended>=1`); `fx-adreno-prev`, `fx-adreno` (`interp_keyed_blended>=1`, `interp_tick_cam_draws>=1`) | on the `--interp` run of SCENE; the saved frame replayed alone, and on the render thread, byte for byte |
 | `rd_fog_depth_copy_dump`, `_d24s8` | `lists/fog_depth_copy.txt` | `fx-adreno` (`draws>=1`, `aura_pastes_whole>=1`) | `fog_path` on every run (the path asked for), `draws` and `aura_pastes_whole` on the copy's run; a run with the copy's reads sabotaged changes SCENE; SCENE byte for byte in place, copied, through a buffer |
-| `rd_replay_tool_ripple`, `_447`, `_436`, `_436_ps2`, `_436_1x`, `_436_1x_ps2`, `rd_replay_tool_mirror_floor` | the registration's `-DFIXTURE` (port/render/CMakeLists.txt) | `fx-ripple-13782`, `fx-ripple-84109`, `fx-ripple-83439` (issue 106's drained room: the puddle's block read by the ripples on REPEAT, `water_blocks_kept>=1`), `fx-puddle-0200` (the pool's grids over its scene copy, no block: `water_blocks_kept=0`, `water_targets_clamped>=1`) | the declared water quantities on the replay's water line; every block read on REPEAT kept; the block's scale in the log; the picture's PNG the fixture's own as the release before's tool drew it. The block's reflection does not reach a fixture's picture (the scene's scale and the GS size give one picture), so the picture pins the frame as a whole, not the water |
+| `rd_replay_tool_ripple`, `_447`, `_436`, `_436_ps2`, `_436_1x`, `_436_1x_ps2`, `rd_replay_tool_mirror_floor` | the registration's `-DFIXTURE` (port/render/CMakeLists.txt) | `fx-water-13782`, `fx-water-83439` (issue 106's drained room made with `@water place`: the block's reflection and the ripples' wrap on the picture, `water_blocks_kept>=1`), `fx-ripple-84109` (the third frame without the rule: made with it, it reaches no pixel), `fx-puddle-0200` (the pool's grids over its scene copy, no block: `water_blocks_kept=0`, `water_targets_clamped>=1`) | the declared water quantities on the replay's water line; every block read on REPEAT kept; the block's scale in the log; the picture's PNG the fixture's own as the release before's tool drew it; on the `@water place` fixtures above 1x the scene's scale and the GS size two pictures (`-DDIFFER`), at 1x one, and the block's reads clamped (`ICO_RD_BLOCK_CLAMP=1`, `-DCLAMP_DIFFERS`) a third |
 | `rd_fades_fold_ab` | `lists/fades_fold.txt` | `fx-phone-4657`, `fx-ripple-83439`, `fx-mobile-164`, `fx-vu-3086` (`fades_folded>=1`, the line's) | `fades_folded` on every folded run; VD-27's rule on every target |
 | `rd_aura_paste_ab` | `lists/aura_paste.txt` | `fx-phone-4657`, `fx-shadow-wide`, `fx-mobile-164`, `fx-163-blended` (`aura_paste_split=1`), `fx-vu-3086` (`aura_paste_split=0`: the paste drawn whole) | `aura_paste_split` on the on run at the phone's setting; every PNG byte for byte, the passes and traffic equal |
 | `rd_noplanes_ab` | `lists/noplanes.txt` (`expect=`, then the tool's arguments) | `fx-title-0200`, `fx-title-0350`, `fx-boot-0600` (`noplanes_fallback=2`), `fx-vu-3112` (`noplanes_fallback=0`) | `noplanes_fallback` on the run without the builds; every target byte for byte |

@@ -208,3 +208,11 @@ fx-ripple-84109 build-host-tmp/corpus/dumps/ripple/frame-20261024-100447-v84109.
 fx-puddle-0200 build-host-tmp/corpus/dumps/puddle/rd-00200.rddump water_blocks_kept=0 water_targets_clamped>=1
 fx-title-0200 build-host-tmp/e2e/run-title-on/dumps/rd-00200.rddump noplanes_fallback=2
 fx-title-0350 build-host-tmp/e2e/run-title-on/dumps/rd-00350.rddump noplanes_fallback=2
+# issue 106's drained room made with water_place.rules.txt (@water place,
+# docs/port/TESTING_FIXTURES.md "The water's rule"; dump version 12, 688x448
+# GS): the six meshes drawn into the puddle's block generated on the block,
+# the puddle surface (the FBA mesh of list 4) on SCENE's middle, the ripples
+# read across the block's period, so the block's scale and the wrap of its
+# reads reach the picture.  water_blocks_kept as for the fx-ripple fixtures.
+fx-water-13782 build-host-tmp/corpus/dumps/ripple/frame-20261024-094512-v13782.zip rules=water_place.rules.txt water_blocks_kept>=1
+fx-water-83439 build-host-tmp/corpus/dumps/ripple/frame-20261024-100436-v83439.zip rules=water_place.rules.txt water_blocks_kept>=1
