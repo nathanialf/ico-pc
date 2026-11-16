@@ -1,0 +1,6 @@
+# rd_vu_bones_ring_ab and rd_vu_bones_ring_ab_prepass
+# (port/render/test/rd_vu_bones_ring_ab.cmake): issue 163's blended frame
+# (FIX-P3a's; the check's quantities on its line) and issue 123's v0.10.4
+# blended frame (this package's)
+fx-163-blended skin_checks_drawn>=1 skin_ring_twins_drawn>=1 skin_twins_drawn>=1
+fx-123-blended

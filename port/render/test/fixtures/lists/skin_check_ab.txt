@@ -1,0 +1,9 @@
+# rd_vu_skin_check_ab (port/render/test/rd_vu_skin_check_ab.cmake): the
+# 2026-10-07 capture with the most skinned commands (FIX-P4a's), issue 163's
+# blended frame (FIX-P3a's), issue 123's v0.10.4 blended frame (this
+# package's: its twins through the draws' own pipelines with the Turnip
+# profile); the check's quantities on the lines of the fixtures other
+# packages own (rd_fixture_list_props.cmake)
+fx-vu-3086 skin_checks_drawn>=1 skin_twins_drawn>=1
+fx-163-blended skin_checks_drawn>=1 skin_twins_drawn>=1
+fx-123-blended

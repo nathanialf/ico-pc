@@ -120,7 +120,9 @@ output pixels at 2x. That reaches the screen on a cropped frame too: issue 26's 
 260 of 964, where the present already leaves the columns out. So the fog of a frame on SCENE arms
 a repeat (`rd__scene_border_arm`, the last line of `doFog`), done before the frame's first post
 sprite that samples SCENE (`sceneRepeatDue` in `rd__blur_post_sprite`: the glow's first
-reduction, the depth of field's, at the latest the reduction into DISPLAY), where SCENE's pass
+reduction, the depth of field's, at the latest the reduction into DISPLAY; at a present that
+holds the glow, the mask's `RDC_NOP` in its place: `rd__scene_border_due`,
+[WORK_BUFFERS.md](WORK_BUFFERS.md#the-glow-between-ticks)), where SCENE's pass
 ends anyway, so the repeat adds no pass on a tiler's local fog read and an open MSAA epoch closes
 where it would have (`port/render/rd_blur_border.c` (`sceneRepeat`)). The repeat copies SCENE's
 texels of GS column 2 into those of columns 0 and 1, and of column W - 3 into W - 2 and W - 1,

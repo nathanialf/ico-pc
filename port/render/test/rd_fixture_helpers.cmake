@@ -92,6 +92,21 @@ set(_rdfx_q_vu_merged_draws "VU merge: [0-9]+ draws in [0-9]+ GPU draws \\(([0-9
 set(_rdfx_q_store_depth_dropped "stats: stores: ([0-9]+) depth and [0-9]+ colour stores dropped")
 set(_rdfx_q_constant_reads_served "constant reads on: ([0-9]+) sprites drawn in a cleared source's colour")
 set(_rdfx_q_vu_record_dispatches "[0-9]+ copies, ([0-9]+) dispatches")
+# the skinned draws' check (--skin-check's summary line, the run's end lines), the VU record's audit
+set(_rdfx_q_skin_checks "skin check: [0-9]+ skinned commands, ([0-9]+) checks")
+set(_rdfx_q_skin_wrong "skin check: [0-9]+ skinned commands, [0-9]+ checks, ([0-9]+) wrong")
+set(_rdfx_q_skin_changed "blocks whose bytes differed \\(([0-9]+) changed after the draw\\)")
+set(_rdfx_q_skin_dropped "([0-9]+) wrong vertices dropped \\(non-finite\\)")
+set(_rdfx_q_skin_twins_own "twins: [0-9]+ read \\(([0-9]+) through the draw's own pipeline\\)")
+set(_rdfx_q_skin_ring_twins "ring twins ([0-9]+) read")
+set(_rdfx_q_skin_checks_drawn "VU skin check: at the end of the run: ([0-9]+) checks drawn")
+set(_rdfx_q_skin_twins_drawn "VU skin check: twins at the end of the run: ([0-9]+) drawn")
+set(_rdfx_q_skin_twins_own_drawn "VU skin check: twins at the end of the run: [0-9]+ drawn \\(([0-9]+) through the draw's own pipeline")
+set(_rdfx_q_skin_ring_twins_drawn "the ring read's twin \\(C\\) ([0-9]+) drawn")
+set(_rdfx_q_vu_audit_entries "rd: VU audit: ([0-9]+) entries")
+set(_rdfx_q_vu_audit_lists "rd: VU audit: [0-9]+ entries \\([0-9]+ index values\\), ([0-9]+) compacted lists")
+set(_rdfx_q_vu_audit_plane_draws "rd: VU audit: [^\n]*draws: ([0-9]+) of the fourth plane")
+set(_rdfx_q_vu_audit_violations "rd: VU audit: [0-9]+ entries[^\n]*, ([0-9]+) violations")
 # the wide frames: the side bands' mode
 set(_rdfx_q_side_band_card_draws "side bands: ([0-9]+) draws with cards")
 # the fog's depth read, the aura's paste after it, the blended frame between two ticks
