@@ -2462,12 +2462,12 @@ devices could take a sampled replay later.
 `port/platform/stall_coincide.h`. A stall is a timed replay's pass that runs over 8 times its
 block's median for that pass (the same kind, target and list, with at least 5 seen) and over 40 ms,
 or a present over 100 ms. Each stall writes one line from the last samples. Nothing is read from a
-file on the game or render thread for it. Every stall of a 10 s block gets its line, up to 350 a
-block (`STALL_BLOCK_LINES`: 10 s over the shortest present stall, 100 ms, plus 10 s over the
-shortest pass stall, 40 ms, each on its own timeline: the most the detector can count in a block).
-Past it (a block that ran longer) the tally ends `; N stall lines left out (the block's first 350
-written)`. A run-wide cap of 8 lines left issue 123's stalls 9-13 of its log of 2026-11-14 in its
-tallies alone:
+file on the game or render thread for it. Every stall gets its line while stalls are rare: a
+block's first 16 (`STALL_RARE_LINES`, four times issue 123's busiest block) while the run has
+written fewer than 500 such lines (`STALL_RUN_LINES`; that tablet's 13 stalls in 325 s are 144 an
+hour). Past that, the older rule over those stalls: the first 8, then every 100th. A block with
+lines left out ends its tally `; N stall lines left out (W written: ...)`; the tally counts every
+stall. The old rule alone left issue 123's stalls 9-13 of its log of 2026-11-14 in its tallies:
 
 `window: stall: list 0 912x512 283.3 ms against the block's median 48.0 ms (replay 2709, GPU span
 411.4 ms); at that moment: the game thread on core 6 (909 MHz), the render thread on core 7 (1443
@@ -2706,7 +2706,7 @@ Per block, a phone adds about 1.5 KB:
 - the memory-in-the-block line: about 330 bytes
 - the audio clause: about 120 bytes
 
-Each stall line is about 600 bytes, and those lines are rate-limited. The start adds the ledger's
+Each stall line is 600 bytes to a few KB, and those lines are rate-limited (above). The start adds the ledger's
 start line (about 700 bytes), the pipeline set's line and the driver threads' line. The block
 lines are formatted on the game thread inside the 10 s print. The logging line's `the display and
 slow scene lines` and `the performance lines` parts include them, so the logging-cost clause still

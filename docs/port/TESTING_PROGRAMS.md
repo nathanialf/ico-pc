@@ -1253,7 +1253,10 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   restarted (a hang)`), a sign without a stamp unwritten (`not a hang`), a restart after a span with
   no GPU work said and not counted (measured, and by the notes alone), the tally's hangs apart
   (issue 123's block of three hangs and the 197 ms present after them: `4 in the block, 3 of them
-  hangs ... and 1 other`), the block's cap (350, the 351st and 352nd left out and said), the
+  hangs ... and 1 other`), the line rules (a block of 352 on a fresh run: its first 16, then the
+  first 8, 100th, 200th and 300th of the others, 325 left out and said; issue 123's tablet's block
+  tallies for 3630 s all written; a stall every picture for an hour, 360 blocks of 600: 500 + 8 +
+  2155 lines, every stall counted), the
   submissions around a stall word for word (issue 123's first: the scene's submission holding the
   first unwritten stamp, the present's list, the stalled present's own, `1 seen, 3 not known`), a
   short buffer, the pressure and status parsers (`VmSwap` read past `RssShmem`, absent from a

@@ -26,7 +26,8 @@
  * stamps and the submissions around the stall (which one held the first
  * unwritten stamp, each one's submit and signal from the stall's start),
  * a counter restart after a span with no GPU work is said and not counted
- * as a sign, and every stall of a block gets its line (STALL_BLOCK_LINES).
+ * as a sign, and every stall gets its line while stalls are rare
+ * (stall_line_due: STALL_RARE_LINES a block, STALL_RUN_LINES a run).
  * The rules, the medians, the parsers and the texts are pure
  * (port/platform/test/stall_coincide_test.c).
  */
@@ -68,18 +69,30 @@ double stall_medians_add(StallMedians *m, uint32_t key, double ms);
    0) and over STALL_PASS_MS */
 bool stall_pass_spike(double ms, double median);
 
-/* The per-stall lines a block writes (issue 123: v0.11.6's run-wide cap of
-   8 left the reporter's stalls 9-13 with block tallies alone): every stall
-   of a 10 s block (hotkeys.h ICO_STATS_PERIOD_NS, the blocks' period) up
-   to STALL_BLOCK_LINES, the most the detector can count in one: a present
-   stall holds the present for over STALL_PRESENT_MS and a pass stall the
-   GPU for over STALL_PASS_MS, each on its own timeline, so at most
-   10000 / 100 + 10000 / 40 = 350.  Past it (a block that ran longer) the
-   tally says how many were left out */
-#define STALL_LINES_BLOCK_MS 10000.0
-#define STALL_BLOCK_LINES                                                                          \
-    ((unsigned)(STALL_LINES_BLOCK_MS / STALL_PRESENT_MS) +                                         \
-     (unsigned)(STALL_LINES_BLOCK_MS / STALL_PASS_MS))
+/* The per-stall lines (issue 123: v0.11.6's run-wide cap of 8, then every
+   100th, left the reporter's stalls 9-13 with block tallies alone; its log
+   of 2026-11-14 holds 13 present stalls of 365-486 ms in about 325 s, at
+   most 4 stalls in one 10 s block).  A stall's line is written:
+   - while stalls are rare: a block's first STALL_RARE_LINES (four times the
+     reporter's busiest block) while the run has written fewer than
+     STALL_RUN_LINES such lines (the reporter's rate, 13 in 325 s, is 144 an
+     hour: over three hours of it);
+   - past that (stalls frequent, or the run's rare lines spent): v0.11.6's
+     rule over those stalls of the run, the first STALL_EXCESS_FIRST, then
+     every STALL_EXCESS_EVERY-th.
+   A line left out is counted in the block's tally (leftOut, said at the end
+   of the tally line) and the tally counts every stall, so the totals stay
+   whole */
+#define STALL_RARE_LINES 16u
+#define STALL_RUN_LINES 500u
+#define STALL_EXCESS_FIRST 8u
+#define STALL_EXCESS_EVERY 100u
+
+/* the run's per-stall lines (stall_line_due) */
+typedef struct StallLineBudget {
+    unsigned long long rare;   /* lines written by the rare rule */
+    unsigned long long excess; /* stalls past it (v0.11.6's rule's count) */
+} StallLineBudget;
 
 /* What the samples said at a stall: -1 (or < 0) where not known */
 #define STALL_WAIT_THREADS 5 /* game, render, submit, SDL audio, system audio */
@@ -167,14 +180,14 @@ typedef struct StallTally {
     unsigned cls[STALL_CLASSES];
     bool gpuReadable; /* a moment had the GPU's clock */
     unsigned hangs;   /* of stalls, those with a hang (StallMoment.hangReplay) */
-    /* the block's per-stall lines written and left out (stall_tally_line_due) */
+    /* the block's per-stall lines written and left out (stall_line_due) */
     unsigned written, leftOut;
 } StallTally;
 
 void stall_tally_add(StallTally *t, const StallMoment *m);
-/* whether a stall's own line is written: the block's first
-   STALL_BLOCK_LINES (written counts them), past it leftOut */
-bool stall_tally_line_due(StallTally *t);
+/* whether a stall's own line is written (the rules above; t->written or
+   t->leftOut counts it) */
+bool stall_line_due(StallTally *t, StallLineBudget *b);
 /* "stalls by what coincided: 4 in the block, 3 of them hangs (...) and 1
    other; all 4 by class: ..." (after "window: "); the length written */
 size_t stall_tally_text(const StallTally *t, char *out, size_t cap);
