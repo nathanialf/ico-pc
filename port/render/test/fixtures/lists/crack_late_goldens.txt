@@ -3,6 +3,12 @@
 # at 1c09ef6b1) wrote with --pass-dump --stats on the expanded fixtures of
 # crack_late.txt at each of their settings, under the script's environment and
 # arguments (made with the script's -DMAKE_GOLDENS=FILE and that tool).
+# The bytes hold for the x86-64 lavapipe (llvmpipe at 256 bits: Mesa 25.0.7 with
+# LLVM 19.1.7 here, Mesa 25.2.8 with LLVM 20.1.2 on CI's ubuntu-24.04 runners, run
+# 43805687280); arm64's llvmpipe (128 bits) draws other bytes.  The device line
+# (rd_replay_tool's "rhi_vk: device table:") the script compares them on, a regex
+# without a semicolon (CMake's list separator):
+# driver: llvmpipe \(LLVM [0-9.]+, 256 bits\)
 # "<fixture> <setting> <png> <sha256>"
 fx-boot-0200 enh2x43 AA0.png 82a7d98aabbe1a49fca62258eb8d0a237719ded8e634b94524802bc43cc453bd
 fx-boot-0200 enh2x43 AA1.png 55025c3427ff40d5f067e9f36d48f4b29cd9203878020d34acf1316c34a11050

@@ -24,7 +24,11 @@
 # lists/crack_late_goldens.txt: "<fixture> <setting> <png> <sha256>", the SHA-256 of
 # every PNG v0.11.6's rd_replay_tool wrote with the same environment and arguments on
 # the expanded fixture); a PNG without a golden, a golden no run wrote and a (fixture,
-# setting) without goldens fail.  These replace the old build's pass dumps outside the
+# setting) without goldens fail.  The bytes are compared only where the run's
+# device line matches the list's "# driver: <regex>" line (the lavapipe build and
+# CPU the goldens hold for: CI run 43805687280's arm64 llvmpipe, 128 bits, drew
+# other bytes); elsewhere the set of PNGs, the fill's line, the path and the
+# start-of-list-7 replay's bytes (the same job's) are checked.  These replace the old build's pass dumps outside the
 # repository (the fill before the fog, compared within VD-20's measured bound, which
 # stays a measurement of the game's frames in DIVERGENCES.md): owner's decision 3, the
 # fixture's own picture.  Every run is replayed once more with ICO_RD_CRACK_PLACE=7 (the
@@ -67,6 +71,8 @@ list(LENGTH names nnames)
 
 # the goldens: "<fixture> <setting> <png> <sha256>"
 set(goldenKeys "")
+set(goldenDriverRe "")
+set(goldenOtherDriver 0)
 if(NOT MAKE_GOLDENS)
   if("${GOLDENS}" STREQUAL "" OR NOT EXISTS "${GOLDENS}")
     message(FATAL_ERROR "rd_crack_late_ab: no golden list ${GOLDENS}")
@@ -74,6 +80,10 @@ if(NOT MAKE_GOLDENS)
   file(STRINGS "${GOLDENS}" glines)
   foreach(l IN LISTS glines)
     string(STRIP "${l}" l)
+    if(l MATCHES "^# driver: (.+)$")
+      set(goldenDriverRe "${CMAKE_MATCH_1}")
+      continue()
+    endif()
     if(l STREQUAL "" OR l MATCHES "^#")
       continue()
     endif()
@@ -188,7 +198,13 @@ foreach(run IN LISTS runs)
       endif()
     endif()
   endif()
-  # every PNG the release before's picture of the fixture, byte for byte
+  # every PNG the release before's picture of the fixture, byte for byte (on the
+  # goldens' driver)
+  set(bytes TRUE)
+  if(NOT goldenDriverRe STREQUAL "" AND NOT err MATCHES "${goldenDriverRe}")
+    set(bytes FALSE)
+    math(EXPR goldenOtherDriver "${goldenOtherDriver} + 1")
+  endif()
   set(nGolden 0)
   foreach(png IN LISTS pngs)
     set(k "${n}__${s}__${png}")
@@ -200,6 +216,9 @@ foreach(run IN LISTS runs)
     list(APPEND goldenUsed "${k}")
     math(EXPR compared "${compared} + 1")
     math(EXPR nGolden "${nGolden} + 1")
+    if(NOT bytes)
+      continue()
+    endif()
     file(SHA256 "${dir}/${png}" h)
     if(NOT h STREQUAL "${golden_${k}}")
       message(SEND_ERROR "${n} ${s}: ${png} is not v0.11.6's picture of the fixture (SHA-256 ${h}, "
@@ -207,7 +226,13 @@ foreach(run IN LISTS runs)
       math(EXPR failures "${failures} + 1")
     endif()
   endforeach()
-  message(STATUS "${n} ${s}: ${nGolden} PNGs against v0.11.6's")
+  if(bytes)
+    message(STATUS "${n} ${s}: ${nGolden} PNGs against v0.11.6's")
+  else()
+    string(REGEX MATCH "rhi_vk: device table: [^\n]*" dev "${err}")
+    message(STATUS "${n} ${s}: ${nGolden} PNGs written; their bytes not compared: the device is "
+                   "not the goldens' (${goldenDriverRe}): ${dev}")
+  endif()
 endforeach()
 foreach(name IN LISTS names)
   if(NOT replayed_${name})
@@ -239,5 +264,6 @@ endif()
 if(compared EQUAL 0)
   message(FATAL_ERROR "rd_crack_late_ab: no target compared over ${nruns} runs")
 endif()
-message(STATUS "rd_crack_late_ab: ${compared} targets v0.11.6's bytes over ${nruns} runs of "
-               "${nnames} fixtures, the fill drawn once after lists 4-6 in each")
+message(STATUS "rd_crack_late_ab: ${compared} targets against v0.11.6's goldens over ${nruns} runs "
+               "of ${nnames} fixtures (${goldenOtherDriver} runs on another driver: their bytes "
+               "not compared), the fill drawn once after lists 4-6 in each")
