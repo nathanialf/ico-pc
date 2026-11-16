@@ -59,6 +59,7 @@
 #include "video_options.h"
 #include "window_host.h"
 #include "log_cost.h" /* LOG_COST_DRAIN */
+#include "mem_watch.h"
 #include "window_lines.h"
 #include "window_loss.h"
 #include "window_pipeline_skip.h"
@@ -2280,6 +2281,7 @@ open_window:
     /* before the set: the careful policy's budget reads the process's
        memory around each batch (rd_pipeline.c createKeys) */
     rd_set_memory_fn(ico_diag_process_memory);
+    rd_set_memory_clause_fn(mem_watch_batch_clause); /* issue 215 */
 #ifdef __ANDROID__
     /* issue 128: the system's low-memory signal (IcoActivity's
        onTrimMemory, diag_host.c ico_diag_note_low_memory) stops the
