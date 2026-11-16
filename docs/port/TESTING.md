@@ -86,9 +86,11 @@ Every test program, one entry each by directory, is in [TESTING_PROGRAMS.md](TES
 ## Render gates
 
 The frame gates replay saved [.rddump](ARCHITECTURE.md#terms) files with the replay tool. Dumps
-hold game assets and are never committed, so the dump lists name paths on one machine; a missing
-file is reported and skipped, and every gate exits 77 when it has nothing to run
-(`tools/native_frame_check.py`, `tools/coverage_check.py`, docstrings).
+hold game assets and are never committed: `native_frame_gate_a` replays committed fixtures
+([TESTING_FIXTURES.md](TESTING_FIXTURES.md)); `native_frame_gate_b`, `coverage_corpus` and
+`rd_boot_present` are local-only validation on the game's own captures, kept outside the
+repository: labelled `local` (`ctest -L local`), they never gate, and each skips (77) with a line
+saying what it lacks and how many inputs it found when its input variable is unset (below).
 
 `tools/native_frame_check.py` has four commands (`tools/native_frame_check.py`, docstring):
 
@@ -97,12 +99,26 @@ file is reported and skipped, and every gate exits 77 when it has nothing to run
   each target's pixels to `docs/native_frame_baseline.json` with the harness commit
   (`cmd_baseline`).
 - `gate-a` renders again and compares with the manifest exactly, reporting dump, settings, target
-  and, with `--ref-dir`, the first differing pixel; exit 1 on any mismatch (ctest
-  `native_frame_gate_a`).
+  and, with `--ref-dir`, the first differing pixel; exit 1 on any mismatch. The ctest
+  `native_frame_gate_a` (`port/render/test/native_frame_gate_a.cmake`) runs it on the committed
+  fixtures of `port/render/test/fixtures/lists/native_frame.txt` (the three 2026-10-07 VU
+  captures, `fx-vu-3086`, `fx-vu-3112`, `fx-vu-1985`, and the title castle `fx-boot-0200`),
+  expanded into the build folder, against `docs/native_frame_baseline.json`: the release before's
+  pictures of those fixtures, every target at both settings, and the expansions' own SHA-256;
+  the path ran (one `--stats` replay a fixture: `prepass_vertices` or `shadow_volume_draws` as it
+  declares) and every one of the 144 targets checked. It held the real pictures of those
+  captures before; that manifest, made 2026-10-17, differed from the release before's own
+  pictures on 66 of its 396 targets (SCENE, DISPLAY and the present of all 11 captures at both
+  settings) while the ctest skipped without `ICO_DUMPS`, and the release being made equalled the
+  release before on all 396, so nothing of the game's look rode on it; now the pin is the release
+  before's picture of a frame with the game's command structure and generic art.
 - `gate-b` takes one game state captured at 4:3, 16:9, 32:9, 48:9 and 60:9 (an aspect sweep: a
   zip, a folder or PNGs with the aspect in the name, or `ICO_SWEEPS`) and checks the centre
   columns of every aspect equal the 4:3 picture byte for byte, with `--effects R` allowing a band
-  of R pixels at each edge of the 4:3 picture (ctest `native_frame_gate_b`).
+  of R pixels at each edge of the 4:3 picture. The ctest `native_frame_gate_b` is local-only: a
+  sweep is the game's own captures (a fixture holds one camera at one aspect and cannot make
+  one); without `ICO_SWEEPS` it skips with `SKIP: local-only validation: ICO_SWEEPS names no
+  aspect sweep (0 sweeps to check)`.
 - `selftest` checks the gate-b logic on synthetic pictures (ctest `native_frame_check_selftest`).
 
 The pictures these gates hold are the PS2's region rule's: `native_frame_check.py` replays under
@@ -415,8 +431,11 @@ has their defaults; the registrations are in `port/*/CMakeLists.txt`):
   `texpack_pack_files`.
 - `ICO_FOG_DUMP`, a player dump with the depth fog: `rd_fog_depth_copy_dump` and `_d24s8` (skipped
   without it).
-- `ICO_BOOT_DUMP_DIR`, a start-up's frame dumps: `rd_boot_present`; `ICO_BOOT_DUMP_OLD` sets
-  `ICO_BOOT_OLD=1` for dumps whose frames 118 to 120 draw stage 1 (`port/render/CMakeLists.txt`).
+- `ICO_BOOT_DUMP_DIR`, a start-up's frame dumps: `rd_boot_present` (local-only: it needs the nine
+  consecutive frames 115 to 123 of a start-up dumped with `dump_every=1`, which no fixture holds;
+  without them it skips with `SKIP: local-only validation: ... 0 of the 9 frames 115-123`);
+  `ICO_BOOT_DUMP_OLD` sets `ICO_BOOT_OLD=1` for dumps whose frames 118 to 120 draw stage 1
+  (`port/render/CMakeLists.txt`).
 
 Five tests start the headless game itself, each in a fresh folder with its own `ico-pc.ini` and a
 pad script, `RUN_SERIAL` and with a long timeout:
@@ -595,7 +614,7 @@ switches the tests and their registrations use:
 | `ICO_RD_DUMP_EVERY`, `_DIR`, `_INTERP`, `_FROM` | `rd_core.c` | the frame dumps `ico-pc.ini` hands to rd |
 | `ICO_VU_REF_AT` | `rd_replay_tool.c` | the kicked triangles containing a GS point |
 | `ICO_BOOT_DUMPS`, `ICO_BOOT_OLD` | `rd_boot_present_test.c` | the start-up dumps (the folder when no argument is given), and `ICO_BOOT_OLD=1` for dumps whose frames 118 to 120 draw stage 1 |
-| `ICO_DUMPS`, `ICO_SWEEPS`, `ICO_COVERAGE_DIR`, `ICO_REPLAY_LOCK` | the gate tools | the dump list, the aspect sweeps, the coverage state, the lock |
+| `ICO_DUMPS`, `ICO_SWEEPS`, `ICO_COVERAGE_CORPUS`, `ICO_COVERAGE_DIR`, `ICO_REPLAY_LOCK` | the gate tools | the dump list, the aspect sweeps (`native_frame_gate_b`, local only), the corpus list (`coverage_corpus`, local only), the coverage state, the lock |
 | `ICO_FIXTURE_SOURCES` | `rd_fixture_tool selfcheck-dir` (`rd_fixtures_selfcheck`) | the developer's folder of the dumps the fixtures were made from; unset: the window check skips ([TESTING_FIXTURES.md](TESTING_FIXTURES.md#the-checks)) |
 
 **Running the storage tests on a lavapipe with the interlock (no root).** The CI runners' Mesa 25.2 lavapipe has the fragment shader interlock, so `rd_pixel_storage`, `rd_fog_storage`, `rd_present_storage`, `rd_replay_tool_pass_merge` and `rd_blend_selftest_moltenvk_storage` run the exact storage path there (banner `blend exact (interlock)`); a lavapipe before 25.2 keeps the fixed-function blend and passes without exercising it. To reproduce on a machine with an older Mesa: download from snapshot.debian.org the trixie-backports `mesa-vulkan-drivers` and `mesa-libgallium` 25.2.6-1~bpo13+1 `.deb`s (into `build-host/tmp/lvp-interlock/deb/`; sid's 26.x needs a newer glibc), `dpkg-deb -x` both into `build-host/tmp/lvp-interlock/root`, copy `root/usr/share/vulkan/icd.d/lvp_icd*.json` and rewrite its `library_path` to the extracted `root/usr/lib/x86_64-linux-gnu/libvulkan_lvp.so`, then run the test from its build directory with `ICO_RD_BLEND=storage VK_ICD_FILENAMES=<that json> LD_LIBRARY_PATH=<root>/usr/lib/x86_64-linux-gnu` (the log's `blend:` line names the mode in force).

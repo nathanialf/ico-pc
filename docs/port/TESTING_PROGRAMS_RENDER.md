@@ -280,7 +280,9 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   miss, the box kept), back (hidden again), under a moved matrix (a miss) and after
   `rd__vis_hiz_cache_clear` (`rd_vis_hiz`).
 - `rd_boot_present_test.c`: a saved start-up through the presenter, present by present; needs
-  `ICO_BOOT_DUMP_DIR` (`rd_boot_present`).
+  `ICO_BOOT_DUMP_DIR` (`rd_boot_present`, local-only validation, label `local`: the nine
+  consecutive frames 115 to 123 of a start-up dumped with `dump_every=1`, kept outside the
+  repository; without them it skips saying how many it found).
 - `rd_blend_selftest_test.c` with `rd_blend_selftest.cmake`: the exact blend's start-up self-test
   and the attachment read's Qualcomm rule; the mode left in force, the forest's tint under it, the
   targets without the attachment read where it is off, the self-test again at a new scene size;
