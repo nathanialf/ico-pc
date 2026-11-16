@@ -783,21 +783,52 @@ nothing touched it since, and is refused (the PS2's size, `a second first-level 
 after the depth or the count was touched`) where something did. A count into SCENE (the
 self-tests' frames) keeps the full-size pass.
 
-**The choice.** Each device times the three forms at its first shadowed scene above 1x: the
-presented replays the perf lines time pass by pass (one every 250 ms) take the stencil step, the
-seven draws and the full-size pass in turn, 3 each, and each one's list 3 GPU time (the sum of its
-pieces begun in list 3; a piece without its two stamps leaves the sample out and is counted) is
-that form's sample; the lowest median is kept for the run (equal medians: the stencil step, then
-the full-size pass). The replays between take the stencil step. The line `rd: shadow count: above
-1x the stencil step, timed at the first shadowed scene (list 3 a replay, the median of 3 timed
-replays each): the stencil step 4.12 ms, the full-size pass 9.80 ms, the seven draws 7.33 ms
-(replay 412; 0 timed replays' stamps unwritten; the same bytes in each form)`. Without GPU
-timestamps (or pass timing: iOS) `rd: shadow count: above 1x the stencil step, untimed: no GPU
-timestamps on this device`; a trial that cannot finish in 36 timed replays keeps the stencil step
-untimed, said. At the start `rd: shadow count: above 1x the first level reads the full-size count
-from the stencil where nothing touched it, else the full-size pass; the device times ...`, or the
-seven draws' line where the device has no stencil view. No config key; `ICO_RD_SHADOW_COUNT_FORM`
-and `ICO_RD_SHADOW_COUNT_TOUCH` are the tests' ([TESTING.md](TESTING.md)).
+**The check.** Until it passed every count above 1x takes the full-size pass. The first presented
+replay with a count above 1x (a self-test's own frame is never presented, nor is `rd_replay_tool
+--pass-dump`) draws its picture that way and, besides, the first level again from the stencil
+and from the seven draws' full-size count, into scratch textures, over the same box with the same
+mask (`rd_shadowres.c` (`checkDraw`)); the three levels go into one readback buffer in that
+replay's list and are compared byte for byte when its frame slot is recycled, after the slot's own
+fence wait (`rd__shadow_count_collect`, from `rd_perf.c`): no wait of its own. At the tablet's 3x
+SHADOW0's level is 864x768, so about 8 MB is read back once (the rows aligned to the device's copy
+pitch), with 2 x 2.6 MB of scratch levels and the 1728x1344 seven-draw count (8.9 MB) made for that
+replay and freed at the compare. The check replay's GPU cost over its picture: a level step from
+the stencil, the seven draws at the full size, a level step from them and three copies (a guess of
+5-15 ms on the tablet, once a run). The stencil step differing keeps the full-size pass for the
+run: `rd: shadow count: the check at the first shadowed scene: the first level from the stencil
+differs from the full-size pass's at N of M texels of WxH, the first (X,Y): ... ; above 1x the
+full-size pass for this run`, the ledger's row refused. The seven draws differing leave them out
+of the trial. Passed: `rd: shadow count: the check at the first shadowed scene: the first level
+from the stencil equal to the full-size pass's at all M texels of WxH; the seven draws' equal too (K
+KB read back at its slot's recycle, no wait); the forms timed next`. A check replay whose depth was
+touched before its step tries again at the next presented replay (8 such refuse the stencil step
+for the run); one with no first level step (a window without volumes) tries again uncounted.
+`ICO_RD_SHADOW_COUNT_SABOTAGE=1` makes the step from the stencil read an empty box, so the check
+refuses it (`rd_shadow_count_check_sabotage`).
+
+**The choice.** After the check, each device times the forms at the same scene: the presented
+replays the perf lines time pass by pass (one every 250 ms) take the stencil step, the seven draws
+and the full-size pass in turn, 3 each, and each one's list 3 GPU time (the sum of its pieces
+begun in list 3; a piece without its two stamps leaves the sample out and is counted) is that
+form's sample. The replays between take the stencil step. The stencil step is kept unless another
+form's median is lower than its own by more than the margin: the larger of 10 % of the stencil
+step's median and the widest spread (max - min) of any form's samples (`rd_sc_choose`). The forms
+differ by a whole pass (the full-size pass at 3.6-11.4 ms in the issue 123 log), while list 3's
+own spread over a scene is what the samples measure; a difference inside that spread never flips
+the choice, so two runs on one device do not alternate on a marginal one. The line `rd: shadow
+count: above 1x the stencil step, timed at the first shadowed scene (list 3 a replay, the median of
+3 timed replays each, taken in turn): the stencil step 4.12 ms, the full-size pass 9.80 ms, the
+seven draws 7.33 ms; another form only below the stencil step's by more than 0.62 ms (the larger of
+10 % of it and the samples' widest spread) (replay 412; 0 timed replays' stamps unwritten; the same
+bytes in each form)`. Without GPU timestamps (or pass timing: iOS) `rd: shadow count: above 1x the
+stencil step, untimed: no GPU timestamps on this device`; a trial that cannot finish in 36 timed
+replays keeps the stencil step untimed, said. A player sees nothing of the check or the trial (the
+same bytes); their cost is the full-size pass's, as in every picture of the release before, on the
+replays before the check passes and on 3 full-size and 3 seven-draw replays of the trial. At the
+start `rd: shadow count: above 1x the full-size pass until the check at the first shadowed scene
+... passes; then the device times ...`, or the seven draws' line where the device has no stencil
+view. No config key; `ICO_RD_SHADOW_COUNT_FORM`, `ICO_RD_SHADOW_COUNT_TOUCH` and
+`ICO_RD_SHADOW_COUNT_SABOTAGE` are the tests' ([TESTING.md](TESTING.md)).
 
 **Where it applies.** Above 1x on any axis up to the levels' cap (non-uniform scales and Full pixel
 alike: the step reads the count's own texel grid, the depth's of the same size). At 1x the one
@@ -815,8 +846,9 @@ stencil` (steps from the stencil, full-size passes drawn after all; refused with
 device timed cheaper). `rd_replay_tool --fine-check` draws the full-size pass after a step from
 the stencil too, so the check reads back the count the step stood for (the stencil-to-table
 equality). Tests: `rd_shadow_fine_ab` check 9 and `rd_shadow_fine_ab_gl` (each form RAN and gave
-the full-size pass's bytes; the guard), `rd_shadow_fine` (the trial's order, median, choice, list
-time and words).
+the full-size pass's bytes; the guard), `rd_shadow_count_check` and
+`rd_shadow_count_check_sabotage` (the check passed, and a wrong step refused), `rd_shadow_fine`
+(the trial's order, median, the choice by table, the check's comparison, words).
 
 ## The shadow count's colour
 

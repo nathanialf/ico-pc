@@ -78,6 +78,31 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool AND Python3_FOUND)
     endif()
 endif()
 
+# rd_shadow_count_check, rd_shadow_count_check_sabotage
+# (test/rd_shadow_count_check.cmake): the check of the full-size count's
+# forms on the device at the first shadowed scene (rd_shadow_count.h): passed
+# on fx-adreno at the tablet's 3x path, and the step from the stencil made
+# wrong (ICO_RD_SHADOW_COUNT_SABOTAGE=1) refused.  No device: SKIP (77).
+if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
+    foreach(_sab 0 1)
+        set(_n rd_shadow_count_check)
+        if(_sab)
+            set(_n rd_shadow_count_check_sabotage)
+        endif()
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${_n}")
+        add_test(NAME ${_n}
+                 COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                         -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                         "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                         "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/${_n}" -DSABOTAGE=${_sab}
+                         -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_shadow_count_check.cmake")
+        set_tests_properties(${_n} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800)
+        if(_sf_env)
+            set_tests_properties(${_n} PROPERTIES ENVIRONMENT "${_sf_env}")
+        endif()
+    endforeach()
+endif()
+
 # The tests whose expectations are the PS2-size chain above 1x (absolute
 # shadow kernels or composites at 2x and 4x, the shadow tiles' masks of the
 # named levels, and the stored pass dumps and baselines made before the rule)

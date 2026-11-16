@@ -705,8 +705,14 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   render area over 200 pictures of moving boxes (0 outside each box, the draw's bytes inside, the
   area cleared alone or the whole); the
   10 s clause and the `--stats` words; the full-size count's forms (`rd_shadow_count.c`):
-  the trial's order, the median, the choice and its ties, list 3's time from a timed replay's
-  pieces (an unstamped piece no sample), the `--stats` words. The pure half (`rd_shadowres_math.c`)
+  the trial's order, the median, the choice by table (the margin: a marginal or noisy win keeps
+  the stencil step), the check's texel comparison, list 3's time from a timed replay's pieces (an
+  unstamped piece no sample), the `--stats` words.
+- `rd_shadow_count_check.cmake` (`rd_shadow_count_check`, `rd_shadow_count_check_sabotage`):
+  `fx-adreno` at the tablet's 3x path, four presented replays: the check drawn by the first and
+  compared at the third, the line `the first level from the stencil equal to the full-size pass's
+  at all N texels` (N > 0); with `ICO_RD_SHADOW_COUNT_SABOTAGE=1` `differs ... at N of M texels`
+  (N > 0) and `the full-size pass for this run`. No device: SKIP. The pure half (`rd_shadowres_math.c`)
   links alone.
 - `rd_shadow_fine_ab.cmake` (`rd_shadow_fine_ab`, `rd_shadow_fine_ab_gl`): the fixtures of
   `port/render/test/fixtures/lists/shadow_fine.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md); a
@@ -739,7 +745,8 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   (`test/png_level_diff.py`); the full-size count's three forms (check 9: where the count
   is the one draw above 1x, `ICO_RD_SHADOW_COUNT_FORM` `full`, `stencil`, `seven` and the default,
   every PNG the full-size pass's bytes, each form RAN by `--stats`' `shadow count above 1x:` line,
-  the default the stencil step, the passes and draws from the code; the guard's run
+  the default (a `--pass-dump` replay: no check) the full-size pass, the passes and draws from the
+  code; the guard's run
   `ICO_RD_SHADOW_COUNT_TOUCH=1` drawing the pass after all with the same bytes; `fx-123-blended`
   at the tablet's path for the forms alone, `forms`). No device: SKIP.
 - `rd_even_test.c` (`rd_even`, CPU): the pictures' evenness line (`rd_even.c`): ten made-up

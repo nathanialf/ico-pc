@@ -288,13 +288,19 @@ static void fullPass(Replay *r, RdTargetRec *tc, RhiPipeline pipe, const RdPipeK
 /* ARMED: the pass kept ready, nothing touched; TAKEN: a step read the
  * stencil, still untouched (a second step of the chain may read it too);
  * STALE: touched after a step took it (a second step cannot: refused);
- * LOST: touched in another list before the step (refused) */
-enum { PEND_NONE = 0, PEND_ARMED, PEND_TAKEN, PEND_STALE, PEND_LOST };
+ * LOST: touched in another list before the step (refused); CHECK: the
+ * check replay (rd_shadow_count.h): the full-size pass drawn, the depth
+ * alone watched until the step draws the check (a touch: not drawn this
+ * replay) */
+enum { PEND_NONE = 0, PEND_ARMED, PEND_TAKEN, PEND_STALE, PEND_LOST, PEND_CHECK };
 
 static struct {
     int state;
     Replay *r;
     RdTargetRec *tc, *td;
+    uint32_t step;  /* the count's step (4 or 8): the seven draws' (the check) */
+    RhiRect texBox; /* the full-size pass's texel box */
+    RhiTexture table;
     RhiPipeline pipe;
     RdPipeKeyInt k;
     RhiBindGroup g2;
@@ -314,6 +320,11 @@ static void pendDraw(void)
 
 void rd__shadow_count_touch(RhiCommandList cl, uint32_t texId)
 {
+    if (s_pend.state == PEND_CHECK && texId != 0 && texId == s_pend.depthTex) {
+        s_pend.state = PEND_NONE;
+        rd__shadow_count_check_lost("the depth was touched before the level's step", true);
+        return;
+    }
     if ((s_pend.state != PEND_ARMED && s_pend.state != PEND_TAKEN) || texId == 0 ||
         (texId != s_pend.depthTex && texId != s_pend.colorTex)) {
         return;
@@ -390,7 +401,81 @@ void rd__shadow_count_materialise(void)
 
 void rd__shadow_count_end(void)
 {
+    /* a check asked this replay and not recorded (no first level step from
+     * the count drawn, or its depth touched): the next presented replay */
+    rd__shadow_count_check_lost("no first level step from the count in the picture", false);
     memset(&s_pend, 0, sizeof(s_pend));
+}
+
+bool rd__shadow_count_check_take(uint32_t color, RdSrStencil *src, RdTargetRec **td, uint32_t *step)
+{
+    if (s_pend.state != PEND_CHECK || s_pend.color != color ||
+        s_pend.replay != g_rd.replayCounter) {
+        return false;
+    }
+    s_pend.state = PEND_NONE; /* the check's own passes touch the depth next */
+    *src = (RdSrStencil){s_pend.td->depth, s_pend.table, rhi_limits()->stencilViewChannel,
+                         s_pend.texBox};
+    *td = s_pend.td;
+    *step = s_pend.step;
+    return true;
+}
+
+/* The check's seven draws (rd_replay.c doShadowResolve's, the same keys,
+ * groups and order) at the full size into dst (w x h, RGBA8, the count
+ * target's texels), the stencil test against td's depth, its depth and
+ * stencil loaded and stored as they are (nothing written to them) */
+bool rd__shadow_count_seven_into(RhiTexture dst, RhiState *dstState, RdTargetRec *td, uint32_t w,
+                                 uint32_t h, uint32_t step)
+{
+    RhiCommandList cl = rd__replay_cl();
+    rd__transition(cl, dst, dstState, RHI_STATE_RENDER_TARGET);
+    rd__transition(cl, td->depth, &td->depthState, RHI_STATE_DEPTH_WRITE);
+    RhiRenderPassDesc p;
+    memset(&p, 0, sizeof(p));
+    p.color[0].texture = dst;
+    p.color[0].load = RHI_LOAD_CLEAR; /* clear[] zeroed, as the resolve's pass */
+    p.colorCount = 1;
+    p.depth.texture = td->depth;
+    p.depth.depthLoad = RHI_LOAD_LOAD;
+    p.depth.stencilLoad = RHI_LOAD_LOAD;
+    p.depth.store = RHI_STORE_STORE;
+    p.depth.stencilStore = RHI_STORE_STORE;
+    p.width = w;
+    p.height = h;
+    rd__perf_pass(cl, RD_PERF_PASS_RENDER, RD_PERF_ID_SHADOW_COUNT, w, h, -1);
+    rhi_cmd_checkpoint(cl, rd__replay_pass_push(RD_PASSK_PASS, 0, w, h, 0, 0, 0, 0, -1));
+    rhi_cmd_begin_render_pass(cl, &p);
+    rd__replay_viewport(w, h);
+    const RhiRect all = {0, 0, w, h};
+    rhi_cmd_set_scissor(cl, &all);
+    const RdUniform g0 = rd__frame_group(w, h, 0.0f, 0.0f);
+    const RhiBindGroup g2 =
+        rd__tex_group(g_rd.dummy, rd__sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP,
+                                              RD_WRAP_CLAMP));
+    uint32_t drawn = 0;
+    for (int pass = 0; pass < RD_SHADOW_RESOLVE_PASSES; pass++) {
+        RdPipeKeyInt k;
+        IcoDrawCB cb;
+        uint8_t ref;
+        if (!rd__shadow_resolve_pass(step, pass, &k, &cb, &ref)) {
+            continue;
+        }
+        const RhiPipeline pipe = rd__get_pipeline(&k);
+        if (!pipe.id) {
+            continue;
+        }
+        rd__set_pipeline(cl, pipe, &k);
+        rd__bind_uniform(cl, 0, g0);
+        rd__bind_uniform(cl, 1, rd__draw_group(&cb));
+        rhi_cmd_set_bind_group(cl, 2, g2);
+        rhi_cmd_set_stencil_ref(cl, ref);
+        rd__replay_draw(cl, 3, 0, 1);
+        drawn++;
+    }
+    rhi_cmd_end_render_pass(cl);
+    rd__transition(cl, dst, dstState, RHI_STATE_SHADER_READ);
+    return drawn > 0;
 }
 
 /* RD_SC_STENCIL at the count: the pass kept ready and the step told where
@@ -425,6 +510,28 @@ static bool armStencil(Replay *r, RdTargetRec *tc, RdTargetRec *td, RhiPipeline 
     const RdSrStencil src = {td->depth, table, lim->stencilViewChannel, fullBox(tc, gsBox)};
     rd__shadow_fine_count_stencil(r->st.color, &src);
     return true;
+}
+
+/* the check replay (rd_shadow_count.h), after the full-size pass: the
+ * depth watched until the first level's step draws the check */
+static void armCheck(Replay *r, RdTargetRec *tc, RdTargetRec *td, const RhiRect *gsBox,
+                     RhiTexture table, uint32_t step)
+{
+    if (td->tw != tc->tw || td->th != tc->th) {
+        rd__shadow_count_check_refuse("the depth's texels are not the count's");
+        return;
+    }
+    memset(&s_pend, 0, sizeof(s_pend));
+    s_pend.r = r;
+    s_pend.tc = tc;
+    s_pend.td = td;
+    s_pend.step = step;
+    s_pend.table = table;
+    s_pend.texBox = fullBox(tc, gsBox);
+    s_pend.color = r->st.color;
+    s_pend.depthTex = td->depth.id; /* colorTex 0: the count target is read as ever */
+    s_pend.replay = g_rd.replayCounter;
+    s_pend.state = PEND_CHECK;
 }
 
 RhiPipeline rd__get_pipeline_held(const RdPipeKeyInt *k)
@@ -552,6 +659,9 @@ bool rd__shadow_one_draw(Replay *r, RdTargetRec *tc, RdTargetRec *td, uint32_t s
         } else if (form != RD_SC_STENCIL ||
                    !armStencil(r, tc, td, pipe, &k, g2, &cb, boxed ? &box : NULL, s_table[ti])) {
             fullPass(r, tc, pipe, &k, g2, &cb, boxed ? &box : NULL);
+            if (fine && rd__shadow_count_check_now()) {
+                armCheck(r, tc, td, boxed ? &box : NULL, s_table[ti], step);
+            }
         }
     }
     g_rdPerf.shadowOne++;

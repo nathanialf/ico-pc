@@ -66,8 +66,9 @@
 #      list 3) every SCENE texel the fine levels change lies within D of a
 #      texel the PS2's levels darken (shadow_fine_check.py; the darkness ratio
 #      it prints is not judged: below);
-#   3b. above 1x the levels themselves: rd_replay_tool --fine-check on the
-#      default (a replay of its own) reads back the count and each level's
+#   3b. above 1x the levels themselves: rd_replay_tool --fine-check with the
+#      step from the stencil (ICO_RD_SHADOW_COUNT_FORM=stencil; the tool then
+#      draws the full-size pass after it) reads back the count and each level's
 #      step and tent and compares them with the CPU reference
 #      (rd_shadowres_math.c) on the same input: every tent texel the
 #      reference's bytes (the tent is whole-number arithmetic), every step
@@ -111,13 +112,18 @@
 #      V seven draws, G guard fallbacks (form X)" line (rd_shadow_count.c):
 #      full S 0 F 1 V 0, stencil S 1 F 0 V 0, seven S 0 F 0 V 1 (and "0 in
 #      one draw, 1 in seven draws"), G 0 and the form's name in each; the
-#      default the stencil step (S 1 F 0 G 0: the tool's first replay is the
-#      trial's first, the stencil step, or untimed the stencil step); the
-#      passes and draws from the code against stencil's: full one pass and
-#      one draw more (fullPass), seven one pass more (the seven draws' pass
-#      and the reduction for the one draw's) and 6 draws more (step 4, every
-#      fixture of the list: RD_SHADOW_RESOLVE_PASSES 7 and the reduction's 1
-#      for the one draw's 1).  The guard (adreno and forms):
+#      default the full-size pass (S 0 F 1 G 0: a --pass-dump replay is not
+#      presented, so no check runs, and until a check passed every replay
+#      takes the full-size pass, rd_shadow_count.c); the passes and draws
+#      from the code against stencil's (the stencil form's count: the one
+#      draw's 1 draw in 1 pass): full one pass and one draw more (fullPass's
+#      1 in a pass of its own), seven one pass more and 7 draws more (the
+#      seven draws' pass, RD_SHADOW_RESOLVE_PASSES 7 draws at step 4, every
+#      fixture of the list (a step-8 count skips bit 5's: 6), and
+#      shadowReduce's pass and 1 draw, for the one draw's pass and 1 draw:
+#      7 + 1 - 1 = 7 draws, 2 - 1 = 1 pass; against full's 2 draws in 2
+#      passes: 6 and 0, v0.11.7's measured 205 -> 211 on fx-adreno), the
+#      default full's.  The guard (adreno and forms):
 #      ICO_RD_SHADOW_COUNT_TOUCH=1 touches the depth before the step from the
 #      stencil, so the full-size pass is drawn after all: S 0 F 1 G 1, every
 #      PNG full's bytes;
@@ -231,9 +237,10 @@ set(args_forms ${args_adreno})
 # check 9's settings (the one draw's count above 1x) and the guard's
 set(formed adreno owner pixel tall forms gl2x)
 set(guarded adreno forms)
-# the seven draws' draws over the one draw's, step 4 (rd_internal.h
-# RD_SHADOW_RESOLVE_PASSES 7 and shadowReduce's 1, for the one draw's 1)
-set(sevenExtraDraws 6)
+# the seven draws' draws over the stencil form's, step 4 (rd_internal.h
+# RD_SHADOW_RESOLVE_PASSES 7 and shadowReduce's 1, for the one draw's 1;
+# the stencil form draws no full-size pass: 7 + 1 - 1)
+set(sevenExtraDraws 7)
 set(same e1x o1x gl1x)
 # above the release's cap (rd_shadowres.h RD_SR_LEVEL_CAP 3: levels at 5 x 3
 # would be drawn): the PS2's sizes, v0.11.6's shadow
@@ -386,16 +393,21 @@ function(sf_forms dumpName dump s base)
                        "${cseven_ff} seven draws, ${cguard_ff} guard fallbacks, form ${cform_ff}")
     set(bad TRUE)
   endif()
-  foreach(v fs fd)
-    if(NOT one_${v} EQUAL 1 OR NOT cst_${v} EQUAL 1 OR NOT cfull_${v} EQUAL 0 OR
-       NOT cseven_${v} EQUAL 0 OR NOT cguard_${v} EQUAL 0 OR NOT cform_${v} STREQUAL "stencil")
-      message(SEND_ERROR "${dumpName} ${s} (${v}): the step from the stencil did not run: one "
-                         "draw ${one_${v}}, ${cst_${v}} from the stencil, ${cfull_${v}} full-size "
-                         "passes, ${cseven_${v}} seven draws, ${cguard_${v}} guard fallbacks, form "
-                         "${cform_${v}}")
-      set(bad TRUE)
-    endif()
-  endforeach()
+  if(NOT one_fs EQUAL 1 OR NOT cst_fs EQUAL 1 OR NOT cfull_fs EQUAL 0 OR
+     NOT cseven_fs EQUAL 0 OR NOT cguard_fs EQUAL 0 OR NOT cform_fs STREQUAL "stencil")
+    message(SEND_ERROR "${dumpName} ${s}: the step from the stencil did not run: one draw "
+                       "${one_fs}, ${cst_fs} from the stencil, ${cfull_fs} full-size passes, "
+                       "${cseven_fs} seven draws, ${cguard_fs} guard fallbacks, form ${cform_fs}")
+    set(bad TRUE)
+  endif()
+  # the default (no check in a --pass-dump replay): the full-size pass
+  if(NOT one_fd EQUAL 1 OR NOT cst_fd EQUAL 0 OR NOT cfull_fd EQUAL 1 OR NOT cseven_fd EQUAL 0 OR
+     NOT cguard_fd EQUAL 0 OR NOT cform_fd STREQUAL "full")
+    message(SEND_ERROR "${dumpName} ${s}: the default is not the full-size pass: one draw "
+                       "${one_fd}, ${cst_fd} from the stencil, ${cfull_fd} full-size passes, "
+                       "${cseven_fd} seven draws, ${cguard_fd} guard fallbacks, form ${cform_fd}")
+    set(bad TRUE)
+  endif()
   if(NOT one_fv EQUAL 0 OR NOT seven_fv EQUAL 1 OR NOT cst_fv EQUAL 0 OR NOT cfull_fv EQUAL 0 OR
      NOT cseven_fv EQUAL 1 OR NOT cguard_fv EQUAL 0 OR NOT cform_fv STREQUAL "seven")
     message(SEND_ERROR "${dumpName} ${s}: the seven draws did not run as asked: ${one_fv} in one "
@@ -408,11 +420,11 @@ function(sf_forms dumpName dump s base)
   math(EXPR wSevenP "${passes_fs} + 1")
   math(EXPR wSevenD "${draws_fs} + ${sevenExtraDraws}")
   if(NOT passes_ff EQUAL wFullP OR NOT draws_ff EQUAL wFullD OR NOT passes_fv EQUAL wSevenP OR
-     NOT draws_fv EQUAL wSevenD OR NOT passes_fd EQUAL passes_fs OR NOT draws_fd EQUAL draws_fs)
+     NOT draws_fv EQUAL wSevenD OR NOT passes_fd EQUAL passes_ff OR NOT draws_fd EQUAL draws_ff)
     message(SEND_ERROR "${dumpName} ${s}: passes and draws: full ${passes_ff}/${draws_ff} "
                        "(${wFullP}/${wFullD}), seven ${passes_fv}/${draws_fv} "
                        "(${wSevenP}/${wSevenD}), default ${passes_fd}/${draws_fd} "
-                       "(${passes_fs}/${draws_fs})")
+                       "(${passes_ff}/${draws_ff})")
     set(bad TRUE)
   endif()
   set(sfFail FALSE)
@@ -574,12 +586,13 @@ foreach(dump IN LISTS dumps)
       math(EXPR compared "${compared} + 1")
       rd_fixture_require(${dumpName} "${out_h}" shadow_levels shadow_level_texels)
       math(EXPR checked_${dumpName} "${checked_${dumpName}} + 1")
-      # the full-size passes the default drew (rd_shadow_count.h: the step
-      # from the stencil draws none; the guard's fallback one)
+      # the full-size passes the default drew (rd_shadow_count.h: a
+      # --pass-dump replay is not presented, no check runs, and until one
+      # passed the count is the full-size pass's)
       set(full "${cfull_h}")
-      if(one_h GREATER 0 AND (NOT cst_h EQUAL 1 OR NOT cfull_h EQUAL 0 OR NOT cguard_h EQUAL 0))
-        message(SEND_ERROR "${dumpName} ${s}: the default's count: ${cst_h} from the stencil (1), "
-                           "${cfull_h} full-size passes (0), ${cguard_h} guard fallbacks (0)")
+      if(one_h GREATER 0 AND (NOT cst_h EQUAL 0 OR NOT cfull_h EQUAL 1 OR NOT cguard_h EQUAL 0))
+        message(SEND_ERROR "${dumpName} ${s}: the default's count: ${cst_h} from the stencil (0), "
+                           "${cfull_h} full-size passes (1), ${cguard_h} guard fallbacks (0)")
         set(sfFail TRUE)
       endif()
       # the cuts: a step and the tent in one pass a level (a level whose box
@@ -650,7 +663,10 @@ foreach(dump IN LISTS dumps)
         endif()
       endif()
       # 3b. the levels against the CPU reference on the same count
-      execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${env_${s}}
+      # (the step from the stencil, ICO_RD_SHADOW_COUNT_FORM=stencil: --fine-check
+      # draws the full-size pass after it, so the reference reads the count
+      # the step stood for: the stencil-to-table equality)
+      execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${env_${s}} ICO_RD_SHADOW_COUNT_FORM=stencil
                               "${TOOL}" "${dump}" "${base}-finecheck.png" --fine-check
                               ${args_${s}}
                       RESULT_VARIABLE frc OUTPUT_VARIABLE fout ERROR_VARIABLE ferr)

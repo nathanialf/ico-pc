@@ -220,6 +220,14 @@ int rd__shadow_count_take(uint32_t color);
 void rd__shadow_count_flush(uint32_t color, int why);
 void rd__shadow_count_materialise(void);
 void rd__shadow_count_end(void);
+/* the check (rd_shadow_count.h): the check replay's first level step takes
+ * the stencil's place, the depth and the count's step (false: not this
+ * replay, or the depth was touched); the seven draws at the full size into
+ * dst (w x h) against td's stencil (false: no draw made) */
+bool rd__shadow_count_check_take(uint32_t color, RdSrStencil *src, struct RdTargetRec **td,
+                                 uint32_t *step);
+bool rd__shadow_count_seven_into(RhiTexture dst, RhiState *dstState, struct RdTargetRec *td,
+                                 uint32_t w, uint32_t h, uint32_t step);
 /* rd_shadow_box.c rd__shadow_box_screen, before the draw's pass: a level
  * sprite of the chain is drawn at the scene's scale too (and the tent
  * after the third) */

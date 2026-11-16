@@ -805,7 +805,7 @@ void ico_attempt_decide_shadow_count(int view)
 {
     if (view) {
         ico_attempt_state(ICO_ATT_SHADOW_COUNT, ICO_ATT_ON,
-                          "above 1x, the form timed at the first shadowed scene");
+                          "above 1x, checked and timed at the first shadowed scene");
     } else {
         ico_attempt_state(ICO_ATT_SHADOW_COUNT, ICO_ATT_NA,
                           "no stencil view here: the seven draws make the count");

@@ -821,6 +821,120 @@ static void levelBoxes(int k, const RdTargetRec *dst, int srcLo[2], int srcHi[2]
     }
 }
 
+/* shadowres_step_stencil_ps's group and DrawCB fields: t1 the stencil
+ * view, t2 the table, t3 the mask (or the dummy); the full-size pass's
+ * texel box in aux0 (ICO_RD_SHADOW_COUNT_SABOTAGE: empty, every texel 0)
+ * and the stencil's channel in mode.w */
+static RhiBindGroup stencilGroup(const RdSrStencil *sc, RhiTexture mask, IcoDrawCB *cb)
+{
+    cb->mode[3] = sc->channel;
+    if (!rd__shadow_count_sabotaged()) {
+        cb->aux0[0] = (uint32_t)sc->box.x;
+        cb->aux0[1] = (uint32_t)sc->box.y;
+        cb->aux0[2] = (uint32_t)sc->box.x + sc->box.w;
+        cb->aux0[3] = (uint32_t)sc->box.y + sc->box.h;
+    }
+    RhiBinding b[4];
+    memset(b, 0, sizeof(b));
+    b[0].slot = 1;
+    b[0].type = RHI_BIND_SAMPLED_TEXTURE;
+    b[0].texture = sc->depth;
+    b[0].aspect = RHI_ASPECT_STENCIL; /* in RHI_STATE_DEPTH_READ since the count */
+    b[1].slot = 1;
+    b[1].type = RHI_BIND_SAMPLER;
+    b[1].sampler = rd__sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    b[2].slot = 2;
+    b[2].type = RHI_BIND_SAMPLED_TEXTURE;
+    b[2].texture = sc->table;
+    b[3].slot = 3;
+    b[3].type = RHI_BIND_SAMPLED_TEXTURE;
+    b[3].texture = mask.id ? mask : g_rd.dummy;
+    return rd__replay_bind_group(s_sr.layoutSt, b, 4);
+}
+
+static RhiTexture scratch(uint32_t w, uint32_t h, const char *name)
+{
+    return rhi_create_texture(
+        &(RhiTextureDesc){w, h, 1, RHI_FMT_RGBA8_UNORM,
+                          RHI_TEX_RENDER_TARGET | RHI_TEX_SAMPLED | RHI_TEX_COPY_SRC, name, 0});
+}
+
+/* The check (rd_shadow_count.h), on the check replay right after its first
+ * level was drawn from the full-size pass's count into lvl[0] (cb, the
+ * step's DrawCB): the same level from the stencil (shadowres_step_stencil_ps)
+ * and from the seven draws' full-size count (cw x ch) into scratch
+ * textures of its own, over the same box with the same mask, and the three
+ * copied into one readback buffer (rows pitch bytes apart: lvl[0], the
+ * stencil's, the seven draws'), compared at the slot's recycle.  Its passes
+ * are not the chain's (chainPasses kept); the picture is lvl[0]'s */
+static void checkDraw(struct Replay *r, uint32_t name, uint32_t count, uint32_t w, uint32_t h,
+                      uint32_t cw, uint32_t ch, const IcoDrawCB *cb, RhiTexture mask)
+{
+    RdSrStencil sc;
+    RdTargetRec *td = NULL;
+    uint32_t step = 4;
+    if (!rd__shadow_count_check_take(count, &sc, &td, &step)) {
+        return;
+    }
+    if (!pipesStencil()) {
+        rd__shadow_count_check_refuse("the stencil step's shader or pipeline could not be made");
+        return;
+    }
+    const RhiLimits *lim = rhi_limits();
+    const uint32_t pa = lim->copyRowPitchAlign ? lim->copyRowPitchAlign : 1u;
+    const uint32_t pitch = (w * 4u + pa - 1u) / pa * pa;
+    RhiTexture tex[RD_SC_CHECK_TEXTURES] = {scratch(w, h, "rd shadow count check: stencil step"),
+                                            scratch(cw, ch, "rd shadow count check: seven draws"),
+                                            scratch(w, h, "rd shadow count check: seven's step")};
+    RhiState ts[RD_SC_CHECK_TEXTURES] = {RHI_STATE_UNDEFINED, RHI_STATE_UNDEFINED,
+                                         RHI_STATE_UNDEFINED};
+    const RhiBuffer rb =
+        rhi_create_buffer(&(RhiBufferDesc){3ull * pitch * h, RHI_BUF_COPY_DST | RHI_BUF_READBACK,
+                                           RHI_MEM_READBACK, "rd shadow count check readback"});
+    bool ok = rb.id != 0;
+    for (int i = 0; i < RD_SC_CHECK_TEXTURES; i++) {
+        ok = ok && tex[i].id != 0;
+    }
+    const uint32_t passes = s_sr.chainPasses;
+    const RhiRect *box = s_sr.cuts && s_sr.boxed ? &s_sr.pre[0] : NULL;
+    if (ok) {
+        RdSrTrack t0 = {{0, 0, 0, 0}, false}, t2 = {{0, 0, 0, 0}, false};
+        IcoDrawCB cbs = *cb;
+        const RhiBindGroup g = stencilGroup(&sc, mask, &cbs);
+        drawPassIn(r, s_sr.pipeStepSt, tex[0], &ts[0], (RhiTexture){0}, NULL, w, h, name, &cbs, box,
+                   mask, &t0, g);
+        ok = rd__shadow_count_seven_into(tex[1], &ts[1], td, cw, ch, step);
+        if (ok) {
+            drawPass(r, s_sr.pipeStep, tex[2], &ts[2], tex[1], &ts[1], w, h, name, cb, box, mask,
+                     &t2);
+        }
+    }
+    s_sr.chainPasses = passes;
+    if (!ok) {
+        for (int i = 0; i < RD_SC_CHECK_TEXTURES; i++) {
+            if (tex[i].id) {
+                rhi_destroy_texture(tex[i]);
+            }
+        }
+        if (rb.id) {
+            rhi_destroy_buffer(rb);
+        }
+        rd__shadow_count_check_refuse("its textures, readback or seven draws could not be made");
+        return;
+    }
+    RhiCommandList cl = rd__replay_cl();
+    const RhiRect all = {0, 0, w, h};
+    rd__transition(cl, s_sr.lvl[0], &s_sr.lvlState[0], RHI_STATE_COPY_SRC);
+    rhi_cmd_copy_texture_to_buffer(cl, s_sr.lvl[0], RHI_ASPECT_COLOR, all, rb, 0, pitch);
+    rd__transition(cl, tex[0], &ts[0], RHI_STATE_COPY_SRC);
+    rhi_cmd_copy_texture_to_buffer(cl, tex[0], RHI_ASPECT_COLOR, all, rb, (uint64_t)pitch * h,
+                                   pitch);
+    rd__transition(cl, tex[2], &ts[2], RHI_STATE_COPY_SRC);
+    rhi_cmd_copy_texture_to_buffer(cl, tex[2], RHI_ASPECT_COLOR, all, rb, 2ull * pitch * h, pitch);
+    rd__transition(cl, s_sr.lvl[0], &s_sr.lvlState[0], RHI_STATE_SHADER_READ);
+    rd__shadow_count_check_recorded(rb, tex, w, h, pitch);
+}
+
 void rd__shadow_fine_screen(const RdStateBlock *st, const RdCmd *c, const RdScreenVtx *v,
                             uint32_t n)
 {
@@ -1022,33 +1136,10 @@ void rd__shadow_fine_screen(const RdStateBlock *st, const RdCmd *c, const RdScre
         cb.uvRect[3] = (float)src->h;
     }
     if (fromStencil) {
-        /* shadowres_step_stencil_ps: the stencil, the table and the mask; the
-         * full-size pass's texel box and the stencil's channel */
-        const RdSrStencil *sc = &s_sr.stencil;
-        cb.mode[3] = sc->channel;
-        cb.aux0[0] = (uint32_t)sc->box.x;
-        cb.aux0[1] = (uint32_t)sc->box.y;
-        cb.aux0[2] = (uint32_t)sc->box.x + sc->box.w;
-        cb.aux0[3] = (uint32_t)sc->box.y + sc->box.h;
-        RhiBinding b[4];
-        memset(b, 0, sizeof(b));
-        b[0].slot = 1;
-        b[0].type = RHI_BIND_SAMPLED_TEXTURE;
-        b[0].texture = sc->depth;
-        b[0].aspect = RHI_ASPECT_STENCIL; /* in RHI_STATE_DEPTH_READ since the count */
-        b[1].slot = 1;
-        b[1].type = RHI_BIND_SAMPLER;
-        b[1].sampler =
-            rd__sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
-        b[2].slot = 2;
-        b[2].type = RHI_BIND_SAMPLED_TEXTURE;
-        b[2].texture = sc->table;
-        b[3].slot = 3;
-        b[3].type = RHI_BIND_SAMPLED_TEXTURE;
-        b[3].texture = mask.id ? mask : g_rd.dummy;
-        const RhiBindGroup g = rd__replay_bind_group(s_sr.layoutSt, b, 4);
+        IcoDrawCB cbs = cb;
+        const RhiBindGroup g = stencilGroup(&s_sr.stencil, mask, &cbs);
         drawPassIn(r, s_sr.pipeStepSt, s_sr.lvl[k], &s_sr.lvlState[k], (RhiTexture){0}, NULL, w, h,
-                   st->color, &cb, s_sr.cuts && s_sr.boxed ? &s_sr.pre[k] : NULL, mask,
+                   st->color, &cbs, s_sr.cuts && s_sr.boxed ? &s_sr.pre[k] : NULL, mask,
                    &s_sr.trLvl[k], g);
         if (g_rdPerf.shadowCountStencil < 0xFFFFu) {
             g_rdPerf.shadowCountStencil++;
@@ -1060,6 +1151,9 @@ void rd__shadow_fine_screen(const RdStateBlock *st, const RdCmd *c, const RdScre
     } else if (!(s_sr.cuts && s_sr.empty)) {
         drawPass(r, s_sr.pipeStep, s_sr.lvl[k], &s_sr.lvlState[k], stex, sstate, w, h, st->color,
                  &cb, s_sr.cuts && s_sr.boxed ? &s_sr.pre[k] : NULL, mask, &s_sr.trLvl[k]);
+        if (k == 0) {
+            checkDraw(r, st->color, t->target, w, h, src->tw, src->th, &cb, mask);
+        }
     }
     s_sr.made[k] = s_sr.chain + 1u;
     if (k + 1 < RD_SR_LEVELS) {

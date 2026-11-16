@@ -15,11 +15,14 @@
  *   RD_SC_SEVEN    the seven stencil-tested draws at the full size, reduced
  *                  by box_reduce_ps (the count's form where the one draw is
  *                  off: rd_replay.c doShadowResolve).
- * Which one a device draws is measured on it: at the first shadowed scene
- * above 1x the timed replays (the perf lines' pass timing, rd_perf.c) take
- * the three forms in turn, RD_SC_TRIAL_N each, and the cheapest median of
- * list 3's GPU time is kept for the run (rd_sc_choose).  Without GPU
- * timestamps the stencil step is kept untimed.  ICO_RD_SHADOW_COUNT_FORM =
+ * Until the check at the first shadowed scene above 1x passed (below:
+ * the stencil step's and the seven draws' first level compared byte for
+ * byte with the full-size pass's on the device) every count takes the
+ * full-size pass.  Then the timed replays (the perf lines' pass timing,
+ * rd_perf.c) take the three forms in turn, RD_SC_TRIAL_N each, and the
+ * stencil step is kept unless another form's median of list 3's GPU time
+ * is lower by more than the margin (rd_sc_choose).  Without GPU timestamps
+ * the stencil step is kept untimed.  ICO_RD_SHADOW_COUNT_FORM =
  * stencil | full | seven (the tests' switch, docs/port/TESTING.md) fixes it. */
 #ifndef ICO_RD_SHADOW_COUNT_H
 #define ICO_RD_SHADOW_COUNT_H
@@ -29,6 +32,7 @@
 #include <stdint.h>
 
 #include "rd.h"
+#include "rhi.h"
 
 enum { RD_SC_FULL = 0, RD_SC_STENCIL, RD_SC_SEVEN, RD_SC_FORMS };
 
@@ -61,10 +65,21 @@ const char *rd_sc_why_text(int why);
 /* the median of v[0..n-1], 1 <= n <= RD_SC_TRIAL_N (the middle one of the
  * sorted values; of two, the lower) */
 float rd_sc_median(const float *v, int n);
-/* the cheapest form of the measured ones (have[f]): the lowest median;
- * between equal medians the stencil step, then the full-size pass, then
- * the seven draws; -1 when none is measured */
-int rd_sc_choose(const float med[RD_SC_FORMS], const bool have[RD_SC_FORMS]);
+/* The choice, steady against noise: med[f] the median of form f's
+ * RD_SC_TRIAL_N samples ms[f] (n[f] of them in; a form with fewer is not
+ * measured, med 0), *margin the larger of RD_SC_MARGIN_SHARE of the
+ * stencil step's median and the widest spread (max - min) of any measured
+ * form's samples; the stencil step unless the full-size pass or the seven
+ * draws has a median under the stencil step's by more than the margin
+ * (then the lower of them; equal: the full-size pass); -1 (margin 0) when
+ * the stencil step is not measured */
+#define RD_SC_MARGIN_SHARE 0.10f
+int rd_sc_choose(const float ms[RD_SC_FORMS][RD_SC_TRIAL_N], const uint8_t n[RD_SC_FORMS],
+                 float med[RD_SC_FORMS], float *margin);
+/* the texels (RGBA8, rows pitch bytes apart) of got that differ from ref's
+ * over w x h, the first's place in *firstX, *firstY (left alone at 0) */
+uint32_t rd_sc_check_differ(const uint8_t *ref, const uint8_t *got, uint32_t w, uint32_t h,
+                            uint32_t pitch, uint32_t *firstX, uint32_t *firstY);
 /* the k-th timed shadowed replay's form at the trial: the stencil step,
  * the seven draws and the full-size pass in turn, a form whose
  * RD_SC_TRIAL_N samples are in (got[f]) left out; -1 when all are in */
@@ -73,6 +88,31 @@ int rd_sc_trial_next(uint32_t k, const uint8_t got[RD_SC_FORMS]);
  * begun in that list (RdPerfPass.list); *written false when a piece of the
  * list came back without its stamps (gpuUs < 0) or the list has none */
 double rd_sc_list_ms(const RdPerfPass *p, uint32_t n, int list, bool *written);
+
+/* ---- the check (round 2): before any other form is drawn on a device,
+ * the first presented replay above 1x draws, besides its picture (the
+ * full-size pass and the first level from it, lvl[0]), the first level
+ * again from the stencil and from the seven draws' full-size count into
+ * scratch textures, and copies the three into one readback buffer
+ * (rd_shadowres.c checkDraw); they are compared when that frame slot is
+ * recycled (rd__shadow_count_collect from rd_perf.c, no wait).  The
+ * stencil step differing keeps the full-size pass for the run (the
+ * attempt ledger's row refused); the seven draws differing leave them out
+ * of the trial; until it passes every replay takes the full-size pass. */
+#define RD_SC_CHECK_TEXTURES 3 /* the stencil step's level, the seven draws' count and level */
+#define RD_SC_CHECK_TRIES 8    /* check replays that could not draw it before it gives up */
+bool rd__shadow_count_check_now(void);
+/* the check replay did not draw it: counted (the depth touched before the
+ * step; RD_SC_CHECK_TRIES of them refuse the stencil step for the run) or
+ * not (no first level step in the picture) */
+void rd__shadow_count_check_lost(const char *why, bool counted);
+void rd__shadow_count_check_refuse(const char *why);
+void rd__shadow_count_check_recorded(RhiBuffer rb, const RhiTexture tex[RD_SC_CHECK_TEXTURES],
+                                     uint32_t w, uint32_t h, uint32_t pitch);
+void rd__shadow_count_collect(uint32_t slot);
+/* ICO_RD_SHADOW_COUNT_SABOTAGE=1 (tests): the step from the stencil reads
+ * an empty box (every texel 0), so the check refuses it */
+bool rd__shadow_count_sabotaged(void);
 
 /* ---- the renderer's */
 /* rd_perf.c: the replay being recorded is timed pass by pass (its pieces

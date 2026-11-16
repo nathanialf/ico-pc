@@ -876,20 +876,88 @@ static void testCountForms(void)
     const float v2[2] = {5.0f, 3.0f};
     CHECK(rd_sc_median(v3, 3) == 9.0f && rd_sc_median(v2, 2) == 3.0f && rd_sc_median(v3, 1) == 9.0f,
           "the median");
-    float med[RD_SC_FORMS];
-    bool have[RD_SC_FORMS] = {true, true, true};
-    med[RD_SC_FULL] = 9.8f;
-    med[RD_SC_STENCIL] = 4.1f;
-    med[RD_SC_SEVEN] = 7.3f;
-    CHECK(rd_sc_choose(med, have) == RD_SC_STENCIL, "the cheapest: the stencil step");
-    med[RD_SC_STENCIL] = 12.0f;
-    CHECK(rd_sc_choose(med, have) == RD_SC_SEVEN, "the cheapest: the seven draws");
-    med[RD_SC_SEVEN] = med[RD_SC_FULL] = med[RD_SC_STENCIL];
-    CHECK(rd_sc_choose(med, have) == RD_SC_STENCIL, "equal: the stencil step");
-    have[RD_SC_STENCIL] = false;
-    CHECK(rd_sc_choose(med, have) == RD_SC_FULL, "equal without it: the full-size pass");
-    have[RD_SC_FULL] = have[RD_SC_SEVEN] = false;
-    CHECK(rd_sc_choose(med, have) == -1, "nothing measured");
+
+    /* the choice by table (rd_sc_choose): samples [stencil, full, seven],
+     * counts, the form and margin wanted (margin: the larger of 10 % of the
+     * stencil step's median and the widest spread) */
+    static const struct {
+        float ms[RD_SC_FORMS][RD_SC_TRIAL_N]; /* indexed by RD_SC_FULL, _STENCIL, _SEVEN */
+        uint8_t n[RD_SC_FORMS];
+        int want;
+        float margin;
+        const char *what;
+    } k_choose[] = {
+        /* full 9.5-10, stencil 4.0-4.2, seven 7.0-7.5: spread 0.5 > 0.41 */
+        {{{9.8f, 9.5f, 10.0f}, {4.0f, 4.2f, 4.1f}, {7.3f, 7.0f, 7.5f}},
+         {3, 3, 3},
+         RD_SC_STENCIL,
+         0.5f,
+         "the stencil step the cheapest"},
+        /* stencil 12 (margin 1.2 > spread 0.7): full 9.2 < 10.8 */
+        {{{9.0f, 9.4f, 9.2f}, {12.0f, 12.5f, 11.75f}, {10.0f, 10.25f, 10.125f}},
+         {3, 3, 3},
+         RD_SC_FULL,
+         1.2f,
+         "the full-size pass clearly cheaper"},
+        /* a marginal win: full 4.75 against 5.0 - 0.5 */
+        {{{4.75f, 4.875f, 4.625f}, {5.0f, 5.125f, 4.875f}, {6.0f, 6.0f, 6.0f}},
+         {3, 3, 3},
+         RD_SC_STENCIL,
+         0.5f,
+         "a marginal win keeps the stencil step"},
+        /* noisy stencil samples (spread 4): full 4.125 not under 6 - 4 */
+        {{{4.0f, 4.125f, 4.25f}, {5.0f, 9.0f, 6.0f}, {8.0f, 8.0f, 8.0f}},
+         {3, 3, 3},
+         RD_SC_STENCIL,
+         4.0f,
+         "a noisy stencil step keeps it"},
+        /* the seven draws left out (n 0): full 7 < 10 - 1 */
+        {{{7.0f, 7.0f, 7.0f}, {10.0f, 10.0f, 10.0f}, {0.0f, 0.0f, 0.0f}},
+         {3, 3, 0},
+         RD_SC_FULL,
+         1.0f,
+         "the seven draws left out"},
+        /* both under by the margin, equal: the full-size pass */
+        {{{7.0f, 7.0f, 7.0f}, {10.0f, 10.0f, 10.0f}, {7.0f, 7.0f, 7.0f}},
+         {3, 3, 3},
+         RD_SC_FULL,
+         1.0f,
+         "equal alternatives: the full-size pass"},
+        /* the seven draws the lower */
+        {{{7.0f, 7.0f, 7.0f}, {10.0f, 10.0f, 10.0f}, {6.0f, 6.0f, 6.0f}},
+         {3, 3, 3},
+         RD_SC_SEVEN,
+         1.0f,
+         "the seven draws the lowest"},
+        /* the stencil step not measured */
+        {{{7.0f, 7.0f, 7.0f}, {10.0f, 10.0f, 0.0f}, {6.0f, 6.0f, 6.0f}},
+         {3, 2, 3},
+         -1,
+         0.0f,
+         "the stencil step not measured"},
+    };
+
+    for (size_t i = 0; i < sizeof k_choose / sizeof k_choose[0]; i++) {
+        float med[RD_SC_FORMS], margin = -1.0f;
+        const int got = rd_sc_choose(k_choose[i].ms, k_choose[i].n, med, &margin);
+        CHECK(got == k_choose[i].want && fabsf(margin - k_choose[i].margin) < 1.0e-4f,
+              "the choice (%s): %d (%d), margin %.4f (%.4f)", k_choose[i].what, got,
+              k_choose[i].want, (double)margin, (double)k_choose[i].margin);
+    }
+    /* the check's comparison (rd_sc_check_differ): rows pitch 12 bytes,
+     * 2 x 2 texels, one texel off */
+    {
+        uint8_t a[24], b[24];
+        memset(a, 0, sizeof a);
+        memset(a + 4, 0x80, 4);
+        memcpy(b, a, sizeof b);
+        uint32_t fx = 0, fy = 0;
+        CHECK(rd_sc_check_differ(a, b, 2, 2, 12, &fx, &fy) == 0, "the same texels");
+        b[12 + 4 + 3] = 0x7F; /* texel (1, 1) */
+        b[8] = 0xFF;          /* past the row's texels: not compared */
+        CHECK(rd_sc_check_differ(a, b, 2, 2, 12, &fx, &fy) == 1 && fx == 1 && fy == 1,
+              "one texel apart at (1,1): (%u,%u)", (unsigned)fx, (unsigned)fy);
+    }
     RdPerfPass p[4];
     memset(p, 0, sizeof(p));
     p[0].list = 2;

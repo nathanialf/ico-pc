@@ -1513,7 +1513,8 @@ void rd__perf_collect_gpu(void)
        RHI_FRAMES_IN_FLIGHT frames ago */
     const uint32_t slot = rhi_frame_slot();
     if (g_rd.hasDevice) {
-        rd__shot_late_collect(slot); /* the state picture this slot copied (rd_shot_late.h) */
+        rd__shot_late_collect(slot);    /* the state picture this slot copied (rd_shot_late.h) */
+        rd__shadow_count_collect(slot); /* the shadow count's check (rd_shadow_count.h) */
     }
     if (!s_pendingValid[slot]) {
         return;
