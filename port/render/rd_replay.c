@@ -62,6 +62,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_hold.h"
 #include "rd_upload_late.h"
 #include "rd_jitter.h"
 #include "rd_layer.h"
@@ -2281,6 +2282,7 @@ static void noteMipUse(RdTexRec *t, const RdDrawState *d)
     if (boost == t->mipBuiltBoost && (!boost || want == t->mipBuiltRef)) {
         return;
     }
+    rd__hold_tex_changed(); /* its levels made again (rd_hold.h) */
     if (!t->dirty) {
         g_rd.texDirtyCount++;
     }

@@ -33,6 +33,7 @@
 #include "rd_log_line.h"
 #include "rd_made_outside.h" /* what play makes outside the key cache, named */
 #include "rd_internal.h"
+#include "rd_hold.h"
 #include "rd_icon_hold.h" /* rd__icon_pass_drop */
 #include "rd_loss_keep.h" /* rd__loss_keep_recycle */
 #include "rd_layer.h"     /* the display layer's reserved slots */
@@ -1452,6 +1453,7 @@ static uint32_t texAlloc(void)
 /* The whole texture changed (a create, rd_update_texture) */
 static void texDirtyAll(RdTexRec *t)
 {
+    rd__hold_tex_changed(); /* the paused scene's hold (rd_hold.h) */
     if (!t->dirty) {
         g_rd.texDirtyCount++;
     }
@@ -1665,6 +1667,7 @@ void rd_update_texture_rect(RdTex tex, uint32_t x, uint32_t y, uint32_t w, uint3
         return; /* nothing changed: nothing to upload */
     }
     g_rd.texRectUpdates++;
+    rd__hold_tex_changed();
     if (!t->dirty) {
         g_rd.texDirtyCount++;
         t->dirty = 1;
@@ -1699,6 +1702,7 @@ void rd_destroy_texture(RdTex tex)
     if (t->dirty && g_rd.texDirtyCount) {
         g_rd.texDirtyCount--;
     }
+    rd__hold_tex_changed();
     free(t->pixels);
     free(t->gsChain);
     rd__free_pending(t); /* a replacement destroyed before its upload */
