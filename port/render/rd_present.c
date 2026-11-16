@@ -2415,6 +2415,7 @@ void rd__shot_late_collect(uint32_t slot)
     }
     s_late.pending = 0;
     const size_t n = (size_t)s_late.w * s_late.h * 4u;
+    const double c0 = rd__now_ms(); /* the copy out of the readback, on this thread */
     const uint8_t *src = s_late.buf.id ? rhi_map_buffer(s_late.buf) : NULL;
     uint8_t *crop = src ? malloc(n) : NULL;
     if (crop) {
@@ -2428,11 +2429,21 @@ void rd__shot_late_collect(uint32_t slot)
             }
             crop[i + 3] = 255; /* opaque, as the old crop */
         }
+        /* the buffer serves one picture a pause: let go now (its destroy
+           waits for the frames in flight, rhi.h), made again at the next
+           pause, so its size is not held through play (issue 123) */
+        const uint64_t kb = s_late.size / 1024u;
+        rhi_destroy_buffer(s_late.buf);
+        s_late.buf = (RhiBuffer){0};
+        s_late.size = 0;
         if (shotLogNow()) {
             rd__log("state picture: %ux%u from the %ux%u output (the box at %d,%d), read at its "
-                    "slot's recycle %u pictures later, no wait (%.1f ms after its present)",
+                    "slot's recycle %u pictures later, no wait (%.1f ms after its present); the "
+                    "copy out of the readback %.1f ms on the replaying thread, its %llu KB buffer "
+                    "let go",
                     s_late.w, s_late.h, s_late.outW, s_late.outH, s_late.box.x, s_late.box.y,
-                    s_late.recycles + 1u, rd__now_ms() - s_late.t0);
+                    s_late.recycles + 1u, rd__now_ms() - s_late.t0, rd__now_ms() - c0,
+                    (unsigned long long)kb);
         }
     } else {
         rd__log("state picture: not taken: its readback could not be read");
