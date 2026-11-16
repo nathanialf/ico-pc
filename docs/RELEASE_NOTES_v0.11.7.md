@@ -5,7 +5,7 @@
 - The log now lists, at start, the adjustments the game makes for your graphics chip and driver, with the reason for each.
 - The log now names the objects that move without smoothing between game frames and says how often each of them moves, and times the moments when the picture rate drops to one picture per game frame, so a report of slow-looking movement can be traced.
 - The log now follows, second by second, which processor cores the game's main threads ran on and how fast those cores were running whenever the picture rate drops to one picture per game frame.
-- When the picture is drawn above the original resolution (a higher Resolution, or supersampling), characters' shadows are now drawn at the picture's resolution and no longer look blocky; they keep the original's softness. In the Original preset, and at Resolution 1x without supersampling, nothing changes.
+- When the picture is drawn above the original resolution (a higher Resolution, or supersampling), characters' shadows now follow the picture's resolution up to three times the original and no longer look blocky there; they keep the original's softness. Above three times the original they are drawn as before. In the Original preset, and at Resolution 1x without supersampling, nothing changes.
 - Reflections in water, and the picture seen through the Queen's barrier, are now always drawn as sharp as the rest of the picture, so the Water reflections option has been removed. In the Original preset, and at Resolution 1x without supersampling, nothing changes.
 
 ## Fixed

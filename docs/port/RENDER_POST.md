@@ -1544,7 +1544,12 @@ and are still drawn from the count box-averaged to its GS size (`port/render/rd_
 for byte. Above 1x the PS2's levels were the penumbra's resolution: a level texel 6, 12 and 24
 SCENE texels at 3x, so where an edge fell against their grid changed the penumbra (10-90 width
 11.3 to 24.3 SCENE texels at 3x over the grid's phase, its middle wandering 3.8 texels: the
-staircase along a slanted edge). Now:
+staircase along a slanted edge). Now, up to the release's cap of 3 texels a GS pixel on each axis
+(`RD_SR_LEVEL_CAP`: the largest scale a device ran, issue 123's tablet at 3x and the owner's Pixel
+at 2.8125 x 2.41, and the tests' 3 x 3; the levels' cost grows about as the scale's fourth power
+and nothing above it was measured on hardware; above it the PS2's sizes, the release before's shadow, the
+reason `scale` and `rd: shadow levels: the PS2's sizes: the scene at CxC texels a GS pixel, above
+the cap of 3 ...` at each change; `rd_shadow_fine_ab` check 8):
 
 1. the count is also kept at its full size (the one draw draws it again at the count target's own
    texels, `port/render/rd_shadow_one.c`; the seven draws and the MSAA epoch's covered-majority
