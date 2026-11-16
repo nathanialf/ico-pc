@@ -21,6 +21,7 @@
  * them into its command (so dumps carry them). */
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
 
@@ -395,10 +396,22 @@ void rd__block_read(const RdTargetRec *src)
  * rd_internal.h rd__block_keeps_repeat: the open border's clamp of a target
  * read (rd_replay.c drawWrap) is for the screen-space copies of the frame;
  * a screen prim reading a block smaller than the frame keeps the game's
- * wrap (the puddle's ripples, issue 106) */
+ * wrap (the puddle's ripples, issue 106).  ICO_RD_BLOCK_CLAMP=1, the tests'
+ * sabotage (docs/port/TESTING.md): no read kept, every block read clamped
+ * under an open border as before the fix, so a test can show its picture
+ * would see the defect; read once a process and logged */
 bool rd__block_keeps_repeat(const RdTargetRec *src)
 {
-    return src && src->block && !(src->w == g_rd.gsW && src->h == g_rd.gsH);
+    static int clampAll = -1;
+    if (clampAll < 0) {
+        const char *e = getenv("ICO_RD_BLOCK_CLAMP");
+        clampAll = e != NULL && strcmp(e, "1") == 0;
+        if (clampAll) {
+            rd__log("water: ICO_RD_BLOCK_CLAMP=1 (the tests' sabotage): every block read clamped "
+                    "under an open border, as before issue 106's fix");
+        }
+    }
+    return !clampAll && src && src->block && !(src->w == g_rd.gsW && src->h == g_rd.gsH);
 }
 
 /* ------------------------------------------- the F12 line (issue 106)

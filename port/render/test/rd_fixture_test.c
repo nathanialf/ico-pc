@@ -283,6 +283,164 @@ static size_t payloadAt(const uint8_t *d, uint32_t ver)
     return o + 4;
 }
 
+/* @water place's frame (version 17, 512 x 448): SCENE with FBA on drawn by
+ * mesh 7 (the alpha bit's writer), a block 0x10015 (256 x 128, marked a block
+ * in the temporary targets) drawn by mesh 8, then a triangle on SCENE with
+ * ST and Q reading the block's texture 3 on REPEAT in S, CLAMP in T */
+enum {
+    WOFF_TRI = 0,               /* RdScreenVtx[3]: art */
+    WOFF_MESH7 = 256,           /* RdVuPayload + block + 1 material + 32 card bytes */
+    WOFF_MESH8 = 256 + 672,     /* the same */
+    WPAY_BYTES = 256 + 2 * 672, /* 1600 */
+    WBLOCK = 0x10015
+};
+
+static void putWaterMesh(uint8_t *pay, uint32_t off, float tx)
+{
+    RdVuPayload h;
+    memset(&h, 0, sizeof(h));
+    h.code = 32;
+    h.prog = 1;
+    h.batchCount = 1;
+    h.qwPerVertex = 3;
+    h.materialCount = 1;
+    memcpy(pay + off, &h, sizeof(h));
+    /* mem[16..19]: x' = tx + 100 x, y' = tx + 100 y, w 1 */
+    float m[4][4] = {{100, 0, 0, 0}, {0, 100, 0, 0}, {0, 0, 1, 0}, {tx, tx, 0, 1}};
+    memset(pay + off + 32, 0, 576);
+    memcpy(pay + off + 32 + 16 * 16, m, sizeof(m));
+    RdMaterial mat;
+    memset(&mat, 0, sizeof(mat));
+    mat.tex.id = 2;
+    mat.blend = 4;
+    memcpy(pay + off + 32 + 576, &mat, sizeof(mat));
+}
+
+static void buildWaterDump(RdFxBuf *b, bool block)
+{
+    const uint32_t ver = 17;
+    rd_fx_put(b, RD_DUMP_MAGIC, 8);
+    rd_fx_put32(b, ver);
+    rd_fx_put32(b, sizeof(RdCmd));
+    rd_fx_put32(b, rd_fx_state_bytes(ver));
+    rd_fx_put32(b, sizeof(RdScreenVtx));
+    rd_fx_put32(b, 512);
+    rd_fx_put32(b, 448);
+    putf(b, 4.0f / 3.0f);
+    putf(b, 512.0f);
+    rd_fx_put32(b, 512);
+    char region[RD_DUMP_REGION_BYTES] = "pal";
+    rd_fx_put(b, region, sizeof(region));
+    rd_fx_put32(b, 1);
+    rd_fx_put32(b, 0);
+    rd_fx_put32(b, 0);
+    RdCamera cam;
+    memset(&cam, 0, sizeof(cam));
+    rd_fx_put(b, &cam, sizeof(cam));
+    RdStateBlock st;
+    memset(&st, 0, sizeof(st));
+    st.gsW = 512;
+    st.gsH = 448;
+    rd_fx_put(b, &st, rd_fx_state_bytes(ver));
+    rd_fx_put(b, &st, rd_fx_state_bytes(ver));
+    RdCmd c[16];
+    int n = 0;
+    c[n] = cmd(RDC_TARGET);
+    c[n].u[0] = (uint32_t)RD_TARGET_SCENE + 1u;
+    c[n++].u[2] = 512u | (448u << 16);
+    c[n] = cmd(RDC_FBA);
+    c[n++].b[0] = 1;
+    c[n] = cmd(RDC_MESH);
+    c[n].u[0] = 7;
+    c[n].u[1] = WOFF_MESH7;
+    c[n].keyLo = 1;
+    c[n++].u[2] = 32 + 576 + 24 + 32;
+    c[n] = cmd(RDC_FBA);
+    c[n++].b[0] = 0;
+    c[n] = cmd(RDC_TARGET);
+    c[n].u[0] = WBLOCK;
+    c[n++].u[2] = 256u | (128u << 16);
+    c[n] = cmd(RDC_MESH);
+    c[n].u[0] = 8;
+    c[n].u[1] = WOFF_MESH8;
+    c[n].keyLo = 2;
+    c[n++].u[2] = 32 + 576 + 24 + 32;
+    c[n] = cmd(RDC_TARGET);
+    c[n].u[0] = (uint32_t)RD_TARGET_SCENE + 1u;
+    c[n++].u[2] = 512u | (448u << 16);
+    c[n] = cmd(RDC_TEXTURE);
+    c[n].b[1] = 1;
+    c[n++].u[0] = 3;
+    c[n] = cmd(RDC_WRAP);
+    c[n].b[0] = RD_WRAP_REPEAT;
+    c[n++].b[1] = RD_WRAP_CLAMP;
+    c[n] = cmd(RDC_SCREEN);
+    c[n].b[0] = RD_PRIM_TRIANGLES;
+    c[n].u[0] = WOFF_TRI;
+    c[n++].u[1] = 3;
+    rd_fx_put32(b, (uint32_t)n);
+    rd_fx_put(b, c, sizeof(RdCmd) * (size_t)n);
+    for (int l = 1; l < RD_LIST_COUNT; l++) {
+        rd_fx_put32(b, 0);
+    }
+    uint8_t pay[WPAY_BYTES];
+    fillArt(pay, sizeof(pay));
+    /* mesh 7 about (1, 1) in model space lands on SCENE's middle (2048,
+       2048); mesh 8 at the origin lands at (2048, 2048) */
+    putWaterMesh(pay, WOFF_MESH7, 1948.0f);
+    putWaterMesh(pay, WOFF_MESH8, 2048.0f);
+    rd_fx_put32(b, WPAY_BYTES);
+    rd_fx_put(b, pay, sizeof(pay));
+    /* textures: 2 (16x16 RGBA8, one level), 3 (the block as a texture) */
+    rd_fx_put32(b, 2);
+    const uint32_t th[2][8] = {{2, RD_TEXKIND_IMAGE, 0, 0, 16, 16, 0, RD_TEXEL_RGBA8},
+                               {3, RD_TEXKIND_TARGET, 0, 0, 256, 128, WBLOCK, 0}};
+    uint8_t px[16 * 16 * 4];
+    for (int k = 0; k < 8; k++) {
+        rd_fx_put32(b, th[0][k]);
+    }
+    fillArt(px, sizeof(px));
+    rd_fx_put(b, px, sizeof(px));
+    rd_fx_put32(b, 1);
+    for (int k = 0; k < 8; k++) {
+        rd_fx_put32(b, th[1][k]);
+    }
+    /* the temporary target: the block (keep's bit 1), or a plain one */
+    rd_fx_put32(b, 1);
+    const uint32_t tt[5] = {WBLOCK, 256, 128, 1, block ? 2u : 0u};
+    for (int k = 0; k < 5; k++) {
+        rd_fx_put32(b, tt[k]);
+    }
+    /* meshes 7 and 8: 5 prelit vertices, one strip each */
+    rd_fx_put32(b, 2);
+    for (uint32_t id = 7; id <= 8; id++) {
+        const uint32_t mh[5] = {id, 5, 3, 9, 1};
+        for (int k = 0; k < 5; k++) {
+            rd_fx_put32(b, mh[k]);
+        }
+        char name[24] = "secret_name";
+        rd_fx_put(b, name, 24);
+        uint8_t stream[5 * 3 * 16];
+        fillArt(stream, sizeof(stream));
+        rd_fx_put(b, stream, sizeof(stream));
+        for (uint32_t k = 2; k <= 4; k++) {
+            for (uint32_t corner = 0; corner < 3; corner++) {
+                rd_fx_put32(b, k * 4u + corner);
+            }
+        }
+        RdVuBatchRec br;
+        memset(&br, 0, sizeof(br));
+        br.indexCount = 9;
+        br.vertexCount = 5;
+        rd_fx_put(b, &br, sizeof(br));
+    }
+    rd_fx_put32(b, 0); /* no tick cameras */
+    for (int k = 0; k < 32; k++) {
+        rd_fx_put32(b, 0);
+    }
+    rd_fx_put32(b, 0); /* no facing tables */
+}
+
 static uint32_t fbits(float f)
 {
     uint32_t u;
@@ -538,6 +696,55 @@ int main(int argc, char **argv)
     CHECK(!rd_fixture_check(&fx, why, sizeof(why), NULL, 0));
     fx.skelBytes += 4;
     rd_fixture_free(&fx);
+    /* @scene place on the same frame: mesh 7 is the first mesh list 0 draws
+       (n 0: role 0, a sheet at grid point 0, the same (1920, 1936) as above,
+       at the origin's w 1).  No perspective: the centre (-1.28, -1.12, 0)
+       as above.  The screen derivatives: x 100 along model x, y 100 along y,
+       nothing along z, so the sheet lies across x and y, flat along z (form
+       RD_FX_FORM_SHEET + 2).  R is a third of 448, 149.33 pixels: the half
+       side 2^1 reaches 200 (2^0: 100); the step 2^-2, the centre (-5, -4, 0)
+       steps.  The strip's corners A (-13, -12), B (-13, 4), C (3, -12),
+       D (3, 4) steps at z 0: vertex 0 at (-3.25, -3, 0), vertex 1 (-3.25, 1),
+       vertex 2 (0.75, -3), vertex 4 A again */
+    static const char sceneRules[] = "alpha_ramp ate\nbright additive\nchecker\n@scene place\n";
+    CHECK(rd_fixture_make(dw.p, dw.n, sceneRules, &fx, report, sizeof(report), why, sizeof(why)));
+    printf("scene placement: %s %s\n", report, why);
+    CHECK(strstr(report, "scene: 1 meshes of list 0 placed (1 sheets, 0 behind a sheet, 0 across "
+                         "the left edge, 0 past the right edge, 0 on the picture), 0 kept their "
+                         "origin") != NULL);
+    CHECK(fx.skelBytes == plainSkel + 4 + 4 + 20 + 4);
+    CHECK(rd_fx_get32(fx.skel + plainSkel) == RD_FX_PLACE_TAG2);
+    CHECK(rd_fx_get32(fx.skel + plainSkel + 4) == 1 && rd_fx_get32(fx.skel + plainSkel + 8) == 7 &&
+          (int32_t)rd_fx_get32(fx.skel + plainSkel + 12) == -5 &&
+          (int32_t)rd_fx_get32(fx.skel + plainSkel + 16) == -4 &&
+          rd_fx_get32(fx.skel + plainSkel + 20) == 0 &&
+          rd_fx_get32(fx.skel + plainSkel + 24) == RD_FX_FORM_SHEET + 2u &&
+          rd_fx_get32(fx.skel + plainSkel + 28) == 0);
+    CHECK(rd_fixture_check(&fx, why, sizeof(why), stats, sizeof(stats)));
+    CHECK(strstr(stats, "1 meshes placed (1 sheets), 0 prims beside WORK2") != NULL);
+    x = NULL;
+    CHECK(rd_fixture_expand(&fx, true, &x, &xn, why, sizeof(why)));
+    if (x) {
+        const size_t pw = payloadAt(x, 17);
+        CHECK(xn == dw.n);
+        size_t ow = pw + PAY_BYTES + 4 + 32 + 8 * 4 * 4 + 4 + 32 + 16 * 16 * 4 + 4 + 8 * 8 * 4;
+        ow += 4 + 4 + 20 + 24;
+        CHECK(rd_fx_get32(x + ow) == fbits(-3.25f) && rd_fx_get32(x + ow + 4) == fbits(-3.0f));
+        CHECK(rd_fx_get32(x + ow + 8) == 0u && rd_fx_get32(x + ow + 12) == fbits(1.0f));
+        CHECK(rd_fx_get32(x + ow + 48) == fbits(-3.25f) &&
+              rd_fx_get32(x + ow + 48 + 4) == fbits(1.0f));
+        CHECK(rd_fx_get32(x + ow + 96) == fbits(0.75f) &&
+              rd_fx_get32(x + ow + 96 + 4) == fbits(-3.0f));
+        CHECK(memcmp(x + ow + 4 * 48, x + ow, 12) == 0);
+        CHECK(rd_fixture_selfcheck(dw.p, dw.n, x, xn, &windows, &hits, why, sizeof(why)));
+        CHECK(windows > 0 && hits == 0);
+        free(x);
+    }
+    /* a form past the sheets does not parse */
+    const uint32_t badForm = RD_FX_FORM_SHEET + 3u;
+    memcpy(fx.skel + plainSkel + 24, &badForm, 4);
+    CHECK(!rd_fixture_check(&fx, why, sizeof(why), NULL, 0));
+    rd_fixture_free(&fx);
     rd_fx_free(&dw);
     /* the rules on a frame that draws nothing into WORK2: refused; a
        placement line that is not one: refused */
@@ -659,6 +866,110 @@ int main(int argc, char **argv)
     CHECK(!rd_fixture_make(df.p, df.n, dropRules, &fx, report, sizeof(report), why, sizeof(why)));
     CHECK(strstr(why, "matched nothing") != NULL && strstr(why, "0 sheets, 1 meshes refused"));
     rd_fx_free(&df);
+    /* @scene drops with @scene place, with @water place, or with @scene
+       cards: refused (one section, one role list) */
+    {
+        static const char *const mixed[3] = {"checker\n@scene drops\n@scene place\n",
+                                             "checker\n@scene drops\n@water place\n",
+                                             "checker\n@scene drops\n@scene cards\n"};
+        RdFxBuf dm = {0};
+        s_persp = true;
+        buildDump(&dm, 17);
+        s_persp = false;
+        for (int k = 0; k < 3; k++) {
+            CHECK(!rd_fixture_make(dm.p, dm.n, mixed[k], &fx, report, sizeof(report), why,
+                                   sizeof(why)));
+            CHECK(strstr(why, k < 2 ? "combine" : "each other") != NULL);
+        }
+        rd_fx_free(&dm);
+    }
+    /* @water place (rd_fixture.h).  Mesh 7, the first mesh drawn into SCENE
+       with FBA on, takes grid point (0 + 4) mod 9 = 4, the scissor's middle:
+       X = 2048 - 256 + 512 * 2 / 4 = 2048, Y = 2048 - 224 + 448 * 2 / 4 =
+       2048; its matrix x' = 1948 + 100 x has no perspective, so the centre is
+       the point of that line nearest the origin, (1, 1, 0); the size 2^-2
+       (25 pixels), the lattice step 2^-5: (32, 32, 0) steps, vertex 0 at
+       ((32 - 8) / 32, (32 - 8) / 32, -8 / 32).  Mesh 8, the first drawn into
+       the block (256 x 128), takes the block's first inner column and row:
+       X = 2048 - 128 + 256 / 4 = 1984, Y = 2048 - 64 + 128 / 4 = 2016, so
+       (-0.64, -0.32, 0): (-20, -10, 0) steps (-20.48 and -10.24 rounded).
+       The triangle reads the block on REPEAT in S only: S from 12 / 16 by
+       sixteenths along the ribbon's columns, T as before (0, then 1) */
+    static const char waterRules[] = "alpha_ramp ate\nchecker\n@water place\n";
+    /* the same texture rules without the line: the skeleton the section follows */
+    static const char waterTexRules[] = "alpha_ramp ate\nchecker\n";
+    RdFxBuf dwa = {0};
+    buildWaterDump(&dwa, true);
+    CHECK(!dwa.bad);
+    CHECK(rd_fixture_make(dwa.p, dwa.n, waterTexRules, &fx, report, sizeof(report), why,
+                          sizeof(why)));
+    const size_t waterPlain = fx.skelBytes;
+    rd_fixture_free(&fx);
+    CHECK(rd_fixture_make(dwa.p, dwa.n, waterRules, &fx, report, sizeof(report), why, sizeof(why)));
+    printf("water placement: %s %s\n", report, why);
+    CHECK(strstr(report, "water: 1 meshes drawn into a block generated on it, 1 meshes setting "
+                         "SCENE's alpha bit generated on SCENE (0 kept their origin), 1 prims "
+                         "reading a block generated across its period") != NULL);
+    CHECK(fx.skelBytes == waterPlain + 4 + 4 + 2 * 16 + 4 + 4 + 8);
+    CHECK(rd_fx_get32(fx.skel + waterPlain) == RD_FX_PLACE_TAG3);
+    CHECK(rd_fx_get32(fx.skel + waterPlain + 4) == 2);
+    CHECK(rd_fx_get32(fx.skel + waterPlain + 8) == 7 &&
+          (int32_t)rd_fx_get32(fx.skel + waterPlain + 12) == 32 &&
+          (int32_t)rd_fx_get32(fx.skel + waterPlain + 16) == 32 &&
+          rd_fx_get32(fx.skel + waterPlain + 20) == 0);
+    CHECK(rd_fx_get32(fx.skel + waterPlain + 24) == 8 &&
+          (int32_t)rd_fx_get32(fx.skel + waterPlain + 28) == -20 &&
+          (int32_t)rd_fx_get32(fx.skel + waterPlain + 32) == -10 &&
+          rd_fx_get32(fx.skel + waterPlain + 36) == 0);
+    CHECK(rd_fx_get32(fx.skel + waterPlain + 40) == 0); /* no prim beside WORK2 */
+    CHECK(rd_fx_get32(fx.skel + waterPlain + 44) == 1 &&
+          rd_fx_get32(fx.skel + waterPlain + 48) == WOFF_TRI &&
+          rd_fx_get32(fx.skel + waterPlain + 52) == RD_FX_ACROSS_S);
+    CHECK(rd_fixture_check(&fx, why, sizeof(why), stats, sizeof(stats)));
+    CHECK(strstr(stats, "2 meshes placed on a block or SCENE, 0 prims beside WORK2, 1 prims read "
+                        "across a block's period") != NULL);
+    x = NULL;
+    CHECK(rd_fixture_expand(&fx, true, &x, &xn, why, sizeof(why)));
+    if (x) {
+        const size_t pw = payloadAt(x, 17);
+        CHECK(xn == dwa.n);
+        RdScreenVtx w[3];
+        memcpy(w, x + pw + WOFF_TRI, sizeof(w));
+        CHECK(w[0].x == (2048 - 256 + 128) * 16 && w[0].y == (2048 - 224 + 112) * 16);
+        CHECK(w[0].s == 0.75f && w[0].t == 0.0f);
+        CHECK(w[1].s == 0.75f && w[1].t == 1.0f && w[1].y == (2048 - 224 + 140) * 16);
+        CHECK(w[2].s == 0.8125f && w[2].t == 0.0f && w[2].x == (2048 - 256 + 144) * 16);
+        /* mesh 7's first vertex: after the payload, the two textures (the
+           image's header, texels and level count; the target's header), the
+           temporary target and mesh 7's header and name */
+        size_t ow = pw + WPAY_BYTES + 4 + 32 + 16 * 16 * 4 + 4 + 32 + 4 + 20 + 4 + 20 + 24;
+        CHECK(rd_fx_get32(x + ow) == fbits(0.75f) && rd_fx_get32(x + ow + 4) == fbits(0.75f));
+        CHECK(rd_fx_get32(x + ow + 8) == fbits(-0.25f));
+        /* mesh 8's: after mesh 7's stream, index list and batch */
+        ow += 5 * 3 * 16 + 9 * 4 + sizeof(RdVuBatchRec) + 20 + 24;
+        CHECK(rd_fx_get32(x + ow) == fbits(-28.0f / 32.0f) &&
+              rd_fx_get32(x + ow + 4) == fbits(-18.0f / 32.0f));
+        CHECK(rd_fixture_selfcheck(dwa.p, dwa.n, x, xn, &windows, &hits, why, sizeof(why)));
+        CHECK(windows > 0 && hits == 0);
+        free(x);
+    }
+    /* a cut section does not parse */
+    fx.skelBytes -= 4;
+    CHECK(!rd_fixture_check(&fx, why, sizeof(why), NULL, 0));
+    fx.skelBytes += 4;
+    rd_fixture_free(&fx);
+    /* @scene place and @water place together: refused (each its own section) */
+    CHECK(!rd_fixture_make(dwa.p, dwa.n, "checker\n@scene place\n@water place\n", &fx, report,
+                           sizeof(report), why, sizeof(why)));
+    CHECK(strstr(why, "not taken together") != NULL);
+    rd_fx_free(&dwa);
+    /* the same frame whose temporary target is not marked a block: refused */
+    RdFxBuf dnb = {0};
+    buildWaterDump(&dnb, false);
+    CHECK(
+        !rd_fixture_make(dnb.p, dnb.n, waterRules, &fx, report, sizeof(report), why, sizeof(why)));
+    CHECK(strstr(why, "matched nothing") != NULL);
+    rd_fx_free(&dnb);
     printf("rd_fixture_test: %s\n", s_fail ? "FAILED" : "all passed");
     return s_fail ? 1 : 0;
 }

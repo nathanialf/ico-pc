@@ -3,26 +3,30 @@
 # ladder"): the cluster entries' ring builds (vu_skin{,_spec,_debug}_ring_plain_vs,
 # the bones read through t5 from VuCB's mark lane) must draw every picture
 # byte for byte as the plain variants that read VuBoneCB at b3.  For each
-# dump of DUMPS that is here, rd_replay_tool --pass-dump with [dev] vu_bones
+# fixture of LIST, rd_replay_tool --pass-dump with [dev] vu_bones
 # unset (ICO_RD_VU_BONES=cbuffer) and = ring, the program entries the plain
 # set (ICO_RD_VU_SET=plain, the Turnip profile's; the ring builds are plain
 # variants) and the VU pre-pass off (as on a tile-based GPU before v0.11.0
 # and after a failed self-test: every skinned draw through its program's
 # entry), the skin check off (its own draws are
 # not the subject here), at two settings:
-#   plain   Original at the dump's aspect, presented at 640x480;
+#   plain   Original at the frame's aspect, presented at 640x480;
 #   attach  the same with the attachment read and GS state as shader data
 #           (ICO_RD_BLEND=attachment, ICO_RD_UBER=on, the interlock faked
 #           off: lavapipe's form of the Turnip reporter's profile).
 # Two more runs with the skin check on for every skinned command (=2): check
 # (the bones through VuBoneCB, the check drawing them through the ring
 # beside the picture: column 3 and twin C, which must have been drawn at
-# least once over the dumps) and ringcheck (the ring builds in force, the
+# least once over the fixtures) and ringcheck (the ring builds in force, the
 # twins A and B through the ring).  Every target's PNG of the ring, check
 # and ringcheck runs must equal the cbuffer run's byte for byte; the ring
 # runs must say "VU bones: through the ring (storage buffer) on the
 # skinned entries" and the others "VU bones: through VuBoneCB".
-# A missing dump is named and skipped; no dump, or no device (77): SKIP.
+# The path ran, per fixture (docs/port/TESTING_FIXTURES.md: committed
+# frames, the skinned draws' geometry generated, the poses kept): on every
+# check run its declared skin_checks_drawn, and skin_ring_twins_drawn (twin
+# C) without the pre-pass or skin_twins_drawn with it (rd_fixture_helpers.cmake);
+# a fixture no check run checked fails.  No device (77): SKIP.
 # With -DPREPASS=1 (rd_vu_bones_ring_ab_prepass, issue 123 after v0.10.5:
 # the pre-pass on every tile-based GPU since v0.11.0) the same with the VU
 # pre-pass on (ICO_RD_VU_PREPASS=1, its "VU pre-pass: on" line asked of
@@ -30,24 +34,23 @@
 # pre-pass's one-an-entry entries, which read VuBoneCB, so under the ring
 # the skinned commands are drawn the old way through the ring builds, its
 # line asked of the ring runs there); the check runs must have twinned at
-# least one draw over the dumps (under the batch builds the twins of a
+# least one draw over the fixtures (under the batch builds the twins of a
 # record draw read the bones through the ring as the record did: no C).
-# -DTOOL=<rd_replay_tool> -DDUMPS=<dump|dump...> -DOUT=<a folder the test may write>
-# [-DPREPASS=1]
-string(REPLACE "|" ";" DUMPS "${DUMPS}")
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<dir>
+# -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<lists/bones_ring.txt>
+# -DOUT=<a folder the test may write> [-DPREPASS=1]
+include("${FIXTURE_HELPERS}")
+include("${CMAKE_CURRENT_LIST_DIR}/rd_fixture_list_props.cmake")
+rd_fixture_list("${LIST}" names)
 set(dumps "")
-foreach(d IN LISTS DUMPS)
-  if(EXISTS "${d}")
-    list(APPEND dumps "${d}")
-  else()
-    message(STATUS "${d}: no such dump, skipped")
-  endif()
+foreach(n IN LISTS names)
+  rd_fixture_list_props(${n})
+  rd_fixture_expand(${n} "${OUT}/fixtures" d)
+  list(APPEND dumps "${d}")
+  set(fx_${d} "${n}")
+  set(seen_${n} 0)
 endforeach()
 list(LENGTH dumps ndumps)
-if(ndumps EQUAL 0)
-  message(STATUS "SKIP: none of the dumps is here")
-  return()
-endif()
 
 if(PREPASS)
   set(settings "plain" "attach" "unbatched")
@@ -84,7 +87,8 @@ foreach(dump IN LISTS dumps)
       file(REMOVE_RECURSE "${dir_${run}}")
       file(MAKE_DIRECTORY "${dir_${run}}")
       execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${env_${run}} ${env_common}
-                              ${env_${s}} "${TOOL}" "${dump}" - --pass-dump "${dir_${run}}"
+                              ${env_${s}} "${TOOL}" "${dump}" "${dir_${run}}.png" --pass-dump
+                              "${dir_${run}}"
                               --present 640x480
                       RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
       if(rc EQUAL 77)
@@ -108,6 +112,16 @@ foreach(dump IN LISTS dumps)
       endif()
       if(run MATCHES "check" AND flat MATCHES "twins at the end of the run: ([0-9]+) drawn")
         math(EXPR twinsDrawn "${twinsDrawn} + ${CMAKE_MATCH_1}")
+      endif()
+      if(run STREQUAL "check")
+        # the path ran (the fixture's declared quantities)
+        set(fx "${fx_${dump}}")
+        if(PREPASS)
+          rd_fixture_require(${fx} "${flat}" skin_checks_drawn skin_twins_drawn)
+        else()
+          rd_fixture_require(${fx} "${flat}" skin_checks_drawn skin_ring_twins_drawn)
+        endif()
+        math(EXPR seen_${fx} "${seen_${fx}} + 1")
       endif()
       if(PREPASS AND NOT flat MATCHES "${line_prepass}")
         message(SEND_ERROR "${dump} ${s} ${run}: the VU pre-pass is not on:\n${err}")
@@ -155,6 +169,13 @@ foreach(dump IN LISTS dumps)
     message(STATUS "${dump} ${s}: ${npng} pictures, ring, check and ringcheck = cbuffer")
   endforeach()
 endforeach()
+foreach(n IN LISTS names)
+  if(seen_${n} EQUAL 0)
+    message(SEND_ERROR "${n}: no check run checked it")
+    math(EXPR failures "${failures} + 1")
+  endif()
+endforeach()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(failures EQUAL 0 AND NOT PREPASS AND ringTwins EQUAL 0)
   message(SEND_ERROR "no twin C (the ring read in the pass) was drawn in any check run")
   set(failures 1)
@@ -163,7 +184,7 @@ if(failures EQUAL 0 AND PREPASS AND twinsDrawn EQUAL 0)
   message(SEND_ERROR "no twin was drawn in any check run with the pre-pass on")
   set(failures 1)
 endif()
-message(STATUS "rd_vu_bones_ring_ab: ${compared} pictures compared over ${ndumps} dumps, "
+message(STATUS "rd_vu_bones_ring_ab: ${compared} pictures compared over ${ndumps} fixtures, "
                "${ringTwins} twins C drawn, ${twinsDrawn} twins drawn in the check runs")
 if(failures GREATER 0)
   message(FATAL_ERROR "rd_vu_bones_ring_ab: ${failures} failures")

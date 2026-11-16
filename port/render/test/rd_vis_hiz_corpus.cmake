@@ -1,9 +1,10 @@
 # rd_vis_hiz_corpus: the occlusion test's cheaper collect (rd_vis_hiz.c
 # rd__vis_hiz_mesh_ex, rd_vis_hiz_fast.c, rd_vis.c hizCollect; docs/port/RENDER.md,
 # "Culling", the occlusion test's cost) never changes a verdict, over the
-# occlusion corpus.  For every row of TABLE (test/rd_vis_hiz_corpus.txt: a
-# setting, a dump of tools/occlusion_corpus.txt and the 26 counts the plain
-# pass made) whose dump is here, rd_replay_tool --cull full --stats under
+# visibility test's fixtures.  For every row of TABLE (test/rd_vis_hiz_corpus.txt:
+# a setting, a committed fixture's name (rd_fixture.cmake,
+# docs/port/TESTING_FIXTURES.md: expanded into OUT, an absent one fails) and the
+# 26 counts the plain pass made), rd_replay_tool --cull full --stats under
 # ICO_RD_BLEND=fixed twice: with ICO_RD_CULL_HIZ_FAST=0 (the plain pass) and
 # with the fast collect and ICO_RD_CULL_HIZ_CHECK=1 (every triangle it leaves
 # and every cache hit done in full as well).  The fast run's counts ("stats:
@@ -11,12 +12,16 @@
 # table's, and its "check: N checked, W wrong" must say W = 0; the plain run
 # equal to the table but not the fast one is the fast path's fault, both apart
 # from the table a change of the rules (the table to be made again).  Each
-# row's collect time of both runs is printed, and their sums.  No dump here,
-# or no device: SKIP (77).  -DTOOL=<rd_replay_tool> -DTABLE=<the table>
+# row's collect time of both runs is printed, and their sums.  The path ran: at
+# least one row hides a draw (its occluded count above 0) and uses an occluder.
+# No device: SKIP (77).  -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool>
+# -DFIXTURES=<folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DTABLE=<the table>
 # -DOUT=<a folder the test may write>
 if(NOT EXISTS "${TABLE}")
   message(FATAL_ERROR "${TABLE}: no table")
 endif()
+include("${FIXTURE_HELPERS}")
+set(occludedRows 0)
 file(STRINGS "${TABLE}" lines)
 set(args_orig43 --aspect 4:3 --present 640x480)
 set(args_enh2x43 --enhanced --aspect 4:3 --resolution 2x)
@@ -43,12 +48,15 @@ foreach(l IN LISTS lines)
     continue()
   endif()
   set(setting "${CMAKE_MATCH_1}")
-  set(dump "${CMAKE_MATCH_2}")
+  set(name "${CMAKE_MATCH_2}")
   set(want "${CMAKE_MATCH_3}")
-  if(NOT EXISTS "${dump}")
-    message(STATUS "${dump}: no such dump, skipped")
-    continue()
+  if(name MATCHES "[/\\:]" OR name MATCHES "\\.\\.")
+    message(FATAL_ERROR "${TABLE}: '${name}' is a path: the table names fixtures")
   endif()
+  if(NOT DEFINED dump_${name})
+    rd_fixture_expand(${name} "${OUT}/fixtures" dump_${name})
+  endif()
+  set(dump "${dump_${name}}")
   if(NOT DEFINED args_${setting})
     message(SEND_ERROR "${TABLE}: setting ${setting} unknown")
     math(EXPR failures "${failures} + 1")
@@ -129,6 +137,13 @@ foreach(l IN LISTS lines)
     continue()
   endif()
   math(EXPR rows "${rows} + 1")
+  # the 4th count is the occluded draws, the 5th the occluder triangles
+  string(REPLACE " " ";" gotList "${got_fast}")
+  list(GET gotList 3 occ)
+  list(GET gotList 4 occTris)
+  if(occ GREATER 0 AND occTris GREATER 0)
+    math(EXPR occludedRows "${occludedRows} + 1")
+  endif()
   if(NOT got_fast STREQUAL got_plain)
     message(SEND_ERROR "${dump} ${setting}: the fast collect's counts differ from the plain "
                        "pass's:\n  plain: ${got_plain}\n  fast:  ${got_fast}")
@@ -152,9 +167,12 @@ foreach(l IN LISTS lines)
   math(EXPR plainHiz "${plainHiz} + ${us_hizMs_plain}")
   math(EXPR fastHiz "${fastHiz} + ${us_hizMs_fast}")
 endforeach()
-if(rows EQUAL 0)
-  message(STATUS "SKIP: no dump of ${TABLE} is here")
-  return()
+if(rows EQUAL 0 AND failures EQUAL 0)
+  message(FATAL_ERROR "rd_vis_hiz_corpus: no row of ${TABLE} compared")
+endif()
+if(occludedRows EQUAL 0)
+  message(SEND_ERROR "rd_vis_hiz_corpus: no row hides a draw: the occlusion test's collect never ran on an occluder")
+  math(EXPR failures "${failures} + 1")
 endif()
 set(sums "the sums over the rows: cull ${plainCull} -> ${fastCull} us, occlusion ${plainHiz} -> ${fastHiz} us (plain -> fast; neither occlusion figure holds the settle)")
 if(failures GREATER 0)
@@ -162,4 +180,4 @@ if(failures GREATER 0)
 endif()
 message(STATUS "rd_vis_hiz_corpus: ${rows} rows, the same counts with the fast collect as with "
                "the plain pass and the table; ${checkedTotal} triangles and cache hits checked "
-               "in full, none wrong; ${sums}")
+               "in full, none wrong; ${occludedRows} rows hide draws; ${sums}")

@@ -1,0 +1,3 @@
+# rd_occlusion_tool (port/render/test/rd_occlusion_tool.cmake): one fixture whose list 0 has draws
+# the occlusion queries find hidden (cubes behind @scene place's sheets)
+fx-scene-boot0200

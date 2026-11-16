@@ -245,6 +245,15 @@ void rd__blur_post_sprite(Replay *r, const RdFrame *f, const RdCmd *c);
  * repeat of SCENE's outer columns (rd_internal.h rd__scene_border_state) is
  * done before this replay's first post sprite that reads SCENE */
 void rd__scene_border_arm(const Replay *r);
+/* rd_blur_border.c: that repeat, if this replay's fog armed it, done now:
+ * at a held glow's mask, not drawn (rd__glow_hold_nop) */
+void rd__scene_border_due(Replay *r);
+/* rd_glow_hold.c: the list loop's RDC_NOP c; a held glow's sprite that read
+ * SCENE (marked by rd__glow_hold) takes SCENE's repeat (rd__scene_border_due) */
+void rd__glow_hold_nop(Replay *r, const RdCmd *c);
+/* rd_glow_hold.c: c is such a marked NOP (the crack fill's walk takes it as
+ * the sprite it was: rd__crack_fill_at) */
+bool rd__glow_hold_mask(const RdCmd *c);
 /* rd_blur_smooth.c: the motion blur's sprite c under Smooth
  * (rd_internal.h rd__blur_smooth_arm): the accumulator's passes, then the
  * recorded sprite reading the accumulator with FIX'; false when Smooth is

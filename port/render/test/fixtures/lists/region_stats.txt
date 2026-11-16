@@ -1,0 +1,4 @@
+# rd_region_stats (port/render/test/rd_region_stats.cmake): the region rule's statistics on the
+# title's castle and the PowerVR phone's frame, list 0 placed by @scene place
+fx-scene-boot0200
+fx-scene-4657

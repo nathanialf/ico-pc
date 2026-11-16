@@ -1,9 +1,9 @@
 # rd_vu_audit: the VU record path's bounds audit (port/render/rd_vu_audit.h)
-# over issue 179's Mali-G52 dumps under the Arm fakes at the reporter's
+# over issue 179's Mali-G52 frames under the Arm fakes at the reporter's
 # settings (1x, 21:9, half height, presented at 1612x720), the record by
 # compute dispatches and made at start-up (ICO_RD_EARLY_PREPARE=1: 512
 # rows, as the phone made it), the volumes' stencil-only entry on as the
-# phone ran it.  Each dump is replayed four times (both frame slots, each
+# phone ran it.  Each frame is replayed four times (both frame slots, each
 # slot's copy read back when the slot comes round, the last two after the
 # --stats wait) with ICO_RD_VU_AUDIT=1 in three arms:
 #   on       the index compaction on (ICO_RD_VU_COMPACT=1), the draw merge on:
@@ -14,21 +14,18 @@
 # Every run must print the audit's run line with 0 violations and no
 # violation line; the on arms must have read compacted lists back (more
 # than 0 lists from more than 0 readbacks) and drawn from the fourth plane.
-# The run lines are printed (the numbers of the hand-back).  Where
-# /primary/dev/ico-dumps exists every listed dump must be there; elsewhere:
-# SKIP.  No device (77): SKIP.
-# -DTOOL=<rd_replay_tool> -DOUT=<a folder the test may write>
-if(NOT EXISTS "/primary/dev/ico-dumps")
-  message(STATUS "SKIP: no /primary/dev/ico-dumps here")
-  return()
-endif()
-set(dumps
-    /primary/dev/ico-dumps/v0117-mali179/loss-20261114-075659-lost.rddump
-    /primary/dev/ico-dumps/v0117-mali179/loss-20261114-075659-before.rddump
-    /primary/dev/ico-dumps/v0116-mali179/frame-20261112-195947-v17565.zip
-    /primary/dev/ico-dumps/v0116-mali179/slow-20261112-195541.zip
-    /primary/dev/ico-dumps/v0116-mali179/slow-20261112-195621.zip
-    /primary/dev/ico-dumps/v0116-mali179/slow-20261112-195651.zip)
+# The run lines are printed (the numbers of the hand-back).  The frames are
+# committed fixtures (lists/vu_audit.txt; docs/port/TESTING_FIXTURES.md: the
+# command structure kept, the geometry generated), so the counts are the
+# fixtures'; the path ran: each run's declared vu_audit_entries and
+# vu_audit_violations, and the on arms' vu_audit_lists and
+# vu_audit_plane_draws (rd_fixture_helpers.cmake).  No device (77): SKIP.
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<dir>
+# -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<lists/vu_audit.txt>
+# -DOUT=<a folder the test may write>
+include("${FIXTURE_HELPERS}")
+include("${CMAKE_CURRENT_LIST_DIR}/rd_fixture_list_props.cmake")
+rd_fixture_list("${LIST}" names)
 set(env_base ICO_VK_FAKE_LIMITS=mali ICO_VK_FAKE_VENDOR=0x13B5 ICO_RD_VU_RECORD=compute
              ICO_RD_EARLY_PREPARE=1 ICO_RD_VOLUME_FS=1 ICO_RD_VU_AUDIT=1)
 set(env_on ICO_RD_VU_COMPACT=1)
@@ -37,13 +34,9 @@ set(env_off ICO_RD_VU_COMPACT=0)
 set(runRe "rd: VU audit: ([0-9]+) entries \\(([0-9]+) index values\\), ([0-9]+) compacted lists from ([0-9]+) readbacks \\(([0-9]+) values, ([0-9]+) filler triangles\\), draws: ([0-9]+) of the fourth plane[^\n]*; ([0-9]+) violations")
 set(failures 0)
 set(index 0)
-foreach(dump IN LISTS dumps)
-  if(NOT EXISTS "${dump}")
-    message(SEND_ERROR "rd_vu_audit: ${dump}: absent")
-    math(EXPR failures "${failures} + 1")
-    continue()
-  endif()
-  get_filename_component(name "${dump}" NAME)
+foreach(name IN LISTS names)
+  rd_fixture_list_props(${name})
+  rd_fixture_expand(${name} "${OUT}/fixtures" dump)
   set(offSpan "")
   set(offRatio "")
   foreach(arm off on nomerge)
@@ -70,6 +63,13 @@ foreach(dump IN LISTS dumps)
       message(SEND_ERROR "rd_vu_audit: ${name} ${arm}: no audit run line (${OUT}/${index}-${arm}.log)")
       math(EXPR failures "${failures} + 1")
       continue()
+    endif()
+    # the path ran (the fixture's declared quantities)
+    if(arm STREQUAL "off")
+      rd_fixture_require(${name} "${all}" vu_audit_entries vu_audit_violations)
+    else()
+      rd_fixture_require(${name} "${all}" vu_audit_entries vu_audit_violations vu_audit_lists
+                         vu_audit_plane_draws)
     endif()
     string(REGEX MATCH "rd: VU audit: [0-9]+ entries[^\n]*" runLine "${all}")
     message(STATUS "rd_vu_audit: ${name} ${arm}: ${runLine}")
@@ -127,6 +127,7 @@ foreach(dump IN LISTS dumps)
     endif()
   endforeach()
 endforeach()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(failures GREATER 0)
   message(FATAL_ERROR "rd_vu_audit: ${failures} failures")
 endif()

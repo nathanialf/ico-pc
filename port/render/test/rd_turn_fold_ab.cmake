@@ -23,9 +23,22 @@
 #   overlay rd_pixel's dump with --overlay-test at win43's setting: must
 #           keep it ("the port's overlay or the deferred text drawn")
 # At least one present must have folded over the run.  The dumps: DUMP
-# (rd_pixel's, may be absent) and LIST's; where /primary/dev/ico-dumps exists a
-# listed dump that is absent fails.  No device (77): SKIP.
-# -DTOOL=<rd_replay_tool> -DDUMP=<rddump> -DLIST=<dump list> -DOUT=<a folder the test may write>
+# (rd_pixel's, may be absent) and the fixtures LIST names
+# (port/render/test/fixtures/lists/turn_fold.txt: fixture names of the
+# repository, docs/port/TESTING_FIXTURES.md; a listed fixture that is absent or
+# does not expand to its pinned SHA-256 FAILS) at phone, win720 and plain, and
+# at win43 too where the line says win43 (a 4:3 frame 512 GS pixels wide fills
+# that window one texel a pixel: it must fold there).  The path ran
+# (rd_fixture_require on the fold's runs, the line's own properties,
+# rd_fixture_list_props.cmake): turn_fold_cases, the self-test's cases, on
+# every fold run; turn_fold_turned, the turn of the fold's line, on every run
+# that folded; a fixture that declares turn_fold_turned and never folded
+# FAILS.  No device (77): SKIP.
+# -DTOOL=<rd_replay_tool> -DDUMP=<rddump> -DFIXTURE_TOOL=<rd_fixture_tool>
+# -DFIXTURES=<the fixtures folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake>
+# -DLIST=<a fixture list> -DOUT=<a folder the test may write>
+include("${FIXTURE_HELPERS}")
+include("${CMAKE_CURRENT_LIST_DIR}/rd_fixture_list_props.cmake")
 file(REMOVE_RECURSE "${OUT}")
 file(MAKE_DIRECTORY "${OUT}")
 set(dumps "")
@@ -33,22 +46,14 @@ if(DUMP AND EXISTS "${DUMP}")
   list(APPEND dumps "${DUMP}")
 endif()
 set(listed "")
-if(LIST AND EXISTS "${LIST}")
-  file(STRINGS "${LIST}" lines)
-  foreach(l IN LISTS lines)
-    string(STRIP "${l}" l)
-    if(l STREQUAL "" OR l MATCHES "^#")
-      continue()
-    endif()
-    if(EXISTS "${l}")
-      list(APPEND listed "${l}")
-    elseif(EXISTS "/primary/dev/ico-dumps")
-      message(FATAL_ERROR "${LIST} names ${l}, which is not here")
-    else()
-      message(STATUS "${l}: not here (no dump folder): skipped")
-    endif()
-  endforeach()
-endif()
+rd_fixture_list("${LIST}" names)
+foreach(name IN LISTS names)
+  rd_fixture_expand(${name} "${OUT}/fixtures" d)
+  rd_fixture_list_props(${name})
+  list(APPEND listed "${d}")
+  set(name_${d} "${name}")
+  set(folds_${name} 0)
+endforeach()
 list(APPEND dumps ${listed})
 list(LENGTH dumps ndumps)
 if(ndumps EQUAL 0)
@@ -82,10 +87,15 @@ set(runs 0)
 set(folded 0)
 set(i 0)
 foreach(dump IN LISTS dumps)
+  set(name "")
   if(dump STREQUAL "${DUMP}")
     set(configs phone win720 win43 plain overlay)
   else()
+    set(name "${name_${dump}}")
     set(configs phone win720 plain)
+    if(" ${RDFX_FIELDS_${name}} " MATCHES " win43 ")
+      list(APPEND configs win43)
+    endif()
   endif()
   foreach(cfg IN LISTS configs)
     string(REGEX MATCH "^([0-9]+)x([0-9]+)$" _ "${size_${cfg}}")
@@ -126,6 +136,10 @@ foreach(dump IN LISTS dumps)
       if(NOT log MATCHES "turn in the blit: self-test passed \\(6 cases")
         message(FATAL_ERROR "${dump} ${cfg} ${deg}: no passed self-test:\n${err}")
       endif()
+      if(name)
+        # the path ran: the fold's self-test on this fixture's run
+        rd_fixture_require(${name} "${log}" turn_fold_cases)
+      endif()
       set(foldLine "turn in the blit: the ${pw}x${ph} picture's box blit drawn turned ${deg} degrees into the ${tw}x${th} image")
       set(textLine "keeps the turn pass: the port's overlay or the deferred text drawn")
       # a "fold" setting folds only where the scene fills the window: the
@@ -155,6 +169,10 @@ foreach(dump IN LISTS dumps)
       if(want STREQUAL "fold")
         if(log MATCHES "${foldLine}")
           math(EXPR folded "${folded} + 1")
+          if(name AND " ${RDFX_PROPS_${name}} " MATCHES "turn_fold_turned")
+            rd_fixture_require(${name} "${log}" turn_fold_turned)
+            math(EXPR folds_${name} "${folds_${name}} + 1")
+          endif()
         elseif(NOT log MATCHES "${textLine}")
           message(FATAL_ERROR "${dump} ${cfg} ${deg}: neither folded nor kept for its text:\n${err}")
         endif()
@@ -177,6 +195,15 @@ foreach(dump IN LISTS dumps)
   endforeach()
   math(EXPR i "${i} + 1")
 endforeach()
+foreach(name IN LISTS names)
+  if(" ${RDFX_PROPS_${name}} " MATCHES "turn_fold_turned" AND folds_${name} EQUAL 0)
+    message(SEND_ERROR "${name}: declares turn_fold_turned and never folded")
+    math(EXPR RDFX_FAILURES "${RDFX_FAILURES} + 1")
+  endif()
+endforeach()
+if(RDFX_FAILURES GREATER 0)
+  message(FATAL_ERROR "rd_turn_fold_ab: ${RDFX_FAILURES} fixtures' declared properties did not hold")
+endif()
 if(folded EQUAL 0)
   message(FATAL_ERROR "rd_turn_fold_ab: ${runs} presents compared, none folded")
 endif()

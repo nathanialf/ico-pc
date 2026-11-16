@@ -1,0 +1,22 @@
+# Rules for the skinned draws' fixtures (FIX-P6a): a texture a blended VU draw
+# samples is `clear` (alpha 0 on every texel, below every alpha test's
+# reference), so under the alpha test the alpha plan (rd_alpha_plan.c) draws
+# such a draw as its one failing pass: colour only, Z written by no pass.
+# With the attachment read and GS state as shader data (the Turnip
+# reporter's profile) that pass reads its attachment with Z writes off, the
+# case whose skin-check twins go through the draw's own pipeline
+# (rd_vu_skin_check.c twinDraw); the reporter's frame of issue 123 has two
+# such draws (texture alphas wholly below the reference).  The other VU
+# textures `opaque` (vu_opaque.rules.txt: one pass that writes Z), so both
+# kinds of twin are drawn; the default rules otherwise.
+glyphs     sheet
+ramp       r8
+date_split date
+clear      vu abe
+opaque     vu
+alpha_ramp ate
+bright     additive
+gradient   abe
+checker    sprite
+grey       unused
+checker

@@ -5883,6 +5883,8 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
             }
             switch (c->type) {
             case RDC_NOP:
+                rd__glow_hold_nop(&r, c); /* a held glow's mask: SCENE's repeat */
+                break;
             case RDC_OVERLAY_TEXT: /* collected by the present */
                 break;
             case RDC_CLEAR:
