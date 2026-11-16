@@ -24,7 +24,8 @@
  * rd__alpha_range_of_draw: hi <= 128, so the factor is not clamped), not Z
  * GREATER with Z write (where the alpha pass's GEQUAL admits a fragment the
  * colour pass did not), an RGBA8 UNORM target, no destination read, not a
- * code 36 cut or kick draw (a fused kick's pixels are unblended).  The
+ * code 36 fused kick (its pixels are unblended; a cut whose pair goes to one
+ * pass is not fused: rd__onepass_unfuse).  The
  * stored alpha through the constant equals the alpha pass's for every As
  * 0..128 under round-to-nearest at any blender precision of 8 bits or more
  * (rd_onepass_alpha_model; the unit test's exhaustive table).
@@ -110,6 +111,13 @@ void rd__onepass_take(RdDrawPass *dp, int *np, uint8_t hi, uint32_t vuBits, uint
  * colour passes carrying A, 1 the proven pairs in one pass, as the
  * self-test's two replays draw (counted as the run's, not the test's) */
 void rd__onepass_force_arm(int arm);
+
+/* rd_replay_vu.c vuFuseVerdict: a code 36 cut whose pair (cut[0..nc)) goes
+ * to one pass is not fused with its kick (the fused kick's pixels are
+ * unblended, so a fused pair keeps both passes); unfused, the cut draws in
+ * one pass and the kick alone under its own state: the same bytes, the
+ * unfused draws being what the fusion stands for */
+bool rd__onepass_unfuse(const RdDrawPass *cut, int nc, uint8_t hi);
 
 /* in force: wanted, the two-pass blend, the self-test passed */
 bool rd__onepass_on(void);

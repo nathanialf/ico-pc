@@ -40,9 +40,7 @@ const char *rd__onepass_why_text(int why)
 int rd_onepass_why(const RdDrawPass *colour, const RdDrawPass *alpha, uint8_t hi, uint32_t vuBits)
 {
     const RdPipeKeyInt *k = &colour->key;
-    if (rd__blend_path(k->gs.blend) != RD_BP_LERP ||
-        (vuBits &
-         ((uint32_t)ICO_VU_CUT_ONLY | (uint32_t)ICO_VU_KICK_ONLY | (uint32_t)ICO_VU_FUSED)) != 0u ||
+    if (rd__blend_path(k->gs.blend) != RD_BP_LERP || (vuBits & (uint32_t)ICO_VU_FUSED) != 0u ||
         (k->gs.ztst == RD_ZTST_GREATER && k->gs.zwrite == RD_ZWRITE_ON) ||
         k->colorFmt != RHI_FMT_RGBA8_UNORM || k->dst != RHI_DST_READ_NONE ||
         alpha->key.gs.colorMask != 8u) {
@@ -181,6 +179,15 @@ void rd__onepass_bind(RhiCommandList cl, const RdPipeKeyInt *k)
 void rd__onepass_force_arm(int arm)
 {
     s_op.arm = arm < 0 ? -1 : (arm ? 1 : 0);
+}
+
+bool rd__onepass_unfuse(const RdDrawPass *cut, int nc, uint8_t hi)
+{
+    const bool allowed = s_op.arm >= 0 ? s_op.arm == 1 : rd__onepass_on();
+    return allowed && g_rd.noDual && g_rd.passSamples <= 1 && nc == 2 &&
+           (cut[0].flags & (uint32_t)ICO_DF_NODUAL_FACTOR) != 0u && rd__no_dual_second(cut, 1) &&
+           cut[0].key.gs.nodual == RD_NODUAL_CARRY &&
+           rd_onepass_why(&cut[0], &cut[1], hi, 0) == RD_ONEPASS_WHY_NONE;
 }
 
 static void blkAdd(uint64_t *v, uint64_t n)

@@ -122,8 +122,10 @@ static void testWhy(void)
     CHECK(rd_onepass_why(&ex[0], &ex[1], 0, 0) == RD_ONEPASS_WHY_NONE);
     CHECK(rd_onepass_why(&ex[0], &ex[1], 129, 0) == RD_ONEPASS_WHY_ALPHA);
     CHECK(rd_onepass_why(&ex[0], &ex[1], 255, 0) == RD_ONEPASS_WHY_ALPHA);
-    CHECK(rd_onepass_why(&ex[0], &ex[1], 64, ICO_VU_CUT_ONLY) == RD_ONEPASS_WHY_OTHER);
-    CHECK(rd_onepass_why(&ex[0], &ex[1], 64, ICO_VU_KICK_ONLY) == RD_ONEPASS_WHY_OTHER);
+    /* a code 36 cut or kick drawn alone is an ordinary draw; a fused kick
+       is not (its pixels unblended) */
+    CHECK(rd_onepass_why(&ex[0], &ex[1], 64, ICO_VU_CUT_ONLY) == RD_ONEPASS_WHY_NONE);
+    CHECK(rd_onepass_why(&ex[0], &ex[1], 64, ICO_VU_KICK_ONLY) == RD_ONEPASS_WHY_NONE);
     CHECK(rd_onepass_why(&ex[0], &ex[1], 64, ICO_VU_KICK_ONLY | ICO_VU_FUSED) ==
           RD_ONEPASS_WHY_OTHER);
     s.ds.fba = 1;
@@ -176,6 +178,24 @@ static void testCarry(void)
     s = lerpState(RD_BLEND_CD_FIX_ADD_CS);
     CHECK(pair(&s, RHI_FMT_RGBA8_UNORM, ex) == 2);
     CHECK(ex[0].key.gs.nodual == 1u && ex[0].key.gs.colorMask == 7u);
+    /* the code 36 cut not fused where its pair goes to one pass: under arm 1
+       a carried, proven pair; not with FBA, a third pass, As above 128, or
+       the rule off */
+    s = lerpState(RD_BLEND_LERP_AS);
+    rd__onepass_force_arm(1);
+    CHECK(pair(&s, RHI_FMT_RGBA8_UNORM, ex) == 2);
+    CHECK(rd__onepass_unfuse(ex, 2, 128));
+    CHECK(!rd__onepass_unfuse(ex, 2, 129));
+    CHECK(!rd__onepass_unfuse(ex, 1, 128));
+    s.ds.fba = 1;
+    CHECK(pair(&s, RHI_FMT_RGBA8_UNORM, ex) == 2);
+    CHECK(!rd__onepass_unfuse(ex, 2, 64));
+    s.ds.fba = 0;
+    rd__onepass_force_arm(0);
+    CHECK(pair(&s, RHI_FMT_RGBA8_UNORM, ex) == 2);
+    CHECK(!rd__onepass_unfuse(ex, 2, 64));
+    rd__onepass_force_arm(-1);
+    CHECK(!rd__onepass_unfuse(ex, 2, 64));
     rd__onepass_force_arm(-1);
     g_rd.noDual = false;
 }

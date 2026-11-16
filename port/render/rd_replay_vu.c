@@ -1203,6 +1203,11 @@ static int vuFuseVerdict(const Replay *r, const RdStateBlock *fan, const DrawSet
        vu_common.hlsli vu_dual_out_f's fused argument */
     RdDrawPass joined;
     const bool split = vuNoDualJoin(cut, nc, &joined);
+    if (split && rd__onepass_unfuse(cut, nc, s_vuAlpha.hi)) {
+        /* the cut's pair in one pass (rd_onepass.c): not fused, so it draws
+         * once and the kick once, each under its own state */
+        return RD_VU_FUSE_PASSES;
+    }
     if ((!split && nc != 1) || nk != 1) {
         return RD_VU_FUSE_PASSES;
     }

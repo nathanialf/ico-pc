@@ -11,3 +11,8 @@ fx-mali-slow541
 fx-opening-dark
 # the opening's sun on the Pixel
 fx-opening-sun
+# the same two frames with every VU texture date_split (onepass.rules.txt): the
+# pairs proven, so the path runs (the frames above, whose alpha-tested draws get
+# alpha 0 to 255, keep every pair in two passes)
+fx-onepass-mali-frame
+fx-onepass-mali-slow541
