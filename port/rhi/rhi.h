@@ -853,15 +853,6 @@ typedef struct RhiLimits {
      * rendering) and on the other backends.  RhiStats.passObjects counts
      * the passes begun so */
     const char *passObjectsRow;
-    /* Vulkan: the game's queue's global priority (rhi_qprio.h, issue 123's
-     * second attempt: high on Qualcomm's own driver under Android):
-     * RHI_QPRIO_NOT_ASKED (0), _GRANTED (1) or _REFUSED (2, the device made
-     * again without it; queuePriorityResult the asking creation's VkResult);
-     * queuePriorityWhy the attempt ledger's reason (a static phrase).  0 and
-     * NULL on the other backends */
-    int queuePriority;
-    int32_t queuePriorityResult;
-    const char *queuePriorityWhy;
     /* (docs/port/RENDER.md, the device profile).  localRead: Vulkan
      * dynamicRenderingLocalRead (VK_KHR_dynamic_rendering_local_read, or
      * VkPhysicalDeviceVulkan14Features on a 1.4 device without the

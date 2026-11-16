@@ -4,6 +4,9 @@
 # of port/render/CMakeLists.txt (a file of its own: that file is near the
 # 256 KiB cap, tools/check_no_rom.sh).
 target_sources(ico_render PRIVATE rd_shadowres.c rd_shadowres_math.c)
+# the full-size count's form above 1x (rd_shadow_count.h: the step from the
+# stencil, the full-size pass, the seven draws, timed on the device; issue 123)
+target_sources(ico_render PRIVATE rd_shadow_count.c)
 # rd_replay_tool --fine-check: the levels the GPU drew against the CPU
 # reference (tools/rd_replay_fine.c; rd_shadow_fine_ab reads its lines)
 if(TARGET rd_replay_tool)
@@ -73,6 +76,31 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool AND Python3_FOUND)
                              TIMEOUT 10800 LABELS gl
                              ENVIRONMENT "ICO_RHI_BACKEND=opengl;LIBGL_ALWAYS_SOFTWARE=1;SDL_VIDEO_DRIVER=offscreen")
     endif()
+endif()
+
+# rd_shadow_count_check, rd_shadow_count_check_sabotage
+# (test/rd_shadow_count_check.cmake): the check of the full-size count's
+# forms on the device at the first shadowed scene (rd_shadow_count.h): passed
+# on fx-adreno at the tablet's 3x path, and the step from the stencil made
+# wrong (ICO_RD_SHADOW_COUNT_SABOTAGE=1) refused.  No device: SKIP (77).
+if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
+    foreach(_sab 0 1)
+        set(_n rd_shadow_count_check)
+        if(_sab)
+            set(_n rd_shadow_count_check_sabotage)
+        endif()
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${_n}")
+        add_test(NAME ${_n}
+                 COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                         -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                         "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                         "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/${_n}" -DSABOTAGE=${_sab}
+                         -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_shadow_count_check.cmake")
+        set_tests_properties(${_n} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800)
+        if(_sf_env)
+            set_tests_properties(${_n} PROPERTIES ENVIRONMENT "${_sf_env}")
+        endif()
+    endforeach()
 endif()
 
 # The tests whose expectations are the PS2-size chain above 1x (absolute

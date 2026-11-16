@@ -604,6 +604,7 @@ static void flushStencilClear(void);
 
 void rd__transition(RhiCommandList cl, RhiTexture t, RhiState *cur, RhiState want)
 {
+    rd__shadow_count_touch(cl, t.id); /* the count's guard (rd_shadow_one.c) */
     /* the MSAA epoch: SCENE's own colour or depth touched outside a pass
      * into SCENE_MS (read, copied, drawn single-sampled) closes it first,
      * resolving the picture into them (msaaEnd); even a transition to the
