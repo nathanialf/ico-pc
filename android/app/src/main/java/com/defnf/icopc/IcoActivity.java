@@ -169,6 +169,23 @@ public class IcoActivity extends SDLActivity {
         }
     }
 
+    // Android's exit records of this app's earlier processes (Android 11,
+    // API 30; port/platform/exit_info.h, issue 215), read once at the start
+    // from native code (port/platform/android/exit_info_android.c): the
+    // record text, one tab-separated line a fact or record (ExitRecords).
+    // The limits come from the native side.
+    public static String exitRecords(String logsDir, long lastSeenMs, int maxRecords,
+            int traceMaxBytes, int descMax) {
+        if (Build.VERSION.SDK_INT < 30) {
+            return "sdk\t" + Build.VERSION.SDK_INT + "\n";
+        }
+        if (sInstance == null) {
+            return "sdk\t" + Build.VERSION.SDK_INT + "\nwhy\tno activity\n";
+        }
+        return ExitRecords.read(sInstance, logsDir, lastSeenMs, maxRecords, traceMaxBytes,
+                descMax);
+    }
+
     // GameManager.getGameMode: 0 unsupported, 1 standard, 2 performance, 3
     // battery, 4 custom; -1 before Android 12 (API 31), -2 when the system
     // gives none. Asked once at the window's open, for the performance

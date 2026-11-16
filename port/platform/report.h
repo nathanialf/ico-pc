@@ -24,6 +24,10 @@
  *   startup-activity.txt     when there is one (diag_host.h);
  *   last-run.txt,            where this run is and where the run before
  *   last-run-previous.txt    was, when there are (last_run.h);
+ *   exit-info.txt            how the run before ended, Android's exit
+ *                            records read at this start (exit_info.h);
+ *   exit-trace-<ms>.txt|.pb  the newest trace Android kept with one (an
+ *                            ANR's text, a native crash's tombstone);
  *   config.toml, ico-pc.ini  the settings;
  *   loss-<stamp>.zip         the newest loss dump, when there is one
  *                            (deflated: the loss dump writes its zip
@@ -60,6 +64,11 @@ void ico_report_set_paths(const char *logs_dir, const char *exe_dir, const char 
 /* Android: VERSION.txt's lines, read from the app's assets (copied, at
    most 255 bytes); report.txt takes them instead of a file. */
 void ico_report_set_version_text(const char *text);
+/* How the run before ended (exit_info.h, issue 215): the verdict for
+   report.txt's head ("the previous run ended: ..."; copied, cut to 1023
+   bytes) and the newest exit trace's file name in the logs folder (copied;
+   NULL or "" none). */
+void ico_report_set_exit_info(const char *verdict, const char *trace);
 
 typedef struct IcoReportInputs {
     const char *what;     /* "a crash: SIGSEGV ...", "the watchdog", ... */
