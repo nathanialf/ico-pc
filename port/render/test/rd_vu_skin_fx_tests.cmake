@@ -4,12 +4,12 @@
 # 123's ladder, docs/port/VU_SKIN_CHECK.md).  Its own file because
 # port/render/CMakeLists.txt is near the 256 KiB cap (tools/check_no_rom.sh).
 #
-# rd_vu_skin_check_dump, rd_vu_skin_check_163_probe, _163_ring and the
+# rd_vu_skin_check_dump, the rd_vu_skin_check_163* and the
 # rd_vu_skin_check_123* rows (test/rd_vu_skin_check_dump.cmake):
 # rd_replay_tool --skin-check on the fixture of
 # test/fixtures/lists/skin_check.txt whose line holds the row's word
 # (corpus: fx-vu-3086, 46 skinned commands; 163: issue 163's blended
-# frame; 123: issue 123's v0.10.4 blended frame), the summary line matched
+# frame; patched: its patched copy; 123: issue 123's v0.10.4 blended frame), the summary line matched
 # and each REQUIRE quantity held as declared (the path ran).  The fixtures
 # keep the poses and generate the skinned vertices (half on two bones,
 # 16 + 4 (s mod n) and the next), which reach address 200 on both reporter
@@ -40,6 +40,24 @@ add_test(NAME rd_vu_skin_check_163_ring
                  "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_163_ring"
                  "-DLINE=[0-9]+ skinned commands, [0-9]+ checks, [1-9][0-9]* wrong \\(address 200\\), [1-9][0-9]* blocks whose bytes differed \\([1-9][0-9]* changed after the draw\\).*reads as: H2, a port race"
                  "-DLOG=${_vsk_wrong}" -P "${_vskd}")
+# rd_vu_skin_check_163 and _163_patched: issue 163's blended frame clean,
+# every command the replay draws checked, no box sample outside on lavapipe,
+# the 1448-vertex command (Ico's) past the probe's 1024 rows boxed over every
+# batch it draws (skin_past, skin_past_boxed); and the deep dive's patched
+# copy (fx-163-patched: its generated lanes on 200 moved to 252 by the rule
+# @skin lane 200 252, as the copy moved Yorda's in the game's stream) clean
+# the same: the check compares the device with the CPU on the same stream,
+# not with the unpatched frame
+add_test(NAME rd_vu_skin_check_163
+         COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> ${_vsk_fx} -DROLE=163
+                 "-DREQUIRE=skin_checks|skin_past|skin_past_boxed"
+                 "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_163" "-DLINE=${_vskd_clean}"
+                 -P "${_vskd}")
+add_test(NAME rd_vu_skin_check_163_patched
+         COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> ${_vsk_fx} -DROLE=patched
+                 "-DREQUIRE=skin_checks|skin_past|skin_past_boxed"
+                 "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_163_patched"
+                 "-DLINE=${_vskd_clean}" -P "${_vskd}")
 # rd_vu_skin_check_123*: issue 123's v0.10.4 blended frame (Yorda's shin
 # missing on the device): clean (the twins equal), and with the bone at 200
 # made NaN in the ring after its bytes were kept (the device's picture's
@@ -122,15 +140,16 @@ set_tests_properties(rd_vu_skin_check_123_bones_ring PROPERTIES ENVIRONMENT
                      "${_env};${_vsk_ringenv};ICO_RD_VU_BONES=ring")
 set_tests_properties(rd_vu_skin_check_123_bones_ring_nan PROPERTIES ENVIRONMENT
                      "${_env};${_vsk_ringenv};ICO_RD_VU_BONES=ring;ICO_RD_VU_SKIN_SABOTAGE=200,nan")
-set(_vskd_fx_tests rd_vu_skin_check_dump rd_vu_skin_check_163_probe rd_vu_skin_check_163_ring
+set(_vskd_fx_tests rd_vu_skin_check_dump rd_vu_skin_check_163 rd_vu_skin_check_163_patched
+                   rd_vu_skin_check_163_probe rd_vu_skin_check_163_ring
                    rd_vu_skin_check_123 rd_vu_skin_check_123_nan rd_vu_skin_check_123_attach
                    rd_vu_skin_check_123_nan_attach rd_vu_skin_check_123_c3
                    rd_vu_skin_check_123_nan_c rd_vu_skin_check_123_bones_ring
                    rd_vu_skin_check_123_bones_ring_nan)
 set_tests_properties(${_vskd_fx_tests} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800)
 if(_env)
-    set_tests_properties(rd_vu_skin_check_dump rd_vu_skin_check_123 PROPERTIES ENVIRONMENT
-                                                                         "${_env}")
+    set_tests_properties(rd_vu_skin_check_dump rd_vu_skin_check_163 rd_vu_skin_check_163_patched
+                         rd_vu_skin_check_123 PROPERTIES ENVIRONMENT "${_env}")
 endif()
 set_tests_properties(rd_vu_skin_check_163_probe
                      PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_SKIN_SABOTAGE=200")

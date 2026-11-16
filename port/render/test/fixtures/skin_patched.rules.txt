@@ -1,0 +1,16 @@
+# Rules for issue 163's patched frame (FIX-P6a): the default texture rules, as
+# fx-163-blended is made, and the deep dive's patch written as a rule: every
+# generated skinned bone lane on address 200 moved to 252 (the copy
+# blended-750-a200 moved Yorda's lanes on 200 to 252 in the game's stream; the
+# fixture's stream is generated, so the move is this line's, docs/port/
+# TESTING_FIXTURES.md "The skinned lanes rule")
+glyphs     sheet
+ramp       r8
+date_split date
+alpha_ramp ate
+bright     additive
+gradient   abe
+checker    sprite
+grey       unused
+checker
+@skin lane 200 252

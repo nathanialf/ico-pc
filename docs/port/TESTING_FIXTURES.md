@@ -299,6 +299,27 @@ period`, the maker's line `water: N meshes drawn into a block generated on it, N
 SCENE's alpha bit generated on SCENE (K kept their origin), N prims reading a block generated
 across its period`.
 
+### The skinned lanes rule (opt-in)
+
+The generated skinned vertices weight half each to the bones at VU addresses 16 + 4 (s mod n) and
+16 + 4 ((s + 1) mod n), s the vertex's strip and n the fewest bones of the mesh's skinned draws.
+A test whose source frame moved a bone index by hand (issue 163's deep dive copied its blended frame
+with Yorda's lanes on 200 moved to 252) writes the move in its rule file:
+
+- `@skin lane A B` (A and B multiples of 4 in 16..252, A not B; at most 8 lines, each A once):
+  every generated lane that would be A is written B. The values are the line's; nothing of the
+  game's data is read.
+
+It is not a placement: the skeleton is the same bytes as without it (no section). The line is kept
+as the fixture's `rule=` note, which the expansion reads (the expansion's SHA-256 pins the result,
+so a changed note fails `rd_fixture_tool check`); the maker strips it from the texture rules, fails
+a malformed line or a lane named twice, and fails a line that moved no lane (no generated vertex on
+A: a mesh whose palette does not reach it); its line ends `@skin lane A B: N lanes moved`. It is
+allowed beside every placement rule (`@lamps place`, `@fans off`, `@scene place`, `@water place`,
+`@scene drops`, `@scene cards`): it moves lane words only, they move positions, centres and forms
+(rd_fixture_test makes a frame with `@scene place` and the lane line: the lanes move as without it).
+`tools/rdfix_check.py` checks the notes' form.
+
 ## The format
 
 `port/render/rd_fixture.h` is the reference. In short: the head (`ICORDFX1`, the format, the
@@ -367,6 +388,7 @@ add a row when a family needs one):
 | `vu_record_dispatches` | `C copies, N dispatches` (the first stats line: the record by compute dispatches) |
 | `skin_checks`, `skin_wrong`, `skin_changed` | `skin check: N skinned commands, C checks, W wrong (address A), B blocks whose bytes differed (R changed after the draw)` (`--skin-check`'s summary line: C, W, R) |
 | `skin_dropped`, `skin_twins_own`, `skin_ring_twins` | the same line's `V wrong vertices dropped (non-finite)`, `twins: T read (O through the draw's own pipeline)` (O), `ring twins R read` |
+| `skin_past`, `skin_past_boxed` | the same line's `P checks past the probe's rows (Q boxed over every batch)` (checks of a command over the probe's 1,024 rows, of them boxed over every batch it draws) |
 | `skin_checks_drawn`, `skin_twins_drawn`, `skin_twins_own_drawn`, `skin_ring_twins_drawn` | the run's end lines: `VU skin check: at the end of the run: N checks drawn`, `VU skin check: twins at the end of the run: T drawn (O through the draw's own pipeline` (T, O), `the ring read's twin (C) N drawn` |
 | `vu_audit_entries`, `vu_audit_lists`, `vu_audit_plane_draws`, `vu_audit_violations` | `rd: VU audit: N entries (V index values), L compacted lists from R readbacks (...), draws: P of the fourth plane ...; B violations` (N, L, P, B) |
 | `side_band_card_draws` | `side bands: N draws with cards` (under `ICO_RD_REGION_RULE=ps2`: the draws the side bands' mode holds that carry card verdicts; 0 where the frame is not wider than 4:3) |
@@ -531,9 +553,9 @@ expansion does not change); its manifest line must say the same.
 | `rd_scope_ab`, `rd_scope_ab_tiler` | `lists/scope.txt` | the three captures, `fx-loss95`, `fx-scope-179-lost`, `fx-scope-179-before` (issue 179's Mali-G52 loss frames at the first 3D scene) (`prepass_vertices>=1`) | `prepass_vertices` on both runs |
 | `rd_vu_rec_size_ab`, `_mali` | `lists/vu_rec_size.txt` | `fx-mali-slow541`, `fx-mali-frame`, `fx-lamps-novolume`, `fx-opening-dark`, `fx-opening-sun`, `fx-vu-plain-0300` (the corpus's largest pre-pass record) (`prepass_vertices>=1`, `vu_record_dispatches>=1`) | `prepass_vertices` on both runs, `vu_record_dispatches` on `_mali`'s |
 | `rd_vurecord_ab_compute_class_opening` | `lists/vu_opening.txt` | `fx-lamps-novolume`, `fx-opening-dark`, `fx-opening-sun` | `prepass_vertices` on both runs, `vu_record_dispatches` on the compute run |
-| `rd_vu_skin_check_dump`, `rd_vu_skin_check_163_probe`, `_163_ring`, `rd_vu_skin_check_123`, `_123_nan`, `_123_attach`, `_123_nan_attach`, `_123_c3`, `_123_nan_c`, `_123_bones_ring`, `_123_bones_ring_nan` | `lists/skin_check.txt` (each test names its fixture by a word on its line: `corpus`, `163`, `123`) | `fx-vu-3086` (46 skinned commands), `fx-163-blended` (issue 163's blended frame), `fx-123-blended` (issue 123's blended frame of 2026-11-06, made with `skin_twins.rules.txt`: a blended VU draw's texture `clear`, so the alpha plan draws it as one failing pass that writes no Z, whose twins go through the draw's own pipeline under the Turnip profile) | each row's `-DREQUIRE`: `skin_checks` everywhere, `skin_wrong` under `ICO_RD_VU_SKIN_SABOTAGE=200`, `skin_changed` with `,ring` or `,nan`, `skin_dropped` with `,nan`, `skin_twins_own` with the Turnip profile, `skin_ring_twins` under the plain set; the summary line as before, the mismatch line naming a generated mesh (`m0001`...) |
+| `rd_vu_skin_check_dump`, `rd_vu_skin_check_163`, `_163_patched`, `_163_probe`, `_163_ring`, `rd_vu_skin_check_123`, `_123_nan`, `_123_attach`, `_123_nan_attach`, `_123_c3`, `_123_nan_c`, `_123_bones_ring`, `_123_bones_ring_nan` | `lists/skin_check.txt` (each test names its fixture by a word on its line: `corpus`, `163`, `patched`, `123`) | `fx-vu-3086` (46 skinned commands), `fx-163-blended` (issue 163's blended frame), `fx-163-patched` (its patched copy: `skin_patched.rules.txt`, the default rules and `@skin lane 200 252`), `fx-123-blended` (issue 123's blended frame of 2026-11-06, made with `skin_twins.rules.txt`: a blended VU draw's texture `clear`, so the alpha plan draws it as one failing pass that writes no Z, whose twins go through the draw's own pipeline under the Turnip profile) | each row's `-DREQUIRE`: `skin_checks` everywhere, `skin_past` and `skin_past_boxed` on the two clean 163 rows, `skin_wrong` under `ICO_RD_VU_SKIN_SABOTAGE=200`, `skin_changed` with `,ring` or `,nan`, `skin_dropped` with `,nan`, `skin_twins_own` with the Turnip profile, `skin_ring_twins` under the plain set; the summary line as before, the mismatch line naming a generated mesh (`m0001`...) |
 | `rd_vu_skin_check_ab` | `lists/skin_check_ab.txt` | `fx-vu-3086`, `fx-163-blended`, `fx-123-blended` | `skin_checks_drawn` on every on run, `skin_twins_drawn` at Original and with the attachment read, `skin_twins_own_drawn` there where declared (`fx-123-blended`); every target byte for byte |
-| `rd_vu_bones_ring_ab`, `_prepass` | `lists/bones_ring.txt` | `fx-163-blended`, `fx-123-blended` | `skin_checks_drawn` and `skin_ring_twins_drawn` on every check run (with the pre-pass `skin_twins_drawn`); every target byte for byte |
+| `rd_vu_bones_ring_ab`, `_prepass` | `lists/bones_ring.txt` | `fx-163-blended`, `fx-163-patched`, `fx-123-blended` | `skin_checks_drawn` and `skin_ring_twins_drawn` on every check run (with the pre-pass `skin_twins_drawn`); every target byte for byte |
 | `rd_vu_audit` | `lists/vu_audit.txt` | `fx-mali-loss`, `fx-mali-loss-before` (issue 179's Mali-G52 loss frames of 2026-11-14, made with `vu_opaque.rules.txt`), `fx-mali-frame`, `fx-mali-slow541` | `vu_audit_entries`, `vu_audit_violations=0` on every run, `vu_audit_lists`, `vu_audit_plane_draws` on the compaction's arms |
 | `rd_replay_tool_still` | `lists/replay_still.txt` | `fx-boot-0200` (`draws>=1` on the line) | `draws` on the run with the re-show on; presents 1 to 3 shown again, every picture byte for byte |
 | `rd_replay_tool_glow_hold` | `lists/glow_hold.txt` (a role a fixture: `still`, `prev`, `move`; `nocull`: `ICO_RD_CULL=off` for that case) | `fx-boot-0200` (`still`: `glow_chains>=1`, `glow_plan=whole`), `fx-adreno-prev`, `fx-adreno` (`prev`, `move`, `nocull`: `glow_chains>=1`, `glow_plan=lamps`) | `glow_chains` and `glow_plan` on each fixture replayed alone at its case's setting; the held and redrawn lines, the pictures as before |

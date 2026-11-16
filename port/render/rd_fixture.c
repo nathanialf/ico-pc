@@ -1039,8 +1039,88 @@ static void putSt(uint8_t *q, uint32_t s, uint32_t j, bool first)
     rd_fx_set32(q + 12, first ? 0u : F_ONE); /* the strip flag: ST.w < 1 starts a strip */
 }
 
+/* the opt-in "@skin lane A B" (rd_fixture.h): lane a as the rule lines
+ * write it (each move counted on its line) */
+static uint32_t laneOf(RdFxSkinLanes *lanes, uint32_t a)
+{
+    for (uint32_t i = 0; lanes && i < lanes->n; i++) {
+        if (lanes->from[i] == a) {
+            lanes->hits[i]++;
+            return lanes->to[i];
+        }
+    }
+    return a;
+}
+
+int rd_fx_skin_lane_line(const char *line, uint32_t *from, uint32_t *to)
+{
+    const char *p = line;
+    while (*p == ' ' || *p == '\t') {
+        p++;
+    }
+    if (strncmp(p, "@skin", 5) != 0 || (p[5] != ' ' && p[5] != '\t' && p[5] != '\0')) {
+        return 0;
+    }
+    p += 5;
+    char rest[96];
+    size_t n = 0;
+    while (*p && *p != '#' && *p != '\r' && *p != '\n' && n + 1 < sizeof(rest)) {
+        rest[n++] = *p++;
+    }
+    rest[n] = '\0';
+    unsigned a = 0, b = 0;
+    char word[8], extra[2];
+    if (sscanf(rest, " %7s %u %u %1s", word, &a, &b, extra) != 3 || strcmp(word, "lane") != 0 ||
+        a < 16u || a > 252u || (a & 3u) != 0 || b < 16u || b > 252u || (b & 3u) != 0 || a == b) {
+        return -1;
+    }
+    *from = a;
+    *to = b;
+    return 1;
+}
+
+bool rd_fx_skin_lane_add(RdFxSkinLanes *l, uint32_t from, uint32_t to, char *why, size_t whySize)
+{
+    for (uint32_t i = 0; i < l->n; i++) {
+        if (l->from[i] == from) {
+            snprintf(why, whySize, "@skin lane %u named twice", (unsigned)from);
+            return false;
+        }
+    }
+    if (l->n >= RD_FX_SKIN_LANES_MAX) {
+        snprintf(why, whySize, "more than %d @skin lane lines", RD_FX_SKIN_LANES_MAX);
+        return false;
+    }
+    l->from[l->n] = from;
+    l->to[l->n] = to;
+    l->hits[l->n] = 0;
+    l->n++;
+    return true;
+}
+
+/* the fixture's own @skin lane lines (its rule= notes) */
+static bool lanesOf(const RdFixture *fx, RdFxSkinLanes *l, char *why, size_t whySize)
+{
+    memset(l, 0, sizeof(*l));
+    for (uint32_t i = 0; i < fx->noteCount; i++) {
+        if (strncmp(fx->notes[i], "rule=", 5) != 0) {
+            continue;
+        }
+        uint32_t a = 0, b = 0;
+        const int r = rd_fx_skin_lane_line(fx->notes[i] + 5, &a, &b);
+        if (r < 0) {
+            snprintf(why, whySize, "the rule note '%s' is no \"@skin lane A B\"", fx->notes[i] + 5);
+            return false;
+        }
+        if (r > 0 && !rd_fx_skin_lane_add(l, a, b, why, whySize)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /* a mesh's stream: nv x qpv qwords */
-static bool genMesh(RdFxBuf *o, const SkMesh *m)
+static bool genMesh(RdFxBuf *o, const SkMesh *m, RdFxSkinLanes *lanes)
 {
     const uint32_t nv = m->nv, qpv = m->qpv;
     uint8_t *kick = calloc(nv ? nv : 1, 1);
@@ -1101,9 +1181,9 @@ static bool genMesh(RdFxBuf *o, const SkMesh *m)
             putNormal(qw + 16, s);
         }
         if (qpv >= 5) {
-            rd_fx_set32(qw + 32, 16u + 4u * (s % nb));
+            rd_fx_set32(qw + 32, laneOf(lanes, 16u + 4u * (s % nb)));
             rd_fx_set32(qw + 36, F_HALF);
-            rd_fx_set32(qw + 40, 16u + 4u * ((s + 1u) % nb));
+            rd_fx_set32(qw + 40, laneOf(lanes, 16u + 4u * ((s + 1u) % nb)));
             rd_fx_set32(qw + 44, F_HALF);
         }
         if (qpv >= 3) {
@@ -1356,8 +1436,18 @@ static void putTexture(RdFxBuf *o, const SkTex *t, uint32_t ver)
 bool rd_fixture_expand(const RdFixture *fx, bool checkSha, uint8_t **out, size_t *outLen, char *why,
                        size_t whySize)
 {
+    return rd_fixture_expand_lanes(fx, checkSha, out, outLen, NULL, why, whySize);
+}
+
+bool rd_fixture_expand_lanes(const RdFixture *fx, bool checkSha, uint8_t **out, size_t *outLen,
+                             RdFxSkinLanes *lanesOut, char *why, size_t whySize)
+{
     *out = NULL;
     *outLen = 0;
+    RdFxSkinLanes lanes;
+    if (!lanesOf(fx, &lanes, why, whySize)) {
+        return false;
+    }
     Sk sk;
     if (!skParse(fx, &sk, why, whySize)) {
         return false;
@@ -1410,7 +1500,7 @@ bool rd_fixture_expand(const RdFixture *fx, bool checkSha, uint8_t **out, size_t
         memset(name, 0, sizeof(name));
         snprintf(name, sizeof(name), "m%04u", (unsigned)(i + 1u));
         rd_fx_put(&o, name, 24);
-        ok = genMesh(&o, m);
+        ok = genMesh(&o, m, lanes.n ? &lanes : NULL);
         rd_fx_put(&o, m->idx, (size_t)m->ni * 4u);
         rd_fx_put(&o, m->batches, (size_t)m->nb * sizeof(RdVuBatchRec));
     }
@@ -1449,6 +1539,9 @@ bool rd_fixture_expand(const RdFixture *fx, bool checkSha, uint8_t **out, size_t
     }
     *out = o.p;
     *outLen = o.n;
+    if (lanesOut) {
+        *lanesOut = lanes;
+    }
     return true;
 }
 
