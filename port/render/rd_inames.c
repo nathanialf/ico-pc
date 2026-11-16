@@ -64,6 +64,27 @@ void rd_inames_add(RdInameTally *t, const char *name, int why, uint32_t n)
     t->lost += n;
 }
 
+void rd_inames_scroll(RdInameTally *t, const char *name, uint32_t n)
+{
+    const char *nm = name != NULL && name[0] != '\0' ? name : "a draw";
+    char key[RD_INAMES_NAME];
+
+    (void)snprintf(key, sizeof(key), "%s", nm);
+    const uint32_t h = name_hash(key);
+
+    for (uint32_t i = 0; i < RD_INAMES_SLOTS; i++) {
+        RdInameSlot *s = &t->s[(h + i) % RD_INAMES_SLOTS];
+
+        if (!s->used) {
+            return;
+        }
+        if (strcmp(s->name, key) == 0) {
+            s->scroll += n;
+            return;
+        }
+    }
+}
+
 typedef struct Out {
     char *buf;
     size_t cap, len;
@@ -119,6 +140,9 @@ int rd_inames_text(const RdInameTally *t, uint32_t frames, uint32_t presents,
             }
             shown[best] = true;
             put(&o, "%s%s %u", named == 0 ? " (" : ", ", t->s[best].name, t->s[best].n[w]);
+            if (w == RD_INAME_UNMATCHED && t->s[best].scroll != 0) {
+                put(&o, " [scroll %u]", t->s[best].scroll);
+            }
             if (w == RD_INAME_STAIR && cad != NULL) {
                 uint32_t judged, moved, alt;
 
