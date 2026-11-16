@@ -138,24 +138,30 @@ folders of the same dumps' pictures, one drawn with the side bands off (`ICO_RD_
 one with them on: the centre 512-texel band (the 4:3 picture) must be identical byte for byte, hard;
 the side columns are reported, and a side pixel that changed must be one the picture without the
 bands left at the fog colour (never lose what was drawn). The ctest `rd_sideband_ab` runs it over
-the committed fixtures of `port/render/test/fixtures/lists/wide.txt` (generated geometry: no triangle
-there is dropped where the side bands would draw it, so both gates hold the pictures the same with
-the side bands' and the camera rule's modes on; [TESTING_FIXTURES.md](TESTING_FIXTURES.md)).
-`rd_sideband_cards` holds issue 189's frame, whose only drops are cards, byte for byte with the side
-bands off and on, and its picture's edges within 1.5 levels by `tools/band_seam.py`; under the
-camera rule the three cards drawn over the whole frame and the edges again within 1.5 levels. The
+the committed fixtures of `port/render/test/fixtures/lists/wide.txt`, made with the placement rule
+`@scene drops` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md#the-placement-rules-opt-in)): a floor
+across the eye plane, which the PS2 drops behind the eye and the side bands draw beside the picture
+(at least one SCENE side pixel must change), and a card beyond the GS window, each facing the eye
+and facing away. `rd_sideband_cards` holds issue 189's frame made with `@scene cards`
+(`fx-cards-189`), whose only drops are its two cards, byte for byte with the side bands off and on,
+and its picture's edges within 1.5 levels by `tools/band_seam.py`; under the camera rule the
+facing card drawn over the whole frame, the other kept, and the edges again within 1.5 levels. The
 disc-wide sweep `gsb_cull_sweep.*` (`gsb_cull_test --sweep`, main only, it needs the disc image)
 counts per stage and aspect the triangles the box cull, the blend span and the PS2's region rule
 leave out (the CPU oracle's `vu1ref_region_draw`: the camera rule is not swept; its drops are the
 back faces alone), against the stored counts of `tools/sweep_baseline.txt`; a count above its line fails, and the
 run prints "baseline can be lowered" when it falls ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
 
-The list is `tools/native_frame_dumps.txt`, or the list or folder `ICO_DUMPS` names; the ctests
-skip unless `ICO_DUMPS` is set. The baseline is updated by running `baseline` after a change whose
-pictures are accepted and committing the new manifest.
+By hand, the tool's list is the list or folder `--dumps` or `ICO_DUMPS` names (default
+`tools/native_frame_dumps.txt`, machine-local). The ctest's manifest is updated, after a change
+whose pictures are accepted, by expanding the fixtures of `lists/native_frame.txt` and running
+`baseline --dumps <their list> --tool <the release's rd_replay_tool>` (with `ICO_RD_SHADOW_FINE=0`,
+the ctest's environment) and committing it.
 
-`tools/coverage_check.py` (ctest `coverage_corpus`, `coverage_check_selftest`) renders every dump
-of `tools/coverage_corpus.txt` at its own aspect, `--enhanced --present 1376x896`, once with
+`tools/coverage_check.py` (ctest `coverage_corpus`, local-only; `coverage_check_selftest`) renders
+every dump of a corpus list (`--corpus` or `ICO_COVERAGE_CORPUS`; the ctest skips with `SKIP:
+local-only validation: ICO_COVERAGE_CORPUS names no corpus list (0 dumps to render)` without one)
+at its own aspect, `--enhanced --present 1376x896`, once with
 `--aa off` and once with `--aa msaa4`, plus the interpolated frame of a dump that names a `PREV`,
 and compares with the previous run: any mesh drawn fewer times than before fails, and more than
 `pixels` percent of pixels changed by more than `tol` fails (defaults 0.5 and 8). The previous

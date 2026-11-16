@@ -18,12 +18,15 @@
 # ("side bands: N draws with cards", counted only for a draw the side bands'
 # mode holds: rd_replay_vu.c vuSource's RD_DROPS_BESIDE branch), at least 1
 # on a wide frame and 0 at 4:3 (the mode is off where the picture is the
-# frame: vuDropMode's gsW test).  The generated geometry of a fixture drops
-# no triangle the side bands would draw (rd_replay_tool --region-stats:
-# "beside 0" on every committed fixture, and on every source frame too), so
-# the compare holds the picture the same with the mode on; what a drop drawn
-# beside the picture does is not exercised (docs/port/TESTING_FIXTURES.md).
-# A fixture no setting checked fails; no device (77): SKIP.
+# frame: vuDropMode's gsW test); and the drops: the fixtures are made with
+# @scene drops (docs/port/TESTING_FIXTURES.md, "The placement rules"), whose
+# floor is a drop behind the eye that faces it, so rd_replay_tool
+# --region-stats under the PS2's rule at the Original preset (CPU only,
+# --no-device) shows the fixture's region_drops and beside_tris (the
+# triangles drawn beside the picture: at least 1 on a wide frame, 0 at 4:3),
+# and a fixture that declares beside_tris >= 1 must change SCENE's side
+# columns at one setting at least ("side N pixels changed": the GPU drew
+# them).  A fixture no setting checked fails; no device (77): SKIP.
 # Both replays run under the PS2's region rule (ICO_RD_REGION_RULE=ps2: the
 # side bands are its; the camera rule, the default, has none and is
 # rd_region_camera_ab's).
@@ -60,6 +63,21 @@ foreach(i RANGE ${last})
   list(GET dumps ${i} dump)
   list(GET aspects ${i} aspect)
   set(checked_${name} 0)
+  set(sidePixels_${name} 0)
+  # the drops, on the CPU oracle at the Original preset (the verdicts do not
+  # depend on the preset on a frame wider than 4:3, or at 4:3 but for the
+  # out-of-box drops, which are drops in both)
+  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_REGION_RULE=ps2
+                          "${TOOL}" "${dump}" "${OUT}/${name}-region.png" --no-device
+                          --aspect ${aspect} --region-stats
+                  RESULT_VARIABLE rcR OUTPUT_VARIABLE outR ERROR_VARIABLE errR)
+  if(NOT rcR EQUAL 0)
+    message(FATAL_ERROR "${name}: --region-stats exited ${rcR}:\n${errR}")
+  endif()
+  string(REGEX MATCH "region: frame [^\n]*" frameR "${outR}")
+  message(STATUS "rd_sideband_ab: ${name}: ${frameR}")
+  rd_fixture_require(${name} "${outR}" region_drops beside_tris)
+  rd_fixture_quantity(beside_tris "${outR}" besideN)
   foreach(s IN LISTS settings)
     set(dirA "${OUT}/${name}-${s}-drop")
     set(dirB "${OUT}/${name}-${s}-beside")
@@ -94,6 +112,9 @@ foreach(i RANGE ${last})
                     RESULT_VARIABLE rcC OUTPUT_VARIABLE outC ERROR_VARIABLE errC)
     message(STATUS "rd_sideband_ab: ${name} (${s}, aspect ${aspect}, frame ${gsw} GS wide):\n"
                    "${outC}${errC}")
+    if(outC MATCHES "SCENE.png +[a-zA-Z]+:[^\n]*side ([0-9]+) pixels changed")
+      math(EXPR sidePixels_${name} "${sidePixels_${name}} + ${CMAKE_MATCH_1}")
+    endif()
     if(NOT rcC EQUAL 0)
       math(EXPR failures "${failures} + 1")
     endif()
@@ -102,10 +123,18 @@ foreach(i RANGE ${last})
     message(SEND_ERROR "${name}: no setting checked it")
     math(EXPR failures "${failures} + 1")
   endif()
+  if(besideN GREATER 0 AND sidePixels_${name} EQUAL 0)
+    message(SEND_ERROR "${name}: ${besideN} triangles beside the picture on the oracle, and no "
+                       "SCENE side pixel changed with the side bands on at any setting")
+    math(EXPR failures "${failures} + 1")
+  else()
+    message(STATUS "rd_sideband_ab: ${name}: ${besideN} triangles beside the picture, "
+                   "${sidePixels_${name}} SCENE side pixels changed over the settings")
+  endif()
 endforeach()
 math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(failures GREATER 0)
   message(FATAL_ERROR "rd_sideband_ab: ${failures} checks failed (above)")
 endif()
 message(STATUS "rd_sideband_ab: ${nd} fixtures at 2 settings: the picture's band identical, no side "
-               "pixel lost, the side bands' mode as each fixture declares")
+               "pixel lost, the side bands' mode and drops as each fixture declares")

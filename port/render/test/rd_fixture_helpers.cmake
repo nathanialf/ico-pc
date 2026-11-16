@@ -92,6 +92,10 @@ set(_rdfx_q_constant_reads_served "constant reads on: ([0-9]+) sprites drawn in 
 set(_rdfx_q_vu_record_dispatches "[0-9]+ copies, ([0-9]+) dispatches")
 # the wide frames: the side bands' mode
 set(_rdfx_q_side_band_card_draws "side bands: ([0-9]+) draws with cards")
+# the region rule's drops (--region-stats' frame line: the PS2's drops kept, those drawn beside the picture, those the camera rule draws)
+set(_rdfx_q_region_drops "region: frame [^\n]* drop ([0-9]+) \\(")
+set(_rdfx_q_beside_tris "region: frame [^\n]*, beside ([0-9]+) \\(")
+set(_rdfx_q_camera_drawn_tris "region: frame [^\n]*drawn by the camera rule ([0-9]+) \\(")
 
 set(RDFX_FAILURES 0)
 

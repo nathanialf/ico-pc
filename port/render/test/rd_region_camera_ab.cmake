@@ -15,17 +15,21 @@
 #      ran: the camera rule's replay (the report's camera.log, --stats) at
 #      every setting shows the fixture's region_rule_draws ("region rule: the
 #      camera's: N VU draws", the draws the camera rule's mode holds,
-#      rd_replay_vu.c vuSource's cameraDrops).  The generated geometry of a
-#      fixture drops no triangle and no sprite (an empty mask on every
-#      committed fixture), so the pictures are held byte for byte with the
-#      camera rule's mode on; what a dropped triangle drawn by the camera rule
-#      does is not exercised (docs/port/TESTING_FIXTURES.md).
+#      rd_replay_vu.c vuSource's cameraDrops).  The fixtures are made with
+#      @scene drops (docs/port/TESTING_FIXTURES.md, "The placement rules"):
+#      a floor behind the eye and a card beyond the GS window that face the
+#      eye (drops the camera rule draws: the mask's red) and the same facing
+#      away (kept dropped), so a fixture whose camera_drawn_tris is at least 1
+#      must change SCENE at one setting at least, every changed pixel inside
+#      the mask.
 #   2. the same verdicts in every preset: --region-stats under the camera
 #      rule at the Original preset 1x and Enhanced 1x, at the frame's aspect:
 #      the frame line's triangles the camera's rule draws of the PS2's drops
 #      (strip + drawn by the camera rule), those it keeps dropped (drop) and
 #      those a tick rescues the same in both (the card test, the one
-#      preset-dependent step of the PS2's rule, is not the camera's).
+#      preset-dependent step of the PS2's rule, is not the camera's); and
+#      each run shows the fixture's camera_drawn_tris (the triangles the
+#      camera rule draws of the PS2's drops).
 # A fixture no setting checked fails; no device (77): SKIP.
 # -DTOOL=<rd_replay_tool> -DPYTHON=<python3> -DREPORT=<tools/region_camera_report.py>
 # -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the fixtures folder>
@@ -74,7 +78,11 @@ endif()
 # output in <out>/<folder>-<stem>-<setting>/camera.log: region_camera_report.py dump_name)
 foreach(n IN LISTS names)
   set(checked_${n} 0)
+  set(scene_${n} 0)
   foreach(s orig enh2x)
+    if(outR MATCHES "(ok|FAIL) fixtures-${n}-${s}: SCENE ([0-9]+) pixels changed")
+      math(EXPR scene_${n} "${scene_${n}} + ${CMAKE_MATCH_2}")
+    endif()
     set(log "${OUT}/ab/fixtures-${n}-${s}/camera.log")
     if(NOT EXISTS "${log}")
       message(SEND_ERROR "${n} (${s}): no camera rule replay (${log})")
@@ -118,6 +126,10 @@ foreach(i RANGE ${last})
     endif()
     math(EXPR drawn "${strip} + ${CMAKE_MATCH_1}")
     list(APPEND counts "${drawn}/${drop}/${rescued}")
+    rd_fixture_require(${n} "${out}" camera_drawn_tris)
+    if(preset STREQUAL "orig")
+      rd_fixture_quantity(camera_drawn_tris "${out}" camN)
+    endif()
   endforeach()
   list(GET counts 0 co)
   list(GET counts 1 ce)
@@ -132,6 +144,14 @@ foreach(i RANGE ${last})
   if(checked_${n} EQUAL 0)
     message(SEND_ERROR "${n}: no setting checked it")
     math(EXPR failures "${failures} + 1")
+  endif()
+  if(camN GREATER 0 AND scene_${n} EQUAL 0)
+    message(SEND_ERROR "${n}: the camera rule draws ${camN} of the PS2's drops on the oracle, and "
+                       "SCENE changed at no setting")
+    math(EXPR failures "${failures} + 1")
+  else()
+    message(STATUS "${n}: the camera rule draws ${camN} of the PS2's drops; ${scene_${n}} SCENE "
+                   "pixels changed over the settings, inside the mask")
   endif()
 endforeach()
 math(EXPR failures "${failures} + ${RDFX_FAILURES}")

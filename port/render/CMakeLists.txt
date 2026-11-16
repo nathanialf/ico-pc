@@ -2980,16 +2980,15 @@ if(ICO_RUN_TESTS)
         set_tests_properties(rd_sideband_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
     # rd_sideband_cards (test/rd_sideband_cards.cmake, issue 189,
-    # docs/port/VU1_PROGRAMS.md "The region rule", step 7): the reporter's
-    # frame near stage 32's exit (machine-local, /primary/dev/ico-dumps/189),
-    # whose only dropped triangles are the mist quads' cards, at Original
+    # docs/port/VU1_PROGRAMS.md "The region rule", step 7): the committed
+    # fixtures of lists/sideband_cards.txt (fx-cards-189: the reporter's frame
+    # made with @scene cards, whose only drops are its cards), at Original
     # 4:3, Enhanced 4:3 2x, Enhanced 16:10 and the reporter's settings: every
     # target byte for byte with and without the side bands (a card keeps the
     # drop beside the picture), --stats's "side bands: N draws with cards",
-    # --region-stats's three card drops and nothing beside, and
-    # tools/band_seam.py's picture edges within 1.5 levels on the 16:10
-    # presents (7.3 with the cards drawn beside the picture); SKIP without
-    # the dump or a device
+    # --region-stats's card drops (the list's counts) and nothing beside, the
+    # camera rule drawing the facing card, and tools/band_seam.py's picture
+    # edges within 1.5 levels on the 16:10 presents; SKIP without a device
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/sideband_cards")
     set(_sbc_py "")
     if(Python3_FOUND)
@@ -2997,7 +2996,9 @@ if(ICO_RUN_TESTS)
     endif()
     add_test(NAME rd_sideband_cards
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMP=/primary/dev/ico-dumps/189/frame-20261104-120509-v130039.rddump"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool> "-DFIXTURES=${ICO_FIXTURE_DIR}"
+                     "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/sideband_cards.txt"
                      "-DSEAM=${CMAKE_SOURCE_DIR}/tools/band_seam.py" ${_sbc_py}
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/sideband_cards"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_sideband_cards.cmake")
