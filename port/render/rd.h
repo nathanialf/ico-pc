@@ -825,6 +825,36 @@ void rd_set_memory_clause_fn(RdMemoryClauseFn fn);
  * pipelines on one thread).  NULL (the default): never asked. */
 typedef int (*RdLowMemoryFn)(char *why, size_t size);
 void rd_set_low_memory_fn(RdLowMemoryFn fn);
+
+/* The start-up set sized by the device's own memory fall (issue 215;
+ * port/platform/set_size.h, docs/port/PIPELINES.md "Sized by the memory
+ * fall").  rd_precreate_pipelines asks fn before each batch with the set's
+ * counts by family ([0] 2D: every pipeline without a VU vertex shader; [1]
+ * VU): the pipelines made so far, those not made yet from the next on, the
+ * family of the next one not stopped (-1 none), play's known need not made
+ * yet (rd_vu_rec_early.h rd_set_size_need) and the next pipeline's place.
+ * fn returns the families stopped (bit 1 << family): their keys are left to
+ * first use from then on, and when every family with keys left is stopped
+ * the set stops there (the rest made on first use, rd_pipelines_lazy with
+ * "the start-up set sized by the device's memory fall: <why>"); a set that
+ * skipped keys of a stopped family stops the same way at its end.  The stop
+ * is the set's own: no low-memory stop, so the window keeps no resume
+ * record for it.  NULL (the default): never asked. */
+typedef struct RdSetSizeAsk {
+    uint32_t made[2], left[2];
+    int next;
+    bool begin; /* the set's first ask */
+    uint64_t needRecordBytes, needArenaBytes;
+    uint32_t place, total;
+} RdSetSizeAsk;
+
+typedef unsigned (*RdSetSizeFn)(const RdSetSizeAsk *ask, char *why, size_t size);
+void rd_set_set_size_fn(RdSetSizeFn fn);
+/* The pipelines made on first use after the start-up set (rd__get_pipeline,
+ * the lazy path's included; any thread): those since the last call and
+ * the longest of them in ms (taken: the next call starts from 0), and the
+ * run's count.  The window's 10 s memory line (window_lines.c). */
+void rd_pipelines_first_use_take(uint32_t *block, float *longestMs, uint32_t *run);
 /* The start-up set resumed where an earlier start's stopped for memory
  * (issue 123; port/platform/pipe_resume.h, docs/port/PIPELINES.md "Stop
  * and resume"): the window calls it before rd_precreate_pipelines.  at is

@@ -904,6 +904,38 @@ the step, and the set stops at the floor): with the start, rule, end and summary
 lines for any set (38 with the sources' line, once a run) (the 684 pipelines of issue 215: every 43 pipelines and 334 MB). Nothing here
 changes behaviour. Test: `mem_breakdown`.
 
+### The start-up set's size
+
+Issue 215: on Qualcomm's own driver the device's free memory falls with every pipeline made and
+does not come back during the run, so a start-up set that runs to the free-memory floor leaves
+play below it (both logged deaths of the issue 215 handheld came under the floor). The set is
+sized by each start's own measurement ([PIPELINES.md](PIPELINES.md#sized-by-the-memory-fall),
+`port/platform/set_size.h`); it never acts on how an earlier run ended, and where the free memory
+does not fall with pipelines, or no floor applies (every system but Android), nothing changes.
+
+| line | when |
+| --- | --- |
+| `ico_pc: pipelines: the start-up set's size by the device's memory fall: on (<m> pipelines; free <a> MB, the floor <f> MB; play's known need <n> MB: the VU pre-pass's record <r> MB and the mesh arena's first chunk <c> MB): ...` or `...: off (<why>): the set as before` | the set's first ask |
+| `ico_pc: pipelines: the start-up set's size at pipeline <p> of <m>: free <a> MB less the floor <f> MB less play's known need <n> MB leaves <h> MB; 2D <x> MB a pipeline (the median of <b> batches): its <k> left x <x> = <c> MB, stops now, the rest made on first use; VU not measured yet (0 of 3 batches), measured when reached; the rests kept <s> MB` | a family's first trusted figure, and each stop |
+| `rd: pipelines: the start-up set sized by the device's memory fall: <k> made (2D <a>, VU <b>), <l> left to first use (...)` and `rd: pipelines: no start-up set (memory: the start-up set sized by the device's memory fall: <why>; <l> pipelines left to first use): ...` | the set's end, when a family was stopped |
+| `window: pipelines: the start-up set stopped at pipeline <p> of <m> (...) (memory: ...); the next start makes the whole set again` | after it: no resume record |
+| `ico_pc: memory at the first picture: free <a> MB of <t> MB (the floor <f> MB), the lowest since the start <l> MB; the start-up set sized by the memory fall: VU left to first use (14.0 MB a pipeline)` | the first picture, where the rule was on |
+| `window: memory: ...; pipelines ... alive ...; <n> made on first use in the block (the longest <s> s), <r> in the run` | every 10 s block |
+
+`last-run.txt`'s phase carries the decision's words after the phase's own (`...; start-up set
+sized by the memory fall: 2D, VU left to first use (15.0, 24.0 MB a pipeline)`), from the decision
+on. The attempt ledger's row `the start-up set sized by the memory fall` is `on` where the floor
+applies (`measured at each start ...`), `not applicable here` elsewhere; its counts are the
+pipelines left to first use and those made on first use after the stop.
+
+The issue ledger, for this rule:
+
+| Problem the logs showed | The question the next log answers | The line and field that answers it |
+| --- | --- | --- |
+| Retroid Pocket 6 (issue 215): every start's set drove free memory down to the floor (7249 -> 1911 MB at the release before), and both deaths came under it | Does play now start with memory to spare, and how low does it go? | `memory at the first picture: free <a> MB ..., the lowest since the start <l> MB` against the release before's 1911 MB at the floor; the block lines' `the device's least <n> MB available against the floor` |
+| The same: what the set left out costs | How many pipelines play made on first use, and how long the longest took | the 10 s line's `<n> made on first use in the block (the longest <s> s)`, the ledger row's two counts, the lazy batches' lines |
+| The issue 123 tablet: the set stopped at the floor in its VU half | Did the rule stop VU early and keep 2D (no fall there)? | the size lines' `2D no fall ... goes on` and `VU ... stops now` |
+
 ### How the previous run ended
 
 At the window's start, before the start-up activity file and `last-run.txt` are read and

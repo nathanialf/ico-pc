@@ -200,6 +200,13 @@ enum {
        no PABE), behind its start-up self-test; count the pairs in one pass,
        second count the pairs kept two-pass */
     ICO_ATT_ONEPASS,
+    /* set_size.c, window_pipe_finish.c, rd_pipeline.c (issue 215, v0.11.8):
+       the start-up set sized by the device's own memory fall, where the
+       free-memory floor applies (Android): a family whose rest does not fit
+       above the floor stops at once and is made on first use; count the
+       pipelines left to first use, second count those made on first use
+       after the stop */
+    ICO_ATT_SET_SIZE,
     ICO_ATT_COUNT
 };
 
@@ -447,5 +454,9 @@ void ico_attempt_decide_pin_release(int android, int rule);
    first shadowed scene above 1x (rd_shadow_count.c sets it again there);
    else not applicable */
 void ico_attempt_decide_shadow_count(int view);
+/* the start-up set sized by the memory fall (window_pipe_finish.c, as the
+   window registers it before the set): floorOn the free-memory floor
+   applies (Android, the floor not set off): on; else not applicable */
+void ico_attempt_decide_set_size(int floorOn);
 
 #endif

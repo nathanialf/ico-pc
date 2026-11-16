@@ -191,7 +191,8 @@ void last_run_beat(const LastRunBeat *b);
 void last_run_step(const char *step);
 void last_run_selftest(int on);
 void last_run_set_pipelines(unsigned done, unsigned total);
-void last_run_present(void);
+/* 1 when this present moved the run to the first picture (once a run) */
+int last_run_present(void);
 void last_run_milestone(const char *milestone);
 /* in front (0) or in the background (1) */
 void last_run_background(int background);
@@ -217,5 +218,12 @@ void last_run_end_words(const char *words);
 void last_run_end_crash(unsigned long code);
 /* the file's path ("" before last_run_begin) */
 const char *last_run_path(void);
+/* Issue 215 (set_size.h): the start-up set's size decision in short words
+   ("start-up set sized by the memory fall: VU left to first use (14.3 MB a
+   pipeline)", "" none),
+   after the phase's own words in every phase from then on */
+void last_run_set_size_words(const char *words);
+/* the lowest free memory the beats read, MB (-1 none yet) */
+long last_run_lowest_mb(void);
 
 #endif
