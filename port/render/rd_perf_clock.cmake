@@ -98,6 +98,8 @@ include(rd_no_volume.cmake)
 include(rd_volume_fs.cmake)
 # the shadow composites and levels by their own entry (rd_comp_spec.c)
 include(rd_comp_spec.cmake)
+# the two-pass blend's pairs in one pass where proven (rd_onepass.c)
+include(rd_onepass.cmake)
 
 # the per-draw lookups' hash (rd_hash.c in ico_render) and its test
 include(rd_hash.cmake)

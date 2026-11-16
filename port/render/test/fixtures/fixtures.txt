@@ -232,3 +232,8 @@ fx-163-patched dumps/163/blended-750-a200.rddump rules=skin_patched.rules.txt sk
 # art): two passes on SCENE that take a render area (rd_pass_area.c's rule),
 # at Enhanced 2x (4:3: the phone's setting cannot show it)
 fx-pass-area synthetic/rd_pass_area_frame.rddump pass_area_passes>=1
+# issue 179's Mali-G52 frame and slow-scene capture (v0.11.5) again with every VU
+# texture date_split (alpha 0x40 and 0x80): its LERP As VU draws' alpha proven at
+# most 128, so the two-pass blend's pairs go to one pass (rd_onepass_ab)
+fx-onepass-mali-frame dumps/v0116-mali179/frame-20261112-195947-v17565.zip rules=onepass.rules.txt prepass_vertices>=1
+fx-onepass-mali-slow541 dumps/v0116-mali179/slow-20261112-195541.zip rules=onepass.rules.txt prepass_vertices>=1

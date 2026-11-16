@@ -1,0 +1,18 @@
+# Fixtures for rd_onepass_ab and rd_onepass_sabotage
+# (port/render/test/rd_onepass_ab.cmake: the two-pass blend's pairs in one pass
+# where proven, against every pair in two passes, byte for byte): fixture names
+# of this repository (port/render/test/fixtures/NAME.rdfix), a name a line.
+#
+# the Mali-G52's F12 frame (stage 3, issue 179)
+fx-mali-frame
+# the Mali-G52's slow-scene capture (stage 42, the opening)
+fx-mali-slow541
+# the opening's dark room on the Pixel
+fx-opening-dark
+# the opening's sun on the Pixel
+fx-opening-sun
+# the same two frames with every VU texture date_split (onepass.rules.txt): the
+# pairs proven, so the path runs (the frames above, whose alpha-tested draws get
+# alpha 0 to 255, keep every pair in two passes)
+fx-onepass-mali-frame
+fx-onepass-mali-slow541

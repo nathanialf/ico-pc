@@ -87,6 +87,7 @@
 #include "rd_glow_blur.h"
 #include "rd_lamps.h"
 #include "rd_mesh.h"
+#include "rd_onepass.h"
 #include "rd_paste_spec.h"
 #include "rd_comp_spec.h"
 #include "rd_replay.h"
@@ -618,6 +619,8 @@ void rd__lamps_init(void)
     rd__paste_spec_init(); /* the glow's paste by its own entry (rd_paste_spec.c) */
     rd__volume_fs_init();  /* the volumes' stencil-only entry: this renderer's (rd_volume_fs.c) */
     rd__comp_spec_init();  /* the shadow composites' own entry (rd_comp_spec.c) */
+    /* the two-pass blend's pairs in one pass where proven (rd_onepass.c) */
+    rd__onepass_init();
 }
 
 void rd__lamps_force(int bits)
@@ -2342,6 +2345,8 @@ void rd_lamps_line(void)
     rd__paste_spec_line(); /* the glow's paste by its own entry (rd_paste_spec.c) */
     rd__volume_fs_line();  /* the volumes' stencil-only entry (rd_volume_fs.c) */
     rd__comp_spec_line();  /* the shadow composites' own entry (rd_comp_spec.c) */
+    /* the two-pass blend's pairs in one pass (rd_onepass.c) */
+    rd__onepass_line();
     uint64_t v[9];
     uint64_t *const src[9] = {&s_sum.areas,      &s_sum.whole,  &s_sum.pads,
                               &s_sum.areaTexels, &s_sum.texels, &s_sum.clear,

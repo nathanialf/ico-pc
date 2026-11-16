@@ -195,6 +195,11 @@ enum {
        kept otherwise); count the steps from the stencil, second count the
        full-size passes the guard drew after all */
     ICO_ATT_SHADOW_COUNT,
+    /* rd_onepass.c (issue 179, v0.11.8): a LERP As pair of the two-pass
+       blend drawn in one pass where its alpha is proven at most 128 (no FBA,
+       no PABE), behind its start-up self-test; count the pairs in one pass,
+       second count the pairs kept two-pass */
+    ICO_ATT_ONEPASS,
     ICO_ATT_COUNT
 };
 
@@ -407,6 +412,12 @@ int ico_attempt_decide_volume_fs(int module, int env, int defaultOn, int selftes
    failed, 1 passed).  1 when the draws may take it (each still passes its
    gate), else 0 */
 int ico_attempt_decide_comp_spec(int module, int device, int env, int defaultOn, int selftest);
+/* the two-pass blend's pairs in one pass (rd_onepass.c, at start-up and
+   after each self-test): twoPass the two-pass blend in use with a device,
+   env the tests' switch (ICO_RD_ONEPASS: -1 unset, 0, 1; its sabotage
+   counts as 1), defaultOn RD_ONEPASS_DEFAULT, selftest its start-up
+   self-test (-1 not run, 0 refused, 1 passed); returns on */
+int ico_attempt_decide_onepass(int twoPass, int env, int defaultOn, int selftest);
 /* the old robust-access line (window_robust.c window_robust_start, the
    window's first start): found config.toml held [dev] gpu_robust = true
    without the game's mark, removed it was taken off (0: the file could not
