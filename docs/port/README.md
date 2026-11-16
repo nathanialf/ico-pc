@@ -16,6 +16,7 @@ In reading order.
 | [PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md) | The log, the heartbeat and watchdog, crash and bug reports, the loss ladder and the lines the window prints. |
 | [ANDROID_DRIVERS.md](ANDROID_DRIVERS.md) | Android graphics driver packages: the picker, the drivers folder, the driver page, the fallback to the phone's own driver. |
 | [ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md) | Android's log diagnostics: the kernel GPU driver's sampler on its own thread, the thermal state and screen recording from the Java side. |
+| [ANDROID_DIAGNOSTICS_LEDGERS.md](ANDROID_DIAGNOSTICS_LEDGERS.md) | Android's diagnostics, continued: the issue and attempt ledgers, the cost counters and the lines that rank the costs. |
 | [GAME_CODE.md](GAME_CODE.md) | How `ico2/` is compiled: the sources, options, host paths, layout asserts and audits. |
 | [CONVENTIONS.md](CONVENTIONS.md) | The pre-commit hook, formatting, names, log lines, tests and scripts. |
 | [DATA.md](DATA.md) | The disc layer: the VFS, disc images, `ico.o2r`, the extractor, libcdvd, SIF and the data tables. |
