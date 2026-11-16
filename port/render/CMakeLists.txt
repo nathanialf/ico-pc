@@ -2248,8 +2248,11 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_vu_skin_check_judge
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vu_skin_check_test> -DMODE=judge
                      -P "${_vsk}")
+    # clean also 31.: a command of 1025 vertices (past the probe's 1024
+    # rows) boxed over every batch it draws, counted at the run's end
     add_test(NAME rd_vu_skin_check
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vu_skin_check_test> -DMODE=clean
+                     "-DEXTRA=rd: VU skin check: frame [0-9]+ command 0:[0-9]+ mesh rd vu skin check past #[0-9]+ \\(1025 vertices\\): past the probe's 1024 rows \\(it compares the first 820 vertices\\): its box check made over every batch the command draws \\(1025 vertices\\), on the CPU.*rd: VU skin check: at the end of the run: [0-9]+ checks drawn.*[;,] 1 checks past the probe's 1024 rows, 1 of them boxed over every batch the command draws"
                      "-DNOT_=vertices wrong" -P "${_vsk}")
     add_test(NAME rd_vu_skin_check_robust
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vu_skin_check_test> -DMODE=clean

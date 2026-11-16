@@ -382,7 +382,10 @@
  *                         (address A), B blocks whose bytes differed (R
  *                         changed after the draw), X of Y box checks with
  *                         samples outside; on the wrong ones c1 right K, c2
- *                         right L (c2 drawn in M); reads as: WORDS".  Vulkan
+ *                         right L (c2 drawn in M); reads as: WORDS; ...; P
+ *                         checks past the probe's rows (Q boxed over every
+ *                         batch)" (a command past the probe's rows: its box
+ *                         made over every batch it draws).  Vulkan
  *                         only (another backend: exit 77);
  *                         ICO_RD_VU_SKIN_SABOTAGE=A[,ring] the tests' wrong
  *                         reads
@@ -3031,12 +3034,13 @@ int main(int argc, char **argv)
                "reads as: %s; twins: %u read (%u through the draw's own pipeline), %u differ (%u "
                "of them through it); "
                "%u wrong vertices dropped (non-finite); the ring read: c3 right %u (c3 drawn in "
-               "%u), ring twins %u read, %u differ from B\n",
+               "%u), ring twins %u read, %u differ from B; %u checks past the probe's rows (%u "
+               "boxed over every batch)\n",
                dump, sk.commands, sk.checks, sk.wrong, sk.lastAddr, sk.blocksDiffer,
                sk.rereadDiffer, sk.boxOutside, sk.boxChecks, sk.c1Right, sk.c2Right, sk.c2Run,
                sk.decision[0] ? sk.decision : "every check right", sk.twins, sk.twinsOwn,
                sk.twinsDiffer, sk.twinsDifferOwn, sk.dropped, sk.c3Right, sk.c3Run, sk.ringTwins,
-               sk.ringDiffer);
+               sk.ringDiffer, sk.past, sk.pastBoxed);
     }
     if (replayed && saveBlended) {
         /* after the replay, as rd_present writes F12's (rd_interp.c

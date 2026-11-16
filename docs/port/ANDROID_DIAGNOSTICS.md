@@ -930,7 +930,13 @@ lines and what each decides:
   every draw was watched; D 0 over a run in which the player saw Yorda flicker says the fault is not
   a read that depends on the bone block's place in the pass (a wrong read at every offset shows in
   the probe's lines instead); N above 0 for long says the twins of draws without the attachment
-  read waited for their pipeline.
+  read waited for their pipeline. Its `P checks past the probe's 1024 rows (Q boxed over every
+  batch)`: checks of a command longer than the probe's rows (Ico's 1,448-vertex model in nearly
+  every scene, the horse's, Yorda's 3,744 on some frames), whose box check is made over every batch
+  the command draws on the CPU (said once a run: `rd: VU skin check: frame F command L:I mesh M #N
+  (V vertices): past the probe's 1024 rows ...`). Before this the box of such a command held only
+  its first batches, so a box event on Ico's model could be false; Q below P is a check whose box
+  was not drawn (its pass, a vertex behind the eye, or batches it could not read).
 - **`twins differ`** (`rd: VU skin check: frame F command L:I mesh testmodel #65641 (763
   vertices): twins differ: A ... N samples, B ... M samples; through FS with the draw's attachment
   read (its own pipeline); the probe of this command: ...; reads as: ...`): the same bytes drew

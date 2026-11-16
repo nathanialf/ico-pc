@@ -123,7 +123,16 @@ picture's pass, which the A/B cannot clear for every device. So on that profile 
 the vertex placement, not the decision table's last row (the pipeline's link with its
 attachment-read shader); the log says so once (`rd: VU skin check: the box check of a draw that
 reads its attachment ... is drawn through vu_ps without that read ...`) and each box line names the
-fragment entry drawn. Drawn only where
+fragment entry drawn. The box holds every vertex the command draws: a command whose batches run
+past the probe's 1,024 rows (the probe compares its first batches; Ico's 1,448-vertex model,
+the horse's 1,164 and Yorda's 3,744 in every frame that draws them) is boxed over all its batches
+through the cluster program on the CPU (`boxOver`), from the same bytes, since the box check draws
+the whole command (before this a 1,448-vertex command was boxed over its first 999 vertices, and on
+issue 163's frame made of generated geometry a sample of the rest fell outside: a false box event
+on a device). Such checks are counted (`past`, boxed over every batch `pastBoxed`), said once a run
+(`rd: VU skin check: frame F command L:I mesh M #N (V vertices): past the probe's 1024 rows (it
+compares the first P vertices): its box check made over every batch the command draws (A
+vertices), on the CPU`) and in the 10 s summary and the run's end line below. Drawn only where
 the box is closed (every vertex of the draw's batches in front of the eye: a clipped corner behind
 it reaches anywhere), the pass an ordinary one (no storage pass, no DATE through the stencil bit, no
 stencil mode) and its pipeline made (compiled in the background at its key's first check: no
@@ -295,7 +304,8 @@ On Turnip the probe once a present adds about 200 KB of readback a present.
 
 The cost: one probe pass of three times the draw's vertices times nine one-pixel triangles, one
 3,840-byte copy, a 48 x 1,024 target's copy, every 100 ms; the box check four scissored redraws of
-one command with nothing written; on the CPU the cluster program over at most 1,024 vertices, and
+one command with nothing written; on the CPU the cluster program over at most 1,024 vertices (and,
+for the box of a command past them, over all its batches: 3,744 vertices at most in the game), and
 on a wrong check one more run of it for each candidate address.
 
 ## The trace
@@ -489,7 +499,8 @@ On an event, the first 8, then every 100th, of each kind on its own count (a wro
 At the renderer's shutdown, when the run drew a check: `rd: VU skin check: at the end of the run: D
 checks drawn (B box checks drawn), R read, W wrong, X blocks whose bytes differed, Y box checks
 with samples outside; U readbacks not written by their replay, O ring stamps of an earlier replay; K
-checks skipped after a reset` (a check of the last replays is not read: its slot was not recycled), and with
+checks skipped after a reset; P checks past the probe's 1024 rows, Q of them boxed over every batch
+the command draws` (a check of the last replays is not read: its slot was not recycled), and with
 twins drawn `rd: VU skin check: twins at the end of the run: T drawn (O through the draw's own
 pipeline with its attachment read), R read, D differ; K checks targeted after a twin event; the ring
 read's twin (C) X drawn, Y read, Z differ from B; thinned N times, re-armed M times[ (thinned at the
@@ -499,7 +510,8 @@ healed (D of T twins differ over P replays)`.
 
 In the 10 s summary, when the check ran: `rd: VU skin check: P checks, W wrong, K skipped after a
 reset, B blocks whose bytes differed (R changed after the draw); Q box checks, S with samples outside the box, N not drawn
-(their pipeline not made yet; F with no slot left for the key); variants on the wrong ones: c1
+(their pipeline not made yet; F with no slot left for the key); P checks past the probe's 1024
+rows (Q boxed over every batch); variants on the wrong ones: c1
 right K, c2 right L (c2 drawn in M checks); largest difference on a right vertex D/16 pixel[;
 readbacks not written by their replay U, ring stamps of an earlier replay O (only when one was)][; T twins, D differ (first at frame F), N not drawn
 (their pipeline not made yet), ring twins differ E (of R read) | A and B through the ring, thinned
@@ -683,7 +695,7 @@ The lines:
   samples outside; on the wrong ones c1 right K, c2 right L (c2 drawn in M); reads as: WORDS;
   twins: T read (O through the draw's own pipeline), D differ (E of them through it); V wrong
   vertices dropped (non-finite); the ring read: c3 right K (c3 drawn in M), ring twins R read, E
-  differ from B`. A
+  differ from B; P checks past the probe's rows (Q boxed over every batch)`. A
   is the address the last wrong check named, WORDS that check's decision (a check whose bytes
   differed but whose probe drew right, a block whose changed bone the mesh does not use, gives its
   words only while no check was wrong).
@@ -708,7 +720,9 @@ the device's wrong read.
 ## Tests
 
 `rd_vu_skin_check_test.c` with `rd_vu_skin_check.cmake` (`rd_vu_skin_check_judge`,
-`rd_vu_skin_check`, `rd_vu_skin_check_robust`, `rd_vu_skin_check_probe`,
+`rd_vu_skin_check` (also a command of 1,025 vertices in five batches, the fifth outside the first
+four's box: clean, counted past the probe's rows and boxed over every batch, no sample outside, the
+once-a-run line and the run's end count), `rd_vu_skin_check_robust`, `rd_vu_skin_check_probe`,
 `rd_vu_skin_check_probe_robust`, `rd_vu_skin_check_ring`, `rd_vu_skin_check_twin`,
 `rd_vu_skin_check_twin_nan`, `rd_vu_skin_check_capture`, `rd_vu_skin_check_stale` (the careful
 compile rule draws a box check; each slot's readback not written again names the replay whose

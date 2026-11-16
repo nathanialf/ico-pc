@@ -498,6 +498,10 @@ typedef struct RdSkinSummary {
     /* issue 123 (v0.11.7): checks skipped after a reset (rd__skin_skip),
      * not counted wrong, no capture asked */
     uint32_t skipped;
+    /* checks of a command whose batches run past the probe's RD_SKIN_MAXV
+     * rows (the probe compares its first batches), of them whose box check
+     * was made over every batch the command draws and drawn */
+    uint32_t past, pastBoxed;
 } RdSkinSummary;
 
 int rd__vu_skin_check_frame(const RdFrame *f, int keep, RdSkinSummary *out);
