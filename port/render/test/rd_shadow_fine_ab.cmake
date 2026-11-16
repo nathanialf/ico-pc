@@ -37,7 +37,14 @@
 #      port/render/test/fixtures/lists/shadow_fine_goldens.txt: v0.11.6's
 #      rd_replay_tool at the same settings on the expanded fixtures, lavapipe)
 #      names for the fixture has its SHA-256, and every golden of the list was
-#      matched (a golden no run asked for fails);
+#      matched (a golden no run asked for fails); the SHA-256 is compared
+#      only where the run's device line (rd_replay_tool's "rhi_vk: device
+#      table:" line) matches the list's "# driver: <regex>" line, the lavapipe
+#      the goldens were made on: another lavapipe build or CPU architecture
+#      rounds the same draws differently (CI run 43805687280: Mesa 25.2.8 with
+#      LLVM 20.1.2 on x86-64 moved the anisotropic "pixel" pictures, on arm64
+#      every picture), and there only the PNG set is checked (each golden's
+#      PNG written) with checks 2-8, which compare runs of the same job;
 #   2. at 1x (e1x, o1x, gl1x) the default is the PS2's sizes: every PNG the
 #      same bytes, the same draws and passes, "shadow levels: 0 shadows at the
 #      scene's scale, 0 passes, 0 at the PS2's size";
@@ -127,12 +134,20 @@ foreach(name IN LISTS names)
 endforeach()
 list(LENGTH dumps ndumps)
 
-# the goldens: "<fixture> <setting> <png> <sha256>"
+# the goldens: "<fixture> <setting> <png> <sha256>", and "# driver: <regex>"
+# naming the device line of the lavapipe they were made on (check 1)
 set(goldenKeys "")
+set(goldenDriverRe "")
+set(goldenCompared 0)
+set(goldenOtherDriver 0)
 if(EXISTS "${GOLDENS}")
   file(STRINGS "${GOLDENS}" glines)
   foreach(l IN LISTS glines)
     string(STRIP "${l}" l)
+    if(l MATCHES "^# driver: (.+)$")
+      set(goldenDriverRe "${CMAKE_MATCH_1}")
+      continue()
+    endif()
     if(l STREQUAL "" OR l MATCHES "^#")
       continue()
     endif()
@@ -260,8 +275,9 @@ function(sf_same what a b)
 endfunction()
 
 # the golden PNGs of (fixture, setting) in dir; none listed fails (the fixture
-# list and the goldens drifted apart)
-function(sf_golden what dumpName s dir)
+# list and the goldens drifted apart); devErr: the run's stderr (its device
+# line); the bytes are compared on the goldens' driver alone
+function(sf_golden what dumpName s dir devErr)
   list(FIND goldenKeys "${dumpName}__${s}" at)
   if(at LESS 0)
     message(SEND_ERROR "${what}: no goldens for ${dumpName} at ${s}")
@@ -269,6 +285,10 @@ function(sf_golden what dumpName s dir)
     return()
   endif()
   set(goldenUsed ${goldenUsed} "${dumpName}__${s}" PARENT_SCOPE)
+  set(bytes TRUE)
+  if(NOT goldenDriverRe STREQUAL "" AND NOT devErr MATCHES "${goldenDriverRe}")
+    set(bytes FALSE)
+  endif()
   set(n 0)
   foreach(e IN LISTS gold_${dumpName}__${s})
     string(REGEX MATCH "^([^=]+)=(.*)$" m "${e}")
@@ -279,14 +299,27 @@ function(sf_golden what dumpName s dir)
       set(sfFail TRUE PARENT_SCOPE)
       continue()
     endif()
+    math(EXPR n "${n} + 1")
+    if(NOT bytes)
+      continue()
+    endif()
     file(SHA256 "${dir}/${png}" got)
     if(NOT got STREQUAL want)
       message(SEND_ERROR "${what}: ${png} is not v0.11.6's (${got}, ${want})")
       set(sfFail TRUE PARENT_SCOPE)
     endif()
-    math(EXPR n "${n} + 1")
   endforeach()
-  message(STATUS "${what}: ${n} PNGs against v0.11.6's")
+  if(bytes)
+    math(EXPR c "${goldenCompared} + 1")
+    set(goldenCompared ${c} PARENT_SCOPE)
+    message(STATUS "${what}: ${n} PNGs against v0.11.6's")
+  else()
+    math(EXPR c "${goldenOtherDriver} + 1")
+    set(goldenOtherDriver ${c} PARENT_SCOPE)
+    string(REGEX MATCH "rhi_vk: device table: [^\n]*" dev "${devErr}")
+    message(STATUS "${what}: ${n} PNGs written; their bytes not compared: the device is not "
+                   "the goldens' (${goldenDriverRe}): ${dev}")
+  endif()
 endfunction()
 
 set(compared 0)
@@ -360,7 +393,8 @@ foreach(dump IN LISTS dumps)
       set(sfFail TRUE)
     endif()
     if(NOT "${BACKEND}" STREQUAL "opengl")
-      sf_golden("${dumpName} ${s} the PS2's sizes" "${dumpName}" "${s}" "${base}-ps2")
+      sf_golden("${dumpName} ${s} the PS2's sizes" "${dumpName}" "${s}" "${base}-ps2"
+                "${err_p}")
     endif()
     list(FIND same "${s}" isSame)
     list(FIND capped "${s}" isCapped)
@@ -564,4 +598,4 @@ endif()
 if(compared EQUAL 0 OR acted EQUAL 0)
   message(FATAL_ERROR "rd_shadow_fine_ab: ${compared} pairs compared, the fine levels acted in ${acted}")
 endif()
-message(STATUS "rd_shadow_fine_ab: ${compared} pairs over ${ndumps} fixtures, the fine levels acted in ${acted}")
+message(STATUS "rd_shadow_fine_ab: ${compared} pairs over ${ndumps} fixtures, the fine levels acted in ${acted}; goldens: ${goldenCompared} runs compared, ${goldenOtherDriver} on another driver")

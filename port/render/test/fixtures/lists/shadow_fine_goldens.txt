@@ -8,6 +8,11 @@
 # give these bytes.  A change that moves these frames' pictures on purpose
 # regenerates them: the same runs with the tool of the release before.
 # Fields: the fixture, the setting, the PNG, its SHA-256.
+# The device line those runs printed (rd_replay_tool's "rhi_vk: device table:"),
+# a regex (no semicolon: CMake's list separator): the bytes are compared on it
+# alone (another lavapipe build or CPU architecture rounds differently: CI run
+# 43805687280).
+# driver: llvmpipe \(LLVM 19\.1\.7, 256 bits\) \(device 10005:0000. driver ID 13, version [0-9.]+. Vulkan 1\.4\.305.
 fx-adreno adreno AA0.png ff120518ea2d56ff24554cae785bbc00ab2f2e0c4b34e2b98166073558a5cd74
 fx-adreno adreno AA1.png e28ee7144c70f5aa90bddd05b4559ef95d873d4700a1a264520617ebd479cba3
 fx-adreno adreno AURA_TAP.png e28ee7144c70f5aa90bddd05b4559ef95d873d4700a1a264520617ebd479cba3
