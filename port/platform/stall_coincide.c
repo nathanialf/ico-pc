@@ -50,6 +50,73 @@ double stall_medians_add(StallMedians *m, uint32_t key, double ms)
     return median;
 }
 
+double stall_medians_peek(const StallMedians *m, uint32_t key)
+{
+    for (uint32_t i = 0; i < m->used; i++) {
+        if (m->k[i].key != key) {
+            continue;
+        }
+        const uint32_t held = m->k[i].n < STALL_RING ? m->k[i].n : STALL_RING;
+        if (held < STALL_MEDIAN_MIN) {
+            return -1.0;
+        }
+        float s[STALL_RING];
+        memcpy(s, m->k[i].ms, held * sizeof(float));
+        qsort(s, held, sizeof(float), cmpf);
+        return (held & 1u) ? (double)s[held / 2u]
+                           : 0.5 * ((double)s[held / 2u - 1u] + (double)s[held / 2u]);
+    }
+    return -1.0;
+}
+
+static int cmpd(const void *a, const void *b)
+{
+    const double x = *(const double *)a, y = *(const double *)b;
+    return x < y ? -1 : x > y ? 1 : 0;
+}
+
+int stall_pieces_judge(StallMoment *m, const double *ms, const double *median, unsigned n)
+{
+    double f[64], others[64];
+    unsigned k = 0, best = 0;
+    int bestAt = -1;
+
+    m->pieceN = m->grown = 0;
+    m->pieceFactor = m->othersFactor = m->factorMin = m->factorMax = 0.0;
+    for (unsigned i = 0; i < n && k < 64u; i++) {
+        if (!(median[i] > 0.0) || ms[i] < 0.0) {
+            continue;
+        }
+        f[k] = ms[i] / median[i];
+        if (bestAt < 0 || f[k] > f[best]) {
+            best = k;
+            bestAt = (int)i;
+        }
+        m->grown += f[k] >= STALL_GROWN ? 1u : 0u;
+        k++;
+    }
+    if (k == 0) {
+        return -1;
+    }
+    m->pieceN = k;
+    m->pieceFactor = f[best];
+    m->factorMin = m->factorMax = f[0];
+    unsigned no = 0;
+    for (unsigned i = 0; i < k; i++) {
+        m->factorMin = f[i] < m->factorMin ? f[i] : m->factorMin;
+        m->factorMax = f[i] > m->factorMax ? f[i] : m->factorMax;
+        if (i != best) {
+            others[no++] = f[i];
+        }
+    }
+    if (no > 0) {
+        qsort(others, no, sizeof(double), cmpd);
+        m->othersFactor =
+            (no & 1u) ? others[no / 2u] : 0.5 * (others[no / 2u - 1u] + others[no / 2u]);
+    }
+    return bestAt;
+}
+
 bool stall_pass_spike(double ms, double median)
 {
     return median > 0.0 && ms > STALL_PASS_TIMES * median && ms > STALL_PASS_MS;
@@ -76,6 +143,12 @@ unsigned stall_classes(const StallMoment *m)
     }
     if (m->resetReplay != 0 || m->hangReplay != 0) {
         bits |= 1u << STALL_CLASS_RESET;
+    }
+    if (m->pieceN >= 2u && m->pieceFactor >= STALL_GROWN && m->othersFactor < STALL_GROWN) {
+        bits |= 1u << STALL_CLASS_ONE_PIECE;
+    }
+    if (m->pieceN >= 2u && m->grown == m->pieceN) {
+        bits |= 1u << STALL_CLASS_GPU_WHOLE;
     }
     return bits ? bits : 1u << STALL_CLASS_NONE;
 }
@@ -129,8 +202,10 @@ static void put(Out *o, const char *fmt, ...)
 }
 
 static const char *const k_class[STALL_CLASSES] = {
-    "a core wait over 100 ms", "memory under the floor",        "memory pressure rising",
-    "the GPU clock low",       "the GPU's own sign of a reset", "none of these"};
+    "a core wait over 100 ms",       "memory under the floor",
+    "memory pressure rising",        "the GPU clock low",
+    "the GPU's own sign of a reset", "one piece grew",
+    "the GPU slow as a whole",       "none of these"};
 
 size_t stall_tally_text(const StallTally *t, char *out, size_t cap)
 {
@@ -336,6 +411,32 @@ size_t stall_moment_text(const StallMoment *m, char *out, size_t cap)
             put(&o, "after a span the game was not presenting (a pause, a capture, the app away)");
         }
         put(&o, ": not a sign of a reset");
+    }
+    if (m->pieceN > 0) {
+        /* the stalled replay's pieces against their block medians */
+        put(&o, "; its %u timed pieces against their block medians: ", m->pieceN);
+        if (m->pieceN >= 2u && m->grown == m->pieceN) {
+            put(&o, "every piece grew, x%.1f to x%.1f", m->factorMin, m->factorMax);
+        } else {
+            put(&o, "%s x%.1f", m->pieceName[0] ? m->pieceName : "a piece", m->pieceFactor);
+            if (m->pieceN >= 2u) {
+                put(&o, ", the others x%.1f (their median; %u of %u at x%.0f or more)",
+                    m->othersFactor, m->grown, m->pieceN, STALL_GROWN);
+            }
+        }
+    }
+    if (m->idleKnown) {
+        if (m->idleBeforeMs >= 0.0) {
+            put(&o, "; the GPU idle %.1f ms before its work", m->idleBeforeMs);
+        } else {
+            put(&o, "; its work begun %.1f ms before the picture before ended", -m->idleBeforeMs);
+        }
+    }
+    if (m->trisKnown) {
+        put(&o, "; %.0f VU triangles against the block's median %.0f", m->tris, m->trisMedian);
+        if (m->trisMedian > 0.0) {
+            put(&o, " (x%.2f)", m->tris / m->trisMedian);
+        }
     }
     subsText(&o, m);
     const unsigned bits = stall_classes(m);

@@ -74,6 +74,10 @@ enum {
 typedef struct RdInameSlot {
     char name[RD_INAMES_NAME];
     uint32_t n[RD_INAME_COUNT];
+    /* of n[RD_INAME_UNMATCHED], the draws whose VU block scrolls their
+       texture (qw 2's x or y not 0: an unmatched draw keeps its tick's
+       scroll, rd_interp.c camCurDraw; issue 123's right wall) */
+    uint32_t scroll;
     bool used;
 } RdInameSlot;
 
@@ -86,11 +90,15 @@ typedef struct RdInameTally {
 void rd_inames_reset(RdInameTally *t);
 /* n draws of name (NULL or "": "a draw") left for why */
 void rd_inames_add(RdInameTally *t, const char *name, int why, uint32_t n);
+/* of name's unmatched draws, n whose texture scrolls (after their
+   rd_inames_add; a name not in the table: nothing) */
+void rd_inames_scroll(RdInameTally *t, const char *name, uint32_t n);
 struct RdInameStairs;
 /* "draws left at their tick's position over F frames (P presents; counted
    at each frame's first present): unmatched N (name n, ...); ...; names
    past the table L", each stair-stepper's name with its cadence from cad
-   ("[moved M of J, alternating A]"; cad NULL: none) */
+   ("[moved M of J, alternating A]"; cad NULL: none), each unmatched name
+   whose draws scrolled their texture with "[scroll S]" (S of its n) */
 int rd_inames_text(const RdInameTally *t, uint32_t frames, uint32_t presents,
                    const struct RdInameStairs *cad, char *out, size_t cap);
 
@@ -163,8 +171,10 @@ struct RdCmd;
 struct RdFrame;
 
 /* the present's start: the notes below count at a frame's first present
-   only (firstOfTick), as the interpolation's own line counts its draws */
-void rd__inames_first(int firstOfTick);
+   only (firstOfTick), as the interpolation's own line counts its draws;
+   out the frame being blended, whose payload the notes' commands address
+   (an unmatched draw's texture scroll read from its VU block) */
+void rd__inames_first(int firstOfTick, const struct RdFrame *out);
 /* a draw left for why (RD_INAME_*: unmatched, mismatched, jumped, turn
    snapped, unkeyed), named by its mesh or its kind */
 void rd__inames_note(const struct RdCmd *c, int why);

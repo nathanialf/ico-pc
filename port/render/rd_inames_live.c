@@ -11,8 +11,10 @@ static RdInameTally s_tally;
 static RdInameStairs s_stairs;
 /* the tick before's view carried to the tick's, worked out once a pair */
 static RdInameCarry s_carry;
-/* the present being blended is its frame's first (rd__inames_first) */
+/* the present being blended is its frame's first (rd__inames_first), and
+   the frame being blended (its commands' payload) */
 static int s_first = 1;
+static const RdFrame *s_out;
 
 static const char *draw_name(const RdCmd *c)
 {
@@ -38,9 +40,26 @@ static const char *draw_name(const RdCmd *c)
     }
 }
 
-void rd__inames_first(int firstOfTick)
+void rd__inames_first(int firstOfTick, const RdFrame *out)
 {
     s_first = firstOfTick;
+    s_out = out;
+}
+
+/* an unmatched mesh draw's VU block scrolls its texture: qw 2's x or y not
+   0 (rd_interp.c lerpVuBlock's UV scroll; such a draw keeps its tick's
+   scroll, camCurDraw) */
+static int scrolls(const RdCmd *c)
+{
+    const uint32_t need = (uint32_t)(sizeof(RdVuPayload) + 3u * 16u);
+    float qw2[4];
+
+    if ((c->type != RDC_MESH && c->type != RDC_SKINNED) || s_out == NULL || c->u[2] < need ||
+        c->u[1] > s_out->payloadSize || c->u[2] > s_out->payloadSize - c->u[1]) {
+        return 0;
+    }
+    memcpy(qw2, s_out->payload + c->u[1] + sizeof(RdVuPayload) + 2u * 16u, sizeof(qw2));
+    return qw2[0] != 0.0f || qw2[1] != 0.0f;
 }
 
 void rd__inames_note(const RdCmd *c, int why)
@@ -56,6 +75,9 @@ void rd__inames_note(const RdCmd *c, int why)
         return;
     }
     rd_inames_add(&s_tally, draw_name(c), why, 1u);
+    if (why == RD_INAME_UNMATCHED && scrolls(c)) {
+        rd_inames_scroll(&s_tally, draw_name(c), 1u);
+    }
 }
 
 void rd__inames_step(const RdFrame *prev, const RdCmd *pc, const uint8_t *op, const RdCmd *c,
