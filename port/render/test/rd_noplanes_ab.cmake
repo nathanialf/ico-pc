@@ -1,63 +1,59 @@
 # rd_noplanes_ab: the screen-prim triangles without the sprite planes builds
 # (issue 161: the fallback a device whose driver stopped creating them draws
 # with, [dev] pipeline_skip; docs/port/WORK_BUFFERS.md "Without the sprite
-# planes") against the run with them.  For every dump the list names
-# (tools/noplanes_dumps.txt: a dump, then expect=same, expect=fallback:N or
-# expect=report, then rd_replay_tool's setting arguments), rd_replay_tool's --pass-dump with
-# --stats twice: as usual and under ICO_RD_NO_SPRITE_PLANES=1.  The second
-# run must say the builds are off; the first must count no command through
-# the fallback ("sprite no-planes 0").  expect=same: every named target's
-# PNG equal byte for byte, and no command through the fallback (a frame that
-# draws no screen-prim triangle with planes: the switch changes nothing
-# there).  expect=fallback:N: N commands through the fallback (N > 0) and
-# every target byte for byte all the same (the title's and the boot's
-# dumps, measured 2026-10-30: 2 commands each, 0 of 18 targets differ).
-# expect=report: at least one command through the fallback, and the
-# targets that differ are listed (the GPU's interpolation of the corners
-# against the planes: a colour a level apart on some pixels), not failed.
-# A missing list or dump is named and skipped; no dump read, or no device:
-# SKIP (77).
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
-if(NOT EXISTS "${LIST}")
-  message(STATUS "SKIP: ${LIST}: no dump list")
-  return()
-endif()
-get_filename_component(listDir "${LIST}" DIRECTORY)
-file(STRINGS "${LIST}" lines)
+# planes") against the run with them.  For every fixture the list names
+# (port/render/test/fixtures/lists/noplanes.txt: fixture names of the
+# repository, docs/port/TESTING_FIXTURES.md; a listed fixture that is absent or
+# does not expand to its pinned SHA-256 FAILS; after the name expect=same,
+# expect=fallback:N or expect=report, the line's own properties
+# (rd_fixture_list_props.cmake) and rd_replay_tool's setting arguments),
+# rd_replay_tool's --pass-dump with --stats twice: as usual and under
+# ICO_RD_NO_SPRITE_PLANES=1.  The second run must say the builds are off; the
+# first must count no command through the fallback ("sprite no-planes 0").
+# expect=same: every named target's PNG equal byte for byte, and no command
+# through the fallback (a frame that draws no screen-prim triangle with
+# planes: the switch changes nothing there).  expect=fallback:N: N commands
+# through the fallback (N > 0, the count of the frame's commands of a
+# screen-prim triangle key with planes: structure the fixture keeps) and
+# every target byte for byte all the same.  expect=report: at least one
+# command through the fallback, and the targets that differ are listed (the
+# GPU's interpolation of the corners against the planes: a colour a level
+# apart on some pixels), not failed.  The path ran (rd_fixture_require on the
+# run without the builds): each fixture's declared noplanes_fallback, the
+# commands drawn through the plain builds (>=1 where the fallback is tested,
+# =0 on the frame with no such triangle); a fixture not compared FAILS, and
+# some fixture must draw through the fallback.  No device: SKIP (77).
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the
+# fixtures folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<a
+# fixture list> -DOUT=<a folder the test may write>
+include("${FIXTURE_HELPERS}")
+include("${CMAKE_CURRENT_LIST_DIR}/rd_fixture_list_props.cmake")
+rd_fixture_list("${LIST}" names)
 set(dietRe "sprite no-planes ([0-9]+)")
 set(compared 0)
 set(failures 0)
 set(ndumps 0)
 set(index 0)
-foreach(l IN LISTS lines)
-  string(STRIP "${l}" l)
-  if(l STREQUAL "" OR l MATCHES "^#")
-    continue()
-  endif()
-  separate_arguments(words UNIX_COMMAND "${l}")
-  list(POP_FRONT words dump)
-  if(NOT IS_ABSOLUTE "${dump}")
-    set(dump "${listDir}/${dump}")
-  endif()
-  if(NOT EXISTS "${dump}")
-    message(STATUS "${dump}: no such dump, skipped")
-    continue()
-  endif()
+set(fellBack 0)
+foreach(name IN LISTS names)
+  rd_fixture_expand(${name} "${OUT}/fixtures" dump)
+  rd_fixture_list_props(${name})
+  separate_arguments(words UNIX_COMMAND "${RDFX_FIELDS_${name}}")
   set(expect "same")
   set(wantN "")
-  list(LENGTH words nw)
-  if(nw GREATER 0)
-    list(GET words 0 w0)
-    if(w0 MATCHES "^expect=(same|report)$")
+  set(args "")
+  foreach(w IN LISTS words)
+    if(w MATCHES "^expect=(same|report)$")
       set(expect "${CMAKE_MATCH_1}")
-      list(POP_FRONT words)
-    elseif(w0 MATCHES "^expect=fallback:([0-9]+)$")
+    elseif(w MATCHES "^expect=fallback:([0-9]+)$")
       set(expect "fallback")
       set(wantN "${CMAKE_MATCH_1}")
-      list(POP_FRONT words)
+    elseif(w MATCHES "^[a-z0-9_]+(>=|<=|!=|>|<|=)")
+      # the line's own property: rd_fixture_list_props took it
+    else()
+      list(APPEND args "${w}")
     endif()
-  endif()
-  set(args ${words})
+  endforeach()
   math(EXPR index "${index} + 1")
   math(EXPR ndumps "${ndumps} + 1")
   set(dirOn "${OUT}/${index}-planes")
@@ -94,6 +90,11 @@ foreach(l IN LISTS lines)
   endif()
   if(flatOff MATCHES "${dietRe}")
     set(nOff "${CMAKE_MATCH_1}")
+  endif()
+  # the path ran: the commands drawn through the plain builds this fixture declares
+  rd_fixture_require(${name} "${outOff}" noplanes_fallback)
+  if(nOff MATCHES "^[0-9]+$" AND nOff GREATER 0)
+    math(EXPR fellBack "${fellBack} + ${nOff}")
   endif()
   if(NOT nOn STREQUAL "0" OR nOff STREQUAL "?")
     message(SEND_ERROR "${dump}: the fallback's count: ${nOn} with the planes (0 expected), "
@@ -144,11 +145,18 @@ foreach(l IN LISTS lines)
     math(EXPR failures "${failures} + 1")
   endif()
 endforeach()
+list(LENGTH names nnames)
+if(NOT ndumps EQUAL nnames)
+  message(SEND_ERROR "rd_noplanes_ab: ${ndumps} of ${nnames} fixtures compared")
+  math(EXPR failures "${failures} + 1")
+endif()
+if(fellBack EQUAL 0)
+  message(SEND_ERROR "rd_noplanes_ab: no fixture drew a command through the fallback")
+  math(EXPR failures "${failures} + 1")
+endif()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(failures GREATER 0)
-  message(FATAL_ERROR "rd_noplanes_ab: ${failures} failures over ${ndumps} dumps")
+  message(FATAL_ERROR "rd_noplanes_ab: ${failures} failures over ${ndumps} fixtures")
 endif()
-if(compared EQUAL 0)
-  message(STATUS "SKIP: no dump of ${LIST} could be compared")
-  return()
-endif()
-message(STATUS "rd_noplanes_ab: ${compared} targets compared over ${ndumps} dumps")
+message(STATUS "rd_noplanes_ab: ${compared} targets compared over ${ndumps} fixtures, ${fellBack} "
+               "commands through the plain builds")

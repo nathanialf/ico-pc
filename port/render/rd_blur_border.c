@@ -266,6 +266,11 @@ static void sceneRepeat(Replay *r)
     if (rd__win_muted()) {
         return;
     }
+    /* the open screen run and the VU merge's drawn first: the list loop did
+     * so before a post sprite; at a held glow's mask, an RDC_NOP
+     * (rd__scene_border_due), it did not.  Only where the repeat copies, so
+     * a frame without it records as before */
+    rd__replay_flush_run(r);
     rd__fill11_border(r); /* a fill held for list 11's pass drawn first (rd_fill11.c) */
     const uint32_t th = t->th;
     if (!colsEnsure((uint32_t)(cwL + cwR), th, t->format)) {
@@ -340,6 +345,21 @@ static void sceneRepeatDue(Replay *r)
     const RdTexRec *tx = rd__tex_rec(r->st.tex);
     if (!tx || tx->kind != RD_TEXKIND_TARGET ||
         rd__target_rec(tx->target) != rd__target_rec(RD_TARGET_SCENE + 1u)) {
+        return;
+    }
+    s_armed = 0;
+    if (s_sceneRepeat) {
+        sceneRepeat(r);
+    }
+}
+
+/* rd_replay.h: the repeat due at a post sprite that read SCENE and is not
+ * drawn: the held glow's mask (rd_glow_hold.c rd__glow_hold_nop), so a held
+ * present repeats SCENE's columns where the chain drawn repeats them (before
+ * the glow's paste), not at the next sprite that reads SCENE (after it) */
+void rd__scene_border_due(Replay *r)
+{
+    if (!s_armed || s_armed != g_rd.replayCounter) {
         return;
     }
     s_armed = 0;

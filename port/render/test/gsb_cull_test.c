@@ -3573,9 +3573,12 @@ static int checkStage(const char *disc)
  *            numbered q mod SWEEP_SLICES.  The models are placed at the
  *            identity as in --stage (a stage whose models the game offsets
  *            is tested at the wrong place: the hand-back lists none found)
- *   cameras  FILE's lines "STAGE DUMP" (tools/sweep_cameras.txt): the dump's
- *            view and zoom, as camOfView reads them (DUMP builtin:i76 is the
- *            camera of the reporter's dump i76, st18a's); the 768-step sweep
+ *   cameras  FILE's lines "STAGE camera NAME V0 .. V15 zoom Z" (the
+ *            committed tools/sweep_cameras.txt: a frame camera's view and
+ *            zoom as numbers, read once from the dump's header), "STAGE
+ *            builtin:i76" (the camera of the reporter's dump i76, st18a's)
+ *            or, in a local list, "STAGE DUMP" (the dump's view and zoom, as
+ *            readDumpCamera reads them); the 768-step sweep
  *            (sweepStage: orbits, the eye alone, the view alone, the zoom
  *            easing) about each, at 16:9 (688 GS pixels) and 48:9 (2048),
  *            every s_pairEvery-th pair (--sweep-step, default 4: --sweep-step
@@ -3924,13 +3927,60 @@ static int readDumpCamera(const char *path, float *view, float *zoom, const char
 
 typedef struct SweepCam {
     char stage[16];
-    char path[1024];
+    char path[1024]; /* the dump, builtin:NAME, or the numbered camera's name */
+    /* "STAGE camera NAME V0 .. V15 zoom Z": the view and zoom as numbers (numbered 1) */
+    int numbered;
+    float view[16], zoom;
 } SweepCam;
 
 static SweepCam *s_cams;
 static int s_camCount;
 
-/* FILE's lines "STAGE DUMP" ('#' comments; a relative DUMP is relative to FILE's folder) */
+/* the numbered form's rest after "camera ": NAME, the view's 16 numbers (world to view,
+   column-major, as kI76View), "zoom" and the zoom; 0 when it is not that */
+static int parseNumberedCamera(const char *s, SweepCam *c)
+{
+    const char *p = s;
+    while (*p == ' ' || *p == '\t') {
+        p++;
+    }
+    const char *n = p;
+    while (*p && *p != ' ' && *p != '\t') {
+        p++;
+    }
+    const size_t nl = (size_t)(p - n);
+    if (nl == 0 || nl >= sizeof(c->path)) {
+        return 0;
+    }
+    memcpy(c->path, n, nl);
+    c->path[nl] = '\0';
+    for (int k = 0; k < 16; k++) {
+        char *end = NULL;
+        c->view[k] = strtof(p, &end);
+        if (end == p) {
+            return 0;
+        }
+        p = end;
+    }
+    while (*p == ' ' || *p == '\t') {
+        p++;
+    }
+    if (strncmp(p, "zoom", 4) != 0) {
+        return 0;
+    }
+    p += 4;
+    char *end = NULL;
+    c->zoom = strtof(p, &end);
+    if (end == p || !(c->zoom > 0.0f)) {
+        return 0;
+    }
+    for (p = end; *p == ' ' || *p == '\t'; p++) {}
+    return *p == '\0';
+}
+
+/* FILE's lines "STAGE camera NAME V0 .. V15 zoom Z" (the committed list: the frame camera's
+   view and zoom as numbers), "STAGE builtin:NAME" or "STAGE DUMP" (a local list: the dump's
+   header is read; a relative DUMP is relative to FILE's folder); '#' comments */
 static void loadCameraList(const char *file)
 {
     FILE *fp = file && file[0] ? fopen(file, "r") : NULL;
@@ -3979,14 +4029,24 @@ static void loadCameraList(const char *file)
             }
             s_cams = n;
         }
-        SweepCam *c = &s_cams[s_camCount++];
+        SweepCam *c = &s_cams[s_camCount];
+        memset(c, 0, sizeof(*c));
         memcpy(c->stage, p, sl);
         c->stage[sl] = '\0';
-        if (*sp == '/' || (sp[0] && sp[1] == ':') || strncmp(sp, "builtin:", 8) == 0) {
+        if (strncmp(sp, "camera ", 7) == 0 || strncmp(sp, "camera\t", 7) == 0) {
+            if (!parseNumberedCamera(sp + 7, c)) {
+                printf("gsb_cull_test: sweep: camera list line not 'STAGE camera NAME' and 16 "
+                       "numbers, 'zoom' and a number above 0: %s\n",
+                       line);
+                continue;
+            }
+            c->numbered = 1;
+        } else if (*sp == '/' || (sp[0] && sp[1] == ':') || strncmp(sp, "builtin:", 8) == 0) {
             snprintf(c->path, sizeof(c->path), "%s", sp);
         } else {
             snprintf(c->path, sizeof(c->path), "%s%s", dir, sp);
         }
+        s_camCount++;
     }
     fclose(fp);
 }
@@ -4081,7 +4141,10 @@ static void sweepOneStage(IcoVfs *vfs, const char *stage)
             }
             float view[16], zoom;
             const char *why = "";
-            if (!readDumpCamera(s_cams[c].path, view, &zoom, &why)) {
+            if (s_cams[c].numbered) {
+                memcpy(view, s_cams[c].view, sizeof(view));
+                zoom = s_cams[c].zoom;
+            } else if (!readDumpCamera(s_cams[c].path, view, &zoom, &why)) {
                 printf("gsb_cull_test: sweep: %s: camera of %s skipped (%s)\n", stage,
                        s_cams[c].path, why);
                 row->camsSkipped++;

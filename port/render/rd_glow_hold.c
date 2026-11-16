@@ -42,11 +42,29 @@
  * hash alike draw the same glow either way (both held, or the first
  * present's chain and the copy of its result), so showing the rendered
  * one again stays exact.
+ *
+ * SCENE's outer columns (rd_blur_border.c, issue 129): the fog arms their
+ * repeat for the frame's first post sprite that reads SCENE, the glow's mask
+ * when the chain is drawn, so the paste lands on the repeated columns.  The
+ * mask turned RDC_NOP keeps that place: rd__glow_hold marks it (b[6]
+ * HELD_SCENE_READ, unused by every command type) and the list loop's RDC_NOP
+ * (rd__glow_hold_nop) does the repeat there.  The crack fill's walk
+ * (rd_crack_fill.c rd__crack_fill_at) takes that NOP as the sprite it was
+ * (rd__glow_hold_mask): a fill not placed yet lands before it, as before the
+ * mask, not after the repeat over the repeated columns' own depth (an RDC_NOP
+ * is a state command to its placement: rd__cmd_is_state).  Without it a held present
+ * repeated them at the next sprite reading SCENE, after the paste, or not at
+ * all, on every frame wider than the PS2's 512 GS pixels (the columns differ
+ * from the chain drawn by up to 121 levels).
  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_replay.h"
+
+/* RDC_NOP's b[6]: a held glow's sprite that read SCENE (rd__glow_hold_nop) */
+#define HELD_SCENE_READ 0x5Au
 
 /* who asks for the chain drawn at every present: nobody (the held glow),
  * the environment switch ([dev] glow_redraw), or Options > Effects > Glow
@@ -228,6 +246,7 @@ int rd__glow_hold(RdFrame *f, int firstOfTick)
     if (!rd__interp_copy_at(list, last + 1, held, id[B_WORK3], id[B_WORK3])) {
         return outcome(RD_GLOW_NO_COPY);
     }
+    const uint32_t scene = rd_target(RD_TARGET_SCENE).id;
     st = f->startState;
     for (int l = head; l <= list; l++) {
         for (uint32_t i = 0; i < f->lists[l].count; i++) {
@@ -236,11 +255,28 @@ int rd__glow_hold(RdFrame *f, int firstOfTick)
                 continue;
             }
             if (l == list && chainBit(c, &st, id, true)) {
+                /* the mask's place: SCENE's columns repeated there */
+                const bool readsScene =
+                    c->type == RDC_POST_STUB && scene && rd__interp_reads(c, &st, scene);
                 c->type = RDC_NOP; /* the copy back at last + 1 is an RDC_COPY: kept */
+                c->b[6] = readsScene ? HELD_SCENE_READ : c->b[6];
             }
         }
     }
     return outcome(RD_GLOW_HELD);
+}
+
+bool rd__glow_hold_mask(const RdCmd *c)
+{
+    return c->type == RDC_NOP && c->b[6] == HELD_SCENE_READ &&
+           (c->b[0] == RD_POST_FLARE || c->b[0] == RD_POST_BLOOM || c->b[0] == RD_POST_EYE_BLUR);
+}
+
+void rd__glow_hold_nop(Replay *r, const RdCmd *c)
+{
+    if (rd__glow_hold_mask(c)) {
+        rd__scene_border_due(r);
+    }
 }
 
 const char *rd__glow_hold_text(int why)

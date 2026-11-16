@@ -120,7 +120,9 @@ output pixels at 2x. That reaches the screen on a cropped frame too: issue 26's 
 260 of 964, where the present already leaves the columns out. So the fog of a frame on SCENE arms
 a repeat (`rd__scene_border_arm`, the last line of `doFog`), done before the frame's first post
 sprite that samples SCENE (`sceneRepeatDue` in `rd__blur_post_sprite`: the glow's first
-reduction, the depth of field's, at the latest the reduction into DISPLAY), where SCENE's pass
+reduction, the depth of field's, at the latest the reduction into DISPLAY; at a present that
+holds the glow, the mask's `RDC_NOP` in its place: `rd__scene_border_due`,
+[WORK_BUFFERS.md](WORK_BUFFERS.md#the-glow-between-ticks)), where SCENE's pass
 ends anyway, so the repeat adds no pass on a tiler's local fog read and an open MSAA epoch closes
 where it would have (`port/render/rd_blur_border.c` (`sceneRepeat`)). The repeat copies SCENE's
 texels of GS column 2 into those of columns 0 and 1, and of column W - 3 into W - 2 and W - 1,
@@ -990,7 +992,7 @@ rd: fades fold: the reduction took another way (the hardware sprite, not as plan
 
 ctest `rd_fades_fold` (the step against the GS blend, rd_gsbase's fade, brightness and letterbox
 cases stepped texel by texel against the sprites' bytes, the plan on recorded frames) and
-`rd_fades_fold_ab` (the fade dumps with and without the fold,
+`rd_fades_fold_ab` (the fade fixtures with and without the fold,
 [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)). Not built:
 a frame differing from the last only in a fade's level could rerun the reduction and the present
 alone (the still re-present shows a picture again only on an unchanged frame hash,
@@ -2799,7 +2801,7 @@ Counters `RdPerfRecord.auraPasteSplit`, `auraPasteRows`, `auraPasteBand`, `auraP
 rows A-B (...), as the paste over the other N rows`; the 10 s line `window: aura paste: P drawn as
 the alpha alone (B band rows each), K read whole (why)` (when any aura paste was seen); `--stats`
 `stats: aura paste on|off: S split (R rows as the alpha alone, B band rows), K drawn whole (why)`.
-`rd_aura_paste` (CPU) and `rd_aura_paste_ab` (dumps) check it
+`rd_aura_paste` (CPU) and `rd_aura_paste_ab` (committed fixtures) check it
 ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
 
 ## Start-up

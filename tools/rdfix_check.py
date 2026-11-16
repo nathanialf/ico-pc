@@ -119,9 +119,27 @@ def skeleton(sk, ver):
     if ver >= 15:
         c.raw(c.u32() * 8)
     c.raw(c.u32() * 8)
-    if c.o != len(sk):
-        # the placement section (rd_fixture.h): centres in lattice steps, payload offsets
-        if c.u32() != 0x31505846:
+    tag = c.u32() if c.o != len(sk) else None
+    if tag == 0x34505846:
+        # the drop sheets' section (rd_fixture.h, @scene drops / cards): per sheet the
+        # mesh id, its role, the exponent, four corners and the normal as small integers
+        sheets = c.u32()
+        if sheets == 0 or sheets > meshes:
+            raise Bad("%d drop sheets of %d meshes" % (sheets, meshes))
+        for _ in range(sheets):
+            _id, role, e = struct.unpack("<IIi", c.raw(12))
+            words = struct.unpack("<15i", c.raw(60))
+            if role >= 4 or not -60 <= e <= 60:
+                raise Bad("a drop sheet's role or exponent is out of range")
+            corners, normal = words[:12], words[12:]
+            if max(abs(w) for w in corners) >= 1 << 21 or max(abs(w) for w in normal) > 1 << 20:
+                raise Bad("a drop sheet's corner or normal is past its range")
+    elif tag is not None:
+        # the placement section (rd_fixture.h): centres in lattice steps (FXP2,
+        # @scene place: each with its form, 0 the cube, 1 to 3 a sheet), payload offsets
+        # (FXP3, @water place: then the prims read across a block's period, offset and axes)
+        water = tag == 0x33505846
+        if tag not in (0x31505846, 0x32505846) and not water:
             raise Bad("bytes after the skeleton's end that are no placement section")
         placed = c.u32()
         if placed > meshes:
@@ -130,10 +148,19 @@ def skeleton(sk, ver):
             _id, x, y, z = struct.unpack("<I3i", c.raw(16))
             if max(abs(x), abs(y), abs(z)) > (1 << 23) - 16:
                 raise Bad("a placed mesh's centre is past the lattice's range")
+            if tag == 0x32505846 and c.u32() > 3:
+                raise Bad("a placed mesh's form is not the cube or a sheet")
         prims = c.u32()
-        if placed == 0 and prims == 0:
-            raise Bad("an empty placement section")
         c.raw(prims * 4)
+        wraps = 0
+        if water:
+            wraps = c.u32()
+            for _ in range(wraps):
+                _off, axes = struct.unpack("<2I", c.raw(8))
+                if axes not in (1, 2, 3):
+                    raise Bad("a prim read across a block names no axis")
+        if placed == 0 and prims == 0 and wraps == 0:
+            raise Bad("an empty placement section")
     if c.o != len(sk):
         raise Bad("%d bytes after the skeleton's end" % (len(sk) - c.o))
     return images, meshes

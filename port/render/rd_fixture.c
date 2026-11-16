@@ -655,6 +655,10 @@ typedef struct SkMesh {
     int32_t sizeExp;
     uint32_t bones;
     int32_t centre[3]; /* the placement section's: the cube's centre in lattice steps (else 0) */
+    uint32_t form;     /* the placement section's RD_FX_FORM_* (RD_FX_PLACE_TAG2; else the cube) */
+    bool drop;         /* the drop sheets' section's: its strips zigzag over corner[] */
+    uint32_t role;
+    int32_t dropExp, corner[4][3], normal[3];
     const uint8_t *idx, *batches;
 } SkMesh;
 
@@ -690,8 +694,14 @@ typedef struct Sk {
     SkExp *exps;
     uint32_t ne;
     uint32_t placed;     /* the placement section's meshes */
+    uint32_t sheets;     /* of them generated as sheets (RD_FX_PLACE_TAG2) */
+    bool scene;          /* the section is RD_FX_PLACE_TAG2's (@scene place) */
     const uint8_t *offs; /* and its prims generated beside the target: payload offsets */
     uint32_t noff;
+    uint32_t drops;       /* the drop sheets' section's meshes */
+    bool water;           /* the section is RD_FX_PLACE_TAG3's (@water place) */
+    const uint8_t *woffs; /* its prims read across a block's period: (offset, axes) pairs */
+    uint32_t nwrap;
 } Sk;
 
 typedef struct Rd {
@@ -855,12 +865,55 @@ static bool skParse(const RdFixture *fx, Sk *s, char *why, size_t whySize)
         s->exps[i].off = r32(&r);
         s->exps[i].e = (int32_t)r32(&r);
     }
-    s->placed = s->noff = 0;
+    s->placed = s->noff = s->sheets = s->drops = 0;
+    s->scene = false;
     s->offs = NULL;
-    if (!r.bad && s->mesh && r.o != r.n) {
-        /* the placement section (a fixture made with @lamps place or
-         * @fans off); never empty, so a fixture has one encoding */
-        if (r32(&r) != RD_FX_PLACE_TAG) {
+    s->water = false;
+    s->woffs = NULL;
+    s->nwrap = 0;
+    const bool section = !r.bad && s->mesh && r.o != r.n;
+    const uint32_t tag = section ? r32(&r) : 0u;
+    if (section && tag == RD_FX_PLACE_TAG4) {
+        /* the drop sheets' section (@scene drops, @scene cards); never empty */
+        s->drops = r32(&r);
+        if (s->drops == 0 || s->drops > s->nm) {
+            r.bad = true;
+        }
+        for (uint32_t i = 0; !r.bad && i < s->drops; i++) {
+            const uint32_t id = r32(&r), role = r32(&r);
+            const int32_t e = (int32_t)r32(&r);
+            int32_t cv[15];
+            for (int k = 0; k < 15; k++) {
+                cv[k] = (int32_t)r32(&r);
+                if (cv[k] >= (k < 12 ? (1 << 21) : (1 << 20) + 1) ||
+                    cv[k] <= -(k < 12 ? (1 << 21) : (1 << 20) + 1)) {
+                    r.bad = true;
+                }
+            }
+            SkMesh *m = NULL;
+            for (uint32_t k = 0; k < s->nm; k++) {
+                if (s->mesh[k].id == id) {
+                    m = &s->mesh[k];
+                    break;
+                }
+            }
+            if (!m || m->drop || role >= RD_FX_DROP_ROLES || e < -60 || e > 60 || r.bad) {
+                r.bad = true;
+                break;
+            }
+            m->drop = true;
+            m->role = role;
+            m->dropExp = e;
+            memcpy(m->corner, cv, sizeof(m->corner));
+            memcpy(m->normal, cv + 12, sizeof(m->normal));
+        }
+    } else if (section) {
+        /* the placement section (a fixture made with @lamps place,
+         * @fans off, @scene place or @water place); never empty, so a
+         * fixture has one encoding */
+        s->scene = tag == RD_FX_PLACE_TAG2;
+        s->water = tag == RD_FX_PLACE_TAG3;
+        if (tag != RD_FX_PLACE_TAG && !s->scene && !s->water) {
             r.bad = true;
         }
         s->placed = r32(&r);
@@ -876,6 +929,11 @@ static bool skParse(const RdFixture *fx, Sk *s, char *why, size_t whySize)
                     r.bad = true;
                 }
             }
+            const uint32_t form = s->scene ? r32(&r) : RD_FX_FORM_CUBE;
+            if (form > RD_FX_FORM_SHEET + 2u) {
+                r.bad = true;
+            }
+            s->sheets += form != RD_FX_FORM_CUBE;
             SkMesh *m = NULL;
             for (uint32_t k = 0; k < s->nm; k++) {
                 if (s->mesh[k].id == id) {
@@ -888,12 +946,27 @@ static bool skParse(const RdFixture *fx, Sk *s, char *why, size_t whySize)
                 break;
             }
             memcpy(m->centre, c, sizeof(c));
+            m->form = form;
         }
         s->noff = r32(&r);
-        if (s->noff > (1u << 20) || (s->placed == 0 && s->noff == 0)) {
+        if (s->noff > (1u << 20) || (!s->water && s->placed == 0 && s->noff == 0)) {
             r.bad = true;
         }
         s->offs = rraw(&r, (size_t)s->noff * 4u);
+        if (s->water && !r.bad) {
+            /* @water place: the prims read across a block's period */
+            s->nwrap = r32(&r);
+            if (s->nwrap > (1u << 20) || (s->placed == 0 && s->noff == 0 && s->nwrap == 0)) {
+                r.bad = true;
+            }
+            s->woffs = rraw(&r, (size_t)s->nwrap * 8u);
+            for (uint32_t i = 0; s->woffs && !r.bad && i < s->nwrap; i++) {
+                const uint32_t axes = rd_fx_get32(s->woffs + 8u * i + 4u);
+                if (axes == 0 || axes > (RD_FX_ACROSS_S | RD_FX_ACROSS_T)) {
+                    r.bad = true;
+                }
+            }
+        }
     }
     if (r.bad || !s->tex || !s->mesh || (s->ver >= 15u && !s->facing) || !s->exps || r.o != r.n) {
         setWhy(why, whySize,
@@ -922,16 +995,29 @@ static void putColour(uint8_t *q)
 }
 
 /* vertex j of strip s on the lattice of step 2^(e-3) inside [-2^e, 2^e]^3
- * about the centre c (lattice steps; the model's origin: 0, 0, 0) */
-static void putPos(uint8_t *q, uint32_t s, uint32_t j, int e, const int32_t c[3])
+ * about the centre c (lattice steps; the model's origin: 0, 0, 0).  A sheet
+ * (form RD_FX_FORM_SHEET + f, @scene place): every strip zigzags over the
+ * square of half side 2^e across the axes f + 1 and f + 2 (mod 3), flat at
+ * the centre along f, its corners in the order A (-, -), B (-, +), C (+, -),
+ * D (+, +), A, ...: the triangles ABC, BCD, CDA, DAB, the square split along
+ * both diagonals (sheetPos) */
+static void putPos(uint8_t *q, uint32_t s, uint32_t j, int e, const int32_t c[3], uint32_t form)
 {
     const uint32_t col = j >> 1, side = j & 1u;
-    const int32_t x = c[0] - 8 + (int32_t)(col % 16u);
-    const int32_t y = c[1] - 8 + (int32_t)((s + col / 16u) % 15u) + (int32_t)side;
-    const int32_t z = c[2] - 8 + (int32_t)((s * 5u) % 17u);
-    rd_fx_set32(q, rd_fx_f32(x, e - 3));
-    rd_fx_set32(q + 4, rd_fx_f32(y, e - 3));
-    rd_fx_set32(q + 8, rd_fx_f32(z, e - 3));
+    int32_t p[3];
+    if (form >= RD_FX_FORM_SHEET) {
+        const uint32_t f = form - RD_FX_FORM_SHEET;
+        p[f] = c[f];
+        p[(f + 1u) % 3u] = c[(f + 1u) % 3u] + (col % 2u ? 8 : -8);
+        p[(f + 2u) % 3u] = c[(f + 2u) % 3u] + (side ? 8 : -8);
+    } else {
+        p[0] = c[0] - 8 + (int32_t)(col % 16u);
+        p[1] = c[1] - 8 + (int32_t)((s + col / 16u) % 15u) + (int32_t)side;
+        p[2] = c[2] - 8 + (int32_t)((s * 5u) % 17u);
+    }
+    rd_fx_set32(q, rd_fx_f32(p[0], e - 3));
+    rd_fx_set32(q + 4, rd_fx_f32(p[1], e - 3));
+    rd_fx_set32(q + 8, rd_fx_f32(p[2], e - 3));
     rd_fx_set32(q + 12, F_ONE);
 }
 
@@ -1074,8 +1160,24 @@ static bool genMesh(RdFxBuf *o, const SkMesh *m, RdFxSkinLanes *lanes)
             j++;
         }
         memset(qw, 0, sizeof(qw));
-        putPos(qw, s, j, m->sizeExp, m->centre);
-        if (qpv >= 4) {
+        if (m->drop) {
+            /* a drop sheet: the strip over its corners in turn, moved by its
+             * index along (1, 1, 1) (rd_fixture_make.c dropSheet); every
+             * word under 2^23 units, an exact float */
+            const int32_t *k = m->corner[j % 4u];
+            for (int a = 0; a < 3; a++) {
+                rd_fx_set32(qw + 4 * a, rd_fx_f32(k[a] + (int32_t)(s & 0x3FFFFFu), m->dropExp));
+            }
+            rd_fx_set32(qw + 12, F_ONE);
+        } else {
+            putPos(qw, s, j, m->sizeExp, m->centre, m->form);
+        }
+        if (qpv >= 4 && m->drop) {
+            for (int a = 0; a < 3; a++) {
+                rd_fx_set32(qw + 16 + 4 * a, rd_fx_f32(m->normal[a], -20));
+            }
+            rd_fx_set32(qw + 28, F_ONE);
+        } else if (qpv >= 4) {
             putNormal(qw + 16, s);
         }
         if (qpv >= 5) {
@@ -1216,13 +1318,30 @@ static bool genSpan(void *user, const RdCmd *c, const RdFxSpan *s)
                 for (uint32_t k = 0; s->gen == RD_FX_GEN_SCREEN && k < g->sk->noff; k++) {
                     beside = beside || rd_fx_get32(g->sk->offs + 4u * k) == s->off;
                 }
+                /* @water place: a prim reading a block across its period on
+                 * the axes the section names (ST with Q: S 12/16 to 27/16
+                 * along the ribbon's columns, T 6/8 to 15/8 down its rows,
+                 * so the ribbon's middle reads the block's first quarter
+                 * through the wrap: 20/16 and 10/8) */
+                uint32_t across = 0;
+                for (uint32_t k = 0; !fixedUv && s->gen == RD_FX_GEN_SCREEN && k < g->sk->nwrap;
+                     k++) {
+                    if (rd_fx_get32(g->sk->woffs + 8u * k) == s->off) {
+                        across = rd_fx_get32(g->sk->woffs + 8u * k + 4u);
+                    }
+                }
+                const uint32_t row = (col / 16u) % 8u;
                 const uint32_t px =
                     beside ? w + 8u + (col % 16u) * 4u : w / 4u + (col % 16u) * (w / 2u) / 16u;
-                const uint32_t py = h / 4u + ((col / 16u) % 8u + side) * (h / 2u) / 8u;
+                const uint32_t py = h / 4u + (row + side) * (h / 2u) / 8u;
                 const uint32_t ss = fixedUv ? rd_fx_f32((int32_t)((col % 16u) * 64u), 0)
-                                            : rd_fx_f32((int32_t)(col % 16u), -4);
-                const uint32_t tt =
-                    fixedUv ? rd_fx_f32((int32_t)(side * 64u), 0) : (side ? F_ONE : 0u);
+                                    : (across & RD_FX_ACROSS_S)
+                                        ? rd_fx_f32((int32_t)(12u + col % 16u), -4)
+                                        : rd_fx_f32((int32_t)(col % 16u), -4);
+                const uint32_t tt = fixedUv ? rd_fx_f32((int32_t)(side * 64u), 0)
+                                    : (across & RD_FX_ACROSS_T)
+                                        ? rd_fx_f32((int32_t)(6u + row + side), -3)
+                                        : (side ? F_ONE : 0u);
                 putVtx(o, gsX(w, px), gsX(h, py), 0xFFFFFFFFu, ss, tt, grey);
             }
         }
@@ -1264,7 +1383,7 @@ static bool genSpan(void *user, const RdCmd *c, const RdFxSpan *s)
         for (uint32_t v = 0; v < s->b; v++) {
             uint8_t *o = q + 16u + (size_t)v * hd.qwPerVertex * 16u;
             static const int32_t origin[3] = {0, 0, 0};
-            putPos(o, s->a, v, e, origin);
+            putPos(o, s->a, v, e, origin, RD_FX_FORM_CUBE);
             if (hd.qwPerVertex >= 3) {
                 putNormal(o + 16, s->a);
             }
@@ -1498,9 +1617,20 @@ bool rd_fixture_check(const RdFixture *fx, char *why, size_t whySize, char *stat
             "zero), %u textures (%u images as patterns), %u meshes generated, %u sized draws",
             sk.ver, cmds, sk.psz, (unsigned long long)kept, (unsigned long long)text,
             (unsigned long long)zero, sk.nt, images, sk.nm, sk.ne);
-        if ((sk.placed || sk.noff) && at > 0 && (size_t)at < statsSize) {
+        if (sk.scene && at > 0 && (size_t)at < statsSize) {
+            snprintf(stats + at, statsSize - (size_t)at,
+                     ", %u meshes placed (%u sheets), %u prims beside WORK2", sk.placed, sk.sheets,
+                     sk.noff);
+        } else if (sk.water && at > 0 && (size_t)at < statsSize) {
+            snprintf(stats + at, statsSize - (size_t)at,
+                     ", %u meshes placed on a block or SCENE, %u prims beside WORK2, %u prims "
+                     "read across a block's period",
+                     sk.placed, sk.noff, sk.nwrap);
+        } else if ((sk.placed || sk.noff) && at > 0 && (size_t)at < statsSize) {
             snprintf(stats + at, statsSize - (size_t)at,
                      ", %u meshes placed on WORK2, %u prims beside it", sk.placed, sk.noff);
+        } else if (sk.drops && at > 0 && (size_t)at < statsSize) {
+            snprintf(stats + at, statsSize - (size_t)at, ", %u meshes as drop sheets", sk.drops);
         }
     }
     free(k.named);

@@ -157,7 +157,10 @@ frame-sized block (the dark volume's) and every VU draw keep the clamp. The `--l
 the F12 line name the counts: `Full pixel on, border mask off: N render-target reads clamped, M
 block reads kept on REPEAT` (ctest `rd_water`, the ripples; `rd_replay_tool_ripple`,
 `rd_replay_tool_ripple_447`, `rd_replay_tool_ripple_436` and its `_ps2`, `_1x`, `_1x_ps2` twins,
-`rd_replay_tool_mirror_floor`).
+`rd_replay_tool_mirror_floor`: committed fixtures of the reporter's frames and the corpus's
+puddle room, [TESTING_FIXTURES.md](TESTING_FIXTURES.md), each picture pinned as the release before
+drew the fixture; on the two made with its water rule a replay with the block's reads clamped,
+`ICO_RD_BLOCK_CLAMP=1`, must draw a different picture).
 
 **The [scene scale](ARCHITECTURE.md#terms)** comes from the Resolution row in `rd__apply_display`:
 "Nx" is the GS size times N; "WxH" that size; "window" the presentation box (only with the Enhanced
@@ -2721,7 +2724,7 @@ one's pixels: for a measurement, not for play.
 | `port/render/test/rd_crt_test.c` | the CRT keys, the modes' table and overrides, and each mode's hash at two sizes on a Vulkan device |
 | `port/render/test/rd_boot_present_test.c` | a saved start-up through the presenter, present by present, with DISPLAY's probe points |
 | `port/rhi/test/rhi_vk_present_mode_test.c` | `vkr_choose_present_mode` (mailbox, FIFO latest ready, FIFO, immediate, and FIFO under the FIFO fallback over every set), `vkr_present_wait_wanted` and `vkr_prerotate_turns` (the turned swapchain's choice: 90, 180, 270; identity, a mirrored turn, a turn not offered, `[dev] prerotate = false` and images past the surface's largest keep identity) |
-| `port/render/test/rd_replay_tool_prerotate.cmake` | the turned present's twin (`ICO_VK_FAKE_TRANSFORM=90`, `180`, `270`) read back turned back is the identity present byte for byte: rd_pixel's dump plain, wide (1280x720), with the overlay test pattern and under the CRT filter, and the dumps of `tools/prerotate_dumps.txt` that are here at 640x480 and 2400x1080; each turned run must name its twin |
+| `port/render/test/rd_replay_tool_prerotate.cmake` | the turned present's twin (`ICO_VK_FAKE_TRANSFORM=90`, `180`, `270`) read back turned back is the identity present byte for byte: rd_pixel's dump plain, wide (1280x720), with the overlay test pattern and under the CRT filter, and the fixtures of `port/render/test/fixtures/lists/prerotate.txt` at 640x480 and 2400x1080; each turned run must name its twin |
 
 The ctest names are the file names without `_test`: `pace_loop`, `pace_policy`, `perf_block`,
 `window_video`, `hotkeys` (`port/platform/CMakeLists.txt`), `rd_present`, `rd_interp`, `rd_crt`,
