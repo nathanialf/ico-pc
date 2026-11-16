@@ -22,6 +22,8 @@
  *   ico-pc.log               the log so far;
  *   ico-pc-previous.log      the run before's;
  *   startup-activity.txt     when there is one (diag_host.h);
+ *   last-run.txt,            where this run is and where the run before
+ *   last-run-previous.txt    was, when there are (last_run.h);
  *   config.toml, ico-pc.ini  the settings;
  *   loss-<stamp>.zip         the newest loss dump, when there is one
  *                            (deflated: the loss dump writes its zip

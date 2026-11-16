@@ -651,6 +651,12 @@ int gpu_sysfs_around_text(const GpuSysfsAround *a, unsigned replay, char *buf, s
     } else {
         put(&o, "; no sample after");
     }
+    if (a->hasBefore && a->hasAfter && a->before.resets >= 0 && a->after.resets >= 0) {
+        /* issue 123's hangs (the GPU's own sign of a reset): did the
+           kernel driver count one across the stall? */
+        put(&o, "; the GPU's reset count %+d across it (%d before, %d after)",
+            (int)(a->after.resets - a->before.resets), (int)a->before.resets, (int)a->after.resets);
+    }
     if (a->core >= 0) {
         /* the game thread's core's clock: did the CPU slow down there? */
         const char *sep = ": ";
@@ -675,6 +681,44 @@ int gpu_sysfs_around_text(const GpuSysfsAround *a, unsigned replay, char *buf, s
                 put(&o, "%s%d MHz after", sep, (int)a->after.cpuMhz[c]);
             }
         }
+    }
+    return done(&o);
+}
+
+const char *gpu_sysfs_resets_why(const GpuSysfsInfo *info)
+{
+    const int st = info->state[GPU_SYSFS_RESETS];
+
+    if (info->kind != GPU_SYSFS_KIND_KGSL) {
+        return "no KGSL directory: not a Qualcomm kernel driver";
+    }
+    if (!info->dirPresent) {
+        return GPU_SYSFS_DIR " not present";
+    }
+    if (st == 1) {
+        return NULL;
+    }
+    if (st == 0) {
+        return "no reset_count node";
+    }
+    return errno_name(-st);
+}
+
+int gpu_sysfs_resets_note(const GpuSysfsInfo *info, char *buf, size_t size)
+{
+    Out o = {buf, size, 0};
+    const char *why = gpu_sysfs_resets_why(info);
+
+    if (why == NULL) {
+        put(&o,
+            "stalls: the GPU's reset count (reset_count, %d at the start) is sampled every %u ms: "
+            "the kernel GPU driver's line around each stall gives its change across it",
+            (int)info->resets, GPU_SYSFS_PERIOD_MS);
+    } else {
+        put(&o,
+            "stalls: the GPU's reset count is not readable here (%s): the stall lines carry no "
+            "change of it",
+            why);
     }
     return done(&o);
 }

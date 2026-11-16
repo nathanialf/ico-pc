@@ -25,7 +25,13 @@
  *            CPU clocks sampled with the GPU's or alone, not readable;
  *   cpus     the block's CPU clocks by speed class (a range, a steady
  *            class, a single core, a core never read), none read, and the
- *            around line's core before, during and after a present.
+ *            around line's core before, during and after a present;
+ *   issue 123's stall clause (v0.11.8):
+ *   resets   the around line's reset count change across a stall (the
+ *            samples before and after both read it: +0, +1; one of them
+ *            not read: no clause), and the start's one line on it
+ *            (readable with its count, EACCES, no node, no KGSL, the
+ *            directory missing), word for word.
  */
 #include <errno.h>
 #include <stdio.h>
@@ -174,7 +180,8 @@ static void around(void)
     CHECK(text_is(line, "kernel GPU driver around the present that blocked (replay 2941): 0.12 s "
                         "before: clock 905 MHz, busy 74 %, resets 3, thermal power level 0; 1 "
                         "during: clock 285 MHz, busy 9 %, resets 3; 0.03 s after: clock 285 MHz, "
-                        "busy 12 %, resets 3, thermal power level 0"));
+                        "busy 12 %, resets 3, thermal power level 0; the GPU's reset count +0 "
+                        "across it (3 before, 3 after)"));
     /* a sample at the very start and end counts as before and after */
     gpu_sysfs_ring_around(&r, 10250.0, 10500.0, 3, &a); /* no cores sampled: none */
     CHECK(a.before.tMs == 10250.0 && a.after.tMs == 10500.0 && a.during == 0);
@@ -498,6 +505,72 @@ static void cpus(void)
     CHECK(strstr(line, "CPU") == NULL); /* core 3 never read */
 }
 
+static void resets(void)
+{
+    GpuSysfsRing r;
+    GpuSysfsAround a;
+    GpuSysfsSample s;
+    GpuSysfsInfo info;
+    char line[512];
+
+    /* issue 123's 397 ms present: a reset counted across it */
+    gpu_sysfs_ring_reset(&r);
+    s = smp(10000.0, 680, 90, 47, 0);
+    gpu_sysfs_ring_add(&r, &s);
+    s = smp(10250.0, 680, 99, 48, 0);
+    gpu_sysfs_ring_add(&r, &s);
+    s = smp(10500.0, 285, 3, 48, 0);
+    gpu_sysfs_ring_add(&r, &s);
+    gpu_sysfs_ring_around(&r, 10120.0, 10480.0, -1, &a);
+    gpu_sysfs_around_text(&a, 2032, line, sizeof line);
+    CHECK(text_is(line, "kernel GPU driver around the present that blocked (replay 2032): 0.12 s "
+                        "before: clock 680 MHz, busy 90 %, resets 47, thermal power level 0; 1 "
+                        "during: clock 680 MHz, busy 99 %, resets 48; 0.02 s after: clock 285 "
+                        "MHz, busy 3 %, resets 48, thermal power level 0; the GPU's reset count "
+                        "+1 across it (47 before, 48 after)"));
+    /* the sample after without the count: no clause */
+    gpu_sysfs_ring_reset(&r);
+    s = smp(10000.0, 680, 90, 47, 0);
+    gpu_sysfs_ring_add(&r, &s);
+    s = smp(10500.0, 285, 3, -1, 0);
+    gpu_sysfs_ring_add(&r, &s);
+    gpu_sysfs_ring_around(&r, 10120.0, 10480.0, -1, &a);
+    gpu_sysfs_around_text(&a, 2033, line, sizeof line);
+    CHECK(strstr(line, "reset count") == NULL);
+    /* no sample after yet: no clause */
+    gpu_sysfs_ring_around(&r, 10120.0, 11000.0, -1, &a);
+    gpu_sysfs_around_text(&a, 2034, line, sizeof line);
+    CHECK(strstr(line, "reset count") == NULL);
+
+    /* the start's line: the Retroid Pocket 6's (reset_count readable, 66 so far) */
+    memset(&info, 0, sizeof info);
+    info.maxMhz = info.minLevel = info.maxLevel = -1;
+    info.kind = GPU_SYSFS_KIND_KGSL;
+    info.dirPresent = 1;
+    info.state[GPU_SYSFS_RESETS] = 1;
+    info.resets = 66;
+    CHECK(gpu_sysfs_resets_why(&info) == NULL);
+    gpu_sysfs_resets_note(&info, line, sizeof line);
+    CHECK(text_is(line, "stalls: the GPU's reset count (reset_count, 66 at the start) is sampled "
+                        "every 250 ms: the kernel GPU driver's line around each stall gives its "
+                        "change across it"));
+    /* the issue 123 tablet's (KGSL denied whole) */
+    info.state[GPU_SYSFS_RESETS] = -EACCES;
+    info.resets = -1;
+    gpu_sysfs_resets_note(&info, line, sizeof line);
+    CHECK(text_is(line, "stalls: the GPU's reset count is not readable here (EACCES): the stall "
+                        "lines carry no change of it"));
+    info.state[GPU_SYSFS_RESETS] = 0;
+    CHECK(strcmp(gpu_sysfs_resets_why(&info), "no reset_count node") == 0);
+    info.dirPresent = 0;
+    CHECK(strcmp(gpu_sysfs_resets_why(&info), "/sys/class/kgsl/kgsl-3d0 not present") == 0);
+    info.kind = GPU_SYSFS_KIND_DEVFREQ;
+    info.dirPresent = 1;
+    gpu_sysfs_resets_note(&info, line, sizeof line);
+    CHECK(text_is(line, "stalls: the GPU's reset count is not readable here (no KGSL directory: "
+                        "not a Qualcomm kernel driver): the stall lines carry no change of it"));
+}
+
 int main(void)
 {
     parse();
@@ -507,6 +580,7 @@ int main(void)
     names();
     open_devfreq();
     cpus();
+    resets();
     printf("gpu_sysfs_test: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }

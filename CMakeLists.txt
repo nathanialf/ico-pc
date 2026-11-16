@@ -296,12 +296,15 @@ if(ICO_LINK_EXE)
         # log (port/platform/gpu_sysfs.h; its pure part tested everywhere).
         # perf_hint_android.c: the NDK's performance hint calls, looked up at
         # run time (port/platform/perf_hint.h; its pure part tested everywhere).
+        # last_run_android.c: last-run.txt's summary to the system's exit
+        # record (port/platform/last_run.h; its pure part tested everywhere).
         add_library(ico_pc SHARED ${_ico_pc_sources} port/platform/android/main_android.c
                                   port/platform/android/host_android.c
                                   port/platform/android/android_paths.c
                                   port/platform/android/iso_import.c
                                   port/platform/android/gpu_sysfs_android.c
-                                  port/platform/android/perf_hint_android.c)
+                                  port/platform/android/perf_hint_android.c
+                                  port/platform/android/last_run_android.c)
         set_target_properties(ico_pc PROPERTIES OUTPUT_NAME main)
         target_compile_definitions(ico_pc PRIVATE ICO_HOST_FORCE_PORTABLE=1)
         target_include_directories(ico_pc PRIVATE port/platform/android)
