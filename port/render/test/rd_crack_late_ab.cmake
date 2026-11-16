@@ -264,5 +264,6 @@ endif()
 if(compared EQUAL 0)
   message(FATAL_ERROR "rd_crack_late_ab: no target compared over ${nruns} runs")
 endif()
-message(STATUS "rd_crack_late_ab: ${compared} targets v0.11.6's bytes over ${nruns} runs of "
-               "${nnames} fixtures, the fill drawn once after lists 4-6 in each")
+message(STATUS "rd_crack_late_ab: ${compared} targets against v0.11.6's goldens over ${nruns} runs "
+               "of ${nnames} fixtures (${goldenOtherDriver} runs on another driver: their bytes "
+               "not compared), the fill drawn once after lists 4-6 in each")
