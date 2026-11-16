@@ -2168,8 +2168,10 @@ into the held copy (`rd held scene`, SCENE's size and format), and the carried t
 slot's readback, read at the slot's recycle (`rd__hold_collect`). Nothing is taken where lists 0-10
 left work owed there: a clear or a shadow reset not recorded (`rd__replay_owed`), a shadow window
 open on SCENE's depth, a crack fill held to a paste or to list 11's pass (`rd__crack_fill_owed`),
-the glow's paste deferred, SCENE's border repeat still due, or a pass begun readable or as storage;
-the chain starts again. A change of key starts a new chain. The chain is settled when it carries
+the glow's paste deferred, or a pass begun readable or as storage; the chain starts again. SCENE's
+border repeat still due at list 11 (the fog's outer columns, `rd_blur_border.c`, where no post
+sprite of lists 0-10 read SCENE) stays where it falls, after list 11's draws, and the held replays
+arm it (`rd__scene_border_rearm`) so it falls at the same command. A change of key starts a new chain. The chain is settled when it carries
 nothing, or when the carried targets read back from two consecutive takes are the same bytes.
 
 **Held.** A settled chain's next replay walks the frame with every action of lists 0-10 an RDC_NOP

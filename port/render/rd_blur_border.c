@@ -179,6 +179,13 @@ const RdBorderBlocks *rd__scene_border_blocks(void)
     return &s_blocks;
 }
 
+/* rd_hold.c: the held replay's repeat, due where the full replay's was (its
+ * fog is not drawn there): armed for this replay whatever the target */
+void rd__scene_border_rearm(void)
+{
+    s_armed = g_rd.replayCounter;
+}
+
 bool rd__scene_border_repeat_pending(void)
 {
     return s_armed != 0 && s_armed == g_rd.replayCounter && s_blocks.replay != g_rd.replayCounter;

@@ -12,9 +12,12 @@
  *               (FEED128, FEED_HELD, WORK3_HELD) into this slot's readback,
  *               unless lists 0-10 left work owed there (a clear or a shadow
  *               reset not recorded yet, a crack fill held to a paste or to
- *               list 11's pass, SCENE's border repeat still due, a pass
- *               begun readable or as storage): then nothing is taken and
- *               the chain starts again (RD_HOLD_OWED).
+ *               list 11's pass, the glow's paste deferred, a pass begun
+ *               readable or as storage): then nothing is taken and the
+ *               chain starts again (RD_HOLD_OWED).  SCENE's border repeat
+ *               still due there (the fog's, no post sprite read SCENE in
+ *               lists 0-10) stays where it falls, after list 11's draws:
+ *               the held replays arm it so it falls at the same command.
  *   held        the frame with every action of lists 0-10 an RDC_NOP (their
  *               state commands, ordinals and overlay text kept, as
  *               rd_vis.c's skipped draws: every scan sees the same lists
@@ -115,7 +118,9 @@ static struct {
     /* the block's counts, read by the window thread's line (__atomic) */
     uint64_t why[RD_HOLD_COUNT];
     uint64_t heldMenu;
-    uint64_t owedWhy[6];
+    uint64_t owedWhy[5];
+    /* the takes found SCENE's border repeat still due at list 11 */
+    bool repeat;
 } s_h = {.env = -1};
 
 /* the stall lines' ring: replay number and its kind (__atomic) */
@@ -389,12 +394,8 @@ static const char *owedWhy(const Replay *r, int *k)
         *k = 3;
         return "the glow's paste deferred";
     }
-    if (rd__scene_border_repeat_pending()) {
-        *k = 4;
-        return "SCENE's border repeat still due";
-    }
     if (r->passOpen && (r->passReadable || r->passStorage || r->passDepthReadable)) {
-        *k = 5;
+        *k = 4;
         return "a pass begun readable or as storage";
     }
     return NULL;
@@ -429,6 +430,10 @@ static void take(Replay *r)
         return;
     }
     rd__replay_end_pass(r); /* list 11 begins its own pass on SCENE, loaded */
+    /* SCENE's border repeat still due (the fog's columns, no post sprite
+       read SCENE in lists 0-10): it stays where it falls, after list 11's
+       draws, and the held replays arm it to fall there too */
+    s_h.repeat = rd__scene_border_repeat_pending();
     const RhiCommandList cl = rd__replay_cl();
     rd__transition(cl, tc->color, &tc->colorState, RHI_STATE_COPY_SRC);
     rd__transition(cl, s_h.held, &s_h.heldState, RHI_STATE_COPY_DST);
@@ -451,6 +456,9 @@ static void restore(Replay *r)
     rd__transition(cl, tc->color, &tc->colorState, RHI_STATE_COPY_DST);
     rhi_cmd_copy_texture(cl, s_h.held, (RhiRect){0, 0, s_h.w, s_h.h}, tc->color, 0, 0);
     r->writeSerial++; /* SCENE's colour written (DATE's snapshot taken again) */
+    if (s_h.repeat) {
+        rd__scene_border_rearm(); /* repeated where the full replay repeats it */
+    }
     s_h.heldPictures++;
 }
 
@@ -753,8 +761,8 @@ void rd_hold_line(void)
         replayed += k == RD_HOLD_HELD || k == RD_HOLD_NOT_PAUSED ? 0u : w[k];
     }
     const uint64_t menuN = __atomic_exchange_n(&s_h.heldMenu, 0, __ATOMIC_RELAXED);
-    uint64_t owed[6];
-    for (int k = 0; k < 6; k++) {
+    uint64_t owed[5];
+    for (int k = 0; k < 5; k++) {
         owed[k] = __atomic_exchange_n(&s_h.owedWhy[k], 0, __ATOMIC_RELAXED);
     }
     if (any == 0) {
@@ -765,7 +773,7 @@ void rd_hold_line(void)
             "replayed (%llu lists differ, %llu feedback not settled, %llu first, %llu settings, "
             "%llu uploads, %llu lists 11-12 the hold cannot keep, %llu the scene reads the "
             "picture before, %llu scene work owed at list 11 [%llu clears, %llu shadow, %llu "
-            "crack fills, %llu glow pastes, %llu border repeats, %llu readable passes], %llu "
+            "crack fills, %llu glow pastes, %llu readable passes], %llu "
             "the device or settings, %llu off)\n",
             (unsigned long long)w[RD_HOLD_HELD], (unsigned long long)menuN,
             (unsigned long long)replayed, (unsigned long long)w[RD_HOLD_LISTS],
@@ -774,6 +782,6 @@ void rd_hold_line(void)
             (unsigned long long)w[RD_HOLD_MENU], (unsigned long long)w[RD_HOLD_PICTURE],
             (unsigned long long)w[RD_HOLD_OWED], (unsigned long long)owed[0],
             (unsigned long long)owed[1], (unsigned long long)owed[2], (unsigned long long)owed[3],
-            (unsigned long long)owed[4], (unsigned long long)owed[5],
-            (unsigned long long)w[RD_HOLD_DEVICE], (unsigned long long)w[RD_HOLD_OFF]);
+            (unsigned long long)owed[4], (unsigned long long)w[RD_HOLD_DEVICE],
+            (unsigned long long)w[RD_HOLD_OFF]);
 }

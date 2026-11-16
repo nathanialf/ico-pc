@@ -139,6 +139,10 @@ void rd__hold_collect(uint32_t slot);
  * rd__crack_fill_owed (a crack fill held to a paste or to list 11's pass) */
 uint32_t rd__replay_owed(void);
 bool rd__crack_fill_owed(void);
+/* rd_blur_border.c: SCENE's border repeat armed for this replay (a held
+ * replay whose take found it still due at list 11: drawn at the same later
+ * command as in the full replay) */
+void rd__scene_border_rearm(void);
 
 /* the window's stall lines: what replay `replay` was (RD_HOLD_KIND_*) */
 enum { RD_HOLD_KIND_NONE = 0, RD_HOLD_KIND_HELD, RD_HOLD_KIND_REPLAYED };
