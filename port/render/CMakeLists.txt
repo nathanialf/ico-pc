@@ -3513,6 +3513,8 @@ include(rd_list_draws.cmake)
 include(rd_glow_offset.cmake)
 # the shadow volumes' clip box by disc (port/include/ico_shadow_clip.h)
 include(shadow_clip.cmake)
+# the camera rule for static meshes on the plain set (rd_plain_camera.c; issue 123)
+include(rd_plain_camera.cmake)
 # last: under asan the fixture replays run without the leak check (the driver's
 # exit leak); after every test's ENVIRONMENT is set
 include(rd_asan_fixture_leaks.cmake)

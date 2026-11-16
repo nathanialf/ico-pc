@@ -3243,6 +3243,11 @@ typedef struct RdPerfRecord {
      * drops are drawn clipped when they face the eye, their sprites outside
      * the VU's window drawn whole */
     uint32_t vuCameraDraws;
+    /* On a device that keeps the VU plain set (g_rd.vuNoBeside; issue 123,
+     * rd_plain_camera.h): the mesh and grid draws under the camera rule
+     * (vuPlainCamera, of vuCameraDraws) and the skinned draws that kept the
+     * PS2's drops (vuPlainKept, issue 163; under region_rule = ps2 too) */
+    uint32_t vuPlainCamera, vuPlainKept;
     /* The visibility test (rd_vis.c rd__vis_frame; [dev] cull): the VU draw
      * commands of the replayed lists (cullDraws), those turned into NOPs
      * (cullSkipped: by the frustum test, cullFrustum, or by occlusion,

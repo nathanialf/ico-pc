@@ -75,6 +75,7 @@
  */
 #include <stdlib.h>
 #include <string.h>
+#include "attempt_ledger.h" /* the camera rule on the plain set's row */
 #include "rd_lamps.h"
 #include "rd_glow_blur.h"
 #include "rd_cache_name.h"
@@ -91,6 +92,7 @@
 #include "rd_comp_spec.h"
 #include "rd_onepass.h"
 #include "rd_pipe_finish.h"
+#include "rd_plain_camera.h"
 #include "rd_present_scene.h"
 #include "rd_shadow_tile.h"
 #include "rd_volume_fs.h"
@@ -3888,6 +3890,17 @@ bool rd__vu_policy_init(const RhiLimits *lim)
     RdVuSetChoice choice;
     rd__vu_set_choose(lim, setPlain || envOn("ICO_RD_VU_PLAIN"),
                       setExtended || envOn("ICO_RD_VU_EXTENDED"), s_vuHostWhy, &choice);
+    {
+        /* the tests' stand-in for a device that keeps the plain set
+         * (ICO_RD_VU_PLAIN=row, docs/port/TESTING.md): its drops as the
+         * table's row and Turnip keep them (rd_plain_camera.h), on lavapipe */
+        const char *vp = getenv("ICO_RD_VU_PLAIN");
+        if (choice.plain && !choice.noBeside && vp && strcmp(vp, "row") == 0) {
+            choice.noBeside = true;
+            rd__log("VU shaders: ICO_RD_VU_PLAIN=row: the plain set's drops as on a device that "
+                    "keeps it (the tests' stand-in for the device table's row)");
+        }
+    }
     const char *kind = choice.kind;
     snprintf(g_rd.vuPlainWhy, sizeof(g_rd.vuPlainWhy), "%s", choice.why);
     bool plain = choice.plain;
@@ -3999,16 +4012,23 @@ bool rd__vu_policy_init(const RhiLimits *lim)
     /* the region rule's mode (rd_replay_vu.c vuSource; a report shows which
      * rule drew the picture on its start lines) */
     regionRuleRead();
-    if (rd__region_camera()) {
+    if (rd__region_camera() && g_rd.vuNoBeside) {
+        /* the device's plain set (rd_plain_camera.h, issue 123): the
+         * static meshes and grids by the camera, the skinned draws as the
+         * PS2 (issue 163) */
+        rd__log("%s; [dev] region_rule = ps2 keeps the PS2's drops on every draw",
+                RD_PLAIN_CAMERA_START);
+    } else if (rd__region_camera()) {
         rd__log("region rule: the camera decides (triangles the PS2 drops are drawn clipped when "
-                "they face the eye; [dev] region_rule = ps2 keeps the PS2's drops)%s",
-                g_rd.vuNoBeside ? "; off on this device's plain set (issue 163): the PS2's "
-                                  "drops"
-                                : "");
+                "they face the eye; [dev] region_rule = ps2 keeps the PS2's drops)");
     } else {
         rd__log("region rule: the PS2's ([dev] region_rule = ps2: a triangle the VU drops stays "
-                "dropped, drawn beside the 4:3 picture on a wider frame when it faces the eye)");
+                "dropped, %s)",
+                g_rd.vuNoBeside ? "with no side bands on this device's plain set (issue 163)"
+                                : "drawn beside the 4:3 picture on a wider frame when it faces "
+                                  "the eye");
     }
+    ico_attempt_decide_plain_camera(g_rd.vuNoBeside, rd__region_camera());
     return true;
 }
 

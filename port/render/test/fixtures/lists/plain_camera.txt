@@ -1,0 +1,19 @@
+# The camera rule on a device that keeps the VU plain set (rd_plain_camera_ab, port/render/
+# test/rd_plain_camera_ab.cmake; issue 123): a fixture, its frame's aspect (the replays'
+# --aspect), then the line's own properties (rd_fixture_list_props.cmake), each under lavapipe
+# put on the plain set as the device table's row keeps it (ICO_RD_VU_PLAIN=row) with the VU
+# pre-pass off (ICO_VK_FAKE_NO_PREPASS=1): region_rule_draws (--stats) and camera_drawn_tris
+# (--region-stats) under the camera rule.  The @scene drops of lists/wide.txt (a floor across the
+# eye plane and a card beyond the GS window, each facing the eye and facing away) are static
+# meshes; every fixture also draws skinned commands (16 to 50), which keep the PS2's drops.
+#
+# the PowerVR phone's one 4:3 frame
+fx-drops-6818 4:3 region_rule_draws>=1 camera_drawn_tris>=1
+# the PowerVR phone, GS 848x448 at 2.189
+fx-drops-4657 2.189 region_rule_draws>=1 camera_drawn_tris>=1
+# issue 189, GS 624x448 at 16:10 (stage 32's exit)
+fx-drops-189 16:10 region_rule_draws>=1 camera_drawn_tris>=1
+# the Mali-G52 reporter's frame (issue 179), GS 912x512 at its own 2.3704
+fx-drops-mali 2.3704 region_rule_draws>=1 camera_drawn_tris>=1
+# the main gate (issue 123's room), GS 2048x448 at 48:9
+fx-drops-maingate 48:9 region_rule_draws>=1 camera_drawn_tris>=1
