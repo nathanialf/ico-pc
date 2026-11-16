@@ -29,18 +29,21 @@ if(ICO_RUN_TESTS)
 endif()
 
 # rd_bench_ab (test/rd_bench_ab.cmake): rd_replay_tool --bench 1 on lavapipe
-# over rd_pixel's dump and the machine-local tools/bench_dumps.txt (the
-# PowerVR phone's opening: a lamps and a sun picture, at the phone's
-# setting; a listed dump that is absent fails where /primary/dev/ico-dumps
-# exists): every variant ran, and the presented picture of a baseline replay
+# over rd_pixel's dump and the fixtures of test/fixtures/lists/bench.txt (the
+# PowerVR phone's opening: a lamps and a sun picture, at the phone's setting;
+# a listed fixture that is absent fails): every variant ran (the path ran:
+# bench_variants), and the presented picture of a baseline replay
 # after the bench is byte for byte the one before it (every switch and
 # command restored).  No device: SKIP.
+include(rd_fixture.cmake)
 if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bench_ab")
     add_test(NAME rd_bench_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/bench_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                     "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/bench.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/bench_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_bench_ab.cmake")
     set_tests_properties(rd_bench_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"

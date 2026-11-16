@@ -528,6 +528,55 @@ int main(int argc, char **argv)
     CHECK(!rd_fixture_check(&fx, why, sizeof(why), NULL, 0));
     fx.skelBytes += 4;
     rd_fixture_free(&fx);
+    /* @scene place on the same frame: mesh 7 is the first mesh list 0 draws
+       (n 0: role 0, a sheet at grid point 0, the same (1920, 1936) as above,
+       at the origin's w 1).  No perspective: the centre (-1.28, -1.12, 0)
+       as above.  The screen derivatives: x 100 along model x, y 100 along y,
+       nothing along z, so the sheet lies across x and y, flat along z (form
+       RD_FX_FORM_SHEET + 2).  R is a third of 448, 149.33 pixels: the half
+       side 2^1 reaches 200 (2^0: 100); the step 2^-2, the centre (-5, -4, 0)
+       steps.  The strip's corners A (-13, -12), B (-13, 4), C (3, -12),
+       D (3, 4) steps at z 0: vertex 0 at (-3.25, -3, 0), vertex 1 (-3.25, 1),
+       vertex 2 (0.75, -3), vertex 4 A again */
+    static const char sceneRules[] = "alpha_ramp ate\nbright additive\nchecker\n@scene place\n";
+    CHECK(rd_fixture_make(dw.p, dw.n, sceneRules, &fx, report, sizeof(report), why, sizeof(why)));
+    printf("scene placement: %s %s\n", report, why);
+    CHECK(strstr(report, "scene: 1 meshes of list 0 placed (1 sheets, 0 behind a sheet, 0 across "
+                         "the left edge, 0 past the right edge, 0 on the picture), 0 kept their "
+                         "origin") != NULL);
+    CHECK(fx.skelBytes == plainSkel + 4 + 4 + 20 + 4);
+    CHECK(rd_fx_get32(fx.skel + plainSkel) == RD_FX_PLACE_TAG2);
+    CHECK(rd_fx_get32(fx.skel + plainSkel + 4) == 1 && rd_fx_get32(fx.skel + plainSkel + 8) == 7 &&
+          (int32_t)rd_fx_get32(fx.skel + plainSkel + 12) == -5 &&
+          (int32_t)rd_fx_get32(fx.skel + plainSkel + 16) == -4 &&
+          rd_fx_get32(fx.skel + plainSkel + 20) == 0 &&
+          rd_fx_get32(fx.skel + plainSkel + 24) == RD_FX_FORM_SHEET + 2u &&
+          rd_fx_get32(fx.skel + plainSkel + 28) == 0);
+    CHECK(rd_fixture_check(&fx, why, sizeof(why), stats, sizeof(stats)));
+    CHECK(strstr(stats, "1 meshes placed (1 sheets), 0 prims beside WORK2") != NULL);
+    x = NULL;
+    CHECK(rd_fixture_expand(&fx, true, &x, &xn, why, sizeof(why)));
+    if (x) {
+        const size_t pw = payloadAt(x, 17);
+        CHECK(xn == dw.n);
+        size_t ow = pw + PAY_BYTES + 4 + 32 + 8 * 4 * 4 + 4 + 32 + 16 * 16 * 4 + 4 + 8 * 8 * 4;
+        ow += 4 + 4 + 20 + 24;
+        CHECK(rd_fx_get32(x + ow) == fbits(-3.25f) && rd_fx_get32(x + ow + 4) == fbits(-3.0f));
+        CHECK(rd_fx_get32(x + ow + 8) == 0u && rd_fx_get32(x + ow + 12) == fbits(1.0f));
+        CHECK(rd_fx_get32(x + ow + 48) == fbits(-3.25f) &&
+              rd_fx_get32(x + ow + 48 + 4) == fbits(1.0f));
+        CHECK(rd_fx_get32(x + ow + 96) == fbits(0.75f) &&
+              rd_fx_get32(x + ow + 96 + 4) == fbits(-3.0f));
+        CHECK(memcmp(x + ow + 4 * 48, x + ow, 12) == 0);
+        CHECK(rd_fixture_selfcheck(dw.p, dw.n, x, xn, &windows, &hits, why, sizeof(why)));
+        CHECK(windows > 0 && hits == 0);
+        free(x);
+    }
+    /* a form past the sheets does not parse */
+    const uint32_t badForm = RD_FX_FORM_SHEET + 3u;
+    memcpy(fx.skel + plainSkel + 24, &badForm, 4);
+    CHECK(!rd_fixture_check(&fx, why, sizeof(why), NULL, 0));
+    rd_fixture_free(&fx);
     rd_fx_free(&dw);
     /* the rules on a frame that draws nothing into WORK2: refused; a
        placement line that is not one: refused */

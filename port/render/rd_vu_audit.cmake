@@ -4,16 +4,20 @@
 # tools/check_no_rom.sh).
 target_sources(ico_render PRIVATE rd_vu_audit.c)
 
-# rd_vu_audit (test/rd_vu_audit.cmake): issue 179's six Mali-G52 dumps
-# (the two v0.11.6 loss dumps, the four v0.11.5 captures) under the Arm
-# fakes at the reporter's settings, ICO_RD_VU_AUDIT=1, the compaction on
-# (merged and not) and off: 0 violations in every run, the compacted lists
-# read back and their draws audited where it is on.  No dump folder, or no
-# device: SKIP.
+# rd_vu_audit (test/rd_vu_audit.cmake): issue 179's Mali-G52 frames as
+# committed fixtures (test/fixtures/lists/vu_audit.txt: the two v0.11.6 loss
+# dumps' frames, the v0.11.5 F12 frame and a slow-scene capture) under the
+# Arm fakes, ICO_RD_VU_AUDIT=1, the compaction on (merged and not) and off:
+# 0 violations in every run, the compacted lists read back and their draws
+# audited where it is on, as each fixture declares.  No device: SKIP.
+include(rd_fixture.cmake)
 if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vu_audit")
     add_test(NAME rd_vu_audit
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool> "-DFIXTURES=${ICO_FIXTURE_DIR}"
+                     "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/vu_audit.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_audit"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_audit.cmake")
     set_tests_properties(rd_vu_audit PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)

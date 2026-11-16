@@ -1053,8 +1053,8 @@ target_link_libraries(texpack_export_test PRIVATE ico_texpack_export)
 # stream bounds audit"): every stream index the VU vertex shaders can read for
 # every VU draw of the dumps, computed on the CPU and checked against the
 # draw's stream; a self-test (a stream one vertex short fails) always runs.
-# The dumps are machine-local (tools/native_frame_dumps.txt, the boot
-# corpus's title frame): 77 when none is there.
+# rd_stream_audit runs it on the fixtures of test/fixtures/lists/stream_audit.txt
+# (test/rd_stream_audit.cmake).
 add_executable(rd_stream_audit_test test/rd_stream_audit_test.c ../platform/dump_zip.c)
 target_compile_options(rd_stream_audit_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_include_directories(rd_stream_audit_test PRIVATE ../platform
@@ -1064,6 +1064,10 @@ target_link_libraries(rd_stream_audit_test PRIVATE ico_render ico_vu1_ref ico_mi
 include(rd_perf_clock.cmake) # the slot clock (ico_render) and rd_perf_clock_test
 include(rd_msaa_shadow.cmake) # the shadow count in MSAA
 include(rd_present_scene.cmake)
+# the committed fixtures' arguments for the visibility test's family
+include(rd_fixture.cmake)
+set(_ico_vis_fx -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool> "-DFIXTURES=${ICO_FIXTURE_DIR}"
+                "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}")
 
 # Windows: SDL3.dll beside the programs
 ico_copy_sdl3_dll(texpack_test texpack_e2e_test texpack_export_test rd_replay_tool rd_state_test
@@ -1092,11 +1096,13 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_layout PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_mip COMMAND rd_mip_test)
     add_test(NAME rd_passring COMMAND rd_passring_test)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/stream_audit")
     add_test(NAME rd_stream_audit
-             COMMAND rd_stream_audit_test --list "${CMAKE_SOURCE_DIR}/tools/native_frame_dumps.txt"
-                     "${CMAKE_SOURCE_DIR}/build-host/tmp/corpus/dumps/boot/rd-00200.rddump"
-             WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
-    set_tests_properties(rd_stream_audit PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+             COMMAND "${CMAKE_COMMAND}" -DTEST=$<TARGET_FILE:rd_stream_audit_test> ${_ico_vis_fx}
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/stream_audit.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/stream_audit"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_stream_audit.cmake")
+    set_tests_properties(rd_stream_audit PROPERTIES TIMEOUT 600)
     add_test(NAME rd_tex COMMAND rd_tex_test)
     add_test(NAME texpack COMMAND texpack_test "${CMAKE_CURRENT_BINARY_DIR}")
     get_filename_component(_ico_texpack_textures "${ICO_TEXPACK_DIR}/../.." ABSOLUTE)
@@ -1319,12 +1325,14 @@ if(ICO_RUN_TESTS)
     # the present turned into a pre-rotated swapchain's headless twin
     # (ICO_VK_FAKE_TRANSFORM=90, 180, 270; rd_prerotate.c) and read back turned
     # back is the identity present byte for byte: rd_pixel's dump plain, wide,
-    # with the overlay test pattern and under the CRT filter, and the dumps of
-    # tools/prerotate_dumps.txt that are here
+    # with the overlay test pattern and under the CRT filter, and the fixtures
+    # of test/fixtures/lists/prerotate.txt (the twin drawn: prerotate_turned)
     add_test(NAME rd_replay_tool_prerotate
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/prerotate_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                     "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/prerotate.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_prerotate"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_prerotate.cmake")
     set_tests_properties(rd_replay_tool_prerotate PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
@@ -1755,146 +1763,80 @@ if(ICO_RUN_TESTS)
                                                                      TIMEOUT 600)
     endforeach()
 
-    # issue 106: the reporter's drained-room dumps (copied into the corpus,
-    # build-host/tmp/corpus/dumps/ripple) at their settings with Full pixel
-    # on: the ripples' read of the puddle's block keeps REPEAT (rd_water.c
-    # rd__block_keeps_repeat), so the ring area holds no near-white pixel
-    # (2089 and 3014 before the fix), and the water line names the clamp's
-    # counts; the ripple wholly past the first period (10:04:36) and the
-    # mirror floor (the pool's grids over its scene copy, corpus puddle
-    # rd-00200) byte for byte as before on lavapipe.  Not Run without the dumps
+    # issue 106: the reporter's drained-room frames as committed fixtures
+    # (test/fixtures, docs/port/TESTING_FIXTURES.md) at their settings with
+    # Full pixel on: the ripples' read of the puddle's block keeps REPEAT
+    # (rd_water.c rd__block_keeps_repeat; the water line's counts, the path
+    # ran: water_blocks_kept), the ripple wholly past the first period
+    # (10:04:36) at the scene's scale, its GS size (--water-ps2) and 1x, and
+    # the mirror floor (the pool's grids over its scene copy, corpus puddle
+    # rd-00200: water_targets_clamped); each picture the fixture's own as
+    # v0.11.6's tool drew it (--water-sharp for the scene's scale), byte for
+    # byte on lavapipe.  On the fixtures the block's reflection does not reach
+    # the picture (generated geometry: the scene's scale and the GS size give
+    # one picture), so the scale and the kept REPEAT are checked by the water
+    # line, the picture as a whole by the pin
     set(_rip "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_ripple.cmake")
-    set(_rip_dir "${CMAKE_SOURCE_DIR}/build-host/tmp/corpus/dumps")
+    set(_rip_fx -DTOOL=$<TARGET_FILE:rd_replay_tool> -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}")
+    set(_rip_out "${CMAKE_CURRENT_BINARY_DIR}/ripple")
     set(_rip_args "--enhanced|--aspect|16:9|--resolution|1920x1080|--full-height|--full-pixel|--aa|ssaa2|--present|1920x1080|--list")
-    set(_rip_py "")
-    if(Python3_FOUND)
-        set(_rip_py "-DPYTHON=${Python3_EXECUTABLE}")
-    endif()
     add_test(NAME rd_replay_tool_ripple
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMP=${_rip_dir}/ripple/frame-20261024-094512-v13782.zip"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_ripple.png"
-                     "-DARGS=${_rip_args}"
+             COMMAND "${CMAKE_COMMAND}" ${_rip_fx} -DFIXTURE=fx-ripple-13782
+                     "-DOUT=${_rip_out}/rd_replay_tool_ripple.png" "-DARGS=${_rip_args}"
                      "-DEXPECT=Full pixel on, border mask off: [0-9]+ render-target reads clamped, 2 block reads kept on REPEAT"
                      "-DEXPECT2=block 344x256 GS with depth [^;]*REPEAT 2, 2 of them kept on REPEAT"
-                     -DBOX=870,430,1210,890 -DMAXBRIGHT=0 ${_rip_py} -P "${_rip}")
+                     -DREQUIRE=water_blocks_kept -DSHA=370e68e29ee91107ce1732febaa6f0e9a82ba283291cb31de88e8c0d8f2e6af5 -P "${_rip}")
     add_test(NAME rd_replay_tool_ripple_447
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMP=${_rip_dir}/ripple/frame-20261024-100447-v84109.zip"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_ripple_447.png"
-                     "-DARGS=${_rip_args}" "-DEXPECT=REPEAT 2, 2 of them kept on REPEAT"
-                     -DBOX=90,700,400,1080 -DMAXBRIGHT=0 ${_rip_py} -P "${_rip}")
+             COMMAND "${CMAKE_COMMAND}" ${_rip_fx} -DFIXTURE=fx-ripple-84109
+                     "-DOUT=${_rip_out}/rd_replay_tool_ripple_447.png" "-DARGS=${_rip_args}"
+                     "-DEXPECT=REPEAT 2, 2 of them kept on REPEAT" -DREQUIRE=water_blocks_kept
+                     -DSHA=bad9eda099e34b11a9fc810928c99e556e30b2fcb6f1d0689c8d661eb570ef2a -P "${_rip}")
     # the puddle's block at the scene's scale (rd_core.c rd__target_scale_of, since
-    # v0.11.7): the SHA-256 is v0.11.6's with Water reflections: Sharp
-    # (--water-sharp); _ps2 (--water-ps2, ICO_RD_WATER_SCALE=0) is v0.11.6's
-    # Original, the SHA-256 this test pinned before; _1x and _1x_ps2 the same
-    # picture at 1x (one SHA-256: nothing changes there)
+    # v0.11.7); _ps2 (--water-ps2, ICO_RD_WATER_SCALE=0) at its GS size, v0.11.6's
+    # Original; _1x and _1x_ps2 the same picture at 1x (one SHA-256: nothing
+    # changes there)
     add_test(NAME rd_replay_tool_ripple_436
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMP=${_rip_dir}/ripple/frame-20261024-100436-v83439.zip"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_ripple_436.png"
-                     "-DARGS=${_rip_args}" "-DEXPECT=REPEAT 2, 2 of them kept on REPEAT"
+             COMMAND "${CMAKE_COMMAND}" ${_rip_fx} -DFIXTURE=fx-ripple-83439
+                     "-DOUT=${_rip_out}/rd_replay_tool_ripple_436.png" "-DARGS=${_rip_args}"
+                     "-DEXPECT=REPEAT 2, 2 of them kept on REPEAT"
                      "-DEXPECT2=block 344x256 GS with depth at 1920x1234 texels \\(5.5814x4.82143, the scene's scale\\)"
-                     -DSHA=09e354461f59199e697c33cf86cc3ea58f8409263bcde7d68789c8756ab0473f
-                     ${_rip_py} -P "${_rip}")
+                     -DREQUIRE=water_blocks_kept -DSHA=928c7c4f822c0163088a96d349596ef99c32e3db0ccf475bfd5eff92ed07e969 -P "${_rip}")
     add_test(NAME rd_replay_tool_ripple_436_ps2
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMP=${_rip_dir}/ripple/frame-20261024-100436-v83439.zip"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_ripple_436_ps2.png"
+             COMMAND "${CMAKE_COMMAND}" ${_rip_fx} -DFIXTURE=fx-ripple-83439
+                     "-DOUT=${_rip_out}/rd_replay_tool_ripple_436_ps2.png"
                      "-DARGS=${_rip_args}|--water-ps2"
                      "-DEXPECT=water reflections at their GS size \\(ICO_RD_WATER_SCALE=0\\)"
                      "-DEXPECT2=block 344x256 GS with depth at 344x256 texels \\(1x1, not the scene's scale\\)"
-                     -DSHA=984695adef5d6d26cc065d7bff996b0234b600cc2c0fd87cd50c365a3cc083aa
-                     ${_rip_py} -P "${_rip}")
+                     -DREQUIRE=water_blocks_kept -DSHA=928c7c4f822c0163088a96d349596ef99c32e3db0ccf475bfd5eff92ed07e969 -P "${_rip}")
     foreach(_w "" _ps2)
         set(_wa "")
         if(_w)
             set(_wa "|--water-ps2")
         endif()
         add_test(NAME rd_replay_tool_ripple_436_1x${_w}
-                 COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                         "-DDUMP=${_rip_dir}/ripple/frame-20261024-100436-v83439.zip"
-                         "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_ripple_436_1x${_w}.png"
+                 COMMAND "${CMAKE_COMMAND}" ${_rip_fx} -DFIXTURE=fx-ripple-83439
+                         "-DOUT=${_rip_out}/rd_replay_tool_ripple_436_1x${_w}.png"
                          "-DARGS=--enhanced|--aspect|16:9|--resolution|1x|--full-pixel|--present|1920x1080|--list${_wa}"
                          "-DEXPECT=block 344x256 GS with depth at 344x256 texels \\(1x1, the scene's scale\\)"
-                         -DSHA=091a188b31b5f06e572725e08839e38f55c38ceca29b8b82e431092d08ff52c6
-                         ${_rip_py} -P "${_rip}")
+                         -DREQUIRE=water_blocks_kept -DSHA=440dc0e51c32a760e88a304b053668e5abb3b4482e639341de1fc45ac1e28acc -P "${_rip}")
     endforeach()
     add_test(NAME rd_replay_tool_mirror_floor
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMP=${_rip_dir}/puddle/rd-00200.rddump"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_mirror_floor.png"
+             COMMAND "${CMAKE_COMMAND}" ${_rip_fx} -DFIXTURE=fx-puddle-0200
+                     "-DOUT=${_rip_out}/rd_replay_tool_mirror_floor.png"
                      "-DARGS=--enhanced|--resolution|2x|--full-pixel|--present|1024x896|--list"
                      "-DEXPECT=Full pixel on, border mask off: [0-9]+ render-target reads clamped, 0 block reads kept on REPEAT"
-                     -DSHA=613d1be7e8d7c1437ffa90c237eed6dfb7db2995e39a708270403afee18e1d28
-                     ${_rip_py} -P "${_rip}")
-    # the pinned SHA-256s are of the pictures without the fades fold: above 1x the
-    # brightness step folded into the reduction (GPUROUND) moves the ripple frame's
-    # pixels by one level (591,187 of them on v83439), inside the fold's bound, which
-    # rd_fades_fold_ab tests; these tests pin the water's exact bytes
-    # (and of the shadow's levels at the PS2's size, ICO_RD_SHADOW_FINE=0: the
-    # SHA-256s were taken before them)
+                     "-DREQUIRE=water_targets_clamped|water_blocks_kept" -DSHA=1bf91cb49971f536ee0fac57ce0904b2ac790b02e06a2de0b5da5598f1305bb0
+                     -P "${_rip}")
+    # the pinned SHA-256s are of the pictures without the fades fold (rd_fades_fold_ab
+    # tests the fold) and with the shadow's levels at the PS2's size
+    # (ICO_RD_SHADOW_FINE=0, rd_shadow_fine_ab tests the levels): these tests pin the
+    # water's exact bytes
     set_tests_properties(rd_replay_tool_ripple rd_replay_tool_ripple_447 rd_replay_tool_ripple_436
                          rd_replay_tool_ripple_436_ps2 rd_replay_tool_ripple_436_1x
                          rd_replay_tool_ripple_436_1x_ps2 rd_replay_tool_mirror_floor
                          PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 600
                                     ENVIRONMENT "ICO_RD_FADES_FOLD=0;ICO_RD_SHADOW_FINE=0")
-    # the still re-present (rd_reshow.c): a corpus dump as its own tick before
-    # (nothing moves), 4 presents at Enhanced 4:3 2x at 1280x960: presents
-    # 1..3 shown again, all 4 pictures byte for byte the ones rendered with
-    # ICO_RD_STILL_REPRESENT=0 (the lavapipe A/B; Not Run without the dump)
-    add_test(NAME rd_replay_tool_still
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMP=${CMAKE_SOURCE_DIR}/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-00428.rddump"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_still" -DPRESENTS=4
-                     "-DARGS=--enhanced|--aspect|4:3|--resolution|2x|--present|1280x960"
-                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_still.cmake")
-    set_tests_properties(rd_replay_tool_still PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 600)
-    # the glow held between ticks (rd_glow_hold.c) against its chain drawn at
-    # every present (ICO_RD_GLOW_REDRAW=1), 2 presents a tick at Enhanced 4:3
-    # 2x, every present rendered: a still tick (rd-01076 as its own tick
-    # before) the same bytes both ways, SCENE and the presented picture; a
-    # moving one (rd-01076 then rd-01077) the first present the same bytes and
-    # the later one differing only within 128 texels of the glow's mask (WORK2)
-    # (the lavapipe A/B; Not Run without the dumps)
-    set(_gh "${CMAKE_SOURCE_DIR}/build-host/tmp/pcsx2cmp/godrays/port2/keep")
-    set(_gh_py "")
-    if(Python3_FOUND)
-        set(_gh_py "-DPYTHON=${Python3_EXECUTABLE}")
-    endif()
-    add_test(NAME rd_replay_tool_glow_hold
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DSTILL=${_gh}/rd-01076.rddump" "-DPREV=${_gh}/rd-01076.rddump"
-                     "-DMOVE=${_gh}/rd-01077.rddump"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_glow_hold" -DPRESENTS=2
-                     -DREACH=128 "-DARGS=--enhanced|--aspect|4:3|--resolution|2x" ${_gh_py}
-                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_glow_hold.cmake")
-    set_tests_properties(rd_replay_tool_glow_hold PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
-                                                             TIMEOUT 900)
-    # the blended present's frame F12 saves (rd.h rd_dump_blended_arm),
-    # written by --save-blended from --interp T PREV, replayed on its own:
-    # SCENE and the presented picture byte for byte the --interp run's, and
-    # the same --interp run with the interpolation and the replays on the
-    # render thread (--render-thread sync and on: the picture and the saved
-    # frame byte for byte the main thread's).
-    # rd-01076 then rd-01077 at alpha 0.5, Enhanced 4:3 2x; the issue 163
-    # pair (the tablet's tick and the tick before) at its present's alpha
-    # 0.999000013 (the lavapipe A/B; Not Run without the dumps)
-    add_test(NAME rd_replay_tool_save_blended
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DPREV=${_gh}/rd-01076.rddump" "-DCUR=${_gh}/rd-01077.rddump" -DT=0.5
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_save_blended"
-                     "-DARGS=--enhanced|--aspect|4:3|--resolution|2x" "-DRT=sync|on"
-                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_save_blended.cmake")
-    set(_sb163 "${CMAKE_SOURCE_DIR}/build-host/tmp/v097/evidence/163/frame/frame-20261031-211530-v10103")
-    add_test(NAME rd_replay_tool_save_blended_163
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DPREV=${_sb163}-prev.rddump" "-DCUR=${_sb163}.rddump" -DT=0.999000013
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_save_blended_163"
-                     "-DARGS=--resolution|2x|--full-height|--full-pixel" "-DRT=sync|on"
-                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_save_blended.cmake")
-    set_tests_properties(rd_replay_tool_save_blended rd_replay_tool_save_blended_163
-                         PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 900)
     # the fog on the depth's words copied out through a buffer
     # (ICO_RD_FOG_PATH=buffer, rd_fog_path.c: the fallback of a device whose
     # depth reads fail), on D32S8 and on D24S8 (the top byte masked off):
@@ -2430,26 +2372,11 @@ if(ICO_RUN_TESTS)
     if(_env)
         set_tests_properties(rd_fog_selftest PROPERTIES ENVIRONMENT "${_env}")
     endif()
-    # a player dump with the fog (the dark hall) replayed with the depth in
-    # place and with its copy: SCENE byte for byte the same, on D32S8 and
-    # on D24S8.  Not Run without the dump (dist/dumps is not in the tree)
-    set(ICO_FOG_DUMP "${CMAKE_SOURCE_DIR}/dist/dumps/frame-20261009-083248-v13836.rddump"
-        CACHE FILEPATH "a player dump with the depth fog, for rd_fog_depth_copy_dump")
-    add_test(NAME rd_fog_depth_copy_dump
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMP=${ICO_FOG_DUMP}" "-DOUT=${_dc}/dump"
-                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_depth_copy_dump.cmake")
-    add_test(NAME rd_fog_depth_copy_dump_d24s8
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMP=${ICO_FOG_DUMP}" "-DOUT=${_dc}/dump_d24s8"
-                     "-DEXTRA_ENV=ICO_VK_FAKE_D24S8=1" -DNO_BUFFER=1
-                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_depth_copy_dump.cmake")
-    set_tests_properties(rd_fog_depth_copy_dump rd_fog_depth_copy_dump_d24s8
-                         PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 600)
-    if(_env)
-        set_tests_properties(rd_fog_depth_copy_dump rd_fog_depth_copy_dump_d24s8
-                             PROPERTIES ENVIRONMENT "${_env}")
-    endif()
+    # the replay tool's still re-present, held glow and saved blended frame
+    # (rd_replay_tool_still, _glow_hold, _save_blended, _save_blended_163) and
+    # a fogged frame with the depth in place, its copy and its words through a
+    # buffer (rd_fog_depth_copy_dump, _d24s8), on the committed fixtures
+    include(rd_replay_tool_fixtures.cmake)
     # the same tests and expectations on a device with a
     # phone GPU's limits (ICO_VK_FAKE_LIMITS=mali, port/rhi/vk/vk_device.c:
     # four descriptor sets, 16 sampled images a stage, 256-byte storage
@@ -2709,232 +2636,61 @@ if(ICO_RUN_TESTS)
         set_tests_properties(rd_vumerge_mali PROPERTIES ENVIRONMENT "${_env}")
     endif()
     # rd_occlusion_tool (test/rd_occlusion_tool.cmake, docs/port/RENDER.md
-    # "Culling"): rd_replay_tool --occlusion on the first dump of the
-    # machine-local list tools/occlusion_corpus.txt here, at Original 4:3 1x:
-    # the hidden-draw line's shape and its --nop spec, then the plain replay
-    # and the replay with the hidden commands NOPs, DISPLAY and PRESENT byte
-    # for byte under ICO_RD_BLEND=fixed; SKIP without the list, a dump or a
-    # device
+    # "Culling"): rd_replay_tool --occlusion on the fixture of
+    # test/fixtures/lists/occlusion_tool.txt, at Original 4:3 1x: the
+    # hidden-draw line's shape (a draw hidden) and its --nop spec, then the
+    # plain replay and the replay with the hidden commands NOPs, DISPLAY and
+    # PRESENT byte for byte under ICO_RD_BLEND=fixed; SKIP without a device
     add_test(NAME rd_occlusion_tool
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/occlusion_corpus.txt"
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> ${_ico_vis_fx}
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/occlusion_tool.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/occlusion_tool"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_occlusion_tool.cmake")
     set_tests_properties(rd_occlusion_tool PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800)
     if(_env)
         set_tests_properties(rd_occlusion_tool PROPERTIES ENVIRONMENT "${_env}")
     endif()
-    # rd_vu_skin_check_dump (test/rd_vu_skin_check_dump.cmake, issue 163,
-    # docs/port/VU_SKIN_CHECK.md): rd_replay_tool --skin-check on a
-    # machine-local corpus dump with 46 skinned commands (the queen's
-    # among them): every command the replay draws checked (a culled one is
-    # not drawn), none wrong, the bytes equal, no box sample outside on
-    # lavapipe; rd_vu_skin_check_163*: the reporter's
-    # blended dump (machine-local, /primary/dev/ico-dumps/163/): clean, then
-    # with the bone at address 200 read as zeros by the probe (the device's
-    # failure as the check would see it: address 200 named, H1
-    # address-dependent) and in the ring (H2), and the deep dive's patched
-    # copy (its stream's lanes on 200 moved to 252: the CPU and the GPU
-    # read the same stream, so the check finds nothing there: it compares
-    # the device with the CPU, not with the clean dump); SKIP without the
-    # dump or a device
+    # the skinned draws' checks on the committed fixtures (issue 163, issue
+    # 123's ladder): rd_vu_skin_check_dump, _163_probe, _163_ring, the
+    # rd_vu_skin_check_123* rows, rd_vu_skin_check_ab, rd_vu_bones_ring_ab
+    # and _prepass (test/rd_vu_skin_fx_tests.cmake).  rd_vu_skin_check_163
+    # and _163_patched (test/rd_vu_skin_check_dump.cmake on a dump): issue
+    # 163's blended dump and the deep dive's patched copy (its stream's
+    # lanes on 200 moved to 252: the CPU and the GPU read the same stream,
+    # so the check finds nothing there), clean, every command the replay
+    # draws checked, no box sample outside on lavapipe; machine-local (not
+    # converted: the clean line's box clause on the fixture, FIX-P6a's
+    # hand-back); SKIP without the dump or a device
     set(_vskd "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_skin_check_dump.cmake")
     set(_vskd_clean "[0-9]+ skinned commands, [1-9][0-9]* checks, 0 wrong \\(address 0\\), 0 blocks whose bytes differed \\(0 changed after the draw\\), 0 of [0-9]+ box checks with samples outside")
     set(_vsk163 "/primary/dev/ico-dumps/163")
-    # a wrong check's mismatch line for Yorda's mesh at bone address 200
-    # (review2 S5: the H2 run's 42 changed blocks must not use up its lines)
-    set(_vsk163_wrong "rd: VU skin check: frame [0-9]+ command 0:[0-9]+ mesh testmodel #[0-9]+ \\([0-9]+ vertices\\): [0-9]+ vertices wrong of [0-9]+, address 200: ")
-    add_test(NAME rd_vu_skin_check_dump
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMP=/primary/dev/ico-dumps/frame-20261007-200706-v3086.rddump"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_dump"
-                     "-DLINE=46 skinned commands, [1-9][0-9]* checks, 0 wrong \\(address 0\\), 0 blocks whose bytes differed \\(0 changed after the draw\\), 0 of [0-9]+ box checks with samples outside"
-                     -P "${_vskd}")
     add_test(NAME rd_vu_skin_check_163
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      "-DDUMP=${_vsk163}/frame-20261105-195124-v6171-blended.rddump"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_163"
                      "-DLINE=${_vskd_clean}" -P "${_vskd}")
-    add_test(NAME rd_vu_skin_check_163_probe
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMP=${_vsk163}/frame-20261105-195124-v6171-blended.rddump"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_163_probe"
-                     "-DLINE=[0-9]+ skinned commands, [0-9]+ checks, [1-9][0-9]* wrong \\(address 200\\), 0 blocks whose bytes differed \\(0 changed after the draw\\).*reads as: H1, address-dependent"
-                     "-DLOG=${_vsk163_wrong}" -P "${_vskd}")
-    add_test(NAME rd_vu_skin_check_163_ring
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMP=${_vsk163}/frame-20261105-195124-v6171-blended.rddump"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_163_ring"
-                     "-DLINE=[0-9]+ skinned commands, [0-9]+ checks, [1-9][0-9]* wrong \\(address 200\\), [1-9][0-9]* blocks whose bytes differed \\([1-9][0-9]* changed after the draw\\).*reads as: H2, a port race"
-                     "-DLOG=${_vsk163_wrong}" -P "${_vskd}")
     add_test(NAME rd_vu_skin_check_163_patched
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      "-DDUMP=${_vsk163}/blended-750-a200.rddump"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_163_patched"
                      "-DLINE=${_vskd_clean}" -P "${_vskd}")
-    # rd_vu_skin_check_123*: issue 123's v0.10.4 blended dump (Yorda's
-    # shin missing on the device; machine-local, copied into the same
-    # folder): clean (the twins equal), and with the bone at 200 made NaN in
-    # the ring after its bytes were kept (the device's picture's form, B0):
-    # wrong at address 200 with the wrong vertices dropped, H2, the twins
-    # differing
-    set(_vsk123 "${_vsk163}/frame-20261106-080033-v3910-blended.rddump")
-    add_test(NAME rd_vu_skin_check_123
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> "-DDUMP=${_vsk123}"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_123"
-                     "-DLINE=${_vskd_clean}.*twins: [1-9][0-9]* read \\([0-9]+ through the draw's own pipeline\\), 0 differ"
-                     -P "${_vskd}")
-    add_test(NAME rd_vu_skin_check_123_nan
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> "-DDUMP=${_vsk123}"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_123_nan"
-                     "-DLINE=[0-9]+ skinned commands, [0-9]+ checks, [1-9][0-9]* wrong \\(address 200\\).*reads as: H2, a port race.*twins: [1-9][0-9]* read \\([0-9]+ through the draw's own pipeline\\), [1-9][0-9]* differ.*[1-9][0-9]* wrong vertices dropped"
-                     "-DLOG=${_vsk163_wrong}.*reads as non-finite / dropped" -P "${_vskd}")
-    # _attach: the same two under the Turnip reporter's profile on lavapipe
-    # (the attachment read, GS state as shader data, the VU pre-pass off as
-    # on a tile-based GPU), so the draws whose first pass reads the
-    # attachment with Z writes off are twinned through their own pipelines
-    # with the write mask cleared: clean every twin equal with at least one
-    # through the draw's own pipeline; with the NaN bone the same and the
-    # twins differing (on this dump the three draws on bone 200 are not
-    # among the own-pipeline ones: each event line says why)
-    set(_vsk_attach "ICO_RD_VU_PREPASS=0;ICO_VK_FAKE_NO_INTERLOCK=1;ICO_RD_BLEND=attachment;ICO_RD_UBER=on")
-    add_test(NAME rd_vu_skin_check_123_attach
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> "-DDUMP=${_vsk123}"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_123_attach"
-                     "-DLINE=${_vskd_clean}.*twins: [1-9][0-9]* read \\([1-9][0-9]* through the draw's own pipeline\\), 0 differ"
-                     -P "${_vskd}")
-    add_test(NAME rd_vu_skin_check_123_nan_attach
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> "-DDUMP=${_vsk123}"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_123_nan_attach"
-                     "-DLINE=[0-9]+ skinned commands, [0-9]+ checks, [1-9][0-9]* wrong \\(address 200\\).*twins: [1-9][0-9]* read \\([1-9][0-9]* through the draw's own pipeline\\), [1-9][0-9]* differ"
-                     "-DLOG=twins differ: A \\(the draw's offset, page phase [0-9]+\\) [0-9]+ samples, B \\(fresh, phase [0-9]+\\) [0-9]+ samples(, C \\(ring read\\) [0-9]+ samples)?[;,] through [a-z0-9_]+ with " -P "${_vskd}")
-    # issue 123's ladder on the same dump under the plain set with the
-    # pre-pass off (the Turnip profile's program entries): _123_c3 the
-    # probe's sabotage (the draw's bytes right): wrong at 200, H1, the
-    # probe's column 3 (the bones through the ring at the draw's block)
-    # right and every twin C equal to B; _123_nan_c the ring's NaN: twin C
-    # reads it as A does (differs from B); _123_bones_ring the ring builds in
-    # force ([dev] vu_bones = ring): clean, the start line, "the ring read:
-    # healed"; _123_bones_ring_nan with the NaN: the twins (both ring reads)
-    # differ, "not healed"
-    set(_vsk_ringenv "ICO_RD_VU_SET=plain;ICO_RD_VU_PREPASS=0")
-    add_test(NAME rd_vu_skin_check_123_c3
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> "-DDUMP=${_vsk123}"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_123_c3"
-                     "-DLINE=[0-9]+ skinned commands, [0-9]+ checks, [1-9][0-9]* wrong \\(address 200\\), 0 blocks whose bytes differed \\(0 changed after the draw\\).*reads as: H1, address-dependent.*the ring read: c3 right [1-9][0-9]* \\(c3 drawn in [1-9][0-9]*\\), ring twins [1-9][0-9]* read, 0 differ from B"
-                     "-DLOG=\\(c3\\) the bones through the ring: right \\(0 wrong\\)" -P "${_vskd}")
-    add_test(NAME rd_vu_skin_check_123_nan_c
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> "-DDUMP=${_vsk123}"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_123_nan_c"
-                     "-DLINE=[0-9]+ skinned commands, [0-9]+ checks, [1-9][0-9]* wrong \\(address 200\\).*reads as: H2, a port race.*ring twins [1-9][0-9]* read, [1-9][0-9]* differ from B"
-                     "-DLOG=B \\(fresh, phase [0-9]+\\) [0-9]+ samples, C \\(ring read\\) [0-9]+ samples" -P "${_vskd}")
-    add_test(NAME rd_vu_skin_check_123_bones_ring
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> "-DDUMP=${_vsk123}"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_123_bones_ring"
-                     "-DLINE=${_vskd_clean}.*twins: [1-9][0-9]* read \\([0-9]+ through the draw's own pipeline\\), 0 differ"
-                     "-DLOG=rd: VU bones: through the ring \\(storage buffer\\) on the skinned entries.*rd: VU skin check: the ring read: healed \\(0 of [1-9][0-9]* twins differ" -P "${_vskd}")
-    add_test(NAME rd_vu_skin_check_123_bones_ring_nan
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> "-DDUMP=${_vsk123}"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_123_bones_ring_nan"
-                     "-DLINE=[0-9]+ skinned commands, [0-9]+ checks, [1-9][0-9]* wrong \\(address 200\\).*twins: [1-9][0-9]* read \\([0-9]+ through the draw's own pipeline\\), [1-9][0-9]* differ"
-                     "-DLOG=A and B read the bones through the ring: step 1 of the ladder in force.*rd: VU skin check: the ring read: not healed \\([1-9][0-9]* of [1-9][0-9]* twins differ" -P "${_vskd}")
-    set_tests_properties(rd_vu_skin_check_123_c3 PROPERTIES ENVIRONMENT
-                         "${_env};${_vsk_ringenv};ICO_RD_VU_SKIN_SABOTAGE=200")
-    set_tests_properties(rd_vu_skin_check_123_nan_c PROPERTIES ENVIRONMENT
-                         "${_env};${_vsk_ringenv};ICO_RD_VU_SKIN_SABOTAGE=200,nan")
-    set_tests_properties(rd_vu_skin_check_123_bones_ring PROPERTIES ENVIRONMENT
-                         "${_env};${_vsk_ringenv};ICO_RD_VU_BONES=ring")
-    set_tests_properties(rd_vu_skin_check_123_bones_ring_nan PROPERTIES ENVIRONMENT
-                         "${_env};${_vsk_ringenv};ICO_RD_VU_BONES=ring;ICO_RD_VU_SKIN_SABOTAGE=200,nan")
-    set(_vskd_tests rd_vu_skin_check_dump rd_vu_skin_check_163 rd_vu_skin_check_163_probe
-                    rd_vu_skin_check_163_ring rd_vu_skin_check_163_patched rd_vu_skin_check_123
-                    rd_vu_skin_check_123_nan rd_vu_skin_check_123_attach
-                    rd_vu_skin_check_123_nan_attach rd_vu_skin_check_123_c3
-                    rd_vu_skin_check_123_nan_c rd_vu_skin_check_123_bones_ring
-                    rd_vu_skin_check_123_bones_ring_nan)
-    set_tests_properties(${_vskd_tests} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800)
+    set_tests_properties(rd_vu_skin_check_163 rd_vu_skin_check_163_patched
+                         PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800)
     if(_env)
-        set_tests_properties(rd_vu_skin_check_dump rd_vu_skin_check_163
-                             rd_vu_skin_check_163_patched rd_vu_skin_check_123
+        set_tests_properties(rd_vu_skin_check_163 rd_vu_skin_check_163_patched
                              PROPERTIES ENVIRONMENT "${_env}")
     endif()
-    set_tests_properties(rd_vu_skin_check_163_probe
-                         PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_SKIN_SABOTAGE=200")
-    set_tests_properties(rd_vu_skin_check_163_ring
-                         PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_SKIN_SABOTAGE=200,ring")
-    set_tests_properties(rd_vu_skin_check_123_nan
-                         PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_SKIN_SABOTAGE=200,nan")
-    set_tests_properties(rd_vu_skin_check_123_attach PROPERTIES ENVIRONMENT "${_env};${_vsk_attach}")
-    set_tests_properties(rd_vu_skin_check_123_nan_attach
-                         PROPERTIES ENVIRONMENT
-                                    "${_env};${_vsk_attach};ICO_RD_VU_SKIN_SABOTAGE=200,nan")
-    # rd_vu_skin_check_ab (test/rd_vu_skin_check_ab.cmake, review2 S6): the
-    # picture with the check on for every skinned command (ICO_RD_VU_SKIN_CHECK=2)
-    # against off, every pass-dump PNG byte for byte, at Original, with the
-    # attachment read and GS state as shader data (the Turnip reporter's
-    # profile on lavapipe) and at Enhanced 2x MSAA 4, on the corpus dump of
-    # tools/vustage_dumps.txt's /primary/dev/ico-dumps/*.rddump with the
-    # most skinned commands (frame-20261007-200706-v3086: 46), issue 163's
-    # blended dump (Yorda's draws) and issue 123's; the twins (every skinned
-    # draw twinned in its pass) drawn in the plain and attach runs and, in
-    # the attach runs, through the draws' own pipelines with the write mask
-    # cleared; SKIP without them or a device
-    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_ab")
-    add_test(NAME rd_vu_skin_check_ab
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMPS=/primary/dev/ico-dumps/frame-20261007-200706-v3086.rddump|${_vsk163}/frame-20261105-195124-v6171-blended.rddump|${_vsk163}/frame-20261106-080033-v3910-blended.rddump"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_ab"
-                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_skin_check_ab.cmake")
-    set_tests_properties(rd_vu_skin_check_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800)
-    if(_env)
-        set_tests_properties(rd_vu_skin_check_ab PROPERTIES ENVIRONMENT "${_env}")
-    endif()
-    # rd_vu_bones_ring_ab (test/rd_vu_bones_ring_ab.cmake, issue 123's
-    # ladder, docs/port/VU_SKIN_CHECK.md "The ladder"): the three dumps of
-    # /primary/dev/ico-dumps/163/ (issue 163's blended dump, its patched
-    # copy, issue 123's v0.10.4 blended dump) replayed under the plain set
-    # with the VU pre-pass off, the bones through VuBoneCB and through the
-    # ring ([dev] vu_bones = ring): every pass-dump PNG byte for byte, at
-    # Original and with the attachment read and GS state as shader data;
-    # SKIP without them or a device
-    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vu_bones_ring_ab")
-    add_test(NAME rd_vu_bones_ring_ab
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DDUMPS=${_vsk163}/frame-20261105-195124-v6171-blended.rddump|${_vsk163}/blended-750-a200.rddump|${_vsk163}/frame-20261106-080033-v3910-blended.rddump"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_bones_ring_ab"
-                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_bones_ring_ab.cmake")
-    set_tests_properties(rd_vu_bones_ring_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800)
-    if(_env)
-        set_tests_properties(rd_vu_bones_ring_ab PROPERTIES ENVIRONMENT "${_env}")
-    endif()
-    # rd_vu_bones_ring_ab_prepass: the same dumps with the VU pre-pass on (every
-    # tile-based GPU since v0.11.0): the ring runs byte for byte as the
-    # cbuffer runs under the pre-pass's batch builds (which read the bones
-    # through t5 either way) and with them off (the skinned commands then
-    # drawn the old way through the ring builds); the twins of the record
-    # draws read the bones through the ring as the record did
-    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vu_bones_ring_ab_prepass")
-    add_test(NAME rd_vu_bones_ring_ab_prepass
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> -DPREPASS=1
-                     "-DDUMPS=${_vsk163}/frame-20261105-195124-v6171-blended.rddump|${_vsk163}/blended-750-a200.rddump|${_vsk163}/frame-20261106-080033-v3910-blended.rddump"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_bones_ring_ab_prepass"
-                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_bones_ring_ab.cmake")
-    set_tests_properties(rd_vu_bones_ring_ab_prepass PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
-                                                                 TIMEOUT 2700)
-    if(_env)
-        set_tests_properties(rd_vu_bones_ring_ab_prepass PROPERTIES ENVIRONMENT "${_env}")
-    endif()
+    include("${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_skin_fx_tests.cmake")
     # rd_region_stats (test/rd_region_stats.cmake, docs/port/VU1_PROGRAMS.md
-    # "The region rule"): rd_replay_tool --region-stats on the first two
-    # dumps of the machine-local list tools/occlusion_corpus.txt here, at
-    # Original 4:3 1x and Enhanced 4:3 2x: the lines' shapes, then the
-    # pass dumps of the plain replay and of the replay with the draws the
-    # CPU oracle says draw nothing NOPs (--region-out's spec), byte for
-    # byte; the orig setting's spec the same without a device; SKIP
-    # without the list, a dump or a device
+    # "The region rule"): rd_replay_tool --region-stats on the fixtures of
+    # test/fixtures/lists/region_stats.txt, at Original 4:3 1x and Enhanced
+    # 4:3 2x: the lines' shapes, then the pass dumps of the plain replay and
+    # of the replay with the draws the CPU oracle says draw nothing NOPs
+    # (--region-out's spec), byte for byte; the orig setting's spec the same
+    # without a device; SKIP without a device
     add_test(NAME rd_region_stats
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/occlusion_corpus.txt"
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> ${_ico_vis_fx}
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/region_stats.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/region_stats"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_region_stats.cmake")
     set_tests_properties(rd_region_stats PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800)
@@ -2942,18 +2698,20 @@ if(ICO_RUN_TESTS)
         set_tests_properties(rd_region_stats PROPERTIES ENVIRONMENT "${_env}")
     endif()
     # rd_sideband_ab (test/rd_sideband_ab.cmake, issue 29, docs/port/VU1_PROGRAMS.md
-    # "The region rule"): the dumps of the machine-local list
-    # tools/sideband_dumps.txt at their own aspect, Original 1x and Enhanced
-    # 2x, with the PS2's drop on every VU draw (ICO_RD_VU_BESIDE=0) and with
-    # the side bands: tools/cmp_dirs_band.py holds SCENE's centre 512 GS
-    # pixels byte for byte and every changed side pixel to one the drop left
-    # at the fog colour; SKIP without the list, a dump or a device
+    # "The region rule"): the committed fixtures of lists/wide.txt at their own
+    # aspect, Original 1x and Enhanced 2x, with the PS2's drop on every VU draw
+    # (ICO_RD_VU_BESIDE=0) and with the side bands: tools/cmp_dirs_band.py holds
+    # SCENE's centre 512 GS pixels byte for byte and every changed side pixel to
+    # one the drop left at the fog colour; the side bands' mode as each fixture
+    # declares (side_band_card_draws); SKIP without a device
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/sideband_ab")
     add_test(NAME rd_sideband_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      "-DPYTHON=${Python3_EXECUTABLE}"
                      "-DCMP=${CMAKE_SOURCE_DIR}/tools/cmp_dirs_band.py"
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/sideband_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool> "-DFIXTURES=${ICO_FIXTURE_DIR}"
+                     "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/wide.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/sideband_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_sideband_ab.cmake")
     set_tests_properties(rd_sideband_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
@@ -2988,20 +2746,22 @@ if(ICO_RUN_TESTS)
     endif()
     # rd_region_camera_ab (test/rd_region_camera_ab.cmake, docs/port/VU1_PROGRAMS.md
     # "The region rule", DIVERGENCES.md VD-29): the camera rule against the
-    # PS2's region rule on the dumps of tools/sideband_dumps.txt at their own
+    # PS2's region rule on the committed fixtures of lists/wide.txt at their own
     # aspect, Original 1x and Enhanced 2x: tools/region_camera_report.py holds
     # every SCENE pixel the camera rule changes to the CPU oracle's mask
-    # (--region-mask) and every target byte for byte where the mask is empty;
-    # and --region-stats under the camera rule gives the same verdicts at the
-    # Original preset and Enhanced at 1x; SKIP without the list, a dump or a
-    # device
+    # (--region-mask) and every target byte for byte where the mask is empty,
+    # the camera rule's mode on each (region_rule_draws); and --region-stats
+    # under the camera rule gives the same verdicts at the Original preset and
+    # Enhanced at 1x; SKIP without a device
     if(Python3_FOUND)
         file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/region_camera_ab")
         add_test(NAME rd_region_camera_ab
                  COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                          "-DPYTHON=${Python3_EXECUTABLE}"
                          "-DREPORT=${CMAKE_SOURCE_DIR}/tools/region_camera_report.py"
-                         "-DLIST=${CMAKE_SOURCE_DIR}/tools/sideband_dumps.txt"
+                         -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                         "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                         "-DLIST=${ICO_FIXTURE_DIR}/lists/wide.txt"
                          "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/region_camera_ab"
                          -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_region_camera_ab.cmake")
         set_tests_properties(rd_region_camera_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
@@ -3010,18 +2770,19 @@ if(ICO_RUN_TESTS)
             set_tests_properties(rd_region_camera_ab PROPERTIES ENVIRONMENT "${_env}")
         endif()
     endif()
-    # rd_noplanes_ab (test/rd_noplanes_ab.cmake, issue 161): the dumps of the
-    # machine-local list tools/noplanes_dumps.txt (the title and the boot,
-    # each drawing one screen-prim triangle key with planes, and a capture
-    # that draws none) with the sprite planes builds and without them
-    # (ICO_RD_NO_SPRITE_PLANES=1, the fallback [dev] pipeline_skip turns on):
-    # every target byte for byte on all four, the title's and the boot's 2
-    # commands each through the plain builds (none on the capture); SKIP as
-    # rd_vustage_ab
+    # rd_noplanes_ab (test/rd_noplanes_ab.cmake, issue 161): the fixtures of
+    # test/fixtures/lists/noplanes.txt (the title and the boot, each drawing
+    # screen-prim triangle keys with planes, and a capture that draws none)
+    # with the sprite planes builds and without them (ICO_RD_NO_SPRITE_PLANES=1,
+    # the fallback [dev] pipeline_skip turns on): every target byte for byte,
+    # the commands each line names through the plain builds (the path ran:
+    # noplanes_fallback); SKIP without a device
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/noplanes_ab")
     add_test(NAME rd_noplanes_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/noplanes_dumps.txt"
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                     "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/noplanes.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/noplanes_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_noplanes_ab.cmake")
     set_tests_properties(rd_noplanes_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800)
@@ -3158,19 +2919,16 @@ if(ICO_RUN_TESTS)
     endif()
     # rd_cull_ab (test/rd_cull_ab.cmake): the scene draws' visibility test
     # (rd_vis.c, rd_vis_hiz.c) against every draw replayed, byte for byte: the
-    # dumps of tools/occlusion_corpus.txt and tools/native_frame_dumps.txt that
-    # exist, under ICO_RD_BLEND=fixed, with ICO_RD_CULL=off, frustum and full, through
-    # --pass-dump --stats at Original 4:3 640x480, Enhanced 4:3 2x, Enhanced
-    # 2x at the dump's own aspect where it is wider than 4:3, and MSAA 4x on
-    # the first dump and on tools/cull_msaa_dumps.txt's (the epoch closed
-    # inside a list by a read of SCENE): every target's PNG equal, the stats
-    # line read, draws skipped over the corpus; SKIP as rd_vustage_ab
+    # fixtures of test/fixtures/lists/cull.txt, under ICO_RD_BLEND=fixed, with
+    # ICO_RD_CULL=off, frustum and full, through --pass-dump --stats at Original
+    # 4:3 640x480, Enhanced 4:3 2x, Enhanced 2x at the frame's own aspect where
+    # it is wider than 4:3, and MSAA 4x on the first fixture and on the list's
+    # msaa lines: every target's PNG equal, the stats line read, the declared
+    # frustum and occluded counts, draws skipped and hidden over the list
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/cull_ab")
     add_test(NAME rd_cull_ab
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/occlusion_corpus.txt"
-                     "-DEXTRA=${CMAKE_SOURCE_DIR}/tools/native_frame_dumps.txt"
-                     "-DMSAA_LIST=${CMAKE_SOURCE_DIR}/tools/cull_msaa_dumps.txt"
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> ${_ico_vis_fx}
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/cull.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/cull_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_cull_ab.cmake")
     set_tests_properties(rd_cull_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 5400)
@@ -3178,15 +2936,15 @@ if(ICO_RUN_TESTS)
         set_tests_properties(rd_cull_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
     # rd_vis_hiz_corpus (test/rd_vis_hiz_corpus.cmake): the occlusion test's
-    # cheaper collect over the occlusion corpus: for every row of
-    # test/rd_vis_hiz_corpus.txt whose dump is here (Original 4:3, Enhanced
-    # 4:3 2x, and the same with --repeat 3: the collect cache's), --cull full
-    # --stats under ICO_RD_CULL_HIZ_FAST=0 and under the fast collect with
+    # cheaper collect over the visibility test's fixtures: for every row of
+    # test/rd_vis_hiz_corpus.txt (Original 4:3, Enhanced 4:3 2x, and the same
+    # with --repeat 3: the collect cache's), --cull full --stats under
+    # ICO_RD_CULL_HIZ_FAST=0 and under the fast collect with
     # ICO_RD_CULL_HIZ_CHECK=1: the same counts as each other and as the
-    # table, no check wrong; SKIP as rd_cull_ab
+    # table, no check wrong, a row hiding draws; SKIP as rd_cull_ab
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vis_hiz_corpus")
     add_test(NAME rd_vis_hiz_corpus
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> ${_ico_vis_fx}
                      "-DTABLE=${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vis_hiz_corpus.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vis_hiz_corpus"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vis_hiz_corpus.cmake")
@@ -3229,9 +2987,9 @@ if(ICO_RUN_TESTS)
     if(_env)
         set_tests_properties(rd_constant_reads_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
-    # rd_fades_fold_ab (test/rd_fades_fold_ab.cmake): the fade dumps
-    # (tools/fades_fold_dumps.txt) and, with ICO_BOOT_DUMP_DIR, the start-up's
-    # frames 115 to 123, with list 11's last full-frame lerp sprites drawn
+    # rd_fades_fold_ab (test/rd_fades_fold_ab.cmake): the fixtures of
+    # test/fixtures/lists/fades_fold.txt (the path ran: fades_folded), with
+    # list 11's last full-frame lerp sprites drawn
     # into SCENE (ICO_RD_FADES_FOLD=0, the tests' way) and applied by the
     # reduction (rd_fades_fold.c, the default on every device), under
     # ICO_RD_BLEND=attachment and fixed, at Original, Enhanced 2x and the
@@ -3242,8 +3000,9 @@ if(ICO_RUN_TESTS)
         file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/fades_fold_ab")
         add_test(NAME rd_fades_fold_ab
                  COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
-                         "-DLIST=${CMAKE_SOURCE_DIR}/tools/fades_fold_dumps.txt"
-                         "-DBOOT=${ICO_BOOT_DUMP_DIR}" "-DPY=${Python3_EXECUTABLE}"
+                         -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                         "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                         "-DLIST=${ICO_FIXTURE_DIR}/lists/fades_fold.txt" "-DPY=${Python3_EXECUTABLE}"
                          "-DDIFF=${CMAKE_CURRENT_SOURCE_DIR}/test/png_level_diff.py"
                          "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/fades_fold_ab"
                          -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_fades_fold_ab.cmake")

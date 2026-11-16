@@ -992,7 +992,7 @@ rd: fades fold: the reduction took another way (the hardware sprite, not as plan
 
 ctest `rd_fades_fold` (the step against the GS blend, rd_gsbase's fade, brightness and letterbox
 cases stepped texel by texel against the sprites' bytes, the plan on recorded frames) and
-`rd_fades_fold_ab` (the fade dumps with and without the fold,
+`rd_fades_fold_ab` (the fade fixtures with and without the fold,
 [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)). Not built:
 a frame differing from the last only in a fade's level could rerun the reduction and the present
 alone (the still re-present shows a picture again only on an unchanged frame hash,
@@ -2801,7 +2801,7 @@ Counters `RdPerfRecord.auraPasteSplit`, `auraPasteRows`, `auraPasteBand`, `auraP
 rows A-B (...), as the paste over the other N rows`; the 10 s line `window: aura paste: P drawn as
 the alpha alone (B band rows each), K read whole (why)` (when any aura paste was seen); `--stats`
 `stats: aura paste on|off: S split (R rows as the alpha alone, B band rows), K drawn whole (why)`.
-`rd_aura_paste` (CPU) and `rd_aura_paste_ab` (dumps) check it
+`rd_aura_paste` (CPU) and `rd_aura_paste_ab` (committed fixtures) check it
 ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
 
 ## Start-up

@@ -2156,7 +2156,7 @@ the plain twin of each, no conversion, the counter, and the clear gives the set 
 `pipeline_skip_test` (`port/platform/test`): the family of the issue's notes (the mixed batch
 and the earlier plain build name none; a single planes build and a lazy creation name it), the value
 read back, the device and driver match, the clear. `rd_noplanes_ab` (`port/render/test/
-rd_noplanes_ab.cmake`, `tools/noplanes_dumps.txt`): the title's and the boot's dumps (one planes key
+rd_noplanes_ab.cmake`, `port/render/test/fixtures/lists/noplanes.txt`): the title's and the boot's fixtures (one planes key
 each, program 9 vs 22 fs 28) with and without the planes: 2 commands each through the fallback
 (`expect=fallback:2`) and every target byte for byte; a capture without planes keys byte for byte
 with none.

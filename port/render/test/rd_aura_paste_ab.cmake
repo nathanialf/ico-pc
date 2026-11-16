@@ -1,71 +1,36 @@
 # rd_aura_paste_ab: the aura's paste as the alpha alone over the rows that read
 # only proven alpha 0 rows of FEED128 (port/render/rd_aura_paste.c), the split
-# off (ICO_RD_AURA_PASTE=0) against on (=1).  For every dump the list names
-# (tools/aura_paste_dumps.txt: a path, '*' globs allowed, optionally 1: the
-# paste split once a replay at the phone's setting; a listed dump that is
-# absent FAILS), rd_replay_tool's --pass-dump with --stats and ICO_RD_VU_PREPASS=0
-# at the PowerVR phone's Resolution Auto and Enhanced 2x 4:3 (both
-# ICO_VK_FAKE_LIMITS=moltenvk: the local read) and a desktop 16:9 window
-# (lavapipe's own profile): every PNG byte for byte,
-# the same passes and attachment bytes (the split draws in the paste's own
-# pass), the off run splitting nothing, the marked dumps split once at the
-# phone's setting with at most 32 band rows, at least one split over the
-# list.  No device: SKIP (77).
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
-# The lists name dumps of the build machine alone (the owner's rule there: a
-# listed dump that is absent FAILS). A machine without that folder has none of
-# them: the test is skipped as the older dump tests are.
-if(NOT IS_DIRECTORY "/primary/dev/ico-dumps")
-  message(STATUS "SKIP: no dump folder on this machine (/primary/dev/ico-dumps): the list's dumps are the build machine's")
-  return()
-endif()
-set(dumps "")
+# off (ICO_RD_AURA_PASTE=0) against on (=1).  For every fixture the list names
+# (port/render/test/fixtures/lists/aura_paste.txt: fixture names of the
+# repository, docs/port/TESTING_FIXTURES.md; a listed fixture that is absent or
+# does not expand to its pinned SHA-256 FAILS; after the name the line's own
+# properties, rd_fixture_list_props.cmake), rd_replay_tool's --pass-dump with
+# --stats and ICO_RD_VU_PREPASS=0 at the PowerVR phone's Resolution Auto and
+# Enhanced 2x 4:3 (both ICO_VK_FAKE_LIMITS=moltenvk: the local read) and a
+# desktop 16:9 window (lavapipe's own profile): every PNG byte for byte, the
+# same passes and attachment bytes (the split draws in the paste's own pass),
+# the off run splitting nothing, every split at the phone's setting with at
+# most 32 band rows, at least one split over the list.  The path ran
+# (rd_fixture_require on the on run at the phone's setting): each fixture's
+# declared aura_paste_split, the pastes split (the count of the frame's
+# aura pastes whose FEED128 rows the chain proves alpha 0: the chain is the
+# frame's commands, which the fixture keeps); a fixture the phone's setting
+# did not replay FAILS.  No device: SKIP (77).
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the
+# fixtures folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<a
+# fixture list> -DOUT=<a folder the test may write>
+include("${FIXTURE_HELPERS}")
+include("${CMAKE_CURRENT_LIST_DIR}/rd_fixture_list_props.cmake")
 set(failures 0)
-if("${LIST}" STREQUAL "" OR NOT EXISTS "${LIST}")
-  message(FATAL_ERROR "rd_aura_paste_ab: no dump list ${LIST}")
-endif()
-get_filename_component(listDir "${LIST}" DIRECTORY)
-file(STRINGS "${LIST}" lines)
-foreach(l IN LISTS lines)
-  string(STRIP "${l}" l)
-  if(l STREQUAL "" OR l MATCHES "^#")
-    continue()
-  endif()
-  set(want "")
-  set(wantJoin "")
-  if(l MATCHES "^(.*[^ \t])[ \t]+join([0-9]+)$")
-    set(l "${CMAKE_MATCH_1}")
-    set(wantJoin "${CMAKE_MATCH_2}")
-  endif()
-  if(l MATCHES "^([^ \t]+)[ \t]+([0-9]+)$")
-    set(l "${CMAKE_MATCH_1}")
-    set(want "${CMAKE_MATCH_2}")
-  endif()
-  if(NOT IS_ABSOLUTE "${l}")
-    set(l "${listDir}/${l}")
-  endif()
-  if(l MATCHES "[*]")
-    file(GLOB found "${l}")
-    list(SORT found)
-    if(NOT found)
-      message(SEND_ERROR "${l}: no dump matches (a listed dump must exist)")
-      math(EXPR failures "${failures} + 1")
-    endif()
-    foreach(d IN LISTS found)
-      list(APPEND dumps "${d}")
-      set(want_${d} "${want}")
-      set(wantJoin_${d} "${wantJoin}")
-    endforeach()
-  elseif(EXISTS "${l}")
-    list(APPEND dumps "${l}")
-    set(want_${l} "${want}")
-    set(wantJoin_${l} "${wantJoin}")
-  else()
-    message(SEND_ERROR "${l}: no such dump (a listed dump must exist)")
-    math(EXPR failures "${failures} + 1")
-  endif()
+set(dumps "")
+rd_fixture_list("${LIST}" names)
+foreach(name IN LISTS names)
+  rd_fixture_expand(${name} "${OUT}/fixtures" d)
+  rd_fixture_list_props(${name})
+  list(APPEND dumps "${d}")
+  set(name_${d} "${name}")
+  set(checked_${name} FALSE)
 endforeach()
-list(REMOVE_DUPLICATES dumps)
 list(LENGTH dumps ndumps)
 
 set(common ICO_RD_VU_PREPASS=0)
@@ -96,7 +61,7 @@ foreach(dump IN LISTS dumps)
       file(REMOVE_RECURSE "${dir}")
       file(MAKE_DIRECTORY "${dir}")
       execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${common} ${env_${s}} ICO_RD_AURA_PASTE=${ap}
-                              "${TOOL}" "${dump}" - --pass-dump "${dir}" --stats ${args_${s}}
+                              "${TOOL}" "${dump}" "${dir}-out.png" --pass-dump "${dir}" --stats ${args_${s}}
                       RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
       if(rc EQUAL 77)
         message(STATUS "SKIP: no device: ${err}")
@@ -114,6 +79,7 @@ foreach(dump IN LISTS dumps)
         continue()
       endif()
       string(REPLACE ";" "," flat "${out}")
+      set(out_${ap} "${out}")
       set(ok TRUE)
       foreach(re drawsRe apRe trafficRe)
         if(NOT flat MATCHES "${${re}}")
@@ -153,12 +119,15 @@ foreach(dump IN LISTS dumps)
                          "${passes_0} and ${traffic_0} without")
       math(EXPR failures "${failures} + 1")
     endif()
-    set(want "${want_${dump}}")
-    if(NOT want STREQUAL "" AND s STREQUAL "phone")
-      if(NOT split_1 EQUAL want OR band_1 GREATER 32)
-        message(SEND_ERROR "${dump} ${s}: ${split_1} split with ${band_1} band rows; ${want} "
-                           "expected, the band within 32 rows (2 FEED128 rows of B-spline reach "
-                           "at 9.6 SCENE rows each, and the margins)")
+    if(s STREQUAL "phone")
+      # the path ran: the pastes this fixture declares split at the phone's setting
+      set(name "${name_${dump}}")
+      rd_fixture_require(${name} "${out_1}" aura_paste_split)
+      set(checked_${name} TRUE)
+      if(split_1 GREATER 0 AND band_1 GREATER 32)
+        message(SEND_ERROR "${dump} ${s}: ${split_1} split with ${band_1} band rows; the band "
+                           "within 32 rows (2 FEED128 rows of B-spline reach at 9.6 SCENE rows "
+                           "each, and the margins)")
         math(EXPR failures "${failures} + 1")
       endif()
     endif()
@@ -185,12 +154,19 @@ foreach(dump IN LISTS dumps)
     endforeach()
   endforeach()
 endforeach()
+foreach(name IN LISTS names)
+  if(NOT checked_${name})
+    message(SEND_ERROR "${name}: not replayed at the phone's setting: its split not checked")
+    math(EXPR failures "${failures} + 1")
+  endif()
+endforeach()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(failures GREATER 0)
-  message(FATAL_ERROR "rd_aura_paste_ab: ${failures} failures over ${ndumps} dumps")
+  message(FATAL_ERROR "rd_aura_paste_ab: ${failures} failures over ${ndumps} fixtures")
 endif()
 if(compared EQUAL 0 OR splitTotal EQUAL 0)
   message(FATAL_ERROR "rd_aura_paste_ab: ${compared} targets compared, ${splitTotal} pastes split "
-                      "over ${ndumps} dumps: one at least expected")
+                      "over ${ndumps} fixtures: one at least expected")
 endif()
-message(STATUS "rd_aura_paste_ab: ${compared} targets the same bytes over ${ndumps} dumps; "
+message(STATUS "rd_aura_paste_ab: ${compared} targets the same bytes over ${ndumps} fixtures; "
                "${splitTotal} pastes split")
