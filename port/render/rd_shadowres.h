@@ -195,6 +195,39 @@ bool rd__shadow_fine_cuts(void);
 /* the count of target color holds the full size (the seven draws, MSAA,
  * the one draw's full-size pass) */
 void rd__shadow_fine_count_full(uint32_t color);
+
+/* The count from the stencil (rd_shadow_one.c, rd_shadow_count.h
+ * RD_SC_STENCIL): the count of target color stands, at the count's texels,
+ * in depth's stencil (its view's channel `channel`, RhiLimits
+ * .stencilViewChannel) through the table (texel m the count's bytes of a
+ * stencil m), 0 outside box (the texels the full-size pass would draw):
+ * the first level's step reads it there (shadowres_step_stencil_ps) */
+typedef struct RdSrStencil {
+    RhiTexture depth, table;
+    uint32_t channel;
+    RhiRect box;
+} RdSrStencil;
+
+void rd__shadow_fine_count_stencil(uint32_t color, const RdSrStencil *src);
+/* rd_shadow_one.c, the guard: rd_replay.c rd__transition first, for every
+ * texture (the pass drawn before a touch of the depth or the count); the
+ * step's take (1 the stencil's, 0 the full-size count drawn after all, -1
+ * lost: the chain refused); the pass drawn now (why: RD_SC_WHY_*); the pass
+ * drawn after a step from the stencil (the tests' readback); the watch
+ * ended (rd_store_plan.c rd__store_plan_end, the walk's end) */
+void rd__shadow_count_touch(RhiCommandList cl, uint32_t texId);
+int rd__shadow_count_take(uint32_t color);
+void rd__shadow_count_flush(uint32_t color, int why);
+void rd__shadow_count_materialise(void);
+void rd__shadow_count_end(void);
+/* the check (rd_shadow_count.h): the check replay's first level step takes
+ * the stencil's place, the depth and the count's step (false: not this
+ * replay, or the depth was touched); the seven draws at the full size into
+ * dst (w x h) against td's stencil (false: no draw made) */
+bool rd__shadow_count_check_take(uint32_t color, RdSrStencil *src, struct RdTargetRec **td,
+                                 uint32_t *step);
+bool rd__shadow_count_seven_into(RhiTexture dst, RhiState *dstState, struct RdTargetRec *td,
+                                 uint32_t w, uint32_t h, uint32_t step);
 /* rd_shadow_box.c rd__shadow_box_screen, before the draw's pass: a level
  * sprite of the chain is drawn at the scene's scale too (and the tent
  * after the third) */

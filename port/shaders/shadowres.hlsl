@@ -23,6 +23,21 @@
 //                      the level's edge; in bytes, rounded.
 //
 // Bindings: t1 the source (Load only; s1 bound, unused).
+//
+// shadowres_step_stencil_ps is shadowres_step_ps built with
+// SHADOWRES_FROM_STENCIL (rd_shadowres.c, "The count from the stencil"):
+// the first level's step alone, reading the count's texels where the
+// full-size count pass (rd_shadow_one.c fullPass) would have written them:
+// texel (x, y) is 0 outside the texel box g_aux0 (x0, y0, x1, y1, ends
+// excluded: the pass's scissor, its clear outside it) and inside it the
+// count's table texel of the stencil's bits 0-5 there (shadow_count_ps at a
+// box of one texel: table[m] * (1 * 1) / (1 * 1) stored to RGBA8 is
+// table[m]'s bytes, so the count texel's float is the table texel's float,
+// both an RGBA8_UNORM texel of those bytes read with Load).  So sr_load
+// returns the float the count texel holds and every other operation of the
+// step is the same text: the same bytes.  Bindings: t1 the depth-stencil's
+// stencil view (RHI_ASPECT_STENCIL, its channel g_mode.w: 0 red, 1 green),
+// t2 the count's table (64 x 1), t3 the step's empty-area mask (g_mode.z).
 // DrawCB (rd_shadowres.c rd__shadow_fine_screen, tent):
 //   step  g_mode.x 0 the first level (boxes of the count), 1 a later level
 //         (points of the level before); g_mode.y bit 0 the sprite's S axis
@@ -40,11 +55,18 @@
 //         the level's size (the indices are held inside it)
 #include "common.hlsli"
 
-Texture2D<float4> g_texture : ICO_REG(t1, 2);
 SamplerState g_sampler : ICO_REG(s1, 2);
+#ifdef SHADOWRES_FROM_STENCIL
+Texture2D<uint4> g_srStencil : ICO_REG(t1, 2);
+Texture2D<float4> g_srTable : ICO_REG(t2, 2);
+// the step's empty-area mask (g_mode.z 1), as g_mask below
+Texture2D<float4> g_mask : ICO_REG(t3, 2);
+#else
+Texture2D<float4> g_texture : ICO_REG(t1, 2);
 // the step's empty-area mask (g_mode.z 1): the count box-reduced to its GS
 // size (rd_replay.c's reduced count), read with Load
 Texture2D<float4> g_mask : ICO_REG(t2, 2);
+#endif
 
 struct SrIn {
     float4 pos : SV_Position;
@@ -80,7 +102,18 @@ int sr_index(int i, int n, bool repeat)
 
 float4 sr_load(int x, int y)
 {
+#ifdef SHADOWRES_FROM_STENCIL
+    // the full-size count's texel (x, y) (the head comment): 0 outside the
+    // box its pass drew, else the table texel of the stencil's bits 0-5
+    if (x < int(g_aux0.x) || y < int(g_aux0.y) || x >= int(g_aux0.z) || y >= int(g_aux0.w)) {
+        return float4(0.0, 0.0, 0.0, 0.0);
+    }
+    const uint4 s = g_srStencil.Load(int3(x, y, 0));
+    const uint m = (g_mode.w != 0u ? s.y : s.x) & 0x3Fu;
+    return g_srTable.Load(int3(int(m), 0, 0));
+#else
     return g_texture.Load(int3(x, y, 0));
+#endif
 }
 
 // the level before at source coordinate j (texel k at j = k), linear

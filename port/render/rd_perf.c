@@ -38,6 +38,7 @@
 #include "rd_perf_hooks.h"
 #include "rd_perf_rare.h"
 #include "rd_shadow_box.h"
+#include "rd_shadow_count.h" /* the count's trial (rd__shadow_count_trial) */
 #include "rd_shadow_tile.h"
 #include "rd_no_volume.h"
 #include "rd_shot_late.h"
@@ -875,6 +876,11 @@ void rd__perf_passes_init(void)
     }
 }
 
+bool rd__perf_pass_on(void)
+{
+    return s_passOn;
+}
+
 void rd__set_perf_passes(bool on)
 {
     s_passesMode = on;
@@ -1507,7 +1513,8 @@ void rd__perf_collect_gpu(void)
        RHI_FRAMES_IN_FLIGHT frames ago */
     const uint32_t slot = rhi_frame_slot();
     if (g_rd.hasDevice) {
-        rd__shot_late_collect(slot); /* the state picture this slot copied (rd_shot_late.h) */
+        rd__shot_late_collect(slot);    /* the state picture this slot copied (rd_shot_late.h) */
+        rd__shadow_count_collect(slot); /* the shadow count's check (rd_shadow_count.h) */
     }
     if (!s_pendingValid[slot]) {
         return;
@@ -1642,6 +1649,9 @@ void rd__perf_collect_gpu(void)
        (gpuGapSkipped) */
     if (r->passTimed) {
         passFinish(&s_passPending[slot], ts, n, busy, nb);
+        /* the shadow count's trial (rd_shadow_count.c): its list 3 time */
+        rd__shadow_count_trial(s_passPending[slot].replay, s_passPending[slot].pass,
+                               s_passPending[slot].count);
     }
     push(r);
 }

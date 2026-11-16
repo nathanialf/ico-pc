@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "rd_clause.h"
+#include "rd_shadow_count.h" /* the count's form words */
 #include "rd_shadowres.h"
 #include "rd_state.h"
 
@@ -291,7 +292,11 @@ int rd_sr_recognise(const RdSrSprite *sp, int *ox, int *oy, float *fx, float *fy
 
 static struct {
     uint64_t chains, passes, original, why[RD_SR_WHY_N], texels, area, rendered;
+    /* the full-size count's forms (rd_shadow_count.h) and the last form
+     * asked + 1 */
+    uint64_t stencil, full, seven, guard;
     uint32_t replays;
+    uint8_t form;
 } s_sum;
 
 void rd__shadow_fine_pop(const RdPerfRecord *rec)
@@ -304,6 +309,13 @@ void rd__shadow_fine_pop(const RdPerfRecord *rec)
     s_sum.rendered += rec->shadowFineRendered;
     for (int k = 0; k < RD_SR_WHY_N; k++) {
         s_sum.why[k] += rec->shadowFineWhy[k];
+    }
+    s_sum.stencil += rec->shadowCountStencil;
+    s_sum.full += rec->shadowCountFull;
+    s_sum.seven += rec->shadowCountSeven;
+    s_sum.guard += rec->shadowCountGuard;
+    if (rec->shadowCountForm) {
+        s_sum.form = rec->shadowCountForm;
     }
     s_sum.replays++;
 }
@@ -339,12 +351,16 @@ void rd__shadow_fine_text(char *out, size_t size, size_t *at)
         out + *at, size - *at,
         "; shadow levels: %llu shadows at the scene's scale, %llu at the PS2's "
         "size%s in %u replays (%.1f passes a shadow, drawing %.1f %% of their targets' "
-        "texels in render areas of %.1f %%, %.2f M texels a shadow)",
+        "texels in render areas of %.1f %%, %.2f M texels a shadow; the count %llu from the "
+        "stencil, %llu full-size passes, %llu seven draws, %llu guard fallbacks, form %s)",
         (unsigned long long)s_sum.chains, (unsigned long long)s_sum.original, why,
         (unsigned)s_sum.replays, s_sum.chains ? (double)s_sum.passes / (double)s_sum.chains : 0.0,
         s_sum.area ? 100.0 * (double)s_sum.texels / (double)s_sum.area : 0.0,
         s_sum.area ? 100.0 * (double)s_sum.rendered / (double)s_sum.area : 0.0,
-        s_sum.chains ? (double)s_sum.texels / (double)s_sum.chains / 1.0e6 : 0.0);
+        s_sum.chains ? (double)s_sum.texels / (double)s_sum.chains / 1.0e6 : 0.0,
+        (unsigned long long)s_sum.stencil, (unsigned long long)s_sum.full,
+        (unsigned long long)s_sum.seven, (unsigned long long)s_sum.guard,
+        rd_sc_form_name((int)s_sum.form - 1));
     rd_clause_done(out, size, at, w);
     memset(&s_sum, 0, sizeof(s_sum));
 }
