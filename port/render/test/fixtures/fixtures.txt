@@ -174,3 +174,9 @@ fx-vu-plain-0300 build-host-tmp/corpus/dumps/plain/rd-00300.rddump rules=vu_opaq
 # command (ICO_RD_VU_SKIN_CHECK=2), skin_twins_own_drawn there with the
 # Turnip profile, skin_ring_twins_drawn there under the plain set
 fx-123-blended dumps/163/frame-20261106-080033-v3910-blended.rddump rules=skin_twins.rules.txt skin_checks>=1 skin_wrong>=1 skin_changed>=1 skin_dropped>=1 skin_twins_own>=1 skin_ring_twins>=1 skin_checks_drawn>=1 skin_twins_drawn>=1 skin_twins_own_drawn>=1 skin_ring_twins_drawn>=1
+# issue 179's Mali-G52 on v0.11.6 (moto g24 power): the loss dump's frame and
+# the one before it (21:9).  The VU record's audit (ICO_RD_VU_AUDIT=1 under
+# the Arm fakes, the record by compute) at every arm; vu_audit_lists and
+# vu_audit_plane_draws with the index compaction on (ICO_RD_VU_COMPACT=1)
+fx-mali-loss dumps/v0117-mali179/loss-20261114-075659-lost.rddump rules=vu_opaque.rules.txt vu_audit_entries>=1 vu_audit_violations=0 vu_audit_lists>=1 vu_audit_plane_draws>=1
+fx-mali-loss-before dumps/v0117-mali179/loss-20261114-075659-before.rddump rules=vu_opaque.rules.txt vu_audit_entries>=1 vu_audit_violations=0 vu_audit_lists>=1 vu_audit_plane_draws>=1

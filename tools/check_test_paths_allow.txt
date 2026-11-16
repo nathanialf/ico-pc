@@ -16,7 +16,6 @@ port/render/test/rd_replay_tool_save_blended.cmake
 port/render/test/rd_replay_tool_still.cmake
 port/render/test/rd_turn_fold_ab.cmake
 port/render/test/rd_vis_hiz_corpus.txt
-port/render/test/rd_vu_audit.cmake
 tools/aura_paste_dumps.txt
 tools/bench_dumps.txt
 tools/coverage_corpus.txt

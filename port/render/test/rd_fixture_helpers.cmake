@@ -101,6 +101,10 @@ set(_rdfx_q_skin_checks_drawn "VU skin check: at the end of the run: ([0-9]+) ch
 set(_rdfx_q_skin_twins_drawn "VU skin check: twins at the end of the run: ([0-9]+) drawn")
 set(_rdfx_q_skin_twins_own_drawn "VU skin check: twins at the end of the run: [0-9]+ drawn \\(([0-9]+) through the draw's own pipeline")
 set(_rdfx_q_skin_ring_twins_drawn "the ring read's twin \\(C\\) ([0-9]+) drawn")
+set(_rdfx_q_vu_audit_entries "rd: VU audit: ([0-9]+) entries")
+set(_rdfx_q_vu_audit_lists "rd: VU audit: [0-9]+ entries \\([0-9]+ index values\\), ([0-9]+) compacted lists")
+set(_rdfx_q_vu_audit_plane_draws "rd: VU audit: [^\n]*draws: ([0-9]+) of the fourth plane")
+set(_rdfx_q_vu_audit_violations "rd: VU audit: [0-9]+ entries[^\n]*, ([0-9]+) violations")
 
 set(RDFX_FAILURES 0)
 
