@@ -443,6 +443,9 @@ static struct {
     /* issue 123 (v0.11.7): checks skipped after a reset (rd__skin_skip),
      * their lines' budget */
     uint64_t skipped, skipEvents;
+    /* checks of a command past the probe's rows (RD_SKIN_MAXV), of them
+     * boxed over every batch the command draws (boxOver) */
+    uint64_t past, pastBoxed;
 } s_run;
 
 static struct {
@@ -460,6 +463,7 @@ static struct {
     bool anyDiffer;
     uint64_t unwritten, ringOld; /* the trace's stamps (s_run's) */
     uint64_t skipped;            /* skipped after a reset (s_run's) */
+    uint64_t past, pastBoxed;    /* past the probe's rows, boxed over every batch (s_run's) */
 } s_blk;
 
 /* the box check's pipelines: the draw's key without its writes, compiled
@@ -875,6 +879,14 @@ typedef struct SkCheck {
     RdSkinBatch *batches;
     uint32_t batchCount, batchCap;
     RdSkinPos *ref; /* RD_SKIN_MAXV */
+    /* a command whose batches run past the probe's rows (RD_SKIN_MAXV: the
+     * probe compares its first batches only): every batch it draws, for
+     * the box check's box (boxOver), which must hold every vertex the
+     * draw places; allN 0 when they cannot be read (no box then) */
+    bool past;
+    uint32_t allN, allBatchCount, allBatchCap;
+    RdSkinBatch *allBatches;
+    const float (*allStream)[4]; /* the mesh's stream at first: allN * 5 qwords */
     /* the draw */
     IcoVuCB vcb;
     RhiBindGroup g1;
@@ -1001,6 +1013,7 @@ static struct {
 } s_cap;
 
 static bool s_boxDstSaid; /* the box check's attachment-read line, once a run */
+static bool s_pastSaid;   /* the first box check of a command past the probe's rows, once a run */
 
 static bool sayNth(uint64_t n)
 {
@@ -1031,6 +1044,7 @@ static void checkFree(SkCheck *k)
     free(k->stream);
     free(k->batches);
     free(k->ref);
+    free(k->allBatches);
     memset(k, 0, sizeof(*k));
 }
 
@@ -1060,6 +1074,51 @@ static void cmdPlace(const RdFrame *f, const RdCmd *c, uint32_t *list, uint32_t 
             return;
         }
     }
+}
+
+/* a command whose batches run past the probe's rows (checkBuild): every
+ * batch from the first to last into k's all* fields, for the box check
+ * (boxOver); allN 0 when one cannot be read (a batch before the first or
+ * past the stream, or the command past the index probe's vertices) */
+static void allBuild(SkCheck *k, const RdMeshRec *m, const RdVuPayload *p, uint32_t first,
+                     uint32_t last, bool past)
+{
+    k->past = past;
+    k->allN = k->allBatchCount = 0;
+    k->allStream = NULL;
+    if (!past) {
+        return;
+    }
+    uint32_t n = 0;
+    for (uint32_t b = p->firstBatch; b < last; b++) {
+        const RdVuBatchRec *br = &m->batches[b];
+        if (br->firstVertex < first ||
+            (uint64_t)br->firstVertex + br->vertexCount > m->vertexCount) {
+            return;
+        }
+        const uint32_t end = br->firstVertex - first + br->vertexCount;
+        n = end > n ? end : n;
+    }
+    const uint32_t nb = last - p->firstBatch;
+    if (n == 0 || (uint64_t)first + n > SK_INDEX_VERTS) {
+        return;
+    }
+    if (k->allBatchCap < nb) {
+        free(k->allBatches);
+        k->allBatches = malloc(sizeof(RdSkinBatch) * nb);
+        k->allBatchCap = k->allBatches ? nb : 0;
+        if (!k->allBatches) {
+            return;
+        }
+    }
+    for (uint32_t b = 0; b < nb; b++) {
+        const RdVuBatchRec *br = &m->batches[p->firstBatch + b];
+        k->allBatches[b].first = br->firstVertex - first;
+        k->allBatches[b].count = br->vertexCount;
+    }
+    k->allBatchCount = nb;
+    k->allN = n;
+    k->allStream = (const float (*)[4])(m->stream + (size_t)first * 5u);
 }
 
 /* the CPU's side of command c (its mesh m) into k: false when the command
@@ -1115,6 +1174,7 @@ static bool checkBuild(SkCheck *k, const RdFrame *f, const RdCmd *c, const RdMes
         k->batches[b].first = br->firstVertex - first;
         k->batches[b].count = br->vertexCount;
     }
+    allBuild(k, m, &p, first, last, nb < last - p.firstBatch);
     k->c2 = k->boxRun = k->c3 = k->targeted = k->judged = false;
     k->probeWrong = k->probeAddr = k->probeDropped = 0;
     return true;
@@ -1311,6 +1371,33 @@ static uint64_t ringFresh(const void *bytes, uint64_t drawOff, uint64_t ua)
     return off;
 }
 
+/* the box check's positions of a command past the probe's rows: every
+ * batch it draws through vu1_ref from the draw's bytes (k->bones), into a
+ * buffer of the run's (the probe's own k->ref holds its first rows only);
+ * NULL when its batches could not be read (allBuild) */
+static const RdSkinPos *boxOver(const SkCheck *k)
+{
+    static RdSkinPos *s_all;
+    static uint32_t s_allCap;
+    if (k->allN == 0) {
+        return NULL;
+    }
+    if (s_allCap < k->allN) {
+        free(s_all);
+        s_all = malloc(sizeof(RdSkinPos) * k->allN);
+        s_allCap = s_all ? k->allN : 0;
+        if (!s_all) {
+            return NULL;
+        }
+    }
+    RdSkinCase c = caseOf(k);
+    c.stream = k->allStream;
+    c.batches = k->allBatches;
+    c.batchCount = k->allBatchCount;
+    c.count = k->allN;
+    return rd__skin_reference(&c, 0, s_all) ? s_all : NULL;
+}
+
 /* S3, inside the draw's pass right after it */
 static void boxCheck(Replay *r, const DrawSetup *ds, const RdSkinDraw *d, SkCheck *k, uint32_t at)
 {
@@ -1322,10 +1409,23 @@ static void boxCheck(Replay *r, const DrawSetup *ds, const RdSkinDraw *d, SkChec
     }
     /* the box over the CPU's positions: closed only when every vertex of
      * the draw's batches is in front of the eye (a clipped triangle's
-     * corner behind it reaches anywhere) */
+     * corner behind it reaches anywhere).  The box check draws the whole
+     * command, so a command past the probe's rows is boxed over every batch
+     * it draws (boxOver), not the probe's first ones: their box need not
+     * hold the rest (issue 163's frame on fixtures: a 1448-vertex command
+     * boxed over its first 999 vertices drew a sample outside) */
+    const RdSkinPos *ref = k->ref;
+    uint32_t n = k->n;
+    if (k->past) {
+        ref = boxOver(k);
+        n = k->allN;
+        if (!ref) {
+            return;
+        }
+    }
     int32_t x0 = INT32_MAX, y0 = INT32_MAX, x1 = INT32_MIN, y1 = INT32_MIN;
-    for (uint32_t i = 0; i < k->n; i++) {
-        const RdSkinPos *p = &k->ref[i];
+    for (uint32_t i = 0; i < n; i++) {
+        const RdSkinPos *p = &ref[i];
         if (!p->inBatch) {
             continue;
         }
@@ -1398,6 +1498,22 @@ static void boxCheck(Replay *r, const DrawSetup *ds, const RdSkinDraw *d, SkChec
     k->boxNoDst = d->key->dst != RHI_DST_READ_NONE;
     k->boxFs = d->key->fs;
     s_run.boxDrawn++;
+    if (k->past) {
+        s_run.pastBoxed++;
+        s_blk.pastBoxed++;
+        if (s_collect) {
+            s_collect->pastBoxed++;
+        }
+        if (!s_pastSaid) {
+            /* once a run: the box of such a draw is not the probe's rows' */
+            s_pastSaid = true;
+            rd__log("VU skin check: frame %u command %u:%u mesh %s #%u (%u vertices): past the "
+                    "probe's %u rows (it compares the first %u vertices): its box check made over "
+                    "every batch the command draws (%u vertices), on the CPU",
+                    k->frame, k->list, k->index, k->mesh, k->meshId, k->meshVertices,
+                    (unsigned)RD_SKIN_MAXV, k->n, k->allN);
+        }
+    }
     if (k->boxNoDst && !s_boxDstSaid) {
         /* the deep dive's last row (the pipeline's link with its
          * attachment-read fragment shader) is not what this box sees: said
@@ -1658,6 +1774,11 @@ void rd__vu_skin_note(Replay *r, const DrawSetup *ds, const RdSkinDraw *d)
         twinDraw(r, d, sl, fresh, check ? (int32_t)sl->n : -1);
     }
     if (check) {
+        s_run.past += k->past;
+        s_blk.past += k->past;
+        if (s_collect) {
+            s_collect->past += k->past;
+        }
         boxCheck(r, ds, d, k, sl->n);
         sl->n++;
         s_pickedThis = true;
@@ -2795,15 +2916,17 @@ void rd__vu_skin_block(void)
     rd__log("VU skin check: %llu checks, %llu wrong, %llu skipped after a reset, %llu blocks "
             "whose bytes differed (%llu changed after the draw); %llu box checks, %llu with "
             "samples outside the box, %llu not drawn (their pipeline not made yet; %llu with no "
-            "slot left for the key); variants on the wrong ones: c1 right %llu, c2 right %llu (c2 "
+            "slot left for the key); %llu checks past the probe's %u rows (%llu boxed over every "
+            "batch); variants on the wrong ones: c1 right %llu, c2 right %llu (c2 "
             "drawn in %llu checks); largest difference on a right vertex %d/16 pixel%s%s",
             (unsigned long long)s_blk.checks, (unsigned long long)s_blk.wrong,
             (unsigned long long)s_blk.skipped, (unsigned long long)s_blk.blocks,
             (unsigned long long)s_blk.reread, (unsigned long long)s_blk.box,
             (unsigned long long)s_blk.boxOut, (unsigned long long)s_blk.boxNot,
-            (unsigned long long)s_blk.boxFull, (unsigned long long)s_blk.c1Right,
-            (unsigned long long)s_blk.c2Right, (unsigned long long)s_blk.c2Run, s_blk.maxRight,
-            stamps, twins);
+            (unsigned long long)s_blk.boxFull, (unsigned long long)s_blk.past,
+            (unsigned)RD_SKIN_MAXV, (unsigned long long)s_blk.pastBoxed,
+            (unsigned long long)s_blk.c1Right, (unsigned long long)s_blk.c2Right,
+            (unsigned long long)s_blk.c2Run, s_blk.maxRight, stamps, twins);
     memset(&s_blk, 0, sizeof(s_blk));
 }
 
@@ -2880,12 +3003,14 @@ void rd__vu_skin_shutdown(void)
         rd__log("VU skin check: at the end of the run: %llu checks drawn (%llu box checks drawn), "
                 "%llu read, %llu wrong, %llu blocks whose bytes differed, %llu box checks with "
                 "samples outside; %llu readbacks not written by their replay, %llu ring stamps of "
-                "an earlier replay; %llu checks skipped after a reset",
+                "an earlier replay; %llu checks skipped after a reset; %llu checks past the "
+                "probe's %u rows, %llu of them boxed over every batch the command draws",
                 (unsigned long long)s_run.drawn, (unsigned long long)s_run.boxDrawn,
                 (unsigned long long)s_run.checks, (unsigned long long)s_run.wrong,
                 (unsigned long long)s_run.blocks, (unsigned long long)s_run.boxOut,
                 (unsigned long long)s_run.unwritten, (unsigned long long)s_run.ringOld,
-                (unsigned long long)s_run.skipped);
+                (unsigned long long)s_run.skipped, (unsigned long long)s_run.past,
+                (unsigned)RD_SKIN_MAXV, (unsigned long long)s_run.pastBoxed);
     }
     if (s_run.twinsDrawn) {
         /* the A/B's proof that the attachment-read draws were twinned
@@ -3009,4 +3134,5 @@ void rd__vu_skin_shutdown(void)
     memset(s_bgSaid, 0, sizeof(s_bgSaid));
     s_bgLastMs = 0.0;
     s_boxDstSaid = false;
+    s_pastSaid = false;
 }

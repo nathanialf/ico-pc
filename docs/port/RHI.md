@@ -1582,7 +1582,9 @@ that path as a cause with the same attachments, ops, layouts and barriers, so th
 Unlike the Intel row it leaves the VU record's store passes without an attachment
 (`RhiLimits.storePassTarget` stays the Intel row's and the subpass read's); `RhiLimits.passObjectsRow`
 holds its reason while it holds the device's passes and `RhiStats.passObjects` counts the passes
-begun as `VkRenderPass` objects (on any `VkRenderPass` path), for the attempt's line. Its line:
+begun as `VkRenderPass` objects (on any `VkRenderPass` path), for the attempt's line
+(`rd_replay_tool --stats`: `render passes: N begun, M as VkRenderPass objects`, M = N under a
+row, 0 with dynamic rendering; `rd_pass_objects_ab` holds both). Its line:
 `rhi_vk: render passes: VkRenderPass objects, not dynamic rendering: Intel's Windows driver at
 Vulkan 1.3.215 or older (...); [dev] legacy_passes = false (ICO_VK_LEGACY_PASSES=0) gives dynamic
 rendering`, and the device line's `render passes legacy (<the reason>)`. Such a 1.3 device keeps

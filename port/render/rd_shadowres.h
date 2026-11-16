@@ -32,6 +32,16 @@ struct RdPerfRecord;
  * SR_TENT_MAX): a scale above RD_SR_SCALE_MAX on an axis keeps Original */
 #define RD_SR_SPAN_MAX 64
 #define RD_SR_SCALE_MAX 31.0f
+/* The release's cap (v0.11.7): the levels at the scene's scale only up to 3
+ * texels a GS pixel on each axis (rd_sr_level_scale at most 3: a scene's
+ * scale up to 3), the largest a device ran (issue 123's tablet at 3x, the
+ * owner's Pixel at 2.8125 x 2.41) and the tests' 3 x 3; the levels' cost
+ * grows about as the scale's fourth power above it and nothing measured it
+ * on hardware.  Above it the PS2's sizes, as v0.11.6 drew them
+ * (RD_SR_WHY_SCALE) */
+#define RD_SR_LEVEL_CAP 3u
+/* the count's scales cx, cy within the cap (and RD_SR_SCALE_MAX) */
+bool rd_sr_within_cap(float cx, float cy);
 
 /* why a shadow above 1x is drawn at the PS2's size (RdPerfRecord.shadowFineWhy,
  * the 10 s clause's and --stats' words, rd__shadow_fine_why_word) */
@@ -47,7 +57,7 @@ enum {
     RD_SR_WHY_COUNT,    /* level 0's source not the count kept at its full size */
     RD_SR_WHY_PIPES,    /* the shaders or pipelines could not be made */
     RD_SR_WHY_TEXTURES, /* the textures could not be made */
-    RD_SR_WHY_SCALE,    /* a scale above RD_SR_SCALE_MAX */
+    RD_SR_WHY_SCALE,    /* a scale above RD_SR_LEVEL_CAP (or RD_SR_SCALE_MAX) */
     RD_SR_WHY_N
 };
 

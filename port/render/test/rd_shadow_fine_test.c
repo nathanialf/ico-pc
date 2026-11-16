@@ -86,6 +86,15 @@ static RdSrStep stepOf(int first, float kx, float sx)
 
 static void testScales(void)
 {
+    /* the release's cap (RD_SR_LEVEL_CAP 3): the devices' and tests' scales
+     * within it, the phone's 4.10 x 2.41 and anything a step above 3 not */
+    CHECK(rd_sr_within_cap(3.0f, 3.0f) && rd_sr_within_cap(3.0000002f, 1.0f) &&
+              rd_sr_within_cap(2.8125f, 2.41071f) && rd_sr_within_cap(1.0f, 2.0f) &&
+              rd_sr_within_cap(1.0f, 1.0f),
+          "within the cap: 3 x 3, 3.0000002, 2.8125 x 2.41, 1 x 2, 1x");
+    CHECK(!rd_sr_within_cap(3.01f, 1.0f) && !rd_sr_within_cap(4.10417f, 2.41071f) &&
+              !rd_sr_within_cap(1.0f, 4.82f) && !rd_sr_within_cap(32.0f, 1.0f),
+          "above the cap: 3.01, 4.10 x 2.41, 4.82 down, 32");
     CHECK(rd_sr_count_scale(576, 1728, 3.0f, 0.0f) == 3.0f, "3x");
     CHECK(fabsf(rd_sr_count_scale(448, 1080, 2.4107f, 0.0f) - 1080.0f / 448.0f) < 1e-6f,
           "full height: th / h");

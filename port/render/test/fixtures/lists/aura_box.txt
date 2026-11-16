@@ -15,3 +15,11 @@ fx-phone-rc4 aura_box_reads>=1
 fx-163-blended aura_box_reads>=1
 # issue 179's Mali-G52, a slow-scene capture (stage 42)
 fx-mali-slow541 aura_box_reads>=1
+# the 2026-10-07 captures (4:3: Enhanced 2x alone), the deja vu 48:9 frame,
+# the PowerVR phone's F12 frames of 2026-10-28 v4103 and v2199
+fx-vu-3086 aura_box_reads>=1
+fx-vu-3112 aura_box_reads>=1
+fx-vu-1985 aura_box_reads>=1
+fx-deja aura_box_reads>=1
+fx-phone-4103 aura_box_reads>=1
+fx-phone-2199 aura_box_reads>=1

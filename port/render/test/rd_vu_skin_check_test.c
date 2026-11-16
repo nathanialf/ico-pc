@@ -113,6 +113,11 @@
  *   a reset faked at the check's replay (rd__vu_skin_reset_seen): the
  *   wrong probe skipped, not wrong, no capture asked; the sign forgotten:
  *   wrong at 200 and the capture asked.
+ * clean also runs 31. (issue 163 on fixtures): a command of RD_SKIN_MAXV + 1
+ *   vertices in five batches, the fifth right of the first four's box: the
+ *   probe compares the first four, the box check is made over every batch
+ *   on the CPU: clean, one check, counted past the probe's rows and boxed
+ *   over every batch, no sample outside; 8.'s command is not counted past.
  * The log lines are matched by test/rd_vu_skin_check.cmake. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -630,7 +635,16 @@ static RdMesh makeMesh(void)
     return rd_create_vu_mesh(&d);
 }
 
+static bool buildFrameOf(RdFrame *f, RdMesh mesh, uint32_t copies, uint32_t batches);
+
 static bool buildFrame(RdFrame *f, RdMesh mesh, uint32_t copies)
+{
+    return buildFrameOf(f, mesh, copies, 1u);
+}
+
+/* f: SCENE cleared, then copies skinned commands of mesh drawing its first
+ * `batches` batches */
+static bool buildFrameOf(RdFrame *f, RdMesh mesh, uint32_t copies, uint32_t batches)
 {
     const RdTargetRec *t = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
     if (!t) {
@@ -665,7 +679,7 @@ static bool buildFrame(RdFrame *f, RdMesh mesh, uint32_t copies)
     p.code = 20;
     p.clip = RD_VU_CLIP_REGION;
     p.prog = RD_PROG_SKIN;
-    p.batchCount = 1;
+    p.batchCount = batches;
     p.boneQw = 240;
     p.qwPerVertex = RD_VU_QW_SKIN;
     RdVuBlock vu;
@@ -690,6 +704,73 @@ static bool buildFrame(RdFrame *f, RdMesh mesh, uint32_t copies)
         m->keyLo = 1;
     }
     return true;
+}
+
+/* 31. a command past the probe's rows: RD_SKIN_MAXV + 1 vertices in five
+ * batches of 205 (the stream's layout and bones as stream()'s, x from -25
+ * to 25 world units; the fifth batch's x from 40 to 90, right of the first
+ * four's box), drawn as one command.  The probe compares the first four
+ * batches (820 vertices); the box check is made over all five on the CPU,
+ * so the fifth batch's samples are inside it: clean, one check, counted
+ * past the probe's rows and boxed over every batch, no sample outside (a
+ * box over the probe's rows alone would see the fifth batch outside) */
+#define PAST_B 5u
+#define PAST_BV 205u
+#define PAST_QW (1u + PAST_BV * 5u)
+
+static void pastTest(void)
+{
+    _Static_assert(PAST_B * PAST_BV == RD_SKIN_MAXV + 1u, "the test's command is the cap + 1");
+    static float q[PAST_B * PAST_QW][4];
+    RdVuBatchDesc batch[PAST_B];
+    for (uint32_t b = 0; b < PAST_B; b++) {
+        float (*t)[4] = q + b * PAST_QW;
+        qw(t[0], fbits(0x8000u | PAST_BV), fbits(0x30064000u), fbits(0x512u), 0);
+        batch[b] = (RdVuBatchDesc){b * PAST_QW, 0, 0};
+        const float x0 = b + 1u == PAST_B ? 40.0f : -25.0f;
+        for (uint32_t i = 0; i < PAST_BV; i++) {
+            const uint32_t v = b * PAST_BV + i;
+            float (*o)[4] = t + 1u + i * 5u;
+            const float x = x0 + 50.0f * (float)(i % 12u) / 11.0f;
+            const float y = -20.0f + 40.0f * (float)((i / 12u) % 10u) / 9.0f;
+            qw(o[0], x, y, 2.0f + 0.15f * (float)(v % 7u), 1);
+            qw(o[1], 0.3f, 0.5f, 0.8f, 1);
+            const uint32_t a0 = 16u + 4u * (v % NB), a1 = 16u + 4u * ((7u * v + 13u) % NB);
+            const float w0 = 0.2f + 0.15f * (float)(v % 5u);
+            qw(o[2], fbits(a0), w0, fbits(a1), 1.0f - w0);
+            qw(o[3], 0.1f * (float)(i % 12u), 0.2f, 1, i % 12u == 0 ? 0.0f : 1.0f);
+            qw(o[4], 100, 100, 100, 128);
+        }
+    }
+    const RdVuMeshDesc d = {(const float (*)[4])q,
+                            PAST_B * PAST_QW,
+                            RD_VU_QW_SKIN,
+                            PAST_B,
+                            batch,
+                            0,
+                            "rd vu skin check past",
+                            NULL,
+                            0,
+                            0};
+    const RdMesh mesh = rd_create_vu_mesh(&d);
+    static RdFrame f;
+    CHECK(mesh.id != 0 && buildFrameOf(&f, mesh, 1, PAST_B), "the command past the probe's rows");
+    if (mesh.id) {
+        RdSkinSummary s;
+        const int rc = rd__vu_skin_check_frame(&f, 0, &s);
+        printf("  31. %u vertices in %u batches: %u checks, %u wrong, %u past the probe's rows "
+               "(%u boxed over every batch), %u box checks, %u with samples outside\n",
+               PAST_B * PAST_BV, PAST_B, s.checks, s.wrong, s.past, s.pastBoxed, s.boxChecks,
+               s.boxOutside);
+        const bool box = rhi_occlusion_supported();
+        CHECK(rc == 0 && s.checks == 1 && s.wrong == 0 && s.blocksDiffer == 0 && s.past == 1 &&
+                  s.pastBoxed == (box ? 1u : 0u) && s.boxChecks == (box ? 1u : 0u) &&
+                  s.boxOutside == 0,
+              "rc %d, %u checks, %u wrong, %u past (%u boxed), %u box checks, %u outside", rc,
+              s.checks, s.wrong, s.past, s.pastBoxed, s.boxChecks, s.boxOutside);
+        rd__frame_free(&f);
+        rd_destroy_vu_mesh(mesh);
+    }
 }
 
 /* 14.-17.: the twins' thinning over replays of f (three skinned commands) */
@@ -1032,6 +1113,8 @@ static int deviceTests(const char *mode, const char *folder)
             CHECK(s.wrong == 0 && s.blocksDiffer == 0 && s.rereadDiffer == 0, "a clean check");
             CHECK(!rhi_occlusion_supported() || (s.boxChecks == 1 && s.boxOutside == 0),
                   "%u box checks, %u outside", s.boxChecks, s.boxOutside);
+            /* a command within the probe's rows: not past them */
+            CHECK(s.past == 0 && s.pastBoxed == 0, "%u past the probe's rows", s.past);
         } else if (strcmp(mode, "probe") == 0) {
             CHECK(s.wrong == 1 && s.lastAddr == 200 && s.blocksDiffer == 0 && s.c1Right == 1 &&
                       strncmp(s.decision, "H1, address-dependent", 21) == 0,
@@ -1049,6 +1132,9 @@ static int deviceTests(const char *mode, const char *folder)
             CHECK(s.lastFound == RD_SKIN_FOUND_RING, "the differing copy found as %d", s.lastFound);
         }
         rd__frame_free(&f);
+        if (strcmp(mode, "clean") == 0) {
+            pastTest(); /* 31. */
+        }
     } else {
         CHECK(0, "the frame");
     }

@@ -382,7 +382,10 @@
  *                         (address A), B blocks whose bytes differed (R
  *                         changed after the draw), X of Y box checks with
  *                         samples outside; on the wrong ones c1 right K, c2
- *                         right L (c2 drawn in M); reads as: WORDS".  Vulkan
+ *                         right L (c2 drawn in M); reads as: WORDS; ...; P
+ *                         checks past the probe's rows (Q boxed over every
+ *                         batch)" (a command past the probe's rows: its box
+ *                         made over every batch it draws).  Vulkan
  *                         only (another backend: exit 77);
  *                         ICO_RD_VU_SKIN_SABOTAGE=A[,ring] the tests' wrong
  *                         reads
@@ -3031,12 +3034,13 @@ int main(int argc, char **argv)
                "reads as: %s; twins: %u read (%u through the draw's own pipeline), %u differ (%u "
                "of them through it); "
                "%u wrong vertices dropped (non-finite); the ring read: c3 right %u (c3 drawn in "
-               "%u), ring twins %u read, %u differ from B\n",
+               "%u), ring twins %u read, %u differ from B; %u checks past the probe's rows (%u "
+               "boxed over every batch)\n",
                dump, sk.commands, sk.checks, sk.wrong, sk.lastAddr, sk.blocksDiffer,
                sk.rereadDiffer, sk.boxOutside, sk.boxChecks, sk.c1Right, sk.c2Right, sk.c2Run,
                sk.decision[0] ? sk.decision : "every check right", sk.twins, sk.twinsOwn,
                sk.twinsDiffer, sk.twinsDifferOwn, sk.dropped, sk.c3Right, sk.c3Run, sk.ringTwins,
-               sk.ringDiffer);
+               sk.ringDiffer, sk.past, sk.pastBoxed);
     }
     if (replayed && saveBlended) {
         /* after the replay, as rd_present writes F12's (rd_interp.c
@@ -3112,6 +3116,10 @@ int main(int argc, char **argv)
                pr->textureGroups, pr->bindGroupBinds, pr->pipelineBinds,
                (unsigned long long)pr->uploadBytes, pr->barriers, pr->copies, pr->dispatches,
                pr->screenCmds, pr->screenDraws);
+        /* the passes begun as VkRenderPass objects (Vulkan under a driver row
+         * of rhi_pass_row.h: every pass the row begins; 0 elsewhere) */
+        printf("%s: stats: render passes: %u begun, %u as VkRenderPass objects\n", dump,
+               pr->renderPasses, pr->passObjects);
         printf("%s: stats: bind cache: %u pipeline, %u bind group and %u state repeats skipped\n",
                dump, pr->pipelineBindsSkipped, pr->bindGroupBindsSkipped, pr->stateSetsSkipped);
         /* the attachment bytes the passes asked for (rhi_traffic.c, the

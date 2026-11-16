@@ -175,6 +175,9 @@ static struct {
     uint32_t whyEvents;    /* the refusals so far (logged: 8, then every 100th) */
     uint32_t fineSince;    /* the shadows at the scene's scale since the last refusal */
     uint32_t saidW, saidH; /* the size line's last SHADOW0 */
+    /* level 0's size whose textures could not be made: not tried again until
+     * a chain at another size (review 1 m2) */
+    uint32_t failW0, failH0;
     /* the tests' readback (rd__shadow_fine_probe): each step as it was drawn
      * (the reference's inputs), its source's texels, the count's target */
     RdSrStep step[RD_SR_LEVELS];
@@ -274,7 +277,9 @@ void rd__shadow_fine_log(void)
     }
     rd__log("shadow levels: at the scene's scale above 1x (the smallest odd whole one at or "
             "above it on each axis: the count at its full size, the game's step at every texel, "
-            "the tent its magnification supplied); at 1x the PS2's sizes%s",
+            "the tent its magnification supplied) up to %u texels a GS pixel, above it and at 1x "
+            "the PS2's sizes%s",
+            RD_SR_LEVEL_CAP,
             m == FINE_FORCE ? "; at 1x too (ICO_RD_SHADOW_FINE=force, the tests' switch)" : "");
 }
 
@@ -356,7 +361,7 @@ bool rd__shadow_fine_count_wanted(const RdTargetRec *tc)
 {
     float cx, cy;
     return fineMode() != FINE_OFF && g_rd.hasDevice && !s_sr.refused && tc &&
-           countScales(tc, &cx, &cy) && cx <= RD_SR_SCALE_MAX && cy <= RD_SR_SCALE_MAX;
+           countScales(tc, &cx, &cy) && rd_sr_within_cap(cx, cy);
 }
 
 void rd__shadow_fine_count_full(uint32_t color)
@@ -617,6 +622,19 @@ static void ps2Line(float cx, float cy)
             (double)cx, (double)cy);
 }
 
+/* the cap in force, at each change (saidW 2, saidH 0) */
+static void capLine(float cx, float cy)
+{
+    if (s_sr.saidW == 2u && s_sr.saidH == 0u) {
+        return;
+    }
+    s_sr.saidW = 2u;
+    s_sr.saidH = 0u;
+    rd__log("shadow levels: the PS2's sizes: the scene at %.4gx%.4g texels a GS pixel, above the "
+            "cap of %u (the largest scale the levels were measured at; reported at each change)",
+            (double)cx, (double)cy, RD_SR_LEVEL_CAP);
+}
+
 /* the tent across (level -> temporary) and down (temporary -> level) */
 static void tent(struct Replay *r, int k, uint32_t name)
 {
@@ -717,8 +735,9 @@ void rd__shadow_fine_screen(const RdStateBlock *st, const RdCmd *c, const RdScre
             ps2Line(cx, cy);
             return; /* 1x: the game's own, no path of its own */
         }
-        if (cx > RD_SR_SCALE_MAX || cy > RD_SR_SCALE_MAX) {
-            say(RD_SR_WHY_SCALE);
+        if (!rd_sr_within_cap(cx, cy)) {
+            capLine(cx, cy);
+            say(RD_SR_WHY_SCALE); /* above the cap: the PS2's sizes, v0.11.6's shadow */
             return;
         }
         s_sr.cx = cx;
@@ -748,11 +767,23 @@ void rd__shadow_fine_screen(const RdStateBlock *st, const RdCmd *c, const RdScre
         return;
     }
     const uint32_t w = dst->w * rd_sr_level_scale(s_sr.cx), h = dst->h * rd_sr_level_scale(s_sr.cy);
+    if (k == 0 && w == s_sr.failW0 && h == s_sr.failH0) {
+        say(RD_SR_WHY_TEXTURES); /* failed at this size before */
+        return;
+    }
     rd__replay_end_pass(r); /* the open pass (the level before's) */
     if (!texturesFor(k, w, h)) {
+        s_sr.failW0 = k == 0 ? w : s_sr.w[0];
+        s_sr.failH0 = k == 0 ? h : s_sr.h[0];
+        rd__log("shadow levels: the levels' textures could not be made (level %d at %ux%u): the "
+                "PS2's sizes until the levels' size changes",
+                k, w, h);
         say(RD_SR_WHY_TEXTURES);
         destroyAll();
         return;
+    }
+    if (k == 0) {
+        s_sr.failW0 = s_sr.failH0 = 0; /* made at another size: a failure forgotten */
     }
     s_sr.sx[k] = (float)w / (float)dst->w;
     s_sr.sy[k] = (float)h / (float)dst->h;

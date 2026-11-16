@@ -16,4 +16,3 @@ tools/no_volume_dumps.txt
 tools/occlusion_corpus.txt
 tools/shadow_box_dumps.txt
 tools/shadow_cuts_dumps.txt
-tools/vustage_dumps.txt
