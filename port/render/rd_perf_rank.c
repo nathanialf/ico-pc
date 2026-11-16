@@ -6,6 +6,7 @@
  */
 #include "rd_perf_rank.h"
 
+#include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -127,6 +128,17 @@ void rd_perf_rank_add_record(RdPerfRankBlock *b, const RdPerfRecord *r, double v
         double work = r->gpuMs - r->gpuDisplayWaitMs;
         work = work > 0.0 ? work : 0.0;
         b->workMs += work;
+        if (r->keep) {
+            b->keepGpuN++;
+            b->keepWorkMs += work;
+        }
+        if (r->gpuGapValid) {
+            b->gapAll++;
+            if (r->gpuGapNs > 0) {
+                b->gapN++;
+                b->gapIdleMs += (double)r->gpuGapNs / 1e6;
+            }
+        }
         b->prepassMs += r->gpuPrepassMs;
         b->uploadGpuMs += r->gpuUploadMs;
         b->presentGpuMs += r->gpuPresentMs;
@@ -256,6 +268,26 @@ static bool fit(uint32_t n, double sx, double sy, double sxx, double sxy, double
     return true;
 }
 
+bool rd_perf_rank_fit_spread(uint32_t n, double sx, double sy, double sxx, double sxy, double syy,
+                             double s, double a, double *seBase)
+{
+    *seBase = 0.0;
+    if (n < 3u) {
+        return false;
+    }
+    const double N = (double)n, mx = sx / N, my = sy / N;
+    const double Sxx = sxx - sx * mx, Sxy = sxy - sx * my, Syy = syy - sy * my;
+    if (!(Sxx > 0.0)) {
+        return false;
+    }
+    double ssr = Syy - s * Sxy;
+    ssr = ssr > 0.0 ? ssr : 0.0;
+    const double var = ssr / (N - 2.0);
+    *seBase = sqrt(var * (1.0 / N + mx * mx / Sxx));
+    (void)a;
+    return *seBase < (my > 0.0 ? my : -my);
+}
+
 void rd_perf_rank_rates(const RdPerfRankBlock *b, double earlierMbMs, RdPerfRankRates *out)
 {
     memset(out, 0, sizeof(*out));
@@ -275,7 +307,13 @@ void rd_perf_rank_rates(const RdPerfRankBlock *b, double earlierMbMs, RdPerfRank
     }
     out->vuXMin = b->fxMin;
     out->vuXMax = b->fxMax;
-    if (fit(b->fitN, b->fx, b->fy, b->fxx, b->fxy, b->fyy, &a, &s, &r2)) {
+    if (fit(b->fitN, b->fx, b->fy, b->fxx, b->fxy, b->fyy, &a, &s, &r2) &&
+        !rd_perf_rank_fit_spread(b->fitN, b->fx, b->fy, b->fxx, b->fxy, b->fyy, s, a,
+                                 &out->vuBaseSe)) {
+        /* a line, but its base not determined by the invocations' spread */
+        out->vuNoSpread = true;
+        out->vuMeanY = b->fy / (double)b->fitN;
+    } else if (fit(b->fitN, b->fx, b->fy, b->fxx, b->fxy, b->fyy, &a, &s, &r2)) {
         out->vuFit = true;
         out->vuBaseMs = a;
         out->vuPerK = s;
@@ -385,7 +423,12 @@ static void vertexCand(const RdPerfRankBlock *b, const RdPerfRankInfo *in,
     const double n = b->n ? (double)b->n : 1.0;
     if (!rt->vuUsable) {
         Out o = outOf(v->vertexWhy, sizeof v->vertexWhy);
-        if (!rt->vuFit) {
+        if (rt->vuNoSpread) {
+            put(&o,
+                "not enough spread in the invocations (%.1fk to %.1fk a picture) to place the "
+                "fit's base",
+                rt->vuXMin, rt->vuXMax);
+        } else if (!rt->vuFit) {
             put(&o, "no fit over %u pictures without keep frames", b->fitN);
         } else {
             const char *sep = "";
@@ -539,6 +582,9 @@ void rd_perf_rank_verdict(const RdPerfRankBlock *b, const RdPerfRankInfo *in,
     out->stepCpuMs = in->stepCpuMs;
     out->periodMs = in->presentedFps > 0.0 ? 1000.0 / in->presentedFps : 0.0;
     out->tickMs = in->gameRateFps > 0.0 ? 1000.0 / in->gameRateFps : 0.0;
+    out->drawnWorkMs = per(b->workMs - b->keepWorkMs, (double)(b->gpuN - b->keepGpuN));
+    out->keepWorkMs = per(b->keepWorkMs, (double)b->keepGpuN);
+    out->idleMs = per(b->gapIdleMs, (double)b->gapAll);
     out->below = (in->targetFps > 0.0 && in->presentedFps < 0.95 * in->targetFps) ||
                  (in->gameRateFps > 0.0 && in->gameFps < 0.95 * in->gameRateFps);
     if (b->n == 0 || out->periodMs <= 0.0) {
@@ -568,6 +614,14 @@ void rd_perf_rank_verdict(const RdPerfRankBlock *b, const RdPerfRankInfo *in,
              "the waits for the GPU %.1f ms measured a picture (the slot waits)", b->fenceMs / n);
         cand(out, b->subSubmitMs / n, false,
              "the submit thread's submit %.1f ms measured a picture", b->subSubmitMs / n);
+        if (b->gapAll) {
+            /* the GPU waiting between pictures: for the next picture's
+               submit, or inside it for the window's image */
+            cand(out, out->idleMs, false,
+                 "the GPU idle before a picture's work %.1f ms measured a picture (idle before %u "
+                 "of %u)",
+                 out->idleMs, b->gapN, b->gapAll);
+        }
         gpuCands(b, in, &rt, out);
     } else {
         gpuCands(b, in, &rt, out);
@@ -591,10 +645,20 @@ int rd_perf_rank_ranked_text(const RdPerfRankInfo *in, const RdPerfRankVerdict *
     } else if (v->bound == RD_PERF_BOUND_GAME) {
         put(&o, " (its step's CPU %.1f ms of the %.1f ms tick)", v->stepCpuMs, v->tickMs);
     } else if (v->bound == RD_PERF_BOUND_ELSE) {
+        put(&o, " (the GPU's work %.1f ms", v->workMs);
+        if (v->keepWorkMs > 0.0) {
+            /* a keep frame's work is a held picture's: the mean hides the
+               pictures drawn anew */
+            put(&o, ": the pictures drawn anew %.1f ms, the keep frames %.1f ms", v->drawnWorkMs,
+                v->keepWorkMs);
+        }
+        if (v->idleMs > 0.0) {
+            put(&o, "; the GPU idle %.1f ms a picture before its work", v->idleMs);
+        }
         put(&o,
-            " (the GPU's work %.1f ms, the render thread's CPU %.1f ms, the game step's %.1f "
-            "ms, of the %.1f ms between presents)",
-            v->workMs, v->ownMs, v->stepCpuMs, v->periodMs);
+            "; the render thread's CPU %.1f ms, the game step's %.1f ms, of the %.1f ms between "
+            "presents)",
+            v->ownMs, v->stepCpuMs, v->periodMs);
     }
     const uint32_t top = v->count < RD_PERF_RANK_TOP ? v->count : RD_PERF_RANK_TOP;
     if (top == 0) {
@@ -826,6 +890,12 @@ int rd_perf_rank_rates_text(const RdPerfRankBlock *b, const RdPerfRankRates *r, 
             "pictures without keep frames, %.1fk to %.1fk invocations%s)",
             r->vuBaseMs, r->vuPerK, r->vuR2, b->fitN, r->vuXMin, r->vuXMax,
             r->vuUsable ? "" : "; not used for an estimate");
+    } else if (r->vuNoSpread) {
+        put(&o,
+            "; the GPU's work against the vertex invocations: not enough spread (%.1fk to %.1fk "
+            "invocations a picture over %u pictures without keep frames: the line's base would "
+            "be off by %.1f ms, against %.1f ms of work a picture)",
+            r->vuXMin, r->vuXMax, b->fitN, r->vuBaseSe, r->vuMeanY);
     } else {
         put(&o, "; no vertex fit (%u pictures without keep frames)", b->fitN);
     }
@@ -909,21 +979,46 @@ static double medianOf(float *v, uint32_t n)
     return n % 2u ? (double)v[n / 2u] : ((double)v[n / 2u - 1u] + (double)v[n / 2u]) / 2.0;
 }
 
-int rd_perf_rank_stamp_cost_text(float *stamped, uint32_t ns, float *plain, uint32_t np, char *buf,
-                                 size_t n)
+int rd_perf_rank_stamp_cost_text(const float *span, const uint8_t *stamped, uint32_t count,
+                                 char *buf, size_t n)
 {
+    static float st[RD_PERF_RANK_STAMP_SEQ], pl[RD_PERF_RANK_STAMP_SEQ],
+        diff[RD_PERF_RANK_STAMP_SEQ];
+    uint32_t ns = 0, np = 0, nd = 0;
+
     if (n > 0) {
         buf[0] = '\0';
     }
-    if (ns < RD_PERF_RANK_STAMP_MIN || np < RD_PERF_RANK_STAMP_MIN) {
+    count = count < RD_PERF_RANK_STAMP_SEQ ? count : RD_PERF_RANK_STAMP_SEQ;
+    for (uint32_t i = 0; i < count; i++) {
+        if (!stamped[i]) {
+            pl[np++] = span[i];
+            continue;
+        }
+        st[ns++] = span[i];
+        double sum = 0.0;
+        unsigned k = 0;
+        if (i > 0 && !stamped[i - 1]) {
+            sum += span[i - 1];
+            k++;
+        }
+        if (i + 1 < count && !stamped[i + 1]) {
+            sum += span[i + 1];
+            k++;
+        }
+        if (k > 0) {
+            diff[nd++] = (float)((double)span[i] - sum / k);
+        }
+    }
+    if (ns < RD_PERF_RANK_STAMP_MIN || np < RD_PERF_RANK_STAMP_MIN || nd < RD_PERF_RANK_STAMP_MIN) {
         return 0;
     }
-    const double a = medianOf(stamped, ns), b = medianOf(plain, np);
+    const double a = medianOf(st, ns), b = medianOf(pl, np), d = medianOf(diff, nd);
     return snprintf(buf, n,
                     "pass timing's cost: GPU span median %.1f ms with every pass stamped (%u "
-                    "pictures), %.1f ms with the list stamps only (%u pictures): %+.1f ms (an "
-                    "estimate: different pictures of one block)",
-                    a, ns, b, np, a - b);
+                    "pictures), %.1f ms with the list stamps only (%u pictures); against the "
+                    "pictures beside each without pass timing: %+.1f ms (the median of %u pairs)",
+                    a, ns, b, np, d, nd);
 }
 
 const char *rd_perf_rank_hist_more(const uint32_t *hist)

@@ -31,6 +31,7 @@
  *              ranking kept, a full table counted;
  *   short      a small buffer is cut and terminated.
  */
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -333,16 +334,21 @@ static void testGpu(void)
         rd_perf_rank_scene_text(&h, &in, &v, sl, sizeof sl);
         CHECK_IN(sl, "worst 256 ms or more");
     }
-    /* the stamps' cost: two sets' medians, none under 5 pictures */
+    /* the stamps' cost (issue 179: different pictures compared gave +36.1
+       and -21.1 ms): each stamped picture against the mean of its plain
+       neighbours (68: 58 alone; 80 and 81 between stamped ones: no pair),
+       the median of the five pairs {9, 10, 7, 10, 10}; none under 5 pairs */
     {
-        float st[5] = {68.0f, 66.0f, 67.4f, 70.0f, 65.0f};
-        float pl[6] = {64.0f, 64.2f, 63.0f, 66.0f, 64.0f, 60.0f};
-        char sc[256];
-        CHECK(rd_perf_rank_stamp_cost_text(st, 5, pl, 6, sc, sizeof sc) > 0);
-        CHECK_STR(sc, "pass timing's cost: GPU span median 67.4 ms with every pass stamped (5 "
-                      "pictures), 64.0 ms with the list stamps only (6 pictures): +3.4 ms (an "
-                      "estimate: different pictures of one block)");
-        CHECK(rd_perf_rank_stamp_cost_text(st, 4, pl, 6, sc, sizeof sc) == 0 && sc[0] == '\0');
+        static const float span[16] = {60.0f, 70.0f, 62.0f, 64.0f, 75.0f, 66.0f, 61.0f, 69.0f,
+                                       63.0f, 65.0f, 72.0f, 59.0f, 58.0f, 68.0f, 80.0f, 81.0f};
+        static const uint8_t st[16] = {0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 1, 1};
+        char sc[320];
+        CHECK(rd_perf_rank_stamp_cost_text(span, st, 16, sc, sizeof sc) > 0);
+        CHECK_STR(sc, "pass timing's cost: GPU span median 72.0 ms with every pass stamped (7 "
+                      "pictures), 62.0 ms with the list stamps only (9 pictures); against the "
+                      "pictures beside each without pass timing: +10.0 ms (the median of 5 "
+                      "pairs)");
+        CHECK(rd_perf_rank_stamp_cost_text(span, st, 12, sc, sizeof sc) == 0 && sc[0] == '\0');
     }
 
     rd_perf_rank_rates_text(&b, &rt, line, sizeof line);
@@ -791,6 +797,126 @@ static void testShort(void)
     CHECK(strlen(small) == sizeof small - 1);
 }
 
+/* the vertex fit's spread rule (rd_perf_rank_fit_spread; issue 179's
+   v0.11.7 log printed "-9224.2 ms + 147.916 ms a thousand" from
+   invocations of 62.7k to 62.7k): the base's standard error against the
+   mean work, from the sums */
+static void spreadFit(const double *x, const double *y, uint32_t n, double *se, bool *ok)
+{
+    double sx = 0, sy = 0, sxx = 0, sxy = 0, syy = 0;
+    for (uint32_t i = 0; i < n; i++) {
+        sx += x[i];
+        sy += y[i];
+        sxx += x[i] * x[i];
+        sxy += x[i] * y[i];
+        syy += y[i] * y[i];
+    }
+    const double N = (double)n, vx = N * sxx - sx * sx;
+    const double s = vx != 0.0 ? (N * sxy - sx * sy) / vx : 0.0, a = (sy - s * sx) / N;
+    *ok = rd_perf_rank_fit_spread(n, sx, sy, sxx, sxy, syy, s, a, se);
+}
+
+static void testSpread(void)
+{
+    double se;
+    bool ok;
+    /* x 1, 2, 3, y 1, 3, 2: s 0.5, a 1, residuals' squares 1.5 over 1;
+       se = sqrt(1.5 (1/3 + 4/2)) = sqrt(3.5) = 1.871 under the mean 2 */
+    {
+        const double x[3] = {1, 2, 3}, y[3] = {1, 3, 2};
+        spreadFit(x, y, 3, &se, &ok);
+        CHECK(ok && near(se, sqrt(3.5), 1e-9));
+    }
+    /* the same moved to x 101..103: se = sqrt(1.5 (1/3 + 10404/2)) = 88.34,
+       over the mean 2: not enough spread */
+    {
+        const double x[3] = {101, 102, 103}, y[3] = {1, 3, 2};
+        spreadFit(x, y, 3, &se, &ok);
+        CHECK(!ok && near(se, sqrt(1.5 * (1.0 / 3.0 + 10404.0 / 2.0)), 1e-6));
+    }
+    /* an exact line: no residual, the base known (se 0) */
+    {
+        const double x[4] = {10, 20, 30, 40}, y[4] = {15, 20, 25, 30};
+        spreadFit(x, y, 4, &se, &ok);
+        CHECK(ok && near(se, 0.0, 1e-9));
+    }
+    /* one x for every point: no spread at all; under 3 points: none */
+    {
+        const double x[4] = {5, 5, 5, 5}, y[4] = {1, 2, 3, 4};
+        spreadFit(x, y, 4, &se, &ok);
+        CHECK(!ok);
+        spreadFit(x, y, 2, &se, &ok);
+        CHECK(!ok && se == 0.0);
+    }
+    /* the reporter's shape: 190 pictures at 62.70k-62.74k invocations, work
+       40-60 ms unrelated to them: the rates line says so, no line printed */
+    {
+        static RdPerfRankBlock b;
+        rd_perf_rank_block_reset(&b);
+        for (uint32_t i = 0; i < 190; i++) {
+            RdPerfRecord r = record(i + 1u, 41.0 + (double)((i * 7u) % 21u));
+            r.gpuDisplayWaitMs = 0.0;
+            rd_perf_rank_add_record(&b, &r, 62700.0 + 10.0 * (double)(i % 5u));
+        }
+        RdPerfRankRates rt;
+        rd_perf_rank_rates(&b, 0.0, &rt);
+        CHECK(!rt.vuFit && rt.vuNoSpread && !rt.vuUsable && rt.vuBaseSe > rt.vuMeanY);
+        char line[2048];
+        rd_perf_rank_rates_text(&b, &rt, line, sizeof line);
+        printf("%s\n", line);
+        CHECK_IN(line, "; the GPU's work against the vertex invocations: not enough spread (62.7k "
+                       "to 62.7k invocations a picture over 190 pictures without keep frames: "
+                       "the line's base would be off by ");
+        CHECK(strstr(line, "a thousand vertex") == NULL);
+        /* the ranked line's reason for no vertex estimate says the same */
+        RdPerfRankInfo in = info("stage 43 scene (13a4demo)", 19.0);
+        in.prepass = false;
+        static RdPerfRankVerdict v;
+        rd_perf_rank_verdict(&b, &in, &v);
+        CHECK_STR(v.vertexWhy, "not enough spread in the invocations (62.7k to 62.7k a picture) "
+                               "to place the fit's base");
+    }
+}
+
+/* "bound by waits elsewhere" named (issue 179's v0.11.7 log, the title's
+   keep frame block: 208 pictures, 124 keep frames, 20.8 of 25 fps, the GPU's
+   work 34.2 ms of 48.1): the keep frames' work apart from the pictures drawn
+   anew, the GPU's idle time before a picture's work a candidate */
+static void testElse(void)
+{
+    static RdPerfRankBlock b;
+    rd_perf_rank_block_reset(&b);
+    for (uint32_t i = 0; i < 208; i++) {
+        const bool keep = i < 124u;
+        RdPerfRecord r = record(5000u + i, keep ? 24.0 : 49.0);
+        r.gpuDisplayWaitMs = 0.0;
+        r.keep = keep;
+        r.gpuGapValid = 1;
+        r.gpuGapNs = i % 2u ? 20000000 : -1000000; /* half idle 20 ms, half begun early */
+        rd_perf_rank_add_record(&b, &r, 50000.0);
+    }
+    const RdPerfRankInfo in = info("stage 1 title (logo) (keep frames)", 20.8);
+    static RdPerfRankVerdict v;
+    rd_perf_rank_verdict(&b, &in, &v);
+    CHECK(v.bound == RD_PERF_BOUND_ELSE);
+    CHECK(near(v.drawnWorkMs, 49.0, 1e-9) && near(v.keepWorkMs, 24.0, 1e-9));
+    CHECK(near(v.idleMs, 10.0, 1e-9) && b.gapN == 104u && b.gapAll == 208u);
+    char line[2400];
+    rd_perf_rank_ranked_text(&in, &v, line, sizeof line);
+    printf("%s\n", line);
+    CHECK_IN(line, "bound by waits elsewhere (the GPU's work 34.1 ms: the pictures drawn anew "
+                   "49.0 ms, the keep frames 24.0 ms; the GPU idle 10.0 ms a picture before its "
+                   "work; the render thread's CPU ");
+    int at = -1;
+    for (uint32_t i = 0; i < v.count; i++) {
+        if (strcmp(v.c[i].text, "the GPU idle before a picture's work 10.0 ms measured a picture "
+                                "(idle before 104 of 208)") == 0) {
+            at = (int)i;
+        }
+    }
+    CHECK(at >= 0 && near(v.c[at].ms, 10.0, 1e-9));
+}
+
 int main(void)
 {
     testGpu();
@@ -803,6 +929,8 @@ int main(void)
     testClasses();
     testRun();
     testShort();
+    testSpread();
+    testElse();
     printf("rd_perf_rank_test: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }
