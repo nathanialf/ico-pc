@@ -556,8 +556,6 @@ which passes ([port/TESTING.md](port/TESTING.md#the-framework)): the disc (`vfs_
   match the pack's files against the disc's textures. No pack file is ever committed.
 - `ICO_BASE_ELF` adds the data loader's reference tests
   ([Appendix](#appendix-maintainers-the-base-elf)).
-- `ICO_FOG_DUMP` (cache variable, default `dist/dumps/frame-20261009-083248-v13836.rddump`) is a
-  player dump with the depth fog for `rd_fog_depth_copy_dump` (skipped without it).
 - `ICO_BOOT_DUMP_DIR` (cache variable, default empty) is a start-up's frame dumps for
   `rd_boot_present`; `ICO_BOOT_DUMP_OLD` (default `OFF`) says they come from a build whose frames 118
   to 120 draw stage 1 (`port/render/CMakeLists.txt`).
@@ -739,9 +737,8 @@ run gating in the `linux-arm64-fixtures` job (three shards of `--fixture-tests o
 each, never for a dispatched package), so the `linux-arm64` job itself (build, the gating tests,
 and on a release tag the package) stays about 25 minutes before the packaging. The rest gate as on `linux`: `fog_lut` runs natively,
 `fog_lut_arm64` skips (it looks for an x86-64 NDK and qemu), and the tests
-that need the disc or saved frames skip (`fmv_fields`, `rd_boot_present`,
-`rd_fog_depth_copy_dump`) or run only their synthetic part (`shadow_spawn`,
-`sndn2`, `fmv`).
+that need the disc or saved frames skip (`fmv_fields`, `rd_boot_present`) or
+run only their synthetic part (`shadow_spawn`, `sndn2`, `fmv`).
 
 The `android` job (90 minutes at most) builds the debug APK and checks its
 structure; the game is not run:

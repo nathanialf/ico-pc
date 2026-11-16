@@ -1,9 +1,10 @@
 # rd_fades_fold_ab: the fades fold (port/render/rd_fades_fold.c;
 # docs/port/RENDER_POST.md, "The fades fold") against list 11's sprites drawn
-# into SCENE.  For every dump the list names (tools/fades_fold_dumps.txt,
-# read as rd_constant_reads_ab.cmake reads its lists) and, with -DBOOT=<dir>
-# (the cmake cache variable ICO_BOOT_DUMP_DIR), the start-up's frames
-# rd-00115 .. rd-00123 of a dump_every=1 run, first the dump's last list 11
+# into SCENE.  For every fixture the list names
+# (port/render/test/fixtures/lists/fades_fold.txt: fixture names of the
+# repository, docs/port/TESTING_FIXTURES.md; a listed fixture that is absent or
+# does not expand to its pinned SHA-256 FAILS; after the name the line's own
+# properties, rd_fixture_list_props.cmake), first the frame's last list 11
 # commands (rd_replay_tool --list --no-device: which ones end with the
 # fade, the letterbox or the brightness), then rd_replay_tool's --pass-dump
 # with --stats twice, with ICO_RD_FADES_FOLD=0 (the sprites drawn, the
@@ -34,57 +35,28 @@
 # between levels on one row add their roundings), the channels a level
 # apart and the largest difference counted and printed per target, dump,
 # blend and setting (docs/port/DIVERGENCES.md VD-27).  The A/B run must say "fades fold off" with none folded; a run
-# whose reduction did not take a planned fold ("took another way") fails.  Some
-# dump must fold at some setting (else the gate saw nothing).  A missing
-# list or dump is named and skipped; no dump read, or no device: SKIP (77).
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DBOOT=<start-up folder or "">
-# -DPY=<python3> -DDIFF=<png_level_diff.py> -DOUT=<a folder the test may write>
+# whose reduction did not take a planned fold ("took another way") fails.  The
+# path ran (rd_fixture_require on every folded run): each fixture's declared
+# fades_folded, the sprites folded into the reduction (list 11's last
+# full-frame lerp sprites: their rectangles, state and colours are the
+# frame's commands, which the fixture keeps); a fixture no setting replayed
+# FAILS, and some fixture must fold.  No device: SKIP (77).
+# -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the
+# fixtures folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<a
+# fixture list> -DPY=<python3> -DDIFF=<png_level_diff.py> -DOUT=<a folder the
+# test may write>
+include("${FIXTURE_HELPERS}")
+include("${CMAKE_CURRENT_LIST_DIR}/rd_fixture_list_props.cmake")
 set(dumps "")
-if(NOT "${LIST}" STREQUAL "" AND EXISTS "${LIST}")
-  get_filename_component(listDir "${LIST}" DIRECTORY)
-  file(STRINGS "${LIST}" lines)
-  foreach(l IN LISTS lines)
-    string(STRIP "${l}" l)
-    if(l STREQUAL "" OR l MATCHES "^#")
-      continue()
-    endif()
-    if(NOT IS_ABSOLUTE "${l}")
-      set(l "${listDir}/${l}")
-    endif()
-    if(l MATCHES "[*]")
-      file(GLOB found "${l}")
-      list(SORT found)
-      if(NOT found)
-        message(STATUS "${l}: no dump matches, skipped")
-      endif()
-      list(APPEND dumps ${found})
-    elseif(EXISTS "${l}")
-      list(APPEND dumps "${l}")
-    else()
-      message(STATUS "${l}: no such dump, skipped")
-    endif()
-  endforeach()
-else()
-  message(STATUS "${LIST}: no dump list, skipped")
-endif()
-set(bootDumps "")
-if(NOT "${BOOT}" STREQUAL "")
-  foreach(n RANGE 115 123)
-    set(b "${BOOT}/rd-00${n}.rddump")
-    if(EXISTS "${b}")
-      list(APPEND bootDumps "${b}")
-    else()
-      message(STATUS "${b}: no such start-up frame, skipped")
-    endif()
-  endforeach()
-endif()
-list(APPEND dumps ${bootDumps})
-list(REMOVE_DUPLICATES dumps)
+rd_fixture_list("${LIST}" names)
+foreach(name IN LISTS names)
+  rd_fixture_expand(${name} "${OUT}/fixtures" d)
+  rd_fixture_list_props(${name})
+  list(APPEND dumps "${d}")
+  set(name_${d} "${name}")
+  set(checked_${name} FALSE)
+endforeach()
 list(LENGTH dumps ndumps)
-if(ndumps EQUAL 0)
-  message(STATUS "SKIP: no dump of ${LIST} (or start-up frame of '${BOOT}') is here")
-  return()
-endif()
 
 set(blends attachment fixed)
 set(settings orig enh2x phoneauto)
@@ -104,7 +76,7 @@ set(index 0)
 foreach(dump IN LISTS dumps)
   math(EXPR index "${index} + 1")
   # the dump's list 11: its last commands
-  execute_process(COMMAND "${TOOL}" "${dump}" - --list --no-device
+  execute_process(COMMAND "${TOOL}" "${dump}" "${OUT}/${index}-list.png" --list --no-device
                   RESULT_VARIABLE rcList OUTPUT_VARIABLE outList ERROR_VARIABLE errList)
   string(REPLACE ";" "," flatList "${outList}")
   string(REPLACE "\n" ";" listLines "${flatList}")
@@ -131,7 +103,7 @@ foreach(dump IN LISTS dumps)
       file(REMOVE_RECURSE "${dirOff}" "${dirOn}")
       file(MAKE_DIRECTORY "${dirOff}" "${dirOn}")
       execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=${blend} ICO_RD_FADES_FOLD=0
-                              ${env_${s}} "${TOOL}" "${dump}" - --pass-dump "${dirOff}" --stats
+                              ${env_${s}} "${TOOL}" "${dump}" "${dirOff}-out.png" --pass-dump "${dirOff}" --stats
                               ${args_${s}}
                       RESULT_VARIABLE rcOff OUTPUT_VARIABLE outOff ERROR_VARIABLE errOff)
       if(rcOff EQUAL 77)
@@ -143,7 +115,7 @@ foreach(dump IN LISTS dumps)
         continue()
       endif()
       execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=${blend}
-                              ${env_${s}} "${TOOL}" "${dump}" - --pass-dump "${dirOn}" --stats
+                              ${env_${s}} "${TOOL}" "${dump}" "${dirOn}-out.png" --pass-dump "${dirOn}" --stats
                               ${args_${s}}
                       RESULT_VARIABLE rcOn OUTPUT_VARIABLE outOn ERROR_VARIABLE errOn)
       if(NOT rcOff EQUAL 0 OR NOT rcOn EQUAL 0)
@@ -192,6 +164,10 @@ foreach(dump IN LISTS dumps)
         endif()
       endif()
       math(EXPR folds "${folds} + ${nOn}")
+      # the path ran: the sprites this fixture declares folded
+      set(name "${name_${dump}}")
+      rd_fixture_require(${name} "${outOn}" fades_folded)
+      set(checked_${name} TRUE)
       # exact where the steps met SCENE's texels before the GS filter under
       # the exact blend; within a level elsewhere
       set(exact FALSE)
@@ -259,16 +235,19 @@ foreach(dump IN LISTS dumps)
     endforeach()
   endforeach()
 endforeach()
+foreach(name IN LISTS names)
+  if(NOT checked_${name})
+    message(SEND_ERROR "${name}: no setting replayed it: its folds not checked")
+    math(EXPR failures "${failures} + 1")
+  endif()
+endforeach()
+math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 if(failures GREATER 0)
-  message(FATAL_ERROR "rd_fades_fold_ab: ${failures} failures over ${ndumps} dumps")
-endif()
-if(compared EQUAL 0)
-  message(STATUS "SKIP: no dump of ${LIST} could be compared")
-  return()
+  message(FATAL_ERROR "rd_fades_fold_ab: ${failures} failures over ${ndumps} fixtures")
 endif()
 if(folds EQUAL 0)
-  message(FATAL_ERROR "rd_fades_fold_ab: no dump folded a sprite at any setting: the gate saw "
+  message(FATAL_ERROR "rd_fades_fold_ab: no fixture folded a sprite at any setting: the gate saw "
                       "nothing")
 endif()
-message(STATUS "rd_fades_fold_ab: ${compared} targets within the rule over ${ndumps} dumps, "
+message(STATUS "rd_fades_fold_ab: ${compared} targets within the rule over ${ndumps} fixtures, "
                "${folds} sprites folded in all")

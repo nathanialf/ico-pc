@@ -1,0 +1,10 @@
+# rd_replay_tool_save_blended (port/render/test/rd_replay_tool_save_blended.cmake):
+# the blended frame --save-blended writes, replayed alone.  Two names, with
+# their role: prev (the tick before) and cur (the tick); a QUANTITY OP VALUE
+# word after cur declares what the --interp run shows
+# (rd_fixture_list_props.cmake).
+#
+# the main gate on the owner's Pixel (v0.11.7, 848x448 GS): tick 48848 then
+# 48849
+fx-gate-prev prev
+fx-gate cur interp_keyed_blended>=1

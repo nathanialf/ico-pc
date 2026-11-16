@@ -655,6 +655,7 @@ typedef struct SkMesh {
     int32_t sizeExp;
     uint32_t bones;
     int32_t centre[3]; /* the placement section's: the cube's centre in lattice steps (else 0) */
+    uint32_t form;     /* the placement section's RD_FX_FORM_* (RD_FX_PLACE_TAG2; else the cube) */
     const uint8_t *idx, *batches;
 } SkMesh;
 
@@ -690,6 +691,8 @@ typedef struct Sk {
     SkExp *exps;
     uint32_t ne;
     uint32_t placed;     /* the placement section's meshes */
+    uint32_t sheets;     /* of them generated as sheets (RD_FX_PLACE_TAG2) */
+    bool scene;          /* the section is RD_FX_PLACE_TAG2's (@scene place) */
     const uint8_t *offs; /* and its prims generated beside the target: payload offsets */
     uint32_t noff;
 } Sk;
@@ -855,12 +858,15 @@ static bool skParse(const RdFixture *fx, Sk *s, char *why, size_t whySize)
         s->exps[i].off = r32(&r);
         s->exps[i].e = (int32_t)r32(&r);
     }
-    s->placed = s->noff = 0;
+    s->placed = s->noff = s->sheets = 0;
+    s->scene = false;
     s->offs = NULL;
     if (!r.bad && s->mesh && r.o != r.n) {
-        /* the placement section (a fixture made with @lamps place or
-         * @fans off); never empty, so a fixture has one encoding */
-        if (r32(&r) != RD_FX_PLACE_TAG) {
+        /* the placement section (a fixture made with @lamps place, @fans off
+         * or @scene place); never empty, so a fixture has one encoding */
+        const uint32_t tag = r32(&r);
+        s->scene = tag == RD_FX_PLACE_TAG2;
+        if (tag != RD_FX_PLACE_TAG && !s->scene) {
             r.bad = true;
         }
         s->placed = r32(&r);
@@ -876,6 +882,11 @@ static bool skParse(const RdFixture *fx, Sk *s, char *why, size_t whySize)
                     r.bad = true;
                 }
             }
+            const uint32_t form = s->scene ? r32(&r) : RD_FX_FORM_CUBE;
+            if (form > RD_FX_FORM_SHEET + 2u) {
+                r.bad = true;
+            }
+            s->sheets += form != RD_FX_FORM_CUBE;
             SkMesh *m = NULL;
             for (uint32_t k = 0; k < s->nm; k++) {
                 if (s->mesh[k].id == id) {
@@ -888,6 +899,7 @@ static bool skParse(const RdFixture *fx, Sk *s, char *why, size_t whySize)
                 break;
             }
             memcpy(m->centre, c, sizeof(c));
+            m->form = form;
         }
         s->noff = r32(&r);
         if (s->noff > (1u << 20) || (s->placed == 0 && s->noff == 0)) {
@@ -922,16 +934,29 @@ static void putColour(uint8_t *q)
 }
 
 /* vertex j of strip s on the lattice of step 2^(e-3) inside [-2^e, 2^e]^3
- * about the centre c (lattice steps; the model's origin: 0, 0, 0) */
-static void putPos(uint8_t *q, uint32_t s, uint32_t j, int e, const int32_t c[3])
+ * about the centre c (lattice steps; the model's origin: 0, 0, 0).  A sheet
+ * (form RD_FX_FORM_SHEET + f, @scene place): every strip zigzags over the
+ * square of half side 2^e across the axes f + 1 and f + 2 (mod 3), flat at
+ * the centre along f, its corners in the order A (-, -), B (-, +), C (+, -),
+ * D (+, +), A, ...: the triangles ABC, BCD, CDA, DAB, the square split along
+ * both diagonals (sheetPos) */
+static void putPos(uint8_t *q, uint32_t s, uint32_t j, int e, const int32_t c[3], uint32_t form)
 {
     const uint32_t col = j >> 1, side = j & 1u;
-    const int32_t x = c[0] - 8 + (int32_t)(col % 16u);
-    const int32_t y = c[1] - 8 + (int32_t)((s + col / 16u) % 15u) + (int32_t)side;
-    const int32_t z = c[2] - 8 + (int32_t)((s * 5u) % 17u);
-    rd_fx_set32(q, rd_fx_f32(x, e - 3));
-    rd_fx_set32(q + 4, rd_fx_f32(y, e - 3));
-    rd_fx_set32(q + 8, rd_fx_f32(z, e - 3));
+    int32_t p[3];
+    if (form >= RD_FX_FORM_SHEET) {
+        const uint32_t f = form - RD_FX_FORM_SHEET;
+        p[f] = c[f];
+        p[(f + 1u) % 3u] = c[(f + 1u) % 3u] + (col % 2u ? 8 : -8);
+        p[(f + 2u) % 3u] = c[(f + 2u) % 3u] + (side ? 8 : -8);
+    } else {
+        p[0] = c[0] - 8 + (int32_t)(col % 16u);
+        p[1] = c[1] - 8 + (int32_t)((s + col / 16u) % 15u) + (int32_t)side;
+        p[2] = c[2] - 8 + (int32_t)((s * 5u) % 17u);
+    }
+    rd_fx_set32(q, rd_fx_f32(p[0], e - 3));
+    rd_fx_set32(q + 4, rd_fx_f32(p[1], e - 3));
+    rd_fx_set32(q + 8, rd_fx_f32(p[2], e - 3));
     rd_fx_set32(q + 12, F_ONE);
 }
 
@@ -994,7 +1019,7 @@ static bool genMesh(RdFxBuf *o, const SkMesh *m)
             j++;
         }
         memset(qw, 0, sizeof(qw));
-        putPos(qw, s, j, m->sizeExp, m->centre);
+        putPos(qw, s, j, m->sizeExp, m->centre, m->form);
         if (qpv >= 4) {
             putNormal(qw + 16, s);
         }
@@ -1184,7 +1209,7 @@ static bool genSpan(void *user, const RdCmd *c, const RdFxSpan *s)
         for (uint32_t v = 0; v < s->b; v++) {
             uint8_t *o = q + 16u + (size_t)v * hd.qwPerVertex * 16u;
             static const int32_t origin[3] = {0, 0, 0};
-            putPos(o, s->a, v, e, origin);
+            putPos(o, s->a, v, e, origin, RD_FX_FORM_CUBE);
             if (hd.qwPerVertex >= 3) {
                 putNormal(o + 16, s->a);
             }
@@ -1405,7 +1430,11 @@ bool rd_fixture_check(const RdFixture *fx, char *why, size_t whySize, char *stat
             "zero), %u textures (%u images as patterns), %u meshes generated, %u sized draws",
             sk.ver, cmds, sk.psz, (unsigned long long)kept, (unsigned long long)text,
             (unsigned long long)zero, sk.nt, images, sk.nm, sk.ne);
-        if ((sk.placed || sk.noff) && at > 0 && (size_t)at < statsSize) {
+        if (sk.scene && at > 0 && (size_t)at < statsSize) {
+            snprintf(stats + at, statsSize - (size_t)at,
+                     ", %u meshes placed (%u sheets), %u prims beside WORK2", sk.placed, sk.sheets,
+                     sk.noff);
+        } else if ((sk.placed || sk.noff) && at > 0 && (size_t)at < statsSize) {
             snprintf(stats + at, statsSize - (size_t)at,
                      ", %u meshes placed on WORK2, %u prims beside it", sk.placed, sk.noff);
         }

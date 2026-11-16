@@ -21,8 +21,8 @@ tests a change needs. Every test program, by area, is
 | `port/render/test/*.cmake` | script tests over the replay tool and the fog self-test |
 | `tools/native_frame_check.py`, `tools/native_frame_dumps.txt`, `docs/native_frame_baseline.json` | the native-frame gates, their dump list and their baseline |
 | `tools/coverage_check.py`, `tools/coverage_corpus.txt` | the regression renders and their corpus |
-| `tools/sweep_cameras.txt`, `tools/sweep_baseline.txt` | the disc-wide cull sweep's cameras (machine-local dump paths) and its stored counts (`gsb_cull_sweep`, [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)) |
-| `tools/sideband_dumps.txt`, `tools/cmp_dirs_band.py` | the wide dumps (machine-local paths and their aspects) the side bands' before/after compare replays, and the compare: the 4:3 band byte for byte, the side columns reported, a side pixel changed only over the fog (`rd_sideband_ab`, [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)) |
+| `tools/sweep_cameras.txt`, `tools/sweep_baseline.txt` | the disc-wide cull sweep's cameras (each a stage and a captured frame's view and zoom as numbers) and its stored counts (`gsb_cull_sweep`, [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)) |
+| `tools/cmp_dirs_band.py` | the side bands' before/after compare: the 4:3 band byte for byte, the side columns reported, a side pixel changed only over the fog (`rd_sideband_ab` on `port/render/test/fixtures/lists/wide.txt`, [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)) |
 | `tools/region_camera_report.py` | the camera rule against the PS2's region rule on saved frames: both rules' pass dumps, every SCENE pixel the camera rule changes held to `rd_replay_tool --region-mask`, a markdown report and the camera rule's baselines (`rd_region_camera_ab`, [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-camera-rule)) |
 | `tools/band_seam.py` | the mean luminance step across each edge of the 4:3 picture on a wide present, against a bound (`rd_sideband_cards`, issue 189, [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)) |
 | `port/render/tools/rd_replay_tool.c` | the replay tool |
@@ -113,7 +113,7 @@ console's picture. The camera rule, the renderer's default ([VU1_PROGRAMS.md](VU
 [--setting NAME=ARGS]...` replays each dump under both rules and holds every SCENE pixel that
 changes to the CPU oracle's mask (`rd_replay_tool --region-mask`), every target byte for byte
 where the mask is empty, and writes the per-dump report; ctest `rd_region_camera_ab` runs it over
-`tools/sideband_dumps.txt` and checks the camera rule's verdicts are the same under the Original
+the committed fixtures of `port/render/test/fixtures/lists/wide.txt` and checks the camera rule's verdicts are the same under the Original
 preset and Enhanced. With `ICO_RD_REGION_RULE=camera` gate-a lists the camera rule's changed
 targets (a report, not a gate).
 
@@ -122,8 +122,9 @@ folders of the same dumps' pictures, one drawn with the side bands off (`ICO_RD_
 one with them on: the centre 512-texel band (the 4:3 picture) must be identical byte for byte, hard;
 the side columns are reported, and a side pixel that changed must be one the picture without the
 bands left at the fog colour (never lose what was drawn). The ctest `rd_sideband_ab` runs it over
-`tools/sideband_dumps.txt`, which also takes each fresh issue-29 capture (dump version 15 or later:
-older dumps carry no facing for prelit meshes, so only lit and skinned drops can change).
+the committed fixtures of `port/render/test/fixtures/lists/wide.txt` (generated geometry: no triangle
+there is dropped where the side bands would draw it, so both gates hold the pictures the same with
+the side bands' and the camera rule's modes on; [TESTING_FIXTURES.md](TESTING_FIXTURES.md)).
 `rd_sideband_cards` holds issue 189's frame, whose only drops are cards, byte for byte with the side
 bands off and on, and its picture's edges within 1.5 levels by `tools/band_seam.py`; under the
 camera rule the three cards drawn over the whole frame and the edges again within 1.5 levels. The
@@ -151,13 +152,13 @@ reports it. `seed` overwrites every baseline after a build that is accepted
 The script tests under `port/render/test/` run the tool or a test program and check its output:
 `rd_replay_tool_list.cmake`, `rd_replay_tool_pass_dump.cmake`,
 `rd_replay_tool_loss_bisect.cmake`, `rd_replay_tool_pass_split.cmake`,
-`rd_replay_tool_pass_merge.cmake` and `rd_replay_tool_snap_swap.cmake` on the dump `rd_pixel` leaves behind, `rd_replay_tool_velocity.cmake` on the one `rd_velocity` leaves (and `rd_pixel`'s), `rd_replay_tool_glow_hold.cmake` and `rd_replay_tool_save_blended.cmake` on two godrays dumps, `rd_depth_copy_dump.cmake` on a player dump with the depth fog (`ICO_FOG_DUMP`), and
+`rd_replay_tool_pass_merge.cmake` and `rd_replay_tool_snap_swap.cmake` on the dump `rd_pixel` leaves behind, `rd_replay_tool_velocity.cmake` on the one `rd_velocity` leaves (and `rd_pixel`'s), `rd_replay_tool_still.cmake`, `rd_replay_tool_glow_hold.cmake`, `rd_replay_tool_save_blended.cmake` and `rd_depth_copy_dump.cmake` on committed fixtures ([TESTING_FIXTURES.md](TESTING_FIXTURES.md)), and
 `rd_fog_selftest.cmake`, which matches the `fog: depth path` line of the self-test, and
 `rd_blend_selftest.cmake`, which matches the `blend: ... (self-test: ...)` line of the blend's,
 and `rd_vuprepass_selftest.cmake`, which matches the `VU pre-pass: on|off (self-test ...)` line
 of the pre-passes', and `rd_crack.cmake`, which matches the crack filler's `crack fill:` lines,
 and `rd_vustage_ab.cmake` and `rd_vubatch_ab.cmake` over the dump corpus, and `rd_cull_ab.cmake`
-over the dumps of `tools/occlusion_corpus.txt` and `tools/native_frame_dumps.txt`: the scene draws'
+over the fixtures of `test/fixtures/lists/cull.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md)): the scene draws'
 visibility test (`ICO_RD_CULL=frustum`, and `full` with list 0's occlusion test) against every draw
 replayed (`off`) under `ICO_RD_BLEND=fixed`, `--pass-dump --stats` at Original 4:3 presented at
 640x480, Enhanced 4:3 2x, Enhanced 2x at a wide dump's own aspect and once with `--aa msaa4`: every
@@ -412,8 +413,6 @@ has their defaults; the registrations are in `port/*/CMakeLists.txt`):
   pyelftools) check the model viewer's Japanese column, which the Korean disc shares.
 - `ICO_TEXPACK_DIR`, a PCSX2 pack's replacements folder: `texpack_disc`, `texpack_e2e`,
   `texpack_pack_files`.
-- `ICO_FOG_DUMP`, a player dump with the depth fog: `rd_fog_depth_copy_dump` and `_d24s8` (skipped
-  without it).
 - `ICO_BOOT_DUMP_DIR`, a start-up's frame dumps: `rd_boot_present`; `ICO_BOOT_DUMP_OLD` sets
   `ICO_BOOT_OLD=1` for dumps whose frames 118 to 120 draw stage 1 (`port/render/CMakeLists.txt`).
 
@@ -527,7 +526,7 @@ switches the tests and their registrations use:
 | `ICO_RD_PASS_AREA` | `rd_pass_area.c` | 1: a render pass on SCENE whose draws are all 2D with a known place takes the render area of the tiles they touch, 0: every pass its whole target, `auto` or unset: the profile's (on on a tile-based GPU; `[dev] pass_area`; `rd_pass_area_ab`, `rd_state` `testPassArea`) |
 | `ICO_RD_CLEAR_CARRY` | `rd_pass_cut.c` | 1: a pending clear carried past a source's barrier into the next pass on its target, 0: flushed as before, `auto` or unset: the profile's (on on a tile-based GPU; `[dev] clear_carry`; `rd_pass_cut_ab`, `rd_pass_cut`) |
 | `ICO_RD_CLEAR_SKIP` | `rd_pass_cut.c` | 1: a clear of AURA_WORK or AURA_TAP whose only reader is a constant read not drawn (drawn later where read), 0: drawn, `auto` or unset: the profile's (on on a tile-based GPU; `[dev] clear_skip`; `rd_pass_cut_ab`, `rd_pass_cut`) |
-| `ICO_RD_GLOW_LIGHT` | `rd_glow_light.c` | 0: the glow's chain drawn whole at every scale (the light plan off; `rd_glow_light_ab`'s baseline, the runs of `rd_glow_cheap_ab`, whose cuts and mask fold need the chain drawn, and those of `rd_crack_late_ab`, whose stored pictures predate the plan); unset or 1: the plan, the default on every device (no config key; [RENDER_POST.md](RENDER_POST.md#the-glow-where-it-adds-light)) |
+| `ICO_RD_GLOW_LIGHT` | `rd_glow_light.c` | 0: the glow's chain drawn whole at every scale (the light plan off; `rd_glow_light_ab`'s baseline, the runs of `rd_glow_cheap_ab`, whose cuts and mask fold need the chain drawn, and those of `rd_crack_late_ab`, whose goldens were made with the chain drawn whole); unset or 1: the plan, the default on every device (no config key; [RENDER_POST.md](RENDER_POST.md#the-glow-where-it-adds-light)) |
 | `ICO_RD_LAST_STORE` | `rd_pass_cut.c` | 1: the depth store of the pass holding its last touch dropped where the walk keeps that pass open to the touch, 0: stored, `auto` or unset: the profile's (on on a tile-based GPU; `[dev] last_store`; `rd_pass_cut_ab`, `rd_pass_cut`) |
 | `ICO_RD_SHADOW_TILE` | `rd_shadow_tile.c` | 0: the shadow composites drawn whole, 1: over the GPU tile mask whatever the class and the self-test (DATE through the stencil bit still needed), unset: off (`RD_SHADOW_TILE_DEFAULT` 0 in rd_shadow_tile.c: no keys, no self-test; no setting: `rd_shadow_tile_ab`, `rd_shadow_tile`) |
 | `ICO_RD_SHADOW_BOX` | `rd_shadow_box.c` | 0: the shadow count's one draw and the shadow composites drawn whole, 1 or unset: over the volumes' box (no setting: `rd_shadow_box_ab`) |

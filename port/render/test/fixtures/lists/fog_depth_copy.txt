@@ -1,0 +1,10 @@
+# rd_fog_depth_copy_dump and _d24s8 (port/render/test/rd_depth_copy_dump.cmake):
+# the fog on SCENE's depth read in place, through its copy and through a
+# buffer.  A name a line: a frame whose list 4 fogs SCENE reading SCENE's depth
+# and whose list 8 draws the aura on SCENE's depth after it (AURA_WORK with
+# SCENE's depth, the FEED128 rows, the paste onto SCENE); a QUANTITY OP VALUE
+# word declares what the fixture shows (rd_fixture_list_props.cmake), checked
+# on the run through the copy.
+#
+# issue 123's Adreno 740 tablet (576x448 GS)
+fx-adreno draws>=1 aura_pastes_whole>=1
