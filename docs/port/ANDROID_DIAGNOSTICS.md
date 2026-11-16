@@ -20,7 +20,7 @@ screen recording the app's Java side reports. The window's lines that use them a
 | `port/rhi/vk/vk_tsclock.c`, `vk_range.c` | the slot's clock (submit times, calibrated timestamps, the polled wait's trace) and the ranges robust access does not cover (`rhi_vk`) |
 | `android/app/src/main/java/com/defnf/icopc/IcoActivity.java` | the thermal getters and the two listeners |
 | `port/platform/attempt_ledger.c`, `attempt_ledger.h` | the attempt ledger's rows and lines, in `ico_thread` so the renderer and the window both count into it (`attempt_ledger_test`, every platform; [The attempt ledger](#the-attempt-ledger)) |
-| `port/platform/present_latency.c`, `present_latency.h` | the present's latency in a block and the queue's priority (`present_latency_test`, every platform; [The present latency line](#the-present-latency-line)) |
+| `port/platform/present_latency.c`, `present_latency.h` | the present's latency in a block (`present_latency_test`, every platform; [The present latency line](#the-present-latency-line)) |
 | `port/render/rd_perf_sub.h` | a replay's submissions as its record carries them (the per-stall line's, issue 123) |
 | `port/platform/stall_coincide.c`, `stall_coincide.h` | what a stall coincided with: the pass medians, the rule, the classes, the parsers of `/proc/pressure/memory` and `/proc/self/status`, the lines (`stall_coincide_test`, every platform; [What a stall coincided with](#what-a-stall-coincided-with)) |
 | `port/render/rd_perf_more.c`, `rd_perf_more.h` | the cost counters' block sums and the costs and compare lines (`rd_perf_more_test`, every platform; [The cost counters](#the-cost-counters)) |
@@ -2060,33 +2060,29 @@ repository).
   in a comparable session says it was; a different first unwritten stamp says the hang moved with
   the path. `RhiStats.passObjects` (the passes begun as `VkRenderPass` objects) and
   `RhiLimits.passObjectsRow` (the row's reason) are the attempt's counter and state for the ledger.
-- **The second attempt (on for this class).** The tablet's log with the first attempt on (13 stalls
-  with the reset sign in about 325 s, every one with `list 0's end` first unwritten) showed the
-  `VkRenderPass` path in every block and robust access off: neither changed the stalls. The next
-  hypothesis that an app can act on: the system's compositor preempts the game's GPU work inside
-  list 0's binned pass and the switch (the pass's tile memory saved and restored) hangs. Qualcomm's
-  own driver under Android now creates the game's queue at high global priority
-  ([RHI.md](RHI.md#vulkan), **Queue priority**; `rhi_pass_row.h` `rhi_vk_qprio_row`,
-  `vk_qprio.c`). The tablet offers it (its start line: `global queue priority KHR and EXT
-  offered, its query too (the game's queue family 0's priorities: 3: low, medium, high)`). Whether
-  Android lets an app have it is not known: a refusal makes the device as before and says so. The
-  `VkRenderPass` path stays on as it was, so each release changes one thing for this class. The
-  risk: with the game above it the compositor may wait behind the game's long submissions (later
-  presents); the present lines show it. The analysis: `build-host/tmp/v0117/design/QPRIO.md` (not
-  in the repository).
-- **Reading the next log for it.** At the start `rhi_vk: queue priority: high, asked and granted
-  (...)`, or `high asked and refused (VkResult N, ...)` (the attempt did nothing), and the
-  attempt ledger's `Qualcomm queue at high priority on (high granted through
-  VK_KHR_global_priority: ...)`. Then in each block `Qualcomm queue at high priority on N stalls in
-  the block` and the clause `; stalls N in the block (the Adreno attempt on, high queue priority
-  granted)`. The ledger counts every stall (presents that blocked and passes over the limit, with
-  or without the reset sign: 15 in the first attempt's log's 34 blocks, 13 of them the hang with `list 0's end`
-  first unwritten in the `rd: GPU clock:` lines). The tally beside it counts the hangs
-  apart (`window: stalls by what coincided: N in the block, H of them hangs (the GPU's own sign
-  of a reset with a stamp unwritten) and O other; ...`): H summed over the blocks is the number to
-  set against the 13. About as many hangs says preemption is not the trigger; none in a session as
-  long says it was. The present latency line's last clause names the priority the queue got
-  ([The present latency line](#the-present-latency-line)).
+- **The second attempt (taken off).** The tablet's log with the first attempt on (13 stalls with
+  the reset sign in about 325 s, every one with `list 0's end` first unwritten) showed the
+  `VkRenderPass` path in every block and robust access off: neither changed the stalls. The
+  hypothesis tried next: the system's compositor preempts the game's GPU work inside list 0's
+  binned pass and the switch hangs; the game's queue was created at high global priority on
+  Qualcomm's own driver under Android. It was granted on both Adreno 740 logs that came back and
+  changed nothing: the tablet's 15 hangs (waits of 382-412 ms) kept their class and place (`list 0's end`
+  first unwritten), its reporter saw the whole tablet slow down while the game ran, and it was one
+  of the few things new on the issue 215 handheld (Adreno 740, driver 512.676.53, Android 13), which
+  now ends at every start with its GPU reset count rising (47 to 66 across two runs). It was taken
+  off on every device (issues 215 and 123): no queue is asked a global priority, and the
+  `VkRenderPass` path stays on as it was. Preemption by the compositor is neither shown nor ruled
+  out: the granted priority did not move the hangs.
+- **Reading the next log for it.** At the start `rhi_vk: queue priority: the driver's default
+  (medium), not asked: global queue priority KHR and EXT offered (the game's queue family 0's
+  priorities: 3: low, medium, high); the game asks no device for a global priority (...)` (the
+  device's offer, read only), and the attempt ledger's `Qualcomm queue at high priority removed
+  (...)`. The block's stalls are counted on the `VkRenderPass` row's second count (`Qualcomm passes
+  as VkRenderPass objects on N passes (S stalls in the block)`) and in the clause `; stalls S in the
+  block (the Adreno attempt on)`. On the issue 215 handheld: whether the run still ends at the
+  start, and the GPU reset count at the start and in the run, against the two runs with the
+  priority granted. On the tablet: the hangs (`H of them hangs` summed over the blocks) against the
+  15 with it granted, and whether the rest of the tablet still slows down.
 - **Which submission hangs (diagnostics only).** A presenting picture is two submissions
   (`rd_submit.c`): the scene's list (the uploads, the VU pre-pass where it runs, lists 0-12 and
   their pieces) and the present's own list, which signals the present's semaphore. The renderer
@@ -2221,10 +2217,8 @@ counters in the hot path.
   Whether the compositor could preempt the game's queue (issue 123's T2) and whether a stall could
   be placed on the CPU's clock if the polled wait were used again. The queue clause
   says what the queue was made with: `with no global priority asked (the driver's default,
-  medium)` off the high priority's row, `with global priority high asked and granted
-  (VK_KHR_global_priority)` or `with global priority high asked and refused (not permitted): no
-  global priority (the driver's default, medium)` on it ([RHI.md](RHI.md#vulkan), **Queue
-  priority**). The calibrated domains are
+  medium)` on every device ([RHI.md](RHI.md#vulkan), **Queue priority**; the line after it,
+  `rhi_vk: queue priority: ...`, says the same with the offer). The calibrated domains are
   listed whatever the submission wait; they are enabled only with the polled wait, as before. The
   display timing clause (the values above an example) says which of the means of learning when a
   picture reached the screen the device offers, for the evenness line's next step
@@ -2347,7 +2341,8 @@ counter is an increment in a hot path, and none of them reads anything from the 
 | Mali: the game, render and both audio threads on the two fast cores | Where do the threads run, and does audio keep up on the slow cores? | `window: render thread cores: ...` (the few-cores rule's sets and moves); the game thread line's `ran / waited for a core: game ..., render ..., submit ..., SDL audio ..., system audio ...` and after it `; run time on the faster cores 6-7: submit N % of T s, SDL audio ..., system audio ..., <the driver's threads> ..., pipeline workers ...` ([The faster cores' share of run time](#the-faster-cores-share-of-run-time)); `audio: ... ms of silence (... ms held back behind the game) ...; the sound chip's emulation E ms a callback on average (longest L ms; R renders) against the device's period of P ms`; and the ledger's `few-cores rule on N threads moved` |
 | Few-core phones: start-up of 62.2 s (51.2 s of it pipelines, cold cache) | How long does the pipeline set take, on which cores, and with how much CPU time? | `rd: pipelines: N of the reachable set's M created at start-up in T ms ...` (wall time), followed by `window: pipeline set: made in T s ...; its N workers on every core ... while it ran ...; the process's CPU time C s over it (B cores busy on average)` |
 | Adreno 740 hangs | Did this release's attempt run, and how many stalls were there with it on? | The start lines that name the hung draw (`rd: GPU clock: ...`); the attempt ledger's row `Qualcomm passes as VkRenderPass objects on (<the row's reason>) N passes` (`not applicable here (not Qualcomm's own driver)` elsewhere, Turnip included); the ledger line's `; stalls N in the block (the Adreno attempt on)`; and each stall's `coincided with: ..., the GPU's own sign of a reset` with the tally's `the GPU's own sign of a reset N` |
-| Adreno 740 hangs (unchanged by the `VkRenderPass` path) | Did high queue priority change the stall rate? | The start's `rhi_vk: queue priority: high, asked and granted (...)` (or `refused (VkResult N, ...)`: the attempt did nothing) and the offer line's `the game's one queue made at priority 1.0 with global priority high asked and granted (...)`; the attempt ledger's `Qualcomm queue at high priority on (...)` at the start and `Qualcomm queue at high priority on N stalls in the block` in each block with the clause `; stalls N in the block (the Adreno attempt on, high queue priority granted)`, summed over the log's blocks against the first attempt's log's 15 stalls in 34 blocks (13 of them the hang, `rd: GPU clock:` with `list 0's end` first unwritten; the tally's `the GPU's own sign of a reset` counted 15, as it also fired on an idle pause). Then the tally's `H of them hangs` summed over the blocks against the 13 (a restart after a pause is not counted), every stall with its own `window: stall:` line ending its sign `(a hang)`, and each block's `window: present latency in the block: ...; the queue's priority: high, granted` with its `after its end (the display's)` part (a compositor delayed behind the game) |
+| Adreno 740 hangs (unchanged by the `VkRenderPass` path and by the high queue priority, which was taken off) | Are the hangs as many without the priority, and does the rest of the tablet still slow down? | The start's `rhi_vk: queue priority: the driver's default (medium), not asked: ...; the game asks no device for a global priority (...)` and the offer line's `the game's one queue made at priority 1.0 with no global priority asked (the driver's default, medium)`; the attempt ledger's `Qualcomm queue at high priority removed (...)` at the start and, in each block, `Qualcomm passes as VkRenderPass objects on N passes (S stalls in the block)` with the clause `; stalls S in the block (the Adreno attempt on)`; the tally's `H of them hangs` summed over the blocks against the 15 hangs (waits of 382-412 ms) with the priority granted (each with `list 0's end` first unwritten in the `rd: GPU clock:` lines) |
+| Retroid Pocket 6 (Adreno 740, driver 512.676.53, Android 13): the run ends at every start with no crash line, loss or watchdog end, its GPU reset count rising (47 to 66 across two runs) | The high priority is gone: does the device still end the run at start, and how many GPU resets come at start and in the run? | The start's `rhi_vk: queue priority: the driver's default (medium), not asked: ...` (the priority not asked) and the attempt ledger's `Qualcomm queue at high priority removed (...)`; then whether the log reaches play and its blocks (`window: attempts: ...`), or ends at the start-up set or the first ticks as before; the GPU reset count at the start and in each stall's line where the kernel driver is readable, against 47 and 66 in the two runs with the priority granted |
 | Pixel under Uncapped at 120 Hz: motion sped up and slowed (pictures shown a mix of one and two refreshes apart) | Which moment is drawn for each picture, and how many land on the refresh predicted for them? | The attempt ledger's `in-between pictures for the screen's refresh on (...) N pictures placed` and `in-between pictures on their own timer on (Android: ...)`; the `on the glass` line's `drawn (the screen's predicted refresh)` measure (its deviation and its share above 1.5) and its clause's `the refresh predicted against the one shown over S pictures: H on it (P %)` with the reasons a picture was `drawn as otherwise` ([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#the-on-glass-line)) |
 | Adreno 740: three skin-check `wrong` verdicts right after 400 ms stalls with the GPU's own sign of a reset, each reading the readback's bytes from an earlier check (`not written again`); the first started the run's capture (44 ms on the game thread, about 1 s on the worker), and more stalls followed | Do the stall clusters remain without the captures? | The attempt ledger's row `no capture after a stall on (a skin check read after a GPU reset is skipped, not captured) N checks skipped after a reset` in the block that holds the stalls, the ledger line's `; stalls N in the block`, each skipped check's `rd: VU skin check: frame F command L:I ...: skipped after a reset: WHY; ...` and the 10 s `rd: VU skin check: P checks, W wrong, K skipped after a reset, ...`; no `VU skin check: captured` or `window: skin-check capture:` line after a stall; then whether `window: stall:` lines still come in clusters a few replays apart ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md#skipped-after-a-reset)). Every stall of a block has its line (up to 350 a block; the tally says how many were left out past it), so a cluster's members are each named with their replay and `(a hang)` or `(not a hang: ...)`, and the tally's `H of them hangs` per block shows whether the hangs themselves come in clusters or only the presents after them |
 | Adreno 740: every hang's first unwritten stamp is `list 0's end`, the present's own list's stamps written after it | Which submission hangs, and was the present waiting on it? | Each `window: stall:` line's clause `the submissions around it (from the stall's start): replay R's K of N (lists 0-12, P pieces; S stamps, U unwritten; it holds the first unwritten stamp) submitted at -T ms, signalled at or before +T ms ...; replay R's 2 of 2 (the present's list, ...; S stamps, all written) ...; replay R+1's 2 of 2 (1 list, the stalled present waits on it) ...; in flight at the stall's start: S seen, U not known`: the submission index that holds the first unwritten stamp across the hangs (always 1 of 2, the scene's, or not), whether the present's list after it ran (its stamps written), and how long before the stall each was submitted. The earlier submissions' own signals stay unknown (no Vulkan call reads them; the slot's last one's is its wait's end) ([Which submission hangs](#issue-123-the-hang-detector-and-the-pass-path)) |
@@ -2359,7 +2354,7 @@ counter is an increment in a hot path, and none of them reads anything from the 
 
 `port/platform/attempt_ledger.h`: one row per behaviour that this release changes on purpose for a
 device class. Each row has a name, its state on this device (on, off by default, refused by its
-self-test, refused by the driver, not applicable here, not in this build, or not reported) with a reason, and up to two counts. Two lines
+self-test, not applicable here, not in this build, removed, or not reported) with a reason, and up to two counts. Two lines
 print it:
 
 - At the first 10 s block, and again whenever a state changes (the first 8 changes, then every
@@ -2376,9 +2371,15 @@ print it:
 - In every block: `window: attempts: few-cores rule on 3 threads moved; pipeline set on every core
   on 0 workers (0 sets); slow-scene capture in two steps on 1 slow-scene captures (0 grown here);
   flat outputs at the provoking corner on (static); ...; stalls 3 in the block`. Rows that are not reported are left
-  out. Where the Adreno row is reported, the stalls clause adds `(the Adreno attempt on)` or `off`,
-  and with the high queue priority's row reported too `(the Adreno attempt on, high queue priority
-  granted)` (`refused`, `not asked`).
+  out, and so are the rows not in this build and the removed ones. Where the Adreno row is
+  reported, the stalls clause adds `(the Adreno attempt on)` or `off`, and the row's second count
+  is the block's stalls (`Qualcomm passes as VkRenderPass objects on 812 passes (2 stalls in the
+  block)`).
+- A removed row keeps its place so two logs compare row by row: it says `removed` at the start
+  with why (`Qualcomm queue at high priority removed (taken off, issues 215 and 123)`) and has no
+  count; the block's stalls are counted on the passes' row. The start line is written in 4 KB
+  parts of whole rows (`ico_attempt_start_part`), so a longer line takes another part and is never
+  cut.
 
 Which device gets which attempt is the device table's ([DEVICE_TABLE.md](DEVICE_TABLE.md)), and
 so are a row's words where no row of it holds (`rhi_device_choice_na_words`).
@@ -2397,8 +2398,8 @@ thread can make it, hot paths included. The rows and where their states are set:
 | one DATE set-up | `rd_date_one.c` at each replay's scan (off by the tests' switch, not applicable under MSAA or the exact blend) | the window, from the record's `dateOneShared` and `dateOneRefused` |
 | empty composites skipped | `rd_shadow_box.c` at each replay's scan | the window, from `emptySkipped` |
 | no-volume break | `rd_no_volume.c` at each replay's scan: `on (the PowerVR D-Series DXT-48-1536)` on the device two phone release candidates showed clean with it, `off by default (shown clean only on the PowerVR D-Series DXT-48-1536's title and pause menu; not tried on this device)` on the rest of the PowerVR and MoltenVK class, `not applicable here (not the PowerVR or MoltenVK class under Vulkan)` elsewhere, or the other gates' reason (the DATE path, MSAA ...) with the class allowed | the window, from `noVolumeBreak` |
-| Qualcomm passes as VkRenderPass objects | `window_perf_rank.c` every block (`ico_attempt_decide_pass_objects`: on with `RhiLimits.passObjectsRow`'s reason while Qualcomm's row holds the device's passes, `not applicable here (not Qualcomm's own driver)` otherwise) | the block's growth of `RhiStats.passObjects`, only while the row holds |
-| Qualcomm queue at high priority | `window_perf_rank.c` every block (`ico_attempt_decide_queue_priority` from `RhiLimits.queuePriority` and `queuePriorityWhy`, set by `vk_qprio.c` at the device's creation): `on (high granted through VK_KHR_global_priority: Qualcomm's own driver on Android)`, `refused by the driver (high asked, the driver answered not permitted: the driver's default (medium))` (or `initialization failed`, or `the device's creation failed with it`), `not applicable here` with the reason (`not Qualcomm's own driver on Android`, `... global queue priority not offered`, `... the game's queue family does not list high`; `not asked on this graphics API (Vulkan's alone)` on OpenGL and Direct3D) | the block's stalls (`ico_attempt_block_text`'s, `window_stall_tally_take`'s count), whatever the state |
+| Qualcomm passes as VkRenderPass objects | `window_perf_rank.c` every block (`ico_attempt_decide_pass_objects`: on with `RhiLimits.passObjectsRow`'s reason while Qualcomm's row holds the device's passes, `not applicable here (not Qualcomm's own driver)` otherwise) | the block's growth of `RhiStats.passObjects`, only while the row holds; second the block's stalls (`ico_attempt_block_text`'s, `window_stall_tally_take`'s count), whatever the state |
+| Qualcomm queue at high priority | nowhere: `removed` from the start (`attempt_ledger.c` `startState`, its words `ICO_ATT_QPRIO_REMOVED_WHY`); the high global priority it reported on Qualcomm's own driver under Android was taken off (issues 215 and 123: it did not change the hangs) | none (its stall count is the passes row's second) |
 | subpass read | `rd_subpass_probe.c` at DATE's self-test (`ico_attempt_decide_subpass`): `off by default` on a class the probe does not run on this release (`off on this driver this release: ...` on the Arm and Qualcomm drivers, `probed on the Intel driver row only this release` elsewhere), `on` with the device's reason (kept by an earlier probe, on for this start's probe, `[dev] subpass_read = on`), `refused by its self-test` (DATE's self-test on the read failed, or this start's or an earlier start's probe refused it), `not applicable here` off the route (`not a VkRenderPass path without local read ...`) or where it cannot be decided (no GPU timestamps, no verdict file, not probed at this start) | the window, from the record's `dateStencilTakes` while the row is on |
 | blend constant | `not in this build` from the start (left out of the block line; measured: no draw of the Mali reporter's pictures to convert, [PIPELINES.md](PIPELINES.md)) | none |
 | index compaction | `rd_vu_compact.c` at the pre-pass's start and after the record's self-test (`ico_attempt_decide_compaction`): `off by default (off by default on the Mali-G52: it blacked out the picture there ... (issue 179; RD_VU_COMPACT_ARM_DEFAULT 0))` on the Mali-G52; `on` on the compute record of the PowerVR D-Series DXT-48-1536 (or a Mali-G52 under `ICO_RD_VU_COMPACT=1`) where the class's define allows and the self-test passed (its pictures equal, at the play record's size with the lists from the fourth plane's middle, and no stamp of its own pictures unwritten) (`the Mali-G52, its start-up self-test passed`, `the PowerVR D-Series DXT-48-1536, ...`; `ICO_RD_VU_COMPACT=1: the tests' switch` without a self-test), `refused by its self-test` when the record's test failed with it and passed without it, `off by default` on every other device (`measured on the Mali-G52 only ...`), by the define, before the self-test or where none ran (`its start-up self-test not run (yet)`) or by `ICO_RD_VU_COMPACT=0`, `not applicable here` with the record path that holds (`record path stores: vertex shader stores`, `record path targets: render targets`, `the VU pre-pass is off`) | the triangles left out (drop and outside, every list), from the counts read back when the frame slot comes round |
@@ -2551,19 +2552,16 @@ poll apart, and the replay's GPU span. How long the present held past that span 
 longest 365.2 ms (replay 2075); of the mean: before the present 18.0 ms (the slot's wait for the
 GPU 15.6 ms, the acquire 0.0 ms), the present 16.6 ms, the driver's present call 15.4 ms of it;
 over 518 presents with the picture's GPU end seen, the call 12.0 ms while the picture's GPU work
-still ran and 3.4 ms after its end (the display's); the queue's priority: high, granted`
+still ran and 3.4 ms after its end (the display's)`
 
 From the picture's hand-over to the render thread (the replay's start where it was not handed
 over: `N from the replay's start`) to the present's end. The part before the present holds the
 replay's CPU work, its frame slot's wait for the GPU and the acquire of the window's image. The
 driver's present call is split at the picture's own GPU end, where its slot's wait blocked and saw
 it end: the part while that work still ran is at most a wait for the GPU, the rest is the display's
-(the compositor's queue, the refresh). Where no wait blocked, `the call not split`. The last
-clause is the queue's global priority as the device's creation got it (`RhiLimits.queuePriority`:
-`high, granted`, `the driver's default (high refused)`, `the driver's default (high not asked)`).
-Its cost: a few adds a presented record on the window's thread. A granted priority that delays the
-compositor would show as a longer `after its end (the display's)` part against the first
-attempt's logs.
+(the compositor's queue, the refresh). Where no wait blocked, `the call not split`. Its cost: a few
+adds a presented record on the window's thread. The line has no clause on the queue's global
+priority: every queue is made at the driver's default (issues 215 and 123).
 
 Issue 123's Adreno 740 log (Qualcomm's driver) had 12 stalls of 401-415 ms, 2 of them in stage 1's
 opening. In every one the hung replay's `rd: GPU clock` line has 19-45 stamps unwritten after the

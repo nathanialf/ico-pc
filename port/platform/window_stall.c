@@ -174,7 +174,7 @@ static void stall_block_close(const StallBlockClock *clock)
                         sizeof(text))) {
         fprintf(stderr, "window: %s\n", text);
     }
-    if (present_latency_text(&s_lat, rhi_limits()->queuePriority, text, sizeof(text)) > 0) {
+    if (present_latency_text(&s_lat, text, sizeof(text)) > 0) {
         fprintf(stderr, "window: %s\n", text);
     }
     memset(&s_lat, 0, sizeof(s_lat));

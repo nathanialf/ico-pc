@@ -166,16 +166,16 @@ if(ICO_RUN_TESTS)
     add_test(NAME rhi_vk_pass_row COMMAND rhi_vk_pass_row_test)
 endif()
 
-# --- The queue's global priority (CPU only, every target) --------------------
-# rhi_qprio.c: issue 123's second attempt, the game's queue at high global
-# priority on Qualcomm's own driver under Android (rhi_pass_row.c
-# rhi_vk_qprio_row; vk/vk_qprio.c asks): the plan from the offer, the tests'
-# fake words, the refusal's words.
-add_executable(rhi_vk_qprio_test test/rhi_vk_qprio_test.c rhi_qprio.c rhi_pass_row.c)
-target_include_directories(rhi_vk_qprio_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
-target_compile_options(rhi_vk_qprio_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+# --- No global queue priority asked (a source scan, every target) ------------
+# rhi_vk_qprio_source (test/rhi_qprio_source.cmake): no source or header
+# under port/ names the structure that asks a global priority for a queue
+# (VkDeviceQueueGlobalPriorityCreateInfo, KHR and EXT): v0.11.7 asked high on
+# Qualcomm's own driver under Android, v0.11.8 took it off (issues 215 and
+# 123).  The lavapipe twin, rhi_vk_qprio_none, is with the Vulkan tests.
 if(ICO_RUN_TESTS)
-    add_test(NAME rhi_vk_qprio COMMAND rhi_vk_qprio_test)
+    add_test(NAME rhi_vk_qprio_source
+             COMMAND "${CMAKE_COMMAND}" "-DSRC=${CMAKE_SOURCE_DIR}"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rhi_qprio_source.cmake")
 endif()
 
 # --- The subpass read's decision and verdict (CPU only, every target) --------
@@ -392,7 +392,7 @@ if(_ico_have_vk)
     set(_ico_vk_sources rhi_adapter.c rhi_bind_cache.c rhi_driver_version.c rhi_pass_row.c rhi_tile_rule.c vk/vk_cmd.c vk/vk_device.c vk/vk_memory.c vk/vk_native.c
                         vk/vk_pipeline.c vk/vk_present_mode.c vk/vk_renderpass.c vk/vk_resource.c
                         vk/vk_spirv_scan.c vk/vk_swapchain.c vk/vk_sync.c vk/vk_tsclock.c vk/vk_range.c
-                        vk/vk_glass.c rhi_qprio.c vk/vk_qprio.c vk/vk_device_table.c)
+                        vk/vk_glass.c vk/vk_device_table.c)
     if(ANDROID)
         # the window's surface through the loader in use (a
         # driver the program loaded, or the system's)
@@ -588,7 +588,7 @@ if(_ico_have_vk)
     # Headless rendering on whatever device is present (lavapipe in the
     # container); exits 77 (skipped) when there is no Vulkan device.
     add_executable(rhi_vk_test test/rhi_vk_test.c test/rhi_vk_scope.c test/rhi_vk_subpass.c
-                               test/rhi_vk_qprio.c ${_ico_rhi_test_common})
+                               ${_ico_rhi_test_common})
     # the thread submit cell's second thread (rhi_test_common.c threadSubmitCell)
     target_link_libraries(rhi_vk_test PRIVATE ico_thread)
     target_include_directories(rhi_vk_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/test/shaders")
@@ -940,32 +940,20 @@ if(_ico_have_vk)
         set_tests_properties(rhi_vk_qcom_passes_off PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
                              "${_ico_vk_qcomoff_env}" FAIL_REGULAR_EXPRESSION
                              "render passes legacy")
-        # the queue's global priority (rhi_qprio.h, vk_qprio.c; issue 123's
-        # second attempt): the qprio cell, first without the fake (not asked
-        # off the row), then the device put on the row by
-        # ICO_VK_FAKE_QUEUE_PRIORITY=<ICO_TEST_QPRIO>: _granted high asked and
-        # granted by lavapipe; _refused the asking creation answered
-        # VK_ERROR_NOT_PERMITTED, the device made again without it and every
-        # exact-texel cell drawn; _unoffered the offer hidden, not asked. 77
-        # where lavapipe offers no global priority with high
-        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/qprio_granted")
-        add_test(NAME rhi_vk_qprio_granted COMMAND rhi_vk_test qprio
-                 WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/qprio_granted")
-        set(_ico_vk_qprio_env ${_ico_vk_test_env} "ICO_TEST_QPRIO=grant")
-        set_tests_properties(rhi_vk_qprio_granted PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
-                             "${_ico_vk_qprio_env}")
-        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/qprio_refused")
-        add_test(NAME rhi_vk_qprio_refused COMMAND rhi_vk_test qprio
-                 WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/qprio_refused")
-        set(_ico_vk_qprio_env ${_ico_vk_test_env} "ICO_TEST_QPRIO=refuse")
-        set_tests_properties(rhi_vk_qprio_refused PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
-                             "${_ico_vk_qprio_env}")
-        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/qprio_unoffered")
-        add_test(NAME rhi_vk_qprio_unoffered COMMAND rhi_vk_test qprio
-                 WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/qprio_unoffered")
-        set(_ico_vk_qprio_env ${_ico_vk_test_env} "ICO_TEST_QPRIO=unoffered")
-        set_tests_properties(rhi_vk_qprio_unoffered PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
-                             "${_ico_vk_qprio_env}")
+        # no global queue priority asked on any device (v0.11.7 asked high
+        # on Qualcomm's own driver under Android; taken off in v0.11.8,
+        # issues 215 and 123): rhi_vk_qprio_none the clock cell with lavapipe
+        # put on Qualcomm's row (ICO_VK_FAKE_PASS_ROW=qualcomm, the devices
+        # the priority was asked on), passing on the read-only start line
+        # (vk_device.c vkr_offer_line) and failing on any asked priority's
+        # words; rhi_vk_qprio_source no source under port/ that chains a
+        # global priority onto a queue's creation (rhi_qprio_source.cmake)
+        add_test(NAME rhi_vk_qprio_none COMMAND rhi_vk_test clock)
+        set_tests_properties(rhi_vk_qprio_none PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_qcom_env}" PASS_REGULAR_EXPRESSION
+                             "rhi_vk: queue priority: the driver's default \\(medium\\), not asked: global queue priority (KHR and EXT|KHR|EXT|not) offered \\(the game's queue family [0-9]+'s priorities: .+ the game asks no device for a global priority"
+                             FAIL_REGULAR_EXPRESSION
+                             "asked and granted|asked and refused|with global priority high")
         # the cells on a Vulkan 1.0 driver (ICO_VK_FAKE_API=1.0, issue 158):
         # a 1.0 instance with VK_KHR_get_physical_device_properties2, the
         # device at 1.0 with VK_KHR_maintenance1/2, the core 1.1 entry points

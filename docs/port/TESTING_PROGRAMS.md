@@ -1193,13 +1193,12 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   with MSAA, a Mac with the break forced): no row at all left `not reported` (the pins let go on for the Android classes, not applicable elsewhere; the start line in one or two whole-row 4 KB parts), the rows not built
   `not in this build`, the cores' rows, the no-volume break's
   state with its reason in the start line, the Qualcomm passes row on only on Qualcomm's driver,
-  its count and the stalls clause `(the Adreno attempt on|off)`, the high queue priority's row
-  (issue 123's second attempt) on with Qualcomm's passes row and not applicable elsewhere, its
-  count the block's stalls (3, then 1, then 0 with no stalls asked), its state in the stalls clause
-  `(the Adreno attempt on, high queue priority granted)`, `refused by the driver` with its reason
-  in the start line and `high queue priority refused` in the clause, `not applicable here (not asked
-  on this graphics API (Vulkan's alone))` for a NULL why and `(the Adreno attempt off, high queue
-  priority not asked)`, the VU record by compute's and
+  its count and the stalls clause `(the Adreno attempt on|off)`, the block's stalls on that row's
+  second count whatever its state (`(2 stalls in the block)` not applicable, `(1 ...)` and `(3
+  ...)` on, then 0 with no stalls asked and 0 off), the high queue priority's row `removed` on
+  every class (taken off, issues 215 and 123) with its words in the start line (`Qualcomm queue at
+  high priority removed (taken off, issues 215 and 123)`), left out of every block line and
+  still removed after a reset, the VU record by compute's and
   the turn fold's states per class (the VU record by compute on with the shipped default on the
   Pixel's D-Series DXT, off by default on the PowerVR B, which never ran it; the Mali and the Adreno
   turned phones' turn fold off by default, not applicable on the desktops), the subpass read's
@@ -1240,9 +1239,9 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   (`port/platform/present_latency.h`, issue 123): four made-up records (from the hand-over and
   from the replay's start; the driver's call split at the picture's GPU end before, after and across
   the call; one without a GPU end seen) and two left out (no present end, an end before its
-  start); the mean and longest, the parts before the present and of it, the line word for word with
-  each queue priority's words, the call not split without a GPU end, nothing with no present (CPU
-  only).
+  start); the mean and longest, the parts before the present and of it, the line word for word
+  (no queue priority clause: the priority was taken off), the call not split without a GPU end,
+  nothing with no present (CPU only).
 - `stall_coincide_test.c` (ctest `stall_coincide`): what a stall coincided with (`port/platform/
   stall_coincide.h`, issue 179): the block's pass medians (none before five, odd and even counts,
   the ring's last 64, a full key table), the spike rule at its bounds (5.9x not, 8.3x and 40.1 ms
@@ -1817,26 +1816,17 @@ The renderer's test programs have a page of their own:
   device put on the row alone (`ICO_VK_FAKE_PASS_ROW=qualcomm`), failing if the device line says
   `render passes dynamic;`; `rhi_vk_qcom_passes_off` the clock cell with `ICO_VK_LEGACY_PASSES=0`
   over the row, failing if it says `render passes legacy`.
-- `rhi_vk_qprio_test.c` (ctest `rhi_vk_qprio`): the high queue priority (`port/rhi/rhi_qprio.c`,
-  `rhi_pass_row.c` `rhi_vk_qprio_row`; issue 123's second attempt), pure: the row is Qualcomm's own
-  driver (id 8 or none) on vendor 0x5143 on an Android build, the same devices as the
-  `VkRenderPass` row; not Android, Turnip, Qualcomm's id on Arm's vendor, Intel, Imagination and
-  NVIDIA are not on it; the plan: off the row not asked (`not Qualcomm's own driver on Android`),
-  the tablet's offer (KHR, EXT and the query, high listed) asked through `VK_KHR_global_priority`,
-  EXT alone through `VK_EXT_global_priority` (with and without a read list), neither listed not
-  asked (`... global queue priority not offered`), a read list without high not asked (`... the
-  game's queue family does not list high`); `ICO_VK_FAKE_QUEUE_PRIORITY`'s words (`grant`,
-  `refuse`, `unoffered` in any case; anything else none) both ways; the results' words
-  (`VK_ERROR_NOT_PERMITTED` -1000174001 `not permitted`, -3, -1, -4, another); the ledger's
-  granted and refused reasons. On lavapipe (`rhi_vk_test qprio`, `port/rhi/test/rhi_vk_qprio.c`):
-  each first starts without the fake (not asked, `not Qualcomm's own driver on Android`; 77
-  without a device), then sets `ICO_VK_FAKE_QUEUE_PRIORITY` from `ICO_TEST_QPRIO`, runs every
-  exact-texel cell and starts once more: `rhi_vk_qprio_granted` (`grant`) `RHI_QPRIO_GRANTED` with
-  `high granted through ...`; `rhi_vk_qprio_refused` (`refuse`) `RHI_QPRIO_REFUSED`, result
-  -1000174001 and `not permitted`, the device made again without the priority and drawing;
-  `rhi_vk_qprio_unoffered` (`unoffered`) not asked with `global queue priority not offered`.
-  `_granted` and `_refused` skip (77) where the device offers no global priority with high (this
-  host's lavapipe lists `VK_KHR_global_priority` with low, medium, high and realtime).
+- `rhi_qprio_source.cmake` (ctest `rhi_vk_qprio_source`, a CMake script, every target): no
+  code path asks a global queue priority (the high priority asked on Qualcomm's own driver under
+  Android for issue 123 was taken off, issues 215 and 123): every C, C++ and Objective-C source and
+  header under `port/` is scanned for `DeviceQueueGlobalPriorityCreateInfo` and
+  `DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO` (the structure and its sType, KHR and EXT), and fails
+  on any; it prints the files scanned and fails when `port/rhi/vk/vk_device.c` is not among them.
+  Its lavapipe twin `rhi_vk_qprio_none` (`rhi_vk_test clock` on Qualcomm's row,
+  `ICO_VK_FAKE_PASS_ROW=qualcomm`) passes on the read-only start line `rhi_vk: queue priority: the
+  driver's default (medium), not asked: global queue priority ... offered (the game's queue family
+  N's priorities: ...); the game asks no device for a global priority` and fails on `asked and
+  granted`, `asked and refused` or `with global priority high`.
 - `rhi_device_table_test.c` (ctests `rhi_device_table`, `rhi_device_table_docs`): the device table
   (`port/rhi/rhi_device_table.c`, [DEVICE_TABLE.md](DEVICE_TABLE.md)), pure: unique row ids, every
   setting's evidence, release and revisit condition, a row sets a choice once, rows read only the
@@ -1861,15 +1851,15 @@ The renderer's test programs have a page of their own:
   driver ids 0, 1, 3 to 9, 13, 14 and 18, fourteen driver texts (Qualcomm's, Turnip's, PurpleVK's,
   the B-Series in any case, Mesa's, none), the Vulkan versions around 1.3.215 on Intel and vendor
   0, every OS and backend, MoltenVK, a driver package; on the logged devices every combination of
-  `ICO_VK_FAKE_VENDOR`, `_PASS_ROW`, `_QUEUE_PRIORITY`, `_ADRENO`, `_SERIAL`, `_NO_PREPASS`,
+  `ICO_VK_FAKE_VENDOR`, `_PASS_ROW`, `_ADRENO`, `_SERIAL`, `_NO_PREPASS`,
   `ICO_RD_VU_COMPACT_ARM` and `ICO_VK_FAKE_LIMITS=moltenvk`, and the profile's run inputs. It links
-  `rhi_pass_row.c`, `rhi_driver_version.c`, `rhi_tile_rule.c`, `rhi_qprio.c`, `memory_floor.c` and
+  `rhi_pass_row.c`, `rhi_driver_version.c`, `rhi_tile_rule.c`, `memory_floor.c` and
   `present_fallback.c` and compares each with its copy over the matrix (those files' predicates read
   the table, so the copies prove the moved predicates; also `rhi_tile_phone` on
   every combination, `rhi_tile_vendor`, the serial rule at any Vulkan version). The Vulkan call
   sites' reads are the library's functions the test calls too: the fakes' parse
   (`rhi_device_fakes_parse`), the two pass rows, the subpass class with every way Qualcomm's row
-  can apply, the VU rows, the queue's row and the serial rule's reason. On the logged devices on
+  can apply, the VU rows and the serial rule's reason. On the logged devices on
   every backend, OS, MoltenVK and driver package, the one-choice read (`rhi_device_table_choice`)
   and the backends' evaluation (`rhi_device_table_start`) equal the whole evaluation. It fails
   The renderer's reads (`port/render/rd_device_rows.c`, linked in): every renderer call site's
@@ -1892,7 +1882,10 @@ The renderer's test programs have a page of their own:
   phrases where no row holds (`rhi_device_choice_na_words`), from the table and as
   `ico_attempt_decide_no_volume_break`, `_pass_objects`, `_vu_compute` and `_compaction` write
   them, byte for byte. It fails when a row is in force on no identity, an override link decides none, or two
-  matching rows differ without a link. About 19 s at -O2, about 2.5 minutes under the address and
+  matching rows differ without a link. The queue's high priority, taken off (issues 215 and 123),
+  is the one change since the copies: its rule's copy (`ref_qprio_row`) stays and the identities it
+  asked on are counted and printed (`N where the old rule asked the queue's high priority (none now)`;
+  none fails), and a choice whose name holds `PRIORITY` fails. About 19 s at -O2, about 2.5 minutes under the address and
   undefined-behaviour sanitizers at -O1 (hand-measured).
 - `rhi_subpass_verdict_test.c`: the subpass read's decision at a Vulkan start and its verdict file
   (`port/rhi/rhi_subpass_verdict.h`), pure: every branch of `rhi_subpass_decide` in its order

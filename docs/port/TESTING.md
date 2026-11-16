@@ -498,7 +498,7 @@ The variants that force GPU paths a desktop driver does not take are in
 [../BUILDING.md](../BUILDING.md#tests)'s table (`ICO_RD_NO_DUAL`, `ICO_VK_FAKE_NO_DUAL`,
 `ICO_VK_FAKE_D24S8`, `ICO_VK_FAKE_LIMITS=mali|min|moltenvk`, `ICO_RD_BLEND=storage|fixed`). The
 switches that stand for a device (`ICO_VK_FAKE_VENDOR`, `ICO_VK_FAKE_PASS_ROW`,
-`ICO_VK_FAKE_QUEUE_PRIORITY`, `ICO_VK_FAKE_ADRENO`, `ICO_VK_FAKE_SERIAL`, `ICO_VK_FAKE_NO_PREPASS`,
+`ICO_VK_FAKE_ADRENO`, `ICO_VK_FAKE_SERIAL`, `ICO_VK_FAKE_NO_PREPASS`,
 `ICO_RD_VU_COMPACT_ARM`, `ICO_VK_FAKE_LIMITS=moltenvk`) fake one choice or one identity field of
 the device table, each with the scope it had before the table; the rows they stand for, and the
 proof that the table gives every device what the old rules gave (`rhi_device_table_equiv`), are in
@@ -515,7 +515,6 @@ switches the tests and their registrations use:
 | `ICO_VK_FAKE_NO_INTERLOCK` | `vk_device.c` | the fragment shader interlock off, the attachment read kept (the `rd_blend_selftest*` ctests: lavapipe has the interlock from Mesa 25.2, their expectations are a device without it) |
 | `ICO_VK_FAKE_LIMITS=moltenvk` | `vk_device.c` | MoltenVK: `RhiLimits.moltenvk` set, no attachment read, the interlock the device's own (`rd_blend_selftest_moltenvk_storage`: `ICO_RD_BLEND=storage` keeps the interlock; run without `ICO_VK_FAKE_NO_INTERLOCK`; it skips on a device without the interlock, as Mesa before 25.2's lavapipe) |
 | `ICO_VK_FAKE_PASS_ROW=qualcomm` | `vk_device_table.c` (once, at the pick: the device table's fakes, [DEVICE_TABLE.md](DEVICE_TABLE.md#the-tests-fakes)) | the device on Qualcomm's driver row alone (`rhi_pass_row.h` `rhi_vk_pass_row_qualcomm`, issue 123): its passes `VkRenderPass` objects, `RhiLimits.passObjectsRow` set, nothing else of Qualcomm's driver faked (`rhi_vk_qcom_passes`, `_off`, `rd_pass_objects_ab`) |
-| `ICO_VK_FAKE_QUEUE_PRIORITY` | `vk_device_table.c` (the row), `vk_qprio.c` (the grant, refusal or no offer) | the device on the high queue priority's row alone (`rhi_pass_row.h` `rhi_vk_qprio_row`, issue 123's second attempt; nothing else of Qualcomm's driver faked): `grant` the real offer and call (lavapipe grants), `refuse` the asking creation answered `VK_ERROR_NOT_PERMITTED` without the driver (the fallback's creation real), `unoffered` the offer read as none. `rhi_vk_test qprio` sets it itself from `ICO_TEST_QPRIO` after a start without it (`rhi_vk_qprio_granted`, `_refused`, `_unoffered`) |
 | `ICO_VK_FAKE_SERIAL` | `vk_device_table.c` (once, at the pick) | 1 takes the rule of one compile at a time (one compile thread, the lock around module and pipeline creation; a PowerVR B-Series driver's, issue 188) on any device (`rhi_vk_serial`) |
 | `ICO_VK_FAKE_ADRENO` | `vk_device_table.c` (once, at the pick) | Qualcomm's Adreno driver: the attachment read not offered (`rd_blend_selftest_adreno`) |
 | `ICO_VK_ATTACHMENT_READ` | `vk_device.c` | 1 offers the attachment read under `ICO_VK_FAKE_ADRENO` too (`rd_blend_selftest_adreno_forced`) |

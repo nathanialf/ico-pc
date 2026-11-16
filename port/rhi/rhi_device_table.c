@@ -101,7 +101,7 @@ static const RhiDeviceSetting kIntelWin[] = {
      "never while the row holds the passes"},
 };
 
-/* rhi_pass_row.c rhi_vk_pass_row_qualcomm and rhi_vk_qprio_row */
+/* rhi_pass_row.c rhi_vk_pass_row_qualcomm */
 static const RhiDeviceSetting kQualcommAndroid[] = {
     {RHI_DC_PASS_OBJECTS, RHI_DT_PASS_QUALCOMM, "render passes as VkRenderPass objects",
      "Qualcomm's own driver (issue 123: its GPU hangs inside a pass begun with "
@@ -111,11 +111,6 @@ static const RhiDeviceSetting kQualcommAndroid[] = {
      "the Adreno 740 (512.676) and Adreno 710 (512.800) hang inside a pass begun with "
      "vkCmdBeginRendering (v0117/evidence/123)",
      "v0.11.6", "the reporter's next log: no hang inside a pass"},
-    {RHI_DC_QUEUE_PRIORITY_HIGH, 1, "the queue asked at high global priority",
-     "Qualcomm's own driver on Android, issue 123: the system's own GPU work at a lower "
-     "priority does not preempt the game's",
-     "issue 123", "commit 60138b4b6 (v0117/evidence/123)", "v0.11.7",
-     "the reporter's next log: the priority granted, and the stalls a block"},
 };
 
 /* rhi_driver_version.c rhi_driver_is_qualcomm_proprietary: vk_device.c's
@@ -589,7 +584,6 @@ static const char *const kChoiceNames[RHI_DC_COUNT] = {
     [RHI_DC_DYNAMIC_STATE_OFF] = "DYNAMIC_STATE_OFF",
     [RHI_DC_MEMORY_BUDGET_OFF] = "MEMORY_BUDGET_OFF",
     [RHI_DC_PASS_OBJECTS] = "PASS_OBJECTS",
-    [RHI_DC_QUEUE_PRIORITY_HIGH] = "QUEUE_PRIORITY_HIGH",
     [RHI_DC_SUBPASS_CLASS] = "SUBPASS_CLASS",
     [RHI_DC_ATTACHMENT_READ_OFF] = "ATTACHMENT_READ_OFF",
     [RHI_DC_VU_FALLBACK_PLAIN] = "VU_FALLBACK_PLAIN",
@@ -1033,12 +1027,6 @@ void rhi_device_table_eval(const RhiDeviceId *id, const RhiDeviceFakes *fk, RhiD
                 fake(o, c, RHI_DT_PASS_QUALCOMM, fr, fs, RHI_DT_FAKE_PASS_ROW);
             }
             break;
-        case RHI_DC_QUEUE_PRIORITY_HIGH:
-            if (fk->queuePriority) {
-                setterOf(c, 1, &fr, &fs);
-                fake(o, c, 1, fr, fs, RHI_DT_FAKE_QUEUE_PRIORITY);
-            }
-            break;
         case RHI_DC_ATTACHMENT_READ_OFF:
             if (fk->adreno && !o->value[c]) {
                 fake(o, c, 1, -1, -1, RHI_DT_FAKE_ADRENO);
@@ -1170,8 +1158,6 @@ static const char *fakeName(uint8_t f)
         return "ICO_VK_FAKE_VENDOR";
     case RHI_DT_FAKE_PASS_ROW:
         return "ICO_VK_FAKE_PASS_ROW=qualcomm";
-    case RHI_DT_FAKE_QUEUE_PRIORITY:
-        return "ICO_VK_FAKE_QUEUE_PRIORITY";
     case RHI_DT_FAKE_ADRENO:
         return "ICO_VK_FAKE_ADRENO";
     case RHI_DT_FAKE_SERIAL:
@@ -1339,7 +1325,6 @@ void rhi_device_fakes_parse(const RhiDeviceFakeEnv *env, RhiDeviceFakes *out)
         }
     }
     out->passRowQualcomm = env->passRow && strcmp(env->passRow, "qualcomm") == 0;
-    out->queuePriority = env->queuePriority != 0;
     out->adreno = env->adreno && env->adreno[0] && env->adreno[0] != '0';
     out->serial = env->serial && env->serial[0] == '1';
     out->noPrepass = env->noPrepass && env->noPrepass[0] && env->noPrepass[0] != '0';

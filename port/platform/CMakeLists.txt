@@ -415,7 +415,7 @@ endif()
 # (present_latency.h, issue 123): the mean and longest from the hand-over or
 # the replay's start, the parts before the present and of it, the driver's
 # call split at the picture's GPU end, records left out, the line word for
-# word with each queue priority (CPU only)
+# word (CPU only)
 add_executable(present_latency_test test/present_latency_test.c present_latency.c)
 target_include_directories(present_latency_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(present_latency_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})

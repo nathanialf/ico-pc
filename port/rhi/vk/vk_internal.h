@@ -738,15 +738,6 @@ typedef struct VkrState {
      * fakes, devFakes) */
     const RhiDeviceChoices *devTable;
     RhiDeviceFakes devFakes;
-    /* the game's queue's global priority (vk_qprio.c, rhi_qprio.h; issue
-     * 123's second attempt): qprio RHI_QPRIO_NOT_ASKED, _GRANTED or
-     * _REFUSED; qprioResult the asking creation's VkResult when refused;
-     * qprioWhy the attempt ledger's reason (RhiLimits.queuePriorityWhy);
-     * qprioKhr through VK_KHR_global_priority (else the EXT one) */
-    int qprio;
-    int32_t qprioResult;
-    const char *qprioWhy;
-    bool qprioKhr;
     /* the crash report's breadcrumb (rhi_pass_crumb.h): the passes begun,
      * and the last marker rhi_cmd_checkpoint was given (the renderer's
      * pass ring sequence number), kept with the checkpoints off too */
@@ -970,30 +961,6 @@ static inline VkFormat vkr_vk_format(RhiFormat f)
 #define VKR_CHECK(expr) vkr_check((expr), #expr, __FILE__, __LINE__)
 
 bool vkr_check(VkResult r, const char *what, const char *file, int line);
-
-/* What the device offers for the queue's global priority
- * (vk_device.c vkr_qprio_offer_read): khr VK_KHR_global_priority listed on
- * a device that may take it (Vulkan 1.1 or the properties2 queries), ext
- * VK_EXT_global_priority listed, query VK_EXT_global_priority_query listed;
- * queried the game's queue family's priorities read (count of them) */
-typedef struct VkrQprioOffer {
-    bool khr, ext, query, queried;
-    uint32_t count;
-    VkQueueGlobalPriorityKHR priorities[VK_MAX_GLOBAL_PRIORITY_SIZE_KHR];
-} VkrQprioOffer;
-
-/* vk_qprio.c: vkCreateDevice for vkr_create_device with the queue asked at
- * high global priority on the row (rhi_pass_row.h rhi_vk_qprio_row; the
- * extension added at exts[ci->enabledExtensionCount], cap the array's
- * size), and once more without it when that fails; its start line, and
- * g_vkr.qprio*.  False when the device could not be made (VKR_CHECK's
- * line) */
-bool vkr_qprio_create_device(VkDeviceCreateInfo *ci, VkDeviceQueueCreateInfo *qci,
-                             const char **exts, uint32_t cap, const VkrQprioOffer *offer);
-/* the offer line's words for what the queue was made with ("no global
- * priority asked (the driver's default, medium)", "global priority high
- * asked and granted", ...) */
-const char *vkr_qprio_said(void);
 /* A monotonic clock in ns, for the blocked-time counters (RhiStats). */
 uint64_t vkr_now_ns(void);
 
