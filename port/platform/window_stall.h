@@ -34,7 +34,7 @@
  *     ico_host_thermal): the block's "window: thermal: ..." line after the
  *     driver's, and the end of each around line;
  *   - each stall's "window: stall: ..." line (stall_coincide.h: every
- *     stall of a block up to STALL_BLOCK_LINES, the GPU's own sign of a
+ *     stall while they are rare, v0.11.6's rule past that, the GPU's own sign of a
  *     reset with the hung replay apart, a counter restart after a span
  *     with no GPU work said and not counted, the submissions around it
  *     from the records' gpuSub), and per block after the present stalls'

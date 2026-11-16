@@ -24,7 +24,7 @@ static const char *const kWhy[RD_SR_WHY_N] = {
     "its source is not the count kept at its full size",
     "the shaders or pipelines could not be made",
     "the textures could not be made",
-    "the scene's scale is above 31 on an axis"};
+    "the scene's scale is above 3 on an axis (the largest the levels were measured at)"};
 
 static const char *const kWhyWord[RD_SR_WHY_N] = {"prim",  "flags",  "texfn",    "blend",
                                                   "test",  "filter", "colour",   "map",
@@ -58,6 +58,12 @@ uint32_t rd_sr_level_scale(float s)
     /* the float's noise above a whole scale (3.0000002) is not a step up */
     const uint32_t n = (uint32_t)ceilf(s - 1.0e-3f);
     return (n & 1u) ? n : n + 1u;
+}
+
+bool rd_sr_within_cap(float cx, float cy)
+{
+    return cx <= RD_SR_SCALE_MAX && cy <= RD_SR_SCALE_MAX &&
+           rd_sr_level_scale(cx) <= RD_SR_LEVEL_CAP && rd_sr_level_scale(cy) <= RD_SR_LEVEL_CAP;
 }
 
 float rd_sr_box_w(float i, float a, float s, float f)

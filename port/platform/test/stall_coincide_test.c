@@ -54,6 +54,62 @@ static void moment_179(StallMoment *m)
     m->gpuMhz = m->gpuMaxMhz = -1;
 }
 
+/* one block of n stalls through the line rules: the tally's counts, the
+   lines written returned */
+static unsigned budget_block(StallLineBudget *b, StallTally *t, unsigned n)
+{
+    StallMoment m;
+    memset(&m, 0, sizeof(m));
+    m.gpuMhz = m.gpuMaxMhz = -1;
+    m.availMb = m.floorMb = -1;
+    m.pressure = -1;
+    memset(t, 0, sizeof(*t));
+    unsigned w = 0;
+    for (unsigned i = 0; i < n; i++) {
+        stall_tally_add(t, &m);
+        w += stall_line_due(t, b) ? 1u : 0u;
+    }
+    CHECK(t->stalls == n && t->written + t->leftOut == n && t->written == w);
+    return w;
+}
+
+/* The per-stall lines at the two rates of review 1 (stall_coincide.h):
+   issue 123's tablet (its log of 2026-11-14: the block tallies 1, 1, 2, 1,
+   4, 1, 1, 1, 3 stalls in 33 blocks of 10 s, its 13 present stalls among
+   them) for 11 times its 325 s, every stall written; a stall every picture
+   at 60 a second for an hour (360 blocks of 600): the rare rule's 500 lines,
+   then v0.11.6's rule over the 215500 others (8 + 2155), every stall
+   counted in its block's tally */
+static void budget_cases(void)
+{
+    static const unsigned k_tablet[33] = {[3] = 1,  [6] = 1,  [9] = 2,  [12] = 1, [14] = 4,
+                                          [17] = 1, [19] = 1, [26] = 1, [30] = 3};
+    StallLineBudget b;
+    StallTally t;
+    unsigned long long stalls = 0, lines = 0;
+
+    memset(&b, 0, sizeof(b));
+    for (unsigned rep = 0; rep < 11u; rep++) {
+        for (unsigned k = 0; k < 33u; k++) {
+            lines += budget_block(&b, &t, k_tablet[k]);
+            CHECK(t.leftOut == 0u);
+            stalls += k_tablet[k];
+        }
+    }
+    CHECK(stalls == 165u && lines == 165u && b.rare == 165u && b.excess == 0u);
+
+    memset(&b, 0, sizeof(b));
+    stalls = lines = 0;
+    for (unsigned k = 0; k < 360u; k++) {
+        lines += budget_block(&b, &t, 600u);
+        stalls += 600u;
+    }
+    CHECK(stalls == 216000u && b.rare == STALL_RUN_LINES && b.excess == stalls - STALL_RUN_LINES);
+    CHECK(lines == STALL_RUN_LINES + STALL_EXCESS_FIRST + b.excess / STALL_EXCESS_EVERY);
+    CHECK(lines == 2663u);
+    CHECK(t.written == 6u && t.leftOut == 594u); /* the last block: the 100ths alone */
+}
+
 int main(void)
 {
     StallMedians md;
@@ -230,16 +286,21 @@ int main(void)
                 "ms 0, memory under the floor 0, memory pressure rising 0, the GPU clock low 0 "
                 "(not readable), the GPU's own sign of a reset 4, none of these 0",
                 __LINE__);
-        /* the cap: 10 s over the shortest present stall and pass stall */
-        CHECK(STALL_BLOCK_LINES == 350u);
+        /* a block of 352 stalls on a fresh run: its first 16 by the rare
+           rule, then v0.11.6's rule over the 336 others (the first 8, the
+           100th, 200th and 300th): 27 written, 325 left out */
+        StallLineBudget b;
+        memset(&b, 0, sizeof(b));
         unsigned due = 0;
         for (unsigned i = 0; i < 352u; i++) {
-            due += stall_tally_line_due(&h) ? 1u : 0u;
+            due += stall_line_due(&h, &b) ? 1u : 0u;
         }
-        CHECK(due == 350u && h.written == 350u && h.leftOut == 2u);
+        CHECK(due == 27u && h.written == 27u && h.leftOut == 325u);
+        CHECK(b.rare == 16u && b.excess == 336u);
         (void)stall_tally_text(&h, t, sizeof t);
-        CHECK(strstr(t, "none of these 0; 2 stall lines left out (the block's first 350 "
-                        "written)") != NULL);
+        CHECK(strstr(t, "none of these 0; 325 stall lines left out (27 written: a block's first "
+                        "16 while the run has written fewer than 500, then the first 8 and every "
+                        "100th of the others)") != NULL);
     }
 
     /* the submissions around a stall: issue 123's first (replay 2074's
@@ -299,6 +360,8 @@ int main(void)
         CHECK(stall_status_swap(sw, strlen(sw), &w) && w == 301234);
         CHECK(!stall_status_swap(st, strlen(st), &w));
     }
+
+    budget_cases();
 
     /* the driver's thread names */
     CHECK(stall_driver_name("mali-cmar-backe"));

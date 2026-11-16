@@ -715,7 +715,10 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   anisotropic: 2.79 x 2.41) on his two main gate captures, the forced chain at 1x; the `_gl` twin 1x
   and 2x on OpenGL): `=0` every PNG the goldens'
   (`port/render/test/fixtures/lists/shadow_fine_goldens.txt`: the release before's pictures of the
-  fixtures, every golden of the list matched); at 1x the default the same bytes, passes and draws; above 1x
+  fixtures, every golden of the list matched); at 1x the default the same bytes, passes and draws;
+  above the release's cap of 3 (the phone's 4.10 x 2.41) the default the PS2's sizes: every PNG
+  the same bytes, the same passes and draws, one shadow drawn at the PS2's size for `scale`, the
+  cap's line; above 1x up to the cap
   one shadow at the scene's scale and none at the PS2's size on every fixture (any reason in the stats
   line fails; the path ran: the fixture's declared `shadow_levels` and `shadow_level_texels` on the
   default run, and on the forced run at 1x), its 9 or 10 passes and 9 draws and nothing else, the

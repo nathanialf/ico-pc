@@ -12,8 +12,8 @@
 #   e1x      the same path, Enhanced at 1x with Full pixel, presented 1280x720;
 #   o1x      the same path, the Original preset, presented 1280x720;
 #   phone    the PowerVR phone (ICO_VK_FAKE_LIMITS=moltenvk): Resolution Auto,
-#            2364x1080 with Full height and Full pixel (4.10417 x 2.41071: levels
-#            at 5 x 3);
+#            2364x1080 with Full height and Full pixel (4.10417 x 2.41071: above
+#            the release's cap of 3, check 8);
 #   msaa     Enhanced 2x under MSAA 4x (the count from the MSAA epoch's
 #            covered-majority resolve, the seven draws: no full-size pass);
 #   bspline  Enhanced 2x with [dev] shadow_bspline (ICO_RD_SHADOW_BSPLINE=1);
@@ -41,7 +41,7 @@
 #   2. at 1x (e1x, o1x, gl1x) the default is the PS2's sizes: every PNG the
 #      same bytes, the same draws and passes, "shadow levels: 0 shadows at the
 #      scene's scale, 0 passes, 0 at the PS2's size";
-#   3. above 1x (adreno, phone, msaa, bspline, owner, tall, pixel, gl2x), the
+#   3. above 1x (adreno, msaa, bspline, owner, tall, pixel, gl2x), the
 #      default against the PS2's sizes: on every fixture exactly one shadow at the
 #      scene's scale and none drawn at the PS2's size (no reason in the stats
 #      line: a silent fallback fails here);
@@ -85,6 +85,11 @@
 #      them 9 + it, 9 draws + its one;
 #   7. above 1x three replays in a row with the cuts and without: the
 #      presented pictures the same bytes (the render area's tracking);
+#   8. above the cap (phone; rd_shadowres.h RD_SR_LEVEL_CAP): the default the
+#      PS2's sizes, every PNG the same bytes, the same passes and draws, no
+#      shadow at the scene's scale and one drawn at the PS2's size for the
+#      scale, "(scale 1)", and the line "shadow levels: the PS2's sizes: the
+#      scene at ... above the cap of 3";
 #   5. force: the fine chain at 1x, one shadow, 6 passes of its own, SCENE
 #      at most 6 levels from the default's at any channel (png_level_diff.py).
 #      At 1x the fine chain is the GS step exactly; the PS2-size chain on the
@@ -183,6 +188,10 @@ set(env_gl2x "")
 set(args_gl2x --enhanced --resolution 2x --present 1280x720)
 set(levels_gl2x 3x3)
 set(same e1x o1x gl1x)
+# above the release's cap (rd_shadowres.h RD_SR_LEVEL_CAP 3: levels at 5 x 3
+# would be drawn): the PS2's sizes, v0.11.6's shadow
+set(capped phone)
+set(capRe "shadow levels: the PS2's sizes: the scene at [0-9.]+x[0-9.]+ texels a GS pixel, above the cap of 3")
 
 set(drawsRe "stats: ([0-9]+) draws, ([0-9]+) passes")
 set(fineRe "stats: shadow levels: ([0-9]+) shadows at the scene's scale, ([0-9]+) passes, ([0-9]+) at the PS2's size([^\n,]*)")
@@ -354,7 +363,27 @@ foreach(dump IN LISTS dumps)
       sf_golden("${dumpName} ${s} the PS2's sizes" "${dumpName}" "${s}" "${base}-ps2")
     endif()
     list(FIND same "${s}" isSame)
-    if(isSame GREATER -1)
+    list(FIND capped "${s}" isCapped)
+    if(isCapped GREATER -1)
+      # 8. above the cap: every PNG the PS2 sizes' bytes, its passes and draws,
+      # no shadow at the scene's scale, one refused for the scale, the line
+      math(EXPR compared "${compared} + 1")
+      sf_same("${dumpName} ${s} above the cap against the PS2's sizes" "${base}-ps2"
+              "${base}-fine")
+      if(NOT chains_h EQUAL 0 OR NOT fpasses_h EQUAL 0 OR NOT refused_h EQUAL 1 OR
+         NOT whys_h STREQUAL " (scale 1)" OR NOT passes_h EQUAL passes_p OR
+         NOT draws_h EQUAL draws_p)
+        message(SEND_ERROR "${dumpName} ${s}: above the cap ${chains_h} shadows at the scene's "
+                           "scale (0), ${fpasses_h} passes (0), ${refused_h} refused${whys_h} (1 "
+                           "for the scale); ${passes_h}/${draws_h} passes and draws against "
+                           "${passes_p}/${draws_p}")
+        set(sfFail TRUE)
+      endif()
+      if(NOT err_h MATCHES "${capRe}")
+        message(SEND_ERROR "${dumpName} ${s}: no cap line in the log:\n${err_h}")
+        set(sfFail TRUE)
+      endif()
+    elseif(isSame GREATER -1)
       # 2. at 1x the default is the PS2's sizes
       math(EXPR compared "${compared} + 1")
       sf_same("${dumpName} ${s} the default against the PS2's sizes" "${base}-ps2"

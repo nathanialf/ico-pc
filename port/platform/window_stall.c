@@ -114,6 +114,7 @@ static void arm_block_end(void); /* the bounded pass timing, below */
    known) */
 static StallMedians s_med;
 static StallTally s_tally;
+static StallLineBudget s_lines; /* the run's per-stall lines (stall_coincide.h) */
 
 /* the last records that showed the GPU's own sign of a reset (rd.h
    RdPerfRecord.gpuResetSign, rd_perf_clock.h rd_perf_reset_sign), for a
@@ -575,14 +576,15 @@ static void moment_now(StallMoment *m, double t0Ms, double t1Ms, uint32_t replay
 
 static void stall_event(const char *what, double t0Ms, double t1Ms, uint32_t replay)
 {
-    /* every stall of the block up to STALL_BLOCK_LINES (stall_coincide.h;
-       the tally says how many were left out): v0.11.6's run-wide cap of 8
-       left issue 123's stalls 9-13 with the tallies alone */
+    /* every stall while they are rare, v0.11.6's rule past that
+       (stall_coincide.h stall_line_due; the tally says how many were left
+       out): v0.11.6's run-wide cap of 8 left issue 123's stalls 9-13 with
+       the tallies alone */
     static StallMoment m;
     static char text[4096];
     moment_now(&m, t0Ms, t1Ms, replay);
     stall_tally_add(&s_tally, &m);
-    if (!stall_tally_line_due(&s_tally)) {
+    if (!stall_line_due(&s_tally, &s_lines)) {
         return;
     }
     (void)stall_moment_text(&m, text, sizeof text);
