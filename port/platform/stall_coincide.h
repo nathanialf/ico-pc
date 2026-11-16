@@ -44,10 +44,16 @@
 #define STALL_MEDIAN_MIN 5u    /* a pass's median needs this many of it in the block */
 #define STALL_WAIT_MS 100.0    /* a core wait over this in the last second (a tenth) */
 #define STALL_GPU_LOW 0.5      /* the GPU clock under this share of its fastest */
+/* a timed piece "grew" at this many times its block median or more (the
+   one-piece and whole-GPU classes below) */
+#define STALL_GROWN 2.0
 
 /* The block's GPU times of each kind of pass (a key: the piece's kind,
-   target and list), the last STALL_RING of each, for their medians */
-#define STALL_KEYS 32
+   target and list), the last STALL_RING of each, for their medians; and
+   (window_stall.c) the timed records' own pieces (13 lists, the effects,
+   the pre-pass, the stretch before list 0, the present) and triangles:
+   room for both */
+#define STALL_KEYS 64
 #define STALL_RING 64
 
 typedef struct StallMedians {
@@ -65,6 +71,8 @@ void stall_medians_reset(StallMedians *m);
    STALL_MEDIAN_MIN), then ms added to them (a full table drops the new
    key: -1) */
 double stall_medians_add(StallMedians *m, uint32_t key, double ms);
+/* the same median without adding (-1 likewise, or the key not held) */
+double stall_medians_peek(const StallMedians *m, uint32_t key);
 /* a pass that is a stall: over STALL_PASS_TIMES its median (known, above
    0) and over STALL_PASS_MS */
 bool stall_pass_spike(double ms, double median);
@@ -161,7 +169,34 @@ typedef struct StallMoment {
            over SCENE's copy), 2 drawn in full */
         uint8_t scene;
     } sub[STALL_SUBS];
+
+    /* Issue 179's stalls all read "none of these" (v0.11.7 log): what the
+       stall line already had, judged.  The stalled replay's pieces timed
+       pass by pass against their block medians (stall_pieces_judge;
+       pieceN 0: the replay not timed pass by pass, or no median known):
+       the piece that grew most (pieceName, pieceFactor its time over its
+       median), the median of the others' factors (othersFactor, 0 with no
+       other), every piece's factors' range and the pieces at STALL_GROWN or
+       more (grown) */
+    unsigned pieceN, grown;
+    char pieceName[48];
+    double pieceFactor, othersFactor, factorMin, factorMax;
+    /* the GPU idle before the stalled picture's first stamp after the one
+       before's last (RdPerfRecord.gpuGapNs: under 0 begun before it ended);
+       idleKnown 0 not timed after another */
+    bool idleKnown;
+    double idleBeforeMs;
+    /* the stalled picture's VU triangles and the block's median of them
+       (trisKnown 0: no median yet) */
+    bool trisKnown;
+    double tris, trisMedian;
 } StallMoment;
+
+/* The pieces judged into m (pieceN, grown, the factors; the name left to
+   the caller): n pieces' times ms[] and their block medians median[] (a
+   piece with no median above 0 left out).  The index of the piece with the
+   largest factor, -1 with none */
+int stall_pieces_judge(StallMoment *m, const double *ms, const double *median, unsigned n);
 
 typedef struct StallSub StallSub;
 
@@ -173,6 +208,13 @@ enum {
     STALL_CLASS_PRESSURE, /* memory pressure rising (some avg10 above the second before's) */
     STALL_CLASS_GPU,      /* the GPU clock under STALL_GPU_LOW of its fastest, where readable */
     STALL_CLASS_RESET,    /* the GPU's own sign of a reset (resetReplay or hangReplay set) */
+    /* one piece grew: of two or more pieces with medians, the most grown at
+       STALL_GROWN times its median or more, the others' median factor under
+       STALL_GROWN */
+    STALL_CLASS_ONE_PIECE,
+    /* the GPU slow as a whole: two or more pieces, every one at STALL_GROWN
+       times its median or more */
+    STALL_CLASS_GPU_WHOLE,
     STALL_CLASS_NONE,
     STALL_CLASSES
 };

@@ -838,7 +838,7 @@ window: paste: P pastes by fx_paste_ps of Q, K kept on fx_frame_ps (counts by wh
 `rd_replay_tool --stats`: `stats: paste spec on|off (self-test <words>): P pastes by fx_paste_ps of
 Q; the run: ...`. The attempt ledger's row `the glow's paste by its own entry` counts the pastes
 drawn by it and those kept on `fx_frame_ps` in each 10 s block
-([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-attempt-ledger)). Tests: `rd_paste_spec`,
+([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS_LEDGERS.md#the-attempt-ledger)). Tests: `rd_paste_spec`,
 `rd_paste_spec_ab`, `rd_paste_spec_sabotage`, `rd_paste_spec_gl`
 ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
 
@@ -1183,7 +1183,7 @@ rd: present: turn in the blit: a present keeps the turn pass: the port's overlay
 ```
 
 The attempt ledger's row `turn in the present's blit` counts the presents folded and those that kept the turn
-pass in each 10 s block ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-attempt-ledger)).
+pass in each 10 s block ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS_LEDGERS.md#the-attempt-ledger)).
 Tests: `rd_smallcuts` (the turned rects against the table, the reasons) and `rd_turn_fold_ab` (the
 headless twin, every PNG byte for byte).
 
@@ -1947,7 +1947,7 @@ rd: shadow volumes: a volume draw kept sprite_ps: <why> (frame F, S samples; rep
 window: shadow volumes: V volume draws by the stencil-only entry of W, K kept on sprite_ps (counts by why)
 ```
 
-`rd_replay_tool --stats`: `stats: volume fs on|off (self-test <words>): V volume draws by date_clear_ps of W; the run: ...`. The attempt ledger's row `the shadow volumes by the stencil-only entry` counts the volume draws by it and those kept on `sprite_ps` where it is offered, in each 10 s block ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-attempt-ledger)). The rc bench has a variant for it each way (`the shadow volumes by sprite_ps (not the stencil-only entry)`), and one for the glow's paste by its own entry (`the glow paste by fx_frame_ps (not its own entry)`). Tests: `rd_volume_fs`, `rd_volume_fs_selftest`, `rd_volume_fs_selftest_sabotage`, `rd_volume_fs_ab`, `rd_volume_fs_sabotage` ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
+`rd_replay_tool --stats`: `stats: volume fs on|off (self-test <words>): V volume draws by date_clear_ps of W; the run: ...`. The attempt ledger's row `the shadow volumes by the stencil-only entry` counts the volume draws by it and those kept on `sprite_ps` where it is offered, in each 10 s block ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS_LEDGERS.md#the-attempt-ledger)). The rc bench has a variant for it each way (`the shadow volumes by sprite_ps (not the stencil-only entry)`), and one for the glow's paste by its own entry (`the glow paste by fx_frame_ps (not its own entry)`). Tests: `rd_volume_fs`, `rd_volume_fs_selftest`, `rd_volume_fs_selftest_sabotage`, `rd_volume_fs_ab`, `rd_volume_fs_sabotage` ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
 
 ### The shadow composites by their own entry
 
@@ -1990,7 +1990,7 @@ rd: composites: a shadow composite or level kept sprite_ps: <why> (frame F, comm
 window: composites: T shadow composites and levels by sprite_comp_ps of S, K kept on sprite_ps (counts by why)
 ```
 
-`rd_replay_tool --stats`: `stats: comp spec on|off (self-test <words>): T composites and levels by sprite_comp_ps of S; the run: ...`. The attempt ledger's row `the shadow composites by their own entry` counts the draws by it and those kept on `sprite_ps` where it is offered ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-attempt-ledger)). Tests: `rd_comp_spec`, `rd_comp_spec_selftest`, `rd_comp_spec_selftest_sabotage`, `rd_comp_spec_ab`, `rd_comp_spec_sabotage` ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
+`rd_replay_tool --stats`: `stats: comp spec on|off (self-test <words>): T composites and levels by sprite_comp_ps of S; the run: ...`. The attempt ledger's row `the shadow composites by their own entry` counts the draws by it and those kept on `sprite_ps` where it is offered ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS_LEDGERS.md#the-attempt-ledger)). Tests: `rd_comp_spec`, `rd_comp_spec_selftest`, `rd_comp_spec_selftest_sabotage`, `rd_comp_spec_ab`, `rd_comp_spec_sabotage` ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
 
 ### The two-pass blend in one pass
 

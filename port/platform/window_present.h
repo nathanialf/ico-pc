@@ -190,6 +190,11 @@ typedef struct WindowPres {
        thread's picture before, rd_submit_waited_ns): the idle ask's guard reads
        the hand-over's own time (pace_policy.h pace_rt_fill) */
     Uint64 handCost;
+    /* the picture interval in force (slow_judge.h; 0 not known): Frame
+       rate Original's game frame (frameSteps steps of the period, the last
+       known), a numeric cap's gap between presents, 0 under Uncapped and
+       the vsync lock (one a refresh) */
+    Uint64 pictureNs;
 } WindowPres;
 
 /* the loop's state (window_present.c), and the deadline: when the
@@ -203,6 +208,17 @@ extern Uint64 g_windowDeadline;
    hz: the simulation's rate (50 PAL, else NTSC's 59.94) */
 void window_present_pace(int hz);
 
+/* --- what slow pictures and steps are judged against (slow_judge.h) ----- */
+/* The slow-replay threshold now in ms (the larger of the refresh and the
+   picture interval in force; a line when it changes) */
+double window_slow_replay_ms(void);
+/* The slow-step threshold now ([dev] slow_step_ms scaled) */
+double window_slow_step_ms(void);
+/* The pictures a second the presents aim at now (0 not known) */
+double window_slow_target_hz(void);
+/* The block's game frames a second over its own frame intervals (once a
+   block, at its end: the block's last close is kept for the next) */
+double window_block_game_fps(double sec);
 /* --- window_host.c's, for the loop ------------------------------------ */
 /* The display's refresh period in ns; fallback when it reports none */
 Uint64 window_refresh_ns(Uint64 fallback);

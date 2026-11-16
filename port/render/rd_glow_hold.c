@@ -60,6 +60,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "rd_glow_offset.h"
 #include "rd_internal.h"
 #include "rd_replay.h"
 
@@ -136,11 +137,16 @@ static bool texOf(uint32_t id, uint32_t v[3])
     return true;
 }
 
-/* this tick's copy: the frame, and WORK3_HELD's and WORK3's textures */
+/* this tick's copy: the frame, and WORK3_HELD's and WORK3's textures, and
+   the first present's screen-view (the held glow's camera, rd_glow_offset.h) */
 static struct {
     bool valid;
     uint32_t number, held[3], work[3];
+    float sv[16];
 } s_copy;
+
+/* the held presents' camera offsets in the window (rd__glow_hold_block) */
+static RdGlowOffsets s_off;
 
 static int s_last = RD_GLOW_NONE;
 static uint64_t s_why[RD_GLOW_COUNT];
@@ -189,6 +195,7 @@ int rd__glow_hold(RdFrame *f, int firstOfTick)
             s_copy.number = f->number;
             memcpy(s_copy.held, heldTex, sizeof(heldTex));
             memcpy(s_copy.work, workTex, sizeof(workTex));
+            memcpy(s_copy.sv, f->vu.screenView, sizeof(s_copy.sv));
         }
         return outcome(list >= 0 ? RD_GLOW_FIRST : RD_GLOW_NONE);
     }
@@ -263,6 +270,15 @@ int rd__glow_hold(RdFrame *f, int firstOfTick)
             }
         }
     }
+    {
+        /* how far the pasted glow's camera is from this present's */
+        double px;
+        if (rd_glow_offset(s_copy.sv, f->vu.screenView, &px)) {
+            rd_glow_offsets_add(&s_off, px);
+        } else {
+            s_off.refused++;
+        }
+    }
     return outcome(RD_GLOW_HELD);
 }
 
@@ -316,18 +332,22 @@ void rd__glow_hold_block(void)
             w[RD_GLOW_NO_COPY] + w[RD_GLOW_READ] ==
         0) {
         memset(s_why, 0, sizeof(s_why));
+        rd_glow_offsets_reset(&s_off);
         return; /* no glow drawn in the block */
     }
+    char off[192];
+    (void)rd_glow_offsets_text(&s_off, off, sizeof(off));
+    rd_glow_offsets_reset(&s_off);
     rd__log("interp: glow between ticks: %s: %llu later presents pasted the tick's glow without "
             "its chain; the chain drawn at %llu first presents, %llu later ones with [dev] "
             "glow_redraw, %llu later ones with Glow between frames: Smooth, %llu without this "
-            "tick's copy, %llu whose other draws read its buffers; %llu presents without a glow",
+            "tick's copy, %llu whose other draws read its buffers; %llu presents without a glow%s",
             redrawSource() == SRC_ENV   ? "redrawn ([dev] glow_redraw = true)"
             : redrawSource() == SRC_ROW ? "redrawn (Glow between frames: Smooth)"
                                         : "held",
             (unsigned long long)w[RD_GLOW_HELD], (unsigned long long)w[RD_GLOW_FIRST],
             (unsigned long long)w[RD_GLOW_DEV], (unsigned long long)w[RD_GLOW_SMOOTH],
             (unsigned long long)w[RD_GLOW_NO_COPY], (unsigned long long)w[RD_GLOW_READ],
-            (unsigned long long)w[RD_GLOW_NONE]);
+            (unsigned long long)w[RD_GLOW_NONE], off);
     memset(s_why, 0, sizeof(s_why));
 }

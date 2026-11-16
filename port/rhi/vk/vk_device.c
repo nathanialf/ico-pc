@@ -2116,8 +2116,14 @@ static bool vkr_create_device(void)
         const bool fakeNoVs = noVs && noVs[0] && noVs[0] != '0';
         g_vkr.vertexStores = avail.vertexPipelineStoresAndAtomics == VK_TRUE && !fakeNoVs;
         if (!g_vkr.vertexStores) {
-            VKR_LOG("no vertexPipelineStoresAndAtomics%s: the VU record is drawn into render "
-                    "targets and copied",
+            /* the renderer decides how the record is stored instead (by
+             * compute dispatches where they pass its self-test, else drawn
+             * into render targets and copied) and says so on its own "VU
+             * pre-pass" and "VU record" lines: the backend's line said the
+             * render targets even where compute was then used (issue 179's
+             * v0.11.7 log, :45 against :140) */
+            VKR_LOG("no vertexPipelineStoresAndAtomics%s: the VU record is not stored by the "
+                    "vertex shaders (the renderer's VU record line says how it is stored)",
                     avail.vertexPipelineStoresAndAtomics == VK_TRUE
                         ? " (ICO_VK_FAKE_NO_VERTEX_STORES)"
                         : "");

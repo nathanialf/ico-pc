@@ -433,6 +433,12 @@ static void test_classes(void)
            here reads the stencil through its view (the count in one draw) */
         ico_attempt_decide_shadow_count(1);
         CHECK(ico_attempt_state_of(ICO_ATT_SHADOW_COUNT) == ICO_ATT_ON);
+        /* the start-up set sized by the memory fall (set_size.h): on where the
+           free-memory floor applies (the Android classes here), not
+           applicable elsewhere */
+        ico_attempt_decide_set_size(kShip[c].android);
+        CHECK(ico_attempt_state_of(ICO_ATT_SET_SIZE) ==
+              (kShip[c].android ? ICO_ATT_ON : ICO_ATT_NA));
         /* the paused scene's hold (rd_hold.c): every class here is a Vulkan
            device; the classes are not told whether list 11's draws join (the
            device's fx plan), so on, as the reporter's Adreno 740 */

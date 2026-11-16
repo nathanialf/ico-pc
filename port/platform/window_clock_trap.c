@@ -17,6 +17,7 @@
 #include "rd.h"
 #include "render_thread.h"
 #include "window_perf_hint.h"
+#include "window_present.h" /* window_slow_target_hz */
 #ifdef __ANDROID__
 #include "gpu_sysfs_android.h"
 #endif
@@ -126,6 +127,8 @@ void window_clock_trap_picture(const struct RdPerfRecord *r)
        the record's time less its waits */
     const double cpu = r->totalMs - r->presentMs - r->fenceWaitMs - r->acquireMs;
 
+    /* the rate in force the worst second is judged against (clock_trap.h) */
+    clock_trap_target(&s_ct, window_slow_target_hz());
     events(
         clock_trap_picture(&s_ct, ico_thread_now_ms(), r->frame, cpu > 0.0 ? cpu : -1.0, &closed),
         &closed);

@@ -141,6 +141,93 @@ static struct {
     double ms;
 } s_idle;
 
+/* The last timed record's pieces against the block's medians (issue 179's
+   classes, stall_coincide.h stall_pieces_judge): the GPU times its record
+   carries on every timed replay (each list, each effect, the VU pre-pass,
+   the stretch before list 0, the present), each with its median in the
+   block before it was added; its GPU idle before (gpuGapNs) and its VU
+   triangles with their median.  Taken by window_stall_after, which sees
+   every record before a stall of it is judged (window_host.c perf_drain:
+   window_stall_after, then the present's stall, then the passes) */
+#define PIECE_KEY 0x40000000u /* the record's pieces' keys: apart from the passes' */
+#define PIECE_TRIS (PIECE_KEY + 0xFFFFu)
+#define PIECES (RD_LIST_COUNT + RD_PERF_POST_COUNT + 3)
+
+static struct {
+    uint32_t replay; /* 0 none */
+    unsigned n;
+    double ms[PIECES], med[PIECES];
+    int what[PIECES]; /* 0..RD_LIST_COUNT-1 a list, then the effects, then the three */
+    bool idleKnown;
+    double idleMs;
+    bool trisKnown;
+    double tris, trisMed;
+} s_pc;
+
+static void piece_name(int what, char *out, size_t cap)
+{
+    if (what < RD_LIST_COUNT) {
+        snprintf(out, cap, "list %d", what);
+    } else if (what < RD_LIST_COUNT + RD_PERF_POST_COUNT) {
+        snprintf(out, cap, "%s", rd_perf_post_name(what - RD_LIST_COUNT));
+    } else {
+        static const char *const k_rest[3] = {"the VU pre-pass", "before list 0", "the present"};
+        snprintf(out, cap, "%s", k_rest[what - RD_LIST_COUNT - RD_PERF_POST_COUNT]);
+    }
+}
+
+static void piece_add(int what, double ms)
+{
+    if (!(ms > 0.0) || s_pc.n >= PIECES) {
+        return;
+    }
+    s_pc.ms[s_pc.n] = ms;
+    s_pc.med[s_pc.n] = stall_medians_add(&s_med, PIECE_KEY + (uint32_t)what, ms);
+    s_pc.what[s_pc.n] = what;
+    s_pc.n++;
+}
+
+/* a record's pieces, idle time and triangles (every record: the medians) */
+static void pieces_take(const RdPerfRecord *r)
+{
+    s_pc.replay = r->replay;
+    s_pc.n = 0;
+    s_pc.idleKnown = r->gpuValid && r->gpuGapValid;
+    s_pc.idleMs = (double)r->gpuGapNs / 1e6;
+    s_pc.tris = (double)r->vuTris;
+    s_pc.trisMed = stall_medians_add(&s_med, PIECE_TRIS, (double)r->vuTris);
+    s_pc.trisKnown = s_pc.trisMed >= 0.0;
+    if (!r->gpuValid) {
+        return;
+    }
+    for (int l = 0; l < RD_LIST_COUNT; l++) {
+        piece_add(l, r->gpuListMs[l]);
+    }
+    for (int e = 0; e < RD_PERF_POST_COUNT; e++) {
+        piece_add(RD_LIST_COUNT + e, r->gpuPostMs[e]);
+    }
+    piece_add(RD_LIST_COUNT + RD_PERF_POST_COUNT, r->gpuPrepassMs);
+    piece_add(RD_LIST_COUNT + RD_PERF_POST_COUNT + 1, r->gpuUploadMs);
+    piece_add(RD_LIST_COUNT + RD_PERF_POST_COUNT + 2, r->gpuPresentMs);
+}
+
+/* the stalled replay's pieces into m (when the last record taken is it) */
+static void moment_pieces(StallMoment *m, uint32_t replay)
+{
+    if (s_pc.replay != replay || replay == 0) {
+        return;
+    }
+    const int at = stall_pieces_judge(m, s_pc.ms, s_pc.med, s_pc.n);
+    if (at >= 0) {
+        piece_name(s_pc.what[at], m->pieceName, sizeof(m->pieceName));
+    }
+    m->idleKnown = s_pc.idleKnown;
+    m->idleBeforeMs = s_pc.idleMs;
+    m->trisKnown = s_pc.trisKnown;
+    m->tris = s_pc.tris;
+    m->trisMedian = s_pc.trisMed;
+}
+
 /* the last records' submissions (rd_perf_sub.h), for the per-stall line:
    the stalled replay's and the two before it (one more kept) */
 #define SUB_RECS 4
@@ -540,6 +627,7 @@ static void moment_now(StallMoment *m, double t0Ms, double t1Ms, uint32_t replay
         m->idleMs = s_idle.ms;
     }
     moment_subs(m, t0Ms, replay);
+    moment_pieces(m, replay);
     m->gameCore = cpu_place_now();
     m->renderCore = ico_render_thread_render_core();
     m->gpuMhz = m->gpuMaxMhz = -1;
@@ -859,6 +947,7 @@ void window_stall_after(const RdPerfRecord *r, PaceGpuGap *gap)
     if (s_stallT0 <= 0.0) {
         s_stallT0 = ico_thread_now_ms(); /* the first block starts with the first record */
     }
+    pieces_take(r); /* its pieces against the block's medians (a stall of it judges them) */
     switch (r->gpuResetSign) {
     case RD_RESET_HANG:
         s_hang.replay = r->replay;

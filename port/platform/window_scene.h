@@ -118,6 +118,7 @@ typedef struct SlowSceneBlock {
     double boundMs;
     int stage;     /* the game's stage_no at the block's end */
     int lastStage; /* the stage of the last dump's block (unused with count 0) */
+    int playDone;  /* a play block's dump has been made this run */
 } SlowSceneBlock;
 
 /* The mean GPU work a replay: (span less the display wait less the present
@@ -135,8 +136,19 @@ double window_slow_scene_work_ms(const SlowSceneBlock *b);
    than SLOW_SCENE_DUMPS) whose block is in another stage than the last
    dump's (window_slow_scene_new_stage), at any work over the bound: the
    first slow block of each stage gets a file (issue 179: the cage, 90.9 ms,
-   after the boat's 99.7 ms, which the 1.5 times rule alone refused) */
+   after the boat's 99.7 ms, which the 1.5 times rule alone refused).
+   The last of the SLOW_SCENE_DUMPS is kept for play (issue 179's v0.11.7
+   log: all three were spent in the opening's cutscenes before the player
+   had control): scene blocks take at most SLOW_SCENE_DUMPS - 1 while no
+   play block's dump has been made (window_slow_scene_scene_cap), and the
+   first block whose dominant kind is play (SCENE_PLAY: the play layout,
+   the player in control; window_scene_kind) with its work over the bound,
+   under the same window, movie, uptime and timed-replay rules, takes the
+   one kept.  The total and each dump's size are unchanged */
 bool window_slow_scene_due(const SlowSceneBlock *b);
+/* the dumps scene blocks may take: SLOW_SCENE_DUMPS - 1 until a play block's
+   dump is made (playDone), then SLOW_SCENE_DUMPS */
+int window_slow_scene_scene_cap(const SlowSceneBlock *b);
 /* true when a dump has been made this run and the block's stage differs from
    the last dump's block's: the block is the first slow one of its stage */
 bool window_slow_scene_new_stage(const SlowSceneBlock *b);
@@ -151,9 +163,10 @@ bool window_slow_scene_pick(double work, double meanWork);
    vertex work 682.1 thousand against the block's mean 598.0 thousand)
    written to logs/slow-20261106-120000.zip (dump 2 of 3 this run); attach
    it with the log" (a new-stage block reads "in a scene layout (the first
-   slow block of stage 40): frame ..."; the works in vertex invocations, printed in thousands;
-   the name is the file name alone; dump is count + 1).  The length
-   written */
+   slow block of stage 40): frame ..."; a play block's "in play (the dump
+   kept for play): frame ..."; the works in vertex invocations, printed in
+   thousands; the name is the file name alone; dump is count + 1).  The
+   length written */
 size_t window_slow_scene_text(char *out, size_t cap, const SlowSceneBlock *b, unsigned frame,
                               double frameWork, double meanWork, const char *zipName);
 

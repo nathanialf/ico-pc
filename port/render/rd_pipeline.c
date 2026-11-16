@@ -82,7 +82,9 @@
 #include "rd_made_outside.h"
 #include "rd_hash.h"
 #include "rd_cpu_phase.h"
+#include "attempt_ledger.h" /* ICO_ATT_SET_SIZE */
 #include "rd_device_rows.h" /* rd_device_rows_reason */
+#include "rd_list_draws.h"
 #include "rd_internal.h"
 #include "rd_passring.h"
 #include "rd_paste_spec.h"
@@ -94,6 +96,7 @@
 #include "rd_volume_fs.h"
 #include "rd_vu_record.h"
 #include "rd_vu_rec_sink.h"
+#include "rd_vu_rec_early.h" /* rd_set_size_need */
 #include "rd_vu_skin_check.h"
 #include "shader_consts.h"
 #include "shaders_gen.h"
@@ -1093,6 +1096,31 @@ void rd_set_low_memory_fn(RdLowMemoryFn fn)
     s_lowMemoryFn = fn;
 }
 
+/* rd_set_set_size_fn (issue 215): the start-up set sized by the device's own
+   memory fall, asked in createKeys while rd_precreate_pipelines makes the
+   start-up set (s_sizeOn; not a display change's keys, nor a replay's) */
+static RdSetSizeFn s_setSizeFn;
+static bool s_sizeOn;
+/* a family was left to first use by it this run: the ledger's second count
+   (the pipelines made on first use since) */
+static bool s_sizeStopped;
+
+void rd_set_set_size_fn(RdSetSizeFn fn)
+{
+    s_setSizeFn = fn;
+}
+
+/* the pipelines made on first use after the set (rd__get_pipeline), for the
+   window's 10 s line: the block's count and longest (taken), the run's */
+static uint32_t s_fuBlock, s_fuRun, s_fuLongUs;
+
+void rd_pipelines_first_use_take(uint32_t *block, float *longestMs, uint32_t *run)
+{
+    *block = __atomic_exchange_n(&s_fuBlock, 0u, __ATOMIC_RELAXED);
+    *longestMs = (float)__atomic_exchange_n(&s_fuLongUs, 0u, __ATOMIC_RELAXED) / 1000.0f;
+    *run = __atomic_load_n(&s_fuRun, __ATOMIC_RELAXED);
+}
+
 /* How the start-up set is made (rd.h RdPipelineSetPolicy; createKeys):
  * zero fields are the defaults (RD_PIPE_BATCH keys a batch, the backend's
  * threads, no memory bound, the cache written as cacheKeptPerBatch says).
@@ -1715,6 +1743,7 @@ static RhiPipeline keepPipeline(const RdPipeKeyInt *k, RhiPipeline p, uint32_t a
     s_hash[at] = (uint16_t)s_used;
     rd__stats_here()->pipelineCreates++;
     rd__passring_pipeline(p.id, k->vs, k->fs, k->dst);
+    rd__list_draws_note(k->fs, k->gs.stencil); /* the list's draws by entry (rd_list_draws.h) */
     return p;
 }
 
@@ -1909,6 +1938,7 @@ RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k)
         const RhiPipeline p = s_cache[s_hash[at] - 1].pipe;
         if (p.id) {
             rd__passring_pipeline(p.id, k->vs, k->fs, k->dst);
+            rd__list_draws_note(k->fs, k->gs.stencil); /* rd_list_draws.h */
         }
         return p;
     }
@@ -1942,6 +1972,19 @@ RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k)
     rd__made_outside_key_end();
     const float ms = (float)(rd__now_ms() - t0);
     s_createMs += ms;
+    if (p.id && (s_lazy.on || s_startupSet)) {
+        /* the window's 10 s line (rd_pipelines_first_use_take): one more,
+           and the longest in microseconds (held below 4000 s) */
+        const uint32_t us = ms <= 0.0f ? 0u : ms < 4.0e6f ? (uint32_t)(ms * 1000.0f) : 4000000000u;
+        uint32_t cur = __atomic_load_n(&s_fuLongUs, __ATOMIC_RELAXED);
+        __atomic_add_fetch(&s_fuBlock, 1u, __ATOMIC_RELAXED);
+        __atomic_add_fetch(&s_fuRun, 1u, __ATOMIC_RELAXED);
+        while (us > cur && !__atomic_compare_exchange_n(&s_fuLongUs, &cur, us, false,
+                                                        __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {}
+        if (s_sizeStopped) {
+            ico_attempt_fire2(ICO_ATT_SET_SIZE, 1u); /* made on first use after the rule's stop */
+        }
+    }
     if (p.id && s_lazy.on) {
         lazyCount(k, ms);
     } else if (p.id && s_startupSet) {
@@ -2447,11 +2490,74 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
     PreBatch pb = {0, m, 0, 0, NULL, NULL, 0, 0, 0, -1};
     memset(c, 0, sizeof(*c));
     c->threads = 1;
+    /* issue 215: the start-up set sized by the device's own memory fall
+       (rd_set_set_size_fn): each key's family counted once, 2 for a key
+       made already or never made (the sprite planes off); the families the
+       window stopped are skipped from then on */
+    static uint8_t sizeFam[RD_PIPELINE_CACHE_MAX];
+    const bool sized =
+        times != NULL && s_sizeOn && s_setSizeFn != NULL && m <= RD_PIPELINE_CACHE_MAX;
+    uint32_t sizeMade[2] = {0u, 0u}, sizeSkipped[2] = {0u, 0u}, sizeAtStop = 0u;
+    uint32_t sizeFirstSkip = UINT32_MAX;
+    unsigned sizeMask = 0u;
+    bool sizeBegin = true;
+    char sizeWhy[160] = "";
+    if (sized) {
+        for (uint32_t j = 0; j < m; j++) {
+            RdPipeKeyInt tmp;
+            bool f;
+            const RdPipeKeyInt *k = resolved ? &keys[j] : drawKey(&keys[j], &tmp);
+            (void)probeKey(k, &f);
+            sizeFam[j] = f || (g_rd.spritePlanesOff && rd__key_is_sprite_planes(k)) ? 2u
+                         : keyIsVu(k)                                               ? 1u
+                                                                                    : 0u;
+        }
+    }
     if (s_progressFn != NULL) {
         s_progressFn(s_progressCtx, 0, m);
     }
     uint32_t i = 0;
     while (i < m && !pb.stop) {
+        if (sized) {
+            /* the window's ask before the batch (issue 215): the counts by
+               family from i on, play's known need */
+            RdSetSizeAsk ask;
+            char why[160];
+            memset(&ask, 0, sizeof(ask));
+            ask.made[0] = sizeMade[0];
+            ask.made[1] = sizeMade[1];
+            ask.next = -1;
+            for (uint32_t j = i; j < m; j++) {
+                if (sizeFam[j] < 2u) {
+                    ask.left[sizeFam[j]]++;
+                    if (ask.next < 0 && !((sizeMask >> sizeFam[j]) & 1u)) {
+                        ask.next = (int)sizeFam[j];
+                    }
+                }
+            }
+            ask.begin = sizeBegin;
+            rd_set_size_need(&ask.needRecordBytes, &ask.needArenaBytes);
+            ask.place = i;
+            ask.total = m;
+            why[0] = '\0';
+            const unsigned was = sizeMask;
+            sizeMask |= s_setSizeFn(&ask, why, sizeof(why));
+            sizeBegin = false;
+            if (sizeMask != was && why[0] != '\0') {
+                snprintf(sizeWhy, sizeof(sizeWhy), "%s", why);
+            }
+            const unsigned live = (ask.left[0] > 0u ? 1u : 0u) | (ask.left[1] > 0u ? 2u : 0u);
+            if (live != 0u && (live & ~sizeMask) == 0u) {
+                /* every family with keys left is stopped: the set stops
+                   here, the rest made on first use */
+                sizeAtStop = ask.left[0] + ask.left[1];
+                snprintf(c->budget, sizeof(c->budget),
+                         "(memory: the start-up set sized by the device's memory fall: %.150s; %u "
+                         "pipelines left to first use)",
+                         sizeWhy, sizeAtStop + sizeSkipped[0] + sizeSkipped[1]);
+                break;
+            }
+        }
         /* the batch: the next keys not made yet, up to RD_PIPE_BATCH, all
          * with a destination read or all without */
         const uint32_t first = i;
@@ -2481,6 +2587,13 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
             if (found) {
                 /* made, or a failed entry (not created again) */
                 c->failed += s_cache[s_hash[at] - 1].pipe.id == 0;
+                continue;
+            }
+            if (sizeMask != 0u && ((sizeMask >> (keyIsVu(k) ? 1u : 0u)) & 1u)) {
+                /* issue 215: its family stopped by the memory fall: made on
+                   first use */
+                sizeSkipped[keyIsVu(k) ? 1 : 0]++;
+                sizeFirstSkip = sizeFirstSkip == UINT32_MAX ? i : sizeFirstSkip;
                 continue;
             }
             if (s_createStopped) {
@@ -2684,6 +2797,7 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
                     continue;
                 }
                 c->compiled++;
+                sizeMade[keyIsVu(&bk[j]) ? 1 : 0]++; /* issue 215's counts */
                 /* the progress screen's frame may have made the same key
                    meanwhile, or filled the cache */
                 if (found || s_used >= RD_PIPELINE_CACHE_MAX) {
@@ -2706,6 +2820,26 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
     s_batchNote[0] = '\0';
     c->stop = pb.stop;
     c->stoppedAt = i;
+    if (sized && sizeSkipped[0] + sizeSkipped[1] > 0u && c->budget[0] == '\0' && !pb.stop) {
+        /* issue 215: the set ran on with a family stopped: it stops as if
+           at its first skipped key, so the rest is made on first use with
+           the lazy path's batches and cache writes */
+        snprintf(c->budget, sizeof(c->budget),
+                 "(memory: the start-up set sized by the device's memory fall: %.150s; %u "
+                 "pipelines left to first use)",
+                 sizeWhy, sizeSkipped[0] + sizeSkipped[1]);
+        c->stoppedAt = sizeFirstSkip < m ? sizeFirstSkip : i;
+    }
+    if (sized && sizeMask != 0u) {
+        const uint32_t left = sizeAtStop + sizeSkipped[0] + sizeSkipped[1];
+        s_sizeStopped = true;
+        ico_attempt_fire(ICO_ATT_SET_SIZE, left);
+        rd__log("pipelines: the start-up set sized by the device's memory fall: %u made (2D %u, "
+                "VU %u), %u left to first use (%u skipped in the set: 2D %u, VU %u; %u after its "
+                "stop)",
+                sizeMade[0] + sizeMade[1], sizeMade[0], sizeMade[1], left,
+                sizeSkipped[0] + sizeSkipped[1], sizeSkipped[0], sizeSkipped[1], sizeAtStop);
+    }
     if (!pb.stop && s_progressFn != NULL) {
         s_progressFn(s_progressCtx, m, m);
     }
@@ -3215,7 +3349,9 @@ uint32_t rd_precreate_pipelines(void)
                                       : "; the pipelines before it are made after the rest");
         s_resume.armed = false;
     }
+    s_sizeOn = true; /* issue 215: the window's ask (rd_set_set_size_fn) */
     createKeys(setKeys, setN, false, &times, &c);
+    s_sizeOn = false;
     s_setBatchCap = 0;
     if (c.budget[0]) {
         /* where it stopped in the set's own order (the rotation undone),

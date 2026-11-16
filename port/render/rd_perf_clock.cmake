@@ -40,11 +40,18 @@ endif()
 # slowest lines, the profile by scene with a full table; the Pixel 10 Pro
 # Fold's stage 4 block (the vertex estimate refused, the glow first, an
 # earlier block's rate), the vertex fit's floor and pre-pass cap, the submit
-# thread's CPU apart, every candidate kept, the block in progress (CPU only)
+# thread's CPU apart, every candidate kept, the block in progress (CPU only);
+# issue 179's v0.11.7 repairs: the vertex fit's spread rule from its own
+# conditioning (the base's error against the mean work), the stamps' cost
+# paired with each stamped picture's plain neighbours, the keep frames' GPU
+# work apart in a block bound by waits elsewhere
 add_executable(rd_perf_rank_test test/rd_perf_rank_test.c rd_perf_rank.c)
 target_include_directories(rd_perf_rank_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
                                                      "${CMAKE_SOURCE_DIR}/port/rhi")
 target_compile_options(rd_perf_rank_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+if(NOT WIN32)
+    target_link_libraries(rd_perf_rank_test PRIVATE m) # the spread rule's sqrt
+endif()
 if(ICO_RUN_TESTS)
     add_test(NAME rd_perf_rank COMMAND rd_perf_rank_test)
 endif()
