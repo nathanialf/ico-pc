@@ -3509,3 +3509,6 @@ include(rd_health.cmake)
 include(rd_inames.cmake)
 # the shadow volumes' clip box by disc (port/include/ico_shadow_clip.h)
 include(shadow_clip.cmake)
+# last: under asan the fixture replays run without the leak check (the driver's
+# exit leak); after every test's ENVIRONMENT is set
+include(rd_asan_fixture_leaks.cmake)
