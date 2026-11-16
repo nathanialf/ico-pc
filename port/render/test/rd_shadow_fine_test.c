@@ -41,6 +41,7 @@
 #include <string.h>
 
 #include "rd_internal.h"
+#include "rd_shadow_count.h"
 #include "rd_shadowres.h"
 #include "rd_shadow_fine_vectors.h"
 #include "rd_shadow_fine_sprite.h"
@@ -827,6 +828,9 @@ static void testLines(void)
     rec.shadowFineTexels = 250000;
     rec.shadowFineArea = 1000000;
     rec.shadowFineRendered = 400000;
+    rec.shadowCountStencil = 1;
+    rec.shadowCountGuard = 0;
+    rec.shadowCountForm = RD_SC_STENCIL + 1;
     rd__shadow_fine_pop(&rec);
     char text[512];
     size_t at = 0;
@@ -835,7 +839,9 @@ static void testLines(void)
     printf("  10 s clause: %s\n", text);
     CHECK(strcmp(text, "; shadow levels: 1 shadows at the scene's scale, 2 at the PS2's size "
                        "(filter 2) in 1 replays (10.0 passes a shadow, drawing 25.0 % of their "
-                       "targets' texels in render areas of 40.0 %, 0.25 M texels a shadow)") == 0,
+                       "targets' texels in render areas of 40.0 %, 0.25 M texels a shadow; the "
+                       "count 1 from the stencil, 0 full-size passes, 0 seven draws, 0 guard "
+                       "fallbacks, form stencil)") == 0,
           "the 10 s clause: %s", text);
     const size_t was = at;
     rd__shadow_fine_text(text, sizeof text, &at);
@@ -852,6 +858,74 @@ static void testLines(void)
           "the drawn words: %s", st);
 }
 
+/* the full-size count's form (rd_shadow_count.c): the trial's order, the
+ * median, the choice and its ties, list 3's time from a timed replay's
+ * pieces (an unstamped piece leaves the sample out), the --stats words */
+static void testCountForms(void)
+{
+    uint8_t got[RD_SC_FORMS] = {0, 0, 0};
+    /* the turn: the stencil step, the seven draws, the full-size pass */
+    CHECK(rd_sc_trial_next(0, got) == RD_SC_STENCIL && rd_sc_trial_next(1, got) == RD_SC_SEVEN &&
+              rd_sc_trial_next(2, got) == RD_SC_FULL && rd_sc_trial_next(3, got) == RD_SC_STENCIL,
+          "the trial's turn");
+    got[RD_SC_SEVEN] = RD_SC_TRIAL_N; /* the seven draws' samples in: left out */
+    CHECK(rd_sc_trial_next(1, got) == RD_SC_FULL, "a form whose samples are in is left out");
+    got[RD_SC_STENCIL] = got[RD_SC_FULL] = RD_SC_TRIAL_N;
+    CHECK(rd_sc_trial_next(0, got) == -1, "every sample in: no form");
+    const float v3[3] = {9.0f, 4.0f, 30.0f};
+    const float v2[2] = {5.0f, 3.0f};
+    CHECK(rd_sc_median(v3, 3) == 9.0f && rd_sc_median(v2, 2) == 3.0f && rd_sc_median(v3, 1) == 9.0f,
+          "the median");
+    float med[RD_SC_FORMS];
+    bool have[RD_SC_FORMS] = {true, true, true};
+    med[RD_SC_FULL] = 9.8f;
+    med[RD_SC_STENCIL] = 4.1f;
+    med[RD_SC_SEVEN] = 7.3f;
+    CHECK(rd_sc_choose(med, have) == RD_SC_STENCIL, "the cheapest: the stencil step");
+    med[RD_SC_STENCIL] = 12.0f;
+    CHECK(rd_sc_choose(med, have) == RD_SC_SEVEN, "the cheapest: the seven draws");
+    med[RD_SC_SEVEN] = med[RD_SC_FULL] = med[RD_SC_STENCIL];
+    CHECK(rd_sc_choose(med, have) == RD_SC_STENCIL, "equal: the stencil step");
+    have[RD_SC_STENCIL] = false;
+    CHECK(rd_sc_choose(med, have) == RD_SC_FULL, "equal without it: the full-size pass");
+    have[RD_SC_FULL] = have[RD_SC_SEVEN] = false;
+    CHECK(rd_sc_choose(med, have) == -1, "nothing measured");
+    RdPerfPass p[4];
+    memset(p, 0, sizeof(p));
+    p[0].list = 2;
+    p[0].gpuUs = 1000.0f;
+    p[1].list = 3;
+    p[1].gpuUs = 1500.0f;
+    p[2].list = 3;
+    p[2].gpuUs = 2500.0f;
+    p[3].list = 4;
+    p[3].gpuUs = 700.0f;
+    bool written = false;
+    const double ms = rd_sc_list_ms(p, 4, 3, &written);
+    CHECK(written && ms == 4.0, "list 3's time: %.3f ms (4.000), written %d", ms, (int)written);
+    p[2].gpuUs = -1.0f; /* its stamps unwritten */
+    (void)rd_sc_list_ms(p, 4, 3, &written);
+    CHECK(!written, "an unstamped piece: no sample");
+    (void)rd_sc_list_ms(p, 4, 5, &written);
+    CHECK(!written, "no piece of the list: no sample");
+    RdPerfRecord rec;
+    memset(&rec, 0, sizeof(rec));
+    rec.shadowCountStencil = 1;
+    rec.shadowCountFull = 2;
+    rec.shadowCountSeven = 3;
+    rec.shadowCountGuard = 4;
+    rec.shadowCountForm = RD_SC_SEVEN + 1;
+    char st[256];
+    rd__shadow_count_stats(&rec, st, sizeof st);
+    printf("  --stats: %s\n", st);
+    CHECK(strcmp(st, "shadow count above 1x: 1 from the stencil, 2 full-size passes, 3 seven "
+                     "draws, 4 guard fallbacks (form seven)") == 0,
+          "the count's stats words: %s", st);
+    rec.shadowCountForm = 0;
+    rd__shadow_count_stats(&rec, st, sizeof st);
+    CHECK(strstr(st, "(form none)") != NULL, "no form: %s", st);
+}
+
 int main(void)
 {
     printf("rd_shadow_fine_test\n");
@@ -866,6 +940,7 @@ int main(void)
     testBoxes();
     testArea();
     testLines();
+    testCountForms();
     if (failures) {
         printf("rd_shadow_fine_test: %d failures\n", failures);
         return 1;

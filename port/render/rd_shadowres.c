@@ -31,10 +31,11 @@
  * PS2's width, the step and tent the identity across):
  *   1. the count is also kept at its full size: the seven draws and the
  *      MSAA resolve (the covered-majority resolve to one sample at the
- *      scene's size, rd_msaa_shadow.c) leave it there already; the one
- *      draw (rd_shadow_one.c) draws it a second time into the count target
- *      at its own texels (the box of one texel: the stencil's table texel
- *      itself), one pass more;
+ *      scene's size, rd_msaa_shadow.c) leave it there already; after the
+ *      one draw (rd_shadow_one.c) the first level's step reads it from the
+ *      stencil ("The count from the stencil" below), or a pass draws it a
+ *      second time into the count target at its own texels (the box of one
+ *      texel: the stencil's table texel itself);
  *   2. at each of the game's three level sprites (rd_shadow_box.c
  *      rd__shadow_box_screen, before the sprite's own pass), the level is
  *      drawn again into a texture of its own at S texels a GS pixel on each
@@ -107,6 +108,27 @@
  *   - an empty count: no step or tent; each final level cleared once and kept
  *     while it holds 0.
  *
+ * The count from the stencil (v0.11.8, issue 123: the full-size count pass
+ * cost up to 10.69 ms of the tablet's 3x picture; rd_shadow_count.h): the
+ * one draw's full-size pass (rd_shadow_one.c fullPass) writes at count
+ * texel (x, y) inside its box shadow_count_ps at a box of one texel, which
+ * is table[m] * (1 * 1) / (1 * 1) for the stencil's bits 0-5 m there (+0.0
+ * plus one product, divided by 1: the table texel's float, blit.hlsl), and
+ * 0 outside the box (its clear); stored to RGBA8 that is the table texel's
+ * bytes, and the step loads it as an RGBA8_UNORM texel of those bytes, as
+ * it loads the table's.  So shadowres_step_stencil_ps (the step built with
+ * SHADOWRES_FROM_STENCIL) loads, where the step loads the count texel, the
+ * table texel of the stencil there (0 outside the pass's box: the texel box
+ * in DrawCB.aux0, the view's channel in g_mode.w) and is otherwise the same
+ * text: the same bytes, no pass.  Its group: t1 the stencil view, t2 the
+ * table, t3 the empty-area mask (a layout of its own, layoutSt).  Where it
+ * stands (rd_shadow_one.c's guard: the depth and the count of one size,
+ * nothing touched either since the count, else the pass after all) the
+ * first level's step takes it (rd__shadow_count_take); the later levels
+ * read the level before as ever.  Which form a device draws (the step from
+ * the stencil, the full-size pass, the seven draws) its own timing decides
+ * (rd_shadow_count.c).
+ *
  * Tests only (docs/port/TESTING.md): ICO_RD_SHADOW_FINE=0 keeps the PS2's
  * sizes above 1x (v0.11.6's picture: the A/B's other half);
  * ICO_RD_SHADOW_FINE=force draws the fine chain at 1x too (S = 1 on both
@@ -137,7 +159,9 @@
 #include "rd_clause.h"
 #include "rd_internal.h"
 #include "rd_replay.h"
-#include "rd_shadow_box.h" /* rd__shadow_box_count_area */
+#include "attempt_ledger.h"
+#include "rd_shadow_box.h"   /* rd__shadow_box_count_area */
+#include "rd_shadow_count.h" /* the full-size count's form above 1x */
 #include "rd_shadowres.h"
 
 /* ------------------------------------------------------------ the replay */
@@ -147,6 +171,10 @@ static struct {
     uint32_t chain;   /* the counts begun (rd__shadow_fine_reset) */
     uint32_t fullFor; /* the count target holding its full size this chain */
     uint32_t fullChain;
+    /* the count target whose full size stands in the stencil this chain
+     * (rd__shadow_fine_count_stencil; 0 none), and where */
+    uint32_t stencilFor, stencilChain;
+    RdSrStencil stencil;
     uint32_t made[RD_SR_LEVELS]; /* chain + 1 of the fine level drawn, 0 none */
     bool ready;                  /* the three drawn and blurred, this chain */
     uint32_t readyChain, readyReplay;
@@ -160,6 +188,13 @@ static struct {
     uint32_t chainPasses;
     RhiShader fsStep, fsTent, fsTent2;
     RhiPipeline pipeStep, pipeTent, pipeTent2;
+    /* the first level's step from the stencil (shadowres_step_stencil_ps)
+     * and its group's layout (t1 the stencil, s1, t2 the table, t3 the
+     * mask); stRefused: they could not be made (the full-size pass then) */
+    RhiShader fsStepSt;
+    RhiPipeline pipeStepSt;
+    RhiBindGroupLayout layoutSt;
+    bool stRefused;
     /* the cuts (cutsOn): this chain's count box known (boxed) and empty, each
      * level's GS box (glo, ghi per axis) and its fine pre-tent and final
      * boxes; the final level is tmp[k] under the cuts (the fused tent writes
@@ -281,6 +316,7 @@ void rd__shadow_fine_log(void)
             "the PS2's sizes%s",
             RD_SR_LEVEL_CAP,
             m == FINE_FORCE ? "; at 1x too (ICO_RD_SHADOW_FINE=force, the tests' switch)" : "");
+    rd__shadow_count_log(); /* the full-size count's form (rd_shadow_count.c) */
 }
 
 static void destroyAll(void)
@@ -331,6 +367,15 @@ void rd__shadow_fine_shutdown(void)
         if (s_sr.fsTent.id) {
             rhi_destroy_shader(s_sr.fsTent);
         }
+        if (s_sr.pipeStepSt.id) {
+            rhi_destroy_pipeline(s_sr.pipeStepSt);
+        }
+        if (s_sr.fsStepSt.id) {
+            rhi_destroy_shader(s_sr.fsStepSt);
+        }
+        if (s_sr.layoutSt.id) {
+            rhi_destroy_bind_group_layout(s_sr.layoutSt);
+        }
     }
     memset(&s_sr, 0, sizeof(s_sr));
 }
@@ -345,6 +390,7 @@ void rd__shadow_fine_reset(uint32_t color)
     (void)color;
     s_sr.chain++;
     s_sr.fullFor = 0;
+    s_sr.stencilFor = 0;
     s_sr.ready = false;
 }
 
@@ -371,12 +417,26 @@ void rd__shadow_fine_count_full(uint32_t color)
     }
     s_sr.fullFor = color;
     s_sr.fullChain = s_sr.chain;
+    s_sr.stencilFor = 0; /* drawn: the step reads the count target */
 }
 
-/* blit_vs and one of the two entries, RGBA8, no blend, every state static */
-static RhiPipeline makePipe(RhiShader fs, const char *name)
+void rd__shadow_fine_count_stencil(uint32_t color, const RdSrStencil *src)
 {
-    RhiBindGroupLayout layouts[3] = {g_rd.layoutFrame, g_rd.layoutDraw, g_rd.layoutTex};
+    if (fineMode() == FINE_OFF) {
+        return;
+    }
+    s_sr.fullFor = color;
+    s_sr.fullChain = s_sr.chain;
+    s_sr.stencilFor = color;
+    s_sr.stencilChain = s_sr.chain;
+    s_sr.stencil = *src;
+}
+
+/* blit_vs and one of the entries, RGBA8, no blend, every state static;
+ * group 2's layout tex (g_rd.layoutTex, or the stencil step's) */
+static RhiPipeline makePipeIn(RhiShader fs, const char *name, RhiBindGroupLayout tex)
+{
+    RhiBindGroupLayout layouts[3] = {g_rd.layoutFrame, g_rd.layoutDraw, tex};
     RhiPipelineDesc d;
     memset(&d, 0, sizeof(d));
     d.vertex = g_rd.vs[RD_VS_BLIT];
@@ -402,6 +462,51 @@ static RhiPipeline makePipe(RhiShader fs, const char *name)
         rd__stats_here()->pipelineCreates++;
     }
     return p;
+}
+
+static RhiPipeline makePipe(RhiShader fs, const char *name)
+{
+    return makePipeIn(fs, name, g_rd.layoutTex);
+}
+
+/* the first level's step from the stencil: its layout, shader and
+ * pipeline, made at the first step that asks; false (logged once, the
+ * full-size pass from then on) when one cannot be made */
+static bool pipesStencil(void)
+{
+    if (s_sr.pipeStepSt.id) {
+        return true;
+    }
+    if (s_sr.stRefused || !g_rd.vs[RD_VS_BLIT].id) {
+        return false;
+    }
+
+    enum { FS = 1u << RHI_STAGE_FRAGMENT };
+
+    static const RhiBindSlot k_slots[4] = {{1, RHI_BIND_SAMPLED_TEXTURE, FS},
+                                           {1, RHI_BIND_SAMPLER, FS},
+                                           {2, RHI_BIND_SAMPLED_TEXTURE, FS},
+                                           {3, RHI_BIND_SAMPLED_TEXTURE, FS}};
+    if (!s_sr.layoutSt.id) {
+        s_sr.layoutSt = rhi_create_bind_group_layout(
+            &(RhiBindGroupLayoutDesc){k_slots, 4, "rd shadow levels step from the stencil"});
+    }
+    if (s_sr.layoutSt.id && !s_sr.fsStepSt.id) {
+        s_sr.fsStepSt = rd__make_shader("shadowres_step_stencil_ps");
+    }
+    if (s_sr.fsStepSt.id) {
+        s_sr.pipeStepSt =
+            makePipeIn(s_sr.fsStepSt, "rd shadow levels step from the stencil", s_sr.layoutSt);
+    }
+    if (!s_sr.pipeStepSt.id) {
+        rd__log("shadow levels: the step from the stencil could not be made on %s (layout %s, "
+                "shader %s): the full-size count pass for this run",
+                backendName(), s_sr.layoutSt.id ? "made" : "missing",
+                s_sr.fsStepSt.id ? "made" : "missing");
+        s_sr.stRefused = true;
+        return false;
+    }
+    return true;
 }
 
 static bool pipes(void)
@@ -480,9 +585,10 @@ static bool texturesFor(int k, uint32_t w, uint32_t h)
  * stores those tiles alone ("The render area"); a union of no texels (the
  * texture is 0 and the box empty) needs no pass.  A box of no texels: the
  * clear alone (no pipe needed) */
-static void drawPass(struct Replay *r, RhiPipeline pipe, RhiTexture dst, RhiState *dstState,
-                     RhiTexture src, RhiState *srcState, uint32_t w, uint32_t h, uint32_t name,
-                     const IcoDrawCB *cb, const RhiRect *box, RhiTexture mask, RdSrTrack *tr)
+static void drawPassIn(struct Replay *r, RhiPipeline pipe, RhiTexture dst, RhiState *dstState,
+                       RhiTexture src, RhiState *srcState, uint32_t w, uint32_t h, uint32_t name,
+                       const IcoDrawCB *cb, const RhiRect *box, RhiTexture mask, RdSrTrack *tr,
+                       RhiBindGroup group)
 {
     const RhiRect all = {0, 0, w, h};
     RhiRect area;
@@ -519,8 +625,10 @@ static void drawPass(struct Replay *r, RhiPipeline pipe, RhiTexture dst, RhiStat
         rd__bind_uniform(cl, 1, rd__draw_group(cb));
         const RhiSampler smp =
             rd__sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
-        rhi_cmd_set_bind_group(
-            cl, 2, mask.id ? rd__tex_group_date(src, smp, mask) : rd__tex_group(src, smp));
+        rhi_cmd_set_bind_group(cl, 2,
+                               group.id  ? group
+                               : mask.id ? rd__tex_group_date(src, smp, mask)
+                                         : rd__tex_group(src, smp));
         rd__replay_draw(cl, 3, 0, 1);
         rd__stats_here()->draws++;
         g_rdPerf.shadowFineTexels += box ? box->w * box->h : w * h;
@@ -531,6 +639,14 @@ static void drawPass(struct Replay *r, RhiPipeline pipe, RhiTexture dst, RhiStat
     rd__transition(cl, dst, dstState, RHI_STATE_SHADER_READ);
     g_rdPerf.shadowFinePasses++;
     s_sr.chainPasses++;
+}
+
+static void drawPass(struct Replay *r, RhiPipeline pipe, RhiTexture dst, RhiState *dstState,
+                     RhiTexture src, RhiState *srcState, uint32_t w, uint32_t h, uint32_t name,
+                     const IcoDrawCB *cb, const RhiRect *box, RhiTexture mask, RdSrTrack *tr)
+{
+    drawPassIn(r, pipe, dst, dstState, src, srcState, w, h, name, cb, box, mask, tr,
+               (RhiBindGroup){0});
 }
 
 /* the level index of a named level target, -1 for any other */
@@ -819,6 +935,25 @@ void rd__shadow_fine_screen(const RdStateBlock *st, const RdCmd *c, const RdScre
             levelBoxes(k, dst, slo, shi, ssz, ofx, ofy, repS, repT);
         }
     }
+    /* the count from the stencil (rd_shadow_one.c; "The count from the
+     * stencil"): the step reads it where the full-size pass was not drawn;
+     * the pass drawn now where the step's pipeline cannot be made, and none
+     * where the guard drew it already (the count target then) */
+    bool fromStencil = false;
+    if (k == 0 && s_sr.stencilFor == t->target && s_sr.stencilChain == s_sr.chain &&
+        !(s_sr.cuts && s_sr.empty)) {
+        if (!pipesStencil()) {
+            rd__shadow_count_flush(t->target, RD_SC_WHY_PIPE);
+        } else {
+            const int took = rd__shadow_count_take(t->target);
+            if (took < 0) {
+                sayDetail(RD_SR_WHY_COUNT, "the count's stencil touched before the step could read "
+                                           "it (rd_shadow_count.c says why)");
+                return;
+            }
+            fromStencil = took > 0;
+        }
+    }
     IcoDrawCB cb;
     memset(&cb, 0, sizeof(cb));
     float ssx, ssy, ox;
@@ -886,7 +1021,43 @@ void rd__shadow_fine_screen(const RdStateBlock *st, const RdCmd *c, const RdScre
         cb.uvRect[2] = (float)src->w;
         cb.uvRect[3] = (float)src->h;
     }
-    if (!(s_sr.cuts && s_sr.empty)) {
+    if (fromStencil) {
+        /* shadowres_step_stencil_ps: the stencil, the table and the mask; the
+         * full-size pass's texel box and the stencil's channel */
+        const RdSrStencil *sc = &s_sr.stencil;
+        cb.mode[3] = sc->channel;
+        cb.aux0[0] = (uint32_t)sc->box.x;
+        cb.aux0[1] = (uint32_t)sc->box.y;
+        cb.aux0[2] = (uint32_t)sc->box.x + sc->box.w;
+        cb.aux0[3] = (uint32_t)sc->box.y + sc->box.h;
+        RhiBinding b[4];
+        memset(b, 0, sizeof(b));
+        b[0].slot = 1;
+        b[0].type = RHI_BIND_SAMPLED_TEXTURE;
+        b[0].texture = sc->depth;
+        b[0].aspect = RHI_ASPECT_STENCIL; /* in RHI_STATE_DEPTH_READ since the count */
+        b[1].slot = 1;
+        b[1].type = RHI_BIND_SAMPLER;
+        b[1].sampler =
+            rd__sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+        b[2].slot = 2;
+        b[2].type = RHI_BIND_SAMPLED_TEXTURE;
+        b[2].texture = sc->table;
+        b[3].slot = 3;
+        b[3].type = RHI_BIND_SAMPLED_TEXTURE;
+        b[3].texture = mask.id ? mask : g_rd.dummy;
+        const RhiBindGroup g = rd__replay_bind_group(s_sr.layoutSt, b, 4);
+        drawPassIn(r, s_sr.pipeStepSt, s_sr.lvl[k], &s_sr.lvlState[k], (RhiTexture){0}, NULL, w, h,
+                   st->color, &cb, s_sr.cuts && s_sr.boxed ? &s_sr.pre[k] : NULL, mask,
+                   &s_sr.trLvl[k], g);
+        if (g_rdPerf.shadowCountStencil < 0xFFFFu) {
+            g_rdPerf.shadowCountStencil++;
+        }
+        ico_attempt_fire(ICO_ATT_SHADOW_COUNT, 1);
+        if (rd__shadow_count_keep()) {
+            rd__shadow_count_materialise(); /* the tests' readback of the count */
+        }
+    } else if (!(s_sr.cuts && s_sr.empty)) {
         drawPass(r, s_sr.pipeStep, s_sr.lvl[k], &s_sr.lvlState[k], stex, sstate, w, h, st->color,
                  &cb, s_sr.cuts && s_sr.boxed ? &s_sr.pre[k] : NULL, mask, &s_sr.trLvl[k]);
     }

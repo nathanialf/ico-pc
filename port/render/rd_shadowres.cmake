@@ -4,6 +4,9 @@
 # of port/render/CMakeLists.txt (a file of its own: that file is near the
 # 256 KiB cap, tools/check_no_rom.sh).
 target_sources(ico_render PRIVATE rd_shadowres.c rd_shadowres_math.c)
+# the full-size count's form above 1x (rd_shadow_count.h: the step from the
+# stencil, the full-size pass, the seven draws, timed on the device; issue 123)
+target_sources(ico_render PRIVATE rd_shadow_count.c)
 # rd_replay_tool --fine-check: the levels the GPU drew against the CPU
 # reference (tools/rd_replay_fine.c; rd_shadow_fine_ab reads its lines)
 if(TARGET rd_replay_tool)

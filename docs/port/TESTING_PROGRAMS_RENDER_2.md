@@ -704,7 +704,10 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   boxed count inside the step's and the tent's boxes (clamp and repeat, boxes at the corners), the
   render area over 200 pictures of moving boxes (0 outside each box, the draw's bytes inside, the
   area cleared alone or the whole); the
-  10 s clause and the `--stats` words. The pure half (`rd_shadowres_math.c`) links alone.
+  10 s clause and the `--stats` words; the full-size count's forms (`rd_shadow_count.c`):
+  the trial's order, the median, the choice and its ties, list 3's time from a timed replay's
+  pieces (an unstamped piece no sample), the `--stats` words. The pure half (`rd_shadowres_math.c`)
+  links alone.
 - `rd_shadow_fine_ab.cmake` (`rd_shadow_fine_ab`, `rd_shadow_fine_ab_gl`): the fixtures of
   `port/render/test/fixtures/lists/shadow_fine.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md); a
   listed fixture that is absent FAILS: issue 123's three main gate frames, the owner's three and
@@ -733,7 +736,12 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   B-spline doing nothing to it, the cuts against `ICO_RD_SHADOW_FINE_CUTS=0` every PNG the same
   bytes (6 passes against 9), three replays in a row with and without the cuts the same presented
   bytes; the forced chain at 1x within a level of the default on SCENE
-  (`test/png_level_diff.py`). No device: SKIP.
+  (`test/png_level_diff.py`); the full-size count's three forms (check 9: where the count
+  is the one draw above 1x, `ICO_RD_SHADOW_COUNT_FORM` `full`, `stencil`, `seven` and the default,
+  every PNG the full-size pass's bytes, each form RAN by `--stats`' `shadow count above 1x:` line,
+  the default the stencil step, the passes and draws from the code; the guard's run
+  `ICO_RD_SHADOW_COUNT_TOUCH=1` drawing the pass after all with the same bytes; `fx-123-blended`
+  at the tablet's path for the forms alone, `forms`). No device: SKIP.
 - `rd_even_test.c` (`rd_even`, CPU): the pictures' evenness line (`rd_even.c`): ten made-up
   presents with GPU ends at the middles of their quarter-ms bins (1, 2, 3, 5 and under half a
   refresh of 8 ms apart, one end a bound, one present with none, a frame number that went back),

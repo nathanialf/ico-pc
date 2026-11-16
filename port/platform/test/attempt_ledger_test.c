@@ -430,6 +430,10 @@ static void test_classes(void)
         ico_attempt_decide_pin_release(kShip[c].android, kShip[c].android ? 1 : 0);
         CHECK(ico_attempt_state_of(ICO_ATT_PIN_RELEASE) ==
               (kShip[c].android ? ICO_ATT_ON : ICO_ATT_NA));
+        /* the shadow count from the stencil (rd_shadow_count.c): every class
+           here reads the stencil through its view (the count in one draw) */
+        ico_attempt_decide_shadow_count(1);
+        CHECK(ico_attempt_state_of(ICO_ATT_SHADOW_COUNT) == ICO_ATT_ON);
         /* the whole start line, its last row included, in the window's 4 KB
            parts (window_perf_rank.c ledger_lines, ico_attempt_start_part):
            one part, or two since the v0.11.7 rows, each whole rows */
