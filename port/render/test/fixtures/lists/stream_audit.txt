@@ -1,0 +1,12 @@
+# rd_stream_audit (port/render/test/rd_stream_audit.cmake): the VU stream bounds audit on the
+# title's castle (the old list's corpus rd-00200), the PowerVR phone's frame, issue 102's gate and
+# issue 91's two frames as every family makes them, and the visibility test's three (sheets'
+# strips over their four corners)
+fx-boot-0200
+fx-phone-4657
+fx-gate-102
+fx-issue91-1279
+fx-issue91-1358
+fx-scene-gate102
+fx-scene-4657
+fx-scene-boot0200

@@ -872,23 +872,27 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   a dropped store that a later pass reads), each fixture's declared `store_depth_dropped` on the
   planned run; each run's counts printed (`rd_store_plan_ab`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#the-store-plan)). SKIP as `rd_vustage_ab`.
-- `rd_cull_ab.cmake`: the dumps of `tools/occlusion_corpus.txt` and `tools/native_frame_dumps.txt`
-  (the missing ones named and skipped) under `ICO_RD_BLEND=fixed` with `--pass-dump --stats`
+- `rd_cull_ab.cmake`: the fixtures of `test/fixtures/lists/cull.txt`
+  ([TESTING_FIXTURES.md](TESTING_FIXTURES.md): `fx-scene-gate102`, `fx-scene-4657`,
+  `fx-scene-boot0200`, made with `@scene place`, and `fx-issue91-1279` as every family makes it)
+  under `ICO_RD_BLEND=fixed` with `--pass-dump --stats`
   three times, `ICO_RD_CULL=off`, `frustum` and `full`, at Original 4:3 presented at 640x480,
-  Enhanced 4:3 2x, Enhanced 2x at the dump's own aspect where `--no-device --list` says it is wider
-  than 4:3, and with `--aa msaa4` (Enhanced 4:3 2x) on the first dump and on the dumps of
-  `tools/cull_msaa_dumps.txt` (`-DMSAA_LIST`: frames whose MSAA epoch closes inside a list by a
-  read of SCENE; one the corpus lists do not name runs that setting only): every named target's PNG (and
+  Enhanced 4:3 2x, Enhanced 2x at the frame's own aspect where `--no-device --list` says it is wider
+  than 4:3, and with `--aa msaa4` (Enhanced 4:3 2x) on the first fixture and on the list's lines
+  with the word `msaa` (issue 102's gate, whose MSAA epoch closes at list 3 by a read of SCENE):
+  the path ran: on the full run at every setting the fixture's declared `frustum_culled` and
+  `occluded` (`fx-issue91-1279`'s line: `occluded=0`) and at msaa `msaa_epoch_kept=0` (the
+  epoch closes at list 3, after the lists the test walks), every named target's PNG (and
   `PRESENT.png`) of the frustum and the full runs byte for byte the off run's, the off run's `cull
   off: 0 of 0`, the frustum run's `cull frustum: N of M` with N at most M, the full run's `cull
   full: N of M (F frustum, O occluded)` with the frustum run's M, F its N and N = F + O, and draws
-  skipped over the corpus (the occluded total printed); each run's counts printed;
-  `-DMAX_DUMPS=n` takes the first n dumps (`rd_cull_ab`, TIMEOUT 5400, and its OpenGL twin
-  `rd_cull_ab_gl`; [RENDER.md](RENDER_PERF.md#culling)). SKIP as `rd_vustage_ab`.
-- `rd_vis_hiz_corpus.cmake`: the rows of `test/rd_vis_hiz_corpus.txt` (the dumps of
-  `tools/occlusion_corpus.txt` and issue 179's frame at Original 4:3 640x480, Enhanced 4:3 2x and Enhanced 4:3 2x with
-  `--repeat 3`, the last replay's counts, so the collect cache's; the missing dumps named and
-  skipped) through `rd_replay_tool --cull full --stats` under `ICO_RD_BLEND=fixed`, once with
+  skipped and draws hidden over the list; each run's counts printed;
+  `-DMAX_DUMPS=n` takes the first n fixtures (`rd_cull_ab`, TIMEOUT 5400, and its OpenGL twin
+  `rd_cull_ab_gl`; [RENDER.md](RENDER_PERF.md#culling)). SKIP without a device.
+- `rd_vis_hiz_corpus.cmake`: the rows of `test/rd_vis_hiz_corpus.txt` (the fixtures of the
+  visibility test, `fx-scene-gate102`, `fx-scene-4657`, `fx-scene-boot0200`, at Original 4:3
+  640x480, Enhanced 4:3 2x and Enhanced 4:3 2x with `--repeat 3`, the last replay's counts, so
+  the collect cache's; expanded into the build tree) through `rd_replay_tool --cull full --stats` under `ICO_RD_BLEND=fixed`, once with
   `ICO_RD_CULL_HIZ_FAST=0` (the plain pass) and once with the fast collect and
   `ICO_RD_CULL_HIZ_CHECK=1`: the 26 counts of `stats: cull full:` (draws skipped, walked, frustum,
   occluded, occluder triangles, past the budget, cells, tested, resets) and `stats: cull

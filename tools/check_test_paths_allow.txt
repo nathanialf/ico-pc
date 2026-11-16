@@ -8,10 +8,8 @@
 # the old tools/shadow_box_dumps.txt stays below while the other tests that
 # read it are not converted).
 port/render/CMakeLists.txt
-port/render/test/rd_vis_hiz_corpus.txt
 port/render/test/rd_vu_audit.cmake
 tools/coverage_corpus.txt
-tools/cull_msaa_dumps.txt
 tools/date_cut_dumps.txt
 tools/lamps_dumps.txt
 tools/native_frame_dumps.txt
