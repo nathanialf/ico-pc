@@ -816,6 +816,14 @@ const char *const ui_strings_es[UI_STR_COUNT] =
             "Este estado guardado se creó con la versión %s.\nLa versión %s cambió cómo el juego guarda\nsu progreso en memoria, así que no se puede\nreanudar.\nTus partidas de la memory card siguen funcionando.",
         [UI_STR_STATES_XB_PINNED] =
             "Este estado guardado se creó con la versión %s\ny solo esa versión puede reanudarlo.\nTus partidas de la memory card siguen funcionando.",
+        [UI_STR_STATES_CKPT_ROW] =
+            "Creado por otra versión: Cargar continúa desde el último punto de control",
+        [UI_STR_STATES_CKPT_LOADED] = "Este estado guardado se creó con la versión %s.\n"
+                                      "No se puede reanudar donde se guardó:\n"
+                                      "el juego continúa desde el último punto de control.",
+        [UI_STR_STATES_CKPT_NONE] = "Este estado guardado se creó con la versión %s.\n"
+                                    "No se puede reanudar donde se guardó\n"
+                                    "y no contiene ningún punto de control desde el que continuar.",
         [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "Resplandor entre fotogramas",
         [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
             "Original conserva el resplandor del fotograma del juego entre fotogramas. Suave lo rehace en cada fotograma mostrado; cuesta más tiempo gráfico.",

@@ -783,6 +783,11 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
         "這個存檔狀態是由版本 %s 建立的。版本 %s 更改了遊戲在記憶體中保存進度的方式，因此無法繼續。記憶卡的存檔仍然可以使用。",
     [UI_STR_STATES_XB_PINNED] =
         "這個存檔狀態是由版本 %s 建立的，只有該版本才能繼續。記憶卡的存檔仍然可以使用。",
+    [UI_STR_STATES_CKPT_ROW] = "由其他版本建立：讀取時從最後的中繼點繼續",
+    [UI_STR_STATES_CKPT_LOADED] =
+        "這個存檔狀態是由版本 %s 建立的，無法從儲存的位置繼續，因此遊戲會從最後的中繼點繼續。",
+    [UI_STR_STATES_CKPT_NONE] =
+        "這個存檔狀態是由版本 %s 建立的，無法從儲存的位置繼續，而且其中沒有可以繼續的中繼點。",
     [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "影格間的光暈",
     [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
         "「原版」讓遊戲本身影格的光暈沿用到其間顯示的影格；「平滑」則為顯示的每一格重新計算，能跟上快速的鏡頭轉動，但會多佔用顯示卡的時間。",

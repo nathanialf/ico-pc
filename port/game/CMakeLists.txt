@@ -798,6 +798,18 @@ if(TARGET ico_pc)
                            ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_PORT_WARNINGS} -Wno-strict-prototypes
                            -iquote "${CMAKE_SOURCE_DIR}/port/ui")
     target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_unused_live>)
+    # Load on a save state that cannot resume where it was saved: the game's
+    # side (state_checkpoint_live.c), the checkpoint put in through the
+    # game's own load at a Main tick's end (port/save/state_checkpoint.h
+    # finds it in the state)
+    add_library(ico_state_checkpoint_live OBJECT state_checkpoint_live.c)
+    target_include_directories(ico_state_checkpoint_live PRIVATE "${_ico_gs_include}"
+                               "${CMAKE_CURRENT_SOURCE_DIR}" ${_ico_gs_game_incs}
+                               "${CMAKE_SOURCE_DIR}/port/platform" "${CMAKE_SOURCE_DIR}/port/save")
+    target_compile_definitions(ico_state_checkpoint_live PRIVATE ${ICO_GAME_DEFINITIONS})
+    target_compile_options(ico_state_checkpoint_live PRIVATE ${ICO_SEMANTIC_OPTIONS}
+                           ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_PORT_WARNINGS} -Wno-strict-prototypes)
+    target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_state_checkpoint_live>)
 endif()
 
 # Save states (port/platform/state.h): state_host.c takes and puts back a

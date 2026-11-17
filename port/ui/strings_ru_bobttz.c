@@ -933,4 +933,11 @@ const char *const ui_strings_ru_bobttz[UI_STR_COUNT] = {
     [UI_STR_DIFF_WORD_PERMADEATH] = "Режим одной смерти", /* "Permadeath" */
     /* "Save states cannot be made on a Permadeath journey." */
     [UI_STR_DIFF_STATES_SAVE_LOCKED] = "В режиме одной смерти невозможно сохранить состояние",
+    /* ---- new since v0.11.8: English until translated ---- */
+    /* "Made by another version: Load continues from its last checkpoint" */
+    [UI_STR_STATES_CKPT_ROW] = NULL,
+    /* "This save state was made by version %s.\nIt cannot be resumed where it was saved,\nso the game continues from its last checkpoint." */
+    [UI_STR_STATES_CKPT_LOADED] = NULL,
+    /* "This save state was made by version %s.\nIt cannot be resumed where it was saved,\nand it holds no checkpoint to continue from." */
+    [UI_STR_STATES_CKPT_NONE] = NULL,
 };

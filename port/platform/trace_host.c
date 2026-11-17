@@ -52,6 +52,13 @@ static int logged_stage = -1;
 
 static int logged_layout = -1;
 
+static void (*main_tick_hook)(void);
+
+void ico_host_set_main_tick_hook(void (*fn)(void))
+{
+    main_tick_hook = fn;
+}
+
 /* The save state's block (state_port.h): a load rewinds the Main tick
    count with the game, so the pad script and the recording go on from the
    saved tick.  The trace file's own position (traced_ticks) is not part of
@@ -83,6 +90,9 @@ void ico_host_main_tick(void)
     if (current_layout_id != logged_layout) {
         ico_diag_milestone("menu screen %d -> %d", logged_layout, current_layout_id);
         logged_layout = current_layout_id;
+    }
+    if (main_tick_hook != NULL) {
+        main_tick_hook();
     }
 }
 

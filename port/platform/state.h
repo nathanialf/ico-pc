@@ -70,6 +70,9 @@ typedef struct IcoStateSlotInfo {
     long long saved_at;       /* time(NULL) at the save */
     char build_commit[48];    /* text, for the refusal popup */
     char png_path[260];       /* the thumbnail's path ("" when none) */
+    /* 1 when it loads but cannot resume where it was saved: Load continues
+       the game from the checkpoint the state holds (port/save/state_checkpoint.h) */
+    int checkpoint;
 } IcoStateSlotInfo;
 
 /* 1 when save states work on this build and start-up (game_data_range
@@ -93,10 +96,13 @@ void ico_state_host_poll(void);
    ICO_STATE_OTHER_BUILD), for the refusal box's words. */
 typedef enum IcoStateBlocker {
     ICO_STATE_BLOCK_NONE = 0,
-    ICO_STATE_BLOCK_OLD,   /* made before states carried over to later versions (format 1) */
-    ICO_STATE_BLOCK_CODE,  /* the code it was saved in (a function a thread sits in) changed */
-    ICO_STATE_BLOCK_DATA,  /* how the game holds its state in memory changed */
-    ICO_STATE_BLOCK_PINNED /* nothing to carry it over with: only its own version resumes it */
+    ICO_STATE_BLOCK_OLD,    /* made before states carried over to later versions (format 1) */
+    ICO_STATE_BLOCK_CODE,   /* the code it was saved in (a function a thread sits in) changed */
+    ICO_STATE_BLOCK_DATA,   /* how the game holds its state in memory changed */
+    ICO_STATE_BLOCK_PINNED, /* nothing to carry it over with: only its own version resumes it */
+    /* it cannot resume here and holds no checkpoint to continue from (or
+       none that could be found: state_checkpoint.h) */
+    ICO_STATE_BLOCK_NO_CHECKPOINT
 } IcoStateBlocker;
 
 typedef struct IcoStateRefusal {
@@ -108,6 +114,12 @@ typedef struct IcoStateRefusal {
 /* The last load refused as ICO_STATE_OTHER_BUILD: what blocked it and the
    two versions (blocker NONE when the last load was not refused so). */
 void ico_state_last_refusal(IcoStateRefusal *out);
+
+/* 1 when the last load that succeeded went through the state's checkpoint
+   (it could not resume where it was saved; port/save/state_checkpoint.h),
+   with the saving version's text ("vX.Y.Z...") in saved_version; 0 when it
+   resumed exactly (or none succeeded since the last request). */
+int ico_state_last_load_checkpoint(char *saved_version, size_t n);
 
 /* The result of the last performed request (the UI's popup, the log line
    is written by state_host.c itself).  `detail` is a short UTF-8 text with

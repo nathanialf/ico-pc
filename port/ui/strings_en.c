@@ -803,6 +803,13 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
         "This save state was made by version %s.\nVersion %s changed how the game keeps\nits progress in memory, so it cannot be resumed.\nYour memory-card saves still work.",
     [UI_STR_STATES_XB_PINNED] =
         "This save state was made by version %s,\nand only that version can resume it.\nYour memory-card saves still work.",
+    [UI_STR_STATES_CKPT_ROW] = "Made by another version: Load continues from its last checkpoint",
+    [UI_STR_STATES_CKPT_LOADED] = "This save state was made by version %s.\n"
+                                  "It cannot be resumed where it was saved,\n"
+                                  "so the game continues from its last checkpoint.",
+    [UI_STR_STATES_CKPT_NONE] = "This save state was made by version %s.\n"
+                                "It cannot be resumed where it was saved,\n"
+                                "and it holds no checkpoint to continue from.",
     [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "Glow between frames",
     [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
         "Original keeps the game’s own frame’s glow between frames. Smooth makes it again for every frame shown; it costs more graphics time.",

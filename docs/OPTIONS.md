@@ -1075,18 +1075,27 @@ Choose a slot and press Left or Right to pick **Save**, **Load** or
 use, and deleting, ask you to press again within two seconds. Saving is
 only possible from the pause menu, so from the title screen the page only
 loads and deletes. A slot that cannot be loaded (it was saved on another
-disc, with different gameplay settings, or by another version of the game
-that it cannot carry over to) is greyed, and the line under the cards says
-why. A state keeps the journey's [Difficulty](#difficulty) with it:
+disc, or with different gameplay settings) is greyed, and the line under the
+cards says why. A state keeps the journey's [Difficulty](#difficulty) with it:
 loading one brings back the difficulty and the knock-down count it was
 saved with. On a journey with Permadeath on, save states are off: none can be
 saved or loaded, and a state made on such a journey never loads. After a load the game is back on the pause menu, on **Save states**. On
 a computer, F5 saves to slot 1 and F9 loads it. On Windows and Android a
 state carries over to a later version of the game when the part of the game
-it was saved in has not changed; states made before the game could carry
-them over do not.
-On Linux, the Steam Deck and Mac a state loads only in the version that
-saved it, so after you update the game those states are greyed. A gameplay
+it was saved in has not changed. On Linux, the Steam Deck and Mac a state
+resumes where it was saved only in the version that saved it.
+
+A state that the game cannot resume where it was saved (one made by another
+version of the game, or on another kind of device) still loads: the game
+continues from the last checkpoint the state holds, the place a game over
+would have taken you back to (the last save point, idol door or story
+checkpoint you passed before saving the state), the way Continue loads a
+memory card save. The line under the cards says so for such a slot, and a
+message says so after the load. The play time, the difficulty and the
+settings a memory card save keeps (the screen effect and Players) come from
+the state. Nothing is written to your memory card. A state saved in a new
+game before its first checkpoint has nothing to continue from; the message
+then says so. A gameplay
 setting that a later version adds does not stop an older state from loading
 while you leave that setting as it starts. A state made before states kept
 their difficulty takes the gameplay rows it was made with as its difficulty.

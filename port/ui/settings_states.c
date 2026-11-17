@@ -443,7 +443,8 @@ void ui__states_refresh(int cur)
         lt_ext_set_dim(c->info2, in->present && !in->loadable);
     }
     /* the status line: the second press asked for, the reason the slot
-       under the cursor cannot load, what the page is for */
+       under the cursor cannot load (or, for one that loads from its
+       checkpoint, that it does), what the page is for */
     if (on >= 0 && s_stConfirmSlot == on) {
         const char *word = ui_str((UiStrId)statesActStr(s_stConfirmAct));
         char w[64];
@@ -453,8 +454,7 @@ void ui__states_refresh(int cur)
         }
         snprintf(buf, sizeof(buf), ui_str(UI_STR_STATES_CONFIRM), w);
         statesStatus(buf);
-    } else if (on >= 0 && s_stInfo[on].present && !s_stInfo[on].loadable &&
-               s_stInfo[on].refusal_str > 0) {
+    } else if (on >= 0 && s_stInfo[on].present && s_stInfo[on].refusal_str > 0) {
         statesPlain(s_stInfo[on].refusal_str, buf, sizeof(buf));
         statesStatus(buf);
     } else if (ico_difficulty_states_locked()) {

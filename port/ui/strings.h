@@ -972,6 +972,14 @@ typedef enum UiStrId {
     UI_STR_STATES_XB_CODE,
     UI_STR_STATES_XB_DATA,
     UI_STR_STATES_XB_PINNED,
+    /* a state that loads but cannot resume where it was saved, Load continuing
+       from the checkpoint it holds (port/save/state_checkpoint.h): the Save
+       states page's line for its slot, the box after the load (the saved
+       version), and the box when it cannot resume and holds no checkpoint to
+       continue from (the saved version) */
+    UI_STR_STATES_CKPT_ROW,
+    UI_STR_STATES_CKPT_LOADED,
+    UI_STR_STATES_CKPT_NONE,
     /* Effects > Glow between frames (Original or Smooth): the label, the note, and the
        note while the row is greyed */
     UI_STR_OPT_EFFECT_GLOW_SMOOTH,

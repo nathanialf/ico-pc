@@ -64,10 +64,12 @@
 #include "../include/ico_gamestate.h"
 #include "../input/input_record.h"
 #include "../save/mc_host.h"
+#include "../save/state_checkpoint.h"
 #include "../ui/settings.h"
 #include "achievements.h"
 #include "difficulty.h"
 #include "options.h"
+#include "state_checkpoint_live.h"
 #include "video_options.h"
 
 #ifndef ICO_HEADLESS
@@ -153,11 +155,14 @@ enum {
     SEC_POBJ,
     SEC_RANGES,
     SEC_SYMS,
+    /* where the game's checkpoint globals are (state_checkpoint.h): a later
+       version continues the state from its checkpoint by it */
+    SEC_CKPT,
     SEC_COUNT
 };
 
-static const char *const sec_names[SEC_COUNT] = {"arena", "gdata",  "gbss", "reg",    "audio",
-                                                 "sched", "fibers", "pobj", "ranges", "syms"};
+static const char *const sec_names[SEC_COUNT] = {
+    "arena", "gdata", "gbss", "reg", "audio", "sched", "fibers", "pobj", "ranges", "syms", "ckpt"};
 
 /* A copy of the memory a state holds: the save's (written by the writer
    thread), the load's staging (inflated from the file) and its backup (the
@@ -606,6 +611,8 @@ static void fill_ranges(StateRanges *r, const void *pobj, size_t pobj_bytes)
     }
 }
 
+static size_t ckpt_record(void *out);
+
 /* Every section of a state from the live memory (the audio blocks under
    the audio lock).  0, or -1 (c freed) when memory ran out or the
    scheduler is not at its quiescent point. */
@@ -635,6 +642,8 @@ static int copy_live(Copy *c)
     if (rg != NULL) {
         fill_ranges(rg, pobj, pobj_bytes);
     }
+    c->p[SEC_CKPT] = malloc(ICO_CKPT_RECORD_BYTES);
+    c->n[SEC_CKPT] = c->p[SEC_CKPT] != NULL ? ckpt_record(c->p[SEC_CKPT]) : 0;
     if (copy_sched(c) != 0) {
         copy_free(c);
         return -1;
@@ -1590,6 +1599,9 @@ static uint64_t section_size(int i, int *exact)
     case SEC_SYMS:
         *exact = 0;
         return ICO_XB_MAX_BYTES;
+    case SEC_CKPT:
+        *exact = 0;
+        return 4096;
     default:
         return sizeof(StateRanges);
     }
@@ -1648,6 +1660,7 @@ static int check_sizes(const Copy *c, const StateRanges *rg, const uint64_t *blo
                                 0,
                                 rg != NULL ? rg->pobj_bytes : 0,
                                 sizeof(StateRanges),
+                                0,
                                 0};
     const void *sched;
     size_t sched_n;
@@ -1666,6 +1679,9 @@ static int check_sizes(const Copy *c, const StateRanges *rg, const uint64_t *blo
     for (i = 0; i < SEC_COUNT; i++) {
         uint64_t w = i == SEC_SCHED ? (uint64_t)sched_n : want[i];
 
+        if (i == SEC_CKPT) {
+            continue; /* a state from before v0.11.9 has none; the exact load needs none */
+        }
         if (c->p[i] == NULL) {
             snprintf(why, n, "the %s section is missing", sec_names[i]);
             return -1;
@@ -2073,6 +2089,241 @@ static void roll_back(const Copy *backup, void *pobj_new)
     }
 }
 
+/* --- the checkpoint (port/save/state_checkpoint.h) ---------------------------------- */
+
+/* this program's own places of the checkpoint globals (its layout) */
+static int self_layout(IcoCkptLayout *out)
+{
+    return ico_ckpt_live_self(out, ico_state_platform_tag(), s_gdata[ICO_GAME_DATA].lo,
+                              s_gdata[ICO_GAME_DATA].hi, s_gdata[ICO_GAME_BSS].lo,
+                              s_gdata[ICO_GAME_BSS].hi);
+}
+
+/* the "ckpt" section a save writes: its size (0: none) */
+static size_t ckpt_record(void *out)
+{
+    static int logged;
+    IcoCkptLayout self;
+    int k;
+
+    if (self_layout(&self) != 0) {
+        return 0;
+    }
+    if (!logged) {
+        char line[320];
+        size_t at = 0;
+
+        logged = 1;
+        line[0] = '\0';
+        for (k = 0; k < ICO_CKPT_G_COUNT && at < sizeof line; k++) {
+            const IcoCkptPlace *g = &self.g[k];
+            const int n = g->range == ICO_CKPT_RANGE_NONE
+                              ? snprintf(line + at, sizeof line - at, "%s%s nowhere", k ? ", " : "",
+                                         ico_ckpt_global_name(k))
+                              : snprintf(line + at, sizeof line - at, "%s%s %s+0x%x", k ? ", " : "",
+                                         ico_ckpt_global_name(k), g->range ? "gbss" : "gdata",
+                                         (unsigned)g->off);
+
+            if (n < 0) {
+                break;
+            }
+            at += (size_t)n;
+        }
+        fprintf(stderr,
+                "state: each state names its checkpoint (a later version continues it from "
+                "there): %s\n",
+                line);
+    }
+    return ico_ckpt_record_write(self.g, out, ICO_CKPT_RECORD_BYTES);
+}
+
+/* the last load that went through the checkpoint (ico_state_last_load_checkpoint) */
+static struct {
+    int slot;   /* armed, waiting for the Main tick (0 none) */
+    int loaded; /* the last load that succeeded went this way */
+    char saved_version[48];
+} s_ckpt;
+
+int ico_state_last_load_checkpoint(char *saved_version, size_t n)
+{
+    if (n > 0) {
+        snprintf(saved_version, n, "%s", s_ckpt.loaded ? s_ckpt.saved_version : "");
+    }
+    return s_ckpt.loaded;
+}
+
+/* the Main thread's word from state_checkpoint_live.c: the load ran (the
+   stage switch began) or was refused there */
+static void ckpt_done(int ok, int stage, const char *why)
+{
+    const int slot = s_ckpt.slot;
+
+    s_ckpt.slot = 0;
+    s_list_gen++;
+    if (!ok) {
+        done(1, slot, ICO_STATE_STAGE_SWITCH, why);
+        return;
+    }
+    (void)stage;
+    s_ckpt.loaded = 1;
+    s_thumb.slot = s_thumb.th == NULL ? 0 : s_thumb.slot; /* no picture of the old game */
+    ui_settings_sync_after_state_checkpoint();
+    done(1, slot, ICO_STATE_OK, "");
+}
+
+/* What a state's checkpoint gives here: 0 with *plan and *ap filled (ap may
+   be NULL: the listing), or the refusal (OTHER_DISC, PERMADEATH by rule;
+   OTHER_BUILD with why when nothing can be continued). */
+static IcoStateResult ckpt_plan(const char *path, IcoCkptState *st, IcoCkptPlan *plan,
+                                IcoCkptApply *ap, char *why, size_t n)
+{
+    const IcoStateEntry *rec_e = NULL;
+    const unsigned char *rec = NULL;
+    IcoCkptLayout self;
+    IcoCkptInput in;
+    char bwhy[160];
+    int i, k;
+
+    if (ico_ckpt_state_read(path, st) != 0) {
+        snprintf(why, n, "%s", st->why);
+        return ICO_STATE_BAD_FILE;
+    }
+    if (strncmp(st->h.disc, now_header()->disc, sizeof st->h.disc) != 0) {
+        snprintf(why, n, "it is of the %s disc", st->h.disc);
+        return ICO_STATE_OTHER_DISC;
+    }
+    /* the journey's record, by the state's own block list */
+    bwhy[0] = '\0';
+    for (i = 0; i < ico_state_registry_count(); i++) {
+        if (strcmp(ico_state_registry_entry(i)->name, "difficulty.record") == 0) {
+            rec_e = ico_state_registry_entry(i);
+        }
+    }
+    k = rec_e != NULL
+            ? ico_ckpt_state_block(st, "difficulty.record", rec_e->n, &rec, bwhy, sizeof bwhy)
+            : 0;
+    if (k > 0 && ico_state_record_permadeath(st->p[ICO_CKPT_S_REG], st->n[ICO_CKPT_S_REG],
+                                             (uint64_t)(rec - st->p[ICO_CKPT_S_REG]), rec_e->n)) {
+        snprintf(why, n, "the state was saved on a Permadeath journey");
+        return ICO_STATE_PERMADEATH;
+    }
+    ico_ckpt_state_input(st, self_layout(&self) == 0 ? &self : NULL, &in);
+    if (ico_ckpt_locate(&in, plan) != 0) {
+        snprintf(why, n, "no checkpoint found in it: %s", plan->why);
+        return ICO_STATE_OTHER_BUILD;
+    }
+    if (plan->checkpoint == 0) {
+        snprintf(why, n,
+                 "it was saved before its journey's first checkpoint (systemStatus[3] 0, found by "
+                 "%s): there is nothing to continue from",
+                 plan->source);
+        return ICO_STATE_OTHER_BUILD;
+    }
+    if (ap == NULL) {
+        return ICO_STATE_OK;
+    }
+    memset(ap, 0, sizeof *ap);
+    memcpy(ap->image, plan->g[ICO_CKPT_G_IMAGE], ICO_CKPT_IMAGE_BYTES);
+    if (plan->g[ICO_CKPT_G_PREVIEW] != NULL) {
+        ap->have_preview = 1;
+        memcpy(ap->preview, plan->g[ICO_CKPT_G_PREVIEW], sizeof ap->preview);
+    }
+    /* the card block's option words: the screen word only where the
+       disc's block holds it (not the 2001 discs), Players on every disc
+       (the 2001 discs keep it beside the save) */
+    if (plan->g[ICO_CKPT_G_SCREEN] != NULL && !ico_ckpt_disc_2001(st->h.disc)) {
+        ap->have_screen = 1;
+        memcpy(&ap->screen, plan->g[ICO_CKPT_G_SCREEN], 4);
+    }
+    if (plan->g[ICO_CKPT_G_GIRL] != NULL) {
+        ap->have_girl = 1;
+        memcpy(&ap->girl, plan->g[ICO_CKPT_G_GIRL], 4);
+    }
+    if (k > 0 && rec_e->n <= sizeof ap->record) {
+        ap->have_record = 1;
+        ap->record_n = rec_e->n;
+        memcpy(ap->record, rec, rec_e->n);
+    } else if (k < 0) {
+        fprintf(stderr, "state: %s: its difficulty is built from its keys\n", bwhy);
+    }
+    snprintf(ap->keys, sizeof ap->keys, "%s", st->h.keys);
+    return ICO_STATE_OK;
+}
+
+/* Load's second way: a state that could not resume where it was saved
+   (exact_r, detail: why) continues from the checkpoint it holds, through
+   the game's own load at the end of the next Main tick (the result comes
+   from there: ckpt_done) */
+static void load_checkpoint(int slot, const char *path, const IcoStateHeader *saved,
+                            IcoStateResult exact_r, const char *detail, int other)
+{
+    static IcoCkptState st;
+    static IcoCkptApply ap;
+    IcoCkptPlan plan;
+    char why[384], sv[48];
+    IcoStateResult r;
+    const double t0 = ico_thread_now_ms();
+
+    version_text(saved->commit, sv, sizeof sv);
+    if (s_ckpt.slot != 0 || ico_ckpt_live_pending()) {
+        done(1, slot, ICO_STATE_BUSY, "a checkpoint load is waiting for the game");
+        return;
+    }
+    why[0] = '\0';
+    r = ckpt_plan(path, &st, &plan, &ap, why, sizeof why);
+    if (r != ICO_STATE_OK) {
+        ico_ckpt_state_free(&st);
+        fprintf(stderr,
+                "state: slot %d (version %s, %s) cannot resume where it was saved (%s%s%s), and "
+                "its checkpoint cannot be loaded either: %s\n",
+                slot, sv, saved->platform, ico_state_result_text(exact_r),
+                detail[0] != '\0' ? ": " : "", detail, why);
+        if (r == ICO_STATE_OTHER_DISC || r == ICO_STATE_PERMADEATH) {
+            done(1, slot, r, why);
+            return;
+        }
+        if (other) {
+            set_refusal(ICO_STATE_BLOCK_NO_CHECKPOINT, saved->commit);
+            done(1, slot, ICO_STATE_OTHER_BUILD, why);
+        } else {
+            done(1, slot, exact_r, why);
+        }
+        return;
+    }
+    ap.slot = slot;
+    ap.done = ckpt_done;
+    s_ckpt.slot = slot;
+    snprintf(s_ckpt.saved_version, sizeof s_ckpt.saved_version, "%s", sv);
+    memset(&s_refusal, 0, sizeof s_refusal);
+    fprintf(stderr,
+            "state: slot %d (version %s, %s) cannot resume where it was saved (%s%s%s): it "
+            "continues from its last checkpoint, stage %d (saved in stage %d), found by %s; "
+            "the game's own load runs at the end of the next Main tick (%.1f ms)\n",
+            slot, sv, saved->platform, ico_state_result_text(exact_r),
+            detail[0] != '\0' ? ": " : "", detail, plan.image_stage, saved->stage_no, plan.source,
+            ico_thread_now_ms() - t0);
+    ico_ckpt_state_free(&st);
+    ico_ckpt_live_arm(&ap);
+}
+
+/* A load the exact path refused: the checkpoint's way where
+   ico_ckpt_route says so, else the refusal as before.  saved: the state's
+   header, NULL when it could not be read. */
+static void load_refused(int slot, const char *path, const IcoStateHeader *saved, IcoStateResult r,
+                         const char *detail)
+{
+    const int other =
+        saved != NULL && (saved->version != s_now.version ||
+                          memcmp(saved->build_id, s_now.build_id, sizeof saved->build_id) != 0 ||
+                          strncmp(saved->platform, s_now.platform, sizeof saved->platform) != 0);
+
+    if (saved == NULL || ico_ckpt_route(r, other) != ICO_CKPT_ROUTE_CHECKPOINT) {
+        done(1, slot, r, detail);
+        return;
+    }
+    load_checkpoint(slot, path, saved, r, detail, other);
+}
+
 static void perform_load(int slot)
 {
     static IcoStateHeader saved;
@@ -2100,11 +2351,13 @@ static void perform_load(int slot)
     IcoStateResult r;
     double t0;
     int moved;
+    int header_ok = 0;
     int i;
 
     (void)live_tex;
     detail[0] = '\0';
     memset(&s_refusal, 0, sizeof s_refusal);
+    s_ckpt.loaded = 0;
     ico_xb_verdict_free(&xv);
     /* a save in flight first (it may be this slot's) */
     collect_save(1);
@@ -2120,6 +2373,7 @@ static void perform_load(int slot)
     }
     r = ico_state_file_read_header(path, &saved);
     if (r == ICO_STATE_OK) {
+        header_ok = 1;
         r = ico_state_header_check(&saved, now_header(), detail, sizeof detail);
     }
     if (r == ICO_STATE_OTHER_BUILD) {
@@ -2133,7 +2387,8 @@ static void perform_load(int slot)
         }
     }
     if (r != ICO_STATE_OK) {
-        done(1, slot, r, detail);
+        /* the checkpoint's way where the refusal allows it (state_checkpoint.h) */
+        load_refused(slot, path, header_ok ? &saved : NULL, r, detail);
         return;
     }
     if (xb) {
@@ -2231,7 +2486,8 @@ static void perform_load(int slot)
     if (r != ICO_STATE_OK) {
         copy_free(&stage);
         free(pobj_new);
-        done(1, slot, r, detail);
+        ico_xb_verdict_free(&xv);
+        load_refused(slot, path, &saved, r, detail);
         return;
     }
     build_reloc(&rel, rg, pobj_new);
@@ -2301,8 +2557,9 @@ static void perform_load(int slot)
         ico_audio_unlock();
         copy_free(&stage);
         copy_free(&backup);
-        done(1, slot, ICO_STATE_SELF_CHECK,
-             "the threads could not be put back (the backup was restored)");
+        ico_xb_verdict_free(&xv);
+        load_refused(slot, path, &saved, ICO_STATE_SELF_CHECK,
+                     "the threads could not be put back (the backup was restored)");
         return;
     }
     memset(&k, 0, sizeof k);
@@ -2326,7 +2583,8 @@ static void perform_load(int slot)
         copy_free(&backup);
         snprintf(detail, sizeof detail, "%s; the game went on as before (backup restored)",
                  chk.why);
-        done(1, slot, ICO_STATE_SELF_CHECK, detail);
+        ico_xb_verdict_free(&xv);
+        load_refused(slot, path, &saved, ICO_STATE_SELF_CHECK, detail);
         return;
     }
     /* committed: the old model tables go, the renderer's handles follow */
@@ -2457,6 +2715,73 @@ static void perform_delete(int slot)
 
 /* --- the listing --------------------------------------------------------------- */
 
+/* A listed slot that cannot resume where it was saved (exact_r): loadable
+   when its checkpoint can be continued (ckpt_plan, the load's own test), 1
+   with info set then and for a refusal by rule (another disc, Permadeath);
+   0 when neither (the caller lists the exact path's refusal).  The verdict
+   is kept per slot with the file's size and time, as slot_permadeath keeps
+   its own: the listing does not read the state's sections again while the
+   file is the same. */
+static int list_checkpoint(int slot, IcoStateSlotInfo *info, IcoStateResult exact_r,
+                           const char *detail)
+{
+    static struct {
+        int known;
+        unsigned long long size;
+        long long mtime;
+        IcoStateResult r;
+    } seen[ICO_STATE_SLOTS + 1];
+
+    static IcoCkptState st;
+    IcoCkptPlan plan;
+    char path[ICO_PATH_MAX], why[384];
+    unsigned long long size = 0;
+    long long mtime = 0;
+    IcoStateResult r;
+
+    if (slot < 1 || slot > ICO_STATE_SLOTS ||
+        ico_state_slot_path(path, sizeof path, ico_state_dir(), slot, ".ics") != 0 ||
+        ico_path_kind(path, &size, &mtime) != 0) {
+        return 0;
+    }
+    if (seen[slot].known && seen[slot].size == size && seen[slot].mtime == mtime) {
+        r = seen[slot].r;
+    } else {
+        why[0] = '\0';
+        r = ckpt_plan(path, &st, &plan, NULL, why, sizeof why);
+        if (r == ICO_STATE_OK) {
+            fprintf(stderr,
+                    "state: slot %d (saved by %s, %s) cannot resume here (%s%s%s): Load continues "
+                    "from its last checkpoint, stage %d (found by %s)\n",
+                    slot, st.h.commit, st.h.platform, ico_state_result_text(exact_r),
+                    detail[0] != '\0' ? ": " : "", detail, plan.image_stage, plan.source);
+        } else {
+            fprintf(stderr,
+                    "state: slot %d cannot resume here (%s%s%s), and its checkpoint cannot be "
+                    "loaded either: %s\n",
+                    slot, ico_state_result_text(exact_r), detail[0] != '\0' ? ": " : "", detail,
+                    why);
+        }
+        ico_ckpt_state_free(&st);
+        seen[slot].known = 1;
+        seen[slot].size = size;
+        seen[slot].mtime = mtime;
+        seen[slot].r = r;
+    }
+    if (r == ICO_STATE_OK) {
+        info->loadable = 1;
+        info->why_not = ICO_STATE_OK;
+        info->checkpoint = 1;
+        return 1;
+    }
+    if (r == ICO_STATE_OTHER_DISC || r == ICO_STATE_PERMADEATH) {
+        info->loadable = 0;
+        info->why_not = r;
+        return 1;
+    }
+    return 0;
+}
+
 /* A listed slot of another build: loadable when a load would translate it
    (the same check as the load's, other_build), its refusal otherwise; one
    line per slot each time the listing is made. */
@@ -2484,6 +2809,10 @@ static void list_other_build(int slot, IcoStateSlotInfo *info)
         ico_xb_verdict_free(&v);
     }
     s_refusal = keep; /* the listing is no refusal of a load */
+    if (r != ICO_STATE_OK && ico_ckpt_route(r, 1) == ICO_CKPT_ROUTE_CHECKPOINT &&
+        list_checkpoint(slot, info, r, detail)) {
+        return;
+    }
     info->loadable = r == ICO_STATE_OK;
     info->why_not = r;
     fprintf(stderr, "state: slot %d (saved by %s) %s%s%s\n", slot, h.commit,
@@ -2512,6 +2841,10 @@ void ico_state_list(IcoStateSlotInfo out[ICO_STATE_SLOTS])
             if (cache[i].present && !cache[i].loadable &&
                 cache[i].why_not == ICO_STATE_OTHER_BUILD) {
                 list_other_build(i + 1, &cache[i]);
+            } else if (cache[i].present && !cache[i].loadable &&
+                       cache[i].why_not == ICO_STATE_OTHER_PLATFORM) {
+                /* another platform's state: its checkpoint (state_checkpoint.h) */
+                (void)list_checkpoint(i + 1, &cache[i], ICO_STATE_OTHER_PLATFORM, "");
             } else if (cache[i].present && cache[i].loadable && slot_permadeath(i + 1, NULL)) {
                 /* this build's state of a Permadeath journey */
                 cache[i].loadable = 0;

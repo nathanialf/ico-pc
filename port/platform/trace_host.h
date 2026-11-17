@@ -39,6 +39,10 @@
 void ico_host_main_tick(void);
 /* Main ticks completed so far. */
 unsigned int ico_host_main_ticks(void);
+/* A function the Main thread runs at the end of each Main tick, after the
+   tick's own bookkeeping (port/game/state_checkpoint_live.c: a save state's
+   checkpoint goes in through the game's own load there); NULL for none. */
+void ico_host_set_main_tick_hook(void (*fn)(void));
 /* Opens the trace file and writes its header. 0, or -1 (message on
    stderr). */
 int ico_trace_open(const char *path);

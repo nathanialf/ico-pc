@@ -830,6 +830,16 @@ const char *const
                 "Dieser Spielzustand stammt aus Version %s.\nVersion %s hat geändert, wie das Spiel seinen\nFortschritt im Speicher hält, deshalb kann er\nnicht fortgesetzt werden.\nDeine Speicherstände auf der Memory Card\nfunktionieren weiterhin.",
             [UI_STR_STATES_XB_PINNED] =
                 "Dieser Spielzustand stammt aus Version %s\nund kann nur mit dieser Version\nfortgesetzt werden.\nDeine Speicherstände auf der Memory Card\nfunktionieren weiterhin.",
+            [UI_STR_STATES_CKPT_ROW] =
+                "Von einer anderen Version: Laden setzt am letzten Kontrollpunkt fort",
+            [UI_STR_STATES_CKPT_LOADED] = "Dieser Spielzustand stammt aus Version %s.\n"
+                                          "Er kann nicht dort fortgesetzt werden,\n"
+                                          "wo er gespeichert wurde: Das Spiel geht\n"
+                                          "am letzten Kontrollpunkt weiter.",
+            [UI_STR_STATES_CKPT_NONE] = "Dieser Spielzustand stammt aus Version %s.\n"
+                                        "Er kann nicht dort fortgesetzt werden,\n"
+                                        "wo er gespeichert wurde, und er enthält\n"
+                                        "keinen Kontrollpunkt zum Weiterspielen.",
             [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "Leuchten zwischen Bildern",
             [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
                 "Original behält das Leuchten des Spielbildes zwischen den Bildern. Flüssig berechnet es für jedes gezeigte Bild neu; das kostet mehr Grafikzeit.",

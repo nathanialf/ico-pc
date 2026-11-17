@@ -778,6 +778,14 @@ const char *const
                 "Cet état a été créé par la version %s.\nLa version %s a modifié la façon dont le jeu\ngarde sa progression en mémoire, il ne peut\ndonc pas être repris.\nVos sauvegardes sur memory card fonctionnent toujours.",
             [UI_STR_STATES_XB_PINNED] =
                 "Cet état a été créé par la version %s\net seule cette version peut le reprendre.\nVos sauvegardes sur memory card fonctionnent toujours.",
+            [UI_STR_STATES_CKPT_ROW] =
+                "Créé par une autre version : Charger reprend au dernier point de contrôle",
+            [UI_STR_STATES_CKPT_LOADED] = "Cet état a été créé par la version %s.\n"
+                                          "Il ne peut pas être repris là où il a été enregistré :\n"
+                                          "le jeu reprend au dernier point de contrôle.",
+            [UI_STR_STATES_CKPT_NONE] = "Cet état a été créé par la version %s.\n"
+                                        "Il ne peut pas être repris là où il a été enregistré,\n"
+                                        "et il ne contient aucun point de contrôle d'où reprendre.",
             [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "Lueur entre les images",
             [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
                 "Original garde la lueur de l’image du jeu entre les images. Fluide la refait pour chaque image affichée ; cela coûte plus de temps graphique.",

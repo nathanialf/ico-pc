@@ -458,7 +458,8 @@ void ui_settings_set_backup_host(const UiBackupHost *host);
 typedef struct UiStateSlotInfo {
     int present;              /* a state exists */
     int loadable;             /* it would load now */
-    int refusal_str;          /* UI_STR_* naming why not (when !loadable); 0 none */
+    int refusal_str;          /* UI_STR_* naming why not (when !loadable), or what a load
+                                 will do (loadable: it continues from its checkpoint); 0 none */
     unsigned int play_frames; /* for playTimeText */
     int stage_no;             /* for areaName */
     long long saved_at;       /* time(NULL) */
@@ -507,6 +508,10 @@ int ui_settings_states_prompt_layout(void);
 /* After a load: the menu closes its page and puts the cursor on the pause
    menu's Save states row (the restored game is on the pause layout). */
 void ui_settings_sync_after_state_load(void);
+/* A state continued from its checkpoint instead (the stage is changing): in
+   play as after a load, from the title the page closes on the game's empty
+   layout. */
+void ui_settings_sync_after_state_checkpoint(void);
 /* F6 (port/platform/hotkeys.h ICO_HOTKEY_STATES_PAGE, the window's key
    down): startOpensPause is mouse_look.h ico_start_opens_pause's answer.
    In play the press is latched and 1 returned: the window then taps Start
