@@ -886,10 +886,11 @@ static int build_syms(Copy *c, IcoXbStats *st)
     ico_xb_where(r, "the scheduler's table");
     ico_xb_scan(r, c->p[SEC_SCHED], (size_t)c->n[SEC_SCHED], (uint64_t)(uintptr_t)sched, 1);
     if (parse_fibers(c, &img) == 0) {
-        ico_xb_frames(r, 1);
         for (i = 0; i < img.n_fibers; i++) {
             const IcoFiberImage *f = &img.fibers[i];
             char what[48];
+
+            ico_xb_frames(r, (int)f->slot + 1);
 
             snprintf(what, sizeof what, "fiber slot %u's control page", (unsigned)f->slot);
             ico_xb_where(r, what);
@@ -898,6 +899,7 @@ static int build_syms(Copy *c, IcoXbStats *st)
             ico_xb_where(r, what);
             xb_scan_stack(r, f);
         }
+        ico_xb_frames(r, 0);
     }
     if (ico_xb_finish(r, &sec, &n, st) != 0) {
         return -1;
@@ -1058,10 +1060,11 @@ static void save_finished(const IcoStateWriteResult *w)
                     "contents), %u start-up values and texts "
                     "(%u of them read-only data found by its bytes, %u texts), %u blocks and the "
                     "game's data layout (%u program words, %u of them naming nothing and kept "
-                    "as numbers, first 0x%llx; code from %s; record %zu bytes in %.1f ms)\n",
+                    "as numbers, first 0x%llx; %u page words of the threads, %u ADRPs making "
+                    "them; code from %s; record %zu bytes in %.1f ms)\n",
                     s_save.slot, x->units, x->positions, x->data, x->data_masked, x->points,
                     x->windows, x->texts, x->blocks, x->values, x->left,
-                    (unsigned long long)x->first_unnamed,
+                    (unsigned long long)x->first_unnamed, x->pages, x->producers,
                     x->code_from ? "the symbol file's sections" : "the loader's segments", x->bytes,
                     s_save.syms_ms);
         }
@@ -2234,6 +2237,10 @@ static void perform_load(int slot)
         xl.n_span = xv.n_span;
         xl.point = xv.point;
         xl.n_point = xv.n_point;
+        /* arm64 page words: each fiber's own (fiber.c sets the slot) */
+        xl.fiber_point = (const IcoStateSpan *const *)xv.fiber_point;
+        xl.fiber_n_point = xv.fiber_n_point;
+        xl.n_fiber = xv.n_fiber;
         xl.missed = &missed;
         xl.first_missed = &first_missed;
         rel.xlate = &xl;

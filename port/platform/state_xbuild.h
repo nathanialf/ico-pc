@@ -79,21 +79,32 @@
  * ... is missing here"), more than one refuses ("... is in more than one
  * place here"): a load never picks one.
  *
- * Page addresses (arm64).  Code keeps an ADRP's page address in a
- * callee-saved register across calls (a fiber's suspended frames hold
- * several: the game's bss pages) and adds a variable's offset in its page,
- * the instruction's low 12 bits, to it.  A later build's code adds its own
- * offsets, so the translated page address must start a page there too: the
- * save records every strict word at a page's start outside the code that a
- * fiber's saved registers or live stack hold (ico_xb_frames: C code never
- * stores a bare page address elsewhere; a code page is not taken, since a
- * return address or a function may start a page; ICO_XB_MAX_PAGES, more is
- * ICO_XB_OVERFLOW) and the load refuses a state where one lands elsewhere
- * in a page ("it holds the page address ..."), instead of letting a resumed
- * frame read the wrong variable.  A pointer there that merely lies at a
- * page's start is checked the same way.  A game range moves whole, so its
- * page addresses keep their pages only while the range starts at the same
- * place in a page in both builds.
+ * Page words (arm64).  clang keeps an ADRP's page address in a
+ * callee-saved register across calls and adds a variable's offset in its
+ * page (the next instruction's low 12 bits) to it; a suspended fiber's saved
+ * registers and live stack hold several.  The later build's code adds its
+ * own offsets, so the word must become the page the later build's ADRP
+ * makes, which a range's or a symbol's move does not give.  C forms a page
+ * address no other way, and a callee-saved register's value was set by a
+ * function still on that fiber's stack (a returned function restored it),
+ * so the save takes, per fiber (ico_xb_frames), the units its return
+ * addresses lie in (positions: the code hash, code_hash.h, requires them
+ * alike, ADRP immediates and the low 12 bits after them masked, so every
+ * instruction keeps its offset) and decodes their ADRPs: each one whose page
+ * is a page-aligned word of that fiber outside the code is a PRODUCER
+ * (unit, offset, page).  The load decodes the same offsets in its units:
+ * the producers of one word on one fiber must make one page, which the word
+ * becomes ("... which ADRPs in f+0x.. and g+0x.. make: here they make two
+ * pages ..." refuses otherwise: no frame tells which one set the register
+ * without unwinding).  A page-aligned word with no producer on its fiber is
+ * an ordinary address (in the owner's state: an element of texTable and of
+ * stageAnimTable, sgHeadContext's start), named by the ordinary rules and
+ * not recorded as a page word.  A word that
+ * is also an ordinary address (seen outside the fibers' frames, or a symbol,
+ * block or start-up value starts at it) keeps both readings and must get
+ * the same from both.  Every reading of one word must agree.  Bounds
+ * ICO_XB_MAX_PAGES words, ICO_XB_MAX_PRODS producers (more pins the state:
+ * ICO_XB_OVERFLOW).  Other architectures record none.
  *
  * A word only these confirm is translated.  A word in the code that no
  * unit holds, or in the image that nothing above names, is confirmed by
@@ -146,20 +157,22 @@
 #define ICO_XB_MAX_SEARCHES 512  /* content points found again at a load */
 #define ICO_XB_CONTENT 24 /* a version 2 text point's bytes; a version 3 hashed window's prefix */
 #define ICO_XB_LIST 16    /* words nothing names, listed with where they are */
-#define ICO_XB_MAX_PAGES 4096        /* arm64 page addresses (ADRP's) a state holds */
+#define ICO_XB_MAX_PAGES 4096        /* arm64 page words (ADRP's) a state holds */
+#define ICO_XB_MAX_PRODS 16384       /* the ADRPs that make them */
 #define ICO_XB_POOL_BYTES (4u << 20) /* the windows' bytes at most */
 /* the section's size at most (a load's bound before it inflates it): the
    records, 4 MB of names and the pool */
 #define ICO_XB_MAX_BYTES                                                                           \
     (80u + ICO_XB_MAX_UNITS * 48u + ICO_XB_MAX_DATA * 48u + ICO_XB_MAX_POINTS * 64u +              \
-     ICO_XB_MAX_BLOCKS * 40u + ICO_XB_LIST * 40u + ICO_XB_MAX_PAGES * 8u + (4u << 20) +            \
-     ICO_XB_POOL_BYTES)
+     ICO_XB_MAX_BLOCKS * 40u + ICO_XB_LIST * 40u + ICO_XB_MAX_PAGES * 16u +                        \
+     ICO_XB_MAX_PRODS * 24u + (4u << 20) + ICO_XB_POOL_BYTES)
 
 /* the header's flags */
 #define ICO_XB_TABLE 1u     /* the saving build had a symbol table */
 #define ICO_XB_OVERFLOW 2u  /* more references than the bounds */
 #define ICO_XB_UNNAMED 4u   /* words nothing in the table names: kept as numbers */
 #define ICO_XB_LOW_IMAGE 8u /* the saving program's image lies below 4 GB */
+#define ICO_XB_PAGES 16u    /* arm64: the fibers' page words were recorded (state_xbuild.c) */
 
 /* why a word is named by nothing (IcoXbUnnamed.reason) */
 enum {
@@ -218,9 +231,10 @@ void ico_xb_word(IcoXbRefs *r, uint64_t w, int strict);
    stack"): kept with each word's first sighting for the list of words
    nothing names (at most 1024 such texts; later ones are not kept). */
 void ico_xb_where(IcoXbRefs *r, const char *what);
-/* Whether the next scans read a suspended fiber's saved registers and
-   stack, where a compiler keeps an arm64 page address (above). */
-void ico_xb_frames(IcoXbRefs *r, int on);
+/* The next scans read a suspended fiber's saved registers and live stack:
+   `fiber` 1 and up names the fiber (state_host.c: its slot + 1), 0 ends
+   them (the page words, above). */
+void ico_xb_frames(IcoXbRefs *r, int fiber);
 /* A registered block: its name, size, flags, address now and offset in
    its packed section (reg or audio, by the AUDIO flag). */
 void ico_xb_block(IcoXbRefs *r, const char *name, uint64_t size, unsigned flags, uint64_t addr,
@@ -230,7 +244,8 @@ typedef struct IcoXbStats {
     unsigned units, positions, data, points, blocks, values;
     unsigned windows;     /* of the points: windows into read-only data */
     unsigned data_masked; /* of the data: of a repeated name, by ordinal and contents */
-    unsigned pages;       /* arm64 page addresses recorded */
+    unsigned pages;       /* arm64 page words recorded (one per word and fiber) */
+    unsigned producers;   /* the ADRPs that make them */
     unsigned texts;       /* of the windows: texts */
     unsigned flags;
     unsigned left;          /* the words nothing names (ICO_XB_UNNAMED) */
@@ -297,7 +312,12 @@ typedef struct IcoXbVerdict {
     int by_unnamed;       /* refused (ICO_XB_PINNED) for the words nothing names */
     unsigned windows;     /* the points that were windows */
     unsigned data_masked; /* the data matched by ordinal and contents */
-    unsigned pages;       /* page addresses checked */
+    unsigned pages;       /* page words translated by their producers */
+    /* their points per fiber slot (state_reloc.h IcoStateXlate.fiber_point:
+       the translation's own lists; freed by ico_xb_verdict_free) */
+    IcoStateSpan **fiber_point;
+    size_t *fiber_n_point;
+    size_t n_fiber;
     /* a version 3 record's list of those words (filled before any check,
        so a refusal has it too) */
     unsigned listed;

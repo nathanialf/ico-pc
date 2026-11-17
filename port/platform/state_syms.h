@@ -112,6 +112,10 @@ typedef struct IcoSymTab {
        item outside it is data. */
     uint64_t code_lo, code_hi;
     int code_from;
+    /* the game data symbols' starts where they lie now, sorted (the layout's
+       symbols; for ico_symtab_starts_at) */
+    uint64_t *game_start;
+    size_t n_game_start;
     size_t n_layout; /* the game data items the layout hash covers */
     uint64_t layout_hash;
     char *str; /* the names, NUL-terminated */
@@ -144,6 +148,10 @@ const IcoSymUnit *ico_symtab_unit_named(const IcoSymTab *t, uint64_t name_hash, 
                                         uint32_t ordinal);
 const IcoSymData *ico_symtab_data_named(const IcoSymTab *t, uint64_t name_hash, const char *name,
                                         uint32_t ordinal);
+/* 1 when a named symbol (a unit, a data symbol or a game data symbol)
+   starts exactly at `addr`. */
+int ico_symtab_starts_at(const IcoSymTab *t, uint64_t addr);
+
 /* The output section holding `addr`, or NULL. */
 const IcoSymSec *ico_symtab_section_at(const IcoSymTab *t, uint64_t addr);
 /* The name of the unit or data symbol that starts nearest at or below

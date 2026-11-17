@@ -78,10 +78,21 @@ typedef struct IcoStateXlate {
        as they were) and the first of them */
     uint64_t *missed;
     uint64_t *first_missed;
+    /* NULL, or per fiber slot its own points (sorted, each lo == hi),
+       looked up before `point` while that fiber's slot is restored: an
+       arm64 page word (state_xbuild.h) that two fibers hold for two
+       pages.  fiber_point[s] (NULL: none) and fiber_n_point[s] for slot s
+       below n_fiber. */
+    const IcoStateSpan *const *fiber_point;
+    const size_t *fiber_n_point;
+    size_t n_fiber;
+    /* the slot being restored + 1 (0: none): fiber.c sets it on its own
+       copy of the translation for each slot it restores */
+    int fiber;
 } IcoStateXlate;
 
-/* 1 and *now when `old` has a translation (a point first, then a span),
-   else 0. */
+/* 1 and *now when `old` has a translation (the restored fiber's own point
+   first, then a point, then a span), else 0. */
 int ico_state_xlate(const IcoStateXlate *x, uint64_t old, uint64_t *now);
 
 typedef struct IcoStateReloc {

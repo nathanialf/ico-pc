@@ -852,6 +852,15 @@ static int build_layout(IcoSymTab *t, const Lists *l)
     t->n_layout = l->n_game;
     t->layout_hash = xxh3_64(txt, len);
     free(txt);
+    t->game_start = (uint64_t *)malloc((l->n_game ? l->n_game : 1) * sizeof *t->game_start);
+    if (t->game_start == NULL) {
+        return -1;
+    }
+    for (i = 0; i < l->n_game; i++) {
+        if (l->game[i].kind == IT_SYM) {
+            t->game_start[t->n_game_start++] = l->game[i].at; /* sorted: l->game is */
+        }
+    }
     return 0;
 }
 
@@ -1077,6 +1086,7 @@ void ico_symtab_free(IcoSymTab *t)
     free(t->unit);
     free(t->data);
     free(t->sec);
+    free(t->game_start);
     free(t->str);
     free(t->unit_by_name);
     free(t->data_by_name);
@@ -1188,6 +1198,36 @@ const IcoSymSec *ico_symtab_section_at(const IcoSymTab *t, uint64_t addr)
         return &t->sec[lo - 1];
     }
     return NULL;
+}
+
+static int in_sorted(const uint64_t *v, size_t n, uint64_t x)
+{
+    size_t lo = 0, hi = n;
+
+    while (lo < hi) {
+        const size_t mid = lo + (hi - lo) / 2;
+
+        if (v[mid] < x) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    return lo < n && v[lo] == x;
+}
+
+int ico_symtab_starts_at(const IcoSymTab *t, uint64_t addr)
+{
+    const IcoSymUnit *u;
+    const IcoSymData *d;
+
+    if (t == NULL) {
+        return 0;
+    }
+    u = ico_symtab_unit_at(t, addr);
+    d = ico_symtab_data_at(t, addr);
+    return (u != NULL && u->start == addr) || (d != NULL && d->start == addr) ||
+           in_sorted(t->game_start, t->n_game_start, addr);
 }
 
 const char *ico_symtab_nearest(const IcoSymTab *t, uint64_t addr, uint64_t *off)

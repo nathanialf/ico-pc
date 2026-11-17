@@ -1231,18 +1231,48 @@ in version 3 the pool of the windows' bytes. Version 3 is written; versions 1 an
 they were written (a version 2 point holds a text of at most 24 bytes, found at the first place
 that holds them). The save's line gives the size.
 
-**Page addresses (arm64).** clang keeps an ADRP's page address in a callee-saved register across
-calls and adds a variable's offset in its page (the load's low 12 bits) to it; a suspended fiber's
-saved registers hold several (the owner's Android state held 13 in its fibers' registers and
-live stacks, ten of them pages of the game's bss). A later build's code adds its own offsets, so a
-translated page address must start a page there too. The save records every strict word at a
-page's start outside the code that a fiber's saved registers or live stack hold (`ico_xb_frames`;
-C code stores no bare page address elsewhere; a code page is left out because a return address or
-a function may start a page), at most 4,096 (`ICO_XB_MAX_PAGES`, more pins the state), and the
-load refuses a state where one lands elsewhere in a page (`it holds the page address 0x.., which
-lands 0x.. into a page here (the code adds a variable's place in its page to it)`), rather than
-resume a frame that would read the wrong variable. The game's ranges move whole, so their page
-addresses keep their pages only while each range starts at the same place in a page in both builds.
+**Page words (arm64).** clang keeps an ADRP's page address in a callee-saved register across
+calls and adds a variable's offset in its page (the next load's or add's low 12 bits) to it, so a
+suspended fiber's saved registers and live stack hold page words. The owner's Android state held
+13 different ones on 119 fibers, ten of them pages of the game's bss. Moving such a word with its
+range or symbol is wrong whenever the range starts at another place in a page in the later build,
+because the later build's code adds its own offsets. A page word is translated by the instructions
+that made it:
+
+- **Why those instructions are known.** C forms a page address no other way. A callee-saved
+  register's value was set by a function still on that fiber's stack, since a function that
+  returned restored it, and a spill sits in a live frame. Each function with a frame on the stack
+  holds a return address in it. The code hash requires those functions alike: it masks ADRP
+  immediates and the low 12 bits after them, nothing else, so every instruction keeps its offset.
+- **Save.** For each fiber (`ico_xb_frames`, the slot + 1), the units its live return addresses
+  lie in are decoded. Every ADRP whose page is one of the fiber's page-aligned words outside the
+  code is a producer (its unit, its offset, the page). The record holds the page words (word,
+  fiber, flags; at most 4,096) and the producers (at most 16,384); more pins the state.
+- **Load.** The same offsets of this build's units are decoded. The producers of one word on one
+  fiber must make one page, and that page becomes the word's translation for that fiber alone:
+  `IcoStateXlate.fiber_point`, which `ico_fiber_slot_restore` (`fiber.c`) selects by setting the
+  slot on its own copy of the translation. Two fibers may hold one old page for two variables that
+  now lie on two pages. In the owner's state, page 0x2589000 becomes 0x258d000 on fibers 87 and 90
+  and 0x258e000 on fiber 94.
+- **Refusals.**
+  - Producers on one fiber that make two pages: `fiber slot N holds the page 0x.., which ADRPs in
+    f+0x.. and g+0x.. make: here they make two pages, and which one it came from cannot be told`.
+    Only unwinding the frames with the call frame information could say which frame set the
+    register.
+  - A word that is both a page word and an ordinary address (seen outside the fibers' frames, or a
+    symbol, a block or a start-up value starts at it) must get one value from both readings:
+    `0x.. is both the page an ADRP in f+0x.. makes and an address of its own, and here the two lie
+    apart`.
+  - A page-aligned word with no producer on its fiber is an ordinary address, named by the ordinary
+    rules and not recorded. In the owner's state: an element of `texTable`, one of
+    `stageAnimTable`, and `sgHeadContext`'s start; two of them would land inside a page in the
+    later build, and they are correct there.
+- **Records without page words.** An arm64 record without `ICO_XB_PAGES` (format 2, or this
+  format from a release candidate made before page words were recorded) is refused: `it was made
+  before the pages its threads keep in registers were recorded`. Its fibers' pages cannot be told
+  from addresses.
+- **Scope.** Other architectures record nothing. GOT pages (`adrp :got:`) and read-only data
+  pages follow the same rule; a page and its offset already added together are an ordinary address.
 
 **Words nothing names.** Only a word the record confirms is translated: a word in a unit (the
 hash rule above), in a game range, a block or a unique variable, or at a start-up value or a
@@ -1577,7 +1607,7 @@ the game lists the reads of unset locals the compiler sees (`camera-ico2.c`'s mo
 | `state: save states are off: <reason>` | once, instead of the line above |
 | `state: the game's data ranges are not bracketed on this build (<why>): save states are off` | once, the verify failed |
 | `state: saved slot N (<path>): arena <raw> -> <packed>, gdata ..., gbss ..., reg ..., audio ..., sched ..., fibers ..., pobj ..., ranges ..., syms ...; <k> fibers; copy <ms> ms, write <ms> ms, file <bytes> bytes` | a save written |
-| `state: slot N can carry over to a later version that keeps U functions (P with a thread inside), D data symbols (M of a repeated name, by their contents), K start-up values and texts (R of them read-only data found by its bytes, T texts), B blocks and the game's data layout (W program words, X of them naming nothing and kept as numbers, first 0x..; code from <the symbol file's sections\|the loader's segments>; record <bytes> bytes in <ms> ms)`, or `state: slot N loads only into this build: <why> (W program words, B blocks; X naming nothing, first 0x..)` | after each `saved` line: the `syms` record ([Across versions](#across-versions)) |
+| `state: slot N can carry over to a later version that keeps U functions (P with a thread inside), D data symbols (M of a repeated name, by their contents), K start-up values and texts (R of them read-only data found by its bytes, T texts), B blocks and the game's data layout (W program words, X of them naming nothing and kept as numbers, first 0x..; G page words of the threads, A ADRPs making them; code from <the symbol file's sections\|the loader's segments>; record <bytes> bytes in <ms> ms)`, or `state: slot N loads only into this build: <why> (W program words, B blocks; X naming nothing, first 0x..)` | after each `saved` line: the `syms` record ([Across versions](#across-versions)) |
 | `state: slot N saved: word I of X named by nothing: 0x.., <reason>; section <name\|none named>, <symbol\|no symbol>+0x..; found in <the block B\|the arena\|the game's data\|the game's bss\|the model tables\|the scheduler's table\|fiber slot S's control page\|fiber slot S's stack\|a place not recorded> at 0x..` | after a `loads only into this build` line for words nothing names: the first 16 |
 | `state: slot N refused: word I of X named by nothing: ...` (the same words) | a load refused for words nothing names, from a version 3 state's list, before the `refused` line |
 | `state: symbols: N functions, M data symbols, K game data items (layout <hash>) from <file> in T ms, S KB; the code 0x..-0x.. from <its code sections\|the loader's segments (it names no code section)> (C sections)`, or `state: symbols: none (<file>: <why>); a state saved here loads only into this build, and no other build's state loads here` | once, at the first save, load or listing that needs the table |
