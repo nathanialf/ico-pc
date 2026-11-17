@@ -940,6 +940,25 @@ were seen in test links of a few objects with the fetched toolchains. Whether th
 (`--disable-dynamicbase`, [BUILDING.md](../BUILDING.md#fixed-image)) does not matter: the bounds
 are symbols the program reads where it runs.
 
+On PE the start of the game's sections is aligned on purpose. The linker places each input
+section at the next multiple of its own alignment, and the largest among the game's is 64 bytes
+(the `.data$ico_p` of five objects: `kanbanBoot.c`, `layout_action.c`, `cdvd.c`, `pad.c`,
+`jimaku.c`; the others are 16 or 32). So the padding between the game's sections depends on where
+the first one starts modulo 64, and that start follows the port's own `.data`, which grows and
+shrinks with the port. On ELF each range is an output section of its own, which starts at a
+multiple of its largest member's alignment, so this cannot happen there (the Linux x86-64 maps of
+two builds show the same offsets with the sections 0x1b020 bytes apart). A Windows build whose
+port data had grown put the brackets 0x11020 bytes later than the recorded build, 0x20 past a
+multiple of 64 instead of 0, and every game section from `kanbanBoot.c`'s `.data$ico_p` on stood
+0x20 bytes earlier in the range: the same objects at other offsets, and another layout hash
+([Across versions](#across-versions)). `game_data_range.c` therefore puts a 64-byte pad, aligned to
+64, in `.data$ico_0`, which sorts just before `.data$ico_a`: the `a` bracket then starts at a
+multiple of 64, where the recorded build's started (0x14070a3c0), whatever comes before it. The pad lies
+outside both ranges, so a state neither holds it nor names it, and the layout hash's text is
+the recorded build's. The zero-filled range starts at the `n` bracket, a fixed distance after the `a` bracket,
+so the same pad fixes it. `android_syms_layout_rows` checks the pad's alignment and size against
+the start that `port/state_legacy/layout-windows-x64.txt` records.
+
 `ico_game_data_ranges` gives -1 when the program has no such sections (a toolchain that left the
 names alone, a program without the game) or they are inconsistent (an empty data range, an end
 below a start, the two overlapping). `ico_game_data_ranges_verify` (`game_data_verify.c`, in the
@@ -1419,7 +1438,13 @@ names another layout before any other reason. Two more changes came with this wo
   (`layout-windows-x64`), and `tools/package_linux.sh` for the arm64 Linux program
   (`layout-linux-arm64`; `none` while no released arm64 Linux state can resume exactly, which
   prints the hash to record). `gamesec` fails a map with no object in the game's data sections or
-  without the reserved room. If the game's
+  without the reserved room. Given the program's link map, the Windows gate also compares the
+  game's sections with the ones the recorded hash's build had
+  (`port/state_legacy/layout-windows-x64.txt`, written by `tools/android_syms_lines.py
+  layout-rows` from that build's map) and says which: `the same objects at other offsets: the
+  range's start alignment` with the first object that moved and the start's residue
+  ([Game data ranges](#game-data-ranges)), the first object of another name or size, or the same
+  objects where they were (an item inside one changed). If the game's
   data did not change, the link lost or moved an item. If it changed on purpose, the maintainer
   records the new hash there, knowing that the legacy tables' states then cannot resume
   exactly and take the checkpoint path.

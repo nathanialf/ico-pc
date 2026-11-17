@@ -904,6 +904,18 @@ the host's compilers make), `state_carry_image` (the loader mirror against
 `ico_state_image_range`) and `state_carry_xbuild` (two real links of one program carrying a state
 both ways); [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md#portplatformtest) says what each holds.
 
+`android_syms_layout_rows` (`tools/test/android_syms_layout_rows_test.py`, no build) covers the
+Windows layout gate's cause line and the start pad
+([PLATFORM.md](PLATFORM.md#game-data-ranges)). It reads `port/state_legacy/layout-windows-x64.txt`
+(the start, the largest alignment and the game's sections in ascending order) and checks that
+`game_data_range.c`'s pad has that alignment and puts the `a` bracket at the recorded start's
+residue wherever the port's `.data` before it ends. A GNU ld map made from the rows must read back
+as the rows (`layout-rows`). Against another hash, `layout ... MAP` must print `the same objects
+at other offsets: the range's start alignment` with the first moved object and the residue when
+the sections from a 64-aligned one on stand 0x20 earlier. It must name the object when one size
+differs, and say that an item inside an object changed when the offsets are the same. The
+recorded hash must pass with no cause line.
+
 ## Which tests a change needs
 
 - A new Options row: `ctest -L ui`. `settings` builds every page and compares its rows with fixed

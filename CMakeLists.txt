@@ -463,6 +463,10 @@ if(Python3_FOUND)
     # the Android packaging gate on the game data layout hash (tools/android_syms_lines.py
     # layout against port/state_legacy/layout.txt; no build, no game)
     add_test(NAME android_syms_layout COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/test/android_syms_layout_test.py")
+    # the Windows layout gate's cause line from the map against
+    # port/state_legacy/layout-windows-x64.txt, and game_data_range.c's start pad
+    # against the recorded start (no build, no game)
+    add_test(NAME android_syms_layout_rows COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/test/android_syms_layout_rows_test.py")
 endif()
 
 # the June 2001 demo's VU1 programs against the retail ones (tools/vu_variant_diff.py,

@@ -51,6 +51,22 @@ for the save states' symbol table (port/platform/state_syms.h).
       defect of the build (v0.11.9-rc4: the reserved room left out of the
       link); with one made on purpose, the maintainer records the new hash
       there knowing those states then take the checkpoint path.
+
+  android_syms_lines.py layout CARRY SRCROOT PLATFORM MAP
+      The same, and on a difference the cause read from the program's link
+      map MAP (GNU ld's) against the game data sections' objects the
+      recorded hash's build had (port/state_legacy/layout-PLATFORM.txt, when
+      it exists): the same objects at other offsets (the range's start
+      alignment, port/platform/game_data_range.c's start pad), other objects
+      or sizes (the first named), or the same objects where they were (an
+      item inside one changed).
+
+  android_syms_lines.py layout-rows MAP
+      Prints those objects of MAP in the form layout-PLATFORM.txt keeps:
+      "start <address of the range> align <largest alignment>" and one line
+      per non-empty input section, "<range> <offset> <size> <section>
+      <object>", the offset from its range's start (the hash's,
+      port/platform/state_syms.c); record it with the hash.
 """
 import os
 import re
@@ -229,7 +245,115 @@ def gamesec(path, root):
           (" (and the loader's frozen room)" if room else ""))
 
 
-def layout(carry, root, platform="android"):
+PE_ALIGN = 64  # the largest alignment of a game object's PE data section (game_data_range.c)
+
+
+def layout_rows(path):
+    """(start, rows) of GNU ld's map: rows [(range, offset, size, section, object)] of the game's
+    data sections in map order, offsets from the range's start (PE: the .data$ico_a and
+    .data$ico_n brackets; ELF: the ico_gdata and ico_gbss output sections); start the data
+    range's address. ([], None) for a map without them."""
+    lo = {}
+    secs = []
+    pending = None
+    for line in open(path, encoding="utf-8", errors="replace"):
+        t = line.split()
+        hexs = [x for x in t[:3] if re.fullmatch(r"0x[0-9a-fA-F]+", x)]
+        if not line.startswith(" ") and len(t) >= 3 and t[0] in ("ico_gdata", "ico_gbss") and \
+                len(hexs) == 2:
+            lo.setdefault(t[0], int(t[1], 16))
+            pending = None
+            continue
+        if line.startswith(" ") and not line.startswith("  ") and len(t) == 1:
+            pending = t[0]
+            continue
+        if line.startswith(" ") and not line.startswith("  ") and len(t) >= 4 and \
+                re.fullmatch(r"0x[0-9a-fA-F]+", t[1]) and re.fullmatch(r"0x[0-9a-fA-F]+", t[2]):
+            name, addr, size, obj = t[0], int(t[1], 16), int(t[2], 16), " ".join(t[3:])
+        elif pending is not None and len(t) >= 3 and re.fullmatch(r"0x[0-9a-fA-F]+", t[0]) and \
+                re.fullmatch(r"0x[0-9a-fA-F]+", t[1]):
+            name, addr, size, obj = pending, int(t[0], 16), int(t[1], 16), " ".join(t[2:])
+        else:
+            pending = None
+            continue
+        pending = None
+        if name in (".data$ico_a", ".data$ico_n") and "game_data_range" in obj:
+            lo.setdefault(name, addr)
+        if name in ("ico_gdata", "ico_gbss", ".data$ico_m", ".data$ico_p") and size > 0:
+            b = re.search(r"\(([^()]*)\)$", obj)
+            secs.append((name, addr, size, b.group(1) if b else re.split(r"[/\\]", obj)[-1]))
+    base = {".data$ico_m": lo.get(".data$ico_a"), ".data$ico_p": lo.get(".data$ico_n"),
+            "ico_gdata": lo.get("ico_gdata"), "ico_gbss": lo.get("ico_gbss")}
+    rng = {".data$ico_m": 0, ".data$ico_p": 1, "ico_gdata": 0, "ico_gbss": 1}
+    if not secs or any(base[s] is None for s, _a, _z, _o in secs):
+        return [], None
+    rows = [(rng[s], a - base[s], z, s, o) for s, a, z, o in secs]
+    return rows, base[secs[0][0]] if secs[0][0] in (".data$ico_m", "ico_gdata") else None
+
+
+def print_layout_rows(path):
+    rows, start = layout_rows(path)
+    if not rows or start is None:
+        sys.exit("android_syms_lines: %s shows no game data sections with their range's start" % path)
+    # ELF: the output section starts at a multiple of its largest member's alignment itself
+    print("start %#x align %d" % (start, PE_ALIGN if rows[0][3].startswith(".data$") else 1))
+    for r, off, size, sec, obj in rows:
+        print("%d %#x %#x %s %s" % (r, off, size, sec, obj))
+
+
+def read_layout_rows(path):
+    start = align = None
+    rows = []
+    for line in open(path, encoding="utf-8"):
+        t = line.split()
+        if not t or t[0].startswith("#"):
+            continue
+        if t[0] == "start" and len(t) == 4 and t[2] == "align":
+            start, align = int(t[1], 16), int(t[3])
+        elif len(t) == 5:
+            rows.append((int(t[0]), int(t[1], 16), int(t[2], 16), t[3], t[4]))
+    return start, align, rows
+
+
+def layout_cause(map_path, root, platform):
+    """the sentence a failing layout gate adds from the map, or None"""
+    rec = os.path.join(root, "port", "state_legacy", "layout-%s.txt" % platform)
+    if not os.path.isfile(rec):
+        return None
+    rstart, ralign, want = read_layout_rows(rec)
+    got, start = layout_rows(map_path)
+    name = "port/state_legacy/layout-%s.txt" % platform
+    if not got:
+        return "the map %s shows no game data sections to compare with %s." % (map_path, name)
+
+    def key(r):
+        return (r[0], r[2], r[3], r[4])
+
+    if [key(r) for r in got] == [key(r) for r in want]:
+        for g, w in zip(got, want):
+            if g[1] != w[1]:
+                where = ""
+                if start is not None and rstart is not None and ralign and ralign > 1:
+                    where = (" The range starts 0x%x past a multiple of %d (0x%x), the recorded "
+                             "build's 0x%x past one; port/platform/game_data_range.c's start pad "
+                             "sets it." % (start % ralign, ralign, start, rstart % ralign))
+                return ("the same objects at other offsets: the range's start alignment. The "
+                        "map's game data holds the objects of %s with their sizes; the first that "
+                        "moved is %s %s (+0x%x, recorded +0x%x).%s" %
+                        (name, g[4], g[3], g[1], w[1], where))
+        return ("the map's game data holds the objects of %s at their offsets with their sizes: "
+                "an item inside one of them changed (a variable added, removed, renamed or "
+                "resized)." % name)
+    for i, (g, w) in enumerate(zip(got, want)):
+        if key(g) != key(w):
+            return ("the map's game data differs from %s at its item %d: %s %s of 0x%x bytes "
+                    "where the recorded build had %s %s of 0x%x bytes." %
+                    (name, i + 1, g[4], g[3], g[2], w[4], w[3], w[2]))
+    return ("the map's game data has %d objects, %s %d: the first %d agree." %
+            (len(got), name, len(want), min(len(got), len(want))))
+
+
+def layout(carry, root, platform="android", map_path=None):
     want_path = os.path.join(root, "port", "state_legacy", "layout.txt")
     key = "layout" if platform == "android" else "layout-" + platform
     want = None
@@ -261,6 +385,9 @@ def layout(carry, root, platform="android"):
               "line, the reserved room port/data/reserved/tables.c, the map's ico_gdata/ico_gbss); "
               "if it changed on purpose, record %s in port/state_legacy/layout.txt knowing those "
               "states then take the checkpoint path." % (got, want, got))
+        cause = layout_cause(map_path, root, platform) if map_path else None
+        if cause:
+            print("android_syms_lines: " + cause)
         sys.exit(1)
     print("android_syms_lines: the %s game data layout hash %s is the recorded one" % (platform, got))
 
@@ -275,6 +402,11 @@ def main():
     elif len(sys.argv) == 5 and sys.argv[1] == "layout" and \
             sys.argv[4] in ("android", "windows-x64", "linux-arm64"):
         layout(sys.argv[2], sys.argv[3], sys.argv[4])
+    elif len(sys.argv) == 6 and sys.argv[1] == "layout" and \
+            sys.argv[4] in ("android", "windows-x64", "linux-arm64"):
+        layout(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5])
+    elif len(sys.argv) == 3 and sys.argv[1] == "layout-rows":
+        print_layout_rows(sys.argv[2])
     elif len(sys.argv) == 4 and sys.argv[1] == "gamesec":
         gamesec(sys.argv[2], sys.argv[3])
     else:
