@@ -54,6 +54,9 @@
 #include "state_syms.h"
 #include "state_xbuild.h"
 #include "trace_host.h"
+#if defined(__ANDROID__)
+#include <SDL3/SDL.h>
+#endif
 #include "../audio/audio_host.h"
 #include "../audio/audio_lock.h"
 #include "../audio/mix_gain.h"
@@ -1721,11 +1724,235 @@ static void build_reloc(IcoStateReloc *r, const StateRanges *rg, const void *pob
     }
 }
 
+/* --- states of earlier versions: legacy tables (state_legacy.h) ------------- */
+
+/* A packaged file of the legacy tables: Android's APK assets under
+   state_legacy/ (android/app/build.gradle copies port/state_legacy).  The
+   other platforms ship none: their earlier states were named whole. */
+static int legacy_read(void *user, const char *path, void **data, size_t *n)
+{
+#if defined(__ANDROID__)
+    char name[200];
+    SDL_IOStream *io;
+    Sint64 size;
+    void *b;
+
+    (void)user;
+    *data = NULL;
+    *n = 0;
+    snprintf(name, sizeof name, "state_legacy/%s", path);
+    io = SDL_IOFromFile(name, "rb");
+    if (io == NULL) {
+        return -1;
+    }
+    size = SDL_GetIOSize(io);
+    if (size <= 0 || size > (64ll << 20) || (b = malloc((size_t)size)) == NULL) {
+        SDL_CloseIO(io);
+        return -1;
+    }
+    if (SDL_ReadIO(io, b, (size_t)size) != (size_t)size) {
+        free(b);
+        SDL_CloseIO(io);
+        return -1;
+    }
+    SDL_CloseIO(io);
+    *data = b;
+    *n = (size_t)size;
+    return 0;
+#else
+    (void)user;
+    (void)path;
+    *data = NULL;
+    *n = 0;
+    return -1;
+#endif
+}
+
+typedef struct LegacyScan {
+    IcoXbRefs *r;
+    const Copy *c;
+    int bad;
+} LegacyScan;
+
+/* each block of the earlier version's record: recorded, and its bytes
+   scanned when it held host pointers, as that version's save did */
+static void legacy_block(void *user, const char *name, uint64_t size, unsigned flags, uint64_t addr,
+                         uint64_t offset)
+{
+    LegacyScan *ls = (LegacyScan *)user;
+    const int audio = (flags & ICO_STATE_AUDIO) != 0;
+    const int sec = audio ? SEC_AUDIO : SEC_REG;
+
+    ico_xb_block(ls->r, name, size, flags, addr, offset);
+    if ((flags & ICO_STATE_SCAN) != 0) {
+        char what[48];
+
+        if (ls->c->p[sec] == NULL || offset > ls->c->n[sec] || size > ls->c->n[sec] - offset) {
+            ls->bad = 1;
+            return;
+        }
+        snprintf(what, sizeof what, "the block %s", name);
+        ico_xb_where(ls->r, what);
+        ico_xb_scan(ls->r, (const unsigned char *)ls->c->p[sec] + offset, (size_t)size, addr, 1);
+    }
+}
+
+/* An earlier Android version's format 2 record named again with that
+   version's legacy table (state_xbuild.h IcoXbLegacy): the whole state is
+   read and scanned as that version's save scanned it, against that
+   version's program, under today's rules.  0 and the new record
+   (malloc'd), 1 when no table is packaged for that version, -1 and why. */
+static int legacy_record(const char *path, const char *commit, void **out, size_t *out_n, char *why,
+                         size_t why_n)
+{
+    static IcoSchedImage img;
+    char name[64];
+    IcoLegacyTable *lt = NULL;
+    IcoSymTab *ot = NULL;
+    IcoSymTabEnv env;
+    IcoXbLegacy lg;
+    IcoXbProc p;
+    IcoXbRefs *r = NULL;
+    IcoXbStats st;
+    LegacyScan ls;
+    const StateRanges *rg;
+    Copy c;
+    LoadCtx lc;
+    int i, rc = -1;
+
+    *out = NULL;
+    *out_n = 0;
+    if (ico_legacy_find(legacy_read, NULL, ico_state_platform_tag(), commit, name, sizeof name) !=
+        1) {
+        return 1;
+    }
+    memset(&c, 0, sizeof c);
+    memset(&lc, 0, sizeof lc);
+    lc.c = &c;
+    lc.xb = 1;
+    if (ico_state_file_read(path, NULL, load_section, &lc) != ICO_STATE_OK || lc.bad) {
+        snprintf(why, why_n, "its records could not be read%s%s", lc.why[0] ? ": " : "", lc.why);
+        goto done;
+    }
+    rg = c.n[SEC_RANGES] == sizeof(StateRanges) ? (const StateRanges *)c.p[SEC_RANGES] : NULL;
+    if (rg == NULL || rg->magic != RANGES_MAGIC || c.p[SEC_SYMS] == NULL) {
+        snprintf(why, why_n, "its records could not be read");
+        goto done;
+    }
+    lt = ico_legacy_load(legacy_read, NULL, name, why, why_n);
+    if (lt == NULL) {
+        goto done;
+    }
+    memset(&env, 0, sizeof env);
+    env.image_lo = rg->image_lo;
+    env.image_hi = rg->image_hi;
+    env.text_lo = rg->text_lo;
+    env.text_hi = rg->text_hi;
+    env.game_lo[ICO_GAME_DATA] = rg->gdata_lo;
+    env.game_hi[ICO_GAME_DATA] = rg->gdata_hi;
+    env.game_lo[ICO_GAME_BSS] = rg->gbss_lo;
+    env.game_hi[ICO_GAME_BSS] = rg->gbss_hi;
+    env.arch = ICO_CODE_A64;
+    ot = ico_legacy_symtab(lt, &env, why, why_n);
+    if (ot == NULL || ico_xb_legacy_verify(c.p[SEC_SYMS], (size_t)c.n[SEC_SYMS], ot, rg->image_lo,
+                                           lt->hash, lt->n_hash, why, why_n) != 0) {
+        goto done;
+    }
+    memset(&lg, 0, sizeof lg);
+    lg.lt = lt;
+    lg.old_lo = rg->image_lo;
+    lg.v2 = c.p[SEC_SYMS];
+    lg.v2_n = (size_t)c.n[SEC_SYMS];
+    lg.now_tab = sym_table();
+    lg.now_snap = s_snap;
+    lg.now_snap_words = s_snap_words;
+    for (i = 0; i < 2; i++) {
+        lg.now_game_lo[i] = s_gdata[i].lo;
+        lg.now_game_hi[i] = s_gdata[i].hi;
+    }
+    memset(&p, 0, sizeof p);
+    p.tab = ot;
+    p.image.lo = rg->image_lo;
+    p.image.hi = rg->image_hi;
+    p.image.text_lo = rg->text_lo;
+    p.image.text_hi = rg->text_hi;
+    p.game_lo[ICO_GAME_DATA] = rg->gdata_lo;
+    p.game_hi[ICO_GAME_DATA] = rg->gdata_hi;
+    p.game_lo[ICO_GAME_BSS] = rg->gbss_lo;
+    p.game_hi[ICO_GAME_BSS] = rg->gbss_hi;
+    p.legacy = &lg;
+    r = ico_xb_begin(&p);
+    if (r == NULL) {
+        snprintf(why, why_n, "no memory to read it again");
+        goto done;
+    }
+    ls.r = r;
+    ls.c = &c;
+    ls.bad = 0;
+    if (ico_xb_record_blocks(c.p[SEC_SYMS], (size_t)c.n[SEC_SYMS], legacy_block, &ls) != 0 ||
+        ls.bad) {
+        snprintf(why, why_n, "its blocks do not match its records");
+        goto done;
+    }
+    /* the regions that version's save scanned (build_syms) */
+    ico_xb_where(r, "the arena");
+    ico_xb_scan(r, c.p[SEC_ARENA], (size_t)c.n[SEC_ARENA], rg->arena_lo, 1);
+    ico_xb_where(r, "the game's data");
+    ico_xb_scan(r, c.p[SEC_GDATA], (size_t)c.n[SEC_GDATA], rg->gdata_lo, 1);
+    ico_xb_where(r, "the game's bss");
+    ico_xb_scan(r, c.p[SEC_GBSS], (size_t)c.n[SEC_GBSS], rg->gbss_lo, 1);
+    if (c.n[SEC_POBJ] != 0) {
+        ico_xb_where(r, "the model tables");
+        ico_xb_scan(r, c.p[SEC_POBJ], (size_t)c.n[SEC_POBJ], rg->pobj_lo, 1);
+    }
+    ico_xb_where(r, "the scheduler's table");
+    ico_xb_scan(r, c.p[SEC_SCHED], (size_t)c.n[SEC_SCHED], 0, 1);
+    if (parse_fibers(&c, &img) == 0) {
+        for (i = 0; i < img.n_fibers; i++) {
+            const IcoFiberImage *f = &img.fibers[i];
+            char what[48];
+
+            ico_xb_frames(r, (int)f->slot + 1);
+            snprintf(what, sizeof what, "fiber slot %u's control page", (unsigned)f->slot);
+            ico_xb_where(r, what);
+            ico_xb_scan(r, f->ctrl, f->ctrl_bytes, f->slot_base, 1);
+            snprintf(what, sizeof what, "fiber slot %u's stack", (unsigned)f->slot);
+            ico_xb_where(r, what);
+            xb_scan_stack(r, f);
+        }
+        ico_xb_frames(r, 0);
+    }
+    rc = ico_xb_finish(r, out, out_n, &st);
+    r = NULL;
+    if (rc != 0) {
+        snprintf(why, why_n, "no memory to read it again");
+        goto done;
+    }
+    fprintf(stderr,
+            "state: read again with the legacy table %s: %u functions (%u with a thread inside), "
+            "%u data symbols, %u start-up values and texts (%u read-only data found by its bytes), "
+            "%u page words of the threads, %u ADRPs making them; %u words naming nothing\n",
+            name, st.units, st.positions, st.data, st.points, st.windows, st.pages, st.producers,
+            st.left);
+done:
+    if (r != NULL) {
+        void *tmp = NULL;
+        size_t tn = 0;
+
+        (void)ico_xb_finish(r, &tmp, &tn, &st); /* frees r */
+        free(tmp);
+    }
+    ico_symtab_free(ot);
+    ico_legacy_free(lt);
+    copy_free(&c);
+    return rc;
+}
+
 /* A state of another build of this format: its "syms" and "ranges"
    sections against this build (state_xbuild.h ico_xb_check).  Returns the
    verdict's kind, *v filled (the caller frees it with
    ico_xb_verdict_free). */
-static int xb_probe(const char *path, IcoXbVerdict *v)
+static int xb_probe(const char *path, const char *commit, IcoXbVerdict *v)
 {
     static const char *names[ICO_STATE_MAX_ENTRIES];
     static uint64_t sizes[ICO_STATE_MAX_ENTRIES], addrs[ICO_STATE_MAX_ENTRIES];
@@ -1779,6 +2006,50 @@ static int xb_probe(const char *path, IcoXbVerdict *v)
     now.old_game_lo[ICO_GAME_BSS] = rg->gbss_lo;
     now.old_game_hi[ICO_GAME_BSS] = rg->gbss_hi;
     now.old_image_lo = rg->image_lo;
+    /* an earlier Android version's format 2 record: named again with its
+       version's legacy table when one is packaged */
+    if (c.n[SEC_SYMS] >= 20 && ((const unsigned char *)c.p[SEC_SYMS])[4] == 2 &&
+        ((const unsigned char *)c.p[SEC_SYMS])[16] == ICO_CODE_A64) {
+        void *sec3 = NULL;
+        size_t n3 = 0;
+        char why[200];
+        const int lr = legacy_record(path, commit, &sec3, &n3, why, sizeof why);
+
+        if (lr == 0) {
+            k = ico_xb_check(sec3, n3, &now, v);
+            free(sec3);
+            copy_free(&c);
+            return k;
+        }
+        if (lr < 0) {
+            memset(v, 0, sizeof *v);
+            v->kind = ICO_XB_PINNED;
+            snprintf(v->why, sizeof v->why, "its version's legacy table could not read it: %.140s",
+                     why);
+            copy_free(&c);
+            return v->kind;
+        }
+        /* no table for its version: of another game data layout, the
+           check below says so (the data refusal); of this layout, the
+           player's line is the pinned one (translated, no new text) and the
+           log says why */
+        if (now.tab != NULL && c.n[SEC_SYMS] >= 48) {
+            uint64_t lay = 0;
+
+            for (i = 7; i >= 0; i--) {
+                lay = lay << 8 | ((const unsigned char *)c.p[SEC_SYMS])[40 + i];
+            }
+            if (lay == now.tab->layout_hash) {
+                memset(v, 0, sizeof *v);
+                v->kind = ICO_XB_PINNED;
+                snprintf(v->why, sizeof v->why,
+                         "its build has no legacy table here (port/state_legacy/index.txt), so "
+                         "its words into read-only data and its page words cannot be named");
+                copy_free(&c);
+                return v->kind;
+            }
+        }
+    }
     k = ico_xb_check(c.p[SEC_SYMS], (size_t)c.n[SEC_SYMS], &now, v);
     copy_free(&c);
     return k;
@@ -1945,7 +2216,7 @@ static IcoStateResult other_build(const char *path, const IcoStateHeader *saved,
     if (r != ICO_STATE_OK) {
         return r;
     }
-    k = xb_probe(path, v);
+    k = xb_probe(path, saved->commit, v);
     if (k == ICO_XB_OK) {
         *xb = 1;
         return ICO_STATE_OK;

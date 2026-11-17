@@ -26,7 +26,16 @@
  *           ADD (immediate) or a load/store (unsigned offset) based on a
  *           register an ADRP set and nothing wrote since (approximately:
  *           ico_code_a64_writes).  x29 and sp are never such a register, so
- *           a frame offset is never masked.
+ *           a frame offset is never masked.  Rules 2 also zero that offset
+ *           where the base is any register an ADRP of the function writes,
+ *           or a MOV copy of one, wherever the ADRP lies (clang keeps a page
+ *           in a callee-saved register across calls and uses it after a
+ *           branch, before its ADRP in the function's order: rules 1 left
+ *           those offsets in, so 521 of the 13,857 functions two Android
+ *           builds share hashed apart with no change of their source; 81
+ *           with rules 2, each a real change).  A register that is a page
+ *           in one path and a pointer in another has its offsets masked in
+ *           both.
  *   other   the bytes raw.
  *
  * Trailing padding (x86: nop, int3; arm64: zero words, nop) is left out, so
@@ -40,7 +49,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define ICO_CODE_HASH_RULES 1
+#define ICO_CODE_HASH_RULES 2 /* 1 is still computed: a record says which it used */
 
 enum { ICO_CODE_RAW = 0, ICO_CODE_X64 = 1, ICO_CODE_A64 = 2 };
 
@@ -53,6 +62,9 @@ int ico_code_arch_native(void);
    [image_lo, image_hi). */
 uint64_t ico_code_hash(int arch, const void *code, size_t n, uint64_t addr, uint64_t image_lo,
                        uint64_t image_hi);
+/* The same under the given rules (1 or ICO_CODE_HASH_RULES). */
+uint64_t ico_code_hash_rules(int rules, int arch, const void *code, size_t n, uint64_t addr,
+                             uint64_t image_lo, uint64_t image_hi);
 
 /* --- the decoders (tests) ----------------------------------------------------- */
 
@@ -80,5 +92,16 @@ void ico_code_x64_decode(const uint8_t *p, size_t avail, IcoX64Insn *out);
    0..31 (bit 31 is sp or xzr); ~0u when the decoder does not know (every
    register then counts as written). */
 uint32_t ico_code_a64_writes(uint32_t w);
+
+/* The forward flow rules 2 masks by, over the `words` arm64 words at code
+   (the function from its start): into[k] gets the registers that may hold
+   a tracked value at word k's start on some path through the function's
+   own branches, seen[k] whether a path reaches it.  from == words: the
+   function's entry, every ADRP tracked (adrp 1); from < words: the value in
+   `regs` as after word `from` (one ADRP's page; adrp 0 tracks no other).
+   A MOV copies a tracked register, any other write ends it.  0, or -1 (no
+   memory). */
+int ico_code_a64_flow(const void *code, size_t words, size_t from, uint32_t regs, int adrp,
+                      uint32_t *into, uint8_t *seen);
 
 #endif /* ICO_PLATFORM_CODE_HASH_H */

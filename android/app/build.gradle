@@ -82,6 +82,32 @@ abstract class IcoAssetsTask extends DefaultTask {
         out.mkdirs()
         def date = new java.text.SimpleDateFormat('yyyy-MM-dd').format(new Date())
         new File(out, 'VERSION.txt').text = "ico-pc ${label.get()}\nbuilt ${date}\ncommit ${commit.get()}\n"
+        // the legacy tables (port/platform/state_legacy.h): every release's;
+        // a release candidate's only into a release candidate's APK
+        def legacy = new File(repoRoot.get(), 'port/state_legacy')
+        def legacyOut = new File(out, 'state_legacy')
+        legacyOut.deleteDir()
+        if (new File(legacy, 'index.txt').isFile()) {
+            def rcApk = label.get() ==~ /.*-rc[0-9]+/
+            def kept = []
+            new File(legacy, 'index.txt').eachLine { line ->
+                def t = line.trim().split(/\s+/)
+                if (line.startsWith('#') || t.size() != 4) {
+                    return
+                }
+                if (t[1] == 'rc' && !rcApk) {
+                    return
+                }
+                kept << line
+                def dir = new File(legacyOut, t[2])
+                dir.mkdirs()
+                new File(legacy, t[2]).eachFile { f ->
+                    java.nio.file.Files.copy(f.toPath(), new File(dir, f.name).toPath())
+                }
+            }
+            legacyOut.mkdirs()
+            new File(legacyOut, 'index.txt').text = kept.collect { it + '\n' }.join('')
+        }
         execOps.exec {
             commandLine python.get(), "${repoRoot.get()}/tools/gen_notices.py", '--platform', 'android',
                     '--root', repoRoot.get(), '--out', new File(out, 'NOTICES.txt').path

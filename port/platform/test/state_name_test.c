@@ -46,6 +46,7 @@
 
 #include "../../test/ico_check.h"
 #include "code_hash.h"
+#include "state_legacy.h"
 #include "state_reloc.h"
 #include "state_syms.h"
 #include "state_xbuild.h"
@@ -720,7 +721,7 @@ static size_t v2_record(uint8_t *out, unsigned flags, uint64_t layout, int arch,
     put32le(out, ICO_XB_MAGIC);
     put32le(out + 4, 2);
     put32le(out + 8, flags);
-    put32le(out + 12, ICO_CODE_HASH_RULES);
+    put32le(out + 12, 1); /* the rules every version 2 record was made under */
     put32le(out + 16, (uint32_t)arch);
     put32le(out + 28, np);
     put32le(out + 36, 1); /* the names: "" */
@@ -787,6 +788,14 @@ static void test_format(void)
               strcmp(v.why, "it holds a program address no symbol names (0x7400001234, 3 such "
                             "words): the version that saved it left them unnamed") == 0,
           "a version 2 state with unnamed words: %d %s", k, v.why);
+    ico_xb_verdict_free(&v);
+    /* the reporter's v0.11.2 and v0.11.5 states (issue 217): unnamed words
+       and another game data layout: the layout is the reason given */
+    n = v2_record(rec, ICO_XB_TABLE | ICO_XB_UNNAMED, b.tab->layout_hash ^ 1u, ICO_CODE_A64, 0,
+                  NULL, 0x0000007400001234ull, 3);
+    k = check_words(rec, n, &b, &a, LAY_ANDROID, &v);
+    CHECK(k == ICO_XB_DATA && strcmp(v.why, "the game's data layout changed") == 0,
+          "another layout is named before the unnamed words: %d %s", k, v.why);
     ico_xb_verdict_free(&v);
     /* an arm64 record made without the page words: refused */
     n = v2_record(rec, ICO_XB_TABLE, b.tab->layout_hash, ICO_CODE_A64, a.lo + a.o_sleep, kSleep, 0,
@@ -1033,13 +1042,26 @@ static void test_masked(void)
 #define PG_VAR2 0x800u
 #define PG_VAR3 0x1020u /* the next page */
 
+#define PG_RO 0x6000u  /* the legacy read's .rodata: [PG_RO, PG_RO + 0x1000) */
+#define PG_DUP 0x7000u /* two data symbols "dup" (0x100 apart) */
+static const char kLegacy[] = "legacy text";
+
 typedef struct Pg {
     uint8_t *raw; /* malloc'd; mem is its first page start */
     uint8_t *mem;
     uint64_t lo, hi;
     uint64_t f_a, f_b, bss, buf;
     IcoSymTab *tab;
+    /* the legacy read's additions (s_pg_legacy): f_e at f_a + 0xC0 (an
+       ADRP of VAR3 whose one user comes before it, reached by a branch
+       back), kLegacy at o_text in .rodata (twice: and at PG_RO + 0x800), the
+       two "dup" from o_dup */
+    uint64_t o_text, o_dup;
+    char nm[1400];
+    size_t nm_n;
 } Pg;
+
+static int s_pg_legacy, s_pg_twice;
 
 static uint32_t adrp(uint64_t pc, uint64_t target, unsigned rd)
 {
@@ -1088,6 +1110,22 @@ static int pg_make(Pg *g, uint64_t f_a, uint64_t f_b, uint64_t bss, uint64_t buf
     put32le(g->mem + f_b + 4, 0xD65F03C0u);
     put32le(g->mem + 0x1800, 0xD65F03C0u);
     put32le(g->mem + 0x1880, 0xD65F03C0u);
+    if (s_pg_legacy) {
+        const uint64_t e = f_a + 0xC0, var3 = bss + PG_VAR3;
+
+        put32le(g->mem + e, 0x14000003u); /* b +12 */
+        put32le(g->mem + e + 4, 0xF9400000u | (uint32_t)((var3 & 0xFFFu) / 8u) << 10 | 24u << 5 |
+                                    1u);      /* ldr x1, [x24, #lo12(VAR3)] */
+        put32le(g->mem + e + 8, 0xD65F03C0u); /* ret */
+        put32le(g->mem + e + 12, adrp(g->lo + e + 12, g->lo + var3, 24));
+        put32le(g->mem + e + 16, 0x17FFFFFDu); /* b -12 */
+        g->o_text = PG_RO + 0x10 + (f_a - 0x1000);
+        memcpy(g->mem + g->o_text, kLegacy, sizeof kLegacy);
+        if (s_pg_twice) {
+            memcpy(g->mem + PG_RO + 0x800, kLegacy, sizeof kLegacy);
+        }
+        g->o_dup = PG_DUP + (f_a - 0x1000);
+    }
 #define L3(off, ty, name)                                                                          \
     n += (size_t)snprintf(nm + n, sizeof nm - n, "%016llx %c %s\n", (unsigned long long)(off), ty, \
                           name)
@@ -1105,8 +1143,15 @@ static int pg_make(Pg *g, uint64_t f_a, uint64_t f_b, uint64_t bss, uint64_t buf
     L4(bss + PG_VAR2, 8, 'b', "var2");
     L4(bss + PG_VAR3, 8, 'b', "var3");
     L4(buf, 0x100, 'b', "s_buf");
+    if (s_pg_legacy) {
+        L3(f_a + 0xC0, 'T', "f_e");
+        L4(g->o_dup, 8, 'd', "dup");
+        L4(g->o_dup + 0x100, 8, 'd', "dup");
+    }
 #undef L3
 #undef L4
+    memcpy(g->nm, nm, n);
+    g->nm_n = n;
     memset(&e, 0, sizeof e);
     e.anchor = "ico_diag_init";
     e.anchor_addr = g->lo + 0x1800;
@@ -1333,6 +1378,294 @@ static void test_pages(void)
     pg_free(&a);
 }
 
+/* --- a legacy read (issue 217) ------------------------------------------------------- */
+
+/* A's legacy table, as tools/state_legacy_table.py makes one from a
+   release: its symbol file, its .rodata's one text run, its functions'
+   code hashes under rules 1 and the current rules (hashes read from A's
+   code here; A's code and read-only data are wiped after, so the read
+   uses the table alone) */
+typedef struct Lg {
+    IcoLegacyTable lt;
+    uint64_t hash[3 * 16];
+    uint32_t run[2];
+    uint8_t v2[64 + 16 * 48];
+    size_t v2_n;
+    IcoSymTab *ot;
+} Lg;
+
+static int lg_make(Lg *g, Pg *a)
+{
+    IcoSymTabEnv e;
+    char why[160];
+    size_t i, nu = 0;
+
+    memset(g, 0, sizeof *g);
+    snprintf(g->lt.name, sizeof g->lt.name, "v0.0.1-test");
+    snprintf(g->lt.commit, sizeof g->lt.commit, "v0.0.0-1-g0000000000");
+    g->lt.syms = a->nm;
+    g->lt.syms_n = a->nm_n;
+    g->lt.ro_lo = PG_RO;
+    g->lt.ro_hi = PG_RO + 0x1000u;
+    g->lt.ro = (uint8_t *)malloc(0x1000u);
+    if (g->lt.ro == NULL) {
+        return -1;
+    }
+    memcpy(g->lt.ro, a->mem + PG_RO, 0x1000u);
+    g->run[0] = (uint32_t)a->o_text;
+    g->run[1] = (uint32_t)sizeof kLegacy;
+    g->lt.run = g->run;
+    g->lt.n_run = 1;
+    g->lt.hash_rules = ICO_CODE_HASH_RULES;
+    /* the version 2 record its saver made: its units with their rules-1
+       hashes, the unnamed words it could not name */
+    put32le(g->v2, ICO_XB_MAGIC);
+    put32le(g->v2 + 4, 2);
+    put32le(g->v2 + 8, ICO_XB_TABLE | ICO_XB_UNNAMED);
+    put32le(g->v2 + 12, 1);
+    put32le(g->v2 + 16, ICO_CODE_A64);
+    put32le(g->v2 + 36, 1);
+    put64le(g->v2 + 40, a->tab->layout_hash);
+    for (i = 0; i < a->tab->n_unit && nu < 16; i++) {
+        const IcoSymUnit *u = &a->tab->unit[i];
+        uint8_t *q = g->v2 + 64 + nu * 48;
+
+        g->hash[3 * nu] = u->start - a->lo;
+        g->hash[3 * nu + 1] = ico_symtab_unit_hash_rules(a->tab, u, 1);
+        g->hash[3 * nu + 2] = ico_symtab_unit_hash_rules(a->tab, u, ICO_CODE_HASH_RULES);
+        put64le(q, u->start);
+        put64le(q + 8, u->size);
+        put64le(q + 24, g->hash[3 * nu + 1]);
+        nu++;
+    }
+    put32le(g->v2 + 20, (uint32_t)nu);
+    g->v2_n = 64 + nu * 48 + 1;
+    g->lt.hash = g->hash;
+    g->lt.n_hash = nu;
+    /* A's code and read-only data gone: the table stands for them */
+    memset(a->mem + 0x1000, 0, 0x4000);
+    memset(a->mem + PG_RO, 0, 0x1000);
+    memset(&e, 0, sizeof e);
+    e.image_lo = a->lo;
+    e.image_hi = a->hi;
+    e.text_lo = a->lo + 0x1000;
+    e.text_hi = a->lo + 0x5000;
+    e.game_lo[1] = a->lo + a->bss;
+    e.game_hi[1] = e.game_lo[1] + PG_BSS_N;
+    e.arch = ICO_CODE_A64;
+    g->ot = ico_legacy_symtab(&g->lt, &e, why, sizeof why);
+    CHECK(g->ot != NULL, "the legacy table's symbol file places: %s", why);
+    return g->ot != NULL ? 0 : -1;
+}
+
+static void lg_free(Lg *g)
+{
+    ico_symtab_free(g->ot);
+    free(g->lt.ro);
+    memset(g, 0, sizeof *g);
+}
+
+/* A's state read again with its table against B (state_host.c
+   legacy_record): fiber 1's registers, the arena */
+static void *lg_read(const Lg *g, const Pg *a, const Pg *b, const uint64_t *snap, size_t snap_n,
+                     const uint64_t *regs, int nr, const uint64_t *arena, int na, size_t *n,
+                     IcoXbStats *st)
+{
+    IcoXbLegacy lg;
+    IcoXbProc p;
+    IcoXbRefs *r;
+    void *sec = NULL;
+
+    memset(&lg, 0, sizeof lg);
+    lg.lt = &g->lt;
+    lg.old_lo = a->lo;
+    lg.v2 = g->v2;
+    lg.v2_n = g->v2_n;
+    lg.now_tab = b->tab;
+    lg.now_game_lo[1] = b->lo + b->bss;
+    lg.now_game_hi[1] = lg.now_game_lo[1] + PG_BSS_N;
+    lg.now_snap = snap;
+    lg.now_snap_words = snap_n;
+    memset(&p, 0, sizeof p);
+    p.tab = g->ot;
+    pg_image(a, &p.image);
+    p.game_lo[1] = a->lo + a->bss;
+    p.game_hi[1] = p.game_lo[1] + PG_BSS_N;
+    p.any_address = 1;
+    p.judge_lo = 0x0000007400000000ull;
+    p.legacy = &lg;
+    *n = 0;
+    memset(st, 0, sizeof *st);
+    r = ico_xb_begin(&p);
+    if (r == NULL) {
+        return NULL;
+    }
+    ico_xb_frames(r, 1);
+    ico_xb_where(r, "fiber slot 0's control page");
+    ico_xb_scan(r, regs, (size_t)nr * 8u, (uint64_t)(uintptr_t)regs, 1);
+    ico_xb_frames(r, 0);
+    ico_xb_where(r, "the arena");
+    ico_xb_scan(r, arena, (size_t)na * 8u, (uint64_t)(uintptr_t)arena, 1);
+    CHECK(ico_xb_finish(r, &sec, n, st) == 0, "ico_xb_finish (legacy)");
+    return sec;
+}
+
+static int lg_check(const void *sec, size_t n, const Pg *b, const Pg *a, const uint64_t *snap,
+                    size_t snap_n, IcoXbVerdict *v)
+{
+    IcoXbNow now;
+
+    memset(&now, 0, sizeof now);
+    now.tab = b->tab;
+    pg_image(b, &now.image);
+    now.image.n_ro = 1;
+    now.image.ro_lo[0] = b->lo + PG_RO;
+    now.image.ro_hi[0] = b->lo + PG_RO + 0x1000u;
+    now.game_lo[1] = b->lo + b->bss;
+    now.game_hi[1] = now.game_lo[1] + PG_BSS_N;
+    now.old_game_lo[1] = a->lo + a->bss;
+    now.old_game_hi[1] = now.old_game_lo[1] + PG_BSS_N;
+    now.old_image_lo = 0x0000007400000000ull;
+    now.snap = snap;
+    now.snap_words = snap_n;
+    return ico_xb_check(sec, n, &now, v);
+}
+
+static void test_legacy(void)
+{
+    Pg a, b;
+    Lg g;
+    IcoXbStats st;
+    IcoXbVerdict v;
+    uint64_t regs[2], arena[2], snap[2];
+    char why[200];
+    void *sec = NULL;
+    size_t n = 0;
+    int k;
+
+    s_pg_legacy = 1;
+    s_pg_twice = 0;
+    if (pg_make(&a, 0x1000, 0x1100, PG_BSS, 0x13000) != 0 ||
+        pg_make(&b, 0x1200, 0x1300, PG_BSS + 0x400, 0x14000) != 0) {
+        pg_free(&a);
+        pg_free(&b);
+        s_pg_legacy = 0;
+        return;
+    }
+    {
+        const IcoSymUnit *ea = ico_symtab_unit_at(a.tab, a.lo + a.f_a + 0xC0);
+        const IcoSymUnit *eb = ico_symtab_unit_at(b.tab, b.lo + b.f_a + 0xC0);
+
+        CHECK(ea != NULL && eb != NULL &&
+                  ico_symtab_unit_hash_rules(a.tab, ea, 1) !=
+                      ico_symtab_unit_hash_rules(b.tab, eb, 1) &&
+                  ico_symtab_unit_hash_rules(a.tab, ea, 2) ==
+                      ico_symtab_unit_hash_rules(b.tab, eb, 2),
+              "f_e: rules 1 tells A's from B's (the page's user before its ADRP), rules 2 not");
+    }
+    if (lg_make(&g, &a) != 0) {
+        pg_free(&a);
+        pg_free(&b);
+        s_pg_legacy = 0;
+        return;
+    }
+    /* the table proves itself the saver's: every unit's rules-1 hash */
+    CHECK(ico_xb_legacy_verify(g.v2, g.v2_n, g.ot, a.lo, g.lt.hash, g.lt.n_hash, why, sizeof why) ==
+              0,
+          "the record and its table agree: %s", why);
+    /* B's start-up data: its second "dup" at offset 8 */
+    snap[0] = 0;
+    snap[1] = b.lo + b.o_dup + 0x100;
+    regs[0] = a.lo + a.f_a + 0xC4;     /* a return address in f_e */
+    regs[1] = a.lo + PG_BSS + 0x1000;  /* x24: VAR3's page */
+    arena[0] = a.lo + a.o_text + 3;    /* into "legacy text" */
+    arena[1] = a.lo + a.o_dup + 0x100; /* the second "dup" */
+    sec = lg_read(&g, &a, &b, snap, 2, regs, 2, arena, 2, &n, &st);
+    CHECK(sec != NULL && st.left == 0 && st.pages == 1 && st.windows == 1,
+          "the version's words named again with its table (%u unnamed, %u page words, %u "
+          "windows)",
+          st.left, st.pages, st.windows);
+    if (sec != NULL) {
+        k = lg_check(sec, n, &b, &a, snap, 2, &v);
+        CHECK(k == ICO_XB_OK, "B loads A's legacy state: %d %s", k, v.why);
+        if (k == ICO_XB_OK) {
+            CHECK(pg_xlate(&v, arena[0], 0) == b.lo + b.o_text + 3,
+                  "the text word: B's \"legacy text\" (0x%llx)",
+                  (unsigned long long)(pg_xlate(&v, arena[0], 0) - b.lo));
+            CHECK(pg_xlate(&v, arena[1], 0) == b.lo + b.o_dup + 0x100,
+                  "the second \"dup\": by B's start-up value (0x%llx)",
+                  (unsigned long long)(pg_xlate(&v, arena[1], 0) - b.lo));
+            CHECK(pg_xlate(&v, regs[1], 1) == b.lo + PG_BSS + 0x1000,
+                  "VAR3's page in B, by f_e's ADRP and its user before it (0x%llx)",
+                  (unsigned long long)(pg_xlate(&v, regs[1], 1) - b.lo));
+            CHECK(pg_xlate(&v, regs[0], 1) == b.lo + b.f_a + 0xC4, "the return address in f_e");
+        }
+        ico_xb_verdict_free(&v);
+        free(sec);
+    }
+    /* no start-up word for the second "dup" in B: a repeated name, unnamed */
+    sec = lg_read(&g, &a, &b, NULL, 0, regs, 2, arena, 2, &n, &st);
+    CHECK(sec != NULL && st.left == 1, "a repeated name no start-up word names: unnamed (%u)",
+          st.left);
+    free(sec);
+    /* ambiguous: the text twice in B's read-only data: refused */
+    pg_free(&b);
+    s_pg_twice = 1;
+    if (pg_make(&b, 0x1200, 0x1300, PG_BSS + 0x400, 0x14000) == 0) {
+        snap[1] = b.lo + b.o_dup + 0x100;
+        sec = lg_read(&g, &a, &b, snap, 2, regs, 2, arena, 2, &n, &st);
+        k = sec != NULL ? lg_check(sec, n, &b, &a, snap, 2, &v) : ICO_XB_BAD;
+        CHECK(k == ICO_XB_DATA && strstr(v.why, "more than one place") != NULL,
+              "the text twice in B: refused: %d %s", k, v.why);
+        ico_xb_verdict_free(&v);
+        free(sec);
+    }
+    pg_free(&b);
+    s_pg_twice = 0;
+    if (pg_make(&b, 0x1200, 0x1300, PG_BSS + 0x400, 0x14000) != 0) {
+        lg_free(&g);
+        pg_free(&a);
+        pg_free(&b);
+        s_pg_legacy = 0;
+        return;
+    }
+    snap[1] = b.lo + b.o_dup + 0x100;
+    /* another build's table: a unit's rules-1 hash not the record's */
+    put64le(g.v2 + 64 + 24, g.hash[1] ^ 1u);
+    CHECK(ico_xb_legacy_verify(g.v2, g.v2_n, g.ot, a.lo, g.lt.hash, g.lt.n_hash, why, sizeof why) !=
+                  0 &&
+              strstr(why, "another build's") != NULL,
+          "a table of another build: refused: %s", why);
+    put64le(g.v2 + 64 + 24, g.hash[1]);
+    /* another version's table: another layout */
+    put64le(g.v2 + 40, a.tab->layout_hash ^ 1u);
+    CHECK(ico_xb_legacy_verify(g.v2, g.v2_n, g.ot, a.lo, g.lt.hash, g.lt.n_hash, why, sizeof why) !=
+                  0 &&
+              strstr(why, "another version's") != NULL,
+          "a table of another layout: refused: %s", why);
+    put64le(g.v2 + 40, a.tab->layout_hash);
+    /* the table's f_e changed (a thread sits in it): the load refuses */
+    {
+        size_t i;
+
+        for (i = 0; i < g.lt.n_hash; i++) {
+            if (g.hash[3 * i] == a.f_a + 0xC0) {
+                g.hash[3 * i + 2] ^= 1u;
+            }
+        }
+        sec = lg_read(&g, &a, &b, snap, 2, regs, 2, arena, 2, &n, &st);
+        k = sec != NULL ? lg_check(sec, n, &b, &a, snap, 2, &v) : ICO_XB_BAD;
+        CHECK(k == ICO_XB_CODE && strstr(v.why, "f_e") != NULL,
+              "f_e's code not the table's: refused: %d %s", k, v.why);
+        ico_xb_verdict_free(&v);
+        free(sec);
+    }
+    lg_free(&g);
+    pg_free(&a);
+    pg_free(&b);
+    s_pg_legacy = 0;
+}
+
 int main(void)
 {
     test_sections();
@@ -1345,5 +1678,6 @@ int main(void)
     test_layout();
     test_masked();
     test_pages();
+    test_legacy();
     return ico_check_summary("state_name");
 }

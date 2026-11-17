@@ -812,7 +812,11 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   immediates and displacements, VEX, EVEX, the 0F 38/3A maps, nops; an unknown opcode and a cut
   instruction not decoded); the masked code hash on x86-64 and arm64 (one function at two addresses
   with other call, RIP, ADRP and low-12 offsets alike; another frame size, stack slot, internal
-  branch, register or constant not; padding left out); the symbol table from a GNU ld map (a
+  branch, register or constant not; padding left out); arm64 code hash rules 2 on a function
+  whose page is used before its ADRP through a branch back and in a jump table's case after a BR:
+  rules 1 and rules 2 equal to `tools/code_hash_a64.py`'s hashes, the two builds apart under
+  rules 1 and alike under rules 2 (the legacy tables are hashed in Python and compared here);
+  the symbol table from a GNU ld map (a
   static function's piece, sections bounding the pieces, `*fill*` and the discarded list skipped),
   lld's map and nm (names, ordinals, uniqueness, lookups), the layout hash equal for one layout at
   two addresses and other when a game global moves, another build's file and a missing anchor
@@ -880,7 +884,34 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   symbols; f_a's two ADRPs making two pages refused (`f_a+0x0 and f_a+0x8`); one page word on two
   fibers whose frames aim at variables now on two pages translated per fiber; a page word also an
   ordinary address refused when the readings differ; a page-aligned word no ADRP on its fiber makes, not
-  recorded, translated as the ordinary address it is even into a page (`test_pages`) (`state_name`).
+  recorded, translated as the ordinary address it is even into a page (`test_pages`); an earlier
+  version's state read again with its legacy table (issue 217), where A's code and read-only data
+  are wiped after the table is made from them (symbol file, one text run, code hashes under rules
+  1 and 2) and its format 2 record holds the units' rules-1 hashes. The record and table agree;
+  f_e's page is used before its ADRP through a branch back, so rules 1 tells A's f_e from B's and
+  rules 2 does not. A text word, a repeated name's data word, VAR3's page on a fiber and a return
+  address are named again (no word unnamed, one page word, one window) and translated in B: the
+  text to B's, the data word by B's start-up value placed back by name, the page to the page f_e's
+  ADRP and its user make in B. Without the start-up word the data word is unnamed. With the text
+  twice in B the state is refused (`in more than one place`). A record whose unit hash is not the
+  table's (`another build's`) or whose layout is another (`another version's`) is refused, and so
+  is a table whose f_e hash differs from B's (`the function f_e changed`) (`test_legacy`). A
+  version 2 record of another layout with unnamed words is refused for the layout first
+  (`test_format`) (`state_name`).
+- `state_legacy_test.c`: the committed legacy tables (`port/state_legacy`, the source tree's
+  folder as its argument) read by the game's loader (`state_legacy.c`). Each table the index
+  names is found by its platform and commit and loads. Its manifest's commit, code hash count and
+  text run count match, its hashes are under the current rules and in address order, its runs lie
+  inside its `.rodata` and end in a zero byte, its symbol file places at an Android image, and
+  every function the table cuts has its hashes. No table is found for another platform or for the
+  reporter's commit of another layout. A missing index gives -1, a missing hashes file is named, and a text
+  file cut short does not load (`state_legacy`).
+- `tools/state_legacy_table.py check`: each legacy table's files against its manifest (sizes,
+  SHA-256, the text runs inside `.rodata` and in order, the symbol file's `ico_diag_init`, the code
+  hashes' count, rules and address order), and the index naming each table once
+  (`state_legacy_tables`). `tools/code_hash_a64.py --selftest`: the Python XXH3-64 against
+  xxHash's sanity vectors and the rules-2 masking against hand-made functions
+  (`code_hash_a64_selftest`).
 - `state_carry_xbuild_test.c`: save states across two real links of one program (`state_carry.cmake`,
   [PLATFORM.md](PLATFORM.md#the-carry-over-guard)): A linked with its read-only data in a segment of
   its own, B with more code and texts ahead of A's and its read-only data inside the executable

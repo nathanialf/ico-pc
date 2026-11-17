@@ -1351,6 +1351,22 @@ const IcoSymData *ico_symtab_data_named(const IcoSymTab *t, uint64_t name_hash, 
     return i >= 0 ? &t->data[i] : NULL;
 }
 
+uint64_t ico_symtab_unit_hash_rules(IcoSymTab *t, const IcoSymUnit *cu, int rules)
+{
+    IcoSymUnit *u = &t->unit[cu - t->unit];
+
+    if (rules == ICO_CODE_HASH_RULES) {
+        return ico_symtab_unit_hash(t, cu);
+    }
+    if (!u->hashed1) {
+        u->code_hash1 =
+            ico_code_hash_rules(rules, t->env.arch, (const void *)(uintptr_t)u->start,
+                                (size_t)u->size, u->start, t->env.image_lo, t->env.image_hi);
+        u->hashed1 = 1;
+    }
+    return u->code_hash1;
+}
+
 uint64_t ico_symtab_unit_hash(IcoSymTab *t, const IcoSymUnit *cu)
 {
     IcoSymUnit *u = &t->unit[cu - t->unit];
