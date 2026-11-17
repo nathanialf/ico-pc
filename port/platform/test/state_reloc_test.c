@@ -46,7 +46,8 @@
  *           with dead frames: dead below sp - 128, live from it, the first
  *           live one named from the stack pointer; a word read from a copy
  *           counted by its own place (the scheduler's and the registers'
- *           words); a same-build scan (no translation) moves the words by
+ *           words); a number kept as it is (an identity point) is no
+ *           miss; a same-build scan (no translation) moves the words by
  *           the delta and counts nothing
  */
 #include <stdint.h>
@@ -1027,6 +1028,26 @@ static void test_misses(void)
     ico_state_miss_live_text(&m, lo, text, sizeof text);
     CHECK(strcmp(text, "the scheduler's table at offset 0x48 holds 0x7700006000 (offset 0x6000 "
                        "in the saving build's image)") == 0);
+    /* a number kept as it is (keep_code_numbers' identity point: a value
+       inside the old code at no function's start, next to a small integer)
+       translates to itself and is no miss; the word next to it is */
+    {
+        IcoStateSpan kept;
+        uint64_t two[2];
+
+        kept.lo = kept.hi = kept.now = lo + 0x7000;
+        xl.point = &kept;
+        xl.n_point = 1;
+        memset(&m, 0, sizeof m);
+        two[0] = lo + 0x7000;
+        two[1] = lo + 0x7008;
+        ico_state_miss_at(&m, "the arena", (uint64_t)(uintptr_t)two, 0, 0);
+        CHECK(ico_state_reloc_scan(&r, two, sizeof two, NULL) == 0);
+        CHECK(two[0] == lo + 0x7000 && m.live == 1 && m.first_live == lo + 0x7008 &&
+              m.live_off == 8 && m.dead == 0);
+        xl.point = NULL;
+        xl.n_point = 0;
+    }
     /* no miss struct: nothing to count, the word left */
     CHECK(ico_state_miss_refuses(NULL, lo, text, sizeof text) == 0 && text[0] == '\0');
 

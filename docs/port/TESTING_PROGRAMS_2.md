@@ -30,5 +30,6 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   whose two deepest words lie below the stack pointer less 128 counted dead, the words at sp - 128
   and sp + 16 live, the first named 128 bytes below the stack pointer; the dead words alone kept
   with the counts word for word; a new place clearing the dead range; a word read from a copy
-  counted by its own address (the saved registers, the scheduler's table); no miss record refuses
+  counted by its own address (the saved registers, the scheduler's table); a number kept as it
+  is (`keep_code_numbers`' identity point) not counted while the word beside it is; no miss record refuses
   nothing; a scan of this build (no translation) moves the word by the delta and counts nothing.
