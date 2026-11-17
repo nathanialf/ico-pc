@@ -32,6 +32,9 @@ version's (`0x7e3463baa76b43a8`). Only v0.11.7 and v0.11.8 qualify. Versions
 up to v0.11.6 have another layout, so their states are refused for that
 reason whether or not a table exists.
 
+`layout.txt` records that hash. `tools/package_android.sh` fails an Android package whose
+layout hash differs (`tools/android_syms_lines.py layout`).
+
 ## Release candidates
 
 A release candidate's table, such as rc4's, is packaged only into release

@@ -13,6 +13,7 @@ adpcm 0.01
 adpcm_slots 0.02
 adpcm_stream 12.97
 android_paths 0.01
+android_syms_layout 0.30  # estimate: 0.1 s local (STATENAME), Python over three small reports
 app_icon_files 0.10
 app_icon_image 0.23
 appearance 0.05

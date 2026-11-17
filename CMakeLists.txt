@@ -457,6 +457,9 @@ if(Python3_FOUND)
     # vectors and hand-made functions (no build, no game)
     add_test(NAME state_legacy_tables COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/state_legacy_table.py" check)
     add_test(NAME code_hash_a64_selftest COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/code_hash_a64.py" --selftest)
+    # the Android packaging gate on the game data layout hash (tools/android_syms_lines.py
+    # layout against port/state_legacy/layout.txt; no build, no game)
+    add_test(NAME android_syms_layout COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/test/android_syms_layout_test.py")
 endif()
 
 # the June 2001 demo's VU1 programs against the retail ones (tools/vu_variant_diff.py,

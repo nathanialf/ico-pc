@@ -90,10 +90,30 @@ __attribute__((used)) static uint32_t ico_tables_crc32_table(void)
 /* An archive member only joins the link when something refers to it: the
    program refers to this (state_host.c) as it referred to the loader that
    stood here, so the linker takes the member at the place the loader's
-   was taken. */
+   was taken.  It returns the room's address so that its section is
+   referred to as well: --gc-sections keeps an input section only when a
+   kept section refers to it, and the Android link (v0.11.9-rc4) dropped
+   the room while keeping this function when it returned its own address
+   (tools/android_syms_lines.py layout now fails such a package). */
 const void *ico_tables_room(void);
 
 const void *ico_tables_room(void)
 {
-    return (const void *)ico_tables_room;
+#if defined(__clang__) && defined(__ELF__) && defined(__aarch64__)
+    const void *p;
+
+    __asm__("adrp %0, loaded_count\n\tadd %0, %0, :lo12:loaded_count" : "=r"(p));
+    return p;
+#elif defined(__clang__) && defined(__ELF__) && defined(__x86_64__)
+    const void *p;
+
+    __asm__("leaq loaded_count(%%rip), %0" : "=r"(p));
+    return p;
+#elif defined(__clang__) && defined(__ELF__)
+#error "the room's address: add this architecture's instruction"
+#elif defined(__clang__)
+    return ico_tables_room_bytes;
+#else
+    return loaded_count;
+#endif
 }

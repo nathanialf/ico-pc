@@ -1,0 +1,8 @@
+# The game data layout hash of the Android library (port/platform/state_syms.h;
+# state_carry_check.py's report prints it: "symbols ... layout <hash>"). The
+# legacy tables in this folder are of this layout: a state they read resumes
+# exactly only in a build of the same hash. tools/package_android.sh fails a
+# package whose hash differs (tools/android_syms_lines.py layout). Change this
+# line only when the game's data changed on purpose: the tables' states then no
+# longer resume exactly anywhere and take the checkpoint path.
+layout 7e3463baa76b43a8
