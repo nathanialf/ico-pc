@@ -201,7 +201,8 @@ jobs:
             --report build-host/state-carry-win/carry.txt
           # v0.11.8's Windows states resume exactly only under its game data
           # layout hash (port/state_legacy/layout.txt), as tools/package_win.sh checks
-          python3 -I tools/android_syms_lines.py layout build-host/state-carry-win/carry.txt . windows-x64
+          python3 -I tools/android_syms_lines.py layout build-host/state-carry-win/carry.txt . windows-x64 \
+            build-host/win-x64/ico_pc.map
           python3 -I tools/android_syms_lines.py gamesec build-host/win-x64/ico_pc.map .
 
       - name: Upload the win-x64 test programs (for the `windows` job)

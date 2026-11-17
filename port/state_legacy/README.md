@@ -40,6 +40,13 @@ reason whether or not a table exists.
 `layout.txt` records that hash. `tools/package_android.sh` fails an Android package whose
 layout hash differs (`tools/android_syms_lines.py layout`).
 
+`layout-windows-x64.txt` lists the game's data sections of the Windows build whose hash
+`layout.txt` records (`layout-windows-x64`): the range's start, the largest alignment, and each
+object's section with its offset and size (`tools/android_syms_lines.py layout-rows` on that
+build's link map). When `tools/package_win.sh` finds another hash, it compares the new map with
+this list and names the cause in its log. Write the list again whenever that hash is recorded
+again.
+
 ## Release candidates
 
 A release candidate's table, such as rc4's, is packaged only into release

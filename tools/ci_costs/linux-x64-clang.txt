@@ -14,6 +14,7 @@ adpcm_slots 0.00
 adpcm_stream 2.66
 android_paths 0.00
 android_syms_layout 0.30  # estimate: 0.1 s local (STATENAME), Python over three small reports
+android_syms_layout_rows 0.30  # estimate: 0.1 s local (WINLAYOUT), Python over the recorded rows and five small maps
 app_icon_files 0.04
 app_icon_image 0.11
 appearance 0.00

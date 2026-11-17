@@ -16,7 +16,24 @@
    .data.  GNU ld has no .bss$* rule (an orphan .bss$ section lands in a
    separate output section), which is why the game's zero-filled data is
    renamed into .data too.  The bracket bytes lie inside the ranges; a
-   restore writes back the value they already hold. */
+   restore writes back the value they already hold.
+
+   The start's alignment: the linker places each input section at the next
+   multiple of its own alignment, so the padding between the game's
+   sections depends on where the first one starts modulo the largest of
+   them (64: five game objects' .data$ico_p, kanbanBoot.c's among them).
+   The port's .data ahead of the brackets grows and shrinks with the port;
+   left alone, the game's sections would move against each other with it,
+   and the game data layout hash (state_syms.c) with them (v0.11.9-rc8:
+   0x20 less padding before kanbanBoot.c's).  This pad, in a section that
+   sorts just before .data$ico_a, starts at a multiple of the largest
+   alignment and ends at one, so .data$ico_a starts at 0 modulo 64, where
+   v0.11.8's started (0x14070a3c0).  It lies outside both ranges; nothing
+   reads it.  docs/port/PLATFORM.md, "Game data ranges". */
+#define ICO_GDR_PE_PAD_ALIGN 64
+#define ICO_GDR_PE_PAD_SIZE 64
+__attribute__((used, aligned(ICO_GDR_PE_PAD_ALIGN),
+               section(".data$ico_0"))) static char gdata_start_pad[ICO_GDR_PE_PAD_SIZE] = {1};
 __attribute__((used, section(".data$ico_a"))) static char gdata_bracket_a[1] = {1};
 __attribute__((used, section(".data$ico_n"))) static char gdata_bracket_n[1] = {1};
 __attribute__((used, section(".data$ico_z"))) static char gdata_bracket_z[1] = {1};
