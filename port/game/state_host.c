@@ -2733,9 +2733,10 @@ static void perform_load(int slot)
                 "state: slot %d was saved by version %s, this is %s: everything it points into is "
                 "unchanged here, so it is translated (%u functions, %u data symbols, %u start-up "
                 "values and texts, %zu spans, %zu points; %u dead-frame words without one; %u "
-                "words naming nothing kept as numbers, first 0x%llx)\n",
+                "words naming nothing kept as numbers, first 0x%llx; %u texts had identical "
+                "twins, the first taken)\n",
                 slot, sv, tv, xv.units, xv.data, xv.points, xv.n_span, xv.n_point, xv.soft_left,
-                xv.left, (unsigned long long)xv.first_left);
+                xv.left, (unsigned long long)xv.first_left, xv.twins);
         log_fresh_blocks(slot, &xv);
     }
     {

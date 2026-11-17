@@ -893,7 +893,7 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   address are named again (no word unnamed, one page word, one window) and translated in B: the
   text to B's, the data word by B's start-up value placed back by name, the page to the page f_e's
   ADRP and its user make in B. Without the start-up word the data word is unnamed. With the text
-  twice in B the state is refused (`in more than one place`). A record whose unit hash is not the
+  twice in B, a word into its middle is refused (`in more than one place`), and a word at its start (a whole literal) takes the first copy and counts one twin. A record whose unit hash is not the
   table's (`another build's`) or whose layout is another (`another version's`) is refused, and so
   is a table whose f_e hash differs from B's (`the function f_e changed`) (`test_legacy`). A
   version 2 record of another layout with unnamed words is refused for the layout first

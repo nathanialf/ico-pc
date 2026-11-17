@@ -1345,9 +1345,19 @@ of another layout is refused for the layout first: `the game's data layout chang
 names another layout before any other reason. Two more changes came with this work:
 
 - The read-only range this build searches starts at its first section that is not a
-  dynamic-linking table (`.dynsym`, `.dynstr`, `.gnu.hash`, `.rela.dyn`, the notes). No program
-  pointer aims there, and `.dynstr` spells every exported name a text window could otherwise find
+  dynamic-linking table (`.dynsym`, `.dynstr`, `.gnu.hash`, `.rela.dyn`, the notes). It ends at
+  the end of its last section before the code that is not an unwind or exception table
+  (`.eh_frame`, `.eh_frame_hdr`, `.gcc_except_table`). No C pointer aims into these tables, and
+  their bytes can spell exported names or short texts that a text window would otherwise find
   twice.
+- A text window that is one or more whole literals can be found at several literal starts with
+  the same bytes. Such a window starts where a literal starts (`XW_LSTART`) and ends in a zero
+  byte. The first copy in address order is taken, and the load's line counts these
+  (`texts had identical twins`). C code reads both copies alike, and every word of one value
+  takes the same copy, because the translation maps by value. A copy can only be told apart by
+  comparing its address with a pointer the code computes afresh, and no game source compares a
+  literal's address (`== "` found nowhere). A window into the middle of a literal, or one that
+  does not end in a zero byte, is still refused when found twice.
 - `port/data/reserved/tables.c` reproduces the released builds' loader statics (names, sizes,
   kinds and order) in the game's bss, so the layout hash is again `0x7e3463baa76b43a8`. Its
   function `ico_tables_room`, which `state_host.c` calls so the archive member joins the link,
