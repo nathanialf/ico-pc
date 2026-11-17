@@ -698,6 +698,34 @@ static void test_hashed(void)
         CHECK(w[0] == b.lo + 16 + 8, "the word at its place past the 16 more zeros");
     }
     ico_xb_verdict_free(&v);
+    /* a damaged record: the hashed window storing 1 byte (a save stores
+       min(len, ICO_XB_CONTENT)): the search would hash the whole length at
+       every place of that byte */
+    if (sec != NULL) {
+        uint8_t *d = (uint8_t *)malloc(n);
+
+        if (d != NULL) {
+            const size_t pts = 80u + (size_t)get32le((const uint8_t *)sec + 20) * 48u +
+                               (size_t)get32le((const uint8_t *)sec + 24) * 48u;
+            unsigned i, hit = 0;
+
+            memcpy(d, sec, n);
+            for (i = 0; i < get32le(d + 28) && !hit; i++) {
+                uint8_t *q = d + pts + (size_t)i * 64u;
+
+                if (get32le(q + 8) == 3 && (get32le(q + 20) & 2u) != 0) {
+                    put32le(q + 36, 1u);
+                    hit = 1;
+                }
+            }
+            CHECK(hit, "the record holds a hashed window");
+            k = ico_xb_check(d, n, &now, &v);
+            CHECK(k == ICO_XB_BAD && strstr(v.why, "window is damaged") != NULL,
+                  "a hashed window of 1 stored byte: refused: %d %s", k, v.why);
+            ico_xb_verdict_free(&v);
+            free(d);
+        }
+    }
     b.mem[b.ro_bytes - 1] = 0; /* no marker: missing */
     k = sec != NULL ? ico_xb_check(sec, n, &now, &v) : ICO_XB_BAD;
     CHECK(k == ICO_XB_DATA && strstr(v.why, "is missing here") != NULL, "hashed, missing: %d %s", k,
@@ -1062,6 +1090,9 @@ typedef struct Pg {
 } Pg;
 
 static int s_pg_legacy, s_pg_twice;
+/* test_pages_plain: s_big's offset in the image (0: none), a data object
+   across a page start, and f_s (f_b + 0x40): an ADRP of s_big + 0x180 */
+static uint64_t s_pg_big;
 
 static uint32_t adrp(uint64_t pc, uint64_t target, unsigned rd)
 {
@@ -1110,6 +1141,12 @@ static int pg_make(Pg *g, uint64_t f_a, uint64_t f_b, uint64_t bss, uint64_t buf
     put32le(g->mem + f_b + 4, 0xD65F03C0u);
     put32le(g->mem + 0x1800, 0xD65F03C0u);
     put32le(g->mem + 0x1880, 0xD65F03C0u);
+    if (s_pg_big != 0) {
+        at = g->lo + f_b + 0x40;
+        put32le(g->mem + f_b + 0x40, adrp(at, g->lo + s_pg_big + 0x180, 25));
+        put32le(g->mem + f_b + 0x44, 0xD503201Fu); /* nop */
+        put32le(g->mem + f_b + 0x48, 0xD65F03C0u);
+    }
     if (s_pg_legacy) {
         const uint64_t e = f_a + 0xC0, var3 = bss + PG_VAR3;
 
@@ -1143,6 +1180,10 @@ static int pg_make(Pg *g, uint64_t f_a, uint64_t f_b, uint64_t bss, uint64_t buf
     L4(bss + PG_VAR2, 8, 'b', "var2");
     L4(bss + PG_VAR3, 8, 'b', "var3");
     L4(buf, 0x100, 'b', "s_buf");
+    if (s_pg_big != 0) {
+        L3(f_b + 0x40, 'T', "f_s");
+        L4(s_pg_big, 0x200, 'b', "s_big");
+    }
     if (s_pg_legacy) {
         L3(f_a + 0xC0, 'T', "f_e");
         L4(g->o_dup, 8, 'd', "dup");
@@ -1265,6 +1306,17 @@ static uint64_t pg_xlate(const IcoXbVerdict *v, uint64_t w, int fiber)
     return ico_state_xlate(&xl, w, &to) ? to : w;
 }
 
+/* a copy of a version 3 record into d, and the offset of its producers
+   (state_xbuild.c's layout: the header, units, data, points, blocks, the
+   unnamed list, the page words, then the producers) */
+static size_t rec3_prods(uint8_t *d, const void *sec, size_t n)
+{
+    memcpy(d, sec, n);
+    return 80u + (size_t)get32le(d + 20) * 48u + (size_t)get32le(d + 24) * 48u +
+           (size_t)get32le(d + 28) * 64u + (size_t)get32le(d + 32) * 40u +
+           (size_t)get32le(d + 68) * 40u + (size_t)get32le(d + 72) * 16u;
+}
+
 static void test_pages(void)
 {
     Pg a, b;
@@ -1310,6 +1362,26 @@ static void test_pages(void)
             CHECK(pg_xlate(&v, regs[0], 1) == b.lo + 0x1200 + 8, "the return address in f_a");
         }
         ico_xb_verdict_free(&v);
+    }
+    pg_free(&b);
+    /* a damaged record: every producer's offset far past its function (a
+       load once decoded this process's code there) */
+    if (pg_make(&b, 0x1200, 0x1300, PG_BSS + 0x400, 0x14000) == 0 && sec != NULL) {
+        uint8_t *d = (uint8_t *)malloc(n);
+
+        if (d != NULL) {
+            const size_t prd = rec3_prods(d, sec, n);
+            unsigned i;
+
+            for (i = 0; i < get32le(d + 76); i++) {
+                put32le(d + prd + (size_t)i * 24u + 16u, 0x7FFFFFF0u);
+            }
+            k = pg_check(d, n, &b, &a, &v);
+            CHECK(k == ICO_XB_BAD && strstr(v.why, "lies outside the function") != NULL,
+                  "a producer's offset past its function: refused: %d %s", k, v.why);
+            ico_xb_verdict_free(&v);
+            free(d);
+        }
     }
     pg_free(&b);
     /* B2: the bss 0x900 into a page: VAR1 stays on the first page, VAR2
@@ -1675,10 +1747,65 @@ static void test_legacy(void)
         ico_xb_verdict_free(&v);
         free(sec);
     }
+    /* a table of other code hash rules: no read (and nothing it allocated
+       kept: the leak checker's builds) */
+    g.lt.hash_rules = ICO_CODE_HASH_RULES - 1;
+    sec = lg_read(&g, &a, &b, snap, 2, regs, 2, arena, 2, &n, &st);
+    CHECK(sec == NULL, "a table of other code hash rules: not read");
+    free(sec);
+    g.lt.hash_rules = ICO_CODE_HASH_RULES;
     lg_free(&g);
     pg_free(&a);
     pg_free(&b);
     s_pg_legacy = 0;
+}
+
+/* one page word on two fibers: fiber 1 holds the page f_s's ADRP of s_big
+   + 0x180 makes, fiber 2 the same value as an ordinary address into s_big
+   (no producer there): each fiber's word read as it holds it, the second
+   by s_big's name (it once had no name: the first fiber's producer kept
+   the word from the ordinary rules, and fiber 2's kept the old address) */
+static void test_pages_plain(void)
+{
+    Pg a, b;
+    IcoXbStats st;
+    IcoXbVerdict v;
+    uint64_t r1[2], r2[1];
+    void *sec = NULL;
+    size_t n = 0;
+    int k;
+
+    s_pg_big = 0x15F00;
+    if (pg_make(&a, 0x1000, 0x1100, PG_BSS, 0x13000) != 0) {
+        pg_free(&a);
+        s_pg_big = 0;
+        return;
+    }
+    r1[0] = a.lo + a.f_b + 0x44; /* a return address in f_s */
+    r1[1] = a.lo + 0x16000;      /* s_big + 0x100: the page f_s's ADRP makes */
+    r2[0] = a.lo + 0x16000;      /* the same value on fiber 2, no producer there */
+    sec = pg_save2(&a, r1, 2, NULL, 0, r2, 1, NULL, 0, &n, &st);
+    CHECK(sec != NULL && st.pages == 1 && st.producers == 1 && st.left == 0,
+          "one page word, named by its producer and by s_big (%u, %u; %u unnamed)", st.pages,
+          st.producers, st.left);
+    /* B: s_big 0x40 further: its page start stays 0x16000, the address
+       0x16000 of A becomes 0x16040 */
+    s_pg_big = 0x15F40;
+    if (pg_make(&b, 0x1200, 0x1300, PG_BSS + 0x400, 0x14000) == 0 && sec != NULL) {
+        k = pg_check(sec, n, &b, &a, &v);
+        CHECK(k == ICO_XB_OK && v.pages == 1, "B loads it: %d %s", k, v.why);
+        if (k == ICO_XB_OK) {
+            CHECK(pg_xlate(&v, r1[1], 1) == b.lo + 0x16000, "fiber 1: the page of s_big + 0x180");
+            CHECK(pg_xlate(&v, r2[0], 2) == b.lo + 0x16040,
+                  "fiber 2: the address in s_big (0x%llx)",
+                  (unsigned long long)(pg_xlate(&v, r2[0], 2) - b.lo));
+        }
+        ico_xb_verdict_free(&v);
+    }
+    pg_free(&b);
+    free(sec);
+    pg_free(&a);
+    s_pg_big = 0;
 }
 
 int main(void)
@@ -1693,6 +1820,7 @@ int main(void)
     test_layout();
     test_masked();
     test_pages();
+    test_pages_plain();
     test_legacy();
     return ico_check_summary("state_name");
 }

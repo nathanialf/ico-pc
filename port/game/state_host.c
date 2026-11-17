@@ -1894,6 +1894,12 @@ static int legacy_record(const char *path, const char *commit, void **out, size_
     if (lt == NULL) {
         goto done;
     }
+    if (lt->hash_rules != ICO_CODE_HASH_RULES) {
+        snprintf(why, why_n,
+                 "its legacy table %s holds code hashes of rules %d, this build's are %d", name,
+                 lt->hash_rules, ICO_CODE_HASH_RULES);
+        goto done;
+    }
     memset(&env, 0, sizeof env);
     env.image_lo = rg->image_lo;
     env.image_hi = rg->image_hi;
