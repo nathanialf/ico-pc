@@ -913,7 +913,11 @@ void last_run_background(int background)
     }
     s_bg = background != 0;
     s_bgSince = ico_diag_uptime();
-    write_all(1);
+    /* Android: the system's lifecycle callback on its UI thread, never made
+       to wait on the disc: written without a sync and only if no other
+       write is in flight (else the next beat's, 2 s, carries it); the
+       write is in the system's cache, which a killed process keeps */
+    write_all(0);
 }
 
 void last_run_trim(int level, const char *name)
@@ -922,7 +926,7 @@ void last_run_trim(int level, const char *name)
     s_trimAt = ico_diag_uptime();
     s_trimN++;
     snprintf(s_trimName, sizeof s_trimName, "%s", name != NULL ? name : "");
-    write_all(1);
+    write_all(0); /* onTrimMemory on Android's UI thread: as last_run_background */
 }
 
 void last_run_set_gpu_resets_start(int32_t start, const char *why)

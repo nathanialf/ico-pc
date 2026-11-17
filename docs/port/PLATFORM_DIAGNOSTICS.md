@@ -816,7 +816,9 @@ width at its own offset, `<field>: <value>` padded with blanks and ended by a ch
 bytes (`[3fa1c2d0]`, 32-bit FNV-1a with the slot's index mixed in). It is rewritten in place with
 one positional write of the whole file at every heartbeat (2 s, not synced: a process the system
 kills leaves the system's page cache, which still reaches the disc) and at every phase change
-(synced, about ten a run). A write the process did not finish leaves every slot whole, from one
+(synced, about ten a run); the background switch and the system's low-memory signal write it
+without a sync and only when no other write is in flight (Android calls them on its UI thread,
+which must not wait on the disc; a skipped write is the next heartbeat's). A write the process did not finish leaves every slot whole, from one
 write or the other, or failing its check, which the reader marks as such: never a mix.
 
 | field | value |
