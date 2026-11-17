@@ -669,9 +669,14 @@ uint64_t ico_fiber_image_sp(const IcoFiberImage *img)
     return (uint64_t)ctx_sp(&cx->ctx);
 }
 
-int ico_fiber_slot_restore(int slot, const IcoFiberImage *in, const IcoStateReloc *r)
+int ico_fiber_slot_restore(int slot, const IcoFiberImage *in, const IcoStateReloc *r0)
 {
-    const IcoStateRange *pr = &r->range[ICO_RELOC_POOL];
+    /* another build's translation with per-fiber points: this slot's
+       (state_reloc.h IcoStateXlate.fiber) */
+    IcoStateReloc rs = *r0;
+    IcoStateXlate xs;
+    const IcoStateReloc *r = &rs;
+    const IcoStateRange *pr = &r0->range[ICO_RELOC_POOL];
     uintptr_t s;
     uintptr_t lo;
     uintptr_t hi;
@@ -686,6 +691,11 @@ int ico_fiber_slot_restore(int slot, const IcoFiberImage *in, const IcoStateRelo
 
     if (pool_ensure() != 0 || !slot_ok(slot) || pool.used[slot] || in->slot != (uint32_t)slot) {
         return -1;
+    }
+    if (r0->xlate != NULL && r0->xlate->n_fiber > 0) {
+        xs = *r0->xlate;
+        xs.fiber = slot + 1;
+        rs.xlate = &xs;
     }
     s = slot_addr(slot);
     lo = s + pool.stack_off;

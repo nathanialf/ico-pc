@@ -168,6 +168,10 @@ awk 'FNR == NR {
             }
         }
      }' "$symdir/symtab.txt" "$symdir/data.txt" >> "$symdir/libmain.syms"
+# the compiler's private objects in .data.rel.ro (switch tables, aggregate
+# initialisers, compound literals), which nm cannot name, from the link map
+python3 -I "$wt/tools/android_syms_lines.py" relro "$map" >> "$symdir/libmain.syms" 2>>"$log" ||
+    fail "tools/android_syms_lines.py relro $map"
 # the allocated sections but thread-local storage (its addresses are offsets)
 awk 'sub(/^ *\[ *[0-9]+\] */, "") && $7 ~ /A/ && $7 !~ /T/ && $3 ~ /^[0-9a-f]+$/ &&
      $5 ~ /^[0-9a-f]+$/ && $5 !~ /^0+$/ { print "section", $3, $5, $7, $1 }' \
@@ -180,6 +184,9 @@ grep -q '^section [0-9a-f]* [0-9a-f]* [A-Z]*X[A-Z]* \.text$' "$symdir/libmain.sy
     fail "libmain.syms lacks the .text section line (the save states' code range)"
 grep -q '^section [0-9a-f]* [0-9a-f]* A[A-Z]* \.rodata$' "$symdir/libmain.syms" ||
     fail "libmain.syms lacks the .rodata section line"
+# a writable data name that repeats could never be told apart in a save state
+python3 -I "$wt/tools/android_syms_lines.py" check "$symdir/libmain.syms" >>"$log" 2>&1 ||
+    fail "tools/android_syms_lines.py check: writable data names repeat in libmain.so (the log names them)"
 gzip -9 -n -c "$symdir/libmain.syms" > "$symdir/libmain.syms.gz"
 echo "package_android: libmain.syms: $(wc -l < "$symdir/libmain.syms") lines ($(grep -c '^section ' "$symdir/libmain.syms") sections, $(awk 'NF == 5 && $1 != "section"' "$symdir/libmain.syms" | wc -l) data symbols with their file), $(wc -c < "$symdir/libmain.syms.gz") bytes gzipped" >>"$log"
 # save states carry over (issue 217): every initialised pointer of the game's

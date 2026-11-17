@@ -74,7 +74,9 @@ typedef struct Nb {
     uint64_t o_text; /* .rodata is [HDR_BYTES, o_text) */
     uint64_t o_names, o_after, o_sleep, o_on, o_long, o_euc, o_tab;
     uint64_t o_data_a, o_data_b, o_gdata, o_gbss;
-    uint64_t o_dup; /* 0, or a second "SleepThread" */
+    uint64_t o_dup;   /* 0, or a second "SleepThread" */
+    uint64_t o_relro; /* two "t.c:kTab" and a private table, read-only once loaded */
+    int relro_tweak;  /* the second kTab's contents changed */
     int no_long;
     uint64_t snap[GDATA_BYTES / 8];
     IcoSymTab *tab;
@@ -119,6 +121,7 @@ static void nb_make(Nb *b, int which)
         b->o_data_b = 0x8010;
         b->o_gdata = 0x9000;
         b->o_gbss = 0x9400;
+        b->o_relro = 0x8800;
     } else {
         b->o_text = 0x2400;
         b->o_names = 0x600;
@@ -132,6 +135,7 @@ static void nb_make(Nb *b, int which)
         b->o_data_b = 0x8120;
         b->o_gdata = 0x9100;
         b->o_gbss = 0x9500;
+        b->o_relro = 0x8900;
     }
 }
 
@@ -172,6 +176,18 @@ static void nb_fill(Nb *b)
     m[b->o_text + 0x100] = 0xC3; /* ico_diag_log */
     memcpy(m + b->o_text + 0x200, f_main, sizeof f_main);
     m[b->o_text + 0x3F00] = 0xC3; /* f_last */
+    /* .data.rel.ro: each object a relocated pointer (this build's own
+       address) and constants */
+    put64le(m + b->o_relro, b->lo + b->o_on);
+    put64le(m + b->o_relro + 8, 0x11);
+    put64le(m + b->o_relro + 16, 0x12);
+    put64le(m + b->o_relro + 24, 0x13);
+    put64le(m + b->o_relro + 0x20, b->lo + b->o_long);
+    put64le(m + b->o_relro + 0x28, 0x21);
+    put64le(m + b->o_relro + 0x30, b->relro_tweak ? 0x99 : 0x22);
+    put64le(m + b->o_relro + 0x38, 0x23);
+    put64le(m + b->o_relro + 0x40, b->lo + b->o_euc);
+    put64le(m + b->o_relro + 0x48, 0x31);
     /* tableA[0] (gdata + 0x40) holds a pointer to "On" at start-up */
     memset(b->snap, 0, sizeof b->snap);
     b->snap[0x40 / 8] = b->lo + b->o_on;
@@ -199,6 +215,11 @@ static size_t nb_nm(const Nb *b, int sections, char *out, size_t size)
     LINE4(b->o_names, 0x20, 'r', "kNames");
     LINE5(b->o_data_a, 8, 'd', "s_count", "a.c");
     LINE5(b->o_data_b, 8, 'd', "s_count", "b.c");
+    /* two statics of one name in two files of one name, and a compiler's
+       private table as tools/android_syms_lines.py names it from the map */
+    LINE5(b->o_relro, 0x20, 'd', "kTab", "t.c");
+    LINE5(b->o_relro + 0x20, 0x20, 'd', "kTab", "t.c");
+    LINE5(b->o_relro + 0x40, 0x10, 'd', ".Lswitch.table.f_main", "t");
     LINE4(b->o_gdata, 0x40, 'D', "systemStatus");
     LINE4(b->o_gdata + 0x40, 0x40, 'D', "tableA");
     LINE4(b->o_gbss + 0x10, 4, 'B', "stage_no");
@@ -206,7 +227,8 @@ static size_t nb_nm(const Nb *b, int sections, char *out, size_t size)
         /* as tools/package_android.sh writes them from the section headers */
         SECTION(HDR_BYTES, b->o_text - HDR_BYTES, "AMS", ".rodata");
         SECTION(b->o_text, TEXT_BYTES, "AX", ".text");
-        SECTION(0x8000, 0x1000, "WA", ".data");
+        SECTION(0x8000, 0x800, "WA", ".data");
+        SECTION(0x8800, 0x800, "WA", ".data.rel.ro");
         SECTION(b->o_gdata, GDATA_BYTES, "WA", "ico_gdata");
         SECTION(b->o_gbss, GBSS_BYTES, "WA", "ico_gbss");
     }
@@ -766,6 +788,13 @@ static void test_format(void)
                             "words): the version that saved it left them unnamed") == 0,
           "a version 2 state with unnamed words: %d %s", k, v.why);
     ico_xb_verdict_free(&v);
+    /* an arm64 record made without the page words: refused */
+    n = v2_record(rec, ICO_XB_TABLE, b.tab->layout_hash, ICO_CODE_A64, a.lo + a.o_sleep, kSleep, 0,
+                  0);
+    k = check_words(rec, n, &b, &a, LAY_LINUX, &v);
+    CHECK(k == ICO_XB_PINNED && strstr(v.why, "pages its threads keep in registers") != NULL,
+          "an arm64 record without page words: %d %s", k, v.why);
+    ico_xb_verdict_free(&v);
     /* version 2: a text point longer than it can be */
     n = v2_record(rec, ICO_XB_TABLE, b.tab->layout_hash, b.tab->env.arch, a.lo + a.o_sleep, kSleep,
                   0, 0);
@@ -869,6 +898,387 @@ static void test_sections(void)
     ico_symtab_free(t);
 }
 
+/* --- read-only once loaded: names that repeat ----------------------------------------- */
+
+static void test_masked(void)
+{
+    Nb a, b;
+    IcoXbStats st;
+    IcoXbVerdict v;
+    uint64_t w[3], want[3], missed = 0;
+    void *sec;
+    size_t n = 0;
+    int k, i;
+
+    nb_make(&a, 0);
+    nb_make(&b, 1);
+    nb_fill(&a);
+    nb_fill(&b);
+    nb_parse(&a, LAY_ANDROID, 1);
+    nb_parse(&b, LAY_ANDROID, 1);
+    if (a.tab == NULL || b.tab == NULL) {
+        nb_free(&a);
+        nb_free(&b);
+        return;
+    }
+    CHECK(
+        ico_symtab_data_named(a.tab, ico_symtab_name_hash("t.c:kTab"), "t.c:kTab", 1) != NULL &&
+            !ico_symtab_data_named(a.tab, ico_symtab_name_hash("t.c:kTab"), "t.c:kTab", 1)->unique,
+        "two t.c:kTab");
+    w[0] = a.lo + a.o_relro + 8;    /* into the first kTab */
+    w[1] = a.lo + a.o_relro + 0x30; /* into the second */
+    w[2] = a.lo + a.o_relro + 0x40; /* the private table's start */
+    want[0] = b.lo + b.o_relro + 8;
+    want[1] = b.lo + b.o_relro + 0x30;
+    want[2] = b.lo + b.o_relro + 0x40;
+    sec = save_words(&a, LAY_ANDROID, w, 3, "the test's words", &n, &st);
+    CHECK(sec != NULL && st.left == 0 && st.data == 3 && st.data_masked == 2,
+          "the two of one name by their contents, the private table by its name (%u data, %u by "
+          "contents, %u left)",
+          st.data, st.data_masked, st.left);
+    k = sec != NULL ? check_words(sec, n, &b, &a, LAY_ANDROID, &v) : ICO_XB_BAD;
+    CHECK(k == ICO_XB_OK && v.data_masked == 2,
+          "B, its pointers its own: the masked contents match: %d %s", k, v.why);
+    if (k == ICO_XB_OK) {
+        translate(&v, &a, &b, w, 3, &missed);
+        for (i = 0; i < 3; i++) {
+            CHECK(w[i] == want[i], "relro word %d translated to 0x%llx, wanted 0x%llx", i,
+                  (unsigned long long)w[i], (unsigned long long)want[i]);
+        }
+    }
+    ico_xb_verdict_free(&v);
+    b.relro_tweak = 1;
+    nb_fill(&b);
+    k = sec != NULL ? check_words(sec, n, &b, &a, LAY_ANDROID, &v) : ICO_XB_BAD;
+    CHECK(k == ICO_XB_DATA &&
+              strstr(v.why, "the read-only data t.c:kTab (number 2 of its name) changed") != NULL,
+          "the second kTab's constant changed: %d %s", k, v.why);
+    ico_xb_verdict_free(&v);
+    free(sec);
+    /* writable as far as the table knows (no section lines, not in the
+       read-only range): a repeated name stays unnamed */
+    nb_parse(&a, LAY_LINUX, 0);
+    w[0] = a.lo + a.o_relro + 8;
+    w[1] = a.lo + a.o_relro + 0x30;
+    w[2] = a.lo + a.o_relro + 0x40;
+    sec = save_words(&a, LAY_LINUX, w, 3, "the test's words", &n, &st);
+    CHECK(sec != NULL && st.left == 2 && st.data_masked == 0 && st.listed == 2 &&
+              st.list[0].reason == ICO_XB_WHY_DATA,
+          "writable data of a repeated name: unnamed (%u left)", st.left);
+    free(sec);
+    nb_free(&a);
+    nb_free(&b);
+}
+
+/* --- arm64 page words ---------------------------------------------------------------- */
+
+#define PG_IMG 0x20000u
+#define PG_BSS 0x10000u /* the game bss range's place in A (a page's start) */
+#define PG_BSS_N 0x2000u
+#define PG_VAR1 0x10u /* in the bss: VAR1 and VAR2 share a page in A */
+#define PG_VAR2 0x800u
+#define PG_VAR3 0x1020u /* the next page */
+
+typedef struct Pg {
+    uint8_t *raw; /* malloc'd; mem is its first page start */
+    uint8_t *mem;
+    uint64_t lo, hi;
+    uint64_t f_a, f_b, bss, buf;
+    IcoSymTab *tab;
+} Pg;
+
+static uint32_t adrp(uint64_t pc, uint64_t target, unsigned rd)
+{
+    const int64_t imm = (int64_t)((target & ~(uint64_t)0xFFF) - (pc & ~(uint64_t)0xFFF)) / 4096;
+    const uint32_t u = (uint32_t)imm & 0x1FFFFFu;
+
+    return 0x90000000u | (u & 3u) << 29 | (u >> 2) << 5 | rd;
+}
+
+/* f_a: ADRP x19 of VAR1, ADRP x20 of VAR2 (one page in A), f_b: ADRP x21 of
+   VAR3; the bss at `bss`, the functions at f_a and f_b (moved in B) */
+static int pg_make(Pg *g, uint64_t f_a, uint64_t f_b, uint64_t bss, uint64_t buf)
+{
+    char nm[1024], why[160];
+    IcoSymTabEnv e;
+    size_t n = 0;
+    uint64_t at;
+
+    memset(g, 0, sizeof *g);
+    g->raw = (uint8_t *)malloc(PG_IMG + 4096u);
+    if (g->raw == NULL) {
+        return -1;
+    }
+    g->mem = g->raw + ((4096u - ((uintptr_t)g->raw & 4095u)) & 4095u);
+    memset(g->mem, 0, PG_IMG);
+    g->lo = (uint64_t)(uintptr_t)g->mem;
+    g->hi = g->lo + PG_IMG;
+    g->f_a = f_a;
+    g->f_b = f_b;
+    g->bss = bss;
+    g->buf = buf;
+    at = g->lo + f_a;
+    put32le(g->mem + f_a, adrp(at, g->lo + bss + PG_VAR1, 19));
+    put32le(g->mem + f_a + 4, 0xD503201Fu); /* nop */
+    put32le(g->mem + f_a + 8, adrp(at + 8, g->lo + bss + PG_VAR2, 20));
+    put32le(g->mem + f_a + 12, 0xD65F03C0u); /* ret */
+    /* f_c (f_a + 0x40): an ADRP of VAR1 alone; f_d (f_a + 0x80): of VAR2 alone */
+    at = g->lo + f_a + 0x40;
+    put32le(g->mem + f_a + 0x40, adrp(at, g->lo + bss + PG_VAR1, 22));
+    put32le(g->mem + f_a + 0x44, 0xD65F03C0u);
+    at = g->lo + f_a + 0x80;
+    put32le(g->mem + f_a + 0x80, adrp(at, g->lo + bss + PG_VAR2, 23));
+    put32le(g->mem + f_a + 0x84, 0xD65F03C0u);
+    at = g->lo + f_b;
+    put32le(g->mem + f_b, adrp(at, g->lo + bss + PG_VAR3, 21));
+    put32le(g->mem + f_b + 4, 0xD65F03C0u);
+    put32le(g->mem + 0x1800, 0xD65F03C0u);
+    put32le(g->mem + 0x1880, 0xD65F03C0u);
+#define L3(off, ty, name)                                                                          \
+    n += (size_t)snprintf(nm + n, sizeof nm - n, "%016llx %c %s\n", (unsigned long long)(off), ty, \
+                          name)
+#define L4(off, sz, ty, name)                                                                      \
+    n += (size_t)snprintf(nm + n, sizeof nm - n, "%016llx %016llx %c %s\n",                        \
+                          (unsigned long long)(off), (unsigned long long)(sz), ty, name)
+    L3(f_a, 'T', "f_a");
+    L3(f_a + 0x40, 'T', "f_c");
+    L3(f_a + 0x80, 'T', "f_d");
+    L3(f_b, 'T', "f_b");
+    L3(0x1800, 'T', "ico_diag_init");
+    L3(0x1880, 'T', "ico_diag_log");
+    L3(0x4F00, 'T', "f_last");
+    L4(bss + PG_VAR1, 8, 'b', "var1");
+    L4(bss + PG_VAR2, 8, 'b', "var2");
+    L4(bss + PG_VAR3, 8, 'b', "var3");
+    L4(buf, 0x100, 'b', "s_buf");
+#undef L3
+#undef L4
+    memset(&e, 0, sizeof e);
+    e.anchor = "ico_diag_init";
+    e.anchor_addr = g->lo + 0x1800;
+    e.check = "ico_diag_log";
+    e.check_addr = g->lo + 0x1880;
+    e.image_lo = g->lo;
+    e.image_hi = g->hi;
+    e.text_lo = g->lo + 0x1000;
+    e.text_hi = g->lo + 0x5000;
+    e.game_lo[1] = g->lo + bss;
+    e.game_hi[1] = e.game_lo[1] + PG_BSS_N;
+    e.arch = ICO_CODE_A64;
+    g->tab = ico_symtab_parse(nm, n, &e, why, sizeof why);
+    CHECK(g->tab != NULL, "the arm64 table: %s", why);
+    return g->tab != NULL ? 0 : -1;
+}
+
+static void pg_free(Pg *g)
+{
+    ico_symtab_free(g->tab);
+    free(g->raw);
+    memset(g, 0, sizeof *g);
+}
+
+static void pg_image(const Pg *g, IcoStateImage *im)
+{
+    memset(im, 0, sizeof *im);
+    im->lo = g->lo;
+    im->hi = g->hi;
+    im->text_lo = g->lo + 0x1000;
+    im->text_hi = g->lo + 0x5000;
+}
+
+/* fiber 1's control page (saved registers) and live stack, fiber 2's
+   registers, and the arena */
+static void *pg_save2(const Pg *a, const uint64_t *regs, int nr, const uint64_t *stack, int ns,
+                      const uint64_t *regs2, int nr2, const uint64_t *arena, int na, size_t *n,
+                      IcoXbStats *st)
+{
+    IcoXbProc p;
+    IcoXbRefs *r;
+    void *sec = NULL;
+
+    memset(&p, 0, sizeof p);
+    p.tab = a->tab;
+    pg_image(a, &p.image);
+    p.game_lo[1] = a->lo + a->bss;
+    p.game_hi[1] = p.game_lo[1] + PG_BSS_N;
+    p.any_address = 1;
+    p.judge_lo = 0x0000007400000000ull;
+    *n = 0;
+    memset(st, 0, sizeof *st);
+    r = ico_xb_begin(&p);
+    if (r == NULL) {
+        return NULL;
+    }
+    ico_xb_frames(r, 1);
+    ico_xb_where(r, "fiber slot 0's control page");
+    ico_xb_scan(r, regs, (size_t)nr * 8u, (uint64_t)(uintptr_t)regs, 1);
+    ico_xb_where(r, "fiber slot 0's stack");
+    ico_xb_scan(r, stack, (size_t)ns * 8u, (uint64_t)(uintptr_t)stack, 1);
+    if (nr2 > 0) {
+        ico_xb_frames(r, 2);
+        ico_xb_where(r, "fiber slot 1's control page");
+        ico_xb_scan(r, regs2, (size_t)nr2 * 8u, (uint64_t)(uintptr_t)regs2, 1);
+    }
+    ico_xb_frames(r, 0);
+    ico_xb_where(r, "the arena");
+    ico_xb_scan(r, arena, (size_t)na * 8u, (uint64_t)(uintptr_t)arena, 1);
+    CHECK(ico_xb_finish(r, &sec, n, st) == 0, "ico_xb_finish");
+    return sec;
+}
+
+static void *pg_save(const Pg *a, const uint64_t *regs, int nr, const uint64_t *stack, int ns,
+                     const uint64_t *arena, int na, size_t *n, IcoXbStats *st)
+{
+    return pg_save2(a, regs, nr, stack, ns, NULL, 0, arena, na, n, st);
+}
+
+static int pg_check(const void *sec, size_t n, const Pg *b, const Pg *a, IcoXbVerdict *v)
+{
+    IcoXbNow now;
+
+    memset(&now, 0, sizeof now);
+    now.tab = b->tab;
+    pg_image(b, &now.image);
+    now.game_lo[1] = b->lo + b->bss;
+    now.game_hi[1] = now.game_lo[1] + PG_BSS_N;
+    now.old_game_lo[1] = a->lo + a->bss;
+    now.old_game_hi[1] = now.old_game_lo[1] + PG_BSS_N;
+    now.old_image_lo = 0x0000007400000000ull;
+    return ico_xb_check(sec, n, &now, v);
+}
+
+/* w translated as fiber `fiber` (its slot + 1; 0: outside the fibers)
+   holds it */
+static uint64_t pg_xlate(const IcoXbVerdict *v, uint64_t w, int fiber)
+{
+    IcoStateXlate xl;
+    uint64_t to = 0;
+
+    memset(&xl, 0, sizeof xl);
+    xl.span = v->span;
+    xl.n_span = v->n_span;
+    xl.point = v->point;
+    xl.n_point = v->n_point;
+    xl.fiber_point = (const IcoStateSpan *const *)v->fiber_point;
+    xl.fiber_n_point = v->fiber_n_point;
+    xl.n_fiber = v->n_fiber;
+    xl.fiber = fiber;
+    return ico_state_xlate(&xl, w, &to) ? to : w;
+}
+
+static void test_pages(void)
+{
+    Pg a, b;
+    IcoXbStats st;
+    IcoXbVerdict v;
+    uint64_t regs[4], stack[2], arena[1];
+    void *sec = NULL;
+    size_t n = 0;
+    int k;
+
+    if (pg_make(&a, 0x1000, 0x1100, PG_BSS, 0x13000) != 0) {
+        pg_free(&a);
+        return;
+    }
+    regs[0] = a.lo + a.f_a + 8;         /* a return address in f_a */
+    regs[1] = a.lo + a.f_b + 4;         /* one in f_b */
+    regs[2] = a.lo + PG_BSS;            /* x19: VAR1's (and VAR2's) page */
+    regs[3] = a.lo + PG_BSS + 0x1000;   /* x21: VAR3's page */
+    stack[0] = a.lo + PG_BSS + 0x1000;  /* VAR3's page spilled */
+    stack[1] = a.lo + PG_BSS + PG_VAR1; /* an ordinary address of VAR1 */
+    arena[0] = a.lo + 0x13000;          /* s_buf: page-aligned, ordinary */
+    sec = pg_save(&a, regs, 4, stack, 2, arena, 1, &n, &st);
+    CHECK(sec != NULL && st.pages == 2 && st.producers == 3 && st.left == 0,
+          "two page words of fiber 1, three ADRPs make them (%u, %u; %u unnamed)", st.pages,
+          st.producers, st.left);
+    /* B: the functions elsewhere, the bss 0x400 into its page (VAR1 and VAR2
+       still share one page), s_buf at a page's start too */
+    if (pg_make(&b, 0x1200, 0x1300, PG_BSS + 0x400, 0x14000) == 0 && sec != NULL) {
+        k = pg_check(sec, n, &b, &a, &v);
+        CHECK(k == ICO_XB_OK && v.pages == 2, "B loads, two page words by their ADRPs: %d %s", k,
+              v.why);
+        if (k == ICO_XB_OK) {
+            CHECK(pg_xlate(&v, regs[2], 1) == b.lo + PG_BSS,
+                  "VAR1's page is B's page of VAR1 (not the range's move, +0x400): 0x%llx",
+                  (unsigned long long)(pg_xlate(&v, regs[2], 1) - b.lo));
+            CHECK(pg_xlate(&v, regs[3], 1) == b.lo + PG_BSS + 0x1000, "VAR3's page in B");
+            CHECK(pg_xlate(&v, regs[2], 0) == b.lo + PG_BSS + 0x400,
+                  "outside the fiber the same value is the range's address");
+            CHECK(pg_xlate(&v, stack[1], 1) == b.lo + PG_BSS + 0x400 + PG_VAR1,
+                  "an ordinary address of VAR1 moves with the range");
+            CHECK(pg_xlate(&v, arena[0], 0) == b.lo + 0x14000,
+                  "the arena's page-aligned s_buf: an ordinary address, by its symbol");
+            CHECK(pg_xlate(&v, regs[0], 1) == b.lo + 0x1200 + 8, "the return address in f_a");
+        }
+        ico_xb_verdict_free(&v);
+    }
+    pg_free(&b);
+    /* B2: the bss 0x900 into a page: VAR1 stays on the first page, VAR2
+       moves to the next: f_a's two ADRPs make two pages */
+    if (pg_make(&b, 0x1200, 0x1300, PG_BSS + 0x900, 0x14000) == 0 && sec != NULL) {
+        k = pg_check(sec, n, &b, &a, &v);
+        CHECK(k == ICO_XB_DATA && strstr(v.why, "f_a+0x0 and f_a+0x8") != NULL &&
+                  strstr(v.why, "cannot be told") != NULL,
+              "the two producers disagree: refused: %d %s", k, v.why);
+        ico_xb_verdict_free(&v);
+    }
+    pg_free(&b);
+    free(sec);
+    /* one page word on two fibers whose frames' ADRPs aim at VAR1 (f_c) and
+       VAR2 (f_d): in B2 the two variables lie on two pages, and each fiber
+       gets its own (the owner's rc4 state holds such a word: 0x2589000 on
+       fibers 87, 90 and 94) */
+    {
+        uint64_t r1[2], r2[2];
+
+        r1[0] = a.lo + a.f_a + 0x44; /* a return address in f_c */
+        r1[1] = a.lo + PG_BSS;
+        r2[0] = a.lo + a.f_a + 0x84; /* in f_d */
+        r2[1] = a.lo + PG_BSS;
+        sec = pg_save2(&a, r1, 2, NULL, 0, r2, 2, NULL, 0, &n, &st);
+        CHECK(sec != NULL && st.pages == 2 && st.producers == 2 && st.left == 0,
+              "one page word on two fibers (%u entries, %u producers)", st.pages, st.producers);
+        if (pg_make(&b, 0x1200, 0x1300, PG_BSS + 0x900, 0x14000) == 0 && sec != NULL) {
+            k = pg_check(sec, n, &b, &a, &v);
+            CHECK(k == ICO_XB_OK && v.pages == 2, "B2 loads it: %d %s", k, v.why);
+            if (k == ICO_XB_OK) {
+                CHECK(pg_xlate(&v, r1[1], 1) == b.lo + PG_BSS, "fiber 1: VAR1's page");
+                CHECK(pg_xlate(&v, r2[1], 2) == b.lo + PG_BSS + 0x1000, "fiber 2: VAR2's page");
+            }
+            ico_xb_verdict_free(&v);
+        }
+        pg_free(&b);
+        free(sec);
+    }
+    /* a page word also seen outside the frames (the arena holds VAR3's page
+       as an address): the two readings differ in B, refused */
+    arena[0] = a.lo + PG_BSS + 0x1000;
+    sec = pg_save(&a, regs, 4, stack, 1, arena, 1, &n, &st);
+    if (pg_make(&b, 0x1200, 0x1300, PG_BSS + 0x400, 0x14000) == 0 && sec != NULL) {
+        k = pg_check(sec, n, &b, &a, &v);
+        CHECK(k == ICO_XB_DATA && strstr(v.why, "both the page an ADRP in f_b+0x0 makes") != NULL,
+              "a page word that is an ordinary address too: refused: %d %s", k, v.why);
+        ico_xb_verdict_free(&v);
+    }
+    pg_free(&b);
+    free(sec);
+    /* a page-aligned word on the fiber that no ADRP there makes (s_buf's
+       start), which B's s_buf moves into a page: an ordinary address */
+    regs[2] = a.lo + 0x13000;
+    sec = pg_save(&a, regs, 3, stack, 0, arena, 0, &n, &st);
+    CHECK(sec != NULL && st.pages == 0 && st.producers == 0 && st.left == 0,
+          "a page-aligned word no ADRP on its fiber makes: no page word (%u)", st.pages);
+    if (pg_make(&b, 0x1200, 0x1300, PG_BSS + 0x400, 0x14040) == 0 && sec != NULL) {
+        k = pg_check(sec, n, &b, &a, &v);
+        CHECK(k == ICO_XB_OK && pg_xlate(&v, regs[2], 1) == b.lo + 0x14040,
+              "translated as the ordinary address of s_buf, into a page: %d %s", k, v.why);
+        ico_xb_verdict_free(&v);
+    }
+    pg_free(&b);
+    free(sec);
+    pg_free(&a);
+}
+
 int main(void)
 {
     test_sections();
@@ -878,5 +1288,7 @@ int main(void)
     test_refuse();
     test_hashed();
     test_format();
+    test_masked();
+    test_pages();
     return ico_check_summary("state_name");
 }

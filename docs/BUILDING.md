@@ -892,7 +892,10 @@ watchdog report names its functions on the phone
 sizes (a local whose name is not unique with its source file in a fifth column, from
 `llvm-readelf -s`'s FILE entries) and its allocated sections from `llvm-readelf -S`
 (`section <address> <size> <flags> <name>`; the package fails without the `.text` and `.rodata`
-lines), which the save states' table reads
+lines) and the compiler's private `.data.rel.ro` objects from `ico_pc.map`
+(`tools/android_syms_lines.py relro`), which the save states' table reads; the package fails when
+two writable data symbols share a name (`tools/android_syms_lines.py check`: a save state could not
+tell them apart)
 ([PLATFORM.md](port/PLATFORM.md#across-versions)); the signed APK is checked to hold it stored.
 Before the APK takes the table, `tools/state_carry_check.py` judges the library with it and the
 package fails unless every initialised pointer of the game's data is one a save state can name

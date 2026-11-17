@@ -47,7 +47,14 @@ Outputs (committed; port/data/gen/):
   <slug>/table_desc.c one field list per record type (host offset by offsetof,
                       EE offset from the disc's layout, sizes, kind), bit-field
                       setters and bit maps, the EE-layout asserts (PAL), one
-                      row per member section and the set ico_table_set_<slug>
+                      row per member section and the set ico_table_set_<slug>;
+                      its statics carry the slug (fields_<slug>_<type>,
+                      record_<slug>_<type>, set_<slug>_..., map_<slug>_...):
+                      the seven files share one name, which is all the
+                      library's symbol table (FILE entries) and an archive
+                      member can tell them apart by, and a save state names
+                      a static by its file and name (docs/port/PLATFORM.md
+                      "Across versions")
   <slug>/ee_symbols.c the address -> host function / object registry of the
                       set's pointer words (sorted by EE address)
   <slug>/tables.cmake the set's two sources
@@ -1009,7 +1016,7 @@ def gen_set(st, pal, host, pool_size, earlier):
     for rec in records:
         for i, (f, eo, es, kind, extra) in enumerate(field_list(st, rec)):
             if kind == "BITS":
-                fn = f"set_{rec.key}_{i}"
+                fn = f"set_{slug}_{rec.key}_{i}"
                 setters[(rec.key, i)] = fn
                 cast = "(int32_t)" if f.signed else ""
                 c.append(f"static void {fn}(void *r, uint32_t v)")
@@ -1018,7 +1025,7 @@ def gen_set(st, pal, host, pool_size, earlier):
                 c.append("}")
                 c.append("")
             elif kind == "BITMAP":
-                nm = f"map_{rec.key}_{i}"
+                nm = f"map_{slug}_{rec.key}_{i}"
                 maps[(rec.key, i)] = nm
                 vals = ", ".join("0xFF" if b is None else str(b) for b in extra)
                 c.append(f"/* {rec.schema['type']}.{f.path}: host bit i is bit map[i] of the {es} "
@@ -1027,7 +1034,7 @@ def gen_set(st, pal, host, pool_size, earlier):
                 c.append("")
     for rec in records:
         T = rec.ctype
-        c.append(f"static const IcoTableField fields_{rec.key}[] = {{")
+        c.append(f"static const IcoTableField fields_{slug}_{rec.key}[] = {{")
         for i, (f, eo, es, kind, extra) in enumerate(field_list(st, rec)):
             path = f.path
             mp, val = "NULL", "0"
@@ -1049,9 +1056,9 @@ def gen_set(st, pal, host, pool_size, earlier):
     for rec in records:
         T = rec.ctype
         size = rec.ee_size if slug == "pal" else f"0x{st.ee_size(rec):X}"
-        c.append(f"static const IcoTableRecord record_{rec.key} = {{\"{rec.schema['type']}\", "
-                 f"sizeof({T}), {size}, fields_{rec.key}, "
-                 f"sizeof(fields_{rec.key}) / sizeof(fields_{rec.key}[0])}};")
+        c.append(f"static const IcoTableRecord record_{slug}_{rec.key} = "
+                 f"{{\"{rec.schema['type']}\", sizeof({T}), {size}, fields_{slug}_{rec.key}, "
+                 f"sizeof(fields_{slug}_{rec.key}) / sizeof(fields_{slug}_{rec.key}[0])}};")
     c.append("")
     c.append(f"static const IcoTableRow rows_{slug}[] = {{")
     for m, s, r, rec, crc in st.tables:
@@ -1064,7 +1071,7 @@ def gen_set(st, pal, host, pool_size, earlier):
             name = s["syms"][0][0]
             host = f"&{name}" if s["count"] is None else name
             c.append(f"    {{\"{m}\", \"{name}\", {sec}, 0x{r['lo']:08X}u, 0x{r['hi']:08X}u, 0x{crc:08X}u, "
-                     f"{g.start_of(s, r)}, {s['count'] or 1}, &record_{rec.key}, (void *){host}, "
+                     f"{g.start_of(s, r)}, {s['count'] or 1}, &record_{slug}_{rec.key}, (void *){host}, "
                      f"{host_counts[name]}, ICO_TID_{name}}},")
     c.append("};")
     c.append("")

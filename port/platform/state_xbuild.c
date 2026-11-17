@@ -36,8 +36,10 @@ enum {
     H_LEFT = 60,
     H_BYTES = 64,
     /* version 3 */
-    H_POOL = 64, /* the windows' pool's bytes */
-    H_LIST = 68, /* the listed words nothing names */
+    H_POOL = 64,  /* the windows' pool's bytes */
+    H_LIST = 68,  /* the listed words nothing names */
+    H_PAGES = 72, /* the page words (arm64) */
+    H_PRODS = 76, /* their producers */
     H_BYTES3 = 80
 };
 
@@ -48,6 +50,13 @@ enum {
 #define POINT_BYTES 64u /* version 3 */
 #define BLOCK_BYTES 40u
 #define LIST_BYTES 40u
+#define PAGE_BYTES 16u /* a page word: the word, its fiber, PG_* */
+#define PROD_BYTES 24u /* a producer: its unit's old start, the page, the offset, the fiber */
+/* a page word's flags */
+#define PG_PROD 1u /* an ADRP of a function on its fiber's stack makes it */
+#define PG_ORDINARY                                                                                \
+    2u /* also an ordinary address: seen outside fibers' frames, a symbol,
+                          block or start-up value at it */
 
 /* a unit record's flags */
 #define XU_START 1u    /* a strict word at its start (a function pointer) */
@@ -57,6 +66,9 @@ enum {
 /* a data record's flags */
 #define XD_EXACT 1u
 #define XD_SECTION 2u /* the input section holding it: its size and the symbol's offset */
+#define XD_MASKED                                                                                  \
+    4u /* version 3: one of a repeated name in data read-only after loading,
+                         told apart by its masked contents' hash (at 40) and its ordinal */
 /* a point's kinds */
 #define XP_SNAP 1u   /* aux: the byte offset of the value in the game's data range */
 #define XP_TEXT 2u   /* version 2: content, a C string of at most ICO_XB_CONTENT bytes */
@@ -108,6 +120,12 @@ typedef struct SnapPair {
     uint64_t off; /* bytes from the game data range's start */
 } SnapPair;
 
+typedef struct FrameWord {
+    uint64_t w;
+    uint32_t fiber;
+    uint32_t kind; /* 0 in the code (a return address), 1 a page-aligned word outside it */
+} FrameWord;
+
 typedef struct BlockRec {
     const char *name;
     uint64_t size, addr, offset;
@@ -124,6 +142,11 @@ struct IcoXbRefs {
     unsigned n_labels;
     uint16_t cur_label;
     uint64_t cur_at;
+    uint32_t fiber; /* the scans read this fiber's registers and stack (ico_xb_frames; 0 none) */
+    int a64;        /* the table's code is arm64: page words (state_xbuild.h) */
+    FrameWord *fw;  /* each fiber's return addresses and page-aligned words */
+    size_t n_fw, cap_fw;
+    int fw_failed;
     size_t n_vals;
     int overflow;
     BlockRec block[ICO_XB_MAX_BLOCKS];
@@ -173,6 +196,7 @@ IcoXbRefs *ico_xb_begin(const IcoXbProc *p)
         return NULL;
     }
     r->n_labels = 1; /* 0: not known */
+    r->a64 = p->tab != NULL && p->tab->env.arch == ICO_CODE_A64;
     /* the game data's start-up words that point into the image, by value
        (the first offset of each value wins) */
     if (p->snap != NULL && p->snap_words > 0) {
@@ -221,7 +245,36 @@ void ico_xb_word(IcoXbRefs *r, uint64_t w, int strict)
         r->at[s] = r->cur_at;
         r->n_vals++;
     }
-    r->strict[s] |= (uint8_t)(strict != 0);
+    if (strict) {
+        /* 1 strict, 2 in a fiber's frames, 4 outside them */
+        r->strict[s] |= (uint8_t)(1u | (r->fiber != 0 ? 2u : 4u));
+        if (r->fiber != 0 && r->a64) {
+            const int code = w >= r->p.image.text_lo && w < r->p.image.text_hi;
+
+            if (code || (w & 0xFFFu) == 0) {
+                if (r->n_fw == r->cap_fw) {
+                    const size_t cap = r->cap_fw ? r->cap_fw * 2 : 1024;
+                    FrameWord *q = (FrameWord *)realloc(r->fw, cap * sizeof *q);
+
+                    if (q == NULL) {
+                        r->fw_failed = 1;
+                        return;
+                    }
+                    r->fw = q;
+                    r->cap_fw = cap;
+                }
+                r->fw[r->n_fw].w = w;
+                r->fw[r->n_fw].fiber = r->fiber;
+                r->fw[r->n_fw].kind = code ? 0u : 1u;
+                r->n_fw++;
+            }
+        }
+    }
+}
+
+void ico_xb_frames(IcoXbRefs *r, int fiber)
+{
+    r->fiber = fiber > 0 ? (uint32_t)fiber : 0u;
 }
 
 void ico_xb_where(IcoXbRefs *r, const char *what)
@@ -505,6 +558,339 @@ static uint32_t str_put(Out *s, const char *name)
     return at;
 }
 
+/* A data symbol read-only once loaded: in the image's read-only data, or in
+   a section the file names .data.rel.ro* (relocated pointers, then never
+   written), .rodata* or .rdata*.  Its bytes are the build's own, the same
+   at every run but for the pointers. */
+static int settled(const IcoSymTab *t, const IcoStateImage *im, const IcoSymData *d)
+{
+    uint64_t lo, hi;
+    const IcoSymSec *s;
+
+    if (!d->exact || d->size == 0) {
+        return 0;
+    }
+    if (ro_range(im, d->start, &lo, &hi) && d->start + d->size <= hi) {
+        return 1;
+    }
+    s = ico_symtab_section_at(t, d->start);
+    if (s == NULL || d->start + d->size > s->start + s->size) {
+        return 0;
+    }
+    {
+        const char *n = ico_symtab_name(t, s->name);
+
+        return strncmp(n, ".data.rel.ro", 12) == 0 || strncmp(n, ".rodata", 7) == 0 ||
+               strncmp(n, ".rdata", 6) == 0;
+    }
+}
+
+/* XXH3-64 of the n bytes at `at` with every 8-byte-aligned word that lies
+   in the image (a relocated pointer: another value in every build and run)
+   replaced by one mark, so the hash holds the contents and where the
+   pointers are, not where they point */
+static uint64_t masked_hash(uint64_t at, uint64_t n, const IcoStateImage *im)
+{
+    const unsigned char *src = (const unsigned char *)(uintptr_t)at;
+    unsigned char *b = (unsigned char *)malloc(n ? (size_t)n : 1);
+    uint64_t a, h;
+
+    if (b == NULL) {
+        return 0; /* no other build's hash is 0 but by chance: a refusal */
+    }
+    memcpy(b, src, (size_t)n);
+    for (a = (at + 7u) & ~(uint64_t)7u; a + 8 <= at + n; a += 8) {
+        uint64_t w;
+
+        memcpy(&w, b + (a - at), sizeof w);
+        if (w >= im->lo && w <= im->hi) {
+            memset(b + (a - at), 0x5A, sizeof w);
+        }
+    }
+    h = xxh3_64(b, (size_t)n);
+    free(b);
+    return h;
+}
+
+/* --- arm64 page words ---------------------------------------------------------- */
+
+static int64_t sext(uint64_t v, int bits)
+{
+    const uint64_t m = 1ull << (bits - 1);
+
+    return (int64_t)((v ^ m) - m);
+}
+
+/* the page an ADRP at pc makes, or 1 (never a page) when insn is no ADRP */
+static uint64_t adrp_page(uint64_t pc, uint32_t insn)
+{
+    uint64_t imm;
+
+    if ((insn & 0x9F000000u) != 0x90000000u) {
+        return 1;
+    }
+    imm = (uint64_t)((insn >> 5) & 0x7FFFFu) << 2 | ((insn >> 29) & 3u);
+    return (pc & ~(uint64_t)0xFFF) + (uint64_t)(sext(imm, 21) * 4096);
+}
+
+static uint32_t code32(uint64_t at)
+{
+    uint32_t v;
+
+    memcpy(&v, (const void *)(uintptr_t)at, sizeof v);
+    return v; /* arm64 code is little-endian, as the hosts that run it */
+}
+
+typedef struct PageEnt {
+    uint64_t w;
+    uint32_t fiber, flags;
+} PageEnt;
+
+typedef struct Prod {
+    uint64_t ustart, page;
+    uint32_t off, fiber;
+} Prod;
+
+static int fw_cmp(const void *a, const void *b)
+{
+    const FrameWord *x = (const FrameWord *)a, *y = (const FrameWord *)b;
+
+    if (x->fiber != y->fiber) {
+        return x->fiber < y->fiber ? -1 : 1;
+    }
+    if (x->kind != y->kind) {
+        return x->kind < y->kind ? -1 : 1;
+    }
+    return x->w < y->w ? -1 : x->w > y->w;
+}
+
+static int pe_cmp(const void *a, const void *b)
+{
+    const PageEnt *x = (const PageEnt *)a, *y = (const PageEnt *)b;
+
+    if (x->w != y->w) {
+        return x->w < y->w ? -1 : 1;
+    }
+    return x->fiber < y->fiber ? -1 : x->fiber > y->fiber;
+}
+
+static int u64_cmp(const void *a, const void *b)
+{
+    const uint64_t x = *(const uint64_t *)a, y = *(const uint64_t *)b;
+
+    return x < y ? -1 : x > y;
+}
+
+static size_t slot_find(const IcoXbRefs *r, uint64_t w)
+{
+    size_t s = slot_of(w);
+
+    while (r->key[s] != 0 && r->key[s] != w) {
+        s = (s + 1) & (ICO_XB_MAX_VALUES - 1);
+    }
+    return s;
+}
+
+static int snap_has(const IcoXbRefs *r, uint64_t w)
+{
+    size_t lo = 0, hi = r->n_snap;
+
+    while (lo < hi) {
+        const size_t mid = lo + (hi - lo) / 2;
+
+        if (r->snap[mid].value < w) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    return lo < r->n_snap && r->snap[lo].value == w;
+}
+
+/* The page words of every fiber and their producers: for each fiber, the
+   units its return addresses lie in (past their start: functions with a
+   frame on its stack), each such unit's ADRPs, and those whose page is one
+   of the fiber's page-aligned words.  *pe sorted by (word, fiber).  0, or -1
+   (no memory). */
+static int plan_pages(IcoXbRefs *r, const IcoSymTab *t, uint8_t *uflag, PageEnt **pe, size_t *npe,
+                      Prod **pr, size_t *npr)
+{
+    size_t a, b, i, k, cap_pe = 0, cap_pr = 0;
+    size_t *units = NULL;
+
+    *pe = NULL;
+    *pr = NULL;
+    *npe = *npr = 0;
+    if (r->n_fw == 0) {
+        return 0;
+    }
+    qsort(r->fw, r->n_fw, sizeof *r->fw, fw_cmp);
+    units = (size_t *)malloc(r->n_fw * sizeof *units);
+    if (units == NULL) {
+        return -1;
+    }
+    for (a = 0; a < r->n_fw; a = b) {
+        const uint32_t f = r->fw[a].fiber;
+        size_t p0, nu = 0;
+
+        for (b = a; b < r->n_fw && r->fw[b].fiber == f; b++) {}
+        for (p0 = a; p0 < b && r->fw[p0].kind == 0; p0++) {}
+        if (p0 == b) {
+            continue; /* no page-aligned word on this fiber */
+        }
+        for (i = a; i < p0; i++) {
+            const uint64_t w = r->fw[i].w;
+            const IcoSymUnit *u = ico_symtab_unit_at(t, w);
+
+            if (u != NULL && w != u->start) {
+                units[nu++] = (size_t)(u - t->unit);
+            } else if (u != NULL && w >= r->p.image.text_lo + 4) {
+                /* a unit's start just after a call (BL, BLR) that ends the
+                   unit before it: the return address of a call that does not
+                   return, the caller's frame on this stack (its code must be
+                   alike, as any frame's) */
+                const IcoSymUnit *c = ico_symtab_unit_at(t, w - 4);
+                const uint32_t insn = code32(w - 4);
+
+                if (c != NULL &&
+                    ((insn & 0xFC000000u) == 0x94000000u || (insn & 0xFFFFFC1Fu) == 0xD63F0000u)) {
+                    units[nu++] = (size_t)(c - t->unit);
+                    uflag[c - t->unit] |= XU_POSITION;
+                }
+            }
+        }
+        if (nu > 1) {
+            qsort(units, nu, sizeof *units, u64_cmp);
+        }
+        for (i = 0; i < b - p0; i++) {
+            const uint64_t w = r->fw[p0 + i].w;
+
+            if (i > 0 && r->fw[p0 + i - 1].w == w) {
+                continue;
+            }
+            if (*npe == cap_pe) {
+                const size_t c = cap_pe ? cap_pe * 2 : 64;
+                PageEnt *q = (PageEnt *)realloc(*pe, c * sizeof *q);
+
+                if (q == NULL) {
+                    free(units);
+                    return -1;
+                }
+                *pe = q;
+                cap_pe = c;
+            }
+            (*pe)[*npe].w = w;
+            (*pe)[*npe].fiber = f;
+            (*pe)[*npe].flags = 0;
+            (*npe)++;
+        }
+        for (i = 0; i < nu; i++) {
+            const IcoSymUnit *u;
+
+            if (i > 0 && units[i] == units[i - 1]) {
+                continue;
+            }
+            u = &t->unit[units[i]];
+            for (k = 0; k + 4 <= u->size; k += 4) {
+                const uint64_t page = adrp_page(u->start + k, code32(u->start + k));
+                size_t lo = p0, hi = b;
+
+                if (page == 1) {
+                    continue;
+                }
+                while (lo < hi) { /* the fiber's page words, sorted */
+                    const size_t mid = lo + (hi - lo) / 2;
+
+                    if (r->fw[mid].w < page) {
+                        lo = mid + 1;
+                    } else {
+                        hi = mid;
+                    }
+                }
+                if (lo == b || r->fw[lo].w != page) {
+                    continue;
+                }
+                if (*npr == cap_pr) {
+                    const size_t c = cap_pr ? cap_pr * 2 : 64;
+                    Prod *q = (Prod *)realloc(*pr, c * sizeof *q);
+
+                    if (q == NULL) {
+                        free(units);
+                        return -1;
+                    }
+                    *pr = q;
+                    cap_pr = c;
+                }
+                (*pr)[*npr].ustart = u->start;
+                (*pr)[*npr].page = page;
+                (*pr)[*npr].off = (uint32_t)k;
+                (*pr)[*npr].fiber = f;
+                (*npr)++;
+            }
+        }
+    }
+    free(units);
+    /* each page word's flags */
+    for (i = 0; i < *npe; i++) {
+        PageEnt *e = &(*pe)[i];
+        int bl;
+
+        for (k = 0; k < *npr; k++) {
+            if ((*pr)[k].fiber == e->fiber && (*pr)[k].page == e->w) {
+                e->flags |= PG_PROD;
+                break;
+            }
+        }
+        if ((r->strict[slot_find(r, e->w)] & 4u) != 0 || ico_symtab_starts_at(t, e->w) ||
+            snap_has(r, e->w)) {
+            e->flags |= PG_ORDINARY;
+        }
+        for (bl = 0; bl < r->n_blocks; bl++) {
+            if (r->block[bl].addr == e->w) {
+                e->flags |= PG_ORDINARY;
+            }
+        }
+    }
+    /* a page-aligned word no ADRP on its fiber makes is an ordinary address
+       (an array element or a variable that starts a page): the ordinary
+       rules alone name it */
+    for (i = k = 0; i < *npe; i++) {
+        if (((*pe)[i].flags & PG_PROD) != 0) {
+            (*pe)[k++] = (*pe)[i];
+        }
+    }
+    *npe = k;
+    if (*npe > 1) {
+        qsort(*pe, *npe, sizeof **pe, pe_cmp);
+    }
+    return 0;
+}
+
+/* 1 when every page word entry of w has a producer and none is ordinary:
+   the page rule alone names it */
+static int page_only(const PageEnt *pe, size_t npe, uint64_t w)
+{
+    size_t lo = 0, hi = npe;
+    int any = 0;
+
+    while (lo < hi) {
+        const size_t mid = lo + (hi - lo) / 2;
+
+        if (pe[mid].w < w) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    for (; lo < npe && pe[lo].w == w; lo++) {
+        if ((pe[lo].flags & (PG_PROD | PG_ORDINARY)) != PG_PROD) {
+            return 0;
+        }
+        any = 1;
+    }
+    return any;
+}
+
 /* a word nothing names: counted, and listed while the list has room */
 static void note_unnamed(const IcoXbRefs *r, const IcoSymTab *t, size_t slot, uint64_t w,
                          unsigned reason, unsigned *flags, unsigned *left, uint64_t *first,
@@ -578,8 +964,12 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
     unsigned char *dflag = NULL;
     Out units = {NULL, 0, 0, 0}, data = {NULL, 0, 0, 0}, points = {NULL, 0, 0, 0},
         blocks = {NULL, 0, 0, 0}, strs = {NULL, 0, 0, 0}, lst = {NULL, 0, 0, 0},
-        pool = {NULL, 0, 0, 0};
-    unsigned flags = 0, nu = 0, nd = 0, np = 0, npos = 0, left = 0, nwin = 0, ntext = 0;
+        pool = {NULL, 0, 0, 0}, pages = {NULL, 0, 0, 0}, prods = {NULL, 0, 0, 0};
+    unsigned flags = 0, nu = 0, nd = 0, np = 0, npos = 0, left = 0, nwin = 0, ntext = 0, nmask = 0;
+    /* arm64: the fibers' page words and the ADRPs that make them */
+    PageEnt *pe = NULL;
+    Prod *pr = NULL;
+    size_t npe = 0, npr = 0;
     uint64_t first_unnamed = 0;
     uint32_t *freq = NULL;
     unsigned char *sec, *q;
@@ -606,16 +996,25 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
     if (r->overflow) {
         flags |= ICO_XB_OVERFLOW;
     }
+    if (r->a64) {
+        flags |= ICO_XB_PAGES;
+    }
+    if (r->fw_failed || (t != NULL && plan_pages(r, t, uflag, &pe, &npe, &pr, &npr) != 0)) {
+        goto done;
+    }
     (void)str_put(&strs, ""); /* offset 0: no name */
     /* each distinct word: what it points into */
     for (i = 0; t != NULL && i < ICO_XB_MAX_VALUES; i++) {
         const uint64_t w = r->key[i];
-        const int strict = r->strict[i] != 0;
+        const int strict = (r->strict[i] & 1) != 0;
         uint64_t rlo = 0, rhi = 0;
         int b, in_block = 0, ro;
 
         if (w == 0) {
             continue;
+        }
+        if (npe > 0 && (w & 0xFFFu) == 0 && page_only(pe, npe, w)) {
+            continue; /* a page an ADRP on its fiber's stack makes: the page rule names it */
         }
         if (w >= p->image.text_lo && w < p->image.text_hi) {
             const IcoSymUnit *u = ico_symtab_unit_at(t, w);
@@ -651,10 +1050,15 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
             /* in read-only data the end address of a sized constant that no
                symbol starts at may be the next, unnamed one's start (a
                string literal after a table): its window names it */
-            if (d != NULL && d->unique &&
-                !(ro && d->exact && w != d->start && w == d->start + d->size)) {
-                dflag[d - t->data] = 1;
-                continue;
+            if (d != NULL && !(ro && d->exact && w != d->start && w == d->start + d->size)) {
+                if (d->unique) {
+                    dflag[d - t->data] = 1;
+                    continue;
+                }
+                if (settled(t, &p->image, d)) {
+                    dflag[d - t->data] = 2; /* by its ordinal and contents */
+                    continue;
+                }
             }
         }
         {
@@ -780,9 +1184,15 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
         put64(q + 16, d->name_hash);
         put32(q + 24, str_put(&strs, ico_symtab_name(t, d->name)));
         put32(q + 28, d->ordinal);
-        put32(q + 32, (d->exact ? XD_EXACT : 0u) | (d->sec_size != 0 ? XD_SECTION : 0u));
-        put32(q + 36, (uint32_t)d->sec_off);
-        put64(q + 40, d->sec_size);
+        if (dflag[i] == 2) {
+            put32(q + 32, XD_EXACT | XD_MASKED);
+            put64(q + 40, masked_hash(d->start, d->size, &p->image));
+            nmask++;
+        } else {
+            put32(q + 32, (d->exact ? XD_EXACT : 0u) | (d->sec_size != 0 ? XD_SECTION : 0u));
+            put32(q + 36, (uint32_t)d->sec_off);
+            put64(q + 40, d->sec_size);
+        }
         nd++;
     }
     for (i = 0; i < (size_t)r->n_blocks; i++) {
@@ -798,6 +1208,29 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
         put64(q + 16, b->offset);
         put32(q + 24, b->flags);
         put32(q + 28, str_put(&strs, b->name));
+    }
+    if (npe > ICO_XB_MAX_PAGES || npr > ICO_XB_MAX_PRODS) {
+        flags |= ICO_XB_OVERFLOW;
+        npe = npr = 0;
+    }
+    for (i = 0; i < npe; i++) {
+        q = out_grow(&pages, PAGE_BYTES);
+        if (q == NULL) {
+            goto done;
+        }
+        put64(q, pe[i].w);
+        put32(q + 8, pe[i].fiber);
+        put32(q + 12, pe[i].flags);
+    }
+    for (i = 0; i < npr; i++) {
+        q = out_grow(&prods, PROD_BYTES);
+        if (q == NULL) {
+            goto done;
+        }
+        put64(q, pr[i].ustart);
+        put64(q + 8, pr[i].page);
+        put32(q + 16, pr[i].off);
+        put32(q + 20, pr[i].fiber);
     }
     for (i = 0; i < st->listed; i++) {
         const IcoXbUnnamed *u = &st->list[i];
@@ -816,10 +1249,11 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
         put32(q + 36, u->reason);
     }
     if (units.failed || data.failed || points.failed || blocks.failed || strs.failed ||
-        lst.failed || pool.failed) {
+        lst.failed || pool.failed || pages.failed || prods.failed) {
         goto done;
     }
-    total = H_BYTES3 + units.n + data.n + points.n + blocks.n + lst.n + strs.n + pool.n;
+    total = H_BYTES3 + units.n + data.n + points.n + blocks.n + lst.n + pages.n + prods.n + strs.n +
+            pool.n;
     sec = (unsigned char *)malloc(total);
     if (sec == NULL) {
         goto done;
@@ -841,6 +1275,8 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
     put32(sec + H_LEFT, left);
     put32(sec + H_POOL, (uint32_t)pool.n);
     put32(sec + H_LIST, st->listed);
+    put32(sec + H_PAGES, (uint32_t)npe);
+    put32(sec + H_PRODS, (uint32_t)npr);
     q = sec + H_BYTES3;
     put_bytes(q, units.p, units.n);
     q += units.n;
@@ -852,6 +1288,10 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
     q += blocks.n;
     put_bytes(q, lst.p, lst.n);
     q += lst.n;
+    put_bytes(q, pages.p, pages.n);
+    q += pages.n;
+    put_bytes(q, prods.p, prods.n);
+    q += prods.n;
     put_bytes(q, strs.p, strs.n);
     q += strs.n;
     put_bytes(q, pool.p, pool.n);
@@ -862,6 +1302,9 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
     st->data = nd;
     st->points = np;
     st->windows = nwin;
+    st->pages = (unsigned)npe;
+    st->producers = (unsigned)npr;
+    st->data_masked = nmask;
     st->texts = ntext;
     st->blocks = (unsigned)r->n_blocks;
     st->values = (unsigned)r->n_vals;
@@ -877,6 +1320,11 @@ done:
     free(blocks.p);
     free(strs.p);
     free(lst.p);
+    free(pages.p);
+    free(prods.p);
+    free(pe);
+    free(pr);
+    free(r->fw);
     free(pool.p);
     free(freq);
     free(uflag);
@@ -1027,12 +1475,58 @@ static uint64_t find_text(const IcoStateImage *im, const unsigned char *b, size_
     return 0;
 }
 
+static void fiber_points_free(IcoXbVerdict *v)
+{
+    size_t i;
+
+    for (i = 0; v->fiber_point != NULL && i < v->n_fiber; i++) {
+        free(v->fiber_point[i]);
+    }
+    free(v->fiber_point);
+    free(v->fiber_n_point);
+    v->fiber_point = NULL;
+    v->fiber_n_point = NULL;
+    v->n_fiber = 0;
+}
+
+/* a unit with a thread inside, then and now (the page words' producers) */
+typedef struct UMap {
+    uint64_t old, now;
+    const char *name;
+} UMap;
+
+static int umap_cmp(const void *a, const void *b)
+{
+    const UMap *x = (const UMap *)a, *y = (const UMap *)b;
+
+    return x->old < y->old ? -1 : x->old > y->old;
+}
+
+static const UMap *umap_find(const UMap *m, size_t n, uint64_t old)
+{
+    size_t lo = 0, hi = n;
+
+    while (lo < hi) {
+        const size_t mid = lo + (hi - lo) / 2;
+
+        if (m[mid].old < old) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    return lo < n && m[lo].old == old ? &m[lo] : NULL;
+}
+
 int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *v)
 {
     const unsigned char *sec = (const unsigned char *)secv;
-    uint32_t flags, nu, nd, np, nb, ns, ver, npool = 0, nl = 0;
-    size_t dbytes, pbytes, hbytes;
-    const unsigned char *u, *d, *pt, *bl, *ls, *pool;
+    uint32_t flags, nu, nd, np, nb, ns, ver, npool = 0, nl = 0, npg = 0, npr = 0;
+    size_t dbytes, pbytes, hbytes, n_umap = 0;
+    const unsigned char *u, *d, *pt, *bl, *ls, *pg, *prd, *pool;
+    UMap *umap = NULL;
+    Spans *fsp = NULL; /* per fiber slot (fiber id - 1): its page words' points */
+    size_t n_fsp = 0, f_i;
     const char *str;
     IcoSymTab *t = now->tab;
     IcoStateImage im = now->image;
@@ -1070,12 +1564,15 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
     if (ver >= 3) {
         npool = get32(sec + H_POOL);
         nl = get32(sec + H_LIST);
+        npg = get32(sec + H_PAGES);
+        npr = get32(sec + H_PRODS);
     }
     if (nu > ICO_XB_MAX_UNITS || nd > ICO_XB_MAX_DATA || np > ICO_XB_MAX_POINTS ||
-        nb > ICO_XB_MAX_BLOCKS || nl > ICO_XB_LIST || npool > ICO_XB_POOL_BYTES || ns == 0 ||
+        nb > ICO_XB_MAX_BLOCKS || nl > ICO_XB_LIST || npg > ICO_XB_MAX_PAGES ||
+        npr > ICO_XB_MAX_PRODS || npool > ICO_XB_POOL_BYTES || ns == 0 ||
         (uint64_t)hbytes + (uint64_t)nu * UNIT_BYTES + (uint64_t)nd * dbytes +
                 (uint64_t)np * pbytes + (uint64_t)nb * BLOCK_BYTES + (uint64_t)nl * LIST_BYTES +
-                ns + npool !=
+                (uint64_t)npg * PAGE_BYTES + (uint64_t)npr * PROD_BYTES + ns + npool !=
             n) {
         FAIL(v, ICO_XB_BAD, "the symbols record does not hold what it says");
     }
@@ -1084,7 +1581,9 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
     pt = d + (size_t)nd * dbytes;
     bl = pt + (size_t)np * pbytes;
     ls = bl + (size_t)nb * BLOCK_BYTES;
-    str = (const char *)(ls + (size_t)nl * LIST_BYTES);
+    pg = ls + (size_t)nl * LIST_BYTES;
+    prd = pg + (size_t)npg * PAGE_BYTES;
+    str = (const char *)(prd + (size_t)npr * PROD_BYTES);
     pool = (const unsigned char *)str + ns;
     if (str[ns - 1] != '\0') {
         FAIL(v, ICO_XB_BAD, "the symbols record's names are cut");
@@ -1181,6 +1680,12 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
              "saved it left them unnamed",
              name, v->left);
     }
+    /* an arm64 record without the page words (a format 2 one, an rc of this
+       format): its fibers' ADRP pages cannot be told from addresses */
+    if ((int)get32(sec + H_ARCH) == ICO_CODE_A64 && (flags & ICO_XB_PAGES) == 0) {
+        FAIL(v, ICO_XB_PINNED,
+             "it was made before the pages its threads keep in registers were recorded");
+    }
     if (t == NULL) {
         FAIL(v, ICO_XB_PINNED, "this build has no symbol file");
     }
@@ -1197,6 +1702,10 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
         }
     }
     /* the units */
+    umap = (UMap *)malloc((nu ? nu : 1) * sizeof *umap);
+    if (umap == NULL) {
+        FAIL(v, ICO_XB_BAD, "no memory for the units' map");
+    }
     for (i = 0; i < nu; i++) {
         const unsigned char *r = u + (size_t)i * UNIT_BYTES;
         const uint64_t start = get64(r), size = get64(r + 8);
@@ -1218,6 +1727,12 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
                       ((f & XU_START) != 0 && !((f & XU_UNIQUE) != 0 && w->unique)))) {
             FAIL(v, ICO_XB_CODE, "the function %s changed", nm);
         }
+        if (same && strict) {
+            umap[n_umap].old = start;
+            umap[n_umap].now = w->start;
+            umap[n_umap].name = nm;
+            n_umap++;
+        }
         if (same && size > 0) {
             span_add(&spans, start, start + size - 1, w->start);
         } else if ((f & XU_START) != 0) {
@@ -1236,6 +1751,20 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
 
         if (w == NULL) {
             FAIL(v, ICO_XB_DATA, "the variable %s is missing here", nm);
+        }
+        if (ver >= 3 && (df & XD_MASKED) != 0) {
+            /* one of a repeated name in data read-only after loading: the
+               same place among its namesakes, the same size and the same
+               contents, its pointers masked */
+            if (!w->exact || w->size != get64(r + 8) ||
+                masked_hash(w->start, w->size, &im) != get64(r + 40)) {
+                FAIL(v, ICO_XB_DATA, "the read-only data %s (number %u of its name) changed", nm,
+                     (unsigned)get32(r + 28) + 1u);
+            }
+            span_add(&spans, get64(r), get64(r) + get64(r + 8), w->start);
+            v->data++;
+            v->data_masked++;
+            continue;
         }
         if (!w->unique) {
             FAIL(v, ICO_XB_DATA, "the variable %s is not the only one of its name here", nm);
@@ -1336,14 +1865,122 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
     }
     spans_settle(&spans, 0);
     spans_settle(&points, 1);
+    /* the page words (arm64, state_xbuild.h): each entry's reading; a word
+       its producers name becomes a point of its own fiber */
+    if (npg > 0) {
+        IcoStateXlate xl;
+
+        if (n_umap > 1) {
+            qsort(umap, n_umap, sizeof *umap, umap_cmp);
+        }
+        for (i = 0; i < npg; i++) {
+            const uint32_t fib = get32(pg + (size_t)i * PAGE_BYTES + 8);
+
+            if (fib == 0 || fib > 65536u) {
+                FAIL(v, ICO_XB_BAD, "the symbols record's page word names no fiber");
+            }
+            if ((size_t)fib > n_fsp) {
+                n_fsp = fib;
+            }
+        }
+        fsp = (Spans *)calloc(n_fsp, sizeof *fsp);
+        if (fsp == NULL) {
+            FAIL(v, ICO_XB_BAD, "no memory for the page words");
+        }
+        memset(&xl, 0, sizeof xl);
+        xl.span = spans.p;
+        xl.n_span = spans.n;
+        xl.point = points.p;
+        xl.n_point = points.n;
+        for (i = 0; i < npg; i++) {
+            const unsigned char *e = pg + (size_t)i * PAGE_BYTES;
+            const uint64_t w = get64(e);
+            const uint32_t fib = get32(e + 8), fl = get32(e + 12);
+            uint64_t q = 0, to = 0, k;
+            const char *nm0 = "";
+            uint32_t off0 = 0;
+            int have_q = 0, have_n;
+
+            for (k = 0; k < npr; k++) {
+                const unsigned char *pp = prd + (size_t)k * PROD_BYTES;
+                const UMap *m;
+                uint64_t np2;
+
+                if (get32(pp + 20) != fib || get64(pp + 8) != w) {
+                    continue;
+                }
+                m = umap_find(umap, n_umap, get64(pp));
+                if (m == NULL) {
+                    FAIL(v, ICO_XB_BAD,
+                         "the symbols record's page word names no function with a "
+                         "thread inside");
+                }
+                np2 = adrp_page(m->now + get32(pp + 16), code32(m->now + get32(pp + 16)));
+                if (np2 == 1) {
+                    FAIL(v, ICO_XB_CODE, "the function %s changed", m->name);
+                }
+                if (!have_q) {
+                    q = np2;
+                    have_q = 1;
+                    nm0 = m->name;
+                    off0 = get32(pp + 16);
+                } else if (np2 != q) {
+                    snprintf(name, sizeof name, "%s+0x%x and %s+0x%x", nm0, (unsigned)off0, m->name,
+                             (unsigned)get32(pp + 16));
+                    FAIL(v, ICO_XB_DATA,
+                         "fiber slot %u holds the page 0x%llx, which ADRPs in %s make: here they "
+                         "make two pages, and which one it came from cannot be told",
+                         (unsigned)(fib - 1u), (unsigned long long)w, name);
+                }
+            }
+            have_n = ico_state_xlate(&xl, w, &to);
+            if (have_q) {
+                if ((fl & PG_ORDINARY) != 0 && have_n && to != q) {
+                    snprintf(name, sizeof name, "%s+0x%x", nm0, (unsigned)off0);
+                    FAIL(v, ICO_XB_DATA,
+                         "0x%llx is both the page an ADRP in %s makes and an address of its own, "
+                         "and here the two lie apart (0x%llx, 0x%llx)",
+                         (unsigned long long)w, name, (unsigned long long)q,
+                         (unsigned long long)to);
+                }
+                span_add(&fsp[fib - 1], w, w, q);
+                v->pages++;
+            } else {
+                FAIL(v, ICO_XB_BAD, "the symbols record's page word has no producer");
+            }
+        }
+        v->fiber_point = (IcoStateSpan **)calloc(n_fsp, sizeof *v->fiber_point);
+        v->fiber_n_point = (size_t *)calloc(n_fsp, sizeof *v->fiber_n_point);
+        if (v->fiber_point == NULL || v->fiber_n_point == NULL) {
+            FAIL(v, ICO_XB_BAD, "no memory for the page words");
+        }
+        v->n_fiber = n_fsp;
+        for (f_i = 0; f_i < n_fsp; f_i++) {
+            if (fsp[f_i].failed) {
+                FAIL(v, ICO_XB_BAD, "no memory for the page words");
+            }
+            spans_settle(&fsp[f_i], 1);
+            v->fiber_point[f_i] = fsp[f_i].p;
+            v->fiber_n_point[f_i] = fsp[f_i].n;
+            fsp[f_i].p = NULL;
+        }
+    }
     v->span = spans.p;
     v->n_span = spans.n;
     v->point = points.p;
     v->n_point = points.n;
     v->kind = ICO_XB_OK;
+    free(umap);
+    free(fsp);
     return ICO_XB_OK;
 fail:
 #undef FAIL
+    free(umap);
+    for (f_i = 0; f_i < n_fsp; f_i++) {
+        free(fsp[f_i].p);
+    }
+    free(fsp);
+    fiber_points_free(v);
     free(spans.p);
     free(points.p);
     return v->kind;
@@ -1351,6 +1988,7 @@ fail:
 
 void ico_xb_verdict_free(IcoXbVerdict *v)
 {
+    fiber_points_free(v);
     free(v->span);
     free(v->point);
     free(v->block_off);

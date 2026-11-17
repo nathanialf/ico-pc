@@ -814,227 +814,227 @@ _Static_assert(sizeof((((WaySrcGrp *)0)->bridge)) == 4, "WaySrcGrp.bridge: jun26
 _Static_assert(sizeof((((WaySrcGrp *)0)->bridgeEnd)) == 8, "WaySrcGrp.bridgeEnd: jun26 size");
 _Static_assert(sizeof((((WaySrcGrp *)0)->active)) == 4, "WaySrcGrp.active: jun26 size");
 
-static void set_LtProperty_27(void *r, uint32_t v)
+static void set_jun26_LtProperty_27(void *r, uint32_t v)
 {
     ((LtProperty *)r)->fade_cancel = v;
 }
 
-static void set_LtProperty_28(void *r, uint32_t v)
+static void set_jun26_LtProperty_28(void *r, uint32_t v)
 {
     ((LtProperty *)r)->masked = v;
 }
 
-static void set_LtProperty_29(void *r, uint32_t v)
+static void set_jun26_LtProperty_29(void *r, uint32_t v)
 {
     ((LtProperty *)r)->defaultMask = v;
 }
 
-static void set_PObjMdl_6(void *r, uint32_t v)
+static void set_jun26_PObjMdl_6(void *r, uint32_t v)
 {
     ((PObjMdl *)r)->pktKind = v;
 }
 
-static void set_PObjMdl_7(void *r, uint32_t v)
+static void set_jun26_PObjMdl_7(void *r, uint32_t v)
 {
     ((PObjMdl *)r)->shade = v;
 }
 
-static void set_PObjMdl_8(void *r, uint32_t v)
+static void set_jun26_PObjMdl_8(void *r, uint32_t v)
 {
     ((PObjMdl *)r)->lod = v;
 }
 
-static void set_ActModeRec_12(void *r, uint32_t v)
+static void set_jun26_ActModeRec_12(void *r, uint32_t v)
 {
     ((ActModeRec *)r)->carried = v;
 }
 
-static void set_ActModeRec_13(void *r, uint32_t v)
+static void set_jun26_ActModeRec_13(void *r, uint32_t v)
 {
     ((ActModeRec *)r)->bit1 = v;
 }
 
-static void set_ActModeRec_14(void *r, uint32_t v)
+static void set_jun26_ActModeRec_14(void *r, uint32_t v)
 {
     ((ActModeRec *)r)->onChain = v;
 }
 
-static void set_ActModeRec_15(void *r, uint32_t v)
+static void set_jun26_ActModeRec_15(void *r, uint32_t v)
 {
     ((ActModeRec *)r)->softIk = v;
 }
 
-static void set_ActModeRec_16(void *r, uint32_t v)
+static void set_jun26_ActModeRec_16(void *r, uint32_t v)
 {
     ((ActModeRec *)r)->bit9 = v;
 }
 
-static void set_ActModeRec_17(void *r, uint32_t v)
+static void set_jun26_ActModeRec_17(void *r, uint32_t v)
 {
     ((ActModeRec *)r)->skipMarked = v;
 }
 
-static void set_ActModeRec_18(void *r, uint32_t v)
+static void set_jun26_ActModeRec_18(void *r, uint32_t v)
 {
     ((ActModeRec *)r)->escort = v;
 }
 
-static void set_ActModeRec_19(void *r, uint32_t v)
+static void set_jun26_ActModeRec_19(void *r, uint32_t v)
 {
     ((ActModeRec *)r)->holdDir = v;
 }
 
-static void set_ActModeRec_20(void *r, uint32_t v)
+static void set_jun26_ActModeRec_20(void *r, uint32_t v)
 {
     ((ActModeRec *)r)->saveInfo = v;
 }
 
-static void set_AttackKindEntry_5(void *r, uint32_t v)
+static void set_jun26_AttackKindEntry_5(void *r, uint32_t v)
 {
     ((AttackKindEntry *)r)->weapon = v;
 }
 
-static void set_AttackKindEntry_6(void *r, uint32_t v)
+static void set_jun26_AttackKindEntry_6(void *r, uint32_t v)
 {
     ((AttackKindEntry *)r)->down = v;
 }
 
-static void set_AttackKindEntry_7(void *r, uint32_t v)
+static void set_jun26_AttackKindEntry_7(void *r, uint32_t v)
 {
     ((AttackKindEntry *)r)->unguardable = v;
 }
 
-static void set_AttackKindEntry_8(void *r, uint32_t v)
+static void set_jun26_AttackKindEntry_8(void *r, uint32_t v)
 {
     ((AttackKindEntry *)r)->stone = v;
 }
 
-static void set_AttackKindEntry_9(void *r, uint32_t v)
+static void set_jun26_AttackKindEntry_9(void *r, uint32_t v)
 {
     ((AttackKindEntry *)r)->toRoot = v;
 }
 
-static void set_AttackKindEntry_10(void *r, uint32_t v)
+static void set_jun26_AttackKindEntry_10(void *r, uint32_t v)
 {
     ((AttackKindEntry *)r)->padBits = v;
 }
 
-static void set_MotionDef_88(void *r, uint32_t v)
+static void set_jun26_MotionDef_88(void *r, uint32_t v)
 {
     ((MotionDef *)r)->dirFrames = (int32_t)v;
 }
 
 /* MotionDef.modeBits: host bit i is bit map[i] of the 8 bytes at the jun26 record's 0x17C (config/motion_bits.jun26.txt) */
-static const uint8_t map_MotionDef_89[32] = {0,  1,  2,  3,  4,  5,  6,  7,    8,  9,  10,
-                                             11, 12, 13, 14, 15, 27, 28, 0xFF, 16, 17, 18,
-                                             21, 22, 19, 20, 29, 30, 23, 24,   25, 26};
+static const uint8_t map_jun26_MotionDef_89[32] = {0,  1,  2,  3,  4,  5,  6,  7,    8,  9,  10,
+                                                   11, 12, 13, 14, 15, 27, 28, 0xFF, 16, 17, 18,
+                                                   21, 22, 19, 20, 29, 30, 23, 24,   25, 26};
 
 /* MotionDef.flags: host bit i is bit map[i] of the 8 bytes at the jun26 record's 0x17C (config/motion_bits.jun26.txt) */
-static const uint8_t map_MotionDef_90[32] = {
+static const uint8_t map_jun26_MotionDef_90[32] = {
     41,   40, 0xFF, 38, 0xFF, 0xFF, 0xFF, 39, 0xFF, 0xFF, 0xFF, 43, 0xFF, 0xFF, 0xFF, 0xFF,
     0xFF, 37, 54,   34, 57,   58,   49,   50, 51,   52,   56,   53, 48,   47,   55,   46};
 
 /* MotionDef.flags2: host bit i is bit map[i] of the 8 bytes at the jun26 record's 0x17C (config/motion_bits.jun26.txt) */
-static const uint8_t map_MotionDef_91[32] = {
+static const uint8_t map_jun26_MotionDef_91[32] = {
     45,   44,   31,   32,   33,   35,   0xFF, 36,   0xFF, 42,   0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-static void set_SeEnvDef_6(void *r, uint32_t v)
+static void set_jun26_SeEnvDef_6(void *r, uint32_t v)
 {
     ((SeEnvDef *)r)->ownPos = v;
 }
 
-static void set_SeEnvDef_7(void *r, uint32_t v)
+static void set_jun26_SeEnvDef_7(void *r, uint32_t v)
 {
     ((SeEnvDef *)r)->levelHeight = v;
 }
 
-static void set_SeEnvDef_8(void *r, uint32_t v)
+static void set_jun26_SeEnvDef_8(void *r, uint32_t v)
 {
     ((SeEnvDef *)r)->stereo = v;
 }
 
-static void set_SeEnvDef_9(void *r, uint32_t v)
+static void set_jun26_SeEnvDef_9(void *r, uint32_t v)
 {
     ((SeEnvDef *)r)->maxVolumeType = v;
 }
 
-static void set_SeDef_8(void *r, uint32_t v)
+static void set_jun26_SeDef_8(void *r, uint32_t v)
 {
     ((SeDef *)r)->mailMode = v;
 }
 
-static void set_SeDef_9(void *r, uint32_t v)
+static void set_jun26_SeDef_9(void *r, uint32_t v)
 {
     ((SeDef *)r)->playMode = v;
 }
 
-static void set_SeDef_10(void *r, uint32_t v)
+static void set_jun26_SeDef_10(void *r, uint32_t v)
 {
     ((SeDef *)r)->shockStop = v;
 }
 
-static void set_SeDef_11(void *r, uint32_t v)
+static void set_jun26_SeDef_11(void *r, uint32_t v)
 {
     ((SeDef *)r)->audible = v;
 }
 
-static void set_SeDef_12(void *r, uint32_t v)
+static void set_jun26_SeDef_12(void *r, uint32_t v)
 {
     ((SeDef *)r)->procRan = v;
 }
 
-static void set_SeDef_13(void *r, uint32_t v)
+static void set_jun26_SeDef_13(void *r, uint32_t v)
 {
     ((SeDef *)r)->waitSkip = v;
 }
 
-static void set_SeBank_2(void *r, uint32_t v)
+static void set_jun26_SeBank_2(void *r, uint32_t v)
 {
     ((SeBank *)r)->loaded = v;
 }
 
-static void set_StgPre_42(void *r, uint32_t v)
+static void set_jun26_StgPre_42(void *r, uint32_t v)
 {
     ((StgPre *)r)->reverbDepth = v;
 }
 
-static void set_StgPre_43(void *r, uint32_t v)
+static void set_jun26_StgPre_43(void *r, uint32_t v)
 {
     ((StgPre *)r)->kidnapSeconds = v;
 }
 
-static void set_StgPre_44(void *r, uint32_t v)
+static void set_jun26_StgPre_44(void *r, uint32_t v)
 {
     ((StgPre *)r)->mpegNo = v;
 }
 
-static void set_StgPre_45(void *r, uint32_t v)
+static void set_jun26_StgPre_45(void *r, uint32_t v)
 {
     ((StgPre *)r)->attrTop = v;
 }
 
-static void set_StgPre_46(void *r, uint32_t v)
+static void set_jun26_StgPre_46(void *r, uint32_t v)
 {
     ((StgPre *)r)->flag0 = v;
 }
 
-static void set_StgPre_47(void *r, uint32_t v)
+static void set_jun26_StgPre_47(void *r, uint32_t v)
 {
     ((StgPre *)r)->flag1 = v;
 }
 
-static void set_StgPre_48(void *r, uint32_t v)
+static void set_jun26_StgPre_48(void *r, uint32_t v)
 {
     ((StgPre *)r)->flag2 = v;
 }
 
-static void set_StgPre_49(void *r, uint32_t v)
+static void set_jun26_StgPre_49(void *r, uint32_t v)
 {
     ((StgPre *)r)->flag3 = v;
 }
 
-static const IcoTableField fields_sceMcIconSys[] = {
+static const IcoTableField fields_jun26_sceMcIconSys[] = {
     {"Head", offsetof(sceMcIconSys, Head), sizeof((((sceMcIconSys *)0)->Head)[0]), 0, 1, 4,
      ICO_TF_INT, 0, 0, 0, NULL, NULL, 0},
     {"Reserv1", offsetof(sceMcIconSys, Reserv1), sizeof((((sceMcIconSys *)0)->Reserv1)), 4, 2, 1,
@@ -1083,7 +1083,7 @@ static const IcoTableField fields_sceMcIconSys[] = {
      1, 512, ICO_TF_INT, 0, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_AccessaryRec[] = {
+static const IcoTableField fields_jun26_AccessaryRec[] = {
     {"model", offsetof(AccessaryRec, model), sizeof((((AccessaryRec *)0)->model)), 0, 4, 1,
      ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
     {"model2", offsetof(AccessaryRec, model2), sizeof((((AccessaryRec *)0)->model2)), 4, 4, 1,
@@ -1098,7 +1098,7 @@ static const IcoTableField fields_AccessaryRec[] = {
      ICO_TF_FLOAT, 0, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_IdleRangeRec[] = {
+static const IcoTableField fields_jun26_IdleRangeRec[] = {
     {"idleMotion", offsetof(IdleRangeRec, idleMotion), sizeof((((IdleRangeRec *)0)->idleMotion)), 0,
      4, 1, ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
     {"orientRow", offsetof(IdleRangeRec, orientRow), sizeof((((IdleRangeRec *)0)->orientRow)), 4, 4,
@@ -1111,7 +1111,7 @@ static const IcoTableField fields_IdleRangeRec[] = {
      4, 1, ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_IntrMail[] = {
+static const IcoTableField fields_jun26_IntrMail[] = {
     {"motion", offsetof(IntrMail, motion), sizeof((((IntrMail *)0)->motion)), 0, 4, 1, ICO_TF_FUNC,
      0, 0, 0, NULL, NULL, 0},
     {"extra", offsetof(IntrMail, extra), sizeof((((IntrMail *)0)->extra)), 4, 4, 1, ICO_TF_FUNC, 0,
@@ -1128,15 +1128,15 @@ static const IcoTableField fields_IntrMail[] = {
      0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_char_32_[] = {
+static const IcoTableField fields_jun26_char_32_[] = {
     {"", 0, sizeof((*(ico_td_rec_char_32_ *)0)[0]), 0, 1, 32, ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_float[] = {
+static const IcoTableField fields_jun26_float[] = {
     {"", 0, sizeof((*(ico_td_rec_float *)0)), 0, 4, 1, ICO_TF_FLOAT, 0, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_MotionOrientEntry[] = {
+static const IcoTableField fields_jun26_MotionOrientEntry[] = {
     {"id", offsetof(MotionOrientEntry, id), sizeof((((MotionOrientEntry *)0)->id)), 0, 4, 1,
      ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
     {"kind", offsetof(MotionOrientEntry, kind), sizeof((((MotionOrientEntry *)0)->kind)), 4, 4, 1,
@@ -1151,7 +1151,7 @@ static const IcoTableField fields_MotionOrientEntry[] = {
      4, 1, ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_ClingRec[] = {
+static const IcoTableField fields_jun26_ClingRec[] = {
     {"rot", offsetof(ClingRec, rot), sizeof((((ClingRec *)0)->rot)[0]), 0, 4, 3, ICO_TF_INT, 1, 0,
      0, NULL, NULL, 0},
     {"pos", offsetof(ClingRec, pos), sizeof((((ClingRec *)0)->pos)[0]), 12, 4, 3, ICO_TF_FLOAT, 0,
@@ -1164,7 +1164,7 @@ static const IcoTableField fields_ClingRec[] = {
      0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_OaRecB[] = {
+static const IcoTableField fields_jun26_OaRecB[] = {
     {"baseMode", offsetof(OaRecB, baseMode), sizeof((((OaRecB *)0)->baseMode)), 0, 4, 1, ICO_TF_INT,
      1, 0, 0, NULL, NULL, 0},
     {"anim2", offsetof(OaRecB, anim2), sizeof((((OaRecB *)0)->anim2)), 4, 4, 1, ICO_TF_INT, 1, 0, 0,
@@ -1177,7 +1177,7 @@ static const IcoTableField fields_OaRecB[] = {
      0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_ObjKindEnt[] = {
+static const IcoTableField fields_jun26_ObjKindEnt[] = {
     {"name", offsetof(ObjKindEnt, name), sizeof((((ObjKindEnt *)0)->name)[0]), 0, 1, 36, ICO_TF_INT,
      1, 0, 0, NULL, NULL, 0},
     {"targetTime", offsetof(ObjKindEnt, targetTime), sizeof((((ObjKindEnt *)0)->targetTime)), 36, 4,
@@ -1214,7 +1214,7 @@ static const IcoTableField fields_ObjKindEnt[] = {
      ICO_TF_FUNC, 0, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_GenGeo[] = {
+static const IcoTableField fields_jun26_GenGeo[] = {
     {"scale", offsetof(GenGeo, scale), sizeof((((GenGeo *)0)->scale)[0]), 0, 4, 3, ICO_TF_FLOAT, 0,
      0, 0, NULL, NULL, 0},
     {"rot", offsetof(GenGeo, rot), sizeof((((GenGeo *)0)->rot)[0]), 12, 4, 3, ICO_TF_FLOAT, 0, 0, 0,
@@ -1249,16 +1249,16 @@ static const IcoTableField fields_GenGeo[] = {
      0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_ParallelMotionRow[] = {
+static const IcoTableField fields_jun26_ParallelMotionRow[] = {
     {"motion", offsetof(ParallelMotionRow, motion), sizeof((((ParallelMotionRow *)0)->motion)[0]),
      0, 4, 37, ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_unsigned_short[] = {
+static const IcoTableField fields_jun26_unsigned_short[] = {
     {"", 0, sizeof((*(ico_td_rec_unsigned_short *)0)), 0, 2, 1, ICO_TF_INT, 0, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_LtProperty[] = {
+static const IcoTableField fields_jun26_LtProperty[] = {
     {"word0", offsetof(LtProperty, word0), sizeof((((LtProperty *)0)->word0)), 0, 0, 1,
      ICO_TF_DEFAULT, 1, 0, 0, NULL, NULL, 0xFFFFFFFFu},
     {"word4", offsetof(LtProperty, word4), sizeof((((LtProperty *)0)->word4)), 0, 0, 1,
@@ -1313,32 +1313,32 @@ static const IcoTableField fields_LtProperty[] = {
      0, 0, NULL, NULL, 0},
     {"texV", offsetof(LtProperty, texV), sizeof((((LtProperty *)0)->texV)), 72, 4, 1, ICO_TF_INT, 1,
      0, 0, NULL, NULL, 0},
-    {"fade_cancel", 0, 0, 84, 4, 1, ICO_TF_BITS, 0, 2, 1, set_LtProperty_27, NULL, 0},
-    {"masked", 0, 0, 84, 4, 1, ICO_TF_BITS, 0, 1, 1, set_LtProperty_28, NULL, 0},
-    {"defaultMask", 0, 0, 84, 4, 1, ICO_TF_BITS, 0, 0, 1, set_LtProperty_29, NULL, 0},
+    {"fade_cancel", 0, 0, 84, 4, 1, ICO_TF_BITS, 0, 2, 1, set_jun26_LtProperty_27, NULL, 0},
+    {"masked", 0, 0, 84, 4, 1, ICO_TF_BITS, 0, 1, 1, set_jun26_LtProperty_28, NULL, 0},
+    {"defaultMask", 0, 0, 84, 4, 1, ICO_TF_BITS, 0, 0, 1, set_jun26_LtProperty_29, NULL, 0},
 };
 
-static const IcoTableField fields_char_[] = {
+static const IcoTableField fields_jun26_char_[] = {
     {"", 0, sizeof((*(ico_td_rec_char_ *)0)), 0, 4, 1, ICO_TF_DATA, 0, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_int[] = {
+static const IcoTableField fields_jun26_int[] = {
     {"", 0, sizeof((*(ico_td_rec_int *)0)), 0, 4, 1, ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_EnemyKindRec[] = {
+static const IcoTableField fields_jun26_EnemyKindRec[] = {
     {"list", offsetof(EnemyKindRec, list), sizeof((((EnemyKindRec *)0)->list)), 0, 4, 1,
      ICO_TF_DATA, 0, 0, 0, NULL, NULL, 0},
     {"kind", offsetof(EnemyKindRec, kind), sizeof((((EnemyKindRec *)0)->kind)), 4, 4, 1, ICO_TF_INT,
      1, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_sceVu0FVECTOR[] = {
+static const IcoTableField fields_jun26_sceVu0FVECTOR[] = {
     {"", 0, sizeof((*(ico_td_rec_sceVu0FVECTOR *)0)[0]), 0, 4, 4, ICO_TF_FLOAT, 0, 0, 0, NULL, NULL,
      0},
 };
 
-static const IcoTableField fields_EnemyModelSet[] = {
+static const IcoTableField fields_jun26_EnemyModelSet[] = {
     {"kinds", offsetof(EnemyModelSet, kinds), sizeof((((EnemyModelSet *)0)->kinds)), 0, 4, 1,
      ICO_TF_DATA, 0, 0, 0, NULL, NULL, 0},
     {"kindNum", offsetof(EnemyModelSet, kindNum), sizeof((((EnemyModelSet *)0)->kindNum)), 4, 4, 1,
@@ -1349,19 +1349,19 @@ static const IcoTableField fields_EnemyModelSet[] = {
      ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_EnemyModelSet_[] = {
+static const IcoTableField fields_jun26_EnemyModelSet_[] = {
     {"", 0, sizeof((*(ico_td_rec_EnemyModelSet_ *)0)), 0, 4, 1, ICO_TF_DATA, 0, 0, 0, NULL, NULL,
      0},
 };
 
-static const IcoTableField fields_EnemySet[] = {
+static const IcoTableField fields_jun26_EnemySet[] = {
     {"list", offsetof(EnemySet, list), sizeof((((EnemySet *)0)->list)), 0, 4, 1, ICO_TF_DATA, 0, 0,
      0, NULL, NULL, 0},
     {"n", offsetof(EnemySet, n), sizeof((((EnemySet *)0)->n)), 4, 4, 1, ICO_TF_INT, 1, 0, 0, NULL,
      NULL, 0},
 };
 
-static const IcoTableField fields_ItemBreakRec[] = {
+static const IcoTableField fields_jun26_ItemBreakRec[] = {
     {"stayAnim", offsetof(ItemBreakRec, stayAnim), sizeof((((ItemBreakRec *)0)->stayAnim)), 0, 4, 1,
      ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
     {"stayMode", offsetof(ItemBreakRec, stayMode), sizeof((((ItemBreakRec *)0)->stayMode)), 0, 0, 1,
@@ -1380,14 +1380,14 @@ static const IcoTableField fields_ItemBreakRec[] = {
      ICO_TF_INT, 0, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_MotOriAlt[] = {
+static const IcoTableField fields_jun26_MotOriAlt[] = {
     {"req", offsetof(MotOriAlt, req), sizeof((((MotOriAlt *)0)->req)), 0, 4, 1, ICO_TF_INT, 1, 0, 0,
      NULL, NULL, 0},
     {"alt", offsetof(MotOriAlt, alt), sizeof((((MotOriAlt *)0)->alt)), 4, 4, 1, ICO_TF_INT, 1, 0, 0,
      NULL, NULL, 0},
 };
 
-static const IcoTableField fields_PObjMdl[] = {
+static const IcoTableField fields_jun26_PObjMdl[] = {
     {"path", offsetof(PObjMdl, path), sizeof((((PObjMdl *)0)->path)[0]), 128, 1, 48, ICO_TF_INT, 1,
      0, 0, NULL, NULL, 0},
     {"collPath", offsetof(PObjMdl, collPath), sizeof((((PObjMdl *)0)->collPath)[0]), 176, 1, 64,
@@ -1400,23 +1400,23 @@ static const IcoTableField fields_PObjMdl[] = {
      4, 1, ICO_TF_FLOAT, 0, 0, 0, NULL, NULL, 0},
     {"shadowLength", offsetof(PObjMdl, shadowLength), sizeof((((PObjMdl *)0)->shadowLength)), 324,
      4, 1, ICO_TF_FLOAT, 0, 0, 0, NULL, NULL, 0},
-    {"pktKind", 0, 0, 328, 4, 1, ICO_TF_BITS, 0, 0, 4, set_PObjMdl_6, NULL, 0},
-    {"shade", 0, 0, 328, 4, 1, ICO_TF_BITS, 0, 4, 4, set_PObjMdl_7, NULL, 0},
-    {"lod", 0, 0, 328, 4, 1, ICO_TF_BITS, 0, 8, 4, set_PObjMdl_8, NULL, 0},
+    {"pktKind", 0, 0, 328, 4, 1, ICO_TF_BITS, 0, 0, 4, set_jun26_PObjMdl_6, NULL, 0},
+    {"shade", 0, 0, 328, 4, 1, ICO_TF_BITS, 0, 4, 4, set_jun26_PObjMdl_7, NULL, 0},
+    {"lod", 0, 0, 328, 4, 1, ICO_TF_BITS, 0, 8, 4, set_jun26_PObjMdl_8, NULL, 0},
     {"modelPath", offsetof(PObjMdl, modelPath), sizeof((((PObjMdl *)0)->modelPath)[0]), 0, 1, 64,
      ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
     {"shadowPath", offsetof(PObjMdl, shadowPath), sizeof((((PObjMdl *)0)->shadowPath)[0]), 64, 1,
      64, ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_SePackage[] = {
+static const IcoTableField fields_jun26_SePackage[] = {
     {"se", offsetof(SePackage, se), sizeof((((SePackage *)0)->se)[0]), 0, 4, 2, ICO_TF_INT, 1, 0, 0,
      NULL, NULL, 0},
     {"id", offsetof(SePackage, id), sizeof((((SePackage *)0)->id)), 8, 4, 1, ICO_TF_INT, 1, 0, 0,
      NULL, NULL, 0},
 };
 
-static const IcoTableField fields_LtProp[] = {
+static const IcoTableField fields_jun26_LtProp[] = {
     {"first", offsetof(LtProp, first), sizeof((((LtProp *)0)->first)), 0, 4, 1, ICO_TF_INT, 1, 0, 0,
      NULL, NULL, 0},
     {"last", offsetof(LtProp, last), sizeof((((LtProp *)0)->last)), 4, 4, 1, ICO_TF_INT, 1, 0, 0,
@@ -1447,7 +1447,7 @@ static const IcoTableField fields_LtProp[] = {
      0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_WaySrcPt[] = {
+static const IcoTableField fields_jun26_WaySrcPt[] = {
     {"pos", offsetof(WaySrcPt, pos), sizeof((((WaySrcPt *)0)->pos)[0]), 0, 4, 3, ICO_TF_FLOAT, 0, 0,
      0, NULL, NULL, 0},
     {"radius", offsetof(WaySrcPt, radius), sizeof((((WaySrcPt *)0)->radius)), 12, 4, 1,
@@ -1460,7 +1460,7 @@ static const IcoTableField fields_WaySrcPt[] = {
      ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_FumbleRow[] = {
+static const IcoTableField fields_jun26_FumbleRow[] = {
     {"pos", offsetof(FumbleRow, pos), sizeof((((FumbleRow *)0)->pos)[0]), 0, 4, 3, ICO_TF_FLOAT, 0,
      0, 0, NULL, NULL, 0},
     {"rotY", offsetof(FumbleRow, rotY), sizeof((((FumbleRow *)0)->rotY)), 12, 4, 1, ICO_TF_FLOAT, 0,
@@ -1471,7 +1471,7 @@ static const IcoTableField fields_FumbleRow[] = {
      0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_ActModeRec[] = {
+static const IcoTableField fields_jun26_ActModeRec[] = {
     {"ent[0].act", offsetof(ActModeRec, ent[0].act), sizeof((((ActModeRec *)0)->ent[0].act)), 0, 4,
      1, ICO_TF_FUNC, 0, 0, 0, NULL, NULL, 0},
     {"ent[0].word4", offsetof(ActModeRec, ent[0].word4), sizeof((((ActModeRec *)0)->ent[0].word4)),
@@ -1496,18 +1496,18 @@ static const IcoTableField fields_ActModeRec[] = {
      ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
     {"mail", offsetof(ActModeRec, mail), sizeof((((ActModeRec *)0)->mail)), 68, 4, 1, ICO_TF_INT, 1,
      0, 0, NULL, NULL, 0},
-    {"carried", 0, 0, 76, 4, 1, ICO_TF_BITS, 0, 8, 1, set_ActModeRec_12, NULL, 0},
-    {"bit1", 0, 0, 76, 4, 1, ICO_TF_BITS, 0, 7, 1, set_ActModeRec_13, NULL, 0},
-    {"onChain", 0, 0, 76, 4, 1, ICO_TF_BITS, 0, 6, 1, set_ActModeRec_14, NULL, 0},
-    {"softIk", 0, 0, 76, 4, 1, ICO_TF_BITS, 0, 5, 1, set_ActModeRec_15, NULL, 0},
-    {"bit9", 0, 0, 76, 4, 1, ICO_TF_BITS, 0, 4, 1, set_ActModeRec_16, NULL, 0},
-    {"skipMarked", 0, 0, 76, 4, 1, ICO_TF_BITS, 0, 2, 1, set_ActModeRec_17, NULL, 0},
-    {"escort", 0, 0, 76, 4, 1, ICO_TF_BITS, 0, 0, 1, set_ActModeRec_18, NULL, 0},
-    {"holdDir", 0, 0, 76, 4, 1, ICO_TF_BITS, 0, 1, 1, set_ActModeRec_19, NULL, 0},
-    {"saveInfo", 0, 0, 76, 4, 1, ICO_TF_BITS, 0, 3, 1, set_ActModeRec_20, NULL, 0},
+    {"carried", 0, 0, 76, 4, 1, ICO_TF_BITS, 0, 8, 1, set_jun26_ActModeRec_12, NULL, 0},
+    {"bit1", 0, 0, 76, 4, 1, ICO_TF_BITS, 0, 7, 1, set_jun26_ActModeRec_13, NULL, 0},
+    {"onChain", 0, 0, 76, 4, 1, ICO_TF_BITS, 0, 6, 1, set_jun26_ActModeRec_14, NULL, 0},
+    {"softIk", 0, 0, 76, 4, 1, ICO_TF_BITS, 0, 5, 1, set_jun26_ActModeRec_15, NULL, 0},
+    {"bit9", 0, 0, 76, 4, 1, ICO_TF_BITS, 0, 4, 1, set_jun26_ActModeRec_16, NULL, 0},
+    {"skipMarked", 0, 0, 76, 4, 1, ICO_TF_BITS, 0, 2, 1, set_jun26_ActModeRec_17, NULL, 0},
+    {"escort", 0, 0, 76, 4, 1, ICO_TF_BITS, 0, 0, 1, set_jun26_ActModeRec_18, NULL, 0},
+    {"holdDir", 0, 0, 76, 4, 1, ICO_TF_BITS, 0, 1, 1, set_jun26_ActModeRec_19, NULL, 0},
+    {"saveInfo", 0, 0, 76, 4, 1, ICO_TF_BITS, 0, 3, 1, set_jun26_ActModeRec_20, NULL, 0},
 };
 
-static const IcoTableField fields_AttackKindEntry[] = {
+static const IcoTableField fields_jun26_AttackKindEntry[] = {
     {"word0", offsetof(AttackKindEntry, word0), sizeof((((AttackKindEntry *)0)->word0)[0]), 0, 4, 4,
      ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
     {"motion", offsetof(AttackKindEntry, motion), sizeof((((AttackKindEntry *)0)->motion)), 16, 4,
@@ -1518,15 +1518,15 @@ static const IcoTableField fields_AttackKindEntry[] = {
      1, ICO_TF_FLOAT, 0, 0, 0, NULL, NULL, 0},
     {"power", offsetof(AttackKindEntry, power), sizeof((((AttackKindEntry *)0)->power)), 28, 4, 1,
      ICO_TF_FLOAT, 0, 0, 0, NULL, NULL, 0},
-    {"weapon", 0, 0, 32, 4, 1, ICO_TF_BITS, 0, 0, 1, set_AttackKindEntry_5, NULL, 0},
-    {"down", 0, 0, 32, 4, 1, ICO_TF_BITS, 0, 1, 1, set_AttackKindEntry_6, NULL, 0},
-    {"unguardable", 0, 0, 32, 4, 1, ICO_TF_BITS, 0, 2, 1, set_AttackKindEntry_7, NULL, 0},
-    {"stone", 0, 0, 32, 4, 1, ICO_TF_BITS, 0, 3, 1, set_AttackKindEntry_8, NULL, 0},
-    {"toRoot", 0, 0, 32, 4, 1, ICO_TF_BITS, 0, 4, 1, set_AttackKindEntry_9, NULL, 0},
-    {"padBits", 0, 0, 32, 4, 1, ICO_TF_BITS, 0, 5, 27, set_AttackKindEntry_10, NULL, 0},
+    {"weapon", 0, 0, 32, 4, 1, ICO_TF_BITS, 0, 0, 1, set_jun26_AttackKindEntry_5, NULL, 0},
+    {"down", 0, 0, 32, 4, 1, ICO_TF_BITS, 0, 1, 1, set_jun26_AttackKindEntry_6, NULL, 0},
+    {"unguardable", 0, 0, 32, 4, 1, ICO_TF_BITS, 0, 2, 1, set_jun26_AttackKindEntry_7, NULL, 0},
+    {"stone", 0, 0, 32, 4, 1, ICO_TF_BITS, 0, 3, 1, set_jun26_AttackKindEntry_8, NULL, 0},
+    {"toRoot", 0, 0, 32, 4, 1, ICO_TF_BITS, 0, 4, 1, set_jun26_AttackKindEntry_9, NULL, 0},
+    {"padBits", 0, 0, 32, 4, 1, ICO_TF_BITS, 0, 5, 27, set_jun26_AttackKindEntry_10, NULL, 0},
 };
 
-static const IcoTableField fields_EscortPoint[] = {
+static const IcoTableField fields_jun26_EscortPoint[] = {
     {"pos", offsetof(EscortPoint, pos), sizeof((((EscortPoint *)0)->pos)[0]), 0, 4, 3, ICO_TF_FLOAT,
      0, 0, 0, NULL, NULL, 0},
     {"area", offsetof(EscortPoint, area), sizeof((((EscortPoint *)0)->area)), 12, 4, 1, ICO_TF_INT,
@@ -1539,7 +1539,7 @@ static const IcoTableField fields_EscortPoint[] = {
      ICO_TF_FLOAT, 0, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_ExitData[] = {
+static const IcoTableField fields_jun26_ExitData[] = {
     {"pos", offsetof(ExitData, pos), sizeof((((ExitData *)0)->pos)[0]), 0, 4, 3, ICO_TF_FLOAT, 0, 0,
      0, NULL, NULL, 0},
     {"rot", offsetof(ExitData, rot), sizeof((((ExitData *)0)->rot)[0]), 12, 4, 3, ICO_TF_FLOAT, 0,
@@ -1554,7 +1554,7 @@ static const IcoTableField fields_ExitData[] = {
      ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_SafePosOffset[] = {
+static const IcoTableField fields_jun26_SafePosOffset[] = {
     {"x", offsetof(SafePosOffset, x), sizeof((((SafePosOffset *)0)->x)), 0, 4, 1, ICO_TF_FLOAT, 0,
      0, 0, NULL, NULL, 0},
     {"y", offsetof(SafePosOffset, y), sizeof((((SafePosOffset *)0)->y)), 4, 4, 1, ICO_TF_FLOAT, 0,
@@ -1565,7 +1565,7 @@ static const IcoTableField fields_SafePosOffset[] = {
      ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_WarpRec[] = {
+static const IcoTableField fields_jun26_WarpRec[] = {
     {"arrive2", offsetof(WarpRec, arrive2), sizeof((((WarpRec *)0)->arrive2)[0]), 0, 4, 4,
      ICO_TF_FLOAT, 0, 0, 0, NULL, NULL, 0},
     {"arrive1", offsetof(WarpRec, arrive1), sizeof((((WarpRec *)0)->arrive1)[0]), 16, 4, 4,
@@ -1592,31 +1592,31 @@ static const IcoTableField fields_WarpRec[] = {
      0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_IconFile[] = {
+static const IcoTableField fields_jun26_IconFile[] = {
     {"name", offsetof(IconFile, name), sizeof((((IconFile *)0)->name)[0]), 0, 1, 32, ICO_TF_INT, 1,
      0, 0, NULL, NULL, 0},
     {"size", offsetof(IconFile, size), sizeof((((IconFile *)0)->size)), 32, 4, 1, ICO_TF_INT, 1, 0,
      0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_IdlingDef[] = {
+static const IcoTableField fields_jun26_IdlingDef[] = {
     {"motion", offsetof(IdlingDef, motion), sizeof((((IdlingDef *)0)->motion)[0]), 0, 4, 3,
      ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_PackKind[] = {
+static const IcoTableField fields_jun26_PackKind[] = {
     {"ext", offsetof(PackKind, ext), sizeof((((PackKind *)0)->ext)[0]), 0, 1, 32, ICO_TF_INT, 1, 0,
      0, NULL, NULL, 0},
     {"func", offsetof(PackKind, func), sizeof((((PackKind *)0)->func)), 32, 4, 1, ICO_TF_FUNC, 0, 0,
      0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_LookTarget[] = {
+static const IcoTableField fields_jun26_LookTarget[] = {
     {"kind", offsetof(LookTarget, kind), sizeof((((LookTarget *)0)->kind)[0]), 0, 4, 3, ICO_TF_INT,
      1, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_MotionDef[] = {
+static const IcoTableField fields_jun26_MotionDef[] = {
     {"eff[0].t", offsetof(MotionDef, eff[0].t), sizeof((((MotionDef *)0)->eff[0].t)), 0, 4, 1,
      ICO_TF_FLOAT, 0, 0, 0, NULL, NULL, 0},
     {"eff[0].no", offsetof(MotionDef, eff[0].no), sizeof((((MotionDef *)0)->eff[0].no)), 4, 4, 1,
@@ -1793,49 +1793,49 @@ static const IcoTableField fields_MotionDef[] = {
      0, 0, 1, ICO_TF_DEFAULT, 1, 0, 0, NULL, NULL, 0x00000000u},
     {"priInputEnd", offsetof(MotionDef, priInputEnd), sizeof((((MotionDef *)0)->priInputEnd)), 378,
      2, 1, ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
-    {"dirFrames", 0, 0, 276, 4, 1, ICO_TF_BITS, 1, 0, 16, set_MotionDef_88, NULL, 0},
+    {"dirFrames", 0, 0, 276, 4, 1, ICO_TF_BITS, 1, 0, 16, set_jun26_MotionDef_88, NULL, 0},
     {"modeBits", offsetof(MotionDef, modeBits), sizeof((((MotionDef *)0)->modeBits)), 380, 8, 1,
-     ICO_TF_BITMAP, 0, 0, 0, NULL, map_MotionDef_89, 0},
+     ICO_TF_BITMAP, 0, 0, 0, NULL, map_jun26_MotionDef_89, 0},
     {"flags", offsetof(MotionDef, flags), sizeof((((MotionDef *)0)->flags)), 380, 8, 1,
-     ICO_TF_BITMAP, 0, 0, 0, NULL, map_MotionDef_90, 0},
+     ICO_TF_BITMAP, 0, 0, 0, NULL, map_jun26_MotionDef_90, 0},
     {"flags2", offsetof(MotionDef, flags2), sizeof((((MotionDef *)0)->flags2)), 380, 8, 1,
-     ICO_TF_BITMAP, 0, 0, 0, NULL, map_MotionDef_91, 0},
+     ICO_TF_BITMAP, 0, 0, 0, NULL, map_jun26_MotionDef_91, 0},
 };
 
-static const IcoTableField fields_HandModeRow[] = {
+static const IcoTableField fields_jun26_HandModeRow[] = {
     {"dir", offsetof(HandModeRow, dir), sizeof((((HandModeRow *)0)->dir)[0]), 0, 4, 3, ICO_TF_FLOAT,
      0, 0, 0, NULL, NULL, 0},
     {"mode", offsetof(HandModeRow, mode), sizeof((((HandModeRow *)0)->mode)), 12, 4, 1, ICO_TF_INT,
      1, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_MotOriName[] = {
+static const IcoTableField fields_jun26_MotOriName[] = {
     {"s", offsetof(MotOriName, s), sizeof((((MotOriName *)0)->s)[0]), 0, 1, 32, ICO_TF_INT, 1, 0, 0,
      NULL, NULL, 0},
 };
 
-static const IcoTableField fields_ObjLight[] = {
+static const IcoTableField fields_jun26_ObjLight[] = {
     {"col", offsetof(ObjLight, col), sizeof((((ObjLight *)0)->col)[0]), 0, 4, 3, ICO_TF_FLOAT, 0, 0,
      0, NULL, NULL, 0},
     {"range", offsetof(ObjLight, range), sizeof((((ObjLight *)0)->range)), 12, 4, 1, ICO_TF_FLOAT,
      0, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_BecPair[] = {
+static const IcoTableField fields_jun26_BecPair[] = {
     {"mot", offsetof(BecPair, mot), sizeof((((BecPair *)0)->mot)), 0, 4, 1, ICO_TF_INT, 1, 0, 0,
      NULL, NULL, 0},
     {"req", offsetof(BecPair, req), sizeof((((BecPair *)0)->req)), 4, 4, 1, ICO_TF_INT, 1, 0, 0,
      NULL, NULL, 0},
 };
 
-static const IcoTableField fields_EscapeRange[] = {
+static const IcoTableField fields_jun26_EscapeRange[] = {
     {"lo", offsetof(EscapeRange, lo), sizeof((((EscapeRange *)0)->lo)), 0, 4, 1, ICO_TF_INT, 1, 0,
      0, NULL, NULL, 0},
     {"hi", offsetof(EscapeRange, hi), sizeof((((EscapeRange *)0)->hi)), 4, 4, 1, ICO_TF_INT, 1, 0,
      0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_SeEnvDef[] = {
+static const IcoTableField fields_jun26_SeEnvDef[] = {
     {"se", offsetof(SeEnvDef, se), sizeof((((SeEnvDef *)0)->se)), 0, 4, 1, ICO_TF_INT, 1, 0, 0,
      NULL, NULL, 0},
     {"proc", offsetof(SeEnvDef, proc), sizeof((((SeEnvDef *)0)->proc)), 4, 4, 1, ICO_TF_FUNC, 0, 0,
@@ -1848,13 +1848,13 @@ static const IcoTableField fields_SeEnvDef[] = {
      ICO_TF_FLOAT, 0, 0, 0, NULL, NULL, 0},
     {"volumeLength", offsetof(SeEnvDef, volumeLength), sizeof((((SeEnvDef *)0)->volumeLength)), 20,
      4, 1, ICO_TF_FLOAT, 0, 0, 0, NULL, NULL, 0},
-    {"ownPos", 0, 0, 24, 4, 1, ICO_TF_BITS, 0, 0, 1, set_SeEnvDef_6, NULL, 0},
-    {"levelHeight", 0, 0, 24, 4, 1, ICO_TF_BITS, 0, 1, 1, set_SeEnvDef_7, NULL, 0},
-    {"stereo", 0, 0, 24, 4, 1, ICO_TF_BITS, 0, 2, 1, set_SeEnvDef_8, NULL, 0},
-    {"maxVolumeType", 0, 0, 24, 4, 1, ICO_TF_BITS, 0, 3, 1, set_SeEnvDef_9, NULL, 0},
+    {"ownPos", 0, 0, 24, 4, 1, ICO_TF_BITS, 0, 0, 1, set_jun26_SeEnvDef_6, NULL, 0},
+    {"levelHeight", 0, 0, 24, 4, 1, ICO_TF_BITS, 0, 1, 1, set_jun26_SeEnvDef_7, NULL, 0},
+    {"stereo", 0, 0, 24, 4, 1, ICO_TF_BITS, 0, 2, 1, set_jun26_SeEnvDef_8, NULL, 0},
+    {"maxVolumeType", 0, 0, 24, 4, 1, ICO_TF_BITS, 0, 3, 1, set_jun26_SeEnvDef_9, NULL, 0},
 };
 
-static const IcoTableField fields_SeDef[] = {
+static const IcoTableField fields_jun26_SeDef[] = {
     {"name", offsetof(SeDef, name), sizeof((((SeDef *)0)->name)[0]), 0, 1, 32, ICO_TF_INT, 1, 0, 0,
      NULL, NULL, 0},
     {"kind", offsetof(SeDef, kind), sizeof((((SeDef *)0)->kind)), 32, 4, 1, ICO_TF_INT, 1, 0, 0,
@@ -1871,23 +1871,23 @@ static const IcoTableField fields_SeDef[] = {
      0, 0, NULL, NULL, 0},
     {"shock", offsetof(SeDef, shock), sizeof((((SeDef *)0)->shock)), 54, 2, 1, ICO_TF_INT, 0, 0, 0,
      NULL, NULL, 0},
-    {"mailMode", 0, 0, 56, 4, 1, ICO_TF_BITS, 0, 0, 4, set_SeDef_8, NULL, 0},
-    {"playMode", 0, 0, 56, 4, 1, ICO_TF_BITS, 0, 4, 2, set_SeDef_9, NULL, 0},
-    {"shockStop", 0, 0, 56, 4, 1, ICO_TF_BITS, 0, 6, 1, set_SeDef_10, NULL, 0},
-    {"audible", 0, 0, 56, 4, 1, ICO_TF_BITS, 0, 7, 1, set_SeDef_11, NULL, 0},
-    {"procRan", 0, 0, 56, 4, 1, ICO_TF_BITS, 0, 8, 1, set_SeDef_12, NULL, 0},
-    {"waitSkip", 0, 0, 56, 4, 1, ICO_TF_BITS, 0, 9, 1, set_SeDef_13, NULL, 0},
+    {"mailMode", 0, 0, 56, 4, 1, ICO_TF_BITS, 0, 0, 4, set_jun26_SeDef_8, NULL, 0},
+    {"playMode", 0, 0, 56, 4, 1, ICO_TF_BITS, 0, 4, 2, set_jun26_SeDef_9, NULL, 0},
+    {"shockStop", 0, 0, 56, 4, 1, ICO_TF_BITS, 0, 6, 1, set_jun26_SeDef_10, NULL, 0},
+    {"audible", 0, 0, 56, 4, 1, ICO_TF_BITS, 0, 7, 1, set_jun26_SeDef_11, NULL, 0},
+    {"procRan", 0, 0, 56, 4, 1, ICO_TF_BITS, 0, 8, 1, set_jun26_SeDef_12, NULL, 0},
+    {"waitSkip", 0, 0, 56, 4, 1, ICO_TF_BITS, 0, 9, 1, set_jun26_SeDef_13, NULL, 0},
 };
 
-static const IcoTableField fields_SeBank[] = {
+static const IcoTableField fields_jun26_SeBank[] = {
     {"hdPath", offsetof(SeBank, hdPath), sizeof((((SeBank *)0)->hdPath)[0]), 0, 1, 32, ICO_TF_INT,
      1, 0, 0, NULL, NULL, 0},
     {"bdPath", offsetof(SeBank, bdPath), sizeof((((SeBank *)0)->bdPath)[0]), 32, 1, 48, ICO_TF_INT,
      1, 0, 0, NULL, NULL, 0},
-    {"loaded", 0, 0, 80, 4, 1, ICO_TF_BITS, 0, 0, 1, set_SeBank_2, NULL, 0},
+    {"loaded", 0, 0, 80, 4, 1, ICO_TF_BITS, 0, 0, 1, set_jun26_SeBank_2, NULL, 0},
 };
 
-static const IcoTableField fields_SeKind[] = {
+static const IcoTableField fields_jun26_SeKind[] = {
     {"num", offsetof(SeKind, num), sizeof((((SeKind *)0)->num)), 0, 2, 1, ICO_TF_INT, 1, 0, 0, NULL,
      NULL, 0},
     {"prog", offsetof(SeKind, prog), sizeof((((SeKind *)0)->prog)), 2, 2, 1, ICO_TF_INT, 1, 0, 0,
@@ -1898,7 +1898,7 @@ static const IcoTableField fields_SeKind[] = {
      NULL, 0},
 };
 
-static const IcoTableField fields_PadActDef[] = {
+static const IcoTableField fields_jun26_PadActDef[] = {
     {"word0", offsetof(PadActDef, word0), sizeof((((PadActDef *)0)->word0)), 0, 4, 1, ICO_TF_INT, 1,
      0, 0, NULL, NULL, 0},
     {"voice", offsetof(PadActDef, voice), sizeof((((PadActDef *)0)->voice)), 4, 2, 1, ICO_TF_INT, 1,
@@ -1907,7 +1907,7 @@ static const IcoTableField fields_PadActDef[] = {
      0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_StgPre[] = {
+static const IcoTableField fields_jun26_StgPre[] = {
     {"key", offsetof(StgPre, key), sizeof((((StgPre *)0)->key)[0]), 0, 1, 32, ICO_TF_INT, 1, 0, 0,
      NULL, NULL, 0},
     {"name", offsetof(StgPre, name), sizeof((((StgPre *)0)->name)[0]), 32, 1, 32, ICO_TF_INT, 1, 0,
@@ -1992,24 +1992,24 @@ static const IcoTableField fields_StgPre[] = {
      380, 4, 1, ICO_TF_FLOAT, 0, 0, 0, NULL, NULL, 0},
     {"shadowDepth", offsetof(StgPre, shadowDepth), sizeof((((StgPre *)0)->shadowDepth)), 384, 2, 1,
      ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
-    {"reverbDepth", 0, 0, 388, 4, 1, ICO_TF_BITS, 0, 0, 16, set_StgPre_42, NULL, 0},
-    {"kidnapSeconds", 0, 0, 388, 4, 1, ICO_TF_BITS, 0, 16, 8, set_StgPre_43, NULL, 0},
-    {"mpegNo", 0, 0, 388, 4, 1, ICO_TF_BITS, 0, 24, 6, set_StgPre_44, NULL, 0},
-    {"attrTop", 0, 0, 388, 4, 1, ICO_TF_BITS, 0, 30, 1, set_StgPre_45, NULL, 0},
-    {"flag0", 0, 0, 388, 4, 1, ICO_TF_BITS, 0, 31, 1, set_StgPre_46, NULL, 0},
-    {"flag1", 0, 0, 392, 4, 1, ICO_TF_BITS, 0, 1, 1, set_StgPre_47, NULL, 0},
-    {"flag2", 0, 0, 392, 4, 1, ICO_TF_BITS, 0, 2, 1, set_StgPre_48, NULL, 0},
-    {"flag3", 0, 0, 392, 4, 1, ICO_TF_BITS, 0, 3, 1, set_StgPre_49, NULL, 0},
+    {"reverbDepth", 0, 0, 388, 4, 1, ICO_TF_BITS, 0, 0, 16, set_jun26_StgPre_42, NULL, 0},
+    {"kidnapSeconds", 0, 0, 388, 4, 1, ICO_TF_BITS, 0, 16, 8, set_jun26_StgPre_43, NULL, 0},
+    {"mpegNo", 0, 0, 388, 4, 1, ICO_TF_BITS, 0, 24, 6, set_jun26_StgPre_44, NULL, 0},
+    {"attrTop", 0, 0, 388, 4, 1, ICO_TF_BITS, 0, 30, 1, set_jun26_StgPre_45, NULL, 0},
+    {"flag0", 0, 0, 388, 4, 1, ICO_TF_BITS, 0, 31, 1, set_jun26_StgPre_46, NULL, 0},
+    {"flag1", 0, 0, 392, 4, 1, ICO_TF_BITS, 0, 1, 1, set_jun26_StgPre_47, NULL, 0},
+    {"flag2", 0, 0, 392, 4, 1, ICO_TF_BITS, 0, 2, 1, set_jun26_StgPre_48, NULL, 0},
+    {"flag3", 0, 0, 392, 4, 1, ICO_TF_BITS, 0, 3, 1, set_jun26_StgPre_49, NULL, 0},
 };
 
-static const IcoTableField fields_StgObjDat[] = {
+static const IcoTableField fields_jun26_StgObjDat[] = {
     {"kind", offsetof(StgObjDat, kind), sizeof((((StgObjDat *)0)->kind)), 0, 4, 1, ICO_TF_INT, 1, 0,
      0, NULL, NULL, 0},
     {"aux", offsetof(StgObjDat, aux), sizeof((((StgObjDat *)0)->aux)), 4, 4, 1, ICO_TF_INT, 1, 0, 0,
      NULL, NULL, 0},
 };
 
-static const IcoTableField fields_StageAnimDef[] = {
+static const IcoTableField fields_jun26_StageAnimDef[] = {
     {"path", offsetof(StageAnimDef, path), sizeof((((StageAnimDef *)0)->path)[0]), 0, 1, 64,
      ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
     {"objFirst", offsetof(StageAnimDef, objFirst), sizeof((((StageAnimDef *)0)->objFirst)), 64, 4,
@@ -2030,12 +2030,12 @@ static const IcoTableField fields_StageAnimDef[] = {
      0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_StreamMotionFile[] = {
+static const IcoTableField fields_jun26_StreamMotionFile[] = {
     {"path", offsetof(StreamMotionFile, path), sizeof((((StreamMotionFile *)0)->path)[0]), 0, 1, 48,
      ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_WeaponDef[] = {
+static const IcoTableField fields_jun26_WeaponDef[] = {
     {"length", offsetof(WeaponDef, length), sizeof((((WeaponDef *)0)->length)), 0, 4, 1,
      ICO_TF_FLOAT, 0, 0, 0, NULL, NULL, 0},
     {"grip", offsetof(WeaponDef, grip), sizeof((((WeaponDef *)0)->grip)), 4, 4, 1, ICO_TF_FLOAT, 0,
@@ -2056,7 +2056,7 @@ static const IcoTableField fields_WeaponDef[] = {
      0, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_AdpcmDataRec[] = {
+static const IcoTableField fields_jun26_AdpcmDataRec[] = {
     {"path", offsetof(AdpcmDataRec, path), sizeof((((AdpcmDataRec *)0)->path)[0]), 0, 1, 48,
      ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
     {"loopStart", offsetof(AdpcmDataRec, loopStart), sizeof((((AdpcmDataRec *)0)->loopStart)), 48,
@@ -2069,7 +2069,7 @@ static const IcoTableField fields_AdpcmDataRec[] = {
      1, ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_MotOriSub[] = {
+static const IcoTableField fields_jun26_MotOriSub[] = {
     {"motion", offsetof(MotOriSub, motion), sizeof((((MotOriSub *)0)->motion)), 0, 4, 1, ICO_TF_INT,
      1, 0, 0, NULL, NULL, 0},
     {"node", offsetof(MotOriSub, node), sizeof((((MotOriSub *)0)->node)), 4, 4, 1, ICO_TF_INT, 1, 0,
@@ -2080,7 +2080,7 @@ static const IcoTableField fields_MotOriSub[] = {
      ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_EnemyMdlRec[] = {
+static const IcoTableField fields_jun26_EnemyMdlRec[] = {
     {"name", offsetof(EnemyMdlRec, name), sizeof((((EnemyMdlRec *)0)->name)[0]), 0, 1, 32,
      ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
     {"first", offsetof(EnemyMdlRec, first), sizeof((((EnemyMdlRec *)0)->first)), 32, 4, 1,
@@ -2089,14 +2089,14 @@ static const IcoTableField fields_EnemyMdlRec[] = {
      1, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_EnemyKindRange[] = {
+static const IcoTableField fields_jun26_EnemyKindRange[] = {
     {"first", offsetof(EnemyKindRange, first), sizeof((((EnemyKindRange *)0)->first)), 0, 4, 1,
      ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
     {"last", offsetof(EnemyKindRange, last), sizeof((((EnemyKindRange *)0)->last)), 4, 4, 1,
      ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_LayoutClothDef[] = {
+static const IcoTableField fields_jun26_LayoutClothDef[] = {
     {"name", offsetof(LayoutClothDef, name), sizeof((((LayoutClothDef *)0)->name)[0]), 0, 1, 32,
      ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
     {"pt[0]", offsetof(LayoutClothDef, pt[0]), sizeof((((LayoutClothDef *)0)->pt[0])[0]), 32, 4, 3,
@@ -2117,7 +2117,7 @@ static const IcoTableField fields_LayoutClothDef[] = {
      ICO_TF_FLOAT, 0, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_VibCondEntry[] = {
+static const IcoTableField fields_jun26_VibCondEntry[] = {
     {"kind", offsetof(VibCondEntry, kind), sizeof((((VibCondEntry *)0)->kind)), 0, 4, 1, ICO_TF_INT,
      1, 0, 0, NULL, NULL, 0},
     {"cond", offsetof(VibCondEntry, cond), sizeof((((VibCondEntry *)0)->cond)), 4, 4, 1, ICO_TF_INT,
@@ -2126,7 +2126,7 @@ static const IcoTableField fields_VibCondEntry[] = {
      ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_EffEntry[] = {
+static const IcoTableField fields_jun26_EffEntry[] = {
     {"x", offsetof(EffEntry, x), sizeof((((EffEntry *)0)->x)), 0, 4, 1, ICO_TF_FLOAT, 0, 0, 0, NULL,
      NULL, 0},
     {"y", offsetof(EffEntry, y), sizeof((((EffEntry *)0)->y)), 4, 4, 1, ICO_TF_FLOAT, 0, 0, 0, NULL,
@@ -2147,7 +2147,7 @@ static const IcoTableField fields_EffEntry[] = {
      0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_MotOriLimit[] = {
+static const IcoTableField fields_jun26_MotOriLimit[] = {
     {"lo.x", offsetof(MotOriLimit, lo.x), sizeof((((MotOriLimit *)0)->lo.x)), 0, 4, 1, ICO_TF_FLOAT,
      0, 0, 0, NULL, NULL, 0},
     {"lo.y", offsetof(MotOriLimit, lo.y), sizeof((((MotOriLimit *)0)->lo.y)), 4, 4, 1, ICO_TF_FLOAT,
@@ -2174,7 +2174,7 @@ static const IcoTableField fields_MotOriLimit[] = {
      ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_SECondEntry[] = {
+static const IcoTableField fields_jun26_SECondEntry[] = {
     {"kind", offsetof(SECondEntry, kind), sizeof((((SECondEntry *)0)->kind)), 0, 4, 1, ICO_TF_INT,
      1, 0, 0, NULL, NULL, 0},
     {"cond", offsetof(SECondEntry, cond), sizeof((((SECondEntry *)0)->cond)), 4, 4, 1, ICO_TF_INT,
@@ -2183,21 +2183,21 @@ static const IcoTableField fields_SECondEntry[] = {
      0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_SERandEntry[] = {
+static const IcoTableField fields_jun26_SERandEntry[] = {
     {"se", offsetof(SERandEntry, se), sizeof((((SERandEntry *)0)->se)), 0, 4, 1, ICO_TF_INT, 1, 0,
      0, NULL, NULL, 0},
     {"rate", offsetof(SERandEntry, rate), sizeof((((SERandEntry *)0)->rate)), 4, 4, 1, ICO_TF_FLOAT,
      0, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_ObjActMailEnt[] = {
+static const IcoTableField fields_jun26_ObjActMailEnt[] = {
     {"labelId", offsetof(ObjActMailEnt, labelId), sizeof((((ObjActMailEnt *)0)->labelId)), 0, 4, 1,
      ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
     {"triggerNo", offsetof(ObjActMailEnt, triggerNo), sizeof((((ObjActMailEnt *)0)->triggerNo)), 4,
      4, 1, ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_MotOriParallelEnt[] = {
+static const IcoTableField fields_jun26_MotOriParallelEnt[] = {
     {"id", offsetof(MotOriParallelEnt, id), sizeof((((MotOriParallelEnt *)0)->id)), 0, 4, 1,
      ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
     {"kind", offsetof(MotOriParallelEnt, kind), sizeof((((MotOriParallelEnt *)0)->kind)), 4, 4, 1,
@@ -2210,14 +2210,14 @@ static const IcoTableField fields_MotOriParallelEnt[] = {
      sizeof((((MotOriParallelEnt *)0)->shiftMode)), 16, 4, 1, ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_ParticleEffectFile[] = {
+static const IcoTableField fields_jun26_ParticleEffectFile[] = {
     {"name", offsetof(ParticleEffectFile, name), sizeof((((ParticleEffectFile *)0)->name)[0]), 0, 1,
      32, ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
     {"path", offsetof(ParticleEffectFile, path), sizeof((((ParticleEffectFile *)0)->path)[0]), 32,
      1, 48, ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_SpiderKindRec[] = {
+static const IcoTableField fields_jun26_SpiderKindRec[] = {
     {"jump", offsetof(SpiderKindRec, jump), sizeof((((SpiderKindRec *)0)->jump)[0]), 0, 4, 3,
      ICO_TF_FLOAT, 0, 0, 0, NULL, NULL, 0},
     {"layout", offsetof(SpiderKindRec, layout), sizeof((((SpiderKindRec *)0)->layout)), 12, 4, 1,
@@ -2232,14 +2232,14 @@ static const IcoTableField fields_SpiderKindRec[] = {
      ICO_TF_FLOAT, 0, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableField fields_TexRec[] = {
+static const IcoTableField fields_jun26_TexRec[] = {
     {"path", offsetof(TexRec, path), sizeof((((TexRec *)0)->path)[0]), 0, 1, 32, ICO_TF_INT, 1, 0,
      0, NULL, NULL, 0},
     {"cameraMove", offsetof(TexRec, cameraMove), sizeof((((TexRec *)0)->cameraMove)), 0, 0, 1,
      ICO_TF_DEFAULT, 1, 0, 0, NULL, NULL, 0x00000000u},
 };
 
-static const IcoTableField fields_WaySrcGrp[] = {
+static const IcoTableField fields_jun26_WaySrcGrp[] = {
     {"name", offsetof(WaySrcGrp, name), sizeof((((WaySrcGrp *)0)->name)[0]), 0, 1, 32, ICO_TF_INT,
      1, 0, 0, NULL, NULL, 0},
     {"firstPoint", offsetof(WaySrcGrp, firstPoint), sizeof((((WaySrcGrp *)0)->firstPoint)), 32, 4,
@@ -2256,468 +2256,498 @@ static const IcoTableField fields_WaySrcGrp[] = {
      ICO_TF_INT, 1, 0, 0, NULL, NULL, 0},
 };
 
-static const IcoTableRecord record_sceMcIconSys = {
-    "sceMcIconSys", sizeof(sceMcIconSys), 0x3C4, fields_sceMcIconSys,
-    sizeof(fields_sceMcIconSys) / sizeof(fields_sceMcIconSys[0])};
-static const IcoTableRecord record_AccessaryRec = {
-    "AccessaryRec", sizeof(AccessaryRec), 0x28, fields_AccessaryRec,
-    sizeof(fields_AccessaryRec) / sizeof(fields_AccessaryRec[0])};
-static const IcoTableRecord record_IdleRangeRec = {
-    "IdleRangeRec", sizeof(IdleRangeRec), 0x14, fields_IdleRangeRec,
-    sizeof(fields_IdleRangeRec) / sizeof(fields_IdleRangeRec[0])};
-static const IcoTableRecord record_IntrMail = {"IntrMail", sizeof(IntrMail), 0x18, fields_IntrMail,
-                                               sizeof(fields_IntrMail) /
-                                                   sizeof(fields_IntrMail[0])};
-static const IcoTableRecord record_char_32_ = {
-    "char[32]", sizeof(ico_td_rec_char_32_), 0x20, fields_char_32_,
-    sizeof(fields_char_32_) / sizeof(fields_char_32_[0])};
-static const IcoTableRecord record_float = {"float", sizeof(ico_td_rec_float), 0x4, fields_float,
-                                            sizeof(fields_float) / sizeof(fields_float[0])};
-static const IcoTableRecord record_MotionOrientEntry = {
-    "MotionOrientEntry", sizeof(MotionOrientEntry), 0x18, fields_MotionOrientEntry,
-    sizeof(fields_MotionOrientEntry) / sizeof(fields_MotionOrientEntry[0])};
-static const IcoTableRecord record_ClingRec = {"ClingRec", sizeof(ClingRec), 0x24, fields_ClingRec,
-                                               sizeof(fields_ClingRec) /
-                                                   sizeof(fields_ClingRec[0])};
-static const IcoTableRecord record_OaRecB = {"OaRecB", sizeof(OaRecB), 0x14, fields_OaRecB,
-                                             sizeof(fields_OaRecB) / sizeof(fields_OaRecB[0])};
-static const IcoTableRecord record_ObjKindEnt = {
-    "ObjKindEnt", sizeof(ObjKindEnt), 0x64, fields_ObjKindEnt,
-    sizeof(fields_ObjKindEnt) / sizeof(fields_ObjKindEnt[0])};
-static const IcoTableRecord record_GenGeo = {"GenGeo", sizeof(GenGeo), 0x4C, fields_GenGeo,
-                                             sizeof(fields_GenGeo) / sizeof(fields_GenGeo[0])};
-static const IcoTableRecord record_ParallelMotionRow = {
-    "ParallelMotionRow", sizeof(ParallelMotionRow), 0x94, fields_ParallelMotionRow,
-    sizeof(fields_ParallelMotionRow) / sizeof(fields_ParallelMotionRow[0])};
-static const IcoTableRecord record_unsigned_short = {
-    "unsigned_short", sizeof(ico_td_rec_unsigned_short), 0x2, fields_unsigned_short,
-    sizeof(fields_unsigned_short) / sizeof(fields_unsigned_short[0])};
-static const IcoTableRecord record_LtProperty = {
-    "LtProperty", sizeof(LtProperty), 0x58, fields_LtProperty,
-    sizeof(fields_LtProperty) / sizeof(fields_LtProperty[0])};
-static const IcoTableRecord record_char_ = {"char*", sizeof(ico_td_rec_char_), 0x4, fields_char_,
-                                            sizeof(fields_char_) / sizeof(fields_char_[0])};
-static const IcoTableRecord record_int = {"int", sizeof(ico_td_rec_int), 0x4, fields_int,
-                                          sizeof(fields_int) / sizeof(fields_int[0])};
-static const IcoTableRecord record_EnemyKindRec = {
-    "EnemyKindRec", sizeof(EnemyKindRec), 0x8, fields_EnemyKindRec,
-    sizeof(fields_EnemyKindRec) / sizeof(fields_EnemyKindRec[0])};
-static const IcoTableRecord record_sceVu0FVECTOR = {
-    "sceVu0FVECTOR", sizeof(ico_td_rec_sceVu0FVECTOR), 0x10, fields_sceVu0FVECTOR,
-    sizeof(fields_sceVu0FVECTOR) / sizeof(fields_sceVu0FVECTOR[0])};
-static const IcoTableRecord record_EnemyModelSet = {
-    "EnemyModelSet", sizeof(EnemyModelSet), 0x10, fields_EnemyModelSet,
-    sizeof(fields_EnemyModelSet) / sizeof(fields_EnemyModelSet[0])};
-static const IcoTableRecord record_EnemyModelSet_ = {
-    "EnemyModelSet*", sizeof(ico_td_rec_EnemyModelSet_), 0x4, fields_EnemyModelSet_,
-    sizeof(fields_EnemyModelSet_) / sizeof(fields_EnemyModelSet_[0])};
-static const IcoTableRecord record_EnemySet = {"EnemySet", sizeof(EnemySet), 0x8, fields_EnemySet,
-                                               sizeof(fields_EnemySet) /
-                                                   sizeof(fields_EnemySet[0])};
-static const IcoTableRecord record_ItemBreakRec = {
-    "ItemBreakRec", sizeof(ItemBreakRec), 0x10, fields_ItemBreakRec,
-    sizeof(fields_ItemBreakRec) / sizeof(fields_ItemBreakRec[0])};
-static const IcoTableRecord record_MotOriAlt = {
-    "MotOriAlt", sizeof(MotOriAlt), 0x8, fields_MotOriAlt,
-    sizeof(fields_MotOriAlt) / sizeof(fields_MotOriAlt[0])};
-static const IcoTableRecord record_PObjMdl = {"PObjMdl", sizeof(PObjMdl), 0x14C, fields_PObjMdl,
-                                              sizeof(fields_PObjMdl) / sizeof(fields_PObjMdl[0])};
-static const IcoTableRecord record_SePackage = {
-    "SePackage", sizeof(SePackage), 0xC, fields_SePackage,
-    sizeof(fields_SePackage) / sizeof(fields_SePackage[0])};
-static const IcoTableRecord record_LtProp = {"LtProp", sizeof(LtProp), 0x38, fields_LtProp,
-                                             sizeof(fields_LtProp) / sizeof(fields_LtProp[0])};
-static const IcoTableRecord record_WaySrcPt = {"WaySrcPt", sizeof(WaySrcPt), 0x1C, fields_WaySrcPt,
-                                               sizeof(fields_WaySrcPt) /
-                                                   sizeof(fields_WaySrcPt[0])};
-static const IcoTableRecord record_FumbleRow = {
-    "FumbleRow", sizeof(FumbleRow), 0x18, fields_FumbleRow,
-    sizeof(fields_FumbleRow) / sizeof(fields_FumbleRow[0])};
-static const IcoTableRecord record_ActModeRec = {
-    "ActModeRec", sizeof(ActModeRec), 0x50, fields_ActModeRec,
-    sizeof(fields_ActModeRec) / sizeof(fields_ActModeRec[0])};
-static const IcoTableRecord record_AttackKindEntry = {
-    "AttackKindEntry", sizeof(AttackKindEntry), 0x24, fields_AttackKindEntry,
-    sizeof(fields_AttackKindEntry) / sizeof(fields_AttackKindEntry[0])};
-static const IcoTableRecord record_EscortPoint = {
-    "EscortPoint", sizeof(EscortPoint), 0x1C, fields_EscortPoint,
-    sizeof(fields_EscortPoint) / sizeof(fields_EscortPoint[0])};
-static const IcoTableRecord record_ExitData = {"ExitData", sizeof(ExitData), 0x28, fields_ExitData,
-                                               sizeof(fields_ExitData) /
-                                                   sizeof(fields_ExitData[0])};
-static const IcoTableRecord record_SafePosOffset = {
-    "SafePosOffset", sizeof(SafePosOffset), 0x10, fields_SafePosOffset,
-    sizeof(fields_SafePosOffset) / sizeof(fields_SafePosOffset[0])};
-static const IcoTableRecord record_WarpRec = {"WarpRec", sizeof(WarpRec), 0x58, fields_WarpRec,
-                                              sizeof(fields_WarpRec) / sizeof(fields_WarpRec[0])};
-static const IcoTableRecord record_IconFile = {"IconFile", sizeof(IconFile), 0x24, fields_IconFile,
-                                               sizeof(fields_IconFile) /
-                                                   sizeof(fields_IconFile[0])};
-static const IcoTableRecord record_IdlingDef = {
-    "IdlingDef", sizeof(IdlingDef), 0xC, fields_IdlingDef,
-    sizeof(fields_IdlingDef) / sizeof(fields_IdlingDef[0])};
-static const IcoTableRecord record_PackKind = {"PackKind", sizeof(PackKind), 0x24, fields_PackKind,
-                                               sizeof(fields_PackKind) /
-                                                   sizeof(fields_PackKind[0])};
-static const IcoTableRecord record_LookTarget = {
-    "LookTarget", sizeof(LookTarget), 0xC, fields_LookTarget,
-    sizeof(fields_LookTarget) / sizeof(fields_LookTarget[0])};
-static const IcoTableRecord record_MotionDef = {
-    "MotionDef", sizeof(MotionDef), 0x184, fields_MotionDef,
-    sizeof(fields_MotionDef) / sizeof(fields_MotionDef[0])};
-static const IcoTableRecord record_HandModeRow = {
-    "HandModeRow", sizeof(HandModeRow), 0x10, fields_HandModeRow,
-    sizeof(fields_HandModeRow) / sizeof(fields_HandModeRow[0])};
-static const IcoTableRecord record_MotOriName = {
-    "MotOriName", sizeof(MotOriName), 0x20, fields_MotOriName,
-    sizeof(fields_MotOriName) / sizeof(fields_MotOriName[0])};
-static const IcoTableRecord record_ObjLight = {"ObjLight", sizeof(ObjLight), 0x10, fields_ObjLight,
-                                               sizeof(fields_ObjLight) /
-                                                   sizeof(fields_ObjLight[0])};
-static const IcoTableRecord record_BecPair = {"BecPair", sizeof(BecPair), 0x8, fields_BecPair,
-                                              sizeof(fields_BecPair) / sizeof(fields_BecPair[0])};
-static const IcoTableRecord record_EscapeRange = {
-    "EscapeRange", sizeof(EscapeRange), 0x8, fields_EscapeRange,
-    sizeof(fields_EscapeRange) / sizeof(fields_EscapeRange[0])};
-static const IcoTableRecord record_SeEnvDef = {"SeEnvDef", sizeof(SeEnvDef), 0x1C, fields_SeEnvDef,
-                                               sizeof(fields_SeEnvDef) /
-                                                   sizeof(fields_SeEnvDef[0])};
-static const IcoTableRecord record_SeDef = {"SeDef", sizeof(SeDef), 0x3C, fields_SeDef,
-                                            sizeof(fields_SeDef) / sizeof(fields_SeDef[0])};
-static const IcoTableRecord record_SeBank = {"SeBank", sizeof(SeBank), 0x54, fields_SeBank,
-                                             sizeof(fields_SeBank) / sizeof(fields_SeBank[0])};
-static const IcoTableRecord record_SeKind = {"SeKind", sizeof(SeKind), 0x8, fields_SeKind,
-                                             sizeof(fields_SeKind) / sizeof(fields_SeKind[0])};
-static const IcoTableRecord record_PadActDef = {
-    "PadActDef", sizeof(PadActDef), 0x8, fields_PadActDef,
-    sizeof(fields_PadActDef) / sizeof(fields_PadActDef[0])};
-static const IcoTableRecord record_StgPre = {"StgPre", sizeof(StgPre), 0x18C, fields_StgPre,
-                                             sizeof(fields_StgPre) / sizeof(fields_StgPre[0])};
-static const IcoTableRecord record_StgObjDat = {
-    "StgObjDat", sizeof(StgObjDat), 0x8, fields_StgObjDat,
-    sizeof(fields_StgObjDat) / sizeof(fields_StgObjDat[0])};
-static const IcoTableRecord record_StageAnimDef = {
-    "StageAnimDef", sizeof(StageAnimDef), 0x5C, fields_StageAnimDef,
-    sizeof(fields_StageAnimDef) / sizeof(fields_StageAnimDef[0])};
-static const IcoTableRecord record_StreamMotionFile = {
-    "StreamMotionFile", sizeof(StreamMotionFile), 0x30, fields_StreamMotionFile,
-    sizeof(fields_StreamMotionFile) / sizeof(fields_StreamMotionFile[0])};
-static const IcoTableRecord record_WeaponDef = {
-    "WeaponDef", sizeof(WeaponDef), 0x24, fields_WeaponDef,
-    sizeof(fields_WeaponDef) / sizeof(fields_WeaponDef[0])};
-static const IcoTableRecord record_AdpcmDataRec = {
-    "AdpcmDataRec", sizeof(AdpcmDataRec), 0x40, fields_AdpcmDataRec,
-    sizeof(fields_AdpcmDataRec) / sizeof(fields_AdpcmDataRec[0])};
-static const IcoTableRecord record_MotOriSub = {
-    "MotOriSub", sizeof(MotOriSub), 0x10, fields_MotOriSub,
-    sizeof(fields_MotOriSub) / sizeof(fields_MotOriSub[0])};
-static const IcoTableRecord record_EnemyMdlRec = {
-    "EnemyMdlRec", sizeof(EnemyMdlRec), 0x28, fields_EnemyMdlRec,
-    sizeof(fields_EnemyMdlRec) / sizeof(fields_EnemyMdlRec[0])};
-static const IcoTableRecord record_EnemyKindRange = {
-    "EnemyKindRange", sizeof(EnemyKindRange), 0x8, fields_EnemyKindRange,
-    sizeof(fields_EnemyKindRange) / sizeof(fields_EnemyKindRange[0])};
-static const IcoTableRecord record_LayoutClothDef = {
-    "LayoutClothDef", sizeof(LayoutClothDef), 0x50, fields_LayoutClothDef,
-    sizeof(fields_LayoutClothDef) / sizeof(fields_LayoutClothDef[0])};
-static const IcoTableRecord record_VibCondEntry = {
-    "VibCondEntry", sizeof(VibCondEntry), 0xC, fields_VibCondEntry,
-    sizeof(fields_VibCondEntry) / sizeof(fields_VibCondEntry[0])};
-static const IcoTableRecord record_EffEntry = {"EffEntry", sizeof(EffEntry), 0x24, fields_EffEntry,
-                                               sizeof(fields_EffEntry) /
-                                                   sizeof(fields_EffEntry[0])};
-static const IcoTableRecord record_MotOriLimit = {
-    "MotOriLimit", sizeof(MotOriLimit), 0x30, fields_MotOriLimit,
-    sizeof(fields_MotOriLimit) / sizeof(fields_MotOriLimit[0])};
-static const IcoTableRecord record_SECondEntry = {
-    "SECondEntry", sizeof(SECondEntry), 0xC, fields_SECondEntry,
-    sizeof(fields_SECondEntry) / sizeof(fields_SECondEntry[0])};
-static const IcoTableRecord record_SERandEntry = {
-    "SERandEntry", sizeof(SERandEntry), 0x8, fields_SERandEntry,
-    sizeof(fields_SERandEntry) / sizeof(fields_SERandEntry[0])};
-static const IcoTableRecord record_ObjActMailEnt = {
-    "ObjActMailEnt", sizeof(ObjActMailEnt), 0x8, fields_ObjActMailEnt,
-    sizeof(fields_ObjActMailEnt) / sizeof(fields_ObjActMailEnt[0])};
-static const IcoTableRecord record_MotOriParallelEnt = {
-    "MotOriParallelEnt", sizeof(MotOriParallelEnt), 0x14, fields_MotOriParallelEnt,
-    sizeof(fields_MotOriParallelEnt) / sizeof(fields_MotOriParallelEnt[0])};
-static const IcoTableRecord record_ParticleEffectFile = {
-    "ParticleEffectFile", sizeof(ParticleEffectFile), 0x50, fields_ParticleEffectFile,
-    sizeof(fields_ParticleEffectFile) / sizeof(fields_ParticleEffectFile[0])};
-static const IcoTableRecord record_SpiderKindRec = {
-    "SpiderKindRec", sizeof(SpiderKindRec), 0x20, fields_SpiderKindRec,
-    sizeof(fields_SpiderKindRec) / sizeof(fields_SpiderKindRec[0])};
-static const IcoTableRecord record_TexRec = {"TexRec", sizeof(TexRec), 0x20, fields_TexRec,
-                                             sizeof(fields_TexRec) / sizeof(fields_TexRec[0])};
-static const IcoTableRecord record_WaySrcGrp = {
-    "WaySrcGrp", sizeof(WaySrcGrp), 0x3C, fields_WaySrcGrp,
-    sizeof(fields_WaySrcGrp) / sizeof(fields_WaySrcGrp[0])};
+static const IcoTableRecord record_jun26_sceMcIconSys = {
+    "sceMcIconSys", sizeof(sceMcIconSys), 0x3C4, fields_jun26_sceMcIconSys,
+    sizeof(fields_jun26_sceMcIconSys) / sizeof(fields_jun26_sceMcIconSys[0])};
+static const IcoTableRecord record_jun26_AccessaryRec = {
+    "AccessaryRec", sizeof(AccessaryRec), 0x28, fields_jun26_AccessaryRec,
+    sizeof(fields_jun26_AccessaryRec) / sizeof(fields_jun26_AccessaryRec[0])};
+static const IcoTableRecord record_jun26_IdleRangeRec = {
+    "IdleRangeRec", sizeof(IdleRangeRec), 0x14, fields_jun26_IdleRangeRec,
+    sizeof(fields_jun26_IdleRangeRec) / sizeof(fields_jun26_IdleRangeRec[0])};
+static const IcoTableRecord record_jun26_IntrMail = {
+    "IntrMail", sizeof(IntrMail), 0x18, fields_jun26_IntrMail,
+    sizeof(fields_jun26_IntrMail) / sizeof(fields_jun26_IntrMail[0])};
+static const IcoTableRecord record_jun26_char_32_ = {
+    "char[32]", sizeof(ico_td_rec_char_32_), 0x20, fields_jun26_char_32_,
+    sizeof(fields_jun26_char_32_) / sizeof(fields_jun26_char_32_[0])};
+static const IcoTableRecord record_jun26_float = {
+    "float", sizeof(ico_td_rec_float), 0x4, fields_jun26_float,
+    sizeof(fields_jun26_float) / sizeof(fields_jun26_float[0])};
+static const IcoTableRecord record_jun26_MotionOrientEntry = {
+    "MotionOrientEntry", sizeof(MotionOrientEntry), 0x18, fields_jun26_MotionOrientEntry,
+    sizeof(fields_jun26_MotionOrientEntry) / sizeof(fields_jun26_MotionOrientEntry[0])};
+static const IcoTableRecord record_jun26_ClingRec = {
+    "ClingRec", sizeof(ClingRec), 0x24, fields_jun26_ClingRec,
+    sizeof(fields_jun26_ClingRec) / sizeof(fields_jun26_ClingRec[0])};
+static const IcoTableRecord record_jun26_OaRecB = {
+    "OaRecB", sizeof(OaRecB), 0x14, fields_jun26_OaRecB,
+    sizeof(fields_jun26_OaRecB) / sizeof(fields_jun26_OaRecB[0])};
+static const IcoTableRecord record_jun26_ObjKindEnt = {
+    "ObjKindEnt", sizeof(ObjKindEnt), 0x64, fields_jun26_ObjKindEnt,
+    sizeof(fields_jun26_ObjKindEnt) / sizeof(fields_jun26_ObjKindEnt[0])};
+static const IcoTableRecord record_jun26_GenGeo = {
+    "GenGeo", sizeof(GenGeo), 0x4C, fields_jun26_GenGeo,
+    sizeof(fields_jun26_GenGeo) / sizeof(fields_jun26_GenGeo[0])};
+static const IcoTableRecord record_jun26_ParallelMotionRow = {
+    "ParallelMotionRow", sizeof(ParallelMotionRow), 0x94, fields_jun26_ParallelMotionRow,
+    sizeof(fields_jun26_ParallelMotionRow) / sizeof(fields_jun26_ParallelMotionRow[0])};
+static const IcoTableRecord record_jun26_unsigned_short = {
+    "unsigned_short", sizeof(ico_td_rec_unsigned_short), 0x2, fields_jun26_unsigned_short,
+    sizeof(fields_jun26_unsigned_short) / sizeof(fields_jun26_unsigned_short[0])};
+static const IcoTableRecord record_jun26_LtProperty = {
+    "LtProperty", sizeof(LtProperty), 0x58, fields_jun26_LtProperty,
+    sizeof(fields_jun26_LtProperty) / sizeof(fields_jun26_LtProperty[0])};
+static const IcoTableRecord record_jun26_char_ = {
+    "char*", sizeof(ico_td_rec_char_), 0x4, fields_jun26_char_,
+    sizeof(fields_jun26_char_) / sizeof(fields_jun26_char_[0])};
+static const IcoTableRecord record_jun26_int = {
+    "int", sizeof(ico_td_rec_int), 0x4, fields_jun26_int,
+    sizeof(fields_jun26_int) / sizeof(fields_jun26_int[0])};
+static const IcoTableRecord record_jun26_EnemyKindRec = {
+    "EnemyKindRec", sizeof(EnemyKindRec), 0x8, fields_jun26_EnemyKindRec,
+    sizeof(fields_jun26_EnemyKindRec) / sizeof(fields_jun26_EnemyKindRec[0])};
+static const IcoTableRecord record_jun26_sceVu0FVECTOR = {
+    "sceVu0FVECTOR", sizeof(ico_td_rec_sceVu0FVECTOR), 0x10, fields_jun26_sceVu0FVECTOR,
+    sizeof(fields_jun26_sceVu0FVECTOR) / sizeof(fields_jun26_sceVu0FVECTOR[0])};
+static const IcoTableRecord record_jun26_EnemyModelSet = {
+    "EnemyModelSet", sizeof(EnemyModelSet), 0x10, fields_jun26_EnemyModelSet,
+    sizeof(fields_jun26_EnemyModelSet) / sizeof(fields_jun26_EnemyModelSet[0])};
+static const IcoTableRecord record_jun26_EnemyModelSet_ = {
+    "EnemyModelSet*", sizeof(ico_td_rec_EnemyModelSet_), 0x4, fields_jun26_EnemyModelSet_,
+    sizeof(fields_jun26_EnemyModelSet_) / sizeof(fields_jun26_EnemyModelSet_[0])};
+static const IcoTableRecord record_jun26_EnemySet = {
+    "EnemySet", sizeof(EnemySet), 0x8, fields_jun26_EnemySet,
+    sizeof(fields_jun26_EnemySet) / sizeof(fields_jun26_EnemySet[0])};
+static const IcoTableRecord record_jun26_ItemBreakRec = {
+    "ItemBreakRec", sizeof(ItemBreakRec), 0x10, fields_jun26_ItemBreakRec,
+    sizeof(fields_jun26_ItemBreakRec) / sizeof(fields_jun26_ItemBreakRec[0])};
+static const IcoTableRecord record_jun26_MotOriAlt = {
+    "MotOriAlt", sizeof(MotOriAlt), 0x8, fields_jun26_MotOriAlt,
+    sizeof(fields_jun26_MotOriAlt) / sizeof(fields_jun26_MotOriAlt[0])};
+static const IcoTableRecord record_jun26_PObjMdl = {
+    "PObjMdl", sizeof(PObjMdl), 0x14C, fields_jun26_PObjMdl,
+    sizeof(fields_jun26_PObjMdl) / sizeof(fields_jun26_PObjMdl[0])};
+static const IcoTableRecord record_jun26_SePackage = {
+    "SePackage", sizeof(SePackage), 0xC, fields_jun26_SePackage,
+    sizeof(fields_jun26_SePackage) / sizeof(fields_jun26_SePackage[0])};
+static const IcoTableRecord record_jun26_LtProp = {
+    "LtProp", sizeof(LtProp), 0x38, fields_jun26_LtProp,
+    sizeof(fields_jun26_LtProp) / sizeof(fields_jun26_LtProp[0])};
+static const IcoTableRecord record_jun26_WaySrcPt = {
+    "WaySrcPt", sizeof(WaySrcPt), 0x1C, fields_jun26_WaySrcPt,
+    sizeof(fields_jun26_WaySrcPt) / sizeof(fields_jun26_WaySrcPt[0])};
+static const IcoTableRecord record_jun26_FumbleRow = {
+    "FumbleRow", sizeof(FumbleRow), 0x18, fields_jun26_FumbleRow,
+    sizeof(fields_jun26_FumbleRow) / sizeof(fields_jun26_FumbleRow[0])};
+static const IcoTableRecord record_jun26_ActModeRec = {
+    "ActModeRec", sizeof(ActModeRec), 0x50, fields_jun26_ActModeRec,
+    sizeof(fields_jun26_ActModeRec) / sizeof(fields_jun26_ActModeRec[0])};
+static const IcoTableRecord record_jun26_AttackKindEntry = {
+    "AttackKindEntry", sizeof(AttackKindEntry), 0x24, fields_jun26_AttackKindEntry,
+    sizeof(fields_jun26_AttackKindEntry) / sizeof(fields_jun26_AttackKindEntry[0])};
+static const IcoTableRecord record_jun26_EscortPoint = {
+    "EscortPoint", sizeof(EscortPoint), 0x1C, fields_jun26_EscortPoint,
+    sizeof(fields_jun26_EscortPoint) / sizeof(fields_jun26_EscortPoint[0])};
+static const IcoTableRecord record_jun26_ExitData = {
+    "ExitData", sizeof(ExitData), 0x28, fields_jun26_ExitData,
+    sizeof(fields_jun26_ExitData) / sizeof(fields_jun26_ExitData[0])};
+static const IcoTableRecord record_jun26_SafePosOffset = {
+    "SafePosOffset", sizeof(SafePosOffset), 0x10, fields_jun26_SafePosOffset,
+    sizeof(fields_jun26_SafePosOffset) / sizeof(fields_jun26_SafePosOffset[0])};
+static const IcoTableRecord record_jun26_WarpRec = {
+    "WarpRec", sizeof(WarpRec), 0x58, fields_jun26_WarpRec,
+    sizeof(fields_jun26_WarpRec) / sizeof(fields_jun26_WarpRec[0])};
+static const IcoTableRecord record_jun26_IconFile = {
+    "IconFile", sizeof(IconFile), 0x24, fields_jun26_IconFile,
+    sizeof(fields_jun26_IconFile) / sizeof(fields_jun26_IconFile[0])};
+static const IcoTableRecord record_jun26_IdlingDef = {
+    "IdlingDef", sizeof(IdlingDef), 0xC, fields_jun26_IdlingDef,
+    sizeof(fields_jun26_IdlingDef) / sizeof(fields_jun26_IdlingDef[0])};
+static const IcoTableRecord record_jun26_PackKind = {
+    "PackKind", sizeof(PackKind), 0x24, fields_jun26_PackKind,
+    sizeof(fields_jun26_PackKind) / sizeof(fields_jun26_PackKind[0])};
+static const IcoTableRecord record_jun26_LookTarget = {
+    "LookTarget", sizeof(LookTarget), 0xC, fields_jun26_LookTarget,
+    sizeof(fields_jun26_LookTarget) / sizeof(fields_jun26_LookTarget[0])};
+static const IcoTableRecord record_jun26_MotionDef = {
+    "MotionDef", sizeof(MotionDef), 0x184, fields_jun26_MotionDef,
+    sizeof(fields_jun26_MotionDef) / sizeof(fields_jun26_MotionDef[0])};
+static const IcoTableRecord record_jun26_HandModeRow = {
+    "HandModeRow", sizeof(HandModeRow), 0x10, fields_jun26_HandModeRow,
+    sizeof(fields_jun26_HandModeRow) / sizeof(fields_jun26_HandModeRow[0])};
+static const IcoTableRecord record_jun26_MotOriName = {
+    "MotOriName", sizeof(MotOriName), 0x20, fields_jun26_MotOriName,
+    sizeof(fields_jun26_MotOriName) / sizeof(fields_jun26_MotOriName[0])};
+static const IcoTableRecord record_jun26_ObjLight = {
+    "ObjLight", sizeof(ObjLight), 0x10, fields_jun26_ObjLight,
+    sizeof(fields_jun26_ObjLight) / sizeof(fields_jun26_ObjLight[0])};
+static const IcoTableRecord record_jun26_BecPair = {
+    "BecPair", sizeof(BecPair), 0x8, fields_jun26_BecPair,
+    sizeof(fields_jun26_BecPair) / sizeof(fields_jun26_BecPair[0])};
+static const IcoTableRecord record_jun26_EscapeRange = {
+    "EscapeRange", sizeof(EscapeRange), 0x8, fields_jun26_EscapeRange,
+    sizeof(fields_jun26_EscapeRange) / sizeof(fields_jun26_EscapeRange[0])};
+static const IcoTableRecord record_jun26_SeEnvDef = {
+    "SeEnvDef", sizeof(SeEnvDef), 0x1C, fields_jun26_SeEnvDef,
+    sizeof(fields_jun26_SeEnvDef) / sizeof(fields_jun26_SeEnvDef[0])};
+static const IcoTableRecord record_jun26_SeDef = {"SeDef", sizeof(SeDef), 0x3C, fields_jun26_SeDef,
+                                                  sizeof(fields_jun26_SeDef) /
+                                                      sizeof(fields_jun26_SeDef[0])};
+static const IcoTableRecord record_jun26_SeBank = {
+    "SeBank", sizeof(SeBank), 0x54, fields_jun26_SeBank,
+    sizeof(fields_jun26_SeBank) / sizeof(fields_jun26_SeBank[0])};
+static const IcoTableRecord record_jun26_SeKind = {
+    "SeKind", sizeof(SeKind), 0x8, fields_jun26_SeKind,
+    sizeof(fields_jun26_SeKind) / sizeof(fields_jun26_SeKind[0])};
+static const IcoTableRecord record_jun26_PadActDef = {
+    "PadActDef", sizeof(PadActDef), 0x8, fields_jun26_PadActDef,
+    sizeof(fields_jun26_PadActDef) / sizeof(fields_jun26_PadActDef[0])};
+static const IcoTableRecord record_jun26_StgPre = {
+    "StgPre", sizeof(StgPre), 0x18C, fields_jun26_StgPre,
+    sizeof(fields_jun26_StgPre) / sizeof(fields_jun26_StgPre[0])};
+static const IcoTableRecord record_jun26_StgObjDat = {
+    "StgObjDat", sizeof(StgObjDat), 0x8, fields_jun26_StgObjDat,
+    sizeof(fields_jun26_StgObjDat) / sizeof(fields_jun26_StgObjDat[0])};
+static const IcoTableRecord record_jun26_StageAnimDef = {
+    "StageAnimDef", sizeof(StageAnimDef), 0x5C, fields_jun26_StageAnimDef,
+    sizeof(fields_jun26_StageAnimDef) / sizeof(fields_jun26_StageAnimDef[0])};
+static const IcoTableRecord record_jun26_StreamMotionFile = {
+    "StreamMotionFile", sizeof(StreamMotionFile), 0x30, fields_jun26_StreamMotionFile,
+    sizeof(fields_jun26_StreamMotionFile) / sizeof(fields_jun26_StreamMotionFile[0])};
+static const IcoTableRecord record_jun26_WeaponDef = {
+    "WeaponDef", sizeof(WeaponDef), 0x24, fields_jun26_WeaponDef,
+    sizeof(fields_jun26_WeaponDef) / sizeof(fields_jun26_WeaponDef[0])};
+static const IcoTableRecord record_jun26_AdpcmDataRec = {
+    "AdpcmDataRec", sizeof(AdpcmDataRec), 0x40, fields_jun26_AdpcmDataRec,
+    sizeof(fields_jun26_AdpcmDataRec) / sizeof(fields_jun26_AdpcmDataRec[0])};
+static const IcoTableRecord record_jun26_MotOriSub = {
+    "MotOriSub", sizeof(MotOriSub), 0x10, fields_jun26_MotOriSub,
+    sizeof(fields_jun26_MotOriSub) / sizeof(fields_jun26_MotOriSub[0])};
+static const IcoTableRecord record_jun26_EnemyMdlRec = {
+    "EnemyMdlRec", sizeof(EnemyMdlRec), 0x28, fields_jun26_EnemyMdlRec,
+    sizeof(fields_jun26_EnemyMdlRec) / sizeof(fields_jun26_EnemyMdlRec[0])};
+static const IcoTableRecord record_jun26_EnemyKindRange = {
+    "EnemyKindRange", sizeof(EnemyKindRange), 0x8, fields_jun26_EnemyKindRange,
+    sizeof(fields_jun26_EnemyKindRange) / sizeof(fields_jun26_EnemyKindRange[0])};
+static const IcoTableRecord record_jun26_LayoutClothDef = {
+    "LayoutClothDef", sizeof(LayoutClothDef), 0x50, fields_jun26_LayoutClothDef,
+    sizeof(fields_jun26_LayoutClothDef) / sizeof(fields_jun26_LayoutClothDef[0])};
+static const IcoTableRecord record_jun26_VibCondEntry = {
+    "VibCondEntry", sizeof(VibCondEntry), 0xC, fields_jun26_VibCondEntry,
+    sizeof(fields_jun26_VibCondEntry) / sizeof(fields_jun26_VibCondEntry[0])};
+static const IcoTableRecord record_jun26_EffEntry = {
+    "EffEntry", sizeof(EffEntry), 0x24, fields_jun26_EffEntry,
+    sizeof(fields_jun26_EffEntry) / sizeof(fields_jun26_EffEntry[0])};
+static const IcoTableRecord record_jun26_MotOriLimit = {
+    "MotOriLimit", sizeof(MotOriLimit), 0x30, fields_jun26_MotOriLimit,
+    sizeof(fields_jun26_MotOriLimit) / sizeof(fields_jun26_MotOriLimit[0])};
+static const IcoTableRecord record_jun26_SECondEntry = {
+    "SECondEntry", sizeof(SECondEntry), 0xC, fields_jun26_SECondEntry,
+    sizeof(fields_jun26_SECondEntry) / sizeof(fields_jun26_SECondEntry[0])};
+static const IcoTableRecord record_jun26_SERandEntry = {
+    "SERandEntry", sizeof(SERandEntry), 0x8, fields_jun26_SERandEntry,
+    sizeof(fields_jun26_SERandEntry) / sizeof(fields_jun26_SERandEntry[0])};
+static const IcoTableRecord record_jun26_ObjActMailEnt = {
+    "ObjActMailEnt", sizeof(ObjActMailEnt), 0x8, fields_jun26_ObjActMailEnt,
+    sizeof(fields_jun26_ObjActMailEnt) / sizeof(fields_jun26_ObjActMailEnt[0])};
+static const IcoTableRecord record_jun26_MotOriParallelEnt = {
+    "MotOriParallelEnt", sizeof(MotOriParallelEnt), 0x14, fields_jun26_MotOriParallelEnt,
+    sizeof(fields_jun26_MotOriParallelEnt) / sizeof(fields_jun26_MotOriParallelEnt[0])};
+static const IcoTableRecord record_jun26_ParticleEffectFile = {
+    "ParticleEffectFile", sizeof(ParticleEffectFile), 0x50, fields_jun26_ParticleEffectFile,
+    sizeof(fields_jun26_ParticleEffectFile) / sizeof(fields_jun26_ParticleEffectFile[0])};
+static const IcoTableRecord record_jun26_SpiderKindRec = {
+    "SpiderKindRec", sizeof(SpiderKindRec), 0x20, fields_jun26_SpiderKindRec,
+    sizeof(fields_jun26_SpiderKindRec) / sizeof(fields_jun26_SpiderKindRec[0])};
+static const IcoTableRecord record_jun26_TexRec = {
+    "TexRec", sizeof(TexRec), 0x20, fields_jun26_TexRec,
+    sizeof(fields_jun26_TexRec) / sizeof(fields_jun26_TexRec[0])};
+static const IcoTableRecord record_jun26_WaySrcGrp = {
+    "WaySrcGrp", sizeof(WaySrcGrp), 0x3C, fields_jun26_WaySrcGrp,
+    sizeof(fields_jun26_WaySrcGrp) / sizeof(fields_jun26_WaySrcGrp[0])};
 
 static const IcoTableRow rows_jun26[] = {
     {"mc-icon-sys", "mcIconSys", ICO_TABLE_DATA, 0x002695F8u, 0x002699BCu, 0x32533E32u, 0, 1,
-     &record_sceMcIconSys, (void *)&mcIconSys, 1, ICO_TID_mcIconSys},
+     &record_jun26_sceMcIconSys, (void *)&mcIconSys, 1, ICO_TID_mcIconSys},
     {"accessary", "accessary", ICO_TABLE_DATA, 0x00275138u, 0x00275480u, 0x7A096587u, 0, 21,
-     &record_AccessaryRec, (void *)accessary, 26, ICO_TID_accessary},
+     &record_jun26_AccessaryRec, (void *)accessary, 26, ICO_TID_accessary},
     {"act-data-tbl", "actDataTbl", ICO_TABLE_DATA, 0x00275480u, 0x002754BCu, 0x06E11A02u, 0, 3,
-     &record_IdleRangeRec, (void *)actDataTbl, 3, ICO_TID_actDataTbl},
+     &record_jun26_IdleRangeRec, (void *)actDataTbl, 3, ICO_TID_actDataTbl},
     {"act-intrlist", "actIntrList", ICO_TABLE_DATA, 0x002754C0u, 0x00279D38u, 0xDF19A4D8u, 0, 773,
-     &record_IntrMail, (void *)actIntrList, 875, ICO_TID_actIntrList},
+     &record_jun26_IntrMail, (void *)actIntrList, 875, ICO_TID_actIntrList},
     {"camera-set", "cameraSetList", ICO_TABLE_DATA, 0x00279D38u, 0x0027A7F8u, 0x5598AA8Bu, 0, 86,
-     &record_char_32_, (void *)cameraSetList, 87, ICO_TID_cameraSetList},
+     &record_jun26_char_32_, (void *)cameraSetList, 87, ICO_TID_cameraSetList},
     {"game-param", "gameParam", ICO_TABLE_DATA, 0x0027A7F8u, 0x0027A878u, 0xF0890E18u, 0, 32,
-     &record_float, (void *)gameParam, 44, ICO_TID_gameParam},
+     &record_jun26_float, (void *)gameParam, 44, ICO_TID_gameParam},
     {"motion-orient", "motionOrient", ICO_TABLE_DATA, 0x0027A878u, 0x00287388u, 0xC674C987u, 0,
-     2166, &record_MotionOrientEntry, (void *)motionOrient, 2468, ICO_TID_motionOrient},
+     2166, &record_jun26_MotionOrientEntry, (void *)motionOrient, 2468, ICO_TID_motionOrient},
     {"node-fix-ofs", "clingData", ICO_TABLE_DATA, 0x00287388u, 0x002875A4u, 0x19604001u, 0, 15,
-     &record_ClingRec, (void *)clingData, 15, ICO_TID_clingData},
+     &record_jun26_ClingRec, (void *)clingData, 15, ICO_TID_clingData},
     {"obj-action", "objAction", ICO_TABLE_DATA, 0x002875A8u, 0x0028B0E0u, 0x5F2B6ABDu, 0, 758,
-     &record_OaRecB, (void *)objAction, 967, ICO_TID_objAction},
+     &record_jun26_OaRecB, (void *)objAction, 967, ICO_TID_objAction},
     {"obj-kind-data", "objKindData", ICO_TABLE_DATA, 0x0028B0E0u, 0x0028CA44u, 0xE53D512Bu, 0, 65,
-     &record_ObjKindEnt, (void *)objKindData, 70, ICO_TID_objKindData},
+     &record_jun26_ObjKindEnt, (void *)objKindData, 70, ICO_TID_objKindData},
     {"obj-layout", "objLayout", ICO_TABLE_DATA, 0x0028CA48u, 0x002C8E88u, 0x405A4688u, 0, 3248,
-     &record_GenGeo, (void *)objLayout, 3759, ICO_TID_objLayout},
+     &record_jun26_GenGeo, (void *)objLayout, 3759, ICO_TID_objLayout},
     {"parallel-motion-tbl", "parallelMotionTbl", ICO_TABLE_DATA, 0x002C8E88u, 0x002CB5D8u,
-     0x3FDE991Eu, 0, 68, &record_ParallelMotionRow, (void *)parallelMotionTbl, 86,
+     0x3FDE991Eu, 0, 68, &record_jun26_ParallelMotionRow, (void *)parallelMotionTbl, 86,
      ICO_TID_parallelMotionTbl},
     {"sekind", "seKind", ICO_TABLE_DATA, 0x002CB5D8u, 0x002CC050u, 0x6B85BF9Cu, 0, 1340,
-     &record_unsigned_short, (void *)seKind, 1420, ICO_TID_seKind},
+     &record_jun26_unsigned_short, (void *)seKind, 1420, ICO_TID_seKind},
     {"tex-property", "texProperty", ICO_TABLE_DATA, 0x002CC050u, 0x002D4450u, 0x659D3D52u, 0, 384,
-     &record_LtProperty, (void *)texProperty, 436, ICO_TID_texProperty},
+     &record_jun26_LtProperty, (void *)texProperty, 436, ICO_TID_texProperty},
     {"staffroll_dat", "staffRollNameData", ICO_TABLE_DATA, 0x004DD750u, 0x004DE220u, 0x4FCD8383u, 0,
-     692, &record_char_, (void *)staffRollNameData, 1072, ICO_TID_staffRollNameData},
+     692, &record_jun26_char_, (void *)staffRollNameData, 1072, ICO_TID_staffRollNameData},
     {"staffroll_dat", NULL, ICO_TABLE_RODATA, 0x0065E630u, 0x0065F250u, 0x45D6D36Cu, 0, 0, NULL,
      ico_table_pool_staffroll_dat_rodata, 4512, ICO_TID_COUNT},
     {"staffroll_dat", NULL, ICO_TABLE_SDATA, 0x0067ABA8u, 0x0067ABB0u, 0xF4B6D2CAu, 0, 0, NULL,
      ico_table_pool_staffroll_dat_sdata, 16, ICO_TID_COUNT},
     {"staffroll_dat", "staffRollNameDataNum", ICO_TABLE_SDATA, 0x0067ABA8u, 0x0067ABB0u,
-     0xF4B6D2CAu, 4, 1, &record_int, (void *)&staffRollNameDataNum, 1,
+     0xF4B6D2CAu, 4, 1, &record_jun26_int, (void *)&staffRollNameDataNum, 1,
      ICO_TID_staffRollNameDataNum},
     {"enemy-model02-kindlist", "enemymodel02Kind16", ICO_TABLE_DATA, 0x004EB318u, 0x004EBC28u,
-     0x0515E885u, 0, 580, &record_int, (void *)enemymodel02Kind16, 580, ICO_TID_enemymodel02Kind16},
+     0x0515E885u, 0, 580, &record_jun26_int, (void *)enemymodel02Kind16, 580,
+     ICO_TID_enemymodel02Kind16},
     {"enemy-model02-kinds", "enemymodel02Kinds", ICO_TABLE_DATA, 0x004EBC28u, 0x004EBD00u,
-     0xC932B788u, 0, 27, &record_EnemyKindRec, (void *)enemymodel02Kinds, 27,
+     0xC932B788u, 0, 27, &record_jun26_EnemyKindRec, (void *)enemymodel02Kinds, 27,
      ICO_TID_enemymodel02Kinds},
     {"enemy-model02-pos", "enemymodel02Pos", ICO_TABLE_DATA, 0x004EBD00u, 0x004EDF20u, 0xE98076EDu,
-     0, 546, &record_sceVu0FVECTOR, (void *)enemymodel02Pos, 546, ICO_TID_enemymodel02Pos},
+     0, 546, &record_jun26_sceVu0FVECTOR, (void *)enemymodel02Pos, 546, ICO_TID_enemymodel02Pos},
     {"enemy-model02-set", "enemymodel02Set", ICO_TABLE_DATA, 0x004EDF20u, 0x004EDF30u, 0xC5A54ACDu,
-     0, 1, &record_EnemyModelSet, (void *)&enemymodel02Set, 1, ICO_TID_enemymodel02Set},
+     0, 1, &record_jun26_EnemyModelSet, (void *)&enemymodel02Set, 1, ICO_TID_enemymodel02Set},
     {"enemy-model02-list", "enemymodel02", ICO_TABLE_DATA, 0x004EDF30u, 0x004EDF34u, 0x695960A4u, 0,
-     1, &record_EnemyModelSet_, (void *)enemymodel02, 1, ICO_TID_enemymodel02},
+     1, &record_jun26_EnemyModelSet_, (void *)enemymodel02, 1, ICO_TID_enemymodel02},
     {"enemy-model03-kindlist", "enemymodel03Kind16", ICO_TABLE_DATA, 0x004EDF38u, 0x004EE928u,
-     0x49516D37u, 0, 636, &record_int, (void *)enemymodel03Kind16, 636, ICO_TID_enemymodel03Kind16},
+     0x49516D37u, 0, 636, &record_jun26_int, (void *)enemymodel03Kind16, 636,
+     ICO_TID_enemymodel03Kind16},
     {"enemy-model03-kinds", "enemymodel03Kinds", ICO_TABLE_DATA, 0x004EE928u, 0x004EE9F8u,
-     0xB6F81C1Du, 0, 26, &record_EnemyKindRec, (void *)enemymodel03Kinds, 26,
+     0xB6F81C1Du, 0, 26, &record_jun26_EnemyKindRec, (void *)enemymodel03Kinds, 26,
      ICO_TID_enemymodel03Kinds},
     {"enemy-model03-pos", "enemymodel03Pos", ICO_TABLE_DATA, 0x004EEA00u, 0x004F0F70u, 0x24B48FDDu,
-     0, 599, &record_sceVu0FVECTOR, (void *)enemymodel03Pos, 599, ICO_TID_enemymodel03Pos},
+     0, 599, &record_jun26_sceVu0FVECTOR, (void *)enemymodel03Pos, 599, ICO_TID_enemymodel03Pos},
     {"enemy-model03-set", "enemymodel03Set", ICO_TABLE_DATA, 0x004F0F70u, 0x004F0F80u, 0x598DDB8Cu,
-     0, 1, &record_EnemyModelSet, (void *)&enemymodel03Set, 1, ICO_TID_enemymodel03Set},
+     0, 1, &record_jun26_EnemyModelSet, (void *)&enemymodel03Set, 1, ICO_TID_enemymodel03Set},
     {"enemy-model03-list", "enemymodel03", ICO_TABLE_DATA, 0x004F0F80u, 0x004F0F84u, 0x36C66B77u, 0,
-     1, &record_EnemyModelSet_, (void *)enemymodel03, 1, ICO_TID_enemymodel03},
+     1, &record_jun26_EnemyModelSet_, (void *)enemymodel03, 1, ICO_TID_enemymodel03},
     {"enemy-model04-kindlist", "enemymodel04Kind16", ICO_TABLE_DATA, 0x004F0F88u, 0x004F1898u,
-     0x0515E885u, 0, 580, &record_int, (void *)enemymodel04Kind16, 580, ICO_TID_enemymodel04Kind16},
+     0x0515E885u, 0, 580, &record_jun26_int, (void *)enemymodel04Kind16, 580,
+     ICO_TID_enemymodel04Kind16},
     {"enemy-model04-kinds", "enemymodel04Kinds", ICO_TABLE_DATA, 0x004F1898u, 0x004F1970u,
-     0xD0B02785u, 0, 27, &record_EnemyKindRec, (void *)enemymodel04Kinds, 27,
+     0xD0B02785u, 0, 27, &record_jun26_EnemyKindRec, (void *)enemymodel04Kinds, 27,
      ICO_TID_enemymodel04Kinds},
     {"enemy-model04-pos", "enemymodel04Pos", ICO_TABLE_DATA, 0x004F1970u, 0x004F3B90u, 0xE98076EDu,
-     0, 546, &record_sceVu0FVECTOR, (void *)enemymodel04Pos, 546, ICO_TID_enemymodel04Pos},
+     0, 546, &record_jun26_sceVu0FVECTOR, (void *)enemymodel04Pos, 546, ICO_TID_enemymodel04Pos},
     {"enemy-model04-set", "enemymodel04Set", ICO_TABLE_DATA, 0x004F3B90u, 0x004F3BA0u, 0x6D991DA2u,
-     0, 1, &record_EnemyModelSet, (void *)&enemymodel04Set, 1, ICO_TID_enemymodel04Set},
+     0, 1, &record_jun26_EnemyModelSet, (void *)&enemymodel04Set, 1, ICO_TID_enemymodel04Set},
     {"enemy-model04-list", "enemymodel04", ICO_TABLE_DATA, 0x004F3BA0u, 0x004F3BA4u, 0xC3DB6703u, 0,
-     1, &record_EnemyModelSet_, (void *)enemymodel04, 1, ICO_TID_enemymodel04},
+     1, &record_jun26_EnemyModelSet_, (void *)enemymodel04, 1, ICO_TID_enemymodel04},
     {"enemy-model05-kindlist", "enemymodel05Kind16", ICO_TABLE_DATA, 0x004F3BA8u, 0x004F46C0u,
-     0xDA80F528u, 0, 710, &record_int, (void *)enemymodel05Kind16, 710, ICO_TID_enemymodel05Kind16},
+     0xDA80F528u, 0, 710, &record_jun26_int, (void *)enemymodel05Kind16, 710,
+     ICO_TID_enemymodel05Kind16},
     {"enemy-model05-kinds", "enemymodel05Kinds", ICO_TABLE_DATA, 0x004F46C0u, 0x004F4798u,
-     0x3D42226Au, 0, 27, &record_EnemyKindRec, (void *)enemymodel05Kinds, 27,
+     0x3D42226Au, 0, 27, &record_jun26_EnemyKindRec, (void *)enemymodel05Kinds, 27,
      ICO_TID_enemymodel05Kinds},
     {"enemy-model05-pos", "enemymodel05Pos", ICO_TABLE_DATA, 0x004F47A0u, 0x004F71E0u, 0x95516498u,
-     0, 676, &record_sceVu0FVECTOR, (void *)enemymodel05Pos, 676, ICO_TID_enemymodel05Pos},
+     0, 676, &record_jun26_sceVu0FVECTOR, (void *)enemymodel05Pos, 676, ICO_TID_enemymodel05Pos},
     {"enemy-model05-set", "enemymodel05Set", ICO_TABLE_DATA, 0x004F71E0u, 0x004F71F0u, 0x08FCBBDFu,
-     0, 1, &record_EnemyModelSet, (void *)&enemymodel05Set, 1, ICO_TID_enemymodel05Set},
+     0, 1, &record_jun26_EnemyModelSet, (void *)&enemymodel05Set, 1, ICO_TID_enemymodel05Set},
     {"enemy-model05b-kindlist", "enemymodel05bKind0", ICO_TABLE_DATA, 0x004F71F0u, 0x004F7448u,
-     0x83C6293Cu, 0, 150, &record_int, (void *)enemymodel05bKind0, 150, ICO_TID_enemymodel05bKind0},
+     0x83C6293Cu, 0, 150, &record_jun26_int, (void *)enemymodel05bKind0, 150,
+     ICO_TID_enemymodel05bKind0},
     {"enemy-model05b-kinds", "enemymodel05bKinds", ICO_TABLE_DATA, 0x004F7448u, 0x004F74C8u,
-     0x13E57C5Cu, 0, 16, &record_EnemyKindRec, (void *)enemymodel05bKinds, 16,
+     0x13E57C5Cu, 0, 16, &record_jun26_EnemyKindRec, (void *)enemymodel05bKinds, 16,
      ICO_TID_enemymodel05bKinds},
     {"enemy-model05b-pos", "enemymodel05bPos", ICO_TABLE_DATA, 0x004F74D0u, 0x004F7CD0u,
-     0xEB7D537Eu, 0, 128, &record_sceVu0FVECTOR, (void *)enemymodel05bPos, 128,
+     0xEB7D537Eu, 0, 128, &record_jun26_sceVu0FVECTOR, (void *)enemymodel05bPos, 128,
      ICO_TID_enemymodel05bPos},
     {"enemy-model05b-set", "enemymodel05bSet", ICO_TABLE_DATA, 0x004F7CD0u, 0x004F7CE0u,
-     0x2BAEBF72u, 0, 1, &record_EnemyModelSet, (void *)&enemymodel05bSet, 1,
+     0x2BAEBF72u, 0, 1, &record_jun26_EnemyModelSet, (void *)&enemymodel05bSet, 1,
      ICO_TID_enemymodel05bSet},
     {"enemy-model05-list", "enemymodel05", ICO_TABLE_DATA, 0x004F7CE0u, 0x004F7CE8u, 0x5EBDE249u, 0,
-     2, &record_EnemyModelSet_, (void *)enemymodel05, 2, ICO_TID_enemymodel05},
+     2, &record_jun26_EnemyModelSet_, (void *)enemymodel05, 2, ICO_TID_enemymodel05},
     {"enemy-model06-kindlist", "enemymodel06Kind16", ICO_TABLE_DATA, 0x004F7CE8u, 0x004F8898u,
-     0x24E62B5Bu, 0, 748, &record_int, (void *)enemymodel06Kind16, 748, ICO_TID_enemymodel06Kind16},
+     0x24E62B5Bu, 0, 748, &record_jun26_int, (void *)enemymodel06Kind16, 748,
+     ICO_TID_enemymodel06Kind16},
     {"enemy-model06-kinds", "enemymodel06Kinds", ICO_TABLE_DATA, 0x004F8898u, 0x004F8970u,
-     0xE93A13CBu, 0, 27, &record_EnemyKindRec, (void *)enemymodel06Kinds, 27,
+     0xE93A13CBu, 0, 27, &record_jun26_EnemyKindRec, (void *)enemymodel06Kinds, 27,
      ICO_TID_enemymodel06Kinds},
     {"enemy-model06-pos", "enemymodel06Pos", ICO_TABLE_DATA, 0x004F8970u, 0x004FB5C0u, 0xAF809028u,
-     0, 709, &record_sceVu0FVECTOR, (void *)enemymodel06Pos, 709, ICO_TID_enemymodel06Pos},
+     0, 709, &record_jun26_sceVu0FVECTOR, (void *)enemymodel06Pos, 709, ICO_TID_enemymodel06Pos},
     {"enemy-model06-set", "enemymodel06Set", ICO_TABLE_DATA, 0x004FB5C0u, 0x004FB5D0u, 0xC31C7DEBu,
-     0, 1, &record_EnemyModelSet, (void *)&enemymodel06Set, 1, ICO_TID_enemymodel06Set},
+     0, 1, &record_jun26_EnemyModelSet, (void *)&enemymodel06Set, 1, ICO_TID_enemymodel06Set},
     {"enemy-model06-list", "enemymodel06", ICO_TABLE_DATA, 0x004FB5D0u, 0x004FB5D4u, 0xE37D5E2Bu, 0,
-     1, &record_EnemyModelSet_, (void *)enemymodel06, 1, ICO_TID_enemymodel06},
+     1, &record_jun26_EnemyModelSet_, (void *)enemymodel06, 1, ICO_TID_enemymodel06},
     {"enemy-model07-kindlist", "enemymodel07Kind16", ICO_TABLE_DATA, 0x004FB5D8u, 0x004FC108u,
-     0x03FED5FBu, 0, 716, &record_int, (void *)enemymodel07Kind16, 716, ICO_TID_enemymodel07Kind16},
+     0x03FED5FBu, 0, 716, &record_jun26_int, (void *)enemymodel07Kind16, 716,
+     ICO_TID_enemymodel07Kind16},
     {"enemy-model07-kinds", "enemymodel07Kinds", ICO_TABLE_DATA, 0x004FC108u, 0x004FC1E0u,
-     0x894D2F6Bu, 0, 27, &record_EnemyKindRec, (void *)enemymodel07Kinds, 27,
+     0x894D2F6Bu, 0, 27, &record_jun26_EnemyKindRec, (void *)enemymodel07Kinds, 27,
      ICO_TID_enemymodel07Kinds},
     {"enemy-model07-pos", "enemymodel07Pos", ICO_TABLE_DATA, 0x004FC1E0u, 0x004FEC40u, 0x92833E25u,
-     0, 678, &record_sceVu0FVECTOR, (void *)enemymodel07Pos, 678, ICO_TID_enemymodel07Pos},
+     0, 678, &record_jun26_sceVu0FVECTOR, (void *)enemymodel07Pos, 678, ICO_TID_enemymodel07Pos},
     {"enemy-model07-set", "enemymodel07Set", ICO_TABLE_DATA, 0x004FEC40u, 0x004FEC50u, 0xB4B81591u,
-     0, 1, &record_EnemyModelSet, (void *)&enemymodel07Set, 1, ICO_TID_enemymodel07Set},
+     0, 1, &record_jun26_EnemyModelSet, (void *)&enemymodel07Set, 1, ICO_TID_enemymodel07Set},
     {"enemy-model07-list", "enemymodel07", ICO_TABLE_DATA, 0x004FEC50u, 0x004FEC54u, 0x6D49FD2Fu, 0,
-     1, &record_EnemyModelSet_, (void *)enemymodel07, 1, ICO_TID_enemymodel07},
+     1, &record_jun26_EnemyModelSet_, (void *)enemymodel07, 1, ICO_TID_enemymodel07},
     {"enemy-model08-kindlist", "enemymodel08Kind16", ICO_TABLE_DATA, 0x004FEC58u, 0x004FFB80u,
-     0xF81AE48Au, 0, 970, &record_int, (void *)enemymodel08Kind16, 970, ICO_TID_enemymodel08Kind16},
+     0xF81AE48Au, 0, 970, &record_jun26_int, (void *)enemymodel08Kind16, 970,
+     ICO_TID_enemymodel08Kind16},
     {"enemy-model08-kinds", "enemymodel08Kinds", ICO_TABLE_DATA, 0x004FFB80u, 0x004FFC58u,
-     0xF7449775u, 0, 27, &record_EnemyKindRec, (void *)enemymodel08Kinds, 27,
+     0xF7449775u, 0, 27, &record_jun26_EnemyKindRec, (void *)enemymodel08Kinds, 27,
      ICO_TID_enemymodel08Kinds},
     {"enemy-model08-pos", "enemymodel08Pos", ICO_TABLE_DATA, 0x004FFC60u, 0x005035C0u, 0x3FFF65E5u,
-     0, 918, &record_sceVu0FVECTOR, (void *)enemymodel08Pos, 918, ICO_TID_enemymodel08Pos},
+     0, 918, &record_jun26_sceVu0FVECTOR, (void *)enemymodel08Pos, 918, ICO_TID_enemymodel08Pos},
     {"enemy-model08-set", "enemymodel08Set", ICO_TABLE_DATA, 0x005035C0u, 0x005035D0u, 0x5B986833u,
-     0, 1, &record_EnemyModelSet, (void *)&enemymodel08Set, 1, ICO_TID_enemymodel08Set},
+     0, 1, &record_jun26_EnemyModelSet, (void *)&enemymodel08Set, 1, ICO_TID_enemymodel08Set},
     {"enemy-model08-list", "enemymodel08", ICO_TABLE_DATA, 0x005035D0u, 0x005035D4u, 0xCF124B35u, 0,
-     1, &record_EnemyModelSet_, (void *)enemymodel08, 1, ICO_TID_enemymodel08},
+     1, &record_jun26_EnemyModelSet_, (void *)enemymodel08, 1, ICO_TID_enemymodel08},
     {"enemy-model09-kindlist", "enemymodel09Kind16", ICO_TABLE_DATA, 0x005035D8u, 0x005042B8u,
-     0x7B520842u, 0, 824, &record_int, (void *)enemymodel09Kind16, 824, ICO_TID_enemymodel09Kind16},
+     0x7B520842u, 0, 824, &record_jun26_int, (void *)enemymodel09Kind16, 824,
+     ICO_TID_enemymodel09Kind16},
     {"enemy-model09-kinds", "enemymodel09Kinds", ICO_TABLE_DATA, 0x005042B8u, 0x00504390u,
-     0x60EC1796u, 0, 27, &record_EnemyKindRec, (void *)enemymodel09Kinds, 27,
+     0x60EC1796u, 0, 27, &record_jun26_EnemyKindRec, (void *)enemymodel09Kinds, 27,
      ICO_TID_enemymodel09Kinds},
     {"enemy-model09-pos", "enemymodel09Pos", ICO_TABLE_DATA, 0x00504390u, 0x00507420u, 0x150A6BC5u,
-     0, 777, &record_sceVu0FVECTOR, (void *)enemymodel09Pos, 777, ICO_TID_enemymodel09Pos},
+     0, 777, &record_jun26_sceVu0FVECTOR, (void *)enemymodel09Pos, 777, ICO_TID_enemymodel09Pos},
     {"enemy-model09-set", "enemymodel09Set", ICO_TABLE_DATA, 0x00507420u, 0x00507430u, 0x231216BFu,
-     0, 1, &record_EnemyModelSet, (void *)&enemymodel09Set, 1, ICO_TID_enemymodel09Set},
+     0, 1, &record_jun26_EnemyModelSet, (void *)&enemymodel09Set, 1, ICO_TID_enemymodel09Set},
     {"enemy-model09b-kindlist", "enemymodel09bKind3", ICO_TABLE_DATA, 0x00507430u, 0x00507610u,
-     0x2A9941AEu, 0, 120, &record_int, (void *)enemymodel09bKind3, 120, ICO_TID_enemymodel09bKind3},
+     0x2A9941AEu, 0, 120, &record_jun26_int, (void *)enemymodel09bKind3, 120,
+     ICO_TID_enemymodel09bKind3},
     {"enemy-model09b-kinds", "enemymodel09bKinds", ICO_TABLE_DATA, 0x00507610u, 0x00507660u,
-     0x616E40E8u, 0, 10, &record_EnemyKindRec, (void *)enemymodel09bKinds, 10,
+     0x616E40E8u, 0, 10, &record_jun26_EnemyKindRec, (void *)enemymodel09bKinds, 10,
      ICO_TID_enemymodel09bKinds},
     {"enemy-model09b-pos", "enemymodel09bPos", ICO_TABLE_DATA, 0x00507660u, 0x00507CA0u,
-     0x4F9AA20Cu, 0, 100, &record_sceVu0FVECTOR, (void *)enemymodel09bPos, 100,
+     0x4F9AA20Cu, 0, 100, &record_jun26_sceVu0FVECTOR, (void *)enemymodel09bPos, 100,
      ICO_TID_enemymodel09bPos},
     {"enemy-model09b-set", "enemymodel09bSet", ICO_TABLE_DATA, 0x00507CA0u, 0x00507CB0u,
-     0x049F7560u, 0, 1, &record_EnemyModelSet, (void *)&enemymodel09bSet, 1,
+     0x049F7560u, 0, 1, &record_jun26_EnemyModelSet, (void *)&enemymodel09bSet, 1,
      ICO_TID_enemymodel09bSet},
     {"enemy-model09-list", "enemymodel09", ICO_TABLE_DATA, 0x00507CB0u, 0x00507CB8u, 0x22C69495u, 0,
-     2, &record_EnemyModelSet_, (void *)enemymodel09, 2, ICO_TID_enemymodel09},
+     2, &record_jun26_EnemyModelSet_, (void *)enemymodel09, 2, ICO_TID_enemymodel09},
     {"enemy-set-table", "enemySetTable", ICO_TABLE_DATA, 0x00507CB8u, 0x00507D00u, 0x0FE8E074u, 0,
-     9, &record_EnemySet, (void *)enemySetTable, 9, ICO_TID_enemySetTable},
+     9, &record_jun26_EnemySet, (void *)enemySetTable, 9, ICO_TID_enemySetTable},
     {"item-kind-def", "itemKind", ICO_TABLE_DATA, 0x0050F220u, 0x0050F280u, 0x2494365Au, 0, 6,
-     &record_ItemBreakRec, (void *)itemKind, 7, ICO_TID_itemKind},
+     &record_jun26_ItemBreakRec, (void *)itemKind, 7, ICO_TID_itemKind},
     {"mirror-motion-def", "mirrorMotionTable", ICO_TABLE_DATA, 0x0050F280u, 0x0050F298u,
-     0x54B1A8DCu, 0, 3, &record_MotOriAlt, (void *)mirrorMotionTable, 6, ICO_TID_mirrorMotionTable},
+     0x54B1A8DCu, 0, 3, &record_jun26_MotOriAlt, (void *)mirrorMotionTable, 6,
+     ICO_TID_mirrorMotionTable},
     {"model-path", "modelData", ICO_TABLE_DATA, 0x0050F298u, 0x00586A30u, 0xC227384Eu, 0, 1474,
-     &record_PObjMdl, (void *)modelData, 1637, ICO_TID_modelData},
+     &record_jun26_PObjMdl, (void *)modelData, 1637, ICO_TID_modelData},
     {"prog-se-link", "progSELink", ICO_TABLE_DATA, 0x00586A30u, 0x00586F04u, 0x06A5ABBFu, 0, 103,
-     &record_SePackage, (void *)progSELink, 128, ICO_TID_progSELink},
+     &record_jun26_SePackage, (void *)progSELink, 128, ICO_TID_progSELink},
     {"texture-layout", "texLayout", ICO_TABLE_DATA, 0x00586F08u, 0x00587F70u, 0x8194B629u, 0, 75,
-     &record_LtProp, (void *)texLayout, 80, ICO_TID_texLayout},
+     &record_jun26_LtProp, (void *)texLayout, 80, ICO_TID_texLayout},
     {"way-point", "wayPointSheet", ICO_TABLE_DATA, 0x00587F70u, 0x00599604u, 0x892E3B3Eu, 0, 2547,
-     &record_WaySrcPt, (void *)wayPointSheet, 2924, ICO_TID_wayPointSheet},
+     &record_jun26_WaySrcPt, (void *)wayPointSheet, 2924, ICO_TID_wayPointSheet},
     {"weapon-fumble-def", "weaponFumbleGeo", ICO_TABLE_DATA, 0x00599608u, 0x00599800u, 0xB8044101u,
-     0, 21, &record_FumbleRow, (void *)weaponFumbleGeo, 21, ICO_TID_weaponFumbleGeo},
+     0, 21, &record_jun26_FumbleRow, (void *)weaponFumbleGeo, 21, ICO_TID_weaponFumbleGeo},
     {"act-mode-def", "actModeTbl", ICO_TABLE_RODATA, 0x005A4910u, 0x005A6D50u, 0x4E2FE592u, 0, 116,
-     &record_ActModeRec, (void *)actModeTbl, 120, ICO_TID_actModeTbl},
+     &record_jun26_ActModeRec, (void *)actModeTbl, 120, ICO_TID_actModeTbl},
     {"attack-def", "attackData", ICO_TABLE_RODATA, 0x005A6D50u, 0x005A7044u, 0xC040F26Cu, 0, 21,
-     &record_AttackKindEntry, (void *)attackData, 21, ICO_TID_attackData},
+     &record_jun26_AttackKindEntry, (void *)attackData, 21, ICO_TID_attackData},
     {"auto-escort", "autoEscortData", ICO_TABLE_RODATA, 0x005A7048u, 0x005A79E8u, 0xC84736AAu, 0,
-     88, &record_EscortPoint, (void *)autoEscortData, 98, ICO_TID_autoEscortData},
+     88, &record_jun26_EscortPoint, (void *)autoEscortData, 98, ICO_TID_autoEscortData},
     {"exit-data", "exitData", ICO_TABLE_RODATA, 0x005A79E8u, 0x005AA1E8u, 0xE9623515u, 0, 256,
-     &record_ExitData, (void *)exitData, 261, ICO_TID_exitData},
+     &record_jun26_ExitData, (void *)exitData, 261, ICO_TID_exitData},
     {"generator-sub-position", "generatorSubPosition", ICO_TABLE_RODATA, 0x005AA1E8u, 0x005AA248u,
-     0x7C32946Fu, 0, 6, &record_SafePosOffset, (void *)generatorSubPosition, 7,
+     0x7C32946Fu, 0, 6, &record_jun26_SafePosOffset, (void *)generatorSubPosition, 7,
      ICO_TID_generatorSubPosition},
     {"girl-warp-list", "girlWarpList", ICO_TABLE_RODATA, 0x005AA248u, 0x005AAB38u, 0xEFECA50Eu, 0,
-     26, &record_WarpRec, (void *)girlWarpList, 26, ICO_TID_girlWarpList},
+     26, &record_jun26_WarpRec, (void *)girlWarpList, 26, ICO_TID_girlWarpList},
     {"iconfile", "iconFile", ICO_TABLE_RODATA, 0x005AAB38u, 0x005AABECu, 0x54008B8Au, 0, 5,
-     &record_IconFile, (void *)iconFile, 5, ICO_TID_iconFile},
+     &record_jun26_IconFile, (void *)iconFile, 5, ICO_TID_iconFile},
     {"idle-mot-def", "idlingDef", ICO_TABLE_RODATA, 0x005AABF0u, 0x005AAC74u, 0x24581E03u, 0, 11,
-     &record_IdlingDef, (void *)idlingDef, 11, ICO_TID_idlingDef},
+     &record_jun26_IdlingDef, (void *)idlingDef, 11, ICO_TID_idlingDef},
     {"init-func", "initFunc", ICO_TABLE_RODATA, 0x005AAC78u, 0x005AAFFCu, 0x7B438F81u, 0, 25,
-     &record_PackKind, (void *)initFunc, 26, ICO_TID_initFunc},
+     &record_jun26_PackKind, (void *)initFunc, 26, ICO_TID_initFunc},
     {"look-target-data", "lookTargetData", ICO_TABLE_RODATA, 0x005AB000u, 0x005AB0FCu, 0xAD8F1FDCu,
-     0, 21, &record_LookTarget, (void *)lookTargetData, 27, ICO_TID_lookTargetData},
+     0, 21, &record_jun26_LookTarget, (void *)lookTargetData, 27, ICO_TID_lookTargetData},
     {"motion-def", "motionKind", ICO_TABLE_RODATA, 0x005AB100u, 0x00619B40u, 0xB60931C2u, 0, 1168,
-     &record_MotionDef, (void *)motionKind, 1168, ICO_TID_motionKind},
+     &record_jun26_MotionDef, (void *)motionKind, 1168, ICO_TID_motionKind},
     {"motion-ik-eff-def", "motionIKEffKind", ICO_TABLE_RODATA, 0x00619B40u, 0x00619BB0u,
-     0xA473EF7Au, 0, 7, &record_HandModeRow, (void *)motionIKEffKind, 7, ICO_TID_motionIKEffKind},
+     0xA473EF7Au, 0, 7, &record_jun26_HandModeRow, (void *)motionIKEffKind, 7,
+     ICO_TID_motionIKEffKind},
     {"motion-orient-def", "motionOriKind", ICO_TABLE_RODATA, 0x00619BB0u, 0x0061BEF0u, 0x97F40BFFu,
-     0, 282, &record_MotOriName, (void *)motionOriKind, 327, ICO_TID_motionOriKind},
+     0, 282, &record_jun26_MotOriName, (void *)motionOriKind, 327, ICO_TID_motionOriKind},
     {"motion-random-def", "randomMotionKind", ICO_TABLE_RODATA, 0x0061BEF0u, 0x0061C018u,
-     0xAE537F0Au, 0, 74, &record_int, (void *)randomMotionKind, 100, ICO_TID_randomMotionKind},
+     0xAE537F0Au, 0, 74, &record_jun26_int, (void *)randomMotionKind, 100,
+     ICO_TID_randomMotionKind},
     {"moviefile", "movieFile", ICO_TABLE_RODATA, 0x0061C018u, 0x0061C0B8u, 0x19B35E20u, 0, 5,
-     &record_MotOriName, (void *)movieFile, 7, ICO_TID_movieFile},
+     &record_jun26_MotOriName, (void *)movieFile, 7, ICO_TID_movieFile},
     {"obj-light", "objectLight", ICO_TABLE_RODATA, 0x0061C0B8u, 0x0061C0E8u, 0xC886589Bu, 0, 3,
-     &record_ObjLight, (void *)objectLight, 3, ICO_TID_objectLight},
+     &record_jun26_ObjLight, (void *)objectLight, 3, ICO_TID_objectLight},
     {"pair-motion", "pairMotion", ICO_TABLE_RODATA, 0x0061C0E8u, 0x0061C208u, 0x8DE96F9Fu, 0, 36,
-     &record_BecPair, (void *)pairMotion, 36, ICO_TID_pairMotion},
+     &record_jun26_BecPair, (void *)pairMotion, 36, ICO_TID_pairMotion},
     {"param-escape-run", "paramEscapeRun", ICO_TABLE_RODATA, 0x0061C208u, 0x0061C248u, 0x5AD13085u,
-     0, 8, &record_EscapeRange, (void *)paramEscapeRun, 8, ICO_TID_paramEscapeRun},
+     0, 8, &record_jun26_EscapeRange, (void *)paramEscapeRun, 8, ICO_TID_paramEscapeRun},
     {"se-env", "seEnv", ICO_TABLE_RODATA, 0x0061C248u, 0x0061F038u, 0x4416236Eu, 0, 420,
-     &record_SeEnvDef, (void *)seEnv, 425, ICO_TID_seEnv},
+     &record_jun26_SeEnvDef, (void *)seEnv, 425, ICO_TID_seEnv},
     {"sedef", "seDef", ICO_TABLE_RODATA, 0x0061F038u, 0x00632994u, 0xD677500Fu, 0, 1337,
-     &record_SeDef, (void *)seDef, 1426, ICO_TID_seDef},
+     &record_jun26_SeDef, (void *)seDef, 1426, ICO_TID_seDef},
     {"sefile", "seFile", ICO_TABLE_RODATA, 0x00632998u, 0x00634BB8u, 0x6E0DF6BEu, 0, 104,
-     &record_SeBank, (void *)seFile, 104, ICO_TID_seFile},
+     &record_jun26_SeBank, (void *)seFile, 104, ICO_TID_seFile},
     {"selist", "seList", ICO_TABLE_RODATA, 0x00634BB8u, 0x0063C1E0u, 0x479667CBu, 0, 3781,
-     &record_SeKind, (void *)seList, 3837, ICO_TID_seList},
+     &record_jun26_SeKind, (void *)seList, 3837, ICO_TID_seList},
     {"shocklist", "shockList", ICO_TABLE_RODATA, 0x0063C1E0u, 0x0063C278u, 0x477B6ECFu, 0, 19,
-     &record_PadActDef, (void *)shockList, 28, ICO_TID_shockList},
+     &record_jun26_PadActDef, (void *)shockList, 28, ICO_TID_shockList},
     {"stage-all", "stageData", ICO_TABLE_RODATA, 0x0063C278u, 0x006461CCu, 0xC0C0673Du, 0, 103,
-     &record_StgPre, (void *)stageData, 106, ICO_TID_stageData},
+     &record_jun26_StgPre, (void *)stageData, 106, ICO_TID_stageData},
     {"stage-anim-model", "objTableScene", ICO_TABLE_RODATA, 0x006461D0u, 0x006486A8u, 0xFBF16136u,
-     0, 1179, &record_StgObjDat, (void *)objTableScene, 1377, ICO_TID_objTableScene},
+     0, 1179, &record_jun26_StgObjDat, (void *)objTableScene, 1377, ICO_TID_objTableScene},
     {"stage-anim", "stageTable", ICO_TABLE_RODATA, 0x006486A8u, 0x00659938u, 0x3B539A94u, 0, 764,
-     &record_StageAnimDef, (void *)stageTable, 973, ICO_TID_stageTable},
+     &record_jun26_StageAnimDef, (void *)stageTable, 973, ICO_TID_stageTable},
     {"stream-motion-def", "streamMotion", ICO_TABLE_RODATA, 0x00659938u, 0x00659B18u, 0x32045764u,
-     0, 10, &record_StreamMotionFile, (void *)streamMotion, 10, ICO_TID_streamMotion},
+     0, 10, &record_jun26_StreamMotionFile, (void *)streamMotion, 10, ICO_TID_streamMotion},
     {"weapon-def", "weaponKind", ICO_TABLE_RODATA, 0x00659B18u, 0x00659C14u, 0x9D362F9Du, 0, 7,
-     &record_WeaponDef, (void *)weaponKind, 10, ICO_TID_weaponKind},
+     &record_jun26_WeaponDef, (void *)weaponKind, 10, ICO_TID_weaponKind},
     {"adpcmfile", "adpcmFile", ICO_TABLE_RODATA, 0x006643C8u, 0x00665A48u, 0xDB37497Au, 0, 90,
-     &record_AdpcmDataRec, (void *)adpcmFile, 105, ICO_TID_adpcmFile},
+     &record_jun26_AdpcmDataRec, (void *)adpcmFile, 105, ICO_TID_adpcmFile},
     {"blend-motion-def", "blendMotionKind", ICO_TABLE_RODATA, 0x00665A48u, 0x00666748u, 0x536939D2u,
-     0, 208, &record_MotOriSub, (void *)blendMotionKind, 321, ICO_TID_blendMotionKind},
+     0, 208, &record_jun26_MotOriSub, (void *)blendMotionKind, 321, ICO_TID_blendMotionKind},
     {"enemy-model-grp", "enemymodelGroup", ICO_TABLE_RODATA, 0x006668B0u, 0x00666A40u, 0xF457D89Au,
-     0, 10, &record_EnemyMdlRec, (void *)enemymodelGroup, 10, ICO_TID_enemymodelGroup},
+     0, 10, &record_jun26_EnemyMdlRec, (void *)enemymodelGroup, 10, ICO_TID_enemymodelGroup},
     {"enemy-model-tbl", "enemymodelTable", ICO_TABLE_RODATA, 0x00666A40u, 0x00666AA4u, 0x2B977E58u,
-     0, 25, &record_int, (void *)enemymodelTable, 25, ICO_TID_enemymodelTable},
+     0, 25, &record_jun26_int, (void *)enemymodelTable, 25, ICO_TID_enemymodelTable},
     {"enemy-random-def", "randomEnemyKind", ICO_TABLE_RODATA, 0x00666AA8u, 0x00666AF8u, 0xCB185D4Au,
-     0, 10, &record_EnemyKindRange, (void *)randomEnemyKind, 22, ICO_TID_randomEnemyKind},
+     0, 10, &record_jun26_EnemyKindRange, (void *)randomEnemyKind, 22, ICO_TID_randomEnemyKind},
     {"enemy-random-variation-def", "randomEnemyVariationKind", ICO_TABLE_RODATA, 0x00666AF8u,
-     0x00666B98u, 0x3792FA7Du, 0, 40, &record_int, (void *)randomEnemyVariationKind, 86,
+     0x00666B98u, 0x3792FA7Du, 0, 40, &record_jun26_int, (void *)randomEnemyVariationKind, 86,
      ICO_TID_randomEnemyVariationKind},
     {"layout-cloth-def", "layoutClothDef", ICO_TABLE_RODATA, 0x00666B98u, 0x006674F8u, 0x30535C8Bu,
-     0, 30, &record_LayoutClothDef, (void *)layoutClothDef, 36, ICO_TID_layoutClothDef},
+     0, 30, &record_jun26_LayoutClothDef, (void *)layoutClothDef, 36, ICO_TID_layoutClothDef},
     {"motion-eff-condition-def", "motEffCondKind", ICO_TABLE_RODATA, 0x006674F8u, 0x0066757Cu,
-     0x998DE4D8u, 0, 11, &record_VibCondEntry, (void *)motEffCondKind, 51, ICO_TID_motEffCondKind},
+     0x998DE4D8u, 0, 11, &record_jun26_VibCondEntry, (void *)motEffCondKind, 51,
+     ICO_TID_motEffCondKind},
     {"motion-eff-def", "motionEffKind", ICO_TABLE_RODATA, 0x00667580u, 0x00667850u, 0xA52D9A14u, 0,
-     20, &record_EffEntry, (void *)motionEffKind, 25, ICO_TID_motionEffKind},
+     20, &record_jun26_EffEntry, (void *)motionEffKind, 25, ICO_TID_motionEffKind},
     {"motion-eff-random-def", "randomEffKind", ICO_TABLE_RODATA, 0x00667850u, 0x00667868u,
-     0xC4AC303Du, 0, 6, &record_int, (void *)randomEffKind, 10, ICO_TID_randomEffKind},
+     0xC4AC303Du, 0, 6, &record_jun26_int, (void *)randomEffKind, 10, ICO_TID_randomEffKind},
     {"motion-limit-def", "motionLimitDef", ICO_TABLE_RODATA, 0x00667868u, 0x00668168u, 0x720CBACDu,
-     0, 48, &record_MotOriLimit, (void *)motionLimitDef, 48, ICO_TID_motionLimitDef},
+     0, 48, &record_jun26_MotOriLimit, (void *)motionLimitDef, 48, ICO_TID_motionLimitDef},
     {"motion-se-condition-def", "motSECondKind", ICO_TABLE_RODATA, 0x00668168u, 0x00668A74u,
-     0xC48DF306u, 0, 193, &record_SECondEntry, (void *)motSECondKind, 211, ICO_TID_motSECondKind},
+     0xC48DF306u, 0, 193, &record_jun26_SECondEntry, (void *)motSECondKind, 211,
+     ICO_TID_motSECondKind},
     {"motion-se-random-def", "randomSEKind", ICO_TABLE_RODATA, 0x00668A78u, 0x0066AC20u,
-     0xFA22757Eu, 0, 1077, &record_SERandEntry, (void *)randomSEKind, 1151, ICO_TID_randomSEKind},
+     0xFA22757Eu, 0, 1077, &record_jun26_SERandEntry, (void *)randomSEKind, 1151,
+     ICO_TID_randomSEKind},
     {"obj-trigger-def", "objTriggerDef", ICO_TABLE_RODATA, 0x0066AC20u, 0x0066AC4Cu, 0xD372B3DDu, 0,
-     11, &record_int, (void *)objTriggerDef, 11, ICO_TID_objTriggerDef},
+     11, &record_jun26_int, (void *)objTriggerDef, 11, ICO_TID_objTriggerDef},
     {"obj-trigger", "objTrigger", ICO_TABLE_RODATA, 0x0066AC50u, 0x0066AD48u, 0x0863D4DAu, 0, 31,
-     &record_ObjActMailEnt, (void *)objTrigger, 33, ICO_TID_objTrigger},
+     &record_jun26_ObjActMailEnt, (void *)objTrigger, 33, ICO_TID_objTrigger},
     {"parallel-motion-orient", "parallelMotionOrient", ICO_TABLE_RODATA, 0x0066AD48u, 0x0066B07Cu,
-     0x657716E3u, 0, 41, &record_MotOriParallelEnt, (void *)parallelMotionOrient, 54,
+     0x657716E3u, 0, 41, &record_jun26_MotOriParallelEnt, (void *)parallelMotionOrient, 54,
      ICO_TID_parallelMotionOrient},
     {"particle-effect", "particleEffectFile", ICO_TABLE_RODATA, 0x0066B080u, 0x0066C0C0u,
-     0x322AAC89u, 0, 52, &record_ParticleEffectFile, (void *)particleEffectFile, 61,
+     0x322AAC89u, 0, 52, &record_jun26_ParticleEffectFile, (void *)particleEffectFile, 61,
      ICO_TID_particleEffectFile},
     {"spider-def", "spiderDef", ICO_TABLE_RODATA, 0x0066C0C0u, 0x0066C180u, 0xC210695Du, 0, 6,
-     &record_SpiderKindRec, (void *)spiderDef, 6, ICO_TID_spiderDef},
+     &record_jun26_SpiderKindRec, (void *)spiderDef, 6, ICO_TID_spiderDef},
     {"texture-path", "texFile", ICO_TABLE_RODATA, 0x0066C180u, 0x0066C800u, 0xE1370369u, 0, 52,
-     &record_TexRec, (void *)texFile, 74, ICO_TID_texFile},
+     &record_jun26_TexRec, (void *)texFile, 74, ICO_TID_texFile},
     {"way-group", "wayGroupSheet", ICO_TABLE_RODATA, 0x0066C800u, 0x00675AF4u, 0x03C6D514u, 0, 627,
-     &record_WaySrcGrp, (void *)wayGroupSheet, 723, ICO_TID_wayGroupSheet},
+     &record_jun26_WaySrcGrp, (void *)wayGroupSheet, 723, ICO_TID_wayGroupSheet},
 };
 
 _Static_assert(sizeof(rows_jun26) / sizeof(rows_jun26[0]) == 122, "jun26: rows");

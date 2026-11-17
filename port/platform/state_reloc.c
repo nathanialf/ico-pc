@@ -20,10 +20,35 @@ static int in_range(const IcoStateRange *g, uint64_t w)
     return g->lo < g->hi && w >= g->lo && w <= g->hi;
 }
 
+static int find_point(const IcoStateSpan *p, size_t n, uint64_t old, uint64_t *now)
+{
+    size_t lo = 0, hi = n;
+
+    while (lo < hi) {
+        const size_t mid = lo + (hi - lo) / 2;
+
+        if (p[mid].lo < old) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    if (lo < n && p[lo].lo == old) {
+        *now = p[lo].now;
+        return 1;
+    }
+    return 0;
+}
+
 int ico_state_xlate(const IcoStateXlate *x, uint64_t old, uint64_t *now)
 {
     size_t lo = 0, hi = x->n_point;
 
+    if (x->fiber > 0 && (size_t)(x->fiber - 1) < x->n_fiber && x->fiber_point != NULL &&
+        x->fiber_point[x->fiber - 1] != NULL &&
+        find_point(x->fiber_point[x->fiber - 1], x->fiber_n_point[x->fiber - 1], old, now)) {
+        return 1;
+    }
     while (lo < hi) {
         const size_t mid = lo + (hi - lo) / 2;
 

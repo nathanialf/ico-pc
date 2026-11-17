@@ -863,12 +863,24 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   with `ICO_XB_LIST` listed (`test_refuse`); a 5 MB window (zeros with one marker) recorded by its
   length, hash and prefix and found again past 16 more zeros, refused once the marker is gone
   (`test_hashed`); a version 2 record's text point translated as before, a version 2 record's
-  unnamed words refused with their own words and no list, a damaged version 2 text and a damaged
+  unnamed words refused with their own words and no list, an arm64 record without page words
+  refused, a damaged version 2 text and a damaged
   version 3 window (`test_format`); a GNU ld map's output sections (`*default*` in the memory
   configuration not one, a long name with its numbers on the next line), the code range from
   `.text` inside a wider executable range, the section at an address, the nearest symbol, and
-  `ico_xb_image` making the rest of the executable range read-only data (`test_sections`)
-  (`state_name`).
+  `ico_xb_image` making the rest of the executable range read-only data (`test_sections`); in
+  `.data.rel.ro`, two statics of one name in files of one name (each a relocated pointer and
+  constants) and a compiler's private table named from the map carry over by ordinal and masked
+  contents into a build whose pointers are its own, a changed constant refused (`number 2 of its
+  name`), the same words with no section lines left unnamed as writable (`test_masked`); synthetic arm64 functions (f_a: ADRPs of two variables of one
+  bss page, f_c and f_d: one each, f_b: a third variable's page) whose targets move by non-page
+  amounts in the later image: a fiber's registers and a spilled slot holding the pages translate to
+  the pages the later ADRPs make (not the range's move), the same value outside the fiber still the
+  range's address, an ordinary address of a variable and a page-aligned arena word by their
+  symbols; f_a's two ADRPs making two pages refused (`f_a+0x0 and f_a+0x8`); one page word on two
+  fibers whose frames aim at variables now on two pages translated per fiber; a page word also an
+  ordinary address refused when the readings differ; a page-aligned word no ADRP on its fiber makes, not
+  recorded, translated as the ordinary address it is even into a page (`test_pages`) (`state_name`).
 - `state_carry_xbuild_test.c`: save states across two real links of one program (`state_carry.cmake`,
   [PLATFORM.md](PLATFORM.md#the-carry-over-guard)): A linked with its read-only data in a segment of
   its own, B with more code and texts ahead of A's and its read-only data inside the executable
