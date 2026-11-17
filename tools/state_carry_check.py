@@ -566,7 +566,8 @@ def nearest(table, addr):
 
 PROBE_SOURCES = [
     "port/platform/state_carry_probe.c", "port/platform/state_xbuild.c",
-    "port/platform/state_syms.c", "port/platform/code_hash.c", "port/render/xxh3.c",
+    "port/platform/state_syms.c", "port/platform/state_reloc.c",
+    "port/platform/code_hash.c", "port/render/xxh3.c",
     "port/third_party/miniz/miniz.c", "port/third_party/miniz/miniz_tdef.c",
     "port/third_party/miniz/miniz_tinfl.c",
 ]
