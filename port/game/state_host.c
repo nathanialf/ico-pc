@@ -220,6 +220,18 @@ static int s_cut_next; /* a load's second camera cut, at the next poll */
 
 static void flush_at_exit(void);
 
+/* the start line's verdict on one range (ico_state_reloc_ambiguous) */
+static const char *scan_words(int fixed, uint64_t at)
+{
+    if (fixed) {
+        return "fixed or pinned: the same address in a later run";
+    }
+    if ((at >> 32) >= ICO_STATE_SCAN_HIGH_MIN) {
+        return "moved by the scan when elsewhere";
+    }
+    return "below the bound: when elsewhere, a load continues from the checkpoint";
+}
+
 /* what a state of this platform records of the saving process besides its
    ranges (state_reloc.h "The saving process's own values"), for the log */
 static const char *proc_words(unsigned need)
@@ -332,6 +344,31 @@ static void init(void)
             ico_arena_pinned() ? "pinned" : "not pinned",
             ico_fiber_pool_pinned() ? "pinned" : "not pinned",
             proc_words(ico_state_proc_needs(ico_state_platform_tag())), s_dir);
+    {
+        /* what a load in a later run can move (ico_state_reloc_ambiguous):
+           a range whose addresses' upper half is below the bound continues
+           from its checkpoint when it lies elsewhere in that run */
+        IcoStateImage img;
+        const uint64_t arena = (uint64_t)(uintptr_t)ico_arena_base();
+        const uint64_t pool = (uint64_t)(uintptr_t)ico_fiber_pool_base();
+        int fixed = 0;
+
+#if defined(ICO_STATE_FIXED_IMAGE) && ICO_STATE_FIXED_IMAGE
+        fixed = 1;
+#endif
+        if (ico_state_image_range(&img) != 0) {
+            memset(&img, 0, sizeof img);
+        }
+        fprintf(stderr,
+                "state: a later run moves a state's addresses only where their upper half is at "
+                "least 0x%x: the image 0x%llx-0x%llx (upper half 0x%llx: %s), the arena at 0x%llx "
+                "(0x%llx: %s), the fiber pool at 0x%llx (0x%llx: %s)\n",
+                ICO_STATE_SCAN_HIGH_MIN, (unsigned long long)img.lo, (unsigned long long)img.hi,
+                (unsigned long long)(img.lo >> 32), scan_words(fixed, img.lo),
+                (unsigned long long)arena, (unsigned long long)(arena >> 32),
+                scan_words(ico_arena_pinned(), arena), (unsigned long long)pool,
+                (unsigned long long)(pool >> 32), scan_words(ico_fiber_pool_pinned(), pool));
+    }
 }
 
 int ico_state_available(void)
@@ -2969,6 +3006,92 @@ static void load_checkpoint(int slot, const char *path, const IcoStateHeader *sa
     ico_ckpt_live_arm(&ap);
 }
 
+/* the merged points of a load that keeps numbers inside the old code as
+   they are (keep_code_numbers), freed at the next load */
+static IcoStateSpan *s_kept_points;
+
+/* Issue 218, another build's state whose image's upper half is below the
+   scan's bound (Windows' fixed base 0x140000000): a float from 2.0 to about
+   142 next to the integer 1 reads as an address in that image, and one
+   that lands inside a function's code would be moved by the function's
+   displacement (a keyframe's value changed).  A data structure holds a
+   function's start, never a byte inside it, so such words of the game's
+   memory and the registered blocks are numbers: each becomes an identity
+   point of the translation (looked up before the spans), kept as it is.
+   0, or -1 with `detail` when the state goes to its checkpoint instead: a
+   thread's stack or the scheduler's table holds one of the values too (it
+   may be a return address there), or more of them than the load keeps. */
+static int keep_code_numbers(int slot, const IcoStateHeader *saved, const Copy *c,
+                             const StateRanges *rg, IcoStateXlate *xl, const IcoXbVerdict *xv,
+                             char *detail, size_t detail_n)
+{
+    enum { KEEP_MAX = 4096 };
+
+    static uint64_t nums[KEEP_MAX];
+    static const int secs[] = {SEC_ARENA, SEC_GDATA, SEC_GBSS, SEC_REG, SEC_AUDIO};
+    size_t nk = 0, found = 0, i, a, b, at;
+    char sv[48];
+    IcoStateSpan *m;
+
+    for (i = 0; i < sizeof secs / sizeof secs[0]; i++) {
+        found += ico_state_code_numbers(xl, rg->text_lo, rg->text_hi, c->p[secs[i]],
+                                        (size_t)c->n[secs[i]], nums, KEEP_MAX, &nk);
+    }
+    if (nk == 0) {
+        return 0;
+    }
+    version_text(saved->commit, sv, sizeof sv);
+    if (found > nk) {
+        snprintf(detail, detail_n,
+                 "its data holds more than %d numbers that read as addresses inside the code of "
+                 "version %s",
+                 (int)KEEP_MAX, sv);
+        fprintf(stderr, "state: slot %d: %s: it continues from its checkpoint\n", slot, detail);
+        set_refusal(ICO_STATE_BLOCK_DATA, saved->commit);
+        return -1;
+    }
+    {
+        uint64_t both = 0;
+
+        if (ico_state_region_holds(c->p[SEC_FIBERS], (size_t)c->n[SEC_FIBERS], nums, nk, &both) ||
+            ico_state_region_holds(c->p[SEC_SCHED], (size_t)c->n[SEC_SCHED], nums, nk, &both)) {
+            snprintf(detail, detail_n,
+                     "0x%llx inside the code of version %s is a number in its data and a word of a "
+                     "thread's stack or the scheduler's table, which may be a return address there",
+                     (unsigned long long)both, sv);
+            fprintf(stderr, "state: slot %d: %s: it continues from its checkpoint\n", slot, detail);
+            set_refusal(ICO_STATE_BLOCK_DATA, saved->commit);
+            return -1;
+        }
+    }
+    m = (IcoStateSpan *)malloc((xv->n_point + nk) * sizeof *m);
+    if (m == NULL) {
+        snprintf(detail, detail_n, "no memory for the translation's %zu kept numbers", nk);
+        set_refusal(ICO_STATE_BLOCK_DATA, saved->commit);
+        return -1;
+    }
+    /* both lists sorted, no value in both (ico_state_code_numbers skips the
+       points): one sorted list */
+    for (a = 0, b = 0, at = 0; a < xv->n_point || b < nk;) {
+        if (b >= nk || (a < xv->n_point && xv->point[a].lo < nums[b])) {
+            m[at++] = xv->point[a++];
+        } else {
+            m[at].lo = m[at].hi = m[at].now = nums[b++];
+            at++;
+        }
+    }
+    free(s_kept_points);
+    s_kept_points = m;
+    xl->point = m;
+    xl->n_point = at;
+    fprintf(stderr,
+            "state: slot %d from version %s: %zu values in its data lie inside that version's "
+            "code at no function's start, numbers next to a small integer rather than addresses "
+            "(first 0x%llx, last 0x%llx): kept as they are\n",
+            slot, sv, nk, (unsigned long long)nums[0], (unsigned long long)nums[nk - 1]);
+    return 0;
+}
+
 /* A load the exact path refused: the checkpoint's way where
    ico_ckpt_route says so, else the refusal as before.  saved: the state's
    header, NULL when it could not be read. */
@@ -3022,6 +3145,8 @@ static void perform_load(int slot)
     memset(&s_refusal, 0, sizeof s_refusal);
     s_ckpt.loaded = 0;
     ico_xb_verdict_free(&xv);
+    free(s_kept_points);
+    s_kept_points = NULL;
     /* a save in flight first (it may be this slot's) */
     collect_save(1);
     sample(&c);
@@ -3079,6 +3204,18 @@ static void perform_load(int slot)
                     "which %s now\n",
                     slot, nk > 1 ? "s" : "", keys, nk > 1 ? "their" : "its",
                     nk > 1 ? "they have" : "it has");
+        }
+    }
+    {
+        char keys[256];
+        const int nd = ico_state_keys_defaulted(saved.keys, s_now.keys, keys, sizeof keys);
+
+        if (nd > 0) {
+            fprintf(stderr,
+                    "state: slot %d was saved with the setting%s %s unset and %s written as %s "
+                    "default now, or the other way round: the same setting%s\n",
+                    slot, nd > 1 ? "s" : "", keys, nd > 1 ? "they are" : "it is",
+                    nd > 1 ? "their" : "its", nd > 1 ? "s" : "");
         }
     }
     {
@@ -3169,6 +3306,52 @@ static void perform_load(int slot)
         xl.missed = &missed;
         xl.first_missed = &first_missed;
         rel.xlate = &xl;
+        if ((rg->image_lo >> 32) < ICO_STATE_SCAN_HIGH_MIN &&
+            keep_code_numbers(slot, &saved, &stage, rg, &xl, &xv, detail, sizeof detail) != 0) {
+            copy_free(&stage);
+            free(pobj_new);
+            ico_xb_verdict_free(&xv);
+            load_refused(slot, path, &saved, ICO_STATE_OTHER_BUILD, detail);
+            return;
+        }
+    }
+    /* a range that moved in this run whose saved addresses' upper half is
+       a small integer: the game's own pairs of 32-bit numbers read as its
+       addresses, and the scan would move them too (issue 218: the Apple
+       image above the 4 GB __PAGEZERO; an arena or fiber pool that could
+       not be pinned at its address).  Nothing has changed yet: the state
+       continues from its checkpoint instead */
+    {
+        const int amb = ico_state_reloc_ambiguous(&rel);
+
+        if (amb >= 0) {
+            static const char *const names[ICO_RELOC_RANGES] = {"program's image", "arena",
+                                                                "fiber pool", "model tables"};
+            const IcoStateRange *g = &rel.range[amb];
+            const size_t words =
+                ico_state_reloc_count(&rel, amb, stage.p[SEC_ARENA], (size_t)stage.n[SEC_ARENA]);
+
+            fprintf(stderr,
+                    "state: slot %d cannot be moved into this run exactly: the %s it was saved "
+                    "with (0x%llx-0x%llx) lies elsewhere now (%s0x%llx) and its addresses' upper "
+                    "half 0x%llx is below 0x%x, where the game's own pairs of numbers read as "
+                    "addresses in it (%zu words of the saved arena lie in it; which of them are "
+                    "addresses cannot be told), so nothing is moved and it continues from its "
+                    "checkpoint\n",
+                    slot, names[amb], (unsigned long long)g->lo, (unsigned long long)g->hi,
+                    g->delta < 0 ? "-" : "+",
+                    (unsigned long long)(g->delta < 0 ? -(uint64_t)g->delta : (uint64_t)g->delta),
+                    (unsigned long long)(g->lo >> 32), ICO_STATE_SCAN_HIGH_MIN, words);
+            snprintf(detail, sizeof detail,
+                     "the %s it was saved with lies elsewhere in this run and its addresses "
+                     "cannot be told from the game's numbers",
+                     names[amb]);
+            copy_free(&stage);
+            free(pobj_new);
+            ico_xb_verdict_free(&xv);
+            load_refused(slot, path, &saved, ICO_STATE_SELF_CHECK, detail);
+            return;
+        }
     }
     /* the saving process's thread pointer and stack guard -> this one's
        (this is the game thread, which resumes every fiber) */

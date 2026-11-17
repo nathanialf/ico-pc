@@ -950,7 +950,20 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   program's image range (this code inside the text, static data and strings inside the image, a
   heap block and the stack outside); a heap built by the allocator walks, a copy at another address
   walks only after the scan, and three corruptions are each refused; a thread entry or handler in data
-  is refused (`state_reloc`).
+  is refused; issue 218's rule (`ico_state_reloc_ambiguous`): a synthetic arena holding a
+  ClusterPoly table with the reporter's `{0x2640e60, 1}`, a bga record's and a keyframe's `{word, 1}`
+  and two real program pointers, the iOS image saved at 0x10027c000 and moved by 0x2964000: the image
+  may not be moved by the scan, the five words it would take for addresses counted and none moved
+  (what the scan would have done: the run moved to 0x4fa4e60), every delta 0 judged and moved
+  nothing, a moved arena (upper half 0xd) or pool named, the model tables and another build's
+  translated image not judged, the bound itself (0x10 moves, 0xf does not), and the macOS image at
+  its new base moved by a slide with its two real pointers moved and every pair left; the Windows
+  numbers inside the old code (`ico_state_code_numbers`, `ico_state_region_holds`): a word inside a
+  function at no start and no point is a number (a repeat once, a second region added to the one
+  sorted list, a full list counting what it did not keep), a function's start, a point, a word
+  outside the code and the code's end are not, a kept value a thread's stack holds is found, and the
+  translation with the identity point keeps the number while the function's address and the point
+  move (`state_reloc`).
 - `state_format_test.c`: the save state file ([PLATFORM.md](PLATFORM.md#the-file)): a write read
   back field by field and byte by byte (an empty section, a 15-character name, a zero-heavy section
   packing to under an eighth), a skipped section left alone, a second write replacing the first, BUSY
@@ -977,6 +990,18 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   header check with the two functions `state_host.c` sets: it loads (both checks), the fifteen
   named for the log, a damaged hash and `gameplay.door_fix=true` refused.
   The same for `developer.free_movement` (`developer.free_movement=(absent) (now true)`); `config_test.c` checks the first-run file's `[developer]` block.
+  Issue 218's side note: `gameplay.developer_mode` unset in the state and `false` now is the same
+  setting in `ico_sim_keys_first_diff` and in the header check (it loads; the key named by
+  `ico_state_keys_defaulted` for the log; refused with a damaged hash and without the key-default
+  function), `true` now differs, the reverse (saved `false`, unset now) loads, every key with one
+  default text (16 of the 18) loads unset in the state and at its default now, while
+  `video.video_mode` unset and `pal` now and `variants.weapon` at two non-default values differ.
+- `tools/macho_image_check.py selftest`: the Apple programs' image base check
+  ([BUILDING.md](../BUILDING.md#apple-image-base)) on hand-built Mach-O headers: the released
+  layout (`__TEXT` at 0x100000000) fails as below the bound, `__TEXT` at the chosen base passes (also
+  as the arm64 slice of a universal file), a linker that ignored the base, a base of upper half 0xf
+  and an image that the largest slide carries over a 4 GB boundary fail, a 32-bit header and load
+  commands past the file's end are refused (`macho_image_check`).
 - `settings_states_test.c`: the Save states page, the pause menu's rows at pitch 16 and the
   Continue screen's Square prompt ([UI.md](UI.md#save-states)), the pictures' box at their own
   shape, and F6 (the page from play and from the pause menu, back to the game, a late press, each

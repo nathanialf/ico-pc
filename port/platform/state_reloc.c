@@ -284,3 +284,148 @@ size_t ico_state_reloc_scan(const IcoStateReloc *r, void *region, size_t n, uint
     }
     return moved;
 }
+
+/* --- what the scan may move (issue 218) ------------------------------------- */
+
+int ico_state_reloc_ambiguous(const IcoStateReloc *r)
+{
+    static const int judged[] = {ICO_RELOC_MODULE, ICO_RELOC_ARENA, ICO_RELOC_POOL};
+    size_t i;
+
+    for (i = 0; i < sizeof judged / sizeof judged[0]; i++) {
+        const IcoStateRange *g = &r->range[judged[i]];
+
+        if (g->lo >= g->hi || g->delta == 0) {
+            continue;
+        }
+        if (judged[i] == ICO_RELOC_MODULE && r->xlate != NULL) {
+            continue;
+        }
+        if ((g->lo >> 32) < ICO_STATE_SCAN_HIGH_MIN || (g->hi >> 32) < ICO_STATE_SCAN_HIGH_MIN) {
+            return judged[i];
+        }
+    }
+    return -1;
+}
+
+size_t ico_state_reloc_count(const IcoStateReloc *r, int which, const void *region, size_t n)
+{
+    const uintptr_t base = (uintptr_t)region;
+    uintptr_t a = (base + 7u) & ~(uintptr_t)7u;
+    size_t k = 0;
+
+    if (region == NULL || which < 0 || which >= ICO_RELOC_RANGES) {
+        return 0;
+    }
+    for (; a >= base && a - base + 8u <= n; a += 8u) {
+        uint64_t w;
+
+        memcpy(&w, (const void *)a, sizeof w);
+        k += (size_t)in_range(&r->range[which], w);
+    }
+    return k;
+}
+
+/* 1 when some span of x starts exactly at w */
+static int span_start(const IcoStateXlate *x, uint64_t w)
+{
+    size_t lo = 0, hi = x->n_span;
+
+    while (lo < hi) {
+        const size_t mid = lo + (hi - lo) / 2;
+
+        if (x->span[mid].lo < w) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    return lo < x->n_span && x->span[lo].lo == w;
+}
+
+/* inserts v into the sorted distinct out[0..*k) (cap entries); 1 when new */
+static int add_distinct(uint64_t *out, size_t cap, size_t *k, size_t *found, uint64_t v)
+{
+    size_t lo = 0, hi = *k;
+
+    while (lo < hi) {
+        const size_t mid = lo + (hi - lo) / 2;
+
+        if (out[mid] < v) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    if (lo < *k && out[lo] == v) {
+        return 0;
+    }
+    (*found)++;
+    if (*k < cap) {
+        memmove(out + lo + 1, out + lo, (*k - lo) * sizeof out[0]);
+        out[lo] = v;
+        (*k)++;
+    }
+    return 1;
+}
+
+size_t ico_state_code_numbers(const IcoStateXlate *x, uint64_t text_lo, uint64_t text_hi,
+                              const void *region, size_t n, uint64_t *out, size_t cap, size_t *k)
+{
+    const uintptr_t base = (uintptr_t)region;
+    uintptr_t a = (base + 7u) & ~(uintptr_t)7u;
+    size_t found = 0;
+
+    if (x == NULL || region == NULL || text_lo >= text_hi) {
+        return 0;
+    }
+    for (; a >= base && a - base + 8u <= n; a += 8u) {
+        uint64_t w, v;
+
+        memcpy(&w, (const void *)a, sizeof w);
+        if (w < text_lo || w >= text_hi || span_start(x, w)) {
+            continue;
+        }
+        if (find_point(x->point, x->n_point, w, &v)) {
+            continue;
+        }
+        (void)add_distinct(out, cap, k, &found, w);
+    }
+    return found;
+}
+
+int ico_state_region_holds(const void *region, size_t n, const uint64_t *vals, size_t nv,
+                           uint64_t *which)
+{
+    const uintptr_t base = (uintptr_t)region;
+    uintptr_t a = (base + 7u) & ~(uintptr_t)7u;
+
+    if (region == NULL || vals == NULL || nv == 0) {
+        return 0;
+    }
+    for (; a >= base && a - base + 8u <= n; a += 8u) {
+        uint64_t w;
+        size_t lo = 0, hi = nv;
+
+        memcpy(&w, (const void *)a, sizeof w);
+        if (w < vals[0] || w > vals[nv - 1]) {
+            continue;
+        }
+        while (lo < hi) {
+            const size_t mid = lo + (hi - lo) / 2;
+
+            if (vals[mid] < w) {
+                lo = mid + 1;
+            } else {
+                hi = mid;
+            }
+        }
+        if (lo < nv && vals[lo] == w) {
+            if (which != NULL) {
+                *which = w;
+            }
+            return 1;
+        }
+    }
+    return 0;
+}

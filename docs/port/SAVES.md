@@ -437,7 +437,20 @@ version's or another platform's state (format 1, a changed function or layout, a
 nothing names, the arm64 page record missing, another version's settings), and of the same build's
 state whose restore failed its self-check (the backup is back) or whose file has a damaged section
 the checkpoint does not need, goes on to the checkpoint (`ico_ckpt_route`, every result in
-`state_checkpoint_test`). Another disc and a Permadeath journey (the state's own record, read
+`state_checkpoint_test`). So does the same build's state whose image, arena or fiber pool lies
+elsewhere in this run with addresses of a small upper half (`ico_state_reloc_ambiguous`, issue 218;
+[PLATFORM.md](PLATFORM.md#relocation)): the iOS program in every later run (its image sits just
+above 4 GB and slides; no base reaches the bound there, [BUILDING.md](../BUILDING.md#apple-image-base)),
+and the arena or pool of any build that could not be pinned at an address of a small upper half.
+Nothing is restored first: the decision is made from the `ranges` record before the restore,
+logged `state: slot N cannot be moved into this run exactly: the <range> it was saved with (..)
+lies elsewhere now (+0x..) and its addresses' upper half 0x.. is below 0x10, ... (W words of the
+saved arena lie in it; ...), so nothing is moved and it continues from its checkpoint`, and the
+checkpoint's line follows with `the restored memory failed its checks` as the exact path's
+refusal. In the same process every delta is 0 and such a state resumes exactly. The iOS state of
+issue 218 (NTSC disc, stage 37, play time 7:54:12 at 60 frames a second) is found by the
+table's `ios-arm64` entry for its release, which its bytes confirm (the image at `gbss`+0x2ac5d0, the
+checkpoint's stage 46, `systemStatus[3]` 1), and the content search finds the same single image. Another disc and a Permadeath journey (the state's own record, read
 through the state's block list, or the one in force) stay refused by rule; so does the same build's
 state with other settings (the box names the setting: with it put back the state resumes exactly),
 and the moment's conditions (a stage change, the card or the disc busy, a movie, another mode).

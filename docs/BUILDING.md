@@ -353,6 +353,27 @@ states then move the code pointers as Android and the Apple builds always do
 ([port/PLATFORM.md](port/PLATFORM.md#fibers)). The same reason pins the game's memory arena and
 the game threads' stacks at fixed addresses when the system has them free.
 
+### Apple image base
+
+Apple's linker puts a 64-bit program's `__TEXT` just above the 4 GB `__PAGEZERO`, at 0x100000000,
+and the kernel slides it by up to 80 MB in every run (arm64 programs are always position
+independent). Every address of the program then has the upper half 1, and in a later run a save
+state's scan cannot tell them from the game's own pairs of 32-bit numbers, an EE offset or a float
+next to the integer 1 (issue 218; [port/PLATFORM.md](port/PLATFORM.md#relocation)). The macOS
+program is therefore linked with `__TEXT` at 0x2A1D60000000 (`-Wl,-segaddr,__TEXT,0x2A1D60000000`,
+`ICO_APPLE_TEXT_BASE` in `CMakeLists.txt`), 46 TB up, inside macOS's 128 TB of address space and far
+from anything the game stores; `-image_base` is ignored for a position-independent program and
+`-pagezero_size` is held to 4 GB with chained fixups (ld64's `Options.cpp`), which is why `-segaddr`
+is used. A step after the link runs `tools/macho_image_check.py check` on the program, which fails
+the build unless `__TEXT` starts at that address and the image with the largest slide keeps an upper
+half of at least 0x10 (`ICO_STATE_SCAN_HIGH_MIN`) without crossing a 4 GB boundary;
+`tools/macho_image_check.py show PROGRAM` prints the segments, the linker's version and the chained
+fixups' pointer format. The iOS program keeps the default: the kernel maps a program only below
+0x458000000 on the largest devices (XNU's `ARM64_MAX_OFFSET_DEVICE_LARGE`; the shared cache fills
+0x180000000 to 0x300000000), and the linker ignores `-pagezero_size` for iOS, so no base reaches
+the bound; its save states resume exactly within one run and continue from their checkpoint in a
+later one ([port/SAVES.md](port/SAVES.md)).
+
 ### Game data sections
 
 Save states also copy the game's own globals, so every build puts the game library's writable

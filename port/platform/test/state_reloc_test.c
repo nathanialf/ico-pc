@@ -250,6 +250,225 @@ static void test_scan(void)
     ico_state_reloc_set_log(0);
 }
 
+/* --- what the scan may move (issue 218) ----------------------------------------- */
+
+/* The reporter's iOS state: the image saved at 0x10027c000-0x102f6c000 (just
+   above the 4 GB __PAGEZERO, upper half 1), loaded in a later process with
+   the image 0x2964000 higher and the arena and pool elsewhere. */
+#define IOS_MOD_LO 0x10027c000ull
+#define IOS_MOD_HI 0x102f6c000ull
+#define IOS_MOD_DELTA 0x2964000ll
+#define IOS_ARENA_LO 0xd2d400000ull
+#define IOS_ARENA_HI (0xd2d400000ull + 0x2800000ull)
+#define IOS_POOL_LO 0xd2fcb4000ull
+#define IOS_POOL_HI 0xd34cb4000ull
+/* the macOS program at its new base (CMakeLists.txt ICO_APPLE_TEXT_BASE) */
+#define MAC_MOD_LO 0x2A1D60000000ull
+#define MAC_MOD_HI (0x2A1D60000000ull + 0x2e24000ull)
+
+static void test_ambiguous(void)
+{
+    /* a synthetic arena: a ClusterPoly table {run, matrix, 0, 0} whose
+       fourth entry is {0x2640e60, 1} (the reporter's arena+0x263fe20), a
+       keyframe's {X, 1} half, a bga record's {word, 1}, and two real program
+       pointers among them */
+    static uint64_t arena[32];
+    const uint64_t real_fn = IOS_MOD_LO + 0x1234560u;
+    const uint64_t real_data = IOS_MOD_LO + 0x2a00000u;
+    static const uint32_t polys[5][2] = {{0x2640b60u, 0x16u},
+                                         {0x2640be0u, 0x27u},
+                                         {0x2640d20u, 0x2bu},
+                                         {0x2640e60u, 0x1u},
+                                         {0x2640f70u, 0x10u}};
+    uint64_t before[32];
+    IcoStateReloc r;
+    IcoStateXlate xl;
+    int i;
+
+    memset(arena, 0, sizeof arena);
+    for (i = 0; i < 5; i++) {
+        arena[i * 2] = ee_pair(polys[i][0], polys[i][1]); /* {run, matrix}, then {0, 0} */
+    }
+    arena[12] = ee_pair(0x00f12da0u, 1u); /* a bga record {word, 1} */
+    arena[13] = real_fn;
+    arena[14] = ee_pair(0x01e0aa10u, 1u); /* a keyframe's {X, Y} with Y 1 */
+    arena[15] = real_data;
+    memcpy(before, arena, sizeof before);
+    CHECK(ee_pair(0x2640e60u, 1u) == 0x0000000102640e60ull && arena[6] == 0x0000000102640e60ull);
+
+    /* a later process: the image moved, upper half 1: the scan may not
+       move it, and the words a scan would take for addresses are counted */
+    memset(&r, 0, sizeof r);
+    set_range(&r, ICO_RELOC_MODULE, IOS_MOD_LO, IOS_MOD_HI, IOS_MOD_DELTA);
+    CHECK(ico_state_reloc_ambiguous(&r) == ICO_RELOC_MODULE);
+    /* the pairs {0x2640e60, 1}, {0xf12da0, 1}, {0x1e0aa10, 1} and the two
+       real pointers: 5 (the pairs with 0x16, 0x27, 0x2b, 0x10 above are not
+       in the range) */
+    CHECK(ico_state_reloc_count(&r, ICO_RELOC_MODULE, arena, sizeof before) == 5);
+    /* the caller moves nothing (state_host.c perform_load returns to the
+       checkpoint's way before its restore): the arena is the saved one */
+    CHECK(memcmp(arena, before, sizeof before) == 0);
+    /* what the scan would have done (issue 218's crash): the run moved by
+       the module delta, an EE offset 0x4fa4e60 past a 40 MB arena */
+    {
+        uint64_t w = arena[6];
+
+        CHECK(ico_state_reloc_word(&r, &w) == 1 && (uint32_t)w == 0x4fa4e60u);
+    }
+
+    /* the same process (every delta 0): nothing to judge, nothing moves */
+    set_range(&r, ICO_RELOC_MODULE, IOS_MOD_LO, IOS_MOD_HI, 0);
+    set_range(&r, ICO_RELOC_ARENA, IOS_ARENA_LO, IOS_ARENA_HI, 0);
+    set_range(&r, ICO_RELOC_POOL, IOS_POOL_LO, IOS_POOL_HI, 0);
+    CHECK(ico_state_reloc_ambiguous(&r) == -1);
+    CHECK(ico_state_reloc_scan(&r, arena, sizeof before, NULL) == 0);
+    CHECK(memcmp(arena, before, sizeof before) == 0);
+
+    /* the image in place but the arena (upper half 0xd) or the pool moved:
+       the same judgement, the first range named */
+    set_range(&r, ICO_RELOC_ARENA, IOS_ARENA_LO, IOS_ARENA_HI, -0x2c5f00000ll);
+    CHECK(ico_state_reloc_ambiguous(&r) == ICO_RELOC_ARENA);
+    set_range(&r, ICO_RELOC_ARENA, IOS_ARENA_LO, IOS_ARENA_HI, 0);
+    set_range(&r, ICO_RELOC_POOL, IOS_POOL_LO, IOS_POOL_HI, -0x2c5f84000ll);
+    CHECK(ico_state_reloc_ambiguous(&r) == ICO_RELOC_POOL);
+    set_range(&r, ICO_RELOC_MODULE, IOS_MOD_LO, IOS_MOD_HI, IOS_MOD_DELTA);
+    CHECK(ico_state_reloc_ambiguous(&r) == ICO_RELOC_MODULE);
+    /* the model tables are not judged */
+    memset(&r, 0, sizeof r);
+    set_range(&r, ICO_RELOC_POBJ, 0x2c0000000ull, 0x2c0010000ull, 0x100000ll);
+    CHECK(ico_state_reloc_ambiguous(&r) == -1);
+    /* another build's image goes by its translation, not a delta: the
+       image is not judged, a moved arena still is */
+    memset(&r, 0, sizeof r);
+    memset(&xl, 0, sizeof xl);
+    set_range(&r, ICO_RELOC_MODULE, 0x140000000ull, 0x1430ef800ull, 0x1000ll);
+    r.xlate = &xl;
+    CHECK(ico_state_reloc_ambiguous(&r) == -1);
+    set_range(&r, ICO_RELOC_ARENA, ARENA_LO, ARENA_HI, ARENA_DELTA);
+    CHECK(ico_state_reloc_ambiguous(&r) == -1); /* 0x3C: at the bound's right side */
+    set_range(&r, ICO_RELOC_ARENA, 0xF00000000ull, 0xF02800000ull, 0x1000000ll);
+    CHECK(ico_state_reloc_ambiguous(&r) == ICO_RELOC_ARENA);
+    /* the bound itself: 0x10 may move, 0xf may not */
+    memset(&r, 0, sizeof r);
+    set_range(&r, ICO_RELOC_MODULE, 0x1000000000ull, 0x1002000000ull, 0x4000ll);
+    CHECK(ico_state_reloc_ambiguous(&r) == -1);
+    set_range(&r, ICO_RELOC_MODULE, 0xFFE000000ull, 0x1000000000ull, 0x4000ll);
+    CHECK(ico_state_reloc_ambiguous(&r) == ICO_RELOC_MODULE);
+
+    /* the macOS image at its new base, moved by a slide: the scan moves the
+       real pointers and leaves every pair, which cannot reach the range */
+    memcpy(arena, before, sizeof before);
+    arena[13] = MAC_MOD_LO + 0x1234560u;
+    arena[15] = MAC_MOD_LO + 0x2a00000u;
+    memset(&r, 0, sizeof r);
+    set_range(&r, ICO_RELOC_MODULE, MAC_MOD_LO, MAC_MOD_HI, IOS_MOD_DELTA);
+    CHECK(ico_state_reloc_ambiguous(&r) == -1);
+    CHECK(ico_state_reloc_count(&r, ICO_RELOC_MODULE, arena, sizeof before) == 2);
+    CHECK(ico_state_reloc_scan(&r, arena, sizeof before, NULL) == 2);
+    CHECK(arena[13] == MAC_MOD_LO + 0x1234560u + (uint64_t)IOS_MOD_DELTA &&
+          arena[15] == MAC_MOD_LO + 0x2a00000u + (uint64_t)IOS_MOD_DELTA);
+    CHECK(arena[6] == 0x0000000102640e60ull && arena[12] == ee_pair(0x00f12da0u, 1u) &&
+          arena[14] == ee_pair(0x01e0aa10u, 1u));
+    /* counting: an empty range, an index outside, no region */
+    CHECK(ico_state_reloc_count(&r, ICO_RELOC_POBJ, arena, sizeof before) == 0);
+    CHECK(ico_state_reloc_count(&r, ICO_RELOC_RANGES, arena, sizeof before) == 0);
+    CHECK(ico_state_reloc_count(&r, -1, arena, sizeof before) == 0);
+    CHECK(ico_state_reloc_count(&r, ICO_RELOC_MODULE, NULL, 64) == 0);
+}
+
+/* Another build's Windows state (image 0x140000000, upper half 1): the
+   words inside the old code at no function's start are numbers (issue 218:
+   a keyframe's {X, 1} with X from 2.0 to about 142 lands in .text) */
+static void test_code_numbers(void)
+{
+    /* the old build's translation: three functions and the game's bss as
+       spans, one start-up value as a point */
+    static const IcoStateSpan spans[] = {
+        {0x140001000ull, 0x1400010ffull, 0x140002000ull},
+        {0x140498000ull, 0x140499fffull, 0x14049a000ull},
+        {0x1407d9000ull, 0x1407d9fffull, 0x1407db000ull},
+        {0x140a00000ull, 0x140d1cbefull, 0x140a01000ull},
+    };
+    static const IcoStateSpan points[] = {{0x140600010ull, 0x140600010ull, 0x140601010ull}};
+    const uint64_t text_lo = 0x140001000ull, text_hi = 0x1406d9000ull;
+    static uint64_t data[16], data2[4], stack[4];
+    uint64_t out[8], v;
+    IcoStateSpan merged[4];
+    IcoStateXlate x;
+    size_t k = 0;
+
+    memset(&x, 0, sizeof x);
+    x.span = spans;
+    x.n_span = sizeof spans / sizeof spans[0];
+    x.point = points;
+    x.n_point = 1;
+    memset(data, 0, sizeof data);
+    data[0] = ee_pair(0x40498c94u, 1u); /* {3.1492..., 1} (a real state's keyframe) */
+    data[1] = 0x140498000ull;           /* a function's address */
+    data[2] = 0x140600010ull;           /* a point */
+    data[3] = 0x1407d9a2aull;           /* {3.9625..., 1}, twice: one value */
+    data[4] = 0x1407d9a2aull;
+    data[5] = 0x140a00000ull; /* {5.0, 1}: in the game's bss, outside the code */
+    data[6] = 0x1406d9000ull; /* the code's end: not inside */
+    data[7] = 0x140001000ull; /* the code's first function */
+    CHECK(data[0] == 0x140498c94ull);
+    CHECK(ico_state_code_numbers(&x, text_lo, text_hi, data, sizeof data, out, 8, &k) == 2);
+    CHECK(k == 2 && out[0] == 0x140498c94ull && out[1] == 0x1407d9a2aull);
+    /* a second region adds to the one sorted list */
+    data2[0] = 0x140498c94ull;
+    data2[1] = 0x140100000ull;
+    CHECK(ico_state_code_numbers(&x, text_lo, text_hi, data2, sizeof data2, out, 8, &k) == 1);
+    CHECK(k == 3 && out[0] == 0x140100000ull && out[1] == 0x140498c94ull &&
+          out[2] == 0x1407d9a2aull);
+    /* a full list: the words past it are counted (a repeat again: it is
+       not in the list), not written; the caller sees more found than kept */
+    k = 0;
+    CHECK(ico_state_code_numbers(&x, text_lo, text_hi, data, sizeof data, out, 1, &k) == 3);
+    CHECK(k == 1 && out[0] == 0x140498c94ull);
+    /* nothing to look at */
+    k = 0;
+    CHECK(ico_state_code_numbers(NULL, text_lo, text_hi, data, sizeof data, out, 8, &k) == 0);
+    CHECK(ico_state_code_numbers(&x, text_lo, text_lo, data, sizeof data, out, 8, &k) == 0);
+    CHECK(ico_state_code_numbers(&x, text_lo, text_hi, NULL, 64, out, 8, &k) == 0 && k == 0);
+
+    /* a kept number that a thread's stack holds too (a return address
+       there, perhaps): the load does not keep it */
+    memset(stack, 0, sizeof stack);
+    stack[2] = 0x1407d9a2aull;
+    {
+        const uint64_t one[1] = {0x140498c94ull};
+        uint64_t which = 0;
+
+        /* out[] holds 0x140100000, 0x140498c94, 0x1407d9a2a (sorted) after
+           the full-list call above wrote only its first: rebuild it */
+        out[0] = 0x140100000ull;
+        out[1] = 0x140498c94ull;
+        out[2] = 0x1407d9a2aull;
+        CHECK(ico_state_region_holds(stack, sizeof stack, out, 3, &which) == 1 &&
+              which == 0x1407d9a2aull);
+        CHECK(ico_state_region_holds(stack, sizeof stack, one, 1, &which) == 0);
+        CHECK(ico_state_region_holds(stack, sizeof stack, out, 0, NULL) == 0);
+        CHECK(ico_state_region_holds(NULL, 32, out, 3, NULL) == 0);
+        stack[0] = 0x140100000ull; /* the list's first value, found by its bounds */
+        CHECK(ico_state_region_holds(stack, sizeof stack, out, 3, NULL) == 1);
+    }
+
+    /* the translation with a number as an identity point (state_host.c
+       keep_code_numbers' merge): the number stays, the function's address
+       and the point move */
+    merged[0].lo = merged[0].hi = merged[0].now = 0x140498c94ull;
+    merged[1] = points[0];
+    x.point = merged;
+    x.n_point = 2;
+    CHECK(ico_state_xlate(&x, 0x140498c94ull, &v) == 1 && v == 0x140498c94ull);
+    CHECK(ico_state_xlate(&x, 0x140498000ull, &v) == 1 && v == 0x14049a000ull);
+    CHECK(ico_state_xlate(&x, 0x140600010ull, &v) == 1 && v == 0x140601010ull);
+    /* without it the number moves with its function (the corruption) */
+    x.point = points;
+    x.n_point = 1;
+    CHECK(ico_state_xlate(&x, 0x140498c94ull, &v) == 1 && v == 0x14049ac94ull);
+}
+
 /* --- the image ---------------------------------------------------------------- */
 
 static int image_data = 42;
@@ -609,6 +828,8 @@ static void test_hash(void)
 int main(void)
 {
     test_scan();
+    test_ambiguous();
+    test_code_numbers();
     test_image();
     test_heap();
     test_check();

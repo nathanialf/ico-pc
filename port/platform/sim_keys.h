@@ -34,7 +34,8 @@ uint64_t ico_sim_keys_hash(char *text, size_t size);
 /* The first key whose value in `saved_text` (the header's text) differs
    from the current config; NULL when none.  out gets "key=saved (now cur)".
    A key the saved text lacks reads as its default: equal while the key is
-   unset or at its default now, else "key=(absent) (now cur)". */
+   unset or at its default now, else "key=(absent) (now cur)".  A key unset
+   on one side and at its default's text on the other is equal. */
 const char *ico_sim_keys_first_diff(const char *saved_text, char *out, size_t size);
 /* A key's default as the config text gives it ("false", "original"), NULL
    for a key without one fixed text (unset is the disc's or the device's

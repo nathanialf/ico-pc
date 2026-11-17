@@ -379,6 +379,106 @@ static void test_retired(void)
     CHECK(ico_config_set_string("variants.one_hit", "") == 0);
 }
 
+/* a state's header check as state_host.c sets it up: saved with the keys
+   text `saved` (its own hash), now this run's config */
+static IcoStateResult check_saved(const char *saved, char *detail, size_t n, int hash_ok)
+{
+    static IcoStateHeader sv, nw;
+
+    ico_state_header_init(&nw, "v0.11.9");
+    snprintf(nw.disc, sizeof nw.disc, "ntsc");
+    nw.settings_hash = ico_sim_keys_hash(nw.keys, sizeof nw.keys);
+    sv = nw;
+    snprintf(sv.keys, sizeof sv.keys, "%s", saved);
+    sv.settings_hash = xxh3_64(sv.keys, strlen(sv.keys)) ^ (hash_ok ? 0u : 1u);
+    return ico_state_header_check(&sv, &nw, detail, n);
+}
+
+/* issue 218: a key unset when the state was saved and written at its
+   default since (the Debug menu writes gameplay.developer_mode = false once
+   it is opened) is the same setting; so is the reverse; every key with one
+   default text, not only that one */
+static void test_unset_is_default(void)
+{
+    static char unset[4096], t[4096];
+    char out[160], detail[160], names[256];
+    const char *k;
+    int i, n_fixed = 0;
+
+    ico_state_set_key_default(ico_sim_key_is_default);
+    ico_state_set_key_retired(ico_sim_key_retired);
+    (void)ico_sim_keys_hash(unset, sizeof unset); /* every key unset */
+    CHECK(strstr(unset, "\ngameplay.developer_mode=\n") != NULL);
+
+    /* the reporter's case: saved unset, now "false" (equal), now "true" (not) */
+    CHECK(ico_config_set_bool("gameplay.developer_mode", 0) == 0);
+    CHECK(strcmp(ico_config_get_string("gameplay.developer_mode", ""), "false") == 0);
+    CHECK(ico_sim_keys_first_diff(unset, out, sizeof out) == NULL && out[0] == '\0');
+    CHECK(check_saved(unset, detail, sizeof detail, 1) == ICO_STATE_OK);
+    (void)ico_sim_keys_hash(t, sizeof t);
+    CHECK(ico_state_keys_defaulted(unset, t, names, sizeof names) == 1);
+    CHECK(strcmp(names, "gameplay.developer_mode") == 0);
+    /* the saved text not the whole of what its hash covered: refused */
+    CHECK(check_saved(unset, detail, sizeof detail, 0) == ICO_STATE_OTHER_SETTINGS);
+    CHECK(strcmp(detail, "the settings differ") == 0);
+    /* without the key-default function (tools, tests) it still differs */
+    ico_state_set_key_default(NULL);
+    CHECK(check_saved(unset, detail, sizeof detail, 1) == ICO_STATE_OTHER_SETTINGS);
+    CHECK(strcmp(detail, "gameplay.developer_mode= (now false)") == 0);
+    CHECK(ico_state_keys_defaulted(unset, t, names, sizeof names) == 0);
+    ico_state_set_key_default(ico_sim_key_is_default);
+    CHECK(ico_config_set_bool("gameplay.developer_mode", 1) == 0);
+    k = ico_sim_keys_first_diff(unset, out, sizeof out);
+    CHECK(k != NULL && strcmp(k, "gameplay.developer_mode") == 0 &&
+          strcmp(out, "gameplay.developer_mode= (now true)") == 0);
+    CHECK(check_saved(unset, detail, sizeof detail, 1) == ICO_STATE_OTHER_SETTINGS);
+    CHECK(strcmp(detail, "gameplay.developer_mode= (now true)") == 0);
+
+    /* the reverse: saved "false", unset now */
+    CHECK(ico_config_set_bool("gameplay.developer_mode", 0) == 0);
+    (void)ico_sim_keys_hash(t, sizeof t);
+    CHECK(ico_config_set_string("gameplay.developer_mode", "") == 0);
+    CHECK(ico_sim_keys_first_diff(t, out, sizeof out) == NULL);
+    CHECK(check_saved(t, detail, sizeof detail, 1) == ICO_STATE_OK);
+
+    /* every key with one default text: unset saved, the default now */
+    for (i = 0; ICO_SIM_KEYS[i] != NULL; i++) {
+        const char *d = ico_sim_key_default(ICO_SIM_KEYS[i]);
+
+        if (d == NULL) {
+            continue;
+        }
+        n_fixed++;
+        CHECK(ico_config_set_string(ICO_SIM_KEYS[i], d) == 0);
+        if (ico_sim_keys_first_diff(unset, out, sizeof out) != NULL ||
+            check_saved(unset, detail, sizeof detail, 1) != ICO_STATE_OK) {
+            printf("  %s unset in the state and %s now: refused (%s)\n", ICO_SIM_KEYS[i], d,
+                   detail);
+            CHECK(0);
+        }
+        CHECK(ico_config_set_string(ICO_SIM_KEYS[i], "") == 0);
+    }
+    CHECK(n_fixed == 16); /* the list's 18 keys less the two without one text */
+
+    /* a key without one default text: unset is the disc's own choice, so
+       unset and a value still differ */
+    CHECK(ico_config_set_string("video.video_mode", "pal") == 0);
+    k = ico_sim_keys_first_diff(unset, out, sizeof out);
+    CHECK(k != NULL && strcmp(k, "video.video_mode") == 0);
+    CHECK(check_saved(unset, detail, sizeof detail, 1) == ICO_STATE_OTHER_SETTINGS);
+    CHECK(strcmp(detail, "video.video_mode= (now pal)") == 0);
+    CHECK(ico_config_set_string("video.video_mode", "") == 0);
+    /* two values neither of which is the default: differ */
+    CHECK(ico_config_set_string("variants.weapon", "mace") == 0);
+    (void)ico_sim_keys_hash(t, sizeof t);
+    CHECK(ico_config_set_string("variants.weapon", "sword") == 0);
+    CHECK(check_saved(t, detail, sizeof detail, 1) == ICO_STATE_OTHER_SETTINGS);
+    CHECK(strcmp(detail, "variants.weapon=mace (now sword)") == 0);
+    CHECK(ico_config_set_string("variants.weapon", "") == 0);
+    ico_state_set_key_retired(NULL);
+    ico_state_set_key_default(NULL);
+}
+
 int main(int argc, char **argv)
 {
     char toml[ICO_PATH_MAX];
@@ -390,6 +490,7 @@ int main(int argc, char **argv)
     test_text_and_hash();
     test_defaults(argc > 1 ? argv[1] : ".");
     test_retired();
+    test_unset_is_default();
     if (fails != 0) {
         printf("sim_keys_test: %d failure(s)\n", fails);
         return 1;
