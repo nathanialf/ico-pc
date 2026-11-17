@@ -1129,6 +1129,7 @@ state_registry 0.00
 state_reloc 0.01
 state_roundtrip_headless 0.00
 state_roundtrip_headless_settings 0.00
+state_verdicts 0.05  # estimate: unmeasured, assumed (RECOVERLOAD could not build or run it): a CPU-only unit test with two short threads
 steam_shortcut 0.06
 strings_complete 0.00
 strings_sync 0.07

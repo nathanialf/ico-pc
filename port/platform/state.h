@@ -73,6 +73,10 @@ typedef struct IcoStateSlotInfo {
     /* 1 when it loads but cannot resume where it was saved: Load continues
        the game from the checkpoint the state holds (port/save/state_checkpoint.h) */
     int checkpoint;
+    /* 1 while its verdict (another build's or platform's state) is still
+       being worked out on a thread: listed from its header, loadable; a
+       Load waits for the verdict (state_host.c) */
+    int pending;
 } IcoStateSlotInfo;
 
 /* 1 when save states work on this build and start-up (game_data_range
