@@ -24,6 +24,11 @@
  *             another build's syms verdict, each refusal reason by its kind
  *             (legacy table, page words, layout first): checkpoint, a
  *             translation: exact
+ *   boxes     the one box each route leaves (exact: the ordinary words;
+ *             the checkpoint: its notice alone, even with the exact path's
+ *             blocker recorded; a load that did nothing: its refusal), and
+ *             the notice's words in the eight languages: not opening as the
+ *             refusal does, the version named once, the page's line plain
  *   syms      the block list of a syms record (versions 2 and 3 with units,
  *             data and points before the blocks): found, absent, damaged
  *   states    three state files through the whole decision: format 1 (no
@@ -46,6 +51,7 @@
 #include "state_checkpoint.h"
 #include "state_file.h"
 #include "state_xbuild.h"
+#include "strings.h" /* port/ui: the boxes' words */
 
 #define GDATA 0x400u
 #define GBSS 0x10000u
@@ -378,6 +384,59 @@ static void test_xb_route(void)
     CHECK(ico_ckpt_xb_result(99) == ICO_STATE_OTHER_BUILD); /* a later kind: not exact */
 }
 
+/* the one box each route leaves (main_host.c states_done through
+   ico_ckpt_box), and the notice's words in the eight languages: a load that
+   continued from its checkpoint shows the notice alone, as a success, never
+   the refusal; the refusal only for a load that did nothing */
+static void test_boxes(void)
+{
+    static const char *const *const tables[] = {ui_strings_en, ui_strings_fr, ui_strings_de,
+                                                ui_strings_it, ui_strings_es, ui_strings_ja,
+                                                ui_strings_ko, ui_strings_zh};
+    static const char *const names[] = {"en", "fr", "de", "it", "es", "ja", "ko", "zh"};
+    size_t i;
+
+    /* exact: the ordinary words, whatever an earlier refusal left */
+    CHECK(ico_ckpt_box(1, ICO_STATE_OK, 0, ICO_STATE_BLOCK_NONE) == ICO_CKPT_BOX_DONE);
+    CHECK(ico_ckpt_box(0, ICO_STATE_OK, 0, ICO_STATE_BLOCK_NONE) == ICO_CKPT_BOX_DONE);
+    /* the checkpoint: the notice, even with the exact path's blocker still
+       recorded (the refusal the route left behind) */
+    CHECK(ico_ckpt_box(1, ICO_STATE_OK, 1, ICO_STATE_BLOCK_NONE) == ICO_CKPT_BOX_NOTICE);
+    CHECK(ico_ckpt_box(1, ICO_STATE_OK, 1, ICO_STATE_BLOCK_OLD) == ICO_CKPT_BOX_NOTICE);
+    CHECK(ico_ckpt_box(1, ICO_STATE_OK, 1, ICO_STATE_BLOCK_PINNED) == ICO_CKPT_BOX_NOTICE);
+    CHECK(ico_ckpt_box(1, ICO_STATE_OK, 1, ICO_STATE_BLOCK_DATA) == ICO_CKPT_BOX_NOTICE);
+    /* a save never gets the notice */
+    CHECK(ico_ckpt_box(0, ICO_STATE_OK, 1, ICO_STATE_BLOCK_NONE) == ICO_CKPT_BOX_DONE);
+    /* loads that did nothing: their refusal only */
+    CHECK(ico_ckpt_box(1, ICO_STATE_OTHER_BUILD, 0, ICO_STATE_BLOCK_NO_CHECKPOINT) ==
+          ICO_CKPT_BOX_VERSION);
+    CHECK(ico_ckpt_box(1, ICO_STATE_OTHER_DISC, 0, ICO_STATE_BLOCK_NONE) == ICO_CKPT_BOX_REFUSAL);
+    CHECK(ico_ckpt_box(1, ICO_STATE_PERMADEATH, 0, ICO_STATE_BLOCK_NONE) == ICO_CKPT_BOX_REFUSAL);
+    CHECK(ico_ckpt_box(1, ICO_STATE_OTHER_SETTINGS, 0, ICO_STATE_BLOCK_NONE) ==
+          ICO_CKPT_BOX_SETTINGS);
+    CHECK(ico_ckpt_box(1, ICO_STATE_STAGE_SWITCH, 0, ICO_STATE_BLOCK_NONE) == ICO_CKPT_BOX_REFUSAL);
+    /* the words: the notice is not the refusal's (their first lines differ:
+       the notice opens with what was done, the refusal with what could not
+       be), it names the version once, and the page's line has no number */
+    for (i = 0; i < sizeof tables / sizeof tables[0]; i++) {
+        const char *ok = tables[i][UI_STR_STATES_CKPT_LOADED];
+        const char *no = tables[i][UI_STR_STATES_CKPT_NONE];
+        const char *row = tables[i][UI_STR_STATES_CKPT_ROW];
+        const char *nl = ok != NULL ? strchr(ok, '\n') : NULL;
+        const size_t first = nl != NULL ? (size_t)(nl - ok) : (ok != NULL ? strlen(ok) : 0);
+
+        CHECK(ok != NULL && no != NULL && row != NULL, "%s: a checkpoint string missing", names[i]);
+        if (ok == NULL || no == NULL || row == NULL) {
+            continue;
+        }
+        CHECK(strncmp(ok, no, first < 12 ? first : 12) != 0,
+              "%s: the notice opens as the refusal does: \"%s\"", names[i], ok);
+        CHECK(strstr(ok, "%s") != NULL && strstr(strstr(ok, "%s") + 2, "%") == NULL,
+              "%s: the notice names the version once", names[i]);
+        CHECK(strchr(row, '%') == NULL, "%s: the page's line takes no value", names[i]);
+    }
+}
+
 /* --- a syms record ------------------------------------------------------------------------------- */
 
 /* state_xbuild.c's layout: the header (64 bytes, 80 in version 3), units 48,
@@ -643,6 +702,7 @@ int main(int argc, char **argv)
     test_search();
     test_route();
     test_xb_route();
+    test_boxes();
     test_syms();
     test_states(dir);
     return ico_check_summary("state_checkpoint");

@@ -835,11 +835,9 @@ const char *const
                 [UI_STR_STATES_XB_PINNED] =
                     "Questo stato è stato creato dalla versione %s\ne solo quella versione può riprenderlo.\nI salvataggi sulla memory card funzionano ancora.",
                 [UI_STR_STATES_CKPT_ROW] =
-                    "Creato da un'altra versione: Carica riprende dall'ultimo checkpoint",
-                [UI_STR_STATES_CKPT_LOADED] =
-                    "Questo stato è stato creato dalla versione %s.\n"
-                    "Non può essere ripreso dal punto in cui è stato salvato:\n"
-                    "il gioco riprende dall'ultimo checkpoint.",
+                    "Si carica dall'ultimo checkpoint (creato da un'altra versione)",
+                [UI_STR_STATES_CKPT_LOADED] = "Ripreso dall'ultimo checkpoint di questo stato,\n"
+                                              "creato dalla versione %s.",
                 [UI_STR_STATES_CKPT_NONE] =
                     "Questo stato è stato creato dalla versione %s.\n"
                     "Non può essere ripreso dal punto in cui è stato salvato\n"

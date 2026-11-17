@@ -779,10 +779,10 @@ const char *const
             [UI_STR_STATES_XB_PINNED] =
                 "Cet état a été créé par la version %s\net seule cette version peut le reprendre.\nVos sauvegardes sur memory card fonctionnent toujours.",
             [UI_STR_STATES_CKPT_ROW] =
-                "Créé par une autre version : Charger reprend au dernier point de contrôle",
-            [UI_STR_STATES_CKPT_LOADED] = "Cet état a été créé par la version %s.\n"
-                                          "Il ne peut pas être repris là où il a été enregistré :\n"
-                                          "le jeu reprend au dernier point de contrôle.",
+                "Se charge depuis son dernier point de contrôle (créé par une autre version)",
+            [UI_STR_STATES_CKPT_LOADED] =
+                "Partie reprise au dernier point de contrôle de cet état,\n"
+                "créé par la version %s.",
             [UI_STR_STATES_CKPT_NONE] = "Cet état a été créé par la version %s.\n"
                                         "Il ne peut pas être repris là où il a été enregistré,\n"
                                         "et il ne contient aucun point de contrôle d'où reprendre.",

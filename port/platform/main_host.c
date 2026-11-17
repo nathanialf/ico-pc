@@ -127,9 +127,10 @@
 #include "ico_version.h" /* ICO_VERSION_LABEL, generated (CMakeLists.txt; "" in a development build) */
 #include "input_record.h"
 #include "pad_script.h"
-#include "sim_keys.h"    /* the recording's config keys */
-#include "state.h"       /* save states: the poll, the [dev] keys */
-#include "state_rules.h" /* port/game: ico_state_parse_at, ico_state_can_save_here */
+#include "sim_keys.h"                 /* the recording's config keys */
+#include "state.h"                    /* save states: the poll, the [dev] keys */
+#include "../save/state_checkpoint.h" /* ico_ckpt_box */
+#include "state_rules.h"              /* port/game: ico_state_parse_at, ico_state_can_save_here */
 #include "tables.h"
 #include "trace_host.h"
 #include "options.h"       /* the recording's effective stick_fix */
@@ -2065,8 +2066,15 @@ static void states_list(UiStateSlotInfo out[UI_STATES_SLOTS])
     }
 }
 
+/* where the request being answered came from, for the box's log line: the
+   page (on the pause menu or the title's Continue screen), else a key (F5,
+   F9) or a [dev] key */
+static const char *s_states_from = "a key";
+
 static int states_request(int action, int slot, int *refusal_str)
 {
+    s_states_from =
+        ico_state_can_save_here() ? "the page on the pause menu" : "the page on the title";
     if (!ico_state_available()) {
         *refusal_str = UI_STR_STATES_OFF;
         return -1;
@@ -2132,25 +2140,54 @@ static void states_done(int action, int slot, IcoStateResult r, const char *deta
     char body[UI_POPUP_TEXT];
     char version[48];
 
+    IcoStateRefusal f;
+    int via;
+
     (void)user;
-    if (r == ICO_STATE_OK && action == UI_STATES_ACT_LOAD &&
-        ico_state_last_load_checkpoint(version, sizeof version)) {
-        /* it could not resume where it was saved: from its checkpoint */
+    ico_state_last_refusal(&f);
+    via = action == UI_STATES_ACT_LOAD && ico_state_last_load_checkpoint(version, sizeof version);
+    /* one box per request, chosen without the game (state_checkpoint.h
+       ico_ckpt_box): a load that continued from its checkpoint shows the
+       notice alone */
+    switch (ico_ckpt_box(action == UI_STATES_ACT_LOAD, r, via, f.blocker)) {
+    case ICO_CKPT_BOX_NOTICE:
         snprintf(body, sizeof body, ui_str(UI_STR_STATES_CKPT_LOADED), version);
-    } else if (r == ICO_STATE_OK) {
+        break;
+    case ICO_CKPT_BOX_DONE:
         snprintf(body, sizeof body, ui_str((UiStrId)ok_str[action]), slot);
-    } else if (r == ICO_STATE_OTHER_SETTINGS) {
+        break;
+    case ICO_CKPT_BOX_SETTINGS:
         /* the key that differs, as the log has it */
         snprintf(body, sizeof body, ui_str(UI_STR_STATES_REFUSED_SETTINGS), detail);
-    } else if (r == ICO_STATE_OTHER_BUILD && action == 1 &&
-               states_other_version(body, sizeof body)) {
+        break;
+    case ICO_CKPT_BOX_VERSION:
         /* another version's state: which one, and what in this one blocks it */
-    } else if (r == ICO_STATE_PERMADEATH && action == UI_STATES_ACT_SAVE) {
-        /* a save the poll refused on a Permadeath journey: the save's words */
-        snprintf(body, sizeof body, "%s", ui_str(UI_STR_DIFF_STATES_SAVE_LOCKED));
-    } else {
+        if (states_other_version(body, sizeof body)) {
+            break;
+        }
         snprintf(body, sizeof body, "%s", ui_str((UiStrId)state_refusal_str(r)));
+        break;
+    case ICO_CKPT_BOX_REFUSAL:
+        if (r == ICO_STATE_PERMADEATH && action == UI_STATES_ACT_SAVE) {
+            /* a save the poll refused on a Permadeath journey: the save's words */
+            snprintf(body, sizeof body, "%s", ui_str(UI_STR_DIFF_STATES_SAVE_LOCKED));
+        } else {
+            snprintf(body, sizeof body, "%s", ui_str((UiStrId)state_refusal_str(r)));
+        }
+        break;
     }
+    {
+        static const char *const box_names[] = {"done", "the checkpoint notice", "settings differ",
+                                                "another version's refusal", "the refusal"};
+        const IcoCkptBox b = ico_ckpt_box(action == UI_STATES_ACT_LOAD, r, via, f.blocker);
+
+        fprintf(stderr, "state: box for slot %d (%s): %s, from %s\n", slot,
+                action == UI_STATES_ACT_SAVE   ? "save"
+                : action == UI_STATES_ACT_LOAD ? "load"
+                                               : "delete",
+                box_names[b], s_states_from);
+    }
+    s_states_from = "a key";
     (void)ui_popup_push(ui_str(UI_STR_STATES), body);
 }
 #endif

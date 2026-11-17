@@ -817,10 +817,10 @@ const char *const ui_strings_es[UI_STR_COUNT] =
         [UI_STR_STATES_XB_PINNED] =
             "Este estado guardado se creó con la versión %s\ny solo esa versión puede reanudarlo.\nTus partidas de la memory card siguen funcionando.",
         [UI_STR_STATES_CKPT_ROW] =
-            "Creado por otra versión: Cargar continúa desde el último punto de control",
-        [UI_STR_STATES_CKPT_LOADED] = "Este estado guardado se creó con la versión %s.\n"
-                                      "No se puede reanudar donde se guardó:\n"
-                                      "el juego continúa desde el último punto de control.",
+            "Se carga desde su último punto de control (creado con otra versión)",
+        [UI_STR_STATES_CKPT_LOADED] =
+            "Se continuó desde el último punto de control de este estado,\n"
+            "creado con la versión %s.",
         [UI_STR_STATES_CKPT_NONE] = "Este estado guardado se creó con la versión %s.\n"
                                     "No se puede reanudar donde se guardó\n"
                                     "y no contiene ningún punto de control desde el que continuar.",
