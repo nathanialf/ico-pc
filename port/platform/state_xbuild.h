@@ -144,6 +144,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "state_legacy.h"
 #include "state_reloc.h"
 #include "state_syms.h"
 
@@ -180,7 +181,10 @@ enum {
     ICO_XB_WHY_DATA,     /* in writable data no block or unique variable holds */
     ICO_XB_WHY_READONLY, /* in read-only data whose window is not unique even whole */
     ICO_XB_WHY_IMAGE,    /* in the image outside every section the file names */
-    ICO_XB_WHY_NUMBER    /* in read-only data, no text (or ""), under an upper half of 0 or 1 */
+    ICO_XB_WHY_NUMBER,   /* in read-only data, no text (or ""), under an upper half of 0 or 1 */
+    ICO_XB_WHY_NOBYTES,  /* in read-only data the version's legacy table keeps no bytes of */
+    ICO_XB_WHY_NOHASH,   /* a function with a thread inside whose code hash its record lacks */
+    ICO_XB_WHY_PAGE      /* a page a frame's ADRP of a target this build cannot place may make */
 };
 
 /* A word named by nothing, as the save found it. */
@@ -205,6 +209,26 @@ void ico_xb_image(const IcoSymTab *t, IcoStateImage *im);
 
 /* --- saving ------------------------------------------------------------------- */
 
+/* A format 2 record of an earlier version read again (state_legacy.h): the
+   save's rules run at the load against that version's program as its
+   legacy table describes it.  IcoXbProc.tab is then that version's table
+   (ico_legacy_symtab), image its ranges from the state's own record, game
+   its game ranges, snap NULL. */
+typedef struct IcoXbLegacy {
+    const IcoLegacyTable *lt;
+    uint64_t old_lo; /* the saving image's start */
+    const void *v2;  /* the record the version saved: its units' code hashes */
+    size_t v2_n;
+    IcoSymTab *now_tab; /* this build's table: what the page words' ADRPs aim at */
+    uint64_t now_game_lo[2], now_game_hi[2];
+    /* this build's game data words at start-up (IcoXbProc.snap), or NULL:
+       the version's are not in its state; each one that points into this
+       image and that the version's table places back by name stands for
+       the version's start-up word at the same offset (one layout) */
+    const uint64_t *now_snap;
+    size_t now_snap_words;
+} IcoXbLegacy;
+
 /* The saving process (this one, at a save). */
 typedef struct IcoXbProc {
     IcoSymTab *tab;      /* NULL: no symbol table (the section says so) */
@@ -216,6 +240,7 @@ typedef struct IcoXbProc {
     /* tests: the image start the number rule judges by (0: image.lo; a
        synthetic image on the heap stands for Windows' 0x140000000) */
     uint64_t judge_lo;
+    const IcoXbLegacy *legacy; /* NULL, or the version whose record is read again */
 } IcoXbProc;
 
 typedef struct IcoXbRefs IcoXbRefs;
@@ -259,6 +284,20 @@ typedef struct IcoXbStats {
 /* The section's bytes (malloc'd, *n long) and what it holds.  0, or -1
    (no memory).  r is freed. */
 int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st);
+
+/* An earlier version's format 2 record against that version's legacy
+   table: 0, or -1 and why (the table is another version's: another layout
+   hash, a unit the record names that the table does not hold at its place,
+   or one whose code hash, rules 1, is not the table's for that function;
+   the record is no format 2 arm64 one).  hash: the table's n_hash triples
+   (state_legacy.h: offset from the image start, rules 1, current rules). */
+int ico_xb_legacy_verify(const void *v2, size_t n, const IcoSymTab *old_tab, uint64_t old_lo,
+                         const uint64_t *hash, size_t n_hash, char *why, size_t why_n);
+/* Each block a record holds (any format): its name, size, flags, old
+   address and offset in its packed section.  0, or -1 (damaged). */
+typedef void (*IcoXbBlockFn)(void *user, const char *name, uint64_t size, unsigned flags,
+                             uint64_t addr, uint64_t offset);
+int ico_xb_record_blocks(const void *sec, size_t n, IcoXbBlockFn fn, void *user);
 
 /* --- loading ------------------------------------------------------------------ */
 

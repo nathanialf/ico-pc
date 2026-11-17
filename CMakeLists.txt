@@ -451,6 +451,12 @@ if(Python3_FOUND)
     add_test(NAME test_paths_selftest COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/check_test_paths.py" --selftest)
     # every committed fixture parses with no art section (tools/rdfix_check.py)
     add_test(NAME rdfix_check COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/rdfix_check.py" --all)
+    # the earlier Android versions' legacy tables (port/state_legacy, issue 217):
+    # each parses and matches its manifest (files, sizes, SHA-256, counts), the
+    # index names each once; the Python arm64 code hash against xxHash's
+    # vectors and hand-made functions (no build, no game)
+    add_test(NAME state_legacy_tables COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/state_legacy_table.py" check)
+    add_test(NAME code_hash_a64_selftest COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/code_hash_a64.py" --selftest)
 endif()
 
 # the June 2001 demo's VU1 programs against the retail ones (tools/vu_variant_diff.py,

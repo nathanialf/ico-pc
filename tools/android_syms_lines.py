@@ -31,8 +31,8 @@ for the save states' symbol table (port/platform/state_syms.h).
       hash, with a change outside the game.  Allowed: a file of SRCROOT's
       ico2/ or ico/, port/data/gen/table_defs.c (the game's tables), and one
       tables.c of the frozen room's footprint (port/data/reserved/tables.c;
-      in lld's map, which lists a file's statics, its one symbol is
-      ico_tables_room_bytes).  An archive member is known by its file name only:
+      in lld's map, which lists a file's statics, its symbols are the
+      loader's five former statics).  An archive member is known by its file name only:
       one that names an ico2/ file passes.
 """
 import os
@@ -113,6 +113,9 @@ def check(path):
 
 
 ROOM_SIZES = (0x600, 0x614, 0x620)  # port/data/reserved/tables.c, per compiler
+# its objects under the loader's former names (clang ELF), or its array
+ROOM_SYMS = {"loaded_count", "loaded_set", "loaded_rows", "loaded_records", "ico_tables_crc32.table",
+             "ico_tables_room_bytes"}
 
 
 def game_section_objects(path):
@@ -182,7 +185,7 @@ def gamesec(path, root):
             continue
         if src in game or src == "table_defs.c":
             continue
-        if src == "tables.c" and size in ROOM_SIZES and (syms is None or syms == ["ico_tables_room_bytes"]):
+        if src == "tables.c" and size in ROOM_SIZES and (syms is None or set(syms) <= ROOM_SYMS):
             room.append(obj)
             continue
         bad.append("%s %s 0x%x%s" % (obj, sec, size, (" (" + ", ".join(syms[:4]) + ")") if syms else ""))

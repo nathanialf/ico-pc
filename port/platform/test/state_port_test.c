@@ -294,6 +294,37 @@ static void test_hash_a64(void)
     CHECK(ico_code_a64_writes(0xB90000E0u) == 0u, "a64: a store writes nothing");
     CHECK((ico_code_a64_writes(0x94000040u) & (1u << 30)) != 0, "a64: bl writes x30");
     CHECK(ico_code_a64_writes(0xD53BD048u) == 1u << 8, "a64: mrs writes its target");
+    {
+        /* rules 2: a page kept in x19 used before its ADRP's place, reached by
+           a backward branch (b +12; ldr x0,[x19,#8]; ret; adrp x19; b -12),
+           and one in x20 used in a jump table's case after a BR; the hashes
+           are tools/code_hash_a64.py's (the legacy tables' hashes are made
+           there and compared here) */
+        static const uint32_t f[9] = {0x90000014u, 0x14000003u, 0xF9400660u,
+                                      0xD65F03C0u, 0x90000013u, 0x17FFFFFDu,
+                                      0x1000006Au, 0xD61F0140u, 0xF9400A81u};
+        uint32_t g[9];
+
+        memcpy(g, f, sizeof g);
+        g[2] = 0xF9400A60u;
+        g[8] = 0xF9400E81u;
+        CHECK(ico_code_hash_rules(1, ICO_CODE_A64, f, sizeof f, 0x10000, 0, 0) ==
+                  0xf047d39e2ce0b334ull,
+              "a64 rules 1: tools/code_hash_a64.py's hash");
+        CHECK(ico_code_hash_rules(2, ICO_CODE_A64, f, sizeof f, 0x10000, 0, 0) ==
+                  0xb13c650b0c6751bcull,
+              "a64 rules 2: tools/code_hash_a64.py's hash");
+        CHECK(ico_code_hash_rules(1, ICO_CODE_A64, g, sizeof g, 0x20000, 0, 0) ==
+                  0xe4a31ec5cf5bbcd6ull,
+              "a64 rules 1: a page used across a branch keeps its offset");
+        CHECK(ico_code_hash_rules(2, ICO_CODE_A64, g, sizeof g, 0x20000, 0, 0) ==
+                  0xb13c650b0c6751bcull,
+              "a64 rules 2: pages used across branches and in a jump table's case are masked");
+        CHECK(
+            ico_code_hash(ICO_CODE_A64, g, sizeof g, 0x20000, 0, 0) ==
+                ico_code_hash_rules(ICO_CODE_HASH_RULES, ICO_CODE_A64, g, sizeof g, 0x20000, 0, 0),
+            "a64: ico_code_hash is the current rules");
+    }
 }
 
 /* --- the synthetic builds --------------------------------------------------------------- */

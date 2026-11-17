@@ -76,7 +76,9 @@ typedef struct IcoSymUnit {
     uint32_t name;        /* offset of the name in the table's strings */
     uint32_t ordinal;     /* among the units of this name, from 0 in address order */
     uint8_t hashed;
-    uint8_t unique; /* the only unit of its name */
+    uint8_t unique;      /* the only unit of its name */
+    uint8_t hashed1;     /* code_hash1 made */
+    uint64_t code_hash1; /* under code hash rules 1 (a record of those rules) */
 } IcoSymUnit;
 
 typedef struct IcoSymData {
@@ -162,6 +164,8 @@ const char *ico_symtab_nearest(const IcoSymTab *t, uint64_t addr, uint64_t *off)
 /* The unit's code hash (computed from the running program's code at the
    first ask, then kept). */
 uint64_t ico_symtab_unit_hash(IcoSymTab *t, const IcoSymUnit *u);
+/* The same under the given rules (code_hash.h; 1 or ICO_CODE_HASH_RULES). */
+uint64_t ico_symtab_unit_hash_rules(IcoSymTab *t, const IcoSymUnit *u, int rules);
 
 static inline const char *ico_symtab_name(const IcoSymTab *t, uint32_t off)
 {

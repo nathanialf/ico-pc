@@ -1192,7 +1192,18 @@ leaving the unit, every RIP-relative displacement, and a 32-bit displacement or 
 value lies in the image (the instruction lengths from a decoder of the legacy, REX, VEX and EVEX
 forms); on arm64 the offsets of B/BL, B.cond, CBZ, TBZ, LDR literal and ADR that leave the unit,
 every ADRP's page, and the low 12 bits of an ADD or a load/store whose base register an ADRP set
-(never x29 or sp, so frame offsets stay in). Trailing padding is left out. A suspended frame
+(never x29 or sp, so frame offsets stay in). Trailing padding is left out. The rules have a
+version (`ICO_CODE_HASH_RULES`, in the record's header). Rules 1 found the ADRP's register only
+by reading forward from it until something wrote the register. Rules 2 follow the
+function's own branches to a fixed point (`ico_code_a64_flow`): a page reaches every instruction
+some path carries it to, a MOV copies it, a BR (a jump table) leads to every word. clang keeps a
+page in a callee-saved register and uses it after a branch back, before the ADRP in the
+function's order. Under rules 1, 521 of the 13,857 functions that two consecutive Android builds
+share hashed apart with no change to their source, six of them holding threads in the owner's
+state. Under rules 2, 88 hash apart, and each lies in a file changed between the two builds or
+is a fortify `snprintf` wrapper paired by ordinal. A record states its rules, and the load
+compares this build's functions under them, so a format 3 state from a rules-1 build still
+loads. A suspended frame
 needs the same instructions at the same offsets with the same frame; a changed address constant
 changes none of that, every other byte does. A prototype of these rules run over the shipped
 binaries of two consecutive releases (with real changes between them) found, of the 10,709
@@ -1282,9 +1293,62 @@ that made it:
 - **Records without page words.** An arm64 record without `ICO_XB_PAGES` (format 2, or this
   format from a release candidate made before page words were recorded) is refused: `it was made
   before the pages its threads keep in registers were recorded`. Its fibers' pages cannot be told
-  from addresses.
+  from addresses. A format 2 Android state of a version with a legacy table is read again first
+  (below).
 - **Scope.** Other architectures record nothing. GOT pages (`adrp :got:`) and read-only data
   pages follow the same rule; a page and its offset already added together are an ordinary address.
+
+**Older Android states (legacy tables, issue 217).** Android builds before this format saved
+format 2 records. Those records left words into read-only data and page words unnamed, so
+every such state was refused. A released build whose game data layout equals this one's has a legacy table under `port/state_legacy/` (`state_legacy.h`, `port/state_legacy/README.md`).
+`tools/state_legacy_table.py` builds the table from the released APK. Android packages it as
+assets. A release candidate's table goes only into release candidate APKs. The table holds:
+
+- the version's symbol file and section lines;
+- the text runs of its `.rodata`;
+- every function's code hash, under rules 1 and under the current rules
+  (`tools/code_hash_a64.py`, the C rules in Python).
+
+At load, `state_host.c` (`legacy_record`) finds the table by the state's commit text and runs the
+save's naming again over the state's own bytes (its blocks, arena, game data, model tables,
+scheduler table, and each fiber's control page and stack) against the old program as the table
+describes it (`IcoXbProc.legacy`):
+
+- **Proof that the table is the saver's.** Every unit the record names must lie where the table
+  puts a function, and its rules-1 hash must equal the table's rules-1 hash of that function
+  (`ico_xb_legacy_verify`). The record's layout hash must equal the table's. For the owner's
+  state, all 1,181 code units match. Otherwise: `the legacy table is another build's` or
+  `another version's`.
+- **Functions.** The table's current-rules hashes stand for the old code, which this process does
+  not hold. The load compares them with this build's functions as for any record.
+- **Texts and anonymous read-only data.** The ordinary window rule applies (the bytes from the word
+  to the end of its text, widened until unique in its run). It reads the old bytes from the
+  table's runs. A window that starts a literal (a zero byte before it) is matched only where a
+  literal starts here (`XW_LSTART`).
+- **Page words.** The old code is not here, but each function with a frame hashes alike, so this
+  build's same function holds the same ADRPs at the same offsets. Each ADRP's target here is placed
+  back in the old program by name and ordinal (`old_of`: the game ranges, a unit, or a data
+  symbol). The target comes from the first user found reading forward or, failing that, from
+  every user the ADRP's own page reaches through the branches (`adrp_users_page`, the rules-2
+  flow seeded with that ADRP alone). All of them must lie on one old page. Each word then goes
+  through the ordinary page-word rules. A page word that an ADRP with no placeable target could
+  have made is refused.
+- **Start-up values.** The state does not hold the old version's start-up words, so this build's
+  are placed back by name (`legacy_snap`). The pairing is the name rule's own: a start-up value
+  names a word only where no unique name does, such as a repeated name's data, which a legacy read
+  cannot tell apart by contents.
+
+The result is a format 3 record, checked against this build as usual. A format 2 Android state of
+this layout with no table gets the pinned refusal: `its build has no legacy table here`. A state
+of another layout is refused for the layout first: `the game's data layout changed`. The check
+names another layout before any other reason. Two more changes came with this work:
+
+- The read-only range this build searches starts at its first section that is not a
+  dynamic-linking table (`.dynsym`, `.dynstr`, `.gnu.hash`, `.rela.dyn`, the notes). No program
+  pointer aims there, and `.dynstr` spells every exported name a text window could otherwise find
+  twice.
+- `port/data/reserved/tables.c` reproduces the released builds' loader statics (names, sizes,
+  kinds and order) in the game's bss, so the layout hash is again `0x7e3463baa76b43a8`.
 
 **Words nothing names.** Only a word the record confirms is translated: a word in a unit (the
 hash rule above), in a game range, a block or a unique variable, or at a start-up value or a
