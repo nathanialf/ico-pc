@@ -290,6 +290,19 @@ static uint64_t cmdKey(const RdFrame *f, const RdCmd *c)
     case RDC_PARTICLES: {
         k.u[1] = 0;
         h = span(f, c->u[1], c->u[2]);
+        if (c->type == RDC_MESH || c->type == RDC_SKINNED) {
+            /* the interpolation's scratch mesh (rd_interp.c morphDraw): one
+               id from present to present, its stream, indices and batches
+               rewritten at each (a blend step, another source mesh), none
+               of it counted by rd__hold_mesh_changed.  Its stream serial is
+               new at every rewrite (scratchFor, rd__mesh_stream_written),
+               so a list that draws one never keys equal to another
+               present's: never held, never the self-test's picture */
+            const RdMeshRec *m = rd__mesh_rec(c->u[0]);
+            if (m && m->transient) {
+                h = mix(h, m->streamSerial);
+            }
+        }
         if ((c->u[3] & RD_VU_PREV) != 0u && c->type != RDC_PARTICLES) {
             /* the VuPrevCB (velocity): its bytes, the offset left out */
             k.u[3] = c->u[3] & ~RD_VU_PREV_OFF;
