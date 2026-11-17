@@ -238,6 +238,11 @@ const char *ico_ckpt_route_text(IcoCkptRoute k);
 int ico_ckpt_syms_block(const void *syms, size_t n, const char *name, uint64_t *off, uint64_t *size,
                         unsigned *flags, uint64_t *layout);
 
+/* Whether v is a value the game indexes its arrays with for an option word
+   (ICO_CKPT_G_SCREEN: 0..4, the screen effects; ICO_CKPT_G_GIRL: 0 or 1,
+   Players): a state's word outside it is not put in (this run's kept). */
+int ico_ckpt_word_ok(int global, int32_t v);
+
 /* --- a state file's part of it ------------------------------------------------------------ */
 
 enum {

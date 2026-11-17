@@ -149,6 +149,11 @@ static void test_globals(void)
     CHECK(ico_ckpt_stamp("ps3") == NULL);
     CHECK(ico_ckpt_disc_2001("ntsc") && !ico_ckpt_disc_2001("pal"));
     CHECK(ico_ckpt_disc_last_stage("pal") == 105 && ico_ckpt_disc_last_stage("jun26") == 102);
+    /* the option words the game indexes its arrays with */
+    CHECK(ico_ckpt_word_ok(ICO_CKPT_G_SCREEN, 0) && ico_ckpt_word_ok(ICO_CKPT_G_SCREEN, 4));
+    CHECK(!ico_ckpt_word_ok(ICO_CKPT_G_SCREEN, 5) && !ico_ckpt_word_ok(ICO_CKPT_G_SCREEN, -1));
+    CHECK(ico_ckpt_word_ok(ICO_CKPT_G_GIRL, 1) && !ico_ckpt_word_ok(ICO_CKPT_G_GIRL, 2));
+    CHECK(!ico_ckpt_word_ok(ICO_CKPT_G_IMAGE, 0));
 }
 
 static void test_table(void)
@@ -596,6 +601,29 @@ static void test_states(const char *dir)
     in.stage_no = 15;
     in.self = &self;
     CHECK(ico_ckpt_locate(&in, &plan) == 0 && plan.by == ICO_CKPT_BY_SEARCH);
+    /* two layouts its bytes confirm that agree on the image and
+       systemStatus but put the screen word in two places: the word is not
+       taken (this run's), the rest is */
+    {
+        IcoCkptLayout two[2];
+
+        make_layout(&two[0], "one", "v0.0.1-0-gone", "test-x64");
+        make_layout(&two[1], "two", "v0.0.2-0-gtwo", "test-x64");
+        two[1].g[ICO_CKPT_G_SCREEN].off += 4;
+        ico_ckpt_state_input(&st, NULL, &in);
+        in.table = two;
+        in.table_n = 2;
+        CHECK(ico_ckpt_locate(&in, &plan) == 0, "%s", plan.why);
+        CHECK(plan.by == ICO_CKPT_BY_LAYOUT && plan.layouts == 2 && plan.checkpoint == 1,
+              "by %d layouts %d (%s)", plan.by, plan.layouts, plan.source);
+        CHECK(plan.g[ICO_CKPT_G_SCREEN] == NULL &&
+                  plan.place[ICO_CKPT_G_SCREEN].range == ICO_CKPT_RANGE_NONE,
+              "the screen word the layouts place apart is not taken");
+        CHECK(plan.g[ICO_CKPT_G_PREVIEW] == st.p[ICO_CKPT_S_GBSS] + PREVIEW_AT &&
+                  plan.g[ICO_CKPT_G_IMAGE] == st.p[ICO_CKPT_S_GBSS] + IMG_AT,
+              "the words they agree on are");
+        CHECK(strstr(plan.source, "some words not taken") != NULL, "%s", plan.source);
+    }
     ico_ckpt_state_free(&st);
 
     /* format 2 (v0.10.0 - v0.11.8): the table's entry of its commit, its

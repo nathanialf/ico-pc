@@ -2578,12 +2578,20 @@ static IcoStateResult ckpt_plan(const char *path, const char *disc_now, IcoCkptS
        disc's block holds it (not the 2001 discs), Players on every disc
        (the 2001 discs keep it beside the save) */
     if (plan->g[ICO_CKPT_G_SCREEN] != NULL && !ico_ckpt_disc_2001(st->h.disc)) {
-        ap->have_screen = 1;
         memcpy(&ap->screen, plan->g[ICO_CKPT_G_SCREEN], 4);
+        ap->have_screen = ico_ckpt_word_ok(ICO_CKPT_G_SCREEN, ap->screen);
     }
     if (plan->g[ICO_CKPT_G_GIRL] != NULL) {
-        ap->have_girl = 1;
         memcpy(&ap->girl, plan->g[ICO_CKPT_G_GIRL], 4);
+        ap->have_girl = ico_ckpt_word_ok(ICO_CKPT_G_GIRL, ap->girl);
+    }
+    if ((plan->g[ICO_CKPT_G_SCREEN] != NULL && !ico_ckpt_disc_2001(st->h.disc) &&
+         !ap->have_screen) ||
+        (plan->g[ICO_CKPT_G_GIRL] != NULL && !ap->have_girl)) {
+        fprintf(
+            stderr,
+            "state: its option words (screen %d, Players %d) are not the game's: this run's kept\n",
+            (int)ap->screen, (int)ap->girl);
     }
     if (k > 0 && rec_e->n <= sizeof ap->record) {
         ap->have_record = 1;
