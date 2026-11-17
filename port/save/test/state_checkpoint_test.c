@@ -686,6 +686,42 @@ static void test_states(const char *dir)
             free(gb);
         }
     }
+    /* a damaged file whose game sections hold more than the PS2's main
+       memory (each under the bound, the two together over it): refused by
+       their sizes before anything is allocated for them */
+    {
+        const size_t gd_n = 1u << 20, gb_n = (size_t)ICO_CKPT_EE_RAM - gd_n + 16u;
+        unsigned char *gb = (unsigned char *)calloc(1, gb_n);
+        IcoStateHeader *h = (IcoStateHeader *)calloc(1, sizeof *h);
+        IcoStateSection sec[3];
+        IcoStateWriteResult res;
+
+        if (gb != NULL && h != NULL) {
+            ico_state_header_init(h, "v0.9.6-1-gtest");
+            snprintf(h->platform, sizeof h->platform, "test-x64");
+            snprintf(h->disc, sizeof h->disc, "pal");
+            memset(sec, 0, sizeof sec);
+            sec[0].name = "gdata";
+            sec[0].data = gb;
+            sec[0].bytes = gd_n;
+            sec[1].name = "gbss";
+            sec[1].data = gb;
+            sec[1].bytes = gb_n;
+            sec[2].name = "reg";
+            sec[2].data = s_reg;
+            sec[2].bytes = sizeof s_reg;
+            snprintf(path, sizeof path, "%s/ckpt_big.ics", dir);
+            CHECK(ico_state_file_write(path, h, sec, 3) == ICO_STATE_OK &&
+                  ico_state_file_flush(&res) == 1 && res.result == ICO_STATE_OK);
+            CHECK(ico_ckpt_state_read(path, &st) == -1 && strstr(st.why, "gbss") != NULL &&
+                      strstr(st.why, "more than a state holds") != NULL,
+                  "the game's two sections over 32 MB: %s", st.why);
+            ico_ckpt_state_free(&st);
+            remove(path);
+        }
+        free(gb);
+        free(h);
+    }
     /* no file */
     snprintf(path, sizeof path, "%s/ckpt_none.ics", dir);
     CHECK(ico_ckpt_state_read(path, &st) == -1 && strstr(st.why, "no file") != NULL);

@@ -630,6 +630,20 @@ typedef struct ReadCtx {
     int bad;
 } ReadCtx;
 
+/* a section's bound (state_checkpoint.h "What a state's sections can hold") */
+static uint64_t section_max(int i)
+{
+    switch (i) {
+    case ICO_CKPT_S_GDATA:
+    case ICO_CKPT_S_GBSS:
+    case ICO_CKPT_S_REG:
+        return ICO_CKPT_EE_RAM;
+    case ICO_CKPT_S_SYMS:
+        return ICO_XB_MAX_BYTES;
+    }
+    return 4096u;
+}
+
 static void *want_section(void *user, const IcoStateSectionInfo *s)
 {
     ReadCtx *c = (ReadCtx *)user;
@@ -639,10 +653,16 @@ static void *want_section(void *user, const IcoStateSectionInfo *s)
         if (strcmp(s->name, s_sec_names[i]) != 0 || c->st->p[i] != NULL) {
             continue;
         }
-        if (s->raw_bytes > (i == ICO_CKPT_S_CKPT ? 4096u : ICO_CKPT_SECTION_MAX)) {
+        if (s->raw_bytes > section_max(i) ||
+            ((i == ICO_CKPT_S_GDATA || i == ICO_CKPT_S_GBSS) &&
+             s->raw_bytes + c->st->n[ICO_CKPT_S_GDATA] + c->st->n[ICO_CKPT_S_GBSS] >
+                 ICO_CKPT_EE_RAM)) {
             c->bad = 1;
-            snprintf(c->st->why, sizeof c->st->why, "its %s section is %llu bytes", s->name,
-                     (unsigned long long)s->raw_bytes);
+            snprintf(c->st->why, sizeof c->st->why,
+                     "its %s section is %llu bytes, more than a state holds (at most %llu%s)",
+                     s->name, (unsigned long long)s->raw_bytes, (unsigned long long)section_max(i),
+                     i == ICO_CKPT_S_GDATA || i == ICO_CKPT_S_GBSS ? ", the game's two together"
+                                                                   : "");
             return NULL;
         }
         c->st->p[i] = (unsigned char *)malloc(s->raw_bytes != 0 ? (size_t)s->raw_bytes : 1u);

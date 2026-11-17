@@ -249,7 +249,17 @@ enum {
     ICO_CKPT_S_COUNT
 };
 
-#define ICO_CKPT_SECTION_MAX (256ull << 20) /* a section read at most (gbss is 6 MB) */
+/* What a state's sections can hold, the bounds a read takes before it
+   allocates anything (a damaged or crafted file is read on the Save states
+   page's worker as the page opens):
+     gdata, gbss  the game's data and bss, copies of what the PS2 held in its
+                  32 MB of main memory: each, and the two together, at most
+                  ICO_CKPT_EE_RAM (a build's are 0.2 MB and 6 MB);
+     reg          the registered blocks: at most ICO_CKPT_EE_RAM (a build's
+                  77 blocks are 2.2 MB without the audio, which is not read);
+     syms         a save's record: ICO_XB_MAX_BYTES, the format's own bound;
+     ckpt         4096 bytes (ICO_CKPT_RECORD_BYTES with room). */
+#define ICO_CKPT_EE_RAM (32ull << 20)
 
 typedef struct IcoCkptState {
     IcoStateHeader h;
