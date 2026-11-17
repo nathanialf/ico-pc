@@ -762,6 +762,7 @@ const char *const
             [UI_STR_STATES_NOTE] =
                 "Un état appartient à ce disque. Les versions suivantes peuvent aussi le charger. Gauche et droite choisissent l'action.",
             [UI_STR_STATES_PAUSE_FIRST] = "Mettez le jeu en pause pour enregistrer un état",
+            [UI_STR_STATES_PAUSE_FIRST_LOAD] = "Mettez le jeu en pause pour charger cet état",
             [UI_STR_STATES_REFUSED_BUILD] = "Enregistré par une autre version du jeu",
             [UI_STR_STATES_REFUSED_DISC] = "Enregistré depuis un autre disque",
             [UI_STR_STATES_REFUSED_SETTINGS] = "Un réglage de jeu diffère : %s",
@@ -778,8 +779,7 @@ const char *const
                 "Cet état a été créé par la version %s.\nLa version %s a modifié la façon dont le jeu\ngarde sa progression en mémoire, il ne peut\ndonc pas être repris.\nVos sauvegardes sur memory card fonctionnent toujours.",
             [UI_STR_STATES_XB_PINNED] =
                 "Cet état a été créé par la version %s\net seule cette version peut le reprendre.\nVos sauvegardes sur memory card fonctionnent toujours.",
-            [UI_STR_STATES_CKPT_ROW] =
-                "Se charge depuis son dernier point de contrôle (créé par une autre version)",
+            [UI_STR_STATES_CKPT_ROW] = "Se charge depuis son dernier point de contrôle",
             [UI_STR_STATES_CKPT_LOADED] =
                 "Partie reprise au dernier point de contrôle de cet état,\n"
                 "créé par la version %s.",

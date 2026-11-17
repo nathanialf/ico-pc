@@ -813,6 +813,7 @@ const char *const
             [UI_STR_STATES_NOTE] =
                 "Ein Zustand gehört zu dieser Disc. Spätere Versionen können ihn auch laden. Links und Rechts wählen die Aktion.",
             [UI_STR_STATES_PAUSE_FIRST] = "Pausiere das Spiel, um einen Zustand zu speichern",
+            [UI_STR_STATES_PAUSE_FIRST_LOAD] = "Pausiere das Spiel, um diesen Zustand zu laden",
             [UI_STR_STATES_REFUSED_BUILD] = "Von einer anderen Version des Spiels gespeichert",
             [UI_STR_STATES_REFUSED_DISC] = "Von einer anderen Disc gespeichert",
             [UI_STR_STATES_REFUSED_SETTINGS] = "Eine Spieleinstellung weicht ab: %s",
@@ -830,8 +831,7 @@ const char *const
                 "Dieser Spielzustand stammt aus Version %s.\nVersion %s hat geändert, wie das Spiel seinen\nFortschritt im Speicher hält, deshalb kann er\nnicht fortgesetzt werden.\nDeine Speicherstände auf der Memory Card\nfunktionieren weiterhin.",
             [UI_STR_STATES_XB_PINNED] =
                 "Dieser Spielzustand stammt aus Version %s\nund kann nur mit dieser Version\nfortgesetzt werden.\nDeine Speicherstände auf der Memory Card\nfunktionieren weiterhin.",
-            [UI_STR_STATES_CKPT_ROW] =
-                "Lädt ab seinem letzten Kontrollpunkt (aus einer anderen Version)",
+            [UI_STR_STATES_CKPT_ROW] = "Lädt ab seinem letzten Kontrollpunkt",
             [UI_STR_STATES_CKPT_LOADED] =
                 "Am letzten Kontrollpunkt dieses Spielzustands fortgesetzt,\n"
                 "der aus Version %s stammt.",

@@ -787,6 +787,7 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_STATES_NOTE] =
         "상태는 이 디스크에 속합니다. 이후 버전에서도 불러올 수도 있습니다. 왼쪽과 오른쪽으로 동작을 고릅니다.",
     [UI_STR_STATES_PAUSE_FIRST] = "상태를 저장하려면 게임을 일시정지하세요",
+    [UI_STR_STATES_PAUSE_FIRST_LOAD] = "이 상태를 불러오려면 게임을 일시정지하세요",
     [UI_STR_STATES_REFUSED_BUILD] = "다른 버전의 게임에서 저장됨",
     [UI_STR_STATES_REFUSED_DISC] = "다른 디스크에서 저장됨",
     [UI_STR_STATES_REFUSED_SETTINGS] = "게임 설정이 다릅니다: %s",
@@ -803,7 +804,7 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
         "이 저장 상태는 버전 %s에서 만들어졌습니다. 버전 %s에서 게임이 진행 상황을 메모리에 담는 방식이 바뀌어 이어서 할 수 없습니다. 메모리 카드의 저장 데이터는 그대로 쓸 수 있습니다.",
     [UI_STR_STATES_XB_PINNED] =
         "이 저장 상태는 버전 %s에서 만들어졌으며 그 버전에서만 이어서 할 수 있습니다. 메모리 카드의 저장 데이터는 그대로 쓸 수 있습니다.",
-    [UI_STR_STATES_CKPT_ROW] = "마지막 체크포인트부터 불러옵니다 (다른 버전에서 만들어짐)",
+    [UI_STR_STATES_CKPT_ROW] = "마지막 체크포인트부터 불러옵니다",
     [UI_STR_STATES_CKPT_LOADED] =
         "버전 %s에서 만들어진 이 저장 상태의 마지막 체크포인트부터 이어서 시작했습니다.",
     [UI_STR_STATES_CKPT_NONE] =
