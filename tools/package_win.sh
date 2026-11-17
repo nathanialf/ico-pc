@@ -94,6 +94,10 @@ cp "$b/ico_pc.map" "$d/ico_pc_$a.map"
 # whole by offset; tools/android_syms_lines.py reads GNU ld's map too)
 python3 -I "$wt/tools/android_syms_lines.py" gamesec "$b/ico_pc.map" "$wt" >>"$log" 2>&1 ||
     fail "tools/android_syms_lines.py gamesec: a port object holds bytes in the game's data sections (the log names it)"
+# the checkpoint globals a state names lie in the game's data sections, the
+# released builds' table is whole (port/save/state_checkpoint.h)
+python3 -I "$wt/tools/state_checkpoint_table.py" guard "$b/ico_pc.map" >>"$log" 2>&1 ||
+    fail "tools/state_checkpoint_table.py guard: a checkpoint global is outside the game's data, or the table lost a release (the log names it)"
 # save states carry over (issue 217): every initialised pointer of the game's
 # data in the program must be one the save can name with this map, or a
 # state carried to a later version keeps a stale address (Windows' fixed

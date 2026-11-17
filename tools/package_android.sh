@@ -188,6 +188,12 @@ grep -q '^section [0-9a-f]* [0-9a-f]* A[A-Z]* \.rodata$' "$symdir/libmain.syms" 
 # them whole by offset, and their layout hash covers every item in them
 python3 -I "$wt/tools/android_syms_lines.py" gamesec "$map" "$wt" >>"$log" 2>&1 ||
     fail "tools/android_syms_lines.py gamesec: a port object holds bytes in the game's data sections (the log names it)"
+# a state that cannot resume where it was saved continues from the checkpoint
+# it holds, by its own record of where the game keeps it (port/save/state_checkpoint.h):
+# those globals must lie in the game's data sections, and the table of the
+# released builds before such records must be whole
+python3 -I "$wt/tools/state_checkpoint_table.py" guard "$so" >>"$log" 2>&1 ||
+    fail "tools/state_checkpoint_table.py guard: a checkpoint global is outside the game's data, or the table lost a release (the log names it)"
 # a writable data name that repeats could never be told apart in a save state
 python3 -I "$wt/tools/android_syms_lines.py" check "$symdir/libmain.syms" >>"$log" 2>&1 ||
     fail "tools/android_syms_lines.py check: writable data names repeat in libmain.so (the log names them)"

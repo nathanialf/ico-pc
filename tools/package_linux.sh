@@ -151,6 +151,10 @@ cp "$b/ico_pc.map" "$stage/ico_pc.map"
 # whole by offset; tools/android_syms_lines.py reads GNU ld's map too)
 python3 -I "$wt/tools/android_syms_lines.py" gamesec "$b/ico_pc.map" "$wt" >>"$log" 2>&1 ||
     fail "tools/android_syms_lines.py gamesec: a port object holds bytes in the game's data sections (the log names it)"
+# the checkpoint globals a state names lie in the game's data sections, the
+# released builds' table is whole (port/save/state_checkpoint.h)
+python3 -I "$wt/tools/state_checkpoint_table.py" guard "$b/ico_pc.map" >>"$log" 2>&1 ||
+    fail "tools/state_checkpoint_table.py guard: a checkpoint global is outside the game's data, or the table lost a release (the log names it)"
 # save states carry over (issue 217): the guard's verdict on the staged
 # program (tools/state_carry_check.py; docs/port/PLATFORM.md "The carry-over
 # guard"). The Linux program is linked at a fixed address below 4 GB, where
