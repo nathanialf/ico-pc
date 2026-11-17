@@ -481,6 +481,37 @@ static void test_journey(void)
     CHECK(rec()->knocks_journey == 1 && rec()->over_pending == 0);
 }
 
+/* a load that continues from a state's checkpoint (a game over stands
+   for it): a pending game over is not carried, the journey's count starts
+   again where the limit's game over would have reset it */
+static void test_checkpoint(void)
+{
+    start_hard();
+    ico_difficulty_set_row(ICO_DIFF_KNOCK_SCOPE, ICO_DIFF_SCOPE_JOURNEY);
+    ico_difficulty_set_row(ICO_DIFF_KNOCK_LIMIT, 2);
+    CHECK(knock() == 0);
+    get_up();
+    g.boy_act_mode = DOWN;
+    CHECK(knock() == 1, "the limit reached");
+    CHECK(rec()->over_pending == 1);
+    ico_difficulty_checkpoint_loaded();
+    CHECK(rec()->over_pending == 0 && rec()->in_fall == 0 && rec()->knocks_room == 0 &&
+              rec()->knocks_journey == 0,
+          "after the continue: pending %d fall %d room %d journey %d", (int)rec()->over_pending,
+          (int)rec()->in_fall, (int)rec()->knocks_room, (int)rec()->knocks_journey);
+    g.boy_act_mode = STAND;
+    get_up();
+    CHECK(knock() == 0, "the next fall is no game over at once");
+    /* the room's scope: the journey's count is kept, nothing was pending */
+    start_hard();
+    CHECK(knock() == 0);
+    ico_difficulty_checkpoint_loaded();
+    CHECK(rec()->in_fall == 0 && rec()->knocks_room == 0 && rec()->knocks_journey == 1,
+          "a fall in progress: room %d journey %d", (int)rec()->knocks_room,
+          (int)rec()->knocks_journey);
+    get_up();
+}
+
 static void test_permadeath(void)
 {
     start_hard();
@@ -812,6 +843,7 @@ int main(int argc, char **argv)
     test_limit();
     test_room();
     test_journey();
+    test_checkpoint();
     test_permadeath();
     test_off();
     test_hooks();

@@ -1070,6 +1070,27 @@ void ico_difficulty_state_loaded(int block_absent, const char *saved_keys)
     apply();
 }
 
+void ico_difficulty_checkpoint_loaded(void)
+{
+    const int pending = s_active.over_pending != 0;
+
+    ensure();
+    s_active.over_pending = 0;
+    s_active.in_fall = 0;
+    s_active.knocks_room = 0;
+    if (pending && s_active.row[ICO_DIFF_KNOCK_SCOPE] == ICO_DIFF_SCOPE_JOURNEY) {
+        /* the limit's game over that was due: the journey's count starts
+           again, as ico_difficulty_game_over does */
+        s_active.knocks_journey = 0;
+        ico_difficulty_file_knocks_reset();
+    }
+    fprintf(stderr,
+            "difficulty: continued from a state's checkpoint: no game over pending%s, the room's "
+            "count 0, the journey's %d\n",
+            pending ? " (the state's limit game over counted as this continue)" : "",
+            (int)s_active.knocks_journey);
+}
+
 int ico_difficulty_states_locked(void)
 {
     ensure();
