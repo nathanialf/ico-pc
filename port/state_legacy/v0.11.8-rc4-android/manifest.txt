@@ -1,0 +1,17 @@
+# tools/state_legacy_table.py build from ico-pc-v0.11.8-rc4-android.apk
+commit v0.11.7-66-gaf8507442c
+platform android-arm64
+kind rc
+apk ico-pc-v0.11.8-rc4-android.apk
+apk_sha256 10e43ab4ff7f2d93ab3a050e508ea7ead33494bf48c7c5cc560ba9c0b16afa3a
+texts 19417 1072408
+text_files 3
+hash_rules 2
+hashes 14188
+file hashes.z 159341 bca40b7b7acf3a3dcd3fb2edb718ff770c22826d15d78f9235720c957fc255d0
+file sections.txt 1231 587b25b2a398004936df454c1566e325739b641dbf0c275ae6dd85ea9aab7e5c
+file syms.gz 228697 27a3ff40ebd497455cd34e1c84c1d4de28138522519fc3b45372f85470b935a6
+file texts.0.z 184330 e48132a019e81002deb6f4d4a62e033413f9f17e135184fb29f58d0369797d81
+file texts.1.z 182877 f716a454c4b0c93eae7a5d2ed0ae540428da67d6c237c7f092128f1e9cd02795
+file texts.2.z 85654 d1d2c76d65202d7ccd180f1ab0844b194aff5bd7101985084634ac2f8516f3e2
+file texts.idx 57746 bf94060c7d8f529ddeabc0104234447225f217e5937e9a15ee59b25ca00258ca

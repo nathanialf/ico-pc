@@ -535,10 +535,174 @@ static size_t mask_a64(const uint8_t *p, size_t n, uint8_t *buf, uint64_t addr)
     return keep;
 }
 
+/* rules 2 (code_hash.h): the 12-bit offset of every ADD (immediate) or
+   load/store (unsigned offset) whose base register may hold an ADRP page
+   on some path through the function's own branches, zeroed in buf.  A
+   forward data-flow to a fixed point over the words: an ADRP makes its
+   register a page, a MOV (ORR Xd, XZR, Xm) copies one, any other write
+   ends one (ico_code_a64_writes; an unknown instruction ends all); B,
+   B.cond, CBZ/CBNZ and TBZ/TBNZ inside the function lead to their target as
+   well, B and RET lead nowhere else, and BR (a jump table's case) leads to
+   every word.  tools/code_hash_a64.py is the same in Python. */
+
+/* the word a branch at word k leads to inside the function, or SIZE_MAX */
+static size_t a64_target(uint32_t w, size_t k, size_t words)
+{
+    int64_t d;
+
+    if ((w & 0xFC000000u) == 0x14000000u) {
+        d = sign_extend(w & 0x3FFFFFFu, 26);
+    } else if ((w & 0xFF000010u) == 0x54000000u || (w & 0x7E000000u) == 0x34000000u) {
+        d = sign_extend((w >> 5) & 0x7FFFFu, 19);
+    } else if ((w & 0x7E000000u) == 0x36000000u) {
+        d = sign_extend((w >> 5) & 0x3FFFu, 14);
+    } else {
+        return SIZE_MAX;
+    }
+    if (d < -(int64_t)k || d >= (int64_t)(words - k)) {
+        return SIZE_MAX;
+    }
+    return (size_t)((int64_t)k + d);
+}
+
+int ico_code_a64_flow(const void *code, size_t words, size_t from, uint32_t regs, int adrp,
+                      uint32_t *into, uint8_t *seen)
+{
+    const uint8_t *p = (const uint8_t *)code;
+    uint8_t *queued;
+    size_t *work, nwork = 0;
+
+    memset(into, 0, words * sizeof *into);
+    memset(seen, 0, words);
+    if (words == 0 || from > words) {
+        return 0;
+    }
+    queued = (uint8_t *)calloc(words, 1);
+    work = (size_t *)malloc(words * sizeof *work);
+    if (queued == NULL || work == NULL) {
+        free(queued);
+        free(work);
+        return -1;
+    }
+    if (from == words) {
+        seen[0] = 1;
+        queued[0] = 1;
+        work[nwork++] = 0;
+    }
+    while (nwork > 0 || from < words) {
+        const size_t at = from < words ? from : work[--nwork];
+        const uint32_t w = get32(p + 4 * at);
+        const uint32_t v = into[at];
+        const uint32_t wr = ico_code_a64_writes(w);
+        const uint32_t d = w & 31;
+        uint32_t out;
+        size_t next[2], nn = 0, j, t;
+        int all = 0;
+
+        if (from < words) {
+            out = regs; /* the seed: as after its own word */
+            from = words + 1;
+        } else {
+            queued[at] = 0;
+            if (wr == ~0u) {
+                out = 0;
+            } else {
+                out = v & ~wr;
+                if (adrp && (w & 0x9F000000u) == 0x90000000u && d != 29 && d != 31) {
+                    out |= 1u << d;
+                } else if ((w & 0xFFE0FFE0u) == 0xAA0003E0u &&
+                           ((v >> ((w >> 16) & 31)) & 1u) != 0 && d != 29 && d != 31) {
+                    out |= 1u << d;
+                }
+            }
+        }
+        if ((w & 0xFC000000u) == 0x14000000u ||
+            ((w & 0xFF00001Fu) == 0x5400000Eu)) { /* b, b.al: the target only */
+        } else if ((w & 0xFE000000u) == 0xD6000000u && ((w >> 21) & 3u) != 1u) {
+            all = ((w >> 21) & 0xFu) == 0; /* br: every word; ret, eret: none */
+        } else if (at + 1 < words) {
+            next[nn++] = at + 1;
+        }
+        t = a64_target(w, at, words);
+        if (t != SIZE_MAX) {
+            next[nn++] = t;
+        }
+        for (j = 0; j < (all ? words : nn); j++) {
+            const size_t to = all ? j : next[j];
+
+            if (!seen[to] || (out & ~into[to]) != 0) {
+                seen[to] = 1;
+                into[to] |= out;
+                if (!queued[to]) {
+                    queued[to] = 1;
+                    work[nwork++] = to;
+                }
+            }
+        }
+    }
+    free(queued);
+    free(work);
+    return 0;
+}
+
+static void mask_a64_pages(const uint8_t *p, size_t words, uint8_t *buf)
+{
+    uint32_t *into;
+    uint8_t *seen;
+    size_t k;
+
+    if (words == 0) {
+        return;
+    }
+    into = (uint32_t *)malloc(words * sizeof *into);
+    seen = (uint8_t *)malloc(words);
+    if (into == NULL || seen == NULL || ico_code_a64_flow(p, words, words, 0, 1, into, seen) != 0) {
+        /* no room for the flow: every offset off any register an ADRP of the
+           function writes, the widest answer the flow could give */
+        uint32_t pages = 0;
+
+        for (k = 0; k < words; k++) {
+            const uint32_t w = get32(p + 4 * k);
+
+            if ((w & 0x9F000000u) == 0x90000000u) {
+                pages |= 1u << (w & 31);
+            }
+        }
+        pages &= ~(1u << 29 | 1u << 31);
+        for (k = 0; k < words; k++) {
+            const uint32_t w = get32(p + 4 * k);
+
+            if (((w & 0x7F800000u) == 0x11000000u || (w & 0x3B000000u) == 0x39000000u) &&
+                ((pages >> ((w >> 5) & 31)) & 1u) != 0) {
+                put32(buf + 4 * k, get32(buf + 4 * k) & ~(0xFFFu << 10));
+            }
+        }
+        free(into);
+        free(seen);
+        return;
+    }
+    for (k = 0; k < words; k++) {
+        const uint32_t w = get32(p + 4 * k);
+
+        if (seen[k] && ((w & 0x7F800000u) == 0x11000000u || (w & 0x3B000000u) == 0x39000000u) &&
+            ((into[k] >> ((w >> 5) & 31)) & 1u) != 0) {
+            put32(buf + 4 * k, get32(buf + 4 * k) & ~(0xFFFu << 10));
+        }
+    }
+    free(into);
+    free(seen);
+}
+
 /* --- the hash ----------------------------------------------------------------- */
 
 uint64_t ico_code_hash(int arch, const void *code, size_t n, uint64_t addr, uint64_t image_lo,
                        uint64_t image_hi)
+{
+    return ico_code_hash_rules(ICO_CODE_HASH_RULES, arch, code, n, addr, image_lo, image_hi);
+}
+
+uint64_t ico_code_hash_rules(int rules, int arch, const void *code, size_t n, uint64_t addr,
+                             uint64_t image_lo, uint64_t image_hi)
 {
     const uint8_t *p = (const uint8_t *)code;
     uint8_t *buf;
@@ -555,6 +719,9 @@ uint64_t ico_code_hash(int arch, const void *code, size_t n, uint64_t addr, uint
     }
     keep = arch == ICO_CODE_X64 ? mask_x64(p, n, buf, addr, image_lo, image_hi)
                                 : mask_a64(p, n, buf, addr);
+    if (arch == ICO_CODE_A64 && rules >= 2) {
+        mask_a64_pages(p, n / 4, buf);
+    }
     h = xxh3_64(buf, keep);
     free(buf);
     return h;

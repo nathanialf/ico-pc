@@ -49,6 +49,7 @@ capture_trigger 0.00
 cdvd_host 0.49
 charfile_image 0.00
 clock_trap 0.00
+code_hash_a64_selftest 0.10  # estimate: 0.03 s local (STATENAME), Python XXH3 over 14 short vectors
 collision_carrier 0.01
 collision_carrier_disc 0.00
 collision_carrier_disc_aug6 0.00
@@ -1110,6 +1111,8 @@ state_fiber_guard 0.06
 state_format 0.13
 state_guard 0.00
 state_host 0.01
+state_legacy 1.00  # estimate: unmeasured, assumed (STATENAME could not build or run it; it inflates and parses three legacy tables)
+state_legacy_tables 0.30  # estimate: 0.15 s local (STATENAME), Python over three legacy tables
 state_name 0.01  # estimate: 0.0x s local (STATENAME's merge check), a unit test like state_port
 state_port 0.02
 state_recover 0.04

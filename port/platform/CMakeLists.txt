@@ -52,6 +52,7 @@ target_sources(ico_platform PRIVATE
     state_registry.c
     state_reloc.c
     state_syms.c
+    state_legacy.c
     state_xbuild.c
     sys_cell.c
     symmap.c
@@ -229,6 +230,20 @@ if(ICO_RUN_TESTS)
     # not (diag_test --switch; POSIX only, 77 elsewhere)
     add_test(NAME diag_switch COMMAND diag_test --switch)
     set_tests_properties(diag_switch PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
+# state_legacy: the committed legacy tables (port/state_legacy, issue 217)
+# read by the game's loader (state_legacy.c): each table the index names
+# loads with its manifest's counts, its code hashes in address order under
+# the current rules, every function its symbol file cuts hashed; the index's
+# lookup (a release, an rc, another platform, an unknown commit, no index), a
+# missing and a cut file; the source tree's folder, no game
+add_executable(state_legacy_test test/state_legacy_test.c)
+target_include_directories(state_legacy_test PRIVATE "${ICO_COMPAT_DIR}")
+target_compile_options(state_legacy_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(state_legacy_test PRIVATE ico_platform)
+if(ICO_RUN_TESTS)
+    add_test(NAME state_legacy COMMAND state_legacy_test "${CMAKE_SOURCE_DIR}/port/state_legacy")
 endif()
 
 # cpu_place: the cores a thread ran on most, the cores' speeds from a fake

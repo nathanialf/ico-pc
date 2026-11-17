@@ -20,7 +20,10 @@
  *             copies, a corrupt image (stage 0, past the disc's last stage,
  *             a cleared word of 7, cut by the section's end), a 2001 disc
  *             (no cleared word)
- *   route     every IcoStateResult for this version's state and another's
+ *   route     every IcoStateResult for this version's state and another's;
+ *             another build's syms verdict, each refusal reason by its kind
+ *             (legacy table, page words, layout first): checkpoint, a
+ *             translation: exact
  *   syms      the block list of a syms record (versions 2 and 3 with units,
  *             data and points before the blocks): found, absent, damaged
  *   states    three state files through the whole decision: format 1 (no
@@ -42,6 +45,7 @@
 #include "ico_check.h"
 #include "state_checkpoint.h"
 #include "state_file.h"
+#include "state_xbuild.h"
 
 #define GDATA 0x400u
 #define GBSS 0x10000u
@@ -330,6 +334,50 @@ static void test_route(void)
     CHECK_STR(ico_ckpt_route_text(ICO_CKPT_ROUTE_CHECKPOINT), "checkpoint");
 }
 
+/* the combined verdict: another build's state through the syms check (the
+   legacy tables' naming of an earlier Android record included), each reason
+   ico_xb_check or state_host.c's xb_probe gives, by the kind it gives it
+   under (port/platform/state_xbuild.c, state_host.c): only a translation
+   resumes exactly, every refusal continues from the checkpoint */
+static void test_xb_route(void)
+{
+    static const struct {
+        int kind;
+        const char *reason;
+    } t[] = {
+        {ICO_XB_OK,
+         "everything it points into is unchanged (a legacy table named it, or its own record)"},
+        {ICO_XB_DATA, "the game's data layout changed (named first)"},
+        {ICO_XB_DATA, "the variable X is missing here / changed size / the start-up data changed"},
+        {ICO_XB_DATA, "the text ... is missing here / is in more than one place here"},
+        {ICO_XB_DATA, "the page address ... lands into a page here"},
+        {ICO_XB_CODE, "the function X changed / is missing here (a page word's producer too)"},
+        {ICO_XB_BLOCKS, "the block X changed size / exists only here / is missing here"},
+        {ICO_XB_PINNED, "it was made before the pages its threads keep in registers were recorded"},
+        {ICO_XB_PINNED, "its build has no legacy table here"},
+        {ICO_XB_PINNED,
+         "its version's legacy table could not read it (the table is another build's)"},
+        {ICO_XB_PINNED, "it holds a program address no symbol names"},
+        {ICO_XB_PINNED, "the version that made it had no symbol file / its program lay below 4 GB"},
+        {ICO_XB_PINNED, "its code was compared under other rules"},
+        {ICO_XB_PINNED, "it points into the program in more places than the record holds"},
+        {ICO_XB_BAD, "the symbols record is missing, damaged or could not be read"},
+    };
+
+    size_t i;
+
+    for (i = 0; i < sizeof t / sizeof t[0]; i++) {
+        const IcoStateResult r = ico_ckpt_xb_result(t[i].kind);
+        const IcoCkptRoute k = ico_ckpt_route(r, 1);
+
+        CHECK(k == (t[i].kind == ICO_XB_OK ? ICO_CKPT_ROUTE_EXACT : ICO_CKPT_ROUTE_CHECKPOINT),
+              "%s: %s", t[i].reason, ico_ckpt_route_text(k));
+    }
+    CHECK(ico_ckpt_xb_result(ICO_XB_BAD) == ICO_STATE_BAD_FILE);
+    CHECK(ico_ckpt_xb_result(ICO_XB_PINNED) == ICO_STATE_OTHER_BUILD);
+    CHECK(ico_ckpt_xb_result(99) == ICO_STATE_OTHER_BUILD); /* a later kind: not exact */
+}
+
 /* --- a syms record ------------------------------------------------------------------------------- */
 
 /* state_xbuild.c's layout: the header (64 bytes, 80 in version 3), units 48,
@@ -594,6 +642,7 @@ int main(int argc, char **argv)
     test_record();
     test_search();
     test_route();
+    test_xb_route();
     test_syms();
     test_states(dir);
     return ico_check_summary("state_checkpoint");

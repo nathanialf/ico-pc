@@ -207,6 +207,13 @@ typedef enum IcoCkptRoute {
 /* r: the exact path's result for the state; other_version: the state's
    build is not this one (its header's build id or format differs). */
 IcoCkptRoute ico_ckpt_route(IcoStateResult r, int other_version);
+/* The load's result for another build's state from its syms verdict
+   (state_xbuild.h ICO_XB_*, the legacy tables' naming of an earlier
+   Android record included: state_host.c other_build): OK for ICO_XB_OK,
+   BAD_FILE for a damaged record, OTHER_BUILD for every blocker.  Each of
+   them then routes to the checkpoint (ico_ckpt_route(.., 1)); only OK
+   resumes exactly. */
+IcoStateResult ico_ckpt_xb_result(int xb_kind);
 const char *ico_ckpt_route_text(IcoCkptRoute k);
 
 /* --- the syms section's block list, read without the symbol table ------------------------

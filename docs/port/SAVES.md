@@ -423,7 +423,11 @@ tool is built by `port/save/CMakeLists.txt` and kept in every build (`cmake/IcoT
 
 Load on a slot that cannot resume where it was saved continues the game from the checkpoint the
 state holds, in the program, through the game's own load path for a card save. The exact resume
-is tried first ([PLATFORM.md](PLATFORM.md#saving-and-loading)); every refusal of another
+is tried first ([PLATFORM.md](PLATFORM.md#saving-and-loading)), an earlier Android record named
+again by its version's legacy table included (`state_host.c` `xb_probe`): a state that resumes
+exactly never takes the checkpoint, and the listing decides with the same `other_build`, its
+verdict kept per slot with the file's size, time and the settings (the legacy check reads the
+whole state and a table once per file). Every refusal of another
 version's or another platform's state (format 1, a changed function or layout, a block, a word
 nothing names, the arm64 page record missing, another version's settings), and of the same build's
 state whose restore failed its self-check (the backup is back) or whose file has a damaged section

@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "state_registry.h" /* ICO_STATE_AUDIO */
+#include "state_xbuild.h"   /* ICO_XB_* */
 
 static const struct {
     const char *name;
@@ -500,6 +501,17 @@ IcoCkptRoute ico_ckpt_route(IcoStateResult r, int other_version)
         return ICO_CKPT_ROUTE_REFUSED;
     }
     return ICO_CKPT_ROUTE_REFUSED;
+}
+
+IcoStateResult ico_ckpt_xb_result(int xb_kind)
+{
+    switch (xb_kind) {
+    case ICO_XB_OK:
+        return ICO_STATE_OK;
+    case ICO_XB_BAD:
+        return ICO_STATE_BAD_FILE;
+    }
+    return ICO_STATE_OTHER_BUILD; /* CODE, DATA, BLOCKS, PINNED and any later kind */
 }
 
 const char *ico_ckpt_route_text(IcoCkptRoute k)

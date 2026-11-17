@@ -76,6 +76,8 @@ enum {
 /* a window's flags */
 #define XW_TEXT 1u   /* a text */
 #define XW_HASHED 2u /* the pool holds its prefix only: found by the hash */
+#define XW_LSTART                                                                                  \
+    4u /* a text that starts a literal (a NUL before it): found only where one starts */
 /* the labels ico_xb_where keeps */
 #define WHERE_MAX 1024
 #define WHERE_BYTES 48
@@ -153,6 +155,12 @@ struct IcoXbRefs {
     int n_blocks;
     SnapPair *snap;
     size_t n_snap;
+    /* a legacy read (IcoXbProc.legacy): where the version's read-only bytes
+       lie (its addresses plus delta) and its record's units' code hashes,
+       by old start */
+    int64_t delta;
+    uint64_t *uh; /* n_uh pairs: start, hash; sorted */
+    size_t n_uh;
 };
 
 static int snap_cmp(const void *a, const void *b)
@@ -170,6 +178,107 @@ static int in_image(const IcoXbProc *p, uint64_t w)
     return w >= p->image.lo && w <= p->image.hi;
 }
 
+static int uh_cmp(const void *a, const void *b)
+{
+    const uint64_t x = ((const uint64_t *)a)[0], y = ((const uint64_t *)b)[0];
+
+    return x < y ? -1 : x > y;
+}
+
+/* a legacy read: the version's read-only data is its text runs' copy (the
+   only read-only range), and the table's code hashes of the version's
+   functions (rules ICO_CODE_HASH_RULES, tools/state_legacy_table.py) stand
+   for the code this process cannot read */
+static int legacy_begin(IcoXbRefs *r)
+{
+    const IcoXbLegacy *lg = r->p.legacy;
+    size_t i;
+
+    r->p.image.n_ro = 1;
+    r->p.image.ro_lo[0] = lg->old_lo + lg->lt->ro_lo;
+    r->p.image.ro_hi[0] = lg->old_lo + lg->lt->ro_hi;
+    r->delta = (int64_t)((uint64_t)(uintptr_t)lg->lt->ro - r->p.image.ro_lo[0]);
+    r->uh = (uint64_t *)malloc((lg->lt->n_hash ? lg->lt->n_hash : 1) * 2 * sizeof *r->uh);
+    if (r->uh == NULL) {
+        return -1;
+    }
+    if (lg->lt->hash_rules != ICO_CODE_HASH_RULES) {
+        return -1;
+    }
+    for (i = 0; i < lg->lt->n_hash; i++) {
+        r->uh[2 * i] = lg->old_lo + lg->lt->hash[3 * i];
+        r->uh[2 * i + 1] = lg->lt->hash[3 * i + 2];
+    }
+    r->n_uh = lg->lt->n_hash;
+    if (r->n_uh > 1) {
+        qsort(r->uh, r->n_uh, 2 * sizeof *r->uh, uh_cmp);
+    }
+    return 0;
+}
+
+/* a unit's code hash: this process's code, or for a legacy read the
+   record's (*missing set when it holds none) */
+static uint64_t unit_hash(const IcoXbRefs *r, IcoSymTab *t, const IcoSymUnit *u, int *missing)
+{
+    size_t lo = 0, hi = r->n_uh;
+
+    if (r->p.legacy == NULL) {
+        return ico_symtab_unit_hash(t, u);
+    }
+    while (lo < hi) {
+        const size_t mid = lo + (hi - lo) / 2;
+
+        if (r->uh[2 * mid] < u->start) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    if (lo < r->n_uh && r->uh[2 * lo] == u->start) {
+        return r->uh[2 * lo + 1];
+    }
+    *missing = 1;
+    return 0;
+}
+
+static int old_of(const IcoXbRefs *r, const IcoSymTab *ot, uint64_t T, uint64_t *old);
+
+/* a legacy read's start-up words: this build's, each placed back in the
+   version by name (old_of).  The pairing is the name rule's own, so a word
+   it names translates to what its name would give; it names a word no
+   unique name does (a repeated name's data, which a legacy read cannot
+   tell by contents).  A start-up word that cannot be placed back is left
+   out (a word only it could name stays unnamed: refused). */
+static void legacy_snap(IcoXbRefs *r)
+{
+    const IcoXbLegacy *lg = r->p.legacy;
+    size_t i;
+
+    if (lg->now_snap == NULL || lg->now_snap_words == 0 || lg->now_tab == NULL ||
+        r->p.tab == NULL) {
+        return;
+    }
+    r->snap = (SnapPair *)malloc(lg->now_snap_words * sizeof *r->snap);
+    if (r->snap == NULL) {
+        return;
+    }
+    for (i = 0; i < lg->now_snap_words; i++) {
+        const uint64_t T = lg->now_snap[i];
+        uint64_t old;
+
+        if (T != 0 && ico_symtab_unit_at(lg->now_tab, T) == NULL &&
+            ico_symtab_data_at(lg->now_tab, T) != NULL && old_of(r, r->p.tab, T, &old) &&
+            in_image(&r->p, old)) {
+            r->snap[r->n_snap].value = old;
+            r->snap[r->n_snap].off = (uint64_t)i * 8u;
+            r->n_snap++;
+        }
+    }
+    if (r->n_snap > 1) {
+        qsort(r->snap, r->n_snap, sizeof *r->snap, snap_cmp);
+    }
+}
+
 IcoXbRefs *ico_xb_begin(const IcoXbProc *p)
 {
     IcoXbRefs *r = (IcoXbRefs *)calloc(1, sizeof *r);
@@ -180,6 +289,10 @@ IcoXbRefs *ico_xb_begin(const IcoXbProc *p)
     }
     r->p = *p;
     ico_xb_image(p->tab, &r->p.image);
+    if (p->legacy != NULL && legacy_begin(r) != 0) {
+        free(r);
+        return NULL;
+    }
     r->key = (uint64_t *)calloc(ICO_XB_MAX_VALUES, sizeof *r->key);
     r->strict = (uint8_t *)calloc(ICO_XB_MAX_VALUES, 1);
     r->lab = (uint16_t *)calloc(ICO_XB_MAX_VALUES, sizeof *r->lab);
@@ -199,7 +312,9 @@ IcoXbRefs *ico_xb_begin(const IcoXbProc *p)
     r->a64 = p->tab != NULL && p->tab->env.arch == ICO_CODE_A64;
     /* the game data's start-up words that point into the image, by value
        (the first offset of each value wins) */
-    if (p->snap != NULL && p->snap_words > 0) {
+    if (p->legacy != NULL) {
+        legacy_snap(r);
+    } else if (p->snap != NULL && p->snap_words > 0) {
         r->snap = (SnapPair *)malloc(p->snap_words * sizeof *r->snap);
         if (r->snap != NULL) {
             for (i = 0; i < p->snap_words; i++) {
@@ -352,9 +467,9 @@ static int ro_range(const IcoStateImage *im, uint64_t w, uint64_t *lo, uint64_t 
 /* the text at w: the bytes up to the first NUL before hi, none of them a
    control character but tab, newline, carriage return and escape (a C
    string literal in any encoding); its length with the NUL, or 0 */
-static size_t text_len(uint64_t w, uint64_t hi)
+static size_t text_len(uint64_t w, uint64_t hi, int64_t delta)
 {
-    const unsigned char *p = (const unsigned char *)(uintptr_t)w;
+    const unsigned char *p = (const unsigned char *)(uintptr_t)(w + (uint64_t)delta);
     const size_t n = (size_t)(hi - w);
     size_t i;
 
@@ -372,14 +487,15 @@ static size_t text_len(uint64_t w, uint64_t hi)
 }
 
 /* each byte value's count over the image's read-only data */
-static void ro_freq(const IcoStateImage *im, uint32_t freq[256])
+static void ro_freq(const IcoStateImage *im, int64_t delta, uint32_t freq[256])
 {
     int i;
 
     memset(freq, 0, 256 * sizeof *freq);
     for (i = 0; i < im->n_ro; i++) {
-        const unsigned char *p = (const unsigned char *)(uintptr_t)im->ro_lo[i];
-        const unsigned char *end = (const unsigned char *)(uintptr_t)im->ro_hi[i];
+        const unsigned char *p = (const unsigned char *)(uintptr_t)(im->ro_lo[i] + (uint64_t)delta);
+        const unsigned char *end =
+            (const unsigned char *)(uintptr_t)(im->ro_hi[i] + (uint64_t)delta);
 
         for (; p < end; p++) {
             freq[*p]++;
@@ -390,10 +506,11 @@ static void ro_freq(const IcoStateImage *im, uint32_t freq[256])
 /* The places in the image's read-only data where the n bytes b start a run
    of len bytes (len >= n) inside one range, whose XXH3-64 is `hash` when
    `hashed`: their count, at most `stop`, and the first.  The search
-   anchors on the window's rarest byte (freq: ro_freq). */
-static unsigned find_in(const IcoStateImage *im, const uint32_t *freq, const unsigned char *b,
-                        size_t n, size_t len, int hashed, uint64_t hash, unsigned stop,
-                        uint64_t *first)
+   anchors on the window's rarest byte (freq: ro_freq).  The image's bytes
+   lie at its addresses plus delta (0 but for a legacy table's copy). */
+static unsigned find_in(const IcoStateImage *im, int64_t delta, const uint32_t *freq,
+                        const unsigned char *b, size_t n, size_t len, int hashed, uint64_t hash,
+                        int lstart, unsigned stop, uint64_t *first)
 {
     size_t k = 0, i;
     unsigned c = 0;
@@ -409,8 +526,10 @@ static unsigned find_in(const IcoStateImage *im, const uint32_t *freq, const uns
         }
     }
     for (r = 0; r < im->n_ro; r++) {
-        const unsigned char *lo = (const unsigned char *)(uintptr_t)im->ro_lo[r];
-        const unsigned char *hi = (const unsigned char *)(uintptr_t)im->ro_hi[r];
+        const unsigned char *lo =
+            (const unsigned char *)(uintptr_t)(im->ro_lo[r] + (uint64_t)delta);
+        const unsigned char *hi =
+            (const unsigned char *)(uintptr_t)(im->ro_hi[r] + (uint64_t)delta);
         const unsigned char *p, *last;
 
         if (hi <= lo || (size_t)(hi - lo) < len) {
@@ -426,9 +545,10 @@ static unsigned find_in(const IcoStateImage *im, const uint32_t *freq, const uns
                 break;
             }
             at = q - k;
-            if (memcmp(at, b, n) == 0 && (!hashed || xxh3_64(at, len) == hash)) {
+            if (memcmp(at, b, n) == 0 && (!hashed || xxh3_64(at, len) == hash) &&
+                (!lstart || (at > lo && at[-1] == 0))) {
                 if (c == 0) {
-                    *first = (uint64_t)(uintptr_t)at;
+                    *first = (uint64_t)(uintptr_t)at - (uint64_t)delta;
                 }
                 if (++c >= stop) {
                     return c;
@@ -444,8 +564,8 @@ static unsigned find_in(const IcoStateImage *im, const uint32_t *freq, const uns
    tl bytes, or tl 0): grown both ways, doubling, until its bytes occur
    once in the image's read-only data.  1 and [*a, *z), or 0 when not even
    the whole range is unique. */
-static int grow_window(const IcoStateImage *im, const uint32_t *freq, uint64_t w, uint64_t rlo,
-                       uint64_t rhi, size_t tl, uint64_t *a, uint64_t *z)
+static int grow_window(const IcoStateImage *im, int64_t delta, const uint32_t *freq, uint64_t w,
+                       uint64_t rlo, uint64_t rhi, size_t tl, uint64_t *a, uint64_t *z)
 {
     uint64_t lo, hi, first;
 
@@ -459,8 +579,8 @@ static int grow_window(const IcoStateImage *im, const uint32_t *freq, uint64_t w
     for (;;) {
         const uint64_t ext = hi - lo;
 
-        if (find_in(im, freq, (const unsigned char *)(uintptr_t)lo, (size_t)ext, (size_t)ext, 0, 0,
-                    2, &first) == 1) {
+        if (find_in(im, delta, freq, (const unsigned char *)(uintptr_t)(lo + (uint64_t)delta),
+                    (size_t)ext, (size_t)ext, 0, 0, 0, 2, &first) == 1) {
             *a = lo;
             *z = hi;
             return 1;
@@ -487,6 +607,35 @@ void ico_xb_image(const IcoSymTab *t, IcoStateImage *im)
     }
     im->text_lo = t->code_lo;
     im->text_hi = t->code_hi;
+    {
+        /* the dynamic linker's tables (.dynsym, .dynstr, .gnu.hash, .rela.dyn,
+           the notes) before the read-only data: no program pointer aims there,
+           and .dynstr spells every exported function's name, which a text
+           window would otherwise find twice */
+        static const char *const dyn[] = {".dyn",  ".gnu",  ".rela",  ".rel.",
+                                          ".note", ".hash", ".interp"};
+        uint64_t first = t->code_lo;
+        size_t i, j;
+
+        for (i = 0; i < t->n_sec; i++) {
+            const IcoSymSec *s = &t->sec[i];
+            const char *nm = ico_symtab_name(t, s->name);
+            int skip = 0;
+
+            if (s->code || s->start < lo || s->start >= t->code_lo) {
+                continue;
+            }
+            for (j = 0; j < sizeof dyn / sizeof dyn[0]; j++) {
+                skip |= strncmp(nm, dyn[j], strlen(dyn[j])) == 0;
+            }
+            if (!skip && s->start < first) {
+                first = s->start;
+            }
+        }
+        if (first < t->code_lo) {
+            lo = first;
+        }
+    }
     if (lo < t->code_lo && im->n_ro < ICO_STATE_IMAGE_RO) {
         im->ro_lo[im->n_ro] = lo;
         im->ro_hi[im->n_ro] = t->code_lo;
@@ -562,12 +711,12 @@ static uint32_t str_put(Out *s, const char *name)
    a section the file names .data.rel.ro* (relocated pointers, then never
    written), .rodata* or .rdata*.  Its bytes are the build's own, the same
    at every run but for the pointers. */
-static int settled(const IcoSymTab *t, const IcoStateImage *im, const IcoSymData *d)
+static int settled(const IcoSymTab *t, const IcoStateImage *im, const IcoSymData *d, int r_legacy)
 {
     uint64_t lo, hi;
     const IcoSymSec *s;
 
-    if (!d->exact || d->size == 0) {
+    if (!d->exact || d->size == 0 || r_legacy) {
         return 0;
     }
     if (ro_range(im, d->start, &lo, &hi) && d->start + d->size <= hi) {
@@ -866,6 +1015,396 @@ static int plan_pages(IcoXbRefs *r, const IcoSymTab *t, uint8_t *uflag, PageEnt 
     return 0;
 }
 
+/* --- a legacy read's page words ----------------------------------------------- */
+
+/* the low 12 bits the first user of an ADRP's register Rd adds (an ADD or a
+   load or store by unsigned offset through it), in the function's order
+   after it at `at` and before `end` (a page kept across calls is used far
+   from its ADRP), before anything writes Rd: 1 and *lo12, else 0 */
+static int adrp_lo12(uint64_t at, uint64_t end, uint32_t rd, uint64_t *lo12)
+{
+    uint64_t j;
+
+    for (j = at + 4; j + 4 <= end && j < at + 4 * 4096; j += 4) {
+        const uint32_t w = code32(j);
+        const uint32_t rn = (w >> 5) & 31u;
+        uint32_t wr;
+
+        if ((w & 0x7F800000u) == 0x11000000u && rn == rd) {
+            *lo12 = (uint64_t)((w >> 10) & 0xFFFu) << (((w >> 22) & 1u) ? 12 : 0);
+            return 1;
+        }
+        if ((w & 0x3B000000u) == 0x39000000u && rn == rd) {
+            const uint32_t size = w >> 30, opc = (w >> 22) & 3u, v = (w >> 26) & 1u;
+            const uint32_t scale = v && size == 0 && (opc & 2u) ? 4u : size;
+
+            *lo12 = (uint64_t)((w >> 10) & 0xFFFu) << scale;
+            return 1;
+        }
+        wr = ico_code_a64_writes(w);
+        if (wr == ~0u || ((wr >> rd) & 1u) != 0) {
+            return 0;
+        }
+    }
+    return 0;
+}
+
+/* this build's address T as the saving version's: by the game ranges (one
+   layout), the unit or the data symbol holding it (by name and ordinal in
+   the version's table).  1 and *old, else 0. */
+static int old_of(const IcoXbRefs *r, const IcoSymTab *ot, uint64_t T, uint64_t *old)
+{
+    const IcoXbLegacy *lg = r->p.legacy;
+    const IcoSymTab *nt = lg->now_tab;
+    const IcoSymUnit *u;
+    const IcoSymData *d;
+    int j;
+
+    for (j = 0; j < 2; j++) {
+        if (lg->now_game_lo[j] < lg->now_game_hi[j] && T >= lg->now_game_lo[j] &&
+            T < lg->now_game_hi[j] && r->p.game_lo[j] < r->p.game_hi[j] &&
+            T - lg->now_game_lo[j] < r->p.game_hi[j] - r->p.game_lo[j]) {
+            *old = r->p.game_lo[j] + (T - lg->now_game_lo[j]);
+            return 1;
+        }
+    }
+    u = ico_symtab_unit_at(nt, T);
+    if (u != NULL) {
+        const IcoSymUnit *o =
+            ico_symtab_unit_named(ot, u->name_hash, ico_symtab_name(nt, u->name), u->ordinal);
+
+        if (o != NULL && T - u->start < o->size) {
+            *old = o->start + (T - u->start);
+            return 1;
+        }
+        return 0;
+    }
+    d = ico_symtab_data_at(nt, T);
+    if (d != NULL && (T - d->start < d->size || T == d->start)) {
+        const IcoSymData *o =
+            ico_symtab_data_named(ot, d->name_hash, ico_symtab_name(nt, d->name), d->ordinal);
+
+        if (o != NULL && T - d->start <= o->size) {
+            *old = o->start + (T - d->start);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* the 12-bit offset an ADD or a load/store (unsigned offset) adds to its
+   base, scaled; 0 for another instruction */
+static int a64_lo12(uint32_t w, uint64_t *lo12)
+{
+    if ((w & 0x7F800000u) == 0x11000000u) {
+        *lo12 = (uint64_t)((w >> 10) & 0xFFFu) << (((w >> 22) & 1u) ? 12 : 0);
+        return 1;
+    }
+    if ((w & 0x3B000000u) == 0x39000000u) {
+        const uint32_t size = w >> 30, opc = (w >> 22) & 3u, v = (w >> 26) & 1u;
+
+        *lo12 = (uint64_t)((w >> 10) & 0xFFFu) << (v && size == 0 && (opc & 2u) ? 4u : size);
+        return 1;
+    }
+    return 0;
+}
+
+/* an ADRP whose first user in the function's order is not found (a page
+   kept across calls, used after a branch): every user its page reaches
+   through the function's own branches (code_hash.h's flow, this ADRP
+   alone), each one's target here placed back in the version.  1 and the
+   one old page they all lie on, else 0 (no user, one not placed back, or
+   two pages) */
+static int adrp_users_page(const IcoXbRefs *r, const IcoSymTab *ot, uint64_t start, uint64_t size,
+                           uint64_t k, uint32_t rd, uint64_t P, uint64_t *page)
+{
+    const size_t words = (size_t)(size / 4);
+    uint32_t *into = (uint32_t *)malloc((words ? words : 1) * sizeof *into);
+    uint8_t *seen = (uint8_t *)malloc(words ? words : 1);
+    size_t j;
+    int any = 0, ok = 1;
+
+    if (into == NULL || seen == NULL ||
+        ico_code_a64_flow((const void *)(uintptr_t)start, words, (size_t)(k / 4), 1u << rd, 0, into,
+                          seen) != 0) {
+        free(into);
+        free(seen);
+        return 0;
+    }
+    for (j = 0; j < words && ok; j++) {
+        const uint32_t w = code32(start + 4 * j);
+        uint64_t lo12, old;
+
+        if (!seen[j] || ((into[j] >> ((w >> 5) & 31u)) & 1u) == 0 || !a64_lo12(w, &lo12)) {
+            continue;
+        }
+        if (!old_of(r, ot, P + lo12, &old)) {
+            ok = 0;
+        } else if (any && (old & ~(uint64_t)0xFFF) != *page) {
+            ok = 0;
+        } else {
+            *page = old & ~(uint64_t)0xFFF;
+            any = 1;
+        }
+    }
+    free(into);
+    free(seen);
+    return ok && any;
+}
+
+/* the old pages an ADRP may have made whose old target cannot be placed:
+   for a page whose target's offset is not known (no user found), the old
+   pages of its first and last byte when both place back; else the pages
+   of the version's section that holds what this build's T lies in.  1 and
+   [*lo, *hi], else 0 (no section of that name: any page) */
+static int old_pages_of(const IcoXbRefs *r, const IcoSymTab *ot, uint64_t T, int page_only,
+                        uint64_t *lo, uint64_t *hi)
+{
+    const IcoSymSec *s = ico_symtab_section_at(r->p.legacy->now_tab, T);
+    uint64_t o1, o2;
+    size_t i;
+
+    if (page_only && old_of(r, ot, T, &o1) && old_of(r, ot, T + 0xFFF, &o2) && o2 >= o1 &&
+        o2 - o1 == 0xFFF) {
+        *lo = o1 & ~(uint64_t)0xFFF;
+        *hi = o2 & ~(uint64_t)0xFFF;
+        return 1;
+    }
+
+    if (s == NULL) {
+        return 0;
+    }
+    for (i = 0; i < ot->n_sec; i++) {
+        if (strcmp(ico_symtab_name(ot, ot->sec[i].name),
+                   ico_symtab_name(r->p.legacy->now_tab, s->name)) == 0) {
+            *lo = ot->sec[i].start & ~(uint64_t)0xFFF;
+            *hi = (ot->sec[i].start + ot->sec[i].size - 1) & ~(uint64_t)0xFFF;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+typedef struct LProd {
+    uint64_t ustart; /* the version's unit */
+    uint32_t off;
+    int known;     /* the old page is known */
+    uint64_t page; /* known: the old page; else the old pages [page, page_hi] */
+    uint64_t page_hi;
+} LProd;
+
+/* plan_pages for a legacy read: the version's code is not in this
+   process, but every function with a frame must hash as this build's (the
+   load checks it), so this build's same function at the same offsets
+   holds the same ADRPs: each one's target here, placed back in the version
+   by old_of, gives the page it made there.  A page word that an ADRP whose
+   target cannot be placed back may have made goes to *bad (refused). */
+static int legacy_pages(IcoXbRefs *r, const IcoSymTab *t, uint8_t *uflag, PageEnt **pe, size_t *npe,
+                        Prod **pr, size_t *npr, uint64_t **bad, size_t *nbad)
+{
+    const IcoSymTab *nt = r->p.legacy->now_tab;
+    size_t a, b, i, k, cap_pe = 0, cap_pr = 0, cap_bad = 0;
+    size_t *units = NULL;
+    LProd *lp = NULL;
+    size_t cap_lp = 0;
+
+    *pe = NULL;
+    *pr = NULL;
+    *bad = NULL;
+    *npe = *npr = *nbad = 0;
+    if (r->n_fw == 0 || nt == NULL) {
+        return 0;
+    }
+    qsort(r->fw, r->n_fw, sizeof *r->fw, fw_cmp);
+    units = (size_t *)malloc(r->n_fw * sizeof *units);
+    if (units == NULL) {
+        return -1;
+    }
+    for (a = 0; a < r->n_fw; a = b) {
+        const uint32_t f = r->fw[a].fiber;
+        size_t p0, nu = 0, nlp = 0;
+
+        for (b = a; b < r->n_fw && r->fw[b].fiber == f; b++) {}
+        for (p0 = a; p0 < b && r->fw[p0].kind == 0; p0++) {}
+        if (p0 == b) {
+            continue;
+        }
+        for (i = a; i < p0; i++) {
+            const uint64_t w = r->fw[i].w;
+            const IcoSymUnit *u = ico_symtab_unit_at(t, w);
+
+            if (u != NULL && w != u->start) {
+                units[nu++] = (size_t)(u - t->unit);
+            } else if (u != NULL) {
+                /* a unit's start just after a call that ends the unit
+                   before it: read in this build's same function */
+                const IcoSymUnit *c = ico_symtab_unit_at(t, w - 1);
+                const IcoSymUnit *c2 =
+                    c != NULL ? ico_symtab_unit_named(nt, c->name_hash, ico_symtab_name(t, c->name),
+                                                      c->ordinal)
+                              : NULL;
+
+                if (c2 != NULL && w - c->start >= 4 && w - c->start <= c2->size) {
+                    const uint32_t insn = code32(c2->start + (w - c->start) - 4);
+
+                    if ((insn & 0xFC000000u) == 0x94000000u ||
+                        (insn & 0xFFFFFC1Fu) == 0xD63F0000u) {
+                        units[nu++] = (size_t)(c - t->unit);
+                        uflag[c - t->unit] |= XU_POSITION;
+                    }
+                }
+            }
+        }
+        if (nu > 1) {
+            qsort(units, nu, sizeof *units, u64_cmp);
+        }
+        /* the fiber's frames' ADRPs and their old pages */
+        for (i = 0; i < nu; i++) {
+            const IcoSymUnit *u, *u2;
+            uint64_t n;
+
+            if (i > 0 && units[i] == units[i - 1]) {
+                continue;
+            }
+            u = &t->unit[units[i]];
+            u2 = ico_symtab_unit_named(nt, u->name_hash, ico_symtab_name(t, u->name), u->ordinal);
+            if (u2 == NULL) {
+                continue; /* the load refuses it: the function is missing here */
+            }
+            n = u->size < u2->size ? u->size : u2->size;
+            for (k = 0; k + 4 <= n; k += 4) {
+                const uint32_t insn = code32(u2->start + k);
+                const uint64_t P = adrp_page(u2->start + k, insn);
+                uint64_t lo12 = 0, T, old = 0;
+                LProd *e;
+
+                if (P == 1) {
+                    continue;
+                }
+                if (nlp == cap_lp) {
+                    const size_t c = cap_lp ? cap_lp * 2 : 256;
+                    LProd *q = (LProd *)realloc(lp, c * sizeof *q);
+
+                    if (q == NULL) {
+                        free(units);
+                        free(lp);
+                        return -1;
+                    }
+                    lp = q;
+                    cap_lp = c;
+                }
+                e = &lp[nlp++];
+                e->ustart = u->start;
+                e->off = (uint32_t)k;
+                if (adrp_lo12(u2->start + k, u2->start + u2->size, insn & 31u, &lo12)) {
+                    T = P + lo12;
+                    e->known = old_of(r, t, T, &old);
+                } else {
+                    T = P;
+                    e->known = adrp_users_page(r, t, u2->start, u2->size, k, insn & 31u, P, &old);
+                }
+                if (e->known) {
+                    e->page = old & ~(uint64_t)0xFFF;
+                } else if (!old_pages_of(r, t, T, T == P, &e->page, &e->page_hi)) {
+                    e->page = 0;
+                    e->page_hi = ~(uint64_t)0;
+                }
+            }
+        }
+        /* each page word of the fiber */
+        for (i = p0; i < b; i++) {
+            const uint64_t w = r->fw[i].w;
+            int any = 0, unsure = 0;
+
+            if (i > p0 && r->fw[i - 1].w == w) {
+                continue;
+            }
+            for (k = 0; k < nlp; k++) {
+                if (lp[k].known ? lp[k].page == w : (w >= lp[k].page && w <= lp[k].page_hi)) {
+                    any |= lp[k].known;
+                    unsure |= !lp[k].known;
+                }
+            }
+            if (unsure) {
+                if (*nbad == cap_bad) {
+                    const size_t c = cap_bad ? cap_bad * 2 : 16;
+                    uint64_t *q = (uint64_t *)realloc(*bad, c * sizeof *q);
+
+                    if (q == NULL) {
+                        free(units);
+                        free(lp);
+                        return -1;
+                    }
+                    *bad = q;
+                    cap_bad = c;
+                }
+                (*bad)[(*nbad)++] = w;
+                continue;
+            }
+            if (!any) {
+                continue; /* an ordinary address */
+            }
+            if (*npe == cap_pe) {
+                const size_t c = cap_pe ? cap_pe * 2 : 64;
+                PageEnt *q = (PageEnt *)realloc(*pe, c * sizeof *q);
+
+                if (q == NULL) {
+                    free(units);
+                    free(lp);
+                    return -1;
+                }
+                *pe = q;
+                cap_pe = c;
+            }
+            (*pe)[*npe].w = w;
+            (*pe)[*npe].fiber = f;
+            (*pe)[*npe].flags = PG_PROD;
+            (*npe)++;
+            for (k = 0; k < nlp; k++) {
+                if (!lp[k].known || lp[k].page != w) {
+                    continue;
+                }
+                if (*npr == cap_pr) {
+                    const size_t c = cap_pr ? cap_pr * 2 : 64;
+                    Prod *q = (Prod *)realloc(*pr, c * sizeof *q);
+
+                    if (q == NULL) {
+                        free(units);
+                        free(lp);
+                        return -1;
+                    }
+                    *pr = q;
+                    cap_pr = c;
+                }
+                (*pr)[*npr].ustart = lp[k].ustart;
+                (*pr)[*npr].page = w;
+                (*pr)[*npr].off = lp[k].off;
+                (*pr)[*npr].fiber = f;
+                (*npr)++;
+            }
+        }
+    }
+    free(units);
+    free(lp);
+    for (i = 0; i < *npe; i++) {
+        PageEnt *e = &(*pe)[i];
+        int bl;
+
+        if ((r->strict[slot_find(r, e->w)] & 4u) != 0 || ico_symtab_starts_at(t, e->w)) {
+            e->flags |= PG_ORDINARY;
+        }
+        for (bl = 0; bl < r->n_blocks; bl++) {
+            if (r->block[bl].addr == e->w) {
+                e->flags |= PG_ORDINARY;
+            }
+        }
+    }
+    if (*npe > 1) {
+        qsort(*pe, *npe, sizeof **pe, pe_cmp);
+    }
+    return 0;
+}
+
 /* 1 when every page word entry of w has a producer and none is ordinary:
    the page rule alone names it */
 static int page_only(const PageEnt *pe, size_t npe, uint64_t w)
@@ -907,9 +1446,10 @@ static void note_unnamed(const IcoXbRefs *r, const IcoSymTab *t, size_t slot, ui
         const char *sym = ico_symtab_nearest(t, w, &u->sym_off);
 
         u->word = w;
-        u->at = r->at[slot];
+        u->at = slot < ICO_XB_MAX_VALUES ? r->at[slot] : 0;
         u->reason = reason;
-        snprintf(u->where, sizeof u->where, "%s", r->labels[r->lab[slot]]);
+        snprintf(u->where, sizeof u->where, "%s",
+                 slot < ICO_XB_MAX_VALUES ? r->labels[r->lab[slot]] : "");
         snprintf(u->section, sizeof u->section, "%s",
                  sec != NULL ? ico_symtab_name(t, sec->name) : "");
         snprintf(u->sym, sizeof u->sym, "%s", sym != NULL ? sym : "");
@@ -919,11 +1459,11 @@ static void note_unnamed(const IcoXbRefs *r, const IcoSymTab *t, size_t slot, ui
 /* a window point (state_xbuild.h): its record, its bytes (whole, or the
    prefix when the pool has no room for them) and its nearest symbol's
    name.  0, or -1 (no memory). */
-static int put_window(Out *points, Out *pool, Out *strs, const IcoSymTab *t, uint64_t w, uint64_t a,
-                      uint64_t z, int text)
+static int put_window(Out *points, Out *pool, Out *strs, const IcoSymTab *t, int64_t delta,
+                      uint64_t w, uint64_t a, uint64_t z, int text, uint64_t rlo)
 {
     const size_t len = (size_t)(z - a);
-    const unsigned char *b = (const unsigned char *)(uintptr_t)a;
+    const unsigned char *b = (const unsigned char *)(uintptr_t)(a + (uint64_t)delta);
     const int whole =
         pool->n + len <= (size_t)ICO_XB_POOL_BYTES - (size_t)ICO_XB_MAX_POINTS * ICO_XB_CONTENT;
     const size_t stored = whole ? len : len < ICO_XB_CONTENT ? len : ICO_XB_CONTENT;
@@ -942,7 +1482,8 @@ static int put_window(Out *points, Out *pool, Out *strs, const IcoSymTab *t, uin
     put32(q + 8, XP_WINDOW);
     put32(q + 12, (uint32_t)len);
     put32(q + 16, (uint32_t)(w - a));
-    put32(q + 20, (text ? XW_TEXT : 0u) | (whole ? 0u : XW_HASHED));
+    put32(q + 20, (text ? XW_TEXT : 0u) | (whole ? 0u : XW_HASHED) |
+                      (text && a > rlo && b[-1] == 0 ? XW_LSTART : 0u));
     put64(q + 24, xxh3_64(b, len));
     put32(q + 32, pool_at);
     put32(q + 36, (uint32_t)stored);
@@ -969,7 +1510,8 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
     /* arm64: the fibers' page words and the ADRPs that make them */
     PageEnt *pe = NULL;
     Prod *pr = NULL;
-    size_t npe = 0, npr = 0;
+    size_t npe = 0, npr = 0, npbad = 0;
+    uint64_t *pbad = NULL; /* a legacy read's page words no ADRP can be told for */
     uint64_t first_unnamed = 0;
     uint32_t *freq = NULL;
     unsigned char *sec, *q;
@@ -999,8 +1541,14 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
     if (r->a64) {
         flags |= ICO_XB_PAGES;
     }
-    if (r->fw_failed || (t != NULL && plan_pages(r, t, uflag, &pe, &npe, &pr, &npr) != 0)) {
+    if (r->fw_failed ||
+        (t != NULL && p->legacy == NULL && plan_pages(r, t, uflag, &pe, &npe, &pr, &npr) != 0) ||
+        (t != NULL && p->legacy != NULL &&
+         legacy_pages(r, t, uflag, &pe, &npe, &pr, &npr, &pbad, &npbad) != 0)) {
         goto done;
+    }
+    for (i = 0; i < npbad; i++) {
+        note_unnamed(r, t, SIZE_MAX, pbad[i], ICO_XB_WHY_PAGE, &flags, &left, &first_unnamed, st);
     }
     (void)str_put(&strs, ""); /* offset 0: no name */
     /* each distinct word: what it points into */
@@ -1055,7 +1603,7 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
                     dflag[d - t->data] = 1;
                     continue;
                 }
-                if (settled(t, &p->image, d)) {
+                if (settled(t, &p->image, d, p->legacy != NULL)) {
                     dflag[d - t->data] = 2; /* by its ordinal and contents */
                     continue;
                 }
@@ -1091,7 +1639,7 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
                 continue;
             }
         }
-        if (ro && numbers_reach && text_len(w, rhi) < 2) {
+        if (ro && numbers_reach && text_len(w, rhi, r->delta) < 2) {
             /* read-only data that is no text (or the empty one: any zero
                byte), where a float next to the integer 1 reaches the image
                (Windows): nothing tells such a word from a number, so it is
@@ -1099,9 +1647,21 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
             note_unnamed(r, t, i, w, ICO_XB_WHY_NUMBER, &flags, &left, &first_unnamed, st);
             continue;
         }
+        if (ro && p->legacy != NULL) {
+            /* a legacy read: only the version's text runs are known; the
+               window stays inside the run holding the word */
+            uint64_t a0, z0;
+
+            if (!ico_legacy_run(p->legacy->lt, w - p->legacy->old_lo, &a0, &z0)) {
+                note_unnamed(r, t, i, w, ICO_XB_WHY_NOBYTES, &flags, &left, &first_unnamed, st);
+                continue;
+            }
+            rlo = p->legacy->old_lo + a0;
+            rhi = p->legacy->old_lo + z0;
+        }
         if (ro) {
             /* read-only data: its window */
-            const size_t tl = text_len(w, rhi);
+            const size_t tl = text_len(w, rhi, r->delta);
             uint64_t a = 0, z = 0;
 
             if (np == ICO_XB_MAX_POINTS) {
@@ -1113,10 +1673,10 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
                 if (freq == NULL) {
                     goto done;
                 }
-                ro_freq(&p->image, freq);
+                ro_freq(&p->image, r->delta, freq);
             }
-            if (grow_window(&p->image, freq, w, rlo, rhi, tl, &a, &z)) {
-                if (put_window(&points, &pool, &strs, t, w, a, z, tl > 0) != 0) {
+            if (grow_window(&p->image, r->delta, freq, w, rlo, rhi, tl, &a, &z)) {
+                if (put_window(&points, &pool, &strs, t, r->delta, w, a, z, tl > 0, rlo) != 0) {
                     goto done;
                 }
                 np++;
@@ -1158,7 +1718,16 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
         put64(q, u->start);
         put64(q + 8, u->size);
         put64(q + 16, u->name_hash);
-        put64(q + 24, ico_symtab_unit_hash(t, u));
+        {
+            int missing = 0;
+
+            put64(q + 24, unit_hash(r, t, u, &missing));
+            if (missing) {
+                /* a function the version's record never hashed */
+                note_unnamed(r, t, SIZE_MAX, u->start, ICO_XB_WHY_NOHASH, &flags, &left,
+                             &first_unnamed, st);
+            }
+        }
         put32(q + 32, str_put(&strs, ico_symtab_name(t, u->name)));
         put32(q + 36, u->ordinal);
         put32(q + 40, f);
@@ -1324,7 +1893,9 @@ done:
     free(prods.p);
     free(pe);
     free(pr);
+    free(pbad);
     free(r->fw);
+    free(r->uh);
     free(pool.p);
     free(freq);
     free(uflag);
@@ -1337,6 +1908,124 @@ done:
     free(r->snap);
     free(r);
     return rc;
+}
+
+/* the table's triple for the function at offset off from the image start */
+static const uint64_t *legacy_hash_at(const uint64_t *hash, size_t n_hash, uint64_t off)
+{
+    size_t lo = 0, hi = n_hash;
+
+    while (lo < hi) {
+        const size_t mid = lo + (hi - lo) / 2;
+
+        if (hash[3 * mid] < off) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    return lo < n_hash && hash[3 * lo] == off ? hash + 3 * lo : NULL;
+}
+
+int ico_xb_legacy_verify(const void *v2, size_t n, const IcoSymTab *old_tab, uint64_t old_lo,
+                         const uint64_t *hash, size_t n_hash, char *why, size_t why_n)
+{
+    const unsigned char *s = (const unsigned char *)v2;
+    uint32_t ver, nu, i;
+
+    if (s == NULL || n < H_BYTES || get32(s + H_MAGIC) != ICO_XB_MAGIC) {
+        snprintf(why, why_n, "its symbols record is missing");
+        return -1;
+    }
+    ver = get32(s + H_VERSION);
+    if (ver != 2 || (int)get32(s + H_ARCH) != ICO_CODE_A64) {
+        snprintf(why, why_n, "its symbols record is not one a legacy table reads");
+        return -1;
+    }
+    if (get64(s + H_LAYOUT) != old_tab->layout_hash) {
+        snprintf(why, why_n, "the legacy table is another version's (another game data layout)");
+        return -1;
+    }
+    nu = get32(s + H_UNITS);
+    if ((uint64_t)H_BYTES + (uint64_t)nu * UNIT_BYTES > n) {
+        snprintf(why, why_n, "its symbols record does not hold what it says");
+        return -1;
+    }
+    for (i = 0; i < nu; i++) {
+        const unsigned char *u = s + H_BYTES + (size_t)i * UNIT_BYTES;
+        const IcoSymUnit *o = ico_symtab_unit_at(old_tab, get64(u));
+
+        /* every function the record names lies where the table puts one of
+           the same start (a unit of the version's own table, a read-only
+           symbol of its, which the record's version took for code) */
+        if (o == NULL ? ico_symtab_data_at(old_tab, get64(u)) == NULL : o->start != get64(u)) {
+            snprintf(why, why_n,
+                     "the legacy table is another version's (a function of the record is not "
+                     "where the table puts it)");
+            return -1;
+        }
+        /* and its code is the table's: the record's hash (rules 1, the
+           saver's own) is the table's rules-1 hash of that function */
+        if (o != NULL && get64(u) >= old_lo) {
+            const uint64_t *h = legacy_hash_at(hash, n_hash, get64(u) - old_lo);
+
+            if (h == NULL || h[1] != get64(u + 24)) {
+                snprintf(why, why_n,
+                         "the legacy table is another build's (the code of a function of the "
+                         "record differs from the table's)");
+                return -1;
+            }
+        }
+    }
+    return 0;
+}
+
+int ico_xb_record_blocks(const void *secv, size_t n, IcoXbBlockFn fn, void *user)
+{
+    const unsigned char *s = (const unsigned char *)secv;
+    uint32_t ver, nu, nd, np, nb, ns, i;
+    size_t dbytes, pbytes, hbytes, at;
+
+    if (s == NULL || n < H_BYTES || get32(s + H_MAGIC) != ICO_XB_MAGIC) {
+        return -1;
+    }
+    ver = get32(s + H_VERSION);
+    if (ver < 1 || ver > ICO_XB_VERSION || (ver >= 3 && n < H_BYTES3)) {
+        return -1;
+    }
+    dbytes = ver >= 2 ? DATA_BYTES : DATA_BYTES_V1;
+    pbytes = ver >= 3 ? POINT_BYTES : POINT_BYTES_V2;
+    hbytes = ver >= 3 ? H_BYTES3 : H_BYTES;
+    nu = get32(s + H_UNITS);
+    nd = get32(s + H_DATA);
+    np = get32(s + H_POINTS);
+    nb = get32(s + H_BLOCKS);
+    ns = get32(s + H_STR);
+    at = hbytes + (size_t)nu * UNIT_BYTES + (size_t)nd * dbytes + (size_t)np * pbytes;
+    if (nb > ICO_XB_MAX_BLOCKS || at + (size_t)nb * BLOCK_BYTES > n || ns == 0) {
+        return -1;
+    }
+    {
+        /* the names: after the blocks, the version 3 list and pages */
+        size_t str_at = at + (size_t)nb * BLOCK_BYTES;
+
+        if (ver >= 3) {
+            str_at += (size_t)get32(s + H_LIST) * LIST_BYTES +
+                      (size_t)get32(s + H_PAGES) * PAGE_BYTES +
+                      (size_t)get32(s + H_PRODS) * PROD_BYTES;
+        }
+        if (str_at + ns > n || s[str_at + ns - 1] != 0) {
+            return -1;
+        }
+        for (i = 0; i < nb; i++) {
+            const unsigned char *b = s + at + (size_t)i * BLOCK_BYTES;
+            const uint32_t nm = get32(b + 28);
+
+            fn(user, nm < ns ? (const char *)s + str_at + nm : "", get64(b + 8), get32(b + 24),
+               get64(b), get64(b + 16));
+        }
+    }
+    return 0;
 }
 
 /* --- loading ------------------------------------------------------------------------ */
@@ -1604,6 +2293,14 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
     }
     ico_xb_image(t, &im);
 
+    /* another game data layout first: the plainest reason, and the one an
+       earlier version's state of another layout meets whatever else it
+       lacks (the checks below repeat it) */
+    if (t != NULL && (flags & ICO_XB_TABLE) != 0 && get64(sec + H_LAYOUT) != 0 &&
+        get64(sec + H_LAYOUT) != t->layout_hash) {
+        FAIL(v, ICO_XB_DATA, "the game's data layout changed");
+    }
+
     /* the blocks, by name, both ways */
     v->block_off =
         (uint64_t *)calloc(now->n_blocks > 0 ? (size_t)now->n_blocks : 1, sizeof(uint64_t));
@@ -1689,7 +2386,8 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
     if (t == NULL) {
         FAIL(v, ICO_XB_PINNED, "this build has no symbol file");
     }
-    if (get32(sec + H_RULES) != ICO_CODE_HASH_RULES || (int)get32(sec + H_ARCH) != t->env.arch) {
+    if (get32(sec + H_RULES) < 1 || get32(sec + H_RULES) > ICO_CODE_HASH_RULES ||
+        (int)get32(sec + H_ARCH) != t->env.arch) {
         FAIL(v, ICO_XB_PINNED, "its code was compared under other rules");
     }
     if (get64(sec + H_LAYOUT) != t->layout_hash) {
@@ -1722,7 +2420,7 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
             v->soft_left++;
             continue;
         }
-        same = ico_symtab_unit_hash(t, w) == get64(r + 24);
+        same = ico_symtab_unit_hash_rules(t, w, (int)get32(sec + H_RULES)) == get64(r + 24);
         if (!same && ((f & XU_POSITION) != 0 ||
                       ((f & XU_START) != 0 && !((f & XU_UNIQUE) != 0 && w->unique)))) {
             FAIL(v, ICO_XB_CODE, "the function %s changed", nm);
@@ -1816,10 +2514,11 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
                 FAIL(v, ICO_XB_PINNED, "it points at more texts than a load looks for");
             }
             if (!have_freq) {
-                ro_freq(&im, freq);
+                ro_freq(&im, 0, freq);
                 have_freq = 1;
             }
-            found = find_in(&im, freq, pool + pool_at, stored, len, hashed, get64(r + 24), 2, &w);
+            found = find_in(&im, 0, freq, pool + pool_at, stored, len, hashed, get64(r + 24),
+                            (wf & XW_LSTART) != 0, 2, &w);
             if (found != 1) {
                 if (text) {
                     char shown[48];
