@@ -23,6 +23,7 @@
  * page's rows[]: the label row of each slot (UI_OPT_STATE_SLOT) and its
  * action row as the value row; the other rows of a card are kept here. */
 
+#include "ico_thread.h" /* ico_thread_now_ms */
 #include "settings.h"
 #include "settings_states.h"
 
@@ -230,7 +231,10 @@ static void statesPictureSync(int slot)
     s_stPngAt[slot] = in->saved_at;
     if (want[0] != '\0') {
         int w, h;
+        const double t0 = ico_thread_now_ms();
         const unsigned int tex = statesTexLoad(want, &w, &h);
+        fprintf(stderr, "state: slot %d's picture decoded and uploaded in %.1f ms\n", slot + 1,
+                ico_thread_now_ms() - t0);
         if (tex != 0) {
             s_stTex[slot] = tex;
             s_stTexW[slot] = w;
@@ -554,6 +558,8 @@ static void statesPerform(int slot)
     const int rc = s_statesHost.request(act, slot + 1, &refusal);
     if (rc != 0) {
         NEGATIVE_SE();
+        fprintf(stderr, "state: box for slot %d: the page's refusal (string %d), from the page\n",
+                slot + 1, refusal > 0 ? refusal : (int)UI_STR_STATES_OFF);
         (void)ui_popup_push(ui_str(UI_STR_STATES),
                             ui_str(refusal > 0 ? (UiStrId)refusal : UI_STR_STATES_OFF));
         return;

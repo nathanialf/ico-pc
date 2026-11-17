@@ -5205,10 +5205,24 @@ static void statesCloseAfterLoad(void)
    as Extras' starts leave it (extrasLeave), the title's cursor on Settings. */
 void ui_settings_sync_after_state_checkpoint(void)
 {
-    if (s_built && onTitle() && pageOfLayout(current_layout_id, NULL) == &s_pages[UI_PAGE_STATES]) {
-        ui__states_release();
+    const int up = s_built && pageOfLayout(current_layout_id, NULL) == &s_pages[UI_PAGE_STATES];
+
+    /* this runs at the end of a Main tick, after the tick's picture was made
+       with the page's slot pictures: they are released by the page's own
+       close at its next tick (statesLeaveQuiet), never under that picture */
+    if (up && onTitle()) {
         s_stFromPause = s_stFromContinue = 0;
         s_stLeave = s_stLeaveScene = 1;
+        return;
+    }
+    if (up) {
+        s_origin = LAYOUT_PAUSE;
+        if (s_statesRow >= 0) {
+            gameCursorOn(LAYOUT_PAUSE, s_statesRow);
+        }
+        s_stFromPause = 1;
+        s_stFromContinue = 0;
+        s_stLeave = 1;
         return;
     }
     statesCloseAfterLoad();
@@ -6275,7 +6289,21 @@ static int settingsProc(int first, int item)
     if (id == UI_PAGE_MUSIC) {
         gallery_tick(); /* the engine, once a Main tick while the page is up */
     }
+    if (id == UI_PAGE_STATES && first && s_stLeave) {
+        /* a close a load asked for while the page was up, which the page
+           never ran: a checkpoint load from the title changes the stage, and
+           the stage's own layout replaced the page before its next tick.
+           Taken now it would close the page as it opens (from the pause
+           menu: onto the game's empty layout); dropped instead */
+        fprintf(stderr,
+                "settings: Save states: the close a load left (%s) dropped; the page "
+                "opens\n",
+                s_stLeaveScene ? "onto the empty layout" : "onto the pause menu");
+        s_stLeave = s_stLeaveScene = 0;
+    }
     if (id == UI_PAGE_STATES && s_stLeave) {
+        fprintf(stderr, "settings: Save states closed after a load (%s)\n",
+                s_stLeaveScene ? "onto the empty layout" : "onto the pause menu");
         return statesLeaveQuiet(); /* a state was loaded */
     }
     if (first) {

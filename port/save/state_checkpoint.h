@@ -214,6 +214,20 @@ IcoCkptRoute ico_ckpt_route(IcoStateResult r, int other_version);
    them then routes to the checkpoint (ico_ckpt_route(.., 1)); only OK
    resumes exactly. */
 IcoStateResult ico_ckpt_xb_result(int xb_kind);
+
+/* The one box a finished request shows (main_host.c states_done): a load
+   that continued from the checkpoint shows the checkpoint's notice and
+   nothing else, whatever the exact path's verdict was; a refused load its
+   refusal (another version's words when the blocker is known). */
+typedef enum IcoCkptBox {
+    ICO_CKPT_BOX_DONE = 0, /* saved / loaded / deleted */
+    ICO_CKPT_BOX_NOTICE,   /* continued from the state's checkpoint */
+    ICO_CKPT_BOX_SETTINGS, /* the setting that differs */
+    ICO_CKPT_BOX_VERSION,  /* another version's state: the blocker's words */
+    ICO_CKPT_BOX_REFUSAL   /* the refusal's line */
+} IcoCkptBox;
+
+IcoCkptBox ico_ckpt_box(int is_load, IcoStateResult r, int via_checkpoint, IcoStateBlocker blocker);
 const char *ico_ckpt_route_text(IcoCkptRoute k);
 
 /* --- the syms section's block list, read without the symbol table ------------------------

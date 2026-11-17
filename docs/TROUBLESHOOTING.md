@@ -834,10 +834,10 @@ stopped. If a controller of yours stops working, delete the line.
 The game says why on the screen. In the Save states list, a slot that cannot
 be loaded is greyed and the line under the cards gives the reason:
 
-- **Made by another version: Load continues from its last checkpoint.** The
+- **Loads from its last checkpoint (made by another version).** The
   slot is not greyed: the game cannot resume this state where it was saved,
   so Load continues from the last checkpoint the state holds (the place a
-  game over would have taken you back to), and a message says so.
+  game over would have taken you back to), and a message says it continued from there.
 - **This save state was made by version ... It cannot be resumed where it was
   saved, and it holds no checkpoint to continue from.** The state was saved in a new game before its first
   checkpoint, or its checkpoint could not be found. Go back to the version

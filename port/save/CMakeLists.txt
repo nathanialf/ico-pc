@@ -169,7 +169,9 @@ endif()
 # else a released layout its bytes confirm, else the image by its contents),
 # which refusals take that way, and the state file's sections it reads.  No
 # game code: the game's side is port/game/state_checkpoint_live.c.
-add_library(ico_state_checkpoint STATIC state_checkpoint.c state_checkpoint_table.c)
+# state_verdicts.c: the slots' verdicts on a worker thread, handed to a load
+# (state_verdicts.h; port/game/state_host.c gives it the work).
+add_library(ico_state_checkpoint STATIC state_checkpoint.c state_checkpoint_table.c state_verdicts.c)
 target_include_directories(ico_state_checkpoint PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(ico_state_checkpoint PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(ico_state_checkpoint PUBLIC ico_platform)
@@ -184,14 +186,26 @@ endif()
 # state_checkpoint_table: the committed table read back by its tool, an entry
 # for every release and platform it must cover (tools/state_checkpoint_table.py
 # check; the packages run its guard, which adds the program's own globals).
-add_executable(state_checkpoint_test test/state_checkpoint_test.c)
+# The eight languages' tables are compiled in for the boxes' words (port/ui's
+# "strings.h" by -iquote, so <strings.h> stays the C library's).
+add_executable(state_checkpoint_test test/state_checkpoint_test.c
+    ../ui/strings_en.c ../ui/strings_fr.c ../ui/strings_de.c ../ui/strings_it.c
+    ../ui/strings_es.c ../ui/strings_ja.c ../ui/strings_ko.c ../ui/strings_zh.c)
 target_include_directories(state_checkpoint_test PRIVATE "${CMAKE_SOURCE_DIR}/port/test")
-target_compile_options(state_checkpoint_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_compile_options(state_checkpoint_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS}
+                       -iquote "${CMAKE_SOURCE_DIR}/port/ui")
 target_link_libraries(state_checkpoint_test PRIVATE ico_state_checkpoint)
+# state_verdicts_test (its header lists the cases): the worker's verdicts and
+# their hand-over to a load, over a fake piece of work.  CPU only.
+add_executable(state_verdicts_test test/state_verdicts_test.c)
+target_include_directories(state_verdicts_test PRIVATE "${CMAKE_SOURCE_DIR}/port/test")
+target_compile_options(state_verdicts_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(state_verdicts_test PRIVATE ico_state_checkpoint)
 if(ICO_RUN_TESTS)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/state_checkpoint")
     add_test(NAME state_checkpoint COMMAND state_checkpoint_test
                                            "${CMAKE_CURRENT_BINARY_DIR}/state_checkpoint")
+    add_test(NAME state_verdicts COMMAND state_verdicts_test)
     if(Python3_EXECUTABLE)
         add_test(NAME state_checkpoint_table
                  COMMAND "${Python3_EXECUTABLE}" -I

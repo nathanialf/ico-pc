@@ -514,6 +514,20 @@ IcoStateResult ico_ckpt_xb_result(int xb_kind)
     return ICO_STATE_OTHER_BUILD; /* CODE, DATA, BLOCKS, PINNED and any later kind */
 }
 
+IcoCkptBox ico_ckpt_box(int is_load, IcoStateResult r, int via_checkpoint, IcoStateBlocker blocker)
+{
+    if (r == ICO_STATE_OK) {
+        return is_load && via_checkpoint ? ICO_CKPT_BOX_NOTICE : ICO_CKPT_BOX_DONE;
+    }
+    if (r == ICO_STATE_OTHER_SETTINGS) {
+        return ICO_CKPT_BOX_SETTINGS;
+    }
+    if (r == ICO_STATE_OTHER_BUILD && is_load && blocker != ICO_STATE_BLOCK_NONE) {
+        return ICO_CKPT_BOX_VERSION;
+    }
+    return ICO_CKPT_BOX_REFUSAL;
+}
+
 const char *ico_ckpt_route_text(IcoCkptRoute k)
 {
     switch (k) {
