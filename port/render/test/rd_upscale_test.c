@@ -650,8 +650,15 @@ static int pngSize(const char *path, uint32_t *w, uint32_t *h)
 
 static void testCapture(void)
 {
-    static const char stem[] = "rd_upscale_capture_test";
+    /* a name of its own for each registration of this program (rd_upscale,
+       rd_upscale_layer_tiler: told apart by ICO_VK_FAKE_LIMITS): run at the
+       same time in one directory, one's "nothing written" check saw the
+       other's pictures (the v0.11.8 tag's linux-arm64 job) */
+    char stem[40];
     char path[64];
+    const char *lim = getenv("ICO_VK_FAKE_LIMITS");
+    snprintf(stem, sizeof(stem), "rd_upscale_capture_test%s%.12s", lim != NULL && lim[0] ? "_" : "",
+             lim != NULL ? lim : "");
     uint32_t w = 0, h = 0, dw = 0, dh = 0;
     for (int i = 0; i < RD_UPSCALE_CAPTURE_PICTURES; i++) {
         snprintf(path, sizeof(path), "%s%s", stem, rd__upscale_capture_suffix(i));
