@@ -919,7 +919,7 @@ does not fall with pipelines, or no floor applies (every system but Android), no
 
 | line | when |
 | --- | --- |
-| `ico_pc: pipelines: the start-up set's size by the device's memory fall: on (<m> pipelines; free <a> MB, the floor <f> MB; play's known need <n> MB: the VU pre-pass's record <r> MB and the mesh arena's first chunk <c> MB): ...` or `...: off (<why>): the set as before` | the set's first ask |
+| `ico_pc: pipelines: the start-up set's size by the device's memory fall: on (<m> pipelines; free <a> MB, the floor <f> MB; play's known need not made yet <n> MB: the VU pre-pass's record <r> MB and the mesh arena's first chunk <c> MB; made already, before the free figure was read: the record <R> MB, the chunk <C> MB): ...` or `...: off (<why>): the set as before` | the set's first ask |
 | `ico_pc: pipelines: the start-up set's size at pipeline <p> of <m>: free <a> MB less the floor <f> MB less play's known need <n> MB leaves <h> MB; 2D <x> MB a pipeline (the median of <b> batches): its <k> left x <x> = <c> MB, stops now, the rest made on first use; VU not measured yet (0 of 3 batches), measured when reached; the rests kept <s> MB` | a family's first trusted figure, and each stop |
 | `rd: pipelines: the start-up set sized by the device's memory fall: <k> made (2D <a>, VU <b>), <l> left to first use (...)` and `rd: pipelines: no start-up set (memory: the start-up set sized by the device's memory fall: <why>; <l> pipelines left to first use): ...` | the set's end, when a family was stopped |
 | `window: pipelines: the start-up set stopped at pipeline <p> of <m> (...) (memory: ...); the next start makes the whole set again` | after it: no resume record |

@@ -61,6 +61,24 @@ uint32_t rd_early_start_rows(bool ticks, bool vel, uint32_t minRows, uint32_t ma
     return rows > maxRows ? maxRows : (uint32_t)rows;
 }
 
+void rd_early_set_need(bool prepass, uint32_t needRows, uint32_t haveRows, uint64_t rowBytes,
+                       bool arenaReady, uint64_t chunkBytes, RdSetNeed *out)
+{
+    memset(out, 0, sizeof(*out));
+    if (prepass) {
+        if (needRows > haveRows) {
+            out->recordNeed = (uint64_t)needRows * rowBytes;
+        } else {
+            out->recordMade = (uint64_t)haveRows * rowBytes;
+        }
+    }
+    if (arenaReady) {
+        out->arenaMade = chunkBytes;
+    } else {
+        out->arenaNeed = chunkBytes;
+    }
+}
+
 void rd_early_plan(const RdEarlyIn *in, RdEarlyPlan *out)
 {
     memset(out, 0, sizeof(*out));

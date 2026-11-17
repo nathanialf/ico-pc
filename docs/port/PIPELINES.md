@@ -694,7 +694,11 @@ the window's `window_pipe_finish.c` reads the memory and asks; `rd.h` `rd_set_se
   renderer allocates for play after the set and before its first 3D picture, not made yet: the VU
   pre-pass's record at the run's need (`rd_early_start_rows` rows x their bytes over every frame
   slot, where the pre-pass is on and the record holds fewer rows) and the mesh arena's first chunk
-  (`RD_MESH_CHUNK`, 32 MB, where not made yet) (`rd_vu_rec_early.h` `rd_set_size_need`). The scene
+  (`RD_MESH_CHUNK`, 32 MB, where not made yet) (`rd_vu_rec_early.h` `rd_set_size_need`,
+  `rd_early_plan.h` `rd_early_set_need`). Where they are made before the set's first read (the VU
+  pre-pass self-test makes the record, on a PowerVR phone with the compute record at 1024 rows,
+  128 MB, with the chunk), the need is 0 and the start line names them as made already: counting them again would
+  take them out of the free figure twice. The scene
   and work targets are made before the set at the play size (the self-tests draw on them), so they
   are already out of the free figure; the textures have no bound in bytes in the code (the
   texture cache holds up to 1024 entries of any size), so the floor stays their guard, as for the

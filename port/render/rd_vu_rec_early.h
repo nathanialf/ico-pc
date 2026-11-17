@@ -51,8 +51,11 @@ bool rd_vu_record_early_arena(void);
  * where the pre-pass is on and the record holds fewer rows, and the mesh
  * arena's first chunk where it is not made; what rd_vu_record_prepare makes
  * at most after the set (ICO_RD_EARLY_ROWS, a tests' switch, not read
- * here).  0 and 0 without a device. */
-void rd_set_size_need(uint64_t *recordBytes, uint64_t *arenaBytes);
+ * here); and what of them is made already (in the free memory the set
+ * reads: the pre-pass self-test's record, a chunk made before), for the
+ * set's line (rd_early_plan.h rd_early_set_need).  All 0 without a
+ * device. */
+void rd_set_size_need(RdSetNeed *out);
 
 /* The record's memory for the window's memory line (any thread: atomics
  * the replay sets once a replay with a pre-pass, rd__vu_rec_note): the

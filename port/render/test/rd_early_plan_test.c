@@ -15,7 +15,10 @@
  *              bound; the targets' rows (their three textures too)
  *   floor      under the floor, at it, or after the system's signal: nothing
  *   off        the pre-pass off: the chunk alone; the chunk made already: the
- *              record alone; a record already as large: the chunk alone */
+ *              record alone; a record already as large: the chunk alone
+ *   set need   play's known need for the start-up set's size, to make and
+ *              made: a PowerVR phone (all made before the set), a
+ *              smaller record, none; the pre-pass on: never 0 in both */
 #include "rd_early_plan.h"
 #include <stdio.h>
 #include <string.h>
@@ -213,9 +216,38 @@ static void testNeed(void)
     CHECK(rd_vu_record_memory_text(s8, 0, &m) == 0);
 }
 
+/* play's known need for the start-up set's size (rd_early_set_need): a
+   PowerVR phone with the compute record, whose pre-pass self-test made the
+   record at 1024 rows of 128 KB over the frame slots and the arena's chunk
+   before the set: nothing to make, 128 MB and 32 MB made; with the
+   pre-pass on the record is never 0 in both */
+static void testSetNeed(void)
+{
+    RdSetNeed n;
+    rd_early_set_need(true, 1024, 1024, 128 * 1024, true, 32 * MB, &n);
+    CHECK(n.recordNeed == 0 && n.recordMade == 128 * MB);
+    CHECK(n.arenaNeed == 0 && n.arenaMade == 32 * MB);
+    /* the record smaller than the run's need, no chunk: both to make */
+    rd_early_set_need(true, 1024, 256, 128 * 1024, false, 32 * MB, &n);
+    CHECK(n.recordNeed == 128 * MB && n.recordMade == 0);
+    CHECK(n.arenaNeed == 32 * MB && n.arenaMade == 0);
+    /* no record yet */
+    rd_early_set_need(true, 512, 0, 2 * ROW, true, 32 * MB, &n);
+    CHECK(n.recordNeed == 512ull * 2 * ROW && n.recordMade == 0);
+    /* the pre-pass on: a zero record in both fails, at every have */
+    for (uint32_t have = 0; have <= 2048; have = have ? have * 2 : 16) {
+        rd_early_set_need(true, 512, have, 2 * ROW, false, 32 * MB, &n);
+        CHECK(n.recordNeed + n.recordMade != 0);
+    }
+    /* the pre-pass off: no record either way */
+    rd_early_set_need(false, 0, 1024, 2 * ROW, false, 32 * MB, &n);
+    CHECK(n.recordNeed == 0 && n.recordMade == 0 && n.arenaNeed == 32 * MB);
+}
+
 int main(void)
 {
     testNeed();
+    testSetNeed();
     testPhones();
     testDesktop();
     testFloor();

@@ -845,6 +845,8 @@ typedef struct RdSetSizeAsk {
     int next;
     bool begin; /* the set's first ask */
     uint64_t needRecordBytes, needArenaBytes;
+    /* the same made already (out of the free memory before the set read it) */
+    uint64_t madeRecordBytes, madeArenaBytes;
     uint32_t place, total;
 } RdSetSizeAsk;
 

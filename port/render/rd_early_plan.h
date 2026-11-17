@@ -108,4 +108,19 @@ size_t rd_vu_record_memory_text(char *out, size_t cap, const RdVuRecMem *m);
 uint32_t rd_early_start_rows(bool ticks, bool vel, uint32_t minRows, uint32_t maxRows,
                              uint32_t rowW);
 
+/* Play's known need for the start-up set's size (issue 215,
+ * rd_vu_rec_early.h rd_set_size_need), in bytes: the VU pre-pass's record
+ * (rowBytes a row over every frame slot) and the mesh arena's first chunk,
+ * each as not made yet (Need: to come out of the free memory the set reads)
+ * and as made already (Made: out of it before the set's first read).  With
+ * the pre-pass on the record is in one or the other whenever needRows is
+ * not 0: needRows over haveRows needs needRows (the larger record made
+ * after the set), else haveRows are made. */
+typedef struct RdSetNeed {
+    uint64_t recordNeed, recordMade, arenaNeed, arenaMade;
+} RdSetNeed;
+
+void rd_early_set_need(bool prepass, uint32_t needRows, uint32_t haveRows, uint64_t rowBytes,
+                       bool arenaReady, uint64_t chunkBytes, RdSetNeed *out);
+
 #endif
