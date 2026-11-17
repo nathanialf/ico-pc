@@ -99,8 +99,11 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
                          "-DLIST=${ICO_FIXTURE_DIR}/lists/onepass.txt"
                          "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/onepass_${_op}"
                          ${_op_sab_arg} -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_onepass_ab.cmake")
+        # TIMEOUT: the merge check's lavapipe run took 108 s (ab) and 27 s (sabotage); CI's
+        # slowest suite runs such A/B tests at up to 2.82 times that (tools/ci_costs/asan.txt),
+        # about 305 s; 1800 s leaves six times that and fails a hang inside the CI job's 120 min
         set_tests_properties(rd_onepass_${_op} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
-                             TIMEOUT 14400)
+                             TIMEOUT 1800)
         if(_op_ab_env)
             set_tests_properties(rd_onepass_${_op} PROPERTIES ENVIRONMENT "${_op_ab_env}")
         endif()
