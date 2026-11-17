@@ -1078,6 +1078,7 @@ def selftest(a):
                 "lld-aarch64-no-rosegment": False, "lld-x86_64-rosegment": True,
                 "lld-x86_64-no-rosegment": False}
     ran = 0
+    not_judged = []
     failures = []
     for name, cc, ld, symkind in cases:
         d = os.path.join(wd, name)
@@ -1110,6 +1111,7 @@ def selftest(a):
                     # this host cannot make is said, not judged (the merged
                     # case, the one issue 217 is about, is never let off)
                     print("selftest %s: this linker cannot make the layout; not judged" % name)
+                    not_judged.append(name)
                     continue
                 failures.append("%s: the link did not make the layout the case is for (%d read-only segments)" % (
                     name, len(im["ro"])))
@@ -1140,7 +1142,13 @@ def selftest(a):
             print("selftest %s%s: status %d, %d init targets, %d unnamed" % (
                 name, " (negative)" if neg else "", status, nt, nu))
         ran += 1
-    print("selftest: %d layouts checked" % ran)
+    # the count the ctest's pass rule reads (state_carry.cmake): every layout
+    # judged; one the host's linker cannot make is named, never counted, and
+    # a run that judged none fails
+    print("selftest: %d layouts checked%s" % (ran, " (%d not judged: %s)" % (
+        len(not_judged), ", ".join(not_judged)) if not_judged else ""))
+    if ran == 0:
+        failures.append("no layout was judged")
     if failures:
         for f in failures:
             print("FAIL " + f)

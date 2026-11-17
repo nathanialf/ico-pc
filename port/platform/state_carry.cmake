@@ -57,8 +57,12 @@ if(EXISTS "${_carry_mingw}")
     list(APPEND _carry_args --mingw-gcc "${_carry_mingw}")
 endif()
 add_test(NAME state_carry_check COMMAND ${_carry_py} ${_carry_args})
+# passes with every layout the host's compilers make judged (1 on a host
+# whose linker cannot make elf-separate and that has no clang or mingw, as
+# linux-arm64's GNU ld may be: that one is named "not judged"); judging none
+# fails (FAIL)
 set_tests_properties(state_carry_check PROPERTIES PASS_REGULAR_EXPRESSION
-                     "selftest: [2-7] layouts checked" FAIL_REGULAR_EXPRESSION "FAIL")
+                     "selftest: [1-7] layouts checked" FAIL_REGULAR_EXPRESSION "FAIL")
 
 # state_carry_image: the one rule the tool mirrors instead of running (the
 # loader's view: ico_state_image_range's image, code and read-only ranges)
