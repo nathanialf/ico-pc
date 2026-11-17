@@ -2460,6 +2460,12 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_upscale_layer_tiler COMMAND rd_upscale_test)
     set_tests_properties(rd_upscale_layer_tiler PROPERTIES SKIP_RETURN_CODE 77
                                                 ENVIRONMENT "${_env};ICO_VK_FAKE_LIMITS=moltenvk")
+    # the two whole runs of rd_upscale_test write and remove the same capture
+    # pictures (rd_upscale_capture_test-*.png in the working directory): run
+    # together, one's "nothing written" check sees the other's file (the
+    # v0.11.8 tag's linux-arm64 job, run 44009812895), so never together
+    set_property(TEST rd_upscale rd_upscale_layer_tiler APPEND PROPERTY RESOURCE_LOCK
+                                                                rd_upscale_capture_files)
     # issue 179: the VU vertex pre-pass under a phone's limits
     # (ICO_VK_FAKE_LIMITS=mali clamps the limits; RhiLimits.tiler stays the
     # device's, so these are the desktop runs under those limits: the
