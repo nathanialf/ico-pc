@@ -2221,7 +2221,8 @@ on this device or with these settings: <why>`; in each 10 s block with a paused 
 still scene: N pictures from the held scene (M under a menu), K replayed (... lists differ, ...
 feedback not settled, ... first, ... settings, ... uploads, ... lists 11-12 the hold cannot keep,
 ... the scene reads the picture before, ... scene work owed at list 11 [...], ... the device or
-settings, ... off)`; a take refused `rd: still scene: no copy at list 11 of frame F: <why> ...`; the
+settings, ... off)`, each replay counted once under its reason (a take's at list 11, under `scene
+work owed` when the take is refused there, on the replaying thread); a take refused `rd: still scene: no copy at list 11 of frame F: <why> ...`; the
 attempt ledger's row `the paused scene held under the menu`; each stall line's submissions `menu
 open, scene held` or `menu open, scene replayed` (`rd_hold_replay_kind`). `ICO_RD_SCENE_HOLD=0`
 turns it off and `=paused` has `rd_replay_tool` mark its frame paused (the tests:
