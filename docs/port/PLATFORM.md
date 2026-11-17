@@ -1635,10 +1635,23 @@ recording's line `# state loaded slot N (Main tick T)`; the menu told
 pad script's position are CLOCK blocks: a load rewinds them with the game. The memory peak of a
 load is the staging and the backup, about 110 MB.
 
+**A load the exact path refuses** (another version's or another platform's state, a format 1
+state, the restore's self-check after the backup is back, a damaged section the checkpoint does not
+need) continues the game from the checkpoint the state holds, through the game's own load for a
+card save at the end of the next Main tick (`port/save/state_checkpoint.h`,
+`port/game/state_checkpoint_live.c`, `ico_host_set_main_tick_hook`): nothing of the exact path
+is applied, the stage changes to the checkpoint's. Each save writes a `ckpt` section, the
+places of the checkpoint's globals in the two game ranges; the exact load reads no `ckpt` (a
+state without one loads as before). Another disc, a Permadeath journey and the moment's conditions
+stay refused. The way, the table of the released builds and the log lines:
+[SAVES.md](SAVES.md#loading-a-state-from-its-checkpoint).
+
 **Delete** removes `slot<n>.ics` and `slot<n>.png`. **The listing** (`ico_state_list`) reads the
 four headers and checks each against this run (`loadable`, `why_not`; a slot of another build of
-this format is checked through its `syms` section, [Across versions](#across-versions)), cached
-until a save, a load, a delete or a change of the simulation keys.
+this format is checked through its `syms` section, [Across versions](#across-versions); a slot it
+refuses, and a slot of another platform, then through its checkpoint: loadable with `checkpoint`
+set when one can be continued), cached until a save, a load, a delete or a change of the
+simulation keys.
 
 **The [dev] keys** (`main_host.c` reads them, `ico_state_dev_set`): `state_save_at = "<tick>:<slot>"`
 and `state_load_at = "<tick>:<slot>"` save and load once when the Main tick reaches the value
@@ -1691,6 +1704,8 @@ the game lists the reads of unset locals the compiler sees (`camera-ico2.c`'s mo
 | `state: slot N (saved by <commit>) loads here`, or `... cannot be loaded here: <v> -> <v>: <blocker>` | each listing, per slot of another build |
 | `state: loaded slot N (saved at Main tick T, stage S): deltas module +0x0 (fixed image), arena +0x0 (pinned), pool +0x0 (pinned), pobj ... ; words rewritten [(nothing moved)] arena .., gdata .., gbss .., registry .., pobj ..; thread pointer 0x<old>->0x<new>[ unchanged\| not recorded\| not needed] (K words), stack guard[ unchanged\| not recorded\| not needed] (M words); checks P partitions, B blocks, T threads, H handlers; K fibers; apply <ms> ms` | a load done |
 | `state: refused <save\|load\|delete> slot N: <reason>[: <detail>]` | every refusal: save states off, not on the pause menu, a stage switch, the card, the disc, a movie, another mode (photo mode, the credits, the music gallery), the slot empty, a damaged file, another build (its commit; `no thread-pointer record` for a state without the saving process's thread pointer or stack guard where the platform needs them; for a state this build cannot translate `<saved commit> -> <commit here>: <blocker>`, the blocker as [Across versions](#across-versions) words it, or `made before save states could carry over to later versions (format 1)`), another disc, another platform, settings differ (`key=saved (now cur)`), the self-checks (the failing check; the backup restored), the file not written (why), busy |
+| `state: slot N (version V, P) cannot resume where it was saved (<refusal>): it continues from its last checkpoint, stage S (saved in stage T), found by <the state's own record\|the table's <release> <platform> (<asset>)\|the layout of <release> <platform>, which its bytes confirm (K layouts agree)\|its bytes: ...>; the game's own load runs at the end of the next Main tick`, then `state: slot N continues from its checkpoint at Main tick M: the game's own load from <the title\|play (as End Game)>, to stage S; option words ..., preview ..., difficulty ...`; or `... and its checkpoint cannot be loaded either: <why>` | a load the exact path refused ([SAVES.md](SAVES.md#loading-a-state-from-its-checkpoint)) |
+| `state: each state names its checkpoint (a later version continues it from there): gameSysMainSaveBuff gbss+0x.., systemStatus gdata+0x.., ...` | once, the first save |
 | `state: deleted slot N` | a delete |
 | `state: slot N's picture written (<path>, WxH, the pause picture\|the frame after the save)`, `... could not be written`, `state: slot N has no picture (no frame was presented)` | the picture |
 | `state: slot N's picture: the frame after the save (no pause picture: <why>)` | a save without a pause picture: none taken since the program started, the frame before the pause menu still to come or not presented, still being written, could not be written, the game went back to play, a state was loaded, no renderer |

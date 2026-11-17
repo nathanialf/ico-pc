@@ -339,9 +339,10 @@ saves to slot 1 from the pause menu. The state keeps the game exactly as it
 is, and you can load it from the pause menu or from the title screen
 (choose **Continue**, then press **Square** for **Save states**; F9 loads
 slot 1). It does not replace
-the game's own save points: those still write to the memory card. A state
-only loads in the version of the game that saved it, so keep a save point
-too before you update. On a journey with Permadeath on, save states are off.
+the game's own save points: those still write to the memory card. In another
+version of the game a state may not resume where you saved it: it then
+continues from its last checkpoint, so keep a save point too before you
+update. On a journey with Permadeath on, save states are off.
 [The details](OPTIONS.md#save-states).
 
 ## Can I change the difficulty in the middle of a game?
@@ -460,8 +461,8 @@ started on, and which Permadeath journeys have ended. Without it every save
 loads with the rules in the other device's `config.toml` (Normal when you
 never changed them), and a Permadeath journey that had ended loads again.
 
-Your save states come with the backup, but a state only loads in a version of
-the game that can resume it, the same as on the device that made it.
+Your save states come with the backup. A state that the game on the other
+device cannot resume where it was saved continues from its last checkpoint.
 
 ## Going back to the version you had before
 
@@ -470,8 +471,8 @@ you update, make a backup (Options > Extras > **Back up your data**). After
 you go back, restore it (**Restore from a backup**): your memory card,
 settings and achievements are as they were when you made the backup. A
 backup made by a newer version also restores in an older one: the memory card
-and the settings work, but its save states only load in a version that can
-resume them, so a state the newer version made may be greyed in the older one.
+and the settings work, but a save state the newer version made may not load
+in the older one.
 Save at one of the game's own save points before you switch, so your progress
 is on the memory card.
 

@@ -922,6 +922,7 @@ static int contProc(int first, int item);
 static int s_stFromPause;     /* opened from the pause menu's row: Back returns there */
 static int s_stFromContinue;  /* opened from the Continue screen: Back returns there */
 static int s_stLeave;         /* a state was loaded: the page closes at the next tick */
+static int s_stLeaveScene;    /* ... from the title onto the game's empty layout */
 static int s_procLayout = -1; /* the layout the last settings proc ran in */
 
 void ui_settings_sync_after_state_load(void)
@@ -5164,6 +5165,10 @@ static int statesLeaveQuiet(void)
 {
     ui__states_release();
     s_stLeave = 0;
+    if (s_stLeaveScene) {
+        s_stLeaveScene = 0;
+        return extrasLeave(ico_region_cur()->layout_scene);
+    }
     if (s_statesRow >= 0) {
         gameCursorOn(LAYOUT_PAUSE, s_statesRow);
     }
@@ -5192,6 +5197,21 @@ static void statesCloseAfterLoad(void)
     if (pageOfLayout(current_layout_id, NULL) == &s_pages[UI_PAGE_STATES]) {
         s_stLeave = 1;
     }
+}
+
+/* A state continued from its checkpoint (state_checkpoint_live.c): the stage
+   is changing.  In play the menu closes as after a load (the pause menu,
+   as End Game leaves it); from the title's page on the game's empty layout,
+   as Extras' starts leave it (extrasLeave), the title's cursor on Settings. */
+void ui_settings_sync_after_state_checkpoint(void)
+{
+    if (s_built && onTitle() && pageOfLayout(current_layout_id, NULL) == &s_pages[UI_PAGE_STATES]) {
+        ui__states_release();
+        s_stFromPause = s_stFromContinue = 0;
+        s_stLeave = s_stLeaveScene = 1;
+        return;
+    }
+    statesCloseAfterLoad();
 }
 
 /* The Continue screen's prompt (its layout chained after the file select,

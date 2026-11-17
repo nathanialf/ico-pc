@@ -2054,8 +2054,10 @@ static void states_list(UiStateSlotInfo out[UI_STATES_SLOTS])
     for (i = 0; i < UI_STATES_SLOTS && i < ICO_STATE_SLOTS; i++) {
         out[i].present = in[i].present;
         out[i].loadable = in[i].loadable;
-        out[i].refusal_str =
-            in[i].present && !in[i].loadable ? state_refusal_str(in[i].why_not) : 0;
+        /* a slot that loads from its checkpoint says so on the page's line */
+        out[i].refusal_str = in[i].present && in[i].checkpoint  ? UI_STR_STATES_CKPT_ROW
+                             : in[i].present && !in[i].loadable ? state_refusal_str(in[i].why_not)
+                                                                : 0;
         out[i].play_frames = in[i].play_frames;
         out[i].stage_no = in[i].stage_no;
         out[i].saved_at = in[i].saved_at;
@@ -2115,6 +2117,9 @@ static int states_other_version(char *body, size_t n)
     case ICO_STATE_BLOCK_PINNED:
         snprintf(body, n, ui_str(UI_STR_STATES_XB_PINNED), f.saved_version);
         return 1;
+    case ICO_STATE_BLOCK_NO_CHECKPOINT:
+        snprintf(body, n, ui_str(UI_STR_STATES_CKPT_NONE), f.saved_version);
+        return 1;
     case ICO_STATE_BLOCK_NONE:
         break;
     }
@@ -2125,9 +2130,14 @@ static void states_done(int action, int slot, IcoStateResult r, const char *deta
 {
     static const int ok_str[3] = {UI_STR_STATES_SAVED, UI_STR_STATES_LOADED, UI_STR_STATES_DELETED};
     char body[UI_POPUP_TEXT];
+    char version[48];
 
     (void)user;
-    if (r == ICO_STATE_OK) {
+    if (r == ICO_STATE_OK && action == UI_STATES_ACT_LOAD &&
+        ico_state_last_load_checkpoint(version, sizeof version)) {
+        /* it could not resume where it was saved: from its checkpoint */
+        snprintf(body, sizeof body, ui_str(UI_STR_STATES_CKPT_LOADED), version);
+    } else if (r == ICO_STATE_OK) {
         snprintf(body, sizeof body, ui_str((UiStrId)ok_str[action]), slot);
     } else if (r == ICO_STATE_OTHER_SETTINGS) {
         /* the key that differs, as the log has it */
