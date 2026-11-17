@@ -87,8 +87,10 @@ typedef struct Readback {
 
 static struct {
     int env; /* -1 unread, 0 off (ICO_RD_SCENE_HOLD=0), 1 on, 2 every frame paused */
-    /* this replay: its kind and the reason it was counted under */
-    int mode, counted;
+    /* this replay: its kind, and a take's reason not yet counted (-1 none):
+       counted at list 11 under the take's outcome, on the replaying thread
+       alone, so the 10 s line's reset never meets a take-back */
+    int mode, pending;
     RdHoldScan scan;
     /* the chain */
     uint32_t chain, takes;
@@ -121,7 +123,7 @@ static struct {
     uint64_t owedWhy[5];
     /* the takes found SCENE's border repeat still due at list 11 */
     bool repeat;
-} s_h = {.env = -1};
+} s_h = {.env = -1, .pending = -1};
 
 /* the stall lines' ring: replay number and its kind (__atomic) */
 #define KIND_RING 256u
@@ -230,6 +232,16 @@ static void count(int why)
 {
     if (why >= 0 && why < RD_HOLD_COUNT) {
         __atomic_add_fetch(&s_h.why[why], 1u, __ATOMIC_RELAXED);
+    }
+}
+
+/* the take's reason, counted once its outcome is known (or when the replay
+   ended before list 11: at the next replay or the shutdown) */
+static void countPending(void)
+{
+    if (s_h.pending >= 0) {
+        count(s_h.pending);
+        s_h.pending = -1;
     }
 }
 
@@ -421,12 +433,13 @@ static void take(Replay *r)
         }
         said++;
         __atomic_add_fetch(&s_h.owedWhy[k], 1u, __ATOMIC_RELAXED);
-        /* counted under the decision's reason: moved to this one */
-        __atomic_sub_fetch(&s_h.why[s_h.counted], 1u, __ATOMIC_RELAXED);
+        /* counted under this reason instead of the decision's */
+        s_h.pending = -1;
         count(RD_HOLD_OWED);
         chainReset();
         return;
     }
+    countPending(); /* the decision's reason */
     if (!heldEnsure(tc)) {
         chainReset();
         return;
@@ -609,6 +622,7 @@ static bool sideReplay(bool present)
 
 const RdFrame *rd__hold_frame(const RdFrame *f, int keep, bool present)
 {
+    countPending(); /* a take that never reached list 11 */
     s_h.mode = MODE_NONE;
     if (sideReplay(present)) {
         /* not the picture: drawn in full and not counted, nothing freed (a
@@ -655,8 +669,6 @@ const RdFrame *rd__hold_frame(const RdFrame *f, int keep, bool present)
         }
         why = RD_HOLD_FEEDBACK; /* no memory for the held frame: drawn in full */
     }
-    count(why);
-    s_h.counted = why;
     ico_attempt_fire2(ICO_ATT_SCENE_HOLD, 1);
     kindNote(RD_HOLD_KIND_REPLAYED);
     switch (why) {
@@ -677,6 +689,11 @@ const RdFrame *rd__hold_frame(const RdFrame *f, int keep, bool present)
     default:
         chainReset(); /* off, the device, the rules: no chain */
         break;
+    }
+    if (s_h.mode == MODE_TAKE) {
+        s_h.pending = why; /* counted at list 11 (take) */
+    } else {
+        count(why);
     }
     return f;
 }
@@ -773,6 +790,7 @@ void rd__hold_selftest_end(bool ok)
 
 void rd__hold_shutdown(void)
 {
+    countPending();
     if (s_h.held.id) {
         rhi_destroy_texture(s_h.held);
     }
