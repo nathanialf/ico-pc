@@ -920,8 +920,9 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   (`code_hash_a64_selftest`). `tools/test/android_syms_layout_test.py`: the Android packaging gate
   on the game data layout hash (`tools/android_syms_lines.py layout` against
   `port/state_legacy/layout.txt`): a guard report with the recorded hash passes, one with another
-  hash fails naming both and the checkpoint path, one with no layout line fails
-  (`android_syms_layout`).
+  hash fails naming both and the checkpoint path, one with no layout line fails; the Windows
+  program's recorded hash the same, the arm64 Linux `none` passes printing the hash; `gamesec`
+  fails a map with no game object or no reserved room (`android_syms_layout`).
 - `state_carry_xbuild_test.c`: save states across two real links of one program (`state_carry.cmake`,
   [PLATFORM.md](PLATFORM.md#the-carry-over-guard)): A linked with its read-only data in a segment of
   its own, B with more code and texts ahead of A's and its read-only data inside the executable
@@ -933,7 +934,8 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   and loaded by the other through `ico_xb_check` and `ico_state_reloc_word`: all 15 words become the
   loading build's own addresses, both ways, each program's layout line checked; both saves are
   judged as a program the loader places high (`judge_lo`), where the constant-table word is named
-  by its bytes (`state_carry_xbuild`, driven by `tools/state_carry_check.py xbuild`).
+  by its bytes (`state_carry_xbuild`, driven by `tools/state_carry_check.py xbuild`; not built
+  under AddressSanitizer, whose red zones lie in the read-only data the save reads whole).
 - `state_carry_fixture.c`: the program `tools/state_carry_check.py selftest` compiles and links in
   each layout (gcc: `-z separate-code` and `-z noseparate-code`; the toolchain's clang and lld for
   arm64 Android and x86-64 Linux, `--rosegment` and `--no-rosegment`; the toolchain's mingw-w64 gcc

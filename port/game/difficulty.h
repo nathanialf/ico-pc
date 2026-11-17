@@ -320,6 +320,13 @@ int ico_difficulty_state_register(void);
    (a state of v0.11.2 or older) the record is built from the state's own
    keys text (ico_difficulty_from_keys), never from config. */
 void ico_difficulty_state_loaded(int block_absent, const char *saved_keys);
+/* After a state's record was taken for a load that continues from its
+   checkpoint (state_checkpoint_live.c, after ico_difficulty_state_loaded):
+   the moment's state goes as a game over takes it (a checkpoint stands for
+   one): no game over pending, no fall in progress, the room's count 0; a
+   limit game over that was pending resets the journey's count (journey
+   scope), as ico_difficulty_game_over does. */
+void ico_difficulty_checkpoint_loaded(void);
 /* 1 while the active record has Permadeath on: save states do not load. */
 int ico_difficulty_states_locked(void);
 

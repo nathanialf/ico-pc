@@ -30,7 +30,8 @@
 typedef struct IcoVdKey {
     unsigned long long size;
     long long mtime;
-    uint64_t keys;
+    uint64_t file; /* the file's own identity (state_host.c: its header's build id and commit) */
+    uint64_t keys; /* the settings it is judged under */
 } IcoVdKey;
 
 typedef struct IcoVdOps {
@@ -50,7 +51,11 @@ typedef struct IcoVdOps {
 typedef struct IcoVerdicts IcoVerdicts;
 
 IcoVerdicts *ico_vd_create(const IcoVdOps *ops);
-/* joins the worker, frees every result */
+/* Drops the queue and stops the worker from taking another slot (the one
+   it is on finishes); a later ico_vd_kick starts nothing.  Never waits. */
+void ico_vd_cancel(IcoVerdicts *v);
+/* cancels (above), joins the worker (at most the slot it was on), frees
+   every result */
 void ico_vd_destroy(IcoVerdicts *v);
 
 /* 1 with a copy of slot's fresh result in out (a shallow copy: what it
@@ -70,6 +75,9 @@ int ico_vd_running(IcoVerdicts *v);
    when there is nothing (no file). */
 int ico_vd_with(IcoVerdicts *v, int slot, void (*fn)(void *result, void *ctx), void *ctx);
 
+/* how many callers wait for the work lock now (ico_vd_with,
+   ico_vd_lock_work): the worker lets each in before its next slot (tests) */
+int ico_vd_waiting(IcoVerdicts *v);
 /* the work lock, for other work sharing the callback's statics */
 void ico_vd_lock_work(IcoVerdicts *v);
 void ico_vd_unlock_work(IcoVerdicts *v);

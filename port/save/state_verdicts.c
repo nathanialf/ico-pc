@@ -19,15 +19,18 @@ typedef struct VdSlot {
 struct IcoVerdicts {
     IcoVdOps ops;
     IcoMutex *work, *tab;
+    IcoCond *turn; /* with tab: the worker waits while a load wants the work lock */
     IcoThread *th;
     int running;
+    int want; /* loads (and lock_work callers) waiting for the work lock */
+    int stop; /* cancelled: the worker takes no further slot */
     unsigned gen;
     VdSlot slot[ICO_VD_SLOTS + 1];
 };
 
 static int same_key(const IcoVdKey *a, const IcoVdKey *b)
 {
-    return a->size == b->size && a->mtime == b->mtime && a->keys == b->keys;
+    return a->size == b->size && a->mtime == b->mtime && a->file == b->file && a->keys == b->keys;
 }
 
 IcoVerdicts *ico_vd_create(const IcoVdOps *ops)
@@ -46,6 +49,7 @@ IcoVerdicts *ico_vd_create(const IcoVdOps *ops)
     v->ops = *ops;
     v->work = ico_mutex_create();
     v->tab = ico_mutex_create();
+    v->turn = ico_cond_create();
     for (i = 1; i <= ops->slots; i++) {
         v->slot[i].res = (unsigned char *)calloc(1, ops->result_bytes);
     }
@@ -55,7 +59,7 @@ IcoVerdicts *ico_vd_create(const IcoVdOps *ops)
             return NULL;
         }
     }
-    if (v->work == NULL || v->tab == NULL) {
+    if (v->work == NULL || v->tab == NULL || v->turn == NULL) {
         ico_vd_destroy(v);
         return NULL;
     }
@@ -70,6 +74,24 @@ static void release(IcoVerdicts *v, VdSlot *s)
     s->have = 0;
 }
 
+void ico_vd_cancel(IcoVerdicts *v)
+{
+    int i;
+
+    if (v == NULL || v->tab == NULL) {
+        return;
+    }
+    ico_mutex_lock(v->tab);
+    v->stop = 1;
+    for (i = 1; i <= v->ops.slots; i++) {
+        v->slot[i].queued = 0;
+    }
+    if (v->turn != NULL) {
+        ico_cond_broadcast(v->turn);
+    }
+    ico_mutex_unlock(v->tab);
+}
+
 void ico_vd_destroy(IcoVerdicts *v)
 {
     int i;
@@ -77,6 +99,8 @@ void ico_vd_destroy(IcoVerdicts *v)
     if (v == NULL) {
         return;
     }
+    /* the queue dropped first: the worker ends after the slot it is on */
+    ico_vd_cancel(v);
     if (v->th != NULL) {
         ico_thread_join(v->th);
     }
@@ -91,6 +115,9 @@ void ico_vd_destroy(IcoVerdicts *v)
     }
     if (v->tab != NULL) {
         ico_mutex_destroy(v->tab);
+    }
+    if (v->turn != NULL) {
+        ico_cond_destroy(v->turn);
     }
     free(v);
 }
@@ -122,11 +149,16 @@ static void worker(void *arg)
     IcoVerdicts *v = (IcoVerdicts *)arg;
 
     for (;;) {
-        int slot = 0, i;
+        int slot = 0, i, still;
 
-        ico_mutex_lock(v->work);
+        /* a load waiting for the work lock goes first (a mutex hands over
+           in no order: the worker re-taking it at once could keep a load
+           waiting through every queued slot) */
         ico_mutex_lock(v->tab);
-        for (i = 1; i <= v->ops.slots && slot == 0; i++) {
+        while (v->want > 0 && !v->stop) {
+            ico_cond_wait(v->turn, v->tab);
+        }
+        for (i = 1; i <= v->ops.slots && slot == 0 && !v->stop; i++) {
             if (v->slot[i].queued) {
                 slot = i;
             }
@@ -135,11 +167,16 @@ static void worker(void *arg)
             v->running = 0;
             v->gen++;
             ico_mutex_unlock(v->tab);
-            ico_mutex_unlock(v->work);
             return;
         }
         ico_mutex_unlock(v->tab);
-        work_out(v, slot);
+        ico_mutex_lock(v->work);
+        ico_mutex_lock(v->tab);
+        still = v->slot[slot].queued && !v->stop; /* a load may have worked it out */
+        ico_mutex_unlock(v->tab);
+        if (still) {
+            work_out(v, slot);
+        }
         ico_mutex_unlock(v->work);
     }
 }
@@ -174,6 +211,10 @@ int ico_vd_kick(IcoVerdicts *v)
         return 0;
     }
     ico_mutex_lock(v->tab);
+    if (v->stop) {
+        ico_mutex_unlock(v->tab);
+        return 0;
+    }
     if (v->running) {
         ico_mutex_unlock(v->tab);
         return 1;
@@ -228,6 +269,32 @@ int ico_vd_running(IcoVerdicts *v)
     return r;
 }
 
+/* the work lock for a load: the worker lets it in before its next slot */
+static void lock_work_first(IcoVerdicts *v)
+{
+    ico_mutex_lock(v->tab);
+    v->want++;
+    ico_mutex_unlock(v->tab);
+    ico_mutex_lock(v->work);
+    ico_mutex_lock(v->tab);
+    v->want--;
+    ico_cond_broadcast(v->turn);
+    ico_mutex_unlock(v->tab);
+}
+
+int ico_vd_waiting(IcoVerdicts *v)
+{
+    int n;
+
+    if (v == NULL) {
+        return 0;
+    }
+    ico_mutex_lock(v->tab);
+    n = v->want;
+    ico_mutex_unlock(v->tab);
+    return n;
+}
+
 int ico_vd_with(IcoVerdicts *v, int slot, void (*fn)(void *result, void *ctx), void *ctx)
 {
     IcoVdKey now;
@@ -238,7 +305,7 @@ int ico_vd_with(IcoVerdicts *v, int slot, void (*fn)(void *result, void *ctx), v
         return -1;
     }
     /* the work lock first: a worker on this slot finishes and stores it */
-    ico_mutex_lock(v->work);
+    lock_work_first(v);
     ico_mutex_lock(v->tab);
     if (v->slot[slot].have && same_key(&v->slot[slot].key, &now)) {
         fn(v->slot[slot].res, ctx);
@@ -261,7 +328,7 @@ int ico_vd_with(IcoVerdicts *v, int slot, void (*fn)(void *result, void *ctx), v
 void ico_vd_lock_work(IcoVerdicts *v)
 {
     if (v != NULL) {
-        ico_mutex_lock(v->work);
+        lock_work_first(v);
     }
 }
 

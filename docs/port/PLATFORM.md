@@ -1414,7 +1414,12 @@ names another layout before any other reason. Two more changes came with this wo
   therefore both check states. `state_xbuild.c` and `state_legacy.c` keep no statics, and a
   legacy table is loaded for each check and freed after it.
 - `tools/package_android.sh` fails when the carry-over guard's layout hash is not the one
-  `port/state_legacy/layout.txt` records (`tools/android_syms_lines.py layout`). If the game's
+  `port/state_legacy/layout.txt` records (`tools/android_syms_lines.py layout`).
+  `tools/package_win.sh` and CI's `linux` job do the same for the Windows program
+  (`layout-windows-x64`), and `tools/package_linux.sh` for the arm64 Linux program
+  (`layout-linux-arm64`; `none` while no released arm64 Linux state can resume exactly, which
+  prints the hash to record). `gamesec` fails a map with no object in the game's data sections or
+  without the reserved room. If the game's
   data did not change, the link lost or moved an item. If it changed on purpose, the maintainer
   records the new hash there, knowing that the legacy tables' states then cannot resume
   exactly and take the checkpoint path.
@@ -1588,7 +1593,8 @@ and `code` classes list their first `--list` (64) unnamed targets and count the 
 Where it runs: `tools/package_android.sh` (on the unstripped library and the table it is about to
 put in the APK; the report is staged as `dist/stage/android/carry.txt`) and `tools/package_win.sh`
 (on the staged program and map) fail the package on any status but 0; `tools/package_linux.sh`
-accepts 0 and 3. CI's `linux` job judges the win-x64 program it cross-builds and the `android` job
+accepts 0 and 3 for the x86-64 program (fixed below 4 GB) and 0 only for the arm64 one, which is
+position-independent and judged like the others. CI's `linux` job judges the win-x64 program it cross-builds and the `android` job
 the debug APK's library (with the table `write-syms` writes: the same lines
 `package_android.sh` writes, its `section` lines and file column included, checked byte for byte
 on a shipped library and on the Linux program). macOS and iOS ship no symbol file inside the bundle, so their states

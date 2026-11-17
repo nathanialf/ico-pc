@@ -25,6 +25,7 @@
 
 #include <windows.h>
 #include <direct.h>
+#include <fcntl.h>
 #include <io.h>
 
 wchar_t *ico_widen(const char *s)
@@ -58,13 +59,45 @@ int ico_narrow(const wchar_t *s, char *out, size_t size)
     return 0;
 }
 
+/* A file opened for reading only, shared for writing and deleting too
+   (_wfopen shares no delete): a reader, such as the Save states page's
+   worker judging a slot, never makes a Save over that file (its rename
+   onto it, MoveFileExW) or a Delete fail with a sharing violation. */
+static FILE *open_read_shared(const wchar_t *wp, const char *mode)
+{
+    HANDLE h = CreateFileW(wp, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                           NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    FILE *fp = NULL;
+    int fd;
+
+    if (h == INVALID_HANDLE_VALUE) {
+        const DWORD e = GetLastError();
+
+        errno = e == ERROR_FILE_NOT_FOUND || e == ERROR_PATH_NOT_FOUND ? ENOENT : EACCES;
+        return NULL;
+    }
+    fd =
+        _open_osfhandle((intptr_t)h, _O_RDONLY | (strchr(mode, 'b') != NULL ? _O_BINARY : _O_TEXT));
+    if (fd < 0) {
+        CloseHandle(h);
+        return NULL;
+    }
+    fp = _fdopen(fd, mode);
+    if (fp == NULL) {
+        _close(fd);
+    }
+    return fp;
+}
+
 FILE *ico_fopen(const char *path, const char *mode)
 {
     wchar_t *wp = ico_widen(path);
     wchar_t *wm = ico_widen(mode);
     FILE *fp = NULL;
 
-    if (wp != NULL && wm != NULL) {
+    if (wp != NULL && wm != NULL && (strcmp(mode, "rb") == 0 || strcmp(mode, "r") == 0)) {
+        fp = open_read_shared(wp, mode);
+    } else if (wp != NULL && wm != NULL) {
         fp = _wfopen(wp, wm);
     } else {
         fp = fopen(path, mode);

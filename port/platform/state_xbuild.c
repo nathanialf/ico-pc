@@ -57,6 +57,9 @@ enum {
 #define PG_ORDINARY                                                                                \
     2u /* also an ordinary address: seen outside fibers' frames, a symbol,
                           block or start-up value at it */
+#define PG_PLAIN                                                                                   \
+    4u /* another fiber holds the word with no producer: there it is an
+                          ordinary address, named so too (a load reads it per fiber) */
 
 /* a unit record's flags */
 #define XU_START 1u    /* a strict word at its start (a function pointer) */
@@ -198,11 +201,11 @@ static int legacy_begin(IcoXbRefs *r)
     r->p.image.ro_lo[0] = lg->old_lo + lg->lt->ro_lo;
     r->p.image.ro_hi[0] = lg->old_lo + lg->lt->ro_hi;
     r->delta = (int64_t)((uint64_t)(uintptr_t)lg->lt->ro - r->p.image.ro_lo[0]);
+    if (lg->lt->hash_rules != ICO_CODE_HASH_RULES) {
+        return -1; /* the caller says so (state_host.c legacy_record checks it first) */
+    }
     r->uh = (uint64_t *)malloc((lg->lt->n_hash ? lg->lt->n_hash : 1) * 2 * sizeof *r->uh);
     if (r->uh == NULL) {
-        return -1;
-    }
-    if (lg->lt->hash_rules != ICO_CODE_HASH_RULES) {
         return -1;
     }
     for (i = 0; i < lg->lt->n_hash; i++) {
@@ -290,6 +293,7 @@ IcoXbRefs *ico_xb_begin(const IcoXbProc *p)
     r->p = *p;
     ico_xb_image(p->tab, &r->p.image);
     if (p->legacy != NULL && legacy_begin(r) != 0) {
+        free(r->uh);
         free(r);
         return NULL;
     }
@@ -305,6 +309,7 @@ IcoXbRefs *ico_xb_begin(const IcoXbProc *p)
         free(r->lab);
         free(r->at);
         free(r->labels);
+        free(r->uh);
         free(r);
         return NULL;
     }
@@ -865,6 +870,39 @@ static int snap_has(const IcoXbRefs *r, uint64_t w)
     return lo < r->n_snap && r->snap[lo].value == w;
 }
 
+/* The page words one fiber holds with a producer and another without
+   (mixed, nm words, any order): on the other fiber the word is an ordinary
+   address, which a load can translate only when the save names it so; its
+   entries are flagged PG_PLAIN, so the save names it ordinarily too (or
+   counts it unnamed) and each fiber's word is read as that fiber holds it:
+   the producer's page on the one, the ordinary address on the other. */
+static int pages_mixed(PageEnt *pe, size_t npe, uint64_t *mixed, size_t nm)
+{
+    size_t i;
+
+    if (nm == 0) {
+        return 0;
+    }
+    qsort(mixed, nm, sizeof *mixed, u64_cmp);
+    for (i = 0; i < npe; i++) {
+        size_t lo = 0, hi = nm;
+
+        while (lo < hi) {
+            const size_t mid = lo + (hi - lo) / 2;
+
+            if (mixed[mid] < pe[i].w) {
+                lo = mid + 1;
+            } else {
+                hi = mid;
+            }
+        }
+        if (lo < nm && mixed[lo] == pe[i].w) {
+            pe[i].flags |= PG_PLAIN;
+        }
+    }
+    return 0;
+}
+
 /* The page words of every fiber and their producers: for each fiber, the
    units its return addresses lie in (past their start: functions with a
    frame on its stack), each such unit's ADRPs, and those whose page is one
@@ -1011,13 +1049,26 @@ static int plan_pages(IcoXbRefs *r, const IcoSymTab *t, uint8_t *uflag, PageEnt 
     }
     /* a page-aligned word no ADRP on its fiber makes is an ordinary address
        (an array element or a variable that starts a page): the ordinary
-       rules alone name it */
-    for (i = k = 0; i < *npe; i++) {
-        if (((*pe)[i].flags & PG_PROD) != 0) {
-            (*pe)[k++] = (*pe)[i];
+       rules alone name it; where another fiber's ADRP makes it, its entries
+       there are named ordinarily too (pages_mixed) */
+    {
+        uint64_t *mixed = (uint64_t *)malloc((*npe ? *npe : 1) * sizeof *mixed);
+        size_t nm = 0;
+
+        if (mixed == NULL) {
+            return -1;
         }
+        for (i = k = 0; i < *npe; i++) {
+            if (((*pe)[i].flags & PG_PROD) != 0) {
+                (*pe)[k++] = (*pe)[i];
+            } else {
+                mixed[nm++] = (*pe)[i].w;
+            }
+        }
+        *npe = k;
+        (void)pages_mixed(*pe, *npe, mixed, nm);
+        free(mixed);
     }
-    *npe = k;
     if (*npe > 1) {
         qsort(*pe, *npe, sizeof **pe, pe_cmp);
     }
@@ -1216,6 +1267,8 @@ static int legacy_pages(IcoXbRefs *r, const IcoSymTab *t, uint8_t *uflag, PageEn
     size_t *units = NULL;
     LProd *lp = NULL;
     size_t cap_lp = 0;
+    uint64_t *mix = NULL; /* the page words a fiber holds with no producer */
+    size_t nmix = 0, cap_mix = 0;
 
     *pe = NULL;
     *pr = NULL;
@@ -1297,6 +1350,7 @@ static int legacy_pages(IcoXbRefs *r, const IcoSymTab *t, uint8_t *uflag, PageEn
                     if (q == NULL) {
                         free(units);
                         free(lp);
+                        free(mix);
                         return -1;
                     }
                     lp = q;
@@ -1342,6 +1396,7 @@ static int legacy_pages(IcoXbRefs *r, const IcoSymTab *t, uint8_t *uflag, PageEn
                     if (q == NULL) {
                         free(units);
                         free(lp);
+                        free(mix);
                         return -1;
                     }
                     *bad = q;
@@ -1351,7 +1406,22 @@ static int legacy_pages(IcoXbRefs *r, const IcoSymTab *t, uint8_t *uflag, PageEn
                 continue;
             }
             if (!any) {
-                continue; /* an ordinary address */
+                /* an ordinary address on this fiber (pages_mixed) */
+                if (nmix == cap_mix) {
+                    const size_t c = cap_mix ? cap_mix * 2 : 64;
+                    uint64_t *q = (uint64_t *)realloc(mix, c * sizeof *q);
+
+                    if (q == NULL) {
+                        free(units);
+                        free(lp);
+                        free(mix);
+                        return -1;
+                    }
+                    mix = q;
+                    cap_mix = c;
+                }
+                mix[nmix++] = w;
+                continue;
             }
             if (*npe == cap_pe) {
                 const size_t c = cap_pe ? cap_pe * 2 : 64;
@@ -1360,6 +1430,7 @@ static int legacy_pages(IcoXbRefs *r, const IcoSymTab *t, uint8_t *uflag, PageEn
                 if (q == NULL) {
                     free(units);
                     free(lp);
+                    free(mix);
                     return -1;
                 }
                 *pe = q;
@@ -1380,6 +1451,7 @@ static int legacy_pages(IcoXbRefs *r, const IcoSymTab *t, uint8_t *uflag, PageEn
                     if (q == NULL) {
                         free(units);
                         free(lp);
+                        free(mix);
                         return -1;
                     }
                     *pr = q;
@@ -1395,6 +1467,8 @@ static int legacy_pages(IcoXbRefs *r, const IcoSymTab *t, uint8_t *uflag, PageEn
     }
     free(units);
     free(lp);
+    (void)pages_mixed(*pe, *npe, mix, nmix);
+    free(mix);
     for (i = 0; i < *npe; i++) {
         PageEnt *e = &(*pe)[i];
         int bl;
@@ -1414,8 +1488,8 @@ static int legacy_pages(IcoXbRefs *r, const IcoSymTab *t, uint8_t *uflag, PageEn
     return 0;
 }
 
-/* 1 when every page word entry of w has a producer and none is ordinary:
-   the page rule alone names it */
+/* 1 when every page word entry of w has a producer, none is ordinary and
+   no fiber holds w without one (PG_PLAIN): the page rule alone names it */
 static int page_only(const PageEnt *pe, size_t npe, uint64_t w)
 {
     size_t lo = 0, hi = npe;
@@ -1431,7 +1505,7 @@ static int page_only(const PageEnt *pe, size_t npe, uint64_t w)
         }
     }
     for (; lo < npe && pe[lo].w == w; lo++) {
-        if ((pe[lo].flags & (PG_PROD | PG_ORDINARY)) != PG_PROD) {
+        if ((pe[lo].flags & (PG_PROD | PG_ORDINARY | PG_PLAIN)) != PG_PROD) {
             return 0;
         }
         any = 1;
@@ -2192,7 +2266,7 @@ static void fiber_points_free(IcoXbVerdict *v)
 
 /* a unit with a thread inside, then and now (the page words' producers) */
 typedef struct UMap {
-    uint64_t old, now;
+    uint64_t old, now, size; /* size: the unit's here (a producer's offset lies inside it) */
     const char *name;
 } UMap;
 
@@ -2440,6 +2514,7 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
         if (same && strict) {
             umap[n_umap].old = start;
             umap[n_umap].now = w->start;
+            umap[n_umap].size = w->size;
             umap[n_umap].name = nm;
             n_umap++;
         }
@@ -2518,8 +2593,12 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
             unsigned found;
             char what[120];
 
+            /* a save stores a hashed window's first min(len, ICO_XB_CONTENT)
+               bytes (put_window): a shorter prefix would make the search
+               hash len bytes at every place of a common byte */
             if (len == 0 || at > len || stored == 0 || (uint64_t)pool_at + stored > npool ||
-                (hashed ? stored > len || stored > ICO_XB_CONTENT : stored != len)) {
+                (hashed ? stored != (len < ICO_XB_CONTENT ? len : ICO_XB_CONTENT)
+                        : stored != len)) {
                 FAIL(v, ICO_XB_BAD, "the symbols record's window is damaged");
             }
             if (++v->searches > ICO_XB_MAX_SEARCHES) {
@@ -2637,6 +2716,13 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
                     FAIL(v, ICO_XB_BAD,
                          "the symbols record's page word names no function with a "
                          "thread inside");
+                }
+                if ((uint64_t)get32(pp + 16) + 4u > m->size) {
+                    /* a damaged record: the offset is the file's, the code
+                       read this process's */
+                    FAIL(v, ICO_XB_BAD,
+                         "the symbols record's page word's ADRP lies outside the function %s",
+                         m->name);
                 }
                 np2 = adrp_page(m->now + get32(pp + 16), code32(m->now + get32(pp + 16)));
                 if (np2 == 1) {

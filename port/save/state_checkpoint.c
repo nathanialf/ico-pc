@@ -388,8 +388,10 @@ int ico_ckpt_locate(const IcoCkptInput *in, IcoCkptPlan *plan)
     {
         const IcoCkptLayout *first = NULL;
         IcoCkptPlan p0;
-        int agree = 1, n = 0;
+        int agree = 1, n = 0, dropped = 0;
+        int differ[ICO_CKPT_G_COUNT];
 
+        memset(differ, 0, sizeof differ);
         memset(&p0, 0, sizeof p0);
         for (i = -1; i < in->table_n; i++) {
             const IcoCkptLayout *c = i < 0 ? in->self : &in->table[i];
@@ -407,13 +409,21 @@ int ico_ckpt_locate(const IcoCkptInput *in, IcoCkptPlan *plan)
             if (first == NULL) {
                 first = c;
                 p0 = t;
-            } else if (!same_place(&first->g[ICO_CKPT_G_IMAGE], &c->g[ICO_CKPT_G_IMAGE]) ||
-                       !same_place(&first->g[ICO_CKPT_G_STATUS], &c->g[ICO_CKPT_G_STATUS])) {
-                agree = 0;
+            } else {
+                for (k = 0; k < ICO_CKPT_G_COUNT; k++) {
+                    differ[k] |= !same_place(&first->g[k], &c->g[k]);
+                }
             }
         }
+        agree = !differ[ICO_CKPT_G_IMAGE] && !differ[ICO_CKPT_G_STATUS];
         if (first != NULL && agree) {
+            /* the other globals only where every confirming layout puts them
+               in one place: one that disagrees is this run's (none taken) */
             for (k = 0; k < ICO_CKPT_G_COUNT; k++) {
+                if (differ[k]) {
+                    dropped++;
+                    continue;
+                }
                 plan->g[k] = p0.g[k];
                 plan->place[k] = p0.place[k];
             }
@@ -422,9 +432,9 @@ int ico_ckpt_locate(const IcoCkptInput *in, IcoCkptPlan *plan)
             plan->by = ICO_CKPT_BY_LAYOUT;
             plan->layouts = n;
             snprintf(plan->source, sizeof plan->source,
-                     "the layout of %s %s, which its bytes confirm (%d layout%s agree)",
+                     "the layout of %s %s, which its bytes confirm (%d layout%s agree%s)",
                      first == in->self ? "this version" : first->tag, first->platform, n,
-                     n == 1 ? "" : "s");
+                     n == 1 ? "" : "s", dropped ? "; some words not taken" : "");
             return 0;
         }
         if (first != NULL) {
@@ -630,6 +640,20 @@ typedef struct ReadCtx {
     int bad;
 } ReadCtx;
 
+/* a section's bound (state_checkpoint.h "What a state's sections can hold") */
+static uint64_t section_max(int i)
+{
+    switch (i) {
+    case ICO_CKPT_S_GDATA:
+    case ICO_CKPT_S_GBSS:
+    case ICO_CKPT_S_REG:
+        return ICO_CKPT_EE_RAM;
+    case ICO_CKPT_S_SYMS:
+        return ICO_XB_MAX_BYTES;
+    }
+    return 4096u;
+}
+
 static void *want_section(void *user, const IcoStateSectionInfo *s)
 {
     ReadCtx *c = (ReadCtx *)user;
@@ -639,10 +663,16 @@ static void *want_section(void *user, const IcoStateSectionInfo *s)
         if (strcmp(s->name, s_sec_names[i]) != 0 || c->st->p[i] != NULL) {
             continue;
         }
-        if (s->raw_bytes > (i == ICO_CKPT_S_CKPT ? 4096u : ICO_CKPT_SECTION_MAX)) {
+        if (s->raw_bytes > section_max(i) ||
+            ((i == ICO_CKPT_S_GDATA || i == ICO_CKPT_S_GBSS) &&
+             s->raw_bytes + c->st->n[ICO_CKPT_S_GDATA] + c->st->n[ICO_CKPT_S_GBSS] >
+                 ICO_CKPT_EE_RAM)) {
             c->bad = 1;
-            snprintf(c->st->why, sizeof c->st->why, "its %s section is %llu bytes", s->name,
-                     (unsigned long long)s->raw_bytes);
+            snprintf(c->st->why, sizeof c->st->why,
+                     "its %s section is %llu bytes, more than a state holds (at most %llu%s)",
+                     s->name, (unsigned long long)s->raw_bytes, (unsigned long long)section_max(i),
+                     i == ICO_CKPT_S_GDATA || i == ICO_CKPT_S_GBSS ? ", the game's two together"
+                                                                   : "");
             return NULL;
         }
         c->st->p[i] = (unsigned char *)malloc(s->raw_bytes != 0 ? (size_t)s->raw_bytes : 1u);
@@ -738,4 +768,15 @@ int ico_ckpt_state_block(const IcoCkptState *st, const char *name, uint64_t size
     }
     *out = st->p[ICO_CKPT_S_REG] + off;
     return 1;
+}
+
+int ico_ckpt_word_ok(int global, int32_t v)
+{
+    switch (global) {
+    case ICO_CKPT_G_SCREEN:
+        return v >= 0 && v < 5; /* screenModeAnim/screenModeItem's 5 (layout_action.c) */
+    case ICO_CKPT_G_GIRL:
+        return v == 0 || v == 1; /* (choiceItem + 2)[girlControlMode]: Players' two */
+    }
+    return 0;
 }

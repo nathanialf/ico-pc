@@ -238,8 +238,10 @@ rm -f "$apk.idsig"
 # the legacy tables in the signed APK by the names the game asks for
 # (state_legacy.c), with the repository's bytes: v0.11.9-rc5 shipped "syms"
 # for "syms.gz" (the packaging un-gzips a .gz asset)
+# a release candidate is a label ending in -rc and its number, the one rule
+# android/app/build.gradle uses for the tables it puts in (==~ /.*-rc[0-9]+/)
 legacy_rc=
-case "$label" in *-rc[0-9]*) legacy_rc=--rc ;; esac
+if [[ "$label" =~ -rc[0-9]+$ ]]; then legacy_rc=--rc; fi
 python3 -I "$wt/tools/state_legacy_table.py" apkcheck "$apk" $legacy_rc >>"$log" 2>&1 ||
     fail "tools/state_legacy_table.py apkcheck: the APK's legacy tables are not the repository's (the log names the file)"
 

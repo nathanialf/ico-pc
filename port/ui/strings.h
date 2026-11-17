@@ -980,6 +980,7 @@ typedef enum UiStrId {
     UI_STR_STATES_CKPT_ROW,
     UI_STR_STATES_CKPT_LOADED,
     UI_STR_STATES_CKPT_NONE,
+    UI_STR_STATES_PAUSE_FIRST_LOAD,
     /* Effects > Glow between frames (Original or Smooth): the label, the note, and the
        note while the row is greyed */
     UI_STR_OPT_EFFECT_GLOW_SMOOTH,

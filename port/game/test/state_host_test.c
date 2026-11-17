@@ -100,6 +100,20 @@ static void test_conditions(void)
     c.layout = 85;
     CHECK(ico_state_conditions(&c, 1, NULL) == ICO_STATE_NOT_PAUSED);
     CHECK(ico_state_conditions(&c, 0, NULL) == ICO_STATE_OK, "a load from the title");
+    /* a load continuing from a checkpoint: the pause menu or the title only */
+    CHECK(ico_state_checkpoint_may_start(&c), "a checkpoint from the title's page");
+    c.layout = 0;
+    c.paused = 0;
+    CHECK(ico_state_checkpoint_may_start(&c), "a checkpoint from the title, no page open (F9)");
+    c = ok_conds();
+    CHECK(ico_state_checkpoint_may_start(&c), "a checkpoint from the pause menu");
+    c.layout = 85;
+    CHECK(ico_state_checkpoint_may_start(&c), "a checkpoint from a page over the pause menu");
+    c.layout = 58;
+    CHECK(!ico_state_checkpoint_may_start(&c), "no checkpoint from another game layout");
+    c = ok_conds();
+    c.paused = 0;
+    CHECK(!ico_state_checkpoint_may_start(&c), "no checkpoint in active play (F9)");
 
     c = ok_conds();
     c.available = 0;
@@ -616,6 +630,70 @@ static void test_record(void)
     remove(p);
 }
 
+/* a fibers section built here: n records of the given sizes */
+static size_t fibers_blob(unsigned char *b, size_t cap, int n, const uint32_t *ctrl,
+                          const uint32_t *stack, int claim)
+{
+    size_t at = 16;
+    int i;
+
+    memset(b, 0, cap);
+    memcpy(b, &claim, sizeof claim);
+    for (i = 0; i < n; i++) {
+        IcoStateFiberRec r;
+
+        memset(&r, 0, sizeof r);
+        r.slot = (uint32_t)i;
+        r.ctrl_bytes = ctrl[i];
+        r.stack_bytes = stack[i];
+        memcpy(b + at, &r, sizeof r);
+        at += sizeof r;
+        /* the bytes as a genuine save pads them, when they fit */
+        if (ctrl[i] < cap && stack[i] < cap) {
+            at += (size_t)ICO_STATE_PAD16(ctrl[i]) + (size_t)ICO_STATE_PAD16(stack[i]);
+        }
+    }
+    return at < cap ? at : cap;
+}
+
+/* the fibers section of a damaged file: every size bounded by the section
+   (a size near 4 GB once wrapped to 0 in the padding and passed) */
+static void test_fibers(void)
+{
+    static unsigned char b[4096];
+    static IcoSchedImage img;
+    uint32_t ctrl[2] = {64, 32}, stack[2] = {100, 48};
+    size_t n;
+
+    n = fibers_blob(b, sizeof b, 2, ctrl, stack, 2);
+    CHECK(ico_state_fibers_parse(b, n, NULL, 0, &img) == 0 && img.n_fibers == 2 &&
+              img.fibers[1].ctrl_bytes == 32 && img.fibers[1].stack_bytes == 48,
+          "a genuine section: two fibers");
+    CHECK(img.fibers[0].stack == (const unsigned char *)img.fibers[0].ctrl + 64 &&
+              (const unsigned char *)img.fibers[1].stack + 48 <= b + n,
+          "the bytes inside the section");
+    CHECK(ico_state_fibers_parse(b, n - 1, NULL, 0, &img) == -1 && img.n_fibers == 0,
+          "one byte short");
+    ctrl[0] = 0xFFFFFFF1u; /* + 15 wrapped to 0 in 32 bits: no bytes then needed */
+    stack[0] = 0;
+    n = fibers_blob(b, sizeof b, 1, ctrl, stack, 1);
+    CHECK(ico_state_fibers_parse(b, n, NULL, 0, &img) == -1, "a control size of 0xFFFFFFF1");
+    ctrl[0] = 0;
+    stack[0] = 0xFFFFFFF8u;
+    n = fibers_blob(b, sizeof b, 1, ctrl, stack, 1);
+    CHECK(ico_state_fibers_parse(b, n, NULL, 0, &img) == -1, "a stack size of 0xFFFFFFF8");
+    ctrl[0] = 64;
+    stack[0] = 100;
+    n = fibers_blob(b, sizeof b, 1, ctrl, stack, ICO_SCHED_MAX_THREADS + 1);
+    CHECK(ico_state_fibers_parse(b, n, NULL, 0, &img) == -1, "a count past the scheduler's");
+    n = fibers_blob(b, sizeof b, 1, ctrl, stack, -1);
+    CHECK(ico_state_fibers_parse(b, n, NULL, 0, &img) == -1, "a negative count");
+    CHECK(ico_state_fibers_parse(b, 8, NULL, 0, &img) == -1, "no room for the count");
+    CHECK(ico_state_fibers_parse(NULL, 0, NULL, 0, &img) == -1, "no section");
+    n = fibers_blob(b, sizeof b, 1, ctrl, stack, 2);
+    CHECK(ico_state_fibers_parse(b, n, NULL, 0, &img) == -1, "a second record past the end");
+}
+
 int main(int argc, char **argv)
 {
     snprintf(base, sizeof base, "%s", argc > 1 ? argv[1] : ".");
@@ -627,5 +705,6 @@ int main(int argc, char **argv)
     test_thumbnail();
     test_pause_picture();
     test_record();
+    test_fibers();
     return ico_check_summary("state_host");
 }

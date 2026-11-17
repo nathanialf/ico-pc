@@ -767,6 +767,7 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_STATES_DELETED] = "已清除欄位 %d",
     [UI_STR_STATES_NOTE] = "狀態屬於這張光碟。之後的版本也可能讀取它。用左右鍵選擇動作。",
     [UI_STR_STATES_PAUSE_FIRST] = "請先暫停遊戲再儲存狀態",
+    [UI_STR_STATES_PAUSE_FIRST_LOAD] = "請先暫停遊戲再讀取這個狀態",
     [UI_STR_STATES_REFUSED_BUILD] = "由其他版本的遊戲儲存",
     [UI_STR_STATES_REFUSED_DISC] = "從其他光碟儲存",
     [UI_STR_STATES_REFUSED_SETTINGS] = "有一項遊戲設定不同：%s",
@@ -783,7 +784,7 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
         "這個存檔狀態是由版本 %s 建立的。版本 %s 更改了遊戲在記憶體中保存進度的方式，因此無法繼續。記憶卡的存檔仍然可以使用。",
     [UI_STR_STATES_XB_PINNED] =
         "這個存檔狀態是由版本 %s 建立的，只有該版本才能繼續。記憶卡的存檔仍然可以使用。",
-    [UI_STR_STATES_CKPT_ROW] = "從最後的中繼點讀取（由其他版本建立）",
+    [UI_STR_STATES_CKPT_ROW] = "從最後的中繼點讀取",
     [UI_STR_STATES_CKPT_LOADED] = "已從這個存檔狀態的最後中繼點繼續（由版本 %s 建立）。",
     [UI_STR_STATES_CKPT_NONE] =
         "這個存檔狀態是由版本 %s 建立的，無法從儲存的位置繼續，而且其中沒有可以繼續的中繼點。",

@@ -792,6 +792,7 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_STATES_NOTE] =
         "ステートはこのディスクのものです。後のバージョンでも読み込める場合があります。左右でアクションを選びます。",
     [UI_STR_STATES_PAUSE_FIRST] = "ステートを保存するにはゲームを一時停止してください",
+    [UI_STR_STATES_PAUSE_FIRST_LOAD] = "このステートを読み込むにはゲームを一時停止してください",
     [UI_STR_STATES_REFUSED_BUILD] = "別のバージョンのゲームで保存されています",
     [UI_STR_STATES_REFUSED_DISC] = "別のディスクで保存されています",
     [UI_STR_STATES_REFUSED_SETTINGS] = "ゲームの設定が違います：%s",
@@ -808,8 +809,7 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
         "このセーブステートはバージョン%sで作られました。バージョン%sではゲームが進行状況をメモリーに保持する方法が変更されたため、再開できません。メモリーカードのセーブデータはそのまま使えます。",
     [UI_STR_STATES_XB_PINNED] =
         "このセーブステートはバージョン%sで作られ、そのバージョンでしか再開できません。メモリーカードのセーブデータはそのまま使えます。",
-    [UI_STR_STATES_CKPT_ROW] =
-        "最後のチェックポイントから読み込みます（別のバージョンで作られたステート）",
+    [UI_STR_STATES_CKPT_ROW] = "最後のチェックポイントから読み込みます",
     [UI_STR_STATES_CKPT_LOADED] =
         "バージョン%sで作られたこのセーブステートの、最後のチェックポイントから続けました。",
     [UI_STR_STATES_CKPT_NONE] =

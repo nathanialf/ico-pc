@@ -800,6 +800,7 @@ const char *const ui_strings_es[UI_STR_COUNT] =
         [UI_STR_STATES_NOTE] =
             "Un estado pertenece a este disco. Las versiones posteriores también pueden cargarlo. Izquierda y derecha eligen la acción.",
         [UI_STR_STATES_PAUSE_FIRST] = "Pausa el juego para guardar un estado",
+        [UI_STR_STATES_PAUSE_FIRST_LOAD] = "Pausa el juego para cargar este estado",
         [UI_STR_STATES_REFUSED_BUILD] = "Guardado por otra versión del juego",
         [UI_STR_STATES_REFUSED_DISC] = "Guardado desde otro disco",
         [UI_STR_STATES_REFUSED_SETTINGS] = "Un ajuste de juego es distinto: %s",
@@ -816,8 +817,7 @@ const char *const ui_strings_es[UI_STR_COUNT] =
             "Este estado guardado se creó con la versión %s.\nLa versión %s cambió cómo el juego guarda\nsu progreso en memoria, así que no se puede\nreanudar.\nTus partidas de la memory card siguen funcionando.",
         [UI_STR_STATES_XB_PINNED] =
             "Este estado guardado se creó con la versión %s\ny solo esa versión puede reanudarlo.\nTus partidas de la memory card siguen funcionando.",
-        [UI_STR_STATES_CKPT_ROW] =
-            "Se carga desde su último punto de control (creado con otra versión)",
+        [UI_STR_STATES_CKPT_ROW] = "Se carga desde su último punto de control",
         [UI_STR_STATES_CKPT_LOADED] =
             "Se continuó desde el último punto de control de este estado,\n"
             "creado con la versión %s.",

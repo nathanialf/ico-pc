@@ -787,6 +787,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_STATES_NOTE] =
         "A state belongs to this disc. Later versions may load it too. Left and Right pick the action.",
     [UI_STR_STATES_PAUSE_FIRST] = "Pause the game to save a state",
+    [UI_STR_STATES_PAUSE_FIRST_LOAD] = "Pause the game to load this state",
     [UI_STR_STATES_REFUSED_BUILD] = "Saved by another version of the game",
     [UI_STR_STATES_REFUSED_DISC] = "Saved from another disc",
     [UI_STR_STATES_REFUSED_SETTINGS] = "A gameplay setting differs: %s",
@@ -803,7 +804,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
         "This save state was made by version %s.\nVersion %s changed how the game keeps\nits progress in memory, so it cannot be resumed.\nYour memory-card saves still work.",
     [UI_STR_STATES_XB_PINNED] =
         "This save state was made by version %s,\nand only that version can resume it.\nYour memory-card saves still work.",
-    [UI_STR_STATES_CKPT_ROW] = "Loads from its last checkpoint (made by another version)",
+    [UI_STR_STATES_CKPT_ROW] = "Loads from its last checkpoint",
     [UI_STR_STATES_CKPT_LOADED] = "Continued from the last checkpoint of this save state,\n"
                                   "which was made by version %s.",
     [UI_STR_STATES_CKPT_NONE] = "This save state was made by version %s.\n"

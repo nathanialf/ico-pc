@@ -817,6 +817,8 @@ const char *const
                 [UI_STR_STATES_NOTE] =
                     "Uno stato appartiene a questo disco. Anche le versioni successive possono caricarlo. Sinistra e destra scelgono l'azione.",
                 [UI_STR_STATES_PAUSE_FIRST] = "Metti il gioco in pausa per salvare uno stato",
+                [UI_STR_STATES_PAUSE_FIRST_LOAD] =
+                    "Metti il gioco in pausa per caricare questo stato",
                 [UI_STR_STATES_REFUSED_BUILD] = "Salvato da un'altra versione del gioco",
                 [UI_STR_STATES_REFUSED_DISC] = "Salvato da un altro disco",
                 [UI_STR_STATES_REFUSED_SETTINGS] = "Un'impostazione di gioco è diversa: %s",
@@ -834,8 +836,7 @@ const char *const
                     "Questo stato è stato creato dalla versione %s.\nLa versione %s ha cambiato il modo in cui il gioco\ntiene i suoi progressi in memoria, quindi non può\nessere ripreso.\nI salvataggi sulla memory card funzionano ancora.",
                 [UI_STR_STATES_XB_PINNED] =
                     "Questo stato è stato creato dalla versione %s\ne solo quella versione può riprenderlo.\nI salvataggi sulla memory card funzionano ancora.",
-                [UI_STR_STATES_CKPT_ROW] =
-                    "Si carica dall'ultimo checkpoint (creato da un'altra versione)",
+                [UI_STR_STATES_CKPT_ROW] = "Si carica dall'ultimo checkpoint",
                 [UI_STR_STATES_CKPT_LOADED] = "Ripreso dall'ultimo checkpoint di questo stato,\n"
                                               "creato dalla versione %s.",
                 [UI_STR_STATES_CKPT_NONE] =

@@ -26,7 +26,9 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "achievements.h" /* ico_ach_slot_loaded */
 #include "difficulty.h"
+#include "ico_gamestate.h" /* the run */
 #include "state_registry.h"
 #include "trace_host.h" /* ico_host_main_ticks, ico_host_set_main_tick_hook */
 #include "../input/input_record.h"
@@ -111,11 +113,37 @@ static int put_difficulty(void)
         if (strcmp(e->name, "difficulty.record") == 0 && e->n == s_apply.record_n) {
             memcpy(e->p, s_apply.record, e->n);
             ico_difficulty_state_loaded(0, s_apply.keys);
+            ico_difficulty_checkpoint_loaded();
             return 1;
         }
     }
     ico_difficulty_state_loaded(1, s_apply.keys);
+    ico_difficulty_checkpoint_loaded();
     return 0;
+}
+
+/* The journey's bookkeeping a card load does in la_load_processing's
+   step 10, for a load of no card file:
+   - the achievement run: Continue ends a fresh run (gamestate.c ends it
+     when the layout enters the load), so an ending reached from a spliced
+     journey cannot count as a run with no capture or game over: the same;
+     ico_ach_slot_loaded's card-slot run record: none (no card slot), so the
+     run's next save starts no slot's record from this one (slot -1);
+   - ico_mirror_slot_loaded: the mirror flag is kept per card file and
+     checksum: no file, this run's kept;
+   - loadSerial (the card file the save screen offers first): not a card
+     file, left as the game leaves it at a New Game;
+   - ico_gs_rebaseline: not run, as Continue does not (the exact state load
+     needs it because it replaces all of the memory at once; here the game's
+     own load runs and the signals follow it as they follow a card load). */
+static void journey_loaded(void)
+{
+    IcoGsRun run;
+
+    ico_gs_run_get(&run);
+    run.fresh = 0;
+    ico_gs_run_set(&run);
+    (void)ico_ach_slot_loaded(-1, 0);
 }
 
 static void tick(void)
@@ -149,6 +177,7 @@ static void tick(void)
         memcpy(IosMcPreviewInfo, s_apply.preview, sizeof s_apply.preview);
     }
     rec = put_difficulty();
+    journey_loaded();
     ico_input_record_state_loaded(s_apply.slot, ico_host_main_ticks());
     fprintf(stderr,
             "state: slot %d continues from its checkpoint at Main tick %u: the game's own load "

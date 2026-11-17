@@ -149,6 +149,11 @@ static void test_globals(void)
     CHECK(ico_ckpt_stamp("ps3") == NULL);
     CHECK(ico_ckpt_disc_2001("ntsc") && !ico_ckpt_disc_2001("pal"));
     CHECK(ico_ckpt_disc_last_stage("pal") == 105 && ico_ckpt_disc_last_stage("jun26") == 102);
+    /* the option words the game indexes its arrays with */
+    CHECK(ico_ckpt_word_ok(ICO_CKPT_G_SCREEN, 0) && ico_ckpt_word_ok(ICO_CKPT_G_SCREEN, 4));
+    CHECK(!ico_ckpt_word_ok(ICO_CKPT_G_SCREEN, 5) && !ico_ckpt_word_ok(ICO_CKPT_G_SCREEN, -1));
+    CHECK(ico_ckpt_word_ok(ICO_CKPT_G_GIRL, 1) && !ico_ckpt_word_ok(ICO_CKPT_G_GIRL, 2));
+    CHECK(!ico_ckpt_word_ok(ICO_CKPT_G_IMAGE, 0));
 }
 
 static void test_table(void)
@@ -596,6 +601,29 @@ static void test_states(const char *dir)
     in.stage_no = 15;
     in.self = &self;
     CHECK(ico_ckpt_locate(&in, &plan) == 0 && plan.by == ICO_CKPT_BY_SEARCH);
+    /* two layouts its bytes confirm that agree on the image and
+       systemStatus but put the screen word in two places: the word is not
+       taken (this run's), the rest is */
+    {
+        IcoCkptLayout two[2];
+
+        make_layout(&two[0], "one", "v0.0.1-0-gone", "test-x64");
+        make_layout(&two[1], "two", "v0.0.2-0-gtwo", "test-x64");
+        two[1].g[ICO_CKPT_G_SCREEN].off += 4;
+        ico_ckpt_state_input(&st, NULL, &in);
+        in.table = two;
+        in.table_n = 2;
+        CHECK(ico_ckpt_locate(&in, &plan) == 0, "%s", plan.why);
+        CHECK(plan.by == ICO_CKPT_BY_LAYOUT && plan.layouts == 2 && plan.checkpoint == 1,
+              "by %d layouts %d (%s)", plan.by, plan.layouts, plan.source);
+        CHECK(plan.g[ICO_CKPT_G_SCREEN] == NULL &&
+                  plan.place[ICO_CKPT_G_SCREEN].range == ICO_CKPT_RANGE_NONE,
+              "the screen word the layouts place apart is not taken");
+        CHECK(plan.g[ICO_CKPT_G_PREVIEW] == st.p[ICO_CKPT_S_GBSS] + PREVIEW_AT &&
+                  plan.g[ICO_CKPT_G_IMAGE] == st.p[ICO_CKPT_S_GBSS] + IMG_AT,
+              "the words they agree on are");
+        CHECK(strstr(plan.source, "some words not taken") != NULL, "%s", plan.source);
+    }
     ico_ckpt_state_free(&st);
 
     /* format 2 (v0.10.0 - v0.11.8): the table's entry of its commit, its
@@ -685,6 +713,42 @@ static void test_states(const char *dir)
             free(gd);
             free(gb);
         }
+    }
+    /* a damaged file whose game sections hold more than the PS2's main
+       memory (each under the bound, the two together over it): refused by
+       their sizes before anything is allocated for them */
+    {
+        const size_t gd_n = 1u << 20, gb_n = (size_t)ICO_CKPT_EE_RAM - gd_n + 16u;
+        unsigned char *gb = (unsigned char *)calloc(1, gb_n);
+        IcoStateHeader *h = (IcoStateHeader *)calloc(1, sizeof *h);
+        IcoStateSection sec[3];
+        IcoStateWriteResult res;
+
+        if (gb != NULL && h != NULL) {
+            ico_state_header_init(h, "v0.9.6-1-gtest");
+            snprintf(h->platform, sizeof h->platform, "test-x64");
+            snprintf(h->disc, sizeof h->disc, "pal");
+            memset(sec, 0, sizeof sec);
+            sec[0].name = "gdata";
+            sec[0].data = gb;
+            sec[0].bytes = gd_n;
+            sec[1].name = "gbss";
+            sec[1].data = gb;
+            sec[1].bytes = gb_n;
+            sec[2].name = "reg";
+            sec[2].data = s_reg;
+            sec[2].bytes = sizeof s_reg;
+            snprintf(path, sizeof path, "%s/ckpt_big.ics", dir);
+            CHECK(ico_state_file_write(path, h, sec, 3) == ICO_STATE_OK &&
+                  ico_state_file_flush(&res) == 1 && res.result == ICO_STATE_OK);
+            CHECK(ico_ckpt_state_read(path, &st) == -1 && strstr(st.why, "gbss") != NULL &&
+                      strstr(st.why, "more than a state holds") != NULL,
+                  "the game's two sections over 32 MB: %s", st.why);
+            ico_ckpt_state_free(&st);
+            remove(path);
+        }
+        free(gb);
+        free(h);
     }
     /* no file */
     snprintf(path, sizeof path, "%s/ckpt_none.ics", dir);
