@@ -1320,6 +1320,88 @@ globals; it is not a proof that the later build means the same by the state:
   list, the SIF server table and the other host callbacks set up at start-up, files, the
   renderer's handles (the [registry](#the-registry) lists them).
 
+### The carry-over guard
+
+Issue 217: every Android state with a format 2 record was pinned to the build that saved it, and
+no test saw it: the unit tests use synthetic images, and nothing looked at the library that ships.
+`tools/state_carry_check.py` looks at it. It takes a shipped program and its shipped symbol file
+(Android: the unstripped `libmain.so` and `libmain.syms.gz`; Windows: `ico_pc_x64.exe` and its map;
+Linux: `ico_pc` and `ico_pc.map`), lays the program out as its loader would (its loadable segments
+or sections, its relocations applied) and asks the product's own save code which of the addresses
+a state could hold the save can name:
+
+| class | the words | a state holds them |
+|---|---|---|
+| `init` | every initialised pointer in the game's data range (the start-up snapshot) | always: one unnamed pins every state (exit 1) |
+| `table` | every other relocated pointer in the image (constant tables, `.data.rel.ro`, the port's) | when the game copies one into its memory |
+| `code` | every address the code computes (arm64 ADRP+ADD and ADR, x86-64 RIP-relative operands) | string literals and tables the code hands out |
+
+The rules are run, not copied: `port/platform/state_carry_probe.c`, built from the same
+`state_xbuild.c`, `state_syms.c` and `code_hash.c` the game links (by CMake as
+`state_carry_probe`, or by the script with the host compiler where there is no host build), maps the
+image at a 64 KB aligned address, reads the symbol file with `ico_symtab_parse` and hands each
+class's words to `ico_xb_begin`, `ico_xb_word` and `ico_xb_finish` in batches of
+`ICO_XB_MAX_POINTS / 2`; a batch with unnamed words is halved until each stands alone. Whatever
+`ico_xb_finish` counts as unnamed is unnamed, so a change to the rules changes the guard's answer
+with it. What the script supplies is the loader's view the game reads at run time: the image, code
+and read-only ranges of `ico_state_image_range` (`state_check.c`; the save narrows the code range
+itself with `ico_xb_image` from the symbol file's code sections, and the probe prints the range it
+got and where from), the base the save's number rule judges by (`IcoXbProc.judge_lo`: a PE's own
+0x140000000, where a read-only word that is no text is kept as a number; a high address for an ELF,
+as the loader places Android's library), the game data ranges of
+`game_data_range.c` (ELF sections or `__start_`/`__stop_` symbols; on Windows the map's
+`.data$ico_a`, `.data$ico_n` and `.data$ico_z` brackets) and the start-up words
+`snap_game_data` copies. The test `state_carry_image` holds that mirror to the real function on the
+probe's own executable.
+
+The relocations are read from the dynamic section: RELA, Android's packed `DT_ANDROID_RELA`
+("APS2", which the NDK's clang asks lld for on Android targets) and `DT_RELR` / `DT_ANDROID_RELR`
+(and a PE's base relocations). A game data range in which no initialised pointer is found cannot be
+judged (status 2): its relocations were not read, and a pass on nothing would be vacuous.
+
+Exit status: 0 every `init` word is named; 1 an `init` word is not (each listed); 2 the program or
+symbol file could not be judged; 3 the program's states never carry over by design (an image fixed
+below 4 GB: the Linux x86-64 program, `ICO_XB_LOW_IMAGE`). A report reads:
+
+```
+  init     529 targets:    315 named,    214 unnamed
+      (275 words of the game data hold them)
+      unnamed 0x20619d in .rodata+0x65f6d, no symbol (0x62a1d past the end of rd__enumerate_reachable_date.kBlends) "On" (3 bytes); held by debugOffOnName+0x8, debugShadowName+0x0
+```
+
+that is: the target's link address, its section and offset, the symbol holding it (or how far past
+the nearest one it lies), its text when it is one, the save's reason (`ico_xb_why_text`, from the
+probe; the example is the frozen copy's, which gives none) and the game variables holding it. On
+Windows the `table` and `code` classes count the read-only words that are no text among the
+unnamed, with the reason "kept as one": the product's rule, not a fault of the program. The `table`
+and `code` classes list their first `--list` (64) unnamed targets and count the rest.
+
+Where it runs: `tools/package_android.sh` (on the unstripped library and the table it is about to
+put in the APK; the report is staged as `dist/stage/android/carry.txt`) and `tools/package_win.sh`
+(on the staged program and map) fail the package on any status but 0; `tools/package_linux.sh`
+accepts 0 and 3. CI's `linux` job judges the win-x64 program it cross-builds and the `android` job
+the debug APK's library (with the table `write-syms` writes: the same lines
+`package_android.sh` writes, its `section` lines and file column included, checked byte for byte
+on a shipped library and on the Linux program). macOS and iOS ship no symbol file inside the bundle, so their states
+carry no table (`ICO_XB_TABLE`) and load only into their own build; the guard does not run there.
+
+`--rules format2` judges with a frozen Python copy of the rules the releases that write format 2
+records applied, to say what an old release's states could do. On the shipped Android libraries
+it reports issue 217's diagnosis exactly: 214 unnamed targets held by 275 words of the game data,
+all C strings of `.rodata` inside the one R+E segment. On the shipped Windows program it reports
+none (its `.rdata` is a read-only section of its own).
+
+The `table` and `code` classes of an Android library list, besides texts, the PLT stubs' slots in
+`.got.plt` (an address only the stub computes into a scratch register, never handed to the game)
+and anonymous `.data.rel.ro` objects the port's data descriptors (`rows_*`, `record_*` of
+`table_desc.c`) point at: writable data no unique symbol names, which a state would pin if the
+game's memory ever held such a pointer.
+
+What the guard cannot see: addresses made only at run time (heap blocks, a pointer computed by
+arithmetic, a text a thread holds in a register: issue 217's run-time texts are `code` words when
+the code computes them, not when they come from a table it walks) and whether a given state
+holds a `table` or `code` word.
+
 ### Saving and loading
 
 `port/game/state_host.c` (the program, both builds; `port/game/state_rules.c` holds the

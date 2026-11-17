@@ -12,7 +12,9 @@
 # to a later version (port/platform/state_syms.h).
 # The unstripped libmain.so, the link map (ico_pc.map) and libmain.syms.gz
 # are staged under dist/stage/android/ with VERSION.txt, for turning crash
-# offsets into function names (llvm-symbolizer). Quiet; the log is
+# offsets into function names (llvm-symbolizer), and carry.txt, the save
+# states' carry-over guard's report (tools/state_carry_check.py: the package
+# fails when a state of this library could not carry over to a later one). Quiet; the log is
 # build-host/pkg-android-<label>.log. Safe to re-run. Builds only: it never
 # runs the game.
 #
@@ -180,6 +182,14 @@ grep -q '^section [0-9a-f]* [0-9a-f]* A[A-Z]* \.rodata$' "$symdir/libmain.syms" 
     fail "libmain.syms lacks the .rodata section line"
 gzip -9 -n -c "$symdir/libmain.syms" > "$symdir/libmain.syms.gz"
 echo "package_android: libmain.syms: $(wc -l < "$symdir/libmain.syms") lines ($(grep -c '^section ' "$symdir/libmain.syms") sections, $(awk 'NF == 5 && $1 != "section"' "$symdir/libmain.syms" | wc -l) data symbols with their file), $(wc -c < "$symdir/libmain.syms.gz") bytes gzipped" >>"$log"
+# save states carry over (issue 217): every initialised pointer of the game's
+# data in this library must be one the save can name with this symbol table,
+# or every state the package saves is pinned to it. The guard runs the
+# tree's own save code (port/platform/state_xbuild.c, built with the host
+# compiler) over the library as the loader maps it (tools/state_carry_check.py;
+# docs/port/PLATFORM.md "The carry-over guard"); its report is staged.
+run python3 -I "$wt/tools/state_carry_check.py" check --binary "$so" --syms "$symdir/libmain.syms.gz" \
+    --workdir "$symdir/carry" --cc "${CC:-cc}" --report "$symdir/carry.txt"
 withsyms="$root/build-host/tmp/android-$label-syms.apk"
 cp "$unsigned" "$withsyms"
 run python3 - "$withsyms" "$symdir/libmain.syms.gz" <<'PY'
@@ -223,8 +233,9 @@ echo "package_android: signer: $certs" >>"$log"
 commit8="${commit:0:8}"
 date_str="$(date +%Y-%m-%d)"
 mkdir -p "$stage"
-rm -f "$stage"/libmain.so "$stage"/ico_pc.map "$stage"/libmain.syms.gz "$stage"/VERSION.txt
+rm -f "$stage"/libmain.so "$stage"/ico_pc.map "$stage"/libmain.syms.gz "$stage"/VERSION.txt "$stage"/carry.txt
 cp "$so" "$stage/libmain.so"
+cp "$symdir/carry.txt" "$stage/carry.txt"
 cp "$map" "$stage/ico_pc.map"
 cp "$symdir/libmain.syms.gz" "$stage/libmain.syms.gz"
 printf 'ico-pc %s\nbuilt %s\ncommit %s\n' "$label" "$date_str" "$commit" > "$stage/VERSION.txt"

@@ -189,6 +189,15 @@ jobs:
           # through WARP, with SDL3.dll (their only non-system import)
           tools/ci_d3d11_warp.sh stage build-host/win-x64 build-host/win-x64-warp
 
+      # save states carry over (issue 217): the guard judges the program the
+      # Windows package ships, with its link map, by the tree's own save code
+      # (tools/state_carry_check.py builds port/platform/state_carry_probe.c
+      # with the host gcc; docs/port/PLATFORM.md "The carry-over guard")
+      - name: Save states of the win-x64 program carry over
+        run: |
+          python3 -I tools/state_carry_check.py check --binary build-host/win-x64/ico_pc.exe \
+            --syms build-host/win-x64/ico_pc.map --workdir build-host/state-carry-win --cc gcc
+
       - name: Upload the win-x64 test programs (for the `windows` job)
         uses: actions/upload-artifact@v4
         with:
@@ -867,6 +876,22 @@ jobs:
 
       - name: Build the debug APK
         run: cd android && ./gradlew --no-daemon assembleDebug -PicoLabel=ci
+
+      # save states carry over (issue 217): the unstripped libmain.so with the
+      # symbol table tools/package_android.sh would ship for it (the tool's
+      # write-syms writes the same lines; checked byte for byte against
+      # v0.11.8-rc4's libmain.syms), judged by the tree's own save code built
+      # with the host gcc (docs/port/PLATFORM.md "The carry-over guard");
+      # every Android state from v0.10.0 to v0.11.8 was pinned
+      - name: Save states of the Android library carry over
+        run: |
+          so=$(ls android/app/build/intermediates/cxx/*/*/obj/arm64-v8a/libmain.so | head -n 1)
+          mkdir -p build-host/state-carry-android
+          python3 -I tools/state_carry_check.py write-syms --binary "$so" \
+            --out build-host/state-carry-android/libmain.syms
+          python3 -I tools/state_carry_check.py check --binary "$so" \
+            --syms build-host/state-carry-android/libmain.syms \
+            --workdir build-host/state-carry-android --cc gcc
 
       # the game's semantics options (cmake/IcoFlags.cmake) reach the NDK
       # clang, no game object holds a fused multiply-add (arm64 has them),

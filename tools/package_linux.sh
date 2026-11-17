@@ -147,6 +147,18 @@ chmod 755 "$stage/tools/mc_import"
 # (port/platform/symmap.h)
 [[ -f "$b/ico_pc.map" ]] || fail "$preset did not produce ico_pc.map"
 cp "$b/ico_pc.map" "$stage/ico_pc.map"
+# save states carry over (issue 217): the guard's verdict on the staged
+# program (tools/state_carry_check.py; docs/port/PLATFORM.md "The carry-over
+# guard"). The Linux program is linked at a fixed address below 4 GB, where
+# a state never carries over by design (status 3, logged); a program that
+# could carry its states fails the package when one of its game data's
+# initialised pointers has no name (status 1), as do the other packages.
+set +e
+python3 -I "$wt/tools/state_carry_check.py" check --binary "$stage/ico_pc" --syms "$stage/ico_pc.map" \
+    --workdir "$root/build-host/tmp/linux-$label-carry" --cc "${CC:-cc}" >>"$log" 2>&1
+carry=$?
+set -e
+[[ $carry -eq 0 || $carry -eq 3 ]] || fail "tools/state_carry_check.py: status $carry"
 sdl="$root/tools/toolchain/deps/sdl3/linux-$arch/lib"
 cp -L "$sdl/libSDL3.so.0" "$stage/libSDL3.so.0"
 chmod 755 "$stage/libSDL3.so.0"
