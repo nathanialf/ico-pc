@@ -841,6 +841,25 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   keys named for the log; a key only the state lists that this build retired (a difficulty row)
   passed over by the other-build check, refused without the retired-key function, a listed key
   that differs still named (`state_port`).
+- `state_carry_xbuild_test.c`: save states across two real links of one program (`state_carry.cmake`,
+  [PLATFORM.md](PLATFORM.md#the-carry-over-guard)): A linked with its read-only data in a segment of
+  its own, B with more code and texts ahead of A's and its read-only data inside the executable
+  segment (lld `--no-rosegment`, else GNU ld `-z noseparate-code`), each reading its own link map;
+  a game table of initialised pointers (two short texts, a 60-byte text, an EUC-JP text, a pointer
+  into a constant table, a function) and a block of run-time words (a short text, a 46-byte and a
+  36-byte EUC-JP text no table holds, the constant table, a function, the game's data, a port
+  variable, the block itself, a copied start-up value) saved by one build through `ico_xb_finish`
+  and loaded by the other through `ico_xb_check` and `ico_state_reloc_word`: all 15 words become the
+  loading build's own addresses, both ways, each program's layout line checked
+  (`state_carry_xbuild`, driven by `tools/state_carry_check.py xbuild`).
+- `state_carry_fixture.c`: the program `tools/state_carry_check.py selftest` compiles and links in
+  each layout (gcc: `-z separate-code` and `-z noseparate-code`; the toolchain's clang and lld for
+  arm64 Android and x86-64 Linux, `--rosegment` and `--no-rosegment`; the toolchain's mingw-w64 gcc
+  for a Windows program at 0x140000000): its 7 game-table pointers to 6 targets all named with the
+  exact symbol file, and exactly one unnamed (the function the negative symbol file leaves between
+  two units) with the other; each layout checked as made (`state_carry_check`). `state_carry_image`
+  compares the tool's reading of `state_carry_probe`'s own file with that program's
+  `ico_state_image_range`.
 - `state_reloc_test.c`: the scan and the self-checks over the game's real allocator
   (`ico2/fumi/ios/memory.c` built with the game's flags): words at each range's start, middle and end
   move by their own delta and nothing else does (near misses, 0, all ones, floats, doubles, EE word

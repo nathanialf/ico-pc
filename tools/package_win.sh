@@ -90,6 +90,14 @@ cp "$b/ico_pc.exe" "$d/ico_pc_$a.exe"
 # report names its functions from it on the player's machine
 # (port/platform/symmap.h; the name is the program's with .map)
 cp "$b/ico_pc.map" "$d/ico_pc_$a.map"
+# save states carry over (issue 217): every initialised pointer of the game's
+# data in the program must be one the save can name with this map, or a
+# state carried to a later version keeps a stale address (Windows' fixed
+# base keeps such words as numbers). The tree's own save code judges the
+# staged program (tools/state_carry_check.py, built with the host compiler;
+# docs/port/PLATFORM.md "The carry-over guard"); the report goes to the log.
+run python3 -I "$wt/tools/state_carry_check.py" check --binary "$d/ico_pc_$a.exe" --syms "$d/ico_pc_$a.map" \
+    --workdir "$root/build-host/tmp/win-$label-carry" --cc "${CC:-cc}"
 cp "$b/SDL3.dll" "$d/SDL3.dll"
 # the save importer, in its own folder with the SDL3.dll it needs beside it
 rm -rf "$d/tools"; mkdir -p "$d/tools"

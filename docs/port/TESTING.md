@@ -884,6 +884,26 @@ bits are a denormal float a driver may flush; issues 163/164,
 read through `float4` loads give 84 findings, the current ones none. `python3 -I tools/check_spirv.py --sizes <build>/shaders` runs it by
 hand; on single files (`check_spirv.py a.spv b.spv`) it skips the variants gate.
 
+### The save states' carry-over guard
+
+`tools/state_carry_check.py check` judges a shipped program and its symbol file with the tree's own
+save code ([PLATFORM.md](PLATFORM.md#the-carry-over-guard): what it checks, the classes, the exit
+statuses, where the packages and CI run it). By hand, on a staged Android library:
+
+```
+python3 -I tools/state_carry_check.py check --binary dist/stage/android/libmain.so \
+    --syms dist/stage/android/libmain.syms.gz --workdir build-host/tmp/carry \
+    [--probe build-host/linux-x64/port/platform/state_carry_probe | --cc gcc]
+```
+
+The last line of its report is the verdict (`CARRIES`, `PINNED`, `NEVER` or `UNJUDGED`); above it
+each class's count and its unnamed targets. A `PINNED` verdict lists every unnamed initialised
+pointer: name it in the save's rules (`state_xbuild.c`), or move the pointer out of the game's
+data. Its tests: `state_carry_check` (the self-test over `state_carry_fixture.c` in every layout
+the host's compilers make), `state_carry_image` (the loader mirror against
+`ico_state_image_range`) and `state_carry_xbuild` (two real links of one program carrying a state
+both ways); [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md#portplatformtest) says what each holds.
+
 ## Which tests a change needs
 
 - A new Options row: `ctest -L ui`. `settings` builds every page and compares its rows with fixed

@@ -888,8 +888,12 @@ screen) and `zipalign -c -P 16 -v 4`. Before the alignment it adds
 `assets/libmain.syms.gz` to the APK, stored: `llvm-nm -n --defined-only` of the unstripped
 `libmain.so`, its code symbols (`T`, `t`, `W`, `w`), gzip-compressed, from which a crash or
 watchdog report names its functions on the phone
-([PLATFORM.md](port/PLATFORM_DIAGNOSTICS.md#the-symbol-lines)); the signed APK is checked to hold it stored. The
-unstripped `libmain.so`, `ico_pc.map`, `libmain.syms.gz` and `VERSION.txt` are left in
+([PLATFORM.md](port/PLATFORM_DIAGNOSTICS.md#the-symbol-lines)); the signed APK is checked to hold it stored. Before
+the APK takes the table, `tools/state_carry_check.py` judges the library with it and the package
+fails unless every initialised pointer of the game's data is one a save state can name
+([PLATFORM.md](port/PLATFORM.md#the-carry-over-guard); `package_win.sh` runs it on the staged
+program and map, `package_linux.sh` logs it). The unstripped `libmain.so`, `ico_pc.map`,
+`libmain.syms.gz`, `VERSION.txt` and the guard's report `carry.txt` are left in
 `dist/stage/android/`.
 
 The signing key is never in the repository. The script reads it from

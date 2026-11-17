@@ -783,3 +783,7 @@ cmake_language(DEFER DIRECTORY "${CMAKE_SOURCE_DIR}" CALL _ico_backend_switch_te
 
 # what slow pictures and steps are judged against (slow_judge.c, issue 179)
 include(slow_judge.cmake)
+
+# the save states' carry-over guard: state_carry_probe and its tests
+# (state_carry_check, state_carry_image, state_carry_xbuild; issue 217)
+include(state_carry.cmake)

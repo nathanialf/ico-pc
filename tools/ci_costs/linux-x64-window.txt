@@ -1100,6 +1100,9 @@ spu2 0.26
 spu2_render_crc 12.09
 stall_coincide 0.01
 startup_retry 0.01
+state_carry_check 15.00  # estimate: unmeasured, assumed (STATEGUARD2 could not build or run it)
+state_carry_image 0.20  # estimate: unmeasured, assumed (STATEGUARD2 could not build or run it)
+state_carry_xbuild 1.00  # estimate: unmeasured, assumed (STATEGUARD2 could not build or run it)
 state_fiber 0.01
 state_fiber_guard 0.11
 state_format 0.08
