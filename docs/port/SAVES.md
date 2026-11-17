@@ -459,6 +459,14 @@ checkpoint's stage 46, `systemStatus[3]` 1), and the content search finds the sa
 through the state's block list, or the one in force) stay refused by rule; so does the same build's
 state with other settings (the box names the setting: with it put back the state resumes exactly),
 and the moment's conditions (a stage change, the card or the disc busy, a movie, another mode).
+Another build's state whose restore leaves a word into the old program untranslated in live
+memory (anywhere but a fiber's dead frames, [PLATFORM.md](PLATFORM.md#across-versions) **The
+record**) fails its self-check the same way: the restore is rolled back and Load continues from
+its last checkpoint, the exact path's line naming the first such word's place and its offset in
+the saving build's image. The listing's verdict cannot know this in advance: it does not run the
+restore (`vd_compute` judges the file), so such a row reads as an exact resume and the load's own
+fallback takes the checkpoint. Words left in dead frames are expected in nearly every state of
+another build and never refuse it.
 
 **Where the checkpoint is** (`port/save/state_checkpoint.h`, header comment). The state's `gdata`
 and `gbss` sections hold `gameSysMainSaveBuff` (25596 bytes), `systemStatus` (word 3: a checkpoint

@@ -1268,7 +1268,28 @@ hash; of the Linux program's 10,239, 1,904 and 9,884 (the game's own functions: 
 8-byte-aligned word of the arena, the game's data and bss, the SCAN blocks, the pobj block, the
 scheduler's tables and each fiber's control block and stack whose value lies in the image. A word
 below a fiber's saved stack pointer less 128 bytes (a dead frame) is soft: translated when it can
-be, left otherwise. Each distinct word is classed:
+be, left otherwise. The split point is one function, `ico_state_stack_dead_bytes`
+(`port/platform/state_reloc.h`, `ICO_STATE_RED_ZONE` 128): `xb_scan_stack` splits the copied stack
+with it at a save, and `ico_fiber_slot_restore` splits the restored stack with it at a load, so the
+part the save calls dead is exactly the part the load counts as dead. A fiber's control page and
+saved registers and its stack from the stack pointer less 128 bytes up are live. At a load of
+another build's state each MODULE word without a translation is counted by its place
+(`IcoStateMiss`; the walkers name their region before its words: the scheduler's table in
+`sched.c`, the control page, the saved registers and the stack in `fiber.c`, the arena, the game's
+data and bss, each SCAN block by its name and the model tables in `scan_all`): one in a dead frame
+is left as it was by design; one anywhere else is live, a stale pointer the resumed game could
+follow, which only a save and a load that walk different regions or a hole in the rules could
+leave. A live one makes the load fail its self-check before anything commits: the restore is
+rolled back (`roll_back`, the game goes on as before) and the state continues from its checkpoint
+(`ICO_STATE_SELF_CHECK` through `load_refused`, [SAVES.md](SAVES.md#loading-a-state-from-its-checkpoint)),
+logged `state: slot N from version <commit>: L program words in live memory had no translation,
+the first: <place> holds 0x.. (offset 0x.. in the saving build's image) (and D in dead stack
+frames): not resumed exactly, the game went on as before (backup restored)`, where the place is
+`the arena at offset 0x..` (or the game's data, the game's bss, a block's name, the model tables,
+the scheduler's table), `fiber slot N's saved registers at offset 0x..`, `fiber slot N's control
+page at offset 0x..` or `fiber slot N's stack, B bytes below (above) its saved stack pointer,`. A
+state of this build carries no translation (`rel.xlate` NULL): nothing is counted and its load is
+unchanged. Each distinct word is classed:
 
 | the word points | recorded as | a later build needs |
 | --- | --- | --- |
@@ -1529,8 +1550,9 @@ the spans (old `[lo, hi]` to new start: a unit `[start, start + size - 1]`, a va
 the two game ranges with their end included, an overlap cut so the later start wins) and the
 points (exact words), and the load runs as for the same build with `rel.xlate` set: the reg and
 audio sections unpacked by the blocks' saved offsets, the conservative scan always on. A MODULE
-word without a translation is left as it was and counted (a dead frame's word into a unit this
-build lacks, a word nothing names). A size the sections check then refuses (the scheduler's table, a fiber slot) is
+word without a translation is left as it was and counted by its place (a dead frame's word into a
+unit this build lacks, a word nothing names); one outside the dead frames refuses the exact resume
+(above, **The record**). A size the sections check then refuses (the scheduler's table, a fiber slot) is
 another build's change, not damage: refused as `ICO_STATE_OTHER_BUILD`. The self-checks still run
 and the backup still comes back on a failure. The listing makes the same check for every slot of
 another build, so a slot that would translate shows as loadable.
@@ -1816,7 +1838,7 @@ the game lists the reads of unset locals the compiler sees (`camera-ico2.c`'s mo
 | `state: slot N saved: word I of X named by nothing: 0x.., <reason>; section <name\|none named>, <symbol\|no symbol>+0x..; found in <the block B\|the arena\|the game's data\|the game's bss\|the model tables\|the scheduler's table\|fiber slot S's control page\|fiber slot S's stack\|a place not recorded> at 0x..` | after a `loads only into this build` line for words nothing names: the first 16 |
 | `state: slot N refused: word I of X named by nothing: ...` (the same words) | a load refused for words nothing names, from a version 3 state's list, before the `refused` line |
 | `state: symbols: N functions, M data symbols, K game data items (layout <hash>) from <file> in T ms, S KB; the code 0x..-0x.. from <its code sections\|the loader's segments (it names no code section)> (C sections)`, or `state: symbols: none (<file>: <why>); a state saved here loads only into this build, and no other build's state loads here` | once, at the first save, load or listing that needs the table |
-| `state: slot N was saved by version <v>, this is <v>: everything it points into is unchanged here, so it is translated (U functions, D data symbols, K start-up values and texts, S spans, P points; L dead-frame words without one; X words naming nothing kept as numbers, first 0x..)` and, after the `loaded` line, `state: slot N from version <commit>: M program words had no translation and were left as they were (first 0x..)` | a load of another build's state |
+| `state: slot N was saved by version <v>, this is <v>: everything it points into is unchanged here, so it is translated (U functions, D data symbols, K start-up values and texts, S spans, P points; L dead-frame words without one; X words naming nothing kept as numbers, first 0x..)` and, after the `loaded` line, `state: slot N from version <commit>: M program words in dead stack frames had no translation and were left as they were (first 0x..); 0 in live memory` | a load of another build's state |
 | `state: slot N (saved by <commit>) loads here`, or `... cannot be loaded here: <v> -> <v>: <blocker>` | each listing, per slot of another build |
 | `state: slot N cannot be moved into this run exactly: the <program's image\|arena\|fiber pool> it was saved with (0x..-0x..) lies elsewhere now (+0x..) and its addresses' upper half 0x.. is below 0x10, where the game's own pairs of numbers read as addresses in it (W words of the saved arena lie in it; which of them are addresses cannot be told), so nothing is moved and it continues from its checkpoint` | a load refused before its restore ([Relocation](#relocation)); the checkpoint's line follows |
 | `state: slot N from version V: K values in its data lie inside that version's code at no function's start, numbers next to a small integer rather than addresses (first 0x.., last 0x..): kept as they are`, or `state: slot N: <why>: it continues from its checkpoint` | a load of another build's state from an image below 0x10 (Windows; [Across versions](#across-versions)) |

@@ -507,7 +507,7 @@ static uintptr_t ctx_sp(const _mco_ctxbuf *c)
 static void scan_word(void **p, const IcoStateReloc *r)
 {
     uint64_t w = (uint64_t)(uintptr_t)*p;
-    if (ico_state_reloc_word(r, &w)) {
+    if (ico_state_reloc_word_at(r, &w, (uint64_t)(uintptr_t)p)) {
         *p = (void *)(uintptr_t)w;
     }
 }
@@ -645,7 +645,7 @@ int ico_fiber_slot_save(int slot, IcoFiberImage *out)
     }
     /* from the stack pointer less the System V red zone, and below it down
        to the deepest word the stack ever held (lowest_used) */
-    from = sp - lo >= 128 ? sp - 128 : lo;
+    from = sp - lo >= ICO_STATE_RED_ZONE ? sp - ICO_STATE_RED_ZONE : lo;
     from = lowest_used(lo, from);
     from &= ~(uintptr_t)15;
     out->slot_base = (uint64_t)s;
@@ -702,6 +702,8 @@ int ico_fiber_slot_restore(int slot, const IcoFiberImage *in, const IcoStateRelo
     uint64_t *end;
     void *p;
     int bad = 0;
+    /* a cross-build load's misses by place (state_reloc.h IcoStateMiss) */
+    IcoStateMiss *miss = r0->xlate != NULL ? r0->xlate->miss : NULL;
 
     if (pool_ensure() != 0 || !slot_ok(slot) || pool.used[slot] || in->slot != (uint32_t)slot) {
         return -1;
@@ -743,6 +745,7 @@ int ico_fiber_slot_restore(int slot, const IcoFiberImage *in, const IcoStateRelo
     p = (void *)(uintptr_t)f->fn;
     typed_word(&p, r, ICO_RELOC_MODULE, &bad);
     f->fn = (void (*)(void *))(uintptr_t)p;
+    ico_state_miss_at(miss, "control page", (uint64_t)s, slot + 1, 0);
     scan_word(&f->arg, r);
     if (f->slot != slot) {
         bad = 1;
@@ -773,17 +776,27 @@ int ico_fiber_slot_restore(int slot, const IcoFiberImage *in, const IcoStateRelo
     co->tsan_fiber = NULL;
 #endif
     /* the switch context; back_ctx is written by the next resume */
+    ico_state_miss_at(miss, "saved registers", (uint64_t)(uintptr_t)&cx->ctx, slot + 1, 0);
     fix_ctxbuf(&cx->ctx, lo, hi, r, &bad);
     memset(&cx->back_ctx, 0, sizeof cx->back_ctx);
     if (ctx_sp(&cx->ctx) < s + in->stack_off) {
         bad = 1; /* the stack pointer below the saved bytes */
     }
-    /* the stack */
+    /* the stack: below the stack pointer less the red zone dead frames,
+       split where the save's soft scan splits them (state_host.c
+       xb_scan_stack, the same function) */
+    ico_state_miss_at(miss, "stack", (uint64_t)ctx_sp(&cx->ctx), slot + 1, 1);
+    if (miss != NULL) {
+        miss->dead_lo = (uint64_t)(s + in->stack_off);
+        miss->dead_hi = miss->dead_lo + ico_state_stack_dead_bytes(miss->dead_lo, in->stack_bytes,
+                                                                   (uint64_t)ctx_sp(&cx->ctx));
+    }
     w = (uint64_t *)(s + in->stack_off);
     end = (uint64_t *)hi;
     for (; w < end; w++) {
         ico_state_reloc_word(r, w);
     }
+    ico_state_miss_at(miss, NULL, 0, 0, 0);
     if (bad) {
         fprintf(stderr, "fiber: slot %d: the saved control block failed its checks\n", slot);
         slot_release(slot);

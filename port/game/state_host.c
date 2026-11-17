@@ -868,22 +868,20 @@ static void xb_scan_ctrl(IcoXbRefs *r, const IcoFiberImage *f)
 }
 
 /* the words of n copied bytes that lay at `addr`, split at the stack
-   pointer's red zone: below it (dead frames) soft, from it up strict */
+   pointer's red zone: below it (dead frames) soft, from it up strict.  The
+   split is state_reloc.h's ico_state_stack_dead_bytes, the one a load's
+   miss count uses (fiber.c ico_fiber_slot_restore): a word the save left
+   unnamed here is the only kind a load may leave untranslated */
 static void xb_scan_stack(IcoXbRefs *r, const IcoFiberImage *f)
 {
     const uint64_t base = f->slot_base + f->stack_off;
-    const uint64_t sp = ico_fiber_image_sp(f);
-    const uint64_t live = sp >= 128 ? sp - 128 : 0;
+    const size_t dead = ico_state_stack_dead_bytes(base, f->stack_bytes, ico_fiber_image_sp(f));
     const unsigned char *p = (const unsigned char *)f->stack;
 
-    if (sp == 0 || live <= base) {
-        ico_xb_scan(r, p, f->stack_bytes, base, 1);
-    } else if (live >= base + f->stack_bytes) {
-        ico_xb_scan(r, p, f->stack_bytes, base, 0);
-    } else {
-        const size_t dead = (size_t)(live - base) & ~(size_t)7;
-
+    if (dead > 0) {
         ico_xb_scan(r, p, dead, base, 0);
+    }
+    if (dead < f->stack_bytes) {
         ico_xb_scan(r, p + dead, f->stack_bytes - dead, base + dead, 1);
     }
 }
@@ -2391,24 +2389,32 @@ typedef struct ScanCounts {
 
 static void scan_all(const IcoStateReloc *r, void *pobj, size_t pobj_bytes, ScanCounts *k)
 {
+    /* a cross-build load's misses by place (state_reloc.h IcoStateMiss) */
+    IcoStateMiss *m = r->xlate != NULL ? r->xlate->miss : NULL;
     int i;
 
     memset(k, 0, sizeof *k);
+    ico_state_miss_at(m, "the arena", (uint64_t)(uintptr_t)ico_arena_base(), 0, 0);
     ico_state_reloc_scan(r, ico_arena_base(), ico_arena_size(), &k->arena);
+    ico_state_miss_at(m, "the game's data", s_gdata[ICO_GAME_DATA].lo, 0, 0);
     ico_state_reloc_scan(r, (void *)s_gdata[ICO_GAME_DATA].lo,
                          s_gdata[ICO_GAME_DATA].hi - s_gdata[ICO_GAME_DATA].lo, &k->gdata);
+    ico_state_miss_at(m, "the game's bss", s_gdata[ICO_GAME_BSS].lo, 0, 0);
     ico_state_reloc_scan(r, (void *)s_gdata[ICO_GAME_BSS].lo,
                          s_gdata[ICO_GAME_BSS].hi - s_gdata[ICO_GAME_BSS].lo, &k->gbss);
     for (i = 0; i < ico_state_registry_count(); i++) {
         const IcoStateEntry *e = ico_state_registry_entry(i);
 
         if ((e->flags & ICO_STATE_SCAN) != 0) {
+            ico_state_miss_at(m, e->name, (uint64_t)(uintptr_t)e->p, 0, 0);
             ico_state_reloc_scan(r, e->p, e->n, &k->reg);
         }
     }
     if (pobj != NULL) {
+        ico_state_miss_at(m, "the model tables", (uint64_t)(uintptr_t)pobj, 0, 0);
         ico_state_reloc_scan(r, pobj, pobj_bytes, &k->pobj);
     }
+    ico_state_miss_at(m, NULL, 0, 0, 0);
 }
 
 static int any_moved(const IcoStateReloc *r)
@@ -3293,7 +3299,7 @@ static void perform_load(int slot)
     ScanCounts k;
     static IcoXbVerdict xv;
     IcoStateXlate xl;
-    uint64_t missed = 0, first_missed = 0;
+    IcoStateMiss miss;
     int xb = 0;
     char path[ICO_PATH_MAX];
     char detail[384];
@@ -3311,6 +3317,7 @@ static void perform_load(int slot)
 
     (void)live_tex;
     detail[0] = '\0';
+    memset(&miss, 0, sizeof miss);
     memset(&s_refusal, 0, sizeof s_refusal);
     s_ckpt.loaded = 0;
     ico_xb_verdict_free(&xv);
@@ -3472,8 +3479,7 @@ static void perform_load(int slot)
         xl.fiber_point = (const IcoStateSpan *const *)xv.fiber_point;
         xl.fiber_n_point = xv.fiber_n_point;
         xl.n_fiber = xv.n_fiber;
-        xl.missed = &missed;
-        xl.first_missed = &first_missed;
+        xl.miss = &miss;
         rel.xlate = &xl;
         if ((rg->image_lo >> 32) < ICO_STATE_SCAN_HIGH_MIN &&
             keep_code_numbers(slot, &saved, &stage, rg, &xl, &xv, detail, sizeof detail) != 0) {
@@ -3582,6 +3588,24 @@ static void perform_load(int slot)
     if (moved) {
         scan_all(&rel, pobj_new, pobj_new != NULL ? (size_t)rg->pobj_bytes : 0, &k);
     }
+    /* another build's word in live memory without a translation (anywhere
+       but a fiber's dead frames, state_reloc.h IcoStateMiss) would be a
+       stale pointer in the resumed game: the restore is rolled back before
+       anything commits and the state continues from its checkpoint.  A
+       state of this build has no translation (xb 0): nothing is counted */
+    if (xb && ico_state_miss_refuses(&miss, rg->image_lo, detail, sizeof detail)) {
+        roll_back(&backup, pobj_new);
+        ico_audio_unlock();
+        copy_free(&stage);
+        copy_free(&backup);
+        fprintf(stderr,
+                "state: slot %d from version %s: %s (and %llu in dead stack frames): not resumed "
+                "exactly, the game went on as before (backup restored)\n",
+                slot, saved.commit, detail, (unsigned long long)miss.dead);
+        ico_xb_verdict_free(&xv);
+        load_refused(slot, path, &saved, ICO_STATE_SELF_CHECK, detail);
+        return;
+    }
 #ifndef ICO_HEADLESS
     pac_HostStateFixup(0);
 #endif
@@ -3673,11 +3697,10 @@ static void perform_load(int slot)
                 (unsigned long long)value_words[ICO_RELOC_GUARD], chk.partitions, chk.nodes,
                 chk.threads, chk.handlers, img.n_fibers, ico_thread_now_ms() - t0);
         if (xb) {
-            fprintf(stderr,
-                    "state: slot %d from version %s: %llu program words had no translation and "
-                    "were left as they were (first 0x%llx)\n",
-                    slot, saved.commit, (unsigned long long)missed,
-                    (unsigned long long)first_missed);
+            char counts[200];
+
+            ico_state_miss_counts(&miss, counts, sizeof counts);
+            fprintf(stderr, "state: slot %d from version %s: %s\n", slot, saved.commit, counts);
         }
     }
     ico_xb_verdict_free(&xv);

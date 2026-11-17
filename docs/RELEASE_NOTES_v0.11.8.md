@@ -3,6 +3,7 @@
 - When the game closes by itself without a message, the next start now records where it was and how much memory the device had left, in the log and in the new `last-run.txt` file in the logs folder (report zips include it), so the cause can be found from one report.
 - On Android 11 and later, the log and the report file now say how Android ended the game the time before (for example, low on memory, stopped responding, or closed from the recent apps list), with the system's own crash details when it kept them.
 - On Android and Linux, the log now also says what is using the device's memory while the game prepares its graphics at start, every ten seconds, and when the system warns that memory is low, so a report shows why a device ran out of memory.
+- Loading a save state made by another version now checks that every part of the game it carries over was carried over exactly; if one was not, the game goes on as before the load and continues from the state's last checkpoint instead of resuming with it.
 
 ## Fixed
 

@@ -80,8 +80,119 @@ int ico_state_xlate(const IcoStateXlate *x, uint64_t old, uint64_t *now)
     return 0;
 }
 
+size_t ico_state_stack_dead_bytes(uint64_t base, size_t n, uint64_t sp)
+{
+    const uint64_t live = sp >= ICO_STATE_RED_ZONE ? sp - ICO_STATE_RED_ZONE : 0;
+
+    if (sp == 0 || live <= base) {
+        return 0;
+    }
+    if (live >= base + n) {
+        return n;
+    }
+    return (size_t)(live - base) & ~(size_t)7;
+}
+
+void ico_state_miss_at(IcoStateMiss *m, const char *where, uint64_t base, int fiber, int sp_rel)
+{
+    if (m == NULL) {
+        return;
+    }
+    m->where = where;
+    m->base = base;
+    m->fiber = fiber;
+    m->sp_rel = sp_rel;
+    m->dead_lo = 0;
+    m->dead_hi = 0;
+}
+
+/* a word without a translation, read from `at`: dead or live by its place */
+static void note_miss(IcoStateMiss *m, uint64_t w, uint64_t at)
+{
+    if (m->dead_lo < m->dead_hi && at >= m->dead_lo && at < m->dead_hi) {
+        if (m->dead == 0) {
+            m->first_dead = w;
+        }
+        m->dead++;
+        return;
+    }
+    if (m->live == 0) {
+        m->first_live = w;
+        m->live_where = m->where != NULL ? m->where : "an unnamed region";
+        m->live_fiber = m->fiber;
+        m->live_sp_rel = m->sp_rel;
+        m->live_off = (int64_t)(at - m->base);
+    }
+    m->live++;
+}
+
+void ico_state_miss_live_text(const IcoStateMiss *m, uint64_t image_lo, char *out, size_t n)
+{
+    char place[128];
+    const uint64_t off = m->first_live >= image_lo ? m->first_live - image_lo : 0;
+    const uint64_t mag =
+        m->live_off < 0 ? (uint64_t)0 - (uint64_t)m->live_off : (uint64_t)m->live_off;
+
+    if (n == 0) {
+        return;
+    }
+    if (m->live == 0) {
+        out[0] = '\0';
+        return;
+    }
+    if (m->live_fiber > 0 && m->live_sp_rel) {
+        if (m->live_off == 0) {
+            snprintf(place, sizeof place, "fiber slot %d's %s, at its saved stack pointer,",
+                     m->live_fiber - 1, m->live_where);
+        } else {
+            snprintf(place, sizeof place,
+                     "fiber slot %d's %s, %llu bytes %s its saved stack pointer,",
+                     m->live_fiber - 1, m->live_where, (unsigned long long)mag,
+                     m->live_off < 0 ? "below" : "above");
+        }
+    } else if (m->live_fiber > 0) {
+        snprintf(place, sizeof place, "fiber slot %d's %s at offset 0x%llx", m->live_fiber - 1,
+                 m->live_where, (unsigned long long)mag);
+    } else {
+        snprintf(place, sizeof place, "%s at offset 0x%llx", m->live_where,
+                 (unsigned long long)mag);
+    }
+    snprintf(out, n, "%s holds 0x%llx (offset 0x%llx in the saving build's image)", place,
+             (unsigned long long)m->first_live, (unsigned long long)off);
+}
+
+int ico_state_miss_refuses(const IcoStateMiss *m, uint64_t image_lo, char *out, size_t n)
+{
+    char first[224];
+
+    if (n > 0) {
+        out[0] = '\0';
+    }
+    if (m == NULL || m->live == 0) {
+        return 0;
+    }
+    ico_state_miss_live_text(m, image_lo, first, sizeof first);
+    if (n > 0) {
+        snprintf(out, n, "%llu program words in live memory had no translation, the first: %s",
+                 (unsigned long long)m->live, first);
+    }
+    return 1;
+}
+
+void ico_state_miss_counts(const IcoStateMiss *m, char *out, size_t n)
+{
+    if (n == 0) {
+        return;
+    }
+    snprintf(out, n,
+             "%llu program words in dead stack frames had no translation and were left as they "
+             "were (first 0x%llx); %llu in live memory",
+             (unsigned long long)m->dead, (unsigned long long)m->first_dead,
+             (unsigned long long)m->live);
+}
+
 /* a MODULE word through the translation: 1 when it changed */
-static int xlate_word(const IcoStateXlate *x, uint64_t *w)
+static int xlate_word(const IcoStateXlate *x, uint64_t *w, uint64_t at)
 {
     uint64_t v;
 
@@ -98,10 +209,18 @@ static int xlate_word(const IcoStateXlate *x, uint64_t *w)
         }
         (*x->missed)++;
     }
+    if (x->miss != NULL) {
+        note_miss(x->miss, *w, at);
+    }
     return 0;
 }
 
 int ico_state_reloc_word(const IcoStateReloc *r, uint64_t *w)
+{
+    return ico_state_reloc_word_at(r, w, (uint64_t)(uintptr_t)w);
+}
+
+int ico_state_reloc_word_at(const IcoStateReloc *r, uint64_t *w, uint64_t at)
 {
     int i;
     for (i = 0; i < ICO_RELOC_VALUES; i++) {
@@ -118,7 +237,7 @@ int ico_state_reloc_word(const IcoStateReloc *r, uint64_t *w)
         const IcoStateRange *g = &r->range[i];
         if (in_range(g, *w)) {
             if (i == ICO_RELOC_MODULE && r->xlate != NULL) {
-                return xlate_word(r->xlate, w);
+                return xlate_word(r->xlate, w, at);
             }
             if (g->delta == 0) {
                 return 0;
@@ -269,7 +388,7 @@ size_t ico_state_reloc_scan(const IcoStateReloc *r, void *region, size_t n, uint
         {
             const uint64_t old = w;
 
-            if (ico_state_reloc_word(r, &w)) {
+            if (ico_state_reloc_word_at(r, &w, (uint64_t)a)) {
                 memcpy((void *)a, &w, sizeof w);
                 moved++;
                 if (log_on) {
