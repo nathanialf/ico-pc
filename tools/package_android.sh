@@ -207,6 +207,10 @@ echo "package_android: libmain.syms: $(wc -l < "$symdir/libmain.syms") lines ($(
 # docs/port/PLATFORM.md "The carry-over guard"); its report is staged.
 run python3 -I "$wt/tools/state_carry_check.py" check --binary "$so" --syms "$symdir/libmain.syms.gz" \
     --workdir "$symdir/carry" --cc "${CC:-cc}" --report "$symdir/carry.txt"
+# the earlier Android versions' states (the legacy tables, port/state_legacy)
+# resume exactly only under their layout hash: a package of another one fails
+python3 -I "$wt/tools/android_syms_lines.py" layout "$symdir/carry.txt" "$wt" >>"$log" 2>&1 ||
+    fail "tools/android_syms_lines.py layout: the game data layout hash is not the legacy tables' (the log says which and what to do)"
 withsyms="$root/build-host/tmp/android-$label-syms.apk"
 cp "$unsigned" "$withsyms"
 run python3 - "$withsyms" "$symdir/libmain.syms.gz" <<'PY'

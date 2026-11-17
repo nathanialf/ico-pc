@@ -34,6 +34,16 @@ for the save states' symbol table (port/platform/state_syms.h).
       in lld's map, which lists a file's statics, its symbols are the
       loader's five former statics).  An archive member is known by its file name only:
       one that names an ico2/ file passes.
+
+  android_syms_lines.py layout CARRY SRCROOT
+      Exit 1 when the game data layout hash the carry-over guard's report
+      CARRY prints ("symbols ... layout <hash>") is not the one
+      SRCROOT/port/state_legacy/layout.txt records: the earlier versions'
+      states the legacy tables read (port/state_legacy) resume exactly only
+      under that hash.  A difference with no change to the game's data is a
+      defect of the build (v0.11.9-rc4: the reserved room left out of the
+      link); with one made on purpose, the maintainer records the new hash
+      there knowing those states then take the checkpoint path.
 """
 import os
 import re
@@ -201,11 +211,42 @@ def gamesec(path, root):
           (" (and the loader's frozen room)" if room else ""))
 
 
+def layout(carry, root):
+    want_path = os.path.join(root, "port", "state_legacy", "layout.txt")
+    want = None
+    for line in open(want_path, encoding="utf-8"):
+        t = line.split()
+        if len(t) == 2 and t[0] == "layout":
+            want = t[1].lower().removeprefix("0x")
+    got = None
+    for line in open(carry, encoding="utf-8", errors="replace"):
+        m = re.search(r"\blayout ([0-9a-f]+)\b", line)
+        if m and line.lstrip().startswith("symbols "):
+            got = m.group(1)
+    if want is None or got is None:
+        print("android_syms_lines: layout: %s" % ("port/state_legacy/layout.txt records no hash"
+                                                  if want is None else
+                                                  "the guard's report %s prints no layout hash" % carry))
+        sys.exit(1)
+    if got != want:
+        print("android_syms_lines: the game data layout hash is %s, the legacy tables' %s "
+              "(port/state_legacy/layout.txt): the states the earlier versions saved could no longer "
+              "resume exactly in this build, only from their checkpoint. If the game's data did not "
+              "change, the link lost or moved an item (compare tools/android_syms_lines.py gamesec's "
+              "line, the reserved room port/data/reserved/tables.c, the map's ico_gdata/ico_gbss); "
+              "if it changed on purpose, record %s in port/state_legacy/layout.txt knowing those "
+              "states then take the checkpoint path." % (got, want, got))
+        sys.exit(1)
+    print("android_syms_lines: the game data layout hash %s is the legacy tables'" % got)
+
+
 def main():
     if len(sys.argv) == 3 and sys.argv[1] == "relro":
         relro_lines(sys.argv[2])
     elif len(sys.argv) == 3 and sys.argv[1] == "check":
         check(sys.argv[2])
+    elif len(sys.argv) == 4 and sys.argv[1] == "layout":
+        layout(sys.argv[2], sys.argv[3])
     elif len(sys.argv) == 4 and sys.argv[1] == "gamesec":
         gamesec(sys.argv[2], sys.argv[3])
     else:

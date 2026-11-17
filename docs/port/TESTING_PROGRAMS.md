@@ -911,7 +911,11 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   hashes' count, rules and address order), and the index naming each table once
   (`state_legacy_tables`). `tools/code_hash_a64.py --selftest`: the Python XXH3-64 against
   xxHash's sanity vectors and the rules-2 masking against hand-made functions
-  (`code_hash_a64_selftest`).
+  (`code_hash_a64_selftest`). `tools/test/android_syms_layout_test.py`: the Android packaging gate
+  on the game data layout hash (`tools/android_syms_lines.py layout` against
+  `port/state_legacy/layout.txt`): a guard report with the recorded hash passes, one with another
+  hash fails naming both and the checkpoint path, one with no layout line fails
+  (`android_syms_layout`).
 - `state_carry_xbuild_test.c`: save states across two real links of one program (`state_carry.cmake`,
   [PLATFORM.md](PLATFORM.md#the-carry-over-guard)): A linked with its read-only data in a segment of
   its own, B with more code and texts ahead of A's and its read-only data inside the executable

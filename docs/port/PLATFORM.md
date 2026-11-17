@@ -1348,7 +1348,16 @@ names another layout before any other reason. Two more changes came with this wo
   pointer aims there, and `.dynstr` spells every exported name a text window could otherwise find
   twice.
 - `port/data/reserved/tables.c` reproduces the released builds' loader statics (names, sizes,
-  kinds and order) in the game's bss, so the layout hash is again `0x7e3463baa76b43a8`.
+  kinds and order) in the game's bss, so the layout hash is again `0x7e3463baa76b43a8`. Its
+  function `ico_tables_room`, which `state_host.c` calls so the archive member joins the link,
+  returns the room's address. The Android link drops with `--gc-sections` any input section no
+  kept section refers to, and a version of the function that returned its own address left the
+  room out: the bss ended 0x607 bytes short and the layout hash changed.
+- `tools/package_android.sh` fails when the carry-over guard's layout hash is not the one
+  `port/state_legacy/layout.txt` records (`tools/android_syms_lines.py layout`). If the game's
+  data did not change, the link lost or moved an item. If it changed on purpose, the maintainer
+  records the new hash there, knowing that the legacy tables' states then cannot resume
+  exactly and take the checkpoint path.
 
 **Words nothing names.** Only a word the record confirms is translated: a word in a unit (the
 hash rule above), in a game range, a block or a unique variable, or at a start-up value or a
