@@ -352,13 +352,63 @@ int ico_state_keys_absent(const char *saved, const char *now, char *out, size_t 
     return count;
 }
 
+/* 1 when the two values (va, na) and (vb, nb) of one key are written
+   differently but both mean its default (s_key_default): unset ("") on one
+   side, the default's text on the other (issue 218: opening the Debug menu
+   writes gameplay.developer_mode = false, and a state saved while the key
+   was unset was refused as "settings differ") */
+static int same_default(const char *key, size_t key_n, const char *va, size_t na, const char *vb,
+                        size_t nb)
+{
+    return s_key_default != NULL && (na != nb || memcmp(va, vb, na) != 0) &&
+           s_key_default(key, key_n, va, na) && s_key_default(key, key_n, vb, nb);
+}
+
+int ico_state_keys_defaulted(const char *saved, const char *now, char *out, size_t size)
+{
+    const char *line = now != NULL ? now : "";
+    size_t at = 0;
+    int count = 0;
+
+    if (out != NULL && size > 0) {
+        out[0] = '\0';
+    }
+    while (*line != '\0') {
+        const char *end = strchr(line, '\n');
+        const size_t len = end != NULL ? (size_t)(end - line) : strlen(line);
+        const char *eq = memchr(line, '=', len);
+        const char *v;
+        size_t vn;
+
+        if (eq != NULL &&
+            key_value(saved != NULL ? saved : "", line, (size_t)(eq - line), &v, &vn) == 0 &&
+            same_default(line, (size_t)(eq - line), eq + 1, len - (size_t)(eq - line) - 1, v, vn)) {
+            if (out != NULL && at + 1 < size) {
+                const int w = snprintf(out + at, size - at, "%s%.*s", count > 0 ? ", " : "",
+                                       (int)(eq - line), line);
+
+                at = w < 0 ? at : at + (size_t)w < size ? at + (size_t)w : size - 1;
+            }
+            count++;
+        }
+        if (end == NULL) {
+            break;
+        }
+        line = end + 1;
+    }
+    return count;
+}
+
 /* the first key of `now` whose value differs in `saved` (or a key only one
    of them has): 1 and out = "key=saved (now cur)", else 0.  A key only
    `now` lists whose value there is its default (s_key_default) is equal:
    *absent counts those.  A key only `saved` lists that this version
    retired (s_key_retired: a setting that became part of what a state
    carries itself) is passed over whatever its value: *absent counts those
-   too, so the saved text must then be whole (header_check) */
+   too.  A key both list, unset on one side and at its default's text on the
+   other (same_default), is equal and counted there as well: the two texts
+   and hashes differ by those lines, so the saved text must then be whole
+   (header_check) */
 static int keys_first_diff(const char *saved, const char *now, char *out, size_t size, int *absent)
 {
     int pass;
@@ -407,6 +457,11 @@ static int keys_first_diff(const char *saved, const char *now, char *out, size_t
                     }
                     return 1;
                 }
+                if (same_default(line, key_n, va, na, vb, nb)) {
+                    (*absent)++;
+                    line = end != NULL ? end + 1 : NULL;
+                    continue;
+                }
                 if (na != nb || memcmp(va, vb, na) != 0) {
                     /* pass 0 reads `now` first: put the saved value first */
                     snprintf(out, size, "%.*s=%.*s (now %.*s)", (int)key_n, line, (int)nb, vb,
@@ -453,8 +508,9 @@ static IcoStateResult header_check(const IcoStateHeader *saved, const IcoStateHe
             return ICO_STATE_OTHER_SETTINGS;
         }
         if (absent > 0) {
-            /* a later version's keys at their defaults, or an earlier
-               version's keys this one retired: the two hashes differ by
+            /* a later version's keys at their defaults, an earlier
+               version's keys this one retired, or a key at its default
+               written as "" on one side: the two hashes differ by
                those lines, so the saved text must be the whole of what its
                hash covered (not cut, not damaged) */
             const char *z = (const char *)memchr(saved->keys, '\0', sizeof saved->keys);
