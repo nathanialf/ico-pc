@@ -240,6 +240,13 @@ const char *ico_sim_keys_first_diff(const char *saved_text, char *out, size_t si
             return k;
         }
         if (vn != strlen(cur) || memcmp(v, cur, vn) != 0) {
+            /* unset on one side and the default's text on the other: the
+               same setting (issue 218: a menu writes the key's default once
+               it is opened) */
+            if (ico_sim_key_is_default(k, strlen(k), v, vn) &&
+                ico_sim_key_is_default(k, strlen(k), cur, strlen(cur))) {
+                continue;
+            }
             if (out != NULL && size > 0) {
                 snprintf(out, size, "%s=%.*s (now %s)", k, (int)vn, v, cur);
             }

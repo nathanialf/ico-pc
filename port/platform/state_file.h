@@ -139,6 +139,13 @@ void ico_state_set_key_default(IcoStateKeyDefaultFn fn);
    truncated; "" for none); their count.  For the load's log line. */
 int ico_state_keys_absent(const char *saved, const char *now, char *out, size_t size);
 
+/* The keys both texts list whose values are written differently but both
+   mean the key's default (the key-default function above: unset on one
+   side, the default's text on the other), as "a, b" into out (size bytes,
+   truncated; "" for none); their count.  The header check takes them as
+   equal; for the load's log line.  0 without the key-default function. */
+int ico_state_keys_defaulted(const char *saved, const char *now, char *out, size_t size);
+
 /* 1 when the simulation key (key_n bytes, not NUL-terminated) is one this
    version retired: sim_keys.h ico_sim_key_retired (v0.11.3: the fifteen
    difficulty rows, which a state now carries as its own block), set by

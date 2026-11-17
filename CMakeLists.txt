@@ -457,6 +457,9 @@ if(Python3_FOUND)
     # vectors and hand-made functions (no build, no game)
     add_test(NAME state_legacy_tables COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/state_legacy_table.py" check)
     add_test(NAME code_hash_a64_selftest COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/code_hash_a64.py" --selftest)
+    # the Apple programs' image base check (tools/macho_image_check.py, issue
+    # 218) on hand-built Mach-O headers (no build, no game)
+    add_test(NAME macho_image_check COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/macho_image_check.py" selftest)
     # the Android packaging gate on the game data layout hash (tools/android_syms_lines.py
     # layout against port/state_legacy/layout.txt; no build, no game)
     add_test(NAME android_syms_layout COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/test/android_syms_layout_test.py")
@@ -668,6 +671,31 @@ if(TARGET ico_pc AND NOT ICO_HEADLESS)
         endif()
     endif()
     if(APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
+        # The image base (issue 218; docs/BUILDING.md, "Apple image base"): the
+        # linker puts __TEXT just above the 4 GB __PAGEZERO, so every address
+        # of the program has the upper half 1, and in a later run the save
+        # state scan cannot tell them from the game's pairs of 32-bit numbers
+        # (port/platform/state_reloc.h ICO_STATE_SCAN_HIGH_MIN).  __TEXT at
+        # 0x2A1D60000000 (upper half 0x2a1d, 46 TB, inside macOS's 128 TB; no
+        # word of five real states has that upper half): -segaddr,
+        # since ld ignores -image_base for a position-independent program and
+        # holds -pagezero_size to 4 GB with chained fixups (ld64 Options.cpp).
+        # The check after the link fails the build when the linker did not
+        # take it.  iOS keeps the default: its process space ends at
+        # 0x458000000 on the largest devices (XNU pmap.c
+        # ARM64_MAX_OFFSET_DEVICE_LARGE) and ld ignores -pagezero_size there,
+        # so no base reaches the bound; its states continue from their
+        # checkpoint in a later run.
+        set(ICO_APPLE_TEXT_BASE 0x2A1D60000000)
+        target_link_options(ico_pc PRIVATE "LINKER:-segaddr,__TEXT,${ICO_APPLE_TEXT_BASE}")
+        if(Python3_FOUND)
+            add_custom_command(TARGET ico_pc POST_BUILD
+                               COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/macho_image_check.py"
+                                       check "$<TARGET_FILE:ico_pc>" --base ${ICO_APPLE_TEXT_BASE}
+                               VERBATIM)
+        else()
+            message(FATAL_ERROR "The macOS program's image base check needs Python 3 (tools/macho_image_check.py)")
+        endif()
         # The Dock icon of the running program (app_icon_window.h): Objective-C
         # on AppKit; SDL's Cocoa windows have no icon of their own
         enable_language(OBJC)

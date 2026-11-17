@@ -219,6 +219,7 @@ layout_asserts_fresh 0.15
 libsd_irx 0.01
 lifecycle 0.00
 log_cost 0.00
+macho_image_check 0.05  # estimate: 0.02 s local (APPLE218), Python over eight hand-built Mach-O headers
 math 0.01
 mem_breakdown 0.00  # estimate: 0.0 s local (merge-wt_FIX1-20261117T010612Z.rest.log) x 1.77
 memory 0.01

@@ -1018,7 +1018,14 @@ value differs from the current one. Each key has its default beside it (`kDefaul
 `original`; none where unset is the disc's or the device's own choice, `video.video_mode`,
 `dev.start_stage`, `variants.barrier_hits`). A key absent from the saved text is one a later
 version added: the state was made at its default, so it is equal while the key is unset or at
-that default now (`ico_sim_key_is_default`).
+that default now (`ico_sim_key_is_default`). A key unset on one side and written at its default
+on the other is the same setting too (issue 218: opening the Debug menu writes
+`gameplay.developer_mode = false`, and a state saved while it was unset was refused as `settings
+differ`): both checks take them as equal (`same_default` in `state_file.c`,
+`ico_sim_keys_first_diff`), under the whole-text rule below, and a load logs them (`state: slot N
+was saved with the setting K unset and it is written as its default now, or the other way round:
+the same setting`, `ico_state_keys_defaulted`). A key without one default text
+(`video.video_mode`, `dev.start_stage`) is equal only to itself.
 
 `ico_state_header_check` compares a saved header with this run's, in this order: the platform
 (`ICO_STATE_OTHER_PLATFORM`, a Windows state on Linux), the format version and the build id
@@ -1097,12 +1104,40 @@ pinned) and `pobjImageTables`' host block (POBJ). A word matches a range when `l
   callee-saved registers. An EE int of 60 above a small int reads as an arena address
   (0x3C_xxxxxxxx), which is why the arena is pinned: with a zero delta nothing moves. With
   developer mode on (`ico_state_reloc_set_log`) each moved word is logged
-  (`state: moved the word at <addr>: <old> -> <new>`). Where the image moves (Android, macOS:
-  a non-zero MODULE delta) any aligned 64-bit value that falls in the old image's range is
-  rewritten, so a pair of adjacent ints whose high word is 0x7f and low word lands in that window
-  would be changed too, and the typed self-checks cannot see a corrupted integer: that developer
-  mode line, which lists every rewritten word, is the one diagnosis (review finding 8; the plan's
-  accepted risk).
+  (`state: moved the word at <addr>: <old> -> <new>`). Where the image moves (Android, macOS: a
+  non-zero MODULE delta) any aligned 64-bit value that falls in the old image's range is
+  rewritten, so a pair of adjacent ints whose high word is the image's upper half (Android's 0x5x
+  to 0x7f) and whose low word lands in that window would be changed too, and the typed self-checks
+  cannot see a corrupted integer: that developer mode line, which lists every rewritten word, is
+  the one diagnosis (review finding 8; the plan's accepted risk).
+- **What the scan may move** (issue 218, `ico_state_reloc_ambiguous`). Two 32-bit words read as
+  one are an address whose upper half is the second word, and the game's memory is full of a value
+  next to a small integer: a ClusterPoly's `{run, matrix = 1}`, a bga record's `{word, 1}`, a
+  keyframe's `{X, 1}`. In five real states' arenas (issue 218's iOS state, a headless PAL state,
+  three Android states) a second word of 1 to 15 follows 8,556 to 11,870 words, 570 to 790 per
+  value, against 47 to 70 per value from 16 to 255. The Apple programs sat just above the 4 GB
+  `__PAGEZERO` (upper half 1) and slide in every run: in issue 218's state 3575 arena words lay in
+  the old image, about 520 of them numbers by the reporter's count, and moving `{0x2640e60, 1}` at
+  arena+0x263fe20 by the module delta +0x2964000 made the shadow's `run` 0x4fa4e60, a read past the
+  40 MB arena into the fiber pool (the SIGBUS in `shadow_EntryClusterShadow`). So a range that
+  moved in this run (delta not 0) whose saved addresses' upper half is below
+  `ICO_STATE_SCAN_HIGH_MIN` (0x10: under 64 GB) is never moved by the scan: before anything is
+  restored, `perform_load` sends the state to its checkpoint
+  ([SAVES.md](SAVES.md#loading-a-state-from-its-checkpoint)). The image, the arena and the fiber
+  pool are judged (the image not for another build, whose words go by their translation); the
+  model tables' small host block is not (its delta is non-zero on every load). Where every delta
+  is 0 (the same process; a fixed image with the arena and pool pinned: Windows, Linux x64) nothing
+  is judged. The macOS program is linked at 0x2A1D60000000
+  ([BUILDING.md](../BUILDING.md#apple-image-base)) and moves by the scan; the iOS program cannot be
+  (the kernel maps it only below 0x458000000), so its states resume exactly within a run and
+  continue from their checkpoint in a later one, as do states whose arena or pool sat below 64 GB
+  unpinned (iOS's always: the pinned base 0x3C00000000 lies beyond its address space). Android's
+  library and an unpinned arena saved at 0x3C00000000 stay above the bound: the accepted risk
+  above. The start line says what a later run can move: `state: a later run moves a state's
+  addresses only where their upper half is at least 0x10: the image 0x..-0x.. (upper half 0x..:
+  <fixed or pinned: the same address in a later run | moved by the scan when elsewhere | below the
+  bound: when elsewhere, a load continues from the checkpoint>), the arena at 0x.. (...), the fiber
+  pool at 0x.. (...)`.
 - The saving process's own values. Two words a suspended fiber holds are no address in any
   range: the game thread's thread pointer and the stack guard. The Android build compiles with
   the stack protector (the NDK's flags; [GAME_CODE.md](GAME_CODE.md)), and clang keeps the thread
@@ -1419,9 +1454,24 @@ record's image start; `ico_xb_check`):
   the game's initialised tables hold over two hundred pointers to literals), so it stays refused
   with this reason and no list.
 
-What the first case leaves: a number that happens to land on named code or data is still read as
-an address (translated when that function or variable moved, or a refusal when the function a
-word lands in changed).
+What the first case leaves: a number that happens to land on named code or data is read as an
+address (translated when that function or variable moved, or a refusal when the function a word
+lands in changed). Issue 218 measured it against a released Windows program's map: in five real
+states' data (arena, game data, registered blocks; their own host addresses left out), 19 to 152
+words a state lie in the Windows image, `{float, 1}` pairs (a keyframe's `{3.149, 1}` reads
+0x140498c94), none on a symbol's first byte: 1 to 15 a state inside `.text`, 0 to 17 in the
+game's data ranges, the rest in `.rdata` (kept unless a text) and the port's `.bss` (kept unless a
+variable). The ones inside the code are kept now: a data structure holds a function's start, never
+a byte inside it, so for a state of an image whose upper half is below 0x10 every word of the
+arena, the game's data and the registered blocks that lies inside the old code at no span's start
+and no point becomes an identity point of the translation (`keep_code_numbers` in `state_host.c`,
+`ico_state_code_numbers`), logged `state: slot N from version V: K values in its data lie inside
+that version's code at no function's start, numbers next to a small integer rather than addresses
+(first 0x.., last 0x..): kept as they are`. Such a value that a thread's stack or the scheduler's
+table also holds (it may be a return address there), or more than 4096 of them, sends the state to
+its checkpoint instead (`state: slot N: <why>: it continues from its checkpoint`). A number inside
+the game's data ranges is still translated by the ranges' displacement (a real pointer into a game
+array is the same kind of word): the residue of this case, nothing when the ranges did not move.
 
 **Pinned states.** A state loads only into its own build when its record says so, and the save's
 line names why: no symbol table where it was made (`ICO_XB_TABLE` unset: macOS, iOS, a build
@@ -1727,6 +1777,7 @@ the game lists the reads of unset locals the compiler sees (`camera-ico2.c`'s mo
 | line | when |
 | --- | --- |
 | `state: save states on: <n> blocks (<bytes> bytes, <bytes> of them audio), build id <16 hex>, <fixed image\|relocatable image>, arena <pinned\|not pinned>, fiber pool <pinned\|not pinned>, <thread pointer recorded[, stack guard recorded]\|stack guard recorded\|no thread pointer needed>, folder <dir>` | once, the first poll |
+| `state: a later run moves a state's addresses only where their upper half is at least 0x10: the image 0x..-0x.. (upper half 0x..: <fixed or pinned: the same address in a later run\|moved by the scan when elsewhere\|below the bound: when elsewhere, a load continues from the checkpoint>), the arena at 0x.. (0x..: ...), the fiber pool at 0x.. (0x..: ...)` | once, after the `save states on` line ([Relocation](#relocation)) |
 | `state: save states are off: <reason>` | once, instead of the line above |
 | `state: the game's data ranges are not bracketed on this build (<why>): save states are off` | once, the verify failed |
 | `state: saved slot N (<path>): arena <raw> -> <packed>, gdata ..., gbss ..., reg ..., audio ..., sched ..., fibers ..., pobj ..., ranges ..., syms ...; <k> fibers; copy <ms> ms, write <ms> ms, file <bytes> bytes` | a save written |
@@ -1736,6 +1787,9 @@ the game lists the reads of unset locals the compiler sees (`camera-ico2.c`'s mo
 | `state: symbols: N functions, M data symbols, K game data items (layout <hash>) from <file> in T ms, S KB; the code 0x..-0x.. from <its code sections\|the loader's segments (it names no code section)> (C sections)`, or `state: symbols: none (<file>: <why>); a state saved here loads only into this build, and no other build's state loads here` | once, at the first save, load or listing that needs the table |
 | `state: slot N was saved by version <v>, this is <v>: everything it points into is unchanged here, so it is translated (U functions, D data symbols, K start-up values and texts, S spans, P points; L dead-frame words without one; X words naming nothing kept as numbers, first 0x..)` and, after the `loaded` line, `state: slot N from version <commit>: M program words had no translation and were left as they were (first 0x..)` | a load of another build's state |
 | `state: slot N (saved by <commit>) loads here`, or `... cannot be loaded here: <v> -> <v>: <blocker>` | each listing, per slot of another build |
+| `state: slot N cannot be moved into this run exactly: the <program's image\|arena\|fiber pool> it was saved with (0x..-0x..) lies elsewhere now (+0x..) and its addresses' upper half 0x.. is below 0x10, where the game's own pairs of numbers read as addresses in it (W words of the saved arena lie in it; which of them are addresses cannot be told), so nothing is moved and it continues from its checkpoint` | a load refused before its restore ([Relocation](#relocation)); the checkpoint's line follows |
+| `state: slot N from version V: K values in its data lie inside that version's code at no function's start, numbers next to a small integer rather than addresses (first 0x.., last 0x..): kept as they are`, or `state: slot N: <why>: it continues from its checkpoint` | a load of another build's state from an image below 0x10 (Windows; [Across versions](#across-versions)) |
+| `state: slot N was saved with the setting<s> K unset and it is written as its default now, or the other way round: the same setting` | a load whose keys differ only that way ([Validity](#validity)) |
 | `state: loaded slot N (saved at Main tick T, stage S): deltas module +0x0 (fixed image), arena +0x0 (pinned), pool +0x0 (pinned), pobj ... ; words rewritten [(nothing moved)] arena .., gdata .., gbss .., registry .., pobj ..; thread pointer 0x<old>->0x<new>[ unchanged\| not recorded\| not needed] (K words), stack guard[ unchanged\| not recorded\| not needed] (M words); checks P partitions, B blocks, T threads, H handlers; K fibers; apply <ms> ms` | a load done |
 | `state: refused <save\|load\|delete> slot N: <reason>[: <detail>]` | every refusal: save states off, not on the pause menu, a stage switch, the card, the disc, a movie, another mode (photo mode, the credits, the music gallery), the slot empty, a damaged file, another build (its commit; `no thread-pointer record` for a state without the saving process's thread pointer or stack guard where the platform needs them; for a state this build cannot translate `<saved commit> -> <commit here>: <blocker>`, the blocker as [Across versions](#across-versions) words it, or `made before save states could carry over to later versions (format 1)`), another disc, another platform, settings differ (`key=saved (now cur)`), the self-checks (the failing check; the backup restored), the file not written (why), busy |
 | `state: slot N (version V, P) cannot resume where it was saved (<refusal>): it continues from its last checkpoint, stage S (saved in stage T), found by <the state's own record\|the table's <release> <platform> (<asset>)\|the layout of <release> <platform>, which its bytes confirm (K layouts agree)\|its bytes: ...>; the game's own load runs at the end of the next Main tick`, then `state: slot N continues from its checkpoint at Main tick M: the game's own load from <the title\|play (as End Game)>, to stage S; option words ..., preview ..., difficulty ...`; or `... and its checkpoint cannot be loaded either: <why>` | a load the exact path refused ([SAVES.md](SAVES.md#loading-a-state-from-its-checkpoint)) |
