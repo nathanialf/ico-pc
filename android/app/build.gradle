@@ -88,6 +88,8 @@ abstract class IcoAssetsTask extends DefaultTask {
         def legacyOut = new File(out, 'state_legacy')
         legacyOut.deleteDir()
         if (new File(legacy, 'index.txt').isFile()) {
+            // a release candidate: the label ends in -rc and its number, the one
+            // rule tools/package_android.sh's apkcheck uses ([[ =~ -rc[0-9]+$ ]])
             def rcApk = label.get() ==~ /.*-rc[0-9]+/
             def kept = []
             new File(legacy, 'index.txt').eachLine { line ->
