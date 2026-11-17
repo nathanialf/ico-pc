@@ -371,10 +371,10 @@ int last_run_milestone_stage(const char *m)
     } else if (strncmp(m, "stage_no ", 9) == 0 && (p = strstr(m, " -> ")) != NULL) {
         p += 4;
     } else {
-        return -2;
+        return LAST_RUN_NO_STAGE;
     }
     if (!((*p >= '0' && *p <= '9') || *p == '-')) {
-        return -2;
+        return LAST_RUN_NO_STAGE;
     }
     return (int)strtol(p, NULL, 10);
 }
@@ -906,7 +906,7 @@ int last_run_present(void)
 void last_run_milestone(const char *milestone)
 {
     const int stage = last_run_milestone_stage(milestone);
-    if (stage == -2 || s_path[0] == '\0') {
+    if (stage == LAST_RUN_NO_STAGE || s_path[0] == '\0') {
         return;
     }
     s_stage = stage;

@@ -157,7 +157,8 @@ const char *last_run_phase_words(int phase);
    finished, the current phase; a self-test's step; else "starting" */
 int last_run_phase_for_step(const char *step, int current, int selftest, int setOpen);
 /* The stage a milestone names ("first Main tick done (stage_no 1)",
-   "stage_no -1 -> 1", trace_host.c), -2 for none */
+   "stage_no -1 -> 1", trace_host.c), LAST_RUN_NO_STAGE for none */
+#define LAST_RUN_NO_STAGE (-2)
 int last_run_milestone_stage(const char *milestone);
 /* The system's summary (at most 128 bytes, LAST_RUN_SUMMARY_MAX with the
    NUL): "ico-pc <phase> | resets 47->66 | free 1911 MB, lowest 1897" */
