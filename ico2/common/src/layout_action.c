@@ -2994,55 +2994,6 @@ int la_load_processing(int first)
     return -1;
 }
 
-/* PC port: Load on a save state that cannot resume where it was saved
-   (port/game/state_checkpoint_live.c, on the Main thread at a tick's end):
-   the game continues from the checkpoint the state holds, already in
-   gameSysMainSaveBuff with the card block's option words, by
-   la_load_processing's own steps after iosMcLoadGameBlock (the kept flags
-   across gflagInit, the image loaded, systemStatus[3] and [4]; the caller
-   puts the state's preview in IosMcPreviewInfo after, where the card load
-   puts the product file's).  From the title the title's sounds go as the
-   load leaves the title; in play as End Game leaves play (la_end_confirm:
-   the fight music paused and closed and the sound segments closed on the
-   discs whose End Game does so, not the August preview and the June demo).
-   Then the stage switch and the boy's records as the load makes them.
-   Returns the stage it switches to. */
-int la_host_checkpoint_continue(int onTitle)
-{
-    gflagKeepState();
-    gflagInit();
-    gamesysMemoryLoad(gameSysMemoryFuncList, gameSysMainSaveBuff, 0);
-    la_host_load_saved();
-    gflagRestoreState();
-    la_host_load_log(-1);
-    systemStatus[3] = 1;
-    systemStatus[4] = 1;
-    seEnvForceClose = 1;
-    if (onTitle) {
-        if (ICO_JUN26) {
-            soundDataSegAllClose(0, 2);
-        } else if (titleAdpcm != 0) {
-            titleAdpcm->stream->fadeStep = 0x40;
-        }
-        titleAdpcm = 0;
-    } else if (!ICO_AUG6JUN26) {
-        fightSoundProcessRequestPause();
-        fightSoundClose();
-        soundDataSegAllClose(0, 2);
-    }
-    if (!ICO_NTSCAUG6JUN26 && gflagChk(395)) {
-        /* the ending's save (end.c actEndingSave), which a title load sends
-           to the second journey's screen: a checkpoint never holds it, so it
-           goes to its stage as any other image */
-        ico_diag_milestone("checkpoint: the image holds the ending's flag 395; to stage %d",
-                           gFlagSaveStage);
-    }
-    nextStage = gFlagSaveStage;
-    stgmgrForceSwitchWithFade(gFlagSaveStage, ICO_JUN26 ? 0.5f : 0.05f, 4.0f);
-    ACTGame_SetActors_Debug(gFlagSaveStage, 0);
-    return gFlagSaveStage;
-}
-
 static inline int la_general_mc_confirm_jun26(void)
 {
     if (PSH_POSITIVE(0)) {
@@ -6081,3 +6032,56 @@ void la_host_end_game(void)
 unsigned int stage_after_skipping_demo = 0;
 
 int layoutActPushStartNew = 0;
+
+/* Kept at the end of this file: clang places a file's statics in the order
+   of their first use, and this function's use of nextStage ahead of
+   saveCardChanged's first use swapped the two in the game's data (the
+   layout the save states of v0.11.7 and v0.11.8 resume under). */
+/* PC port: Load on a save state that cannot resume where it was saved
+   (port/game/state_checkpoint_live.c, on the Main thread at a tick's end):
+   the game continues from the checkpoint the state holds, already in
+   gameSysMainSaveBuff with the card block's option words, by
+   la_load_processing's own steps after iosMcLoadGameBlock (the kept flags
+   across gflagInit, the image loaded, systemStatus[3] and [4]; the caller
+   puts the state's preview in IosMcPreviewInfo after, where the card load
+   puts the product file's).  From the title the title's sounds go as the
+   load leaves the title; in play as End Game leaves play (la_end_confirm:
+   the fight music paused and closed and the sound segments closed on the
+   discs whose End Game does so, not the August preview and the June demo).
+   Then the stage switch and the boy's records as the load makes them.
+   Returns the stage it switches to. */
+int la_host_checkpoint_continue(int onTitle)
+{
+    gflagKeepState();
+    gflagInit();
+    gamesysMemoryLoad(gameSysMemoryFuncList, gameSysMainSaveBuff, 0);
+    la_host_load_saved();
+    gflagRestoreState();
+    la_host_load_log(-1);
+    systemStatus[3] = 1;
+    systemStatus[4] = 1;
+    seEnvForceClose = 1;
+    if (onTitle) {
+        if (ICO_JUN26) {
+            soundDataSegAllClose(0, 2);
+        } else if (titleAdpcm != 0) {
+            titleAdpcm->stream->fadeStep = 0x40;
+        }
+        titleAdpcm = 0;
+    } else if (!ICO_AUG6JUN26) {
+        fightSoundProcessRequestPause();
+        fightSoundClose();
+        soundDataSegAllClose(0, 2);
+    }
+    if (!ICO_NTSCAUG6JUN26 && gflagChk(395)) {
+        /* the ending's save (end.c actEndingSave), which a title load sends
+           to the second journey's screen: a checkpoint never holds it, so it
+           goes to its stage as any other image */
+        ico_diag_milestone("checkpoint: the image holds the ending's flag 395; to stage %d",
+                           gFlagSaveStage);
+    }
+    nextStage = gFlagSaveStage;
+    stgmgrForceSwitchWithFade(gFlagSaveStage, ICO_JUN26 ? 0.5f : 0.05f, 4.0f);
+    ACTGame_SetActors_Debug(gFlagSaveStage, 0);
+    return gFlagSaveStage;
+}
