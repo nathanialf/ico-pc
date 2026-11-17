@@ -845,8 +845,10 @@ first start with it, or the file was deleted)` and an older copy is deleted. `la
 gives the facts (`LastRunFacts`: pid, seconds, phase with stage and tick, background, trim level,
 resets, free memory, the end and a crash's signal) for the verdict of the next start.
 
-On Android 11 and later each phase change also hands at most 128 bytes (`ico-pc <phase> | resets
-47->66 | free 1911 MB, lowest 1897`) to `ActivityManager.setProcessStateSummary`
+On Android 11 and later each phase change also keeps at most 128 bytes (`ico-pc <phase> | resets
+47->66 | free 1911 MB, lowest 1897`), which the next heartbeat (within 2 s) hands from its own
+thread, never from the game's fiber stack where a phase change can come and a Java call is not
+made, to `ActivityManager.setProcessStateSummary`
 (`IcoActivity.processStateSummary`, `port/platform/android/last_run_android.c`), which the system
 keeps in the process's exit record (`ApplicationExitInfo.getProcessStateSummary`) even when the
 app's files are lost; the first outcome is logged once (`ico_pc: last-run: the system keeps a

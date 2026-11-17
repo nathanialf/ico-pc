@@ -20,7 +20,9 @@
  *            the start-up set and its own steps, a self-test, the game, the
  *            first picture, play with the stage and the beat's tick, the
  *            background, a trim, the resets, the GPU memory, the memory
- *            figures, the activity note between heartbeats), the crash's
+ *            figures, the activity note between heartbeats, the system's
+ *            summary handed over by the next beat only, once a phase
+ *            change), the crash's
  *            end (the async-signal-safe write), the next start's lines and
  *            its copy to last-run-previous.txt, a run that ended without a
  *            word, the clean end after a loss.
@@ -315,6 +317,16 @@ static void log_line(const char *line)
 }
 
 /* the file now, read whole: its size, parsed into *f */
+/* the system's summary hook: its calls and the last text */
+static int s_sumCalls;
+static char s_sumLast[LAST_RUN_SUMMARY_MAX];
+
+static void sum_hook(const char *text)
+{
+    s_sumCalls++;
+    snprintf(s_sumLast, sizeof s_sumLast, "%s", text);
+}
+
 static size_t read_file(const char *path, char *buf, size_t cap, LastRunFacts *f)
 {
     FILE *fp = ico_fopen(path, "rb");
@@ -409,10 +421,26 @@ static void run(const char *base)
              "file cache 2104, anon 3012, kernel 640, GPU ?, rest 5190, swap used 1200 MB");
     last_run_beat(&b);
 
+    /* the system's summary: set at a phase change (on Android it can come
+       on the game's fiber stack), handed to the hook by the next beat (the
+       heartbeat's thread) only, once */
+    last_run_set_summary_hook(sum_hook);
+    CHECK(s_sumCalls == 0);
+    last_run_beat(&b);
+    CHECK(s_sumCalls == 1 && strncmp(s_sumLast, "ico-pc a self-test: the fog self-test", 37) == 0);
+    s_sumCalls = 0;
+
     /* the game, its first picture, play */
     last_run_step("window: start: up in 12.3 s; the game runs");
     (void)read_file(cur, buf, sizeof buf, &s_f);
     CHECK(s_f.phase == LAST_RUN_PHASE_GAME);
+    CHECK(s_sumCalls == 0);
+    last_run_beat(&b);
+    CHECK(s_sumCalls == 1 && strncmp(s_sumLast, "ico-pc the game", 15) == 0 &&
+          strstr(s_sumLast, " | resets 47->66 | free 1903 MB, lowest 1897") != NULL);
+    last_run_beat(&b);
+    CHECK(s_sumCalls == 1);
+    last_run_set_summary_hook(NULL);
     last_run_present();
     (void)read_file(cur, buf, sizeof buf, &s_f);
     CHECK(s_f.phase == LAST_RUN_PHASE_FIRST_PICTURE);
