@@ -9,10 +9,17 @@
  *              worker started; the verdict arrives after the listing, the
  *              next listing has it; one piece of work
  *   waits      a load asked while the worker is on that slot waits for it
- *              (a second thread asks, the work is held open) and takes the
- *              worker's result: one piece of work, no second pass
- *   changed    the file changed after its verdict (its time): the listing
- *              queues it again, a load works it out itself
+ *              (a second thread asks, the work is held open until the load
+ *              is seen waiting, ico_vd_waiting) and takes the worker's
+ *              result: one piece of work, no second pass
+ *   first      a load waiting while the worker is on another slot goes
+ *              before the worker's next queued slot (the work's order)
+ *   cancel     the queue dropped while the worker is on a slot: that slot
+ *              ends, no other is worked out, a later kick starts nothing
+ *   changed    the file changed after its verdict (its time, then its
+ *              header's build with the same size and time, then the
+ *              settings): the listing queues it again, a load works it out
+ *              itself
  *   nofile     a slot without a file: nothing to hand over
  *   nothread   no worker: the queue worked out inside the kick
  *   release    a replaced verdict's owned memory released, the rest at the end
@@ -38,8 +45,9 @@ static int g_computes[ICO_VD_SLOTS + 1];
 static int g_released;
 static IcoMutex *g_mx;
 static IcoCond *g_cv;
-static int g_hold;    /* the work waits while set */
-static int g_in_work; /* the work has started */
+static int g_hold;                 /* the work waits while set */
+static int g_in_work;              /* the work has started */
+static int g_order[16], g_n_order; /* the slots in the order worked out */
 
 static int key_now(int slot, void *user, IcoVdKey *key)
 {
@@ -59,6 +67,9 @@ static int compute(int slot, void *user, void *result, IcoVdKey *key)
     (void)user;
     ico_mutex_lock(g_mx);
     g_computes[slot]++;
+    if (g_n_order < 16) {
+        g_order[g_n_order++] = slot;
+    }
     g_in_work = 1;
     ico_cond_broadcast(g_cv);
     while (g_hold) {
@@ -114,6 +125,37 @@ static void reset(void)
     g_released = 0;
     g_hold = 0;
     g_in_work = 0;
+    g_n_order = 0;
+}
+
+/* until n callers wait for the work lock (bounded: 10 s) */
+static int wait_waiting(IcoVerdicts *v, int n)
+{
+    const double t0 = ico_thread_now_ms();
+
+    while (ico_vd_waiting(v) < n) {
+        if (ico_thread_now_ms() - t0 > 10000.0) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
+static void hold_until_in_work(void)
+{
+    ico_mutex_lock(g_mx);
+    while (!g_in_work) {
+        ico_cond_wait(g_cv, g_mx);
+    }
+    ico_mutex_unlock(g_mx);
+}
+
+static void let_go(void)
+{
+    ico_mutex_lock(g_mx);
+    g_hold = 0;
+    ico_cond_broadcast(g_cv);
+    ico_mutex_unlock(g_mx);
 }
 
 /* until the worker is done (bounded: 10 s) */
@@ -161,6 +203,7 @@ static void test_arrives(void)
 
 typedef struct Asker {
     IcoVerdicts *v;
+    int slot;
     int rc;
     Res r;
 } Asker;
@@ -169,7 +212,7 @@ static void asker(void *arg)
 {
     Asker *a = (Asker *)arg;
 
-    a->rc = ico_vd_with(a->v, 2, take_fn, &a->r);
+    a->rc = ico_vd_with(a->v, a->slot, take_fn, &a->r);
 }
 
 static void test_waits(void)
@@ -196,14 +239,13 @@ static void test_waits(void)
     ico_mutex_unlock(g_mx);
     memset(&a, 0, sizeof a);
     a.v = v;
+    a.slot = 2;
     a.rc = -9;
     t = ico_thread_create(asker, &a);
     CHECK(t != NULL);
-    /* the load is waiting: let the work end */
-    ico_mutex_lock(g_mx);
-    g_hold = 0;
-    ico_cond_broadcast(g_cv);
-    ico_mutex_unlock(g_mx);
+    /* the load is seen waiting, then the work ends */
+    CHECK(t == NULL || wait_waiting(v, 1) == 0, "the load never waited");
+    let_go();
     if (t != NULL) {
         ico_thread_join(t);
     }
@@ -211,6 +253,67 @@ static void test_waits(void)
     CHECK(a.r.value == 20);
     CHECK(g_computes[2] == 1, "%d pieces of work (no second pass)", g_computes[2]);
     CHECK(wait_idle(v) == 0);
+    ico_vd_destroy(v);
+}
+
+static void test_first(void)
+{
+    IcoVerdicts *v;
+    IcoThread *t;
+    Asker a;
+    Res r;
+
+    reset();
+    v = make(0);
+    if (v == NULL) {
+        CHECK(v != NULL);
+        return;
+    }
+    g_hold = 1;
+    CHECK(ico_vd_list(v, 1, &r) == 0 && ico_vd_list(v, 2, &r) == 0 && ico_vd_list(v, 3, &r) == 0);
+    CHECK(ico_vd_kick(v) == 1);
+    hold_until_in_work(); /* the worker on slot 1 */
+    memset(&a, 0, sizeof a);
+    a.v = v;
+    a.slot = 3;
+    a.rc = -9;
+    t = ico_thread_create(asker, &a);
+    CHECK(t != NULL);
+    CHECK(t == NULL || wait_waiting(v, 1) == 0, "the load never waited");
+    let_go();
+    if (t != NULL) {
+        ico_thread_join(t);
+    }
+    CHECK(wait_idle(v) == 0);
+    CHECK(a.rc == 0 && a.r.value == 30, "the load worked slot 3 out itself (%d, %d)", a.rc,
+          a.r.value);
+    CHECK(g_n_order == 3 && g_order[0] == 1 && g_order[1] == 3 && g_order[2] == 2,
+          "the load's slot before the worker's next: %d %d %d (%d)", g_order[0], g_order[1],
+          g_order[2], g_n_order);
+    ico_vd_destroy(v);
+}
+
+static void test_cancel(void)
+{
+    IcoVerdicts *v;
+    Res r;
+
+    reset();
+    v = make(0);
+    if (v == NULL) {
+        CHECK(v != NULL);
+        return;
+    }
+    g_hold = 1;
+    CHECK(ico_vd_list(v, 1, &r) == 0 && ico_vd_list(v, 2, &r) == 0 && ico_vd_list(v, 3, &r) == 0);
+    CHECK(ico_vd_kick(v) == 1);
+    hold_until_in_work();
+    ico_vd_cancel(v);
+    let_go();
+    CHECK(wait_idle(v) == 0);
+    CHECK(g_n_order == 1 && g_order[0] == 1, "after the cancel only the slot in work (%d)",
+          g_n_order);
+    CHECK(ico_vd_list(v, 2, &r) == 0 && ico_vd_kick(v) == 0, "a later kick starts nothing");
     ico_vd_destroy(v);
 }
 
@@ -237,6 +340,10 @@ static void test_changed(void)
     CHECK(ico_vd_with(v, 3, take_fn, &r) == 0); /* worked out by the load */
     CHECK(r.value == 33 && g_computes[3] == 2);
     CHECK(g_released == 1, "the replaced verdict released (%d)", g_released);
+    /* another file of the same size and second (its header's build): the same */
+    g_key[3].file++;
+    CHECK(ico_vd_list(v, 3, &r) == 0);
+    CHECK(ico_vd_with(v, 3, take_fn, &r) == 0 && g_computes[3] == 3);
     /* the settings changed: the same */
     g_key[3].keys++;
     CHECK(ico_vd_list(v, 3, &r) == 0);
@@ -295,6 +402,8 @@ int main(void)
     CHECK(ico_vd_create(&bad) == NULL);
     test_arrives();
     test_waits();
+    test_first();
+    test_cancel();
     test_changed();
     test_nofile();
     test_nothread();

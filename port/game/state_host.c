@@ -2638,17 +2638,47 @@ typedef struct SlotVerdict {
 static IcoVerdicts *s_vd;
 static IcoStateHeader s_vd_now; /* this run's header as the worker's job was given */
 
-static int vd_key_now(int slot, void *user, IcoVdKey *key)
+/* A slot file's identity: its size and time and its header's build id and
+   commit (a file replaced within one second by another of the same size is
+   told apart); the settings are the caller's.  0, or -1 (no file). */
+static int vd_key_file(int slot, IcoVdKey *key)
 {
     char path[ICO_PATH_MAX];
+    IcoStateHeader *h;
+    uint64_t f = 0xcbf29ce484222325ull;
+    size_t i;
+    int rc;
 
-    (void)user;
     memset(key, 0, sizeof *key);
-    key->keys = s_vd_now.settings_hash;
-    return ico_state_slot_path(path, sizeof path, s_dir, slot, ".ics") != 0 ||
-                   ico_path_kind(path, &key->size, &key->mtime) != 0
-               ? -1
-               : 0;
+    if (ico_state_slot_path(path, sizeof path, s_dir, slot, ".ics") != 0 ||
+        ico_path_kind(path, &key->size, &key->mtime) != 0) {
+        return -1;
+    }
+    h = (IcoStateHeader *)malloc(sizeof *h);
+    if (h == NULL) {
+        return -1;
+    }
+    rc = ico_state_file_read_header(path, h) == ICO_STATE_OK ? 0 : -1;
+    for (i = 0; rc == 0 && i < sizeof h->build_id; i++) {
+        f = (f ^ h->build_id[i]) * 0x100000001b3ull;
+    }
+    for (i = 0; rc == 0 && i < sizeof h->commit && h->commit[i] != '\0'; i++) {
+        f = (f ^ (unsigned char)h->commit[i]) * 0x100000001b3ull;
+    }
+    free(h);
+    key->file = f;
+    return 0; /* a header that cannot be read is keyed by its size and time */
+}
+
+/* the slot's key now (the game thread: the live settings) */
+static int vd_key_now(int slot, void *user, IcoVdKey *key)
+{
+    (void)user;
+    if (vd_key_file(slot, key) != 0) {
+        return -1;
+    }
+    key->keys = now_header()->settings_hash;
+    return 0;
 }
 
 static void vd_release(void *res, void *user)
@@ -2677,11 +2707,13 @@ static int vd_compute(int slot, void *user, void *res, IcoVdKey *key)
     int xb = 0;
 
     (void)user;
-    if (vd_key_now(slot, NULL, key) != 0 ||
+    /* keyed by the settings it is judged under (the work's copy) */
+    if (vd_key_file(slot, key) != 0 ||
         ico_state_slot_path(path, sizeof path, s_dir, slot, ".ics") != 0 ||
         ico_state_file_read_header(path, &h) != ICO_STATE_OK) {
         return -1;
     }
+    key->keys = now->settings_hash;
     t0 = ico_thread_now_ms();
     s_legacy_ms = 0;
     out->exact = ico_state_header_check(&h, now, out->detail, sizeof out->detail);
@@ -2755,15 +2787,32 @@ static IcoVerdicts *vd(void)
     return s_vd;
 }
 
-/* the header copy the work reads, renewed while no work runs (the settings
-   may change between listings) */
-static void vd_refresh_now(void)
+/* The header copy the work reads, renewed under the work lock when the
+   settings (or the disc) changed.  A load waits for the worker's slot to
+   renew it (wait); the listing never waits: while the worker runs, the
+   verdicts it stores carry the settings they were judged under, which the
+   live key no longer matches, so they are judged again (state_verdicts.h
+   keys), never used. */
+static void vd_refresh_now(int wait)
 {
-    if (vd() != NULL && !ico_vd_running(s_vd)) {
-        ico_vd_lock_work(s_vd);
-        s_vd_now = *now_header();
-        ico_vd_unlock_work(s_vd);
+    const IcoStateHeader *h;
+
+    if (vd() == NULL) {
+        return;
     }
+    h = now_header();
+    if (h->settings_hash == s_vd_now.settings_hash &&
+        strncmp(h->disc, s_vd_now.disc, sizeof h->disc) == 0) {
+        return;
+    }
+    if (!wait && ico_vd_running(s_vd)) {
+        return;
+    }
+    ico_vd_lock_work(s_vd);
+    s_vd_now = *h;
+    ico_vd_unlock_work(s_vd);
+    fprintf(stderr, "state: the slots' verdicts are judged under the settings now (%016llx)\n",
+            (unsigned long long)h->settings_hash);
 }
 
 typedef struct VdTake {
@@ -2814,7 +2863,7 @@ static IcoStateResult vd_load_exact(int slot, const char *path, const IcoStateHe
     t.xb = xb;
     t.detail = detail;
     t.n = n;
-    vd_refresh_now();
+    vd_refresh_now(1);
     rc = vd() != NULL ? ico_vd_with(s_vd, slot, vd_take_exact_fn, &t) : -1;
     if (rc < 0 || t.spent) {
         IcoStateResult r;
@@ -2931,7 +2980,7 @@ static void load_checkpoint(int slot, const char *path, const IcoStateHeader *sa
     }
     why[0] = '\0';
     memset(&plan, 0, sizeof plan);
-    vd_refresh_now();
+    vd_refresh_now(1);
     if (vd_take_ckpt(slot, &ap, &plan.image_stage, plan.source, sizeof plan.source)) {
         r = ICO_STATE_OK;
     } else {
@@ -3398,7 +3447,7 @@ void ico_state_list(IcoStateSlotInfo out[ICO_STATE_SLOTS])
         return;
     }
     now = now_header();
-    vd_refresh_now();
+    vd_refresh_now(0);
     vd_gen = vd() != NULL ? ico_vd_gen(s_vd) : 0;
     if (cache_gen != s_list_gen || cache_keys != now->settings_hash || cache_vd != vd_gen) {
         int i, pending = 0;
