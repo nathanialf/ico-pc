@@ -1082,8 +1082,9 @@ saved with. On a journey with Permadeath on, save states are off: none can be
 saved or loaded, and a state made on such a journey never loads. After a load the game is back on the pause menu, on **Save states**. On
 a computer, F5 saves to slot 1 and F9 loads it. On Windows and Android a
 state carries over to a later version of the game when the part of the game
-it was saved in has not changed. On Linux, the Steam Deck and Mac a state
-resumes where it was saved only in the version that saved it.
+it was saved in has not changed and the game can be sure it resumes it
+exactly. On Linux, the Steam Deck and Mac count on a state resuming where it
+was saved only in the version that saved it.
 
 A state that the game cannot resume where it was saved (one made by another
 version of the game, or on another kind of device) still loads: the game
@@ -1091,10 +1092,14 @@ continues from the last checkpoint the state holds, the place a game over
 would have taken you back to (the last save point, idol door or story
 checkpoint you passed before saving the state), the way Continue loads a
 memory card save. The line under the cards says so for such a slot, and a
-message says so after the load. The play time, the difficulty and the
-settings a memory card save keeps (the screen effect and Players) come from
-the state. Nothing is written to your memory card. A state saved in a new
-game before its first checkpoint has nothing to continue from; the message
+message says so after the load. The difficulty comes from the state; the
+play time and the settings a memory card save keeps (the screen effect and
+Players) come from the state when the game can find them in it, and stay as
+they are otherwise. Nothing is written to your memory card. Such a load
+works from the pause menu and the title screen: F9 during play asks you to
+pause first. A state from another disc or a Permadeath journey is refused,
+and a state saved in a new game before its first checkpoint, or one whose
+checkpoint the game cannot find, has nothing to continue from; the message
 then says so. A gameplay
 setting that a later version adds does not stop an older state from loading
 while you leave that setting as it starts. A state made before states kept
