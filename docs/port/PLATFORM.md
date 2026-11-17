@@ -1354,6 +1354,11 @@ as the loader places Android's library), the game data ranges of
 `snap_game_data` copies. The test `state_carry_image` holds that mirror to the real function on the
 probe's own executable.
 
+The relocations are read from the dynamic section: RELA, Android's packed `DT_ANDROID_RELA`
+("APS2", which the NDK's clang asks lld for on Android targets) and `DT_RELR` / `DT_ANDROID_RELR`
+(and a PE's base relocations). A game data range in which no initialised pointer is found cannot be
+judged (status 2): its relocations were not read, and a pass on nothing would be vacuous.
+
 Exit status: 0 every `init` word is named; 1 an `init` word is not (each listed); 2 the program or
 symbol file could not be judged; 3 the program's states never carry over by design (an image fixed
 below 4 GB: the Linux x86-64 program, `ICO_XB_LOW_IMAGE`). A report reads:
@@ -1385,6 +1390,12 @@ records applied, to say what an old release's states could do. On the shipped An
 it reports issue 217's diagnosis exactly: 214 unnamed targets held by 275 words of the game data,
 all C strings of `.rodata` inside the one R+E segment. On the shipped Windows program it reports
 none (its `.rdata` is a read-only section of its own).
+
+The `table` and `code` classes of an Android library list, besides texts, the PLT stubs' slots in
+`.got.plt` (an address only the stub computes into a scratch register, never handed to the game)
+and anonymous `.data.rel.ro` objects the port's data descriptors (`rows_*`, `record_*` of
+`table_desc.c`) point at: writable data no unique symbol names, which a state would pin if the
+game's memory ever held such a pointer.
 
 What the guard cannot see: addresses made only at run time (heap blocks, a pointer computed by
 arithmetic, a text a thread holds in a register: issue 217's run-time texts are `code` words when

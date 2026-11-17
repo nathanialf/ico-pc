@@ -194,33 +194,80 @@ class Elf:
                         dsyms.append((shndx, value))
             return dsyms[i] if i < len(dsyms) else (0, 0)
 
+        def one(off, info, add):
+            typ, sym = info & 0xFFFFFFFF, info >> 32
+            kind = kinds.get(typ)
+            if kind == "rel":
+                out.append((off, add & 0xFFFFFFFFFFFFFFFF))
+            elif kind in ("abs", "sym"):
+                shndx, value = dynsym(sym)
+                if sym == 0 or shndx == 0:
+                    out.append((off, None))  # another library's
+                else:
+                    out.append((off, (value + (add if kind == "abs" else 0)) & 0xFFFFFFFFFFFFFFFF))
+            else:
+                out.append((off, None))
+
         def rela(addr, size):
             o = self.file_off(addr)
             if o is None:
                 return
             for k in range(size // 24):
                 off, info, add = struct.unpack_from("<QQq", self.b, o + 24 * k)
-                typ, sym = info & 0xFFFFFFFF, info >> 32
-                kind = kinds.get(typ)
-                if kind == "rel":
-                    out.append((off, add & 0xFFFFFFFFFFFFFFFF))
-                elif kind in ("abs", "sym"):
-                    shndx, value = dynsym(sym)
-                    if sym == 0 or shndx == 0:
-                        out.append((off, None))  # another library's
-                    else:
-                        out.append((off, (value + (add if kind == "abs" else 0)) & 0xFFFFFFFFFFFFFFFF))
-                else:
-                    out.append((off, None))
+                one(off, info, add)
 
-        if 7 in d:
-            rela(d[7], d.get(8, 0))
-        if 23 in d and d.get(20, 7) == 7:
-            rela(d[23], d.get(2, 0))
-        if 36 in d:  # DT_RELR: the slots hold their link address already
-            o = self.file_off(d[36])
+        def aps2(addr, size):
+            """Android's packed relocations (DT_ANDROID_RELA: "APS2" and SLEB128
+            groups; bionic linker/linker_reloc_iterators.h)"""
+            o = self.file_off(addr)
+            if o is None or self.b[o:o + 4] != b"APS2":
+                raise Fail("DT_ANDROID_RELA at 0x%x does not start with APS2" % addr)
+            pos = [o + 4]
+            end = o + size
+
+            def sleb():
+                v, shift = 0, 0
+                while True:
+                    if pos[0] >= end:
+                        raise Fail("DT_ANDROID_RELA runs past its size")
+                    c = self.b[pos[0]]
+                    pos[0] += 1
+                    v |= (c & 0x7F) << shift
+                    shift += 7
+                    if c & 0x80 == 0:
+                        if c & 0x40:
+                            v -= 1 << shift
+                        return v
+            n = sleb()
+            off = sleb()
+            info = add = 0
+            done = 0
+            while done < n:
+                size_g = sleb()
+                flags = sleb()
+                by_info, by_delta, by_addend, has_addend = flags & 1, flags & 2, flags & 4, flags & 8
+                delta = sleb() if by_delta else 0
+                if by_info:
+                    info = sleb()
+                if has_addend and by_addend:
+                    add += sleb()
+                elif not has_addend:
+                    add = 0
+                for _ in range(size_g):
+                    off += delta if by_delta else sleb()
+                    if not by_info:
+                        info = sleb()
+                    if has_addend and not by_addend:
+                        add += sleb()
+                    one(off & 0xFFFFFFFFFFFFFFFF, info & 0xFFFFFFFFFFFFFFFF, add)
+                done += size_g
+
+        def relr(addr, size):
+            """DT_RELR (or Android's earlier DT_ANDROID_RELR): the slots hold
+            their link address already"""
+            o = self.file_off(addr)
             where = 0
-            for k in range(d.get(35, 0) // 8):
+            for k in range(size // 8):
                 e = struct.unpack_from("<Q", self.b, o + 8 * k)[0]
                 if e & 1 == 0:
                     where = e
@@ -232,6 +279,19 @@ class Elf:
                         if bits >> i & 1:
                             out.append((where + 8 * i, self.word(where + 8 * i)))
                     where += 63 * 8
+
+        if 7 in d:
+            rela(d[7], d.get(8, 0))
+        if 0x60000011 in d:  # DT_ANDROID_RELA, DT_ANDROID_RELASZ
+            aps2(d[0x60000011], d.get(0x60000012, 0))
+        if 0x6000000F in d:
+            raise Fail("DT_ANDROID_REL (packed REL relocations) is not read here")
+        if 23 in d and d.get(20, 7) == 7:
+            rela(d[23], d.get(2, 0))
+        if 36 in d:
+            relr(d[36], d.get(35, 0))
+        if 0x6FFFE000 in d:  # DT_ANDROID_RELR, DT_ANDROID_RELRSZ
+            relr(d[0x6FFFE000], d.get(0x6FFFE001, 0))
         return out
 
     def word(self, vaddr):
@@ -798,6 +858,12 @@ def check(a):
     prog["slots"] = slots
     prog["slotset"] = set(slots)
     nwords = sum(len(v) for v in init.values())
+    if not init:
+        # the game's data always holds initialised pointers: none found means
+        # the relocations were not read (a packed format, a reader's gap),
+        # never that every pointer is named
+        raise Fail("no initialised pointer found in the game data range [0x%x, 0x%x): its relocations "
+                   "were not read" % prog["game"][0])
     say("  init: %d initialised pointers in the game data, %d distinct targets; table: %d other relocated "
         "pointers, %d distinct targets" % (nwords, len(init), sum(len(v) for v in table.values()), len(table)))
     if a.rules == "format2":
@@ -1021,13 +1087,28 @@ def selftest(a):
         # temporary: the map names this object)
         sh(cc + ["-c", "-o", obj, src])
         driver = cc[:2] if name.startswith("lld") else cc[:1]  # the compiler (and its --target)
-        sh(driver + ld + ["-o", binary, obj, "-Wl,-Map=" + mapf])
+        try:
+            sh(driver + ld + ["-o", binary, obj, "-Wl,-Map=" + mapf])
+        except Fail as e:
+            if not name.startswith("elf-"):
+                raise
+            # a GNU ld without the -z option (not every target has it): its
+            # own default layout, checked below like any other
+            print("selftest %s: the linker refused %s; linked with its default layout" % (name, ld[-1]))
+            print(str(e).splitlines()[-1] if str(e) else "")
+            sh(driver + ld[:-1] + ["-o", binary, obj, "-Wl,-Map=" + mapf])
         if name in separate:
             im = elf_image(Elf(binary))
             text = Elf(binary).by.get(".rodata") or {}
             print("selftest %s: read-only segments %d" % (name, len(im["ro"])))
             if bool(im["ro"]) != separate[name] or (not separate[name] and text and not (
                     im["text_lo"] <= text.get("addr", 0) < im["text_hi"])):
+                if name == "elf-separate":
+                    # GNU ld on a target without -z separate-code: the case
+                    # this host cannot make is said, not judged (the merged
+                    # case, the one issue 217 is about, is never let off)
+                    print("selftest %s: this linker cannot make the layout; not judged" % name)
+                    continue
                 failures.append("%s: the link did not make the layout the case is for (%d read-only segments)" % (
                     name, len(im["ro"])))
         for neg in (False, True):

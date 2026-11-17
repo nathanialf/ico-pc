@@ -71,15 +71,15 @@ set_tests_properties(state_carry_image PROPERTIES PASS_REGULAR_EXPRESSION
 # state_carry_xbuild: the real mechanism across two real links of one
 # program (port/platform/test/state_carry_xbuild_test.c): A as the desktop
 # programs are linked, B with more code and texts ahead of A's and its
-# read-only data inside the executable segment (lld --no-rosegment, else GNU
-# ld -z noseparate-code; A the opposite flag), each reading its own link
+# read-only data inside the executable segment (-z noseparate-code, with
+# --no-rosegment where the linker has it; A -z separate-code), each reading its own link
 # map; A's state loads into B and B's into A through ico_xb_finish,
 # ico_xb_check and ico_state_reloc_word, every word becoming the loading
 # build's own address of the same thing
 include(CheckLinkerFlag)
 check_linker_flag(C "LINKER:--no-rosegment" ICO_LD_NO_ROSEGMENT)
 check_linker_flag(C "LINKER:-z,noseparate-code" ICO_LD_NOSEPARATE_CODE)
-if(NOT ICO_LD_NO_ROSEGMENT AND NOT ICO_LD_NOSEPARATE_CODE)
+if(NOT ICO_LD_NOSEPARATE_CODE)
     message(STATUS "state_carry_xbuild: the linker cannot put read-only data inside the "
                    "executable segment: the test is not built")
     return()
@@ -100,12 +100,19 @@ foreach(_v a b)
         "LINKER:-Map=$<TARGET_FILE_DIR:state_carry_xbuild_${_v}>/state_carry_xbuild_${_v}.map")
 endforeach()
 target_compile_definitions(state_carry_xbuild_b PRIVATE CARRY_B=1)
-if(ICO_LD_NO_ROSEGMENT)
-    target_link_options(state_carry_xbuild_a PRIVATE "LINKER:--rosegment")
-    target_link_options(state_carry_xbuild_b PRIVATE "LINKER:--no-rosegment")
-else()
+# B: -z noseparate-code puts GNU ld's read-only data in the executable
+# segment; lld also needs --no-rosegment, which GNU ld 2.43+ accepts too
+# (keeping the merged layout: checked by hand with ld 2.44). GNU ld's own
+# --rosegment/--no-rosegment (2.43+) do NOT merge on their own: the first
+# version of this test linked B with --no-rosegment alone and GNU ld 2.44
+# gave R, R+E, R, RW. A: -z separate-code, its own segment for read-only
+# data with either linker. The test's layout lines check what came out.
+if(ICO_LD_NOSEPARATE_CODE)
     target_link_options(state_carry_xbuild_a PRIVATE "LINKER:-z,separate-code")
     target_link_options(state_carry_xbuild_b PRIVATE "LINKER:-z,noseparate-code")
+endif()
+if(ICO_LD_NO_ROSEGMENT)
+    target_link_options(state_carry_xbuild_b PRIVATE "LINKER:--no-rosegment")
 endif()
 add_test(NAME state_carry_xbuild
          COMMAND ${_carry_py} xbuild --a $<TARGET_FILE:state_carry_xbuild_a>
