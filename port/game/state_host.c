@@ -743,10 +743,15 @@ static IcoSymTab *sym_table(void)
 
         fprintf(stderr,
                 "state: symbols: %zu functions, %zu data symbols, %zu game data items (layout "
-                "%016llx) from %s in %.1f ms, %zu KB\n",
+                "%016llx) from %s in %.1f ms, %zu KB; the code 0x%llx-0x%llx from %s (%zu "
+                "sections)\n",
                 s_tab->n_unit, s_tab->n_data, s_tab->n_layout,
                 (unsigned long long)s_tab->layout_hash, name, ico_thread_now_ms() - t0,
-                bytes / 1024);
+                bytes / 1024, (unsigned long long)s_tab->code_lo,
+                (unsigned long long)s_tab->code_hi,
+                s_tab->code_from ? "its code sections"
+                                 : "the loader's segments (it names no code section)",
+                s_tab->n_sec);
     } else {
         fprintf(stderr,
                 "state: symbols: none (%s: %s); a state saved here loads only into this build, and "
@@ -855,27 +860,41 @@ static int build_syms(Copy *c, IcoXbStats *st)
 
         ico_xb_block(r, e->name, e->n, e->flags, (uint64_t)(uintptr_t)e->p, at[audio]);
         if ((e->flags & ICO_STATE_SCAN) != 0) {
+            char what[48];
+
+            snprintf(what, sizeof what, "the block %s", e->name);
+            ico_xb_where(r, what);
             ico_xb_scan(r, copy + at[audio], e->n, (uint64_t)(uintptr_t)e->p, 1);
         }
         at[audio] += e->n;
     }
+    ico_xb_where(r, "the arena");
     ico_xb_scan(r, c->p[SEC_ARENA], (size_t)c->n[SEC_ARENA], (uint64_t)(uintptr_t)ico_arena_base(),
                 1);
+    ico_xb_where(r, "the game's data");
     ico_xb_scan(r, c->p[SEC_GDATA], (size_t)c->n[SEC_GDATA], s_gdata[ICO_GAME_DATA].lo, 1);
+    ico_xb_where(r, "the game's bss");
     ico_xb_scan(r, c->p[SEC_GBSS], (size_t)c->n[SEC_GBSS], s_gdata[ICO_GAME_BSS].lo, 1);
     if (c->n[SEC_POBJ] != 0) {
         size_t pobj_bytes = 0;
         void **pobj = PObj_GetImageTables(&pobj_bytes);
 
+        ico_xb_where(r, "the model tables");
         ico_xb_scan(r, c->p[SEC_POBJ], (size_t)c->n[SEC_POBJ], (uint64_t)(uintptr_t)pobj, 1);
     }
     ico_sched_state_block(&sched, &sched_n);
+    ico_xb_where(r, "the scheduler's table");
     ico_xb_scan(r, c->p[SEC_SCHED], (size_t)c->n[SEC_SCHED], (uint64_t)(uintptr_t)sched, 1);
     if (parse_fibers(c, &img) == 0) {
         for (i = 0; i < img.n_fibers; i++) {
             const IcoFiberImage *f = &img.fibers[i];
+            char what[48];
 
+            snprintf(what, sizeof what, "fiber slot %u's control page", (unsigned)f->slot);
+            ico_xb_where(r, what);
             ico_xb_scan(r, f->ctrl, f->ctrl_bytes, f->slot_base, 1);
+            snprintf(what, sizeof what, "fiber slot %u's stack", (unsigned)f->slot);
+            ico_xb_where(r, what);
             xb_scan_stack(r, f);
         }
     }
@@ -900,6 +919,28 @@ static const char *pinned_why(unsigned flags)
         return "it points into the program in more places than the record holds";
     }
     return "";
+}
+
+/* The words a save named nothing (state_xbuild.h ico_xb_where), one line
+   each: the save's own list, or the one a refused load read from the
+   state. */
+static void log_unnamed(int slot, const char *when, const IcoXbUnnamed *list, unsigned listed,
+                        unsigned left)
+{
+    unsigned i;
+
+    for (i = 0; i < listed; i++) {
+        const IcoXbUnnamed *u = &list[i];
+
+        fprintf(
+            stderr,
+            "state: slot %d %s word %u of %u named by nothing: 0x%llx, %s; section %s, %s+0x%llx; "
+            "found in %s at 0x%llx\n",
+            slot, when, i + 1, left, (unsigned long long)u->word, ico_xb_why_text(u->reason),
+            u->section[0] != '\0' ? u->section : "none named",
+            u->sym[0] != '\0' ? u->sym : "no symbol", (unsigned long long)u->sym_off,
+            u->where[0] != '\0' ? u->where : "a place not recorded", (unsigned long long)u->at);
+    }
 }
 
 /* the save's own image (state_xbuild.h): above an upper half of 1 a word
@@ -1006,14 +1047,20 @@ static void save_finished(const IcoStateWriteResult *w)
                     "blocks; %u naming nothing, first 0x%llx)\n",
                     s_save.slot, pin, x->values, x->blocks, x->left,
                     (unsigned long long)x->first_unnamed);
+            if ((x->flags & ICO_XB_UNNAMED) != 0) {
+                log_unnamed(s_save.slot, "saved:", x->list, x->listed, x->left);
+            }
         } else {
             fprintf(stderr,
                     "state: slot %d can carry over to a later version that keeps %u functions "
-                    "(%u with a thread inside), %u data symbols, %u start-up values and texts, "
-                    "%u blocks and the game's data layout (%u program words, %u of them naming "
-                    "nothing and kept as numbers, first 0x%llx; record %zu bytes in %.1f ms)\n",
-                    s_save.slot, x->units, x->positions, x->data, x->points, x->blocks, x->values,
-                    x->left, (unsigned long long)x->first_unnamed, x->bytes, s_save.syms_ms);
+                    "(%u with a thread inside), %u data symbols, %u start-up values and texts "
+                    "(%u of them read-only data found by its bytes, %u texts), %u blocks and the "
+                    "game's data layout (%u program words, %u of them naming nothing and kept "
+                    "as numbers, first 0x%llx; code from %s; record %zu bytes in %.1f ms)\n",
+                    s_save.slot, x->units, x->positions, x->data, x->points, x->windows, x->texts,
+                    x->blocks, x->values, x->left, (unsigned long long)x->first_unnamed,
+                    x->code_from ? "the symbol file's sections" : "the loader's segments", x->bytes,
+                    s_save.syms_ms);
         }
         done(0, s_save.slot, ICO_STATE_OK, "");
     } else {
@@ -2068,6 +2115,11 @@ static void perform_load(int slot)
         /* another build's state (the platform is this one's): translated
            when everything it points into is unchanged here */
         r = other_build(path, &saved, &xv, &xb, detail, sizeof detail);
+        if (r != ICO_STATE_OK && xv.by_unnamed) {
+            /* the words its save named nothing, as the state lists them
+               (a format 2 state has no list) */
+            log_unnamed(slot, "refused:", xv.list, xv.listed, xv.left);
+        }
     }
     if (r != ICO_STATE_OK) {
         done(1, slot, r, detail);

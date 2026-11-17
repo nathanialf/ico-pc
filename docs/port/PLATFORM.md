@@ -1143,8 +1143,11 @@ scanned region need no other change).
 
 **The symbol table** (`port/platform/state_syms.h`): the symbol file the program ships for its
 crash reports (`ico_pc.map` beside the Linux program, `ico_pc_x64.map` beside the Windows one,
-Android's `assets/libmain.syms.gz`, which `tools/package_android.sh` now writes with the data
-symbols and their sizes in four columns the crash reader passes over; macOS and iOS ship none),
+Android's `assets/libmain.syms.gz`, which `tools/package_android.sh` writes with the data
+symbols and their sizes in four columns, a fifth column with the source file on a local whose
+name is not unique (from the symbol table's FILE entries; the table names it `<file>:<name>`),
+and the library's allocated sections from its section headers as `section <address> <size>
+<ELF flags> <name>` lines, all of which the crash reader passes over; macOS and iOS ship none),
 read whole once, at the first save, load or listing that needs it, through `diag_host.c`
 (`ico_diag_symbols_info`, `ico_diag_symbols_read`, a positional read that leaves the crash
 report's position alone), placed by `ico_diag_init` and checked by `ico_diag_log` (a file of
@@ -1153,9 +1156,19 @@ symbol, its input section's end or its own size; an input section's start withou
 a unit named `<object>:<section>`, so a static function a GNU ld map does not name is part of the
 unit before it), the named data outside the game's ranges, and the game's data layout: the
 symbols and input sections inside the two game data ranges as (range, offset, size, kind, name),
-whose XXH3-64 is the layout hash. Logged once: `state: symbols: N functions, M data symbols, K
-game data items (layout <hash>) from <file> in T ms, S KB`, or `state: symbols: none (<file>:
-<why>); ...`.
+whose XXH3-64 is the layout hash. It keeps the output sections the file names (a map's own
+output section lines, the nm table's `section` lines) and takes the code range from the code
+sections among them (`.text`, `.text.*`, `.init`, `.fini`, `.plt*` in a map, the ELF X flag in a
+`section` line), so the code and the read-only data are where the sections say, not where the
+loader's segment flags put them: Android's library is linked with `-Wl,--no-rosegment` below API
+30 (the NDK's flags), so its one read and execute segment holds the headers, `.rodata` with every
+string literal, `.eh_frame` and the code, and the loader's code range would hold all of them. The
+rest of the executable range becomes read-only data (`ico_xb_image`). A file without a code
+section keeps the loader's ranges: deriving the code's start from the first function symbol
+would judge code before it as data. Logged once: `state: symbols: N functions, M data symbols, K
+game data items (layout <hash>) from <file> in T ms, S KB; the code 0x..-0x.. from <its code
+sections|the loader's segments (it names no code section)> (C sections)`, or `state: symbols:
+none (<file>: <why>); ...`.
 
 **The code hash** (`port/platform/code_hash.h`): XXH3-64 of a unit's code with every field that
 depends on where the code and its data were linked set to zero: on x86-64 a branch displacement
@@ -1184,22 +1197,46 @@ be, left otherwise. Each distinct word is classed:
 | into a registered block | the block (every block is recorded: name, size, flags, old address, offset in its packed section) | the block by name, with the same size and flags; every block of either build in the other |
 | into a named variable of a unique name | the variable: name, ordinal, old start, size (exact when the file gave one); without a size (a GNU ld map names globals only, so its span runs to the next item and may hold the object's statics) also its input section's size and its offset in it | the variable, still unique, of the same exact size; without one, in an input section of the same size at the same offset (`the data around the variable <name> changed`) |
 | at a value the game's data held at start-up (an initialised table's pointer, or one the game copied from it) | a point: the value's offset in the data range | its own start-up value at that offset, in its image |
-| at a C string in read-only data (printable, ending within 24 bytes) | a point: the bytes | the same bytes in its read-only data (the first place) |
+| into read-only data (a text of any length or encoding, a constant without a symbol, a sized constant's end address) | a window: bytes around it, grown until they occur once in the saving image's read-only data, and the word's offset in them (the bytes whole, or their length, hash and first 24 bytes past the record's pool) | the bytes in exactly one place of its read-only data (`the text "<text>" is missing here`, `... is in more than one place here`; `the read-only data at <symbol>+0x.. (N bytes) ...` for no text) |
 
 The start-up values are a copy of the game data range taken by a constructor in `state_host.c`,
-after the loader relocated the initialised pointers and before any game code. The section holds a
-64-byte header (magic `SYMS`, its version 2, flags, the hash rules' version, the architecture,
-the counts, the layout hash, the first word nothing names and their count), then the units (48
-bytes each), variables (48; 40 without the input section in a version 1 record, which is read
-too), points (48) and blocks (40) and the names; the save's line gives its size.
+after the loader relocated the initialised pointers and before any game code.
+
+**The windows.** A text is the bytes from the word to the first NUL inside its read-only range, none
+of them a control character but tab, newline, carriage return and escape: what C's string
+functions read, so EUC-JP, UTF-8 and Korean literals are texts too; it starts as its whole
+content. Any other word starts with the 8 bytes either side of it. The save doubles the window
+both ways inside its read-only range until its bytes occur once in the saving image's read-only
+data (the search anchors on the window's rarest byte), so a literal that the linker merged into
+another's tail is named with that tail's neighbours, and a literal that occurs once is named by
+itself alone. The bytes are stored whole while the pool has room (`ICO_XB_POOL_BYTES`, 4 MB, less
+24 bytes for every point the record may hold); past it the window is stored as its length, XXH3-64
+and first 24 bytes, and the load counts the places that start with those bytes and hash alike. A
+load that finds one place translates the word to it plus the offset; none or more than one refuses
+the state with that reason, as the game's data: it never picks one of two.
+
+**The section.** A 64-byte header (magic `SYMS`, its version, flags, the hash rules' version, the
+architecture, the counts, the layout hash, the first word nothing names and their count; 80 bytes
+in version 3, the pool's size and the list's count after them), then the units (48 bytes each),
+variables (48; 40 without the input section in a version 1 record), points (48; 64 in version 3:
+a window's length, offset, flags, hash, place in the pool and nearest symbol) and blocks (40), in
+version 3 the list of words nothing names (40 each: the word, where it was found, its offset from
+the nearest symbol, the texts of where, the section and the symbol, the reason), the names, and
+in version 3 the pool of the windows' bytes. Version 3 is written; versions 1 and 2 are read as
+they were written (a version 2 point holds a text of at most 24 bytes, found at the first place
+that holds them). The save's line gives the size.
 
 **Words nothing names.** Only a word the record confirms is translated: a word in a unit (the
 hash rule above), in a game range, a block or a unique variable, or at a start-up value or a
-constant text. A word that lies in the image's range and that nothing in the table names (a code
-address outside every unit, a word into writable data that is no block and no unique variable, a
-word into the image's headers) is counted by the save (`ICO_XB_UNNAMED`, the count and the first
-such word in the header), and what it means depends on the saving image's upper half (the
-`ranges` record's image start; `ico_xb_check`):
+window. A word that lies in the image's range and that nothing in the table names (a code
+address outside every unit, a word into writable data that is no block and no unique variable,
+such as an anonymous `.data.rel.ro` table or the GOT, a word into the image's headers outside
+every section) is counted by the save (`ICO_XB_UNNAMED`, the count and the first such word in the
+header; in version 3 the first 16, `ICO_XB_LIST`, with the reason, the section holding it, the
+nearest symbol and offset, and what held it: `ico_xb_where` labels each scan with the block's
+name, the arena, the game's data or bss, the model tables, the scheduler's table, a fiber slot's
+control page or stack), and what it means depends on the saving image's upper half (the `ranges`
+record's image start; `ico_xb_check`):
 
 - 0 or 1 (Windows' fixed base 0x140000000, `--disable-dynamicbase` in `CMakeLists.txt`): such
   words are data more often than addresses, since any float from 2.0 to about 572 followed by the
@@ -1207,11 +1244,21 @@ such word in the header), and what it means depends on the saving image's upper 
   against the Windows program's sections held 203 such words, 140 of them in the DWARF sections
   the range leaves out, none a pointer. They are kept as the numbers they are: the load has no
   span or point for them, so each is left and counted with the words without a translation.
+  Such a number lands in read-only data as well (a float from about 2.0 to 5.0 next to a 1 falls in
+  the program's sections), so there only a text of at least one character is taken for an address;
+  a word into read-only data that is no text, or the empty one (any zero byte), is kept as a number
+  (`ICO_XB_WHY_NUMBER`). A number that lands on a text is named as that text, as an address would
+  be: translated when the later build holds the text once, refused when it does not.
 - Above 1 (Android's library at a randomised 64-bit base): no float next to a small integer
   reaches the image, so such a word is an address the table does not name, and the state is
   refused, pinned to its build (`it holds a program address no symbol names (0x.., N such words):
   the version that saved it left them unnamed`; the save's line already says it loads only into
-  its build).
+  its build, and both the save and the refused load list the words, the load from the record).
+  Every read-only word is named there by its window, so what pins a state is a code address
+  outside every unit or a writable word no symbol of a unique name holds. A version 2 state saved
+  by Android's library holds the text words its loader-flag ranges left unnamed (every one did:
+  the game's initialised tables hold over two hundred pointers to literals), so it stays refused
+  with this reason and no list.
 
 What the first case leaves: a number that happens to land on named code or data is still read as
 an address (translated when that function or variable moved, or a refusal when the function a
@@ -1236,7 +1283,9 @@ it as it is and the sections check counts the saved reg and audio sections witho
 record's flags (pinned, above), this build's table (`this build has no symbol file`), the hash
 rules, the layout hash (`the game's data layout changed`), each unit (`the function <name> is
 missing here`, `the function <name> changed`), each variable, each point (`the game's start-up
-data changed`, `the text "<text>" is missing here`). Passed, it builds
+data changed`, `the text "<text>" is missing here`, `the text "<text>" is in more than one place
+here`, `the read-only data at <symbol>+0x.. (N bytes) is missing here`, `the symbols record's
+window is damaged`). Passed, it builds
 the spans (old `[lo, hi]` to new start: a unit `[start, start + size - 1]`, a variable, a block and
 the two game ranges with their end included, an overlap cut so the later start wins) and the
 points (exact words), and the load runs as for the same build with `rel.xlate` set: the reg and
@@ -1427,8 +1476,10 @@ the game lists the reads of unset locals the compiler sees (`camera-ico2.c`'s mo
 | `state: save states are off: <reason>` | once, instead of the line above |
 | `state: the game's data ranges are not bracketed on this build (<why>): save states are off` | once, the verify failed |
 | `state: saved slot N (<path>): arena <raw> -> <packed>, gdata ..., gbss ..., reg ..., audio ..., sched ..., fibers ..., pobj ..., ranges ..., syms ...; <k> fibers; copy <ms> ms, write <ms> ms, file <bytes> bytes` | a save written |
-| `state: slot N can carry over to a later version that keeps U functions (P with a thread inside), D data symbols, K start-up values and texts, B blocks and the game's data layout (W program words, X of them naming nothing and kept as numbers, first 0x..; record <bytes> bytes in <ms> ms)`, or `state: slot N loads only into this build: <why> (W program words, B blocks; X naming nothing, first 0x..)` | after each `saved` line: the `syms` record ([Across versions](#across-versions)) |
-| `state: symbols: N functions, M data symbols, K game data items (layout <hash>) from <file> in T ms, S KB`, or `state: symbols: none (<file>: <why>); a state saved here loads only into this build, and no other build's state loads here` | once, at the first save, load or listing that needs the table |
+| `state: slot N can carry over to a later version that keeps U functions (P with a thread inside), D data symbols, K start-up values and texts (R of them read-only data found by its bytes, T texts), B blocks and the game's data layout (W program words, X of them naming nothing and kept as numbers, first 0x..; code from <the symbol file's sections\|the loader's segments>; record <bytes> bytes in <ms> ms)`, or `state: slot N loads only into this build: <why> (W program words, B blocks; X naming nothing, first 0x..)` | after each `saved` line: the `syms` record ([Across versions](#across-versions)) |
+| `state: slot N saved: word I of X named by nothing: 0x.., <reason>; section <name\|none named>, <symbol\|no symbol>+0x..; found in <the block B\|the arena\|the game's data\|the game's bss\|the model tables\|the scheduler's table\|fiber slot S's control page\|fiber slot S's stack\|a place not recorded> at 0x..` | after a `loads only into this build` line for words nothing names: the first 16 |
+| `state: slot N refused: word I of X named by nothing: ...` (the same words) | a load refused for words nothing names, from a version 3 state's list, before the `refused` line |
+| `state: symbols: N functions, M data symbols, K game data items (layout <hash>) from <file> in T ms, S KB; the code 0x..-0x.. from <its code sections\|the loader's segments (it names no code section)> (C sections)`, or `state: symbols: none (<file>: <why>); a state saved here loads only into this build, and no other build's state loads here` | once, at the first save, load or listing that needs the table |
 | `state: slot N was saved by version <v>, this is <v>: everything it points into is unchanged here, so it is translated (U functions, D data symbols, K start-up values and texts, S spans, P points; L dead-frame words without one; X words naming nothing kept as numbers, first 0x..)` and, after the `loaded` line, `state: slot N from version <commit>: M program words had no translation and were left as they were (first 0x..)` | a load of another build's state |
 | `state: slot N (saved by <commit>) loads here`, or `... cannot be loaded here: <v> -> <v>: <blocker>` | each listing, per slot of another build |
 | `state: loaded slot N (saved at Main tick T, stage S): deltas module +0x0 (fixed image), arena +0x0 (pinned), pool +0x0 (pinned), pobj ... ; words rewritten [(nothing moved)] arena .., gdata .., gbss .., registry .., pobj ..; thread pointer 0x<old>->0x<new>[ unchanged\| not recorded\| not needed] (K words), stack guard[ unchanged\| not recorded\| not needed] (M words); checks P partitions, B blocks, T threads, H handlers; K fibers; apply <ms> ms` | a load done |

@@ -15,6 +15,7 @@
 
 #include "code_hash.h"
 #include "state_registry.h"
+#include "xxh3.h"
 
 /* --- the records ------------------------------------------------------------------ */
 
@@ -33,14 +34,20 @@ enum {
     H_UNNAMED = 48,
     H_VALUES = 56,
     H_LEFT = 60,
-    H_BYTES = 64
+    H_BYTES = 64,
+    /* version 3 */
+    H_POOL = 64, /* the windows' pool's bytes */
+    H_LIST = 68, /* the listed words nothing names */
+    H_BYTES3 = 80
 };
 
 #define UNIT_BYTES 48u
 #define DATA_BYTES 48u /* 40 in a version 1 record: no input section */
 #define DATA_BYTES_V1 40u
-#define POINT_BYTES 48u
+#define POINT_BYTES_V2 48u
+#define POINT_BYTES 64u /* version 3 */
 #define BLOCK_BYTES 40u
+#define LIST_BYTES 40u
 
 /* a unit record's flags */
 #define XU_START 1u    /* a strict word at its start (a function pointer) */
@@ -51,8 +58,15 @@ enum {
 #define XD_EXACT 1u
 #define XD_SECTION 2u /* the input section holding it: its size and the symbol's offset */
 /* a point's kinds */
-#define XP_SNAP 1u /* aux: the byte offset of the value in the game's data range */
-#define XP_TEXT 2u /* content: a C string */
+#define XP_SNAP 1u   /* aux: the byte offset of the value in the game's data range */
+#define XP_TEXT 2u   /* version 2: content, a C string of at most ICO_XB_CONTENT bytes */
+#define XP_WINDOW 3u /* version 3: a window of read-only data (state_xbuild.h) */
+/* a window's flags */
+#define XW_TEXT 1u   /* a text */
+#define XW_HASHED 2u /* the pool holds its prefix only: found by the hash */
+/* the labels ico_xb_where keeps */
+#define WHERE_MAX 1024
+#define WHERE_BYTES 48
 
 static void put32(unsigned char *p, uint32_t v)
 {
@@ -101,9 +115,15 @@ typedef struct BlockRec {
 } BlockRec;
 
 struct IcoXbRefs {
-    IcoXbProc p;
+    IcoXbProc p;   /* its image as the table places it (ico_xb_image) */
     uint64_t *key; /* open addressing over ICO_XB_MAX_VALUES slots; 0 empty */
     uint8_t *strict;
+    uint16_t *lab; /* each word's first sighting: its label and address */
+    uint64_t *at;
+    char (*labels)[WHERE_BYTES];
+    unsigned n_labels;
+    uint16_t cur_label;
+    uint64_t cur_at;
     size_t n_vals;
     int overflow;
     BlockRec block[ICO_XB_MAX_BLOCKS];
@@ -136,14 +156,23 @@ IcoXbRefs *ico_xb_begin(const IcoXbProc *p)
         return NULL;
     }
     r->p = *p;
+    ico_xb_image(p->tab, &r->p.image);
     r->key = (uint64_t *)calloc(ICO_XB_MAX_VALUES, sizeof *r->key);
     r->strict = (uint8_t *)calloc(ICO_XB_MAX_VALUES, 1);
-    if (r->key == NULL || r->strict == NULL) {
+    r->lab = (uint16_t *)calloc(ICO_XB_MAX_VALUES, sizeof *r->lab);
+    r->at = (uint64_t *)calloc(ICO_XB_MAX_VALUES, sizeof *r->at);
+    r->labels = (char (*)[WHERE_BYTES])calloc(WHERE_MAX, WHERE_BYTES);
+    if (r->key == NULL || r->strict == NULL || r->lab == NULL || r->at == NULL ||
+        r->labels == NULL) {
         free(r->key);
         free(r->strict);
+        free(r->lab);
+        free(r->at);
+        free(r->labels);
         free(r);
         return NULL;
     }
+    r->n_labels = 1; /* 0: not known */
     /* the game data's start-up words that point into the image, by value
        (the first offset of each value wins) */
     if (p->snap != NULL && p->snap_words > 0) {
@@ -188,9 +217,21 @@ void ico_xb_word(IcoXbRefs *r, uint64_t w, int strict)
             return;
         }
         r->key[s] = w;
+        r->lab[s] = r->cur_label;
+        r->at[s] = r->cur_at;
         r->n_vals++;
     }
     r->strict[s] |= (uint8_t)(strict != 0);
+}
+
+void ico_xb_where(IcoXbRefs *r, const char *what)
+{
+    if (r->n_labels >= WHERE_MAX) {
+        r->cur_label = 0;
+        return;
+    }
+    snprintf(r->labels[r->n_labels], WHERE_BYTES, "%s", what);
+    r->cur_label = (uint16_t)r->n_labels++;
 }
 
 void ico_xb_scan(IcoXbRefs *r, const void *p, size_t n, uint64_t addr, int strict)
@@ -206,9 +247,11 @@ void ico_xb_scan(IcoXbRefs *r, const void *p, size_t n, uint64_t addr, int stric
 
         memcpy(&w, b + at, sizeof w);
         if (w >= r->p.image.lo && w <= r->p.image.hi) {
+            r->cur_at = addr + at;
             ico_xb_word(r, w, strict);
         }
     }
+    r->cur_at = 0;
 }
 
 void ico_xb_block(IcoXbRefs *r, const char *name, uint64_t size, unsigned flags, uint64_t addr,
@@ -234,42 +277,190 @@ static int in_game(const uint64_t lo[2], const uint64_t hi[2], uint64_t w)
            (lo[1] < hi[1] && w >= lo[1] && w <= hi[1]);
 }
 
-static int in_ro(const IcoStateImage *im, uint64_t lo, uint64_t hi)
+/* --- read-only data and its windows ------------------------------------------------- */
+
+/* the read-only range holding w: 1 and the range (a range's end is the
+   next section's start, Android's .text after its read-only data, so a
+   word there is not the range's) */
+static int ro_range(const IcoStateImage *im, uint64_t w, uint64_t *lo, uint64_t *hi)
 {
     int i;
 
     for (i = 0; i < im->n_ro; i++) {
-        if (lo >= im->ro_lo[i] && hi <= im->ro_hi[i]) {
+        if (w >= im->ro_lo[i] && w < im->ro_hi[i]) {
+            *lo = im->ro_lo[i];
+            *hi = im->ro_hi[i];
             return 1;
         }
     }
     return 0;
 }
 
-/* the C string at w when it lies in read-only data: its length with the
-   NUL (at most ICO_XB_CONTENT), or 0 */
-static size_t c_string(const IcoStateImage *im, uint64_t w)
+/* the text at w: the bytes up to the first NUL before hi, none of them a
+   control character but tab, newline, carriage return and escape (a C
+   string literal in any encoding); its length with the NUL, or 0 */
+static size_t text_len(uint64_t w, uint64_t hi)
 {
+    const unsigned char *p = (const unsigned char *)(uintptr_t)w;
+    const size_t n = (size_t)(hi - w);
     size_t i;
 
-    if (!in_ro(im, w, w + 1)) {
-        return 0;
-    }
-    for (i = 0; i < ICO_XB_CONTENT; i++) {
-        unsigned char c;
+    for (i = 0; i < n; i++) {
+        const unsigned char c = p[i];
 
-        if (!in_ro(im, w + i, w + i + 1)) {
-            return 0;
-        }
-        c = *(const unsigned char *)(uintptr_t)(w + i);
         if (c == 0) {
             return i + 1;
         }
-        if (c < 0x20 && c != '\t' && c != '\n' && c != '\r') {
+        if (c < 0x20 && c != '\t' && c != '\n' && c != '\r' && c != 0x1b) {
             return 0;
         }
     }
     return 0;
+}
+
+/* each byte value's count over the image's read-only data */
+static void ro_freq(const IcoStateImage *im, uint32_t freq[256])
+{
+    int i;
+
+    memset(freq, 0, 256 * sizeof *freq);
+    for (i = 0; i < im->n_ro; i++) {
+        const unsigned char *p = (const unsigned char *)(uintptr_t)im->ro_lo[i];
+        const unsigned char *end = (const unsigned char *)(uintptr_t)im->ro_hi[i];
+
+        for (; p < end; p++) {
+            freq[*p]++;
+        }
+    }
+}
+
+/* The places in the image's read-only data where the n bytes b start a run
+   of len bytes (len >= n) inside one range, whose XXH3-64 is `hash` when
+   `hashed`: their count, at most `stop`, and the first.  The search
+   anchors on the window's rarest byte (freq: ro_freq). */
+static unsigned find_in(const IcoStateImage *im, const uint32_t *freq, const unsigned char *b,
+                        size_t n, size_t len, int hashed, uint64_t hash, unsigned stop,
+                        uint64_t *first)
+{
+    size_t k = 0, i;
+    unsigned c = 0;
+    int r;
+
+    *first = 0;
+    if (n == 0 || len < n) {
+        return 0;
+    }
+    for (i = 1; i < n; i++) {
+        if (freq[b[i]] < freq[b[k]]) {
+            k = i;
+        }
+    }
+    for (r = 0; r < im->n_ro; r++) {
+        const unsigned char *lo = (const unsigned char *)(uintptr_t)im->ro_lo[r];
+        const unsigned char *hi = (const unsigned char *)(uintptr_t)im->ro_hi[r];
+        const unsigned char *p, *last;
+
+        if (hi <= lo || (size_t)(hi - lo) < len) {
+            continue;
+        }
+        p = lo + k;
+        last = hi - len + k; /* the anchor's last place */
+        while (p <= last) {
+            const unsigned char *q = (const unsigned char *)memchr(p, b[k], (size_t)(last - p) + 1);
+            const unsigned char *at;
+
+            if (q == NULL) {
+                break;
+            }
+            at = q - k;
+            if (memcmp(at, b, n) == 0 && (!hashed || xxh3_64(at, len) == hash)) {
+                if (c == 0) {
+                    *first = (uint64_t)(uintptr_t)at;
+                }
+                if (++c >= stop) {
+                    return c;
+                }
+            }
+            p = q + 1;
+        }
+    }
+    return c;
+}
+
+/* The window of the word w in its read-only range [rlo, rhi) (a text of
+   tl bytes, or tl 0): grown both ways, doubling, until its bytes occur
+   once in the image's read-only data.  1 and [*a, *z), or 0 when not even
+   the whole range is unique. */
+static int grow_window(const IcoStateImage *im, const uint32_t *freq, uint64_t w, uint64_t rlo,
+                       uint64_t rhi, size_t tl, uint64_t *a, uint64_t *z)
+{
+    uint64_t lo, hi, first;
+
+    if (tl > 0) {
+        lo = w;
+        hi = w + tl;
+    } else {
+        lo = w - rlo > 8 ? w - 8 : rlo;
+        hi = rhi - w > 8 ? w + 8 : rhi; /* w < rhi: never empty */
+    }
+    for (;;) {
+        const uint64_t ext = hi - lo;
+
+        if (find_in(im, freq, (const unsigned char *)(uintptr_t)lo, (size_t)ext, (size_t)ext, 0, 0,
+                    2, &first) == 1) {
+            *a = lo;
+            *z = hi;
+            return 1;
+        }
+        if (lo == rlo && hi == rhi) {
+            return 0;
+        }
+        lo = lo - rlo > ext ? lo - ext : rlo;
+        hi = rhi - hi > ext ? hi + ext : rhi;
+    }
+}
+
+void ico_xb_image(const IcoSymTab *t, IcoStateImage *im)
+{
+    uint64_t lo, hi;
+
+    if (t == NULL || !t->code_from || t->code_hi <= t->code_lo) {
+        return;
+    }
+    lo = im->text_lo;
+    hi = im->text_hi;
+    if (t->code_lo < lo || t->code_hi > hi || (t->code_lo == lo && t->code_hi == hi)) {
+        return;
+    }
+    im->text_lo = t->code_lo;
+    im->text_hi = t->code_hi;
+    if (lo < t->code_lo && im->n_ro < ICO_STATE_IMAGE_RO) {
+        im->ro_lo[im->n_ro] = lo;
+        im->ro_hi[im->n_ro] = t->code_lo;
+        im->n_ro++;
+    }
+    if (t->code_hi < hi && im->n_ro < ICO_STATE_IMAGE_RO) {
+        im->ro_lo[im->n_ro] = t->code_hi;
+        im->ro_hi[im->n_ro] = hi;
+        im->n_ro++;
+    }
+}
+
+const char *ico_xb_why_text(unsigned reason)
+{
+    switch (reason) {
+    case ICO_XB_WHY_CODE:
+        return "in the code but in no function";
+    case ICO_XB_WHY_DATA:
+        return "in writable data that no block or variable of a unique name holds";
+    case ICO_XB_WHY_READONLY:
+        return "in read-only data whose bytes repeat even across their whole range";
+    case ICO_XB_WHY_IMAGE:
+        return "in the image outside every section the symbol file names";
+    case ICO_XB_WHY_NUMBER:
+        return "in read-only data but no text, where a number can lie (kept as one)";
+    }
+    return "named by nothing";
 }
 
 typedef struct Out {
@@ -314,6 +505,71 @@ static uint32_t str_put(Out *s, const char *name)
     return at;
 }
 
+/* a word nothing names: counted, and listed while the list has room */
+static void note_unnamed(const IcoXbRefs *r, const IcoSymTab *t, size_t slot, uint64_t w,
+                         unsigned reason, unsigned *flags, unsigned *left, uint64_t *first,
+                         IcoXbStats *st)
+{
+    *flags |= ICO_XB_UNNAMED;
+    (*left)++;
+    if (*first == 0) {
+        *first = w;
+    }
+    if (st->listed < ICO_XB_LIST) {
+        IcoXbUnnamed *u = &st->list[st->listed++];
+        const IcoSymSec *sec = ico_symtab_section_at(t, w);
+        const char *sym = ico_symtab_nearest(t, w, &u->sym_off);
+
+        u->word = w;
+        u->at = r->at[slot];
+        u->reason = reason;
+        snprintf(u->where, sizeof u->where, "%s", r->labels[r->lab[slot]]);
+        snprintf(u->section, sizeof u->section, "%s",
+                 sec != NULL ? ico_symtab_name(t, sec->name) : "");
+        snprintf(u->sym, sizeof u->sym, "%s", sym != NULL ? sym : "");
+    }
+}
+
+/* a window point (state_xbuild.h): its record, its bytes (whole, or the
+   prefix when the pool has no room for them) and its nearest symbol's
+   name.  0, or -1 (no memory). */
+static int put_window(Out *points, Out *pool, Out *strs, const IcoSymTab *t, uint64_t w, uint64_t a,
+                      uint64_t z, int text)
+{
+    const size_t len = (size_t)(z - a);
+    const unsigned char *b = (const unsigned char *)(uintptr_t)a;
+    const int whole =
+        pool->n + len <= (size_t)ICO_XB_POOL_BYTES - (size_t)ICO_XB_MAX_POINTS * ICO_XB_CONTENT;
+    const size_t stored = whole ? len : len < ICO_XB_CONTENT ? len : ICO_XB_CONTENT;
+    uint64_t off = 0;
+    const char *sym = ico_symtab_nearest(t, w, &off);
+    const uint32_t sym_at = sym != NULL ? str_put(strs, sym) : 0u;
+    const uint32_t pool_at = (uint32_t)pool->n;
+    unsigned char *q = out_grow(points, POINT_BYTES);
+    unsigned char *pq;
+
+    if (q == NULL) {
+        return -1;
+    }
+    memset(q, 0, POINT_BYTES);
+    put64(q, w);
+    put32(q + 8, XP_WINDOW);
+    put32(q + 12, (uint32_t)len);
+    put32(q + 16, (uint32_t)(w - a));
+    put32(q + 20, (text ? XW_TEXT : 0u) | (whole ? 0u : XW_HASHED));
+    put64(q + 24, xxh3_64(b, len));
+    put32(q + 32, pool_at);
+    put32(q + 36, (uint32_t)stored);
+    put32(q + 40, sym_at);
+    put64(q + 48, sym != NULL ? off : 0);
+    pq = out_grow(pool, stored);
+    if (pq == NULL) {
+        return -1;
+    }
+    memcpy(pq, b, stored);
+    return 0;
+}
+
 int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
 {
     const IcoXbProc *p = &r->p;
@@ -321,18 +577,23 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
     uint8_t *uflag = NULL;
     unsigned char *dflag = NULL;
     Out units = {NULL, 0, 0, 0}, data = {NULL, 0, 0, 0}, points = {NULL, 0, 0, 0},
-        blocks = {NULL, 0, 0, 0}, strs = {NULL, 0, 0, 0};
-    unsigned flags = 0, nu = 0, nd = 0, np = 0, npos = 0, left = 0;
+        blocks = {NULL, 0, 0, 0}, strs = {NULL, 0, 0, 0}, lst = {NULL, 0, 0, 0},
+        pool = {NULL, 0, 0, 0};
+    unsigned flags = 0, nu = 0, nd = 0, np = 0, npos = 0, left = 0, nwin = 0, ntext = 0;
     uint64_t first_unnamed = 0;
+    uint32_t *freq = NULL;
     unsigned char *sec, *q;
     size_t i, total;
     int rc = -1;
+    /* the image's upper half is 0 or 1: a number can lie in it (above) */
+    const int numbers_reach = ((p->judge_lo != 0 ? p->judge_lo : p->image.lo) >> 32) <= 1u;
 
     memset(st, 0, sizeof *st);
     *out = NULL;
     *n = 0;
     if (t != NULL) {
         flags |= ICO_XB_TABLE;
+        st->code_from = t->code_from;
         uflag = (uint8_t *)calloc(t->n_unit ? t->n_unit : 1, 1);
         dflag = (unsigned char *)calloc(t->n_data ? t->n_data : 1, 1);
         if (uflag == NULL || dflag == NULL) {
@@ -350,7 +611,8 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
     for (i = 0; t != NULL && i < ICO_XB_MAX_VALUES; i++) {
         const uint64_t w = r->key[i];
         const int strict = r->strict[i] != 0;
-        int b, in_block = 0;
+        uint64_t rlo = 0, rhi = 0;
+        int b, in_block = 0, ro;
 
         if (w == 0) {
             continue;
@@ -366,17 +628,14 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
                 /* in the code but in no unit: nothing confirms it is an
                    address (a float next to the integer 1 under Windows'
                    0x140000000 is such a word), so it stays a number */
-                flags |= ICO_XB_UNNAMED;
-                left++;
-                if (first_unnamed == 0) {
-                    first_unnamed = w;
-                }
+                note_unnamed(r, t, i, w, ICO_XB_WHY_CODE, &flags, &left, &first_unnamed, st);
             }
             continue;
         }
         if (in_game(p->game_lo, p->game_hi, w)) {
             continue;
         }
+        ro = ro_range(&p->image, w, &rlo, &rhi);
         for (b = 0; b < r->n_blocks; b++) {
             if (w >= r->block[b].addr && w <= r->block[b].addr + r->block[b].size) {
                 in_block = 1;
@@ -389,7 +648,11 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
         {
             const IcoSymData *d = ico_symtab_data_at(t, w);
 
-            if (d != NULL && d->unique) {
+            /* in read-only data the end address of a sized constant that no
+               symbol starts at may be the next, unnamed one's start (a
+               string literal after a table): its window names it */
+            if (d != NULL && d->unique &&
+                !(ro && d->exact && w != d->start && w == d->start + d->size)) {
                 dflag[d - t->data] = 1;
                 continue;
             }
@@ -424,35 +687,49 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
                 continue;
             }
         }
-        {
-            const size_t len = c_string(&p->image, w);
+        if (ro && numbers_reach && text_len(w, rhi) < 2) {
+            /* read-only data that is no text (or the empty one: any zero
+               byte), where a float next to the integer 1 reaches the image
+               (Windows): nothing tells such a word from a number, so it is
+               kept as one */
+            note_unnamed(r, t, i, w, ICO_XB_WHY_NUMBER, &flags, &left, &first_unnamed, st);
+            continue;
+        }
+        if (ro) {
+            /* read-only data: its window */
+            const size_t tl = text_len(w, rhi);
+            uint64_t a = 0, z = 0;
 
-            if (len > 0) {
-                if (np == ICO_XB_MAX_POINTS) {
-                    flags |= ICO_XB_OVERFLOW;
-                    continue;
-                }
-                q = out_grow(&points, POINT_BYTES);
-                if (q == NULL) {
-                    goto done;
-                }
-                memset(q, 0, POINT_BYTES);
-                put64(q, w);
-                put32(q + 8, XP_TEXT);
-                put32(q + 12, (uint32_t)len);
-                memcpy(q + 24, (const void *)(uintptr_t)w, len);
-                np++;
+            if (np == ICO_XB_MAX_POINTS) {
+                flags |= ICO_XB_OVERFLOW;
                 continue;
             }
+            if (freq == NULL) {
+                freq = (uint32_t *)malloc(256 * sizeof *freq);
+                if (freq == NULL) {
+                    goto done;
+                }
+                ro_freq(&p->image, freq);
+            }
+            if (grow_window(&p->image, freq, w, rlo, rhi, tl, &a, &z)) {
+                if (put_window(&points, &pool, &strs, t, w, a, z, tl > 0) != 0) {
+                    goto done;
+                }
+                np++;
+                nwin++;
+                ntext += tl > 0;
+                continue;
+            }
+            note_unnamed(r, t, i, w, ICO_XB_WHY_READONLY, &flags, &left, &first_unnamed, st);
+            continue;
         }
         /* nothing names it: a number that lies in the image's range (a
            float next to the integer 1 under Windows' 0x140000000, a word
            into the image's headers), kept as it is */
-        flags |= ICO_XB_UNNAMED;
-        left++;
-        if (first_unnamed == 0) {
-            first_unnamed = w;
-        }
+        note_unnamed(r, t, i, w,
+                     t->n_sec > 0 && ico_symtab_section_at(t, w) == NULL ? ICO_XB_WHY_IMAGE
+                                                                         : ICO_XB_WHY_DATA,
+                     &flags, &left, &first_unnamed, st);
     }
     for (i = 0; t != NULL && i < t->n_unit; i++) {
         const IcoSymUnit *u = &t->unit[i];
@@ -522,15 +799,32 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
         put32(q + 24, b->flags);
         put32(q + 28, str_put(&strs, b->name));
     }
-    if (units.failed || data.failed || points.failed || blocks.failed || strs.failed) {
+    for (i = 0; i < st->listed; i++) {
+        const IcoXbUnnamed *u = &st->list[i];
+
+        q = out_grow(&lst, LIST_BYTES);
+        if (q == NULL) {
+            goto done;
+        }
+        memset(q, 0, LIST_BYTES);
+        put64(q, u->word);
+        put64(q + 8, u->at);
+        put64(q + 16, u->sym_off);
+        put32(q + 24, str_put(&strs, u->where));
+        put32(q + 28, str_put(&strs, u->section));
+        put32(q + 32, str_put(&strs, u->sym));
+        put32(q + 36, u->reason);
+    }
+    if (units.failed || data.failed || points.failed || blocks.failed || strs.failed ||
+        lst.failed || pool.failed) {
         goto done;
     }
-    total = H_BYTES + units.n + data.n + points.n + blocks.n + strs.n;
+    total = H_BYTES3 + units.n + data.n + points.n + blocks.n + lst.n + strs.n + pool.n;
     sec = (unsigned char *)malloc(total);
     if (sec == NULL) {
         goto done;
     }
-    memset(sec, 0, H_BYTES);
+    memset(sec, 0, H_BYTES3);
     put32(sec + H_MAGIC, ICO_XB_MAGIC);
     put32(sec + H_VERSION, ICO_XB_VERSION);
     put32(sec + H_FLAGS, flags);
@@ -545,7 +839,9 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
     put64(sec + H_UNNAMED, first_unnamed);
     put32(sec + H_VALUES, (uint32_t)r->n_vals);
     put32(sec + H_LEFT, left);
-    q = sec + H_BYTES;
+    put32(sec + H_POOL, (uint32_t)pool.n);
+    put32(sec + H_LIST, st->listed);
+    q = sec + H_BYTES3;
     put_bytes(q, units.p, units.n);
     q += units.n;
     put_bytes(q, data.p, data.n);
@@ -554,13 +850,19 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
     q += points.n;
     put_bytes(q, blocks.p, blocks.n);
     q += blocks.n;
+    put_bytes(q, lst.p, lst.n);
+    q += lst.n;
     put_bytes(q, strs.p, strs.n);
+    q += strs.n;
+    put_bytes(q, pool.p, pool.n);
     *out = sec;
     *n = total;
     st->units = nu;
     st->positions = npos;
     st->data = nd;
     st->points = np;
+    st->windows = nwin;
+    st->texts = ntext;
     st->blocks = (unsigned)r->n_blocks;
     st->values = (unsigned)r->n_vals;
     st->flags = flags;
@@ -574,10 +876,16 @@ done:
     free(points.p);
     free(blocks.p);
     free(strs.p);
+    free(lst.p);
+    free(pool.p);
+    free(freq);
     free(uflag);
     free(dflag);
     free(r->key);
     free(r->strict);
+    free(r->lab);
+    free(r->at);
+    free(r->labels);
     free(r->snap);
     free(r);
     return rc;
@@ -681,7 +989,21 @@ static void spans_settle(Spans *s, int points)
     s->n = k;
 }
 
-/* the first place in this image's read-only data that holds the n bytes */
+/* a window's text for a log line: from its word's offset to the NUL or
+   the stored bytes' end, at most 40 bytes, a byte outside printable ASCII
+   as '?' */
+static void show_text(char *out, size_t n, const unsigned char *b, size_t stored, size_t at)
+{
+    size_t k = 0;
+
+    for (; at < stored && b[at] != 0 && k + 1 < n && k < 40; at++) {
+        out[k++] = b[at] >= 0x20 && b[at] < 0x7f ? (char)b[at] : '?';
+    }
+    out[k < n ? k : n - 1] = '\0';
+}
+
+/* the first place in this image's read-only data that holds the n bytes
+   (a version 2 text point) */
 static uint64_t find_text(const IcoStateImage *im, const unsigned char *b, size_t n)
 {
     int i;
@@ -708,11 +1030,14 @@ static uint64_t find_text(const IcoStateImage *im, const unsigned char *b, size_
 int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *v)
 {
     const unsigned char *sec = (const unsigned char *)secv;
-    uint32_t flags, nu, nd, np, nb, ns, ver;
-    size_t dbytes;
-    const unsigned char *u, *d, *pt, *bl;
+    uint32_t flags, nu, nd, np, nb, ns, ver, npool = 0, nl = 0;
+    size_t dbytes, pbytes, hbytes;
+    const unsigned char *u, *d, *pt, *bl, *ls, *pool;
     const char *str;
     IcoSymTab *t = now->tab;
+    IcoStateImage im = now->image;
+    uint32_t freq[256];
+    int have_freq = 0;
     Spans spans = {NULL, 0, 0, 0}, points = {NULL, 0, 0, 0};
     char name[160];
     uint32_t i;
@@ -729,29 +1054,56 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
         ver > ICO_XB_VERSION) {
         FAIL(v, ICO_XB_BAD, "the symbols record is missing or of another kind");
     }
+    v->version = ver;
     dbytes = ver >= 2 ? DATA_BYTES : DATA_BYTES_V1;
+    pbytes = ver >= 3 ? POINT_BYTES : POINT_BYTES_V2;
+    hbytes = ver >= 3 ? H_BYTES3 : H_BYTES;
+    if (ver >= 3 && n < H_BYTES3) {
+        FAIL(v, ICO_XB_BAD, "the symbols record does not hold what it says");
+    }
     flags = get32(sec + H_FLAGS);
     nu = get32(sec + H_UNITS);
     nd = get32(sec + H_DATA);
     np = get32(sec + H_POINTS);
     nb = get32(sec + H_BLOCKS);
     ns = get32(sec + H_STR);
+    if (ver >= 3) {
+        npool = get32(sec + H_POOL);
+        nl = get32(sec + H_LIST);
+    }
     if (nu > ICO_XB_MAX_UNITS || nd > ICO_XB_MAX_DATA || np > ICO_XB_MAX_POINTS ||
-        nb > ICO_XB_MAX_BLOCKS || ns == 0 ||
-        (uint64_t)H_BYTES + (uint64_t)nu * UNIT_BYTES + (uint64_t)nd * dbytes +
-                (uint64_t)np * POINT_BYTES + (uint64_t)nb * BLOCK_BYTES + ns !=
+        nb > ICO_XB_MAX_BLOCKS || nl > ICO_XB_LIST || npool > ICO_XB_POOL_BYTES || ns == 0 ||
+        (uint64_t)hbytes + (uint64_t)nu * UNIT_BYTES + (uint64_t)nd * dbytes +
+                (uint64_t)np * pbytes + (uint64_t)nb * BLOCK_BYTES + (uint64_t)nl * LIST_BYTES +
+                ns + npool !=
             n) {
         FAIL(v, ICO_XB_BAD, "the symbols record does not hold what it says");
     }
-    u = sec + H_BYTES;
+    u = sec + hbytes;
     d = u + (size_t)nu * UNIT_BYTES;
     pt = d + (size_t)nd * dbytes;
-    bl = pt + (size_t)np * POINT_BYTES;
-    str = (const char *)(bl + (size_t)nb * BLOCK_BYTES);
+    bl = pt + (size_t)np * pbytes;
+    ls = bl + (size_t)nb * BLOCK_BYTES;
+    str = (const char *)(ls + (size_t)nl * LIST_BYTES);
+    pool = (const unsigned char *)str + ns;
     if (str[ns - 1] != '\0') {
         FAIL(v, ICO_XB_BAD, "the symbols record's names are cut");
     }
 #define NAME_AT(off) ((off) < ns ? str + (off) : "")
+    /* the words the save found nothing to name, as it listed them */
+    for (i = 0; i < nl; i++) {
+        const unsigned char *r = ls + (size_t)i * LIST_BYTES;
+        IcoXbUnnamed *e = &v->list[v->listed++];
+
+        e->word = get64(r);
+        e->at = get64(r + 8);
+        e->sym_off = get64(r + 16);
+        snprintf(e->where, sizeof e->where, "%s", NAME_AT(get32(r + 24)));
+        snprintf(e->section, sizeof e->section, "%s", NAME_AT(get32(r + 28)));
+        snprintf(e->sym, sizeof e->sym, "%s", NAME_AT(get32(r + 32)));
+        e->reason = get32(r + 36);
+    }
+    ico_xb_image(t, &im);
 
     /* the blocks, by name, both ways */
     v->block_off =
@@ -823,6 +1175,7 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
     if ((flags & ICO_XB_UNNAMED) != 0 &&
         ((now->old_image_lo != 0 ? now->old_image_lo : v->first_left) >> 32) > 1u) {
         snprintf(name, sizeof name, "0x%llx", (unsigned long long)v->first_left);
+        v->by_unnamed = 1;
         FAIL(v, ICO_XB_PINNED,
              "it holds a program address no symbol names (%s, %u such words): the version that "
              "saved it left them unnamed",
@@ -902,7 +1255,7 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
     }
     /* the points */
     for (i = 0; i < np; i++) {
-        const unsigned char *r = pt + (size_t)i * POINT_BYTES;
+        const unsigned char *r = pt + (size_t)i * pbytes;
         const uint64_t old = get64(r);
         const unsigned kind = get32(r + 8);
 
@@ -918,7 +1271,45 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
                 FAIL(v, ICO_XB_DATA, "the game's start-up data changed");
             }
             span_add(&points, old, old, w);
-        } else if (kind == XP_TEXT) {
+        } else if (kind == XP_WINDOW && ver >= 3) {
+            const uint32_t len = get32(r + 12), at = get32(r + 16), wf = get32(r + 20);
+            const uint32_t pool_at = get32(r + 32), stored = get32(r + 36);
+            const int text = (wf & XW_TEXT) != 0, hashed = (wf & XW_HASHED) != 0;
+            uint64_t w = 0;
+            unsigned found;
+            char what[120];
+
+            if (len == 0 || at > len || stored == 0 || (uint64_t)pool_at + stored > npool ||
+                (hashed ? stored > len || stored > ICO_XB_CONTENT : stored != len)) {
+                FAIL(v, ICO_XB_BAD, "the symbols record's window is damaged");
+            }
+            if (++v->searches > ICO_XB_MAX_SEARCHES) {
+                FAIL(v, ICO_XB_PINNED, "it points at more texts than a load looks for");
+            }
+            if (!have_freq) {
+                ro_freq(&im, freq);
+                have_freq = 1;
+            }
+            found = find_in(&im, freq, pool + pool_at, stored, len, hashed, get64(r + 24), 2, &w);
+            if (found != 1) {
+                if (text) {
+                    char shown[48];
+
+                    show_text(shown, sizeof shown, pool + pool_at, stored, at);
+                    snprintf(what, sizeof what, "the text \"%s\"", shown);
+                } else {
+                    const char *sym = NAME_AT(get32(r + 40));
+
+                    snprintf(what, sizeof what, "the read-only data at %s+0x%llx (%u bytes)",
+                             sym[0] != '\0' ? sym : "?", (unsigned long long)get64(r + 48),
+                             (unsigned)len);
+                }
+                FAIL(v, ICO_XB_DATA, "%s is %s here", what,
+                     found == 0 ? "missing" : "in more than one place");
+            }
+            span_add(&points, old, old, w + at);
+            v->windows++;
+        } else if (kind == XP_TEXT && ver < 3) {
             const uint32_t len = get32(r + 12);
             uint64_t w;
 
@@ -928,7 +1319,7 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
             if (++v->searches > ICO_XB_MAX_SEARCHES) {
                 FAIL(v, ICO_XB_PINNED, "it points at more texts than a load looks for");
             }
-            w = find_text(&now->image, r + 24, len);
+            w = find_text(&im, r + 24, len);
             if (w == 0) {
                 snprintf(name, sizeof name, "%s", (const char *)(r + 24));
                 FAIL(v, ICO_XB_DATA, "the text \"%s\" is missing here", name);

@@ -841,6 +841,34 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   keys named for the log; a key only the state lists that this build retired (a difficulty row)
   passed over by the other-build check, refused without the retired-key function, a listed key
   that differs still named (`state_port`).
+- `state_name_test.c`: every address a save state holds named across versions
+  ([PLATFORM.md](PLATFORM.md#across-versions)), with two synthetic builds whose images hold
+  headers, read-only data (a sized constant, literals, an anonymous constant table), code, port
+  data and the game's two ranges at other places, each with its own nm table; nothing of the game
+  starts. Laid out as Android's library (one read and execute range from the headers through the
+  code, no read-only range, the symbol file's `section` lines), a state's words (a return address,
+  a game table's start-up pointer to a literal, a literal at a sized constant's end address, a
+  60-byte literal, an EUC-JP literal, a word into the anonymous table, two statics of one name
+  told apart by their files' column, a game data pointer) carry over into a build where each
+  moved: the code range is the `.text` line's, the constant is data, four windows (three texts)
+  and the start-up value are recorded, nothing is unnamed, and each word is translated to its new
+  place (with the code range the loader's, the same words are code no unit holds and the state is
+  pinned); laid out as Linux's program (read-only data in its own range, no `section` lines) the
+  same; laid out as Windows' (PE sections, judged at 0x140000000) the texts carry over, the
+  60-byte one read from a fiber's stack, while the table's word, no text, is kept as a number and
+  the state still loads (`test_carry`). A text twice in the later build with other neighbours
+  (`is in more than one place here`), a text it lacks (`is missing here`), a code word no unit
+  holds (pinned, the save's list entry and the load's from the record: the reason, `.text`, the
+  nearest symbol and offset, the scan's label and the word's address), twenty such words counted
+  with `ICO_XB_LIST` listed (`test_refuse`); a 5 MB window (zeros with one marker) recorded by its
+  length, hash and prefix and found again past 16 more zeros, refused once the marker is gone
+  (`test_hashed`); a version 2 record's text point translated as before, a version 2 record's
+  unnamed words refused with their own words and no list, a damaged version 2 text and a damaged
+  version 3 window (`test_format`); a GNU ld map's output sections (`*default*` in the memory
+  configuration not one, a long name with its numbers on the next line), the code range from
+  `.text` inside a wider executable range, the section at an address, the nearest symbol, and
+  `ico_xb_image` making the rest of the executable range read-only data (`test_sections`)
+  (`state_name`).
 - `state_reloc_test.c`: the scan and the self-checks over the game's real allocator
   (`ico2/fumi/ios/memory.c` built with the game's flags): words at each range's start, middle and end
   move by their own delta and nothing else does (near misses, 0, all ones, floats, doubles, EE word

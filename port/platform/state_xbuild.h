@@ -41,13 +41,41 @@
  *           start-up (an initialised pointer of a game table, a string or a
  *           function the game copied from one), the offset of that value,
  *           taken in the later build from its own start-up values; else,
- *           when it points at a C string (printable bytes ending in NUL
- *           within ICO_XB_CONTENT), those bytes, found again in the later
- *           build's image outside the code and the game ranges.
+ *           when it points into read-only data, its WINDOW: bytes around it
+ *           and its offset in them, found again in the later build's
+ *           read-only data (format 3; below).
+ *
+ * The code and the read-only data are where the symbol file's sections say
+ * (ico_xb_image, state_syms.h's code range), not where the loader's segment
+ * flags put them: Android's library maps .rodata and its string literals
+ * in its one executable segment (issue 217).  A word in the code is a
+ * unit's or nothing's; a word in read-only data that no unique variable
+ * holds goes on to the start-up values and the windows.
+ *
+ * A window.  A text (the bytes from the word to the first NUL inside the
+ * read-only range, none of them a control character but tab, newline,
+ * carriage return and escape: a C string literal in any encoding, EUC-JP,
+ * UTF-8 or Korean included) starts as its whole content, any length; any
+ * other word starts with the 8 bytes either side of it (only where the
+ * image's upper half is above 1: under Windows' fixed base a float next to
+ * the integer 1 lands in read-only data as well, and only a text of at
+ * least one character is taken for an address there, as before; the rest
+ * is kept as a number, ICO_XB_WHY_NUMBER).  The save grows the
+ * window, doubling both ways inside its read-only range, until its bytes
+ * occur exactly once in the saving image's read-only data, and records the
+ * bytes whole while they fit the record's pool (ICO_XB_POOL_BYTES less the
+ * room every point's prefix may need), else their length, XXH3-64 and first
+ * ICO_XB_CONTENT bytes.  A load finds every place in its own read-only data
+ * that holds them (by the prefix and the hash for the second form): one
+ * place translates the word to it plus the offset; none refuses ("the text
+ * ... is missing here"), more than one refuses ("... is in more than one
+ * place here"): a load never picks one.
  *
  * A word only these confirm is translated.  A word in the code that no
  * unit holds, or in the image that nothing above names, is confirmed by
- * nothing (ICO_XB_UNNAMED, counted, the first one recorded).  Where the
+ * nothing (ICO_XB_UNNAMED, counted, the first one recorded, and in format
+ * 3 the first ICO_XB_LIST of them with where they were found, their
+ * section and their nearest symbol, ico_xb_where).  Where the
  * saving image's addresses have an upper half of 0 or 1 such words are
  * ordinary data (under Windows' fixed base 0x140000000 any float from 2.0
  * to about 572 followed by the integer 1 lies in the image), so they are
@@ -64,11 +92,16 @@
  * is not safe).  The same build never reads this section: its build id
  * pins the one-delta path.
  *
- * The section (little-endian): a 64-byte header, then the units (48 bytes
+ * The section (little-endian): a 64-byte header (80 in version 3: the
+ * pool's size and the list's count after it), then the units (48 bytes
  * each), data (48; 40 in a version 1 record, without the input section),
- * points (48) and blocks (40) records, then the names.
- * The header's last word counts the words nothing names (0 in a record
- * from before it was counted).
+ * points (48; 64 in version 3, a window's length, offset, hash, pool place
+ * and nearest symbol) and blocks (40) records, in version 3 the list of
+ * words nothing names (40 each), then the names, and in version 3 the pool
+ * of the windows' bytes.  The header's word at 60 counts the words nothing
+ * names (0 in a record from before it was counted).  Versions 1 and 2 are
+ * read as they were written (a version 2 text point holds at most 24
+ * bytes, found at the first place that holds them).
  */
 #ifndef ICO_PLATFORM_STATE_XBUILD_H
 #define ICO_PLATFORM_STATE_XBUILD_H
@@ -80,24 +113,56 @@
 #include "state_syms.h"
 
 #define ICO_XB_MAGIC 0x534D5953u /* "SYMS" */
-#define ICO_XB_VERSION 2         /* 1 is read too: its data records hold no input section */
+#define ICO_XB_VERSION 3         /* 1 and 2 are read too (above) */
 #define ICO_XB_MAX_UNITS 16384
 #define ICO_XB_MAX_DATA 4096
 #define ICO_XB_MAX_POINTS 4096
 #define ICO_XB_MAX_BLOCKS 128
 #define ICO_XB_MAX_VALUES 262144 /* distinct words looked at (a power of two) */
 #define ICO_XB_MAX_SEARCHES 512  /* content points found again at a load */
-#define ICO_XB_CONTENT 24
-/* the section's size at most (a load's bound before it inflates it) */
+#define ICO_XB_CONTENT 24 /* a version 2 text point's bytes; a version 3 hashed window's prefix */
+#define ICO_XB_LIST 16    /* words nothing names, listed with where they are */
+#define ICO_XB_POOL_BYTES (4u << 20) /* the windows' bytes at most */
+/* the section's size at most (a load's bound before it inflates it): the
+   records, 4 MB of names and the pool */
 #define ICO_XB_MAX_BYTES                                                                           \
-    (64u + ICO_XB_MAX_UNITS * 48u + ICO_XB_MAX_DATA * 48u + ICO_XB_MAX_POINTS * 48u +              \
-     ICO_XB_MAX_BLOCKS * 40u + (4u << 20))
+    (80u + ICO_XB_MAX_UNITS * 48u + ICO_XB_MAX_DATA * 48u + ICO_XB_MAX_POINTS * 64u +              \
+     ICO_XB_MAX_BLOCKS * 40u + ICO_XB_LIST * 40u + (4u << 20) + ICO_XB_POOL_BYTES)
 
 /* the header's flags */
 #define ICO_XB_TABLE 1u     /* the saving build had a symbol table */
 #define ICO_XB_OVERFLOW 2u  /* more references than the bounds */
 #define ICO_XB_UNNAMED 4u   /* words nothing in the table names: kept as numbers */
 #define ICO_XB_LOW_IMAGE 8u /* the saving program's image lies below 4 GB */
+
+/* why a word is named by nothing (IcoXbUnnamed.reason) */
+enum {
+    ICO_XB_WHY_CODE = 1, /* in the code, in no unit */
+    ICO_XB_WHY_DATA,     /* in writable data no block or unique variable holds */
+    ICO_XB_WHY_READONLY, /* in read-only data whose window is not unique even whole */
+    ICO_XB_WHY_IMAGE,    /* in the image outside every section the file names */
+    ICO_XB_WHY_NUMBER    /* in read-only data, no text (or ""), under an upper half of 0 or 1 */
+};
+
+/* A word named by nothing, as the save found it. */
+typedef struct IcoXbUnnamed {
+    uint64_t word;
+    uint64_t at;      /* where it was found (its address then; 0: not known) */
+    uint64_t sym_off; /* word minus the nearest symbol's start */
+    unsigned reason;  /* ICO_XB_WHY_* */
+    char where[48];   /* what held it (ico_xb_where; "" not known) */
+    char section[32]; /* the section holding the word ("" none named) */
+    char sym[80];     /* the nearest symbol at or below it ("" none) */
+} IcoXbUnnamed;
+
+/* the reason's words for a log line */
+const char *ico_xb_why_text(unsigned reason);
+
+/* The image as the symbol table places it: [text_lo, text_hi) narrowed to
+   the table's code range (state_syms.h) when the file names its code
+   sections inside it, the rest of the loader's code range added as
+   read-only data.  Unchanged without a table or code sections. */
+void ico_xb_image(const IcoSymTab *t, IcoStateImage *im);
 
 /* --- saving ------------------------------------------------------------------- */
 
@@ -109,6 +174,9 @@ typedef struct IcoXbProc {
     const uint64_t *snap; /* the game data range's words at start-up, or NULL */
     size_t snap_words;
     int any_address; /* tests: a synthetic image below 4 GB is not ICO_XB_LOW_IMAGE */
+    /* tests: the image start the number rule judges by (0: image.lo; a
+       synthetic image on the heap stands for Windows' 0x140000000) */
+    uint64_t judge_lo;
 } IcoXbProc;
 
 typedef struct IcoXbRefs IcoXbRefs;
@@ -120,6 +188,10 @@ IcoXbRefs *ico_xb_begin(const IcoXbProc *p);
    part of a stack (above). */
 void ico_xb_scan(IcoXbRefs *r, const void *p, size_t n, uint64_t addr, int strict);
 void ico_xb_word(IcoXbRefs *r, uint64_t w, int strict);
+/* What the next scans read (a block's name, "the arena", "fiber 5's
+   stack"): kept with each word's first sighting for the list of words
+   nothing names (at most 1024 such texts; later ones are not kept). */
+void ico_xb_where(IcoXbRefs *r, const char *what);
 /* A registered block: its name, size, flags, address now and offset in
    its packed section (reg or audio, by the AUDIO flag). */
 void ico_xb_block(IcoXbRefs *r, const char *name, uint64_t size, unsigned flags, uint64_t addr,
@@ -127,9 +199,14 @@ void ico_xb_block(IcoXbRefs *r, const char *name, uint64_t size, unsigned flags,
 
 typedef struct IcoXbStats {
     unsigned units, positions, data, points, blocks, values;
+    unsigned windows; /* of the points: windows into read-only data */
+    unsigned texts;   /* of the windows: texts */
     unsigned flags;
     unsigned left;          /* the words nothing names (ICO_XB_UNNAMED) */
     uint64_t first_unnamed; /* the first of them */
+    unsigned listed;        /* the first ICO_XB_LIST of them */
+    IcoXbUnnamed list[ICO_XB_LIST];
+    int code_from; /* the table's code range from its sections (1) or the loader (0) */
     size_t bytes;
 } IcoXbStats;
 
@@ -185,6 +262,13 @@ typedef struct IcoXbVerdict {
        first of them */
     unsigned left;
     uint64_t first_left;
+    unsigned version; /* the record's */
+    int by_unnamed;   /* refused (ICO_XB_PINNED) for the words nothing names */
+    unsigned windows; /* the points that were windows */
+    /* a version 3 record's list of those words (filled before any check,
+       so a refusal has it too) */
+    unsigned listed;
+    IcoXbUnnamed list[ICO_XB_LIST];
 } IcoXbVerdict;
 
 #define ICO_XB_BLOCK_ABSENT UINT64_MAX
