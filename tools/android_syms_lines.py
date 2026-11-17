@@ -28,19 +28,26 @@ for the save states' symbol table (port/platform/state_syms.h).
       ico_gdata / ico_gbss, PE .data$ico_m / .data$ico_p): a save state copies
       those sections whole and their layout hash covers every item in them,
       so a port object there would move the game's variables, or change the
-      hash, with a change outside the game.  Allowed: a file of SRCROOT's
+      hash, with a change outside the game.  Exit 1 too when the map shows
+      no object in those sections (a map of another format, or a link
+      without them) or no reserved room (port/data/reserved/tables.c: its
+      loss moved the game's bss in v0.11.9-rc4).  Allowed: a file of SRCROOT's
       ico2/ or ico/, port/data/gen/table_defs.c (the game's tables), and one
       tables.c of the frozen room's footprint (port/data/reserved/tables.c;
       in lld's map, which lists a file's statics, its symbols are the
       loader's five former statics).  An archive member is known by its file name only:
       one that names an ico2/ file passes.
 
-  android_syms_lines.py layout CARRY SRCROOT
+  android_syms_lines.py layout CARRY SRCROOT [PLATFORM]
       Exit 1 when the game data layout hash the carry-over guard's report
       CARRY prints ("symbols ... layout <hash>") is not the one
-      SRCROOT/port/state_legacy/layout.txt records: the earlier versions'
-      states the legacy tables read (port/state_legacy) resume exactly only
-      under that hash.  A difference with no change to the game's data is a
+      SRCROOT/port/state_legacy/layout.txt records for PLATFORM ("layout"
+      for android, the default; "layout-windows-x64", "layout-linux-arm64"):
+      the earlier versions' states resume exactly only under that hash (on
+      Android the ones the legacy tables read, port/state_legacy; on Windows
+      the earlier versions' own records).  A platform recorded "none" has no
+      earlier version whose states resume exactly: the hash is printed, to
+      record after the release that ships it.  A difference with no change to the game's data is a
       defect of the build (v0.11.9-rc4: the reserved room left out of the
       link); with one made on purpose, the maintainer records the new hash
       there knowing those states then take the checkpoint path.
@@ -186,7 +193,8 @@ def gamesec(path, root):
         for d, _, files in os.walk(os.path.join(root, top)):
             game.update(f for f in files if f.endswith(".c"))
     bad, room = [], []
-    for obj, sec, size, syms in game_section_objects(path):
+    objs = game_section_objects(path)
+    for obj, sec, size, syms in objs:
         b = re.search(r"\(([^()]*)\)$", obj)
         member = b.group(1) if b else re.split(r"[/\\]", obj)[-1]
         src = re.sub(r"\.o(bj)?$", "", member)
@@ -201,6 +209,16 @@ def gamesec(path, root):
         bad.append("%s %s 0x%x%s" % (obj, sec, size, (" (" + ", ".join(syms[:4]) + ")") if syms else ""))
     if len(room) > 1:
         bad += ["%s (a second tables.c)" % o for o in room[1:]]
+    if not objs:
+        print("android_syms_lines: %s shows no object in the game's data sections (ico_gdata, "
+              "ico_gbss, .data$ico_m, .data$ico_p): not a link map of the program, or its game "
+              "data is missing" % path)
+        sys.exit(1)
+    if not room:
+        print("android_syms_lines: the reserved room (port/data/reserved/tables.c, %s bytes) is not "
+              "in the game's data sections of %s: the game's variables after it moved" %
+              (" or ".join("0x%x" % n for n in ROOM_SIZES), path))
+        sys.exit(1)
     if bad:
         print("android_syms_lines: %d objects outside the game's sources hold bytes in the game's "
               "data sections:" % len(bad))
@@ -211,23 +229,30 @@ def gamesec(path, root):
           (" (and the loader's frozen room)" if room else ""))
 
 
-def layout(carry, root):
+def layout(carry, root, platform="android"):
     want_path = os.path.join(root, "port", "state_legacy", "layout.txt")
+    key = "layout" if platform == "android" else "layout-" + platform
     want = None
     for line in open(want_path, encoding="utf-8"):
         t = line.split()
-        if len(t) == 2 and t[0] == "layout":
-            want = t[1].lower().removeprefix("0x")
+        if len(t) == 2 and t[0] == key:
+            want = t[1].lower()
+            want = want[2:] if want.startswith("0x") else want
     got = None
     for line in open(carry, encoding="utf-8", errors="replace"):
         m = re.search(r"\blayout ([0-9a-f]+)\b", line)
         if m and line.lstrip().startswith("symbols "):
             got = m.group(1)
     if want is None or got is None:
-        print("android_syms_lines: layout: %s" % ("port/state_legacy/layout.txt records no hash"
+        print("android_syms_lines: layout: %s" % ("port/state_legacy/layout.txt records no %s hash" % key
                                                   if want is None else
                                                   "the guard's report %s prints no layout hash" % carry))
         sys.exit(1)
+    if want == "none":
+        print("android_syms_lines: the %s game data layout hash is %s; no earlier version's states "
+              "resume exactly here (port/state_legacy/layout.txt %s none): record it there after "
+              "the release that ships this build" % (platform, got, key))
+        return
     if got != want:
         print("android_syms_lines: the game data layout hash is %s, the legacy tables' %s "
               "(port/state_legacy/layout.txt): the states the earlier versions saved could no longer "
@@ -237,7 +262,7 @@ def layout(carry, root):
               "if it changed on purpose, record %s in port/state_legacy/layout.txt knowing those "
               "states then take the checkpoint path." % (got, want, got))
         sys.exit(1)
-    print("android_syms_lines: the game data layout hash %s is the legacy tables'" % got)
+    print("android_syms_lines: the %s game data layout hash %s is the recorded one" % (platform, got))
 
 
 def main():
@@ -247,6 +272,9 @@ def main():
         check(sys.argv[2])
     elif len(sys.argv) == 4 and sys.argv[1] == "layout":
         layout(sys.argv[2], sys.argv[3])
+    elif len(sys.argv) == 5 and sys.argv[1] == "layout" and \
+            sys.argv[4] in ("android", "windows-x64", "linux-arm64"):
+        layout(sys.argv[2], sys.argv[3], sys.argv[4])
     elif len(sys.argv) == 4 and sys.argv[1] == "gamesec":
         gamesec(sys.argv[2], sys.argv[3])
     else:

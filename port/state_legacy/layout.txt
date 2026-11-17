@@ -6,3 +6,16 @@
 # line only when the game's data changed on purpose: the tables' states then no
 # longer resume exactly anywhere and take the checkpoint path.
 layout 7e3463baa76b43a8
+
+# The Windows program's (tools/package_win.sh, the same gate on the staged
+# program's report): v0.11.8's states resume exactly in a later version only
+# under v0.11.8's hash, which its own release computes (state_carry_check.py
+# check on dist/stage/x64 of v0.11.8, aeb00e610; v0.11.9-rc3's is the same).
+layout-windows-x64 74cdbc99b21a191e
+# The arm64 Linux program's (tools/package_linux.sh): no earlier version's
+# states resume exactly (v0.11.8's hold one start-up word its rules could not
+# name, "queen_effect2", so every one takes the checkpoint): none recorded;
+# the gate prints the hash, to record after the first release whose arm64
+# Linux states can carry over (the x86-64 Linux program is fixed below 4 GB:
+# its states never carry over, no gate).
+layout-linux-arm64 none

@@ -105,7 +105,13 @@ python3 -I "$wt/tools/state_checkpoint_table.py" guard "$b/ico_pc.map" >>"$log" 
 # staged program (tools/state_carry_check.py, built with the host compiler;
 # docs/port/PLATFORM.md "The carry-over guard"); the report goes to the log.
 run python3 -I "$wt/tools/state_carry_check.py" check --binary "$d/ico_pc_$a.exe" --syms "$d/ico_pc_$a.map" \
-    --workdir "$root/build-host/tmp/win-$label-carry" --cc "${CC:-cc}"
+    --workdir "$root/build-host/tmp/win-$label-carry" --cc "${CC:-cc}" \
+    --report "$root/build-host/tmp/win-$label-carry.txt"
+# the earlier versions' Windows states resume exactly only under their game
+# data layout hash (port/state_legacy/layout.txt layout-windows-x64): a
+# package of another one fails, as the Android package does
+python3 -I "$wt/tools/android_syms_lines.py" layout "$root/build-host/tmp/win-$label-carry.txt" "$wt" windows-x64 >>"$log" 2>&1 ||
+    fail "tools/android_syms_lines.py layout: the Windows game data layout hash is not the recorded one (the log says which and what to do)"
 cp "$b/SDL3.dll" "$d/SDL3.dll"
 # the save importer, in its own folder with the SDL3.dll it needs beside it
 rm -rf "$d/tools"; mkdir -p "$d/tools"
