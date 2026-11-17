@@ -1146,9 +1146,9 @@ pinned) and `pobjImageTables`' host block (POBJ). A word matches a range when `l
   pool are judged (the image not for another build, whose words go by their translation); the
   model tables' small host block is not (its delta is non-zero on every load). Where every delta
   is 0 (the same process; a fixed image with the arena and pool pinned: Windows, Linux x64) nothing
-  is judged. The macOS program is linked at 0x2A1D60000000
-  ([BUILDING.md](../BUILDING.md#apple-image-base)) and moves by the scan; the iOS program cannot be
-  (the kernel maps it only below 0x458000000), so its states resume exactly within a run and
+  is judged. Neither Apple program can be linked above the bound
+  ([BUILDING.md](../BUILDING.md#apple-image-base): the macOS link with `__TEXT` alone placed high
+  fails; the iOS kernel maps a program only below 0x458000000), so their states resume exactly within a run and
   continue from their checkpoint in a later one, as do states whose arena or pool sat below 64 GB
   unpinned (iOS's always: the pinned base 0x3C00000000 lies beyond its address space). Android's
   library and an unpinned arena saved at 0x3C00000000 stay above the bound: the accepted risk
