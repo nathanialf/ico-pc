@@ -367,6 +367,9 @@ typedef struct RdFrame {
      * for the draws marked RD_VU_TICK_CAMERAS (IcoVuCB.ticks) */
     uint32_t hasTickCams;
     float tickCams[2][16];
+    /* not dumped: the game paused when the frame closed (rd_end_frame,
+     * rd_set_paused_source; the paused scene's hold, rd_hold.h) */
+    uint32_t paused;
 } RdFrame;
 
 void rd__frame_reset(RdFrame *f);

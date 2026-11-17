@@ -1773,6 +1773,13 @@ static void fillAt(Replay *r, const RdFrame *f, const RdCmd *c, int list, bool m
     rd__crack_fill_late(r, msaaOpen);
 }
 
+/* rd_hold.h: a fill of this replay still to be drawn (held to a paste, or
+ * in list 11's pass) */
+bool rd__crack_fill_owed(void)
+{
+    return (s_late.armed && s_late.replay == g_rd.replayCounter) || rd__crack_fill11_pending();
+}
+
 bool rd__crack_fill_paste_due(void)
 {
     return s_late.armed && s_late.paste && s_late.pasteOrd == g_rdStoreOrd;

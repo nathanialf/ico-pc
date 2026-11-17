@@ -35,6 +35,7 @@
 #include <string.h>
 #include "../core/region.h" /* ico_region: which disc's VU programs */
 #include "rd_internal.h"
+#include "rd_hold.h"
 #include "rd_mesh.h"
 #include "rd_vu_rec_early.h"
 #include "shader_consts.h"
@@ -275,7 +276,8 @@ static void meshFree(RdMeshRec *m)
         s_staleCount--;
     }
     m->stale = 0;
-    meshGpuRelease(m); /* its span of the device arena */
+    rd__hold_mesh_changed(); /* a stream gone (rd_hold.h) */
+    meshGpuRelease(m);       /* its span of the device arena */
     for (int i = 0; i < 2; i++) {
         free(m->hist[i].stream);
         m->hist[i].stream = NULL;
@@ -354,6 +356,7 @@ static RdMeshRec *meshAlloc(uint32_t *id)
             m->live = 1;
             m->lastUsed = g_rd.frameCounter;
             *id = (m->gen << 16) | (i + 1);
+            rd__hold_mesh_changed(); /* a stream made (rd_hold.h) */
             return m;
         }
         evict();
@@ -649,6 +652,7 @@ static int parseVerb(const char *t, size_t n, RdHideVerb *v)
 
 bool rd__content_hide_set(const char *spec)
 {
+    rd__hold_mesh_changed(); /* what the meshes draw may change (rd_hold.h) */
     const int n =
         rd__content_hide_count < RD_CONTENT_HIDE_MAX ? rd__content_hide_count : RD_CONTENT_HIDE_MAX;
     RdHideVerb v[RD_CONTENT_HIDE_MAX];
@@ -780,6 +784,7 @@ static int parseExtendVerb(const char *t, size_t n, RdExtendVerb *v)
 
 bool rd__content_extend_set(const char *spec)
 {
+    rd__hold_mesh_changed(); /* what the meshes draw may change (rd_hold.h) */
     const int n = rd__content_extend_count < RD_CONTENT_EXTEND_MAX ? rd__content_extend_count
                                                                    : RD_CONTENT_EXTEND_MAX;
     RdExtendVerb v[RD_CONTENT_EXTEND_MAX];
@@ -1370,6 +1375,7 @@ bool rd__mesh_set_facing(RdMeshRec *m, const uint8_t *bits, uint32_t count)
         return false;
     }
     const uint32_t nv = m->vertexCount;
+    rd__hold_mesh_changed(); /* its facing table (rd_hold.h) */
     bool had = false;
     for (uint32_t k = 0; k < m->markCount; k++) {
         had |= (m->kickMark[k] & ICO_VU_MARK_FLIP) != 0;
@@ -2348,15 +2354,21 @@ bool rd_update_vu_mesh(RdMesh mesh, const float (*qw)[4])
         return false; /* a replaced mesh: its stream is not the packet's layout */
     }
     keepVersion(m);
+    bool changed = false; /* other bytes than the stream holds (rd_hold.h) */
     for (uint32_t b = 0; b < m->batchCount; b++) {
         const RdVuBatchRec *br = &m->batches[b];
         /* a sheet's batch: the packet holds its own vertices, not the tiles */
         const uint32_t n = m->tiledFrom ? m->tiledFrom - br->firstVertex : br->vertexCount;
+        changed = changed || memcmp(m->stream[(size_t)br->firstVertex * m->qwPerVertex],
+                                    qw[br->srcQw + 1], (size_t)n * m->qwPerVertex * 16) != 0;
         memcpy(m->stream[(size_t)br->firstVertex * m->qwPerVertex], qw[br->srcQw + 1],
                (size_t)n * m->qwPerVertex * 16);
     }
     if (m->tiledFrom) {
         retileSheet(m);
+    }
+    if (changed) {
+        rd__hold_mesh_changed(); /* the paused scene's hold sees the morph */
     }
     rd__mesh_stream_written(m);
     m->replaySeen = 0; /* upload again at the next replay */

@@ -213,6 +213,13 @@ enum {
        draws keep the PS2's drops (issue 163); count the mesh and grid draws
        by the camera, second count the skinned draws kept */
     ICO_ATT_PLAIN_CAMERA,
+    /* rd_hold.c (issue 123, v0.11.8): while the game is paused and its scene
+       is the one the last full picture drew, lists 11-12 drawn over a copy
+       of SCENE taken at list 11 (Vulkan, no joined list 11 passes, no MSAA,
+       exact blend or temporal upscaler), behind the first held picture's
+       check against the same picture in full; count the pictures held,
+       second count those drawn in full while paused */
+    ICO_ATT_SCENE_HOLD,
     ICO_ATT_COUNT
 };
 
@@ -469,5 +476,10 @@ void ico_attempt_decide_set_size(int floorOn);
    (g_rd.vuNoBeside), camera the camera rule in force ([dev] region_rule).
    On with both; not applicable with the reason otherwise */
 void ico_attempt_decide_plain_camera(int plainRow, int camera);
+/* the paused scene held under the menu (rd_hold.c at the first paused
+   picture, and when the device's verdict changes): offWhy NULL, on; else not
+   applicable with offWhy (a static string: not Vulkan, list 11's passes
+   joined, MSAA, the exact blend, a temporal upscaler, ...) */
+void ico_attempt_decide_scene_hold(const char *offWhy);
 
 #endif

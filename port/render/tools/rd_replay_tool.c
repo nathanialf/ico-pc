@@ -2904,6 +2904,14 @@ int main(int argc, char **argv)
     if (!rf) {
         return 1;
     }
+    {
+        /* ICO_RD_SCENE_HOLD=paused: the frame taken as the game's paused one
+           (rd_hold.c; the tests' A/B), not the start-up self-tests' frames */
+        const char *hold = getenv("ICO_RD_SCENE_HOLD");
+        if (hold && strcmp(hold, "paused") == 0) {
+            ((RdFrame *)rf)->paused = 1u;
+        }
+    }
     if (list) {
         RdStateBlock st = rf->startState;
         s_listed = 0;
@@ -3012,6 +3020,7 @@ int main(int argc, char **argv)
             replayed = rd__replay_frame(rf, (int)rf->keep, pw != 0 && !passDir);
         }
     }
+    rd_hold_line(); /* the paused scene's hold, when a picture was taken as paused (rd_hold.c) */
     if (occlusion) {
         /* the counts before anything else recycles a frame slot */
         RdOccResult occ;

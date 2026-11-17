@@ -1108,6 +1108,19 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   and whether a game cut is pending since the flip before; a crossing marks the frame that flip
   closes (`RdCamera.cut` 2, `RD_SNAP_WALL` against the frame before), not the next;
   `gsb_ResetGSSystem` forgets the eye (`checkCameraWall`).
+- `rd_hold_test.c`: the paused scene's hold, its CPU half (`rd_hold`, no device;
+  [RENDER.md](RENDER.md#the-paused-scenes-hold)): the change counters (a texture made, given the same
+  texels and new ones, a rectangle of each, destroyed; a mesh made, morphed to the same stream and to
+  another, destroyed: one change each, none for the same bytes), the lists key (another menu and the
+  menu recorded first keep it; one scene colour word, one state command, one command more change it),
+  the state key (a setting), the frame's rules (a plain frame, the aura's FEED128 carried, the motion
+  blur's DISPLAY, list 11 under a Z test, reading WORK0 or drawn into WORK0, a keep frame) and
+  `rd__hold_why` for every input. `rd_hold_ab.cmake` (`rd_hold_ab`): the fixtures of
+  `port/render/test/fixtures/lists/hold.txt` replayed with `--repeat 8`, every tick taken as paused
+  (`ICO_RD_SCENE_HOLD=paused`) against `=0`, at the tablet's 3x path with and without the late pass
+  and at Enhanced 2x 4:3: every target after the last tick, the last picture, and that picture under
+  `ICO_RD_WORK_CLEAR=FF00FF`, byte for byte; a `held` fixture's run holds 3 pictures or more with its
+  self-test `equal`, a `refused` one none with its reason counted.
 - `rd_still_test.c`: the still re-present's hash and decision (`rd_still`, no device): two ticks with
   the same sprites and a still camera hash the same at alpha 0.25, 0.5, 0.75 and 0.999 (the presenter's top), as a first and as
   a later present (the head copies are not in it); one colour word of the second tick, a sprite that

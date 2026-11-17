@@ -228,6 +228,7 @@ add_library(ico_render STATIC
     rd_present_info.c # rd_last_present_info's record: what the last present drew
     rd_icon_hold.c # the title's last picture held on screen while the icon capture's frames are drawn
     rd_replay.c
+    rd_readback.c # the readbacks (moved from rd_replay.c for the file cap)
     rd_replay_tiler.c # the replay's tiler passes: DATE through the stencil bit, the blur fold
     rd_replay_vu.c # the replay's VU draws
     rd_vuprepass_selftest.c # the VU vertex pre-pass's start-up check on the device
@@ -3487,6 +3488,7 @@ include(rd_vu_audit.cmake) # the VU record path's bounds audit (issue 179, tests
 include(rd_subpass_probe.cmake) # the subpass read's first-start probe
 include(rd_bench.cmake) # the rc-only bench: kept frames measured part by part
 include(rd_shadowres.cmake) # the shadow's levels at the scene's scale above 1x
+include(rd_hold.cmake) # the paused scene held under the menu (issue 123)
 
 # the lavapipe driver's compile thread racing the exit (the leak described at
 # rd_blend_selftest above: 240 or 480 bytes, every frame in libasan, libc or an

@@ -17,6 +17,8 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_tex.h`, `rd_tex.c` | the texture cache: GS formats decoded into rd textures |
 | `port/render/rd_mesh.h`, `rd_mesh.c` | the VU mesh path (VU1_PROGRAMS.md) |
 | `port/render/rd_replay.c` | a frame onto the RHI: every command's replay |
+| `port/render/rd_hold.h`, `rd_hold_key.c`, `rd_hold.c` | the paused scene's hold: lists 11-12 over a copy of SCENE taken at list 11 while the game is paused and its scene unchanged ([The paused scene's hold](#the-paused-scenes-hold)) |
+| `port/render/rd_readback.c` | the readbacks: a texture, a named target's colour or depth, the presented output read back to the CPU (dumps, screenshots, tests; moved from `rd_replay.c` for the file cap) |
 | `port/render/rd_jitter.h`, `rd_jitter.c` | the scene's sub-pixel jitter after the GS's snap ([Jitter](#jitter)) and the Halton (2, 3) table |
 | `port/render/rd_shader_plan.c` | the size of `rd__gpu_init`'s shader set, counted before it is made, for the progress screens (`rhi_plan_shaders`) |
 | `port/render/rd_submit.c`, `rd_submit.h` | a replay's end: the present's pass recorded, the list ended and submitted, the picture presented and the capture it copied written out |
@@ -2127,6 +2129,102 @@ by mesh name and key with their largest turn and the last reason (`RD_TURN_WHY_*
 prints the pair's long ways and turns kept at the tick's pose (`port/render/rd_interp.c` (rotation
 continuity: `turnFind`, `turnRecall`, `turnRecallGap`, `turnKeep`, `blendTurn`, `turnSnaps`),
 `port/render/rd_camera_blend.h`, `port/render/rd_internal.h`).
+
+## The paused scene's hold
+
+Issue 123's tablet (Adreno 740) hangs for about 400 ms inside list 0, also with the pause menu open,
+where every tick drew the unchanged scene again under the menu. While the game is paused and its
+scene is the one the last full picture drew, the replay draws lists 11-12 alone over a copy of
+SCENE taken at the start of list 11 (`port/render/rd_hold.c`, `rd_hold_key.c`, `rd_hold.h`).
+
+**Paused.** `rd_end_frame` marks the frame paused (`RdFrame.paused`) from the window's rule
+(`port/platform/window_pause.c`: `systemStatus[5]` set, which the pause menu and the title set, and
+photo mode not open: its paused game follows the photo camera and its feedback the picture).
+
+**The frame's rules** (`rd__hold_scan`): not a keep frame; lists 0-10 neither read nor write the
+picture before (DISPLAY, DISPLAY_HELD, the display layer's slots: the motion blur); lists 11-12 draw
+only into SCENE and DISPLAY, read no target but SCENE's colour, test no depth, DATE or PRIM.AA1,
+and hold only screen prims, post sprites other than the fog, clears of SCENE or DISPLAY, overlay
+text and NOPs. The targets lists 0-10 carry from one replay to the next (FEED128, FEED_HELD,
+WORK3_HELD) are named for the settling. **The device**: Vulkan; list 11's draws not joined to the
+open pass (`rd_late_pass.c`: where the fx plan reads destinations by the local read the join draws
+them with other pipelines, [DIVERGENCES.md](DIVERGENCES.md) VD-31, which the copy would change); no
+MSAA, exact blend or GS state as shader data, temporal upscaler (the display layer is in force only
+under its split), present from
+SCENE, Motion blur: Smooth, pass window, upscaler capture or video. OpenGL and Direct3D 11 draw
+every paused picture in full.
+
+**The key** (`rd__hold_lists_key`, `rd__hold_state_key`): lists 0-10, each command with its payload
+offsets left out and the payload bytes they name hashed instead (a menu that records its payload
+first moves no key), the head's scalars, start state, camera, VU block and tick cameras (not the
+frame's number); the settings, the filter, the fog path, the blend mode, SCENE's and DISPLAY's
+textures, sizes and formats; and two change counters: meshes (`rd__hold_mesh_changed`: made,
+destroyed, a morph with other bytes, a facing table, the content table's switches; `rd_mesh.c`)
+and textures (`rd__hold_tex_changed`: every place a texture is marked for upload, made or
+destroyed; `rd_core.c`, `rd_tex.c`, `rd_replay.c`), with no texture waiting for its upload.
+
+**The chain.** Each full replay of a paused frame that qualifies is a take: at the start of list 11
+(`rd__hold_list`, from `rd_replay.c`'s list loop) the open pass ends and SCENE's colour is copied
+into the held copy (`rd held scene`, SCENE's size and format), and the carried targets into this
+slot's readback, read at the slot's recycle (`rd__hold_collect`). Nothing is taken where lists 0-10
+left work owed there: a clear or a shadow reset not recorded (`rd__replay_owed`), a shadow window
+open on SCENE's depth, a crack fill held to a paste or to list 11's pass (`rd__crack_fill_owed`),
+the glow's paste deferred, or a pass begun readable or as storage; the chain starts again. SCENE's
+border repeat still due at list 11 (the fog's outer columns, `rd_blur_border.c`, where no post
+sprite of lists 0-10 read SCENE) stays where it falls, after list 11's draws, and the held replays
+arm it (`rd__scene_border_rearm`) so it falls at the same command. A change of key starts a new chain. The chain is settled when it carries
+nothing, or when the carried targets read back from two consecutive takes are the same bytes.
+
+**Held.** A settled chain's next replay walks the frame with every action of lists 0-10 an RDC_NOP
+(state commands, overlay text, ordinals and every scan as in the full frame, the rule of
+`rd_vis.c`'s skipped draws) and copies the held copy back into SCENE's colour at the start of list
+11. Why the bytes are the full replay's: a replay is a function of its frame, the settings, the
+meshes and textures and the carried targets at its start. Two consecutive takes with one key whose
+carried targets end the same began from the targets they ended with, so every later replay of the
+key begins and ends there and draws the same SCENE at list 11, the held copy. A held replay writes
+no carried target; lists 11-12 read nothing of SCENE's depth and no target but SCENE's colour, so
+they draw from the same inputs; the take changes the full replay only where list 11's first pass
+begins (the same attachments and pipelines, stores planned at each pass's begin), which is why the
+join's devices are left out. While paused the aura's feedback takes nothing from SCENE
+(`staticBlur.c`: `copyCurrentFBToFeedBackArea` only while `systemStatus[5] == 0`), so FEED128 settles
+after one replay where its alpha is the frame's own.
+
+**Side replays.** A replay that presents nothing (a dump's, the VU skin check's, a start-up
+self-test's or probe's own frame) is never held or taken and is not counted; the chain starts again
+after it, since its lists 0-10 may write the carried targets. Only the tool's frame under
+`ICO_RD_SCENE_HOLD=paused` (its `--pass-dump` replays present nothing) and the self-test's held
+replay are exceptions.
+
+**The self-test.** The first held picture of a run is made twice (`rd__replay_frame_here`): held
+without a present, then in full; SCENE and DISPLAY are read back and compared byte for byte at their
+size. A difference turns the hold off for the run (`rd: still scene: self-test: ...: different
+...; the hold off for the run`, the ledger's row refused). It costs one extra replay and two
+read-backs with the GPU idle, once a run.
+
+**Memory.** The held copy is SCENE's colour (1728 x 1344 x 4 = 9.3 MB at the tablet's 3x 3:2), made
+at the first take and let go when the game is unpaused (`rd: still scene: the held copy made: ...`,
+`... freed (the pause ended; N pictures held over it) ...`); the readbacks are the carried targets'
+size per frame slot.
+
+**The next log (issue 123, its issue ledger's row).** Hangs with a menu open: with the scene held,
+do they stop (the hang needs scene work) or continue on menu-only submissions (the cause is outside
+the picture's content)? The stall lines' submission clauses say `menu open, scene held` (lists
+11-12 alone over the copy) or `menu open, scene replayed`, with the submission that holds the first
+unwritten stamp (`it holds the first unwritten stamp`) and its lists; the 10 s line says how many
+pictures were held and why the others were drawn in full; the tally's `H of them hangs` against the
+reporter's last log: 10 hangs in 22 s of menus, each in a scene replay's list 0.
+
+**Lines.** At the first paused picture `rd: still scene: on (Vulkan): ...` or `rd: still scene: off
+on this device or with these settings: <why>`; in each 10 s block with a paused picture `window:
+still scene: N pictures from the held scene (M under a menu), K replayed (... lists differ, ...
+feedback not settled, ... first, ... settings, ... uploads, ... lists 11-12 the hold cannot keep,
+... the scene reads the picture before, ... scene work owed at list 11 [...], ... the device or
+settings, ... off)`; a take refused `rd: still scene: no copy at list 11 of frame F: <why> ...`; the
+attempt ledger's row `the paused scene held under the menu`; each stall line's submissions `menu
+open, scene held` or `menu open, scene replayed` (`rd_hold_replay_kind`). `ICO_RD_SCENE_HOLD=0`
+turns it off and `=paused` has `rd_replay_tool` mark its frame paused (the tests:
+[TESTING.md](TESTING.md#environment-switches)). Tests: `rd_hold` (the CPU half) and `rd_hold_ab`
+(held against full on fixtures, [TESTING_FIXTURES.md](TESTING_FIXTURES.md)).
 
 ## Performance records
 

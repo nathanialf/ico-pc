@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_hold.h"
 #include "rd_tex_decode.h"
 #include "shader_consts.h"
 #include "texpack.h"
@@ -1515,6 +1516,7 @@ void rd__sheet_bake_grow(const RdTexRec *t, uint32_t dw, uint32_t dh, uint32_t *
 /* t's texels uploaded whole at the next replay */
 static void sheetDirtyAll(RdTexRec *t)
 {
+    rd__hold_tex_changed(); /* the paused scene's hold (rd_hold.h) */
     if (!t->dirty) {
         g_rd.texDirtyCount++;
     }

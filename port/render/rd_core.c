@@ -33,6 +33,7 @@
 #include "rd_log_line.h"
 #include "rd_made_outside.h" /* what play makes outside the key cache, named */
 #include "rd_internal.h"
+#include "rd_hold.h"
 #include "rd_icon_hold.h" /* rd__icon_pass_drop */
 #include "rd_loss_keep.h" /* rd__loss_keep_recycle */
 #include "rd_layer.h"     /* the display layer's reserved slots */
@@ -1452,6 +1453,7 @@ static uint32_t texAlloc(void)
 /* The whole texture changed (a create, rd_update_texture) */
 static void texDirtyAll(RdTexRec *t)
 {
+    rd__hold_tex_changed(); /* the paused scene's hold (rd_hold.h) */
     if (!t->dirty) {
         g_rd.texDirtyCount++;
     }
@@ -1665,6 +1667,7 @@ void rd_update_texture_rect(RdTex tex, uint32_t x, uint32_t y, uint32_t w, uint3
         return; /* nothing changed: nothing to upload */
     }
     g_rd.texRectUpdates++;
+    rd__hold_tex_changed();
     if (!t->dirty) {
         g_rd.texDirtyCount++;
         t->dirty = 1;
@@ -1699,6 +1702,7 @@ void rd_destroy_texture(RdTex tex)
     if (t->dirty && g_rd.texDirtyCount) {
         g_rd.texDirtyCount--;
     }
+    rd__hold_tex_changed();
     free(t->pixels);
     free(t->gsChain);
     rd__free_pending(t); /* a replacement destroyed before its upload */
@@ -2007,6 +2011,7 @@ void rd_shutdown(void)
         rd__crack_fill_shutdown();  /* the crack filler's count target and buffer */
         rd__aura_box_shutdown();    /* the aura's ROWBOX (rd_aura_box.c) */
         rd__lamps_shutdown();       /* LOWRES's copy of SCENE's depth (rd_lamps.c) */
+        rd__hold_shutdown();        /* the paused scene's copy and readbacks (rd_hold.c) */
         rd__shadow_tile_shutdown(); /* the shadow tiles' masks (rd_shadow_tile.c) */
         rd__vu_skin_shutdown();     /* the skin check's probes (rd_vu_skin_check.c) */
         rd__gpu_shutdown();
@@ -2746,6 +2751,14 @@ static void originalPicture(const RdFrame *f)
     }
 }
 
+/* rd_set_paused_source's: the game's pause, read as each frame closes */
+static int (*s_pausedFn)(void);
+
+void rd_set_paused_source(int (*fn)(void))
+{
+    s_pausedFn = fn;
+}
+
 void rd_end_frame(int keep)
 {
     rd__texlock_wait();
@@ -2759,6 +2772,7 @@ void rd_end_frame(int keep)
         return;
     }
     f->keep = keep ? 1 : 0;
+    f->paused = s_pausedFn && s_pausedFn() ? 1u : 0u; /* the paused scene's hold (rd_hold.h) */
     if (f->cut) {
         /* a plain cut, the camera's or the frame's, wins over a wall's */
         f->camera.cut = f->cut == RD_CAMERA_CUT_WALL && f->camera.cut != 1 ? RD_CAMERA_CUT_WALL : 1;

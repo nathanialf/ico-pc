@@ -73,6 +73,8 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
                           "made on first use"},
     [ICO_ATT_PLAIN_CAMERA] = {"the camera rule for static meshes on the plain set",
                               "mesh and grid draws by the camera", "skinned draws kept"},
+    [ICO_ATT_SCENE_HOLD] = {"the paused scene held under the menu", "pictures held",
+                            "drawn in full while paused"},
 };
 
 /* the rows' live values (__atomic), and the block text's last counts (the
@@ -882,5 +884,14 @@ void ico_attempt_decide_plain_camera(int plainRow, int camera)
         ico_attempt_state(ICO_ATT_PLAIN_CAMERA, ICO_ATT_ON,
                           "static meshes and grids by the camera, skinned draws keep the PS2's "
                           "drops (issue 163)");
+    }
+}
+
+void ico_attempt_decide_scene_hold(const char *offWhy)
+{
+    if (offWhy == NULL) {
+        ico_attempt_state(ICO_ATT_SCENE_HOLD, ICO_ATT_ON, "while paused");
+    } else {
+        ico_attempt_state(ICO_ATT_SCENE_HOLD, ICO_ATT_NA, offWhy);
     }
 }

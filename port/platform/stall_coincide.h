@@ -164,6 +164,10 @@ typedef struct StallMoment {
            1 or 2 there), 0 not known */
         uint8_t signalKind;
         double signalMs;
+        /* its replay under the game's pause (rd.h rd_hold_replay_kind): 0
+           not paused or not known, 1 drawn from the held scene (lists 11-12
+           over SCENE's copy), 2 drawn in full */
+        uint8_t scene;
     } sub[STALL_SUBS];
 
     /* Issue 179's stalls all read "none of these" (v0.11.7 log): what the

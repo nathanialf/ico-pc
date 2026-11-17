@@ -3613,6 +3613,17 @@ void rd_glow_light_line(void);
  * "window: late pass: ..." for the replays since its last call (nothing
  * when no fill was held) */
 void rd_late_pass_line(void);
+/* The paused scene's hold (rd_hold.c; docs/port/RENDER.md "The paused
+ * scene's hold"): rd_set_paused_source(fn) has rd_end_frame mark each frame
+ * paused while fn() returns non-zero (the window: the game's pause, not
+ * photo mode; NULL: never); rd_hold_line writes the 10 s line `window: still
+ * scene: ...` when a paused picture was made in the block; rd_hold_replay_kind
+ * says what replay `replay` (RdPerfRecord.replay) was: 0 not paused or not
+ * known, 1 drawn from the held scene, 2 drawn in full while paused (the
+ * window's stall lines; any thread) */
+void rd_set_paused_source(int (*fn)(void));
+void rd_hold_line(void);
+int rd_hold_replay_kind(uint32_t replay);
 /* the lamps' glow for less (rd_lamps.c): the 10 s "window: lamps: N lamps
  * passes on WORK2 with an area (...), M whole (why); P bands left lazy"
  * line, nothing in a block without a lamps frame */

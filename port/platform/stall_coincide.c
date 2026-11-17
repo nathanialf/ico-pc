@@ -264,6 +264,11 @@ static void subsText(Out *o, const StallMoment *m)
         } else {
             put(o, "%u list%s", s->lists, s->lists == 1 ? "" : "s");
         }
+        if (s->scene == 1u) {
+            put(o, ", menu open, scene held");
+        } else if (s->scene == 2u) {
+            put(o, ", menu open, scene replayed");
+        }
         if (s->named && s->pieces > 0) {
             put(o, ", %u pieces", s->pieces);
         }
