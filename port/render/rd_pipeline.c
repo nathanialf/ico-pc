@@ -2538,7 +2538,14 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
                 }
             }
             ask.begin = sizeBegin;
-            rd_set_size_need(&ask.needRecordBytes, &ask.needArenaBytes);
+            {
+                RdSetNeed need;
+                rd_set_size_need(&need);
+                ask.needRecordBytes = need.recordNeed;
+                ask.needArenaBytes = need.arenaNeed;
+                ask.madeRecordBytes = need.recordMade;
+                ask.madeArenaBytes = need.arenaMade;
+            }
             ask.place = i;
             ask.total = m;
             why[0] = '\0';

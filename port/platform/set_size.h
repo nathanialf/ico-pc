@@ -19,7 +19,9 @@
  *            against the headroom = free memory now - the floor - play's
  *            known need (the window's: the VU pre-pass's record at the
  *            run's need and the mesh arena's first chunk, where not made
- *            yet; rd_vu_rec_early.h rd_set_size_need);
+ *            yet; rd_vu_rec_early.h rd_set_size_need: made already, as the
+ *            pre-pass self-test's record, they are out of the free memory
+ *            read and the start line names them);
  *   decide   the family of the next pipeline first, then the other: a
  *            family whose rest added to the rests kept so far does not fit
  *            stops now (its pipelines made on first use), else its rest is
@@ -130,10 +132,13 @@ void set_size_begin(SetSizeRun *r, long freeMb, long floorMb);
 unsigned set_size_ask(SetSizeRun *r, const SetSizeAsk *a, char *line, size_t lineSize, char *why,
                       size_t whySize);
 /* The set's start line ("ico_pc: pipelines: the start-up set's size by the
-   device's memory fall: on (...)", or "... off (<offWhy>): ..."); the
-   length written */
+   device's memory fall: on (...)", or "... off (<offWhy>): ..."): play's
+   known need not made yet (recordMb, arenaMb) and what of it is made
+   already (recordMadeMb, arenaMadeMb: made before the free figure was
+   read, not counted again); the length written */
 size_t set_size_rule_text(char *out, size_t size, int active, const char *offWhy, unsigned total,
-                          long freeMb, long floorMb, long recordMb, long arenaMb);
+                          long freeMb, long floorMb, long recordMb, long arenaMb, long recordMadeMb,
+                          long arenaMadeMb);
 /* The short words of the run's decision for last-run.txt's phase ("start-up
    set sized by the memory fall: VU left to first use (14.3 MB a pipeline)";
    "" before a verdict) */

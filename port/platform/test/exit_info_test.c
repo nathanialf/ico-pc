@@ -582,7 +582,8 @@ static void set_env(const char *name, const char *value)
 
 static void run(const char *base)
 {
-    static char dir[600], p[700], act[700], recs[700], buf[16384];
+    /* p holds "<dir>/<name>": sized from both (gcc's -O1 fortify format-truncation) */
+    static char dir[600], p[600 + 1 + 160], act[700], recs[700], buf[16384];
     static char text[EXIT_INFO_TEXT_MAX];
     static char lastRun[LAST_RUN_BYTES];
     static const char kTrace[] = "----- pid 23456 at 2026-11-16 20:50:15 -----\n\"main\" ...\n";

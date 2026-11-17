@@ -816,7 +816,9 @@ width at its own offset, `<field>: <value>` padded with blanks and ended by a ch
 bytes (`[3fa1c2d0]`, 32-bit FNV-1a with the slot's index mixed in). It is rewritten in place with
 one positional write of the whole file at every heartbeat (2 s, not synced: a process the system
 kills leaves the system's page cache, which still reaches the disc) and at every phase change
-(synced, about ten a run). A write the process did not finish leaves every slot whole, from one
+(synced, about ten a run); the background switch and the system's low-memory signal write it
+without a sync and only when no other write is in flight (Android calls them on its UI thread,
+which must not wait on the disc; a skipped write is the next heartbeat's). A write the process did not finish leaves every slot whole, from one
 write or the other, or failing its check, which the reader marks as such: never a mix.
 
 | field | value |
@@ -845,8 +847,10 @@ first start with it, or the file was deleted)` and an older copy is deleted. `la
 gives the facts (`LastRunFacts`: pid, seconds, phase with stage and tick, background, trim level,
 resets, free memory, the end and a crash's signal) for the verdict of the next start.
 
-On Android 11 and later each phase change also hands at most 128 bytes (`ico-pc <phase> | resets
-47->66 | free 1911 MB, lowest 1897`) to `ActivityManager.setProcessStateSummary`
+On Android 11 and later each phase change also keeps at most 128 bytes (`ico-pc <phase> | resets
+47->66 | free 1911 MB, lowest 1897`), which the next heartbeat (within 2 s) hands from its own
+thread, never from the game's fiber stack where a phase change can come and a Java call is not
+made, to `ActivityManager.setProcessStateSummary`
 (`IcoActivity.processStateSummary`, `port/platform/android/last_run_android.c`), which the system
 keeps in the process's exit record (`ApplicationExitInfo.getProcessStateSummary`) even when the
 app's files are lost; the first outcome is logged once (`ico_pc: last-run: the system keeps a
@@ -915,7 +919,7 @@ does not fall with pipelines, or no floor applies (every system but Android), no
 
 | line | when |
 | --- | --- |
-| `ico_pc: pipelines: the start-up set's size by the device's memory fall: on (<m> pipelines; free <a> MB, the floor <f> MB; play's known need <n> MB: the VU pre-pass's record <r> MB and the mesh arena's first chunk <c> MB): ...` or `...: off (<why>): the set as before` | the set's first ask |
+| `ico_pc: pipelines: the start-up set's size by the device's memory fall: on (<m> pipelines; free <a> MB, the floor <f> MB; play's known need not made yet <n> MB: the VU pre-pass's record <r> MB and the mesh arena's first chunk <c> MB; made already, before the free figure was read: the record <R> MB, the chunk <C> MB): ...` or `...: off (<why>): the set as before` | the set's first ask |
 | `ico_pc: pipelines: the start-up set's size at pipeline <p> of <m>: free <a> MB less the floor <f> MB less play's known need <n> MB leaves <h> MB; 2D <x> MB a pipeline (the median of <b> batches): its <k> left x <x> = <c> MB, stops now, the rest made on first use; VU not measured yet (0 of 3 batches), measured when reached; the rests kept <s> MB` | a family's first trusted figure, and each stop |
 | `rd: pipelines: the start-up set sized by the device's memory fall: <k> made (2D <a>, VU <b>), <l> left to first use (...)` and `rd: pipelines: no start-up set (memory: the start-up set sized by the device's memory fall: <why>; <l> pipelines left to first use): ...` | the set's end, when a family was stopped |
 | `window: pipelines: the start-up set stopped at pipeline <p> of <m> (...) (memory: ...); the next start makes the whole set again` | after it: no resume record |

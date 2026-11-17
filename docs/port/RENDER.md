@@ -2157,7 +2157,9 @@ every paused picture in full.
 **The key** (`rd__hold_lists_key`, `rd__hold_state_key`): lists 0-10, each command with its payload
 offsets left out and the payload bytes they name hashed instead (a menu that records its payload
 first moves no key), the head's scalars, start state, camera, VU block and tick cameras (not the
-frame's number); the settings, the filter, the fog path, the blend mode, SCENE's and DISPLAY's
+frame's number), and for a mesh draw that names the interpolation's scratch mesh (`transient`:
+`rd_interp.c` `morphDraw` rewrites one id at every present with another blend step) that mesh's
+stream serial, new at every rewrite, so a frame drawing one is never held; the settings, the filter, the fog path, the blend mode, SCENE's and DISPLAY's
 textures, sizes and formats; and two change counters: meshes (`rd__hold_mesh_changed`: made,
 destroyed, a morph with other bytes, a facing table, the content table's switches; `rd_mesh.c`)
 and textures (`rd__hold_tex_changed`: every place a texture is marked for upload, made or
@@ -2219,7 +2221,8 @@ on this device or with these settings: <why>`; in each 10 s block with a paused 
 still scene: N pictures from the held scene (M under a menu), K replayed (... lists differ, ...
 feedback not settled, ... first, ... settings, ... uploads, ... lists 11-12 the hold cannot keep,
 ... the scene reads the picture before, ... scene work owed at list 11 [...], ... the device or
-settings, ... off)`; a take refused `rd: still scene: no copy at list 11 of frame F: <why> ...`; the
+settings, ... off)`, each replay counted once under its reason (a take's at list 11, under `scene
+work owed` when the take is refused there, on the replaying thread); a take refused `rd: still scene: no copy at list 11 of frame F: <why> ...`; the
 attempt ledger's row `the paused scene held under the menu`; each stall line's submissions `menu
 open, scene held` or `menu open, scene replayed` (`rd_hold_replay_kind`). `ICO_RD_SCENE_HOLD=0`
 turns it off and `=paused` has `rd_replay_tool` mark its frame paused (the tests:

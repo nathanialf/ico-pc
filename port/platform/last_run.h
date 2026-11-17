@@ -35,8 +35,10 @@
  * lines, and it is copied to logs/last-run-previous.txt, which a report zip
  * carries with last-run.txt (report.c).  Nothing here changes behaviour.
  *
- * Android 11 and later: each phase change also hands a summary of at most
- * LAST_RUN_SUMMARY_MAX bytes to ActivityManager.setProcessStateSummary
+ * Android 11 and later: each phase change also keeps a summary of at most
+ * LAST_RUN_SUMMARY_MAX bytes, which the next heartbeat (last_run_beat, the
+ * heartbeat's own thread: never the game's fiber stack) hands to
+ * ActivityManager.setProcessStateSummary
  * (android/last_run_android.c), which the system keeps in the process's
  * exit record even when the files are lost.
  */
@@ -191,7 +193,8 @@ void last_run_beat(const LastRunBeat *b);
 void last_run_step(const char *step);
 void last_run_selftest(int on);
 void last_run_set_pipelines(unsigned done, unsigned total);
-/* 1 when this present moved the run to the first picture (once a run) */
+/* 1 when this present moved the run to the first picture (once a run;
+   without the file too) */
 int last_run_present(void);
 void last_run_milestone(const char *milestone);
 /* in front (0) or in the background (1) */
@@ -209,7 +212,9 @@ void last_run_set_note(const char *note);
 void last_run_set_gpu_memory(const char *text);
 /* the text last set (mem_watch.c's lines) */
 const char *last_run_gpu_memory_text(void);
-/* the system's summary hook (Android 11+, android/last_run_android.c) */
+/* the system's summary hook (Android 11+, android/last_run_android.c),
+   called by last_run_beat's thread with the summary kept since its last
+   call, if a phase change kept one */
 void last_run_set_summary_hook(void (*fn)(const char *summary));
 /* Ends: written and synced.  last_run_end_crash: async-signal-safe (the
    crash handler; code a signal, or on Windows the exception's code) */

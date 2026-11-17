@@ -72,24 +72,19 @@ static uint32_t rowsFromEnv(uint32_t minRows, uint32_t maxRows)
     return (uint32_t)v;
 }
 
-void rd_set_size_need(uint64_t *recordBytes, uint64_t *arenaBytes)
+void rd_set_size_need(RdSetNeed *out)
 {
-    *recordBytes = 0;
-    *arenaBytes = 0;
+    memset(out, 0, sizeof(*out));
     if (!g_rd.hasDevice) {
         return;
     }
-    if (g_rd.vuPrepass) {
-        const uint32_t lo = rd__vu_rec_rows_min(), hi = rd__vu_rec_rows_max();
-        const uint32_t need =
-            rd_early_start_rows(rd_interpolation_active(), rd__velocity_on(), lo, hi, ICO_VU_REC_W);
-        if (need > rd__vu_rec_rows()) {
-            *recordBytes = (uint64_t)need * rd__vu_rec_row_bytes();
-        }
-    }
-    if (!rd__mesh_arena_ready()) {
-        *arenaBytes = rd__mesh_arena_chunk_bytes();
-    }
+    const uint32_t need =
+        g_rd.vuPrepass
+            ? rd_early_start_rows(rd_interpolation_active(), rd__velocity_on(),
+                                  rd__vu_rec_rows_min(), rd__vu_rec_rows_max(), ICO_VU_REC_W)
+            : 0u;
+    rd_early_set_need(g_rd.vuPrepass, need, rd__vu_rec_rows(), rd__vu_rec_row_bytes(),
+                      rd__mesh_arena_ready(), rd__mesh_arena_chunk_bytes(), out);
 }
 
 uint32_t rd_vu_record_early_rows(void)

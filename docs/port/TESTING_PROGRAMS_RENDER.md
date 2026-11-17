@@ -1112,7 +1112,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   [RENDER.md](RENDER.md#the-paused-scenes-hold)): the change counters (a texture made, given the same
   texels and new ones, a rectangle of each, destroyed; a mesh made, morphed to the same stream and to
   another, destroyed: one change each, none for the same bytes), the lists key (another menu and the
-  menu recorded first keep it; one scene colour word, one state command, one command more change it),
+  menu recorded first keep it; one scene colour word, one state command, one command more change it; a mesh draw's live mesh written again keeps it,
+  the interpolation's scratch mesh rewritten changes it),
   the state key (a setting), the frame's rules (a plain frame, the aura's FEED128 carried, the motion
   blur's DISPLAY, list 11 under a Z test, reading WORK0 or drawn into WORK0, a keep frame) and
   `rd__hold_why` for every input. `rd_hold_ab.cmake` (`rd_hold_ab`): the fixtures of

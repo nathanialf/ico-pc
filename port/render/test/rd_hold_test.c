@@ -12,6 +12,9 @@
  *               scene state command (the blend's FIX) and one command more:
  *               another key each
  *   state key   a setting changed and back
+ *   scratch     a mesh draw: its live mesh written again keeps the key; as
+ *               the interpolation's scratch mesh (transient) the key holds
+ *               until its stream is rewritten, then changes
  *   scan        a plain frame: qualifies, list 11's draws counted; the aura
  *               into FEED128: FEED128 carried; the motion blur reading
  *               DISPLAY: the picture before; a list 11 sprite with a Z
@@ -219,6 +222,48 @@ static void testKeys(void)
     CHECK(rd__hold_state_key() == s0, "the setting back: the same state key");
 }
 
+/* a mesh draw's key and the interpolation's scratch meshes (rd_interp.c
+   morphDraw: one id rewritten at every present, transient) */
+static void testScratch(void)
+{
+    float stream[3][4];
+    memset(stream, 0, sizeof(stream));
+    const uint32_t index[3] = {0, 1, 2};
+    RdVuBatchRec b;
+    memset(&b, 0, sizeof(b));
+    b.indexCount = 3;
+    b.vertexCount = 3;
+    const uint32_t id = rd__vu_mesh_create_raw(stream, 3, 1, index, 3, &b, 1, "hold scratch");
+    RdMeshRec *m = rd__mesh_rec(id);
+    CHECK(id != 0 && m != NULL, "a mesh");
+    if (!m) {
+        return;
+    }
+    static uint8_t payload[sizeof(RdVuPayload) + sizeof(RdVuBlock)];
+    static RdCmd c;
+    static RdFrame f;
+    memset(&c, 0, sizeof(c));
+    c.type = RDC_MESH;
+    c.u[0] = id;
+    c.u[1] = 0;
+    c.u[2] = (uint32_t)sizeof(payload);
+    f.lists[0].cmds = &c;
+    f.lists[0].count = 1;
+    f.payload = payload;
+    f.payloadSize = (uint32_t)sizeof(payload);
+    const uint64_t live = rd__hold_lists_key(&f);
+    rd__mesh_stream_written(m);
+    CHECK(rd__hold_lists_key(&f) == live,
+          "a live mesh written again: the same key (its changes are the mesh counter's)");
+    m->transient = 1;
+    const uint64_t s0 = rd__hold_lists_key(&f);
+    CHECK(rd__hold_lists_key(&f) == s0, "a scratch mesh not rewritten: the same key");
+    rd__mesh_stream_written(m);
+    CHECK(rd__hold_lists_key(&f) != s0, "a scratch mesh rewritten (the next present): another key");
+    m->transient = 0;
+    rd_destroy_vu_mesh((RdMesh){id});
+}
+
 static void testScan(void)
 {
     RdHoldScan s;
@@ -313,6 +358,7 @@ int main(void)
     }
     testCounters();
     testKeys();
+    testScratch();
     testScan();
     testDecision();
     rd_shutdown();

@@ -120,6 +120,8 @@ static unsigned size_ask(const RdSetSizeAsk *a, char *why, size_t size)
     const long mb = 1024L * 1024L;
     const long recMb = (long)((a->needRecordBytes + (uint64_t)mb - 1u) / (uint64_t)mb);
     const long arenaMb = (long)((a->needArenaBytes + (uint64_t)mb - 1u) / (uint64_t)mb);
+    const long recMadeMb = (long)((a->madeRecordBytes + (uint64_t)mb - 1u) / (uint64_t)mb);
+    const long arenaMadeMb = (long)((a->madeArenaBytes + (uint64_t)mb - 1u) / (uint64_t)mb);
     long freeMb = -1, totalMb = -1, floorMb = -1;
     const char *offWhy = NULL;
     const int have = size_memory(&freeMb, &totalMb, &floorMb, &offWhy) == 0;
@@ -131,7 +133,7 @@ static unsigned size_ask(const RdSetSizeAsk *a, char *why, size_t size)
     if (a->begin) {
         set_size_begin(&s_size, have ? freeMb : -1, have ? floorMb : 0);
         (void)set_size_rule_text(line, sizeof line, s_size.active, offWhy, a->left[0] + a->left[1],
-                                 freeMb, floorMb, recMb, arenaMb);
+                                 freeMb, floorMb, recMb, arenaMb, recMadeMb, arenaMadeMb);
         ico_diag_log("%s", line);
         set_size_publish(s_size.active, floorMb, freeMb, "");
     }

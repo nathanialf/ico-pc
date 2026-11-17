@@ -487,6 +487,12 @@ static long s_lowMb = -1;
 static double s_lowAt;
 static char s_end[192];
 static void (*volatile s_summary)(const char *summary);
+/* the summary's text from the last phase change, handed to the hook by the
+   heartbeat's thread (last_run_beat): a phase change can come on the game's
+   fiber stack, where a Java call is not made (Android: the hook is a JNI
+   call); under the lock */
+static char s_sumText[LAST_RUN_SUMMARY_MAX];
+static unsigned s_sumGen, s_sumGiven;
 
 static void lock_take(void)
 {
@@ -664,17 +670,41 @@ static void write_all(int sync)
     lock_give();
 }
 
+/* the phase change's summary, kept for the next beat's hand-over */
 static void summary(void)
 {
-    void (*fn)(const char *) = s_summary;
     char ph[LAST_RUN_VALUE_MAX], text[LAST_RUN_SUMMARY_MAX];
-    if (fn == NULL) {
+    if (s_summary == NULL) {
         return;
     }
     phase_value(ph, sizeof ph);
     last_run_summary_text(ph, (int)s_resetsStart, (int)s_resetsNow,
                           s_beat.availKb >= 0 ? s_beat.availKb / 1024 : -1, s_lowMb, text,
                           sizeof text);
+    lock_take();
+    memcpy(s_sumText, text, sizeof s_sumText);
+    s_sumGen++;
+    lock_give();
+}
+
+/* on the heartbeat's thread (a thread of the host's, its own stack): the
+   summary kept since the last hand-over, if any; a write in flight: the
+   next beat */
+static void summary_hand_over(void)
+{
+    void (*fn)(const char *) = s_summary;
+    char text[LAST_RUN_SUMMARY_MAX];
+    if (fn == NULL || !lock_try()) {
+        return;
+    }
+    if (s_sumGen == s_sumGiven) {
+        lock_give();
+        return;
+    }
+    s_sumGiven = s_sumGen;
+    memcpy(text, s_sumText, sizeof text);
+    lock_give();
+    text[sizeof text - 1] = '\0';
     fn(text);
 }
 
@@ -798,6 +828,7 @@ void last_run_beat(const LastRunBeat *b)
         s_lowAt = ico_diag_uptime();
     }
     write_all(0);
+    summary_hand_over();
 }
 
 void last_run_set_note(const char *note)
@@ -856,12 +887,20 @@ void last_run_set_pipelines(unsigned done, unsigned total)
 
 int last_run_present(void)
 {
-    if (s_phase == LAST_RUN_PHASE_GAME && s_path[0] != '\0') {
-        s_playStep[0] = '\0';
-        phase_to(LAST_RUN_PHASE_FIRST_PICTURE, "");
+    if (s_phase != LAST_RUN_PHASE_GAME) {
+        return 0;
+    }
+    s_playStep[0] = '\0';
+    if (s_path[0] == '\0') {
+        /* no file (it could not be opened): the phase moves all the same,
+           so the caller's first picture (set_size_first_picture) still
+           comes once */
+        s_phase = LAST_RUN_PHASE_FIRST_PICTURE;
+        s_phaseSince = ico_diag_uptime();
         return 1;
     }
-    return 0;
+    phase_to(LAST_RUN_PHASE_FIRST_PICTURE, "");
+    return 1;
 }
 
 void last_run_milestone(const char *milestone)
@@ -882,7 +921,11 @@ void last_run_background(int background)
     }
     s_bg = background != 0;
     s_bgSince = ico_diag_uptime();
-    write_all(1);
+    /* Android: the system's lifecycle callback on its UI thread, never made
+       to wait on the disc: written without a sync and only if no other
+       write is in flight (else the next beat's, 2 s, carries it); the
+       write is in the system's cache, which a killed process keeps */
+    write_all(0);
 }
 
 void last_run_trim(int level, const char *name)
@@ -891,7 +934,7 @@ void last_run_trim(int level, const char *name)
     s_trimAt = ico_diag_uptime();
     s_trimN++;
     snprintf(s_trimName, sizeof s_trimName, "%s", name != NULL ? name : "");
-    write_all(1);
+    write_all(0); /* onTrimMemory on Android's UI thread: as last_run_background */
 }
 
 void last_run_set_gpu_resets_start(int32_t start, const char *why)

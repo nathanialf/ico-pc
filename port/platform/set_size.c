@@ -250,7 +250,8 @@ unsigned set_size_ask(SetSizeRun *r, const SetSizeAsk *a, char *line, size_t lin
 }
 
 size_t set_size_rule_text(char *out, size_t size, int active, const char *offWhy, unsigned total,
-                          long freeMb, long floorMb, long recordMb, long arenaMb)
+                          long freeMb, long floorMb, long recordMb, long arenaMb, long recordMadeMb,
+                          long arenaMadeMb)
 {
     int w;
     if (size == 0) {
@@ -264,15 +265,18 @@ size_t set_size_rule_text(char *out, size_t size, int active, const char *offWhy
     } else {
         w = snprintf(out, size,
                      "ico_pc: pipelines: the start-up set's size by the device's memory fall: on "
-                     "(%u pipelines; free %ld MB, the floor %ld MB; play's known need %ld MB: the "
-                     "VU pre-pass's record %ld MB and the mesh arena's first chunk %ld MB): each "
+                     "(%u pipelines; free %ld MB, the floor %ld MB; play's known need not made yet "
+                     "%ld MB: the VU pre-pass's record %ld MB and the mesh arena's first chunk %ld "
+                     "MB; made already, before the free figure was read: the record %ld MB, the "
+                     "chunk %ld MB): each "
                      "family's fall of free memory a pipeline (2D: every pipeline without a VU "
                      "vertex shader; VU) is the median of its batches, trusted after %u; a "
                      "family whose pipelines not made x its fall do not fit in free memory less "
                      "the floor less that need stops at once and is made on first use; a family "
                      "with no fall never stops by this rule",
                      total, text_mb(freeMb), text_mb(floorMb), text_mb(recordMb + arenaMb),
-                     text_mb(recordMb), text_mb(arenaMb), SET_SIZE_MIN_BATCHES);
+                     text_mb(recordMb), text_mb(arenaMb), text_mb(recordMadeMb),
+                     text_mb(arenaMadeMb), SET_SIZE_MIN_BATCHES);
     }
     return w < 0 ? 0 : (size_t)w < size ? (size_t)w : size - 1;
 }

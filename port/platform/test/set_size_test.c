@@ -343,20 +343,28 @@ static void testText(void)
     size_t n;
     unsigned i;
 
-    n = set_size_rule_text(line, sizeof line, 1, NULL, 684, 7249, 1915, 0, 32);
+    n = set_size_rule_text(line, sizeof line, 1, NULL, 684, 7249, 1915, 0, 32, 0, 0);
     CHECK(n == strlen(line));
     CHECK(strcmp(line,
                  "ico_pc: pipelines: the start-up set's size by the device's memory fall: on (684 "
-                 "pipelines; free 7249 MB, the floor 1915 MB; play's known need 32 MB: the VU "
-                 "pre-pass's record 0 MB and the mesh arena's first chunk 32 MB): each family's "
-                 "fall of free memory a pipeline (2D: every pipeline without a VU vertex shader; "
-                 "VU) is the median of its batches, trusted after 3; a family whose pipelines not "
-                 "made x its fall do not fit in free memory less the floor less that need stops "
-                 "at once and is made on first use; a family with no fall never stops by this "
-                 "rule") == 0);
+                 "pipelines; free 7249 MB, the floor 1915 MB; play's known need not made yet 32 "
+                 "MB: the VU pre-pass's record 0 MB and the mesh arena's first chunk 32 MB; made "
+                 "already, before the free figure was read: the record 0 MB, the chunk 0 MB): "
+                 "each family's fall of free memory a pipeline (2D: every pipeline without a VU "
+                 "vertex shader; VU) is the median of its batches, trusted after 3; a family "
+                 "whose pipelines not made x its fall do not fit in free memory less the floor "
+                 "less that need stops at once and is made on first use; a family with no fall "
+                 "never stops by this rule") == 0);
+    /* a phone whose pre-pass self-test made the record (128 MB) and the
+       arena's chunk (32 MB) before the set: nothing to make, both named as
+       made */
+    (void)set_size_rule_text(line, sizeof line, 1, NULL, 856, 1958, 512, 0, 0, 128, 32);
+    CHECK(strstr(line, "; play's known need not made yet 0 MB: the VU pre-pass's record 0 MB and "
+                       "the mesh arena's first chunk 0 MB; made already, before the free figure "
+                       "was read: the record 128 MB, the chunk 32 MB): ") != NULL);
     (void)set_size_rule_text(line, sizeof line, 0,
                              "no free-memory floor on this system (Android's only)", 600, -1, -1, 0,
-                             0);
+                             0, 0, 0);
     CHECK(strcmp(line, "ico_pc: pipelines: the start-up set's size by the device's memory fall: "
                        "off (no free-memory floor on this system (Android's only)): the set as "
                        "before") == 0);
@@ -373,12 +381,12 @@ static void testText(void)
                        "1947 MB), the lowest since the start not known; the start-up set made as "
                        "each family fit") == 0);
 
-    /* the room: the start line at its widest (585 bytes) and a decision line
+    /* the room: the start line at its widest (692 bytes) and a decision line
        whose every figure is at the text's widest, within SET_SIZE_LINE_MAX
        and not cut (it ends with its last words) */
     n = set_size_rule_text(line, sizeof line, 1, NULL, UINT_MAX, -9999999L, -9999999L, -9999999L,
-                           -9999999L);
-    CHECK(n == 585 && n == strlen(line));
+                           -9999999L, -9999999L, -9999999L);
+    CHECK(n == 692 && n == strlen(line));
     set_size_begin(&s_run, 9999999L, 1);
     (void)ask(9999999L, 0, 0, 4096, 4096, 0, 0, 4096, line, why);
     for (i = 1; i <= 3; i++) {
