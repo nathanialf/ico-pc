@@ -184,9 +184,14 @@ endif()
 # state_checkpoint_table: the committed table read back by its tool, an entry
 # for every release and platform it must cover (tools/state_checkpoint_table.py
 # check; the packages run its guard, which adds the program's own globals).
-add_executable(state_checkpoint_test test/state_checkpoint_test.c)
+# The eight languages' tables are compiled in for the boxes' words (port/ui's
+# "strings.h" by -iquote, so <strings.h> stays the C library's).
+add_executable(state_checkpoint_test test/state_checkpoint_test.c
+    ../ui/strings_en.c ../ui/strings_fr.c ../ui/strings_de.c ../ui/strings_it.c
+    ../ui/strings_es.c ../ui/strings_ja.c ../ui/strings_ko.c ../ui/strings_zh.c)
 target_include_directories(state_checkpoint_test PRIVATE "${CMAKE_SOURCE_DIR}/port/test")
-target_compile_options(state_checkpoint_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_compile_options(state_checkpoint_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS}
+                       -iquote "${CMAKE_SOURCE_DIR}/port/ui")
 target_link_libraries(state_checkpoint_test PRIVATE ico_state_checkpoint)
 if(ICO_RUN_TESTS)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/state_checkpoint")

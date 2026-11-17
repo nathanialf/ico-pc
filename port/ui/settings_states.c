@@ -554,6 +554,8 @@ static void statesPerform(int slot)
     const int rc = s_statesHost.request(act, slot + 1, &refusal);
     if (rc != 0) {
         NEGATIVE_SE();
+        fprintf(stderr, "state: box for slot %d: the page's refusal (string %d), from the page\n",
+                slot + 1, refusal > 0 ? refusal : (int)UI_STR_STATES_OFF);
         (void)ui_popup_push(ui_str(UI_STR_STATES),
                             ui_str(refusal > 0 ? (UiStrId)refusal : UI_STR_STATES_OFF));
         return;

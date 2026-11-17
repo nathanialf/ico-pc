@@ -831,11 +831,10 @@ const char *const
             [UI_STR_STATES_XB_PINNED] =
                 "Dieser Spielzustand stammt aus Version %s\nund kann nur mit dieser Version\nfortgesetzt werden.\nDeine Speicherstände auf der Memory Card\nfunktionieren weiterhin.",
             [UI_STR_STATES_CKPT_ROW] =
-                "Von einer anderen Version: Laden setzt am letzten Kontrollpunkt fort",
-            [UI_STR_STATES_CKPT_LOADED] = "Dieser Spielzustand stammt aus Version %s.\n"
-                                          "Er kann nicht dort fortgesetzt werden,\n"
-                                          "wo er gespeichert wurde: Das Spiel geht\n"
-                                          "am letzten Kontrollpunkt weiter.",
+                "Lädt ab seinem letzten Kontrollpunkt (aus einer anderen Version)",
+            [UI_STR_STATES_CKPT_LOADED] =
+                "Am letzten Kontrollpunkt dieses Spielzustands fortgesetzt,\n"
+                "der aus Version %s stammt.",
             [UI_STR_STATES_CKPT_NONE] = "Dieser Spielzustand stammt aus Version %s.\n"
                                         "Er kann nicht dort fortgesetzt werden,\n"
                                         "wo er gespeichert wurde, und er enthält\n"
