@@ -906,9 +906,19 @@ by 64 KB (`port/platform/arena.h` (`ico_heap_stats_alloc`); `ico2/fumi/ios/memor
 ## Game data ranges
 
 A save state holds the game's own globals: every writable object the game library `ico_game`
-defines (the `ico2/` sources and the data tables of `port/data`, the tables' loader `tables.c`
-among them), and nothing of the port's, which the registry lists one block at a time
-(`port/platform/state.h`). The build gathers the game's objects into sections of their own and
+defines (the `ico2/` sources and the data tables of `port/data/gen/table_defs.c`), and nothing of
+the port's, which the registry lists one block at a time (`port/platform/state.h`). The tables'
+loader `port/data/tables.c` is port code with port state (the loaded counts and set, the CRC
+table), set once at start-up before the game's fibers exist: it is linked outside the game
+library (`ico_tables_loader`), so a state neither holds nor restores it, and a load sees this
+run's values, the ones the same disc's tables gave. `port/data/reserved/tables.c` keeps, inside
+`ico_game`, the room the loader's statics took in the game's sections until then (its object
+name `tables.c` and its footprint per compiler: GCC 0x614 bytes aligned to 32, 0x620 in a COFF
+object; clang 0x600 aligned to 16 on x86-64, 8 on arm64), so every game variable keeps its offset
+and a Windows state saved while the loader stood there, whose zero-filled range holds that room in its middle,
+still carries over. The packages fail when any other object outside `ico2/` puts bytes in the
+game's sections (`tools/android_syms_lines.py gamesec`, run on the link map by
+`tools/package_android.sh`, `package_win.sh` and `package_linux.sh`). The build gathers the game's objects into sections of their own and
 the program reads their bounds as two ranges, the initialised data and the zero-filled data
 (`ico_game_data_ranges`, `port/platform/game_data_range.h`). How depends on the compiler and the
 object format (`cmake/IcoStateSections.cmake`):
@@ -1160,7 +1170,9 @@ symbol, its input section's end or its own size; an input section's start withou
 a unit named `<object>:<section>`, so a static function a GNU ld map does not name is part of the
 unit before it), the named data outside the game's ranges, and the game's data layout: the
 symbols and input sections inside the two game data ranges as (range, offset, size, kind, name),
-whose XXH3-64 is the layout hash. It keeps the output sections the file names (a map's own
+whose XXH3-64 is the layout hash (a symbol's own name: the nm file column's `<file>:`, which
+depends on whether any other symbol of the library shares the name, is left out). It keeps the
+output sections the file names (a map's own
 output section lines, the nm table's `section` lines) and takes the code range from the code
 sections among them (`.text`, `.text.*`, `.init`, `.fini`, `.plt*` in a map, the ELF X flag in a
 `section` line), so the code and the read-only data are where the sections say, not where the

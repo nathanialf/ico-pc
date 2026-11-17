@@ -147,6 +147,10 @@ chmod 755 "$stage/tools/mc_import"
 # (port/platform/symmap.h)
 [[ -f "$b/ico_pc.map" ]] || fail "$preset did not produce ico_pc.map"
 cp "$b/ico_pc.map" "$stage/ico_pc.map"
+# the game's data sections hold the game's objects only (save states copy them
+# whole by offset; tools/android_syms_lines.py reads GNU ld's map too)
+python3 -I "$wt/tools/android_syms_lines.py" gamesec "$b/ico_pc.map" "$wt" >>"$log" 2>&1 ||
+    fail "tools/android_syms_lines.py gamesec: a port object holds bytes in the game's data sections (the log names it)"
 # save states carry over (issue 217): the guard's verdict on the staged
 # program (tools/state_carry_check.py; docs/port/PLATFORM.md "The carry-over
 # guard"). The Linux program is linked at a fixed address below 4 GB, where

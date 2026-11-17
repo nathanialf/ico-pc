@@ -184,6 +184,10 @@ grep -q '^section [0-9a-f]* [0-9a-f]* [A-Z]*X[A-Z]* \.text$' "$symdir/libmain.sy
     fail "libmain.syms lacks the .text section line (the save states' code range)"
 grep -q '^section [0-9a-f]* [0-9a-f]* A[A-Z]* \.rodata$' "$symdir/libmain.syms" ||
     fail "libmain.syms lacks the .rodata section line"
+# the game's data sections hold the game's objects only: a save state copies
+# them whole by offset, and their layout hash covers every item in them
+python3 -I "$wt/tools/android_syms_lines.py" gamesec "$map" "$wt" >>"$log" 2>&1 ||
+    fail "tools/android_syms_lines.py gamesec: a port object holds bytes in the game's data sections (the log names it)"
 # a writable data name that repeats could never be told apart in a save state
 python3 -I "$wt/tools/android_syms_lines.py" check "$symdir/libmain.syms" >>"$log" 2>&1 ||
     fail "tools/android_syms_lines.py check: writable data names repeat in libmain.so (the log names them)"

@@ -90,6 +90,10 @@ cp "$b/ico_pc.exe" "$d/ico_pc_$a.exe"
 # report names its functions from it on the player's machine
 # (port/platform/symmap.h; the name is the program's with .map)
 cp "$b/ico_pc.map" "$d/ico_pc_$a.map"
+# the game's data sections hold the game's objects only (save states copy them
+# whole by offset; tools/android_syms_lines.py reads GNU ld's map too)
+python3 -I "$wt/tools/android_syms_lines.py" gamesec "$b/ico_pc.map" "$wt" >>"$log" 2>&1 ||
+    fail "tools/android_syms_lines.py gamesec: a port object holds bytes in the game's data sections (the log names it)"
 # save states carry over (issue 217): every initialised pointer of the game's
 # data in the program must be one the save can name with this map, or a
 # state carried to a later version keeps a stale address (Windows' fixed

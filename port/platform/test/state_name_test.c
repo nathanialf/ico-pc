@@ -898,6 +898,60 @@ static void test_sections(void)
     ico_symtab_free(t);
 }
 
+/* --- the layout hash: the game's variables, their own names ----------------------- */
+
+static uint64_t layout_of(const char *game_lines)
+{
+    char nm[1024], why[160];
+    IcoSymTabEnv e;
+    IcoSymTab *t;
+    uint64_t h = 0;
+
+    snprintf(nm, sizeof nm, "0000000000001000 T ico_diag_init\n0000000000001080 T ico_diag_log\n%s",
+             game_lines);
+    memset(&e, 0, sizeof e);
+    e.anchor = "ico_diag_init";
+    e.anchor_addr = 0x7400001000ull;
+    e.check = "ico_diag_log";
+    e.check_addr = 0x7400001080ull;
+    e.image_lo = 0x7400000000ull;
+    e.image_hi = 0x7400040000ull;
+    e.text_lo = 0x7400001000ull;
+    e.text_hi = 0x7400008000ull;
+    e.game_lo[0] = 0x7400009000ull;
+    e.game_hi[0] = 0x7400009400ull;
+    e.arch = ICO_CODE_RAW;
+    t = ico_symtab_parse(nm, strlen(nm), &e, why, sizeof why);
+    CHECK(t != NULL && t->n_layout == 3, "the layout table: %s", why);
+    if (t != NULL) {
+        h = t->layout_hash;
+    }
+    ico_symtab_free(t);
+    return h;
+}
+
+static void test_layout(void)
+{
+    /* two statics of one name: with the file column (a library where the
+       name repeats) and without it (one where it does not) */
+    const uint64_t a = layout_of("0000000000009000 0000000000000040 D systemStatus\n"
+                                 "0000000000009040 0000000000000008 b count Matrix.c\n"
+                                 "0000000000009048 0000000000000008 b count matrixDrive.c\n");
+    const uint64_t b = layout_of("0000000000009000 0000000000000040 D systemStatus\n"
+                                 "0000000000009040 0000000000000008 b count\n"
+                                 "0000000000009048 0000000000000008 b count\n");
+    const uint64_t moved = layout_of("0000000000009000 0000000000000040 D systemStatus\n"
+                                     "0000000000009040 0000000000000008 b count Matrix.c\n"
+                                     "0000000000009050 0000000000000008 b count matrixDrive.c\n");
+    const uint64_t resized = layout_of("0000000000009000 0000000000000040 D systemStatus\n"
+                                       "0000000000009040 0000000000000008 b count Matrix.c\n"
+                                       "0000000000009048 0000000000000010 b count matrixDrive.c\n");
+
+    CHECK(a != 0 && a == b, "the file column leaves the layout hash alone");
+    CHECK(moved != a, "a moved game variable: another layout hash");
+    CHECK(resized != a, "a resized game variable: another layout hash");
+}
+
 /* --- read-only once loaded: names that repeat ----------------------------------------- */
 
 static void test_masked(void)
@@ -1288,6 +1342,7 @@ int main(void)
     test_refuse();
     test_hashed();
     test_format();
+    test_layout();
     test_masked();
     test_pages();
     return ico_check_summary("state_name");

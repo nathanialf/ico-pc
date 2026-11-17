@@ -28,7 +28,8 @@
  *           (exact when the file gives it), name and ordinal.
  *   layout  the symbols and input sections inside the game's two data
  *           ranges, as (range, offset from the range's start, size, kind,
- *           name), sorted: their XXH3-64 is the game's data layout hash.
+ *           name; a symbol's own name, without the nm file column's
+ *           "<file>:"), sorted: their XXH3-64 is the game's data layout hash.
  *           Two builds with the same hash hold their game globals at the
  *           same offsets.
  *   sections  the program's output sections the file names: a GNU ld map's
