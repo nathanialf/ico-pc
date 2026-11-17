@@ -74,7 +74,9 @@ typedef struct Nb {
     uint64_t o_text; /* .rodata is [HDR_BYTES, o_text) */
     uint64_t o_names, o_after, o_sleep, o_on, o_long, o_euc, o_tab;
     uint64_t o_data_a, o_data_b, o_gdata, o_gbss;
-    uint64_t o_dup; /* 0, or a second "SleepThread" */
+    uint64_t o_dup;   /* 0, or a second "SleepThread" */
+    uint64_t o_relro; /* two "t.c:kTab" and a private table, read-only once loaded */
+    int relro_tweak;  /* the second kTab's contents changed */
     int no_long;
     uint64_t snap[GDATA_BYTES / 8];
     IcoSymTab *tab;
@@ -119,6 +121,7 @@ static void nb_make(Nb *b, int which)
         b->o_data_b = 0x8010;
         b->o_gdata = 0x9000;
         b->o_gbss = 0x9400;
+        b->o_relro = 0x8800;
     } else {
         b->o_text = 0x2400;
         b->o_names = 0x600;
@@ -132,6 +135,7 @@ static void nb_make(Nb *b, int which)
         b->o_data_b = 0x8120;
         b->o_gdata = 0x9100;
         b->o_gbss = 0x9500;
+        b->o_relro = 0x8900;
     }
 }
 
@@ -172,6 +176,18 @@ static void nb_fill(Nb *b)
     m[b->o_text + 0x100] = 0xC3; /* ico_diag_log */
     memcpy(m + b->o_text + 0x200, f_main, sizeof f_main);
     m[b->o_text + 0x3F00] = 0xC3; /* f_last */
+    /* .data.rel.ro: each object a relocated pointer (this build's own
+       address) and constants */
+    put64le(m + b->o_relro, b->lo + b->o_on);
+    put64le(m + b->o_relro + 8, 0x11);
+    put64le(m + b->o_relro + 16, 0x12);
+    put64le(m + b->o_relro + 24, 0x13);
+    put64le(m + b->o_relro + 0x20, b->lo + b->o_long);
+    put64le(m + b->o_relro + 0x28, 0x21);
+    put64le(m + b->o_relro + 0x30, b->relro_tweak ? 0x99 : 0x22);
+    put64le(m + b->o_relro + 0x38, 0x23);
+    put64le(m + b->o_relro + 0x40, b->lo + b->o_euc);
+    put64le(m + b->o_relro + 0x48, 0x31);
     /* tableA[0] (gdata + 0x40) holds a pointer to "On" at start-up */
     memset(b->snap, 0, sizeof b->snap);
     b->snap[0x40 / 8] = b->lo + b->o_on;
@@ -199,6 +215,11 @@ static size_t nb_nm(const Nb *b, int sections, char *out, size_t size)
     LINE4(b->o_names, 0x20, 'r', "kNames");
     LINE5(b->o_data_a, 8, 'd', "s_count", "a.c");
     LINE5(b->o_data_b, 8, 'd', "s_count", "b.c");
+    /* two statics of one name in two files of one name, and a compiler's
+       private table as tools/android_syms_lines.py names it from the map */
+    LINE5(b->o_relro, 0x20, 'd', "kTab", "t.c");
+    LINE5(b->o_relro + 0x20, 0x20, 'd', "kTab", "t.c");
+    LINE5(b->o_relro + 0x40, 0x10, 'd', ".Lswitch.table.f_main", "t");
     LINE4(b->o_gdata, 0x40, 'D', "systemStatus");
     LINE4(b->o_gdata + 0x40, 0x40, 'D', "tableA");
     LINE4(b->o_gbss + 0x10, 4, 'B', "stage_no");
@@ -206,7 +227,8 @@ static size_t nb_nm(const Nb *b, int sections, char *out, size_t size)
         /* as tools/package_android.sh writes them from the section headers */
         SECTION(HDR_BYTES, b->o_text - HDR_BYTES, "AMS", ".rodata");
         SECTION(b->o_text, TEXT_BYTES, "AX", ".text");
-        SECTION(0x8000, 0x1000, "WA", ".data");
+        SECTION(0x8000, 0x800, "WA", ".data");
+        SECTION(0x8800, 0x800, "WA", ".data.rel.ro");
         SECTION(b->o_gdata, GDATA_BYTES, "WA", "ico_gdata");
         SECTION(b->o_gbss, GBSS_BYTES, "WA", "ico_gbss");
     }
@@ -869,6 +891,206 @@ static void test_sections(void)
     ico_symtab_free(t);
 }
 
+/* --- read-only once loaded: names that repeat ----------------------------------------- */
+
+static void test_masked(void)
+{
+    Nb a, b;
+    IcoXbStats st;
+    IcoXbVerdict v;
+    uint64_t w[3], want[3], missed = 0;
+    void *sec;
+    size_t n = 0;
+    int k, i;
+
+    nb_make(&a, 0);
+    nb_make(&b, 1);
+    nb_fill(&a);
+    nb_fill(&b);
+    nb_parse(&a, LAY_ANDROID, 1);
+    nb_parse(&b, LAY_ANDROID, 1);
+    if (a.tab == NULL || b.tab == NULL) {
+        nb_free(&a);
+        nb_free(&b);
+        return;
+    }
+    CHECK(
+        ico_symtab_data_named(a.tab, ico_symtab_name_hash("t.c:kTab"), "t.c:kTab", 1) != NULL &&
+            !ico_symtab_data_named(a.tab, ico_symtab_name_hash("t.c:kTab"), "t.c:kTab", 1)->unique,
+        "two t.c:kTab");
+    w[0] = a.lo + a.o_relro + 8;    /* into the first kTab */
+    w[1] = a.lo + a.o_relro + 0x30; /* into the second */
+    w[2] = a.lo + a.o_relro + 0x40; /* the private table's start */
+    want[0] = b.lo + b.o_relro + 8;
+    want[1] = b.lo + b.o_relro + 0x30;
+    want[2] = b.lo + b.o_relro + 0x40;
+    sec = save_words(&a, LAY_ANDROID, w, 3, "the test's words", &n, &st);
+    CHECK(sec != NULL && st.left == 0 && st.data == 3 && st.data_masked == 2,
+          "the two of one name by their contents, the private table by its name (%u data, %u by "
+          "contents, %u left)",
+          st.data, st.data_masked, st.left);
+    k = sec != NULL ? check_words(sec, n, &b, &a, LAY_ANDROID, &v) : ICO_XB_BAD;
+    CHECK(k == ICO_XB_OK && v.data_masked == 2,
+          "B, its pointers its own: the masked contents match: %d %s", k, v.why);
+    if (k == ICO_XB_OK) {
+        translate(&v, &a, &b, w, 3, &missed);
+        for (i = 0; i < 3; i++) {
+            CHECK(w[i] == want[i], "relro word %d translated to 0x%llx, wanted 0x%llx", i,
+                  (unsigned long long)w[i], (unsigned long long)want[i]);
+        }
+    }
+    ico_xb_verdict_free(&v);
+    b.relro_tweak = 1;
+    nb_fill(&b);
+    k = sec != NULL ? check_words(sec, n, &b, &a, LAY_ANDROID, &v) : ICO_XB_BAD;
+    CHECK(k == ICO_XB_DATA &&
+              strstr(v.why, "the read-only data t.c:kTab (number 2 of its name) changed") != NULL,
+          "the second kTab's constant changed: %d %s", k, v.why);
+    ico_xb_verdict_free(&v);
+    free(sec);
+    /* writable as far as the table knows (no section lines, not in the
+       read-only range): a repeated name stays unnamed */
+    nb_parse(&a, LAY_LINUX, 0);
+    w[0] = a.lo + a.o_relro + 8;
+    w[1] = a.lo + a.o_relro + 0x30;
+    w[2] = a.lo + a.o_relro + 0x40;
+    sec = save_words(&a, LAY_LINUX, w, 3, "the test's words", &n, &st);
+    CHECK(sec != NULL && st.left == 2 && st.data_masked == 0 && st.listed == 2 &&
+              st.list[0].reason == ICO_XB_WHY_DATA,
+          "writable data of a repeated name: unnamed (%u left)", st.left);
+    free(sec);
+    nb_free(&a);
+    nb_free(&b);
+}
+
+/* --- arm64 page addresses ------------------------------------------------------------ */
+
+static void *page_save(IcoSymTab *t, uint64_t base, const uint64_t *framed, int nf,
+                       const uint64_t *other, int no, size_t *n, IcoXbStats *st)
+{
+    IcoXbProc p;
+    IcoXbRefs *r;
+    void *sec = NULL;
+
+    memset(&p, 0, sizeof p);
+    p.tab = t;
+    p.image.lo = base;
+    p.image.hi = base + 0x40000u;
+    p.image.text_lo = base + 0x1000u;
+    p.image.text_hi = base + 0x8000u;
+    p.game_lo[1] = base + 0x10000u;
+    p.game_hi[1] = base + 0x12000u;
+    p.any_address = 1;
+    *n = 0;
+    r = ico_xb_begin(&p);
+    if (r == NULL) {
+        return NULL;
+    }
+    ico_xb_where(r, "fiber slot 5's control page");
+    ico_xb_frames(r, 1);
+    ico_xb_scan(r, framed, (size_t)nf * 8u, (uint64_t)(uintptr_t)framed, 1);
+    ico_xb_frames(r, 0);
+    ico_xb_where(r, "the arena");
+    ico_xb_scan(r, other, (size_t)no * 8u, (uint64_t)(uintptr_t)other, 1);
+    CHECK(ico_xb_finish(r, &sec, n, st) == 0, "ico_xb_finish");
+    return sec;
+}
+
+static IcoSymTab *page_table(uint64_t base, int arch)
+{
+    char nm[160], why[160];
+    IcoSymTabEnv e;
+    IcoSymTab *t;
+
+    snprintf(nm, sizeof nm, "%016llx T ico_diag_init\n%016llx T ico_diag_log\n",
+             (unsigned long long)0x1000u, (unsigned long long)0x1080u);
+    memset(&e, 0, sizeof e);
+    e.anchor = "ico_diag_init";
+    e.anchor_addr = base + 0x1000u;
+    e.check = "ico_diag_log";
+    e.check_addr = base + 0x1080u;
+    e.image_lo = base;
+    e.image_hi = base + 0x40000u;
+    e.text_lo = base + 0x1000u;
+    e.text_hi = base + 0x8000u;
+    e.arch = arch;
+    t = ico_symtab_parse(nm, strlen(nm), &e, why, sizeof why);
+    CHECK(t != NULL, "the page test's table: %s", why);
+    return t;
+}
+
+static int page_check(const void *sec, size_t n, IcoSymTab *t, uint64_t base, uint64_t gbss,
+                      uint64_t old_base, IcoXbVerdict *v)
+{
+    IcoXbNow now;
+
+    memset(&now, 0, sizeof now);
+    now.tab = t;
+    now.image.lo = base;
+    now.image.hi = base + 0x40000u;
+    now.image.text_lo = base + 0x1000u;
+    now.image.text_hi = base + 0x8000u;
+    now.game_lo[1] = base + gbss;
+    now.game_hi[1] = base + gbss + 0x2000u;
+    now.old_game_lo[1] = old_base + 0x10000u;
+    now.old_game_hi[1] = old_base + 0x12000u;
+    now.old_image_lo = old_base;
+    return ico_xb_check(sec, n, &now, v);
+}
+
+/* a suspended frame's register holds the page of a game bss variable (an
+   ADRP's): it carries over where the bss starts at the same place in a page,
+   and is refused where it does not */
+static void test_pages(void)
+{
+    const uint64_t A = 0x0000007400000000ull, B = 0x0000007500000000ull;
+    IcoSymTab *ta = page_table(A, ICO_CODE_A64), *tb = page_table(B, ICO_CODE_A64);
+    IcoSymTab *tr = page_table(A, ICO_CODE_RAW);
+    uint64_t framed[2], other[1], to = 0;
+    IcoXbStats st;
+    IcoXbVerdict v;
+    void *sec;
+    size_t n = 0;
+    int k;
+
+    if (ta == NULL || tb == NULL || tr == NULL) {
+        ico_symtab_free(ta);
+        ico_symtab_free(tb);
+        ico_symtab_free(tr);
+        return;
+    }
+    framed[0] = A + 0x11000u; /* a page of the game's bss */
+    framed[1] = A + 0x11010u; /* a pointer, not at a page's start */
+    other[0] = A + 0x10000u;  /* a page's start in the arena: a pointer */
+    sec = page_save(ta, A, framed, 2, other, 1, &n, &st);
+    CHECK(sec != NULL && st.pages == 1, "one page address recorded (%u)", st.pages);
+    k = sec != NULL ? page_check(sec, n, tb, B, 0x10400u, A, &v) : ICO_XB_BAD;
+    CHECK(k == ICO_XB_DATA && strstr(v.why, "page address 0x7400011000") != NULL &&
+              strstr(v.why, "lands 0x400 into a page") != NULL,
+          "the bss 0x400 into a page in B: refused: %d %s", k, v.why);
+    ico_xb_verdict_free(&v);
+    k = sec != NULL ? page_check(sec, n, tb, B, 0x11000u, A, &v) : ICO_XB_BAD;
+    CHECK(k == ICO_XB_OK && v.pages == 1, "the bss a page further in B: loads: %d %s", k, v.why);
+    if (k == ICO_XB_OK) {
+        IcoStateXlate xl;
+
+        memset(&xl, 0, sizeof xl);
+        xl.span = v.span;
+        xl.n_span = v.n_span;
+        CHECK(ico_state_xlate(&xl, framed[0], &to) && to == B + 0x12000u,
+              "the page address at B's page");
+    }
+    ico_xb_verdict_free(&v);
+    free(sec);
+    /* another architecture's code keeps no page addresses */
+    sec = page_save(tr, A, framed, 2, other, 1, &n, &st);
+    CHECK(sec != NULL && st.pages == 0, "x86-64 and raw: no page address (%u)", st.pages);
+    free(sec);
+    ico_symtab_free(ta);
+    ico_symtab_free(tb);
+    ico_symtab_free(tr);
+}
+
 int main(void)
 {
     test_sections();
@@ -878,5 +1100,7 @@ int main(void)
     test_refuse();
     test_hashed();
     test_format();
+    test_masked();
+    test_pages();
     return ico_check_summary("state_name");
 }

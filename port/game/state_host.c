@@ -886,6 +886,7 @@ static int build_syms(Copy *c, IcoXbStats *st)
     ico_xb_where(r, "the scheduler's table");
     ico_xb_scan(r, c->p[SEC_SCHED], (size_t)c->n[SEC_SCHED], (uint64_t)(uintptr_t)sched, 1);
     if (parse_fibers(c, &img) == 0) {
+        ico_xb_frames(r, 1);
         for (i = 0; i < img.n_fibers; i++) {
             const IcoFiberImage *f = &img.fibers[i];
             char what[48];
@@ -1053,12 +1054,14 @@ static void save_finished(const IcoStateWriteResult *w)
         } else {
             fprintf(stderr,
                     "state: slot %d can carry over to a later version that keeps %u functions "
-                    "(%u with a thread inside), %u data symbols, %u start-up values and texts "
+                    "(%u with a thread inside), %u data symbols (%u of a repeated name, by their "
+                    "contents), %u start-up values and texts "
                     "(%u of them read-only data found by its bytes, %u texts), %u blocks and the "
                     "game's data layout (%u program words, %u of them naming nothing and kept "
                     "as numbers, first 0x%llx; code from %s; record %zu bytes in %.1f ms)\n",
-                    s_save.slot, x->units, x->positions, x->data, x->points, x->windows, x->texts,
-                    x->blocks, x->values, x->left, (unsigned long long)x->first_unnamed,
+                    s_save.slot, x->units, x->positions, x->data, x->data_masked, x->points,
+                    x->windows, x->texts, x->blocks, x->values, x->left,
+                    (unsigned long long)x->first_unnamed,
                     x->code_from ? "the symbol file's sections" : "the loader's segments", x->bytes,
                     s_save.syms_ms);
         }

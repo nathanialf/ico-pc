@@ -867,8 +867,14 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   version 3 window (`test_format`); a GNU ld map's output sections (`*default*` in the memory
   configuration not one, a long name with its numbers on the next line), the code range from
   `.text` inside a wider executable range, the section at an address, the nearest symbol, and
-  `ico_xb_image` making the rest of the executable range read-only data (`test_sections`)
-  (`state_name`).
+  `ico_xb_image` making the rest of the executable range read-only data (`test_sections`); in
+  `.data.rel.ro`, two statics of one name in files of one name (each a relocated pointer and
+  constants) and a compiler's private table named from the map carry over by ordinal and masked
+  contents into a build whose pointers are its own, a changed constant refused (`number 2 of its
+  name`), the same words with no section lines left unnamed as writable (`test_masked`); an arm64
+  table's page address in a fiber's frame recorded (not an arena word at a page's start, not under
+  another architecture), refused where the later build's bss starts 0x400 into a page and
+  translated to the page where it starts a page further (`test_pages`) (`state_name`).
 - `state_carry_xbuild_test.c`: save states across two real links of one program (`state_carry.cmake`,
   [PLATFORM.md](PLATFORM.md#the-carry-over-guard)): A linked with its read-only data in a segment of
   its own, B with more code and texts ahead of A's and its read-only data inside the executable

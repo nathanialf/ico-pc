@@ -1146,6 +1146,10 @@ crash reports (`ico_pc.map` beside the Linux program, `ico_pc_x64.map` beside th
 Android's `assets/libmain.syms.gz`, which `tools/package_android.sh` writes with the data
 symbols and their sizes in four columns, a fifth column with the source file on a local whose
 name is not unique (from the symbol table's FILE entries; the table names it `<file>:<name>`),
+the compiler's private objects in `.data.rel.ro` that nm cannot name (switch lookup tables,
+aggregate initialisers, compound literals: `tools/android_syms_lines.py relro` reads them from the
+link map as `<file>:<section without .data.rel.ro. and its trailing counter>`, such as
+`vk_device.c:.Lswitch.table.vkr_create_device`),
 and the library's allocated sections from its section headers as `section <address> <size>
 <ELF flags> <name>` lines, all of which the crash reader passes over; macOS and iOS ship none),
 read whole once, at the first save, load or listing that needs it, through `diag_host.c`
@@ -1196,6 +1200,7 @@ be, left otherwise. Each distinct word is classed:
 | into the game's data or bss range (the end included) | nothing: the range moves whole | the same layout hash |
 | into a registered block | the block (every block is recorded: name, size, flags, old address, offset in its packed section) | the block by name, with the same size and flags; every block of either build in the other |
 | into a named variable of a unique name | the variable: name, ordinal, old start, size (exact when the file gave one); without a size (a GNU ld map names globals only, so its span runs to the next item and may hold the object's statics) also its input section's size and its offset in it | the variable, still unique, of the same exact size; without one, in an input section of the same size at the same offset (`the data around the variable <name> changed`) |
+| into a sized variable of a repeated name in data read-only once loaded (the read-only data, a section named `.data.rel.ro*`, `.rodata*` or `.rdata*`) | the variable by name and ordinal, its size and the XXH3-64 of its bytes with every 8-byte-aligned word that lies in the image masked (a relocated pointer: another value in every build and run; where the pointers lie stays in the hash) | the variable of that name and ordinal, of the same size and masked hash (`the read-only data <name> (number N of its name) changed`) |
 | at a value the game's data held at start-up (an initialised table's pointer, or one the game copied from it) | a point: the value's offset in the data range | its own start-up value at that offset, in its image |
 | into read-only data (a text of any length or encoding, a constant without a symbol, a sized constant's end address) | a window: bytes around it, grown until they occur once in the saving image's read-only data, and the word's offset in them (the bytes whole, or their length, hash and first 24 bytes past the record's pool) | the bytes in exactly one place of its read-only data (`the text "<text>" is missing here`, `... is in more than one place here`; `the read-only data at <symbol>+0x.. (N bytes) ...` for no text) |
 
@@ -1226,11 +1231,25 @@ in version 3 the pool of the windows' bytes. Version 3 is written; versions 1 an
 they were written (a version 2 point holds a text of at most 24 bytes, found at the first place
 that holds them). The save's line gives the size.
 
+**Page addresses (arm64).** clang keeps an ADRP's page address in a callee-saved register across
+calls and adds a variable's offset in its page (the load's low 12 bits) to it; a suspended fiber's
+saved registers hold several (the owner's Android state held 13 in its fibers' registers and
+live stacks, ten of them pages of the game's bss). A later build's code adds its own offsets, so a
+translated page address must start a page there too. The save records every strict word at a
+page's start outside the code that a fiber's saved registers or live stack hold (`ico_xb_frames`;
+C code stores no bare page address elsewhere; a code page is left out because a return address or
+a function may start a page), at most 4,096 (`ICO_XB_MAX_PAGES`, more pins the state), and the
+load refuses a state where one lands elsewhere in a page (`it holds the page address 0x.., which
+lands 0x.. into a page here (the code adds a variable's place in its page to it)`), rather than
+resume a frame that would read the wrong variable. The game's ranges move whole, so their page
+addresses keep their pages only while each range starts at the same place in a page in both builds.
+
 **Words nothing names.** Only a word the record confirms is translated: a word in a unit (the
 hash rule above), in a game range, a block or a unique variable, or at a start-up value or a
 window. A word that lies in the image's range and that nothing in the table names (a code
 address outside every unit, a word into writable data that is no block and no unique variable,
-such as an anonymous `.data.rel.ro` table or the GOT, a word into the image's headers outside
+such as a static of a repeated name in `.data` or `.bss` (`tools/android_syms_lines.py check`
+fails the Android package when one exists), a word into the GOT, a word into the image's headers outside
 every section) is counted by the save (`ICO_XB_UNNAMED`, the count and the first such word in the
 header; in version 3 the first 16, `ICO_XB_LIST`, with the reason, the section holding it, the
 nearest symbol and offset, and what held it: `ico_xb_where` labels each scan with the block's
@@ -1558,7 +1577,7 @@ the game lists the reads of unset locals the compiler sees (`camera-ico2.c`'s mo
 | `state: save states are off: <reason>` | once, instead of the line above |
 | `state: the game's data ranges are not bracketed on this build (<why>): save states are off` | once, the verify failed |
 | `state: saved slot N (<path>): arena <raw> -> <packed>, gdata ..., gbss ..., reg ..., audio ..., sched ..., fibers ..., pobj ..., ranges ..., syms ...; <k> fibers; copy <ms> ms, write <ms> ms, file <bytes> bytes` | a save written |
-| `state: slot N can carry over to a later version that keeps U functions (P with a thread inside), D data symbols, K start-up values and texts (R of them read-only data found by its bytes, T texts), B blocks and the game's data layout (W program words, X of them naming nothing and kept as numbers, first 0x..; code from <the symbol file's sections\|the loader's segments>; record <bytes> bytes in <ms> ms)`, or `state: slot N loads only into this build: <why> (W program words, B blocks; X naming nothing, first 0x..)` | after each `saved` line: the `syms` record ([Across versions](#across-versions)) |
+| `state: slot N can carry over to a later version that keeps U functions (P with a thread inside), D data symbols (M of a repeated name, by their contents), K start-up values and texts (R of them read-only data found by its bytes, T texts), B blocks and the game's data layout (W program words, X of them naming nothing and kept as numbers, first 0x..; code from <the symbol file's sections\|the loader's segments>; record <bytes> bytes in <ms> ms)`, or `state: slot N loads only into this build: <why> (W program words, B blocks; X naming nothing, first 0x..)` | after each `saved` line: the `syms` record ([Across versions](#across-versions)) |
 | `state: slot N saved: word I of X named by nothing: 0x.., <reason>; section <name\|none named>, <symbol\|no symbol>+0x..; found in <the block B\|the arena\|the game's data\|the game's bss\|the model tables\|the scheduler's table\|fiber slot S's control page\|fiber slot S's stack\|a place not recorded> at 0x..` | after a `loads only into this build` line for words nothing names: the first 16 |
 | `state: slot N refused: word I of X named by nothing: ...` (the same words) | a load refused for words nothing names, from a version 3 state's list, before the `refused` line |
 | `state: symbols: N functions, M data symbols, K game data items (layout <hash>) from <file> in T ms, S KB; the code 0x..-0x.. from <its code sections\|the loader's segments (it names no code section)> (C sections)`, or `state: symbols: none (<file>: <why>); a state saved here loads only into this build, and no other build's state loads here` | once, at the first save, load or listing that needs the table |

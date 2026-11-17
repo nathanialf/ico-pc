@@ -32,7 +32,15 @@
  *           may differ); a block missing on either side or of another size
  *           refuses the state.
  *   data    a word inside a named data symbol whose name is unique: by name,
- *           old start and size (exact when the file gave it).  A symbol the
+ *           old start and size (exact when the file gave it); in data that
+ *           is read-only once loaded (read-only data, .data.rel.ro*,
+ *           .rodata*, .rdata*) also one whose name repeats (two statics of
+ *           one name in files of one name, a compiler's private table the
+ *           symbol file names by its section, "<file>:.Lswitch.table.<fn>"):
+ *           by name and ordinal, its exact size and the XXH3-64 of its bytes
+ *           with every word that lies in the image masked (XD_MASKED: a
+ *           relocated pointer differs in every build and run, its place in
+ *           the object does not).  A symbol the
  *           file gave no size (a GNU ld map names globals only) spans to
  *           the next item, so a word past it may point at a static of the
  *           same object: its input section's size and the symbol's offset
@@ -70,6 +78,22 @@
  * place translates the word to it plus the offset; none refuses ("the text
  * ... is missing here"), more than one refuses ("... is in more than one
  * place here"): a load never picks one.
+ *
+ * Page addresses (arm64).  Code keeps an ADRP's page address in a
+ * callee-saved register across calls (a fiber's suspended frames hold
+ * several: the game's bss pages) and adds a variable's offset in its page,
+ * the instruction's low 12 bits, to it.  A later build's code adds its own
+ * offsets, so the translated page address must start a page there too: the
+ * save records every strict word at a page's start outside the code that a
+ * fiber's saved registers or live stack hold (ico_xb_frames: C code never
+ * stores a bare page address elsewhere; a code page is not taken, since a
+ * return address or a function may start a page; ICO_XB_MAX_PAGES, more is
+ * ICO_XB_OVERFLOW) and the load refuses a state where one lands elsewhere
+ * in a page ("it holds the page address ..."), instead of letting a resumed
+ * frame read the wrong variable.  A pointer there that merely lies at a
+ * page's start is checked the same way.  A game range moves whole, so its
+ * page addresses keep their pages only while the range starts at the same
+ * place in a page in both builds.
  *
  * A word only these confirm is translated.  A word in the code that no
  * unit holds, or in the image that nothing above names, is confirmed by
@@ -122,12 +146,14 @@
 #define ICO_XB_MAX_SEARCHES 512  /* content points found again at a load */
 #define ICO_XB_CONTENT 24 /* a version 2 text point's bytes; a version 3 hashed window's prefix */
 #define ICO_XB_LIST 16    /* words nothing names, listed with where they are */
+#define ICO_XB_MAX_PAGES 4096        /* arm64 page addresses (ADRP's) a state holds */
 #define ICO_XB_POOL_BYTES (4u << 20) /* the windows' bytes at most */
 /* the section's size at most (a load's bound before it inflates it): the
    records, 4 MB of names and the pool */
 #define ICO_XB_MAX_BYTES                                                                           \
     (80u + ICO_XB_MAX_UNITS * 48u + ICO_XB_MAX_DATA * 48u + ICO_XB_MAX_POINTS * 64u +              \
-     ICO_XB_MAX_BLOCKS * 40u + ICO_XB_LIST * 40u + (4u << 20) + ICO_XB_POOL_BYTES)
+     ICO_XB_MAX_BLOCKS * 40u + ICO_XB_LIST * 40u + ICO_XB_MAX_PAGES * 8u + (4u << 20) +            \
+     ICO_XB_POOL_BYTES)
 
 /* the header's flags */
 #define ICO_XB_TABLE 1u     /* the saving build had a symbol table */
@@ -192,6 +218,9 @@ void ico_xb_word(IcoXbRefs *r, uint64_t w, int strict);
    stack"): kept with each word's first sighting for the list of words
    nothing names (at most 1024 such texts; later ones are not kept). */
 void ico_xb_where(IcoXbRefs *r, const char *what);
+/* Whether the next scans read a suspended fiber's saved registers and
+   stack, where a compiler keeps an arm64 page address (above). */
+void ico_xb_frames(IcoXbRefs *r, int on);
 /* A registered block: its name, size, flags, address now and offset in
    its packed section (reg or audio, by the AUDIO flag). */
 void ico_xb_block(IcoXbRefs *r, const char *name, uint64_t size, unsigned flags, uint64_t addr,
@@ -199,8 +228,10 @@ void ico_xb_block(IcoXbRefs *r, const char *name, uint64_t size, unsigned flags,
 
 typedef struct IcoXbStats {
     unsigned units, positions, data, points, blocks, values;
-    unsigned windows; /* of the points: windows into read-only data */
-    unsigned texts;   /* of the windows: texts */
+    unsigned windows;     /* of the points: windows into read-only data */
+    unsigned data_masked; /* of the data: of a repeated name, by ordinal and contents */
+    unsigned pages;       /* arm64 page addresses recorded */
+    unsigned texts;       /* of the windows: texts */
     unsigned flags;
     unsigned left;          /* the words nothing names (ICO_XB_UNNAMED) */
     uint64_t first_unnamed; /* the first of them */
@@ -262,9 +293,11 @@ typedef struct IcoXbVerdict {
        first of them */
     unsigned left;
     uint64_t first_left;
-    unsigned version; /* the record's */
-    int by_unnamed;   /* refused (ICO_XB_PINNED) for the words nothing names */
-    unsigned windows; /* the points that were windows */
+    unsigned version;     /* the record's */
+    int by_unnamed;       /* refused (ICO_XB_PINNED) for the words nothing names */
+    unsigned windows;     /* the points that were windows */
+    unsigned data_masked; /* the data matched by ordinal and contents */
+    unsigned pages;       /* page addresses checked */
     /* a version 3 record's list of those words (filled before any check,
        so a refusal has it too) */
     unsigned listed;
