@@ -94,18 +94,23 @@ if(NOT ICO_LD_NOSEPARATE_CODE)
                    "executable segment: the test is not built")
     return()
 endif()
+# not under AddressSanitizer: the save reads the program's read-only data
+# whole (state_xbuild.c ro_freq, find_in: a text's window), which in a
+# sanitizer build holds ASan's poisoned red zones after each literal of
+# ico_platform, so the first save would stop on a global-buffer-overflow.
+# The program itself never saves a state in a sanitizer build (state_host.c
+# STATE_SANITIZED turns save states off), so no product path reads them there.
+if(ICO_SANITIZE MATCHES "address")
+    message(STATUS "state_carry_xbuild: not built under AddressSanitizer (the save reads the "
+                   "read-only data whole; save states are off in a sanitizer build)")
+    return()
+endif()
 foreach(_v a b)
     add_executable(state_carry_xbuild_${_v} test/state_carry_xbuild_test.c)
     target_include_directories(state_carry_xbuild_${_v} PRIVATE "${ICO_COMPAT_DIR}")
     target_compile_options(state_carry_xbuild_${_v} PRIVATE ${ICO_SEMANTIC_OPTIONS}
                                                              ${ICO_PORT_WARNINGS})
     target_link_libraries(state_carry_xbuild_${_v} PRIVATE ico_platform)
-    # the game data range is read whole (the save's scan, the start-up copy):
-    # no AddressSanitizer red zones between this file's globals (the asan
-    # suite; UBSan stays on)
-    if(ICO_SANITIZE MATCHES "address")
-        target_compile_options(state_carry_xbuild_${_v} PRIVATE -fno-sanitize=address)
-    endif()
     target_link_options(state_carry_xbuild_${_v} PRIVATE
         "LINKER:-Map=$<TARGET_FILE_DIR:state_carry_xbuild_${_v}>/state_carry_xbuild_${_v}.map")
 endforeach()

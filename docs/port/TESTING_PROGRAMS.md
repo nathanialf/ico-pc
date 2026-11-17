@@ -933,7 +933,8 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   and loaded by the other through `ico_xb_check` and `ico_state_reloc_word`: all 15 words become the
   loading build's own addresses, both ways, each program's layout line checked; both saves are
   judged as a program the loader places high (`judge_lo`), where the constant-table word is named
-  by its bytes (`state_carry_xbuild`, driven by `tools/state_carry_check.py xbuild`).
+  by its bytes (`state_carry_xbuild`, driven by `tools/state_carry_check.py xbuild`; not built
+  under AddressSanitizer, whose red zones lie in the read-only data the save reads whole).
 - `state_carry_fixture.c`: the program `tools/state_carry_check.py selftest` compiles and links in
   each layout (gcc: `-z separate-code` and `-z noseparate-code`; the toolchain's clang and lld for
   arm64 Android and x86-64 Linux, `--rosegment` and `--no-rosegment`; the toolchain's mingw-w64 gcc
