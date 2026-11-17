@@ -763,8 +763,9 @@ void last_run_begin(const char *activityPath, const char *version, void (*log)(c
     last_run_utc_text((long long)time(NULL), s_started, sizeof s_started);
     if (!file_open()) {
         if (log != NULL) {
-            snprintf(line, sizeof line, "last-run.txt: %s could not be opened; not written",
-                     s_path);
+            /* the path cut to what the line holds (a path may be longer than the line) */
+            snprintf(line, sizeof line, "last-run.txt: %.*s could not be opened; not written",
+                     (int)(sizeof line - 64), s_path);
             log(line);
         }
         s_path[0] = '\0';
