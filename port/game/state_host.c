@@ -2878,9 +2878,25 @@ static void load_checkpoint(int slot, const char *path, const IcoStateHeader *sa
     IcoStateResult r;
     const double t0 = ico_thread_now_ms();
 
+    IcoStateConds c;
+
     version_text(saved->commit, sv, sizeof sv);
     if (s_ckpt.slot != 0 || ico_ckpt_live_pending()) {
         done(1, slot, ICO_STATE_BUSY, "a checkpoint load is waiting for the game");
+        return;
+    }
+    /* the game's load of an image runs from the pause menu or the title
+       only (state_rules.h ico_state_checkpoint_may_start): F9 in play asks
+       for the pause first */
+    sample(&c);
+    if (!ico_state_checkpoint_may_start(&c)) {
+        fprintf(stderr,
+                "state: slot %d (version %s, %s) cannot resume where it was saved (%s%s%s): its "
+                "checkpoint is loaded from the pause menu or the title only, not in play "
+                "(stage %d, layout %d)\n",
+                slot, sv, saved->platform, ico_state_result_text(exact_r),
+                detail[0] != '\0' ? ": " : "", detail, c.stage, c.layout);
+        done(1, slot, ICO_STATE_NOT_PAUSED, "its checkpoint is loaded from the pause menu only");
         return;
     }
     why[0] = '\0';

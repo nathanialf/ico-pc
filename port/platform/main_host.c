@@ -2168,7 +2168,10 @@ static void states_done(int action, int slot, IcoStateResult r, const char *deta
         snprintf(body, sizeof body, "%s", ui_str((UiStrId)state_refusal_str(r)));
         break;
     case ICO_CKPT_BOX_REFUSAL:
-        if (r == ICO_STATE_PERMADEATH && action == UI_STATES_ACT_SAVE) {
+        if (r == ICO_STATE_NOT_PAUSED && action == UI_STATES_ACT_LOAD) {
+            /* a checkpoint load asked for in play (F9): the pause first */
+            snprintf(body, sizeof body, "%s", ui_str(UI_STR_STATES_PAUSE_FIRST_LOAD));
+        } else if (r == ICO_STATE_PERMADEATH && action == UI_STATES_ACT_SAVE) {
             /* a save the poll refused on a Permadeath journey: the save's words */
             snprintf(body, sizeof body, "%s", ui_str(UI_STR_DIFF_STATES_SAVE_LOCKED));
         } else {
