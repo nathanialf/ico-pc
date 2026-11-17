@@ -122,22 +122,64 @@ cd "$root"
 # port's variables), gzip-compressed and added to the APK stored (not
 # deflated again), so the program reads it straight out of the APK file with
 # a descriptor (host_android.c ico_android_open_symbols): a report reads it
-# when it is written, save states at the first save, load or listing
+# when it is written, save states at the first save, load or listing.
+# Two more kinds of line for the save states' table, which the crash reader
+# passes over: the library's allocated output sections from its section
+# headers ("section <address> <size> <ELF flags> <name>": the code range is
+# where the X sections are, whatever the segments say; the library has one
+# read and execute segment holding .rodata with .text, -Wl,--no-rosegment
+# below API 30, issue 217), and a fifth column on a local data symbol whose
+# name is not unique: its source file, from the symbol table's FILE entries
+# (lld writes each object's locals after its FILE symbol), so the table
+# names it "<file>:<name>"
 llvm_nm="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
+llvm_readelf="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
 [[ -x "$llvm_nm" ]] || fail "no llvm-nm in the NDK ($llvm_nm)"
+[[ -x "$llvm_readelf" ]] || fail "no llvm-readelf in the NDK ($llvm_readelf)"
 symdir="$root/build-host/tmp/android-$label-syms"
 rm -rf "$symdir"
 mkdir -p "$symdir"
 "$llvm_nm" -n --defined-only "$so" > "$symdir/nm.txt" 2>>"$log" || fail "llvm-nm $so"
 "$llvm_nm" -n -S --defined-only "$so" > "$symdir/nm-sized.txt" 2>>"$log" || fail "llvm-nm -S $so"
+"$llvm_readelf" -S -W "$so" > "$symdir/sections.txt" 2>>"$log" || fail "llvm-readelf -S $so"
+"$llvm_readelf" -s -W "$so" > "$symdir/symtab.txt" 2>>"$log" || fail "llvm-readelf -s $so"
 awk 'NF == 3 && $2 ~ /^[TtWw]$/' "$symdir/nm.txt" > "$symdir/libmain.syms"
-awk 'NF == 4 && $3 ~ /^[DdBbRrVv]$/' "$symdir/nm-sized.txt" >> "$symdir/libmain.syms"
+awk 'NF == 4 && $3 ~ /^[DdBbRrVv]$/' "$symdir/nm-sized.txt" > "$symdir/data.txt"
+# the data lines, a repeated local name with its file
+awk 'FNR == NR {
+        if ($0 ~ /^Symbol table /) { insym = index($0, ".symtab") > 0; next }
+        if (!insym || NF < 8) next
+        if ($4 == "FILE") { cur = $8; next }
+        if ($5 == "LOCAL" && $4 != "SECTION" && cur != "") {
+            v = $2; sub(/^0+/, "", v); file[v SUBSEP $8] = cur
+        }
+        next
+     }
+     { n++; line[n] = $0; nm[n] = $4; v = $1; sub(/^0+/, "", v); key[n] = v SUBSEP $4; cnt[$4]++ }
+     END {
+        for (i = 1; i <= n; i++) {
+            if (cnt[nm[i]] > 1 && (key[i] in file)) {
+                split(line[i], f, " ")
+                print f[1], f[2], f[3], f[4], file[key[i]]
+            } else {
+                print line[i]
+            }
+        }
+     }' "$symdir/symtab.txt" "$symdir/data.txt" >> "$symdir/libmain.syms"
+# the allocated sections but thread-local storage (its addresses are offsets)
+awk 'sub(/^ *\[ *[0-9]+\] */, "") && $7 ~ /A/ && $7 !~ /T/ && $3 ~ /^[0-9a-f]+$/ &&
+     $5 ~ /^[0-9a-f]+$/ && $5 !~ /^0+$/ { print "section", $3, $5, $7, $1 }' \
+    "$symdir/sections.txt" >> "$symdir/libmain.syms"
 grep -q ' [DdBb] systemStatus$' "$symdir/libmain.syms" ||
     fail "libmain.syms lacks the game's data symbols (systemStatus)"
 grep -q ' T ico_diag_init$' "$symdir/libmain.syms" ||
     fail "libmain.syms lacks ico_diag_init (the symbol lines' anchor)"
+grep -q '^section [0-9a-f]* [0-9a-f]* [A-Z]*X[A-Z]* \.text$' "$symdir/libmain.syms" ||
+    fail "libmain.syms lacks the .text section line (the save states' code range)"
+grep -q '^section [0-9a-f]* [0-9a-f]* A[A-Z]* \.rodata$' "$symdir/libmain.syms" ||
+    fail "libmain.syms lacks the .rodata section line"
 gzip -9 -n -c "$symdir/libmain.syms" > "$symdir/libmain.syms.gz"
-echo "package_android: libmain.syms: $(wc -l < "$symdir/libmain.syms") symbols, $(wc -c < "$symdir/libmain.syms.gz") bytes gzipped" >>"$log"
+echo "package_android: libmain.syms: $(wc -l < "$symdir/libmain.syms") lines ($(grep -c '^section ' "$symdir/libmain.syms") sections, $(awk 'NF == 5 && $1 != "section"' "$symdir/libmain.syms" | wc -l) data symbols with their file), $(wc -c < "$symdir/libmain.syms.gz") bytes gzipped" >>"$log"
 withsyms="$root/build-host/tmp/android-$label-syms.apk"
 cp "$unsigned" "$withsyms"
 run python3 - "$withsyms" "$symdir/libmain.syms.gz" <<'PY'

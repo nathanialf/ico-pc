@@ -147,6 +147,15 @@ endif()
 # the refusal naming the first blocker (a changed function, the data
 # layout, a block), the bounds' fallback, the format 1 refusal; nothing of
 # the game starts
+# state_name: every address a save state holds is named across versions
+# (state_xbuild.c, state_syms.c, issue 217): synthetic images laid out as
+# Android's library (one read and execute range, the symbol file's section
+# lines), Linux's and Windows' programs carry a state's words (start-up
+# values, texts of any length and encoding, an anonymous table's word,
+# statics of one name in two files) into a build where each moved; a text
+# twice or missing there, a code word no unit holds (its listed line), a
+# window longer than the record's pool, version 2 records, a GNU ld map's
+# output sections
 # state_registry: the save state registry's table (state_registry.c)
 # display_rate: the refresh rate's log lines and the Android frame rate pin's
 # decisions (display_rate.c, issue 123)
@@ -192,8 +201,8 @@ endif()
 # both tried, a port race, step 2 out of reach), the mark written and read
 # back, the start and action lines word for word
 foreach(t sched fiber fps_counter arena diag hotkeys pace_policy pace_loop perf_block lifecycle pump_watch ico_thread
-          gpu_hang state_fiber state_guard state_port state_registry pipeline_skip memory_floor
-          present_fallback frame_mailbox display_rate present_hist present_stall_block gpu_sysfs
+          gpu_hang state_fiber state_guard state_port state_name state_registry pipeline_skip
+          memory_floor present_fallback frame_mailbox display_rate present_hist present_stall_block gpu_sysfs
           thermal_text window_scene bones_ladder pipe_resume clock_trap pin_release)
     add_executable(${t}_test test/${t}_test.c)
     target_include_directories(${t}_test PRIVATE "${ICO_COMPAT_DIR}")

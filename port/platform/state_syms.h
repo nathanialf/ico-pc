@@ -31,6 +31,24 @@
  *           name), sorted: their XXH3-64 is the game's data layout hash.
  *           Two builds with the same hash hold their game globals at the
  *           same offsets.
+ *   sections  the program's output sections the file names: a GNU ld map's
+ *           and lld's map's own output section lines (code when named
+ *           .text, .text.*, .init, .fini or .plt*, symmap.c's rule), and an
+ *           nm table's "section <address> <size> <flags> <name>" lines,
+ *           which tools/package_android.sh writes from the library's
+ *           section headers (code when the ELF flags hold X).  The code
+ *           sections bound the CODE RANGE: where the code is, whatever the
+ *           loader's segments say (Android's library has one read and
+ *           execute segment that holds its read-only data and string
+ *           literals with the code, -Wl,--no-rosegment below API 30).
+ *           Without a code section the code range is the caller's text
+ *           range, as before (no derivation from the symbols: code before
+ *           a build's first symbol would be judged data).
+ *
+ * An nm data line may carry a fifth column, the source file of a local
+ * symbol whose name is not unique (tools/package_android.sh, from the
+ * symbol table's FILE entries): the data symbol is then named
+ * "<file>:<name>", so a static of one file is told from its namesakes.
  */
 #ifndef ICO_PLATFORM_STATE_SYMS_H
 #define ICO_PLATFORM_STATE_SYMS_H
@@ -73,11 +91,27 @@ typedef struct IcoSymData {
     uint64_t sec_size, sec_off;
 } IcoSymData;
 
+/* An output section where it lies now. */
+typedef struct IcoSymSec {
+    uint64_t start, size;
+    uint32_t name;
+    uint8_t code; /* holds code (above) */
+} IcoSymSec;
+
 typedef struct IcoSymTab {
     IcoSymUnit *unit;
     size_t n_unit;
     IcoSymData *data;
     size_t n_data;
+    IcoSymSec *sec; /* sorted by start; NULL when the file names none */
+    size_t n_sec;
+    /* the code range: [code_lo, code_hi) of the code sections inside the
+       caller's text range (code_from 1), or the caller's text range itself
+       (code_from 0: the file names no code section there).  env.text_lo
+       and env.text_hi are set to it: the units lie inside it, and every
+       item outside it is data. */
+    uint64_t code_lo, code_hi;
+    int code_from;
     size_t n_layout; /* the game data items the layout hash covers */
     uint64_t layout_hash;
     char *str; /* the names, NUL-terminated */
@@ -110,6 +144,12 @@ const IcoSymUnit *ico_symtab_unit_named(const IcoSymTab *t, uint64_t name_hash, 
                                         uint32_t ordinal);
 const IcoSymData *ico_symtab_data_named(const IcoSymTab *t, uint64_t name_hash, const char *name,
                                         uint32_t ordinal);
+/* The output section holding `addr`, or NULL. */
+const IcoSymSec *ico_symtab_section_at(const IcoSymTab *t, uint64_t addr);
+/* The name of the unit or data symbol that starts nearest at or below
+   `addr` (*off: addr minus its start), or NULL when none does. */
+const char *ico_symtab_nearest(const IcoSymTab *t, uint64_t addr, uint64_t *off);
+
 /* The unit's code hash (computed from the running program's code at the
    first ask, then kept). */
 uint64_t ico_symtab_unit_hash(IcoSymTab *t, const IcoSymUnit *u);

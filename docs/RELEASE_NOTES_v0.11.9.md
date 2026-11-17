@@ -1,0 +1,3 @@
+## Fixed
+
+- On Android, save states made from this version on can carry over to later versions of the game, as they do on Windows (a later version still refuses one when it changed the part of the game it was saved in): until now every save state on Android could only be resumed by the exact version that made it, because it held places of texts inside the game that the game could not name. Save states made by earlier versions still load only in their own version. On every system, a save state made while a long message (such as a Japanese one) was in use no longer keeps an out-of-date place for it, and when a save state cannot carry over, the log lists what in it could not be named.
