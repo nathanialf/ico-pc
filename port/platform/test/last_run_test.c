@@ -25,7 +25,8 @@
  *            change), the crash's
  *            end (the async-signal-safe write), the next start's lines and
  *            its copy to last-run-previous.txt, a run that ended without a
- *            word, the clean end after a loss.
+ *            word, the clean end after a loss, a run without the file
+ *            (its first picture still told once).
  * argv[1]: a folder the test may write in (the build folder).
  */
 #include <stdio.h>
@@ -560,6 +561,14 @@ static void run(const char *base)
     last_run_begin(act, "v0.11.8 (commit test)", log_line);
     CHECK(ico_path_kind(prev, NULL, NULL) < 0);
     CHECK(strstr(s_log, "the previous run: no last-run.txt") != NULL);
+
+    /* a file that cannot be opened (no path): the first picture is still
+       told once (set_size_first_picture's memory line) */
+    last_run_begin(NULL, "v0.11.8 (commit test)", log_line);
+    CHECK(last_run_path()[0] == '\0');
+    last_run_step("window: start: up in 1.0 s; the game runs");
+    CHECK(last_run_present() == 1);
+    CHECK(last_run_present() == 0);
     (void)ico_remove_tree(dir);
 }
 

@@ -887,12 +887,20 @@ void last_run_set_pipelines(unsigned done, unsigned total)
 
 int last_run_present(void)
 {
-    if (s_phase == LAST_RUN_PHASE_GAME && s_path[0] != '\0') {
-        s_playStep[0] = '\0';
-        phase_to(LAST_RUN_PHASE_FIRST_PICTURE, "");
+    if (s_phase != LAST_RUN_PHASE_GAME) {
+        return 0;
+    }
+    s_playStep[0] = '\0';
+    if (s_path[0] == '\0') {
+        /* no file (it could not be opened): the phase moves all the same,
+           so the caller's first picture (set_size_first_picture) still
+           comes once */
+        s_phase = LAST_RUN_PHASE_FIRST_PICTURE;
+        s_phaseSince = ico_diag_uptime();
         return 1;
     }
-    return 0;
+    phase_to(LAST_RUN_PHASE_FIRST_PICTURE, "");
+    return 1;
 }
 
 void last_run_milestone(const char *milestone)

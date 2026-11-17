@@ -193,7 +193,8 @@ void last_run_beat(const LastRunBeat *b);
 void last_run_step(const char *step);
 void last_run_selftest(int on);
 void last_run_set_pipelines(unsigned done, unsigned total);
-/* 1 when this present moved the run to the first picture (once a run) */
+/* 1 when this present moved the run to the first picture (once a run;
+   without the file too) */
 int last_run_present(void);
 void last_run_milestone(const char *milestone);
 /* in front (0) or in the background (1) */
