@@ -143,10 +143,7 @@ typedef struct StateRanges {
 
 /* one fiber in the fibers section, followed by its control block and its
    stack bytes, each padded to 16 */
-typedef struct FiberRec {
-    uint64_t slot_base;
-    uint32_t slot, ctrl_bytes, stack_off, stack_bytes;
-} FiberRec;
+typedef IcoStateFiberRec FiberRec; /* state_rules.h */
 
 enum {
     SEC_ARENA,
@@ -480,7 +477,7 @@ static void unpack_reg(int audio, const unsigned char *in, const uint64_t *off)
     }
 }
 
-#define PAD16(n) (((n) + 15u) & ~(uint64_t)15u)
+#define PAD16(n) ICO_STATE_PAD16(n) /* in 64 bits: a file's size near 4 GB does not wrap */
 
 /* the scheduler's tables and every fiber, copied (the images point into
    live memory, fiber.h) */
@@ -531,46 +528,8 @@ static int copy_sched(Copy *c)
    section does not hold what it says */
 static int parse_fibers(const Copy *c, IcoSchedImage *img)
 {
-    const unsigned char *p = (const unsigned char *)c->p[SEC_FIBERS];
-    const unsigned char *end = p + c->n[SEC_FIBERS];
-    int n, i;
-
-    img->tables = c->p[SEC_SCHED];
-    img->tables_bytes = (size_t)c->n[SEC_SCHED];
-    img->n_fibers = 0;
-    if (p == NULL || c->n[SEC_FIBERS] < 16) {
-        return -1;
-    }
-    memcpy(&n, p, sizeof n);
-    if (n < 0 || n > ICO_SCHED_MAX_THREADS) {
-        return -1;
-    }
-    p += 16;
-    for (i = 0; i < n; i++) {
-        IcoFiberImage *f = &img->fibers[i];
-        FiberRec r;
-
-        if ((size_t)(end - p) < sizeof r) {
-            return -1;
-        }
-        memcpy(&r, p, sizeof r);
-        p += sizeof r;
-        if ((uint64_t)(end - p) < PAD16(r.ctrl_bytes) ||
-            (uint64_t)(end - p) - PAD16(r.ctrl_bytes) < PAD16(r.stack_bytes)) {
-            return -1;
-        }
-        f->slot_base = r.slot_base;
-        f->slot = r.slot;
-        f->ctrl_bytes = r.ctrl_bytes;
-        f->stack_off = r.stack_off;
-        f->stack_bytes = r.stack_bytes;
-        f->ctrl = p;
-        p += PAD16(r.ctrl_bytes);
-        f->stack = p;
-        p += PAD16(r.stack_bytes);
-    }
-    img->n_fibers = n;
-    return 0;
+    return ico_state_fibers_parse(c->p[SEC_FIBERS], c->n[SEC_FIBERS], c->p[SEC_SCHED],
+                                  c->n[SEC_SCHED], img);
 }
 
 static void fill_ranges(StateRanges *r, const void *pobj, size_t pobj_bytes)

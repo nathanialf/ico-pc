@@ -385,3 +385,53 @@ int ico_state_record_permadeath(const unsigned char *reg, uint64_t reg_n, uint64
     memcpy(&d, reg + off, sizeof d);
     return d.version == ICO_DIFF_VERSION && d.row[ICO_DIFF_PERMADEATH] != 0;
 }
+
+int ico_state_fibers_parse(const void *p, uint64_t n, const void *tables, uint64_t tables_n,
+                           IcoSchedImage *img)
+{
+    const unsigned char *q = (const unsigned char *)p;
+    const unsigned char *end = q + n;
+    int k, i;
+
+    img->tables = tables;
+    img->tables_bytes = (size_t)tables_n;
+    img->n_fibers = 0;
+    if (q == NULL || n < 16) {
+        return -1;
+    }
+    memcpy(&k, q, sizeof k);
+    if (k < 0 || k > ICO_SCHED_MAX_THREADS) {
+        return -1;
+    }
+    q += 16;
+    for (i = 0; i < k; i++) {
+        IcoFiberImage *f = &img->fibers[i];
+        IcoStateFiberRec r;
+
+        if ((size_t)(end - q) < sizeof r) {
+            return -1;
+        }
+        memcpy(&r, q, sizeof r);
+        q += sizeof r;
+        if ((uint64_t)(end - q) < ICO_STATE_PAD16(r.ctrl_bytes) ||
+            (uint64_t)(end - q) - ICO_STATE_PAD16(r.ctrl_bytes) < ICO_STATE_PAD16(r.stack_bytes)) {
+            return -1;
+        }
+        f->slot_base = r.slot_base;
+        f->slot = r.slot;
+        f->ctrl_bytes = r.ctrl_bytes;
+        f->stack_off = r.stack_off;
+        f->stack_bytes = r.stack_bytes;
+        f->ctrl = q;
+        q += ICO_STATE_PAD16(r.ctrl_bytes);
+        f->stack = q;
+        q += ICO_STATE_PAD16(r.stack_bytes);
+    }
+    img->n_fibers = k;
+    return 0;
+}
+
+int ico_state_checkpoint_may_start(const IcoStateConds *c)
+{
+    return ico_state_on_pause_menu(c) || c->stage == c->stage_title;
+}

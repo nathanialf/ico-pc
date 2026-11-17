@@ -16,6 +16,7 @@
 
 #include "state.h"
 #include "state_file.h"
+#include "sched.h" /* IcoSchedImage: a state's fibers section, parsed */
 
 /* What the conditions look at, sampled by state_host.c at the host loop's
    quiescent point (plan "Save"). */
@@ -134,5 +135,30 @@ IcoStateShotStep ico_state_shot_step(int *last, int layout, int layout_play, int
    (ICO_STATE_PERMADEATH) whatever journey is in force.  0 for a block of
    another size, outside the section, or of another record version. */
 int ico_state_record_permadeath(const unsigned char *reg, uint64_t reg_n, uint64_t off, uint64_t n);
+
+/* A state's fibers section: a count (the first 16 bytes), then per fiber
+   one record, its control block and its stack bytes, each padded to 16.
+   The sizes are a file's 32-bit fields: the padding is worked out in 64
+   bits (a size near 4 GB no longer wraps to 0 and passes the bound). */
+typedef struct IcoStateFiberRec {
+    uint64_t slot_base;
+    uint32_t slot, ctrl_bytes, stack_off, stack_bytes;
+} IcoStateFiberRec;
+
+#define ICO_STATE_PAD16(n) (((uint64_t)(n) + 15u) & ~(uint64_t)15u)
+/* The fibers section p (n bytes) and the scheduler's tables into img, its
+   fibers' pointers into p: 0, or -1 when the section does not hold what it
+   says (a count outside 0..ICO_SCHED_MAX_THREADS, a record or its bytes
+   past the end); img->n_fibers is then 0. */
+int ico_state_fibers_parse(const void *p, uint64_t n, const void *tables, uint64_t tables_n,
+                           IcoSchedImage *img);
+
+/* Whether a load that continues from a state's checkpoint may start now:
+   on the pause menu (or a port page over it) or on the title, the two
+   places the game's own card load and End Game run from.  In active play
+   (F9 during a scripted event, a fall, a game over) the game's load of an
+   image is no step the game ever takes; the exact load replaces all of the
+   memory and may run there, this one replaces the save image only. */
+int ico_state_checkpoint_may_start(const IcoStateConds *c);
 
 #endif /* ICO_GAME_STATE_RULES_H */
