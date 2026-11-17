@@ -185,7 +185,11 @@ set_source_files_properties("${CMAKE_SOURCE_DIR}/ico2/common/src/main.c" TARGET_
 # for that; tools/check_const_writes.py looks for others).
 set(ICO_DATA_GEN_DIR "${CMAKE_SOURCE_DIR}/port/data/gen")
 include("${ICO_DATA_GEN_DIR}/tables.cmake")
-add_library(ico_data OBJECT ${ICO_TABLE_SOURCES} "${CMAKE_SOURCE_DIR}/port/data/tables.c")
+# port/data/reserved/tables.c holds, in the game's data sections, the room the
+# loader's statics took there (the loader's object name and footprint), so
+# the game's variables after it keep their offsets for save states of
+# earlier versions; it stands last, where the loader stood.
+add_library(ico_data OBJECT ${ICO_TABLE_SOURCES} "${CMAKE_SOURCE_DIR}/port/data/reserved/tables.c")
 ico_include_dirs(sugipon incs)
 # the generated files spell the record headers repo-relative ("ico2/...")
 target_include_directories(ico_data PRIVATE ${incs} "${CMAKE_SOURCE_DIR}/port/data"
@@ -193,10 +197,19 @@ target_include_directories(ico_data PRIVATE ${incs} "${CMAKE_SOURCE_DIR}/port/da
 target_compile_definitions(ico_data PRIVATE ${ICO_GAME_DEFINITIONS})
 target_compile_options(ico_data PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
-# the loader is port code: the port's warning set
-set_source_files_properties("${CMAKE_SOURCE_DIR}/port/data/tables.c" TARGET_DIRECTORY ico_data
-                            PROPERTIES COMPILE_OPTIONS "${ICO_PORT_WARNINGS}")
 list(APPEND ICO_GAME_OBJECT_LIBS ico_data)
+# The loader (port/data/tables.c) is port code with port state (the loaded
+# counts, the set, the CRC table, set once at start-up): outside the game
+# library, so its statics stay out of the game's data sections and a save
+# state neither holds nor restores them (cmake/IcoStateSections.cmake;
+# tools/android_syms_lines.py checks the sections' objects). The program
+# links its objects itself.
+add_library(ico_tables_loader OBJECT "${CMAKE_SOURCE_DIR}/port/data/tables.c")
+target_include_directories(ico_tables_loader PRIVATE ${incs} "${CMAKE_SOURCE_DIR}/port/data"
+                           "${CMAKE_SOURCE_DIR}")
+target_compile_definitions(ico_tables_loader PRIVATE ${ICO_GAME_DEFINITIONS})
+target_compile_options(ico_tables_loader PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_PORT_WARNINGS})
 
 # --- The platform layer -----------------------------------------------------
 add_library(ico_platform STATIC
@@ -347,6 +360,8 @@ if(ICO_LINK_EXE)
     endif()
     target_compile_options(ico_pc PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
     target_link_libraries(ico_pc PRIVATE ico_game ico_platform ico_region)
+    # the table loader, outside the game library (above)
+    target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_tables_loader>)
     if(ANDROID)
         target_link_libraries(ico_pc PRIVATE log android m dl)
     elseif(NOT WIN32)

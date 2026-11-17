@@ -813,8 +813,17 @@ static int build_layout(IcoSymTab *t, const Lists *l)
         int r = 0;
         uint64_t end, size;
         const char *nm = t->str + p->name;
-        const size_t need = strlen(nm) + 80;
+        size_t need;
 
+        /* a symbol's own name: an nm table's "<file>:<name>" (a repeated
+           local's file column, tools/package_android.sh) depends on whether
+           another symbol anywhere in the library shares the name, which a
+           change outside the game can decide; its offset already tells two
+           namesakes apart */
+        if (p->kind == IT_SYM && strrchr(nm, ':') != NULL) {
+            nm = strrchr(nm, ':') + 1;
+        }
+        need = strlen(nm) + 80;
         (void)in_game(e, p->at, &r);
         end = e->game_hi[r];
         if (p->sized) {

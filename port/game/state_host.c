@@ -83,6 +83,8 @@ extern int stage_no;
 extern int current_layout_id;
 struct IosMemPart;
 extern struct IosMemPart *ios_partition_root;
+/* port/data/reserved/tables.c: the loader's room in the game's data sections */
+const void *ico_tables_room(void);
 /* ico2/common/src/PObj.c: the decoded tables of the model being loaded */
 void **PObj_GetImageTables(size_t *bytes);
 void PObj_SetImageTables(void **p, unsigned int count);
@@ -249,6 +251,9 @@ static void init(void)
     s_inited = 1;
     s_on = 1;
     s_off_why[0] = '\0';
+    /* the loader's room in the game's data sections joins the link where
+       the loader's statics were (port/data/reserved/tables.c) */
+    (void)ico_tables_room();
 #ifdef STATE_SANITIZED
     turn_off("a sanitizer build");
 #endif

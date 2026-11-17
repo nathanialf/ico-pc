@@ -21,7 +21,8 @@ disc's boot ELF, and the port's own reads of DATA.DF. The repository holds no di
 | `port/data/sif_host.h`, `sif_host.c` | `sceSif*` with no IOP: the IOP heap, SIF DMA, RPC to host servers |
 | `port/data/sifdev_host.c` | `sceOpen` and the other sifdev file calls, for the development kit's `host0:` device |
 | `port/data/iop_ram.h`, `iop_ram.c` | `ico_iop_ram`, the 2 MB of IOP RAM, and the IOP heap allocator |
-| `port/data/tables.h`, `tables.c` | the runtime loader of the 73 data tables |
+| `port/data/tables.h`, `tables.c` | the runtime loader of the 73 data tables (linked outside the game library: [PLATFORM.md](PLATFORM.md#game-data-ranges)) |
+| `port/data/reserved/tables.c` | the frozen room the loader's statics took in the game's data sections ([PLATFORM.md](PLATFORM.md#game-data-ranges)) |
 | `port/data/gen/` | the generated table definitions (`table_defs.c`), descriptor types (`table_desc.h`), the sets' list (`table_sets.c`, `tables.cmake`) and one descriptor set per disc (`pal/`, `jpn/`, `kor/`, `ntsc/`, `aug6/`, `jun26/`, `cn/`: `table_desc.c`, `ee_symbols.c`, `tables.cmake`) |
 | `port/data/df_pack.h`, `df_pack.c` | reads of DATA.DF's loose files and pack members for the port's own screens |
 | `port/data/json.h`, `json.c` | the JSON reader (`ico_json`) |

@@ -66,9 +66,12 @@ list, minus `ICO_BLOCKED_SOURCES` unless `ICO_BUILD_BLOCKED=ON`, and prints the 
 `ico2/common/src/main.c` is compiled with `main=ico_game_main`; the program's `main` is in
 `port/platform/main_host.c` (`main`, `ico_host_main`), and the game's `ico_game_main` runs on the
 boot [fiber](ARCHITECTURE.md#terms). The object libraries and `ico_data` (the table definitions and
-the loader) are collected into the static library `ico_game`. `ico_pc` (only with `ICO_LINK_EXE=ON`)
-links `ico_game`, `ico_platform` and the port's libraries, plus `port/null/gfx_null.c` and
-`port/null/libgcc_null.c` compiled into the program itself, since they call back into the game
+`port/data/reserved/tables.c`, the frozen room the loader's statics once took in the game's data
+sections) are collected into the static library `ico_game`. `ico_pc` (only with
+`ICO_LINK_EXE=ON`) links `ico_game`, `ico_platform` and the port's libraries, plus
+`port/null/gfx_null.c` and `port/null/libgcc_null.c` compiled into the program itself, since they
+call back into the game, and the table loader `port/data/tables.c` (`ico_tables_loader`, port
+state outside the game's data sections; [PLATFORM.md](PLATFORM.md#across-versions))
 (`CMakeLists.txt` (the game library and the program sections)).
 
 `cmake/IcoExclusions.cmake` holds `ICO_BLOCKED_SOURCES` (fails with every compiler) and
