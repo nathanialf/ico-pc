@@ -11,6 +11,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stddef.h>
 #include <string.h>
 #include "diag_host.h"
 #include "fiber.h"
@@ -669,6 +670,19 @@ uint64_t ico_fiber_image_sp(const IcoFiberImage *img)
     return (uint64_t)ctx_sp(&cx->ctx);
 }
 
+int ico_fiber_image_rewritten(const IcoFiberImage *img, size_t *off, size_t *n)
+{
+    *off = 0;
+    *n = 0;
+    if (pool.base == 0 || img->ctrl == NULL || img->ctrl_bytes != pool.page ||
+        pool.ctx_off + sizeof(_mco_context) > img->ctrl_bytes) {
+        return -1;
+    }
+    *off = pool.ctx_off + offsetof(_mco_context, back_ctx);
+    *n = sizeof(((_mco_context *)0)->back_ctx);
+    return 0;
+}
+
 int ico_fiber_slot_restore(int slot, const IcoFiberImage *in, const IcoStateReloc *r0)
 {
     /* another build's translation with per-fiber points: this slot's
@@ -784,6 +798,14 @@ uint64_t ico_fiber_image_sp(const IcoFiberImage *img)
 {
     (void)img;
     return 0;
+}
+
+int ico_fiber_image_rewritten(const IcoFiberImage *img, size_t *off, size_t *n)
+{
+    (void)img;
+    *off = 0;
+    *n = 0;
+    return -1;
 }
 
 int ico_fiber_slot_save(int slot, IcoFiberImage *out)

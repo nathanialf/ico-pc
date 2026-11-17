@@ -814,6 +814,22 @@ static IcoStateBlocker blocker_of(int kind)
     return ICO_STATE_BLOCK_PINNED;
 }
 
+/* a fiber's control page, less the bytes a restore rewrites (back_ctx: the
+   resumer's registers, fiber.h ico_fiber_image_rewritten), which no load
+   keeps and which would make the resumer's frames look like the fiber's */
+static void xb_scan_ctrl(IcoXbRefs *r, const IcoFiberImage *f)
+{
+    const unsigned char *p = (const unsigned char *)f->ctrl;
+    size_t off, n;
+
+    if (ico_fiber_image_rewritten(f, &off, &n) != 0 || off + n > f->ctrl_bytes) {
+        ico_xb_scan(r, f->ctrl, f->ctrl_bytes, f->slot_base, 1);
+        return;
+    }
+    ico_xb_scan(r, p, off, f->slot_base, 1);
+    ico_xb_scan(r, p + off + n, f->ctrl_bytes - off - n, f->slot_base + off + n, 1);
+}
+
 /* the words of n copied bytes that lay at `addr`, split at the stack
    pointer's red zone: below it (dead frames) soft, from it up strict */
 static void xb_scan_stack(IcoXbRefs *r, const IcoFiberImage *f)
@@ -905,7 +921,7 @@ static int build_syms_locked(Copy *c, IcoXbStats *st)
 
             snprintf(what, sizeof what, "fiber slot %u's control page", (unsigned)f->slot);
             ico_xb_where(r, what);
-            ico_xb_scan(r, f->ctrl, f->ctrl_bytes, f->slot_base, 1);
+            xb_scan_ctrl(r, f);
             snprintf(what, sizeof what, "fiber slot %u's stack", (unsigned)f->slot);
             ico_xb_where(r, what);
             xb_scan_stack(r, f);
@@ -1950,7 +1966,7 @@ static int legacy_record(const char *path, const char *commit, void **out, size_
             ico_xb_frames(r, (int)f->slot + 1);
             snprintf(what, sizeof what, "fiber slot %u's control page", (unsigned)f->slot);
             ico_xb_where(r, what);
-            ico_xb_scan(r, f->ctrl, f->ctrl_bytes, f->slot_base, 1);
+            xb_scan_ctrl(r, f);
             snprintf(what, sizeof what, "fiber slot %u's stack", (unsigned)f->slot);
             ico_xb_where(r, what);
             xb_scan_stack(r, f);

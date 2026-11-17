@@ -503,6 +503,22 @@ static void test_dead_frames(void)
     ico_fiber_destroy(g);
     pool_reloc(&r, (uintptr_t)ico_fiber_pool_base()); /* the same pool: delta 0 */
     CHECK(ico_fiber_slot_restore(5, &img, &r) == 0);
+    {
+        /* the bytes the save leaves unscanned (back_ctx): the saved ones held
+           the resumer's registers, the restore zeroes them */
+        static const unsigned char zero[256];
+        size_t off = 0, n = 0;
+
+        /* the rewritten span lies inside the control page */
+        CHECK(ico_fiber_image_rewritten(&img, &off, &n) == 0 && n > 0 && n <= sizeof zero &&
+              off + n <= img.ctrl_bytes);
+        if (n > 0 && n <= sizeof zero && off + n <= img.ctrl_bytes) {
+            /* the saved back_ctx held the resumer's registers; the restore
+               zeroed it */
+            CHECK(memcmp((const unsigned char *)img.ctrl + off, zero, n) != 0);
+            CHECK(memcmp((const void *)(base + off), zero, n) == 0);
+        }
+    }
     g = ico_fiber_in_slot(5);
     CHECK(g != NULL);
     if (g != NULL) {
