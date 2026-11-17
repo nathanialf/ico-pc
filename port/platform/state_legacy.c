@@ -101,6 +101,7 @@ IcoLegacyTable *ico_legacy_load(IcoLegacyRead rd, void *user, const char *name, 
     IcoLegacyTable *t = (IcoLegacyTable *)calloc(1, sizeof *t);
     void *man = NULL, *gz = NULL, *sec = NULL, *idx = NULL, *runs = NULL;
     size_t man_n = 0, gz_n = 0, sec_n = 0, idx_n = 0, runs_n = 0, text_n = 0, files = 0;
+    long text_index = 1; /* a manifest without the line: the first format */
     char *syms = NULL;
     size_t syms_n = 0, i, k, at;
     const char *p, *end;
@@ -134,6 +135,8 @@ IcoLegacyTable *ico_legacy_load(IcoLegacyRead rd, void *user, const char *name, 
                     t->n_run = (size_t)a;
                     text_n = (size_t)b;
                 }
+            } else if (strncmp(l, "text_index ", 11) == 0) {
+                text_index = strtol(l + 11, NULL, 10);
             } else if (strncmp(l, "text_files ", 11) == 0) {
                 files = (size_t)strtoul(l + 11, NULL, 10);
             } else if (strncmp(l, "hash_rules ", 11) == 0) {
@@ -144,6 +147,15 @@ IcoLegacyTable *ico_legacy_load(IcoLegacyRead rd, void *user, const char *name, 
     }
     if (t->commit[0] == '\0' || files == 0 || files > 64 || t->n_run == 0) {
         say(why, why_n, "its manifest is damaged");
+        goto fail;
+    }
+    if (text_index != ICO_LEGACY_TEXT_INDEX) {
+        if (why != NULL && why_n > 0) {
+            snprintf(why, why_n,
+                     "its text index is of format %ld, not %d (its runs do not say where a "
+                     "literal starts): the table must be rebuilt",
+                     text_index, ICO_LEGACY_TEXT_INDEX);
+        }
         goto fail;
     }
     if (read_file(rd, user, name, ICO_LEGACY_SYMS, &gz, &gz_n, why, why_n) != 0 ||
@@ -199,14 +211,17 @@ IcoLegacyTable *ico_legacy_load(IcoLegacyRead rd, void *user, const char *name, 
         goto fail;
     }
     t->run = (uint32_t *)malloc(t->n_run * 2 * sizeof *t->run);
+    t->lstart = (uint8_t *)malloc(t->n_run);
     t->ro = (uint8_t *)calloc(1, (size_t)(t->ro_hi - t->ro_lo));
-    if (t->run == NULL || t->ro == NULL) {
+    if (t->run == NULL || t->lstart == NULL || t->ro == NULL) {
         say(why, why_n, "no memory");
         goto fail;
     }
     for (i = 0; i < t->n_run; i++) {
         t->run[2 * i] = get32((const uint8_t *)runs + 8 * i);
         t->run[2 * i + 1] = get32((const uint8_t *)runs + 8 * i + 4);
+        t->lstart[i] = (t->run[2 * i + 1] & ICO_LEGACY_LSTART) != 0;
+        t->run[2 * i + 1] &= ~ICO_LEGACY_LSTART;
         if (t->run[2 * i] < t->ro_lo || (uint64_t)t->run[2 * i] + t->run[2 * i + 1] > t->ro_hi ||
             (i > 0 && t->run[2 * i] < (uint64_t)t->run[2 * i - 2] + t->run[2 * i - 1])) {
             say(why, why_n, "its text index is out of order");
@@ -313,6 +328,7 @@ void ico_legacy_free(IcoLegacyTable *t)
     free(t->syms);
     free(t->ro);
     free(t->run);
+    free(t->lstart);
     free(t->hash);
     free(t);
 }
@@ -352,7 +368,7 @@ IcoSymTab *ico_legacy_symtab(const IcoLegacyTable *t, const IcoSymTabEnv *env, c
     return ico_symtab_parse(t->syms, t->syms_n, &e, why, why_n);
 }
 
-int ico_legacy_run(const IcoLegacyTable *t, uint64_t off, uint64_t *lo, uint64_t *hi)
+int ico_legacy_run(const IcoLegacyTable *t, uint64_t off, uint64_t *lo, uint64_t *hi, int *lstart)
 {
     size_t a = 0, b = t->n_run;
 
@@ -368,6 +384,7 @@ int ico_legacy_run(const IcoLegacyTable *t, uint64_t off, uint64_t *lo, uint64_t
     if (a > 0 && off - t->run[2 * (a - 1)] < t->run[2 * (a - 1) + 1]) {
         *lo = t->run[2 * (a - 1)];
         *hi = (uint64_t)t->run[2 * (a - 1)] + t->run[2 * (a - 1) + 1];
+        *lstart = t->lstart != NULL && t->lstart[a - 1] != 0;
         return 1;
     }
     return 0;

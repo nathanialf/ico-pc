@@ -1389,6 +1389,7 @@ typedef struct Lg {
     IcoLegacyTable lt;
     uint64_t hash[3 * 16];
     uint32_t run[2];
+    uint8_t lstart[1];
     uint8_t v2[64 + 16 * 48];
     size_t v2_n;
     IcoSymTab *ot;
@@ -1414,7 +1415,10 @@ static int lg_make(Lg *g, Pg *a)
     memcpy(g->lt.ro, a->mem + PG_RO, 0x1000u);
     g->run[0] = (uint32_t)a->o_text;
     g->run[1] = (uint32_t)sizeof kLegacy;
+    /* the run starts a literal as the tool records it: the byte before it is zero */
+    g->lstart[0] = a->mem[a->o_text - 1] == 0;
     g->lt.run = g->run;
+    g->lt.lstart = g->lstart;
     g->lt.n_run = 1;
     g->lt.hash_rules = ICO_CODE_HASH_RULES;
     /* the version 2 record its saver made: its units with their rules-1

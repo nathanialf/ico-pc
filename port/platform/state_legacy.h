@@ -17,7 +17,11 @@
  *   sections.txt  its library's allocated sections ("section" lines)
  *   texts.idx     its .rodata's text runs (every run of C string literals):
  *                 per run the offset from the image start and the length,
- *                 32-bit little-endian pairs, raw deflate
+ *                 32-bit little-endian pairs, raw deflate; the length's top
+ *                 bit (ICO_LEGACY_LSTART) is set when the run starts a
+ *                 literal: the byte before it in the version's .rodata is
+ *                 zero, or it is the section's first (the table holds the
+ *                 runs' bytes only, so the byte before a run is not here)
  *   texts.<k>.z   the runs' bytes in order, raw deflate
  *   hashes.z      every function's code hashes (code_hash.h) as this
  *                 build's table would cut and hash it: per function its
@@ -27,7 +31,10 @@
  *                 format 2 record holds: every unit of the record must
  *                 match it, which proves the table is the saver's build.
  *   manifest.txt  the commit text its states carry, the platform, the kind
- *                 (release, rc), the source APK and its SHA-256, the files
+ *                 (release, rc), the source APK and its SHA-256, the files,
+ *                 "text_index 2" (texts.idx's format: a table without it,
+ *                 whose lengths carry no literal starts, is refused) and
+ *                 "lstarts N" (the runs that start a literal)
  *
  * and index.txt: one line per table, "platform kind name commit".
  */
@@ -38,6 +45,8 @@
 #include <stdint.h>
 
 #define ICO_LEGACY_SYMS "syms.gzip"
+#define ICO_LEGACY_TEXT_INDEX 2       /* the manifest's text_index */
+#define ICO_LEGACY_LSTART 0x80000000u /* a texts.idx length's top bit */
 
 /* Reads the packaged file `path` (relative to the tables' root,
    "index.txt", "v0.11.8-android/syms.gzip"): 0 and *data (malloc'd), *n,
@@ -56,7 +65,8 @@ typedef struct IcoLegacyTable {
        runs' bytes in place, zeros elsewhere */
     uint8_t *ro;
     uint64_t ro_lo, ro_hi;
-    uint32_t *run; /* n_run pairs: offset from the image start, length */
+    uint32_t *run;   /* n_run pairs: offset from the image start, length */
+    uint8_t *lstart; /* n_run: 1 when the run starts a literal (NULL: none does) */
     size_t n_run;
     uint64_t *hash; /* n_hash triples: a function's offset from the image start, its code hash
                        under rules 1, under hash_rules */
@@ -82,7 +92,8 @@ struct IcoSymTab *ico_legacy_symtab(const IcoLegacyTable *t, const struct IcoSym
                                     char *why, size_t why_n);
 
 /* The text run holding the image offset `off`: 1 and [*lo, *hi) (image
-   offsets), else 0. */
-int ico_legacy_run(const IcoLegacyTable *t, uint64_t off, uint64_t *lo, uint64_t *hi);
+   offsets) and *lstart (1 when the run starts a literal: the byte before
+   *lo was zero), else 0. */
+int ico_legacy_run(const IcoLegacyTable *t, uint64_t off, uint64_t *lo, uint64_t *hi, int *lstart);
 
 #endif /* ICO_PLATFORM_STATE_LEGACY_H */

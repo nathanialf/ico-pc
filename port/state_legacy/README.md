@@ -13,7 +13,12 @@ repository's 256 KiB file cap:
 
 - the version's own symbol file;
 - its sections;
-- its read-only text runs;
+- its read-only text runs, each marked when it starts a literal (the byte
+  before it is zero, or it is the first byte of `.rodata`). The table holds
+  only the runs' bytes, so the loader cannot see the byte before a run. The
+  manifest's `text_index 2` names this format and `lstarts` counts the
+  marked runs. The game refuses a table without `text_index 2` and says it
+  must be rebuilt;
 - its functions' code hashes.
 
 `index.txt` lists the tables. Each line gives the platform, the kind, the
@@ -44,7 +49,8 @@ release APK leaves it out.
 ## Checks
 
 The `state_legacy_tables` test checks the files against their manifests
-(sizes, SHA-256, counts, address order). The `state_legacy` test loads every
+(sizes, SHA-256, counts, address order, the text index's format and its
+literal-start count). The `state_legacy` test loads every
 table with the game's own loader.
 
 ## Making a table
@@ -55,4 +61,6 @@ python3 -I tools/state_legacy_table.py build --apk <the release APK> \
 ```
 
 A table must be rebuilt whenever the code hash rules change
-(`port/platform/code_hash.h` `ICO_CODE_HASH_RULES`, `tools/code_hash_a64.py`).
+(`port/platform/code_hash.h` `ICO_CODE_HASH_RULES`, `tools/code_hash_a64.py`)
+or the text index's format changes (`ICO_LEGACY_TEXT_INDEX` in
+`port/platform/state_legacy.h`, `TEXT_INDEX` in the tool).

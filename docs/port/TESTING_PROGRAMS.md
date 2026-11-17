@@ -893,7 +893,7 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   address are named again (no word unnamed, one page word, one window) and translated in B: the
   text to B's, the data word by B's start-up value placed back by name, the page to the page f_e's
   ADRP and its user make in B. Without the start-up word the data word is unnamed. With the text
-  twice in B, a word into its middle is refused (`in more than one place`), and a word at its start (a whole literal) takes the first copy and counts one twin. A record whose unit hash is not the
+  twice in B, a word into its middle is refused (`in more than one place`), and a word at its start (a whole literal, at its run's start: the table marks the run as a literal start because the byte before it is zero) takes the first copy and counts one twin. A record whose unit hash is not the
   table's (`another build's`) or whose layout is another (`another version's`) is refused, and so
   is a table whose f_e hash differs from B's (`the function f_e changed`) (`test_legacy`). A
   version 2 record of another layout with unnamed words is refused for the layout first
@@ -902,15 +902,18 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   folder as its argument) read by the game's loader (`state_legacy.c`). Each table the index
   names is found by its platform and commit and loads. Its manifest's commit, code hash count and
   text run count match, its hashes are under the current rules and in address order, its runs lie
-  inside its `.rodata` and end in a zero byte, its symbol file places at an Android image, and
+  inside its `.rodata` and end in a zero byte, a run found by its start gives its literal-start
+  mark, the marked runs number the manifest's `lstarts`, its symbol file places at an Android image, and
   every function the table cuts has its hashes. No table is found for another platform or for the
   reporter's commit of another layout. The reader acts as an APK (no asset name ends in `.gz`),
   so every table must load by the names an APK keeps. A missing index gives -1, a missing hashes
   file and a missing sections file are named with the reader's reason (`cannot read <table>/sections.txt:
-  dropped`), and a text file cut short does not load
+  dropped`), a text file cut short does not load, and a table whose manifest lacks
+  `text_index 2` is refused by name (`text index is of format 1, not 2`, `rebuilt`)
   (`state_legacy`).
 - `tools/state_legacy_table.py check`: each legacy table's files against its manifest (sizes,
-  SHA-256, the text runs inside `.rodata` and in order, the symbol file's `ico_diag_init`, the code
+  SHA-256, the text runs inside `.rodata` and in order, the text index's format `text_index 2`
+  and its literal-start count `lstarts`, the symbol file's `ico_diag_init`, the code
   hashes' count, rules and address order), and the index naming each table once
   (`state_legacy_tables`). `tools/code_hash_a64.py --selftest`: the Python XXH3-64 against
   xxHash's sanity vectors and the rules-2 masking against hand-made functions

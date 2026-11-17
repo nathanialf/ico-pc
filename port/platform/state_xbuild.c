@@ -1467,9 +1467,11 @@ static void note_unnamed(const IcoXbRefs *r, const IcoSymTab *t, size_t slot, ui
 
 /* a window point (state_xbuild.h): its record, its bytes (whole, or the
    prefix when the pool has no room for them) and its nearest symbol's
-   name.  0, or -1 (no memory). */
+   name.  A text starts a literal when the byte before it is zero; at the
+   range's own start that byte is not readable here, and rlo_lstart says
+   (a legacy run's flag from its table, else 0).  0, or -1 (no memory). */
 static int put_window(Out *points, Out *pool, Out *strs, const IcoSymTab *t, int64_t delta,
-                      uint64_t w, uint64_t a, uint64_t z, int text, uint64_t rlo)
+                      uint64_t w, uint64_t a, uint64_t z, int text, uint64_t rlo, int rlo_lstart)
 {
     const size_t len = (size_t)(z - a);
     const unsigned char *b = (const unsigned char *)(uintptr_t)(a + (uint64_t)delta);
@@ -1492,7 +1494,7 @@ static int put_window(Out *points, Out *pool, Out *strs, const IcoSymTab *t, int
     put32(q + 12, (uint32_t)len);
     put32(q + 16, (uint32_t)(w - a));
     put32(q + 20, (text ? XW_TEXT : 0u) | (whole ? 0u : XW_HASHED) |
-                      (text && a > rlo && b[-1] == 0 ? XW_LSTART : 0u));
+                      (text && (a > rlo ? b[-1] == 0 : rlo_lstart) ? XW_LSTART : 0u));
     put64(q + 24, xxh3_64(b, len));
     put32(q + 32, pool_at);
     put32(q + 36, (uint32_t)stored);
@@ -1565,7 +1567,7 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
         const uint64_t w = r->key[i];
         const int strict = (r->strict[i] & 1) != 0;
         uint64_t rlo = 0, rhi = 0;
-        int b, in_block = 0, ro;
+        int b, in_block = 0, ro, rlo_lstart = 0;
 
         if (w == 0) {
             continue;
@@ -1661,7 +1663,7 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
                window stays inside the run holding the word */
             uint64_t a0, z0;
 
-            if (!ico_legacy_run(p->legacy->lt, w - p->legacy->old_lo, &a0, &z0)) {
+            if (!ico_legacy_run(p->legacy->lt, w - p->legacy->old_lo, &a0, &z0, &rlo_lstart)) {
                 note_unnamed(r, t, i, w, ICO_XB_WHY_NOBYTES, &flags, &left, &first_unnamed, st);
                 continue;
             }
@@ -1685,7 +1687,8 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
                 ro_freq(&p->image, r->delta, freq);
             }
             if (grow_window(&p->image, r->delta, freq, w, rlo, rhi, tl, &a, &z)) {
-                if (put_window(&points, &pool, &strs, t, r->delta, w, a, z, tl > 0, rlo) != 0) {
+                if (put_window(&points, &pool, &strs, t, r->delta, w, a, z, tl > 0, rlo,
+                               rlo_lstart) != 0) {
                     goto done;
                 }
                 np++;

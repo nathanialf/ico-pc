@@ -7,7 +7,9 @@
  * the current code hash rules, and its symbol file places at an image the
  * way an earlier version's state gives one.  The index's lookup by
  * platform and commit (the release, the rc, another platform, an unknown
- * commit), a table that is missing a file, and one whose file is cut short.
+ * commit), a table that is missing a file, one whose file is cut short, and
+ * one of the first format (no text_index line: its runs do not say where a
+ * literal starts), refused by name.
  * The argument is the tables' folder in the source tree; no build output,
  * no game.
  */
@@ -27,6 +29,7 @@ typedef struct Dir {
     const char *drop; /* a path the reader says is missing, or NULL */
     const char *cut;  /* a path the reader returns half of, or NULL */
     int apk;          /* as Android's APK: no asset ends in .gz (packaging un-gzips them) */
+    int old_index;    /* every manifest.txt without its text_index line (the first format) */
 } Dir;
 
 static int dir_read(void *user, const char *path, void **data, size_t *n, char *err, size_t err_n)
@@ -66,6 +69,24 @@ static int dir_read(void *user, const char *path, void **data, size_t *n, char *
     *n = (size_t)len;
     if (d->cut != NULL && strcmp(path, d->cut) == 0) {
         *n = (size_t)len / 2;
+    }
+    if (d->old_index && strlen(path) > 13 &&
+        strcmp(path + strlen(path) - 13, "/manifest.txt") == 0) {
+        char *s = (char *)b, *l = NULL, *e;
+        size_t i;
+
+        for (i = 0; i + 11 <= *n; i++) {
+            if ((i == 0 || s[i - 1] == '\n') && memcmp(s + i, "text_index ", 11) == 0) {
+                l = s + i;
+                break;
+            }
+        }
+        if (l != NULL) {
+            e = (char *)memchr(l, '\n', *n - (size_t)(l - s));
+            e = e != NULL ? e + 1 : s + *n;
+            memmove(l, e, *n - (size_t)(e - s));
+            *n -= (size_t)(e - l);
+        }
     }
     return 0;
 }
@@ -133,10 +154,18 @@ static void check_table(const Dir *d, const char *name, const char *platform, co
     {
         uint64_t lo = 0, hi = 0;
         const uint32_t off = t->run[2 * (t->n_run / 2)];
+        int ls = -1;
+        long nls = 0;
 
-        CHECK(ico_legacy_run(t, off, &lo, &hi) == 1 && lo == off &&
-                  t->ro[off - t->ro_lo + (hi - lo) - 1] == 0,
-              "%s: a run found by its start ends in a zero byte", name);
+        CHECK(ico_legacy_run(t, off, &lo, &hi, &ls) == 1 && lo == off &&
+                  t->ro[off - t->ro_lo + (hi - lo) - 1] == 0 && ls == t->lstart[t->n_run / 2],
+              "%s: a run found by its start ends in a zero byte, its literal-start flag given",
+              name);
+        for (i = 0; i < t->n_run; i++) {
+            nls += t->lstart[i] != 0;
+        }
+        CHECK(nls == manifest_num(d, name, "lstarts") && nls > 0 && nls < (long)t->n_run,
+              "%s: %ld runs start a literal, as its manifest says", name, nls);
     }
     /* placed where an Android state's ranges put an image */
     memset(&env, 0, sizeof env);
@@ -216,6 +245,14 @@ int main(int argc, char **argv)
     d.cut = "v0.11.8-android/texts.1.z";
     t = ico_legacy_load(dir_read, &d, "v0.11.8-android", why, sizeof why);
     CHECK(t == NULL, "a text file cut short: %s", t == NULL ? why : "loaded");
+    ico_legacy_free(t);
+    d.cut = NULL;
+    d.old_index = 1;
+    t = ico_legacy_load(dir_read, &d, "v0.11.8-android", why, sizeof why);
+    CHECK(t == NULL && strstr(why, "text index is of format 1, not 2") != NULL &&
+              strstr(why, "rebuilt") != NULL,
+          "a table of the first format (no text_index): refused, named: %s",
+          t == NULL ? why : "loaded");
     ico_legacy_free(t);
     return ico_check_summary("state_legacy");
 }

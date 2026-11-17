@@ -1306,7 +1306,10 @@ assets. A release candidate's table goes only into release candidate APKs. The t
 
 - the version's symbol file (`syms.gzip`: an Android asset ending in `.gz` is un-gzipped and
   renamed by the packaging, so the file must not have that name) and section lines;
-- the text runs of its `.rodata`;
+- the text runs of its `.rodata`, each marked when it starts a literal (the byte before it is
+  zero, or it is the section's first byte: the table holds only the runs' bytes). The manifest's
+  `text_index 2` names this format, and a table without it is refused (`the table must be
+  rebuilt`);
 - every function's code hash, under rules 1 and under the current rules
   (`tools/code_hash_a64.py`, the C rules in Python).
 
@@ -1325,7 +1328,8 @@ describes it (`IcoXbProc.legacy`):
 - **Texts and anonymous read-only data.** The ordinary window rule applies (the bytes from the word
   to the end of its text, widened until unique in its run). It reads the old bytes from the
   table's runs. A window that starts a literal (a zero byte before it) is matched only where a
-  literal starts here (`XW_LSTART`).
+  literal starts here (`XW_LSTART`). A window at the start of a run takes the run's mark from
+  the table, since the byte before the run is not in it.
 - **Page words.** The old code is not here, but each function with a frame hashes alike, so this
   build's same function holds the same ADRPs at the same offsets. Each ADRP's target here is placed
   back in the old program by name and ordinal (`old_of`: the game ranges, a unit, or a data
