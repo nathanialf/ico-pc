@@ -888,7 +888,12 @@ screen) and `zipalign -c -P 16 -v 4`. Before the alignment it adds
 `assets/libmain.syms.gz` to the APK, stored: `llvm-nm -n --defined-only` of the unstripped
 `libmain.so`, its code symbols (`T`, `t`, `W`, `w`), gzip-compressed, from which a crash or
 watchdog report names its functions on the phone
-([PLATFORM.md](port/PLATFORM_DIAGNOSTICS.md#the-symbol-lines)); the signed APK is checked to hold it stored. The
+([PLATFORM.md](port/PLATFORM_DIAGNOSTICS.md#the-symbol-lines)), then its data symbols with their
+sizes (a local whose name is not unique with its source file in a fifth column, from
+`llvm-readelf -s`'s FILE entries) and its allocated sections from `llvm-readelf -S`
+(`section <address> <size> <flags> <name>`; the package fails without the `.text` and `.rodata`
+lines), which the save states' table reads
+([PLATFORM.md](port/PLATFORM.md#across-versions)); the signed APK is checked to hold it stored. The
 unstripped `libmain.so`, `ico_pc.map`, `libmain.syms.gz` and `VERSION.txt` are left in
 `dist/stage/android/`.
 
