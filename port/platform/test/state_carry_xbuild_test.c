@@ -32,6 +32,9 @@
  * tools/state_carry_check.py xbuild runs A's state into B and B's into A
  * and checks each program's layout line ("layout separate" for A, "layout
  * merged" for B: a text's address inside the image's code range).
+ * The save judges both programs as the loader places Android's library
+ * (high: IcoXbProc.judge_lo), where every read-only word is named by its
+ * bytes; under Windows' fixed base only texts are (state_name covers that).
  * Nothing of the game starts.  POSIX ELF only (the CMake file says where).
  */
 #include <stdint.h>
@@ -230,6 +233,13 @@ static int save(const char *path)
     p.snap = s_snap;
     p.snap_words = s_snap_words;
     p.any_address = 1; /* a test program may lie below 4 GB */
+    /* judged as a program the loader places high (Android's library, a
+       PIE): there a read-only word that is no text is named by its bytes,
+       where under an upper half of 0 or 1 (Windows' fixed base, this
+       non-PIE test program) the save keeps it as a number (state_xbuild.h,
+       ICO_XB_WHY_NUMBER) and the block's constant-table word would stay
+       untranslated */
+    p.judge_lo = 0x7000000000ull;
     r = ico_xb_begin(&p);
     if (r == NULL) {
         return fail("no memory", NULL);

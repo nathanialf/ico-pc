@@ -34,6 +34,10 @@
  *   words PATH          lines "<class> <offset>": the init and table words
  *   list N              the unnamed words listed per class at most (the
  *                       init class: all of them)
+ *   judge ADDR          the address the save's number rule judges the image
+ *                       by (IcoXbProc.judge_lo): the program's own base where
+ *                       it runs (Windows' 0x140000000; a high address for an
+ *                       ELF placed by the loader), not this mapping's
  *
  * The image is mapped at an address aligned to 64 KB (an arm64 ADRP's page
  * and every offset below 64 KB stay what they are in the program), the
@@ -48,11 +52,15 @@
  * decoded with code_hash.c's decoders.
  *
  * Output lines:
- *   symbols units N data N layout HASH
+ *   symbols units N data N layout HASH sections N code LO HI from WHAT
+ *                       (the code range ico_xb_image makes of the symbol
+ *                       file's code sections, or the loader's)
  *   class CLS words N named N unnamed N overflow 0|1
  *   kind CLS KIND N     where the class's words point (unit, game, data,
  *                       start-up, content): a description, not the verdict
- *   unnamed CLS OFF     each unnamed word (offset from the image's start)
+ *   unnamed CLS OFF WHY TEXT
+ *                       each unnamed word (offset from the image's start),
+ *                       its ICO_XB_WHY_* and ico_xb_why_text
  * Status 0, or 2 with the reason on a line of its own.
  */
 #include <stdint.h>
@@ -90,6 +98,9 @@ typedef struct Probe {
     Words cls[CLS_N];
     size_t list;
     char *anchor; /* the anchor's name (the table's env points at it) */
+    /* the image as the save judges it: ico_xb_image's code range from the
+       symbol file's code sections, the rest of the loader's read-only */
+    IcoStateImage code;
 } Probe;
 
 static int die(const char *what, const char *arg)
@@ -272,7 +283,7 @@ static int code_words(Probe *p, int arch)
         const IcoSymUnit *u = &p->tab->unit[i];
         const uint8_t *c = (const uint8_t *)(uintptr_t)u->start;
 
-        if (u->start < p->proc.image.text_lo || u->start + u->size > p->proc.image.text_hi) {
+        if (u->start < p->code.text_lo || u->start + u->size > p->code.text_hi) {
             continue;
         }
         if ((arch == ICO_CODE_X64   ? code_x64(p, c, u->start, u->size)
@@ -287,8 +298,9 @@ static int code_words(Probe *p, int arch)
 
 /* --- the verdict -------------------------------------------------------------------- */
 
-/* the words nothing names among n (ico_xb_finish's count), or -1 */
-static long run_left(const Probe *p, const uint64_t *w, size_t n, int *overflow)
+/* the words nothing names among n (ico_xb_finish's count), or -1; *why
+   (when not NULL) the first listed one's ICO_XB_WHY_* (0: none listed) */
+static long run_left(const Probe *p, const uint64_t *w, size_t n, int *overflow, unsigned *why)
 {
     IcoXbRefs *r = ico_xb_begin(&p->proc);
     IcoXbStats st;
@@ -308,11 +320,15 @@ static long run_left(const Probe *p, const uint64_t *w, size_t n, int *overflow)
     if ((st.flags & ICO_XB_OVERFLOW) != 0) {
         *overflow = 1;
     }
+    if (why != NULL) {
+        *why = st.listed > 0 ? st.list[0].reason : 0u;
+    }
     return (long)st.left;
 }
 
 typedef struct Found {
     uint64_t *w;
+    unsigned *why; /* each one's ICO_XB_WHY_* */
     size_t n, cap; /* cap: the list's bound */
     unsigned long long count;
     int overflow, failed;
@@ -327,12 +343,16 @@ static void isolate(const Probe *p, const uint64_t *w, size_t n, long left, Foun
         return;
     }
     if (n == 1) {
+        if (run_left(p, w, 1, &f->overflow, &f->why[f->n]) < 0) {
+            f->failed = 1;
+            return;
+        }
         f->w[f->n++] = w[0];
         return;
     }
     h = n / 2;
-    l1 = run_left(p, w, h, &f->overflow);
-    l2 = run_left(p, w + h, n - h, &f->overflow);
+    l1 = run_left(p, w, h, &f->overflow, NULL);
+    l2 = run_left(p, w + h, n - h, &f->overflow, NULL);
     if (l1 < 0 || l2 < 0) {
         f->failed = 1;
         return;
@@ -346,7 +366,7 @@ static const char *kind_of(const Probe *p, uint64_t w)
     const IcoXbProc *x = &p->proc;
     int i;
 
-    if (w >= x->image.text_lo && w < x->image.text_hi && ico_symtab_unit_at(p->tab, w) != NULL) {
+    if (w >= p->code.text_lo && w < p->code.text_hi && ico_symtab_unit_at(p->tab, w) != NULL) {
         return "unit";
     }
     for (i = 0; i < 2; i++) {
@@ -379,21 +399,26 @@ static int judge(Probe *p, int c)
     memset(&f, 0, sizeof f);
     f.cap = c == CLS_INIT ? s->n : (p->list < s->n ? p->list : s->n);
     f.w = (uint64_t *)malloc((f.cap ? f.cap : 1) * sizeof *f.w);
-    if (f.w == NULL) {
+    f.why = (unsigned *)calloc(f.cap ? f.cap : 1, sizeof *f.why);
+    if (f.w == NULL || f.why == NULL) {
+        free(f.w);
+        free(f.why);
         return -1;
     }
     for (i = 0; i < s->n; i += batch) {
         const size_t n = s->n - i < batch ? s->n - i : batch;
-        const long left = run_left(p, s->w + i, n, &f.overflow);
+        const long left = run_left(p, s->w + i, n, &f.overflow, NULL);
 
         if (left < 0) {
             free(f.w);
+            free(f.why);
             return -1;
         }
         f.count += (unsigned long long)left;
         isolate(p, s->w + i, n, left, &f);
         if (f.failed) {
             free(f.w);
+            free(f.why);
             return -1;
         }
     }
@@ -414,10 +439,12 @@ static int judge(Probe *p, int c)
         }
     }
     for (i = 0; i < f.n; i++) {
-        printf("unnamed %s %llx\n", CLS_NAME[c],
-               (unsigned long long)(f.w[i] - (uint64_t)(uintptr_t)p->base));
+        printf("unnamed %s %llx %u %s\n", CLS_NAME[c],
+               (unsigned long long)(f.w[i] - (uint64_t)(uintptr_t)p->base), f.why[i],
+               ico_xb_why_text(f.why[i]));
     }
     free(f.w);
+    free(f.why);
     return 0;
 }
 
@@ -428,7 +455,7 @@ static int parse_desc(Probe *p, char *text, int *arch)
     char *line = text, *nl;
     char *image_path = NULL, *relocs_path = NULL, *syms_path = NULL, *words_path = NULL;
     char *anchor = NULL;
-    unsigned long long a, b, anchor_off = 0, n_relocs = 0, image_size = 0;
+    unsigned long long a, b, anchor_off = 0, n_relocs = 0, image_size = 0, judge_at = 0;
     unsigned long long range_hi = 0, text_lo = 0, text_hi = 0, game[2][2] = {{0, 0}, {0, 0}};
     unsigned long long ro[ICO_STATE_IMAGE_RO][2];
     int n_ro = 0, i;
@@ -489,6 +516,8 @@ static int parse_desc(Probe *p, char *text, int *arch)
             anchor = dup_text(path);
             p->anchor = anchor;
             anchor_off = a;
+        } else if (strcmp(key, "judge") == 0 && sscanf(line, "judge %llx", &a) == 1) {
+            judge_at = a;
         } else if (strcmp(key, "list") == 0 && sscanf(line, "list %u", &u) == 1) {
             p->list = u;
         } else {
@@ -570,6 +599,9 @@ static int parse_desc(Probe *p, char *text, int *arch)
         p->n_snap = x->snap_words;
         qsort(p->snap_sorted, p->n_snap, sizeof *p->snap_sorted, u64_cmp);
         x->any_address = 1; /* the mapping's own address is not the program's */
+        /* the address the number rule judges by: the program's own base
+           (Windows' 0x140000000), not this mapping's */
+        x->judge_lo = judge_at;
 
         memset(&env, 0, sizeof env);
         env.anchor = anchor;
@@ -595,8 +627,13 @@ static int parse_desc(Probe *p, char *text, int *arch)
         return die("the symbol file was refused", why);
     }
     p->proc.tab = p->tab;
-    printf("symbols units %zu data %zu layout %016llx\n", p->tab->n_unit, p->tab->n_data,
-           (unsigned long long)p->tab->layout_hash);
+    p->code = p->proc.image;
+    ico_xb_image(p->tab, &p->code);
+    printf("symbols units %zu data %zu layout %016llx sections %zu code %llx %llx from %s\n",
+           p->tab->n_unit, p->tab->n_data, (unsigned long long)p->tab->layout_hash, p->tab->n_sec,
+           (unsigned long long)(p->code.text_lo - (uint64_t)(uintptr_t)p->base),
+           (unsigned long long)(p->code.text_hi - (uint64_t)(uintptr_t)p->base),
+           p->tab->code_from ? "its code sections" : "the loader's segments");
     /* the init and table words */
     words = read_file(words_path, &words_n);
     if (words == NULL) {

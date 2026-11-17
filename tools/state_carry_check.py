@@ -90,6 +90,7 @@ PF_X, PF_W = 1, 2
 SHF_WRITE, SHF_ALLOC, SHF_EXECINSTR = 1, 2, 4
 EM_X86_64, EM_AARCH64 = 62, 183
 ARCH_X64, ARCH_A64 = 1, 2  # code_hash.h ICO_CODE_*
+ELF_JUDGE = 0x7000000000  # where an ELF the loader places lies, for the number rule (Android: 0x7...)
 ICO_STATE_IMAGE_RO = 8  # state_reloc.h
 
 # relocation types: value = target (link address), None = not an address in
@@ -419,7 +420,7 @@ def pe_game_ranges(p, syms):
 
 class SymFile:
     NM3 = re.compile(r"^([0-9A-Fa-f]+) ([A-Za-z]) (\S+)$")
-    NM4 = re.compile(r"^([0-9A-Fa-f]+) ([0-9A-Fa-f]+) ([A-Za-z]) (\S+)$")
+    NM4 = re.compile(r"^([0-9A-Fa-f]+) ([0-9A-Fa-f]+) ([A-Za-z]) (\S+)( \S+)?$")
     GNU_SYM = re.compile(r"^\s+0x([0-9A-Fa-f]+)\s+(\S+)$")
     GNU_SEC = re.compile(r"^ (\S+)\s+0x([0-9A-Fa-f]+)\s+0x([0-9A-Fa-f]+)\s+(\S.*)$")
     GNU_SEC2 = re.compile(r"^\s+0x([0-9A-Fa-f]+)\s+0x([0-9A-Fa-f]+)\s+(\S.*)$")
@@ -441,6 +442,8 @@ class SymFile:
             if m:
                 self.items.append((m.group(3), int(m.group(1), 16)))
                 continue
+            if line.startswith("section "):
+                continue  # the table's section lines (the probe reads them)
             m = self.NM4.match(line)
             if m:
                 self.items.append((m.group(4), int(m.group(1), 16)))
@@ -619,6 +622,10 @@ def run_probe(probe, prog, syms_path, init, table, workdir, list_n):
         f.write("anchor ico_diag_init %x\n" % prog["anchor"])
         f.write("words %s\n" % words)
         f.write("list %d\n" % list_n)
+        # the base the save's number rule judges by (IcoXbProc.judge_lo): a
+        # PE's own (Windows' 0x140000000, where numbers reach the image), an
+        # ELF the loader places high (Android's library, a PIE)
+        f.write("judge %x\n" % (prog["link_lo"] if prog["kind"] == "pe" else ELF_JUDGE))
     r = subprocess.run([probe, desc], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     out = r.stdout.decode("utf-8", "replace")
     if r.returncode != 0:
@@ -633,6 +640,7 @@ def run_probe(probe, prog, syms_path, init, table, workdir, list_n):
                                         overflow=int(t[9]))
         elif t[0] == "unnamed":
             res["unnamed"][t[1]].append(int(t[2], 16))
+            res.setdefault("why", {})[(t[1], int(t[2], 16))] = line.split(None, 4)[4] if len(t) > 4 else ""
         elif t[0] == "kind":
             res["kinds"].setdefault(t[1], {})[t[2]] = int(t[3])
         elif t[0] == "symbols":
@@ -663,6 +671,8 @@ def emulate_v0118(prog, syms, init, table):
             items.append((int(t[0], 16) - lo, 0, 0, t[2], seq))
         elif len(t) == 4 and len(t[2]) == 1 and t[2] in "TtWwDdBbRrVvSsGg" and re.match(r"^[0-9A-Fa-f]+$", t[0]):
             items.append((int(t[0], 16) - lo, int(t[1], 16), 1, t[3], seq))
+        elif t and (t[0] == "section" or (len(t) == 5 and re.match(r"^[0-9A-Fa-f]+$", t[0]))):
+            pass  # a later table's section lines and file column: the old parser read neither
         elif t:
             is_map = True
     if is_map:
@@ -820,8 +830,9 @@ def check(a):
         if cls == "init" and c["unnamed"]:
             say("      (%d words of the game data hold them)" % sum(len(init.get(w, ())) for w in res["unnamed"][cls]))
         for w in shown:
-            line = "      unnamed 0x%x in %s, %s%s" % (w + lo, section_of(prog, w), nearest(names, w + lo),
-                                                   preview(prog["buf"], w))
+            why = res.get("why", {}).get((cls, w))
+            line = "      unnamed 0x%x in %s, %s%s%s" % (w + lo, section_of(prog, w), nearest(names, w + lo),
+                                                     preview(prog["buf"], w), ": " + why if why else "")
             if holders.get(w):
                 hs = holders[w]
                 line += "; held by %s" % ", ".join(nearest(names, s + lo) for s in hs[:4])
@@ -873,10 +884,12 @@ def emit(a, out):
 
 def nm_letter(e, name, value, size, shndx, typ, bind):
     """GNU/llvm nm's type letter for the classes package_android.sh keeps"""
-    if shndx == 0 or shndx >= 0xFF00 and shndx != 0xFFF1 or typ in (3, 4, 6):  # SECTION, FILE, TLS
+    if shndx == 0 or shndx >= 0xFF00 and shndx != 0xFFF1 or typ in (3, 4):  # SECTION, FILE
         return None
-    if bind == 2:  # weak
-        return "W" if typ == 2 else "V"
+    if bind == 10:  # GNU unique: nm's "u", which the table does not keep
+        return None
+    if bind == 2:  # weak: an object V, anything else W
+        return "V" if typ == 1 else "W"
     if shndx == 0xFFF1:
         return None
     s = e.sh[shndx]
@@ -894,12 +907,33 @@ def nm_letter(e, name, value, size, shndx, typ, bind):
     return c.lower() if local else c
 
 
+GNU_FLAGS = [(0x1, "W"), (0x2, "A"), (0x4, "X"), (0x10, "M"), (0x20, "S"), (0x40, "I"), (0x80, "L"),
+             (0x100, "O"), (0x200, "G"), (0x400, "T"), (0x800, "C"), (0x80000000, "E"), (0x200000, "R")]
+
+
+def section_flags(fl):
+    """llvm-readelf -S's flag letters (the ones an allocated section of the
+    shipped programs carries)"""
+    return "".join(c for bit, c in GNU_FLAGS if fl & bit)
+
+
 def write_syms(a):
+    """tools/package_android.sh's libmain.syms from an ELF: llvm-nm's code
+    lines, its sized data lines (a local whose name repeats among them with
+    its source file, from the FILE entries before it, in a fifth column),
+    then llvm-readelf -S's allocated sections but TLS as section lines"""
     e = Elf(a.binary)
     if ".symtab" not in e.by:
         raise Fail("%s has no .symtab (an unstripped program is needed)" % a.binary)
     code, data = [], []
+    files = {}
+    cur = ""
     for name, value, size, shndx, typ, bind in e.symbols():
+        if typ == 4:  # FILE
+            cur = name
+            continue
+        if bind == 0 and typ != 3 and cur and name:
+            files[(value, name)] = cur
         if not name or name.startswith("$"):
             continue
         c = nm_letter(e, name, value, size, shndx, typ, bind)
@@ -911,11 +945,21 @@ def write_syms(a):
             data.append((value, size, c, name))
     code.sort(key=lambda r: (r[0], r[2]))
     data.sort(key=lambda r: (r[0], r[3]))
+    count = {}
+    for d in data:
+        count[d[3]] = count.get(d[3], 0) + 1
     with open(a.out, "w") as f:
         for v, c, n in code:
             f.write("%016x %s %s\n" % (v, c, n))
-        for v, s, c, n in data:
-            f.write("%016x %016x %s %s\n" % (v, s, c, n))
+        for v, sz, c, n in data:
+            if count[n] > 1 and (v, n) in files:
+                f.write("%016x %016x %s %s %s\n" % (v, sz, c, n, files[(v, n)]))
+            else:
+                f.write("%016x %016x %s %s\n" % (v, sz, c, n))
+        for sec in e.sh:
+            if sec["flags"] & SHF_ALLOC and not sec["flags"] & 0x400 and sec["size"]:
+                f.write("section %016x %06x %s %s\n" % (sec["addr"], sec["size"], section_flags(sec["flags"]),
+                                                       sec["name"]))
     return 0
 
 
@@ -1005,7 +1049,9 @@ def selftest(a):
             # the fixture's game table (state_carry_fixture.c): 7 pointers, 6
             # targets (two hold one text); the negative case leaves exactly
             # one of them unnamed (carry_hidden)
-            if status != want or nt != FIXTURE_TARGETS or nu != (1 if neg else 0):
+            # the negative word must be refused for the right reason
+            wrong_why = neg and "in the code but in no function" not in rep
+            if status != want or nt != FIXTURE_TARGETS or nu != (1 if neg else 0) or wrong_why:
                 failures.append("%s%s: status %d (want %d), %d init targets (want %d), %d unnamed (want %d)" % (
                     name, " (negative)" if neg else "", status, want, nt, FIXTURE_TARGETS, nu, 1 if neg else 0))
             print("selftest %s%s: status %d, %d init targets, %d unnamed" % (

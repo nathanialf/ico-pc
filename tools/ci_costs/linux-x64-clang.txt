@@ -1103,6 +1103,7 @@ state_fiber_guard 0.05
 state_format 0.07
 state_guard 0.00
 state_host 0.01
+state_name 0.01  # estimate: 0.0x s local (STATENAME's merge check), a unit test like state_port
 state_port 0.02
 state_recover 0.02
 state_recover_aug6 0.02
