@@ -383,14 +383,24 @@ def c_table(entries, skipped):
     return "\n".join(out)
 
 
-ENTRY_RE = re.compile(r'^    \{"(v[^"]*)", "([^"]*)", "([a-z0-9-]+)", 0x([0-9a-f]+)u, 0x([0-9a-f]+)u,$')
+# an entry's head as C text, whatever its line breaks (tools/format.sh lays the
+# generated table out again: one field a line)
+ENTRY_RE = re.compile(r'\{\s*"(v[^"]*)",\s*"([^"]*)",\s*"([a-z0-9-]+)",\s*0x([0-9a-f]+)u,\s*'
+                      r'0x([0-9a-f]+)u,')
+SHA_RE = re.compile(r'"[0-9a-f]{64}"')
 
 
 def read_table(path):
     with open(path, encoding="utf-8") as f:
         text = f.read()
-    return [(m.group(1), m.group(2), m.group(3)) for m in
-            (ENTRY_RE.match(line) for line in text.splitlines()) if m]
+    entries = [(m.group(1), m.group(2), m.group(3)) for m in ENTRY_RE.finditer(text)]
+    # every entry carries one SHA-256: a count that differs is an entry this
+    # reader did not see (a layout it does not know), never a smaller table
+    shas = len(SHA_RE.findall(text))
+    if shas != len(entries):
+        raise SystemExit("state_checkpoint_table: %s: %d entries read but %d SHA-256 texts: the "
+                         "reader does not know this file's layout" % (path, len(entries), shas))
+    return entries
 
 
 def check_table(path):
@@ -483,6 +493,11 @@ def main(argv):
         entries.sort(key=lambda e: (order.get(e["tag"], len(order)), e["platform"]))
         with open(a.out, "w", encoding="utf-8") as f:
             f.write(c_table(entries, skipped))
+        fmt = os.path.join(ROOT, "tools", "format.sh")
+        if os.path.abspath(a.out).startswith(os.path.join(ROOT, "port") + os.sep) and \
+                os.path.exists(fmt):
+            import subprocess
+            subprocess.run([fmt, a.out], check=True)
         print("state_checkpoint_table: wrote %s (%d entries, %d left out)"
               % (a.out, len(entries), len(skipped)))
         return 0
