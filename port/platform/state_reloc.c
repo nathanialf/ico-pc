@@ -429,3 +429,32 @@ int ico_state_region_holds(const void *region, size_t n, const uint64_t *vals, s
     }
     return 0;
 }
+
+int ico_state_move_check(const IcoStateMoveIn *in, uint64_t *nums, size_t cap, size_t *nk,
+                         uint64_t *held_value)
+{
+    const int amb = ico_state_reloc_ambiguous(in->rel);
+    size_t found = 0;
+    int i;
+
+    *nk = 0;
+    if (amb >= 0) {
+        return amb;
+    }
+    if (in->rel->xlate == NULL || (in->saved_image_lo >> 32) >= ICO_STATE_SCAN_HIGH_MIN) {
+        return ICO_STATE_MOVE_OK;
+    }
+    for (i = 0; i < in->n_data; i++) {
+        found += ico_state_code_numbers(in->rel->xlate, in->text_lo, in->text_hi, in->data[i],
+                                        in->data_n[i], nums, cap, nk);
+    }
+    if (found > *nk) {
+        return ICO_STATE_MOVE_TOO_MANY;
+    }
+    for (i = 0; i < in->n_held && *nk > 0; i++) {
+        if (ico_state_region_holds(in->held[i], in->held_n[i], nums, *nk, held_value)) {
+            return ICO_STATE_MOVE_HELD;
+        }
+    }
+    return ICO_STATE_MOVE_OK;
+}

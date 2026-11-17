@@ -2712,6 +2712,112 @@ static void vd_release(void *res, void *user)
     e->ap = NULL;
 }
 
+/* Issue 218's rules in the verdict, from the file (perform_load applies the
+   same ones, ico_state_move_check's parts, to its staged sections before the
+   restore): ICO_STATE_OK, or the result the load would route to its
+   checkpoint (SELF_CHECK for this build's state, OTHER_BUILD for another
+   build's) with detail.  The ranges record alone, and for another build's
+   state of an image below the bound its data, threads and scheduler's
+   table. */
+static IcoStateResult vd_move_rules(const char *path, int xb, const IcoXbVerdict *xv, char *detail,
+                                    size_t n)
+{
+    static uint64_t nums[4096];
+    static const char *const names[ICO_RELOC_RANGES] = {"program's image", "arena", "fiber pool",
+                                                        "model tables"};
+    static const int data_secs[] = {SEC_ARENA, SEC_GDATA, SEC_GBSS, SEC_REG, SEC_AUDIO};
+    const void *data[5], *held[2];
+    size_t data_n[5], held_n[2], nk = 0;
+    uint64_t held_value = 0;
+    IcoStateReloc rel;
+    IcoStateXlate xl;
+    IcoStateMoveIn in;
+    StateRanges rg;
+    Copy c;
+    LoadCtx lc;
+    int verdict, i;
+
+    memset(&c, 0, sizeof c);
+    memset(&lc, 0, sizeof lc);
+    lc.c = &c;
+    lc.xb = xb;
+    lc.want = 1u << SEC_RANGES;
+    if (ico_state_file_read(path, NULL, load_section, &lc) != ICO_STATE_OK || lc.bad ||
+        c.n[SEC_RANGES] != sizeof(StateRanges)) {
+        copy_free(&c);
+        return ICO_STATE_OK; /* the load reads the file again and decides */
+    }
+    memcpy(&rg, c.p[SEC_RANGES], sizeof rg);
+    copy_free(&c);
+    if (rg.magic != RANGES_MAGIC) {
+        return ICO_STATE_OK;
+    }
+    build_reloc(&rel, &rg, NULL);
+    memset(&xl, 0, sizeof xl);
+    if (xb && xv != NULL) {
+        xl.span = xv->span;
+        xl.n_span = xv->n_span;
+        xl.point = xv->point;
+        xl.n_point = xv->n_point;
+        rel.xlate = &xl;
+    }
+    memset(&in, 0, sizeof in);
+    in.rel = &rel;
+    in.saved_image_lo = rg.image_lo;
+    in.text_lo = rg.text_lo;
+    in.text_hi = rg.text_hi;
+    if (rel.xlate != NULL && (rg.image_lo >> 32) < ICO_STATE_SCAN_HIGH_MIN &&
+        ico_state_reloc_ambiguous(&rel) < 0) {
+        /* the numbers inside the old code: the whole state */
+        memset(&lc, 0, sizeof lc);
+        lc.c = &c;
+        lc.xb = xb;
+        lc.want = 1u << SEC_ARENA | 1u << SEC_GDATA | 1u << SEC_GBSS | 1u << SEC_REG |
+                  1u << SEC_AUDIO | 1u << SEC_FIBERS | 1u << SEC_SCHED;
+        if (ico_state_file_read(path, NULL, load_section, &lc) != ICO_STATE_OK || lc.bad) {
+            copy_free(&c);
+            return ICO_STATE_OK;
+        }
+        for (i = 0; i < 5; i++) {
+            data[i] = c.p[data_secs[i]];
+            data_n[i] = (size_t)c.n[data_secs[i]];
+        }
+        held[0] = c.p[SEC_FIBERS];
+        held_n[0] = (size_t)c.n[SEC_FIBERS];
+        held[1] = c.p[SEC_SCHED];
+        held_n[1] = (size_t)c.n[SEC_SCHED];
+        in.data = data;
+        in.data_n = data_n;
+        in.n_data = 5;
+        in.held = held;
+        in.held_n = held_n;
+        in.n_held = 2;
+    }
+    verdict = ico_state_move_check(&in, nums, sizeof nums / sizeof nums[0], &nk, &held_value);
+    copy_free(&c);
+    if (verdict >= 0 && verdict < ICO_RELOC_RANGES) {
+        snprintf(detail, n,
+                 "the %s it was saved with lies elsewhere in this run and its addresses "
+                 "cannot be told from the game's numbers",
+                 names[verdict]);
+        return xb ? ICO_STATE_OTHER_BUILD : ICO_STATE_SELF_CHECK;
+    }
+    if (verdict == ICO_STATE_MOVE_TOO_MANY) {
+        snprintf(detail, n,
+                 "its data holds more numbers that read as addresses inside the "
+                 "earlier version's code than a load keeps");
+        return ICO_STATE_OTHER_BUILD;
+    }
+    if (verdict == ICO_STATE_MOVE_HELD) {
+        snprintf(detail, n,
+                 "0x%llx inside the earlier version's code is a number in its data and a word "
+                 "of a thread's stack or the scheduler's table",
+                 (unsigned long long)held_value);
+        return ICO_STATE_OTHER_BUILD;
+    }
+    return ICO_STATE_OK;
+}
+
 /* Works out slot's verdict (the work lock held: the worker or a load). */
 static int vd_compute(int slot, void *user, void *res, IcoVdKey *key)
 {
@@ -2741,6 +2847,15 @@ static int vd_compute(int slot, void *user, void *res, IcoVdKey *key)
             out->exact = ICO_STATE_PERMADEATH;
             snprintf(out->detail, sizeof out->detail, "%s",
                      "the state was saved on a Permadeath journey");
+            ico_xb_verdict_free(&out->xv);
+            out->have_xv = 0;
+        }
+    }
+    if (out->exact == ICO_STATE_OK) {
+        /* issue 218: what the load decides before its restore */
+        out->exact = vd_move_rules(path, xb, out->have_xv ? &out->xv : NULL, out->detail,
+                                   sizeof out->detail);
+        if (out->exact != ICO_STATE_OK && out->have_xv) {
             ico_xb_verdict_free(&out->xv);
             out->have_xv = 0;
         }
@@ -3562,6 +3677,18 @@ static void perform_delete(int slot)
 
 /* --- the listing --------------------------------------------------------------- */
 
+/* 1 when this build's state in slot has a range the scan may not move in
+   this run (issue 218: an iOS state after a restart): the listing then
+   takes the slot's verdict, which names its checkpoint, as for another
+   build's state.  The ranges record alone (152 bytes). */
+static int slot_moves_refused(int slot)
+{
+    char path[ICO_PATH_MAX], why[8];
+
+    return ico_state_slot_path(path, sizeof path, s_dir, slot, ".ics") == 0 &&
+           vd_move_rules(path, 0, NULL, why, sizeof why) != ICO_STATE_OK;
+}
+
 void ico_state_list(IcoStateSlotInfo out[ICO_STATE_SLOTS])
 {
     static IcoStateSlotInfo cache[ICO_STATE_SLOTS];
@@ -3583,9 +3710,10 @@ void ico_state_list(IcoStateSlotInfo out[ICO_STATE_SLOTS])
 
         ico_state_list_dir(ico_state_dir(), now, cache);
         for (i = 0; i < ICO_STATE_SLOTS; i++) {
-            if (cache[i].present && !cache[i].loadable &&
-                (cache[i].why_not == ICO_STATE_OTHER_BUILD ||
-                 cache[i].why_not == ICO_STATE_OTHER_PLATFORM)) {
+            if (cache[i].present &&
+                ((!cache[i].loadable && (cache[i].why_not == ICO_STATE_OTHER_BUILD ||
+                                         cache[i].why_not == ICO_STATE_OTHER_PLATFORM)) ||
+                 (cache[i].loadable && slot_moves_refused(i + 1)))) {
                 /* another build's or platform's state: its verdict from the
                    worker; until it comes the row stands on its header and a
                    Load works it out (vd_load_exact, load_checkpoint) */

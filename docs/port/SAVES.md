@@ -447,7 +447,12 @@ logged `state: slot N cannot be moved into this run exactly: the <range> it was 
 lies elsewhere now (+0x..) and its addresses' upper half 0x.. is below 0x10, ... (W words of the
 saved arena lie in it; ...), so nothing is moved and it continues from its checkpoint`, and the
 checkpoint's line follows with `the restored memory failed its checks` as the exact path's
-refusal. In the same process every delta is 0 and such a state resumes exactly. The iOS state of
+refusal. In the same process every delta is 0 and such a state resumes exactly. The Save states
+page says so in advance: the listing's verdict (`vd_compute`) applies the same rules from the
+file (`vd_move_rules`, `ico_state_move_check`: the `ranges` record, and for another build's
+Windows state its data, threads and scheduler's table), and a slot of this build whose ranges the
+rule refuses in this run (`slot_moves_refused`, the 152-byte record read on the listing) takes
+that verdict too, so its row shows that Load continues from its last checkpoint. The iOS state of
 issue 218 (NTSC disc, stage 37, play time 7:54:12 at 60 frames a second) is found by the
 table's `ios-arm64` entry for its release, which its bytes confirm (the image at `gbss`+0x2ac5d0, the
 checkpoint's stage 46, `systemStatus[3]` 1), and the content search finds the same single image. Another disc and a Permadeath journey (the state's own record, read

@@ -963,7 +963,11 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   sorted list, a full list counting what it did not keep), a function's start, a point, a word
   outside the code and the code's end are not, a kept value a thread's stack holds is found, and the
   translation with the identity point keeps the number while the function's address and the point
-  move (`state_reloc`).
+  move; the verdict the load and the listing share (`ico_state_move_check`): an iOS state after a
+  restart names the image, in its own run it is OK, another build's Windows state whose kept
+  numbers a thread's stack holds is HELD (the first found named), without threads OK with the
+  three kept, a list too short is TOO_MANY, an image above the bound looks for no numbers, a
+  moved arena below the bound is named (`state_reloc`).
 - `state_format_test.c`: the save state file ([PLATFORM.md](PLATFORM.md#the-file)): a write read
   back field by field and byte by byte (an empty section, a 15-character name, a zero-heavy section
   packing to under an eighth), a skipped section left alone, a second write replacing the first, BUSY

@@ -386,7 +386,7 @@ static void test_code_numbers(void)
     static const IcoStateSpan spans[] = {
         {0x140001000ull, 0x1400010ffull, 0x140002000ull},
         {0x140498000ull, 0x140499fffull, 0x14049a000ull},
-        {0x1407d9000ull, 0x1407d9fffull, 0x1407db000ull},
+        {0x1405f8000ull, 0x1405f8fffull, 0x1405fa000ull},
         {0x140a00000ull, 0x140d1cbefull, 0x140a01000ull},
     };
     static const IcoStateSpan points[] = {{0x140600010ull, 0x140600010ull, 0x140601010ull}};
@@ -406,20 +406,20 @@ static void test_code_numbers(void)
     data[0] = ee_pair(0x40498c94u, 1u); /* {3.1492..., 1} (a real state's keyframe) */
     data[1] = 0x140498000ull;           /* a function's address */
     data[2] = 0x140600010ull;           /* a point */
-    data[3] = 0x1407d9a2aull;           /* {3.9625..., 1}, twice: one value */
-    data[4] = 0x1407d9a2aull;
+    data[3] = 0x1405f82feull;           /* {3.4923..., 1}, twice: one value */
+    data[4] = 0x1405f82feull;
     data[5] = 0x140a00000ull; /* {5.0, 1}: in the game's bss, outside the code */
     data[6] = 0x1406d9000ull; /* the code's end: not inside */
     data[7] = 0x140001000ull; /* the code's first function */
     CHECK(data[0] == 0x140498c94ull);
     CHECK(ico_state_code_numbers(&x, text_lo, text_hi, data, sizeof data, out, 8, &k) == 2);
-    CHECK(k == 2 && out[0] == 0x140498c94ull && out[1] == 0x1407d9a2aull);
+    CHECK(k == 2 && out[0] == 0x140498c94ull && out[1] == 0x1405f82feull);
     /* a second region adds to the one sorted list */
     data2[0] = 0x140498c94ull;
     data2[1] = 0x140100000ull;
     CHECK(ico_state_code_numbers(&x, text_lo, text_hi, data2, sizeof data2, out, 8, &k) == 1);
     CHECK(k == 3 && out[0] == 0x140100000ull && out[1] == 0x140498c94ull &&
-          out[2] == 0x1407d9a2aull);
+          out[2] == 0x1405f82feull);
     /* a full list: the words past it are counted (a repeat again: it is
        not in the list), not written; the caller sees more found than kept */
     k = 0;
@@ -434,18 +434,18 @@ static void test_code_numbers(void)
     /* a kept number that a thread's stack holds too (a return address
        there, perhaps): the load does not keep it */
     memset(stack, 0, sizeof stack);
-    stack[2] = 0x1407d9a2aull;
+    stack[2] = 0x1405f82feull;
     {
         const uint64_t one[1] = {0x140498c94ull};
         uint64_t which = 0;
 
-        /* out[] holds 0x140100000, 0x140498c94, 0x1407d9a2a (sorted) after
+        /* out[] holds 0x140100000, 0x140498c94, 0x1405f82fe (sorted) after
            the full-list call above wrote only its first: rebuild it */
         out[0] = 0x140100000ull;
         out[1] = 0x140498c94ull;
-        out[2] = 0x1407d9a2aull;
+        out[2] = 0x1405f82feull;
         CHECK(ico_state_region_holds(stack, sizeof stack, out, 3, &which) == 1 &&
-              which == 0x1407d9a2aull);
+              which == 0x1405f82feull);
         CHECK(ico_state_region_holds(stack, sizeof stack, one, 1, &which) == 0);
         CHECK(ico_state_region_holds(stack, sizeof stack, out, 0, NULL) == 0);
         CHECK(ico_state_region_holds(NULL, 32, out, 3, NULL) == 0);
@@ -467,6 +467,60 @@ static void test_code_numbers(void)
     x.point = points;
     x.n_point = 1;
     CHECK(ico_state_xlate(&x, 0x140498c94ull, &v) == 1 && v == 0x14049ac94ull);
+
+    /* the verdict the load and the Save states page's listing share
+       (ico_state_move_check), one row per outcome */
+    {
+        const void *regions[2] = {data, data2};
+        const size_t regions_n[2] = {sizeof data, sizeof data2};
+        const void *threads[1] = {stack};
+        const size_t threads_n[1] = {sizeof stack};
+        IcoStateReloc r;
+        IcoStateMoveIn in;
+        uint64_t held = 0;
+
+        memset(&r, 0, sizeof r);
+        memset(&in, 0, sizeof in);
+        in.rel = &r;
+        in.saved_image_lo = 0x140000000ull;
+        in.text_lo = text_lo;
+        in.text_hi = text_hi;
+        in.data = regions;
+        in.data_n = regions_n;
+        in.n_data = 2;
+        in.held = threads;
+        in.held_n = threads_n;
+        in.n_held = 1;
+        /* an iOS state after a restart (this build: no translation): the
+           image the scan may not move */
+        set_range(&r, ICO_RELOC_MODULE, IOS_MOD_LO, IOS_MOD_HI, IOS_MOD_DELTA);
+        in.saved_image_lo = IOS_MOD_LO;
+        CHECK(ico_state_move_check(&in, out, 8, &k, &held) == ICO_RELOC_MODULE && k == 0);
+        /* the same state in its own run: OK, nothing kept */
+        set_range(&r, ICO_RELOC_MODULE, IOS_MOD_LO, IOS_MOD_HI, 0);
+        CHECK(ico_state_move_check(&in, out, 8, &k, &held) == ICO_STATE_MOVE_OK && k == 0);
+        /* another build's Windows state: its numbers inside the code, two of
+           them on a thread's stack (stack[0] 0x140100000, stack[2]
+           0x1405f82fe): the checkpoint, the first found named */
+        memset(&r, 0, sizeof r);
+        set_range(&r, ICO_RELOC_MODULE, 0x140000000ull, 0x1430ef800ull, 0);
+        r.xlate = &x;
+        in.saved_image_lo = 0x140000000ull;
+        CHECK(ico_state_move_check(&in, out, 8, &k, &held) == ICO_STATE_MOVE_HELD &&
+              held == 0x140100000ull && k == 3);
+        /* no thread holds them: OK, the three kept */
+        in.n_held = 0;
+        CHECK(ico_state_move_check(&in, out, 8, &k, &held) == ICO_STATE_MOVE_OK && k == 3 &&
+              out[0] == 0x140100000ull && out[1] == 0x140498c94ull && out[2] == 0x1405f82feull);
+        /* more than the list holds: the checkpoint */
+        CHECK(ico_state_move_check(&in, out, 2, &k, &held) == ICO_STATE_MOVE_TOO_MANY);
+        /* an image above the bound (Android's): no numbers looked for */
+        in.saved_image_lo = 0x7768720000ull;
+        CHECK(ico_state_move_check(&in, out, 8, &k, &held) == ICO_STATE_MOVE_OK && k == 0);
+        /* another build's state whose arena moved below the bound */
+        set_range(&r, ICO_RELOC_ARENA, IOS_ARENA_LO, IOS_ARENA_HI, -0x2c5f00000ll);
+        CHECK(ico_state_move_check(&in, out, 8, &k, &held) == ICO_RELOC_ARENA);
+    }
 }
 
 /* --- the image ---------------------------------------------------------------- */

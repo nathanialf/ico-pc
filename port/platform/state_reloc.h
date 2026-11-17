@@ -220,6 +220,34 @@ size_t ico_state_code_numbers(const IcoStateXlate *x, uint64_t text_lo, uint64_t
 int ico_state_region_holds(const void *region, size_t n, const uint64_t *vals, size_t nv,
                            uint64_t *which);
 
+/* The two rules above as one verdict, for the load (state_host.c
+   perform_load, which applies them to its staged sections) and the Save
+   states page's listing (vd_compute, from the file): ICO_STATE_MOVE_OK; a
+   range the scan may not move (ico_state_reloc_ambiguous: its index,
+   ICO_RELOC_MODULE, _ARENA or _POOL); or, for another build's state from an
+   image whose upper half is below the bound (saved_image_lo; rel->xlate
+   set), the numbers inside the old code [text_lo, text_hi) of the n_data
+   data regions (ico_state_code_numbers into nums, cap, *nk) when there are
+   more than cap (ICO_STATE_MOVE_TOO_MANY) or one of them is a word of the
+   n_held regions (the fibers, the scheduler's table: ICO_STATE_MOVE_HELD,
+   *held_value that value).  Both later outcomes send the state to its
+   checkpoint; an OK with *nk > 0 keeps those numbers as identity points. */
+enum { ICO_STATE_MOVE_OK = -1, ICO_STATE_MOVE_HELD = ICO_RELOC_RANGES, ICO_STATE_MOVE_TOO_MANY };
+
+typedef struct IcoStateMoveIn {
+    const IcoStateReloc *rel;
+    uint64_t saved_image_lo, text_lo, text_hi;
+    const void *const *data; /* n_data regions (NULL entries skipped) */
+    const size_t *data_n;
+    int n_data;
+    const void *const *held; /* n_held regions */
+    const size_t *held_n;
+    int n_held;
+} IcoStateMoveIn;
+
+int ico_state_move_check(const IcoStateMoveIn *in, uint64_t *nums, size_t cap, size_t *nk,
+                         uint64_t *held_value);
+
 /* The 8-byte-aligned words inside [region, region + n) that lie in range
    `which` (lo <= word <= hi): what a scan would take for its addresses.
    0 for an empty range or an index outside the ranges. */
