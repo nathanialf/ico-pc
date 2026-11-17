@@ -10,7 +10,10 @@
  * version, under port/state_legacy/<name>/ (tools/state_legacy_table.py
  * builds them from the released APK; Android packages them as assets):
  *
- *   syms.gz       the version's own libmain.syms.gz, as released
+ *   syms.gzip     the version's own libmain.syms.gz, as released (not
+ *                 ".gz": Android's asset packaging un-gzips a .gz asset and
+ *                 drops the extension, which left v0.11.9-rc5's tables
+ *                 without their symbol file)
  *   sections.txt  its library's allocated sections ("section" lines)
  *   texts.idx     its .rodata's text runs (every run of C string literals):
  *                 per run the offset from the image start and the length,
@@ -34,10 +37,14 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define ICO_LEGACY_SYMS "syms.gzip"
+
 /* Reads the packaged file `path` (relative to the tables' root,
-   "index.txt", "v0.11.8-android/syms.gz"): 0 and *data (malloc'd), *n,
-   or -1. */
-typedef int (*IcoLegacyRead)(void *user, const char *path, void **data, size_t *n);
+   "index.txt", "v0.11.8-android/syms.gzip"): 0 and *data (malloc'd), *n,
+   or -1 with the reason in err (the reader's error text, at most err_n
+   bytes with the NUL). */
+typedef int (*IcoLegacyRead)(void *user, const char *path, void **data, size_t *n, char *err,
+                             size_t err_n);
 
 typedef struct IcoLegacyTable {
     char name[64];

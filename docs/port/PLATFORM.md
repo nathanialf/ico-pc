@@ -1304,7 +1304,8 @@ every such state was refused. A released build whose game data layout equals thi
 `tools/state_legacy_table.py` builds the table from the released APK. Android packages it as
 assets. A release candidate's table goes only into release candidate APKs. The table holds:
 
-- the version's symbol file and section lines;
+- the version's symbol file (`syms.gzip`: an Android asset ending in `.gz` is un-gzipped and
+  renamed by the packaging, so the file must not have that name) and section lines;
 - the text runs of its `.rodata`;
 - every function's code hash, under rules 1 and under the current rules
   (`tools/code_hash_a64.py`, the C rules in Python).
@@ -1353,6 +1354,16 @@ names another layout before any other reason. Two more changes came with this wo
   returns the room's address. The Android link drops with `--gc-sections` any input section no
   kept section refers to, and a version of the function that returned its own address left the
   room out: the bss ended 0x607 bytes short and the layout hash changed.
+- `tools/package_android.sh` and the CI android job open every file the game asks for in the
+  built APK, by its exact name, and compare it with the repository's
+  (`tools/state_legacy_table.py apkcheck`). A file the loader cannot read is named in the log
+  with the reader's reason (`cannot read <table>/sections.txt: ...`).
+- The symbols lock in `state_host.c` (`xb_lock`) covers the program's table, which is read
+  once, and its units' code hashes, which are computed on first use. It also covers the work
+  arrays of the save's record (`build_syms`) and of the check (`xb_probe`, with the legacy
+  read). The game thread and one worker, such as the Save states listing's verdict, may
+  therefore both check states. `state_xbuild.c` and `state_legacy.c` keep no statics, and a
+  legacy table is loaded for each check and freed after it.
 - `tools/package_android.sh` fails when the carry-over guard's layout hash is not the one
   `port/state_legacy/layout.txt` records (`tools/android_syms_lines.py layout`). If the game's
   data did not change, the link lost or moved an item. If it changed on purpose, the maintainer

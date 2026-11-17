@@ -922,17 +922,10 @@ jobs:
           # no more
           hooks=$(grep -c ' lib/arm64-v8a/lib[^/]*hook[^/]*\.so$' apk.lst || true)
           [ "$hooks" -eq 3 ] || { echo "APK holds $hooks hook libraries, expected 3"; exit 1; }
-          # the legacy tables (port/state_legacy): every release's, no release
-          # candidate's (this APK's label is not -rcN)
-          grep -q " assets/state_legacy/index.txt\$" apk.lst || { echo "APK lacks the legacy index"; exit 1; }
-          while read -r plat kind name commit; do
-            case "$plat" in '#'*|'') continue ;; esac
-            if [ "$kind" = rc ]; then
-              ! grep -q " assets/state_legacy/$name/" apk.lst || { echo "APK holds the rc table $name"; exit 1; }
-            else
-              grep -q " assets/state_legacy/$name/hashes.z\$" apk.lst || { echo "APK lacks the table $name"; exit 1; }
-            fi
-          done < port/state_legacy/index.txt
+          # the legacy tables (port/state_legacy): every file the game asks for
+          # under that exact name and with the repository's bytes, every release
+          # table, no release candidate's (this APK's label is not -rcN)
+          python3 -I tools/state_legacy_table.py apkcheck "$apk"
 
           # 16 KB pages: every LOAD segment of every library (libmain, SDL3 and
           # the three hook libraries) aligned to 0x4000

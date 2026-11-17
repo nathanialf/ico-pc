@@ -904,8 +904,11 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   text run count match, its hashes are under the current rules and in address order, its runs lie
   inside its `.rodata` and end in a zero byte, its symbol file places at an Android image, and
   every function the table cuts has its hashes. No table is found for another platform or for the
-  reporter's commit of another layout. A missing index gives -1, a missing hashes file is named, and a text
-  file cut short does not load (`state_legacy`).
+  reporter's commit of another layout. The reader acts as an APK (no asset name ends in `.gz`),
+  so every table must load by the names an APK keeps. A missing index gives -1, a missing hashes
+  file and a missing sections file are named with the reader's reason (`cannot read <table>/sections.txt:
+  dropped`), and a text file cut short does not load
+  (`state_legacy`).
 - `tools/state_legacy_table.py check`: each legacy table's files against its manifest (sizes,
   SHA-256, the text runs inside `.rodata` and in order, the symbol file's `ico_diag_init`, the code
   hashes' count, rules and address order), and the index naming each table once

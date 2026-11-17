@@ -36,7 +36,10 @@ int ico_legacy_find(IcoLegacyRead rd, void *user, const char *platform, const ch
     const char *p, *end;
     int found = 0;
 
-    if (rd == NULL || rd(user, "index.txt", &data, &len) != 0) {
+    char err[160];
+
+    err[0] = '\0';
+    if (rd == NULL || rd(user, "index.txt", &data, &len, err, sizeof err) != 0) {
         return -1;
     }
     p = (const char *)data;
@@ -66,13 +69,25 @@ static void *inflate_raw(const void *z, size_t n, size_t *out_n)
     return tinfl_decompress_mem_to_heap(z, n, out_n, 0);
 }
 
+/* the table's file: 0, or -1 with why naming the file and the reader's
+   reason */
 static int read_file(IcoLegacyRead rd, void *user, const char *dir, const char *file, void **data,
-                     size_t *n)
+                     size_t *n, char *why, size_t why_n)
 {
-    char path[160];
+    char path[160], err[160];
 
-    snprintf(path, sizeof path, "%s/%s", dir, file);
-    return rd(user, path, data, n);
+    snprintf(path, sizeof path, "%.63s/%.63s", dir, file);
+    err[0] = '\0';
+    *data = NULL;
+    *n = 0;
+    if (rd(user, path, data, n, err, sizeof err) != 0) {
+        if (why != NULL && why_n > 0) {
+            snprintf(why, why_n, "cannot read %.130s: %.150s", path,
+                     err[0] != '\0' ? err : "the reader gave no reason");
+        }
+        return -1;
+    }
+    return 0;
 }
 
 static uint32_t get32(const uint8_t *p)
@@ -95,8 +110,7 @@ IcoLegacyTable *ico_legacy_load(IcoLegacyRead rd, void *user, const char *name, 
         return NULL;
     }
     snprintf(t->name, sizeof t->name, "%s", name);
-    if (read_file(rd, user, name, "manifest.txt", &man, &man_n) != 0) {
-        say(why, why_n, "its manifest is missing");
+    if (read_file(rd, user, name, "manifest.txt", &man, &man_n, why, why_n) != 0) {
         goto fail;
     }
     p = (const char *)man;
@@ -132,14 +146,13 @@ IcoLegacyTable *ico_legacy_load(IcoLegacyRead rd, void *user, const char *name, 
         say(why, why_n, "its manifest is damaged");
         goto fail;
     }
-    if (read_file(rd, user, name, "syms.gz", &gz, &gz_n) != 0 ||
-        read_file(rd, user, name, "sections.txt", &sec, &sec_n) != 0) {
-        say(why, why_n, "its symbol file or its sections are missing");
+    if (read_file(rd, user, name, ICO_LEGACY_SYMS, &gz, &gz_n, why, why_n) != 0 ||
+        read_file(rd, user, name, "sections.txt", &sec, &sec_n, why, why_n) != 0) {
         goto fail;
     }
     syms = ico_symtab_gunzip(gz, gz_n, &syms_n);
     if (syms == NULL) {
-        say(why, why_n, "its symbol file does not inflate");
+        say(why, why_n, "its symbol file " ICO_LEGACY_SYMS " does not inflate");
         goto fail;
     }
     t->syms = (char *)malloc(syms_n + sec_n + 2);
@@ -178,9 +191,11 @@ IcoLegacyTable *ico_legacy_load(IcoLegacyRead rd, void *user, const char *name, 
         say(why, why_n, "its sections name no .rodata");
         goto fail;
     }
-    if (read_file(rd, user, name, "texts.idx", &idx, &idx_n) != 0 ||
-        (runs = inflate_raw(idx, idx_n, &runs_n)) == NULL || runs_n != t->n_run * 8) {
-        say(why, why_n, "its text index is missing or damaged");
+    if (read_file(rd, user, name, "texts.idx", &idx, &idx_n, why, why_n) != 0) {
+        goto fail;
+    }
+    if ((runs = inflate_raw(idx, idx_n, &runs_n)) == NULL || runs_n != t->n_run * 8) {
+        say(why, why_n, "its text index texts.idx is damaged");
         goto fail;
     }
     t->run = (uint32_t *)malloc(t->n_run * 2 * sizeof *t->run);
@@ -207,10 +222,14 @@ IcoLegacyTable *ico_legacy_load(IcoLegacyRead rd, void *user, const char *name, 
         size_t z_n = 0, b_n = 0, j = 0;
 
         snprintf(file, sizeof file, "texts.%u.z", (unsigned)k);
-        if (read_file(rd, user, name, file, &z, &z_n) != 0 ||
-            (b = inflate_raw(z, z_n, &b_n)) == NULL) {
+        if (read_file(rd, user, name, file, &z, &z_n, why, why_n) != 0) {
+            goto fail;
+        }
+        if ((b = inflate_raw(z, z_n, &b_n)) == NULL) {
             free(z);
-            say(why, why_n, "a text file is missing or damaged");
+            if (why != NULL && why_n > 0) {
+                snprintf(why, why_n, "its text file %s does not inflate", file);
+            }
             goto fail;
         }
         free(z);
@@ -241,11 +260,13 @@ IcoLegacyTable *ico_legacy_load(IcoLegacyRead rd, void *user, const char *name, 
         void *hz = NULL, *hb = NULL;
         size_t hz_n = 0, hb_n = 0, j;
 
-        if (read_file(rd, user, name, "hashes.z", &hz, &hz_n) != 0 ||
-            (hb = inflate_raw(hz, hz_n, &hb_n)) == NULL || hb_n % 20 != 0 || hb_n == 0) {
+        if (read_file(rd, user, name, "hashes.z", &hz, &hz_n, why, why_n) != 0) {
+            goto fail;
+        }
+        if ((hb = inflate_raw(hz, hz_n, &hb_n)) == NULL || hb_n % 20 != 0 || hb_n == 0) {
             free(hz);
             free(hb);
-            say(why, why_n, "its code hashes are missing or damaged");
+            say(why, why_n, "its code hashes hashes.z are damaged");
             goto fail;
         }
         free(hz);
