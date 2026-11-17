@@ -37,6 +37,17 @@
  *           each range with its kind in order; the block table widens an
  *           overlapping or touching block, ignores a null one and, full,
  *           widens the nearest
+ *   misses  another build's words without a translation by place
+ *           (IcoStateMiss): the dead/live split of a saved stack
+ *           (ico_state_stack_dead_bytes) at every boundary; a scan of a
+ *           synthetic arena and game data with translated words and words
+ *           without one: each miss live, the first named with its region
+ *           and offset, the verdict refusing word for word; a stack region
+ *           with dead frames: dead below sp - 128, live from it, the first
+ *           live one named from the stack pointer; a word read from a copy
+ *           counted by its own place (the scheduler's and the registers'
+ *           words); a same-build scan (no translation) moves the words by
+ *           the delta and counts nothing
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -879,6 +890,159 @@ static void test_hash(void)
           blocks.hi[0] == 0x1410);
 }
 
+/* --- misses ------------------------------------------------------------------ */
+
+static void test_misses(void)
+{
+    enum { TR = 0x1000, HI = 0x100000 };
+
+    const uint64_t lo = 0x7700000000ull;
+    IcoStateReloc r;
+    IcoStateXlate xl;
+    IcoStateSpan span;
+    IcoStateMiss m;
+    uint64_t total = 0, first_total = 0;
+    uint64_t arena[8], gdata[4], stk[64], w;
+    char text[320];
+    size_t moved;
+    uintptr_t sbase;
+    uint64_t sp;
+
+    /* the split: of n bytes at base with stack pointer sp, the dead part */
+    CHECK(ico_state_stack_dead_bytes(0x10000, 0x400, 0) == 0);             /* no sp */
+    CHECK(ico_state_stack_dead_bytes(0x10000, 0x400, 100) == 0);           /* sp < 128 */
+    CHECK(ico_state_stack_dead_bytes(0x10000, 0x400, 0x10000 + 128) == 0); /* live == base */
+    CHECK(ico_state_stack_dead_bytes(0x10000, 0x400, 0x10000 + 135) == 0); /* 7 bytes */
+    CHECK(ico_state_stack_dead_bytes(0x10000, 0x400, 0x10000 + 136) == 8); /* one word */
+    CHECK(ico_state_stack_dead_bytes(0x10000, 0x400, 0x10000 + 141) == 8); /* rounded down */
+    CHECK(ico_state_stack_dead_bytes(0x10000, 0x400, 0x10000 + 0x400) == 0x400 - 128);
+    CHECK(ico_state_stack_dead_bytes(0x10000, 0x400, 0x10000 + 0x400 + 128) == 0x400);
+    CHECK(ico_state_stack_dead_bytes(0x10000, 0x400, 0x90000) == 0x400); /* all below */
+
+    /* the old image [lo, lo + HI]; its first TR bytes translate (+0x1000000),
+       the rest has no translation */
+    memset(&r, 0, sizeof r);
+    r.range[ICO_RELOC_MODULE].lo = lo;
+    r.range[ICO_RELOC_MODULE].hi = lo + HI;
+    span.lo = lo;
+    span.hi = lo + TR - 1;
+    span.now = lo + 0x1000000;
+    memset(&xl, 0, sizeof xl);
+    xl.span = &span;
+    xl.n_span = 1;
+    xl.missed = &total;
+    xl.first_missed = &first_total;
+    memset(&m, 0, sizeof m);
+    xl.miss = &m;
+    r.xlate = &xl;
+
+    /* the arena: one word translated, two without, the first at offset 0x18 */
+    memset(arena, 0, sizeof arena);
+    arena[0] = lo + 0x10;
+    arena[3] = lo + 0x2000;
+    arena[5] = lo + 0x3000;
+    arena[6] = lo + HI + 1; /* outside the image: no program word */
+    ico_state_miss_at(&m, "the arena", (uint64_t)(uintptr_t)arena, 0, 0);
+    moved = ico_state_reloc_scan(&r, arena, sizeof arena, NULL);
+    CHECK(moved == 1 && arena[0] == lo + 0x1000010 && arena[3] == lo + 0x2000);
+    CHECK(m.live == 2 && m.dead == 0 && m.first_live == lo + 0x2000 && m.live_off == 0x18);
+    CHECK(m.live_where != NULL && strcmp(m.live_where, "the arena") == 0 && m.live_fiber == 0);
+    CHECK(total == 2 && first_total == lo + 0x2000);
+    CHECK(ico_state_miss_refuses(&m, lo, text, sizeof text) == 1);
+    CHECK(strcmp(text, "2 program words in live memory had no translation, the first: the arena "
+                       "at offset 0x18 holds 0x7700002000 (offset 0x2000 in the saving build's "
+                       "image)") == 0);
+    ico_state_miss_counts(&m, text, sizeof text);
+    CHECK(strcmp(text, "0 program words in dead stack frames had no translation and were left "
+                       "as they were (first 0x0); 2 in live memory") == 0);
+
+    /* the game's data: the first live miss stays the arena's, the count grows */
+    memset(gdata, 0, sizeof gdata);
+    gdata[1] = lo + 0x4000;
+    ico_state_miss_at(&m, "the game's data", (uint64_t)(uintptr_t)gdata, 0, 0);
+    (void)ico_state_reloc_scan(&r, gdata, sizeof gdata, NULL);
+    CHECK(m.live == 3 && m.live_off == 0x18 && strcmp(m.live_where, "the arena") == 0);
+    /* alone, it is named with its own place */
+    memset(&m, 0, sizeof m);
+    ico_state_miss_at(&m, "the game's data", (uint64_t)(uintptr_t)gdata, 0, 0);
+    (void)ico_state_reloc_scan(&r, gdata, sizeof gdata, NULL);
+    CHECK(m.live == 1 && m.live_off == 8);
+    ico_state_miss_live_text(&m, lo, text, sizeof text);
+    CHECK(strcmp(text, "the game's data at offset 0x8 holds 0x7700004000 (offset 0x4000 in the "
+                       "saving build's image)") == 0);
+
+    /* a fiber's stack: 512 bytes at sbase, sp 384 bytes up: 256 dead */
+    memset(&m, 0, sizeof m);
+    memset(stk, 0, sizeof stk);
+    sbase = (uintptr_t)stk;
+    sp = (uint64_t)sbase + 384;
+    stk[0] = lo + 0x5000;  /* the deepest word: dead */
+    stk[31] = lo + 0x5008; /* the last below sp - 128: dead */
+    stk[32] = lo + 0x5010; /* sp - 128: live (the red zone) */
+    stk[50] = lo + 0x5018; /* sp + 16: live */
+    stk[40] = lo + 0x20;   /* translated wherever it is */
+    ico_state_miss_at(&m, "stack", sp, 6, 1);
+    m.dead_lo = (uint64_t)sbase;
+    m.dead_hi = m.dead_lo + ico_state_stack_dead_bytes(m.dead_lo, sizeof stk, sp);
+    CHECK(m.dead_hi - m.dead_lo == 256);
+    moved = ico_state_reloc_scan(&r, stk, sizeof stk, NULL);
+    CHECK(moved == 1 && stk[40] == lo + 0x1000020);
+    CHECK(m.dead == 2 && m.first_dead == lo + 0x5000);
+    CHECK(m.live == 2 && m.first_live == lo + 0x5010 && m.live_off == -128);
+    ico_state_miss_live_text(&m, lo, text, sizeof text);
+    CHECK(strcmp(text, "fiber slot 5's stack, 128 bytes below its saved stack pointer, holds "
+                       "0x7700005010 (offset 0x5010 in the saving build's image)") == 0);
+    /* dead only: kept */
+    memset(&m, 0, sizeof m);
+    stk[32] = 0;
+    stk[50] = 0;
+    ico_state_miss_at(&m, "stack", sp, 6, 1);
+    m.dead_lo = (uint64_t)sbase;
+    m.dead_hi = m.dead_lo + ico_state_stack_dead_bytes(m.dead_lo, sizeof stk, sp);
+    (void)ico_state_reloc_scan(&r, stk, sizeof stk, NULL);
+    CHECK(m.dead == 2 && m.live == 0);
+    CHECK(ico_state_miss_refuses(&m, lo, text, sizeof text) == 0 && text[0] == '\0');
+    ico_state_miss_counts(&m, text, sizeof text);
+    CHECK(strcmp(text, "2 program words in dead stack frames had no translation and were left "
+                       "as they were (first 0x7700005000); 0 in live memory") == 0);
+    /* a new place clears the dead range: the same words are live there */
+    ico_state_miss_at(&m, "the arena", (uint64_t)sbase, 0, 0);
+    (void)ico_state_reloc_scan(&r, stk, sizeof stk, NULL);
+    CHECK(m.dead == 2 && m.live == 2 && m.live_off == 0);
+
+    /* a word read from a copy (the scheduler's table, the saved
+       registers): counted by its own place */
+    memset(&m, 0, sizeof m);
+    ico_state_miss_at(&m, "saved registers", 0x1000, 3, 0);
+    w = lo + 0x6000;
+    CHECK(ico_state_reloc_word_at(&r, &w, 0x1018) == 0 && w == lo + 0x6000);
+    CHECK(m.live == 1 && m.live_off == 0x18);
+    ico_state_miss_live_text(&m, lo, text, sizeof text);
+    CHECK(strcmp(text, "fiber slot 2's saved registers at offset 0x18 holds 0x7700006000 "
+                       "(offset 0x6000 in the saving build's image)") == 0);
+    memset(&m, 0, sizeof m);
+    ico_state_miss_at(&m, "the scheduler's table", 0x2000, 0, 0);
+    w = lo + 0x6000;
+    (void)ico_state_reloc_word_at(&r, &w, 0x2000 + 0x48);
+    ico_state_miss_live_text(&m, lo, text, sizeof text);
+    CHECK(strcmp(text, "the scheduler's table at offset 0x48 holds 0x7700006000 (offset 0x6000 "
+                       "in the saving build's image)") == 0);
+    /* no miss struct: nothing to count, the word left */
+    CHECK(ico_state_miss_refuses(NULL, lo, text, sizeof text) == 0 && text[0] == '\0');
+
+    /* the same build: no translation, the MODULE range moved by its delta */
+    memset(&m, 0, sizeof m);
+    r.xlate = NULL;
+    r.range[ICO_RELOC_MODULE].delta = 0x100;
+    memset(arena, 0, sizeof arena);
+    arena[3] = lo + 0x2000;
+    ico_state_miss_at(&m, "the arena", (uint64_t)(uintptr_t)arena, 0, 0);
+    moved = ico_state_reloc_scan(&r, arena, sizeof arena, NULL);
+    CHECK(moved == 1 && arena[3] == lo + 0x2100);
+    CHECK(m.live == 0 && m.dead == 0);
+    CHECK(ico_state_miss_refuses(&m, lo, text, sizeof text) == 0);
+}
+
 int main(void)
 {
     test_scan();
@@ -888,6 +1052,7 @@ int main(void)
     test_heap();
     test_check();
     test_hash();
+    test_misses();
     if (fails != 0) {
         printf("state_reloc_test: %d failure(s)\n", fails);
         return 1;

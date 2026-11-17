@@ -75,9 +75,12 @@ typedef struct IcoStateXlate {
     const IcoStateSpan *point; /* sorted by lo, each lo == hi */
     size_t n_point;
     /* NULL, or counters: the MODULE words that had no translation (left
-       as they were) and the first of them */
+       as they were) and the first of them, wherever they lay */
     uint64_t *missed;
     uint64_t *first_missed;
+    /* NULL, or the same words split by place (IcoStateMiss below): the
+       walkers name where their words lie before they walk them */
+    struct IcoStateMiss *miss;
     /* NULL, or per fiber slot its own points (sorted, each lo == hi),
        looked up before `point` while that fiber's slot is restored: an
        arm64 page word (state_xbuild.h) that two fibers hold for two
@@ -90,6 +93,68 @@ typedef struct IcoStateXlate {
        copy of the translation for each slot it restores */
     int fiber;
 } IcoStateXlate;
+
+/* --- A cross-build load's words without a translation, by place ----------
+
+   A fiber's saved stack below its saved stack pointer less the red zone
+   holds dead frames: the save names nothing there ("soft" words,
+   state_host.c xb_scan_stack, state_xbuild.c), so a word there without a
+   translation is left as it was by design.  Everything else a load walks
+   is live: the arena, the game's data and bss, the registry's scanned
+   blocks, the model tables, the scheduler's table, a fiber's control page
+   and saved registers and its stack from the stack pointer less the red
+   zone up.  A live word without a translation would be a stale pointer in
+   the resumed game: state_host.c refuses the exact resume for one (the
+   checkpoint's way).
+
+   The split point, shared by the save's soft scan and the load's count so
+   the two cannot drift: of the n saved stack bytes at `base` (8-aligned)
+   of a fiber whose saved stack pointer is sp, the first
+   ico_state_stack_dead_bytes are dead (a multiple of 8; 0 when sp is 0 or
+   sp - ICO_STATE_RED_ZONE is at or below base, n when it is at or above
+   base + n).  The red zone is System V's (x86-64) and the same 128 bytes
+   on arm64, where frames below sp are dead at once (fiber.c's save starts
+   its image at or below sp less the same zone). */
+#define ICO_STATE_RED_ZONE 128
+
+size_t ico_state_stack_dead_bytes(uint64_t base, size_t n, uint64_t sp);
+
+typedef struct IcoStateMiss {
+    /* the walk's place, set by the walker (ico_state_miss_at) */
+    const char *where;         /* "the arena", a block's name, "stack", ... */
+    uint64_t base;             /* the address offsets are counted from */
+    int fiber;                 /* a fiber slot + 1 (0: no fiber's) */
+    int sp_rel;                /* 1: base is the fiber's stack pointer */
+    uint64_t dead_lo, dead_hi; /* [dead_lo, dead_hi): the dead frames (0, 0: none) */
+    /* the counts */
+    uint64_t dead, first_dead; /* words in dead frames, the first's value */
+    uint64_t live, first_live; /* words anywhere else, the first's value */
+    const char *live_where;    /* the first live word's place */
+    int live_fiber, live_sp_rel;
+    int64_t live_off;
+} IcoStateMiss;
+
+/* The walk's place from here on (m NULL: nothing); the dead range is
+   cleared (fiber.c sets it for a stack after this call). */
+void ico_state_miss_at(IcoStateMiss *m, const char *where, uint64_t base, int fiber, int sp_rel);
+
+/* The first live miss in words, for the log and the refusal: "fiber slot 5's
+   stack, 64 bytes below its saved stack pointer, holds 0x... (offset 0x...
+   in the saving build's image)" or "the arena at offset 0x10 holds ...".
+   image_lo: the saving process's image (the MODULE range's lo). */
+void ico_state_miss_live_text(const IcoStateMiss *m, uint64_t image_lo, char *out, size_t n);
+
+/* The load's verdict on its misses: 0 with out empty when none lies in
+   live memory (the dead frames' are left as they were, by design), else 1
+   with out "N program words in live memory had no translation, the first:
+   <ico_state_miss_live_text>": state_host.c rolls the restore back and
+   the state continues from its checkpoint (ICO_STATE_SELF_CHECK). */
+int ico_state_miss_refuses(const IcoStateMiss *m, uint64_t image_lo, char *out, size_t n);
+
+/* The loaded line's counts: "N program words in dead stack frames had no
+   translation and were left as they were (first 0x...); L in live
+   memory". */
+void ico_state_miss_counts(const IcoStateMiss *m, char *out, size_t n);
 
 /* 1 and *now when `old` has a translation (the restored fiber's own point
    first, then a point, then a span), else 0. */
@@ -115,6 +180,10 @@ typedef struct IcoStateReloc {
    word without one is left and counted); otherwise *w is left alone and
    the result is 0. */
 int ico_state_reloc_word(const IcoStateReloc *r, uint64_t *w);
+/* The same for a word read from the address `at` (a copy in *w): a miss
+   is counted by `at`'s place (IcoStateMiss).  ico_state_reloc_word is this
+   with at = w. */
+int ico_state_reloc_word_at(const IcoStateReloc *r, uint64_t *w, uint64_t at);
 
 /* Sets the two values (old -> now) and their counters (`words`: NULL, or
    ICO_RELOC_VALUES counters, zeroed here).  A value whose old or new word

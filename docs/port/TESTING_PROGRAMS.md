@@ -792,7 +792,7 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   the restored fiber's stack bounds in the thread block are checked too); the wrong delta and the
   wrong slot refused (`state_fiber`). `state_fiber_guard` saves a fiber, restores it into a second pool,
   resumes it in a forked child and overflows its stack: the restored slot's guard page must stop it
-  (not on Windows).
+  (not on Windows). Its `misses` case and `state_reloc`'s: [TESTING_PROGRAMS_2.md](TESTING_PROGRAMS_2.md).
 - `state_guard_test.c`: the saving process's thread pointer and stack guard
   ([PLATFORM.md](PLATFORM.md#relocation)), with both processes' values made up so it runs on
   x86-64: an exact match is rewritten and counted per value, near misses (one off, one bit off,

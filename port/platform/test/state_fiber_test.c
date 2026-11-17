@@ -24,6 +24,20 @@
  *           pattern (the dead frames under the stack pointer are saved)
  *           and, restored into a fresh slot, the stack's bytes from the
  *           image's start to its top are the saved ones byte for byte.
+ *   misses  another build's load (state_reloc.h IcoStateMiss): the same
+ *           fiber's image with one program word that has no translation
+ *           (a word into a hole the translation leaves in this program's
+ *           image) planted at a time, restored with the translation and
+ *           counted by place: two words in the dead frames (the deepest
+ *           saved word and the last word below the stack pointer less the
+ *           red zone, the split ico_state_stack_dead_bytes gives the save's
+ *           soft scan) are dead, the restore resumes to the end and the
+ *           verdict keeps the load; the first word of the red zone, a word
+ *           64 bytes below the stack pointer, one 8 bytes above it and a
+ *           callee-saved register (x19 / rbx) are each live, named with
+ *           their place word for word, and the verdict refuses the load; a
+ *           same-build restore (no translation) leaves the planted word as
+ *           it is and counts nothing.
  *
  * `state_fiber_test guard` (not on Windows): a fiber saved before it
  * overflows its stack, restored into a second pool and resumed in a child
@@ -534,6 +548,241 @@ static void test_dead_frames(void)
     free(stack);
 }
 
+/* --- misses (another build's load) ------------------------------------------------ */
+
+/* the translation's hole: a word pointing here has none (nothing of the
+   fiber's code points here) */
+static unsigned char s_hole[64];
+
+/* where the switch context's stack pointer and a callee-saved register sit
+   in it (minicoro's _mco_ctxbuf: arm64 x19-x30, sp; x86-64 rip, rsp, rbp,
+   rbx) */
+#if defined(__aarch64__)
+#define CTX_SP_OFF 96
+#define CTX_REG_OFF 0 /* x19 */
+#else
+#define CTX_SP_OFF 8
+#define CTX_REG_OFF 24 /* rbx */
+#endif
+
+#define MISS_SLOT 7
+
+typedef struct MissRun {
+    const IcoFiberImage *img; /* the saved image (copied out) */
+    const IcoStateReloc *r;
+    IcoStateMiss m;
+    uint64_t total; /* the translation's own counter: every miss */
+    uint64_t first_total;
+} MissRun;
+
+/* restores the image with `word` written at the stack address `stack_at`
+   (0: none) or at the control page's offset `ctrl_off` (SIZE_MAX: none);
+   0 when the restore succeeded (the slot then holds the fiber) */
+static int miss_restore(MissRun *k, uint64_t word, uint64_t stack_at, size_t ctrl_off,
+                        int translate)
+{
+    IcoFiberImage in = *k->img;
+    IcoStateReloc r = *k->r;
+    IcoStateXlate xl = *k->r->xlate;
+    unsigned char *ctrl = (unsigned char *)malloc(in.ctrl_bytes);
+    unsigned char *stack = (unsigned char *)malloc(in.stack_bytes);
+    const uint64_t base = in.slot_base + in.stack_off;
+    int rc;
+
+    if (ctrl == NULL || stack == NULL) {
+        free(ctrl);
+        free(stack);
+        return -1;
+    }
+    memcpy(ctrl, in.ctrl, in.ctrl_bytes);
+    memcpy(stack, in.stack, in.stack_bytes);
+    if (stack_at != 0) {
+        memcpy(stack + (size_t)(stack_at - base), &word, sizeof word);
+    }
+    if (ctrl_off != SIZE_MAX) {
+        memcpy(ctrl + ctrl_off, &word, sizeof word);
+    }
+    in.ctrl = ctrl;
+    in.stack = stack;
+    memset(&k->m, 0, sizeof k->m);
+    k->total = 0;
+    k->first_total = 0;
+    xl.miss = &k->m;
+    xl.missed = &k->total;
+    xl.first_missed = &k->first_total;
+    r.xlate = translate ? &xl : NULL;
+    rc = ico_fiber_slot_restore(MISS_SLOT, &in, &r);
+    free(ctrl);
+    free(stack);
+    return rc;
+}
+
+static void test_misses(void)
+{
+    IcoFiberImage img;
+    IcoStateImage im;
+    IcoStateReloc r;
+    IcoStateXlate xl;
+    IcoStateSpan span[2];
+    MissRun k;
+    void *ctrl = NULL;
+    void *stack = NULL;
+    uint64_t sp, base, word, at;
+    size_t dead, back_off = 0, back_n = 0, ctx_off;
+    char text[320], want[320];
+    IcoFiber *g = ico_fiber_create_in_slot(MISS_SLOT, dead_main, NULL);
+
+    CHECK(g != NULL);
+    if (g == NULL) {
+        return;
+    }
+    CHECK(ico_state_image_range(&im) == 0);
+    dead_done = 0;
+    CHECK(ico_fiber_resume(g) == 0);
+    CHECK(ico_fiber_slot_save(MISS_SLOT, &img) == 0);
+    copy_image(&img, &ctrl, &stack);
+    ico_fiber_destroy(g);
+
+    /* the translation: this program's image onto itself, but for s_hole */
+    pool_reloc(&r, (uintptr_t)ico_fiber_pool_base()); /* the same pool: delta 0 */
+    r.range[ICO_RELOC_MODULE].lo = im.lo;
+    r.range[ICO_RELOC_MODULE].hi = im.hi;
+    span[0].lo = im.lo;
+    span[0].hi = (uint64_t)(uintptr_t)s_hole - 1;
+    span[0].now = span[0].lo;
+    span[1].lo = (uint64_t)(uintptr_t)s_hole + sizeof s_hole;
+    span[1].hi = im.hi;
+    span[1].now = span[1].lo;
+    memset(&xl, 0, sizeof xl);
+    xl.span = span;
+    xl.n_span = 2;
+    r.xlate = &xl;
+    word = (uint64_t)(uintptr_t)&s_hole[8];
+    CHECK(word > im.lo && word < im.hi);
+    k.img = &img;
+    k.r = &r;
+
+    sp = ico_fiber_image_sp(&img);
+    base = img.slot_base + img.stack_off;
+    dead = ico_state_stack_dead_bytes(base, img.stack_bytes, sp);
+    printf("misses: saved stack 0x%llx + %u bytes, sp 0x%llx, %zu bytes dead\n",
+           (unsigned long long)base, (unsigned)img.stack_bytes, (unsigned long long)sp, dead);
+    /* the dead frames reach down to the pattern: some dead bytes, and the
+       first live word inside the red zone */
+    CHECK(sp != 0 && dead < img.stack_bytes);
+    CHECK(base + dead <= sp - ICO_STATE_RED_ZONE && base + dead + 8 > sp - ICO_STATE_RED_ZONE);
+
+    /* nothing planted: no miss anywhere (the fiber's own words translate) */
+    CHECK(miss_restore(&k, 0, 0, SIZE_MAX, 1) == 0);
+    CHECK(k.m.dead == 0 && k.m.live == 0 && k.total == 0);
+    ico_fiber_slot_discard(MISS_SLOT);
+
+    /* dead: the deepest saved word, then the last word below sp - 128;
+       the load is kept and the fiber resumes to its end.  Under the
+       address sanitizer the deep frame may lie on its fake stack, leaving
+       too few dead bytes saved */
+    if (dead < 16) {
+        printf("misses: %zu dead bytes saved (a fake stack): the dead cases skipped\n", dead);
+    } else {
+        CHECK(miss_restore(&k, word, base, SIZE_MAX, 1) == 0);
+        CHECK(k.m.dead == 1 && k.m.first_dead == word && k.m.live == 0 && k.total == 1);
+        ico_fiber_slot_discard(MISS_SLOT);
+        CHECK(miss_restore(&k, word, base + dead - 8, SIZE_MAX, 1) == 0);
+        CHECK(k.m.dead == 1 && k.m.live == 0 && k.total == 1);
+        CHECK(ico_state_miss_refuses(&k.m, im.lo, text, sizeof text) == 0 && text[0] == '\0');
+        ico_state_miss_counts(&k.m, text, sizeof text);
+        snprintf(
+            want, sizeof want,
+            "1 program words in dead stack frames had no translation and were left as they were "
+            "(first 0x%llx); 0 in live memory",
+            (unsigned long long)word);
+        CHECK(strcmp(text, want) == 0);
+        g = ico_fiber_in_slot(MISS_SLOT);
+        CHECK(g != NULL);
+        if (g != NULL) {
+            dead_done = 0;
+            CHECK(ico_fiber_resume(g) == 0);
+            CHECK(ico_fiber_finished(g) && dead_done == 1);
+            ico_fiber_destroy(g);
+        }
+    }
+
+    /* live: the first word of the red zone (sp - 128 when sp is 8-aligned) */
+    at = base + dead;
+    CHECK(miss_restore(&k, word, at, SIZE_MAX, 1) == 0);
+    CHECK(k.m.dead == 0 && k.m.live == 1 && k.m.first_live == word && k.total == 1);
+    CHECK(k.m.live_fiber == MISS_SLOT + 1 && k.m.live_sp_rel == 1 &&
+          k.m.live_off == (int64_t)(at - sp));
+    CHECK(k.m.live_where != NULL && strcmp(k.m.live_where, "stack") == 0);
+    CHECK(ico_state_miss_refuses(&k.m, im.lo, text, sizeof text) == 1);
+    snprintf(want, sizeof want,
+             "1 program words in live memory had no translation, the first: fiber slot %d's "
+             "stack, %llu bytes below its saved stack pointer, holds 0x%llx (offset 0x%llx in "
+             "the saving build's image)",
+             MISS_SLOT, (unsigned long long)(sp - at), (unsigned long long)word,
+             (unsigned long long)(word - im.lo));
+    CHECK(strcmp(text, want) == 0);
+    if (strcmp(text, want) != 0) {
+        printf("  got:  %s\n  want: %s\n", text, want);
+    }
+    ico_fiber_slot_discard(MISS_SLOT);
+
+    /* live: 64 bytes below sp, inside the red zone */
+    CHECK(miss_restore(&k, word, sp - 64, SIZE_MAX, 1) == 0);
+    CHECK(k.m.dead == 0 && k.m.live == 1 && k.m.live_off == -64);
+    ico_fiber_slot_discard(MISS_SLOT);
+
+    /* live: 8 bytes above sp (the yield's own frame) */
+    CHECK(sp + 16 <= base + img.stack_bytes);
+    CHECK(miss_restore(&k, word, sp + 8, SIZE_MAX, 1) == 0);
+    CHECK(k.m.dead == 0 && k.m.live == 1 && k.m.live_off == 8);
+    ico_state_miss_live_text(&k.m, im.lo, text, sizeof text);
+    snprintf(want, sizeof want,
+             "fiber slot %d's stack, 8 bytes above its saved stack pointer, holds 0x%llx (offset "
+             "0x%llx in the saving build's image)",
+             MISS_SLOT, (unsigned long long)word, (unsigned long long)(word - im.lo));
+    CHECK(strcmp(text, want) == 0);
+    ico_fiber_slot_discard(MISS_SLOT);
+
+    /* live: a callee-saved register of the switch context, which lies
+       just before back_ctx (fiber.h ico_fiber_image_rewritten) */
+    CHECK(ico_fiber_image_rewritten(&img, &back_off, &back_n) == 0 && back_off >= back_n);
+    ctx_off = back_off - back_n;
+    {
+        uint64_t sp_word;
+
+        memcpy(&sp_word, (const unsigned char *)img.ctrl + ctx_off + CTX_SP_OFF, sizeof sp_word);
+        CHECK(sp_word == sp); /* the layout this test assumes */
+        if (sp_word == sp) {
+            CHECK(miss_restore(&k, word, 0, ctx_off + CTX_REG_OFF, 1) == 0);
+            CHECK(k.m.dead == 0 && k.m.live == 1 && k.m.live_off == CTX_REG_OFF &&
+                  k.m.live_sp_rel == 0 && k.m.live_fiber == MISS_SLOT + 1);
+            CHECK(k.m.live_where != NULL && strcmp(k.m.live_where, "saved registers") == 0);
+            ico_state_miss_live_text(&k.m, im.lo, text, sizeof text);
+            snprintf(want, sizeof want,
+                     "fiber slot %d's saved registers at offset 0x%x holds 0x%llx (offset 0x%llx "
+                     "in the saving build's image)",
+                     MISS_SLOT, (unsigned)CTX_REG_OFF, (unsigned long long)word,
+                     (unsigned long long)(word - im.lo));
+            CHECK(strcmp(text, want) == 0);
+            ico_fiber_slot_discard(MISS_SLOT);
+        }
+    }
+
+    /* the same build: no translation, nothing counted, the word kept */
+    CHECK(miss_restore(&k, word, sp - 64, SIZE_MAX, 0) == 0);
+    CHECK(k.m.dead == 0 && k.m.live == 0 && k.total == 0);
+    {
+        uint64_t kept = 0;
+
+        raw_copy(&kept, (const void *)(uintptr_t)(sp - 64), sizeof kept);
+        CHECK(kept == word);
+    }
+    ico_fiber_slot_discard(MISS_SLOT);
+    free(ctrl);
+    free(stack);
+}
+
 /* --- guard (a child process) ----------------------------------------------------- */
 
 #if !defined(_WIN32)
@@ -621,6 +870,7 @@ int main(int argc, char **argv)
     } else {
         test_states();
         test_dead_frames();
+        test_misses();
     }
     if (fails != 0) {
         printf("%d failure(s)\n", fails);

@@ -851,10 +851,12 @@ static void *module_word(void *p, const IcoStateReloc *r, int *bad)
     return (void *)(uintptr_t)w;
 }
 
-static void *scan_word(void *p, const IcoStateReloc *r)
+/* a word of the table at `at` (a cross-build load's miss is counted by its
+   place, state_reloc.h IcoStateMiss) */
+static void *scan_word(void *p, void *const *at, const IcoStateReloc *r)
 {
     uint64_t w = (uint64_t)(uintptr_t)p;
-    ico_state_reloc_word(r, &w);
+    ico_state_reloc_word_at(r, &w, (uint64_t)(uintptr_t)at);
     return (void *)(uintptr_t)w;
 }
 
@@ -897,6 +899,8 @@ int ico_sched_state_restore(const IcoSchedImage *in, const IcoStateReloc *r)
         }
     }
     memcpy(&tab, src, sizeof tab);
+    ico_state_miss_at(r->xlate != NULL ? r->xlate->miss : NULL, "the scheduler's table",
+                      (uint64_t)(uintptr_t)&tab, 0, 0);
     for (id = 0; id < ICO_SCHED_MAX_THREADS; id++) {
         Thread *t = &tab.threads[id];
         t->fiber = NULL;
@@ -906,9 +910,9 @@ int ico_sched_state_restore(const IcoSchedImage *in, const IcoStateReloc *r)
         t->entry = (void (*)(void *))(uintptr_t)module_word((void *)(uintptr_t)t->entry, r, &bad);
         t->note = (const char *)module_word((void *)(uintptr_t)t->note, r, &bad);
         t->note_caller = module_word(t->note_caller, r, &bad);
-        t->arg = scan_word(t->arg, r);
-        t->stack = scan_word(t->stack, r);
-        t->gp = scan_word(t->gp, r);
+        t->arg = scan_word(t->arg, &t->arg, r);
+        t->stack = scan_word(t->stack, &t->stack, r);
+        t->gp = scan_word(t->gp, &t->gp, r);
     }
     for (i = 0; i < in->n_fibers && !bad; i++) {
         int slot = (int)in->fibers[i].slot;
