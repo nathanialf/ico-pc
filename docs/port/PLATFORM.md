@@ -1304,8 +1304,12 @@ every such state was refused. A released build whose game data layout equals thi
 `tools/state_legacy_table.py` builds the table from the released APK. Android packages it as
 assets. A release candidate's table goes only into release candidate APKs. The table holds:
 
-- the version's symbol file and section lines;
-- the text runs of its `.rodata`;
+- the version's symbol file (`syms.gzip`: an Android asset ending in `.gz` is un-gzipped and
+  renamed by the packaging, so the file must not have that name) and section lines;
+- the text runs of its `.rodata`, each marked when it starts a literal (the byte before it is
+  zero, or it is the section's first byte: the table holds only the runs' bytes). The manifest's
+  `text_index 2` names this format, and a table without it is refused (`the table must be
+  rebuilt`);
 - every function's code hash, under rules 1 and under the current rules
   (`tools/code_hash_a64.py`, the C rules in Python).
 
@@ -1324,7 +1328,8 @@ describes it (`IcoXbProc.legacy`):
 - **Texts and anonymous read-only data.** The ordinary window rule applies (the bytes from the word
   to the end of its text, widened until unique in its run). It reads the old bytes from the
   table's runs. A window that starts a literal (a zero byte before it) is matched only where a
-  literal starts here (`XW_LSTART`).
+  literal starts here (`XW_LSTART`). A window at the start of a run takes the run's mark from
+  the table, since the byte before the run is not in it.
 - **Page words.** The old code is not here, but each function with a frame hashes alike, so this
   build's same function holds the same ADRPs at the same offsets. Each ADRP's target here is placed
   back in the old program by name and ordinal (`old_of`: the game ranges, a unit, or a data
@@ -1344,15 +1349,35 @@ of another layout is refused for the layout first: `the game's data layout chang
 names another layout before any other reason. Two more changes came with this work:
 
 - The read-only range this build searches starts at its first section that is not a
-  dynamic-linking table (`.dynsym`, `.dynstr`, `.gnu.hash`, `.rela.dyn`, the notes). No program
-  pointer aims there, and `.dynstr` spells every exported name a text window could otherwise find
+  dynamic-linking table (`.dynsym`, `.dynstr`, `.gnu.hash`, `.rela.dyn`, the notes). It ends at
+  the end of its last section before the code that is not an unwind or exception table
+  (`.eh_frame`, `.eh_frame_hdr`, `.gcc_except_table`). No C pointer aims into these tables, and
+  their bytes can spell exported names or short texts that a text window would otherwise find
   twice.
+- A text window that is one or more whole literals can be found at several literal starts with
+  the same bytes. Such a window starts where a literal starts (`XW_LSTART`) and ends in a zero
+  byte. The first copy in address order is taken, and the load's line counts these
+  (`texts had identical twins`). C code reads both copies alike, and every word of one value
+  takes the same copy, because the translation maps by value. A copy can only be told apart by
+  comparing its address with a pointer the code computes afresh, and no game source compares a
+  literal's address (`== "` found nowhere). A window into the middle of a literal, or one that
+  does not end in a zero byte, is still refused when found twice.
 - `port/data/reserved/tables.c` reproduces the released builds' loader statics (names, sizes,
   kinds and order) in the game's bss, so the layout hash is again `0x7e3463baa76b43a8`. Its
   function `ico_tables_room`, which `state_host.c` calls so the archive member joins the link,
   returns the room's address. The Android link drops with `--gc-sections` any input section no
   kept section refers to, and a version of the function that returned its own address left the
   room out: the bss ended 0x607 bytes short and the layout hash changed.
+- `tools/package_android.sh` and the CI android job open every file the game asks for in the
+  built APK, by its exact name, and compare it with the repository's
+  (`tools/state_legacy_table.py apkcheck`). A file the loader cannot read is named in the log
+  with the reader's reason (`cannot read <table>/sections.txt: ...`).
+- The symbols lock in `state_host.c` (`xb_lock`) covers the program's table, which is read
+  once, and its units' code hashes, which are computed on first use. It also covers the work
+  arrays of the save's record (`build_syms`) and of the check (`xb_probe`, with the legacy
+  read). The game thread and one worker, such as the Save states listing's verdict, may
+  therefore both check states. `state_xbuild.c` and `state_legacy.c` keep no statics, and a
+  legacy table is loaded for each check and freed after it.
 - `tools/package_android.sh` fails when the carry-over guard's layout hash is not the one
   `port/state_legacy/layout.txt` records (`tools/android_syms_lines.py layout`). If the game's
   data did not change, the link lost or moved an item. If it changed on purpose, the maintainer

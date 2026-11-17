@@ -595,7 +595,7 @@ static int grow_window(const IcoStateImage *im, int64_t delta, const uint32_t *f
 
 void ico_xb_image(const IcoSymTab *t, IcoStateImage *im)
 {
-    uint64_t lo, hi;
+    uint64_t lo, hi, ro_end;
 
     if (t == NULL || !t->code_from || t->code_hi <= t->code_lo) {
         return;
@@ -607,14 +607,19 @@ void ico_xb_image(const IcoSymTab *t, IcoStateImage *im)
     }
     im->text_lo = t->code_lo;
     im->text_hi = t->code_hi;
+    ro_end = t->code_lo;
     {
         /* the dynamic linker's tables (.dynsym, .dynstr, .gnu.hash, .rela.dyn,
            the notes) before the read-only data: no program pointer aims there,
            and .dynstr spells every exported function's name, which a text
-           window would otherwise find twice */
-        static const char *const dyn[] = {".dyn",  ".gnu",  ".rela",  ".rel.",
-                                          ".note", ".hash", ".interp"};
-        uint64_t first = t->code_lo;
+           window would otherwise find twice; and the unwind and exception
+           tables after it (.eh_frame, .eh_frame_hdr, .gcc_except_table):
+           the unwinder's data, which no C pointer aims into, whose bytes can
+           spell a short text (v0.11.9-rc5's "/8" lay in .eh_frame too) */
+        static const char *const dyn[] = {".dyn",    ".gnu",      ".rela",
+                                          ".rel.",   ".note",     ".hash",
+                                          ".interp", ".eh_frame", ".gcc_except_table"};
+        uint64_t first = t->code_lo, end = 0;
         size_t i, j;
 
         for (i = 0; i < t->n_sec; i++) {
@@ -631,14 +636,18 @@ void ico_xb_image(const IcoSymTab *t, IcoStateImage *im)
             if (!skip && s->start < first) {
                 first = s->start;
             }
+            if (!skip && s->start + s->size > end) {
+                end = s->start + s->size;
+            }
         }
         if (first < t->code_lo) {
             lo = first;
+            ro_end = end > first && end < t->code_lo ? end : t->code_lo;
         }
     }
     if (lo < t->code_lo && im->n_ro < ICO_STATE_IMAGE_RO) {
         im->ro_lo[im->n_ro] = lo;
-        im->ro_hi[im->n_ro] = t->code_lo;
+        im->ro_hi[im->n_ro] = ro_end;
         im->n_ro++;
     }
     if (t->code_hi < hi && im->n_ro < ICO_STATE_IMAGE_RO) {
@@ -1458,9 +1467,11 @@ static void note_unnamed(const IcoXbRefs *r, const IcoSymTab *t, size_t slot, ui
 
 /* a window point (state_xbuild.h): its record, its bytes (whole, or the
    prefix when the pool has no room for them) and its nearest symbol's
-   name.  0, or -1 (no memory). */
+   name.  A text starts a literal when the byte before it is zero; at the
+   range's own start that byte is not readable here, and rlo_lstart says
+   (a legacy run's flag from its table, else 0).  0, or -1 (no memory). */
 static int put_window(Out *points, Out *pool, Out *strs, const IcoSymTab *t, int64_t delta,
-                      uint64_t w, uint64_t a, uint64_t z, int text, uint64_t rlo)
+                      uint64_t w, uint64_t a, uint64_t z, int text, uint64_t rlo, int rlo_lstart)
 {
     const size_t len = (size_t)(z - a);
     const unsigned char *b = (const unsigned char *)(uintptr_t)(a + (uint64_t)delta);
@@ -1483,7 +1494,7 @@ static int put_window(Out *points, Out *pool, Out *strs, const IcoSymTab *t, int
     put32(q + 12, (uint32_t)len);
     put32(q + 16, (uint32_t)(w - a));
     put32(q + 20, (text ? XW_TEXT : 0u) | (whole ? 0u : XW_HASHED) |
-                      (text && a > rlo && b[-1] == 0 ? XW_LSTART : 0u));
+                      (text && (a > rlo ? b[-1] == 0 : rlo_lstart) ? XW_LSTART : 0u));
     put64(q + 24, xxh3_64(b, len));
     put32(q + 32, pool_at);
     put32(q + 36, (uint32_t)stored);
@@ -1556,7 +1567,7 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
         const uint64_t w = r->key[i];
         const int strict = (r->strict[i] & 1) != 0;
         uint64_t rlo = 0, rhi = 0;
-        int b, in_block = 0, ro;
+        int b, in_block = 0, ro, rlo_lstart = 0;
 
         if (w == 0) {
             continue;
@@ -1652,7 +1663,7 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
                window stays inside the run holding the word */
             uint64_t a0, z0;
 
-            if (!ico_legacy_run(p->legacy->lt, w - p->legacy->old_lo, &a0, &z0)) {
+            if (!ico_legacy_run(p->legacy->lt, w - p->legacy->old_lo, &a0, &z0, &rlo_lstart)) {
                 note_unnamed(r, t, i, w, ICO_XB_WHY_NOBYTES, &flags, &left, &first_unnamed, st);
                 continue;
             }
@@ -1676,7 +1687,8 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
                 ro_freq(&p->image, r->delta, freq);
             }
             if (grow_window(&p->image, r->delta, freq, w, rlo, rhi, tl, &a, &z)) {
-                if (put_window(&points, &pool, &strs, t, r->delta, w, a, z, tl > 0, rlo) != 0) {
+                if (put_window(&points, &pool, &strs, t, r->delta, w, a, z, tl > 0, rlo,
+                               rlo_lstart) != 0) {
                     goto done;
                 }
                 np++;
@@ -2519,6 +2531,18 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
             }
             found = find_in(&im, 0, freq, pool + pool_at, stored, len, hashed, get64(r + 24),
                             (wf & XW_LSTART) != 0, 2, &w);
+            /* whole literals (the window starts where a literal starts and
+               ends in its zero byte) found at several literal starts: the
+               copies hold the same bytes, which C code reads alike; a word
+               naming one is told from its twin only by comparing it with
+               another pointer, and every word of one value takes the same
+               twin (the translation maps by value), so the first in address
+               order is taken and the twins counted */
+            if (found == 2 && text && !hashed && (wf & XW_LSTART) != 0 && stored == len &&
+                pool[pool_at + stored - 1] == 0) {
+                found = 1;
+                v->twins++;
+            }
             if (found != 1) {
                 if (text) {
                     char shown[48];

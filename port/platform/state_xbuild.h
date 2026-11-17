@@ -352,6 +352,9 @@ typedef struct IcoXbVerdict {
     unsigned windows;     /* the points that were windows */
     unsigned data_masked; /* the data matched by ordinal and contents */
     unsigned pages;       /* page words translated by their producers */
+    /* text windows of whole literals found at several literal starts, all
+       the same bytes: the first in address order taken (state_xbuild.c) */
+    unsigned twins;
     /* their points per fiber slot (state_reloc.h IcoStateXlate.fiber_point:
        the translation's own lists; freed by ico_xb_verdict_free) */
     IcoStateSpan **fiber_point;

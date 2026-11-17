@@ -694,6 +694,40 @@ __attribute__((constructor)) static void snap_game_data(void)
 static IcoSymTab *s_tab;
 static int s_tab_tried;
 
+/* The symbols lock: the program's table (s_tab, read once) and its units'
+   code hashes (computed on first use, state_syms.c) are shared, and so are
+   the static work arrays of build_syms, legacy_record and xb_probe; the save
+   (the writer's build_syms), a load's check and the Save states listing's
+   verdict (another thread may ask) each hold it for their whole use of the
+   table (state_xbuild.c and state_legacy.c keep no statics of their own: a
+   legacy table is loaded per check and freed). Made before main.
+   Lock order: the verdicts' work lock (state_verdicts.h) first, then this
+   one, never the other way.  A load's check and the listing's worker reach
+   xb_probe through other_build with the work lock held; the save's
+   build_syms takes this lock alone, outside the work lock, so the work lock
+   does not cover the save and this lock is still needed.  Code holding this
+   lock takes no other lock and calls neither the game nor the renderer. */
+static IcoMutex *s_xb_lock;
+
+__attribute__((constructor)) static void xb_lock_make(void)
+{
+    s_xb_lock = ico_mutex_create();
+}
+
+static void xb_lock(void)
+{
+    if (s_xb_lock != NULL) {
+        ico_mutex_lock(s_xb_lock);
+    }
+}
+
+static void xb_unlock(void)
+{
+    if (s_xb_lock != NULL) {
+        ico_mutex_unlock(s_xb_lock);
+    }
+}
+
 /* The program's symbol table (state_syms.h), read at the first save, load
    or listing that needs it and kept; NULL when there is none (logged once:
    this build's states then load only into this build, and no other
@@ -847,7 +881,7 @@ static void xb_scan_stack(IcoXbRefs *r, const IcoFiberImage *f)
    relocates: the arena, the game's data, the scanned blocks, the model
    tables, the scheduler's tables, the fibers' control blocks and stacks)
    and the registry's blocks.  0, or -1 when memory ran out. */
-static int build_syms(Copy *c, IcoXbStats *st)
+static int build_syms_locked(Copy *c, IcoXbStats *st)
 {
     static IcoSchedImage img;
     IcoXbProc p;
@@ -925,6 +959,16 @@ static int build_syms(Copy *c, IcoXbStats *st)
     c->p[SEC_SYMS] = sec;
     c->n[SEC_SYMS] = n;
     return 0;
+}
+
+static int build_syms(Copy *c, IcoXbStats *st)
+{
+    int rc;
+
+    xb_lock();
+    rc = build_syms_locked(c, st);
+    xb_unlock();
+    return rc;
 }
 
 /* why a state saved here loads only into this build, for the save's line */
@@ -1749,7 +1793,8 @@ static void build_reloc(IcoStateReloc *r, const StateRanges *rg, const void *pob
 /* A packaged file of the legacy tables: Android's APK assets under
    state_legacy/ (android/app/build.gradle copies port/state_legacy).  The
    other platforms ship none: their earlier states were named whole. */
-static int legacy_read(void *user, const char *path, void **data, size_t *n)
+static int legacy_read(void *user, const char *path, void **data, size_t *n, char *err,
+                       size_t err_n)
 {
 #if defined(__ANDROID__)
     char name[200];
@@ -1763,14 +1808,24 @@ static int legacy_read(void *user, const char *path, void **data, size_t *n)
     snprintf(name, sizeof name, "state_legacy/%s", path);
     io = SDL_IOFromFile(name, "rb");
     if (io == NULL) {
+        snprintf(err, err_n, "the APK's asset %s does not open: %s", name, SDL_GetError());
         return -1;
     }
     size = SDL_GetIOSize(io);
-    if (size <= 0 || size > (64ll << 20) || (b = malloc((size_t)size)) == NULL) {
+    if (size <= 0 || size > (64ll << 20)) {
+        snprintf(err, err_n, "the asset's size is %lld bytes (%s)", (long long)size,
+                 size < 0 ? SDL_GetError() : "outside 1 byte to 64 MB");
+        SDL_CloseIO(io);
+        return -1;
+    }
+    b = malloc((size_t)size);
+    if (b == NULL) {
+        snprintf(err, err_n, "no memory for its %lld bytes", (long long)size);
         SDL_CloseIO(io);
         return -1;
     }
     if (SDL_ReadIO(io, b, (size_t)size) != (size_t)size) {
+        snprintf(err, err_n, "reading its %lld bytes failed: %s", (long long)size, SDL_GetError());
         free(b);
         SDL_CloseIO(io);
         return -1;
@@ -1784,6 +1839,7 @@ static int legacy_read(void *user, const char *path, void **data, size_t *n)
     (void)path;
     *data = NULL;
     *n = 0;
+    snprintf(err, err_n, "this platform packages no legacy tables");
     return -1;
 #endif
 }
@@ -1973,10 +2029,11 @@ done:
    verdict's kind, *v filled (the caller frees it with
    ico_xb_verdict_free). */
 /* the last xb_probe's legacy naming, ms (0: none ran); for the listing's
-   timing line (read under the verdict lock, the only caller's) */
+   timing line (written under the symbols lock inside the verdicts' work
+   lock, read by vd_compute under the work lock) */
 static double s_legacy_ms;
 
-static int xb_probe(const char *path, const char *commit, IcoXbVerdict *v)
+static int xb_probe_locked(const char *path, const char *commit, IcoXbVerdict *v)
 {
     static const char *names[ICO_STATE_MAX_ENTRIES];
     static uint64_t sizes[ICO_STATE_MAX_ENTRIES], addrs[ICO_STATE_MAX_ENTRIES];
@@ -2079,6 +2136,17 @@ static int xb_probe(const char *path, const char *commit, IcoXbVerdict *v)
     }
     k = ico_xb_check(c.p[SEC_SYMS], (size_t)c.n[SEC_SYMS], &now, v);
     copy_free(&c);
+    return k;
+}
+
+/* xb_probe under the symbols lock (any thread) */
+static int xb_probe(const char *path, const char *commit, IcoXbVerdict *v)
+{
+    int k;
+
+    xb_lock();
+    k = xb_probe_locked(path, commit, v);
+    xb_unlock();
     return k;
 }
 
@@ -2223,7 +2291,9 @@ static int slot_permadeath(int slot, const uint64_t *block_off)
    set_refusal).  now: this run's header (a copy taken on the game thread
    when the listing's worker asks: now_header() is the game thread's).
    Called under the verdicts' work lock (state_verdicts.h): xb_probe's and
-   legacy_record's statics and the legacy tables assume one caller. */
+   legacy_record's statics and the legacy tables assume one caller; xb_probe
+   then takes the symbols lock inside it (the order at s_xb_lock), against
+   the save's build_syms. */
 static IcoStateResult other_build(const char *path, const IcoStateHeader *saved,
                                   const IcoStateHeader *now, IcoXbVerdict *v, int *xb, char *detail,
                                   size_t n, int box, IcoStateBlocker *blk)
@@ -2993,9 +3063,10 @@ static void perform_load(int slot)
                 "state: slot %d was saved by version %s, this is %s: everything it points into is "
                 "unchanged here, so it is translated (%u functions, %u data symbols, %u start-up "
                 "values and texts, %zu spans, %zu points; %u dead-frame words without one; %u "
-                "words naming nothing kept as numbers, first 0x%llx)\n",
+                "words naming nothing kept as numbers, first 0x%llx; %u texts had identical "
+                "twins, the first taken)\n",
                 slot, sv, tv, xv.units, xv.data, xv.points, xv.n_span, xv.n_point, xv.soft_left,
-                xv.left, (unsigned long long)xv.first_left);
+                xv.left, (unsigned long long)xv.first_left, xv.twins);
         log_fresh_blocks(slot, &xv);
     }
     {

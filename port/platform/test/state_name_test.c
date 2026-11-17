@@ -1389,6 +1389,7 @@ typedef struct Lg {
     IcoLegacyTable lt;
     uint64_t hash[3 * 16];
     uint32_t run[2];
+    uint8_t lstart[1];
     uint8_t v2[64 + 16 * 48];
     size_t v2_n;
     IcoSymTab *ot;
@@ -1414,7 +1415,10 @@ static int lg_make(Lg *g, Pg *a)
     memcpy(g->lt.ro, a->mem + PG_RO, 0x1000u);
     g->run[0] = (uint32_t)a->o_text;
     g->run[1] = (uint32_t)sizeof kLegacy;
+    /* the run starts a literal as the tool records it: the byte before it is zero */
+    g->lstart[0] = a->mem[a->o_text - 1] == 0;
     g->lt.run = g->run;
+    g->lt.lstart = g->lstart;
     g->lt.n_run = 1;
     g->lt.hash_rules = ICO_CODE_HASH_RULES;
     /* the version 2 record its saver made: its units with their rules-1
@@ -1608,7 +1612,9 @@ static void test_legacy(void)
     CHECK(sec != NULL && st.left == 1, "a repeated name no start-up word names: unnamed (%u)",
           st.left);
     free(sec);
-    /* ambiguous: the text twice in B's read-only data: refused */
+    /* the text twice in B's read-only data: a word into its middle is
+       refused (its tail could be either copy's); a word at its start names
+       a whole literal whose twins hold the same bytes: the first taken */
     pg_free(&b);
     s_pg_twice = 1;
     if (pg_make(&b, 0x1200, 0x1300, PG_BSS + 0x400, 0x14000) == 0) {
@@ -1616,9 +1622,18 @@ static void test_legacy(void)
         sec = lg_read(&g, &a, &b, snap, 2, regs, 2, arena, 2, &n, &st);
         k = sec != NULL ? lg_check(sec, n, &b, &a, snap, 2, &v) : ICO_XB_BAD;
         CHECK(k == ICO_XB_DATA && strstr(v.why, "more than one place") != NULL,
-              "the text twice in B: refused: %d %s", k, v.why);
+              "the text twice in B, a word into its middle: refused: %d %s", k, v.why);
         ico_xb_verdict_free(&v);
         free(sec);
+        arena[0] = a.lo + a.o_text; /* the literal's start */
+        sec = lg_read(&g, &a, &b, snap, 2, regs, 2, arena, 2, &n, &st);
+        k = sec != NULL ? lg_check(sec, n, &b, &a, snap, 2, &v) : ICO_XB_BAD;
+        CHECK(k == ICO_XB_OK && v.twins == 1 && pg_xlate(&v, arena[0], 0) == b.lo + b.o_text,
+              "a whole literal twice in B: the first taken, one twin counted: %d %u %s", k, v.twins,
+              v.why);
+        ico_xb_verdict_free(&v);
+        free(sec);
+        arena[0] = a.lo + a.o_text + 3;
     }
     pg_free(&b);
     s_pg_twice = 0;

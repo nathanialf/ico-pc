@@ -235,6 +235,14 @@ ICO_KS_PASS="$pw" run "$bt/apksigner" sign --ks "$ks" --ks-key-alias upload \
 unset pw
 rm -f "$apk.idsig"
 
+# the legacy tables in the signed APK by the names the game asks for
+# (state_legacy.c), with the repository's bytes: v0.11.9-rc5 shipped "syms"
+# for "syms.gz" (the packaging un-gzips a .gz asset)
+legacy_rc=
+case "$label" in *-rc[0-9]*) legacy_rc=--rc ;; esac
+python3 -I "$wt/tools/state_legacy_table.py" apkcheck "$apk" $legacy_rc >>"$log" 2>&1 ||
+    fail "tools/state_legacy_table.py apkcheck: the APK's legacy tables are not the repository's (the log names the file)"
+
 "$bt/apksigner" verify --verbose --print-certs "$apk" >>"$log" 2>&1 ||
     fail "apksigner verify"
 run "$bt/zipalign" -c -P 16 -v 4 "$apk"

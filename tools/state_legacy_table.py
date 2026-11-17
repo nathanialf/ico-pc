@@ -6,13 +6,16 @@ states an earlier Android version saved (format 2: port/platform/state_legacy.h)
                               [--out port/state_legacy]
       Writes port/state_legacy/NAME/ from a released APK (run by a maintainer;
       the outputs are committed): the APK's own assets/libmain.syms.gz as it is
-      (syms.gz), its library's allocated sections from its section headers
+      (syms.gzip: not .gz, which Android's asset packaging un-gzips and renames), its library's allocated sections from its section headers
       (sections.txt: the symbol file's "section" lines, which versions before
       v0.11.9 did not write), the text runs of its .rodata (every run of one or
       more C string literals, each its non-control bytes and a NUL: what a
       state's pointers into its read-only data can hold) as an index
       (texts.idx: per run its offset from the image start and its length,
-      little-endian 32-bit pairs, raw deflate) and the runs' bytes in order
+      little-endian 32-bit pairs, raw deflate; the length's top bit LSTART is set
+      when the run starts a literal: the byte before it is zero or it is .rodata's
+      first; the manifest's "text_index 2" names this format, and the game refuses
+      a table without it) and the runs' bytes in order
       (texts.<k>.z, raw deflate, each under the repository's 256 KiB file cap),
       every function's code hash under rules 1 and the current rules (hashes.z: per function,
       as port/platform/state_syms.c cuts the code into units, its offset from the image start
@@ -29,9 +32,17 @@ states an earlier Android version saved (format 2: port/platform/state_legacy.h)
   state_legacy_table.py check [--root port/state_legacy]
       Exit 1 unless every table's files match its manifest (sizes, SHA-256),
       the texts inflate to the index's total, the runs lie in .rodata's
-      section line and do not overlap, the symbol file inflates and names
+      section line and do not overlap, the index is of format 2 (text_index) with as many
+      literal-start runs as the manifest's lstarts, the symbol file inflates and names
       ico_diag_init, and index.txt lists exactly the tables (the
       state_legacy_tables test).
+
+  state_legacy_table.py apkcheck APK [--rc]
+      Every file the game asks for (manifest.txt and the files each manifest lists)
+      under assets/state_legacy/<table>/ by that exact name and with the repository's
+      bytes (Android's packaging un-gzips a .gz asset and drops the extension:
+      v0.11.9-rc5 shipped "syms" for "syms.gz"); the release tables, an rc's only
+      with --rc; the APK's index lists exactly those.
 """
 import argparse
 import gzip
@@ -53,6 +64,8 @@ HASH_RULES = 2  # port/platform/code_hash.h ICO_CODE_HASH_RULES
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CAP = 250000  # bytes per compressed text file (the repository's cap is 262144)
+TEXT_INDEX = 2  # texts.idx's format (port/platform/state_legacy.h ICO_LEGACY_TEXT_INDEX)
+LSTART = 0x80000000  # a run length's top bit: the run starts a literal (state_legacy.h)
 TEXT_RUN = re.compile(rb"(?:[\t\n\r\x1b\x20-\xff]+\x00)+")
 
 
@@ -181,13 +194,17 @@ def build(a):
     ro = so[ro_off:ro_off + ro_size]
     runs = [(m.start(), m.end()) for m in TEXT_RUN.finditer(ro) if m.end() - m.start() >= 4]
     blob = b"".join(ro[s:e] for s, e in runs)
-    idx = b"".join(struct.pack("<II", ro_addr + s, e - s) for s, e in runs)
+    if any(e - s >= LSTART for s, e in runs):
+        sys.exit("state_legacy_table: a text run of 2 GiB or more")
+    lstarts = sum(1 for s, _ in runs if s == 0 or ro[s - 1] == 0)
+    idx = b"".join(struct.pack("<II", ro_addr + s, (e - s) | (LSTART if s == 0 or ro[s - 1] == 0 else 0))
+                   for s, e in runs)
     out = os.path.join(a.out, a.name)
     os.makedirs(out, exist_ok=True)
     for f in os.listdir(out):
         os.remove(os.path.join(out, f))
     hashes = unit_hashes(gzip.decompress(syms).decode(), sec_lines, so)
-    files = {"syms.gz": syms, "sections.txt": ("".join(l + "\n" for l in sec_lines)).encode(),
+    files = {"syms.gzip": syms, "sections.txt": ("".join(l + "\n" for l in sec_lines)).encode(),
              "texts.idx": deflate(idx),
              "hashes.z": deflate(b"".join(struct.pack("<IQQ", a, h1, h) for a, h1, h in hashes))}
     k, at, step = 0, 0, 400000
@@ -209,13 +226,14 @@ def build(a):
         f.write("commit %s\nplatform android-arm64\nkind %s\n" % (a.commit, a.kind))
         f.write("apk %s\napk_sha256 %s\n" % (os.path.basename(a.apk), sha(apk)))
         f.write("texts %d %d\n" % (len(runs), len(blob)))
+        f.write("text_index %d\nlstarts %d\n" % (TEXT_INDEX, lstarts))
         f.write("text_files %d\n" % k)
         f.write("hash_rules %d\nhashes %d\n" % (HASH_RULES, len(hashes)))
         for name in sorted(files):
             f.write("file %s %d %s\n" % (name, len(files[name]), sha(files[name])))
     write_index(a.out)
-    print("state_legacy_table: %s: %d text runs, %d bytes; %d files, %d bytes" %
-          (out, len(runs), len(blob), len(files), sum(len(b) for b in files.values())))
+    print("state_legacy_table: %s: %d text runs (%d start a literal), %d bytes; %d files, %d bytes" %
+          (out, len(runs), lstarts, len(blob), len(files), sum(len(b) for b in files.values())))
 
 
 def check(a):
@@ -235,13 +253,22 @@ def check(a):
             b = open(os.path.join(p, name), "rb").read()
             if len(b) != size or sha(b) != digest:
                 bad.append("%s/%s does not match its manifest" % (d, name))
+        gz = [f for f in m["files"] if f.endswith(".gz")]
+        if gz:
+            bad.append("%s: %s end in .gz, which Android's asset packaging un-gzips and renames" % (d, gz))
         extra = set(os.listdir(p)) - set(m["files"]) - {"manifest.txt"}
         if extra:
             bad.append("%s: files the manifest does not list: %s" % (d, sorted(extra)))
         try:
             nruns, nbytes = map(int, m["texts"].split())
+            if int(m.get("text_index", "1")) != TEXT_INDEX:
+                bad.append("%s: its texts.idx is of format %s, not %d (rebuild the table)" %
+                           (d, m.get("text_index", "1"), TEXT_INDEX))
+                continue
             idx = inflate(open(os.path.join(p, "texts.idx"), "rb").read())
-            runs = [struct.unpack_from("<II", idx, i) for i in range(0, len(idx), 8)]
+            raw = [struct.unpack_from("<II", idx, i) for i in range(0, len(idx), 8)]
+            runs = [(a0, n & ~LSTART) for a0, n in raw]
+            flags = [n & LSTART != 0 for _, n in raw]
             blob = b"".join(inflate(open(os.path.join(p, "texts.%d.z" % k), "rb").read())
                             for k in range(int(m["text_files"])))
             ro = [l.split() for l in open(os.path.join(p, "sections.txt"))
@@ -255,7 +282,11 @@ def check(a):
                     bad.append("%s: a text run outside .rodata or out of order" % d)
                     break
                 prev = a0 + n
-            if b" T ico_diag_init\n" not in gzip.decompress(open(os.path.join(p, "syms.gz"), "rb").read()):
+            if sum(flags) != int(m["lstarts"]):
+                bad.append("%s: %d runs start a literal, the manifest says %s" % (d, sum(flags), m["lstarts"]))
+            if runs and runs[0][0] == lo and not flags[0]:
+                bad.append("%s: the run at .rodata's start starts a literal, its flag is clear" % d)
+            if b" T ico_diag_init\n" not in gzip.decompress(open(os.path.join(p, "syms.gzip"), "rb").read()):
                 bad.append("%s: the symbol file names no ico_diag_init" % d)
             hz = inflate(open(os.path.join(p, "hashes.z"), "rb").read())
             if len(hz) != 20 * int(m["hashes"]) or int(m["hash_rules"]) != HASH_RULES:
@@ -271,6 +302,48 @@ def check(a):
     sys.exit(1 if bad else 0)
 
 
+def apkcheck(a):
+    """every file the game asks for (state_legacy.c: manifest.txt and the files the manifest
+    lists) in the APK's assets/state_legacy/<table>/ under that exact name, with the
+    repository's bytes; the release tables always, the rc tables only in an rc APK, the APK's
+    index naming exactly those"""
+    root = os.path.join(ROOT, "port/state_legacy")
+    bad, want = [], []
+    for line in open(os.path.join(root, "index.txt")):
+        t = line.split()
+        if len(t) == 4 and not line.startswith("#") and (t[1] != "rc" or a.rc):
+            want.append(t)
+    with zipfile.ZipFile(a.apk) as z:
+        have = {i.filename: i for i in z.infolist()}
+        idx = "assets/state_legacy/index.txt"
+        if idx not in have:
+            bad.append("the APK lacks %s" % idx)
+        else:
+            listed = sorted(l.split()[2] for l in z.read(idx).decode().splitlines()
+                            if len(l.split()) == 4 and not l.startswith("#"))
+            if listed != sorted(t[2] for t in want):
+                bad.append("the APK's index lists %s, expected %s" % (listed, sorted(t[2] for t in want)))
+        for t in want:
+            m = manifest(os.path.join(root, t[2]))
+            names = ["manifest.txt"] + sorted(m["files"])
+            for f in names:
+                path = "assets/state_legacy/%s/%s" % (t[2], f)
+                src = open(os.path.join(root, t[2], f), "rb").read()
+                if path not in have:
+                    bad.append("the APK lacks %s (the game asks for it by this name)" % path)
+                elif z.read(path) != src:
+                    bad.append("the APK's %s is not the repository's bytes" % path)
+        for n in have:
+            if n.startswith("assets/state_legacy/") and n.split("/")[2] not in [t[2] for t in want] \
+                    and n != idx:
+                bad.append("the APK holds %s, which no table it lists has" % n)
+    for b in bad:
+        print("state_legacy_table: apkcheck: " + b)
+    print("state_legacy_table: apkcheck %s: %d tables, %s" % (os.path.basename(a.apk), len(want),
+                                                            "ok" if not bad else "%d problems" % len(bad)))
+    sys.exit(1 if bad else 0)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -282,8 +355,11 @@ def main():
     b.add_argument("--out", default=os.path.join(ROOT, "port/state_legacy"))
     c = sub.add_parser("check")
     c.add_argument("--root", default=os.path.join(ROOT, "port/state_legacy"))
+    k = sub.add_parser("apkcheck")
+    k.add_argument("apk")
+    k.add_argument("--rc", action="store_true", help="a release candidate's APK: its tables too")
     a = ap.parse_args()
-    build(a) if a.cmd == "build" else check(a)
+    {"build": build, "check": check, "apkcheck": apkcheck}[a.cmd](a)
 
 
 if __name__ == "__main__":
