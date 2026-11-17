@@ -1098,6 +1098,7 @@ stall_coincide 0.01
 startup_retry 0.01
 state_carry_check 15.00  # estimate: unmeasured, assumed (STATEGUARD2 could not build or run it)
 state_carry_image 0.20  # estimate: unmeasured, assumed (STATEGUARD2 could not build or run it)
+state_carry_probe_build 8.00  # estimate: one host compile of the probe (unmeasured in CI)
 state_carry_xbuild 1.00  # estimate: unmeasured, assumed (STATEGUARD2 could not build or run it)
 state_checkpoint 0.10  # estimate: unmeasured, assumed (RECOVERLOAD could not build or run it): a CPU-only unit test writing three small state files, like state_format
 state_checkpoint_table 0.30  # estimate: unmeasured, assumed (RECOVERLOAD could not build or run it): one Python run reading a 30 KB C file

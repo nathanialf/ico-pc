@@ -64,6 +64,16 @@ set_tests_properties(state_carry_check PROPERTIES PASS_REGULAR_EXPRESSION
 # loader's view: ico_state_image_range's image, code and read-only ranges)
 # read from the probe's own file and compared with the function's answer in
 # the probe's process
+# state_carry_probe_build: the probe built as the package scripts build it
+# (the host compiler over the tool's own source list, not this build's
+# target): v0.11.9's rc3 and rc4 packages stopped at "cannot judge" because
+# the save rules had come to need a source the list lacked
+add_test(NAME state_carry_probe_build
+         COMMAND ${_carry_py} probe-build --workdir "${CMAKE_CURRENT_BINARY_DIR}/state_carry_probe_build"
+                 --cc ${CMAKE_C_COMPILER})
+set_tests_properties(state_carry_probe_build PROPERTIES PASS_REGULAR_EXPRESSION
+                     "probe-build: the standalone probe built")
+
 add_test(NAME state_carry_image COMMAND ${_carry_py} self-image --probe $<TARGET_FILE:state_carry_probe>)
 set_tests_properties(state_carry_image PROPERTIES PASS_REGULAR_EXPRESSION
                      "self-image: the file's image, code and read-only ranges equal")

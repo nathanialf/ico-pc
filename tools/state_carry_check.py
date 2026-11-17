@@ -567,6 +567,7 @@ def nearest(table, addr):
 PROBE_SOURCES = [
     "port/platform/state_carry_probe.c", "port/platform/state_xbuild.c",
     "port/platform/state_syms.c", "port/platform/state_reloc.c",
+    "port/platform/state_legacy.c",
     "port/platform/code_hash.c", "port/render/xxh3.c",
     "port/third_party/miniz/miniz.c", "port/third_party/miniz/miniz_tdef.c",
     "port/third_party/miniz/miniz_tinfl.c",
@@ -1292,6 +1293,9 @@ def main():
     s.add_argument("--cc", default="cc")
     s.add_argument("--lld-clang", default=None)
     s.add_argument("--mingw-gcc", default=None)
+    b = sub.add_parser("probe-build")
+    b.add_argument("--workdir", required=True)
+    b.add_argument("--cc", default="cc")
     i = sub.add_parser("self-image")
     i.add_argument("--probe", required=True)
     x = sub.add_parser("xbuild")
@@ -1306,6 +1310,13 @@ def main():
             if a.rules is None and a.workdir is None:
                 ap.error("check needs --workdir (the probe's files go there)")
             return check(a)
+        if a.cmd == "probe-build":
+            # the probe as the package scripts build it (the host compiler over
+            # PROBE_SOURCES): a source the save rules came to need and the list
+            # lacks fails here, at a merge check, not at packaging
+            os.makedirs(a.workdir, exist_ok=True)
+            print("probe-build: the standalone probe built from PROBE_SOURCES: %s" % build_probe(a.cc, a.workdir))
+            return 0
         if a.cmd == "write-syms":
             return write_syms(a)
         if a.cmd == "selftest":
