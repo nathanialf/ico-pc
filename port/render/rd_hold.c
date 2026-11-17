@@ -134,8 +134,8 @@ static int envMode(void)
         const char *e = getenv("ICO_RD_SCENE_HOLD");
         s_h.env = !e || !e[0] ? 1 : e[0] == '0' ? 0 : strcmp(e, "paused") == 0 ? 2 : 1;
         if (s_h.env == 2) {
-            rd__log("still scene: ICO_RD_SCENE_HOLD=paused: every frame taken as paused (the "
-                    "tests' A/B)");
+            rd__log("still scene: ICO_RD_SCENE_HOLD=paused: the replay tool's frame taken as "
+                    "paused, its replays that present nothing too (the tests' A/B)");
         }
     }
     return s_h.env;
@@ -160,7 +160,9 @@ static const char *deviceWhy(void)
     if (g_rd.dstMode != RD_BLEND_EXACT_OFF || rd__uber_on()) {
         return "the exact blend";
     }
-    if (rd__upscale_point_on() || rd__layer_on()) {
+    /* the display layer is in force only under the upscaler's split
+       (rd__layer_on is its [dev] switch, on by default: not the layer) */
+    if (rd__upscale_point_on()) {
         return "a temporal upscaler";
     }
     if (rd__present_scene_on()) {
@@ -430,6 +432,9 @@ static void take(Replay *r)
         return;
     }
     rd__replay_end_pass(r); /* list 11 begins its own pass on SCENE, loaded */
+    /* the chain's state as this replay drew with it: its uploads came
+       before list 11 (the texture levels' filter is set by the first) */
+    s_h.state = rd__hold_state_key();
     /* SCENE's border repeat still due (the fog's columns, no post sprite
        read SCENE in lists 0-10): it stays where it falls, after list 11's
        draws, and the held replays arm it to fall there too */
@@ -564,7 +569,7 @@ static int decide(const RdFrame *f, int keep, RdHoldIn *in)
 {
     memset(in, 0, sizeof(*in));
     const int env = envMode();
-    in->paused = f && (f->paused || env == 2) && !keep;
+    in->paused = f && f->paused && !keep;
     if (!in->paused) {
         return rd__hold_why(in);
     }
@@ -593,9 +598,26 @@ static int decide(const RdFrame *f, int keep, RdHoldIn *in)
     return rd__hold_why(in);
 }
 
-const RdFrame *rd__hold_frame(const RdFrame *f, int keep)
+/* a replay that presents nothing, outside the self-test: a dump's, a check's
+ * or a probe's own replay (the VU skin check, F12's dump, the start-up
+ * self-tests); the replay tool's frame under ICO_RD_SCENE_HOLD=paused is the
+ * tests' picture (its --pass-dump replays present nothing) */
+static bool sideReplay(bool present)
+{
+    return !present && envMode() != 2 && s_h.self != SELF_HELD;
+}
+
+const RdFrame *rd__hold_frame(const RdFrame *f, int keep, bool present)
 {
     s_h.mode = MODE_NONE;
+    if (sideReplay(present)) {
+        /* not the picture: drawn in full and not counted, nothing freed (a
+           probe's frame is not the game's, paused or not); its lists 0-10
+           may write the carried targets, so the chain starts again */
+        chainReset();
+        kindNote(RD_HOLD_KIND_NONE);
+        return f;
+    }
     RdHoldIn in;
     int why = decide(f, keep, &in);
     if (s_h.self == SELF_HELD) {
@@ -661,9 +683,9 @@ const RdFrame *rd__hold_frame(const RdFrame *f, int keep)
 
 /* ---------------------------------------------------------- the self-test */
 
-bool rd__hold_selftest_due(const RdFrame *f, int keep)
+bool rd__hold_selftest_due(const RdFrame *f, int keep, bool present)
 {
-    if (s_h.self != SELF_NONE || !f) {
+    if (s_h.self != SELF_NONE || !f || sideReplay(present)) {
         return false;
     }
     RdHoldIn in;
@@ -747,6 +769,38 @@ void rd__hold_selftest_end(bool ok)
         s_h.selfPx[i] = NULL;
         s_h.selfCap[i] = 0;
     }
+}
+
+void rd__hold_shutdown(void)
+{
+    if (s_h.held.id) {
+        rhi_destroy_texture(s_h.held);
+    }
+    s_h.held = (RhiTexture){0};
+    for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
+        if (s_h.rb[i].buf.id) {
+            rhi_destroy_buffer(s_h.rb[i].buf);
+        }
+        memset(&s_h.rb[i], 0, sizeof(s_h.rb[i]));
+    }
+    free(s_h.last);
+    s_h.last = NULL;
+    s_h.lastBytes = s_h.lastCap = 0;
+    s_h.lastChain = s_h.lastTake = 0;
+    for (int i = 0; i < 2; i++) {
+        free(s_h.selfPx[i]);
+        s_h.selfPx[i] = NULL;
+        s_h.selfCap[i] = 0;
+    }
+    s_h.heldBytes = s_h.heldPictures = 0;
+    s_h.w = s_h.h = 0;
+    s_h.heldState = RHI_STATE_UNDEFINED;
+    s_h.mode = MODE_NONE;
+    s_h.self = SELF_NONE;
+    s_h.deviceSaid = false;
+    s_h.deviceWhy = NULL;
+    s_h.repeat = false;
+    chainReset();
 }
 
 /* ------------------------------------------------------------- the line */

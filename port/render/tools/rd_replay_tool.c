@@ -2904,6 +2904,14 @@ int main(int argc, char **argv)
     if (!rf) {
         return 1;
     }
+    {
+        /* ICO_RD_SCENE_HOLD=paused: the frame taken as the game's paused one
+           (rd_hold.c; the tests' A/B), not the start-up self-tests' frames */
+        const char *hold = getenv("ICO_RD_SCENE_HOLD");
+        if (hold && strcmp(hold, "paused") == 0) {
+            ((RdFrame *)rf)->paused = 1u;
+        }
+    }
     if (list) {
         RdStateBlock st = rf->startState;
         s_listed = 0;

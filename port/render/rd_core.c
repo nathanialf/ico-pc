@@ -2011,6 +2011,7 @@ void rd_shutdown(void)
         rd__crack_fill_shutdown();  /* the crack filler's count target and buffer */
         rd__aura_box_shutdown();    /* the aura's ROWBOX (rd_aura_box.c) */
         rd__lamps_shutdown();       /* LOWRES's copy of SCENE's depth (rd_lamps.c) */
+        rd__hold_shutdown();        /* the paused scene's copy and readbacks (rd_hold.c) */
         rd__shadow_tile_shutdown(); /* the shadow tiles' masks (rd_shadow_tile.c) */
         rd__vu_skin_shutdown();     /* the skin check's probes (rd_vu_skin_check.c) */
         rd__gpu_shutdown();

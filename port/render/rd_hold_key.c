@@ -404,7 +404,9 @@ static uint64_t targetKey(uint64_t h, RdTargetId id)
 uint64_t rd__hold_state_key(void)
 {
     uint64_t h = bytes(&g_rd.settings, sizeof(g_rd.settings));
-    const int32_t w[4] = {(int32_t)g_rd.filterUpgrade, g_rd.texLevelsFilter, (int32_t)g_rd.fogPath,
+    /* the levels' filter (g_rd.texLevelsFilter) is the decision's texture
+       wait: it differs from filterUpgrade only until the next upload */
+    const int32_t w[3] = {(int32_t)g_rd.filterUpgrade, (int32_t)g_rd.fogPath,
                           (int32_t)g_rd.dstMode};
     h = mix(h, bytes(w, sizeof(w)));
     h = targetKey(h, RD_TARGET_SCENE);

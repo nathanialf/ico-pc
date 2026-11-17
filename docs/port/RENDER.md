@@ -2149,7 +2149,8 @@ text and NOPs. The targets lists 0-10 carry from one replay to the next (FEED128
 WORK3_HELD) are named for the settling. **The device**: Vulkan; list 11's draws not joined to the
 open pass (`rd_late_pass.c`: where the fx plan reads destinations by the local read the join draws
 them with other pipelines, [DIVERGENCES.md](DIVERGENCES.md) VD-31, which the copy would change); no
-MSAA, exact blend or GS state as shader data, temporal upscaler or display layer, present from
+MSAA, exact blend or GS state as shader data, temporal upscaler (the display layer is in force only
+under its split), present from
 SCENE, Motion blur: Smooth, pass window, upscaler capture or video. OpenGL and Direct3D 11 draw
 every paused picture in full.
 
@@ -2188,6 +2189,12 @@ join's devices are left out. While paused the aura's feedback takes nothing from
 (`staticBlur.c`: `copyCurrentFBToFeedBackArea` only while `systemStatus[5] == 0`), so FEED128 settles
 after one replay where its alpha is the frame's own.
 
+**Side replays.** A replay that presents nothing (a dump's, the VU skin check's, a start-up
+self-test's or probe's own frame) is never held or taken and is not counted; the chain starts again
+after it, since its lists 0-10 may write the carried targets. Only the tool's frame under
+`ICO_RD_SCENE_HOLD=paused` (its `--pass-dump` replays present nothing) and the self-test's held
+replay are exceptions.
+
 **The self-test.** The first held picture of a run is made twice (`rd__replay_frame_here`): held
 without a present, then in full; SCENE and DISPLAY are read back and compared byte for byte at their
 size. A difference turns the hold off for the run (`rd: still scene: self-test: ...: different
@@ -2215,7 +2222,7 @@ feedback not settled, ... first, ... settings, ... uploads, ... lists 11-12 the 
 settings, ... off)`; a take refused `rd: still scene: no copy at list 11 of frame F: <why> ...`; the
 attempt ledger's row `the paused scene held under the menu`; each stall line's submissions `menu
 open, scene held` or `menu open, scene replayed` (`rd_hold_replay_kind`). `ICO_RD_SCENE_HOLD=0`
-turns it off and `=paused` takes every frame as paused (the tests:
+turns it off and `=paused` has `rd_replay_tool` mark its frame paused (the tests:
 [TESTING.md](TESTING.md#environment-switches)). Tests: `rd_hold` (the CPU half) and `rd_hold_ab`
 (held against full on fixtures, [TESTING_FIXTURES.md](TESTING_FIXTURES.md)).
 

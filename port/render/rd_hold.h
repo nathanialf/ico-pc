@@ -122,14 +122,14 @@ const char *rd__hold_why_text(int why);
 /* ------------------------------------------------------------ rd_hold.c */
 /* replayFrame (rd_replay.c), after the slot's wait: the frame to walk (f,
  * or the held frame) and this replay's kind */
-const RdFrame *rd__hold_frame(const RdFrame *f, int keep);
+const RdFrame *rd__hold_frame(const RdFrame *f, int keep, bool present);
 /* the walk at the start of list l (rd_replay.c's list loop): the copy
  * (a full replay of a paused scene) or its copy back (a held replay) */
 void rd__hold_list(struct Replay *r, int l);
 /* rd__replay_frame_here: the first held picture of the run is made twice
  * (rd__hold_selftest_due true once: the held one without a present, then
  * this one in full, rd__hold_selftest_end compares their pictures) */
-bool rd__hold_selftest_due(const RdFrame *f, int keep);
+bool rd__hold_selftest_due(const RdFrame *f, int keep, bool present);
 void rd__hold_selftest_mid(void);
 void rd__hold_selftest_end(bool ok);
 /* rd_perf.c rd__perf_collect_gpu: the feedback's readback of slot */
@@ -147,6 +147,11 @@ void rd__scene_border_rearm(void);
 /* the window's stall lines: what replay `replay` was (RD_HOLD_KIND_*) */
 enum { RD_HOLD_KIND_NONE = 0, RD_HOLD_KIND_HELD, RD_HOLD_KIND_REPLAYED };
 
+/* rd_shutdown, before the device goes: the held copy and the readbacks
+ * destroyed, the chain, the self-test and the device's verdict forgotten
+ * (a renderer made again, as rd_replay_tool's --present pass, starts
+ * afresh) */
+void rd__hold_shutdown(void);
 /* the 10 s line's counts (tests) */
 uint64_t rd__hold_count(int why);
 

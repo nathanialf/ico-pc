@@ -5705,7 +5705,7 @@ bool rd__replay_frame_here(const RdFrame *f, int keep, bool present)
 {
     /* the first held picture of a run: made held first, then this one in
        full, and the two compared (rd_hold.c) */
-    const bool selftest = rd__hold_selftest_due(f, keep);
+    const bool selftest = rd__hold_selftest_due(f, keep, present);
     if (selftest) {
         (void)rd__replay_frame_here(f, keep, false);
         rd__hold_selftest_mid();
@@ -5766,9 +5766,9 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     g_rd.replayCounter++;
     rd__passring_frame(g_rdPerf.replay, f->number, keep); /* the loss report's names */
     rd__diag_frame(NULL, 0);
-    rd_cpu_start();              /* the upload's phases (rd_cpu_phase.c) */
-    f = rd__hold_frame(f, keep); /* the paused scene's hold: lists 0-10 as NOPs (rd_hold.c) */
-    f = rd__vis_frame(f, keep);  /* the scene draws off the target: NOPs (rd_vis.c) */
+    rd_cpu_start();                       /* the upload's phases (rd_cpu_phase.c) */
+    f = rd__hold_frame(f, keep, present); /* the paused scene's hold (rd_hold.c) */
+    f = rd__vis_frame(f, keep);           /* the scene draws off the target: NOPs (rd_vis.c) */
     rd_cpu_mark(RD_CPU_U_CULL);
     /* the pass window's count starts again (rd__replay_set_window) */
     g_rdWin.passes = g_rdWin.lastDraws = g_rdWin.drawn = 0;

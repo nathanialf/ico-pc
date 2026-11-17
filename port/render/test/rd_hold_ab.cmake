@@ -17,10 +17,13 @@
 # DISPLAY and the feedback cleared before every replay, so a held picture that
 # read a work target lists 0-10 drew would show it).  Each pair: every PNG the
 # same bytes.  The path ran: a "held" fixture's held run says the hold on, its
-# self-test "equal" and N - 5 or more pictures from the held scene (rd_hold.c:
-# two takes, the readbacks of both at the third and fourth replays' waits, the
-# fourth a take as the first held picture waits for the self-test, the fifth
-# the self-test's; N - 2 with no carried target) and the full run none; a
+# self-test "equal" and N - 5 or more pictures from the held scene (rd_hold.c,
+# RHI_FRAMES_IN_FLIGHT 2: two takes, the readbacks of both at the third and
+# fourth replays' waits, the fourth a take as the first held picture waits for
+# the self-test, the fifth the self-test's; N - 2 with no carried target; the
+# chain's state key taken at list 11 of its first take, after the first
+# upload set the levels' filter; the tool marks its frame paused, so the
+# start-up self-tests' frames are not counted) and the full run none; a
 # "refused WHY" fixture none held and its reason counted.  No device: SKIP (77).
 # -DTOOL=<rd_replay_tool> -DFIXTURE_TOOL=<rd_fixture_tool> -DFIXTURES=<the
 # fixtures folder> -DFIXTURE_HELPERS=<rd_fixture_helpers.cmake> -DLIST=<a
