@@ -621,7 +621,7 @@ driver route to a Turnip package (`UI_STR_GPU_HANG_TURNIP`;
 512.676.53 a submission that never finished went with the kernel's GPU driver resetting the GPU
 again and again, and the whole device restarted about 10 s into the wait, before the 15 s limit.
 One wait for one unfinished submission seen for 1 s (`ICO_GPU_RESET_STOP_S`) during which KGSL's
-`reset_count` rose by 2 or more (`ICO_GPU_RESET_STOP_N`) ends the run as the GPU hang at once:
+`reset_count` rose by 3 or more (`ICO_GPU_RESET_STOP_N`) ends the run as the GPU hang at once:
 `ico_pc: WATCHDOG: the GPU: submission <n> not finished after <t> ms with the kernel's GPU driver
 resetting the GPU under it (<a> to <b> resets); ...`. The end's words go to last-run.txt (`the graphics
 driver stopped responding (a GPU hang, the kernel's driver resetting the GPU)`) and the log is
@@ -983,7 +983,7 @@ ico_pc: the previous run ended: <how> (<Android's part>); it was at <phase>, <s>
 crashed (signal 11)`, `the graphics device was lost`, `the graphics driver stopped responding (a
 GPU hang)`, `the watchdog ended it: <reason>`, `it was closed normally`; or the start-up activity
 file's loss line); then a restart of the device (`last-run.txt`'s boot id is not this boot's:
-`the device restarted (or was powered off) while it ran: no crash, device loss, watchdog or clean
+`the device has restarted (or was powered off) since, most likely while it ran: no crash, device loss, watchdog or clean
 end was written (boot 1a2b3c4d then, 5e6f7a8b now)`, issue 215; either id unreadable, as before,
 `exit_info_verdict_boot`); then Android's exit record whose pid is `last-run.txt`'s, in plain words
 (`Android ended it because the device was low on memory`, `it crashed in native code`, `it stopped

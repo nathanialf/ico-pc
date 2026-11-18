@@ -421,10 +421,10 @@ rd_display_change_2x_legacy 3.22
 rd_display_change_2x_sinks 3.27
 rd_display_change_2x_vk11 3.52
 rd_display_change_gl 3.51
-rd_draw_pattern_adreno 16.20  # estimate: 10.0 s local (PATTERNGATE, not measured: four fixtures, one replay each with the game's start-up self-tests) x 1.62
-rd_draw_pattern_desktop 16.20  # estimate: 10.0 s local (PATTERNGATE, not measured: four fixtures, one replay each with the game's start-up self-tests) x 1.62
-rd_draw_pattern_mali 16.20  # estimate: 10.0 s local (PATTERNGATE, not measured: four fixtures, one replay each with the game's start-up self-tests) x 1.62
-rd_draw_pattern_powervr 16.20  # estimate: 10.0 s local (PATTERNGATE, not measured: four fixtures, one replay each with the game's start-up self-tests) x 1.62
+rd_draw_pattern_adreno 58.48  # estimate: 36.1 s local (v0.11.11's int build, logs/pattern-run4.log) x 1.62
+rd_draw_pattern_desktop 58.81  # estimate: 36.3 s local (v0.11.11's int build, logs/pattern-run4.log) x 1.62
+rd_draw_pattern_mali 21.38  # estimate: 13.2 s local (v0.11.11's int build, logs/pattern-run4.log) x 1.62
+rd_draw_pattern_powervr 76.14  # estimate: 47.0 s local (v0.11.11's int build, logs/pattern-run4.log) x 1.62
 rd_dst_usage 1.25
 rd_dst_usage_gl 0.85
 rd_early_plan 0.00

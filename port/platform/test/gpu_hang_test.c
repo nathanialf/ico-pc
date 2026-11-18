@@ -111,7 +111,7 @@ static void testStep(void)
 }
 
 /* The reset stop (issue 215): a wait with the kernel driver resetting the
-   GPU under it ends at 1 s and 2 resets; a recovered stall, a wait without
+   GPU under it ends at 1 s and 3 resets; a recovered stall, a wait without
    resets and an unreadable count never do */
 static void testResetStop(void)
 {
@@ -127,17 +127,17 @@ static void testResetStop(void)
     CHECK(ico_gpu_reset_step(&w, 403, 401, 0.25, 1, 280) == 0); /* first seen */
     CHECK(ico_gpu_reset_step(&w, 403, 401, 0.25, 1, 280) == 0);
     CHECK(ico_gpu_reset_step(&w, 403, 401, 0.25, 1, 281) == 0);
-    CHECK(ico_gpu_reset_step(&w, 403, 401, 0.25, 1, 282) == 0); /* 2 resets, 0.75 s */
-    CHECK(ico_gpu_reset_step(&w, 403, 401, 0.25, 1, 282) == 1); /* 1.0 s */
+    CHECK(ico_gpu_reset_step(&w, 403, 401, 0.25, 1, 283) == 0); /* 3 resets, 0.75 s */
+    CHECK(ico_gpu_reset_step(&w, 403, 401, 0.25, 1, 283) == 1); /* 1.0 s */
     CHECK(w.fired && w.resets0 == 280);
     CHECK(ico_gpu_reset_step(&w, 403, 401, 0.25, 1, 290) == 0); /* once */
     /* a long wait with one reset, or none: the 15 s limit's, not this one's */
     memset(&w, 0, sizeof w);
     for (i = 0; i < 80; i++) {
-        CHECK(ico_gpu_reset_step(&w, 500, 499, 0.25, 1, i < 10 ? 40 : 41) == 0);
+        CHECK(ico_gpu_reset_step(&w, 500, 499, 0.25, 1, i < 10 ? 40 : i < 40 ? 41 : 42) == 0);
     }
-    /* the second reset arrives late: the stop then */
-    CHECK(ico_gpu_reset_step(&w, 500, 499, 0.25, 1, 42) == 1);
+    /* the third reset arrives late: the stop then */
+    CHECK(ico_gpu_reset_step(&w, 500, 499, 0.25, 1, 43) == 1);
     /* the count not readable (the issue 123 tablet), at any poll */
     memset(&w, 0, sizeof w);
     for (i = 0; i < 80; i++) {
