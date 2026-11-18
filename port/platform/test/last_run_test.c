@@ -801,6 +801,7 @@ static void run_sync(const char *base)
            beat does */
         LastRunBeat beat;
         memset(&beat, 0, sizeof beat);
+        beat.availKb = -1; /* not read: the run's lowest free memory stays */
         last_run_beat(&beat);
     }
     (void)read_file(cur, buf, sizeof buf, &s_f);
