@@ -77,6 +77,14 @@ void set_size_decide(const SetSizeIn *in, SetSizeOut *out)
     }
     out->active = 1;
     out->headroomMb = in->freeMb - in->floorMb - (in->needMb > 0 ? in->needMb : 0);
+    if (in->gpuRead) {
+        /* the driver's own figure for this process: the smaller room decides */
+        out->gpuRoomMb = SET_SIZE_GPU_LIMIT_MB - (in->gpuMb > 0 ? in->gpuMb : 0);
+        if (out->gpuRoomMb < out->headroomMb) {
+            out->headroomMb = out->gpuRoomMb;
+            out->gpuBound = 1;
+        }
+    }
     order[0] = in->next == SET_SIZE_VU ? SET_SIZE_VU : SET_SIZE_2D;
     order[1] = 1 - order[0];
     for (int k = 0; k < SET_SIZE_FAMILIES; k++) {
@@ -190,6 +198,8 @@ unsigned set_size_ask(SetSizeRun *r, const SetSizeAsk *a, char *line, size_t lin
     in.needMb = a->needMb;
     in.next = a->next;
     in.stopped = r->stopped;
+    in.gpuRead = a->gpuRead;
+    in.gpuMb = a->gpuMb;
     for (int f = 0; f < SET_SIZE_FAMILIES; f++) {
         in.left[f] = a->left[f];
         in.batches[f] = r->n[f];
@@ -209,17 +219,27 @@ unsigned set_size_ask(SetSizeRun *r, const SetSizeAsk *a, char *line, size_t lin
     }
     if (due != 0u && line != NULL && lineSize > 0) {
         char fam[SET_SIZE_FAMILIES][400];
+        char gpu[160];
         int w;
+        gpu[0] = '\0';
+        if (in.gpuRead) {
+            snprintf(gpu, sizeof gpu,
+                     "; the driver holds %ld MB of GPU memory for this process, the limit %ld MB "
+                     "leaves %ld MB%s",
+                     text_mb(in.gpuMb), SET_SIZE_GPU_LIMIT_MB, text_mb(o.gpuRoomMb),
+                     o.gpuBound ? ", the smaller: it decides" : "");
+        }
         for (int f = 0; f < SET_SIZE_FAMILIES; f++) {
             (void)family_text(fam[f], sizeof fam[f], r, &in, &o, f);
         }
         w = snprintf(line, lineSize,
                      "ico_pc: pipelines: the start-up set's size at pipeline %u of %u: free %ld "
-                     "MB less the floor %ld MB less play's known need %ld MB leaves %ld MB; %s; "
+                     "MB less the floor %ld MB less play's known need %ld MB leaves %ld MB%s; %s; "
                      "%s; the rests kept %ld MB",
                      a->place + 1u, a->total, text_mb(a->freeMb), text_mb(r->floorMb),
-                     text_mb(a->needMb > 0 ? a->needMb : 0), text_mb(o.headroomMb), fam[0], fam[1],
-                     text_mb(o.keptMb));
+                     text_mb(a->needMb > 0 ? a->needMb : 0),
+                     text_mb(a->freeMb - r->floorMb - (a->needMb > 0 ? a->needMb : 0)), gpu, fam[0],
+                     fam[1], text_mb(o.keptMb));
         (void)w;
         r->said |= due;
     }
@@ -232,6 +252,9 @@ unsigned set_size_ask(SetSizeRun *r, const SetSizeAsk *a, char *line, size_t lin
             r->leftAtStop[f] = in.left[f];
             r->placeAtStop[f] = a->place;
             r->fallAtStop[f] = in.fallMb[f];
+            if (o.gpuBound) {
+                r->gpuStopped |= 1u << f;
+            }
             if (why != NULL && at < whySize) {
                 const int w = snprintf(
                     why + at, whySize - at, "%s%s %.1f MB a pipeline, its rest %ld MB",
@@ -240,7 +263,9 @@ unsigned set_size_ask(SetSizeRun *r, const SetSizeAsk *a, char *line, size_t lin
             }
         }
         if (why != NULL && at < whySize) {
-            const int w = snprintf(why + at, whySize - at, ", against %ld MB above the floor",
+            const int w = snprintf(why + at, whySize - at,
+                                   o.gpuBound ? ", against %ld MB under the driver's GPU limit"
+                                              : ", against %ld MB above the floor",
                                    text_mb(o.headroomMb));
             (void)w;
         }
@@ -281,8 +306,33 @@ size_t set_size_rule_text(char *out, size_t size, int active, const char *offWhy
     return w < 0 ? 0 : (size_t)w < size ? (size_t)w : size - 1;
 }
 
+size_t set_size_gpu_text(char *out, size_t size, int gpuRead, long gpuMb, const char *offWhy)
+{
+    int w;
+    if (size == 0) {
+        return 0;
+    }
+    if (!gpuRead) {
+        w = snprintf(out, size,
+                     "ico_pc: pipelines: the start-up set's size by the driver's GPU memory: off "
+                     "(%s): the free memory's rule alone",
+                     offWhy != NULL ? offWhy : "the kernel's GPU driver gives no figure here");
+    } else {
+        w = snprintf(out, size,
+                     "ico_pc: pipelines: the start-up set's size by the driver's GPU memory: on "
+                     "(this process holds %ld MB, the limit %ld MB): a family's rest is weighed "
+                     "against the smaller of the free memory's room and the limit less what the "
+                     "driver holds",
+                     text_mb(gpuMb), SET_SIZE_GPU_LIMIT_MB);
+    }
+    return w < 0 ? 0 : (size_t)w < size ? (size_t)w : size - 1;
+}
+
 size_t set_size_words(const SetSizeRun *r, char *out, size_t size)
 {
+    /* the rule that stopped: the driver's GPU memory where it stopped a
+       family, else the memory fall */
+    const char *by = r->gpuStopped != 0u ? "the driver's GPU memory" : "the memory fall";
     int w;
     if (size == 0) {
         return 0;
@@ -295,15 +345,15 @@ size_t set_size_words(const SetSizeRun *r, char *out, size_t size)
         w = snprintf(out, size, "start-up set sized by the memory fall: every family fits");
     } else if (r->stopped == 3u) {
         w = snprintf(out, size,
-                     "start-up set sized by the memory fall: 2D, VU left to first use (%.1f, %.1f "
+                     "start-up set sized by %s: 2D, VU left to first use (%.1f, %.1f "
                      "MB a pipeline)",
-                     text_fall(r->fallAtStop[0]), text_fall(r->fallAtStop[1]));
+                     by, text_fall(r->fallAtStop[0]), text_fall(r->fallAtStop[1]));
     } else {
         const int f = r->stopped == 2u ? SET_SIZE_VU : SET_SIZE_2D;
         w = snprintf(out, size,
-                     "start-up set sized by the memory fall: %s left to first use (%.1f MB a "
+                     "start-up set sized by %s: %s left to first use (%.1f MB a "
                      "pipeline)",
-                     k_family[f], text_fall(r->fallAtStop[f]));
+                     by, k_family[f], text_fall(r->fallAtStop[f]));
     }
     return w < 0 ? 0 : (size_t)w < size ? (size_t)w : size - 1;
 }

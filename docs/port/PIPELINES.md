@@ -742,6 +742,21 @@ not measured on a device):
   0.00-0.01 s from the cache and 0.15-0.23 s for one the cache missed, and play's own first-use
   batches 0.00-0.15 s a pipeline.
 
+The driver's own figure (issue 215's third start, v0.11.9): after a restart the handheld had so
+much free memory that VU's rest fit above the floor; the set ran to about 227 pipelines, the
+kernel's GPU driver held 4387 MB for the process (about 20-24 MB a pipeline on driver 512.676.53)
+and the device went down in the self-tests after the set. The starts that held 698 MB (51
+pipelines) and 1116 MB (65) got through. So where the kernel's driver says what this process holds
+(`/sys/class/kgsl/kgsl/proc/<pid>/kernel`, readable), a family's rest is weighed against the
+smaller of the free memory's room and `SET_SIZE_GPU_LIMIT_MB` (1024 MB) less that figure; a stop
+by it is the same stop (the rest made on first use, for this start only). Not readable (the issue
+123 tablet): the free memory's room alone. The start says which:
+`the start-up set's size by the driver's GPU memory: on (this process holds <g> MB, the limit 1024 MB)`
+or `off (<why>)`; a decision line then carries `the driver holds <g> MB of GPU memory for this
+process, the limit 1024 MB leaves <r> MB` (`, the smaller: it decides` where it is), and
+last-run.txt's phase says `start-up set sized by the driver's GPU memory: ...` where that room
+stopped a family.
+
 Lines: the start's `the start-up set's size by the device's memory fall: on (...)` or `off (...)`,
 one line at each family's first trusted figure and at each stop, the renderer's count at the set's
 end, the first picture's free memory, and the 10 s line's first-use count
