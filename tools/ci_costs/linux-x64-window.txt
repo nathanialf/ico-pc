@@ -215,6 +215,7 @@ knockdown_disc_jun26 0.00
 knockdown_disc_kor 0.00
 knockdown_disc_ntsc 0.00
 last_run 10.90  # estimate: 6.2 s local (merge-wt_FIX1-20261117T010612Z.rest.log) x 1.77
+last_run_skin 0.10  # estimate: 0.0 s local (merge-wt_SKINHOT-20261118T053941Z.rest.log), a pure text test
 layout_asserts 0.00
 layout_asserts_fresh 0.15
 libsd_irx 0.01
