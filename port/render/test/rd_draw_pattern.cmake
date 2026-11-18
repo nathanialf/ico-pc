@@ -79,7 +79,9 @@ set(env_adreno ICO_VK_FAKE_VENDOR=0x5143 ICO_VK_FAKE_PASS_ROW=qualcomm ICO_VK_FA
     ICO_VK_FAKE_NO_DYNAMIC=1 ICO_RD_VU_PLAIN=row ICO_VK_FAKE_NO_PREPASS=1
     ICO_VK_FAKE_NO_INTERLOCK=1)
 set(args_adreno --enhanced --resolution 2x --present 1920x1080)
-set(said_adreno "(ICO_VK_FAKE_VENDOR)" "(ICO_VK_FAKE_PASS_ROW=qualcomm)"
+# (the pass row's own line is not said at API 1.1, where the passes are VkRenderPass
+# objects before the row is asked: vk_device.c; the stats line says them)
+set(said_adreno "(ICO_VK_FAKE_VENDOR)" "as VkRenderPass objects"
     "ICO_VK_FAKE_API=1.1: the device is used as a Vulkan 1.1" "ICO_VK_FAKE_NO_DYNAMIC=1"
     "(ICO_VK_FAKE_NO_INTERLOCK)" "ICO_RD_VU_PLAIN=row: the plain set's drops"
     "stats: VU pre-pass off")

@@ -44,8 +44,18 @@ if(TARGET rd_replay_tool AND TARGET rd_fixture_tool)
                              -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_draw_pattern.cmake")
             set_tests_properties(rd_draw_pattern_${_dp} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                                    TIMEOUT 900)
-            if(_env)
-                set_tests_properties(rd_draw_pattern_${_dp} PROPERTIES ENVIRONMENT "${_env}")
+            # the tables are written without the validation layer (the target
+            # below) and the desktop profile's pass count differs under it (40
+            # against 32 on fx-pattern-mali-frame): of the tests' environment
+            # only the sanitizers' options
+            set(_dp_env "")
+            foreach(_dp_e IN LISTS _env)
+                if(_dp_e MATCHES "^(ASAN|UBSAN|LSAN)_OPTIONS=")
+                    list(APPEND _dp_env "${_dp_e}")
+                endif()
+            endforeach()
+            if(_dp_env)
+                set_tests_properties(rd_draw_pattern_${_dp} PROPERTIES ENVIRONMENT "${_dp_env}")
             endif()
         endforeach()
     endif()

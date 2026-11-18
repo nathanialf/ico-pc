@@ -1,5 +1,11 @@
 # The draw pattern of profile powervr (rd_draw_pattern_powervr,
-# port/render/test/rd_draw_pattern.cmake; docs/port/TESTING.md, "The draw pattern gate").
-# Not written yet: the target rd_draw_pattern_tables writes this file from the build's
-# replays; until then the test fails on the word below.
-ungenerated
+# port/render/test/rd_draw_pattern.cmake; docs/port/TESTING.md, "The draw pattern gate"):
+# a line a fixture of port/render/test/fixtures/lists/draw_pattern.txt, the counts
+# rd_replay_tool --stats --game-selftests printed under the profile's fakes.  Written by
+# the target rd_draw_pattern_tables; a change is committed with the change that made
+# it and named in the release's device checklist.
+# device: llvmpipe (LLVM 19.1.7, 256 bits) (device 10005:0000, driver ID 13, version 0.0.1, Vulkan 1.4.305, Linux)
+fx-pattern-mali-frame draws=669 passes=22 vu_draws=301 vu_gpu=301 vu_merged=0 vu_merged_into=0 vu_alone=301 fused=0 kept=100 kept_blend=0 kept_plans=0 kept_passes=100 kept_dst=0 kept_planes=0 kept_build=0 kept_off=0 fused_same=2 twice=0 twice_tris=0 colour_alone=0 pipelines=46
+fx-pattern-mali-slow541 draws=1004 passes=24 vu_draws=902 vu_gpu=450 vu_merged=484 vu_merged_into=32 vu_alone=418 fused=0 kept=199 kept_blend=0 kept_plans=0 kept_passes=199 kept_dst=0 kept_planes=0 kept_build=0 kept_off=0 fused_same=242 twice=0 twice_tris=0 colour_alone=0 pipelines=47
+fx-mobile-164 draws=88 passes=24 vu_draws=84 vu_gpu=30 vu_merged=61 vu_merged_into=7 vu_alone=23 fused=27 kept=0 kept_blend=0 kept_plans=0 kept_passes=0 kept_dst=0 kept_planes=0 kept_build=0 kept_off=0 fused_same=0 twice=0 twice_tris=0 colour_alone=0 pipelines=47
+fx-phone-2199 draws=130 passes=27 vu_draws=65 vu_gpu=42 vu_merged=35 vu_merged_into=12 vu_alone=30 fused=0 kept=0 kept_blend=0 kept_plans=0 kept_passes=0 kept_dst=0 kept_planes=0 kept_build=0 kept_off=0 fused_same=0 twice=0 twice_tris=0 colour_alone=0 pipelines=49
