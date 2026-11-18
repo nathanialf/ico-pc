@@ -796,6 +796,13 @@ static void run_sync(const char *base)
     last_run_set_pipelines(0, 684);
     last_run_set_pipelines(684, 0);
     last_run_set_pipelines_over(680);
+    {
+        /* a full set's close writes nothing by itself (as before): the next
+           beat does */
+        LastRunBeat beat;
+        memset(&beat, 0, sizeof beat);
+        last_run_beat(&beat);
+    }
     (void)read_file(cur, buf, sizeof buf, &s_f);
     CHECK(starts(s_f.value[LAST_RUN_PIPELINES], "start-up set 684 of 684; "));
 
