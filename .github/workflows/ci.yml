@@ -354,8 +354,25 @@ jobs:
             --exclude "$ICO_CI_EXCLUDE" \
             --cost-data ${{ matrix.dir }}/Testing/Temporary/CTestCostData.txt \
             --out "$RUNNER_TEMP/shard.txt"
+          # the sanitizer suite's load: Mesa's software renderers start a worker
+          # thread per core in every test, so four tests at once on the runner's
+          # four cores ran sixteen under AddressSanitizer; the runner of asan 5/6
+          # (three OpenGL tests of about 16 minutes and rd_lamps_ab started
+          # together) was lost three times in a row (run 44181572046: "lost
+          # communication with the server" twice, "received a shutdown signal"
+          # once). One worker thread a test there; the pictures do not depend on it.
+          if [ "${{ matrix.suite }}" = asan ]; then export LP_NUM_THREADS=1; fi
+          # the runner's load and free memory once a minute, in the log: what a
+          # lost runner's last minutes looked like
+          ( while sleep 60; do
+              echo "runner: load $(cut -d' ' -f1-3 /proc/loadavg), available $(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo) MB, $(date -u +%H:%M:%S)"
+            done ) &
+          watch=$!
+          rc=0
           $CMAKE/ctest --test-dir ${{ matrix.dir }} --output-on-failure --parallel 4 \
-            --no-tests=error --tests-from-file "$RUNNER_TEMP/shard.txt"
+            --no-tests=error --tests-from-file "$RUNNER_TEMP/shard.txt" || rc=$?
+          kill $watch 2>/dev/null || true
+          exit $rc
 
       # every shader entry with the Direct3D 11 macro (ICO_D3D11=1): the
       # flat-register preprocessing compiles (FXC itself runs on Windows only)
