@@ -374,8 +374,9 @@ endif()
 # logs/last-run.txt (last_run.c, issue 215): the slots' text and parse, a
 # file cut and a write torn at every byte offset, the previous run's lines,
 # the phase rules and the summary, and the run's own file through its calls
-# (the crash's end, the next start's lines and copy); it writes under the
-# build folder
+# (the crash's end, the next start's lines and rename; issue 215's boot id,
+# the set's count made and a start ended between its renames); it writes
+# under the build folder
 add_executable(last_run_test test/last_run_test.c)
 target_compile_options(last_run_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(last_run_test PRIVATE ico_platform ico_host_fs)

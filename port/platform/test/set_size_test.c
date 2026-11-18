@@ -226,6 +226,120 @@ static void testHandheld(void)
     CHECK(s_run.lowMb == 6313 && s_run.n[0] == 3 && s_run.n[1] == 3 && s_run.mixed == 0);
 }
 
+/* the ask with the driver's GPU memory for this process read */
+static unsigned askGpu(long freeMb, long gpuMb, unsigned made2d, unsigned madeVu, unsigned left2d,
+                       unsigned leftVu, int next, unsigned place, unsigned total, char *line,
+                       char *why)
+{
+    SetSizeAsk a;
+    memset(&a, 0, sizeof a);
+    a.freeMb = freeMb;
+    a.made[0] = made2d;
+    a.made[1] = madeVu;
+    a.left[0] = left2d;
+    a.left[1] = leftVu;
+    a.next = next;
+    a.needMb = 32;
+    a.place = place;
+    a.total = total;
+    a.gpuRead = 1;
+    a.gpuMb = gpuMb;
+    return set_size_ask(&s_run, &a, line, SET_SIZE_LINE_MAX, why, SET_SIZE_WHY_MAX);
+}
+
+/* Issue 215's third start: after a restart the handheld has 9500 MB free,
+   so VU's rest fits above the floor (the free memory's rule alone let the
+   set run to 4387 MB held); the driver's figure for the process stops it */
+static void testGpuRoom(void)
+{
+    char line[SET_SIZE_LINE_MAX], why[SET_SIZE_WHY_MAX], words[SET_SIZE_WORDS_MAX];
+    SetSizeIn in;
+    SetSizeOut o;
+    unsigned m;
+    size_t n;
+
+    /* the decision: the smaller room decides, an unread figure changes nothing */
+    memset(&in, 0, sizeof in);
+    in.freeMb = 9000;
+    in.floorMb = 1915;
+    in.left[SET_SIZE_VU] = 100;
+    in.batches[SET_SIZE_VU] = 3;
+    in.fallMb[SET_SIZE_VU] = 24.0;
+    in.next = SET_SIZE_VU;
+    set_size_decide(&in, &o);
+    CHECK(o.active && o.headroomMb == 7085 && o.gpuBound == 0 && o.stop == 0u && o.keptMb == 2400);
+    in.gpuRead = 1;
+    in.gpuMb = 500; /* 524 MB of room: 2400 does not fit */
+    set_size_decide(&in, &o);
+    CHECK(o.gpuBound == 1 && o.gpuRoomMb == 524 && o.headroomMb == 524 && o.stop == 2u &&
+          o.newly == 2u);
+    in.left[SET_SIZE_VU] = 21; /* 504 MB: fits under the limit */
+    set_size_decide(&in, &o);
+    CHECK(o.gpuBound == 1 && o.stop == 0u && o.keptMb == 504);
+    in.gpuMb = SET_SIZE_GPU_LIMIT_MB + 300; /* over the limit already: any cost stops */
+    in.left[SET_SIZE_VU] = 1;
+    set_size_decide(&in, &o);
+    CHECK(o.gpuRoomMb == -300 && o.stop == 2u);
+    in.fallMb[SET_SIZE_VU] = 0.0; /* no fall: never stopped, by either room */
+    set_size_decide(&in, &o);
+    CHECK(o.stop == 0u);
+    in.fallMb[SET_SIZE_VU] = 24.0;
+    in.freeMb = 2000; /* the free memory's room (85 MB) is the smaller: its words */
+    in.gpuMb = 10;
+    in.left[SET_SIZE_VU] = 10;
+    set_size_decide(&in, &o);
+    CHECK(o.gpuBound == 0 && o.headroomMb == 85 && o.stop == 2u);
+
+    /* the run: 2D of 24 MB a pipeline, the process's figure growing with it */
+    set_size_begin(&s_run, 9500, 1915);
+    CHECK(askGpu(9500, 2, 0, 0, 442, 242, 0, 0, 684, line, why) == 0u && line[0] == '\0');
+    CHECK(askGpu(9308, 194, 8, 0, 434, 242, 0, 8, 684, line, why) == 0u);
+    CHECK(askGpu(9116, 386, 16, 0, 426, 242, 0, 16, 684, line, why) == 0u);
+    m = askGpu(8924, 578, 24, 0, 418, 242, 0, 24, 684, line, why);
+    CHECK(m == 1u && s_run.gpuStopped == 1u);
+    CHECK(strcmp(line,
+                 "ico_pc: pipelines: the start-up set's size at pipeline 25 of 684: free 8924 MB "
+                 "less the floor 1915 MB less play's known need 32 MB leaves 6977 MB; the driver "
+                 "holds 578 MB of GPU memory for this process, the limit 1024 MB leaves 446 MB, "
+                 "the smaller: it decides; 2D 24.0 MB a pipeline (the median of 3 batches): its "
+                 "418 left x 24.0 = 10032 MB, stops now, the rest made on first use; VU not "
+                 "measured yet (0 of 3 batches), measured when reached; the rests kept 0 MB") == 0);
+    CHECK(strcmp(why, "2D 24.0 MB a pipeline, its rest 10032 MB, against 446 MB under the driver's "
+                      "GPU limit") == 0);
+    /* VU: 218 left x 24 = 5232 MB fits in the free memory's 6400 MB (the
+       third start's set went on), not under the driver's limit */
+    CHECK(askGpu(8732, 770, 24, 8, 108, 234, 1, 342, 684, line, why) == 1u);
+    CHECK(askGpu(8540, 962, 24, 16, 108, 226, 1, 350, 684, line, why) == 1u);
+    m = askGpu(8348, 1154, 24, 24, 108, 218, 1, 357, 684, line, why);
+    CHECK(m == 3u && s_run.gpuStopped == 3u);
+    CHECK(strstr(line, "leaves 6401 MB; the driver holds 1154 MB of GPU memory for this process, "
+                       "the limit 1024 MB leaves -130 MB, the smaller: it decides; ") != NULL);
+    CHECK(strstr(line, "its 218 left x 24.0 = 5232 MB, stops now, the rest made on first use") !=
+          NULL);
+    CHECK(strcmp(why, "VU 24.0 MB a pipeline, its rest 5232 MB, against -130 MB under the "
+                      "driver's GPU limit") == 0);
+    n = set_size_words(&s_run, words, sizeof words);
+    CHECK(n == strlen(words) && n < sizeof words - 1);
+    CHECK(strcmp(words, "start-up set sized by the driver's GPU memory: 2D, VU left to first use "
+                        "(24.0, 24.0 MB a pipeline)") == 0);
+
+    /* the start line, both ways, and its room */
+    n = set_size_gpu_text(line, SET_SIZE_GPU_LINE_MAX, 1, 2, NULL);
+    CHECK(n == strlen(line) && n < SET_SIZE_GPU_LINE_MAX - 1);
+    CHECK(strcmp(line, "ico_pc: pipelines: the start-up set's size by the driver's GPU memory: on "
+                       "(this process holds 2 MB, the limit 1024 MB): a family's rest is weighed "
+                       "against the smaller of the free memory's room and the limit less what "
+                       "the driver holds") == 0);
+    n = set_size_gpu_text(line, SET_SIZE_GPU_LINE_MAX, 0, 0,
+                          "this process's figure in the kernel's GPU driver is not readable, errno "
+                          "-2147483648");
+    CHECK(n == strlen(line) && n < SET_SIZE_GPU_LINE_MAX - 1);
+    CHECK(strstr(line, ": off (this process's figure") != NULL &&
+          strstr(line, "): the free memory's rule alone") != NULL);
+    n = set_size_gpu_text(line, SET_SIZE_GPU_LINE_MAX, 1, -9999999L, NULL);
+    CHECK(n == strlen(line) && n < SET_SIZE_GPU_LINE_MAX - 1);
+}
+
 static void testTablet(void)
 {
     char line[SET_SIZE_LINE_MAX], why[SET_SIZE_WHY_MAX], words[SET_SIZE_WORDS_MAX];
@@ -413,6 +527,7 @@ int main(void)
     testDecide();
     testHandheld();
     testTablet();
+    testGpuRoom();
     testDesktop();
     testNoisy();
     testFew();

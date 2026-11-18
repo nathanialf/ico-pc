@@ -292,6 +292,21 @@ const char *gpu_sysfs_android_proc_text(void)
     return s_procText;
 }
 
+int gpu_sysfs_android_proc_kernel_mb(long *mb)
+{
+    char path[96];
+    long long v = 0;
+    int e;
+
+    snprintf(path, sizeof(path), "/sys/class/kgsl/kgsl/proc/%d/kernel", (int)getpid());
+    e = read_node(path, &v);
+    if (e != 0) {
+        return e;
+    }
+    *mb = (long)((v + (1ll << 19)) >> 20);
+    return 0;
+}
+
 /* the sampler thread's step: one sample of the readable nodes */
 static void sample(void)
 {

@@ -162,6 +162,8 @@ static void say_full(const char *what, const MemBreakdown *m)
     say(line);
 }
 
+static void set_end(unsigned made);
+
 void mem_watch_set_pipelines(unsigned done, unsigned total)
 {
     if (!s_open && total > 0u) {
@@ -191,24 +193,37 @@ void mem_watch_set_pipelines(unsigned done, unsigned total)
         return;
     }
     if (s_open && total == 0u) {
-        MemBreakdown end;
-        char what[128], line[1536];
-        size_t n;
-        s_open = 0;
-        s_made = done > s_made ? done : s_made;
-        (void)read_all(&end);
-        snprintf(what, sizeof what,
-                 "memory at the start-up set's end (%u of %u pipelines made; %u clauses on its "
-                 "batch lines, %u by count and %u by a fall)",
-                 s_made, s_total, s_due.byCount + s_due.byFall, s_due.byCount, s_due.byFall);
-        say_full(what, &end);
-        n = (size_t)snprintf(line, sizeof line, "ico_pc: memory over the start-up set: ");
-        if (n < sizeof line) {
-            mem_breakdown_summary(&s_base, &end, s_made, ico_diag_uptime() - s_t0, line + n,
-                                  sizeof line - n);
-        }
-        say(line);
+        set_end(done > s_made ? done : s_made);
     }
+}
+
+void mem_watch_set_pipelines_over(unsigned made)
+{
+    if (s_open) {
+        set_end(made); /* issue 215: the set's real count, not the place it stopped at */
+    }
+}
+
+/* the set's end with made pipelines made: its lines and the summary */
+static void set_end(unsigned made)
+{
+    MemBreakdown end;
+    char what[128], line[1536];
+    size_t n;
+    s_open = 0;
+    s_made = made;
+    (void)read_all(&end);
+    snprintf(what, sizeof what,
+             "memory at the start-up set's end (%u of %u pipelines made; %u clauses on its "
+             "batch lines, %u by count and %u by a fall)",
+             s_made, s_total, s_due.byCount + s_due.byFall, s_due.byCount, s_due.byFall);
+    say_full(what, &end);
+    n = (size_t)snprintf(line, sizeof line, "ico_pc: memory over the start-up set: ");
+    if (n < sizeof line) {
+        mem_breakdown_summary(&s_base, &end, s_made, ico_diag_uptime() - s_t0, line + n,
+                              sizeof line - n);
+    }
+    say(line);
 }
 
 int mem_watch_batch_clause(uint32_t first, uint32_t last, uint32_t total, char *out, size_t size)

@@ -538,6 +538,13 @@ void ico_diag_set_pipelines(unsigned int done, unsigned int total, unsigned int 
     mem_watch_set_pipelines(done, total); /* the system's memory over the set (issue 215) */
 }
 
+void ico_diag_set_pipelines_over(unsigned int made)
+{
+    pipes_done = pipes_longest_ms = pipes_total = 0;
+    last_run_set_pipelines_over(made);
+    mem_watch_set_pipelines_over(made);
+}
+
 void ico_diag_set_exit_hook(void (*fn)(const char *reason))
 {
     exit_hook = fn;
@@ -940,6 +947,42 @@ static void fatal_ui_serve(void)
 
 #endif
 
+/* Android, issue 215: a device that restarts keeps only what reached the
+   disc (the log came back full size, all zero bytes). The writer asks
+   after its line is written (a start-up step, a heartbeat, a stall, a
+   loss); the watchdog thread serves the ask at its next poll (250 ms):
+   the stderr pipe drained into the file first (fatal_flush), then one
+   fdatasync, so never on the render or submit thread and at most four
+   a second however many lines ask */
+#ifdef __ANDROID__
+static volatile int log_sync_want;
+
+static void log_sync_ask(void)
+{
+    __atomic_store_n(&log_sync_want, 1, __ATOMIC_RELEASE);
+}
+
+static void log_sync_serve(int force)
+{
+    if (__atomic_exchange_n(&log_sync_want, 0, __ATOMIC_ACQ_REL) == 0 && !force) {
+        return;
+    }
+    if (fatal_flush != NULL) {
+        fatal_flush();
+    }
+    if (log_fd >= 0) {
+        (void)fdatasync(log_fd);
+    }
+}
+#else
+static void log_sync_ask(void) {}
+#endif
+
+void ico_diag_log_sync_ask(void)
+{
+    log_sync_ask();
+}
+
 #ifdef __ANDROID__
 
 /* the box's words: what happened, the saves, and the log to send */
@@ -1128,6 +1171,7 @@ static void heartbeat(int fatal_path)
     }
     if (!fatal_path) {
         last_run_beat_now(); /* not on a crash's path: it formats and locks */
+        log_sync_ask();      /* issue 215: the beat's line on the disc */
     }
 }
 
@@ -1154,6 +1198,7 @@ void ico_diag_step(const char *fmt, ...)
     fflush(stdout);
     fflush(stderr);
     ico_diag_log("%s", msg);
+    log_sync_ask(); /* issue 215: a step's line survives the device restarting inside it */
     memcpy(step_line, msg, sizeof step_line);
     sw_progress++;
     last_run_step(msg);
@@ -3573,6 +3618,7 @@ void ico_diag_note_device_loss(const char *dump_zip)
     } else {
         act_write("");
     }
+    log_sync_ask(); /* issue 215: the loss's lines on the disc */
 }
 
 void ico_diag_note_device_loss_at_wait(const char *where)
@@ -5993,6 +6039,9 @@ static void watchdog_fire(const char *reason)
     watchdog_ending = 1;
 #endif
 #endif
+#ifdef __ANDROID__
+    log_sync_serve(1); /* issue 215: the report on the disc before the box waits */
+#endif
     finish(hang ? "the graphics driver stopped responding (watchdog)" : "watchdog", box,
            EXIT_WATCHDOG);
 }
@@ -6125,6 +6174,9 @@ static void watchdog_loop(void)
         nanosleep(&ts, NULL);
         /* a crashing thread's flush and box (fatal_ui_*) */
         fatal_ui_serve();
+#ifdef __ANDROID__
+        log_sync_serve(0); /* issue 215: the lines that asked, on the disc */
+#endif
 #endif
         if (fatal_once || !main_alive) {
             continue;

@@ -76,6 +76,12 @@ int mem_watch_due(const MemWatchRule *r, MemWatchDue *d, unsigned pipes, long av
    after none starts the set (its lines), none after a total ends it (its
    lines and the summary) */
 void mem_watch_set_pipelines(unsigned done, unsigned total);
+/* The set over with made pipelines made in it (diag_host.h
+   ico_diag_set_pipelines_over): a set still open (stopped early: no last
+   progress call) ends with that count in its end line and the summary's
+   division ("51 pipelines made in 0.7 s; ...: 23.5 MB lost a pipeline", not
+   the place it stopped at); a set already ended: nothing */
+void mem_watch_set_pipelines_over(unsigned made);
 /* rd.h RdMemoryClauseFn: a start-up batch's clause when the rule picks it */
 int mem_watch_batch_clause(uint32_t first, uint32_t last, uint32_t total, char *out, size_t size);
 /* the system's onTrimMemory (diag_host.c ico_diag_note_low_memory) */
