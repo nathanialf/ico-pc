@@ -124,7 +124,8 @@ typedef enum RhiDeviceChoice {
     RHI_DC_TURNIP_NOTE,        /* bool: the hang box names a Turnip package */
     /* the renderer's */
     RHI_DC_SKIN_CHECK_DEFAULT, /* bool: the skin check on by default with a window */
-    RHI_DC_SKIN_AS_BEFORE,     /* bool: the skin check issues v0.11.2's work */
+    RHI_DC_SKIN_AS_BEFORE,     /* bool: the skin check issues v0.11.2's work, none of its own
+                                  pipelines compiled (issue 217) */
     RHI_DC_BLUR_FOLD_OFF,      /* bool: the profile's blur fold off */
     RHI_DC_TILE_COLUMNS,       /* bool: the profile's tile-based columns */
     RHI_DC_LAMPS_MS,           /* bool: the lamps' 4-sample pass's class (Vulkan) */

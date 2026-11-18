@@ -244,6 +244,20 @@ void window_pipe_early(void)
     rd_vu_record_prepare(early_memory);
 }
 
+/* the skin check's run counts for logs/last-run.txt and the report (issue
+   217: last_run_skin.h); the heartbeat's thread too: relaxed atomics only */
+static void skin_source(LastRunSkin *out)
+{
+    RdSkinRunCounts c;
+    rd_vu_skin_run_counts(&c);
+    out->on = c.on;
+    out->phone = c.phone;
+    out->checks = (unsigned long long)c.checks;
+    out->box = (unsigned long long)c.boxDrawn;
+    out->twins = (unsigned long long)c.twinsDrawn;
+    out->begun = (unsigned long long)c.pipesBegun;
+}
+
 void window_pipe_skin_check(int pipePolicy)
 {
     const int driver = ico_diag_memory_floor_driver();
@@ -269,6 +283,7 @@ void window_pipe_skin_check(int pipePolicy)
     } else {
         rd_vu_skin_background(ico_diag_background_memory, NULL);
     }
+    last_run_set_skin_source(skin_source);
     /* the start-up's own work done: what is made from here outside the key
        cache is play's, named (rd_made_outside.h) */
     rd_made_outside_watch();

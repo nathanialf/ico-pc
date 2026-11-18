@@ -387,9 +387,10 @@ void rd__vu_skin_twins_set(int on);
  * every skinned draw again, until RD_SKIN_THIN_REPLAYS more clean replays.
  * Not in mode 2 (every command, the tool's and the A/Bs').  The game's
  * mode (1) only.  On a tile-based phone GPU (RhiLimits.tilePhone) the twins
- * start thinned (rd_vu_skin_background), the one a picture through the
- * draw's own pipeline where that is its twin's form, and an event re-arms
- * them as above. */
+ * start thinned (rd_vu_skin_background), the one a picture drawn only
+ * through the draw's own pipeline where that is its twin's form (the box
+ * check's, the other form, is never compiled there: issue 217; such a twin
+ * is counted not drawn), and an event re-arms them as above. */
 #define RD_SKIN_THIN_REPLAYS 2000u
 /* Under the careful rule (rd_vu_skin_background with a reason: the
  * start-up set stopped for memory on Qualcomm's own driver, issue 123's
@@ -502,6 +503,9 @@ typedef struct RdSkinSummary {
      * rows (the probe compares its first batches), of them whose box check
      * was made over every batch the command draws and drawn */
     uint32_t past, pastBoxed;
+    /* box checks and twins not drawn: their pipeline not made (on a
+     * tile-based phone GPU never compiled: issue 217) */
+    uint32_t boxNot, twinsNot;
 } RdSkinSummary;
 
 int rd__vu_skin_check_frame(const RdFrame *f, int keep, RdSkinSummary *out);
@@ -610,6 +614,11 @@ const char *rd__vu_skin_capture_dir(void);
  * ..." and the check's start line.  Returns whether it was right (true
  * when not run). */
 bool rd__vu_skin_selftest(void);
+/* The check's rule at its start line (rd_vu_skin_selftest.c): on, or off;
+ * kept for rd.h rd_vu_skin_run_counts, with whether it runs on a tile-based
+ * phone GPU (none of its own pipelines compiled there: issue 217), and the
+ * attempt ledger's row (attempt_ledger.h ico_attempt_decide_skin_phone) */
+void rd__vu_skin_rule_start(bool on);
 
 /* shared by the check and the start-up probe: the probe pipeline of the
  * cluster entry vs (RD_VS_VU_SKIN .. RD_VS_VU_SKIN_DEBUG; robustOff: c2's,

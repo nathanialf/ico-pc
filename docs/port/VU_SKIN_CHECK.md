@@ -223,12 +223,13 @@ where the rule above gave about 2,000 (67 s) at every start and after every even
 set did (`rd_vu_skin_background`), so a first start does not twin every skinned draw of its first
 3D scene for 2,000 replays (issue 211's Adreno 710 lost the device there with them on); a twin
 event re-arms them as the rule above does (every skinned draw until 2,000 clean replays). The one
-twin a picture goes through the draw's own pipeline where that is its twin's form (the draw reads
-its attachment and writes no Z), else the box check's: fewer draws of the shapes every start
-already draws, no pipeline the start lacks. The first twin says so: `rd: VU skin check: twins on
-(<rule>) at one skinned draw a picture from the start (a tile-based phone GPU: not every skinned
-draw of the first 3D scene; ...); a twin event twins every skinned draw again until 2000 replays
-with none differing`. The box check,
+twin a picture is drawn there only where its form is the draw's own pipeline (the draw reads its
+attachment and writes no Z); a twin whose form is the box check's pipeline is picked and counted
+not drawn, because that pipeline is never compiled on a phone (issue 217, below). The first twin
+says so: `rd: VU skin check: twins on (<rule>) at one skinned draw a picture from the start (a
+tile-based phone GPU: not every skinned draw of the first 3D scene; only through the draw's own
+pipeline where it reads its attachment, the box check's not compiled there); a twin event twins
+every skinned draw again until 2000 replays with none differing`. The box check,
 the stamps and the search are unchanged. The first twin of a run says which rule put the twins on
 and at what rate: `rd: VU skin check: twins on (the probe check's rule: an Adreno with a window) at
 one skinned draw a picture from the start (the careful rule: <why>); a twin event twins every
@@ -288,12 +289,27 @@ its box check, twins or c2, said once (`rd: VU skin check: its box check, its tw
 its c2 variant are compiled carefully (<why>): one at a time, each only above the free-memory floor
 and 2 s after the last; until then the check runs without them`, `... no background compile for
 the rest of the run (<why>) ...`, `... a background compile waits for memory (<why>) ...`). On a
-tile-based phone GPU (`RhiLimits.tilePhone`: every Android GPU, iOS; issues 179 and 211, where the
-release that brought the careful rule lost the device in the first 3D scene) none of them is
-compiled after such a stop, as before that release (their draws would be GPU work the release
-before never issued; the twins not thinned from the start either): `... are not compiled in the
-background (<why>; a tile-based phone GPU: none, as before the careful rule): the check runs without
-them`. The check holds 33 pipelines outside the renderer's cache at most (the probe's 3, c2's 3, column
+tile-based phone GPU (`RhiLimits.tilePhone`, the device table's `SKIN_AS_BEFORE`: every Android
+GPU, iOS) none of them is ever compiled, whatever the start-up set did, in every mode (the tool's
+and the tests' replays too, so a replay with a phone faked issues what the phone issues): no box
+check, no c2, no column 3, no twin C, and a twin only through the draw's own pipeline. Issue 217:
+the check left them out on a phone only where the start-up set stopped for memory on Qualcomm's
+own driver (the rule the careful rule kept from before it), and once the start-up set was sized by
+the device's own memory fall the set ended above the floor, so the Adreno 710 of issues 211 and 217
+compiled them in its first 3D scene and drew its box checks and twins with them; of its four runs
+the one whose set stopped at the floor (none compiled, `0 box checks ... 0 twins`) kept the device
+and the three others lost it about 4 s into that scene. The probes, their readbacks and the CPU's
+checks stay. One line says so at the window's start where the check runs (or at the first compile
+held back): `rd: VU skin check: its box check, its twins' pipelines and its c2 variant are not
+compiled in the background (<why>; a tile-based phone GPU: none, whatever the start-up set did,
+issue 217): the check runs without them and without column 3; its probes, readbacks and CPU checks
+stay` (`<why>; ` only with the window's reason). The attempt ledger's row `the skin check's own
+pipelines left out on a phone` counts the box checks and the twins not drawn for it
+([ANDROID_DIAGNOSTICS_LEDGERS.md](ANDROID_DIAGNOSTICS_LEDGERS.md#the-attempt-ledger)), and the
+run's counts (`rd_vu_skin_run_counts`: checks, box checks and twins drawn, its own pipelines begun)
+reach `logs/last-run.txt`, the system's exit summary and the report's `report.txt` at every
+heartbeat, so a run lost before its first 10 s line still shows them
+([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#the-last-run-file)). The check holds 33 pipelines outside the renderer's cache at most (the probe's 3, c2's 3, column
 3's 3, 16 box checks and twin C's 8), counted
 in the pool's headroom ([RHI.md](RHI.md)); keys past the 16 box slots are not box-checked.
 
@@ -730,11 +746,13 @@ stamps it holds, and the four checks are skipped after a reset, none wrong),
 `rd_vu_skin_check_reset` (the probe's bone at 200 read as zeros with the GPU's sign of a reset faked
 at the check's replay: skipped, not wrong, no capture asked; the sign forgotten: wrong at 200 and the
 capture asked), `rd_vu_skin_check_stale_phone` and `rd_vu_skin_check_clean_phone` (Arm's phone
-GPU faked: no compile and no box check after the reason, no stamps; the clean frame right without
-the stamp's bytes), `rd_vu_skin_check_thin` (the thinning:
+GPU faked: no compile and no box check, with the reason and without it, in the frame check's mode
+too, the line once, the run's counts with nothing begun or drawn, no stamps; the clean frame right
+without the stamp's bytes), `rd_vu_skin_check_thin` (the thinning:
 three twins a replay until the clean replays, one after, re-armed by the zeroed bone),
-`rd_vu_skin_check_thin_phone` (Arm's phone GPU faked: thinned from the start, re-armed by the zeroed
-bone, thinned again after the clean replays), and the
+`rd_vu_skin_check_thin_phone` (Arm's phone GPU faked: thinned from the start, each twin picked
+counted not drawn and none drawn, so the zeroed bone re-arms nothing; the line once; the run's
+counts with nothing begun), and the
 ladder's `rd_vu_skin_check_probe_c3`, `rd_vu_skin_check_twin_c`, `rd_vu_skin_check_twin_bones_ring`,
 `rd_vu_skin_check_twin_record` (a pre-pass record draw's twins through the ring build)),
 `rd_vuprepass_selftest_skincheck` (`rd_vuprepass_selftest.cmake`: the check on for every skinned

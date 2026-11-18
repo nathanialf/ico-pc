@@ -75,6 +75,8 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
                               "mesh and grid draws by the camera", "skinned draws kept"},
     [ICO_ATT_SCENE_HOLD] = {"the paused scene held under the menu", "pictures held",
                             "drawn in full while paused"},
+    [ICO_ATT_SKIN_PHONE] = {"the skin check's own pipelines left out on a phone",
+                            "box checks not drawn", "twins not drawn"},
 };
 
 /* the rows' live values (__atomic), and the block text's last counts (the
@@ -815,6 +817,20 @@ void ico_attempt_decide_skin_skip(int on)
     ico_attempt_state(ICO_ATT_SKIN_RESET_SKIP, on ? ICO_ATT_ON : ICO_ATT_NA,
                       on ? "a skin check read after a GPU reset is skipped, not captured"
                          : "the skin check is off here");
+}
+
+void ico_attempt_decide_skin_phone(int on, int phone)
+{
+    if (!on) {
+        ico_attempt_state(ICO_ATT_SKIN_PHONE, ICO_ATT_NA, "the skin check is off here");
+    } else if (!phone) {
+        ico_attempt_state(ICO_ATT_SKIN_PHONE, ICO_ATT_NA,
+                          "not a tile-based phone GPU: compiled under the memory rule");
+    } else {
+        ico_attempt_state(ICO_ATT_SKIN_PHONE, ICO_ATT_ON,
+                          "a tile-based phone GPU: none compiled, whatever the start-up set did, "
+                          "issue 217");
+    }
 }
 
 void ico_attempt_decide_pin_release(int android, int rule)

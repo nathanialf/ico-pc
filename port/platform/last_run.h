@@ -48,6 +48,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "last_run_skin.h" /* the skin check's counts (issue 217) */
+
 /* the slots, in the file's order */
 enum {
     LAST_RUN_HEADER,
@@ -164,6 +166,12 @@ int last_run_milestone_stage(const char *milestone);
    NUL): "ico-pc <phase> | resets 47->66 | free 1911 MB, lowest 1897" */
 void last_run_summary_text(const char *phase, int resetsStart, int resetsNow, long freeMb,
                            long lowMb, char *out, size_t size);
+/* The same with a figure of its own between the resets and the free memory
+   (extra: the skin check's short form, last_run_skin.h; NULL or "" none):
+   "ico-pc <phase> | resets 47->66 | skin box 0 twin 0 made 0 | free 1911 MB,
+   lowest 1897", the phase cut first */
+void last_run_summary_text_with(const char *phase, int resetsStart, int resetsNow, long freeMb,
+                                long lowMb, const char *extra, char *out, size_t size);
 /* logs/last-run.txt and logs/last-run-previous.txt beside the activity
    file's path (its folder); 0 when both fit */
 int last_run_paths(const char *activityPath, char *cur, char *prev, size_t size);
@@ -231,5 +239,14 @@ const char *last_run_path(void);
 void last_run_set_size_words(const char *words);
 /* the lowest free memory the beats read, MB (-1 none yet) */
 long last_run_lowest_mb(void);
+/* Issue 217: the skin check's counts (last_run_skin.h), read through fn at
+   every write (any thread: fn reads relaxed atomics only; NULL none): their
+   words in the pipelines slot ("...; the skin check: 35 checks, 0 box checks
+   drawn, ...; the last pipeline note: ..."), their short form in the
+   system's summary, made again by the beat that sees it change */
+void last_run_set_skin_source(void (*fn)(LastRunSkin *out));
+/* the skin check's words now (through the source; "" without one, or with
+   the check off): the report's summary (report.c) */
+void last_run_skin_now(char *out, size_t size);
 
 #endif

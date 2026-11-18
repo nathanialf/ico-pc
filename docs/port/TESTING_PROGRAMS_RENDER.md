@@ -449,7 +449,7 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   (`rd__vu_skin_reset_seen`), the wrong probe skipped (`skipped after a reset: the GPU's own sign of
   a reset at replay S, ...`), not wrong, no capture asked; the sign forgotten, the same check wrong
   at 200 and the capture asked (`no sidecar written (no folder for it); asked for a frame dump`)
-  (`rd_vu_skin_check_reset`); on Arm's phone GPU faked (`ICO_VK_FAKE_VENDOR=0x13B5`, `rd_vu_skin_check_stale_phone`) no box check is compiled or drawn after the reason (the line of the release before the careful rule) and no readback is named unwritten (no stamps), and `rd_vu_skin_check_clean_phone` checks the clean frame right without the stamp's bytes. `twin` (issue 123): the same frame
+  (`rd_vu_skin_check_reset`); on Arm's phone GPU faked (`ICO_VK_FAKE_VENDOR=0x13B5`, `rd_vu_skin_check_stale_phone`) no box check is compiled or drawn, with the reason or without it (issue 217: the line once, the run's counts with nothing begun), and no readback is named unwritten (no stamps), and `rd_vu_skin_check_clean_phone` checks the clean frame right without the stamp's bytes, with no box check and no c2 in the frame check's mode either. `twin` (issue 123): the same frame
   under the game's mode with the twins on (`rd__vu_skin_twins_set`), the scheduled probe off
   (`ICO_RD_VU_SKIN_INTERVAL_MS=off`) and `ICO_RD_VU_SKIN_SABOTAGE=200,ring`, replayed three times
   through `rd__vu_skin_check_replays`: the first replay's twins differ with nothing probed (`twins
@@ -490,9 +490,12 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   cycles use the four stretches, after which two replays under the sabotage twin one each
   (`rd_vu_skin_check_thin`). `thinphone` (`rd_vu_skin_check_thin_phone`, Arm's phone GPU faked,
   `ICO_VK_FAKE_VENDOR=0x13B5`): the window's rule without a reason (`rd_vu_skin_background(memory,
-  NULL)`) thins the twins at once, three replays twin one each and the first twin's line says `at
-  one skinned draw a picture from the start (a tile-based phone GPU`; the zeroed bone re-arms them
-  (the next replay twins all three), and four clean replays thin them again, two more twin one each.
+  NULL)`) thins the twins at once and says once that none of the check's own pipelines is compiled
+  (issue 217); three replays pick one twin each and draw none (their form is the box check's
+  pipeline: the frame's draws write Z), three counted not drawn, and the first twin's line says `at
+  one skinned draw a picture from the start (a tile-based phone GPU: ... only through the draw's
+  own pipeline ...`; the zeroed bone re-arms nothing (no twin read), and the run's counts
+  (`rd_vu_skin_run_counts`) hold no twin, no box check and nothing begun.
 - `rd_vustage_ab.cmake`: every fixture of `port/render/test/fixtures/lists/vustage.txt` (the
   2026-10-07 captures, issue 95's loss frame and the deja vu 48:9 frame:
   [TESTING_FIXTURES.md](TESTING_FIXTURES.md); `test/rd_vu_inputs.cmake` reads the list, or a list

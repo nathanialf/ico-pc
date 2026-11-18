@@ -24,6 +24,7 @@ target_sources(ico_platform PRIVATE
     hotkeys.c
     kernel_host.c
     last_run.c
+    last_run_skin.c
     log_cost.c
     mem_breakdown.c
     mem_watch.c
@@ -380,6 +381,16 @@ target_compile_options(last_run_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_
 target_link_libraries(last_run_test PRIVATE ico_platform ico_host_fs)
 if(ICO_RUN_TESTS)
     add_test(NAME last_run COMMAND last_run_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
+# The skin check's counts in words (last_run_skin.c, issue 217): the
+# pipelines slot's words and the summary's short form word for word, the
+# check off, the largest counts within their bound, a short buffer
+add_executable(last_run_skin_test test/last_run_skin_test.c)
+target_compile_options(last_run_skin_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(last_run_skin_test PRIVATE ico_platform)
+if(ICO_RUN_TESTS)
+    add_test(NAME last_run_skin COMMAND last_run_skin_test)
 endif()
 
 # Where the device's memory is (mem_breakdown.c, mem_watch.c, issue 215):
