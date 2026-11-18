@@ -220,6 +220,12 @@ enum {
        check against the same picture in full; count the pictures held,
        second count those drawn in full while paused */
     ICO_ATT_SCENE_HOLD,
+    /* rd_vu_skin_check.c (issue 217, v0.11.10): on a tile-based phone GPU
+       none of the skin check's own pipelines (the box check's, the twins',
+       c2's, column 3's) is compiled, whatever the start-up set did; state
+       at the check's start line (rd_vu_skin_selftest.c), count the box
+       checks not drawn for it, second count the twins not drawn */
+    ICO_ATT_SKIN_PHONE,
     ICO_ATT_COUNT
 };
 
@@ -451,6 +457,12 @@ void ico_attempt_decide_robust_line(int found, int removed);
    line): on the skin check runs on this device (an Adreno with a window,
    or the tests' switch); else not applicable */
 void ico_attempt_decide_skin_skip(int on);
+/* the skin check's own pipelines left out on a phone (rd_vu_skin_check.c
+   rd__vu_skin_rule_start, at the skin check's start line): on where the
+   check runs on a tile-based phone GPU (phone: the device table's
+   SKIN_AS_BEFORE); not applicable where it runs elsewhere (compiled under
+   the memory rule) or is off */
+void ico_attempt_decide_skin_phone(int on, int phone);
 /* the picture-health report (port/render/rd_health_live.c at the first
    record): on where the records carry the slot clock's signs (Vulkan),
    counting; else not applicable */

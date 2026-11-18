@@ -419,6 +419,12 @@ static void test_classes(void)
         ico_attempt_decide_skin_skip(d->passRow != NULL);
         CHECK(ico_attempt_state_of(ICO_ATT_SKIN_RESET_SKIP) ==
               (d->passRow != NULL ? ICO_ATT_ON : ICO_ATT_NA));
+        /* the skin check's own pipelines left out on a phone (issue 217):
+           on where the check runs on a phone (the Adreno 740 classes, on
+           Android), not applicable elsewhere */
+        ico_attempt_decide_skin_phone(d->passRow != NULL, kShip[c].android);
+        CHECK(ico_attempt_state_of(ICO_ATT_SKIN_PHONE) ==
+              (d->passRow != NULL && kShip[c].android ? ICO_ATT_ON : ICO_ATT_NA));
         /* the picture-health report (issue 179): every class here is a
            Vulkan device, counting */
         ico_attempt_decide_picture_health(1);
@@ -912,6 +918,39 @@ static void test_skin_skip(void)
     CHECK(ico_attempt_state_of(ICO_ATT_SKIN_RESET_SKIP) == ICO_ATT_NOT_SET);
 }
 
+/* the skin check's own pipelines left out on a phone (issue 217, v0.11.10):
+   its three states with their words, its start words, and its two counts
+   per block (the box checks and the twins not drawn for it) */
+static void test_skin_phone(void)
+{
+    char b[4096];
+
+    ico_attempt_reset();
+    CHECK(ico_attempt_state_of(ICO_ATT_SKIN_PHONE) == ICO_ATT_NOT_SET);
+    ico_attempt_decide_skin_phone(0, 1);
+    CHECK(ico_attempt_state_of(ICO_ATT_SKIN_PHONE) == ICO_ATT_NA &&
+          strcmp(ico_attempt_why_of(ICO_ATT_SKIN_PHONE), "the skin check is off here") == 0);
+    ico_attempt_decide_skin_phone(1, 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_SKIN_PHONE) == ICO_ATT_NA &&
+          strcmp(ico_attempt_why_of(ICO_ATT_SKIN_PHONE),
+                 "not a tile-based phone GPU: compiled under the memory rule") == 0);
+    ico_attempt_decide_skin_phone(1, 1);
+    CHECK(ico_attempt_state_of(ICO_ATT_SKIN_PHONE) == ICO_ATT_ON);
+    (void)ico_attempt_start_text(b, sizeof b);
+    CHECK(strstr(b, "; the skin check's own pipelines left out on a phone on (a tile-based phone "
+                    "GPU: none compiled, whatever the start-up set did, issue 217)") != NULL);
+    ico_attempt_fire(ICO_ATT_SKIN_PHONE, 2u);
+    ico_attempt_fire2(ICO_ATT_SKIN_PHONE, 5u);
+    (void)ico_attempt_block_text(b, sizeof b, -1);
+    CHECK(text_is(b, "attempts: the skin check's own pipelines left out on a phone on 2 box "
+                     "checks not drawn (5 twins not drawn)"));
+    (void)ico_attempt_block_text(b, sizeof b, -1);
+    CHECK(text_is(b, "attempts: the skin check's own pipelines left out on a phone on 0 box "
+                     "checks not drawn (0 twins not drawn)"));
+    ico_attempt_reset();
+    CHECK(ico_attempt_state_of(ICO_ATT_SKIN_PHONE) == ICO_ATT_NOT_SET);
+}
+
 /* the picture-health report (issue 179, v0.11.7): its row's states and its
    counts per block */
 static void test_health(void)
@@ -1155,6 +1194,7 @@ int main(void)
     test_classes();
     test_robust_line();
     test_skin_skip();
+    test_skin_phone();
     test_flat0_capture();
     test_health();
     test_start_parts();

@@ -27,7 +27,11 @@
  *   8. a frame of one skinned command (the same 60 bones and 120 vertices
  *      through code 20, a camera whose world origin lies in front of the
  *      eye) checked by rd__vu_skin_check_frame: clean, one check, nothing
- *      wrong, the bytes equal, its box check run with no sample outside;
+ *      wrong, the bytes equal, its box check run with no sample outside,
+ *      the run's counts (rd_vu_skin_run_counts) on, the check and the box
+ *      check drawn, the box check's pipeline begun; on a tile-based phone
+ *      GPU (clean_phone; issue 217) no box check (one counted not drawn),
+ *      no c2, nothing of its own begun, the run's counts saying so;
  *      probe (ICO_RD_VU_SKIN_SABOTAGE=200: the probe reads the bone at 200
  *      as zeros, the draw's bytes right), the check wrong, address 200,
  *      the bytes equal, c1 right: "H1, address-dependent"; ring
@@ -73,12 +77,14 @@
  *      events no longer re-arm them.
  * thinphone (a device; ICO_VK_FAKE_VENDOR=0x13B5, a tile-based phone GPU):
  *   the same frame, the window's rule without a reason
- *   (rd_vu_skin_background(memory, NULL)):
- *   26. thinned from the start: three replays, one twin each;
- *   27. the bone at 200 zeroed: the one twin differs, the twins re-armed;
- *      the next replay twins all three;
- *   28. the sabotage off, four clean replays (twelve twins): thinned again,
- *      then one a replay.
+ *   (rd_vu_skin_background(memory, NULL)); issue 217: none of the check's
+ *   own pipelines is compiled there, so the twins (the box check's form:
+ *   the frame's draws write Z) are picked and not drawn:
+ *   26. thinned from the start: three replays, one twin picked each, none
+ *      drawn, three counted not drawn;
+ *   27. the bone at 200 zeroed: no twin drawn, none differs, still thinned;
+ *   28. the run's counts (rd_vu_skin_run_counts): on, a phone, no twin, no
+ *      box check drawn, none of its own pipelines begun.
  * judge also runs the trace (rd_vu_skin_trace.c; issue 123 v0.11.3):
  *   18. the clear stamp's colour read back as its replay, an earlier
  *      replay's, none;
@@ -100,10 +106,10 @@
  *   the box check's pipeline is compiled in the background and the box
  *   check drawn (before v0.11.3 none was compiled).
  *   On a tile-based phone GPU (RhiLimits.tilePhone: ICO_VK_FAKE_VENDOR=0x13B5,
- *   rd_vu_skin_check_stale_phone) the check issues what v0.11.2's issued:
- *   with the reason no box check is compiled or drawn (22.), and there are
- *   no stamps, so the readbacks not written again are not told apart (21.:
- *   none unwritten, none old, none wrong).
+ *   rd_vu_skin_check_stale_phone) no box check is compiled or drawn (22.,
+ *   and the run's counts: none begun; issue 217: with or without the
+ *   reason), and there are no stamps, so the readbacks not written again
+ *   are not told apart (21.: none unwritten, none old, none wrong).
  * judge also runs 29. skipped after a reset (rd__skin_skip, issue 123
  *   v0.11.7): not written again, the stamps unwritten, a reset sign inside
  *   and outside the readback's span, written again and differing judged.
@@ -762,7 +768,9 @@ static void pastTest(void)
                "(%u boxed over every batch), %u box checks, %u with samples outside\n",
                PAST_B * PAST_BV, PAST_B, s.checks, s.wrong, s.past, s.pastBoxed, s.boxChecks,
                s.boxOutside);
-        const bool box = rhi_occlusion_supported();
+        /* on a tile-based phone GPU no box check's pipeline is compiled
+         * (issue 217): counted past the probe's rows, not boxed */
+        const bool box = rhi_occlusion_supported() && !rhi_limits()->tilePhone;
         CHECK(rc == 0 && s.checks == 1 && s.wrong == 0 && s.blocksDiffer == 0 && s.past == 1 &&
                   s.pastBoxed == (box ? 1u : 0u) && s.boxChecks == (box ? 1u : 0u) &&
                   s.boxOutside == 0,
@@ -858,43 +866,45 @@ static void thinTests(const RdFrame *f)
     rd__vu_skin_thin_set(0);
 }
 
-/* 26.-28.: a tile-based phone GPU: the twins thinned from the start */
+/* 26.-28.: a tile-based phone GPU: the twins thinned from the start, and
+ * (issue 217) none of the check's own pipelines compiled: the frame's draws
+ * write Z, so their twins' form is the box check's pipeline (never the
+ * draw's own), which is never made there: each twin picked is counted not
+ * drawn, none is drawn, nothing is begun, and with no twin read no event
+ * re-arms them */
 static void thinPhoneTests(const RdFrame *f)
 {
-    RdSkinSummary s, t;
+    RdSkinSummary s;
+    RdSkinRunCounts c;
     rd__vu_skin_thin_set(4);
     const bool phone = rhi_limits()->tilePhone;
     rd_vu_skin_background(memoryFine, NULL);
     const bool start = rd__vu_skin_thinned();
     int rc = rd__vu_skin_check_replays(f, 0, 3, &s);
     printf("  26. a tile-based phone GPU %d: thinned at the start %d; three replays %u twins, %u "
-           "differ\n",
-           (int)phone, (int)start, s.twins, s.twinsDiffer);
-    CHECK(phone && start && rc >= 0 && s.twins == 3 && s.twinsDiffer == 0 && rd__vu_skin_thinned(),
-          "phone %d, thinned at the start %d, rc %d, %u twins, %u differ", (int)phone, (int)start,
-          rc, s.twins, s.twinsDiffer);
+           "not drawn (their pipeline not made)\n",
+           (int)phone, (int)start, s.twins, s.twinsNot);
+    CHECK(phone && start && rc >= 0 && s.twins == 0 && s.twinsNot == 3 && rd__vu_skin_thinned(),
+          "phone %d, thinned at the start %d, rc %d, %u twins, %u not drawn", (int)phone,
+          (int)start, rc, s.twins, s.twinsNot);
     rd__vu_skin_sabotage_set(200);
     rc = rd__vu_skin_check_replays(f, 0, 1, &s);
-    const bool rearmed = !rd__vu_skin_thinned();
-    int rc2 = rd__vu_skin_check_replays(f, 0, 1, &t);
-    printf("  27. the bone at 200 zeroed: %u twins, %u differ, re-armed %d; the next replay %u "
-           "twins, %u differ\n",
-           s.twins, s.twinsDiffer, (int)rearmed, t.twins, t.twinsDiffer);
-    CHECK(rc >= 0 && rc2 >= 0 && s.twins == 1 && s.twinsDiffer == 1 && rearmed && t.twins == 3 &&
-              t.twinsDiffer == 3,
-          "rc %d/%d, %u twins, %u differ, re-armed %d, then %u twins, %u differ", rc, rc2, s.twins,
-          s.twinsDiffer, (int)rearmed, t.twins, t.twinsDiffer);
-    rd__vu_skin_sabotage_set(0);
-    rc = rd__vu_skin_check_replays(f, 0, 4, &s);
     const bool thin = rd__vu_skin_thinned();
-    rc2 = rd__vu_skin_check_replays(f, 0, 2, &t);
-    printf("  28. the sabotage off: four replays %u twins, %u differ, thinned %d; then two "
-           "replays %u twins\n",
-           s.twins, s.twinsDiffer, (int)thin, t.twins);
-    CHECK(rc >= 0 && rc2 >= 0 && s.twins == 12 && s.twinsDiffer == 0 && thin && t.twins == 2 &&
-              t.twinsDiffer == 0,
-          "rc %d/%d, %u twins, %u differ, thinned %d, then %u twins", rc, rc2, s.twins,
-          s.twinsDiffer, (int)thin, t.twins);
+    printf("  27. the bone at 200 zeroed: %u twins, %u differ, %u not drawn; thinned %d\n", s.twins,
+           s.twinsDiffer, s.twinsNot, (int)thin);
+    CHECK(rc >= 0 && s.twins == 0 && s.twinsDiffer == 0 && s.twinsNot == 1 && thin,
+          "rc %d, %u twins, %u differ, %u not drawn, thinned %d", rc, s.twins, s.twinsDiffer,
+          s.twinsNot, (int)thin);
+    rd__vu_skin_sabotage_set(0);
+    rd_vu_skin_run_counts(&c);
+    printf("  28. run counts: on %d, phone %d, %llu twins drawn, %llu box checks drawn, %llu own "
+           "pipelines begun\n",
+           c.on, c.phone, (unsigned long long)c.twinsDrawn, (unsigned long long)c.boxDrawn,
+           (unsigned long long)c.pipesBegun);
+    CHECK(c.on == 1 && c.phone == 1 && c.twinsDrawn == 0 && c.boxDrawn == 0 && c.pipesBegun == 0,
+          "run counts on %d, phone %d, %llu twins, %llu box checks, %llu begun", c.on, c.phone,
+          (unsigned long long)c.twinsDrawn, (unsigned long long)c.boxDrawn,
+          (unsigned long long)c.pipesBegun);
     rd_vu_skin_background(NULL, NULL);
     rd__vu_skin_thin_set(0);
 }
@@ -1008,6 +1018,21 @@ static int deviceTests(const char *mode, const char *folder)
                phone ? " on a tile-based phone GPU (none compiled)" : "", box);
         CHECK(phone ? box == 0 : box > 0, "%u box checks drawn under the careful rule (%s)", box,
               phone ? "a phone: none expected" : "some expected");
+        {
+            /* issue 217: the run's counts say the same (none begun on a
+             * phone; begun and drawn elsewhere) */
+            RdSkinRunCounts rc22;
+            rd_vu_skin_run_counts(&rc22);
+            printf("  22. run counts: phone %d, %llu box checks drawn, %llu own pipelines "
+                   "begun\n",
+                   rc22.phone, (unsigned long long)rc22.boxDrawn,
+                   (unsigned long long)rc22.pipesBegun);
+            CHECK(phone ? (rc22.phone == 1 && rc22.boxDrawn == 0 && rc22.pipesBegun == 0)
+                        : (rc22.phone == 0 && rc22.boxDrawn >= box && rc22.pipesBegun >= 1),
+                  "phone %d: run counts phone %d, %llu box checks drawn, %llu begun", (int)phone,
+                  rc22.phone, (unsigned long long)rc22.boxDrawn,
+                  (unsigned long long)rc22.pipesBegun);
+        }
         rd_vu_skin_background(NULL, NULL);
         /* 21. each slot's readback written by its first check alone (both
          * written in 22.): the four checks read as not written by their
@@ -1108,11 +1133,40 @@ static int deviceTests(const char *mode, const char *folder)
          * (robust access on, VK_EXT_pipeline_robustness: _robust,
          * _probe_robust) */
         const bool c2Offered = rhi_limits()->uniformRobustOff;
-        CHECK(!c2Offered || s.c2Run == 1, "c2 offered but drawn in %u checks", s.c2Run);
+        /* issue 217: on a tile-based phone GPU (rd_vu_skin_check_clean_phone)
+         * none of the check's own pipelines is compiled, in every mode: no
+         * c2, no box check (counted not drawn), nothing begun; elsewhere
+         * (rd_vu_skin_check) as before, the box check's pipeline begun */
+        const bool phone = rhi_limits()->tilePhone;
+        RdSkinRunCounts rc8;
+        rd_vu_skin_run_counts(&rc8);
+        printf("  8. run counts: on %d, phone %d, %llu checks, %llu box checks drawn, %llu "
+               "twins drawn, %llu own pipelines begun\n",
+               rc8.on, rc8.phone, (unsigned long long)rc8.checks, (unsigned long long)rc8.boxDrawn,
+               (unsigned long long)rc8.twinsDrawn, (unsigned long long)rc8.pipesBegun);
+        CHECK(rc8.on == 1 && rc8.phone == (phone ? 1 : 0) && rc8.checks >= 1,
+              "run counts on %d, phone %d, %llu checks", rc8.on, rc8.phone,
+              (unsigned long long)rc8.checks);
+        CHECK(phone ? s.c2Run == 0 : (!c2Offered || s.c2Run == 1),
+              "c2 offered %d on a phone %d, drawn in %u checks", (int)c2Offered, (int)phone,
+              s.c2Run);
         if (strcmp(mode, "clean") == 0) {
             CHECK(s.wrong == 0 && s.blocksDiffer == 0 && s.rereadDiffer == 0, "a clean check");
-            CHECK(!rhi_occlusion_supported() || (s.boxChecks == 1 && s.boxOutside == 0),
-                  "%u box checks, %u outside", s.boxChecks, s.boxOutside);
+            if (phone) {
+                CHECK(!rhi_occlusion_supported() ||
+                          (s.boxChecks == 0 && s.boxNot == 1 && rc8.boxDrawn == 0),
+                      "a phone: %u box checks (%u not drawn), %llu drawn this run", s.boxChecks,
+                      s.boxNot, (unsigned long long)rc8.boxDrawn);
+                CHECK(rc8.pipesBegun == 0 && rc8.twinsDrawn == 0,
+                      "a phone: %llu own pipelines begun, %llu twins drawn",
+                      (unsigned long long)rc8.pipesBegun, (unsigned long long)rc8.twinsDrawn);
+            } else {
+                CHECK(!rhi_occlusion_supported() || (s.boxChecks == 1 && s.boxOutside == 0 &&
+                                                     rc8.boxDrawn >= 1 && rc8.pipesBegun >= 1),
+                      "%u box checks, %u outside, %llu drawn and %llu begun this run", s.boxChecks,
+                      s.boxOutside, (unsigned long long)rc8.boxDrawn,
+                      (unsigned long long)rc8.pipesBegun);
+            }
             /* a command within the probe's rows: not past them */
             CHECK(s.past == 0 && s.pastBoxed == 0, "%u past the probe's rows", s.past);
         } else if (strcmp(mode, "probe") == 0) {

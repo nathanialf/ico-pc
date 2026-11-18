@@ -84,8 +84,14 @@ static const RhiDeviceSetting kTilePhone[] = {
     {RHI_DC_MEMORY_BUDGET_OFF, 1, "VK_EXT_memory_budget not asked", NULL, "",
      "commit 1859caa76 (a phone's free memory is the system's own measure)", "v0.11.5",
      "never: Android's MemAvailable is the measure there"},
-    {RHI_DC_SKIN_AS_BEFORE, 1, "the skin check issues v0.11.2's work", NULL, "issue 211",
-     "commit cf4256f8d", "v0.11.4", "a phone log without a loss under the v0.11.3 check"},
+    {RHI_DC_SKIN_AS_BEFORE, 1,
+     "the skin check issues v0.11.2's work, and none of its own pipelines (box check, twins, c2, "
+     "column 3) is compiled",
+     NULL, "issues 211 and 217",
+     "commit cf4256f8d; issue 217: of the Adreno 710's four runs on v0.11.8 and v0.11.9 the one "
+     "that kept the device had none of them compiled, the three that compiled them lost it in "
+     "the first 3D scene (v01110/evidence/217)",
+     "v0.11.4", "a phone log without a loss with the box checks and the twins drawn"},
 };
 
 /* rhi_pass_row.c rhi_vk_pass_row; vk_device.c vkr_subpass_read_decide */

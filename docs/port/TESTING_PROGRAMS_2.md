@@ -33,3 +33,21 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   counted by its own address (the saved registers, the scheduler's table); a number kept as it
   is (`keep_code_numbers`' identity point) not counted while the word beside it is; no miss record refuses
   nothing; a scan of this build (no translation) moves the word by the delta and counts nothing.
+- `last_run_skin_test.c` (ctest `last_run_skin`, a program of its own; CPU only): the skin check's
+  counts in words (`port/platform/last_run_skin.c`, issue 217,
+  [PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#the-last-run-file)): the pipelines field's
+  words and the summary's short form word for word on a phone (`(a tile-based phone GPU: none
+  compiled)`) and elsewhere, nothing with the check off or without counts, the largest counts
+  within `LAST_RUN_SKIN_SHORT_MAX`, a short buffer cut and terminated, none left untouched.
+- `last_run_test.c`, its skin case (`last_run`): `last_run_summary_text_with` with the skin check's
+  figure between the resets and the free memory word for word, none or `""` as before, issue
+  217's reporter's figures with the phase cut and the stage and tick whole, a long phase cut with
+  the figures kept; then the run's file with a fake source (`last_run_set_skin_source`): the
+  pipelines field holding the words before the note, the summary made again by the beat that sees
+  the figure change and only then (the hook's calls counted), the report's words
+  (`last_run_skin_now`), and with the check off or no source nothing in the field or the words.
+- `attempt_ledger_test.c`, its skin-phone case (`attempt_ledger`): the row `the skin check's own
+  pipelines left out on a phone` (`ico_attempt_decide_skin_phone`) not applicable with the check
+  off and off a phone, each with its words, on with its start words, its two counts in the block
+  line word for word and taken per block; in every device class on the Adreno 740 classes (on
+  Android), not applicable elsewhere.

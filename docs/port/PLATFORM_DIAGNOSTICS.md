@@ -833,7 +833,7 @@ write or the other, or failing its check, which the reader marks as such: never 
 | `free memory` | `MemAvailable` now, the run's lowest and when, the start-up set's free-memory floor (Android), then the system's split from the same read (issue 215, [where the memory is](#where-the-memory-is)): `; file cache <n>, anon <n>, kernel <n>, GPU <n or ?>, rest <n>, swap used <n> MB` (the GPU figure the last full read's: the heartbeat reads `/proc` only) |
 | `process memory` | `VmRSS` now and `VmHWM` |
 | `GPU memory` | this process's files in the kernel driver's `/sys/class/kgsl/kgsl/proc/<pid>/` (each read as its first integer and taken for bytes), read on the sampler's thread every 2 s; or why not |
-| `pipelines` | the start-up set's count, the pipelines made as the frames needed them, the last pipeline note |
+| `pipelines` | the start-up set's count, the pipelines made as the frames needed them, where the skin check runs its counts this run (issue 217, `port/platform/last_run_skin.h`, read at each write through the window's source: `the skin check: <n> checks, <b> box checks drawn, <t> twins drawn, <p> of its own pipelines begun`, with ` (a tile-based phone GPU: none compiled)` on a phone), the last pipeline note |
 | `end` | `running (...)` until an end is written: `clean` (the window's clean close; `clean, after: <words>` after a loss), `crash (signal <n>)` (POSIX; `crash (exception 0x<code>)` on Windows) written by the crash handler with async-signal-safe calls only (a slot built by hand, one `pwrite`, a bounded wait for a heartbeat's write in flight), `graphics device lost`, `the graphics driver stopped responding (a GPU hang)`, `the watchdog: <reason>` |
 
 At the next start the file is read before it is rewritten, copied to `logs/last-run-previous.txt`,
@@ -848,7 +848,10 @@ gives the facts (`LastRunFacts`: pid, seconds, phase with stage and tick, backgr
 resets, free memory, the end and a crash's signal) for the verdict of the next start.
 
 On Android 11 and later each phase change also keeps at most 128 bytes (`ico-pc <phase> | resets
-47->66 | free 1911 MB, lowest 1897`), which the next heartbeat (within 2 s) hands from its own
+47->66 | free 1911 MB, lowest 1897`; where the skin check runs, `| skin box <b> twin <t> made <p>`
+before the free figure, and a heartbeat that sees those three change keeps a new one, since a run
+in play has no phase change to carry them: issue 217's lost runs died before the check's first
+10 s line; the phase is cut first), which the next heartbeat (within 2 s) hands from its own
 thread, never from the game's fiber stack where a phase change can come and a Java call is not
 made, to `ActivityManager.setProcessStateSummary`
 (`IcoActivity.processStateSummary`, `port/platform/android/last_run_android.c`), which the system
@@ -1045,7 +1048,7 @@ the newest file in logs that starts with report-" and name it (`port/platform/di
 
 | entry | what |
 | --- | --- |
-| `report.txt` | what ended the run and when, the `VERSION.txt` lines (beside the program or one folder up, then on Linux `../share/doc/ico-pc/` from the running program's own folder, where the AppImage keeps it; Android's from the app's assets; `port/platform/report.c` (`ico_report_set_paths`)), `achievements.toml`'s `stages` line (not the file), the disc played (`disc: SCPS-11003 (the Japanese disc)`, `ico_diag_set_disc`), the [summary line](#the-summary-line), the process's and the device's memory when the report is written (`memory: memory 191 MB (most 197 MB); device 320 MB available of 7632 MB`, `IcoReportInputs.memory`, `ico_diag_memory_text`; `(unknown on this system)` without `/proc`), the log's latest device, robust access, blend, VU index, fog, shader and window lines, the last 20 `ico_pc:`, `window:` and `rd:` lines before the report, the report block itself (the crash or watchdog report with its symbol lines), and the window's own part (`IcoReportInputs.extra`, `ico_diag_set_report_extra`: SDL's own log, the last 64 lines) |
+| `report.txt` | what ended the run and when, the `VERSION.txt` lines (beside the program or one folder up, then on Linux `../share/doc/ico-pc/` from the running program's own folder, where the AppImage keeps it; Android's from the app's assets; `port/platform/report.c` (`ico_report_set_paths`)), `achievements.toml`'s `stages` line (not the file), the disc played (`disc: SCPS-11003 (the Japanese disc)`, `ico_diag_set_disc`), the [summary line](#the-summary-line), where the skin check runs its counts this run (`the skin check: <n> checks, <b> box checks drawn, ...`, issue 217, as `last-run.txt`'s pipelines field), the process's and the device's memory when the report is written (`memory: memory 191 MB (most 197 MB); device 320 MB available of 7632 MB`, `IcoReportInputs.memory`, `ico_diag_memory_text`; `(unknown on this system)` without `/proc`), the log's latest device, robust access, blend, VU index, fog, shader and window lines, the last 20 `ico_pc:`, `window:` and `rd:` lines before the report, the report block itself (the crash or watchdog report with its symbol lines), and the window's own part (`IcoReportInputs.extra`, `ico_diag_set_report_extra`: SDL's own log, the last 64 lines) |
 | `ico-pc.log` | the log so far |
 | `ico-pc-previous.log` | the run before's |
 | `startup-activity.txt` | when there is one |

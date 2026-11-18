@@ -401,7 +401,7 @@ Matches a tile-based phone GPU: a tile-based phone (TILE_PHONE) yes.
 | Choice | Value | What | Issue | Since | Evidence | Revisit |
 | --- | --- | --- | --- | --- | --- | --- |
 | `MEMORY_BUDGET_OFF` | yes | VK_EXT_memory_budget not asked | - | v0.11.5 | commit 1859caa76 (a phone's free memory is the system's own measure) | never: Android's MemAvailable is the measure there |
-| `SKIN_AS_BEFORE` | yes | the skin check issues v0.11.2's work | issue 211 | v0.11.4 | commit cf4256f8d | a phone log without a loss under the v0.11.3 check |
+| `SKIN_AS_BEFORE` | yes | the skin check issues v0.11.2's work, and none of its own pipelines (box check, twins, c2, column 3) is compiled | issues 211 and 217 | v0.11.4 | commit cf4256f8d; issue 217: of the Adreno 710's four runs on v0.11.8 and v0.11.9 the one that kept the device had none of them compiled, the three that compiled them lost it in the first 3D scene (v01110/evidence/217) | a phone log without a loss with the box checks and the twins drawn |
 
 #### `intel-windows-1.3.215`
 

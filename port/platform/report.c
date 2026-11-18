@@ -13,6 +13,7 @@
 #include <time.h>
 
 #include "host_fs.h"
+#include "last_run.h" /* the skin check's counts (issue 217) */
 #include "miniz.h"
 
 #ifdef _WIN32
@@ -878,6 +879,15 @@ static void build_text(const IcoReportInputs *in)
     /* issue 215: how the run before ended (exit_info.h) */
     if (s_exit_verdict[0] != '\0') {
         text_line(s_exit_verdict);
+    }
+    {
+        /* issue 217: the skin check's counts this run, when it runs (a run
+           lost before its first 10 s line has no other count of them) */
+        char skin[192];
+        last_run_skin_now(skin, sizeof skin);
+        if (skin[0] != '\0') {
+            text_line(skin);
+        }
     }
 
     memset(s_key, 0, sizeof s_key);

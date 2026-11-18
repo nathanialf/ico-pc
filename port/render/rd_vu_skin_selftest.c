@@ -171,6 +171,7 @@ bool rd__vu_skin_selftest(void)
     }
     if (!rd__vu_skin_check_on()) {
         ico_attempt_decide_skin_skip(0); /* the attempt ledger's row (rd__skin_skip) */
+        rd__vu_skin_rule_start(false);
         if (rhi_backend() == RHI_BACKEND_VULKAN && g_rd.windowed) {
             rd__log("VU skin check: off (%s)",
                     rhi_device_lost() ? "the device was lost" : rd__vu_skin_check_why());
@@ -427,10 +428,12 @@ bool rd__vu_skin_selftest(void)
          * writes the setting (rd_vu_skin_probe_failed) */
         rd__vu_skin_check_set(0);
         ico_attempt_decide_skin_skip(0);
+        rd__vu_skin_rule_start(false);
         rd__log("VU skin check: off (the start-up probe failed: %s)", s_failed);
         return true;
     }
     ico_attempt_decide_skin_skip(1);
+    rd__vu_skin_rule_start(true); /* issue 217's phone rule, the ledger's row */
     const RhiLimits *lim = rhi_limits();
     if (rd__vu_skin_twins_on()) {
         rd__log(

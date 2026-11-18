@@ -935,6 +935,22 @@ uint32_t rd_pipelines_background_start(RdBackgroundMemoryFn memory);
  * The window, before the render thread starts; without a call (the tests,
  * the tool) every compile may begin. */
 void rd_vu_skin_background(RdBackgroundMemoryFn memory, const char *noBackground);
+
+/* Issue 217 (v0.11.10): on a tile-based phone GPU (the device table's
+ * SKIN_AS_BEFORE) none of the check's own pipelines is compiled at all,
+ * with or without noBackground, said in one line. */
+/* The check's counts this run (any thread: relaxed atomics, kept across a
+ * renderer's restart), for the last-run record and the report (port/platform
+ * window_pipe_finish.c hands them to last_run.h): on (its start line said
+ * on), phone (on, on a tile-based phone GPU), the checks drawn, the box
+ * checks drawn, the twins drawn, and its own pipelines begun (background or
+ * at once: c2's, column 3's, the box checks', twin C's) */
+typedef struct RdSkinRunCounts {
+    int on, phone;
+    uint64_t checks, boxDrawn, twinsDrawn, pipesBegun;
+} RdSkinRunCounts;
+
+void rd_vu_skin_run_counts(RdSkinRunCounts *out);
 /* A late game step or a slow picture: no background batch begins for
  * RD_FINISH_HOLD_MS (a batch in flight goes on).  Any thread. */
 void rd_pipelines_background_hold(void);

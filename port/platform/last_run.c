@@ -382,7 +382,13 @@ int last_run_milestone_stage(const char *m)
 void last_run_summary_text(const char *phase, int resetsStart, int resetsNow, long freeMb,
                            long lowMb, char *out, size_t size)
 {
-    char resets[48], free_[64];
+    last_run_summary_text_with(phase, resetsStart, resetsNow, freeMb, lowMb, NULL, out, size);
+}
+
+void last_run_summary_text_with(const char *phase, int resetsStart, int resetsNow, long freeMb,
+                                long lowMb, const char *extra, char *out, size_t size)
+{
+    char resets[48], free_[64], extra_[LAST_RUN_SKIN_SHORT_MAX + 4];
     if (size == 0) {
         return;
     }
@@ -398,13 +404,19 @@ void last_run_summary_text(const char *phase, int resetsStart, int resetsNow, lo
     } else {
         snprintf(free_, sizeof free_, "free unknown");
     }
+    /* issue 217: the skin check's short form, " | " before it */
+    extra_[0] = '\0';
+    if (extra != NULL && extra[0] != '\0') {
+        snprintf(extra_, sizeof extra_, " | %.*s", LAST_RUN_SKIN_SHORT_MAX - 1, extra);
+    }
     {
         /* the figures first in the room: the phase is cut, never them.  The
-           whole text is made first (the tail at most 6 + 47 + 63 bytes),
-           then cut by hand to the system's 128 bytes: the cut is the
-           phase's alone */
-        char tail[sizeof resets + sizeof free_ + 8];
-        const int t = snprintf(tail, sizeof tail, " | %s | %s", resets, free_);
+           whole text is made first (the tail at most 6 + 47 + 98 + 63
+           bytes), then cut by hand to the system's 128 bytes: the cut is
+           the phase's alone (with the skin check's figure the phase keeps
+           about 38 bytes: "play: stage 1, Main tick 216 (since 18") */
+        char tail[sizeof resets + sizeof extra_ + sizeof free_ + 8];
+        const int t = snprintf(tail, sizeof tail, " | %s%s | %s", resets, extra_, free_);
         const size_t tlen = t <= 0 ? 0 : (size_t)t < sizeof tail ? (size_t)t : sizeof tail - 1;
         const size_t cap = size < LAST_RUN_SUMMARY_MAX ? size : LAST_RUN_SUMMARY_MAX;
         const char *ph = phase != NULL ? phase : "";
@@ -460,6 +472,11 @@ static char s_phaseDetail[200];
 static char s_playStep[200];
 /* the start-up set's size decision (last_run_set_size_words), "" none */
 static char s_sizeWords[112]; /* set_size.h SET_SIZE_WORDS_MAX */
+/* issue 217: the skin check's source, its words and short form at the last
+   write (under the lock), and the short form the last summary carried */
+static void (*volatile s_skinFn)(LastRunSkin *out);
+static char s_skinWords[192];
+static char s_skinShort[LAST_RUN_SKIN_SHORT_MAX], s_skinSumShort[LAST_RUN_SKIN_SHORT_MAX];
 static int s_stage = -1;
 static volatile int s_selftest;
 static unsigned s_setDone, s_setTotal;
@@ -640,10 +657,24 @@ static void compose(void)
         const int at = __atomic_load_n(&s_gpuMemAt, __ATOMIC_ACQUIRE);
         snprintf(v[LAST_RUN_GPU_MEMORY], sizeof v[0], "%s", s_gpuMem[at & 1]);
     }
+    {
+        /* issue 217: the skin check's counts before the note (the slot may
+           cut the note, never them) */
+        void (*fn)(LastRunSkin *) = s_skinFn;
+        s_skinWords[0] = s_skinShort[0] = '\0';
+        if (fn != NULL) {
+            LastRunSkin k;
+            memset(&k, 0, sizeof k);
+            fn(&k);
+            last_run_skin_words(&k, s_skinWords, sizeof s_skinWords);
+            last_run_skin_short(&k, s_skinShort, sizeof s_skinShort);
+        }
+    }
     snprintf(v[LAST_RUN_PIPELINES], sizeof v[0],
-             "start-up set %u of %u; %u made as the frames needed them; the last pipeline note: "
-             "%s",
-             s_setDone, s_setTotal, b->pipesMade, s_note[0] != '\0' ? s_note : "none");
+             "start-up set %u of %u; %u made as the frames needed them; %s%sthe last pipeline "
+             "note: %s",
+             s_setDone, s_setTotal, b->pipesMade, s_skinWords, s_skinWords[0] != '\0' ? "; " : "",
+             s_note[0] != '\0' ? s_note : "none");
     snprintf(v[LAST_RUN_END], sizeof v[0], "%s",
              s_end[0] != '\0' ? s_end
                               : "running (nothing written at an end: a run that stops here ended "
@@ -673,16 +704,20 @@ static void write_all(int sync)
 /* the phase change's summary, kept for the next beat's hand-over */
 static void summary(void)
 {
-    char ph[LAST_RUN_VALUE_MAX], text[LAST_RUN_SUMMARY_MAX];
+    char ph[LAST_RUN_VALUE_MAX], text[LAST_RUN_SUMMARY_MAX], skin[LAST_RUN_SKIN_SHORT_MAX];
     if (s_summary == NULL) {
         return;
     }
     phase_value(ph, sizeof ph);
-    last_run_summary_text(ph, (int)s_resetsStart, (int)s_resetsNow,
-                          s_beat.availKb >= 0 ? s_beat.availKb / 1024 : -1, s_lowMb, text,
-                          sizeof text);
+    lock_take();
+    memcpy(skin, s_skinShort, sizeof skin);
+    lock_give();
+    last_run_summary_text_with(ph, (int)s_resetsStart, (int)s_resetsNow,
+                               s_beat.availKb >= 0 ? s_beat.availKb / 1024 : -1, s_lowMb, skin,
+                               text, sizeof text);
     lock_take();
     memcpy(s_sumText, text, sizeof s_sumText);
+    memcpy(s_skinSumShort, skin, sizeof s_skinSumShort);
     s_sumGen++;
     lock_give();
 }
@@ -828,6 +863,17 @@ void last_run_beat(const LastRunBeat *b)
         s_lowAt = ico_diag_uptime();
     }
     write_all(0);
+    {
+        /* issue 217: the skin check's figure changed since the last
+           summary (a run in play has no phase change to carry it) */
+        int changed;
+        lock_take();
+        changed = strcmp(s_skinShort, s_skinSumShort) != 0;
+        lock_give();
+        if (changed) {
+            summary();
+        }
+    }
     summary_hand_over();
 }
 
@@ -1067,4 +1113,25 @@ void last_run_set_size_words(const char *words)
 long last_run_lowest_mb(void)
 {
     return s_lowMb;
+}
+
+void last_run_set_skin_source(void (*fn)(LastRunSkin *out))
+{
+    s_skinFn = fn;
+}
+
+void last_run_skin_now(char *out, size_t size)
+{
+    void (*fn)(LastRunSkin *) = s_skinFn;
+    LastRunSkin k;
+    if (size == 0) {
+        return;
+    }
+    out[0] = '\0';
+    if (fn == NULL) {
+        return;
+    }
+    memset(&k, 0, sizeof k);
+    fn(&k);
+    last_run_skin_words(&k, out, size);
 }

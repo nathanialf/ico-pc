@@ -505,12 +505,20 @@ static RdSkinSummary *s_collect; /* rd__vu_skin_check_frame's */
 
 /* On a tile-based phone GPU (RhiLimits.tilePhone; v0.11.4: two phones lost
  * the device in the first 3D scene on v0.11.3, cause unknown) the check
- * issues what v0.11.2's issued: no careful rule (with a reason none of these
- * compiles at all, so none of their draws; the twins not thinned from the
- * start), no ring stamp (no 16 bytes in the ring, no copy of them, the
- * readback laid out as before) and the probe target cleared to zero, not to
- * the replay's stamp; the stamps' checks then take every readback as its
- * replay's.  CPU-only additions (the copy search, the trace) stay. */
+ * issues what v0.11.2's issued: no careful rule, no ring stamp (no 16 bytes
+ * in the ring, no copy of them, the readback laid out as before) and the
+ * probe target cleared to zero, not to the replay's stamp; the stamps'
+ * checks then take every readback as its replay's.  CPU-only additions (the
+ * copy search, the trace) stay.  And since issue 217 (v0.11.10) none of its
+ * own pipelines is ever compiled there (the box check's, the twins', c2's,
+ * column 3's: bgMay, in every mode), whatever the start-up set did: v0.11.2
+ * and v0.11.4 to v0.11.9 left them out only where the start-up set stopped
+ * for memory on Qualcomm's own driver, and of the Adreno 710's four runs on
+ * v0.11.8 and v0.11.9 the one that kept the device was the one that stopped
+ * there (none compiled, none of their draws); the three that compiled them
+ * lost it in the first 3D scene.  So no box check is drawn there and a twin
+ * only through the draw's own pipeline (its attachment read); the probes,
+ * their readbacks and the CPU's checks stay. */
 static bool skAsBefore(void)
 {
     /* the device table's SKIN_AS_BEFORE (the row tile-phone: RhiLimits
@@ -520,8 +528,8 @@ static bool skAsBefore(void)
 }
 
 static RdBackgroundMemoryFn s_memFn;
-static char s_noBg[192]; /* why the compiles are careful (none at all on a phone) */
-static bool s_noBgPhone; /* s_noBg's rule is v0.11.2's: none compiled (skAsBefore) */
+static char s_noBg[192]; /* why the compiles are careful (the window's reason) */
+static bool s_noBgPhone; /* a tile-based phone GPU (skAsBefore): none compiled, no careful rule */
 static bool s_memStop;   /* the system's signal: none for the run */
 /* a tile-based phone GPU (skAsBefore): the twins thinned from the start
  * (rd_vu_skin_background), whatever the start-up set did */
@@ -529,17 +537,68 @@ static bool s_phoneThin;
 static bool s_bgSaid[3];  /* the lines said: the rule, the signal, the floor */
 static double s_bgLastMs; /* the careful rule's last begin */
 
+/* the run's counts for the last-run record and the report (rd.h
+ * rd_vu_skin_run_counts; read by the heartbeat's thread: relaxed atomics,
+ * never reset by a renderer's restart) */
+static struct {
+    int on, phone;
+    uint64_t checks, box, twins, begun;
+} s_lr;
+
+static void lrAdd(uint64_t *n, uint64_t d)
+{
+    __atomic_fetch_add(n, d, __ATOMIC_RELAXED);
+}
+
+/* the phone's rule, said once (a renderer): at the window's call where the
+ * check runs, else at the first compile it holds back */
+static void phoneSay(void)
+{
+    if (s_bgSaid[0]) {
+        return;
+    }
+    s_bgSaid[0] = true;
+    rd__log("VU skin check: its box check, its twins' pipelines and its c2 variant are not "
+            "compiled in the background (%s%sa tile-based phone GPU: none, whatever the start-up "
+            "set did, issue 217): the check runs without them and without column 3; its probes, "
+            "readbacks and CPU checks stay",
+            s_noBg, s_noBg[0] ? "; " : "");
+}
+
+void rd__vu_skin_rule_start(bool on)
+{
+    const bool phone = on && skAsBefore();
+    __atomic_store_n(&s_lr.on, on ? 1 : 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&s_lr.phone, phone ? 1 : 0, __ATOMIC_RELAXED);
+    ico_attempt_decide_skin_phone(on ? 1 : 0, skAsBefore() ? 1 : 0);
+}
+
+void rd_vu_skin_run_counts(RdSkinRunCounts *out)
+{
+    out->on = __atomic_load_n(&s_lr.on, __ATOMIC_RELAXED);
+    out->phone = __atomic_load_n(&s_lr.phone, __ATOMIC_RELAXED);
+    out->checks = __atomic_load_n(&s_lr.checks, __ATOMIC_RELAXED);
+    out->boxDrawn = __atomic_load_n(&s_lr.box, __ATOMIC_RELAXED);
+    out->twinsDrawn = __atomic_load_n(&s_lr.twins, __ATOMIC_RELAXED);
+    out->pipesBegun = __atomic_load_n(&s_lr.begun, __ATOMIC_RELAXED);
+}
+
 void rd_vu_skin_background(RdBackgroundMemoryFn memory, const char *noBackground)
 {
     s_memFn = memory;
     snprintf(s_noBg, sizeof(s_noBg), "%s", noBackground ? noBackground : "");
-    s_noBgPhone = s_noBg[0] != '\0' && skAsBefore();
+    /* issue 217: on a tile-based phone GPU none at all, with or without the
+     * window's reason (the line at the window's start, with it) */
+    s_noBgPhone = skAsBefore();
+    if (s_noBgPhone && rd__vu_skin_check_on()) {
+        phoneSay();
+    }
     /* the careful rule: on a GPU-bound phone (issue 123: 26.7-28.7 of 33.3 ms
      * a picture) the twins' extra draws must not cost it time, so they
      * start thinned (one a picture, the rate they reach after
      * RD_SKIN_THIN_REPLAYS clean replays) and a twin event re-arms them for
      * a bounded stretch only (thinNote); not on a tile-based phone GPU
-     * (skAsBefore: v0.11.2's rule, none compiled, the twins as before) */
+     * (skAsBefore: none compiled at all, the phone's thinning below) */
     const bool careful = s_noBg[0] != '\0' && !s_noBgPhone;
     if (careful && !s_thin.careful) {
         s_thin.thin = true;
@@ -553,7 +612,8 @@ void rd_vu_skin_background(RdBackgroundMemoryFn memory, const char *noBackground
      * on v0.11.3 with them on); a twin event re-arms them as the rule
      * above does.  Fewer draws of the shapes every start draws, nothing new
      * on the GPU (twinDraw: through the draw's own pipeline where that is
-     * the twin's form, so no pipeline is needed that the start lacks) */
+     * the twin's form; the box check's, the other form's, is never compiled
+     * there: bgMay, issue 217) */
     const bool phone = skAsBefore();
     if (phone && !s_phoneThin) {
         s_thin.thin = true;
@@ -581,24 +641,19 @@ static bool jobBusy(void)
 }
 
 /* whether a background compile may begin now (wait: the tool's and the
- * tests', taken at once: always) */
+ * tests', taken at once: always, except on a tile-based phone GPU) */
 static bool bgMay(bool wait)
 {
+    if (skAsBefore()) {
+        /* issue 217: none on a tile-based phone GPU, in every mode (the
+         * tool's and the tests' replays issue what the phone issues) */
+        phoneSay();
+        return false;
+    }
     if (wait) {
         return true;
     }
     if (jobBusy()) {
-        return false;
-    }
-    if (s_noBg[0] && s_noBgPhone) {
-        /* v0.11.2's rule on a tile-based phone GPU (skAsBefore) */
-        if (!s_bgSaid[0]) {
-            s_bgSaid[0] = true;
-            rd__log("VU skin check: its box check, its twins' pipelines and its c2 variant are "
-                    "not compiled in the background (%s; a tile-based phone GPU: none, as before "
-                    "the careful rule): the check runs without them",
-                    s_noBg);
-        }
         return false;
     }
     if (s_noBg[0]) {
@@ -666,6 +721,7 @@ static void roPoll(bool wait)
             n++;
         }
         s_p.roJob = rhi_create_pipelines_begin(s_p.roDesc, n, 1, true);
+        lrAdd(&s_lr.begun, s_p.roJob ? n : 0u);
         if (!s_p.roJob) {
             s_p.roDone = true;
             return;
@@ -696,6 +752,7 @@ static void rgPoll(bool wait)
             }
         }
         s_p.rgJob = rhi_create_pipelines_begin(s_p.rgDesc, SK_VS_COUNT, 1, true);
+        lrAdd(&s_lr.begun, s_p.rgJob ? SK_VS_COUNT : 0u);
         if (!s_p.rgJob) {
             s_p.rgDone = true;
             return;
@@ -830,6 +887,7 @@ static RhiPipeline tablePipe(SkBoxPipe *tab, int n, const RdPipeKeyInt *raw, boo
             e->pipe = rhi_create_pipeline(&e->desc);
             e->failed = !e->pipe.id;
         }
+        lrAdd(&s_lr.begun, 1u); /* begun in the background, or made at once */
     }
     if (e->job && rhi_create_pipelines_end(e->job, wait, &e->pipe, NULL, NULL)) {
         e->job = NULL;
@@ -1202,9 +1260,10 @@ static void twinsOnSay(void)
                 rule, s_noBg, carefulRearm(), (unsigned)RD_SKIN_CAREFUL_REARMS);
     } else if (s_phoneThin) {
         rd__log("VU skin check: twins on (%s) at one skinned draw a picture from the start (a "
-                "tile-based phone GPU: not every skinned draw of the first 3D scene; through the "
-                "draw's own pipeline where it reads its attachment, else the box check's); a "
-                "twin event twins every skinned draw again until %u replays with none differing",
+                "tile-based phone GPU: not every skinned draw of the first 3D scene; only through "
+                "the draw's own pipeline where it reads its attachment, the box check's not "
+                "compiled there); a twin event twins every skinned draw again until %u replays "
+                "with none differing",
                 rule, rd__vu_skin_thin_after());
     } else {
         rd__log("VU skin check: twins on (%s): every skinned draw until %u replays with none "
@@ -1467,6 +1526,12 @@ static void boxCheck(Replay *r, const DrawSetup *ds, const RdSkinDraw *d, SkChec
     const RhiPipeline p = boxPipe(&key, skMode() == 2);
     if (!p.id) {
         s_blk.boxNot++;
+        if (s_collect) {
+            s_collect->boxNot++;
+        }
+        if (skAsBefore()) {
+            ico_attempt_fire(ICO_ATT_SKIN_PHONE, 1u); /* issue 217's rule: none compiled */
+        }
         return;
     }
     const RhiCommandList cl = rd__replay_cl();
@@ -1498,6 +1563,7 @@ static void boxCheck(Replay *r, const DrawSetup *ds, const RdSkinDraw *d, SkChec
     k->boxNoDst = d->key->dst != RHI_DST_READ_NONE;
     k->boxFs = d->key->fs;
     s_run.boxDrawn++;
+    lrAdd(&s_lr.box, 1u);
     if (k->past) {
         s_run.pastBoxed++;
         s_blk.pastBoxed++;
@@ -1612,6 +1678,12 @@ static void twinDraw(Replay *r, const RdSkinDraw *d, SkSlot *sl, uint64_t fresh,
                     : boxPipe(&key, skMode() == 2 || s_collect != NULL);
         if (!p.id) {
             s_blk.twinsNot++;
+            if (s_collect) {
+                s_collect->twinsNot++;
+            }
+            if (skAsBefore()) {
+                ico_attempt_fire2(ICO_ATT_SKIN_PHONE, 1u); /* issue 217's rule: none compiled */
+            }
             return;
         }
     }
@@ -1703,6 +1775,7 @@ static void twinDraw(Replay *r, const RdSkinDraw *d, SkSlot *sl, uint64_t fresh,
         rd__set_pipeline(cl, d->pipe, dk);
     }
     s_run.twinsDrawn++;
+    lrAdd(&s_lr.twins, 1u);
     s_run.twinsOwn += own;
     s_run.ringDrawn += pc.id != 0;
 }
@@ -2034,6 +2107,7 @@ void rd__vu_skin_end(void)
     }
     sl->pending = true;
     s_run.drawn += n;
+    lrAdd(&s_lr.checks, n);
     sl->counter = g_rd.replayCounter;
     sl->rhiSlot = rhi_frame_slot();
     sl->ringId = g_rd.ring[slot].id;

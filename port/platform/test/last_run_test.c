@@ -299,6 +299,29 @@ static void rules(void)
         CHECK(strlen(sum) == LAST_RUN_SUMMARY_MAX - 1);
         CHECK(strstr(sum, "pp | resets 47->66 | free 1911 MB, lowest 1897") != NULL);
         CHECK(strncmp(sum, "ico-pc pp", 9) == 0);
+        /* issue 217: the skin check's figure between the resets and the
+           free memory; none, or "", as before */
+        last_run_summary_text_with("play: stage 1, Main tick 4 (since 14.2 s)", 47, 66, 1911, 1897,
+                                   "skin box 0 twin 0 made 0", sum, sizeof sum);
+        CHECK(text_is(sum, "ico-pc play: stage 1, Main tick 4 (since 14.2 s) | resets 47->66 | "
+                           "skin box 0 twin 0 made 0 | free 1911 MB, lowest 1897"));
+        last_run_summary_text_with("starting", -1, -1, -1, -1, "", sum, sizeof sum);
+        CHECK(text_is(sum, "ico-pc starting | resets unread | free unknown"));
+        /* issue 217's reporter's figures: the phase cut, the figures kept,
+           the stage and tick still whole */
+        last_run_summary_text_with(
+            "play: stage 1, Main tick 216 (since 18.1 s); start-up set sized "
+            "by the memory fall: every family fits",
+            1009623, 1009701, 1761, 590, "skin box 0 twin 0 made 0", sum, sizeof sum);
+        CHECK(strlen(sum) == LAST_RUN_SUMMARY_MAX - 1);
+        CHECK(strncmp(sum, "ico-pc play: stage 1, Main tick 216 (since 1", 44) == 0);
+        CHECK(strstr(sum, " | resets 1009623->1009701 | skin box 0 twin 0 made 0 | free 1761 MB, "
+                          "lowest 590") != NULL);
+        last_run_summary_text_with(big, 47, 66, 1911, 1897, "skin box 1 twin 2 made 3", sum,
+                                   sizeof sum);
+        CHECK(strlen(sum) == LAST_RUN_SUMMARY_MAX - 1);
+        CHECK(strstr(sum, "pp | resets 47->66 | skin box 1 twin 2 made 3 | free 1911 MB, lowest "
+                          "1897") != NULL);
     }
     CHECK(last_run_paths("logs/startup-activity.txt", cur, prev, sizeof cur) == 0);
     CHECK(text_is(cur, "logs/last-run.txt") && text_is(prev, "logs/last-run-previous.txt"));
@@ -572,6 +595,90 @@ static void run(const char *base)
     (void)ico_remove_tree(dir);
 }
 
+/* issue 217: the skin check's counts (a fake source, as the window's
+   window_pipe_finish.c skin_source hands rd_vu_skin_run_counts) */
+static LastRunSkin s_skin;
+
+static void skin_fake(LastRunSkin *out)
+{
+    *out = s_skin;
+}
+
+/* issue 217: the skin check's counts in the pipelines slot at every write,
+   before the note; in the system's summary, made again by the beat that
+   sees them change and only then; in the report's words; none without the
+   source or with the check off */
+static void run_skin(const char *base)
+{
+    static char buf[LAST_RUN_BYTES + 64];
+    char dir[512], act[600], cur[700], prev[700], words[256];
+    LastRunBeat b;
+
+    snprintf(dir, sizeof dir, "%s/last_run_skin_logs", base);
+    (void)ico_remove_tree(dir);
+    CHECK(ico_mkdir(dir) == 0);
+    snprintf(act, sizeof act, "%s/startup-activity.txt", dir);
+    snprintf(cur, sizeof cur, "%s/last-run.txt", dir);
+    snprintf(prev, sizeof prev, "%s/last-run-previous.txt", dir);
+    s_log[0] = '\0';
+    last_run_begin(act, "v0.11.10 (commit test)", log_line);
+    (void)read_file(cur, buf, sizeof buf, &s_f);
+    CHECK(strstr(s_f.value[LAST_RUN_PIPELINES], "skin check") == NULL);
+    last_run_skin_now(words, sizeof words);
+    CHECK(words[0] == '\0');
+
+    memset(&s_skin, 0, sizeof s_skin);
+    s_skin.on = 1;
+    s_skin.phone = 1;
+    s_skin.checks = 35;
+    last_run_set_skin_source(skin_fake);
+    s_sumCalls = 0;
+    last_run_set_summary_hook(sum_hook);
+    CHECK(s_sumCalls == 0);
+    memset(&b, 0, sizeof b);
+    b.ticks = 149;
+    b.note = "";
+    b.rssKb = 311 * 1024;
+    b.peakKb = 378 * 1024;
+    b.availKb = 1072 * 1024;
+    b.totalKb = 5345 * 1024;
+    b.floorMb = 908;
+    last_run_beat(&b);
+    (void)read_file(cur, buf, sizeof buf, &s_f);
+    CHECK(strstr(s_f.value[LAST_RUN_PIPELINES],
+                 " made as the frames needed them; the skin check: 35 checks, 0 box checks drawn, "
+                 "0 twins drawn, 0 of its own pipelines begun (a tile-based phone GPU: none "
+                 "compiled); the last pipeline note: none") != NULL);
+    /* the summary set by the hook carried no figure: this beat's made it
+       again with one, handed over once */
+    CHECK(s_sumCalls == 1 &&
+          strstr(s_sumLast, " | skin box 0 twin 0 made 0 | free 1072 MB") != NULL);
+    last_run_beat(&b);
+    CHECK(s_sumCalls == 1);
+    s_skin.box = 1;
+    s_skin.begun = 1;
+    last_run_beat(&b);
+    CHECK(s_sumCalls == 2 && strstr(s_sumLast, " | skin box 1 twin 0 made 1 | ") != NULL);
+    last_run_skin_now(words, sizeof words);
+    CHECK(text_is(words, "the skin check: 35 checks, 1 box checks drawn, 0 twins drawn, 1 of its "
+                         "own pipelines begun (a tile-based phone GPU: none compiled)"));
+
+    /* the check off: nothing in the slot, the summary without the figure */
+    s_skin.on = 0;
+    last_run_beat(&b);
+    (void)read_file(cur, buf, sizeof buf, &s_f);
+    CHECK(strstr(s_f.value[LAST_RUN_PIPELINES], "skin check") == NULL);
+    CHECK(s_sumCalls == 3 && strstr(s_sumLast, "skin") == NULL);
+    last_run_skin_now(words, sizeof words);
+    CHECK(words[0] == '\0');
+    last_run_set_summary_hook(NULL);
+    last_run_set_skin_source(NULL);
+    last_run_skin_now(words, sizeof words);
+    CHECK(words[0] == '\0');
+    last_run_end_clean();
+    (void)ico_remove_tree(dir);
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 2) {
@@ -585,6 +692,7 @@ int main(int argc, char **argv)
     lines();
     rules();
     run(argv[1]);
+    run_skin(argv[1]);
     if (fails != 0) {
         printf("last_run_test: %d failure(s)\n", fails);
         return 1;
