@@ -6350,17 +6350,16 @@ static void watchdog_loop(void)
             if (gpu_state(&g) &&
                 ico_gpu_reset_step(&reset_watch, g.waiting_for, g.finished, poll_dt, poll_counted,
                                    (int)last_run_gpu_resets_now())) {
+                static char why[256];
                 reset_stop = 1;
-                snprintf(reason, sizeof reason,
-                         "the GPU: submission %llu not finished after %.1f s while the kernel's "
-                         "GPU driver reset the GPU %d times (from %d to %d; the stop is at %d "
-                         "resets in a wait of %.0f s or more); the newest is %llu, the newest "
-                         "seen finished %llu",
-                         g.waiting_for, reset_watch.counted_s,
-                         (int)last_run_gpu_resets_now() - reset_watch.resets0, reset_watch.resets0,
-                         (int)last_run_gpu_resets_now(), ICO_GPU_RESET_STOP_N, ICO_GPU_RESET_STOP_S,
-                         g.submitted, g.finished);
-                watchdog_fire(reason);
+                snprintf(why, sizeof why,
+                         "the GPU: submission %llu not finished after %u ms with the kernel's GPU "
+                         "driver resetting the GPU under it (%d to %d resets); the newest is "
+                         "%llu, the newest seen finished %llu",
+                         g.waiting_for, (unsigned)(reset_watch.counted_s * 1000.0),
+                         reset_watch.resets0, (int)last_run_gpu_resets_now(), g.submitted,
+                         g.finished);
+                watchdog_fire(why);
                 continue;
             }
             if (gpu_state(&g) &&

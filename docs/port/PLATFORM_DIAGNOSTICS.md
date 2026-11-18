@@ -622,8 +622,8 @@ driver route to a Turnip package (`UI_STR_GPU_HANG_TURNIP`;
 again and again, and the whole device restarted about 10 s into the wait, before the 15 s limit.
 One wait for one unfinished submission seen for 1 s (`ICO_GPU_RESET_STOP_S`) during which KGSL's
 `reset_count` rose by 2 or more (`ICO_GPU_RESET_STOP_N`) ends the run as the GPU hang at once:
-`ico_pc: WATCHDOG: the GPU: submission <n> not finished after <t> s while the kernel's GPU driver
-reset the GPU <k> times (from <a> to <b>; ...)`. The end's words go to last-run.txt (`the graphics
+`ico_pc: WATCHDOG: the GPU: submission <n> not finished after <t> ms with the kernel's GPU driver
+resetting the GPU under it (<a> to <b> resets); ...`. The end's words go to last-run.txt (`the graphics
 driver stopped responding (a GPU hang, the kernel's driver resetting the GPU)`) and the log is
 synced before anything else; there is no pass ring and no loss dump (`no loss dump at a reset
 stop: the run ends at once`), then the hang's box. A stall the driver recovers from (about 350 ms
