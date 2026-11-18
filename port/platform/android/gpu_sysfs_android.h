@@ -36,5 +36,11 @@ bool gpu_sysfs_android_ring(GpuSysfsRing *out);
    (/sys/class/kgsl/kgsl/proc/<pid>/, last-run.txt's field), one line
    without "window: "; "" before gpu_sysfs_android_start */
 const char *gpu_sysfs_android_proc_text(void);
+/* The GPU memory the kernel's driver holds for this process now, MB
+   (/sys/class/kgsl/kgsl/proc/<pid>/kernel, bytes; read at the call, with
+   or without the sampler started): 0 read, else the errno (ENOENT: no
+   KGSL here; EACCES: the device's policy denies it).  set_size.h's GPU
+   room (issue 215) */
+int gpu_sysfs_android_proc_kernel_mb(long *mb);
 
 #endif /* ICO_PLATFORM_GPU_SYSFS_ANDROID_H */

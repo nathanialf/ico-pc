@@ -31,6 +31,16 @@
  *            not trusted yet is measured first; a stopped family stays
  *            stopped for the set.  Without a floor (every system but
  *            Android, or the floor set off) the rule is off.
+ *   GPU      where the kernel's GPU driver says what this process holds
+ *            (Qualcomm's KGSL, readable), the headroom is the smaller of
+ *            the one above and SET_SIZE_GPU_LIMIT_MB less that figure: on
+ *            the issue 215 handheld (driver 512.676.53, about 20-24 MB of
+ *            it a pipeline) a start after a restart had so much free
+ *            memory that the set ran to about 227 pipelines and 4387 MB
+ *            held, and the device went down in the self-tests after it;
+ *            the starts that held 698 MB (51 pipelines) and 1116 MB (65)
+ *            got through.  Not readable (the issue 123 tablet): the free
+ *            memory's headroom alone.
  *
  * The window (window_pipe_finish.c) reads the memory, logs the lines and
  * hands the stop to the renderer (rd.h rd_set_set_size_fn); the stop is the
@@ -67,6 +77,13 @@
 #define SET_SIZE_WORDS_MAX 112
 /* the stop's words the renderer puts in its budget (rd.h RdSetSizeFn) */
 #define SET_SIZE_WHY_MAX 160
+/* the GPU memory the kernel's driver may hold for this process when the
+   set's rest is weighed: between the most a start that got through held
+   at its set's end (1116 MB) and the 4387 MB of the start that took the
+   device down (issue 215; no start between them is known) */
+#define SET_SIZE_GPU_LIMIT_MB 1024L
+/* the GPU rule's start line */
+#define SET_SIZE_GPU_LINE_MAX 320
 
 /* --- The pure part ------------------------------------------------------------ */
 
@@ -79,6 +96,8 @@ typedef struct SetSizeIn {
     unsigned batches[SET_SIZE_FAMILIES]; /* the family's batches measured */
     double fallMb[SET_SIZE_FAMILIES];    /* their median, MB a pipeline */
     unsigned stopped;                    /* the families stopped earlier (bit 1 << family) */
+    int gpuRead;                         /* the driver's figure for this process was read */
+    long gpuMb;                          /* it, MB (with gpuRead) */
 } SetSizeIn;
 
 typedef struct SetSizeOut {
@@ -88,6 +107,8 @@ typedef struct SetSizeOut {
     long keptMb;                    /* the rests kept */
     unsigned stop;                  /* the families stopped after this decision */
     unsigned newly;                 /* of them, those this decision stopped */
+    long gpuRoomMb;                 /* the GPU limit less the figure (with gpuRead) */
+    int gpuBound;                   /* the GPU room is the headroom (the smaller) */
 } SetSizeOut;
 
 /* The median of n values (the lower of the two middle ones for an even n),
@@ -109,6 +130,7 @@ typedef struct SetSizeRun {
     unsigned said;    /* the families whose first trusted verdict has its line */
     unsigned leftAtStop[SET_SIZE_FAMILIES], placeAtStop[SET_SIZE_FAMILIES];
     double fallAtStop[SET_SIZE_FAMILIES];
+    unsigned gpuStopped; /* of the stopped, those the GPU room stopped */
 } SetSizeRun;
 
 /* One ask, before each batch of the set (the renderer's counts) */
@@ -119,6 +141,8 @@ typedef struct SetSizeAsk {
     int next;                         /* the family of the next pipeline not stopped, -1 none */
     long needMb;                      /* play's known need not made yet */
     unsigned place, total;            /* the next pipeline (0-based) and the set's size */
+    int gpuRead;                      /* the driver's GPU memory for this process was read */
+    long gpuMb;                       /* it, MB (with gpuRead) */
 } SetSizeAsk;
 
 /* The set's start: free memory freeMb, its floor floorMb (0 or below: the
@@ -139,6 +163,10 @@ unsigned set_size_ask(SetSizeRun *r, const SetSizeAsk *a, char *line, size_t lin
 size_t set_size_rule_text(char *out, size_t size, int active, const char *offWhy, unsigned total,
                           long freeMb, long floorMb, long recordMb, long arenaMb, long recordMadeMb,
                           long arenaMadeMb);
+/* The GPU rule's start line: "ico_pc: pipelines: the start-up set's size by
+   the driver's GPU memory: on (this process holds 2 MB, the limit 1024 MB:
+   ...)" or "... off (<offWhy>): the free memory's rule alone"; the length */
+size_t set_size_gpu_text(char *out, size_t size, int gpuRead, long gpuMb, const char *offWhy);
 /* The short words of the run's decision for last-run.txt's phase ("start-up
    set sized by the memory fall: VU left to first use (14.3 MB a pipeline)";
    "" before a verdict) */
