@@ -742,7 +742,7 @@ not measured on a device):
   0.00-0.01 s from the cache and 0.15-0.23 s for one the cache missed, and play's own first-use
   batches 0.00-0.15 s a pipeline.
 
-The driver's own figure (issue 215's third start, v0.11.9): after a restart the handheld had so
+The driver's own figure (issue 215's third start): after a restart the handheld had so
 much free memory that VU's rest fit above the floor; the set ran to about 227 pipelines, the
 kernel's GPU driver held 4387 MB for the process (about 20-24 MB a pipeline on driver 512.676.53)
 and the device went down in the self-tests after the set. The starts that held 698 MB (51
