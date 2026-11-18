@@ -1,0 +1,5 @@
+# The draw pattern of profile desktop (rd_draw_pattern_desktop,
+# port/render/test/rd_draw_pattern.cmake; docs/port/TESTING.md, "The draw pattern gate").
+# Not written yet: the target rd_draw_pattern_tables writes this file from the build's
+# replays; until then the test fails on the word below.
+ungenerated

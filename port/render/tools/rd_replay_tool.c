@@ -307,7 +307,30 @@
  *                         more times and the last replay's GPU times are
  *                         printed: the uploads, each list, each picture
  *                         effect (rd.h RD_PERF_POST_*, inside the lists'
- *                         times), the present and the VU pre-pass
+ *                         times), the present and the VU pre-pass.  Among
+ *                         the lines, "stats: two-pass blend: N draws drawn
+ *                         twice (T VU triangles), C through the colour pass
+ *                         alone" (RdPerfRecord noDualPairs, noDualTris,
+ *                         noDualColour: 0 with dual-source blending) and
+ *                         "stats: pipelines: P made this run"
+ *                         (rd_pipeline_count: the self-tests' and the
+ *                         replays' own; the tool makes no start-up set),
+ *                         which the draw pattern gate reads
+ *                         (test/rd_draw_pattern.cmake)
+ *   --game-selftests      the start-up self-tests in the game window's order
+ *                         (port/platform/window_host.c): rd_blend_selftest,
+ *                         rd_vuprepass_selftest, then rd_fog_selftest (DATE's,
+ *                         the local reads', the shadow count's, the volumes'
+ *                         and composites' entries, the crack fill's swap,
+ *                         the turn fold, the desktop's local-read probe) in
+ *                         place of the tool's own few (the crack fill's swap,
+ *                         the turn fold, and those ICO_RD_VOLUME_FS and
+ *                         ICO_RD_COMP_SPEC ask for), so the replay draws as
+ *                         the game would on the device the fakes stand for;
+ *                         one line "game self-tests: blend <passed|failed>,
+ *                         VU pre-pass <on|off>, fog <passed|failed>".  A rule
+ *                         that a start-up self-test turns on is in force in
+ *                         a replay only with it (or its own variable)
  *   --keys                the pipelines the replay asks for against the start-up
  *                         set (rd__enumerate_reachable): the replay is walked
  *                         with nothing drawn (rd__pipeline_gather) and the keys
@@ -2225,7 +2248,7 @@ int main(int argc, char **argv)
                 "[--gpu-repeat K] "
                 "[--region-stats] [--region-png FILE] [--region-out FILE] [--region-mask FILE] "
                 "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--pass-times] "
-                "[--time N] [--bench K] [--keys] "
+                "[--time N] [--bench K] [--keys] [--game-selftests] "
                 "[--pass-dump DIR] "
                 "[--velocity] [--velocity-dump PNG] "
                 "[--prev DUMP]... [--no-half] [--interp T PREV [--interp-any] [--no-reproject] "
@@ -2265,6 +2288,7 @@ int main(int argc, char **argv)
     bool regionFailed = false; /* its picture or spec could not be written */
     bool noDevice = false, aspectGiven = false;
     bool keysCheck = false;
+    bool gameSelftests = false; /* --game-selftests */
     int vuRefL[8], vuRefCount = 0;
     uint32_t vuRefI[8];
     const char *passDir = NULL;
@@ -2491,6 +2515,8 @@ int main(int argc, char **argv)
             rd__set_glow_edge_fill(false);
         } else if (strcmp(argv[i], "--keys") == 0) {
             keysCheck = true;
+        } else if (strcmp(argv[i], "--game-selftests") == 0) {
+            gameSelftests = true;
         } else if (strcmp(argv[i], "--pass-times") == 0) {
             stats = passTimes = true;
         } else if (strcmp(argv[i], "--time") == 0 && i + 1 < argc) {
@@ -2793,7 +2819,18 @@ int main(int argc, char **argv)
         }
     }
     rd__set_not_implemented_fatal(false);
-    if (!noDevice) {
+    if (!noDevice && gameSelftests) {
+        /* the game window's start-up self-tests, in its order
+         * (window_host.c: the blend's and the VU pre-pass's before the
+         * start-up set, the fog's after it; rd_fog_selftest runs the
+         * crack fill's swap, the turn fold and the shadows' entries) */
+        const bool blendOk = rd_blend_selftest();
+        (void)rd_vuprepass_selftest();
+        const bool prepassOn = rd_vu_prepass_on(); /* off by the settings or the device too */
+        const bool fogOk = rd_fog_selftest();
+        printf("game self-tests: blend %s, VU pre-pass %s, fog %s\n", blendOk ? "passed" : "failed",
+               prepassOn ? "on" : "off", fogOk ? "passed" : "failed");
+    } else if (!noDevice) {
         /* the crack fill's swap is on only where its self-test passed
          * (rd_crack_fill.c; the game runs it with the other self-tests,
          * rd_fog_selftest, which the tool does not run) */
@@ -3134,6 +3171,13 @@ int main(int argc, char **argv)
          * of rhi_pass_row.h: every pass the row begins; 0 elsewhere) */
         printf("%s: stats: render passes: %u begun, %u as VkRenderPass objects\n", dump,
                pr->renderPasses, pr->passObjects);
+        /* the two-pass blend's draws (no dual-source blending,
+         * rd__expand_no_dual; rd_perf_hooks.c) and the pipelines made so
+         * far: what the draw pattern gate pins a device profile by */
+        printf("%s: stats: two-pass blend: %u draws drawn twice (%u VU triangles), %u through "
+               "the colour pass alone\n",
+               dump, pr->noDualPairs, pr->noDualTris, pr->noDualColour);
+        printf("%s: stats: pipelines: %u made this run\n", dump, rd_pipeline_count());
         printf("%s: stats: bind cache: %u pipeline, %u bind group and %u state repeats skipped\n",
                dump, pr->pipelineBindsSkipped, pr->bindGroupBindsSkipped, pr->stateSetsSkipped);
         /* the attachment bytes the passes asked for (rhi_traffic.c, the
