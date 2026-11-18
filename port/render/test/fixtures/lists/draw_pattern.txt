@@ -1,0 +1,17 @@
+# rd_draw_pattern_mali, _powervr, _adreno, _desktop (port/render/test/rd_draw_pattern.cmake,
+# docs/port/TESTING.md "The draw pattern gate"): the fixtures each faked device profile
+# replays, a name a line, in the tables' order (port/render/test/draw_pattern/<profile>.txt).
+# Each declares prepass_vertices, checked where the profile runs the VU pre-pass.
+#
+# issue 179's Mali-G52 F12 frame with every VU texture date_split: shadow volumes, skinned
+# draws, LERP As VU draws whose alpha is proven at most 128 (the two-pass blend's pairs a
+# rule over that proof takes)
+fx-pattern-mali-frame
+# the same phone's slow-scene capture of the opening (stage 42), the same rules: volumes, the
+# opening's VU draws
+fx-pattern-mali-slow541
+# issue 164's Mali-G52 frame (the settings over a paused room, 21:9): code 36's cut and kick
+# pairs that fuse
+fx-mobile-164
+# the PowerVR phone's frame of 2026-10-28: code 36's fused pairs, the draw merge's runs
+fx-phone-2199

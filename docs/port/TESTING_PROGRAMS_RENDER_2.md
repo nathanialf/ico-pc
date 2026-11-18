@@ -1112,3 +1112,17 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   whole run's, one fewer under lamps, no more otherwise. The path ran: at every row the plan's run
   shows each fixture's declared `glow_plan` (on the fixture or its list line), and each of the five
   pinned rows has a dark, a lamps and a whole run (`rd_glow_light_ab`; SKIP without a device).
+- `rd_draw_pattern.cmake` (`rd_draw_pattern_mali`, `rd_draw_pattern_powervr`,
+  `rd_draw_pattern_adreno`, `rd_draw_pattern_desktop`; `rd_draw_pattern.cmake`; issue 179): the
+  draw pattern gate ([TESTING.md](TESTING.md#the-draw-pattern-gate)): the fixtures of
+  `test/fixtures/lists/draw_pattern.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md)) once each
+  under the profile's fakes with `rd_replay_tool --stats --game-selftests`, every count of each
+  fixture's line in `test/draw_pattern/<profile>.txt` equal (the GPU draws and passes, the VU draw
+  merge's draws, GPU draws, merged and alone, code 36's pairs fused, kept apart and each reason,
+  under one pipeline already, the two-pass blend's draws drawn twice, their VU triangles and its
+  colour pass alone, the pipelines made); a change fails with each count's old and new value and
+  the sentence to update the table and name the change in the release's device checklist; a table
+  marked `ungenerated` fails with the command that writes it (the target `rd_draw_pattern_tables`,
+  `-DWRITE=1`). The path ran: the profile's fakes in each run's log, the game self-tests' line,
+  every count's line, each fixture's declared `prepass_vertices` under `mali` and `desktop`, the
+  two-pass blend's draws over the list under `mali`; SKIP without a device.

@@ -26,6 +26,7 @@ tests a change needs. Every test program, by area, is
 | `tools/region_camera_report.py` | the camera rule against the PS2's region rule on saved frames: both rules' pass dumps, every SCENE pixel the camera rule changes held to `rd_replay_tool --region-mask`, a markdown report and the camera rule's baselines; `--feedback-off` / `--feedback-nops` leave out the draws that sample a render target (`rd_region_camera_ab`, `rd_sideband_ab`, [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-camera-rule)) |
 | `tools/band_seam.py` | the mean luminance step across each edge of the 4:3 picture on a wide present, against a bound (`rd_sideband_cards`, issue 189, [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)) |
 | `port/render/tools/rd_replay_tool.c` | the replay tool |
+| `port/render/test/draw_pattern/*.txt`, `port/render/test/rd_draw_pattern.cmake` | the draw pattern gate's tables, a faked device profile each, and its script ([The draw pattern gate](#the-draw-pattern-gate)) |
 | `port/render/test/fixtures/`, `port/render/rd_fixture.h`, `port/render/tools/rd_fixture_tool.c` | the committed test frames, their format and tool ([TESTING_FIXTURES.md](TESTING_FIXTURES.md)) |
 | `tools/check_test_paths.py`, `tools/check_test_paths_allow.txt`, `tools/rdfix_check.py` | no test names a path outside the repository, its allow-list of the lists not converted yet, a fixture holds no art |
 | `tools/vu_variant_diff.py`, `tools/vu_variant_equiv.py`, `tools/test/vu1/` | the June 2001 demo's VU1 programs against the retail ones: the diff, its per-hunk table, the symbolic comparison |
@@ -218,6 +219,67 @@ upscaler at 1.5 or FSR 3.1 Quality and pass on one dispatch and `keep frames hel
 FidelityFX upscaler; 77 only where it cannot be expected: a build without it, not Vulkan, a device
 below Vulkan 1.2; a build with it on a 1.2 device that refuses it exits 1 with the reason, and
 `rd_present`'s FSR 3.1 cases fail there too; [DISPLAY.md](DISPLAY.md#fsr-31-upscaling)).
+
+### The draw pattern gate
+
+A change can alter how a phone draws every scene without changing a picture on lavapipe: the
+two-pass blend's pairs in one pass on a device without dual-source blending (issue 179, taken out
+again) turned code 36's fused pairs into pairs kept apart and a Mali-G52 frame's 300 GPU draws of
+its VU draws into 931 under the Mali fakes, every picture on lavapipe the same, and the phone drew
+broken pictures. Nothing looked at those counts. The draw pattern gate pins them per faked device
+profile, so a change of pattern on a device nobody here owns fails until its table is updated on
+purpose.
+
+`rd_draw_pattern_mali`, `rd_draw_pattern_powervr`, `rd_draw_pattern_adreno` and
+`rd_draw_pattern_desktop` (`port/render/rd_draw_pattern.cmake`, script
+`port/render/test/rd_draw_pattern.cmake`) replay each fixture of
+`port/render/test/fixtures/lists/draw_pattern.txt` once under the profile with
+`rd_replay_tool --stats --game-selftests` and compare these counts, exactly, with the profile's
+table `port/render/test/draw_pattern/<profile>.txt` (a line a fixture, `COUNT=N` words): the GPU
+draws and render passes, the VU draws, the GPU draws they took, those merged and alone (the draw
+merge), code 36's pairs fused, kept apart and kept apart by each reason, and under one pipeline
+already, the draws the two-pass blend drew twice, their VU triangles and those drawn once through
+its colour pass, and the pipelines the run made. `--game-selftests` runs the game window's
+start-up self-tests in its order (`rd_blend_selftest`, `rd_vuprepass_selftest`, `rd_fog_selftest`),
+so a rule a self-test turns on is in force as on the device: without it the tool runs only the
+crack fill's swap, the turn fold and the self-tests a variable asks for.
+
+| profile | the fakes | the setting |
+| --- | --- | --- |
+| `mali` | `ICO_VK_FAKE_LIMITS=mali ICO_VK_FAKE_VENDOR=0x13B5 ICO_VK_FAKE_API=1.1 ICO_VK_FAKE_NO_DUAL=1 ICO_VK_FAKE_NO_VERTEX_STORES=1 ICO_RD_VU_RECORD=compute ICO_VK_FAKE_NO_DST=1 ICO_VK_FAKE_NO_DYNAMIC=1` (issue 179's Mali-G52) | `--resolution 1x --present 1612x720` |
+| `powervr` | `ICO_VK_FAKE_LIMITS=moltenvk ICO_VK_FAKE_VENDOR=0x1010 ICO_RD_VU_PREPASS=0 ICO_VK_FAKE_NO_INTERLOCK=1` (the PowerVR phone as `rd_lamps_ab` fakes it) | `--enhanced --resolution 2364x1080 --full-height --full-pixel --present 2364x1080` |
+| `adreno` | `ICO_VK_FAKE_VENDOR=0x5143 ICO_VK_FAKE_PASS_ROW=qualcomm ICO_VK_FAKE_API=1.1 ICO_VK_FAKE_NO_DYNAMIC=1 ICO_RD_VU_PLAIN=row ICO_VK_FAKE_NO_PREPASS=1 ICO_VK_FAKE_NO_INTERLOCK=1` (an Adreno on Qualcomm's own driver: the plain VU set, the pre-pass off) | `--enhanced --resolution 2x --present 1920x1080` |
+| `desktop` | `ICO_RD_LOCAL_PROBE_SABOTAGE=fast ICO_VK_FAKE_NO_INTERLOCK=1` (lavapipe's own profile; the local-read probe's timing would otherwise decide) | `--enhanced --resolution 2x --present 1280x960` |
+
+The interlock is off in every profile (the Mali's through `ICO_VK_FAKE_NO_DST`): lavapipe has it
+from Mesa 25.2 and not on Mesa 25.0.7, and no reporter's phone has it, so the tables hold on both.
+The fixtures: `fx-pattern-mali-frame` and `fx-pattern-mali-slow541` (issue 179's Mali-G52 frame
+and opening capture with every VU texture `date_split`, so the alpha plan proves the LERP As VU
+draws' alpha at most 128, as the disc's own textures did in the reporter's frame: shadow volumes,
+skinned draws, the two-pass blend's pairs), `fx-mobile-164` (code 36's pairs that fuse) and
+`fx-phone-2199` (the PowerVR phone's frame: fused pairs, the merge's runs). The path ran: each
+run names the profile's fakes in its log and prints the game self-tests' line and every count's
+stats line; where the profile runs the VU pre-pass (`mali`, `desktop`) each fixture's declared
+`prepass_vertices` holds; under `mali` the two-pass blend drew some draw twice over the list. No
+device: SKIP.
+
+A count that differs fails with each count's table and run values and the sentence "the draw
+pattern of profile <p> changed: if it is intended, update <file> in the same commit and name the
+change in the release notes' device checklist". When the change is intended:
+
+1. write the tables from a build of the change: `cmake --build <build dir> --target
+   rd_draw_pattern_tables` (the script with `-DWRITE=1` for each profile; never run by `ctest`),
+   on lavapipe;
+2. read `git diff port/render/test/draw_pattern/`: every count that moved is a change of how that
+   device class draws, and none of those devices is here;
+3. commit the tables with the change, and put the change in the release's device checklist (the
+   list of what each reporter's device should show in the next log) as new on a device nobody
+   here owns: the device, the counts that moved and why, so the owner knows which reporter's next
+   log and pictures answer for it before the release.
+
+A table holding the word `ungenerated` fails with the command that writes it. The table's
+`# device:` line is the device line of the run that wrote it; a failure on another device says
+both.
 
 ## The render suite on OpenGL
 
