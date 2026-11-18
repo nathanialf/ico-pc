@@ -404,11 +404,6 @@ static void test_classes(void)
         /* the shadow composites' own entry: likewise a dual-source Vulkan
            device whose self-test passed (rd_comp_spec.c) */
         CHECK(ico_attempt_decide_comp_spec(1, 1, -1, 1, 1) == 1);
-        /* the two-pass blend in one pass (rd_onepass.c): the Mali-G52
-           (class 0) has no dual-source blend, its self-test passed; every
-           other class blends with dual sources: not applicable */
-        CHECK(ico_attempt_decide_onepass(c == 0, -1, 1, c == 0 ? 1 : -1) == (c == 0 ? 1 : 0));
-        CHECK(ico_attempt_state_of(ICO_ATT_ONEPASS) == (c == 0 ? ICO_ATT_ON : ICO_ATT_NA));
         /* the old robust-access line: the Mali-G52 reporter's config.toml
            held [dev] gpu_robust = true without the mark (issue 179's v0.11.5
            log, line 15), removed at the start; no other class's did */
@@ -1123,74 +1118,9 @@ static void test_pin_release(void)
     ico_attempt_reset();
 }
 
-/* the window's ledger buffer (window_perf_rank.c: static char text[4096]):
-   the start line is printed in parts of it (ico_attempt_start_part), the
-   block line into it */
-#define WINDOW_LEDGER_TEXT 4096
-
-/* the part of the start line holding row id, in a buffer of cap bytes */
-static int start_part_of(int id, char *b, size_t cap)
-{
-    int row = 0, parts = 0;
-    while (row < ICO_ATT_COUNT && parts < 8) {
-        const int from = row;
-        (void)ico_attempt_start_part(b, cap, &row);
-        if (id >= from && id < row) {
-            return 1;
-        }
-        parts++;
-    }
-    b[0] = '\0';
-    return 0;
-}
-
-/* the two-pass blend in one pass (rd_onepass.c): each state with its words,
-   the start words in the window's parts, the two counts in the block line,
-   taken per block */
-static void test_onepass(void)
-{
-    static char b[WINDOW_LEDGER_TEXT];
-
-    ico_attempt_reset();
-    CHECK(ico_attempt_state_of(ICO_ATT_ONEPASS) == ICO_ATT_NOT_SET);
-    CHECK(strcmp(ico_attempt_name(ICO_ATT_ONEPASS), "the two-pass blend in one pass") == 0);
-    CHECK(ico_attempt_decide_onepass(1, 0, 1, 1) == 0);
-    CHECK(ico_attempt_state_of(ICO_ATT_ONEPASS) == ICO_ATT_OFF_DEFAULT &&
-          strcmp(ico_attempt_why_of(ICO_ATT_ONEPASS), "ICO_RD_ONEPASS=0: the tests' switch") == 0);
-    CHECK(ico_attempt_decide_onepass(0, -1, 1, -1) == 0);
-    CHECK(ico_attempt_state_of(ICO_ATT_ONEPASS) == ICO_ATT_NA &&
-          strcmp(ico_attempt_why_of(ICO_ATT_ONEPASS),
-                 "dual-source blending: no two-pass blend here") == 0);
-    CHECK(ico_attempt_decide_onepass(1, -1, 0, 1) == 0);
-    CHECK(ico_attempt_state_of(ICO_ATT_ONEPASS) == ICO_ATT_OFF_DEFAULT);
-    CHECK(ico_attempt_decide_onepass(1, -1, 1, -1) == 0);
-    CHECK(ico_attempt_state_of(ICO_ATT_ONEPASS) == ICO_ATT_OFF_DEFAULT &&
-          strcmp(ico_attempt_why_of(ICO_ATT_ONEPASS), "its self-test not run yet") == 0);
-    CHECK(ico_attempt_decide_onepass(1, -1, 1, 0) == 0);
-    CHECK(ico_attempt_state_of(ICO_ATT_ONEPASS) == ICO_ATT_REFUSED);
-    CHECK(start_part_of(ICO_ATT_ONEPASS, b, sizeof b));
-    CHECK(strstr(b, "the two-pass blend in one pass refused by its self-test (the one-pass "
-                    "pairs' bytes differ from the two passes' on this device)") != NULL);
-    CHECK(ico_attempt_decide_onepass(1, 1, 0, 1) == 1);
-    CHECK(strcmp(ico_attempt_why_of(ICO_ATT_ONEPASS), "ICO_RD_ONEPASS=1, self-test passed") == 0);
-    CHECK(ico_attempt_decide_onepass(1, -1, 1, 1) == 1);
-    CHECK(ico_attempt_state_of(ICO_ATT_ONEPASS) == ICO_ATT_ON);
-    CHECK(start_part_of(ICO_ATT_ONEPASS, b, sizeof b));
-    CHECK(strstr(b, "the two-pass blend in one pass on (self-test passed: the same bytes as the "
-                    "two passes)") != NULL);
-    ico_attempt_fire(ICO_ATT_ONEPASS, 811u);
-    ico_attempt_fire2(ICO_ATT_ONEPASS, 40u);
-    (void)ico_attempt_block_text(b, sizeof b, -1);
-    CHECK(text_is(b, "attempts: the two-pass blend in one pass on 811 pairs (40 kept two-pass)"));
-    (void)ico_attempt_block_text(b, sizeof b, -1);
-    CHECK(text_is(b, "attempts: the two-pass blend in one pass on 0 pairs (0 kept two-pass)"));
-    ico_attempt_reset();
-}
-
 int main(void)
 {
     test_pin_release();
-    test_onepass();
     test_classes();
     test_robust_line();
     test_skin_skip();
