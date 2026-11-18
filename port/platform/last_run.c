@@ -212,6 +212,10 @@ static void facts_numbers(LastRunFacts *f)
     if (f->state[LAST_RUN_PID] == LAST_RUN_SLOT_READ) {
         f->pid = strtol(f->value[LAST_RUN_PID], NULL, 10);
     }
+    if (f->state[LAST_RUN_STARTED] == LAST_RUN_SLOT_READ &&
+        (v = strstr(f->value[LAST_RUN_STARTED], LAST_RUN_BOOT_WORD)) != NULL) {
+        (void)last_run_boot_short(v + sizeof LAST_RUN_BOOT_WORD - 1, f->boot, sizeof f->boot);
+    }
     if (f->state[LAST_RUN_SECONDS] == LAST_RUN_SLOT_READ) {
         f->seconds = strtod(f->value[LAST_RUN_SECONDS], NULL);
     }
@@ -448,6 +452,52 @@ int last_run_paths(const char *activityPath, char *cur, char *prev, size_t size)
     return a > 0 && (size_t)a < size && b > 0 && (size_t)b < size ? 0 : -1;
 }
 
+int last_run_boot_short(const char *raw, char *out, size_t size)
+{
+    size_t k = 0;
+    if (size < LAST_RUN_BOOT_MAX) {
+        return -1;
+    }
+    out[0] = '\0';
+    for (; raw != NULL && k < LAST_RUN_BOOT_MAX - 1; k++) {
+        const char ch = raw[k];
+        if (ch >= 'A' && ch <= 'F') {
+            out[k] = (char)(ch - 'A' + 'a');
+        } else if ((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f')) {
+            out[k] = ch;
+        } else {
+            break;
+        }
+    }
+    if (k < LAST_RUN_BOOT_MAX - 1) {
+        out[0] = '\0';
+        return -1;
+    }
+    out[k] = '\0';
+    return 0;
+}
+
+int last_run_boot_now(char *out, size_t size)
+{
+    char raw[64] = "";
+    if (size > 0) {
+        out[0] = '\0';
+    }
+#if defined(__linux__)
+    {
+        /* the kernel's id of this boot (Linux and Android): a new one after
+           every restart of the device */
+        FILE *fp = fopen("/proc/sys/kernel/random/boot_id", "rb");
+        if (fp != NULL) {
+            const size_t n = fread(raw, 1, sizeof raw - 1, fp);
+            raw[n] = '\0';
+            fclose(fp);
+        }
+    }
+#endif
+    return last_run_boot_short(raw, out, size);
+}
+
 /* --- The run's file ------------------------------------------------------------- */
 
 #define PATH_BYTES 1024
@@ -465,7 +515,8 @@ static char s_img[LAST_RUN_BYTES];
 
 static char s_version[160];
 static long s_pid;
-static char s_started[40];
+/* "2026-11-18 09:43:44 UTC, boot 1a2b3c4d" (the boot where readable) */
+static char s_started[48];
 static volatile int s_phase = LAST_RUN_PHASE_STARTING;
 static double s_phaseSince;
 static char s_phaseDetail[200];
@@ -480,6 +531,8 @@ static char s_skinShort[LAST_RUN_SKIN_SHORT_MAX], s_skinSumShort[LAST_RUN_SKIN_S
 static int s_stage = -1;
 static volatile int s_selftest;
 static unsigned s_setDone, s_setTotal;
+/* the set closed before its end with s_setDone made (last_run_set_pipelines_over) */
+static int s_setEarly;
 static volatile int s_setOpen; /* the set in progress (its count's total not 0) */
 static volatile int s_bg;
 static double s_bgSince;
@@ -674,10 +727,11 @@ static void compose(void)
         }
     }
     snprintf(v[LAST_RUN_PIPELINES], sizeof v[0],
-             "start-up set %u of %u; %u made as the frames needed them; %s%sthe last pipeline "
+             "start-up set %u %s %u%s; %u made as the frames needed them; %s%sthe last pipeline "
              "note: %s",
-             s_setDone, s_setTotal, b->pipesMade, s_skinWords, s_skinWords[0] != '\0' ? "; " : "",
-             s_note[0] != '\0' ? s_note : "none");
+             s_setDone, s_setEarly ? "made of" : "of", s_setTotal,
+             s_setEarly ? ", the rest on first use" : "", b->pipesMade, s_skinWords,
+             s_skinWords[0] != '\0' ? "; " : "", s_note[0] != '\0' ? s_note : "none");
     snprintf(v[LAST_RUN_END], sizeof v[0], "%s",
              s_end[0] != '\0' ? s_end
                               : "running (nothing written at an end: a run that stops here ended "
@@ -760,7 +814,7 @@ void last_run_begin(const char *activityPath, const char *version, void (*log)(c
     static char buf[LAST_RUN_BYTES + 1];
     static LastRunFacts f;
     static char line[LAST_RUN_VALUE_MAX + 160];
-    char prev[PATH_BYTES];
+    char prev[PATH_BYTES], fresh[PATH_BYTES + 8];
     size_t n = 0;
     FILE *fp;
 #ifdef _WIN32
@@ -788,16 +842,28 @@ void last_run_begin(const char *activityPath, const char *version, void (*log)(c
         fclose(fp);
     }
     if (fp == NULL) {
-        (void)ico_remove(prev); /* an older run's copy would be taken for it */
+        /* issue 215: last-run-previous.txt is kept (a start that ended
+           between its record's move and its own file's rename below left it
+           as the newest record there is) */
         if (log != NULL) {
-            log("the previous run: no last-run.txt (the first start with it, or the file was "
-                "deleted)");
+            log(ico_path_kind(prev, NULL, NULL) >= 0
+                    ? "the previous run: no last-run.txt (a start ended before it wrote one, or "
+                      "the file was deleted); last-run-previous.txt, an earlier run's, is kept"
+                    : "the previous run: no last-run.txt (the first start with it, or the file "
+                      "was deleted)");
         }
     } else {
-        FILE *cp = ico_fopen(prev, "wb");
-        if (cp != NULL) {
-            (void)fwrite(buf, 1, n, cp);
-            (void)fclose(cp);
+        /* issue 215: the record becomes last-run-previous.txt by a rename,
+           the folder synced (a copy that was never synced came back as
+           zero bytes after the device restarted); a copy, synced, where the
+           rename fails */
+        if (last_run_keep_previous(s_path, prev) != 0) {
+            FILE *cp = ico_fopen(prev, "wb");
+            if (cp != NULL) {
+                (void)fwrite(buf, 1, n, cp);
+                (void)ico_fsync(cp);
+                (void)fclose(cp);
+            }
         }
         (void)last_run_parse(buf, n, &f);
         if (log != NULL && !f.found) {
@@ -813,11 +879,14 @@ void last_run_begin(const char *activityPath, const char *version, void (*log)(c
             }
         }
     }
-    /* this run's */
+    /* this run's, under a name of its own until it is written and synced,
+       then renamed to last-run.txt (the folder synced): a restart at any
+       step leaves a whole record under one of the two names */
+    snprintf(fresh, sizeof fresh, "%s.new", s_path);
 #ifdef _WIN32
     s_pid = (long)GetCurrentProcessId();
     {
-        wchar_t *w = ico_widen(s_path);
+        wchar_t *w = ico_widen(fresh);
         if (w != NULL) {
             s_h = CreateFileW(w, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_DELETE, NULL,
                               CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -826,9 +895,17 @@ void last_run_begin(const char *activityPath, const char *version, void (*log)(c
     }
 #else
     s_pid = (long)getpid();
-    s_fd = open(s_path, O_RDWR | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+    s_fd = open(fresh, O_RDWR | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
 #endif
     last_run_utc_text((long long)time(NULL), s_started, sizeof s_started);
+    {
+        /* issue 215: the boot, so the next start can tell a device restart */
+        char boot[LAST_RUN_BOOT_MAX];
+        if (last_run_boot_now(boot, sizeof boot) == 0) {
+            const size_t k = strlen(s_started);
+            snprintf(s_started + k, sizeof s_started - k, "%s%s", LAST_RUN_BOOT_WORD, boot);
+        }
+    }
     if (!file_open()) {
         if (log != NULL) {
             /* the path cut to what the line holds (a path may be longer than the line) */
@@ -840,9 +917,20 @@ void last_run_begin(const char *activityPath, const char *version, void (*log)(c
         return;
     }
     s_beat.availKb = s_beat.totalKb = s_beat.rssKb = s_beat.peakKb = s_beat.floorMb = -1;
+    s_setEarly = 0;
     /* the phase a step before the file set (last_run_step), and its time */
     write_all(1);
+    if (ico_rename_replace(fresh, s_path) != 0 && log != NULL) {
+        snprintf(line, sizeof line, "last-run.txt: %.*s.new could not be renamed; written there",
+                 (int)(sizeof line - 64), s_path);
+        log(line);
+    }
     summary();
+}
+
+int last_run_keep_previous(const char *cur, const char *prev)
+{
+    return ico_rename_replace(cur, prev);
 }
 
 const char *last_run_path(void)
@@ -914,6 +1002,26 @@ void last_run_selftest(int on)
     s_selftest = on != 0;
 }
 
+void last_run_selftest_name(const char *name)
+{
+    if (name == NULL || s_path[0] == '\0' || s_phase != LAST_RUN_PHASE_SELFTEST) {
+        return;
+    }
+    s_playStep[0] = '\0';
+    phase_to(LAST_RUN_PHASE_SELFTEST, name);
+}
+
+void last_run_set_pipelines_over(unsigned made)
+{
+    if (!s_setOpen) {
+        return; /* the set's last progress call closed it: its figures stay */
+    }
+    s_setOpen = 0;
+    s_setDone = made;
+    s_setEarly = made < s_setTotal;
+    write_all(1);
+}
+
 void last_run_set_pipelines(unsigned done, unsigned total)
 {
     if (total == 0) {
@@ -926,6 +1034,7 @@ void last_run_set_pipelines(unsigned done, unsigned total)
         return;
     }
     s_setOpen = 1;
+    s_setEarly = 0;
     s_setDone = done;
     s_setTotal = total;
     if (s_phase < LAST_RUN_PHASE_SET && s_path[0] != '\0') {

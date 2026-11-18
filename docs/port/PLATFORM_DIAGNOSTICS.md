@@ -26,7 +26,14 @@ heartbeat line and every thread, then the
 on Windows shows a message box naming the report and exits with code 3 (`port/platform/diag_host.h`;
 `port/platform/CMakeLists.txt` (the link map)). Every
 diagnostic line is written with one unbuffered OS call to its own handle on the log, so a crash
-leaves everything before it (`port/platform/diag_host.c` (header comment)). On Android the handler
+leaves everything before it (`port/platform/diag_host.c` (header comment)). A restart of the device
+keeps only what reached the disc (issue 215: the Retroid's log came back full size and all zero
+bytes), so on Android each start-up step, heartbeat, stall line and device loss asks for the log to
+be synced, and the watchdog's thread serves the ask at its next poll (250 ms): the stderr pipe
+drained into the file, then one `fdatasync` of the log, never on the render or submit thread and
+at most four a second however many lines ask; the watchdog's own end syncs before its box
+(`port/platform/diag_host.c` (`log_sync_ask`, `log_sync_serve`), `ico_diag_log_sync_ask`). No line
+is added. On Android the handler
 then puts the system's handlers back so the system still writes its tombstone
 (`port/platform/diag_host.c` (`restore_handlers`)).
 
@@ -824,28 +831,34 @@ write or the other, or failing its check, which the reader marks as such: never 
 | field | value |
 | --- | --- |
 | `version` | the version and commit |
-| `pid`, `started` | the process id; the start in UTC |
+| `pid`, `started` | the process id; the start in UTC, and on Linux and Android the first 8 hex digits of the kernel's boot id (`/proc/sys/kernel/random/boot_id`: `2026-11-18 09:43:44 UTC, boot 1a2b3c4d`; a new id after every restart of the device, which the next start's verdict reads) |
 | `seconds since start` | at the write |
-| `phase` | `starting: <the start's last step>`, `the start-up set: pipeline <n> of <m>`, `a self-test: <its step>`, `the game starting`, `the first picture`, `play: stage <n>, Main tick <t>` (the tick of the last heartbeat), each with `(since <s> s)`; a step that does not change the phase (the set's own, a renderer switch in play) is added as `; the last step: <step>` |
+| `phase` | `starting: <the start's last step>`, `the start-up set: pipeline <n> of <m>`, `a self-test: <its step>` (inside the fog self-test's step, the self-test running by name, written and synced at each: `DATE`, `the effects' local read`, `the shadow count`, `the volumes' stencil entry`, `the shadow composites' entry`, `the crack fill's swap and the present's turn`, `the fog's depth path`, `the local read's timing (the depth path again when it is off)`, `the shadow count under MSAA`, `the stencil outside the shadow window`, `the shadow tiles`, then `the start after the self-tests`; `rd_set_selftest_fn`, `last_run_selftest_name`, issue 215: the Retroid's death said `the fog self-test` for all of them), `the game starting`, `the first picture`, `play: stage <n>, Main tick <t>` (the tick of the last heartbeat), each with `(since <s> s)`; a step that does not change the phase (the set's own, a renderer switch in play) is added as `; the last step: <step>` |
 | `app` | `in front` or `in the background`, since when |
 | `last trim signal` | the last `onTrimMemory` level, its name, when, how many in all; `none` |
 | `GPU resets` | `<a> at start, <b> now (+<d>)` from the kernel GPU driver's `reset_count` (Android's sampler, every 250 ms), else why not (`not readable (EACCES)`, `not available on this system ...`) |
 | `free memory` | `MemAvailable` now, the run's lowest and when, the start-up set's free-memory floor (Android), then the system's split from the same read (issue 215, [where the memory is](#where-the-memory-is)): `; file cache <n>, anon <n>, kernel <n>, GPU <n or ?>, rest <n>, swap used <n> MB` (the GPU figure the last full read's: the heartbeat reads `/proc` only) |
 | `process memory` | `VmRSS` now and `VmHWM` |
 | `GPU memory` | this process's files in the kernel driver's `/sys/class/kgsl/kgsl/proc/<pid>/` (each read as its first integer and taken for bytes), read on the sampler's thread every 2 s; or why not |
-| `pipelines` | the start-up set's count, the pipelines made as the frames needed them, where the skin check runs its counts this run (issue 217, `port/platform/last_run_skin.h`, read at each write through the window's source: `the skin check: <n> checks, <b> box checks drawn, <t> twins drawn, <p> of its own pipelines begun`, with ` (a tile-based phone GPU: none compiled)` on a phone), the last pipeline note |
+| `pipelines` | the start-up set's count (`start-up set <n> of <m>`; a set stopped early by its budget or the memory size rule `start-up set <k> made of <m>, the rest on first use`, the count `rd_precreate_pipelines` made, where it said `684 of 684` for 51 made before: `ico_diag_set_pipelines_over`), the pipelines made as the frames needed them, where the skin check runs its counts this run (issue 217, `port/platform/last_run_skin.h`, read at each write through the window's source: `the skin check: <n> checks, <b> box checks drawn, <t> twins drawn, <p> of its own pipelines begun`, with ` (a tile-based phone GPU: none compiled)` on a phone), the last pipeline note |
 | `end` | `running (...)` until an end is written: `clean` (the window's clean close; `clean, after: <words>` after a loss), `crash (signal <n>)` (POSIX; `crash (exception 0x<code>)` on Windows) written by the crash handler with async-signal-safe calls only (a slot built by hand, one `pwrite`, a bounded wait for a heartbeat's write in flight), `graphics device lost`, `the graphics driver stopped responding (a GPU hang)`, `the watchdog: <reason>` |
 
-At the next start the file is read before it is rewritten, copied to `logs/last-run-previous.txt`,
-and each field goes to the log beside the activity file's lines:
+At the next start the file is read before it is rewritten, renamed to `logs/last-run-previous.txt`
+(the folder synced, `ico_rename_replace`; a synced copy where the rename fails), and this run's file
+is written and synced as `last-run.txt.new`, then renamed to `last-run.txt` (issue 215: the copy,
+never synced, came back as zero bytes after the device restarted; now a restart at any step leaves
+a whole record under one of the two names). Each field goes to the log beside the activity file's
+lines:
 `ico_pc: the previous run: <field>: <value>`, a field the file does not hold whole
 `... not readable (the file ends before it)` or `(a write the run did not finish)`, and a run that
 wrote no end `ico_pc: the previous run: end: none written: the run ended without a word (no clean
 end, crash, device loss or watchdog end was written; the fields above are its last write, <s> s
 after its start)`. Without the file the line is `ico_pc: the previous run: no last-run.txt (the
-first start with it, or the file was deleted)` and an older copy is deleted. `last_run_parse`
-gives the facts (`LastRunFacts`: pid, seconds, phase with stage and tick, background, trim level,
-resets, free memory, the end and a crash's signal) for the verdict of the next start.
+first start with it, or the file was deleted)`, or with a `last-run-previous.txt` left `...: no
+last-run.txt (a start ended before it wrote one, or the file was deleted); last-run-previous.txt,
+an earlier run's, is kept` (the newest record there is). `last_run_parse` gives the facts
+(`LastRunFacts`: pid, seconds, phase with stage and tick, background, trim level, resets, free
+memory, the end, a crash's signal and the boot id) for the verdict of the next start.
 
 On Android 11 and later each phase change also keeps at most 128 bytes (`ico-pc <phase> | resets
 47->66 | free 1911 MB, lowest 1897`; where the skin check runs, `| skin box <b> twin <t> made <p>`
@@ -898,7 +911,7 @@ memory shows there), and two sources that overlap show as a rest below zero.
 | `ico_pc: memory before the start-up set (<m> pipelines): free <a> MB of <t> MB (MemAvailable; MemFree <f> MB); in use <u> MB: file cache <n> MB, shared ..., the rest <n> MB (in none of these); swap used <s> of <t> MB; this process <r> MB resident (...)` (Android adds `; this process's GPU memory: <the last-run file's GPU memory text>`) | the set's start (`ico_diag_set_pipelines` with a total after none) |
 | `ico_pc: memory: the start-up set's batch lines carry the system's memory every <N> pipelines (<m> pipelines in 16 lines) and whenever free memory falls more than <step> MB below the lowest shown (free <a> MB less the floor <f> MB in 16 steps): at most 16 + 17 lines` | the set's start |
 | `rd: pipelines: compiled ... batch ...; system: free 5059 MB (-2190 since the set began), file cache ..., GPU ..., the rest ... MB, swap used ... MB; each (s): ...` | the batches the rule picks (`rd_set_memory_clause_fn`; not in the activity file's copy) |
-| `ico_pc: memory at the start-up set's end (<k> of <m> pipelines made; <c> clauses on its batch lines, <a> by count and <b> by a fall): ...` | the set's end (a total of 0 after one) |
+| `ico_pc: memory at the start-up set's end (<k> of <m> pipelines made; <c> clauses on its batch lines, <a> by count and <b> by a fall): ...` | the set's end (a total of 0 after one; a set stopped early by its budget or the size rule gets no last progress call and is ended by the window's `ico_diag_set_pipelines_over` with the count made, so `<k>` and the summary's division are the pipelines made, not the 684 of the set's size: issue 215's `684 pipelines made in 0.7 s; ... 1.8 MB lost a pipeline` was 51 made) |
 | `ico_pc: memory over the start-up set: <k> pipelines made in <s> s; free memory <a> -> <b> MB: <x> MB lost a pipeline; the memory in use <+d> MB, what grew a pipeline (they sum to it): file cache <+x>, shared ..., the rest <+x> MB; swapped out <+x> MB a pipeline; this process <+x> MB a pipeline (resident); the most: <part>` | after it |
 | `ico_pc: memory at the system's signal (onTrimMemory level <n>): ...` | each `onTrimMemory` |
 | `window: memory in the block: ...; the system now: free ... MB (... since the set began), file cache ..., the rest ... MB, swap used ... MB` | the 10 s block line (Android) |
@@ -956,7 +969,10 @@ ico_pc: the previous run ended: <how> (<Android's part>); it was at <phase>, <s>
 `<how>` comes from the first of these that holds: our own end mark (`last-run.txt`'s end: `it
 crashed (signal 11)`, `the graphics device was lost`, `the graphics driver stopped responding (a
 GPU hang)`, `the watchdog ended it: <reason>`, `it was closed normally`; or the start-up activity
-file's loss line); then Android's exit record whose pid is `last-run.txt`'s, in plain words
+file's loss line); then a restart of the device (`last-run.txt`'s boot id is not this boot's:
+`the device restarted (or was powered off) while it ran: no crash, device loss, watchdog or clean
+end was written (boot 1a2b3c4d then, 5e6f7a8b now)`, issue 215; either id unreadable, as before,
+`exit_info_verdict_boot`); then Android's exit record whose pid is `last-run.txt`'s, in plain words
 (`Android ended it because the device was low on memory`, `it crashed in native code`, `it stopped
 responding (Android's "not responding")`, `it was closed from the recent apps list or with Force
 stop (or updated, before Android 14)`, `it was killed (signal 9, SIGKILL); this device does not
@@ -990,7 +1006,9 @@ only the newest two such files stay. Then:
   importance <i> (<words>); pss <n> MB, rss <n> MB; at <UTC> (<ms> ms); trace <file or none>;
   description "<the system's text>"; summary "<the process's summary>"`, one a record;
 - `logs/exit-info.txt`: the verdict, the system's line, the record lines and the newest trace
-  kept, rewritten at every start. A report zip carries it and the newest trace, and `report.txt`
+  kept, rewritten at every start (as `exit-info.txt.new`, synced, then renamed over it with the
+  folder synced, and `exit-info-seen.txt` the same way: issue 215's was all zero bytes after the
+  device restarted). A report zip carries it and the newest trace, and `report.txt`
   carries the verdict after its memory line (`ico_report_set_exit_info`).
 
 Off Android the system keeps no record: the line says so and uses the files alone

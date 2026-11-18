@@ -2541,11 +2541,11 @@ open_window:
         ico_diag_step("window: start: the pipeline set");
         rd_set_pipeline_progress(pipeline_progress, &screen);
         ico_render_thread_pipeline_set(true); /* its workers' cores (render_thread.h) */
-        rd_precreate_pipelines();
+        const uint32_t setMade = rd_precreate_pipelines();
         ico_render_thread_pipeline_set(false);
         rd_set_pipeline_progress(NULL, NULL);
         rd_set_display_progress(display_progress, &screen);
-        ico_diag_set_pipelines(0, 0, 0);
+        ico_diag_set_pipelines_over(setMade);
         if (rd_pipelines_lazy_on()) {
             /* the careful policy's budget stopped the set: the rest of the
                run is recorded as a lazy run's, for this start only; or the
@@ -2834,12 +2834,12 @@ int ico_window_reopen(const char *backend, bool backendExplicit)
         s_pipeTitle = "Changing the graphics";
         rd_set_pipeline_progress(pipeline_progress, &screen);
         ico_render_thread_pipeline_set(true); /* its workers' cores (render_thread.h) */
-        rd_precreate_pipelines();
+        const uint32_t setMade = rd_precreate_pipelines();
         ico_render_thread_pipeline_set(false);
         rd_set_pipeline_progress(NULL, NULL);
         rd_set_display_progress(display_progress, &screen);
         s_pipeTitle = "Starting ICO";
-        ico_diag_set_pipelines(0, 0, 0);
+        ico_diag_set_pipelines_over(setMade);
         if (!s_quitLatched && !rhi_device_lost()) {
             (void)rhi_pipeline_cache_save();
         }

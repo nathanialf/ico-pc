@@ -2831,7 +2831,12 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
                 sizeMade[0] + sizeMade[1], sizeMade[0], sizeMade[1], left,
                 sizeSkipped[0] + sizeSkipped[1], sizeSkipped[0], sizeSkipped[1], sizeAtStop);
     }
-    if (!pb.stop && s_progressFn != NULL) {
+    if (!pb.stop && s_progressFn != NULL && !(s_sizeOn && c->budget[0] != '\0')) {
+        /* (m, m) only for a set that went to its end: a start-up set
+           stopped early (its budget, the memory size rule) is closed by the
+           window with the count made (rd_precreate_pipelines' return,
+           diag_host.h ico_diag_set_pipelines_over; issue 215's "684 of 684"
+           for 51 made) */
         s_progressFn(s_progressCtx, m, m);
     }
     if (s_activityFn != NULL) {

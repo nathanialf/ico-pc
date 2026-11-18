@@ -13,10 +13,13 @@
  *   verdict  the precedence table (our own end marks, the activity file's
  *            loss, the record of last-run.txt's pid, the files alone, no
  *            file at all, a torn end), the two issue 215 runs word for
- *            word, the longest inputs within EXIT_INFO_VERDICT_MAX with
- *            every part whole;
+ *            word, a device restart (a new boot id and no end: its words,
+ *            Android's record kept in its part, an end mark first, the
+ *            same boot or either id unknown as before), the longest inputs
+ *            within EXIT_INFO_VERDICT_MAX with every part whole;
  *   run      exit_info_begin through ICO_TEST_EXIT_INFO in a folder under
- *            the build folder: the verdict, exit-info.txt, the seen file,
+ *            the build folder: the verdict, exit-info.txt (renamed from its
+ *            synced .new: none left), the seen file (the same),
  *            the report's verdict line and its exit-info.txt and trace
  *            entries; a second start that finds no new record.
  * argv[1]: a folder the test may write in (the build folder).
@@ -506,6 +509,46 @@ static void verdict(void)
                      "record); it was at a self-test: the fog self-test (since 4.4 s), 4.4 s after "
                      "its start at its last write; GPU resets 66 -> 66; free memory 2226 MB at "
                      "its last write (lowest 2226 MB, floor 1915 MB)"));
+
+    /* issue 215: the device restarted under the run (a new boot id, no end
+       written): in the how's place; Android's record, when one matched,
+       stays in its part */
+    facts_with(LAST_RUN_STARTED, "2026-11-18 09:43:44 UTC, boot 1a2b3c4d", &f);
+    CHECK(text_is(f.boot, "1a2b3c4d"));
+    CHECK(exit_info_verdict_boot(&f, NULL, &other, "5e6f7a8b", v, sizeof v) ==
+          EXIT_INFO_FROM_FILES);
+    CHECK(starts_with(v, "the previous run ended: the device restarted (or was powered off) while "
+                         "it ran: no crash, device loss, watchdog or clean end was written (boot "
+                         "1a2b3c4d then, 5e6f7a8b now) (no record from Android for pid 23456; 1 "
+                         "other new record); it was at play: "));
+    CHECK(has(v, tail));
+    CHECK(exit_info_verdict_boot(&f, NULL, &match, "5e6f7a8b", v, sizeof v) ==
+          EXIT_INFO_FROM_FILES);
+    CHECK(starts_with(v, "the previous run ended: the device restarted (or was powered off) "));
+    CHECK(has(v, rec));
+    /* the same boot, this boot unread, or none in the file: as before */
+    CHECK(exit_info_verdict_boot(&f, NULL, &other, "1a2b3c4d", v, sizeof v) ==
+          EXIT_INFO_FROM_FILES);
+    CHECK(starts_with(v, "the previous run ended: without a word: "));
+    CHECK(exit_info_verdict_boot(&f, NULL, &match, "", v, sizeof v) == EXIT_INFO_FROM_RECORD);
+    CHECK(exit_info_verdict_boot(&f, NULL, &match, NULL, v, sizeof v) == EXIT_INFO_FROM_RECORD);
+    facts_of(kRunA, &f);
+    CHECK(f.boot[0] == '\0');
+    CHECK(exit_info_verdict_boot(&f, NULL, &match, "5e6f7a8b", v, sizeof v) ==
+          EXIT_INFO_FROM_RECORD);
+    /* an end mark still comes first */
+    {
+        const char *w[LAST_RUN_SLOTS];
+        for (int k = 0; k < LAST_RUN_SLOTS; k++) {
+            w[k] = kRunA[k];
+        }
+        w[LAST_RUN_STARTED] = "2026-11-18 09:43:44 UTC, boot 1a2b3c4d";
+        w[LAST_RUN_END] = "crash (signal 11)";
+        facts_of(w, &f);
+        CHECK(exit_info_verdict_boot(&f, NULL, &match, "5e6f7a8b", v, sizeof v) ==
+              EXIT_INFO_FROM_MARK);
+        CHECK(starts_with(v, "the previous run ended: it crashed (signal 11) "));
+    }
 }
 
 /* the longest inputs: every part within its room, the line within
@@ -641,10 +684,14 @@ static void run(const char *base)
                    "\"ico-pc play: stage 1, Main tick 2 (since 14.2 s) | resets 47->47 | free "
                    "1945 MB, lowest 1804\"\n"));
     CHECK(has(buf, "\nthe newest trace kept: exit-trace-1794862215000.txt\n"));
+    snprintf(p, sizeof p, "%s/exit-info.txt.new", dir);
+    CHECK(ico_path_kind(p, NULL, NULL) < 0); /* synced there, renamed over exit-info.txt */
     /* the seen file: the newest record and its trace */
     snprintf(p, sizeof p, "%s/exit-info-seen.txt", dir);
     CHECK(get(p, buf, sizeof buf) > 0);
     CHECK(text_is(buf, "1794862215000 exit-trace-1794862215000.txt\n"));
+    snprintf(p, sizeof p, "%s/exit-info-seen.txt.new", dir);
+    CHECK(ico_path_kind(p, NULL, NULL) < 0);
 
     /* the report: the verdict in report.txt, exit-info.txt and the trace */
     ico_report_set_paths(dir, dir, dir, NULL);

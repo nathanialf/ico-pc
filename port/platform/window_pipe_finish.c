@@ -316,6 +316,9 @@ void window_pipe_skin_check(int pipePolicy)
         rd_vu_skin_background(ico_diag_background_memory, NULL);
     }
     last_run_set_skin_source(skin_source);
+    /* the fog self-test's block names each self-test in last-run.txt's
+       phase (issue 215; before rd_fog_selftest, window_host.c) */
+    rd_set_selftest_fn(last_run_selftest_name);
     /* the start-up's own work done: what is made from here outside the key
        cache is play's, named (rd_made_outside.h) */
     rd_made_outside_watch();

@@ -25,7 +25,9 @@
  *   watch    (Linux and Android) the set's lines through the tree: the
  *            sources once, the start's picture and rule, a clause by count
  *            and one by a fall, the end's picture and the summary, the
- *            system's signal, the 10 s clause;
+ *            system's signal, the 10 s clause; a set stopped early closed
+ *            with its count made (issue 215: 51 of 684, not 684), a close
+ *            after an end saying nothing;
  *   lastrun  last-run.txt's free memory field with the split, through its
  *            text and parse (the free figure, the lowest and the floor still
  *            read).
@@ -498,6 +500,30 @@ static void watch(const char *base)
     CHECK(text_is(s_log, want));
     mem_watch_block_clause(out, sizeof out);
     CHECK(text_is(out, kClauseB));
+    /* issue 215: a set stopped early (no last progress call) ends with the
+       count made, not the place it stopped at; a second close says nothing */
+    mem_watch_set_pipelines(0, 684);
+    mem_watch_set_pipelines(359, 684);
+    s_log[0] = '\0';
+    s_lines = 0;
+    mem_watch_set_pipelines_over(51);
+    {
+        static const char head[] =
+            "ico_pc: memory at the start-up set's end (51 of 684 pipelines made; 0 clauses on its "
+            "batch lines, 0 by count and 0 by a fall): ";
+        CHECK(s_lines == 2u && strncmp(s_log, head, sizeof head - 1) == 0 &&
+              strstr(s_log, "\nico_pc: memory over the start-up set: 51 pipelines made in ") !=
+                  NULL);
+    }
+    s_log[0] = '\0';
+    mem_watch_set_pipelines_over(9);
+    CHECK(s_log[0] == '\0');
+    /* a set its last progress call ended: the close after it says nothing */
+    mem_watch_set_pipelines(0, 684);
+    mem_watch_set_pipelines(684, 0);
+    s_log[0] = '\0';
+    mem_watch_set_pipelines_over(680);
+    CHECK(s_log[0] == '\0');
     mem_watch_test_set(NULL, NULL, -2);
     (void)ico_remove_tree(root);
 }

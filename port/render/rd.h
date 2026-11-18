@@ -752,7 +752,9 @@ uint32_t rd_precreate_pipelines(void);
  * (0, total) before the first pipeline, while a batch compiles (about every
  * 50 ms, with the pipelines finished so far) and between two batches, with
  * done never going down and below total, and (total, total) once at the
- * end; on the calling thread.  fn may present a frame (the window draws its
+ * end of a set that went to its end (a start-up set stopped early by its
+ * budget or the memory size rule ends without it: the window closes it
+ * with rd_precreate_pipelines' count, issue 215); on the calling thread.  fn may present a frame (the window draws its
  * start-up screen from it); that present asks the pipeline cache for its
  * own few pipelines, which are created at once and found again afterwards,
  * so the call is safe from inside the loop.  A nonzero return stops the set
@@ -984,6 +986,13 @@ void rd_index_span_text(char *out, size_t size);
  * read, rd_fx_plan.c).  Waits for the GPU.  Returns whether the path in
  * force passed. */
 bool rd_fog_selftest(void);
+/* The name of each self-test rd_fog_selftest's first run is about to run
+ * ("DATE", "the shadow count", "the fog's depth path", ..., then "the
+ * start after the self-tests" as it returns), to fn on the calling thread;
+ * the window passes last_run.h last_run_selftest_name, so a run that ends
+ * inside one names it in logs/last-run.txt (issue 215).  NULL (the
+ * default): none.  Kept until cleared. */
+void rd_set_selftest_fn(void (*fn)(const char *name));
 /* DATE's self-test (rd_date_selftest.c), where the profile asks for DATE
  * through the stencil bit (RdProfile.dateStencil): a frame of its own on
  * SCENE draws a cell of destination alpha 0x80 and one of 0x00, then a
