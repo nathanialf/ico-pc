@@ -617,6 +617,19 @@ driver route to a Turnip package (`UI_STR_GPU_HANG_TURNIP`;
 `port/platform/android/gpu_driver_android.c` (`ico_gpu_driver_android_hang_note`), registered with
 `ico_diag_set_gpu_hang_note`).
 
+**The reset stop** (issue 215, `gpu_hang.h` `ico_gpu_reset_step`): on Qualcomm's driver
+512.676.53 a submission that never finished went with the kernel's GPU driver resetting the GPU
+again and again, and the whole device restarted about 10 s into the wait, before the 15 s limit.
+One wait for one unfinished submission seen for 1 s (`ICO_GPU_RESET_STOP_S`) during which KGSL's
+`reset_count` rose by 2 or more (`ICO_GPU_RESET_STOP_N`) ends the run as the GPU hang at once:
+`ico_pc: WATCHDOG: the GPU: submission <n> not finished after <t> ms with the kernel's GPU driver
+resetting the GPU under it (<a> to <b> resets); ...`. The end's words go to last-run.txt (`the graphics
+driver stopped responding (a GPU hang, the kernel's driver resetting the GPU)`) and the log is
+synced before anything else; there is no pass ring and no loss dump (`no loss dump at a reset
+stop: the run ends at once`), then the hang's box. A stall the driver recovers from (about 350 ms
+and one reset) is far from both figures; where the count is not readable the rule never acts.
+Tests: `gpu_hang`.
+
 With the [render thread](PLATFORM.md#the-render-thread) presenting, a picture the driver never finishes
 leaves the render thread inside the driver's present and the main thread waiting for the render
 thread, not for the GPU, so the backend's progress names no wait. The render thread's heartbeat

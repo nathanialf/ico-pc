@@ -41,6 +41,32 @@ int ico_gpu_hang_step(IcoGpuHangWatch *w, double limit_s, unsigned long long wai
     return 0;
 }
 
+int ico_gpu_reset_step(IcoGpuResetWatch *w, unsigned long long waiting_for,
+                       unsigned long long finished, double dt_s, int count, int resets)
+{
+    if (resets < 0 || waiting_for == 0 || waiting_for <= finished) {
+        /* no count to read, no wait, or its submission finished */
+        w->waiting_for = 0;
+        w->counted_s = 0.0;
+        return 0;
+    }
+    if (waiting_for != w->waiting_for || resets < w->resets0) {
+        w->waiting_for = waiting_for;
+        w->counted_s = 0.0;
+        w->resets0 = resets;
+        return 0;
+    }
+    if (count && dt_s > 0.0) {
+        w->counted_s += dt_s;
+    }
+    if (!w->fired && w->counted_s >= ICO_GPU_RESET_STOP_S &&
+        resets - w->resets0 >= ICO_GPU_RESET_STOP_N) {
+        w->fired = 1;
+        return 1;
+    }
+    return 0;
+}
+
 int ico_render_hang_step(IcoRenderHangWatch *r, double limit_s, unsigned long long seq,
                          unsigned long long done, unsigned mark, int creating, double dt_s,
                          int count)

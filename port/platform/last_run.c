@@ -1114,6 +1114,11 @@ void last_run_set_gpu_resets(int32_t now)
     s_resetsNow = now;
 }
 
+int32_t last_run_gpu_resets_now(void)
+{
+    return s_resetsNow;
+}
+
 const char *last_run_gpu_memory_text(void)
 {
     return s_gpuMem[__atomic_load_n(&s_gpuMemAt, __ATOMIC_ACQUIRE) & 1];
