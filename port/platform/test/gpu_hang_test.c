@@ -55,6 +55,7 @@
  *            without a creation, without growth, or with memory low.
  */
 #include <stdio.h>
+#include <string.h>
 #include "gpu_hang.h"
 
 static int failures;
@@ -107,6 +108,54 @@ static void testStep(void)
     CHECK(w.fired && w.counted_s >= 15.0);
     /* once: the wait going on fires no more */
     CHECK(pollFor(&w, 15.0, 263, 262, 10.0, 1, NULL) == 0);
+}
+
+/* The reset stop (issue 215): a wait with the kernel driver resetting the
+   GPU under it ends at 1 s and 2 resets; a recovered stall, a wait without
+   resets and an unreadable count never do */
+static void testResetStop(void)
+{
+    IcoGpuResetWatch w = {0};
+    int i;
+    /* the handheld's second run: three stalls of about 350 ms, one reset
+       each, each on its own submission that then finishes: no stop */
+    CHECK(ico_gpu_reset_step(&w, 380, 379, 0.25, 1, 278) == 0);
+    CHECK(ico_gpu_reset_step(&w, 380, 379, 0.25, 1, 279) == 0);
+    CHECK(ico_gpu_reset_step(&w, 0, 380, 0.25, 1, 279) == 0);
+    CHECK(w.counted_s == 0.0);
+    /* the endless wait: submission 403, a reset every 350 ms */
+    CHECK(ico_gpu_reset_step(&w, 403, 401, 0.25, 1, 280) == 0); /* first seen */
+    CHECK(ico_gpu_reset_step(&w, 403, 401, 0.25, 1, 280) == 0);
+    CHECK(ico_gpu_reset_step(&w, 403, 401, 0.25, 1, 281) == 0);
+    CHECK(ico_gpu_reset_step(&w, 403, 401, 0.25, 1, 282) == 0); /* 2 resets, 0.75 s */
+    CHECK(ico_gpu_reset_step(&w, 403, 401, 0.25, 1, 282) == 1); /* 1.0 s */
+    CHECK(w.fired && w.resets0 == 280);
+    CHECK(ico_gpu_reset_step(&w, 403, 401, 0.25, 1, 290) == 0); /* once */
+    /* a long wait with one reset, or none: the 15 s limit's, not this one's */
+    memset(&w, 0, sizeof w);
+    for (i = 0; i < 80; i++) {
+        CHECK(ico_gpu_reset_step(&w, 500, 499, 0.25, 1, i < 10 ? 40 : 41) == 0);
+    }
+    /* the second reset arrives late: the stop then */
+    CHECK(ico_gpu_reset_step(&w, 500, 499, 0.25, 1, 42) == 1);
+    /* the count not readable (the issue 123 tablet), at any poll */
+    memset(&w, 0, sizeof w);
+    for (i = 0; i < 80; i++) {
+        CHECK(ico_gpu_reset_step(&w, 500, 499, 0.25, 1, -1) == 0);
+    }
+    /* time not counted (in the background, a suspend gap) is not waited time */
+    memset(&w, 0, sizeof w);
+    CHECK(ico_gpu_reset_step(&w, 600, 599, 0.25, 1, 10) == 0);
+    for (i = 0; i < 20; i++) {
+        CHECK(ico_gpu_reset_step(&w, 600, 599, 0.25, 0, 30) == 0);
+    }
+    CHECK(w.counted_s == 0.0);
+    /* a count that went down starts the wait's figure again */
+    CHECK(ico_gpu_reset_step(&w, 600, 599, 0.25, 1, 3) == 0);
+    CHECK(w.resets0 == 3 && w.counted_s == 0.0);
+    /* another submission's wait starts again */
+    CHECK(ico_gpu_reset_step(&w, 601, 599, 0.25, 1, 9) == 0);
+    CHECK(w.resets0 == 9);
 }
 
 static void testFinished(void)
@@ -418,6 +467,7 @@ int main(void)
     testLimit();
     testStep();
     testFinished();
+    testResetStop();
     testOther();
     testPaused();
     testOff();

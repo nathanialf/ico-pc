@@ -182,6 +182,9 @@ static const char *(*volatile gpu_hang_note_fn)(void);
    the picture and the time it was counted */
 static int (*volatile render_beat_fn)(unsigned long long *seq, unsigned long long *done);
 static volatile int render_hang;
+/* the reset stop fired (gpu_hang.h ico_gpu_reset_step): the hang's end at
+   once, its words on the disc first, no loss dump */
+static volatile int reset_stop;
 static unsigned long long render_hang_seq;
 static double render_hang_s;
 static void (*exit_hook)(const char *reason);
@@ -5872,6 +5875,15 @@ static void watchdog_fire(const char *reason)
     hang = (tracked && gpu_hung(&gpu)) || render_hang;
     flog("ico_pc: ======================================================================");
     flog("ico_pc: WATCHDOG: %s", reason);
+    if (reset_stop) {
+        /* issue 215: the device may go down with the GPU: the end's words
+           and the log on the disc before anything else */
+        last_run_end_words("the graphics driver stopped responding (a GPU hang, the kernel's "
+                           "driver resetting the GPU)");
+#ifdef __ANDROID__
+        log_sync_serve(1);
+#endif
+    }
     if (render_hang) {
         flog("ico_pc: the graphics driver did not finish the picture (the render thread has been "
              "inside picture %llu's submit and present for %.0f s; the main thread waits for it); "
@@ -5968,7 +5980,11 @@ static void watchdog_fire(const char *reason)
            dump when none was noted */
         void (*dump)(void) = gpu_dump_fn;
         loss_hang = 1;
-        if (dump != NULL) {
+        if (reset_stop) {
+            /* no pass ring and no loss dump: the run ends before the device
+               does (a loss without a dump for the next start) */
+            flog("ico_pc: no loss dump at a reset stop: the run ends at once");
+        } else if (dump != NULL) {
             dump();
         }
 #ifdef __ANDROID__
@@ -6131,6 +6147,7 @@ static void watchdog_loop(void)
     /* the GPU hang limit's watch (gpu_hang.h): the wait it counts, and the
        render thread's picture it counts the same way */
     IcoGpuHangWatch hang_watch;
+    IcoGpuResetWatch reset_watch;
     IcoRenderHangWatch render_watch;
     /* the switch's watch (ico_diag_watchdog_switch): on, the progress and
        pipeline counts last seen, when either last moved */
@@ -6138,6 +6155,7 @@ static void watchdog_loop(void)
     unsigned int sw_seen = 0, sw_pipes = 0;
     double sw_alive = start;
     memset(&hang_watch, 0, sizeof hang_watch);
+    memset(&reset_watch, 0, sizeof reset_watch);
     memset(&render_watch, 0, sizeof render_watch);
     for (;;) {
         double now;
@@ -6326,6 +6344,25 @@ static void watchdog_loop(void)
         hang_ms = gpu_hang_limit_ms;
         if (hang_ms != 0 && (first_s != 0 || later_s != 0)) {
             IcoDiagGpu g;
+            /* the reset stop (gpu_hang.h, issue 215): the same wait with
+               the kernel driver resetting the GPU under it ends now, before
+               the device goes down with it */
+            if (gpu_state(&g) &&
+                ico_gpu_reset_step(&reset_watch, g.waiting_for, g.finished, poll_dt, poll_counted,
+                                   (int)last_run_gpu_resets_now())) {
+                reset_stop = 1;
+                snprintf(reason, sizeof reason,
+                         "the GPU: submission %llu not finished after %.1f s while the kernel's "
+                         "GPU driver reset the GPU %d times (from %d to %d; the stop is at %d "
+                         "resets in a wait of %.0f s or more); the newest is %llu, the newest "
+                         "seen finished %llu",
+                         g.waiting_for, reset_watch.counted_s,
+                         (int)last_run_gpu_resets_now() - reset_watch.resets0, reset_watch.resets0,
+                         (int)last_run_gpu_resets_now(), ICO_GPU_RESET_STOP_N, ICO_GPU_RESET_STOP_S,
+                         g.submitted, g.finished);
+                watchdog_fire(reason);
+                continue;
+            }
             if (gpu_state(&g) &&
                 ico_gpu_hang_step(&hang_watch, (double)hang_ms / 1000.0, g.waiting_for, g.finished,
                                   poll_dt, poll_counted)) {

@@ -251,6 +251,8 @@ void last_run_trim(int level, const char *name);
    readable, else why not), then each sample's */
 void last_run_set_gpu_resets_start(int32_t start, const char *why);
 void last_run_set_gpu_resets(int32_t now);
+/* the kernel GPU driver's reset count as last sampled, below 0 not read */
+int32_t last_run_gpu_resets_now(void);
 /* the activity note (diag_host.c ico_diag_set_activity, "" cleared):
    copied only, written with the next write */
 void last_run_set_note(const char *note);

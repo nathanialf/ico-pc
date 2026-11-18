@@ -44,6 +44,31 @@ typedef struct IcoGpuHangWatch {
 int ico_gpu_hang_step(IcoGpuHangWatch *w, double limit_s, unsigned long long waiting_for,
                       unsigned long long finished, double dt_s, int count);
 
+/* The reset stop (issue 215): on Qualcomm's driver 512.676.53 a submission
+   that never finished went with the kernel's GPU driver resetting the GPU
+   again and again (KGSL's reset_count, gpu_sysfs.h), and the whole device
+   restarted about 10 s into the wait, before the limit above (15 s).  One
+   wait for one unfinished submission seen for ICO_GPU_RESET_STOP_S during
+   which the reset count rose by ICO_GPU_RESET_STOP_N or more ends the run
+   as the GPU hang at once.  A stall the driver recovers from (about 350 ms
+   and one reset there, issue 123's too) is far from both figures. */
+#define ICO_GPU_RESET_STOP_S 1.0
+#define ICO_GPU_RESET_STOP_N 2
+
+/* Zero-initialise before the first step. */
+typedef struct IcoGpuResetWatch {
+    unsigned long long waiting_for; /* the submission the wait is for, 0 none */
+    double counted_s;               /* the time it was seen unfinished, counted */
+    int resets0;                    /* the reset count when the wait was first seen */
+    int fired;                      /* stopped (once a run) */
+} IcoGpuResetWatch;
+
+/* One poll, as ico_gpu_hang_step's, with the kernel driver's reset count
+   now (below 0: not readable, never a stop; a count that went down, as
+   after the reader's restart, starts the wait's figure again).  1 once. */
+int ico_gpu_reset_step(IcoGpuResetWatch *w, unsigned long long waiting_for,
+                       unsigned long long finished, double dt_s, int count, int resets);
+
 /* The render thread's watch (diag_host.c, the window's render thread):
    the same count over its picture in progress (seq, 0 none: a call between
    pictures is not counted, render_thread.c) and the last one finished
