@@ -603,7 +603,10 @@ static void compose(void)
     /* each value whole before its slot cuts it to the slot's room
        (last_run_slot_build: the file's fixed layout is the one intended
        cut; the pipeline note alone, up to 439 bytes, can reach it) */
-    static char v[LAST_RUN_SLOTS][LAST_RUN_VALUE_MAX + 256];
+    /* room for the longest value before its slot cuts it: the pipelines
+       line is a note of up to LAST_RUN_VALUE_MAX - 1 bytes after its counts
+       and the skin check's words (192) */
+    static char v[LAST_RUN_SLOTS][LAST_RUN_VALUE_MAX + 512];
     const char *vals[LAST_RUN_SLOTS];
     const LastRunBeat *b = &s_beat;
     snprintf(v[LAST_RUN_HEADER], sizeof v[0], "%s (rewritten in place while the game runs)",
