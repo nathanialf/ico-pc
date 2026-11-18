@@ -3479,6 +3479,22 @@ if(ICO_RUN_TESTS AND ICO_RHI_OPENGL AND ICO_SHADERS_GLSL AND TARGET ico_rhi_open
     foreach(_n IN LISTS _ico_rd_gl_tests)
         ico_rd_gl_twin(${_n})
     endforeach()
+    # Under the sanitizers the presenter's OpenGL twins run one at a time: on
+    # CI's runner (its llvmpipe; not on the build host, where each holds about
+    # 0.9 GB) each of them grows by about 0.25 GB a minute for its 11 to 14
+    # minutes, and three started together in asan 5/6 took the runner's memory
+    # from 10 GB to under 0.5 GB, where the runner was shut down (CI runs
+    # 44181572046 and 44247320150; in run 44206485203 the three ended with
+    # 0.66 GB left and 11 GB came back when they did). The other suites keep
+    # them in parallel.
+    if(ICO_SANITIZE)
+        foreach(_n rd_present_gl rd_present_nodual_gl rd_present_storage_gl rd_present_fixed_gl
+                   rd_present_attachment_gl rd_present_depth_copy_gl)
+            if(TEST ${_n})
+                set_property(TEST ${_n} APPEND PROPERTY RESOURCE_LOCK ico_rd_present_gl_memory)
+            endif()
+        endforeach()
+    endif()
     get_property(_gl_done GLOBAL PROPERTY ICO_RD_GL_DONE)
     list(LENGTH _gl_done _gl_n)
     message(STATUS "ico: ${_gl_n} render tests registered again on OpenGL (ctest -L gl)")
