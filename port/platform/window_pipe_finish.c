@@ -5,6 +5,9 @@
  * window's start (window_pipe_finish.h).
  */
 #include "window_pipe_finish.h"
+#ifdef __ANDROID__
+#include "android/gpu_sysfs_android.h"
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -111,6 +114,26 @@ static int size_memory(long *freeMb, long *totalMb, long *floorMb, const char **
 #endif
 }
 
+/* Issue 215 (set_size.h's GPU room): what the kernel's GPU driver holds for
+   this process, where it says (Qualcomm's KGSL, readable): 1 with the
+   figure, else 0 with why */
+static int size_gpu(long *gpuMb, char *offWhy, size_t size)
+{
+#ifdef __ANDROID__
+    const int e = gpu_sysfs_android_proc_kernel_mb(gpuMb);
+    if (e == 0) {
+        return 1;
+    }
+    snprintf(offWhy, size,
+             "this process's figure in the kernel's GPU driver is not readable, errno %d", e);
+    return 0;
+#else
+    (void)gpuMb;
+    snprintf(offWhy, size, "the kernel's GPU driver gives no figure on this system");
+    return 0;
+#endif
+}
+
 /* the set's measurement (32 KB of samples: static) */
 static SetSizeRun s_size;
 
@@ -129,12 +152,19 @@ static unsigned size_ask(const RdSetSizeAsk *a, char *why, size_t size)
     char words[SET_SIZE_WORDS_MAX];
     SetSizeAsk q;
     unsigned was, mask;
+    long gpuMb = 0;
+    char gpuWhy[96];
+    const int gpuRead = have ? size_gpu(&gpuMb, gpuWhy, sizeof gpuWhy) : 0;
 
     if (a->begin) {
         set_size_begin(&s_size, have ? freeMb : -1, have ? floorMb : 0);
         (void)set_size_rule_text(line, sizeof line, s_size.active, offWhy, a->left[0] + a->left[1],
                                  freeMb, floorMb, recMb, arenaMb, recMadeMb, arenaMadeMb);
         ico_diag_log("%s", line);
+        if (s_size.active) {
+            (void)set_size_gpu_text(line, sizeof line, gpuRead, gpuMb, gpuWhy);
+            ico_diag_log("%s", line);
+        }
         set_size_publish(s_size.active, floorMb, freeMb, "");
     }
     if (!s_size.active) {
@@ -150,6 +180,8 @@ static unsigned size_ask(const RdSetSizeAsk *a, char *why, size_t size)
     q.needMb = recMb + arenaMb;
     q.place = a->place;
     q.total = a->total;
+    q.gpuRead = gpuRead;
+    q.gpuMb = gpuMb;
     was = s_size.stopped | s_size.said;
     mask = set_size_ask(&s_size, &q, line, sizeof line, why, size);
     if (line[0] != '\0') {

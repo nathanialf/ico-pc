@@ -604,13 +604,6 @@ rd_no_volume_break_ab 1316.42  # estimate: 655.5 s local (merge-wt_REVIEWFIX7-20
 rd_no_volume_break_ab_gl 60.95  # estimate: 30.4 s local (merge-wt_FIX-P2a-20261115T053727Z.lvp.log) x 2.01
 rd_noplanes_ab 33.48  # estimate: 16.7 s local (merge-wt_FIX-P5b-20261115T232657Z.lvp.log) x 2.01
 rd_occlusion_tool 15.60  # estimate: 7.8 s local (merge-wt_FIX-P5b2-20261116T020204Z.lvp.log) x 2.01
-rd_onepass 0.04  # estimate: 0.0 s local (merge-wt_ONEPASS-20261116T195751Z.lvp.log) x 2.01
-rd_onepass_ab 215.83  # estimate: 107.5 s local (merge-wt_FIX1-20261117T010612Z.lvp.log) x 2.01
-rd_onepass_sabotage 53.82  # estimate: 26.8 s local (merge-wt_FIX1-20261117T010612Z.lvp.log) x 2.01
-rd_onepass_selftest 1.65  # estimate: 0.8 s local (merge-wt_ONEPASS-20261116T195751Z.lvp.log) x 2.01
-rd_onepass_selftest_dual 1.02  # estimate: 0.5 s local (merge-wt_ONEPASS-20261116T195751Z.lvp.log) x 2.01
-rd_onepass_selftest_sabotage 1.67  # estimate: 0.8 s local (merge-wt_ONEPASS-20261116T195751Z.lvp.log) x 2.01
-rd_onepass_selftest_static 1.77  # estimate: 0.9 s local (merge-wt_ONEPASS-20261116T195751Z.lvp.log) x 2.01
 rd_pace_gpu 0.02
 rd_pace_screen 0.26
 rd_pass_area_ab 753.93  # estimate: 375.4 s local (merge-wt_FIX-P4d2-20261116T031841Z.lvp.log) x 2.01

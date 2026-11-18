@@ -68,7 +68,6 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
     [ICO_ATT_PIN_RELEASE] = {"pins let go at one picture a tick", "times let go", "taken again"},
     [ICO_ATT_SHADOW_COUNT] = {"the shadow levels' count from the stencil", "steps from the stencil",
                               "full-size passes drawn after all"},
-    [ICO_ATT_ONEPASS] = {"the two-pass blend in one pass", "pairs", "kept two-pass"},
     [ICO_ATT_SET_SIZE] = {"the start-up set sized by the memory fall", "left to first use",
                           "made on first use"},
     [ICO_ATT_PLAIN_CAMERA] = {"the camera rule for static meshes on the plain set",
@@ -759,35 +758,6 @@ int ico_attempt_decide_comp_spec(int module, int device, int env, int defaultOn,
                        : "self-test passed: the same bytes as sprite_ps";
     }
     ico_attempt_state(ICO_ATT_COMP_SPEC, st, why);
-    return on;
-}
-
-int ico_attempt_decide_onepass(int twoPass, int env, int defaultOn, int selftest)
-{
-    IcoAttemptState st = ICO_ATT_NA;
-    const char *why;
-    int on = 0;
-    if (env == 0) {
-        st = ICO_ATT_OFF_DEFAULT;
-        why = "ICO_RD_ONEPASS=0: the tests' switch";
-    } else if (!twoPass) {
-        why = "dual-source blending: no two-pass blend here";
-    } else if (env != 1 && !defaultOn) {
-        st = ICO_ATT_OFF_DEFAULT;
-        why = "off by default (RD_ONEPASS_DEFAULT 0)";
-    } else if (selftest == 0) {
-        st = ICO_ATT_REFUSED;
-        why = "the one-pass pairs' bytes differ from the two passes' on this device";
-    } else if (selftest < 0) {
-        st = ICO_ATT_OFF_DEFAULT;
-        why = "its self-test not run yet";
-    } else {
-        st = ICO_ATT_ON;
-        on = 1;
-        why = env == 1 ? "ICO_RD_ONEPASS=1, self-test passed"
-                       : "self-test passed: the same bytes as the two passes";
-    }
-    ico_attempt_state(ICO_ATT_ONEPASS, st, why);
     return on;
 }
 
