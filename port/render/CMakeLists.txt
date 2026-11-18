@@ -3539,6 +3539,8 @@ include(rd_glow_offset.cmake)
 include(shadow_clip.cmake)
 # the camera rule for static meshes on the plain set (rd_plain_camera.c; issue 123)
 include(rd_plain_camera.cmake)
+# the draw pattern gate: each faked phone profile's counts against its table (issue 179)
+include(rd_draw_pattern.cmake)
 # last: under asan the fixture replays run without the leak check (the driver's
 # exit leak); after every test's ENVIRONMENT is set
 include(rd_asan_fixture_leaks.cmake)

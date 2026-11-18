@@ -2328,6 +2328,7 @@ The options:
 | `--loss-bisect` | the [loss bisect](#the-loss-bisect) on the dump: the frame one pass longer each time, waiting for the GPU after each |
 | `--loss-overlap BEFORE` | with `--loss-bisect`: after a clean bisect, the [overlap step](#the-loss-bisect): the dump `BEFORE` (`-` for none) and the frame replayed back to back, four times each, with no wait for the GPU between them; prints `loss overlap: clean` (or `lost`) with the replays made |
 | `--keys` | the pipelines the replay asks for against the start-up set, one line a key (`in set` or `MISSING`), exit 1 on a miss ([The start-up set](PIPELINES.md#the-start-up-set)); needs a device, `<out.png>` unused (give `-`) |
+| `--game-selftests` | the game window's start-up self-tests in its order (`rd_blend_selftest`, `rd_vuprepass_selftest`, `rd_fog_selftest`) in place of the tool's own few, so a rule a self-test turns on is in force as on the device; prints `game self-tests: blend passed, VU pre-pass on, fog passed` (each word as it went); the draw pattern gate's runs ([TESTING.md](TESTING.md#the-draw-pattern-gate)) |
 | `--passes A[-B]` | replays passes A..B only (the [pass window](#the-loss-bisect)); A alone is pass A alone |
 
 ## Shader families

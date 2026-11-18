@@ -1,0 +1,11 @@
+# The draw pattern of profile mali (rd_draw_pattern_mali,
+# port/render/test/rd_draw_pattern.cmake; docs/port/TESTING.md, "The draw pattern gate"):
+# a line a fixture of port/render/test/fixtures/lists/draw_pattern.txt, the counts
+# rd_replay_tool --stats --game-selftests printed under the profile's fakes.  Written by
+# the target rd_draw_pattern_tables; a change is committed with the change that made
+# it and named in the release's device checklist.
+# device: llvmpipe (LLVM 19.1.7, 256 bits) (device 10005:0000, driver ID 0, version 0.0.1, Vulkan 1.4.305, Linux)
+fx-pattern-mali-frame draws=928 passes=19 vu_draws=317 vu_gpu=317 vu_merged=0 vu_merged_into=0 vu_alone=317 fused=0 kept=100 kept_blend=0 kept_plans=0 kept_passes=100 kept_dst=0 kept_planes=0 kept_build=0 kept_off=0 fused_same=2 twice=24 twice_tris=0 colour_alone=0 pipelines=58
+fx-pattern-mali-slow541 draws=1499 passes=18 vu_draws=950 vu_gpu=498 vu_merged=484 vu_merged_into=32 vu_alone=466 fused=0 kept=199 kept_blend=0 kept_plans=0 kept_passes=199 kept_dst=0 kept_planes=0 kept_build=0 kept_off=0 fused_same=242 twice=105 twice_tris=3532 colour_alone=0 pipelines=58
+fx-mobile-164 draws=99 passes=21 vu_draws=100 vu_gpu=46 vu_merged=61 vu_merged_into=7 vu_alone=39 fused=27 kept=0 kept_blend=0 kept_plans=0 kept_passes=0 kept_dst=0 kept_planes=0 kept_build=0 kept_off=0 fused_same=0 twice=100 twice_tris=4582 colour_alone=0 pipelines=56
+fx-phone-2199 draws=143 passes=21 vu_draws=107 vu_gpu=78 vu_merged=47 vu_merged_into=18 vu_alone=60 fused=0 kept=0 kept_blend=0 kept_plans=0 kept_passes=0 kept_dst=0 kept_planes=0 kept_build=0 kept_off=0 fused_same=0 twice=48 twice_tris=4359 colour_alone=0 pipelines=57
