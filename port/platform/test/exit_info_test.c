@@ -517,15 +517,17 @@ static void verdict(void)
     CHECK(text_is(f.boot, "1a2b3c4d"));
     CHECK(exit_info_verdict_boot(&f, NULL, &other, "5e6f7a8b", v, sizeof v) ==
           EXIT_INFO_FROM_FILES);
-    CHECK(starts_with(v, "the previous run ended: the device restarted (or was powered off) while "
-                         "it ran: no crash, device loss, watchdog or clean end was written (boot "
+    CHECK(starts_with(v, "the previous run ended: the device has restarted (or was powered off) "
+                         "since, most likely while it ran: no crash, device loss, watchdog or "
+                         "clean end was written (boot "
                          "1a2b3c4d then, 5e6f7a8b now) (no record from Android for pid 23456; 1 "
                          "other new record); it was at play: "));
     CHECK(has(v, tail));
+    /* Android's record for the run says how it ended: not a restart's
+       (a game swiped away, the device restarted later) */
     CHECK(exit_info_verdict_boot(&f, NULL, &match, "5e6f7a8b", v, sizeof v) ==
-          EXIT_INFO_FROM_FILES);
-    CHECK(starts_with(v, "the previous run ended: the device restarted (or was powered off) "));
-    CHECK(has(v, rec));
+          EXIT_INFO_FROM_RECORD);
+    CHECK(!has(v, "restarted"));
     /* the same boot, this boot unread, or none in the file: as before */
     CHECK(exit_info_verdict_boot(&f, NULL, &other, "1a2b3c4d", v, sizeof v) ==
           EXIT_INFO_FROM_FILES);

@@ -51,9 +51,10 @@ int ico_gpu_hang_step(IcoGpuHangWatch *w, double limit_s, unsigned long long wai
    wait for one unfinished submission seen for ICO_GPU_RESET_STOP_S during
    which the reset count rose by ICO_GPU_RESET_STOP_N or more ends the run
    as the GPU hang at once.  A stall the driver recovers from (about 350 ms
-   and one reset there, issue 123's too) is far from both figures. */
+   and one reset there; issue 217's phone once had two resets in a 269 ms
+   wait that went on) is under both figures. */
 #define ICO_GPU_RESET_STOP_S 1.0
-#define ICO_GPU_RESET_STOP_N 2
+#define ICO_GPU_RESET_STOP_N 3
 
 /* Zero-initialise before the first step. */
 typedef struct IcoGpuResetWatch {

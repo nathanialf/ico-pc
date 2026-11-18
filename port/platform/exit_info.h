@@ -173,7 +173,7 @@ int exit_info_verdict(const LastRunFacts *last, const ExitInfoActivity *act,
                       const ExitInfoList *list, char *out, size_t size);
 /* The same with this boot's id (last_run.h last_run_boot_now; NULL or ""
    unknown): with no end mark and last-run.txt's boot id another, "the
-   device restarted (or was powered off) while it ran: no crash, device
+   device has restarted (or was powered off) since, most likely while it ran: no crash, device
    loss, watchdog or clean end was written (boot 1a2b3c4d then, 5e6f7a8b
    now)" in the how's place (issue 215: the Retroid restarted under the
    game); either id unknown: as exit_info_verdict. */

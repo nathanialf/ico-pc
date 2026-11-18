@@ -500,13 +500,15 @@ int exit_info_verdict_boot(const LastRunFacts *last, const ExitInfoActivity *act
     }
     if (how_from_mark(last, act, how, sizeof how)) {
         from = EXIT_INFO_FROM_MARK;
-    } else if (found && last->boot[0] != '\0' && bootNow != NULL && bootNow[0] != '\0' &&
-               strcmp(last->boot, bootNow) != 0) {
-        /* issue 215: a new boot id and no end written: the device went down
-           under the run (Android's record, when one matched, stays in the
-           part after) */
+    } else if (found && match < 0 && last->boot[0] != '\0' && bootNow != NULL &&
+               bootNow[0] != '\0' && strcmp(last->boot, bootNow) != 0) {
+        /* issue 215: a new boot id, no end written and no record from
+           Android for the run: the device most likely went down under it
+           (a record that matched says how the run ended, the branch below:
+           a game swiped away before a later restart is not a restart's) */
         snprintf(how, sizeof how,
-                 "the device restarted (or was powered off) while it ran: no crash, device loss, "
+                 "the device has restarted (or was powered off) since, most likely while it ran: "
+                 "no crash, device loss, "
                  "watchdog or clean end was written (boot %.8s then, %.8s now)",
                  last->boot, bootNow);
         from = EXIT_INFO_FROM_FILES;
