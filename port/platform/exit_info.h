@@ -21,7 +21,9 @@
  *
  * The verdict (exit_info_verdict, pure), in this order: our own end mark
  * (last-run.txt's end: crash, device loss, GPU hang, watchdog, clean; or
- * the start-up activity file's loss line); then Android's record whose pid
+ * the start-up activity file's loss line); then a device restart (the
+ * kernel's boot id in last-run.txt is not this boot's,
+ * exit_info_verdict_boot); then Android's record whose pid
  * is last-run.txt's; then last-run.txt and the activity file alone ("no
  * record from Android"; below Android 11 and off Android "the system keeps
  * no exit record").  Logged as
@@ -30,7 +32,8 @@
  *   <phase>, <s> s after its start at its last write; GPU resets <a> -> <b>;
  *   free memory <n> MB at its last write (lowest <l> MB, floor <f> MB)
  *
- * one line for each record read, and the lot written to logs/exit-info.txt,
+ * one line for each record read, and the lot written to logs/exit-info.txt
+ * (as exit-info.txt.new, synced, then renamed over it, the folder synced),
  * which a report zip carries with the newest trace (report.c), the verdict
  * in report.txt's head.  Nothing changes behaviour by it.
  *
@@ -168,6 +171,14 @@ int exit_info_find_pid(const ExitInfoList *list, long pid);
    off Android.  Returns EXIT_INFO_FROM_*. */
 int exit_info_verdict(const LastRunFacts *last, const ExitInfoActivity *act,
                       const ExitInfoList *list, char *out, size_t size);
+/* The same with this boot's id (last_run.h last_run_boot_now; NULL or ""
+   unknown): with no end mark and last-run.txt's boot id another, "the
+   device restarted (or was powered off) while it ran: no crash, device
+   loss, watchdog or clean end was written (boot 1a2b3c4d then, 5e6f7a8b
+   now)" in the how's place (issue 215: the Retroid restarted under the
+   game); either id unknown: as exit_info_verdict. */
+int exit_info_verdict_boot(const LastRunFacts *last, const ExitInfoActivity *act,
+                           const ExitInfoList *list, const char *bootNow, char *out, size_t size);
 /* One record's line ("pid 4242, REASON_LOW_MEMORY (3): ...") */
 void exit_info_record_line(const ExitInfoRecord *r, int lmk, char *out, size_t size);
 /* The trace's field is a file the Java side writes ("exit-trace-<digits>.txt"

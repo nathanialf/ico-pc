@@ -15,8 +15,10 @@
  * leaves each slot whole, from one write or the other, or failing its
  * check (last_run_parse marks it torn, never a mix).
  *
- * The fields: the version and commit, the pid, the start time (UTC),
- * seconds since the start, the phase (starting with the start's last step,
+ * The fields: the version and commit, the pid, the start time (UTC) and,
+ * on Linux and Android, the first 8 hex digits of the kernel's boot id
+ * ("2026-11-18 09:43:44 UTC, boot 1a2b3c4d": a new boot id means the device
+ * restarted, exit_info.h), seconds since the start, the phase (starting with the start's last step,
  * the start-up set with its pipeline, a self-test by its step's name, the
  * game starting, the first picture, play with the stage and the last Main
  * tick), in front or in the background since when, the last onTrimMemory
@@ -32,8 +34,13 @@
  * At the next start (diag_host.c ico_diag_startup_activity_begin, beside
  * the activity file's lines) the file is read before it is rewritten, its
  * fields go to the log as "ico_pc: the previous run: <field>: <value>"
- * lines, and it is copied to logs/last-run-previous.txt, which a report zip
- * carries with last-run.txt (report.c).  Nothing here changes behaviour.
+ * lines, and it becomes logs/last-run-previous.txt by a rename (the folder
+ * synced; a synced copy where the rename fails), which a report zip carries
+ * with last-run.txt (report.c).  This run's file is written and synced as
+ * last-run.txt.new, then renamed to last-run.txt (issue 215: a device that
+ * restarted kept the unsynced copy as zero bytes; now a restart at any step
+ * leaves a whole record under one of the names).  Nothing here changes
+ * behaviour.
  *
  * Android 11 and later: each phase change also keeps a summary of at most
  * LAST_RUN_SUMMARY_MAX bytes, which the next heartbeat (last_run_beat, the
@@ -79,6 +86,10 @@ enum {
 #define LAST_RUN_FORMAT "format 1"
 /* ActivityManager.setProcessStateSummary's limit (128 bytes), with the NUL */
 #define LAST_RUN_SUMMARY_MAX 129
+/* the boot id's short form in the start slot: 8 hex digits and the NUL,
+   after the word */
+#define LAST_RUN_BOOT_MAX 9
+#define LAST_RUN_BOOT_WORD ", boot "
 
 /* the phases, in the order a start passes them */
 enum {
@@ -126,8 +137,9 @@ typedef struct LastRunFacts {
     int resetsStart, resetsNow;
     long freeMb, freeLowMb, floorMb;
     long rssMb, peakMb;
-    int end;       /* LAST_RUN_END_* */
-    int endSignal; /* a crash's signal, -1 none */
+    int end;                      /* LAST_RUN_END_* */
+    int endSignal;                /* a crash's signal, -1 none */
+    char boot[LAST_RUN_BOOT_MAX]; /* the boot id's short form, "" none */
 } LastRunFacts;
 
 /* --- The pure part (tested on every platform) ------------------------------ */
@@ -175,6 +187,13 @@ void last_run_summary_text_with(const char *phase, int resetsStart, int resetsNo
 /* logs/last-run.txt and logs/last-run-previous.txt beside the activity
    file's path (its folder); 0 when both fit */
 int last_run_paths(const char *activityPath, char *cur, char *prev, size_t size);
+/* The boot id's short form (the first 8 hex digits of
+   /proc/sys/kernel/random/boot_id, lower case) from raw: 0, or -1 with ""
+   when raw does not start with 8 hex digits or size < LAST_RUN_BOOT_MAX */
+int last_run_boot_short(const char *raw, char *out, size_t size);
+/* This boot's short form (Linux and Android): 0, or -1 with "" where the
+   file is not readable (other systems: always) */
+int last_run_boot_now(char *out, size_t size);
 
 /* --- The run's file (last_run.c) ------------------------------------------- */
 
@@ -192,9 +211,15 @@ typedef struct LastRunBeat {
 } LastRunBeat;
 
 /* Reads the previous run's file beside activityPath (each line through
-   log, without "ico_pc: "), copies it to last-run-previous.txt, then
-   writes this run's (synced).  Again later: the file is opened again. */
+   log, without "ico_pc: "), renames it to last-run-previous.txt
+   (last_run_keep_previous), then writes this run's as last-run.txt.new
+   (synced) and renames that to last-run.txt.  No last-run.txt: a
+   last-run-previous.txt is kept (a start that ended between the two
+   renames).  Again later: the file is opened again. */
 void last_run_begin(const char *activityPath, const char *version, void (*log)(const char *line));
+/* last_run_begin's first step: cur renamed over prev, the folder synced
+   (host_fs.h ico_rename_replace): 0, or -1 (nothing moved) */
+int last_run_keep_previous(const char *cur, const char *prev);
 /* The heartbeat's figures: the file rewritten, not synced */
 void last_run_beat(const LastRunBeat *b);
 /* Phase changes (written and synced; Android's summary): a step line, a
@@ -202,6 +227,18 @@ void last_run_beat(const LastRunBeat *b);
 void last_run_step(const char *step);
 void last_run_selftest(int on);
 void last_run_set_pipelines(unsigned done, unsigned total);
+/* The self-test now running inside the start's self-test phase (the
+   renderer's hook, rd.h rd_set_selftest_fn: "the shadow count", ...): the
+   phase's words name it ("a self-test: the shadow count (since 4.1 s)"),
+   written and synced as any phase change; outside that phase (a renderer
+   switch in play) or NULL: nothing */
+void last_run_selftest_name(const char *name);
+/* The start-up set over with made of its total made (diag_host.h
+   ico_diag_set_pipelines_over): a set still open is closed with that
+   count, in the words "start-up set 51 made of 684, the rest on first use"
+   when made is below the total (written and synced); a set its last
+   progress call closed is left as it is */
+void last_run_set_pipelines_over(unsigned made);
 /* 1 when this present moved the run to the first picture (once a run;
    without the file too) */
 int last_run_present(void);

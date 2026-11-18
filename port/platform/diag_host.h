@@ -79,6 +79,14 @@ void ico_diag_set_movie(int playing);
    <longest_ms / 1000> s"; total 0 (when the set is done) takes it off. Any
    thread. */
 void ico_diag_set_pipelines(unsigned int done, unsigned int total, unsigned int longest_ms);
+/* The start-up set over with made pipelines made in it (rd_precreate_pipelines'
+   count), after rd_precreate_pipelines: the heartbeat's count off, as
+   (0, 0, 0); a set still open (stopped early by its budget or the memory
+   size rule: the renderer makes no last progress call then) is closed with
+   that count, so logs/last-run.txt says "start-up set 51 made of 684, the
+   rest on first use" and the memory summary divides by 51 (issue 215); a
+   set the last progress call closed is left as it is. Main thread. */
+void ico_diag_set_pipelines_over(unsigned int made);
 /* Run on a fatal end (crash, abort, watchdog) after the report, to write
    the run's summary. Must not take locks the main thread may hold. */
 void ico_diag_set_exit_hook(void (*fn)(const char *reason));
@@ -305,6 +313,13 @@ void ico_diag_main_thread_end(void);
 
 /* One line to the log, written at once (a newline is added). */
 void ico_diag_log(const char *fmt, ...) ICO_DIAG_PRINTF(1, 2);
+/* Android (issue 215: a restart of the device left the log all zero bytes):
+   the log's lines so far to the disc, asked after a line is written (a
+   stall's); the watchdog thread drains the stderr pipe into the file and
+   calls fdatasync at its next poll (250 ms), so the asking thread never
+   waits on the disc. The start-up steps, heartbeats and losses ask by
+   themselves. Elsewhere nothing. Any thread. */
+void ico_diag_log_sync_ask(void);
 /* A boot milestone: the line gets the wall time, vsyncs, Main ticks and
    the current thread. */
 void ico_diag_milestone(const char *fmt, ...) ICO_DIAG_PRINTF(1, 2);

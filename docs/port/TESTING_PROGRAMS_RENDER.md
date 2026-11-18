@@ -997,7 +997,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   a pass frame with the game's fade sprite over it (`RD_POST_FADE`, a full-frame lerp of the
   title's pale colour) presents the letter alone byte for byte under the pass and the fade without it;
   no validation errors (`rd_icon_hold`, and `rd_icon_hold_gl` on OpenGL).
-- `rd_fog_selftest_test.c` with `rd_fog_selftest.cmake`: the fog's self-test and probe; its log line
+- `rd_fog_selftest_test.c` with `rd_fog_selftest.cmake`: the fog's self-test and probe (its first
+  run's twelve self-test names to `rd_set_selftest_fn` in order, issue 215); its log line
   matched for each path, MSAA counts, odd widths and [Full pixel](ARCHITECTURE.md#terms)
   (`rd_fog_selftest*`; the local read's first under `ICO_RD_FOG_PATH=local`,
   `rd_fog_selftest_local`). With `rd_date_selftest.cmake` and `ICO_RD_DATE_PATH=stencil`, DATE's

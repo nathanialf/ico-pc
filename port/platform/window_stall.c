@@ -680,6 +680,7 @@ static void stall_event(const char *what, double t0Ms, double t1Ms, uint32_t rep
     }
     (void)stall_moment_text(&m, text, sizeof text);
     fprintf(stderr, "window: stall: %s; at that moment: %s\n", what, text);
+    ico_diag_log_sync_ask(); /* issue 215: on the disc from the watchdog's thread, not this one */
 }
 
 int window_stall_tally_take(char *out, size_t cap)

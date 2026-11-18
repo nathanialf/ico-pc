@@ -482,6 +482,12 @@ static void android_part(const ExitInfoList *list, const LastRunFacts *last, int
 int exit_info_verdict(const LastRunFacts *last, const ExitInfoActivity *act,
                       const ExitInfoList *list, char *out, size_t size)
 {
+    return exit_info_verdict_boot(last, act, list, NULL, out, size);
+}
+
+int exit_info_verdict_boot(const LastRunFacts *last, const ExitInfoActivity *act,
+                           const ExitInfoList *list, const char *bootNow, char *out, size_t size)
+{
     char how[HOW_MAX], android[ANDROID_MAX], where[WHERE_MAX], resets[RESETS_MAX], free_[FREE_MAX];
     const int found = last_found(last);
     const int actFound = act != NULL && act->found;
@@ -494,6 +500,16 @@ int exit_info_verdict(const LastRunFacts *last, const ExitInfoActivity *act,
     }
     if (how_from_mark(last, act, how, sizeof how)) {
         from = EXIT_INFO_FROM_MARK;
+    } else if (found && last->boot[0] != '\0' && bootNow != NULL && bootNow[0] != '\0' &&
+               strcmp(last->boot, bootNow) != 0) {
+        /* issue 215: a new boot id and no end written: the device went down
+           under the run (Android's record, when one matched, stays in the
+           part after) */
+        snprintf(how, sizeof how,
+                 "the device restarted (or was powered off) while it ran: no crash, device loss, "
+                 "watchdog or clean end was written (boot %.8s then, %.8s now)",
+                 last->boot, bootNow);
+        from = EXIT_INFO_FROM_FILES;
     } else if (match >= 0) {
         exit_info_reason_words(list->rec[match].reason, list->rec[match].status, list->lmk, how,
                                sizeof how);
@@ -615,6 +631,25 @@ static int join(char *out, size_t size, const char *dir, const char *name)
     return c > 0 && (size_t)c < size ? 0 : -1;
 }
 
+/* path + ".new" for writing (synced_close moves it over path) */
+static FILE *synced_open(const char *path)
+{
+    char tmp[1108];
+    const int c = snprintf(tmp, sizeof tmp, "%s.new", path);
+    return c > 0 && (size_t)c < sizeof tmp ? ico_fopen(tmp, "wb") : NULL;
+}
+
+/* its bytes to the disc, closed, then renamed over path (the folder
+   synced, host_fs.h ico_rename_replace) */
+static void synced_close(FILE *f, const char *path)
+{
+    char tmp[1108];
+    (void)ico_fsync(f);
+    fclose(f);
+    snprintf(tmp, sizeof tmp, "%s.new", path);
+    (void)ico_rename_replace(tmp, path);
+}
+
 /* a whole small file into buf (NUL-ended): its bytes, -1 none */
 static long read_small(const char *path, char *buf, size_t size)
 {
@@ -668,8 +703,12 @@ void exit_info_begin(const char *logsDir, const char *activityPath)
         exit_info_activity_parse(actText, &act);
         haveAct = 1;
     }
-    (void)exit_info_verdict(haveLast ? &last : NULL, haveAct ? &act : NULL, &list, s_verdict,
-                            sizeof s_verdict);
+    {
+        char boot[LAST_RUN_BOOT_MAX];
+        (void)last_run_boot_now(boot, sizeof boot); /* "" where unreadable: as before */
+        (void)exit_info_verdict_boot(haveLast ? &last : NULL, haveAct ? &act : NULL, &list, boot,
+                                     s_verdict, sizeof s_verdict);
+    }
     ico_diag_log("ico_pc: %s", s_verdict);
     /* the newest trace copied this start, else the one kept before */
     for (int i = 0; i < list.n; i++) {
@@ -692,9 +731,10 @@ void exit_info_begin(const char *logsDir, const char *activityPath)
             ico_diag_log("ico_pc: Android's exit record %d of %d: %s", i + 1, list.n, line);
         }
     }
-    /* logs/exit-info.txt: this start's read */
-    if (join(cur, sizeof cur, logsDir, "exit-info.txt") == 0 &&
-        (f = ico_fopen(cur, "wb")) != NULL) {
+    /* logs/exit-info.txt: this start's read (issue 215: written as
+       exit-info.txt.new, synced, then renamed over it, the folder synced: a
+       device restart left the file written in place as zero bytes) */
+    if (join(cur, sizeof cur, logsDir, "exit-info.txt") == 0 && (f = synced_open(cur)) != NULL) {
         char now[40];
         last_run_utc_text((long long)time(NULL), now, sizeof now);
         fprintf(f, "ico-pc exit info: read at the start of %s\n%s\n", now, s_verdict);
@@ -712,12 +752,13 @@ void exit_info_begin(const char *logsDir, const char *activityPath)
             fprintf(f, "record %d of %d: %s\n", i + 1, list.n, line);
         }
         fprintf(f, "the newest trace kept: %s\n", trace[0] != '\0' ? trace : "none");
-        fclose(f);
+        synced_close(f, cur);
     }
-    /* the newest record seen: the next start reads only newer ones */
-    if (list.system == EXIT_INFO_SYSTEM_READ && list.n > 0 && (f = ico_fopen(path, "wb")) != NULL) {
+    /* the newest record seen: the next start reads only newer ones (the
+       same way) */
+    if (list.system == EXIT_INFO_SYSTEM_READ && list.n > 0 && (f = synced_open(path)) != NULL) {
         fprintf(f, "%lld %s\n", list.newestMs, trace[0] != '\0' ? trace : "-");
-        fclose(f);
+        synced_close(f, path);
     }
     ico_report_set_exit_info(s_verdict, trace);
 }

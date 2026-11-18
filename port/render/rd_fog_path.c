@@ -1443,41 +1443,73 @@ static int probeOffPath(void)
     return RD_FOG_COPY;
 }
 
+/* the window's hook (rd.h rd_set_selftest_fn): each self-test's name */
+static void (*s_selftestFn)(const char *name);
+
+void rd_set_selftest_fn(void (*fn)(const char *name))
+{
+    s_selftestFn = fn;
+}
+
+static void selftestName(const char *name)
+{
+    if (s_selftestFn != NULL) {
+        s_selftestFn(name);
+    }
+}
+
 bool rd_fog_selftest(void)
 {
     if (!g_rd.inited || !g_rd.hasDevice) {
         return false;
     }
     /* DATE's self-test once a renderer (rd_init clears it), before the
-       fog's first */
+       fog's first; each named before it runs (issue 215: logs/last-run.txt
+       said "the fog self-test" for all of them; twelve names, each one
+       synced write of that file) */
     const bool first = !g_rd.dateRan;
     if (first) {
         g_rd.dateRan = true;
+        selftestName("DATE");
         (void)rd_date_selftest();
-        (void)rd__fx_local_selftest();   /* it reads the readable passes DATE's path keeps */
-        (void)rd__shadow_selftest();     /* the shadow count's one draw (rd_shadow_selftest.c) */
-        (void)rd__volume_fs_selftest();  /* the volumes' stencil-only entry (rd_volume_fs.c) */
-        (void)rd__comp_spec_selftest();  /* the shadow composites' own entry (rd_comp_spec.c) */
+        selftestName("the effects' local read");
+        (void)rd__fx_local_selftest(); /* it reads the readable passes DATE's path keeps */
+        selftestName("the shadow count");
+        (void)rd__shadow_selftest(); /* the shadow count's one draw (rd_shadow_selftest.c) */
+        selftestName("the volumes' stencil entry");
+        (void)rd__volume_fs_selftest(); /* the volumes' stencil-only entry (rd_volume_fs.c) */
+        selftestName("the shadow composites' entry");
+        (void)rd__comp_spec_selftest(); /* the shadow composites' own entry (rd_comp_spec.c) */
+        selftestName("the crack fill's swap and the present's turn");
         (void)rd__crack_swap_selftest(); /* the crack fill's swap (rd_crack_fill.c) */
         (void)rd__turn_fold_selftest();  /* the turn in the present's blit (rd_turn_fold.c) */
+        selftestName("the fog's depth path");
     }
     s_st.armed = true;
     bool ok = runSelftest();
     /* the desktop's local reads timed against the snapshots, once a
        renderer after its self-tests (rd_local_probe.c); turned off, the
        depth path is chosen again without the local read */
+    if (first) {
+        selftestName("the local read's timing (the depth path again when it is off)");
+    }
     if (first && rd__local_probe(probeOffPath()) == 0) {
         ok = runSelftest();
     }
     if (first) {
         /* the shadow count in the MSAA epoch, where it is asked for */
+        selftestName("the shadow count under MSAA");
         (void)rd__msaa_shadow_selftest(rd_aa_samples(rd__aa_requested()));
         /* the stencil outside the shadow window on the path chosen
            (rd_stencil_selftest.c): its fogs read the exact entry, no probe */
         s_st.running = true;
+        selftestName("the stencil outside the shadow window");
         (void)rd__stencil_cut_selftest();
+        selftestName("the shadow tiles");
         (void)rd__shadow_tile_selftest(); /* the shadow tiles (rd_shadow_tile.c) */
         s_st.running = false;
+        /* what the window does after them is not the last test's */
+        selftestName("the start after the self-tests");
     }
     return ok;
 }

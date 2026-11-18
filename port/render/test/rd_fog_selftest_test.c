@@ -21,7 +21,9 @@
  * pixels:
  *   1. rd_fog_selftest picks <path> (inplace on lavapipe; buffer when
  *      ICO_RD_FOG_SABOTAGE=inplace,copy makes the other two read 0) and
- *      says it passed;
+ *      says it passed; its first run names each self-test to the window's
+ *      hook (rd_set_selftest_fn, issue 215: logs/last-run.txt's phase) in
+ *      order, the twelve names word for word;
  *   2. a frame recorded through the renderer's own calls (not the game's
  *      fog code) draws the self-test's grid, cell n at GS Z (n << 16) |
  *      0x8000, and fogs it: the first fogged replay records the probe, the
@@ -55,6 +57,15 @@ static int failures;
     } while (0)
 
 #define CELLS 16
+
+/* the names rd_fog_selftest hands the hook, each followed by '|' */
+static char s_names[1024];
+
+static void name_hook(const char *name)
+{
+    const size_t n = strlen(s_names);
+    snprintf(s_names + n, sizeof(s_names) - n, "%s|", name);
+}
 
 /* the self-test's tables (rd_fog_path.c stLut, stCellColor) */
 static void lutOf(int i, uint8_t out[4])
@@ -240,8 +251,17 @@ int main(int argc, char **argv)
         return 77;
     }
 
-    /* 1. the self-test */
+    /* 1. the self-test, each of its first run's tests named first */
+    rd_set_selftest_fn(name_hook);
     const bool passed = rd_fog_selftest();
+    rd_set_selftest_fn(NULL);
+    CHECK(strcmp(s_names, "DATE|the effects' local read|the shadow count|the volumes' stencil "
+                          "entry|the shadow composites' entry|the crack fill's swap and the "
+                          "present's turn|the fog's depth path|the local read's timing (the "
+                          "depth path again when it is off)|the shadow count under MSAA|the "
+                          "stencil outside the shadow window|the shadow tiles|the start after "
+                          "the self-tests|") == 0,
+          "the self-tests' names: %s", s_names);
     printf("  self-test %s, path %s\n", passed ? "passed" : "failed",
            rd__fog_path_name(g_rd.fogPath));
     CHECK(passed, "the self-test passed");

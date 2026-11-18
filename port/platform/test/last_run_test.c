@@ -26,7 +26,18 @@
  *            end (the async-signal-safe write), the next start's lines and
  *            its copy to last-run-previous.txt, a run that ended without a
  *            word, the clean end after a loss, a run without the file
- *            (its first picture still told once).
+ *            (its first picture still told once, last-run-previous.txt
+ *            kept);
+ *   sync     issue 215's records across a device restart: the boot id's
+ *            short form, this boot's id in the start slot and parsed back
+ *            (asserted read on Linux), the self-tests named in the phase
+ *            (and not in play), the set stopped early closed with its count
+ *            ("start-up set 51 made of 684, the rest on first use") and a
+ *            full set left as its last progress call closed it, the
+ *            previous record moved by rename byte for byte, and a start
+ *            ended between its steps (the record moved, this run's file
+ *            left under last-run.txt.new): the next start keeps the record
+ *            and writes its own whole.
  * argv[1]: a folder the test may write in (the build folder).
  */
 #include <stdio.h>
@@ -453,6 +464,15 @@ static void run(const char *base)
     last_run_beat(&b);
     CHECK(s_sumCalls == 1 && strncmp(s_sumLast, "ico-pc a self-test: the fog self-test", 37) == 0);
     s_sumCalls = 0;
+    /* issue 215: the self-test running named in the phase (the renderer's
+       hook, rd.h rd_set_selftest_fn); NULL changes nothing */
+    last_run_selftest_name("the shadow count");
+    (void)read_file(cur, buf, sizeof buf, &s_f);
+    CHECK(s_f.phase == LAST_RUN_PHASE_SELFTEST &&
+          strncmp(s_f.value[LAST_RUN_PHASE], "a self-test: the shadow count (since ", 37) == 0);
+    last_run_selftest_name(NULL);
+    (void)read_file(cur, buf, sizeof buf, &s_f);
+    CHECK(strncmp(s_f.value[LAST_RUN_PHASE], "a self-test: the shadow count (since ", 37) == 0);
 
     /* the game, its first picture, play */
     last_run_step("window: start: up in 12.3 s; the game runs");
@@ -476,6 +496,10 @@ static void run(const char *base)
     (void)read_file(cur, buf, sizeof buf, &s_f);
     CHECK(s_f.phase == LAST_RUN_PHASE_PLAY && s_f.stage == 1 && s_f.tick == 4);
     CHECK(strncmp(s_f.value[LAST_RUN_PHASE], "play: stage 1, Main tick 4 (since ", 34) == 0);
+    last_run_selftest_name("the shadow tiles"); /* a renderer switch's in play: nothing */
+    (void)read_file(cur, buf, sizeof buf, &s_f);
+    CHECK(s_f.phase == LAST_RUN_PHASE_PLAY &&
+          strncmp(s_f.value[LAST_RUN_PHASE], "play: stage 1, Main tick 4 (since ", 34) == 0);
     CHECK(s_f.background == 1 &&
           strncmp(s_f.value[LAST_RUN_APP], "in the background since ", 24) == 0);
     CHECK(s_f.trimLevel == 15 &&
@@ -578,12 +602,16 @@ static void run(const char *base)
     (void)read_file(cur, buf, sizeof buf, &s_f);
     CHECK(s_f.end == LAST_RUN_END_WATCHDOG);
 
-    /* no file: an older copy is not left for a report */
+    /* no file: last-run-previous.txt is kept (issue 215: a start that ended
+       between its record's rename and its own file's left the newest
+       record there; run_sync) */
     (void)ico_remove(cur);
     s_log[0] = '\0';
     last_run_begin(act, "v0.11.8 (commit test)", log_line);
-    CHECK(ico_path_kind(prev, NULL, NULL) < 0);
-    CHECK(strstr(s_log, "the previous run: no last-run.txt") != NULL);
+    CHECK(ico_path_kind(prev, NULL, NULL) == 0);
+    CHECK(strstr(s_log, "the previous run: no last-run.txt (a start ended before it wrote one, "
+                        "or the file was deleted); last-run-previous.txt, an earlier run's, is "
+                        "kept\n") != NULL);
 
     /* a file that cannot be opened (no path): the first picture is still
        told once (set_size_first_picture's memory line) */
@@ -679,6 +707,135 @@ static void run_skin(const char *base)
     (void)ico_remove_tree(dir);
 }
 
+static int starts(const char *got, const char *want)
+{
+    if (strncmp(got, want, strlen(want)) != 0) {
+        printf("got:  %s\nwant: %s...\n", got, want);
+        return 0;
+    }
+    return 1;
+}
+
+/* a whole file's bytes into buf: its size (0 none) */
+static size_t bytes_of(const char *path, char *buf, size_t cap)
+{
+    FILE *fp = ico_fopen(path, "rb");
+    size_t n = 0;
+    if (fp != NULL) {
+        n = fread(buf, 1, cap, fp);
+        fclose(fp);
+    }
+    return n;
+}
+
+/* issue 215: the records a device restart must not take (see the head) */
+static void run_sync(const char *base)
+{
+    static char buf[LAST_RUN_BYTES + 64], before[LAST_RUN_BYTES + 64], copy[LAST_RUN_BYTES + 64];
+    static char img[LAST_RUN_BYTES];
+    static LastRunFacts f;
+    const char *vals[LAST_RUN_SLOTS];
+    char dir[512], act[600], cur[700], prev[700], fresh[720], boot[LAST_RUN_BOOT_MAX];
+    size_t n;
+    FILE *fp;
+
+    /* the boot id's short form */
+    CHECK(last_run_boot_short("1A2b3C4d-9f00-4e1b-8c2a-0123456789ab\n", boot, sizeof boot) == 0 &&
+          text_is(boot, "1a2b3c4d"));
+    CHECK(last_run_boot_short("1a2b3c4", boot, sizeof boot) == -1 && boot[0] == '\0');
+    CHECK(last_run_boot_short("1a2b3c4g", boot, sizeof boot) == -1 && boot[0] == '\0');
+    CHECK(last_run_boot_short(NULL, boot, sizeof boot) == -1 && boot[0] == '\0');
+    CHECK(last_run_boot_short("1a2b3c4d", boot, LAST_RUN_BOOT_MAX - 1) == -1);
+    /* ... parsed from the start slot; none in an older file's */
+    for (int i = 0; i < LAST_RUN_SLOTS; i++) {
+        vals[i] = kA[i];
+    }
+    vals[LAST_RUN_STARTED] = "2026-11-16 20:56:01 UTC, boot 5e6f7a8b";
+    last_run_text(vals, img);
+    CHECK(last_run_parse(img, sizeof img, &f) == LAST_RUN_SLOTS && text_is(f.boot, "5e6f7a8b"));
+    last_run_text(kA, img);
+    CHECK(last_run_parse(img, sizeof img, &f) == LAST_RUN_SLOTS && f.boot[0] == '\0');
+
+    snprintf(dir, sizeof dir, "%s/last_run_sync_logs", base);
+    (void)ico_remove_tree(dir);
+    CHECK(ico_mkdir(dir) == 0);
+    snprintf(act, sizeof act, "%s/startup-activity.txt", dir);
+    snprintf(cur, sizeof cur, "%s/last-run.txt", dir);
+    snprintf(prev, sizeof prev, "%s/last-run-previous.txt", dir);
+    snprintf(fresh, sizeof fresh, "%s.new", cur);
+    s_log[0] = '\0';
+    last_run_begin(act, "v0.11.11 (commit test)", log_line);
+    n = read_file(cur, buf, sizeof buf, &s_f);
+    CHECK(n == LAST_RUN_BYTES && s_f.found && s_f.slots == LAST_RUN_SLOTS);
+    CHECK(ico_path_kind(fresh, NULL, NULL) < 0); /* written there, renamed to last-run.txt */
+    /* this boot's id in the start slot */
+    if (last_run_boot_now(boot, sizeof boot) == 0) {
+        CHECK(text_is(s_f.boot, boot) &&
+              strstr(s_f.value[LAST_RUN_STARTED], " UTC, boot ") != NULL);
+    } else {
+        CHECK(s_f.boot[0] == '\0' && strstr(s_f.value[LAST_RUN_STARTED], "boot") == NULL);
+    }
+#if defined(__linux__) && !defined(__ANDROID__)
+    CHECK(boot[0] != '\0'); /* the path ran: Linux's kernel has the file */
+#endif
+
+    /* (the self-tests by name: run(), inside its self-test phase and in
+       play; the phases never go back within one process) */
+
+    /* the set stopped early: its count made, not the place it stopped at */
+    last_run_set_pipelines(0, 684);
+    last_run_set_pipelines(359, 684);
+    last_run_set_pipelines_over(51);
+    (void)read_file(cur, buf, sizeof buf, &s_f);
+    CHECK(starts(s_f.value[LAST_RUN_PIPELINES],
+                 "start-up set 51 made of 684, the rest on first use; "));
+    last_run_set_pipelines_over(7); /* the set closed: nothing */
+    (void)read_file(cur, buf, sizeof buf, &s_f);
+    CHECK(starts(s_f.value[LAST_RUN_PIPELINES], "start-up set 51 made of 684, "));
+    /* a set that went to its end: its last progress call closed it */
+    last_run_set_pipelines(0, 684);
+    last_run_set_pipelines(684, 0);
+    last_run_set_pipelines_over(680);
+    (void)read_file(cur, buf, sizeof buf, &s_f);
+    CHECK(starts(s_f.value[LAST_RUN_PIPELINES], "start-up set 684 of 684; "));
+
+    /* the next start ended after its first step (the record moved), with
+       its own file left under its own name: the start after it keeps the
+       record and writes its own whole */
+    last_run_end_clean();
+    n = bytes_of(cur, before, sizeof before);
+    CHECK(n == LAST_RUN_BYTES);
+    CHECK(last_run_keep_previous(cur, prev) == 0);
+    CHECK(ico_path_kind(cur, NULL, NULL) < 0);
+    CHECK(bytes_of(prev, copy, sizeof copy) == LAST_RUN_BYTES &&
+          memcmp(copy, before, LAST_RUN_BYTES) == 0);
+    fp = ico_fopen(fresh, "wb");
+    CHECK(fp != NULL);
+    if (fp != NULL) {
+        fputs("a write the start did not finish", fp);
+        fclose(fp);
+    }
+    s_log[0] = '\0';
+    last_run_begin(act, "v0.11.11 (commit test)", log_line);
+    CHECK(strstr(s_log, "the previous run: no last-run.txt (a start ended before it wrote one, "
+                        "or the file was deleted); last-run-previous.txt, an earlier run's, is "
+                        "kept\n") != NULL);
+    CHECK(bytes_of(prev, copy, sizeof copy) == LAST_RUN_BYTES &&
+          memcmp(copy, before, LAST_RUN_BYTES) == 0);
+    n = read_file(cur, buf, sizeof buf, &s_f);
+    CHECK(n == LAST_RUN_BYTES && s_f.found && s_f.end == LAST_RUN_END_RUNNING);
+    CHECK(ico_path_kind(fresh, NULL, NULL) < 0);
+    /* the start after that: the record moves by the rename, byte for byte */
+    n = bytes_of(cur, before, sizeof before);
+    s_log[0] = '\0';
+    last_run_begin(act, "v0.11.11 (commit test)", log_line);
+    CHECK(strstr(s_log, "the previous run: version: v0.11.11 (commit test)\n") != NULL);
+    CHECK(n == LAST_RUN_BYTES && bytes_of(prev, copy, sizeof copy) == LAST_RUN_BYTES &&
+          memcmp(copy, before, LAST_RUN_BYTES) == 0);
+    last_run_begin(NULL, "v0.11.11 (commit test)", log_line); /* the file closed for run() */
+    (void)ico_remove_tree(dir);
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 2) {
@@ -691,6 +848,7 @@ int main(int argc, char **argv)
     torn();
     lines();
     rules();
+    run_sync(argv[1]);
     run(argv[1]);
     run_skin(argv[1]);
     if (fails != 0) {
