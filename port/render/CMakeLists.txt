@@ -2442,6 +2442,10 @@ if(ICO_RUN_TESTS)
     list(APPEND _ico_mali_tests rd_upscale_off_mali)
     set_tests_properties(${_ico_mali_tests} PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_ml}"
                                                        ENVIRONMENT "${_env_mali}")
+    # rd_tex's rate cases (the GPU's end first, threadPresentFree) time real
+    # waits against 33 to 40 ms ticks: alone on the machine, not beside three
+    # other tests (CI run 44468091552: five jobs lost ticks there)
+    set_tests_properties(rd_tex rd_tex_mali PROPERTIES RUN_SERIAL TRUE)
     # rd_upscale_off_tiler: rd_upscale_test off on the tile-based device
     # profile (ICO_VK_FAKE_LIMITS=moltenvk, the Apple class of rd_profile.c:
     # pass areas, the aura box, no glow fold, no UINT views; the class the
