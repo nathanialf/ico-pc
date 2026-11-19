@@ -2378,15 +2378,24 @@ static void threadPresentFree(void)
                       "frame wanted",
                       c->name, on.posts, off.posts, ticks);
             } else if (c->gpuMs < c->tickMs) {
-                CHECK(on.posts == ticks,
-                      "GPU's end first, %s: %.1f pictures a second (%u of %u), every tick wanted",
+                /* the times are the machine's: a busy one (CI's shards run
+                   four tests at once) loses a tick now and then with or
+                   without the rule (linux-arm64, run 44468091552: 49 of 50
+                   without it), so a fifth of the ticks may go (the worst there: 42 of 50) */
+                CHECK(on.posts + ticks / 5 >= ticks,
+                      "GPU's end first, %s: %.1f pictures a second (%u of %u), every tick less "
+                      "a fifth wanted",
                       c->name, on.fps, on.posts, ticks);
             } else {
-                const double want = 1000.0 / c->gpuMs * 0.9;
-                CHECK(on.fps >= want && on.posts > off.posts && on.beside > 0,
+                /* the rate requirement: three quarters of 1000 / the GPU's
+                   time (a tenth under it on a quiet machine: 22.0 of 22.2;
+                   19.5 on a busy arm64 runner), and well over the rule-off
+                   rate of every second tick */
+                const double want = 1000.0 / c->gpuMs * 0.75;
+                CHECK(on.fps >= want && on.fps >= 1.3 * off.fps && on.beside > 0,
                       "GPU's end first, %s: %.1f pictures a second (%u handed over beside the "
-                      "wait), at least %.1f wanted (1000/%.0f less a tenth) and more than "
-                      "without the rule's %.1f",
+                      "wait), at least %.1f wanted (three quarters of 1000/%.0f) and 1.3 times "
+                      "the %.1f without the rule",
                       c->name, on.fps, on.beside, want, c->gpuMs, off.fps);
             }
         } else {
@@ -2395,9 +2404,12 @@ static void threadPresentFree(void)
                   "one (none wanted)",
                   c->name, on.verdict, on.waits, on.beside);
             if (c->driver == PF_EARLY) {
-                CHECK(on.posts == ticks && off.posts == ticks,
+                /* no wait made is the rule's part (checked above); the
+                   rate is the machine's, a fifth of the ticks may go on a
+                   busy one, with the rule wanted or not */
+                CHECK(on.posts + ticks / 5 >= ticks && off.posts + ticks / 5 >= ticks,
                       "GPU's end first, %s: %u and %u of %u presented (wanted, not), every tick "
-                      "(30.0 a second) wanted",
+                      "less a fifth (30.0 a second) wanted",
                       c->name, on.posts, off.posts, ticks);
             }
         }
