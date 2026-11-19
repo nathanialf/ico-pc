@@ -24,8 +24,7 @@
 #include "gallery.h"
 #include "ico_credits.h"
 #include "ico_gamestate.h"
-#include "ico_rows.h"   /* Developer > Free movement */
-#include "ico_unused.h" /* a test room: no Square for Save states on its pause menu */
+#include "ico_rows.h" /* Developer > Free movement */
 #include "input.h"
 #include "layout_ext.h"
 #include "menu_text.h"
@@ -897,8 +896,6 @@ static int s_contWarned;
 static UiHint s_contHint;
 static unsigned s_contLockedLines; /* contProc: showings with the prompt held back */
 static int s_contLockedWas;
-static UiHint s_pauseHint;          /* the pause menu's Square prompt (pausePrompt) */
-static unsigned s_pauseSquareLines; /* entryProc: Square refused on the pause menu */
 static void statesCloseAfterLoad(void);
 static void gameCursorOn(int to, int row);
 static void buildStatesPage(void);
@@ -3899,22 +3896,14 @@ static void buildEntries(void)
             P(s_statesRow)->right = s_pages[UI_PAGE_STATES].layout;
         }
     }
-    /* Square and "Save states": the pause menu's own (pausePrompt shows
-       it) in the menu's entry layout, and the Continue screen's under the
-       file picture's frame (contProc shows it), in a layout with no cursor
-       that repoint chains after the file select.  The Continue screen's
-       rows are outside the pause menu's: inside them (v0.9.6 to v0.11.8)
-       they were drawn on the pause menu as contProc last left them, and
-       nothing there read Square */
-    memset(&s_pauseHint, 0, sizeof(s_pauseHint));
-    if (s_statesAtBuild) {
-        (void)buildSquarePrompt(&s_pauseHint);
-        ui_hint_show(&s_pauseHint, 0, 0);
-        ui_hint_layout(&s_pauseHint);
-    }
     int last = buildStats();
     addEntryLayout(ENTRY_PAUSE, s_photoRow,
                    last >= 0 ? last : (s_statesRow >= 0 ? s_statesRow : s_photoRow));
+    /* Square and "Save states" on the Continue screen only, under the file
+       picture's frame (contProc shows it), in a layout with no cursor that
+       repoint chains after the file select, outside the pause menu's rows.
+       The pause menu has no Square prompt and reads no Square: its Save
+       states row and F6 open the page */
     s_contLayout = -1;
     if (s_statesAtBuild) {
         const int first = buildSquarePrompt(&s_contHint);
@@ -4694,7 +4683,6 @@ void ui_settings_reset(void)
     s_statesAtBuild = 0;
     s_contLayout = -1;
     s_contWarned = 0;
-    s_pauseSquareLines = 0;
     s_stLeave = s_stFromPause = s_stFromContinue = 0;
     s_procLayout = -1;
     s_statsBuilt = 0;
@@ -4963,39 +4951,6 @@ static Page *pageOfLayout(int layout, int *id)
     return NULL;
 }
 
-/* why Square on the pause menu opens no Save states page now (NULL: it
-   does): the row's conditions (placePause), F6's and the page's refusals */
-static const char *pauseSquareRefusal(void)
-{
-    if (s_statesRow < 0 || !ui__states_hosted() || s_pages[UI_PAGE_STATES].layout < 0) {
-        return "save states are off";
-    }
-    if (ico_photo_active()) {
-        return "photo mode is open";
-    }
-    if (ico_difficulty_states_locked()) {
-        return "the journey has Permadeath on";
-    }
-    return ico_unused_active() ? "in a test room" : NULL;
-}
-
-/* the pause menu's prompt on the Continue screen's line, its glyph where
-   the menu's letters start (under the rows, clear of the journey's lines) */
-static void pausePrompt(int on)
-{
-    if (s_pauseHint.n <= 0) {
-        return;
-    }
-    ui_hint_show(&s_pauseHint, 0, on);
-    ui_hint_layout(&s_pauseHint);
-    if (on) {
-        LtProperty *g = P(s_pauseHint.glyphRow[0][0]), *t = P(s_pauseHint.textRow[0]);
-        const int dx = texProperty[ROW_PAUSE_OPTIONS].dispX + PAUSE_LETTERS_IN - g->dispX;
-        g->dispX += dx;
-        t->dispX += dx;
-    }
-}
-
 static int entryProc(int first, int item)
 {
     (void)first;
@@ -5028,10 +4983,6 @@ static int entryProc(int first, int item)
         texLayout[s_restoreTitle].defaultItem = s_restoreDefault;
         s_restoreTitle = -1;
     }
-    /* the prompt only where Square opens the page: on the pause menu itself
-       (not on a layout that draws the menu under its own) */
-    const char *noSquare = cur == LAYOUT_PAUSE ? pauseSquareRefusal() : "";
-    pausePrompt(noSquare == NULL);
     if (cur == LAYOUT_PAUSE && lt_fade_status() == 2 && s_statesRow >= 0 && ui__states_key_take()) {
         /* F6 (ui_settings_states_key): the page as the row opens it; Back
            there returns to the row (statesLeave) */
@@ -5039,18 +4990,6 @@ static int entryProc(int first, int item)
         lt_switch_layout(s_pages[UI_PAGE_STATES].layout);
         if (ui__states_key_line(0)) {
             fprintf(stderr, "hotkeys: F6 opened the Save states page\n");
-        }
-    } else if (cur == LAYOUT_PAUSE && lt_fade_status() == 2 && (pad[0].flags & LT_PAD_SQUARE) &&
-               !(pad[0].flags & (PAD_OK | PAD_BACK))) {
-        /* Square (the pad, the touch button, a click or tap on the prompt):
-           the page as the row opens it, Back there returns to the row */
-        if (noSquare == NULL) {
-            POSITIVE_SE();
-            lt_switch_layout(s_pages[UI_PAGE_STATES].layout);
-            fprintf(stderr, "settings: Save states opened from the pause menu (Square)\n");
-        } else if (++s_pauseSquareLines <= 8 || s_pauseSquareLines % 100 == 0) {
-            fprintf(stderr, "settings: Square on the pause menu: no Save states page: %s (%u)\n",
-                    noSquare, s_pauseSquareLines);
         }
     }
     return -1;

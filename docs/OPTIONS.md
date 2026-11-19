@@ -1062,10 +1062,7 @@ picture. One that could not get a picture shows the screen as it was when
 you saved.
 
 - **During play:** press Start and choose **Save states**, under Photo mode.
-  The pause menu also shows **Square Save states** under its choices: press
-  Square (or click it, or tap it) to open the page. Back on that page returns
-  to the pause menu. The shortcut is not shown on a journey with Permadeath
-  on or in a test room.
+  Back on that page returns to the pause menu.
   On a keyboard, **F6** does both: it pauses the game and opens the page.
   In the pause menu F6 opens the page, and on the page F6 takes you back to
   the game. F6 does nothing on the title screen or in photo mode.

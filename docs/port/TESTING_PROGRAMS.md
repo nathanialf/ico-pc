@@ -1008,7 +1008,8 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   as the arm64 slice of a universal file), a linker that ignored the base, a base of upper half 0xf
   and an image that the largest slide carries over a 4 GB boundary fail, a 32-bit header and load
   commands past the file's end are refused (`macho_image_check`).
-- `settings_states_test.c`: the Save states page, the pause menu's rows at pitch 16 and the
+- `settings_states_test.c`: the Save states page, the pause menu's rows at pitch 16 (no Square
+  rows there, Square doing nothing and logging nothing, the row and F6 opening the page) and the
   Continue screen's Square prompt ([UI.md](UI.md#save-states)), the pictures' box at their own
   shape, and F6 (the page from play and from the pause menu, back to the game, a late press, each
   ignore), on a Permadeath journey (the pause row greyed and still shown, the page's line

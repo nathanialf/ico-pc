@@ -1487,7 +1487,8 @@ tick's shell (`statesProc`); `port/ui/settings_states.c` holds the host, the car
 
 - **Entry from the pause menu**: under Photo mode a pause menu row `UI_STR_STATES`, in the port
   layout chained after the pause menu (`s_statesRow`, built in `buildEntries` before the journey's
-  lines), whose `right` is the page's layout.
+  lines), whose `right` is the page's layout, and F6. The pause menu has no Square prompt and
+  `entryProc` reads no Square there: Square on the pause menu does nothing and logs nothing.
 - **Entry from the title** (the Continue screen's prompt, `contProc`): the Continue screen's file
   select is `la_mc_load_file_select` (region `layout_load_files`: 19 on the European disc, 16 on the
   six others), a layout with no cursor whose `link` is the files' layout (`layout_mc_files`, 14 or
