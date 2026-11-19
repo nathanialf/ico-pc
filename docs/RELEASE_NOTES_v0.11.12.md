@@ -1,6 +1,3 @@
-## New
-
-
 ## Fixed
 
 - An attempted fix for the frame rate dropping during the opening and in some scenes on Android phones (moto g24) with Frame rate Original. In the first moments of play the game now checks whether the phone's graphics driver holds each picture until it is drawn; where it does, the next picture is prepared while the one before is still being drawn instead of leaving that frame out. Other phones present as before, and the pictures look the same.
