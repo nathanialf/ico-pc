@@ -1854,7 +1854,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   frames handed over beside it (`rd_thread_gpu_wait_posts_take`), the GPU holding one picture at
   a time (no faked submit while the GPU held the one before); a present that returns at once (17
   ms GPU, 10 ms walk, 8 ms submit at 33.3 ms, the owner's Pixel) gets the verdict off, no wait
-  and every tick (30.0 a second); one that waits every second time gets it off, no wait. SCENE and
+  and every tick (30.0 a second); one that waits every second time gets it off, no wait; one back
+  0.3 ms before the work's end gets it on (the samples' 1 ms wait), every tick. SCENE and
   DISPLAY are byte for byte the runs' without the rule. It is the render thread's program to run under
   ThreadSanitizer, as `audio_pull_test`: the `asan` preset with `-DICO_SANITIZE=thread` into a
   build folder of its own (`build-host/linux-x64-tsan`), `--target rd_tex_test`, run with

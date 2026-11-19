@@ -1394,7 +1394,9 @@ lines added beside them for issues 179 and 123:
   the swapchain's lock. Whether it does is the device's verdict: the first Original presents are
   made as before, and the job's work is read as the driver's present call begins and as it returns
   (`rhi_submitted_finished`, the timeline counter); a sample counts where the work was still
-  running at the call's start; at 16 counted, on where 14 or more returned at the work's end. The
+  running at the call's start, and one still running at the return gets one 1 ms wait for its work
+  (a counter a fraction of a millisecond behind the driver's return; 14-17 ms of work left cannot
+  pass it); at 16 counted, on where 14 or more returned at the work's end. The
   Mali-G52's log (calls of 8-28 ms ending `0.0 ms after` the GPU end) reads on; the owner's Pixel
   (0.8 ms calls with 14-17 ms of GPU work still running; with the wait each picture gained 9-13 ms
   and Original dropped frames) reads off. The lines: at each start `rd: submit thread: with Frame
@@ -1403,8 +1405,8 @@ lines added beside them for issues 179 and 123:
   still running as the driver's present call begins, on where 14 or more of them return at that
   work's end (a driver whose present waits for the GPU); android, issue 179`; the verdict `rd:
   submit thread: 16 of 16 Frame rate Original presents whose picture's GPU work was still running
-  as the driver's present call began returned at that work's end (14 needed; present mode
-  mailbox): the driver's present waits for the GPU: each picture's GPU work is waited for before
+  as the driver's present call began returned at that work's end (12 finished at the return, 4
+  within 1.0 ms after it; 14 needed; present mode mailbox): the driver's present waits for the GPU: each picture's GPU work is waited for before
   its present from here on, outside the swapchain's lock (verdict 1 of the run)` or `0 of 16 ...:
   the driver's present does not wait for the GPU: the presents stay as they are, no wait before
   them (...)`; a present mode change after it `rd: submit thread: the present mode is fifo now

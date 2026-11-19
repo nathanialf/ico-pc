@@ -40,7 +40,7 @@ static struct {
        finished when it returned) and the present mode it was taken under;
        the submit thread's own but the verdict */
     int verdict;
-    unsigned counted, atEnd, verdicts;
+    unsigned counted, atEnd, within, verdicts;
     char verdictMode[32];
 } s_st;
 
@@ -133,15 +133,15 @@ static void gpuWaitPhase(bool on)
     ico_mutex_unlock(s_st.m);
 }
 
-/* the job's GPU work finished now (1), not (0), not known (-1): the
-   test's fake, else the backend's counter read (*mark the job's
-   submission, taken at the first ask) */
-static int gpuDone(const RdSubmitTestGpu *fake, uint64_t *mark)
+/* the job's GPU work finished now (1), within waitNs (2: a bounded wait),
+   not (0), not known (-1): the test's fake, else the backend's counter
+   read (*mark the job's submission, taken at the first ask) */
+static int gpuDone(const RdSubmitTestGpu *fake, uint64_t *mark, uint64_t waitNs)
 {
     if (fake != NULL && fake->finished != NULL) {
-        return fake->finished();
+        return fake->finished((double)waitNs / 1e6);
     }
-    return rhi_submitted_finished(mark);
+    return rhi_submitted_finished(mark, waitNs);
 }
 
 /* one sample of the verdict (rd_submit_thread.h "the GPU's end first"):
@@ -149,7 +149,14 @@ static int gpuDone(const RdSubmitTestGpu *fake, uint64_t *mark)
    and as it returned.  Counted only where it was still running as the call
    began: a picture whose work ended before the call says nothing of the
    driver (a light one ends before any present), and one counted cannot
-   read "at its end" unless the call itself lasted until that end.  At
+   read "at its end" unless the call itself lasted until that end.  A
+   counted one still running at the return gets one wait of
+   RD_GPU_FIRST_GRACE_NS for its work (the verdict's samples only): the
+   Mali-G52's log puts the call's end at the GPU end by the GPU's
+   timestamps, and a counter that shows it a fraction of a millisecond
+   after the driver's return would read "early" there; a driver that
+   returns with its picture's work running for longer (the Pixel's 14-17
+   ms) cannot pass it.  At
    RD_GPU_FIRST_SAMPLES counted the verdict: on with RD_GPU_FIRST_NEED or
    more at their end, else off; its line */
 static void gpuSample(int before, int after)
@@ -158,7 +165,8 @@ static void gpuSample(int before, int after)
         return;
     }
     s_st.counted++;
-    s_st.atEnd += after == 1 ? 1u : 0u;
+    s_st.atEnd += after == 1 || after == 2 ? 1u : 0u;
+    s_st.within += after == 2 ? 1u : 0u;
     if (s_st.counted < RD_GPU_FIRST_SAMPLES) {
         return;
     }
@@ -170,8 +178,10 @@ static void gpuSample(int before, int after)
     if (n <= 8u || n % 100u == 0u) {
         rd__log("submit thread: %u of %u Frame rate Original presents whose picture's GPU work "
                 "was still running as the driver's present call began returned at that work's "
-                "end (%u needed; present mode %s): %s (verdict %u of the run)",
-                s_st.atEnd, s_st.counted, (unsigned)RD_GPU_FIRST_NEED, s_st.verdictMode,
+                "end (%u finished at the return, %u within %.1f ms after it; %u needed; present "
+                "mode %s): %s (verdict %u of the run)",
+                s_st.atEnd, s_st.counted, s_st.atEnd - s_st.within, s_st.within,
+                (double)RD_GPU_FIRST_GRACE_NS / 1e6, (unsigned)RD_GPU_FIRST_NEED, s_st.verdictMode,
                 on ? "the driver's present waits for the GPU: each picture's GPU work is waited "
                      "for before its present from here on, outside the swapchain's lock"
                    : "the driver's present does not wait for the GPU: the presents stay as they "
@@ -192,7 +202,7 @@ static void gpuVerdictMode(void)
         rd__log("submit thread: the present mode is %s now (the verdict was taken under %s): the "
                 "GPU's end first is decided again from the next presents",
                 mode, s_st.verdictMode);
-        s_st.counted = s_st.atEnd = 0;
+        s_st.counted = s_st.atEnd = s_st.within = 0;
         __atomic_store_n(&s_st.verdict, RD_GPU_FIRST_UNDECIDED, __ATOMIC_RELEASE);
     }
 }
@@ -219,7 +229,7 @@ static void tail(RdSubmitJob *j)
     const bool sample =
         verdict == RD_GPU_FIRST_UNDECIDED && (j->present || (fake != NULL && fake->present));
     uint64_t mark = 0;
-    const int before = sample ? gpuDone(fake, &mark) : -1;
+    const int before = sample ? gpuDone(fake, &mark, 0u) : -1;
     if (first) {
         /* the GPU's end first (rd_submit_thread.h): the swapchain's lock is
            not held, so the render thread's next picture acquires and
@@ -251,7 +261,7 @@ static void tail(RdSubmitJob *j)
         rhi_present();
     }
     if (sample) {
-        gpuSample(before, gpuDone(fake, &mark));
+        gpuSample(before, before == 0 ? gpuDone(fake, &mark, RD_GPU_FIRST_GRACE_NS) : before);
     }
     j->presentMs = rd__now_ms() - t1;
     rd__present_split_take(j, j->present);

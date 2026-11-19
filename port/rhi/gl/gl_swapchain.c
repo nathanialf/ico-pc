@@ -132,9 +132,10 @@ bool rhi_wait_submitted(void)
 }
 
 /* rhi.h: not known here (the GPU's end first stays off) */
-int rhi_submitted_finished(uint64_t *value)
+int rhi_submitted_finished(uint64_t *value, uint64_t waitNs)
 {
     (void)value;
+    (void)waitNs;
     return -1;
 }
 

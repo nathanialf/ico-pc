@@ -1411,7 +1411,7 @@ static int waitSubmittedCell(void)
     rhi_submit(l);
     if (!rhi_limits()->slotOverlap) {
         uint64_t none = 0;
-        WS_CHECK(!rhi_wait_submitted() && rhi_submitted_finished(&none) == -1,
+        WS_CHECK(!rhi_wait_submitted() && rhi_submitted_finished(&none, 0) == -1,
                  "the fence sync: a wait made, or the counter read, where none is offered\n");
         rhi_test_log("wait submitted cell: the slots not apart (the fence sync): no wait, as "
                      "wanted\n");
@@ -1445,10 +1445,14 @@ static int waitSubmittedCell(void)
             /* the verdict's read (rhi_submitted_finished): the held one still
                running, the newest taken when asked with 0 */
             uint64_t v = value, newest = 0;
-            const int held1 = rhi_submitted_finished(&v), held0 = rhi_submitted_finished(&newest);
-            WS_CHECK(held1 == 0 && held0 == 0 && newest == value,
-                     "the counter read while held: %d, %d (newest %llu, want %llu)\n", held1, held0,
-                     (unsigned long long)newest, (unsigned long long)value);
+            const int held1 = rhi_submitted_finished(&v, 0),
+                      held0 = rhi_submitted_finished(&newest, 0);
+            /* held: the bounded wait times out */
+            const int heldW = rhi_submitted_finished(&v, 1000000u);
+            WS_CHECK(held1 == 0 && held0 == 0 && heldW == 0 && newest == value,
+                     "the counter read while held: %d, %d, with a 1 ms wait %d (newest %llu, want "
+                     "%llu)\n",
+                     held1, held0, heldW, (unsigned long long)newest, (unsigned long long)value);
         }
         WS_CHECK(!__atomic_load_n(&s_wsDone, __ATOMIC_ACQUIRE) && p.waitingFor == value &&
                      p.finished < value && ns1 >= 40000000ull,
@@ -1473,7 +1477,7 @@ static int waitSubmittedCell(void)
         rhi_gpu_progress(&p);
         uint64_t vAfter = value;
         WS_CHECK(s_wsResult && s_wsEndNs >= rel && p.waitingFor == 0 && p.finished >= value &&
-                     rhi_submitted_finished(&vAfter) == 1,
+                     rhi_submitted_finished(&vAfter, 1000000u) == 1,
                  "released: %d, ended %s the release, waiting for %llu, finished %llu of %llu\n",
                  (int)s_wsResult, s_wsEndNs >= rel ? "after" : "before",
                  (unsigned long long)p.waitingFor, (unsigned long long)p.finished,

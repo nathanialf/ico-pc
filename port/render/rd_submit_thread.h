@@ -88,7 +88,9 @@
  *                   returns (rhi_submitted_finished: the timeline's
  *                   counter); a sample counts only where the work was
  *                   still running as the call began (a light picture whose
- *                   work ended before it says nothing).  At
+ *                   work ended before it says nothing), and one still
+ *                   running at the return gets one 1 ms wait for it (a
+ *                   counter a hair behind the driver's return).  At
  *                   RD_GPU_FIRST_SAMPLES counted the rule is on where
  *                   RD_GPU_FIRST_NEED or more returned at the work's end,
  *                   else off, with one line; a backend that cannot tell
@@ -201,6 +203,9 @@ void rd__submit_test_hook(void (*fn)(void));
  * spend before */
 #define RD_GPU_FIRST_SAMPLES 16u
 #define RD_GPU_FIRST_NEED 14u
+/* a counted sample still running as the call returned: one wait this long
+ * for its work, the samples only (rd_submit_thread.c gpuSample) */
+#define RD_GPU_FIRST_GRACE_NS 1000000u
 
 enum { RD_GPU_FIRST_UNDECIDED = -1, RD_GPU_FIRST_OFF = 0, RD_GPU_FIRST_ON = 1 };
 
@@ -215,8 +220,9 @@ bool rd_thread_submit_gpu_wait_alone(void);
  * thread (NULL: none).  submitted() after a job's submit (its work begins);
  * waitEnd() inside the GPU's end first's wait (returns at the faked end);
  * present() where the driver's present call is, every job (it may wait for
- * the faked end: a driver whose present waits for the GPU); finished()
- * whether the faked work has ended now, in place of the backend's counter
+ * the faked end: a driver whose present waits for the GPU); finished(ms)
+ * whether the faked work has ended now (1), within ms (2, waited for), or
+ * not (0), in place of the backend's counter
  * read for the verdict's samples (a job counts as presenting while
  * present is set).  Any member may be NULL.  The rule wanted (1) or not (0)
  * at the next start, -1 the device table's.  The jobs that made the wait,
@@ -225,7 +231,7 @@ typedef struct RdSubmitTestGpu {
     void (*submitted)(void);
     void (*waitEnd)(void);
     void (*present)(void);
-    int (*finished)(void);
+    int (*finished)(double waitMs);
 } RdSubmitTestGpu;
 
 void rd__submit_test_gpu(const RdSubmitTestGpu *fake);

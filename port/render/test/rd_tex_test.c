@@ -2049,13 +2049,15 @@ out:
  * faked GPU and driver (rd__submit_test_gpu): a job's GPU time begins
  * after its submit (a faked submit time first) and after the job before's
  * GPU time (one queue); the driver's present call waits for that end
- * (PF_BLOCK, the Mali-G52's), returns at once (PF_EARLY, the owner's
- * Pixel's: 0.8 ms calls with the work still running) or waits on every
- * second job (PF_MIXED); the verdict reads the faked end.  The render
+ * (PF_BLOCK, the Mali-G52's), returns 0.3 ms before it (PF_NEAR: a
+ * counter a hair behind the driver's return), returns at once (PF_EARLY,
+ * the owner's Pixel's: 0.8 ms calls with the work still running) or waits
+ * on every second job (PF_MIXED); the verdict reads the faked end, its
+ * 1 ms wait included.  The render
  * thread's walk is faked too (rd__thread_test_hook at RD_READ_WALK); the
  * game thread closes a frame every tick with the window's busy rule
  * (origGate mode 2). */
-enum { PF_BLOCK, PF_EARLY, PF_MIXED };
+enum { PF_BLOCK, PF_EARLY, PF_MIXED, PF_NEAR };
 
 static struct {
     double ms;     /* the faked GPU time a picture */
@@ -2106,12 +2108,22 @@ static void pfPresent(void)
 {
     if (s_pf.driver == PF_BLOCK || (s_pf.driver == PF_MIXED && (s_pf.jobs & 1u) != 0)) {
         pfWaitUntil(s_pf.end);
+    } else if (s_pf.driver == PF_NEAR) {
+        pfWaitUntil(s_pf.end - 0.3); /* returns 0.3 ms before the work's end */
     }
 }
 
-static int pfFinished(void)
+static int pfFinished(double waitMs)
 {
-    return ico_thread_now_ms() >= s_pf.end ? 1 : 0;
+    const double now = ico_thread_now_ms();
+    if (now >= s_pf.end) {
+        return 1;
+    }
+    if (waitMs > 0.0 && s_pf.end - now <= waitMs) {
+        pfWaitUntil(s_pf.end);
+        return 2;
+    }
+    return 0;
 }
 
 static const RdSubmitTestGpu kPfGpu = {pfSubmitted, pfWaitEnd, pfPresent, pfFinished};
@@ -2217,6 +2229,8 @@ static bool pfRun(const PfCase *c, bool wanted, unsigned ticks, PfRun *out, uint
  *   PF_EARLY, 17 ms GPU + 10 ms walk + 8 ms submit at 33.3 ms (the owner's
  *     Pixel at 30 a second): the verdict off, no wait ever made before a
  *     present, every tick (30.0 a second), as without the rule;
+ *   PF_NEAR, 20 ms at 40 ms, the present back 0.3 ms before the work's
+ *     end: on (the samples' 1 ms wait), every tick;
  *   PF_MIXED, 20 ms at 40 ms: half the samples at the work's end: off, no
  *     wait.
  * In every case SCENE and DISPLAY are byte for byte the reference's (no
@@ -2256,6 +2270,8 @@ static void threadPresentFree(void)
          false},
         {"20 ms pictures, a present that waits every second time", PF_MIXED, 20.0, 5.0, 0.0, 40.0,
          false},
+        {"20 ms pictures, a present back 0.3 ms before the work's end", PF_NEAR, 20.0, 5.0, 0.0,
+         40.0, false},
     };
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
         const PfCase *c = &cases[i];
@@ -2279,7 +2295,7 @@ static void threadPresentFree(void)
               "rule %u waits, %u frames beside one, verdict %d (none, none, off wanted)",
               c->name, on.gpuJobs, on.posts, off.gpuJobs, off.posts, off.waits, off.beside,
               off.verdict);
-        if (c->driver == PF_BLOCK) {
+        if (c->driver == PF_BLOCK || c->driver == PF_NEAR) {
             CHECK(on.verdict == RD_GPU_FIRST_ON && on.waits == on.posts && on.overlaps == 0 &&
                       off.overlaps == 0,
                   "GPU's end first, %s: verdict %d (on wanted), %u waits of %u jobs, a picture "
