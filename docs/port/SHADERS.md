@@ -107,7 +107,7 @@ each file's header comment):
 | `vu_lit.hlsl` | `vu_lit_vs`, `vu_lit_spec_vs`, `vu_reflect_vs` and their `_pre_vs` | `normal_l` (codes 32/36, 34, 38) |
 | `vu_skin.hlsl` | `vu_skin_vs`, `vu_skin_spec_vs`, `vu_skin_debug_vs` and their `_pre_vs` | `cluster`, skinned (codes 20, 22, 24) |
 | `vu_grid.hlsl` | `vu_grid_vs`, `vu_grid_lit_vs`, `vu_grid_spec_vs` and their `_pre_vs` | `mesh`, the procedural grids (codes 20, 22, 24) |
-| `vu_tri.hlsl` | `vu_main_vs`, `vu_tri_rule_pre_vs`, `vu_tri_tick_pre_vs`, `vu_tri_planes_pre_vs`, `vu_pre_ps`, `vu_tri_keep_cs` (and the tests' twins `vu_all_main_vs`, `vu_merge_all_main_vs`, `ICO_VU_FLAT0=0`) | the main vertex shader of every mesh program, the triangle pre-pass's record stages, the record targets' pixel shader and the index compaction's keep stage ([RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes), [the index compaction](PIPELINES.md#the-index-compaction)) |
+| `vu_tri.hlsl` | `vu_main_vs`, `vu_tri_rule_pre_vs`, `vu_tri_tick_pre_vs`, `vu_tri_planes_pre_vs`, `vu_pre_ps`, `vu_tri_keep_cs` (and the tests' twins `vu_all_main_vs`, `vu_merge_all_main_vs`, `ICO_VU_FLAT0=0 ICO_VU_EARLY=0`) | the main vertex shader of every mesh program, the triangle pre-pass's record stages, the record targets' pixel shader and the index compaction's keep stage ([RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes), [the index compaction](PIPELINES.md#the-index-compaction)) |
 | `vu_velocity.hlsl` | `vu_velocity_main_vs`, `velocity_ps` | the velocity pass ([RENDER.md](RENDER.md#velocity)): `vu_main_vs`'s position, the corner's motion from its two vertex records (this picture's and the VuPrevCB's, previous less current in NDC, every lane written: no `OpUndef`) as one noperspective float4; the motion in texels of the target, current to previous, +y down, into VELOCITY (RGBA16F). Made by `rd_velocity.c` only while the temporal upscaler's switch is on; no `RdVsId` / `RdFsId` |
 | `vu_particle.hlsl` | `vu_particle_vs`, `vu_particle_pre_vs`, `vu_particle_main_vs` | `particle`, six vertices a particle, non-indexed; the sprite's record stage and main shader |
 | `common.hlsli`, `gs_math.hlsli`, `sheet_text.hlsli`, `tone.hlsli`, `vu_common.hlsli` | none | included headers, below |
@@ -889,7 +889,11 @@ instructions, 199 blocks), `vu_merge_main_vs` 7,201 and `vu_velocity_main_vs` 6,
 `vu_main_vs` for the position), each about 150 words over the build before (the corner test on
 the planes, the later bias's three corners in branches), no finding; the twins
 `vu_all_main_vs` and `vu_merge_all_main_vs` (`ICO_VU_FLAT0=0`, the tests' A/B alone) are the
-builds before the change word for word (6,693 and 7,044).
+builds before the change word for word (6,693 and 7,044). The main shader's drop verdict now
+comes first (`ICO_VU_EARLY`, [PIPELINES.md](PIPELINES.md#the-drop-verdict-first)): the figures
+above were measured without it, and the twins also carry `ICO_VU_EARLY=0` (the shader before both
+changes, its statements through the shared verdict helper, so the same statements but not the same
+words).
 
 Every plain module is smaller than the same module of the last set that built on the Adreno 740 in
 words, instructions and blocks.

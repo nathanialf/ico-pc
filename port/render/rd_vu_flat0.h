@@ -14,9 +14,10 @@
  *
  * The tests' switch ICO_RD_VU_FLAT0 (docs/port/TESTING_PROGRAMS_RENDER.md;
  * no setting): unset, empty or 1 the shipped build; 0 the twins built with
- * ICO_VU_FLAT0=0 (vu_all_main_vs, vu_merge_all_main_vs: the shader before,
- * every corner computing them) in place of vu_main_vs and
- * vu_merge_main_vs. */
+ * ICO_VU_FLAT0=0 and ICO_VU_EARLY=0 (vu_all_main_vs, vu_merge_all_main_vs:
+ * the shader before, every corner computing them, and a triangle the drop
+ * verdict culls computed in full instead of returning after its verdict)
+ * in place of vu_main_vs and vu_merge_main_vs. */
 #ifndef RD_VU_FLAT0_H
 #define RD_VU_FLAT0_H
 

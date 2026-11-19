@@ -1434,13 +1434,55 @@ pictures with the programs' entries', which compute the planes at every corner, 
 takes corner 0's in both; the skin check counts samples covered (the position alone); the blend
 self-test draws no VU program.
 
+#### The drop verdict first
+
+A triangle the game drops (hidden, the region rule's drop that the tick cameras, card, camera and
+beside rules keep, the other scissor pass's triangle, every corner past the chain plane) leaves
+every corner of it at `VU_CULLED`, outside `x <= w`: it draws nothing. With the verdict after the
+corner's record (three loads), as the twins below still draw, `vu_main_vs` returns early only on
+the hidden flag and every other dropped triangle runs the whole shader three times (the later
+bias's two or three loads, the chain plane's stream qword, the position's arithmetic). Now the
+verdict comes first (`ICO_VU_EARLY`, `port/shaders/vu_tri.hlsl`): slot A, and slot C under the
+tick cameras where the blended camera's verdict is a drop, through `vu_tri_verdict`, the helper
+the index compaction's `vu_keep_position` takes its `culled` from too, so the two cannot disagree;
+a culled triangle returns `vu_out_init()` (`VU_CULLED` itself) without its corner's record. Record
+loads of a culled triangle's invocation: 1 (slot A), + 1 (slot C) under the tick cameras, + 10
+under the merge; before: 4 (the corner's three and slot A; a hidden triangle stopped there), + 1
+under the tick cameras, + 1 under the chain plane, + 2 under the later bias, + 5 at corner 0 where
+a triangle past the chain plane held its planes, + 10 under the merge. A drawn
+triangle's invocation reads what it read before (the table above), the same words in the same
+statements. Exact by construction: the same verdict on the same words, and both positions are
+outside the clip volume past the same plane (`x = 2`, `w = 1`; only `z` could differ, by the
+later bias), so no fragment, sample, depth or stencil either way. On the Mali-G52 (the index
+compaction off there) a dropped triangle's three invocations each stop after slot A; where the
+compaction runs, its filler (the dropped triangle's corner 1, three times) stops there too. The
+merge's prologue (the table's search and the draw's constants) still runs: the verdict reads
+`vu_tri`, `vu_rec.w`, `vu_draw.z` and `vu_batch.z`, which the prologue loads, so no ordering
+before it is exact; in the builds without the merge they are constants already. Every build of the
+shader takes it: `vu_main_vs`, `vu_merge_main_vs` and `vu_velocity_main_vs` (which calls it for
+the position), on every record path (the render targets, the vertex stores and the compute
+record all leave the same record words; the shader reads them the same way). The tests' twins
+(`vu_all_main_vs`, `vu_merge_all_main_vs`, `ICO_VU_FLAT0=0 ICO_VU_EARLY=0`) are the shader before
+both changes, so `rd_vu_flat0_ab` holds the shipped build to the bytes of the shader before on
+every fixture of `lists/vu_flat0.txt`, merged and one draw a command, under the corpus, Mali and
+Pixel profiles; `rd_vu_compact_ab`'s drop counts (`lists/vu_compact_counts.txt`, D: 4612 of list
+0's 12192 triangles on `fx-mali-frame`, 8196 of 19185 on `fx-mali-slow541`) are the triangles the
+same helper culls, so they show the early return ran there and the verdict did not move. No new
+log line: the start line of the flat outputs names the twins as before. The start-up self-tests
+cover it at the play record's size: the pre-pass self-test draws through `vu_main_vs` (merged
+where the merge is on) and compares every replay with the programs' entries byte for byte; its
+`=ticks` sabotage drops the ticks copy, which then takes the early return. Every build of the
+shader changes, so the pipeline cache's name changes and the cache is made again once on the
+first start (`pipelines-<key>.vkcache`, `port/render/rd_cache_name.h`; [RHI.md](RHI.md#vulkan)).
+
 #### The index compaction
 
 Of list 0's mesh triangles a picture draws, a large share draws nothing: the game's own drops
 (`vu_main_vs` sends every corner to `VU_CULLED`) and triangles wholly past the target's edges or
 the depth range (the GPU's clipping discards them). On the Mali-G52's four dumps of issue 179 that
 is 27-54 % of list 0 (44.5 % in the 8-12 fps scene), on the Pixel's opening 38-82 %; each still
-costs `vu_main_vs` three invocations with their record loads. Under the compute record a third
+costs `vu_main_vs` three invocations (a drop's stop after its slot A, [the drop verdict
+first](#the-drop-verdict-first); one outside the target's edges runs the whole shader). Under the compute record a third
 record pass, pass K, runs after pass T (`rd_replay_vu.c` `vuCompactPass`; `rd_vu_compact.c`,
 `rd_vu_compact.h`): one dispatch of `vu_tri_keep_compute_cs` (`vu_tri.hlsl` `vu_tri_keep_cs`) a
 mesh draw `doVuDraw` will make (a command's one draw, or a code 36 command's cut and kick draws of

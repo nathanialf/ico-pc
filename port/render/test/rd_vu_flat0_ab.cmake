@@ -1,9 +1,11 @@
 # rd_vu_flat0_ab: the main vertex shader's flat outputs at the provoking
 # corner (port/shaders/vu_tri.hlsl vu_main_vs, ICO_VU_FLAT0;
 # port/render/rd_vu_flat0.h; docs/port/PIPELINES.md, "Flat outputs at the
-# provoking corner") against the twins with every corner computing them
+# provoking corner") and its early return on a triangle the drop verdict
+# culls (ICO_VU_EARLY; "The drop verdict first") against the twins with
+# every corner computing them and no early return but the hidden flag's
 # (ICO_RD_VU_FLAT0=0: vu_all_main_vs, vu_merge_all_main_vs, the shader of
-# v0.11.5), byte for byte.  The frames, two forms:
+# v0.11.5 and of v0.11.11), byte for byte.  The frames, two forms:
 #   fixtures  -DFIXTURE_TOOL -DFIXTURES -DFIXTURE_HELPERS and LIST a fixture
 #             list (port/render/test/fixtures/lists/vu_flat0.txt: a fixture,
 #             the profiles it is replayed under, then its QUANTITY OP VALUE
