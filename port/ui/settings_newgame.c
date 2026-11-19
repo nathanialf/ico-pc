@@ -2,21 +2,23 @@
  * port/ui/settings_newgame.c
  *
  * The New Game screen (settings.h ui_new_game_screen_*), between the
- * vibration choice and the start, one row under the other (pitch 24):
+ * vibration choice and the start, one row under the other:
  *
  *   Difficulty    < Normal >     y 46   Left/Right: Easy, Normal, Hard (Custom)
  *   Customize                    y 70   Cross: the Customize pages
- *   Mirror mode   Off    On      y 94
- *   New Game+     Off    On      y 118
- *              Start             y 148
+ *              Start             y 100
  *   the cursor row's note        y 182  (30 lines: its bottom at 212)
  *
- * Each Off/On row keeps its choice: up and down land on it, and it stays lit
- * while the cursor is away.  The difficulty is a draft (settings_difficulty.c)
- * the Difficulty row steps between the presets and Customize edits row by
- * row; the confirm hands it to the journey (port/game/difficulty.h
- * ico_difficulty_begin) before the game starts.  settings.c builds the screen
- * after the pages and forgets it with them (settings_newgame.h).
+ * Up and down loop the three rows.  The difficulty is a draft
+ * (settings_difficulty.c) the Difficulty row steps between the presets and
+ * Customize edits row by row; the confirm hands it to the journey
+ * (port/game/difficulty.h ico_difficulty_begin) before the game starts.
+ * Mirror mode and New Game+ are Customize's rows for every difficulty
+ * (UI_OPT_NEWGAME_MIRROR, UI_OPT_NEWGAME_PLUS through ui__newgame_*): their
+ * choices are kept here, reset on entering the screen and applied at the
+ * start, never part of the draft, so a step there leaves the mode and a
+ * step of Difficulty leaves them.  settings.c builds the screen after the
+ * pages and forgets it with them (settings_newgame.h).
  */
 #include "settings.h"
 #include "settings_newgame.h"
@@ -48,13 +50,12 @@ extern void la_host_new_game_go(void);
 #define PAD_OK (lt_ext_confirm_button())
 
 static int s_newGameLayout = -1;
-static int s_newGameRow[2][2] = {{-1, -1}, {-1, -1}}; /* [row][off, on] */
 static int s_newGameNote = -1;
 static int s_newGameStart = -1; /* the centred Start row */
 static int s_diffRow = -1;      /* Difficulty's label (the item); its value and arrows follow */
 static int s_customizeRow = -1;
 static int s_newGameChosen;
-static int s_mirrorChoice, s_ngpChoice; /* each row's Off (0) or On (1) */
+static int s_mirrorChoice, s_ngpChoice; /* Customize's two rows: Off (0) or On (1) */
 /* the record of the cleared save the screen was entered from (its rows the
    draft's start, kept while that save's New Game+ goes back to the
    vibration screen and comes here again) */
@@ -64,12 +65,10 @@ static int s_haveCleared;
 #define LAYOUT_VIBE_SELECT (ico_region_cur()->layout_vibe) /* la_vibe_select's screen (9) */
 #define NEW_GAME_PITCH 24
 #define NEW_GAME_DIFF_Y 46
-#define NEW_GAME_ROW_Y (NEW_GAME_DIFF_Y + 2 * NEW_GAME_PITCH) /* Mirror mode, 94 */
 #define NEW_GAME_ROW_H 34
-#define NEW_GAME_START_Y 148 /* six lines under the value rows */
+#define NEW_GAME_START_Y 100 /* six lines under Customize (70 + 24) */
 #define NEW_GAME_NOTE_Y 182  /* 30 lines, clear of the bottom (212) */
-/* Difficulty's value between its arrows, over the Off and On columns
-   (320 .. 550) */
+/* Difficulty's value between its arrows (320 .. 550) */
 #define NEW_GAME_ARROW_L_X 320
 #define NEW_GAME_ARROW_R_X 536
 #define NEW_GAME_ARROW_W 14
@@ -85,7 +84,6 @@ static int newGameScreenProc(int first, int item);
 
 void ui__newgame_build(void)
 {
-    static const int kLabel[2] = {UI_STR_OPT_MIRROR, UI_STR_OPT_NEWGAME_PLUS};
     int first = lt_ext_prop_count() + LT_GAME_PROPERTY_COUNT;
     /* Difficulty: the label is the item (right-aligned up to x 300), its
        value and arrows lit with it, the Settings pages' stepped row */
@@ -106,18 +104,6 @@ void ui__newgame_build(void)
     lt_ext_set_pointer_role(ar, LT_POINTER_RIGHT);
     s_customizeRow = ui_settings_add_row(40, NEW_GAME_DIFF_Y + NEW_GAME_PITCH, 260, NEW_GAME_ROW_H,
                                          1, -1, UI_STR_DIFF_CUSTOMIZE, NULL, 0.0f, UI_ALIGN_RIGHT);
-    for (int r = 0; r < 2; r++) {
-        const int y = NEW_GAME_ROW_Y + r * NEW_GAME_PITCH;
-        /* the label right-aligned up to x 300, Off and On after it */
-        ui_settings_add_row(40, y, 260, NEW_GAME_ROW_H, 0, -1, kLabel[r], NULL, 0.0f,
-                            UI_ALIGN_RIGHT);
-        s_newGameRow[r][0] = ui_settings_add_row(320, y, 110, NEW_GAME_ROW_H, 1, -1, UI_STR_OFF,
-                                                 NULL, 0.0f, UI_ALIGN_CENTER);
-        s_newGameRow[r][1] = ui_settings_add_row(440, y, 110, NEW_GAME_ROW_H, 1, -1, UI_STR_ON,
-                                                 NULL, 0.0f, UI_ALIGN_CENTER);
-        P(s_newGameRow[r][0])->rightItem = s_newGameRow[r][1];
-        P(s_newGameRow[r][1])->leftItem = s_newGameRow[r][0];
-    }
     /* the note stays the last row built */
     s_newGameStart = ui_settings_add_row(200, NEW_GAME_START_Y, 240, NEW_GAME_ROW_H, 1, -1,
                                          UI_STR_NEWGAME_START, NULL, 0.0f, UI_ALIGN_CENTER);
@@ -132,57 +118,33 @@ void ui__newgame_build(void)
 void ui__newgame_reset(void)
 {
     s_newGameLayout = s_newGameStart = -1;
-    s_newGameRow[0][0] = s_newGameRow[0][1] = s_newGameRow[1][0] = s_newGameRow[1][1] = -1;
     s_newGameNote = s_diffRow = s_customizeRow = -1;
     s_newGameChosen = s_mirrorChoice = s_ngpChoice = 0;
     s_haveCleared = 0;
 }
 
-/* The cursor's row takes the item it is on as its choice (curRow -1 on
-   Start, 2 on Difficulty, 3 on Customize); up and down loop Difficulty,
-   Customize, Mirror mode, New Game+, Start; the Off/On rows' choices stay
-   lit (ownerItem, layout_texture.c display_texture); Difficulty's value
-   shows the draft's mode. */
+/* Up and down loop Difficulty, Customize, Start; Difficulty's value shows
+   the draft's mode; the note is the cursor's row's. */
 static void newGameSync(void)
 {
     const int cur = lt_ext_layout(s_newGameLayout)->curItem;
-    int curRow = cur == s_diffRow ? 2 : cur == s_customizeRow ? 3 : -1;
-    for (int r = 0; r < 2; r++) {
-        for (int c = 0; c < 2; c++) {
-            if (cur == s_newGameRow[r][c]) {
-                curRow = r;
-                *(r == 0 ? &s_mirrorChoice : &s_ngpChoice) = c;
-            }
-        }
-    }
-    const int choice[2] = {s_mirrorChoice, s_ngpChoice};
-    for (int r = 0; r < 2; r++) {
-        for (int c = 0; c < 2; c++) {
-            LtProperty *e = P(s_newGameRow[r][c]);
-            e->upItem = r == 0 ? s_customizeRow : s_newGameRow[0][choice[0]];
-            e->downItem = r == 0 ? s_newGameRow[1][choice[1]] : s_newGameStart;
-            e->ownerItem = r != curRow && c == choice[r] ? cur : -1;
-        }
-    }
     LtProperty *d = P(s_diffRow);
     d->upItem = s_newGameStart;
     d->downItem = s_customizeRow;
     d->leftItem = d->rightItem = -1; /* Left and Right step the mode (the proc) */
     LtProperty *cz = P(s_customizeRow);
     cz->upItem = s_diffRow;
-    cz->downItem = s_newGameRow[0][choice[0]];
+    cz->downItem = s_newGameStart;
     cz->leftItem = cz->rightItem = -1;
     LtProperty *st = P(s_newGameStart);
-    st->upItem = s_newGameRow[1][choice[1]];
+    st->upItem = s_customizeRow;
     st->downItem = s_diffRow;
     st->leftItem = st->rightItem = -1;
     const IcoDiffMode mode = ui__diff_draft_mode();
     lt_ext_set_str(s_diffRow + 1, ui__diff_mode_str(mode));
-    ui__settings_set_note(s_newGameNote, curRow == 0   ? UI_STR_MIRROR_SCREEN
-                                         : curRow == 1 ? UI_STR_NEWGAME_PLUS_SCREEN
-                                         : curRow == 2 ? ui__diff_mode_note(mode)
-                                         : curRow == 3 ? UI_STR_DIFF_CUSTOMIZE_NOTE
-                                                       : UI_STR_NEWGAME_START_SCREEN);
+    ui__settings_set_note(s_newGameNote, cur == s_diffRow        ? ui__diff_mode_note(mode)
+                                         : cur == s_customizeRow ? UI_STR_DIFF_CUSTOMIZE_NOTE
+                                                                 : UI_STR_NEWGAME_START_SCREEN);
 }
 
 int ui_new_game_screen_enter(void)
@@ -232,11 +194,6 @@ int ui_new_game_screen_start(void)
     return s_newGameStart;
 }
 
-int ui_new_game_screen_row(int row, int on)
-{
-    return row == 0 || row == 1 ? s_newGameRow[row][on ? 1 : 0] : -1;
-}
-
 int ui_new_game_screen_difficulty(void)
 {
     return s_diffRow;
@@ -272,8 +229,8 @@ static int newGameScreenProc(int first, int item)
     }
     /* the stick's left and right as the d-pad's, before the word is read
        (settingsProc does the same): the game's own call comes later, in
-       default_item_select after this proc, so without it the stick moved
-       the Off/On rows but never stepped Difficulty.  One step a push, as
+       default_item_select after this proc, so without it the stick never
+       stepped Difficulty.  One step a push, as
        the Settings pages' rows that wrap (lastButton keeps a held stick
        from repeating); the second call in the same tick adds nothing. */
     const int digital = pad[0].flags & (LT_PAD_LEFT | LT_PAD_RIGHT);
@@ -298,7 +255,7 @@ static int newGameScreenProc(int first, int item)
         return ui__settings_open_customize();
     }
     if ((flags & PAD_OK) && cur != s_newGameStart && !(flags & LT_PAD_START)) {
-        /* Cross on Difficulty or an Off/On item picks it and moves on */
+        /* Cross on Difficulty moves on to Customize */
         POSITIVE_SE();
         lt_ext_layout(s_newGameLayout)->curItem = P(cur)->downItem;
         newGameSync(); /* lit for this tick's draw */
@@ -325,4 +282,39 @@ static int newGameScreenProc(int first, int item)
         return LAYOUT_VIBE_SELECT;
     }
     return -1;
+}
+
+/* --- Customize's Mirror mode and New Game+ (settings_newgame.h) ------------ */
+
+int ui__newgame_opt(int opt)
+{
+    return opt == UI_OPT_NEWGAME_MIRROR || opt == UI_OPT_NEWGAME_PLUS;
+}
+
+int ui__newgame_value(int opt, int journey)
+{
+    if (opt == UI_OPT_NEWGAME_MIRROR) {
+        return journey ? ico_opt_mirror() != 0 : s_mirrorChoice;
+    }
+    if (opt == UI_OPT_NEWGAME_PLUS) {
+        return journey ? gFlagGameClear != 0 : s_ngpChoice;
+    }
+    return 0;
+}
+
+void ui__newgame_step(int opt)
+{
+    static unsigned s_steps;
+    int *c = opt == UI_OPT_NEWGAME_MIRROR ? &s_mirrorChoice
+             : opt == UI_OPT_NEWGAME_PLUS ? &s_ngpChoice
+                                          : NULL;
+    if (c == NULL) {
+        return;
+    }
+    *c = !*c;
+    if (++s_steps <= 8 || s_steps % 100 == 0) {
+        fprintf(stderr, "newgame: Customize: %s %s (Difficulty stays %s)\n",
+                opt == UI_OPT_NEWGAME_MIRROR ? "Mirror mode" : "New Game+", *c ? "on" : "off",
+                ico_difficulty_mode_name(ui__diff_draft_mode()));
+    }
 }

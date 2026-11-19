@@ -204,7 +204,7 @@ const char *const ui_strings_es[UI_STR_COUNT] =
             "Toda la partida se juega invertida de izquierda a derecha. Cada partida guardada conserva la elección.",
         [UI_STR_OPT_NEWGAME_PLUS] = "Nueva partida +",
         [UI_STR_NEWGAME_PLUS_SCREEN] =
-            "Nueva partida + juega el segundo viaje: palabras de Yorda traducidas, final y objetos cambiados. Desactivado juega el primer viaje incluso tras terminar el juego.",
+            "Nueva partida + juega el segundo viaje: palabras de Yorda traducidas, final y objetos cambiados. Desactivado: el primer viaje, incluso tras terminar.",
         [UI_STR_NEWGAME_START] = "Empezar",
         [UI_STR_NEWGAME_START_SCREEN] = "Comienza la nueva partida con las opciones de arriba.",
         [UI_STR_OPT_CRT] = "Filtro CRT",
@@ -813,8 +813,7 @@ const char *const ui_strings_es[UI_STR_COUNT] =
             "Este estado guardado se creó con la versión %s,\nantes de que los estados guardados pudieran\npasar a versiones nuevas.\nTus partidas de la memory card siguen funcionando.",
         [UI_STR_STATES_XB_CODE] =
             "Este estado guardado se creó con la versión %s.\nLa versión %s cambió la parte del juego\nen la que se guardó, así que no se puede reanudar.\nTus partidas de la memory card siguen funcionando.",
-        [UI_STR_STATES_XB_DATA] =
-            "Este estado guardado se creó con la versión %s.\nLa versión %s cambió cómo el juego guarda\nsu progreso en memoria, así que no se puede\nreanudar.\nTus partidas de la memory card siguen funcionando.",
+        [UI_STR_STATES_XB_DATA] = "Este estado guardado se creó con la versión %s.\nLa versión %s cambió cómo el juego guarda\nsu progreso en memoria, así que no se puede\nreanudar.\nTus partidas de la memory card siguen funcionando.",
         [UI_STR_STATES_XB_PINNED] =
             "Este estado guardado se creó con la versión %s\ny solo esa versión puede reanudarlo.\nTus partidas de la memory card siguen funcionando.",
         [UI_STR_STATES_CKPT_ROW] = "Se carga desde su último punto de control",

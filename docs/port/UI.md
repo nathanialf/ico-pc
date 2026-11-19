@@ -11,7 +11,7 @@ draws, navigates, fades and sounds it; the port supplies the rows, their words a
 | --- | --- |
 | `port/ui/layout_ext.h`, `layout_ext.c` | the layout extension: port layouts and rows past the game's tables, text, glyph and rectangle rows, the text hook, the back buttons, pointer roles |
 | `port/ui/settings.h`, `settings.c` | the Settings menu: the pages, the entry rows, the Quit screen, the values and their setters, the saves |
-| `port/ui/settings_newgame.h`, `settings_newgame.c` | the New Game screen: Difficulty, Customize, Mirror mode, New Game+, Start and its note ([The New Game and Quit screens](#the-new-game-and-quit-screens)) |
+| `port/ui/settings_newgame.h`, `settings_newgame.c` | the New Game screen: Difficulty, Customize, Start and its note, and the Mirror mode and New Game+ choices Customize shows (`ui__newgame_*`) ([The New Game and Quit screens](#the-new-game-and-quit-screens)) |
 | `port/ui/settings_difficulty.h`, `settings_difficulty.c` | the New Game's difficulty draft and Customize's pages: the draft's rows, their value text, steps, notes and greying, the pages' tables, the Difficulty row's modes ([Customize: the New Game draft's pages](#customize-the-new-game-drafts-pages)) |
 | `port/ui/settings_graphics.h`, `settings_graphics.c` | Settings > Graphics: the Graphics API and Graphics card rows' values and steps, Apply and its countdown |
 | `port/ui/settings_desktop.h`, `settings_desktop.c` | Settings > Extras > Add to the applications menu (Linux): the host's handler (`ui_settings_set_desktop_handler`), Cross and the done / failed popups |
@@ -208,7 +208,7 @@ tables in step and within the `MAX_ROWS` (17, 18 in an rc build) budget of a pag
 | Edit layout (`UI_PAGE_TOUCH_LAYOUT`) | no shown rows: the editor's own screen ([The touch layout editor](#the-touch-layout-editor)) |
 | Gameplay | Stick fix, Door fix, Second memory card (`UI_OPT_SECOND_CARD`, `[gameplay] second_memory_card`, its note `UI_STR_OPT_SECOND_CARD_NOTE`; the step calls `ico_opt_set_second_memory_card`, whose listener puts the card in at once), Film effect, Players, Light sword colour (`UI_OPT_VAR_SWORD_COLOUR`: Original, Red; hidden on ntsc, aug6 and jun26, `ui__variant_shown`), Stick (`UI_OPT_VAR_WEAPON`: Original, Insect net), Chains (`UI_PAGE_CHAINS`), Cutscenes (`UI_PAGE_CUTSCENES`), Difficulty (a link to `UI_PAGE_CUSTOMIZE`, shown from the pause menu only: `optShown` hides it while `onTitle()`), Back: the three links before Back as Controls' Touch screen; eleven rows once the game is cleared, the window's ten slots scroll. The rows a journey's difficulty holds are Customize's (below) |
 | Chains (`UI_PAGE_CHAINS`) | Natural chains, Chain swing speed (`UI_OPT_VAR_CHAIN_SPEED`) and Chain swing slowdown (`UI_OPT_VAR_CHAIN_DAMPING`) (`[variants] chain_swing_speed` and `chain_swing_damping`, `ICO_VARIANT_CHAIN_SWING_SPEED` / `_DAMPING`: the value is the game's number 1 to 10 as text, the game's own 4 reads `UI_STR_VAL_VAR_CHAIN_ORIGINAL`, "4 (original)"; Left and Right wrap 10 and 1; notes `UI_STR_OPT_VAR_CHAIN_SPEED_NOTE` / `_DAMPING_NOTE`; their text is in `settings_variants.c`), Back |
-| Customize (`UI_PAGE_CUSTOMIZE`) | Shadows (`UI_PAGE_SHADOWS`), Combat (`UI_PAGE_COMBAT`), Rules (`UI_PAGE_RULES`), Back; reached from the New Game screen's Customize row (its Back returns there) and, read-only, from the pause menu's Gameplay > Difficulty link (its Back returns to Gameplay, the cursor on the link) ([Customize: the New Game draft's pages](#customize-the-new-game-drafts-pages)) |
+| Customize (`UI_PAGE_CUSTOMIZE`) | Shadows (`UI_PAGE_SHADOWS`), Combat (`UI_PAGE_COMBAT`), Rules (`UI_PAGE_RULES`), Mirror mode (`UI_OPT_NEWGAME_MIRROR`), New Game+ (`UI_OPT_NEWGAME_PLUS`), Back; the two Off/On rows for every difficulty, the New Game screen's choices (`settings_newgame.c` `ui__newgame_opt`, `_value`, `_step`), never rows of the draft; reached from the New Game screen's Customize row (its Back returns there) and, read-only, from the pause menu's Gameplay > Difficulty link (its Back returns to Gameplay, the cursor on the link) ([Customize: the New Game draft's pages](#customize-the-new-game-drafts-pages)) |
 | Shadows (`UI_PAGE_SHADOWS`) | Shadow speed, Shadow toughness, Shadow aggression, Peaceful shadows, Shadows never take Yorda (`UI_OPT_YORDA`), Shadows attack together, No Shadows (`UI_OPT_DIFF_NO_SHADOWS`), Back: the New Game draft's rows |
 | Combat (`UI_PAGE_COMBAT`) | Automatic guard, Turn to face shadows, Shadows wait while Ico is down, One hit per swing, Shadows never dodge, Queen barrier, Back: the draft's rows |
 | Rules (`UI_PAGE_RULES`) | Time to rescue Yorda (`UI_OPT_PIT_TIME`: `"15 s (Original)"` for Original with the base from `ico_opt_pit_base_seconds`, else `"8 s"`; a second a step, held at 4 and 30), Yorda trips, No hints (`UI_OPT_VAR_NO_HINTS`), Knock-down limit (`UI_OPT_DIFF_KNOCK_LIMIT`: Off, 1 .. 9 around), Knock-downs count (`UI_OPT_DIFF_KNOCK_SCOPE`: Each room, Whole journey; greyed while the limit is Off), Permadeath (`UI_OPT_DIFF_PERMADEATH`, never greyed), Back: the draft's rows |
@@ -397,12 +397,14 @@ in the strings table. A development build's empty label shows nothing (`port/pla
 ### The New Game and Quit screens
 
 After the game's vibration choice, `la_vibe_select` switches to the port's New Game screen
-(`port/ui/settings_newgame.c`), its rows one under the other at pitch 24 from y 46: Difficulty (a
-stepped value between two arrows over the Off and On columns: Easy, Normal, Hard, and Custom while a
-customized draft is kept aside), Customize (a link), Mirror mode and New Game+ (each Off or On), a
-centred Start row at 148 and the cursor row's note at 182 (30 lines, its bottom at 212). Up and Down
-go Difficulty, Customize, Mirror mode, New Game+, Start and round; each Off/On row's chosen value stays
-lit (the cursor's pulse marks the current item, the game's own lit and dim scheme). The cursor
+(`port/ui/settings_newgame.c`): Difficulty at y 46 (a stepped value between two arrows: Easy, Normal,
+Hard, and Custom while a customized draft is kept aside), Customize (a link) at 70, a centred Start
+row at 100 and the cursor row's note at 182 (30 lines, its bottom at 212). Up and Down go
+Difficulty, Customize, Start and round. Mirror mode and New Game+ are Customize's rows, for every
+difficulty: their choices (`s_mirrorChoice`, `s_ngpChoice`) stay in `settings_newgame.c`, reset on
+entering the screen (Mirror mode Off, New Game+ On from a finished save and Off otherwise) and
+applied at Start, and are no rows of the draft, so stepping them leaves its mode and stepping
+Difficulty (`ui__diff_step_mode` copies the draft's rows only) leaves them. The cursor
 starts on Difficulty at Normal; a cleared save's New Game+ (`gFlagGameClear` set while that save's
 record, with a journey, is in force) starts from that save's rows, copied before
 `ico_opt_mirror_reset` puts Normal in force and kept while the player goes back to the vibration
@@ -413,11 +415,12 @@ d-pad emulation (`lt_analog2Pad`) before it reads the pad word, as `settingsProc
 call is in `default_item_select`, after the proc); one step a push, held or not, as the Settings rows
 that wrap (`newgame: Difficulty stepped by the stick (N)`, the first 8 then every 100th). Cross on
 Customize opens [Customize](#customize-the-new-game-drafts-pages) on its first row; its Back returns with
-the cursor on Customize. Cross on Difficulty or an Off or On item picks it and moves the cursor to the
-item below; Cross on Start, or the Start button on any row, confirms: `ico_difficulty_begin` makes the
+the cursor on Customize. Cross on Difficulty moves the cursor to Customize; Cross on Start, or the Start button on any row, confirms: `ico_difficulty_begin` makes the
 draft the journey's (a new journey id, its counts 0), then the run's mirror mode and `gFlagGameClear` are
-set and `la_host_new_game_go` starts the game as the vibration screen did. The notes: the mode's
-(`UI_STR_DIFF_*_NOTE`) on Difficulty, `UI_STR_DIFF_CUSTOMIZE_NOTE` on Customize, the others as before.
+set from Customize's two choices and `la_host_new_game_go` starts the game as the vibration screen did. The notes: the mode's
+(`UI_STR_DIFF_*_NOTE`) on Difficulty, `UI_STR_DIFF_CUSTOMIZE_NOTE` on Customize,
+`UI_STR_NEWGAME_START_SCREEN` on Start; `UI_STR_MIRROR_SCREEN` and `UI_STR_NEWGAME_PLUS_SCREEN` are
+Customize's two rows' notes.
 The title's lettering is left alone on the screen (the game's own title animation has taken it away by
 the vibration screen; `ui_settings_covers_title` does not count the screen, which is not a page). The
 rows are port props, so the mouse and touch take them with no extra code; there a hover moves nothing
@@ -425,7 +428,8 @@ and a click does (`ui_mouse.c`), a click on Difficulty's arrows is Left or Right
 Triangle goes back to the vibration screen. Log lines: `newgame: the screen opened: Difficulty <mode>
 (<the preset|the cleared save's rows, journey <id>>), New Game+ <on|off>`, `newgame: Difficulty <Mode>
 (was <Mode>...)`, `newgame: Customize opened on Difficulty <mode>`, `newgame: back from Customize:
-Difficulty <mode>`, `newgame: start: Difficulty <mode>, Mirror mode <on|off>, New Game+ <on|off>`, then
+Difficulty <mode>`, `newgame: Customize: <Mirror mode|New Game+> <on|off> (Difficulty stays <mode>)`
+(the first 8 then every 100th), `newgame: start: Difficulty <mode>, Mirror mode <on|off>, New Game+ <on|off>`, then
 the record's own `difficulty: <Mode> in force (a New Game; ...)` (`port/ui/settings.h`
 (`ui_new_game_screen_enter`, `ui_new_game_screen_difficulty`, `ui_new_game_screen_customize`,
 `ui_new_game_screen_draft`); `ico2/common/src/layout_action.c` (`la_host_new_game_screen`,
@@ -1177,8 +1181,8 @@ logs `variants: <key> = <value>`; the page's leaving saves the file as every pag
 
 ### Customize: the New Game draft's pages
 
-`UI_PAGE_CUSTOMIZE` (Shadows, Combat, Rules, Back) and its three pages hold every row of a journey's
-difficulty (`port/game/difficulty.h`): ordinary Settings pages (the window, scrolling, held Left and
+`UI_PAGE_CUSTOMIZE` (Shadows, Combat, Rules, Mirror mode, New Game+, Back) and its three pages hold
+every row of a journey's difficulty (`port/game/difficulty.h`): ordinary Settings pages (the window, scrolling, held Left and
 Right, the mouse, the languages) whose rows read and step the New Game's draft
 (`port/ui/settings_difficulty.c`), never the config nor the journey in force. `build` makes them from
 `ui__diff_page`; Customize's parent is the New Game screen (`UI__PARENT_NEW_GAME`: `parentLayout`
@@ -1197,7 +1201,20 @@ is on it, the 2001 discs' No hints note; no note ends with an achievements rule 
 switches them off). Knock-downs count is greyed while the limit is Off (`ui__diff_dimmed`); Permadeath
 is never greyed. Every row shows on every disc.
 
-- Places: Customize 4 rows, Shadows 8, Combat 7, Rules 7, inside the window with slots to spare.
+Customize's Mirror mode and New Game+ (`UI_OPT_NEWGAME_MIRROR`, `UI_OPT_NEWGAME_PLUS`, after
+`UI_OPT_DIFF_PERMADEATH`) are the New Game screen's two choices, for every difficulty, not rows of
+the draft: `ui__diff_row` is -1 for them, so they never enter `kRowOpt`, `ico_difficulty_classify`,
+difficulty.toml or a save state, while `ui__diff_opt` answers for them so `settings.c` routes their
+value, step, note and greying with the draft's rows and has no case of its own. `ui__diff_text` gives
+Off or On from `ui__newgame_value` (the screen's choice, or in the read-only view the game's own: the
+run's mirror value and `gFlagGameClear != 0`); `ui__diff_step` hands a step to `ui__newgame_step`
+(either direction toggles; no `classified`, so the draft and its mode stay as they are; the line
+`newgame: Customize: Mirror mode on (Difficulty stays normal)`); their notes are
+`UI_STR_MIRROR_SCREEN` and `UI_STR_NEWGAME_PLUS_SCREEN` (`UI_STR_DIFF_LOCKED_NOTE` read-only), greyed
+and refused in the read-only view as the draft's rows (`mirror_mode not stepped` / `new_game_plus not
+stepped: chosen when the journey began`).
+
+- Places: Customize 6 rows, Shadows 8, Combat 7, Rules 7, inside the window with slots to spare.
 - The pause menu's read-only view: Gameplay > Difficulty opens the same pages on the journey in force
   (`ico_difficulty_active`), not the draft. `settingsProc` sets `ui__diff_set_readonly(1)` each tick
   Gameplay is up in the pause menu and the New Game screen's Customize clears it, so the pages know
