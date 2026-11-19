@@ -690,7 +690,8 @@ static void testScreenRows(void)
     }
     CHECK(ui_settings_page_rows(UI_PAGE_CUSTOMIZE, lb, op, lv, 8) == 6, "Customize's rows again");
     CHECK(ui__diff_readonly(), "from Gameplay: read-only");
-    CHECK(strcmp(lt_ext_row_text(lv[3]), "On") == 0 && strcmp(lt_ext_row_text(lv[4]), "Off") == 0,
+    CHECK(strcmp(lt_ext_row_text(lv[3]), ui_str(UI_STR_ON)) == 0 &&
+              strcmp(lt_ext_row_text(lv[4]), ui_str(UI_STR_OFF)) == 0,
           "the journey's values: mirrored, no New Game+ (%s, %s)", lt_ext_row_text(lv[3]),
           lt_ext_row_text(lv[4]));
     CHECK(lt_ext_row_dim(lb[3]) && lt_ext_row_dim(lv[3]) && lt_ext_row_dim(lb[4]) &&
@@ -705,7 +706,7 @@ static void testScreenRows(void)
     errCapture();
     press(LT_PAD_RIGHT);
     errRelease(log, sizeof(log));
-    CHECK(gFlagGameClear == 0 && strcmp(lt_ext_row_text(lv[4]), "Off") == 0 &&
+    CHECK(gFlagGameClear == 0 && strcmp(lt_ext_row_text(lv[4]), ui_str(UI_STR_OFF)) == 0 &&
               strstr(log, "new_game_plus not stepped: chosen when the journey began") != NULL,
           "a step on New Game+ refused, the flag untouched (\"%s\")", log);
     lt_ext_layout(rcl)->curItem = lb[3];
