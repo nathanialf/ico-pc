@@ -374,6 +374,7 @@ with Igor Chagas's Brazilian Portuguese ones (with corrections by cobra838). To 
 - braito4, for the Apple-silicon macOS app.
 - neetgon, for the second player's gamepad.
 - KClough, for the arm64 Linux build.
+- MesaBlack, for the Xbox, Nintendo and Wii Classic Controller button pictures.
 
 ### Special thanks
 

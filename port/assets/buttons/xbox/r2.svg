@@ -1,0 +1,6 @@
+<svg version="1.2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 24" width="40" height="24">
+	<style>
+		.s0 { fill: #e1e1e1;stroke: #000000;paint-order:stroke fill markers;stroke-miterlimit:100;stroke-width: 4 } 
+	</style>
+	<path id="RT" fill-rule="evenodd" class="s0" d="m2.51 21.77v-19.54h8.51q3.49 0 4.87 0.82 2.44 1.41 2.44 4.58 0 4.6-5.34 5.37 2.08 1.11 4.02 4.16l2.93 4.61h-3.93l-2.73-4.14q-1.29-1.99-1.97-2.78-0.61-0.74-1.29-1.09-0.73-0.41-2.31-0.41h-1.94v8.42zm3.23-11.09h4.34q2.58 0 3.64-0.56 1.29-0.67 1.29-2.34 0-2.85-4.52-2.85h-4.75zm22.35 11.09v-16.78h-6.13v-2.76h15.52v2.76h-6.13v16.78z"/>
+</svg>

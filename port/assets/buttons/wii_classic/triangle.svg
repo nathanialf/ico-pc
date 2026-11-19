@@ -1,0 +1,8 @@
+<svg version="1.2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 32" width="24" height="32">
+	<style>
+		.s0 { fill: #ffffff;stroke: #000000;paint-order:stroke fill markers;stroke-miterlimit:100;stroke-width: 4 } 
+	</style>
+	<g id="gamecube">
+		<path id="x" class="s0" d="m8.24 23.66h-4l5.7-8.13-5.37-7.55h4.16l2.93 4.52 0.13 0.3 0.1 0.09 3.41-4.91h4l-5.4 7.39 5.82 8.29h-4.13l-3.64-5.59z"/>
+	</g>
+</svg>

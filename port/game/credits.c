@@ -39,6 +39,7 @@ static char s_katsifolis[] = "{R}katsifolis ";
 static char s_braito4[] = "{R}braito4 ";
 static char s_neetgon[] = "{R}neetgon ";
 static char s_kclough[] = "{R}KClough ";
+static char s_mesablack[] = "{R}MesaBlack ";
 static char s_thanks[] = "{R}< Special Thanks > ";
 static char s_sadorigami[] = "{R}Sad Origami ";
 
@@ -56,7 +57,8 @@ static char *s_lines[ICO_ROLL_PORT_LAST + 1] = {
     [62] = s_braito4,                    /* after 2 */
     [65] = s_neetgon,                    /* after 2 */
     [68] = s_kclough,                    /* after 2 */
-    [81] = s_thanks,                     /* after 12 */
+    [71] = s_mesablack,                  /* after 2 */
+    [84] = s_thanks,                     /* after 12 */
     [ICO_ROLL_PORT_LAST] = s_sadorigami, /* after 4: the roll's last line */
 };
 
