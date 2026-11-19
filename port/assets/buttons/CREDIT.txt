@@ -1,0 +1,19 @@
+Controller button pictures
+==========================
+
+Drawn by MesaBlack for ICO PC and contributed in
+https://github.com/nathanialf/ico-pc/issues/187 (November 2026).
+Shipped with the contributor's credit; the issue is the record of the
+contribution. The files are the contributor's SVG files, unchanged, renamed
+by the PlayStation 2 button whose place each one takes:
+
+  xbox/         cross A, circle B, square X, triangle Y,
+                l1 LB, r1 RB, l2 LT, r2 RT
+  nintendo/     cross B, circle A, square Y, triangle X,
+                l1 L, r1 R, l2 ZL, r2 ZR
+  wii_classic/  cross b, circle a, square y, triangle x,
+                l1 L, r1 R, l2 ZL, r2 ZR
+
+The pictures are letters only. Xbox, Nintendo, Nintendo Switch, Wii and
+Wii U are trademarks of their owners; ICO PC is not affiliated with or
+endorsed by them.
