@@ -40,6 +40,8 @@
     X(wait_present_room)                                                                           \
     X(wait_submitted)                                                                              \
     X(submitted_finished)                                                                          \
+    X(last_submitted)                                                                              \
+    X(wait_value_ns)                                                                               \
     X(release_surface)                                                                             \
     X(recreate_surface)                                                                            \
     X(create_buffer)                                                                               \

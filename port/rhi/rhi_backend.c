@@ -888,10 +888,22 @@ bool rhi_wait_submitted(void)
     return be()->wait_submitted();
 }
 
-int rhi_submitted_finished(uint64_t *value, uint64_t waitNs)
+int rhi_submitted_finished(uint64_t *value)
 {
     RHI_GUARD();
-    return be()->submitted_finished(value, waitNs);
+    return be()->submitted_finished(value);
+}
+
+uint64_t rhi_last_submitted(void)
+{
+    RHI_GUARD();
+    return be()->last_submitted();
+}
+
+int32_t rhi_wait_value_ns(uint64_t value, uint64_t *ns)
+{
+    RHI_GUARD();
+    return be()->wait_value_ns(value, ns);
 }
 
 bool rhi_present_mailbox(void)

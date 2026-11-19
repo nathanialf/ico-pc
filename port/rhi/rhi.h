@@ -1250,17 +1250,39 @@ bool rhi_wait_present_room(void);
  * no such wait (the fence sync, OpenGL, Direct3D 11 and 12) or the device
  * is lost, nothing done. */
 bool rhi_wait_submitted(void);
-/* Whether a submission has finished on the GPU: *value 0 takes the newest
- * submission made so far (written back, so the caller asks about the same
- * one later); 1 finished, 2 not at once but within waitNs (a bounded wait,
- * made only when it was still running; 0: no wait), 0 still running, -1
+/* Whether a submission has finished on the GPU, read at once (no wait):
+ * *value 0 takes the newest submission made so far (written back, so the
+ * caller asks about the same one later); 1 finished, 0 still running, -1
  * the backend cannot tell (the fence sync, OpenGL, Direct3D 11 and 12, a
- * lost device).  The submit thread's samples for the GPU's end first's verdict
- * (port/render/rd_submit_thread.h): asked as the driver's present call
- * begins and as it returns.  Vulkan's timeline counter read
- * (vkGetSemaphoreCounterValue) needs no lock against the recording
- * thread. */
-int rhi_submitted_finished(uint64_t *value, uint64_t waitNs);
+ * lost device, a counter read that failed).  Vulkan's timeline counter
+ * read (vkGetSemaphoreCounterValue) needs no lock against the recording
+ * thread.  Read only: the submit thread's first 8 samples of the GPU's
+ * end first's verdict log it as the driver's present call begins and as it
+ * returns (port/render/rd_submit_thread.h); the verdict does not use it
+ * (issue 179: v0.11.12's samples, which did, never counted one on the
+ * Mali-G52). */
+int rhi_submitted_finished(uint64_t *value);
+/* The newest submission made so far (its number on the timeline sync's
+ * counter: the value rhi_wait_value_ns waits for), 0 none or where the
+ * backend has no such number (OpenGL, Direct3D 11 and 12).  The submit
+ * thread reads it after its job's submits: the recording thread submits
+ * nothing while the submit thread works (the call guard), so it is that
+ * job's own. */
+uint64_t rhi_last_submitted(void);
+/* One unbounded wait until submission `value` (rhi_last_submitted) has
+ * finished on the GPU: this device's single-semaphore wait
+ * (vkWaitSemaphores, or its KHR entry point, with no timeout: the form the
+ * recording thread's fence waits make every picture), with no lock against
+ * the recording thread, as rhi_wait_submitted (the timeline sync with the
+ * slots apart only).  *ns the time it blocked.  Returns 0 when it waited
+ * the submission out (or value 0: nothing to wait for), RHI_WAIT_NONE where
+ * the backend has no such wait (the fence sync, a lost device, OpenGL,
+ * Direct3D 11 and 12), else the wait's own failure (Vulkan's VkResult; a
+ * device loss is noted as any wait's).  The watchdog sees it as
+ * rhi_wait_submitted's (rhi_gpu_progress).  The submit thread's samples
+ * for the GPU's end first's verdict (port/render/rd_submit_thread.h). */
+#define RHI_WAIT_NONE INT32_MIN
+int32_t rhi_wait_value_ns(uint64_t value, uint64_t *ns);
 /* The window's surface (the Android lifecycle).
  * rhi_release_surface waits for the GPU, destroys the swapchain and the
  * surface and keeps the device and everything made on it: the app goes to

@@ -38,9 +38,11 @@ uint32_t vkr_cache_drop_others(const char *path, char *log, size_t logCap);
 void vkr_test_force_present_result(int32_t result);
 uint32_t vkr_test_swapchain_creations(void);
 /* For rhi_vk_test: the next rhi_wait_submitted (the submit thread's wait
- * before its present) reports `result` (a VkResult value, e.g.
- * RHI_VK_TEST_DEVICE_LOST) after its wait instead of the driver's, once */
+ * before its present) or rhi_wait_value_ns (its samples' wait) reports
+ * `result` (a VkResult value, e.g. RHI_VK_TEST_DEVICE_LOST) after its wait
+ * instead of the driver's, once */
 #define RHI_VK_TEST_DEVICE_LOST (-4) /* VK_ERROR_DEVICE_LOST */
+#define RHI_VK_TEST_NOT_READY 1      /* VK_NOT_READY */
 void vkr_test_force_wait_result(int32_t result);
 /* 1 while a swapchain retired by a recreation is still held (until the
  * first present on the new one succeeds), else 0 */

@@ -858,11 +858,11 @@ with a fake clock and swapchain; the window only supplies its I/O (`port/platfor
    picture before`. On every Android device (the device table's `PRESENT_FREE`, row `android`,
    issue 179; with the frame slots apart) the submit thread may wait for a picture's GPU work to
    end before its present, outside the swapchain's lock (`port/render/rd_submit_thread.h` "the
-   GPU's end first", `rhi_wait_submitted`): the Mali-G52's present returns at the picture's GPU
-   end, and with the lock held through it every picture of more GPU time than the tick made the
-   next frame busy. It does only where the first Original presents show the driver's present
-   waiting for the GPU (16 counted samples, 14 at the work's end; the owner's Pixel, whose present
-   returns early, reads off and presents as before). While that wait runs with no job behind it the gate is not told busy and the hand-over
+   GPU's end first", `rhi_wait_submitted`): the Mali-G52's present returns at the end of GPU work
+   (the picture before's), and with the lock held through it every picture of more GPU time than
+   the tick made the next frame busy. It does only where the first Original presents show the
+   driver's present waiting for the GPU (16 calls of 2 ms or more, 14 back with the picture
+   before's work ended; the owner's Pixel's short calls never count, and its counts start again every 256). While that wait runs with no job behind it the gate is not told busy and the hand-over
    waits for nothing (a keep frame neither): the next picture is walked, acquired and recorded
    beside it and submitted after that present, so the GPU still holds one picture at a time and
    pictures of G ms over the tick come about `1000 / G` a second (`rd_tex_test`
