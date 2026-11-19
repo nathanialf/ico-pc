@@ -1,0 +1,8 @@
+<svg version="1.2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+	<style>
+		.s0 { fill: #ffffff;stroke: #000000;paint-order:stroke fill markers;stroke-miterlimit:100;stroke-width: 4 } 
+	</style>
+	<g id="gamecube">
+		<path id="A" fill-rule="evenodd" class="s0" d="m6.15 21.55h-3.44l7.32-19.1h3.56l7.35 19.1h-3.58l-1.79-5.06h-7.62zm5.66-15.8h-0.08l-2.88 8.21h5.83z"/>
+	</g>
+</svg>

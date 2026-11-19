@@ -197,6 +197,13 @@
       "texts": [{"file": "port/assets/fonts/NotoSansTC-OFL.txt"}]
     },
     {
+      "name": "Controller button pictures (Xbox, Nintendo, Wii Classic Controller)",
+      "version": "the contributor's SVG files of November 2026 (ICO PC issue 187), unchanged",
+      "licence": "contributed to ICO PC by MesaBlack, shipped with the contributor's credit",
+      "used_for": "the button pictures shown for a non-PlayStation controller (Options > Controls > Button pictures), embedded in the program",
+      "texts": [{"file": "port/assets/buttons/CREDIT.txt"}]
+    },
+    {
       "name": "minicoro",
       "version": "v0.2.0, unmodified",
       "licence": "Unlicense or MIT-0",

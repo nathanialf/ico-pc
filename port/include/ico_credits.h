@@ -57,7 +57,7 @@ char **ico_roll_port_line(int k);
    ICO_ROLL_PORT_LAST + 1 */
 #define ICO_ROLL_PORT_HEADING 12
 #define ICO_ROLL_PORT_NAME 17
-#define ICO_ROLL_PORT_LAST 86
+#define ICO_ROLL_PORT_LAST 89
 /* staffRollStart's log line (the roll's length, the port lines' start) */
 void ico_roll_started(int discLines);
 

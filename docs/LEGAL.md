@@ -96,6 +96,12 @@ icon (`<user folder>/icon/`, the title lettering's "I" cut out of two captured f
 game; `docs/port/APP_ICON.md`). The repository holds the code that makes
 them, not the images.
 
+The controller button pictures under `port/assets/buttons/` are the one
+exception to "no images": they are a contributor's own drawings (letters
+only, no logos, nothing from the disc), credited in
+`port/assets/buttons/CREDIT.txt`. Xbox, Nintendo, Nintendo Switch, Wii and
+Wii U are trademarks of their owners.
+
 `.gitignore` and `tools/check_no_rom.sh` (run by the pre-commit hook) make it
 harder to commit such material by accident. They do not replace care. If you
 suspect a file in this repository breaks these rules, open an issue tagged
