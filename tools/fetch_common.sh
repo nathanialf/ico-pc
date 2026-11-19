@@ -41,9 +41,14 @@ if ! command -v sha256sum >/dev/null 2>&1; then
     sha256sum() { shasum -a 256 "$@"; }
 fi
 
+# Every download gives up on a server that does not answer within 20 s or
+# that sends under 20 kB/s for 30 s, and tries again (five tries, any error):
+# a stalled transfer once ran until the CI job's own limit.
+CURL_LIMITS=(--connect-timeout 20 --speed-limit 20000 --speed-time 30 --retry 5 --retry-all-errors)
+
 fetch() {
     echo "==> fetching $1"
-    curl -fL --retry 3 -o "$3" "$1"
+    curl -fL "${CURL_LIMITS[@]}" -o "$3" "$1"
     echo "${2}  $3" | sha256sum -c -
 }
 
@@ -59,8 +64,8 @@ fetch_deb() {
     local path="${1% *}" sum="${1#* }" dir="$2" deb
     deb="$TMP/$(basename "$path")"
     echo "==> fetching $(basename "$path")"
-    if ! curl -fsL --retry 3 -o "$deb" "http://deb.debian.org/debian/${path//+/%2B}"; then
-        curl -fsL --retry 3 -o "$deb" "${DEB_SNAPSHOT}/${path//+/%2B}"
+    if ! curl -fsL "${CURL_LIMITS[@]}" -o "$deb" "http://deb.debian.org/debian/${path//+/%2B}"; then
+        curl -fsL "${CURL_LIMITS[@]}" -o "$deb" "${DEB_SNAPSHOT}/${path//+/%2B}"
     fi
     echo "${sum}  ${deb}" | sha256sum -c -
     dpkg-deb -x "$deb" "$dir"

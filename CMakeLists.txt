@@ -539,17 +539,32 @@ else()
     set(ICO_LIBMPEG2_NEON OFF)
 endif()
 
-# ico_copy_sdl3_dll(<target>...): on Windows, SDL3.dll beside each program
-# after it is linked, so it runs from the build directory. SDL3::SDL3-shared
-# is found by port/rhi and made global there, so call this after port/rhi
-# is configured (or from a deferred function).
+# ico_copy_sdl3_dll(<target>...): on Windows, SDL3.dll beside each program,
+# so it runs from the build directory. One copy rule a directory, which the
+# directory's programs depend on: a copy after each program's own link put
+# up to 71 copies of the one file into port/render at once, and one of them
+# failed in CI (run 44413124008, "Error copying file (if different)").
+# SDL3::SDL3-shared is found by port/rhi and made global there, so call this
+# after port/rhi is configured (or from a deferred function).
 function(ico_copy_sdl3_dll)
     if(WIN32 AND TARGET SDL3::SDL3-shared)
         foreach(t IN LISTS ARGN)
-            add_custom_command(TARGET ${t} POST_BUILD
-                               COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                                       "$<TARGET_FILE:SDL3::SDL3-shared>" "$<TARGET_FILE_DIR:${t}>"
-                               VERBATIM)
+            get_target_property(dir ${t} RUNTIME_OUTPUT_DIRECTORY)
+            if(NOT dir)
+                get_target_property(dir ${t} BINARY_DIR)
+            endif()
+            string(MD5 h "${dir}")
+            string(SUBSTRING "${h}" 0 8 h)
+            set(copy ico_sdl3_dll_${h})
+            if(NOT TARGET ${copy})
+                add_custom_command(OUTPUT "${dir}/SDL3.dll"
+                                   COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                                           "$<TARGET_FILE:SDL3::SDL3-shared>" "${dir}/SDL3.dll"
+                                   DEPENDS "$<TARGET_FILE:SDL3::SDL3-shared>"
+                                   VERBATIM)
+                add_custom_target(${copy} DEPENDS "${dir}/SDL3.dll")
+            endif()
+            add_dependencies(${t} ${copy})
         endforeach()
     endif()
 endfunction()

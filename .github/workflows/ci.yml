@@ -18,7 +18,8 @@ name: ci
 on:
   push:
     branches: [main]
-    # a release tag also builds the Linux arm64 package (the linux-arm64 job)
+    # a release tag builds the Linux arm64 package and nothing else (the
+    # linux-arm64 job; every other job is main's run on the same commit)
     tags: ['v*']
   pull_request:
   # the arm64 package of a release whose tag's run failed its tests for a
@@ -65,35 +66,25 @@ jobs:
   # The hygiene checks and the win-x64 cross build (for the `windows` job);
   # the Linux test suites are the `tests` jobs below.
   linux:
-    if: github.event_name != 'workflow_dispatch'
+    # not on a release tag either: main's run on the same commit is the gate
+    # (the release is cut only after it is green), and the tag's run only
+    # builds and attaches the Linux arm64 package
+    if: github.event_name != 'workflow_dispatch' && github.ref_type != 'tag'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
       - name: Host packages
-        # the runner's package mirror sometimes hangs for an hour (2026-10-07,
-        # twice): a short step timeout and one retry instead of the job's 120
+        # cached package files and three bounded tries, the later ones on
+        # other mirrors (tools/ci_host_packages.sh says why)
         timeout-minutes: 10
-        run: |
-          for try in 1 2; do
-            sudo apt-get update && break
-            sleep 30
-          done
-          sudo apt-get install -y --no-install-recommends \
-            build-essential gcc-14 curl xz-utils python3 python3-venv \
-            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
-            libxfixes-dev libxrender-dev libasound2-dev libpulse-dev \
-            libpipewire-0.3-dev libspa-0.2-dev \
-            libdbus-1-dev libxss-dev \
-            libgl-dev libglx-dev libegl-dev libgl1 libegl1 libgl1-mesa-dri \
-            libvulkan1 mesa-vulkan-drivers
-          # lavapipe (mesa-vulkan-drivers): the render tests run on the CPU
-          # Vulkan driver instead of skipping
-          # llvmpipe (libgl1-mesa-dri, libgl1, libegl1): the OpenGL tests run on
-          # the CPU OpenGL driver; the GL headers build SDL with GLX and EGL
+        uses: ./.github/actions/host-packages
+        with:
+          set: x64
 
       - name: Python tools (venv)
+        timeout-minutes: 10
         run: |
           python3 -m venv .venv
           .venv/bin/pip install -r tools/requirements.txt
@@ -108,6 +99,7 @@ jobs:
           key: toolchain-${{ runner.os }}-${{ hashFiles('tools/fetch_toolchain.sh', 'tools/fetch_deps.sh', 'tools/fetch_common.sh', 'tools/fetch_android.sh') }}
 
       - name: Fetch toolchain and dependencies
+        timeout-minutes: 45
         run: tools/fetch_toolchain.sh
 
       - name: Toolchain and dependency cache (save)
@@ -245,7 +237,7 @@ jobs:
   # rd_glow_light_ab, so more shards do not shorten it), fptrap 2 (35); the
   # run about 61 minutes, modelled. Shard 1 of each suite saves its ccache.
   tests:
-    if: github.event_name != 'workflow_dispatch'
+    if: github.event_name != 'workflow_dispatch' && github.ref_type != 'tag'
     name: ${{ matrix.suite }} ${{ matrix.shard }}/${{ matrix.shards }}
     runs-on: ubuntu-24.04
     # a shard is estimated at 35 to 55 minutes of tests (tools/ci_costs_update.py
@@ -281,28 +273,15 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Host packages
-        # the runner's package mirror sometimes hangs for an hour (2026-10-07,
-        # twice): a short step timeout and one retry instead of the job's 120
+        # cached package files and three bounded tries, the later ones on
+        # other mirrors (tools/ci_host_packages.sh says why)
         timeout-minutes: 10
-        run: |
-          for try in 1 2; do
-            sudo apt-get update && break
-            sleep 30
-          done
-          sudo apt-get install -y --no-install-recommends \
-            build-essential gcc-14 curl xz-utils python3 python3-venv \
-            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
-            libxfixes-dev libxrender-dev libasound2-dev libpulse-dev \
-            libpipewire-0.3-dev libspa-0.2-dev \
-            libdbus-1-dev libxss-dev \
-            libgl-dev libglx-dev libegl-dev libgl1 libegl1 libgl1-mesa-dri \
-            libvulkan1 mesa-vulkan-drivers
-          # lavapipe (mesa-vulkan-drivers): the render tests run on the CPU
-          # Vulkan driver instead of skipping
-          # llvmpipe (libgl1-mesa-dri, libgl1, libegl1): the OpenGL tests run on
-          # the CPU OpenGL driver; the GL headers build SDL with GLX and EGL
+        uses: ./.github/actions/host-packages
+        with:
+          set: x64
 
       - name: Python tools (venv)
+        timeout-minutes: 10
         run: |
           python3 -m venv .venv
           .venv/bin/pip install -r tools/requirements.txt
@@ -314,6 +293,7 @@ jobs:
           key: toolchain-${{ runner.os }}-${{ hashFiles('tools/fetch_toolchain.sh', 'tools/fetch_deps.sh', 'tools/fetch_common.sh', 'tools/fetch_android.sh') }}
 
       - name: Fetch toolchain and dependencies
+        timeout-minutes: 45
         run: tools/fetch_toolchain.sh
 
       # ccache (the presets' compiler launcher): one cache a suite, keyed as
@@ -393,7 +373,7 @@ jobs:
   # nothing. docs/port/TESTING.md ("The render suite on Direct3D 11 (WARP)")
   # lists what runs.
   windows:
-    if: github.event_name != 'workflow_dispatch'
+    if: github.event_name != 'workflow_dispatch' && github.ref_type != 'tag'
     needs: linux
     runs-on: windows-2022
     timeout-minutes: 180
@@ -440,7 +420,7 @@ jobs:
   # restores the toolchain the `linux` job caches (and fetches it on a
   # miss); only `linux` saves it.
   extra:
-    if: github.event_name != 'workflow_dispatch'
+    if: github.event_name != 'workflow_dispatch' && github.ref_type != 'tag'
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     strategy:
@@ -451,24 +431,15 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Host packages
-        # the runner's package mirror sometimes hangs for an hour (2026-10-07,
-        # twice): a short step timeout and one retry instead of the job's 120
+        # cached package files and three bounded tries, the later ones on
+        # other mirrors (tools/ci_host_packages.sh says why)
         timeout-minutes: 10
-        run: |
-          for try in 1 2; do
-            sudo apt-get update && break
-            sleep 30
-          done
-          sudo apt-get install -y --no-install-recommends \
-            build-essential gcc-14 curl xz-utils python3 python3-venv \
-            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
-            libxfixes-dev libxrender-dev libasound2-dev libpulse-dev \
-            libpipewire-0.3-dev libspa-0.2-dev \
-            libdbus-1-dev libxss-dev \
-            libgl-dev libglx-dev libegl-dev libgl1 libegl1 libgl1-mesa-dri \
-            libvulkan1 mesa-vulkan-drivers
+        uses: ./.github/actions/host-packages
+        with:
+          set: x64
 
       - name: Python tools (venv)
+        timeout-minutes: 10
         run: |
           python3 -m venv .venv
           .venv/bin/pip install -r tools/requirements.txt
@@ -480,6 +451,7 @@ jobs:
           key: toolchain-${{ runner.os }}-${{ hashFiles('tools/fetch_toolchain.sh', 'tools/fetch_deps.sh', 'tools/fetch_common.sh', 'tools/fetch_android.sh') }}
 
       - name: Fetch toolchain and dependencies
+        timeout-minutes: 45
         run: tools/fetch_toolchain.sh
 
       # ccache (the presets' compiler launcher, tools/toolchain/ccache): the
@@ -526,24 +498,15 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Host packages
+        # cached package files and three bounded tries, the later ones on
+        # other mirrors (tools/ci_host_packages.sh says why)
         timeout-minutes: 10
-        run: |
-          for try in 1 2; do
-            sudo apt-get update && break
-            sleep 30
-          done
-          sudo apt-get install -y --no-install-recommends \
-            build-essential gcc-14 g++ git curl xz-utils python3 python3-venv \
-            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
-            libxfixes-dev libxrender-dev libasound2-dev libpulse-dev \
-            libpipewire-0.3-dev libspa-0.2-dev \
-            libdbus-1-dev libxss-dev \
-            libgl-dev libglx-dev libegl-dev libgl1 libegl1 libgl1-mesa-dri \
-            libwayland-dev wayland-protocols libxkbcommon-dev libdecor-0-dev \
-            libdrm-dev libgbm-dev \
-            libvulkan1 mesa-vulkan-drivers
+        uses: ./.github/actions/host-packages
+        with:
+          set: arm64
 
       - name: Python tools (venv)
+        timeout-minutes: 10
         run: |
           python3 -m venv .venv
           .venv/bin/pip install -r tools/requirements.txt
@@ -556,6 +519,7 @@ jobs:
           key: toolchain-arm64-${{ runner.os }}-${{ hashFiles('tools/fetch_toolchain.sh', 'tools/fetch_deps.sh', 'tools/fetch_common.sh', 'tools/fetch_android.sh') }}
 
       - name: Fetch toolchain and dependencies
+        timeout-minutes: 45
         run: tools/fetch_toolchain.sh
 
       - name: Toolchain and dependency cache (save)
@@ -564,6 +528,22 @@ jobs:
         with:
           path: tools/toolchain
           key: toolchain-arm64-${{ runner.os }}-${{ hashFiles('tools/fetch_toolchain.sh', 'tools/fetch_deps.sh', 'tools/fetch_common.sh', 'tools/fetch_android.sh') }}
+
+      # ccache publishes no Linux arm64 build (tools/fetch_toolchain.sh): the
+      # runner's own, from the host packages, linked where the presets look
+      # for the launcher. After the toolchain cache's save: the link is the
+      # runner's, not the cache's.
+      - name: ccache (the runner's own; restore)
+        run: |
+          mkdir -p tools/toolchain/ccache/bin
+          ln -sf "$(command -v ccache)" tools/toolchain/ccache/bin/ccache
+          tools/toolchain/ccache/bin/ccache --set-config "max_size=$CCACHE_MAXSIZE"
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-linux-arm64-${{ runner.os }}-${{ hashFiles('tools/fetch_toolchain.sh', 'tools/fetch_deps.sh', 'tools/fetch_common.sh', 'tools/fetch_android.sh') }}-${{ github.sha }}
+          restore-keys: |
+            ccache-linux-arm64-${{ runner.os }}-${{ hashFiles('tools/fetch_toolchain.sh', 'tools/fetch_deps.sh', 'tools/fetch_common.sh', 'tools/fetch_android.sh') }}-
 
       - name: No disc data in the tree
         run: tools/check_no_rom.sh
@@ -577,6 +557,10 @@ jobs:
         run: |
           $CMAKE/cmake --preset linux-arm64 -DCMAKE_C_COMPILER=$ICO_CC
           $CMAKE/cmake --build build-host/linux-arm64 --parallel --target all tests
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            echo "a release tag: main's run on this commit ran the tests; the package steps follow"
+            exit 0
+          fi
           # the tests that replay the committed fixtures run in the
           # linux-arm64-fixtures job's shards (about 115 minutes of
           # --parallel 4 time would put this job past its timeout)
@@ -595,6 +579,15 @@ jobs:
           $CMAKE/ctest --test-dir build-host/linux-arm64 --output-on-failure --parallel 4 \
             --no-tests=error --tests-from-file "$RUNNER_TEMP/gating.txt" \
             --exclude-regex "$ICO_ARM64_FILTERED"
+
+      # saved by this job alone (the filtered and fixtures jobs restore it:
+      # several jobs saving one key would race), also when a test failed
+      - name: ccache (save)
+        if: ${{ !cancelled() }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-linux-arm64-${{ runner.os }}-${{ hashFiles('tools/fetch_toolchain.sh', 'tools/fetch_deps.sh', 'tools/fetch_common.sh', 'tools/fetch_android.sh') }}-${{ github.sha }}
 
       # A pushed release tag (never a pull request): the Linux arm64 package
       # (normal and portable archives, and the aarch64 AppImage) of the tagged commit, which the maintainer's x86-64 machine cannot
@@ -696,7 +689,7 @@ jobs:
   # `tests` shards do; a fixture's tests (rd_pixel and the rd_replay_tool runs
   # on its dump) stay in one shard. Never run for a dispatched package.
   linux-arm64-filtered:
-    if: github.event_name != 'workflow_dispatch'
+    if: github.event_name != 'workflow_dispatch' && github.ref_type != 'tag'
     name: linux-arm64 filtered ${{ matrix.shard }}/2
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 60
@@ -708,24 +701,15 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Host packages
+        # cached package files and three bounded tries, the later ones on
+        # other mirrors (tools/ci_host_packages.sh says why)
         timeout-minutes: 10
-        run: |
-          for try in 1 2; do
-            sudo apt-get update && break
-            sleep 30
-          done
-          sudo apt-get install -y --no-install-recommends \
-            build-essential gcc-14 g++ git curl xz-utils python3 python3-venv \
-            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
-            libxfixes-dev libxrender-dev libasound2-dev libpulse-dev \
-            libpipewire-0.3-dev libspa-0.2-dev \
-            libdbus-1-dev libxss-dev \
-            libgl-dev libglx-dev libegl-dev libgl1 libegl1 libgl1-mesa-dri \
-            libwayland-dev wayland-protocols libxkbcommon-dev libdecor-0-dev \
-            libdrm-dev libgbm-dev \
-            libvulkan1 mesa-vulkan-drivers
+        uses: ./.github/actions/host-packages
+        with:
+          set: arm64
 
       - name: Python tools (venv)
+        timeout-minutes: 10
         run: |
           python3 -m venv .venv
           .venv/bin/pip install -r tools/requirements.txt
@@ -740,7 +724,24 @@ jobs:
           key: toolchain-arm64-${{ runner.os }}-${{ hashFiles('tools/fetch_toolchain.sh', 'tools/fetch_deps.sh', 'tools/fetch_common.sh', 'tools/fetch_android.sh') }}
 
       - name: Fetch toolchain and dependencies
+        timeout-minutes: 45
         run: tools/fetch_toolchain.sh
+
+      # ccache publishes no Linux arm64 build (tools/fetch_toolchain.sh): the
+      # runner's own, from the host packages, linked where the presets look
+      # for the launcher. After the toolchain cache's save: the link is the
+      # runner's, not the cache's.
+      - name: ccache (the runner's own; restore)
+        run: |
+          mkdir -p tools/toolchain/ccache/bin
+          ln -sf "$(command -v ccache)" tools/toolchain/ccache/bin/ccache
+          tools/toolchain/ccache/bin/ccache --set-config "max_size=$CCACHE_MAXSIZE"
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-linux-arm64-${{ runner.os }}-${{ hashFiles('tools/fetch_toolchain.sh', 'tools/fetch_deps.sh', 'tools/fetch_common.sh', 'tools/fetch_android.sh') }}-${{ github.sha }}
+          restore-keys: |
+            ccache-linux-arm64-${{ runner.os }}-${{ hashFiles('tools/fetch_toolchain.sh', 'tools/fetch_deps.sh', 'tools/fetch_common.sh', 'tools/fetch_android.sh') }}-
 
       - name: linux-arm64, build
         run: |
@@ -767,7 +768,7 @@ jobs:
   # (rd_present_scene_ab) runs in linux-arm64-filtered instead, as every test
   # of those names does. Never run for a dispatched package.
   linux-arm64-fixtures:
-    if: github.event_name != 'workflow_dispatch'
+    if: github.event_name != 'workflow_dispatch' && github.ref_type != 'tag'
     name: linux-arm64 fixtures ${{ matrix.shard }}/${{ matrix.shards }}
     runs-on: ubuntu-24.04-arm
     # a shard is estimated at about 30 minutes (tools/ci_costs_update.py plan)
@@ -781,24 +782,15 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Host packages
+        # cached package files and three bounded tries, the later ones on
+        # other mirrors (tools/ci_host_packages.sh says why)
         timeout-minutes: 10
-        run: |
-          for try in 1 2; do
-            sudo apt-get update && break
-            sleep 30
-          done
-          sudo apt-get install -y --no-install-recommends \
-            build-essential gcc-14 g++ git curl xz-utils python3 python3-venv \
-            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
-            libxfixes-dev libxrender-dev libasound2-dev libpulse-dev \
-            libpipewire-0.3-dev libspa-0.2-dev \
-            libdbus-1-dev libxss-dev \
-            libgl-dev libglx-dev libegl-dev libgl1 libegl1 libgl1-mesa-dri \
-            libwayland-dev wayland-protocols libxkbcommon-dev libdecor-0-dev \
-            libdrm-dev libgbm-dev \
-            libvulkan1 mesa-vulkan-drivers
+        uses: ./.github/actions/host-packages
+        with:
+          set: arm64
 
       - name: Python tools (venv)
+        timeout-minutes: 10
         run: |
           python3 -m venv .venv
           .venv/bin/pip install -r tools/requirements.txt
@@ -813,7 +805,24 @@ jobs:
           key: toolchain-arm64-${{ runner.os }}-${{ hashFiles('tools/fetch_toolchain.sh', 'tools/fetch_deps.sh', 'tools/fetch_common.sh', 'tools/fetch_android.sh') }}
 
       - name: Fetch toolchain and dependencies
+        timeout-minutes: 45
         run: tools/fetch_toolchain.sh
+
+      # ccache publishes no Linux arm64 build (tools/fetch_toolchain.sh): the
+      # runner's own, from the host packages, linked where the presets look
+      # for the launcher. After the toolchain cache's save: the link is the
+      # runner's, not the cache's.
+      - name: ccache (the runner's own; restore)
+        run: |
+          mkdir -p tools/toolchain/ccache/bin
+          ln -sf "$(command -v ccache)" tools/toolchain/ccache/bin/ccache
+          tools/toolchain/ccache/bin/ccache --set-config "max_size=$CCACHE_MAXSIZE"
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-linux-arm64-${{ runner.os }}-${{ hashFiles('tools/fetch_toolchain.sh', 'tools/fetch_deps.sh', 'tools/fetch_common.sh', 'tools/fetch_android.sh') }}-${{ github.sha }}
+          restore-keys: |
+            ccache-linux-arm64-${{ runner.os }}-${{ hashFiles('tools/fetch_toolchain.sh', 'tools/fetch_deps.sh', 'tools/fetch_common.sh', 'tools/fetch_android.sh') }}-
 
       - name: linux-arm64, build
         run: |
@@ -840,7 +849,7 @@ jobs:
   # cache has its own key (it also holds the Android SDL3 build) and is saved by
   # this job.
   android:
-    if: github.event_name != 'workflow_dispatch'
+    if: github.event_name != 'workflow_dispatch' && github.ref_type != 'tag'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
@@ -854,16 +863,15 @@ jobs:
       - uses: gradle/actions/wrapper-validation@v4
 
       - name: Host packages
+        # cached package files and three bounded tries, the later ones on
+        # other mirrors (tools/ci_host_packages.sh says why)
         timeout-minutes: 10
-        run: |
-          for try in 1 2; do
-            sudo apt-get update && break
-            sleep 30
-          done
-          sudo apt-get install -y --no-install-recommends \
-            build-essential curl xz-utils python3 python3-venv
+        uses: ./.github/actions/host-packages
+        with:
+          set: android
 
       - name: Python tools (venv)
+        timeout-minutes: 10
         run: |
           python3 -m venv .venv
           .venv/bin/pip install -r tools/requirements.txt
@@ -880,12 +888,14 @@ jobs:
           SKIP_SDL3_LINUX: '1'
           SKIP_SDL3_MINGW: '1'
           SKIP_VALIDATION_LAYER: '1'
+        timeout-minutes: 45
         run: tools/fetch_toolchain.sh
 
       # the runner has the Android SDK (ANDROID_SDK_ROOT); the script adds the
       # NDK, platform and build-tools it pins, builds SDL3 for arm64 and
       # writes android/local.properties
       - name: Fetch the Android build tools
+        timeout-minutes: 30
         run: tools/fetch_android.sh
 
       - name: Toolchain and dependency cache (save)
@@ -1029,7 +1039,7 @@ jobs:
   # attached. Each platform is its own job; the caches they save on main are
   # the ones a release's run restores.
   apple:
-    if: github.event_name != 'workflow_dispatch'
+    if: github.event_name != 'workflow_dispatch' && github.ref_type != 'tag'
     strategy:
       fail-fast: false
       matrix:
