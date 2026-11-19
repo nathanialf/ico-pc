@@ -793,7 +793,11 @@ int main(int argc, char **argv)
         /* select_disc (main_host.c): the Japanese program's word starts at 0 */
         systemStatus[0] = 0;
     }
-    snprintf(p, sizeof(p), "%s/kanban_boot_test.toml", dir);
+    /* a file of this disc's own: the discs' tests run side by side from one
+       directory, and with one name a test read the file another had just
+       written or removed (CI run 44433959013, asan 2/6: kanban_boot read
+       language 2 while kanban_boot_ntsc ran) */
+    snprintf(p, sizeof(p), "%s/kanban_boot_test_%s.toml", dir, argc > 2 ? argv[2] : "pal");
     writeFile(p, "version = 1\n[game]\nlanguage = \"de\"\n");
     ico_config_reset(p, "");
     ico_sysconf_reset();
