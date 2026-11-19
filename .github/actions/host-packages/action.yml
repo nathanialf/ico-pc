@@ -1,0 +1,35 @@
+# The host packages of one job kind (tools/ci_host_packages.sh), with the
+# downloaded package files cached between runs. The cache's key ends in a
+# hash of the files' names: a run that downloaded an updated package saves a
+# new entry, a run that downloaded nothing saves none. The caller's step
+# carries the time limit (a composite action's steps cannot).
+name: Host packages
+description: apt packages for a CI job, cached, with bounded retries on other mirrors
+inputs:
+  set:
+    description: x64, arm64 or android
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Package files (restore)
+      id: restore
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/.cache/ico-apt
+        # never present by this name: the newest entry of the prefix is taken
+        key: ico-apt-${{ inputs.set }}-${{ runner.arch }}-latest
+        restore-keys: |
+          ico-apt-${{ inputs.set }}-${{ runner.arch }}-
+
+    - name: Install
+      id: install
+      shell: bash
+      run: tools/ci_host_packages.sh "${{ inputs.set }}"
+
+    - name: Package files (save)
+      if: steps.restore.outputs.cache-matched-key != format('ico-apt-{0}-{1}-{2}', inputs.set, runner.arch, steps.install.outputs.names)
+      uses: actions/cache/save@v4
+      with:
+        path: ~/.cache/ico-apt
+        key: ico-apt-${{ inputs.set }}-${{ runner.arch }}-${{ steps.install.outputs.names }}

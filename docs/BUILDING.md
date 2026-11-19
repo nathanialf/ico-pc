@@ -636,7 +636,7 @@ that missed the cache); a warm job is estimated at 4 to 5 minutes in all (the pa
 measured about 3.5 minutes).
 
 `ci.yml`'s `apple` job calls it for `macos` and `ios` (a matrix of two jobs, `fail-fast` off) on
-every push to main, every pull request and every pushed `v*` tag, beside the other jobs, with no
+every push to main and every pull request, beside the other jobs, with no
 label and nothing kept: an Apple compile, link or packaging error fails main's run before a release
 is made. No test runs on the Mac.
 
@@ -683,9 +683,11 @@ tag's tree did not, each one MoltenVK must export for the Apple link. It needs n
 covers neither Apple's own clang, nor code under `__APPLE__` or `ICO_IOS`, nor the link: the
 `apple` jobs are the gate.
 
-`.github/workflows/ci.yml` runs on every push to main, every pull request and
-every pushed `v*` tag (which also packages for arm64, see
-[Packages](#packages)): the `linux` job (`ubuntu-24.04`), the `tests` matrix
+`.github/workflows/ci.yml` runs on every push to main and every pull request.
+A pushed `v*` tag runs the `linux-arm64` job alone, which builds without its
+tests and packages for arm64 (see [Packages](#packages)): main's run on the
+same commit is the gate, and a release is cut only after it is green. On main
+and pull requests: the `linux` job (`ubuntu-24.04`), the `tests` matrix
 of sixteen `ubuntu-24.04` runners (five suites in 2 to 6 shards each), the `extra` job, the
 `linux-arm64` job, the `linux-arm64-filtered` job (two shards) and the `linux-arm64-fixtures` job
 (four shards) on `ubuntu-24.04-arm`, the
@@ -699,9 +701,9 @@ described after the table.
 
 | step | what |
 | --- | --- |
-| host packages, venv | gcc 14 (the runner's default gcc 13 also configures, since `cmake/IcoFlags.cmake` drops warning flags a compiler does not know), the X11, ALSA, PulseAudio and PipeWire (`libpipewire-0.3-dev`, `libspa-0.2-dev`) headers SDL3 builds against, lavapipe (`mesa-vulkan-drivers`, `libvulkan1`) so the render tests run on a CPU Vulkan device, the GL headers (`libgl-dev`, `libglx-dev`, `libegl-dev`) and llvmpipe (`libgl1-mesa-dri`, `libgl1`, `libegl1`) so the OpenGL tests run on a CPU OpenGL device, `tools/requirements.txt` |
+| host packages, venv | `.github/actions/host-packages` runs `tools/ci_host_packages.sh <x64\|arm64\|android>` in every Linux job: the downloaded package files are cached between runs (the cache's key ends in a hash of the file names, so only a run that downloaded an updated package saves a new entry), the index update and the downloads are tried three times under their own time limits (60 s and 120 s), the second and third try on other mirrors, and the unpack runs once after them; the step's limit is 10 minutes. The runner's mirror was slow enough on 2026-11-18 that a plain install ran past that limit in six of eleven runs. The packages: gcc 14 (the runner's default gcc 13 also configures, since `cmake/IcoFlags.cmake` drops warning flags a compiler does not know), the X11, ALSA, PulseAudio and PipeWire (`libpipewire-0.3-dev`, `libspa-0.2-dev`) headers SDL3 builds against, lavapipe (`mesa-vulkan-drivers`, `libvulkan1`) so the render tests run on a CPU Vulkan device, the GL headers (`libgl-dev`, `libglx-dev`, `libegl-dev`) and llvmpipe (`libgl1-mesa-dri`, `libgl1`, `libegl1`) so the OpenGL tests run on a CPU OpenGL device, `tools/requirements.txt` |
 | cache and `tools/fetch_toolchain.sh` | `tools/toolchain/` is cached on the hash of `fetch_toolchain.sh`, `fetch_deps.sh`, `fetch_common.sh` and `fetch_android.sh`, restored and saved as separate steps so a cold fetch is saved even when a later step fails |
-| ccache | `~/.cache/ccache` is restored before the builds and saved after them (also when a build fails), keyed by the job or suite and the same four scripts' hash, with the commit as the last part so every run saves its entries, each capped at 5 GiB (`CCACHE_MAXSIZE` in the workflow's `env`; `tools/fetch_toolchain.sh` sets the same cap for a local ccache); a suite's shard 1 saves its cache, the other shards only restore it, and a suite with no entry of its own yet starts from `linux`'s; the `linux-arm64` job has no ccache |
+| ccache | `~/.cache/ccache` is restored before the builds and saved after them (also when a build fails), keyed by the job or suite and the same four scripts' hash, with the commit as the last part so every run saves its entries, each capped at 5 GiB (`CCACHE_MAXSIZE` in the workflow's `env`; `tools/fetch_toolchain.sh` sets the same cap for a local ccache); a suite's shard 1 saves its cache, the other shards only restore it, and a suite with no entry of its own yet starts from `linux`'s; the three arm64 job kinds link the runner's own ccache (a host package there) at `tools/toolchain/ccache/bin/ccache` and share one cache that the `linux-arm64` job saves. The steps that download (the venv's pip, the toolchain fetch, the Android build tools) have limits of 10, 45 and 30 minutes, and every `curl` of the fetch scripts gives up on a server silent for 20 s or under 20 kB/s for 30 s and tries again, five times (`CURL_LIMITS`, `tools/fetch_common.sh`) |
 | `tools/check_no_rom.sh` | the IP scan over every tracked file |
 | `tools/format.sh --check` | clang-format over the tracked C |
 | `tools/strip_host_gates.py --check` | no `ICO_HOST` conditional in `ico2/` or `sce/` |
@@ -757,7 +759,7 @@ fixtures are left out of the `linux-arm64` job too (`ci_shard.py split --fixture
 run gating in the `linux-arm64-fixtures` job (four shards of `--fixture-tests only` without the
 filtered-pixel names, a build on
 each, never for a dispatched package), so the `linux-arm64` job itself (build, the gating tests,
-and on a release tag the package) stays about 25 minutes before the packaging. The rest gate as on `linux`: `fog_lut` runs natively,
+or on a release tag the package in their place) stays about 25 minutes before the packaging. The rest gate as on `linux`: `fog_lut` runs natively,
 `fog_lut_arm64` skips (it looks for an x86-64 NDK and qemu), and the tests
 that need the disc or saved frames skip (`fmv_fields`, `rd_boot_present`) or
 run only their synthetic part (`shadow_spawn`, `sndn2`, `fmv`).
