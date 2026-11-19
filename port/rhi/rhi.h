@@ -1236,6 +1236,20 @@ bool rhi_present_split(RhiPresentSplit *out);
  * backbuffer still acquired, or a present that queued nothing (nothing to
  * wait for). */
 bool rhi_wait_present_room(void);
+/* Every submission made so far finished on the GPU: the submit thread's
+ * wait before its present (port/render/rd_submit_thread.h "the GPU's end
+ * first"), made without the swapchain's lock, so the recording thread's
+ * acquire runs beside it.  Only with RhiLimits.slotOverlap (Vulkan's
+ * timeline sync: its wait needs no lock against the recording thread's
+ * slot calls); the recording thread submits nothing while the submit
+ * thread works (the call guard), so "every submission" is the submit
+ * thread's job's own.  A watchdog sees the wait (rhi_gpu_progress
+ * waitingFor, beside the recording thread's own fence waits), so the GPU
+ * hang limit applies to it; a loss found here is noted as any wait's.
+ * True: waited (or nothing was left to wait for); false: the backend has
+ * no such wait (the fence sync, OpenGL, Direct3D 11 and 12) or the device
+ * is lost, nothing done. */
+bool rhi_wait_submitted(void);
 /* The window's surface (the Android lifecycle).
  * rhi_release_surface waits for the GPU, destroys the swapchain and the
  * surface and keeps the device and everything made on it: the app goes to

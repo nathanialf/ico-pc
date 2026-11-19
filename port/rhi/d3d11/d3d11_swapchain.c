@@ -275,6 +275,13 @@ bool rhi_wait_present_room(void)
     return true;
 }
 
+/* rhi.h: no wait before the present (this backend takes every call on one
+ * thread: no submit thread, port/render/rd_submit_thread.h) */
+bool rhi_wait_submitted(void)
+{
+    return false;
+}
+
 RhiTexture rhi_acquire_backbuffer(void)
 {
     RhiTexture out = {0};

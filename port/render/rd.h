@@ -3754,6 +3754,13 @@ typedef struct RdFramePost {
 } RdFramePost;
 
 void rd_frame_post_take(RdFramePost *out);
+/* The frames Frame rate Original handed over while the submit thread's
+ * picture before waited for its GPU work to end before its present (the
+ * GPU's end first, port/render/rd_submit_thread.h: those frames were
+ * skipped as busy before it), since the last take; the count starts again.
+ * The window's 10 s "frames not presented" clause (window_lines.c
+ * window_orig_words). */
+unsigned rd_thread_gpu_wait_posts_take(void);
 /* The clause of the 10 s line from p: "; its picture handed over in 0.6 ms
  * (longest 14.2 ms; 3 waited for the picture before, 31.0 ms in all; 12
  * skipped: render thread busy); presents waited inside the step: 0 (0.0

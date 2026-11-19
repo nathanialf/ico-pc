@@ -265,6 +265,13 @@ bool rhi_wait_present_room(void)
     return false;
 }
 
+/* rhi.h: no wait before the present (the frame slots are one at a time on
+ * this backend, port/render/rd_submit_thread.h "the GPU's end first") */
+bool rhi_wait_submitted(void)
+{
+    return false;
+}
+
 static RhiTexture dx_acquire_backbuffer_locked(void)
 {
     RhiTexture out = {0};

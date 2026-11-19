@@ -205,15 +205,21 @@ void vkr_frames_shutdown(void)
 void vkr_progress_reset(void)
 {
     __atomic_store_n(&g_vkr.progWaitingFor, 0, __ATOMIC_RELEASE);
+    __atomic_store_n(&g_vkr.progPresentFor, 0, __ATOMIC_RELEASE);
     __atomic_store_n(&g_vkr.progFinished, 0, __ATOMIC_RELEASE);
     __atomic_store_n(&g_vkr.progSubmitted, 0, __ATOMIC_RELEASE);
 }
 
-/* value seen finished (a wait that returned, a counter read) */
+/* value seen finished (a wait that returned, a counter read): raised only,
+ * by compare and swap (the submit thread's wait before its present,
+ * rhi_wait_submitted, and the recording thread's fence waits may store it
+ * at once) */
 static void vkr_progress_finished(uint64_t value)
 {
-    if (value > __atomic_load_n(&g_vkr.progFinished, __ATOMIC_RELAXED)) {
-        __atomic_store_n(&g_vkr.progFinished, value, __ATOMIC_RELEASE);
+    uint64_t was = __atomic_load_n(&g_vkr.progFinished, __ATOMIC_RELAXED);
+    while (value > was && !__atomic_compare_exchange_n(&g_vkr.progFinished, &was, value, true,
+                                                       __ATOMIC_RELEASE, __ATOMIC_RELAXED)) {
+        /* was holds the value another thread stored: compare again */
     }
 }
 
@@ -284,6 +290,73 @@ void vkr_wait_value(uint64_t value)
 void vkr_wait_slot_value(VkrFrame *f, uint64_t value)
 {
     vkr_wait_value_on(value, f);
+}
+
+/* rhi.h: the submit thread's wait for its job's GPU end before the present
+ * (port/render/rd_submit_thread.h "the GPU's end first").  The timeline
+ * sync with the slots apart only: vkWaitSemaphores and
+ * vkGetSemaphoreCounterValue need no lock against the recording thread's
+ * slot calls (its own fence waits on the same semaphore run beside this
+ * one), where the fence path's ring is reset and rescanned by the thread
+ * that waits (vk_device.c, RhiLimits.slotOverlap).  It writes nothing the
+ * recording thread writes: the progress pair of its own (progPresentFor,
+ * rhi_gpu_progress gives the watchdog the older wait of the two, so the
+ * GPU hang limit counts this one while the recording thread's waits come
+ * and go), progFinished raised by compare and swap, the failed wait's value
+ * once; not stats (the recording thread's alone): the wait's time is the
+ * present's in the job's record (rd_submit_thread.c tail) */
+/* rhi_vk.h vkr_test_force_wait_result: the next wait's result, once (0:
+ * the driver's) */
+static int32_t s_testWaitResult;
+
+void vkr_test_force_wait_result(int32_t result)
+{
+    s_testWaitResult = result;
+}
+
+bool rhi_wait_submitted(void)
+{
+    if (!g_vkr.slotOverlap || g_vkr.syncKind != VKR_SYNC_TIMELINE ||
+        __atomic_load_n(&g_vkr.deviceLost, __ATOMIC_ACQUIRE)) {
+        return false;
+    }
+    const uint64_t value = __atomic_load_n(&g_vkr.timelineValue, __ATOMIC_ACQUIRE);
+    if (value == 0) {
+        return true; /* nothing submitted yet */
+    }
+    __atomic_store_n(&g_vkr.progPresentSinceNs, vkr_now_ns(), __ATOMIC_RELAXED);
+    __atomic_store_n(&g_vkr.progPresentFor, value, __ATOMIC_RELEASE);
+    const uint64_t t0 = vkr_now_ns();
+    uint64_t done = 0;
+    VkResult r = VK_SUCCESS;
+    if (vkr_sync_reached(&done)) {
+        vkr_progress_finished(done);
+    }
+    if (done < value) {
+        r = vkr_sync_wait(value);
+    }
+    if (s_testWaitResult != 0) {
+        r = (VkResult)s_testWaitResult; /* a test's result for this wait, once */
+        s_testWaitResult = 0;
+    }
+    __atomic_store_n(&g_vkr.progPresentFor, 0, __ATOMIC_RELEASE);
+    if (r == VK_SUCCESS) {
+        vkr_progress_finished(value);
+        return true;
+    }
+    /* as vkr_wait_value's line: the submissions between the value and the
+     * one the GPU reached never finished (the loss report names them) */
+    uint64_t reached = 0;
+    const bool known = vkr_sync_reached(&reached);
+    VKR_LOG("the wait before the present waited %.1f s for submission %llu (sync %s); the GPU "
+            "reached %llu%s",
+            (double)(vkr_now_ns() - t0) / 1e9, (unsigned long long)value, vkr_sync_name(),
+            (unsigned long long)reached, known ? "" : " (the counter read failed too)");
+    uint64_t none = 0;
+    (void)__atomic_compare_exchange_n(&g_vkr.lostWaitValue, &none, value, false, __ATOMIC_RELAXED,
+                                      __ATOMIC_RELAXED);
+    VKR_CHECK(r);
+    return false;
 }
 
 void vkr_note_submit(const VkrFrame *f, uint64_t value, uint32_t lists, bool present)

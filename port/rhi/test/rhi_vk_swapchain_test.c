@@ -29,7 +29,11 @@
  * on the acquire's semaphore (issue 179, acquireWaits): a list of
  * off-screen passes before it waits for nothing, and an acquire no list
  * used is drained by an empty batch at ALL_COMMANDS; the same on the fence
- * ring (the rhi_vk_swapchain_vk11 run).  Exit
+ * ring (the rhi_vk_swapchain_vk11 run).  The GPU's end first (besidePresent:
+ * a worker thread as the submit thread waits for its picture's GPU end
+ * before the present, rhi_wait_submitted; this thread's acquire of the
+ * other slot returns beside that wait, and a rebuild from this thread
+ * waits for the worker's whole job first; not on the fence ring).  Exit
  * 77 when SDL has no offscreen Vulkan surface or no device presents to it. */
 #include "rhi.h"
 #include "vk/rhi_vk.h"
@@ -600,6 +604,257 @@ static int pollSize(SDL_Window *win, RhiFormat fmt)
     return failures;
 }
 
+/* The GPU's end first on the window path (port/render/rd_submit_thread.h;
+ * issue 179): a worker thread stands for the submit thread with the frame
+ * slots apart (the slot guard and the call guard set as the window's are:
+ * the worker's calls never wait, the other thread's slot calls of a slot
+ * the worker holds no job of run beside it, every other call waits for
+ * the worker).  The picture of slot A is recorded and submitted with its
+ * GPU work held on the host (vkr_test_hold_next_submit, released from a
+ * third thread 150 ms later), and the worker makes the wait before the
+ * present (rhi_wait_submitted) and then the present.
+ *   beside   while the worker waits, this thread recycles slot B and
+ *            acquires its image: the acquire returns before the worker's
+ *            wait ends (the swapchain's lock is not held by the wait; the
+ *            swapchain's image to spare, vk_swapchain.c
+ *            vkr_acquire_ahead_ok), another image than A's; after the
+ *            worker presented A's image this thread submits and presents
+ *            B's: nothing acquired after it, no validation error.
+ *   rebuild  while the worker waits, rhi_resize_swapchain from this thread
+ *            waits for the worker's whole job (its wait and its present on
+ *            the old swapchain) and then makes one swapchain at the new
+ *            size; the next frame draws on it.
+ * Skipped on the fence ring (the slots one at a time: rhi_wait_submitted
+ * makes no wait there). */
+static int s_bpActive, s_bpDone, s_bpWaited;
+static SDL_ThreadID s_bpWorker;
+static uint32_t s_bpSlot;
+
+/* the worker's id, stored by the worker itself before its first call (0:
+   none) */
+static bool bpOnWorker(void)
+{
+    const SDL_ThreadID w = __atomic_load_n(&s_bpWorker, __ATOMIC_ACQUIRE);
+    return w != 0 && SDL_GetCurrentThreadID() == w;
+}
+
+static bool bpBusy(void *u)
+{
+    (void)u;
+    return __atomic_load_n(&s_bpActive, __ATOMIC_ACQUIRE) != 0 && !bpOnWorker();
+}
+
+static void bpWait(void *u)
+{
+    (void)u;
+    while (__atomic_load_n(&s_bpActive, __ATOMIC_ACQUIRE) != 0) {
+        SDL_Delay(1);
+    }
+}
+
+static bool bpFree(void *u, uint32_t slot)
+{
+    (void)u;
+    return !bpOnWorker() && slot % RHI_FRAMES_IN_FLIGHT != s_bpSlot;
+}
+
+static bool bpPending(void *u, uint32_t slot)
+{
+    (void)u;
+    return __atomic_load_n(&s_bpActive, __ATOMIC_ACQUIRE) != 0 &&
+           slot % RHI_FRAMES_IN_FLIGHT == s_bpSlot;
+}
+
+static bool bpWorkerQ(void *u)
+{
+    (void)u;
+    return bpOnWorker();
+}
+
+static int SDLCALL bpJob(void *u)
+{
+    (void)u;
+    __atomic_store_n(&s_bpWorker, SDL_GetCurrentThreadID(), __ATOMIC_RELEASE);
+    const bool waited = rhi_wait_submitted();
+    __atomic_store_n(&s_bpWaited, waited ? 1 : 0, __ATOMIC_RELEASE);
+    __atomic_store_n(&s_bpDone, 1, __ATOMIC_RELEASE); /* the wait over: the present next */
+    rhi_present();
+    __atomic_store_n(&s_bpWorker, (SDL_ThreadID)0, __ATOMIC_RELEASE);
+    __atomic_store_n(&s_bpActive, 0, __ATOMIC_RELEASE);
+    return 0;
+}
+
+static int SDLCALL bpRelease(void *u)
+{
+    (void)u;
+    SDL_Delay(150);
+    return vkr_test_release_hold() ? 0 : 1;
+}
+
+/* slot A's picture: acquired, cleared, moved to PRESENT and submitted held;
+   the worker started on it (its slot noted first). 0 on success */
+static int bpStart(SDL_Thread **worker, SDL_Thread **release, RhiTexture *bbA)
+{
+    rhi_wait_frame();
+    *bbA = rhi_acquire_backbuffer();
+    if (!bbA->id) {
+        printf("FAIL GPU's end first: no backbuffer for slot A\n");
+        return 1;
+    }
+    uint32_t sw = 0, sh = 0;
+    (void)rhi_swapchain_size(&sw, &sh);
+    RhiCommandList cl = rhi_begin_commands();
+    RhiTextureBarrier b0 = {*bbA, RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET};
+    rhi_cmd_barrier(cl, &b0, 1);
+    RhiRenderPassDesc rp = {0};
+    rp.color[0] = (RhiColorAttachment){
+        *bbA, RHI_LOAD_CLEAR, {0.25f, 0.5f, 0.75f, 1.0f}, RHI_STORE_STORE, false, {0}};
+    rp.colorCount = 1;
+    rp.width = sw;
+    rp.height = sh;
+    rhi_cmd_begin_render_pass(cl, &rp);
+    rhi_cmd_end_render_pass(cl);
+    RhiTextureBarrier b1 = {*bbA, RHI_STATE_RENDER_TARGET, RHI_STATE_PRESENT};
+    rhi_cmd_barrier(cl, &b1, 1);
+    if (!vkr_test_hold_next_submit()) {
+        printf("FAIL GPU's end first: no hold on the timeline sync\n");
+        return 1;
+    }
+    rhi_submit(cl);
+    s_bpSlot = rhi_frame_slot() % RHI_FRAMES_IN_FLIGHT;
+    __atomic_store_n(&s_bpDone, 0, __ATOMIC_RELEASE);
+    __atomic_store_n(&s_bpWaited, 0, __ATOMIC_RELEASE);
+    __atomic_store_n(&s_bpActive, 1, __ATOMIC_RELEASE);
+    *worker = SDL_CreateThread(bpJob, "bp worker", NULL);
+    if (*worker == NULL) {
+        __atomic_store_n(&s_bpActive, 0, __ATOMIC_RELEASE);
+        (void)vkr_test_release_hold();
+        printf("FAIL GPU's end first: no worker thread\n");
+        return 1;
+    }
+    *release = SDL_CreateThread(bpRelease, "bp release", NULL);
+    if (*release == NULL) {
+        (void)vkr_test_release_hold();
+    }
+    return 0;
+}
+
+static int bpFinish(SDL_Thread *worker, SDL_Thread *release)
+{
+    int failures = 0, rc = 0;
+    SDL_WaitThread(worker, NULL);
+    if (release != NULL) {
+        SDL_WaitThread(release, &rc);
+    }
+    if (rc != 0) {
+        printf("FAIL GPU's end first: the hold not released\n");
+        failures++;
+    }
+    vkr_test_hold_destroy();
+    if (!__atomic_load_n(&s_bpWaited, __ATOMIC_ACQUIRE)) {
+        printf("FAIL GPU's end first: the worker's rhi_wait_submitted made no wait\n");
+        failures++;
+    }
+    return failures;
+}
+
+static int besidePresent(SDL_Window *win, RhiFormat fmt)
+{
+    if (!rhi_limits()->slotOverlap) {
+        printf("GPU's end first: the frame slots one at a time (the fence ring): not driven\n");
+        return 0;
+    }
+    int failures = 0;
+    static const RhiCallGuard guard = {NULL, bpBusy, bpWait, NULL};
+    static const RhiSlotGuard slots = {NULL, bpFree, bpPending, bpWorkerQ};
+    RhiStats st;
+    rhi_wait_idle();
+    rhi_get_stats(&st);
+    printf("GPU's end first: the swapchain has %llu images\n", (unsigned long long)st.swapImages);
+    rhi_set_call_guard(&guard);
+    rhi_set_slot_guard(&slots);
+
+    /* beside */
+    SDL_Thread *worker = NULL, *release = NULL;
+    RhiTexture bbA = {0};
+    if (bpStart(&worker, &release, &bbA) != 0) {
+        failures++;
+    } else {
+        rhi_wait_frame(); /* slot B: the worker holds no job of it */
+        const RhiTexture bbB = rhi_acquire_backbuffer();
+        const bool beside = !__atomic_load_n(&s_bpDone, __ATOMIC_ACQUIRE);
+        if (!bbB.id || bbB.id == bbA.id || !beside) {
+            printf("FAIL GPU's end first, beside: slot B's acquire %s (image %u, A's %u) %s the "
+                   "worker's wait ended\n",
+                   bbB.id ? "returned" : "gave no image", bbB.id, bbA.id,
+                   beside ? "before" : "after");
+            failures++;
+        }
+        uint32_t sw = 0, sh = 0;
+        (void)rhi_swapchain_size(&sw, &sh);
+        RhiCommandList cl = rhi_begin_commands();
+        if (bbB.id) {
+            RhiTextureBarrier b0 = {bbB, RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET};
+            rhi_cmd_barrier(cl, &b0, 1);
+            RhiRenderPassDesc rp = {0};
+            rp.color[0] = (RhiColorAttachment){
+                bbB, RHI_LOAD_CLEAR, {0.75f, 0.5f, 0.25f, 1.0f}, RHI_STORE_STORE, false, {0}};
+            rp.colorCount = 1;
+            rp.width = sw;
+            rp.height = sh;
+            rhi_cmd_begin_render_pass(cl, &rp);
+            rhi_cmd_end_render_pass(cl);
+            RhiTextureBarrier b1 = {bbB, RHI_STATE_RENDER_TARGET, RHI_STATE_PRESENT};
+            rhi_cmd_barrier(cl, &b1, 1);
+        }
+        rhi_end_commands(cl); /* a slot call: beside the worker too */
+        failures += bpFinish(worker, release);
+        rhi_submit(cl); /* after the worker's present, as the next job's */
+        rhi_present();
+        rhi_wait_idle();
+        rhi_get_stats(&st);
+        if (st.swapAcquired != 0 || !rhi_present_shown()) {
+            printf("FAIL GPU's end first, beside: %llu images still acquired, the last present "
+                   "%s\n",
+                   (unsigned long long)st.swapAcquired,
+                   rhi_present_shown() ? "shown" : "not shown");
+            failures++;
+        }
+    }
+
+    /* rebuild */
+    worker = release = NULL;
+    if (!failures && bpStart(&worker, &release, &bbA) != 0) {
+        failures++;
+    } else if (!failures) {
+        const uint32_t n0 = vkr_test_swapchain_creations();
+        SDL_SetWindowSize(win, 112, 84);
+        SDL_SyncWindow(win);
+        const uint64_t t0 = SDL_GetTicksNS();
+        const bool made = rhi_resize_swapchain(112, 84, true);
+        const double ms = (double)(SDL_GetTicksNS() - t0) / 1e6;
+        const bool after = __atomic_load_n(&s_bpActive, __ATOMIC_ACQUIRE) == 0;
+        failures += bpFinish(worker, release);
+        uint32_t sw = 0, sh = 0;
+        if (!made || !after || vkr_test_swapchain_creations() != n0 + 1 ||
+            !rhi_swapchain_size(&sw, &sh) || sw != 112 || sh != 84) {
+            printf("FAIL GPU's end first, rebuild: made %d %.1f ms in, %s the worker's job, %u "
+                   "swapchains made (want 1), %ux%u\n",
+                   (int)made, ms, after ? "after" : "before", vkr_test_swapchain_creations() - n0,
+                   sw, sh);
+            failures++;
+        }
+        failures += frame(win, fmt, 40);
+    }
+    rhi_set_slot_guard(NULL);
+    rhi_set_call_guard(NULL);
+    rhi_wait_idle();
+    printf("GPU's end first: %s\n", failures ? "failed"
+                                             : "the acquire beside the wait, the "
+                                               "rebuild after the job");
+    return failures;
+}
+
 static int run(SDL_Window *win)
 {
     RhiDeviceDesc dd = {win, true, true, "rhi_vk_swapchain_test", NULL};
@@ -709,6 +964,9 @@ static int run(SDL_Window *win)
     }
     if (!failures) {
         failures += acquireWaits(win, fmt);
+    }
+    if (!failures) {
+        failures += besidePresent(win, fmt);
     }
     rhi_wait_idle();
     rhi_shutdown();

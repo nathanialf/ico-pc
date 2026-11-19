@@ -51,3 +51,30 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   off and off a phone, each with its words, on with its start words, its two counts in the block
   line word for word and taken per block; in every device class on the Adreno 740 classes (on
   Android), not applicable elsewhere.
+
+## port/rhi/test
+
+- `rhi_vk_test.c`, its `waitSubmittedCell` (`rhi_vk`; the `_vk11` and `_vk10` runs take its
+  fence-ring branch): `rhi_wait_submitted`, the submit thread's wait before its present
+  ([RHI.md](RHI.md#the-interface) "Frame slots and the submit thread",
+  `port/render/rd_submit_thread.h` "the GPU's end first"). A finished list: true at once, no wait
+  left in `rhi_gpu_progress`. A list held on the host (`vkr_test_hold_next_submit`) waited for on
+  another thread: while it blocks, `rhi_gpu_progress` names that submission, unfinished, with a
+  wait time that grows, also after this thread's own fence wait for a finished slot came and went
+  beside it (`rhi_wait_frame`: the progress pair of its own, so the GPU hang limit sees one
+  submission's wait, `port/platform/gpu_hang.h`); it returns true only after the release 150 ms
+  in, the submission then finished and no wait shown. A wait whose result is forced to a device
+  loss (`vkr_test_force_wait_result`) returns false with the device lost, and the next makes
+  none. On the fence ring (the slots one at a time) it returns false at once.
+- `rhi_vk_swapchain_test.c`, its `besidePresent` (`rhi_vk_swapchain`; skipped on the fence ring
+  of `_vk11` and `_vk10`): a worker thread stands for the submit thread with the slot guard and
+  the call guard set as the window's are. Slot A's picture is submitted with its GPU work held
+  (released by a third thread 150 ms later) and the worker makes `rhi_wait_submitted` and then
+  the present. Beside: this thread recycles slot B and acquires its image before the worker's
+  wait ends (another image than A's: the swapchain's image to spare; the line prints the image
+  count), and after the worker presented A's image submits and presents B's: no image left
+  acquired, the last present shown. Rebuild: `rhi_resize_swapchain` from this thread while the
+  worker waits returns only after the worker's whole job (its wait and its present) and makes
+  one swapchain at the new size; the next frame draws on it. No validation error.
+- `rhi_device_table_equiv_test.c` (`rhi_device_table_equiv`): `PRESENT_FREE` on every Vulkan
+  identity on Android and on no other (no rule before the table: the row's own definition).

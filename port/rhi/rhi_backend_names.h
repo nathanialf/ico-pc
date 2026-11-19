@@ -113,6 +113,7 @@
 #define rhi_present_shown        RHI__NAME(present_shown)
 #define rhi_present_split        RHI__NAME(present_split)
 #define rhi_wait_present_room    RHI__NAME(wait_present_room)
+#define rhi_wait_submitted       RHI__NAME(wait_submitted)
 #define rhi_present_mode_name     RHI__NAME(present_mode_name)
 #define rhi_present_timing       RHI__NAME(present_timing)
 #define rhi_present_timing_use   RHI__NAME(present_timing_use)
