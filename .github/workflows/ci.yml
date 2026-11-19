@@ -78,7 +78,7 @@ jobs:
       - name: Host packages
         # cached package files and three bounded tries, the later ones on
         # other mirrors (tools/ci_host_packages.sh says why)
-        timeout-minutes: 10
+        timeout-minutes: 12
         uses: ./.github/actions/host-packages
         with:
           set: x64
@@ -275,7 +275,7 @@ jobs:
       - name: Host packages
         # cached package files and three bounded tries, the later ones on
         # other mirrors (tools/ci_host_packages.sh says why)
-        timeout-minutes: 10
+        timeout-minutes: 12
         uses: ./.github/actions/host-packages
         with:
           set: x64
@@ -433,7 +433,7 @@ jobs:
       - name: Host packages
         # cached package files and three bounded tries, the later ones on
         # other mirrors (tools/ci_host_packages.sh says why)
-        timeout-minutes: 10
+        timeout-minutes: 12
         uses: ./.github/actions/host-packages
         with:
           set: x64
@@ -500,7 +500,7 @@ jobs:
       - name: Host packages
         # cached package files and three bounded tries, the later ones on
         # other mirrors (tools/ci_host_packages.sh says why)
-        timeout-minutes: 10
+        timeout-minutes: 12
         uses: ./.github/actions/host-packages
         with:
           set: arm64
@@ -703,7 +703,7 @@ jobs:
       - name: Host packages
         # cached package files and three bounded tries, the later ones on
         # other mirrors (tools/ci_host_packages.sh says why)
-        timeout-minutes: 10
+        timeout-minutes: 12
         uses: ./.github/actions/host-packages
         with:
           set: arm64
@@ -784,7 +784,7 @@ jobs:
       - name: Host packages
         # cached package files and three bounded tries, the later ones on
         # other mirrors (tools/ci_host_packages.sh says why)
-        timeout-minutes: 10
+        timeout-minutes: 12
         uses: ./.github/actions/host-packages
         with:
           set: arm64
@@ -865,7 +865,7 @@ jobs:
       - name: Host packages
         # cached package files and three bounded tries, the later ones on
         # other mirrors (tools/ci_host_packages.sh says why)
-        timeout-minutes: 10
+        timeout-minutes: 12
         uses: ./.github/actions/host-packages
         with:
           set: android
