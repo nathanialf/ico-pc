@@ -87,6 +87,7 @@ jobs:
           git checkout -- $files
 
       - name: Host tools
+        timeout-minutes: 15
         run: |
           brew install cmake ninja
           python3 -m venv .venv
