@@ -10,6 +10,9 @@
 #   - the index update and the download are tried three times, each try under
 #     its own time limit, the second and third on other mirrors; a download
 #     that was cut off continues where it stopped;
+#   - a runner whose list names Ubuntu's EC2 mirror starts on the main
+#     archive instead, and each cached file is checked against the index's
+#     SHA-256 before it is installed;
 #   - the unpack runs once, after the downloads, without a time limit of its
 #     own (a package manager killed half way leaves the runner broken).
 # The step's own limit in the workflow stays the outer bound: three tries of
@@ -74,6 +77,45 @@ use_mirror() {
     echo "host packages: now on $1"
 }
 
+# A runner whose list names Ubuntu's EC2 mirror (GitHub's AWS-hosted runners
+# since 2026-10-28, actions/runner-images issue 14823): that mirror trickles
+# at 60-110 kB/s and apt does not leave a slow mirror by itself, so the main
+# archive is the first try there and the runner's own list the last.
+ec2=0
+if [ -f "$mirrors" ] && grep -q 'ec2\.\(archive\|ports\)\.ubuntu\.com' "$mirrors"; then
+    ec2=1
+    sudo cp "$mirrors" "$mirrors.runner"
+    echo "host packages: the runner's list names the EC2 mirror: $alt3 first, the runner's own list last"
+fi
+
+# The cached package files against the index's SHA-256, before any of them is
+# installed: a file whose sum is not the index's goes (the tries below fetch
+# it again). A file the index does not know (an older version) is left for
+# the autoclean at the end; apt does not install it.
+verify_debs() {
+    bad=0
+    n=0
+    for f in "$debs"/*.deb; do
+        [ -f "$f" ] || continue
+        pkg=$(dpkg-deb -f "$f" Package 2> /dev/null) || pkg=
+        ver=$(dpkg-deb -f "$f" Version 2> /dev/null) || ver=
+        want=
+        if [ -n "$pkg" ] && [ -n "$ver" ]; then
+            want=$(apt-cache show "$pkg=$ver" 2> /dev/null | awk '/^SHA256:/ { print $2; exit }')
+        fi
+        if [ -n "$pkg" ] && [ -z "$want" ]; then
+            continue
+        fi
+        n=$((n + 1))
+        if [ -z "$pkg" ] || [ "$(sha256sum "$f" | cut -d' ' -f1)" != "$want" ]; then
+            bad=$((bad + 1))
+            echo "host packages: $(basename "$f") is not the file the index names (SHA-256): removed"
+            sudo rm -f "$f"
+        fi
+    done
+    echo "host packages: $n cached package files checked against the index's SHA-256, $bad removed"
+}
+
 # First without the network at all: the package index the last good run kept
 # beside the package files. Two runners of run 44480916957 could not use
 # Ubuntu's servers (one never read the Ubuntu source entry, one got no answer
@@ -84,6 +126,7 @@ ok=0
 if [ -d "$lists" ] && ls "$debs"/*.deb > /dev/null 2>&1; then
     sudo mkdir -p /var/lib/apt/lists.runner
     sudo sh -c 'mv /var/lib/apt/lists/* /var/lib/apt/lists.runner/ 2>/dev/null; cp -a "$1"/. /var/lib/apt/lists/' sh "$lists"
+    verify_debs
     # shellcheck disable=SC2086
     if sudo apt-get $opts install -y --no-install-recommends --no-download $pkgs; then
         ok=2
@@ -108,8 +151,14 @@ own_source() {
 
 for try in 1 2 3; do
     [ "$ok" = 0 ] || break
+    [ "$try" = 1 ] && [ "$ec2" = 1 ] && use_mirror "$alt3"
     [ "$try" = 2 ] && use_mirror "$alt2"
-    [ "$try" = 3 ] && use_mirror "$alt3"
+    if [ "$try" = 3 ] && [ "$ec2" = 1 ]; then
+        sudo cp "$mirrors.runner" "$mirrors"
+        echo "host packages: now on the runner's own list again"
+    elif [ "$try" = 3 ]; then
+        use_mirror "$alt3"
+    fi
     if [ "$try" != 1 ] && ! apt-cache policy build-essential 2> /dev/null | grep -q 'Candidate: [0-9]'; then
         [ "$try" = 2 ] && own_source "$alt2"
         [ "$try" = 3 ] && own_source "$alt3"
@@ -127,12 +176,13 @@ for try in 1 2 3; do
         "(index ${update_s} s, downloads ${download_s} s)"
 done
 if [ "$ok" = 0 ]; then
-    echo "::error::host packages: three tries failed (the runner's mirror, then $alt2, then $alt3)"
+    echo "::error::host packages: three tries failed (the runner's mirror or, where it is the EC2 one, $alt3 first; then $alt2; then $alt3 or the runner's own)"
     exit 1
 fi
 
 if [ "$ok" = 1 ]; then
     # shellcheck disable=SC2086
+    verify_debs
     sudo apt-get $opts install -y --no-install-recommends $pkgs || exit 1
     # the index this install used, for the next run's try without the network
     sudo rm -rf "$lists"
