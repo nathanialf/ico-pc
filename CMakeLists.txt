@@ -735,6 +735,49 @@ if(TARGET ico_pc AND NOT ICO_HEADLESS)
         endif()
         enable_language(CXX)
         add_subdirectory("${ICO_ADRENOTOOLS_SRC}" adrenotools EXCLUDE_FROM_ALL)
+        # liblinkernsbypass finds the linker's internal dlopen by walking the
+        # machine code of libdl's dlopen, and did so in a constructor: at the
+        # load of libmain.so, on every device, whether or not a driver of the
+        # player's is ever opened. On a Pixel 10 Pro Fold's Android 17 preview
+        # (DP11.261030.003) the walk lands on the wrong instruction and the
+        # game ended with SIGILL before its first line (resolve_linker_symbols,
+        # android_linker_ns.cpp:166, called from the linker's
+        # call_constructors). The walk now runs the first time the library is
+        # asked whether it is ready (linkernsbypass_load_status, which
+        # adrenotools_open_libvulkan asks first): only where a driver of the
+        # player's is opened. The pinned source is not changed: the build
+        # compiles a copy with the two places rewritten, and stops if the
+        # pinned text is no longer what this was written against.
+        set(_ico_nsb_src "${ICO_ADRENOTOOLS_SRC}/lib/linkernsbypass/android_linker_ns.cpp")
+        set(_ico_nsb_out "${CMAKE_CURRENT_BINARY_DIR}/ico_linkernsbypass/android_linker_ns.cpp")
+        file(READ "${_ico_nsb_src}" _ico_nsb)
+        set(_ico_nsb_ctor "__attribute__((constructor)) static void resolve_linker_symbols() {")
+        set(_ico_nsb_status "bool linkernsbypass_load_status() {\n    return lib_loaded;\n}")
+        string(FIND "${_ico_nsb}" "${_ico_nsb_ctor}" _ico_nsb_at_ctor)
+        string(FIND "${_ico_nsb}" "${_ico_nsb_status}" _ico_nsb_at_status)
+        if(_ico_nsb_at_ctor LESS 0 OR _ico_nsb_at_status LESS 0)
+            message(FATAL_ERROR "liblinkernsbypass's android_linker_ns.cpp is not the text the "
+                                "load-time constructor's removal was written against "
+                                "(${_ico_nsb_src}): see CMakeLists.txt")
+        endif()
+        string(REPLACE "${_ico_nsb_ctor}" "static void resolve_linker_symbols() {"
+                       _ico_nsb "${_ico_nsb}")
+        string(REPLACE "${_ico_nsb_status}"
+                       "static void resolve_linker_symbols();\nbool linkernsbypass_load_status() {\n    static bool ico_tried;\n    if (!ico_tried) {\n        ico_tried = true; /* once, on the thread that opens the driver */\n        resolve_linker_symbols();\n    }\n    return lib_loaded;\n}"
+                       _ico_nsb "${_ico_nsb}")
+        set(_ico_nsb_old "")
+        if(EXISTS "${_ico_nsb_out}")
+            file(READ "${_ico_nsb_out}" _ico_nsb_old)
+        endif()
+        if(NOT _ico_nsb_old STREQUAL _ico_nsb)
+            file(WRITE "${_ico_nsb_out}" "${_ico_nsb}")
+        endif()
+        get_target_property(_ico_nsb_sources linkernsbypass SOURCES)
+        list(REMOVE_ITEM _ico_nsb_sources android_linker_ns.cpp)
+        set_target_properties(linkernsbypass PROPERTIES SOURCES "${_ico_nsb_sources}")
+        target_sources(linkernsbypass PRIVATE "${_ico_nsb_out}")
+        target_include_directories(linkernsbypass PRIVATE
+                                   "${ICO_ADRENOTOOLS_SRC}/lib/linkernsbypass")
         target_sources(ico_pc PRIVATE port/platform/gpu_driver.c
                                       port/platform/android/gpu_driver_android.c)
         target_link_libraries(ico_pc PRIVATE adrenotools ico_json ico_miniz)
