@@ -1861,8 +1861,10 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   before's faked GPU end, a check shown first to find a broken order in a self-check; and the
   backend's `rhi_gpu_progress` showing the job before finished by each submit); a present that
   returns at once (17 ms GPU, 10 ms walk, 8 ms submit at 33.3 ms, the owner's Pixel) makes only
-  short calls: no verdict after 70 ticks, no wait of any kind, as many presented as without the
-  rule less a fifth; one that waits every second time gets it on (its short calls not counted),
+  short calls: no verdict after 70 ticks, no rule wait, at most 3 sample waits (a call a loaded
+  machine stretched), as many presented as without the rule less a fifth; after 280 light jobs
+  (short calls) the first window of 256 ends undecided and starts again, and the heavy pictures
+  of the job before's end after it reach on; one that waits every second time gets it on (its short calls not counted),
   every tick less a fifth; one back 0.3 ms before the work's end gets it on, every tick; one back
   at the end of the job before's work, 45 ms at 40 ms (on lavapipe's counter and on the faked
   GPU), gets it on with no unknown and no early sample and every timed present but the first and

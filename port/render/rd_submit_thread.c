@@ -212,40 +212,54 @@ static void gpuCount(uint8_t cls, int32_t result)
     }
 }
 
+/* the window's counts cleared (gpuVerdictTake), the verdict left undecided:
+   the picture before's value, the round's mode and its late line kept */
+static void gpuWindowClear(void)
+{
+    __atomic_store_n(&s_st.counted, 0u, __ATOMIC_RELEASE);
+    __atomic_store_n(&s_st.atEnd, 0u, __ATOMIC_RELEASE);
+    __atomic_store_n(&s_st.timed, 0u, __ATOMIC_RELEASE);
+    __atomic_store_n(&s_st.shortCalls, 0u, __ATOMIC_RELEASE);
+    __atomic_store_n(&s_st.unknown, 0u, __ATOMIC_RELEASE);
+    s_st.notOriginal = s_st.noPresent = 0;
+    s_st.lastResult = 0;
+}
+
 /* at RD_GPU_FIRST_SAMPLES counted the verdict: on with RD_GPU_FIRST_NEED
-   or more at the end of GPU work, else off; its line.  Without it after
-   RD_GPU_FIRST_LATE timed presents, one line a round (a run and present
-   mode) saying what the calls show; where half of them or more were short
-   that is the verdict, off: the round would otherwise go on and the rare
+   or more at the end of GPU work, else off; its line.  The counts are a
+   window of RD_GPU_FIRST_LATE timed presents: one that ends without a
+   verdict (mostly short calls, or long ones too few) starts again from
+   zero and the verdict stays undecided (the rule off for now), so the rare
    long call of a present that returns early (the owner's Pixel: the
-   longest 1 to 4 ms of 300 a block) would add up to 16 counted, its
-   picture before ended long before, and read on */
+   longest 1 to 4 ms of 300 a block) never adds up to 16, and a run that
+   begins light still decides in its later GPU-bound scenes (the Mali-G52's
+   stage 42, 155 s in); the first window's end has one line a round (a run
+   and present mode) */
 static void gpuVerdictTake(void)
 {
     char tally[320];
     const char *mode = rhi_present_mode_name();
     if (s_st.counted < RD_GPU_FIRST_SAMPLES) {
-        if (s_st.timed >= RD_GPU_FIRST_LATE && !s_st.lateLogged) {
-            s_st.lateLogged = true;
-            gpuTallyText(tally, sizeof(tally));
-            if (s_st.shortCalls * 2u >= s_st.timed) {
-                snprintf(s_st.verdictMode, sizeof(s_st.verdictMode), "%s",
-                         mode != NULL ? mode : "?");
-                __atomic_store_n(&s_st.verdict, RD_GPU_FIRST_OFF, __ATOMIC_RELEASE);
-                const unsigned n = ++s_st.verdicts;
-                rd__log("submit thread: no verdict on the GPU's end first after %u Frame rate "
-                        "Original presents (present mode %s; %s): the present calls are short (%u "
-                        "of %u under %.1f ms): the driver's present does not wait for the GPU, no "
-                        "rule needed: the presents stay as they are, no wait before them "
-                        "(verdict %u of the run, off)",
-                        s_st.timed, s_st.verdictMode, tally, s_st.shortCalls, s_st.timed,
-                        RD_GPU_FIRST_CALL_MS, n);
-            } else {
-                rd__log("submit thread: no verdict on the GPU's end first after %u Frame rate "
-                        "Original presents (present mode %s; %s): too few counted for one; the "
-                        "presents stay as they are, the long ones still sampled",
-                        s_st.timed, s_st.roundMode, tally);
+        if (s_st.timed >= RD_GPU_FIRST_LATE) {
+            if (!s_st.lateLogged) {
+                s_st.lateLogged = true;
+                gpuTallyText(tally, sizeof(tally));
+                if (s_st.shortCalls * 2u >= s_st.timed) {
+                    rd__log("submit thread: no verdict on the GPU's end first after %u Frame rate "
+                            "Original presents (present mode %s; %s): the present calls are short "
+                            "(%u of %u under %.1f ms): nothing decided, counted again from here "
+                            "(every %u timed presents; the presents stay as they are meanwhile)",
+                            s_st.timed, s_st.roundMode, tally, s_st.shortCalls, s_st.timed,
+                            RD_GPU_FIRST_CALL_MS, (unsigned)RD_GPU_FIRST_LATE);
+                } else {
+                    rd__log("submit thread: no verdict on the GPU's end first after %u Frame rate "
+                            "Original presents (present mode %s; %s): too few counted for one: "
+                            "nothing decided, counted again from here (every %u timed presents; "
+                            "the presents stay as they are meanwhile)",
+                            s_st.timed, s_st.roundMode, tally, (unsigned)RD_GPU_FIRST_LATE);
+                }
             }
+            gpuWindowClear();
         }
         return;
     }
@@ -561,8 +575,8 @@ static void gpuFirstLine(bool want, const char *notApart)
                 "on where %u or more of them returned at the end of GPU work (after each such "
                 "call one wait for the picture before's GPU work, found ended within %.1f ms: a "
                 "driver whose present waits for the GPU); shorter calls are only timed, and "
-                "after %u timed, half of them or more short, the verdict is off (a driver whose "
-                "present returns early keeps the presents as they are); %s, issue 179",
+                "every %u timed presents without a verdict the counts start again (a driver "
+                "whose present returns early keeps the presents as they are); %s, issue 179",
                 (unsigned)RD_GPU_FIRST_SAMPLES, RD_GPU_FIRST_CALL_MS, (unsigned)RD_GPU_FIRST_NEED,
                 RD_GPU_FIRST_NEAR_MS, (unsigned)RD_GPU_FIRST_LATE, gpuFirstWhere());
     } else if (want) {

@@ -87,9 +87,9 @@
  *                   made without the wait and the driver's call of each
  *                   is timed, nothing else done before or around it.  A
  *                   call under 2 ms is not counted and costs nothing (a
- *                   driver whose present returns early does not decide,
- *                   the rule off, until RD_GPU_FIRST_LATE timed presents,
- *                   half of them or more short, make the verdict off).  After a call of 2 ms or more the
+ *                   driver whose present returns early does not decide:
+ *                   the rule stays off; the counts start again every
+ *                   RD_GPU_FIRST_LATE timed presents without a verdict).  After a call of 2 ms or more the
  *                   submit thread makes one unbounded wait for the
  *                   previous present job's submission (rhi_last_submitted
  *                   after its submits, rhi_wait_value_ns), never for the
@@ -219,8 +219,9 @@ void rd__submit_test_hook(void (*fn)(void));
 #define RD_GPU_FIRST_SAMPLES 16u
 #define RD_GPU_FIRST_NEED 14u
 /* the samples' lines one by one (counted and unknown ones), the first this
- * many of the run; the line "no verdict after" this many timed Original
- * presents, once a run and present mode */
+ * many of the run; the counts' window: this many timed Original presents
+ * without a verdict start them again (its line for the first window, once
+ * a run and present mode) */
 #define RD_GPU_FIRST_LINES 8u
 #define RD_GPU_FIRST_LATE 256u
 

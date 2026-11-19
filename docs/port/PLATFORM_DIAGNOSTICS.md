@@ -1407,9 +1407,13 @@ lines added beside them for issues 179 and 123:
   samples of the Mali-G52's log in `build-host/tmp/v01113/evidence/179` were never counted (no
   verdict line); its stall line 562 shows the shape the class is for: a 140.3 ms call that ended
   at the picture before's signal, its own work 91 ms later. The owner's Pixel (0.6 ms calls) never
-  counts a sample but the rare long call; after 256 timed presents, more than half of them
-  short, the verdict is off, and until then its presents stay as they are, at no cost. The lines:
-  at each start `rd: submit thread: with Frame rate Original each picture's GPU work may be waited for before its present, outside the swapchain's lock (the next picture walked, acquired and recorded meanwhile, handed over instead of skipped as busy, submitted after that present: the GPU holds one picture at a time): decided from the first 16 Original presents whose driver's call lasts 2.0 ms or more, on where 14 or more of them returned at the end of GPU work (after each such call one wait for the picture before's GPU work, found ended within 1.0 ms: a driver whose present waits for the GPU); shorter calls are only timed, and after 256 timed, half of them or more short, the verdict is off (a driver whose present returns early keeps the presents as they are); android, issue 179`; the run's first 8 counted or unknown samples one by one, `rd: submit
+  counts a sample but the rare long call; the counts are a window of 256 timed presents, and one
+  that ends without a verdict (whether its calls were mostly short or its long ones too few)
+  starts again from zero with the verdict undecided (the rule off for now), so those rare calls
+  never add up to 16 and its presents stay as they are, at no cost; a run that begins light still
+  decides in its later GPU-bound scenes (the reporter's stage 42 begins 155 s in). A verdict of
+  off comes only from 16 counted with fewer than 14 waited. The lines:
+  at each start `rd: submit thread: with Frame rate Original each picture's GPU work may be waited for before its present, outside the swapchain's lock (the next picture walked, acquired and recorded meanwhile, handed over instead of skipped as busy, submitted after that present: the GPU holds one picture at a time): decided from the first 16 Original presents whose driver's call lasts 2.0 ms or more, on where 14 or more of them returned at the end of GPU work (after each such call one wait for the picture before's GPU work, found ended within 1.0 ms: a driver whose present waits for the GPU); shorter calls are only timed, and every 256 timed presents without a verdict the counts start again (a driver whose present returns early keeps the presents as they are); android, issue 179`; the run's first 8 counted or unknown samples one by one, `rd: submit
   thread: Frame rate Original sample 3 (of the first 8 logged): the present 140.3 ms, then the
   wait for the picture before's GPU work 0.0 ms (result 0); returned at the end of GPU work (3
   counted, 3 at the end of GPU work); the counter read after the wait: the picture before's 1, its
@@ -1423,16 +1427,14 @@ lines added beside them for issues 179 and 123:
   waits for the GPU: each picture's GPU work is waited for before its present from here on,
   outside the swapchain's lock (verdict 1 of the run)` or `... : the driver's present does not
   wait for the GPU: the presents stay as they are, no wait before them (...)`; once a run and
-  present mode, where 256 Original presents were timed without it, `rd: submit thread: no verdict
-  on the GPU's end first after 256 Frame rate Original presents (present mode mailbox; 256
-  presents timed: 251 under 2.0 ms (not counted), 4 counted (...), 0 unknown (last result 0); ...):
-  the present calls are short (251 of 256 under 2.0 ms): the driver's present does not wait for
-  the GPU, no rule needed: the presents stay as they are, no wait before them (verdict 1 of the
-  run, off)`, which is the verdict, off (else the rare long call of a present that returns early,
-  the owner's Pixel's longest 1 to 4 ms, would add up to 16 counted with the picture before long
-  ended and read on; where the short calls are fewer than
-  half, `...: too few counted for one; the presents stay as they are, the long ones still
-  sampled`); a present mode change while undecided `rd: submit thread: the present mode is fifo now
+  present mode, where the first window of 256 timed presents ended without one, `rd: submit
+  thread: no verdict on the GPU's end first after 256 Frame rate Original presents (present mode
+  mailbox; 256 presents timed: 251 under 2.0 ms (not counted), 4 counted (...), 0 unknown (last
+  result 0); ...): the present calls are short (251 of 256 under 2.0 ms): nothing decided, counted
+  again from here (every 256 timed presents; the presents stay as they are meanwhile)` (where the
+  short calls are fewer than half, `...: too few counted for one: nothing decided, counted again
+  from here (...)`; later windows start again without a line; the 10 s counts are the block's own,
+  each job in the block it finished in); a present mode change while undecided `rd: submit thread: the present mode is fifo now
   (the GPU's end first's samples were taken under mailbox): its samples start again`; in the 10 s
   line's submit thread part, in the blocks whose jobs ran while the verdict was not taken (the
   block it arrives in the last), ` (the GPU's end first's samples: 21 Original presents timed, 4
