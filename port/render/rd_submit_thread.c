@@ -50,6 +50,8 @@ static struct {
    the wait, ever (the tests' read, rd__submit_gpu_first_waits) */
 static int s_waitAlone;
 static uint64_t s_gpuFirstWaits;
+/* of those, the waits the backend made and that returned true */
+static uint64_t s_gpuFirstWaited;
 
 /* the jobs queued or running of each frame slot (rd__sq_slot_jobs's
    count), for the slot guard's question without the lock (asked at every
@@ -102,6 +104,11 @@ void rd__submit_test_gpu_first(int force)
 uint64_t rd__submit_gpu_first_waits(void)
 {
     return __atomic_load_n(&s_gpuFirstWaits, __ATOMIC_ACQUIRE);
+}
+
+uint64_t rd__submit_gpu_first_waited(void)
+{
+    return __atomic_load_n(&s_gpuFirstWaited, __ATOMIC_ACQUIRE);
 }
 
 /* the lists' ends and submits in rd__sq_tail_steps's order (the scene's,
@@ -242,7 +249,9 @@ static void tail(RdSubmitJob *j)
         if (fake != NULL && fake->waitEnd != NULL) {
             fake->waitEnd(); /* the test's GPU end */
         }
-        (void)rhi_wait_submitted();
+        if (rhi_wait_submitted()) {
+            __atomic_add_fetch(&s_gpuFirstWaited, 1u, __ATOMIC_RELEASE);
+        }
         gpuWaitPhase(false);
         __atomic_add_fetch(&s_gpuFirstWaits, 1u, __ATOMIC_RELEASE);
     }

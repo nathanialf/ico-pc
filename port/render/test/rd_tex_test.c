@@ -2065,8 +2065,33 @@ static struct {
     double end;    /* the last picture's faked GPU end (ico_thread_now_ms) */
     double walk;   /* the faked walk */
     int driver;    /* PF_* */
-    unsigned jobs, overlaps;
+    unsigned jobs;
+    /* the bookkeeping the checks read: each job's submit (its lists'
+       submits done, as the hook is called) and its faked GPU end, in
+       order (the first PF_LOG); the waits inside the GPU's end first
+       (their count and time, ms); the jobs whose submits came while the
+       backend had not seen the job before's submission finished
+       (rhi_gpu_progress, read at the hook) */
+    double sub[512], gpuEnd[512];
+    unsigned logged;
+    unsigned waitN;
+    double waitMs;
+    uint64_t prevValue;
+    unsigned progBad;
 } s_pf;
+
+#define PF_LOG 512u
+
+/* the pictures submitted while the GPU still held the one before: job k+1's
+   submit before job k's GPU end (the times as recorded, from first) */
+static unsigned pfOverlaps(const double *sub, const double *end, unsigned first, unsigned n)
+{
+    unsigned bad = 0;
+    for (unsigned k = first + 1u; k < n; k++) {
+        bad += sub[k] < end[k - 1u] ? 1u : 0u;
+    }
+    return bad;
+}
 
 static void pfWaitUntil(double at)
 {
@@ -2090,18 +2115,35 @@ static void pfWaitUntil(double at)
 
 static void pfSubmitted(void)
 {
+    const double at = ico_thread_now_ms(); /* the job's own submits are done */
+    {
+        /* the backend's own view: the job before's submission seen finished
+           (its wait made) by the time this job submitted */
+        RhiGpuProgress gp;
+        if (rhi_gpu_progress(&gp)) {
+            s_pf.progBad += s_pf.prevValue != 0 && gp.finished < s_pf.prevValue ? 1u : 0u;
+            s_pf.prevValue = gp.submitted;
+        }
+    }
     if (s_pf.submit > 0.0) {
-        pfWaitUntil(ico_thread_now_ms() + s_pf.submit);
+        pfWaitUntil(at + s_pf.submit);
     }
     const double t = ico_thread_now_ms();
-    s_pf.overlaps += t < s_pf.end ? 1u : 0u; /* submitted while the GPU held the one before */
     s_pf.end = (t > s_pf.end ? t : s_pf.end) + s_pf.ms;
+    if (s_pf.logged < PF_LOG) {
+        s_pf.sub[s_pf.logged] = at;
+        s_pf.gpuEnd[s_pf.logged] = s_pf.end;
+        s_pf.logged++;
+    }
     s_pf.jobs++;
 }
 
 static void pfWaitEnd(void)
 {
+    const double t = ico_thread_now_ms();
     pfWaitUntil(s_pf.end);
+    s_pf.waitN++;
+    s_pf.waitMs += ico_thread_now_ms() - t;
 }
 
 static void pfPresent(void)
@@ -2143,9 +2185,9 @@ typedef struct PfCase {
 } PfCase;
 
 typedef struct PfRun {
-    unsigned posts, busySkips, beside, waits, overlaps, gpuJobs, warm;
+    unsigned posts, busySkips, beside, waits, waited, overlaps, gpuJobs, warm, progBad, waitN;
     int verdict;
-    double fps;
+    double fps, waitMs;
 } PfRun;
 
 static void pfTick(double at)
@@ -2190,8 +2232,11 @@ static bool pfRun(const PfCase *c, bool wanted, unsigned ticks, PfRun *out, uint
     out->verdict = rd_thread_submit_gpu_first_verdict();
     rd_frame_post_take(&fp);
     (void)rd_thread_gpu_wait_posts_take();
-    const uint64_t waits0 = rd__submit_gpu_first_waits();
-    const unsigned jobs0 = s_pf.jobs, overlaps0 = s_pf.overlaps;
+    const uint64_t waits0 = rd__submit_gpu_first_waits(), waited0 = rd__submit_gpu_first_waited();
+    const unsigned jobs0 = s_pf.jobs, logged0 = s_pf.logged, progBad0 = s_pf.progBad;
+    const unsigned waitN0 = s_pf.waitN;
+    s_pf.prevValue = 0; /* the measured jobs only (the warm-up's last made no wait) */
+    const double waitMs0 = s_pf.waitMs;
     t0 = ico_thread_now_ms() + 5.0;
     for (unsigned k = 0; k < ticks; k++) {
         pfTick(t0 + c->tickMs * k);
@@ -2205,7 +2250,11 @@ static bool pfRun(const PfCase *c, bool wanted, unsigned ticks, PfRun *out, uint
     out->busySkips = fp.busySkips;
     out->beside = rd_thread_gpu_wait_posts_take();
     out->waits = (unsigned)(rd__submit_gpu_first_waits() - waits0);
-    out->overlaps = s_pf.overlaps - overlaps0;
+    out->waited = (unsigned)(rd__submit_gpu_first_waited() - waited0);
+    out->overlaps = pfOverlaps(s_pf.sub, s_pf.gpuEnd, logged0, s_pf.logged);
+    out->progBad = s_pf.progBad - progBad0;
+    out->waitN = s_pf.waitN - waitN0;
+    out->waitMs = s_pf.waitMs - waitMs0;
     out->gpuJobs = s_pf.jobs - jobs0;
     out->fps = (double)fp.posts * 1000.0 / (c->tickMs * ticks);
     const bool read = readScene(scene, display, dw, dh);
@@ -2241,6 +2290,17 @@ static void threadPresentFree(void)
         return;
     }
     const unsigned ticks = 50;
+    {
+        /* the overlap check's own check: a next picture submitted 10 ms
+           into the one before's 45 ms of GPU time is found, the same jobs
+           in series are not */
+        static const double subBad[3] = {0.0, 10.0, 60.0}, endBad[3] = {45.0, 90.0, 105.0};
+        static const double subOk[3] = {0.0, 45.0, 90.0}, endOk[3] = {45.0, 90.0, 135.0};
+        CHECK(pfOverlaps(subBad, endBad, 0, 3) == 1 && pfOverlaps(subOk, endOk, 0, 3) == 0,
+              "GPU's end first: the overlap check found %u in a broken order (1 wanted), %u in "
+              "series (0 wanted)",
+              pfOverlaps(subBad, endBad, 0, 3), pfOverlaps(subOk, endOk, 0, 3));
+    }
     uint8_t *offScene = malloc(512 * 512 * 4), *offDisplay = malloc(512 * 512 * 4);
     uint8_t *scene = malloc(512 * 512 * 4), *display = malloc(512 * 512 * 4);
     uint32_t offW = 0, offH = 0, dw = 0, dh = 0;
@@ -2297,10 +2357,20 @@ static void threadPresentFree(void)
               off.verdict);
         if (c->driver == PF_BLOCK || c->driver == PF_NEAR) {
             CHECK(on.verdict == RD_GPU_FIRST_ON && on.waits == on.posts && on.overlaps == 0 &&
-                      off.overlaps == 0,
+                      off.overlaps == 0 && on.progBad == 0,
                   "GPU's end first, %s: verdict %d (on wanted), %u waits of %u jobs, a picture "
-                  "submitted while the GPU held the one before %u times wanted, %u without",
-                  c->name, on.verdict, on.waits, on.posts, on.overlaps, off.overlaps);
+                  "submitted while the GPU held the one before %u times wanted, %u without, %u "
+                  "while the backend had not seen the one before finished",
+                  c->name, on.verdict, on.waits, on.posts, on.overlaps, off.overlaps, on.progBad);
+            /* the wait happened and lasted: the backend's wait returned true
+               for every job, and the faked GPU time was waited out (the job
+               submitted, then its whole GPU time inside the wait) */
+            CHECK(on.waited == on.waits && on.waitN == on.waits && on.waitN > 0 &&
+                      on.waitMs / on.waitN >= 0.8 * c->gpuMs,
+                  "GPU's end first, %s: %u of %u backend waits returned true, %u faked waits of "
+                  "%.1f ms on average (at least %.1f wanted)",
+                  c->name, on.waited, on.waits, on.waitN, on.waitN ? on.waitMs / on.waitN : 0.0,
+                  0.8 * c->gpuMs);
             if (c->keep) {
                 CHECK(on.posts == ticks && off.posts == ticks && on.busySkips == 0 &&
                           off.busySkips == 0,

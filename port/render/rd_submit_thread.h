@@ -237,6 +237,8 @@ typedef struct RdSubmitTestGpu {
 void rd__submit_test_gpu(const RdSubmitTestGpu *fake);
 void rd__submit_test_gpu_first(int force);
 uint64_t rd__submit_gpu_first_waits(void);
+/* of those, the backend's waits that returned true (rhi_wait_submitted) */
+uint64_t rd__submit_gpu_first_waited(void);
 /* The longest present call of the jobs finished since the last take, ns
  * (0: none; render_thread.c's present estimate, pace_rt_further_hold) */
 uint64_t rd_thread_submit_take_present_ns(void);

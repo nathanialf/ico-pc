@@ -1851,8 +1851,11 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   pictures at 40 ms present at least 1000/45 a second less a tenth, more than without the rule
   (every second frame skipped as busy, about 1000/80, printed), 20 ms pictures every tick (25.0 a
   second), 45 ms keep frames every one, every job's wait made (`rd__submit_gpu_first_waits`),
-  frames handed over beside it (`rd_thread_gpu_wait_posts_take`), the GPU holding one picture at
-  a time (no faked submit while the GPU held the one before); a present that returns at once (17
+  frames handed over beside it (`rd_thread_gpu_wait_posts_take`), every backend wait returning
+  true (`rd__submit_gpu_first_waited`) and the faked GPU time waited out (at least 0.8 of it a
+  wait), the GPU holding one picture at a time (each job's recorded submit at or after the job
+  before's faked GPU end, a check shown first to find a broken order in a self-check; and the
+  backend's `rhi_gpu_progress` showing the job before finished by each submit); a present that returns at once (17
   ms GPU, 10 ms walk, 8 ms submit at 33.3 ms, the owner's Pixel) gets the verdict off, no wait
   and every tick (30.0 a second); one that waits every second time gets it off, no wait; one back
   0.3 ms before the work's end gets it on (the samples' 1 ms wait), every tick. SCENE and
