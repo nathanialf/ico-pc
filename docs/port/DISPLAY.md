@@ -856,16 +856,20 @@ with a fake clock and swapchain; the window only supplies its I/O (`port/platfor
    picture before, its present included, before it is handed over, so an acquire never waits
    behind a present inside a picture's reads; the 10 s line counts it in `N waited for the
    picture before`. On every Android device (the device table's `PRESENT_FREE`, row `android`,
-   issue 179; with the frame slots apart) the submit thread waits for a picture's GPU work to end
-   before its present, outside the swapchain's lock (`port/render/rd_submit_thread.h` "the GPU's
-   end first", `rhi_wait_submitted`): the Mali-G52's present returns at the picture's GPU end, and
-   with the lock held through it every picture of more GPU time than the tick made the next frame
-   busy. While that wait runs with no job behind it the gate is not told busy and the hand-over
+   issue 179; with the frame slots apart) the submit thread may wait for a picture's GPU work to
+   end before its present, outside the swapchain's lock (`port/render/rd_submit_thread.h` "the
+   GPU's end first", `rhi_wait_submitted`): the Mali-G52's present returns at the picture's GPU
+   end, and with the lock held through it every picture of more GPU time than the tick made the
+   next frame busy. It does only where the first Original presents show the driver's present
+   waiting for the GPU (16 counted samples, 14 at the work's end; the owner's Pixel, whose present
+   returns early, reads off and presents as before). While that wait runs with no job behind it the gate is not told busy and the hand-over
    waits for nothing (a keep frame neither): the next picture is walked, acquired and recorded
    beside it and submitted after that present, so the GPU still holds one picture at a time and
    pictures of G ms over the tick come about `1000 / G` a second (`rd_tex_test`
-   `threadPresentFree`). Its start line `rd: submit thread: with Frame rate Original each
-   picture's GPU work is waited for before its present, outside the swapchain's lock: ...`. The
+   `threadPresentFree`). Its lines: `rd: submit thread: with Frame rate Original each picture's
+   GPU work may be waited for before its present, ...: decided from the first 16 Original presents
+   ...` and the verdict's `rd: submit thread: N of 16 Frame rate Original presents ...`
+   ([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#issue-179s-judging-lines)). The
    lines: at each start `rd: render thread: with Frame rate Original
    each game frame's picture is handed over as the other frame rates' are: its submit and present
    run on the submit thread; ... but a kept frame (a fade, a load) still waits for the picture

@@ -1839,22 +1839,23 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   left out, and after the release one more is handed over, so the gate runs 6 times, `busySkips`
   is 4, 2 are handed over and run on the render thread, the clause says "skipped: render thread
   busy", and SCENE is the handed-over frames'. The GPU's end first (`threadPresentFree`,
-  `rd_submit_thread.h`; issue 179), forced on and off at the thread's start
-  (`rd__submit_test_gpu_first`; the device table turns it on only on Android): the submit
-  thread's job is given a GPU time of its own (`rd__submit_test_gpu_hook`: inside the job's wait
-  before its present with the rule on, where the present's call is with it off, as the
-  Mali-G52's present that returns at the picture's GPU end) and the walk 5 ms
-  (`rd__thread_test_hook` at `RD_READ_WALK`); the test's thread closes a frame every 40 ms (Frame
-  rate Original's 25 a second) for 50 ticks with the window's busy rule. Rate requirements:
-  pictures of 45 ms present at least 1000/45 a second less a tenth with the rule on (each one
-  recorded during the GPU time of the one before and submitted after its present), more than with
-  it off (every second frame skipped as busy, about 1000/80 a second, printed); pictures of 20 ms
-  every tick (25.0 a second); 45 ms keep frames every one either way. In every run the fake's
-  bookkeeping shows the GPU held one picture at a time (a job's GPU time never began before the
-  one before's ended), every Original job made the wait with the rule on
-  (`rd__submit_gpu_first_waits`) and none with it off, frames were handed over beside the wait
-  only with it on (`rd_thread_gpu_wait_posts_take`, the 10 s clause's count), and SCENE and
-  DISPLAY are byte for byte the rule off's. It is the render thread's program to run under
+  `rd_submit_thread.h`; issue 179), wanted or not at the thread's start
+  (`rd__submit_test_gpu_first`; the device table wants it only on Android), on a faked GPU and
+  driver (`rd__submit_test_gpu`: a job's GPU time begins after its faked submit and after the
+  job before's; the driver's present call waits for that end, returns at once, or waits every
+  second time; the verdict's samples read the faked end) with the walk faked
+  (`rd__thread_test_hook` at `RD_READ_WALK`), the test's thread closing a frame every tick with
+  the window's busy rule. Wanted, the ticks run first until the verdict is taken
+  (`rd_thread_submit_gpu_first_verdict`), then 50 measured ticks; each case also runs without the
+  rule. Rate requirements: a present that waits for the GPU gets the verdict on, then 45 ms
+  pictures at 40 ms present at least 1000/45 a second less a tenth, more than without the rule
+  (every second frame skipped as busy, about 1000/80, printed), 20 ms pictures every tick (25.0 a
+  second), 45 ms keep frames every one, every job's wait made (`rd__submit_gpu_first_waits`),
+  frames handed over beside it (`rd_thread_gpu_wait_posts_take`), the GPU holding one picture at
+  a time (no faked submit while the GPU held the one before); a present that returns at once (17
+  ms GPU, 10 ms walk, 8 ms submit at 33.3 ms, the owner's Pixel) gets the verdict off, no wait
+  and every tick (30.0 a second); one that waits every second time gets it off, no wait. SCENE and
+  DISPLAY are byte for byte the runs' without the rule. It is the render thread's program to run under
   ThreadSanitizer, as `audio_pull_test`: the `asan` preset with `-DICO_SANITIZE=thread` into a
   build folder of its own (`build-host/linux-x64-tsan`), `--target rd_tex_test`, run with
   `TSAN_OPTIONS=halt_on_error=1` under `setarch x86_64 -R`; a report is a failure.

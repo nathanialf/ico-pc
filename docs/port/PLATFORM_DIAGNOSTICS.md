@@ -1389,26 +1389,38 @@ lines added beside them for issues 179 and 123:
   glow (the pan's share of the slide; a near wall slides more by the eye's move).
 - **The GPU's end first** (`port/render/rd_submit_thread.c`, `.h` "the GPU's end first";
   `rd_thread.c` `rd__thread_picture_busy`; `port/platform/window_lines.c` `window_orig_words`):
-  on every Android device (the device table's `PRESENT_FREE`, row `android`) at Frame rate
-  Original, with the frame slots apart, each picture's job waits for its GPU work to end before
-  its present, outside the swapchain's lock (the log had the present call `X ms while the
-  picture's GPU work still ran and 0.0 ms after its end`, and 21-30 frames a 10 s block `not
-  presented: the render thread busy`). At each start of the submit thread: `rd: submit thread:
-  with Frame rate Original each picture's GPU work is waited for before its present, outside the
-  swapchain's lock: the next picture is walked, acquired and recorded meanwhile and handed over
-  instead of being skipped as busy, and is submitted after that present (the GPU holds one
-  picture at a time; android, issue 179)`, or where the slots are one at a time `rd: submit
-  thread: Frame rate Original's pictures present as before, their GPU work not waited for first
-  (<why>: ...)`. The 10 s line's Original clause gains its count: `; steps late 78 (frames not
-  presented 2: the step late 0, the render thread busy 2; frames handed over while the picture
-  before waited for its GPU work 180)`. A failed wait: `rhi_vk: the wait before the present waited
-  S s for submission N (sync timeline); the GPU reached M`, then the loss as any wait's; a wait
-  that never ends is the GPU hang limit's (`rhi_gpu_progress` names its submission). With the
-  wait the job's `present` time holds the GPU's end and the driver's call itself is expected to
-  be short (the present latency line's `the driver's present call ... of it`). How to judge it
-  from the next log: `the render thread busy` near 0 and the presented fps near the game's in the
-  logo, op2 and stage 3 blocks (whose mean GPU time is under the tick), the hand-over count near
-  the pictures presented.
+  on Android (the device table's `PRESENT_FREE`, row `android`) at Frame rate Original, with the
+  frame slots apart, a picture's job may wait for its GPU work to end before its present, outside
+  the swapchain's lock. Whether it does is the device's verdict: the first Original presents are
+  made as before, and the job's work is read as the driver's present call begins and as it returns
+  (`rhi_submitted_finished`, the timeline counter); a sample counts where the work was still
+  running at the call's start; at 16 counted, on where 14 or more returned at the work's end. The
+  Mali-G52's log (calls of 8-28 ms ending `0.0 ms after` the GPU end) reads on; the owner's Pixel
+  (0.8 ms calls with 14-17 ms of GPU work still running; with the wait each picture gained 9-13 ms
+  and Original dropped frames) reads off. The lines: at each start `rd: submit thread: with Frame
+  rate Original each picture's GPU work may be waited for before its present, outside the
+  swapchain's lock (...): decided from the first 16 Original presents whose picture's GPU work is
+  still running as the driver's present call begins, on where 14 or more of them return at that
+  work's end (a driver whose present waits for the GPU); android, issue 179`; the verdict `rd:
+  submit thread: 16 of 16 Frame rate Original presents whose picture's GPU work was still running
+  as the driver's present call began returned at that work's end (14 needed; present mode
+  mailbox): the driver's present waits for the GPU: each picture's GPU work is waited for before
+  its present from here on, outside the swapchain's lock (verdict 1 of the run)` or `0 of 16 ...:
+  the driver's present does not wait for the GPU: the presents stay as they are, no wait before
+  them (...)`; a present mode change after it `rd: submit thread: the present mode is fifo now
+  (the verdict was taken under mailbox): the GPU's end first is decided again from the next
+  presents` (the verdict lines first 8, then every 100th); where the slots are one at a time `rd:
+  submit thread: Frame rate Original's pictures present as before, their GPU work not waited for
+  first (<why>: ...)`. The 10 s line's Original clause: `; steps late 78 (frames not presented 2:
+  the step late 0, the render thread busy 2; frames handed over while the picture before waited
+  for its GPU work 180)` (0 where the verdict is off). A failed wait: `rhi_vk: the wait before the
+  present waited S s for submission N (sync timeline); the GPU reached M`, then the loss as any
+  wait's; a wait that never ends is the GPU hang limit's (`rhi_gpu_progress` names its
+  submission). With the wait the job's `present` time holds the GPU's end and the driver's call
+  itself is expected to be short. How to judge it from the next log: the verdict line's counts
+  against the driver (on the Mali-G52 on), then `the render thread busy` near 0 and the presented
+  fps near the game's in the logo, op2 and stage 3 blocks, the hand-over count near the pictures
+  presented; where the verdict is off, the blocks as without the rule.
 
 ### The issue ledger, continued
 
