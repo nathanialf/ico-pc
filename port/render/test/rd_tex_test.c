@@ -2294,7 +2294,7 @@ static void threadPresentFree(void)
         /* the overlap check's own check: a next picture submitted 10 ms
            into the one before's 45 ms of GPU time is found, the same jobs
            in series are not */
-        static const double subBad[3] = {0.0, 10.0, 60.0}, endBad[3] = {45.0, 90.0, 105.0};
+        static const double subBad[3] = {0.0, 10.0, 60.0}, endBad[3] = {45.0, 55.0, 105.0};
         static const double subOk[3] = {0.0, 45.0, 90.0}, endOk[3] = {45.0, 90.0, 135.0};
         CHECK(pfOverlaps(subBad, endBad, 0, 3) == 1 && pfOverlaps(subOk, endOk, 0, 3) == 0,
               "GPU's end first: the overlap check found %u in a broken order (1 wanted), %u in "
