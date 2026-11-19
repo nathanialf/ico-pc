@@ -1392,24 +1392,51 @@ lines added beside them for issues 179 and 123:
   on Android (the device table's `PRESENT_FREE`, row `android`) at Frame rate Original, with the
   frame slots apart, a picture's job may wait for its GPU work to end before its present, outside
   the swapchain's lock. Whether it does is the device's verdict: the first Original presents are
-  made as before, and the job's work is read as the driver's present call begins and as it returns
-  (`rhi_submitted_finished`, the timeline counter); a sample counts where the work was still
-  running at the call's start, and one still running at the return gets one 1 ms wait for its work
-  (a counter a fraction of a millisecond behind the driver's return; 14-17 ms of work left cannot
-  pass it); at 16 counted, on where 14 or more returned at the work's end. The
-  Mali-G52's log (calls of 8-28 ms ending `0.0 ms after` the GPU end) reads on; the owner's Pixel
-  (0.8 ms calls with 14-17 ms of GPU work still running; with the wait each picture gained 9-13 ms
-  and Original dropped frames) reads off. The lines: at each start `rd: submit thread: with Frame
-  rate Original each picture's GPU work may be waited for before its present, outside the
-  swapchain's lock (...): decided from the first 16 Original presents whose picture's GPU work is
-  still running as the driver's present call begins, on where 14 or more of them return at that
-  work's end (a driver whose present waits for the GPU); android, issue 179`; the verdict `rd:
-  submit thread: 16 of 16 Frame rate Original presents whose picture's GPU work was still running
-  as the driver's present call began returned at that work's end (12 finished at the return, 4
-  within 1.0 ms after it; 14 needed; present mode mailbox): the driver's present waits for the GPU: each picture's GPU work is waited for before
-  its present from here on, outside the swapchain's lock (verdict 1 of the run)` or `0 of 16 ...:
-  the driver's present does not wait for the GPU: the presents stay as they are, no wait before
-  them (...)`; a present mode change after it `rd: submit thread: the present mode is fifo now
+  made as before, each timed (the driver's call where the backend times it apart), and after each
+  the submit thread makes one unbounded wait for the picture before's submission and one for its
+  own (`rhi_last_submitted` after the job's submits, `rhi_wait_value_ns`: the device's plain
+  semaphore wait, no counter read and no timeout); each wait's return, in ms from the present's
+  return, is that end's time (a wait that did not block says "at or before the return"). While it
+  decides the GPU so holds one picture at a time. The class (`rd_submit_queue.c`
+  `rd__sq_gf_class`): a present under 2 ms with its own work done within 1 ms of its return says
+  nothing (skipped, the GPU done first); one of 2 ms or more back within 1 ms of the end of the
+  picture before's work or of its own returned at the end of GPU work; anything else is early; a
+  failed wait is unknown (not counted, its result kept). At 16 counted, on where 14 or more
+  returned at the end of GPU work. Read from the timeline counter at the call's start and return
+  instead, the samples of the Mali-G52's log in `build-host/tmp/v01113/evidence/179` were never
+  counted (no verdict line); its stall line 562 shows the shape the class is for: a 140.3 ms call that ended at the picture
+  before's signal, its own work 91 ms later. The owner's Pixel (0.6 ms calls with 14-17 ms of GPU
+  work still running) reads early, so off. The lines: at each start `rd: submit thread: with
+  Frame rate Original each picture's GPU work may be waited for before its present, outside the
+  swapchain's lock (...): decided from the first 16 Original presents that say something, on where
+  14 or more of them return at the end of GPU work, their own or the picture before's (a present
+  of 2.0 ms or more back within 1.0 ms of either end: a driver whose present waits for the GPU);
+  while it decides, each present is followed by one wait for the picture before's GPU work and
+  one for its own, so the GPU holds one picture at a time for those pictures (16 counted, more
+  where the GPU was done first) at the start of Original play; android, issue 179`; the run's
+  first 8 samples one by one, `rd: submit thread: Frame rate Original sample 3 (of the first 8
+  logged): the present 140.3 ms; the picture before's GPU work ended by +0.7 ms, its own by +91.4
+  ms (from the present's return, as each wait returned: one that did not block says at or before
+  it); returned at the end of GPU work (3 counted, 3 at the end of GPU work); the counter read as
+  the present began 0, as it returned 0 (read only: 1 finished, 0 running, -1 not known)` (the
+  counter's two reads were the samples' input before, logged so the next log shows what they
+  answer there; a failed wait reads `the wait for its own failed (result -4)` and `unknown (a wait failed)`);
+  the verdict `rd: submit thread: 15 of 16 Frame rate Original presents returned at the end of
+  GPU work (its own or the picture before's: a present of 2.0 ms or more back within 1.0 ms of
+  either end; 14 needed; present mode mailbox; 16 samples counted (15 returned at the end of GPU
+  work), 3 skipped (the GPU done first), 0 unknown (last result 0), 2 jobs not Original, 0
+  Original jobs without a present): the driver's present waits for the GPU: each picture's GPU
+  work is waited for before its present from here on, outside the swapchain's lock (verdict 1 of
+  the run)` or `... : the driver's present does not wait for the GPU: the presents stay as they
+  are, no wait before them (...)`; once, where 64 Original presents passed without it, `rd:
+  submit thread: no verdict on the GPU's end first after 64 Frame rate Original presents: 9
+  samples counted (5 returned at the end of GPU work), 50 skipped (the GPU done first), 5 unknown
+  (last result -4), 12 jobs not Original, 0 Original jobs without a present; the presents stay as
+  they are, the samples go on`; in the 10 s line's submit thread part, in the blocks whose jobs
+  ran while the verdict was not taken (the block it arrives in the last), ` (the GPU's end
+  first's samples: 16 counted, 3 skipped with the GPU done first, 0 unknown (last result 0), 2
+  jobs not Original, 0 Original jobs without a present)`; a present mode change after it `rd:
+  submit thread: the present mode is fifo now
   (the verdict was taken under mailbox): the GPU's end first is decided again from the next
   presents` (the verdict lines first 8, then every 100th); where the slots are one at a time `rd:
   submit thread: Frame rate Original's pictures present as before, their GPU work not waited for
@@ -1419,8 +1446,13 @@ lines added beside them for issues 179 and 123:
   present waited S s for submission N (sync timeline); the GPU reached M`, then the loss as any
   wait's; a wait that never ends is the GPU hang limit's (`rhi_gpu_progress` names its
   submission). With the wait the job's `present` time holds the GPU's end and the driver's call
-  itself is expected to be short. How to judge it from the next log: the verdict line's counts
-  against the driver (on the Mali-G52 on), then `the render thread busy` near 0 and the presented
+  itself is expected to be short (the waits after a sampled present count in its `present` time
+  too). How to judge it from the next log: the 8 sample lines (their class against the call's
+  time and the two ends; the counter's two reads say why the earlier samples were never counted
+  there: a read of 1 or -1 as the present began is the counter's own answer, while 0 then and 0 or
+  1 at the return leave the 1 ms timed wait those samples made at the return as the part that
+  failed), the verdict line's counts against the driver (on the Mali-G52 on, 14 or more of 16),
+  then `the render thread busy` near 0 and the presented
   fps near the game's in the logo, op2 and stage 3 blocks, the hand-over count near the pictures
   presented; where the verdict is off, the blocks as without the rule.
 

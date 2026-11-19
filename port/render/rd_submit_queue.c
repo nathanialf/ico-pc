@@ -17,6 +17,8 @@ uint64_t rd__sq_post(RdSubmitQ *q, const RdSubmitJob *job)
     *j = *job;
     j->seq = ++q->posted;
     j->submitMs = j->presentMs = 0.0;
+    j->gfSample = RD_GF_NONE; /* the job's tail sets it */
+    j->gfResult = 0;
     q->count++;
     if (q->count > q->block.depthMax) {
         q->block.depthMax = q->count;
@@ -49,6 +51,27 @@ void rd__sq_finish(RdSubmitQ *q, const RdSubmitJob *job)
     {
         const double ms = job->submitMs + job->presentMs;
         q->block.longestMs = ms > q->block.longestMs ? ms : q->block.longestMs;
+    }
+    if (job->gfSample != RD_GF_NONE) {
+        q->block.gfJobs++;
+        switch (job->gfSample) {
+        case RD_GF_NOT_ORIGINAL:
+            q->block.gfNotOriginal++;
+            break;
+        case RD_GF_NO_PRESENT:
+            q->block.gfNoPresent++;
+            break;
+        case RD_GF_SKIPPED:
+            q->block.gfSkipped++;
+            break;
+        case RD_GF_UNKNOWN:
+            q->block.gfUnknown++;
+            q->block.gfLastResult = job->gfResult;
+            break;
+        default:
+            q->block.gfCounted++; /* waited or early */
+            break;
+        }
     }
     if (job->present) {
         const uint64_t ns = job->presentMs > 0.0 ? (uint64_t)(job->presentMs * 1e6) : 1u;
@@ -131,6 +154,20 @@ void rd__sq_block_take(RdSubmitQ *q, RdSubmitBlock *out)
         out->submitMs /= out->jobs;
         out->presentMs /= out->jobs;
     }
+}
+
+uint8_t rd__sq_gf_class(int32_t result, double callMs, bool hasPrev, double prevEndMs,
+                        double ownEndMs)
+{
+    if (result != 0) {
+        return RD_GF_UNKNOWN;
+    }
+    const bool ownNear = ownEndMs <= RD_GPU_FIRST_NEAR_MS;
+    const bool prevNear = hasPrev && prevEndMs <= RD_GPU_FIRST_NEAR_MS;
+    if (callMs < RD_GPU_FIRST_CALL_MS) {
+        return ownNear ? RD_GF_SKIPPED : RD_GF_EARLY;
+    }
+    return ownNear || prevNear ? RD_GF_WAITED : RD_GF_EARLY;
 }
 
 uint32_t rd__sq_tail_steps(const RdSubmitJob *j, RdSqStep out[RD_SQ_TAIL_MAX])

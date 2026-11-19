@@ -14,9 +14,10 @@
  *   run     rd__sq_next: the head, when nothing runs; it stays counted until
  *           rd__sq_finish, so a queue with a job running is not idle;
  *   finish  rd__sq_finish: the running job done with its times: counted in
- *           the block, kept for rd__sq_take_finished (the oldest dropped,
- *           and counted, past RD_SUBMIT_DEPTH unread), its present time
- *           for rd__sq_take_present_ns;
+ *           the block (with what it gave the GPU's end first's verdict),
+ *           kept for rd__sq_take_finished (the oldest dropped, and
+ *           counted, past RD_SUBMIT_DEPTH unread), its present time for
+ *           rd__sq_take_present_ns;
  *   slots   rd__sq_slot_jobs: the jobs queued or running of one frame slot
  *           (RdSubmitJob.slot): with the slots apart the render thread's
  *           next picture waits for those of the slot it recycles only
@@ -76,7 +77,28 @@ typedef struct RdSubmitJob {
     /* the present's desired time (the even cadence's, rd_pace_even.h; the
        display's clock, ms; 0 none): rhi_present_desire before it */
     double desiredMs;
+    /* what the job gave the GPU's end first's verdict while it was not
+       taken (rd_submit_thread.c tail; RD_GF_*, RD_GF_NONE where the verdict
+       was taken or is not wanted) and, for RD_GF_UNKNOWN, the failed wait's
+       result (rhi.h rhi_wait_value_ns) */
+    uint8_t gfSample;
+    int32_t gfResult;
 } RdSubmitJob;
+
+/* RdSubmitJob.gfSample: none; a job not of Frame rate Original; an
+   Original job without a present; a present whose picture's work was done
+   before it could say anything (skipped: the GPU done first); a sample
+   whose wait failed (unknown); a counted sample, its present returned at
+   the end of GPU work (waited) or not (early) */
+enum {
+    RD_GF_NONE,
+    RD_GF_NOT_ORIGINAL,
+    RD_GF_NO_PRESENT,
+    RD_GF_SKIPPED,
+    RD_GF_UNKNOWN,
+    RD_GF_WAITED,
+    RD_GF_EARLY
+};
 
 /* the 10 s block (rd__sq_block_take): the jobs finished and their means in
    ms, the longest job, the most jobs queued and running at once, the other
@@ -93,6 +115,12 @@ typedef struct RdSubmitBlock {
     double waitMs, renderWaitMs, waitMaxMs;
     unsigned dropped, onRender;
     unsigned overlapped;
+    /* the jobs finished while the GPU's end first's verdict was not taken
+       (gfSample not RD_GF_NONE; 0: none, the 10 s line leaves them out),
+       by gfSample: counted (waited and early), skipped, unknown with the
+       last one's result, not Original, without a present */
+    unsigned gfJobs, gfCounted, gfSkipped, gfUnknown, gfNotOriginal, gfNoPresent;
+    int32_t gfLastResult;
 } RdSubmitBlock;
 
 typedef struct RdSubmitQ {
@@ -123,6 +151,34 @@ void rd__sq_note_wait(RdSubmitQ *q, double ms, bool byRender);
 void rd__sq_note_on_render(RdSubmitQ *q);
 void rd__sq_note_overlap(RdSubmitQ *q);
 void rd__sq_block_take(RdSubmitQ *q, RdSubmitBlock *out);
+
+/* One sample of the GPU's end first's verdict (rd_submit_thread.h), its
+ * class (RD_GF_UNKNOWN, RD_GF_SKIPPED, RD_GF_WAITED, RD_GF_EARLY) from the
+ * waits' result (the first failure's, rhi.h rhi_wait_value_ns: not 0 is
+ * unknown whatever the times say, VK_NOT_READY or VK_TIMEOUT included),
+ * the present's time (callMs) and the two ends after it, in ms from the
+ * present's return:
+ * prevEndMs the picture before's GPU work (hasPrev false: no picture
+ * before), ownEndMs its own.  Each end is the time the submit thread's
+ * wait for it returned (one unbounded wait after the present, the picture
+ * before's first): a wait that blocked gives the end, one that did not
+ * says "at or before the return" (near 0), so an end long before the return
+ * reads as one at it.
+ *   skipped  the present under RD_GPU_FIRST_CALL_MS and its own work done
+ *            within RD_GPU_FIRST_NEAR_MS of its return: the GPU done
+ *            first (idle, or the picture too light for so short a call to
+ *            have waited for it): says nothing of the driver;
+ *   waited   the present RD_GPU_FIRST_CALL_MS or longer and back within
+ *            RD_GPU_FIRST_NEAR_MS of the end of the picture before's work
+ *            (line 562 of issue 179's v0.11.12 log: 140.3 ms, at the end
+ *            of the picture before's, its own 91 ms later) or of its own
+ *            (a present that returns at its own picture's end);
+ *   early    anything else (the owner's Pixel: 0.6 ms with its own work
+ *            still running). */
+#define RD_GPU_FIRST_CALL_MS 2.0
+#define RD_GPU_FIRST_NEAR_MS 1.0
+uint8_t rd__sq_gf_class(int32_t result, double callMs, bool hasPrev, double prevEndMs,
+                        double ownEndMs);
 
 /* a job's tail, step by step (rd__sq_tail_steps) */
 enum { RD_SQ_END, RD_SQ_SUBMIT, RD_SQ_PRESENT };

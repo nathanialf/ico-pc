@@ -283,11 +283,24 @@ bool rhi_wait_submitted(void)
 }
 
 /* rhi.h: not known here (the GPU's end first stays off) */
-int rhi_submitted_finished(uint64_t *value, uint64_t waitNs)
+int rhi_submitted_finished(uint64_t *value)
 {
     (void)value;
-    (void)waitNs;
     return -1;
+}
+
+/* rhi.h: no submission numbers here */
+uint64_t rhi_last_submitted(void)
+{
+    return 0;
+}
+
+/* rhi.h: no such wait here (the GPU's end first stays off) */
+int32_t rhi_wait_value_ns(uint64_t value, uint64_t *ns)
+{
+    (void)value;
+    *ns = 0;
+    return RHI_WAIT_NONE;
 }
 
 RhiTexture rhi_acquire_backbuffer(void)

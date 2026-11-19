@@ -28,7 +28,14 @@
  *            present's own list waits for the window's image): the job
  *            carries both through the queue, and its tail ends and submits
  *            the scene's list, then the present's, then presents; a job of
- *            one list ends and submits it and presents only when asked.
+ *            one list ends and submits it and presents only when asked;
+ *   gpu end  the GPU's end first's samples (rd__sq_gf_class): the classes
+ *            from the evidence (issue 179's v0.11.12 log line 562, the
+ *            owner's Pixel, a light picture) and at their edges (2 ms, 1
+ *            ms); a failed wait (VK_NOT_READY, a loss, no such wait) is
+ *            unknown whatever the times; the block counts each finished
+ *            job's sample by class, the last unknown's result, and none
+ *            where no job had one.
  */
 #include <stdio.h>
 #include <string.h>
@@ -224,9 +231,82 @@ static void testTail(void)
     CHECK(n == 3 && st[1].what == RD_SQ_SUBMIT && st[2].what == RD_SQ_PRESENT);
 }
 
+/* one job through the queue with its sample (RdSubmitJob.gfSample) */
+static void runSample(RdSubmitQ *q, uint8_t cls, int32_t result)
+{
+    const RdSubmitJob a = job(61, true, 70);
+    CHECK(rd__sq_post(q, &a) != 0);
+    RdSubmitJob j;
+    CHECK(rd__sq_next(q, &j));
+    j.gfSample = cls;
+    j.gfResult = result;
+    rd__sq_finish(q, &j);
+}
+
+static void testGpuFirst(void)
+{
+    /* line 562: 140.3 ms, back 0.7 ms before the picture before's end was
+       seen, its own 91.4 ms after: at the end of GPU work */
+    CHECK(rd__sq_gf_class(0, 140.3, true, 0.7, 91.4) == RD_GF_WAITED);
+    /* a present that returns at its own end (both waits at once) or 0.3 ms
+       before it */
+    CHECK(rd__sq_gf_class(0, 45.0, true, 0.0, 0.0) == RD_GF_WAITED);
+    CHECK(rd__sq_gf_class(0, 20.0, true, 0.0, 0.3) == RD_GF_WAITED);
+    CHECK(rd__sq_gf_class(0, 20.0, false, 0.0, 0.3) == RD_GF_WAITED);
+    /* the owner's Pixel: 0.6 ms, its own work 14 ms on: early */
+    CHECK(rd__sq_gf_class(0, 0.6, true, 0.0, 14.0) == RD_GF_EARLY);
+    /* a light picture: 0.5 ms, everything done: says nothing */
+    CHECK(rd__sq_gf_class(0, 0.5, true, 0.0, 0.0) == RD_GF_SKIPPED);
+    /* a long present back before both ends; no picture before */
+    CHECK(rd__sq_gf_class(0, 10.0, true, 5.0, 20.0) == RD_GF_EARLY);
+    CHECK(rd__sq_gf_class(0, 10.0, false, 0.0, 20.0) == RD_GF_EARLY);
+    /* the edges: 2 ms is long enough, 1 ms near enough */
+    CHECK(rd__sq_gf_class(0, RD_GPU_FIRST_CALL_MS, true, 5.0, RD_GPU_FIRST_NEAR_MS) ==
+          RD_GF_WAITED);
+    CHECK(rd__sq_gf_class(0, 1.99, true, 5.0, RD_GPU_FIRST_NEAR_MS) == RD_GF_SKIPPED);
+    CHECK(rd__sq_gf_class(0, 1.99, true, 0.0, 1.01) == RD_GF_EARLY);
+    CHECK(rd__sq_gf_class(0, 2.0, true, 1.01, 1.01) == RD_GF_EARLY);
+    /* a failed wait: unknown, never a class (VK_NOT_READY 1, VK_TIMEOUT 2,
+       VK_ERROR_DEVICE_LOST -4, rhi.h RHI_WAIT_NONE) */
+    CHECK(rd__sq_gf_class(1, 140.3, true, 0.7, 91.4) == RD_GF_UNKNOWN);
+    CHECK(rd__sq_gf_class(2, 0.6, true, 0.0, 14.0) == RD_GF_UNKNOWN);
+    CHECK(rd__sq_gf_class(-4, 0.5, true, 0.0, 0.0) == RD_GF_UNKNOWN);
+    CHECK(rd__sq_gf_class(INT32_MIN, 45.0, true, 0.0, 0.0) == RD_GF_UNKNOWN);
+
+    RdSubmitQ q;
+    rd__sq_init(&q);
+    RdSubmitBlock bl;
+    runSample(&q, RD_GF_NONE, 0);
+    rd__sq_block_take(&q, &bl);
+    CHECK(bl.jobs == 1 && bl.gfJobs == 0 && bl.gfCounted == 0 && bl.gfUnknown == 0);
+    runSample(&q, RD_GF_WAITED, 0);
+    runSample(&q, RD_GF_EARLY, 0);
+    runSample(&q, RD_GF_SKIPPED, 0);
+    runSample(&q, RD_GF_UNKNOWN, -4);
+    runSample(&q, RD_GF_UNKNOWN, 1);
+    runSample(&q, RD_GF_NOT_ORIGINAL, 0);
+    runSample(&q, RD_GF_NO_PRESENT, 0);
+    runSample(&q, RD_GF_NONE, 0);
+    rd__sq_block_take(&q, &bl);
+    CHECK(bl.jobs == 8 && bl.gfJobs == 7 && bl.gfCounted == 2 && bl.gfSkipped == 1);
+    CHECK(bl.gfUnknown == 2 && bl.gfLastResult == 1 && bl.gfNotOriginal == 1 &&
+          bl.gfNoPresent == 1);
+    rd__sq_block_take(&q, &bl);
+    CHECK(bl.gfJobs == 0 && bl.gfUnknown == 0 && bl.gfLastResult == 0);
+    /* a post clears what a job brought in its sample */
+    RdSubmitJob dirty = job(62, true, 71);
+    dirty.gfSample = RD_GF_WAITED;
+    dirty.gfResult = 7;
+    CHECK(rd__sq_post(&q, &dirty) != 0);
+    RdSubmitJob j;
+    CHECK(rd__sq_next(&q, &j) && j.gfSample == RD_GF_NONE && j.gfResult == 0);
+    rd__sq_finish(&q, &j);
+}
+
 int main(void)
 {
     testOrderDepth();
+    testGpuFirst();
     testCarry();
     testSlots();
     testTail();
