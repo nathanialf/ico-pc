@@ -70,15 +70,35 @@
  *                   (issue 179; the device table's PRESENT_FREE, the row
  *                   android: every Android device; with the slots apart
  *                   only) a job of a picture Frame rate Original handed
- *                   over (rd_thread.h rd__thread_original_job) waits after
- *                   its submit for its work to end on the GPU
+ *                   over (rd_thread.h rd__thread_original_job) may wait
+ *                   after its submit for its work to end on the GPU
  *                   (rhi_wait_submitted), outside the swapchain's lock,
- *                   and presents after it.  On the Mali-G52 the driver's
+ *                   and present after it.  On the Mali-G52 the driver's
  *                   present returns at the picture's GPU end, and with the
  *                   lock held through that call the game's gate counted the
  *                   picture before as busy and skipped the next frame
- *                   whenever a picture's GPU time passed the tick.  While
- *                   the job is in that wait with no job behind it
+ *                   whenever a picture's GPU time passed the tick.  On a
+ *                   driver whose present returns early (the owner's Pixel,
+ *                   PowerVR: 0.8 ms calls with the GPU work still running)
+ *                   the wait would only add the GPU's remaining time
+ *                   before every present.  So the verdict is the device's,
+ *                   taken at run time: the first Original presents are
+ *                   made without the wait, and at each one the job's work
+ *                   is read as the driver's present call begins and as it
+ *                   returns (rhi_submitted_finished: the timeline's
+ *                   counter); a sample counts only where the work was
+ *                   still running as the call began (a light picture whose
+ *                   work ended before it says nothing), and one still
+ *                   running at the return gets one 1 ms wait for it (a
+ *                   counter a hair behind the driver's return).  At
+ *                   RD_GPU_FIRST_SAMPLES counted the rule is on where
+ *                   RD_GPU_FIRST_NEED or more returned at the work's end,
+ *                   else off, with one line; a backend that cannot tell
+ *                   never decides (off).  Taken anew at every start of
+ *                   the thread (a renderer switch, a new device) and where
+ *                   the present mode changed since (a FIFO present waits
+ *                   for the display, not the GPU).  With the rule on,
+ *                   while the job is in that wait with no job behind it
  *                   (rd_thread_submit_gpu_wait_alone) the gate does not
  *                   count it (rd_thread.c rd__thread_picture_busy) and the
  *                   hand-over does not wait for it (rd__replay_frame_post):
@@ -93,10 +113,9 @@
  *                   recorded ahead.  A call that is not a slot call still
  *                   waits for the whole job through the call guard (a
  *                   texture made or retired, a pipeline made, a readback;
- *                   the game thread's calls), now up to the GPU's end where
- *                   a driver's present returned earlier.  The other frame
- *                   rates are untouched (their pacing reads the job's
- *                   times as they are).
+ *                   the game thread's calls).  The other frame rates are
+ *                   untouched (their pacing reads the job's times as they
+ *                   are).
  *   the depth       at most RD_SUBMIT_DEPTH jobs queued and running
  *                   (rd_submit_queue.h); with the rule above there is one,
  *                   with the GPU's end first two (the job in its wait and
@@ -172,22 +191,54 @@ bool rd_thread_submit_unfinished(void);
  * that blocks, held as long as fn does, also where the job has no present
  * (the tests' offscreen output has no swapchain); NULL: none */
 void rd__submit_test_hook(void (*fn)(void));
-/* The GPU's end first (above) is on for this run (the device table's
- * choice at the start, the frame slots apart) */
+/* The GPU's end first (above) is wanted for this run (the device table's
+ * choice at the start, the frame slots apart); its verdict from the first
+ * presents: RD_GPU_FIRST_UNDECIDED while sampling, _ON, _OFF (also where
+ * it is not wanted).  RD_GPU_FIRST_SAMPLES counted samples, on at
+ * RD_GPU_FIRST_NEED or more at the work's end: 16 is about 0.7 s of the
+ * Mali-G52's Original pictures (22 a second in its v0.11.11 log) and
+ * enough that a stray sample cannot turn it; 14 of 16 (seven in eight)
+ * keeps a driver that waits for the GPU only now and then (a mixed
+ * driver) off, where the wait would cost most presents time they did not
+ * spend before */
+#define RD_GPU_FIRST_SAMPLES 16u
+#define RD_GPU_FIRST_NEED 14u
+/* a counted sample still running as the call returned: one wait this long
+ * for its work, the samples only (rd_submit_thread.c gpuSample) */
+#define RD_GPU_FIRST_GRACE_NS 1000000u
+
+enum { RD_GPU_FIRST_UNDECIDED = -1, RD_GPU_FIRST_OFF = 0, RD_GPU_FIRST_ON = 1 };
+
 bool rd_thread_submit_gpu_first(void);
+int rd_thread_submit_gpu_first_verdict(void);
 /* The submit thread's running job waits for its picture's GPU end before
  * its present, and no job is queued behind it (any thread, no lock; the
  * game's gate and the hand-over, rd_thread.c) */
 bool rd_thread_submit_gpu_wait_alone(void);
-/* The tests' seams (rd_tex_test): fn() on the submit thread as a job's
- * GPU time, inside the GPU's end first's wait where the rule is on for the
- * job, else where the present's call is (a driver's present that returns
- * at the picture's GPU end); NULL: none.  The rule forced on (1) or off
- * (0) at the next start, -1 the device table's.  The jobs that made the
- * wait, ever. */
-void rd__submit_test_gpu_hook(void (*fn)(void));
+
+/* The tests' seams (rd_tex_test): a faked GPU and driver on the submit
+ * thread (NULL: none).  submitted() after a job's submit (its work begins);
+ * waitEnd() inside the GPU's end first's wait (returns at the faked end);
+ * present() where the driver's present call is, every job (it may wait for
+ * the faked end: a driver whose present waits for the GPU); finished(ms)
+ * whether the faked work has ended now (1), within ms (2, waited for), or
+ * not (0), in place of the backend's counter
+ * read for the verdict's samples (a job counts as presenting while
+ * present is set).  Any member may be NULL.  The rule wanted (1) or not (0)
+ * at the next start, -1 the device table's.  The jobs that made the wait,
+ * ever. */
+typedef struct RdSubmitTestGpu {
+    void (*submitted)(void);
+    void (*waitEnd)(void);
+    void (*present)(void);
+    int (*finished)(double waitMs);
+} RdSubmitTestGpu;
+
+void rd__submit_test_gpu(const RdSubmitTestGpu *fake);
 void rd__submit_test_gpu_first(int force);
 uint64_t rd__submit_gpu_first_waits(void);
+/* of those, the backend's waits that returned true (rhi_wait_submitted) */
+uint64_t rd__submit_gpu_first_waited(void);
 /* The longest present call of the jobs finished since the last take, ns
  * (0: none; render_thread.c's present estimate, pace_rt_further_hold) */
 uint64_t rd_thread_submit_take_present_ns(void);

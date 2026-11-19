@@ -41,14 +41,17 @@ static const RhiDeviceSetting kAndroid[] = {
     /* rd_submit_thread.c (rd_submit_thread.h "the GPU's end first") */
     {RHI_DC_PRESENT_FREE, 1,
      "Frame rate Original: each picture's GPU work waited for before its present, outside the "
-     "swapchain's lock (the next picture recorded meanwhile, not skipped as busy)",
+     "swapchain's lock, where the first presents show the driver's present waits for the GPU "
+     "(decided at run time; the next picture recorded meanwhile, not skipped as busy)",
      NULL, "issue 179",
-     "the Mali-G52's v0.11.11 log: its present returned at the picture's GPU end, the swapchain's "
-     "lock held through it, and 21 to 30 game frames a 10 s block were skipped as busy at 22.0 "
-     "to 22.6 of 25 fps (v01112/evidence/179)",
+     "the Mali-G52's v0.11.11 log: its present returned at the picture's GPU end, the "
+     "swapchain's lock held through it, and 21 to 30 game frames a 10 s block were skipped as "
+     "busy at 22.0 to 22.6 of 25 fps (v01112/evidence/179); the owner's Pixel (PowerVR, "
+     "v01112/evidence/owner-rc5): 0.8 ms present calls, the wait added 9 to 13 ms a picture, "
+     "so the rule takes each device's own verdict",
      "v0.11.12",
-     "an Android log at Frame rate Original whose presents return before their picture's GPU end "
-     "and keep 25 fps without it"},
+     "an Android log whose verdict line reads wrong for its driver (on with presents that "
+     "return early, off where they wait for the GPU)"},
 };
 
 /* rhi_tile_rule.c rhi_tile_phone (iOS through MoltenVK) */

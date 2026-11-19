@@ -305,6 +305,41 @@ void vkr_wait_slot_value(VkrFrame *f, uint64_t value)
  * and go), progFinished raised by compare and swap, the failed wait's value
  * once; not stats (the recording thread's alone): the wait's time is the
  * present's in the job's record (rd_submit_thread.c tail) */
+/* rhi.h: the timeline counter against the submission (the fence ring's
+ * scan writes state the recording thread shares: not known there) */
+int rhi_submitted_finished(uint64_t *value, uint64_t waitNs)
+{
+    if (g_vkr.syncKind != VKR_SYNC_TIMELINE ||
+        __atomic_load_n(&g_vkr.deviceLost, __ATOMIC_ACQUIRE)) {
+        return -1;
+    }
+    if (*value == 0) {
+        *value = __atomic_load_n(&g_vkr.timelineValue, __ATOMIC_ACQUIRE);
+    }
+    if (*value == 0) {
+        return 1; /* nothing submitted */
+    }
+    uint64_t done = 0;
+    if (!vkr_sync_reached(&done)) {
+        return -1;
+    }
+    vkr_progress_finished(done);
+    if (done >= *value) {
+        return 1;
+    }
+    if (waitNs == 0) {
+        return 0;
+    }
+    /* the bounded wait (vkWaitSemaphores with a timeout: no lock against the
+       recording thread, as the counter read) */
+    const VkResult r = vkr_sync_wait_for(*value, waitNs);
+    if (r == VK_SUCCESS) {
+        vkr_progress_finished(*value);
+        return 2;
+    }
+    return r == VK_TIMEOUT ? 0 : -1;
+}
+
 /* rhi_vk.h vkr_test_force_wait_result: the next wait's result, once (0:
  * the driver's) */
 static int32_t s_testWaitResult;

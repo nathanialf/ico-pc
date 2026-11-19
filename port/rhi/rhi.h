@@ -1250,6 +1250,17 @@ bool rhi_wait_present_room(void);
  * no such wait (the fence sync, OpenGL, Direct3D 11 and 12) or the device
  * is lost, nothing done. */
 bool rhi_wait_submitted(void);
+/* Whether a submission has finished on the GPU: *value 0 takes the newest
+ * submission made so far (written back, so the caller asks about the same
+ * one later); 1 finished, 2 not at once but within waitNs (a bounded wait,
+ * made only when it was still running; 0: no wait), 0 still running, -1
+ * the backend cannot tell (the fence sync, OpenGL, Direct3D 11 and 12, a
+ * lost device).  The submit thread's samples for the GPU's end first's verdict
+ * (port/render/rd_submit_thread.h): asked as the driver's present call
+ * begins and as it returns.  Vulkan's timeline counter read
+ * (vkGetSemaphoreCounterValue) needs no lock against the recording
+ * thread. */
+int rhi_submitted_finished(uint64_t *value, uint64_t waitNs);
 /* The window's surface (the Android lifecycle).
  * rhi_release_surface waits for the GPU, destroys the swapchain and the
  * surface and keeps the device and everything made on it: the app goes to

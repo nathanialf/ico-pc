@@ -272,6 +272,14 @@ bool rhi_wait_submitted(void)
     return false;
 }
 
+/* rhi.h: not known here (the GPU's end first stays off) */
+int rhi_submitted_finished(uint64_t *value, uint64_t waitNs)
+{
+    (void)value;
+    (void)waitNs;
+    return -1;
+}
+
 static RhiTexture dx_acquire_backbuffer_locked(void)
 {
     RhiTexture out = {0};

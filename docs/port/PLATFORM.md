@@ -660,10 +660,10 @@ rd: submit thread: on (the pictures handed to the render thread are submitted an
 rd: submit thread: off (this graphics API takes every call on one thread: the render thread submits and presents its pictures)
 rd: submit thread: the frame slots apart (the render thread's next picture records while the one before is submitted and presented, and waits only for its own slot's picture two before; ICO_RD_SUBMIT_OVERLAP=0 keeps the submit thread's work and the render thread's graphics calls one at a time)
 rd: submit thread: the frame slots one at a time (this graphics API keys its frame slot on one index: the render thread's next picture's first graphics call waits for the submit thread)
-rd: submit thread: with Frame rate Original each picture's GPU work is waited for before its present, outside the swapchain's lock: the next picture is walked, acquired and recorded meanwhile and handed over instead of being skipped as busy, and is submitted after that present (the GPU holds one picture at a time; android, issue 179)
+rd: submit thread: with Frame rate Original each picture's GPU work may be waited for before its present, outside the swapchain's lock (the next picture walked, acquired and recorded meanwhile, handed over instead of skipped as busy, submitted after that present: the GPU holds one picture at a time): decided from the first 16 Original presents whose picture's GPU work is still running as the driver's present call begins, on where 14 or more of them return at that work's end (a driver whose present waits for the GPU); android, issue 179
 ```
 
-The last only on Android (the device table's `PRESENT_FREE`; `port/render/rd_submit_thread.h` "the
+The last only on Android, followed by the verdict's line once 16 presents are counted (the device table's `PRESENT_FREE`; `port/render/rd_submit_thread.h` "the
 GPU's end first", [PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#issue-179s-judging-lines)).
 
 the line `rd: submit thread: the render thread's picture waited X ms for frame slot S's picture two

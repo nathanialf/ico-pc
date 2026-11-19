@@ -922,13 +922,22 @@ bool rd__thread_picture_busy(void)
     if (!rd__replay_frame_post_ok()) {
         return false;
     }
+    if (__atomic_load_n(&s_picBusy, __ATOMIC_ACQUIRE) != 0) {
+        return true;
+    }
+    if (!rd_thread_submit_unfinished()) {
+        return false;
+    }
     /* the GPU's end first (rd_submit_thread.h): a job that waits for its
        picture's GPU end with none behind it holds no lock the next picture
-       takes; read before the job's state, so a wait that ends meanwhile
-       reads as a job that ended or that presents (busy) */
-    const bool alone = rd_thread_submit_gpu_wait_alone();
-    return __atomic_load_n(&s_picBusy, __ATOMIC_ACQUIRE) != 0 ||
-           (rd_thread_submit_unfinished() && !alone);
+       takes.  Read last: the render thread's post of a job behind it
+       (rd__submit_post_pending: alone cleared under the queue's lock)
+       comes before its release of s_picBusy, which the acquire above
+       read as 0, so a post that made the queue two deep is always seen
+       here, and a stale "alone" of the job before cannot pass.  What is
+       left: the wait ends just after this read; the hand-over then reads
+       alone again and waits for that job's present alone (rd__replay_frame_post) */
+    return !rd_thread_submit_gpu_wait_alone();
 }
 
 bool rd__thread_original_job(void)

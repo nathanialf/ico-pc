@@ -63,7 +63,10 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   wait time that grows, also after this thread's own fence wait for a finished slot came and went
   beside it (`rhi_wait_frame`: the progress pair of its own, so the GPU hang limit sees one
   submission's wait, `port/platform/gpu_hang.h`); it returns true only after the release 150 ms
-  in, the submission then finished and no wait shown. A wait whose result is forced to a device
+  in, the submission then finished and no wait shown. The verdict's counter read
+  (`rhi_submitted_finished`): 0 for the held submission (asked by its value and with 0, which
+  takes it as the newest; 0 also with a 1 ms wait, which times out), 1 after the release, -1 on
+  the fence ring. A wait whose result is forced to a device
   loss (`vkr_test_force_wait_result`) returns false with the device lost, and the next makes
   none. On the fence ring (the slots one at a time) it returns false at once.
 - `rhi_vk_swapchain_test.c`, its `besidePresent` (`rhi_vk_swapchain`; skipped on the fence ring

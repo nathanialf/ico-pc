@@ -23,7 +23,7 @@
  * submit thread's wait before its present (waitSubmittedCell:
  * rhi_wait_submitted on a held list from another thread, seen by
  * rhi_gpu_progress beside this thread's fence wait, a loss found there;
- * none on the fence ring), and the
+ * the counter read rhi_submitted_finished; none on the fence ring), and the
  * range checks of the commands robust access does not cover (rangeCell), and
  * after the vertex and compute stores' cells the buffer barriers' scopes
  * (rhi_vk_scope.c; alone with the argument `scopes`), and a pass's own
@@ -1410,7 +1410,9 @@ static int waitSubmittedCell(void)
     clockList(UINT32_MAX, UINT32_MAX, heavy, 1, &state, &l);
     rhi_submit(l);
     if (!rhi_limits()->slotOverlap) {
-        WS_CHECK(!rhi_wait_submitted(), "the fence sync: a wait made where none is offered\n");
+        uint64_t none = 0;
+        WS_CHECK(!rhi_wait_submitted() && rhi_submitted_finished(&none, 0) == -1,
+                 "the fence sync: a wait made, or the counter read, where none is offered\n");
         rhi_test_log("wait submitted cell: the slots not apart (the fence sync): no wait, as "
                      "wanted\n");
         rhi_destroy_texture(heavy);
@@ -1439,6 +1441,19 @@ static int waitSubmittedCell(void)
         clockSleepMs(60);
         rhi_gpu_progress(&p);
         const uint64_t ns1 = p.waitingNs;
+        {
+            /* the verdict's read (rhi_submitted_finished): the held one still
+               running, the newest taken when asked with 0 */
+            uint64_t v = value, newest = 0;
+            const int held1 = rhi_submitted_finished(&v, 0),
+                      held0 = rhi_submitted_finished(&newest, 0);
+            /* held: the bounded wait times out */
+            const int heldW = rhi_submitted_finished(&v, 1000000u);
+            WS_CHECK(held1 == 0 && held0 == 0 && heldW == 0 && newest == value,
+                     "the counter read while held: %d, %d, with a 1 ms wait %d (newest %llu, want "
+                     "%llu)\n",
+                     held1, held0, heldW, (unsigned long long)newest, (unsigned long long)value);
+        }
         WS_CHECK(!__atomic_load_n(&s_wsDone, __ATOMIC_ACQUIRE) && p.waitingFor == value &&
                      p.finished < value && ns1 >= 40000000ull,
                  "held: done %d, waiting for %llu (want %llu), finished %llu, %.1f ms\n",
@@ -1460,7 +1475,9 @@ static int waitSubmittedCell(void)
         WS_CHECK(vkr_test_release_hold(), "the hold not released\n");
         ico_thread_join(th);
         rhi_gpu_progress(&p);
-        WS_CHECK(s_wsResult && s_wsEndNs >= rel && p.waitingFor == 0 && p.finished >= value,
+        uint64_t vAfter = value;
+        WS_CHECK(s_wsResult && s_wsEndNs >= rel && p.waitingFor == 0 && p.finished >= value &&
+                     rhi_submitted_finished(&vAfter, 1000000u) == 1,
                  "released: %d, ended %s the release, waiting for %llu, finished %llu of %llu\n",
                  (int)s_wsResult, s_wsEndNs >= rel ? "after" : "before",
                  (unsigned long long)p.waitingFor, (unsigned long long)p.finished,
