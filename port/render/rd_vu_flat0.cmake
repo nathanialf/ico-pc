@@ -25,9 +25,12 @@ endif()
 # Mac reporter's 16:9 frame, issue 179's Mali-G52 frames under the Arm fakes
 # at its settings, the Pixel's three opening frames at its setting) with the
 # flat outputs at the provoking corner (ICO_RD_VU_FLAT0=1, the shipped
-# build) against every corner computing them (=0, the twins), merged and one
-# draw a command: every target byte for byte, and the vertices the record
-# holds each fixture declares (the path ran).  rd_vu_flat0_ab_pixel: the
+# build, with its early return on a triangle the drop verdict culls,
+# ICO_VU_EARLY) against every corner computing them and the culled
+# triangles computed in full (=0, the twins: the shader before both), merged
+# and one draw a command: every target byte for byte, and the vertices the
+# record holds each fixture declares (the path ran; that the early return
+# ran on those fixtures is rd_vu_compact_ab's drop count, below).  rd_vu_flat0_ab_pixel: the
 # same on the frames rd_pixel leaves (a list of build-tree names, every
 # machine, CI's Direct3D 11 job too: tools/ci_d3d11_warp.sh).
 # rd_vu_flat0_gl: the list on OpenGL (llvmpipe), the corpus settings.  No

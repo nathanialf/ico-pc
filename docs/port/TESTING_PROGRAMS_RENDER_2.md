@@ -368,8 +368,10 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   corner read before, the others 5 fewer).
 - `rd_vu_flat0_ab.cmake` (`rd_vu_flat0_ab`, `rd_vu_flat0_ab_pixel`, `rd_vu_flat0_gl`;
   `rd_vu_flat0.cmake`): `vu_main_vs` and `vu_merge_main_vs` reading the planes at corner 0 alone
-  ([PIPELINES.md](PIPELINES.md#flat-outputs-at-the-provoking-corner)) against their twins with
-  every corner computing them, `ICO_RD_VU_FLAT0=1` against `=0`, `--pass-dump --stats`, each with
+  ([PIPELINES.md](PIPELINES.md#flat-outputs-at-the-provoking-corner)) and returning after the
+  drop verdict on a culled triangle ([the drop verdict first](PIPELINES.md#the-drop-verdict-first))
+  against their twins with every corner computing them and no early return but the hidden flag's
+  (the shader before both), `ICO_RD_VU_FLAT0=1` against `=0`, `--pass-dump --stats`, each with
   the draw merge and without it (`ICO_RD_VU_MERGE=0`), on every fixture of
   `port/render/test/fixtures/lists/vu_flat0.txt` ([TESTING_FIXTURES.md](TESTING_FIXTURES.md); each
   line a fixture, its profiles and its properties; a listed fixture that is absent FAILS): the

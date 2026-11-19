@@ -34,6 +34,19 @@
 #define ICO_VU_FLAT0 1
 #endif
 
+// ICO_VU_EARLY (vu_main_vs; docs/port/PIPELINES.md, "The drop verdict
+// first"): 1, the shipped build, reads the triangle's verdict (slot A, and
+// slot C under the tick cameras) before the corner's record and returns
+// vu_out_init() for a triangle the verdict leaves culled, without the
+// corner's record or anything after it; 0 (the same twins as ICO_VU_FLAT0=0,
+// vu_all_main_vs and vu_merge_all_main_vs: the shader before) returns early
+// only on VU_TF_HIDDEN and computes the culled position as before.  Every
+// corner of such a triangle is outside x <= w either way: no fragment, the
+// picture the same byte for byte (rd_vu_flat0_ab)
+#ifndef ICO_VU_EARLY
+#define ICO_VU_EARLY 1
+#endif
+
 // --------------------------------------------------- the record stages
 
 // slot A: the flags (vu_common.hlsli VU_TF_*), the anchor's colour and
@@ -203,44 +216,37 @@ VU_PRE_CS(vu_tri_planes_pre_cs, vu_tri_planes_pre_vs)
 
 // ------------------------------------------------------- the main shader
 
-// The triangle kick-2, kick-1, kick at its corner as vu_mesh_out draws it:
-// the corner's record (vu_rec_vertex), the triangle's (slot A; slot C for
-// the tick cameras' verdicts), the verdict resolved as vu_region_rule's
-// tail and vu_rule_card do, the position chosen as vu_triangle_out_pos
-// does, the chain plane's cull and distance and the later bias as
-// vu_plane_out and vu_later_out apply them; the planes where they hold
-// from slots A and B (vu_rec_planes: VuVSOut's flat varyings, as the
-// program's entry hands them over)
-VuVSOut vu_main_vs(uint vid : SV_VertexID)
+// The triangle kick-2, kick-1, kick's verdict from its record words, the
+// one vu_main_vs and vu_keep_position both take (so the two cannot
+// disagree): f its slot A word's flags, drawZ the draw's flags (vu_draw.z;
+// the compaction's adds its pass flags), slot C read here under the tick
+// cameras where the blended camera's verdict is a drop.  The position code
+// at: 0 culled (the corner at VU_CULLED), 1 the corner's position, 2 its
+// cut position; in clip mode none 1, the corner's own wrap test choosing 1
+// or 3 (vu_corner_position).  exact: the planes hold (vu_attr_planes);
+// beside: the side bands' mark.  culled 1 when the verdict leaves every
+// corner at VU_CULLED: hidden, code 0 (the region rule's drop the tick, card,
+// camera and beside rules keep; the other scissor pass's triangle), or
+// every corner past the chain plane (vu_plane_out); the same for the three
+// corners (the words are the triangle's), and in clip mode none only by
+// the hidden flag or the chain plane
+uint vu_tri_verdict(uint f, uint kick, uint drawZ, out uint exact, out uint beside, out uint culled)
 {
-    vid = VU_MERGE_ENTRY(vid); // the merge build: the draw's own value
-    bool probe = (vu_draw.z & VU_F_PROBE) != 0u;
-    uint kick = vid >> 2;
-    uint corner = vid & 3u;
-    // the corner, or the tests' probe vertex
-    VuVtx me = vu_rec_vertex(probe ? vu_probe_vertex(vid) : kick - 2u + corner);
-    if (probe) {
-        return vu_probe_out(vid, vu_probe_field(me, (vid / 3u) % VU_PROBE_FIELDS));
-    }
     uint rule = vu_rec.w;
     uint mode = rule & VU_CLIP_MASK;
-    uint4 a0 = vu_rec_buf[vu_tri.x + kick];
-    uint f = a0.x;
-    VuVSOut o = vu_out_init();
-    if ((f & VU_TF_HIDDEN) != 0u) {
-        return o;
-    }
-    o.col = float4(me.rgba);
-    o.stq = me.stq;
     uint at = 0u;
-    uint exact = 0u;
-    uint beside = 0u;
+    exact = 0u;
+    beside = 0u;
+    culled = 1u;
+    if ((f & VU_TF_HIDDEN) != 0u) {
+        return at;
+    }
     if (mode == VU_CLIP_NONE) {
-        at = (me.gx & 65535) != me.gx || (me.gy & 65535) != me.gy ? 3u : 1u;
+        at = 1u;
         exact = (f & VU_TF_EXACT) != 0u ? 1u : 0u;
     } else if (mode == VU_CLIP_REGION) {
         uint r = f & VU_TF_RULE_MASK;
-        if (r == VU_RULE_DROP && (vu_draw.z & VU_F_TICKS) != 0u) {
+        if (r == VU_RULE_DROP && (drawZ & VU_F_TICKS) != 0u) {
             // vu_region_rule's tail: a tick that drew it clips it, one
             // that sent it to the card test sends it there
             uint4 s = vu_rec_buf[vu_tri.z + kick];
@@ -256,7 +262,7 @@ VuVSOut vu_main_vs(uint vid : SV_VertexID)
             // whole frame (the flag is set only under VU_F_CAMERA)
             r = VU_RULE_CLIP;
         }
-        if (r == VU_RULE_DROP && (f & VU_TF_BESIDE) != 0u && (vu_draw.z & VU_F_NO_BESIDE) == 0u) {
+        if (r == VU_RULE_DROP && (f & VU_TF_BESIDE) != 0u && (drawZ & VU_F_NO_BESIDE) == 0u) {
             // vu_rule_beside (the draw's flag again: a _dstrov pass sets it
             // after the pre-pass)
             r = VU_RULE_CLIP_BESIDE;
@@ -271,24 +277,82 @@ VuVSOut vu_main_vs(uint vid : SV_VertexID)
         }
     } else {
         uint cut = (f & VU_TF_CUT) != 0u ? 1u : 0u;
-        if ((cut != 0u && (vu_draw.z & VU_F_KICK_ONLY) != 0u) ||
-            (cut == 0u && (vu_draw.z & VU_F_CUT_ONLY) != 0u)) {
+        if ((cut != 0u && (drawZ & VU_F_KICK_ONLY) != 0u) ||
+            (cut == 0u && (drawZ & VU_F_CUT_ONLY) != 0u)) {
             // drawn by the other pass
         } else {
             at = (f >> VU_TF_AT_SHIFT) & 3u;
             exact = (f & VU_TF_EXACT) != 0u ? 1u : 0u;
         }
     }
+    culled = at == 0u ? 1u : 0u;
+    if ((rule & VU_TRI_CHAIN) != 0u && vu_batch.z != 0u && (f & VU_TF_PAST) != 0u) {
+        // vu_plane_out: every corner past the chain plane
+        culled = 1u;
+    }
+    return at;
+}
+
+// The triangle kick-2, kick-1, kick at its corner as vu_mesh_out draws it:
+// the triangle's verdict first (slot A; slot C for the tick cameras'
+// verdicts: vu_tri_verdict, resolved as vu_region_rule's tail and
+// vu_rule_card do), a culled triangle ending there (ICO_VU_EARLY), then
+// the corner's record (vu_rec_vertex), the position chosen as
+// vu_triangle_out_pos does, the chain plane's distance and the later bias
+// as vu_plane_out and vu_later_out apply them; the planes where they hold
+// from slots A and B (vu_rec_planes: VuVSOut's flat varyings, as the
+// program's entry hands them over)
+VuVSOut vu_main_vs(uint vid : SV_VertexID)
+{
+    vid = VU_MERGE_ENTRY(vid); // the merge build: the draw's own value
+    uint kick = vid >> 2;
+    uint corner = vid & 3u;
+    if ((vu_draw.z & VU_F_PROBE) != 0u) {
+        // the tests' probe vertex
+        VuVtx pv = vu_rec_vertex(vu_probe_vertex(vid));
+        return vu_probe_out(vid, vu_probe_field(pv, (vid / 3u) % VU_PROBE_FIELDS));
+    }
+    uint rule = vu_rec.w;
+    uint mode = rule & VU_CLIP_MASK;
+    uint4 a0 = vu_rec_buf[vu_tri.x + kick];
+    uint f = a0.x;
+    uint exact = 0u;
+    uint beside = 0u;
+    uint culled = 0u;
+    uint at = vu_tri_verdict(f, kick, vu_draw.z, exact, beside, culled);
+    VuVSOut o = vu_out_init();
+#if ICO_VU_EARLY
+    // every corner at VU_CULLED (outside x <= w): the triangle draws
+    // nothing, so its corner's record and outputs are not read (the
+    // compaction's filler, a dropped triangle's corner 1, ends here too)
+    if (culled != 0u) {
+        return o;
+    }
+#else
+    if ((f & VU_TF_HIDDEN) != 0u) {
+        return o;
+    }
+#endif
+    VuVtx me = vu_rec_vertex(kick - 2u + corner);
+    o.col = float4(me.rgba);
+    o.stq = me.stq;
+    if (mode == VU_CLIP_NONE) {
+        at = (me.gx & 65535) != me.gx || (me.gy & 65535) != me.gy ? 3u : 1u;
+    }
     o.pos = vu_corner_position(me, mode, at);
     o.plane.y = beside != 0u ? 1.0 : 0.0; // the side bands' pixels (vu_pixel_tests)
     if ((rule & VU_TRI_CHAIN) != 0u) {
         if (vu_batch.z != 0u) {
-            // vu_plane_out: culled value by value, the corner's distance
+#if !ICO_VU_EARLY
+            // vu_plane_out: culled value by value (the shipped build has
+            // returned on such a triangle: culled)
             bool past = (f & VU_TF_PAST) != 0u;
             o.pos.x = past ? VU_CULLED.x : o.pos.x;
             o.pos.y = past ? VU_CULLED.y : o.pos.y;
             o.pos.z = past ? VU_CULLED.z : o.pos.z;
             o.pos.w = past ? VU_CULLED.w : o.pos.w;
+#endif
+            // the corner's distance
             o.plane.x = vu_plane_distance(kick - 2u + corner);
         }
         if ((f & VU_TF_LATER) != 0u) {
@@ -408,8 +472,11 @@ void vu_keep_store(uint u, uint v)
 
 // vu_main_vs's position of the draw's own index value vid under the pass
 // flags passFlags, its statements in their order (the same record words, the
-// same verdict, vu_corner_position, the chain plane's cull and the later
-// bias); culled 1 when the verdict left the corner at VU_CULLED.  The side
+// same verdict through the same helper, vu_tri_verdict, vu_corner_position,
+// the chain plane's cull and the later bias, a culled corner's position
+// computed as vu_main_vs computed it before its early return, ICO_VU_EARLY);
+// culled 1 when the verdict left the corner at VU_CULLED, the triangles
+// vu_main_vs returns early on.  The side
 // bands: as vu_main_vs with the command's VU_F_NO_BESIDE (a _dstrov pass
 // adds the flag at its draw, vuDraw: a drop there, drawn here: kept)
 float4 vu_keep_position(uint vid, uint passFlags, out uint culled)
@@ -421,53 +488,26 @@ float4 vu_keep_position(uint vid, uint passFlags, out uint culled)
     uint mode = rule & VU_CLIP_MASK;
     uint drawZ = vu_draw.z | passFlags;
     uint f = vu_rec_buf[vu_tri.x + kick].x;
-    culled = 1u;
+    uint exact = 0u;
+    uint beside = 0u;
+    // vu_main_vs's verdict (the same helper: culled as vu_main_vs's early
+    // return takes it)
+    uint at = vu_tri_verdict(f, kick, drawZ, exact, beside, culled);
     if ((f & VU_TF_HIDDEN) != 0u) {
         return VU_CULLED;
     }
-    uint at = 0u;
     if (mode == VU_CLIP_NONE) {
         at = (me.gx & 65535) != me.gx || (me.gy & 65535) != me.gy ? 3u : 1u;
-    } else if (mode == VU_CLIP_REGION) {
-        uint r = f & VU_TF_RULE_MASK;
-        if (r == VU_RULE_DROP && (drawZ & VU_F_TICKS) != 0u) {
-            uint4 s = vu_rec_buf[vu_tri.z + kick];
-            r = s.x == 2u || s.y == 2u ? VU_RULE_CLIP
-                                       : ((s.x | s.y) != 0u ? VU_RULE_STRIP : VU_RULE_DROP);
-        }
-        if (r == VU_RULE_STRIP) {
-            r = (f & VU_TF_CARD) != 0u ? VU_RULE_DROP : VU_RULE_CLIP;
-        }
-        if (r == VU_RULE_DROP && (f & VU_TF_CAMERA) != 0u) {
-            r = VU_RULE_CLIP;
-        }
-        if (r == VU_RULE_DROP && (f & VU_TF_BESIDE) != 0u && (drawZ & VU_F_NO_BESIDE) == 0u) {
-            r = VU_RULE_CLIP_BESIDE;
-        }
-        if (r == VU_RULE_EXACT) {
-            at = 1u;
-        } else if (r == VU_RULE_CLIP || r == VU_RULE_CLIP_BESIDE) {
-            at = 2u;
-        }
-    } else {
-        uint cut = (f & VU_TF_CUT) != 0u ? 1u : 0u;
-        if ((cut != 0u && (drawZ & VU_F_KICK_ONLY) != 0u) ||
-            (cut == 0u && (drawZ & VU_F_CUT_ONLY) != 0u)) {
-            // drawn by the other pass
-        } else {
-            at = (f >> VU_TF_AT_SHIFT) & 3u;
-        }
     }
     float4 pos = vu_corner_position(me, mode, at);
-    culled = at == 0u ? 1u : 0u;
     if ((rule & VU_TRI_CHAIN) != 0u) {
-        // value by value, as vu_main_vs (no vector of booleans)
+        // value by value, as vu_main_vs's shader before (no vector of
+        // booleans); culled already says so
         bool past = vu_batch.z != 0u && (f & VU_TF_PAST) != 0u;
         pos.x = past ? VU_CULLED.x : pos.x;
         pos.y = past ? VU_CULLED.y : pos.y;
         pos.z = past ? VU_CULLED.z : pos.z;
         pos.w = past ? VU_CULLED.w : pos.w;
-        culled = past ? 1u : culled;
         if ((f & VU_TF_LATER) != 0u) {
             VuVtx a = vu_rec_vertex(kick - 2u);
             VuVtx b = vu_rec_vertex(kick - 1u);

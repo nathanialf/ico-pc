@@ -102,7 +102,12 @@ endif()
 # command, MSAA and a fractional scale among the corpus settings; every
 # pair's counts matched against its line of
 # test/fixtures/lists/vu_compact_counts.txt, the triangles left out and the
-# camera rule's draws each fixture declares (the path ran).
+# camera rule's draws each fixture declares (the path ran).  The drop
+# count D is also the triangles vu_main_vs returns early on (vu_tri.hlsl
+# ICO_VU_EARLY): vu_keep_position takes its culled from the same helper,
+# vu_tri_verdict, so D unchanged on fx-mali-frame (4612 of list 0's
+# 12192), fx-mali-slow541 (8196 of 19185) and fx-opening-sun (138) holds
+# the verdict as it was and shows the early return ran there.
 # rd_vu_compact_ab_pixel: the same on the frames rd_pixel leaves (a list of
 # build-tree names, the counts printed).  No device: SKIP.
 include(rd_fixture.cmake)
