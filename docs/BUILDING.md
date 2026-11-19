@@ -684,7 +684,7 @@ covers neither Apple's own clang, nor code under `__APPLE__` or `ICO_IOS`, nor t
 `apple` jobs are the gate.
 
 `.github/workflows/ci.yml` runs on every push to main and every pull request.
-A pushed `v*` tag runs the `linux-arm64` job alone, which builds without its
+`tools/ci_watch.sh <full sha>` follows a commit's run from a terminal: a line for every job that starts, ends or fails, and the failed jobs re-run up to twice once the run has completed. A pushed `v*` tag runs the `linux-arm64` job alone, which builds without its
 tests and packages for arm64 (see [Packages](#packages)): main's run on the
 same commit is the gate, and a release is cut only after it is green. On main
 and pull requests: the `linux` job (`ubuntu-24.04`), the `tests` matrix
