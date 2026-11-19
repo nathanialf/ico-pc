@@ -12,7 +12,9 @@
 #     that was cut off continues where it stopped;
 #   - the unpack runs once, after the downloads, without a time limit of its
 #     own (a package manager killed half way leaves the runner broken).
-# The step's own limit in the workflow stays the outer bound.
+# The step's own limit in the workflow stays the outer bound: three tries of
+# 45 s + 100 s with their kill grace are under eight minutes of its twelve,
+# which leaves the unpack its time.
 set -u
 
 kind=${1:-}
@@ -41,8 +43,8 @@ if [ "${2:-}" = --list ]; then
 fi
 
 debs=${ICO_APT_ARCHIVES:-$HOME/.cache/ico-apt}
-update_s=${ICO_APT_UPDATE_S:-60}
-download_s=${ICO_APT_DOWNLOAD_S:-120}
+update_s=${ICO_APT_UPDATE_S:-45}
+download_s=${ICO_APT_DOWNLOAD_S:-100}
 mkdir -p "$debs/partial"
 sudo chown -R root:root "$debs"
 opts="-o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 \

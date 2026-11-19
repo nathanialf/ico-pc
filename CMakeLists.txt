@@ -772,12 +772,28 @@ if(TARGET ico_pc AND NOT ICO_HEADLESS)
         if(NOT _ico_nsb_old STREQUAL _ico_nsb)
             file(WRITE "${_ico_nsb_out}" "${_ico_nsb}")
         endif()
-        get_target_property(_ico_nsb_sources linkernsbypass SOURCES)
-        list(REMOVE_ITEM _ico_nsb_sources android_linker_ns.cpp)
-        set_target_properties(linkernsbypass PROPERTIES SOURCES "${_ico_nsb_sources}")
-        target_sources(linkernsbypass PRIVATE "${_ico_nsb_out}")
-        target_include_directories(linkernsbypass PRIVATE
+        # A library of its own for libmain.so (through adrenotools). The
+        # pinned `linkernsbypass` target stays as it is for libhook_impl.so,
+        # which links it too and calls its namespace functions without asking
+        # linkernsbypass_load_status first: there the constructor has to stay
+        # (that library is loaded only while a driver of the player's is
+        # opened, after libmain.so's own search succeeded).
+        add_library(ico_linkernsbypass_lazy STATIC
+                    "${_ico_nsb_out}"
+                    "${ICO_ADRENOTOOLS_SRC}/lib/linkernsbypass/elf_soname_patcher.cpp")
+        target_compile_options(ico_linkernsbypass_lazy PRIVATE -Wall -Wextra)
+        target_link_libraries(ico_linkernsbypass_lazy android dl)
+        target_include_directories(ico_linkernsbypass_lazy PUBLIC
                                    "${ICO_ADRENOTOOLS_SRC}/lib/linkernsbypass")
+        foreach(_ico_nsb_prop LINK_LIBRARIES INTERFACE_LINK_LIBRARIES)
+            get_target_property(_ico_nsb_libs adrenotools ${_ico_nsb_prop})
+            if(NOT "linkernsbypass" IN_LIST _ico_nsb_libs)
+                message(FATAL_ERROR "libadrenotools no longer links linkernsbypass by that name "
+                                    "(${_ico_nsb_prop}: ${_ico_nsb_libs}): see CMakeLists.txt")
+            endif()
+            list(TRANSFORM _ico_nsb_libs REPLACE "^linkernsbypass$" "ico_linkernsbypass_lazy")
+            set_target_properties(adrenotools PROPERTIES ${_ico_nsb_prop} "${_ico_nsb_libs}")
+        endforeach()
         target_sources(ico_pc PRIVATE port/platform/gpu_driver.c
                                       port/platform/android/gpu_driver_android.c)
         target_link_libraries(ico_pc PRIVATE adrenotools ico_json ico_miniz)
