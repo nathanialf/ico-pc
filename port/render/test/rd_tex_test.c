@@ -2480,14 +2480,16 @@ static void threadPresentFree(void)
         }
         if (c->driver == PF_PREV) {
             /* every long call read at the end of GPU work, one after the
-               other: the first (no picture before) and at most one short
-               call left out (after a light stretch, its short calls in the
-               window too) */
+               other: the first (no picture before) and a few short calls
+               at the start left out, while the GPU is not yet a picture
+               behind (two in the first merge check, on lavapipe and on the
+               faked GPU alike; after a light stretch, its short calls in
+               the window too) */
             CHECK(t->waited == t->counted &&
-                      t->timed <= t->counted + 2u + (c->lightN > 0 ? on.light.timed + 2u : 0u),
+                      t->timed <= t->counted + 4u + (c->lightN > 0 ? on.light.timed + 2u : 0u),
                   "GPU's end first, %s: %u of %u counted at the end of GPU work (all wanted), %u "
                   "timed (at most %u wanted)",
-                  c->name, t->waited, t->counted, t->timed, t->counted + 2u);
+                  c->name, t->waited, t->counted, t->timed, t->counted + 4u);
         } else if (c->driver == PF_FIXED) {
             CHECK(t->waited == 0,
                   "GPU's end first, %s: %u of %u at the end of GPU work (none "
