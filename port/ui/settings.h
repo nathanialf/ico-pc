@@ -84,26 +84,25 @@ int ui_settings_covers_title(void);
    one under the other: Difficulty (a stepped value: Easy, Normal, Hard, and
    Custom while a customized draft exists), Customize (opens the Customize
    pages, UI_PAGE_CUSTOMIZE, on the draft; their Back returns here with the
-   cursor on Customize), Mirror mode (row 0) and New Game+ (row 1), each
-   "Off" or "On", a Start row, and a note for the cursor's row.  Left and
-   Right on Difficulty step the mode: a preset replaces the draft's rows, the
-   customized draft is kept aside and comes back with Custom.  Cross on
-   Difficulty or on an Off/On item picks it and moves the cursor down; Cross
-   on Start, or START anywhere, confirms: the draft becomes the journey's
-   difficulty (port/game/difficulty.h ico_difficulty_begin), then the run's
-   mirror mode (ico_opt_set_mirror) and New Game+ (gFlagGameClear) are set
-   and la_host_new_game_go called (gflagOn(382), what the vibration screen
-   did).  Triangle goes back to the vibration screen (layout 9).  Enter
-   returns the screen's layout with the cursor on Difficulty, the draft at
-   Normal (a cleared save's own rows when gFlagGameClear is set and that
-   save's record is in force) and the run's mirror value reset
-   (ico_opt_mirror_reset), -1 when the menu is not built (the caller then
-   starts the game as the original did). */
+   cursor on Customize), a Start row, and a note for the cursor's row; up
+   and down loop the three.  Mirror mode and New Game+ are Customize's rows
+   (UI_OPT_NEWGAME_MIRROR, UI_OPT_NEWGAME_PLUS), for every difficulty.  Left
+   and Right on Difficulty step the mode: a preset replaces the draft's rows,
+   the customized draft is kept aside and comes back with Custom.  Cross on
+   Difficulty moves the cursor down; Cross on Start, or START anywhere,
+   confirms: the draft becomes the journey's difficulty
+   (port/game/difficulty.h ico_difficulty_begin), then the run's mirror mode
+   (ico_opt_set_mirror) and New Game+ (gFlagGameClear) are set from
+   Customize's two choices and la_host_new_game_go called (gflagOn(382),
+   what the vibration screen did).  Triangle goes back to the vibration
+   screen (layout 9).  Enter returns the screen's layout with the cursor on
+   Difficulty, the draft at Normal (a cleared save's own rows when
+   gFlagGameClear is set and that save's record is in force), Mirror mode
+   Off, New Game+ On from a finished save and Off otherwise, and the run's
+   mirror value reset (ico_opt_mirror_reset), -1 when the menu is not built
+   (the caller then starts the game as the original did). */
 int ui_new_game_screen_enter(void);
 int ui_new_game_screen_layout(void);
-/* row 0 (Mirror mode) or 1 (New Game+): the "Off" (on = 0) and "On"
-   (on = 1) items; -1 for a row the screen does not have (tests) */
-int ui_new_game_screen_row(int row, int on);
 /* the Start row's item (tests) */
 int ui_new_game_screen_start(void);
 /* the Difficulty row's item (its value row and two arrows follow it) and
@@ -904,6 +903,12 @@ typedef enum UiSettingsOpt {
     UI_OPT_DIFF_KNOCK_LIMIT,
     UI_OPT_DIFF_KNOCK_SCOPE,
     UI_OPT_DIFF_PERMADEATH,
+    /* Customize's Mirror mode and New Game+ (Off, On), for every difficulty:
+       the New Game screen's choices (settings_newgame.c ui__newgame_*), not
+       rows of the draft, so never in its mode, difficulty.toml or a save
+       state; the pause menu's view shows the journey's own, greyed */
+    UI_OPT_NEWGAME_MIRROR,
+    UI_OPT_NEWGAME_PLUS,
 } UiSettingsOpt;
 
 /* The entry rows and the menu's layouts (-1 before ui_settings_install):

@@ -10,10 +10,15 @@
  * their strings; No Shadows, the knock-down limit, its count and Permadeath
  * are new.  After every step the draft's mode is the preset its rows match,
  * else Custom; a Custom draft is kept aside, so the Difficulty row can step
- * to a preset and back to it.
+ * to a preset and back to it.  Customize itself also holds Mirror mode and
+ * New Game+ (UI_OPT_NEWGAME_MIRROR, UI_OPT_NEWGAME_PLUS): routed here with
+ * the draft's rows so settings.c needs no case of its own, their choices
+ * kept by the New Game screen (settings_newgame.h ui__newgame_*), never a
+ * row of the draft (ui__diff_row -1).
  */
 #include "settings.h"
 #include "settings_difficulty.h"
+#include "settings_newgame.h" /* ui__newgame_*: Customize's Mirror mode and New Game+ */
 
 #include <stdio.h>
 #include <string.h>
@@ -59,11 +64,12 @@ _Static_assert(ICO_DIFF_ROW_COUNT == 19 && ICO_DIFF_SHADOW_SPEED == 0 &&
 
 /* --- the pages ------------------------------------------------------------- */
 
-/* Customize: the three pages' links, Back */
-static const int kCustOpts[] = {UI_OPT_LINK, UI_OPT_LINK, UI_OPT_LINK, UI_OPT_BACK};
-static const int kCustStrs[] = {UI_STR_SECTION_SHADOWS, UI_STR_SECTION_COMBAT, UI_STR_DIFF_RULES,
-                                UI_STR_BACK};
-static const int kCustLinks[] = {UI_PAGE_SHADOWS, UI_PAGE_COMBAT, UI_PAGE_RULES, -1};
+/* Customize: the three pages' links, Mirror mode and New Game+, Back */
+static const int kCustOpts[] = {UI_OPT_LINK,           UI_OPT_LINK,         UI_OPT_LINK,
+                                UI_OPT_NEWGAME_MIRROR, UI_OPT_NEWGAME_PLUS, UI_OPT_BACK};
+static const int kCustStrs[] = {UI_STR_SECTION_SHADOWS, UI_STR_SECTION_COMBAT,   UI_STR_DIFF_RULES,
+                                UI_STR_OPT_MIRROR,      UI_STR_OPT_NEWGAME_PLUS, UI_STR_BACK};
+static const int kCustLinks[] = {UI_PAGE_SHADOWS, UI_PAGE_COMBAT, UI_PAGE_RULES, -1, -1, -1};
 /* Shadows: how fast, tough and bold they are, then the rules about them */
 static const int kShadowOpts[] = {
     UI_OPT_SHADOW_SPEED, UI_OPT_VAR_TOUGHNESS,    UI_OPT_VAR_AGGRESSION,  UI_OPT_VAR_PEACEFUL,
@@ -280,7 +286,7 @@ int ui__diff_row(int opt)
 
 int ui__diff_opt(int opt)
 {
-    return ui__diff_row(opt) >= 0;
+    return ui__diff_row(opt) >= 0 || ui__newgame_opt(opt);
 }
 
 /* the Queen's barrier as the disc ships it (queen.c: 7 on the June 2001
@@ -300,6 +306,9 @@ const char *ui__diff_text(int opt, char *buf, unsigned size)
     static const int kAgg[ICO_AGGRESSION_COUNT] = {
         UI_STR_VAL_VAR_AGG_OWN, UI_STR_VAL_VAR_AGG_BOLD_PATIENT, UI_STR_VAL_VAR_AGG_BOLD_QUICK,
         UI_STR_VAL_VAR_AGG_WARY_PATIENT, UI_STR_VAL_VAR_AGG_WARY_QUICK};
+    if (ui__newgame_opt(opt)) {
+        return ui_str(ui__newgame_value(opt, s_readOnly) ? UI_STR_ON : UI_STR_OFF);
+    }
     const int row = ui__diff_row(opt);
     if (row < 0) {
         return "";
@@ -342,17 +351,25 @@ const char *ui__diff_text(int opt, char *buf, unsigned size)
 void ui__diff_step(int opt, int dir)
 {
     const int row = ui__diff_row(opt);
+    const int screen = ui__newgame_opt(opt); /* Mirror mode, New Game+: no row of the draft */
     IcoDifficulty *d;
     static int ignored;
-    if (row < 0 || dir == 0) {
+    if ((row < 0 && !screen) || dir == 0) {
         return;
     }
     if (s_readOnly) {
         /* chosen when the journey began: nothing to step */
         if (ignored++ < 8 || ignored % 100 == 0) {
             fprintf(stderr, "settings: %s not stepped: chosen when the journey began (%d)\n",
-                    ico_difficulty_row_key((IcoDiffRow)row), ignored);
+                    !screen                        ? ico_difficulty_row_key((IcoDiffRow)row)
+                    : opt == UI_OPT_NEWGAME_MIRROR ? "mirror_mode"
+                                                   : "new_game_plus",
+                    ignored);
         }
+        return;
+    }
+    if (screen) {
+        ui__newgame_step(opt); /* Off and On: either way toggles; the draft untouched */
         return;
     }
     d = draft();
@@ -375,6 +392,11 @@ int ui__diff_shown(int opt)
 int ui__diff_note(int opt)
 {
     const int row = ui__diff_row(opt);
+    if (ui__newgame_opt(opt)) {
+        return s_readOnly                     ? UI_STR_DIFF_LOCKED_NOTE
+               : opt == UI_OPT_NEWGAME_MIRROR ? UI_STR_MIRROR_SCREEN
+                                              : UI_STR_NEWGAME_PLUS_SCREEN;
+    }
     if (s_readOnly && row >= 0) {
         /* No Shadows, when on, keeps its warning about the story */
         return row == ICO_DIFF_NO_SHADOWS && viewed()->row[row] ? UI_STR_DIFF_NO_SHADOWS_NOTE

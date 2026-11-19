@@ -246,10 +246,8 @@ void ui_mouse_tick(void)
     }
     if (t.valid && (t.moved || t.clicks > 0)) {
         UiMouseHit hit;
-        /* the New Game screen's cursor row takes the item under the cursor
-           as its choice, and the way from a row's "On" to Start crosses its
-           "Off": there only a click moves the cursor (a touch tap is a click,
-           a drag over an item picks nothing) */
+        /* the New Game screen: only a click moves the cursor (a touch tap
+           is a click, a drag over an item picks nothing) */
         const int ng = ui_new_game_screen_layout();
         const int clickOnly = ng >= 0 && current_layout_id == ng;
         if (hitAt(t.x, t.y, &hit) && (t.clicks > 0 || !clickOnly)) {

@@ -25,13 +25,48 @@
  *   - the pause menu's journey line and the listener (no pop-up for a knock-down or the end; the difficulty
  *     listener: the Continue list's refusal, each counted knock-down short of
  *     the limit);
+ *   - Customize's Mirror mode and New Game+: no rows of the draft, a step
+ *     toggles the screen's choice (its line) and leaves the draft and its
+ *     mode, Difficulty stepped keeps both, the pause menu's view shows the
+ *     journey's values greyed and refuses a step;
  *   - the screen's notes fit two lines in every table; the moved rows' notes
  *     carry no achievements tail.
  * CPU only. */
 #include "settings_fixture.h"
 
 #include "settings_difficulty.h"
+#include "settings_newgame.h" /* ui__newgame_value */
 #include "popup.h"
+
+/* stderr to a file for a stretch: the log lines the pages write */
+static int s_errSaved = -1;
+
+static void errCapture(void)
+{
+    char p[1100];
+    path(p, sizeof(p), "settings_test_stderr.txt");
+    fflush(stderr);
+    s_errSaved = dup(2);
+    FILE *f = freopen(p, "wb", stderr);
+    (void)f;
+}
+
+static void errRelease(char *out, size_t n)
+{
+    char p[1100];
+    path(p, sizeof(p), "settings_test_stderr.txt");
+    fflush(stderr);
+    dup2(s_errSaved, 2);
+    close(s_errSaved);
+    clearerr(stderr);
+    out[0] = '\0';
+    FILE *f = fopen(p, "rb");
+    if (f) {
+        size_t got = fread(out, 1, n - 1, f);
+        out[got] = '\0';
+        fclose(f);
+    }
+}
 
 /* the screen up, the cursor on Difficulty */
 static int ngOpen(int cleared)
@@ -289,15 +324,16 @@ static void testClearedSave(void)
     ico_difficulty_reset();
 }
 
-/* the screen's notes (the four modes', Customize's) fit its two lines in
+/* the screen's notes (the four modes', Customize's, and Customize's Mirror
+   mode and New Game+ notes) fit its two lines in
    every table; the moved rows' notes on Customize's pages carry no
    achievements tail */
 static void testNotes(void)
 {
-    static const int kNotes[] = {UI_STR_DIFF_EASY_NOTE,      UI_STR_DIFF_NORMAL_NOTE,
-                                 UI_STR_DIFF_HARD_NOTE,      UI_STR_DIFF_CUSTOM_NOTE,
-                                 UI_STR_DIFF_CUSTOMIZE_NOTE, UI_STR_DIFF_LOCKED_NOTE,
-                                 UI_STR_DIFF_NO_SHADOWS_NOTE};
+    static const int kNotes[] = {
+        UI_STR_DIFF_EASY_NOTE,       UI_STR_DIFF_NORMAL_NOTE,    UI_STR_DIFF_HARD_NOTE,
+        UI_STR_DIFF_CUSTOM_NOTE,     UI_STR_DIFF_CUSTOMIZE_NOTE, UI_STR_DIFF_LOCKED_NOTE,
+        UI_STR_DIFF_NO_SHADOWS_NOTE, UI_STR_MIRROR_SCREEN,       UI_STR_NEWGAME_PLUS_SCREEN};
     static const UiSettingsPage kPages[3] = {UI_PAGE_SHADOWS, UI_PAGE_COMBAT, UI_PAGE_RULES};
     ngSetup();
     for (int lang = 0; lang < UI_LANG_TABLES; lang++) {
@@ -505,7 +541,7 @@ static void stickX(int x, int ticks)
 
 /* the owner's play test: the stick's left and right step Difficulty as the
    d-pad does (one step a push, held or not, the mode wrapping as a Settings
-   row that wraps); the Off/On rows and Customize's rows keep taking it */
+   row that wraps); Customize's rows (Mirror mode among them) keep taking it */
 static void testStick(void)
 {
     ngSetup();
@@ -527,18 +563,28 @@ static void testStick(void)
     CHECK(ui__diff_draft_mode() == ICO_DIFF_NORMAL, "stick left: Normal");
     CHECK(!ico_difficulty_has_journey() && ico_difficulty_active()->mode == ICO_DIFF_NORMAL,
           "the stick changes nothing in force before the confirm");
-    /* Mirror mode's Off/On: the stick moves between them as before */
-    l->curItem = ui_new_game_screen_row(0, 0);
-    frame(0);
-    stickX(255, 1);
-    CHECK(l->curItem == ui_new_game_screen_row(0, 1), "stick right on Mirror mode: On (%d)",
-          l->curItem);
-    stickX(0, 1);
-    CHECK(l->curItem == ui_new_game_screen_row(0, 0), "stick left on Mirror mode: Off (%d)",
-          l->curItem);
-    CHECK(ui__diff_draft_mode() == ICO_DIFF_NORMAL, "Mirror mode's stick leaves Difficulty");
-    /* a Customize row (an ordinary Settings page) steps by the stick too */
+    /* Customize: the stick on Mirror mode toggles it, Difficulty stays */
     const int cl = custOpen(ml);
+    {
+        int lb[8], op[8], lv[8];
+        const int cn = ui_settings_page_rows(UI_PAGE_CUSTOMIZE, lb, op, lv, 8);
+        CHECK(cn == 6 && op[3] == UI_OPT_NEWGAME_MIRROR, "Customize's Mirror mode row (%d)", cn);
+        if (cn == 6) {
+            lt_ext_layout(cl)->curItem = lb[3];
+            frame(0);
+            stickX(255, 1);
+            CHECK(ui__newgame_value(UI_OPT_NEWGAME_MIRROR, 0) == 1 &&
+                      strcmp(lt_ext_row_text(lv[3]), "On") == 0,
+                  "stick right on Mirror mode: On (%s)", lt_ext_row_text(lv[3]));
+            stickX(0, 1);
+            CHECK(ui__newgame_value(UI_OPT_NEWGAME_MIRROR, 0) == 0, "stick left: Off");
+            CHECK(ui__diff_draft_mode() == ICO_DIFF_NORMAL,
+                  "Mirror mode's stick leaves Difficulty");
+            lt_ext_layout(cl)->curItem = lb[0];
+            frame(0);
+        }
+    }
+    /* a Customize page's row (an ordinary Settings page) steps by the stick too */
     const int sl = openLink(cl, UI_PAGE_CUSTOMIZE, UI_PAGE_SHADOWS);
     int lb[16], op[16];
     const int sn = ui_settings_page_rows(UI_PAGE_SHADOWS, lb, op, NULL, 16);
@@ -555,6 +601,126 @@ static void testStick(void)
     ico_difficulty_reset();
 }
 
+/* Customize's Mirror mode and New Game+ (every difficulty): no row of the
+   draft (ui__diff_row -1), routed as one (ui__diff_opt); a step toggles the
+   screen's choice with its line and leaves the draft, its mode and a kept
+   Custom draft; Difficulty stepped keeps both; the confirm applies them.
+   The pause menu's view shows the journey's own values greyed with the
+   locked note and refuses a step (gFlagGameClear and the run's mirror value
+   untouched). */
+static void testScreenRows(void)
+{
+    char log[2048];
+    static const int kOpt[2] = {UI_OPT_NEWGAME_MIRROR, UI_OPT_NEWGAME_PLUS};
+    for (int k = 0; k < 2; k++) {
+        CHECK(ui__diff_row(kOpt[k]) == -1 && ui__diff_opt(kOpt[k]) && ui__diff_shown(kOpt[k]),
+              "option %d: no row of the draft, routed as Customize's", kOpt[k]);
+    }
+    ngSetup();
+    ico_opt_set_mirror(0);
+    int ml = ngOpen(0);
+    const int cl = custOpen(ml);
+    int lb[8], op[8], lv[8];
+    const int cn = ui_settings_page_rows(UI_PAGE_CUSTOMIZE, lb, op, lv, 8);
+    CHECK(cn == 6 && op[3] == UI_OPT_NEWGAME_MIRROR && op[4] == UI_OPT_NEWGAME_PLUS &&
+              op[5] == UI_OPT_BACK && lv[3] >= 0 && lv[4] >= 0,
+          "Customize: Shadows, Combat, Rules, Mirror mode, New Game+, Back (%d)", cn);
+    if (cn != 6) {
+        return;
+    }
+    checkPageFits(UI_PAGE_CUSTOMIZE, "Customize");
+    CHECK(strcmp(lt_ext_row_text(lv[3]), "Off") == 0 &&
+              strcmp(lt_ext_row_text(lv[4]), "Off") == 0 && !lt_ext_row_dim(lb[3]) &&
+              !lt_ext_row_dim(lb[4]),
+          "a title New Game: both Off, not greyed");
+    CHECK(ui__diff_note(UI_OPT_NEWGAME_MIRROR) == UI_STR_MIRROR_SCREEN &&
+              ui__diff_note(UI_OPT_NEWGAME_PLUS) == UI_STR_NEWGAME_PLUS_SCREEN,
+          "their own notes");
+    /* a Custom draft kept aside first: the two rows leave it */
+    const int sl = openLink(cl, UI_PAGE_CUSTOMIZE, UI_PAGE_SHADOWS);
+    (void)sl;
+    press(LT_PAD_RIGHT); /* Shadow speed Faster: Custom */
+    press(LT_PAD_TRIANGLE);
+    CHECK(settle(cl, 60) && ui__diff_draft_mode() == ICO_DIFF_CUSTOM, "a Custom draft");
+    IcoDifficulty before = *ui_new_game_screen_draft();
+    lt_ext_layout(cl)->curItem = lb[3];
+    frame(0);
+    errCapture();
+    press(LT_PAD_RIGHT);
+    errRelease(log, sizeof(log));
+    CHECK(strcmp(lt_ext_row_text(lv[3]), "On") == 0 &&
+              strstr(log, "newgame: Customize: Mirror mode on (Difficulty stays custom)") != NULL,
+          "Right on Mirror mode: On, its line (\"%s\")", log);
+    lt_ext_layout(cl)->curItem = lb[4];
+    frame(0);
+    press(LT_PAD_LEFT);
+    CHECK(strcmp(lt_ext_row_text(lv[4]), "On") == 0 && gFlagGameClear == 0 && ico_opt_mirror() == 0,
+          "Left on New Game+: On; nothing applied before the start");
+    CHECK(memcmp(ui_new_game_screen_draft(), &before, sizeof(before)) == 0 &&
+              ui__diff_draft_mode() == ICO_DIFF_CUSTOM && ui__diff_has_custom(),
+          "the draft, its mode and the kept Custom draft untouched");
+    press(LT_PAD_TRIANGLE);
+    CHECK(settle(ml, 60), "Back: the screen");
+    /* Difficulty to Hard keeps both */
+    lt_ext_layout(ml)->curItem = ui_new_game_screen_difficulty();
+    frame(0);
+    press(LT_PAD_LEFT); /* from Custom: Hard */
+    CHECK(strcmp(ngValue(), "Hard") == 0 && draftIs(ICO_DIFF_HARD), "Left: Hard (%s)", ngValue());
+    CHECK(ui__newgame_value(UI_OPT_NEWGAME_MIRROR, 0) == 1 &&
+              ui__newgame_value(UI_OPT_NEWGAME_PLUS, 0) == 1,
+          "Difficulty stepped (%s): Mirror mode and New Game+ kept", ngValue());
+    press(LT_PAD_START);
+    CHECK(ico_opt_mirror() == 1 && gFlagGameClear == 1, "START: both applied");
+    CHECK(ui__newgame_value(UI_OPT_NEWGAME_MIRROR, 1) == 1 &&
+              ui__newgame_value(UI_OPT_NEWGAME_PLUS, 1) == 1,
+          "the journey's values: the run's mirror value, the cleared flag");
+
+    /* the pause menu's view: the journey's values, greyed, the locked note,
+       a step refused with its line */
+    const int mainL = enterMain(0);
+    int gameL = openPage(mainL, -1, UI_PAGE_GAMEPLAY);
+    for (int k = 0; k < 4; k++) {
+        frame(0);
+    }
+    ico_opt_set_mirror(1);
+    gFlagGameClear = 0;
+    const int rcl = openLink(gameL, UI_PAGE_GAMEPLAY, UI_PAGE_CUSTOMIZE);
+    for (int k = 0; k < 4; k++) {
+        frame(0);
+    }
+    CHECK(ui_settings_page_rows(UI_PAGE_CUSTOMIZE, lb, op, lv, 8) == 6, "Customize's rows again");
+    CHECK(ui__diff_readonly(), "from Gameplay: read-only");
+    CHECK(strcmp(lt_ext_row_text(lv[3]), ui_str(UI_STR_ON)) == 0 &&
+              strcmp(lt_ext_row_text(lv[4]), ui_str(UI_STR_OFF)) == 0,
+          "the journey's values: mirrored, no New Game+ (%s, %s)", lt_ext_row_text(lv[3]),
+          lt_ext_row_text(lv[4]));
+    CHECK(lt_ext_row_dim(lb[3]) && lt_ext_row_dim(lv[3]) && lt_ext_row_dim(lb[4]) &&
+              lt_ext_row_dim(lv[4]),
+          "both greyed");
+    CHECK(ui__diff_note(UI_OPT_NEWGAME_MIRROR) == UI_STR_DIFF_LOCKED_NOTE &&
+              ui__diff_note(UI_OPT_NEWGAME_PLUS) == UI_STR_DIFF_LOCKED_NOTE,
+          "the note: chosen when the journey began");
+    const int keepMirror = ui__newgame_value(UI_OPT_NEWGAME_MIRROR, 0);
+    lt_ext_layout(rcl)->curItem = lb[4];
+    frame(0);
+    errCapture();
+    press(LT_PAD_RIGHT);
+    errRelease(log, sizeof(log));
+    CHECK(gFlagGameClear == 0 && strcmp(lt_ext_row_text(lv[4]), ui_str(UI_STR_OFF)) == 0 &&
+              strstr(log, "new_game_plus not stepped: chosen when the journey began") != NULL,
+          "a step on New Game+ refused, the flag untouched (\"%s\")", log);
+    lt_ext_layout(rcl)->curItem = lb[3];
+    frame(0);
+    press(LT_PAD_LEFT);
+    CHECK(ico_opt_mirror() == 1 && ui__newgame_value(UI_OPT_NEWGAME_MIRROR, 0) == keepMirror,
+          "a step on Mirror mode refused, the run's value and the screen's choice untouched");
+    press(LT_PAD_TRIANGLE);
+    CHECK(settle(gameL, 60), "Back: Gameplay");
+    gFlagGameClear = 0;
+    ico_opt_set_mirror(0);
+    ico_difficulty_reset();
+}
+
 int main(int argc, char **argv)
 {
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
@@ -567,6 +733,7 @@ int main(int argc, char **argv)
     testCustomize();
     testClearedSave();
     testReadOnly();
+    testScreenRows();
     testNoPopups();
     testNotes();
     gFlagGameClear = 0;

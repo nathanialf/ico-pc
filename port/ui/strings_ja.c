@@ -200,7 +200,7 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_MIRROR_SCREEN] = "左右を反転して遊びます。この設定はセーブデータに記録されます。",
     [UI_STR_OPT_NEWGAME_PLUS] = "ニューゲーム+",
     [UI_STR_NEWGAME_PLUS_SCREEN] =
-        "ニューゲーム+では2周目の旅を遊びます。ヨルダの言葉が訳され、エンディングとアイテムが変わります。オフにすると、クリア後も1周目の旅を遊びます。",
+        "2周目の旅を遊びます。ヨルダの言葉が訳され、エンディングとアイテムが変わります。オフは1周目の旅です。",
     [UI_STR_NEWGAME_START] = "はじめる",
     [UI_STR_NEWGAME_START_SCREEN] = "上の設定でニューゲームをはじめます。",
     [UI_STR_OPT_CRT] = "CRTフィルタ",

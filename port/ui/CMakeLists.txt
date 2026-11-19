@@ -235,8 +235,8 @@ ico_settings_test(settings_test test/settings_test.c)
 # hide the title's logo
 ico_settings_test(settings_extras_test test/settings_extras_test.c)
 # settings_states_test: the Save states page, the pause menu's row at pitch 16
-# and the pause menu's and the Continue screen's Square prompts over a fake host
-# and a fake Continue screen; Extras has no Save states row (the other discs' runs: the pause
+# (Square there does nothing) and the Continue screen's Square prompt over a fake
+# host and a fake Continue screen; Extras has no Save states row (the other discs' runs: the pause
 # rows, Extras and the prompt on their numbers)
 ico_settings_test(settings_states_test test/settings_states_test.c)
 # settings_extra_test: more Settings menu tests; each settings test file
