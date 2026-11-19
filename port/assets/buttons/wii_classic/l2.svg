@@ -1,0 +1,6 @@
+<svg version="1.2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 24" width="40" height="24">
+	<style>
+		.s0 { fill: #e1e1e1;stroke: #000000;paint-order:stroke fill markers;stroke-miterlimit:100;stroke-width: 4 } 
+	</style>
+	<path id="ZL" class="s0" d="m3.89 21.77v-2.94l10.15-12.61q0.44-0.59 1.06-1.23h-10.06v-2.76h14.13v2.64l-10.82 13.41-0.62 0.7h11.83v2.79zm19.25 0v-19.54h3.22v16.78h9.74v2.76z"/>
+</svg>
