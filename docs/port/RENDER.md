@@ -156,9 +156,9 @@ Direct3D 12, Vulkan's fence ring or `ICO_RD_SUBMIT_OVERLAP=0` the next picture's
 interpolation. On Android at Frame rate Original (the device table's `PRESENT_FREE`, with the slots
 apart) the submit thread's job waits for its picture's GPU work to end before its present, outside
 the swapchain's lock (`rhi_wait_submitted`; `rd_submit_thread.h` "the GPU's end first", issue
-179), where the first Original presents show the driver's present waiting for the GPU (after
-each, one unbounded wait for the picture before's submission and one for its own,
-`rhi_wait_value_ns`: the present back within 1 ms of either end), and while it waits with no job
+179), where the first Original presents show the driver's present waiting for the GPU (each
+call timed; after one of 2 ms or more, one unbounded wait for the previous present job's
+submission, `rhi_wait_value_ns`, back within 1 ms), and while it waits with no job
 behind it the game's gate does not count the picture before
 as busy: the next picture records beside that wait and its job follows that present, so the GPU
 still holds one picture at a time ([DISPLAY.md](DISPLAY.md#pacing) path 1). The lines: `rd: submit thread: the frame slots apart (...)` or `the frame slots one at

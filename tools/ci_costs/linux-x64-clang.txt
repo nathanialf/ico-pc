@@ -779,9 +779,9 @@ rd_subpass_probe_plain 11.37
 rd_subpass_probe_refused 10.91
 rd_subpass_probe_rule 0.00
 rd_subpass_probe_selftest 9.12
-rd_tex 34.14
+rd_tex 46.14
 rd_tex_gl 5.81
-rd_tex_mali 34.85
+rd_tex_mali 46.85
 rd_tex_pool 0.37
 rd_thread_ab 348.24  # estimate: 215.5 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 1.62
 rd_turn_fold_ab 424.91  # estimate: 262.9 s local (merge-wt_FIX-P5b-20261115T232657Z.lvp.log) x 1.62

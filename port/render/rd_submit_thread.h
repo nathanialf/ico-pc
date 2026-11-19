@@ -84,34 +84,36 @@
  *                   the wait would only add the GPU's remaining time
  *                   before every present.  So the verdict is the device's,
  *                   taken at run time: the first Original presents are
- *                   made without the wait, each timed, and after each one
- *                   the submit thread makes one unbounded wait for the
- *                   picture before's submission and one for its own
- *                   (rhi_last_submitted after the job's submits,
- *                   rhi_wait_value_ns), whose returns give each end's time
- *                   from the present's return (the GPU then holds one
- *                   picture at a time while the verdict is taken).  The
- *                   class (rd_submit_queue.h rd__sq_gf_class): a present
- *                   under 2 ms with its own work done by its return says
- *                   nothing (the GPU done first, skipped); one of 2 ms or
- *                   more back within 1 ms of the end of the picture
- *                   before's work (issue 179's Mali-G52, v0.11.12 log line
- *                   562: the present returned at the picture before's
- *                   end, its own 91 ms later) or of its own returned at
- *                   the end of GPU work; anything else is early; a wait
- *                   that failed is unknown (its result kept for the 10 s
- *                   line).  At RD_GPU_FIRST_SAMPLES counted the rule is on
- *                   where RD_GPU_FIRST_NEED or more returned at the end of
- *                   GPU work, else off, with one line; a backend without
- *                   the wait never decides (off).  The timeline counter's
- *                   instant read (rhi_submitted_finished, v0.11.12's
- *                   input: no sample was ever counted on the Mali-G52) is
- *                   only logged, in the first 8 samples' lines.  Taken
- *                   anew at every start of the thread (a renderer switch,
- *                   a new device) and where the present mode changed
- *                   since (a FIFO present waits for the display, not the
- *                   GPU).  With the rule on,
- *                   while the job is in that wait with no job behind it
+ *                   made without the wait and the driver's call of each
+ *                   is timed, nothing else done before or around it.  A
+ *                   call under 2 ms is not counted and costs nothing (a
+ *                   driver whose present returns early does not decide,
+ *                   the rule off, until RD_GPU_FIRST_LATE timed presents,
+ *                   half of them or more short, make the verdict off).  After a call of 2 ms or more the
+ *                   submit thread makes one unbounded wait for the
+ *                   previous present job's submission (rhi_last_submitted
+ *                   after its submits, rhi_wait_value_ns), never for the
+ *                   picture's own (that wait would leave the next present
+ *                   nothing of the picture before to wait for): back
+ *                   within 1 ms, the picture before had ended by the
+ *                   call's return, so the call lasted to the end of GPU
+ *                   work (issue 179's Mali-G52, its reporter's log line
+ *                   562: 140.3 ms, back at the picture before's signal);
+ *                   blocked 1 ms or more, early; failed, unknown (its
+ *                   result kept for the 10 s line).  The classes:
+ *                   rd_submit_queue.h rd__sq_gf_class.  At
+ *                   RD_GPU_FIRST_SAMPLES counted the rule is on where
+ *                   RD_GPU_FIRST_NEED or more returned at the end of GPU
+ *                   work, else off, with one line; after it no wait is
+ *                   made again.  The timeline counter's instant read
+ *                   (rhi_submitted_finished: no sample was ever counted
+ *                   on the Mali-G52 with it as the input) is made only
+ *                   after the wait, for the first 8 samples' lines, and
+ *                   only logged.  Taken anew at every start of the thread
+ *                   (a renderer switch, a new device) and where the
+ *                   present mode changed since (a FIFO present waits for
+ *                   the display, not the GPU).  With the rule on, while
+ *                   the job is in that wait with no job behind it
  *                   (rd_thread_submit_gpu_wait_alone) the gate does not
  *                   count it (rd_thread.c rd__thread_picture_busy) and the
  *                   hand-over does not wait for it (rd__replay_frame_post):
@@ -216,10 +218,11 @@ void rd__submit_test_hook(void (*fn)(void));
  * spend before */
 #define RD_GPU_FIRST_SAMPLES 16u
 #define RD_GPU_FIRST_NEED 14u
-/* the samples' lines one by one, the first this many of the run; the line
- * "no verdict after" this many Original presents, once */
+/* the samples' lines one by one (counted and unknown ones), the first this
+ * many of the run; the line "no verdict after" this many timed Original
+ * presents, once a run and present mode */
 #define RD_GPU_FIRST_LINES 8u
-#define RD_GPU_FIRST_LATE 64u
+#define RD_GPU_FIRST_LATE 256u
 
 enum { RD_GPU_FIRST_UNDECIDED = -1, RD_GPU_FIRST_OFF = 0, RD_GPU_FIRST_ON = 1 };
 
@@ -234,26 +237,30 @@ bool rd_thread_submit_gpu_wait_alone(void);
  * thread (NULL: none).  submitted() after a job's submit (its work begins);
  * waitEnd() inside the GPU's end first's wait (returns at the faked end);
  * present() where the driver's present call is, every job (it may wait for
- * the faked end: a driver whose present waits for the GPU); sampleWait(own)
- * the verdict's samples' waits after the present, in place of the
- * backend's (rhi_wait_value_ns): returns at the faked end of the picture
- * before's work (own false) or of the job's own, true (a job counts as
- * presenting while present is set).  Any member may be NULL: sampleWait
- * NULL, the samples wait on the real backend's submissions.  The rule
- * wanted (1) or not (0) at the next start, -1 the device table's.  The
- * jobs that made the wait, ever.  The verdict's tally since the thread's
- * start (or the present mode's retake): the Original presents sampled,
- * of them counted and unknown. */
+ * the faked end: a driver whose present waits for the GPU); sampleWait()
+ * the verdict's wait after a long present, in place of the backend's
+ * (rhi_wait_value_ns): returns at the faked end of the picture before's
+ * work, true (a job counts as presenting while present is set).  Any
+ * member may be NULL: sampleWait NULL, the samples wait on the real
+ * backend's submissions.  The rule wanted (1) or not (0) at the next
+ * start, -1 the device table's.  The jobs that made the wait, ever.  The
+ * verdict's tally since the thread's start (or a present mode change):
+ * the Original presents timed, of them short (under 2 ms), counted, of
+ * those waited, unknown; the samples' waits made. */
 typedef struct RdSubmitTestGpu {
     void (*submitted)(void);
     void (*waitEnd)(void);
     void (*present)(void);
-    bool (*sampleWait)(bool own);
+    bool (*sampleWait)(void);
 } RdSubmitTestGpu;
+
+typedef struct RdGpuFirstTally {
+    unsigned timed, shortCalls, counted, waited, unknown, waits;
+} RdGpuFirstTally;
 
 void rd__submit_test_gpu(const RdSubmitTestGpu *fake);
 void rd__submit_test_gpu_first(int force);
-void rd__submit_gpu_first_tally(unsigned *presents, unsigned *counted, unsigned *unknown);
+void rd__submit_gpu_first_tally(RdGpuFirstTally *out);
 uint64_t rd__submit_gpu_first_waits(void);
 /* of those, the backend's waits that returned true (rhi_wait_submitted) */
 uint64_t rd__submit_gpu_first_waited(void);

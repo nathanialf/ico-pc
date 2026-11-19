@@ -86,15 +86,17 @@ typedef struct RdSubmitJob {
 } RdSubmitJob;
 
 /* RdSubmitJob.gfSample: none; a job not of Frame rate Original; an
-   Original job without a present; a present whose picture's work was done
-   before it could say anything (skipped: the GPU done first); a sample
-   whose wait failed (unknown); a counted sample, its present returned at
-   the end of GPU work (waited) or not (early) */
+   Original job without a present; a timed present under
+   RD_GPU_FIRST_CALL_MS (short: no wait, not counted); a long one with no
+   present job before it (the round's first: not counted); a sample whose
+   wait failed (unknown); a counted sample, its present returned at the
+   end of the picture before's GPU work (waited) or not (early) */
 enum {
     RD_GF_NONE,
     RD_GF_NOT_ORIGINAL,
     RD_GF_NO_PRESENT,
-    RD_GF_SKIPPED,
+    RD_GF_SHORT,
+    RD_GF_NO_PREV,
     RD_GF_UNKNOWN,
     RD_GF_WAITED,
     RD_GF_EARLY
@@ -117,9 +119,11 @@ typedef struct RdSubmitBlock {
     unsigned overlapped;
     /* the jobs finished while the GPU's end first's verdict was not taken
        (gfSample not RD_GF_NONE; 0: none, the 10 s line leaves them out),
-       by gfSample: counted (waited and early), skipped, unknown with the
-       last one's result, not Original, without a present */
-    unsigned gfJobs, gfCounted, gfSkipped, gfUnknown, gfNotOriginal, gfNoPresent;
+       by gfSample: the presents timed (short, no picture before, unknown,
+       waited and early), of them short, counted (waited and early, and of
+       those waited), unknown with the last one's result; the jobs not
+       Original, without a present */
+    unsigned gfJobs, gfTimed, gfShort, gfCounted, gfWaited, gfUnknown, gfNotOriginal, gfNoPresent;
     int32_t gfLastResult;
 } RdSubmitBlock;
 
@@ -152,33 +156,29 @@ void rd__sq_note_on_render(RdSubmitQ *q);
 void rd__sq_note_overlap(RdSubmitQ *q);
 void rd__sq_block_take(RdSubmitQ *q, RdSubmitBlock *out);
 
-/* One sample of the GPU's end first's verdict (rd_submit_thread.h), its
- * class (RD_GF_UNKNOWN, RD_GF_SKIPPED, RD_GF_WAITED, RD_GF_EARLY) from the
- * waits' result (the first failure's, rhi.h rhi_wait_value_ns: not 0 is
- * unknown whatever the times say, VK_NOT_READY or VK_TIMEOUT included),
- * the present's time (callMs) and the two ends after it, in ms from the
- * present's return:
- * prevEndMs the picture before's GPU work (hasPrev false: no picture
- * before), ownEndMs its own.  Each end is the time the submit thread's
- * wait for it returned (one unbounded wait after the present, the picture
- * before's first): a wait that blocked gives the end, one that did not
- * says "at or before the return" (near 0), so an end long before the return
- * reads as one at it.
- *   skipped  the present under RD_GPU_FIRST_CALL_MS and its own work done
- *            within RD_GPU_FIRST_NEAR_MS of its return: the GPU done
- *            first (idle, or the picture too light for so short a call to
- *            have waited for it): says nothing of the driver;
- *   waited   the present RD_GPU_FIRST_CALL_MS or longer and back within
- *            RD_GPU_FIRST_NEAR_MS of the end of the picture before's work
- *            (line 562 of issue 179's v0.11.12 log: 140.3 ms, at the end
- *            of the picture before's, its own 91 ms later) or of its own
- *            (a present that returns at its own picture's end);
- *   early    anything else (the owner's Pixel: 0.6 ms with its own work
- *            still running). */
+/* One timed present of the GPU's end first's verdict (rd_submit_thread.h)
+ * and its class:
+ *   short    the driver's call under RD_GPU_FIRST_CALL_MS: no wait is
+ *            made, not counted (a present that returns early, the owner's
+ *            Pixel's 0.6 ms, never pays anything and never decides: the
+ *            rule stays off);
+ *   no prev  a long call with no present job before it (hasPrev false):
+ *            not counted;
+ *   unknown  the one wait after the call, for the picture before's
+ *            submission (never the picture's own: it would leave the next
+ *            present nothing to wait for), failed (result not 0, rhi.h
+ *            rhi_wait_value_ns; VK_NOT_READY and VK_TIMEOUT included);
+ *   waited   it returned within RD_GPU_FIRST_NEAR_MS (waitMs: the time it
+ *            took): the picture before had ended by the call's return, so
+ *            the call lasted to that end or to its own picture's, later
+ *            (line 562 of issue 179's reporter log: 140.3 ms, back at the
+ *            picture before's signal);
+ *   early    it blocked RD_GPU_FIRST_NEAR_MS or more: the call returned
+ *            while the picture before still ran, its length not the
+ *            GPU's. */
 #define RD_GPU_FIRST_CALL_MS 2.0
 #define RD_GPU_FIRST_NEAR_MS 1.0
-uint8_t rd__sq_gf_class(int32_t result, double callMs, bool hasPrev, double prevEndMs,
-                        double ownEndMs);
+uint8_t rd__sq_gf_class(double callMs, bool hasPrev, int32_t result, double waitMs);
 
 /* a job's tail, step by step (rd__sq_tail_steps) */
 enum { RD_SQ_END, RD_SQ_SUBMIT, RD_SQ_PRESENT };

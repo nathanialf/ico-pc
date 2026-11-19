@@ -61,15 +61,22 @@ void rd__sq_finish(RdSubmitQ *q, const RdSubmitJob *job)
         case RD_GF_NO_PRESENT:
             q->block.gfNoPresent++;
             break;
-        case RD_GF_SKIPPED:
-            q->block.gfSkipped++;
+        case RD_GF_SHORT:
+            q->block.gfTimed++;
+            q->block.gfShort++;
+            break;
+        case RD_GF_NO_PREV:
+            q->block.gfTimed++;
             break;
         case RD_GF_UNKNOWN:
+            q->block.gfTimed++;
             q->block.gfUnknown++;
             q->block.gfLastResult = job->gfResult;
             break;
-        default:
-            q->block.gfCounted++; /* waited or early */
+        default: /* waited or early */
+            q->block.gfTimed++;
+            q->block.gfCounted++;
+            q->block.gfWaited += job->gfSample == RD_GF_WAITED ? 1u : 0u;
             break;
         }
     }
@@ -156,18 +163,18 @@ void rd__sq_block_take(RdSubmitQ *q, RdSubmitBlock *out)
     }
 }
 
-uint8_t rd__sq_gf_class(int32_t result, double callMs, bool hasPrev, double prevEndMs,
-                        double ownEndMs)
+uint8_t rd__sq_gf_class(double callMs, bool hasPrev, int32_t result, double waitMs)
 {
+    if (callMs < RD_GPU_FIRST_CALL_MS) {
+        return RD_GF_SHORT;
+    }
+    if (!hasPrev) {
+        return RD_GF_NO_PREV;
+    }
     if (result != 0) {
         return RD_GF_UNKNOWN;
     }
-    const bool ownNear = ownEndMs <= RD_GPU_FIRST_NEAR_MS;
-    const bool prevNear = hasPrev && prevEndMs <= RD_GPU_FIRST_NEAR_MS;
-    if (callMs < RD_GPU_FIRST_CALL_MS) {
-        return ownNear ? RD_GF_SKIPPED : RD_GF_EARLY;
-    }
-    return ownNear || prevNear ? RD_GF_WAITED : RD_GF_EARLY;
+    return waitMs < RD_GPU_FIRST_NEAR_MS ? RD_GF_WAITED : RD_GF_EARLY;
 }
 
 uint32_t rd__sq_tail_steps(const RdSubmitJob *j, RdSqStep out[RD_SQ_TAIL_MAX])

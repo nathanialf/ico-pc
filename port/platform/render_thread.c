@@ -2056,11 +2056,11 @@ void ico_render_thread_block_line(double stepMs, double stepCpuMs, double pictur
             const size_t at = strlen(st);
 
             snprintf(st + at, sizeof(st) - at,
-                     " (the GPU's end first's samples: %u counted, %u skipped with the GPU done "
-                     "first, %u unknown (last result %d), %u jobs not Original, %u Original jobs "
-                     "without a present)",
-                     sb.gfCounted, sb.gfSkipped, sb.gfUnknown, (int)sb.gfLastResult,
-                     sb.gfNotOriginal, sb.gfNoPresent);
+                     " (the GPU's end first's samples: %u Original presents timed, %u under "
+                     "2 ms, %u counted (%u waited for the GPU, %u early), %u unknown (last "
+                     "result %d), %u jobs not Original, %u Original jobs without a present)",
+                     sb.gfTimed, sb.gfShort, sb.gfCounted, sb.gfWaited, sb.gfCounted - sb.gfWaited,
+                     sb.gfUnknown, (int)sb.gfLastResult, sb.gfNotOriginal, sb.gfNoPresent);
         }
     } else {
         snprintf(st, sizeof(st), "; submit thread: off");
