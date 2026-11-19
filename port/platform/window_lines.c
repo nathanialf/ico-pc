@@ -471,14 +471,20 @@ unsigned window_orig_skip_busy(void)
 
 const char *window_orig_words(bool original)
 {
-    static char words[128];
+    static char words[224];
+    /* the frames handed over while the picture before waited for its GPU
+       end on the submit thread (rd.h rd_thread_gpu_wait_posts_take: the
+       GPU's end first, issue 179), taken every block */
+    const unsigned beside = rd_thread_gpu_wait_posts_take();
 
     words[0] = '\0';
     if (original) {
         snprintf(words, sizeof(words),
                  "; steps late %u (frames not presented %u: the step late %u, the render thread "
-                 "busy %u)",
-                 s_origLate, s_origSkipLate + s_origSkipBusy, s_origSkipLate, s_origSkipBusy);
+                 "busy %u; frames handed over while the picture before waited for its GPU work "
+                 "%u)",
+                 s_origLate, s_origSkipLate + s_origSkipBusy, s_origSkipLate, s_origSkipBusy,
+                 beside);
     }
     return words;
 }

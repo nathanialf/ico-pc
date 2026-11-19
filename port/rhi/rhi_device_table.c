@@ -38,6 +38,17 @@ static const RhiDeviceSetting kAndroid[] = {
      "commit 6fb557768; the Mali-G52 and the Adreno 710 lost the device in the first 3D scene "
      "on v0.11.3 and not on v0.11.2 (v0114/evidence/179, v0114/evidence/211)",
      "v0.11.4", "a phone log without a loss under v0.11.3's scopes and wait"},
+    /* rd_submit_thread.c (rd_submit_thread.h "the GPU's end first") */
+    {RHI_DC_PRESENT_FREE, 1,
+     "Frame rate Original: each picture's GPU work waited for before its present, outside the "
+     "swapchain's lock (the next picture recorded meanwhile, not skipped as busy)",
+     NULL, "issue 179",
+     "the Mali-G52's v0.11.11 log: its present returned at the picture's GPU end, the swapchain's "
+     "lock held through it, and 21 to 30 game frames a 10 s block were skipped as busy at 22.0 "
+     "to 22.6 of 25 fps (v01112/evidence/179)",
+     "v0.11.12",
+     "an Android log at Frame rate Original whose presents return before their picture's GPU end "
+     "and keep 25 fps without it"},
 };
 
 /* rhi_tile_rule.c rhi_tile_phone (iOS through MoltenVK) */
@@ -626,6 +637,7 @@ static const char *const kChoiceNames[RHI_DC_COUNT] = {
     [RHI_DC_UBER_AUTO] = "UBER_AUTO",
     [RHI_DC_FOG_ORDER_TILER] = "FOG_ORDER_TILER",
     [RHI_DC_CULL_FRUSTUM] = "CULL_FRUSTUM",
+    [RHI_DC_PRESENT_FREE] = "PRESENT_FREE",
 };
 
 const char *rhi_device_choice_name(RhiDeviceChoice choice)

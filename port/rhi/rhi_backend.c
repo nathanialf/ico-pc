@@ -882,6 +882,12 @@ bool rhi_wait_present_room(void)
     return be()->wait_present_room();
 }
 
+bool rhi_wait_submitted(void)
+{
+    RHI_GUARD();
+    return be()->wait_submitted();
+}
+
 bool rhi_present_mailbox(void)
 {
     return be()->present_mailbox();

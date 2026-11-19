@@ -335,12 +335,17 @@ bool rd__replay_frame_async(const RdFrame *f, int keep, bool present);
  * rd__replay_frame_post_ok: the job of the picture it posted last has not
  * ended (its walk, its acquire, its slot ahead), or the submit thread has
  * a job unfinished (that picture's submit and present: the next acquire
- * would wait for its present inside the reads).  rd__replay_frame_post:
+ * would wait for its present inside the reads), but for a job that waits
+ * for its picture's GPU end before its present with none behind it (the
+ * GPU's end first, rd_submit_thread.h: no lock held, the next picture
+ * records beside it).  rd__replay_frame_post:
  * frame f replayed and presented as a picture handed over (the overlay's
  * layers collected here first, Motion blur: Smooth armed at one present a
  * tick there, as rd_end_frame's replay inside the step did), after the
  * picture before ended (its present too: waitMs, a no-op unless the gate
- * presented a keep frame while busy; counted as a new frame's slot wait),
+ * presented a keep frame while busy; counted as a new frame's slot wait;
+ * not the submit thread's job in its GPU wait with none behind it, which
+ * this picture's job follows: counted, rd_thread_gpu_wait_posts_take),
  * rd_last_present_info noted for f after that wait (rd__note_frame_present);
  * true when posted, false when not taken (the reasons above, or the host
  * refused: nothing is posted and the caller replays it inside the step on
@@ -352,6 +357,11 @@ bool rd__replay_frame_post(const RdFrame *f, int keep, double *waitMs);
  * rd__thread_picture_busy alone, the job of the picture posted last not
  * ended; the submit thread's part is rd_thread_submit_unfinished */
 bool rd__thread_picture_busy_render(void);
+/* The render thread inside the job of a picture Frame rate Original
+ * handed over (rd__replay_frame_post): its list's job waits for the GPU's
+ * end before its present where that rule is on (rd_submit_thread.h "the
+ * GPU's end first", rd__submit_defer) */
+bool rd__thread_original_job(void);
 /* rd_end_frame's replay inside the game's step runs on the calling thread
  * (set around it, on whichever thread runs it): RdPerfRecord.presentThread
  * RD_PRESENT_IN_STEP (rd_perf.c) */

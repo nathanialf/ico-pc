@@ -3652,9 +3652,22 @@ bool rhi_gpu_progress(RhiGpuProgress *out)
             }
         }
     }
-    if (out->waitingFor != 0) {
-        const uint64_t since = __atomic_load_n(&g_vkr.progWaitSinceNs, __ATOMIC_RELAXED);
-        out->waitingNs = now > since ? now - since : 0;
+    {
+        /* the recording thread's fence wait and the submit thread's wait
+           before its present (rhi_wait_submitted, a pair of its own): the
+           older of the two in progress, so a wait that never ends keeps one
+           value while the other thread's short waits come and go (the GPU
+           hang limit counts one submission's wait, gpu_hang.h) */
+        uint64_t since = __atomic_load_n(&g_vkr.progWaitSinceNs, __ATOMIC_RELAXED);
+        const uint64_t pre = __atomic_load_n(&g_vkr.progPresentFor, __ATOMIC_ACQUIRE);
+        const uint64_t preSince = __atomic_load_n(&g_vkr.progPresentSinceNs, __ATOMIC_RELAXED);
+        if (pre != 0 && (out->waitingFor == 0 || preSince < since)) {
+            out->waitingFor = pre;
+            since = preSince;
+        }
+        if (out->waitingFor != 0) {
+            out->waitingNs = now > since ? now - since : 0;
+        }
     }
     if (out->submitted != 0) {
         const uint64_t at = __atomic_load_n(&g_vkr.progSubmitNs, __ATOMIC_RELAXED);

@@ -147,6 +147,7 @@ typedef enum RhiDeviceChoice {
     RHI_DC_UBER_AUTO,          /* bool: the uber shader on under auto */
     RHI_DC_FOG_ORDER_TILER,    /* bool: the tile-based fog order */
     RHI_DC_CULL_FRUSTUM,       /* bool: cull frustum by default */
+    RHI_DC_PRESENT_FREE,       /* bool: Original's GPU end waited for before the present */
     RHI_DC_COUNT
 } RhiDeviceChoice;
 

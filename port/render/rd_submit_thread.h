@@ -66,8 +66,41 @@
  *                   before anything of picture N+1; only N+1's acquire may
  *                   come before N's present (the swapchain's lock orders
  *                   the two calls; vk_swapchain.c).
+ *   the GPU's end first
+ *                   (issue 179; the device table's PRESENT_FREE, the row
+ *                   android: every Android device; with the slots apart
+ *                   only) a job of a picture Frame rate Original handed
+ *                   over (rd_thread.h rd__thread_original_job) waits after
+ *                   its submit for its work to end on the GPU
+ *                   (rhi_wait_submitted), outside the swapchain's lock,
+ *                   and presents after it.  On the Mali-G52 the driver's
+ *                   present returns at the picture's GPU end, and with the
+ *                   lock held through that call the game's gate counted the
+ *                   picture before as busy and skipped the next frame
+ *                   whenever a picture's GPU time passed the tick.  While
+ *                   the job is in that wait with no job behind it
+ *                   (rd_thread_submit_gpu_wait_alone) the gate does not
+ *                   count it (rd_thread.c rd__thread_picture_busy) and the
+ *                   hand-over does not wait for it (rd__replay_frame_post):
+ *                   the next picture's interpolation, fence wait, acquire
+ *                   (beside the pending present: vk_swapchain.c, the
+ *                   swapchain having images to spare), uploads and walk
+ *                   run meanwhile, and its job is posted behind this one,
+ *                   so its submit follows this present: the GPU never holds
+ *                   two pictures (the queue's order, the slots' rule below).
+ *                   The render thread's slot ahead then waits for this job
+ *                   (the picture before's slot), so at most one picture is
+ *                   recorded ahead.  A call that is not a slot call still
+ *                   waits for the whole job through the call guard (a
+ *                   texture made or retired, a pipeline made, a readback;
+ *                   the game thread's calls), now up to the GPU's end where
+ *                   a driver's present returned earlier.  The other frame
+ *                   rates are untouched (their pacing reads the job's
+ *                   times as they are).
  *   the depth       at most RD_SUBMIT_DEPTH jobs queued and running
- *                   (rd_submit_queue.h); with the rule above there is one.
+ *                   (rd_submit_queue.h); with the rule above there is one,
+ *                   with the GPU's end first two (the job in its wait and
+ *                   the next picture's).
  *   the times       a job's submit and present times go into its replay's
  *                   perf record (rd__perf_submit_times) when a thread that
  *                   waited for it takes them: the window's replays line
@@ -139,6 +172,22 @@ bool rd_thread_submit_unfinished(void);
  * that blocks, held as long as fn does, also where the job has no present
  * (the tests' offscreen output has no swapchain); NULL: none */
 void rd__submit_test_hook(void (*fn)(void));
+/* The GPU's end first (above) is on for this run (the device table's
+ * choice at the start, the frame slots apart) */
+bool rd_thread_submit_gpu_first(void);
+/* The submit thread's running job waits for its picture's GPU end before
+ * its present, and no job is queued behind it (any thread, no lock; the
+ * game's gate and the hand-over, rd_thread.c) */
+bool rd_thread_submit_gpu_wait_alone(void);
+/* The tests' seams (rd_tex_test): fn() on the submit thread as a job's
+ * GPU time, inside the GPU's end first's wait where the rule is on for the
+ * job, else where the present's call is (a driver's present that returns
+ * at the picture's GPU end); NULL: none.  The rule forced on (1) or off
+ * (0) at the next start, -1 the device table's.  The jobs that made the
+ * wait, ever. */
+void rd__submit_test_gpu_hook(void (*fn)(void));
+void rd__submit_test_gpu_first(int force);
+uint64_t rd__submit_gpu_first_waits(void);
 /* The longest present call of the jobs finished since the last take, ns
  * (0: none; render_thread.c's present estimate, pace_rt_further_hold) */
 uint64_t rd_thread_submit_take_present_ns(void);

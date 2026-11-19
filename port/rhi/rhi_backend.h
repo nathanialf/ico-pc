@@ -38,6 +38,7 @@
     X(present_shown)                                                                               \
     X(present_split)                                                                               \
     X(wait_present_room)                                                                           \
+    X(wait_submitted)                                                                              \
     X(release_surface)                                                                             \
     X(recreate_surface)                                                                            \
     X(create_buffer)                                                                               \

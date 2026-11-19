@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "ico_thread.h"
+#include "rd_device_rows.h" /* rd__device_value: the GPU's end first */
 #include "rd_internal.h"
 
 static struct {
@@ -28,7 +29,17 @@ static struct {
        ever (the lines' rate limit and the end's line); under the lock */
     uint64_t overlaps, slotWaits;
     double slotWaitMs;
+    /* the GPU's end first (rd_submit_thread.h): on for this run's Frame rate
+       Original jobs; set at the start, before the thread exists */
+    bool gpuFirst;
 } s_st;
+
+/* the running job waits for its GPU end before its present, with no job
+   queued behind it (rd_thread_submit_gpu_wait_alone, read with no lock):
+   stored under the lock, as the queue's count it reads; the jobs that made
+   the wait, ever (the tests' read, rd__submit_gpu_first_waits) */
+static int s_waitAlone;
+static uint64_t s_gpuFirstWaits;
 
 /* the jobs queued or running of each frame slot (rd__sq_slot_jobs's
    count), for the slot guard's question without the lock (asked at every
@@ -52,10 +63,29 @@ static _Thread_local RdSubmitJob t_job;
 /* the tests' seam (rd__submit_test_hook): kept apart from s_st, which a
    start clears */
 static void (*s_testHook)(void);
+/* and the faked GPU end (rd__submit_test_gpu_hook), the rule's choice
+   forced (rd__submit_test_gpu_first: -1 the device table's) */
+static void (*s_gpuHook)(void);
+static int s_gpuFirstForce = -1;
 
 void rd__submit_test_hook(void (*fn)(void))
 {
     __atomic_store_n(&s_testHook, fn, __ATOMIC_RELEASE);
+}
+
+void rd__submit_test_gpu_hook(void (*fn)(void))
+{
+    __atomic_store_n(&s_gpuHook, fn, __ATOMIC_RELEASE);
+}
+
+void rd__submit_test_gpu_first(int force)
+{
+    s_gpuFirstForce = force < 0 ? -1 : force != 0;
+}
+
+uint64_t rd__submit_gpu_first_waits(void)
+{
+    return __atomic_load_n(&s_gpuFirstWaits, __ATOMIC_ACQUIRE);
 }
 
 /* the lists' ends and submits in rd__sq_tail_steps's order (the scene's,
@@ -74,17 +104,53 @@ void rd__submit_lists(const RdSubmitJob *j)
     }
 }
 
+/* the GPU's end first: the job's wait for it begins (on) or ends; alone
+   when no job is queued behind the running one */
+static void gpuWaitPhase(bool on)
+{
+    if (!on) {
+        __atomic_store_n(&s_waitAlone, 0, __ATOMIC_RELEASE);
+        return;
+    }
+    ico_mutex_lock(s_st.m);
+    __atomic_store_n(&s_waitAlone, s_st.q.count == 1u ? 1 : 0, __ATOMIC_RELEASE);
+    ico_mutex_unlock(s_st.m);
+}
+
 static void tail(RdSubmitJob *j)
 {
     const double t0 = rd__now_ms();
     rd__submit_lists(j);
     const double t1 = rd__now_ms();
     j->submitMs = t1 - t0;
+    void (*gpu)(void) = t_onS ? __atomic_load_n(&s_gpuHook, __ATOMIC_ACQUIRE) : NULL;
+    const bool first = j->gpuFirst && t_onS;
+    if (first) {
+        /* the GPU's end first (rd_submit_thread.h): the swapchain's lock is
+           not held, so the render thread's next picture acquires and
+           records beside this wait, and the game's gate does not count it
+           as busy (rd_thread.c rd__thread_picture_busy); the present after
+           it finds the picture's work done (the Mali-G52's present returns
+           at that end, issue 179).  The next job is this queue's, after
+           this present: the GPU holds one picture at a time */
+        gpuWaitPhase(true);
+        if (gpu != NULL) {
+            gpu(); /* the test's GPU time (rd__submit_test_gpu_hook) */
+        }
+        (void)rhi_wait_submitted();
+        gpuWaitPhase(false);
+        __atomic_add_fetch(&s_gpuFirstWaits, 1u, __ATOMIC_RELEASE);
+    }
     {
         void (*hook)(void) = __atomic_load_n(&s_testHook, __ATOMIC_ACQUIRE);
         if (hook != NULL && t_onS) {
             hook(); /* the test's job that does not end: a driver's present that blocks */
         }
+    }
+    if (!first && gpu != NULL) {
+        /* the rule off: the test's GPU time in the present, as a driver
+           whose present returns at the picture's GPU end */
+        gpu();
     }
     if (j->present) {
         /* the even cadence's desired time for this present (0: any time) */
@@ -180,6 +246,48 @@ static const char *apartWhy(const RhiLimits *l)
     return NULL;
 }
 
+/* where the GPU's end first's choice came from: the device table's row
+   (the android row, issue 179), or a test's */
+static const char *gpuFirstWhere(void)
+{
+    if (s_gpuFirstForce >= 0) {
+        return "a test's choice (rd__submit_test_gpu_first)";
+    }
+    const RhiDeviceChoices *c = rhi_device_table_current();
+    size_t n = 0;
+    const RhiDeviceRow *rows = rhi_device_table_rows(&n);
+    if (c != NULL && c->row[RHI_DC_PRESENT_FREE] >= 0 && (size_t)c->row[RHI_DC_PRESENT_FREE] < n) {
+        return rows[c->row[RHI_DC_PRESENT_FREE]].id;
+    }
+    return "the device table";
+}
+
+/* the GPU's end first wanted for this run (rd_submit_thread.h): the device
+   table's PRESENT_FREE, or a test's choice */
+static bool gpuFirstWanted(void)
+{
+    return s_gpuFirstForce >= 0 ? s_gpuFirstForce != 0 : rd__device_value(RHI_DC_PRESENT_FREE) != 0;
+}
+
+/* its line where it is wanted (none elsewhere: the desktop's log as
+   before); on with the frame slots apart (notApart NULL), else why not */
+static void gpuFirstLine(bool want, const char *notApart)
+{
+    if (s_st.gpuFirst) {
+        rd__log("submit thread: with Frame rate Original each picture's GPU work is waited for "
+                "before its present, outside the swapchain's lock: the next picture is walked, "
+                "acquired and recorded meanwhile and handed over instead of being skipped as "
+                "busy, and is submitted after that present (the GPU holds one picture at a "
+                "time; %s, issue 179)",
+                gpuFirstWhere());
+    } else if (want) {
+        rd__log("submit thread: Frame rate Original's pictures present as before, their GPU "
+                "work not waited for first (%s: the next picture's graphics calls wait for the "
+                "submit thread anyway; %s)",
+                notApart, gpuFirstWhere());
+    }
+}
+
 bool rd__submit_thread_start(void (*begin)(void *user), void *user)
 {
     if (s_st.th != NULL) {
@@ -207,6 +315,11 @@ bool rd__submit_thread_start(void (*begin)(void *user), void *user)
     s_st.user = user;
     const char *notApart = apartWhy(l);
     s_st.apart = notApart == NULL;
+    /* the GPU's end first: decided before the thread exists, read by the
+       render thread's posts (rd__submit_defer) */
+    const bool want = gpuFirstWanted();
+    s_st.gpuFirst = want && s_st.apart;
+    __atomic_store_n(&s_waitAlone, 0, __ATOMIC_RELEASE);
     s_st.m = ico_mutex_create();
     s_st.c = ico_cond_create();
     s_st.th = s_st.m && s_st.c ? ico_thread_create(stMain, NULL) : NULL;
@@ -226,6 +339,7 @@ bool rd__submit_thread_start(void (*begin)(void *user), void *user)
             "presented on a thread of their own, %s; [dev] submit_thread = false "
             "(ICO_RD_SUBMIT_THREAD=0) keeps them on the render thread)",
             rhi_backend_kind_name(rhi_backend()));
+    gpuFirstLine(want, notApart);
     if (s_st.apart) {
         static const RhiSlotGuard guard = {NULL, slotFree, slotPending, slotWorker};
         rhi_set_slot_guard(&guard);
@@ -310,6 +424,16 @@ bool rd_thread_submit_apart(void)
 bool rd_thread_submit_unfinished(void)
 {
     return __atomic_load_n(&s_st.busy, __ATOMIC_ACQUIRE) != 0;
+}
+
+bool rd_thread_submit_gpu_first(void)
+{
+    return s_st.th != NULL && s_st.gpuFirst;
+}
+
+bool rd_thread_submit_gpu_wait_alone(void)
+{
+    return __atomic_load_n(&s_waitAlone, __ATOMIC_ACQUIRE) != 0;
 }
 
 uint64_t rd_thread_submit_drain(void)
@@ -460,6 +584,8 @@ bool rd__submit_defer(RhiCommandList cl, RhiCommandList cl2, bool present)
     t_job.cl2 = cl2.id;
     t_job.slot = (uint8_t)(rhi_frame_slot() % RHI_FRAMES_IN_FLIGHT);
     t_job.present = present && rd__present_will_show();
+    /* the GPU's end first: a picture Frame rate Original handed over */
+    t_job.gpuFirst = s_st.gpuFirst && rd__thread_original_job();
     t_job.replay = g_rdPerf.replay;
     t_job.desiredMs = g_rdPerf.desiredMs;
     t_kept = true;
@@ -480,6 +606,9 @@ void rd__submit_post_pending(void)
     if (seq != 0) {
         __atomic_add_fetch(&s_slotJobs[t_job.slot], 1u, __ATOMIC_RELAXED);
         __atomic_store_n(&s_st.busy, 1, __ATOMIC_RELEASE);
+        /* a job behind the one in its GPU wait: that wait is no longer
+           the queue's last (rd_thread_submit_gpu_wait_alone) */
+        __atomic_store_n(&s_waitAlone, 0, __ATOMIC_RELEASE);
         ico_cond_broadcast(s_st.c);
         ico_mutex_unlock(s_st.m);
         return;
