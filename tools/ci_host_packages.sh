@@ -42,7 +42,9 @@ if [ "${2:-}" = --list ]; then
     exit 0
 fi
 
-debs=${ICO_APT_ARCHIVES:-$HOME/.cache/ico-apt}
+cache=${ICO_APT_ARCHIVES:-$HOME/.cache/ico-apt}
+debs=$cache
+lists=$cache/lists
 update_s=${ICO_APT_UPDATE_S:-45}
 download_s=${ICO_APT_DOWNLOAD_S:-100}
 mkdir -p "$debs/partial"
@@ -72,10 +74,46 @@ use_mirror() {
     echo "host packages: now on $1"
 }
 
+# First without the network at all: the package index the last good run kept
+# beside the package files. Two runners of run 44480916957 could not use
+# Ubuntu's servers (one never read the Ubuntu source entry, one got no answer
+# from three mirrors in 45 s each) while every package was already in the
+# cache. An index older than the image's own packages can refuse the set:
+# then the tries below run as before.
 ok=0
+if [ -d "$lists" ] && ls "$debs"/*.deb > /dev/null 2>&1; then
+    sudo mkdir -p /var/lib/apt/lists.runner
+    sudo sh -c 'mv /var/lib/apt/lists/* /var/lib/apt/lists.runner/ 2>/dev/null; cp -a "$1"/. /var/lib/apt/lists/' sh "$lists"
+    # shellcheck disable=SC2086
+    if sudo apt-get $opts install -y --no-install-recommends --no-download $pkgs; then
+        ok=2
+        echo "host packages: installed from the cached index and package files, nothing downloaded"
+    else
+        echo "host packages: the cached index and files do not install on this image; the network tries follow"
+        sudo sh -c 'rm -rf /var/lib/apt/lists/*; mv /var/lib/apt/lists.runner/* /var/lib/apt/lists/ 2>/dev/null' || true
+    fi
+fi
+
+# the runner's Ubuntu source entry, written anew for a mirror: for a runner
+# whose own entry is not read (no Ubuntu line in its update's output)
+own_source() {
+    . /etc/os-release
+    printf 'Types: deb\nURIs: %s\nSuites: %s %s-updates %s-backports %s-security\nComponents: main universe restricted multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n' \
+        "$1" "$VERSION_CODENAME" "$VERSION_CODENAME" "$VERSION_CODENAME" "$VERSION_CODENAME" |
+        sudo tee /etc/apt/sources.list.d/ico-ubuntu.sources > /dev/null
+    echo "host packages: the runner's sources (no Ubuntu package had a candidate):"
+    ls -la /etc/apt/sources.list.d/ | sed 's/^/    /'
+    echo "host packages: own source entry written for $1"
+}
+
 for try in 1 2 3; do
+    [ "$ok" = 0 ] || break
     [ "$try" = 2 ] && use_mirror "$alt2"
     [ "$try" = 3 ] && use_mirror "$alt3"
+    if [ "$try" != 1 ] && ! apt-cache policy build-essential 2> /dev/null | grep -q 'Candidate: [0-9]'; then
+        [ "$try" = 2 ] && own_source "$alt2"
+        [ "$try" = 3 ] && own_source "$alt3"
+    fi
     t0=$(date +%s)
     # shellcheck disable=SC2086
     if sudo timeout -k 10 "$update_s" apt-get $opts update &&
@@ -88,13 +126,19 @@ for try in 1 2 3; do
     echo "host packages: try $try failed or ran past its limit after $(($(date +%s) - t0)) s" \
         "(index ${update_s} s, downloads ${download_s} s)"
 done
-if [ "$ok" != 1 ]; then
+if [ "$ok" = 0 ]; then
     echo "::error::host packages: three tries failed (the runner's mirror, then $alt2, then $alt3)"
     exit 1
 fi
 
-# shellcheck disable=SC2086
-sudo apt-get $opts install -y --no-install-recommends $pkgs || exit 1
+if [ "$ok" = 1 ]; then
+    # shellcheck disable=SC2086
+    sudo apt-get $opts install -y --no-install-recommends $pkgs || exit 1
+    # the index this install used, for the next run's try without the network
+    sudo rm -rf "$lists"
+    sudo mkdir -p "$lists"
+    sudo sh -c 'cp -a /var/lib/apt/lists/. "$1"/ && rm -rf "$1"/partial "$1"/lock "$1"/auxfiles' sh "$lists"
+fi
 
 # the cache keeps what this job kind installs today: files no mirror offers
 # any more (older versions) go, and the directory's file names are its key
@@ -102,8 +146,8 @@ sudo apt-get $opts install -y --no-install-recommends $pkgs || exit 1
 sudo apt-get $opts autoclean > /dev/null || true
 sudo rm -rf "$debs/partial" "$debs/lock"
 sudo chown -R "$(id -u):$(id -g)" "$debs"
-names=$(cd "$debs" && ls -1 | LC_ALL=C sort | sha256sum | cut -c1-16)
-echo "host packages: $(ls -1 "$debs" | wc -l) package files kept for the next run (names $names)"
+names=$(cd "$debs" && ls -1 *.deb | LC_ALL=C sort | sha256sum | cut -c1-16)
+echo "host packages: $(ls -1 "$debs"/*.deb | wc -l) package files and their index kept for the next run (names $names)"
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
     echo "names=$names" >> "$GITHUB_OUTPUT"
 fi
