@@ -129,6 +129,13 @@ static uint32_t s_failedPresents; /* rd_thread_failed_presents */
 static int s_picBusy;
 static bool s_origOff;
 static _Thread_local bool t_inStep;
+/* the render thread's job is Frame rate Original's picture (its Tramp's
+ * busy flag s_picBusy: rd__thread_original_job, the submit thread's GPU's
+ * end first); the frames handed over while the picture before waited for
+ * its GPU end on the submit thread (rd_thread_gpu_wait_posts_take; the game
+ * thread adds, the window's thread takes) */
+static _Thread_local bool t_origJob;
+static unsigned s_gpuWaitPosts;
 
 static void lk(void)
 {
@@ -375,7 +382,13 @@ static void runTramp(Tramp *t, bool picture)
             retireDrain();
         }
     }
+    if (outer) {
+        t_origJob = t->busy == &s_picBusy;
+    }
     t->fn(t->arg);
+    if (outer) {
+        t_origJob = false; /* its list kept for the submit thread already */
+    }
     rd__reads_done();
     if (outer && t_retireKept) {
         /* a picture that made no graphics call (nothing to blend) */
@@ -909,7 +922,23 @@ bool rd__thread_picture_busy(void)
     if (!rd__replay_frame_post_ok()) {
         return false;
     }
-    return __atomic_load_n(&s_picBusy, __ATOMIC_ACQUIRE) != 0 || rd_thread_submit_unfinished();
+    /* the GPU's end first (rd_submit_thread.h): a job that waits for its
+       picture's GPU end with none behind it holds no lock the next picture
+       takes; read before the job's state, so a wait that ends meanwhile
+       reads as a job that ended or that presents (busy) */
+    const bool alone = rd_thread_submit_gpu_wait_alone();
+    return __atomic_load_n(&s_picBusy, __ATOMIC_ACQUIRE) != 0 ||
+           (rd_thread_submit_unfinished() && !alone);
+}
+
+bool rd__thread_original_job(void)
+{
+    return t_onR != 0 && t_origJob;
+}
+
+unsigned rd_thread_gpu_wait_posts_take(void)
+{
+    return __atomic_exchange_n(&s_gpuWaitPosts, 0u, __ATOMIC_ACQ_REL);
 }
 
 bool rd__thread_picture_busy_render(void)
@@ -934,7 +963,16 @@ bool rd__replay_frame_post(const RdFrame *f, int keep, double *waitMs)
         s_block.freshWaitMs += (double)ns / 1e6;
         ulk();
     }
-    (void)rd_thread_submit_drain();
+    /* the submit thread's job: waited for, its present too, unless it waits
+       for its picture's GPU end with none behind it (the GPU's end first,
+       rd_submit_thread.h): this picture is walked, acquired and recorded
+       beside that wait, its own job queued after that present */
+    const bool besideGpu = rd_thread_submit_gpu_wait_alone();
+    if (besideGpu) {
+        rd_thread_submit_reap();
+    } else {
+        (void)rd_thread_submit_drain();
+    }
     *waitMs = rd__now_ms() - d0;
     /* rd_last_present_info names this frame only now: the picture before's
        job may still present inside the wait above, and its screenshot
@@ -951,6 +989,9 @@ bool rd__replay_frame_post(const RdFrame *f, int keep, double *waitMs)
     if (s_host.post(s_host.user, pictureTramp, &s_picTramp, true, false)) {
         s_async = true;
         s_asyncPresent = false;
+        if (besideGpu) {
+            __atomic_add_fetch(&s_gpuWaitPosts, 1u, __ATOMIC_RELAXED);
+        }
         return true;
     }
     /* refused (parked, the queue full): nothing posted holds the state;

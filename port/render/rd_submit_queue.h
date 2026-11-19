@@ -53,8 +53,11 @@ typedef struct RdSubmitJob {
        image (rd_submit.c rd__submit_frame, port/rhi/vk/vk_cmd.c
        vkr_submit_batch) */
     uint32_t cl2;
-    uint8_t slot;     /* its frame slot (rhi_frame_slot when it was recorded) */
-    bool present;     /* its image is presented after the submit */
+    uint8_t slot; /* its frame slot (rhi_frame_slot when it was recorded) */
+    bool present; /* its image is presented after the submit */
+    /* the GPU's end waited for before the present (rd_submit_thread.h "the
+       GPU's end first": a Frame rate Original picture with the rule on) */
+    bool gpuFirst;
     uint32_t replay;  /* its replay's perf record (RdPerfRecord.replay) */
     uint64_t seq;     /* rd__sq_post's number */
     double submitMs;  /* the end and the submit (rhi_end_commands, rhi_submit) */

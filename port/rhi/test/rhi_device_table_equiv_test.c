@@ -556,6 +556,9 @@ static void compare(const RefIn *in, bool withRun)
     SAME(in, "UBER_AUTO", tiler, v[RHI_DC_UBER_AUTO]);
     SAME(in, "FOG_ORDER_TILER", tiler, v[RHI_DC_FOG_ORDER_TILER]);
     SAME(in, "CULL_FRUSTUM", tiler, v[RHI_DC_CULL_FRUSTUM]);
+    /* no rule before the table: v0.11.12's row (rd_submit_thread.c), every
+       Android device under Vulkan */
+    SAME(in, "PRESENT_FREE", vulkan && in->os == RHI_DT_ANDROID, v[RHI_DC_PRESENT_FREE]);
     rendererReads(in, &c, true, NULL);
 
     if (withRun) {

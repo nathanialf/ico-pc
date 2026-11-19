@@ -662,6 +662,10 @@ typedef struct VkrState {
      * wait in progress blocks on with its start (vkr_wait_value,
      * rhi_wait_idle); stored with __atomic by the submitting thread */
     uint64_t progSubmitted, progSubmitNs, progFinished, progWaitingFor, progWaitSinceNs;
+    /* the submit thread's wait before its present (rhi_wait_submitted), a
+     * pair of its own: the recording thread's fence waits beside it store
+     * the pair above, and rhi_gpu_progress gives the older of the two */
+    uint64_t progPresentFor, progPresentSinceNs;
     uint32_t progReplay, progFrame;
     /* the last VKR_SUBMIT_HISTORY submissions' values and tags
      * (replay << 32 | frame) as atomic words, and the count made: what

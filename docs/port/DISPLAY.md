@@ -855,14 +855,26 @@ with a fake clock and swapchain; the window only supplies its I/O (`port/platfor
    that the gate presents while the render thread is busy still waits inside the step for the
    picture before, its present included, before it is handed over, so an acquire never waits
    behind a present inside a picture's reads; the 10 s line counts it in `N waited for the
-   picture before`. The lines: at each start `rd: render thread: with Frame rate Original
+   picture before`. On every Android device (the device table's `PRESENT_FREE`, row `android`,
+   issue 179; with the frame slots apart) the submit thread waits for a picture's GPU work to end
+   before its present, outside the swapchain's lock (`port/render/rd_submit_thread.h` "the GPU's
+   end first", `rhi_wait_submitted`): the Mali-G52's present returns at the picture's GPU end, and
+   with the lock held through it every picture of more GPU time than the tick made the next frame
+   busy. While that wait runs with no job behind it the gate is not told busy and the hand-over
+   waits for nothing (a keep frame neither): the next picture is walked, acquired and recorded
+   beside it and submitted after that present, so the GPU still holds one picture at a time and
+   pictures of G ms over the tick come about `1000 / G` a second (`rd_tex_test`
+   `threadPresentFree`). Its start line `rd: submit thread: with Frame rate Original each
+   picture's GPU work is waited for before its present, outside the swapchain's lock: ...`. The
+   lines: at each start `rd: render thread: with Frame rate Original
    each game frame's picture is handed over as the other frame rates' are: its submit and present
    run on the submit thread; ... but a kept frame (a fade, a load) still waits for the picture
    before, its present included ...` (or `... is replayed and presented inside the game step, the game
    thread waiting ([dev] original_async = false)`); the 10 s game-thread line's `(closing a frame
    ...; its picture handed over in 0.6 ms (longest 14.2 ms; 3 waited for the picture before, 31.0 ms
    in all; 12 skipped: render thread busy); presents waited inside the step: 0 (0.0 ms))`; the 10 s
-   line's `steps late N (frames not presented M: the step late L, the render thread busy B)`; a slow
+   line's `steps late N (frames not presented M: the step late L, the render thread busy B;
+   frames handed over while the picture before waited for its GPU work G)`; a slow
    step's `, the picture handed over 0.5 ms (0.0 ms waiting for the one before)`, `, the picture
    replayed inside the step 165.6 ms` or `, the picture not presented (...)`; a present that blocked
    `window: a present blocked N ms in the driver's present call (...; on the submit thread)` or `(...;

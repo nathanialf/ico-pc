@@ -160,6 +160,7 @@ class, no tile-based GPU, no phone), whatever evaluation an earlier device left.
 | `SCENE_CAP_4096`, `MSAA_BUDGET`, `SHOT_LATE` | `rd_present.c` |
 | `UBER_AUTO` | `rd_uber.c` |
 | `FOG_ORDER_TILER` | `rd_fog_path.c` |
+| `PRESENT_FREE` | `rd_submit_thread.c` `rd__submit_thread_start` (the GPU's end first, `rd_submit_thread.h`: with the frame slots apart only; the tests force it with `rd__submit_test_gpu_first`) |
 
 The release-wide switches the renderer ANDs with a class (`RD_LAMPS_MS_DEFAULT`,
 `RD_LAMPS_FILLPASTE_DEFAULT`, `RD_SHADOW_TILE_DEFAULT`, `RD_FILL11_DEFAULT`,
@@ -350,6 +351,7 @@ Left where they are, and why:
 | `UBER_AUTO` | no | - |
 | `FOG_ORDER_TILER` | no | - |
 | `CULL_FRUSTUM` | no | - |
+| `PRESENT_FREE` | no | - |
 
 ### The rows (27, in table order)
 
@@ -369,6 +371,7 @@ Matches Vulkan on Android: backend Vulkan; OS Android.
 | --- | --- | --- | --- | --- | --- | --- |
 | `TILER` | yes | a tile-based GPU (every Android GPU) | - | v0.5.2 | commit 6ba1c875a | never: a phone GPU missing from the vendor list would take the desktop defaults |
 | `TILE_PHONE` | yes | a tile-based phone GPU: v0.11.2's wide barriers and single submission wait, the loss rung | issues 179 and 211 | v0.11.4 | commit 6fb557768; the Mali-G52 and the Adreno 710 lost the device in the first 3D scene on v0.11.3 and not on v0.11.2 (v0114/evidence/179, v0114/evidence/211) | a phone log without a loss under v0.11.3's scopes and wait |
+| `PRESENT_FREE` | yes | Frame rate Original: each picture's GPU work waited for before its present, outside the swapchain's lock (the next picture recorded meanwhile, not skipped as busy) | issue 179 | v0.11.12 | the Mali-G52's v0.11.11 log: its present returned at the picture's GPU end, the swapchain's lock held through it, and 21 to 30 game frames a 10 s block were skipped as busy at 22.0 to 22.6 of 25 fps (v01112/evidence/179) | an Android log at Frame rate Original whose presents return before their picture's GPU end and keep 25 fps without it |
 
 #### `ios`
 

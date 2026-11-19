@@ -1387,6 +1387,28 @@ lines added beside them for issues 179 and 123:
   direction): median 1.2, largest 4.5 GS pixels over 44 held presents`: the direction the tick's
   first present put at the frame centre, projected through each later present that pasted that
   glow (the pan's share of the slide; a near wall slides more by the eye's move).
+- **The GPU's end first** (`port/render/rd_submit_thread.c`, `.h` "the GPU's end first";
+  `rd_thread.c` `rd__thread_picture_busy`; `port/platform/window_lines.c` `window_orig_words`):
+  on every Android device (the device table's `PRESENT_FREE`, row `android`) at Frame rate
+  Original, with the frame slots apart, each picture's job waits for its GPU work to end before
+  its present, outside the swapchain's lock (the log had the present call `X ms while the
+  picture's GPU work still ran and 0.0 ms after its end`, and 21-30 frames a 10 s block `not
+  presented: the render thread busy`). At each start of the submit thread: `rd: submit thread:
+  with Frame rate Original each picture's GPU work is waited for before its present, outside the
+  swapchain's lock: the next picture is walked, acquired and recorded meanwhile and handed over
+  instead of being skipped as busy, and is submitted after that present (the GPU holds one
+  picture at a time; android, issue 179)`, or where the slots are one at a time `rd: submit
+  thread: Frame rate Original's pictures present as before, their GPU work not waited for first
+  (<why>: ...)`. The 10 s line's Original clause gains its count: `; steps late 78 (frames not
+  presented 2: the step late 0, the render thread busy 2; frames handed over while the picture
+  before waited for its GPU work 180)`. A failed wait: `rhi_vk: the wait before the present waited
+  S s for submission N (sync timeline); the GPU reached M`, then the loss as any wait's; a wait
+  that never ends is the GPU hang limit's (`rhi_gpu_progress` names its submission). With the
+  wait the job's `present` time holds the GPU's end and the driver's call itself is expected to
+  be short (the present latency line's `the driver's present call ... of it`). How to judge it
+  from the next log: `the render thread busy` near 0 and the presented fps near the game's in the
+  logo, op2 and stage 3 blocks (whose mean GPU time is under the tick), the hand-over count near
+  the pictures presented.
 
 ### The issue ledger, continued
 

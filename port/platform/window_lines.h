@@ -66,8 +66,10 @@ void window_hold_block_line(unsigned long long heldMs, double stepAvgMs, double 
    picture before or not, counting the frames it leaves out by reason.
    window_orig_step: after each Original pace, whether the step ran past
    its period.  window_orig_words: the 10 s line's "; steps late N (frames
-   not presented M: the step late L, the render thread busy B)" (empty
-   unless original; a static buffer).  window_hold_block: at the block's
+   not presented M: the step late L, the render thread busy B; frames
+   handed over while the picture before waited for its GPU work G)" (G: rd.h
+   rd_thread_gpu_wait_posts_take, taken at each call; empty unless
+   original; a static buffer).  window_hold_block: at the block's
    end, window_hold_block_line from the sound held back since the last
    block (the first: since the open), the steps' time (sum, count,
    longest, in ms), the picture's time (replaySumMs / replays: the replays'
