@@ -615,7 +615,7 @@ them to change every rule on its own. The pause menu cannot change it: a
 journey is played as it began, so a Permadeath journey cannot be softened
 halfway and a knock-down count means the same all the way through. From the
 pause menu, **Options > Gameplay > Difficulty** shows the rules the journey
-was started with, greyed, and the pause screen's journey lines show the mode,
+was started with, greyed, Mirror mode and New Game+ among them, and the pause screen's journey lines show the mode,
 the knock-down count (as `2 / 3`, when there is a limit) and the word
 Permadeath when it is on.
 
@@ -641,13 +641,15 @@ all the others as in Normal:
 | Knock-down limit | Off | Off | 3, in each room |
 
 One hit per swing, Peaceful shadows, No Shadows, Yorda trips, No hints and
-Permadeath stay Off in all three. When you change a row under Customize, the
-mode shown is the one whose rows match exactly, or **Custom** when none does.
+Permadeath stay Off in all three. When you change a row of Customize's three
+pages, the mode shown is the one whose rows match exactly, or **Custom** when none does.
 The Easy and Hard values are a judgement, not a measured balance.
 
 ### Customize
 
-Customize has three pages. Each row's line says what it does.
+Customize has three pages, then the **Mirror mode** and **New Game+** rows
+(for every difficulty; [Starting a New Game](#starting-a-new-game) says
+what they do). Each row's line says what it does.
 
 **Shadows**
 
@@ -1062,10 +1064,7 @@ picture. One that could not get a picture shows the screen as it was when
 you saved.
 
 - **During play:** press Start and choose **Save states**, under Photo mode.
-  The pause menu also shows **Square Save states** under its choices: press
-  Square (or click it, or tap it) to open the page. Back on that page returns
-  to the pause menu. The shortcut is not shown on a journey with Permadeath
-  on or in a test room.
+  Back on that page returns to the pause menu.
   On a keyboard, **F6** does both: it pauses the game and opens the page.
   In the pause menu F6 opens the page, and on the page F6 takes you back to
   the game. F6 does nothing on the title screen or in photo mode.
@@ -1185,11 +1184,12 @@ hidden until you start a New Game.
 ## Starting a New Game
 
 **Difficulty**, **Mirror mode** and **New Game+** are not in Options. When you
-start a New Game, the screen after the Vibration question has a row for each,
-a **Customize** row under Difficulty, and a Start row under them. Up and Down
-move between them, Left and Right pick, Cross accepts a row and moves on,
-and the Start row (or the Start button on any row) begins the game. Triangle
-goes back to the Vibration question.
+start a New Game, the screen after the Vibration question has three rows:
+**Difficulty**, **Customize** and **Start**. Up and Down move between them,
+Left and Right pick the difficulty, Cross on Customize opens it, and the
+Start row (or the Start button on any row) begins the game. Triangle goes
+back to the Vibration question. Mirror mode and New Game+ are rows of
+Customize, whatever the difficulty.
 
 - **Difficulty** is Easy, Normal (the game as it shipped, and what the screen
   starts on) or Hard. It shows **Custom** once Customize has made a mix that
@@ -1197,14 +1197,16 @@ goes back to the Vibration question.
   What each mode changes, every row of Customize, the knock-down limit and
   Permadeath are under [Difficulty](#difficulty). The choice stays with that
   save and cannot be changed once the journey has begun.
-- **Customize** opens the Shadows, Combat and Rules pages. Nothing on them is
-  kept until you start the game, and Back returns to this screen. Going back
-  to Easy, Normal or Hard replaces the rows; going back to Custom brings your
-  own rows back.
-- **Mirror mode** plays the whole game flipped left to right. The sticks
-  and the D-pad both walk the way you press.
-- **New Game+** plays the second journey, the one the PS2 gives you after
-  you finish the game. Yorda's words are translated, and the ending and
+- **Customize** opens the Shadows, Combat and Rules pages and the Mirror mode
+  and New Game+ rows. Nothing on them is kept until you start the game, and
+  Back returns to this screen. Going back to Easy, Normal or Hard replaces
+  the rows of the three pages; going back to Custom brings your own rows
+  back. Changing the difficulty never changes Mirror mode or New Game+, and
+  changing those two never changes the difficulty.
+- **Mirror mode** (under Customize) plays the whole game flipped left to
+  right. The sticks and the D-pad both walk the way you press. It starts Off.
+- **New Game+** (under Customize) plays the second journey, the one the PS2
+  gives you after you finish the game. Yorda's words are translated, and the ending and
   some items change. It starts On when you begin from a finished game's
   save, and Off otherwise. You can change it either way. When you begin from a
   finished game's save, Difficulty starts with that save's rules.

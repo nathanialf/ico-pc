@@ -816,8 +816,9 @@ static int render(void)
     frame(0);
     snap("settings_remap_capture.png");
     /* the New Game screen, the cursor on Difficulty (Normal, its note),
-       then Hard; the cursor on New Game+ (its note), Mirror mode Off lit;
-       then Customize and its Shadows and Rules pages, back to the screen */
+       then Hard; then Customize, the cursor on New Game+ (its note, in
+       English and French) and its Shadows, Combat and Rules pages, back to
+       the screen */
     gFlagGameClear = 0;
     int ml = ui_new_game_screen_enter();
     lt_switch_layout(ml);
@@ -828,24 +829,22 @@ static int render(void)
     frame(0);
     snap("settings_new_game_screen_hard.png");
     press(0x4000);
-    press(0x4000);
-    press(0x4000);
-    frame(0);
-    snap("settings_new_game_screen_ngp.png");
-    NonLinearCameraMove = 3; /* French: the longest note */
-    frame(0);
-    frame(0);
-    snap("settings_new_game_screen_ngp_fr.png");
-    NonLinearCameraMove = 2;
-    frame(0);
-    press(0x1000);
-    press(0x1000);
     press(0x40); /* Customize */
     {
         const int custL = ui_settings_page_layout(UI_PAGE_CUSTOMIZE);
         CHECK(settle(custL, 60), "Customize from the New Game screen (%d)", current_layout_id);
         frame(0);
         snap("settings_customize.png");
+        lt_ext_layout(custL)->curItem = ui_settings_row_of(UI_PAGE_CUSTOMIZE, UI_OPT_NEWGAME_PLUS);
+        frame(0);
+        frame(0);
+        snap("settings_customize_ngp.png");
+        NonLinearCameraMove = 3; /* French: the longest note */
+        frame(0);
+        frame(0);
+        snap("settings_customize_ngp_fr.png");
+        NonLinearCameraMove = 2;
+        frame(0);
 
         static const struct {
             UiSettingsPage page;
@@ -1064,17 +1063,18 @@ static int render(void)
         lt_switch_layout(mir);
         CHECK(settle(mir, 60), "the New Game screen at 1080p");
         snap1080("settings_new_game_screen");
+        /* Customize on New Game+, then Customize > Rules (the dimmed
+           Knock-downs count at Normal) */
         press(0x4000);
-        press(0x4000);
-        press(0x4000);
-        snap1080("settings_new_game_screen_ngp");
-        /* Customize > Rules (the dimmed Knock-downs count at Normal) */
-        press(0x1000);
-        press(0x1000);
         press(0x40);
         {
             const int custL = ui_settings_page_layout(UI_PAGE_CUSTOMIZE);
             CHECK(settle(custL, 60), "Customize at 1080p");
+            lt_ext_layout(custL)->curItem =
+                ui_settings_row_of(UI_PAGE_CUSTOMIZE, UI_OPT_NEWGAME_PLUS);
+            frame(0);
+            frame(0);
+            snap1080("settings_customize_ngp");
             openLink(custL, UI_PAGE_CUSTOMIZE, UI_PAGE_RULES);
             for (int k = 0; k < 30; k++) {
                 frame(0);

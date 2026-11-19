@@ -334,7 +334,8 @@ error messages and what to try first.
 
 The title screen has an **Options** line and a **Quit to desktop** line
 (**Quit game** on a phone); starting a New Game shows one more screen, with
-**Mirror mode** and **New Game+** ([more about them](docs/OPTIONS.md#starting-a-new-game));
+the difficulty and its **Customize** pages, where **Mirror mode** and
+**New Game+** are ([more about them](docs/OPTIONS.md#starting-a-new-game));
 the language and 50/60 Hz questions the European PS2 disc asks at first
 start live in Options instead, and the language can change in the middle of
 a game; the language list also has Russian and Brazilian Portuguese,
@@ -373,6 +374,7 @@ with Igor Chagas's Brazilian Portuguese ones (with corrections by cobra838). To 
 - braito4, for the Apple-silicon macOS app.
 - neetgon, for the second player's gamepad.
 - KClough, for the arm64 Linux build.
+- MesaBlack, for the Xbox, Nintendo and Wii Classic Controller button pictures.
 
 ### Special thanks
 

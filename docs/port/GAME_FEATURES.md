@@ -1197,9 +1197,9 @@ every roll, the real ending's and the Extras playback's; the disc's table is not
 lines, a heading, four blank lines and its names with two blank lines between them, as the disc's
 own `< Special Thanks >` spaces its names: `{R}< Decompilation and PC Port > ` and
 `{R}Nathanial Fine `; `{R}< Translation > `, `{R}bob-ttz `, `{R}cobra838 ` and `{R}ichagas7 `;
-`{R}< Contributors > `, `{R}katsifolis `, `{R}braito4 `, `{R}neetgon ` and `{R}KClough `;
-`{R}< Special Thanks > ` (the disc's own heading text) and `{R}Sad Origami `, 87 lines in all
-(`ICO_ROLL_PORT_LAST` 86). They are in the roll's own forms and ASCII without the backtick only,
+`{R}< Contributors > `, `{R}katsifolis `, `{R}braito4 `, `{R}neetgon `, `{R}KClough ` and `{R}MesaBlack `;
+`{R}< Special Thanks > ` (the disc's own heading text) and `{R}Sad Origami `, 90 lines in all
+(`ICO_ROLL_PORT_LAST` 89). They are in the roll's own forms and ASCII without the backtick only,
 because the roll draws with `font_Print`'s bitmap font (`port/game/credits.c` (`s_lines`, a table
 of the non-blank lines at their indices, the others blank)). The roll logs
 `credits: the port credit is posted` at the port's first heading and

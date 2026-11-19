@@ -1,5 +1,5 @@
-/* settings_states_test.c: the Save states page, the pause menu's row and the
- * Square prompts of the pause menu and the Continue screen (settings.c, "the
+/* settings_states_test.c: the Save states page, the pause menu's row (no
+ * Square prompt there) and the Continue screen's Square prompt (settings.c, "the
  * Save states page"), over the shared fixture (settings_fixture.h) with a
  * fake UiStatesHost, fake picture textures and a fake Continue screen; the
  * slot picture's box at its own shape (lt_ext_image_fit: 16:9, 4:3 and a
@@ -1166,14 +1166,14 @@ static int pausePromptRows(int out[4])
     return n;
 }
 
-/* Square while paused, "Save states" beside it under the pause menu's rows
-   (v0.9.6 to v0.11.8 the Continue screen's prompt was drawn there, its rows
-   inside the menu's layout, and nothing read Square): the pause menu's own
-   prompt, not the Continue screen's; Square or a click on it opens the page
-   as the row does (a line), Back returns to the row; photo mode, a
-   Permadeath journey and a test room: the prompt hidden, Square refused
-   with its line; after the Continue screen showed its prompt the pause menu
-   draws none of it; no host: no prompt, Square nothing */
+/* The pause menu has no Square prompt and reads no Square (v0.9.6 to
+   v0.11.8 the Continue screen's prompt was drawn there; v0.11.9 to v0.11.12
+   it had its own): with the host no Square rows in the layouts chained after
+   it, Square (the pad or the touch button) leaves it current with no line,
+   in Normal and in photo mode, a Permadeath journey and a test room; the
+   Save states row and F6 still open the page; the Continue screen's prompt
+   is unchanged (shown with the files, Square opens the page); no host: no
+   rows, Square nothing */
 static void testPauseSquare(void)
 {
     char log[2048];
@@ -1184,103 +1184,75 @@ static void testPauseSquare(void)
     toPause();
     const int st = ui_settings_states_row(), pl = ui_settings_states_prompt_layout();
     const int sl = ui_settings_page_layout(UI_PAGE_STATES);
-    const int n = pausePromptRows(r);
-    CHECK(n == 2 && pl >= 0, "the pause menu's Square rows (%d), the Continue screen's layout %d",
-          n, pl);
-    if (n != 2 || pl < 0) {
+    CHECK(st >= 0 && pl >= 0 && sl >= 0, "the row %d, the Continue screen's layout %d, the page %d",
+          st, pl, sl);
+    if (st < 0 || pl < 0 || sl < 0) {
         return;
     }
-    const LtProp *pp = lt_ext_layout(pl);
-    CHECK((r[0] < pp->first || r[0] >= pp->last) && (r[1] < pp->first || r[1] >= pp->last),
-          "the pause menu's prompt (%d, %d) is not the Continue screen's (%d..%d)", r[0], r[1],
-          pp->first, pp->last - 1);
-    const LtProperty *g = lt_ext_prop(r[0]), *w = lt_ext_prop(r[1]);
-    CHECK(lt_ext_is_glyph_row(g) && strcmp(txt(r[1]), ui_str(UI_STR_STATES)) == 0,
-          "the prompt: a glyph and \"%s\"", txt(r[1]));
-    CHECK(!g->masked && !w->masked, "the prompt shown on the pause menu");
-    /* the glyph where the rows' letters start, the words on the Continue
-       screen's line, ending before the journey's lines (STATS_X 300 less
-       its margin 8) */
-    CHECK(g->dispX == lt_ext_prop(st)->dispX && w->dispY == 183 &&
-              g->dispX + g->dispW <= w->dispX && w->dispX + w->dispW <= 292,
-          "under the rows: glyph x %d (rows %d), words %d..%d at %d", g->dispX,
-          lt_ext_prop(st)->dispX, w->dispX, w->dispX + w->dispW, w->dispY);
+    CHECK(pausePromptRows(r) == 0, "no Square rows on the pause menu");
 
-    /* Square: the page; Back: the pause menu on the row */
-    errCapture();
-    frame(LT_PAD_SQUARE);
-    errRelease(log, sizeof(log));
-    CHECK(strstr(log, "settings: Save states opened from the pause menu (Square)") != NULL,
-          "Square: its line (\"%s\")", log);
-    CHECK(settle(sl, 60), "Square opens the page (%d)", current_layout_id);
-    press(LT_PAD_TRIANGLE);
-    CHECK(settle(pause, 60) && texLayout[pause].curItem == st,
-          "Back: the pause menu on the Save states row (%d, %d)", current_layout_id,
-          texLayout[pause].curItem);
-
-    /* a click (a tap) on the prompt is Square */
-    ui_mouse_reset();
-    ui_mouse_set_view(640, 480, 0, 0, 640, 480);
-    pointAt(r[1]);
-    mouseFrame();
-    ico_pointer_button(1);
-    ico_pointer_button(0);
-    mouseFrame();
-    CHECK(settle(sl, 60), "a click on the prompt opens the page (%d)", current_layout_id);
-    ui_mouse_set_view(0, 0, 0, 0, 0, 0);
-    press(LT_PAD_TRIANGLE);
-    CHECK(settle(pause, 60), "Back again");
-
-    /* refused: the prompt hidden, Square opens nothing, a line each */
-    static const char *const kWhy[3] = {"photo mode is open", "the journey has Permadeath on",
-                                        "in a test room"};
-    for (int k = 0; k < 3; k++) {
-        if (k == 0) {
+    /* Square: nothing, no line; in Normal and where v0.11.12 refused it */
+    static const char *const kWhen[4] = {"Normal", "photo mode", "Permadeath", "a test room"};
+    for (int k = 0; k < 4; k++) {
+        if (k == 1) {
             ico_photo_enter();
-        } else if (k == 1) {
+        } else if (k == 2) {
             ico_difficulty_set_row(ICO_DIFF_PERMADEATH, 1);
-        } else {
+        } else if (k == 3) {
             ico_unused_set_running(ICO_UNUSED_ARENA);
         }
         frame(0);
-        CHECK(g->masked && w->masked, "%s: the prompt hidden", kWhy[k]);
         errCapture();
         frame(LT_PAD_SQUARE);
         frame(0);
+        frame(0);
         errRelease(log, sizeof(log));
         CHECK(current_layout_id == pause &&
-                  strstr(log, "Square on the pause menu: no Save states page") != NULL &&
-                  strstr(log, kWhy[k]) != NULL,
-              "%s: Square refused (%d; \"%s\")", kWhy[k], current_layout_id, log);
-        if (k == 0) {
+                  strstr(log, "opened from the pause menu (Square)") == NULL &&
+                  strstr(log, "Square on the pause menu") == NULL,
+              "%s: Square does nothing (%d; \"%s\")", kWhen[k], current_layout_id, log);
+        CHECK(pausePromptRows(r) == 0, "%s: no Square rows", kWhen[k]);
+        if (k == 1) {
             ico_photo_exit();
         }
         ico_difficulty_reset();
         ico_unused_set_running(-1);
         frame(0);
-        CHECK(!g->masked && !w->masked, "%s ended: the prompt shown again", kWhy[k]);
     }
 
-    /* the Continue screen's prompt shown, then a Permadeath pause menu:
-       nothing of it drawn there (its rows keep the mask contProc left) */
-    lt_switch_layout(fxLayout(19));
-    CHECK(settle(fxLayout(19), 60), "the Continue screen (%d)", current_layout_id);
-    s_mcFilesShown = 1;
-    frame(0);
-    CHECK(!lt_ext_prop(pp->first)->masked, "the Continue screen's prompt shown");
+    /* the row opens the page; Back returns to it */
+    texLayout[pause].curItem = st;
+    press(lt_ext_confirm_button());
+    CHECK(settle(sl, 60), "the row opens the page (%d)", current_layout_id);
+    press(LT_PAD_TRIANGLE);
+    CHECK(settle(pause, 60) && texLayout[pause].curItem == st,
+          "Back: the pause menu on the Save states row (%d, %d)", current_layout_id,
+          texLayout[pause].curItem);
+
+    /* F6 on the pause menu opens the page */
+    errCapture();
+    (void)ui_settings_states_key(0);
+    const int opened = settle(sl, 60);
+    errRelease(log, sizeof(log));
+    CHECK(opened && strstr(log, "hotkeys: F6 opened the Save states page") != NULL,
+          "F6 opens the page (%d; \"%s\")", current_layout_id, log);
+    press(LT_PAD_TRIANGLE);
+    CHECK(settle(pause, 60), "Back again (%d)", current_layout_id);
+
+    /* the Continue screen's prompt: shown with the files, Square opens the page */
+    const LtProp *pp = lt_ext_layout(pl);
+    toContinue();
+    CHECK(pp->last - pp->first == 2 && !lt_ext_prop(pp->first)->masked &&
+              !lt_ext_prop(pp->first + 1)->masked &&
+              lt_ext_pointer_role(pp->first) == LT_POINTER_SQUARE &&
+              strcmp(txt(pp->first + 1), ui_str(UI_STR_STATES)) == 0,
+          "the Continue screen's prompt: %d rows, shown, \"%s\"", pp->last - pp->first,
+          txt(pp->first + 1));
+    press(LT_PAD_SQUARE);
+    CHECK(settle(sl, 60), "Square on the Continue screen opens the page (%d)", current_layout_id);
     s_mcFilesShown = 0;
-    ico_difficulty_set_row(ICO_DIFF_PERMADEATH, 1);
-    toPause();
-    const int m = pausePromptRows(r);
-    int drawn = 0;
-    for (int i = 0; i < m; i++) {
-        drawn += !lt_ext_prop(r[i])->masked;
-    }
-    CHECK(m == 2 && drawn == 0, "Permadeath after the Continue screen: %d Square rows, %d drawn", m,
-          drawn);
-    ico_difficulty_reset();
 
-    /* no host: no prompt, Square nothing */
+    /* no host: no rows, Square nothing */
     startMenus(0, 11);
     toPause();
     CHECK(pausePromptRows(r) == 0, "no host: no Square rows on the pause menu");

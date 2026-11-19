@@ -206,7 +206,7 @@ const char *const
                 "Toute la partie est inversée de gauche à droite. Chaque sauvegarde garde ce choix.",
             [UI_STR_OPT_NEWGAME_PLUS] = "Nouvelle partie +",
             [UI_STR_NEWGAME_PLUS_SCREEN] =
-                "Nouvelle partie + joue le second voyage : paroles de Yorda traduites, fin et objets changés. Désactivé, c’est le premier voyage, même après avoir fini le jeu.",
+                "Nouvelle partie + joue le second voyage : paroles de Yorda traduites, fin et objets changés. Désactivé : le premier voyage, même après la fin du jeu.",
             [UI_STR_NEWGAME_START] = "Commencer",
             [UI_STR_NEWGAME_START_SCREEN] = "Lance la nouvelle partie avec les choix ci-dessus.",
             [UI_STR_OPT_CRT] = "Filtre CRT",
