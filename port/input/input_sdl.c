@@ -24,6 +24,7 @@
 #include "input.h"
 #include "input_sdl.h"
 #include "mouse_look.h"
+#include "pad_kind.h"
 #include "pointer.h"
 #include "touch.h"
 #include "touch_eaten.h"
@@ -64,6 +65,8 @@ static IcoInputRaw s_pad_raw[MAX_PADS];
 /* the last snapshot's gamepad sources, for the press edges the remap
    screen's capture reads (ico_input_note_press) */
 static unsigned char s_gp_down[ICO_GP_COUNT];
+/* the same per slot, for the kind of the pad pressed last (pad_kind.h) */
+static unsigned char s_slot_gp_down[MAX_PADS][ICO_GP_COUNT];
 static SDL_JoystickID s_pad_id[MAX_PADS];
 static SDL_Gamepad *s_pad[MAX_PADS];
 
@@ -230,6 +233,7 @@ static void open_pad(SDL_JoystickID id)
     s_last_high[slot] = s_last_low[slot] = 0;
     s_rumble_age[slot] = 0;
     s_rumble_took[slot] = 0;
+    memset(s_slot_gp_down[slot], 0, sizeof(s_slot_gp_down[slot]));
     fprintf(stderr, "input: gamepad slot %d \"%s\"\n", slot, SDL_GetGamepadName(s_pad[slot]));
 }
 
@@ -665,6 +669,9 @@ static void touch_finger(const SDL_Event *e, int kind)
         return; /* a trackpad's fingers (macOS) are not the overlay's */
     }
     touch_found("first touch");
+    if (kind == ICO_TOUCH_DOWN) {
+        ico_input_note_pad_kind(ICO_PAD_KIND_PLAYSTATION, "touch");
+    }
     if (s_touchEdit.active) {
         ico_touch_edit_event(&s_touchEdit, (uint64_t)e->tfinger.fingerID, e->tfinger.x,
                              e->tfinger.y, kind, e->tfinger.timestamp);
@@ -738,6 +745,7 @@ void ico_input_sdl_event(const SDL_Event *e)
             s_raw.key[s_sdl_to_key[e->key.scancode]] = e->type == SDL_EVENT_KEY_DOWN;
             if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat) {
                 ico_input_note_press(ICO_SRC_KEY, s_sdl_to_key[e->key.scancode]);
+                ico_input_note_pad_kind(ICO_PAD_KIND_PLAYSTATION, "keyboard");
             }
         }
         break;
@@ -755,6 +763,7 @@ void ico_input_sdl_event(const SDL_Event *e)
             s_raw.mouse[map[e->button.button]] = (unsigned char)down;
             if (down) {
                 ico_input_note_press(ICO_SRC_MOUSE, map[e->button.button]);
+                ico_input_note_pad_kind(ICO_PAD_KIND_PLAYSTATION, "mouse");
             }
             /* the menus' pointer, while it is free: the left button
                clicks (and, pressed over a menu, is not Cross until it is
@@ -1006,6 +1015,68 @@ static void send_rumble(void)
     }
 }
 
+/* SDL_GamepadType's values as pad_kind.h mirrors them (SDL 3.4.18) */
+_Static_assert(ICO_SDLPAD_UNKNOWN == (int)SDL_GAMEPAD_TYPE_UNKNOWN, "pad_kind.h");
+_Static_assert(ICO_SDLPAD_STANDARD == (int)SDL_GAMEPAD_TYPE_STANDARD, "pad_kind.h");
+_Static_assert(ICO_SDLPAD_XBOX360 == (int)SDL_GAMEPAD_TYPE_XBOX360, "pad_kind.h");
+_Static_assert(ICO_SDLPAD_XBOXONE == (int)SDL_GAMEPAD_TYPE_XBOXONE, "pad_kind.h");
+_Static_assert(ICO_SDLPAD_PS3 == (int)SDL_GAMEPAD_TYPE_PS3, "pad_kind.h");
+_Static_assert(ICO_SDLPAD_PS4 == (int)SDL_GAMEPAD_TYPE_PS4, "pad_kind.h");
+_Static_assert(ICO_SDLPAD_PS5 == (int)SDL_GAMEPAD_TYPE_PS5, "pad_kind.h");
+_Static_assert(ICO_SDLPAD_NINTENDO_SWITCH_PRO == (int)SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_PRO,
+               "pad_kind.h");
+_Static_assert(ICO_SDLPAD_NINTENDO_SWITCH_JOYCON_LEFT ==
+                   (int)SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_LEFT,
+               "pad_kind.h");
+_Static_assert(ICO_SDLPAD_NINTENDO_SWITCH_JOYCON_RIGHT ==
+                   (int)SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_RIGHT,
+               "pad_kind.h");
+_Static_assert(ICO_SDLPAD_NINTENDO_SWITCH_JOYCON_PAIR ==
+                   (int)SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_PAIR,
+               "pad_kind.h");
+_Static_assert(ICO_SDLPAD_GAMECUBE == (int)SDL_GAMEPAD_TYPE_GAMECUBE, "pad_kind.h");
+_Static_assert(ICO_SDLPAD_STEAM == (int)SDL_GAMEPAD_TYPE_STEAM, "pad_kind.h");
+_Static_assert(ICO_SDLPAD_COUNT == (int)SDL_GAMEPAD_TYPE_COUNT, "pad_kind.h");
+
+/* Each slot's new presses (the edges note_pad_presses finds on the merged
+   pad, per pad): the kind of the pad that pressed, for the button pictures
+   (ico_input_note_pad_kind); the slots in order, so of two pads pressed in
+   the same vsync the later slot's kind stands. */
+static void note_pad_kind_presses(void)
+{
+    int i, j;
+
+    for (i = 0; i < MAX_PADS; i++) {
+        const IcoInputRaw *raw = &s_pad_raw[i];
+        int pressed = 0;
+
+        if (s_pad[i] == NULL) {
+            continue;
+        }
+        for (j = 1; j < ICO_GP_COUNT; j++) {
+            float v;
+            int down;
+
+            if (j < ICO_GP_BUTTONS) {
+                v = raw->gp[j];
+            } else {
+                const int a = (j - ICO_GP_LX_NEG) / 2; /* lx ly rx ry */
+                const float x = raw->axis[a];
+
+                v = (j - ICO_GP_LX_NEG) % 2 == 0 ? -x : x;
+            }
+            down = s_slot_gp_down[i][j] ? v > 0.25f : v >= 0.5f;
+            pressed |= down && !s_slot_gp_down[i][j];
+            s_slot_gp_down[i][j] = (unsigned char)down;
+        }
+        if (pressed) {
+            const int type = (int)SDL_GetGamepadType(s_pad[i]);
+
+            ico_input_note_pad_kind(ico_pad_kind_of_sdl_type(type), ico_pad_sdl_type_name(type));
+        }
+    }
+}
+
 /* The gamepad's new presses for the remap screen's capture:
    a button, a trigger past half, a stick axis past half (as a direction
    source); release below a quarter re-arms it. */
@@ -1031,6 +1102,7 @@ static void note_pad_presses(void)
         }
         s_gp_down[j] = (unsigned char)down;
     }
+    note_pad_kind_presses();
 }
 
 /* the touch overlay's vsync: the Touch size row's change, the look pad's

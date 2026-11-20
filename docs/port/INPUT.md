@@ -25,6 +25,7 @@ others.
 | `port/input/mouse_camera.h`, `mouse_camera.c` | the mouse camera's speed and range for the game's hand camera |
 | `port/input/pointer.h`, `pointer.c` | the mouse pointer in the menus |
 | `port/input/touch.h`, `touch.c` | the touch overlay's input mapper |
+| `port/input/pad_kind.h`, `pad_kind.c` | the kind of controller pressed last (`ico_input_last_pad_kind`): SDL's gamepad types mapped, for the button pictures |
 | `port/input/touch_edit.h`, `touch_edit.c` | the layout edits (per posture and control), their config text and rails, and the layout editor's state machine |
 | `port/input/CMakeLists.txt` | `ico_input` and the input tests |
 | `port/input/test/` | the input unit tests |
@@ -64,6 +65,20 @@ window (`port/platform/window_host.c`) drives it (`port/input/input_sdl.h`, head
   set, on every disc: `subGirlControl` and its 2001 arms), slots 2..7 drive no port. A pad keeps its slot across a reconnection by serial, then
   path, then a GUID no other known pad shares; a different pad plugged in while a player's slot
   stands empty takes that slot. The log names the slot (`input: gamepad slot N "<name>"`).
+- The kind of controller pressed last (`ico_input_last_pad_kind`, `port/input/pad_kind.c`), the
+  Button pictures setting's Auto ([UI.md](UI.md#button-pictures)): every new press of a slot's
+  pad (a button, a trigger or a stick past half, as the remap screen's edges are found, per slot)
+  reports the kind of that pad's `SDL_GetGamepadType`: Xbox 360, Xbox One and Steam (A B X Y in
+  the Xbox places) are Xbox, the Switch Pro Controller and a pair of Joy-Cons Nintendo, every
+  other type (PS3, PS4, PS5, standard, unknown, a single Joy-Con, GameCube) PlayStation; a key
+  press, a mouse button and a finger down on the touch screen report PlayStation. Before any press,
+  and in the headless build, it is PlayStation. `pad_kind.h` mirrors SDL 3.4.18's
+  `SDL_GamepadType` values so the mapping's test needs no SDL; `input_sdl.c` checks each with
+  `_Static_assert`. A change writes `input: last pad kind Xbox (was PlayStation; the press:
+  xboxone), change 1` (the first 8, then every 100th). The buttons are read by position
+  (`SDL_GAMEPAD_BUTTON_SOUTH` is Cross on every pad, SDL_gamepad.h's button comment: B on a
+  Switch pad, A on an Xbox pad) and the port sets no hint that trades them, so the pictures are
+  mapped by position too.
 
 Rumble: libpad maps the game's actuator bytes through `scePadSetActAlign`'s table (the small
 motor on or off to 0xFFFF, the large motor's level times 257; `port/input/pad_host.c`
@@ -586,11 +601,12 @@ The editor is driven by the Edit layout page (`port/ui/touch_edit_ui.c` (`ui_tou
 | `input_record` (`input_record_test.c`) | the recording's line format, the round trip through the script reader over a long session, the "only when it changes" rule, a second read in a tick, the poll's timing, a scripted session recorded through libpad and loaded back |
 | `touch` (`touch_test.c`) | the mapper's layouts over phones, a notch, foldables, a tablet and monitors at every size, the hinge rule, the floating stick, the d-pad and face buttons, sliding, cancel, the look pad's decay, hiding and fades, the merged pad with the stick fix off and on |
 | `touch_edit` (`touch_edit_test.c`) | an unedited layout equal to the default field by field and byte for byte over the screen table, the anchor arithmetic on four screens with and without insets, the clamp into the bounds and out of the band, a camera hole on the left and an inset on the right (`test_cutout`: negative offsets kept, saved and parsed, clamped to the window, `l0` flush with the safe edge, a drop with its centre inside kept inside, a gamepad nudge past the safe edge, the band carried to the window's top, TABLETOP's bounds), the region-clamped forms on four inset screens (`test_v084_forms`: the region's formulas, the stick's area and the look pad in it, SPLIT beside the region's band, `ico_touch_edit_outside`), Hidden and Off controls and the rails (no floor, every control), the stick's and the look pad's areas, the flat crease seeing the edits, the config text round trip with bad and out-of-range lines (`hidden` and `off` alone and after a place), the format-1 reading of `hidden` and `o0` as Off (`test_format_migration`), the opacity steps through Hidden and Off on the gamepad with Undo and the overlap and refuse rules counting Hidden and skipping Off (`test_hidden_off_editor`), sizes to 300 % on screen in the three postures on a phone and a 3000 x 2000 tablet (`test_size_300`), the editor fed synthetic fingers and gamepad words (tap, drag and snap, the refused drop, overlap, cancel, pinch, a pinch from a fresh two-finger touch, the steppers, All, the posture switch, Undo, Reset, Done, a readout tap doing nothing), and the toolbar strip and the hint on the screen table and the smallest region of each posture (the strip inside the region, over the top row by 2.5 q at most with 5.5 q left, clear of every other control; SPLIT's second row on a hand-built narrow side) |
+| `pad_kind` (`pad_kind_test.c`) | every SDL gamepad type's kind and name, values out of range, the kind the reported presses leave (a keyboard, mouse or touch press PlayStation) and the changes counted once each |
 | `mouse_camera` (`mouse_camera_test.c`) | the camera step arithmetic, and the speed and range applied only while the mouse drives the camera |
 | `pad_script` (`pad_script_test.c`) | the script reader and what libpad then shows the game's pad state machine, replayed from `pad.c`'s libpad calls in their order |
 | `movie_pad` (`port/platform/test/movie_pad_test.c`) | the Start edge through the game's own pad code during a movie ([FMV.md](FMV.md)) |
 
-The first five are registered in `port/input/CMakeLists.txt`, `pad_script` in
+The first six are registered in `port/input/CMakeLists.txt`, `pad_script` in
 `port/null/CMakeLists.txt`, `movie_pad` in `port/platform/CMakeLists.txt`. Run them with
-`ctest --preset linux-x64 -R '^(input|input_record|touch|touch_edit|mouse_camera|pad_script|movie_pad)$'`
+`ctest --preset linux-x64 -R '^(input|input_record|touch|touch_edit|pad_kind|mouse_camera|pad_script|movie_pad)$'`
 ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
