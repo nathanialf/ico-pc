@@ -718,6 +718,60 @@ static void test_upscale_pictures(const char *base)
     ico_rmdir(dir);
 }
 
+/* the scene ledger's text (ico_dump_zip_set_ledger): a zip that takes the
+   log takes scene-ledger.txt beside it, byte for byte; a zip without the
+   log does not; with none set neither */
+static const char kLedger[] = "The scene ledger: ...\n\nscene ledger: stage 40 (deja) ended: ...\n";
+
+static size_t fakeLedger(char *out, size_t cap)
+{
+    snprintf(out, cap, "%s", kLedger);
+    return strlen(out);
+}
+
+static void test_ledger(const char *base)
+{
+    char dump[1200], log[1200], zip[1200], why[160];
+    char rd[256], text[] = "window: a log line\n";
+    mz_zip_archive z;
+
+    for (size_t i = 0; i < sizeof(rd); i++) {
+        rd[i] = (char)(i * 11 + 3);
+    }
+    snprintf(dump, sizeof(dump), "%s/ledger-v1.rddump", base);
+    snprintf(log, sizeof(log), "%s/ledger.log", base);
+    snprintf(zip, sizeof(zip), "%s/ledger-v1.zip", base);
+    CHECK(put(log, text, sizeof(text) - 1) == 0);
+    ico_dump_zip_set_ledger(fakeLedger);
+    CHECK(put(dump, rd, sizeof(rd)) == 0);
+    CHECK(ico_frame_dump_zip(zip, dump, NULL, log, why, sizeof(why)) == 0);
+    memset(&z, 0, sizeof(z));
+    CHECK(mz_zip_reader_init_file(&z, zip, 0));
+    CHECK(mz_zip_reader_get_num_files(&z) == 3);
+    CHECK(entry_is(&z, "scene-ledger.txt", kLedger, sizeof(kLedger) - 1));
+    CHECK(entry_is(&z, "ledger.log", text, sizeof(text) - 1));
+    mz_zip_reader_end(&z);
+    remove(zip);
+    /* no log: no ledger either (the zip is the frame alone) */
+    CHECK(put(dump, rd, sizeof(rd)) == 0);
+    CHECK(ico_frame_dump_zip(zip, dump, NULL, NULL, why, sizeof(why)) == 1);
+    memset(&z, 0, sizeof(z));
+    CHECK(mz_zip_reader_init_file(&z, zip, 0));
+    CHECK(mz_zip_reader_locate_file(&z, "scene-ledger.txt", NULL, 0) < 0);
+    mz_zip_reader_end(&z);
+    remove(zip);
+    /* none set: the log alone */
+    ico_dump_zip_set_ledger(NULL);
+    CHECK(put(dump, rd, sizeof(rd)) == 0);
+    CHECK(ico_frame_dump_zip(zip, dump, NULL, log, why, sizeof(why)) == 0);
+    memset(&z, 0, sizeof(z));
+    CHECK(mz_zip_reader_init_file(&z, zip, 0));
+    CHECK(mz_zip_reader_get_num_files(&z) == 2);
+    mz_zip_reader_end(&z);
+    remove(zip);
+    remove(log);
+}
+
 int main(int argc, char **argv)
 {
     char dump[1200], log[1200], zip[1200], why[160];
@@ -887,6 +941,7 @@ int main(int argc, char **argv)
     test_why(argv[1]);
     test_slow(argv[1]);
     test_add(argv[1]);
+    test_ledger(argv[1]);
     test_upscale_pictures(argv[1]);
 
     printf("dump_zip_test: %s\n", fails ? "FAILED" : "ok");
