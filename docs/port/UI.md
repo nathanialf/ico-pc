@@ -1144,10 +1144,10 @@ handled by what is beside the box where it is drawn:
 
 | Where | Beside the box | Choice |
 |---|---|---|
-| Button Configuration's column (game rows), shoulders | the rows' labels end at x 384, 6 units left of the column (x 390 on every disc read: PAL, Japanese, Korean, Chinese); nothing to its right | the set's lettering, passing the box by up to 6 units a side (`ART_GAME_SHOULDER_OVER`, scaled with the box), shrunk only past that: on the PAL disc's 40-unit boxes LB is about 51 units wide (kept), RB about 54 (a little smaller); the others' 64-unit boxes hold them |
-| The prompts (game rows), face buttons; Button Configuration's face column | the word's box starts at the picture box's right edge | inside the box: the widest, the A, comes out a few % under the lettering; the face pictures are one size everywhere |
+| Button Configuration's column (game rows), shoulders | the rows' labels end at x 384, 6 units left of the column (x 390 on every disc read: PAL, Japanese, Korean, Chinese); nothing to its right | the set's lettering, passing the box by up to 6 units a side (`ART_GAME_SHOULDER_OVER`, scaled with the box), shrunk only past that: in the PAL disc's 39 x 28 sprite box LB is about 48 units wide (kept), RB about 51 (a little smaller); the others' 64-unit boxes hold them |
+| The prompts (game rows), face buttons; Button Configuration's face column | the word's box starts at the picture box's right edge | inside the box: the widest, the A (1.03 times as wide as tall), just fits the sprite's 31 x 28 box, so the face pictures keep the lettering |
 | The prompt lines (port glyph rows, `ui_hint.c`: Settings, the gallery, the model viewer) | the pair's other picture 2 units away, the word 5 | inside the box, shrunk to its width (its shape kept) |
-| Photo mode's panel (`photo_ui.c` `hudArt`) | the pair's other picture 0.16 of the size away, the word 0.34 | inside the box, as the prompt lines |
+| Photo mode's panel (`photo_ui.c` `hudArt`) | the pair's other picture 0.16 of the size away, the word 0.34 | inside the box, as the prompt lines (its 32 x 30 box at size 27 has the A about 4 % under the lettering) |
 | The touch buttons (`touch_ui.c`) | nothing inside a button | the lettering the disc's face picture has in that button (0.78 of a round one's width, 0.7 of a key's height), the ink centred on it, shrunk only so a round button's corners stay inside the circle within its ring (radius w / 2 - th) and a key's inside its frame |
 
 The colour is the sprite's as the game computed it (the fade, the half colour of a row another

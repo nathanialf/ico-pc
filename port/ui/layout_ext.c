@@ -482,16 +482,16 @@ int lt_ext_art_fit(int glyph, const float in[4], float maxW, float out[4], float
    Configuration's picture column (x 390 .. 430 on the PAL disc, 390 .. 454
    on the Japanese, Korean and Chinese ones), whose left neighbours, the
    rows' labels, end at x 384 on all of them, and nothing is to its right:
-   6 units free a side, which the PAL disc's 40-unit boxes need for the
-   two-letter pictures at the set's lettering (LB about 51 units wide, RB
-   about 54: that one still shrinks a little).  The face
-   pictures are drawn in that column too and in the prompts (a picture,
-   then its word: five layouts on the PAL disc, four on the Japanese, Korean
-   and Chinese ones), where the word's box starts at the picture box's
-   right edge: they keep inside everywhere (the widest, the A, comes out
-   a few % under the lettering).  The port's glyph rows are the
-   prompt lines (ui_hint.c: the pair's other picture 2 units away, the word
-   5): they keep inside too. */
+   6 units free a side, which the PAL disc's boxes need for the two-letter
+   pictures at the set's lettering (the sprite's box 39 by 28 units: LB
+   about 48 units wide, kept; RB about 51, a hair over 39 + 2 x 5.85, so it
+   shrinks a little).  The face pictures are drawn in that column too and
+   in the prompts (a picture, then its word: five layouts on the PAL disc,
+   four on the Japanese, Korean and Chinese ones), where the word's box
+   starts at the picture box's right edge: they keep inside everywhere (the
+   widest, the A, 1.03 times as wide as tall, just fits the sprite's 31 by
+   28 box).  The port's glyph rows are the prompt lines (ui_hint.c: the
+   pair's other picture 2 units away, the word 5): they keep inside too. */
 #define ART_GAME_SHOULDER_OVER 6.0f
 
 /* the widest row e's art of button g may be in a box bw x units wide (the
