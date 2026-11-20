@@ -294,6 +294,29 @@ void ico_input_note_press(int kind, int code);
    capture compares the sequence with the one it saw when it started. */
 unsigned int ico_input_last_press(int *kind, int *code);
 
+/* --- the kind of controller pressed last (pad_kind.c) ----------------------- */
+
+/* Whose button pictures fit the controller in use (port/ui/pad_glyphs.h, the
+   Button pictures option's Auto). */
+typedef enum IcoPadKind {
+    ICO_PAD_KIND_PLAYSTATION = 0,
+    ICO_PAD_KIND_XBOX,
+    ICO_PAD_KIND_NINTENDO
+} IcoPadKind;
+
+/* The kind of the gamepad whose button (or trigger, or stick past half) was
+   pressed last: Xbox for SDL's Xbox 360, Xbox One and Steam types, Nintendo
+   for the Switch Pro Controller and a pair of Joy-Cons; PlayStation for
+   every other type, and when the last press came from the keyboard, the
+   mouse or the touch screen; PlayStation before any press and in the
+   headless build (nothing reports there). */
+int ico_input_last_pad_kind(void);
+/* The device layer's report of a press (input_sdl.c): its kind (anything but
+   Xbox or Nintendo counts as PlayStation) and what pressed, for the log
+   line a change writes (first 8, then every 100th): "keyboard", "mouse",
+   "touch", or the gamepad's SDL type (pad_kind.h ico_pad_sdl_type_name). */
+void ico_input_note_pad_kind(int kind, const char *from);
+
 /* Bind target to one source of its kind: that device's row for target is
    replaced by the source alone, and the source is taken off every other
    target of the same device (one key, one action). When the source was on

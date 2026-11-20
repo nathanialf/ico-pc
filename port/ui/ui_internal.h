@@ -142,6 +142,22 @@ int ui__font_chinese_first(void);
 void ui__menu_set_ja_geometry(int sheet, float em, float wx, float gap, float bx, float by);
 void ui__menu_ja_geometry(int sheet, float *em, float *wx, float *gap, float *bx, float *by);
 void ui__set_menu_font_hooks(void (*shutdown)(void), void (*forget)(void));
+/* the same pair for pad_glyphs.c's atlases (the button pictures): run after
+   menu_font.c's by ui_font_shutdown and ui_font_forget_textures */
+void ui__set_pad_glyph_hooks(void (*shutdown)(void), void (*forget)(void));
+/* stb_truetype's scanline rasteriser (font.c compiles it, static) over n
+   closed polygons: xy holds counts[0] + .. + counts[n - 1] points (x, y
+   pairs) in pixels of cov, y down, each polygon closed from its last point
+   to its first.  cov (w x h, rows stride bytes apart) is cleared and gets
+   each pixel's coverage 0..255: the absolute value of the polygons' summed
+   signed area over the pixel, clamped at 255 (stbtt__rasterize_sorted_edges
+   `k = scanline[i] + sum; fabs(k) * 255`), so same-oriented overlaps unite,
+   opposite-oriented ones cancel (the non-zero rule for windings of one sign:
+   a hole needs the opposite orientation).  The points should lie inside
+   [0, w] x [0, h] (pad_glyphs.c clips them first).  0, or -1 for bad
+   arguments or no memory. */
+int ui__raster_polys(uint8_t *cov, int w, int h, int stride, const float *xy, const int *counts,
+                     int n);
 
 #ifdef ICO_RD
 /* Tests: in overlay mode (font.h ui_begin_overlay) the prims go to fn

@@ -124,6 +124,7 @@ static struct {
     void (*recordHook)(void);
     void (*syncHook)(void);
     void (*menuShutdown)(void), (*menuForget)(void); /* ui__set_menu_font_hooks */
+    void (*padShutdown)(void), (*padForget)(void);   /* ui__set_pad_glyph_hooks */
     int suppress;
     int warnedSizes, warnedPages;
     uint32_t useClock;
@@ -266,6 +267,9 @@ void ui_font_shutdown(void)
     if (s_font.menuShutdown) {
         s_font.menuShutdown();
     }
+    if (s_font.padShutdown) {
+        s_font.padShutdown();
+    }
     s_font.inited = 0;
     s_font.failed = 0;
     s_font.warnedSizes = s_font.warnedPages = 0;
@@ -275,6 +279,9 @@ void ui_font_forget_textures(void)
 {
     if (s_font.menuForget) {
         s_font.menuForget();
+    }
+    if (s_font.padForget) {
+        s_font.padForget();
     }
     for (int i = 0; i < MAX_SIZES; i++) {
         SizeSet *z = &s_font.sizes[i];
@@ -305,6 +312,54 @@ void ui__set_menu_font_hooks(void (*shutdown)(void), void (*forget)(void))
 {
     s_font.menuShutdown = shutdown;
     s_font.menuForget = forget;
+}
+
+void ui__set_pad_glyph_hooks(void (*shutdown)(void), void (*forget)(void))
+{
+    s_font.padShutdown = shutdown;
+    s_font.padForget = forget;
+}
+
+/* pad_glyphs.c's outlines through stb_truetype's own scanline rasteriser:
+   stbtt__rasterize is the step of stbtt_Rasterize after its curve
+   flattening, taken directly so the points stay floats (stbtt_vertex holds
+   shorts) and the caller's flattening is the only one */
+int ui__raster_polys(uint8_t *cov, int w, int h, int stride, const float *xy, const int *counts,
+                     int n)
+{
+    if (!cov || w <= 0 || h <= 0 || stride < w || n < 0 || (n > 0 && (!xy || !counts))) {
+        return -1;
+    }
+    for (int y = 0; y < h; y++) {
+        memset(cov + (size_t)y * (size_t)stride, 0, (size_t)w);
+    }
+    size_t total = 0;
+    for (int i = 0; i < n; i++) {
+        if (counts[i] < 0) {
+            return -1;
+        }
+        total += (size_t)counts[i];
+    }
+    if (total == 0) {
+        return 0;
+    }
+    stbtt__point *pts = malloc(sizeof(*pts) * total);
+    int *wc = malloc(sizeof(*wc) * (size_t)n);
+    if (!pts || !wc) {
+        free(pts);
+        free(wc);
+        return -1;
+    }
+    for (size_t i = 0; i < total; i++) {
+        pts[i].x = xy[2 * i];
+        pts[i].y = xy[2 * i + 1];
+    }
+    memcpy(wc, counts, sizeof(*wc) * (size_t)n);
+    stbtt__bitmap bm = {w, h, stride, cov};
+    stbtt__rasterize(&bm, pts, wc, n, 1.0f, 1.0f, 0.0f, 0.0f, 0, 0, 0, NULL);
+    free(wc);
+    free(pts);
+    return 0;
 }
 
 void ui__set_sync_hook(void (*fn)(void))

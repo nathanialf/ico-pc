@@ -271,6 +271,8 @@ options_ntsc 0.22
 pace_loop 3.06
 pace_policy 0.04
 package_textures 1.55
+pad_glyphs 0.05  # estimate: unmeasured (BTNCORE could not build or run it): CPU only, 24 SVG files parsed and about 40 small rasters
+pad_kind 0.01  # estimate: unmeasured (BTNCORE could not build or run it): a table and a few calls
 pad_mirror 0.01
 pad_script 0.02
 perf_block 0.01

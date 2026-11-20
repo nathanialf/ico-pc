@@ -31,6 +31,8 @@ draws, navigates, fades and sounds it; the port supplies the rows, their words a
 | `port/ui/menu_text.h`, `menu_text.c` | the table of the game's menu words, measured from the PAL sheets |
 | `port/ui/ui_internal.h` | font.c's and menu_font.c's internals shared with `ui_host.c` and the tests |
 | `port/ui/embed_font.cmake` | a font file as a C array at build time; the subsets' code points |
+| `port/ui/pad_glyphs.h`, `pad_glyphs.c`, `pad_glyphs.cmake` | the button pictures of other controllers: the SVG files embedded, read, rasterised and cached ([Button pictures](#button-pictures)) |
+| `port/assets/buttons/<set>/<button>.svg`, `CREDIT.txt` | the button pictures (Xbox, Nintendo, Wii Classic Controller: eight each) and their credit |
 | `port/assets/fonts/Arimo-Regular.ttf`, `OFL.txt` | the font and its licence |
 | `port/assets/fonts/NotoSansJP-Regular-subset.ttf`, `NotoSansJP-OFL.txt` | the second font (the characters Arimo lacks) and its licence |
 | `tools/subset_font_arimo.py` | makes and checks Arimo's subset |
@@ -978,6 +980,93 @@ five sheets; a port label wider than its box shrinks to fit down to 60 %
 whole ([Hints](#hints)); the photo panel shrinks its size until the widest line fits
 (`port/ui/photo_ui.h` (`ui__photo_hud_fit`)).
 
+## Button pictures
+
+The menus draw the disc's own PlayStation button pictures. For other controllers the port carries
+pictures of its own (issue 187): `port/assets/buttons/<set>/<button>.svg`, eight files a set
+(`xbox`, `nintendo`, `wii_classic`), each named by the PlayStation 2 button whose place it takes
+(`cross`, `circle`, `square`, `triangle`, `l1`, `r1`, `l2`, `r2`), so the art follows the button's
+position: `nintendo/cross.svg` is the B letter (the south button), `xbox/cross.svg` the A.
+`port/assets/buttons/CREDIT.txt` credits the artist. `port/ui/pad_glyphs.c` reads, draws and caches
+them; the Button pictures setting chooses the set in force (`pad_glyphs_set_style`, its Auto from
+the controller pressed last, [INPUT.md](INPUT.md#devices) `ico_input_last_pad_kind`), and the glyph
+rows ask for the picture they show (`pad_glyphs_texture`).
+
+**Embedding.** `port/ui/pad_glyphs.cmake` turns the 24 files into C arrays at build time
+(`embed_font.cmake`, `ui_pad_<set>_<button>_svg`), part of every program that compiles
+`pad_glyphs.c` (`_ui_sources`, `pad_glyphs_test`). Configure stops with a message naming the file
+when one of the 24 is missing.
+
+**The reader.** A file may hold exactly what the contributed files use, and anything else refuses
+the piece: an `<?xml?>` line and comments; one root `<svg>` with a `viewBox` (required; `version`,
+`xmlns`, `width`, `height`, `id`); `<g>` with an `id` only (no `transform`); one `<style>` with one
+rule `.<class> { ... }` of `fill` and `stroke` (`#rgb`, `#rrggbb` or `none`), `stroke-width`,
+`stroke-miterlimit` and `paint-order`; and exactly one `<path>` (`id`, `class` naming that rule,
+`d`, `fill-rule` `nonzero` or `evenodd`) whose data uses `M L H V Q C Z` in their absolute and
+relative forms with implicit repeats, every subpath closed. Another element, attribute, property
+or path command, an entity, more than 8192 bytes, more than 512 path commands or nesting deeper
+than 8 refuses it; the reader's buffers are bounded by those limits and by 16384 flattened points
+a picture.
+
+**Drawing.** A piece is rasterised at the height it is drawn at (the viewBox scaled to that many
+rows, its width rounded), as a browser draws the file: the curves flattened into segments of about
+2 pixels; the fill by the file's rule; the stroke built as outlines, a band of the stroke width
+along every segment and a join piece at every vertex on the outer side of the turn, a miter up to
+`stroke-miterlimit` and a bevel past it (SVG's `stroke-linejoin` default; the files' limit of 100
+gives miters at every corner they have); `paint-order: stroke` puts the fill over the stroke;
+everything clipped to the viewBox. Both layers go through stb_truetype's own scanline rasteriser
+(`font.c` `ui__raster_polys`, around `stbtt__rasterize`, the step of `stbtt_Rasterize` after its
+curve flattening, so the points stay floats). That rasteriser sums each polygon's signed area over
+a pixel and takes its magnitude, clamped (`k = scanline[i] + sum; fabs(k) * 255`): polygons of one
+orientation unite and opposite ones cancel. So every stroke piece is given one orientation, and
+an `evenodd` fill's contours are turned by how deeply each lies inside the others (even depths
+one way, odd ones the other), which empties a hole inside an outline: the even-odd result for
+outlines that do not cross, as the letters' holes (A, B, R, a, b) are. A `nonzero` fill keeps the
+file's own orientations, which is the non-zero rule for windings of one sign.
+
+**The texels.** RGBA8, straight colour (not premultiplied), the alpha at the GS's scale (0x80
+opaque: coverage 255 is 0x80), uploaded with `rd_create_texture(..., RD_TEXA_80_80)` and drawn
+through `ui__draw_tex_quads` (modulate, the texture's alpha, the blend `RD_BLEND_LERP_AS`), so a
+vertex colour of 0x80 draws the art as it is. A transparent texel carries the stroke's colour, so
+bilinear filtering at the outline brings in no other colour.
+
+**The cache.** One atlas per set and height holds the eight pictures, the four face buttons on
+one row and the four shoulders on the next, two transparent texels around each; a request of
+`pixelH` rows is drawn from the first of 16, 24, 32, 48, 64, 96, 128, 192 and 256 at or above it
+(`pad_glyphs_bucket`). The atlas is `2 h + 6` texels high, never a power of two, so the texture
+filter gives it no mip chain to average cells together (`rd_upload.c` `texLevels`). It is made
+inside `pad_glyphs_texture` the first time a set and height are asked for, on the thread that
+draws the menus, as the menu font's pages are. Six atlases live at most: a full cache drops the
+one drawn least recently once no frame of the last four can name it, else the nearest height of
+the set stands in. An atlas of another set than the one in force goes once those four frames have
+passed, at the next `pad_glyphs_texture` or `pad_glyphs_set_style`; `ui_font_forget_textures`
+forgets them (rd started again) and `ui_font_shutdown` destroys them, through
+`ui__set_pad_glyph_hooks`, the pair beside the menu font's. A failed upload is logged once and
+not tried again for that set and height until the textures are forgotten.
+
+**The completeness gate.** A set is complete when all eight of its pieces were read
+(`pad_glyphs_set_complete`; PlayStation always is: the disc's own). A set that is not complete can
+never be in force: `pad_glyphs_set_style` sets PlayStation instead (one line per refused set), and
+`pad_glyphs_active` checks completeness again at every call. The start-up line names each set:
+
+```
+ui: button pictures: Xbox complete, Nintendo complete, Wii Classic Controller complete; PlayStation: the disc's own
+```
+
+and a refused piece has its own line before it, e.g. `ui: button pictures: xbox/cross.svg refused:
+the element <circle>`, the set then `Xbox incomplete, cannot be chosen (7 of 8)`. A refused style:
+`ui: button pictures: Xbox (1) asked for, not a complete set: PlayStation's drawn`.
+
+**The API** (`port/ui/pad_glyphs.h`): `pad_glyphs_init`, `pad_glyphs_set_complete`,
+`pad_glyphs_set_style`, `pad_glyphs_style`, `pad_glyphs_active`, `pad_glyphs_style_name`,
+`pad_glyphs_aspect` (the art's width over its height: 1, 40 / 24 for the 40 x 24 shoulders, 24 / 32
+for the Wii Classic Controller's face letters), `pad_glyphs_bucket`, `pad_glyphs_texture` (the
+atlas, the cell's texel rectangle, the aspect); for tests and tools, CPU only:
+`pad_glyphs_raster_size`, `pad_glyphs_raster` (a piece into the caller's RGBA buffer, the atlas
+cell's texels exactly), `pad_glyphs_piece_valid`, `pad_glyphs_piece_error`,
+`pad_glyphs_test_source` (a piece read from given text instead of its file) and
+`pad_glyphs_atlas_count`. Without `ICO_RD` no texture is made (`pad_glyphs_texture` returns 0).
+
 ## Popups
 
 `ui_popup_push` queues a title and body (eight at most); one shows at a time, sliding in from the
@@ -1636,6 +1725,13 @@ Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
   layout extension through the real `layout_texture.c`, a Japanese popup body's line break.
   `ui_jpn` (`ui_test jpn`): the glyph rows and rectangles, the table sizes and the pad convention
   on the Japanese disc.
+- `pad_glyphs` (`test/pad_glyphs_test.c`): the button pictures' core, CPU only
+  ([Button pictures](#button-pictures)): every set's eight pieces read, their aspects, fill and
+  stroke present and the alpha within 0x80; the Xbox B and A at 24 and 96 rows (the fill in a stem,
+  the stroke beside it, clear corners, the holes without fill); a ring of two same-way squares,
+  empty with `evenodd` and filled without; the 40 x 24 and 24 x 32 sizes; the absolute path forms
+  drawing as the relative ones; broken files refused, their set incomplete and refused as the style
+  in force. Every sample point comes from the file's path data.
 - `strings_complete` (`test/strings_complete_test.c`): every table defines every id with the
   English entry's conversions, the serial notes on every disc, the sheet language, the menu
   language's rule, the Japanese line-break rules.

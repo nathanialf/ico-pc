@@ -19,6 +19,9 @@
 #   ico_ui_font_rd      font.c alone with ICO_RD, for the render tests and
 #                       rd_replay_tool
 #
+# pad_glyphs.cmake embeds the button pictures' SVG files the same way
+# (_ui_pad_glyph_data, in _ui_sources).
+#
 # The font files (Arimo, Noto Sans JP's subset for the characters Arimo
 # has no glyph for: the Japanese text, the language names, the button
 # marks, Noto Sans KR's for the Hangul neither has: the Korean text, and
@@ -81,14 +84,20 @@ set(_ui_string_srcs strings.c strings_en.c strings_fr.c strings_de.c strings_it.
                     strings_ja.c strings_ko.c strings_zh.c strings_ru_bobttz.c
                     strings_ru_cobra838.c strings_pt_br.c)
 
+# the button pictures of other controllers (pad_glyphs.c over the 24 SVG files
+# pad_glyphs.cmake embeds: _ui_pad_glyph_data)
+include("${CMAKE_CURRENT_SOURCE_DIR}/pad_glyphs.cmake")
+
 set(_ui_sources
     font.c
     layout_ext.c
     menu_font.c
     menu_text.c
+    pad_glyphs.c
     popup.c
     ${_ui_string_srcs}
-    ${_ui_font_srcs})
+    ${_ui_font_srcs}
+    ${_ui_pad_glyph_data})
 
 # layout_ext.h includes the game's layout_texture.h (LtProp, LtProperty),
 # whose typedef.h has unprototyped declarations the port warnings reject
@@ -521,6 +530,27 @@ target_include_directories(ui_mouse_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(ui_mouse_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 if(ICO_RUN_TESTS)
     add_test(NAME ui_mouse COMMAND ui_mouse_test)
+endif()
+
+# pad_glyphs_test: the button pictures' core (pad_glyphs.c over the embedded
+# files, font.c's rasteriser): every shipped set has eight valid pieces,
+# broken files given through the test entry are refused and make their set
+# incomplete (it can then not be the style in force), the absolute and
+# relative path forms draw alike, and the rasters at 24 and 96 rows: the
+# fill inside a letter, the stroke just outside it, the corners clear, the
+# evenodd holes of the Xbox A and B without fill, the 40 x 24 and 24 x 32
+# sizes. CPU only (no ICO_RD: no texture is made).
+add_executable(pad_glyphs_test test/pad_glyphs_test.c pad_glyphs.c font.c ${_ui_pad_glyph_data}
+    ${_ui_font_srcs})
+target_include_directories(pad_glyphs_test PRIVATE "${CMAKE_SOURCE_DIR}/port/third_party/stb")
+# port/ui by -iquote, so <strings.h> stays the C library's
+target_compile_options(pad_glyphs_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS}
+                       -iquote "${CMAKE_CURRENT_SOURCE_DIR}")
+if(NOT WIN32)
+    target_link_libraries(pad_glyphs_test PRIVATE m)
+endif()
+if(ICO_RUN_TESTS)
+    add_test(NAME pad_glyphs COMMAND pad_glyphs_test)
 endif()
 
 if(NOT TARGET ico_render)
