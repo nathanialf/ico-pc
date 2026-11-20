@@ -41,12 +41,24 @@ static RdLedgerStage s_a, s_b;
 static RdLedgerTable s_rep;
 static char s_text[RD_LEDGER_TEXT];
 
+#ifdef _WIN32
+#include <windows.h>
+
+static double nowNs(void)
+{
+    LARGE_INTEGER f, c;
+    QueryPerformanceFrequency(&f);
+    QueryPerformanceCounter(&c);
+    return (double)c.QuadPart * 1e9 / (double)f.QuadPart;
+}
+#else
 static double nowNs(void)
 {
     struct timespec ts;
     timespec_get(&ts, TIME_UTC);
     return (double)ts.tv_sec * 1e9 + (double)ts.tv_nsec;
 }
+#endif
 
 /* the row of name in the text (its "name:" after a ' ' or ';'), NULL none */
 static const char *rowOf(const char *text, const char *name)

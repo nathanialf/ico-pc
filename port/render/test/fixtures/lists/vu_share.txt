@@ -9,5 +9,5 @@
 #
 # issue 179's Mali-G52 (moto g24 power, v0.11.5): the stage 42 slow-scene capture,
 # the boat scene of the opening (three code 34 draws of 723 triangles in it,
-# counted from its dump: build-host/tmp/v01113/handbacks/VTXSHARE.md)
+# counted from its dump)
 fx-mali-slow541 mali,corpus vu_shared_triangles>=1
