@@ -1659,12 +1659,12 @@ static void testSizeSets(void)
  * force as before; with Xbox, Nintendo and Wii Classic each row is one
  * sprite from a button pictures' atlas (the texture's name), its cell
  * inside the atlas with the art in it, the art's aspect on screen, its ink
- * centred in the disc glyph's box (within a tenth of a unit: under half an
- * output pixel) at the set's lettering (the face buttons' box height over
- * the glyph's, region.h disp_h, times the piece's own height), shrunk to
- * the box's width where wider, a game row's shoulder picture to the box's
- * width and 6 units a side (layout_ext.c ART_GAME_SHOULDER_OVER), the
- * sprite's colour and the packet's blend. */
+ * wholly inside the disc glyph's box (no overhang anywhere, Button
+ * Configuration's copies included) and centred on it (within a tenth of a
+ * unit: under half an output pixel), at its group's fit for that box
+ * (pad_glyphs_fit_box: the four faces, or the four shoulders, one scale,
+ * one of them touching the box), the sprite's colour and the packet's
+ * blend. */
 
 #define ART_ROWS 10
 
@@ -1960,32 +1960,25 @@ static void testGlyphArt(const char *slug)
             const float bx = (float)e->dispX + 0.25f, by = 2.0f * (float)e->dispY + 0.5f;
             const float bw = (float)(e->dispW - 1), bh = (float)(e->dispH - 2);
             const float shown = (gx1 - gx0) / ((gy1 - gy0) * UI_X_PER_Y);
-            /* the size: the lettering in this box, the piece's height, its
-               ink's width; the widest it may be: the box's, and 6 units a
-               side more for a game row's shoulder picture (scaled from the
-               row's own width to the sprite's box) */
-            const float letter =
-                bh * (float)ri->glyph[LT_GLYPH_CROSS].disp_h / (float)ri->glyph[g].disp_h;
-            float wantH = letter * pad_glyphs_height(style, g), wantW = wantH * UI_X_PER_Y * a;
-            const float over = r >= 8 && g >= LT_GLYPH_L1 ? 6.0f * bw / (float)e->dispW : 0.0f;
-            if (wantW > bw + 2.0f * over) {
-                wantH *= (bw + 2.0f * over) / wantW;
-                wantW = bw + 2.0f * over;
-            }
+            /* the size: the group's fit for this box (in y units both
+               ways), the piece's height and aspect; the tightest piece of
+               the group touches the box, so this one cannot pass it */
+            const float L = pad_glyphs_fit_box(style, g, bw / UI_X_PER_Y, bh);
+            const float wantH = L * pad_glyphs_height(style, g);
+            const float wantW = wantH * UI_X_PER_Y * a;
             /* in 1/16 units the corners are rounded: a tenth of a unit */
-            CHECK(gx0 >= bx - over - 0.1f && gx1 <= bx + bw + over + 0.1f && gy0 >= by - 0.1f &&
+            CHECK(L > 0.0f && gx0 >= bx - 0.1f && gx1 <= bx + bw + 0.1f && gy0 >= by - 0.1f &&
                       gy1 <= by + bh + 0.1f,
-                  "%s %s: row %d's art %.2f,%.2f-%.2f,%.2f inside the disc box %.2f,%.2f %.2fx%.2f "
-                  "(%.2f a side more)",
+                  "%s %s: row %d's art %.2f,%.2f-%.2f,%.2f inside the disc box %.2f,%.2f %.2fx%.2f",
                   slug, name, r, (double)gx0, (double)gy0, (double)gx1, (double)gy1, (double)bx,
-                  (double)by, (double)bw, (double)bh, (double)over);
+                  (double)by, (double)bw, (double)bh);
             CHECK(fabsf((gx0 + gx1) * 0.5f - (bx + bw * 0.5f)) < 0.1f &&
                       fabsf((gy0 + gy1) * 0.5f - (by + bh * 0.5f)) < 0.1f,
                   "%s %s: row %d's art centred in its box", slug, name, r);
             CHECK(fabsf(gx1 - gx0 - wantW) < 0.15f && fabsf(gy1 - gy0 - wantH) < 0.15f,
-                  "%s %s: row %d's art %.2f x %.2f (%.2f x %.2f: the lettering %.2f)", slug, name,
+                  "%s %s: row %d's art %.2f x %.2f (%.2f x %.2f: the group's fit %.2f)", slug, name,
                   r, (double)(gx1 - gx0), (double)(gy1 - gy0), (double)wantW, (double)wantH,
-                  (double)letter);
+                  (double)L);
             CHECK(fabsf(shown / a - 1.0f) < 0.02f, "%s %s: row %d's art at aspect %.3f (%.3f)",
                   slug, name, r, (double)shown, (double)a);
             /* the cell: inside the texture, the art's shape (its width

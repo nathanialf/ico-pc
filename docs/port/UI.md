@@ -1133,35 +1133,44 @@ disc at run time, so the match is made from them at each call (`lt_ext_glyph_of_
 comparisons) and never goes stale. Such a row is a text row (`lt_ext_is_text_row`), and the
 layout's text hook (`lt_ext_draw_text_row`, and `lt_ext_draw_row`'s glyph branch for a port row)
 draws the art in the box `display_texture` gives the disc's sprite (`lt_ext_art_fit`;
-`lt_ext_glyph_box` and every row's place stay the disc's): the piece's ink box centred in the box,
-across and down, each picture by itself (they are single pictures in separate boxes, not a line of
-text), at the set's **lettering**: the face buttons' box height over this glyph's
-(`lt_ext_glyph_lettering`, from the disc's table: 1 on the PAL disc, 30 / 40 for the taller
-shoulder boxes of the others) times the box's height, times the piece's own height. So every
-picture of a set has the same lettering beside the same label, the sets are one size, and a
-capital is as tall as the disc's face picture's box. A picture wider than its box at that size is
-handled by what is beside the box where it is drawn:
+`lt_ext_glyph_box` and every row's place stay the disc's). **The rule, everywhere a picture is
+drawn:** the piece's ink box is fitted inside the button it stands on (as large as fits, its shape
+kept) and centred on it, and nothing of it lies outside that button. The size follows the button,
+never the text beside it. The four face pictures of a set are fitted by one scale, and the four
+shoulder pictures by another (`pad_glyphs_fit_box` / `pad_glyphs_fit_circle`: the largest scale
+at which every one of the four fits a button of this shape and size), so on same-sized buttons
+the A is not bigger than the B. The files allow that for every set; the Wii Classic Controller's
+face letters are lower case, so at one scale its a and x come out x height against its b and y.
+Because the scale is set by the group's tightest piece, the others are a little under their own
+largest fit: the two-letter shoulder pieces (RB is the widest, 1.7 times as wide as tall) set it
+for the shoulders, so a Nintendo L or R is drawn at ZR's lettering.
 
-| Where | Beside the box | Choice |
-|---|---|---|
-| Button Configuration's column (game rows), shoulders | the rows' labels end at x 384, 6 units left of the column (x 390 on every disc read: PAL, Japanese, Korean, Chinese); nothing to its right | the set's lettering, passing the box by up to 6 units a side (`ART_GAME_SHOULDER_OVER`, scaled with the box), shrunk only past that: in the PAL disc's 39 x 28 sprite box LB is about 48 units wide (kept), RB about 51 (a little smaller); the others' 64-unit boxes hold them |
-| The prompts (game rows), face buttons; Button Configuration's face column | the word's box starts at the picture box's right edge | inside the box: the widest, the A (1.03 times as wide as tall), just fits the sprite's 31 x 28 box, so the face pictures keep the lettering |
-| The prompt lines (port glyph rows, `ui_hint.c`: Settings, the gallery, the model viewer) | the pair's other picture 2 units away, the word 5 | inside the box, shrunk to its width (its shape kept) |
-| Photo mode's panel (`photo_ui.c` `hudArt`) | the pair's other picture 0.16 of the size away, the word 0.34 | inside the box, as the prompt lines (its 32 x 30 box at size 27 has the A about 4 % under the lettering) |
-| The touch buttons (`touch_ui.c`) | nothing inside a button | the lettering the disc's face picture has in that button (0.78 of a round one's width, 0.7 of a key's height), the ink centred on it, shrunk only so a round button's corners stay inside the circle within its ring (radius w / 2 - th) and a key's inside its frame |
+| Where | The button |
+|---|---|
+| Menu rows: the prompts, Button Configuration's columns (game rows) | the disc picture's sprite box (`display_texture`'s; on the PAL disc 31 x 28 units for a face, 39 x 28 for a shoulder) |
+| The prompt lines (port glyph rows, `ui_hint.c`: Settings, the gallery, the model viewer) | the glyph row's box (`lt_ext_glyph_box`) |
+| Photo mode's panel (`photo_ui.c` `hudArt`) | the disc picture's box at the panel's size |
+| The touch buttons (`touch_ui.c`) | a round button: a circle of `UI_TOUCH_ART_ROUND` (0.8) of its radius, the ink box's corners inside it; a key: a box of `UI_TOUCH_ART_KEY_W` x `UI_TOUCH_ART_KEY_H` (0.8 x 0.7) of its size; each also a pixel inside the ring or frame |
+
+The touch margin: the ring is 0.4 of the layout unit thick; a face's radius is 5.5 units times the
+editor's scale (0.7 to 3.0), so the ring is 10.4 % of the smallest face's radius and 2.4 % of the
+largest's, and the 0.8 circle keeps the stroke 9.6 % to 17.6 % of the radius off the ring (keys:
+7.9 % of the smallest key's height and 5.2 % of its width). As shares of the button, the
+picture scales with the size setting, the editor's per-button scale and the output's resolution:
+half the button, half the picture.
 
 The colour is the sprite's as the game computed it (the fade, the half colour of a row another
 item dims, the reduction), the game's blend for the label pass, and the glow passes additive in
 the stretched box as the glow sprite. The 2001 builds' inset sprite box is fitted the same way. The
-art is rasterised at the lettering it has in the row's own box at the picture's scale (the GS
+art is rasterised at the size it has in the row's own box at the picture's scale (the GS
 frame's lines per y unit times the scene's scale, as the menu text's strips), for the label and
 glow passes alike, so a glow is the same picture stretched. A game row's texture is
 still transferred, as for the menu text table's rows. When no atlas can be made the row keeps the
 disc's path (`lt_ext_is_text_row` asks for the texture first).
 
 **Photo mode's panel** (`photo_ui.c`) and **the touch overlay** (`touch_ui.c`) draw on the output:
-the art centred in the disc picture's box there (the table above), rasterised at the lettering it
-is shown at in output pixels.
+the art fitted and centred on its button there (the table above), rasterised at the size it is
+shown at in output pixels.
 `lt_ext_glyph_available` (a set in force, or the disc's texture there) decides whether the panel
 shows a picture or the button's name; the touch overlay needs no sheet in its slot for the art.
 Touch input itself counts as PlayStation under Auto, so the touch overlay shows another set only
@@ -1834,15 +1843,17 @@ Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
   arrow or rectangle of another file; with PlayStation the glyph rows are the texture path and the
   frame is the same after the sets as before; with Xbox, Nintendo and Wii Classic each glyph row is
   one sprite from an atlas, centred in its disc box within a tenth of a unit (under half an output
-  pixel) at the art's aspect, the size the set's lettering gives it (shrunk to the box's width, a
-  game row's shoulder picture to that plus 6 units a side), the cell inside the atlas holding the
+  pixel) and wholly inside it, at the art's aspect, the size its group's fit for that box gives
+  it (`pad_glyphs_fit_box`), the cell inside the atlas holding the
   art, the sprite's colour and the packet's blend.
 - `pad_glyphs` (`test/pad_glyphs_test.c`): the button pictures' core, CPU only
   ([Button pictures](#button-pictures)): every set's eight pieces read, each ink box inside its
   viewBox, their aspects (the ink's), the capitals one lettering height and the Wii Classic a, x, y
   against its b, fill and stroke present and the alpha within 0x80; every piece at 24, 48 and 96
   rows reaching all four sides of its raster within a pixel, every capital of a set the same height
-  within a pixel, the Wii Classic b as tall as the Nintendo B; the Xbox B and A at 24 and 96 rows
+  within a pixel, the Wii Classic b as tall as the Nintendo B; the group fits (every face, or
+  shoulder, piece inside a box or circle at one scale, one touching, twice the button twice the
+  scale); the Xbox B and A at 24 and 96 rows
   (the B's ink box, the fill in a stem, the stroke beside it, the stem's stroke corners and the
   bowls' clear ones, the holes without fill); a ring of two same-way squares, empty with `evenodd`
   and filled without; the 40 x 24 LB's and 24 x 32 b's ink boxes and sizes; the absolute path forms
@@ -1887,11 +1898,13 @@ Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
   set (`settings_pad_glyphs_<set>.png`: every glyph row one sprite from an atlas in its box and
   centred on it, the pixels there not the stand-in sheet's, flat opaque art the texel times the
   sprite's colour); photo mode's panel with Xbox (seven pictures from the atlas, none from the
-  sheets, each centred on a disc picture's box within half a pixel, inside it, at the lettering
-  or the box's width); the touch overlay at 1080p (`settings_touch_<set>_1080.png`: with Xbox
-  every zone with a picture takes the art, `ui__touch_art_zones`, each centred on its button
-  within half a pixel at the lettering unless the circle or the key's frame stops it,
-  `ui__touch_art_quad`).
+  sheets, each centred on a disc picture's box within half a pixel and inside it, the faces one
+  height and the shoulders one height, one of each filling its box); the touch overlay at 1080p
+  (`settings_touch_<set>_1080.png`: with Xbox every zone with a picture takes the art,
+  `ui__touch_art_zones`; for each set each picture centred on its button within half a pixel and
+  inside its circle or key box, the faces at one scale and the shoulder keys at one, the tightest
+  at its limit, and every button at 0.5 and 2 times its size giving pictures 0.5 and 2 times as
+  large within a pixel, `ui__touch_art_quad`).
 - `settings_jpn`, `settings_extras_jpn`, `settings_extra_jpn`, `settings_render_jpn` (each program
   with `jpn`): the Japanese disc over the fixture's tables at its numbers (`fxLayout`, `fxRow`):
   the rows it has not and the Menu language row, Circle confirming and Cross or Triangle going
