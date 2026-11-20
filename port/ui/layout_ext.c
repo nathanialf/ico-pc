@@ -5,6 +5,7 @@
  */
 #include "layout_ext.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -12,8 +13,12 @@
 #include "../core/region.h" /* ico_region_cur: the running disc */
 #include "menu_font.h"
 #include "menu_text.h"
+#include "pad_glyphs.h"
 #include "strings.h"
 #include "ui_internal.h"
+#ifdef ICO_RD
+#include "rd.h" /* rd_get_scene_scale */
+#endif
 
 /* a label's bytes with its NUL: as long as the wrapped notes settings.c
    builds (setNote's 256), which the longer translations need (the Spanish
@@ -339,6 +344,182 @@ int lt_ext_glyph_texture(int g)
     return src->texNo;
 }
 
+/* a row's draw key: the row and the pass (1 the label or words, 2 the
+   glow), so the presenter blends a row that moves or fades */
+static uint64_t rowKey(const LtProperty *e, int glow)
+{
+    return ((uint64_t)(uintptr_t)e << 2) ^ (uint64_t)(glow ? 2u : 1u);
+}
+
+/* ------------------------------------------------ the button pictures
+
+   The art of another controller (pad_glyphs.h) where the disc's button
+   glyph would be.  A row shows a button when it is a port glyph row of a
+   button, or a game row that draws one of the disc's button sources: the
+   same texture file (texFileNo) and texel rectangle as the running disc's
+   source row for that button (region.h IcoGlyphRow), so the save prompts,
+   Button Configuration's columns and every copy of them are found on each
+   disc from its own tables.  The tables are the disc's, loaded at run
+   time (and the tests' fakes): the match is made from them at each call
+   (eight comparisons) rather than kept in a map that a reload would leave
+   stale.  The menu arrows never (no art for them). */
+_Static_assert((int)PAD_GLYPHS_PIECES == (int)LT_GLYPH_LEFT,
+               "pad_glyphs.h's pieces are the button glyphs before the arrows");
+
+static int gameGlyphOf(const LtProperty *e)
+{
+    for (int g = 0; g < PAD_GLYPHS_PIECES; g++) {
+        const IcoGlyphRow *k = glyphOf(g);
+        if (k->row < 0 || k->row >= LT_GAME_PROPERTY_COUNT) {
+            continue;
+        }
+        const LtProperty *src = &texProperty[k->row];
+        /* the source row is not the disc's own (the tables are another
+           disc's): nothing is that button */
+        if (src->texU != k->u || src->texV != k->v || src->texW != k->w || src->texH != k->h) {
+            continue;
+        }
+        if (e->texFileNo == src->texFileNo && e->texU == k->u && e->texV == k->v &&
+            e->texW == k->w && e->texH == k->h) {
+            return g;
+        }
+    }
+    return -1;
+}
+
+/* the button a row shows (LtExtGlyph below LT_GLYPH_LEFT), -1 for none */
+static int buttonOf(const LtProperty *e)
+{
+    if (lt_ext_is_port_prop(e)) {
+        const ExtRow *r = &s_rows[e - s_props];
+        return r->kind == ROW_GLYPH && r->glyph < PAD_GLYPHS_PIECES ? r->glyph : -1;
+    }
+    if (!e || e < texProperty || e >= texProperty + LT_GAME_PROPERTY_COUNT) {
+        return -1;
+    }
+    return gameGlyphOf(e);
+}
+
+int lt_ext_glyph_of_row(int row)
+{
+    if (row < 0 || row >= LT_GAME_PROPERTY_COUNT + s_propCount) {
+        return -1;
+    }
+    return buttonOf(lt_ext_prop(row));
+}
+
+int lt_ext_glyph_available(int glyph)
+{
+    if (glyph >= 0 && glyph < PAD_GLYPHS_PIECES && pad_glyphs_active()) {
+        return 1;
+    }
+    return lt_ext_glyph_texture(glyph) >= 0;
+}
+
+/* pixels of the picture being drawn per y unit: in the scene (the menus
+   are drawn into the game's picture, at its resolution) the GS frame's
+   lines per y unit (screenH / 448, font.c gsY) times the scene's scale (the
+   menu text's strips use the same, menu_font.c mfScale); in overlay mode
+   the output's */
+static float pixelsPerY(void)
+{
+    float k = 1.0f;
+#ifdef ICO_RD
+    if (ui_overlay_active()) {
+        float y0 = 0.0f, y1 = 0.0f;
+        ui_overlay_map(0.0f, 0.0f, NULL, &y0);
+        ui_overlay_map(0.0f, 1.0f, NULL, &y1);
+        k = (y1 - y0) / 16.0f;
+    } else {
+        rd_get_scene_scale(NULL, &k);
+        k *= (float)ui_get_gs_frame()->screenH / 448.0f;
+    }
+#endif
+    return k > 0.0f ? k : 1.0f;
+}
+
+/* The art's texture for row e while a set is in force: its button (*g),
+   the texture, its cell (texels) and the art's aspect; 0 when the row
+   shows no button, no set is in force or no atlas can be made (then the
+   disc's own path draws the row).  The art is rasterised at the height it
+   has fitted in the row's own box (dispW pixels by dispH y units, the
+   texture's size where they are 0) at the picture's scale, for the label
+   pass and the glow passes alike: a glow is the same picture stretched,
+   as the disc's glow sprite is its texture stretched. */
+static int artOf(const LtProperty *e, int *g, unsigned *tex, float uv[4], float *aspect)
+{
+    if (!pad_glyphs_active()) {
+        return 0;
+    }
+    const int b = buttonOf(e);
+    if (b < 0) {
+        return 0;
+    }
+    const float a = pad_glyphs_aspect(pad_glyphs_style(), b);
+    const float w = (float)(e->dispW ? e->dispW : e->texW);
+    const float h = (float)(e->dispH ? e->dispH : e->texH);
+    if (!(a > 0.0f) || !(w > 0.0f) || !(h > 0.0f)) {
+        return 0;
+    }
+    /* the fitted height in y units: the box's, or the width's over the
+       aspect where the box is the narrower (a y unit is UI_X_PER_Y x
+       units on screen) */
+    const float fh = w >= h * UI_X_PER_Y * a ? h : w / a / UI_X_PER_Y;
+    const long px = lrintf(fh * pixelsPerY());
+    if (!pad_glyphs_texture(b, px < 1 ? 1 : (int)px, tex, uv, aspect)) {
+        return 0;
+    }
+    *g = b;
+    return 1;
+}
+
+/* Row e's art in box (the sprite's rectangle display_texture or the glow
+   gives the disc's glyph: x, y, w, h in 1/16 pixel / 1/16 field line from
+   the centre), the largest rectangle of the art's aspect centred in it
+   (lt_ext_aspect_fit: the disc box is kept, nothing is laid out again),
+   with the sprite's colour (the row's fade, dimming and reduction as the
+   game computed them) and the packet's state: the label pass the game's
+   sprite blend, the glow pass additive as the glow sprite.  1 when drawn. */
+static int drawArt(const LtProperty *e, const int box[4], const unsigned char rgba[4], int glow)
+{
+#ifdef ICO_RD
+    int g = -1;
+    unsigned tex = 0;
+    float uv[4], a = 0.0f;
+    if (!artOf(e, &g, &tex, uv, &a)) {
+        return 0;
+    }
+    float in[4], fit[4];
+    in[0] = (float)box[0] / 16.0f + UI_GRID_CX;
+    in[1] = (float)box[1] / 8.0f + UI_GRID_CY;
+    in[2] = in[0] + (float)box[2] / 16.0f;
+    in[3] = in[1] + (float)box[3] / 8.0f;
+    lt_ext_aspect_fit(in, a, fit);
+    UiTexQuad q;
+    q.x0 = fit[0];
+    q.y0 = fit[1];
+    q.x1 = fit[2];
+    q.y1 = fit[3];
+    q.u0 = uv[0];
+    q.v0 = uv[1];
+    q.u1 = uv[2];
+    q.v1 = uv[3];
+    const unsigned flags = UI_KEEP_STATE | (glow ? UI_ADDITIVE : 0u);
+    ui__sync();
+    const uint64_t owner = ui_set_draw_key(rowKey(e, glow));
+    ui__draw_tex_quads(tex, &q, 1, rgba, flags, NULL,
+                       ui__text_key("pad glyph", flags, pad_glyphs_style() * 16 + g));
+    ui_set_draw_key(owner);
+    return 1;
+#else
+    (void)e;
+    (void)box;
+    (void)rgba;
+    (void)glow;
+    return 0;
+#endif
+}
+
 int lt_ext_add_rect(int x, int y, int w, int h, const unsigned char rgba[4])
 {
     LtProperty r;
@@ -448,12 +629,21 @@ uint32_t lt_ext_row_image(int index, int *texW, int *texH)
 
 void lt_ext_image_fit(const float in[4], int texW, int texH, float out[4])
 {
-    const float w = in[2] - in[0], h = in[3] - in[1];
-    memcpy(out, in, 4 * sizeof(float));
-    if (texW <= 0 || texH <= 0 || !(w > 0.0f) || !(h > 0.0f)) {
+    if (texW <= 0 || texH <= 0) {
+        memcpy(out, in, 4 * sizeof(float));
         return;
     }
-    const float a = (float)texW / (float)texH, shown = h * UI_X_PER_Y; /* the height in x units */
+    lt_ext_aspect_fit(in, (float)texW / (float)texH, out);
+}
+
+void lt_ext_aspect_fit(const float in[4], float a, float out[4])
+{
+    const float w = in[2] - in[0], h = in[3] - in[1];
+    memcpy(out, in, 4 * sizeof(float));
+    if (!(a > 0.0f) || !(w > 0.0f) || !(h > 0.0f)) {
+        return;
+    }
+    const float shown = h * UI_X_PER_Y; /* the height in x units */
     if (w > shown * a) {
         /* a box wider than the picture: as tall as the box, centred across */
         const float fw = shown * a;
@@ -570,13 +760,6 @@ int lt_ext_prop_count(void)
     return s_propCount;
 }
 
-/* a row's draw key: the row and the pass (1 the label or words, 2 the
-   glow), so the presenter blends a row that moves or fades */
-static uint64_t rowKey(const LtProperty *e, int glow)
-{
-    return ((uint64_t)(uintptr_t)e << 2) ^ (uint64_t)(glow ? 2u : 1u);
-}
-
 void lt_ext_draw_row(const LtProperty *e, const int box[4], const unsigned char rgba[4], int glow)
 {
     if (!lt_ext_is_port_prop(e)) {
@@ -585,7 +768,10 @@ void lt_ext_draw_row(const LtProperty *e, const int box[4], const unsigned char 
     ui__sync();
     ExtRow *r = &s_rows[e - s_props];
     if (r->kind == ROW_GLYPH) {
-        return; /* a glyph without its texture (tables not PAL): nothing */
+        /* the button pictures' art while a set is in force, else a glyph
+           without its texture (tables not PAL): nothing */
+        drawArt(e, box, rgba, glow);
+        return;
     }
     if (r->kind == ROW_IMAGE) {
         if (!glow) {
@@ -680,6 +866,12 @@ void lt_ext_draw_row(const LtProperty *e, const int box[4], const unsigned char 
 
 int lt_ext_is_text_row(const LtProperty *e)
 {
+    int g;
+    unsigned tex;
+    float uv[4], a;
+    if (artOf(e, &g, &tex, uv, &a)) {
+        return 1; /* the button pictures' art (drawArt) */
+    }
     if (lt_ext_is_glyph_row(e)) {
         return lt_ext_glyph_tex_no(e) < 0;
     }
@@ -692,6 +884,9 @@ void lt_ext_draw_text_row(const LtProperty *e, const int box[4], const int uv[4]
     if (lt_ext_is_port_prop(e)) {
         lt_ext_draw_row(e, box, rgba, glow);
         return;
+    }
+    if (drawArt(e, box, rgba, glow)) {
+        return; /* a game row of a button: the art in the disc glyph's box */
     }
     const UiMenuTextItem *it = ui_menu_text_item_of(e);
     if (!it) {

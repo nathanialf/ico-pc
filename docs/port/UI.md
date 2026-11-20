@@ -1067,6 +1067,39 @@ cell's texels exactly), `pad_glyphs_piece_valid`, `pad_glyphs_piece_error`,
 `pad_glyphs_test_source` (a piece read from given text instead of its file) and
 `pad_glyphs_atlas_count`. Without `ICO_RD` no texture is made (`pad_glyphs_texture` returns 0).
 
+### Where the pictures are drawn
+
+While a set is in force (`pad_glyphs_active`), the art takes the place of the disc's picture of the
+eight buttons wherever the port or the game draws one; the two menu arrows (the Options values')
+stay the disc's, and with PlayStation in force nothing changes at all.
+
+**The menus' rows** (`port/ui/layout_ext.c`). A row shows a button when it is a port glyph row of
+one (`lt_ext_add_glyph`: the prompt lines of `ui_hint.c`, the model viewer's among them, and the
+Settings pages' prompts), or a game row whose texture file (`texFileNo`) and texel rectangle are
+those of the running disc's source row for that button (`port/core/region_<slug>.c`, `.glyph`): so
+the save prompts, Button Configuration's columns and every copy of their rectangles are found on
+each disc from the disc's own tables, with no list of rows per disc. The tables are loaded from the
+disc at run time, so the match is made from them at each call (`lt_ext_glyph_of_row`, eight
+comparisons) and never goes stale. Such a row is a text row (`lt_ext_is_text_row`), and the
+layout's text hook (`lt_ext_draw_text_row`, and `lt_ext_draw_row`'s glyph branch for a port row)
+draws the art in the box `display_texture` gives the disc's sprite: the largest rectangle of the
+art's aspect centred in it (`lt_ext_aspect_fit`; `lt_ext_glyph_box` and every row's place stay the
+disc's), with the sprite's colour as the game computed it (the fade, the half colour of a row
+another item dims, the reduction), the game's blend for the label pass, and the glow passes
+additive in the stretched box as the glow sprite. The 2001 builds' inset sprite box is fitted the
+same way. The art is rasterised at the height it has fitted in the row's own box at the picture's
+scale (the GS frame's lines per y unit times the scene's scale, as the menu text's strips), for
+the label and glow passes alike, so a glow is the same picture stretched. A game row's texture is
+still transferred, as for the menu text table's rows. When no atlas can be made the row keeps the
+disc's path (`lt_ext_is_text_row` asks for the texture first).
+
+**Photo mode's panel** (`photo_ui.c`) and **the touch overlay** (`touch_ui.c`) draw on the output:
+the art in the disc picture's box there, rasterised at the height it is shown in output pixels.
+`lt_ext_glyph_available` (a set in force, or the disc's texture there) decides whether the panel
+shows a picture or the button's name; the touch overlay needs no sheet in its slot for the art.
+Touch input itself counts as PlayStation under Auto, so the touch overlay shows another set only
+when the player picked one.
+
 ## Popups
 
 `ui_popup_push` queues a title and body (eight at most); one shows at a time, sliding in from the
@@ -1111,8 +1144,9 @@ heading moves on in the direction it came from. The rows are port rows made with
 `touch_ui.c` draws the touch controls of `port/input/touch.h` on the output from the copy the
 device layer takes once a vsync: each button a translucent disc or key, the D-pad one cross, the
 game's own button pictures on them while their sheet is loaded (sprites in output pixels from the
-game's textures, fitted to the shape), words on Select, Start and any zone whose sheet is not
-loaded yet, the left stick's ring, run ring and knob, the look pad's ring and dot, a held button
+game's textures, fitted to the shape), or another controller's while a set is in force
+([Where the pictures are drawn](#where-the-pictures-are-drawn)), words on Select, Start and any
+zone whose sheet is not loaded yet, the left stick's ring, run ring and knob, the look pad's ring and dot, a held button
 brighter (`port/ui/touch_ui.h`, header comment). It draws only while the copy's opacity is above
 0. It is on the presenter's top layer (`rd_set_present_overlay_top`), never through the CRT
 filter (`port/ui/ui_host.c` (`hostOverlayTop`)). [INPUT.md](INPUT.md) has the touch input.
@@ -1724,7 +1758,13 @@ Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
 - `ui` (`test/ui_test.c`): the embedded fonts, UTF-8 decoding, measuring, the string tables, the
   layout extension through the real `layout_texture.c`, a Japanese popup body's line break.
   `ui_jpn` (`ui_test jpn`): the glyph rows and rectangles, the table sizes and the pad convention
-  on the Japanese disc.
+  on the Japanese disc; `ui_kor`, `ui_cn` the same on theirs. `testGlyphArt` (in `ui` and each of
+  them, on that disc's glyph table, recording only): `lt_ext_glyph_of_row` finds every button's
+  source row and Button Configuration's second block (the L1 and Square rows + 8) and no word,
+  arrow or rectangle of another file; with PlayStation the glyph rows are the texture path and the
+  frame is the same after the sets as before; with Xbox, Nintendo and Wii Classic each glyph row is
+  one sprite from an atlas, inside and centred in its disc box at the art's aspect, the cell inside
+  the atlas holding the art, the sprite's colour and the packet's blend.
 - `pad_glyphs` (`test/pad_glyphs_test.c`): the button pictures' core, CPU only
   ([Button pictures](#button-pictures)): every set's eight pieces read, their aspects, fill and
   stroke present and the alpha within 0x80; the Xbox B and A at 24 and 96 rows (the fill in a stem,
@@ -1762,7 +1802,12 @@ Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
   ([Extras > Back up your data and Restore from a backup](#extras--back-up-your-data-and-restore-from-a-backup)).
 - `settings_render` (`test/settings_photo_test.c` with `SETTINGS_RENDER`): every screen through rd
   on a Vulkan device, written as PNGs, the words as sheet strips in the scene list, photo mode's
-  panel in every language.
+  panel in every language. The button pictures: the model viewer's prompt lines at 1x with each
+  set (`settings_pad_glyphs_<set>.png`: every glyph row one sprite from an atlas in its box, the
+  pixels there not the stand-in sheet's, flat opaque art the texel times the sprite's colour);
+  photo mode's panel with Xbox (seven pictures from the atlas, none from the sheets); the touch
+  overlay at 1080p (`settings_touch_<set>_1080.png`: with Xbox every zone with a picture takes
+  the art, `ui__touch_art_zones`).
 - `settings_jpn`, `settings_extras_jpn`, `settings_extra_jpn`, `settings_render_jpn` (each program
   with `jpn`): the Japanese disc over the fixture's tables at its numbers (`fxLayout`, `fxRow`):
   the rows it has not and the Menu language row, Circle confirming and Cross or Triangle going
