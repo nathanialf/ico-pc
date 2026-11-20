@@ -18,6 +18,29 @@
 #include <string.h>
 #include <assert.h>
 
+#ifdef ICO_RD
+
+#include "rd.h"
+
+/* PC port: the scene ledger (rd.h rd_note_game_hide, port/render/rd_ledger.h):
+   a stage animation object the game has in the scene and does not draw this
+   tick, its display flag off or its row not playing; a macro (no static:
+   the layout rule) */
+#define STAGE_HOST_HIDE(d, why) rd_note_game_hide((d)->model != 0 ? (d)->model->name : 0, (why))
+#define STAGE_HOST_ROW_IDLE(e)                                                                     \
+    do {                                                                                           \
+        int k_;                                                                                    \
+        for (k_ = 0; k_ < (e)->flags.b.count; k_++) {                                              \
+            if ((e)->obj[k_] != 0 && (e)->obj[k_]->dobj != 0) {                                    \
+                STAGE_HOST_HIDE((e)->obj[k_]->dobj, RD_GAME_HIDE_IDLE);                            \
+            }                                                                                      \
+        }                                                                                          \
+    } while (0)
+#else
+#define STAGE_HOST_HIDE(d, why) ((void)0)
+#define STAGE_HOST_ROW_IDLE(e) ((void)0)
+#endif
+
 typedef union { /* field names derived */
     int i;
     float f;
@@ -1669,6 +1692,9 @@ static void stage_DispAnimation_jun26(void)
             continue;
         }
         lv = e->entry2->mode;
+        if (lv < 0 || lv >= 2) {
+            STAGE_HOST_ROW_IDLE(e); /* PC port: not playing, its objects not drawn */
+        }
         if (lv == -1) {
             continue;
         }
@@ -1683,6 +1709,8 @@ static void stage_DispAnimation_jun26(void)
 
             if (d->disp != 0) {
                 reg_DispObj(d);
+            } else {
+                STAGE_HOST_HIDE(d, RD_GAME_HIDE_FLAG); /* PC port: its display flag off */
             }
         }
     }
@@ -1711,6 +1739,9 @@ static void stage_DispAnimation_aug6(void)
             continue;
         }
         lv = e->entry2->mode;
+        if (lv < 0 || lv >= 2) {
+            STAGE_HOST_ROW_IDLE(e); /* PC port: not playing, its objects not drawn */
+        }
         if (lv == -1) {
             continue;
         }
@@ -1725,6 +1756,8 @@ static void stage_DispAnimation_aug6(void)
 
             if (d->disp != 0) {
                 reg_DispObj(d);
+            } else {
+                STAGE_HOST_HIDE(d, RD_GAME_HIDE_FLAG); /* PC port: its display flag off */
             }
         }
     }
@@ -1765,6 +1798,9 @@ void stage_DispAnimation(void)
             continue;
         }
         lv = e->entry2->mode;
+        if (lv < 0 || lv >= 2) {
+            STAGE_HOST_ROW_IDLE(e); /* PC port: not playing, its objects not drawn */
+        }
         if (lv == -1) {
             continue;
         }
@@ -1779,6 +1815,8 @@ void stage_DispAnimation(void)
 
             if (d->disp != 0) {
                 reg_DispObj(d);
+            } else {
+                STAGE_HOST_HIDE(d, RD_GAME_HIDE_FLAG); /* PC port: its display flag off */
             }
         }
     }

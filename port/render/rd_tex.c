@@ -7,6 +7,7 @@
 #include <string.h>
 #include "rd_internal.h"
 #include "rd_hold.h"
+#include "rd_ledger_live.h" /* the scene ledger: textures by name */
 #include "rd_tex_decode.h"
 #include "shader_consts.h"
 #include "texpack.h"
@@ -510,6 +511,7 @@ RdTex rdtex_find(uint32_t id, uint32_t gen, int texa)
         /* the graphics card refused the replacement: the entry is
            forgotten (the release hook hears of it, so the pack does not
            offer that file again) and the caller decodes the game's own */
+        rd__ledger_tex_failed(r->name, RD_LEDGER_TEX_REFUSED);
         freeEntry(e);
         r = NULL;
     }
@@ -795,8 +797,10 @@ static RdTex store(uint32_t id, uint32_t gen, int texa, const RdTexImage *ims, u
     RdTexSrc src;
     int indexed;
 
+    rd__ledger_tex_asked(debugName);
     if (pw == 0 || ph == 0 || pw > 4096 || ph > 4096) {
         s_tc.stats.failures++;
+        rd__ledger_tex_failed(debugName, RD_LEDGER_TEX_SIZE);
         return (RdTex){0};
     }
     j = calloc(1, sizeof(*j));
@@ -807,6 +811,7 @@ static RdTex store(uint32_t id, uint32_t gen, int texa, const RdTexImage *ims, u
         }
         free(j);
         s_tc.stats.failures++;
+        rd__ledger_tex_failed(debugName, RD_LEDGER_TEX_DECODE);
         return (RdTex){0};
     }
     if (texa != RDTEX_TEXA_REPLAY) {
@@ -825,6 +830,7 @@ static RdTex store(uint32_t id, uint32_t gen, int texa, const RdTexImage *ims, u
             free(j->px);
             free(j);
             s_tc.stats.failures++;
+            rd__ledger_tex_failed(debugName, RD_LEDGER_TEX_FULL);
             return (RdTex){0};
         }
         memset(e, 0, sizeof(*e));
@@ -853,6 +859,7 @@ static RdTex store(uint32_t id, uint32_t gen, int texa, const RdTexImage *ims, u
             free(j);
             freeEntry(e);
             s_tc.stats.failures++;
+            rd__ledger_tex_failed(debugName, RD_LEDGER_TEX_CREATE);
             return (RdTex){0};
         }
         /* a replaced entry's new generation gets a texture of the game's
@@ -898,6 +905,7 @@ static RdTex store(uint32_t id, uint32_t gen, int texa, const RdTexImage *ims, u
     } else {
         rdtex__job_finish(j);
     }
+    rd__ledger_tex_loaded(debugName);
     return e->tex;
 }
 
@@ -1076,6 +1084,12 @@ int rdtex_replace(uint32_t id, uint32_t gen, int texa, RdTex rep)
 
     if (e == NULL || e->gen != gen || rep.id == 0 || rd__tex_rec(rep.id) == NULL) {
         return -1;
+    }
+    {
+        /* the game's texture's name, before the pack's takes its place */
+        const RdTexRec *own = rd__tex_rec(e->tex.id);
+        rd__ledger_tex_replaced(own != NULL && !own->replacement ? own->name
+                                                                 : "(a pack's picture)");
     }
     if (e->tex.id != rep.id) {
         releaseReplaced(e); /* a replacement replaced again */

@@ -11,11 +11,14 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   [SCENE_LEDGER.md](SCENE_LEDGER.md#the-gate)): every place that leaves a model's draw out names a
   ledger reason. The reasons of `RdLedgerReason` and `rd_ledger.c`'s words agree in number and
   each reason has a hook call outside `rd_ledger.c`; every early return of `rd_create_vu_mesh` and
-  `rd_draw_vu_mesh` follows an `rd__ledger_` call in its block; `rd_note_cull_drop`, `visWalk`
-  and `rd__vis_frame` call their hooks; the counted drop sites (the game's object, node and part
-  box tests each followed by `REG_CULL_DROP`, the packet box test and its callers, `regHostMesh`'s
-  return without a mesh, the stream's batch cap, the draw filter's callers, the visibility test's
-  NOP) keep their counts. The self-test: the rule finds an unledgered early return in a synthetic
+  `rd_draw_vu_mesh` and `rd_tex.c`'s `store` follows an `rd__ledger_` call in its block;
+  `rd_note_cull_drop`, `visWalk`, `rd__vis_frame`, `rdtex_find`, `rdtex_replace` and
+  `pac_hostBuild` call their hooks; the counted drop sites (the game's object, node and part box
+  tests each followed by `REG_CULL_DROP`, the packet box test's remapped zeros and its callers,
+  `regHostMesh`'s return without a mesh, the stream's batch cap and the packet notes, the stage
+  animations' display flag tests each followed by `STAGE_HOST_HIDE` and their idle rows, the
+  draw filter's callers each followed by a hook, the visibility test's NOP) keep their counts;
+  the packet box test cannot return 0; the texture reasons and their words agree. The self-test: the rule finds an unledgered early return in a synthetic
   function and passes a ledgered one.
 
 ## port/input/test
@@ -28,6 +31,10 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
 
 ## port/platform/test
 
+- `dump_zip_test.c`, its scene ledger case (`dump_zip`): with a ledger text set
+  (`ico_dump_zip_set_ledger`, [SCENE_LEDGER.md](SCENE_LEDGER.md#the-report)) a capture's zip that
+  takes the log holds `scene-ledger.txt` byte for byte beside it; one without the log holds
+  neither; with none set the zip is the frame and the log.
 - `report_test.c`, its scene ledger case (`report`): with a ledger text set
   (`ico_report_set_ledger`, [SCENE_LEDGER.md](SCENE_LEDGER.md#the-report)) the report holds
   `scene-ledger.txt` byte for byte; with none set the next report has no such entry.

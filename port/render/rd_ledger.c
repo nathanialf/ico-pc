@@ -18,6 +18,10 @@ static const char *const kReasonWords[] = {
     "no frame open to record it",
     "the port's frustum test",
     "the port's occlusion test",
+    "an empty packet (no geometry the port can read)",
+    "a packet cut short (the rest of it not drawn)",
+    "the game's flag (its display flag off)",
+    "the game (its stage animation not playing)",
 };
 
 /* the mechanical half of the gate (tools/check_drop_ledger.py the other):
@@ -60,6 +64,27 @@ int rd_ledger_reason_by_picture(int reason)
     return reason == RD_LEDGER_FRUSTUM || reason == RD_LEDGER_OCCLUDED;
 }
 
+int rd_ledger_reason_by_game(int reason)
+{
+    return reason == RD_LEDGER_GAME_FLAG || reason == RD_LEDGER_GAME_IDLE;
+}
+
+static const char *const kTexWhyWords[] = {
+    "a size of 0 or past 4096",
+    "its format or data could not be read",
+    "the texture cache was full",
+    "the graphics side could not make it",
+    "the graphics card refused the pack's picture",
+};
+
+_Static_assert(sizeof(kTexWhyWords) / sizeof(kTexWhyWords[0]) == RD_LEDGER_TEX_WHYS,
+               "every RdLedgerTexWhy has its words in kTexWhyWords");
+
+const char *rd_ledger_tex_why_words(int why)
+{
+    return why >= 0 && why < RD_LEDGER_TEX_WHYS ? kTexWhyWords[why] : "?";
+}
+
 const char *rd_ledger_fx_words(int fx)
 {
     return fx >= 0 && fx < RD_LEDGER_FX_COUNT ? kFxWords[fx] : "?";
@@ -82,32 +107,136 @@ static uint32_t nameHash(const char *s)
     return h;
 }
 
-int rd_ledger_slot(RdLedgerTable *t, const char *name)
+void rd_ledger_key(const char *name, char *out)
 {
+    static const char kPart[] = " part ";
     const char *nm = name != NULL && name[0] != '\0' ? name : "(no name)";
-    char cut[RD_LEDGER_NAME];
-    snprintf(cut, sizeof cut, "%s", nm);
-    uint32_t at = nameHash(cut) & (RD_LEDGER_HASH - 1);
+    snprintf(out, RD_LEDGER_NAME, "%s", nm);
+    char *at = strstr(out, kPart);
+    if (at != NULL && at != out) {
+        *at = '\0';
+        return;
+    }
+    /* a part's name the mesh record cut inside " part " (24 bytes) */
+    const size_t n = strlen(out);
+    if (n == RD_LEDGER_NAME - 1) {
+        for (size_t k = sizeof kPart - 2; k >= 1; k--) {
+            if (n > k && memcmp(out + n - k, kPart, k) == 0) {
+                out[n - k] = '\0';
+                return;
+            }
+        }
+    }
+}
+
+/* the slot of key in a table of cap rows (names at stride bytes from
+   names): found, added (*added 1) or -1 when full */
+static int findSlot(uint16_t *hash, uint32_t *n, uint32_t cap, char *names, size_t stride,
+                    const char *key, int *added)
+{
+    uint32_t at = nameHash(key) & (RD_LEDGER_HASH - 1);
+    *added = 0;
     for (uint32_t probe = 0; probe < RD_LEDGER_HASH; probe++) {
-        const uint16_t h = t->hash[at];
+        const uint16_t h = hash[at];
         if (h == 0) {
-            if (t->n >= RD_LEDGER_SLOTS) {
-                t->pastNames++;
+            if (*n >= cap) {
                 return -1;
             }
-            RdLedgerEntry *e = &t->e[t->n];
-            memset(e, 0, sizeof(*e));
-            memcpy(e->name, cut, sizeof cut);
-            t->hash[at] = (uint16_t)(t->n + 1);
-            return (int)t->n++;
+            hash[at] = (uint16_t)(*n + 1);
+            *added = 1;
+            return (int)(*n)++;
         }
-        if (strcmp(t->e[h - 1].name, cut) == 0) {
+        if (strcmp(names + (size_t)(h - 1) * stride, key) == 0) {
             return h - 1;
         }
         at = (at + 1) & (RD_LEDGER_HASH - 1);
     }
-    t->pastNames++;
     return -1;
+}
+
+int rd_ledger_slot(RdLedgerTable *t, const char *name)
+{
+    char cut[RD_LEDGER_NAME];
+    rd_ledger_key(name, cut);
+    int added;
+    const int k =
+        findSlot(t->hash, &t->n, RD_LEDGER_SLOTS, t->e[0].name, sizeof t->e[0], cut, &added);
+    if (k < 0) {
+        t->pastNames++;
+        return -1;
+    }
+    if (added) {
+        RdLedgerEntry *e = &t->e[k];
+        memset(e, 0, sizeof(*e));
+        memcpy(e->name, cut, sizeof cut);
+    }
+    return k;
+}
+
+int rd_ledger_cached_row(RdLedgerTable *t, RdLedgerRowCache *c, uint32_t id, uint32_t epoch,
+                         const char *name)
+{
+    if (c->id != id || c->epoch != epoch) {
+        c->id = id;
+        c->epoch = epoch;
+        c->row = rd_ledger_slot(t, name);
+        c->marksValid = 0;
+    }
+    return c->row;
+}
+
+void rd_ledger_note_marks(RdLedgerTable *t, int slot, uint32_t hide, uint32_t later)
+{
+    if (slot >= 0 && (uint32_t)slot < t->n) {
+        t->e[slot].hideTris += hide;
+        t->e[slot].laterTris += later;
+    }
+}
+
+int rd_ledger_tex_slot(RdLedgerTexTable *t, const char *name)
+{
+    char cut[RD_LEDGER_NAME];
+    snprintf(cut, sizeof cut, "%s", name != NULL && name[0] != '\0' ? name : "(no name)");
+    int added;
+    const int k =
+        findSlot(t->hash, &t->n, RD_LEDGER_TEX_SLOTS, t->e[0].name, sizeof t->e[0], cut, &added);
+    if (k < 0) {
+        t->pastNames++;
+        return -1;
+    }
+    if (added) {
+        memset(&t->e[k], 0, sizeof t->e[k]);
+        memcpy(t->e[k].name, cut, sizeof cut);
+    }
+    return k;
+}
+
+void rd_ledger_tex_asked(RdLedgerTexTable *t, int slot)
+{
+    if (slot >= 0 && (uint32_t)slot < t->n) {
+        t->e[slot].asked++;
+    }
+}
+
+void rd_ledger_tex_loaded(RdLedgerTexTable *t, int slot)
+{
+    if (slot >= 0 && (uint32_t)slot < t->n) {
+        t->e[slot].loaded++;
+    }
+}
+
+void rd_ledger_tex_replaced(RdLedgerTexTable *t, int slot)
+{
+    if (slot >= 0 && (uint32_t)slot < t->n) {
+        t->e[slot].replaced++;
+    }
+}
+
+void rd_ledger_tex_failed(RdLedgerTexTable *t, int slot, int why)
+{
+    if (slot >= 0 && (uint32_t)slot < t->n && why >= 0 && why < RD_LEDGER_TEX_WHYS) {
+        t->e[slot].failed[why]++;
+    }
 }
 
 void rd_ledger_note_built(RdLedgerTable *t, int slot)
@@ -161,6 +290,8 @@ void rd_ledger_table_add(RdLedgerTable *dst, const RdLedgerTable *src)
         d->ticks += s->ticks;
         d->draws += s->draws;
         d->tris += s->tris;
+        d->hideTris += s->hideTris;
+        d->laterTris += s->laterTris;
         for (int r = 0; r < RD_LEDGER_REASONS; r++) {
             d->drops[r] += s->drops[r];
             d->pics[r] += s->pics[r];
@@ -265,8 +396,15 @@ static void putRow(Out *o, const RdLedgerEntry *e, uint32_t ticks)
 {
     put(o, "%s:", e->name);
     if (e->draws > 0) {
-        put(o, " drawn in %u of %u ticks (%u draws, %llu triangles)", e->ticks, ticks, e->draws,
+        put(o, " drawn in %u of %u ticks (%u draws, %llu triangles", e->ticks, ticks, e->draws,
             (unsigned long long)e->tris);
+        if (e->hideTris > 0) {
+            put(o, ", %llu of them hidden by the content table", (unsigned long long)e->hideTris);
+        }
+        if (e->laterTris > 0) {
+            put(o, ", %llu of them drawn over an overlap", (unsigned long long)e->laterTris);
+        }
+        put(o, ")");
     } else if (entryDropPics(e) == 0) {
         put(o, " never drawn, no reason recorded");
     } else {
@@ -283,10 +421,93 @@ static void putRow(Out *o, const RdLedgerEntry *e, uint32_t ticks)
             continue;
         }
         const int byPic = rd_ledger_reason_by_picture(r);
-        put(o, "; left out by %s in %u %s (%u %s), %u %s", kReasonWords[r], e->pics[r],
-            byPic ? "pictures" : "ticks", e->alt[r],
-            byPic ? "between ticks" : "with the cameras between ticks", e->drops[r],
-            r == RD_LEDGER_BOX_OBJECT ? "times" : "draws or parts");
+        if (rd_ledger_reason_by_game(r)) {
+            put(o, "; hidden by %s in %u ticks", kReasonWords[r], e->pics[r]);
+            continue;
+        }
+        put(o, "; left out by %s in %u %s", kReasonWords[r], e->pics[r],
+            byPic ? "pictures" : "ticks");
+        if (byPic) {
+            put(o, " (%u between ticks)", e->alt[r]);
+        } else if (r <= RD_LEDGER_BOX_PART) {
+            put(o, " (%u with the cameras between ticks)", e->alt[r]);
+        }
+        put(o, ", %u %s", e->drops[r],
+            r == RD_LEDGER_BOX_OBJECT ? "times"
+            : r == RD_LEDGER_NO_MESH || r == RD_LEDGER_PACKET_EMPTY || r == RD_LEDGER_PACKET_CUT
+                ? "packets or builds"
+                : "draws or parts");
+    }
+}
+
+/* the textures' lines: the counts, then those that failed (with why) and
+   those a pack replaced, by name, each list on one line of about 1200
+   bytes and the rest counted */
+static void putTextures(Out *o, const RdLedgerStage *s, const char *label)
+{
+    const RdLedgerTexTable *t = &s->textures;
+    uint32_t asked = 0, askedNames = 0, loaded = 0, failed = 0, failedNames = 0, replaced = 0,
+             replacedNames = 0;
+    for (uint32_t i = 0; i < t->n; i++) {
+        const RdLedgerTexRow *r = &t->e[i];
+        uint32_t f = 0;
+        for (int w = 0; w < RD_LEDGER_TEX_WHYS; w++) {
+            f += r->failed[w];
+        }
+        asked += r->asked;
+        askedNames += r->asked > 0;
+        loaded += r->loaded;
+        failed += f;
+        failedNames += f > 0;
+        replaced += r->replaced;
+        replacedNames += r->replaced > 0;
+    }
+    put(o,
+        "scene ledger: %s textures: %u names asked for (%u times), %u made, %u failed (%u "
+        "names), %u replaced by a pack (%u names); names past the table %u\n",
+        label, askedNames, asked, loaded, failed, failedNames, replaced, replacedNames,
+        t->pastNames);
+    for (int pass = 0; pass < 2; pass++) {
+        const uint32_t names = pass == 0 ? failedNames : replacedNames;
+        if (names == 0) {
+            continue;
+        }
+        const size_t lineAt = o->at;
+        put(o, "scene ledger: %s textures %s:", label,
+            pass == 0 ? "that failed" : "replaced by a pack");
+        const char *sep = " ";
+        uint32_t listed = 0;
+        for (uint32_t i = 0; i < t->n && o->at - lineAt < 1200; i++) {
+            const RdLedgerTexRow *r = &t->e[i];
+            if (pass == 1) {
+                if (r->replaced == 0) {
+                    continue;
+                }
+                put(o, "%s%s", sep, r->name);
+            } else {
+                int any = 0;
+                for (int w = 0; w < RD_LEDGER_TEX_WHYS; w++) {
+                    if (r->failed[w] == 0) {
+                        continue;
+                    }
+                    if (!any) {
+                        put(o, "%s%s (", sep, r->name);
+                    }
+                    put(o, "%s%s %u times", any ? ", " : "", kTexWhyWords[w], r->failed[w]);
+                    any = 1;
+                }
+                if (!any) {
+                    continue;
+                }
+                put(o, ")");
+            }
+            sep = "; ";
+            listed++;
+        }
+        if (listed < names) {
+            put(o, "; %u more", names - listed);
+        }
+        put(o, "\n");
     }
 }
 
@@ -301,7 +522,7 @@ size_t rd_ledger_format(const RdLedgerStage *s, const char *when, char *out, siz
     stageLabel(s, label, sizeof label);
     const uint32_t ticks = s->lastTick >= s->firstTick ? s->lastTick - s->firstTick + 1 : 0;
     const RdLedgerTable *t = &s->models;
-    uint32_t drawn = 0, leftOut = 0, never = 0, silent = 0;
+    uint32_t drawn = 0, leftOut = 0, never = 0, silent = 0, hidden = 0;
     for (uint32_t i = 0; i < t->n; i++) {
         const RdLedgerEntry *e = &t->e[i];
         const uint32_t d = entryDropPics(e);
@@ -309,13 +530,15 @@ size_t rd_ledger_format(const RdLedgerStage *s, const char *when, char *out, siz
         leftOut += d > 0;
         never += e->draws == 0;
         silent += e->draws == 0 && d == 0;
+        hidden +=
+            e->draws == 0 && (e->pics[RD_LEDGER_GAME_FLAG] + e->pics[RD_LEDGER_GAME_IDLE]) > 0;
     }
     put(&o,
         "scene ledger: %s %s: ticks %u-%u (%u), %u pictures (%u between ticks); %u models: %u "
-        "drawn, %u left out at times, %u never drawn (%u with no reason recorded); names past "
-        "the table %u; the replay's events of the stage before %u\n",
+        "drawn, %u left out at times, %u never drawn (%u hidden by the game, %u with no reason "
+        "recorded); names past the table %u; the replay's events of the stage before %u\n",
         label, when != NULL ? when : "ended", s->firstTick, s->lastTick, ticks, s->pictures,
-        s->between, t->n, drawn, leftOut, never, silent, t->pastNames, s->lateEvents);
+        s->between, t->n, drawn, leftOut, never, hidden, silent, t->pastNames, s->lateEvents);
     put(&o, "scene ledger: %s effects:", label);
     {
         const char *sep = " ";
@@ -372,6 +595,7 @@ size_t rd_ledger_format(const RdLedgerStage *s, const char *when, char *out, siz
             "scene ledger: %s: %u more models not listed (%u of them drawn and never left out)\n",
             label, t->n - written, quiet);
     }
+    putTextures(&o, s, label);
     return o.at;
 }
 

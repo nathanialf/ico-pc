@@ -2985,7 +2985,11 @@ void rd_draw_vu_mesh(RdMesh mesh, const RdVuDraw *d, RdKey key)
 
 void rd_draw_vu_grid(const RdVuGridDraw *d, RdKey key)
 {
-    if (!d || !d->qw || d->strips == 0 || d->stripLen < 3 || !rd__draw_filter_pass(key)) {
+    if (!d || !d->qw || d->strips == 0 || d->stripLen < 3) {
+        return;
+    }
+    if (!rd__draw_filter_pass(key)) {
+        rd__ledger_unnamed_out("(a grid)", RD_LEDGER_FILTER);
         return;
     }
     RdVuPayload p;
@@ -3032,7 +3036,11 @@ void rd_draw_vu_particles(const RdVuParticleDraw *d, RdKey key)
     if (key == 0) {
         key = RD_KEY(&kParticleKeyTag, rd_current_list(), 18);
     }
-    if (!d || !d->qw || d->count == 0 || !rd__draw_filter_pass(key)) {
+    if (!d || !d->qw || d->count == 0) {
+        return;
+    }
+    if (!rd__draw_filter_pass(key)) {
+        rd__ledger_unnamed_out("(particles)", RD_LEDGER_FILTER);
         return;
     }
     const uint32_t count = d->count > 80 ? 80 : d->count;

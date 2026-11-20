@@ -34,6 +34,9 @@ LEDGERED = [
     ("port/render/rd_mesh.c", "RdMesh rd_create_vu_mesh(const RdVuMeshDesc *d)", "rd__ledger_built("),
     ("port/render/rd_mesh.c", "void rd_draw_vu_mesh(RdMesh mesh, const RdVuDraw *d, RdKey key)",
      "rd__ledger_draw("),
+    ("port/render/rd_tex.c",
+     "static RdTex store(uint32_t id, uint32_t gen, int texa, const RdTexImage *ims, uint32_t n,",
+     "rd__ledger_tex_loaded("),
 ]
 
 # (file, the function's first line, the hook it must call)
@@ -46,6 +49,13 @@ CALLS = [
      "rd__ledger_cull("),
     ("port/render/rd_vis.c", "const RdFrame *rd__vis_frame(const RdFrame *f, int keep)",
      "rd__ledger_picture("),
+    ("port/render/rd_tex.c", "RdTex rdtex_find(uint32_t id, uint32_t gen, int texa)",
+     "rd__ledger_tex_failed("),
+    ("port/render/rd_tex.c", "int rdtex_replace(uint32_t id, uint32_t gen, int texa, RdTex rep)",
+     "rd__ledger_tex_replaced("),
+    ("ico2/seki/src/Packet.c",
+     "static void pac_hostBuild(PacHeader *pk, const char *name, const PacHostIdent *id, int load)",
+     "rd_note_packet_out("),
 ]
 
 # (file, pattern, count, what it is and how the ledger sees it)
@@ -54,27 +64,47 @@ COUNTED = [
      "the game's object, node and part box tests: each followed by REG_CULL_DROP "
      "(rd_note_cull_drop, RD_LEDGER_BOX_*), checked line by line below"),
     ("ico2/seki/src/RegistPacket.c", r"ret = gsb_ClipBox\(pk->box\[0\]\)", 3,
-     "NOT IN THE LEDGER: the packet box test (reg_clipPacketBoundingBox), a material "
-     "packet left out with no hook"),
+     "the packet box test (reg_clipPacketBoundingBox): on the port it never drops, a box "
+     "that fails picks the clipping program; its 0 results remapped, counted below"),
+    ("ico2/seki/src/RegistPacket.c", r"ret = REG_PACKET_CLIPPED; /\* PC port: clipped, not dropped", 2,
+     "the packet box test's 0 turned into the clipping program (types 1 and 2)"),
+    ("ico2/seki/src/RegistPacket.c", r"ret = 2; /\* PC port: 0 clipped, not dropped", 1,
+     "the packet box test's 0 turned into the clipping program (type 3)"),
     ("ico2/seki/src/RegistPacket.c", r"r = reg_clipPacketBoundingBox\(pkt\)", 6,
-     "NOT IN THE LEDGER: the packet box test's callers"),
+     "the packet box test's callers: each draws on a result other than 0, which the test "
+     "no longer gives"),
     ("ico2/seki/src/RegistPacket.c", r"if \(m\.id == 0\) \{", 1,
-     "NOT IN THE LEDGER when the packet has no batches (Packet.c pac_hostDesc); a refused "
-     "build is RD_LEDGER_NO_MESH at rd_create_vu_mesh"),
+     "regHostMesh without a mesh: a packet with no geometry is RD_LEDGER_PACKET_EMPTY "
+     "(Packet.c pac_hostBuild), a refused build RD_LEDGER_NO_MESH (rd_create_vu_mesh)"),
     ("ico2/seki/src/Packet.c", r"\*nb == PAC_HOST_BATCHES", 1,
-     "NOT IN THE LEDGER: a packet's stream cut at the batch cap or the scratch size "
-     "(pac_hostStream), the rest of the packet dropped"),
-    ("port/render/rd_mesh.c", r"!rd__draw_filter_pass\(key\)", 3,
-     "the draw filter in rd_draw_vu_mesh (RD_LEDGER_FILTER); NOT IN THE LEDGER: "
-     "rd_draw_vu_grid and rd_draw_vu (no model name)"),
+     "a packet's stream cut short (pac_hostStream sets *cut: RD_LEDGER_PACKET_CUT)"),
+    ("ico2/seki/src/Packet.c", r"rd_note_packet_out\(", 2,
+     "pac_hostBuild's two notes: no geometry, cut short"),
+    ("ico2/seki/src/StageAnimation.c", r"if \(d->disp != 0\) \{", 3,
+     "the stage animations' display flag test in each stage_DispAnimation twin, each with "
+     "STAGE_HOST_HIDE in its else (RD_LEDGER_GAME_FLAG), checked line by line below"),
+    ("ico2/seki/src/StageAnimation.c", r"STAGE_HOST_ROW_IDLE\(e\); /\* PC port", 3,
+     "a stage animation row not playing in each stage_DispAnimation twin "
+     "(RD_LEDGER_GAME_IDLE)"),
+    ("port/render/rd_mesh.c", r"rd__draw_filter_pass\(key\)", 3,
+     "the draw filter in rd_draw_vu_mesh, rd_draw_vu_grid, rd_draw_vu_particles "
+     "(RD_LEDGER_FILTER), each followed by its hook (checked below)"),
     ("port/render/rd_core.c", r"rd__draw_filter_pass\(key\)", 2,
-     "NOT IN THE LEDGER: the draw filter in rd_screen_prims and pushStub "
-     "(screen prims, world prims, shadow strips: no model name)"),
-    ("port/render/rd_shadow.c", r"!rd__draw_filter_pass\(key\)", 1,
-     "NOT IN THE LEDGER: the draw filter in rd_shadow_tris (a shadow volume, no model name)"),
+     "the draw filter in rd_screen_prims and pushStub (RD_LEDGER_FILTER)"),
+    ("port/render/rd_shadow.c", r"rd__draw_filter_pass\(key\)", 1,
+     "the draw filter in rd_shadow_tris (RD_LEDGER_FILTER)"),
     ("port/render/rd_vis.c", r"\.type = RDC_NOP;", 1,
      "the visibility test's skips (RD_LEDGER_FRUSTUM, RD_LEDGER_OCCLUDED: visWalk "
      "calls rd__ledger_cull for every skip)"),
+]
+
+# (file, pattern, the hook within the lines after it, how many lines)
+FOLLOWED = [
+    ("ico2/seki/src/RegistPacket.c", r"if \(gsb_ClipBox\(box\) == 0\) \{", "REG_CULL_DROP(", 1),
+    ("ico2/seki/src/StageAnimation.c", r"if \(d->disp != 0\) \{", "STAGE_HOST_HIDE(", 4),
+    ("port/render/rd_mesh.c", r"rd__draw_filter_pass\(key\)", "rd__ledger_", 8),
+    ("port/render/rd_core.c", r"rd__draw_filter_pass\(key\)", "rd__ledger_", 8),
+    ("port/render/rd_shadow.c", r"rd__draw_filter_pass\(key\)", "rd__ledger_", 8),
 ]
 
 
@@ -141,6 +171,18 @@ def check(root):
         if not re.search(r"\b" + r + r"\b", users):
             errors.append(f"{r}: no hook call outside rd_ledger.c names it (a reason nothing records)")
 
+    # the texture reasons the same way
+    tenum = re.search(r"typedef enum RdLedgerTexWhy \{(.*?)RD_LEDGER_TEX_WHYS", hdr, re.S)
+    twhys = re.findall(r"^\s*(RD_LEDGER_TEX_[A-Z_]+)", tenum.group(1), re.M) if tenum else []
+    twords = re.search(r"kTexWhyWords\[\] = \{(.*?)\};", src, re.S)
+    ntwords = len(re.findall(r'"[^"]*",', twords.group(1))) if twords else -1
+    if not twhys or ntwords != len(twhys):
+        errors.append(f"rd_ledger.c: {ntwords} texture reason words for {len(twhys)} reasons")
+    for r in twhys:
+        checked += 1
+        if not re.search(r"\b" + r + r"\b", users):
+            errors.append(f"{r}: no hook call outside rd_ledger.c names it")
+
     for path, head, hook in LEDGERED:
         checked += 1
         text = (root / path).read_text(encoding="latin-1")
@@ -169,14 +211,25 @@ def check(root):
                           "site was added or removed; give a new one a ledger reason and update "
                           "tools/check_drop_ledger.py and docs/port/SCENE_LEDGER.md")
 
-    # every box test of the game's cull reports its drop on the next line
-    rp = (root / "ico2/seki/src/RegistPacket.c").read_text(encoding="latin-1").split("\n")
-    for i, line in enumerate(rp):
-        if re.search(r"if \(gsb_ClipBox\(box\) == 0\) \{", line):
-            checked += 1
-            if i + 1 >= len(rp) or "REG_CULL_DROP(" not in rp[i + 1]:
-                errors.append(f"ico2/seki/src/RegistPacket.c:{i + 1}: a box test without "
-                              "REG_CULL_DROP on its next line")
+    # each counted site reports to the ledger in the lines after it
+    for path, pat, hook, span in FOLLOWED:
+        lines = (root / path).read_text(encoding="latin-1").split("\n")
+        for i, line in enumerate(lines):
+            if re.search(pat, line):
+                checked += 1
+                if not any(hook in l for l in lines[i + 1:i + 1 + span]):
+                    errors.append(f"{path}:{i + 1}: a drop site without {hook} in the "
+                                  f"{span} lines after it")
+
+    # the packet box test gives no 0 on the port (a 0 would drop a packet unseen)
+    rp = (root / "ico2/seki/src/RegistPacket.c").read_text(encoding="latin-1")
+    body = function_body(rp, "static int reg_clipPacketBoundingBox(PacHeader *pk)")
+    checked += 1
+    if body is None:
+        errors.append("RegistPacket.c: reg_clipPacketBoundingBox not found")
+    elif any(re.search(r"\bret = 0;|\breturn 0;", l) for l in body):
+        errors.append("RegistPacket.c: reg_clipPacketBoundingBox can return 0 (a packet dropped "
+                      "with no ledger reason)")
     return errors, checked
 
 

@@ -136,7 +136,11 @@ void rd_shadow_resolve(void)
 void rd_shadow_tris(const RdScreenVtx *v, const int8_t *sign, uint32_t triCount, RdKey key)
 {
     RdFrame *f = rd__rec_frame();
-    if (!v || !sign || triCount == 0 || !rd__draw_filter_pass(key)) {
+    if (!v || !sign || triCount == 0) {
+        return;
+    }
+    if (!rd__draw_filter_pass(key)) {
+        rd__ledger_unnamed_out("(a shadow volume)", RD_LEDGER_FILTER);
         return;
     }
     if (!f) {

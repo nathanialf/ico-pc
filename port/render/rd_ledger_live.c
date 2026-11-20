@@ -16,6 +16,7 @@
 #include <string.h>
 
 #include "rd_vis.h"
+#include "shader_consts.h" /* ICO_VU_MARK_HIDE, ICO_VU_MARK_LATER */
 
 static RdLedgerStage s_cur;     /* the stage in play, the game's half */
 static RdLedgerTable s_rep;     /* the replay's half, under s_lock */
@@ -29,14 +30,13 @@ static char s_text[RD_LEDGER_TEXT];
 static int s_open;
 static char s_lock;
 
-/* the row of each mesh slot this stage: valid while id and epoch match */
-typedef struct MeshRow {
-    uint32_t id, epoch;
-    int32_t row;
-} MeshRow;
-
-static MeshRow s_meshRow[RD_MAX_MESHES];
+/* the row of each mesh slot this stage, and the counts of the batch
+   range it last drew: valid while id and epoch match */
+static RdLedgerRowCache s_meshRow[RD_MAX_MESHES];
 static uint32_t s_epoch = 1;
+/* rd_ledger_report_text's static buffers in use (the crash path, a
+   capture's zip on the dump worker) */
+static char s_reportBusy;
 
 static void lock(void)
 {
@@ -63,19 +63,19 @@ static const char *meshName(const RdMeshRec *m)
     return m != NULL && m->name[0] != '\0' ? m->name : "(no mesh)";
 }
 
-static int rowOfMesh(const RdMeshRec *m, uint32_t id)
+static RdLedgerRowCache *cacheOf(uint32_t id)
 {
     const uint32_t k = (id & 0xFFFFu) - 1u;
-    if (m == NULL || id == 0 || k >= RD_MAX_MESHES) {
+    return id != 0 && k < RD_MAX_MESHES ? &s_meshRow[k] : NULL;
+}
+
+static int rowOfMesh(const RdMeshRec *m, uint32_t id)
+{
+    RdLedgerRowCache *c = m != NULL ? cacheOf(id) : NULL;
+    if (c == NULL) {
         return rd_ledger_slot(&s_cur.models, meshName(m));
     }
-    MeshRow *r = &s_meshRow[k];
-    if (r->id != id || r->epoch != s_epoch) {
-        r->id = id;
-        r->epoch = s_epoch;
-        r->row = rd_ledger_slot(&s_cur.models, meshName(m));
-    }
-    return r->row;
+    return rd_ledger_cached_row(&s_cur.models, c, id, s_epoch, meshName(m));
 }
 
 void rd__ledger_built(const char *name)
@@ -91,15 +91,41 @@ void rd__ledger_build_failed(const char *name)
 
 void rd__ledger_draw(const RdMeshRec *m, uint32_t meshId, uint32_t first, uint32_t n)
 {
-    uint32_t idx = 0;
-    if (first == 0 && n == m->batchCount) {
-        idx = m->indexCount;
-    } else {
-        for (uint32_t b = first; b < first + n && b < m->batchCount; b++) {
-            idx += m->batches[b].indexCount;
-        }
+    const int row = rowOfMesh(m, meshId);
+    RdLedgerRowCache *c = cacheOf(meshId);
+    RdLedgerRowCache local;
+    if (c == NULL) {
+        memset(&local, 0, sizeof local);
+        c = &local;
     }
-    rd_ledger_note_draw(&s_cur.models, rowOfMesh(m, meshId), tickNow(), idx / 3u);
+    if (!c->marksValid || c->first != first || c->n != n) {
+        /* the range's triangles and its marked ones, counted once a stage
+           and a range (the marks: a byte a vertex, rd_internal.h
+           RdMeshRec.kickMark) */
+        uint32_t idx = 0, hide = 0, later = 0;
+        const uint32_t end = first + n < m->batchCount ? first + n : m->batchCount;
+        for (uint32_t b = first; b < end; b++) {
+            idx += m->batches[b].indexCount;
+            if (m->kickMark != NULL) {
+                const uint32_t v0 = m->batches[b].firstVertex;
+                const uint32_t v1 = v0 + m->batches[b].vertexCount;
+                for (uint32_t v = v0; v < v1 && v < m->markCount; v++) {
+                    hide += (m->kickMark[v] & ICO_VU_MARK_HIDE) != 0;
+                    later += (m->kickMark[v] & ICO_VU_MARK_LATER) != 0;
+                }
+            }
+        }
+        c->first = first;
+        c->n = n;
+        c->tris = idx / 3u;
+        c->hide = hide;
+        c->later = later;
+        c->marksValid = 1;
+    }
+    rd_ledger_note_draw(&s_cur.models, row, tickNow(), c->tris);
+    if (c->hide != 0 || c->later != 0) {
+        rd_ledger_note_marks(&s_cur.models, row, c->hide, c->later);
+    }
 }
 
 void rd__ledger_draw_out(const RdMeshRec *m, uint32_t meshId, int reason)
@@ -114,6 +140,46 @@ void rd__ledger_box(const char *model, int part, int rule, int views)
                                   : RD_LEDGER_BOX_NODE;
     rd_ledger_note_drop(&s_cur.models, rd_ledger_slot(&s_cur.models, model), reason, tickNow(),
                         views > 1, 1);
+}
+
+void rd__ledger_unnamed_out(const char *what, int reason)
+{
+    rd_ledger_note_drop(&s_cur.models, rd_ledger_slot(&s_cur.models, what), reason, tickNow(), 0,
+                        1);
+}
+
+void rd_note_packet_out(const char *model, int why)
+{
+    rd_ledger_note_drop(&s_cur.models, rd_ledger_slot(&s_cur.models, model),
+                        why == RD_PACKET_OUT_CUT ? RD_LEDGER_PACKET_CUT : RD_LEDGER_PACKET_EMPTY,
+                        tickNow(), 0, 1);
+}
+
+void rd_note_game_hide(const char *model, int why)
+{
+    rd_ledger_note_drop(&s_cur.models, rd_ledger_slot(&s_cur.models, model),
+                        why == RD_GAME_HIDE_IDLE ? RD_LEDGER_GAME_IDLE : RD_LEDGER_GAME_FLAG,
+                        tickNow(), 0, 1);
+}
+
+void rd__ledger_tex_asked(const char *name)
+{
+    rd_ledger_tex_asked(&s_cur.textures, rd_ledger_tex_slot(&s_cur.textures, name));
+}
+
+void rd__ledger_tex_loaded(const char *name)
+{
+    rd_ledger_tex_loaded(&s_cur.textures, rd_ledger_tex_slot(&s_cur.textures, name));
+}
+
+void rd__ledger_tex_failed(const char *name, int why)
+{
+    rd_ledger_tex_failed(&s_cur.textures, rd_ledger_tex_slot(&s_cur.textures, name), why);
+}
+
+void rd__ledger_tex_replaced(const char *name)
+{
+    rd_ledger_tex_replaced(&s_cur.textures, rd_ledger_tex_slot(&s_cur.textures, name));
 }
 
 void rd__ledger_picture(uint32_t frame)
@@ -248,9 +314,11 @@ static void logText(const char *text)
     }
 }
 
+static size_t reportText(char *out, size_t cap);
+
 static int stageHasContent(const RdLedgerStage *s)
 {
-    if (s->models.n > 0 || s->pictures > 0) {
+    if (s->models.n > 0 || s->textures.n > 0 || s->pictures > 0) {
         return 1;
     }
     for (int fx = 0; fx < RD_LEDGER_FX_COUNT; fx++) {
@@ -297,6 +365,17 @@ void rd__ledger_log_now(const char *when)
 }
 
 size_t rd_ledger_report_text(char *out, size_t cap)
+{
+    if (__atomic_test_and_set(&s_reportBusy, __ATOMIC_ACQUIRE)) {
+        /* another report or capture is writing it: the kept stages alone */
+        return rd_ledger_kept_text(&s_kept, NULL, out, cap);
+    }
+    const size_t n = reportText(out, cap);
+    __atomic_clear(&s_reportBusy, __ATOMIC_RELEASE);
+    return n;
+}
+
+static size_t reportText(char *out, size_t cap)
 {
     /* the report's own buffers (a crash handler's: no stack of 60 KB) */
     static RdLedgerStage now;

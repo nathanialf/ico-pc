@@ -15,6 +15,36 @@
 #include "host_fs.h"
 #include "miniz.h"
 
+static size_t (*volatile s_ledger_fn)(char *out, size_t cap);
+
+void ico_dump_zip_set_ledger(size_t (*fn)(char *out, size_t cap))
+{
+    s_ledger_fn = fn;
+}
+
+/* the scene ledger's text into z beside the log: 1 added or none to add,
+   0 the add failed */
+static int add_ledger(mz_zip_archive *z, mz_uint level)
+{
+    size_t (*fn)(char *, size_t) = s_ledger_fn;
+
+    enum { LEDGER_BYTES = 64 * 1024 };
+
+    if (fn == NULL) {
+        return 1;
+    }
+    char *text = malloc(LEDGER_BYTES);
+    if (text == NULL) {
+        return 1; /* the zip without it */
+    }
+    const size_t n = fn(text, LEDGER_BYTES);
+    const int ok =
+        n == 0 || mz_zip_writer_add_mem(z, "scene-ledger.txt", text,
+                                        n < LEDGER_BYTES ? n : LEDGER_BYTES - 1, level) != 0;
+    free(text);
+    return ok;
+}
+
 static void say(char *why, size_t why_size, const char *what, const char *detail)
 {
     if (why != NULL && why_size > 0) {
@@ -143,6 +173,8 @@ static int mem_zip(const char *zip_path, const IcoZipMem *e, int n, const char *
         }
         if (ok && log != NULL) {
             ok = mz_zip_writer_add_mem(&z, base_name(log_path), log, log_size, level) != 0;
+            /* what the last stages held and left out, beside the log */
+            ok = ok && add_ledger(&z, level);
         }
         if (!ok) {
             say(why, why_size, "cannot add to the archive",

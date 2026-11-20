@@ -19,6 +19,16 @@ void rd__ledger_build_failed(const char *name);
 void rd__ledger_draw(const RdMeshRec *m, uint32_t meshId, uint32_t first, uint32_t n);
 /* rd_draw_vu_mesh: a draw left out for reason (m NULL: no live record) */
 void rd__ledger_draw_out(const RdMeshRec *m, uint32_t meshId, int reason);
+/* a draw without a model name (a grid, particles, screen or world prims, a
+   shadow volume: what "(a grid)") left out for reason */
+void rd__ledger_unnamed_out(const char *what, int reason);
+/* rd_tex.c: a texture of the game's name asked for (made from the game's
+   data on a cache miss), made, failed (RdLedgerTexWhy) or replaced by a
+   pack's picture */
+void rd__ledger_tex_asked(const char *name);
+void rd__ledger_tex_loaded(const char *name);
+void rd__ledger_tex_failed(const char *name, int why);
+void rd__ledger_tex_replaced(const char *name);
 /* rd_note_cull_drop: the game's box cull left out model's object (part
    -1, rule 2), node (rule 2) or part (rule 3); views the cameras tested */
 void rd__ledger_box(const char *model, int part, int rule, int views);

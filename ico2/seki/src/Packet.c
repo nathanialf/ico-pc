@@ -40,9 +40,13 @@
 #define PAC_HOST_BATCHES 512
 
 /* The UNPACK payloads of a packet into qw (at most cap quadwords) and their
-   batches; returns the quadword count, 0 when the packet has none. */
+   batches; returns the quadword count, 0 when the packet has none.  *cut
+   (NULL: not asked) is 1 when the stream stopped before the packet's end
+   (an UNPACK past the data, the scratch's room or the batch cap: the rest
+   of the packet is not drawn; the scene ledger names it, rd.h
+   rd_note_packet_out). */
 static unsigned int pac_hostStream(const PacHeader *pk, float (*qw)[4], unsigned int cap,
-                                   RdVuBatchDesc *b, unsigned int *nb, unsigned int *qpv)
+                                   RdVuBatchDesc *b, unsigned int *nb, unsigned int *qpv, int *cut)
 {
     const unsigned char *p = (const unsigned char *)pk->data;
     unsigned int nw = pk->size / 4, i = 0, n = 0;
@@ -64,6 +68,9 @@ static unsigned int pac_hostStream(const PacHeader *pk, float (*qw)[4], unsigned
                 num = 256;
             }
             if (i + num * 4 > nw || n + num > cap || *nb == PAC_HOST_BATCHES) {
+                if (cut != 0) {
+                    *cut = 1;
+                }
                 break;
             }
             memcpy(qw[n], p + (size_t)i * 4, (size_t)num * 16);
@@ -89,7 +96,8 @@ static unsigned int pacHostQwCap;
 
 static RdVuBatchDesc pacHostBatch[PAC_HOST_BATCHES];
 
-static unsigned int pac_hostCollect(const PacHeader *pk, unsigned int *nb, unsigned int *qpv)
+static unsigned int pac_hostCollect(const PacHeader *pk, unsigned int *nb, unsigned int *qpv,
+                                    int *cut)
 {
     unsigned int need = pk->size / 16 + 1;
 
@@ -101,7 +109,7 @@ static unsigned int pac_hostCollect(const PacHeader *pk, unsigned int *nb, unsig
     if (pacHostQw == 0) {
         return 0;
     }
-    return pac_hostStream(pk, pacHostQw, pacHostQwCap, pacHostBatch, nb, qpv);
+    return pac_hostStream(pk, pacHostQw, pacHostQwCap, pacHostBatch, nb, qpv, cut);
 }
 
 /* PC port: a save state's load (port/game/state_host.c).  The scratch
@@ -133,15 +141,15 @@ void pac_HostStateWords(void (*fn)(const void *p, size_t n, int ptr, void *user)
 }
 
 /* The packet's mesh desc (its stream in pacHostQw); 0 when the packet has
-   no batches. */
-static int pac_hostDesc(const PacHeader *pk, RdVuMeshDesc *d, const char *name)
+   no batches.  *cut as pac_hostStream's (NULL: not asked). */
+static int pac_hostDesc(const PacHeader *pk, RdVuMeshDesc *d, const char *name, int *cut)
 {
     unsigned int nb, qpv, n;
 
     if (pk->data == 0 || pk->size == 0) {
         return 0;
     }
-    n = pac_hostCollect(pk, &nb, &qpv);
+    n = pac_hostCollect(pk, &nb, &qpv, cut);
     if (n == 0 || nb == 0 || qpv == 0) {
         return 0;
     }
@@ -185,10 +193,17 @@ static void pac_hostBuild(PacHeader *pk, const char *name, const PacHostIdent *i
     uint64_t h;
     void *field;
     int e;
+    int cut = 0;
 
     memset(pk->pad9C, 0, sizeof(pk->pad9C));
-    if (!pac_hostDesc(pk, &d, name)) {
+    if (!pac_hostDesc(pk, &d, name, &cut)) {
+        /* PC port: no geometry the port can read (no data, no UNPACK, no
+           vertex size): no mesh, the packet's draws none (the scene ledger) */
+        rd_note_packet_out(name, RD_PACKET_OUT_EMPTY);
         return;
+    }
+    if (cut) {
+        rd_note_packet_out(name, RD_PACKET_OUT_CUT); /* PC port: the rest not drawn */
     }
     /* the triangles' facing from the p2o normals (pac_hostFacing): the
        table pac_makeStrip just made, kept under the stream's hash, or the
@@ -250,7 +265,7 @@ void pac_HostRefreshFor(PacHeader *pk, const PacHostIdent *id)
     unsigned int nb, qpv;
     uint64_t h;
 
-    if (m.id == 0 || pac_hostCollect(pk, &nb, &qpv) == 0) {
+    if (m.id == 0 || pac_hostCollect(pk, &nb, &qpv, 0) == 0) {
         return;
     }
     if (rd_update_vu_mesh(m, (const float (*)[4])pacHostQw) || !rd_vu_mesh_replaced(m)) {
@@ -288,7 +303,7 @@ int pac_HostDump(PacHeader *pk, const PacHostIdent *id)
     RdVuMeshDesc d;
     ModelpackIdent mi;
 
-    if (!pac_hostDesc(pk, &d, id != 0 && id->model != 0 ? id->model : "pac")) {
+    if (!pac_hostDesc(pk, &d, id != 0 && id->model != 0 ? id->model : "pac", 0)) {
         return 0;
     }
     mi.model = id != 0 ? id->model : 0;

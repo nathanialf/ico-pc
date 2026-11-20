@@ -12,6 +12,14 @@
 
 #include <stddef.h>
 
+/* The scene ledger's text (port/render/rd_ledger.h rd_ledger_report_text:
+   the last stages played and the stage in play so far): every zip here
+   that takes the log (F12's, the Settings picture's, the slow-scene and
+   skin-check captures', the loss dumps') takes it beside the log as
+   scene-ledger.txt; fn writes at most cap - 1 bytes and returns the
+   length.  NULL (the default; a build without the renderer) leaves it out. */
+void ico_dump_zip_set_ledger(size_t (*fn)(char *out, size_t cap));
+
 /* Writes zip_path holding the file dump_path under its own name, then
    prev_path (NULL or "": none; the tick before, second so a zip's first
    .rddump stays the frame) and, when it can be read, the file log_path under

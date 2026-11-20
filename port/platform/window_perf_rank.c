@@ -17,7 +17,8 @@
 #include "rd_ledger.h" /* the scene ledger: the stage in play */
 #include "rd_list_draws.h"
 #include "rd_perf_rank.h"
-#include "report.h" /* the report's scene-ledger.txt */
+#include "dump_zip.h" /* the captures' scene-ledger.txt */
+#include "report.h"   /* the report's scene-ledger.txt */
 #include "rhi.h"
 #include "window_clock_trap.h" /* window_clock_trap_ranked */
 #include "window_lines.h"      /* window_log_cost_part */
@@ -102,6 +103,7 @@ void window_perf_rank_step(SceneKind kind, int stage, uint64_t ns)
     if (!s_ledgerSet) {
         s_ledgerSet = true;
         ico_report_set_ledger(rd_ledger_report_text);
+        ico_dump_zip_set_ledger(rd_ledger_report_text); /* the captures' zips */
     }
     rd_ledger_scene(stage, name);
 }
