@@ -155,7 +155,8 @@ static void testNeverDrawnAndCarry(void)
         CHECK(strncmp(row, " st13_deja1: never drawn, no reason recorded, 1 mesh built", 58) == 0,
               "built, never drawn, no reason: said so");
     }
-    CHECK(strstr(s_text, "(1 with no reason recorded)") != NULL, "the header counts it");
+    CHECK(strstr(s_text, "(0 hidden by the game, 1 with no reason recorded)") != NULL,
+          "the header counts it");
     /* the never drawn rows come before the drawn ones */
     const char *s = rowOf(s_text, "sky_r_bg");
     CHECK(s != NULL && w != NULL && w < s, "never drawn first");
