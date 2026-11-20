@@ -196,7 +196,9 @@ fi
 sudo apt-get $opts autoclean > /dev/null || true
 sudo rm -rf "$debs/partial" "$debs/lock"
 sudo chown -R "$(id -u):$(id -g)" "$debs"
-names=$(cd "$debs" && ls -1 *.deb | LC_ALL=C sort | sha256sum | cut -c1-16)
+# (with a mark for the kept index: an entry saved before the index was kept
+# has the same package files and would otherwise never be replaced)
+names=$(cd "$debs" && { ls -1 *.deb | LC_ALL=C sort; [ -d lists ] && echo "+index"; } | sha256sum | cut -c1-16)
 echo "host packages: $(ls -1 "$debs"/*.deb | wc -l) package files and their index kept for the next run (names $names)"
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
     echo "names=$names" >> "$GITHUB_OUTPUT"
