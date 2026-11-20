@@ -1373,11 +1373,12 @@ stepped: chosen when the journey began`).
   journey began" (`UI_STR_DIFF_LOCKED_NOTE`, `ui__diff_note`) and ignores Left and Right (No Shadows, when on, keeps its own note, which says some story moments are lost or play differently without the Shadows; `ui__diff_step`
   logs `<key> not stepped: chosen when the journey began`, the first 8 then every 100th);
   `parentLayout` sends Customize's Back to Gameplay and `leaveTo` puts the cursor on the link.
-- The pause menu's journey lines (`pauseStats`, 13 lines at most): one line `STAT_DIFFICULTY`
-  (label `UI_STR_DIFF_LINE`) after Achievements shows the mode, " n / N" while a knock-down limit is on
-  (the room's count, or the journey's with the Whole journey count; `ui__diff_line_text`) and
-  ", Permadeath" (`UI_STR_DIFF_WORD_PERMADEATH`); it took the third assist slot, and Shadows never take
-  Yorda is not an assist any more (it is a row of the difficulty).
+- The pause menu's journey lines (`pauseStats`, 7 lines at most: play time, deaths, captures, saves,
+  enemies, difficulty, area): the line `STAT_DIFFICULTY` (label `UI_STR_DIFF_LINE`) shows the mode,
+  " n / N" while a knock-down limit is on (the room's count, or the journey's with the Whole journey
+  count; `ui__diff_line_text`) and ", Permadeath" (`UI_STR_DIFF_WORD_PERMADEATH`). v0.11.13 removed the
+  New Game+, Mirror mode, Achievements and Assists lines (the Customize view and the Achievements page
+  show them).
 - The journey events (`ui__diff_listen`, called by `ui_settings_install`): the difficulty listener
   (`ico_difficulty_set_listener`) raises one pop-up, for `ICO_DIFF_EV_REFUSED` ("This journey has
   ended.", `UI_STR_DIFF_TOAST_ENDED`): difficulty_file.c raises it through `ico_difficulty_notify` at

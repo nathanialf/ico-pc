@@ -462,7 +462,6 @@ const char *const
             [UI_STR_STATS_CAPTURES] = "Yorda entführt",
             [UI_STR_STATS_SAVES] = "Speicherungen dieser Reise",
             [UI_STR_STATS_ENEMIES] = "Besiegte Gegner dieser Reise",
-            [UI_STR_STATS_ASSISTS] = "Hilfen",
             [UI_STR_STATS_AREA] = "Ort",
             [UI_STR_PHOTO_ACT_MOVE] = "bewegen",
             [UI_STR_PHOTO_ACT_LOOK] = "umschauen",
