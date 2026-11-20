@@ -96,6 +96,13 @@ int title_demo_mode;
 unsigned int stage_after_skipping_demo;
 int mpegPlayReturnStage;
 
+/* port/input's view of the stick for the menus (pad_host.c, not linked
+   here): Mirror mode is off in this program, so the byte as it is */
+unsigned char ico_pad_menu_stick_x(unsigned char x)
+{
+    return x;
+}
+
 static int s_texTransfers;
 
 void tex_TransTexture(int no, int pri)

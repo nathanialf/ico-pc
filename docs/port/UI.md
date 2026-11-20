@@ -1825,7 +1825,8 @@ Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
   hold again, the other direction, the stick's emulation, held at 1 and 100, 1..100 in 98 repeats,
   presses with gaps), a wrapping row (Filter) held for 75 ticks stepping once, L1/R1 by 10 on the
   four colour rows (held at 1 and 100, nothing on Filter, written on leaving the page), Square's 50,
-  the repeating rows list.
+  the repeating rows list, and Mirror mode's stick on the menus (the frame's negated x taken back
+  by `lt_analog2Pad` through `ico_pad_menu_stick_x`, `docs/port/INPUT.md`).
 - `settings_adapter` (`test/settings_adapter_test.c`): the Graphics card row and Apply on another
   card over a fake host ([Graphics > Apply](#graphics--apply)).
 - `settings_desktop` (`test/settings_desktop_test.c`): Extras' Add to the applications menu row over a fake

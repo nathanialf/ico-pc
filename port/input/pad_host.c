@@ -336,6 +336,29 @@ unsigned int ico_pad_menu_word(const void *libpad_buf)
     return ((((unsigned int)d[20] << 8) | d[21]) ^ 0xFFFFu) & 0xFFFFu;
 }
 
+static unsigned int s_menu_x_reflected; /* ico_pad_menu_stick_x's reflections */
+
+unsigned char ico_pad_menu_stick_x(unsigned char x)
+{
+    if (!ico_opt_mirror()) {
+        return x;
+    }
+    if (s_menu_x_reflected++ == 0) {
+        fprintf(stderr, "input: Mirror mode: the menus take the stick's left and right as "
+                        "pushed (they are drawn unflipped)\n");
+    }
+    /* the frame's bytes are symmetric about 127.5 (vpad.c
+       ico_input_quantise), so 255 - x is the stick as pushed (within one
+       step at an exact half), and lt_analog2Pad's thresholds, below 20 and
+       from 236, are each other's reflection */
+    return (unsigned char)(255u - x);
+}
+
+unsigned int ico_pad_menu_stick_x_reflected(void)
+{
+    return s_menu_x_reflected;
+}
+
 int scePadInfoMode(int port, int slot, int term, int index)
 {
     if (!connected(port, slot)) {

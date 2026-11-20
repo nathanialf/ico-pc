@@ -1222,7 +1222,10 @@ Customize, whatever the difficulty.
   back. Changing the difficulty never changes Mirror mode or New Game+, and
   changing those two never changes the difficulty.
 - **Mirror mode** (under Customize) plays the whole game flipped left to
-  right. The sticks and the D-pad both walk the way you press. It starts Off.
+  right. The sticks and the D-pad both walk the way you press, and in the
+  menus, on the save and memory card screens and on the screens after the
+  ending, left and right on the stick and the D-pad move the way you press.
+  It starts Off.
 - **New Game+** (under Customize) plays the second journey, the one the PS2
   gives you after you finish the game. Yorda's words are translated, and the ending and
   some items change. It starts On when you begin from a finished game's
