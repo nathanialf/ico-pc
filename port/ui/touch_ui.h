@@ -66,6 +66,22 @@ void ui_touch_draw_overlay(const struct RdOverlayCtx *ctx);
 /* Tests: the mask of the zones (1 << IcoTouchZone) the last draw gave the
    button pictures' art (0 with no set in force) */
 unsigned ui__touch_art_zones(void);
+/* The room another controller's button picture has on a touch button
+   (touch_ui.c drawArtGlyphs), as shares of the button, so the picture
+   scales with it.  A round button: a circle of UI_TOUCH_ART_ROUND of its
+   radius.  The ring is th = 0.4 of the unit thick (touch.c: a face's radius
+   5.5 units, R1's 6.5, times the editor's scale 0.7 .. 3.0), 7.3 % of a
+   default face's radius, 10.4 % of the smallest face's (scale 0.7), 2.4 %
+   of the largest's; so 0.8 keeps the stroke 9.6 % of the radius off the
+   ring at the smallest and 17.6 % at the largest.  A key (L1, L2, R2): a
+   box of UI_TOUCH_ART_KEY_W x UI_TOUCH_ART_KEY_H of its size (the disc's
+   own picture box on a key); the frame is 7.1 % of the smallest key's
+   height and 4.8 % of its width, so the gaps are 7.9 % and 5.2 %.  The
+   2-pixel floor on th (a unit under 5 pixels) is met by holding the room a
+   pixel inside the ring or frame. */
+#define UI_TOUCH_ART_ROUND 0.8f
+#define UI_TOUCH_ART_KEY_W 0.8f
+#define UI_TOUCH_ART_KEY_H 0.7f
 /* Tests: zone's art quad at the last draw (output pixels: x0, y0, x1, y1),
    1; 0 when that draw gave it none */
 int ui__touch_art_quad(int zone, float q[4]);

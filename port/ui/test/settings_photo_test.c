@@ -672,15 +672,20 @@ static void testPhotoPanel(void)
        atlas (none from the sheets), on the panel, each the art's aspect
        (on the output's square pixels), each centred on one of the disc
        pictures' boxes within half an output pixel, inside it (the panel's
-       gaps kept) and at the set's lettering, the box's height on the PAL
-       tables (every Xbox piece is a capital), unless its width is the
-       box's (shrunk to it) */
+       gaps kept); the faces one height and the shoulders one height (the
+       group's one scale: every Xbox piece is a capital, so one scale is
+       one height), and in each group some picture filling its box's width
+       or height (as large as fits) */
     ico_input_note_press(ICO_SRC_PAD, 0);
     pad_glyphs_set_style(ICO_PAD_GLYPHS_XBOX);
     s_pn = 0;
     ui_photo_draw_overlay(&ctx);
     {
         int sheets = 0, art = 0, shape = 0, placed = 0, used[7] = {0};
+        /* per group (by the box's width: the faces' boxes are narrower):
+           the box width, the least and most height, a picture filling */
+        float grpW[2] = {0, 0}, grpLo[2] = {1e9f, 1e9f}, grpHi[2] = {0, 0};
+        int grpFill[2] = {0, 0}, grpN[2] = {0, 0};
         CHECK(psN == 7, "the pad's seven disc pictures' boxes (%d)", psN);
         for (uint32_t i = 2; i + 1 < s_pn; i++) {
             sheets += isSheet(s_ptex[i]);
@@ -701,18 +706,27 @@ static void testPhotoPanel(void)
                     }
                     used[k] = 1;
                     const int inside = dw / 16.0f <= bw + 0.5f && dh / 16.0f <= bh + 0.5f;
-                    const int sized =
-                        fabsf(dh / 16.0f - bh) <= 1.0f || fabsf(dw / 16.0f - bw) <= 1.0f;
-                    CHECK(inside && sized,
-                          "pad with Xbox: the picture %.1f x %.1f in the box %.1f x %.1f (inside, "
-                          "the lettering's height or the box's width)",
+                    CHECK(inside,
+                          "pad with Xbox: the picture %.1f x %.1f inside the box %.1f x %.1f",
                           (double)(dw / 16.0f), (double)(dh / 16.0f), (double)bw, (double)bh);
+                    int gi = grpN[0] && fabsf(bw - grpW[0]) > 0.5f ? 1 : 0;
+                    grpW[gi] = bw;
+                    grpN[gi]++;
+                    grpLo[gi] = fminf(grpLo[gi], dh / 16.0f);
+                    grpHi[gi] = fmaxf(grpHi[gi], dh / 16.0f);
+                    grpFill[gi] |= fabsf(dh / 16.0f - bh) <= 1.0f || fabsf(dw / 16.0f - bw) <= 1.0f;
                     placed++;
                     break;
                 }
                 art += 2;
                 i++;
             }
+        }
+        for (int gi = 0; gi < 2; gi++) {
+            CHECK(grpN[gi] > 0 && grpHi[gi] - grpLo[gi] <= 1.0f && grpFill[gi],
+                  "pad with Xbox: the %d pictures in %.1f-wide boxes %.1f .. %.1f tall, one "
+                  "filling its box %d",
+                  grpN[gi], (double)grpW[gi], (double)grpLo[gi], (double)grpHi[gi], grpFill[gi]);
         }
         CHECK(sheets == 0 && art == 2 * 7 && shape == 7 && placed == 7,
               "pad with Xbox: %d sheet vertices (0), %d art vertices (%d), %d of the art's shape, "
@@ -958,12 +972,44 @@ static void testArtPixels(void)
 
 /* the touch overlay (touch_ui.c) on a 1920 x 1080 output: the default
    medium layout, fully shown */
+static float s_touchK = 1.0f; /* every button scaled by this about its centre */
+
+/* the picture a touch zone shows (touch_ui.c glyphOf) */
+static int glyphOfZone(int z)
+{
+    switch (z) {
+    case ICO_TOUCH_B_CROSS:
+        return LT_GLYPH_CROSS;
+    case ICO_TOUCH_B_CIRCLE:
+        return LT_GLYPH_CIRCLE;
+    case ICO_TOUCH_B_SQUARE:
+        return LT_GLYPH_SQUARE;
+    case ICO_TOUCH_B_TRIANGLE:
+        return LT_GLYPH_TRIANGLE;
+    case ICO_TOUCH_B_L1:
+        return LT_GLYPH_L1;
+    case ICO_TOUCH_B_R1:
+        return LT_GLYPH_R1;
+    case ICO_TOUCH_B_L2:
+        return LT_GLYPH_L2;
+    default:
+        return LT_GLYPH_R2;
+    }
+}
+
 static int touchSource(IcoTouchOverlay *out)
 {
     IcoTouchInsets none = {0.0f, 0.0f, 0.0f, 0.0f};
     memset(out, 0, sizeof(*out));
     out->layout = ico_touch_layout(1920, 1080, none, ICO_TOUCH_MEDIUM);
     out->opacity = 1.0f;
+    for (int z = 0; z < ICO_TOUCH_BUTTONS; z++) {
+        IcoTouchRect *r = &out->layout.button[z].rect;
+        r->x += r->w * (1.0f - s_touchK) * 0.5f;
+        r->y += r->h * (1.0f - s_touchK) * 0.5f;
+        r->w *= s_touchK;
+        r->h *= s_touchK;
+    }
     return 1;
 }
 
@@ -1011,55 +1057,107 @@ static void testTouchArt(void)
     }
     CHECK(want != 0 && ui__touch_art_zones() == want,
           "Xbox: the zones with a picture take the art (%#x, %#x)", ui__touch_art_zones(), want);
-    /* each picture centred on its button within half an output pixel (the
-       layout is the output's size: layout pixels are output pixels), at the
-       set's lettering (the disc's face picture's height in that button:
-       touch_ui.c glyphBox of Cross, 0.78 of a round button's width or 0.7
-       of a key's height at the face picture's proportions) unless the
-       button's inside stops it: a round one's corners inside the circle
-       within the ring (radius w / 2 - th), a key's inside its frame (th
-       the unit's 0.4, at least 2) */
-    {
-        int gw = 0, gh = 0;
-        lt_ext_glyph_box(LT_GLYPH_CROSS, 27.0f, &gw, &gh);
-        const float ga = (float)gw * 14.0f / (15.0f * (float)gh);
-        float th = o.layout.unit * 0.4f;
-        th = th < 2.0f ? 2.0f : th;
+    /* each picture wholly inside its button and centred on it within half
+       an output pixel (the layout is the output's size: layout pixels are
+       output pixels): a round button's corners inside the circle of
+       UI_TOUCH_ART_ROUND of its radius (and a pixel inside the ring, th
+       the unit's 0.4, at least 2), a key's inside UI_TOUCH_ART_KEY_W x
+       UI_TOUCH_ART_KEY_H of it (and inside its frame); as large as fits
+       for its group: the four faces one height and the three shoulder
+       keys one height (every Xbox piece a capital), and each group's
+       tightest picture at its limit within a pixel.  Then every button at
+       0.5 and 2 times its size: every picture 0.5 and 2 times as large,
+       within a pixel.  For each of the three sets (the group's scale read
+       as the height over the piece's own, pad_glyphs_height, so the Wii
+       Classic's short letters count too). */
+    float th = o.layout.unit * 0.4f;
+    th = th < 2.0f ? 2.0f : th;
+    float size1[ICO_TOUCH_BUTTONS][2];
+    static const int kSets[] = {ICO_PAD_GLYPHS_XBOX, ICO_PAD_GLYPHS_NINTENDO,
+                                ICO_PAD_GLYPHS_WII_CLASSIC};
+    for (int pass = 0; pass < 9; pass++) {
+        static const float kK[3] = {1.0f, 0.5f, 2.0f};
+        const int style = kSets[pass / 3];
+        s_touchK = kK[pass % 3];
+        pad_glyphs_set_style(style);
+        if (pass > 0) {
+            frame(0);
+        }
+        touchSource(&o);
+        float lo[2] = {1e9f, 1e9f}, hi[2] = {0, 0};
+        int atLimit[2] = {0, 0};
         for (size_t i = 0; i < sizeof(kZones) / sizeof(kZones[0]); i++) {
-            const IcoTouchButton *bt = &o.layout.button[kZones[i]];
+            const int z = kZones[i];
+            const IcoTouchButton *bt = &o.layout.button[z];
             float q[4];
-            if (!((want >> kZones[i]) & 1u)) {
+            if (!((want >> z) & 1u)) {
                 continue;
             }
-            if (!ui__touch_art_quad(kZones[i], q)) {
-                CHECK(0, "Xbox: zone %d's art quad", kZones[i]);
+            if (!ui__touch_art_quad(z, q)) {
+                CHECK(0, "%s at %.1fx: zone %d's art quad", pad_glyphs_style_name(style),
+                      (double)s_touchK, z);
                 continue;
             }
             const float cx = bt->rect.x + bt->rect.w * 0.5f, cy = bt->rect.y + bt->rect.h * 0.5f;
             const float w = q[2] - q[0], h = q[3] - q[1];
-            const float bw = bt->round ? bt->rect.w * 0.78f : bt->rect.w * 0.8f;
-            const float bh = bt->round ? bt->rect.w * 0.78f : bt->rect.h * 0.7f;
-            const float letter = (bw < bh * ga ? bw : bh * ga) / ga;
-            int inside, limited;
+            int inside, limit;
             if (bt->round) {
-                const float R = bt->rect.w * 0.5f - th, half = 0.5f * hypotf(w, h);
+                const float r = bt->rect.w * 0.5f;
+                const float R = fminf(UI_TOUCH_ART_ROUND * r, r - th - 1.0f);
+                const float half = 0.5f * hypotf(w, h);
                 inside = half <= R + 0.5f;
-                limited = fabsf(half - R) <= 0.5f;
+                limit = fabsf(half - R) <= 1.0f;
             } else {
-                const float iw = bt->rect.w - 2.0f * th, ih = bt->rect.h - 2.0f * th;
-                inside = w <= iw + 0.5f && h <= ih + 0.5f;
-                limited = fabsf(w - iw) <= 0.5f || fabsf(h - ih) <= 0.5f;
+                const float bw =
+                    fminf(UI_TOUCH_ART_KEY_W * bt->rect.w, bt->rect.w - 2.0f * th - 2.0f);
+                const float bh =
+                    fminf(UI_TOUCH_ART_KEY_H * bt->rect.h, bt->rect.h - 2.0f * th - 2.0f);
+                inside = w <= bw + 0.5f && h <= bh + 0.5f;
+                limit = fabsf(w - bw) <= 1.0f || fabsf(h - bh) <= 1.0f;
             }
             CHECK(fabsf((q[0] + q[2]) * 0.5f - cx) <= 0.5f &&
-                      fabsf((q[1] + q[3]) * 0.5f - cy) <= 0.5f && inside &&
-                      (fabsf(h - letter) <= 0.5f || (h < letter && limited)),
-                  "Xbox: zone %d's art %.1f,%.1f-%.1f,%.1f on the %s %.1f,%.1f %.1fx%.1f (the "
-                  "lettering %.1f)",
-                  kZones[i], (double)q[0], (double)q[1], (double)q[2], (double)q[3],
-                  bt->round ? "circle" : "key", (double)bt->rect.x, (double)bt->rect.y,
-                  (double)bt->rect.w, (double)bt->rect.h, (double)letter);
+                      fabsf((q[1] + q[3]) * 0.5f - cy) <= 0.5f && inside,
+                  "%s at %.1fx: zone %d's art %.1f,%.1f-%.1f,%.1f inside and centred on the %s "
+                  "%.1f,%.1f %.1fx%.1f",
+                  pad_glyphs_style_name(style), (double)s_touchK, z, (double)q[0], (double)q[1],
+                  (double)q[2], (double)q[3], bt->round ? "circle" : "key", (double)bt->rect.x,
+                  (double)bt->rect.y, (double)bt->rect.w, (double)bt->rect.h);
+            /* the groups: the four round faces, the three shoulder keys
+               (R1, a round shoulder, is a button of its own size) */
+            const int gi = z == ICO_TOUCH_B_R1 ? -1
+                                               : (z == ICO_TOUCH_B_L1 || z == ICO_TOUCH_B_L2 ||
+                                                  z == ICO_TOUCH_B_R2);
+            /* the group's one scale: the height over the piece's own */
+            const float L = h / pad_glyphs_height(style, glyphOfZone(z));
+            if (gi >= 0) {
+                lo[gi] = fminf(lo[gi], L);
+                hi[gi] = fmaxf(hi[gi], L);
+                atLimit[gi] |= limit;
+            }
+            if (pass % 3 == 0) {
+                size1[z][0] = w;
+                size1[z][1] = h;
+            } else {
+                CHECK(fabsf(w - s_touchK * size1[z][0]) <= 1.0f &&
+                          fabsf(h - s_touchK * size1[z][1]) <= 1.0f,
+                      "%s: zone %d's art %.1f x %.1f at %.1fx (%.1f x %.1f at 1x)",
+                      pad_glyphs_style_name(style), z, (double)w, (double)h, (double)s_touchK,
+                      (double)size1[z][0], (double)size1[z][1]);
+            }
+        }
+        for (int gi = 0; gi < 2; gi++) {
+            CHECK(hi[gi] > 0.0f && hi[gi] - lo[gi] <= 1.0f && atLimit[gi],
+                  "%s at %.1fx: the %s' scale %.1f .. %.1f, one at its button's limit %d",
+                  pad_glyphs_style_name(style), (double)s_touchK,
+                  gi ? "shoulder keys' pictures" : "faces' pictures", (double)lo[gi],
+                  (double)hi[gi], atLimit[gi]);
         }
     }
+    /* back at 1x with Xbox, presented again for the pixel check below */
+    s_touchK = 1.0f;
+    pad_glyphs_set_style(ICO_PAD_GLYPHS_XBOX);
+    touchSource(&o);
+    frame(0);
     int okB = rd_read_presented(b, &ow, &oh) && ow == W && oh == H;
     CHECK(okA && okB, "the touch overlay's presented outputs");
     if (okA && okB) {

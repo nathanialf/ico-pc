@@ -525,17 +525,21 @@ int ui__touch_art_quad(int zone, float q[4])
 }
 
 /* The button pictures' art (pad_glyphs.h) on the zones that have a picture
-   while a set is in force.  Every picture at the set's lettering: the
-   height the disc's face picture has in that button (glyphBox of Cross, so
-   the shoulders' letters are the face buttons' size), times the piece's
-   own height, its ink centred on the button; then shrunk, its shape kept,
-   only as far as the button's inside needs (nothing else is drawn in a
-   button): a round one's corners inside the circle within the ring (radius
-   r - th), a key's inside its frame (w - 2 th by h - 2 th).  Rasterised at
-   the lettering it is shown at in output pixels, the cell's texels whole
-   (the art's cell, not a disc sheet's, so no half-texel inset), the held
-   and opacity alpha of the disc's pictures.  No sheet check: the art is
-   the port's own texture.  Returns the mask of the zones drawn. */
+   while a set is in force: its ink fitted inside the button it stands on
+   and centred on it, at its group's fit (pad_glyphs_fit_circle /
+   pad_glyphs_fit_box: one scale for the four face pictures, one for the
+   four shoulders, the largest at which every one of them fits a button of
+   this shape and size, so A is not bigger than B), so the picture scales
+   with the button (the size setting, the editor's per-button scale, the
+   output's resolution) and never leaves it.  The room (touch_ui.h): a
+   round button's circle of UI_TOUCH_ART_ROUND of its radius, a key's box
+   of UI_TOUCH_ART_KEY_W x UI_TOUCH_ART_KEY_H of its size, each held a
+   pixel inside the ring or frame (th thick) where a tiny window's 2-pixel
+   floor on th would reach it.  Rasterised at the size it is shown in
+   output pixels, the cell's texels whole (the art's cell, not a disc
+   sheet's, so no half-texel inset), the held and opacity alpha of the
+   disc's pictures.  No sheet check: the art is the port's own texture.
+   Returns the mask of the zones drawn. */
 static uint32_t drawArtGlyphs(const IcoTouchOverlay *o, float th)
 {
     uint32_t drawn = 0;
@@ -547,30 +551,31 @@ static uint32_t drawArtGlyphs(const IcoTouchOverlay *o, float th)
         const int g = glyphOf(z);
         const int held = (o->info.pressed >> z) & 1u;
         const float ca = shownAlpha(o, b->alpha);
-        float fw, fh, cx, cy, uv[4];
+        float uv[4];
         unsigned tex = 0;
 
-        if (g < 0 || b->rect.w <= 0.0f || b->rect.h <= 0.0f || ca < 0.0f ||
-            !glyphBox(b, LT_GLYPH_CROSS, &fw, &fh, &cx, &cy)) {
+        if (g < 0 || b->rect.w <= 0.0f || b->rect.h <= 0.0f || ca < 0.0f) {
             continue;
         }
         const float aa = pad_glyphs_aspect(style, g), hk = pad_glyphs_height(style, g);
-        if (!(aa > 0.0f) || !(hk > 0.0f)) {
+        float letter;
+        if (b->round) {
+            const float r = b->rect.w * 0.5f;
+            const float R = fminf(UI_TOUCH_ART_ROUND * r * kmin, (r - th) * kmin - 1.0f);
+            letter = R > 0.0f ? pad_glyphs_fit_circle(style, g, 2.0f * R) : 0.0f;
+        } else {
+            const float bw = fminf(UI_TOUCH_ART_KEY_W * b->rect.w * s_d.kx,
+                                   (b->rect.w - 2.0f * th) * s_d.kx - 2.0f);
+            const float bh = fminf(UI_TOUCH_ART_KEY_H * b->rect.h * s_d.ky,
+                                   (b->rect.h - 2.0f * th) * s_d.ky - 2.0f);
+            letter = pad_glyphs_fit_box(style, g, bw, bh);
+        }
+        if (!(letter > 0.0f) || !(aa > 0.0f) || !(hk > 0.0f)) {
             continue;
         }
-        float letter = fh, h = letter * hk, w = h * aa, k = 1.0f;
-        if (b->round) {
-            const float R = (b->rect.w * 0.5f - th) * kmin, half = 0.5f * hypotf(w, h);
-            k = half > R && R > 0.0f ? R / half : 1.0f;
-        } else {
-            const float iw = (b->rect.w - 2.0f * th) * s_d.kx,
-                        ih = (b->rect.h - 2.0f * th) * s_d.ky;
-            k = iw > 0.0f && w > iw ? iw / w : 1.0f;
-            k = ih > 0.0f && h * k > ih ? ih / h : k;
-        }
-        letter *= k;
-        w *= k;
-        h *= k;
+        const float h = letter * hk, w = h * aa;
+        const float cx = (b->rect.x + b->rect.w * 0.5f) * s_d.kx;
+        const float cy = (b->rect.y + b->rect.h * 0.5f) * s_d.ky;
         const long px = lrintf(letter);
         if (!pad_glyphs_texture(g, px < 1 ? 1 : (int)px, &tex, uv, NULL)) {
             continue;

@@ -475,12 +475,10 @@ float ui__photo_hud_fit(const UiHudItem *items, int n, float *size, float room, 
 
 /* The button pictures' art (pad_glyphs.h) while a set is in force, in the
    disc glyph's box at the same place (its left edge x, its middle on mid):
-   its ink centred in the box at the set's lettering (lt_ext_art_fit),
-   rasterised at that lettering as it is shown on the output (the
-   overlay's pixels per y unit); 1 when drawn, 0 to draw the disc's picture
-   instead.  The panel puts the pair's other picture 0.16 of the size away
-   and the word 0.34 (ui__photo_hud_layout): a picture keeps inside its box
-   (shrunk, its shape kept, where it is wider), so those gaps stay. */
+   its ink fitted inside the box and centred on it (lt_ext_art_fit), so the
+   panel's gaps between pictures and words stay, rasterised at the size it
+   is shown on the output (the overlay's pixels per y unit); 1 when drawn,
+   0 to draw the disc's picture instead. */
 static int hudArt(int glyph, float x, float mid, float size)
 {
     if (!pad_glyphs_active()) {
@@ -496,7 +494,7 @@ static int hudArt(int glyph, float x, float mid, float size)
     in[1] = mid - (float)h * 0.5f;
     in[2] = x + (float)w;
     in[3] = in[1] + (float)h;
-    if (!lt_ext_art_fit(glyph, in, (float)w, fit, &letter)) {
+    if (!lt_ext_art_fit(glyph, in, fit, &letter)) {
         return 0;
     }
     float y0 = 0.0f, y1 = 0.0f;

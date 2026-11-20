@@ -80,9 +80,24 @@ const char *pad_glyphs_style_name(int style);
    capital or ascender letter, about 0.76 for the a and x, 1.0015 for the
    y's ascender-to-descender).  Both 0 for PlayStation, an invalid piece or
    a glyph out of 0 .. 7.  A caller centres the ink box (a texture cell is
-   exactly that box) in its own box. */
+   exactly that box) on its button. */
 float pad_glyphs_aspect(int style, int glyph);
 float pad_glyphs_height(int style, int glyph);
+
+/* The fit of a picture to the button it stands on, as one scale for its
+   group (the four face buttons, glyphs 0 .. 3, or the four shoulders,
+   4 .. 7), so on same-sized buttons a set's face letters come out one
+   size, and its shoulder pieces another: the largest lettering height at
+   which EVERY piece of the group's ink lies inside the button.
+   pad_glyphs_fit_box: a w x h box (square units: the caller converts its
+   own); pad_glyphs_fit_circle: a circle of diameter d, the ink box's
+   corners inside it.  The picture of glyph is then pad_glyphs_height times
+   that tall and pad_glyphs_aspect times as wide, centred on the button.
+   Proportional: twice the button, twice the picture.  0 for PlayStation,
+   a glyph out of 0 .. 7, a group with an invalid piece or an empty
+   button. */
+float pad_glyphs_fit_box(int style, int glyph, float w, float h);
+float pad_glyphs_fit_circle(int style, int glyph, float d);
 
 /* The atlas height a request of pixelH output pixels is drawn from: the
    first of 16, 24, 32, 48, 64, 96, 128, 192, 256 at or above it (256 above

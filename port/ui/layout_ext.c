@@ -438,16 +438,7 @@ static float pixelsPerY(void)
     return k > 0.0f ? k : 1.0f;
 }
 
-float lt_ext_glyph_lettering(int glyph)
-{
-    if (glyph < 0 || glyph >= LT_GLYPH_COUNT) {
-        return 1.0f;
-    }
-    const int face = glyphOf(LT_GLYPH_CROSS)->disp_h, own = glyphOf(glyph)->disp_h;
-    return face > 0 && own > 0 ? (float)face / (float)own : 1.0f;
-}
-
-int lt_ext_art_fit(int glyph, const float in[4], float maxW, float out[4], float *letter)
+int lt_ext_art_fit(int glyph, const float in[4], float out[4], float *letter)
 {
     if (glyph < 0 || glyph >= PAD_GLYPHS_PIECES || !pad_glyphs_active()) {
         return 0;
@@ -458,14 +449,13 @@ int lt_ext_art_fit(int glyph, const float in[4], float maxW, float out[4], float
     if (!(a > 0.0f) || !(hk > 0.0f) || !(bw > 0.0f) || !(bh > 0.0f)) {
         return 0;
     }
-    float L = bh * lt_ext_glyph_lettering(glyph);
-    float h = L * hk, w = h * UI_X_PER_Y * a; /* a y unit is UI_X_PER_Y x units on screen */
-    if (maxW > 0.0f && w > maxW) {
-        const float k = maxW / w;
-        w = maxW;
-        h *= k;
-        L *= k;
+    /* the box in y units both ways (a y unit is UI_X_PER_Y x units on
+       screen), the group's lettering in y units */
+    const float L = pad_glyphs_fit_box(style, glyph, bw / UI_X_PER_Y, bh);
+    if (!(L > 0.0f)) {
+        return 0;
     }
+    const float h = L * hk, w = h * UI_X_PER_Y * a;
     const float cx = (in[0] + in[2]) * 0.5f, cy = (in[1] + in[3]) * 0.5f;
     out[0] = cx - w * 0.5f;
     out[1] = cy - h * 0.5f;
@@ -477,39 +467,10 @@ int lt_ext_art_fit(int glyph, const float in[4], float maxW, float out[4], float
     return 1;
 }
 
-/* The x units a game row's shoulder picture may pass its box by on each
-   side.  The discs draw the shoulder pictures only in Button
-   Configuration's picture column (x 390 .. 430 on the PAL disc, 390 .. 454
-   on the Japanese, Korean and Chinese ones), whose left neighbours, the
-   rows' labels, end at x 384 on all of them, and nothing is to its right:
-   6 units free a side, which the PAL disc's boxes need for the two-letter
-   pictures at the set's lettering (the sprite's box 39 by 28 units: LB
-   about 48 units wide, kept; RB about 51, a hair over 39 + 2 x 5.85, so it
-   shrinks a little).  The face pictures are drawn in that column too and
-   in the prompts (a picture, then its word: five layouts on the PAL disc,
-   four on the Japanese, Korean and Chinese ones), where the word's box
-   starts at the picture box's right edge: they keep inside everywhere (the
-   widest, the A, 1.03 times as wide as tall, just fits the sprite's 31 by
-   28 box).  The port's glyph rows are the prompt lines (ui_hint.c: the
-   pair's other picture 2 units away, the word 5): they keep inside too. */
-#define ART_GAME_SHOULDER_OVER 6.0f
-
-/* the widest row e's art of button g may be in a box bw x units wide (the
-   row's own box or the sprite's, which the glow stretches): rowW is the
-   row's own width, so the overhang scales with the box */
-static float artMaxW(const LtProperty *e, int g, float bw)
-{
-    if (lt_ext_is_port_prop(e) || g < LT_GLYPH_L1) {
-        return bw;
-    }
-    const float rowW = (float)(e->dispW ? e->dispW : e->texW);
-    return bw + 2.0f * ART_GAME_SHOULDER_OVER * (rowW > 0.0f ? bw / rowW : 1.0f);
-}
-
 /* The art's texture for row e while a set is in force: its button (*g),
    the texture and the ink's cell (texels); 0 when the row shows no button,
    no set is in force or no atlas can be made (then the disc's own path
-   draws the row).  The art is rasterised at the lettering it has in the
+   draws the row).  The art is rasterised at the size it has in the
    row's own box (dispW pixels by dispH y units, the texture's size where
    they are 0; lt_ext_art_fit) at the picture's scale, for the label pass
    and the glow passes alike: a glow is the same picture stretched, as the
@@ -527,7 +488,7 @@ static int artOf(const LtProperty *e, int *g, unsigned *tex, float uv[4])
     const float h = (float)(e->dispH ? e->dispH : e->texH);
     const float in[4] = {0.0f, 0.0f, w, h};
     float out[4], letter = 0.0f;
-    if (!lt_ext_art_fit(b, in, artMaxW(e, b, w), out, &letter)) {
+    if (!lt_ext_art_fit(b, in, out, &letter)) {
         return 0;
     }
     const long px = lrintf(letter * pixelsPerY());
@@ -540,7 +501,7 @@ static int artOf(const LtProperty *e, int *g, unsigned *tex, float uv[4])
 
 /* Row e's art in box (the sprite's rectangle display_texture or the glow
    gives the disc's glyph: x, y, w, h in 1/16 pixel / 1/16 field line from
-   the centre): its ink centred in the box at the set's lettering
+   the centre): its ink fitted inside the box and centred on it
    (lt_ext_art_fit; the disc box is kept, nothing is laid out again), with
    the sprite's colour (the row's fade, dimming and reduction as the game
    computed them) and the packet's state: the label pass the game's sprite
@@ -559,7 +520,7 @@ static int drawArt(const LtProperty *e, const int box[4], const unsigned char rg
     in[1] = (float)box[1] / 8.0f + UI_GRID_CY;
     in[2] = in[0] + (float)box[2] / 16.0f;
     in[3] = in[1] + (float)box[3] / 8.0f;
-    if (!lt_ext_art_fit(g, in, artMaxW(e, g, in[2] - in[0]), fit, NULL)) {
+    if (!lt_ext_art_fit(g, in, fit, NULL)) {
         return 0;
     }
     UiTexQuad q;

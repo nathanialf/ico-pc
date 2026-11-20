@@ -1626,6 +1626,37 @@ float pad_glyphs_height(int style, int glyph)
     return pc && pc->valid && pc->ref > 0.0f ? (pc->iy1 - pc->iy0) / pc->ref : 0.0f;
 }
 
+/* the group's fit: for each piece the lettering height it may have (the
+   box's or circle's limit over its ink at a lettering of 1), the least */
+static float groupFit(int style, int glyph, float w, float h, float d)
+{
+    if (!pieceOf(style, glyph)) {
+        return 0.0f;
+    }
+    const int first = glyph < 4 ? 0 : 4;
+    float L = -1.0f;
+    for (int g = first; g < first + 4; g++) {
+        const float hk = pad_glyphs_height(style, g), a = pad_glyphs_aspect(style, g);
+        if (!(hk > 0.0f) || !(a > 0.0f)) {
+            return 0.0f;
+        }
+        /* the ink at lettering 1: hk tall, hk a wide */
+        const float lim = d > 0.0f ? d / (hk * sqrtf(1.0f + a * a)) : fminf(h / hk, w / (hk * a));
+        L = L < 0.0f || lim < L ? lim : L;
+    }
+    return L > 0.0f ? L : 0.0f;
+}
+
+float pad_glyphs_fit_box(int style, int glyph, float w, float h)
+{
+    return w > 0.0f && h > 0.0f ? groupFit(style, glyph, w, h, 0.0f) : 0.0f;
+}
+
+float pad_glyphs_fit_circle(int style, int glyph, float d)
+{
+    return d > 0.0f ? groupFit(style, glyph, 0.0f, 0.0f, d) : 0.0f;
+}
+
 int pad_glyphs_ink_box(int style, int glyph, float box[4])
 {
     const PgPiece *pc = pieceOf(style, glyph);
