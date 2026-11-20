@@ -455,7 +455,6 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_STATS_CAPTURES] = "Yorda Capturada",
     [UI_STR_STATS_SAVES] = "N° de saves nesta jornada",
     [UI_STR_STATS_ENEMIES] = "Inimigos derrotados nesta jornada",
-    [UI_STR_STATS_ASSISTS] = "Assistências",
     [UI_STR_STATS_AREA] = "Área",
     [UI_STR_PHOTO_ACT_MOVE] = "Mover",
     [UI_STR_PHOTO_ACT_LOOK] = "Olhar",

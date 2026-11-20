@@ -456,7 +456,6 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_STATS_CAPTURES] = "요르다가 잡혀간 횟수",
     [UI_STR_STATS_SAVES] = "이번 여정의 저장 횟수",
     [UI_STR_STATS_ENEMIES] = "이번 여정에서 쓰러뜨린 적",
-    [UI_STR_STATS_ASSISTS] = "어시스트",
     [UI_STR_STATS_AREA] = "지역",
     [UI_STR_PHOTO_ACT_MOVE] = "이동",
     [UI_STR_PHOTO_ACT_LOOK] = "시점",

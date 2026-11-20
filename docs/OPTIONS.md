@@ -1186,15 +1186,13 @@ Ico about freely:
 ## The pause menu's journey panel
 
 The pause menu shows your journey's numbers on the right: play time,
-deaths, how often Yorda was taken, saves, enemies defeated, whether New
-Game+ and Mirror mode are on, and how many achievements you have. A
+deaths, how often Yorda was taken, saves and enemies defeated. A
 **Difficulty** line shows the mode the journey was started with, the
 knock-down count when there is a limit (as `2 / 3`: knock-downs so far, and
 the limit) and the word Permadeath when it is on; Options > Gameplay >
-Difficulty shows the rules in full ([Difficulty](#difficulty)). Any
-helpers you turned on (the stick fix, Developer
-mode) are listed too. Where the game has a name for the area you are in,
-the panel shows it.
+Difficulty shows the rules in full ([Difficulty](#difficulty)), Mirror mode
+and New Game+ among them. Where the game has a name for the area you are
+in, the panel shows it.
 
 A save that has no count of saves and enemies keeps those two lines
 hidden until you start a New Game.

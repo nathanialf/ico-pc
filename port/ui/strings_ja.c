@@ -453,7 +453,6 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_STATS_CAPTURES] = "ヨルダがさらわれた回数",
     [UI_STR_STATS_SAVES] = "この旅のセーブ回数",
     [UI_STR_STATS_ENEMIES] = "この旅で倒した敵",
-    [UI_STR_STATS_ASSISTS] = "アシスト",
     [UI_STR_STATS_AREA] = "エリア",
     [UI_STR_PHOTO_ACT_MOVE] = "移動",
     [UI_STR_PHOTO_ACT_LOOK] = "視点",
