@@ -17,6 +17,7 @@ draws, navigates, fades and sounds it; the port supplies the rows, their words a
 | `port/ui/settings_desktop.h`, `settings_desktop.c` | Settings > Extras > Add to the applications menu (Linux): the host's handler (`ui_settings_set_desktop_handler`), Cross and the done / failed popups |
 | `port/ui/settings_backup.h`, `settings_backup.c` | Settings > Extras > Back up your data and Restore from a backup: the rows' words and notes, Cross, the confirmations, the popups |
 | `port/ui/settings_unused.h`, `settings_unused.c` | Settings > Extras > Unused content's host: whether each row and the link show, Cross's open ([Extras > Unused content](#extras--unused-content)) |
+| `port/ui/settings_pads.h`, `settings_pads.c` | Controls > Button pictures: the row's value and stepping, and the set in force once a frame ([The setting](#the-setting)) |
 | `port/ui/settings_step.h`, `settings_step.c` | holding Left or Right on the value rows (the tracker and the rows that repeat), L1/R1 on the Picture colour rows, the colour rows' field and step |
 | `port/ui/settings_variants.h`, `settings_variants.c` | the game variants rows' helpers: which options they are, their value text, the disc's note and whether a row shows on the disc ([Gameplay > Chains and Cutscenes](#gameplay--chains-and-cutscenes)) |
 | `port/ui/settings_states.h`, `settings_states.c` | the Save states page's host, cards' texts and pictures, actions on a slot with their second press, and F6's latch (`settings.c` builds, opens, leaves and ticks the page) |
@@ -205,7 +206,7 @@ tables in step and within the `MAX_ROWS` (17, 18 in an rc build) budget of a pag
 | Graphics driver | Driver, Add a driver, Add from the drivers folder (`UI_OPT_GPU_ADD_FILE`, stepped over `fileName(i)`, shown while `fileCount()` is above 0, Cross calls `installFileBegin`), Remove this driver, Back (Android) |
 | Developer | Developer mode, Dump textures, Dump models, Debug menu (`UI_OPT_VAR_DEBUG_MENU`, a press row; the dump rows and Debug menu only with Developer mode on, Debug menu not on the June 2001 demo), Free movement (`UI_OPT_FREE_MOVEMENT`, [developer] free_movement, with Developer mode on, every disc), Back |
 | Audio | Volume, Music, Effects, Output, Device, Back |
-| Controls | Remap (a list, ending with Ask Yorda for a hint on the discs with hints: `REMAP_TARGETS` in `settings.c`), Button configuration, Vibration, Hold type, Stick fix, the mouse camera's six rows, Circle back, Touch screen (a link, with a touch screen only), Back |
+| Controls | Remap (a list, ending with Ask Yorda for a hint on the discs with hints: `REMAP_TARGETS` in `settings.c`), Button configuration, Vibration, Button pictures (`[input] button_pictures`, every disc, title and pause), Hold type, Stick fix, the mouse camera's six rows, Circle back, Touch screen (a link, with a touch screen only), Back |
 | Touch screen (`UI_PAGE_TOUCH`) | Touch controls, Touch size, Touch opacity, Edit layout (`UI_OPT_TOUCH_EDIT`), Snap to grid, Grid size, Reset layout, Reset all layouts, Back |
 | Edit layout (`UI_PAGE_TOUCH_LAYOUT`) | no shown rows: the editor's own screen ([The touch layout editor](#the-touch-layout-editor)) |
 | Gameplay | Stick fix, Door fix, Second memory card (`UI_OPT_SECOND_CARD`, `[gameplay] second_memory_card`, its note `UI_STR_OPT_SECOND_CARD_NOTE`; the step calls `ico_opt_set_second_memory_card`, whose listener puts the card in at once), Film effect, Players, Light sword colour (`UI_OPT_VAR_SWORD_COLOUR`: Original, Red; hidden on ntsc, aug6 and jun26, `ui__variant_shown`), Stick (`UI_OPT_VAR_WEAPON`: Original, Insect net), Chains (`UI_PAGE_CHAINS`), Cutscenes (`UI_PAGE_CUTSCENES`), Difficulty (a link to `UI_PAGE_CUSTOMIZE`, shown from the pause menu only: `optShown` hides it while `onTitle()`), Back: the three links before Back as Controls' Touch screen; eleven rows once the game is cleared, the window's ten slots scroll. The rows a journey's difficulty holds are Customize's (below) |
@@ -1067,6 +1068,32 @@ cell's texels exactly), `pad_glyphs_piece_valid`, `pad_glyphs_piece_error`,
 `pad_glyphs_test_source` (a piece read from given text instead of its file) and
 `pad_glyphs_atlas_count`. Without `ICO_RD` no texture is made (`pad_glyphs_texture` returns 0).
 
+### The setting
+
+Options > Controls > **Button pictures** (`UI_OPT_BUTTON_PICTURES`, after Vibration and before
+Hold type, on the title and the pause menu, every disc and platform; note
+`UI_STR_BUTTON_PICTURES_NOTE`) holds `[input] button_pictures` (`port/game/options.h`
+`ico_opt_button_pictures`: -1 Auto, else the style's number). Its logic is `port/ui/settings_pads.c`
+(settings.c has its case lines only):
+
+- `ui_settings_pads_frame` resolves the style in force and calls `pad_glyphs_set_style` with it on
+  every call (cheap; it lets another set's atlases go): the chosen set, or under Auto the kind of
+  the controller pressed last (Xbox, Nintendo, else PlayStation; keyboard, mouse and touch give
+  PlayStation; Wii Classic only by hand). `port/ui/ui_host.c` calls it from `ui_host_vsync`, at the
+  frame's quiescent point after the pump read the pads and before the next step draws the menus and
+  prompts and the next present draws the photo and touch overlays, and once from `ui_host_init` for
+  the first frame; so a style chosen by hand or by Auto is in force before the frame's first
+  picture, in play as in Options. A change of the style or of where it came from logs `controls:
+  button pictures: Xbox (Auto, the last pad used), change 2` (the first 8, then every 100th).
+- A set `pad_glyphs_set_complete` refuses reads as Auto (`ui__pads_choice`; `controls: button
+  pictures: Xbox is not a complete set: Auto`, once a set), and the row's stepping skips it
+  (`ui__pads_step`: Auto, PlayStation, Xbox, Nintendo, Wii Classic Controller around).
+- The value text is the set's name (names, not translated) or `Auto (Xbox)` with the set Auto
+  picked (`ui__pads_text`); the key is written in memory at each step and saved with the page.
+
+Not covered: button names in sentences and on the Remap page, and pictures for Start, Select, the
+sticks and the d-pad.
+
 ### Where the pictures are drawn
 
 While a set is in force (`pad_glyphs_active`), the art takes the place of the disc's picture of the
@@ -1604,7 +1631,9 @@ The game code calls the menus at named places, each marked "PC port" in a commen
 rd starts, loads the font, installs the sync hook (the game's GS frame, the language, the UI scale
 of the [preset](ARCHITECTURE.md#terms)) and the record hook (`gif_HostFlush`, so the GS register
 decoder flushes before port text is recorded into the list), the two presentation overlays, the
-popup test switch and the quit handler; `ui_host_vsync` runs the popup clock once a vsync
+popup test switch, the first frame's button pictures and the quit handler; `ui_host_vsync` runs
+the popup clock once a vsync and resolves the next frame's button pictures
+(`ui_settings_pads_frame`, [The setting](#the-setting))
 (`port/ui/ui_host.h`; `port/ui/ui_host.c`; `port/ui/ui_internal.h` (`ui__set_record_hook`,
 `ui__set_sync_hook`)).
 
@@ -1777,7 +1806,11 @@ Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
   language's rule, the Japanese line-break rules.
 - `settings` (`test/settings_test.c`): the menu over fake PAL-shaped tables: pages and labels, the
   entry repoint, the title and pause rows' places, navigation through the real `layout_texture.c`,
-  the game's settings on the pages, what is written.
+  the game's settings on the pages, what is written. `testButtonPictures`: Auto's set from a faked
+  last pad kind (`ico_input_note_pad_kind`) with one change counted a change, Wii Classic only by
+  hand, the row's five values around from the title and the pause menu with the key written and
+  saved on leaving, an incomplete set (`pad_glyphs_test_source`) skipped and the file's word for it
+  read as Auto, an unknown word read as Auto.
 - `settings_states` (`test/settings_states_test.c`): the Save states page, the pause menu's row
   and the Continue screen's prompt over a fake host ([Save states](#save-states)).
 - `settings_extras` (`test/settings_extras_test.c`): the Extras page from the title and the pause

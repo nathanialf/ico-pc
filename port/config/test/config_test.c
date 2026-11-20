@@ -556,6 +556,10 @@ static void test_first_run(void)
     /* the Frame rate counter: Off, written with the file */
     CHECK(ico_config_get_bool("video.show_fps", 1) == 0);
     CHECK(text != NULL && strstr(text, "show_fps = false") != NULL);
+    /* Button pictures: auto, written with the file under [input] */
+    CHECK_STR(ico_config_get_string("input.button_pictures", "?"), "auto");
+    CHECK(text != NULL && strstr(text, "\n[input]\n") != NULL &&
+          strstr(text, "\nbutton_pictures = \"auto\"\n") != NULL);
     /* Downsampling: off, written with the file */
     CHECK_STR(ico_config_get_string("video.downsample", "?"), "off");
     CHECK(text != NULL && strstr(text, "downsample = \"off\"") != NULL);

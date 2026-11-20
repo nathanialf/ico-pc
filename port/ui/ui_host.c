@@ -21,6 +21,7 @@
 #include "photo_ui.h"
 #include "popup.h"
 #include "settings.h"
+#include "settings_pads.h"
 #include "strings.h"
 #include "touch_ui.h"
 #include "ui_fps.h"
@@ -120,6 +121,7 @@ void ui_host_init(void)
     rd_set_present_overlay_top(hostOverlayTop, NULL);
 #endif
     ui_popup_set_dev_test(truthy(getenv("ICO_UI_POPUP_TEST")));
+    ui_settings_pads_frame(); /* the button pictures of the first frame */
 #ifdef ICO_UI_HAVE_SDL
     ui_settings_set_quit_handler(hostQuit);
 #endif
@@ -130,6 +132,12 @@ void ui_host_vsync(unsigned int mainTick)
     ui_popup_dev_tick(mainTick);
     ui_popup_vsync();
     ui_settings_vsync(); /* Graphics > Apply's countdown */
+    /* the button pictures the next frame draws (Options > Controls > Button
+       pictures: its set, or Auto's from the controller pressed last, read
+       just before by the pump's ico_input_sdl_update); here, at the frame's
+       quiescent point, before the next step's menus and prompts and the
+       next present's photo and touch overlays */
+    ui_settings_pads_frame();
 }
 
 void ui_host_shutdown(void)

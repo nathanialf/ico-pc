@@ -434,6 +434,24 @@ A change takes effect the next time you start the game.
 - **Button configuration** opens the game's own screen for choosing which
   button does what. It applies on top of Remap controls. Pause menu only.
 - **Vibration** is On or Off, as the game's own setting. Pause menu only.
+- **Button pictures** chooses whose button pictures the game shows: in the
+  menus, in the game's own prompts (such as saving), on the Button
+  configuration screen, in photo mode and on the touch screen buttons.
+  **Auto** shows the buttons of the controller you used last: an Xbox
+  controller (or a Steam Controller) gets Xbox pictures, a Nintendo Switch
+  Pro Controller or a pair of Joy-Cons gets Nintendo pictures, and any other
+  controller, the keyboard, the mouse and the touch screen get the
+  PlayStation ones. The row shows which Auto picked, for example **Auto
+  (Xbox)**. You can also pick **PlayStation**, **Xbox**, **Nintendo**
+  (Switch, Wii U) or **Wii Classic Controller** yourself; the Wii Classic
+  Controller pictures are only used when you pick them. Buttons are shown by
+  where they sit on the controller, so the bottom face button is always the
+  one the game calls Cross. Not covered: button names written in sentences
+  and the Remap controls page stay as they are, Start, Select and the
+  sticks are still words, and other controllers (GameCube, Dreamcast, the
+  first Xbox, Ouya, PSP, Vita, the Wii Remote) have no pictures yet. It
+  shows from the title screen and the pause menu, on every disc. The
+  pictures are by MesaBlack.
 - **Hold type** is **Disc's own**, **A (hold)**, where Yorda's hand stays
   held while you keep R1 down, or **B (toggle)**, where you press R1 once to
   take her hand and again to let go. **Disc's own** is how the disc you play
@@ -1271,7 +1289,7 @@ Under `[video]`:
 | `effects_depth = true` | Lets an effects program such as ReShade see how far away things are. [About ReShade](RESHADE.md). |
 | `texture_pack_budget_mb`, `texture_pack_precache`, `texture_pack_cache_mb` | How much memory a texture pack may use. [About texture packs](TEXTURE_PACKS.md#if-the-pack-uses-a-lot-of-memory). |
 
-Under `[input]`, for the mouse camera and vibration:
+Under `[input]`, for the mouse camera, vibration and the button pictures:
 
 | Line | What it does |
 | --- | --- |
@@ -1281,6 +1299,7 @@ Under `[input]`, for the mouse camera and vibration:
 | `mouse_return = true` | The Camera swings back row. |
 | `mouse_hold = 0.75` | How many seconds the mouse must stay still before the camera swings back behind Ico. |
 | `rumble = true` | `false` stops all vibration: a gamepad's rumble and, on a phone, the phone's own. |
+| `button_pictures = "auto"` | The Button pictures row: `"auto"`, `"playstation"`, `"xbox"`, `"nintendo"` or `"wii_classic"`. Any other word counts as `"auto"`. |
 
 Under `[game]`:
 

@@ -897,4 +897,8 @@ const char *const ui_strings_ru_cobra838[UI_STR_COUNT] = {
     /* "This save state was made by version %s.\nIt cannot be resumed where it was saved,\nand it holds no checkpoint to continue from." */
     [UI_STR_STATES_CKPT_NONE] = NULL,
     [UI_STR_STATES_PAUSE_FIRST_LOAD] = NULL, /* "Pause the game to load this state" */
+    /* ---- new since v0.11.12: English until translated ---- */
+    [UI_STR_OPT_BUTTON_PICTURES] = NULL, /* "Button pictures" */
+    /* "The buttons shown in menus and photo mode. Auto follows the controller you used last." */
+    [UI_STR_BUTTON_PICTURES_NOTE] = NULL,
 };

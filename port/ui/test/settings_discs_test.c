@@ -152,8 +152,9 @@ static const Expect *expectFor(const char *slug)
 
 /* the rows every disc has, from both entries */
 static const UiSettingsOpt kEveryDisc[] = {
-    UI_OPT_MENU_LANGUAGE, UI_OPT_BRIGHTNESS,  UI_OPT_VIBRATION, UI_OPT_STICK_FIX, UI_OPT_DOOR_FIX,
-    UI_OPT_SKIP_OPENING,  UI_OPT_SECOND_CARD, UI_OPT_OUTPUT,    UI_OPT_DEVELOPER, UI_OPT_VAR_WEAPON,
+    UI_OPT_MENU_LANGUAGE, UI_OPT_BRIGHTNESS,   UI_OPT_VIBRATION,       UI_OPT_STICK_FIX,
+    UI_OPT_DOOR_FIX,      UI_OPT_SKIP_OPENING, UI_OPT_SECOND_CARD,     UI_OPT_OUTPUT,
+    UI_OPT_DEVELOPER,     UI_OPT_VAR_WEAPON,   UI_OPT_BUTTON_PICTURES,
 };
 
 /* the New Game draft's rows (Customize's three pages), every one on every
@@ -226,6 +227,13 @@ static void checkTitleRows(const Expect *e)
           "%s title: Circle goes back %d, want %d", e->slug,
           ui_settings_opt_shown(UI_OPT_CIRCLE_BACK), e->circleBack);
     CHECK(ui_settings_opt_shown(UI_OPT_HOLD_TYPE), "%s title: Hold type", e->slug);
+    /* Controls > Button pictures on every disc, Auto (no pad pressed yet:
+       PlayStation's, the disc's own) */
+    CHECK(ui_settings_opt_shown(UI_OPT_BUTTON_PICTURES) &&
+              ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_BUTTON_PICTURES) >= 0 &&
+              strcmp(ui_settings_value_text(UI_OPT_BUTTON_PICTURES), "Auto (PlayStation)") == 0,
+          "%s title: Button pictures on Controls, %s", e->slug,
+          ui_settings_value_text(UI_OPT_BUTTON_PICTURES));
     CHECK(strcmp(ui_settings_value_text(UI_OPT_HOLD_TYPE),
                  e->holdOwn ? "Disc’s own (B)" : "Disc’s own (A)") == 0 &&
               optionControlType == e->holdOwn,

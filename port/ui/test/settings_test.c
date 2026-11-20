@@ -33,6 +33,9 @@
 #include "popup.h"
 #include "ui_lang.h"             /* ui_settings_text_language */
 #include "settings_difficulty.h" /* the New Game draft */
+#include "pad_glyphs.h"          /* Controls > Button pictures */
+#include "pad_kind.h"            /* ico_pad_kind_reset */
+#include "settings_pads.h"
 
 static void testBuild(void)
 {
@@ -128,18 +131,17 @@ static void testBuild(void)
                                     UI_OPT_OUTPUT, UI_OPT_DEVICE, UI_OPT_BACK};
     static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_OPT_MUSIC_VOL, UI_STR_OPT_EFFECTS_VOL,
                                     UI_STR_OPT_OUTPUT, UI_STR_OPT_DEVICE,    UI_STR_BACK};
-    static const int ctlOpts[] = {UI_OPT_LINK,        UI_OPT_BUTTON_CONFIG, UI_OPT_VIBRATION,
-                                  UI_OPT_HOLD_TYPE,   UI_OPT_STICK_FIX,     UI_OPT_MOUSE_CAMERA,
-                                  UI_OPT_MOUSE_SENS,  UI_OPT_MOUSE_INVERT,  UI_OPT_MOUSE_SPEED,
-                                  UI_OPT_MOUSE_RANGE, UI_OPT_MOUSE_RETURN,  UI_OPT_CIRCLE_BACK,
-                                  UI_OPT_LINK,        UI_OPT_BACK};
-    static const int ctlStrs[] = {UI_STR_OPT_REMAP,        UI_STR_OPT_BUTTON_CONFIG,
-                                  UI_STR_OPT_VIBRATION,    UI_STR_OPT_HOLD_TYPE,
-                                  UI_STR_OPT_STICK_FIX,    UI_STR_OPT_MOUSE_CAMERA,
-                                  UI_STR_OPT_MOUSE_SENS,   UI_STR_OPT_MOUSE_INVERT,
-                                  UI_STR_OPT_MOUSE_SPEED,  UI_STR_OPT_MOUSE_RANGE,
-                                  UI_STR_OPT_MOUSE_RETURN, UI_STR_OPT_CIRCLE_BACK,
-                                  UI_STR_SECTION_TOUCH,    UI_STR_BACK};
+    static const int ctlOpts[] = {
+        UI_OPT_LINK,         UI_OPT_BUTTON_CONFIG, UI_OPT_VIBRATION,    UI_OPT_BUTTON_PICTURES,
+        UI_OPT_HOLD_TYPE,    UI_OPT_STICK_FIX,     UI_OPT_MOUSE_CAMERA, UI_OPT_MOUSE_SENS,
+        UI_OPT_MOUSE_INVERT, UI_OPT_MOUSE_SPEED,   UI_OPT_MOUSE_RANGE,  UI_OPT_MOUSE_RETURN,
+        UI_OPT_CIRCLE_BACK,  UI_OPT_LINK,          UI_OPT_BACK};
+    static const int ctlStrs[] = {
+        UI_STR_OPT_REMAP,           UI_STR_OPT_BUTTON_CONFIG, UI_STR_OPT_VIBRATION,
+        UI_STR_OPT_BUTTON_PICTURES, UI_STR_OPT_HOLD_TYPE,     UI_STR_OPT_STICK_FIX,
+        UI_STR_OPT_MOUSE_CAMERA,    UI_STR_OPT_MOUSE_SENS,    UI_STR_OPT_MOUSE_INVERT,
+        UI_STR_OPT_MOUSE_SPEED,     UI_STR_OPT_MOUSE_RANGE,   UI_STR_OPT_MOUSE_RETURN,
+        UI_STR_OPT_CIRCLE_BACK,     UI_STR_SECTION_TOUCH,     UI_STR_BACK};
     static const int touchOpts[] = {
         UI_OPT_TOUCH_MODE,  UI_OPT_TOUCH_SIZE,      UI_OPT_TOUCH_OPACITY,
         UI_OPT_TOUCH_EDIT,  UI_OPT_TOUCH_SNAP,      UI_OPT_TOUCH_GRID,
@@ -257,7 +259,7 @@ static void testBuild(void)
     CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 9),
           "display rows (Frame rate without a framerate key)");
     CHECK(labelsAre(UI_PAGE_AUDIO, audioOpts, audioStrs, 6), "audio rows");
-    CHECK(labelsAre(UI_PAGE_CONTROLS, ctlOpts, ctlStrs, 14), "controls rows");
+    CHECK(labelsAre(UI_PAGE_CONTROLS, ctlOpts, ctlStrs, 15), "controls rows");
     CHECK(labelsAre(UI_PAGE_TOUCH, touchOpts, touchStrs, 9), "touch screen rows");
     CHECK(ui_settings_page_rows(UI_PAGE_TOUCH_LAYOUT, NULL, NULL, NULL, 16) == 0,
           "the Edit layout page has no rows");
@@ -265,8 +267,8 @@ static void testBuild(void)
         /* Touch screen opens its page, Edit layout the editor's */
         int cl[16], co[16];
         const int cn = ui_settings_page_rows(UI_PAGE_CONTROLS, cl, co, NULL, 16);
-        CHECK(cn == 14 && co[12] == UI_OPT_LINK &&
-                  lt_ext_prop(cl[12])->right == ui_settings_page_layout(UI_PAGE_TOUCH),
+        CHECK(cn == 15 && co[13] == UI_OPT_LINK &&
+                  lt_ext_prop(cl[13])->right == ui_settings_page_layout(UI_PAGE_TOUCH),
               "Touch screen opens its page");
     }
     CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 11), "gameplay rows");
@@ -3452,14 +3454,15 @@ static void testGameOptions(void)
         const int ctlL = openPage(mainL, 4, UI_PAGE_CONTROLS);
         CHECK(rowShown(UI_PAGE_CONTROLS, UI_OPT_BUTTON_CONFIG) == !title &&
                   rowShown(UI_PAGE_CONTROLS, UI_OPT_VIBRATION) == !title &&
-                  rowShown(UI_PAGE_CONTROLS, UI_OPT_HOLD_TYPE),
-              "title %d: the game's controls %s; Hold type always shown", title,
+                  rowShown(UI_PAGE_CONTROLS, UI_OPT_HOLD_TYPE) &&
+                  rowShown(UI_PAGE_CONTROLS, UI_OPT_BUTTON_PICTURES),
+              "title %d: the game's controls %s; Button pictures and Hold type always shown", title,
               title ? "hidden" : "shown");
         checkPageFits(UI_PAGE_CONTROLS, title ? "Controls (title)" : "Controls (pause)");
         press(0x4000);
         CHECK(lt_ext_layout(ctlL)->curItem ==
                   ui_settings_row_of(UI_PAGE_CONTROLS,
-                                     title ? UI_OPT_HOLD_TYPE : UI_OPT_BUTTON_CONFIG),
+                                     title ? UI_OPT_BUTTON_PICTURES : UI_OPT_BUTTON_CONFIG),
               "title %d: down from Remap", title);
         press(0x10);
         CHECK(settle(mainL, 60), "Controls: back");
@@ -3534,6 +3537,10 @@ static void testGameOptions(void)
     press(0x8000);
     CHECK(iosPadActRequestEnable == 1, "Left: on again");
     press(0x4000);
+    CHECK(lt_ext_layout(ctlL)->curItem ==
+              ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_BUTTON_PICTURES),
+          "Down: Button pictures after Vibration");
+    press(0x4000);
     ico_opt_set_hold_type(0);
     optionControlType = 0;
     CHECK(strcmp(ui_settings_value_text(UI_OPT_HOLD_TYPE), "A (hold)") == 0, "hold type A (%s)",
@@ -3570,7 +3577,8 @@ static void testGameOptions(void)
     CHECK(ico_opt_hold_choice() == ICO_HOLD_HOLD, "Right: A again");
     press(0x1000);
     press(0x1000);
-    CHECK(lt_ext_layout(ctlL)->curItem == bc, "up twice: Button configuration");
+    press(0x1000);
+    CHECK(lt_ext_layout(ctlL)->curItem == bc, "up three times: Button configuration");
     press(0x40);
     CHECK(settle(59, 60), "Cross: the game's button configuration (%d)", current_layout_id);
     /* la_key_config's OK returns what ui_settings_key_config_back gives */
@@ -3613,7 +3621,8 @@ static void testGameOptions(void)
     CHECK(lt_ext_layout(ctlL)->curItem == remap && lt_ext_layout(ctlL)->defaultItem == remap,
           "title: off the hidden row (%d)", lt_ext_layout(ctlL)->curItem);
     CHECK(lt_ext_prop(bc)->upItem == remap &&
-              lt_ext_prop(bc)->downItem == ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_HOLD_TYPE),
+              lt_ext_prop(bc)->downItem ==
+                  ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_BUTTON_PICTURES),
           "title: the hidden row's links lead to shown rows (%d, %d)", lt_ext_prop(bc)->upItem,
           lt_ext_prop(bc)->downItem);
     for (int i = 0; i < 12; i++) {
@@ -4436,6 +4445,153 @@ static void testTouch(void)
     useConfig("version = 1\n");
 }
 
+/* the value text of Button pictures is want */
+static int padsText(const char *want)
+{
+    const char *v = ui_settings_value_text(UI_OPT_BUTTON_PICTURES);
+    if (strcmp(v, want) != 0) {
+        printf("  Button pictures reads \"%s\", want \"%s\"\n", v, want);
+        return 0;
+    }
+    return 1;
+}
+
+/* Controls > Button pictures (settings_pads.c): Auto's set from the
+   controller pressed last (ico_input_note_pad_kind, the device layer's
+   report), the change counted once, Wii Classic Controller only by hand;
+   the row on the title and from the pause menu, its five values around with
+   the key written, the choice saved on leaving the page; a set that is not
+   complete (pad_glyphs_test_source refuses a piece) skipped by the row and
+   read as Auto from the file; an unknown word read as Auto */
+static void testButtonPictures(void)
+{
+    static const char *const kText[5] = {"PlayStation", "Xbox", "Nintendo",
+                                         "Wii Classic Controller", "Auto (PlayStation)"};
+    static const char *const kKey[5] = {"playstation", "xbox", "nintendo", "wii_classic", "auto"};
+    static const int kStyle[5] = {ICO_PAD_GLYPHS_PLAYSTATION, ICO_PAD_GLYPHS_XBOX,
+                                  ICO_PAD_GLYPHS_NINTENDO, ICO_PAD_GLYPHS_WII_CLASSIC,
+                                  ICO_PAD_GLYPHS_PLAYSTATION};
+
+    static const struct {
+        int kind, style;
+        const char *text;
+    } kAuto[4] = {{ICO_PAD_KIND_XBOX, ICO_PAD_GLYPHS_XBOX, "Auto (Xbox)"},
+                  {ICO_PAD_KIND_NINTENDO, ICO_PAD_GLYPHS_NINTENDO, "Auto (Nintendo)"},
+                  {ICO_PAD_KIND_XBOX, ICO_PAD_GLYPHS_XBOX, "Auto (Xbox)"},
+                  {ICO_PAD_KIND_PLAYSTATION, ICO_PAD_GLYPHS_PLAYSTATION, "Auto (PlayStation)"}};
+
+    char p[1100];
+
+    useConfig("version = 1\n");
+    ico_pad_kind_reset();
+    ui__pads_reset();
+    CHECK(ico_opt_button_pictures() == ICO_BUTTON_PICTURES_AUTO, "Auto without the key");
+    for (int s = 0; s < ICO_PAD_GLYPHS_COUNT; s++) {
+        CHECK(pad_glyphs_set_complete(s), "set %d is complete", s);
+    }
+    /* Auto: the last controller's kind, one change counted a change */
+    CHECK(ui_settings_pads_frame() == ICO_PAD_GLYPHS_PLAYSTATION && ui__pads_changes() == 1 &&
+              padsText("Auto (PlayStation)"),
+          "Auto before any press: PlayStation, the first resolve counted (%u)", ui__pads_changes());
+    for (int i = 0; i < 4; i++) {
+        ico_input_note_pad_kind(kAuto[i].kind, "test");
+        CHECK(ui_settings_pads_frame() == kAuto[i].style && pad_glyphs_style() == kAuto[i].style &&
+                  ui__pads_changes() == (unsigned)(i + 2) && padsText(kAuto[i].text),
+              "Auto, last pad kind %d: style %d (%d, %u changes)", kAuto[i].kind, kAuto[i].style,
+              pad_glyphs_style(), ui__pads_changes());
+        CHECK(ui_settings_pads_frame() == kAuto[i].style && ui__pads_changes() == (unsigned)(i + 2),
+              "pad kind %d, the next frame: the same style, no change counted", kAuto[i].kind);
+    }
+    /* by hand: Wii Classic Controller and PlayStation, whatever the last pad */
+    ico_input_note_pad_kind(ICO_PAD_KIND_XBOX, "test");
+    ico_opt_set_button_pictures(ICO_BUTTON_PICTURES_WII_CLASSIC);
+    CHECK(ui_settings_pads_frame() == ICO_PAD_GLYPHS_WII_CLASSIC &&
+              pad_glyphs_style() == ICO_PAD_GLYPHS_WII_CLASSIC &&
+              padsText("Wii Classic Controller"),
+          "chosen: Wii Classic Controller with an Xbox pad last (%d)", pad_glyphs_style());
+    ico_opt_set_button_pictures(ICO_BUTTON_PICTURES_PLAYSTATION);
+    CHECK(ui_settings_pads_frame() == ICO_PAD_GLYPHS_PLAYSTATION && padsText("PlayStation"),
+          "chosen: PlayStation with an Xbox pad last");
+    ico_opt_set_button_pictures(ICO_BUTTON_PICTURES_AUTO);
+    ico_pad_kind_reset();
+    ui_settings_pads_frame();
+
+    /* the row, from the title and from the pause menu */
+    for (int title = 1; title >= 0; title--) {
+        stage_no = title ? 1 : 11;
+        useConfig("version = 1\n");
+        const int mainL = enterMain(title);
+        const int ctlL = openPage(mainL, 4, UI_PAGE_CONTROLS);
+        const int row = ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_BUTTON_PICTURES);
+        CHECK(row >= 0 && ui_settings_row_shown(row) &&
+                  strcmp(lt_ext_row_text(row), "Button pictures") == 0 &&
+                  padsText("Auto (PlayStation)"),
+              "title %d: the Button pictures row, Auto", title);
+        CHECK(noteStarting(UI_PAGE_CONTROLS, "The buttons shown in menus") >= 0,
+              "title %d: its note", title);
+        lt_ext_layout(ctlL)->curItem = row;
+        for (int i = 0; i < 5; i++) {
+            press(LT_PAD_RIGHT);
+            CHECK(padsText(kText[i]) &&
+                      strcmp(ico_config_get_string("input.button_pictures", ""), kKey[i]) == 0 &&
+                      pad_glyphs_style() == kStyle[i],
+                  "title %d: Right %d: %s, [input] button_pictures = %s, style %d", title, i + 1,
+                  kText[i], kKey[i], pad_glyphs_style());
+        }
+        press(LT_PAD_LEFT);
+        CHECK(padsText("Wii Classic Controller"), "title %d: Left from Auto: Wii Classic", title);
+        press(LT_PAD_LEFT);
+        press(LT_PAD_LEFT);
+        CHECK(padsText("Xbox") && pad_glyphs_style() == ICO_PAD_GLYPHS_XBOX,
+              "title %d: Left twice more: Xbox", title);
+        press(LT_PAD_TRIANGLE);
+        CHECK(settle(mainL, 60), "title %d: Controls: back", title);
+        path(p, sizeof(p), "settings_test.toml");
+        IcoToml *t = ico_toml_load(p);
+        CHECK(t != NULL && ico_toml_get(t, "input.button_pictures") != NULL &&
+                  strcmp(ico_toml_get(t, "input.button_pictures"), "xbox") == 0,
+              "title %d: leaving Controls saved button_pictures = \"xbox\"", title);
+        if (t) {
+            ico_toml_free(t);
+        }
+    }
+
+    /* Xbox not complete: the row skips it, the file's "xbox" reads as Auto
+       (which then draws PlayStation's for an Xbox pad) */
+    CHECK(pad_glyphs_test_source(ICO_PAD_GLYPHS_XBOX, 0, "<svg/>", 6) == 0 &&
+              !pad_glyphs_set_complete(ICO_PAD_GLYPHS_XBOX),
+          "a refused piece: Xbox is not complete");
+    useConfig("version = 1\n[input]\nbutton_pictures = \"xbox\"\n");
+    ico_input_note_pad_kind(ICO_PAD_KIND_XBOX, "test");
+    CHECK(ico_opt_button_pictures() == ICO_BUTTON_PICTURES_XBOX &&
+              ui__pads_choice() == ICO_BUTTON_PICTURES_AUTO &&
+              ui_settings_pads_frame() == ICO_PAD_GLYPHS_PLAYSTATION &&
+              padsText("Auto (PlayStation)"),
+          "the key's Xbox, not complete: Auto, PlayStation's drawn for an Xbox pad");
+    ui_settings_step(UI_OPT_BUTTON_PICTURES, 1);
+    CHECK(padsText("PlayStation"), "Right from Auto: PlayStation");
+    ui_settings_step(UI_OPT_BUTTON_PICTURES, 1);
+    CHECK(padsText("Nintendo") &&
+              strcmp(ico_config_get_string("input.button_pictures", ""), "nintendo") == 0,
+          "Right again: Nintendo, Xbox skipped");
+    ui_settings_step(UI_OPT_BUTTON_PICTURES, -1);
+    CHECK(padsText("PlayStation"), "Left: PlayStation, Xbox skipped");
+    CHECK(pad_glyphs_test_source(ICO_PAD_GLYPHS_XBOX, 0, NULL, 0) == 1 &&
+              pad_glyphs_set_complete(ICO_PAD_GLYPHS_XBOX),
+          "the file back: Xbox complete again");
+    ui_settings_step(UI_OPT_BUTTON_PICTURES, 1);
+    CHECK(padsText("Xbox"), "Right: Xbox again");
+
+    /* a word that is none of them: Auto */
+    useConfig("version = 1\n[input]\nbutton_pictures = \"sega\"\n");
+    CHECK(ico_opt_button_pictures() == ICO_BUTTON_PICTURES_AUTO && padsText("Auto (Xbox)"),
+          "an unknown word: Auto");
+    ico_pad_kind_reset();
+    useConfig("version = 1\n");
+    pad_glyphs_set_style(ICO_PAD_GLYPHS_PLAYSTATION);
+    ui__pads_reset();
+}
+
 /* whether opt has a row on page that the page's rule shows (in the window
    or scrolled out of it): -1 for no row of opt on the page */
 static int jpnRowShown(UiSettingsPage page, UiSettingsOpt opt)
@@ -4732,6 +4888,7 @@ int main(int argc, char **argv)
     testEffects();
     testGlowSmooth();
     testTouch();
+    testButtonPictures();
     if (failures) {
         printf("settings_test: %d failure(s)\n", failures);
         return 1;

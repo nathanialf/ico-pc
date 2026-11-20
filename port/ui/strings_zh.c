@@ -407,6 +407,8 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_VAL_HOLD_DISC_B] = "依光碟而定（B）",
     [UI_STR_HOLD_TYPE_NOTE] =
         "A：按住 R1 期間牽著 Yorda 的手。B：按一下 R1 牽起她的手，再按一下放開。",
+    [UI_STR_OPT_BUTTON_PICTURES] = "按鈕圖示",
+    [UI_STR_BUTTON_PICTURES_NOTE] = "選單與照相模式中顯示的按鈕圖示。自動會依照最後使用的控制器。",
     [UI_STR_STICK_FIX_ALSO_NOTE] = "「遊戲」中也有此項。",
     [UI_STR_ACH_POPUPS_ALSO_NOTE] = "「成就」中也有此項。",
     [UI_STR_PLAYERS_NOTE] = "2：由第二支手把操控 Yorda。",

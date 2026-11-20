@@ -2115,7 +2115,7 @@ static void testQuitGame(void)
    Mouse camera speed, Mouse camera range and Camera swings back follow
    Invert (mouse_camera_speed, mouse_full_range, mouse_return, written only
    when changed); the six mouse rows come after Hold type, hidden on
-   Android; fourteen rows (the pause menu with a touch screen: its Touch
+   Android; fifteen rows (the pause menu with a touch screen: its Touch
    screen row) fit 11 lines apart */
 static int s_i17aTouch;
 
@@ -2238,8 +2238,9 @@ static void testMouseCamera(void)
             }
             const int remap = ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_LINK);
             const int below = lt_ext_prop(remap)->downItem;
-            /* Hold type shows on the title too ([gameplay] hold_type) */
-            const UiSettingsOpt want = title ? UI_OPT_HOLD_TYPE : UI_OPT_BUTTON_CONFIG;
+            /* Button pictures and Hold type show on the title too ([input]
+               button_pictures, [gameplay] hold_type) */
+            const UiSettingsOpt want = title ? UI_OPT_BUTTON_PICTURES : UI_OPT_BUTTON_CONFIG;
             CHECK(below == ui_settings_row_of(UI_PAGE_CONTROLS, want),
                   "android %d, title %d: down from Remap (%d)", android, title, below);
             if (!android) {
@@ -2270,7 +2271,7 @@ static void testMouseCamera(void)
     }
     ico_video_set_android(0);
 
-    /* fourteen rows with a touch screen from the pause menu: the window's
+    /* fifteen rows with a touch screen from the pause menu: the window's
        slots full, the last box inside the 226 lines */
     s_i17aTouch = 1;
     ui_settings_set_touch_query(i17aTouch);
@@ -2280,10 +2281,10 @@ static void testMouseCamera(void)
         frame(0);
     }
     int n = 0, slots = 0;
-    CHECK(ui_settings_page_scroll(UI_PAGE_CONTROLS, &n, NULL, &slots) == 1 && n == 14 &&
+    CHECK(ui_settings_page_scroll(UI_PAGE_CONTROLS, &n, NULL, &slots) == 1 && n == 15 &&
               slots == WIN_SLOTS,
-          "fourteen rows shown, %d in view (%d)", slots, n);
-    checkPageFits(UI_PAGE_CONTROLS, "Controls, fourteen rows (touch screen)");
+          "fifteen rows shown, %d in view (%d)", slots, n);
+    checkPageFits(UI_PAGE_CONTROLS, "Controls, fifteen rows (touch screen)");
     press(0x10);
     CHECK(settle(mainL, 60), "Controls: back");
     ui_settings_set_touch_query(NULL);
@@ -2965,7 +2966,7 @@ static void testDuplicatedRows(void)
               "row_of returns the first of several rows of one option");
     }
 
-    /* the fullest Controls page (pause menu, mouse and touch): fourteen rows
+    /* the fullest Controls page (pause menu, mouse and touch): fifteen rows
        fit in every language */
     useConfig("version = 1\n");
     ico_video_set_android(0);
@@ -2983,11 +2984,11 @@ static void testDuplicatedRows(void)
         for (int j = 0; j < n; j++) {
             shown += ui_settings_row_shown(labels[j]);
         }
-        CHECK(shown == 14, "language %d: Controls shows fourteen rows (%d)", i, shown);
+        CHECK(shown == 15, "language %d: Controls shows fifteen rows (%d)", i, shown);
         CHECK(strcmp(lt_ext_row_text(ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_STICK_FIX)),
                      ui_str(UI_STR_OPT_STICK_FIX)) == 0,
               "language %d: the stick fix label", i);
-        checkPageFits(UI_PAGE_CONTROLS, "Controls, fourteen rows");
+        checkPageFits(UI_PAGE_CONTROLS, "Controls, fifteen rows");
         press(0x10);
         CHECK(settle(mainL, 60), "language %d: Controls: back", i);
     }
@@ -4177,7 +4178,7 @@ static void testOtherDiscPointer(const char *slug)
 }
 
 /* Controls > Touch screen (UI_PAGE_TOUCH): the link only with a touch
-   screen; Controls' fourteen rows and the page's nine fit from both
+   screen; Controls' fifteen rows and the page's nine fit from both
    entries; the overlay's three rows moved there (their values, steps, save
    and read back as [input] touch_mode, touch_size, touch_opacity); the
    overlay's note on Touch controls; Back to Controls on its Touch screen

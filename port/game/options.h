@@ -75,6 +75,10 @@
  *                                 menu words and subtitles, drawn as text
  *                                 over the English disc data: "" none or
  *                                 ru-bobttz, ru-cobra838 or pt-br
+ *   [input] button_pictures
+ *                          "auto" the button pictures drawn: "auto" (the
+ *                                 controller pressed last), "playstation",
+ *                                 "xbox", "nintendo" or "wii_classic"
  *   [dev] debug_option     0      with developer mode: non-zero loads the
  *                                 debug option table the Debug Mode page saves
  *
@@ -406,6 +410,32 @@ int ico_opt_hold_choice_store(void);
    318, reached only on a disc whose layout tables are not recognised): sets
    the type, writes the key and saves config.toml at once. */
 void ico_opt_hold_type_toggled(int type);
+/* [input] button_pictures: whose button pictures the menus, the prompts,
+   photo mode and the touch screen draw (Options > Controls > Button
+   pictures; port/ui/settings_pads.c resolves it once a frame).  "auto"
+   (ICO_BUTTON_PICTURES_AUTO, the default: the controller pressed last,
+   port/input/input.h ico_input_last_pad_kind; Wii Classic Controller is
+   never chosen by Auto), "playstation" (the disc's own pictures), "xbox",
+   "nintendo" (Switch, Wii U) or "wii_classic".  The numbers 0..3 are
+   port/ui/pad_glyphs.h's IcoPadGlyphStyle.  Another word reads as auto,
+   logged once.  Not a pad-recording key: it changes what is drawn only.
+   A set the build cannot draw whole reads as auto too (settings_pads.c,
+   which can ask the pictures; this file cannot). */
+#define ICO_BUTTON_PICTURES_AUTO (-1)
+#define ICO_BUTTON_PICTURES_PLAYSTATION 0
+#define ICO_BUTTON_PICTURES_XBOX 1
+#define ICO_BUTTON_PICTURES_NINTENDO 2
+#define ICO_BUTTON_PICTURES_WII_CLASSIC 3
+#define ICO_BUTTON_PICTURES_COUNT 4
+int ico_opt_button_pictures(void);
+/* out of -1..3 sets auto */
+void ico_opt_set_button_pictures(int choice);
+/* the key's word: "auto", "playstation", "xbox", "nintendo", "wii_classic"
+   ("auto" for anything else) */
+const char *ico_opt_button_pictures_name(int choice);
+/* Writes the run's choice into [input] button_pictures without saving the
+   file: 0, or -1 when it cannot be set. */
+int ico_opt_button_pictures_store(void);
 /* Forget the run-time values: each option is read from the config again on
    its next use (and the characters' colours, appearance.h).  The difficulty
    rows are the journey's and are kept. */

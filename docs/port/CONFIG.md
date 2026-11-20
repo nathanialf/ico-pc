@@ -375,6 +375,20 @@ The bindings and the input switches, applied over the defaults at start
 | `touch_mode` | string | `"auto"` | `off`, `auto`, `always`, `always_scenes` |
 | `touch_size` | string | `"medium"` | `small`, `medium`, `large` |
 | `touch_opacity` | number | `75` | 10..100 |
+| `button_pictures` | string | `"auto"` | `auto`, `playstation`, `xbox`, `nintendo`, `wii_classic` (Options > Controls > Button pictures) |
+
+`button_pictures` is not read by the input layer: `port/game/options.c` (`ico_opt_button_pictures`,
+`ico_opt_button_pictures_store`) reads and writes it, and another word reads as `auto` with the
+line `options: [input] button_pictures = "sega" is not one of auto, playstation, xbox, nintendo,
+wii_classic: auto`. `port/ui/settings_pads.c` resolves it once a frame (`ui_settings_pads_frame`,
+called by `port/ui/ui_host.c` `ui_host_vsync` and `ui_host_init`): `auto` takes the kind of the
+controller pressed last (`port/input/input.h` `ico_input_last_pad_kind`: Xbox, Nintendo, else
+PlayStation; never Wii Classic), and a set that `port/ui/pad_glyphs.h` (`pad_glyphs_set_complete`)
+says is not complete reads as `auto` (`controls: button pictures: Xbox is not a complete set:
+Auto`, once a set). A change of the set in force or of where it came from logs `controls: button
+pictures: Xbox (Auto, the last pad used), change 2` or `... Nintendo (chosen in Options), change
+3` (the first 8, then every 100th). It changes what is drawn only: not a simulation key. The
+first-run file writes it under `[input]`.
 
 The bindings themselves are `kb.<target>`, `mouse.<target>` and `pad.<target>` for each pad target
 (`cross`, `circle`, `lstick_up`, ...; `bindings.c` (`target_names`)), plus `kb.walk`; a value is
