@@ -284,13 +284,7 @@ enum {
     STAT_CAPTURES,
     STAT_SAVES,
     STAT_ENEMIES,
-    STAT_NEWGAME_PLUS,
-    STAT_MIRROR,
-    STAT_ACHIEVEMENTS,
     STAT_DIFFICULTY, /* the mode, "n / N" with a knock-down limit, Permadeath */
-    STAT_ASSISTS,    /* the heading; the active assists one a line under it */
-    STAT_ASSIST_1,
-    STAT_ASSIST_2,
     STAT_AREA,
     STAT_LINES
 };
@@ -3652,19 +3646,9 @@ static void addEntryLayout(int e, int first, int last)
 #define STATS_GAP 10 /* between a label and its value */
 #define STATS_BACK_MARGIN 8
 
-static const int kStatLabel[STAT_LINES] = {UI_STR_STATS_PLAY_TIME,
-                                           UI_STR_STATS_DEATHS,
-                                           UI_STR_STATS_CAPTURES,
-                                           UI_STR_STATS_SAVES,
-                                           UI_STR_STATS_ENEMIES,
-                                           UI_STR_OPT_NEWGAME_PLUS,
-                                           UI_STR_OPT_MIRROR,
-                                           UI_STR_SECTION_ACHIEVEMENTS,
-                                           UI_STR_DIFF_LINE,
-                                           UI_STR_STATS_ASSISTS,
-                                           0,
-                                           0,
-                                           UI_STR_STATS_AREA};
+static const int kStatLabel[STAT_LINES] = {
+    UI_STR_STATS_PLAY_TIME, UI_STR_STATS_DEATHS, UI_STR_STATS_CAPTURES, UI_STR_STATS_SAVES,
+    UI_STR_STATS_ENEMIES,   UI_STR_DIFF_LINE,    UI_STR_STATS_AREA};
 
 /* the backdrop, then each line's label and value; returns the last row */
 static int buildStats(void)
@@ -3784,8 +3768,8 @@ static int achUnlocked(void)
    puts every row back to its defaultMask before the procs run, and the
    default follows the last frame's choice so the lines fade with the menu.
    Shown while a stage runs (not the title's stage 1) and photo mode is
-   off; the visible lines are packed from the top, the assists' only those
-   on, the area's only where the save screen names one. */
+   off; the visible lines are packed from the top, the area's only where
+   the save screen names one. */
 static void pauseStats(int show)
 {
     char text[STAT_LINES][96];
@@ -3795,38 +3779,21 @@ static void pauseStats(int show)
     }
     if (show) {
         ui_settings_apply_language();
-        const int got = achUnlocked();
-        const int n = ico_ach_count();
         playTimeText(ico_gs_play_frames(), text[STAT_PLAY_TIME], sizeof(text[0]));
         snprintf(text[STAT_DEATHS], sizeof(text[0]), "%u", ico_gs_run_game_overs());
         snprintf(text[STAT_CAPTURES], sizeof(text[0]), "%u", ico_gs_run_captures());
         snprintf(text[STAT_SAVES], sizeof(text[0]), "%u", ico_gs_run_saves());
         snprintf(text[STAT_ENEMIES], sizeof(text[0]), "%u", ico_gs_run_enemies());
-        snprintf(text[STAT_NEWGAME_PLUS], sizeof(text[0]), "%s", onOff(gFlagGameClear != 0));
-        snprintf(text[STAT_MIRROR], sizeof(text[0]), "%s", onOff(ico_opt_mirror()));
-        snprintf(text[STAT_ACHIEVEMENTS], sizeof(text[0]), "%d / %d", got, n);
         for (int i = 0; i < STAT_LINES; i++) {
-            on[i] = i < STAT_ASSISTS;
+            on[i] = 1;
         }
         if (ico_gs_run_partial()) {
             /* an older save kept no count of these: hidden rather than
                counted from the load, until a New Game */
             on[STAT_SAVES] = on[STAT_ENEMIES] = 0;
         }
-        /* the journey's difficulty has a line of its own (Shadows never
-           take Yorda is one of its rows, not an assist) */
+        /* the journey's difficulty has a line of its own */
         ui__diff_line_text(text[STAT_DIFFICULTY], sizeof(text[0]));
-        const int assist[2] = {ico_opt_stick_fix(), ico_opt_developer_mode()};
-        static const int kAssistStr[2] = {UI_STR_OPT_STICK_FIX, UI_STR_OPT_DEVELOPER_MODE};
-        int k = STAT_ASSIST_1;
-        for (int a = 0; a < 2; a++) {
-            if (assist[a]) {
-                snprintf(text[k], sizeof(text[0]), "%s", ui_str((UiStrId)kAssistStr[a]));
-                on[k++] = 1;
-            }
-        }
-        on[STAT_ASSISTS] = k > STAT_ASSIST_1;
-        text[STAT_ASSISTS][0] = '\0';
         const char *area = areaName(stage_no);
         on[STAT_AREA] = area != NULL;
         snprintf(text[STAT_AREA], sizeof(text[0]), "%s", area ? area : "");
@@ -3863,7 +3830,7 @@ static void pauseStats(int show)
         b->defaultMask = shown ? 0 : 1;
         lt_mask_property(s_statBack, shown ? 0 : 1);
         /* three field lines over the first line's box and one under the
-           last's: thirteen lines end at 198, above the lower bar (200) */
+           last's: seven lines end at 126, above the lower bar (200) */
         b->dispY = STATS_Y - 3;
         b->dispH = 2 * (shown * STATS_PITCH + 4);
     }

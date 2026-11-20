@@ -1425,7 +1425,7 @@ static void testPhoto(void)
  * enemies defeated and a save in this run.  Shown while a stage runs, the
  * labels from x 300 and every line between the black bars (field lines 38
  * to 198), the values the port's figures; hidden on the title's stage and
- * in photo mode; the assists' line only with one on; the area only where
+ * in photo mode; the area only where
  * the save screen names one; the game's rows where they were. */
 /* the pause entry layout's label row with this text (shown or not), -1 */
 static int statLabel(const char *text)
@@ -1517,7 +1517,7 @@ static void testPauseStats(void)
     init_layout_texture(2);
     const int ph = ui_settings_photo_row();
     const LtProp *el = lt_ext_layout(ui_settings_entry_layout(57));
-    CHECK(el->first == ph && el->last > ph + 2 * 13, "the lines after Photo mode (%d .. %d)",
+    CHECK(el->first == ph && el->last > ph + 2 * 7, "the lines after Photo mode (%d .. %d)",
           el->first, el->last);
     for (int r = ph + 1; r < el->last; r++) {
         CHECK(lt_ext_prop(r)->defaultMask && !lt_ext_prop(r)->selectable,
@@ -1545,31 +1545,28 @@ static void testPauseStats(void)
     CHECK(v && strcmp(v, "1") == 0, "Saves \"%s\"", v ? v : "(hidden)");
     v = statValue(UI_STR_STATS_ENEMIES);
     CHECK(v && strcmp(v, "5") == 0, "Enemies \"%s\"", v ? v : "(hidden)");
-    v = statValue(UI_STR_OPT_NEWGAME_PLUS);
-    CHECK(v && strcmp(v, "Off") == 0, "New Game+ \"%s\"", v ? v : "(hidden)");
-    v = statValue(UI_STR_OPT_MIRROR);
-    CHECK(v && strcmp(v, "Off") == 0, "Mirror mode \"%s\"", v ? v : "(hidden)");
-    char want[32];
-    snprintf(want, sizeof(want), "0 / %d", ico_ach_count());
-    v = statValue(UI_STR_SECTION_ACHIEVEMENTS);
-    CHECK(v && strcmp(v, want) == 0, "Achievements \"%s\" (want \"%s\")", v ? v : "(hidden)", want);
     v = statValue(UI_STR_DIFF_LINE);
     CHECK(v && strcmp(v, ui_str(UI_STR_DIFF_NORMAL)) == 0, "Difficulty \"%s\"", v ? v : "(hidden)");
     v = statValue(UI_STR_STATS_AREA);
     CHECK(v && strcmp(v, ui_str(UI_STR_MT_LOC_MAIN_GATE)) == 0, "Area \"%s\"", v ? v : "(hidden)");
-    CHECK(statValue(UI_STR_STATS_ASSISTS) == NULL, "no assist on: no Assists line");
+    /* the journey's other facts are not lines here (the Customize view and
+       the Achievements page show them) */
+    CHECK(statLabel(ui_str(UI_STR_OPT_NEWGAME_PLUS)) < 0 &&
+              statLabel(ui_str(UI_STR_OPT_MIRROR)) < 0 &&
+              statLabel(ui_str(UI_STR_SECTION_ACHIEVEMENTS)) < 0,
+          "no New Game+, Mirror mode or Achievements line");
+    CHECK(shown == 2 * 7 + 1, "seven lines and the backdrop (%d rows)", shown);
     /* the lines packed from the top, a pitch apart */
     const int pt = statLabel(ui_str(UI_STR_STATS_PLAY_TIME)),
               de = statLabel(ui_str(UI_STR_STATS_DEATHS)),
-              ar = statLabel(ui_str(UI_STR_STATS_AREA)),
-              ac = statLabel(ui_str(UI_STR_SECTION_ACHIEVEMENTS));
+              ar = statLabel(ui_str(UI_STR_STATS_AREA)), df = statLabel(ui_str(UI_STR_DIFF_LINE));
     CHECK(lt_ext_prop(pt)->dispX == 300 &&
               lt_ext_prop(pt + 1)->dispX + lt_ext_prop(pt + 1)->dispW <= 610,
           "from x 300 to 610");
     CHECK(lt_ext_prop(de)->dispY > lt_ext_prop(pt)->dispY &&
               lt_ext_prop(ar)->dispY ==
-                  lt_ext_prop(ac)->dispY + 2 * (lt_ext_prop(de)->dispY - lt_ext_prop(pt)->dispY),
-          "Area right under the Difficulty line (under Achievements) when no assist is on");
+                  lt_ext_prop(df)->dispY + (lt_ext_prop(de)->dispY - lt_ext_prop(pt)->dispY),
+          "Area right under the Difficulty line");
     /* the Photo mode row's box ends before the lines; the game's rows
        where they were */
     CHECK(lt_ext_prop(ph)->dispX + lt_ext_prop(ph)->dispW < 300, "Photo mode's box ends at x %d",
@@ -1591,13 +1588,8 @@ static void testPauseStats(void)
           v ? v : "(hidden)");
     v = statValue(UI_STR_STATS_DEATHS);
     CHECK(v && strcmp(v, "4") == 0, "Deaths \"%s\"", v ? v : "(hidden)");
-    v = statValue(UI_STR_OPT_NEWGAME_PLUS);
-    CHECK(v && strcmp(v, "On") == 0, "New Game+ \"%s\"", v ? v : "(hidden)");
-    v = statValue(UI_STR_OPT_MIRROR);
-    CHECK(v && strcmp(v, "On") == 0, "Mirror mode \"%s\"", v ? v : "(hidden)");
 
-    /* the journey's line: the mode, the knock-down count by the scope, Permadeath
-       (Shadows never take Yorda is a row of the difficulty, not an assist) */
+    /* the journey's line: the mode, the knock-down count by the scope, Permadeath */
     {
         IcoDifficulty hard;
         char line[96];
@@ -1635,29 +1627,14 @@ static void testPauseStats(void)
         frame(0);
     }
 
-    /* the assists: the line and one line for each on, nothing for those off */
+    /* the assists are not lines here: nothing is added with them on */
     ico_opt_set_developer_mode(1);
-    frame(0);
-    const int as = statLabel(ui_str(UI_STR_STATS_ASSISTS));
-    CHECK(as >= 0 && !lt_ext_prop(as)->masked, "an assist on: the Assists line");
-    if (as >= 0) {
-        CHECK(!lt_ext_prop(as + 3)->masked &&
-                  strcmp(lt_ext_row_text(as + 3), ui_str(UI_STR_OPT_DEVELOPER_MODE)) == 0 &&
-                  lt_ext_prop(as + 5)->masked,
-              "Developer mode on, Shadows never take Yorda not an assist (\"%s\")",
-              lt_ext_row_text(as + 3));
-    }
-    statsShown(&placed);
-    CHECK(placed, "with the assists, every line between the bars");
     ico_opt_set_stick_fix(1);
     frame(0);
-    CHECK(statsShown(&placed) == 2 * 13 + 1 && placed,
-          "every line (the two assists, the difficulty and the area): still between the bars");
-    if (as >= 0) {
-        CHECK(strcmp(lt_ext_row_text(as + 3), ui_str(UI_STR_OPT_STICK_FIX)) == 0 &&
-                  strcmp(lt_ext_row_text(as + 5), ui_str(UI_STR_OPT_DEVELOPER_MODE)) == 0,
-              "both assists, one a line");
-    }
+    CHECK(statsShown(&placed) == 2 * 7 + 1 && placed &&
+              statLabel(ui_str(UI_STR_OPT_DEVELOPER_MODE)) < 0 &&
+              statLabel(ui_str(UI_STR_OPT_STICK_FIX)) < 0,
+          "both assists on: the same seven lines, between the bars");
     /* each language: a label and its value never overlap once the label is
        set to fit its box (layout_ext.c: down to 60 %) */
     for (int g = 2; g <= 6; g++) {
@@ -1686,8 +1663,6 @@ static void testPauseStats(void)
     ico_opt_set_mirror(0);
     gFlagGameClear = 0;
     frame(0);
-    CHECK(statValue(UI_STR_STATS_ASSISTS) == NULL && lt_ext_prop(as + 3)->masked,
-          "the assists off again: hidden");
 
     /* a stage the save screen has no name for: no Area line */
     stage_no = 39;

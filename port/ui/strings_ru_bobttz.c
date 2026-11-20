@@ -452,7 +452,6 @@ const char *const ui_strings_ru_bobttz[UI_STR_COUNT] = {
     [UI_STR_STATS_CAPTURES] = "Йорда схвачена",
     [UI_STR_STATS_SAVES] = "Число сохранений",
     [UI_STR_STATS_ENEMIES] = "Число побежденных противников",
-    [UI_STR_STATS_ASSISTS] = "Помощь",
     [UI_STR_STATS_AREA] = "Зона",
     [UI_STR_PHOTO_ACT_MOVE] = "двигать",
     [UI_STR_PHOTO_ACT_LOOK] = "вращать",

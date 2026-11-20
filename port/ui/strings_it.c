@@ -468,7 +468,6 @@ const char *const
                 [UI_STR_STATS_CAPTURES] = "Yorda rapita",
                 [UI_STR_STATS_SAVES] = "Salvataggi di questo viaggio",
                 [UI_STR_STATS_ENEMIES] = "Nemici sconfitti in questo viaggio",
-                [UI_STR_STATS_ASSISTS] = "Aiuti",
                 [UI_STR_STATS_AREA] = "Luogo",
                 [UI_STR_PHOTO_ACT_MOVE] = "muovi",
                 [UI_STR_PHOTO_ACT_LOOK] = "guarda",

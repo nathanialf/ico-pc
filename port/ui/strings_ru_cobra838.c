@@ -450,7 +450,6 @@ const char *const ui_strings_ru_cobra838[UI_STR_COUNT] = {
     [UI_STR_STATS_CAPTURES] = "Кол-во похизений Йорды",
     [UI_STR_STATS_SAVES] = "Сохранения за это прохождение",
     [UI_STR_STATS_ENEMIES] = "Побежденные враги за это прохождение",
-    [UI_STR_STATS_ASSISTS] = "Помощь",
     [UI_STR_STATS_AREA] = "Область",
     [UI_STR_PHOTO_ACT_MOVE] = "движение",
     [UI_STR_PHOTO_ACT_LOOK] = "осмотр",

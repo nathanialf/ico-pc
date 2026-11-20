@@ -451,7 +451,6 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_STATS_CAPTURES] = "Yorda captured",
     [UI_STR_STATS_SAVES] = "Saves this journey",
     [UI_STR_STATS_ENEMIES] = "Enemies defeated this journey",
-    [UI_STR_STATS_ASSISTS] = "Assists",
     [UI_STR_STATS_AREA] = "Area",
     [UI_STR_PHOTO_ACT_MOVE] = "move",
     [UI_STR_PHOTO_ACT_LOOK] = "look",
