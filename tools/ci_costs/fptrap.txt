@@ -822,6 +822,9 @@ rd_vu_rec_early_ab_compute 59.51  # estimate: 29.6 s local (merge-wt_FIX-P4a-202
 rd_vu_rec_early_ab_targets 61.11  # estimate: 30.4 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.01
 rd_vu_rec_size_ab 125.06  # estimate: 62.3 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.01
 rd_vu_rec_size_ab_mali 127.14  # estimate: 63.3 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.01
+rd_vu_share 0.01  # estimate: a CPU unit test like rd_vu_flat0 (not run here)
+rd_vu_share_ab 85.00  # estimate: rd_vu_flat0_ab / 6 (one of its twelve fixtures, the heaviest; not run here)
+rd_vu_share_gl 54.25  # estimate: rd_vu_flat0_gl / 8 (one of its twelve fixtures, the heaviest; not run here)
 rd_vu_skin_check 1.94
 rd_vu_skin_check_123 5.94  # estimate: 3.0 s local (merge-wt_FIX-P6a2-20261116T042614Z.lvp.log) x 2.01
 rd_vu_skin_check_123_attach 16.63  # estimate: 8.3 s local (merge-wt_FIX-P6a2-20261116T042614Z.lvp.log) x 2.01

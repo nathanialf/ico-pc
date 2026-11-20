@@ -86,6 +86,8 @@ set(_rdfx_q_aura_box_reads "aura box on: ([0-9]+) feedback reads in two passes")
 set(_rdfx_q_pass_objects "render passes: [0-9]+ begun, ([0-9]+) as VkRenderPass objects")
 # the index compaction: list 0's triangles it left out
 set(_rdfx_q_vu_compact_left_out "VU index compaction on: ([0-9]+) of [0-9]+ list 0 triangles left out")
+# the shared vertices: the triangles drawn with them (rd_vu_share.h)
+set(_rdfx_q_vu_shared_triangles "VU shared vertices on: ([0-9]+) triangles")
 # the VU family: the pre-pass's draws, the merge's joined draws, the store plan,
 # the cleared sources read as their colour, the record by compute dispatches
 set(_rdfx_q_prepass_draws "VU pre-pass on: [0-9]+ passes, [0-9]+ vertices in ([0-9]+) draws")
