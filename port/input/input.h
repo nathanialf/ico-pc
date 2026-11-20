@@ -84,6 +84,18 @@ void ico_input_frame_for_port(int port, IcoPadFrame *out);
    bytes 20 and 21, active low. fumi/ios/pad.c reads the default table's
    buttons through it. */
 unsigned int ico_pad_menu_word(const void *libpad_buf);
+/* The menus' view of the left stick's x (the byte the game holds in
+   pad[0].ana[2], 0 left, 255 right). Mirror mode negates the frame's stick
+   x for the flipped 3D picture, but the menus are drawn unflipped
+   (port/render/rd_replay.c mirrorUi), so with the option on this gives the
+   reflection 255 - x back and the stick moves a menu's cursor the way it
+   was pushed; with it off, x unchanged. It follows the option, not the
+   frame's source, so a recording of a mirrored run (its frames as negated)
+   replays as it ran. The game's lt_analog2Pad (common/src/layout_texture.c),
+   the stick's d-pad emulation of every layout, reads the stick through it. */
+unsigned char ico_pad_menu_stick_x(unsigned char x);
+/* How many times ico_pad_menu_stick_x reflected x (the option on). */
+unsigned int ico_pad_menu_stick_x_reflected(void);
 
 /* Rumble. act = the 6 bytes scePadSetActDirect gets, align = the bytes
    scePadSetActAlign set (align[i] = the actuator data byte i drives: 0 the

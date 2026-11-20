@@ -187,8 +187,17 @@ static void display_texture_fade_cancel_chk(int from, int to)
     }
 }
 
+/* PC port: port/input/pad_host.c (Mirror mode: the menus' view of the stick) */
+unsigned char ico_pad_menu_stick_x(unsigned char x);
+
 void lt_analog2Pad(void)
 {
+    /* PC port: Mirror mode negates the stick's x for the flipped 3D
+       picture, but the layouts are drawn unflipped, so their Left and
+       Right take the stick as it was pushed (input.h ico_pad_menu_stick_x;
+       the stick's byte itself is left as the frame gave it) */
+    const unsigned char x = ico_pad_menu_stick_x(pad[0].ana[2]);
+
     if (pad[0].ana[3] < 20) {
         pad[0].now |= 0x1000;
         if ((lastButton & 0x1000) == 0) {
@@ -201,13 +210,13 @@ void lt_analog2Pad(void)
             pad[0].flags |= 0x4000;
         }
     }
-    if (pad[0].ana[2] < 20) {
+    if (x < 20) {
         pad[0].now |= 0x8000;
         if ((lastButton & 0x8000) == 0) {
             pad[0].flags |= 0x8000;
         }
     }
-    if (pad[0].ana[2] >= 236) {
+    if (x >= 236) {
         pad[0].now |= 0x2000;
         if ((lastButton & 0x2000) == 0) {
             pad[0].flags |= 0x2000;

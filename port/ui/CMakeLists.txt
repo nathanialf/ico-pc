@@ -259,7 +259,8 @@ ico_settings_test(settings_extra_test test/settings_extra_test.c)
 # names, Apply on another card with Keep and Revert, a fake host)
 ico_settings_test(settings_adapter_test test/settings_adapter_test.c)
 # settings_step_test: holding Left or Right on the Picture colour rows and
-# L1/R1 by 10 (settings_step.c)
+# L1/R1 by 10 (settings_step.c); Mirror mode's stick on the menus (the
+# game's lt_analog2Pad through port/input's ico_pad_menu_stick_x)
 ico_settings_test(settings_step_test test/settings_step_test.c)
 # settings_backup_test: Extras > Back up your data and Restore from a backup
 # (settings_backup.c) over a fake host: the rows, the confirmations, the

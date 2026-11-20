@@ -173,8 +173,25 @@ apart from `bindings.c` so that a build without `config.toml` does not pull in t
 `IcoVirtualPad` holds the buttons (the game's logical word, active high), the menus' word and
 four stick floats from -1 to +1, x to the right and y downwards (`port/input/input.h`).
 `ico_input_vpad_to_frame` turns it into a byte frame: the optional stick fix, the mirror (stick X
-negated on both sticks; the d-pad bits are not flipped here, because the menus are drawn pre-flipped, and the game's own d-pad to stick vector in `iosPadGetStick` swaps its Left and Right under `ico_opt_mirror()` instead), then `ico_input_quantise` (0 to 128, the DualShock's idle; -1 to 0; +1 to
+negated on both sticks; the d-pad bits are not flipped here, because the menus are drawn pre-flipped, and the game's own d-pad to stick vector in `iosPadGetStick` swaps its Left and Right under `ico_opt_mirror()` instead; the menus take the stick's x back, below), then `ico_input_quantise` (0 to 128, the DualShock's idle; -1 to 0; +1 to
 255) (`port/input/vpad.c`).
+
+Mirror mode and the menus. The mirror is for the flipped 3D picture: the game steers Ico, the
+camera, photo mode and the free camera with the negated x, and the d-pad's
+synthesised stick vector is swapped to match (`pad_mirror_test`). The layouts (the title, the
+pause and End Game menus, Options, the save, load and memory card screens, Continue, the ending's
+save prompt and every screen after the ending up to the title, and the port's own pages) are drawn
+unflipped (`port/render/rd_replay.c` `mirrorUi`), and they read Left and Right from the d-pad bits,
+which are not flipped, and from the left stick through the game's d-pad emulation `lt_analog2Pad`
+(`ico2/common/src/layout_texture.c`: below 20 is Left, from 236 Right). That one reader takes the
+stick's x through `ico_pad_menu_stick_x` (`port/input/pad_host.c`): the byte unchanged with the
+option off, its reflection 255 - x with it on (the frame's bytes are symmetric about 127.5, and the
+two thresholds are each other's reflection), so the stick moves a menu's cursor the way it was
+pushed in both modes. `pad[0].ana[2]` itself is left as the frame gave it, for the 3D readers. It
+follows the option rather than the frame's source, so a recording of a mirrored run (its frames as
+negated) replays as it ran. The first reflection of a run logs `input: Mirror mode: the menus take
+the stick's left and right as pushed (they are drawn unflipped)`; `ico_pad_menu_stick_x_reflected`
+counts them (`settings_step`).
 
 The stick fix scales a stick vector by 1 + 0.2 x d / 45, d the angle in degrees to the nearest
 axis, so the off-axis divisor of the game's `iosPadNormalizeStick` (`ico2/fumi/ios/pad.c`)
