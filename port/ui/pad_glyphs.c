@@ -761,9 +761,12 @@ static int pgParse(PgPiece *pc, const char *src, size_t n)
                     }
                     skipWs(&vp, ve);
                     if (vp != ve ||
-                        !(v[2] > 0.0f && v[3] > 0.0f && v[2] <= 1000.0f && v[3] <= 1000.0f &&
-                          v[2] <= 4.0f * v[3] && v[3] <= 4.0f * v[2])) {
-                        return pgFail(pc, "the viewBox (four numbers, a size up to 1000 and "
+                        !(v[2] >= 1.0f && v[3] >= 1.0f && v[2] <= 1000.0f && v[3] <= 1000.0f &&
+                          v[2] <= 4.0f * v[3] && v[3] <= 4.0f * v[2] && fabsf(v[0]) <= 100000.0f &&
+                          fabsf(v[1]) <= 100000.0f)) {
+                        /* a size under 1 would scale the outline past what
+                           the rasteriser's floats hold (a NaN there) */
+                        return pgFail(pc, "the viewBox (four numbers, a size from 1 to 1000, "
                                           "an aspect within 4)");
                     }
                     pc->vbx = v[0];
@@ -1067,8 +1070,11 @@ static void flatEnd(PgFlat *f)
 /* segments for a curve whose control polygon is L pixels long */
 static int curveSegs(float L)
 {
+    if (!(L < 128.0f)) {
+        return 64; /* long, or not a number: never cast */
+    }
     int n = (int)ceilf(L / 2.0f);
-    return n < 2 ? 2 : n > 64 ? 64 : n;
+    return n < 2 ? 2 : n;
 }
 
 /* the ops as closed contours of points (user units less the viewBox's
