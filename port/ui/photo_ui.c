@@ -6,6 +6,7 @@
  */
 #include "photo_ui.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -14,6 +15,7 @@
 #include "layout_ext.h"
 #include "menu_font.h"
 #include "mouse_look.h"
+#include "pad_glyphs.h"
 #include "options.h" /* ico_opt_mirror */
 #include "photo_mode.h"
 #include "popup.h"
@@ -325,7 +327,9 @@ static void addIcon(UiHudSet *set, UiHudItem *it, HudBtn b, int keyboard)
     if (ic->word) {
         return;
     }
-    if (kBtn[b].glyph >= 0 && lt_ext_glyph_texture(kBtn[b].glyph) >= 0) {
+    /* the disc's picture where its sheet has one, or the button pictures'
+       art while a set is in force (layout_ext.h lt_ext_glyph_available) */
+    if (kBtn[b].glyph >= 0 && lt_ext_glyph_available(kBtn[b].glyph)) {
         ic->glyph = kBtn[b].glyph;
         return;
     }
@@ -469,6 +473,50 @@ float ui__photo_hud_fit(const UiHudItem *items, int n, float *size, float room, 
     return w;
 }
 
+/* The button pictures' art (pad_glyphs.h) while a set is in force, in the
+   disc glyph's box at the same place (its left edge x, its middle on mid),
+   fitted and centred with the art's aspect, rasterised at the height it is
+   shown on the output (the overlay's pixels per y unit); 1 when drawn,
+   0 to draw the disc's picture instead. */
+static int hudArt(int glyph, float x, float mid, float size)
+{
+    if (!pad_glyphs_active()) {
+        return 0;
+    }
+    int w = 0, h = 0;
+    lt_ext_glyph_box(glyph, size, &w, &h);
+    const float a = pad_glyphs_aspect(pad_glyphs_style(), glyph);
+    if (w <= 0 || h <= 0 || !(a > 0.0f)) {
+        return 0;
+    }
+    float in[4], fit[4], uv[4];
+    in[0] = x;
+    in[1] = mid - (float)h * 0.5f;
+    in[2] = x + (float)w;
+    in[3] = in[1] + (float)h;
+    lt_ext_aspect_fit(in, a, fit);
+    float y0 = 0.0f, y1 = 0.0f;
+    ui_overlay_map(0.0f, fit[1], NULL, &y0);
+    ui_overlay_map(0.0f, fit[3], NULL, &y1);
+    const long px = lrintf((y1 - y0) / 16.0f);
+    unsigned tex = 0;
+    if (!pad_glyphs_texture(glyph, px < 1 ? 1 : (int)px, &tex, uv, NULL)) {
+        return 0;
+    }
+    UiTexQuad q;
+    q.x0 = fit[0];
+    q.y0 = fit[1];
+    q.x1 = fit[2];
+    q.y1 = fit[3];
+    q.u0 = uv[0];
+    q.v0 = uv[1];
+    q.u1 = uv[2];
+    q.v1 = uv[3];
+    static const uint8_t grey[4] = {0x80, 0x80, 0x80, 0x80};
+    ui__draw_tex_quads(tex, &q, 1, grey, 0, NULL, 0);
+    return 1;
+}
+
 /* one picture of the game's button sheets, its box's left edge at x and its
    middle on mid (grid units): the texture the menus draw it from (the
    table's texNo, layout_ext.h lt_ext_glyph_texture) magnified onto the
@@ -476,6 +524,9 @@ float ui__photo_hud_fit(const UiHudItem *items, int n, float *size, float room, 
    rectangle half a texel in on each side as display_texture samples it */
 static void hudGlyph(int glyph, float x, float mid, float size)
 {
+    if (hudArt(glyph, x, mid, size)) {
+        return;
+    }
     const int no = lt_ext_glyph_texture(glyph);
     const unsigned tex = no >= 0 ? tex_HostTextureId(no) : 0u;
     if (!tex) {

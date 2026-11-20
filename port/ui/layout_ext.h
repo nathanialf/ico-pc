@@ -149,6 +149,30 @@ int lt_ext_glyph_texture(int glyph);
    tables with it. */
 int lt_ext_glyph_source(int glyph, int uvwh[4]);
 
+/* The button pictures of another controller (pad_glyphs.h), drawn where
+   the disc's button glyphs are while a set is in force
+   (pad_glyphs_active): the eight buttons (LT_GLYPH_CROSS .. LT_GLYPH_R2;
+   the menu arrows keep the disc's).  A row shows a button when it is a
+   port glyph row of one, or a game row whose texture file (texFileNo) and
+   texel rectangle are those of the running disc's source row for it
+   (region.h IcoGlyphRow): the save prompts, Button Configuration and every
+   copy of their rectangles, on every disc, from its own tables.  Such a
+   row is a text row (lt_ext_is_text_row) and its hook draws the art,
+   rasterised at the height it has fitted in the row's box at the picture's
+   scale, fitted and centred in the disc glyph's box with the art's aspect
+   (lt_ext_glyph_box and the rows' boxes are unchanged), in the colour, fade
+   and dimming the game gives the sprite, and the glow passes additive as
+   the glow sprite.  No set in force (PlayStation): nothing changes.  When
+   no atlas can be made the disc's path draws the row.
+
+   lt_ext_glyph_of_row: the button row index shows (LtExtGlyph, below
+   LT_GLYPH_LEFT), -1 for none or an index outside the tables.
+   lt_ext_glyph_available: a picture can be drawn for glyph: a set is in
+   force (the eight buttons), or its disc texture is there
+   (lt_ext_glyph_texture >= 0). */
+int lt_ext_glyph_of_row(int row);
+int lt_ext_glyph_available(int glyph);
+
 /* A filled rectangle on a port row (the music gallery's progress bar): the
    row's box (dispX, dispY, dispW, dispH), the left `fill` of it (0..1,
    lt_ext_set_fill; 1 when added), in rgba (GS, 0x80 = 1.0) times the row's
@@ -182,14 +206,16 @@ void lt_ext_reset(void);
    box is the stretched rectangle, mapped from the row's last plain box. */
 void lt_ext_draw_row(const LtProperty *e, const int box[4], const unsigned char rgba[4], int glow);
 
-/* Whether display_texture (and kanban.c's) draws e as text: a port row (a
-   glyph row only when it has no texture: it then draws nothing), or a game
-   row of the menu text table (menu_text.h ui_menu_text_item_of: its rectangle
-   the PAL one).  Every other game row draws its texture. */
+/* Whether display_texture (and kanban.c's) draws e as text: a row showing
+   a button while a set of button pictures is in force (its art, above), a
+   port row (a glyph row only when it has no texture: it then draws
+   nothing), or a game row of the menu text table (menu_text.h
+   ui_menu_text_item_of: its rectangle the PAL one).  Every other game row
+   draws its texture. */
 int lt_ext_is_text_row(const LtProperty *e);
 /* The text hook of display_texture, lt_glow_sprite and kanban.c's
-   display_texture, for a row lt_ext_is_text_row says is text: a port row's
-   label (lt_ext_draw_row) or a game row's words (menu_font.h
+   display_texture, for a row lt_ext_is_text_row says is text: a button's
+   art, a port row's label (lt_ext_draw_row) or a game row's words (menu_font.h
    ui_menu_word_draw, in the language the game shows), keyed by the row and
    the pass ((e << 2) ^ (glow ? 2 : 1)).  box and uv are the sprite's
    rectangle and texel rectangle (1/16 texel) as the caller would hand them
@@ -261,6 +287,9 @@ uint32_t lt_ext_row_image(int index, int *texW, int *texH);
    shape in a 4:3 box (bands above and below stay empty) and nothing is
    stretched.  out = in for a zero size. */
 void lt_ext_image_fit(const float in[4], int texW, int texH, float out[4]);
+/* the same for a shape of aspect a (width over height on screen, square
+   pixels): out = in for a <= 0 or an empty box (the button pictures' fit) */
+void lt_ext_aspect_fit(const float in[4], float a, float out[4]);
 
 /* A rect row's colour changed after it was added (Settings >
    Extras > Characters' swatches): rgba as lt_ext_add_rect takes it (GS,
