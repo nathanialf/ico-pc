@@ -14,7 +14,8 @@
 #                       settings tests
 #   ico_ui_rd           the sources with ICO_RD for ui_test and
 #                       menu_text_test (needs ico_render)
-#   ico_ui_settings_rd  ico_ui_rd with the Settings sources, for
+#   ico_ui_settings_rd  ico_ui_rd with the Settings sources and
+#                       touch_ui.c (the touch overlay's button pictures), for
 #                       settings_render
 #   ico_ui_font_rd      font.c alone with ICO_RD, for the render tests and
 #                       rd_replay_tool
@@ -606,6 +607,9 @@ target_link_libraries(ui_test PRIVATE ico_render ico_math ico_sheet_ref ico_regi
 # device)
 ico_ui_library(ico_ui_settings_rd ON)
 ico_ui_settings(ico_ui_settings_rd)
+# the touch overlay's drawing: its button pictures with a set of another
+# controller's in force (settings_photo_test.c testTouchArt)
+target_sources(ico_ui_settings_rd PRIVATE touch_ui.c)
 add_executable(settings_render test/settings_photo_test.c test/settings_fixture.c
     $<TARGET_OBJECTS:ico_ui_settings_rd>
     "${CMAKE_SOURCE_DIR}/ico2/common/src/layout_texture.c"

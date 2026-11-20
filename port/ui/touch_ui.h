@@ -18,7 +18,10 @@
  *     in its texture slot, as
  *     sprites in output pixels from the game's button sheets, fitted to the
  *     disc or key with the picture's proportions; the port draws no symbol
- *     of its own;
+ *     of its own, except while a set of button pictures is in force
+ *     (pad_glyphs.h, the player's choice: touch input itself counts as
+ *     PlayStation under Auto): then that set's art, in the same box with the
+ *     art's proportions, rasterised at the size it is shown;
  *   - the words, with ui_draw_text placed in output pixels, on Select and
  *     Start, and on any zone whose
  *     sheet is not loaded yet (before a stage's textures are set up);
@@ -60,6 +63,9 @@ void ui_touch_set_source(int (*fn)(struct IcoTouchOverlay *out));
 
 /* The overlay on the output (ui_host.c's overlay callback). */
 void ui_touch_draw_overlay(const struct RdOverlayCtx *ctx);
+/* Tests: the mask of the zones (1 << IcoTouchZone) the last draw gave the
+   button pictures' art (0 with no set in force) */
+unsigned ui__touch_art_zones(void);
 
 /* Where the Frame rate counter goes while the touch controls show, from the
    player's actual layout (touch_gap.h ico_touch_fps_place): margin, the
