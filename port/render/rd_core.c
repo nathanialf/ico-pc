@@ -3211,6 +3211,8 @@ void rd_screen_prims(RdPrim type, const RdScreenVtx *v, uint32_t count, RdSpace 
         /* a world draw the filter leaves out; UI and full-screen in the icon pass */
         if (rd_icon_pass_on()) {
             rd__icon_pass_drop(RD_ICON_DROP_PRIMS);
+        } else {
+            rd__ledger_unnamed_out("(screen prims)", RD_LEDGER_FILTER);
         }
         return;
     }
@@ -3299,6 +3301,8 @@ static RdCmd *pushStub(uint8_t type, RdKey key, const void *const *parts, const 
                        int n)
 {
     if (!rd__draw_filter_pass(key)) {
+        rd__ledger_unnamed_out(type == RDC_SHADOW_STRIP ? "(a shadow volume)" : "(world prims)",
+                               RD_LEDGER_FILTER);
         return NULL; /* rd_world_prims, rd_shadow_strip: world draws */
     }
     RdFrame *f = rd__rec_frame();

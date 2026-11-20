@@ -1258,6 +1258,23 @@ void rd_free_camera(void);
 #define RD_CULL_DROPS_MAX 48
 void rd_note_cull_drop(const char *model, int part, int rule, int views, int oneWhy);
 
+/* PC port: the scene ledger's notes from the game's sources
+ * (port/render/rd_ledger.h, docs/port/SCENE_LEDGER.md), on the game's
+ * thread, for the stage in play.  rd_note_packet_out: a packet of model
+ * (Packet.c pac_hostBuild) has no geometry the port can read
+ * (RD_PACKET_OUT_EMPTY: no mesh, nothing drawn) or its stream was cut short
+ * (RD_PACKET_OUT_CUT: at the batch cap, the scratch's room or past its
+ * data; the rest not drawn).  rd_note_game_hide: the game has model in the
+ * scene and does not draw it this tick (StageAnimation.c
+ * stage_DispAnimation*): its display flag is off (RD_GAME_HIDE_FLAG) or its
+ * stage animation's row is not playing (RD_GAME_HIDE_IDLE). */
+enum { RD_PACKET_OUT_EMPTY = 0, RD_PACKET_OUT_CUT = 1 };
+
+enum { RD_GAME_HIDE_FLAG = 0, RD_GAME_HIDE_IDLE = 1 };
+
+void rd_note_packet_out(const char *model, int why);
+void rd_note_game_hide(const char *model, int why);
+
 /* What the last present showed (rd_present's, or with interpolation off
  * rd_end_frame's one present of the frame), for the window's start-up log: the
  * frame's number, its keep flag, the strongest fade it recorded (1 + the

@@ -90,22 +90,41 @@ static void testReasons(void)
         (void)rd_ledger_format(&s_a, "ended", s_text, sizeof s_text);
         char want[256];
         const int byPic = rd_ledger_reason_by_picture(r);
-        snprintf(want, sizeof want, "model_%d: never drawn; left out by %s in 10 %s (5 %s), 20 %s",
-                 r, rd_ledger_reason_words(r), byPic ? "pictures" : "ticks",
-                 byPic ? "between ticks" : "with the cameras between ticks",
-                 r == RD_LEDGER_BOX_OBJECT ? "times" : "draws or parts");
+        const int byGame = rd_ledger_reason_by_game(r);
+        if (byGame) {
+            snprintf(want, sizeof want, "model_%d: never drawn; hidden by %s in 10 ticks", r,
+                     rd_ledger_reason_words(r));
+        } else {
+            snprintf(want, sizeof want, "model_%d: never drawn; left out by %s in 10 %s%s, 20 %s",
+                     r, rd_ledger_reason_words(r), byPic ? "pictures" : "ticks",
+                     byPic                     ? " (5 between ticks)"
+                     : r <= RD_LEDGER_BOX_PART ? " (5 with the cameras between ticks)"
+                                               : "",
+                     r == RD_LEDGER_BOX_OBJECT ? "times"
+                     : r == RD_LEDGER_NO_MESH || r == RD_LEDGER_PACKET_EMPTY ||
+                             r == RD_LEDGER_PACKET_CUT
+                         ? "packets or builds"
+                         : "draws or parts");
+        }
         if (strstr(s_text, want) == NULL) {
             printf("  want: %s\n  text: %s\n", want, s_text);
         }
         CHECK(strstr(s_text, want) != NULL, "the reason's row");
-        CHECK(strstr(s_text, "1 models: 0 drawn, 1 left out at times, 1 never drawn (0 with no "
-                             "reason recorded)") != NULL,
-              "the header's counts");
+        char head[160];
+        snprintf(head, sizeof head,
+                 "1 models: 0 drawn, 1 left out at times, 1 never drawn (%d hidden by the game, 0 "
+                 "with no reason recorded)",
+                 byGame);
+        CHECK(strstr(s_text, head) != NULL, "the header's counts");
         CHECK(strstr(s_text, "scene ledger: stage 7 (st07 (TEST)) ended: ticks 100-149 (50)") ==
                   s_text,
               "the header first");
     }
     CHECK(strcmp(rd_ledger_reason_words(RD_LEDGER_REASONS), "?") == 0, "past the reasons: ?");
+    CHECK(rd_ledger_reason_by_game(RD_LEDGER_GAME_FLAG) &&
+              rd_ledger_reason_by_game(RD_LEDGER_GAME_IDLE) &&
+              !rd_ledger_reason_by_game(RD_LEDGER_PACKET_EMPTY),
+          "the game's own decisions read hidden by");
     CHECK(rd_ledger_reason_by_picture(RD_LEDGER_FRUSTUM) &&
               rd_ledger_reason_by_picture(RD_LEDGER_OCCLUDED) &&
               !rd_ledger_reason_by_picture(RD_LEDGER_BOX_OBJECT),
@@ -302,6 +321,171 @@ static void testCost(void)
     CHECK(ledgerNs < 40.0 || ledgerNs < 6.0 * controlNs, "a draw's tally is a few additions");
 }
 
+/* One model, one row, from the name sources of the call sites:
+ * - the mesh built at load: Packet.c pac_makePacket passes obj->name, and
+ *   obj is the object's o->model (pac_MakePacket), so the mesh's name is
+ *   o->model->name, cut to 23 bytes by RdMeshRec.name (rd_mesh.c
+ *   rd__vu_mesh_create_raw's snprintf);
+ * - the mesh built at a draw: RegistPacket.c regHostIdent's
+ *   regKeyObj->model->name, the same cut;
+ * - a model pack's mesh: Packet.c pac_hostPartName's "%s part %d" of the
+ *   same name, the same cut (which may fall inside " part ");
+ * - the box cull: RegistPacket.c regHostCullDrop's o->model->name, whole;
+ * - the game's hide: StageAnimation.c's d->model->name, whole. */
+static void testNames(void)
+{
+    static const char *const kModels[] = {"st13_deja1", "deja_room_model_ab",
+                                          "a_model_name_of_thirty_bytes__"};
+    for (int i = 0; i < 3; i++) {
+        rd_ledger_stage_begin(&s_a, 40, "deja", 1);
+        const char *model = kModels[i];
+        char meshName[24], packName[24], partFull[64] = {0};
+        snprintf(meshName, sizeof meshName, "%s", model);
+        snprintf(partFull, sizeof partFull, "%s part %d", model, 12);
+        /* the mesh record's cut (24 bytes with its end) */
+        memcpy(packName, partFull, sizeof packName - 1);
+        packName[sizeof packName - 1] = '\0';
+        const int built = rd_ledger_slot(&s_a.models, meshName);
+        const int pack = rd_ledger_slot(&s_a.models, packName);
+        const int box = rd_ledger_slot(&s_a.models, model);
+        const int hide = rd_ledger_slot(&s_a.models, model);
+        CHECK(built == 0 && pack == 0 && box == 0 && hide == 0 && s_a.models.n == 1,
+              "the mesh's, the pack's, the box cull's and the hide's names: one row");
+    }
+    char key[RD_LEDGER_NAME];
+    rd_ledger_key("deja_room_model_ab par", key);
+    CHECK(strcmp(key, "deja_room_model_ab par") == 0, "a short name keeps its words");
+    rd_ledger_key("deja_room_model_abc par", key); /* 23 bytes: a cut " part " */
+    CHECK(strcmp(key, "deja_room_model_abc") == 0, "a cut part suffix dropped");
+    rd_ledger_key(NULL, key);
+    CHECK(strcmp(key, "(no name)") == 0, "no name");
+
+    /* the row cache: a lookup at a new id or epoch only */
+    rd_ledger_stage_begin(&s_a, 40, "deja", 1);
+    RdLedgerRowCache c;
+    memset(&c, 0, sizeof c);
+    const int r1 = rd_ledger_cached_row(&s_a.models, &c, 0x10001u, 1, "cage");
+    const int r2 = rd_ledger_cached_row(&s_a.models, &c, 0x10001u, 1, "never looked up");
+    CHECK(r1 == 0 && r2 == 0 && s_a.models.n == 1, "the same id and epoch: the cached row");
+    rd_ledger_stage_begin(&s_a, 41, "next", 1);
+    const int r3 = rd_ledger_cached_row(&s_a.models, &c, 0x10001u, 2, "cage");
+    CHECK(r3 == 0 && s_a.models.n == 1 && strcmp(s_a.models.e[0].name, "cage") == 0,
+          "a new epoch: looked up again in the new stage's table");
+}
+
+/* the game's own hide and the marked triangles, as the rows say them */
+static void testHiddenAndMarks(void)
+{
+    rd_ledger_stage_begin(&s_a, 40, "deja", 1);
+    s_a.lastTick = 10;
+    const int walls = rd_ledger_slot(&s_a.models, "st13_deja1");
+    rd_ledger_note_built(&s_a.models, walls);
+    for (uint32_t t = 1; t <= 3; t++) {
+        rd_ledger_note_drop(&s_a.models, walls, RD_LEDGER_GAME_FLAG, t, 0, 1);
+    }
+    const int room = rd_ledger_slot(&s_a.models, "st13_deja3");
+    rd_ledger_note_draw(&s_a.models, room, 1, 50);
+    rd_ledger_note_marks(&s_a.models, room, 10, 4);
+    rd_ledger_note_draw(&s_a.models, room, 2, 50);
+    const int grid = rd_ledger_slot(&s_a.models, "(a grid)");
+    rd_ledger_note_drop(&s_a.models, grid, RD_LEDGER_FILTER, 5, 0, 1);
+    (void)rd_ledger_format(&s_a, "ended", s_text, sizeof s_text);
+    CHECK(strstr(s_text, " st13_deja1: never drawn, 1 mesh built; hidden by the game's flag (its "
+                         "display flag off) in 3 ticks") != NULL,
+          "hidden by the game's flag, not no reason");
+    CHECK(strstr(s_text, "(1 hidden by the game, 0 with no reason recorded)") != NULL,
+          "the header tells hidden from silent");
+    CHECK(strstr(s_text, " st13_deja3: drawn in 2 of 10 ticks (2 draws, 100 triangles, 10 of them "
+                         "hidden by the content table, 4 of them drawn over an overlap)") != NULL,
+          "the marked triangles in the drawn row");
+    CHECK(strstr(s_text, " (a grid): never drawn; left out by photo mode's draw filter in 1 ticks, "
+                         "1 draws or parts") != NULL,
+          "an unnamed draw's row");
+}
+
+static void testTextures(void)
+{
+    rd_ledger_stage_begin(&s_a, 13, "st13c", 1);
+    RdLedgerTexTable *t = &s_a.textures;
+    const int floor1 = rd_ledger_tex_slot(t, "floor1");
+    const int steel = rd_ledger_tex_slot(t, "ca_steel");
+    const int w01 = rd_ledger_tex_slot(t, "w01");
+    CHECK(floor1 == 0 && steel == 1 && w01 == 2, "rows in order");
+    rd_ledger_tex_asked(t, floor1);
+    rd_ledger_tex_loaded(t, floor1);
+    rd_ledger_tex_replaced(t, floor1);
+    rd_ledger_tex_asked(t, steel);
+    rd_ledger_tex_failed(t, steel, RD_LEDGER_TEX_DECODE);
+    rd_ledger_tex_asked(t, steel);
+    rd_ledger_tex_failed(t, steel, RD_LEDGER_TEX_DECODE);
+    rd_ledger_tex_asked(t, w01);
+    rd_ledger_tex_failed(t, w01, RD_LEDGER_TEX_FULL);
+    rd_ledger_tex_failed(t, w01, RD_LEDGER_TEX_WHYS); /* ignored */
+    (void)rd_ledger_format(&s_a, "ended", s_text, sizeof s_text);
+    CHECK(strstr(s_text, "scene ledger: stage 13 (st13c) textures: 3 names asked for (4 times), 1 "
+                         "made, 3 failed (2 names), 1 replaced by a pack (1 names); names past "
+                         "the table 0\n") != NULL,
+          "the textures' counts");
+    CHECK(strstr(s_text,
+                 "scene ledger: stage 13 (st13c) textures that failed: ca_steel (its format "
+                 "or data could not be read 2 times); w01 (the texture cache was full 1 "
+                 "times)\n") != NULL,
+          "the failed ones by name with why");
+    CHECK(strstr(s_text, "scene ledger: stage 13 (st13c) textures replaced by a pack: floor1\n") !=
+              NULL,
+          "the replaced ones by name");
+    for (int i = 0; i < RD_LEDGER_TEX_SLOTS + 3; i++) {
+        char name[24];
+        snprintf(name, sizeof name, "t%d", i);
+        (void)rd_ledger_tex_slot(t, name);
+    }
+    CHECK(t->n == RD_LEDGER_TEX_SLOTS && t->pastNames == 6, "the textures' table bounded");
+    CHECK(strcmp(rd_ledger_tex_why_words(RD_LEDGER_TEX_WHYS), "?") == 0, "past the whys: ?");
+}
+
+/* The cost a tick of a busy scene (issue 179's boat: 3000 draws of 300
+ * meshes, the box cull's 60 drops, the culler's 100 skips) through the
+ * paths rd_ledger_live.c takes: the cached row and a draw's tally per
+ * draw, a name lookup per drop and per skip.  The mean over 2000 ticks is
+ * printed and must stay under 250 us (1.5 % of a 60 fps picture). */
+static void testTickCost(void)
+{
+    static RdLedgerRowCache cache[300];
+    static char names[300][24];
+
+    enum { TICKS = 2000, DRAWS = 3000, MESHES = 300 };
+
+    for (int m = 0; m < MESHES; m++) {
+        snprintf(names[m], sizeof names[m], "model_%03d", m);
+    }
+    memset(cache, 0, sizeof cache);
+    rd_ledger_stage_begin(&s_a, 42, "boat", 1);
+    rd_ledger_table_reset(&s_rep);
+    const double t0 = nowNs();
+    for (uint32_t tick = 1; tick <= TICKS; tick++) {
+        for (int d = 0; d < DRAWS; d++) {
+            const int m = d % MESHES;
+            const int row =
+                rd_ledger_cached_row(&s_a.models, &cache[m], (uint32_t)m + 1u, 1, names[m]);
+            rd_ledger_note_draw(&s_a.models, row, tick, 40);
+        }
+        for (int d = 0; d < 60; d++) {
+            rd_ledger_note_drop(&s_a.models, rd_ledger_slot(&s_a.models, names[d * 5]),
+                                RD_LEDGER_BOX_PART, tick, d & 1, 1);
+        }
+        for (int d = 0; d < 100; d++) {
+            rd_ledger_note_drop(&s_rep, rd_ledger_slot(&s_rep, names[d * 3]), RD_LEDGER_FRUSTUM,
+                                tick, d & 1, 1);
+        }
+    }
+    const double usTick = (nowNs() - t0) / 1e3 / TICKS;
+    printf("rd_ledger: a tick of %d draws, 60 box drops and 100 skips: %.2f us\n", DRAWS, usTick);
+    CHECK(s_a.models.e[0].draws == (uint32_t)TICKS * (DRAWS / MESHES) &&
+              s_a.models.e[0].ticks == TICKS,
+          "the tick loop ran");
+    CHECK(usTick < 250.0, "a busy tick's ledger under 250 us");
+}
+
 int main(void)
 {
     testReasons();
@@ -310,6 +494,10 @@ int main(void)
     testEffectsAndBounds();
     testKept();
     testCost();
+    testNames();
+    testHiddenAndMarks();
+    testTextures();
+    testTickCost();
     if (s_fails) {
         printf("rd_ledger_test: %d failure(s)\n", s_fails);
         return 1;

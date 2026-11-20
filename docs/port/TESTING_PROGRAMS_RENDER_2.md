@@ -1176,4 +1176,12 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   every line the ledger's and under 1500 bytes, a 40-byte buffer cut and ended, no buffer
   nothing. The kept stages: the last four, oldest first, then the stage in play. The cost: a
   draw's tally over 4 million calls under 40 ns on average or within six times a control loop of
-  the same additions in the same run.
+  the same additions in the same run. One model one row from the call sites' name sources (the
+  mesh's name cut to 23 bytes, a model pack's `<model> part 12` cut inside `part`, the box cull's
+  and the hide's whole name, for names of 10, 18 and 30 bytes); the row cache looked up only at a
+  new id or epoch. A row hidden by the game's flag reads `hidden by the game's flag (its display
+  flag off) in 3 ticks` and the header counts it apart from rows with no reason; a drawn row's
+  triangles hidden by the content table and drawn over an overlap; an unnamed `(a grid)` row of
+  the draw filter. Textures: the counts line, the failed ones by name with why, the replaced ones
+  by name, the table bounded at 256. The cost of a busy tick (3000 draws of 300 meshes, 60 box
+  drops, 100 skips) over 2000 ticks, printed and under 250 us.

@@ -92,9 +92,9 @@ void ico_report_set_paths(const char *logs_dir, const char *exe_dir, const char 
 
 /* the scene ledger's text (ico_report_set_ledger) and its buffer: the kept
    stages and the stage in play (rd_ledger.h RD_LEDGER_KEEP + 1 stages of
-   RD_LEDGER_TEXT, 8192, bytes each) */
+   RD_LEDGER_TEXT, 10240, bytes each) */
 static size_t (*volatile s_ledger_fn)(char *out, size_t cap);
-static char s_ledger[5 * 8192 + 1024];
+static char s_ledger[5 * 10240 + 1024];
 
 void ico_report_set_ledger(size_t (*fn)(char *out, size_t cap))
 {

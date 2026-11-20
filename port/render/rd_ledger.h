@@ -51,12 +51,16 @@ typedef enum RdLedgerReason {
     RD_LEDGER_BOX_NODE, /* the game's box cull, one node (rule 2 with a node) */
     RD_LEDGER_BOX_PART, /* the game's box cull, one part (rule 3) */
     RD_LEDGER_NO_MESH,  /* its mesh could not be built (rd_create_vu_mesh refused the stream) */
-    RD_LEDGER_NO_RECORD,   /* a draw of a mesh with no live record (rd_draw_vu_mesh) */
-    RD_LEDGER_BATCHES,     /* a draw whose first batch lies past its mesh */
-    RD_LEDGER_FILTER,      /* photo mode's draw filter left it out */
-    RD_LEDGER_RECORD_FULL, /* no frame open to record it (rd_mesh.c pushVu) */
-    RD_LEDGER_FRUSTUM,     /* the port's visibility test: off the picture or behind the eye */
-    RD_LEDGER_OCCLUDED,    /* the port's visibility test: behind what was drawn before it */
+    RD_LEDGER_NO_RECORD,    /* a draw of a mesh with no live record (rd_draw_vu_mesh) */
+    RD_LEDGER_BATCHES,      /* a draw whose first batch lies past its mesh */
+    RD_LEDGER_FILTER,       /* photo mode's draw filter left it out */
+    RD_LEDGER_RECORD_FULL,  /* no frame open to record it (rd_mesh.c pushVu) */
+    RD_LEDGER_FRUSTUM,      /* the port's visibility test: off the picture or behind the eye */
+    RD_LEDGER_OCCLUDED,     /* the port's visibility test: behind what was drawn before it */
+    RD_LEDGER_PACKET_EMPTY, /* a packet with no geometry the port can read (Packet.c pac_hostDesc) */
+    RD_LEDGER_PACKET_CUT, /* a packet's stream cut short when its mesh was built (pac_hostStream) */
+    RD_LEDGER_GAME_FLAG,  /* hidden by the game: its display flag off (StageAnimation.c) */
+    RD_LEDGER_GAME_IDLE,  /* hidden by the game: its stage animation's row not playing */
     RD_LEDGER_REASONS
 } RdLedgerReason;
 
@@ -65,6 +69,9 @@ const char *rd_ledger_reason_words(int reason);
 /* 1 for a reason the replay counts by picture (the port's visibility
    test), 0 for one counted by tick (recorded on the game's thread) */
 int rd_ledger_reason_by_picture(int reason);
+/* 1 for the game's own decision not to draw (the row reads "hidden by"),
+   0 for a test or a failure (the row reads "left out by") */
+int rd_ledger_reason_by_game(int reason);
 
 /* the effects the game recorded, by ticks on */
 typedef enum RdLedgerFx {
@@ -90,7 +97,7 @@ const char *rd_ledger_fx_words(int fx);
 #define RD_LEDGER_SLOTS 256
 #define RD_LEDGER_HASH 512 /* a power of two, at least twice the slots */
 #define RD_LEDGER_ROWS 48  /* detailed rows a stage's text holds */
-#define RD_LEDGER_TEXT 8192
+#define RD_LEDGER_TEXT 10240
 #define RD_LEDGER_KEEP 4 /* the closed stages the report keeps */
 
 typedef struct RdLedgerEntry {
@@ -100,6 +107,10 @@ typedef struct RdLedgerEntry {
     uint32_t ticks;   /* ticks with a draw of it recorded */
     uint32_t draws;
     uint64_t tris;
+    /* of tris, the triangles its draws carried marked hidden by the
+       content table (ICO_VU_MARK_HIDE: drawn nowhere) and marked as
+       overlapping an earlier one (ICO_VU_MARK_LATER: drawn over it) */
+    uint64_t hideTris, laterTris;
     uint32_t lastTick;
     uint32_t drops[RD_LEDGER_REASONS]; /* draws, parts or objects left out */
     uint32_t pics[RD_LEDGER_REASONS];  /* ticks or pictures with one */
@@ -122,6 +133,36 @@ typedef struct RdLedgerFxRow {
     float value; /* the last tick's key value (rd_ledger_fx_value_words) */
 } RdLedgerFxRow;
 
+/* Why a texture could not be made (rd_tex.c store, rdtex_find) */
+typedef enum RdLedgerTexWhy {
+    RD_LEDGER_TEX_SIZE = 0, /* a size of 0 or past 4096 */
+    RD_LEDGER_TEX_DECODE,   /* its format or data could not be read, or no memory for it */
+    RD_LEDGER_TEX_FULL,     /* the texture cache was full */
+    RD_LEDGER_TEX_CREATE,   /* the graphics side could not make it */
+    RD_LEDGER_TEX_REFUSED,  /* the graphics card refused a pack's replacement */
+    RD_LEDGER_TEX_WHYS
+} RdLedgerTexWhy;
+
+const char *rd_ledger_tex_why_words(int why);
+
+#define RD_LEDGER_TEX_SLOTS 256
+
+/* a texture by the game's name of it (the TIM2's, Texture.c t->name) */
+typedef struct RdLedgerTexRow {
+    char name[RD_LEDGER_NAME];
+    uint32_t asked;    /* made from the game's data (a cache miss): asked for */
+    uint32_t loaded;   /* of them made */
+    uint32_t replaced; /* a pack's picture put in its place */
+    uint32_t failed[RD_LEDGER_TEX_WHYS];
+} RdLedgerTexRow;
+
+typedef struct RdLedgerTexTable {
+    RdLedgerTexRow e[RD_LEDGER_TEX_SLOTS];
+    uint16_t hash[RD_LEDGER_HASH];
+    uint32_t n;
+    uint32_t pastNames;
+} RdLedgerTexTable;
+
 typedef struct RdLedgerStage {
     int stage;     /* the game's stage_no, -1 none */
     char name[48]; /* the game's name of it, "" none */
@@ -130,15 +171,38 @@ typedef struct RdLedgerStage {
     uint32_t lateEvents;        /* the replay's events of a frame of the stage before */
     RdLedgerFxRow fx[RD_LEDGER_FX_COUNT];
     RdLedgerTable models;
+    RdLedgerTexTable textures;
 } RdLedgerStage;
 
 /* --- the tally (pure) ------------------------------------------------------- */
 
 void rd_ledger_table_reset(RdLedgerTable *t);
 /* The row of name (NULL or "": "(no name)"), added when new; -1 when the
-   table is full (counted in pastNames).  A name of RD_LEDGER_NAME bytes or
-   more is cut. */
+   table is full (counted in pastNames).  The key is the model's name: a
+   part's name as the model pack names its mesh ("st13_deja1 part 0",
+   Packet.c pac_hostPartName) is the model's row, and a name of
+   RD_LEDGER_NAME bytes or more is cut (as RdMeshRec.name cuts it). */
 int rd_ledger_slot(RdLedgerTable *t, const char *name);
+/* The key rd_ledger_slot files name under (out RD_LEDGER_NAME bytes) */
+void rd_ledger_key(const char *name, char *out);
+
+/* A mesh's row cached by its id and the stage's epoch, with the marked
+   triangles of the batch range last drawn (rd_ledger_live.c keeps one a
+   mesh slot); rd_ledger_cached_row the row, looked up by name only when
+   the id or the epoch changed */
+typedef struct RdLedgerRowCache {
+    uint32_t id, epoch;
+    int32_t row;
+    uint32_t first, n;    /* the batch range the counts below are of */
+    uint32_t tris;        /* its triangles */
+    uint32_t hide, later; /* of them marked hidden, marked later */
+    uint32_t marksValid;  /* 1: first, n and the counts hold */
+} RdLedgerRowCache;
+
+int rd_ledger_cached_row(RdLedgerTable *t, RdLedgerRowCache *c, uint32_t id, uint32_t epoch,
+                         const char *name);
+/* the marked triangles of a draw added to the row */
+void rd_ledger_note_marks(RdLedgerTable *t, int slot, uint32_t hide, uint32_t later);
 void rd_ledger_note_built(RdLedgerTable *t, int slot);
 /* a draw of the row recorded in tick (frame number), tris triangles */
 void rd_ledger_note_draw(RdLedgerTable *t, int slot, uint32_t tick, uint32_t tris);
@@ -148,6 +212,14 @@ void rd_ledger_note_draw(RdLedgerTable *t, int slot, uint32_t tick, uint32_t tri
 void rd_ledger_note_drop(RdLedgerTable *t, int slot, int reason, uint32_t pic, int alt, uint32_t n);
 /* src's rows added into dst's (the replay's half into the game's) */
 void rd_ledger_table_add(RdLedgerTable *dst, const RdLedgerTable *src);
+
+/* textures: the row of name (as rd_ledger_slot, the name cut alone), and
+   the events */
+int rd_ledger_tex_slot(RdLedgerTexTable *t, const char *name);
+void rd_ledger_tex_asked(RdLedgerTexTable *t, int slot);
+void rd_ledger_tex_loaded(RdLedgerTexTable *t, int slot);
+void rd_ledger_tex_replaced(RdLedgerTexTable *t, int slot);
+void rd_ledger_tex_failed(RdLedgerTexTable *t, int slot, int why);
 
 void rd_ledger_stage_begin(RdLedgerStage *s, int stage, const char *name, uint32_t firstTick);
 /* an effect recorded in tick, its key value */
