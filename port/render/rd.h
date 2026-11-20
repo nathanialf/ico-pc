@@ -3229,6 +3229,10 @@ typedef struct RdPerfRecord {
      * last read back in the replay's frame slot gave them (the picture two
      * frame slots back; 0 without the compaction) */
     uint32_t vuTrisLeftOut;
+    /* of the draws' vu_main_vs invocations (3 a triangle), those the shared
+     * vertices' lists save (rd_vu_share.h: a draw's values less its distinct
+     * ones; 0 without them) */
+    uint32_t vuShareSaved;
     /* the skin check's twins (rd_vu_skin_check.c twinDraw, issue 123): the
      * draws they added (A, B and C each one) and their vertex invocations,
      * 9 a triangle (the twins never read the pre-pass record): what the

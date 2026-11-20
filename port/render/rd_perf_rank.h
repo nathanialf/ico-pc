@@ -122,6 +122,9 @@ typedef struct RdPerfRankBlock {
     /* of them the index compaction's left out (RdPerfRecord.vuTrisLeftOut):
        one invocation each where the GPU reuses an index */
     double vuLeftOut;
+    /* the invocations the shared vertices' lists saved
+     * (RdPerfRecord.vuShareSaved, rd_vu_share.h) */
+    double vuShareSaved;
     double colorLoad, colorStore, depthLoad, depthStore, clear, texels, copy, untracked;
     /* the slot wait: records with a blocking wait, their wait; those with
        a done time, its sum and the longest */

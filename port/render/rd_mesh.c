@@ -2056,7 +2056,6 @@ uint32_t rd__vu_mesh_create_raw(const float (*stream)[4], uint32_t vertexCount,
     markJoinedStrips(m);
     markWinding(m);
     cardStrips(m);
-    rd__vu_share_build(m);      /* the shared vertices' list (rd_vu_share.h), sheets none */
     rd__mesh_stream_written(m); /* the stream as created, a sheet's tiles with it */
     return id;
 }

@@ -50,12 +50,20 @@ static bool batchesInOrder(const RdMeshRec *m)
     return at == m->indexCount;
 }
 
+static uint64_t s_markScans;
+
+uint64_t rd__vu_share_mark_scans(void)
+{
+    return s_markScans;
+}
+
 void rd__vu_share_build(RdMeshRec *m)
 {
     rd__vu_share_free(m);
-    if (m == NULL || !m->vu || m->index == NULL || m->batches == NULL || m->batchCount == 0 ||
-        m->indexCount < 3u || m->indexCount % 3u != 0u || m->tiledFrom != 0u ||
-        m->vertexCount < 3u || m->vertexCount >= ICO_VU_INDEX_KICK_LIMIT || !batchesInOrder(m)) {
+    if (m == NULL || !m->vu || m->qwPerVertex != RD_VU_QW_PRELIT || m->index == NULL ||
+        m->batches == NULL || m->batchCount == 0 || m->indexCount < 3u ||
+        m->indexCount % 3u != 0u || m->tiledFrom != 0u || m->vertexCount < 3u ||
+        m->vertexCount >= ICO_VU_INDEX_KICK_LIMIT || !batchesInOrder(m)) {
         return;
     }
     uint32_t *shared = malloc((size_t)m->indexCount * 4u);
@@ -97,9 +105,18 @@ void rd__vu_share_build(RdMeshRec *m)
                 shared[i + c] = canon[v];
             }
         }
-        unique[b] = n;
+        /* the hide and later marks of the batch's kicks, once (a triangle
+           the verdict may cull or whose depth the later bias moves) */
+        bool marked = false;
+        for (uint32_t i = i0; ok && m->kickMark && i < i1; i += 3u) {
+            const uint32_t k = m->index[i] >> 2;
+            marked = marked || (k < m->markCount &&
+                                (m->kickMark[k] & (ICO_VU_MARK_HIDE | ICO_VU_MARK_LATER)) != 0u);
+        }
+        unique[b] = n | (marked ? RD_VU_SHARE_MARKED : 0u);
         distinct += n;
     }
+    s_markScans++;
     free(canon);
     free(kicked);
     if (!ok || distinct >= m->indexCount) {
@@ -109,6 +126,39 @@ void rd__vu_share_build(RdMeshRec *m)
     }
     m->indexShared = shared;
     m->shareUnique = unique;
+}
+
+bool rd__vu_share_candidate(const RdCmd *c, const RdVuPayload *p)
+{
+    return c != NULL && p != NULL && c->type == RDC_MESH && p->prog == RD_PROG_PRELIT &&
+           p->clip == RD_VU_CLIP_NONE && c->b[5] == 0;
+}
+
+/* whether rd__vu_share_consider makes m's list for c now */
+static bool considerBuilds(const RdMeshRec *m, const RdCmd *c, const RdVuPayload *p)
+{
+    return m != NULL && !m->shareTried && !m->transient && rd__vu_share_candidate(c, p);
+}
+
+void rd__vu_share_consider(RdMeshRec *m, const RdCmd *c, const RdVuPayload *p)
+{
+    if (!considerBuilds(m, c, p)) {
+        return;
+    }
+    m->shareTried = 1;
+    rd__vu_share_build(m);
+    if (m->indexShared && m->gpuChunk) {
+        m->gpuDirty = 1; /* the device copy again, with the list (rd_upload.c) */
+    }
+}
+
+uint64_t rd__mesh_ring_bytes(const RdMeshRec *m, const RdCmd *c, const RdVuPayload *p,
+                             uint64_t align)
+{
+    const uint64_t a = align > 16u ? align : 16u;
+    const uint64_t lists = m->indexShared || considerBuilds(m, c, p) ? 2u : 1u;
+    return (uint64_t)m->vertexCount * m->qwPerVertex * 16u + (uint64_t)rd__mesh_mark_qw(m) * 16u +
+           (uint64_t)m->indexCount * 4u * lists + 2u * a;
 }
 
 uint64_t rd__mesh_index_bytes(const RdMeshRec *m)
@@ -150,19 +200,12 @@ int rd__vu_share_draw(const RdMeshRec *m, uint8_t type, uint32_t rule, uint32_t 
         m->batches[last - 1u].firstIndex + m->batches[last - 1u].indexCount != end) {
         return RD_VU_SHARE_OTHER;
     }
-    /* the hide and later marks of the range's kicks (a triangle the verdict
-       may cull or whose depth the later bias moves) */
-    if (m->kickMark) {
-        for (uint32_t i = firstIndex; i < end; i += 3u) {
-            const uint32_t k = m->index[i] >> 2;
-            if (k < m->markCount &&
-                (m->kickMark[k] & (ICO_VU_MARK_HIDE | ICO_VU_MARK_LATER)) != 0u) {
-                return RD_VU_SHARE_MARKS;
-            }
-        }
-    }
+    /* the hide and later marks, decided per batch at the build */
     uint32_t distinct = 0;
     for (uint32_t b = first; b < last; b++) {
+        if ((m->shareUnique[b] & RD_VU_SHARE_MARKED) != 0u) {
+            return RD_VU_SHARE_MARKS;
+        }
         distinct += m->shareUnique[b];
     }
     const uint32_t count = end - firstIndex;
@@ -208,6 +251,7 @@ void rd__vu_share_totals(uint64_t *sharedTris, uint64_t *saved, uint64_t *record
 void rd__vu_share_reset(void)
 {
     s_tris = s_saved = s_rec = s_draws = 0;
+    s_markScans = 0;
     s_bTris = s_bSaved = s_bRec = 0;
     memset(s_kept, 0, sizeof(s_kept));
 }
