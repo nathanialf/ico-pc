@@ -169,10 +169,13 @@ static void testBuild(void)
                                     UI_OPT_VAR_CHAIN_DAMPING, UI_OPT_BACK};
     static const int chainStrs[] = {UI_STR_OPT_NATURAL_CHAINS, UI_STR_OPT_VAR_CHAIN_SPEED,
                                     UI_STR_OPT_VAR_CHAIN_DAMPING, UI_STR_BACK};
-    /* the New Game's Customize and its three pages: every row of the draft */
-    static const int custOpts[] = {UI_OPT_LINK, UI_OPT_LINK, UI_OPT_LINK, UI_OPT_BACK};
-    static const int custStrs[] = {UI_STR_SECTION_SHADOWS, UI_STR_SECTION_COMBAT, UI_STR_DIFF_RULES,
-                                   UI_STR_BACK};
+    /* the New Game's Customize (its three pages, Mirror mode and New Game+)
+       and the three pages: every row of the draft */
+    static const int custOpts[] = {UI_OPT_LINK,           UI_OPT_LINK,         UI_OPT_LINK,
+                                   UI_OPT_NEWGAME_MIRROR, UI_OPT_NEWGAME_PLUS, UI_OPT_BACK};
+    static const int custStrs[] = {UI_STR_SECTION_SHADOWS,  UI_STR_SECTION_COMBAT,
+                                   UI_STR_DIFF_RULES,       UI_STR_OPT_MIRROR,
+                                   UI_STR_OPT_NEWGAME_PLUS, UI_STR_BACK};
     static const int shadowOpts[] = {
         UI_OPT_SHADOW_SPEED, UI_OPT_VAR_TOUGHNESS,    UI_OPT_VAR_AGGRESSION,  UI_OPT_VAR_PEACEFUL,
         UI_OPT_YORDA,        UI_OPT_SHADOWS_TOGETHER, UI_OPT_DIFF_NO_SHADOWS, UI_OPT_BACK};
@@ -269,7 +272,7 @@ static void testBuild(void)
     CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 11), "gameplay rows");
     CHECK(labelsAre(UI_PAGE_CHAINS, chainOpts, chainStrs, 4), "Gameplay > Chains rows");
     CHECK(labelsAre(UI_PAGE_CUTSCENES, cutOpts, cutStrs, 4), "Gameplay > Cutscenes rows");
-    CHECK(labelsAre(UI_PAGE_CUSTOMIZE, custOpts, custStrs, 4), "Customize rows");
+    CHECK(labelsAre(UI_PAGE_CUSTOMIZE, custOpts, custStrs, 6), "Customize rows");
     CHECK(labelsAre(UI_PAGE_SHADOWS, shadowOpts, shadowStrs, 8), "Customize > Shadows rows");
     CHECK(labelsAre(UI_PAGE_COMBAT, combatOpts, combatStrs, 7), "Customize > Combat rows");
     CHECK(labelsAre(UI_PAGE_RULES, rulesOpts, rulesStrs, 7), "Customize > Rules rows");
@@ -292,7 +295,8 @@ static void testBuild(void)
                   lt_ext_prop(gl[9])->right == ui_settings_page_layout(UI_PAGE_CUSTOMIZE),
               "Gameplay's Difficulty link opens Customize");
         const int cn = ui_settings_page_rows(UI_PAGE_CUSTOMIZE, gl, go, NULL, 16);
-        for (int k = 0; k < 3 && cn == 4; k++) {
+        CHECK(cn == 6, "Customize: six rows (%d)", cn);
+        for (int k = 0; k < 3 && cn == 6; k++) {
             CHECK(go[k] == UI_OPT_LINK &&
                       lt_ext_prop(gl[k])->right == ui_settings_page_layout(kCust[k]),
                   "Customize row %d opens page %d", k, kCust[k]);
@@ -351,28 +355,10 @@ static void testBuild(void)
     /* the New Game screen */
     int ml = ui_new_game_screen_layout();
     CHECK(ml >= LT_GAME_LAYOUT_COUNT && lt_ext_layout(ml)->proc != NULL, "New Game screen layout");
-    static const char *const kNgLabel[2] = {"Mirror mode", "New Game+"};
-    for (int r = 0; r < 2; r++) {
-        const int off = ui_new_game_screen_row(r, 0), on = ui_new_game_screen_row(r, 1);
-        CHECK(off >= 0 && on >= 0 && strcmp(lt_ext_row_text(off - 1), kNgLabel[r]) == 0 &&
-                  strcmp(lt_ext_row_text(off), "Off") == 0 &&
-                  strcmp(lt_ext_row_text(on), "On") == 0,
-              "New Game screen row %d: %s Off / On", r, kNgLabel[r]);
-        CHECK(lt_ext_prop(off)->rightItem == on && lt_ext_prop(on)->leftItem == off,
-              "row %d: Off and On side by side", r);
-        CHECK(lt_ext_prop(off)->dispY == lt_ext_prop(on)->dispY &&
-                  lt_ext_prop(off - 1)->dispY == lt_ext_prop(off)->dispY,
-              "row %d: the label, Off and On on one line", r);
-    }
-    CHECK(lt_ext_prop(ui_new_game_screen_row(1, 0))->dispY >
-              lt_ext_prop(ui_new_game_screen_row(0, 0))->dispY,
-          "New Game+ under Mirror mode");
-    CHECK(ui_new_game_screen_row(2, 0) == -1 && ui_new_game_screen_row(-1, 1) == -1,
-          "no third Off/On row");
     {
         /* Difficulty (its value and two arrows after it, owned by it),
-           Customize, Mirror mode, New Game+ at pitch 24 from y 46, the Start
-           row centred under them at 148 */
+           Customize at pitch 24 from y 46, the Start row centred under them
+           at 100; no Mirror mode or New Game+ row (they are Customize's) */
         const int d = ui_new_game_screen_difficulty(), c = ui_new_game_screen_customize();
         const int st = ui_new_game_screen_start();
         CHECK(d >= 0 && strcmp(lt_ext_row_text(d), "Difficulty") == 0 &&
@@ -384,24 +370,36 @@ static void testBuild(void)
               "the Difficulty row, its value and arrows (%d)", d);
         CHECK(c >= 0 && strcmp(lt_ext_row_text(c), "Customize") == 0, "the Customize row (%d)", c);
         CHECK(lt_ext_prop(d)->dispY == 46 && lt_ext_prop(c)->dispY == 70 &&
-                  lt_ext_prop(ui_new_game_screen_row(0, 0))->dispY == 94 &&
-                  lt_ext_prop(ui_new_game_screen_row(1, 0))->dispY == 118 &&
-                  lt_ext_prop(st)->dispY == 148,
-              "the rows at 46, 70, 94, 118, Start at 148 (%d %d %d)", lt_ext_prop(d)->dispY,
+                  lt_ext_prop(st)->dispY == 100,
+              "the rows at 46, 70, Start at 100 (%d %d %d)", lt_ext_prop(d)->dispY,
               lt_ext_prop(c)->dispY, lt_ext_prop(st)->dispY);
+        {
+            /* the screen's rows: Difficulty's four, Customize, Start, the
+               note (at 182); none reads Mirror mode, New Game+, Off or On */
+            const LtProp *nl = lt_ext_layout(ml);
+            int selectable = 0;
+            for (int k = nl->first; k < nl->last; k++) {
+                const char *t = lt_ext_row_text(k);
+                selectable += lt_ext_prop(k)->selectable && lt_ext_prop(k)->ownerItem < 0;
+                CHECK(strcmp(t, "Mirror mode") != 0 && strcmp(t, "New Game+") != 0 &&
+                          strcmp(t, "Off") != 0 && strcmp(t, "On") != 0,
+                      "New Game screen row %d is no Mirror mode / New Game+ row (\"%s\")", k, t);
+            }
+            CHECK(nl->last - nl->first == 7 && selectable == 3 &&
+                      lt_ext_prop(nl->last - 1)->dispY == 182,
+                  "seven rows (%d), three items (%d), the note at 182 (%d)", nl->last - nl->first,
+                  selectable, lt_ext_prop(nl->last - 1)->dispY);
+        }
         CHECK(st >= 0 && strcmp(lt_ext_row_text(st), "Start") == 0, "the Start row (%d)", st);
         gFlagGameClear = 0;
         const int m0 = ui_new_game_screen_enter();
         CHECK(m0 == ml && lt_ext_layout(ml)->curItem == d &&
                   strcmp(lt_ext_row_text(d + 1), "Normal") == 0,
               "entered: the cursor on Difficulty, Normal (\"%s\")", lt_ext_row_text(d + 1));
-        const int mo = ui_new_game_screen_row(0, 0), no = ui_new_game_screen_row(1, 0);
         CHECK(lt_ext_prop(d)->upItem == st && lt_ext_prop(d)->downItem == c &&
-                  lt_ext_prop(c)->upItem == d && lt_ext_prop(c)->downItem == mo &&
-                  lt_ext_prop(mo)->upItem == c && lt_ext_prop(mo)->downItem == no &&
-                  lt_ext_prop(no)->upItem == mo && lt_ext_prop(no)->downItem == st &&
-                  lt_ext_prop(st)->upItem == no && lt_ext_prop(st)->downItem == d,
-              "up/down: Difficulty, Customize, Mirror mode, New Game+, Start, round");
+                  lt_ext_prop(c)->upItem == d && lt_ext_prop(c)->downItem == st &&
+                  lt_ext_prop(st)->upItem == c && lt_ext_prop(st)->downItem == d,
+              "up/down: Difficulty, Customize, Start, round");
     }
     {
         /* every row of the screen inside the layout, the note's bottom
@@ -1729,18 +1727,46 @@ static void testPauseStats(void)
     ico_gs_reset();
 }
 
-/* the New Game screen, run by the real layout code: Difficulty and
- * Customize above the two rows Mirror mode and New Game+.  The cursor
- * starts on Difficulty (Normal), Down goes to Customize, then to Mirror
- * mode's Off; Right moves to On, Down to New Game+'s choice and Up back to
- * Mirror mode's; each row keeps its own choice, the other row's choice
- * stays lit, and the note follows the cursor's row.  New Game+ starts on
+/* Customize's row for opt (its label; its value row in *value): Mirror
+   mode and New Game+, -1 for none */
+static int custRow(int opt, int *value)
+{
+    int lb[16], op[16], lv[16];
+    const int n = ui_settings_page_rows(UI_PAGE_CUSTOMIZE, lb, op, lv, 16);
+    for (int i = 0; i < n; i++) {
+        if (op[i] == opt) {
+            if (value) {
+                *value = lv[i];
+            }
+            return lb[i];
+        }
+    }
+    return -1;
+}
+
+/* Customize opened from the screen's Customize row (Cross), its layout */
+static int ngCustomize(int ml)
+{
+    lt_ext_layout(ml)->curItem = ui_new_game_screen_customize();
+    frame(0);
+    press(0x40);
+    const int cl = ui_settings_page_layout(UI_PAGE_CUSTOMIZE);
+    CHECK(settle(cl, 60), "Customize from the New Game screen (%d)", current_layout_id);
+    return cl;
+}
+
+/* the New Game screen, run by the real layout code: Difficulty, Customize
+ * and Start, the cursor's note under them.  The cursor starts on Difficulty
+ * (Normal); up and down loop the three rows.  Mirror mode and New Game+ are
+ * Customize's rows (Off / On, their own notes): a step there toggles the
+ * choice and leaves the draft's mode; stepping Difficulty leaves both
+ * choices; Back returns to the screen on Customize.  New Game+ starts On
  * when the game was finished (gFlagGameClear set: a finished save's new
- * game), off otherwise; Cross or START writes both choices (the run's
- * mirror mode, gFlagGameClear), hands the draft to the journey
- * (ico_difficulty_begin) and starts the game once; Triangle goes back to the
- * vibration screen (layout 9).  The Difficulty row's own steps and Customize
- * are settings_difficulty_test.c's. */
+ * game), Off otherwise, Mirror mode Off; Cross on Start or START writes both
+ * choices (the run's mirror mode, gFlagGameClear), hands the draft to the
+ * journey (ico_difficulty_begin) and starts the game once; Triangle goes
+ * back to the vibration screen (layout 9).  The Difficulty row's own steps
+ * and Customize's draft rows are settings_difficulty_test.c's. */
 static void testNewGameScreen(void)
 {
     useConfig("version = 1\n");
@@ -1754,74 +1780,90 @@ static void testNewGameScreen(void)
     init_layout_texture(2);
     settle(54, 4);
     int ml = ui_new_game_screen_enter();
-    const int mOff = ui_new_game_screen_row(0, 0), mOn = ui_new_game_screen_row(0, 1);
-    const int nOff = ui_new_game_screen_row(1, 0), nOn = ui_new_game_screen_row(1, 1);
     const int diff = ui_new_game_screen_difficulty(), cust = ui_new_game_screen_customize();
+    const int start = ui_new_game_screen_start();
     const int note = lt_ext_layout(ml)->last - 1;
+    int mv = -1, nv = -1;
+    const int mRow = custRow(UI_OPT_NEWGAME_MIRROR, &mv), nRow = custRow(UI_OPT_NEWGAME_PLUS, &nv);
     CHECK(ml >= 0, "the screen is there once installed");
+    CHECK(mRow >= 0 && nRow >= 0 && mv >= 0 && nv >= 0 &&
+              strcmp(lt_ext_row_text(mRow), "Mirror mode") == 0 &&
+              strcmp(lt_ext_row_text(nRow), "New Game+") == 0,
+          "Customize's Mirror mode and New Game+ rows (%d %d)", mRow, nRow);
     lt_switch_layout(ml);
     CHECK(settle(ml, 60), "the New Game screen (%d)", current_layout_id);
     LtProp *l = lt_ext_layout(ml);
     CHECK(l->curItem == diff && strcmp(lt_ext_row_text(diff + 1), "Normal") == 0,
           "the cursor on Difficulty, Normal");
-    CHECK(lt_ext_prop(nOff)->ownerItem == diff && lt_ext_prop(mOff)->ownerItem == diff &&
-              lt_ext_prop(nOn)->ownerItem == -1,
-          "Mirror mode Off and New Game+ Off lit (a plain New Game)");
     CHECK(strncmp(lt_ext_row_text(note), "The game as it shipped", 22) == 0,
           "the note says what Normal is (%s)", lt_ext_row_text(note));
     press(0x4000); /* down */
     CHECK(l->curItem == cust && strncmp(lt_ext_row_text(note), "Change each rule", 16) == 0,
           "down: Customize, its note (%s)", lt_ext_row_text(note));
     press(0x4000);
-    CHECK(l->curItem == mOff, "down: Mirror mode's Off");
-    CHECK(strncmp(lt_ext_row_text(note), "Plays the game flipped", 22) == 0,
-          "the note explains Mirror mode (%s)", lt_ext_row_text(note));
-    press(0x2000); /* right */
-    CHECK(l->curItem == mOn, "right: Mirror mode On");
-    CHECK(lt_ext_prop(nOff)->ownerItem == mOn, "New Game+ Off still lit");
-    press(0x4000); /* down */
-    CHECK(l->curItem == nOff, "down: New Game+'s choice, Off");
-    CHECK(lt_ext_prop(mOn)->ownerItem == nOff && lt_ext_prop(mOff)->ownerItem == -1,
-          "Mirror mode On stays lit");
-    CHECK(lt_ext_prop(nOff)->ownerItem == -1 && lt_ext_prop(nOn)->ownerItem == -1,
-          "the cursor's row: the cursor alone");
-    CHECK(strncmp(lt_ext_row_text(note), "New Game+ plays", 15) == 0,
-          "the note explains New Game+ (%s)", lt_ext_row_text(note));
-    press(0x2000);
-    CHECK(l->curItem == nOn, "right: New Game+ On");
-    press(0x1000); /* up */
-    CHECK(l->curItem == mOn, "up: Mirror mode's choice, On, kept");
-    CHECK(lt_ext_prop(nOn)->ownerItem == mOn, "New Game+ On lit");
-    press(0x1000);
-    CHECK(l->curItem == cust, "up from Mirror mode: Customize");
-    press(0x4000);
-    press(0x4000);
-    CHECK(l->curItem == nOn, "down again: New Game+ On, kept");
-    const int start = ui_new_game_screen_start();
-    press(0x4000); /* Start under the last row */
-    CHECK(l->curItem == start, "down from New Game+: Start");
-    CHECK(lt_ext_prop(mOn)->ownerItem == start && lt_ext_prop(nOn)->ownerItem == start &&
-              lt_ext_prop(mOff)->ownerItem == -1 && lt_ext_prop(nOff)->ownerItem == -1,
-          "on Start both chosen values stay lit");
-    CHECK(strncmp(lt_ext_row_text(note), "Begins", 6) == 0, "the note explains Start (%s)",
-          lt_ext_row_text(note));
+    CHECK(l->curItem == start && strncmp(lt_ext_row_text(note), "Begins", 6) == 0,
+          "down: Start, its note (%s)", lt_ext_row_text(note));
     press(0x2000);
     CHECK(l->curItem == start, "no left/right on Start");
     press(0x4000); /* the rows in a loop */
     CHECK(l->curItem == diff, "down from Start: Difficulty");
-    press(0x1000);
+    press(0x1000); /* up */
     CHECK(l->curItem == start, "up from Difficulty: Start");
-    press(0x4000);
-    press(0x4000);
-    press(0x4000);
-    CHECK(l->curItem == mOn, "down three times: Mirror mode's choice");
+    press(0x1000);
+    CHECK(l->curItem == cust, "up from Start: Customize");
+    press(0x1000);
+    CHECK(l->curItem == diff, "up from Customize: Difficulty");
+
+    /* Customize: both Off (a plain New Game), each its own note; Right and
+       Left toggle; the draft stays Normal; nothing applied before Start */
     int games = s_newGames;
     ico_opt_set_mirror(0);
     ico_difficulty_reset();
-    press(0x40); /* Cross picks Mirror mode On and moves down */
-    CHECK(l->curItem == nOn && s_newGames == games, "Cross on a value: on to New Game+'s choice");
-    press(0x40);
-    CHECK(l->curItem == start && s_newGames == games, "Cross on New Game+ On: on to Start");
+    int cl = ngCustomize(ml);
+    LtProp *c = lt_ext_layout(cl);
+    CHECK(strcmp(lt_ext_row_text(mv), "Off") == 0 && strcmp(lt_ext_row_text(nv), "Off") == 0,
+          "a plain New Game: Mirror mode Off, New Game+ Off (%s, %s)", lt_ext_row_text(mv),
+          lt_ext_row_text(nv));
+    checkPageFits(UI_PAGE_CUSTOMIZE, "Customize");
+    c->curItem = mRow;
+    frame(0);
+    int nn = noteStarting(UI_PAGE_CUSTOMIZE, "Plays the game flipped");
+    CHECK(nn >= 0 && !lt_ext_prop(nn)->masked, "Mirror mode's note on the cursor");
+    press(0x2000); /* right */
+    CHECK(strcmp(lt_ext_row_text(mv), "On") == 0 && ico_opt_mirror() == 0 &&
+              ui__diff_draft_mode() == ICO_DIFF_NORMAL,
+          "Right: Mirror mode On, not applied yet, the draft Normal (%s)", lt_ext_row_text(mv));
+    c->curItem = nRow;
+    frame(0);
+    nn = noteStarting(UI_PAGE_CUSTOMIZE, "New Game+ plays");
+    CHECK(nn >= 0 && !lt_ext_prop(nn)->masked, "New Game+'s note on the cursor");
+    press(0x8000); /* left */
+    CHECK(strcmp(lt_ext_row_text(nv), "On") == 0 && gFlagGameClear == 0 &&
+              ui__diff_draft_mode() == ICO_DIFF_NORMAL && !ui__diff_has_custom(),
+          "Left: New Game+ On, the flag untouched, the draft Normal (%s)", lt_ext_row_text(nv));
+    press(LT_PAD_TRIANGLE);
+    CHECK(settle(ml, 60) && l->curItem == cust && strcmp(lt_ext_row_text(diff + 1), "Normal") == 0,
+          "Back: the screen on Customize, Difficulty still Normal (%s)", lt_ext_row_text(diff + 1));
+
+    /* Difficulty stepped to Hard: both choices kept */
+    l->curItem = diff;
+    frame(0);
+    press(0x2000);
+    CHECK(strcmp(lt_ext_row_text(diff + 1), "Hard") == 0, "Right: Hard");
+    cl = ngCustomize(ml);
+    CHECK(strcmp(lt_ext_row_text(mv), "On") == 0 && strcmp(lt_ext_row_text(nv), "On") == 0,
+          "Hard: Mirror mode and New Game+ still On (%s, %s)", lt_ext_row_text(mv),
+          lt_ext_row_text(nv));
+    press(LT_PAD_TRIANGLE);
+    CHECK(settle(ml, 60), "Back again");
+    l->curItem = diff;
+    frame(0);
+    press(0x8000);
+    CHECK(strcmp(lt_ext_row_text(diff + 1), "Normal") == 0, "Left: Normal again");
+
+    /* Cross on Start: both applied, the game starts once */
+    press(0x1000);
+    CHECK(l->curItem == start && s_newGames == games, "up: Start, nothing started yet");
     press(0x40); /* Cross on Start */
     CHECK(ico_opt_mirror() == 1, "Cross on Start: the run is mirrored");
     CHECK(gFlagGameClear == 1, "Cross: New Game+ On sets the cleared flag");
@@ -1834,46 +1876,30 @@ static void testNewGameScreen(void)
     press(0x800);
     CHECK(s_newGames == games + 1, "once");
 
-    /* from a finished save (gFlagGameClear set): New Game+ starts On, and
-       Off chosen there clears the flag; START confirms */
+    /* from a finished save (gFlagGameClear set): Mirror mode Off again, New
+       Game+ On; Off chosen there clears the flag; START confirms */
     lt_switch_layout(54);
     settle(54, 60);
     gFlagGameClear = 1;
     ml = ui_new_game_screen_enter();
     lt_switch_layout(ml);
     CHECK(settle(ml, 60), "the New Game screen again");
-    CHECK(l->curItem == diff, "the cursor on Difficulty again");
-    CHECK(lt_ext_prop(nOn)->ownerItem == diff && lt_ext_prop(nOff)->ownerItem == -1,
-          "New Game+ On lit (a finished save)");
-    press(0x4000);
-    press(0x4000);
-    press(0x4000);
-    CHECK(l->curItem == nOn, "down: New Game+ On");
-    press(0x8000); /* left */
-    CHECK(l->curItem == nOff, "left: New Game+ Off");
-    press(0x1000);
-    CHECK(l->curItem == mOff, "up: Mirror mode Off, kept");
+    CHECK(l->curItem == diff && ico_opt_mirror() == 0,
+          "the cursor on Difficulty again, the run's mirror value reset");
+    cl = ngCustomize(ml);
+    CHECK(strcmp(lt_ext_row_text(mv), "Off") == 0 && strcmp(lt_ext_row_text(nv), "On") == 0,
+          "a finished save: Mirror mode Off, New Game+ On (%s, %s)", lt_ext_row_text(mv),
+          lt_ext_row_text(nv));
+    lt_ext_layout(cl)->curItem = nRow;
+    frame(0);
+    press(0x2000);
+    CHECK(strcmp(lt_ext_row_text(nv), "Off") == 0 && gFlagGameClear == 1,
+          "Right: New Game+ Off, the flag untouched until the start");
+    press(LT_PAD_TRIANGLE);
+    CHECK(settle(ml, 60), "Back: the screen");
     press(0x800); /* START */
     CHECK(ico_opt_mirror() == 0 && s_newGames == games + 2, "START: not mirrored, the game starts");
     CHECK(gFlagGameClear == 0, "New Game+ Off: the first journey even after finishing");
-
-    /* a plain New Game with New Game+ chosen On */
-    lt_switch_layout(54);
-    settle(54, 60);
-    gFlagGameClear = 0;
-    ml = ui_new_game_screen_enter();
-    lt_switch_layout(ml);
-    CHECK(settle(ml, 60), "the New Game screen a third time");
-    press(0x4000);
-    press(0x4000);
-    press(0x4000);
-    CHECK(l->curItem == nOff, "a plain New Game: New Game+ Off");
-    press(0x2000);
-    press(0x40);
-    CHECK(l->curItem == start && s_newGames == games + 2, "Cross on a value does not start");
-    press(0x40);
-    CHECK(gFlagGameClear == 1 && ico_opt_mirror() == 0 && s_newGames == games + 3,
-          "New Game+ On from a plain New Game");
 
     /* Triangle: the vibration screen, the flag as it was */
     lt_switch_layout(54);
@@ -1881,12 +1907,16 @@ static void testNewGameScreen(void)
     gFlagGameClear = 1;
     ml = ui_new_game_screen_enter();
     lt_switch_layout(ml);
-    CHECK(settle(ml, 60), "the New Game screen a fourth time");
-    press(0x4000);
-    press(0x8000);
+    CHECK(settle(ml, 60), "the New Game screen a third time");
+    cl = ngCustomize(ml);
+    lt_ext_layout(cl)->curItem = nRow;
+    frame(0);
+    press(0x2000); /* New Game+ Off, not started */
+    press(LT_PAD_TRIANGLE);
+    CHECK(settle(ml, 60), "Back: the screen");
     press(0x10);
     CHECK(settle(9, 60), "Triangle: the vibration screen (%d)", current_layout_id);
-    CHECK(s_newGames == games + 3, "no game started");
+    CHECK(s_newGames == games + 2, "no game started");
     CHECK(gFlagGameClear == 1, "Triangle: the cleared flag untouched");
     gFlagGameClear = 0;
     ico_opt_set_mirror(0);
@@ -1920,11 +1950,11 @@ static void ngMouseFrame(int click)
     frame(pad[0].flags);
 }
 
-/* The New Game screen and the mouse: the cursor's row takes the item the
- * cursor is on as its choice, so a hover there moves nothing (the way from
- * New Game+'s "On" to Start crosses its "Off"); a click on a value picks
- * it and moves on with the picked value lit in the same tick; a click on
- * Start begins with the clicked values. */
+/* The New Game screen and the mouse: only a click moves the cursor there
+ * (a hover over Customize or Start moves nothing); a click on Difficulty's
+ * arrows or value steps it, a click on Customize opens Customize, where a
+ * click on Mirror mode's value turns it On; a click on Start begins with
+ * the clicked values. */
 static void testNewGameMouse(void)
 {
     useConfig("version = 1\n");
@@ -1935,48 +1965,33 @@ static void testNewGameMouse(void)
     pad[0].ana[0] = pad[0].ana[1] = pad[0].ana[2] = pad[0].ana[3] = 128;
     NonLinearCameraMove = 2;
     gFlagGameClear = 0;
+    ico_opt_set_mirror(0);
     init_layout_texture(2);
     settle(54, 4);
     ui_mouse_reset();
     ui_mouse_set_view(640, 480, 0, 0, 640, 480);
     const int ml = ui_new_game_screen_enter();
-    const int mOff = ui_new_game_screen_row(0, 0), mOn = ui_new_game_screen_row(0, 1);
-    const int nOff = ui_new_game_screen_row(1, 0), nOn = ui_new_game_screen_row(1, 1);
     const int start = ui_new_game_screen_start();
-    const int diff = ui_new_game_screen_difficulty();
+    const int diff = ui_new_game_screen_difficulty(), cust = ui_new_game_screen_customize();
+    int mv = -1;
+    (void)custRow(UI_OPT_NEWGAME_MIRROR, &mv);
     lt_switch_layout(ml);
     CHECK(settle(ml, 60), "mouse: the New Game screen (%d)", current_layout_id);
     LtProp *l = lt_ext_layout(ml);
     ngMouseFrame(0);
     ngMouseFrame(0);
     CHECK(ui_mouse_menu_active(), "mouse: the screen is a menu");
-    ngPointAt(mOn);
+    ngPointAt(cust);
     ngMouseFrame(0);
-    CHECK(l->curItem == diff && lt_ext_prop(mOff)->ownerItem == diff,
-          "hover over Mirror mode's On: the choice stays Off (%d)", l->curItem);
-    ngPointAt(nOn);
+    CHECK(l->curItem == diff, "hover over Customize: nothing moves (%d)", l->curItem);
+    ngPointAt(start);
     ngMouseFrame(0);
-    CHECK(l->curItem == diff && lt_ext_prop(nOff)->ownerItem == diff,
-          "hover over New Game+ On: nothing moves (%d)", l->curItem);
+    CHECK(l->curItem == diff, "hover over Start: the cursor stays (%d)", l->curItem);
     const int games = s_newGames;
-    ngMouseFrame(1);
-    CHECK(l->curItem == start && s_newGames == games,
-          "click on New Game+ On: picked, on to Start (%d)", l->curItem);
-    CHECK(lt_ext_prop(nOn)->ownerItem == start && lt_ext_prop(mOff)->ownerItem == start,
-          "the picked values lit in the click's tick");
-    ngPointAt(nOff); /* on the way to Start */
-    ngMouseFrame(0);
-    CHECK(l->curItem == start && lt_ext_prop(nOn)->ownerItem == start,
-          "hover over New Game+ Off: New Game+ stays On (%d)", l->curItem);
-    ngPointAt(mOn);
-    ngMouseFrame(1);
-    CHECK(l->curItem == nOn && lt_ext_prop(mOn)->ownerItem == nOn,
-          "click on Mirror mode On: picked, on to New Game+'s choice (%d)", l->curItem);
-    /* Difficulty's arrows and value: a click steps (Right on the value), a
-       hover over them moves nothing */
+    /* Difficulty's arrows and value: a click steps (Right on the value) */
     ngPointAt(diff + 3);
     ngMouseFrame(0);
-    CHECK(l->curItem == nOn, "hover over Difficulty's right arrow: the cursor stays (%d)",
+    CHECK(l->curItem == diff, "hover over Difficulty's right arrow: the cursor stays (%d)",
           l->curItem);
     ngMouseFrame(1);
     CHECK(l->curItem == diff && strcmp(lt_ext_row_text(diff + 1), "Hard") == 0,
@@ -1987,16 +2002,33 @@ static void testNewGameMouse(void)
     CHECK(strcmp(lt_ext_row_text(diff + 1), "Normal") == 0, "click on the left arrow: Normal");
     ngPointAt(diff + 1);
     ngMouseFrame(1);
-    CHECK(strcmp(lt_ext_row_text(diff + 1), "Hard") == 0 && lt_ext_prop(mOn)->ownerItem == diff &&
-              lt_ext_prop(nOn)->ownerItem == diff,
-          "click on the value: Right, Hard; the Off/On choices kept");
+    CHECK(strcmp(lt_ext_row_text(diff + 1), "Hard") == 0, "click on the value: Right, Hard");
+    /* Customize by a click; Mirror mode's value clicked On there */
+    const int cl = ui_settings_page_layout(UI_PAGE_CUSTOMIZE);
+    ngPointAt(cust);
+    ngMouseFrame(1);
+    CHECK(settle(cl, 60) && s_newGames == games, "click on Customize: its page (%d)",
+          current_layout_id);
+    ngMouseFrame(0);
+    ngMouseFrame(0); /* the page faded in */
+    ngPointAt(mv);
+    ngMouseFrame(1);
+    CHECK(mv >= 0 && strcmp(lt_ext_row_text(mv), "On") == 0 && ico_opt_mirror() == 0,
+          "click on Mirror mode's value: On, not applied yet (\"%s\")",
+          mv >= 0 ? lt_ext_row_text(mv) : "");
+    press(LT_PAD_TRIANGLE);
+    CHECK(settle(ml, 60) && strcmp(lt_ext_row_text(diff + 1), "Hard") == 0,
+          "Back: the screen, still Hard (%d)", current_layout_id);
+    ngMouseFrame(0);
+    ngMouseFrame(0); /* the screen faded in again */
     ngPointAt(start);
     ngMouseFrame(0);
-    CHECK(l->curItem == diff, "hover over Start: the cursor stays (%d)", l->curItem);
+    CHECK(l->curItem == cust, "hover over Start after Back: the cursor stays on Customize (%d)",
+          l->curItem);
     ngMouseFrame(1);
-    CHECK(s_newGames == games + 1 && gFlagGameClear == 1 && ico_opt_mirror() == 1 &&
+    CHECK(s_newGames == games + 1 && gFlagGameClear == 0 && ico_opt_mirror() == 1 &&
               ico_difficulty_active()->mode == ICO_DIFF_HARD,
-          "click on Start: mirrored, New Game+, Hard (%d %d %d)", s_newGames - games,
+          "click on Start: mirrored, no New Game+, Hard (%d %d %d)", s_newGames - games,
           gFlagGameClear, ico_opt_mirror());
     ico_difficulty_reset();
     gFlagGameClear = 0;

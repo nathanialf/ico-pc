@@ -1959,7 +1959,7 @@ void ico_render_thread_block_line(double stepMs, double stepCpuMs, double pictur
     RdSubmitBlock sb;
     unsigned closes;
     double closeMs, closeMaxMs;
-    char rt[1536], st[384], cores[1600];
+    char rt[1536], st[768], cores[1600];
     CpuPlaceHist gc, rc, sc;
 
     s_rt.held = s_rt.heldMiss = s_rt.heldOverrun = s_rt.heldBehind = 0;
@@ -2049,6 +2049,19 @@ void ico_render_thread_block_line(double stepMs, double stepCpuMs, double pictur
                  sb.submitMs + sb.presentMs, sb.submitMs, sb.presentMs, sb.jobs, sb.longestMs,
                  sb.depthMax, sb.renderWaits, sb.renderWaitMs, sb.waits - sb.renderWaits,
                  sb.waitMs - sb.renderWaitMs, sb.waitMaxMs, sb.onRender);
+        if (sb.gfJobs != 0) {
+            /* the GPU's end first's samples (rd_submit_thread.h): only in
+               the blocks whose jobs ran while its verdict was not taken
+               (the block it arrives in the last) */
+            const size_t at = strlen(st);
+
+            snprintf(st + at, sizeof(st) - at,
+                     " (the GPU's end first's samples: %u Original presents timed, %u under "
+                     "2 ms, %u counted (%u waited for the GPU, %u early), %u unknown (last "
+                     "result %d), %u jobs not Original, %u Original jobs without a present)",
+                     sb.gfTimed, sb.gfShort, sb.gfCounted, sb.gfWaited, sb.gfCounted - sb.gfWaited,
+                     sb.gfUnknown, (int)sb.gfLastResult, sb.gfNotOriginal, sb.gfNoPresent);
+        }
     } else {
         snprintf(st, sizeof(st), "; submit thread: off");
     }

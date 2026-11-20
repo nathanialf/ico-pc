@@ -211,7 +211,7 @@ const char *const
                     "L’intera partita è ribaltata da sinistra a destra. Ogni salvataggio conserva la scelta.",
                 [UI_STR_OPT_NEWGAME_PLUS] = "Nuova partita +",
                 [UI_STR_NEWGAME_PLUS_SCREEN] =
-                    "Nuova partita + gioca il secondo viaggio: parole di Yorda tradotte, finale e oggetti cambiati. Disattivato gioca il primo viaggio anche dopo aver finito il gioco.",
+                    "Nuova partita + gioca il secondo viaggio: parole di Yorda tradotte, finale e oggetti cambiati. Disattivato: il primo viaggio, anche a gioco finito.",
                 [UI_STR_NEWGAME_START] = "Inizia",
                 [UI_STR_NEWGAME_START_SCREEN] = "Avvia la nuova partita con le scelte qui sopra.",
                 [UI_STR_OPT_CRT] = "Filtro CRT",

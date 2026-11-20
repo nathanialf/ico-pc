@@ -23,9 +23,12 @@ extern "C" {
 /* the Customize page's parent: the New Game screen (settings.c parentLayout) */
 #define UI__PARENT_NEW_GAME (-2)
 
-/* 1 when opt is a row of the draft (a UiSettingsOpt of Customize's pages) */
+/* 1 when opt is a row of the draft (a UiSettingsOpt of Customize's pages)
+   or one of Customize's Mirror mode and New Game+ (settings_newgame.h
+   ui__newgame_opt), which settings.c routes the same way */
 int ui__diff_opt(int opt);
-/* the draft's row an option is, -1 for none */
+/* the draft's row an option is, -1 for none (Mirror mode and New Game+
+   included: they are no rows of the draft) */
 int ui__diff_row(int opt);
 /* the value text of row opt in the draft, in the port's language */
 const char *ui__diff_text(int opt, char *buf, unsigned size);

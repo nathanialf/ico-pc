@@ -32,6 +32,19 @@ void ui__newgame_reset(void);
 /* Customize's Back: the screen's layout, its cursor on Customize */
 int ui__newgame_customize_back(void);
 
+/* Customize's Mirror mode and New Game+ rows (UI_OPT_NEWGAME_MIRROR,
+   UI_OPT_NEWGAME_PLUS), for every difficulty.  Their choices live here, not
+   in the draft: reset by ui_new_game_screen_enter (Mirror mode Off, New
+   Game+ On from a finished save), applied at Start.  ui__newgame_opt: one
+   of the two; ui__newgame_value: Off (0) or On (1), the screen's choice, or
+   with journey the game's own (the run's mirror value, gFlagGameClear) for
+   the pause menu's read-only view; ui__newgame_step: toggles the choice
+   (logged "newgame: Customize: Mirror mode on (Difficulty stays normal)",
+   the first 8 then every 100th), the draft and its mode untouched. */
+int ui__newgame_opt(int opt);
+int ui__newgame_value(int opt, int journey);
+void ui__newgame_step(int opt);
+
 #ifdef __cplusplus
 }
 #endif

@@ -305,9 +305,9 @@ void vkr_wait_slot_value(VkrFrame *f, uint64_t value)
  * and go), progFinished raised by compare and swap, the failed wait's value
  * once; not stats (the recording thread's alone): the wait's time is the
  * present's in the job's record (rd_submit_thread.c tail) */
-/* rhi.h: the timeline counter against the submission (the fence ring's
- * scan writes state the recording thread shares: not known there) */
-int rhi_submitted_finished(uint64_t *value, uint64_t waitNs)
+/* rhi.h: the timeline counter against the submission, read once (the fence
+ * ring's scan writes state the recording thread shares: not known there) */
+int rhi_submitted_finished(uint64_t *value)
 {
     if (g_vkr.syncKind != VKR_SYNC_TIMELINE ||
         __atomic_load_n(&g_vkr.deviceLost, __ATOMIC_ACQUIRE)) {
@@ -324,20 +324,14 @@ int rhi_submitted_finished(uint64_t *value, uint64_t waitNs)
         return -1;
     }
     vkr_progress_finished(done);
-    if (done >= *value) {
-        return 1;
-    }
-    if (waitNs == 0) {
-        return 0;
-    }
-    /* the bounded wait (vkWaitSemaphores with a timeout: no lock against the
-       recording thread, as the counter read) */
-    const VkResult r = vkr_sync_wait_for(*value, waitNs);
-    if (r == VK_SUCCESS) {
-        vkr_progress_finished(*value);
-        return 2;
-    }
-    return r == VK_TIMEOUT ? 0 : -1;
+    return done >= *value ? 1 : 0;
+}
+
+/* rhi.h: the counter's newest number (the timeline path's; the fence
+ * path's too, though nothing waits on it there: rhi_wait_value_ns) */
+uint64_t rhi_last_submitted(void)
+{
+    return __atomic_load_n(&g_vkr.timelineValue, __ATOMIC_ACQUIRE);
 }
 
 /* rhi_vk.h vkr_test_force_wait_result: the next wait's result, once (0:
@@ -392,6 +386,49 @@ bool rhi_wait_submitted(void)
                                       __ATOMIC_RELAXED);
     VKR_CHECK(r);
     return false;
+}
+
+/* rhi.h: the samples' wait (port/render/rd_submit_thread.c tail):
+ * vkr_sync_wait alone, no counter read before it (the read's own answer is
+ * what v0.11.12's samples could not trust on the Mali-G52, issue 179) and
+ * no timeout; the same progress pair as rhi_wait_submitted's (the submit
+ * thread's, one wait at a time), so the GPU hang limit counts it.  A
+ * failure is the caller's to count and log (the samples' lines); a loss
+ * (VK_ERROR_DEVICE_LOST, any error) is noted as rhi_wait_submitted's
+ * (VKR_CHECK, the loss report); a result that is no error (VK_TIMEOUT,
+ * VK_NOT_READY: no wait without a timeout should give one) is returned as
+ * it is */
+int32_t rhi_wait_value_ns(uint64_t value, uint64_t *ns)
+{
+    *ns = 0;
+    if (!g_vkr.slotOverlap || g_vkr.syncKind != VKR_SYNC_TIMELINE ||
+        __atomic_load_n(&g_vkr.deviceLost, __ATOMIC_ACQUIRE)) {
+        return RHI_WAIT_NONE;
+    }
+    if (value == 0) {
+        return 0; /* nothing submitted */
+    }
+    __atomic_store_n(&g_vkr.progPresentSinceNs, vkr_now_ns(), __ATOMIC_RELAXED);
+    __atomic_store_n(&g_vkr.progPresentFor, value, __ATOMIC_RELEASE);
+    const uint64_t t0 = vkr_now_ns();
+    VkResult r = vkr_sync_wait(value);
+    if (s_testWaitResult != 0) {
+        r = (VkResult)s_testWaitResult; /* a test's result for this wait, once */
+        s_testWaitResult = 0;
+    }
+    *ns = vkr_now_ns() - t0;
+    __atomic_store_n(&g_vkr.progPresentFor, 0, __ATOMIC_RELEASE);
+    if (r == VK_SUCCESS) {
+        vkr_progress_finished(value);
+        return 0;
+    }
+    if (r < 0) {
+        uint64_t none = 0;
+        (void)__atomic_compare_exchange_n(&g_vkr.lostWaitValue, &none, value, false,
+                                          __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+        VKR_CHECK(r);
+    }
+    return (int32_t)r;
 }
 
 void vkr_note_submit(const VkrFrame *f, uint64_t value, uint32_t lists, bool present)
