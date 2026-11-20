@@ -580,7 +580,6 @@ typedef enum UiStrId {
     UI_STR_STATS_CAPTURES,
     UI_STR_STATS_SAVES,
     UI_STR_STATS_ENEMIES,
-    UI_STR_STATS_ASSISTS,
     UI_STR_STATS_AREA,
     /* the photo panel's action words, each beside its button
        picture or key (photo_ui.c) */

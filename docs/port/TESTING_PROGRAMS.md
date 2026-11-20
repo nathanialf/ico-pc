@@ -2329,7 +2329,8 @@ The renderer's test programs have a page of their own:
   release and hold again, the other direction, the stick's d-pad emulation, held at 1 and 100,
   1 to 100 in 98 repeats, presses with gaps never repeating), a wrapping row (Filter) held for 75
   ticks stepping once, L1/R1 by 10 on the four colour rows (held at 1 and 100, nothing on Filter,
-  written on leaving the page), and the list of the rows that repeat.
+  written on leaving the page), the rows that repeat, and Mirror mode's stick on the menus
+  (`ico_pad_menu_stick_x`, `docs/port/INPUT.md`).
 - `settings_photo_test.c`: the Settings screens through rd on a device, written as PNGs
   (`settings_render`, which also draws the Touch screen page, the editor page and the main page
   scrolled by nine Downs, `settings_main_scrolled.png`, the Picture and Developer pages, `settings_picture.png` and `settings_developer.png`, and Gameplay's Chains, Shadows and Cutscenes pages opened through Gameplay, `settings_gameplay_chains.png`, `settings_gameplay_shadows.png` and `settings_gameplay_cutscenes.png`, also at 1080p); with `jpn` or `kor`, that disc's title and main page (`settings_render_jpn`,

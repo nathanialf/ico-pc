@@ -448,7 +448,6 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_STATS_CAPTURES] = "Yorda 被抓走的次數",
     [UI_STR_STATS_SAVES] = "這趟旅程的保存次數",
     [UI_STR_STATS_ENEMIES] = "這趟旅程打倒的敵人",
-    [UI_STR_STATS_ASSISTS] = "協助次數",
     [UI_STR_STATS_AREA] = "區域",
     [UI_STR_PHOTO_ACT_MOVE] = "移動",
     [UI_STR_PHOTO_ACT_LOOK] = "轉向",
