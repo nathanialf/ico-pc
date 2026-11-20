@@ -12,6 +12,9 @@
  *     tall and the Wii Classic Controller's a, x and y their sizes against
  *     its b, the fill colour and the black stroke present in each at 96
  *     rows, the alpha never past the GS's 0x80;
+ *   - the group fits: every face (or shoulder) piece of a set inside a box
+ *     or circle at the group's one scale, one touching, twice the button
+ *     twice the scale;
  *   - every piece at 24, 48 and 96 rows: its ink reaching all four sides of
  *     its raster within a pixel (no bearing left), every capital of a set
  *     the same height within a pixel, and the Wii Classic b as tall as the
@@ -434,6 +437,56 @@ static void testInk(int rows)
           "at %d rows: the Nintendo B %d rows tall, the Wii Classic b %d", rows, bH[0], bH[1]);
 }
 
+/* The group fits (pad_glyphs_fit_box / _circle): for every set and both
+   groups (the faces 0 .. 3, the shoulders 4 .. 7), in boxes of the discs'
+   sizes (32 x 30, 40 x 30, 64 x 40 y units, here square) and a 10 x 10,
+   and circles of 10 and 80: every piece of the group inside at that one
+   scale, one of them touching (as large as fits), the same for every
+   piece of the group, and twice the button twice the scale */
+static void testFit(void)
+{
+    static const float kBox[4][2] = {{32, 30}, {40, 30}, {64, 40}, {10, 10}};
+    static const float kD[2] = {10, 80};
+    CHECK(pad_glyphs_fit_box(ICO_PAD_GLYPHS_PLAYSTATION, CROSS, 32, 30) == 0.0f &&
+              pad_glyphs_fit_circle(ICO_PAD_GLYPHS_PLAYSTATION, CROSS, 10) == 0.0f &&
+              pad_glyphs_fit_box(ICO_PAD_GLYPHS_XBOX, 8, 32, 30) == 0.0f &&
+              pad_glyphs_fit_box(ICO_PAD_GLYPHS_XBOX, CROSS, 0, 30) == 0.0f,
+          "no fit for PlayStation, an arrow or an empty box");
+    for (int s = ICO_PAD_GLYPHS_XBOX; s < ICO_PAD_GLYPHS_COUNT; s++) {
+        for (int first = 0; first < 8; first += 4) {
+            for (int k = 0; k < 6; k++) {
+                const int circle = k >= 4;
+                const float w = circle ? 0.0f : kBox[k][0], h = circle ? 0.0f : kBox[k][1];
+                const float d = circle ? kD[k - 4] : 0.0f;
+                const float L = circle ? pad_glyphs_fit_circle(s, first, d)
+                                       : pad_glyphs_fit_box(s, first, w, h);
+                const float L2 = circle ? pad_glyphs_fit_circle(s, first, 2.0f * d)
+                                        : pad_glyphs_fit_box(s, first, 2.0f * w, 2.0f * h);
+                int inside = 1, touching = 0, same = 1;
+                for (int g = first; g < first + 4; g++) {
+                    const float ph = L * pad_glyphs_height(s, g), pw = ph * pad_glyphs_aspect(s, g);
+                    const float Lg =
+                        circle ? pad_glyphs_fit_circle(s, g, d) : pad_glyphs_fit_box(s, g, w, h);
+                    same &= Lg == L;
+                    if (circle) {
+                        const float half = 0.5f * hypotf(pw, ph);
+                        inside &= half <= 0.5f * d * 1.0001f;
+                        touching |= fabsf(half - 0.5f * d) <= 1e-3f * d;
+                    } else {
+                        inside &= pw <= w * 1.0001f && ph <= h * 1.0001f;
+                        touching |= fabsf(pw - w) <= 1e-3f * w || fabsf(ph - h) <= 1e-3f * h;
+                    }
+                }
+                CHECK(L > 0.0f && inside && touching && same && fabsf(L2 - 2.0f * L) <= 1e-4f * L,
+                      "%s pieces %d..%d, button %d: the fit %g (twice the button %g): inside %d, "
+                      "touching %d, one scale %d",
+                      pad_glyphs_style_name(s), first, first + 3, k, (double)L, (double)L2, inside,
+                      touching, same);
+            }
+        }
+    }
+}
+
 /* the absolute forms against the embedded relative files */
 static void testAbsolute(void)
 {
@@ -598,6 +651,7 @@ int main(void)
     testInk(24);
     testInk(48);
     testInk(96);
+    testFit();
     testAbsolute();
     testSameFile();
     testBroken();
