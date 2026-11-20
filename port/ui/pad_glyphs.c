@@ -1394,7 +1394,10 @@ static int pgRaster(const PgPiece *pc, int pixelH, int W, int H, uint8_t *rgba, 
         f.xy[2 * i] -= pc->ix0;
         f.xy[2 * i + 1] -= pc->iy0;
     }
-    const float cw = (pc->ix1 - pc->ix0) * s, ch = (pc->iy1 - pc->iy0) * s;
+    /* the ink's extent, within the bitmap (pgSize rounds a side a
+       thousandth of a texel past a whole one down) */
+    const float cw = fminf((pc->ix1 - pc->ix0) * s, (float)W);
+    const float ch = fminf((pc->iy1 - pc->iy0) * s, (float)H);
     const size_t px = (size_t)W * (size_t)H;
     uint8_t *covF = calloc(px, 1), *covS = calloc(px, 1);
     PgPolys ps;
