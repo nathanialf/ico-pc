@@ -438,15 +438,83 @@ static float pixelsPerY(void)
     return k > 0.0f ? k : 1.0f;
 }
 
+float lt_ext_glyph_lettering(int glyph)
+{
+    if (glyph < 0 || glyph >= LT_GLYPH_COUNT) {
+        return 1.0f;
+    }
+    const int face = glyphOf(LT_GLYPH_CROSS)->disp_h, own = glyphOf(glyph)->disp_h;
+    return face > 0 && own > 0 ? (float)face / (float)own : 1.0f;
+}
+
+int lt_ext_art_fit(int glyph, const float in[4], float maxW, float out[4], float *letter)
+{
+    if (glyph < 0 || glyph >= PAD_GLYPHS_PIECES || !pad_glyphs_active()) {
+        return 0;
+    }
+    const int style = pad_glyphs_style();
+    const float a = pad_glyphs_aspect(style, glyph), hk = pad_glyphs_height(style, glyph);
+    const float bw = in[2] - in[0], bh = in[3] - in[1];
+    if (!(a > 0.0f) || !(hk > 0.0f) || !(bw > 0.0f) || !(bh > 0.0f)) {
+        return 0;
+    }
+    float L = bh * lt_ext_glyph_lettering(glyph);
+    float h = L * hk, w = h * UI_X_PER_Y * a; /* a y unit is UI_X_PER_Y x units on screen */
+    if (maxW > 0.0f && w > maxW) {
+        const float k = maxW / w;
+        w = maxW;
+        h *= k;
+        L *= k;
+    }
+    const float cx = (in[0] + in[2]) * 0.5f, cy = (in[1] + in[3]) * 0.5f;
+    out[0] = cx - w * 0.5f;
+    out[1] = cy - h * 0.5f;
+    out[2] = cx + w * 0.5f;
+    out[3] = cy + h * 0.5f;
+    if (letter) {
+        *letter = L;
+    }
+    return 1;
+}
+
+/* The x units a game row's shoulder picture may pass its box by on each
+   side.  The discs draw the shoulder pictures only in Button
+   Configuration's picture column (x 390 .. 430 on the PAL disc, 390 .. 454
+   on the Japanese, Korean and Chinese ones), whose left neighbours, the
+   rows' labels, end at x 384 on all of them, and nothing is to its right:
+   6 units free a side, which the PAL disc's 40-unit boxes need for the
+   two-letter pictures at the set's lettering (LB about 51 units wide, RB
+   about 54: that one still shrinks a little).  The face
+   pictures are drawn in that column too and in the prompts (a picture,
+   then its word: five layouts on the PAL disc, four on the Japanese, Korean
+   and Chinese ones), where the word's box starts at the picture box's
+   right edge: they keep inside everywhere (the widest, the A, comes out
+   a few % under the lettering).  The port's glyph rows are the
+   prompt lines (ui_hint.c: the pair's other picture 2 units away, the word
+   5): they keep inside too. */
+#define ART_GAME_SHOULDER_OVER 6.0f
+
+/* the widest row e's art of button g may be in a box bw x units wide (the
+   row's own box or the sprite's, which the glow stretches): rowW is the
+   row's own width, so the overhang scales with the box */
+static float artMaxW(const LtProperty *e, int g, float bw)
+{
+    if (lt_ext_is_port_prop(e) || g < LT_GLYPH_L1) {
+        return bw;
+    }
+    const float rowW = (float)(e->dispW ? e->dispW : e->texW);
+    return bw + 2.0f * ART_GAME_SHOULDER_OVER * (rowW > 0.0f ? bw / rowW : 1.0f);
+}
+
 /* The art's texture for row e while a set is in force: its button (*g),
-   the texture, its cell (texels) and the art's aspect; 0 when the row
-   shows no button, no set is in force or no atlas can be made (then the
-   disc's own path draws the row).  The art is rasterised at the height it
-   has fitted in the row's own box (dispW pixels by dispH y units, the
-   texture's size where they are 0) at the picture's scale, for the label
-   pass and the glow passes alike: a glow is the same picture stretched,
-   as the disc's glow sprite is its texture stretched. */
-static int artOf(const LtProperty *e, int *g, unsigned *tex, float uv[4], float *aspect)
+   the texture and the ink's cell (texels); 0 when the row shows no button,
+   no set is in force or no atlas can be made (then the disc's own path
+   draws the row).  The art is rasterised at the lettering it has in the
+   row's own box (dispW pixels by dispH y units, the texture's size where
+   they are 0; lt_ext_art_fit) at the picture's scale, for the label pass
+   and the glow passes alike: a glow is the same picture stretched, as the
+   disc's glow sprite is its texture stretched. */
+static int artOf(const LtProperty *e, int *g, unsigned *tex, float uv[4])
 {
     if (!pad_glyphs_active()) {
         return 0;
@@ -455,18 +523,15 @@ static int artOf(const LtProperty *e, int *g, unsigned *tex, float uv[4], float 
     if (b < 0) {
         return 0;
     }
-    const float a = pad_glyphs_aspect(pad_glyphs_style(), b);
     const float w = (float)(e->dispW ? e->dispW : e->texW);
     const float h = (float)(e->dispH ? e->dispH : e->texH);
-    if (!(a > 0.0f) || !(w > 0.0f) || !(h > 0.0f)) {
+    const float in[4] = {0.0f, 0.0f, w, h};
+    float out[4], letter = 0.0f;
+    if (!lt_ext_art_fit(b, in, artMaxW(e, b, w), out, &letter)) {
         return 0;
     }
-    /* the fitted height in y units: the box's, or the width's over the
-       aspect where the box is the narrower (a y unit is UI_X_PER_Y x
-       units on screen) */
-    const float fh = w >= h * UI_X_PER_Y * a ? h : w / a / UI_X_PER_Y;
-    const long px = lrintf(fh * pixelsPerY());
-    if (!pad_glyphs_texture(b, px < 1 ? 1 : (int)px, tex, uv, aspect)) {
+    const long px = lrintf(letter * pixelsPerY());
+    if (!pad_glyphs_texture(b, px < 1 ? 1 : (int)px, tex, uv, NULL)) {
         return 0;
     }
     *g = b;
@@ -475,18 +540,18 @@ static int artOf(const LtProperty *e, int *g, unsigned *tex, float uv[4], float 
 
 /* Row e's art in box (the sprite's rectangle display_texture or the glow
    gives the disc's glyph: x, y, w, h in 1/16 pixel / 1/16 field line from
-   the centre), the largest rectangle of the art's aspect centred in it
-   (lt_ext_aspect_fit: the disc box is kept, nothing is laid out again),
-   with the sprite's colour (the row's fade, dimming and reduction as the
-   game computed them) and the packet's state: the label pass the game's
-   sprite blend, the glow pass additive as the glow sprite.  1 when drawn. */
+   the centre): its ink centred in the box at the set's lettering
+   (lt_ext_art_fit; the disc box is kept, nothing is laid out again), with
+   the sprite's colour (the row's fade, dimming and reduction as the game
+   computed them) and the packet's state: the label pass the game's sprite
+   blend, the glow pass additive as the glow sprite.  1 when drawn. */
 static int drawArt(const LtProperty *e, const int box[4], const unsigned char rgba[4], int glow)
 {
 #ifdef ICO_RD
     int g = -1;
     unsigned tex = 0;
-    float uv[4], a = 0.0f;
-    if (!artOf(e, &g, &tex, uv, &a)) {
+    float uv[4];
+    if (!artOf(e, &g, &tex, uv)) {
         return 0;
     }
     float in[4], fit[4];
@@ -494,7 +559,9 @@ static int drawArt(const LtProperty *e, const int box[4], const unsigned char rg
     in[1] = (float)box[1] / 8.0f + UI_GRID_CY;
     in[2] = in[0] + (float)box[2] / 16.0f;
     in[3] = in[1] + (float)box[3] / 8.0f;
-    lt_ext_aspect_fit(in, a, fit);
+    if (!lt_ext_art_fit(g, in, artMaxW(e, g, in[2] - in[0]), fit, NULL)) {
+        return 0;
+    }
     UiTexQuad q;
     q.x0 = fit[0];
     q.y0 = fit[1];
@@ -627,16 +694,9 @@ uint32_t lt_ext_row_image(int index, int *texW, int *texH)
     return r->tex;
 }
 
-void lt_ext_image_fit(const float in[4], int texW, int texH, float out[4])
-{
-    if (texW <= 0 || texH <= 0) {
-        memcpy(out, in, 4 * sizeof(float));
-        return;
-    }
-    lt_ext_aspect_fit(in, (float)texW / (float)texH, out);
-}
-
-void lt_ext_aspect_fit(const float in[4], float a, float out[4])
+/* the largest rectangle of aspect a (width over height on screen, square
+   pixels) centred in box in; out = in for a <= 0 or an empty box */
+static void aspectFit(const float in[4], float a, float out[4])
 {
     const float w = in[2] - in[0], h = in[3] - in[1];
     memcpy(out, in, 4 * sizeof(float));
@@ -655,6 +715,15 @@ void lt_ext_aspect_fit(const float in[4], float a, float out[4])
         out[1] = in[1] + (h - fh) * 0.5f;
         out[3] = out[1] + fh;
     }
+}
+
+void lt_ext_image_fit(const float in[4], int texW, int texH, float out[4])
+{
+    if (texW <= 0 || texH <= 0) {
+        memcpy(out, in, 4 * sizeof(float));
+        return;
+    }
+    aspectFit(in, (float)texW / (float)texH, out);
 }
 
 /* an image row: the box (the rect row's conversion), the texture's
@@ -868,8 +937,8 @@ int lt_ext_is_text_row(const LtProperty *e)
 {
     int g;
     unsigned tex;
-    float uv[4], a;
-    if (artOf(e, &g, &tex, uv, &a)) {
+    float uv[4];
+    if (artOf(e, &g, &tex, uv)) {
         return 1; /* the button pictures' art (drawArt) */
     }
     if (lt_ext_is_glyph_row(e)) {
