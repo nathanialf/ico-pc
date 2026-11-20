@@ -417,6 +417,9 @@ const char *const
             [UI_STR_VAL_HOLD_DISC_B] = "Wie die Disc (B)",
             [UI_STR_HOLD_TYPE_NOTE] =
                 "A: R1 gedrückt halten, um Yordas Hand zu halten. B: R1 einmal drücken, um ihre Hand zu nehmen, erneut drücken zum Loslassen.",
+            [UI_STR_OPT_BUTTON_PICTURES] = "Tastenbilder",
+            [UI_STR_BUTTON_PICTURES_NOTE] =
+                "Die Tasten in Menüs und im Fotomodus. Automatisch folgt dem zuletzt benutzten Controller.",
             [UI_STR_STICK_FIX_ALSO_NOTE] = "Auch unter Spiel.",
             [UI_STR_ACH_POPUPS_ALSO_NOTE] = "Auch unter Erfolge.",
             [UI_STR_PLAYERS_NOTE] = "2: Ein zweiter Controller steuert Yorda.",

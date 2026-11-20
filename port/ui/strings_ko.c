@@ -412,6 +412,9 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_VAL_HOLD_DISC_B] = "디스크 그대로 (B)",
     [UI_STR_HOLD_TYPE_NOTE] =
         "A: R1을 누르고 있는 동안 요르다의 손을 잡습니다. B: R1을 한 번 누르면 손을 잡고, 다시 누르면 놓습니다.",
+    [UI_STR_OPT_BUTTON_PICTURES] = "버튼 그림",
+    [UI_STR_BUTTON_PICTURES_NOTE] =
+        "메뉴와 포토 모드에 표시되는 버튼 그림입니다. 자동은 마지막으로 사용한 컨트롤러에 맞게 바뀝니다.",
     [UI_STR_STICK_FIX_ALSO_NOTE] = "‘게임플레이’에도 있습니다.",
     [UI_STR_ACH_POPUPS_ALSO_NOTE] = "‘업적’에도 있습니다.",
     [UI_STR_PLAYERS_NOTE] = "2: 두 번째 컨트롤러로 요르다를 조작합니다.",

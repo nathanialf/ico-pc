@@ -414,6 +414,9 @@ const char *const ui_strings_es[UI_STR_COUNT] =
         [UI_STR_VAL_HOLD_DISC_B] = "El del disco (B)",
         [UI_STR_HOLD_TYPE_NOTE] =
             "A: mantén pulsado R1 para sujetar la mano de Yorda. B: pulsa R1 una vez para cogerle la mano y vuelve a pulsarlo para soltarla.",
+        [UI_STR_OPT_BUTTON_PICTURES] = "Imágenes de los botones",
+        [UI_STR_BUTTON_PICTURES_NOTE] =
+            "Los botones que se muestran en los menús y el modo foto. Automático sigue al último mando usado.",
         [UI_STR_STICK_FIX_ALSO_NOTE] = "También en Juego.",
         [UI_STR_ACH_POPUPS_ALSO_NOTE] = "También en Logros.",
         [UI_STR_PLAYERS_NOTE] = "2: un segundo mando controla a Yorda.",

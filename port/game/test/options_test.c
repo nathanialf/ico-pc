@@ -2625,6 +2625,72 @@ static void test_video_changes_text(void)
 
 /* options_test DIR [SLUG]: SLUG the selected disc (config/regions.txt: pal,
    the default, jpn or kor) */
+/* [input] button_pictures: auto by default and for a word that is none of
+   the five; "playstation", "xbox", "nintendo", "wii_classic" their numbers
+   0..3 (port/ui/pad_glyphs.h's styles); the setter takes -1..3 (anything
+   else auto); the store writes the run's choice, which reads back after a
+   save and a reload */
+static void test_button_pictures(const char *dir)
+{
+    static const char *const names[ICO_BUTTON_PICTURES_COUNT] = {"playstation", "xbox", "nintendo",
+                                                                 "wii_classic"};
+    char path[512];
+    char text[96];
+    FILE *f;
+
+    ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
+    ico_opt_reload();
+    CHECK(ico_opt_button_pictures() == ICO_BUTTON_PICTURES_AUTO);
+    CHECK(strcmp(ico_opt_button_pictures_name(ICO_BUTTON_PICTURES_AUTO), "auto") == 0);
+    snprintf(path, sizeof(path), "%s/options_test.toml", dir);
+    for (int i = 0; i < ICO_BUTTON_PICTURES_COUNT + 3; i++) {
+        const char *v = i < ICO_BUTTON_PICTURES_COUNT        ? names[i]
+                        : i == ICO_BUTTON_PICTURES_COUNT     ? "auto"
+                        : i == ICO_BUTTON_PICTURES_COUNT + 1 ? "Xbox"
+                                                             : "sega";
+        const int want = i < ICO_BUTTON_PICTURES_COUNT ? i : ICO_BUTTON_PICTURES_AUTO;
+
+        f = fopen(path, "wb");
+        if (f == NULL) {
+            fprintf(stderr, "cannot write %s\n", path);
+            failures++;
+            return;
+        }
+        snprintf(text, sizeof(text), "[input]\nbutton_pictures = \"%s\"\n", v);
+        fputs(text, f);
+        fclose(f);
+        ico_config_reset(path, "/nonexistent/options_test.ini");
+        ico_opt_reload();
+        CHECK(ico_opt_button_pictures() == want);
+        CHECK(strcmp(ico_opt_button_pictures_name(ico_opt_button_pictures()),
+                     i < ICO_BUTTON_PICTURES_COUNT ? v : "auto") == 0);
+    }
+    /* the setter */
+    ico_opt_set_button_pictures(ICO_BUTTON_PICTURES_NINTENDO);
+    CHECK(ico_opt_button_pictures() == ICO_BUTTON_PICTURES_NINTENDO);
+    ico_opt_set_button_pictures(ICO_BUTTON_PICTURES_COUNT);
+    CHECK(ico_opt_button_pictures() == ICO_BUTTON_PICTURES_AUTO);
+    ico_opt_set_button_pictures(-7);
+    CHECK(ico_opt_button_pictures() == ICO_BUTTON_PICTURES_AUTO);
+    /* the round trip: the store, the save, a reload */
+    ico_opt_set_button_pictures(ICO_BUTTON_PICTURES_WII_CLASSIC);
+    CHECK(ico_opt_button_pictures_store() == 0);
+    CHECK(strcmp(ico_config_get_string("input.button_pictures", ""), "wii_classic") == 0);
+    CHECK(ico_config_save() == 0);
+    ico_config_reset(path, "/nonexistent/options_test.ini");
+    ico_opt_reload();
+    CHECK(ico_opt_button_pictures() == ICO_BUTTON_PICTURES_WII_CLASSIC);
+    ico_opt_set_button_pictures(ICO_BUTTON_PICTURES_AUTO);
+    CHECK(ico_opt_button_pictures_store() == 0 && ico_config_save() == 0);
+    ico_config_reset(path, "/nonexistent/options_test.ini");
+    ico_opt_reload();
+    CHECK(ico_opt_button_pictures() == ICO_BUTTON_PICTURES_AUTO);
+    CHECK(strcmp(ico_config_get_string("input.button_pictures", ""), "auto") == 0);
+    remove(path);
+    ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
+    ico_opt_reload();
+}
+
 int main(int argc, char **argv)
 {
     if (argc > 2 && ico_region_select(argv[2]) != 0) {
@@ -2646,6 +2712,7 @@ int main(int argc, char **argv)
     test_brain();
     test_ui_language(argc > 1 ? argv[1] : ".");
     test_text_language(argc > 1 ? argv[1] : ".");
+    test_button_pictures(argc > 1 ? argv[1] : ".");
     test_video_effects(argc > 1 ? argv[1] : ".");
     test_video_effects_depth(argc > 1 ? argv[1] : ".");
     test_video_full_pixel(argc > 1 ? argv[1] : ".");

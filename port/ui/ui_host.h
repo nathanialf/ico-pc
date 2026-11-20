@@ -10,9 +10,12 @@
  *                            presentation overlay that draws the popups
  *                            (rd_set_present_overlay), the [dev] popup_test
  *                            switch (ICO_UI_POPUP_TEST, exported by
- *                            host_config.c)
+ *                            host_config.c), the first frame's button
+ *                            pictures (settings_pads.h)
  *   ui_host_vsync(mainTick)   once per vsync after the simulation step: the
- *                            popup test trigger and the popup clock
+ *                            popup test trigger and the popup clock, the
+ *                            next frame's button pictures
+ *                            (ui_settings_pads_frame)
  *   ui_host_shutdown()        before rd_shutdown: the overlay, the atlases'
  *                            textures
  */

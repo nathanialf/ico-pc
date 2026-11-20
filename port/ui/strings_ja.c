@@ -409,6 +409,9 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_VAL_HOLD_DISC_B] = "ディスクのまま（B）",
     [UI_STR_HOLD_TYPE_NOTE] =
         "A：R1を押している間、ヨルダと手をつなぎます。B：R1を1回押すと手をつなぎ、もう一度押すと手を離します。",
+    [UI_STR_OPT_BUTTON_PICTURES] = "ボタン表示",
+    [UI_STR_BUTTON_PICTURES_NOTE] =
+        "メニューとフォトモードに表示するボタンです。自動は最後に使ったコントローラーに合わせます。",
     [UI_STR_STICK_FIX_ALSO_NOTE] = "「ゲームプレイ」にもあります。",
     [UI_STR_ACH_POPUPS_ALSO_NOTE] = "「実績」にもあります。",
     [UI_STR_PLAYERS_NOTE] = "2：2つ目のコントローラでヨルダを操作します。",

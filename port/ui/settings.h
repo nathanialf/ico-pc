@@ -746,6 +746,9 @@ typedef enum UiSettingsOpt {
     UI_OPT_CIRCLE_BACK,  /* [game] circle_back */
     UI_OPT_VIBRATION,    /* the game's iosPadActRequestEnable */
     UI_OPT_HOLD_TYPE,    /* [gameplay] hold_type: A (hold) or B (toggle) */
+    /* [input] button_pictures: Auto, PlayStation, Xbox, Nintendo, Wii Classic
+       Controller (settings_pads.h), after Vibration */
+    UI_OPT_BUTTON_PICTURES,
     /* Controls > Touch screen: the touch overlay ([input] touch_*) and
        its layout edits ([touch]), shown with a touch screen */
     UI_OPT_TOUCH_MODE,    /* Off, Auto, Always */

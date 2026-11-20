@@ -857,6 +857,53 @@ void ico_opt_hold_type_toggled(int type)
     }
 }
 
+/* [input] button_pictures (options.h): -2 not read yet, else
+   ICO_BUTTON_PICTURES_* */
+static int s_button_pictures = -2;
+static const char *const kButtonPicturesNames[ICO_BUTTON_PICTURES_COUNT] = {
+    "playstation", "xbox", "nintendo", "wii_classic"};
+
+int ico_opt_button_pictures(void)
+{
+    if (s_button_pictures == -2) {
+        const char *v = ico_config_get_string("input.button_pictures", "auto");
+
+        s_button_pictures = ICO_BUTTON_PICTURES_AUTO;
+        for (int i = 0; v != NULL && i < ICO_BUTTON_PICTURES_COUNT; i++) {
+            if (strcmp(v, kButtonPicturesNames[i]) == 0) {
+                s_button_pictures = i;
+            }
+        }
+        if (s_button_pictures == ICO_BUTTON_PICTURES_AUTO && v != NULL && strcmp(v, "auto") != 0) {
+            fprintf(stderr,
+                    "options: [input] button_pictures = \"%s\" is not one of auto, playstation, "
+                    "xbox, nintendo, wii_classic: auto\n",
+                    v);
+        }
+    }
+    return s_button_pictures;
+}
+
+void ico_opt_set_button_pictures(int choice)
+{
+    s_button_pictures =
+        choice >= 0 && choice < ICO_BUTTON_PICTURES_COUNT ? choice : ICO_BUTTON_PICTURES_AUTO;
+}
+
+const char *ico_opt_button_pictures_name(int choice)
+{
+    return choice >= 0 && choice < ICO_BUTTON_PICTURES_COUNT ? kButtonPicturesNames[choice]
+                                                             : "auto";
+}
+
+int ico_opt_button_pictures_store(void)
+{
+    return ico_config_set_string("input.button_pictures",
+                                 ico_opt_button_pictures_name(ico_opt_button_pictures())) != 0
+               ? -1
+               : 0;
+}
+
 void ico_opt_reload(void)
 {
     /* the difficulty rows (yorda_safe, pit_time, shadow_speed, yorda_trips,
@@ -868,6 +915,7 @@ void ico_opt_reload(void)
     s_ui_language = -2;
     s_text_language = -2;
     s_hold_choice = -1;
+    s_button_pictures = -2;
     /* the characters' colours ([characters], appearance.h) */
     ico_appearance_reload();
     /* the game variants ([variants], variants.h) */

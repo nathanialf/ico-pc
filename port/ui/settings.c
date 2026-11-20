@@ -46,6 +46,7 @@
 #include "settings_unused.h"     /* Extras > Unused content's host */
 #include "settings_variants.h"   /* the game variants rows' values, notes and rule */
 #include "settings_upscale.h"    /* the Upscaling rows: FSR 3.1, quality */
+#include "settings_pads.h"       /* Controls > Button pictures */
 #include "settings_step.h"       /* held Left/Right, L1/R1 */
 #include "touch_edit_ui.h"       /* the Edit layout page */
 #include "variants.h"            /* the game variants rows (Gameplay and its pages) */
@@ -2001,6 +2002,8 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         }
         return ui_str(toggle ? UI_STR_VAL_HOLD_B : UI_STR_VAL_HOLD_A);
     }
+    case UI_OPT_BUTTON_PICTURES:
+        return ui__pads_text(buf, size);
     case UI_OPT_TOUCH_MODE: {
         static const int modeStr[4] = {UI_STR_OFF, UI_STR_VAL_AUTO, UI_STR_VAL_ALWAYS,
                                        UI_STR_VAL_ALWAYS_SCENES};
@@ -2812,6 +2815,10 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         s_dirtyConfig = 1;
         break;
     }
+    case UI_OPT_BUTTON_PICTURES:
+        ui__pads_step(dir); /* [input] button_pictures */
+        s_dirtyConfig = 1;
+        break;
     case UI_OPT_FILM_EFFECT: {
         /* row 300: 0..4 around, the stage animations with it */
         int m = optionScreenMode >= 0 && optionScreenMode < FILM_EFFECTS ? optionScreenMode : 0;
@@ -3437,6 +3444,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
     case UI_PAGE_CONTROLS:
         addNote(pg, UI_OPT_BUTTON_CONFIG, UI_STR_BUTTON_CONFIG_NOTE);
         addNote(pg, UI_OPT_HOLD_TYPE, UI_STR_HOLD_TYPE_NOTE);
+        addNote(pg, UI_OPT_BUTTON_PICTURES, UI_STR_BUTTON_PICTURES_NOTE);
         addNote(pg, UI_OPT_STICK_FIX, UI_STR_STICK_FIX_ALSO_NOTE);
         addNote(pg, UI_OPT_CIRCLE_BACK, UI_STR_CIRCLE_BACK_NOTE);
         break;
@@ -4121,23 +4129,22 @@ static void build(void)
                                     UI_OPT_OUTPUT, UI_OPT_DEVICE, UI_OPT_BACK};
     static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_OPT_MUSIC_VOL, UI_STR_OPT_EFFECTS_VOL,
                                     UI_STR_OPT_OUTPUT, UI_STR_OPT_DEVICE,    UI_STR_BACK};
-    /* the game's Button configuration, Vibration and Hold type after
-       Remap, from the pause menu; the Touch screen page's link before
+    /* the game's Button configuration and Vibration after Remap, from the
+       pause menu, then Button pictures and Hold type; the Touch screen page's link before
        Back, with a touch screen; the mouse camera's rows (not on
        Android) */
-    static const int ctlOpts[] = {UI_OPT_LINK,        UI_OPT_BUTTON_CONFIG, UI_OPT_VIBRATION,
-                                  UI_OPT_HOLD_TYPE,   UI_OPT_STICK_FIX,     UI_OPT_MOUSE_CAMERA,
-                                  UI_OPT_MOUSE_SENS,  UI_OPT_MOUSE_INVERT,  UI_OPT_MOUSE_SPEED,
-                                  UI_OPT_MOUSE_RANGE, UI_OPT_MOUSE_RETURN,  UI_OPT_CIRCLE_BACK,
-                                  UI_OPT_LINK,        UI_OPT_BACK};
-    static const int ctlStrs[] = {UI_STR_OPT_REMAP,        UI_STR_OPT_BUTTON_CONFIG,
-                                  UI_STR_OPT_VIBRATION,    UI_STR_OPT_HOLD_TYPE,
-                                  UI_STR_OPT_STICK_FIX,    UI_STR_OPT_MOUSE_CAMERA,
-                                  UI_STR_OPT_MOUSE_SENS,   UI_STR_OPT_MOUSE_INVERT,
-                                  UI_STR_OPT_MOUSE_SPEED,  UI_STR_OPT_MOUSE_RANGE,
-                                  UI_STR_OPT_MOUSE_RETURN, UI_STR_OPT_CIRCLE_BACK,
-                                  UI_STR_SECTION_TOUCH,    UI_STR_BACK};
-    static const int ctlLinks[] = {UI_PAGE_REMAP, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    static const int ctlOpts[] = {
+        UI_OPT_LINK,         UI_OPT_BUTTON_CONFIG, UI_OPT_VIBRATION,    UI_OPT_BUTTON_PICTURES,
+        UI_OPT_HOLD_TYPE,    UI_OPT_STICK_FIX,     UI_OPT_MOUSE_CAMERA, UI_OPT_MOUSE_SENS,
+        UI_OPT_MOUSE_INVERT, UI_OPT_MOUSE_SPEED,   UI_OPT_MOUSE_RANGE,  UI_OPT_MOUSE_RETURN,
+        UI_OPT_CIRCLE_BACK,  UI_OPT_LINK,          UI_OPT_BACK};
+    static const int ctlStrs[] = {
+        UI_STR_OPT_REMAP,           UI_STR_OPT_BUTTON_CONFIG, UI_STR_OPT_VIBRATION,
+        UI_STR_OPT_BUTTON_PICTURES, UI_STR_OPT_HOLD_TYPE,     UI_STR_OPT_STICK_FIX,
+        UI_STR_OPT_MOUSE_CAMERA,    UI_STR_OPT_MOUSE_SENS,    UI_STR_OPT_MOUSE_INVERT,
+        UI_STR_OPT_MOUSE_SPEED,     UI_STR_OPT_MOUSE_RANGE,   UI_STR_OPT_MOUSE_RETURN,
+        UI_STR_OPT_CIRCLE_BACK,     UI_STR_SECTION_TOUCH,     UI_STR_BACK};
+    static const int ctlLinks[] = {UI_PAGE_REMAP, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
                                    UI_PAGE_TOUCH, -1};
     /* Controls > Touch screen: the overlay's three rows, then the layout
        editor's (Edit layout opens UI_PAGE_TOUCH_LAYOUT) */

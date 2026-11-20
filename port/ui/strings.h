@@ -525,6 +525,10 @@ typedef enum UiStrId {
     UI_STR_VAL_HOLD_DISC_A, /* Hold type: the disc's own, A on this disc */
     UI_STR_VAL_HOLD_DISC_B, /* the disc's own, B */
     UI_STR_HOLD_TYPE_NOTE,
+    /* Controls > Button pictures and its note (the values are names, not
+       translated: settings_pads.c) */
+    UI_STR_OPT_BUTTON_PICTURES,
+    UI_STR_BUTTON_PICTURES_NOTE,
     UI_STR_STICK_FIX_ALSO_NOTE,  /* Controls: this row is also under Gameplay */
     UI_STR_ACH_POPUPS_ALSO_NOTE, /* Extras: this row is also under Achievements */
     UI_STR_PLAYERS_NOTE,
