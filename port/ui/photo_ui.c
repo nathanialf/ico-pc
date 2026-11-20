@@ -474,10 +474,13 @@ float ui__photo_hud_fit(const UiHudItem *items, int n, float *size, float room, 
 }
 
 /* The button pictures' art (pad_glyphs.h) while a set is in force, in the
-   disc glyph's box at the same place (its left edge x, its middle on mid),
-   fitted and centred with the art's aspect, rasterised at the height it is
-   shown on the output (the overlay's pixels per y unit); 1 when drawn,
-   0 to draw the disc's picture instead. */
+   disc glyph's box at the same place (its left edge x, its middle on mid):
+   its ink centred in the box at the set's lettering (lt_ext_art_fit),
+   rasterised at that lettering as it is shown on the output (the
+   overlay's pixels per y unit); 1 when drawn, 0 to draw the disc's picture
+   instead.  The panel puts the pair's other picture 0.16 of the size away
+   and the word 0.34 (ui__photo_hud_layout): a picture keeps inside its box
+   (shrunk, its shape kept, where it is wider), so those gaps stay. */
 static int hudArt(int glyph, float x, float mid, float size)
 {
     if (!pad_glyphs_active()) {
@@ -485,19 +488,20 @@ static int hudArt(int glyph, float x, float mid, float size)
     }
     int w = 0, h = 0;
     lt_ext_glyph_box(glyph, size, &w, &h);
-    const float a = pad_glyphs_aspect(pad_glyphs_style(), glyph);
-    if (w <= 0 || h <= 0 || !(a > 0.0f)) {
+    if (w <= 0 || h <= 0) {
         return 0;
     }
-    float in[4], fit[4], uv[4];
+    float in[4], fit[4], uv[4], letter = 0.0f;
     in[0] = x;
     in[1] = mid - (float)h * 0.5f;
     in[2] = x + (float)w;
     in[3] = in[1] + (float)h;
-    lt_ext_aspect_fit(in, a, fit);
+    if (!lt_ext_art_fit(glyph, in, (float)w, fit, &letter)) {
+        return 0;
+    }
     float y0 = 0.0f, y1 = 0.0f;
-    ui_overlay_map(0.0f, fit[1], NULL, &y0);
-    ui_overlay_map(0.0f, fit[3], NULL, &y1);
+    ui_overlay_map(0.0f, 0.0f, NULL, &y0);
+    ui_overlay_map(0.0f, letter, NULL, &y1);
     const long px = lrintf((y1 - y0) / 16.0f);
     unsigned tex = 0;
     if (!pad_glyphs_texture(glyph, px < 1 ? 1 : (int)px, &tex, uv, NULL)) {

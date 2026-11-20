@@ -66,6 +66,9 @@ void ui_touch_draw_overlay(const struct RdOverlayCtx *ctx);
 /* Tests: the mask of the zones (1 << IcoTouchZone) the last draw gave the
    button pictures' art (0 with no set in force) */
 unsigned ui__touch_art_zones(void);
+/* Tests: zone's art quad at the last draw (output pixels: x0, y0, x1, y1),
+   1; 0 when that draw gave it none */
+int ui__touch_art_quad(int zone, float q[4]);
 
 /* Where the Frame rate counter goes while the touch controls show, from the
    player's actual layout (touch_gap.h ico_touch_fps_place): margin, the

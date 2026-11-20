@@ -1009,13 +1009,32 @@ or path command, an entity, more than 8192 bytes, more than 512 path commands or
 than 8 refuses it; the reader's buffers are bounded by those limits and by 16384 flattened points
 a picture.
 
-**Drawing.** A piece is rasterised at the height it is drawn at (the viewBox scaled to that many
-rows, its width rounded), as a browser draws the file: the curves flattened into segments of about
+**The ink, not the viewBox.** The contributed files do not place their letters alike: the
+viewBoxes are 24 x 24 (the face letters, the Nintendo and Wii Classic L and R), 40 x 24 (LB, RB,
+LT, RT, ZL, ZR) and 24 x 32 (the Wii Classic b, a, y, x), and inside them the letters have
+different bearings and heights (the capitals' outlines are 19.10, 19.54 or 20.00 units tall; the
+lower case sit at x height or hang a descender). Fitted by its viewBox, a Wii letter came out 3/4
+the size and a two-letter piece in a square box 3/5. So each piece's **ink box** is measured once
+when it is read (`pgInk`): the bounds of every polygon its raster draws (the fill, the stroke's
+bands and miter joins, flattened finely), clipped to the viewBox; the stroke's 4 units belong to
+the ink. Each piece then has a **lettering height** in its file's units (`pgRefs`, per set): a
+capital or ascender letter (its outline's top within a quarter of its own height of the viewBox's
+top) is its own ink height, so every capital of every set fills the same height whatever its
+file's units; a short letter (the Wii Classic a, x and y: their outlines start 7.63 and 7.98 units
+down) takes the lettering of the set's first capital on a viewBox of its size (the b), so it keeps
+its size against it (the a and x about 0.78 and 0.76 of it, the y, ascender to descender, 1.0015).
+`pad_glyphs_aspect` is the ink's width over its height, `pad_glyphs_height` its height in
+lettering heights; a raster, a cell and its texel rectangle are the ink box at the lettering
+height asked for.
+
+**Drawing.** A piece is rasterised at the lettering height it is drawn at (its ink box at that
+size, each side rounded up to whole texels, the box's corner at the first texel's), as a browser
+draws the file: the curves flattened into segments of about
 2 pixels; the fill by the file's rule; the stroke built as outlines, a band of the stroke width
 along every segment and a join piece at every vertex on the outer side of the turn, a miter up to
 `stroke-miterlimit` and a bevel past it (SVG's `stroke-linejoin` default; the files' limit of 100
 gives miters at every corner they have); `paint-order: stroke` puts the fill over the stroke;
-everything clipped to the viewBox. Both layers go through stb_truetype's own scanline rasteriser
+everything clipped to the viewBox (the ink box, which is the same clip). Both layers go through stb_truetype's own scanline rasteriser
 (`font.c` `ui__raster_polys`, around `stbtt__rasterize`, the step of `stbtt_Rasterize` after its
 curve flattening, so the points stay floats). That rasteriser sums each polygon's signed area over
 a pixel and takes its magnitude, clamped (`k = scanline[i] + sum; fabs(k) * 255`): polygons of one
@@ -1031,11 +1050,14 @@ through `ui__draw_tex_quads` (modulate, the texture's alpha, the blend `RD_BLEND
 vertex colour of 0x80 draws the art as it is. A transparent texel carries the stroke's colour, so
 bilinear filtering at the outline brings in no other colour.
 
-**The cache.** One atlas per set and height holds the eight pictures, the four face buttons on
-one row and the four shoulders on the next, two transparent texels around each; a request of
-`pixelH` rows is drawn from the first of 16, 24, 32, 48, 64, 96, 128, 192 and 256 at or above it
-(`pad_glyphs_bucket`). The atlas is `2 h + 6` texels high, never a power of two, so the texture
-filter gives it no mip chain to average cells together (`rd_upload.c` `texLevels`). It is made
+**The cache.** One atlas per set and lettering height holds the eight pictures, the four face
+buttons on one row and the four shoulders on the next, each cell its ink rounded up to whole texels
+with two transparent texels around it; a request of a `pixelH` lettering is drawn from the first of
+16, 24, 32, 48, 64, 96, 128, 192 and 256 at or above it (`pad_glyphs_bucket`). Each row is as tall
+as its tallest cell, and an atlas whose height would be a power of two gets one more row, so the
+texture filter gives it no mip chain to average cells together (`rd_upload.c` `texLevels`). The
+texel rectangle a caller gets is the ink's own (its right and bottom edges are not whole texels).
+It is made
 inside `pad_glyphs_texture` the first time a set and height are asked for, on the thread that
 draws the menus, as the menu font's pages are. Six atlases live at most: a full cache drops the
 one drawn least recently once no frame of the last four can name it, else the nearest height of
@@ -1060,11 +1082,12 @@ the element <circle>`, the set then `Xbox incomplete, cannot be chosen (7 of 8)`
 
 **The API** (`port/ui/pad_glyphs.h`): `pad_glyphs_init`, `pad_glyphs_set_complete`,
 `pad_glyphs_set_style`, `pad_glyphs_style`, `pad_glyphs_active`, `pad_glyphs_style_name`,
-`pad_glyphs_aspect` (the art's width over its height: 1, 40 / 24 for the 40 x 24 shoulders, 24 / 32
-for the Wii Classic Controller's face letters), `pad_glyphs_bucket`, `pad_glyphs_texture` (the
-atlas, the cell's texel rectangle, the aspect); for tests and tools, CPU only:
+`pad_glyphs_aspect` (the ink's width over its height), `pad_glyphs_height` (the ink's height in
+lettering heights: 1 for a capital), `pad_glyphs_bucket`, `pad_glyphs_texture` (the atlas, the
+ink's texel rectangle, the aspect, for a lettering height); for tests and tools, CPU only:
 `pad_glyphs_raster_size`, `pad_glyphs_raster` (a piece into the caller's RGBA buffer, the atlas
-cell's texels exactly), `pad_glyphs_piece_valid`, `pad_glyphs_piece_error`,
+cell's texels exactly), `pad_glyphs_ink_box` (the ink box in the file's units),
+`pad_glyphs_piece_valid`, `pad_glyphs_piece_error`,
 `pad_glyphs_test_source` (a piece read from given text instead of its file) and
 `pad_glyphs_atlas_count`. Without `ICO_RD` no texture is made (`pad_glyphs_texture` returns 0).
 
@@ -1109,19 +1132,36 @@ each disc from the disc's own tables, with no list of rows per disc. The tables 
 disc at run time, so the match is made from them at each call (`lt_ext_glyph_of_row`, eight
 comparisons) and never goes stale. Such a row is a text row (`lt_ext_is_text_row`), and the
 layout's text hook (`lt_ext_draw_text_row`, and `lt_ext_draw_row`'s glyph branch for a port row)
-draws the art in the box `display_texture` gives the disc's sprite: the largest rectangle of the
-art's aspect centred in it (`lt_ext_aspect_fit`; `lt_ext_glyph_box` and every row's place stay the
-disc's), with the sprite's colour as the game computed it (the fade, the half colour of a row
-another item dims, the reduction), the game's blend for the label pass, and the glow passes
-additive in the stretched box as the glow sprite. The 2001 builds' inset sprite box is fitted the
-same way. The art is rasterised at the height it has fitted in the row's own box at the picture's
-scale (the GS frame's lines per y unit times the scene's scale, as the menu text's strips), for
-the label and glow passes alike, so a glow is the same picture stretched. A game row's texture is
+draws the art in the box `display_texture` gives the disc's sprite (`lt_ext_art_fit`;
+`lt_ext_glyph_box` and every row's place stay the disc's): the piece's ink box centred in the box,
+across and down, each picture by itself (they are single pictures in separate boxes, not a line of
+text), at the set's **lettering**: the face buttons' box height over this glyph's
+(`lt_ext_glyph_lettering`, from the disc's table: 1 on the PAL disc, 30 / 40 for the taller
+shoulder boxes of the others) times the box's height, times the piece's own height. So every
+picture of a set has the same lettering beside the same label, the sets are one size, and a
+capital is as tall as the disc's face picture's box. A picture wider than its box at that size is
+handled by what is beside the box where it is drawn:
+
+| Where | Beside the box | Choice |
+|---|---|---|
+| Button Configuration's column (game rows), shoulders | the rows' labels end at x 384, 6 units left of the column (x 390 on every disc read: PAL, Japanese, Korean, Chinese); nothing to its right | the set's lettering, passing the box by up to 6 units a side (`ART_GAME_SHOULDER_OVER`, scaled with the box), shrunk only past that: in the PAL disc's 39 x 28 sprite box LB is about 48 units wide (kept), RB about 51 (a little smaller); the others' 64-unit boxes hold them |
+| The prompts (game rows), face buttons; Button Configuration's face column | the word's box starts at the picture box's right edge | inside the box: the widest, the A (1.03 times as wide as tall), just fits the sprite's 31 x 28 box, so the face pictures keep the lettering |
+| The prompt lines (port glyph rows, `ui_hint.c`: Settings, the gallery, the model viewer) | the pair's other picture 2 units away, the word 5 | inside the box, shrunk to its width (its shape kept) |
+| Photo mode's panel (`photo_ui.c` `hudArt`) | the pair's other picture 0.16 of the size away, the word 0.34 | inside the box, as the prompt lines (its 32 x 30 box at size 27 has the A about 4 % under the lettering) |
+| The touch buttons (`touch_ui.c`) | nothing inside a button | the lettering the disc's face picture has in that button (0.78 of a round one's width, 0.7 of a key's height), the ink centred on it, shrunk only so a round button's corners stay inside the circle within its ring (radius w / 2 - th) and a key's inside its frame |
+
+The colour is the sprite's as the game computed it (the fade, the half colour of a row another
+item dims, the reduction), the game's blend for the label pass, and the glow passes additive in
+the stretched box as the glow sprite. The 2001 builds' inset sprite box is fitted the same way. The
+art is rasterised at the lettering it has in the row's own box at the picture's scale (the GS
+frame's lines per y unit times the scene's scale, as the menu text's strips), for the label and
+glow passes alike, so a glow is the same picture stretched. A game row's texture is
 still transferred, as for the menu text table's rows. When no atlas can be made the row keeps the
 disc's path (`lt_ext_is_text_row` asks for the texture first).
 
 **Photo mode's panel** (`photo_ui.c`) and **the touch overlay** (`touch_ui.c`) draw on the output:
-the art in the disc picture's box there, rasterised at the height it is shown in output pixels.
+the art centred in the disc picture's box there (the table above), rasterised at the lettering it
+is shown at in output pixels.
 `lt_ext_glyph_available` (a set in force, or the disc's texture there) decides whether the panel
 shows a picture or the button's name; the touch overlay needs no sheet in its slot for the art.
 Touch input itself counts as PlayStation under Auto, so the touch overlay shows another set only
@@ -1793,13 +1833,19 @@ Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
   source row and Button Configuration's second block (the L1 and Square rows + 8) and no word,
   arrow or rectangle of another file; with PlayStation the glyph rows are the texture path and the
   frame is the same after the sets as before; with Xbox, Nintendo and Wii Classic each glyph row is
-  one sprite from an atlas, inside and centred in its disc box at the art's aspect, the cell inside
-  the atlas holding the art, the sprite's colour and the packet's blend.
+  one sprite from an atlas, centred in its disc box within a tenth of a unit (under half an output
+  pixel) at the art's aspect, the size the set's lettering gives it (shrunk to the box's width, a
+  game row's shoulder picture to that plus 6 units a side), the cell inside the atlas holding the
+  art, the sprite's colour and the packet's blend.
 - `pad_glyphs` (`test/pad_glyphs_test.c`): the button pictures' core, CPU only
-  ([Button pictures](#button-pictures)): every set's eight pieces read, their aspects, fill and
-  stroke present and the alpha within 0x80; the Xbox B and A at 24 and 96 rows (the fill in a stem,
-  the stroke beside it, clear corners, the holes without fill); a ring of two same-way squares,
-  empty with `evenodd` and filled without; the 40 x 24 and 24 x 32 sizes; the absolute path forms
+  ([Button pictures](#button-pictures)): every set's eight pieces read, each ink box inside its
+  viewBox, their aspects (the ink's), the capitals one lettering height and the Wii Classic a, x, y
+  against its b, fill and stroke present and the alpha within 0x80; every piece at 24, 48 and 96
+  rows reaching all four sides of its raster within a pixel, every capital of a set the same height
+  within a pixel, the Wii Classic b as tall as the Nintendo B; the Xbox B and A at 24 and 96 rows
+  (the B's ink box, the fill in a stem, the stroke beside it, the stem's stroke corners and the
+  bowls' clear ones, the holes without fill); a ring of two same-way squares, empty with `evenodd`
+  and filled without; the 40 x 24 LB's and 24 x 32 b's ink boxes and sizes; the absolute path forms
   drawing as the relative ones; broken files refused, their set incomplete and refused as the style
   in force. Every sample point comes from the file's path data.
 - `strings_complete` (`test/strings_complete_test.c`): every table defines every id with the
@@ -1838,11 +1884,14 @@ Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
 - `settings_render` (`test/settings_photo_test.c` with `SETTINGS_RENDER`): every screen through rd
   on a Vulkan device, written as PNGs, the words as sheet strips in the scene list, photo mode's
   panel in every language. The button pictures: the model viewer's prompt lines at 1x with each
-  set (`settings_pad_glyphs_<set>.png`: every glyph row one sprite from an atlas in its box, the
-  pixels there not the stand-in sheet's, flat opaque art the texel times the sprite's colour);
-  photo mode's panel with Xbox (seven pictures from the atlas, none from the sheets); the touch
-  overlay at 1080p (`settings_touch_<set>_1080.png`: with Xbox every zone with a picture takes
-  the art, `ui__touch_art_zones`).
+  set (`settings_pad_glyphs_<set>.png`: every glyph row one sprite from an atlas in its box and
+  centred on it, the pixels there not the stand-in sheet's, flat opaque art the texel times the
+  sprite's colour); photo mode's panel with Xbox (seven pictures from the atlas, none from the
+  sheets, each centred on a disc picture's box within half a pixel, inside it, at the lettering
+  or the box's width); the touch overlay at 1080p (`settings_touch_<set>_1080.png`: with Xbox
+  every zone with a picture takes the art, `ui__touch_art_zones`, each centred on its button
+  within half a pixel at the lettering unless the circle or the key's frame stops it,
+  `ui__touch_art_quad`).
 - `settings_jpn`, `settings_extras_jpn`, `settings_extra_jpn`, `settings_render_jpn` (each program
   with `jpn`): the Japanese disc over the fixture's tables at its numbers (`fxLayout`, `fxRow`):
   the rows it has not and the Menu language row, Circle confirming and Cross or Triangle going

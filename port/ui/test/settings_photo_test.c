@@ -619,6 +619,10 @@ static void testPhotoPanel(void)
     ctx.box.h = 1080;
     ctx.boxScale = 1080.0f / 448.0f;
     ui__set_overlay_sink(panelSink);
+    /* the disc's pictures' boxes on the pad (output pixels: x0, y0, x1, y1):
+       a sheet's quad is its picture's box exactly (photo_ui.c hudGlyph) */
+    float psBox[7][4];
+    int psN = 0;
     for (int keys = 0; keys < 2; keys++) {
         if (keys) {
             ico_input_note_press(ICO_SRC_KEY, 4);
@@ -648,6 +652,17 @@ static void testPhotoPanel(void)
             const float m = sheet ? 0.0f : textOver;
             out += x < x0 - m || x > x1 + m || y < y0 - m || y > y1 + m;
             pictures += sheet;
+            if (!keys && sheet && i + 1 < s_pn && s_ptex[i + 1] == s_ptex[i] && psN < 7) {
+                psBox[psN][0] = x;
+                psBox[psN][1] = y;
+                psBox[psN][2] = (float)s_pv[i + 1].x / 16.0f;
+                psBox[psN][3] = (float)s_pv[i + 1].y / 16.0f;
+                psN++;
+                pictures++;
+                i++;
+                const float x2 = (float)s_pv[i].x / 16.0f, y2 = (float)s_pv[i].y / 16.0f;
+                out += x2 < x0 || x2 > x1 || y2 < y0 || y2 > y1;
+            }
         }
         CHECK(out == 0, "%s: %d vertices outside the panel", keys ? "keys" : "pad", out);
         CHECK(pictures == (keys ? 0 : 2 * 7), "%s: %d picture vertices (%d)", keys ? "keys" : "pad",
@@ -655,29 +670,54 @@ static void testPhotoPanel(void)
     }
     /* the pad with Xbox: the seven pictures from the button pictures'
        atlas (none from the sheets), on the panel, each the art's aspect
-       (on the output's square pixels) */
+       (on the output's square pixels), each centred on one of the disc
+       pictures' boxes within half an output pixel, inside it (the panel's
+       gaps kept) and at the set's lettering, the box's height on the PAL
+       tables (every Xbox piece is a capital), unless its width is the
+       box's (shrunk to it) */
     ico_input_note_press(ICO_SRC_PAD, 0);
     pad_glyphs_set_style(ICO_PAD_GLYPHS_XBOX);
     s_pn = 0;
     ui_photo_draw_overlay(&ctx);
     {
-        int sheets = 0, art = 0, shape = 0;
+        int sheets = 0, art = 0, shape = 0, placed = 0, used[7] = {0};
+        CHECK(psN == 7, "the pad's seven disc pictures' boxes (%d)", psN);
         for (uint32_t i = 2; i + 1 < s_pn; i++) {
             sheets += isSheet(s_ptex[i]);
             if (isArtTex(s_ptex[i]) && s_ptex[i + 1] == s_ptex[i]) {
                 const float dw = (float)(s_pv[i + 1].x - s_pv[i].x);
                 const float dh = (float)(s_pv[i + 1].y - s_pv[i].y);
                 const float du = s_pv[i + 1].s - s_pv[i].s, dv = s_pv[i + 1].t - s_pv[i].t;
-                /* the quad's shape on screen is the cell's (a texel's
-                   rounding of the cell width allowed) */
+                /* the quad's shape on screen is the cell's */
                 shape += dh > 0.0f && dv > 0.0f && fabsf(dw / dh - du / dv) <= 0.06f * (du / dv);
+                const float cx = (float)(s_pv[i].x + s_pv[i + 1].x) / 32.0f;
+                const float cy = (float)(s_pv[i].y + s_pv[i + 1].y) / 32.0f;
+                for (int k = 0; k < psN; k++) {
+                    const float *bx = psBox[k];
+                    const float bw = bx[2] - bx[0], bh = bx[3] - bx[1];
+                    if (used[k] || fabsf(cx - (bx[0] + bx[2]) * 0.5f) > 0.5f ||
+                        fabsf(cy - (bx[1] + bx[3]) * 0.5f) > 0.5f) {
+                        continue;
+                    }
+                    used[k] = 1;
+                    const int inside = dw / 16.0f <= bw + 0.5f && dh / 16.0f <= bh + 0.5f;
+                    const int sized =
+                        fabsf(dh / 16.0f - bh) <= 1.0f || fabsf(dw / 16.0f - bw) <= 1.0f;
+                    CHECK(inside && sized,
+                          "pad with Xbox: the picture %.1f x %.1f in the box %.1f x %.1f (inside, "
+                          "the lettering's height or the box's width)",
+                          (double)(dw / 16.0f), (double)(dh / 16.0f), (double)bw, (double)bh);
+                    placed++;
+                    break;
+                }
                 art += 2;
                 i++;
             }
         }
-        CHECK(sheets == 0 && art == 2 * 7 && shape == 7,
-              "pad with Xbox: %d sheet vertices (0), %d art vertices (%d), %d of the art's shape",
-              sheets, art, 2 * 7, shape);
+        CHECK(sheets == 0 && art == 2 * 7 && shape == 7 && placed == 7,
+              "pad with Xbox: %d sheet vertices (0), %d art vertices (%d), %d of the art's shape, "
+              "%d centred on a disc picture's box",
+              sheets, art, 2 * 7, shape, placed);
     }
     pad_glyphs_set_style(ICO_PAD_GLYPHS_PLAYSTATION);
     ui__set_overlay_sink(NULL);
@@ -812,17 +852,24 @@ static void testArtPixels(void)
                dispX + 1/4, dispW - 1 wide; 2 dispY + 1/2, dispH - 2 high) */
             const float gx0 = artGridX(v[0].x), gx1 = artGridX(v[1].x);
             const float gy0 = artGridY(v[0].y), gy1 = artGridY(v[1].y);
-            int inBox = 0;
+            int inBox = 0, centred = 0;
             for (int i = first; i < last; i++) {
                 const LtProperty *e = lt_ext_prop(i);
                 if (!lt_ext_is_glyph_row(e) || e->defaultMask) {
                     continue;
                 }
                 const float bx = (float)e->dispX + 0.25f, by = 2.0f * (float)e->dispY + 0.5f;
-                inBox += gx0 >= bx - 0.1f && gx1 <= bx + (float)(e->dispW - 1) + 0.1f &&
-                         gy0 >= by - 0.1f && gy1 <= by + (float)(e->dispH - 2) + 0.1f;
+                const float bw = (float)(e->dispW - 1), bh = (float)(e->dispH - 2);
+                const int in = gx0 >= bx - 0.1f && gx1 <= bx + bw + 0.1f && gy0 >= by - 0.1f &&
+                               gy1 <= by + bh + 0.1f;
+                inBox += in;
+                /* the ink centred on the box: a tenth of a unit, under
+                   half a SCENE pixel (1.25 x units, 0.875 y units a pixel) */
+                centred += in && fabsf((gx0 + gx1) * 0.5f - (bx + bw * 0.5f)) < 0.1f &&
+                           fabsf((gy0 + gy1) * 0.5f - (by + bh * 0.5f)) < 0.1f;
             }
-            CHECK(inBox == 1, "%s: sprite %d (%.1f,%.1f-%.1f,%.1f) inside one glyph row's box",
+            CHECK(inBox == 1 && centred == 1,
+                  "%s: sprite %d (%.1f,%.1f-%.1f,%.1f) inside one glyph row's box, centred on it",
                   name, q, (double)gx0, (double)gy0, (double)gx1, (double)gy1);
             const float X0 = artPix(v[0].x), X1 = artPix(v[1].x);
             const float Y0 = artPix(v[0].y), Y1 = artPix(v[1].y);
@@ -838,38 +885,56 @@ static void testArtPixels(void)
                     const uint8_t *b = &px[((size_t)y * 512 + (size_t)x) * 4];
                     area++;
                     differ += memcmp(a, b, 3) != 0;
-                    if (!tr || !tr->pixels || tr->format != RD_TEXEL_RGBA8) {
-                        continue;
-                    }
-                    /* the pixel's centre in the cell, and its 3 x 3
-                       texels: one opaque colour, so bilinear gives it */
-                    const float uu = u0 + ((float)x + 0.5f - X0) / (X1 - X0) * (u1 - u0);
-                    const float vv = t0 + ((float)y + 0.5f - Y0) / (Y1 - Y0) * (t1 - t0);
-                    const int tx = (int)floorf(uu), ty = (int)floorf(vv);
-                    if (tx < 1 || ty < 1 || tx + 1 >= (int)tr->w || ty + 1 >= (int)tr->h) {
-                        continue;
-                    }
-                    const uint8_t *c = &tr->pixels[((size_t)ty * tr->w + (size_t)tx) * 4];
-                    int flat = c[3] == 0x80;
-                    for (int dy = -1; flat && dy <= 1; dy++) {
-                        for (int dx = -1; flat && dx <= 1; dx++) {
-                            flat =
-                                memcmp(c,
-                                       &tr->pixels[((size_t)(ty + dy) * tr->w + (size_t)(tx + dx)) *
-                                                   4],
-                                       4) == 0;
+                }
+            }
+            /* the art's colour arrives: the cell's brightest flat opaque
+               texel (3 x 3 of one colour: the letter's fill) is some pixel
+               of the sprite, MODULATE (t * 0x7F) >> 7 blended at 127 / 128
+               (at most 2 off).  One pixel a sprite, not every flat one: the
+               sprite is drawn smaller than its cell (the atlas's size
+               bucket), so a pixel beside an edge mixes texels the 3 x 3
+               does not hold (merge check 1: 46 such pixels, up to 45 off) */
+            if (tr && tr->pixels && tr->format == RD_TEXEL_RGBA8) {
+                const uint8_t *fill = NULL;
+                int fillSum = -1;
+                for (int ty = (int)floorf(t0) + 1; ty + 1 < (int)ceilf(t1) && ty + 1 < (int)tr->h;
+                     ty++) {
+                    for (int tx = (int)floorf(u0) + 1;
+                         tx + 1 < (int)ceilf(u1) && tx + 1 < (int)tr->w; tx++) {
+                        const uint8_t *c = &tr->pixels[((size_t)ty * tr->w + (size_t)tx) * 4];
+                        int flat = tx >= 1 && ty >= 1 && c[3] == 0x80;
+                        for (int dy = -1; flat && dy <= 1; dy++) {
+                            for (int dx = -1; flat && dx <= 1; dx++) {
+                                flat = memcmp(c,
+                                              &tr->pixels[((size_t)(ty + dy) * tr->w +
+                                                           (size_t)(tx + dx)) *
+                                                          4],
+                                              4) == 0;
+                            }
+                        }
+                        if (flat && c[0] + c[1] + c[2] > fillSum) {
+                            fillSum = c[0] + c[1] + c[2];
+                            fill = c;
                         }
                     }
-                    if (!flat) {
-                        continue;
+                }
+                if (fill && fillSum > 0) {
+                    int best = 255;
+                    for (int y = (int)ceilf(Y0); y + 1 <= (int)floorf(Y1) && y < 512; y++) {
+                        for (int x = (int)ceilf(X0); x + 1 <= (int)floorf(X1) && x < 512; x++) {
+                            if (x < 0 || y < 0) {
+                                continue;
+                            }
+                            const uint8_t *b = &px[((size_t)y * 512 + (size_t)x) * 4];
+                            int d = 0;
+                            for (int ch = 0; ch < 3; ch++) {
+                                const int e = abs((int)b[ch] - ((fill[ch] * 0x7F) >> 7));
+                                d = e > d ? e : d;
+                            }
+                            best = d < best ? d : best;
+                        }
                     }
-                    for (int ch = 0; ch < 3; ch++) {
-                        /* MODULATE (t * 0x7F) >> 7, blended at 127 / 128 over
-                           what was there (at most 2 off) */
-                        const int want = (c[ch] * 0x7F) >> 7;
-                        const int d = abs((int)b[ch] - want);
-                        worst = d > worst ? d : worst;
-                    }
+                    worst = best > worst ? best : worst;
                     checked++;
                 }
             }
@@ -877,18 +942,14 @@ static void testArtPixels(void)
                   "%s: sprite %d: %d of %d pixels differ from the stand-in sheet's", name, q,
                   differ, area);
         }
-        /* at this size a letter's flat interior is a handful of pixels (14,
-           1 and 0 for the three sets in the first merge check, thin lower
-           case letters having none): each set's are held to the colour, and
-           the sets together must have had some */
         CHECK(worst <= 4,
-              "%s: %d pixels of flat opaque art, the worst %d off the texel times the colour", name,
-              checked, worst);
+              "%s: %d sprites show their fill colour, the worst %d off the texel times the colour",
+              name, checked, worst);
         flatAll += checked;
-        printf("settings_render: %s: %d art sprites, %d flat pixels checked, worst %d\n", name,
-               quads, checked, worst);
+        printf("settings_render: %s: %d art sprites, %d with their fill colour checked, worst %d\n",
+               name, quads, checked, worst);
     }
-    CHECK(flatAll >= 10, "the three sets: %d pixels of flat opaque art checked", flatAll);
+    CHECK(flatAll >= 15, "the three sets: %d sprites' fill colours checked", flatAll);
     pad_glyphs_set_style(ICO_PAD_GLYPHS_PLAYSTATION);
     frame(0);
     free(ps);
@@ -950,6 +1011,55 @@ static void testTouchArt(void)
     }
     CHECK(want != 0 && ui__touch_art_zones() == want,
           "Xbox: the zones with a picture take the art (%#x, %#x)", ui__touch_art_zones(), want);
+    /* each picture centred on its button within half an output pixel (the
+       layout is the output's size: layout pixels are output pixels), at the
+       set's lettering (the disc's face picture's height in that button:
+       touch_ui.c glyphBox of Cross, 0.78 of a round button's width or 0.7
+       of a key's height at the face picture's proportions) unless the
+       button's inside stops it: a round one's corners inside the circle
+       within the ring (radius w / 2 - th), a key's inside its frame (th
+       the unit's 0.4, at least 2) */
+    {
+        int gw = 0, gh = 0;
+        lt_ext_glyph_box(LT_GLYPH_CROSS, 27.0f, &gw, &gh);
+        const float ga = (float)gw * 14.0f / (15.0f * (float)gh);
+        float th = o.layout.unit * 0.4f;
+        th = th < 2.0f ? 2.0f : th;
+        for (size_t i = 0; i < sizeof(kZones) / sizeof(kZones[0]); i++) {
+            const IcoTouchButton *bt = &o.layout.button[kZones[i]];
+            float q[4];
+            if (!((want >> kZones[i]) & 1u)) {
+                continue;
+            }
+            if (!ui__touch_art_quad(kZones[i], q)) {
+                CHECK(0, "Xbox: zone %d's art quad", kZones[i]);
+                continue;
+            }
+            const float cx = bt->rect.x + bt->rect.w * 0.5f, cy = bt->rect.y + bt->rect.h * 0.5f;
+            const float w = q[2] - q[0], h = q[3] - q[1];
+            const float bw = bt->round ? bt->rect.w * 0.78f : bt->rect.w * 0.8f;
+            const float bh = bt->round ? bt->rect.w * 0.78f : bt->rect.h * 0.7f;
+            const float letter = (bw < bh * ga ? bw : bh * ga) / ga;
+            int inside, limited;
+            if (bt->round) {
+                const float R = bt->rect.w * 0.5f - th, half = 0.5f * hypotf(w, h);
+                inside = half <= R + 0.5f;
+                limited = fabsf(half - R) <= 0.5f;
+            } else {
+                const float iw = bt->rect.w - 2.0f * th, ih = bt->rect.h - 2.0f * th;
+                inside = w <= iw + 0.5f && h <= ih + 0.5f;
+                limited = fabsf(w - iw) <= 0.5f || fabsf(h - ih) <= 0.5f;
+            }
+            CHECK(fabsf((q[0] + q[2]) * 0.5f - cx) <= 0.5f &&
+                      fabsf((q[1] + q[3]) * 0.5f - cy) <= 0.5f && inside &&
+                      (fabsf(h - letter) <= 0.5f || (h < letter && limited)),
+                  "Xbox: zone %d's art %.1f,%.1f-%.1f,%.1f on the %s %.1f,%.1f %.1fx%.1f (the "
+                  "lettering %.1f)",
+                  kZones[i], (double)q[0], (double)q[1], (double)q[2], (double)q[3],
+                  bt->round ? "circle" : "key", (double)bt->rect.x, (double)bt->rect.y,
+                  (double)bt->rect.w, (double)bt->rect.h, (double)letter);
+        }
+    }
     int okB = rd_read_presented(b, &ow, &oh) && ow == W && oh == H;
     CHECK(okA && okB, "the touch overlay's presented outputs");
     if (okA && okB) {

@@ -157,13 +157,19 @@ int lt_ext_glyph_source(int glyph, int uvwh[4]);
    texel rectangle are those of the running disc's source row for it
    (region.h IcoGlyphRow): the save prompts, Button Configuration and every
    copy of their rectangles, on every disc, from its own tables.  Such a
-   row is a text row (lt_ext_is_text_row) and its hook draws the art,
-   rasterised at the height it has fitted in the row's box at the picture's
-   scale, fitted and centred in the disc glyph's box with the art's aspect
-   (lt_ext_glyph_box and the rows' boxes are unchanged), in the colour, fade
+   row is a text row (lt_ext_is_text_row) and its hook draws the art
+   (lt_ext_art_fit: its ink centred in the disc glyph's box at the set's
+   lettering; lt_ext_glyph_box and the rows' boxes are unchanged),
+   rasterised at that lettering at the picture's scale, in the colour, fade
    and dimming the game gives the sprite, and the glow passes additive as
-   the glow sprite.  No set in force (PlayStation): nothing changes.  When
-   no atlas can be made the disc's path draws the row.
+   the glow sprite.  A port glyph row (a prompt line, ui_hint.c: the next
+   picture 2 units away, the word 5) keeps its art inside its box; a game
+   row's shoulder picture (Button Configuration's column: the labels end 6
+   units left of it on every disc, nothing is right of it) may pass its box
+   by 6 units a side; a game row's face picture (the prompts: the word
+   starts at the box's right edge) keeps inside.  No set in force
+   (PlayStation): nothing changes.  When no atlas can be made the disc's
+   path draws the row.
 
    lt_ext_glyph_of_row: the button row index shows (LtExtGlyph, below
    LT_GLYPH_LEFT), -1 for none or an index outside the tables.
@@ -172,6 +178,24 @@ int lt_ext_glyph_source(int glyph, int uvwh[4]);
    (lt_ext_glyph_texture >= 0). */
 int lt_ext_glyph_of_row(int row);
 int lt_ext_glyph_available(int glyph);
+
+/* The set's lettering height in glyph's own box, as a share of the box's
+   height: the face buttons' box height over glyph's (region.h disp_h), so
+   every picture of a set has the same lettering beside the same label: 1
+   on the PAL disc, 30 / 40 for the shoulders of the others, whose boxes
+   are taller.  1 for a glyph out of range. */
+float lt_ext_glyph_lettering(int glyph);
+/* Where the art of glyph (the set in force) is drawn for the disc's box
+   in[4] (x0, y0, x1, y1 in the text grid: a y unit UI_X_PER_Y of an x unit
+   on screen): its ink box centred in the box (across and down, each
+   picture by itself), as tall as the lettering (lt_ext_glyph_lettering
+   times the box's height) times the piece's own height (pad_glyphs_height:
+   1 for a capital), as wide as its ink at that height; when that is wider
+   than maxW x units, the whole shrunk to maxW wide (its shape kept).  1
+   with out[4] the quad and *letter (may be NULL) the lettering height in y
+   units after any shrink (the height to rasterise at), 0 when no set is in
+   force, the glyph has no art or the box is empty. */
+int lt_ext_art_fit(int glyph, const float in[4], float maxW, float out[4], float *letter);
 
 /* A filled rectangle on a port row (the music gallery's progress bar): the
    row's box (dispX, dispY, dispW, dispH), the left `fill` of it (0..1,
@@ -287,9 +311,6 @@ uint32_t lt_ext_row_image(int index, int *texW, int *texH);
    shape in a 4:3 box (bands above and below stay empty) and nothing is
    stretched.  out = in for a zero size. */
 void lt_ext_image_fit(const float in[4], int texW, int texH, float out[4]);
-/* the same for a shape of aspect a (width over height on screen, square
-   pixels): out = in for a <= 0 or an empty box (the button pictures' fit) */
-void lt_ext_aspect_fit(const float in[4], float a, float out[4]);
 
 /* A rect row's colour changed after it was added (Settings >
    Extras > Characters' swatches): rgba as lt_ext_add_rect takes it (GS,

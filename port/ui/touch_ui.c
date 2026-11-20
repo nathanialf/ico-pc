@@ -505,47 +505,73 @@ static int glyphBox(const IcoTouchButton *b, int glyph, float *w, float *h, floa
     return 1;
 }
 
-/* the zones drawn with the button pictures' art at the last draw (tests) */
+/* the zones drawn with the button pictures' art at the last draw, and
+   each one's quad (output pixels: x0, y0, x1, y1) (tests) */
 static uint32_t s_artZones;
+static float s_artQuad[ICO_TOUCH_BUTTONS][4];
 
 unsigned ui__touch_art_zones(void)
 {
     return (unsigned)s_artZones;
 }
 
+int ui__touch_art_quad(int zone, float q[4])
+{
+    if (zone < 0 || zone >= ICO_TOUCH_BUTTONS || !((s_artZones >> zone) & 1u)) {
+        return 0;
+    }
+    memcpy(q, s_artQuad[zone], sizeof(s_artQuad[zone]));
+    return 1;
+}
+
 /* The button pictures' art (pad_glyphs.h) on the zones that have a picture
-   while a set is in force: in the disc glyph's box (glyphBox), fitted and
-   centred with the art's aspect, rasterised at the height it is shown in
-   output pixels, the cell's texels whole (the art's cell, not a disc
-   sheet's, so no half-texel inset), the held and opacity alpha of the
-   disc's pictures.  No sheet check: the art is the port's own texture.
-   Returns the mask of the zones drawn. */
-static uint32_t drawArtGlyphs(const IcoTouchOverlay *o)
+   while a set is in force.  Every picture at the set's lettering: the
+   height the disc's face picture has in that button (glyphBox of Cross, so
+   the shoulders' letters are the face buttons' size), times the piece's
+   own height, its ink centred on the button; then shrunk, its shape kept,
+   only as far as the button's inside needs (nothing else is drawn in a
+   button): a round one's corners inside the circle within the ring (radius
+   r - th), a key's inside its frame (w - 2 th by h - 2 th).  Rasterised at
+   the lettering it is shown at in output pixels, the cell's texels whole
+   (the art's cell, not a disc sheet's, so no half-texel inset), the held
+   and opacity alpha of the disc's pictures.  No sheet check: the art is
+   the port's own texture.  Returns the mask of the zones drawn. */
+static uint32_t drawArtGlyphs(const IcoTouchOverlay *o, float th)
 {
     uint32_t drawn = 0;
+    const int style = pad_glyphs_style();
+    const float kmin = s_d.kx < s_d.ky ? s_d.kx : s_d.ky;
 
     for (int z = 0; z < ICO_TOUCH_BUTTONS; z++) {
         const IcoTouchButton *b = &o->layout.button[z];
         const int g = glyphOf(z);
         const int held = (o->info.pressed >> z) & 1u;
         const float ca = shownAlpha(o, b->alpha);
-        float w, h, cx, cy, uv[4];
+        float fw, fh, cx, cy, uv[4];
         unsigned tex = 0;
 
         if (g < 0 || b->rect.w <= 0.0f || b->rect.h <= 0.0f || ca < 0.0f ||
-            !glyphBox(b, g, &w, &h, &cx, &cy)) {
+            !glyphBox(b, LT_GLYPH_CROSS, &fw, &fh, &cx, &cy)) {
             continue;
         }
-        const float aa = pad_glyphs_aspect(pad_glyphs_style(), g);
-        if (!(aa > 0.0f)) {
+        const float aa = pad_glyphs_aspect(style, g), hk = pad_glyphs_height(style, g);
+        if (!(aa > 0.0f) || !(hk > 0.0f)) {
             continue;
         }
-        if (w > h * aa) {
-            w = h * aa;
+        float letter = fh, h = letter * hk, w = h * aa, k = 1.0f;
+        if (b->round) {
+            const float R = (b->rect.w * 0.5f - th) * kmin, half = 0.5f * hypotf(w, h);
+            k = half > R && R > 0.0f ? R / half : 1.0f;
         } else {
-            h = w / aa;
+            const float iw = (b->rect.w - 2.0f * th) * s_d.kx,
+                        ih = (b->rect.h - 2.0f * th) * s_d.ky;
+            k = iw > 0.0f && w > iw ? iw / w : 1.0f;
+            k = ih > 0.0f && h * k > ih ? ih / h : k;
         }
-        const long px = lrintf(h);
+        letter *= k;
+        w *= k;
+        h *= k;
+        const long px = lrintf(letter);
         if (!pad_glyphs_texture(g, px < 1 ? 1 : (int)px, &tex, uv, NULL)) {
             continue;
         }
@@ -553,11 +579,15 @@ static uint32_t drawArtGlyphs(const IcoTouchOverlay *o)
         float al = (float)(held ? 0x80 : 0x70) * s_d.opacity * ca;
 
         al = al > 128.0f ? 128.0f : al;
+        s_artQuad[z][0] = cx - w * 0.5f;
+        s_artQuad[z][1] = cy - h * 0.5f;
+        s_artQuad[z][2] = cx + w * 0.5f;
+        s_artQuad[z][3] = cy + h * 0.5f;
         memset(v, 0, sizeof(v));
-        v[0].x = fix16(cx - w * 0.5f, s_d.maxX);
-        v[0].y = fix16(cy - h * 0.5f, s_d.maxY);
-        v[1].x = fix16(cx + w * 0.5f, s_d.maxX);
-        v[1].y = fix16(cy + h * 0.5f, s_d.maxY);
+        v[0].x = fix16(s_artQuad[z][0], s_d.maxX);
+        v[0].y = fix16(s_artQuad[z][1], s_d.maxY);
+        v[1].x = fix16(s_artQuad[z][2], s_d.maxX);
+        v[1].y = fix16(s_artQuad[z][3], s_d.maxY);
         v[0].s = uv[0] * 16.0f;
         v[0].t = uv[1] * 16.0f;
         v[1].s = uv[2] * 16.0f;
@@ -574,18 +604,19 @@ static uint32_t drawArtGlyphs(const IcoTouchOverlay *o)
 
 /* the game's button pictures on the discs and keys, each zone that has one
    (glyphOf) and whose sheet is loaded, or the button pictures' art on them
-   while a set is in force (drawArtGlyphs).  The sprites are in 12.4 output
+   while a set is in force (drawArtGlyphs; th the rings' and frames'
+   thickness).  The sprites are in 12.4 output
    pixels as the menus' glyphs are (font.c ovEmit), the texel rectangle half
    a texel in on each side as display_texture samples it; zones on one
    texture go in one draw.  Returns the mask of the zones drawn. */
-static uint32_t drawGlyphs(const IcoTouchOverlay *o)
+static uint32_t drawGlyphs(const IcoTouchOverlay *o, float th)
 {
     unsigned tex[ICO_TOUCH_BUTTONS];
     uint32_t drawn = 0, done = 0;
 
     s_artZones = 0;
     if (pad_glyphs_active()) {
-        return s_artZones = drawArtGlyphs(o);
+        return s_artZones = drawArtGlyphs(o, th);
     }
 
     for (int z = 0; z < ICO_TOUCH_BUTTONS; z++) {
@@ -1196,7 +1227,7 @@ void ui_touch_draw_overlay(const struct RdOverlayCtx *ctx)
     drawButtons(&o, th);
     drawDpad(&o, th);
     flush();
-    const uint32_t withGlyph = drawGlyphs(&o);
+    const uint32_t withGlyph = drawGlyphs(&o, th);
     drawLabels(ctx, &o, withGlyph);
     if (o.edit.active) {
         drawEditor(ctx, &o, th);
