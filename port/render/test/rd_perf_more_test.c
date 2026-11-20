@@ -127,6 +127,11 @@ static void test_lines(void)
     CHECK(rd_perf_more_draw_invocations_left(52000, 60000, true) == 52000u);
     CHECK(rd_perf_more_draw_invocations_left(52000, 20000, false) == 468000u);
     CHECK(rd_perf_more_draw_invocations_left(52000, 0, true) == 156000u);
+    /* less the shared vertices' saving (rd_vu_share.h), with the pre-pass alone */
+    CHECK(rd_perf_more_draw_invocations_shared(52000, 0, 11500, true) == 144500u);
+    CHECK(rd_perf_more_draw_invocations_shared(52000, 20000, 11500, true) == 104500u);
+    CHECK(rd_perf_more_draw_invocations_shared(52000, 0, 11500, false) == 468000u);
+    CHECK(rd_perf_more_draw_invocations_shared(10, 0, 100, true) == 0u);
     (void)rd_perf_more_cost_text(&b, t, sizeof t);
     text_is(t,
             "costs a picture: two-pass blend 3.0 draws drawn twice (0 triangles' vertex work "

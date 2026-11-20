@@ -152,9 +152,10 @@ uint64_t rd__estimate_ring(const RdFrame *f, int keep)
                 total += (uint64_t)p.batchCount * (p.vertsPerBatch + 1) * 12 + 16;
                 const RdMeshRec *m = c->type <= RDC_SKINNED ? rd__mesh_rec(c->u[0]) : NULL;
                 if (m) {
-                    total += (uint64_t)m->vertexCount * m->qwPerVertex * 16 +
-                             (uint64_t)rd__mesh_mark_qw(m) * 16 + (uint64_t)m->indexCount * 4 +
-                             2 * align;
+                    /* its upload: stream, marks and index lists, the shared
+                       vertices' list wherever the upload below may write it
+                       (rd_vu_share.h: the same count the writes take) */
+                    total += rd__mesh_ring_bytes(m, c, &p, align);
                     total += (uint64_t)m->indexCount * 4 + 16; /* its run's copy */
                 }
             }
@@ -759,6 +760,22 @@ void rd__upload_late(const RdFrame *f, int keep, uint64_t win)
 void rd__upload_meshes(const RdFrame *f, int keep)
 {
     const uint64_t ua = rhi_limits()->uniformAlign;
+    /* the shared vertices' lists first, every command before any upload
+       (rd_vu_share.h: a list made marks its device copy for the upload
+       below; rd__estimate_ring counted it) */
+    for (int l = rd__first_list(keep); l < RD_LIST_COUNT; l++) {
+        const RdCmdList *cl = &f->lists[l];
+        for (uint32_t i = 0; i < cl->count; i++) {
+            const RdCmd *c = &cl->cmds[i];
+            RdMeshRec *m = c->type == RDC_MESH ? rd__mesh_rec(c->u[0]) : NULL;
+            if (m && m->vu && !m->shareTried &&
+                (uint64_t)c->u[1] + sizeof(RdVuPayload) <= f->payloadSize) {
+                RdVuPayload p;
+                memcpy(&p, f->payload + c->u[1], sizeof(p));
+                rd__vu_share_consider(m, c, &p);
+            }
+        }
+    }
     for (int l = rd__first_list(keep); l < RD_LIST_COUNT; l++) {
         const RdCmdList *cl = &f->lists[l];
         for (uint32_t i = 0; i < cl->count; i++) {

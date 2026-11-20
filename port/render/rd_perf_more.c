@@ -104,6 +104,16 @@ uint64_t rd_perf_more_draw_invocations_left(uint64_t tris, uint64_t leftOut, boo
     return tris * 3u - left * 2u;
 }
 
+uint64_t rd_perf_more_draw_invocations_shared(uint64_t tris, uint64_t leftOut, uint64_t saved,
+                                              bool prepass)
+{
+    const uint64_t inv = rd_perf_more_draw_invocations_left(tris, leftOut, prepass);
+    if (!prepass) {
+        return inv; /* the programs' own entries: no shared list */
+    }
+    return saved < inv ? inv - saved : 0u;
+}
+
 void rd_perf_more_add(RdPerfMore *b, const RdPerfRecord *r, bool prepass)
 {
     b->n++;
@@ -135,8 +145,10 @@ void rd_perf_more_add(RdPerfMore *b, const RdPerfRecord *r, bool prepass)
         }
     }
     b->preVerts += prepass ? (double)r->vuPreVertices : 0.0;
-    b->drawInv += (double)rd_perf_more_draw_invocations_left(r->vuTris, r->vuTrisLeftOut, prepass);
+    b->drawInv += (double)rd_perf_more_draw_invocations_shared(r->vuTris, r->vuTrisLeftOut,
+                                                               r->vuShareSaved, prepass);
     b->leftOut += prepass ? (double)r->vuTrisLeftOut : 0.0;
+    b->shareSaved += prepass ? (double)r->vuShareSaved : 0.0;
     if (r->glowLight <= RD_GLOW_LIGHT_OFF) {
         b->glowPlan[r->glowLight]++;
     }
@@ -305,7 +317,10 @@ size_t rd_perf_more_compare_text(const RdPerfMore *b, const char *scene, bool ti
     }
     put(&o, "; vertex invocations a picture: the pre-pass's %s, the draws' %s (%s; never summed)",
         count(b->preVerts / n, c2, sizeof c2), count(b->drawInv / n, c3, sizeof c3),
-        b->leftOut > 0.0      ? "3 a triangle, after the index compaction 1 a triangle it left out"
+        b->shareSaved > 0.0
+            ? "3 a triangle less the shared vertices' repeated values, 1 a triangle "
+              "the index compaction left out"
+        : b->leftOut > 0.0    ? "3 a triangle, after the index compaction 1 a triangle it left out"
         : b->prepassN == b->n ? "3 a triangle"
         : b->prepassN == 0u   ? "9 a triangle without the pre-pass"
                               : "3 a triangle with the pre-pass, 9 without");

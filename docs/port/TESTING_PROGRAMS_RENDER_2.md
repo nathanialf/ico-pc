@@ -402,7 +402,12 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   mark, a probe draw and a range off the batches; no candidate for a skinned command, a draw the
   pre-pass did not record, and rule modes region and scissor; the joined and flip marks change
   nothing. The device bytes are the original list, then the shared one. The run's stats line word
-  for word, the block's text and its return to zero, cut in a short buffer.
+  for word, the block's text and its return to zero, cut in a short buffer. The list only where a draw can take it: none
+  for a lit or a skinned mesh, none made for a command that is no candidate (skinned, lit, prelit
+  at codes 32 and 36, a chain plane) or for a scratch mesh, made once for a candidate with its
+  device copy marked for upload. The marks are decided once: 1000 draws scan none. The ring's
+  estimate of a mesh covers both upload paths' writes at their worst alignment, the same before
+  the list is made (the estimate runs first) and after.
 - `rd_vu_share_ab.cmake` (`rd_vu_share_ab`, `rd_vu_share_gl`; `rd_vu_share.cmake`): shared vertices
   for clip-mode-none strips ([PIPELINES.md](PIPELINES.md#shared-vertices-for-clip-mode-none)).
   Compares `ICO_RD_VU_SHARE=1` against `=0` with `--pass-dump --stats`, each with the draw merge

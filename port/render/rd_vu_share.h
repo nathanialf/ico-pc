@@ -9,8 +9,9 @@
  * same visible fill; most of them are the dock's prelit code 34 meshes
  * (build-host/tmp/v01113/handbacks/SCENE179.md).
  *
- * What.  A second index list per mesh (RdMeshRec.indexShared, made at the
- * mesh's creation, rd__vu_share_build): the same triangles in the same
+ * What.  A second index list per mesh (RdMeshRec.indexShared, made once,
+ * at the first upload of a replay that draws the mesh as a candidate:
+ * rd__vu_share_consider, rd__vu_share_build): the same triangles in the same
  * order, each corner's value replaced by one canonical value of the same
  * vertex: (v + 2) * 4 + 0 where the triangle v + 2 is in the list (the
  * vertex's own provoking value), else the first triangle's of the list that
@@ -37,6 +38,12 @@
  * The device copy and the ring hold the shared list right after the
  * original (rd__mesh_index_bytes, rd__mesh_write_indices): the original's
  * offset, which the compaction and everything else read, is unchanged.
+ * The ring's estimate (rd_upload.c rd__estimate_ring) counts a mesh's
+ * upload by rd__mesh_ring_bytes, which counts the shared list wherever the
+ * upload that follows may write it (one already made, or one the replay's
+ * consideration will make), so the estimate covers the writes by
+ * construction.  The interpolation's scratch meshes (transient, rewritten
+ * every present) never get one.
  *
  * The tests' switch ICO_RD_VU_SHARE=0 (docs/port/TESTING.md; no setting):
  * every draw keeps the original list. */
@@ -48,6 +55,13 @@
 #include <stdint.h>
 
 #include "rd_internal.h"
+#include "rd_mesh.h"
+
+/* shareUnique's top bit: the batch has a kick with ICO_VU_MARK_HIDE or
+ * ICO_VU_MARK_LATER (decided once, at the build: both marks are made at
+ * the mesh's creation, before it, and never change after), the rest the
+ * batch's distinct values */
+#define RD_VU_SHARE_MARKED 0x80000000u
 
 /* why a candidate draw (a mesh command through the record under rule mode
  * none) kept the original list; RD_VU_SHARE_YES: it took the shared one */
@@ -67,9 +81,11 @@ bool rd_vu_share_word(const char *e);
 /* ICO_RD_VU_SHARE read once a process */
 bool rd__vu_share_on(void);
 
-/* m's shared list and its per-batch counts of distinct values, made from
- * its index list and batches (any earlier ones freed); none (NULL) where
- * the list is not of the form every check below needs:
+/* m's shared list and its per-batch counts of distinct values and mark
+ * flags, made from its index list and batches (any earlier ones freed);
+ * none (NULL) where the list is not of the form every check below needs:
+ *   - the prelit layout (RD_VU_QW_PRELIT: the program that alone draws in
+ *     clip mode none; lit and skinned meshes never get one);
  *   - the batches in index order, back to back from 0 to indexCount, each
  *     a whole number of triangles, their vertex ranges in order and apart;
  *   - every triangle k * 4 + 0, + 1, + 2 with its three corners in its
@@ -79,6 +95,27 @@ bool rd__vu_share_on(void);
 void rd__vu_share_build(RdMeshRec *m);
 /* frees m's shared list */
 void rd__vu_share_free(RdMeshRec *m);
+
+/* Whether command c (its payload p) may draw its mesh with the shared
+ * list: a mesh command of the prelit program at clip mode none (code 34)
+ * without a chain plane.  A mesh never drawn by one never gets a list. */
+bool rd__vu_share_candidate(const RdCmd *c, const RdVuPayload *p);
+/* At a replay's mesh uploads, before any of them (rd_upload.c
+ * rd__upload_meshes): m's list made once (shareTried) when c is a
+ * candidate and m is not transient; a device copy made without it is then
+ * marked for upload again (gpuDirty), so a bound copy always holds the
+ * list a draw may take. */
+void rd__vu_share_consider(RdMeshRec *m, const RdCmd *c, const RdVuPayload *p);
+/* The ring bytes command c's mesh m may take at the replay's uploads
+ * (rd__estimate_ring): its stream and mark bytes, its index lists as
+ * rd__mesh_index_bytes will count them after rd__vu_share_consider (the
+ * shared list's too where one is made or may be made now), each upload's
+ * alignment (align, at least 16). */
+uint64_t rd__mesh_ring_bytes(const RdMeshRec *m, const RdCmd *c, const RdVuPayload *p,
+                             uint64_t align);
+/* the times a build scanned a mesh's marks (the tests: once a mesh, never
+ * a draw) */
+uint64_t rd__vu_share_mark_scans(void);
 
 /* The bytes m's index lists take in the device copy and the ring: the
  * original's, and the shared list's after it where m has one. */

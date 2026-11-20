@@ -17,13 +17,21 @@
  *       a corner out of order, batches not back to back, a sheet
  *   t5  a draw's verdict: shared with its saved count; kept on the
  *       original list (counted by why) for the switch's words, the form,
- *       a chain plane, the hide and later marks, a probe draw, a range off
- *       the batches; no candidate (not counted) for a skinned command, a
+ *       a chain plane, the hide and later marks (as built), a probe draw, a
+ *       range off the batches; no candidate (not counted) for a skinned command, a
  *       draw the pre-pass did not record and a rule mode other than none;
  *       the joined mark changes nothing
  *   t6  the bytes on the device: the original's, then the shared list's
  *   t7  the counts and their texts: the run's stats line, the block's text
- *       taken back to zero */
+ *       taken back to zero
+ *   t8  the list only where a draw can take it: none for a lit or a skinned
+ *       mesh, none made for a command that is no candidate (skinned, lit,
+ *       prelit at codes 32 and 36, a chain plane) or for a scratch mesh,
+ *       made once for a candidate, its device copy marked for upload
+ *   t9  the hide and later marks decided once: 1000 draws scan no mark
+ *   t10 the ring's estimate covers the uploads' writes, the same before
+ *       the build (the estimate runs first) and after it, at three
+ *       alignments */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -50,6 +58,7 @@ static RdMeshRec *mesh(uint32_t nv, const uint32_t *kicks, uint32_t nk, const ui
 {
     RdMeshRec *m = calloc(1, sizeof(*m));
     m->vu = 1;
+    m->qwPerVertex = RD_VU_QW_PRELIT;
     m->vertexCount = nv;
     m->indexCount = nk * 3u;
     m->index = malloc((size_t)m->indexCount * 4u + 4u);
@@ -233,19 +242,27 @@ static void t5(void)
     CHECK(w == RD_VU_SHARE_OTHER, "t5: probe: %d", w);
     w = rd__vu_share_draw(m, RDC_MESH, none, 0, 0, true, 0, 1, 3, 12, &saved);
     CHECK(w == RD_VU_SHARE_OTHER, "t5: a range off the batches: %d", w);
+    /* the marks, decided at the build (the renderer makes them at the
+       mesh's creation, before it) */
     m->kickMark = calloc(6, 1);
     m->markCount = 6;
     m->kickMark[4] = ICO_VU_MARK_JOINED | ICO_VU_MARK_FLIP;
+    rd__vu_share_build(m);
     w = rd__vu_share_draw(m, RDC_MESH, none, 0, 0, true, 0, 1, 0, 12, &saved);
     CHECK(w == RD_VU_SHARE_YES, "t5: joined and flip marks: %d", w);
     m->kickMark[5] = ICO_VU_MARK_LATER;
+    rd__vu_share_build(m);
     w = rd__vu_share_draw(m, RDC_MESH, none, 0, 0, true, 0, 1, 0, 12, &saved);
     CHECK(w == RD_VU_SHARE_MARKS, "t5: later mark: %d", w);
     m->kickMark[5] = 0;
     m->kickMark[2] = ICO_VU_MARK_HIDE;
+    rd__vu_share_build(m);
     w = rd__vu_share_draw(m, RDC_MESH, none, 0, 0, true, 0, 1, 0, 12, &saved);
     CHECK(w == RD_VU_SHARE_MARKS, "t5: hide mark: %d", w);
     m->kickMark[2] = 0;
+    rd__vu_share_build(m);
+    w = rd__vu_share_draw(m, RDC_MESH, none, 0, 0, true, 0, 1, 0, 12, &saved);
+    CHECK(w == RD_VU_SHARE_YES && saved == 6u, "t5: marks gone, built again: %d", w);
     rd__vu_share_free(m);
     w = rd__vu_share_draw(m, RDC_MESH, none, 0, 0, true, 0, 1, 0, 12, &saved);
     CHECK(w == RD_VU_SHARE_FORM, "t5: no list: %d", w);
@@ -304,6 +321,136 @@ static void t7(void)
     rd__vu_share_reset();
 }
 
+/* a mesh command and its payload: prog, clip, the chain plane's code */
+static void command(RdCmd *c, RdVuPayload *p, uint8_t type, uint8_t prog, uint8_t clip,
+                    uint8_t chain)
+{
+    memset(c, 0, sizeof(*c));
+    memset(p, 0, sizeof(*p));
+    c->type = type;
+    c->b[5] = chain;
+    p->prog = prog;
+    p->clip = clip;
+}
+
+/* t8: the list only where a draw can take it (review A2-L2): none for the
+   lit and skinned layouts, none made for a command that is no candidate,
+   none for the interpolation's scratch meshes, made once */
+static void t8(void)
+{
+    static const uint32_t kicks[] = {2, 3, 4, 5};
+    static const uint32_t bat[][3] = {{0, 6, 4}};
+    RdMeshRec *m = mesh(6, kicks, 4, bat, 1);
+    m->qwPerVertex = RD_VU_QW_LIT;
+    rd__vu_share_build(m);
+    CHECK(m->indexShared == NULL, "t8: a lit mesh: no list");
+    m->qwPerVertex = RD_VU_QW_SKIN;
+    rd__vu_share_build(m);
+    CHECK(m->indexShared == NULL, "t8: a skinned mesh: no list");
+    meshFree(m);
+    RdCmd c;
+    RdVuPayload p;
+
+    static const struct {
+        uint8_t type, prog, clip, chain;
+        const char *what;
+    } no[] = {
+        {RDC_SKINNED, RD_PROG_SKIN, RD_VU_CLIP_NONE, 0, "skinned"},
+        {RDC_MESH, RD_PROG_LIT, RD_VU_CLIP_NONE, 0, "lit (the region rule's)"},
+        {RDC_MESH, RD_PROG_PRELIT, RD_VU_CLIP_REGION, 0, "prelit code 32"},
+        {RDC_MESH, RD_PROG_PRELIT, RD_VU_CLIP_SCISSOR, 0, "prelit code 36"},
+        {RDC_MESH, RD_PROG_PRELIT, RD_VU_CLIP_NONE, 1, "a chain plane"},
+    };
+
+    for (size_t i = 0; i < sizeof(no) / sizeof(no[0]); i++) {
+        m = mesh(6, kicks, 4, bat, 1);
+        command(&c, &p, no[i].type, no[i].prog, no[i].clip, no[i].chain);
+        CHECK(!rd__vu_share_candidate(&c, &p), "t8: %s: a candidate", no[i].what);
+        rd__vu_share_consider(m, &c, &p);
+        CHECK(m->indexShared == NULL && !m->shareTried, "t8: %s: a list made", no[i].what);
+        CHECK(rd__mesh_ring_bytes(m, &c, &p, 16u) == 6u * 3u * 16u + 48u + 32u,
+              "t8: %s: ring bytes %llu", no[i].what,
+              (unsigned long long)rd__mesh_ring_bytes(m, &c, &p, 16u));
+        meshFree(m);
+    }
+    /* the scratch meshes */
+    m = mesh(6, kicks, 4, bat, 1);
+    m->transient = 1;
+    command(&c, &p, RDC_MESH, RD_PROG_PRELIT, RD_VU_CLIP_NONE, 0);
+    rd__vu_share_consider(m, &c, &p);
+    CHECK(m->indexShared == NULL && !m->shareTried, "t8: a scratch mesh: a list made");
+    meshFree(m);
+    /* a candidate: made once, the device copy marked for its upload */
+    m = mesh(6, kicks, 4, bat, 1);
+    m->gpuChunk = 1;
+    const uint64_t scans = rd__vu_share_mark_scans();
+    rd__vu_share_consider(m, &c, &p);
+    CHECK(m->indexShared != NULL && m->shareTried && m->gpuDirty, "t8: a candidate: no list");
+    uint32_t *first = m->indexShared;
+    rd__vu_share_consider(m, &c, &p);
+    CHECK(m->indexShared == first && rd__vu_share_mark_scans() == scans + 1u,
+          "t8: considered again: built again (%llu scans)",
+          (unsigned long long)(rd__vu_share_mark_scans() - scans));
+    m->gpuChunk = 0;
+    meshFree(m);
+}
+
+/* t9: the hide and later marks decided once a mesh (review A2-L3): the
+   marks' scans do not grow with the draws */
+static void t9(void)
+{
+    static const uint32_t kicks[] = {2, 3, 4, 5};
+    static const uint32_t bat[][3] = {{0, 6, 4}};
+    RdMeshRec *m = mesh(6, kicks, 4, bat, 1);
+    m->kickMark = calloc(6, 1);
+    m->markCount = 6;
+    rd__vu_share_build(m);
+    const uint64_t scans = rd__vu_share_mark_scans();
+    const uint32_t none = ICO_VU_CLIP_NONE | ICO_VU_TRI_CHAIN | ICO_VU_TRI_HIDE;
+    uint32_t saved = 0;
+    int yes = 0;
+    for (int replay = 0; replay < 1000; replay++) {
+        yes += rd__vu_share_draw(m, RDC_MESH, none, 0, 0, true, 0, 1, 0, 12, &saved) ==
+               RD_VU_SHARE_YES;
+    }
+    CHECK(yes == 1000 && rd__vu_share_mark_scans() == scans,
+          "t9: %d shared, %llu scans in 1000 draws", yes,
+          (unsigned long long)(rd__vu_share_mark_scans() - scans));
+    meshFree(m);
+}
+
+/* t10: the ring's estimate covers the uploads' writes (review A2-L1): for a
+   candidate not yet considered (the estimate runs before the uploads) and
+   after it, the mesh's ring bytes hold the ring path's two allocations at
+   their worst alignment (stream and marks at align, the lists at 16), the
+   lists counted as rd__mesh_index_bytes counts them after the build */
+static void t10(void)
+{
+    static const uint32_t kicks[] = {2, 3, 4, 5};
+    static const uint32_t bat[][3] = {{0, 6, 4}};
+    RdCmd c;
+    RdVuPayload p;
+    command(&c, &p, RDC_MESH, RD_PROG_PRELIT, RD_VU_CLIP_NONE, 0);
+    static const uint64_t aligns[] = {16u, 64u, 256u};
+    for (size_t i = 0; i < sizeof(aligns) / sizeof(aligns[0]); i++) {
+        const uint64_t a = aligns[i];
+        RdMeshRec *m = mesh(6, kicks, 4, bat, 1);
+        const uint64_t before = rd__mesh_ring_bytes(m, &c, &p, a);
+        rd__vu_share_consider(m, &c, &p);
+        CHECK(m->indexShared != NULL, "t10: no list");
+        const uint64_t after = rd__mesh_ring_bytes(m, &c, &p, a);
+        const uint64_t writes = (uint64_t)m->vertexCount * m->qwPerVertex * 16u +
+                                (uint64_t)rd__mesh_mark_qw(m) * 16u + (a - 1u) +
+                                rd__mesh_index_bytes(m) + 15u;
+        CHECK(before == after, "t10: align %llu: %llu before the build, %llu after",
+              (unsigned long long)a, (unsigned long long)before, (unsigned long long)after);
+        CHECK(before >= writes && rd__mesh_index_bytes(m) == 96u,
+              "t10: align %llu: %llu counted for %llu written", (unsigned long long)a,
+              (unsigned long long)before, (unsigned long long)writes);
+        meshFree(m);
+    }
+}
+
 int main(void)
 {
     t1();
@@ -313,6 +460,9 @@ int main(void)
     t5();
     t6();
     t7();
+    t8();
+    t9();
+    t10();
     if (s_fail) {
         printf("rd_vu_share_test: %d failures\n", s_fail);
         return 1;

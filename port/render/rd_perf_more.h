@@ -62,7 +62,8 @@ typedef struct RdPerfMore {
     double listTris[RD_LIST_COUNT];
     uint32_t listTargetPx[RD_LIST_COUNT]; /* the last seen */
     double preVerts, drawInv;
-    double leftOut; /* RdPerfRecord.vuTrisLeftOut summed */
+    double leftOut;    /* RdPerfRecord.vuTrisLeftOut summed */
+    double shareSaved; /* RdPerfRecord.vuShareSaved summed (rd_vu_share.h) */
     /* GPU ms over the gpuN records with GPU times */
     double gpuMs, uploadMs, prepassMs, presentMs, listMs[RD_LIST_COUNT];
     double postMs[RD_PERF_POST_COUNT];
@@ -82,6 +83,11 @@ uint64_t rd_perf_more_draw_invocations(uint64_t tris, bool prepass);
    triangle), the others 3: 3 tris - 2 leftOut with the pre-pass (leftOut
    at most tris), 9 a triangle without */
 uint64_t rd_perf_more_draw_invocations_left(uint64_t tris, uint64_t leftOut, bool prepass);
+/* the same less the invocations the shared vertices' lists saved
+ * (RdPerfRecord.vuShareSaved, rd_vu_share.h; with the pre-pass alone, at
+ * least 0) */
+uint64_t rd_perf_more_draw_invocations_shared(uint64_t tris, uint64_t leftOut, uint64_t saved,
+                                              bool prepass);
 
 /* The two lines' texts (after "window: "); the length written, as
    snprintf's but cut at cap - 1.  The costs line is "" with no record;

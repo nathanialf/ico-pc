@@ -1367,6 +1367,7 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
     /* the record's draws counted for the share, the shared list's own */
     if (recorded && !own && vs == RD_VS_VU_MAIN) {
         rd__vu_share_note(count / 3u, ix->plain != NULL, ix->plain ? ix->saved : 0u);
+        g_rdPerf.vuShareSaved += ix->plain ? ix->saved : 0u; /* the perf lines' invocations */
     }
     VuIdx sel; /* the shared list, held by value (the run copies it) without its plain */
     if (ix->plain) {

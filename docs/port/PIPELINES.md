@@ -1483,8 +1483,12 @@ the GPU runs `vu_main_vs` three times a triangle. Under clip mode none (`vu_rec.
 what the shader writes at value `k * 4 + c`, besides the flat outputs, depends on the vertex
 `k - 2 + c` alone: its position (the vertex's own wrap test in `vu_corner_position`), colour, STQ
 and the side band's mark 0. The triangle's verdict can only cull it (the hidden flag, or every
-corner past the chain plane) or move its depth (the later bias). So a mesh gets a second index list
-at its creation (`RdMeshRec.indexShared`, `port/render/rd_vu_share.c` `rd__vu_share_build`). The
+corner past the chain plane) or move its depth (the later bias). So a prelit mesh gets a second index list
+(`RdMeshRec.indexShared`, `port/render/rd_vu_share.c` `rd__vu_share_build`). The list is made
+once, at the first replay that draws the mesh by a candidate command (a prelit mesh command at
+code 34 without a chain plane: `rd__vu_share_consider`, run over the replay's commands before
+its mesh uploads). Lit and skinned meshes, prelit meshes drawn only in other modes, and the
+interpolation's scratch meshes never get one. The
 list has the same triangles in the same order, and each place's value is replaced by one canonical
 value of the same vertex: `(v + 2) * 4 + 0` where the triangle `v + 2` is in the batch (the vertex
 provoking its own triangle), else the value of the first triangle of the batch that has the vertex
@@ -1504,6 +1508,12 @@ The list is made only where its form allows it:
 
 The device copy and the ring hold it right after the original (`rd__mesh_index_bytes`,
 `rd__mesh_write_indices`), so the original's offset, which everything else reads, is unchanged.
+A list made for a mesh whose device copy lacks it marks the copy for upload again. The ring's
+estimate (`rd__estimate_ring`) counts each mesh by `rd__mesh_ring_bytes`, which counts the shared
+list wherever the upload may write it (one made, or one this replay's consideration will make),
+so the estimate covers the writes by construction. The hide and later marks are made at the
+mesh's creation and never change; the build records, per batch, whether a kick carries one, so a
+draw checks its batches, not its triangles.
 
 A draw takes the shared list only when nothing can make a corner's output depend on its triangle
 (`rd__vu_share_draw`, at `doVuDraw`'s mesh draw):
@@ -1511,7 +1521,7 @@ A draw takes the shared list only when nothing can make a corner's output depend
 - recorded by the pre-pass and drawn by the main shader;
 - rule mode none;
 - no chain plane (`vu_batch.z` 0);
-- no kick of its range with `ICO_VU_MARK_HIDE` or `ICO_VU_MARK_LATER`;
+- no batch of its range with a kick marked `ICO_VU_MARK_HIDE` or `ICO_VU_MARK_LATER`;
 - not a probe draw;
 - its range the batches' own.
 

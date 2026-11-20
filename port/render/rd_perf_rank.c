@@ -114,6 +114,7 @@ void rd_perf_rank_add_record(RdPerfRankBlock *b, const RdPerfRecord *r, double v
     b->vuInv += vuInvocations;
     b->vuTris += (double)r->vuTris;
     b->vuLeftOut += (double)(r->vuTrisLeftOut < r->vuTris ? r->vuTrisLeftOut : r->vuTris);
+    b->vuShareSaved += (double)r->vuShareSaved;
     b->colorLoad += (double)r->colorLoadBytes;
     b->colorStore += (double)r->colorStoreBytes;
     b->depthLoad += (double)r->depthLoadBytes;
@@ -746,7 +747,16 @@ int rd_perf_rank_scene_text(const RdPerfRankBlock *b, const RdPerfRankInfo *in,
     if (in->prepass && b->vuTris > 0.0) {
         /* the figure above is the pre-pass's (window_scene.h); the draws run
            vu_main_vs three times a triangle besides it */
-        if (b->vuLeftOut > 0.0) {
+        if (b->vuShareSaved > 0.0) {
+            /* with the shared vertices' lists (rd_vu_share.h): a list's
+               repeated values one invocation fewer each, and after the index
+               compaction a triangle it left out one */
+            put(&o,
+                " (the VU pre-pass's; the draws' own %.0fk more, 3 a triangle less %.1fk "
+                "shared vertices and 2 a triangle the index compaction left out: %.1fk)",
+                (3.0 * b->vuTris - 2.0 * b->vuLeftOut - b->vuShareSaved) / N / 1000.0,
+                b->vuShareSaved / N / 1000.0, b->vuLeftOut / N / 1000.0);
+        } else if (b->vuLeftOut > 0.0) {
             /* after the index compaction (rd_vu_compact.h): a triangle it
                left out one invocation (its filler), the others three */
             put(&o,
