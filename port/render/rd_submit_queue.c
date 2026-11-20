@@ -19,6 +19,7 @@ uint64_t rd__sq_post(RdSubmitQ *q, const RdSubmitJob *job)
     j->submitMs = j->presentMs = 0.0;
     j->gfSample = RD_GF_NONE; /* the job's tail sets it */
     j->gfResult = 0;
+    j->gfPrevRead = -2;
     q->count++;
     if (q->count > q->block.depthMax) {
         q->block.depthMax = q->count;
@@ -54,6 +55,7 @@ void rd__sq_finish(RdSubmitQ *q, const RdSubmitJob *job)
     }
     if (job->gfSample != RD_GF_NONE) {
         q->block.gfJobs++;
+        q->block.gfReadFailed += job->gfPrevRead == -1 ? 1u : 0u;
         switch (job->gfSample) {
         case RD_GF_NOT_ORIGINAL:
             q->block.gfNotOriginal++;
@@ -67,6 +69,10 @@ void rd__sq_finish(RdSubmitQ *q, const RdSubmitJob *job)
             break;
         case RD_GF_NO_PREV:
             q->block.gfTimed++;
+            break;
+        case RD_GF_PREV_DONE:
+            q->block.gfTimed++;
+            q->block.gfPrevDone++;
             break;
         case RD_GF_UNKNOWN:
             q->block.gfTimed++;
@@ -163,13 +169,16 @@ void rd__sq_block_take(RdSubmitQ *q, RdSubmitBlock *out)
     }
 }
 
-uint8_t rd__sq_gf_class(double callMs, bool hasPrev, int32_t result, double waitMs)
+uint8_t rd__sq_gf_class(double callMs, bool hasPrev, int prevRead, int32_t result, double waitMs)
 {
     if (callMs < RD_GPU_FIRST_CALL_MS) {
         return RD_GF_SHORT;
     }
     if (!hasPrev) {
         return RD_GF_NO_PREV;
+    }
+    if (prevRead == 1) {
+        return RD_GF_PREV_DONE;
     }
     if (result != 0) {
         return RD_GF_UNKNOWN;

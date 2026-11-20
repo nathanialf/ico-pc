@@ -243,20 +243,26 @@ bool rd_thread_submit_gpu_wait_alone(void);
  * (rhi_wait_value_ns): returns at the faked end of the picture before's
  * work, true (a job counts as presenting while present is set).  Any
  * member may be NULL: sampleWait NULL, the samples wait on the real
- * backend's submissions.  The rule wanted (1) or not (0) at the next
- * start, -1 the device table's.  The jobs that made the wait, ever.  The
+ * backend's submissions; prevFinished() the read of the picture before
+ * just before the present call, in place of the backend's
+ * (rhi_submitted_finished): 1 finished by the faked clock, 0 running, -1
+ * a failed read.  The rule wanted (1) or not (0) at the next
+ * start (2: wanted with the verdict on from the start, no samples), -1
+ * the device table's.  The jobs that made the wait, ever.  The
  * verdict's tally since the thread's start (or a present mode change):
  * the Original presents timed, of them short (under 2 ms), counted, of
- * those waited, unknown; the samples' waits made. */
+ * those waited, unknown; the samples' waits made; the long calls with the
+ * picture before already finished; the reads of it that failed. */
 typedef struct RdSubmitTestGpu {
     void (*submitted)(void);
     void (*waitEnd)(void);
     void (*present)(void);
     bool (*sampleWait)(void);
+    int (*prevFinished)(void);
 } RdSubmitTestGpu;
 
 typedef struct RdGpuFirstTally {
-    unsigned timed, shortCalls, counted, waited, unknown, waits;
+    unsigned timed, shortCalls, counted, waited, unknown, waits, prevDone, readFailed;
 } RdGpuFirstTally;
 
 void rd__submit_test_gpu(const RdSubmitTestGpu *fake);
