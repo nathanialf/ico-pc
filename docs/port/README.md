@@ -46,6 +46,7 @@ In reading order.
 | [UI.md](UI.md) | The port's menus: the layout extension, the Settings menu, strings, the font, popups, touch and mouse. |
 | [GAME_FEATURES.md](GAME_FEATURES.md) | Gameplay options and their hooks, achievements, photo mode, the model viewer, gallery and credits. |
 | [HARD_MODE.md](HARD_MODE.md) | The difficulty's levers and presets: every row by Customize page with its mechanism and discs, the knock-down limit, Permadeath and the presets as shipped. |
+| [SCENE_LEDGER.md](SCENE_LEDGER.md) | The scene ledger: what each stage contained and what was left out of its pictures, by model and reason, its lines, the report's entry, its cost, the drop sites' gate and what it does not see yet. |
 | [PACKS.md](PACKS.md) | Texture and model packs: names, loading, formats, log lines and dumping. |
 | [TESTING.md](TESTING.md) | The test framework, the render gates, the suites per backend, the disc tests, switches, dumps, traces, audits and CI. |
 | [TESTING_FIXTURES.md](TESTING_FIXTURES.md) | The committed test frames: what a fixture keeps and holds not, the patterns and rules, the generated geometry, declared properties, making one, the checks. |

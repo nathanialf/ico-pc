@@ -76,6 +76,7 @@
 #include <string.h>
 #include "rd_internal.h"
 #include "rd_icon_hold.h"   /* the icon pass's post effects */
+#include "rd_ledger_live.h" /* the scene ledger: the effects by ticks on */
 #include "../core/region.h" /* the running disc's reduction crop */
 
 /* The RdKey the next post sprites carry, so the presenter
@@ -654,6 +655,7 @@ void rd_post(RdPostKind kind, const RdPostParams *params)
         rd__icon_pass_drop(RD_ICON_DROP_POST);
         return;
     }
+    rd__ledger_post((int)kind, params);
     switch (kind) {
     case RD_POST_REDUCTION:
         postReduction(params);

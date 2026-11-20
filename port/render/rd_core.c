@@ -34,11 +34,12 @@
 #include "rd_made_outside.h" /* what play makes outside the key cache, named */
 #include "rd_internal.h"
 #include "rd_hold.h"
-#include "rd_icon_hold.h" /* rd__icon_pass_drop */
-#include "rd_loss_keep.h" /* rd__loss_keep_recycle */
-#include "rd_layer.h"     /* the display layer's reserved slots */
-#include "rd_fsr3.h"      /* rd__fsr3_fp16_word, the summary's precision */
-#include "modelpack.h"    /* the model pack switch */
+#include "rd_icon_hold.h"   /* rd__icon_pass_drop */
+#include "rd_loss_keep.h"   /* rd__loss_keep_recycle */
+#include "rd_layer.h"       /* the display layer's reserved slots */
+#include "rd_ledger_live.h" /* the scene ledger: the box cull's drops by model */
+#include "rd_fsr3.h"        /* rd__fsr3_fp16_word, the summary's precision */
+#include "modelpack.h"      /* the model pack switch */
 #include "rd_mesh.h"
 #include "rd_present_scene.h"
 #include "rd_shadow_tile.h" /* rd__shadow_tile_shutdown */
@@ -2867,6 +2868,7 @@ void rd_free_camera(void)
 
 void rd_note_cull_drop(const char *model, int part, int rule, int views, int oneWhy)
 {
+    rd__ledger_box(model, part, rule, views);
     RdFrame *f = rd__rec_frame();
     if (!f) {
         return;

@@ -3546,6 +3546,8 @@ include(shadow_clip.cmake)
 include(rd_plain_camera.cmake)
 # the draw pattern gate: each faked phone profile's counts against its table (issue 179)
 include(rd_draw_pattern.cmake)
+# the scene ledger: what each stage held and left out, by model and reason (rd_ledger.c, issue 221)
+include(rd_ledger.cmake)
 # last: under asan the fixture replays run without the leak check (the driver's
 # exit leak); after every test's ENVIRONMENT is set
 include(rd_asan_fixture_leaks.cmake)

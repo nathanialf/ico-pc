@@ -33,7 +33,12 @@
  *                            (deflated: the loss dump writes its zip
  *                            stored);
  *   slow-<stamp>.zip         this run's slow-scene dump, when one was
- *                            written (stored as it is).
+ *                            written (stored as it is);
+ *   scene-ledger.txt         what each of the last stages played contained
+ *                            and what was left out of its pictures, and the
+ *                            stage in play so far (the window's renderer
+ *                            sets it: ico_report_set_ledger; port/render/
+ *                            rd_ledger.h), when one is set.
  *
  * Written from a crash handler: no allocation, no stdio, raw file calls
  * through static buffers, the zip's entries deflated by miniz's tdefl into
@@ -64,6 +69,11 @@ void ico_report_set_paths(const char *logs_dir, const char *exe_dir, const char 
 /* Android: VERSION.txt's lines, read from the app's assets (copied, at
    most 255 bytes); report.txt takes them instead of a file. */
 void ico_report_set_version_text(const char *text);
+/* The scene ledger's text for scene-ledger.txt (port/render/rd_ledger.h
+   rd_ledger_report_text: static data and snprintf only, as the crash path
+   needs): fn writes at most cap - 1 bytes into out and returns the length;
+   NULL leaves the entry out.  A build without the renderer sets none. */
+void ico_report_set_ledger(size_t (*fn)(char *out, size_t cap));
 /* How the run before ended (exit_info.h, issue 215): the verdict for
    report.txt's head ("the previous run ended: ..."; copied, cut to 1023
    bytes) and the newest exit trace's file name in the logs folder (copied;

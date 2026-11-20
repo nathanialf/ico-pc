@@ -109,6 +109,8 @@ difficulty_ntsc 0.02
 display_rate 0.01
 docs_check 2.93
 door_grace 0.01
+drop_ledger_gate 0.20  # estimate: Python over a dozen sources (LEDGER)
+drop_ledger_gate_selftest 0.05  # estimate: Python, two synthetic functions (LEDGER)
 dump_auto 0.04
 dump_zip 0.01
 ee_layout_fresh_aug6 0.09
@@ -544,6 +546,7 @@ rd_late_pass_gl 76.25
 rd_layout 1.02
 rd_layout_gl 1.54
 rd_layout_mali 0.24
+rd_ledger 0.10  # estimate: a CPU-only tally test with an 8 million step cost loop (LEDGER)
 rd_list_draws 0.00  # estimate: 0.0 s local (merge-wt_DIAG5-20261116T202500Z.lvp.log) x 1.35
 rd_local_probe_kept 8.47
 rd_local_probe_off 5.87
