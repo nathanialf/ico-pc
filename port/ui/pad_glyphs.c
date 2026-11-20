@@ -29,6 +29,12 @@
  * the others (even depths one way, odd ones the other), which makes a hole
  * inside an outline cancel to zero, the even-odd result for outlines that
  * do not cross (the letters' holes: A, B, R, a, b ...).
+ *
+ * What is drawn is the piece's ink, not its viewBox (pad_glyphs.h): the
+ * files place their letters differently in boxes of three sizes, so each
+ * piece's ink box is measured once from the outline (pgInk) and every
+ * raster, cell and aspect is that box at the set's lettering height
+ * (pgRefs).
  */
 #include "pad_glyphs.h"
 
@@ -108,6 +114,14 @@ typedef struct PgPiece {
     float strokeW, miter;
     int nops;
     PgOp *ops; /* malloc'd, nops */
+    /* the ink box (user units from the viewBox's corner), the outline's
+       own top and height (no stroke), whether the piece is a capital or
+       ascender letter (tall) and its lettering height in user units (ref:
+       pgRefs, per set) */
+    float ix0, iy0, ix1, iy1;
+    float oy0, oh;
+    int tall;
+    float ref;
 } PgPiece;
 
 static struct {
@@ -1295,36 +1309,105 @@ static int strokePolys(const PgPiece *pc, const PgFlat *f, float sx, float sy, f
     return 1;
 }
 
+/* points a user unit the curves are flattened at to measure the ink (a
+   letter of 24 units at 384 rows: past every size the atlases are made at) */
+#define PG_INK_SCALE 16.0f
+
+/* The piece's ink box: the bounds of every polygon the raster draws (the
+   fill, the stroke's bands and joins, all clipped to the viewBox), in user
+   units from the viewBox's corner; and its outline's top and height (the
+   flattened path itself, no stroke), which say whether it is a short
+   letter (pgRefs).  1, or 0 with the refusal in pc->why. */
+static int pgInk(PgPiece *pc)
+{
+    PgFlat f;
+    if (!flatten(pc, PG_INK_SCALE, PG_INK_SCALE, &f)) {
+        return pgFail(pc, "the outline is past the reader's bounds");
+    }
+    float oy0 = PG_MAX_COORD * 4.0f, oy1 = -PG_MAX_COORD * 4.0f;
+    for (int i = 0; i < f.npts; i++) {
+        oy0 = fminf(oy0, f.xy[2 * i + 1]);
+        oy1 = fmaxf(oy1, f.xy[2 * i + 1]);
+    }
+    PgPolys ps;
+    memset(&ps, 0, sizeof(ps));
+    int ok = !pc->hasFill || fillPolys(pc, &f, 1.0f, 1.0f, pc->vbw, pc->vbh, &ps);
+    if (ok && pc->hasStroke && pc->strokeW > 0.0f) {
+        ok = strokePolys(pc, &f, 1.0f, 1.0f, pc->vbw, pc->vbh, &ps);
+    }
+    float x0 = pc->vbw, y0 = pc->vbh, x1 = 0.0f, y1 = 0.0f;
+    for (int i = 0; ok && i < ps.npts; i++) {
+        x0 = fminf(x0, ps.xy[2 * i]);
+        x1 = fmaxf(x1, ps.xy[2 * i]);
+        y0 = fminf(y0, ps.xy[2 * i + 1]);
+        y1 = fmaxf(y1, ps.xy[2 * i + 1]);
+    }
+    polysFree(&ps);
+    flatFree(&f);
+    if (!ok) {
+        return pgFail(pc, "the outline is past the reader's bounds");
+    }
+    /* a hundredth of a unit: a sliver no raster size shows */
+    if (!(x1 - x0 >= 0.01f && y1 - y0 >= 0.01f)) {
+        return pgFail(pc, "nothing drawn inside the viewBox");
+    }
+    pc->ix0 = x0;
+    pc->iy0 = y0;
+    pc->ix1 = x1;
+    pc->iy1 = y1;
+    pc->oy0 = oy0;
+    pc->oh = oy1 - oy0;
+    return 1;
+}
+
+/* the ink's size in texels at a lettering height of pixelH: each side
+   rounded up (a capital's height, pixelH exactly, is not rounded past it
+   by the float's last bit) */
 static int pgSize(const PgPiece *pc, int pixelH, int *w, int *h)
 {
-    const long wl = lrintf(pc->vbw * (float)pixelH / pc->vbh);
-    *w = wl < 1 ? 1 : (int)wl;
-    *h = pixelH;
+    const float s = (float)pixelH / pc->ref;
+    const float fw = ceilf((pc->ix1 - pc->ix0) * s - 1e-3f);
+    const float fh = ceilf((pc->iy1 - pc->iy0) * s - 1e-3f);
+    /* a short letter of a test file may be far taller than its set's
+       capitals: the reader's raster bound */
+    if (!(fw <= 4.0f * PG_MAX_PX && fh <= 4.0f * PG_MAX_PX)) {
+        return -1;
+    }
+    *w = fw < 1.0f ? 1 : (int)fw;
+    *h = fh < 1.0f ? 1 : (int)fh;
     return 0;
 }
 
-/* the piece at W x H into rgba (stride bytes a row): straight colour, the
-   alpha at GS scale */
-static int pgRaster(const PgPiece *pc, int W, int H, uint8_t *rgba, int stride)
+/* the piece at a lettering height of pixelH into rgba (W x H texels of
+   pgSize, stride bytes a row), the ink box's corner at texel (0, 0):
+   straight colour, the alpha at GS scale */
+static int pgRaster(const PgPiece *pc, int pixelH, int W, int H, uint8_t *rgba, int stride)
 {
-    const float sx = (float)W / pc->vbw, sy = (float)H / pc->vbh;
+    const float s = (float)pixelH / pc->ref;
     PgFlat f;
-    if (!flatten(pc, sx, sy, &f)) {
+    if (!flatten(pc, s, s, &f)) {
         return -1;
     }
+    /* the ink box's corner to the origin: clipping to the ink box is the
+       viewBox's clip (the box is the bounds of what lies inside it) */
+    for (int i = 0; i < f.npts; i++) {
+        f.xy[2 * i] -= pc->ix0;
+        f.xy[2 * i + 1] -= pc->iy0;
+    }
+    const float cw = (pc->ix1 - pc->ix0) * s, ch = (pc->iy1 - pc->iy0) * s;
     const size_t px = (size_t)W * (size_t)H;
     uint8_t *covF = calloc(px, 1), *covS = calloc(px, 1);
     PgPolys ps;
     memset(&ps, 0, sizeof(ps));
     int ok = covF && covS;
     if (ok && pc->hasFill) {
-        ok = fillPolys(pc, &f, sx, sy, (float)W, (float)H, &ps) &&
+        ok = fillPolys(pc, &f, s, s, cw, ch, &ps) &&
              ui__raster_polys(covF, W, H, W, ps.xy, ps.cnt, ps.n) == 0;
     }
     const int stroke = pc->hasStroke && pc->strokeW > 0.0f;
     if (ok && stroke) {
         ps.n = ps.npts = 0;
-        ok = strokePolys(pc, &f, sx, sy, (float)W, (float)H, &ps) &&
+        ok = strokePolys(pc, &f, s, s, cw, ch, &ps) &&
              ui__raster_polys(covS, W, H, W, ps.xy, ps.cnt, ps.n) == 0;
     }
     polysFree(&ps);
@@ -1368,6 +1451,48 @@ static int pgRaster(const PgPiece *pc, int W, int H, uint8_t *rgba, int stride)
 
 /* ============================================================ the sets */
 
+/* Each valid piece's lettering height in user units.  A capital or
+   ascender letter (tall: its outline's top within a quarter of its own
+   height of its viewBox's top) is its own: its ink fills the lettering
+   height, so every capital of the set comes out the same height (the
+   files' capitals are 19.10, 19.54 and 20.00 units tall: one scale for the
+   set would leave them 4 % apart).  A short letter takes the lettering of
+   the set's first tall piece drawn on a viewBox of its size (the Wii
+   Classic Controller's a, x and y take its b's: same font, same grid), or
+   failing one the tallest capital's, so it keeps its size against them. */
+static void pgRefs(int s)
+{
+    PgPiece *p = s_pg.piece[s];
+    float tallest = 0.0f;
+    for (int g = 0; g < PAD_GLYPHS_PIECES; g++) {
+        if (!p[g].valid) {
+            continue;
+        }
+        p[g].tall = !(p[g].oy0 > 0.25f * p[g].oh);
+        p[g].ref = p[g].iy1 - p[g].iy0;
+        if (p[g].tall && p[g].ref > tallest) {
+            tallest = p[g].ref;
+        }
+    }
+    for (int g = 0; g < PAD_GLYPHS_PIECES; g++) {
+        if (!p[g].valid || p[g].tall) {
+            continue;
+        }
+        float ref = 0.0f;
+        for (int t = 0; t < PAD_GLYPHS_PIECES && ref <= 0.0f; t++) {
+            if (p[t].valid && p[t].tall && p[t].vbw == p[g].vbw && p[t].vbh == p[g].vbh) {
+                ref = p[t].iy1 - p[t].iy0;
+            }
+        }
+        if (ref <= 0.0f) {
+            ref = tallest;
+        }
+        if (ref > 0.0f) {
+            p[g].ref = ref;
+        }
+    }
+}
+
 static void pgCheckSet(int s)
 {
     int n = 0;
@@ -1375,13 +1500,16 @@ static void pgCheckSet(int s)
         n += s_pg.piece[s][g].valid;
     }
     s_pg.complete[s] = n == PAD_GLYPHS_PIECES;
+    pgRefs(s);
 }
 
 static void pgLoad(int s, int g, const char *src, size_t n)
 {
     PgPiece *pc = &s_pg.piece[s][g];
     free(pc->ops);
-    pgParse(pc, src, n);
+    if (pgParse(pc, src, n)) {
+        pgInk(pc);
+    }
 }
 
 void pad_glyphs_init(void)
@@ -1486,7 +1614,26 @@ static const PgPiece *pieceOf(int style, int glyph)
 float pad_glyphs_aspect(int style, int glyph)
 {
     const PgPiece *pc = pieceOf(style, glyph);
-    return pc && pc->valid ? pc->vbw / pc->vbh : 0.0f;
+    return pc && pc->valid ? (pc->ix1 - pc->ix0) / (pc->iy1 - pc->iy0) : 0.0f;
+}
+
+float pad_glyphs_height(int style, int glyph)
+{
+    const PgPiece *pc = pieceOf(style, glyph);
+    return pc && pc->valid && pc->ref > 0.0f ? (pc->iy1 - pc->iy0) / pc->ref : 0.0f;
+}
+
+int pad_glyphs_ink_box(int style, int glyph, float box[4])
+{
+    const PgPiece *pc = pieceOf(style, glyph);
+    if (!pc || !pc->valid || !box) {
+        return 0;
+    }
+    box[0] = pc->ix0;
+    box[1] = pc->iy0;
+    box[2] = pc->ix1;
+    box[3] = pc->iy1;
+    return 1;
 }
 
 int pad_glyphs_bucket(int pixelH)
@@ -1515,7 +1662,7 @@ int pad_glyphs_raster(int style, int glyph, int pixelH, uint8_t *rgba, int strid
     if (pad_glyphs_raster_size(style, glyph, pixelH, &w, &h) != 0 || !rgba || stride < 4 * w) {
         return -1;
     }
-    return pgRaster(pieceOf(style, glyph), w, h, rgba, stride);
+    return pgRaster(pieceOf(style, glyph), pixelH, w, h, rgba, stride);
 }
 
 int pad_glyphs_piece_valid(int style, int glyph)
@@ -1565,7 +1712,8 @@ typedef struct PgAtlas {
     unsigned stale; /* s_pg.stale[style] when made */
     int failed;     /* the upload failed: not tried again until forgotten */
     uint32_t tex;
-    int cellX[PAD_GLYPHS_PIECES], cellY[PAD_GLYPHS_PIECES], cellW[PAD_GLYPHS_PIECES];
+    int cellX[PAD_GLYPHS_PIECES], cellY[PAD_GLYPHS_PIECES];
+    float inkW[PAD_GLYPHS_PIECES], inkH[PAD_GLYPHS_PIECES]; /* texels, unrounded */
     uint32_t lastFrame, lastUse;
 } PgAtlas;
 
@@ -1603,27 +1751,38 @@ static int evictable(const PgAtlas *a, uint32_t now)
     return now - a->lastFrame >= PG_EVICT_FRAMES;
 }
 
-/* the eight pictures of style at height h in one texture: the face buttons
-   on the first row, the shoulders on the second, PG_GUTTER transparent
-   texels around each (bilinear sampling inside a cell reaches one texel
-   past it); 2 h + 3 gutters high, never a power of two for the buckets, so
-   no mip chain averages cells together (rd_upload.c texLevels) */
+/* the eight pictures of style at lettering height h in one texture: the
+   face buttons on the first row, the shoulders on the second, each cell its
+   ink rounded up to whole texels, PG_GUTTER transparent texels around each
+   (bilinear sampling inside a cell reaches one texel past it); the rows as
+   tall as their tallest cell, one more row when the height would be a
+   power of two, so no mip chain averages cells together (rd_upload.c
+   texLevels) */
 static int atlasMake(PgAtlas *a, int style, int h)
 {
-    int w[PAD_GLYPHS_PIECES], rowW[2] = {PG_GUTTER, PG_GUTTER};
+    int w[PAD_GLYPHS_PIECES], hh[PAD_GLYPHS_PIECES], rowW[2] = {PG_GUTTER, PG_GUTTER};
+    int rowH[2] = {0, 0};
     for (int g = 0; g < PAD_GLYPHS_PIECES; g++) {
-        int hh = 0;
-        if (pad_glyphs_raster_size(style, g, h, &w[g], &hh) != 0) {
+        const PgPiece *pc = pieceOf(style, g);
+        if (pad_glyphs_raster_size(style, g, h, &w[g], &hh[g]) != 0) {
             return 0;
         }
         const int r = g / 4;
+        const float s = (float)h / pc->ref;
         a->cellX[g] = rowW[r];
-        a->cellY[g] = PG_GUTTER + r * (h + PG_GUTTER);
-        a->cellW[g] = w[g];
+        a->inkW[g] = (pc->ix1 - pc->ix0) * s;
+        a->inkH[g] = (pc->iy1 - pc->iy0) * s;
         rowW[r] += w[g] + PG_GUTTER;
+        rowH[r] = hh[g] > rowH[r] ? hh[g] : rowH[r];
+    }
+    for (int g = 0; g < PAD_GLYPHS_PIECES; g++) {
+        a->cellY[g] = PG_GUTTER + (g / 4) * (rowH[0] + PG_GUTTER);
     }
     const int texW = rowW[0] > rowW[1] ? rowW[0] : rowW[1];
-    const int texH = 2 * h + 3 * PG_GUTTER;
+    int texH = rowH[0] + rowH[1] + 3 * PG_GUTTER;
+    if ((texH & (texH - 1)) == 0) {
+        texH++;
+    }
     uint8_t *rgba = calloc((size_t)texW * (size_t)texH, 4);
     if (!rgba) {
         return 0;
@@ -1761,8 +1920,8 @@ int pad_glyphs_texture(int glyph, int pixelH, unsigned *tex, float uv[4], float 
     *tex = a->tex;
     uv[0] = (float)a->cellX[glyph];
     uv[1] = (float)a->cellY[glyph];
-    uv[2] = (float)(a->cellX[glyph] + a->cellW[glyph]);
-    uv[3] = (float)(a->cellY[glyph] + a->h);
+    uv[2] = (float)a->cellX[glyph] + a->inkW[glyph];
+    uv[3] = (float)a->cellY[glyph] + a->inkH[glyph];
     if (aspect) {
         *aspect = pad_glyphs_aspect(style, glyph);
     }

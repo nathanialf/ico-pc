@@ -64,10 +64,25 @@ int pad_glyphs_active(void);
    "?" out of range */
 const char *pad_glyphs_style_name(int style);
 
-/* The art's width over its height (its viewBox's: 1 for 24 x 24, 40/24 for
-   the 40 x 24 shoulders, 24/32 for the Wii Classic Controller's face
-   letters); 0 for PlayStation, an invalid piece or a glyph out of 0 .. 7. */
+/* A piece is drawn by its INK, not its viewBox: the bounds of what it
+   paints (the outline with the stroke's half width and its miter joins,
+   clipped to the viewBox), which the contributed files place differently
+   in boxes of different sizes.  Its size comes from the set's LETTERING
+   height: a capital or ascender letter's ink is exactly one lettering
+   height tall (each such piece measured by itself, so every capital of a
+   set, and of every set, is the same height whatever its file's units); a
+   short letter (its outline's top more than a quarter of its own height
+   below its viewBox's top: the Wii Classic Controller's a, x and y) keeps
+   the size it has against the capital drawn on the same viewBox (b).
+
+   pad_glyphs_aspect: the ink's width over its height (square pixels);
+   pad_glyphs_height: the ink's height in lettering heights (1 for a
+   capital or ascender letter, about 0.76 for the a and x, 1.0015 for the
+   y's ascender-to-descender).  Both 0 for PlayStation, an invalid piece or
+   a glyph out of 0 .. 7.  A caller centres the ink box (a texture cell is
+   exactly that box) in its own box. */
 float pad_glyphs_aspect(int style, int glyph);
+float pad_glyphs_height(int style, int glyph);
 
 /* The atlas height a request of pixelH output pixels is drawn from: the
    first of 16, 24, 32, 48, 64, 96, 128, 192, 256 at or above it (256 above
@@ -75,11 +90,13 @@ float pad_glyphs_aspect(int style, int glyph);
 int pad_glyphs_bucket(int pixelH);
 
 /* The picture of glyph (0 .. 7, LtExtGlyph) in the style in force, for a
-   draw about pixelH output pixels high: 1 with *tex the atlas's rd texture
-   id (RdTex.id), uv the cell's texel rectangle (u0, v0, u1, v1: texels, the
-   cell's outer edges, not half a texel in: the cell is the art's exact
-   extent, rasterised at the bucket's height, with two transparent texels
-   around it) and *aspect as pad_glyphs_aspect.  0 (and *tex 0) when no
+   draw whose lettering height is about pixelH output pixels: 1 with *tex
+   the atlas's rd texture id (RdTex.id), uv the ink's texel rectangle (u0,
+   v0, u1, v1: texels, the ink box's own edges, which are not whole texels
+   at the right and bottom; not half a texel in: the cell holds the ink
+   rasterised at the bucket's lettering height, rounded up to whole texels,
+   with two transparent texels around it) and *aspect as pad_glyphs_aspect.
+   The quad is pad_glyphs_height lettering heights tall.  0 (and *tex 0) when no
    style is active, for the menu arrows or any other glyph, without ICO_RD,
    or when no atlas can be made.
 
@@ -106,16 +123,22 @@ int pad_glyphs_texture(int glyph, int pixelH, unsigned *tex, float uv[4], float 
 
 /* ---- CPU only: tests and tools (no texture, any thread that owns them) */
 
-/* The size piece (style, glyph) rasterises to at pixelH (1 .. 1024) rows:
-   *h = pixelH, *w = the art's width at that height, rounded, at least 1.
-   0, or -1 for PlayStation, an invalid piece or a bad argument. */
+/* The size piece (style, glyph) rasterises to at a lettering height of
+   pixelH (1 .. 1024) pixels: its ink box at that size, each side rounded up
+   to whole texels (*h = pixelH for a capital), at least 1.  0, or -1 for
+   PlayStation, an invalid piece or a bad argument. */
 int pad_glyphs_raster_size(int style, int glyph, int pixelH, int *w, int *h);
-/* Rasterises piece (style, glyph) at pixelH rows into rgba (w x h texels of
-   pad_glyphs_raster_size, rows stride bytes apart, stride >= 4 * w): the
-   atlas cell's texels exactly (straight colour, GS alpha 0 .. 0x80).
+/* Rasterises piece (style, glyph) at a lettering height of pixelH into
+   rgba (w x h texels of pad_glyphs_raster_size, rows stride bytes apart,
+   stride >= 4 * w): the ink box's top left corner at the first texel's,
+   the atlas cell's texels exactly (straight colour, GS alpha 0 .. 0x80).
    0, or -1 as pad_glyphs_raster_size or when the outline is over the
    reader's bounds. */
 int pad_glyphs_raster(int style, int glyph, int pixelH, uint8_t *rgba, int stride);
+/* The ink box of piece (style, glyph) in its file's user units from the
+   viewBox's top left corner: box = x0, y0, x1, y1.  1, or 0 as
+   pad_glyphs_raster_size's -1. */
+int pad_glyphs_ink_box(int style, int glyph, float box[4]);
 /* 1 when piece (style, glyph) parsed; its refusal (a sentence for the log)
    or NULL */
 int pad_glyphs_piece_valid(int style, int glyph);
