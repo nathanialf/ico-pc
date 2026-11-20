@@ -1147,7 +1147,8 @@ Developer mode for it. It saves what is on the screen 3 seconds after you
 press it, so leave the menu right away. It goes into the `dumps` folder as
 two `.png` pictures (the frame the game drew, and one ending in
 `-present.png` as your screen showed it) and a `.zip` file that also holds
-the log; attach the `.zip` to your report. It is the same as F12 on a
+the log, with a list of what the area contained up to that moment and what
+was left out of its pictures; attach the `.zip` to your report. It is the same as F12 on a
 computer, and it is how a phone or a handheld makes one.
 
 ## Developer mode

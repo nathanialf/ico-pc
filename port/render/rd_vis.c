@@ -113,6 +113,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "rd_ledger_live.h" /* the scene ledger: the skips by model */
 #include "rd_mesh.h"
 #include "rd_perf_hooks.h"
 #include "rd_vis.h"
@@ -1642,6 +1643,7 @@ static void visWalk(void *user, int list, uint32_t index, const RdCmd *c, const 
     s_vis.skipL[s_vis.nSkip] = (uint8_t)list;
     s_vis.skipI[s_vis.nSkip] = index;
     s_vis.nSkip++;
+    rd__ledger_cull(c, v, w->f->number);
     w->n.skipped++;
     if (v == RD_VIS_OCCLUDED) {
         w->n.occluded++;
@@ -1665,6 +1667,9 @@ static void noMemoryLine(void)
 const RdFrame *rd__vis_frame(const RdFrame *f, int keep)
 {
     s_vis.src = NULL;
+    if (f) {
+        rd__ledger_picture(f->number); /* the stage's pictures, whatever the mode */
+    }
     if (!f || rd__vis_mode() == RD_VIS_OFF || g_rdWin.first || f->number == 0) {
         memset(&s_vis.last, 0, sizeof(s_vis.last));
         memset(s_vis.why, 0, sizeof(s_vis.why));

@@ -10,7 +10,9 @@
  * logs folder's last-run.txt and last-run-previous.txt (last_run.h, issue
  * 215) go in byte for byte, and a report without them has neither entry;
  * so do exit-info.txt and the newest exit trace (exit_info.h, issue 215),
- * with the verdict line in report.txt's head.
+ * with the verdict line in report.txt's head; the scene ledger's text
+ * (ico_report_set_ledger, issue 221) goes in as scene-ledger.txt byte for
+ * byte, and a report with no ledger set has no such entry.
  * argv[1]: a folder the test may write in (the build folder).
  */
 #include <stdio.h>
@@ -35,6 +37,15 @@ static const char kVerdict[] = "the previous run ended: it was killed (signal 9,
             fails++;                                                                               \
         }                                                                                          \
     } while (0)
+
+/* the scene ledger's text as rd_ledger_report_text would hand it */
+static const char kLedger[] = "The scene ledger: ...\n\nscene ledger: stage 40 (deja) ended: ...\n";
+
+static size_t fakeLedger(char *out, size_t cap)
+{
+    snprintf(out, cap, "%s", kLedger);
+    return strlen(out);
+}
 
 static int put(const char *path, const void *data, size_t n)
 {
@@ -112,6 +123,7 @@ int main(int argc, char **argv)
     ico_report_set_exit_info(kVerdict, "exit-trace-1794862215000.pb");
 
     ico_report_set_paths(dir, dir, dir, NULL);
+    ico_report_set_ledger(fakeLedger);
     memset(&in, 0, sizeof in);
     in.what = "the test";
     in.summary = "";
@@ -154,6 +166,9 @@ int main(int argc, char **argv)
                     &st));
         CHECK(entry(&z, "exit-trace-1794862215000.pb", (const unsigned char *)kTrace,
                     sizeof kTrace - 1, &st));
+        /* the scene ledger's text, byte for byte */
+        CHECK(
+            entry(&z, "scene-ledger.txt", (const unsigned char *)kLedger, sizeof kLedger - 1, &st));
     }
     {
         /* the verdict in report.txt's head, after the memory line */
@@ -186,6 +201,7 @@ int main(int argc, char **argv)
         /* the trace stays on disc: the report takes it only when named */
     }
     ico_report_set_exit_info("", "");
+    ico_report_set_ledger(NULL); /* the next report has no scene-ledger.txt */
 
     /* the log's key lines: the picture-health report's line first (issue
        179: a reporter's zip says at its top that the picture came back
@@ -215,6 +231,7 @@ int main(int argc, char **argv)
         CHECK(mz_zip_reader_locate_file(&z, "last-run-previous.txt", NULL, 0) < 0);
         CHECK(mz_zip_reader_locate_file(&z, "exit-info.txt", NULL, 0) < 0);
         CHECK(mz_zip_reader_locate_file(&z, "exit-trace-1794862215000.pb", NULL, 0) < 0);
+        CHECK(mz_zip_reader_locate_file(&z, "scene-ledger.txt", NULL, 0) < 0);
         size_t got = 0;
         char *txt = mz_zip_reader_extract_file_to_heap(&z, "report.txt", &got, 0);
         CHECK(txt != NULL);

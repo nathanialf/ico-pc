@@ -1159,3 +1159,21 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   `-DWRITE=1`). The path ran: the profile's fakes in each run's log, the game self-tests' line,
   every count's line, each fixture's declared `prepass_vertices` under `mali` and `desktop`, the
   two-pass blend's draws over the list under `mali`; SKIP without a device.
+
+- `rd_ledger_test.c` (`rd_ledger`; `rd_ledger.cmake`, CPU; [SCENE_LEDGER.md](SCENE_LEDGER.md)):
+  the scene ledger's tally and text from synthetic scenes. A model left out by each reason in
+  ten ticks, twice in each, five of them between ticks: its row reads `never drawn; left out by
+  <the reason's words> in 10 ticks (5 with the cameras between ticks), 20 draws or parts` (the
+  port's tests in pictures, between ticks; the whole object's box `times`), and the header's
+  counts. A model built and never drawn nor left out reads `never drawn, no reason recorded, 1
+  mesh built`, before the drawn rows, counted in the header; carried into the next stage it reads
+  `built before the stage began` while a drawn or left out row is not carried. A drawn row reads
+  back with `sscanf` as put in (831 ticks, 1662 draws, two a tick counted as one tick). The
+  replay's half added into the game's (one row a name). The table full: 256 rows in order, five
+  names past it counted, a known name still found, stray rows and reasons ignored; a long name cut
+  to 23 bytes, no name `(no name)`. The effects line (`none`; fog's last strength, shadow
+  volumes' triangles). The text's bounds: 58 rows, 48 listed and `10 more models not listed`,
+  every line the ledger's and under 1500 bytes, a 40-byte buffer cut and ended, no buffer
+  nothing. The kept stages: the last four, oldest first, then the stage in play. The cost: a
+  draw's tally over 4 million calls under 40 ns on average or within six times a control loop of
+  the same additions in the same run.

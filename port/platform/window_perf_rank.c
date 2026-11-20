@@ -13,9 +13,11 @@
 #include "ico_gamestate.h"
 #include "log_cost.h"
 #include "rd_perf_more.h"
-#include "rd.h" /* rd_vu_prepass_on */
+#include "rd.h"        /* rd_vu_prepass_on */
+#include "rd_ledger.h" /* the scene ledger: the stage in play */
 #include "rd_list_draws.h"
 #include "rd_perf_rank.h"
+#include "report.h" /* the report's scene-ledger.txt */
 #include "rhi.h"
 #include "window_clock_trap.h" /* window_clock_trap_ranked */
 #include "window_lines.h"      /* window_log_cost_part */
@@ -93,6 +95,15 @@ void window_perf_rank_step(SceneKind kind, int stage, uint64_t ns)
         snprintf(s_stageName, sizeof s_stageName, "%s", name != NULL ? name : "");
     }
     SDL_UnlockSpinlock(&s_lock);
+    /* the scene ledger (rd_ledger.h) on the game's thread, the one that
+       records the frames: a new stage writes the stage before's lines; the
+       bug report takes the kept stages (report.h ico_report_set_ledger) */
+    static bool s_ledgerSet;
+    if (!s_ledgerSet) {
+        s_ledgerSet = true;
+        ico_report_set_ledger(rd_ledger_report_text);
+    }
+    rd_ledger_scene(stage, name);
 }
 
 /* the scene's key (window_scene_key): the stage and its name on every kind,

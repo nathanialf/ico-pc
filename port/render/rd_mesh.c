@@ -36,6 +36,7 @@
 #include "../core/region.h" /* ico_region: which disc's VU programs */
 #include "rd_internal.h"
 #include "rd_hold.h"
+#include "rd_ledger_live.h" /* the scene ledger: meshes built, draws, draws left out */
 #include "rd_mesh.h"
 #include "rd_vu_rec_early.h"
 #include "rd_vu_share.h"
@@ -2186,6 +2187,7 @@ RdMesh rd_create_vu_mesh(const RdVuMeshDesc *d)
 {
     uint32_t nv;
     if (!descCount(d, &nv)) {
+        rd__ledger_build_failed(d ? d->debugName : NULL);
         return (RdMesh){0};
     }
     size_t streamAt, bytes;
@@ -2196,6 +2198,7 @@ RdMesh rd_create_vu_mesh(const RdVuMeshDesc *d)
         free(buf);
         free(index);
         free(br);
+        rd__ledger_build_failed(d->debugName);
         return (RdMesh){0};
     }
     const float (*stream)[4] = (const float (*)[4])(void *)(buf + streamAt);
@@ -2226,6 +2229,9 @@ RdMesh rd_create_vu_mesh(const RdVuMeshDesc *d)
             /* the EE's facing table (Packet.c): the marks of every program */
             (void)rd__mesh_set_facing(m, d->facing, d->facingCount);
         }
+        rd__ledger_built(d->debugName);
+    } else {
+        rd__ledger_build_failed(d->debugName);
     }
     free(buf);
     free(index);
@@ -2913,11 +2919,17 @@ void rd_draw_vu_mesh(RdMesh mesh, const RdVuDraw *d, RdKey key)
 {
     rd__texlock_wait();
     RdMeshRec *m = rd__mesh_rec(mesh.id);
-    if (!m || !m->vu || !d || !rd__draw_filter_pass(key)) {
+    if (!m || !m->vu || !d) {
+        rd__ledger_draw_out(m, mesh.id, RD_LEDGER_NO_RECORD);
+        return;
+    }
+    if (!rd__draw_filter_pass(key)) {
+        rd__ledger_draw_out(m, mesh.id, RD_LEDGER_FILTER);
         return;
     }
     uint32_t first = d->firstBatch, n = d->batchCount;
     if (first >= m->batchCount) {
+        rd__ledger_draw_out(m, mesh.id, RD_LEDGER_BATCHES);
         return;
     }
     if (n == 0 || first + n > m->batchCount) {
@@ -2953,7 +2965,11 @@ void rd_draw_vu_mesh(RdMesh mesh, const RdVuDraw *d, RdKey key)
     }
     RdCmd *c = pushVu(d->bones ? RDC_SKINNED : RDC_MESH, key, &p, &d->vu, d->bones, NULL,
                       d->materials, cards, cardBytes);
+    if (!c) {
+        rd__ledger_draw_out(m, mesh.id, RD_LEDGER_RECORD_FULL);
+    }
     if (c) {
+        rd__ledger_draw(m, mesh.id, first, n);
         c->u[0] = mesh.id;
         /* b[4]: RD_VU_VIEW_*, how the model matrices follow the camera
          * (rd_interp.c's re-base); 0 in older dumps */

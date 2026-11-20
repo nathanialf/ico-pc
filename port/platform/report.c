@@ -90,6 +90,17 @@ void ico_report_set_paths(const char *logs_dir, const char *exe_dir, const char 
 #endif
 }
 
+/* the scene ledger's text (ico_report_set_ledger) and its buffer: the kept
+   stages and the stage in play (rd_ledger.h RD_LEDGER_KEEP + 1 stages of
+   RD_LEDGER_TEXT, 8192, bytes each) */
+static size_t (*volatile s_ledger_fn)(char *out, size_t cap);
+static char s_ledger[5 * 8192 + 1024];
+
+void ico_report_set_ledger(size_t (*fn)(char *out, size_t cap))
+{
+    s_ledger_fn = fn;
+}
+
 void ico_report_set_version_text(const char *text)
 {
     snprintf(s_version_text, sizeof s_version_text, "%s", text != NULL ? text : "");
@@ -985,6 +996,18 @@ int ico_report_write(const IcoReportInputs *in, char *name, size_t name_size)
     }
     build_text(in);
     zip_add_mem("report.txt", s_text, s_text_len);
+    {
+        /* what the last stages held and left out (issue 221: a report made
+           minutes after the wrong picture, in another stage) */
+        size_t (*fn)(char *, size_t) = s_ledger_fn;
+        if (fn != NULL) {
+            const size_t n = fn(s_ledger, sizeof s_ledger);
+            if (n > 0) {
+                zip_add_mem("scene-ledger.txt", s_ledger,
+                            n < sizeof s_ledger ? n : sizeof s_ledger - 1);
+            }
+        }
+    }
     (void)zip_add_file("ico-pc.log", in->log_path, 0);
     if (join(path, sizeof path, s_logs, "ico-pc-previous.log") == 0) {
         (void)zip_add_file("ico-pc-previous.log", path, 0);

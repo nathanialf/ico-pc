@@ -31,8 +31,9 @@ loses the graphics card, or cannot start its graphics, it also writes a
 report file in the same `logs` folder: its name starts with `report-` and
 goes on with the date and time, ending in `.zip` (for example
 `report-20261016-142301.zip`). It holds the log, the log of the run
-before, your settings and a short summary, so it is the one file a
-problem report needs. On Android 11 and later it also says how Android
+before, your settings, a short summary and a list of what each of the
+last few areas you played contained and what was left out of its
+pictures, so it is the one file a problem report needs. On Android 11 and later it also says how Android
 ended the game the time before (for example, when the phone ran low on
 memory). The message the game shows names it. The five
 newest are kept. Whenever you report a problem, also say which disc you

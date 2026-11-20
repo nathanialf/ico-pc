@@ -147,6 +147,7 @@
 #include "host_fs.h"
 #include "rd_internal.h"
 #include "../core/region.h" /* the disc a dump was drawn on (version 12) */
+#include "rd_ledger_live.h" /* the stage in play's ledger before a capture's zip */
 #include "rd_mesh.h"
 #include "rd_loss_keep.h"
 #include "rd_loss_pick.h"
@@ -1290,6 +1291,10 @@ static void logCullDrops(const RdFrame *f)
 
 void rd_dump_on_demand_log(void)
 {
+    /* the stage in play so far (rd_ledger.h): the capture's zip takes the
+       log after this line, so the zip says what the scene held and left out
+       up to the moment, beside the frame */
+    rd__ledger_log_now("so far, at this capture");
     const RdFrame *last = rd__last_frame();
     if (last) {
         logCullDrops(last);

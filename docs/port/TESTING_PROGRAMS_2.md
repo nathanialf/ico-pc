@@ -5,6 +5,19 @@ keeps every file under 256 KiB), and programs whose entries that page has no roo
 directory the program lives in. The entries read as that
 page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
 
+## tools
+
+- `check_drop_ledger.py` (`drop_ledger_gate`, `drop_ledger_gate_selftest`; `rd_ledger.cmake`,
+  [SCENE_LEDGER.md](SCENE_LEDGER.md#the-gate)): every place that leaves a model's draw out names a
+  ledger reason. The reasons of `RdLedgerReason` and `rd_ledger.c`'s words agree in number and
+  each reason has a hook call outside `rd_ledger.c`; every early return of `rd_create_vu_mesh` and
+  `rd_draw_vu_mesh` follows an `rd__ledger_` call in its block; `rd_note_cull_drop`, `visWalk`
+  and `rd__vis_frame` call their hooks; the counted drop sites (the game's object, node and part
+  box tests each followed by `REG_CULL_DROP`, the packet box test and its callers, `regHostMesh`'s
+  return without a mesh, the stream's batch cap, the draw filter's callers, the visibility test's
+  NOP) keep their counts. The self-test: the rule finds an unledgered early return in a synthetic
+  function and passes a ledgered one.
+
 ## port/input/test
 
 - `pad_kind_test.c`: the kind of controller pressed last (`port/input/pad_kind.c`,
@@ -14,6 +27,10 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   PlayStation) and the changes counted once each (`pad_kind`).
 
 ## port/platform/test
+
+- `report_test.c`, its scene ledger case (`report`): with a ledger text set
+  (`ico_report_set_ledger`, [SCENE_LEDGER.md](SCENE_LEDGER.md#the-report)) the report holds
+  `scene-ledger.txt` byte for byte; with none set the next report has no such entry.
 
 - `state_fiber_test.c`, its `misses` case (`state_fiber`): another build's load counting the
   program words it cannot translate by their place ([PLATFORM.md](PLATFORM.md#across-versions)

@@ -67,6 +67,7 @@
  */
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_ledger_live.h"      /* the scene ledger: shadow volumes by ticks on */
 #include "rd_stencil_selftest.h" /* rd__stencil_cut_forced */
 #include "../core/region.h"      /* the running disc's step (rd__shadow_disc_step) */
 
@@ -162,6 +163,7 @@ void rd_shadow_tris(const RdScreenVtx *v, const int8_t *sign, uint32_t triCount,
     if (!c) {
         return;
     }
+    rd__ledger_shadow(triCount);
     c->b[0] = RD_SHADOW_TRIS;
     c->b[1] = rd__frame_projected() ? RD_SHADOW_FRAME_CAMERA : 0;
     c->u[0] = inc * 3;
