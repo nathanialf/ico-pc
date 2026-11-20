@@ -20,6 +20,7 @@
 
 #ifdef ICO_RD
 
+#include "DisplayP2O.h" /* the model name */
 #include "rd.h"
 
 /* PC port: the scene ledger (rd.h rd_note_game_hide, port/render/rd_ledger.h):
