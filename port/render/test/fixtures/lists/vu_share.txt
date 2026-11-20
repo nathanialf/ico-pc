@@ -1,0 +1,13 @@
+# rd_vu_share_ab and rd_vu_share_gl (test/rd_vu_share_ab.cmake): a fixture, the
+# profiles it is replayed under (corpus, mali: the script's head says what each
+# is; OpenGL replays every fixture at the corpus settings alone), then the
+# property the test checks (rd_fixture_list_props.cmake), holding on every =1
+# run compared:
+#   vu_shared_triangles  the triangles drawn with shared vertices (rd_vu_share.h:
+#                        the prelit program's code 34 mesh draws through the
+#                        record, no chain plane, no hide or later mark)
+#
+# issue 179's Mali-G52 (moto g24 power, v0.11.5): the stage 42 slow-scene capture,
+# the boat scene of the opening (three code 34 draws of 723 triangles in it,
+# counted from its dump: build-host/tmp/v01113/handbacks/VTXSHARE.md)
+fx-mali-slow541 mali,corpus vu_shared_triangles>=1

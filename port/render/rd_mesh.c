@@ -38,6 +38,7 @@
 #include "rd_hold.h"
 #include "rd_mesh.h"
 #include "rd_vu_rec_early.h"
+#include "rd_vu_share.h"
 #include "shader_consts.h"
 #include "vu1_ref.h"
 #include "xxh3.h"
@@ -284,6 +285,7 @@ static void meshFree(RdMeshRec *m)
     }
     free(m->stream);
     free(m->index);
+    rd__vu_share_free(m); /* its shared list (rd_vu_share.h) */
     free(m->kickMark);
     free(m->batches);
     free(m->cardStrips);
@@ -2054,6 +2056,7 @@ uint32_t rd__vu_mesh_create_raw(const float (*stream)[4], uint32_t vertexCount,
     markJoinedStrips(m);
     markWinding(m);
     cardStrips(m);
+    rd__vu_share_build(m);      /* the shared vertices' list (rd_vu_share.h), sheets none */
     rd__mesh_stream_written(m); /* the stream as created, a sheet's tiles with it */
     return id;
 }

@@ -871,6 +871,9 @@ typedef struct RdMeshRec {
     uint32_t qwPerVertex, batchCount, srcQw;
     float (*stream)[4]; /* vertexCount * qwPerVertex quadwords */
     uint32_t *index;    /* the list the device draws, dense (ICO_VU_INDEX) */
+    /* the same triangles with shared vertices and each batch's distinct
+     * values (rd_vu_share.h; NULL: none), after index on the device */
+    uint32_t *indexShared, *shareUnique;
     /* The triangles' marks, a byte a kick (shader_consts.h ICO_VU_MARK_*;
      * markCount bytes, NULL when no triangle has one): ICO_VU_MARK_LATER
      * on each triangle that overlaps an earlier triangle of the mesh in

@@ -391,6 +391,32 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   `tools/ci_d3d11_warp.sh`, `-DBACKEND=d3d11`, the debug layer's errors failing it).
   `rd_vu_flat0_gl`: the list on OpenGL (llvmpipe), every fixture at the corpus settings (the fakes
   are Vulkan's). No device: SKIP.
+- `rd_vu_share_test.c` (`rd_vu_share`; `rd_vu_share.cmake`, CPU): shared vertices for clip-mode-none
+  strips, the pure parts (`rd_vu_share.c`, synthetic meshes): `ICO_RD_VU_SHARE` unset, empty and 1
+  on, 0 and `off` off. A strip of four triangles gets its hand-worked shared list (six distinct
+  values of twelve) and two batches get each batch's distinct count. Every list keeps the invariants
+  that make it exact: the same vertex at every place, a triangle's first value its own, every value
+  a kick of its batch. No list for three separate triangles, a kick twice, a corner outside its
+  batch, corners out of order, batches not back to back, or a sheet. A draw's verdict: shared with
+  its saved count; kept on the original list for the form, a chain plane, the later mark, the hide
+  mark, a probe draw and a range off the batches; no candidate for a skinned command, a draw the
+  pre-pass did not record, and rule modes region and scissor; the joined and flip marks change
+  nothing. The device bytes are the original list, then the shared one. The run's stats line word
+  for word, the block's text and its return to zero, cut in a short buffer.
+- `rd_vu_share_ab.cmake` (`rd_vu_share_ab`, `rd_vu_share_gl`; `rd_vu_share.cmake`): shared vertices
+  for clip-mode-none strips ([PIPELINES.md](PIPELINES.md#shared-vertices-for-clip-mode-none)).
+  Compares `ICO_RD_VU_SHARE=1` against `=0` with `--pass-dump --stats`, each with the draw merge
+  and without it (`ICO_RD_VU_MERGE=0`), on every fixture of
+  `port/render/test/fixtures/lists/vu_share.txt` (issue 179's stage 42 capture, `fx-mali-slow541`,
+  under the corpus settings and the Arm fakes with the record by compute at 1x and 21:9; a listed
+  fixture that is absent FAILS).
+  - Every target's PNG must be the same bytes.
+  - Each run's line must show: `stats: VU shared vertices off (ICO_RD_VU_SHARE=0): 0 triangles`,
+    or `stats: VU shared vertices on: ` on the `=1` runs; and `merge on)` or `merge off)`.
+  - The path ran: the triangles drawn with shared vertices meet the fixture's declared
+    `vu_shared_triangles` on every `=1` run compared.
+  - `rd_vu_share_gl`: the list on OpenGL (llvmpipe), at the corpus settings.
+  - No device: SKIP.
 - `rd_smallcuts_test.c` (`rd_smallcuts`; `rd_smallcuts.cmake`, CPU): the pure parts of the turn in
   the present's blit and the VU record by compute on the PowerVR class: `rd__turn_rect` for every
   quarter turn against `rd_prerotate.c`'s pixel table (every pixel of the rect lands inside the

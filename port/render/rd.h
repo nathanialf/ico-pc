@@ -680,6 +680,11 @@ bool rd_vu_prepass_on(void);
  * "stores" (the vertex shaders store it), "compute" (compute dispatches
  * store it) or "targets" (render targets and copies) */
 const char *rd_vu_record_mode(void);
+/* The window's 10 s VU line's share of shared vertices (rd_vu_share.h):
+ * "; shared vertices: T triangles, S vertex invocations saved (P % of the
+ * draws')" a picture over the n pictures since the last call, whose counts
+ * it takes back to zero; the length written */
+size_t rd_vu_share_text(char *out, size_t cap, unsigned n);
 /* The record written without render targets (stores or compute: a device
  * loss takes the restart's losstargets step first, startup_retry.h
  * StartupRetryRun.storesWereOn) */
