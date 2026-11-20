@@ -407,6 +407,10 @@ static void testBroken(void)
         HEAD24 "<path class=\"s0\" fill=\"#fff\" d=\"" A_D "\"/></svg>",
         /* not closed */
         HEAD24 "<path class=\"s0\" d=\"" A_D "\"/>",
+        /* a viewBox too small to scale (its outline would leave the
+           rasteriser's floats) */
+        "<svg viewBox=\"0 0 1e-36 1e-36\"><style>.s0 { fill: #fff }</style><path class=\"s0\" "
+        "d=\"" A_D "\"/></svg>",
         big,
         many,
     };
