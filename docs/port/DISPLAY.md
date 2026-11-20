@@ -777,6 +777,9 @@ least-squares line of it against their vertex invocations (the line's own number
 fewer than 3 replays or one invocation count, no R^2 when the work did not vary). A high R^2 with a
 large slope is the vertex work setting the GPU's time, the question the VU pre-pass answers on a
 tiler ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#issue-179s-lines-what-each-decides)).
+After the VU figures it says `; shared vertices: T triangles, S vertex invocations saved (P % of the
+draws')` a picture: the triangles drawn with a strip's shared vertices and the shader runs that saved, out of
+the draws' three a triangle ([PIPELINES.md](PIPELINES.md#shared-vertices-for-clip-mode-none)).
 On Vulkan the block adds `window: acquire: the display's image was free at the present's submit in N
 of M pictures` (once a block; `RhiStats.acquireReadyAtSubmit`/`acquireNotReady`: each frame slot's
 acquire is given a fence, and the submit of the present's list asks it; an acquire made ahead of

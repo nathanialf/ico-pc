@@ -598,6 +598,7 @@
 #include "rd_present_scene.h"    /* --stats: the present from SCENE */
 #include "rd_stencil_selftest.h" /* --stats: the stencil outside the shadow window */
 #include "rd_vu_compact.h"       /* --stats: the index compaction's counts */
+#include "rd_vu_share.h"         /* --stats: the shared vertices */
 #include "rd_shadow_box.h"       /* --stats: the shadows over the volumes' box */
 #include "rd_shadow_tile.h"      /* --stats: the shadow composites over the tile mask */
 #include "rd_replay_fine.h"      /* --fine-check */
@@ -3688,6 +3689,10 @@ int main(int argc, char **argv)
                    "merge %s)\n",
                    dump, pr->vuMergeIn + pr->vuMergeAlone, pr->vuMergeGpu + pr->vuMergeAlone,
                    pr->vuMergeIn, pr->vuMergeGpu, pr->vuMergeAlone, g_rd.vuMerge ? "on" : "off");
+            /* the shared vertices (rd_vu_share.h): the run's draws so far */
+            char share[384];
+            (void)rd__vu_share_stats_text(share, sizeof(share));
+            printf("%s: stats: %s\n", dump, share);
             /* code 36's cut and kick pairs (rd_replay_vu.c vuFuseVerdict;
              * g_rd.vuFuse): fused, kept apart by reason, under one pipeline
              * already */

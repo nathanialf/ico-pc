@@ -821,6 +821,9 @@ rd_vu_rec_early_ab_compute 62.89
 rd_vu_rec_early_ab_targets 60.27
 rd_vu_rec_size_ab 92.80
 rd_vu_rec_size_ab_mali 100.82
+rd_vu_share 0.01  # estimate: a CPU unit test like rd_vu_flat0 (not run here)
+rd_vu_share_ab 51.19  # estimate: rd_vu_flat0_ab / 6 (one of its twelve fixtures, the heaviest; not run here)
+rd_vu_share_gl 55.87  # estimate: rd_vu_flat0_gl / 8 (one of its twelve fixtures, the heaviest; not run here)
 rd_vu_skin_check 2.10
 rd_vu_skin_check_123 4.90
 rd_vu_skin_check_123_attach 7.75

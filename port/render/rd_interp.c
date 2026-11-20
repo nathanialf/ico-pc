@@ -167,6 +167,7 @@
 #include "rd_upscale.h"
 #include "rd_velocity.h"
 #include "rd_vu_skin_check.h"
+#include "rd_vu_share.h"
 #include "xxh3.h"
 #include "rd_cpu_phase.h"
 
@@ -4233,6 +4234,7 @@ static RdMeshRec *scratchFor(const RdMeshRec *c, const float (*stream)[4])
        the out-of-the-box state) */
     m->tiledFrom = c->tiledFrom;
     m->tiledIndexFrom = c->tiledIndexFrom;
+    rd__vu_share_build(m); /* the list above's shared vertices (none for a sheet) */
     m->materialCount = c->materialCount;
     m->srcQw = c->srcQw;
     s_scratchBytes +=

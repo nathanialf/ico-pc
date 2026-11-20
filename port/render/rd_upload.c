@@ -19,6 +19,7 @@
 #include "rd_layer.h"
 #include "rd_velocity.h"
 #include "rd_vu_skin_check.h"
+#include "rd_vu_share.h"
 #include "rd_mesh.h"
 #include "rd_stencil_selftest.h"
 #include "rd_tex.h"
@@ -775,7 +776,8 @@ void rd__upload_meshes(const RdFrame *f, int keep)
              * vu_kick_marks), then the indices */
             const uint64_t vb = (uint64_t)m->vertexCount * m->qwPerVertex * 16;
             const uint64_t sb = vb + (uint64_t)rd__mesh_mark_qw(m) * 16;
-            const uint64_t ib = (uint64_t)m->indexCount * 4;
+            /* the list, and its shared vertices' list after it (rd_vu_share.h) */
+            const uint64_t ib = rd__mesh_index_bytes(m);
             if (!rd__mesh_gpu_reserve(m, sb, ib, ua)) {
                 m->replaySeen = 0; /* doVuDraw's ring path */
                 continue;
@@ -795,8 +797,8 @@ void rd__upload_meshes(const RdFrame *f, int keep)
             }
             rd__mesh_write_marks(m, g_rd.ringMap[rd__ring_slot()] + off + vb);
             if (ib) {
-                memcpy(g_rd.ringMap[rd__ring_slot()] + off + (m->gpuIndexOff - m->gpuOff), m->index,
-                       ib);
+                rd__mesh_write_indices(m, g_rd.ringMap[rd__ring_slot()] + off +
+                                              (m->gpuIndexOff - m->gpuOff));
             }
             rhi_cmd_copy_buffer(rd__replay_cl(), g_rd.ring[rd__ring_slot()], off,
                                 rd__mesh_gpu_buffer(m->gpuChunk), m->gpuOff, span);

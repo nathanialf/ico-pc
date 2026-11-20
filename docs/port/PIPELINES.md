@@ -1475,6 +1475,64 @@ where the merge is on) and compares every replay with the programs' entries byte
 shader changes, so the pipeline cache's name changes and the cache is made again once on the
 first start (`pipelines-<key>.vkcache`, `port/render/rd_cache_name.h`; [RHI.md](RHI.md#vulkan)).
 
+#### Shared vertices for clip mode none
+
+Every draw through the record names a corner by `kick * 4 + corner`, so no index value repeats and
+the GPU runs `vu_main_vs` three times a triangle. Under clip mode none (`vu_rec.w`'s mode
+`ICO_VU_CLIP_NONE`: the prelit program at code 34, `vuTriRule` in `port/render/rd_replay_vu.c`)
+what the shader writes at value `k * 4 + c`, besides the flat outputs, depends on the vertex
+`k - 2 + c` alone: its position (the vertex's own wrap test in `vu_corner_position`), colour, STQ
+and the side band's mark 0. The triangle's verdict can only cull it (the hidden flag, or every
+corner past the chain plane) or move its depth (the later bias). So a mesh gets a second index list
+at its creation (`RdMeshRec.indexShared`, `port/render/rd_vu_share.c` `rd__vu_share_build`). The
+list has the same triangles in the same order, and each place's value is replaced by one canonical
+value of the same vertex: `(v + 2) * 4 + 0` where the triangle `v + 2` is in the batch (the vertex
+provoking its own triangle), else the value of the first triangle of the batch that has the vertex
+as a corner. Every value is one the original list holds, so the span is the same or narrower (issue
+95's sizing and the 16/32-bit limits are unchanged). A triangle's first value stays its own, so
+its provoking vertex, and with it the planes (the flat outputs), is the same invocation as before.
+The GPU reuses an invocation where a value repeats within a draw: a strip's middle vertices are
+shaded once instead of three times.
+
+The list is made only where its form allows it:
+- the batches lie back to back in index order, each a whole number of triangles, their vertex
+  ranges in order and apart;
+- every triangle is `k * 4 + 0, + 1, + 2` with its corners in its batch's vertices;
+- no kick appears twice;
+- the mesh is not a sheet of the content table;
+- at least one value is shared.
+
+The device copy and the ring hold it right after the original (`rd__mesh_index_bytes`,
+`rd__mesh_write_indices`), so the original's offset, which everything else reads, is unchanged.
+
+A draw takes the shared list only when nothing can make a corner's output depend on its triangle
+(`rd__vu_share_draw`, at `doVuDraw`'s mesh draw):
+- a mesh command, not skinned, a grid or particles;
+- recorded by the pre-pass and drawn by the main shader;
+- rule mode none;
+- no chain plane (`vu_batch.z` 0);
+- no kick of its range with `ICO_VU_MARK_HIDE` or `ICO_VU_MARK_LATER`;
+- not a probe draw;
+- its range the batches' own.
+
+`vuDraw` keeps the original list where the index compaction draws its own list or the draw falls
+back to a program's own entry. Every other draw is the same list and the same GPU draw as before.
+The merge reads the shared values through the same CPU pointer (`vuRunWrite` raises them as it
+raises any list), and the velocity pass draws the same list (`vu_velocity_main_vs` reads its corner
+from the value). No shader changes, so the OpenGL, Direct3D 11 and Direct3D 12 twins and MSAA
+draw the same values: Vulkan's first-vertex mode, Direct3D's first vertex and OpenGL's
+`GL_FIRST_VERTEX_CONVENTION` all take the flat outputs from the first value. On issue 179's boat
+scene (stage 42, the reporter's slow-scene capture of 2026-11-19) it admits 60 of 87 code 34 draws: 24,921
+triangles, 11,502 vertex invocations saved of their 74,763. The dock's meshes are mostly short
+strips, so the saving is about a sixth, not two thirds. Counted in the 10 s VU line
+(`; shared vertices: T triangles, S vertex invocations saved (P % of the draws')`, `rd_vu_share_text`)
+and in `rd_replay_tool --stats` (`stats: VU shared vertices on: ...`, with the draws kept on the
+original list by reason). The tests' switch `ICO_RD_VU_SHARE=0` keeps every original list
+([TESTING.md](TESTING.md#environment-switches)). `rd_vu_share_ab` and `rd_vu_share_gl` hold every
+target of `lists/vu_share.txt` byte for byte between the two, merged and one draw a command, under
+the corpus and Mali profiles. `rd_vu_share` checks the lists, the exclusions and the counts on
+synthetic meshes.
+
 #### The index compaction
 
 Of list 0's mesh triangles a picture draws, a large share draws nothing: the game's own drops

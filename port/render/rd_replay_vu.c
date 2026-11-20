@@ -23,6 +23,7 @@
 #include "rd_vu_record.h"
 #include "rd_vu_rec_sink.h"
 #include "rd_vu_skin_check.h"
+#include "rd_vu_share.h"
 #include "shader_consts.h"
 #include "vu1_ref.h" /* vu1ref_region_mirror: ICO_VU_MIRROR */
 
@@ -672,6 +673,12 @@ struct VuIdx {
        call's at; its values raised by the call's raise (NULL: the list as
        above) */
     const RdVuCmpCall *cmp;
+    /* the shared vertices' list (rd_vu_share.h): plain the same draw's
+       original list, which vuDraw takes where the shared one may not be
+       drawn (NULL: this is no shared list); saved the vertex invocations
+       its values save */
+    const VuIdx *plain;
+    uint32_t saved;
 };
 
 typedef struct VuRunDraw {
@@ -1345,9 +1352,27 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
     }
     VuIdx cix;
     if (cmpOk) {
-        cix = (VuIdx){cmpIndexBuffer(), cmpIndexOffset(), NULL, 0, 0, cd};
+        cix = (VuIdx){cmpIndexBuffer(), cmpIndexOffset(), NULL, 0, 0, cd, NULL, 0};
+        if (ix->plain) {
+            rd__vu_share_kept(RD_VU_SHARE_ENTRY); /* the compaction's list instead */
+        }
         ix = &cix;
         first = cd->at;
+    } else if (ix->plain && (!recorded || own)) {
+        /* the shared vertices' list through the main shader alone (a
+           program's own entry reads its corner from the value: the list) */
+        rd__vu_share_kept(RD_VU_SHARE_ENTRY);
+        ix = ix->plain;
+    }
+    /* the record's draws counted for the share, the shared list's own */
+    if (recorded && !own && vs == RD_VS_VU_MAIN) {
+        rd__vu_share_note(count / 3u, ix->plain != NULL, ix->plain ? ix->saved : 0u);
+    }
+    VuIdx sel; /* the shared list, held by value (the run copies it) without its plain */
+    if (ix->plain) {
+        sel = *ix;
+        sel.plain = NULL;
+        ix = &sel;
     }
     /* the passes a merged draw takes: one, or the no-dual pair; a
      * destination read only under GS state as shader data (rd_uber.c: the
@@ -1712,13 +1737,18 @@ static bool vuSource(const RdFrame *f, const RdCmd *c, VuSource *s)
                 memcpy(g_rd.ringMap[rd__ring_slot()] + m->ringStream, m->stream, vb);
                 rd__mesh_write_marks(m, g_rd.ringMap[rd__ring_slot()] + m->ringStream + vb);
             }
-            m->ringIndex = ringCopy(m->index, (uint64_t)m->indexCount * 4, 16);
+            /* the list, and its shared vertices' list after it (rd_vu_share.h) */
+            const uint64_t ib = rd__mesh_index_bytes(m);
+            m->ringIndex = rd__ring_alloc(ib ? ib : 16, 16);
+            if (m->ringIndex != ~0ull) {
+                rd__mesh_write_indices(m, g_rd.ringMap[rd__ring_slot()] + m->ringIndex);
+            }
             m->replaySeen = g_rd.replayCounter;
             g_rdPerf.meshUploads++;
-            g_rdPerf.meshUploadBytes += vb + mb + (uint64_t)m->indexCount * 4;
+            g_rdPerf.meshUploadBytes += vb + mb + ib;
             if (m->transient) {
                 /* the interpolation's blended copy, made for this present */
-                g_rdPerf.uploadInterpBytes += vb + mb + (uint64_t)m->indexCount * 4;
+                g_rdPerf.uploadInterpBytes += vb + mb + ib;
             }
         }
         streamOff = m->ringStream;
@@ -4126,7 +4156,8 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
          * uncached memory): ICO_VU_INDEX(2, 0) to ICO_VU_INDEX(the last
          * batch's last vertex, 2) (vuSpanOf); the merge rewrites the list
          * from the shape too (vuRunWrite) */
-        const VuIdx gix = {g_rd.ring[rd__ring_slot()], iOff, NULL, p.batchCount, vpb, NULL};
+        const VuIdx gix = {
+            g_rd.ring[rd__ring_slot()], iOff, NULL, p.batchCount, vpb, NULL, NULL, 0};
         for (uint32_t b = 0, k = 0; b < p.batchCount; b++) {
             for (uint32_t v = 2; v < vpb; v++) {
                 for (uint32_t cc = 0; cc < 3; cc++) {
@@ -4147,7 +4178,7 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
         if (!g2.id) {
             return;
         }
-        const VuIdx none = {{0}, 0, NULL, 0, 0, NULL}; /* not indexed */
+        const VuIdx none = {{0}, 0, NULL, 0, 0, NULL, NULL, 0}; /* not indexed */
         vuDraw(r, &r->st, &ds, g2, p.prog, vs, progVs, streamBuf, streamBufSize, streamOff,
                streamSize, &vcb, bonesOff, &none, 0, 6 * p.vertsPerBatch, NULL);
         return;
@@ -4157,7 +4188,7 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     if (!g2.id) {
         return;
     }
-    const VuIdx mix = {indexBuf, indexOff, m->index, 0, 0, NULL};
+    const VuIdx mix = {indexBuf, indexOff, m->index, 0, 0, NULL, NULL, 0};
     uint32_t last = p.firstBatch + p.batchCount;
     if (last > m->batchCount || p.batchCount == 0) {
         last = m->batchCount;
@@ -4172,8 +4203,21 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
             rd__vu_skin_pick(f, c, m); /* the skin check's round robin (rd_vu_skin_check.h) */
         }
         if (end > b0->firstIndex) {
+            /* a clip-mode-none mesh draw through the record: its shared
+               vertices' list, right after the list (rd_vu_share.h) */
+            uint32_t saved = 0;
+            const int why = rd__vu_share_draw(m, c->type, vcb.rec[3], vcb.batch[2], vcb.draw[2],
+                                              pre && pre->rec && !pre->particle, p.firstBatch, last,
+                                              b0->firstIndex, end, &saved);
+            const VuIdx six = {
+                indexBuf, indexOff + (uint64_t)m->indexCount * 4u, m->indexShared, 0, 0, NULL, &mix,
+                saved};
+            if (why > RD_VU_SHARE_YES) {
+                rd__vu_share_kept(why);
+            }
             vuDraw(r, &r->st, &ds, g2, p.prog, vs, progVs, streamBuf, streamBufSize, streamOff,
-                   streamSize, &vcb, bonesOff, &mix, b0->firstIndex, end - b0->firstIndex,
+                   streamSize, &vcb, bonesOff, why == RD_VU_SHARE_YES ? &six : &mix, b0->firstIndex,
+                   end - b0->firstIndex,
                    cmpCall(pre, RD_VU_CMP_WHOLE, b0->firstIndex, end - b0->firstIndex));
         }
         return;
