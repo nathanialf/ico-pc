@@ -1376,8 +1376,8 @@ stepped: chosen when the journey began`).
 - The pause menu's journey lines (`pauseStats`, 7 lines at most: play time, deaths, captures, saves,
   enemies, difficulty, area): the line `STAT_DIFFICULTY` (label `UI_STR_DIFF_LINE`) shows the mode,
   " n / N" while a knock-down limit is on (the room's count, or the journey's with the Whole journey
-  count; `ui__diff_line_text`) and ", Permadeath" (`UI_STR_DIFF_WORD_PERMADEATH`). v0.11.13 removed the
-  New Game+, Mirror mode, Achievements and Assists lines (the Customize view and the Achievements page
+  count; `ui__diff_line_text`) and ", Permadeath" (`UI_STR_DIFF_WORD_PERMADEATH`). New Game+, Mirror mode, the
+  achievements count and the assists are not lines here (the Customize view and the Achievements page
   show them).
 - The journey events (`ui__diff_listen`, called by `ui_settings_install`): the difficulty listener
   (`ico_difficulty_set_listener`) raises one pop-up, for `ICO_DIFF_EV_REFUSED` ("This journey has
