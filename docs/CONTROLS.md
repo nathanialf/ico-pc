@@ -23,6 +23,13 @@ onto a face button or the d-pad. Then the game follows your change in
 play, but the menus still use that face button or d-pad direction for its
 usual job, and the original button for its own.
 
+The menus, the game's prompts, photo mode and the touch screen buttons show
+pictures of the controller you used last: Xbox pictures for an Xbox
+controller, Nintendo pictures for a Switch Pro Controller or a pair of
+Joy-Cons, and the PlayStation ones otherwise. Options > Controls > Button
+pictures picks a set yourself (also the Wii Classic Controller's).
+[More about Button pictures](OPTIONS.md#controls).
+
 | PS2 button | Gamepad | Keyboard | Mouse |
 | --- | --- | --- | --- |
 | Cross (confirm, jump, call Yorda) | bottom face button (A on Xbox) | Space | left button |
