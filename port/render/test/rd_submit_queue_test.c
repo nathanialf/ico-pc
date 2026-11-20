@@ -32,7 +32,9 @@
  *   gpu end  the GPU's end first's timed presents (rd__sq_gf_class): the
  *            classes from the evidence (issue 179's v0.11.12 log line 562,
  *            the owner's Pixel's short calls, a long call while the picture
- *            before ran), the round's first, the edges (2 ms, 1 ms); a
+ *            before ran), the witness (a long call whose picture before had
+ *            already finished is not counted; a failed read leaves it
+ *            eligible), the round's first, the edges (2 ms, 1 ms); a
  *            failed wait (VK_NOT_READY, a loss, no such wait) is unknown
  *            whatever the times; the block counts each finished job's
  *            sample by class, the last unknown's result, and none where no
@@ -233,6 +235,18 @@ static void testTail(void)
 }
 
 /* one job through the queue with its sample (RdSubmitJob.gfSample) */
+static void runSampleRead(RdSubmitQ *q, uint8_t cls, int32_t result, int8_t prevRead)
+{
+    const RdSubmitJob a = job(61, true, 70);
+    CHECK(rd__sq_post(q, &a) != 0);
+    RdSubmitJob j;
+    CHECK(rd__sq_next(q, &j) && j.gfPrevRead == -2);
+    j.gfSample = cls;
+    j.gfResult = result;
+    j.gfPrevRead = prevRead;
+    rd__sq_finish(q, &j);
+}
+
 static void runSample(RdSubmitQ *q, uint8_t cls, int32_t result)
 {
     const RdSubmitJob a = job(61, true, 70);
@@ -248,27 +262,35 @@ static void testGpuFirst(void)
 {
     /* line 562: a 140.3 ms call, the picture before found ended at once
        after it: at the end of GPU work */
-    CHECK(rd__sq_gf_class(140.3, true, 0, 0.05) == RD_GF_WAITED);
+    CHECK(rd__sq_gf_class(140.3, true, 0, 0, 0.05) == RD_GF_WAITED);
     /* a present that returns at its own end (the picture before ended
        earlier still) */
-    CHECK(rd__sq_gf_class(45.0, true, 0, 0.0) == RD_GF_WAITED);
+    CHECK(rd__sq_gf_class(45.0, true, 0, 0, 0.0) == RD_GF_WAITED);
     /* a 5 ms call while the picture before still ran 20 ms: early */
-    CHECK(rd__sq_gf_class(5.0, true, 0, 20.0) == RD_GF_EARLY);
+    CHECK(rd__sq_gf_class(5.0, true, 0, 0, 20.0) == RD_GF_EARLY);
     /* the owner's Pixel: a 0.6 ms call is short, whatever else */
-    CHECK(rd__sq_gf_class(0.6, true, 0, 0.0) == RD_GF_SHORT);
-    CHECK(rd__sq_gf_class(0.6, false, 1, 0.0) == RD_GF_SHORT);
+    CHECK(rd__sq_gf_class(0.6, true, 0, 0, 0.0) == RD_GF_SHORT);
+    CHECK(rd__sq_gf_class(0.6, false, 0, 1, 0.0) == RD_GF_SHORT);
+    /* the witness: the picture before already finished as the call
+       began: not counted, whatever the wait would say; a failed read (-1)
+       leaves the call eligible */
+    CHECK(rd__sq_gf_class(5.0, true, 1, 0, 0.0) == RD_GF_PREV_DONE);
+    CHECK(rd__sq_gf_class(140.3, true, 1, 0, 0.05) == RD_GF_PREV_DONE);
+    CHECK(rd__sq_gf_class(140.3, true, -1, 0, 0.05) == RD_GF_WAITED);
+    CHECK(rd__sq_gf_class(5.0, true, -1, 0, 20.0) == RD_GF_EARLY);
+    CHECK(rd__sq_gf_class(0.6, true, 1, 0, 0.0) == RD_GF_SHORT);
     /* the round's first long call: no picture before */
-    CHECK(rd__sq_gf_class(140.3, false, 0, 0.0) == RD_GF_NO_PREV);
+    CHECK(rd__sq_gf_class(140.3, false, 0, 0, 0.0) == RD_GF_NO_PREV);
     /* the edges: 2 ms is long, a wait of 1 ms is early */
-    CHECK(rd__sq_gf_class(RD_GPU_FIRST_CALL_MS, true, 0, 0.99) == RD_GF_WAITED);
-    CHECK(rd__sq_gf_class(1.99, true, 0, 0.0) == RD_GF_SHORT);
-    CHECK(rd__sq_gf_class(2.0, true, 0, RD_GPU_FIRST_NEAR_MS) == RD_GF_EARLY);
+    CHECK(rd__sq_gf_class(RD_GPU_FIRST_CALL_MS, true, 0, 0, 0.99) == RD_GF_WAITED);
+    CHECK(rd__sq_gf_class(1.99, true, 0, 0, 0.0) == RD_GF_SHORT);
+    CHECK(rd__sq_gf_class(2.0, true, 0, 0, RD_GPU_FIRST_NEAR_MS) == RD_GF_EARLY);
     /* a failed wait: unknown, never a class (VK_NOT_READY 1, VK_TIMEOUT 2,
        VK_ERROR_DEVICE_LOST -4, rhi.h RHI_WAIT_NONE) */
-    CHECK(rd__sq_gf_class(140.3, true, 1, 0.05) == RD_GF_UNKNOWN);
-    CHECK(rd__sq_gf_class(5.0, true, 2, 20.0) == RD_GF_UNKNOWN);
-    CHECK(rd__sq_gf_class(45.0, true, -4, 0.0) == RD_GF_UNKNOWN);
-    CHECK(rd__sq_gf_class(45.0, true, INT32_MIN, 0.0) == RD_GF_UNKNOWN);
+    CHECK(rd__sq_gf_class(140.3, true, 0, 1, 0.05) == RD_GF_UNKNOWN);
+    CHECK(rd__sq_gf_class(5.0, true, 0, 2, 20.0) == RD_GF_UNKNOWN);
+    CHECK(rd__sq_gf_class(45.0, true, 0, -4, 0.0) == RD_GF_UNKNOWN);
+    CHECK(rd__sq_gf_class(45.0, true, 0, INT32_MIN, 0.0) == RD_GF_UNKNOWN);
 
     RdSubmitQ q;
     rd__sq_init(&q);
@@ -289,7 +311,14 @@ static void testGpuFirst(void)
     rd__sq_block_take(&q, &bl);
     CHECK(bl.jobs == 10 && bl.gfJobs == 9 && bl.gfTimed == 7 && bl.gfShort == 1);
     CHECK(bl.gfCounted == 3 && bl.gfWaited == 2 && bl.gfUnknown == 2 && bl.gfLastResult == 1);
-    CHECK(bl.gfNotOriginal == 1 && bl.gfNoPresent == 1);
+    CHECK(bl.gfNotOriginal == 1 && bl.gfNoPresent == 1 && bl.gfPrevDone == 0 &&
+          bl.gfReadFailed == 0);
+    runSampleRead(&q, RD_GF_PREV_DONE, 0, 1);
+    runSampleRead(&q, RD_GF_WAITED, 0, -1);
+    runSampleRead(&q, RD_GF_SHORT, 0, -1);
+    rd__sq_block_take(&q, &bl);
+    CHECK(bl.gfTimed == 3 && bl.gfPrevDone == 1 && bl.gfReadFailed == 2 && bl.gfCounted == 1 &&
+          bl.gfWaited == 1 && bl.gfShort == 1);
     rd__sq_block_take(&q, &bl);
     CHECK(bl.gfJobs == 0 && bl.gfTimed == 0 && bl.gfUnknown == 0 && bl.gfLastResult == 0);
     /* a post clears what a job brought in its sample */

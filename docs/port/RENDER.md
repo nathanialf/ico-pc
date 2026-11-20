@@ -157,8 +157,9 @@ interpolation. On Android at Frame rate Original (the device table's `PRESENT_FR
 apart) the submit thread's job waits for its picture's GPU work to end before its present, outside
 the swapchain's lock (`rhi_wait_submitted`; `rd_submit_thread.h` "the GPU's end first", issue
 179), where the first Original presents show the driver's present waiting for the GPU (each
-call timed; after one of 2 ms or more, one unbounded wait for the previous present job's
-submission, `rhi_wait_value_ns`, back within 1 ms), and while it waits with no job
+call timed; after one of 2 ms or more whose picture before was still running as it began, read
+just before the call, one unbounded wait for the previous present job's submission,
+`rhi_wait_value_ns`, back within 1 ms), and while it waits with no job
 behind it the game's gate does not count the picture before
 as busy: the next picture records beside that wait and its job follows that present, so the GPU
 still holds one picture at a time ([DISPLAY.md](DISPLAY.md#pacing) path 1). The lines: `rd: submit thread: the frame slots apart (...)` or `the frame slots one at

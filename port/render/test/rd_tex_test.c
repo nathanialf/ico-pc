@@ -2063,7 +2063,7 @@ out:
  * its phone never decided).  The render thread's walk is faked too (rd__thread_test_hook
  * at RD_READ_WALK); the game thread closes a frame every tick with the
  * window's busy rule (origGate mode 2). */
-enum { PF_BLOCK, PF_EARLY, PF_MIXED, PF_NEAR, PF_PREV, PF_FIXED };
+enum { PF_BLOCK, PF_EARLY, PF_MIXED, PF_NEAR, PF_PREV, PF_FIXED, PF_SPORADIC };
 
 static struct {
     double ms;      /* the faked GPU time a picture */
@@ -2076,6 +2076,8 @@ static struct {
     /* the first this many jobs light (1 ms of GPU, the present back at
        once: short calls), the case's driver after them */
     unsigned lightN;
+    /* the witness's read fails every time (pfPrevFinished -1) */
+    bool readFails;
     /* the bookkeeping the checks read: each job's submit (its lists'
        submits done, as the hook is called) and its faked GPU end, in
        order (the first PF_LOG); the waits inside the GPU's end first
@@ -2168,7 +2170,7 @@ static void pfPresent(void)
         pfWaitUntil(s_pf.end - 0.3); /* returns 0.3 ms before the work's end */
     } else if (s_pf.driver == PF_PREV) {
         pfWaitUntil(s_pf.prevEnd); /* returns at the job before's end */
-    } else if (s_pf.driver == PF_FIXED) {
+    } else if (s_pf.driver == PF_FIXED || (s_pf.driver == PF_SPORADIC && s_pf.jobs % 8u == 0)) {
         pfWaitUntil(ico_thread_now_ms() + 5.0); /* 5 ms, whatever the GPU does */
     }
 }
@@ -2179,9 +2181,21 @@ static bool pfSampleWait(void)
     return true;
 }
 
-static const RdSubmitTestGpu kPfGpu = {pfSubmitted, pfWaitEnd, pfPresent, pfSampleWait};
-/* the samples' waits the backend's own (PfCase.real) */
-static const RdSubmitTestGpu kPfGpuReal = {pfSubmitted, pfWaitEnd, pfPresent, NULL};
+/* the witness: the job before's faked work finished by now (1), running
+   (0), or the read failing (-1, PfCase.readFails) */
+static int pfPrevFinished(void)
+{
+    if (s_pf.readFails) {
+        return -1;
+    }
+    return ico_thread_now_ms() >= s_pf.prevEnd ? 1 : 0;
+}
+
+static const RdSubmitTestGpu kPfGpu = {pfSubmitted, pfWaitEnd, pfPresent, pfSampleWait,
+                                       pfPrevFinished};
+/* the samples' waits the backend's own (PfCase.real; the witness the
+   faked clock's: lavapipe's own work ends at once) */
+static const RdSubmitTestGpu kPfGpuReal = {pfSubmitted, pfWaitEnd, pfPresent, NULL, pfPrevFinished};
 
 static void pfWalk(int at)
 {
@@ -2193,7 +2207,11 @@ static void pfWalk(int at)
 /* expect: the verdict wanted (RD_GPU_FIRST_ON, _OFF, or _UNDECIDED: none,
    the warm-up then 70 ticks, past 64 presents); real: the samples' wait
    the backend's; lightN: with the rule wanted, the first lightN jobs light
-   (ticks of 8 ms until they are made), then the warm-up as the case's */
+   (ticks of 8 ms until they are made), then the warm-up as the case's;
+   forceOn: the verdict on from the start (rd__submit_test_gpu_first(2):
+   the rule's own behaviour, no samples); warmJobs: an undecided case's
+   warm-up until this many jobs (else 70 ticks); readFails: the witness's
+   read fails */
 typedef struct PfCase {
     const char *name;
     int driver;
@@ -2202,6 +2220,9 @@ typedef struct PfCase {
     int expect;
     bool real;
     unsigned lightN;
+    bool forceOn;
+    unsigned warmJobs;
+    bool readFails;
 } PfCase;
 
 typedef struct PfRun {
@@ -2234,7 +2255,7 @@ static bool pfRun(const PfCase *c, bool wanted, unsigned ticks, PfRun *out, uint
 {
     RdFramePost fp;
     memset(out, 0, sizeof(*out));
-    rd__submit_test_gpu_first(wanted ? 1 : 0);
+    rd__submit_test_gpu_first(!wanted ? 0 : c->forceOn ? 2 : 1);
     if (!rd_thread_local_start(RD_THREAD_ON)) {
         rd__submit_test_gpu_first(-1);
         return false;
@@ -2247,6 +2268,7 @@ static bool pfRun(const PfCase *c, bool wanted, unsigned ticks, PfRun *out, uint
     s_pf.walk = c->walkMs;
     s_pf.submit = c->submitMs;
     s_pf.driver = c->driver;
+    s_pf.readFails = c->readFails;
     rd__submit_test_gpu(c->real ? &kPfGpuReal : &kPfGpu);
     rd__thread_test_hook(pfWalk);
     fbKeep = c->keep ? 1 : 0;
@@ -2263,9 +2285,11 @@ static bool pfRun(const PfCase *c, bool wanted, unsigned ticks, PfRun *out, uint
         out->lightVerdict = rd_thread_submit_gpu_first_verdict();
         t0 = ico_thread_now_ms() + 5.0;
     }
-    const unsigned warmMax = c->expect == RD_GPU_FIRST_UNDECIDED ? 70u : 200u;
+    const unsigned warmMax = c->warmJobs > 0                       ? 3u * c->warmJobs
+                             : c->expect == RD_GPU_FIRST_UNDECIDED ? 70u
+                                                                   : 200u;
     while (wantedNow && rd_thread_submit_gpu_first_verdict() == RD_GPU_FIRST_UNDECIDED &&
-           out->warm < warmMax) {
+           out->warm < warmMax && (c->warmJobs == 0 || s_pf.jobs < c->warmJobs)) {
         pfTick(t0 + c->tickMs * out->warm++);
     }
     (void)rd_thread_drain();
@@ -2311,50 +2335,38 @@ static bool pfRun(const PfCase *c, bool wanted, unsigned ticks, PfRun *out, uint
 
 /* The rate requirements (pictures a second at the tick, 50 measured
  * ticks), each case run with the rule not wanted (the reference: the
- * presents as before) and wanted (the verdict from the first presents):
- *   PF_BLOCK, 45 ms pictures at 40 ms: the verdict on after the first 16
- *     counted presents; then at least 1000/45 a second less a tenth (each
- *     picture recorded during the GPU time of the one before and submitted
- *     after its present), more than without the rule (every second frame
- *     skipped as busy, about 1000/80, printed), frames handed over beside
- *     the wait, every job's wait made, the GPU holding one picture at a
- *     time;
- *   PF_BLOCK, 20 ms pictures: on, every tick (25.0 a second);
- *   PF_BLOCK, 45 ms keep frames: on, every one either way;
- *   PF_EARLY, 17 ms GPU + 10 ms walk + 8 ms submit at 33.3 ms (the owner's
- *     Pixel at 30 a second): every call short (under 2 ms), so no verdict
- *     after 70 ticks, no rule wait, at most 3 sample waits and counted
- *     samples (a fake call a loaded machine stretched past 2 ms), and as
- *     many presented as without the rule less a fifth;
- *   PF_NEAR, 20 ms at 40 ms, the present back 0.3 ms before the work's
- *     end: on, every tick;
- *   PF_MIXED, 20 ms at 40 ms, a present that waits for its own end every
- *     second time and returns at once between: the short calls are not
- *     counted and the long ones found the picture before ended, so on,
- *     every tick less a fifth;
- *   PF_PREV, 45 ms at 40 ms, the present back at the job before's end,
- *     once with the samples' wait on lavapipe's own counter and once on
- *     the faked GPU: on, no unknown and no early sample, every timed
- *     present but the first (no picture before) and at most one short call
- *     counted: consecutive presents all read at the end of GPU work, the
- *     samples do not change what the next one sees; then at least three
- *     quarters of 1000/45 a second and as many as without the rule less a
- *     fifth of the ticks (without the rule this driver's GPU already runs
- *     back to back: job k's present returns at job k-1's end with job k
- *     submitted before it, so the busy rule skips no frame the GPU could
- *     have drawn, and the rate is the GPU's 1000/45 either way);
- *   PF_PREV after 280 light jobs (8 ms ticks, 1 ms of GPU, short calls):
- *     the first window of 256 timed presents ends undecided and starts
- *     again (not off), and the heavy pictures after it reach on;
- *   PF_FIXED, 60 ms GPU at 40 ms, every call 5 ms while the job before
- *     still runs (its wait after the call blocks 10 to 50 ms): 16 counted,
- *     all early, off, no wait after the verdict, as many presented as
- *     without the rule less a fifth.
+ * presents as before) and wanted.  The rule's own behaviour, its verdict
+ * forced on at the start (rd__submit_test_gpu_first(2)):
+ *   PF_BLOCK, 45 ms pictures at 40 ms: at least three quarters of 1000/45
+ *     a second and 1.3 times the rule-off rate (every second frame skipped
+ *     as busy), frames handed over beside the wait, every job's wait made,
+ *     the GPU holding one picture at a time; 20 ms pictures every tick
+ *     less a fifth; 45 ms keep frames every one; PF_MIXED and PF_NEAR, 20
+ *     ms, every tick less a fifth.
+ * The verdict from the first presents (the witness: the picture before's
+ * read just before each call, by the faked clock):
+ *   PF_BLOCK sampled: its present returns at its own end, so the picture
+ *     before has always finished as the next call begins: never counted,
+ *     no verdict, no sample wait (the witness's price: a driver of that
+ *     shape is not detected);
+ *   PF_EARLY (the owner's Pixel at 30 a second): short calls, no verdict,
+ *     no rule wait, at most 3 sample waits and counted (a fake call a
+ *     loaded runner stretched past 2 ms);
+ *   PF_SPORADIC, 1 ms pictures at 10 ms, a 5 ms call one in eight: after
+ *     300 presents no verdict, no sample wait, its long calls counted as
+ *     the picture before already finished (review M1);
+ *   PF_PREV, 45 ms at 40 ms, the present back at the job before's end (on
+ *     lavapipe's counter, on the faked GPU, with the witness's read
+ *     failing every time, and after 280 light jobs whose first window of
+ *     256 ends undecided and starts again): on, none early or unknown,
+ *     every timed present but the first few counted; at least three
+ *     quarters of 1000/45 a second and the rule-off posts less a fifth
+ *     (without the rule this driver's GPU already runs back to back);
+ *   PF_FIXED, 60 ms GPU at 40 ms, 5 ms calls while the job before runs:
+ *     16 counted, all early, off.
  * Every case whose verdict is wanted reaches it within the first 64
- * Original presents with none unknown (v0.11.12's samples on the phone
- * never did), and after it no sample wait is made.  In every case SCENE
- * and DISPLAY are byte for byte the reference's (no command stream
- * changes). */
+ * Original presents with none unknown, and after it no sample wait is
+ * made.  SCENE and DISPLAY are byte for byte the reference's. */
 static void threadPresentFree(void)
 {
     if (rhi_backend() == RHI_BACKEND_OPENGL) {
@@ -2395,28 +2407,38 @@ static void threadPresentFree(void)
 
     enum { ON = RD_GPU_FIRST_ON, OFF = RD_GPU_FIRST_OFF, NONE = RD_GPU_FIRST_UNDECIDED };
 
+    /* name, driver, GPU / walk / submit / tick ms, keep frames, the verdict
+       wanted, real waits, light jobs first, verdict forced on, warm-up
+       jobs, the witness's read failing */
     static const PfCase cases[] = {
-        {"45 ms pictures, a present that waits for the GPU", PF_BLOCK, 45.0, 5.0, 0.0, 40.0, false,
-         ON, false, 0},
-        {"20 ms pictures, a present that waits for the GPU", PF_BLOCK, 20.0, 5.0, 0.0, 40.0, false,
-         ON, false, 0},
-        {"45 ms keep frames, a present that waits for the GPU", PF_BLOCK, 45.0, 5.0, 0.0, 40.0,
-         true, ON, false, 0},
+        {"45 ms pictures, a present that waits for its own GPU end (the rule on)", PF_BLOCK, 45.0,
+         5.0, 0.0, 40.0, false, ON, false, 0, true, 0, false},
+        {"20 ms pictures, a present that waits for its own GPU end (the rule on)", PF_BLOCK, 20.0,
+         5.0, 0.0, 40.0, false, ON, false, 0, true, 0, false},
+        {"45 ms keep frames, a present that waits for its own GPU end (the rule on)", PF_BLOCK,
+         45.0, 5.0, 0.0, 40.0, true, ON, false, 0, true, 0, false},
+        {"20 ms pictures, a present that waits every second time (the rule on)", PF_MIXED, 20.0,
+         5.0, 0.0, 40.0, false, ON, false, 0, true, 0, false},
+        {"20 ms pictures, a present back 0.3 ms before the work's end (the rule on)", PF_NEAR, 20.0,
+         5.0, 0.0, 40.0, false, ON, false, 0, true, 0, false},
+        {"45 ms pictures, a present that waits for its own GPU end (sampled)", PF_BLOCK, 45.0, 5.0,
+         0.0, 40.0, false, NONE, false, 0, false, 0, false},
         {"17 ms pictures, a present that returns at once", PF_EARLY, 17.0, 10.0, 8.0, 1000.0 / 30.0,
-         false, NONE, false, 0},
-        {"20 ms pictures, a present that waits every second time", PF_MIXED, 20.0, 5.0, 0.0, 40.0,
-         false, ON, false, 0},
-        {"20 ms pictures, a present back 0.3 ms before the work's end", PF_NEAR, 20.0, 5.0, 0.0,
-         40.0, false, ON, false, 0},
+         false, NONE, false, 0, false, 0, false},
+        {"1 ms pictures, a 5 ms present one in eight", PF_SPORADIC, 1.0, 3.0, 0.0, 10.0, false,
+         NONE, false, 0, false, 300, false},
         {"45 ms pictures, a present back at the end of the picture before's work (lavapipe's "
          "counter)",
-         PF_PREV, 45.0, 5.0, 0.0, 40.0, false, ON, true, 0},
+         PF_PREV, 45.0, 5.0, 0.0, 40.0, false, ON, true, 0, false, 0, false},
         {"45 ms pictures, a present back at the end of the picture before's work (faked GPU)",
-         PF_PREV, 45.0, 5.0, 0.0, 40.0, false, ON, false, 0},
+         PF_PREV, 45.0, 5.0, 0.0, 40.0, false, ON, false, 0, false, 0, false},
+        {"45 ms pictures, a present back at the end of the picture before's work, its read "
+         "failing",
+         PF_PREV, 45.0, 5.0, 0.0, 40.0, false, ON, false, 0, false, 0, true},
         {"60 ms pictures, a 5 ms present while the picture before runs", PF_FIXED, 60.0, 5.0, 0.0,
-         40.0, false, OFF, false, 0},
+         40.0, false, OFF, false, 0, false, 0, false},
         {"280 light presents, then 45 ms pictures back at the end of the picture before's work",
-         PF_PREV, 45.0, 5.0, 0.0, 40.0, false, ON, false, 280},
+         PF_PREV, 45.0, 5.0, 0.0, 40.0, false, ON, false, 280, false, 0, false},
     };
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
         const PfCase *c = &cases[i];
@@ -2447,7 +2469,13 @@ static void threadPresentFree(void)
               "GPU's end first, %s: verdict %d (%d wanted), %u sample waits in the measured "
               "ticks (at most %u wanted)",
               c->name, on.verdict, c->expect, on.sampleWaits, waitsAllowed);
-        if (c->expect != RD_GPU_FIRST_UNDECIDED) {
+        if (c->forceOn) {
+            /* the verdict forced on at the start: no sample taken */
+            CHECK(t->timed == 0 && t->waits == 0,
+                  "GPU's end first, %s: %u presents timed, %u sample waits (none wanted: the "
+                  "verdict on from the start)",
+                  c->name, t->timed, t->waits);
+        } else if (c->expect != RD_GPU_FIRST_UNDECIDED) {
             /* the verdict arrives: within the first 64 Original presents,
                none unknown */
             CHECK(t->timed <= 64u && t->counted == RD_GPU_FIRST_SAMPLES && t->unknown == 0,
@@ -2455,16 +2483,27 @@ static void threadPresentFree(void)
                   "counted (%u wanted), %u unknown (none wanted)",
                   c->name, t->timed, t->counted, (unsigned)RD_GPU_FIRST_SAMPLES, t->unknown);
         } else {
-            /* short calls: not counted, no wait, the rule off; a loaded
-               runner may stretch a fake call past 2 ms (its wall clock):
-               at most 3 such */
-            CHECK(t->counted <= 3u && t->waits <= 3u && t->shortCalls + 3u >= t->timed &&
-                      t->timed > RD_GPU_FIRST_SAMPLES && on.waits == 0,
-                  "GPU's end first, %s: %u counted, %u sample waits (at most 3 wanted), %u of %u "
-                  "timed presents short (all but 3, more than %u, wanted), %u rule waits (none "
-                  "wanted)",
-                  c->name, t->counted, t->waits, t->shortCalls, t->timed,
-                  (unsigned)RD_GPU_FIRST_SAMPLES, on.waits);
+            /* no verdict: not counted, no rule wait; PF_EARLY's calls short
+               (a loaded runner may stretch a fake call past 2 ms, its wall
+               clock: at most 3 such); the long calls of PF_SPORADIC and of
+               the own-end present find the picture before finished by the
+               faked clock: never a sample wait, the new count above 0 */
+            CHECK(t->counted <= 3u && t->waits <= 3u && t->timed > RD_GPU_FIRST_SAMPLES &&
+                      on.waits == 0,
+                  "GPU's end first, %s: %u counted, %u sample waits (at most 3 wanted), %u "
+                  "timed (more than %u wanted), %u rule waits (none wanted)",
+                  c->name, t->counted, t->waits, t->timed, (unsigned)RD_GPU_FIRST_SAMPLES,
+                  on.waits);
+            if (c->driver == PF_EARLY) {
+                CHECK(t->shortCalls + 3u >= t->timed,
+                      "GPU's end first, %s: %u of %u timed presents short (all but 3 wanted)",
+                      c->name, t->shortCalls, t->timed);
+            } else {
+                CHECK(t->waits == 0 && t->counted == 0 && t->prevDone > 0,
+                      "GPU's end first, %s: %u sample waits, %u counted (none wanted), %u long "
+                      "calls with the picture before already finished (some wanted)",
+                      c->name, t->waits, t->counted, t->prevDone);
+            }
         }
         if (c->lightN > 0) {
             /* the light stretch's window ended without a verdict and
@@ -2477,6 +2516,10 @@ static void threadPresentFree(void)
                   "waits (at most 3 each: a call the machine stretched)",
                   c->name, on.lightVerdict, on.light.timed, (unsigned)RD_GPU_FIRST_LATE,
                   on.light.counted, on.light.waits);
+        }
+        if (c->readFails) {
+            CHECK(t->readFailed > 0, "GPU's end first, %s: %u failed reads counted (some wanted)",
+                  c->name, t->readFailed);
         }
         if (c->driver == PF_PREV) {
             /* every long call read at the end of GPU work, one after the

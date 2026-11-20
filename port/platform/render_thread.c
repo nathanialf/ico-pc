@@ -1959,7 +1959,7 @@ void ico_render_thread_block_line(double stepMs, double stepCpuMs, double pictur
     RdSubmitBlock sb;
     unsigned closes;
     double closeMs, closeMaxMs;
-    char rt[1536], st[768], cores[1600];
+    char rt[1536], st[1024], cores[1600];
     CpuPlaceHist gc, rc, sc;
 
     s_rt.held = s_rt.heldMiss = s_rt.heldOverrun = s_rt.heldBehind = 0;
@@ -2057,10 +2057,13 @@ void ico_render_thread_block_line(double stepMs, double stepCpuMs, double pictur
 
             snprintf(st + at, sizeof(st) - at,
                      " (the GPU's end first's samples: %u Original presents timed, %u under "
-                     "2 ms, %u counted (%u waited for the GPU, %u early), %u unknown (last "
-                     "result %d), %u jobs not Original, %u Original jobs without a present)",
-                     sb.gfTimed, sb.gfShort, sb.gfCounted, sb.gfWaited, sb.gfCounted - sb.gfWaited,
-                     sb.gfUnknown, (int)sb.gfLastResult, sb.gfNotOriginal, sb.gfNoPresent);
+                     "2 ms, %u long with the picture before already finished, %u counted (%u "
+                     "waited for the GPU, %u early), %u unknown (last result %d), %u reads of "
+                     "the picture before failed, %u jobs not Original, %u Original jobs without "
+                     "a present or a driver call)",
+                     sb.gfTimed, sb.gfShort, sb.gfPrevDone, sb.gfCounted, sb.gfWaited,
+                     sb.gfCounted - sb.gfWaited, sb.gfUnknown, (int)sb.gfLastResult,
+                     sb.gfReadFailed, sb.gfNotOriginal, sb.gfNoPresent);
         }
     } else {
         snprintf(st, sizeof(st), "; submit thread: off");

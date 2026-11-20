@@ -83,12 +83,18 @@ typedef struct RdSubmitJob {
        result (rhi.h rhi_wait_value_ns) */
     uint8_t gfSample;
     int32_t gfResult;
+    /* and the counter's read of the picture before as its present call
+       began (rhi_submitted_finished: 1 finished, 0 running, -1 the read
+       failed; -2 not read) */
+    int8_t gfPrevRead;
 } RdSubmitJob;
 
 /* RdSubmitJob.gfSample: none; a job not of Frame rate Original; an
    Original job without a present; a timed present under
    RD_GPU_FIRST_CALL_MS (short: no wait, not counted); a long one with no
-   present job before it (the round's first: not counted); a sample whose
+   present job before it (the round's first: not counted); a long one
+   whose picture before had already finished as it began (prev done: not
+   counted, no wait); a sample whose
    wait failed (unknown); a counted sample, its present returned at the
    end of the picture before's GPU work (waited) or not (early) */
 enum {
@@ -97,6 +103,7 @@ enum {
     RD_GF_NO_PRESENT,
     RD_GF_SHORT,
     RD_GF_NO_PREV,
+    RD_GF_PREV_DONE,
     RD_GF_UNKNOWN,
     RD_GF_WAITED,
     RD_GF_EARLY
@@ -122,8 +129,11 @@ typedef struct RdSubmitBlock {
        by gfSample: the presents timed (short, no picture before, unknown,
        waited and early), of them short, counted (waited and early, and of
        those waited), unknown with the last one's result; the jobs not
-       Original, without a present */
+       Original, without a present (or whose present made no driver call);
+       the long calls whose picture before had already finished, and the
+       timed presents whose read of it failed (gfPrevRead -1) */
     unsigned gfJobs, gfTimed, gfShort, gfCounted, gfWaited, gfUnknown, gfNotOriginal, gfNoPresent;
+    unsigned gfPrevDone, gfReadFailed;
     int32_t gfLastResult;
 } RdSubmitBlock;
 
@@ -164,6 +174,14 @@ void rd__sq_block_take(RdSubmitQ *q, RdSubmitBlock *out);
  *            rule stays off);
  *   no prev  a long call with no present job before it (hasPrev false):
  *            not counted;
+ *   prev done a long call whose picture before had already finished as it
+ *            began (prevRead 1: the counter read just before the call, no
+ *            wait): not counted and no wait after it; the call was long
+ *            for something else (the display, the thread descheduled, the
+ *            driver's CPU work, a rebuild's first present), and the wait
+ *            after it would return at once and read waited whatever made
+ *            it long.  A read that failed (-1) or read running (0) leaves
+ *            the call eligible: the read failing never blocks the verdict;
  *   unknown  the one wait after the call, for the picture before's
  *            submission (never the picture's own: it would leave the next
  *            present nothing to wait for), failed (result not 0, rhi.h
@@ -178,7 +196,7 @@ void rd__sq_block_take(RdSubmitQ *q, RdSubmitBlock *out);
  *            GPU's. */
 #define RD_GPU_FIRST_CALL_MS 2.0
 #define RD_GPU_FIRST_NEAR_MS 1.0
-uint8_t rd__sq_gf_class(double callMs, bool hasPrev, int32_t result, double waitMs);
+uint8_t rd__sq_gf_class(double callMs, bool hasPrev, int prevRead, int32_t result, double waitMs);
 
 /* a job's tail, step by step (rd__sq_tail_steps) */
 enum { RD_SQ_END, RD_SQ_SUBMIT, RD_SQ_PRESENT };
