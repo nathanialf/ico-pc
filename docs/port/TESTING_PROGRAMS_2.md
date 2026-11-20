@@ -1,8 +1,17 @@
 # Test programs, continued
 
 Cases added to programs whose entries are in [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md) (the repo
-keeps every file under 256 KiB), by the directory the program lives in. The entries read as that
+keeps every file under 256 KiB), and programs whose entries that page has no room for, by the
+directory the program lives in. The entries read as that
 page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
+
+## port/input/test
+
+- `pad_kind_test.c`: the kind of controller pressed last (`port/input/pad_kind.c`,
+  [INPUT.md](INPUT.md#devices)): every value of SDL 3.4.18's gamepad type to its kind (Xbox 360,
+  Xbox One, Steam: Xbox; Switch Pro, Joy-Con pair: Nintendo; the rest PlayStation) and name,
+  values out of range, the kind a sequence of reported presses leaves (keyboard, mouse and touch
+  PlayStation) and the changes counted once each (`pad_kind`).
 
 ## port/platform/test
 
@@ -81,3 +90,19 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   one swapchain at the new size; the next frame draws on it. No validation error.
 - `rhi_device_table_equiv_test.c` (`rhi_device_table_equiv`): `PRESENT_FREE` on every Vulkan
   identity on Android and on no other (no rule before the table: the row's own definition).
+
+## port/ui/test
+
+- `pad_glyphs_test.c`: the button pictures' core (`port/ui/pad_glyphs.c`,
+  [UI.md](UI.md#button-pictures)), CPU only: the 24 embedded files read, each set complete, each
+  piece's aspect, fill colour and black stroke present at 96 rows, the alpha never past 0x80; the
+  Xbox B at 24 and 96 rows (the fill in its stem, the stroke left of it, the four corners clear,
+  the upper hole's middle clear at 96 rows) and A (the fill in its left leg, the stroke's black in
+  its hole, no blue); two squares turning the same way, the middle empty with `evenodd`, filled
+  without; the 40 x 24 LB and the 24 x 32 b at their sizes with fill in their letters; LT, ZL and a
+  curved shape in absolute forms drawing as the relative ones; a file reading as `xbox/cross.svg`
+  drawing as it, byte for byte; eleven broken files (an element that draws, a transform, an arc,
+  an open subpath, no viewBox, two paths, a style property, a fill attribute, no closing tag, over
+  8192 bytes, over 512 commands) refused through `pad_glyphs_test_source` with a reason, their
+  set incomplete and refused as the style in force, a set broken while in force falling back to
+  PlayStation, the files back after (`pad_glyphs`).
