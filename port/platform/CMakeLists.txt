@@ -30,6 +30,7 @@ target_sources(ico_platform PRIVATE
     mem_watch.c
     pace_policy.c
     perf_hint.c
+    perf_secs.c
     memory_floor.c
     display_rate.c
     present_hist.c
@@ -198,6 +199,11 @@ endif()
 # judged seconds without, a stuck second starting the count again, the rule
 # not allowing it, the trace's seconds and its cap, the threads' cores a
 # second and a block, every line word for word
+# perf_secs: pictures a second by stage (perf_secs.c, issue 179): a block's
+# whole seconds under the stage of each second's first step, a hitch's
+# second, a stage change inside a second, the block's cut asked until the
+# line is taken, the part second, pictures before any step, seconds past
+# the 64 held, a short buffer, the lines word for word
 # bones_ladder: issue 123's ladder across starts (bones_ladder.c): the step
 # for each run's evidence over sequences of starts (step 1, step 2, healed,
 # both tried, a port race, step 2 out of reach), the mark written and read
@@ -205,7 +211,8 @@ endif()
 foreach(t sched fiber fps_counter arena diag hotkeys pace_policy pace_loop perf_block lifecycle pump_watch ico_thread
           gpu_hang state_fiber state_guard state_port state_name state_registry pipeline_skip
           memory_floor present_fallback frame_mailbox display_rate present_hist present_stall_block gpu_sysfs
-          thermal_text window_scene bones_ladder pipe_resume clock_trap pin_release)
+          thermal_text window_scene bones_ladder pipe_resume clock_trap pin_release
+          perf_secs)
     add_executable(${t}_test test/${t}_test.c)
     target_include_directories(${t}_test PRIVATE "${ICO_COMPAT_DIR}")
     target_compile_options(${t}_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})

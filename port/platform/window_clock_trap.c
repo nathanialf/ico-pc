@@ -13,6 +13,7 @@
 #include "cpu_place.h"
 #include "diag_host.h"
 #include "ico_thread.h"
+#include "perf_secs.h"
 #include "pin_release.h"
 #include "rd.h"
 #include "render_thread.h"
@@ -120,6 +121,7 @@ void window_clock_trap_picture(const struct RdPerfRecord *r)
     if (!r->presented) {
         return;
     }
+    perf_secs_window_picture(ico_thread_now_ms()); /* its second by stage (perf_secs.h) */
     if (s_blockStartMs < 0.0) {
         s_blockStartMs = ico_thread_now_ms();
     }

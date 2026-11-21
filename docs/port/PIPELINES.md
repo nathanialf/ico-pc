@@ -1535,9 +1535,13 @@ draw the same values: Vulkan's first-vertex mode, Direct3D's first vertex and Op
 scene (stage 42, the reporter's slow-scene capture of 2026-11-19) it admits 60 of 87 code 34 draws: 24,921
 triangles, 11,502 vertex invocations saved of their 74,763. The dock's meshes are mostly short
 strips, so the saving is about a sixth, not two thirds. Counted in the 10 s VU line
-(`; shared vertices: T triangles, S vertex invocations saved (P % of the draws')`, `rd_vu_share_text`)
+(`; shared vertices: T triangles, S vertex invocations saved (P % of the draws')`, `rd_vu_share_text`,
+then `; shared vertices kept (triangles a picture): form a, chain b, marks c, other d, entry e,
+region f, no verdict g`: the mesh draws' triangles kept on the original list by reason, `region`
+a rule mode other than none and `no verdict` a draw the pre-pass did not record, both left
+uncounted before; which draws share is unchanged)
 and in `rd_replay_tool --stats` (`stats: VU shared vertices on: ...`, with the draws kept on the
-original list by reason). The tests' switch `ICO_RD_VU_SHARE=0` keeps every original list
+original list by reason, `rule mode not none` and `not recorded` among them). The tests' switch `ICO_RD_VU_SHARE=0` keeps every original list
 ([TESTING.md](TESTING.md#environment-switches)). `rd_vu_share_ab` and `rd_vu_share_gl` hold every
 target of `lists/vu_share.txt` byte for byte between the two, merged and one draw a command, under
 the corpus and Mali profiles. `rd_vu_share` checks the lists, the exclusions and the counts on

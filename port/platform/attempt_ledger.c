@@ -6,6 +6,7 @@
 #include "attempt_ledger.h"
 
 #include "rhi_device_table.h" /* port/rhi: the words where no row sets a choice */
+#include "stall_coincide.h"   /* the stall lines' rule, for the stalls clause */
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -295,17 +296,26 @@ size_t ico_attempt_block_text(char *out, size_t cap, int stalls)
             put(&p, " (static)");
         } else {
             put(&p, " %llu %s", (unsigned long long)d, k_rows[i].unit);
-            if (k_rows[i].unit2 != NULL) {
+            /* the Adreno row's stalls only where the row applies (issue
+               179's Mali: "not applicable here 0 passes (3 stalls in the
+               block)" read as a third kind of stall) */
+            if (k_rows[i].unit2 != NULL && !(i == ICO_ATT_ADRENO_A && st == ICO_ATT_NA)) {
                 put(&p, " (%llu %s)", (unsigned long long)d2, k_rows[i].unit2);
             }
         }
         shown++;
     }
     if (stalls >= 0) {
-        put(&p, "%sstalls %d in the block", shown ? "; " : "attempts: ", stalls);
+        /* the stall lines' stalls (stall_coincide.h), not the presents
+           blocked over 50 ms the GPU gap line counts */
+        put(&p,
+            "%sstalls %d in the block (a present over %.0f ms or a pass over %.0f times its "
+            "block median and %.0f ms",
+            shown ? "; " : "attempts: ", stalls, STALL_PRESENT_MS, STALL_PASS_TIMES, STALL_PASS_MS);
         if (adreno >= 0) {
-            put(&p, " (the Adreno attempt %s)", adreno ? "on" : "off");
+            put(&p, "; the Adreno attempt %s", adreno ? "on" : "off");
         }
+        put(&p, ")");
         shown++;
     }
     return shown ? p.at : 0u;

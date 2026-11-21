@@ -1840,8 +1840,9 @@ static void testBudgetLines(void)
         pace_budget_reset(&q.b, 1);
         seqSteps(&q, 600, 1, 2, 10 * MS, 1, 0);
         pace_budget_block_text(&q.b, 0, 0, 0, 0, q.gpuNs, true, "no GPU timestamps", t, sizeof(t));
-        CHECK(textIs(t, "; presents held to 0 a step (lowest 0, 298 refused, 3 drops, 2 climbs, "
-                        "climbs refused 0); GPU span 19.0 ms a timed replay"));
+        CHECK(textIs(
+            t, "; presents held to 0 a step (lowest 0, 298 refused, 3 drops, 2 climbs, "
+               "climbs refused 0); GPU span 19.0 ms (the median of the last 8 timed replays)"));
         pace_budget_block(&q.b);
         pace_budget_block_text(&q.b, q.b.refused, q.b.drops, q.b.climbs, q.b.climbRefusals, 0, true,
                                "no GPU timestamps", t, sizeof(t));
@@ -1857,8 +1858,9 @@ static void testBudgetLines(void)
                         "climbs refused 0); GPU not timed yet"));
         /* a busy time (gpuIsSpan false) is named so */
         pace_budget_block_text(&b, 0, 0, 0, 0, 3 * MS, false, "GPU not timed yet", t, sizeof(t));
-        CHECK(textIs(t, "; presents not held (lowest not held, 0 refused, 0 drops, 0 climbs, "
-                        "climbs refused 0); GPU busy 3.0 ms a timed replay"));
+        CHECK(textIs(
+            t, "; presents not held (lowest not held, 0 refused, 0 drops, 0 climbs, "
+               "climbs refused 0); GPU busy 3.0 ms (the median of the last 8 timed replays)"));
     }
     {
         /* paced by the GPU (12 ms a picture: 1.4 a step): the budget's
@@ -1873,8 +1875,10 @@ static void testBudgetLines(void)
         CHECK(textIs(t, "presents paced by the GPU: 1.4 a step (GPU span 12.0 ms a picture, "
                         "period 16.7 ms)"));
         pace_budget_block_text(&b, 0, 0, 0, 0, 12 * MS, true, "GPU not timed yet", t, sizeof(t));
-        CHECK(textIs(t, "; presents paced to 1.4 a step (lowest not held, 120 refused, 0 drops, 0 "
-                        "climbs, climbs refused 0); GPU span 12.0 ms a timed replay"));
+        CHECK(textIs(
+            t,
+            "; presents paced to 1.4 a step (lowest not held, 120 refused, 0 drops, 0 "
+            "climbs, climbs refused 0); GPU span 12.0 ms (the median of the last 8 timed replays)"));
         pace_budget_present(&b, true);
         pace_budget_present(&b, false);
         (void)pace_budget_step(&b, 10 * MS, PERIOD, REFRESH, 0, 12 * MS, MS / 2, 0);
@@ -1887,8 +1891,9 @@ static void testBudgetLines(void)
                         "21.5 ms for the GPU and 0.1 ms for the display; GPU span 12.0 ms a "
                         "replay); back to paced by the GPU after 60 steps on time"));
         pace_budget_block_text(&b, 120, 0, 0, 0, 12 * MS, true, "GPU not timed yet", t, sizeof(t));
-        CHECK(textIs(t, "; presents held to 1 a step (lowest 1, 0 refused, 1 drops, 0 climbs, "
-                        "climbs refused 0); GPU span 12.0 ms a timed replay"));
+        CHECK(textIs(
+            t, "; presents held to 1 a step (lowest 1, 0 refused, 1 drops, 0 climbs, "
+               "climbs refused 0); GPU span 12.0 ms (the median of the last 8 timed replays)"));
         (void)pacedSteps(&b, PACE_ALLOW_HOLD, 8, 1, 12 * MS, MS / 2, 0, NULL);
         pace_budget_event_text(&b, PACE_BUDGET_TEXT_CLIMB, &w, t, sizeof(t));
         CHECK(textIs(t, "presents back to paced by the GPU (where they started) after 60 steps "
@@ -1900,8 +1905,9 @@ static void testBudgetLines(void)
         CHECK(textIs(t, "presents paced by the GPU: not held (GPU span 1.0 ms a picture, period "
                         "16.7 ms)"));
         pace_budget_block_text(&b, 0, 0, 0, 0, 1 * MS, true, "GPU not timed yet", t, sizeof(t));
-        CHECK(textIs(t, "; presents not held (lowest not held, 0 refused, 0 drops, 0 climbs, "
-                        "climbs refused 0); GPU span 1.0 ms a timed replay"));
+        CHECK(textIs(
+            t, "; presents not held (lowest not held, 0 refused, 0 drops, 0 climbs, "
+               "climbs refused 0); GPU span 1.0 ms (the median of the last 8 timed replays)"));
     }
     {
         PaceLock L = {0};
@@ -2997,9 +3003,11 @@ static void testStepRule(void)
                         "yet"));
         b.pacedTenths = 7;
         pace_budget_block_text(&b, 0, 0, 0, 0, 24 * MS, true, "GPU not timed yet", t, sizeof(t));
-        CHECK(textIs(t, "; vsync off, uncapped: pictures as made (2 in flight at most, the GPU's "
-                        "time would pace them to 0.7 a step) (lowest not held, 0 refused, 0 "
-                        "drops, 0 climbs, climbs refused 0); GPU span 24.0 ms a timed replay"));
+        CHECK(textIs(
+            t,
+            "; vsync off, uncapped: pictures as made (2 in flight at most, the GPU's "
+            "time would pace them to 0.7 a step) (lowest not held, 0 refused, 0 "
+            "drops, 0 climbs, climbs refused 0); GPU span 24.0 ms (the median of the last 8 timed replays)"));
     }
 }
 
@@ -3521,21 +3529,23 @@ static void testGpuGap(void)
                        "ms on average, the longest 310.5 ms), 0 begun before the one before ended "
                        "(by 0.0 ms on average: their spans count that end too); the GPU's time a "
                        "replay past the one before's end 27.00 ms, its span 27.00 ms; 1 of them "
-                       "timed across untimed replays; across the 3 stalls: the GPU was idle 301.2, "
+                       "timed across untimed replays; after the 3 presents blocked over 50 ms: the "
+                       "GPU was idle 301.2, "
                        "298.0, 310.5 ms before the next replay"));
     /* one stall; then past the 8 kept */
     memset(&g, 0, sizeof g);
     pace_gpu_gap_add(&g, 27000000ull, -400000ll, 0);
     pace_gpu_gap_stall(&g, -400000ll);
     pace_gpu_gap_text(&g, text, sizeof text);
-    CHECK(strstr(text, "its span 27.00 ms; across the 1 stall: the GPU was idle -0.4 ms before the "
-                       "next replay") != NULL);
+    CHECK(strstr(text, "its span 27.00 ms; after the 1 present blocked over 50 ms: the GPU was "
+                       "idle -0.4 ms before the next replay") != NULL);
     for (int i = 0; i < 10; i++) {
         pace_gpu_gap_stall(&g, (int64_t)(i + 1) * 1000000ll);
     }
     CHECK(g.stalls == 11 && g.stallNs[7] == 7000000ll);
     pace_gpu_gap_text(&g, text, sizeof text);
-    CHECK(strstr(text, "; across the first 8 of the 11 stalls: the GPU was idle -0.4, 1.0, 2.0, "
+    CHECK(strstr(text, "; after the first 8 of the 11 presents blocked over 50 ms: the GPU was "
+                       "idle -0.4, 1.0, 2.0, "
                        "3.0, 4.0, 5.0, 6.0, 7.0 ms before the next replay") != NULL);
 
     /* the window's buffer (PACE_GPU_GAP_TEXT_MAX, window_host.c perf_log;
@@ -3558,7 +3568,8 @@ static void testGpuGap(void)
         }
         const int w = pace_gpu_gap_text(&g, big, sizeof big);
         CHECK(w > 0 && (unsigned)w < sizeof big && strlen(big) == (size_t)w);
-        CHECK(strstr(big, "; across the first 8 of the 4000000000 stalls: the GPU was idle "
+        CHECK(strstr(big, "; after the first 8 of the 4000000000 presents blocked over 50 ms: the "
+                          "GPU was idle "
                           "-59999.9, -59999.9, -59999.9, -59999.9, -59999.9, -59999.9, -59999.9, "
                           "-59999.9 ms before the next replay") != NULL);
         /* a reporter's block (review S1): 3 stalls and the across part

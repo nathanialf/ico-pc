@@ -1101,20 +1101,24 @@ causes in it, each on its own lines. The lines to read, in the log's order:
   ... walk W, ... N pipelines created`: a picture that compiled pipelines in its walk (the
   reporter's freeze: 29 pipelines, 1311.9 of 1359.6 ms).
 - The 10 s presents line's end: `; the GPU takes 37.7 ms a picture at this resolution (3x): 2x
-  would fit the game's rate (37.7 ms = 3.8 ms of vertex work by the fit + 33.9 ms that scales with
-  the pixels: 3.8 + 33.9 x (2/3)^2 = 18.8 ms, under 30.0 ms, 0.9 of the 33.3 ms step at 30.0 game
-  fps; a hint: nothing changes by itself)`, written only when the block presented fewer pictures
+  would fit the game's rate (37.7 ms = 3.8 ms of vertex work by the fit (R^2 0.94) + 33.9 ms that
+  scales with the pixels: 3.8 + 33.9 x (2/3)^2 = 18.8 ms, under 30.0 ms, 0.9 of the 33.3 ms step at
+  30.0 game fps; a hint: nothing changes by itself)` (`by the fit (the work flat)` where the work
+  did not vary), written only when the block presented fewer pictures
   than the game made, skipped presents (late ones and, at frame rate Original, those the render
   thread's busy picture left out: `frames not presented N: ..., the render thread busy N`; the
-  Mali-G52 run of issue 179 had only busy ones and no hint printed) and the GPU span is over the step
-  (`port/platform/window_scene.c` `window_scene_gpu_hint_text`): the vertex part is the block's VU
+  Mali-G52 run of issue 179 had only busy ones and no hint printed) and the GPU's time is over the
+  step (`port/platform/window_scene.c` `window_scene_gpu_hint_text`). That time is the block's mean
+  GPU work, the VU line's `GPU work ... a replay`, not the presents line's `GPU span` (the median of
+  the last 8 timed replays, which issue 179's log had at 7.9 ms against 26.7 ms a replay): the vertex part is the block's VU
   fit's slope times its mean invocations (the `window: VU: ...` line's fit), the rest is taken to
   scale with the pixels, and the step is the largest offered Resolution step whose estimate is at
   most 0.9 of the step. At a scale that is not a Resolution row's (Window, Auto, or an upscaler's
   render scale such as 3.02) no row is named: `; the GPU takes 40.0 ms a picture at this render
   scale (2.5x, not a Resolution row's: Window, Auto or an upscaler): a lower Resolution (or
   Upscaling quality) would fit the game's rate at a render scale of 2x or under (...)`. Without a fit line (under 3 timed replays, or the block's invocations not
-  spread by a factor of 2, which the fit needs) no step is named, since a vertex-bound block would
+  spread by a factor of 2, which the fit needs) or with one under R^2 0.80 (the ranked lines' own
+  floor, `rd_perf_rank.h`; `fit: R^2 0.79, under 0.80`) no step is named, since a vertex-bound block would
   read as pixels: `; GPU-bound at 3x (the GPU takes 37.7 ms a picture, the step 33.3 ms at 30.0 game
   fps): no resolution hint (fit: not enough spread)`; the reporter's heavy blocks (370k-382k
   invocations) read that way. A hint only: the resolution never changes by itself (the owner's rule).
@@ -2078,8 +2082,10 @@ repository).
   priorities: 3: low, medium, high); the game asks no device for a global priority (...)` (the
   device's offer, read only), and the attempt ledger's `Qualcomm queue at high priority removed
   (...)`. The block's stalls are counted on the `VkRenderPass` row's second count (`Qualcomm passes
-  as VkRenderPass objects on N passes (S stalls in the block)`) and in the clause `; stalls S in the
-  block (the Adreno attempt on)`. On the issue 215 handheld: whether the run still ends at the
+  as VkRenderPass objects on N passes (S stalls in the block)`, left out where the row is not
+  applicable) and in the clause `; stalls S in the block (a present over 100 ms or a pass over 8
+  times its block median and 40 ms; the Adreno attempt on)`: the stall lines' count, not the GPU
+  gap line's presents blocked over 50 ms. On the issue 215 handheld: whether the run still ends at the
   start, and the GPU reset count at the start and in the run, against the two runs with the
   priority granted. On the tablet: the hangs (`H of them hangs` summed over the blocks) against the
   15 with it granted, and whether the rest of the tablet still slows down.

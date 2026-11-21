@@ -8,7 +8,11 @@
  * known, its reports and their numbers, a target change asked once, a
  * thread change through setThreads and, without it (API 33), closed and
  * made again; closed in the background and made again on return; refused
- * once and never asked again; a full ring dropped and counted; a failed
+ * once and never asked again, except a first session refused on a system
+ * that gives an update rate: asked once more for the game thread alone
+ * (made: the game thread's alone after a thread change and the background;
+ * refused again: off, both calls said; no rate: not asked again), its
+ * lines word for word; a full ring dropped and counted; a failed
  * report counted; the lines word for word; a short buffer; the wake period;
  * and a game thread pushing while the hint thread reports, on two real
  * threads (no picture lost, none reported twice).  The block's numbers
@@ -43,10 +47,11 @@ static int failures;
 
 typedef struct Fake {
     int refuse;
+    size_t refuseOver; /* refused for more threads than this (0: not by count) */
     int reportRc;
     unsigned creates, closes, updates, setThreads, reports;
     int32_t tids[PERF_HINT_MAX_THREADS];
-    size_t n;
+    size_t n, askedN;
     int64_t createTarget, target, lastTotal, lastCpu, lastGpu;
     uint64_t clock;
     int session; /* the session's address */
@@ -57,7 +62,8 @@ static void *f_create(void *u, const int32_t *tids, size_t n, int64_t targetNs)
     Fake *f = u;
 
     f->creates++;
-    if (f->refuse) {
+    f->askedN = n;
+    if (f->refuse || (f->refuseOver != 0 && n > f->refuseOver)) {
         return NULL;
     }
     f->n = n;
@@ -389,6 +395,131 @@ static void testRefused(void)
     free(h);
 }
 
+/* the first session refused with an update rate given: once more, for
+   the game thread alone (issue 179's Mali-G52 phone) */
+static void testRetry(void)
+{
+    static const char *const names[3] = {"game", "render", "submit"};
+    Fake f;
+    PerfHint *h = calloc(1, sizeof(*h));
+    PerfHintOps o;
+    PerfHintOnText t;
+    char line[640];
+
+    /* refused for three threads, made for one */
+    memset(&f, 0, sizeof(f));
+    f.refuseOver = 1;
+    o = fake_ops(&f, true, true);
+    o.rateNs = 16666666;
+    perf_hint_init(h, &o);
+    perf_hint_set_threads(h, k_tids, 3);
+    perf_hint_set_target(h, 40000000u);
+    CHECK(perf_hint_step(h) == PERF_HINT_EV_MADE);
+    CHECK(f.creates == 2 && f.n == 1 && f.tids[0] == k_tids[0] && h->sessN == 1);
+    CHECK(h->retried && h->alone && h->firstN == 3 && !h->refused);
+    memset(&t, 0, sizeof(t));
+    t.api = 34;
+    t.gameMode = 1;
+    t.basis = PERF_HINT_BASIS_ORIGINAL;
+    t.withGpu = false;
+    t.names = names;
+    t.tids = h->sessTids;
+    t.n = h->sessN;
+    t.targetNs = h->sessTargetNs;
+    t.rateNs = o.rateNs;
+    t.wakeMs = perf_hint_wake_ms(o.rateNs);
+    t.madeMs = h->madeMs;
+    t.alone = h->alone;
+    t.firstN = h->firstN;
+    t.firstMs = h->firstMs;
+    perf_hint_on_text(&t, line, sizeof(line));
+    CHECK_STR(line, "performance hints: on (API 34; session of 1 threads: game 100; target 40.00 "
+                    "ms a picture (a game frame); GPU durations reported no; game mode standard "
+                    "(1); the system's update rate 16.67 ms, the reports made every 16 ms off the "
+                    "game and render threads; made in 0.10 ms; the game thread alone: the system "
+                    "refused 3 threads in 0.10 ms)");
+    /* the render thread made again: the session keeps the game thread */
+    {
+        const int32_t again[3] = {100, 301, 302};
+        perf_hint_set_threads(h, again, 3);
+        CHECK(perf_hint_step(h) == 0 && f.setThreads == 0 && f.creates == 2 && f.n == 1);
+    }
+    /* the background and back: made again for the game thread alone */
+    perf_hint_set_active(h, false);
+    CHECK(perf_hint_step(h) == PERF_HINT_EV_CLOSED);
+    perf_hint_set_active(h, true);
+    CHECK(perf_hint_step(h) == PERF_HINT_EV_MADE && f.creates == 3 && f.askedN == 1);
+    perf_hint_shutdown(h);
+
+    /* refused for one too: off, both calls said, never asked again */
+    memset(&f, 0, sizeof(f));
+    f.refuse = 1;
+    o = fake_ops(&f, true, true);
+    o.rateNs = 16666666;
+    perf_hint_init(h, &o);
+    perf_hint_set_threads(h, k_tids, 3);
+    perf_hint_set_target(h, 40000000u);
+    CHECK(perf_hint_step(h) == PERF_HINT_EV_REFUSED && f.creates == 2 && f.askedN == 1);
+    CHECK(h->refused && h->retried && !h->alone);
+    CHECK(perf_hint_step(h) == 0 && f.creates == 2);
+    CHECK(perf_hint_refused_text(h, 34, 1, line, sizeof(line)) == strlen(line));
+    CHECK_STR(line, "performance hints: off (the system refused the session: "
+                    "APerformanceHint_createSession answered none for 3 threads in 0.10 ms and "
+                    "for the game thread alone in 0.10 ms; the system's update rate 16.67 ms; API "
+                    "34; game mode standard); the port runs as before");
+
+    /* no update rate: not asked again (v0.11.13's one call) */
+    memset(&f, 0, sizeof(f));
+    f.refuseOver = 1;
+    o = fake_ops(&f, true, true);
+    perf_hint_init(h, &o);
+    perf_hint_set_threads(h, k_tids, 3);
+    perf_hint_set_target(h, 40000000u);
+    CHECK(perf_hint_step(h) == PERF_HINT_EV_REFUSED && f.creates == 1 && !h->retried);
+    (void)perf_hint_refused_text(h, 34, 1, line, sizeof(line));
+    CHECK_STR(line, "performance hints: off (the system refused the session: "
+                    "APerformanceHint_createSession answered none for 3 threads in 0.10 ms (not "
+                    "asked again for the game thread alone: no update rate given); the system "
+                    "gives no update rate; API 34; game mode standard); the port runs as before");
+
+    /* one thread asked: nothing to retry */
+    memset(&f, 0, sizeof(f));
+    f.refuse = 1;
+    o = fake_ops(&f, true, true);
+    o.rateNs = 8000000;
+    perf_hint_init(h, &o);
+    perf_hint_set_threads(h, k_tids, 1);
+    perf_hint_set_target(h, 40000000u);
+    CHECK(perf_hint_step(h) == PERF_HINT_EV_REFUSED && f.creates == 1);
+    (void)perf_hint_refused_text(h, 33, 0, line, sizeof(line));
+    CHECK(strstr(line, "for 1 thread in 0.10 ms (not asked again for the game thread alone: one "
+                       "thread asked); the system's update rate 8.00 ms; API 33; game mode "
+                       "unsupported)") != NULL);
+
+    /* refused after a session was made (back from the background): no
+       retry, said so */
+    memset(&f, 0, sizeof(f));
+    o = fake_ops(&f, true, true);
+    o.rateNs = 16666666;
+    perf_hint_init(h, &o);
+    perf_hint_set_threads(h, k_tids, 3);
+    perf_hint_set_target(h, 40000000u);
+    CHECK(perf_hint_step(h) == PERF_HINT_EV_MADE && f.creates == 1);
+    perf_hint_set_active(h, false);
+    (void)perf_hint_step(h);
+    f.refuse = 1;
+    perf_hint_set_active(h, true);
+    CHECK(perf_hint_step(h) == PERF_HINT_EV_REFUSED && f.creates == 2 && !h->retried);
+    (void)perf_hint_refused_text(h, 34, 1, line, sizeof(line));
+    CHECK(strstr(line, "answered none in 0.10 ms after a session was made; the system's update "
+                       "rate 16.67 ms;") != NULL);
+    {
+        char small[16];
+        CHECK(perf_hint_refused_text(h, 34, 1, small, sizeof(small)) == sizeof(small) - 1);
+    }
+    free(h);
+}
+
 /* --- the lines ------------------------------------------------------------------- */
 
 static void testLines(void)
@@ -588,6 +719,7 @@ int main(void)
     testSession();
     testApi33();
     testRefused();
+    testRetry();
     testLines();
     testThreads();
     if (failures) {

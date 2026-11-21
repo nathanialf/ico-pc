@@ -69,11 +69,18 @@ int ico_sweep_paths(const char *dir, const char *stamp, char *prefix, size_t pre
                     size_t zip_size);
 
 /* The stats line's period: ICO_STATS_FAST_PERIOD_NS while now is before
-   fast_until, else ICO_STATS_PERIOD_NS. */
+   fast_until, else ICO_STATS_PERIOD_NS; at most ICO_STATS_CUT_NS when the
+   block holds a stage change (perf_secs.h perf_secs_window_cut_due: the
+   block ends at the change once it is that old, so a block's lines are of
+   one stage after its first 2 s). */
 #define ICO_STATS_PERIOD_NS 10000000000ull
 #define ICO_STATS_FAST_PERIOD_NS 1000000000ull
 #define ICO_STATS_FAST_SPAN_NS 30000000000ull
+#define ICO_STATS_CUT_NS 2000000000ull
 unsigned long long ico_stats_period_ns(unsigned long long now, unsigned long long fast_until);
+/* the same with the stage change given (nonzero: the block holds one) */
+unsigned long long ico_stats_period_cut_ns(unsigned long long now, unsigned long long fast_until,
+                                           int stage_changed);
 /* F11: the new fast_until (now + the span, or 0 when it was running). */
 unsigned long long ico_stats_fast_toggle(unsigned long long now, unsigned long long fast_until);
 

@@ -84,7 +84,7 @@ int stall_pieces_judge(StallMoment *m, const double *ms, const double *median, u
     m->pieceN = m->grown = 0;
     m->pieceFactor = m->othersFactor = m->factorMin = m->factorMax = 0.0;
     for (unsigned i = 0; i < n && k < 64u; i++) {
-        if (!(median[i] > 0.0) || ms[i] < 0.0) {
+        if (!(median[i] >= STALL_RATIO_MIN_MS) || ms[i] < 0.0) {
             continue;
         }
         f[k] = ms[i] / median[i];
@@ -439,7 +439,7 @@ size_t stall_moment_text(const StallMoment *m, char *out, size_t cap)
     }
     if (m->trisKnown) {
         put(&o, "; %.0f VU triangles against the block's median %.0f", m->tris, m->trisMedian);
-        if (m->trisMedian > 0.0) {
+        if (m->trisMedian >= STALL_RATIO_MIN_TRIS) {
             put(&o, " (x%.2f)", m->tris / m->trisMedian);
         }
     }

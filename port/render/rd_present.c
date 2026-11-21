@@ -94,6 +94,7 @@
 #include <string.h>
 #include "rd_internal.h"
 #include "rd_device_rows.h" /* rd__device_value */
+#include "rd_diag_notes.h"  /* the display line once more at the width's first change */
 #include "rd_shot_late.h"
 #include "rd_submit.h"
 #include "rd_fsr1.h"
@@ -538,8 +539,13 @@ bool rd__apply_display(void)
         fsrChanged |= rd__upscale_temporal_apply(st, rd__crt_on(), down, dsy, detail,
                                                  fsrNote + used, sizeof(fsrNote) - used);
     }
-    if (changed || aspect != g_rd.outAspect || filter != g_rd.filterUpgrade ||
-        vs != g_rd.vsyncApplied || down != g_rd.downsample || fsrChanged) {
+    /* the line also once when the frame's width first changes alone
+     * (rd_reset_scene: issue 179's log named 512 while its passes were 688
+     * wide) */
+    static RdWidthNote s_widthNote;
+    const bool logging = changed || aspect != g_rd.outAspect || filter != g_rd.filterUpgrade ||
+                         vs != g_rd.vsyncApplied || down != g_rd.downsample || fsrChanged;
+    if (rd_width_note(&s_widthNote, (uint32_t)gw, logging)) {
         char ssaaNote[96] = "";
         if (ssaaAsked > 1.0f && ssaa > 1.0f && ssaa < ssaaAsked) {
             snprintf(ssaaNote, sizeof(ssaaNote), " (at %gx: the resolution has %.2f texels %s)",
@@ -555,8 +561,12 @@ bool rd__apply_display(void)
          * (rd__fog_aa_reconcile) and logs "msaa: off" when the device cannot */
         /* the frame as the options give it (issue 129: a phone whose width
          * is a whole number of GS pixels shows the border's columns) */
-        char frameNote[160];
+        char frameNote[224];
         frameWords(frameNote, sizeof(frameNote), (uint32_t)gw, wexactFor(aspect));
+        {
+            const size_t at = strlen(frameNote);
+            (void)rd_width_note_text(&s_widthNote, logging, frameNote + at, sizeof(frameNote) - at);
+        }
         /* under a temporal upscaler the two scales (rd_upscale.h) */
         char upNote[160] = "";
         if (temporal) {
