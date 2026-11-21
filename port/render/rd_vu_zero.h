@@ -145,8 +145,9 @@ bool rd__vu_zero_copyable(void);
 bool rd__vu_zero_try_begin(void);
 /* the zero builds made this process (the tests: 0 without a try) */
 uint32_t rd__vu_zero_variants_made(void);
-/* the rule stage's vertex shader id for an entry's word (0: the build
-   without the cull) */
+/* the rule stage's vertex shader id: the zero build for every entry while
+   the cull is on and its build made (an entry without a word skips the
+   test), else the build without the cull */
 uint8_t rd__vu_zero_rule_vs(uint32_t word);
 /* an entry's word kept, or 0 with *why: skinned, read by the velocity
    pass, a probe */

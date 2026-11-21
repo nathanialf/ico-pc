@@ -93,7 +93,10 @@ endif()
 # where its self-test released it, 0 and 0 where it was never tried.
 if(ICO_RUN_TESTS AND DEFINED _vst AND TARGET rd_vuprepass_selftest_test)
     set(_zon "rd: VU zero-area cull: on \\(self-test: [1-9][0-9]* of [0-9]+ triangle slots culled as the CPU answers, code 34 and code 32, pictures byte for byte, lattice 0x[0-9A-F]+\\) on SCENE.*rd: VU zero-area cull: on, 1 modules of it made, 1 of its pipelines alive")
-    set(_zrel ".*rd: VU zero-area cull: its module and pipeline released.*rd: VU zero-area cull: off, 1 modules of it made, 0 of its pipelines alive")
+    # the release is logged as the verdict turns the cull off, before the
+    # self-test's own line
+    set(_zrel "rd: VU zero-area cull: its module and pipeline released.*")
+    set(_zgone ".*rd: VU zero-area cull: off, 1 modules of it made, 0 of its pipelines alive")
     set(_znone ".*rd: VU zero-area cull: off, 0 modules of it made, 0 of its pipelines alive")
     add_test(NAME rd_vuprepass_selftest_zero
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
@@ -107,12 +110,12 @@ if(ICO_RUN_TESTS AND DEFINED _vst AND TARGET rd_vuprepass_selftest_test)
     add_test(NAME rd_vuprepass_selftest_zero_lattice
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}"
-                     "-DEXTRA=rd: VU zero-area cull: off for the run \\(self-test: the GPU's answers differ from the CPU's in [1-9][0-9]* of [0-9]+ triangle slots: triangle slot [0-9]+: the GPU ${_zrel}"
+                     "-DEXTRA=${_zrel}rd: VU zero-area cull: off for the run \\(self-test: the GPU's answers differ from the CPU's in [1-9][0-9]* of [0-9]+ triangle slots: triangle slot [0-9]+: the GPU ${_zgone}"
                      "-DNOT_=rd: VU zero-area cull: on" -P "${_vst}")
     add_test(NAME rd_vuprepass_selftest_zero_missing
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}"
-                     "-DEXTRA=rd: VU zero-area cull: off for the run \\(self-test: no answer read back from the GPU\\)${_zrel}"
+                     "-DEXTRA=${_zrel}rd: VU zero-area cull: off for the run \\(self-test: no answer read back from the GPU\\)${_zgone}"
                      "-DNOT_=rd: VU zero-area cull: on" -P "${_vst}")
     add_test(NAME rd_vuprepass_selftest_zero_lossrow
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on

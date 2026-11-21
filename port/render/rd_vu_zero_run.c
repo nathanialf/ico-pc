@@ -351,7 +351,13 @@ uint32_t rd__vu_zero_variants_made(void)
 
 uint8_t rd__vu_zero_rule_vs(uint32_t word)
 {
-    return word != 0u ? (uint8_t)RD_VS_VU_TRI_RULE_ZERO : (uint8_t)RD_VS_VU_TRI_RULE_PRE;
+    /* with the cull on every entry takes the zero build (an entry without a
+       word skips the test: its slots are the build's without it), so the
+       pre-pass's batches are the ones it had: one rule stage key, the same
+       draws and dispatches; else the build without it */
+    (void)word;
+    return s_z.state == Z_ON && zeroReady() ? (uint8_t)RD_VS_VU_TRI_RULE_ZERO
+                                            : (uint8_t)RD_VS_VU_TRI_RULE_PRE;
 }
 
 uint32_t rd__vu_zero_entry_keep(uint32_t word, bool skinned, bool velocity, bool probe, int *why)

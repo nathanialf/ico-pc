@@ -498,8 +498,8 @@ static void t6(void)
           "a skinned entry kept its word");
     CHECK(rd__vu_zero_entry_keep(0x11100u, false, false, false, &kw) == 0x11100u,
           "a plain entry lost its word");
-    CHECK(rd__vu_zero_rule_vs(0u) != rd__vu_zero_rule_vs(0x11100u),
-          "the zero build's id is the rule stage's");
+    CHECK(rd__vu_zero_rule_vs(0u) == rd__vu_zero_rule_vs(0x11100u),
+          "one rule stage id for every entry (no device: the build without the cull)");
     char small[24];
     const size_t n = rd_vu_zero_text(small, sizeof(small), 1);
     CHECK(n == sizeof(small) - 1u && strlen(small) == sizeof(small) - 1u, "short buffer: %zu", n);

@@ -1573,7 +1573,10 @@ The test, exact by construction:
   `setViewport`) puts them on the GS's 1/16 grid at a whole-number scale: in sixteenths of a
   texel, `U = gx * sx + kx` and `V = gy * sy + ky` are multiples of 16 there. The CPU works the
   offsets out from the target, its scale, the Full pixel crop, the field's half line and the
-  viewport's power of two (`rd_vu_zero_word`); the zero build's draw gets them in `vu_tri.w`.
+  viewport's power of two (`rd_vu_zero_word`); the zero build's draw gets them in `vu_tri.w`. While
+  the cull is on every entry's rule stage takes the zero build (an entry without a word skips the
+  test), so the pre-pass's batches, draws and dispatches are the ones it had; the one pipeline more
+  is the draw pattern tables' only change (`mali`, `desktop`: `pipelines` + 1).
 - The test runs where every corner is drawn at its GS position: clip mode none without the wrap,
   the region rule's exact verdict, the scissor mode's code 1, the exact viewport, the GS grid
   (not `ICO_RD_VU_OFFGRID`), no jitter.
