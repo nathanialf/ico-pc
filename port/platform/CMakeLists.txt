@@ -406,7 +406,9 @@ add_executable(vu_zero_mark_test test/vu_zero_mark_test.c)
 target_compile_options(vu_zero_mark_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(vu_zero_mark_test PRIVATE ico_platform ico_host_fs ico_miniz)
 if(ICO_RUN_TESTS)
-    add_test(NAME vu_zero_mark COMMAND vu_zero_mark_test "${CMAKE_CURRENT_BINARY_DIR}")
+    # a folder of its own: last-run-previous.txt is written by both mark tests
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vu_zero_mark_test_files")
+    add_test(NAME vu_zero_mark COMMAND vu_zero_mark_test "${CMAKE_CURRENT_BINARY_DIR}/vu_zero_mark_test_files")
 endif()
 
 # The next picture submitted ahead, its mark on the install (ahead_mark.c,
@@ -421,7 +423,9 @@ add_executable(ahead_mark_test test/ahead_mark_test.c)
 target_compile_options(ahead_mark_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(ahead_mark_test PRIVATE ico_platform ico_host_fs)
 if(ICO_RUN_TESTS)
-    add_test(NAME ahead_mark COMMAND ahead_mark_test "${CMAKE_CURRENT_BINARY_DIR}")
+    # a folder of its own: last-run-previous.txt is written by both mark tests
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/ahead_mark_test_files")
+    add_test(NAME ahead_mark COMMAND ahead_mark_test "${CMAKE_CURRENT_BINARY_DIR}/ahead_mark_test_files")
 endif()
 
 # The skin check's counts in words (last_run_skin.c, issue 217): the
