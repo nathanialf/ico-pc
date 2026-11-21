@@ -146,6 +146,26 @@ if(ICO_RUN_TESTS)
     endforeach()
 endif()
 
+# stage_DispAnimation's row skip (ico2/seki/src/StageAnimation.c, compiled
+# into the test with the rest of the game stubbed) on the discs its main
+# body serves: the European build leaves row 66 out, the Japanese, Korean and
+# Chinese builds row 62, the North American disc no row (its row 66 is
+# deja_lightning.bga, the dream's room: issue 221).  CPU only.
+add_executable(stage_disp_test test/stage_disp_test.c)
+ico_include_dirs(seki _ico_stage_disp_incs)
+target_include_directories(stage_disp_test PRIVATE ${_ico_stage_disp_incs})
+if(NOT ICO_HEADLESS)
+    target_include_directories(stage_disp_test PRIVATE "${CMAKE_SOURCE_DIR}/port/render")
+endif()
+target_compile_definitions(stage_disp_test PRIVATE ${ICO_GAME_DEFINITIONS})
+target_compile_options(stage_disp_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS} -Wno-unused-parameter -Wno-unused-variable
+                       -Wno-unused-function)
+target_link_libraries(stage_disp_test PRIVATE ico_region)
+if(ICO_RUN_TESTS)
+    add_test(NAME stage_disp COMMAND stage_disp_test)
+endif()
+
 # Where each disc's ACTGetEnvironment reads the two-bit wall-reach field of a
 # motion record (ico2/fumi/src/act-env.c, a text scan + synthetic words): the
 # host holds it at bits 24-25 on every disc (config/motion_bits.*.txt), so

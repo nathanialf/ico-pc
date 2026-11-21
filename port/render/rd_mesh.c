@@ -3014,6 +3014,10 @@ void rd_draw_vu_grid(const RdVuGridDraw *d, RdKey key)
             gridCards((const float (*)[4])d->vu.mem, d->qw, p.qwPerVertex, d->stripLen, &cardBytes);
     }
     RdCmd *c = pushVu(RDC_GRID, key, &p, &d->vu, NULL, d->qw, NULL, cards, cardBytes);
+    if (c) {
+        /* a strip of stripLen vertices: stripLen - 2 triangles */
+        rd__ledger_unnamed_draw("(a grid)", d->strips * (d->stripLen - 2u));
+    }
     if (c && kind) {
         /* b[5]: the RdGridSt formula of the STs (rd.h rd_grid_screen_st),
          * f[0], f[1] its sx and sy; 0 in other grids and in older dumps */
@@ -3062,7 +3066,10 @@ void rd_draw_vu_particles(const RdVuParticleDraw *d, RdKey key)
     p.vertsPerBatch = count;
     p.qwPerVertex = RD_VU_QW_PARTICLE;
     p.streamQw = 6 + 2 * count;
-    pushVu(RDC_PARTICLES, key, &p, &d->vu, NULL, d->qw, NULL, NULL, 0);
+    if (pushVu(RDC_PARTICLES, key, &p, &d->vu, NULL, d->qw, NULL, NULL, 0)) {
+        /* a particle: one sprite, two triangles */
+        rd__ledger_unnamed_draw("(particles)", 2u * count);
+    }
 }
 
 /* ------------------------------------------------------------ pipelines

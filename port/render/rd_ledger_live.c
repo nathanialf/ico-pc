@@ -142,6 +142,11 @@ void rd__ledger_box(const char *model, int part, int rule, int views)
                         views > 1, 1);
 }
 
+void rd__ledger_unnamed_draw(const char *what, uint32_t tris)
+{
+    rd_ledger_note_draw(&s_cur.models, rd_ledger_slot(&s_cur.models, what), tickNow(), tris);
+}
+
 void rd__ledger_unnamed_out(const char *what, int reason)
 {
     rd_ledger_note_drop(&s_cur.models, rd_ledger_slot(&s_cur.models, what), reason, tickNow(), 0,

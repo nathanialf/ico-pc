@@ -1792,7 +1792,10 @@ void stage_DispAnimation(void)
         signed char lv;
         int k;
 
-        if (entry1->no == PAL_JPNKORCN(0x42, 62)) {
+        /* upstream's block leaves out the North American disc (and the
+           August 2001 build, a twin above): that disc draws every row,
+           and its row 66 is deja_lightning.bga, the dream's room */
+        if (!ICO_NTSCAUG6 && entry1->no == PAL_JPNKORCN(0x42, 62)) {
             continue;
         }
         if ((e->flags.i >> 30) != 0) {
