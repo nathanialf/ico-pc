@@ -888,6 +888,30 @@ since a run of <version> ended while it was tried or it was refused ...`, `... b
 this is <v>: tried again`, `... on when the watchdog ended it: counted as a lost start (the loss
 ladder)`, `... on (it ended: <end>)`. Nothing is written to the settings.
 
+The next picture submitted ahead has a mark of its own (`port/platform/ahead_mark.c`, read once a
+process as the render thread starts, before the submit thread): `logs/ahead-mark.txt` holds `on
+<version>` (written once a process on the submit thread as the order first takes effect, before
+that picture's first submit; flushed, not synced) or `blocked <version>`. With the previous run's
+end in `last-run-previous.txt` and Android's exit reason for that run (`exit_info_last_reason`:
+the record whose pid is `last-run.txt`'s), `on` of the running version after a device loss, a GPU
+hang, the watchdog or a crash, or with no end written and Android's reason a crash, a native crash
+or no response, writes `blocked <version>`: the order stays off on that install until the version
+changes. Any other end clears the mark: a clean close (`last-run.txt`'s `clean`) and every
+ordinary close (no end written: a swipe from the recent apps, Force stop, the system ending the
+app in the background or for memory, an update, whose Android reasons are none of those three),
+as does `on` of another version or a block of another version. A bad end with the order not in
+effect holds it off for the next start only, as before (the loss ladder, the watchdog's mark).
+One line where there was a mark: `ico_pc: the previous run: the next picture submitted ahead: in
+effect when it ended (a lost graphics device): off on this install until the version changes
+(blocked <version>)`, `... in effect when it ended (no end written; Android's exit reason 10: an
+ordinary end (closed, stopped or ended by the system)): not held off (the mark cleared)`, `...
+off on this install since a run of <version> ended badly with it in effect (blocked
+<version>)`, `... in effect in a run of <v> when it ended (<end>); this is <v>: tried again (the
+mark cleared)`, `... blocked on <v>, this is <v>: tried again (the mark cleared)`; and at the
+write `ico_pc: the next picture submitted ahead: in effect on this install from here
+(<logs>/ahead-mark.txt: on <version>; a device loss, GPU hang, watchdog end or crash of this run
+keeps it off until the version changes)`.
+
 On Android 11 and later each phase change also keeps at most 128 bytes (`ico-pc <phase> | resets
 47->66 | free 1911 MB, lowest 1897`; where the skin check runs, `| skin box <b> twin <t> made <p>`
 before the free figure, and a heartbeat that sees those three change keeps a new one, since a run
@@ -1513,10 +1537,23 @@ lines added beside them for issues 179 and 123:
   return or within 1.0 ms of it (the waiter's wait for it, made anyway as that picture is held
   next), and the call lasting at least half of that work's GPU time; a call that is only slow
   while that work runs on is not counted, nor one that began after that work ended or is too
-  brief for it; a failed read or wait counts), a wait that failed, a submit that
-  moved no submission number, a lost device; a start after one that lost the device or hung its
-  driver (the loss ladder, `ICO_LOSS_ROW`) or that the watchdog ended keeps one at a time. With
-  the verdict undecided or off nothing of it runs (no waiter, no call made in another order). The
+  brief for it; a failed read or wait counts), a wait that failed, a job whose submits moved the
+  submission number by fewer than its submits, a lost device; off so, it stays off for the
+  process, a restart of the submit thread by a Graphics API switch included (`; turned off earlier
+  in this run, before the graphics started again: <reason>; it stays off until the game is started
+  again` in the start line). A start after one that lost the device or hung its driver (the loss
+  ladder, `ICO_LOSS_ROW`) or that the watchdog ended keeps one at a time; so does every start of
+  the version after a run of it that ended so, or crashed, with the order in effect (the install's
+  mark, [the last-run file](#the-last-run-file): `(the install's mark, ahead-mark.txt: blocked
+  <version>: a run of <version> ended badly with it in effect, so it stays off until the version
+  changes)` in the start line). With the verdict undecided or off nothing of it runs (no
+  waiter, no call made in another order); a job the order does not take (the verdict undecided
+  again at a present mode change) puts it out of effect for the gate at once. A job submitted
+  behind the picture before has its present time, the record's "present", counted from that
+  picture's GPU end as the waiter saw it (`rd__sq_present_from`), not from its own submit: one GPU
+  stall shows as one long present in its own picture's record, as with one picture at a time, and
+  not again in the next one's (the presents blocked over 50 ms, the stalled-replay lines, the FIFO
+  fallback's count of long presents). The
   lines: at each start where the GPU's end first is wanted `rd: submit thread: with the verdict
   on, the next picture is submitted ahead (its lists submitted as soon as it is handed over,
   beside the picture before's wait for its GPU work, which a thread of its own makes; the GPU
@@ -1565,10 +1602,11 @@ of it with its presented pictures, under the stage the game was in at the second
 
 `window: pictures a second: 42: 17 18 9 19 | 40: 12 11 12 (and 4 in the block's last 0.6 s)`
 
-A stage change in a block ends the block once it is 2 s old (`hotkeys.c`
-`ico_stats_period_cut_ns`, `ICO_STATS_CUT_NS`), so every 10 s line after it is of one stage. The
-block's presented fps and its worst second alone could not say whether 17.4 fps was 17 a second
-throughout or 25 with a hitch. A second with no step keeps the stage before it (`?` before any
+The blocks stay 10 s at a stage change (`hotkeys.c` `ico_stats_period_ns`): a block that holds
+one shows it here, each second under its own stage, and every rule that counts or times blocks
+(the pass timing's disarm after quiet blocks, the CPU pin's release history, the slow-scene
+capture's judgement) keeps its time. The block's presented fps and its worst second alone could
+not say whether 17.4 fps was 17 a second throughout or 25 with a hitch. A second with no step keeps the stage before it (`?` before any
 step); seconds past the 64 a block holds are counted at the end (`; 6 seconds past the 64 held, 6
 pictures in them`). Its cost: a step compares the stage, a picture adds one to its second (game
 thread, no lock).
@@ -1591,13 +1629,13 @@ thread, no lock).
 - The upload ring's grow line names the ring it replaces: `rd: the upload ring of frame slot 1
   grows to 64 MB (this frame needs 32 MB; the 32 MB ring it replaces was made 41.2 s before, last
   used 0.08 s before for 31 MB)`.
-- The performance hints' refusal says the rate the system gave and, where it gave one, the second
-  call for the game thread alone (`perf_hint.c` `perf_hint_refused_text`): `window: performance
-  hints: off (the system refused the session: APerformanceHint_createSession answered none for 3
-  threads in 0.67 ms and for the game thread alone in 0.41 ms; the system's update rate 16.67 ms;
-  API 34; game mode standard); the port runs as before`. Made for the game thread alone, the
-  start line ends `; the game thread alone: the system refused 3 threads in 0.67 ms)` and the
-  session keeps that one thread. The second call is made once a run, at the first session only.
+- The performance hints' refusal says the rate the system gave (`perf_hint.c`
+  `perf_hint_refused_text`): `window: performance hints: off (the system refused the session:
+  APerformanceHint_createSession answered none for 3 threads in 0.67 ms; the system's update rate
+  16.67 ms; API 34; game mode standard); the port runs as before` (`the system gives no update
+  rate` without one). No other session is asked for after a refusal: a session of other threads
+  would be a scheduling state of its own with no way back; the rate in the next log says whether
+  the system has hint sessions at all.
 
 ### The issue ledger, continued
 

@@ -1453,7 +1453,7 @@ bool rd_dump_retained_frame(uint32_t number, const char *path, uint32_t *dumped)
  * (rd__loss_keep_recycle, the game thread, before the slot is reset), as an
  * ordinary dump in dumpFrame's reads-only mode (the GPU's stalled work not
  * waited for), and freed again once the GPU has moved two frames past it.
- * A frame no picture of which was handed to a replay (RdFrame.sent: with
+ * A frame no picture of which was handed to a replay (rd__frame_sent: with
  * Frame rate Original, a picture the gate left out) is never copied: it
  * was never on the GPU (counted, "not copied: never handed to the GPU").
  *
@@ -1626,7 +1626,7 @@ void rd__loss_keep_recycle(const RdFrame *f)
             have = have || (s_keep.buf[i] && s_keep.frame[i] == f->number);
         }
         if (f && f->closed && f->number != 0 && !have) {
-            const bool sent = __atomic_load_n(&f->sent, __ATOMIC_RELAXED) != 0;
+            const bool sent = rd__frame_sent(f);
 
             switch (rd_loss_keep_decide(&s_keep.throttle, s_keep.seen, f->number, sent, p.openFrame,
                                         p.waitingFor, p.waitingNs)) {

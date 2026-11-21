@@ -589,10 +589,16 @@ void exit_info_record_line(const ExitInfoRecord *r, int lmk, char *out, size_t s
 /* --- The start's part ------------------------------------------------------------- */
 
 static char s_verdict[EXIT_INFO_VERDICT_MAX];
+static int s_lastReason = -1;
 
 const char *exit_info_last_verdict(void)
 {
     return s_verdict;
+}
+
+int exit_info_last_reason(void)
+{
+    return s_lastReason;
 }
 
 #ifndef __ANDROID__
@@ -683,6 +689,7 @@ void exit_info_begin(const char *logsDir, const char *activityPath)
     FILE *f;
 
     s_verdict[0] = '\0';
+    s_lastReason = -1;
     if (logsDir == NULL || activityPath == NULL ||
         join(path, sizeof path, logsDir, "exit-info-seen.txt") != 0) {
         return;
@@ -712,6 +719,10 @@ void exit_info_begin(const char *logsDir, const char *activityPath)
                                      s_verdict, sizeof s_verdict);
     }
     ico_diag_log("ico_pc: %s", s_verdict);
+    if (haveLast && last.found && list.system == EXIT_INFO_SYSTEM_READ) {
+        const int m = exit_info_find_pid(&list, last.pid);
+        s_lastReason = m >= 0 ? list.rec[m].reason : -1;
+    }
     /* the newest trace copied this start, else the one kept before */
     for (int i = 0; i < list.n; i++) {
         if (exit_info_trace_name_ok(list.rec[i].trace)) {

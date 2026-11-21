@@ -3,8 +3,8 @@
  *
  * Pictures a second by stage (perf_secs.h): a 10 s block at 25 pictures a
  * second with a 0.4 s hitch (its second reads 15), a stage change inside a
- * second (the second keeps the stage of its first step) and the block's
- * cut asked from then until the line is taken, the part second at the end,
+ * second (the second keeps the stage of its first step) and the next
+ * block's start in the stage then, the part second at the end,
  * pictures before any step ("?"), a quiet end (zeros to the end), seconds
  * past the 64 held counted apart, no second begun (no line) and a short
  * buffer cut, the lines word for word.
@@ -52,27 +52,24 @@ int main(void)
     /* nothing begun: no line, and the next block starts there */
     perf_secs_reset(&s);
     CHECK(perf_secs_block_text(&s, 500.0, b, sizeof(b)) == 0 && b[0] == '\0');
-    CHECK(s.t0Ms == 500.0 && !perf_secs_cut_due(&s));
+    CHECK(s.t0Ms == 500.0);
 
     /* 25 a second, a hitch of 0.4 s in the fourth second */
     perf_secs_reset(&s);
     play(&s, 42, 0, 10000, 3000, 3400);
-    CHECK(!perf_secs_cut_due(&s));
     CHECK(perf_secs_block_text(&s, 10000.0, b, sizeof(b)) == strlen(b));
     CHECK(text_is(b, "pictures a second: 42: 25 25 25 15 25 25 25 25 25 25"));
 
     /* a stage change at 4.5 s: the fifth second keeps 42 (its first step);
-       the cut asked; the part second's pictures */
+       the part second's pictures */
     perf_secs_reset(&s);
     play(&s, 42, 0, 4500, -1, -1);
-    CHECK(!perf_secs_cut_due(&s));
     play(&s, 40, 4500, 6500, -1, -1);
-    CHECK(perf_secs_cut_due(&s));
     (void)perf_secs_block_text(&s, 6500.0, b, sizeof(b));
     CHECK(text_is(b, "pictures a second: 42: 25 25 25 25 25 | 40: 25 (and 13 in the block's last "
                      "0.5 s)"));
-    /* the next block: from 6.5 s in the stage now, no cut asked */
-    CHECK(!perf_secs_cut_due(&s) && s.stage == 40 && s.t0Ms == 6500.0);
+    /* the next block: from 6.5 s in the stage now */
+    CHECK(s.stage == 40 && s.t0Ms == 6500.0);
     play(&s, 40, 6500, 8500, 7500, 8500);
     (void)perf_secs_block_text(&s, 8500.0, b, sizeof(b));
     CHECK(text_is(b, "pictures a second: 40: 25 0"));

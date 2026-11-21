@@ -370,13 +370,18 @@ typedef struct RdFrame {
     /* not dumped: the game paused when the frame closed (rd_end_frame,
      * rd_set_paused_source; the paused scene's hold, rd_hold.h) */
     uint32_t paused;
-    /* not dumped: a picture of this frame's number was handed to a replay
-     * (rd_thread.c noteSent; __atomic, 0 at rd__frame_reset): the loss
-     * keep copies only such a frame (rd_loss_pick.h rd_loss_keep_needed) */
-    uint32_t sent;
 } RdFrame;
 
 void rd__frame_reset(RdFrame *f);
+/* A picture of the ring frame f's number was handed to a replay (rd_thread.c
+ * noteSent): the loss keep copies only such a frame (rd_loss_pick.h
+ * rd_loss_keep_needed).  Kept beside the ring, one atomic word a slot, not
+ * in RdFrame: frames are copied whole by value (rd_interp.c, rd_hold.c, the
+ * replay's own copies) on the render thread while the game thread marks a
+ * frame, and a field in them would be read by those copies beside that
+ * store.  false for a frame outside the ring; _clear at rd__frame_reset */
+bool rd__frame_sent(const RdFrame *f);
+void rd__frame_sent_clear(const RdFrame *f);
 void rd__frame_free(RdFrame *f);
 /* Appends size bytes (8-aligned) to the payload; returns the offset. */
 uint32_t rd__frame_payload(RdFrame *f, const void *data, uint32_t size);

@@ -10,12 +10,11 @@
  * keeps the stage before it).  The reporter's v0.11.13 log had the block's
  * presented fps and its worst second only: a block of 17.4 fps could not
  * say whether it was 17 a second throughout or 25 with a hitch, and its
- * blocks straddled the stage changes of the opening.
- *
- * The block's cut: a stage change in the block ends it once it is at
- * least ICO_STATS_CUT_NS (2 s) old (hotkeys.h ico_stats_period_ns asks
- * perf_secs_window_cut_due), so a block holds one stage after its first
- * 2 s.
+ * blocks straddled the stage changes of the opening.  The blocks stay
+ * 10 s whatever the stage does (hotkeys.h ico_stats_period_ns): every
+ * per-block rule (the pass timing's disarm, the CPU pin's release history,
+ * the slow-scene capture's judgement) keeps its time; a block that holds a
+ * stage change shows it in this line, each second under its own stage.
  *
  * The cost: a step compares the stage and maybe sets a second's stage, a
  * presented picture adds one to its second (a division and an add, on the
@@ -40,7 +39,6 @@
 typedef struct PerfSecs {
     double t0Ms;    /* the block's start (below 0: none yet) */
     int stage;      /* the stage now (PERF_SECS_NO_STAGE: none seen yet) */
-    bool changed;   /* the stage changed in the block */
     unsigned n;     /* seconds begun (at most PERF_SECS_MAX held) */
     unsigned over;  /* pictures in seconds past PERF_SECS_MAX */
     unsigned overS; /* those seconds */
@@ -56,8 +54,6 @@ void perf_secs_reset(PerfSecs *s);
 void perf_secs_step(PerfSecs *s, int stage, double nowMs);
 /* A presented picture, drained at nowMs */
 void perf_secs_picture(PerfSecs *s, double nowMs);
-/* Whether the block holds a stage change (the block's cut) */
-bool perf_secs_cut_due(const PerfSecs *s);
 /* The block's line (after "window: ") at nowMs, its whole seconds by
    stage and the pictures of the part second at the end; "" (0) with no
    second begun.  The next block starts at nowMs in the stage now.  The
@@ -67,7 +63,6 @@ size_t perf_secs_block_text(PerfSecs *s, double nowMs, char *out, size_t cap);
 /* The window's instance (the game thread's) */
 void perf_secs_window_step(int stage, double nowMs);
 void perf_secs_window_picture(double nowMs);
-bool perf_secs_window_cut_due(void);
 size_t perf_secs_window_block_text(double nowMs, char *out, size_t cap);
 
 #endif

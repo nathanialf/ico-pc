@@ -359,13 +359,50 @@ int main(void)
                          "under 30.0 ms, 0.9 of the 33.3 ms step at 30.0 game fps; a hint: "
                          "nothing changes by itself)"));
         /* the longest of the texts fits the window's buffer (window_host.c
-           hint[512]; v0.11.13's 400 cut this one's end) with the scale and
-           times at their widest in play */
+           hint[512], WINDOW_SCENE_HINT_TEXT; v0.11.13's 400 cut the
+           fractional scale's end): every variant swept with its figures at
+           their widest (the GPU's time at and past its clamp, the game's
+           rate from its clamp down to a step of 9999 ms, the scales whose
+           %.4g is widest, a flat fit and a line with vertex work, an R^2
+           under the floor); the longest found under the buffer, and a time
+           past the clamp printed as the clamp */
         {
+            static const double gpus[] = {9999.9, 1e9, 8888.8, 999.9, 99.9};
+            static const double fpss[] = {999.9, 99.9, 60.0, 30.0, 25.0, 0.11};
+            static const double scales[] = {1.0,   0.000123, 1.234e-05, 1.5,  2.5,       6.0,
+                                            7.333, 11.67,    12.35,     16.0, 1.234e+100};
+            size_t longest = 0;
+            for (size_t g = 0; g < sizeof gpus / sizeof gpus[0]; g++) {
+                for (size_t q = 0; q < sizeof fpss / sizeof fpss[0]; q++) {
+                    for (size_t c = 0; c < sizeof scales / sizeof scales[0]; c++) {
+                        for (int kind = 0; kind < 4; kind++) {
+                            SceneVuFit w;
+                            char m[2048];
+                            memset(&w, 0, sizeof(w));
+                            for (int i = 0; i < 3; i++) {
+                                /* flat; a line with vertex work; a line
+                                   under the R^2 floor; no fit */
+                                const double y = kind == 0   ? gpus[g]
+                                                 : kind == 1 ? gpus[g] * (0.5 + 0.25 * i)
+                                                             : gpus[g] * (i == 1 ? 1.5 : 0.75);
+                                window_scene_vu_fit_add(&w, inv[i], y);
+                            }
+                            const size_t n = window_scene_gpu_hint_text(
+                                m, sizeof(m), 0.0, fpss[q], 0xFFFFFFFFu, gpus[g], scales[c],
+                                kind == 3 ? NULL : &w);
+                            CHECK(n == strlen(m));
+                            longest = n > longest ? n : longest;
+                        }
+                    }
+                }
+            }
+            CHECK(longest > 400u && longest < WINDOW_SCENE_HINT_TEXT);
+            printf("window_scene_test: the GPU hint's longest text %zu bytes (under %d)\n", longest,
+                   WINDOW_SCENE_HINT_TEXT);
             char m[1024];
-            const size_t n =
-                window_scene_gpu_hint_text(m, sizeof(m), 9.9, 30.0, 999, 99.9, 12.5, &flat50);
-            CHECK(n > 400u && n < 512u);
+            (void)window_scene_gpu_hint_text(m, sizeof(m), 0.0, 25.0, 9, 1e9, 3.0, NULL);
+            CHECK(strstr(m, "(the GPU takes 9999.9 ms a picture,") != NULL);
+            CHECK(window_scene_gpu_hint_text(m, sizeof(m), 0.0, 1000.0, 9, 50.0, 3.0, NULL) == 0);
         }
         /* the largest step that fits (4x of 6x at 25 game fps), 5x not offered */
         window_scene_gpu_hint_text(b, sizeof(b), 20.0, 25.0, 9, 50.0, 6.0, &flat50);

@@ -10,13 +10,16 @@
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include "ahead_mark.h" /* the next picture submitted ahead: the install's mark */
 #include "attempt_ledger.h"
 #include "config.h"
 #include "core_share.h"
 #include "cpu_keep.h"
 #include "cpu_place.h"
 #include "diag_host.h"
-#include "ico_thread.h" /* ico_thread_now_ms */
+#include "exit_info.h"   /* exit_info_last_reason */
+#include "host_config.h" /* ico_host_logs_dir */
+#include "ico_thread.h"  /* ico_thread_now_ms */
 #include "pace_policy.h"
 #include "rd.h"
 #include "rd_submit_thread.h"
@@ -1569,6 +1572,13 @@ static int rt_heartbeat(unsigned long long *seq, unsigned long long *done)
     return 1;
 }
 
+/* ahead_mark.h's lines (at the start, and on the submit thread as the
+   order first takes effect) */
+static void rt_mark_log(const char *line)
+{
+    ico_diag_log("ico_pc: %s", line);
+}
+
 FmMode ico_render_thread_start(void)
 {
     static const RhiCallGuard guard = {NULL, rt_busy, rt_wait, rt_stale};
@@ -1650,11 +1660,24 @@ FmMode ico_render_thread_start(void)
         s_rt.mode = mode;
         rhi_set_call_guard(&guard);
         host.sync = mode == FM_MODE_SYNC; /* every picture waited: none counted as handed over */
-        /* the previous run's watchdog end holds the next picture's submit
-           ahead off for this start (rd_submit_thread.h "ahead"; a device
-           loss or a hung driver comes through the loss ladder) */
-        rd_thread_submit_ahead_prev(
-            ico_diag_startup_prev_watchdog() ? "the previous run was ended by the watchdog" : NULL);
+        /* the next picture's submit ahead (rd_submit_thread.h "ahead"):
+           off on this install until the version changes after a run of it
+           that ended badly with the order in effect (ahead_mark.h, decided
+           once a process); else the previous run's watchdog end holds it
+           off for this start (a device loss or a hung driver comes through
+           the loss ladder) */
+        {
+            char logs[ICO_PATH_MAX];
+            const char *blocked = ico_host_logs_dir(logs, sizeof(logs)) == 0
+                                      ? ahead_mark_begin(logs, ico_diag_version(),
+                                                         exit_info_last_reason(), rt_mark_log)
+                                      : NULL;
+            rd_thread_submit_ahead_prev(blocked != NULL ? blocked
+                                        : ico_diag_startup_prev_watchdog()
+                                            ? "the previous run was ended by the watchdog"
+                                            : NULL);
+            rd_thread_submit_ahead_mark_fn(ahead_mark_in_effect);
+        }
         rd_set_thread_host(&host);
         ico_diag_set_render_heartbeat(rt_heartbeat);
     }
