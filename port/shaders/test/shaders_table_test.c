@@ -228,6 +228,18 @@ static const char *const expectedBaked[] = {"font_sheet_baked_ps"};
 /* the velocity pass (vu_velocity.hlsl; rd_velocity.c makes them only while
  * the temporal upscaler's switch is on): the draw again from the record,
  * with its motion, and the motion in pixels into VELOCITY */
+/* the zero-area cull's rule-stage builds (rd_vu_zero_run.c makes them only
+   once the cull is tried): four vertex builds and two compute ones */
+static const char *const expectedZero[] = {
+    "vu_tri_rule_zero_pre_vs",
+    "vu_tri_rule_zero_batch_pre_vs",
+    "vu_tri_rule_zero_store_pre_vs",
+    "vu_tri_rule_zero_batch_store_pre_vs",
+};
+static const char *const expectedZeroCompute[] = {
+    "vu_tri_rule_zero_compute_pre_cs",
+    "vu_tri_rule_zero_batch_compute_pre_cs",
+};
 static const char *const expectedVelocity[] = {"vu_velocity_main_vs", "velocity_ps"};
 
 /* the anti-aliasing's (rd_present.c, rd_replay.c's MSAA epoch) */
@@ -682,9 +694,20 @@ int main(void)
         }
     }
     /* the record's compute builds: two for each batch build's entry (checked
-       by name above), and the index compaction's keep stage: the only
-       compute-stage entries of the table */
-    const size_t nCompute = 2 * nBatch + 1;
+       by name above), the index compaction's keep stage and the zero-area
+       cull's two: the only compute-stage entries of the table */
+    const size_t nZero = sizeof(expectedZero) / sizeof(expectedZero[0]);
+    const size_t nZeroCompute = sizeof(expectedZeroCompute) / sizeof(expectedZeroCompute[0]);
+    for (size_t i = 0; i < nZero + nZeroCompute; i++) {
+        const char *name = i < nZero ? expectedZero[i] : expectedZeroCompute[i - nZero];
+        const IcoShaderBlob *z = ico_find_shader(name);
+        const int want = i < nZero ? ICO_SHADER_STAGE_VERTEX : ICO_SHADER_STAGE_COMPUTE;
+        if (!z || (int)z->stage != want) {
+            printf("FAIL %s: not in the table or not its stage\n", name);
+            failures++;
+        }
+    }
+    const size_t nCompute = 2 * nBatch + 1 + nZeroCompute;
     if (computeCount != nCompute) {
         printf("FAIL %u compute-stage entries, expected %zu\n", computeCount, nCompute);
         failures++;
@@ -699,7 +722,7 @@ int main(void)
     const size_t nAll = sizeof(expected) / sizeof(expected[0]) + nAa + nNoDual + nVariants + nDst +
                         nUint + nTiler + nDiet + nPlanes + nPlain + nPrepass + nBatch + nMerge +
                         nSmooth + nCrack + nShadowLoad + nAuraBox + nBaked + nTone + nFsr1 +
-                        nVelocity + nStore + nCompute + nPresentScene + nShadowTile +
+                        nVelocity + nStore + nCompute + nZero + nPresentScene + nShadowTile +
                         sizeof(expectedShadowFine) / sizeof(expectedShadowFine[0]);
     if (g_icoShaderCount != nAll) {
         printf("FAIL table has %u entries, expected %zu\n", g_icoShaderCount, nAll);
