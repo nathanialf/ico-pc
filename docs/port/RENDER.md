@@ -174,7 +174,8 @@ submitted that waited for that picture's GPU work (2.0 ms or more, begun with th
 found ended by its return or within 1.0 ms, lasting half its GPU time or more; a merely slow call
 is not counted), 4 times in the last 16, a failed wait or submit, or a lost device puts
 the run back on one picture at a time; a start after a lost device, a hung driver or a watchdog
-end keeps one at a time ([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#issue-179s-judging-lines)). The lines: `rd: submit thread: the frame slots apart (...)` or `the frame slots one at
+end keeps one at a time, and so does every start of the version after a run of it that ended so,
+or crashed, with the order in effect (`logs/ahead-mark.txt`) ([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#issue-179s-judging-lines)). The lines: `rd: submit thread: the frame slots apart (...)` or `the frame slots one at
 a time (<why>: ...)` at the start, `rd: submit thread: the render thread's picture waited X ms for
 frame slot S's picture two before to be submitted and presented (N such waits so far)` (first 8,
 then every 100th), and the end's line counts the pictures begun while the one before was still

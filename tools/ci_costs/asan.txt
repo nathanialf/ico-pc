@@ -12,6 +12,7 @@ achievements_ntsc 0.23
 adpcm 0.01
 adpcm_slots 0.02
 adpcm_stream 12.97
+ahead_mark 0.10  # estimate: 0.0 s local (merge-wt_REVA-20261121T160834Z.rest.log) x 2.51
 android_paths 0.01
 android_syms_layout 0.30  # estimate: 0.1 s local (STATENAME), Python over three small reports
 android_syms_layout_rows 0.30  # estimate: 0.1 s local (WINLAYOUT), Python over the recorded rows and five small maps
@@ -279,6 +280,7 @@ pad_mirror 0.01
 pad_script 0.02
 perf_block 0.01
 perf_hint 0.02
+perf_secs 0.00  # estimate: 0.0 s local (merge-wt_REVA-20261121T160834Z.rest.log) x 2.51
 photo 0.10
 pin_release 0.03
 pipe_resume 0.01
@@ -291,6 +293,7 @@ pit_dive_base_jun26 0.02
 pit_dive_base_kor 0.02
 pit_dive_base_ntsc 0.02
 poly_flat 0.01
+rd_diag_notes 0.00  # estimate: 0.0 s local (merge-wt_DIAG6-20261121T075234Z.lvp.log) x 2.09
 stage_disp 0.01  # estimate: a CPU-only walk of two rows on five discs (GRID221)
 present_fallback 0.01
 present_hist 0.01

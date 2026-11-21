@@ -102,7 +102,7 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   the end kind from last-run.txt's end (our own first, `clean, after: <end>` as that end) and
   Android's exit record (every reason; SIGKILL apart from other signals); the stage table, every
   stage against every end, printed (`trying` blocks all but a clean close, `counting` and `on` only
-  a crash, an ANR, a signal, a device loss, a GPU hang or the watchdog, `failed` and `blocked`
+  a crash, an ANR, a signal other than SIGKILL, a device loss, a GPU hang or the watchdog, `failed` and `blocked`
   always); the marks with versions (a block for the version in the mark, never the next; a mark
   without one the running version's; a text not known taken as `trying`). Then the start's step on
   files in the build folder: closed from the recent apps list while counting: not blocked, the

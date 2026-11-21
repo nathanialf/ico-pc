@@ -1538,8 +1538,8 @@ strips, so the saving is about a sixth, not two thirds. Counted in the 10 s VU l
 (`; shared vertices: T triangles, S vertex invocations saved (P % of the draws')`, `rd_vu_share_text`,
 then `; shared vertices kept (triangles a picture): form a, chain b, marks c, other d, entry e,
 region f, no verdict g`: the mesh draws' triangles kept on the original list by reason, `region`
-a rule mode other than none and `no verdict` a draw the pre-pass did not record, both left
-uncounted before; which draws share is unchanged)
+a rule mode other than none and `no verdict` a draw the pre-pass did not record, with `off o,`
+first where the tests' switch below keeps every original list)
 and in `rd_replay_tool --stats` (`stats: VU shared vertices on: ...`, with the draws kept on the
 original list by reason, `rule mode not none` and `not recorded` among them). The tests' switch `ICO_RD_VU_SHARE=0` keeps every original list
 ([TESTING.md](TESTING.md#environment-switches)). `rd_vu_share_ab` and `rd_vu_share_gl` hold every
@@ -1554,8 +1554,8 @@ depth, no stencil. The rule stage's zero builds (`port/shaders/vu_tri.hlsl` with
 `vu_tri_rule_zero_pre_vs` and its batch, store and compute builds, the vertex shader id
 `RD_VS_VU_TRI_RULE_ZERO`) mark such a triangle `VU_TF_HIDDEN | VU_TF_ZERO` in its slot A, and every
 reader of the slot culls it as a hidden triangle (`vu_tri_verdict`: the early return of [The drop
-verdict first](#the-drop-verdict-first), the index compaction's filler). No index or vertex
-feeding changes. `port/render/rd_vu_zero.c`, `rd_vu_zero_run.c` and `rd_vu_zero_selftest.c` hold
+verdict first](#the-drop-verdict-first), the index compaction's filler). No vertex feeding
+changes; a culling entry's draws take the mesh's original index list (below). `port/render/rd_vu_zero.c`, `rd_vu_zero_run.c` and `rd_vu_zero_selftest.c` hold
 the CPU's side (`rd_vu_zero.h` says it all), `port/platform/vu_zero_mark.c` the install's mark.
 
 Nothing of it reaches a device that does not try it:
@@ -1594,13 +1594,14 @@ multisampled), not a skinned entry (the skin check's twins), not one the velocit
 a probe; and only where the mapping is proven (a whole-number scale from 1 to 15, no jitter, the
 GS grid). Its draws keep the mesh's original list: a value of the shared vertices' list is drawn
 for other triangles too (counted, `shared lists given up`). A draw of a marked entry in a
-multisampled pass all the same turns the cull off for the run.
+multisampled pass all the same turns the cull off for the run and writes "failed".
 
 The ways back, each logged, none written to the settings:
 - The install's mark (`logs/vu-zero-mark.txt`, `port/platform/vu_zero_mark.h`), each word with
   the version that was running: "trying" is written and synced before the zero build is made,
   "counting" when the self-test passed, "on" after 250 pictures drawn with the cull, "failed" when
-  the zero build could not be made or the self-test refused it. A refusal by the settings (no
+  the zero build could not be made, the self-test refused it or a culling draw met a multisampled
+  pass. A refusal by the settings (no
   lattice for SCENE: MSAA, a scale that is not a whole number, jitter, the vertices off the grid)
   comes first and writes nothing: the cull is not tried in that run and a later run whose settings
   allow it tries. The next start classes the previous run's end from its `last-run-previous.txt`
@@ -1608,8 +1609,8 @@ The ways back, each logged, none written to the settings:
   where it wrote none, Android's exit record for that run. With "trying" every end but a clean close
   keeps the cull off; with "counting" or "on" only a crash (ours, or Android's `REASON_CRASH` /
   `REASON_CRASH_NATIVE`), an ANR, a signal other than SIGKILL, a device loss, a GPU hang or the
-  watchdog does; a close from the recent apps list, Force stop, a kill by the system, an update, a
-  clean close or no evidence at all (no exit record: Android before 11, a desktop `kill -9`) do not,
+  watchdog does; a close from the recent apps list, Force stop, a kill by the system, an update, the
+  app ending itself, a clean close or no evidence at all (no exit record: Android before 11, a desktop `kill -9`) do not,
   and the cull runs its self-test again; "failed" keeps it off. Off means `blocked <the version in
   the mark>`, handed to the renderer as `ICO_VU_ZERO_BLOCK` while that version runs: an update
   tries again. One line each start that had a mark: `ico_pc: the previous run: zero-area cull:
