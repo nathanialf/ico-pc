@@ -31,7 +31,11 @@
  * are the same byte for byte (the device's own rasteriser covered no
  * sample of a culled triangle).  Anything else (a difference, an answer not
  * read back, a pipeline missing, a device error) leaves it off for the
- * run.
+ * run and writes "failed" to the install's mark.  Before any of it, SCENE's
+ * lattice word from the settings (rd__vu_zero_target_word) and the frame:
+ * no word (MSAA, a scale that is not a whole number, jitter, the vertices
+ * off the grid) or no frame is "not tried in this run": no mark written,
+ * no module made, a later run tries again.
  *
  *   rd: VU zero-area cull: on (self-test: 26 of 92 triangle slots culled as
  *     the CPU answers, code 34 and code 32, pictures byte for byte; lattice
@@ -41,7 +45,8 @@
  * ICO_RD_VU_ZERO_SABOTAGE (tests, rd_vu_zero_run.c): lattice, the GPU
  * given a lattice half a texel off (its flags then differ from the CPU's);
  * check, the run-time check's answers from no lattice (the self-test is not
- * affected); missing, no record copied. */
+ * affected); missing, no record copied; picture, the picture without the
+ * cull changed in one byte before the compare. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -270,88 +275,103 @@ void rd__vu_zero_selftest(RdTargetRec *t)
     }
     const double t0 = rd__now_ms();
     char why[256] = "";
-    /* the cull tried from here: the mark, then its one module
-       (rd__vu_zero_try_begin); SCENE's word as the replay's pre-pass will
-       give it */
-    rd__vu_zero_hold(true);
-    const bool made = rd__vu_zero_try_begin();
+    /* SCENE's word as the replay's pre-pass will give it, before anything
+       is tried: a refusal by the settings (MSAA, a scale that is not a
+       whole number, jitter, ...) is "not tried in this run": no mark
+       written, no module made; a later run whose settings allow it tries */
     RdStateBlock st;
     rd__reset_state_block(&st);
     st.color = rd_target(RD_TARGET_SCENE).id;
     st.gsW = t->w;
     st.gsH = t->h;
     int wordWhy = -1;
-    const uint32_t word = rd__vu_zero_entry_word(&st, &wordWhy);
+    const uint32_t word = rd__vu_zero_target_word(&st, &wordWhy);
+    if (word == 0u) {
+        snprintf(why, sizeof(why),
+                 "these settings give SCENE no lattice (%s): nothing written, tried in a later "
+                 "run whose settings allow it",
+                 rd_vu_zero_reason_name(wordWhy));
+        rd__vu_zero_selftest_skip(why);
+        return;
+    }
     int32_t g[ZT_VERTS][2];
+    corners(t, word, g);
+    const uint32_t want = 2u * cpuCulled(g, word);
     RdFrame f;
     memset(&f, 0, sizeof(f));
-    RdMesh mesh = {0};
+    const RdMesh mesh = makeMesh(g);
     const size_t size = (size_t)t->tw * t->th * 4u;
-    uint8_t *a = NULL, *b = NULL;
+    uint8_t *a = malloc(size), *b = malloc(size);
+    if (!mesh.id || !a || !b || !buildFrame(&f, st.color, t->w, t->h, mesh)) {
+        /* nothing of the cull tried yet: not the device's verdict */
+        rd__frame_free(&f);
+        if (mesh.id) {
+            rd_destroy_vu_mesh(mesh);
+        }
+        free(a);
+        free(b);
+        rd__vu_zero_selftest_skip("could not build its frame");
+        return;
+    }
+    /* the cull tried from here: the mark, then its one module
+       (rd__vu_zero_try_begin) */
+    rd__vu_zero_hold(true);
+    const bool made = rd__vu_zero_try_begin();
     RdVuZeroCheck took;
     memset(&took, 0, sizeof(took));
-    uint32_t want = 0;
     bool pass = false;
     if (!made) {
         snprintf(why, sizeof(why), "its rule stage's zero build could not be made");
-    } else if (word == 0u) {
-        snprintf(why, sizeof(why), "SCENE gives no lattice (%s)", rd_vu_zero_reason_name(wordWhy));
     } else {
-        corners(t, word, g);
-        want = 2u * cpuCulled(g, word);
-        mesh = makeMesh(g);
-        a = malloc(size);
-        b = malloc(size);
-        if (!mesh.id || !a || !b || !buildFrame(&f, st.color, t->w, t->h, mesh)) {
-            snprintf(why, sizeof(why), "could not build its frame");
+        const bool wasBlocked = g_rd.msaaBlocked;
+        g_rd.msaaBlocked = true; /* single-sampled, as the cull asks */
+        /* the pipelines first, on the workers (rd_vuprepass_selftest.c) */
+        rd__replay_set_window(UINT32_MAX, 0);
+        rd__pipeline_gather(true);
+        (void)rd__replay_frame(&f, 0, false);
+        rd__pipeline_gather(false);
+        rd__replay_set_window(0, 0);
+        rhi_wait_idle();
+        if (!rhi_device_lost()) {
+            bool stopped = false;
+            (void)rd__pipeline_create_gathered(&stopped);
+        }
+        rd__vu_zero_take(&took); /* nothing from the gathering replay */
+        const bool okA = replayRead(&f, t, a, size);
+        rd__vu_zero_collect_now();
+        rd__vu_zero_take(&took);
+        rd__vu_zero_hold(false); /* the same frame without the cull */
+        const bool okB = okA && replayRead(&f, t, b, size);
+        g_rd.msaaBlocked = wasBlocked;
+        if (okB && rd__vu_zero_sabotage_picture()) {
+            b[size / 2u] ^= 0x40u; /* the tests' picture branch */
+        }
+        if (!okA || !okB) {
+            snprintf(why, sizeof(why), "the device failed in the replays %s the cull",
+                     okA ? "without" : "with");
+        } else if (took.slots == 0u) {
+            snprintf(why, sizeof(why), "no answer read back from the GPU");
+        } else if (took.mismatches != 0u) {
+            snprintf(why, sizeof(why),
+                     "the GPU's answers differ from the CPU's in %llu of %llu "
+                     "triangle slots: %.120s",
+                     (unsigned long long)took.mismatches, (unsigned long long)took.slots,
+                     took.first);
+        } else if (took.culled != want || want == 0u) {
+            snprintf(why, sizeof(why),
+                     "%llu triangle slots culled, the CPU's answer %u (the corners not where "
+                     "the CPU put them)",
+                     (unsigned long long)took.culled, (unsigned)want);
+        } else if (memcmp(a, b, size) != 0) {
+            size_t first = 0;
+            while (first < size && a[first] == b[first]) {
+                first++;
+            }
+            snprintf(why, sizeof(why),
+                     "the pictures differ with the cull, the first at texel %u,%u",
+                     (unsigned)((first / 4u) % t->tw), (unsigned)((first / 4u) / t->tw));
         } else {
-            const bool wasBlocked = g_rd.msaaBlocked;
-            g_rd.msaaBlocked = true; /* single-sampled, as the cull asks */
-            /* the pipelines first, on the workers (rd_vuprepass_selftest.c) */
-            rd__replay_set_window(UINT32_MAX, 0);
-            rd__pipeline_gather(true);
-            (void)rd__replay_frame(&f, 0, false);
-            rd__pipeline_gather(false);
-            rd__replay_set_window(0, 0);
-            rhi_wait_idle();
-            if (!rhi_device_lost()) {
-                bool stopped = false;
-                (void)rd__pipeline_create_gathered(&stopped);
-            }
-            rd__vu_zero_take(&took); /* nothing from the gathering replay */
-            const bool okA = replayRead(&f, t, a, size);
-            rd__vu_zero_collect_now();
-            rd__vu_zero_take(&took);
-            rd__vu_zero_hold(false); /* the same frame without the cull */
-            const bool okB = okA && replayRead(&f, t, b, size);
-            g_rd.msaaBlocked = wasBlocked;
-            if (!okA || !okB) {
-                snprintf(why, sizeof(why), "the device failed in the replays %s the cull",
-                         okA ? "without" : "with");
-            } else if (took.slots == 0u) {
-                snprintf(why, sizeof(why), "no answer read back from the GPU");
-            } else if (took.mismatches != 0u) {
-                snprintf(why, sizeof(why),
-                         "the GPU's answers differ from the CPU's in %llu of %llu "
-                         "triangle slots: %.120s",
-                         (unsigned long long)took.mismatches, (unsigned long long)took.slots,
-                         took.first);
-            } else if (took.culled != want || want == 0u) {
-                snprintf(why, sizeof(why),
-                         "%llu triangle slots culled, the CPU's answer %u (the corners not where "
-                         "the CPU put them)",
-                         (unsigned long long)took.culled, (unsigned)want);
-            } else if (memcmp(a, b, size) != 0) {
-                size_t first = 0;
-                while (first < size && a[first] == b[first]) {
-                    first++;
-                }
-                snprintf(why, sizeof(why),
-                         "the pictures differ with the cull, the first at texel %u,%u",
-                         (unsigned)((first / 4u) % t->tw), (unsigned)((first / 4u) / t->tw));
-            } else {
-                pass = true;
-            }
+            pass = true;
         }
     }
     rd__vu_zero_hold_end();

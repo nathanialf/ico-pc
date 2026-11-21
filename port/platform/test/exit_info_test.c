@@ -21,7 +21,10 @@
  *            the build folder: the verdict, exit-info.txt (renamed from its
  *            synced .new: none left), the seen file (the same),
  *            the report's verdict line and its exit-info.txt and trace
- *            entries; a second start that finds no new record.
+ *            entries; the run's record for the zero-area cull's mark
+ *            (exit_info_last_reason: REASON_SIGNALED, signal 9; -1 with no
+ *            record of the pid and off Android); a second start that finds
+ *            no new record.
  * argv[1]: a folder the test may write in (the build folder).
  */
 #include <stdio.h>
@@ -671,6 +674,11 @@ static void run(const char *base)
 
     exit_info_begin(dir, act);
     CHECK(text_is(exit_info_last_verdict(), kVerdict));
+    {
+        /* the run's record for the zero-area cull's mark (vu_zero_mark.h) */
+        int status = -1;
+        CHECK(exit_info_last_reason(&status) == EXIT_INFO_REASON_SIGNALED && status == 9);
+    }
     /* exit-info.txt */
     snprintf(p, sizeof p, "%s/exit-info.txt", dir);
     CHECK(get(p, buf, sizeof buf) > 0);
@@ -732,6 +740,7 @@ static void run(const char *base)
                       "the previous run ended: without a word: no crash, device loss, watchdog "
                       "or clean end was written (no record from Android for pid 23456; 0 other "
                       "new records); "));
+    CHECK(exit_info_last_reason(NULL) == -1); /* no record of that pid this start */
     snprintf(p, sizeof p, "%s/exit-info-seen.txt", dir);
     CHECK(get(p, buf, sizeof buf) > 0);
     CHECK(text_is(buf, "1794862215000 exit-trace-1794862215000.txt\n"));
@@ -745,6 +754,7 @@ static void run(const char *base)
     exit_info_begin(dir, act);
     CHECK(has(exit_info_last_verdict(), "(the system keeps no exit record (Android 11 and later "
                                         "only))"));
+    CHECK(exit_info_last_reason(NULL) == -1);
     snprintf(p, sizeof p, "%s/exit-info.txt", dir);
     CHECK(get(p, buf, sizeof buf) > 0);
     CHECK(has(buf, "\nthe system: no exit records on this system; "));

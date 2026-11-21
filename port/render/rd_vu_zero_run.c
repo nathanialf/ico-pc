@@ -8,14 +8,19 @@
  * buffer is made as without it) or on.  ICO_RD_VU_ZERO=1 (tests) starts on
  * and checks every entry of every replay.
  *
- * Trying it (rd__vu_zero_try_begin, the self-test's first step): the mark
- * "trying" written and synced to ICO_VU_ZERO_MARK's file (the platform's,
- * port/platform/vu_zero_mark.h, read at the next start), then the rule
- * stage's zero build of the record's mode and batches made (one module) and
- * the record buffers made again copyable for the self-test's read back; at
- * its end they are made again as without the cull; a failed self-test
- * writes "failed" and releases the module and its pipeline;
- * RD_VU_ZERO_PROBATION pictures drawn with it write "on".
+ * Trying it (rd__vu_zero_try_begin, the self-test's step after its frame
+ * is built: the settings must give SCENE a lattice first, else nothing is
+ * written and nothing made): the mark "trying <version>" written and synced
+ * to ICO_VU_ZERO_MARK's file (the platform's, port/platform/vu_zero_mark.h,
+ * read at the next start; the version ICO_VU_ZERO_VERSION, the running
+ * one), then the rule stage's zero build of the record's mode and batches
+ * made (one module) and the record buffers made again copyable for the
+ * self-test's read back; at its end they are made again as without the
+ * cull and the read back's buffers released (made again at the next try);
+ * a module that could not be made or a failed self-test writes "failed
+ * <version>" and releases the module and its pipeline; a passed one
+ * "counting <version>" (synced); RD_VU_ZERO_PROBATION pictures drawn with
+ * it "on <version>".
  *
  * The checks (the self-test's and the tests' ICO_RD_VU_ZERO=1 alone; none
  * in play): the slot's record buffer is copied after pass T for every entry
@@ -50,8 +55,8 @@ enum { Z_HELD, Z_ON, Z_OFF };
 
 /* ICO_RD_VU_ZERO_SABOTAGE (tests): the GPU's word half a texel off, the
    run-time check's answers from no word (every culled triangle differs), no
-   record copied */
-enum { SB_NONE, SB_LATTICE, SB_CHECK, SB_MISSING };
+   record copied, the self-test's picture without the cull changed */
+enum { SB_NONE, SB_LATTICE, SB_CHECK, SB_MISSING, SB_PICTURE };
 
 /* one entry's copy in a slot's readback buffer: its slot A words at aAt,
    its vertices' planes 1 and 2 at v1At and v2At (bytes) */
@@ -84,6 +89,7 @@ static struct {
     uint32_t pictures;   /* pictures drawn with a word since the self-test */
     bool markedOn;       /* "on" written */
     char markPath[1024]; /* ICO_VU_ZERO_MARK: the platform's mark file, "" none */
+    char version[64];    /* ICO_VU_ZERO_VERSION: the running version, "" none */
     ZSlot slot[RHI_FRAMES_IN_FLIGHT];
     RdVuZeroCheck took; /* since rd__vu_zero_take */
 } s_z;
@@ -114,15 +120,19 @@ static void setOff(const char *why)
    made again in the same process (rd__vu_zero_init) */
 static char s_runOff[384];
 
+/* the self-test's read back buffers made this process (the tests) */
+static uint32_t s_rbMade;
+
 static void setRunOff(const char *why)
 {
     setOff(why);
     snprintf(s_runOff, sizeof(s_runOff), "%s", s_z.why);
 }
 
-/* the mark (port/platform/vu_zero_mark.h): written whole, synced where
-   asked (trying, failed: before the step they guard; on: not synced, a
-   lost "on" only keeps a "trying" the next start reads with the run's end) */
+/* the mark (port/platform/vu_zero_mark.h): the stage word and the running
+   version, written whole, synced where asked (trying, counting, failed:
+   before the step they guard; on: not synced, a lost "on" only keeps the
+   "counting" the next start judges the same way) */
 static bool writeMark(const char *word, bool sync)
 {
     if (s_z.markPath[0] == '\0') {
@@ -133,7 +143,8 @@ static bool writeMark(const char *word, bool sync)
         rd__log("VU zero-area cull: its mark %s could not be written (%s)", s_z.markPath, word);
         return false;
     }
-    bool ok = fprintf(f, "%s\n", word) > 0;
+    bool ok = (s_z.version[0] != '\0' ? fprintf(f, "%s %s\n", word, s_z.version)
+                                      : fprintf(f, "%s\n", word)) > 0;
     ok = fflush(f) == 0 && ok;
     if (sync) {
 #ifdef _WIN32
@@ -145,8 +156,44 @@ static bool writeMark(const char *word, bool sync)
     return fclose(f) == 0 && ok;
 }
 
+/* the self-test's read back buffers released (with the device: destroyed;
+   without one they belong to a device that is gone and are only
+   forgotten): never copied into again, made again at the next try */
+static void slotsFree(bool destroy)
+{
+    for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
+        ZSlot *z = &s_z.slot[i];
+        if (destroy && z->rb.id && g_rd.hasDevice) {
+            rhi_destroy_buffer(z->rb);
+        }
+        free(z->copies);
+        memset(z, 0, sizeof(*z));
+    }
+}
+
+void rd__vu_zero_shutdown(void)
+{
+    slotsFree(true);
+}
+
+uint32_t rd__vu_zero_check_buffers(uint32_t *made)
+{
+    uint32_t alive = 0;
+    for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
+        alive += s_z.slot[i].rb.id != 0;
+    }
+    if (made != NULL) {
+        *made = s_rbMade;
+    }
+    return alive;
+}
+
 void rd__vu_zero_init(void)
 {
+    /* a renderer made again (the Graphics API switched in the process): no
+       handle of the device before is ever used (rd__vu_zero_shutdown
+       destroyed them where it ran) */
+    slotsFree(false);
     memset(&s_z.took, 0, sizeof(s_z.took));
     s_z.tried = false;
     s_z.copyNow = false;
@@ -156,6 +203,9 @@ void rd__vu_zero_init(void)
     s_z.markedOn = false;
     const char *mark = getenv("ICO_VU_ZERO_MARK");
     snprintf(s_z.markPath, sizeof(s_z.markPath), "%s", mark != NULL ? mark : "");
+    const char *ver = getenv("ICO_VU_ZERO_VERSION");
+    snprintf(s_z.version, sizeof(s_z.version), "%.*s", 63,
+             ver != NULL && strchr(ver, '\n') == NULL ? ver : "");
     const char *block = getenv("ICO_VU_ZERO_BLOCK");
     s_z.held = false;
     s_z.forced = false;
@@ -169,11 +219,14 @@ void rd__vu_zero_init(void)
         s_z.sabotage = SB_CHECK;
     } else if (sb != NULL && strcmp(sb, "missing") == 0) {
         s_z.sabotage = SB_MISSING;
+    } else if (sb != NULL && strcmp(sb, "picture") == 0) {
+        s_z.sabotage = SB_PICTURE;
     }
     if (s_z.sabotage != SB_NONE) {
-        static const char *const kWhat[] = {"", "the rule stage given a lattice half a texel off",
-                                            "the run-time check's answers from no lattice",
-                                            "no record copied for the checks"};
+        static const char *const kWhat[] = {
+            "", "the rule stage given a lattice half a texel off",
+            "the run-time check's answers from no lattice", "no record copied for the checks",
+            "the self-test's picture without the cull changed in one byte"};
         rd__log("VU zero-area cull: ICO_RD_VU_ZERO_SABOTAGE: %s", kWhat[s_z.sabotage]);
     }
     const char *env = getenv("ICO_RD_VU_ZERO");
@@ -301,6 +354,7 @@ bool rd__vu_zero_try_begin(void)
     s_z.variants++;
     if (!slot->id) {
         rd__log("VU zero-area cull: %s could not be made", kZeroNames[kind]);
+        (void)writeMark("failed", true); /* the device refused it: off for the version */
         return false;
     }
     s_z.madeKind = kind;
@@ -385,7 +439,7 @@ void rd__vu_zero_picture(bool culling)
     }
     if (++s_z.pictures >= RD_VU_ZERO_PROBATION) {
         s_z.markedOn = true;
-        (void)writeMark("on", false);
+        (void)writeMark("on", false); /* after it only a bad end blocks, as while counting */
         rd__log("VU zero-area cull: %u pictures drawn with it since its self-test: its mark "
                 "says on",
                 (unsigned)RD_VU_ZERO_PROBATION);
@@ -398,6 +452,12 @@ uint32_t rd__vu_zero_entry_word(const RdStateBlock *st, int *why)
     if (s_z.state != Z_ON || !zeroReady()) {
         return 0;
     }
+    return rd__vu_zero_target_word(st, why);
+}
+
+uint32_t rd__vu_zero_target_word(const RdStateBlock *st, int *why)
+{
+    *why = RD_VU_ZERO_OFF;
     const RdTargetRec *tc = rd__target_rec(st->color);
     if (tc == NULL || !tc->color.id) {
         *why = RD_VU_ZERO_MAPPING;
@@ -433,6 +493,11 @@ uint32_t rd__vu_zero_entry_word(const RdStateBlock *st, int *why)
     m.offGrid = rd__vu_off_grid() && g_rd.settings.preset == RD_PRESET_ENHANCED &&
                 (tc->sx > 1.0f || tc->sy > 1.0f);
     return rd_vu_zero_word(&m, why);
+}
+
+bool rd__vu_zero_sabotage_picture(void)
+{
+    return s_z.sabotage == SB_PICTURE;
 }
 
 uint32_t rd__vu_zero_gpu_word(uint32_t word)
@@ -570,6 +635,7 @@ static bool slotRoom(ZSlot *z, uint64_t bytes)
     z->rb = rhi_create_buffer(&(RhiBufferDesc){size, RHI_BUF_COPY_DST | RHI_BUF_READBACK,
                                                RHI_MEM_READBACK, "rd vu zero-area checks"});
     z->bytes = z->rb.id ? size : 0u;
+    s_rbMade += z->rb.id != 0;
     z->n = 0;
     z->used = 0;
     return z->rb.id != 0;
@@ -666,6 +732,11 @@ void rd__vu_zero_verdict(bool pass, const char *why)
         s_z.why[0] = '\0';
         s_z.pictures = 0;
         copyEnd(); /* play's record buffers as without the cull */
+        if (s_z.tried) {
+            /* past the compile and the self-test: from here only an end the
+               evidence calls bad blocks it (port/platform/vu_zero_mark.h) */
+            (void)writeMark("counting", true);
+        }
     } else {
         char w[200];
         snprintf(w, sizeof(w), "for the run (its self-test: %.150s)", why);
@@ -675,6 +746,7 @@ void rd__vu_zero_verdict(bool pass, const char *why)
         }
         zeroRelease();
     }
+    slotsFree(true); /* no read back in play: made again at the next try */
 }
 
 void rd__vu_zero_selftest_skip(const char *why)
@@ -711,8 +783,9 @@ size_t rd_vu_zero_text(char *out, size_t cap, unsigned n)
     c.culled = takeN(&s_block.culled);
     c.mismatches = takeN(&s_block.mismatches);
     if (s_z.state != Z_ON) {
-        return (size_t)snprintf(out, cap, "; zero-area cull %s (%s)", rd__vu_zero_state_text(),
-                                s_z.why);
+        const int k =
+            snprintf(out, cap, "; zero-area cull %s (%s)", rd__vu_zero_state_text(), s_z.why);
+        return k < 0 ? 0u : ((size_t)k < cap ? (size_t)k : cap - 1u); /* what was written */
     }
     const double d = n ? (double)n : 1.0;
     int at = snprintf(out, cap, "; zero-area cull: %.0f draws a picture culling, %.0f triangles",

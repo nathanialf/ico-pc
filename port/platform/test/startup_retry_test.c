@@ -509,6 +509,25 @@ static void test_note_vu_pre(void)
     CHECK(!startup_retry_note_has_vu_store("loading vu_prelit_store_pre_vs"));
     CHECK(!startup_retry_note_has_vu_store("creating pipelinesX vu_prelit_store_pre_vs"));
     CHECK(!startup_retry_note_has_vu_store("loading vu_prelit_compute_pre_cs"));
+    /* the zero-area cull's build (rd_vu_zero.h: made only in its own
+       self-test; its install mark answers for an end there): neither the
+       pre-pass's nor the record's, alone or in a batch */
+    static const char *const zeros[] = {
+        "creating pipeline program 0 blend 0 vs 60 fs 57 fmt 0/0 msaa 0 dst 0 pre "
+        "(vu_tri_rule_zero_batch_compute_pre_cs 20311 words + vu_pre_cs 0 words)",
+        "creating pipeline program 0 blend 0 vs 60 fs 41 fmt 0/0 msaa 0 dst 0 pre "
+        "(vu_tri_rule_zero_store_pre_vs 20371 words + vu_pre_ps 300 words)",
+        "creating pipeline program 0 blend 0 vs 60 fs 41 fmt 3/0 msaa 0 dst 0 pre "
+        "(vu_tri_rule_zero_pre_vs 20371 words + vu_pre_ps 300 words)",
+        "creating pipelines 560-563 of 563: program 0 blend 0 vs 60 fs 57 fmt 0/0 msaa 0 dst 0 "
+        "pre to program 0 blend 12 vs 41 fs 5 fmt 1/8 msaa 0 dst 0; vertex "
+        "vu_tri_rule_zero_batch_compute_pre_cs 20311 words (4000 instructions), vu_main_vs "
+        "7133 words (1500 instructions)",
+    };
+    for (size_t i = 0; i < sizeof zeros / sizeof zeros[0]; i++) {
+        CHECK(!startup_retry_note_has_vu_pre(zeros[i]), "\"%s\"", zeros[i]);
+        CHECK(!startup_retry_note_has_vu_store(zeros[i]), "\"%s\"", zeros[i]);
+    }
     /* the skin check's start-up probe (rd_vu_skin_selftest.c): its
        compile's note and its draw's, neither the pre-pass's nor a
        destination read's */

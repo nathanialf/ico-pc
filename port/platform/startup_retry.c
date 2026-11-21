@@ -171,11 +171,21 @@ bool startup_retry_note_has_dst(const char *note)
     return digits && nonzero && (p[i] == '\0' || p[i] == ' ');
 }
 
+/* a note naming the zero-area cull's rule stage build (vu_tri_rule_zero_*,
+   port/render/rd_vu_zero.h): made only in the cull's own start-up
+   self-test, after the pre-pass passed its own; an end there is the cull's
+   (its install mark, port/platform/vu_zero_mark.h, blocks it), not the
+   pre-pass's or its record's */
+static bool note_is_vu_zero(const char *note)
+{
+    return strstr(note, "vu_tri_rule_zero_") != NULL;
+}
+
 bool startup_retry_note_has_vu_pre(const char *note)
 {
     static const char head[] = "creating pipeline";
     const char *p;
-    if (note == NULL || strncmp(note, head, sizeof head - 1) != 0) {
+    if (note == NULL || strncmp(note, head, sizeof head - 1) != 0 || note_is_vu_zero(note)) {
         return false;
     }
     p = note + (sizeof head - 1);
@@ -206,7 +216,7 @@ bool startup_retry_note_has_vu_store(const char *note)
 {
     static const char head[] = "creating pipeline";
     const char *p;
-    if (note == NULL || strncmp(note, head, sizeof head - 1) != 0) {
+    if (note == NULL || strncmp(note, head, sizeof head - 1) != 0 || note_is_vu_zero(note)) {
         return false;
     }
     p = note + (sizeof head - 1);

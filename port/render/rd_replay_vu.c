@@ -3733,6 +3733,7 @@ void rd__vu_prepass_shutdown(void)
     s_groupPre = false;
     rd__vu_compact_shutdown(); /* its pipeline before the store layout (rd_vu_compact.h) */
     rd__vu_record_shutdown();  /* the store builds and their layout */
+    rd__vu_zero_shutdown();    /* the zero-area cull's read back buffers (rd_vu_zero.h) */
     for (int v = 0; v < RD_VS_COUNT; v++) {
         if (g_rd.vsBatch[v].id) {
             rhi_destroy_shader(g_rd.vsBatch[v]);

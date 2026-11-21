@@ -932,7 +932,10 @@ rd_vuprepass_selftest_zero_mali 1.42  # estimate: rd_vuprepass_selftest_mali x 1
 rd_vuprepass_selftest_zero_marked 1.68  # estimate: rd_vuprepass_selftest (the cull not tried; not run here)
 rd_vuprepass_selftest_zero_missing 1.85  # estimate: rd_vuprepass_selftest x 1.1 (not run here)
 rd_vuprepass_selftest_zero_never 1.68  # estimate: rd_vuprepass_selftest (the cull not tried; not run here)
+rd_vuprepass_selftest_zero_picture 1.85  # estimate: rd_vuprepass_selftest_zero (the same replays; not run here)
 rd_vuprepass_selftest_zero_plain 1.50  # estimate: rd_vuprepass_selftest_plain x 1.1 (not run here)
+rd_vuprepass_selftest_zero_refused 1.68  # estimate: rd_vuprepass_selftest (the cull not tried; not run here)
+rd_vuprepass_selftest_zero_switch 3.70  # estimate: rd_vuprepass_selftest_zero x 2 (the renderer made again, both self-tests again; not run here)
 rd_vurecord_ab 62.12  # estimate: 38.4 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 1.62
 rd_vurecord_ab_compute 59.98  # estimate: 37.1 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 1.62
 rd_vurecord_ab_compute_class 55.28  # estimate: 34.2 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 1.62

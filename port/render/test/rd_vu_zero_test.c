@@ -32,7 +32,11 @@
  *       the words a velocity, skinned or probe entry gives up, no zero
  *       module made without a try, a failed self-test off for the run and
  *       still off at a renderer made again (over =1), the install's mark
- *       (ICO_VU_ZERO_BLOCK) off over =1, the reasons' words */
+ *       (ICO_VU_ZERO_BLOCK) off over =1, the reasons' words; the off
+ *       clause cut to a short buffer returns what it wrote; a self-test
+ *       not run (a refusal by the settings) is off for this renderer only
+ *       (held again at a renderer made again); no read back buffer without
+ *       a device, none left after a shutdown */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -514,7 +518,35 @@ static void t6(void)
           "the ladder's text: %s", buf);
     rd__vu_zero_verdict(true, "");
     CHECK(!rd__vu_zero_on(), "the ladder: on after a passed self-test");
+    {
+        /* the off clause is longer than a short buffer: what was written */
+        const size_t k = rd_vu_zero_text(small, sizeof(small), 1);
+        CHECK(k == sizeof(small) - 1u && strlen(small) == k, "short buffer, off: %zu", k);
+    }
     putEnv("ICO_LOSS_ROW", NULL);
+    /* a self-test not run (the settings give no lattice, no frame): off for
+       this renderer, nothing kept for the next (unlike a failed one) */
+    putEnv("ICO_RD_VU_ZERO", NULL);
+    rd__vu_zero_init();
+    rd__vu_zero_selftest_skip("these settings give SCENE no lattice (multisampled)");
+    (void)rd_vu_zero_text(buf, sizeof(buf), 1);
+    CHECK(!rd__vu_zero_on() &&
+              strcmp(buf, "; zero-area cull off (for the run (self-test not run: these settings "
+                          "give SCENE no lattice (multisampled)))") == 0,
+          "not run: %s", buf);
+    rd__vu_zero_init();
+    CHECK(strcmp(rd__vu_zero_state_text(), "held") == 0,
+          "a refusal by the settings kept at a renderer made again: %s", rd__vu_zero_state_text());
+    {
+        /* the read back buffers: none without a device, none after the
+           shutdown (a renderer made again makes its own) */
+        uint32_t made = 99u;
+        CHECK(rd__vu_zero_check_buffers(&made) == 0u && made == 0u,
+              "read back buffers without a device: made %u", (unsigned)made);
+        rd__vu_zero_shutdown();
+        CHECK(rd__vu_zero_check_buffers(NULL) == 0u, "read back buffers after the shutdown");
+    }
+    putEnv("ICO_RD_VU_ZERO", "1");
     /* the install's mark (port/platform/vu_zero_mark.h) over =1 */
     putEnv("ICO_VU_ZERO_BLOCK", "a run of v9.9.9 ended while it was tried");
     rd__vu_zero_init();
