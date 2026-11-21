@@ -23,13 +23,15 @@ if(ICO_RUN_TESTS)
 endif()
 
 # rd_vu_zero_ab (test/rd_vu_zero_ab.cmake): every fixture of
-# test/fixtures/lists/vu_zero.txt (issue 179's Mali-G52 stage 42 capture)
-# with the cull on and every entry checked (ICO_RD_VU_ZERO=1) against it off
-# (=0), merged and one draw a command, under the corpus settings (4:3 at 1x,
-# Enhanced 16:9 at 2x, the motion vectors) and the Mali fakes (the record by
-# compute dispatches; 1x at 21:9 and at 16:9 with half height): every target
-# byte for byte, every check 0 differ, the culled slots at least the
-# fixture's vu_zero_culled (the path ran).  rd_vu_zero_gl: the same on OpenGL
+# test/fixtures/lists/vu_zero.txt (issue 179's Mali-G52 stage 42 capture,
+# issue 123's Adreno frame) with the cull on and every entry checked
+# (ICO_RD_VU_ZERO=1) against it off (=0), merged and one draw a command,
+# under the corpus settings (4:3 at 1x, Enhanced 16:9 and 4:3 at 2x, the
+# motion vectors) and the Mali fakes (the record by compute dispatches; 1x at
+# 21:9 and at 16:9 with half height): every target byte for byte, every
+# check 0 differ, each run's cull line printed, the culled slots of each
+# fixture's profile at least its vu_zero_culled (the path ran), and at least
+# one slot culled at 2x over the list.  rd_vu_zero_gl: the same on OpenGL
 # (llvmpipe), the corpus settings.  rd_vu_zero_fault: the run-time check's
 # way back (ICO_RD_VU_ZERO_SABOTAGE=check: off for the run, logged).  No
 # device: SKIP.

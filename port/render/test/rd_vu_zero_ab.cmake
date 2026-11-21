@@ -11,9 +11,11 @@
 # of each of its profiles, each with the draw merge and without it
 # (ICO_RD_VU_MERGE=0):
 #   corpus   the device as it is: the Original preset at 4:3 and 1x, the
-#            Enhanced preset at 16:9 and 2x, and the Original preset with
-#            the motion vectors (--velocity, its PNG in the folder: the
-#            velocity pass reads the same slots without the cull)
+#            Enhanced preset at 16:9 and at 4:3, both 2x (the lattice of
+#            two samples a GS pixel each way; the 4:3 one for the frames
+#            narrower than 16:9), and the Original preset with the motion
+#            vectors (--velocity, its PNG in the folder: the velocity pass
+#            reads the same slots without the cull)
 #   mali     issue 179's Mali-G52 on lavapipe: the Arm fakes
 #            (ICO_VK_FAKE_LIMITS=mali, ICO_VK_FAKE_VENDOR=0x13B5), the record
 #            by compute dispatches as on that phone (ICO_RD_VU_RECORD=compute),
@@ -30,11 +32,18 @@
 # off)".  A frame whose =0 run draws nothing through the record (no "stats:
 # VU pre-pass on: [1-9]" line) is skipped at that setting, as is a 4:3 frame
 # the 16:9 setting cannot show; every profile with a frame here must have
-# compared targets.  The path ran: on every =1 run compared, the triangle
-# slots culled against the fixture's declared vu_zero_culled; a fixture with
-# no pair compared under one of its profiles fails.
+# compared targets.  Every =1 run compared prints its cull line (the slots
+# culled, the draws culling, the refusals by reason).  The path ran: for
+# each fixture and each of its profiles, the triangle slots culled summed
+# over that profile's runs against the fixture's declared vu_zero_culled
+# (one lattice of a profile may find nothing in a frame: 2x samples twice
+# as finely as 1x), printed with the refusals summed by reason; and over the
+# committed list, at least one triangle culled at the 2x lattice (the
+# enh169 and enh43 runs together).  A fixture with no pair compared under
+# one of its profiles fails.
 # MODE=fault (rd_vu_zero_fault): the run-time check's way back instead: each
-# frame once under the mali profile with ICO_RD_VU_ZERO=1 and
+# frame once under the mali profile (a frame not listed for it: the corpus
+# profile's Original 4:3 setting) with ICO_RD_VU_ZERO=1 and
 # ICO_RD_VU_ZERO_SABOTAGE=check (the CPU's answers from no lattice, so every
 # culled triangle differs): the log must say "rd: VU zero-area cull: off for
 # the run: the GPU's answer differs from the CPU's" and the stats line "VU
@@ -128,11 +137,12 @@ endif()
 set(env_corpus "")
 set(env_mali ICO_VK_FAKE_LIMITS=mali ICO_VK_FAKE_VENDOR=0x13B5 ICO_RD_VU_RECORD=compute)
 set(env_mali169 ${env_mali})
-set(settings_corpus orig enh169 vel)
+set(settings_corpus orig enh169 enh43 vel)
 set(settings_mali mali)
 set(settings_mali169 m169)
 set(args_orig --aspect 4:3)
 set(args_enh169 --enhanced --aspect 16:9 --resolution 2x)
+set(args_enh43 --enhanced --aspect 4:3 --resolution 2x)
 set(args_vel --aspect 4:3 --velocity)
 set(args_mali --aspect 21:9)
 set(args_m169 --aspect 16:9)
@@ -145,14 +155,29 @@ set(reqOff "stats: VU zero-area cull off \\(ICO_RD_VU_ZERO=0\\)")
 set(reqOn "stats: VU zero-area cull on \\(ICO_RD_VU_ZERO=1\\): [0-9]+ of [0-9]+ triangle slots culled over [1-9][0-9]* pictures checked, 0 differ")
 set(reqFaultLog "rd: VU zero-area cull: off for the run: the GPU's answer differs from the CPU's in [1-9]")
 set(reqFaultStats "stats: VU zero-area cull off \\(for the run: ")
+# the =1 run's cull line (rd_vu_zero_run.c rd__vu_zero_stats_text) and its
+# refusals by reason (rd_vu_zero.c rd_vu_zero_reason_name, in that order,
+# spaces dropped); matched in the run's text with its ';' made ','
+set(cullRe "stats: (VU zero-area cull on [^\n]*)")
+set(cullNumRe "VU zero-area cull on [^:]*: ([0-9]+) of ([0-9]+) triangle slots culled over [0-9]+ pictures checked, [0-9]+ differ, ([0-9]+) draws culling \\(([0-9]+) triangles, ([0-9]+) shared lists given up\\), refused: ([a-z0-9 ,]*), zero-area modules made")
+set(reasons off mapping scale jitter offgrid multisampled velocity ownentry)
+set(culled2x 0)
 if(MODE STREQUAL "fault")
   set(faults 0)
   foreach(e IN LISTS entries)
     string(REPLACE "|" ";" ef "${e}")
+    list(GET ef 0 prof)
     list(GET ef 1 dump)
-    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${env_mali} ICO_RD_VU_ZERO=1
+    string(REPLACE "," ";" profList "${prof}")
+    set(fp corpus)
+    set(fs orig)
+    if(mali IN_LIST profList)
+      set(fp mali)
+      set(fs mali)
+    endif()
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${env_${fp}} ICO_RD_VU_ZERO=1
                             ICO_RD_VU_ZERO_SABOTAGE=check "${TOOL}" "${dump}" /dev/null --stats
-                            ${args_mali}
+                            ${args_${fs}}
                     RESULT_VARIABLE rcF OUTPUT_VARIABLE outF ERROR_VARIABLE errF)
     if(rcF EQUAL 77)
       message(STATUS "SKIP: no device: ${errF}")
@@ -198,6 +223,15 @@ foreach(e IN LISTS entries)
   foreach(p IN LISTS profList)
     set(asked_${p} 1)
     set(fxPairs 0)
+    # the profile's sums over its runs (the path ran; the refusals by reason)
+    set(pCulled 0)
+    set(pSlots 0)
+    set(pDraws 0)
+    set(pTris 0)
+    set(pShared 0)
+    foreach(r IN LISTS reasons)
+      set(pRef_${r} 0)
+    endforeach()
     foreach(s IN LISTS settings_${p})
       foreach(m IN LISTS merges)
         math(EXPR index "${index} + 1")
@@ -253,9 +287,35 @@ foreach(e IN LISTS entries)
             math(EXPR failures "${failures} + 1")
           endif()
         endforeach()
-        # the path ran: the triangle slots the checks found culled
-        if(NOT name STREQUAL "")
-          rd_fixture_require(${name} "${outB}\n${errB}" vu_zero_culled)
+        # the run's cull line, and its numbers into the profile's sums
+        if(flatB MATCHES "${cullRe}")
+          message(STATUS "${dump} ${p} ${s} ${m}: ${CMAKE_MATCH_1}")
+        endif()
+        if(flatB MATCHES "${cullNumRe}")
+          # the groups kept before another MATCHES replaces them
+          set(rCulled "${CMAKE_MATCH_1}")
+          set(rRefused "${CMAKE_MATCH_6}")
+          math(EXPR pCulled "${pCulled} + ${rCulled}")
+          math(EXPR pSlots "${pSlots} + ${CMAKE_MATCH_2}")
+          math(EXPR pDraws "${pDraws} + ${CMAKE_MATCH_3}")
+          math(EXPR pTris "${pTris} + ${CMAKE_MATCH_4}")
+          math(EXPR pShared "${pShared} + ${CMAKE_MATCH_5}")
+          if(s STREQUAL "enh169" OR s STREQUAL "enh43")
+            math(EXPR culled2x "${culled2x} + ${rCulled}")
+          endif()
+          string(REPLACE ", " "|" refList "${rRefused}")
+          string(REPLACE "|" ";" refList "${refList}")
+          foreach(rw IN LISTS refList)
+            if(rw MATCHES "^([a-z ]+) ([0-9]+)$")
+              string(REPLACE " " "" rk "${CMAKE_MATCH_1}")
+              if(DEFINED pRef_${rk})
+                math(EXPR pRef_${rk} "${pRef_${rk}} + ${CMAKE_MATCH_2}")
+              endif()
+            endif()
+          endforeach()
+        else()
+          message(SEND_ERROR "${dump} ${p} ${s} ${m}: run B's cull line is not \"${cullNumRe}\"")
+          math(EXPR failures "${failures} + 1")
         endif()
         file(GLOB pngs RELATIVE "${dirA}" "${dirA}/*.png")
         foreach(need SCENE.png DISPLAY.png)
@@ -303,6 +363,19 @@ foreach(e IN LISTS entries)
                          "nothing drawn through the record, or its runs failed)")
       math(EXPR failures "${failures} + 1")
     endif()
+    set(refText "")
+    foreach(r IN LISTS reasons)
+      string(APPEND refText " ${r} ${pRef_${r}}")
+    endforeach()
+    message(STATUS "${dump} ${p}: over ${fxPairs} pairs: ${pCulled} of ${pSlots} triangle slots "
+                   "culled; ${pDraws} draws culling (${pTris} triangles, ${pShared} shared lists "
+                   "given up); refused:${refText}")
+    # the path ran: the profile's culled slots summed over its runs
+    if(NOT name STREQUAL "" AND fxPairs GREATER 0)
+      rd_fixture_require(${name}
+                         "VU zero-area cull on (ICO_RD_VU_ZERO=1): ${pCulled} of ${pSlots} triangle slots culled"
+                         vu_zero_culled)
+    endif()
   endforeach()
 endforeach()
 foreach(p IN LISTS profiles)
@@ -313,10 +386,16 @@ foreach(p IN LISTS profiles)
 endforeach()
 if(fixtures)
   math(EXPR failures "${failures} + ${RDFX_FAILURES}")
+  # the 2x lattice found something to cull in the committed frames
+  if(culled2x EQUAL 0)
+    message(SEND_ERROR "rd_vu_zero_ab: no triangle slot culled at 2x (the enh169 and enh43 runs) "
+                       "in any committed frame: the 2x lattice is not shown culling")
+    math(EXPR failures "${failures} + 1")
+  endif()
 endif()
 message(STATUS "rd_vu_zero_ab (${BACKEND}): ${compared} targets compared over ${nentries} frames "
                "(corpus ${compared_corpus}, mali ${compared_mali}, mali169 ${compared_mali169}), "
-               "${missing} listed dumps not here")
+               "${culled2x} triangle slots culled at 2x, ${missing} listed dumps not here")
 if(failures GREATER 0)
   message(FATAL_ERROR "rd_vu_zero_ab: ${failures} failures")
 endif()

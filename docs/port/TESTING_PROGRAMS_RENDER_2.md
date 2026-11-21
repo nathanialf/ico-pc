@@ -440,18 +440,23 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   short buffer.
 - `rd_vu_zero_ab.cmake` (`rd_vu_zero_ab`, `rd_vu_zero_gl`, `rd_vu_zero_fault`; `rd_vu_zero.cmake`):
   the zero-area cull on every fixture of `port/render/test/fixtures/lists/vu_zero.txt`
-  (`fx-mali-slow541`; a listed fixture that is absent FAILS). `ICO_RD_VU_ZERO=1` (on, every entry
-  of every replay checked) against `=0` with `--pass-dump --stats`, each with the draw merge and
-  without it, under the corpus settings (4:3 at 1x, Enhanced 16:9 at 2x, 4:3 with `--velocity` and
-  its picture), the Arm fakes with the record by compute at 1x and 21:9, and the same at 16:9 with
-  half height.
+  (`fx-mali-slow541`, `fx-adreno`; a listed fixture that is absent FAILS). `ICO_RD_VU_ZERO=1` (on,
+  every entry of every replay checked) against `=0` with `--pass-dump --stats`, each with the draw
+  merge and without it, under the corpus settings (4:3 at 1x, Enhanced 16:9 and 4:3 at 2x, 4:3 with
+  `--velocity` and its picture), the Arm fakes with the record by compute at 1x and 21:9, and the
+  same at 16:9 with half height.
   - Every target's PNG must be the same bytes, the motion vectors' included.
   - The lines: `stats: VU zero-area cull off (ICO_RD_VU_ZERO=0)`, and on the `=1` runs `stats: VU
     zero-area cull on (ICO_RD_VU_ZERO=1): C of S triangle slots culled over P pictures checked, 0
     differ` with P at least 1; `merge on)` or `merge off)`.
-  - The path ran: the culled slots meet the fixture's `vu_zero_culled`.
+  - Each `=1` run's cull line is printed (slots culled, draws culling, refusals by reason), and each
+    fixture's profile its sums over its runs.
+  - The path ran: each fixture's profile's culled slots, summed over its runs, meet the fixture's
+    `vu_zero_culled` (one lattice may find nothing in a frame: 2x samples twice as finely as 1x),
+    and at least one slot is culled at 2x (the Enhanced runs) over the list.
   - `rd_vu_zero_gl`: the list on OpenGL (llvmpipe), at the corpus settings.
-  - `rd_vu_zero_fault`: each fixture once under the Arm fakes with `ICO_RD_VU_ZERO_SABOTAGE=check`:
+  - `rd_vu_zero_fault`: each fixture once under the Arm fakes (a fixture not listed for them: the
+    corpus 4:3 setting) with `ICO_RD_VU_ZERO_SABOTAGE=check`:
     `rd: VU zero-area cull: off for the run: the GPU's answer differs from the CPU's` logged and
     the stats line off.
   - No device: SKIP.
