@@ -1179,16 +1179,25 @@ lists after the newest numbered submission when there is one, else the newest nu
 failed submit was none of a picture's: a capture, a readback or a check). The frame before it is the previous replay's in the pass ring's table. To have
 the lost frame, `rd_begin_frame` copies a frame to memory before the ring reuses its slot when the
 backend still has a submission open at or after that frame and a slot wait has blocked 100 ms or
-more (`RhiGpuProgress.waitingNs`; `rd__loss_keep_recycle`, an ordinary dump held as bytes). In steady
-play no wait blocks that long, so nothing is copied and no thread is drained for it, even with
-frames in flight; the lost frame is held only when a stall preceded the loss (both reports
+more (`RhiGpuProgress.waitingNs`; `rd__loss_keep_recycle`, an ordinary dump held as bytes) and a
+picture of that frame was handed to a replay (`RdFrame.sent`, set where the replay is asked for in
+`rd_thread.c`; with Frame rate Original a picture the gate left out was never on the GPU and is
+not copied, counted as `not copied: never handed to the GPU`). The copy waits only for the reads
+of the pictures handed over (`dumpFrame`'s reads-only mode, `rd_thread_reads_wait`; `rd_dump.c`
+lists each record it reads and who writes it when), not for the render and submit threads' work
+in flight, so a stalled picture's GPU work does not hold the game step. In steady play no wait
+blocks that long, so nothing is copied, even with frames in flight; the lost frame is held only when a stall preceded the loss (both reports
 stalled first), otherwise the pick falls back to the ring's frames as before. The bounds: at most 4
 copies of at most 16 MiB (the build stops there; a dump is about 7 MB), freed once the first open
 submission is two frames past them, at most 4 attempts in any 64 recycled frames (every attempt
 counted), none for 600 after one too big, none on a backend that does not track its submissions.
 The loss dump stops the copies (a copy in progress waited for up to 3 s, else the copies are not
-used). The log names what it did: `rd: loss keep: frame N copied to memory ...` (the first eight
-copies, then every hundredth) and, at the loss,
+used). The log names what it did: `rd: loss keep: frame N copied to memory ...; 1 kept (13299 KB),
+copy 1 of 619 recycled frames (0 not copied: never handed to the GPU); copy 5.1 ms, reads wait
+0.0 ms` (the first eight copies, then every hundredth), `rd: loss keep: frame N not copied: the
+slot wait had blocked 105 ms and the backend's first open submission is frame O (newest tag replay
+R frame T), but no picture of frame N was handed to the GPU (a picture left out); n not copied so,
+c copies, of s recycled frames` (the first eight, then every hundredth) and, at the loss,
 `window: loss dump: the lost submission is replay R, frame F (how it was found; wait failed on frame
 ..., first open frame ..., newest numbered frame ...); the frame before it is B; held now: frames
 A..Z (n, c of them copies in memory)`, `window: loss dump: copies in memory: ...`, then for each

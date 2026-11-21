@@ -21,7 +21,7 @@
 #include "ico_thread.h" /* ico_thread_now_ms */
 #include "rd.h"
 #include "rd_dump_mem.h" /* the slow-scene dump's two steps */
-#include "rd_thread.h"   /* rd_thread_drain */
+#include "rd_thread.h"   /* rd_thread_drain, rd_thread_reads_wait */
 #include "trace_host.h"
 #include "window_lines.h" /* window_log_cost_job */
 #include "window_present.h"
@@ -242,6 +242,7 @@ int window_dump_auto_slow(uint32_t frame, const SlowSceneBlock *b, double work, 
     memset(j, 0, sizeof(*j));
     j->drainMs = -1.0;
     j->measureMs = j->copyMs = -1.0;
+    j->readsOnly = 1; /* rd_dump_mem.h: the reads' wait alone, no drain */
     snprintf(j->tag, sizeof(j->tag), "slow-scene dump");
     if (ico_dump_auto_busy()) {
         (void)ico_dump_auto_submit(j); /* the drop line, counted */
@@ -261,15 +262,17 @@ int window_dump_auto_slow(uint32_t frame, const SlowSceneBlock *b, double work, 
     use_flush();
     /* The frame's bytes are read on the game thread, not on the worker:
        the ring frame names textures, meshes and targets the game thread
-       changes from its next call on (rd_dump.c dumpFrame drains the render
-       and submit threads first; the zip and the file writes are the
-       worker's).  Here the frame is only measured and the worker makes a
-       block of its size with its pages touched; the copy into it is made
-       at a later picture (slow_pump), one pass of the dump's bytes
+       changes from its next call on (rd_dump.c dumpFrame waits for the
+       reads of the pictures handed over first, not for the render and
+       submit threads' work in flight: issue 179's 68.8 and 258.6 ms were
+       that drain behind a stalled picture; the zip and the file writes
+       are the worker's).  Here the frame is only measured and the worker
+       makes a block of its size with its pages touched; the copy into it
+       is made at a later picture (slow_pump), one pass of the dump's bytes
        (rd_dump_mem.h; issue 179: 47-56 ms here when the block was grown
-       on this thread).  The drain is timed apart */
+       on this thread).  The reads' wait is timed apart */
     size_t bytes = 0;
-    j->drainMs = (double)rd_thread_drain() / 1e6;
+    j->drainMs = (double)rd_thread_reads_wait() / 1e6;
     if (!rd_dump_retained_frame_bytes(frame, &bytes)) {
         fprintf(stderr, "window: slow scene: frame %u not written\n", (unsigned)frame);
         return 0;
@@ -282,7 +285,7 @@ int window_dump_auto_slow(uint32_t frame, const SlowSceneBlock *b, double work, 
         /* no worker thread (or busy since the check): the old way, the
            copy grown here; the submit says why when it fails too */
         const Uint64 t1 = SDL_GetTicksNS();
-        if (!rd_dump_retained_frame_mem(frame, &j->dump, &j->dumpLen, &got)) {
+        if (!rd_dump_retained_frame_mem_reads(frame, &j->dump, &j->dumpLen, &got)) {
             fprintf(stderr, "window: slow scene: frame %u not written\n", (unsigned)frame);
             return 0;
         }
@@ -378,7 +381,8 @@ static void slow_pump(void)
     size_t len = 0;
 
     *j = s_slow.job;
-    const double drain = (double)rd_thread_drain() / 1e6;
+    const double drain =
+        (double)rd_thread_reads_wait() / 1e6; /* the reads alone, as the first step */
     const RdDumpInto into = rd_dump_retained_frame_into(frame, block, size, &len, &got);
 
     j->drainMs = s_slow.drainMs + drain;
@@ -400,7 +404,7 @@ static void slow_pump(void)
                 "into a block grown here instead\n",
                 (unsigned)frame,
                 into == RD_DUMP_INTO_SMALL ? "had grown past" : "could not be written into", size);
-        if (!rd_dump_retained_frame_mem(frame, &j->dump, &j->dumpLen, &got)) {
+        if (!rd_dump_retained_frame_mem_reads(frame, &j->dump, &j->dumpLen, &got)) {
             char why[64];
             snprintf(why, sizeof(why), "frame %u could not be copied", (unsigned)frame);
             slow_given_up(why);
@@ -426,12 +430,8 @@ static void report_one(const IcoDumpDone *d)
                 d->tag, d->why, d->gameMs, d->workerMs);
         return;
     }
-    char drain[96] = "";
-    if (d->drainMs >= 0.0) {
-        snprintf(drain, sizeof(drain),
-                 " (the render thread's work in flight %.1f ms of it, the frame's bytes %.1f ms)",
-                 d->drainMs, d->gameMs > d->drainMs ? d->gameMs - d->drainMs : 0.0);
-    }
+    char drain[96];
+    ico_dump_auto_game_text(d, drain, sizeof(drain));
     fprintf(stderr,
             "window: %s: %.1f ms on the game thread%s, %.0f ms on the worker (%zu bytes of frame "
             "into %s%s)\n",
@@ -442,8 +442,9 @@ static void report_one(const IcoDumpDone *d)
            game thread, and which way the frame went) */
         fprintf(stderr,
                 "window: %s: the game thread's parts: the measure %.1f ms, the copy %.1f ms (each "
-                "without its drain); the worker's block made in %.0f ms; %s\n",
-                d->tag, d->measureMs, d->copyMs, d->prepMs, d->how);
+                "without its %s); the worker's block made in %.0f ms; %s\n",
+                d->tag, d->measureMs, d->copyMs, d->readsOnly ? "wait for the reads" : "drain",
+                d->prepMs, d->how);
     }
     if (d->why[0] != '\0') {
         fprintf(stderr, "window: %s: %s\n", d->tag, d->why);

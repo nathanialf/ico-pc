@@ -757,7 +757,7 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   179) and the zip from memory (`ico_zip_mem_files`, `ico_zip_add_bundle`): the entries and the log
   read back, a missing log leaving the entries alone, nothing deleted; a job written whole (the
   frame, the tick before, the log byte for byte, the sidecar, both costs and the drain's part in the result, the slow
-  zips pruned to three); a second job while one is written dropped with its line and counted, never
+  zips pruned to three); a reads-only job's flag and line (`copy, reads wait`, not `work in flight`); a second job while one is written dropped with its line and counted, never
   queued, its block the caller's, the first finishing whole, a new job taken after the result is
   polled; a zip that cannot be written keeping the frame loose; the join at shutdown with a job in
   flight, twice safe, a later job starting a new worker; the report's bundle (the newest three of

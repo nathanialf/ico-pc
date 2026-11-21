@@ -28,7 +28,21 @@
  *              a frame or two behind (no copy), then stuck at frame 129 with
  *              the wait stalled: the lost frame survives the ring moving
  *              on, at most four copies are ever held, and a GPU that
- *              finishes everything frees them all */
+ *              finishes everything frees them all
+ *   not sent   a frame no picture of which was handed to a replay
+ *              (RdFrame.sent, Frame rate Original's gate leaving it out) is
+ *              never needed, decided after the stall's test and before the
+ *              throttle (no attempt counted); issue 179's v0.11.13 log: the
+ *              8 copies its lines 782-1188 made (each frame newer than the
+ *              newest submission) are the 8 "not sent" now, the same 8
+ *              taken when sent
+ *   unchanged  the loss report's choice: a copy of a frame never sent
+ *              changes nothing the choice names when the lost frame and
+ *              the one before are held (issue 179's run 3 with such a copy
+ *              beside them); over a stall longer than the throttle's window
+ *              the never-sent frames take no slot, so the lost frame is
+ *              still held where v0.11.13's copies of them had pushed it
+ *              out */
 #include "rd_loss_pick.h"
 #include <stdio.h>
 #include <string.h>
@@ -155,10 +169,12 @@ static void keep(void)
     uint32_t slots[4] = {0, 0, 0, 0};
     const uint64_t stall = RD_LOSS_KEEP_STALL_NS, wait = 7;
 
-    CHECK(!rd_loss_keep_needed(129, 0));
-    CHECK(!rd_loss_keep_needed(0, 129));
-    CHECK(!rd_loss_keep_needed(128, 129));
-    CHECK(rd_loss_keep_needed(129, 129) && rd_loss_keep_needed(130, 129));
+    CHECK(!rd_loss_keep_needed(129, true, 0));
+    CHECK(!rd_loss_keep_needed(0, true, 129));
+    CHECK(!rd_loss_keep_needed(128, true, 129));
+    CHECK(rd_loss_keep_needed(129, true, 129) && rd_loss_keep_needed(130, true, 129));
+    /* never handed to a replay: not on the GPU, whatever is open */
+    CHECK(!rd_loss_keep_needed(129, false, 129) && !rd_loss_keep_needed(130, false, 129));
     CHECK(rd_loss_keep_release(10, 0));
     CHECK(rd_loss_keep_release(127, 129) && !rd_loss_keep_release(128, 129) &&
           !rd_loss_keep_release(129, 129));
@@ -186,11 +202,11 @@ static void keep(void)
     {
         RdLossThrottle t = {0};
 
-        CHECK(rd_loss_keep_decide(&t, 1, 128, 129, wait, stall) == RD_LOSS_KEEP_NOT_OPEN);
-        CHECK(rd_loss_keep_decide(&t, 2, 129, 129, 0, 0) == RD_LOSS_KEEP_NO_STALL);
-        CHECK(rd_loss_keep_decide(&t, 3, 129, 129, wait, stall / 2) == RD_LOSS_KEEP_NO_STALL);
+        CHECK(rd_loss_keep_decide(&t, 1, 128, true, 129, wait, stall) == RD_LOSS_KEEP_NOT_OPEN);
+        CHECK(rd_loss_keep_decide(&t, 2, 129, true, 129, 0, 0) == RD_LOSS_KEEP_NO_STALL);
+        CHECK(rd_loss_keep_decide(&t, 3, 129, true, 129, wait, stall / 2) == RD_LOSS_KEEP_NO_STALL);
         CHECK(t.attempts == 0);
-        CHECK(rd_loss_keep_decide(&t, 4, 129, 129, wait, stall) == RD_LOSS_KEEP_TAKE);
+        CHECK(rd_loss_keep_decide(&t, 4, 129, true, 129, wait, stall) == RD_LOSS_KEEP_TAKE);
         CHECK(t.attempts == 1);
     }
     /* the burst the cumulative throttle allowed (after the title and menus
@@ -202,7 +218,7 @@ static void keep(void)
         uint32_t inWindow[1024] = {0};
 
         for (uint64_t seen = 5000; seen < 5000 + 1024; seen++) {
-            if (rd_loss_keep_decide(&t, seen, 200, 200, wait, stall) == RD_LOSS_KEEP_TAKE) {
+            if (rd_loss_keep_decide(&t, seen, 200, true, 200, wait, stall) == RD_LOSS_KEEP_TAKE) {
                 inWindow[seen - 5000] = 1;
                 taken++;
             }
@@ -221,12 +237,12 @@ static void keep(void)
         RdLossThrottle u = {0};
 
         for (uint64_t seen = 1; seen <= 4; seen++) {
-            CHECK(rd_loss_keep_decide(&u, seen, 9, 9, wait, stall) == RD_LOSS_KEEP_TAKE);
+            CHECK(rd_loss_keep_decide(&u, seen, 9, true, 9, wait, stall) == RD_LOSS_KEEP_TAKE);
         }
-        CHECK(rd_loss_keep_decide(&u, 5, 9, 9, wait, stall) == RD_LOSS_KEEP_THROTTLED);
-        CHECK(rd_loss_keep_decide(&u, RD_LOSS_KEEP_WINDOW, 9, 9, wait, stall) ==
+        CHECK(rd_loss_keep_decide(&u, 5, 9, true, 9, wait, stall) == RD_LOSS_KEEP_THROTTLED);
+        CHECK(rd_loss_keep_decide(&u, RD_LOSS_KEEP_WINDOW, 9, true, 9, wait, stall) ==
               RD_LOSS_KEEP_THROTTLED);
-        CHECK(rd_loss_keep_decide(&u, 1 + RD_LOSS_KEEP_WINDOW, 9, 9, wait, stall) ==
+        CHECK(rd_loss_keep_decide(&u, 1 + RD_LOSS_KEEP_WINDOW, 9, true, 9, wait, stall) ==
               RD_LOSS_KEEP_TAKE);
     }
     /* a frame too big (every attempt counted, a failed one too): no retry
@@ -235,18 +251,18 @@ static void keep(void)
     {
         RdLossThrottle t = {0};
 
-        CHECK(rd_loss_keep_decide(&t, 10, 50, 50, wait, stall) == RD_LOSS_KEEP_TAKE);
+        CHECK(rd_loss_keep_decide(&t, 10, 50, true, 50, wait, stall) == RD_LOSS_KEEP_TAKE);
         rd_loss_keep_big(&t, 10);
         uint32_t tried = 0;
 
         for (uint64_t seen = 11; seen < 10 + RD_LOSS_KEEP_BIG_PAUSE; seen++) {
-            const RdLossKeep k = rd_loss_keep_decide(&t, seen, 50, 50, wait, stall);
+            const RdLossKeep k = rd_loss_keep_decide(&t, seen, 50, true, 50, wait, stall);
 
             tried += k == RD_LOSS_KEEP_TAKE;
             CHECK(k == RD_LOSS_KEEP_PAUSED);
         }
         CHECK(tried == 0 && t.attempts == 1);
-        CHECK(rd_loss_keep_decide(&t, 10 + RD_LOSS_KEEP_BIG_PAUSE, 50, 50, wait, stall) ==
+        CHECK(rd_loss_keep_decide(&t, 10 + RD_LOSS_KEEP_BIG_PAUSE, 50, true, 50, wait, stall) ==
               RD_LOSS_KEEP_TAKE);
     }
 }
@@ -280,7 +296,7 @@ static void history(void)
                 copies[i] = 0;
             }
         }
-        const RdLossKeep k = rd_loss_keep_decide(&t, seen, old, open, stalled ? 9u : 0u,
+        const RdLossKeep k = rd_loss_keep_decide(&t, seen, old, true, open, stalled ? 9u : 0u,
                                                  stalled ? 150000000ull : 0u);
 
         steadyAsked += !stalled && k == RD_LOSS_KEEP_TAKE;
@@ -323,6 +339,173 @@ static void history(void)
     CHECK(copies[0] == 0 && copies[1] == 0 && copies[2] == 0 && copies[3] == 0);
 }
 
+/* the decision for a frame never sent */
+static void notSent(void)
+{
+    const uint64_t stall = RD_LOSS_KEEP_STALL_NS, wait = 7;
+    RdLossThrottle t = {0};
+
+    CHECK(rd_loss_keep_decide(&t, 1, 128, false, 129, wait, stall) == RD_LOSS_KEEP_NOT_OPEN);
+    CHECK(rd_loss_keep_decide(&t, 2, 129, false, 129, 0, 0) == RD_LOSS_KEEP_NO_STALL);
+    CHECK(rd_loss_keep_decide(&t, 3, 129, false, 129, wait, stall) == RD_LOSS_KEEP_NOT_SENT);
+    CHECK(rd_loss_keep_decide(&t, 4, 130, false, 129, wait, stall) == RD_LOSS_KEEP_NOT_SENT);
+    CHECK(t.attempts == 0);
+    CHECK(rd_loss_keep_decide(&t, 5, 129, true, 129, wait, stall) == RD_LOSS_KEEP_TAKE);
+    CHECK(t.attempts == 1);
+    /* paused after one too big: a frame never sent is still "not sent" */
+    rd_loss_keep_big(&t, 5);
+    CHECK(rd_loss_keep_decide(&t, 6, 130, false, 129, wait, stall) == RD_LOSS_KEEP_NOT_SENT);
+    CHECK(rd_loss_keep_decide(&t, 7, 130, true, 129, wait, stall) == RD_LOSS_KEEP_PAUSED);
+
+    /* issue 179's v0.11.13 log, its 8 "loss keep" lines (782, 913, 978,
+       982, 987, 991, 1051, 1188): the frame copied, the backend's first
+       open frame (= its newest tag's), the slot wait, the recycled frames
+       so far */
+    static const struct {
+        uint32_t frame, open, waitMs;
+        uint64_t seen;
+    } log[8] = {
+        {616, 613, 105, 619},    {1042, 1040, 119, 1045}, {1289, 1287, 134, 1292},
+        {1297, 1295, 107, 1300}, {1301, 1300, 111, 1304}, {1305, 1304, 111, 1308},
+        {1393, 1389, 120, 1396}, {1568, 1566, 112, 1571},
+    };
+
+    RdLossThrottle was = {0}, now = {0};
+    uint32_t taken = 0, notTaken = 0;
+
+    for (int i = 0; i < 8; i++) {
+        const uint64_t ns = (uint64_t)log[i].waitMs * 1000000ull;
+
+        CHECK(log[i].frame > log[i].open); /* newer than the newest submission */
+        taken += rd_loss_keep_decide(&was, log[i].seen, log[i].frame, true, log[i].open, wait,
+                                     ns) == RD_LOSS_KEEP_TAKE;
+        notTaken += rd_loss_keep_decide(&now, log[i].seen, log[i].frame, false, log[i].open, wait,
+                                        ns) == RD_LOSS_KEEP_NOT_SENT;
+    }
+    CHECK(taken == 8 && notTaken == 8);
+    CHECK(was.attempts == 8 && now.attempts == 0);
+}
+
+/* the frames held (copies and ring) as rd_dump.c's heldFrames lists them:
+   ascending, without repeats */
+static uint32_t heldList(const uint32_t *copies, const uint32_t *ring, uint32_t *out)
+{
+    uint32_t n = 0;
+
+    for (uint32_t v = 1; v < 100000; v++) {
+        bool in = false;
+
+        for (int i = 0; i < 4; i++) {
+            in = in || copies[i] == v;
+        }
+        for (int i = 0; i < 3; i++) {
+            in = in || ring[i] == v;
+        }
+        if (in) {
+            out[n++] = v;
+        }
+    }
+    return n;
+}
+
+/* the recycles of frames 124..last, the GPU stuck at frame 129 from 130
+   on with the wait stalled from 131; sentUpTo: the newest frame a picture
+   was handed over for (the frames after it left out by the gate); `all`
+   marks every frame sent (v0.11.13, which had no flag) */
+static void stalled(uint32_t last, uint32_t sentUpTo, bool all, uint32_t *copies, uint32_t *ring)
+{
+    RdLossThrottle t = {0};
+    uint64_t seen = 0;
+
+    memset(copies, 0, 4 * sizeof(uint32_t));
+    memset(ring, 0, 3 * sizeof(uint32_t));
+    for (uint32_t n = 124; n <= last; n++) {
+        const uint32_t old = ring[n % 3];
+        const uint32_t open = n > 129 ? 129u : (n > 125 ? n - 2u : 0u);
+        const bool st = n > 130;
+
+        seen++;
+        for (int i = 0; i < 4; i++) {
+            if (copies[i] && rd_loss_keep_release(copies[i], open)) {
+                copies[i] = 0;
+            }
+        }
+        bool have = false;
+
+        for (int i = 0; i < 4; i++) {
+            have = have || (old && copies[i] == old);
+        }
+        if (old && !have &&
+            rd_loss_keep_decide(&t, seen, old, all || old <= sentUpTo, open, st ? 9u : 0u,
+                                st ? 150000000ull : 0u) == RD_LOSS_KEEP_TAKE) {
+            copies[rd_loss_keep_slot(copies, 4)] = old;
+        }
+        ring[n % 3] = n;
+    }
+}
+
+static void unchanged(void)
+{
+    static const uint32_t replayed[] = {124, 126, 128, 129, 130};
+    uint32_t copies[4], ring[3], held[16];
+    RdLossInput in = {0};
+    RdLossChoice a, b;
+
+    /* issue 179's run 3 (issue179 above): the lost frame and the one before
+       held, with and without a copy of 133, a frame never sent */
+    {
+        static const uint32_t sentOnly[] = {128, 129, 130, 131, 132};
+        static const uint32_t withUnsent[] = {128, 129, 130, 131, 132, 133};
+
+        in.waitReplay = in.openReplay = 148;
+        in.waitFrame = in.openFrame = 129;
+        in.newestReplay = 149;
+        in.newestFrame = 130;
+        in.replayed = replayed;
+        in.replayedCount = 5;
+        in.held = sentOnly;
+        in.heldCount = 5;
+        rd_loss_choose(&in, &a);
+        in.held = withUnsent;
+        in.heldCount = 6;
+        rd_loss_choose(&in, &b);
+        CHECK(a.how == b.how && a.replay == b.replay && a.frame == b.frame &&
+              a.before == b.before && a.frameHeld == b.frameHeld && a.beforeHeld == b.beforeHeld &&
+              a.writeFrame == b.writeFrame && a.writeBefore == b.writeBefore);
+        CHECK(a.writeFrame == 129 && a.writeBefore == 128);
+    }
+    /* the history's report moment (frame 132 begun): every frame sent up to
+       130 (the picture handed over beside the stalled one), the same copies
+       and the same choice as v0.11.13's */
+    {
+        uint32_t c0[4], r0[3];
+
+        stalled(132, 130, true, c0, r0);
+        stalled(132, 130, false, copies, ring);
+        CHECK(memcmp(c0, copies, sizeof(c0)) == 0 && memcmp(r0, ring, sizeof(r0)) == 0);
+        in.held = held;
+        in.heldCount = heldList(copies, ring, held);
+        rd_loss_choose(&in, &a);
+        CHECK(a.writeFrame == 129 && a.frameHeld);
+    }
+    /* a stall past the throttle's window (frames to 400): v0.11.13's copies
+       of the frames never sent took the four slots and pushed 129 out (the
+       nearest held, 130 or newer, written in its place); now they take
+       none and 129 is still written */
+    {
+        stalled(400, 130, true, copies, ring);
+        in.held = held;
+        in.heldCount = heldList(copies, ring, held);
+        rd_loss_choose(&in, &a);
+        CHECK(!a.frameHeld && a.writeFrame != 129);
+        stalled(400, 130, false, copies, ring);
+        in.heldCount = heldList(copies, ring, held);
+        rd_loss_choose(&in, &b);
+        CHECK(b.frameHeld && b.writeFrame == 129 &&
+              b.writeBefore == 0); /* 128 recycled before the stall */
+    }
+}
+
 int main(void)
 {
     issue179();
@@ -330,6 +513,8 @@ int main(void)
     order();
     keep();
     history();
+    notSent();
+    unchanged();
     if (failures == 0) {
         printf("rd_loss_pick_test: ok\n");
     }

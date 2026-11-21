@@ -302,6 +302,10 @@ typedef struct DumpOut {
        caller's block of cap bytes (never grown: past it the dump stops,
        big set) */
     bool count, fixed;
+    /* the reads-only mode (dumpFrame): the wait for the pictures' reads
+       already handed over in place of the drain, and its ns (0 none) */
+    bool readsOnly;
+    uint64_t waitNs;
 } DumpOut;
 
 #define RD_DUMP_MEM_MAX ((size_t)192u << 20)
@@ -385,12 +389,50 @@ static bool wRegion(DumpOut *fp)
     return wraw(fp, slug, sizeof(slug));
 }
 
-/* the frame into out (a file or memory); false when a write failed */
+/* the frame into out (a file or memory); false when a write failed.
+ *
+ * The frames, textures and meshes as no present of the render thread reads
+ * or changes them (rd_thread.h): the dump waits.  For what: the drain (the
+ * render and submit threads' work in flight, a stalled picture's GPU work
+ * included), or with out->readsOnly the reads of the pictures handed over
+ * alone (rd_thread_reads_wait; issue 179: a kept copy's drain was the
+ * 146-370 ms late game steps after a GPU stall, a slow-scene dump's 68.8
+ * and 258.6 ms).  The reads-only mode is for the game thread's dumps (the
+ * loss keep, the slow-scene dump's two steps): everything written here is
+ * read from what the hand-over rule gives the game thread once the reads
+ * end, the same records its own calls change after the same wait
+ * (rd__texlock_wait):
+ *   the frame f       a ring frame (or a copy of one) the game thread
+ *                     records and closes; the render thread reads it in a
+ *                     picture's reads only (rd_begin_frame and
+ *                     rd_end_frame wait for them before they touch a slot)
+ *   the texture records (rd__tex_rec: kind, size, pixels, levels, view,
+ *                     the replacement flag) written by the game thread's
+ *                     texture calls and the decode pool's settle (both
+ *                     after rd__texlock_wait); the render thread's uploads
+ *                     read the texels and clear the dirty ranges in its
+ *                     reads (the ring and the uploads, before the walk)
+ *   the target records (rd__target_rec: size, depth, keep, block) made
+ *                     and freed by the game thread's calls, the frames'
+ *                     temporaries at rd__frame_reset (after the wait);
+ *                     made again only through rd__on_host, waited for
+ *   the mesh records  (rd__mesh_rec: stream, index, batches, name, the
+ *                     facing marks) the game thread's mesh calls (after
+ *                     the wait); the render thread's walk reads them
+ *   the region's slug the disc in play, fixed for the run
+ * After its reads a job's rest touches none of them: the list posted to
+ * the submit thread, the stats published, the next slot's fence wait
+ * (rhi_wait_frame, the bind groups' epoch) and the display's wait ahead;
+ * the submit thread ends, submits and presents lists and swapchain images
+ * and reads no record (rd_submit_thread.c).  Another thread's dump (the
+ * loss dump on the watchdog's) and F12's keep the drain. */
 static bool dumpFrame(const RdFrame *f, DumpOut *out)
 {
-    /* the frames, textures and meshes as no present of the render thread
-     * reads or changes them (rd_thread.h): the game thread's dump waits */
-    (void)rd_thread_drain();
+    if (out->readsOnly) {
+        out->waitNs = rd_thread_reads_wait();
+    } else {
+        (void)rd_thread_drain();
+    }
     rdtex_settle(); /* the texels the decode pool still owes (rd_tex_decode.h) */
     /* the call's own sets (16 KB each): a loss dump on the watchdog's
        thread and a copy on the game thread's may build at once (rd_dump.c
@@ -540,19 +582,29 @@ static bool dumpFrame(const RdFrame *f, DumpOut *out)
 }
 
 /* the frame into a memory block of at most max bytes (0: RD_DUMP_MEM_MAX);
-   *big (may be NULL) set when it failed for the bound alone */
-static bool dumpFrameMemMax(const RdFrame *f, void **outBuf, size_t *outLen, size_t max, bool *big)
+   *big (may be NULL) set when it failed for the bound alone; readsOnly:
+   dumpFrame's reads-only mode, its wait into *waitNs (may be NULL) */
+static bool dumpFrameMemMax(const RdFrame *f, void **outBuf, size_t *outLen, size_t max, bool *big,
+                            bool readsOnly, uint64_t *waitNs)
 {
     DumpOut out = {0};
 
     out.max = max;
+    out.readsOnly = readsOnly;
+    if (waitNs) {
+        *waitNs = 0;
+    }
     if (big) {
         *big = false;
     }
     if (!f || !outBuf || !outLen) {
         return false;
     }
-    if (!dumpFrame(f, &out) || out.bad) {
+    const bool ok = dumpFrame(f, &out) && !out.bad;
+    if (waitNs) {
+        *waitNs = out.waitNs;
+    }
+    if (!ok) {
         if (big) {
             *big = out.big;
         }
@@ -570,7 +622,7 @@ static bool dumpFrameMemMax(const RdFrame *f, void **outBuf, size_t *outLen, siz
 
 static bool dumpFrameMem(const RdFrame *f, void **outBuf, size_t *outLen)
 {
-    return dumpFrameMemMax(f, outBuf, outLen, 0, NULL);
+    return dumpFrameMemMax(f, outBuf, outLen, 0, NULL, false, NULL);
 }
 
 bool rd__dump_frame(const RdFrame *f, const char *path)
@@ -605,20 +657,30 @@ bool rd_dump_prev_frame_mem(void **buf, size_t *len)
     return f && p && p->closed && p->number + 1 == f->number ? dumpFrameMem(p, buf, len) : false;
 }
 
-bool rd_dump_retained_frame_mem(uint32_t number, void **buf, size_t *len, uint32_t *dumped)
+static bool retainedMem(uint32_t number, void **buf, size_t *len, uint32_t *dumped, bool readsOnly)
 {
     const RdFrame *f = rd__retained_frame(number);
 
     if (dumped) {
         *dumped = 0;
     }
-    if (!f || !f->closed || !dumpFrameMem(f, buf, len)) {
+    if (!f || !f->closed || !dumpFrameMemMax(f, buf, len, 0, NULL, readsOnly, NULL)) {
         return false;
     }
     if (dumped) {
         *dumped = f->number;
     }
     return true;
+}
+
+bool rd_dump_retained_frame_mem(uint32_t number, void **buf, size_t *len, uint32_t *dumped)
+{
+    return retainedMem(number, buf, len, dumped, false);
+}
+
+bool rd_dump_retained_frame_mem_reads(uint32_t number, void **buf, size_t *len, uint32_t *dumped)
+{
+    return retainedMem(number, buf, len, dumped, true);
 }
 
 bool rd_dump_retained_frame_bytes(uint32_t number, size_t *bytes)
@@ -631,6 +693,7 @@ bool rd_dump_retained_frame_bytes(uint32_t number, size_t *bytes)
         return false;
     }
     out.count = true;
+    out.readsOnly = true; /* the game thread's (rd_dump_mem.h) */
     if (!dumpFrame(f, &out)) {
         return false;
     }
@@ -660,6 +723,7 @@ RdDumpInto rd_dump_retained_frame_into(uint32_t number, void *block, size_t cap,
     out.fixed = true;
     out.buf = block;
     out.cap = cap;
+    out.readsOnly = true; /* the game thread's (rd_dump_mem.h) */
     if (!dumpFrame(f, &out) || out.bad) {
         return out.big ? RD_DUMP_INTO_SMALL : RD_DUMP_INTO_FAILED;
     }
@@ -1387,13 +1451,17 @@ bool rd_dump_retained_frame(uint32_t number, const char *path, uint32_t *dumped)
  * frame 129 and the dump held 132 and 131.  A frame the GPU may not have
  * finished when the ring reuses its slot is therefore copied to memory first
  * (rd__loss_keep_recycle, the game thread, before the slot is reset), as an
- * ordinary dump (dumpFrameMem), and freed again once the GPU has moved two
- * frames past it.
+ * ordinary dump in dumpFrame's reads-only mode (the GPU's stalled work not
+ * waited for), and freed again once the GPU has moved two frames past it.
+ * A frame no picture of which was handed to a replay (RdFrame.sent: with
+ * Frame rate Original, a picture the gate left out) is never copied: it
+ * was never on the GPU (counted, "not copied: never handed to the GPU").
  *
  * Only while a slot wait has stalled (rd_loss_pick.h rd_loss_keep_stalled:
  * a wait in progress blocked 100 ms or more, RhiGpuProgress.waitingNs; no
- * driver call is made for it): a copy drains the render and submit threads
- * and serializes the frame (about 7 MB at 2x), which must not happen in
+ * driver call is made for it): a copy serializes the frame (about 7 MB at
+ * 2x; until v0.11.13 it drained the render and submit threads first, the
+ * stalled picture's GPU work included), which must not happen in
  * steady play, where a GPU-bound phone still has the recycled frame's
  * submission open (frames in flight) but no wait blocks that long.  So the
  * lost frame is held when a stall preceded the loss (issues 179 and 211
@@ -1407,7 +1475,7 @@ bool rd_dump_retained_frame(uint32_t number, const char *path, uint32_t *dumped)
  * that does not track its submissions (Direct3D 12 and 11, OpenGL).
  *
  * The loss dump reads the copies from another thread (the watchdog's,
- * while the main thread may be blocked inside a copy's drain): s_keepStop,
+ * while the main thread may be blocked inside a copy): s_keepStop,
  * set by the loss dump (rd_loss_plan) and by the recycle itself once the
  * device is lost, makes every later recycle return at once, and the loss
  * dump waits up to RD_LOSS_KEEP_WAIT_MS for a recycle in progress
@@ -1422,6 +1490,7 @@ static struct {
     void *buf[RD_LOSS_KEEP_SLOTS];
     size_t len[RD_LOSS_KEEP_SLOTS];
     uint64_t seen, taken, big, failed, throttled, freed;
+    uint64_t notSent; /* RD_LOSS_KEEP_NOT_SENT: not copied, never handed to the GPU */
     size_t maxBytes;
     RdLossThrottle throttle;
 } s_keep;
@@ -1464,8 +1533,13 @@ static void keepTake(const RdFrame *f, const RhiGpuProgress *p)
     void *buf = NULL;
     size_t len = 0;
     bool big = false;
+    uint64_t waitNs = 0;
+    const double t0 = rd__now_ms();
 
-    if (!dumpFrameMemMax(f, &buf, &len, RD_LOSS_KEEP_BYTES, &big)) {
+    /* reads-only: the GPU's stalled work and the submit thread's not
+       waited for (dumpFrame); rd_begin_frame waited for the reads already,
+       so the wait is about nothing */
+    if (!dumpFrameMemMax(f, &buf, &len, RD_LOSS_KEEP_BYTES, &big, true, &waitNs)) {
         if (big) {
             s_keep.big++;
             rd_loss_keep_big(&s_keep.throttle, s_keep.seen);
@@ -1479,6 +1553,8 @@ static void keepTake(const RdFrame *f, const RhiGpuProgress *p)
         }
         return;
     }
+    const double waitMs = (double)waitNs / 1e6;
+    const double copyMs = rd__now_ms() - t0 - waitMs;
     const uint32_t slot = rd_loss_keep_slot(s_keep.frame, RD_LOSS_KEEP_SLOTS);
 
     if (s_keep.buf[slot]) {
@@ -1496,10 +1572,28 @@ static void keepTake(const RdFrame *f, const RhiGpuProgress *p)
         rd__log("loss keep: frame %u copied to memory, %zu KB, as the GPU had not finished it "
                 "when the ring reused its slot and the slot wait had blocked %.0f ms (the "
                 "backend's first open submission is frame %u replay %u, newest tag replay %u "
-                "frame %u); %u kept (%zu KB), copy %llu of %llu recycled frames",
+                "frame %u); %u kept (%zu KB), copy %llu of %llu recycled frames (%llu not "
+                "copied: never handed to the GPU); copy %.1f ms, reads wait %.1f ms",
                 f->number, len >> 10, (double)p->waitingNs / 1e6, p->openFrame, p->openReplay,
                 p->replay, p->frame, (unsigned)(s_keep.taken - s_keep.freed), keepBytes() >> 10,
-                (unsigned long long)s_keep.taken, (unsigned long long)s_keep.seen);
+                (unsigned long long)s_keep.taken, (unsigned long long)s_keep.seen,
+                (unsigned long long)s_keep.notSent, copyMs > 0.0 ? copyMs : 0.0, waitMs);
+    }
+}
+
+/* the frame left uncopied as no picture of it reached the GPU (the first 8,
+   then every 100th) */
+static void keepNotSent(const RdFrame *f, const RhiGpuProgress *p)
+{
+    s_keep.notSent++;
+    if (s_keep.notSent <= 8 || s_keep.notSent % 100 == 0) {
+        rd__log("loss keep: frame %u not copied: the slot wait had blocked %.0f ms and the "
+                "backend's first open submission is frame %u (newest tag replay %u frame %u), "
+                "but no picture of frame %u was handed to the GPU (a picture left out); %llu "
+                "not copied so, %llu copies, of %llu recycled frames",
+                f->number, (double)p->waitingNs / 1e6, p->openFrame, p->replay, p->frame, f->number,
+                (unsigned long long)s_keep.notSent, (unsigned long long)s_keep.taken,
+                (unsigned long long)s_keep.seen);
     }
 }
 
@@ -1532,10 +1626,15 @@ void rd__loss_keep_recycle(const RdFrame *f)
             have = have || (s_keep.buf[i] && s_keep.frame[i] == f->number);
         }
         if (f && f->closed && f->number != 0 && !have) {
-            switch (rd_loss_keep_decide(&s_keep.throttle, s_keep.seen, f->number, p.openFrame,
+            const bool sent = __atomic_load_n(&f->sent, __ATOMIC_RELAXED) != 0;
+
+            switch (rd_loss_keep_decide(&s_keep.throttle, s_keep.seen, f->number, sent, p.openFrame,
                                         p.waitingFor, p.waitingNs)) {
             case RD_LOSS_KEEP_TAKE:
                 keepTake(f, &p);
+                break;
+            case RD_LOSS_KEEP_NOT_SENT:
+                keepNotSent(f, &p);
                 break;
             case RD_LOSS_KEEP_THROTTLED:
             case RD_LOSS_KEEP_PAUSED:
@@ -1582,8 +1681,8 @@ static bool keepStopWait(void)
     while (__atomic_load_n(&s_keepBusy, __ATOMIC_SEQ_CST)) {
         if (rd__now_ms() - t0 > RD_LOSS_KEEP_WAIT_MS) {
             s_keepGone = true;
-            rd__log("loss keep: a copy in progress did not finish in %.0f s (its drain of the "
-                    "render thread blocks): the copies in memory are not used",
+            rd__log("loss keep: a copy in progress did not finish in %.0f s (its wait for the "
+                    "render thread's reads blocks): the copies in memory are not used",
                     RD_LOSS_KEEP_WAIT_MS / 1000.0);
             return false;
         }
