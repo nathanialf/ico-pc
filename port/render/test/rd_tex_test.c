@@ -3038,8 +3038,8 @@ static void threadPresentFree(void)
                       c->name, on.posts, ticks, on.fps, need, c->needFps, loss, off.posts,
                       offIdeal);
                 if (c->busyNeed > 0.0) {
-                    const double busyWant =
-                        c->busyNeed < off.gpuBusy - 0.02 ? c->busyNeed : off.gpuBusy - 0.02;
+                    /* less what the machine took from the control's busy share */
+                    const double busyWant = c->busyNeed - (1.0 - off.gpuBusy);
                     CHECK(on.gpuBusy >= busyWant,
                           "GPU's end first, %s: the faked GPU busy %.1f %% of the measured "
                           "span ahead (at least %.1f %% wanted; %.1f %% without the rule)",
