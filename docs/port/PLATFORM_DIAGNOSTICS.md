@@ -877,13 +877,15 @@ The zero-area cull's mark (`port/platform/vu_zero_mark.c`; [PIPELINES.md](PIPELI
 is read right after: `logs/vu-zero-mark.txt` holds a stage and the version that wrote it:
 `trying <v>` (written and synced by the renderer before it makes the cull's one module),
 `counting <v>` (its self-test passed), `on <v>` (250 pictures drawn with it), `failed <v>` (the
-module could not be made or the self-test refused it) or `blocked <v>`. The previous run's end is
+module could not be made, the self-test refused it, or a culling draw met a multisampled pass) or
+`blocked <v>`. The previous run's end is
 classed from last-run-previous.txt's end (`clean, after: <end>` counts as that end) and, where no
 end was written, from Android's exit record with that run's pid (`exit_info_last_reason`, read by
 `exit_info_begin` before; none below Android 11 and off Android). `trying` blocks after every end
 but a clean close; `counting` and `on` only after a crash, an ANR, a signal other than SIGKILL, a
 device loss, a GPU hang or the watchdog (a close from the recent apps list, Force stop, a kill by
-the system, an update or no evidence do not); `failed` and `blocked` always. A block holds while
+the system, an update, the app ending itself or no evidence do not); `failed` and `blocked`
+always. A block holds while
 the mark's version runs (`blocked <v>`, the renderer gets `ICO_VU_ZERO_BLOCK`), so an update
 clears it; the renderer also gets `ICO_VU_ZERO_MARK` (the path) and `ICO_VU_ZERO_VERSION`. Nothing
 here touches the loss ladder. One line where there was a mark: `ico_pc: the previous run:
@@ -916,7 +918,8 @@ off on this install since a run of <version> ended badly with it in effect (bloc
 mark cleared)`, `... blocked on <v>, this is <v>: tried again (the mark cleared)`; and at the
 write `ico_pc: the next picture submitted ahead: in effect on this install from here
 (<logs>/ahead-mark.txt: on <version>; a device loss, GPU hang, watchdog end or crash of this run
-keeps it off until the version changes)`.
+keeps it off until the version changes)`. Neither mark file is in the [report
+file](#the-report-file); their lines are in the log it holds.
 
 On Android 11 and later each phase change also keeps at most 128 bytes (`ico-pc <phase> | resets
 47->66 | free 1911 MB, lowest 1897`; where the skin check runs, `| skin box <b> twin <t> made <p>`
@@ -1129,7 +1132,7 @@ the newest file in logs that starts with report-" and name it (`port/platform/di
 | `ico-pc-previous.log` | the run before's |
 | `startup-activity.txt` | when there is one |
 | `last-run.txt`, `last-run-previous.txt` | where this run is and where the run before was, when there are ([the last-run file](#the-last-run-file)) |
-| `vu-zero-mark.txt` | the zero-area cull's mark on the install: trying, counting, on, failed or blocked, with the version that wrote it ([the last-run file](#the-last-run-file)) |
+| `scene-ledger.txt` | what the last stages held and left out of their pictures, when there is one ([SCENE_LEDGER.md](SCENE_LEDGER.md)) |
 | `exit-info.txt`, `exit-trace-<ms>.txt` or `.pb` | how the run before ended and Android's exit records read at this start; the newest trace Android kept with a record ([how the previous run ended](#how-the-previous-run-ended)) |
 | `config.toml`, `ico-pc.ini` | the settings |
 | `loss-<stamp>.zip` | this run's [loss dump](RENDER.md#the-loss-dump), else the one the previous run left, deflated |
@@ -1608,10 +1611,7 @@ of it with its presented pictures, under the stage the game was in at the second
 
 `window: pictures a second: 42: 17 18 9 19 | 40: 12 11 12 (and 4 in the block's last 0.6 s)`
 
-The blocks stay 10 s at a stage change (`hotkeys.c` `ico_stats_period_ns`): a block that holds
-one shows it here, each second under its own stage, and every rule that counts or times blocks
-(the pass timing's disarm after quiet blocks, the CPU pin's release history, the slow-scene
-capture's judgement) keeps its time. The block's presented fps and its worst second alone could
+A block that holds a stage change shows it here, each second under its own stage. The block's presented fps and its worst second alone could
 not say whether 17.4 fps was 17 a second throughout or 25 with a hitch. A second with no step keeps the stage before it (`?` before any
 step); seconds past the 64 a block holds are counted at the end (`; 6 seconds past the 64 held, 6
 pictures in them`). Its cost: a step compares the stage, a picture adds one to its second (game
@@ -1639,9 +1639,8 @@ thread, no lock).
   `perf_hint_refused_text`): `window: performance hints: off (the system refused the session:
   APerformanceHint_createSession answered none for 3 threads in 0.67 ms; the system's update rate
   16.67 ms; API 34; game mode standard); the port runs as before` (`the system gives no update
-  rate` without one). No other session is asked for after a refusal: a session of other threads
-  would be a scheduling state of its own with no way back; the rate in the next log says whether
-  the system has hint sessions at all.
+  rate` without one). No other session is asked for after a refusal; the rate in the next log says
+  whether the system has hint sessions at all.
 
 ### The issue ledger, continued
 

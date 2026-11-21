@@ -185,7 +185,9 @@ In that folder:
 - `logs` holds the log file, `ico-pc.log`, which helps with problem
   reports. When the graphics driver stops responding, the game also saves
   a copy of the picture it was drawing there, a file whose name starts
-  with `loss-` and ends in `.zip` (the three newest are kept).
+  with `loss-` and ends in `.zip` (the three newest are kept). The small
+  notes `vu-zero-mark.txt` and `ahead-mark.txt` there are the game's own:
+  leave them in place ([what they are](FAQ.md#what-are-vu-zero-marktxt-and-ahead-marktxt)).
 - `textures/SCES-50760/replacements` is where a
   [texture pack](TEXTURE_PACKS.md) for the European disc goes, and
   `textures/SCPS-11003/replacements` one for the Japanese disc,

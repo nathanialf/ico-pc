@@ -1894,7 +1894,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   failing every time, and after 280 light jobs whose first window of 256 ends undecided), gets it
   on with none early or unknown, then at least three quarters of 1000/45 a second and the
   rule-off posts less a fifth; 5 ms calls while the job before runs (60 ms GPU) get it off, 16
-  counted all early. Every case whose verdict is wanted reaches it, 16 counted, within the first
+  counted, at most 2 of them at the end of the GPU work (a call's end meeting the picture
+  before's within 1 ms by chance; the verdict needs 14). Every case whose verdict is wanted reaches it, 16 counted, within the first
   64 Original presents with none unknown (`rd__submit_gpu_first_tally`), and no sample wait is
   made after it. The cases with the verdict forced on above run one picture at a time
   (`rd__submit_test_ahead(0)`), the order the ways back return to; the sampled present back at the
@@ -1922,7 +1923,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   submit thread, no present call waiting for GPU work as above, no long call counted by the
   guard as waiting for the later picture; the 37.5 and 48 ms cases again with 6 of every 16
   present calls 6 ms long while the later picture's work runs on keep the order (some calls
-  classed slow, none counted) and the same rate requirements. The ways back: a
+  classed slow, none counted) and the same rate requirements, half of the jobs, not three
+  quarters, submitted before the picture before's GPU end. The ways back: a
   present that waits for all the work submitted (`PF_BLOCK`, ahead from the start) turns the
   order off by the guard within its window (4 to 16 presents with a later picture submitted, at
   least 4 of them counted as waiting for the later picture's work and none as slow: the fake's

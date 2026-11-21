@@ -562,6 +562,18 @@ keeps the newest three. If you are reporting that the game runs slowly, please a
 log. They are safe to delete. To stop the game writing them, set `slow_scene_dump_ms = 0` under
 `[dev]` in `config.toml`.
 
+## What are vu-zero-mark.txt and ahead-mark.txt?
+
+They are small notes the game keeps in the `logs` folder about two ways it saves work for the
+graphics card or phone: leaving out pieces of scenery too small to cover a single pixel
+(`vu-zero-mark.txt`), and, on some Android phones, handing the next picture to the graphics chip
+while the one before is still finishing (`ahead-mark.txt`). If the game closes with a crash or a
+graphics problem while one of them is in use, if the game's check at start finds that the first one
+does not work, or if the game is stopped while it runs that check, the note keeps that way off on
+your computer or phone until you install a newer version of the game. Closing the game the usual
+way once it has started never turns either off. Leave the files where they are: the log's first lines say what each
+note decided, and a problem report needs only the log.
+
 ## Something went wrong. What now?
 
 Look at [When something goes wrong](TROUBLESHOOTING.md). It explains the

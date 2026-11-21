@@ -400,6 +400,18 @@ spot both ways ([save a picture of a problem](#save-a-picture-of-a-problem));
 the log's line with `region rule:` in it says which way the game
 ran. To go back, delete the line.
 
+## A piece of the scenery is missing
+
+To save work, the game leaves out pieces of scenery so small that they
+would not cover a single pixel of the picture. Before it does, it checks at
+start that this works on your graphics card or phone, and it uses it only
+when that check passes. If a part of a room, a wall or an object is missing
+all the same, save a picture of it while it shows
+([save a picture of a problem](#save-a-picture-of-a-problem)) and send it
+with a [problem report](#send-a-problem-report), saying where you were and
+what should be there. On a phone, use **Save a picture for a bug report**
+([how](ANDROID.md#send-a-problem-report)).
+
 ## A program that adds frames or scales the game (Lossless Scaling) does not work
 
 Programs that scale the game's window, add frames to it or draw over it,
