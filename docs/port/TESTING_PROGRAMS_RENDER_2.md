@@ -461,7 +461,8 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
     the stats line off.
   - No device: SKIP.
 - `rd_vuprepass_selftest_zero`, `_zero_plain`, `_zero_mali`, `_zero_lattice`, `_zero_missing`,
-  `_zero_lossrow`, `_zero_marked`, `_zero_never` (`rd_vu_zero.cmake`, through
+  `_zero_lossrow`, `_zero_marked`, `_zero_never`, `_zero_refused`, `_zero_picture`, `_zero_switch`
+  (`rd_vu_zero.cmake`, through
   `rd_vuprepass_selftest_test` and `test/rd_vuprepass_selftest.cmake`): the zero-area cull's
   start-up self-test after the pre-pass's (which must still be on), each run's start line saying
   what of it exists: on in the extended variant (Enhanced 16:9 at 2x, Full pixel), the plain one
@@ -470,7 +471,13 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   texel off (the answers differ) and with no record copied (no answer read back), the module and
   pipeline released; off for this start after a lost one (`ICO_LOSS_ROW=1`), off on the install
   (`ICO_VU_ZERO_BLOCK`, the mark the platform hands over) and off by `ICO_RD_VU_ZERO=0`, no
-  module or pipeline of it made and no try logged.
+  module or pipeline of it made and no try logged; a refusal by the settings (`ICO_RD_VU_OFFGRID=1`:
+  no lattice) not tried, no module made and the install's mark (`ICO_VU_ZERO_MARK` in the build
+  folder) not written; the picture compare's way back (`ICO_RD_VU_ZERO_SABOTAGE=picture`): off,
+  released, the mark `failed <the test's version>`; the renderer made again in the process as a Graphics API
+  switch makes it (`switch`: `rd_suspend`, `rd_resume`, the self-test again): on both times, its
+  read back buffers made again for the second try and none alive after either, the mark `counting
+  <the test's version>` after each.
 - `rd_smallcuts_test.c` (`rd_smallcuts`; `rd_smallcuts.cmake`, CPU): the pure parts of the turn in
   the present's blit and the VU record by compute on the PowerVR class: `rd__turn_rect` for every
   quarter turn against `rd_prerotate.c`'s pixel table (every pixel of the rect lands inside the

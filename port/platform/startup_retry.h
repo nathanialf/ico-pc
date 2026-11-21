@@ -304,7 +304,10 @@ bool startup_retry_note_has_dst(const char *note);
  * start that ended without a word inside such a batch makes the next start
  * draw without the pre-pass, and the second such end in a row every start
  * after it ([dev] vu_prepass = false, diag_host.h
- * ico_diag_startup_vu_prepass).  Tolerant as startup_retry_note_has_dst. */
+ * ico_diag_startup_vu_prepass).  A note naming the zero-area cull's build
+ * (vu_tri_rule_zero_*, made only in the cull's own self-test) is not one:
+ * the cull's install mark answers for it (port/platform/vu_zero_mark.h).
+ * Tolerant as startup_retry_note_has_dst. */
 bool startup_retry_note_has_vu_pre(const char *note);
 
 /* Whether an activity note names a pipeline of the pre-pass's record
@@ -316,7 +319,8 @@ bool startup_retry_note_has_vu_pre(const char *note);
  * port/render/rd_pipeline.c keyVsName names the build a key draws or
  * dispatches through).  Every such note is also startup_retry_note_has_vu_pre's; the
  * crash order's targets step and the ends' targets rung read this one
- * first.  Tolerant as startup_retry_note_has_dst. */
+ * first.  Not a note naming the zero-area cull's build (as above).
+ * Tolerant as startup_retry_note_has_dst. */
 bool startup_retry_note_has_vu_store(const char *note);
 
 /* Whether an activity note names the skinned draws' bone-block check's

@@ -393,15 +393,17 @@ if(ICO_RUN_TESTS)
 endif()
 
 # The zero-area cull's mark on the install (vu_zero_mark.c, issue 179): the
-# decision for every mark and every previous end (trying after a crash, a
-# loss, a hang, the watchdog or no end: blocked for the version; trying after
-# a clean end: tried again; failed: blocked; blocked on this version: off,
-# another version: tried again; on after the watchdog: a lost start), and the
-# start's step on files under the build folder (the file rewritten, the
-# environment exported, one line)
+# end kind from last-run.txt's end and Android's exit record, the stage table
+# (trying: every end but a clean close blocks; counting and on: only a crash,
+# an ANR, a signal, a device loss, a GPU hang or the watchdog; failed and
+# blocked always), every mark with its version (a block holds for the
+# version that ran, an update clears it), and the start's step on files
+# under the build folder (closed from the recent apps list while counting:
+# not blocked; a crash while counting: blocked for that version, not the
+# next; the file rewritten, the environment exported, one line)
 add_executable(vu_zero_mark_test test/vu_zero_mark_test.c)
 target_compile_options(vu_zero_mark_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
-target_link_libraries(vu_zero_mark_test PRIVATE ico_platform ico_host_fs)
+target_link_libraries(vu_zero_mark_test PRIVATE ico_platform ico_host_fs ico_miniz)
 if(ICO_RUN_TESTS)
     add_test(NAME vu_zero_mark COMMAND vu_zero_mark_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()

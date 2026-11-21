@@ -90,6 +90,23 @@ endif()
 #   _zero_never                       the cull off (ICO_RD_VU_ZERO=0): no
 #                                     module or pipeline of it made, so the
 #                                     modules made are the build's without it
+#   _zero_refused                     a refusal by the settings (the
+#                                     vertices off the grid,
+#                                     ICO_RD_VU_OFFGRID=1, as MSAA, a scale
+#                                     that is not whole or jitter refuse):
+#                                     not tried in this run, no module made
+#                                     and the install's mark not written
+#   _zero_picture                     the picture without the cull changed
+#                                     (ICO_RD_VU_ZERO_SABOTAGE=picture): off
+#                                     for the run by the picture compare,
+#                                     released, the mark "failed <version>"
+#   _zero_switch                      the renderer made again in the process
+#                                     (a Graphics API switch: rd_suspend,
+#                                     rd_resume) and the self-test run again:
+#                                     on both times, its read back buffers
+#                                     made again for the second try and none
+#                                     alive after either, the mark "counting
+#                                     <version>" after each
 # Each run's start line ("VU zero-area cull: on|off, N modules of it made, P
 # of its pipelines alive") says what exists: 1 and 1 where it passed, 1 and 0
 # where its self-test released it, 0 and 0 where it was never tried.
@@ -133,10 +150,32 @@ if(ICO_RUN_TESTS AND DEFINED _vst AND TARGET rd_vuprepass_selftest_test)
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}" "-DEXTRA=${_znone}"
                      "-DNOT_=rd: VU zero-area cull: (on|trying)" -P "${_vst}")
+    # the install's mark in the build folder (each test its own file; the
+    # program removes it first) and the version the renderer writes in it
+    # the second try's start line counts both tries' modules
+    string(REPLACE "on, 1 modules of it made" "on, 2 modules of it made" _zon2 "${_zon}")
+    set(_zmark "ICO_VU_ZERO_VERSION=v0.0.0;ICO_VU_ZERO_MARK=${CMAKE_CURRENT_BINARY_DIR}/vu_zero_mark")
+    add_test(NAME rd_vuprepass_selftest_zero_refused
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
+                     "-DLINE=${_vst_on}"
+                     "-DEXTRA=rd: VU zero-area cull: off for the run \\(self-test not run: these settings give SCENE no lattice \\(off grid\\): nothing written, tried in a later run whose settings allow it\\)${_znone}.*test: the zero-area cull's mark after the self-test: none"
+                     "-DNOT_=rd: VU zero-area cull: (on|trying)" -P "${_vst}")
+    add_test(NAME rd_vuprepass_selftest_zero_picture
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
+                     "-DLINE=${_vst_on}"
+                     "-DEXTRA=${_zrel}rd: VU zero-area cull: off for the run \\(self-test: the pictures differ with the cull, the first at texel [0-9]+,[0-9]+\\)${_zgone}.*test: the zero-area cull's mark after the self-test: failed v0.0.0"
+                     "-DNOT_=rd: VU zero-area cull: on \\(" -P "${_vst}")
+    add_test(NAME rd_vuprepass_selftest_zero_switch
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
+                     -DVARIANT=switch "-DLINE=${_vst_on}.*rd: VU pre-pass: ${_vst_on}"
+                     "-DEXTRA=${_zon}.*test: the zero-area cull's mark after the self-test: counting v0.0.0.*rd: VU zero-area cull: trying it: .*${_zon2}.*test: the renderer made again: the zero-area cull on before, on after, its read back buffers [1-9][0-9]* made before the switch, [1-9][0-9]* after, alive 0, 0, 0.*test: the zero-area cull's mark after the second self-test: counting v0.0.0"
+                     -P "${_vst}")
     set(_zst rd_vuprepass_selftest_zero rd_vuprepass_selftest_zero_plain
              rd_vuprepass_selftest_zero_mali rd_vuprepass_selftest_zero_lattice
              rd_vuprepass_selftest_zero_missing rd_vuprepass_selftest_zero_lossrow
-             rd_vuprepass_selftest_zero_marked rd_vuprepass_selftest_zero_never)
+             rd_vuprepass_selftest_zero_marked rd_vuprepass_selftest_zero_never
+             rd_vuprepass_selftest_zero_refused rd_vuprepass_selftest_zero_picture
+             rd_vuprepass_selftest_zero_switch)
     set_tests_properties(${_zst} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
     set_tests_properties(rd_vuprepass_selftest_zero rd_vuprepass_selftest_zero_plain
                          PROPERTIES ENVIRONMENT "${_env}")
@@ -152,4 +191,10 @@ if(ICO_RUN_TESTS AND DEFINED _vst AND TARGET rd_vuprepass_selftest_test)
                          PROPERTIES ENVIRONMENT "${_env};ICO_VU_ZERO_BLOCK=was being tried when it ended (a crash)")
     set_tests_properties(rd_vuprepass_selftest_zero_never
                          PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_ZERO=0")
+    set_tests_properties(rd_vuprepass_selftest_zero_refused
+                         PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_OFFGRID=1;${_zmark}_refused.txt")
+    set_tests_properties(rd_vuprepass_selftest_zero_picture
+                         PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_ZERO_SABOTAGE=picture;${_zmark}_picture.txt")
+    set_tests_properties(rd_vuprepass_selftest_zero_switch
+                         PROPERTIES ENVIRONMENT "${_env};${_zmark}_switch.txt")
 endif()
