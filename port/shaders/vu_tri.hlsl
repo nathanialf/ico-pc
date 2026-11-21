@@ -47,6 +47,93 @@
 #define ICO_VU_EARLY 1
 #endif
 
+// --------------------------------------------------- the zero-area test
+
+// shader_consts.h ICO_VU_ZERO_GROW, ICO_VU_ZERO_SPAN
+#define VU_ZERO_GROW 2
+#define VU_ZERO_SPAN 4
+
+// The edge a -> b's test at p (corners and p in sixteenths of a texel, the
+// box's first sample point at 0): 1 when p may be on the inner side of the
+// triangle grown by VU_ZERO_GROW, s the triangle's winding (1 or -1).  A
+// corner the GPU moves by at most VU_ZERO_GROW each way moves this edge's
+// value at p by at most VU_ZERO_GROW (|ex| + |ey|): the closed, grown
+// triangle holds every point the GPU's own can cover.  The vertex-shader
+// envelope (tools/check_spirv.py): signed tests as >= and ==, no loop, no
+// arithmetic shift, choices between numbers
+uint vu_zero_edge(int2 a, int2 b, int2 p, int s)
+{
+    int2 e = b - a;
+    int v = s * (e.x * (p.y - a.y) - e.y * (p.x - a.x));
+    return v >= -VU_ZERO_GROW * (abs(e.x) + abs(e.y)) ? 1u : 0u;
+}
+
+// sample point (i, j) of the box (n: its last point's place) inside the
+// grown triangle a, b, c: 1 or 0
+uint vu_zero_at(int2 a, int2 b, int2 c, int s, uint2 n, uint i, uint j)
+{
+    int2 p = int2(int(i * 16u), int(j * 16u));
+    uint in3 = vu_zero_edge(a, b, p, s) & vu_zero_edge(b, c, p, s) & vu_zero_edge(c, a, p, s);
+    return in3 & (n.x >= i ? 1u : 0u) & (n.y >= j ? 1u : 0u);
+}
+
+// 1 when the triangle with corners at GS positions (ga, gb, gc: 12.4,
+// 0..65535) covers no sample point of the lattice word (shader_consts.h
+// ICO_VU_ZERO_ON: U = gx * sx + kx, V = gy * sy + ky in sixteenths of a
+// texel, the samples where both are multiples of 16), every corner drawn at
+// that position (vu_tri_rule_pre_vs says when).  Integers only: the
+// corners are within 61 sixteenths of the box's first sample, so every
+// product is exact.  A box of more than VU_ZERO_SPAN samples a side is
+// kept; a triangle of no area is tested by its grown box alone
+// (port/render/rd_vu_zero.c rd_vu_zero_test is the same statements); the
+// box's sixteen points are written out (no loop in a vertex shader)
+uint vu_tri_zero(int2 ga, int2 gb, int2 gc, uint word)
+{
+    int2 k = int2(int(word & 15u), int((word >> 4) & 15u));
+    int2 sc = int2(int((word >> 8) & 15u), int((word >> 12) & 15u));
+    int2 a = ga * sc + k;
+    int2 b = gb * sc + k;
+    int2 c = gc * sc + k;
+    // the grown box's sample points m * 16, m0 .. m1 (the corners'
+    // places are not negative: lo + 15 and hi are not either)
+    int2 lo = min(a, min(b, c)) - VU_ZERO_GROW;
+    int2 hi = max(a, max(b, c)) + VU_ZERO_GROW;
+    int2 m0 = int2(uint2(lo + 15) >> 4);
+    int2 m1 = int2(uint2(hi) >> 4);
+    // the grown box is at least 2 VU_ZERO_GROW wide: m1 is m0 - 1 at least
+    if (m1.x - m0.x == -1 || m1.y - m0.y == -1) {
+        return 1u;
+    }
+    uint2 n = uint2(m1 - m0);
+    if (n.x >= uint(VU_ZERO_SPAN) || n.y >= uint(VU_ZERO_SPAN)) {
+        return 0u;
+    }
+    int2 o = m0 * 16;
+    a -= o;
+    b -= o;
+    c -= o;
+    int area = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    if (area == 0) {
+        return 0u;
+    }
+    int s = (asuint(area) >> 31) != 0u ? -1 : 1;
+    uint hit = vu_zero_at(a, b, c, s, n, 0u, 0u) | vu_zero_at(a, b, c, s, n, 1u, 0u) |
+               vu_zero_at(a, b, c, s, n, 2u, 0u) | vu_zero_at(a, b, c, s, n, 3u, 0u);
+    hit |= vu_zero_at(a, b, c, s, n, 0u, 1u) | vu_zero_at(a, b, c, s, n, 1u, 1u) |
+           vu_zero_at(a, b, c, s, n, 2u, 1u) | vu_zero_at(a, b, c, s, n, 3u, 1u);
+    hit |= vu_zero_at(a, b, c, s, n, 0u, 2u) | vu_zero_at(a, b, c, s, n, 1u, 2u) |
+           vu_zero_at(a, b, c, s, n, 2u, 2u) | vu_zero_at(a, b, c, s, n, 3u, 2u);
+    hit |= vu_zero_at(a, b, c, s, n, 0u, 3u) | vu_zero_at(a, b, c, s, n, 1u, 3u) |
+           vu_zero_at(a, b, c, s, n, 2u, 3u) | vu_zero_at(a, b, c, s, n, 3u, 3u);
+    return hit != 0u ? 0u : 1u;
+}
+
+// a corner's GS position is in 0..65535 on both axes (vu_tri_zero's range)
+uint vu_zero_range(VuVtx v)
+{
+    return (v.gx & 65535) == v.gx && (v.gy & 65535) == v.gy ? 1u : 0u;
+}
+
 // --------------------------------------------------- the record stages
 
 // slot A: the flags (vu_common.hlsli VU_TF_*), the anchor's colour and
@@ -120,6 +207,25 @@ VuPreOut vu_tri_rule_pre_vs(uint vid : SV_VertexID)
         }
         f |= (at << VU_TF_AT_SHIFT) | (exact != 0u ? VU_TF_EXACT : 0u);
         f |= (fa | fb | fc) != 0u ? VU_TF_CUT : 0u;
+    }
+    // the zero-area test (vu_tri_zero; port/render/rd_vu_zero.h): asked for
+    // by the lattice word (vu_tri.w, the rule stage's alone), under the
+    // exact viewport on the GS's grid without jitter, where every corner is
+    // drawn at its GS position: clip mode none without the wrap, the region
+    // rule's EXACT, the scissor mode's code 1.  Nothing else of the word
+    // changes; a draw culls the triangle only under VU_F_ZERO_OK
+    // (vu_tri_verdict)
+    uint at1 = mode == VU_CLIP_NONE     ? ((f & VU_TF_WRAP) != 0u ? 1u : 0u)
+               : mode == VU_CLIP_REGION ? ((f & VU_TF_RULE_MASK) == VU_RULE_EXACT ? 1u : 0u)
+                                        : (((f >> VU_TF_AT_SHIFT) & 3u) == 1u ? 1u : 0u);
+    uint zw = (vu_tri.w != 0u ? 1u : 0u) & gsPos & at1 & (g_vp.x != 0.0 ? 1u : 0u) &
+              (g_z.w == 0.0 ? 1u : 0u) & (g_jitter.x == 0.0 ? 1u : 0u) &
+              (g_jitter.y == 0.0 ? 1u : 0u) & vu_zero_range(a) & vu_zero_range(b) &
+              vu_zero_range(c);
+    if (zw != 0u) {
+        f |= vu_tri_zero(int2(a.gx, a.gy), int2(b.gx, b.gy), int2(c.gx, c.gy), vu_tri.w) != 0u
+                 ? VU_TF_ZERO
+                 : 0u;
     }
     // the planes as vu_mesh_out makes them (vu_attr_planes, vu_plane_out),
     // whether they hold or not (vu_main_vs says which)
@@ -288,6 +394,14 @@ uint vu_tri_verdict(uint f, uint kick, uint drawZ, out uint exact, out uint besi
     culled = at == 0u ? 1u : 0u;
     if ((rule & VU_TRI_CHAIN) != 0u && vu_batch.z != 0u && (f & VU_TF_PAST) != 0u) {
         // vu_plane_out: every corner past the chain plane
+        culled = 1u;
+    }
+    if ((f & VU_TF_ZERO) != 0u && (drawZ & VU_F_ZERO_OK) != 0u) {
+        // the rule stage's zero-area test (vu_tri_zero): no sample point of
+        // the draw's target in it, culled as a drop is
+        at = 0u;
+        exact = 0u;
+        beside = 0u;
         culled = 1u;
     }
     return at;

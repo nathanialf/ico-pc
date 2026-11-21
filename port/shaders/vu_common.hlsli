@@ -436,6 +436,14 @@ uint4 vu_stream_u(uint qw)
 // what the camera sees of it): a triangle the PS2 drops is drawn whatever
 // way it faces (vu_rule_beside)
 #define VU_F_TWO_SIDED 32768u
+// The draw may cull the triangles the rule stage found to cover no sample
+// point of its target (shader_consts.h ICO_VU_ZERO_OK, rd_vu_zero.h; the
+// triangle's VU_TF_ZERO, vu_tri.hlsl vu_tri_zero): set by rd_replay_vu.c
+// vuDraw only for a draw on the target and viewport its pre-pass entry's
+// lattice was made for, single-sampled, on the original index list; every
+// other reader of the slot (the velocity pass, the index compaction, a
+// shared list's draw) leaves such a triangle as it was
+#define VU_F_ZERO_OK 65536u
 // The marks of a triangle k-2, k-1, k (shader_consts.h ICO_VU_MARK_*,
 // rd_mesh.c RdMeshRec.kickMark): a byte a kick after the mesh's vertices
 // in the stream, where vu_mark says.
@@ -2285,6 +2293,7 @@ VuPreOut vu_pre_out(uint id, VuVtx v)
 #define VU_TF_KEPT 16384u   // a sprite the port draws (vu_particle_vs's drop verdict)
 #define VU_TF_BESIDE 32768u // a drop would be drawn beside the picture (vu_drop_fate 1; region mode)
 #define VU_TF_CAMERA 65536u // a drop the camera rule draws (vu_drop_fate 2; region mode)
+#define VU_TF_ZERO 131072u  // covers no sample point of the lattice vu_tri.w names (vu_tri_zero)
 
 // A record stage's point: texel t of the three planes (vu_pre_out's mapping;
 // the store builds: vu_rec_store)

@@ -865,6 +865,10 @@ rd_vu_skin_check_twin_bones_ring 1.00  # estimate: 0.6 s local (merge-wt_CULL-20
 rd_vu_skin_check_twin_c 0.75
 rd_vu_skin_check_twin_nan 1.07
 rd_vu_skin_check_twin_record 0.72
+rd_vu_zero 0.01  # estimate: a CPU unit test with a brute-force rasteriser, like rd_vu_share (not run here)
+rd_vu_zero_ab 71.17  # estimate: rd_vu_share_ab x 10 / 6 (ten pairs a fixture to its six; not run here)
+rd_vu_zero_fault 7.12  # estimate: rd_vu_share_ab / 6 (one run a fixture; not run here)
+rd_vu_zero_gl 46.61  # estimate: rd_vu_share_gl x 1.5 (three corpus settings to its two; not run here)
 rd_vubatch_ab 96.84
 rd_vufuse_ab 360.50
 rd_vufuse_ab_pixel 0.00
@@ -925,6 +929,12 @@ rd_vuprepass_selftest_unbatched 2.67
 rd_vuprepass_selftest_unbatched_gl 3.21
 rd_vuprepass_selftest_unmerged 0.97
 rd_vuprepass_selftest_unmerged_gl 3.83
+rd_vuprepass_selftest_zero 1.67  # estimate: rd_vuprepass_selftest x 1.1 (two more replays; not run here)
+rd_vuprepass_selftest_zero_lattice 1.67  # estimate: rd_vuprepass_selftest x 1.1 (not run here)
+rd_vuprepass_selftest_zero_lossrow 1.52  # estimate: rd_vuprepass_selftest (the cull not tested; not run here)
+rd_vuprepass_selftest_zero_mali 1.67  # estimate: rd_vuprepass_selftest_mali x 1.1 (not run here)
+rd_vuprepass_selftest_zero_missing 1.67  # estimate: rd_vuprepass_selftest x 1.1 (not run here)
+rd_vuprepass_selftest_zero_plain 1.62  # estimate: rd_vuprepass_selftest_plain x 1.1 (not run here)
 rd_vurecord_ab 52.14
 rd_vurecord_ab_compute 42.73
 rd_vurecord_ab_compute_class 39.25

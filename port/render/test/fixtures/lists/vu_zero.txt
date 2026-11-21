@@ -1,0 +1,17 @@
+# rd_vu_zero_ab, rd_vu_zero_gl and rd_vu_zero_fault (test/rd_vu_zero_ab.cmake):
+# a fixture, the profiles it is replayed under (corpus, mali, mali169: the
+# script's head says what each is; OpenGL replays every fixture at the corpus
+# settings alone), then the property the test checks
+# (rd_fixture_list_props.cmake), holding on every ICO_RD_VU_ZERO=1 run
+# compared:
+#   vu_zero_culled  the triangle slots the checks read back found culled
+#                   (rd_vu_zero.h: no sample point of the target in them)
+# The Pixel's profile is not here: its Enhanced resolution is no whole
+# number of texels a GS pixel, so the cull is refused there (rd_vu_zero_test
+# t1).
+#
+# issue 179's Mali-G52 (moto g24 power, v0.11.5): the stage 42 slow-scene
+# capture, the boat scene of the opening (a third of its on-target triangles
+# cover no pixel centre in the v0.11.12 capture: build-host/tmp/v01113/
+# handbacks/DIG179.md, counted from its dump)
+fx-mali-slow541 mali,mali169,corpus vu_zero_culled>=1

@@ -685,6 +685,11 @@ const char *rd_vu_record_mode(void);
  * draws')" a picture over the n pictures since the last call, whose counts
  * it takes back to zero; the length written */
 size_t rd_vu_share_text(char *out, size_t cap, unsigned n);
+/* The same line's clause of the zero-area cull (rd_vu_zero.h): "; zero-area
+ * cull: D draws a picture culling, T triangles; refused a picture: ...;
+ * checked P pictures: C of S triangle slots culled, M differ", or
+ * "; zero-area cull held|off (why)"; the block's counts back to zero */
+size_t rd_vu_zero_text(char *out, size_t cap, unsigned n);
 /* The record written without render targets (stores or compute: a device
  * loss takes the restart's losstargets step first, startup_retry.h
  * StartupRetryRun.storesWereOn) */

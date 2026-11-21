@@ -599,6 +599,7 @@
 #include "rd_stencil_selftest.h" /* --stats: the stencil outside the shadow window */
 #include "rd_vu_compact.h"       /* --stats: the index compaction's counts */
 #include "rd_vu_share.h"         /* --stats: the shared vertices */
+#include "rd_vu_zero.h"          /* --stats: the zero-area cull */
 #include "rd_shadow_box.h"       /* --stats: the shadows over the volumes' box */
 #include "rd_shadow_tile.h"      /* --stats: the shadow composites over the tile mask */
 #include "rd_replay_fine.h"      /* --fine-check */
@@ -3693,6 +3694,11 @@ int main(int argc, char **argv)
             char share[384];
             (void)rd__vu_share_stats_text(share, sizeof(share));
             printf("%s: stats: %s\n", dump, share);
+            /* the zero-area cull (rd_vu_zero.h): the run's draws and checks
+               so far, every check read first */
+            char zero[640];
+            (void)rd__vu_zero_stats_text(zero, sizeof(zero));
+            printf("%s: stats: %s\n", dump, zero);
             /* code 36's cut and kick pairs (rd_replay_vu.c vuFuseVerdict;
              * g_rd.vuFuse): fused, kept apart by reason, under one pipeline
              * already */

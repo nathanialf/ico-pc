@@ -422,6 +422,42 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
     `vu_shared_triangles` on every `=1` run compared.
   - `rd_vu_share_gl`: the list on OpenGL (llvmpipe), at the corpus settings.
   - No device: SKIP.
+- `rd_vu_zero_test.c` (`rd_vu_zero`; `rd_vu_zero.cmake`, CPU): the zero-area cull's pure parts
+  ([PIPELINES.md](PIPELINES.md#the-zero-area-cull)): the lattice word of the run's targets (1x, 2x
+  and 3x at 16:9, the field's half line, an odd width, the Full pixel crop at an even and an odd
+  width, a smaller viewport limit) worked out by hand, and every refusal with its reason; the test
+  against a brute-force rasteriser on three lattices (3,000 random small triangles each, every
+  corner moved by every combination of -1, 0 and 1 sixteenth, every point on an edge covered): no
+  culled triangle covers a sample point, some are culled, some kept by the margin; the self-test's
+  cases at 1x and the half line; the record check (an agreeing record, a flipped flag, a flag
+  without a word, a corner without its GS position, the region and scissor modes); `vu_ftoi4`'s
+  edges; the run's state (held until the self-test, `ICO_RD_VU_ZERO` 0 and 1, the loss ladder over
+  both) and the VU line's clause word for word, its reset and a short buffer.
+- `rd_vu_zero_ab.cmake` (`rd_vu_zero_ab`, `rd_vu_zero_gl`, `rd_vu_zero_fault`; `rd_vu_zero.cmake`):
+  the zero-area cull on every fixture of `port/render/test/fixtures/lists/vu_zero.txt`
+  (`fx-mali-slow541`; a listed fixture that is absent FAILS). `ICO_RD_VU_ZERO=1` (on, every entry
+  of every replay checked) against `=0` with `--pass-dump --stats`, each with the draw merge and
+  without it, under the corpus settings (4:3 at 1x, Enhanced 16:9 at 2x, 4:3 with `--velocity` and
+  its picture), the Arm fakes with the record by compute at 1x and 21:9, and the same at 16:9 with
+  half height.
+  - Every target's PNG must be the same bytes, the motion vectors' included.
+  - The lines: `stats: VU zero-area cull off (ICO_RD_VU_ZERO=0)`, and on the `=1` runs `stats: VU
+    zero-area cull on (ICO_RD_VU_ZERO=1): C of S triangle slots culled over P pictures checked, 0
+    differ` with P at least 1; `merge on)` or `merge off)`.
+  - The path ran: the culled slots meet the fixture's `vu_zero_culled`.
+  - `rd_vu_zero_gl`: the list on OpenGL (llvmpipe), at the corpus settings.
+  - `rd_vu_zero_fault`: each fixture once under the Arm fakes with `ICO_RD_VU_ZERO_SABOTAGE=check`:
+    `rd: VU zero-area cull: off for the run: the GPU's answer differs from the CPU's` logged and
+    the stats line off.
+  - No device: SKIP.
+- `rd_vuprepass_selftest_zero`, `_zero_plain`, `_zero_mali`, `_zero_lattice`, `_zero_missing`,
+  `_zero_lossrow` (`rd_vu_zero.cmake`, through `rd_vuprepass_selftest_test` and
+  `test/rd_vuprepass_selftest.cmake`): the zero-area cull's start-up self-test after the
+  pre-pass's (which must still be on): on in the extended variant (Enhanced 16:9 at 2x, Full
+  pixel), the plain one and under the Arm fakes with the record by compute, its line naming the
+  culled slots and the lattice; off for the run with the rule stage given a lattice half a texel
+  off (the answers differ) and with no record copied (no answer read back); off for this start
+  after a lost one (`ICO_LOSS_ROW=1`), its self-test not run.
 - `rd_smallcuts_test.c` (`rd_smallcuts`; `rd_smallcuts.cmake`, CPU): the pure parts of the turn in
   the present's blit and the VU record by compute on the PowerVR class: `rd__turn_rect` for every
   quarter turn against `rd_prerotate.c`'s pixel table (every pixel of the rect lands inside the

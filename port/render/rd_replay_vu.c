@@ -24,6 +24,7 @@
 #include "rd_vu_rec_sink.h"
 #include "rd_vu_skin_check.h"
 #include "rd_vu_share.h"
+#include "rd_vu_zero.h"
 #include "shader_consts.h"
 #include "vu1_ref.h" /* vu1ref_region_mirror: ICO_VU_MIRROR */
 
@@ -80,6 +81,13 @@ static void vuVelNote(Replay *r, uint8_t vs, RhiBuffer streamBuf, uint64_t strea
                       uint64_t bonesOff, const VuIdx *ix, uint32_t first, uint32_t count);
 static void vuVelMaybe(Replay *r);
 static void vuVelBegin(void);
+
+/* the zero-area cull (rd_vu_zero.h) of the command doVuDraw draws: armed
+   when it is drawn through the record, with its pre-pass entry's lattice
+   word (0: none) and the reason it has none */
+static bool s_zeroArmed;
+static uint32_t s_zeroWord;
+static int s_zeroWhy;
 
 /* ------------------------------------------------ the record's buffers
  * The vertex and triangle pre-passes (docs/port/RENDER.md, "The vertex and
@@ -234,7 +242,10 @@ static bool recEnsure(uint32_t rows)
         const uint32_t use =
             RHI_BUF_STORAGE_READ | RHI_BUF_COPY_DST |
             (buffered ? (uint32_t)RHI_BUF_STORAGE_WRITE : 0u) |
-            (rd__vu_compact_plane() ? (uint32_t)(RHI_BUF_INDEX | RHI_BUF_COPY_SRC) : 0u);
+            (rd__vu_compact_plane() ? (uint32_t)(RHI_BUF_INDEX | RHI_BUF_COPY_SRC) : 0u) |
+            /* the zero-area cull's checks copy slot A and the vertices out
+               (rd_vu_zero.h) */
+            (rd__vu_zero_copyable() ? (uint32_t)RHI_BUF_COPY_SRC : 0u);
         s_recBuf[i] = rhi_create_buffer(
             &(RhiBufferDesc){recBytes(rows), use, RHI_MEM_DEVICE, "rd vu record"});
         s_recBufRows[i] = s_recBuf[i].id ? rows : 0u;
@@ -1369,6 +1380,28 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
         rd__vu_share_note(count / 3u, ix->plain != NULL, ix->plain ? ix->saved : 0u);
         g_rdPerf.vuShareSaved += ix->plain ? ix->saved : 0u; /* the perf lines' invocations */
     }
+    /* the zero-area cull (rd_vu_zero.h): the record's main shader on the
+     * entry's own target (doVuDraw armed it), single-sampled, not on the
+     * shared vertices' list (a value there is drawn for other triangles
+     * too); the velocity pass's note above was made from vcb0, without it */
+    if (s_zeroArmed && recorded && vs == RD_VS_VU_MAIN) {
+        int why = -1;
+        if (s_zeroWord == 0u) {
+            why = s_zeroWhy;
+        } else if (own || (vcbAt.draw[2] & ICO_VU_PROBE) != 0u || g_rdSkinArm || g_rdSkinTwin) {
+            /* a program's own entry, a probe, or the skin check's draw (its
+               twins and box take this VuCB on their own targets) */
+            why = RD_VU_ZERO_ENTRY;
+        } else if (ix->plain != NULL) {
+            why = RD_VU_ZERO_SHARED;
+        } else if (g_rd.passSamples > 1u) {
+            why = RD_VU_ZERO_MSAA;
+        }
+        if (why < 0) {
+            vcbAt.draw[2] |= ICO_VU_ZERO_OK;
+        }
+        rd__vu_zero_draw(why < 0, why, count / 3u);
+    }
     VuIdx sel; /* the shared list, held by value (the run copies it) without its plain */
     if (ix->plain) {
         sel = *ix;
@@ -1931,6 +1964,10 @@ typedef struct VuPre {
      * replay's plan; cmpN 0: none, its draws read their own lists) */
     uint8_t list;
     uint32_t cmpFirst, cmpN;
+    /* the zero-area cull's lattice word for its rule stage (rd_vu_zero.h;
+     * vu_tri.w of its rule stage's draw), 0 none, and why none */
+    uint32_t zeroWord;
+    int8_t zeroWhy;
 } VuPre;
 
 static VuPre *s_pre;
@@ -2142,6 +2179,7 @@ void rd__vu_prepass(const RdFrame *f, int keep)
     /* the index compaction's counters this slot's last copy read back (its
        frame done: the slot came round; rd_vu_compact.h) */
     rd__vu_compact_slot_begin(rd__ring_slot());
+    rd__vu_zero_slot_begin(rd__ring_slot());  /* the zero-area cull's checks (rd_vu_zero.h) */
     rd__vu_audit_slot_begin(rd__ring_slot()); /* the tests' bounds audit (rd_vu_audit.h) */
     g_rdPerf.vuTrisLeftOut = rd__vu_compact_last_left_out(); /* that picture's (rd.h) */
     vuPrepassRun(f, keep);
@@ -3164,6 +3202,8 @@ static void vuPrepassRun(const RdFrame *f, int keep)
     RdStateBlock st = f->startState;
     const uint32_t headHalf = rd__replay_scene_head_half(f);
     RdUniform frame = {{0}, 0};
+    uint32_t zeroWord = 0; /* the frame's lattice word (rd_vu_zero.h) and why none */
+    int zeroWhy = RD_VU_ZERO_OFF;
     uint32_t frameKey[6];
     memset(frameKey, 0xFF, sizeof(frameKey));
     for (int l = rd__first_list(keep); l < RD_LIST_COUNT; l++) {
@@ -3201,9 +3241,12 @@ static void vuPrepassRun(const RdFrame *f, int keep)
             const uint32_t fk[6] = {st.color, st.depth, st.gsW, st.gsH, st.useOffset, picture};
             if (memcmp(fk, frameKey, sizeof(fk)) != 0) {
                 frame = rd__replay_vu_frame(&st, picture);
+                zeroWord = rd__vu_zero_entry_word(&st, &zeroWhy);
                 memcpy(frameKey, fk, sizeof(fk));
             }
             e->frame = frame;
+            e->zeroWord = zeroWord;
+            e->zeroWhy = (int8_t)zeroWhy;
             memcpy(e->frameKey, fk, sizeof(fk));
             if (c->type == RDC_PARTICLES) {
                 e->particle = 1;
@@ -3537,7 +3580,9 @@ static void vuPrepassRun(const RdFrame *f, int keep)
             PreItem it[4];
             uint32_t n = 0;
             const RdPipeKeyInt kr = rd__vu_stage_key(RD_VS_VU_TRI_RULE_PRE, 0xF);
-            bool ok = preItemsReserve(4) && preItem(e, &rule, &kr, 0, kicks, &it[n++]);
+            /* vu_tri.w of the rule stage: the zero-area cull's word */
+            bool ok = preItemsReserve(4) &&
+                      preItem(e, &rule, &kr, rd__vu_zero_gpu_word(e->zeroWord), kicks, &it[n++]);
             if (ok && e->ticks) {
                 IcoVuCB tick = vcb;
                 if (s_preSabotage == RD_VU_SABOTAGE_TICKS) {
@@ -3585,7 +3630,7 @@ static void vuPrepassRun(const RdFrame *f, int keep)
             }
             firstTri = false;
             const RdPipeKeyInt kr = rd__vu_stage_key(RD_VS_VU_TRI_RULE_PRE, 0xF);
-            bool ok = vuStageDraw(e, &rule, dOff, &kr, 0, kicks);
+            bool ok = vuStageDraw(e, &rule, dOff, &kr, rd__vu_zero_gpu_word(e->zeroWord), kicks);
             if (ok && e->ticks) {
                 IcoVuCB tick = vcb;
                 if (s_preSabotage == RD_VU_SABOTAGE_TICKS) {
@@ -3610,6 +3655,24 @@ static void vuPrepassRun(const RdFrame *f, int keep)
         }
         vuRecPassEnd(rowsV, usedT, muted || s_preSabotage == RD_VU_SABOTAGE_STALE);
         passes++;
+        /* the zero-area cull's checks (rd_vu_zero.h): the entries' slot A
+           and vertices copied for the readback, compared when the slot comes
+           round (not in a muted pass, nor the sabotage's sink) */
+        bool zAll = false;
+        if (!muted && s_preSabotage != RD_VU_SABOTAGE_STALE && rd__vu_zero_check_now(&zAll)) {
+            const uint32_t slot = rd__ring_slot();
+            const uint64_t plane = (uint64_t)s_recBufRows[slot] * ICO_VU_REC_W;
+            for (uint32_t i = 0; i < s_preN; i++) {
+                const VuPre *e = &s_pre[i];
+                if (!e->rec || e->particle) {
+                    continue;
+                }
+                IcoVuCB rv = e->src.vcb;
+                vuTriRule(e->src.vs, &rv);
+                rd__vu_zero_copy(rd__replay_cl(), slot, s_recBuf[slot], plane, e->base, e->count,
+                                 e->slotA, rv.rec[3] & ICO_VU_CLIP_MASK, e->zeroWord);
+            }
+        }
         /* 6. pass K: the index compaction (rd_vu_compact.h), its own
          * bracket after pass T's (the stage reads slots A and C) */
         vuCompactPass();
@@ -3936,6 +3999,7 @@ void rd__vu_prepass_init(const RhiLimits *lim)
 {
     g_rd.vuPrepassWhy[0] = '\0';
     rd__vu_record_init(lim); /* render targets or vertex stores (rd_vu_record.h) */
+    rd__vu_zero_init();      /* the zero-area cull's state (rd_vu_zero.h) */
     const char *env = getenv("ICO_RD_VU_PREPASS");
     const uint32_t bytes = lim ? lim->colorBytesPerPixel : 0u;
     if (s_preHostWhy[0] != '\0') {
@@ -4119,6 +4183,10 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     /* its velocity draws (vuVelNote), or a velocity left at 0 counted */
     s_velArm = pre && pre->rec && pre->vel ? pre : NULL;
+    /* the zero-area cull's word for vuDraw (rd_vu_zero.h) */
+    s_zeroArmed = pre && pre->rec && !pre->particle;
+    s_zeroWord = s_zeroArmed ? pre->zeroWord : 0u;
+    s_zeroWhy = s_zeroArmed ? pre->zeroWhy : RD_VU_ZERO_ENTRY;
     if (!s_velArm && s_vel.on && !s_vel.done && rd__passring_list_now() == 0 &&
         (c->u[3] & RD_VU_PREV) != 0u && c->type != RDC_PARTICLES) {
         s_vel.noRecord++;
