@@ -148,12 +148,18 @@ typedef struct RdSubmitBlock {
        its parts, rd__sq_note_gap), of them those whose next picture was not
        yet posted when the picture before was finished (gapNotPosted); the
        present calls made with a later picture submitted (guardTimed), of
-       them those of RD_GPU_FIRST_CALL_MS or more (guardLong), the longest */
+       them those of RD_GPU_FIRST_CALL_MS or more (guardLong), the longest;
+       the long ones by the guard's class (rd__sq_guard_class): counted as
+       waiting for the later picture's GPU work (guardWaited) or with a read
+       or wait that failed (guardFailed, counted too), slow while that work
+       ran on (guardSlow), begun with it already ended (guardDone), or found
+       at its end but too brief for it (guardBrief) */
     unsigned aheadJobs, aheadEarly;
     unsigned gaps, gapNotPosted;
     double gapMs, gapWakeMs, gapPresentMs, gapFinishMs, gapPostMs, gapEndMs, gapSubmitMs;
     unsigned guardTimed, guardLong;
     double guardMaxMs;
+    unsigned guardWaited, guardFailed, guardSlow, guardDone, guardBrief;
 } RdSubmitBlock;
 
 typedef struct RdSubmitQ {
@@ -212,28 +218,79 @@ void rd__sq_gap_parts(double endSeen, double wake, double presented, double fini
                       double ended, double submitted, RdSqGap *out);
 void rd__sq_note_gap(RdSubmitQ *q, const RdSqGap *g, bool notPosted);
 /* a present call made with a later picture submitted, its time (the
-   guard's input, RD_GPU_FIRST_CALL_MS or more is long) */
+   block's count of them, RD_GPU_FIRST_CALL_MS or more is long) */
 void rd__sq_note_guard(RdSubmitQ *q, double callMs);
 
-/* The present-call guard of the ahead order: of the last
- * RD_AHEAD_GUARD_WINDOW present calls made with a later picture submitted,
- * RD_AHEAD_GUARD_LONG or more of RD_GPU_FIRST_CALL_MS or more put the run
- * back on one picture at a time (a driver whose present waits for all the
- * work submitted, not only its own picture's: there each present would
- * wait for the next picture's GPU work).  rd__sq_guard_note: one call into
- * the window, true when the window now holds that many long ones (the
+/* The present-call guard of the ahead order tests one thing: a driver whose
+ * present waits for all the work submitted, so that each present waits for
+ * the LATER picture's GPU work (tens of ms, inside the swapchain's lock).
+ * A call that is only slow (the scheduler, a slow core: issue 179's phone
+ * makes calls of 1.1 to 1.8 ms) must not trip it.  So each present call
+ * made with a later picture submitted is classed as the verdict's samples
+ * are (rd__sq_gf_class), against the later picture:
+ *   short      under RD_GPU_FIRST_CALL_MS: not counted;
+ *   done       long, the later picture's work read ended just before the
+ *              call (readBefore 1: the counter read, no wait): long for
+ *              something else, not counted;
+ *   failed     a read before or after the call failed (-1), or the wait
+ *              for the later picture failed: counted (the safe side);
+ *   slow       long, the later picture's work read running as the call
+ *              returned (readAfter 0) and its wait (the waiter's, made
+ *              anyway as that picture is held next) returning
+ *              RD_GPU_FIRST_NEAR_MS or more after the call's return: the
+ *              call ended while that work ran on, so it did not wait for
+ *              it; not counted ("slow, not waiting");
+ *   waited     long, that work found ended by the call's return (readAfter
+ *              1) or within RD_GPU_FIRST_NEAR_MS of it (the waiter's return,
+ *              the samples' rule), and the call lasted at least
+ *              RD_AHEAD_GUARD_SHARE of that work's GPU span (from
+ *              laterStartMs, the later picture's earliest GPU start: its
+ *              submit's end or the held picture's seen end, whichever is
+ *              later, to where it was found ended): counted;
+ *   brief      found ended at the return but the call shorter than that
+ *              share: a slow call that ended by chance near the end of a
+ *              short piece of GPU work, not counted.  The miscount left: a
+ *              slow call that covers half or more of the later picture's
+ *              GPU span and ends within 1.0 ms of its end (later work of
+ *              under twice the call's time); the reporter's pictures run
+ *              33 to 54 ms of GPU work against calls of 1.1 to 1.8 ms;
+ *   pending    readAfter 0 and the waiter's return not yet known (waited
+ *              false): classed again when it is.
+ * Of the last RD_AHEAD_GUARD_WINDOW classed calls, RD_AHEAD_GUARD_LONG or
+ * more counted ones put the run back on one picture at a time.
+ * rd__sq_guard_note: one classed call into the window (counted: waited or
+ * failed), true when the window now holds that many counted ones (the
  * caller turns the order off; the guard keeps counting) */
 #define RD_AHEAD_GUARD_WINDOW 16u
 #define RD_AHEAD_GUARD_LONG 4u
+#define RD_AHEAD_GUARD_SHARE 0.5
+
+enum {
+    RD_GD_PENDING,
+    RD_GD_SHORT,
+    RD_GD_DONE,
+    RD_GD_FAILED,
+    RD_GD_SLOW,
+    RD_GD_WAITED,
+    RD_GD_BRIEF
+};
+
+uint8_t rd__sq_guard_class(double callMs, int readBefore, int readAfter, bool waited,
+                           int32_t waitResult, double foundMs, double returnMs,
+                           double laterStartMs);
+/* counted toward the trip: waited or failed */
+bool rd__sq_guard_counts(uint8_t cls);
+/* a long call's final class into the block's counts (RD_GD_*) */
+void rd__sq_note_guard_class(RdSubmitQ *q, uint8_t cls);
 
 typedef struct RdSqGuard {
-    uint16_t bits; /* the window's calls, newest in bit 0: 1 long */
+    uint16_t bits; /* the window's calls, newest in bit 0: 1 counted */
     uint8_t n;     /* calls in the window (at most RD_AHEAD_GUARD_WINDOW) */
-    uint8_t longN; /* long calls in the window */
+    uint8_t longN; /* counted calls in the window */
     unsigned calls, longs;
 } RdSqGuard;
 
-bool rd__sq_guard_note(RdSqGuard *g, double callMs);
+bool rd__sq_guard_note(RdSqGuard *g, bool counted);
 
 /* What the ahead order's checks found after one of its steps (the first
  * reason found, RD_AHEAD_OFF_NONE: go on): the device lost; a submit that

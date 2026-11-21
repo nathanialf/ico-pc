@@ -1491,8 +1491,13 @@ lines added beside them for issues 179 and 123:
   from its end to the next one's submit, and at GPU times near the 40 ms tick play presented 22 of
   25 a second (1356, 1421, 1499). The ways back, each with its line, each taking the run back to
   one picture at a time with the pictures already submitted presented first: 4 of the last 16
-  present calls made with a later picture submitted taking 2.0 ms or more (a driver whose present
-  waits for all the work submitted, not only its own picture's), a wait that failed, a submit that
+  present calls made with a later picture submitted found waiting for that picture's GPU work (a
+  driver whose present waits for all the work submitted, not only its own picture's: a call of
+  2.0 ms or more begun with the later picture's work running, that work found ended by the call's
+  return or within 1.0 ms of it (the waiter's wait for it, made anyway as that picture is held
+  next), and the call lasting at least half of that work's GPU time; a call that is only slow
+  while that work runs on is not counted, nor one that began after that work ended or is too
+  brief for it; a failed read or wait counts), a wait that failed, a submit that
   moved no submission number, a lost device; a start after one that lost the device or hung its
   driver (the loss ladder, `ICO_LOSS_ROW`) or that the watchdog ended keeps one at a time. With
   the verdict undecided or off nothing of it runs (no waiter, no call made in another order). The
@@ -1500,8 +1505,10 @@ lines added beside them for issues 179 and 123:
   on, the next picture is submitted ahead (its lists submitted as soon as it is handed over,
   beside the picture before's wait for its GPU work, which a thread of its own makes; the GPU
   holds up to two pictures); back to one at a time for the run after 4 of the last 16 present
-  calls made with a later picture submitted take 2.0 ms or more, a failed wait or submit, or a
-  lost device; a start after one that lost the device, hung its driver or was ended by the
+  calls made with a later picture submitted waited for that picture's GPU work (a call of 2.0 ms
+  or more begun with that work running, found ended by its return or within 1.0 ms of it, and
+  lasting at least 50 % of that work's GPU time; a slow call while that work runs on is not
+  counted, a failed read or wait of it is), a failed wait or submit, or a lost device; a start after one that lost the device, hung its driver or was ended by the
   watchdog keeps one at a time` or `rd: submit thread: with the verdict on, the next picture is
   not submitted ahead this start (the loss ladder: 1 start in a row before this one lost the
   graphics device or hung its driver, ICO_LOSS_ROW 1, nothing written to the settings): one
@@ -1509,8 +1516,9 @@ lines added beside them for issues 179 and 123:
   previous run was ended by the watchdog)`); at its first picture `rd: submit thread: the next
   picture is submitted ahead from here on (the verdict on): ...`; a way back `rd: submit thread:
   the next picture is not submitted ahead for the rest of this run: 4 of the last 16 present calls made
-  with a later picture submitted took 2.0 ms or more (a present that waits for the later
-  picture's GPU work too) (this call 44.1 ms; 4 of 7 such calls so far long); back to one picture
+  with a later picture submitted waited for that picture's GPU work (a present that waits for all
+  the work submitted) (this call 44.1 ms, the later picture's work found ended at its return; 4 of
+  7 such calls so far counted); back to one picture
   on the GPU at a time (each picture's GPU work waited for before its present, the next submitted
   after that present), the pictures already submitted presented first` (the others: `a wait for
   a picture's GPU work failed (result 1)`, `a picture's submit failed (the submission counter
@@ -1519,7 +1527,9 @@ lines added beside them for issues 179 and 123:
   `; the next picture submitted ahead: 236 of 248 submitted before the picture before's GPU end;
   the GPU idle 12 times (3.4 ms a time: wake-up 0.2, present call 1.1, finish 0.1, waiting for
   the next picture 1.0 (5 pictures whose next was not yet posted), list end 0.3, submit 0.7);
-  present calls with a later picture submitted 236 (0 of 2.0 ms or more, longest 1.4 ms)` and,
+  present calls with a later picture submitted 236 (3 of 2.0 ms or more: 0 waited for the later
+  picture's GPU work, 3 slow, not waiting, 0 with that work already ended, 0 too brief for it, 0
+  reads or waits failed; longest 2.6 ms)` and,
   off, `; off for the run: <reason>`. The idle gap runs from the picture's GPU end, as its wait
   returned, to the end of the next one's submit; its parts sum to it (a next picture taken while
   the submit thread was still on its way to the picture before's present shows only its list end
@@ -1527,7 +1537,7 @@ lines added beside them for issues 179 and 123:
   (2 on the picture before, 10 at its wait for the picture two before's GPU work, 0 for the submit
   thread's present)`. How to judge it from the next log: "p of q" near q, the gaps few and short,
   no skip for the submit thread's present, the present calls with a later picture submitted
-  short (the guard's count of long ones at 0), and play in the first room at the game's 25 a
+  short or "slow, not waiting" (none "waited for the later picture's GPU work"), and play in the first room at the game's 25 a
   second; a way back's line says what took it, and the blocks after it read as one picture at a
   time.
 

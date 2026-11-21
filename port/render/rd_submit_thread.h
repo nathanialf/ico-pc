@@ -157,11 +157,15 @@
  *                   (rd_thread.c rd__thread_picture_busy) no longer counts
  *                   the submit thread's work as busy, and the hand-over only
  *                   reaps (rd_thread_submit_ahead_now).  The present-call
- *                   guard: of the last RD_AHEAD_GUARD_WINDOW present calls
- *                   made with a later picture submitted, RD_AHEAD_GUARD_LONG
- *                   of RD_GPU_FIRST_CALL_MS or more (a driver whose present
- *                   waits for all the work submitted) put the run back on
- *                   one picture at a time, with one line; so do a failed
+ *                   guard: of the last RD_AHEAD_GUARD_WINDOW long present
+ *                   calls made with a later picture submitted,
+ *                   RD_AHEAD_GUARD_LONG that waited for the later picture's
+ *                   GPU work (rd_submit_queue.h rd__sq_guard_class: found
+ *                   ended by the call's return or within 1.0 ms of it, the
+ *                   call begun with it running and covering half its GPU
+ *                   span; a slow call while it ran on is not counted; a
+ *                   failed read or wait is) put the run back on one picture
+ *                   at a time, with one line; so do a failed
  *                   wait, a submit that moved no submission number and a
  *                   lost device, each found before what follows it (the
  *                   jobs already submitted finish as the one-at-a-time
@@ -315,6 +319,11 @@ typedef struct RdSubmitTestGpu {
        submission `value` (rhi_last_submitted after that job's submits):
        returns at the faked end of that job's work */
     void (*waitValue)(uint64_t value);
+    /* the present-call guard's reads of the later picture's submission
+       `value`, just before and just after the call, in place of the
+       backend's (rhi_submitted_finished): 1 its faked work ended, 0
+       running, -1 a failed read */
+    int (*laterFinished)(uint64_t value);
 } RdSubmitTestGpu;
 
 /* The ahead order's counts ever (the tests' read): the waiter's waits, the
@@ -322,8 +331,12 @@ typedef struct RdSubmitTestGpu {
  * order and of them those submitted before the picture before's GPU end,
  * the times it was turned off; off: its reason at the last start or since
  * (RD_AHEAD_OFF_*, rd_submit_queue.h; kept after the thread ends) */
+/* (and the guard's long calls by class, rd_submit_queue.h RD_GD_*:
+ * counted as waiting for the later picture, slow while it ran on, begun
+ * with it ended, too brief for it, a read or wait failed) */
 typedef struct RdAheadTally {
     uint64_t waits, presents, submits, early, offs;
+    uint64_t guardWaited, guardSlow, guardDone, guardBrief, guardFailed;
     int off;
 } RdAheadTally;
 

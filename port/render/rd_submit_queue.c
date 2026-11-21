@@ -298,9 +298,53 @@ void rd__sq_note_guard(RdSubmitQ *q, double callMs)
     q->block.guardMaxMs = callMs > q->block.guardMaxMs ? callMs : q->block.guardMaxMs;
 }
 
-bool rd__sq_guard_note(RdSqGuard *g, double callMs)
+uint8_t rd__sq_guard_class(double callMs, int readBefore, int readAfter, bool waited,
+                           int32_t waitResult, double foundMs, double returnMs, double laterStartMs)
 {
-    const bool isLong = callMs >= RD_GPU_FIRST_CALL_MS;
+    if (callMs < RD_GPU_FIRST_CALL_MS) {
+        return RD_GD_SHORT;
+    }
+    if (readBefore == 1) {
+        return RD_GD_DONE;
+    }
+    if (readBefore == -1 || readAfter == -1) {
+        return RD_GD_FAILED;
+    }
+    double found = returnMs;
+    if (readAfter != 1) {
+        if (!waited) {
+            return RD_GD_PENDING;
+        }
+        if (waitResult != 0) {
+            return RD_GD_FAILED;
+        }
+        if (foundMs - returnMs >= RD_GPU_FIRST_NEAR_MS) {
+            return RD_GD_SLOW;
+        }
+        found = foundMs > returnMs ? foundMs : returnMs;
+    }
+    const double span = found - laterStartMs;
+    return span > 0.0 && callMs < RD_AHEAD_GUARD_SHARE * span ? RD_GD_BRIEF : RD_GD_WAITED;
+}
+
+bool rd__sq_guard_counts(uint8_t cls)
+{
+    return cls == RD_GD_WAITED || cls == RD_GD_FAILED;
+}
+
+void rd__sq_note_guard_class(RdSubmitQ *q, uint8_t cls)
+{
+    RdSubmitBlock *b = &q->block;
+    b->guardWaited += cls == RD_GD_WAITED ? 1u : 0u;
+    b->guardFailed += cls == RD_GD_FAILED ? 1u : 0u;
+    b->guardSlow += cls == RD_GD_SLOW ? 1u : 0u;
+    b->guardDone += cls == RD_GD_DONE ? 1u : 0u;
+    b->guardBrief += cls == RD_GD_BRIEF ? 1u : 0u;
+}
+
+bool rd__sq_guard_note(RdSqGuard *g, bool counted)
+{
+    const bool isLong = counted;
     if (g->n == RD_AHEAD_GUARD_WINDOW) {
         /* the oldest call leaves the window */
         if ((g->bits >> (RD_AHEAD_GUARD_WINDOW - 1u)) & 1u) {
@@ -348,12 +392,15 @@ size_t rd__sq_ahead_text(const RdSubmitBlock *b, const char *offWhy, char *out, 
                      "before's GPU end; the GPU idle %u times (%.1f ms a time: wake-up %.1f, "
                      "present call %.1f, finish %.1f, waiting for the next picture %.1f (%u "
                      "pictures whose next was not yet posted), list end %.1f, submit %.1f); "
-                     "present calls with a later picture submitted %u (%u of %.1f ms or more, "
+                     "present calls with a later picture submitted %u (%u of %.1f ms or more: "
+                     "%u waited for the later picture's GPU work, %u slow, not waiting, %u with "
+                     "that work already ended, %u too brief for it, %u reads or waits failed; "
                      "longest %.1f ms)",
                      b->aheadEarly, b->aheadJobs, b->gaps, b->gapMs / g, b->gapWakeMs / g,
                      b->gapPresentMs / g, b->gapFinishMs / g, b->gapPostMs / g, b->gapNotPosted,
                      b->gapEndMs / g, b->gapSubmitMs / g, b->guardTimed, b->guardLong,
-                     RD_GPU_FIRST_CALL_MS, b->guardMaxMs);
+                     RD_GPU_FIRST_CALL_MS, b->guardWaited, b->guardSlow, b->guardDone,
+                     b->guardBrief, b->guardFailed, b->guardMaxMs);
     n = k < 0 ? 0 : (size_t)k < cap ? (size_t)k : cap - 1;
     if (offWhy != NULL && n + 1 < cap) {
         k = snprintf(out + n, cap - n, "; off for the run: %s", offWhy);

@@ -43,8 +43,12 @@
  *            two jobs submitted at once, none run one at a time while either
  *            is unfinished, a third post refused, each finished in the order
  *            posted with its slot's count, the times taken oldest first; the
- *            present-call guard's edges (1.99 ms short, 2.0 ms long, the 4th
- *            long call of 16 turns it, the window sliding past old ones); the
+ *            present-call guard's classes and edges (1.99 ms short, 2.0 ms
+ *            long; begun with the later picture's work ended; found ended
+ *            at the return or within 1.0 ms of it, 0.99 counted and 1.0
+ *            slow; the half share of its GPU span, 0.5 counted and under it
+ *            brief; a failed read or wait counted; the 4th counted call of
+ *            16 turns it, the window sliding past old ones); the
  *            idle gap's parts summing to the gap, both shapes (the next taken
  *            after the picture before's present, or across its GPU end); the
  *            checks that turn the order off; the 10 s clause.
@@ -390,29 +394,70 @@ static void testAhead(void)
     rd__sq_block_take(&q, &bl);
     CHECK(bl.jobs == 4 && bl.depthMax == RD_SUBMIT_DEPTH && bl.dropped == 1);
 
-    /* the guard's edges: 1.99 ms is short, 2.0 ms long; the 4th long call
-       in 16 turns it; old long calls leave the window */
+    /* the guard's classes (rd__sq_guard_class): the call's time, the later
+       picture's work read before and after it (1 ended, 0 running, -1
+       failed), its wait (made, result, found ended at), the call's return,
+       the later picture's earliest GPU start.  Times: the later picture's
+       GPU work from 100.0; the call returns at 140.0 */
+    CHECK(rd__sq_guard_class(1.99, 0, 1, false, 0, 0.0, 140.0, 100.0) == RD_GD_SHORT);
+    CHECK(rd__sq_guard_class(RD_GPU_FIRST_CALL_MS, 0, 1, false, 0, 0.0, 140.0, 138.0) ==
+          RD_GD_WAITED); /* 2.0 is long; its 2 ms the whole span: counted */
+    CHECK(rd__sq_guard_class(45.0, 1, 1, false, 0, 0.0, 140.0, 100.0) == RD_GD_DONE);
+    CHECK(rd__sq_guard_class(45.0, -1, 0, false, 0, 0.0, 140.0, 100.0) == RD_GD_FAILED);
+    CHECK(rd__sq_guard_class(45.0, 0, -1, false, 0, 0.0, 140.0, 100.0) == RD_GD_FAILED);
+    /* found ended by the return: waited (the call covers all of the span) */
+    CHECK(rd__sq_guard_class(40.0, 0, 1, false, 0, 0.0, 140.0, 100.0) == RD_GD_WAITED);
+    /* the share's edge: span 40 ms, 20.0 ms of call counted, 19.99 brief */
+    CHECK(rd__sq_guard_class(20.0, 0, 1, false, 0, 0.0, 140.0, 100.0) == RD_GD_WAITED);
+    CHECK(rd__sq_guard_class(19.99, 0, 1, false, 0, 0.0, 140.0, 100.0) == RD_GD_BRIEF);
+    /* a 6 ms slow call ending by chance at the end of 33 ms of work: brief */
+    CHECK(rd__sq_guard_class(6.0, 0, 1, false, 0, 0.0, 140.0, 107.0) == RD_GD_BRIEF);
+    /* read running at the return: pending until the wait returns */
+    CHECK(rd__sq_guard_class(6.0, 0, 0, false, 0, 0.0, 140.0, 100.0) == RD_GD_PENDING);
+    /* the wait: found ended 0.99 ms after the return counted (span 40.99,
+       call 40), 1.0 ms after it slow, the wait failing counted */
+    CHECK(rd__sq_guard_class(40.0, 0, 0, true, 0, 140.99, 140.0, 100.0) == RD_GD_WAITED);
+    CHECK(rd__sq_guard_class(40.0, 0, 0, true, 0, 141.0, 140.0, 100.0) == RD_GD_SLOW);
+    CHECK(rd__sq_guard_class(6.0, 0, 0, true, 0, 170.0, 140.0, 100.0) == RD_GD_SLOW);
+    CHECK(rd__sq_guard_class(6.0, 0, 0, true, 1, 141.0, 140.0, 100.0) == RD_GD_FAILED);
+    /* found within 1.0 ms but the call under half the span: brief */
+    CHECK(rd__sq_guard_class(6.0, 0, 0, true, 0, 140.5, 140.0, 100.0) == RD_GD_BRIEF);
+    CHECK(rd__sq_guard_counts(RD_GD_WAITED) && rd__sq_guard_counts(RD_GD_FAILED) &&
+          !rd__sq_guard_counts(RD_GD_SLOW) && !rd__sq_guard_counts(RD_GD_DONE) &&
+          !rd__sq_guard_counts(RD_GD_BRIEF) && !rd__sq_guard_counts(RD_GD_SHORT) &&
+          !rd__sq_guard_counts(RD_GD_PENDING));
+
+    /* the window: the 4th counted call in 16 turns it; old counted calls
+       leave the window; uncounted ones (short, slow, done, brief) fill it */
     RdSqGuard g;
     memset(&g, 0, sizeof(g));
     for (int i = 0; i < 20; i++) {
-        CHECK(!rd__sq_guard_note(&g, 1.99));
+        CHECK(!rd__sq_guard_note(&g, false));
     }
     CHECK(g.n == RD_AHEAD_GUARD_WINDOW && g.longN == 0 && g.calls == 20 && g.longs == 0);
-    CHECK(!rd__sq_guard_note(&g, 2.0) && !rd__sq_guard_note(&g, RD_GPU_FIRST_CALL_MS));
-    CHECK(!rd__sq_guard_note(&g, 45.0) && g.longN == 3);
-    CHECK(rd__sq_guard_note(&g, 2.0) && g.longN == 4 && g.longs == 4);
+    CHECK(!rd__sq_guard_note(&g, true) && !rd__sq_guard_note(&g, true));
+    CHECK(!rd__sq_guard_note(&g, true) && g.longN == 3);
+    CHECK(rd__sq_guard_note(&g, true) && g.longN == 4 && g.longs == 4);
     memset(&g, 0, sizeof(g));
     for (int i = 0; i < 3; i++) {
-        CHECK(!rd__sq_guard_note(&g, 10.0));
+        CHECK(!rd__sq_guard_note(&g, true));
     }
     for (int i = 0; i < (int)RD_AHEAD_GUARD_WINDOW - 3; i++) {
-        CHECK(!rd__sq_guard_note(&g, 0.5));
+        CHECK(!rd__sq_guard_note(&g, false));
     }
-    /* the window full: the next short call pushes the first long one out */
-    CHECK(!rd__sq_guard_note(&g, 0.5) && g.longN == 2);
-    CHECK(!rd__sq_guard_note(&g, 10.0) && g.longN == 2); /* the second long one left too */
-    CHECK(!rd__sq_guard_note(&g, 10.0) && !rd__sq_guard_note(&g, 2.5) && g.longN == 3);
-    CHECK(rd__sq_guard_note(&g, 3.0) && g.longN == 4);
+    /* the window full: the next uncounted call pushes the first counted one out */
+    CHECK(!rd__sq_guard_note(&g, false) && g.longN == 2);
+    CHECK(!rd__sq_guard_note(&g, true) && g.longN == 2); /* the second counted one left too */
+    CHECK(!rd__sq_guard_note(&g, true) && !rd__sq_guard_note(&g, true) && g.longN == 3);
+    CHECK(rd__sq_guard_note(&g, true) && g.longN == 4);
+    /* six slow calls of every sixteen (the reporter's scheduler noise, a
+       loaded runner): never trips */
+    memset(&g, 0, sizeof(g));
+    for (int i = 0; i < 160; i++) {
+        const uint8_t cls = i % 16 < 6 ? rd__sq_guard_class(6.0, 0, 0, true, 0, 170.0, 140.0, 100.0)
+                                       : rd__sq_guard_class(1.5, 0, 0, false, 0, 0.0, 140.0, 100.0);
+        CHECK(!rd__sq_guard_note(&g, rd__sq_guard_counts(cls)));
+    }
 
     /* the idle gap's parts: the next taken after the picture before's
        present (each part, the sum the gap from its GPU end to the next's
@@ -435,21 +480,25 @@ static void testAhead(void)
     rd__sq_note_ahead(&q, false);
     rd__sq_note_guard(&q, 1.5);
     rd__sq_note_guard(&q, 2.0);
+    rd__sq_note_guard_class(&q, RD_GD_SLOW);
     rd__sq_block_take(&q, &bl);
     CHECK(bl.gaps == 2 && bl.gapNotPosted == 1 && near(bl.gapMs, 11.5 + 1.0));
     CHECK(near(bl.gapMs, bl.gapWakeMs + bl.gapPresentMs + bl.gapFinishMs + bl.gapPostMs +
                              bl.gapEndMs + bl.gapSubmitMs));
     CHECK(bl.aheadJobs == 3 && bl.aheadEarly == 2);
-    CHECK(bl.guardTimed == 2 && bl.guardLong == 1 && near(bl.guardMaxMs, 2.0));
+    CHECK(bl.guardTimed == 2 && bl.guardLong == 1 && near(bl.guardMaxMs, 2.0) &&
+          bl.guardSlow == 1 && bl.guardWaited == 0);
     {
-        char text[640];
+        char text[1024];
         CHECK(rd__sq_ahead_text(&bl, NULL, text, sizeof(text)) > 0);
         CHECK(strstr(text,
                      "; the next picture submitted ahead: 2 of 3 submitted before the "
                      "picture before's GPU end; the GPU idle 2 times (6.2 ms a time") != NULL);
         CHECK(strstr(text, "(1 pictures whose next was not yet posted)") != NULL);
         CHECK(strstr(text, "present calls with a later picture submitted 2 (1 of 2.0 ms or "
-                           "more, longest 2.0 ms)") != NULL);
+                           "more: 0 waited for the later picture's GPU work, 1 slow, not "
+                           "waiting, 0 with that work already ended, 0 too brief for it, 0 "
+                           "reads or waits failed; longest 2.0 ms)") != NULL);
         CHECK(strstr(text, "off for the run") == NULL);
         printf("rd_submit_queue_test: %s\n", text);
         CHECK(rd__sq_ahead_text(&bl, "the graphics device was lost", text, sizeof(text)) > 0 &&

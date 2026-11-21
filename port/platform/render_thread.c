@@ -1964,7 +1964,7 @@ void ico_render_thread_block_line(double stepMs, double stepCpuMs, double pictur
     RdSubmitBlock sb;
     unsigned closes;
     double closeMs, closeMaxMs;
-    char rt[1536], st[1536], cores[1600];
+    char rt[1536], st[2048], cores[1600];
     CpuPlaceHist gc, rc, sc;
 
     s_rt.held = s_rt.heldMiss = s_rt.heldOverrun = s_rt.heldBehind = 0;

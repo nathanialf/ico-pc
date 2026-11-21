@@ -2108,6 +2108,7 @@ static struct {
     double call, presentMaxMs;
     double owedMaxMs, restMaxMs;
     unsigned owedN;
+    bool slow; /* PfCase.slowCalls */
     unsigned waitVN;
     double waitVMs;
 } s_pf;
@@ -2195,14 +2196,17 @@ static void pfWaitEnd(void)
    PF_PREV for the end of the submission before the newest (per job: with
    one picture at a time the end of the picture before the one presented,
    with the next submitted ahead the presented one's own, which its waiter
-   saw first); the call's own time first (s_pf.call), its end returned in
+   saw first); the call's own time first (s_pf.call; with s_pf.slow 6 ms
+   for 6 calls of every 16, the later picture's work running on), its end
+   returned in
    *callEnd; the GPU work still owed as the driver's wait begins noted
    (owedMaxMs) */
 static void pfPresentCall(double *callEnd)
 {
     const unsigned p = s_pf.presented++;
-    if (s_pf.call > 0.0) {
-        pfWaitUntil(ico_thread_now_ms() + s_pf.call);
+    const double call = s_pf.slow && p % 16u < 6u ? 6.0 : s_pf.call;
+    if (call > 0.0) {
+        pfWaitUntil(ico_thread_now_ms() + call);
     }
     *callEnd = ico_thread_now_ms();
     if (p < s_pf.lightN) {
@@ -2264,6 +2268,24 @@ static void pfWaitValue(uint64_t value)
     s_pf.waitVMs += ico_thread_now_ms() - t;
 }
 
+/* the present-call guard's read of the later picture's submission `value`
+   (the newest job with it; none found, the last submitted's): its faked
+   work ended by now (1) or running (0) */
+static int pfLaterFinished(uint64_t value)
+{
+    const unsigned jobs = __atomic_load_n(&s_pf.jobs, __ATOMIC_ACQUIRE);
+    double at = 0.0;
+    __atomic_load(&s_pf.endAt[(jobs + PF_RING - 1u) % PF_RING], &at, __ATOMIC_RELAXED);
+    for (unsigned i = 0; i < PF_RING && i < jobs; i++) {
+        const unsigned k = (jobs - 1u - i) % PF_RING;
+        if (__atomic_load_n(&s_pf.valueAt[k], __ATOMIC_RELAXED) == value) {
+            __atomic_load(&s_pf.endAt[k], &at, __ATOMIC_RELAXED);
+            break;
+        }
+    }
+    return ico_thread_now_ms() >= at ? 1 : 0;
+}
+
 static bool pfSampleWait(void)
 {
     pfWaitUntil(s_pf.prevEnd);
@@ -2280,12 +2302,12 @@ static int pfPrevFinished(void)
     return ico_thread_now_ms() >= s_pf.prevEnd ? 1 : 0;
 }
 
-static const RdSubmitTestGpu kPfGpu = {pfSubmitted,  pfWaitEnd,      pfPresent,
-                                       pfSampleWait, pfPrevFinished, pfWaitValue};
+static const RdSubmitTestGpu kPfGpu = {pfSubmitted,    pfWaitEnd,   pfPresent,      pfSampleWait,
+                                       pfPrevFinished, pfWaitValue, pfLaterFinished};
 /* the samples' waits the backend's own (PfCase.real; the witness the
    faked clock's: lavapipe's own work ends at once) */
-static const RdSubmitTestGpu kPfGpuReal = {pfSubmitted, pfWaitEnd,      pfPresent,
-                                           NULL,        pfPrevFinished, pfWaitValue};
+static const RdSubmitTestGpu kPfGpuReal = {pfSubmitted,    pfWaitEnd,   pfPresent,      NULL,
+                                           pfPrevFinished, pfWaitValue, pfLaterFinished};
 
 static void pfWalk(int at)
 {
@@ -2309,7 +2331,9 @@ static void pfWalk(int at)
    (vkr_test_force_wait_result, VK_NOT_READY); lossRow, a start after a
    lost one (ICO_LOSS_ROW=1: the order off from the start); needFps, the
    rate requirement (pictures a second, the case's control below it), and
-   busyNeed the faked GPU's busy share wanted (0: none) */
+   busyNeed the faked GPU's busy share wanted (0: none); slowCalls, 6 of
+   every 16 faked present calls 6 ms long while the later picture's work
+   runs on (a slow call, not one that waits: the guard must not trip) */
 typedef struct PfCase {
     const char *name;
     int driver;
@@ -2325,6 +2349,7 @@ typedef struct PfCase {
     double callMs;
     bool guard, failWait, lossRow;
     double needFps, busyNeed;
+    bool slowCalls;
 } PfCase;
 
 typedef struct PfRun {
@@ -2340,9 +2365,11 @@ typedef struct PfRun {
        longest part of a call past its own time; the fake's waiter waits
        (count, ms) */
     uint64_t aheadWaits, aheadPresents, aheadSubmits, aheadEarly;
+    /* the guard's long calls in the measured ticks by class (RD_GD_*) */
+    uint64_t guardWaited, guardSlow, guardDone, guardBrief, guardFailed;
     int aheadOff;
     bool warmOff;
-    uint64_t tripPresents;
+    uint64_t tripPresents, tripWaited, tripSlow;
     unsigned busyBy[RD_BUSY_REASONS];
     double gpuBusy, presentMaxMs, owedMaxMs, restMaxMs;
     unsigned owedN;
@@ -2397,6 +2424,7 @@ static bool pfRun(const PfCase *c, bool wanted, unsigned ticks, PfRun *out, uint
     s_pf.driver = c->driver;
     s_pf.readFails = c->readFails;
     s_pf.call = c->callMs;
+    s_pf.slow = c->slowCalls;
     rd__submit_test_gpu(c->real ? &kPfGpuReal : &kPfGpu);
     rd__thread_test_hook(pfWalk);
     fbKeep = c->keep ? 1 : 0;
@@ -2436,6 +2464,8 @@ static bool pfRun(const PfCase *c, bool wanted, unsigned ticks, PfRun *out, uint
             if (a.off != RD_AHEAD_OFF_NONE) {
                 out->warmOff = true;
                 out->tripPresents = a.presents - a0.presents;
+                out->tripWaited = a.guardWaited - a0.guardWaited;
+                out->tripSlow = a.guardSlow - a0.guardSlow;
                 break;
             }
         }
@@ -2498,6 +2528,11 @@ static bool pfRun(const PfCase *c, bool wanted, unsigned ticks, PfRun *out, uint
         out->aheadPresents = a.presents - ahead0.presents;
         out->aheadSubmits = a.submits - ahead0.submits;
         out->aheadEarly = a.early - ahead0.early;
+        out->guardWaited = a.guardWaited - ahead0.guardWaited;
+        out->guardSlow = a.guardSlow - ahead0.guardSlow;
+        out->guardDone = a.guardDone - ahead0.guardDone;
+        out->guardBrief = a.guardBrief - ahead0.guardBrief;
+        out->guardFailed = a.guardFailed - ahead0.guardFailed;
         out->aheadOff = a.off;
     }
     {
@@ -2729,6 +2764,33 @@ static void threadPresentFree(void)
          .callMs = 1.5,
          .needFps = 20.0,
          .busyNeed = 0.97},
+        /* the same with 6 of every 16 present calls 6 ms long while the
+           later picture's work runs on (the scheduler's or a slow core's
+           stretch, issue 179's phone: calls of 1.1 to 1.8 ms): slow, not
+           waiting, so the guard keeps the order and the rates hold */
+        {.name = "37.5 ms pictures ahead, 6 of 16 present calls 6 ms long",
+         .driver = PF_PREV,
+         .gpuMs = 37.5,
+         .walkMs = 8.0,
+         .submitMs = 1.0,
+         .tickMs = 40.0,
+         .expect = ON,
+         .forceOn = true,
+         .callMs = 1.5,
+         .needFps = 24.0,
+         .slowCalls = true},
+        {.name = "48 ms pictures ahead, 6 of 16 present calls 6 ms long",
+         .driver = PF_PREV,
+         .gpuMs = 48.0,
+         .walkMs = 8.0,
+         .submitMs = 1.0,
+         .tickMs = 40.0,
+         .expect = ON,
+         .forceOn = true,
+         .callMs = 1.5,
+         .needFps = 20.0,
+         .busyNeed = 0.97,
+         .slowCalls = true},
         {.name = "60 ms pictures ahead, a present back at the end of the picture before's work",
          .driver = PF_PREV,
          .gpuMs = 60.0,
@@ -2815,12 +2877,17 @@ static void threadPresentFree(void)
                "longest present call %.2f ms (%.2f ms past its own time; of %u calls that wait "
                "for GPU work, the most still owed as the wait began %.2f ms), the faked GPU "
                "busy %.1f %% (%.1f %% without the rule), skips by cause: %u on the picture "
-               "before, %u at its slot wait, %u for the submit thread; off reason %d%s\n",
+               "before, %u at its slot wait, %u for the submit thread; the guard's long calls: "
+               "%llu waiting for the later picture, %llu slow, %llu after its end, %llu brief, "
+               "%llu failed; off reason %d%s\n",
                c->name, (unsigned long long)on.aheadEarly, (unsigned long long)on.aheadSubmits,
                (unsigned long long)on.aheadWaits, (unsigned long long)on.aheadPresents,
                on.presentMaxMs, on.restMaxMs, on.owedN, on.owedMaxMs, 100.0 * on.gpuBusy,
                100.0 * off.gpuBusy, on.busyBy[RD_BUSY_RENDER], on.busyBy[RD_BUSY_SLOT],
-               on.busyBy[RD_BUSY_SUBMIT], on.aheadOff, on.warmOff ? " (in the warm-up)" : "");
+               on.busyBy[RD_BUSY_SUBMIT], (unsigned long long)on.guardWaited,
+               (unsigned long long)on.guardSlow, (unsigned long long)on.guardDone,
+               (unsigned long long)on.guardBrief, (unsigned long long)on.guardFailed, on.aheadOff,
+               on.warmOff ? " (in the warm-up)" : "");
         fflush(stdout); /* in order with the renderer's lines */
         CHECK(okOff && okOn, "GPU's end first, %s: the runs (off %d, on %d: the rule as forced)",
               c->name, okOff, okOn);
@@ -3019,6 +3086,28 @@ static void threadPresentFree(void)
                   "GPU's end first, %s: ahead: the waiter's faked waits %.1f ms on average (at "
                   "least %.1f wanted: the held picture's work waited out)",
                   c->name, on.waitVN ? on.waitVMs / on.waitVN : 0.0, 0.5 * c->gpuMs);
+            /* the guard: no long call counted as waiting for the later
+               picture (the faked driver never waits for it here: a call a
+               loaded runner stretched, or the slow calls below, is slow,
+               not waiting); with the slow calls some classed so (the
+               classing ran on them) */
+            CHECK(on.guardWaited == 0 && on.guardFailed == 0 && (!c->slowCalls || on.guardSlow > 0),
+                  "GPU's end first, %s: ahead: the guard's long calls: %llu counted as waiting "
+                  "for the later picture, %llu with a read or wait failed (none wanted), %llu "
+                  "slow, not waiting (%s), %llu begun with its work ended, %llu too brief for it",
+                  c->name, (unsigned long long)on.guardWaited, (unsigned long long)on.guardFailed,
+                  (unsigned long long)on.guardSlow, c->slowCalls ? "some wanted" : "any",
+                  (unsigned long long)on.guardDone, (unsigned long long)on.guardBrief);
+        }
+        if (c->guard) {
+            /* the guard's trip came from calls found waiting for the later
+               picture's work (the faked driver waits for all the work
+               submitted), not from slow ones */
+            CHECK(on.tripWaited >= RD_AHEAD_GUARD_LONG && on.tripSlow == 0,
+                  "GPU's end first, %s: the guard tripped on %llu calls counted as waiting for "
+                  "the later picture (at least %u wanted), %llu slow (none wanted)",
+                  c->name, (unsigned long long)on.tripWaited, (unsigned)RD_AHEAD_GUARD_LONG,
+                  (unsigned long long)on.tripSlow);
         }
         if (c->expect == RD_GPU_FIRST_ON) {
             if (c->needFps > 0.0) {

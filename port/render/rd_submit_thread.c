@@ -89,6 +89,8 @@ static int s_aheadLive;
 static int s_aheadForce = -1;
 static char s_aheadPrev[160];
 static uint64_t s_aheadWaits, s_aheadPresents, s_aheadSubmits, s_aheadEarly, s_aheadOffs;
+/* the guard's long calls by final class (RD_GD_*, rd_submit_queue.h) */
+static uint64_t s_guardWaited, s_guardSlow, s_guardDone, s_guardBrief, s_guardFailed;
 /* the order's off reason at the last start or since (the tests' read after
    the thread ended; RD_AHEAD_OFF_*) */
 static int s_aheadLastOff;
@@ -545,8 +547,8 @@ static const char *aheadWhyText(int code)
     case RD_AHEAD_OFF_WAIT:
         return "a wait for a picture's GPU work failed";
     case RD_AHEAD_OFF_GUARD:
-        return "4 of the last 16 present calls made with a later picture submitted took 2.0 ms "
-               "or more (a present that waits for the later picture's GPU work too)";
+        return "4 of the last 16 present calls made with a later picture submitted waited for "
+               "that picture's GPU work (a present that waits for all the work submitted)";
     case RD_AHEAD_OFF_THREAD:
         return "its waiting thread could not be made";
     case RD_AHEAD_OFF_TEST:
@@ -681,6 +683,11 @@ typedef struct Ahead {
     uint64_t heldValue, nextValue;
     bool gapOpen, gapNotPosted;
     double gapEnd, gapWake, gapPresented, gapFinished;
+    /* the guard's call classed when the later picture's wait returns
+       (RD_GD_PENDING: read running as the call returned): its call time,
+       its return, the later picture's earliest GPU start */
+    bool pend;
+    double pendCallMs, pendReturn, pendLaterStart;
 } Ahead;
 
 /* a job's ends and submits (rd__sq_tail_steps, without the present) timed
@@ -719,12 +726,62 @@ static int aheadSubmit(RdSubmitJob *j, double *endMs, double *submitMs, uint64_t
     return rd__sq_ahead_check_submit(v0, *value, rhi_device_lost());
 }
 
+/* the later picture's submission read at once (the guard's): the test's
+   fake by its clock, else the backend's counter (1 ended, 0 running, -1
+   not known) */
+static int aheadLaterRead(const RdSubmitTestGpu *fake, uint64_t value)
+{
+    if (fake != NULL && fake->laterFinished != NULL) {
+        return fake->laterFinished(value);
+    }
+    uint64_t v = value;
+    return value != 0 ? rhi_submitted_finished(&v) : -1;
+}
+
+/* a call's final class into the window (every call made with a later
+   picture submitted takes its place there) and a long one's into the
+   counts; the order off at the RD_AHEAD_GUARD_LONG-th counted one in the
+   window of RD_AHEAD_GUARD_WINDOW */
+static void aheadGuardClass(uint8_t cls, double callMs)
+{
+    uint64_t *n = cls == RD_GD_WAITED   ? &s_guardWaited
+                  : cls == RD_GD_SLOW   ? &s_guardSlow
+                  : cls == RD_GD_DONE   ? &s_guardDone
+                  : cls == RD_GD_BRIEF  ? &s_guardBrief
+                  : cls == RD_GD_FAILED ? &s_guardFailed
+                                        : NULL;
+    if (cls == RD_GD_PENDING) {
+        return; /* not yet classed */
+    }
+    if (n != NULL) {
+        /* a long call (a short one only takes its place in the window) */
+        __atomic_add_fetch(n, 1u, __ATOMIC_RELEASE);
+        ico_mutex_lock(s_st.m);
+        rd__sq_note_guard_class(&s_st.q, cls);
+        ico_mutex_unlock(s_st.m);
+    }
+    if (rd__sq_guard_note(&s_st.guard, rd__sq_guard_counts(cls)) &&
+        __atomic_load_n(&s_st.aheadOff, __ATOMIC_ACQUIRE) == RD_AHEAD_OFF_NONE) {
+        char what[160];
+        snprintf(what, sizeof(what), "this call %.1f ms, %s; %u of %u such calls so far counted",
+                 callMs,
+                 cls == RD_GD_FAILED ? "a read or wait of the later picture failed"
+                                     : "the later picture's work found ended at its return",
+                 s_st.guard.longs, s_st.guard.calls);
+        aheadOffSet(RD_AHEAD_OFF_GUARD, what);
+    }
+}
+
 /* the held job's present (the test's hook and driver as tail's), timed: the
    present call (the backend's split where it times it, else the whole
-   call) into the guard where a later picture is submitted (later) */
-static void aheadPresent(RdSubmitJob *j, double t1, bool later)
+   call) into the guard where a later picture is submitted (a->haveNext):
+   the later picture's work read just before the call and just after it,
+   the call classed (rd__sq_guard_class) or kept pending for the later
+   picture's wait (a->pend); heldEnd, the held picture's GPU end as seen */
+static void aheadPresent(RdSubmitJob *j, double t1, Ahead *a, double heldEnd)
 {
     const RdSubmitTestGpu *fake = __atomic_load_n(&s_gpuFake, __ATOMIC_ACQUIRE);
+    const bool later = a->haveNext;
     {
         void (*hook)(void) = __atomic_load_n(&s_testHook, __ATOMIC_ACQUIRE);
         if (hook != NULL) {
@@ -734,6 +791,7 @@ static void aheadPresent(RdSubmitJob *j, double t1, bool later)
     if (rhi_device_lost()) {
         aheadOffSet(RD_AHEAD_OFF_LOST, NULL);
     }
+    const int readBefore = later ? aheadLaterRead(fake, a->nextValue) : -2;
     const double c0 = rd__now_ms();
     if (fake != NULL && fake->present != NULL) {
         fake->present(); /* the test's driver's present call */
@@ -753,13 +811,22 @@ static void aheadPresent(RdSubmitJob *j, double t1, bool later)
     ico_mutex_lock(s_st.m);
     rd__sq_note_guard(&s_st.q, callMs);
     ico_mutex_unlock(s_st.m);
-    if (rd__sq_guard_note(&s_st.guard, callMs) &&
-        __atomic_load_n(&s_st.aheadOff, __ATOMIC_ACQUIRE) == RD_AHEAD_OFF_NONE) {
-        char what[96];
-        snprintf(what, sizeof(what), "this call %.1f ms; %u of %u such calls so far long", callMs,
-                 s_st.guard.longs, s_st.guard.calls);
-        aheadOffSet(RD_AHEAD_OFF_GUARD, what);
+    if (callMs < RD_GPU_FIRST_CALL_MS || readBefore == 1) {
+        aheadGuardClass(rd__sq_guard_class(callMs, readBefore, 0, false, 0, 0.0, c1, 0.0), callMs);
+        return; /* short, or the later picture's work ended first: no read after */
     }
+    const int readAfter = aheadLaterRead(fake, a->nextValue);
+    const double laterStart = a->nextT1 > heldEnd ? a->nextT1 : heldEnd;
+    const uint8_t cls =
+        rd__sq_guard_class(callMs, readBefore, readAfter, false, 0, 0.0, c1, laterStart);
+    if (cls == RD_GD_PENDING) {
+        a->pend = true;
+        a->pendCallMs = callMs;
+        a->pendReturn = c1;
+        a->pendLaterStart = laterStart;
+        return;
+    }
+    aheadGuardClass(cls, callMs);
 }
 
 /* The ahead order's step (the lock held on entry and on return): true when
@@ -885,8 +952,20 @@ static bool aheadStep(Ahead *a)
             __atomic_add_fetch(&s_gpuFirstWaits, 1u, __ATOMIC_RELEASE);
         }
     }
+    if (a->pend) {
+        /* the call before, pending on this picture's work (the later
+           picture then): classed by this wait's return, as the samples'
+           wait (RD_GPU_FIRST_NEAR_MS); after the order went off with it
+           submitted, dropped */
+        a->pend = false;
+        if (waited) {
+            aheadGuardClass(rd__sq_guard_class(a->pendCallMs, 0, 0, true, result, endSeen,
+                                               a->pendReturn, a->pendLaterStart),
+                            a->pendCallMs);
+        }
+    }
     RdSubmitJob j = a->held;
-    aheadPresent(&j, a->heldT1, a->haveNext);
+    aheadPresent(&j, a->heldT1, a, endSeen);
     const double presented = rd__now_ms();
     cpu_place_note(&s_cores, cpu_place_now());
     ico_mutex_lock(s_st.m);
@@ -1105,10 +1184,14 @@ static void aheadStartLine(const char *off)
             "submitted as soon as it is handed over, beside the picture before's wait for its "
             "GPU work, which a thread of its own makes; the GPU holds up to two pictures); back "
             "to one at a time for the run after %u of the last %u present calls made with a "
-            "later picture submitted take %.1f ms or more, a failed wait or submit, or a lost "
-            "device; a start after one that lost the device, hung its driver or was ended by "
-            "the watchdog keeps one at a time",
-            (unsigned)RD_AHEAD_GUARD_LONG, (unsigned)RD_AHEAD_GUARD_WINDOW, RD_GPU_FIRST_CALL_MS);
+            "later picture submitted waited for that picture's GPU work (a call of %.1f ms or "
+            "more begun with that work running, found ended by its return or within %.1f ms "
+            "of it, and lasting at least %.0f %% of that work's GPU time; a slow call while that "
+            "work runs on is not counted, a failed read or wait of it is), a failed wait or "
+            "submit, or a lost device; a start after one that lost the device, hung its driver "
+            "or was ended by the watchdog keeps one at a time",
+            (unsigned)RD_AHEAD_GUARD_LONG, (unsigned)RD_AHEAD_GUARD_WINDOW, RD_GPU_FIRST_CALL_MS,
+            RD_GPU_FIRST_NEAR_MS, 100.0 * RD_AHEAD_GUARD_SHARE);
 }
 
 bool rd__submit_thread_start(void (*begin)(void *user), void *user)
@@ -1317,6 +1400,11 @@ void rd__submit_ahead_tally(RdAheadTally *out)
     out->submits = __atomic_load_n(&s_aheadSubmits, __ATOMIC_ACQUIRE);
     out->early = __atomic_load_n(&s_aheadEarly, __ATOMIC_ACQUIRE);
     out->offs = __atomic_load_n(&s_aheadOffs, __ATOMIC_ACQUIRE);
+    out->guardWaited = __atomic_load_n(&s_guardWaited, __ATOMIC_ACQUIRE);
+    out->guardSlow = __atomic_load_n(&s_guardSlow, __ATOMIC_ACQUIRE);
+    out->guardDone = __atomic_load_n(&s_guardDone, __ATOMIC_ACQUIRE);
+    out->guardBrief = __atomic_load_n(&s_guardBrief, __ATOMIC_ACQUIRE);
+    out->guardFailed = __atomic_load_n(&s_guardFailed, __ATOMIC_ACQUIRE);
     out->off = __atomic_load_n(&s_aheadLastOff, __ATOMIC_ACQUIRE);
 }
 

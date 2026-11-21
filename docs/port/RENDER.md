@@ -169,8 +169,10 @@ submitted at once, beside the picture before's wait, which a waiter thread makes
 presents the picture once the wait returns, then waits for the next one through the waiter. The
 submit thread keeps every queue call; two frame slots suffice (the render thread's next picture
 still waits for its slot's picture two before), the GPU holds up to two pictures, and the gate
-does not count the submit thread's work as busy. A present call of 2.0 ms or more made with a
-later picture submitted, 4 times in the last 16, a failed wait or submit, or a lost device puts
+does not count the submit thread's work as busy. A present call made with a later picture
+submitted that waited for that picture's GPU work (2.0 ms or more, begun with that work running,
+found ended by its return or within 1.0 ms, lasting half its GPU time or more; a merely slow call
+is not counted), 4 times in the last 16, a failed wait or submit, or a lost device puts
 the run back on one picture at a time; a start after a lost device, a hung driver or a watchdog
 end keeps one at a time ([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#issue-179s-judging-lines)). The lines: `rd: submit thread: the frame slots apart (...)` or `the frame slots one at
 a time (<why>: ...)` at the start, `rd: submit thread: the render thread's picture waited X ms for
