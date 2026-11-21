@@ -95,7 +95,7 @@ static const char *const s_vsNames[RD_VS_COUNT] = {
     "vu_skin_debug_pre_vs", "vu_grid_pre_vs", "vu_grid_lit_pre_vs", "vu_grid_spec_pre_vs",
     /* RD_VS_OPTIONAL_FIRST on */
     "vu_main_vs", "vu_particle_main_vs", "vu_tri_rule_pre_vs", "vu_tri_tick_pre_vs",
-    "vu_tri_planes_pre_vs", "vu_particle_pre_vs"};
+    "vu_tri_planes_pre_vs", "vu_particle_pre_vs", "vu_tri_rule_zero_pre_vs"};
 
 const char *rd__vs_name(uint8_t vs)
 {
@@ -338,8 +338,9 @@ bool rd__gpu_init(void *sdlWindow)
     for (int i = 0; i < RD_VS_COUNT; i++) {
         /* a module from RD_VS_OPTIONAL_FIRST on that is missing from the
          * table leaves its id empty (its draws take their fallback) */
-        if (i >= RD_VS_OPTIONAL_FIRST && !optionalBuilt(s_vsNames[i])) {
-            continue;
+        if ((i >= RD_VS_OPTIONAL_FIRST && !optionalBuilt(s_vsNames[i])) ||
+            rd__vs_is_vu_zero((uint8_t)i)) {
+            continue; /* the zero-area cull's: made only when it is tried (rd_vu_zero.h) */
         }
         g_rd.vs[i] = rd__make_shader(s_vsNames[i]);
         ok = ok && g_rd.vs[i].id;

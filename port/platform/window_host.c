@@ -5079,13 +5079,14 @@ static void perf_log(void)
             (double)(cardTris - s_pres.cardTris) / steps, (cardMs - s_pres.cardMs) / steps);
     {
         /* the VU work of a replay: where the vertex shader's time goes */
-        char vu[256], fit[192], twins[96], sh[256];
+        char vu[256], fit[192], twins[96], sh[256], zc[224];
 
         (void)window_scene_vu_text(vu, sizeof(vu), s_perf.vuDraws, s_perf.vuTris, s_perf.vuPreVerts,
                                    b->n, rd_vu_prepass_on(), s_perf.vuLeftOut);
         /* the skin check's own share (issue 123): its twins' draws */
         (void)window_scene_twins_text(twins, sizeof(twins), s_perf.twinDraws, s_perf.twinInv, b->n);
         (void)rd_vu_share_text(sh, sizeof(sh), b->n); /* the shared vertices (issue 179) */
+        (void)rd_vu_zero_text(zc, sizeof(zc), b->n);  /* the zero-area cull (rd.h) */
         /* and the GPU's work against the vertex invocations: what the vertex
            work costs this GPU (the VU pre-pass question, docs/port/
            ANDROID_DIAGNOSTICS.md) */
@@ -5099,7 +5100,7 @@ static void perf_log(void)
             snprintf(rec + at, sizeof(rec) - (size_t)at,
                      "; pre-pass skipped %u frames under %u slots", (unsigned)skip, (unsigned)minS);
         }
-        fprintf(stderr, "window: %s%s%s%s%s\n", vu, sh, twins, fit, rec);
+        fprintf(stderr, "window: %s%s%s%s%s%s\n", vu, sh, zc, twins, fit, rec);
         window_vu_compact_line(); /* the index compaction's block (window_lines.h) */
         window_log_cost_mark("the replays and VU lines");
     }

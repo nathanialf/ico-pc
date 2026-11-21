@@ -37,7 +37,8 @@ uint32_t rd__shader_plan(const RhiLimits *lim, bool dstStorage, bool dstAttach)
     /* the optional entries where built (rd__gpu_init's optionalBuilt is
      * planMade's test), the rest asked for and made where planMade holds */
     for (int i = 0; i < RD_VS_COUNT; i++) {
-        n += planMade(rd__vs_name((uint8_t)i)) ? 1u : 0u;
+        /* the zero-area cull's rule stage: not made at the start */
+        n += planMade(rd__vs_name((uint8_t)i)) && !rd__vs_is_vu_zero((uint8_t)i) ? 1u : 0u;
     }
     for (int i = 0; i < RD_FS_COUNT; i++) {
         const char *name = rd__fs_name((uint8_t)i);

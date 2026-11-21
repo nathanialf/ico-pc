@@ -25,6 +25,7 @@ target_sources(ico_platform PRIVATE
     kernel_host.c
     last_run.c
     last_run_skin.c
+    vu_zero_mark.c
     log_cost.c
     mem_breakdown.c
     mem_watch.c
@@ -389,6 +390,20 @@ target_compile_options(last_run_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_
 target_link_libraries(last_run_test PRIVATE ico_platform ico_host_fs)
 if(ICO_RUN_TESTS)
     add_test(NAME last_run COMMAND last_run_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
+# The zero-area cull's mark on the install (vu_zero_mark.c, issue 179): the
+# decision for every mark and every previous end (trying after a crash, a
+# loss, a hang, the watchdog or no end: blocked for the version; trying after
+# a clean end: tried again; failed: blocked; blocked on this version: off,
+# another version: tried again; on after the watchdog: a lost start), and the
+# start's step on files under the build folder (the file rewritten, the
+# environment exported, one line)
+add_executable(vu_zero_mark_test test/vu_zero_mark_test.c)
+target_compile_options(vu_zero_mark_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(vu_zero_mark_test PRIVATE ico_platform ico_host_fs)
+if(ICO_RUN_TESTS)
+    add_test(NAME vu_zero_mark COMMAND vu_zero_mark_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
 # The skin check's counts in words (last_run_skin.c, issue 217): the

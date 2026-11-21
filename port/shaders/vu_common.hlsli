@@ -2285,6 +2285,7 @@ VuPreOut vu_pre_out(uint id, VuVtx v)
 #define VU_TF_KEPT 16384u   // a sprite the port draws (vu_particle_vs's drop verdict)
 #define VU_TF_BESIDE 32768u // a drop would be drawn beside the picture (vu_drop_fate 1; region mode)
 #define VU_TF_CAMERA 65536u // a drop the camera rule draws (vu_drop_fate 2; region mode)
+#define VU_TF_ZERO 131072u  // the zero-area builds: no sample point covered (vu_tri_zero; with HIDDEN)
 
 // A record stage's point: texel t of the three planes (vu_pre_out's mapping;
 // the store builds: vu_rec_store)

@@ -558,6 +558,25 @@ enum {
                               * are open (a grid): its drops drawn whatever way they face */
 };
 
+/* The rule stage's lattice word (IcoVuCB.tri[3] of the zero build's draw,
+ * vu_tri.hlsl vu_tri_zero with ICO_VU_ZERO=1; port/render/rd_vu_zero.h): a
+ * corner's place in sixteenths of a texel of the bound target is
+ * U = GS X (12.4) * sx + kx, V = GS Y * sy + ky, and the target's sample
+ * points (its texel centres) are where U and V are both multiples of 16.
+ *   bits 0..3   kx (the lattice's offset, 0..15)
+ *   bits 4..7   ky
+ *   bits 8..11  sx (texels per GS pixel, 1..15)
+ *   bits 12..15 sy
+ *   bit 16      1 (the word is never 0 when the test is asked for)
+ * The triangle is grown by ICO_VU_ZERO_GROW sixteenths of a texel each way
+ * before it is tested (the GPU's sub-pixel snap, at least 4 bits on every
+ * API, moves a corner by under 1/16 texel; the float steps of the exact
+ * viewport by under 2^-12) and at most ICO_VU_ZERO_SPAN sample points a
+ * side are tested (a larger box is kept untested). */
+#define ICO_VU_ZERO_ON (1u << 16)
+#define ICO_VU_ZERO_GROW 2
+#define ICO_VU_ZERO_SPAN 4
+
 /* The native frame's constants (port/include/ico_frame.h ICO_FRAME_BASE_W,
  * ICO_FRAME_K_MAX, ICO_FRAME_W_MAX), for the shaders' side: the 4:3 width
  * the projection and the 2D layer are sized by, the widest frame as a

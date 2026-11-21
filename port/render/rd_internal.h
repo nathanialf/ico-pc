@@ -1435,6 +1435,10 @@ typedef enum RdVsId {
     RD_VS_VU_TRI_TICK_PRE,   /* vu_tri_tick_pre_vs: one tick camera's test a triangle */
     RD_VS_VU_TRI_PLANES_PRE, /* vu_tri_planes_pre_vs: the colour planes a triangle */
     RD_VS_VU_PARTICLE_PRE,   /* vu_particle_pre_vs: one point a sprite: verdict and planes */
+    /* vu_tri_rule_zero_pre_vs: the rule stage with the zero-area test
+     * (rd_vu_zero.h): never made at the start (rd__gpu_init, the record's
+     * and the batches' sets leave it out), only once the cull is tried */
+    RD_VS_VU_TRI_RULE_ZERO,
     RD_VS_COUNT
 } RdVsId;
 
@@ -1467,6 +1471,14 @@ static inline bool rd__vs_is_vu_pre(uint8_t vs)
 static inline bool rd__vs_is_vu_stage(uint8_t vs)
 {
     return vs >= RD_VS_VU_TRI_RULE_PRE && vs <= RD_VS_VU_PARTICLE_PRE;
+}
+
+/* the zero-area cull's rule stage (rd_vu_zero.h): a record stage as the
+   pipelines see it (rd_pipeline.c), outside rd__vs_is_vu_stage so no set
+   made at the start holds it */
+static inline bool rd__vs_is_vu_zero(uint8_t vs)
+{
+    return vs == RD_VS_VU_TRI_RULE_ZERO;
 }
 
 /* the record path's two drawing vertex shaders (vu_main_vs,

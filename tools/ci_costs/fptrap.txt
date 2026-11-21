@@ -862,6 +862,10 @@ rd_vu_skin_check_twin_bones_ring 1.84
 rd_vu_skin_check_twin_c 1.45
 rd_vu_skin_check_twin_nan 1.23
 rd_vu_skin_check_twin_record 1.09
+rd_vu_zero 0.01  # estimate: a CPU unit test with a brute-force rasteriser, like rd_vu_share (not run here)
+rd_vu_zero_ab 141.67  # estimate: rd_vu_share_ab x 10 / 6 (ten pairs a fixture to its six; not run here)
+rd_vu_zero_fault 14.17  # estimate: rd_vu_share_ab / 6 (one run a fixture; not run here)
+rd_vu_zero_gl 81.38  # estimate: rd_vu_share_gl x 1.5 (three corpus settings to its two; not run here)
 rd_vubatch_ab 140.46  # estimate: 69.9 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.01
 rd_vufuse_ab 639.23  # estimate: 318.3 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.01
 rd_vufuse_ab_pixel 19.62
@@ -922,6 +926,14 @@ rd_vuprepass_selftest_unbatched 4.57
 rd_vuprepass_selftest_unbatched_gl 6.00
 rd_vuprepass_selftest_unmerged 0.98
 rd_vuprepass_selftest_unmerged_gl 5.71
+rd_vuprepass_selftest_zero 2.17  # estimate: rd_vuprepass_selftest x 1.1 (two more replays; not run here)
+rd_vuprepass_selftest_zero_lattice 2.17  # estimate: rd_vuprepass_selftest x 1.1 (not run here)
+rd_vuprepass_selftest_zero_lossrow 1.97  # estimate: rd_vuprepass_selftest (the cull not tested; not run here)
+rd_vuprepass_selftest_zero_mali 2.37  # estimate: rd_vuprepass_selftest_mali x 1.1 (not run here)
+rd_vuprepass_selftest_zero_marked 1.97  # estimate: rd_vuprepass_selftest (the cull not tried; not run here)
+rd_vuprepass_selftest_zero_missing 2.17  # estimate: rd_vuprepass_selftest x 1.1 (not run here)
+rd_vuprepass_selftest_zero_never 1.97  # estimate: rd_vuprepass_selftest (the cull not tried; not run here)
+rd_vuprepass_selftest_zero_plain 4.11  # estimate: rd_vuprepass_selftest_plain x 1.1 (not run here)
 rd_vurecord_ab 77.20  # estimate: 38.4 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.01
 rd_vurecord_ab_compute 74.55  # estimate: 37.1 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.01
 rd_vurecord_ab_compute_class 68.70  # estimate: 34.2 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 2.01
@@ -1230,6 +1242,7 @@ vu1_mali 120.24
 vu1_variant_diff 0.04
 vu1_variant_equiv 0.05
 vu1_variant_table 0.03
+vu_zero_mark 0.02  # estimate: a CPU unit test with a few files, like last_run (not run here)
 weapon_draw 0.01
 weapon_draw_aug6 0.01
 weapon_draw_cn 0.01

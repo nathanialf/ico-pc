@@ -102,6 +102,10 @@
  * and the test is run again with the render targets; the line above (on
  * or off) is then that second run's, its "record" part saying so.  [dev]
  * vu_prepass_min is held off while the test runs.
+ *
+ * After a pass, the zero-area cull's own self-test (rd_vu_zero_selftest.c,
+ * rd_vu_zero.h) runs on the same SCENE and logs its line; after a failure
+ * or without a run the cull is off.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -115,6 +119,7 @@
 #include "rd_vu_rec_early.h"
 #include "rd_vu_record.h"
 #include "rd_vu_skin_check.h"
+#include "rd_vu_zero.h"
 #include "rd_velocity.h"
 #include "shader_consts.h" /* ICO_VU_REC_W */
 
@@ -823,6 +828,8 @@ bool rd_vuprepass_selftest(void)
         snprintf(g_rdSumPrepass, sizeof g_rdSumPrepass, "off %s (self-test not run)",
                  g_rd.vuPrepassWhy);
         rd__log("VU pre-pass: off (self-test not run)");
+        rd__vu_zero_selftest_skip("the VU pre-pass is off"); /* rd_vu_zero.h */
+        rd__vu_zero_start_line();
         return true;
     }
     RdTargetRec *t = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
@@ -830,6 +837,8 @@ bool rd_vuprepass_selftest(void)
         snprintf(g_rdSumPrepass, sizeof g_rdSumPrepass, "on (self-test not run: no SCENE target)");
         rd__log("VU pre-pass: on (self-test not run: no SCENE target to run it on)");
         rd__vu_compact_selftest_not_run("no SCENE target"); /* off: never tried */
+        rd__vu_zero_selftest_skip("no SCENE target to run it on");
+        rd__vu_zero_start_line();
         return true;
     }
     readSabotage();
@@ -917,5 +926,13 @@ bool rd_vuprepass_selftest(void)
     }
     rd__log("VU pre-pass: %s%s) on SCENE %ux%u at %ux%u texels in %.1f ms, record %s", head, v.text,
             t->w, t->h, t->tw, t->th, rd__now_ms() - t0, rec);
+    /* the zero-area cull's own (rd_vu_zero_selftest.c), on the pre-pass that
+       passed */
+    if (v.on) {
+        rd__vu_zero_selftest(t);
+    } else {
+        rd__vu_zero_selftest_skip("the VU pre-pass failed its self-test");
+    }
+    rd__vu_zero_start_line(); /* its state and the modules of it made */
     return v.on;
 }

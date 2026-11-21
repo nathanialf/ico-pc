@@ -1547,6 +1547,91 @@ target of `lists/vu_share.txt` byte for byte between the two, merged and one dra
 the corpus and Mali profiles. `rd_vu_share` checks the lists, the exclusions and the counts on
 synthetic meshes.
 
+#### The zero-area cull
+
+A triangle whose closed edges hold no sample point of its target draws nothing: no fragment, no
+depth, no stencil. The rule stage's zero builds (`port/shaders/vu_tri.hlsl` with `ICO_VU_ZERO=1`:
+`vu_tri_rule_zero_pre_vs` and its batch, store and compute builds, the vertex shader id
+`RD_VS_VU_TRI_RULE_ZERO`) mark such a triangle `VU_TF_HIDDEN | VU_TF_ZERO` in its slot A, and every
+reader of the slot culls it as a hidden triangle (`vu_tri_verdict`: the early return of [The drop
+verdict first](#the-drop-verdict-first), the index compaction's filler). No index or vertex
+feeding changes. `port/render/rd_vu_zero.c`, `rd_vu_zero_run.c` and `rd_vu_zero_selftest.c` hold
+the CPU's side (`rd_vu_zero.h` says it all), `port/platform/vu_zero_mark.c` the install's mark.
+
+Nothing of it reaches a device that does not try it:
+- Every module of the build without the cull is the same module byte for byte (`ICO_VU_ZERO` 0
+  leaves `vu_tri.hlsl`'s statements as they were). The zero builds have names of their own, are
+  left out of the start's modules (`rd__gpu_init`, the record's and the batches' sets, the shader
+  plan) and of the pipeline cache file's name, so a device keeps the cache it had.
+- The renderer makes one zero build, the one its record mode and batches take, and its one
+  pipeline, only when it tries the cull: in the start-up self-test, before the start-up set, never
+  inside a picture. The record buffers are copyable only while the self-test reads them back
+  (made again at the self-test's small size before and after it, before the play record is made).
+
+The test, exact by construction:
+- The sample points are the target's texel centres. The exact viewport (`rd__frame_group_ex`,
+  `setViewport`) puts them on the GS's 1/16 grid at a whole-number scale: in sixteenths of a
+  texel, `U = gx * sx + kx` and `V = gy * sy + ky` are multiples of 16 there. The CPU works the
+  offsets out from the target, its scale, the Full pixel crop, the field's half line and the
+  viewport's power of two (`rd_vu_zero_word`); the zero build's draw gets them in `vu_tri.w`. While
+  the cull is on every entry's rule stage takes the zero build (an entry without a word skips the
+  test), so the pre-pass's batches, draws and dispatches are the ones it had; the one pipeline more
+  is the draw pattern tables' only change (`mali`, `desktop`: `pipelines` + 1).
+- The test runs where every corner is drawn at its GS position: clip mode none without the wrap,
+  the region rule's exact verdict, the scissor mode's code 1, the exact viewport, the GS grid
+  (not `ICO_RD_VU_OFFGRID`), no jitter.
+- The triangle is grown by 2 sixteenths of a texel each way (`ICO_VU_ZERO_GROW`): more than a
+  GPU's sub-pixel snap moves a corner (at least 4 bits on every API) plus the viewport's float
+  steps. The closed, grown triangle holds every point the GPU's own triangle can cover under any
+  fill rule. A triangle of no area is tested by its grown box alone; a box of more than 4 sample
+  points a side is kept untested.
+- Integers only, every product exact, within the vertex-shader envelope (no loop: the 16 points
+  are written out; signed tests as `>=` and `==`).
+
+An entry gets a word only where every reader of its slots is a draw on its own target,
+single-sampled: not with an MSAA setting, not on WORK2 (the lamps' pass there may be
+multisampled), not a skinned entry (the skin check's twins), not one the velocity pass reads, not
+a probe; and only where the mapping is proven (a whole-number scale from 1 to 15, no jitter, the
+GS grid). Its draws keep the mesh's original list: a value of the shared vertices' list is drawn
+for other triangles too (counted, `shared lists given up`). A draw of a marked entry in a
+multisampled pass all the same turns the cull off for the run.
+
+The ways back, each logged, none written to the settings:
+- The install's mark (`logs/vu-zero-mark.txt`, `port/platform/vu_zero_mark.h`): "trying" is
+  written and synced before the zero build is made. The next start reads it with the previous
+  run's end (its `last-run-previous.txt`): a crash, a device loss, a GPU hang, the watchdog or no
+  end written with "trying", or a refused self-test ("failed"), keeps the cull off on that install
+  until the version changes (`blocked <version>`, handed to the renderer as `ICO_VU_ZERO_BLOCK`);
+  a clean end with "trying" tries again. 250 pictures drawn with the cull write "on". One line
+  each start that had a mark: `ico_pc: the previous run: zero-area cull: ...`.
+- The start-up self-test, after the pre-pass passed its own: a mesh of cases at SCENE's own
+  sample points (inside a cell in both windings, a corner on a point, an edge through one, no area
+  between points and through one, a big one, one within the margin, a sliver too wide, the
+  target's left and top edges) drawn at codes 34 and 32. The GPU's flag of every triangle slot must
+  equal the CPU's answer, the culled count the CPU's from the corners it placed, and the picture
+  with the cull the picture without it byte for byte. Anything else, the zero build missing, an
+  answer not read back or a device error: off for the run (still off when the renderer is made
+  again in the process), the mark "failed", the module and its pipeline released and the record
+  buffers made again as without it.
+  `rd: VU zero-area cull: on (self-test: C of S triangle slots culled as the CPU answers, code
+  34 and code 32, pictures byte for byte; lattice 0x11100) on SCENE 688x512 at 688x512 texels in
+  T ms`, or `off for the run (self-test: <reason>)`; then `rd: VU zero-area cull: on|off, N modules
+  of it made, P of its pipelines alive`.
+- A start after one that lost the graphics device, whose driver hung, or that the watchdog ended
+  with the cull on (the mark "on": counted in the loss ladder by `diag_host.c`): off for this start,
+  on every device (`ICO_LOSS_ROW`; on a phone that start draws without the VU pre-pass anyway).
+- No record is read back in play: once the self-test passed, nothing new runs on the GPU but the
+  zero build where the build without it ran.
+
+The 10 s VU line's clause (`rd_vu_zero_text`): `; zero-area cull: D draws a picture culling, T
+triangles; refused a picture: velocity a, ...; shared lists given up a picture: g`, or `;
+zero-area cull held|off (why)`. `rd_replay_tool --stats`: `stats: VU zero-area cull on|held|off
+(why): C of S triangle slots culled over P pictures checked, M differ; D draws culling (T
+triangles, G shared lists given up); refused: ...; zero-area modules made N`. The tests' switches:
+`ICO_RD_VU_ZERO` and `ICO_RD_VU_ZERO_SABOTAGE` ([TESTING.md](TESTING.md#environment-switches)).
+Whether a GPU spends time on triangles that cover no sample point depends on its tiler, which no
+test here measures.
+
 #### The index compaction
 
 Of list 0's mesh triangles a picture draws, a large share draws nothing: the game's own drops
