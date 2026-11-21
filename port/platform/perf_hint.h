@@ -34,7 +34,11 @@
  *     again (APerformanceHint_setThreads from API 34, else closed and made
  *     again), its target updated when the pacer's changes, closed while the
  *     app is in the background and made again on its return; refused once,
- *     never asked again (the port runs as before and says so once);
+ *     never asked again (the port runs as before and says so once), except
+ *     that a first session refused on a system that gives an update rate
+ *     is asked once more, at once, for the game thread alone (issue 179's
+ *     Mali-G52 phone, API 34: refused for three threads, its rate not
+ *     logged); that one made, the session stays the game thread's alone;
  *   - the line texts.
  */
 #ifndef ICO_PLATFORM_PERF_HINT_H
@@ -125,6 +129,10 @@ typedef struct PerfHintOps {
     /* the clock the calls are timed by (monotonic ns) */
     uint64_t (*now_ns)(void *user);
     bool withGpu; /* the reports carry the GPU time (API 35) */
+    /* the system's preferred update rate (getPreferredUpdateRateNanos; 0
+       or less: none): above 0, a refused first session is asked once more
+       for the game thread alone (perf_hint_step) */
+    int64_t rateNs;
 } PerfHintOps;
 
 /* The 10 s block's numbers (perf_hint_take: since the last take) */
@@ -158,7 +166,14 @@ typedef struct PerfHint {
     uint32_t sessN;
     bool refused, everMade;
     unsigned made;
-    double madeMs;     /* the last create call's time */
+    double madeMs; /* the last create call's time */
+    /* the first session refused for firstN threads in firstMs and asked
+       once more for the game thread alone (retried: once a run, at the
+       first session only); alone: that one made, every session after it
+       of the game thread alone (its threads never changed) */
+    bool retried, alone;
+    uint32_t firstN;
+    double firstMs;
     uint32_t droppedR; /* droppedW already counted */
     /* the block's numbers, under the spin (the hint thread adds, the game
        thread takes) */
@@ -217,9 +232,27 @@ typedef struct PerfHintOnText {
     int64_t rateNs; /* the system's preferred update rate (0 or less: none) */
     unsigned wakeMs;
     double madeMs;
+    /* the session of the game thread alone after the first was refused
+       (PerfHint.alone): "; the game thread alone: the system refused 3
+       threads in 0.67 ms" before the closing parenthesis */
+    bool alone;
+    uint32_t firstN;
+    double firstMs;
 } PerfHintOnText;
 
 size_t perf_hint_on_text(const PerfHintOnText *t, char *out, size_t cap);
+
+/* The line when the session is refused (PERF_HINT_EV_REFUSED; after
+   "window: "): "performance hints: off (the system refused the session:
+   APerformanceHint_createSession answered none for 3 threads in 0.67 ms
+   and for the game thread alone in 0.41 ms; the system's update rate
+   16.67 ms; API 34; game mode standard); the port runs as before"; not
+   asked again: "... for 3 threads in 0.67 ms (not asked again for the game
+   thread alone: no update rate given) ...", or "(... alone: one
+   thread asked)"; a session refused after one was made (the app back from
+   the background) "... answered none in 0.52 ms after a session was made
+   ...".  The length written */
+size_t perf_hint_refused_text(const PerfHint *h, int api, int gameMode, char *out, size_t cap);
 
 /* "performance hints: 612 reports (actual CPU 4.12 ms / GPU 18.40 ms of the
    7.81 ms target; over target in 598), the report calls 3.10 ms in all

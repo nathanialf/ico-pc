@@ -119,6 +119,16 @@ bool rd_thread_on_render(void);
  * thread; on the render thread the submit thread's alone, its list kept
  * for it included; 0 and nothing done without a host); the ns waited */
 uint64_t rd_thread_drain(void);
+/* The reads of the pictures handed over ended (the game thread: the wait
+ * its calls that change the renderer's state make, rd__texlock_wait,
+ * counted as one in the 10 s line's read waits); the rest of the render
+ * thread's jobs and the submit thread's work (the submits, the presents,
+ * a wait for the GPU) are not waited for.  What a dump reads is then the
+ * game thread's alone (the hand-over above): rd_dump.c's copies on the
+ * game thread (the loss keep, the slow-scene dump) wait here, not in
+ * rd_thread_drain.  The ns waited (0: none open, no host, or on the
+ * render thread) */
+uint64_t rd_thread_reads_wait(void);
 /* The result of the last picture rd_present_post or rd__replay_frame_async
  * handed over, once a drain after it returned (the replay tool) */
 bool rd_thread_last_ok(void);

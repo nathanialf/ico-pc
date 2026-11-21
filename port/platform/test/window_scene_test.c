@@ -260,11 +260,13 @@ int main(void)
     /* the GPU-bound hint (issue 123): the Adreno 740's blocks at Custom 3x,
        25.7 presented fps against 30 game fps, 217 late skips, GPU 37.7 ms a
        picture; a fit of 34.0 ms + 0.01 ms a thousand invocations over 376k
-       on average (spread 200k..552k, the fit's factor of 2): 3.76 ms of
-       vertex work, 33.94 ms scaling with the pixels; 2x = 3.76 + 33.94 x
-       4/9 = 18.8 ms under 0.9 of the 33.3 ms step */
+       on average (spread 200k..552k, the fit's factor of 2): the block's
+       mean 37.76 ms (the time the hint takes, since v0.11.14, whatever the
+       median passed), 3.76 ms of vertex work, 34.0 ms scaling with the
+       pixels; 2x = 3.76 + 34.0 x 4/9 = 18.9 ms under 0.9 of the 33.3 ms
+       step */
     {
-        SceneVuFit f, flat;
+        SceneVuFit f, flat, flat50;
         static const uint64_t inv[3] = {200000, 376000, 552000};
         static const uint64_t narrow[3] = {370000, 376000, 382000};
 
@@ -273,17 +275,24 @@ int main(void)
             window_scene_vu_fit_add(&f, inv[i], 34.0 + 0.01 * (double)inv[i] / 1000.0);
         }
         window_scene_gpu_hint_text(b, sizeof(b), 25.7, 30.0, 217, 37.7, 3.0, &f);
-        CHECK(text_is(b, "; the GPU takes 37.7 ms a picture at this resolution (3x): 2x would fit "
-                         "the game's rate (37.7 ms = 3.8 ms of vertex work by the fit + 33.9 ms "
-                         "that scales with the pixels: 3.8 + 33.9 x (2/3)^2 = 18.8 ms, under 30.0 "
-                         "ms, 0.9 of the 33.3 ms step at 30.0 game fps; a hint: nothing changes "
-                         "by itself)"));
+        CHECK(text_is(b, "; the GPU takes 37.8 ms a picture at this resolution (3x): 2x would fit "
+                         "the game's rate (37.8 ms = 3.8 ms of vertex work by the fit (R^2 1.00) "
+                         "+ 34.0 ms that scales with the pixels: 3.8 + 34.0 x (2/3)^2 = 18.9 ms, "
+                         "under 30.0 ms, 0.9 of the 33.3 ms step at 30.0 game fps; a hint: "
+                         "nothing changes by itself)"));
+        /* the block's mean, not the median passed (issue 179's v0.11.13
+           log: the presents line's 7.9 ms against 26.7 ms a replay) */
+        {
+            char m[512];
+            window_scene_gpu_hint_text(m, sizeof(m), 25.7, 30.0, 217, 7.9, 3.0, &f);
+            CHECK(strcmp(m, b) == 0);
+        }
         /* not GPU-bound: presented at the game's rate, no late skips, the GPU
            inside the step, no game rate: nothing */
         CHECK(window_scene_gpu_hint_text(b, sizeof(b), 30.0, 30.0, 217, 37.7, 3.0, &f) == 0 &&
               b[0] == '\0');
         CHECK(window_scene_gpu_hint_text(b, sizeof(b), 25.7, 30.0, 0, 37.7, 3.0, &f) == 0);
-        CHECK(window_scene_gpu_hint_text(b, sizeof(b), 25.7, 30.0, 217, 33.3, 3.0, &f) == 0);
+        CHECK(window_scene_gpu_hint_text(b, sizeof(b), 25.7, 30.0, 217, 33.3, 3.0, NULL) == 0);
         CHECK(window_scene_gpu_hint_text(b, sizeof(b), 0.0, 0.0, 217, 37.7, 3.0, &f) == 0);
         /* the reporter's own blocks: the invocations 370k..382k, not spread
            enough for a line (a vertex-bound block would read as pixels):
@@ -293,35 +302,51 @@ int main(void)
             window_scene_vu_fit_add(&f, narrow[i], 0.1 * (double)narrow[i] / 1000.0);
         }
         window_scene_gpu_hint_text(b, sizeof(b), 25.7, 30.0, 217, 37.7, 3.0, &f);
-        CHECK(text_is(b, "; GPU-bound at 3x (the GPU takes 37.7 ms a picture, the step 33.3 ms "
+        CHECK(text_is(b, "; GPU-bound at 3x (the GPU takes 37.6 ms a picture, the step 33.3 ms "
                          "at 30.0 game fps): no resolution hint (fit: not enough spread)"));
         window_scene_gpu_hint_text(b, sizeof(b), 25.7, 30.0, 217, 37.7, 3.0, NULL);
         CHECK(text_is(b, "; GPU-bound at 3x (the GPU takes 37.7 ms a picture, the step 33.3 ms "
                          "at 30.0 game fps): no resolution hint (fit: under 3 timed replays)"));
-        /* the vertex work alone over the budget (0.1 ms a thousand over
-           376k: 37.6 of 40 ms): no step fits */
+        /* the vertex work alone over the budget (2.4 ms + 0.1 ms a
+           thousand over 376k: 37.6 of the mean 40 ms): no step fits */
         memset(&f, 0, sizeof(f));
         for (int i = 0; i < 3; i++) {
-            window_scene_vu_fit_add(&f, inv[i], 0.1 * (double)inv[i] / 1000.0);
+            window_scene_vu_fit_add(&f, inv[i], 2.4 + 0.1 * (double)inv[i] / 1000.0);
         }
         window_scene_gpu_hint_text(b, sizeof(b), 25.7, 30.0, 217, 40.0, 3.0, &f);
         CHECK(text_is(b, "; the GPU takes 40.0 ms a picture at this resolution (3x): no lower "
                          "resolution step would fit the game's rate (37.6 ms of vertex work by "
-                         "the fit + 2.4 ms that scales with the pixels: 37.6 + 2.4 x (1/3)^2 = "
-                         "37.9 ms at 1x against 30.0 ms, 0.9 of the 33.3 ms step at 30.0 game "
-                         "fps)"));
+                         "the fit (R^2 1.00) + 2.4 ms that scales with the pixels: 37.6 + 2.4 x "
+                         "(1/3)^2 = 37.9 ms at 1x against 30.0 ms, 0.9 of the 33.3 ms step at "
+                         "30.0 game fps)"));
+        /* a line explaining under 0.8 of the work's variance (R^2 0.75,
+           the invocations spread): no step named, its R^2 said */
+        {
+            SceneVuFit noisy;
+            static const double xy[4][2] = {{10, 40}, {20, 44}, {30, 60}, {40, 56}};
+            memset(&noisy, 0, sizeof(noisy));
+            for (int i = 0; i < 4; i++) {
+                window_scene_vu_fit_add(&noisy, (uint64_t)(xy[i][0] * 1000.0), xy[i][1]);
+            }
+            window_scene_gpu_hint_text(b, sizeof(b), 20.0, 25.0, 9, 50.0, 3.0, &noisy);
+            CHECK(text_is(b, "; GPU-bound at 3x (the GPU takes 50.0 ms a picture, the step 40.0 "
+                             "ms at 25.0 game fps): no resolution hint (fit: R^2 0.75, under "
+                             "0.80)"));
+        }
         /* a line with no vertex cost (the work flat over spread invocations):
            all of it the pixels' */
         memset(&flat, 0, sizeof(flat));
+        memset(&flat50, 0, sizeof(flat50));
         for (int i = 0; i < 3; i++) {
             window_scene_vu_fit_add(&flat, inv[i], 40.0);
+            window_scene_vu_fit_add(&flat50, inv[i], 50.0);
         }
         /* at 1x */
         window_scene_gpu_hint_text(b, sizeof(b), 25.7, 30.0, 217, 40.0, 1.0, &flat);
         CHECK(text_is(b, "; the GPU takes 40.0 ms a picture at this resolution (1x): at 1x "
                          "already, no lower resolution step is offered (0.0 ms of vertex work by "
-                         "the fit + 40.0 ms that scales with the pixels, against 30.0 ms, 0.9 of "
-                         "the 33.3 ms step at 30.0 game fps)"));
+                         "the fit (the work flat) + 40.0 ms that scales with the pixels, against "
+                         "30.0 ms, 0.9 of the 33.3 ms step at 30.0 game fps)"));
         /* a fractional scale (Window, Auto, an upscaler's render scale) is
            no Resolution row: a lower Resolution, the render scale rounded
            down to an offered step */
@@ -329,27 +354,37 @@ int main(void)
         CHECK(text_is(b, "; the GPU takes 40.0 ms a picture at this render scale (2.5x, not a "
                          "Resolution row's: Window, Auto or an upscaler): a lower Resolution (or "
                          "Upscaling quality) would fit the game's rate at a render scale of 2x or "
-                         "under (40.0 ms = 0.0 ms of vertex work by the fit + 40.0 ms that scales "
-                         "with the pixels: 0.0 + 40.0 x (2/2.5)^2 = 25.6 ms, under 30.0 ms, 0.9 of "
-                         "the 33.3 ms step at 30.0 game fps; a hint: nothing changes by itself)"));
+                         "under (40.0 ms = 0.0 ms of vertex work by the fit (the work flat) + "
+                         "40.0 ms that scales with the pixels: 0.0 + 40.0 x (2/2.5)^2 = 25.6 ms, "
+                         "under 30.0 ms, 0.9 of the 33.3 ms step at 30.0 game fps; a hint: "
+                         "nothing changes by itself)"));
+        /* the longest of the texts fits the window's buffer (window_host.c
+           hint[512]; v0.11.13's 400 cut this one's end) with the scale and
+           times at their widest in play */
+        {
+            char m[1024];
+            const size_t n =
+                window_scene_gpu_hint_text(m, sizeof(m), 9.9, 30.0, 999, 99.9, 12.5, &flat50);
+            CHECK(n > 400u && n < 512u);
+        }
         /* the largest step that fits (4x of 6x at 25 game fps), 5x not offered */
-        window_scene_gpu_hint_text(b, sizeof(b), 20.0, 25.0, 9, 50.0, 6.0, &flat);
+        window_scene_gpu_hint_text(b, sizeof(b), 20.0, 25.0, 9, 50.0, 6.0, &flat50);
         CHECK(text_is(b, "; the GPU takes 50.0 ms a picture at this resolution (6x): 4x would fit "
-                         "the game's rate (50.0 ms = 0.0 ms of vertex work by the fit + 50.0 ms "
-                         "that scales with the pixels: 0.0 + 50.0 x (4/6)^2 = 22.2 ms, under 36.0 "
-                         "ms, 0.9 of the 40.0 ms step at 25.0 game fps; a hint: nothing changes by "
-                         "itself)"));
+                         "the game's rate (50.0 ms = 0.0 ms of vertex work by the fit (the work "
+                         "flat) + 50.0 ms that scales with the pixels: 0.0 + 50.0 x (4/6)^2 = 22.2 "
+                         "ms, under 36.0 ms, 0.9 of the 40.0 ms step at 25.0 game fps; a hint: "
+                         "nothing changes by itself)"));
         /* issue 179 (Mali-G52): no late skip, 157 frames left out because
            the render thread was busy: the call site adds them, the hint
            prints (the spread guard still names no step) */
         CHECK(window_scene_hint_skips(0, 157) == 157 && window_scene_hint_skips(3, 4) == 7 &&
               window_scene_hint_skips(0xFFFFFFFFu, 5) == 0xFFFFFFFFu);
         window_scene_gpu_hint_text(b, sizeof(b), 15.0, 25.0, window_scene_hint_skips(0, 157), 53.0,
-                                   1.0, &flat);
+                                   1.0, &flat50);
         CHECK(b[0] != '\0' && strstr(b, "at 1x already") != NULL);
         memset(&f, 0, sizeof(f));
         for (int i = 0; i < 3; i++) {
-            window_scene_vu_fit_add(&f, narrow[i], 0.1 * (double)narrow[i] / 1000.0);
+            window_scene_vu_fit_add(&f, narrow[i], 0.14 * (double)narrow[i] / 1000.0);
         }
         window_scene_gpu_hint_text(b, sizeof(b), 15.0, 25.0, window_scene_hint_skips(0, 157), 53.0,
                                    1.0, &f);
@@ -360,7 +395,7 @@ int main(void)
         {
             char t[16];
             const size_t n =
-                window_scene_gpu_hint_text(t, sizeof(t), 20.0, 25.0, 9, 50.0, 6.0, &flat);
+                window_scene_gpu_hint_text(t, sizeof(t), 20.0, 25.0, 9, 50.0, 6.0, &flat50);
 
             CHECK(n < sizeof(t) && strlen(t) == n);
         }

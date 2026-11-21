@@ -1201,7 +1201,7 @@ void pace_gpu_gap_stall(PaceGpuGap *g, int64_t gapNs)
 
 int pace_gpu_gap_text(const PaceGpuGap *g, char *out, unsigned len)
 {
-    char across[64] = "", stalls[192] = "";
+    char across[64] = "", stalls[224] = "";
 
     if (len != 0) {
         out[0] = '\0';
@@ -1219,10 +1219,13 @@ int pace_gpu_gap_text(const PaceGpuGap *g, char *out, unsigned len)
         size_t at;
 
         if (g->stalls > PACE_GPU_GAP_STALLS) {
-            snprintf(stalls, sizeof stalls,
-                     "; across the first %u of the %u stalls: the GPU was idle ", kept, g->stalls);
+            snprintf(
+                stalls, sizeof stalls,
+                "; after the first %u of the %u presents blocked over 50 ms: the GPU was idle ",
+                kept, g->stalls);
         } else {
-            snprintf(stalls, sizeof stalls, "; across the %u stall%s: the GPU was idle ", g->stalls,
+            snprintf(stalls, sizeof stalls,
+                     "; after the %u present%s blocked over 50 ms: the GPU was idle ", g->stalls,
                      g->stalls == 1 ? "" : "s");
         }
         at = strlen(stalls);
@@ -1645,7 +1648,7 @@ int pace_budget_block_text(const PaceBudget *b, unsigned refusedAt, unsigned dro
                            unsigned climbsAt, unsigned climbRefusalsAt, uint64_t gpuNs,
                            bool gpuIsSpan, const char *noGpu, char *out, unsigned size)
 {
-    char held[144], lowest[24], gpu[48];
+    char held[144], lowest[24], gpu[72];
 
     /* the timer path before its first drop, or back where it started:
        unbound, nothing held */
@@ -1676,8 +1679,11 @@ int pace_budget_block_text(const PaceBudget *b, unsigned refusedAt, unsigned dro
         snprintf(lowest, sizeof(lowest), "%u", b->lowest);
     }
     if (gpuNs != 0) {
-        snprintf(gpu, sizeof(gpu), "%s %.1f ms a timed replay", gpuIsSpan ? "GPU span" : "GPU busy",
-                 ms_of(gpuNs));
+        /* gpuNs is the median of the last PACE_HIST_LEN timed replays
+           (pace_hist_add): not the block's mean the replays line gives
+           (issue 179's v0.11.13 log: 7.9 ms here, 26.71 ms a replay there) */
+        snprintf(gpu, sizeof(gpu), "%s %.1f ms (the median of the last %u timed replays)",
+                 gpuIsSpan ? "GPU span" : "GPU busy", ms_of(gpuNs), (unsigned)PACE_HIST_LEN);
     } else {
         snprintf(gpu, sizeof(gpu), "%s", noGpu);
     }

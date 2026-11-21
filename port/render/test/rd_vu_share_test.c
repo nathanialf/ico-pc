@@ -18,12 +18,15 @@
  *   t5  a draw's verdict: shared with its saved count; kept on the
  *       original list (counted by why) for the switch's words, the form,
  *       a chain plane, the hide and later marks (as built), a probe draw, a
- *       range off the batches; no candidate (not counted) for a skinned command, a
- *       draw the pre-pass did not record and a rule mode other than none;
+ *       range off the batches, a rule mode other than none (before) and a
+ *       draw the pre-pass did not record; no candidate (not counted) for a
+ *       skinned command;
  *       the joined mark changes nothing
  *   t6  the bytes on the device: the original's, then the shared list's
  *   t7  the counts and their texts: the run's stats line, the block's text
- *       taken back to zero
+ *       taken back to zero; the block's kept triangles by why (each
+ *       verdict's own, the compaction's after a shared one, none after a
+ *       command that is no mesh), a picture, in thousands past 10 000
  *   t8  the list only where a draw can take it: none for a lit or a skinned
  *       mesh, none made for a command that is no candidate (skinned, lit,
  *       prelit at codes 32 and 36, a chain plane) or for a scratch mesh,
@@ -228,13 +231,16 @@ static void t5(void)
     /* no candidate */
     w = rd__vu_share_draw(m, RDC_SKINNED, none, 0, 0, true, 0, 1, 0, 12, &saved);
     CHECK(w == -1 && saved == 0u, "t5: skinned: %d", w);
+    /* kept, counted apart since v0.11.14 (the rule mode first) */
     w = rd__vu_share_draw(m, RDC_MESH, none, 0, 0, false, 0, 1, 0, 12, &saved);
-    CHECK(w == -1, "t5: not recorded: %d", w);
+    CHECK(w == RD_VU_SHARE_NOREC && saved == 0u, "t5: not recorded: %d", w);
     w = rd__vu_share_draw(m, RDC_MESH, ICO_VU_CLIP_REGION | ICO_VU_TRI_CHAIN, 0, 0, true, 0, 1, 0,
                           12, &saved);
-    CHECK(w == -1, "t5: rule mode region: %d", w);
+    CHECK(w == RD_VU_SHARE_CLIP, "t5: rule mode region: %d", w);
     w = rd__vu_share_draw(m, RDC_MESH, ICO_VU_CLIP_SCISSOR, 0, 0, true, 0, 1, 0, 12, &saved);
-    CHECK(w == -1, "t5: rule mode scissor: %d", w);
+    CHECK(w == RD_VU_SHARE_CLIP, "t5: rule mode scissor: %d", w);
+    w = rd__vu_share_draw(m, RDC_MESH, ICO_VU_CLIP_REGION, 0, 0, false, 0, 1, 0, 12, &saved);
+    CHECK(w == RD_VU_SHARE_CLIP, "t5: rule mode region, not recorded: %d", w);
     /* kept */
     w = rd__vu_share_draw(m, RDC_MESH, none, 3u, 0, true, 0, 1, 0, 12, &saved);
     CHECK(w == RD_VU_SHARE_CHAIN && saved == 0u, "t5: chain plane: %d", w);
@@ -308,12 +314,70 @@ static void t7(void)
           "t7: stats \"%s\"", buf);
     CHECK(strstr(buf, "chain plane 1, hide or later marks 1,") != NULL, "t7: reasons \"%s\"", buf);
     const size_t w = rd_vu_share_text(buf, sizeof(buf), 2u);
-    CHECK(w > 0 && strcmp(buf, "; shared vertices: 20 triangles, 15 vertex invocations saved (7 % "
-                               "of the draws')") == 0,
+    CHECK(w > 0 &&
+              strcmp(buf, "; shared vertices: 20 triangles, 15 vertex invocations saved (7 % "
+                          "of the draws'); shared vertices kept (triangles a picture): form "
+                          "0, chain 0, marks 0, other 0, entry 0, region 0, no verdict 0") == 0,
           "t7: block \"%s\"", buf);
     (void)rd_vu_share_text(buf, sizeof(buf), 1u);
     CHECK(strstr(buf, ": 0 triangles, 0 vertex invocations saved (0 %") != NULL,
           "t7: block taken back to zero: \"%s\"", buf);
+    /* the block's kept triangles: each verdict's triangles, kept by the
+       rd__vu_share_kept after it (the compaction's ENTRY after a shared
+       verdict: that draw's), a picture, the run's draws beside them */
+    {
+        static const uint32_t kicks[] = {2, 3, 4, 5};
+        static const uint32_t bat[][3] = {{0, 6, 4}};
+        const uint32_t none = ICO_VU_CLIP_NONE;
+        RdMeshRec *m = mesh(6, kicks, 4, bat, 1);
+        uint32_t saved = 0;
+        rd__vu_share_build(m);
+        int why = rd__vu_share_draw(m, RDC_MESH, none, 3u, 0, true, 0, 1, 0, 12, &saved);
+        rd__vu_share_kept(why); /* chain: 4 triangles */
+        why = rd__vu_share_draw(m, RDC_MESH, ICO_VU_CLIP_REGION, 0, 0, true, 0, 1, 0, 12, &saved);
+        rd__vu_share_kept(why); /* region: 4 */
+        why = rd__vu_share_draw(m, RDC_MESH, ICO_VU_CLIP_REGION, 0, 0, true, 0, 1, 0, 12, &saved);
+        rd__vu_share_kept(why); /* region: 8 */
+        why = rd__vu_share_draw(m, RDC_MESH, none, 0, 0, false, 0, 1, 0, 12, &saved);
+        rd__vu_share_kept(why); /* no verdict: 4 */
+        why = rd__vu_share_draw(m, RDC_MESH, none, 0, 0, true, 0, 1, 0, 12, &saved);
+        CHECK(why == RD_VU_SHARE_YES, "t7: shared: %d", why);
+        rd__vu_share_kept(RD_VU_SHARE_ENTRY); /* the compaction took it: 4 */
+        why = rd__vu_share_draw(m, RDC_SKINNED, none, 0, 0, true, 0, 1, 0, 12, &saved);
+        CHECK(why == -1, "t7: skinned: %d", why);
+        rd__vu_share_kept(RD_VU_SHARE_ENTRY); /* after no verdict: 0 triangles */
+        rd__vu_share_free(m);
+        why = rd__vu_share_draw(m, RDC_MESH, none, 0, 0, true, 0, 1, 0, 12, &saved);
+        rd__vu_share_kept(why); /* form: 4 */
+        meshFree(m);
+        size_t k = rd__vu_share_kept_text(buf, sizeof(buf), 2u);
+        CHECK(k == strlen(buf) &&
+                  strcmp(buf, "; shared vertices kept (triangles a picture): form 2, chain 2, "
+                              "marks 0, other 0, entry 2, region 4, no verdict 2") == 0,
+              "t7: kept \"%s\"", buf);
+        (void)rd__vu_share_kept_text(buf, sizeof(buf), 1u);
+        CHECK(strstr(buf, "form 0, chain 0, marks 0, other 0, entry 0, region 0, no verdict 0") !=
+                  NULL,
+              "t7: kept taken back to zero: \"%s\"", buf);
+        (void)rd__vu_share_stats_text(buf, sizeof(buf));
+        CHECK(strstr(buf, "compaction or program entry 2, rule mode not none 2, not recorded 1") !=
+                  NULL,
+              "t7: the run's draws by why \"%s\"", buf);
+        /* the words of a large count (k) */
+        for (int i = 0; i < 3000; i++) {
+            (void)rd__vu_share_draw(NULL, RDC_MESH, none, 0, 0, true, 0, 1, 0, 12, &saved);
+        }
+        m = mesh(6, kicks, 4, bat, 1);
+        for (int i = 0; i < 3000; i++) {
+            why =
+                rd__vu_share_draw(m, RDC_MESH, ICO_VU_CLIP_REGION, 0, 0, true, 0, 1, 0, 12, &saved);
+            rd__vu_share_kept(why);
+        }
+        meshFree(m);
+        k = rd__vu_share_kept_text(buf, sizeof(buf), 1u);
+        CHECK(k == strlen(buf) && strstr(buf, ", region 12k, no verdict 0") != NULL,
+              "t7: kept in thousands \"%s\"", buf);
+    }
     char small[8];
     const size_t ws = rd_vu_share_text(small, sizeof(small), 1u);
     CHECK(ws == sizeof(small) - 1u && strlen(small) == ws, "t7: a short buffer cut: %u",

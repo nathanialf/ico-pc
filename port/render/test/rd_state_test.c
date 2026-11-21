@@ -23,6 +23,8 @@
  *              failing fragment writes what a passing one writes, the pass
  *              and fail pair otherwise; the toggle restores the split
  *   dump       a frame with textures and a temp target survives dump/load;
+ *              the reads-only dump (rd_dump_retained_frame_mem_reads) is
+ *              the drained dump's bytes;
  *              an image's GS levels and TEX1's mipmap fields (tex1Lod)
  *              round-trip; version 8 and older dumps (no tex1Lod, no level
  *              words) still load; RDC_AA1 and RdStateBlock.aa1 round-trip, and a
@@ -877,6 +879,21 @@ static void testDump(const char *dir)
               "the retained frame's memory dump is the same");
         CHECK(!rd_dump_retained_frame_mem(f->number + 7u, &none, &noneLen, NULL),
               "a frame the ring does not hold is not dumped");
+        {
+            /* the reads-only mode (rd_dump.c dumpFrame: the slow-scene
+               dump's copy grown here, the loss keep's) is the drained
+               dump byte for byte */
+            void *reads = NULL;
+            size_t readsLen = 0;
+            uint32_t rn = 0;
+
+            CHECK(rd_dump_retained_frame_mem_reads(f->number, &reads, &readsLen, &rn) &&
+                      rn == f->number && readsLen == memLen && memcmp(reads, mem, memLen) == 0,
+                  "the reads-only dump is the drained one's bytes (%zu, %zu)", readsLen, memLen);
+            CHECK(!rd_dump_retained_frame_mem_reads(f->number + 7u, &reads, &readsLen, NULL),
+                  "reads-only: a frame the ring does not hold is not dumped");
+            free(reads);
+        }
         {
             /* the slow-scene dump's two steps (rd_dump_mem.h): the frame
                measured with nothing copied is the memory dump's size; copied

@@ -100,9 +100,15 @@ void rd_loss_choose(const RdLossInput *in, RdLossChoice *out)
     }
 }
 
-bool rd_loss_keep_needed(uint32_t frame, uint32_t openFrame)
+/* the GPU's first open submission is of the frame or an earlier one */
+static bool keepOpen(uint32_t frame, uint32_t openFrame)
 {
     return frame != 0 && openFrame != 0 && frame >= openFrame;
+}
+
+bool rd_loss_keep_needed(uint32_t frame, bool sent, uint32_t openFrame)
+{
+    return sent && keepOpen(frame, openFrame);
 }
 
 bool rd_loss_keep_release(uint32_t frame, uint32_t openFrame)
@@ -115,14 +121,19 @@ bool rd_loss_keep_stalled(uint64_t waitingFor, uint64_t waitingNs)
     return waitingFor != 0 && waitingNs >= RD_LOSS_KEEP_STALL_NS;
 }
 
-RdLossKeep rd_loss_keep_decide(RdLossThrottle *t, uint64_t seen, uint32_t frame, uint32_t openFrame,
-                               uint64_t waitingFor, uint64_t waitingNs)
+RdLossKeep rd_loss_keep_decide(RdLossThrottle *t, uint64_t seen, uint32_t frame, bool sent,
+                               uint32_t openFrame, uint64_t waitingFor, uint64_t waitingNs)
 {
-    if (!rd_loss_keep_needed(frame, openFrame)) {
+    if (!keepOpen(frame, openFrame)) {
         return RD_LOSS_KEEP_NOT_OPEN;
     }
     if (!rd_loss_keep_stalled(waitingFor, waitingNs)) {
         return RD_LOSS_KEEP_NO_STALL;
+    }
+    /* after the stall's test, so the count is of the copies v0.11.13 made
+       or throttled, and before the throttle, which it does not use */
+    if (!rd_loss_keep_needed(frame, sent, openFrame)) {
+        return RD_LOSS_KEEP_NOT_SENT;
     }
     if (seen < t->pauseUntil) {
         return RD_LOSS_KEEP_PAUSED;

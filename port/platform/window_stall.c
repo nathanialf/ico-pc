@@ -272,6 +272,17 @@ static void stall_block_close(const StallBlockClock *clock)
     stall_medians_reset(&s_med); /* the passes' medians are the block's */
 }
 
+void window_stall_stage(int stage)
+{
+    static int s_stage;
+    static bool s_known;
+    if (s_known && stage != s_stage) {
+        stall_medians_reset(&s_med); /* the new stage's own medians */
+    }
+    s_stage = stage;
+    s_known = true;
+}
+
 void window_stall_run_summary(void)
 {
     char text[1536];

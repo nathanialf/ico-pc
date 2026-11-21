@@ -5079,7 +5079,7 @@ static void perf_log(void)
             (double)(cardTris - s_pres.cardTris) / steps, (cardMs - s_pres.cardMs) / steps);
     {
         /* the VU work of a replay: where the vertex shader's time goes */
-        char vu[256], fit[192], twins[96], sh[112];
+        char vu[256], fit[192], twins[96], sh[256];
 
         (void)window_scene_vu_text(vu, sizeof(vu), s_perf.vuDraws, s_perf.vuTris, s_perf.vuPreVerts,
                                    b->n, rd_vu_prepass_on(), s_perf.vuLeftOut);
@@ -5621,7 +5621,7 @@ void window_pace_log(Uint64 now)
         (void)window_scene_images_text(images, sizeof(images), st.swapImages, st.swapAcquired);
     }
     /* issue 123: a GPU-bound block's hint, the scale that would fit */
-    char hint[400];
+    char hint[512];
     {
         float sx = 1.0f, sy = 1.0f;
 
@@ -5639,8 +5639,8 @@ void window_pace_log(Uint64 now)
         "window: %u presents, %u movie presents%s and %u game frames (%u frame numbers) in "
         "%.1f s: %.1f "
         "presented fps, %.1f game fps; %u vsyncs (%.1f Hz simulated), %u resyncs dropping "
-        "%.0f ms; skipped %u presents (late %u, slow %u)%s%s; longest replay %.1f ms of %u, %u "
-        "over their interval; %u steps over %.1f ms; "
+        "%.0f ms; skipped %u presents (late %u, slow %u)%s%s; longest replay on the render "
+        "thread alone %.1f ms of %u, %u over their interval; %u steps over %.1f ms; "
         "framerate %s%s, present "
         "%s%s, display %.2f Hz (%.3f presents a refresh), window %dx%d%s; step late max %.1f "
         "ms; pump max %.1f ms; %s%s\n",
