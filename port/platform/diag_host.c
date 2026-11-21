@@ -2109,8 +2109,6 @@ static void ends_clean(void)
    after one, the v0.11.2 barrier scopes, after two the single submission
    wait too; the backend's lines say which ran.  Nothing is written to the settings. */
 static unsigned int act_loss_row;
-/* the previous run's watchdog end with the zero-area cull on (vu_zero_mark.h) */
-static int act_zero_loss;
 
 /* the ladder line's words for a phone (Android, iOS: every GPU there is a
    tile-based phone GPU to rhi_tile_rule.h); ICO_TEST_LADDER_PHONE gives
@@ -2956,8 +2954,9 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     }
     memcpy(act_path, path, strlen(path) + 1);
     last_run_begin(act_path, act_version, last_run_log); /* "the previous run: ..." first */
-    /* the zero-area cull's mark (vu_zero_mark.h): its line, its watchdog end */
-    act_zero_loss = vu_zero_mark_begin(act_path, act_version, last_run_log);
+    /* the zero-area cull's mark (vu_zero_mark.h): its line; a bad end turns
+       the cull off, never the pre-pass (the loss count below is the rung's) */
+    (void)vu_zero_mark_begin(act_path, act_version, last_run_log);
     act_sibling(act_ends_path, sizeof act_ends_path, "-ends.txt");
     act_sibling(act_bg_path, sizeof act_bg_path, "-background.txt");
     act_sibling(act_stall_path, sizeof act_stall_path, "-stall.txt");
@@ -3080,12 +3079,11 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     act_remove();
     ends_count_prev(prev, relaunched);
     /* a loss inside a probe is the probe's (ico_diag_set_probe): no step */
-    loss_count_prev((!act_prev_probe && loss != NULL &&
-                     (strcmp(loss, act_loss_none) == 0 ||
-                      strncmp(loss, act_loss_prefix, sizeof act_loss_prefix - 1) == 0 ||
-                      strcmp(loss, act_loss_hang_none) == 0 ||
-                      strncmp(loss, act_loss_hang_prefix, sizeof act_loss_hang_prefix - 1) == 0)) ||
-                        act_zero_loss,
+    loss_count_prev(!act_prev_probe && loss != NULL &&
+                        (strcmp(loss, act_loss_none) == 0 ||
+                         strncmp(loss, act_loss_prefix, sizeof act_loss_prefix - 1) == 0 ||
+                         strcmp(loss, act_loss_hang_none) == 0 ||
+                         strncmp(loss, act_loss_hang_prefix, sizeof act_loss_hang_prefix - 1) == 0),
                     relaunched);
     if (act_prev_background && (relaunched || !note_is_pipelines(prev))) {
         /* the mark of a run that ended in the background outside a

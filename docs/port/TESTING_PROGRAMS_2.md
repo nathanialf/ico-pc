@@ -89,13 +89,17 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   end of ours: blocked.
 - `vu_zero_mark_test.c` (`vu_zero_mark`): the zero-area cull's mark on the install
   (`port/platform/vu_zero_mark.c`, [PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#the-last-run-file)):
-  `trying` after a crash, a device loss, a GPU hang, the watchdog, no end and no file: blocked for
-  the version, its line; after a clean end: removed, tried again; `failed`: blocked; a block of
-  the running version kept, of another removed; `on` after the watchdog: a lost start, after a crash
-  nothing; no mark: nothing. Then the start's step on files in the build folder: a crash with
-  `trying` rewrites the mark `blocked <version>` and exports `ICO_VU_ZERO_BLOCK` and
-  `ICO_VU_ZERO_MARK`, the next start of that version keeps it, another version's removes it, the
-  watchdog with `on` returns the lost start. CPU only.
+  the end kind from last-run.txt's end (our own first, `clean, after: <end>` as that end) and
+  Android's exit record (every reason; SIGKILL apart from other signals); the stage table, every
+  stage against every end, printed (`trying` blocks all but a clean close, `counting` and `on` only
+  a crash, an ANR, a signal, a device loss, a GPU hang or the watchdog, `failed` and `blocked`
+  always); the marks with versions (a block for the version in the mark, never the next; a mark
+  without one the running version's; a text not known taken as `trying`). Then the start's step on
+  files in the build folder: closed from the recent apps list while counting: not blocked, the
+  mark removed, no block exported; a crash while counting: `blocked <version>`, kept at that
+  version's next start, removed at a later version's; no evidence while trying: blocked, while counting:
+  not; the watchdog and a cleanly closed device loss while on: blocked; a SIGKILL while on: not;
+  `ICO_VU_ZERO_MARK` and `ICO_VU_ZERO_VERSION` exported. CPU only.
 - `last_run_test.c`, its skin case (`last_run`): `last_run_summary_text_with` with the skin check's
   figure between the resets and the free memory word for word, none or `""` as before, issue
   217's reporter's figures with the phase cut and the stage and tick whole, a long phase cut with

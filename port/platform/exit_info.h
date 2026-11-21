@@ -202,10 +202,11 @@ int exit_info_system_records(const char *logsDir, long long lastSeenMs, char *ou
 void exit_info_begin(const char *logsDir, const char *activityPath);
 /* the verdict of this start ("" before exit_info_begin) */
 const char *exit_info_last_verdict(void);
-/* Android's exit reason (EXIT_INFO_REASON_*) of the record whose pid is
-   last-run.txt's, as this start read it; -1 none (no such record, no
-   last-run.txt, off Android, before exit_info_begin).  Read-only: the
-   install's marks (ahead_mark.h) tell an ordinary close from a crash by it */
-int exit_info_last_reason(void);
+/* Android's record of the previous run (the one with last-run.txt's pid)
+   as exit_info_begin read it: its reason (EXIT_INFO_REASON_*) and *status;
+   -1 when there is none (off Android, before Android 11, the records not
+   read, no record with that pid, no last-run.txt, before exit_info_begin);
+   the zero-area cull's mark reads it (vu_zero_mark.h) */
+int exit_info_last_reason(int *status);
 
 #endif

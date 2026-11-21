@@ -937,7 +937,10 @@ rd_vuprepass_selftest_zero_mali 1.67  # estimate: rd_vuprepass_selftest_mali x 1
 rd_vuprepass_selftest_zero_marked 1.52  # estimate: rd_vuprepass_selftest (the cull not tried; not run here)
 rd_vuprepass_selftest_zero_missing 1.67  # estimate: rd_vuprepass_selftest x 1.1 (not run here)
 rd_vuprepass_selftest_zero_never 1.52  # estimate: rd_vuprepass_selftest (the cull not tried; not run here)
+rd_vuprepass_selftest_zero_picture 1.67  # estimate: rd_vuprepass_selftest_zero (the same replays; not run here)
 rd_vuprepass_selftest_zero_plain 1.62  # estimate: rd_vuprepass_selftest_plain x 1.1 (not run here)
+rd_vuprepass_selftest_zero_refused 1.52  # estimate: rd_vuprepass_selftest (the cull not tried; not run here)
+rd_vuprepass_selftest_zero_switch 3.34  # estimate: rd_vuprepass_selftest_zero x 2 (the renderer made again, both self-tests again; not run here)
 rd_vurecord_ab 52.14
 rd_vurecord_ab_compute 42.73
 rd_vurecord_ab_compute_class 39.25

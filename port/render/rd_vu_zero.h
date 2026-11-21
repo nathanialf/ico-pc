@@ -32,11 +32,16 @@
  *
  * The ways back (each logged, none written to the settings):
  *   - the install's mark (port/platform/vu_zero_mark.h, ICO_VU_ZERO_MARK,
- *     ICO_VU_ZERO_BLOCK): "trying" written and synced before the zero build
- *     is made; a start after a run that ended other than cleanly with it,
- *     or whose self-test failed ("failed"), keeps the cull off on that
- *     install until the version changes; RD_VU_ZERO_PROBATION pictures
- *     drawn with it write "on";
+ *     ICO_VU_ZERO_VERSION, ICO_VU_ZERO_BLOCK), each word with the running
+ *     version: "trying" written and synced before the zero build is made
+ *     (only once the settings give SCENE a lattice: a refusal by the
+ *     settings writes nothing and makes nothing), "counting" when the
+ *     self-test passed, "on" after RD_VU_ZERO_PROBATION pictures drawn with
+ *     it, "failed" when the module could not be made or the self-test
+ *     refused it; the next start keeps the cull off on that install while
+ *     that version runs after any end but a clean close while trying, after
+ *     a bad end (a crash, an ANR, a signal, a device loss, a GPU hang, the
+ *     watchdog) while counting or on, or after "failed";
  *   - the start-up self-test (rd_vu_zero_selftest.c, run by
  *     rd_vuprepass_selftest after the pre-pass passed): triangles with
  *     CPU-computed answers drawn with the cull and without; the GPU's flag
@@ -45,8 +50,8 @@
  *     off for the run, the module and its pipeline released.  Until it
  *     passes the cull is off and nothing of it exists on the device;
  *   - the loss ladder (port/rhi/rhi_tile_rule.h, ICO_LOSS_ROW: a start
- *     after one that lost the graphics device, whose driver hung, or that
- *     the watchdog ended with the cull on): off for this start.
+ *     after one that lost the graphics device or whose driver hung): off
+ *     for this start.
  * ICO_RD_VU_ZERO (tests): 0 off; 1 on without the self-test (the replay
  * tool runs none by default), every entry of every replay checked. */
 #ifndef PORT_RENDER_RD_VU_ZERO_H
@@ -135,8 +140,16 @@ struct RdStateBlock;
 struct RdTargetRec;
 
 /* rd__vu_prepass_init: the environment, the loss ladder (ICO_LOSS_ROW), the
-   start state (off, or held until the self-test), its line when off */
+   start state (off, or held until the self-test), its line when off; any
+   read back buffer of a device before forgotten */
 void rd__vu_zero_init(void);
+/* rd__vu_prepass_shutdown, with the device: the self-test's read back
+   buffers destroyed and forgotten (a renderer made again, as after a
+   Graphics API switch, makes its own at its try) */
+void rd__vu_zero_shutdown(void);
+/* the read back buffers alive now; *made those made this process (the
+   tests: made again at each try, none alive after the self-test) */
+uint32_t rd__vu_zero_check_buffers(uint32_t *made);
 /* the record buffer is made able to be copied from (the checks' copies):
    only while the self-test reads it back, or under the tests' =1 */
 bool rd__vu_zero_copyable(void);
@@ -169,9 +182,16 @@ uint32_t rd__pipeline_count_vs(uint8_t vs);
 /* the lattice word of a pre-pass entry drawn under st (its target, offset),
    0 when off or refused (*why) */
 uint32_t rd__vu_zero_entry_word(const struct RdStateBlock *st, int *why);
+/* the same whatever the cull's state: the settings' answer for st's target
+   alone (the self-test asks it before it tries anything) */
+uint32_t rd__vu_zero_target_word(const struct RdStateBlock *st, int *why);
 /* the word the rule stage is given (word, but under the tests'
    ICO_RD_VU_ZERO_SABOTAGE=lattice half a texel off) */
 uint32_t rd__vu_zero_gpu_word(uint32_t word);
+/* the tests' ICO_RD_VU_ZERO_SABOTAGE=picture: the self-test's picture
+   without the cull changed in one byte before the compare (its picture
+   branch's way back) */
+bool rd__vu_zero_sabotage_picture(void);
 /* a draw: culls (allowed) or why not, its triangles */
 void rd__vu_zero_draw(bool allowed, int why, uint32_t tris);
 /* the frame slot's checks, its frame done (rd__vu_prepass's start) */

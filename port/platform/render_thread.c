@@ -1670,7 +1670,7 @@ FmMode ico_render_thread_start(void)
             char logs[ICO_PATH_MAX];
             const char *blocked = ico_host_logs_dir(logs, sizeof(logs)) == 0
                                       ? ahead_mark_begin(logs, ico_diag_version(),
-                                                         exit_info_last_reason(), rt_mark_log)
+                                                         exit_info_last_reason(NULL), rt_mark_log)
                                       : NULL;
             rd_thread_submit_ahead_prev(blocked != NULL ? blocked
                                         : ico_diag_startup_prev_watchdog()

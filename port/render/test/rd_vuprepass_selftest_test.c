@@ -1,7 +1,7 @@
 /* rd_vuprepass_selftest_test.c: the VU vertex and triangle pre-passes'
  * self-test (rd_vuprepass_selftest.c).
  *
- *   rd_vuprepass_selftest_test <on|off|notrun> [plain]
+ *   rd_vuprepass_selftest_test <on|off|notrun> [plain] [switch]
  *
  * <mode> what the self-test must leave: on (it passed), off (it failed:
  * ICO_RD_VU_PREPASS_SABOTAGE=1, tri, ticks or stale) or notrun (the
@@ -54,6 +54,14 @@
  * loss ladder (a tile-based phone GPU; the previous start lost ...)".
  * notrun with ICO_VK_FAKE_NO_PREPASS=1 is the row on this device: the
  * summary says "off by the device table (ICO_VK_FAKE_NO_PREPASS; ...)".
+ * The zero-area cull (rd_vu_zero.h): with ICO_VU_ZERO_MARK set the file is
+ * removed first (a fresh install) and after the self-test its text is
+ * written to stderr ("test: the zero-area cull's mark: counting v0.0.0" or
+ * "none"); with switch the renderer is made again in the process as a
+ * Graphics API switch makes it (rd_suspend, rd_resume) and the self-test
+ * run again: the cull must be on after both, no read back buffer of it
+ * alive after either and more made after the second (made again at each
+ * try, never a handle of the device before), its line on stderr.
  * The log lines are matched by test/rd_vuprepass_selftest.cmake. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -61,6 +69,7 @@
 
 #include "rd_internal.h"
 #include "rd_vu_record.h"
+#include "rd_vu_zero.h"
 #include "vk/rhi_vk.h"
 
 static int failures;
@@ -254,6 +263,26 @@ static void checkLossRung(RhiLimits *lim)
           "without the rung the pre-pass is off by the loss ladder: %s", g_rd.vuPrepassWhy);
 }
 
+/* the zero-area cull's mark file's first line (ICO_VU_ZERO_MARK), on stderr
+   for the script */
+static void zeroMarkLine(const char *when)
+{
+    const char *path = getenv("ICO_VU_ZERO_MARK");
+    if (path == NULL || path[0] == '\0') {
+        return;
+    }
+    char text[128] = "";
+    FILE *f = fopen(path, "rb");
+    if (f != NULL) {
+        const size_t n = fread(text, 1, sizeof(text) - 1, f);
+        text[n] = '\0';
+        fclose(f);
+    }
+    text[strcspn(text, "\r\n")] = '\0';
+    fprintf(stderr, "test: the zero-area cull's mark %s: %s\n", when,
+            text[0] != '\0' ? text : "none");
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 2) {
@@ -263,6 +292,16 @@ int main(int argc, char **argv)
     const bool wantOn = strcmp(argv[1], "on") == 0;
     const bool notRun = strcmp(argv[1], "notrun") == 0;
     const bool plain = argc > 2 && strcmp(argv[2], "plain") == 0;
+    bool zswitch = false;
+    for (int i = 2; i < argc; i++) {
+        zswitch = zswitch || strcmp(argv[i], "switch") == 0;
+    }
+    {
+        const char *mark = getenv("ICO_VU_ZERO_MARK");
+        if (mark != NULL && mark[0] != '\0') {
+            (void)remove(mark); /* a fresh install */
+        }
+    }
     RdSettings st;
     memset(&st, 0, sizeof(st));
     st.preset = plain ? RD_PRESET_ORIGINAL : RD_PRESET_ENHANCED;
@@ -287,6 +326,40 @@ int main(int argc, char **argv)
     CHECK(g_rd.vuPrepass == wantOn, "the pre-pass %s after the self-test, %s expected",
           g_rd.vuPrepass ? "on" : "off", wantOn ? "on" : "off");
     CHECK(kept == (wantOn || notRun), "the self-test returned %s", kept ? "true" : "false");
+    zeroMarkLine("after the self-test");
+    if (zswitch) {
+        /* the Graphics API switch's path (window_host.c): the renderer made
+           again in the process, the self-test run again on the new device */
+        uint32_t made1 = 0, made2 = 0;
+        const uint32_t alive1 = rd__vu_zero_check_buffers(&made1);
+        const bool on1 = rd__vu_zero_on();
+        rd_suspend();
+        const uint32_t alive0 = rd__vu_zero_check_buffers(NULL);
+        if (!rd_resume(&st, NULL)) {
+            printf("FAIL: the renderer could not be made again\n");
+            return 1;
+        }
+        rd__set_not_implemented_fatal(true);
+        const bool kept2 = rd_vuprepass_selftest();
+        const uint32_t alive2 = rd__vu_zero_check_buffers(&made2);
+        const bool on2 = rd__vu_zero_on();
+        fprintf(stderr,
+                "test: the renderer made again: the zero-area cull %s before, %s after; its read "
+                "back buffers %u made before the switch, %u after, alive %u, %u, %u\n",
+                on1 ? "on" : "off", on2 ? "on" : "off", (unsigned)made1, (unsigned)made2,
+                (unsigned)alive1, (unsigned)alive0, (unsigned)alive2);
+        CHECK(kept2 && g_rd.vuPrepass, "the pre-pass off after the second self-test");
+        CHECK(on1 && on2, "the zero-area cull %s, %s (on, on expected)", on1 ? "on" : "off",
+              on2 ? "on" : "off");
+        CHECK(alive1 == 0u && alive0 == 0u && alive2 == 0u,
+              "read back buffers alive: %u after the first self-test, %u after the shutdown, %u "
+              "after the second",
+              (unsigned)alive1, (unsigned)alive0, (unsigned)alive2);
+        CHECK(made1 > 0u && made2 > made1,
+              "read back buffers made: %u by the first try, %u by both (made again expected)",
+              (unsigned)made1, (unsigned)made2);
+        zeroMarkLine("after the second self-test");
+    }
 
     /* 2. */
     char sum[2048];

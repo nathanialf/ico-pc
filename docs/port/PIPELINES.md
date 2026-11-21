@@ -1597,13 +1597,23 @@ for other triangles too (counted, `shared lists given up`). A draw of a marked e
 multisampled pass all the same turns the cull off for the run.
 
 The ways back, each logged, none written to the settings:
-- The install's mark (`logs/vu-zero-mark.txt`, `port/platform/vu_zero_mark.h`): "trying" is
-  written and synced before the zero build is made. The next start reads it with the previous
-  run's end (its `last-run-previous.txt`): a crash, a device loss, a GPU hang, the watchdog or no
-  end written with "trying", or a refused self-test ("failed"), keeps the cull off on that install
-  until the version changes (`blocked <version>`, handed to the renderer as `ICO_VU_ZERO_BLOCK`);
-  a clean end with "trying" tries again. 250 pictures drawn with the cull write "on". One line
-  each start that had a mark: `ico_pc: the previous run: zero-area cull: ...`.
+- The install's mark (`logs/vu-zero-mark.txt`, `port/platform/vu_zero_mark.h`), each word with
+  the version that was running: "trying" is written and synced before the zero build is made,
+  "counting" when the self-test passed, "on" after 250 pictures drawn with the cull, "failed" when
+  the zero build could not be made or the self-test refused it. A refusal by the settings (no
+  lattice for SCENE: MSAA, a scale that is not a whole number, jitter, the vertices off the grid)
+  comes first and writes nothing: the cull is not tried in that run and a later run whose settings
+  allow it tries. The next start classes the previous run's end from its `last-run-previous.txt`
+  (clean, a crash, a device loss, a GPU hang, the watchdog; `clean, after: <end>` is that end) and,
+  where it wrote none, Android's exit record for that run. With "trying" every end but a clean close
+  keeps the cull off; with "counting" or "on" only a crash (ours, or Android's `REASON_CRASH` /
+  `REASON_CRASH_NATIVE`), an ANR, a signal other than SIGKILL, a device loss, a GPU hang or the
+  watchdog does; a close from the recent apps list, Force stop, a kill by the system, an update, a
+  clean close or no evidence at all (no exit record: Android before 11, a desktop `kill -9`) do not,
+  and the cull runs its self-test again; "failed" keeps it off. Off means `blocked <the version in
+  the mark>`, handed to the renderer as `ICO_VU_ZERO_BLOCK` while that version runs: an update
+  tries again. One line each start that had a mark: `ico_pc: the previous run: zero-area cull:
+  ...`.
 - The start-up self-test, after the pre-pass passed its own: a mesh of cases at SCENE's own
   sample points (inside a cell in both windings, a corner on a point, an edge through one, no area
   between points and through one, a big one, one within the margin, a sliver too wide, the
@@ -1617,9 +1627,9 @@ The ways back, each logged, none written to the settings:
   34 and code 32, pictures byte for byte; lattice 0x11100) on SCENE 688x512 at 688x512 texels in
   T ms`, or `off for the run (self-test: <reason>)`; then `rd: VU zero-area cull: on|off, N modules
   of it made, P of its pipelines alive`.
-- A start after one that lost the graphics device, whose driver hung, or that the watchdog ended
-  with the cull on (the mark "on": counted in the loss ladder by `diag_host.c`): off for this start,
-  on every device (`ICO_LOSS_ROW`; on a phone that start draws without the VU pre-pass anyway).
+- A start after one that lost the graphics device or whose driver hung: off for this start, on
+  every device (`ICO_LOSS_ROW`; on a phone that start draws without the VU pre-pass anyway). A
+  watchdog end turns off the cull alone (the mark above), never the pre-pass.
 - No record is read back in play: once the self-test passed, nothing new runs on the GPU but the
   zero build where the build without it ran.
 
