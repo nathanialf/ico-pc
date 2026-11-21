@@ -2657,10 +2657,12 @@ void rd_frame_post_text(const RdFramePost *p, char *out, size_t cap)
     }
     snprintf(out, cap,
              "; its picture handed over in %.1f ms (longest %.1f ms; %u waited for the picture "
-             "before, %.1f ms in all; %u skipped: render thread busy); presents waited inside the "
-             "step: %u (%.1f ms)",
+             "before, %.1f ms in all; %u skipped: render thread busy (%u on the picture before, %u "
+             "at its wait for the picture two before's GPU work, %u for the submit thread's "
+             "present)); presents waited inside the step: %u (%.1f ms)",
              p->posts ? p->postMs / p->posts : 0.0, p->postMaxMs, p->postWaits, p->postWaitMs,
-             p->busySkips, p->inlines, p->inlineMs);
+             p->busySkips, p->busyBy[RD_BUSY_RENDER], p->busyBy[RD_BUSY_SLOT],
+             p->busyBy[RD_BUSY_SUBMIT], p->inlines, p->inlineMs);
 }
 
 void rd_frame_post_last_text(const RdFramePostLast *p, char *out, size_t cap)
@@ -2690,7 +2692,7 @@ void rd_frame_post_last_text(const RdFramePostLast *p, char *out, size_t cap)
 
 /* waited: a picture handed over that found the render thread busy (a keep
  * frame the gate presents: it waited for the picture before, waitMs) */
-static void postNote(uint32_t frame, int how, double ms, double waitMs, bool waited)
+static void postNote(uint32_t frame, int how, double ms, double waitMs, bool waited, int busyBy)
 {
     s_postLast = (RdFramePostLast){frame, how, ms, waitMs};
     s_postLastHave = true;
@@ -2710,6 +2712,9 @@ static void postNote(uint32_t frame, int how, double ms, double waitMs, bool wai
         break;
     case RD_POST_SKIP_BUSY:
         s_post.busySkips++;
+        if (busyBy > RD_BUSY_NONE && busyBy < RD_BUSY_REASONS) {
+            s_post.busyBy[busyBy]++;
+        }
         break;
     default:
         s_post.lateSkips++;
@@ -2726,12 +2731,14 @@ static void postNote(uint32_t frame, int how, double ms, double waitMs, bool wai
 static void originalPicture(const RdFrame *f)
 {
     const double t0 = rd__now_ms();
-    const bool busy = s_replayGate != NULL && rd__thread_picture_busy();
+    /* what is busy (rd.h RD_BUSY_*): the 10 s line's skips by cause */
+    const int busyBy = s_replayGate != NULL ? rd__thread_picture_busy() : RD_BUSY_NONE;
+    const bool busy = busyBy != RD_BUSY_NONE;
     const int gate = s_replayGate != NULL ? s_replayGate(f->keep, busy) : RD_GATE_PRESENT;
     if (gate != RD_GATE_PRESENT) {
         /* the window's skip: the last picture stays */
         postNote(f->number, gate == RD_GATE_BUSY ? RD_POST_SKIP_BUSY : RD_POST_SKIP_LATE, 0.0, 0.0,
-                 false);
+                 false, busyBy);
         return;
     }
     /* rd_last_present_info, as rd_present notes its own: the hand-over
@@ -2741,7 +2748,7 @@ static void originalPicture(const RdFrame *f)
         PostCall c = {f, f->keep, false, 0.0};
         onHostStack(postOnHost, &c);
         if (c.ok) {
-            postNote(f->number, RD_POST_HANDED, rd__now_ms() - t0, c.waitMs, busy);
+            postNote(f->number, RD_POST_HANDED, rd__now_ms() - t0, c.waitMs, busy, RD_BUSY_NONE);
             return;
         }
     }
@@ -2749,7 +2756,7 @@ static void originalPicture(const RdFrame *f)
     ReplayCall c = {f, f->keep};
     rd__on_host(replayOnHost, &c); /* on the render thread, waited for; or here */
     if (s_replayGate != NULL) {
-        postNote(f->number, RD_POST_INLINE, rd__now_ms() - t0, 0.0, false);
+        postNote(f->number, RD_POST_INLINE, rd__now_ms() - t0, 0.0, false, RD_BUSY_NONE);
     }
 }
 

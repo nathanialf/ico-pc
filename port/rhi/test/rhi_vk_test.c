@@ -1375,7 +1375,11 @@ static int clockCell(void)
  * rhi_last_submitted names the list just submitted; a finished one and
  * value 0 return 0 at once; a held one is waited for on another thread
  * (seen by the watchdog as rhi_wait_submitted's), returns 0 only after the
- * release with the time it blocked; a forced VK_NOT_READY comes back as
+ * release with the time it blocked, and while it blocks this thread
+ * submits the next list on the other slot (the ahead order's shape: the
+ * wait on a third thread beside a submit), which lands with the next
+ * number, leaves the wait and the watchdog's view on the held one, and
+ * finishes after the release; a forced VK_NOT_READY comes back as
  * it is (1: the submit thread's sample then counts unknown, never a class,
  * rd_submit_queue_test), the device not lost, and the next wait is 0.
  * A wait that reports the device lost (vkr_test_force_wait_result) returns
@@ -1385,7 +1389,7 @@ static int clockCell(void)
 static int s_wsDone;
 static bool s_wsResult;
 static uint64_t s_wsEndNs;
-static uint64_t s_wvValue, s_wvNs;
+static uint64_t s_wvValue, s_wvNs, s_wvNext;
 static int32_t s_wvResult;
 
 static void wsWait(void *arg)
@@ -1544,7 +1548,33 @@ static int waitSubmittedCell(void)
                  "the samples' wait held: done %d, the watchdog waiting for %llu (want %llu)\n",
                  __atomic_load_n(&s_wsDone, __ATOMIC_ACQUIRE), (unsigned long long)p.waitingFor,
                  (unsigned long long)s_wvValue);
-        clockSleepMs(40);
+        {
+            /* the ahead order's shape (port/render/rd_submit_thread.h
+               "ahead"): the wait on a third thread while this thread, the
+               submit thread's part, records and submits the next list (the
+               other slot, behind the held one on the one queue): the submit
+               lands (a new number), the wait goes on for its own value, the
+               watchdog still names it */
+            rhi_wait_frame();
+            RhiCommandList l2;
+            clockList(UINT32_MAX, UINT32_MAX, heavy, 1, &state, &l2);
+            rhi_submit(l2);
+            const uint64_t next = rhi_last_submitted();
+            clockSleepMs(20);
+            rhi_gpu_progress(&p);
+            WS_CHECK(next > s_wvValue && !__atomic_load_n(&s_wsDone, __ATOMIC_ACQUIRE) &&
+                         p.waitingFor == s_wvValue && p.submitted == next &&
+                         p.finished < s_wvValue && !rhi_device_lost(),
+                     "a submit beside the samples' wait on another thread: submission %llu (past "
+                     "%llu wanted), done %d, the watchdog waiting for %llu (want %llu), finished "
+                     "%llu, lost %d\n",
+                     (unsigned long long)next, (unsigned long long)s_wvValue,
+                     __atomic_load_n(&s_wsDone, __ATOMIC_ACQUIRE), (unsigned long long)p.waitingFor,
+                     (unsigned long long)s_wvValue, (unsigned long long)p.finished,
+                     (int)rhi_device_lost());
+            s_wvNext = next;
+        }
+        clockSleepMs(20);
         const uint64_t rel = clockNowNs();
         WS_CHECK(vkr_test_release_hold(), "the samples' hold not released\n");
         ico_thread_join(tv);
@@ -1562,6 +1592,20 @@ static int waitSubmittedCell(void)
         rhi_test_log("wait submitted cell: the samples' wait for submission %llu blocked %.1f ms "
                      "until the release\n",
                      (unsigned long long)s_wvValue, (double)s_wvNs / 1e6);
+        {
+            /* the list submitted beside it ran after the release, in order */
+            uint64_t ns2 = 0;
+            const int32_t w2 = rhi_wait_value_ns(s_wvNext, &ns2);
+            uint64_t v2 = s_wvNext;
+            WS_CHECK(
+                w2 == 0 && rhi_submitted_finished(&v2) == 1 && rhi_vk_validation_error_count() == 0,
+                "the list submitted beside the wait: wait %d, finished %d, %u validation "
+                "errors\n",
+                (int)w2, rhi_submitted_finished(&v2), (unsigned)rhi_vk_validation_error_count());
+            rhi_test_log("wait submitted cell: submission %llu landed beside the third thread's "
+                         "wait for %llu and finished after its release\n",
+                         (unsigned long long)s_wvNext, (unsigned long long)s_wvValue);
+        }
     } else {
         rhi_test_log("wait submitted cell: no hold on this device: the samples' held wait not "
                      "driven\n");

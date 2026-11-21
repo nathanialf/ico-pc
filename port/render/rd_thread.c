@@ -136,6 +136,11 @@ static _Thread_local bool t_inStep;
  * thread adds, the window's thread takes) */
 static _Thread_local bool t_origJob;
 static unsigned s_gpuWaitPosts;
+/* the render thread's picture job in its end's waits (its slot ahead and
+   the display's wait ahead, after its post to the submit thread): the
+   gate's reason for its busy (rd.h RD_BUSY_SLOT; atomic: set and cleared
+   by the render thread, read by the game thread) */
+static int s_picAhead;
 
 static void lk(void)
 {
@@ -407,10 +412,14 @@ static void runTramp(Tramp *t, bool picture)
         }
         ulk();
         if (picture && t->handed) {
+            if (t->busy != NULL) {
+                __atomic_store_n(&s_picAhead, 1, __ATOMIC_RELEASE);
+            }
             slotAhead(); /* the next picture's slot, the hand-over ended */
             roomAhead(); /* and its room in the present queue */
         }
         if (t->busy != NULL) {
+            __atomic_store_n(&s_picAhead, 0, __ATOMIC_RELEASE);
             /* the last read of t: the game thread may post the next
                picture into it from here */
             __atomic_store_n(t->busy, 0, __ATOMIC_RELEASE);
@@ -947,23 +956,32 @@ bool rd__replay_frame_post_ok(void)
     return s_on && t_onR == 0 && !s_origOff && !pictureWaits();
 }
 
-/* The rule's input (rd.h RdReplayGate busy): the render thread has not
- * ended the job of the picture before (its walk, or its acquire waiting
- * behind a present, its slot ahead waiting for the GPU), or the submit
- * thread has not ended that picture's submit and present (the swapchain's
- * lock is held through the driver's present call, vk_swapchain.c, and the
- * next acquire takes it: a picture posted now would wait for that present
- * inside its reads, and the game step's next renderer call with it) */
-bool rd__thread_picture_busy(void)
+/* The rule's input (rd.h RdReplayGate busy), what was busy (rd.h
+ * RD_BUSY_*): the render thread has not ended the job of the picture before
+ * (its walk, or its acquire waiting behind a present: RD_BUSY_RENDER; its
+ * slot ahead waiting for the GPU's picture two before: RD_BUSY_SLOT), or
+ * the submit thread has not ended that picture's submit and present
+ * (RD_BUSY_SUBMIT: the swapchain's lock is held through the driver's
+ * present call, vk_swapchain.c, and the next acquire takes it: a picture
+ * posted now would wait for that present inside its reads, and the game
+ * step's next renderer call with it) */
+int rd__thread_picture_busy(void)
 {
     if (!rd__replay_frame_post_ok()) {
-        return false;
+        return RD_BUSY_NONE;
     }
     if (__atomic_load_n(&s_picBusy, __ATOMIC_ACQUIRE) != 0) {
-        return true;
+        return __atomic_load_n(&s_picAhead, __ATOMIC_ACQUIRE) != 0 ? RD_BUSY_SLOT : RD_BUSY_RENDER;
     }
     if (!rd_thread_submit_unfinished()) {
-        return false;
+        return RD_BUSY_NONE;
+    }
+    if (rd_thread_submit_ahead_now()) {
+        /* the ahead order (rd_submit_thread.h): a picture posted now is
+           submitted as soon as it is recorded, and the submit thread's
+           present of the one before is short (its GPU work ended first;
+           the present-call guard turns the order off where it is not) */
+        return RD_BUSY_NONE;
     }
     /* the GPU's end first (rd_submit_thread.h): a job that waits for its
        picture's GPU end with none behind it holds no lock the next picture
@@ -974,7 +992,7 @@ bool rd__thread_picture_busy(void)
        here, and a stale "alone" of the job before cannot pass.  What is
        left: the wait ends just after this read; the hand-over then reads
        alone again and waits for that job's present alone (rd__replay_frame_post) */
-    return !rd_thread_submit_gpu_wait_alone();
+    return rd_thread_submit_gpu_wait_alone() ? RD_BUSY_NONE : RD_BUSY_SUBMIT;
 }
 
 bool rd__thread_original_job(void)
@@ -1014,7 +1032,11 @@ bool rd__replay_frame_post(const RdFrame *f, int keep, double *waitMs)
        for its picture's GPU end with none behind it (the GPU's end first,
        rd_submit_thread.h): this picture is walked, acquired and recorded
        beside that wait, its own job queued after that present */
-    const bool besideGpu = rd_thread_submit_gpu_wait_alone();
+    /* (and with the ahead order in effect, rd_submit_thread.h "ahead": its
+       job is posted behind the submit thread's work and submitted at once,
+       the present of the one before not waited for here) */
+    const bool besideGpu = rd_thread_submit_gpu_wait_alone() ||
+                           (rd_thread_submit_ahead_now() && rd_thread_submit_unfinished());
     if (besideGpu) {
         rd_thread_submit_reap();
     } else {

@@ -1494,6 +1494,68 @@ lines added beside them for issues 179 and 123:
   then `the render thread busy` near 0 and the presented
   fps near the game's in the logo, op2 and stage 3 blocks, the hand-over count near the pictures
   presented; where the verdict is off, the blocks as without the rule.
+- **The next picture submitted ahead** (`port/render/rd_submit_thread.c`, `.h` "ahead";
+  `rd_submit_queue.c` the guard, the gaps and the clause; `rd_thread.c`
+  `rd__thread_picture_busy`): with the GPU's end first's verdict on, a picture handed over is
+  ended and submitted as soon as its job is posted, beside the picture before's wait for its GPU
+  work, which a thread of its own makes (the waiter: `rhi_wait_value_ns` for that picture's
+  submission, nothing else); when the wait returns the submit thread presents that picture,
+  finishes it and has the waiter wait for the next. The GPU holds up to two pictures, the
+  swapchain's lock is still never held through a wait, and the game's gate does not count the
+  submit thread's work as busy. Issue 179's reporter's log is why: with one picture at a time the
+  GPU sat idle before every picture (6.1 to 12.4 ms in stage 3 play, its lines 1380, 1446, 1524)
+  from its end to the next one's submit, and at GPU times near the 40 ms tick play presented 22 of
+  25 a second (1356, 1421, 1499). The ways back, each with its line, each taking the run back to
+  one picture at a time with the pictures already submitted presented first: 4 of the last 16
+  present calls made with a later picture submitted found waiting for that picture's GPU work (a
+  driver whose present waits for all the work submitted, not only its own picture's: a call of
+  2.0 ms or more begun with the later picture's work running, that work found ended by the call's
+  return or within 1.0 ms of it (the waiter's wait for it, made anyway as that picture is held
+  next), and the call lasting at least half of that work's GPU time; a call that is only slow
+  while that work runs on is not counted, nor one that began after that work ended or is too
+  brief for it; a failed read or wait counts), a wait that failed, a submit that
+  moved no submission number, a lost device; a start after one that lost the device or hung its
+  driver (the loss ladder, `ICO_LOSS_ROW`) or that the watchdog ended keeps one at a time. With
+  the verdict undecided or off nothing of it runs (no waiter, no call made in another order). The
+  lines: at each start where the GPU's end first is wanted `rd: submit thread: with the verdict
+  on, the next picture is submitted ahead (its lists submitted as soon as it is handed over,
+  beside the picture before's wait for its GPU work, which a thread of its own makes; the GPU
+  holds up to two pictures); back to one at a time for the run after 4 of the last 16 present
+  calls made with a later picture submitted waited for that picture's GPU work (a call of 2.0 ms
+  or more begun with that work running, found ended by its return or within 1.0 ms of it, and
+  lasting at least 50 % of that work's GPU time; a slow call while that work runs on is not
+  counted, a failed read or wait of it is), a failed wait or submit, or a lost device; a start after one that lost the device, hung its driver or was ended by the
+  watchdog keeps one at a time` or `rd: submit thread: with the verdict on, the next picture is
+  not submitted ahead this start (the loss ladder: 1 start in a row before this one lost the
+  graphics device or hung its driver, ICO_LOSS_ROW 1, nothing written to the settings): one
+  picture on the GPU at a time, each one's GPU work waited for before its present` (or `(the
+  previous run was ended by the watchdog)`); at its first picture `rd: submit thread: the next
+  picture is submitted ahead from here on (the verdict on): ...`; a way back `rd: submit thread:
+  the next picture is not submitted ahead for the rest of this run: 4 of the last 16 present calls made
+  with a later picture submitted waited for that picture's GPU work (a present that waits for all
+  the work submitted) (this call 44.1 ms, the later picture's work found ended at its return; 4 of
+  7 such calls so far counted); back to one picture
+  on the GPU at a time (each picture's GPU work waited for before its present, the next submitted
+  after that present), the pictures already submitted presented first` (the others: `a wait for
+  a picture's GPU work failed (result 1)`, `a picture's submit failed (the submission counter
+  still at 812 after it)`, `the graphics device was lost`, `its waiting thread could not be
+  made`). In the 10 s line's submit thread part, where it ran in the block or is off for the run:
+  `; the next picture submitted ahead: 236 of 248 submitted before the picture before's GPU end;
+  the GPU idle 12 times (3.4 ms a time: wake-up 0.2, present call 1.1, finish 0.1, waiting for
+  the next picture 1.0 (5 pictures whose next was not yet posted), list end 0.3, submit 0.7);
+  present calls with a later picture submitted 236 (3 of 2.0 ms or more: 0 waited for the later
+  picture's GPU work, 3 slow, not waiting, 0 with that work already ended, 0 too brief for it, 0
+  reads or waits failed; longest 2.6 ms)` and,
+  off, `; off for the run: <reason>`. The idle gap runs from the picture's GPU end, as its wait
+  returned, to the end of the next one's submit; its parts sum to it (a next picture taken while
+  the submit thread was still on its way to the picture before's present shows only its list end
+  and submit). The Original clause names the busy skips by cause: `12 skipped: render thread busy
+  (2 on the picture before, 10 at its wait for the picture two before's GPU work, 0 for the submit
+  thread's present)`. How to judge it from the next log: "p of q" near q, the gaps few and short,
+  no skip for the submit thread's present, the present calls with a later picture submitted
+  short or "slow, not waiting" (none "waited for the later picture's GPU work"), and play in the first room at the game's 25 a
+  second; a way back's line says what took it, and the blocks after it read as one picture at a
+  time.
 
 ### Pictures a second
 

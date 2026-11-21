@@ -3777,10 +3777,20 @@ void rd_frame_close_take(unsigned *closes, double *meanMs, double *maxMs);
  * game thread waiting (no render thread, parked, sync, a capture, [dev]
  * original_async = false), inlineMs their time in all; busySkips, the
  * frames the gate left out because the render thread was busy (RD_GATE_BUSY),
- * lateSkips those it left out late.  The sums start again.  The window's 10
- * s game-thread line (render_thread.c, rd_frame_post_text). */
+ * busyBy those by what was busy (RD_BUSY_*: index 0 unused), lateSkips
+ * those it left out late.  The sums start again.  The window's 10 s
+ * game-thread line (render_thread.c, rd_frame_post_text). */
+/* What the gate's busy input found busy (rd_thread.h rd__thread_picture_busy):
+ * nothing; the render thread on the picture before (its interpolation,
+ * uploads, acquire or walk); its wait at that picture's end for the next
+ * picture's frame slot, the picture two before's GPU work (the slot ahead);
+ * the submit thread's job of the picture before (its present, one picture
+ * on the GPU at a time: the next acquire would wait for it) */
+enum { RD_BUSY_NONE, RD_BUSY_RENDER, RD_BUSY_SLOT, RD_BUSY_SUBMIT, RD_BUSY_REASONS };
+
 typedef struct RdFramePost {
     unsigned posts, postWaits, inlines, busySkips, lateSkips;
+    unsigned busyBy[RD_BUSY_REASONS];
     double postMs, postMaxMs, postWaitMs, inlineMs;
 } RdFramePost;
 
@@ -3794,9 +3804,10 @@ void rd_frame_post_take(RdFramePost *out);
 unsigned rd_thread_gpu_wait_posts_take(void);
 /* The clause of the 10 s line from p: "; its picture handed over in 0.6 ms
  * (longest 14.2 ms; 3 waited for the picture before, 31.0 ms in all; 12
- * skipped: render thread busy); presents waited inside the step: 0 (0.0
- * ms)"; empty when p counts nothing (the other frame rates); out always
- * terminated */
+ * skipped: render thread busy (2 on the picture before, 10 at its wait for
+ * the picture two before's GPU work, 0 for the submit thread's present));
+ * presents waited inside the step: 0 (0.0 ms)"; empty when p counts nothing
+ * (the other frame rates); out always terminated */
 void rd_frame_post_text(const RdFramePost *p, char *out, size_t cap);
 
 /* The last Original picture rd_end_frame made since the last take (false:

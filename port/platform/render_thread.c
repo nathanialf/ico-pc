@@ -1650,6 +1650,11 @@ FmMode ico_render_thread_start(void)
         s_rt.mode = mode;
         rhi_set_call_guard(&guard);
         host.sync = mode == FM_MODE_SYNC; /* every picture waited: none counted as handed over */
+        /* the previous run's watchdog end holds the next picture's submit
+           ahead off for this start (rd_submit_thread.h "ahead"; a device
+           loss or a hung driver comes through the loss ladder) */
+        rd_thread_submit_ahead_prev(
+            ico_diag_startup_prev_watchdog() ? "the previous run was ended by the watchdog" : NULL);
         rd_set_thread_host(&host);
         ico_diag_set_render_heartbeat(rt_heartbeat);
     }
@@ -1959,7 +1964,7 @@ void ico_render_thread_block_line(double stepMs, double stepCpuMs, double pictur
     RdSubmitBlock sb;
     unsigned closes;
     double closeMs, closeMaxMs;
-    char rt[1536], st[1024], cores[1600];
+    char rt[1536], st[2048], cores[1600];
     CpuPlaceHist gc, rc, sc;
 
     s_rt.held = s_rt.heldMiss = s_rt.heldOverrun = s_rt.heldBehind = 0;
@@ -2030,7 +2035,7 @@ void ico_render_thread_block_line(double stepMs, double stepCpuMs, double pictur
        the render thread was busy, replayed inside the step (rd.h
        rd_frame_post_take; empty at the other frame rates) */
     RdFramePost fp;
-    char post[288];
+    char post[448];
 
     rd_frame_post_take(&fp);
     rd_frame_post_text(&fp, post, sizeof(post));
@@ -2064,6 +2069,16 @@ void ico_render_thread_block_line(double stepMs, double stepCpuMs, double pictur
                      sb.gfTimed, sb.gfShort, sb.gfPrevDone, sb.gfCounted, sb.gfWaited,
                      sb.gfCounted - sb.gfWaited, sb.gfUnknown, (int)sb.gfLastResult,
                      sb.gfReadFailed, sb.gfNotOriginal, sb.gfNoPresent);
+        }
+        {
+            /* the next picture submitted ahead (rd_submit_thread.h "ahead"):
+               "p of q submitted before the picture before's GPU end", the
+               GPU's idle gaps in parts, the present calls the guard timed;
+               only in the blocks where it ran or is off for the run */
+            const size_t at = strlen(st);
+
+            (void)rd__sq_ahead_text(&sb, rd_thread_submit_ahead_off_why(), st + at,
+                                    sizeof(st) - at);
         }
     } else {
         snprintf(st, sizeof(st), "; submit thread: off");

@@ -42,7 +42,19 @@
  *              beside them); over a stall longer than the throttle's window
  *              the never-sent frames take no slot, so the lost frame is
  *              still held where v0.11.13's copies of them had pushed it
- *              out */
+ *              out
+ *   two in flight  the next picture submitted ahead (port/render
+ *              rd_submit_thread.h "ahead": frame 299's work held, waited for
+ *              on the waiter, frame 300 submitted behind it): a failed wait
+ *              names the submission waited for, the oldest unfinished
+ *              (299, the frame before 298), as the one wait at a time did;
+ *              299 seen finished and the waiter's wait for 300 failing names
+ *              300 and 299; no wait failed (a later submit did): the first
+ *              open submission, 299.  What the pick cannot tell: a driver
+ *              that answers the wait for 299 with the loss although 299 had
+ *              finished and 300 faulted (Vulkan allows either answer after
+ *              a loss) names 299, one picture early; 300 is then held but
+ *              not written (pinned here, rd_loss_pick.c unchanged) */
 #include "rd_loss_pick.h"
 #include <stdio.h>
 #include <string.h>
@@ -506,6 +518,56 @@ static void unchanged(void)
     }
 }
 
+static void twoInFlight(void)
+{
+    static const uint32_t replayed[] = {296, 297, 298, 299, 300};
+    static const uint32_t held[] = {298, 299, 300, 301, 302};
+    RdLossInput in = {0};
+    RdLossChoice c;
+
+    in.replayed = replayed;
+    in.replayedCount = 5;
+    in.held = held;
+    in.heldCount = 5;
+    in.newestReplay = 500;
+    in.newestFrame = 300;
+    in.ringReplay = 502;
+    in.ringFrame = 302;
+    /* the waiter's wait for 299 (replay 499) failed, 300 submitted behind it */
+    in.waitReplay = 499;
+    in.waitFrame = 299;
+    in.openReplay = 499;
+    in.openFrame = 299;
+    rd_loss_choose(&in, &c);
+    CHECK(c.how == RD_LOSS_HOW_WAIT && c.replay == 499 && c.frame == 299 && c.before == 298);
+    CHECK(c.writeFrame == 299 && c.writeBefore == 298);
+    /* 299 seen finished (the waiter's wait for it returned), the wait for
+       300 failed */
+    in.waitReplay = 500;
+    in.waitFrame = 300;
+    in.openReplay = 500;
+    in.openFrame = 300;
+    rd_loss_choose(&in, &c);
+    CHECK(c.how == RD_LOSS_HOW_WAIT && c.frame == 300 && c.before == 299);
+    CHECK(c.writeFrame == 300 && c.writeBefore == 299);
+    /* no wait failed (a later submit found the loss): the first submission
+       not seen finished, the older of the two */
+    in.waitReplay = 0;
+    in.waitFrame = 0;
+    in.openReplay = 499;
+    in.openFrame = 299;
+    rd_loss_choose(&in, &c);
+    CHECK(c.how == RD_LOSS_HOW_OPEN && c.frame == 299 && c.before == 298);
+    CHECK(c.writeFrame == 299 && c.writeBefore == 298);
+    /* the limit: the wait for 299 answered with the loss although 300
+       faulted: 299 named, 300 held and not written */
+    in.waitReplay = 499;
+    in.waitFrame = 299;
+    rd_loss_choose(&in, &c);
+    CHECK(c.frame == 299 && c.writeFrame == 299 && c.writeBefore == 298 && c.writeFrame != 300 &&
+          c.writeBefore != 300);
+}
+
 int main(void)
 {
     issue179();
@@ -515,6 +577,7 @@ int main(void)
     history();
     notSent();
     unchanged();
+    twoInFlight();
     if (failures == 0) {
         printf("rd_loss_pick_test: ok\n");
     }
