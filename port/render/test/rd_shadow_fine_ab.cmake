@@ -142,6 +142,7 @@
 # such run checked fails.
 # No device: SKIP (77).  -DTOOL -DFIXTURE_TOOL -DFIXTURES -DFIXTURE_HELPERS
 # -DLIST -DGOLDENS -DPY -DCHECK -DDIFF -DOUT -DBACKEND
+cmake_policy(SET CMP0054 NEW) # a quoted if() argument is a string, not a variable (line 592 sets one named full)
 include("${FIXTURE_HELPERS}")
 set(failures 0)
 rd_fixture_list("${LIST}" names)
