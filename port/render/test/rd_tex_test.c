@@ -2789,7 +2789,9 @@ static void threadPresentFree(void)
          .forceOn = true,
          .callMs = 1.5,
          .needFps = 20.0,
-         .busyNeed = 0.97,
+         /* 0.97 less the slow calls' own share: 6 of 16 calls hold their
+            picture's slot 4.5 ms longer, 6 * 4.5 / (16 * 48) = 3.5 % */
+         .busyNeed = 0.935,
          .slowCalls = true},
         {.name = "60 ms pictures ahead, a present back at the end of the picture before's work",
          .driver = PF_PREV,
