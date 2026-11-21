@@ -1865,8 +1865,9 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   (`rd__submit_test_gpu_first`; the device table wants it only on Android), on a faked GPU and
   driver (`rd__submit_test_gpu`: a job's GPU time begins after its faked submit and after the
   job before's; the driver's present call waits for that end, returns 0.3 ms before it, returns
-  at once, waits every second time, returns at the end of the job before's GPU time (line 562
-  of the issue 179 reporter's log), or lasts 5 ms while the job before runs; the verdict's one
+  at once, waits every second time, returns at the end of the submission before the newest (with
+  one picture at a time the job before's GPU time, line 562 of the issue 179 reporter's log; with
+  the next submitted ahead the presented job's own), or lasts 5 ms while the job before runs; the verdict's one
   wait after a call of 2 ms or more waits for the job before's faked end, except in one of the
   two cases of the job before's end: there it is lavapipe's own, `rhi_last_submitted` and
   `rhi_wait_value_ns`, the phone's path) with the walk faked
@@ -1899,20 +1900,26 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   end of the job before's work runs ahead after its verdict (`rd_submit_thread.h` "ahead"): every
   measured job submitted in that order and waited for by the waiter (`rd__submit_ahead_tally`, the
   fake's `waitValue` at that job's faked end), none by the submit thread, no skip for the submit
-  thread's sake, no present call past 2 ms. The ahead order's rate requirements (the verdict on
+  thread's sake, no present call waiting for GPU work (by the faked clock nothing owed as any
+  call's wait began, by the wall clock no call 2 ms past its own time; the whole call is printed,
+  not bound: a loaded runner stretches the faked call's own time). The ahead order's rate requirements (the verdict on
   from the start, a 1.5 ms present call, a 1.0 ms submit, an 8 ms walk, 40 ms ticks, the present
   back at the end of the job before's work): 33 and 37.5 ms pictures 48 of 50 presented (25 a
   second less two ticks), 48 ms at least 20.0 a second with the faked GPU busy at least 97 % of
   the measured span, 60 ms at least 16.0, each less what the machine took from the case's run
   without the rule (its control: that run keeps the faked GPU fed too), none skipped for the
-  submit thread, the longest present call at most the faked call and 2 ms. The ways back: a
+  submit thread, no present call waiting for GPU work as above. The ways back: a
   present that waits for all the work submitted (`PF_BLOCK`, ahead from the start) turns the
   order off by the guard within its window (4 to 16 presents with a later picture submitted),
-  then one picture at a time with no present call over 3.5 ms and the rates above; the waiter's
+  then one picture at a time with no present call waiting for GPU work (as above) and the rates
+  above; the waiter's
   wait forced to fail (`vkr_test_force_wait_result`, VK_NOT_READY, the device not lost) turns it
   off, then one at a time; a start after a lost one (`ICO_LOSS_ROW=1`) never runs it (no waiter
   wait). Every case without the rule, and every case whose verdict is not on, makes no waiter
-  wait, no present ahead and no job submitted ahead. SCENE and DISPLAY are byte for byte the runs'
+  wait, no present ahead and no job submitted ahead; where such a case made none of the rule's waits and
+  nothing of the ahead order, yet its pair's counts differ by more than a fifth of the ticks, the
+  pair is measured once more and the same bound read on it (the two runs come one after the other:
+  a stretch the machine takes from one is not in the other). SCENE and DISPLAY are byte for byte the runs'
   without the rule. It is the render thread's program to run under
   ThreadSanitizer, as `audio_pull_test`: the `asan` preset with `-DICO_SANITIZE=thread` into a
   build folder of its own (`build-host/linux-x64-tsan`), `--target rd_tex_test`, run with
