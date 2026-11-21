@@ -26,6 +26,7 @@ target_sources(ico_platform PRIVATE
     last_run.c
     last_run_skin.c
     vu_zero_mark.c
+    ahead_mark.c
     log_cost.c
     mem_breakdown.c
     mem_watch.c
@@ -202,8 +203,8 @@ endif()
 # second and a block, every line word for word
 # perf_secs: pictures a second by stage (perf_secs.c, issue 179): a block's
 # whole seconds under the stage of each second's first step, a hitch's
-# second, a stage change inside a second, the block's cut asked until the
-# line is taken, the part second, pictures before any step, seconds past
+# second, a stage change inside a second, two stages in one 10 s block (the
+# block not cut: hotkeys_test), the part second, pictures before any step, seconds past
 # the 64 held, a short buffer, the lines word for word
 # bones_ladder: issue 123's ladder across starts (bones_ladder.c): the step
 # for each run's evidence over sequences of starts (step 1, step 2, healed,
@@ -406,6 +407,21 @@ target_compile_options(vu_zero_mark_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_P
 target_link_libraries(vu_zero_mark_test PRIVATE ico_platform ico_host_fs ico_miniz)
 if(ICO_RUN_TESTS)
     add_test(NAME vu_zero_mark COMMAND vu_zero_mark_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
+# The next picture submitted ahead, its mark on the install (ahead_mark.c,
+# issue 179): the state table (on after a loss, a hang, the watchdog, a crash
+# or Android's crash record: blocked for the version; on after a clean end, no
+# end written or an ordinary close by Android's record: cleared; blocked on
+# this version: kept, another: cleared), and the start's step on files under
+# the build folder (a loss with the order in effect: off for this version,
+# kept at the next start, on again in the next version; a close from the
+# recent apps: not blocked; the in-effect write once a process)
+add_executable(ahead_mark_test test/ahead_mark_test.c)
+target_compile_options(ahead_mark_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(ahead_mark_test PRIVATE ico_platform ico_host_fs)
+if(ICO_RUN_TESTS)
+    add_test(NAME ahead_mark COMMAND ahead_mark_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
 # The skin check's counts in words (last_run_skin.c, issue 217): the

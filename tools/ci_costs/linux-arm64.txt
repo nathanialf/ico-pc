@@ -791,9 +791,9 @@ rd_subpass_probe_plain 15.72
 rd_subpass_probe_refused 13.99
 rd_subpass_probe_rule 0.00
 rd_subpass_probe_selftest 8.95
-rd_tex 106.42  # estimate: the run before plus the ahead order's nine cases (18 runs of 50 ticks at 40 ms, not run here)
+rd_tex 114.42  # estimate: the run before plus the ahead order's nine cases (18 runs of 50 ticks at 40 ms) and the 37.5 ms case's 100 ticks with its one-at-a-time twin (8 s more), not run here
 rd_tex_gl 2.64
-rd_tex_mali 107.65  # estimate: the run before plus the ahead order's nine cases (18 runs of 50 ticks at 40 ms, not run here)
+rd_tex_mali 115.65  # estimate: the run before plus the ahead order's nine cases (18 runs of 50 ticks at 40 ms) and the 37.5 ms case's 100 ticks with its one-at-a-time twin (8 s more), not run here
 rd_tex_pool 0.44
 rd_thread_ab 177.69
 rd_turn_fold_ab 197.56

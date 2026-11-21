@@ -166,13 +166,21 @@
  *                   span; a slow call while it ran on is not counted; a
  *                   failed read or wait is) put the run back on one picture
  *                   at a time, with one line; so do a failed
- *                   wait, a submit that moved no submission number and a
- *                   lost device, each found before what follows it (the
- *                   jobs already submitted finish as the one-at-a-time
- *                   order's: their wait, then their present).  A start
- *                   after one that lost the device or hung its driver (the
- *                   loss ladder, ICO_LOSS_ROW) or that the watchdog ended
- *                   (rd_thread_submit_ahead_prev) keeps one at a time.
+ *                   wait, a job whose submits moved the submission number
+ *                   by fewer than its submits and a lost device, each found
+ *                   before what follows it (the jobs already submitted
+ *                   finish as the one-at-a-time order's: their wait, then
+ *                   their present); off so, it stays off for the rest of
+ *                   the process, a restart of this thread included (a
+ *                   Graphics API switch).  A start after one that lost the
+ *                   device or hung its driver (the loss ladder,
+ *                   ICO_LOSS_ROW) or that the watchdog ended keeps one at a
+ *                   time; so does every start of the version after a run
+ *                   that ended so, or crashed, with the order in effect
+ *                   (port/platform/ahead_mark.h: rd_thread_submit_ahead_prev
+ *                   names either).  A job submitted behind the picture
+ *                   before has its present time counted from that
+ *                   picture's GPU end (rd__sq_present_from).
  *                   Undecided or off, nothing of it runs (no waiter, no
  *                   call made in another order).
  *   the depth       at most RD_SUBMIT_DEPTH jobs queued and running
@@ -285,10 +293,16 @@ bool rd_thread_submit_ahead_now(void);
  * first not wanted; a static string: the 10 s line) */
 const char *rd_thread_submit_ahead_off_why(void);
 /* The window, before the render thread's host starts the submit thread:
- * why the previous run's end holds the ahead order off for this start
- * ("the previous run was ended by the watchdog"; NULL or "": none); kept
- * for the later starts of the run */
+ * why the previous run's end or the install's mark holds the ahead order
+ * off for this start ("the previous run was ended by the watchdog", the
+ * mark's block until the version changes; NULL or "": none); kept for the
+ * later starts of the run */
 void rd_thread_submit_ahead_prev(const char *why);
+/* The window: fn() called on the submit thread as the ahead order first
+ * takes effect in a start of the thread (its first job in that order, with
+ * its line; port/platform/ahead_mark.h writes the install's "in effect"
+ * mark there, once a process); NULL none */
+void rd_thread_submit_ahead_mark_fn(void (*fn)(void));
 
 /* The tests' seams (rd_tex_test): a faked GPU and driver on the submit
  * thread (NULL: none).  submitted() after a job's submit (its work begins);
@@ -344,6 +358,9 @@ void rd__submit_ahead_tally(RdAheadTally *out);
 /* The tests' choice at the next start: 0 the ahead order held off
  * (RD_AHEAD_OFF_TEST: one picture at a time with the verdict on), -1 none */
 void rd__submit_test_ahead(int force);
+/* The tests' fresh run: the order's off for the run (kept across the
+ * thread's restarts in a process) cleared, as at a new process */
+void rd__submit_test_ahead_fresh(void);
 
 typedef struct RdGpuFirstTally {
     unsigned timed, shortCalls, counted, waited, unknown, waits, prevDone, readFailed;

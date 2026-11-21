@@ -882,7 +882,11 @@ static void testDump(const char *dir)
         {
             /* the reads-only mode (rd_dump.c dumpFrame: the slow-scene
                dump's copy grown here, the loss keep's) is the drained
-               dump byte for byte */
+               dump byte for byte.  No host here: the drain and the wait
+               for the reads both return at once, so this shows only that
+               the mode serialises the frame the same way; that it waits
+               for the reads alone, beside a render thread still running a
+               picture, is rd_dump_reads_test.c's */
             void *reads = NULL;
             size_t readsLen = 0;
             uint32_t rn = 0;

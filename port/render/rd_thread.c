@@ -842,7 +842,35 @@ bool rd__render_call(void (*fn)(void *arg), void *arg)
 
 /* ---------------------------------------------------------- the replays */
 
-/* RdFrame.sent (rd_loss_pick.h rd_loss_keep_needed): the ring's closed
+/* the ring's sent flags (rd_internal.h rd__frame_sent), a slot each */
+static uint32_t s_frameSent[RD_FRAME_RING];
+
+/* f's slot in the ring, -1 for a frame outside it (compared as addresses:
+   f may be any frame) */
+static int ringSlot(const RdFrame *f)
+{
+    const uintptr_t a = (uintptr_t)f, b = (uintptr_t)&g_rd.frames[0];
+    if (f == NULL || a < b || a >= b + sizeof(g_rd.frames) || (a - b) % sizeof(RdFrame) != 0) {
+        return -1;
+    }
+    return (int)((a - b) / sizeof(RdFrame));
+}
+
+bool rd__frame_sent(const RdFrame *f)
+{
+    const int i = ringSlot(f);
+    return i >= 0 && __atomic_load_n(&s_frameSent[i], __ATOMIC_RELAXED) != 0;
+}
+
+void rd__frame_sent_clear(const RdFrame *f)
+{
+    const int i = ringSlot(f);
+    if (i >= 0) {
+        __atomic_store_n(&s_frameSent[i], 0u, __ATOMIC_RELAXED);
+    }
+}
+
+/* rd__frame_sent (rd_loss_pick.h rd_loss_keep_needed): the ring's closed
  * frame of f's number (f itself, or a frame made from its head with its
  * number: the reshow's, the paused hold's) has had a picture handed to a
  * replay.  Called where a replay is asked for, before it runs: on the game
@@ -861,7 +889,7 @@ static void noteSent(const RdFrame *f)
     for (int i = 0; i < RD_FRAME_RING; i++) {
         RdFrame *r = &g_rd.frames[i];
         if (r->closed && r->number == f->number) {
-            __atomic_store_n(&r->sent, 1u, __ATOMIC_RELAXED);
+            __atomic_store_n(&s_frameSent[i], 1u, __ATOMIC_RELAXED);
         }
     }
 }

@@ -82,6 +82,21 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   words and the summary's short form word for word on a phone (`(a tile-based phone GPU: none
   compiled)`) and elsewhere, nothing with the check off or without counts, the largest counts
   within `LAST_RUN_SKIN_SHORT_MAX`, a short buffer cut and terminated, none left untouched.
+- `ahead_mark_test.c` (`ahead_mark`): the next picture submitted ahead, its mark on the install
+  (`port/platform/ahead_mark.c`, [PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#the-last-run-file)):
+  the state table: `on` after a device loss, a GPU hang, the watchdog or a crash (whatever
+  Android's reason), or with no end written and Android's crash, native crash or no response:
+  blocked for the running version, its line word for word; of another version: cleared; `on` after a
+  clean end, no end written with no record or an ordinary close by Android's reason (user
+  requested, user stopped, low memory, signalled, its resources, the freezer, an update, other),
+  or an end not read: cleared, not held off; `blocked` of the running version kept, of another cleared;
+  no mark: nothing and no line; other text: cleared. Then on files in the build folder: the
+  process's start with no mark says nothing and the in-effect write makes `on <version>` once a
+  process, its line once; a loss with the order in effect blocks the version, kept at the next starts
+  of it (a clean one and a close from the recent apps between), cleared and on again at the first
+  start of the next version; a close from the recent apps (no end, Android's `REASON_USER_REQUESTED`), no
+  record, a low-memory kill, an update and a signal: not blocked; Android's native crash with no
+  end of ours: blocked.
 - `vu_zero_mark_test.c` (`vu_zero_mark`): the zero-area cull's mark on the install
   (`port/platform/vu_zero_mark.c`, [PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#the-last-run-file)):
   the end kind from last-run.txt's end (our own first, `clean, after: <end>` as that end) and
@@ -106,29 +121,31 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   (`port/platform/perf_secs.c`, issue 179,
   [PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#pictures-a-second)): a 10 s block at 25 a
   second with a 0.4 s hitch (its second 15), a stage change inside a second (the second keeps the
-  stage of its first step) and the block's cut asked from then until the line is taken, the part
-  second at the end, pictures before any step (`?`), a quiet end, a block under 1 s, seconds past
+  stage of its first step) and the next block's start in the stage then, the part second at the
+  end, pictures before any step (`?`), a quiet end, a block under 1 s, seconds past
   the 64 held counted apart, no second begun (no line) and a short buffer; the lines word for
   word.
-- `hotkeys_test.c`, its cut case (`hotkeys`): the stats period at most 2 s with a stage change in
-  the block (`ico_stats_period_cut_ns`), F11's 1 s kept; the window's own seconds (a stage, then
-  another) asking the cut until their line is taken, the line word for word.
+- `hotkeys_test.c`, its stage case (`hotkeys`): a stage change in the block leaves the stats
+  period at 10 s (the block is not cut), before and after the window's own seconds (a stage, then
+  another) give their line, the line word for word.
 - `attempt_ledger_test.c`, its stalls clause (`attempt_ledger`): the clause names the stall lines'
   rule (`a present over 100 ms or a pass over 8 times its block median and 40 ms`), the Adreno
   row's second count left out where the row is not applicable.
 - `stall_coincide_test.c`, its small medians (`stall_coincide`): a piece whose median is under
   0.1 ms left out of the judgement (0.1 kept, 0.099 left out), the VU triangles' ratio only
   against a median of 1 or more.
-- `perf_hint_test.c`, its retry (`perf_hint`): a first session refused for three threads on a
-  system that gives an update rate asked once more for the game thread alone; made: the game
-  thread's alone after a thread change (no setThreads) and the background, the start line's words;
-  refused again: off, both calls in the line word for word, never asked again; no rate or one
-  thread: one call, the line says why; refused after a session was made: no retry, said so.
+- `perf_hint_test.c`, its refused line (`perf_hint`): a session refused for three threads on a
+  system that gives an update rate: one create call, off, never asked again (no session of other
+  threads asked for), the line with the rate word for word; no rate, one thread, and refused after
+  a session was made: one call each, the line's words.
 - `pace_policy_test.c` and `window_scene_test.c`, the presents line's words (`pace_policy`,
   `window_scene`): the GPU span named as the median of the last 8 timed replays; the GPU gap
   line's stalls named as presents blocked over 50 ms; the hint on the block's mean GPU work
   whatever the median passed, no step named under R^2 0.80 (`fit: R^2 0.75, under 0.80`), the
-  fit's R^2 or `the work flat` in its words, the longest hint under the window's 512 bytes.
+  fit's R^2 or `the work flat` in its words; every variant of the hint swept with its figures at
+  their widest (the GPU's time at and past its 9999.9 ms clamp, the game's rate up to its 999.9
+  clamp, the widest scales, each kind of fit): the longest under the window's 512 bytes, a time
+  past the clamp printed as the clamp, a rate past it no hint.
 - `attempt_ledger_test.c`, its skin-phone case (`attempt_ledger`): the row `the skin check's own
   pipelines left out on a phone` (`ico_attempt_decide_skin_phone`) not applicable with the check
   off and off a phone, each with its words, on with its start words, its two counts in the block

@@ -66,7 +66,7 @@ typedef struct RdLossChoice {
 void rd_loss_choose(const RdLossInput *in, RdLossChoice *out);
 
 /* Whether frame `frame` may still be on the GPU when the ring reuses its
- * slot: a picture of it was handed to a replay (sent: RdFrame.sent, set at
+ * slot: a picture of it was handed to a replay (sent: rd__frame_sent, set at
  * the hand-over, rd_thread.c) and the backend's first unfinished
  * submission is of that frame or a later one (openFrame 0: none is open,
  * the frame is done; frame 0: none).  Frames, not replays: frame numbers

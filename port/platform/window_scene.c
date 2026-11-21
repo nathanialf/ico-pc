@@ -356,7 +356,8 @@ size_t window_scene_gpu_hint_text(char *out, size_t cap, double presentedFps, do
         return 0;
     }
     out[0] = '\0';
-    if (!(gameFps > 0.0) || !(presentedFps < gameFps) || skippedLate == 0 || !(scale > 0.0)) {
+    if (!(gameFps > 0.0) || !(gameFps <= WINDOW_SCENE_HINT_FPS_MAX) || !(presentedFps < gameFps) ||
+        skippedLate == 0 || !(scale > 0.0)) {
         return 0;
     }
     /* the block's mean GPU work (the fit's own: the VU line's "GPU work
@@ -366,6 +367,7 @@ size_t window_scene_gpu_hint_text(char *out, size_t cap, double presentedFps, do
     if (fit != NULL && fit->n > 0) {
         gpuMs = fit->sy / fit->n;
     }
+    gpuMs = gpuMs < WINDOW_SCENE_HINT_GPU_MAX_MS ? gpuMs : WINDOW_SCENE_HINT_GPU_MAX_MS;
     period = 1000.0 / gameFps;
     if (!(gpuMs > period)) {
         return 0;
