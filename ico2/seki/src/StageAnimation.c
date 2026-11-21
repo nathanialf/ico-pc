@@ -2149,7 +2149,9 @@ float stage_PlayBgAnimation(int key, float t, void *v, void *q)
         if (systemStatus[0x14 / 4] != 0) {
             break;
         }
-        if (ICO_JPNKORCN) {
+        /* upstream's block names the North American disc with these:
+           its step is the frame-rate formula, not the 50 Hz factor */
+        if (ICO_JPNKORNTSCCN) {
             r = t + e->entry2->step * (30.0f / ((60 - systemStatus[0] * 10) / systemStatus[1]));
         } else {
             f = e->entry2->step;

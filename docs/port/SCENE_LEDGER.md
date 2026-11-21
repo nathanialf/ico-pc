@@ -106,8 +106,12 @@ At a stage's end (its number or name changes), `rd: scene ledger:` lines, each u
     port's frustum test in 56 pictures (28 between ticks), 56 draws or parts; ...
     rd: scene ledger: stage 40 (deja): 3 more models not listed (3 of them drawn and never left out)
 
-The rows come in this order: never drawn first, then those left out at times (most pictures left
-out first), then the drawn ones by draws; the first 48 are listed, the rest counted. A capture
+The rows come in this order, so the 48 listed are the ones that matter most (the rest are
+counted): the stage's own models never drawn and not hidden by the game (built in the stage;
+silent or left out by a test), the most triangles first (`rd_ledger_note_built_tris`, from the
+mesh's index count); then models drawn and left out at times, the biggest draws first; then the
+other rows never drawn (hidden by the game, built before the stage, or only named by a test),
+the most pictures left out first; then the drawn ones by draws. A capture
 (F12, Options > Save a picture for a bug report, the skin check's capture) writes the stage in
 play so far the same way ("so far, at this capture") before its zip takes the log, so the
 capture's log says what the scene held and left out up to that moment.

@@ -246,6 +246,13 @@ void rd_ledger_note_built(RdLedgerTable *t, int slot)
     }
 }
 
+void rd_ledger_note_built_tris(RdLedgerTable *t, int slot, uint32_t tris)
+{
+    if (slot >= 0 && (uint32_t)slot < t->n) {
+        t->e[slot].builtTris += tris;
+    }
+}
+
 void rd_ledger_note_draw(RdLedgerTable *t, int slot, uint32_t tick, uint32_t tris)
 {
     if (slot < 0 || (uint32_t)slot >= t->n) {
@@ -340,6 +347,9 @@ void rd_ledger_carry(RdLedgerStage *next, const RdLedgerStage *prev)
             const int k = rd_ledger_slot(&next->models, e->name);
             if (k >= 0) {
                 next->models.e[k].carried = 1;
+                if (next->models.e[k].builtTris == 0) {
+                    next->models.e[k].builtTris = e->builtTris;
+                }
             }
         }
     }
@@ -369,16 +379,32 @@ static void put(Out *o, const char *fmt, ...)
     }
 }
 
-/* a row's rank: rows left out or never drawn first (most pictures left
-   out first), then the drawn ones by draws */
+/* a row's rank, so the 48 rows listed are the ones that matter most:
+   3: never drawn, built in this stage and not hidden by the game (a model
+      of the stage that never showed, silent or left out by a test), the
+      most triangles first;
+   2: drawn and left out at times, the biggest draws first;
+   1: never drawn otherwise (hidden by the game, built before the stage,
+      or only named by a test), the most pictures left out first;
+   0: drawn and never left out, by draws.
+   Inside a tier: the size in the high bits, the pictures left out in the
+   low 20 */
 static uint64_t rowRank(const RdLedgerEntry *e)
 {
     const uint32_t dropped = entryDropPics(e);
+    const uint64_t low = dropped < (1u << 20) ? dropped : (1u << 20) - 1u;
+    const uint64_t cap = (1ull << 40) - 1u;
     if (e->draws == 0) {
-        return (3ull << 62) | dropped;
+        const int hidden = e->pics[RD_LEDGER_GAME_FLAG] > 0 || e->pics[RD_LEDGER_GAME_IDLE] > 0;
+        if (e->built > 0 && !e->carried && !hidden) {
+            const uint64_t size = e->builtTris < cap ? e->builtTris : cap;
+            return (3ull << 62) | (size << 20) | low;
+        }
+        return (1ull << 62) | low;
     }
     if (dropped > 0) {
-        return (2ull << 62) | dropped;
+        const uint64_t per = e->tris / e->draws;
+        return (2ull << 62) | ((per < cap ? per : cap) << 20) | low;
     }
     return e->draws;
 }

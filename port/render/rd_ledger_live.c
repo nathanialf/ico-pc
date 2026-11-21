@@ -78,9 +78,11 @@ static int rowOfMesh(const RdMeshRec *m, uint32_t id)
     return rd_ledger_cached_row(&s_cur.models, c, id, s_epoch, meshName(m));
 }
 
-void rd__ledger_built(const char *name)
+void rd__ledger_built(const char *name, uint32_t tris)
 {
-    rd_ledger_note_built(&s_cur.models, rd_ledger_slot(&s_cur.models, name));
+    const int slot = rd_ledger_slot(&s_cur.models, name);
+    rd_ledger_note_built(&s_cur.models, slot);
+    rd_ledger_note_built_tris(&s_cur.models, slot, tris);
 }
 
 void rd__ledger_build_failed(const char *name)

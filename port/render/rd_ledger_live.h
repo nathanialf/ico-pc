@@ -11,8 +11,9 @@
 #include "rd_internal.h"
 #include "rd_ledger.h"
 
-/* rd_create_vu_mesh: a mesh built under name, or refused (RD_LEDGER_NO_MESH) */
-void rd__ledger_built(const char *name);
+/* rd_create_vu_mesh: a mesh of tris triangles built under name, or refused
+   (RD_LEDGER_NO_MESH) */
+void rd__ledger_built(const char *name, uint32_t tris);
 void rd__ledger_build_failed(const char *name);
 /* rd_draw_vu_mesh: a draw recorded, batches first .. first + n - 1 of m
    (its triangles counted from them) */

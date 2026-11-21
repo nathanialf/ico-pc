@@ -2229,7 +2229,7 @@ RdMesh rd_create_vu_mesh(const RdVuMeshDesc *d)
             /* the EE's facing table (Packet.c): the marks of every program */
             (void)rd__mesh_set_facing(m, d->facing, d->facingCount);
         }
-        rd__ledger_built(d->debugName);
+        rd__ledger_built(d->debugName, m->indexCount ? m->indexCount / 3u : m->vertexCount);
     } else {
         rd__ledger_build_failed(d->debugName);
     }

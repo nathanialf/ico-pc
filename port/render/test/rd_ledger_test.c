@@ -13,6 +13,9 @@
  *   - the effects line; a stage with none says none;
  *   - the text's bounds (a short buffer, more rows than RD_LEDGER_ROWS:
  *     the count of rows not listed);
+ *   - the rows listed: a model of the stage built and never drawn (the
+ *     dream's walls of issue 221) and a big model left out at times come
+ *     before 60 models the game hid, past RD_LEDGER_ROWS of them;
  *   - the kept stages: the last RD_LEDGER_KEEP, oldest first, then the
  *     stage in play;
  *   - the cost: a draw's tally (rd_ledger_note_draw on a known row) under
@@ -416,6 +419,47 @@ static void testHiddenAndMarks(void)
           "an unnamed draw's row");
 }
 
+/* the 48 rows listed are the ones that matter most: issue 221's report
+   listed 48 rows the game hid and left st13_deja1 (built, never drawn, no
+   reason) among the 67 not listed */
+static void testRank(void)
+{
+    rd_ledger_stage_begin(&s_a, 40, "deja", 1);
+    s_a.lastTick = 100;
+    for (int i = 0; i < RD_LEDGER_ROWS + 12; i++) {
+        char name[24];
+        snprintf(name, sizeof name, "hidden%02d", i);
+        const int k = rd_ledger_slot(&s_a.models, name);
+        rd_ledger_note_built(&s_a.models, k);
+        rd_ledger_note_built_tris(&s_a.models, k, 50000);
+        for (uint32_t t = 1; t <= 90; t++) {
+            rd_ledger_note_drop(&s_a.models, k, RD_LEDGER_GAME_IDLE, t, 0, 1);
+        }
+    }
+    const int walls = rd_ledger_slot(&s_a.models, "st13_deja1");
+    rd_ledger_note_built(&s_a.models, walls);
+    rd_ledger_note_built_tris(&s_a.models, walls, 10790);
+    const int small = rd_ledger_slot(&s_a.models, "pebble");
+    rd_ledger_note_built(&s_a.models, small);
+    rd_ledger_note_built_tris(&s_a.models, small, 12);
+    const int cage = rd_ledger_slot(&s_a.models, "cage");
+    rd_ledger_note_draw(&s_a.models, cage, 1, 900);
+    rd_ledger_note_drop(&s_a.models, cage, RD_LEDGER_FRUSTUM, 7, 1, 1);
+    (void)rd_ledger_format(&s_a, "ended", s_text, sizeof s_text);
+    const char *w = strstr(s_text, " st13_deja1: never drawn, no reason recorded, 1 mesh built");
+    const char *pb = strstr(s_text, " pebble: never drawn");
+    const char *c = strstr(s_text, " cage: drawn in 1 of 100 ticks");
+    const char *h = strstr(s_text, " hidden00: never drawn");
+    CHECK(w != NULL, "the stage's model never drawn is listed past 60 hidden rows");
+    CHECK(c != NULL, "the model left out at times is listed past 60 hidden rows");
+    CHECK(w != NULL && pb != NULL && c != NULL && h != NULL && w < pb && pb < c && c < h,
+          "order: never drawn by triangles, then left out at times, then hidden by the game");
+    CHECK(strstr(s_text, "(a grid)") == NULL, "no row named that was not noted");
+    CHECK(strstr(s_text, "scene ledger: stage 40 (deja): 15 more models not listed (0 of them "
+                         "drawn and never left out)\n") != NULL,
+          "the hidden rows past the cap counted");
+}
+
 static void testTextures(void)
 {
     rd_ledger_stage_begin(&s_a, 13, "st13c", 1);
@@ -509,6 +553,7 @@ int main(void)
     testCost();
     testNames();
     testHiddenAndMarks();
+    testRank();
     testTextures();
     testTickCost();
     if (s_fails) {

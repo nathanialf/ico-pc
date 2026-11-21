@@ -22,6 +22,8 @@
  *     (its deja_lightning.bga row)
  *   - row 62 left out on the Japanese, Korean and Chinese discs, row 66
  *     drawn there
+ * And stage_PlayBgAnimation's step on the European, Japanese and North
+ * American discs (the frame-rate formula on the last two).
  * CPU only; no disc data beyond the region table.
  */
 #include <stdio.h>
@@ -353,8 +355,51 @@ static void walk(int region, int otherRow)
            drawn(0) ? "drawn" : "left out", otherRow, drawn(1) ? "drawn" : "left out");
 }
 
+/* stage_PlayBgAnimation's next frame for one playing row of step 2 from
+   frame 10, with the frame step fs (systemStatus[1]) at 60 Hz: the Japanese,
+   Korean, Chinese and North American builds scale the step by 30 / (60 /
+   fs), the European one adds it as it is at 60 Hz (fs 2 is the game's own,
+   where both give 12; fs 1 tells them apart) */
+static unsigned char s_arena[256] __attribute__((aligned(16)));
+
+static float step(int region, int fs)
+{
+    float v[4] = {0};
+    float q[4] = {0};
+    BgaAnim *a = (BgaAnim *)(s_arena + 64);
+
+    ico_region = region;
+    ico_arena_cached_base = s_arena;
+    setRow(0, 7);
+    s_head[0].start = 0.0f;
+    s_head[0].end = 1000.0f;
+    s_head[0].step = 2.0f;
+    s_head[0].anim = (IcoEEWord)((unsigned char *)a - s_arena);
+    stageAnimCount = 1;
+    systemStatus[0] = 0;
+    systemStatus[1] = fs;
+    systemStatus[5] = 0;
+    s_drawnCount = 0;
+    const float r = stage_PlayBgAnimation(7, 10.0f, v, q);
+    CHECK(s_drawnCount == 1, "region %d: the row was not played (%d draws)", region, s_drawnCount);
+    systemStatus[1] = 2;
+    ico_arena_cached_base = 0;
+    return r;
+}
+
 int main(void)
 {
+    /* the step (issue 221's audit): the North American disc takes the
+       frame-rate formula, as its build does */
+    CHECK(step(ICO_REGION_PAL, 2) == 12.0f);
+    CHECK(step(ICO_REGION_PAL, 1) == 12.0f, "pal: the step is added as it is at 60 Hz");
+    CHECK(step(ICO_REGION_JPN, 1) == 11.0f);
+    CHECK(step(ICO_REGION_NTSC, 2) == 12.0f);
+    CHECK(step(ICO_REGION_NTSC, 1) == 11.0f,
+          "ntsc: the step not scaled by the frame step (the European arm)");
+    printf("stage_disp: step at frame step 1: pal %.1f, ntsc %.1f\n", step(ICO_REGION_PAL, 1),
+           step(ICO_REGION_NTSC, 1));
+
     /* the European disc: row 66 left out, deja_lightning.bga (79) drawn */
     walk(ICO_REGION_PAL, 0x42);
     CHECK(ico_region_info[ICO_REGION_PAL]->veil_anim_row != 0x42);
