@@ -162,7 +162,17 @@ just before the call, one unbounded wait for the previous present job's submissi
 `rhi_wait_value_ns`, back within 1 ms), and while it waits with no job
 behind it the game's gate does not count the picture before
 as busy: the next picture records beside that wait and its job follows that present, so the GPU
-still holds one picture at a time ([DISPLAY.md](DISPLAY.md#pacing) path 1). The lines: `rd: submit thread: the frame slots apart (...)` or `the frame slots one at
+still holds one picture at a time ([DISPLAY.md](DISPLAY.md#pacing) path 1). With that verdict on,
+the next picture is submitted ahead (`rd_submit_thread.h` "ahead"): every job posted is ended and
+submitted at once, beside the picture before's wait, which a waiter thread makes
+(`rhi_wait_value_ns` for that picture's own submission number, nothing else); the submit thread
+presents the picture once the wait returns, then waits for the next one through the waiter. The
+submit thread keeps every queue call; two frame slots suffice (the render thread's next picture
+still waits for its slot's picture two before), the GPU holds up to two pictures, and the gate
+does not count the submit thread's work as busy. A present call of 2.0 ms or more made with a
+later picture submitted, 4 times in the last 16, a failed wait or submit, or a lost device puts
+the run back on one picture at a time; a start after a lost device, a hung driver or a watchdog
+end keeps one at a time ([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#issue-179s-judging-lines)). The lines: `rd: submit thread: the frame slots apart (...)` or `the frame slots one at
 a time (<why>: ...)` at the start, `rd: submit thread: the render thread's picture waited X ms for
 frame slot S's picture two before to be submitted and presented (N such waits so far)` (first 8,
 then every 100th), and the end's line counts the pictures begun while the one before was still

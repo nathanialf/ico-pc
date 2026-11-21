@@ -58,7 +58,40 @@ static struct {
     int32_t lastResult;
     unsigned lines;
     bool lateLogged;
+    /* the ahead order (rd_submit_thread.h "ahead"): off for the run
+       (RD_AHEAD_OFF_*, rd_submit_queue.h; atomic: the gate, the 10 s line
+       and the tests read it; set by the start or by the submit thread) and
+       its start line written; the present-call guard (the submit thread's);
+       the waiter thread and its condition (made at the order's first job),
+       and under the lock: a wait asked for (armed, for value), its return
+       (done: result, endMs on rd's ms clock), the end asked (wQuit) */
+    int aheadOff;
+    bool aheadLogged;
+    RdSqGuard guard;
+    IcoThread *wth;
+    IcoCond *wc;
+    bool wArmed, wDone, wQuit;
+    uint64_t wValue;
+    int32_t wResult;
+    double wEndMs;
 } s_st;
+
+/* the ahead order's run-wide reads (no lock): in effect for the gate (set
+   by the submit thread as it takes a job in that order, cleared as it
+   takes one in the one-at-a-time order or turns the order off), the tests'
+   choice (rd__submit_test_ahead: 0 held off, -1 none), the previous run's
+   end that holds it off for this start (rd_thread_submit_ahead_prev; kept
+   across the thread's restarts); the counts ever (rd__submit_ahead_tally:
+   the waiter's waits, the presents made with a later picture submitted,
+   the jobs submitted in the order and of them before the picture before's
+   GPU end, the times it was turned off) */
+static int s_aheadLive;
+static int s_aheadForce = -1;
+static char s_aheadPrev[160];
+static uint64_t s_aheadWaits, s_aheadPresents, s_aheadSubmits, s_aheadEarly, s_aheadOffs;
+/* the order's off reason at the last start or since (the tests' read after
+   the thread ended; RD_AHEAD_OFF_*) */
+static int s_aheadLastOff;
 
 /* the running job waits for its GPU end before its present, with no job
    queued behind it (rd_thread_submit_gpu_wait_alone, read with no lock):
@@ -81,8 +114,11 @@ static uint32_t s_slotJobs[RHI_FRAMES_IN_FLIGHT];
    across a restart of the thread) */
 static CpuPlaceHist s_cores;
 
-/* the calling thread is the submit thread */
+/* the calling thread is the submit thread; the ahead order's waiter (its
+   one call, rhi_wait_value_ns, is the submit thread's as far as the call
+   guard goes: rd_thread_on_submit) */
 static _Thread_local bool t_onS;
+static _Thread_local bool t_onW;
 /* the render thread's list kept open for it (rd__submit_defer), posted at
    its job's end (rd__submit_post_pending) */
 static _Thread_local bool t_kept;
@@ -497,6 +533,399 @@ static void apply(const RdSubmitJob *j)
     rd__thread_note_submit(j->submitMs + j->presentMs);
 }
 
+/* ------------------------------------------------- the ahead order */
+
+static const char *aheadWhyText(int code)
+{
+    switch (code) {
+    case RD_AHEAD_OFF_LOST:
+        return "the graphics device was lost";
+    case RD_AHEAD_OFF_SUBMIT:
+        return "a picture's submit failed";
+    case RD_AHEAD_OFF_WAIT:
+        return "a wait for a picture's GPU work failed";
+    case RD_AHEAD_OFF_GUARD:
+        return "4 of the last 16 present calls made with a later picture submitted took 2.0 ms "
+               "or more (a present that waits for the later picture's GPU work too)";
+    case RD_AHEAD_OFF_THREAD:
+        return "its waiting thread could not be made";
+    case RD_AHEAD_OFF_TEST:
+        return "a test's choice (rd__submit_test_ahead)";
+    case RD_AHEAD_OFF_PREV:
+        return "a start after one that lost the graphics device, hung its driver or was ended "
+               "by the watchdog";
+    default:
+        return NULL;
+    }
+}
+
+/* the order off for the run, first reason only, with its line (what:
+   the reason's numbers); the jobs already submitted finish as the
+   one-at-a-time order's would (stMain).  Set before anything else is done
+   with what was found: a device loss's handling (window_host.c
+   device_lost_quit) drains this thread first, so it finds the order off */
+static void aheadOffSet(int code, const char *what)
+{
+    int none = RD_AHEAD_OFF_NONE;
+    if (!__atomic_compare_exchange_n(&s_st.aheadOff, &none, code, false, __ATOMIC_ACQ_REL,
+                                     __ATOMIC_ACQUIRE)) {
+        return;
+    }
+    __atomic_store_n(&s_aheadLive, 0, __ATOMIC_RELEASE);
+    __atomic_store_n(&s_aheadLastOff, code, __ATOMIC_RELEASE);
+    __atomic_add_fetch(&s_aheadOffs, 1u, __ATOMIC_RELEASE);
+    rd__log("submit thread: the next picture is not submitted ahead for the rest of this run: "
+            "%s%s%s%s; "
+            "back to one picture on the GPU at a time (each picture's GPU work waited for before "
+            "its present, the next submitted after that present), the pictures already "
+            "submitted presented first",
+            aheadWhyText(code), what != NULL ? " (" : "", what != NULL ? what : "",
+            what != NULL ? ")" : "");
+}
+
+/* the order wanted for job j (its post's choice, the run's state, the
+   verdict on): read outside the lock on a copy (only this thread takes
+   jobs).  The present mode is checked (gpuVerdictMode, as tail does) only
+   with the verdict on, so a run whose verdict is not on goes through
+   exactly the calls it made before this order existed */
+static bool aheadWants(const RdSubmitJob *j)
+{
+    if (!j->gpuFirst || !t_onS || !s_st.gpuFirst ||
+        __atomic_load_n(&s_st.aheadOff, __ATOMIC_ACQUIRE) != RD_AHEAD_OFF_NONE ||
+        __atomic_load_n(&s_st.verdict, __ATOMIC_RELAXED) != RD_GPU_FIRST_ON) {
+        return false;
+    }
+    if (rhi_device_lost()) {
+        aheadOffSet(RD_AHEAD_OFF_LOST, NULL); /* a loss another thread found first */
+        return false;
+    }
+    if (j->present) {
+        gpuVerdictMode();
+    }
+    return __atomic_load_n(&s_st.verdict, __ATOMIC_RELAXED) == RD_GPU_FIRST_ON;
+}
+
+/* the waiter thread: one unbounded wait at a time for the held job's
+   submission (s_st.wValue), its result and its return's time, nothing else
+   (no queue call, no present, no counter of the backend but the wait's
+   own: vk_cmd.c rhi_wait_value_ns, which the submit thread makes no more
+   while the order runs); a quit asked while a wait is armed waits first */
+static void waiterMain(void *u)
+{
+    (void)u;
+    t_onW = true;
+    ico_mutex_lock(s_st.m);
+    for (;;) {
+        while (!s_st.wArmed && !s_st.wQuit) {
+            ico_cond_wait(s_st.wc, s_st.m);
+        }
+        if (!s_st.wArmed) {
+            break;
+        }
+        const uint64_t value = s_st.wValue;
+        ico_mutex_unlock(s_st.m);
+        const RdSubmitTestGpu *fake = __atomic_load_n(&s_gpuFake, __ATOMIC_ACQUIRE);
+        if (fake != NULL && fake->waitValue != NULL) {
+            fake->waitValue(value); /* the test's GPU end of that job */
+        }
+        uint64_t ns = 0;
+        const int32_t r = rhi_wait_value_ns(value, &ns);
+        const double t = rd__now_ms();
+        __atomic_add_fetch(&s_aheadWaits, 1u, __ATOMIC_RELEASE);
+        ico_mutex_lock(s_st.m);
+        s_st.wArmed = false;
+        s_st.wDone = true;
+        s_st.wResult = r;
+        s_st.wEndMs = t;
+        ico_cond_broadcast(s_st.c);
+    }
+    ico_mutex_unlock(s_st.m);
+}
+
+/* the waiter made (on the submit thread, at the order's first job): false
+   and the order off where it cannot be */
+static bool aheadWaiter(void)
+{
+    if (s_st.wth != NULL) {
+        return true;
+    }
+    if (s_st.wc == NULL) {
+        s_st.wc = ico_cond_create();
+    }
+    s_st.wth = s_st.wc != NULL ? ico_thread_create(waiterMain, NULL) : NULL;
+    if (s_st.wth == NULL) {
+        aheadOffSet(RD_AHEAD_OFF_THREAD, NULL);
+        return false;
+    }
+    return true;
+}
+
+/* the waiter asked to wait for `value` (the lock held) */
+static void aheadArm(uint64_t value)
+{
+    s_st.wValue = value;
+    s_st.wDone = false;
+    s_st.wArmed = true;
+    ico_cond_broadcast(s_st.wc);
+}
+
+/* the ahead order's jobs on the submit thread: the held one (submitted,
+   its GPU work waited for by the waiter, or here where the order went off
+   with it submitted: self), the next (submitted behind it); each one's
+   submit end (its presentMs from there, as tail's); the gap after the held
+   job's GPU end while no next was submitted (its times, rd__sq_gap_parts) */
+typedef struct Ahead {
+    RdSubmitJob held, next;
+    bool haveHeld, haveNext, heldSelf;
+    double heldT1, nextT1;
+    uint64_t heldValue, nextValue;
+    bool gapOpen, gapNotPosted;
+    double gapEnd, gapWake, gapPresented, gapFinished;
+} Ahead;
+
+/* a job's ends and submits (rd__sq_tail_steps, without the present) timed
+   apart, the test's GPU begun (as tail), the job's submission value
+   (rhi_last_submitted: the waiter's), the check of what the submit did */
+static int aheadSubmit(RdSubmitJob *j, double *endMs, double *submitMs, uint64_t *value)
+{
+    const RdSubmitTestGpu *fake = __atomic_load_n(&s_gpuFake, __ATOMIC_ACQUIRE);
+    const uint64_t v0 = rhi_last_submitted();
+    RdSqStep st[RD_SQ_TAIL_MAX];
+    const uint32_t n = rd__sq_tail_steps(j, st);
+    double ends = 0.0, subs = 0.0;
+    const double t0 = rd__now_ms();
+    for (uint32_t k = 0; k < n; k++) {
+        const double a = rd__now_ms();
+        if (st[k].what == RD_SQ_END) {
+            rhi_end_commands((RhiCommandList){st[k].cl});
+            ends += rd__now_ms() - a;
+        } else if (st[k].what == RD_SQ_SUBMIT) {
+            rhi_submit((RhiCommandList){st[k].cl});
+            subs += rd__now_ms() - a;
+        }
+    }
+    if (fake != NULL && fake->submitted != NULL) {
+        const double a = rd__now_ms();
+        fake->submitted(); /* the test's GPU work begins (its submit time) */
+        subs += rd__now_ms() - a;
+    }
+    j->submitMs = rd__now_ms() - t0;
+    j->gfSample = RD_GF_NONE;
+    j->gfResult = 0;
+    j->gfPrevRead = -2;
+    *endMs = ends;
+    *submitMs = subs;
+    *value = rhi_last_submitted();
+    return rd__sq_ahead_check_submit(v0, *value, rhi_device_lost());
+}
+
+/* the held job's present (the test's hook and driver as tail's), timed: the
+   present call (the backend's split where it times it, else the whole
+   call) into the guard where a later picture is submitted (later) */
+static void aheadPresent(RdSubmitJob *j, double t1, bool later)
+{
+    const RdSubmitTestGpu *fake = __atomic_load_n(&s_gpuFake, __ATOMIC_ACQUIRE);
+    {
+        void (*hook)(void) = __atomic_load_n(&s_testHook, __ATOMIC_ACQUIRE);
+        if (hook != NULL) {
+            hook(); /* the test's job that does not end */
+        }
+    }
+    if (rhi_device_lost()) {
+        aheadOffSet(RD_AHEAD_OFF_LOST, NULL);
+    }
+    const double c0 = rd__now_ms();
+    if (fake != NULL && fake->present != NULL) {
+        fake->present(); /* the test's driver's present call */
+    }
+    if (j->present) {
+        rhi_present_desire(j->desiredMs > 0.0 ? (uint64_t)(j->desiredMs * 1e6) : 0u);
+        rhi_present();
+    }
+    const double c1 = rd__now_ms();
+    rd__present_split_take(j, j->present);
+    j->presentMs = rd__now_ms() - t1;
+    if (!later || (j->present && j->presentSplit == 2u)) {
+        return; /* no later picture, or no driver call made: not the guard's */
+    }
+    const double callMs = j->presentSplit == 1u ? j->presentCallMs : c1 - c0;
+    __atomic_add_fetch(&s_aheadPresents, 1u, __ATOMIC_RELEASE);
+    ico_mutex_lock(s_st.m);
+    rd__sq_note_guard(&s_st.q, callMs);
+    ico_mutex_unlock(s_st.m);
+    if (rd__sq_guard_note(&s_st.guard, callMs) &&
+        __atomic_load_n(&s_st.aheadOff, __ATOMIC_ACQUIRE) == RD_AHEAD_OFF_NONE) {
+        char what[96];
+        snprintf(what, sizeof(what), "this call %.1f ms; %u of %u such calls so far long", callMs,
+                 s_st.guard.longs, s_st.guard.calls);
+        aheadOffSet(RD_AHEAD_OFF_GUARD, what);
+    }
+}
+
+/* The ahead order's step (the lock held on entry and on return): true when
+   it did something.  (1) The oldest job posted and not submitted, wanted
+   in this order (aheadWants): ended and submitted at once, its value
+   kept, the held one (the waiter armed for it) or the next (behind the
+   held one; counted early when the held one's GPU end had not been seen
+   by its submit's end, else its idle gap noted).  A job not wanted waits
+   until no job of this order is left, then runs one at a time (stMain).
+   (2) The held job's wait returned (or, the order off, made here as the
+   one-at-a-time order makes it): its present, its finish, the next one
+   held and the waiter armed for it.  Otherwise nothing (the caller waits
+   on the queue's condition, which the waiter's return broadcasts). */
+static bool aheadStep(Ahead *a)
+{
+    const RdSubmitJob *peek = a->haveNext ? NULL : rd__sq_peek_unsent(&s_st.q);
+    if (peek != NULL) {
+        const RdSubmitJob c = *peek;
+        ico_mutex_unlock(s_st.m);
+        const bool want = aheadWants(&c) && aheadWaiter();
+        ico_mutex_lock(s_st.m);
+        if (want) {
+            RdSubmitJob j;
+            (void)rd__sq_take_unsent(&s_st.q, &j);
+            __atomic_store_n(&s_aheadLive, 1, __ATOMIC_RELEASE);
+            const bool first = !s_st.aheadLogged;
+            s_st.aheadLogged = true;
+            ico_mutex_unlock(s_st.m);
+            if (first) {
+                rd__log("submit thread: the next picture is submitted ahead from here on (the "
+                        "verdict on): each picture's lists are submitted as soon as it is "
+                        "handed over, beside the picture before's wait for its GPU work, which a "
+                        "thread of its own makes; that picture is presented once its work has "
+                        "ended (the GPU holds up to two pictures, the swapchain's lock still not "
+                        "held through a wait)");
+            }
+            const double taken = rd__now_ms();
+            double endMs = 0.0, subMs = 0.0;
+            uint64_t value = 0;
+            const int check = aheadSubmit(&j, &endMs, &subMs, &value);
+            const double t1 = rd__now_ms();
+            __atomic_add_fetch(&s_aheadSubmits, 1u, __ATOMIC_RELEASE);
+            if (check != RD_AHEAD_OFF_NONE) {
+                char what[96];
+                snprintf(what, sizeof(what), "the submission counter still at %llu after it",
+                         (unsigned long long)value);
+                aheadOffSet(check, check == RD_AHEAD_OFF_SUBMIT ? what : NULL);
+            }
+            ico_mutex_lock(s_st.m);
+            if (a->haveHeld) {
+                /* behind the held one: early when its GPU end was not seen
+                   by the end of this submit */
+                const bool early = !s_st.wDone || s_st.wEndMs >= t1;
+                rd__sq_note_ahead(&s_st.q, early);
+                if (early) {
+                    __atomic_add_fetch(&s_aheadEarly, 1u, __ATOMIC_RELEASE);
+                } else {
+                    RdSqGap g;
+                    rd__sq_gap_parts(s_st.wEndMs, 0.0, 0.0, 0.0, taken, taken + endMs, t1, &g);
+                    rd__sq_note_gap(&s_st.q, &g, false);
+                }
+                a->next = j;
+                a->nextT1 = t1;
+                a->nextValue = value;
+                a->haveNext = true;
+            } else {
+                if (a->gapOpen) {
+                    /* the picture before already presented and finished:
+                       the GPU idle from its end to this submit's */
+                    RdSqGap g;
+                    rd__sq_gap_parts(a->gapEnd, a->gapWake, a->gapPresented, a->gapFinished, taken,
+                                     taken + endMs, t1, &g);
+                    rd__sq_note_ahead(&s_st.q, false);
+                    rd__sq_note_gap(&s_st.q, &g, a->gapNotPosted);
+                    a->gapOpen = false;
+                }
+                a->held = j;
+                a->heldT1 = t1;
+                a->heldValue = value;
+                a->haveHeld = true;
+                a->heldSelf = false;
+                if (__atomic_load_n(&s_st.aheadOff, __ATOMIC_ACQUIRE) == RD_AHEAD_OFF_NONE) {
+                    aheadArm(value);
+                } else {
+                    a->heldSelf = true; /* turned off by its own submit: waited for here */
+                }
+            }
+            return true;
+        }
+        a->gapOpen = false; /* the next job is not this order's: no gap of it */
+        if (!a->haveHeld) {
+            return false; /* the one-at-a-time order takes it */
+        }
+    }
+    if (!a->haveHeld || !(s_st.wDone || a->heldSelf)) {
+        return false;
+    }
+    /* (2) the held job's GPU work ended */
+    const double endSeen = a->heldSelf ? 0.0 : s_st.wEndMs;
+    const int32_t result = s_st.wResult;
+    const bool waited = !a->heldSelf;
+    s_st.wDone = false;
+    ico_mutex_unlock(s_st.m);
+    const double wake = rd__now_ms();
+    if (waited) {
+        const int check = rd__sq_ahead_check_wait(result, rhi_device_lost());
+        if (check != RD_AHEAD_OFF_NONE) {
+            char what[64];
+            snprintf(what, sizeof(what), "result %d", (int)result);
+            aheadOffSet(check, check == RD_AHEAD_OFF_WAIT ? what : NULL);
+        }
+    } else {
+        /* the order off with this job submitted: its wait as the
+           one-at-a-time order makes it (tail's `first`) */
+        const RdSubmitTestGpu *fake = __atomic_load_n(&s_gpuFake, __ATOMIC_ACQUIRE);
+        if (__atomic_load_n(&s_st.verdict, __ATOMIC_RELAXED) == RD_GPU_FIRST_ON) {
+            if (fake != NULL && fake->waitEnd != NULL) {
+                fake->waitEnd();
+            }
+            if (rhi_wait_submitted()) {
+                __atomic_add_fetch(&s_gpuFirstWaited, 1u, __ATOMIC_RELEASE);
+            }
+            __atomic_add_fetch(&s_gpuFirstWaits, 1u, __ATOMIC_RELEASE);
+        }
+    }
+    RdSubmitJob j = a->held;
+    aheadPresent(&j, a->heldT1, a->haveNext);
+    const double presented = rd__now_ms();
+    cpu_place_note(&s_cores, cpu_place_now());
+    ico_mutex_lock(s_st.m);
+    {
+        const double ms = j.submitMs + j.presentMs;
+        const uint64_t ns = ms > 0.0 ? (uint64_t)(ms * 1e6) : 1u;
+        s_st.jobMaxNs = ns > s_st.jobMaxNs ? ns : s_st.jobMaxNs;
+    }
+    rd__sq_finish_sent(&s_st.q, &j);
+    __atomic_sub_fetch(&s_slotJobs[j.slot % RHI_FRAMES_IN_FLIGHT], 1u, __ATOMIC_RELEASE);
+    if (rd__sq_idle(&s_st.q)) {
+        __atomic_store_n(&s_st.busy, 0, __ATOMIC_RELEASE);
+    }
+    ico_cond_broadcast(s_st.c);
+    const double finished = rd__now_ms();
+    a->haveHeld = false;
+    if (a->haveNext) {
+        /* the next one held: its wait armed, or made here (the order off) */
+        a->held = a->next;
+        a->heldT1 = a->nextT1;
+        a->heldValue = a->nextValue;
+        a->haveHeld = true;
+        a->haveNext = false;
+        a->heldSelf = __atomic_load_n(&s_st.aheadOff, __ATOMIC_ACQUIRE) != RD_AHEAD_OFF_NONE;
+        if (!a->heldSelf) {
+            aheadArm(a->heldValue);
+        }
+    } else if (waited && __atomic_load_n(&s_st.aheadOff, __ATOMIC_ACQUIRE) == RD_AHEAD_OFF_NONE) {
+        /* the GPU idle until the next picture's submit: its gap open */
+        a->gapOpen = true;
+        a->gapNotPosted = s_st.q.count == 0;
+        a->gapEnd = endSeen;
+        a->gapWake = wake;
+        a->gapPresented = presented;
+        a->gapFinished = finished;
+    }
+    return true;
+}
+
 static void stMain(void *u)
 {
     (void)u;
@@ -504,10 +933,19 @@ static void stMain(void *u)
     if (s_st.begin != NULL) {
         s_st.begin(s_st.user);
     }
+    Ahead ahead;
+    memset(&ahead, 0, sizeof(ahead));
     ico_mutex_lock(s_st.m);
     for (;;) {
         RdSubmitJob j;
+        if (s_st.gpuFirst && aheadStep(&ahead)) {
+            continue;
+        }
         if (rd__sq_next(&s_st.q, &j)) {
+            if (s_st.gpuFirst) {
+                /* one at a time from here: the gate counts its present */
+                __atomic_store_n(&s_aheadLive, 0, __ATOMIC_RELEASE);
+            }
             ico_mutex_unlock(s_st.m);
             tail(&j);
             cpu_place_note(&s_cores, cpu_place_now());
@@ -527,7 +965,7 @@ static void stMain(void *u)
             ico_cond_broadcast(s_st.c);
             continue;
         }
-        if (s_st.quit) {
+        if (s_st.quit && rd__sq_idle(&s_st.q)) {
             break; /* what was queued ran first */
         }
         ico_cond_wait(s_st.c, s_st.m);
@@ -623,6 +1061,56 @@ static void gpuFirstLine(bool want, const char *notApart)
     }
 }
 
+/* the ahead order held off for this start, and why (its line; NULL: it may
+   run once the verdict is on): the tests' choice, the loss ladder (port/rhi
+   rhi_tile_rule.h ICO_LOSS_ROW: the starts in a row before this one that
+   lost the graphics device or hung its driver, port/platform/diag_host.c),
+   the previous run's watchdog end (rd_thread_submit_ahead_prev) */
+static const char *aheadHeldOff(char *buf, size_t size)
+{
+    if (s_aheadForce == 0) {
+        snprintf(buf, size, "a test's choice (rd__submit_test_ahead)");
+        return buf;
+    }
+    const char *row = getenv("ICO_LOSS_ROW");
+    char *end = NULL;
+    const unsigned long lost = row != NULL && row[0] != '\0' ? strtoul(row, &end, 10) : 0ul;
+    if (lost > 0 && end != NULL && *end == '\0') {
+        snprintf(buf, size,
+                 "the loss ladder: %lu start%s in a row before this one lost the graphics device "
+                 "or hung its driver, ICO_LOSS_ROW %lu, nothing written to the settings",
+                 lost, lost == 1ul ? "" : "s", lost);
+        return buf;
+    }
+    if (s_aheadPrev[0] != '\0') {
+        snprintf(buf, size, "%s", s_aheadPrev);
+        return buf;
+    }
+    return NULL;
+}
+
+/* the ahead order's start line where the GPU's end first is wanted: how it
+   runs once the verdict is on, or why it is held off for this start (the
+   order off from here: RD_AHEAD_OFF_TEST, _PREV) */
+static void aheadStartLine(const char *off)
+{
+    if (off != NULL) {
+        rd__log("submit thread: with the verdict on, the next picture is not submitted ahead "
+                "this start (%s): one picture on the GPU at a time, each one's GPU work waited "
+                "for before its present",
+                off);
+        return;
+    }
+    rd__log("submit thread: with the verdict on, the next picture is submitted ahead (its lists "
+            "submitted as soon as it is handed over, beside the picture before's wait for its "
+            "GPU work, which a thread of its own makes; the GPU holds up to two pictures); back "
+            "to one at a time for the run after %u of the last %u present calls made with a "
+            "later picture submitted take %.1f ms or more, a failed wait or submit, or a lost "
+            "device; a start after one that lost the device, hung its driver or was ended by "
+            "the watchdog keeps one at a time",
+            (unsigned)RD_AHEAD_GUARD_LONG, (unsigned)RD_AHEAD_GUARD_WINDOW, RD_GPU_FIRST_CALL_MS);
+}
+
 bool rd__submit_thread_start(void (*begin)(void *user), void *user)
 {
     if (s_st.th != NULL) {
@@ -658,6 +1146,15 @@ bool rd__submit_thread_start(void (*begin)(void *user), void *user)
        own behaviour driven without its verdict) */
     s_st.verdict = s_gpuFirstForce == 2 ? RD_GPU_FIRST_ON : RD_GPU_FIRST_UNDECIDED;
     __atomic_store_n(&s_waitAlone, 0, __ATOMIC_RELEASE);
+    /* the ahead order: held off for this start (decided before the thread
+       exists, its line below) */
+    char aheadWhy[256];
+    const char *aheadOff = s_st.gpuFirst ? aheadHeldOff(aheadWhy, sizeof(aheadWhy)) : NULL;
+    s_st.aheadOff = aheadOff == NULL    ? RD_AHEAD_OFF_NONE
+                    : s_aheadForce == 0 ? RD_AHEAD_OFF_TEST
+                                        : RD_AHEAD_OFF_PREV;
+    __atomic_store_n(&s_aheadLastOff, s_st.aheadOff, __ATOMIC_RELEASE);
+    __atomic_store_n(&s_aheadLive, 0, __ATOMIC_RELEASE);
     s_st.m = ico_mutex_create();
     s_st.c = ico_cond_create();
     s_st.th = s_st.m && s_st.c ? ico_thread_create(stMain, NULL) : NULL;
@@ -678,6 +1175,9 @@ bool rd__submit_thread_start(void (*begin)(void *user), void *user)
             "(ICO_RD_SUBMIT_THREAD=0) keeps them on the render thread)",
             rhi_backend_kind_name(rhi_backend()));
     gpuFirstLine(want, notApart);
+    if (s_st.gpuFirst) {
+        aheadStartLine(aheadOff);
+    }
     if (s_st.apart) {
         static const RhiSlotGuard guard = {NULL, slotFree, slotPending, slotWorker};
         rhi_set_slot_guard(&guard);
@@ -704,6 +1204,19 @@ void rd__submit_thread_stop(void)
     ico_cond_broadcast(s_st.c);
     ico_mutex_unlock(s_st.m);
     ico_thread_join(s_st.th);
+    if (s_st.wth != NULL) {
+        /* the ahead order's waiter: idle (the drain above waited for every
+           job, each one's wait first) */
+        ico_mutex_lock(s_st.m);
+        s_st.wQuit = true;
+        ico_cond_broadcast(s_st.wc);
+        ico_mutex_unlock(s_st.m);
+        ico_thread_join(s_st.wth);
+    }
+    if (s_st.wc != NULL) {
+        ico_cond_destroy(s_st.wc);
+    }
+    __atomic_store_n(&s_aheadLive, 0, __ATOMIC_RELEASE);
     if (s_st.apart) {
         rhi_set_slot_guard(NULL); /* the thread idle: nothing asks it now */
     }
@@ -724,7 +1237,7 @@ bool rd_thread_submit_on(void)
 
 bool rd_thread_on_submit(void)
 {
-    return t_onS;
+    return t_onS || t_onW;
 }
 
 bool rd_thread_submit_busy(void)
@@ -772,6 +1285,39 @@ bool rd_thread_submit_gpu_first(void)
 bool rd_thread_submit_gpu_wait_alone(void)
 {
     return __atomic_load_n(&s_waitAlone, __ATOMIC_ACQUIRE) != 0;
+}
+
+bool rd_thread_submit_ahead_now(void)
+{
+    return s_st.th != NULL && s_st.gpuFirst && __atomic_load_n(&s_aheadLive, __ATOMIC_ACQUIRE) != 0;
+}
+
+const char *rd_thread_submit_ahead_off_why(void)
+{
+    if (s_st.th == NULL || !s_st.gpuFirst) {
+        return NULL;
+    }
+    return aheadWhyText(__atomic_load_n(&s_st.aheadOff, __ATOMIC_ACQUIRE));
+}
+
+void rd_thread_submit_ahead_prev(const char *why)
+{
+    snprintf(s_aheadPrev, sizeof(s_aheadPrev), "%s", why != NULL ? why : "");
+}
+
+void rd__submit_test_ahead(int force)
+{
+    s_aheadForce = force == 0 ? 0 : -1;
+}
+
+void rd__submit_ahead_tally(RdAheadTally *out)
+{
+    out->waits = __atomic_load_n(&s_aheadWaits, __ATOMIC_ACQUIRE);
+    out->presents = __atomic_load_n(&s_aheadPresents, __ATOMIC_ACQUIRE);
+    out->submits = __atomic_load_n(&s_aheadSubmits, __ATOMIC_ACQUIRE);
+    out->early = __atomic_load_n(&s_aheadEarly, __ATOMIC_ACQUIRE);
+    out->offs = __atomic_load_n(&s_aheadOffs, __ATOMIC_ACQUIRE);
+    out->off = __atomic_load_n(&s_aheadLastOff, __ATOMIC_ACQUIRE);
 }
 
 uint64_t rd_thread_submit_drain(void)

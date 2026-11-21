@@ -1,6 +1,7 @@
 /* rd_submit_queue.c: the submit thread's queue (rd_submit_queue.h). */
 #include "rd_submit_queue.h"
 
+#include <stdio.h>
 #include <string.h>
 
 void rd__sq_init(RdSubmitQ *q)
@@ -29,7 +30,7 @@ uint64_t rd__sq_post(RdSubmitQ *q, const RdSubmitJob *job)
 
 bool rd__sq_next(RdSubmitQ *q, RdSubmitJob *out)
 {
-    if (q->running || q->count == 0) {
+    if (q->running || q->count == 0 || q->sent != 0) {
         return false;
     }
     *out = q->ring[q->head];
@@ -37,12 +38,9 @@ bool rd__sq_next(RdSubmitQ *q, RdSubmitJob *out)
     return true;
 }
 
-void rd__sq_finish(RdSubmitQ *q, const RdSubmitJob *job)
+/* the head done with job's times: counted in the block, kept for the take */
+static void finishHead(RdSubmitQ *q, const RdSubmitJob *job)
 {
-    if (!q->running || q->count == 0) {
-        return;
-    }
-    q->running = false;
     q->head = (q->head + 1u) % RD_SUBMIT_DEPTH;
     q->count--;
     q->done = job->seq > q->done ? job->seq : q->done;
@@ -97,6 +95,48 @@ void rd__sq_finish(RdSubmitQ *q, const RdSubmitJob *job)
         q->block.dropped++;
     }
     q->fin[q->finN++] = *job;
+}
+
+void rd__sq_finish(RdSubmitQ *q, const RdSubmitJob *job)
+{
+    if (!q->running || q->count == 0) {
+        return;
+    }
+    q->running = false;
+    finishHead(q, job);
+}
+
+const RdSubmitJob *rd__sq_peek_unsent(const RdSubmitQ *q)
+{
+    if (q->running || q->sent >= q->count) {
+        return NULL;
+    }
+    return &q->ring[(q->head + q->sent) % RD_SUBMIT_DEPTH];
+}
+
+bool rd__sq_take_unsent(RdSubmitQ *q, RdSubmitJob *out)
+{
+    const RdSubmitJob *j = rd__sq_peek_unsent(q);
+    if (j == NULL) {
+        return false;
+    }
+    *out = *j;
+    q->sent++;
+    return true;
+}
+
+void rd__sq_finish_sent(RdSubmitQ *q, const RdSubmitJob *job)
+{
+    if (q->sent == 0 || q->count == 0) {
+        return;
+    }
+    q->sent--;
+    finishHead(q, job);
+}
+
+uint32_t rd__sq_sent(const RdSubmitQ *q)
+{
+    return q->sent;
 }
 
 bool rd__sq_idle(const RdSubmitQ *q)
@@ -199,6 +239,125 @@ uint32_t rd__sq_tail_steps(const RdSubmitJob *j, RdSqStep out[RD_SQ_TAIL_MAX])
     }
     if (j->present) {
         out[n++] = (RdSqStep){RD_SQ_PRESENT, 0};
+    }
+    return n;
+}
+
+void rd__sq_note_ahead(RdSubmitQ *q, bool early)
+{
+    q->block.aheadJobs++;
+    q->block.aheadEarly += early ? 1u : 0u;
+}
+
+/* b - a, never below 0 (a clock read on another thread may come first) */
+static double span(double a, double b)
+{
+    return b > a ? b - a : 0.0;
+}
+
+void rd__sq_gap_parts(double endSeen, double wake, double presented, double finished, double taken,
+                      double ended, double submitted, RdSqGap *out)
+{
+    memset(out, 0, sizeof(*out));
+    if (wake <= 0.0 || taken < wake) {
+        /* the next taken before the submit thread woke for the picture
+           before: its end and submit straddle that GPU end (only what came
+           after it is idle) */
+        const double from = taken > endSeen ? taken : endSeen;
+        out->endMs = span(from, ended);
+        out->submitMs = span(ended > endSeen ? ended : endSeen, submitted);
+        return;
+    }
+    out->wakeMs = span(endSeen, wake);
+    out->presentMs = span(wake, presented);
+    out->finishMs = span(presented, finished);
+    out->postMs = span(finished, taken);
+    out->endMs = span(taken, ended);
+    out->submitMs = span(ended, submitted);
+}
+
+void rd__sq_note_gap(RdSubmitQ *q, const RdSqGap *g, bool notPosted)
+{
+    RdSubmitBlock *b = &q->block;
+    const double ms = g->wakeMs + g->presentMs + g->finishMs + g->postMs + g->endMs + g->submitMs;
+    b->gaps++;
+    b->gapNotPosted += notPosted ? 1u : 0u;
+    b->gapMs += ms;
+    b->gapWakeMs += g->wakeMs;
+    b->gapPresentMs += g->presentMs;
+    b->gapFinishMs += g->finishMs;
+    b->gapPostMs += g->postMs;
+    b->gapEndMs += g->endMs;
+    b->gapSubmitMs += g->submitMs;
+}
+
+void rd__sq_note_guard(RdSubmitQ *q, double callMs)
+{
+    q->block.guardTimed++;
+    q->block.guardLong += callMs >= RD_GPU_FIRST_CALL_MS ? 1u : 0u;
+    q->block.guardMaxMs = callMs > q->block.guardMaxMs ? callMs : q->block.guardMaxMs;
+}
+
+bool rd__sq_guard_note(RdSqGuard *g, double callMs)
+{
+    const bool isLong = callMs >= RD_GPU_FIRST_CALL_MS;
+    if (g->n == RD_AHEAD_GUARD_WINDOW) {
+        /* the oldest call leaves the window */
+        if ((g->bits >> (RD_AHEAD_GUARD_WINDOW - 1u)) & 1u) {
+            g->longN--;
+        }
+    } else {
+        g->n++;
+    }
+    g->bits = (uint16_t)((g->bits << 1) | (isLong ? 1u : 0u));
+    g->longN = (uint8_t)(g->longN + (isLong ? 1u : 0u));
+    g->calls++;
+    g->longs += isLong ? 1u : 0u;
+    return g->longN >= RD_AHEAD_GUARD_LONG;
+}
+
+int rd__sq_ahead_check_submit(uint64_t before, uint64_t after, bool lost)
+{
+    if (lost) {
+        return RD_AHEAD_OFF_LOST;
+    }
+    return after > before ? RD_AHEAD_OFF_NONE : RD_AHEAD_OFF_SUBMIT;
+}
+
+int rd__sq_ahead_check_wait(int32_t result, bool lost)
+{
+    if (lost) {
+        return RD_AHEAD_OFF_LOST;
+    }
+    return result == 0 ? RD_AHEAD_OFF_NONE : RD_AHEAD_OFF_WAIT;
+}
+
+size_t rd__sq_ahead_text(const RdSubmitBlock *b, const char *offWhy, char *out, size_t cap)
+{
+    size_t n = 0;
+    if (cap == 0) {
+        return 0;
+    }
+    out[0] = '\0';
+    if (b->aheadJobs == 0 && b->gaps == 0 && b->guardTimed == 0 && offWhy == NULL) {
+        return 0;
+    }
+    const double g = b->gaps ? (double)b->gaps : 1.0;
+    int k = snprintf(out, cap,
+                     "; the next picture submitted ahead: %u of %u submitted before the picture "
+                     "before's GPU end; the GPU idle %u times (%.1f ms a time: wake-up %.1f, "
+                     "present call %.1f, finish %.1f, waiting for the next picture %.1f (%u "
+                     "pictures whose next was not yet posted), list end %.1f, submit %.1f); "
+                     "present calls with a later picture submitted %u (%u of %.1f ms or more, "
+                     "longest %.1f ms)",
+                     b->aheadEarly, b->aheadJobs, b->gaps, b->gapMs / g, b->gapWakeMs / g,
+                     b->gapPresentMs / g, b->gapFinishMs / g, b->gapPostMs / g, b->gapNotPosted,
+                     b->gapEndMs / g, b->gapSubmitMs / g, b->guardTimed, b->guardLong,
+                     RD_GPU_FIRST_CALL_MS, b->guardMaxMs);
+    n = k < 0 ? 0 : (size_t)k < cap ? (size_t)k : cap - 1;
+    if (offWhy != NULL && n + 1 < cap) {
+        k = snprintf(out + n, cap - n, "; off for the run: %s", offWhy);
+        n = k < 0 ? n : n + (size_t)k < cap ? n + (size_t)k : cap - 1;
     }
     return n;
 }

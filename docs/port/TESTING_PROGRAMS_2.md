@@ -128,7 +128,10 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   which takes it as the newest, `rhi_last_submitted`'s), 1 after the release, -1 on the fence
   ring. The samples' wait (`rhi_wait_value_ns`): 0 at once for a finished submission and for 0;
   a held one waited for on another thread, seen by `rhi_gpu_progress`, returns 0 only after the
-  release with the time it blocked; a result forced to VK_NOT_READY comes back as 1 (the
+  release with the time it blocked, and while it blocks this thread submits the next list on the
+  other slot (the ahead order's third thread, `port/render/rd_submit_thread.h` "ahead"): the
+  submit lands with the next number, the wait and the watchdog's view stay on the held one, and
+  the list finishes after the release with no validation error; a result forced to VK_NOT_READY comes back as 1 (the
   sample's unknown, `rd_submit_queue_test`), the device not lost, the next wait 0; on the fence
   ring `RHI_WAIT_NONE` with no wait. A wait whose result is forced to a device
   loss (`vkr_test_force_wait_result`) returns false with the device lost, and the next makes

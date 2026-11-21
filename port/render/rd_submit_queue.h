@@ -31,7 +31,10 @@
  *   block   rd__sq_block_take: the block's numbers, the sums cleared;
  *   tail    rd__sq_tail_steps: a job's graphics calls in order (the submit
  *           thread's tail and rd_submit.c's inline path run them): end and
- *           submit cl, end and submit cl2, present.
+ *           submit cl, end and submit cl2, present;
+ *   ahead   rd__sq_take_unsent / rd__sq_finish_sent: the ahead order's two
+ *           jobs submitted at once, finished in order; its block counts, the
+ *           present-call guard and the checks that turn it off (below).
  *
  * Pure C (no threads, no graphics calls): the caller holds its own lock
  * around every call.  The unit test is port/render/test/rd_submit_queue_test.c.
@@ -40,6 +43,7 @@
 #define RD_SUBMIT_QUEUE_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 /* the pictures submitted and not yet presented the queue holds: the GPU's
@@ -135,12 +139,30 @@ typedef struct RdSubmitBlock {
     unsigned gfJobs, gfTimed, gfShort, gfCounted, gfWaited, gfUnknown, gfNotOriginal, gfNoPresent;
     unsigned gfPrevDone, gfReadFailed;
     int32_t gfLastResult;
+    /* the next picture submitted ahead (rd_submit_thread.h "ahead"; 0
+       everywhere where that order did not run in the block): the jobs
+       submitted in it with a picture before in the chain (aheadJobs) and of
+       them those whose submit ended before the picture before's GPU end was
+       seen (aheadEarly: "p of q"); the GPU's idle gaps (a next picture
+       submitted after the picture before's end: gaps, their time in all and
+       its parts, rd__sq_note_gap), of them those whose next picture was not
+       yet posted when the picture before was finished (gapNotPosted); the
+       present calls made with a later picture submitted (guardTimed), of
+       them those of RD_GPU_FIRST_CALL_MS or more (guardLong), the longest */
+    unsigned aheadJobs, aheadEarly;
+    unsigned gaps, gapNotPosted;
+    double gapMs, gapWakeMs, gapPresentMs, gapFinishMs, gapPostMs, gapEndMs, gapSubmitMs;
+    unsigned guardTimed, guardLong;
+    double guardMaxMs;
 } RdSubmitBlock;
 
 typedef struct RdSubmitQ {
     RdSubmitJob ring[RD_SUBMIT_DEPTH];
     uint32_t head, count; /* count: queued and running */
     bool running;
+    /* the ahead order (rd__sq_take_unsent): the jobs from the head ended and
+       submitted, not yet finished (0 in the one-at-a-time order) */
+    uint32_t sent;
     uint64_t posted, done;
     RdSubmitJob fin[RD_SUBMIT_DEPTH];
     uint32_t finN;
@@ -150,8 +172,93 @@ typedef struct RdSubmitQ {
 
 void rd__sq_init(RdSubmitQ *q);
 uint64_t rd__sq_post(RdSubmitQ *q, const RdSubmitJob *job);
+/* the head to run one at a time: none while a job runs or while jobs of the
+   ahead order are submitted and unfinished (sent) */
 bool rd__sq_next(RdSubmitQ *q, RdSubmitJob *out);
 void rd__sq_finish(RdSubmitQ *q, const RdSubmitJob *job);
+
+/* The ahead order (rd_submit_thread.h "ahead"): several jobs from the head
+ * ended and submitted before the oldest of them is presented, each finished
+ * in the order posted.
+ *   peek    rd__sq_peek_unsent: the oldest job posted and not yet submitted
+ *           (NULL: none, or a job runs one at a time);
+ *   take    rd__sq_take_unsent: that job, counted as submitted (sent);
+ *   finish  rd__sq_finish_sent: the oldest submitted job done with its times,
+ *           counted as rd__sq_finish counts (the head moves on);
+ *   sent    rd__sq_sent: the jobs submitted and not finished. */
+const RdSubmitJob *rd__sq_peek_unsent(const RdSubmitQ *q);
+bool rd__sq_take_unsent(RdSubmitQ *q, RdSubmitJob *out);
+void rd__sq_finish_sent(RdSubmitQ *q, const RdSubmitJob *job);
+uint32_t rd__sq_sent(const RdSubmitQ *q);
+
+/* A job submitted in the ahead order with a picture before in the chain:
+ * its submit ended before that picture's GPU end was seen (early) or not */
+void rd__sq_note_ahead(RdSubmitQ *q, bool early);
+
+/* One GPU idle gap of the ahead order: from the picture before's GPU end
+ * (as its wait returned) to the end of the next picture's submit, in
+ * parts: the submit thread's wake-up, the picture before's present call,
+ * its finish, the wait for the next picture to be posted (notPosted: none
+ * was posted when the finish ended), the next's list ends and its submits.
+ * rd__sq_gap_parts: the parts from the times on rd's ms clock (endSeen the
+ * wait's return; wake, presented, finished: the submit thread's times
+ * after it, 0 where the next was taken before the wake-up; taken, ended,
+ * submitted: the next's) */
+typedef struct RdSqGap {
+    double wakeMs, presentMs, finishMs, postMs, endMs, submitMs;
+} RdSqGap;
+
+void rd__sq_gap_parts(double endSeen, double wake, double presented, double finished, double taken,
+                      double ended, double submitted, RdSqGap *out);
+void rd__sq_note_gap(RdSubmitQ *q, const RdSqGap *g, bool notPosted);
+/* a present call made with a later picture submitted, its time (the
+   guard's input, RD_GPU_FIRST_CALL_MS or more is long) */
+void rd__sq_note_guard(RdSubmitQ *q, double callMs);
+
+/* The present-call guard of the ahead order: of the last
+ * RD_AHEAD_GUARD_WINDOW present calls made with a later picture submitted,
+ * RD_AHEAD_GUARD_LONG or more of RD_GPU_FIRST_CALL_MS or more put the run
+ * back on one picture at a time (a driver whose present waits for all the
+ * work submitted, not only its own picture's: there each present would
+ * wait for the next picture's GPU work).  rd__sq_guard_note: one call into
+ * the window, true when the window now holds that many long ones (the
+ * caller turns the order off; the guard keeps counting) */
+#define RD_AHEAD_GUARD_WINDOW 16u
+#define RD_AHEAD_GUARD_LONG 4u
+
+typedef struct RdSqGuard {
+    uint16_t bits; /* the window's calls, newest in bit 0: 1 long */
+    uint8_t n;     /* calls in the window (at most RD_AHEAD_GUARD_WINDOW) */
+    uint8_t longN; /* long calls in the window */
+    unsigned calls, longs;
+} RdSqGuard;
+
+bool rd__sq_guard_note(RdSqGuard *g, double callMs);
+
+/* What the ahead order's checks found after one of its steps (the first
+ * reason found, RD_AHEAD_OFF_NONE: go on): the device lost; a submit that
+ * moved the submission counter by nothing (before, after: rhi_last_submitted
+ * around the job's submits; the counter moves only on a submit that
+ * succeeded); a wait for the held picture's GPU work that failed (result
+ * not 0, rhi.h rhi_wait_value_ns) */
+enum {
+    RD_AHEAD_OFF_NONE,
+    RD_AHEAD_OFF_LOST,
+    RD_AHEAD_OFF_SUBMIT,
+    RD_AHEAD_OFF_WAIT,
+    RD_AHEAD_OFF_GUARD,
+    RD_AHEAD_OFF_THREAD,
+    RD_AHEAD_OFF_TEST,
+    RD_AHEAD_OFF_PREV
+};
+
+int rd__sq_ahead_check_submit(uint64_t before, uint64_t after, bool lost);
+int rd__sq_ahead_check_wait(int32_t result, bool lost);
+
+/* The 10 s line's clause of the ahead order from b (empty where it did not
+   run in the block and offWhy is NULL); offWhy: why it is off for the run
+   (NULL: not off); out always terminated, its length returned */
+size_t rd__sq_ahead_text(const RdSubmitBlock *b, const char *offWhy, char *out, size_t cap);
 /* nothing queued or running */
 bool rd__sq_idle(const RdSubmitQ *q);
 /* the oldest finished job's times not yet taken (false: none) */

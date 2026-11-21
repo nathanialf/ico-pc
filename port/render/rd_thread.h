@@ -361,7 +361,10 @@ bool rd__replay_frame_async(const RdFrame *f, int keep, bool present);
  * refused: nothing is posted and the caller replays it inside the step on
  * the host's stack; never here on the game's fiber stack). */
 bool rd__replay_frame_post_ok(void);
-bool rd__thread_picture_busy(void);
+/* (its value: what was busy, rd.h RD_BUSY_*, 0 RD_BUSY_NONE; with the ahead
+ * order in effect the submit thread's job is not busy, rd_submit_thread.h
+ * "ahead") */
+int rd__thread_picture_busy(void);
 bool rd__replay_frame_post(const RdFrame *f, int keep, double *waitMs);
 /* The tests' read (rd_tex_test): the render thread's part of
  * rd__thread_picture_busy alone, the job of the picture posted last not

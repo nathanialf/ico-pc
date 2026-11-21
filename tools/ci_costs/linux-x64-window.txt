@@ -790,9 +790,9 @@ rd_subpass_probe_plain 14.77
 rd_subpass_probe_refused 16.24
 rd_subpass_probe_rule 0.01
 rd_subpass_probe_selftest 9.99
-rd_tex 70.10
+rd_tex 101.10  # estimate: the run before plus the ahead order's seven cases (14 runs of 50 ticks at 40 ms, not run here)
 rd_tex_gl 3.90
-rd_tex_mali 67.88
+rd_tex_mali 98.88  # estimate: the run before plus the ahead order's seven cases (14 runs of 50 ticks at 40 ms, not run here)
 rd_tex_pool 0.57
 rd_thread_ab 423.35  # estimate: 215.5 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 1.96
 rd_turn_fold_ab 516.57  # estimate: 262.9 s local (merge-wt_FIX-P5b-20261115T232657Z.lvp.log) x 1.96
