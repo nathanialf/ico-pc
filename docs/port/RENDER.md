@@ -1192,7 +1192,7 @@ failed submit was none of a picture's: a capture, a readback or a check). The fr
 the lost frame, `rd_begin_frame` copies a frame to memory before the ring reuses its slot when the
 backend still has a submission open at or after that frame and a slot wait has blocked 100 ms or
 more (`RhiGpuProgress.waitingNs`; `rd__loss_keep_recycle`, an ordinary dump held as bytes) and a
-picture of that frame was handed to a replay (`RdFrame.sent`, set where the replay is asked for in
+picture of that frame was handed to a replay (`rd__frame_sent`, set where the replay is asked for in
 `rd_thread.c`; with Frame rate Original a picture the gate left out was never on the GPU and is
 not copied, counted as `not copied: never handed to the GPU`). The copy waits only for the reads
 of the pictures handed over (`dumpFrame`'s reads-only mode, `rd_thread_reads_wait`; `rd_dump.c`

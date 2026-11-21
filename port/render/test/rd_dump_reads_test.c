@@ -14,8 +14,8 @@
  *              starts only after the call began: each of the three waits
  *              for its reads (the game thread's read waits grow, the job
  *              ran) and makes no drain; the bytes are the same;
- *   sent       RdFrame.sent: 0 for a frame recorded and never handed over,
- *              1 once a picture of it is (rd_thread.c noteSent), 0 again
+ *   sent       rd__frame_sent: false for a frame recorded and never handed over,
+ *              true once a picture of it is (rd_thread.c noteSent), false again
  *              when its slot is recycled (rd__frame_reset).
  * Each picture's job waits 150 ms after the call is asked for before it
  * starts: the order is what is checked, not a time (a job that starts
@@ -160,7 +160,8 @@ int main(void)
     recordFrame(a);
     const RdFrame *f = rd__last_frame();
     const uint32_t number = f->number;
-    CHECK(f->closed && f->sent == 0, "sent: a frame recorded and never handed over is not sent");
+    CHECK(f->closed && !rd__frame_sent(f),
+          "sent: a frame recorded and never handed over is not sent");
 
     /* the drained dump with no host: the bytes every call below must make */
     void *ref = NULL;
@@ -207,7 +208,7 @@ int main(void)
             CHECK(0, "reads open: a picture handed over (%s)", names[call]);
             break;
         }
-        CHECK(f->sent == 1, "sent: the frame handed over is sent (%s)", names[call]);
+        CHECK(rd__frame_sent(f), "sent: the frame handed over is sent (%s)", names[call]);
         const unsigned d0 = s_drains;
         const uint64_t w0 = rd_thread_read_wait_ns();
         size_t want = 0, got = 0;
@@ -248,7 +249,7 @@ int main(void)
     recordFrame(a);
     for (int i = 0; i < RD_FRAME_RING; i++) {
         CHECK(g_rd.frames[i].number != number, "the ring moved past frame %u", number);
-        CHECK(g_rd.frames[i].sent == 0, "sent: slot %d recycled, not sent", i);
+        CHECK(!rd__frame_sent(&g_rd.frames[i]), "sent: slot %d recycled, not sent", i);
     }
     free(ref);
     rd_destroy_texture(a);

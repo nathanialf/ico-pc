@@ -42,9 +42,6 @@ static unsigned second_at(PerfSecs *s, double nowMs)
 
 void perf_secs_step(PerfSecs *s, int stage, double nowMs)
 {
-    if (s->stage != PERF_SECS_NO_STAGE && stage != s->stage) {
-        s->changed = true;
-    }
     s->stage = stage;
     const unsigned i = second_at(s, nowMs);
     if (i < PERF_SECS_MAX && !s->stageSet[i]) {
@@ -61,11 +58,6 @@ void perf_secs_picture(PerfSecs *s, double nowMs)
     } else {
         s->over++;
     }
-}
-
-bool perf_secs_cut_due(const PerfSecs *s)
-{
-    return s->changed;
 }
 
 static void put(char *out, size_t cap, size_t *at, const char *fmt, ...)
@@ -137,7 +129,7 @@ size_t perf_secs_block_text(PerfSecs *s, double nowMs, char *out, size_t cap)
 
 /* the window's (the game thread's: steps, drained records and the block's
    end all run there) */
-static PerfSecs s_win = {-1.0, PERF_SECS_NO_STAGE, false, 0, 0, 0, {0}, {0}, {false}};
+static PerfSecs s_win = {-1.0, PERF_SECS_NO_STAGE, 0, 0, 0, {0}, {0}, {false}};
 
 void perf_secs_window_step(int stage, double nowMs)
 {
@@ -147,11 +139,6 @@ void perf_secs_window_step(int stage, double nowMs)
 void perf_secs_window_picture(double nowMs)
 {
     perf_secs_picture(&s_win, nowMs);
-}
-
-bool perf_secs_window_cut_due(void)
-{
-    return perf_secs_cut_due(&s_win);
 }
 
 size_t perf_secs_window_block_text(double nowMs, char *out, size_t cap)

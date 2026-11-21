@@ -217,6 +217,16 @@ typedef struct RdSqGap {
 void rd__sq_gap_parts(double endSeen, double wake, double presented, double finished, double taken,
                       double ended, double submitted, RdSqGap *out);
 void rd__sq_note_gap(RdSubmitQ *q, const RdSqGap *g, bool notPosted);
+/* A job of the ahead order presented: the time its present's time
+ * (RdSubmitJob.presentMs) counts from, the later of its own submit's end
+ * and the picture before's GPU end as seen (0: not seen).  A job submitted
+ * behind the picture before became the GPU's current picture only at that
+ * end, so its present time holds its own GPU time and the call, as the
+ * one-at-a-time order's does (rd_submit_thread.c tail), and one picture's
+ * GPU stall shows in that picture's record alone, not in the next one's
+ * too (the "presents blocked over 50 ms" count, the stalled-replay lines,
+ * the FIFO fallback's count of long presents) */
+double rd__sq_present_from(double submitEnd, double beforeEnd);
 /* a present call made with a later picture submitted, its time (the
    block's count of them, RD_GPU_FIRST_CALL_MS or more is long) */
 void rd__sq_note_guard(RdSubmitQ *q, double callMs);
@@ -293,11 +303,14 @@ typedef struct RdSqGuard {
 bool rd__sq_guard_note(RdSqGuard *g, bool counted);
 
 /* What the ahead order's checks found after one of its steps (the first
- * reason found, RD_AHEAD_OFF_NONE: go on): the device lost; a submit that
- * moved the submission counter by nothing (before, after: rhi_last_submitted
- * around the job's submits; the counter moves only on a submit that
- * succeeded); a wait for the held picture's GPU work that failed (result
- * not 0, rhi.h rhi_wait_value_ns) */
+ * reason found, RD_AHEAD_OFF_NONE: go on): the device lost; a job whose
+ * submits moved the submission counter by fewer than its submit steps
+ * (before, after: rhi_last_submitted around the job's submits; steps: its
+ * RD_SQ_SUBMIT steps, rd__sq_tail_steps; the counter moves by one on each
+ * submit that succeeded, so one failed submit of two leaves it a step
+ * short; more than steps is another thread's submit landing between the
+ * reads, not a failure); a wait for the held picture's GPU work that
+ * failed (result not 0, rhi.h rhi_wait_value_ns) */
 enum {
     RD_AHEAD_OFF_NONE,
     RD_AHEAD_OFF_LOST,
@@ -309,7 +322,7 @@ enum {
     RD_AHEAD_OFF_PREV
 };
 
-int rd__sq_ahead_check_submit(uint64_t before, uint64_t after, bool lost);
+int rd__sq_ahead_check_submit(uint64_t before, uint64_t after, uint32_t steps, bool lost);
 int rd__sq_ahead_check_wait(int32_t result, bool lost);
 
 /* The 10 s line's clause of the ahead order from b (empty where it did not

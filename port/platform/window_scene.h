@@ -240,6 +240,15 @@ size_t window_scene_vu_fit_text(char *out, size_t cap, const SceneVuFit *f);
    the ranked lines' vertex estimate's own): a line explaining less of the
    work's variance names no step (issue 179's v0.11.13 log: R^2 0.79) */
 #define WINDOW_SCENE_HINT_R2 0.8
+/* The hint's printed figures kept to known widths, so the text has a
+   known longest (window_host.c hint[512]; window_scene_test.c sweeps it):
+   the GPU's time a picture at most WINDOW_SCENE_HINT_GPU_MAX_MS (a block's
+   mean over a 10 s block: the GPU hang limit ends any picture far below
+   it) and the game's rate at most WINDOW_SCENE_HINT_FPS_MAX (the game runs
+   at 25 to 60) or no hint; every other figure is one of these or less */
+#define WINDOW_SCENE_HINT_GPU_MAX_MS 9999.9
+#define WINDOW_SCENE_HINT_FPS_MAX 999.9
+#define WINDOW_SCENE_HINT_TEXT 512
 
 /* The GPU-bound hint at the end of the 10 s presents line (issue 123: the
    Adreno 740 at Custom 3x made 25.7 presented fps against the game's 30,

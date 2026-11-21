@@ -51,7 +51,11 @@
  *            16 turns it, the window sliding past old ones); the
  *            idle gap's parts summing to the gap, both shapes (the next taken
  *            after the picture before's present, or across its GPU end); the
- *            checks that turn the order off; the 10 s clause.
+ *            checks that turn the order off (a job's submits short of its
+ *            submit steps, another thread's submit between the reads no
+ *            failure); a job's present time from the picture before's GPU
+ *            end (one GPU stall one long present, not two); the 10 s
+ *            clause.
  */
 #include <stdio.h>
 #include <string.h>
@@ -508,10 +512,39 @@ static void testAhead(void)
         CHECK(rd__sq_ahead_text(&bl, "x", text, 8) == 7 && text[7] == '\0');
     }
 
-    /* what turns the order off */
-    CHECK(rd__sq_ahead_check_submit(10, 12, false) == RD_AHEAD_OFF_NONE);
-    CHECK(rd__sq_ahead_check_submit(10, 10, false) == RD_AHEAD_OFF_SUBMIT);
-    CHECK(rd__sq_ahead_check_submit(10, 12, true) == RD_AHEAD_OFF_LOST);
+    /* what turns the order off: a job's submits short of its submit steps
+       (two lists, one failed without a loss: the counter one short), none
+       moved; another thread's submit landing between the reads is no
+       failure (more than the steps) */
+    CHECK(rd__sq_ahead_check_submit(10, 12, 2, false) == RD_AHEAD_OFF_NONE);
+    CHECK(rd__sq_ahead_check_submit(10, 11, 2, false) == RD_AHEAD_OFF_SUBMIT);
+    CHECK(rd__sq_ahead_check_submit(10, 11, 1, false) == RD_AHEAD_OFF_NONE);
+    CHECK(rd__sq_ahead_check_submit(10, 13, 2, false) == RD_AHEAD_OFF_NONE);
+    CHECK(rd__sq_ahead_check_submit(10, 10, 1, false) == RD_AHEAD_OFF_SUBMIT);
+    CHECK(rd__sq_ahead_check_submit(10, 10, 0, false) == RD_AHEAD_OFF_SUBMIT);
+    CHECK(rd__sq_ahead_check_submit(12, 10, 2, false) == RD_AHEAD_OFF_SUBMIT);
+    CHECK(rd__sq_ahead_check_submit(10, 12, 2, true) == RD_AHEAD_OFF_LOST);
+    {
+        /* a job's present time from the moment it became the GPU's current
+           picture: one GPU stall is one long present.  Picture N submitted
+           at 0 ms with nothing before it, its GPU work stalled to 200 ms;
+           N+1 submitted behind it at 10 ms, its own 40 ms of GPU work
+           ending at 240, each present call 1 ms.  N's present 201 ms (the
+           stall, its own); N+1's from N's end, 41 ms, not 231 (the stall
+           again): of the two, one over 50 ms ("presents blocked over 50
+           ms", the stalled-replay lines, the FIFO fallback's count) */
+        const double nFrom = rd__sq_present_from(0.0, 0.0);
+        const double n1From = rd__sq_present_from(10.0, 200.0);
+        const double nMs = 201.0 - nFrom, n1Ms = 241.0 - n1From;
+        CHECK(nFrom == 0.0 && n1From == 200.0 && nMs == 201.0 && n1Ms == 41.0);
+        CHECK((nMs > 50.0 ? 1 : 0) + (n1Ms > 50.0 ? 1 : 0) == 1);
+        /* its submit after the picture before's end (the GPU idle between,
+           the next not yet posted): from its own submit, as one at a time */
+        CHECK(rd__sq_present_from(52.0, 47.5) == 52.0);
+        /* the picture before's end not seen (the order off with it
+           submitted, no wait made): from its own submit */
+        CHECK(rd__sq_present_from(10.0, 0.0) == 10.0);
+    }
     CHECK(rd__sq_ahead_check_wait(0, false) == RD_AHEAD_OFF_NONE);
     CHECK(rd__sq_ahead_check_wait(1, false) == RD_AHEAD_OFF_WAIT);
     CHECK(rd__sq_ahead_check_wait(INT32_MIN, false) == RD_AHEAD_OFF_WAIT);

@@ -1349,7 +1349,7 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   empty one else the oldest; and a recycle run over a fake history (the GPU a frame or two behind
   with no copy, then stuck at frame 129 with the wait stalled: the lost frame survives the ring
   moving on, at most four copies are ever held, a GPU that finishes everything frees them all).
-  A frame no picture of which was handed to a replay (`RdFrame.sent`) is never needed, decided
+  A frame no picture of which was handed to a replay (`rd__frame_sent`) is never needed, decided
   after the stall's test and before the throttle (no attempt counted; under the pause still "not
   sent"); the Mali reporter's 8 copies (each frame newer than the newest submission) are 8 "not
   sent" with the flag off and the same 8 taken with it on. The loss report's choice is unchanged by
@@ -1364,8 +1364,9 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   (`rd_dump_retained_frame_bytes`, `_into`, `_mem_reads`) make no drain and the drained dump's
   bytes (`rd_dump_retained_frame_mem` still drains: the control); with a picture handed over whose
   job starts 150 ms after the call is asked for, each call waits for its reads (the read waits
-  grow, the job ran) and makes no drain, with the same bytes; `RdFrame.sent` is 0 for a frame never
-  handed over, 1 once one is, 0 again after its slot is recycled. The order is checked, not a time.
+  grow, the job ran) and makes no drain, with the same bytes; `rd__frame_sent` is false for a frame
+  never handed over, true once one is, false again after its slot is recycled. The order is
+  checked, not a time.
 - `rd_passring_test.c`: the pass ring the device-loss report prints: order, wrap, the replay table, the
   replays printed (the last three, whole at 430 passes a replay), the line format (the VU
   vertex pre-pass's entry among them, `testVuPre`) and the loss bisect's line; the pipeline
@@ -1769,7 +1770,7 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   composited level not constant over level texels i0 - 2 to i0 + 3, the kernels' joint support and
   a tie: N = 3 level texels), some texels differing; the |d| histogram printed (`checkEdges2x`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#the-shadow-edges-above-1x)).
-- `rd_state_test.c`: the recording half of rd without a GPU: the retained-frame lookup of the slow-scene dump (`rd__retained_frame` and `rd_frame_retained`: the last closed and the one before by number, other numbers none; `rd_dump_retained_frame` writes nothing for a number outside the ring; the slow-scene dump's two steps of `rd_dump_mem.h`: the frame measured with nothing copied is the memory dump's size, copied into a block of exactly that size it is the memory dump byte for byte, a block one byte short refused, a frame outside the ring neither measured nor copied; the reads-only dump, `rd_dump_retained_frame_mem_reads`, the drained dump byte for byte), the payload arena's alignment gap
+- `rd_state_test.c`: the recording half of rd without a GPU: the retained-frame lookup of the slow-scene dump (`rd__retained_frame` and `rd_frame_retained`: the last closed and the one before by number, other numbers none; `rd_dump_retained_frame` writes nothing for a number outside the ring; the slow-scene dump's two steps of `rd_dump_mem.h`: the frame measured with nothing copied is the memory dump's size, copied into a block of exactly that size it is the memory dump byte for byte, a block one byte short refused, a frame outside the ring neither measured nor copied; the reads-only dump, `rd_dump_retained_frame_mem_reads`, the drained dump byte for byte: with no host both waits return at once, so this shows only that the mode serialises the same frame the same way; that it waits for the reads alone beside a running render thread is `rd_dump_reads_test.c`'s), the payload arena's alignment gap
   zeroed over a reused buffer's bytes (`testPayloadPad`), the sheet shader's keys in the set
   (`testSheetSet`, issue 188: no `font_sheet_ps` key on a tile-based profile at 1x and 2x with a
   1008-line output, the frame's 8 at a 3x scene, the overlay's 4 at 1080 lines, 10 with `[dev]
@@ -1903,11 +1904,21 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   thread's sake, no present call waiting for GPU work (by the faked clock nothing owed as any
   call's wait began, by the wall clock no call 2 ms past its own time; the whole call is printed,
   not bound: a loaded runner stretches the faked call's own time). The ahead order's rate requirements (the verdict on
-  from the start, a 1.5 ms present call, a 1.0 ms submit, an 8 ms walk, 40 ms ticks, the present
-  back at the end of the job before's work): 33 and 37.5 ms pictures 48 of 50 presented (25 a
-  second less two ticks), 48 ms at least 20.0 a second with the faked GPU busy at least 97 % of
-  the measured span, 60 ms at least 16.0, each less what the machine took from the case's run
-  without the rule (its control: that run keeps the faked GPU fed too), none skipped for the
+  from the start, a 1.5 ms present call, an 8 ms walk, 40 ms ticks, the present back at the end
+  of the job before's work): 33 ms pictures 48 of 50 presented and 37.5 ms pictures 98 of 100 (25
+  a second less two ticks), both with the one-at-a-time chain's cost of issue 179's reporter's
+  log (2.4 to 4.7 ms from a GPU end to the next submit: a 1.0 ms wake-up after each GPU end the
+  fake's waits return at, the call, a 2.2 ms submit); the 37.5 ms case is run a third time in the
+  same run one picture at a time (the verdict on, `rd__submit_test_ahead(0)`: the order before the ahead one),
+  which must present at most 97 of 100 and fewer than the ahead order (its chain passes the tick:
+  the phone's loss in ordinary play reproduced), with no job submitted ahead and every job's GPU end waited for by
+  the submit thread (at 33 ms the chain fits inside the tick in either order, so no twin is run);
+  48 ms at least 20.0 a second with the faked GPU busy at least 97 % of the measured span and, in
+  the same check, every job submitted ahead, at least three quarters before the picture before's
+  GPU end, no submit thread wait and no way back taken (the counts that tell the orders apart on a
+  loaded runner, where the busy share alone does not); 60 ms at least 16.0; each less what the
+  machine took from the case's run without the rule (its control: that run keeps the faked GPU
+  fed too), none skipped for the
   submit thread, no present call waiting for GPU work as above, no long call counted by the
   guard as waiting for the later picture; the 37.5 and 48 ms cases again with 6 of every 16
   present calls 6 ms long while the later picture's work runs on keep the order (some calls

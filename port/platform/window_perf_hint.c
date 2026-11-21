@@ -65,9 +65,6 @@ static void on_line(bool again)
     t.rateNs = s_info.rateNs;
     t.wakeMs = s_wakeMs;
     t.madeMs = s_h.madeMs;
-    t.alone = s_h.alone;
-    t.firstN = s_h.firstN;
-    t.firstMs = s_h.firstMs;
     perf_hint_on_text(&t, line, sizeof(line));
     if (again) {
         ico_log_limited("window: performance hints again", "window: %s", line);
@@ -106,8 +103,7 @@ static int SDLCALL hint_main(void *u)
         if (ev & PERF_HINT_EV_REFUSED) {
             char line[512];
 
-            /* the rate the system gave, and the game thread alone asked
-               once where it gave one (perf_hint.h) */
+            /* the rate the system gave (perf_hint.h) */
             (void)perf_hint_refused_text(&s_h, s_info.api, s_gameMode, line, sizeof line);
             fprintf(stderr, "window: %s\n", line);
             __atomic_store_n(&s_refused, 1, __ATOMIC_RELEASE);
@@ -135,7 +131,7 @@ void window_perf_hint_open(void)
                 s_info.why, perf_hint_game_mode_words(s_gameMode));
         return;
     }
-    ops.rateNs = s_info.rateNs; /* the retry's gate (perf_hint.h make) */
+    ops.rateNs = s_info.rateNs; /* the refused line's (perf_hint_refused_text) */
     perf_hint_init(&s_h, &ops);
     s_wakeMs = perf_hint_wake_ms(s_info.rateNs);
     s_stop = s_refused = s_made = 0;

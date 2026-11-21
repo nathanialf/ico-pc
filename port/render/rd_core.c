@@ -543,7 +543,7 @@ void rd__frame_reset(RdFrame *f)
     f->closed = 0;
     f->keep = 0;
     f->number = 0;
-    __atomic_store_n(&f->sent, 0u, __ATOMIC_RELAXED);
+    rd__frame_sent_clear(f);
 }
 
 void rd__frame_free(RdFrame *f)

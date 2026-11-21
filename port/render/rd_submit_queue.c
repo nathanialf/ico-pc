@@ -360,12 +360,18 @@ bool rd__sq_guard_note(RdSqGuard *g, bool counted)
     return g->longN >= RD_AHEAD_GUARD_LONG;
 }
 
-int rd__sq_ahead_check_submit(uint64_t before, uint64_t after, bool lost)
+int rd__sq_ahead_check_submit(uint64_t before, uint64_t after, uint32_t steps, bool lost)
 {
     if (lost) {
         return RD_AHEAD_OFF_LOST;
     }
-    return after > before ? RD_AHEAD_OFF_NONE : RD_AHEAD_OFF_SUBMIT;
+    const uint64_t need = steps > 0 ? steps : 1u;
+    return after >= before && after - before >= need ? RD_AHEAD_OFF_NONE : RD_AHEAD_OFF_SUBMIT;
+}
+
+double rd__sq_present_from(double submitEnd, double beforeEnd)
+{
+    return beforeEnd > submitEnd ? beforeEnd : submitEnd;
 }
 
 int rd__sq_ahead_check_wait(int32_t result, bool lost)

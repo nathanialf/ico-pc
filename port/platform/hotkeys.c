@@ -4,7 +4,6 @@
  * The window build's diagnostic keys (hotkeys.h).
  */
 #include "hotkeys.h"
-#include "perf_secs.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -36,14 +35,7 @@ IcoHotkey ico_hotkey_for_mod(unsigned int key, int repeat, int shift)
 
 unsigned long long ico_stats_period_ns(unsigned long long now, unsigned long long fast_until)
 {
-    return ico_stats_period_cut_ns(now, fast_until, perf_secs_window_cut_due());
-}
-
-unsigned long long ico_stats_period_cut_ns(unsigned long long now, unsigned long long fast_until,
-                                           int stage_changed)
-{
-    const unsigned long long p = now < fast_until ? ICO_STATS_FAST_PERIOD_NS : ICO_STATS_PERIOD_NS;
-    return stage_changed && p > ICO_STATS_CUT_NS ? ICO_STATS_CUT_NS : p;
+    return now < fast_until ? ICO_STATS_FAST_PERIOD_NS : ICO_STATS_PERIOD_NS;
 }
 
 unsigned long long ico_stats_fast_toggle(unsigned long long now, unsigned long long fast_until)

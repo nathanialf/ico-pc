@@ -6,7 +6,7 @@
 # test's own whose render thread is a thread per picture handed over: the
 # slow-scene dump's three calls make no drain and the drained dump's bytes,
 # with no picture handed over and with one whose reads are still open
-# (each waits for those reads); RdFrame.sent set at the hand-over and
+# (each waits for those reads); rd__frame_sent set at the hand-over and
 # cleared at the recycle.  Each picture's job starts 150 ms after the call
 # is asked for: the order is checked, not a time.
 add_executable(rd_dump_reads_test test/rd_dump_reads_test.c)
