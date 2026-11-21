@@ -79,6 +79,33 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   pipelines field holding the words before the note, the summary made again by the beat that sees
   the figure change and only then (the hook's calls counted), the report's words
   (`last_run_skin_now`), and with the check off or no source nothing in the field or the words.
+- `perf_secs_test.c` (ctest `perf_secs`; CPU only): pictures a second by stage
+  (`port/platform/perf_secs.c`, issue 179,
+  [PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#pictures-a-second)): a 10 s block at 25 a
+  second with a 0.4 s hitch (its second 15), a stage change inside a second (the second keeps the
+  stage of its first step) and the block's cut asked from then until the line is taken, the part
+  second at the end, pictures before any step (`?`), a quiet end, a block under 1 s, seconds past
+  the 64 held counted apart, no second begun (no line) and a short buffer; the lines word for
+  word.
+- `hotkeys_test.c`, its cut case (`hotkeys`): the stats period at most 2 s with a stage change in
+  the block (`ico_stats_period_cut_ns`), F11's 1 s kept; the window's own seconds (a stage, then
+  another) asking the cut until their line is taken, the line word for word.
+- `attempt_ledger_test.c`, its stalls clause (`attempt_ledger`): the clause names the stall lines'
+  rule (`a present over 100 ms or a pass over 8 times its block median and 40 ms`), the Adreno
+  row's second count left out where the row is not applicable.
+- `stall_coincide_test.c`, its small medians (`stall_coincide`): a piece whose median is under
+  0.1 ms left out of the judgement (0.1 kept, 0.099 left out), the VU triangles' ratio only
+  against a median of 1 or more.
+- `perf_hint_test.c`, its retry (`perf_hint`): a first session refused for three threads on a
+  system that gives an update rate asked once more for the game thread alone; made: the game
+  thread's alone after a thread change (no setThreads) and the background, the start line's words;
+  refused again: off, both calls in the line word for word, never asked again; no rate or one
+  thread: one call, the line says why; refused after a session was made: no retry, said so.
+- `pace_policy_test.c` and `window_scene_test.c`, the presents line's words (`pace_policy`,
+  `window_scene`): the GPU span named as the median of the last 8 timed replays; the GPU gap
+  line's stalls named as presents blocked over 50 ms; the hint on the block's mean GPU work
+  whatever the median passed, no step named under R^2 0.80 (`fit: R^2 0.75, under 0.80`), the
+  fit's R^2 or `the work flat` in its words, the longest hint under the window's 512 bytes.
 - `attempt_ledger_test.c`, its skin-phone case (`attempt_ledger`): the row `the skin check's own
   pipelines left out on a phone` (`ico_attempt_decide_skin_phone`) not applicable with the check
   off and off a phone, each with its words, on with its start words, its two counts in the block

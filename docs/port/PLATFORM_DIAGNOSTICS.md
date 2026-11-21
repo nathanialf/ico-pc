@@ -1350,7 +1350,9 @@ lines added beside them for issues 179 and 123:
   their block medians: list 0 x6.0, the others x1.1 (their median; 1 of 4 at x2 or more)` or
   `every piece grew, x3.0 to x3.5`, `; the GPU idle 0.2 ms before its work` (or `its work begun
   1.5 ms before the picture before ended`) and `; 13000 VU triangles against the block's median
-  12000 (x1.08)`. Two classes join the tally: `one piece grew` (two or more pieces, the largest at
+  12000 (x1.08)`. The medians start again at a stage change; a piece whose median is under 0.1 ms
+  is left out (issue 179's log had `the VU pre-pass x11019.2`), and the triangles' ratio needs a
+  median of 1 or more. Two classes join the tally: `one piece grew` (two or more pieces, the largest at
   twice its median or more, the others' median under twice) and `the GPU slow as a whole` (two or
   more pieces, every one at twice its median or more).
 - **Pass timing's cost** (`rd_perf_rank_stamp_cost_text`): each picture timed pass by pass against
@@ -1476,6 +1478,48 @@ lines added beside them for issues 179 and 123:
   then `the render thread busy` near 0 and the presented
   fps near the game's in the logo, op2 and stage 3 blocks, the hand-over count near the pictures
   presented; where the verdict is off, the blocks as without the rule.
+
+### Pictures a second
+
+`port/platform/perf_secs.c`, `.h` (fed by `window_perf_rank.c`'s steps and `window_clock_trap.c`'s
+presented pictures, written by `window_perf_rank_block`): one line a 10 s block, each whole second
+of it with its presented pictures, under the stage the game was in at the second's first step:
+
+`window: pictures a second: 42: 17 18 9 19 | 40: 12 11 12 (and 4 in the block's last 0.6 s)`
+
+A stage change in a block ends the block once it is 2 s old (`hotkeys.c`
+`ico_stats_period_cut_ns`, `ICO_STATS_CUT_NS`), so every 10 s line after it is of one stage. The
+block's presented fps and its worst second alone could not say whether 17.4 fps was 17 a second
+throughout or 25 with a hitch. A second with no step keeps the stage before it (`?` before any
+step); seconds past the 64 a block holds are counted at the end (`; 6 seconds past the 64 held, 6
+pictures in them`). Its cost: a step compares the stage, a picture adds one to its second (game
+thread, no lock).
+
+### Words the 10 s lines use
+
+- `GPU span G ms (the median of the last 8 timed replays)` (the presents line, `pace_policy.c`
+  `pace_budget_block_text`): the value the pacing reads at the block's end, not the block's mean
+  (the replays line's `GPU`).
+- `longest replay on the render thread alone T ms of N` (the presents line): the render thread's
+  part (`rd_replay_time_max`), without the submit thread's submit and present that the replays
+  line's `CPU ... (max M)` adds.
+- `after the first 8 of the 72 presents blocked over 50 ms: the GPU was idle ...` (the GPU gap
+  line) against `stalls 3 in the block (a present over 100 ms or a pass over 8 times its block
+  median and 40 ms; ...)` (the attempt ledger's clause, the stall lines' count): two counts of
+  different things.
+- The display line (`rd: display: scene ...`) once more when the frame's width first changes by
+  itself (`rd_diag_notes.c`): `..., frame 688 GS wide (...), border closed (written again: the
+  frame's width changed from 512)`.
+- The upload ring's grow line names the ring it replaces: `rd: the upload ring of frame slot 1
+  grows to 64 MB (this frame needs 32 MB; the 32 MB ring it replaces was made 41.2 s before, last
+  used 0.08 s before for 31 MB)`.
+- The performance hints' refusal says the rate the system gave and, where it gave one, the second
+  call for the game thread alone (`perf_hint.c` `perf_hint_refused_text`): `window: performance
+  hints: off (the system refused the session: APerformanceHint_createSession answered none for 3
+  threads in 0.67 ms and for the game thread alone in 0.41 ms; the system's update rate 16.67 ms;
+  API 34; game mode standard); the port runs as before`. Made for the game thread alone, the
+  start line ends `; the game thread alone: the system refused 3 threads in 0.67 ms)` and the
+  session keeps that one thread. The second call is made once a run, at the first session only.
 
 ### The issue ledger, continued
 

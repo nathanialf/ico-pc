@@ -3549,6 +3549,8 @@ include(rd_plain_camera.cmake)
 include(rd_draw_pattern.cmake)
 # the scene ledger: what each stage held and left out, by model and reason (rd_ledger.c, issue 221)
 include(rd_ledger.cmake)
+# the display line at the frame width's first change, the ring's grow words (rd_diag_notes.c)
+include(rd_diag_notes.cmake)
 # last: under asan the fixture replays run without the leak check (the driver's
 # exit leak); after every test's ENVIRONMENT is set
 include(rd_asan_fixture_leaks.cmake)

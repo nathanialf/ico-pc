@@ -6,7 +6,8 @@
  * block line's counts taken per block (the next block starts from 0), a
  * static row, rows not reported left out of the block line, the stalls
  * clause with and without an Adreno row and the block's stalls on that row's
- * second count, the high queue priority's row removed (v0.11.8: its start
+ * second count where the row applies (the stall lines' rule named in the
+ * clause), the high queue priority's row removed (v0.11.8: its start
  * words, left out of the blocks), out-of-range ids ignored and a short
  * buffer cut and terminated.
  */
@@ -14,6 +15,11 @@
 #include <string.h>
 
 #include "attempt_ledger.h"
+
+/* the stalls clause's rule (stall_coincide.h: a present over
+   STALL_PRESENT_MS or a pass over STALL_PASS_TIMES its median and
+   STALL_PASS_MS) */
+#define STALLS_RULE "a present over 100 ms or a pass over 8 times its block median and 40 ms"
 
 static int failures;
 #define CHECK(cond)                                                                                \
@@ -1150,7 +1156,8 @@ int main(void)
     /* and the block line is empty, with no stalls asked */
     CHECK(ico_attempt_block_text(b, sizeof(b), -1) == 0 && b[0] == '\0');
     CHECK(ico_attempt_block_text(b, sizeof(b), 0) > 0 &&
-          text_is(b, "attempts: stalls 0 in the block"));
+          text_is(b, "attempts: stalls 0 in the block (a present over 100 ms or a pass over 8 "
+                     "times its block median and 40 ms)"));
 
     /* a state with its why; the serial moves once */
     const uint32_t s0 = ico_attempt_serial();
@@ -1203,15 +1210,17 @@ int main(void)
     /* the Adreno row: the stalls clause says whether it is on */
     ico_attempt_decide_pass_objects(NULL);
     (void)ico_attempt_block_text(b, sizeof(b), 2);
-    CHECK(strstr(b, "; stalls 2 in the block (the Adreno attempt off)") != NULL);
-    /* the block's stalls on the Adreno row's second count, whatever its
-       state (the 4 of the block before were that block's) */
-    CHECK(strstr(b, "Qualcomm passes as VkRenderPass objects not applicable here 0 passes (2 "
-                    "stalls in the block)") != NULL);
+    CHECK(strstr(b, "; stalls 2 in the block (" STALLS_RULE "; the Adreno attempt off)") != NULL);
+    /* the block's stalls on the Adreno row's second count where the row
+       applies (the 4 of the block before were that block's) */
+    /* (since v0.11.14) not where the row does not apply */
+    CHECK(strstr(b, "Qualcomm passes as VkRenderPass objects not applicable here 0 passes; ") !=
+              NULL &&
+          strstr(b, "stalls in the block)") == NULL);
     ico_attempt_decide_pass_objects("Qualcomm's own driver");
     ico_attempt_fire(ICO_ATT_ADRENO_A, 120);
     (void)ico_attempt_block_text(b, sizeof(b), 1);
-    CHECK(strstr(b, "; stalls 1 in the block (the Adreno attempt on)") != NULL);
+    CHECK(strstr(b, "; stalls 1 in the block (" STALLS_RULE "; the Adreno attempt on)") != NULL);
     CHECK(strstr(b, "Qualcomm passes as VkRenderPass objects on 120 passes (1 stalls in the "
                     "block)") != NULL);
     CHECK(strstr(b, "Qualcomm queue at high priority") == NULL); /* removed: left out */
@@ -1230,7 +1239,7 @@ int main(void)
     (void)ico_attempt_block_text(b, sizeof(b), 3);
     CHECK(strstr(b, "Qualcomm passes as VkRenderPass objects on 0 passes (3 stalls in the "
                     "block)") != NULL);
-    CHECK(strstr(b, "; stalls 3 in the block (the Adreno attempt on)") != NULL);
+    CHECK(strstr(b, "; stalls 3 in the block (" STALLS_RULE "; the Adreno attempt on)") != NULL);
     CHECK(strstr(b, "Qualcomm queue at high priority") == NULL);
     CHECK(strstr(b, "priority") == NULL);
     /* the next block counts its own stalls only; none asked (-1): 0 */
@@ -1240,9 +1249,10 @@ int main(void)
     CHECK(strstr(b, "; stalls") == NULL);
     ico_attempt_decide_pass_objects(NULL);
     (void)ico_attempt_block_text(b, sizeof(b), 0);
-    CHECK(strstr(b, "; stalls 0 in the block (the Adreno attempt off)") != NULL);
-    CHECK(strstr(b, "Qualcomm passes as VkRenderPass objects not applicable here 0 passes (0 "
-                    "stalls in the block)") != NULL);
+    CHECK(strstr(b, "; stalls 0 in the block (" STALLS_RULE "; the Adreno attempt off)") != NULL);
+    CHECK(strstr(b, "Qualcomm passes as VkRenderPass objects not applicable here 0 passes; ") !=
+              NULL &&
+          strstr(b, "stalls in the block)") == NULL);
     /* a reset keeps the row removed, with its words */
     ico_attempt_reset();
     CHECK(ico_attempt_state_of(ICO_ATT_ADRENO_B) == ICO_ATT_REMOVED);

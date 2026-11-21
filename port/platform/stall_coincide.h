@@ -47,6 +47,12 @@
 /* a timed piece "grew" at this many times its block median or more (the
    one-piece and whole-GPU classes below) */
 #define STALL_GROWN 2.0
+/* a ratio is said only against a median of at least this: a piece's (ms;
+   issue 179's v0.11.13 log: "the VU pre-pass x11019.2", "list 5
+   x103074.9" against medians of a few microseconds) and the VU triangles'
+   (a median of 0 after a stage of keep frames) */
+#define STALL_RATIO_MIN_MS 0.1
+#define STALL_RATIO_MIN_TRIS 1.0
 
 /* The block's GPU times of each kind of pass (a key: the piece's kind,
    target and list), the last STALL_RING of each, for their medians; and
@@ -177,7 +183,8 @@ typedef struct StallMoment {
        the piece that grew most (pieceName, pieceFactor its time over its
        median), the median of the others' factors (othersFactor, 0 with no
        other), every piece's factors' range and the pieces at STALL_GROWN or
-       more (grown) */
+       more (grown); a piece whose median is under STALL_RATIO_MIN_MS is left
+   out */
     unsigned pieceN, grown;
     char pieceName[48];
     double pieceFactor, othersFactor, factorMin, factorMax;
@@ -194,7 +201,7 @@ typedef struct StallMoment {
 
 /* The pieces judged into m (pieceN, grown, the factors; the name left to
    the caller): n pieces' times ms[] and their block medians median[] (a
-   piece with no median above 0 left out).  The index of the piece with the
+   piece with no median of STALL_RATIO_MIN_MS or more left out).  The index of the piece with the
    largest factor, -1 with none */
 int stall_pieces_judge(StallMoment *m, const double *ms, const double *median, unsigned n);
 

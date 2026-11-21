@@ -7,7 +7,8 @@
  * stay with window_host.c and the binding layer), the stats period and
  * F11's toggle, and F12's file names; F5 and F9 are the save states' slot 1
  * save and load and F6 the Save states page (once per press, no Shift
- * variant), F6's code SDL3's. window_host.c checks the key codes against
+ * variant), F6's code SDL3's; a stage change cutting the block at 2 s
+ * (perf_secs.h). window_host.c checks the key codes against
  * SDL3's SDLK_F5, F6, F9, F11 and F12 at compile time and dispatches on
  * ico_hotkey_for.
  */
@@ -15,6 +16,7 @@
 #include <string.h>
 
 #include "hotkeys.h"
+#include "perf_secs.h"
 
 static int fails;
 
@@ -109,6 +111,23 @@ int main(void)
     CHECK(ico_stats_fast_toggle(110 * s, until) == 0);
     /* after it ran out, F11 starts a new 30 s */
     CHECK(ico_stats_fast_toggle(140 * s, until) == 170 * s);
+    /* a stage change in the block: 2 s at most (the fast 1 s kept) */
+    CHECK(ico_stats_period_cut_ns(5 * s, 0, 1) == 2 * s);
+    CHECK(ico_stats_period_cut_ns(5 * s, 0, 0) == 10 * s);
+    CHECK(ico_stats_period_cut_ns(100 * s, until, 1) == 1 * s);
+    /* the window's: a stage seen, then another: the cut, until the block's
+       line is taken (perf_secs.h) */
+    CHECK(ico_stats_period_ns(5 * s, 0) == 10 * s);
+    perf_secs_window_step(42, 1000.0);
+    CHECK(ico_stats_period_ns(5 * s, 0) == 10 * s);
+    perf_secs_window_step(43, 1500.0);
+    CHECK(ico_stats_period_ns(5 * s, 0) == 2 * s);
+    {
+        char line[128];
+        (void)perf_secs_window_block_text(3000.0, line, sizeof(line));
+        CHECK(strcmp(line, "pictures a second: 42: 0 | 43: 0") == 0);
+    }
+    CHECK(ico_stats_period_ns(5 * s, 0) == 10 * s);
 
     /* F12's files */
     CHECK(ico_frame_dump_paths("/p/dumps", "20261005-073732", 1234, dump, sizeof(dump), png,

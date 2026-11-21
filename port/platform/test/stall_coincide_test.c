@@ -5,7 +5,8 @@
  * before five, the ring's last 64, a full table), the spike rule at its
  * bounds, the classes of a moment (issue 179's: memory under the floor;
  * a core wait; pressure rising; the GPU clock low; none; one piece grew and
- * the GPU slow as a whole from the pieces against their medians), the tally and
+ * the GPU slow as a whole from the pieces against their medians; no ratio
+ * against a median under 0.1 ms or 1 triangle), the tally and
  * moment texts word for word, the pressure and status parsers, the
  * driver's thread names (CPU only).
  */
@@ -188,6 +189,36 @@ static void pieces_cases(void)
         CHECK(stall_classes(&m) == 1u << STALL_CLASS_NONE);
         const double none[1] = {-1.0};
         CHECK(stall_pieces_judge(&m, ms, none, 1) == -1 && m.pieceN == 0u);
+    }
+    /* a median under 0.1 ms is no ratio (issue 179's v0.11.13 log: "the
+       VU pre-pass x11019.2"): that piece left out, the grown one named;
+       the VU triangles against a median under 1: no ratio */
+    {
+        const double ms[3] = {44.0, 120.0, 9.0}, med[3] = {0.004, 20.0, 9.0};
+        memset(&m, 0, sizeof m);
+        m.gameCore = m.renderCore = -1;
+        m.gpuMhz = m.gpuMaxMhz = -1;
+        m.availMb = m.floorMb = -1;
+        m.pressure = -1;
+        m.headroom = -1.0;
+        CHECK(stall_pieces_judge(&m, ms, med, 3) == 1 && m.pieceN == 2u && m.pieceFactor == 6.0);
+        const double at[2] = {5.0, 5.0}, edge[2] = {0.1, 0.099};
+        CHECK(stall_pieces_judge(&m, at, edge, 2) == 0 && m.pieceN == 1u && m.pieceFactor > 49.99 &&
+              m.pieceFactor < 50.01);
+        (void)stall_pieces_judge(&m, ms, med, 3);
+        snprintf(m.pieceName, sizeof m.pieceName, "list 0");
+        m.trisKnown = true;
+        m.tris = 44893.0;
+        m.trisMedian = 0.0;
+        (void)stall_moment_text(&m, t, sizeof t);
+        CHECK(strstr(t, "; 44893 VU triangles against the block's median 0; ") != NULL &&
+              strstr(t, "VU triangles against the block's median 0 (x") == NULL);
+        m.trisMedian = 0.5;
+        (void)stall_moment_text(&m, t, sizeof t);
+        CHECK(strstr(t, "against the block's median 0; ") != NULL);
+        m.trisMedian = 1.0;
+        (void)stall_moment_text(&m, t, sizeof t);
+        CHECK(strstr(t, "against the block's median 1 (x44893.00)") != NULL);
     }
     /* the median peeked: as add's, nothing added */
     {
