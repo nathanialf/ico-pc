@@ -10,9 +10,9 @@ target_sources(ico_render PRIVATE rd_vu_share.c)
 # at every place, a triangle's first value its own, every value a kick of its
 # batch), the forms that get no list, a draw's verdict for every reason it
 # keeps the original list (the switch, the form, a chain plane, the hide and
-# later marks, a probe, a range off the batches) and for the draws that are no
-# candidate (skinned, not recorded, rule mode region or scissor), the bytes on
-# the device, the counts and their texts
+# later marks, a probe, a range off the batches, rule mode region or scissor,
+# not recorded) and for the draws that are no candidate (skinned), the bytes on
+# the device, the counts and their texts (the block's kept triangles by reason)
 add_executable(rd_vu_share_test test/rd_vu_share_test.c)
 target_compile_options(rd_vu_share_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_include_directories(rd_vu_share_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"

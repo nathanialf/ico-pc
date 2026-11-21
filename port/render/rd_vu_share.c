@@ -177,14 +177,27 @@ void rd__mesh_write_indices(const RdMeshRec *m, uint8_t *dst)
     }
 }
 
+/* the last verdict's triangles, for the rd__vu_share_kept after it (the
+   replay's thread alone writes and reads it) */
+static uint32_t s_lastTris;
+
 int rd__vu_share_draw(const RdMeshRec *m, uint8_t type, uint32_t rule, uint32_t chain,
                       uint32_t flags, bool recorded, uint32_t first, uint32_t last,
                       uint32_t firstIndex, uint32_t end, uint32_t *saved)
 {
     *saved = 0;
-    if (m == NULL || type != RDC_MESH || !recorded ||
-        (rule & ICO_VU_CLIP_MASK) != ICO_VU_CLIP_NONE) {
+    s_lastTris = 0;
+    if (m == NULL || type != RDC_MESH) {
         return -1;
+    }
+    s_lastTris = end > firstIndex ? (end - firstIndex) / 3u : 0u;
+    /* the two that were left uncounted until v0.11.14, told apart for the
+       log (issue 179: 4 % saved in the boat scene, the reasons not known) */
+    if ((rule & ICO_VU_CLIP_MASK) != ICO_VU_CLIP_NONE) {
+        return RD_VU_SHARE_CLIP;
+    }
+    if (!recorded) {
+        return RD_VU_SHARE_NOREC;
     }
     if (!rd__vu_share_on()) {
         return RD_VU_SHARE_OFF;
@@ -218,6 +231,7 @@ int rd__vu_share_draw(const RdMeshRec *m, uint8_t type, uint32_t rule, uint32_t 
 static uint64_t s_tris, s_saved, s_rec, s_draws;
 static uint64_t s_kept[RD_VU_SHARE_WHY_COUNT];
 static uint64_t s_bTris, s_bSaved, s_bRec;
+static uint64_t s_bKept[RD_VU_SHARE_WHY_COUNT]; /* the block's, in triangles */
 
 void rd__vu_share_note(uint32_t tris, bool shared, uint32_t saved)
 {
@@ -236,6 +250,7 @@ void rd__vu_share_kept(int why)
 {
     if (why > RD_VU_SHARE_YES && why < RD_VU_SHARE_WHY_COUNT) {
         __atomic_fetch_add(&s_kept[why], 1u, __ATOMIC_RELAXED);
+        __atomic_fetch_add(&s_bKept[why], s_lastTris, __ATOMIC_RELAXED);
     }
 }
 
@@ -253,7 +268,9 @@ void rd__vu_share_reset(void)
     s_tris = s_saved = s_rec = s_draws = 0;
     s_markScans = 0;
     s_bTris = s_bSaved = s_bRec = 0;
+    s_lastTris = 0;
     memset(s_kept, 0, sizeof(s_kept));
+    memset(s_bKept, 0, sizeof(s_bKept));
 }
 
 int rd__vu_share_stats_text(char *out, size_t cap)
@@ -266,14 +283,15 @@ int rd__vu_share_stats_text(char *out, size_t cap)
         "VU shared vertices %s: %llu triangles in %llu draws, %llu vertex invocations "
         "saved of %.0f (%.1f %%); kept on the original list: off %llu, form %llu, "
         "chain plane %llu, hide or later marks %llu, other %llu, compaction or "
-        "program entry %llu",
+        "program entry %llu, rule mode not none %llu, not recorded %llu",
         rd__vu_share_on() ? "on" : "off (ICO_RD_VU_SHARE=0)", (unsigned long long)t,
         (unsigned long long)dr, (unsigned long long)sv, all,
         all > 0.0 ? 100.0 * (double)sv / all : 0.0, (unsigned long long)s_kept[RD_VU_SHARE_OFF],
         (unsigned long long)s_kept[RD_VU_SHARE_FORM], (unsigned long long)s_kept[RD_VU_SHARE_CHAIN],
         (unsigned long long)s_kept[RD_VU_SHARE_MARKS],
         (unsigned long long)s_kept[RD_VU_SHARE_OTHER],
-        (unsigned long long)s_kept[RD_VU_SHARE_ENTRY]);
+        (unsigned long long)s_kept[RD_VU_SHARE_ENTRY], (unsigned long long)s_kept[RD_VU_SHARE_CLIP],
+        (unsigned long long)s_kept[RD_VU_SHARE_NOREC]);
 }
 
 /* 61k, 4.1k, 550: the VU line's words (window_scene.c count_words) */
@@ -286,6 +304,48 @@ static void words(double v, char *out, size_t cap)
     } else {
         snprintf(out, cap, "%.0f", v);
     }
+}
+
+size_t rd__vu_share_kept_text(char *out, size_t cap, unsigned n)
+{
+    /* the log's order (the plan's): the form first, then what a draw of a
+       mesh with a list met */
+    static const struct {
+        int why;
+        const char *word;
+    } k_words[] = {{RD_VU_SHARE_FORM, "form"},       {RD_VU_SHARE_CHAIN, "chain"},
+                   {RD_VU_SHARE_MARKS, "marks"},     {RD_VU_SHARE_OTHER, "other"},
+                   {RD_VU_SHARE_ENTRY, "entry"},     {RD_VU_SHARE_CLIP, "region"},
+                   {RD_VU_SHARE_NOREC, "no verdict"}};
+
+    if (cap == 0) {
+        return 0;
+    }
+    const double d = n ? (double)n : 1.0;
+    size_t at = 0;
+    const uint64_t off = __atomic_exchange_n(&s_bKept[RD_VU_SHARE_OFF], 0u, __ATOMIC_RELAXED);
+    int w = snprintf(out, cap, "; shared vertices kept (triangles a picture):");
+    if (w < 0) {
+        out[0] = '\0';
+        return 0;
+    }
+    at = (size_t)w < cap ? (size_t)w : cap - 1;
+    if (off != 0u && at + 1 < cap) {
+        char v[24];
+        words((double)off / d, v, sizeof(v));
+        w = snprintf(out + at, cap - at, " off %s,", v);
+        at = w < 0 ? at : (at + (size_t)w < cap ? at + (size_t)w : cap - 1);
+    }
+    for (size_t i = 0; i < sizeof k_words / sizeof k_words[0]; i++) {
+        const uint64_t t = __atomic_exchange_n(&s_bKept[k_words[i].why], 0u, __ATOMIC_RELAXED);
+        char v[24];
+        words((double)t / d, v, sizeof(v));
+        if (at + 1 < cap) {
+            w = snprintf(out + at, cap - at, "%s %s %s", i ? "," : "", k_words[i].word, v);
+            at = w < 0 ? at : (at + (size_t)w < cap ? at + (size_t)w : cap - 1);
+        }
+    }
+    return at;
 }
 
 size_t rd_vu_share_text(char *out, size_t cap, unsigned n)
@@ -308,5 +368,6 @@ size_t rd_vu_share_text(char *out, size_t cap, unsigned n)
         out[0] = '\0';
         return 0;
     }
-    return (size_t)w < cap ? (size_t)w : cap - 1;
+    const size_t at = (size_t)w < cap ? (size_t)w : cap - 1;
+    return at + rd__vu_share_kept_text(out + at, cap - at, n);
 }

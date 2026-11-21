@@ -11,7 +11,9 @@
 
 #include "attempt_ledger.h"
 #include "ico_gamestate.h"
+#include "ico_thread.h" /* ico_thread_now_ms: the seconds' clock (perf_secs.h) */
 #include "log_cost.h"
+#include "perf_secs.h" /* pictures a second by stage */
 #include "rd_perf_more.h"
 #include "rd.h"        /* rd_vu_prepass_on */
 #include "rd_ledger.h" /* the scene ledger: the stage in play */
@@ -96,6 +98,10 @@ void window_perf_rank_step(SceneKind kind, int stage, uint64_t ns)
         snprintf(s_stageName, sizeof s_stageName, "%s", name != NULL ? name : "");
     }
     SDL_UnlockSpinlock(&s_lock);
+    /* the stage into the seconds (perf_secs.h: a change cuts the block)
+       and the stall lines' medians (window_stall.h: a new stage's own) */
+    perf_secs_window_step(stage, ico_thread_now_ms());
+    window_stall_stage(stage);
     /* the scene ledger (rd_ledger.h) on the game's thread, the one that
        records the frames: a new stage writes the stage before's lines; the
        bug report takes the kept stages (report.h ico_report_set_ledger) */
@@ -253,6 +259,14 @@ void window_perf_rank_block(const WindowPerfBlock *in)
 {
     window_log_cost_mark("the display and slow scene lines"); /* before it (log_cost.h) */
     window_perf_rank_block_lines(in);
+    {
+        /* the block's pictures a second by stage (perf_secs.h); the
+           records before the first block dropped (in NULL) */
+        char secs[1024];
+        if (perf_secs_window_block_text(ico_thread_now_ms(), secs, sizeof secs) > 0 && in != NULL) {
+            fprintf(stderr, "window: %s\n", secs);
+        }
+    }
     if (in != NULL) {
         ledger_lines();
     }

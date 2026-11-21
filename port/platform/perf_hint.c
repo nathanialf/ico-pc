@@ -184,10 +184,28 @@ static uint64_t now_ns(PerfHint *h)
 
 static bool make(PerfHint *h, const int32_t *t, uint32_t n, uint32_t gen, uint64_t target)
 {
-    const uint64_t t0 = now_ns(h);
+    /* the game thread alone once that was the session the system gave
+       (t[0]: the game thread, window_perf_hint.c) */
+    if (h->alone && n > 1u) {
+        n = 1u;
+    }
+    uint64_t t0 = now_ns(h);
     void *s = h->ops.create(h->ops.user, t, n, (int64_t)target);
 
     h->madeMs = (double)(now_ns(h) - t0) / 1e6;
+    if (s == NULL && !h->everMade && !h->retried && h->ops.rateNs > 0 && n > 1u) {
+        /* once, at the first session: the game thread alone (a system that
+           gives an update rate has hint sessions; one that refuses
+           several threads may take one) */
+        h->retried = true;
+        h->firstN = n;
+        h->firstMs = h->madeMs;
+        n = 1u;
+        t0 = now_ns(h);
+        s = h->ops.create(h->ops.user, t, n, (int64_t)target);
+        h->madeMs = (double)(now_ns(h) - t0) / 1e6;
+        h->alone = s != NULL;
+    }
     if (s == NULL) {
         h->refused = true;
         return false;
@@ -307,6 +325,9 @@ unsigned perf_hint_step(PerfHint *h)
             return ev | PERF_HINT_EV_REFUSED;
         }
         ev |= PERF_HINT_EV_MADE;
+    }
+    if (h->session != NULL && haveT && gen != h->sessGen && h->alone) {
+        h->sessGen = gen; /* the game thread's session: its thread is the same */
     }
     if (h->session != NULL && haveT && gen != h->sessGen) {
         /* the render thread made again (a renderer switch): its new ids */
@@ -431,8 +452,46 @@ size_t perf_hint_on_text(const PerfHintOnText *t, char *out, size_t cap)
         put(out, cap, &len, "; the system gives no update rate");
     }
     put(out, cap, &len,
-        ", the reports made every %u ms off the game and render threads; made in %.2f ms)",
+        ", the reports made every %u ms off the game and render threads; made in %.2f ms",
         t->wakeMs, t->madeMs);
+    if (t->alone) {
+        put(out, cap, &len, "; the game thread alone: the system refused %u threads in %.2f ms",
+            (unsigned)t->firstN, t->firstMs);
+    }
+    put(out, cap, &len, ")");
+    return len;
+}
+
+size_t perf_hint_refused_text(const PerfHint *h, int api, int gameMode, char *out, size_t cap)
+{
+    size_t len = 0;
+
+    if (cap == 0) {
+        return 0;
+    }
+    out[0] = '\0';
+    put(out, cap, &len,
+        "performance hints: off (the system refused the session: "
+        "APerformanceHint_createSession answered none");
+    if (h->everMade) {
+        put(out, cap, &len, " in %.2f ms after a session was made", h->madeMs);
+    } else if (h->retried) {
+        put(out, cap, &len, " for %u threads in %.2f ms and for the game thread alone in %.2f ms",
+            (unsigned)h->firstN, h->firstMs, h->madeMs);
+    } else {
+        const uint32_t n = __atomic_load_n(&h->tidN, __ATOMIC_RELAXED);
+        put(out, cap, &len,
+            " for %u thread%s in %.2f ms (not asked again for the game thread alone: %s)",
+            (unsigned)n, n == 1u ? "" : "s", h->madeMs,
+            n <= 1u ? "one thread asked" : "no update rate given");
+    }
+    if (h->ops.rateNs > 0) {
+        put(out, cap, &len, "; the system's update rate %.2f ms", (double)h->ops.rateNs / 1e6);
+    } else {
+        put(out, cap, &len, "; the system gives no update rate");
+    }
+    put(out, cap, &len, "; API %d; game mode %s); the port runs as before", api,
+        perf_hint_game_mode_words(gameMode));
     return len;
 }
 

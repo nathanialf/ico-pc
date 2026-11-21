@@ -74,8 +74,13 @@ void window_stall_blocked(const RdPerfRecord *r);
    when the record before it blocked, the after line (from
    PRESENT_STALL_LINE_MS on), and its gap into the
    block's stall gaps (pace_gpu_gap_stall: the 10 s 'GPU between replays'
-   line's "across the N stalls") */
+   line's "after the N presents blocked over 50 ms") */
 void window_stall_after(const RdPerfRecord *r, PaceGpuGap *gap);
+/* The game's stage at a step (window_perf_rank.c): a change starts the
+   stall lines' medians again (the passes', the pieces' and the VU
+   triangles': issue 179's v0.11.13 log divided a stage 40 picture by
+   stage 42's medians and by medians of 0) */
+void window_stall_stage(int stage);
 /* A timed replay's pieces p (n) before they join the block's agg: when its
    present blocked PRESENT_STALL_LINE_MS or more, "window: stalled replay
    N (present ..., GPU ... against the block's ...): <its top passes

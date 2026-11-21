@@ -66,13 +66,18 @@ typedef struct RdLossChoice {
 void rd_loss_choose(const RdLossInput *in, RdLossChoice *out);
 
 /* Whether frame `frame` may still be on the GPU when the ring reuses its
- * slot: the backend's first unfinished submission is of that frame or a
- * later one (openFrame 0: none is open, the frame is done; frame 0: none).
- * Frames, not replays: frame numbers grow with the replays that draw them,
- * and the backend's tags carry both (RhiGpuProgress.openFrame), so the
- * game thread needs no read of the pass ring's table, which the render
- * thread writes */
-bool rd_loss_keep_needed(uint32_t frame, uint32_t openFrame);
+ * slot: a picture of it was handed to a replay (sent: RdFrame.sent, set at
+ * the hand-over, rd_thread.c) and the backend's first unfinished
+ * submission is of that frame or a later one (openFrame 0: none is open,
+ * the frame is done; frame 0: none).  Frames, not replays: frame numbers
+ * grow with the replays that draw them, and the backend's tags carry both
+ * (RhiGpuProgress.openFrame), so the game thread needs no read of the pass
+ * ring's table, which the render thread writes.  A frame never sent (with
+ * Frame rate Original, a picture the gate left out while the render thread
+ * was busy) was never on the GPU and is never a submission's frame: issue
+ * 179's v0.11.13 log copied 8 such frames, each newer than the newest
+ * submission (its line 782: frame 616, the newest frame 613) */
+bool rd_loss_keep_needed(uint32_t frame, bool sent, uint32_t openFrame);
 
 /* Whether a copy kept for frame `frame` can go: no submission is open, or
  * the first open one is two frames after it (a copy stays while the frame
@@ -83,11 +88,12 @@ bool rd_loss_keep_release(uint32_t frame, uint32_t openFrame);
  * RhiGpuProgress names it) blocked at least RD_LOSS_KEEP_STALL_NS
  * (waitingNs).  A copy is made only then: the losses of issues 179 and 211
  * came after such waits.  100 ms, not 50: one copy is not cheap
- * (rd_dump.c dumpFrame: the game thread drains the render and submit
- * threads, so it waits for the render thread's own slot wait and walk,
- * then serialises the frame, about 7 MB at 2x, into a buffer that grows by
- * realloc from 1 MiB, four allocations and copies on the way, plus three
- * 16 KB sets), and the Mali-G52's ordinary slot waits average 35-55 ms and
+ * (rd_dump.c dumpFrame: the game thread waits for the reads of the
+ * pictures handed over (until v0.11.13 it drained the render and submit
+ * threads, the stalled picture's GPU work included), then serialises the
+ * frame, about 7 MB at 2x, into a buffer that grows by realloc from 1 MiB,
+ * four allocations and copies on the way, plus three 16 KB sets), and the
+ * Mali-G52's ordinary slot waits average 35-55 ms and
  * reach 60-250 ms in most 10 s blocks (issue 179's v0.11.4 log), so at
  * 50 ms copies would be made in steady play there (4 in every 64 frames,
  * each a hitch of a whole picture or more).  Issue 179's loss had its
@@ -114,17 +120,21 @@ typedef struct RdLossThrottle {
     uint64_t pauseUntil; /* no attempt while seen < it */
 } RdLossThrottle;
 
-/* What the recycle of a frame does (rd_loss_keep_decide) */
+/* What the recycle of a frame does (rd_loss_keep_decide), in the order
+ * decided */
 typedef enum RdLossKeep {
     RD_LOSS_KEEP_NOT_OPEN = 0, /* the GPU is past the frame: nothing to keep */
     RD_LOSS_KEEP_NO_STALL,     /* open, but no wait has stalled: not copied */
+    RD_LOSS_KEEP_NOT_SENT,     /* open and stalled, but no picture of the frame was handed
+                                * to a replay: nothing of it is on the GPU, not copied (no
+                                * attempt counted) */
     RD_LOSS_KEEP_PAUSED,       /* a copy was too big lately: not tried */
     RD_LOSS_KEEP_THROTTLED,    /* the window's attempts are used */
     RD_LOSS_KEEP_TAKE,         /* copy it (the attempt is counted now) */
 } RdLossKeep;
 
-RdLossKeep rd_loss_keep_decide(RdLossThrottle *t, uint64_t seen, uint32_t frame, uint32_t openFrame,
-                               uint64_t waitingFor, uint64_t waitingNs);
+RdLossKeep rd_loss_keep_decide(RdLossThrottle *t, uint64_t seen, uint32_t frame, bool sent,
+                               uint32_t openFrame, uint64_t waitingFor, uint64_t waitingNs);
 /* The attempt's outcome: big (over the bound) pauses the attempts */
 void rd_loss_keep_big(RdLossThrottle *t, uint64_t seen);
 

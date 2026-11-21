@@ -73,6 +73,8 @@ enum {
     RD_VU_SHARE_MARKS, /* a kick of the range with the hide or later mark */
     RD_VU_SHARE_OTHER, /* a probe draw, a sheet, a range off the batches */
     RD_VU_SHARE_ENTRY, /* vuDraw: the compaction's list or the program's own entry */
+    RD_VU_SHARE_CLIP,  /* a mesh draw under a rule mode other than none (region, scissor) */
+    RD_VU_SHARE_NOREC, /* a mesh draw the pre-pass did not record (no verdict) */
     RD_VU_SHARE_WHY_COUNT
 };
 
@@ -128,16 +130,23 @@ void rd__mesh_write_indices(const RdMeshRec *m, uint8_t *dst);
  * (RDC_*), rule the draw's VuCB rule word (vu_rec.w), chain its chain
  * plane's code (vu_batch.z), flags its VuCB draw flags (vu_draw.z),
  * recorded true when the pre-pass recorded it.  RD_VU_SHARE_YES or why
- * not; -1 for a draw that is no candidate (not a mesh command through the
- * record under mode none), which is not counted.  *saved: the vertex
- * invocations its list saves (its values less its distinct ones). */
+ * not: a mesh command under another rule mode RD_VU_SHARE_CLIP, then one
+ * the pre-pass did not record RD_VU_SHARE_NOREC (words for the log only:
+ * which draws take the shared list is unchanged); -1 for a command that
+ * is no mesh (skinned, a grid, particles), which is not counted.  *saved:
+ * the vertex invocations its list saves (its values less its distinct
+ * ones).  The draw's triangles ((end - firstIndex) / 3) are kept for the
+ * rd__vu_share_kept that follows it on the same (the replay's) thread. */
 int rd__vu_share_draw(const RdMeshRec *m, uint8_t type, uint32_t rule, uint32_t chain,
                       uint32_t flags, bool recorded, uint32_t first, uint32_t last,
                       uint32_t firstIndex, uint32_t end, uint32_t *saved);
 
 /* The counts (rd_replay_vu.c vuDraw): a draw through the record of tris
  * triangles, shared or not, the invocations its shared list saves; a
- * candidate kept on the original list by why. */
+ * candidate kept on the original list by why: the run's count of draws,
+ * the block's of triangles (the last rd__vu_share_draw's: for
+ * RD_VU_SHARE_ENTRY the draw that had been given the shared list).  A few
+ * adds a draw. */
 void rd__vu_share_note(uint32_t tris, bool shared, uint32_t saved);
 void rd__vu_share_kept(int why);
 
@@ -149,5 +158,11 @@ void rd__vu_share_totals(uint64_t *sharedTris, uint64_t *saved, uint64_t *record
                          uint64_t *sharedDraws);
 /* back to zero (the unit test) */
 void rd__vu_share_reset(void);
+/* The block's kept triangles by why, a picture (n pictures), taken back to
+ * zero: "; shared vertices kept (triangles a picture): form 12k, chain 0,
+ * marks 3.1k, other 0, entry 0, region 20k, no verdict 0" (the switch's
+ * own "off N" first when ICO_RD_VU_SHARE=0).  rd_vu_share_text appends it;
+ * here for the unit test.  The length written. */
+size_t rd__vu_share_kept_text(char *out, size_t cap, unsigned n);
 
 #endif

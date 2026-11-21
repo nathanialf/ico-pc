@@ -757,7 +757,7 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   179) and the zip from memory (`ico_zip_mem_files`, `ico_zip_add_bundle`): the entries and the log
   read back, a missing log leaving the entries alone, nothing deleted; a job written whole (the
   frame, the tick before, the log byte for byte, the sidecar, both costs and the drain's part in the result, the slow
-  zips pruned to three); a second job while one is written dropped with its line and counted, never
+  zips pruned to three); a reads-only job's flag and line (`copy, reads wait`, not `work in flight`); a second job while one is written dropped with its line and counted, never
   queued, its block the caller's, the first finishing whole, a new job taken after the result is
   polled; a zip that cannot be written keeping the frame loose; the join at shutdown with a job in
   flight, twice safe, a later job starting a new worker; the report's bundle (the newest three of
@@ -1333,9 +1333,9 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
   with MSAA, a Mac with the break forced): no row at all left `not reported` (the pins let go on for the Android classes, not applicable elsewhere; the start-up set's size likewise; the start line in one or two whole-row 4 KB parts), the rows not built
   `not in this build`, the cores' rows, the no-volume break's
   state with its reason in the start line, the Qualcomm passes row on only on Qualcomm's driver,
-  its count and the stalls clause `(the Adreno attempt on|off)`, the block's stalls on that row's
-  second count whatever its state (`(2 stalls in the block)` not applicable, `(1 ...)` and `(3
-  ...)` on, then 0 with no stalls asked and 0 off), the high queue priority's row `removed` on
+  its count and the stalls clause `(...; the Adreno attempt on|off)`, the block's stalls on that
+  row's second count where it applies (none not applicable, `(1 ...)` and `(3 ...)` on, then 0
+  with no stalls asked), the high queue priority's row `removed` on
   every class (taken off, issues 215 and 123) with its words in the start line (`Qualcomm queue at
   high priority removed (taken off, issues 215 and 123)`), left out of every block line and
   still removed after a reset, the VU record by compute's and

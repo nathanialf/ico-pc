@@ -350,6 +350,7 @@ size_t window_scene_gpu_hint_text(char *out, size_t cap, double presentedFps, do
 {
     double a, b, r2, v = 0.0, p, period, budget;
     int k = 0, w, row = 0;
+    char by[40]; /* the fit's words: its R^2 */
 
     if (cap == 0) {
         return 0;
@@ -358,26 +359,46 @@ size_t window_scene_gpu_hint_text(char *out, size_t cap, double presentedFps, do
     if (!(gameFps > 0.0) || !(presentedFps < gameFps) || skippedLate == 0 || !(scale > 0.0)) {
         return 0;
     }
+    /* the block's mean GPU work (the fit's own: the VU line's "GPU work
+       ... a replay") where the block timed a replay, not the median of
+       the last 8 the presents line names (issue 179's v0.11.13 log: 7.9
+       ms there against 26.7 ms a replay in the block) */
+    if (fit != NULL && fit->n > 0) {
+        gpuMs = fit->sy / fit->n;
+    }
     period = 1000.0 / gameFps;
     if (!(gpuMs > period)) {
         return 0;
     }
     budget = 0.9 * period;
-    if (fit == NULL || fit->n < 3 || !window_scene_vu_fit(fit, &a, &b, &r2)) {
-        /* no line to split the time by (fewer than 3 timed replays, or
-           the invocations not spread enough: window_scene_vu_fit): a
-           vertex-bound block would be read as pixels and a lower step
-           named that does not help, so no step is named */
+    const bool line = fit != NULL && fit->n >= 3 && window_scene_vu_fit(fit, &a, &b, &r2);
+    if (!line || (r2 >= 0.0 && r2 < WINDOW_SCENE_HINT_R2)) {
+        /* no line to split the time by (fewer than 3 timed replays, the
+           invocations not spread enough: window_scene_vu_fit, or a line
+           that explains under WINDOW_SCENE_HINT_R2 of the work's
+           variance): a vertex-bound block would be read as pixels and a
+           lower step named that does not help, so no step is named */
+        char why[48];
+        if (line) {
+            snprintf(why, sizeof why, "R^2 %.2f, under %.2f", r2, WINDOW_SCENE_HINT_R2);
+        } else {
+            snprintf(why, sizeof why, "%s",
+                     fit == NULL || fit->n < 3 ? "under 3 timed replays" : "not enough spread");
+        }
         w = snprintf(out, cap,
                      "; GPU-bound at %.4gx (the GPU takes %.1f ms a picture, the step %.1f ms at "
                      "%.1f game fps): no resolution hint (fit: %s)",
-                     scale, gpuMs, period, gameFps,
-                     fit == NULL || fit->n < 3 ? "under 3 timed replays" : "not enough spread");
+                     scale, gpuMs, period, gameFps, why);
         if (w < 0) {
             out[0] = '\0';
             return 0;
         }
         return (size_t)w < cap ? (size_t)w : cap - 1;
+    }
+    if (r2 >= 0.0) {
+        snprintf(by, sizeof by, "by the fit (R^2 %.2f)", r2);
+    } else {
+        snprintf(by, sizeof by, "by the fit (the work flat)");
     }
     if (b > 0.0) {
         v = b * (fit->sx / fit->n);
@@ -396,36 +417,35 @@ size_t window_scene_gpu_hint_text(char *out, size_t cap, double presentedFps, do
     if (scale <= 1.0 + 1e-6) {
         w = snprintf(out, cap,
                      "; the GPU takes %.1f ms a picture at this resolution (%.4gx): at 1x "
-                     "already, no lower resolution step is offered (%.1f ms of vertex work by the "
-                     "fit + %.1f ms that scales with the pixels, against %.1f ms, 0.9 of the %.1f "
+                     "already, no lower resolution step is offered (%.1f ms of vertex work %s + "
+                     "%.1f ms that scales with the pixels, against %.1f ms, 0.9 of the %.1f "
                      "ms step at %.1f game fps)",
-                     gpuMs, scale, v, p, budget, period, gameFps);
+                     gpuMs, scale, v, by, p, budget, period, gameFps);
     } else if (k == 0) {
         w = snprintf(out, cap,
                      "; the GPU takes %.1f ms a picture at this resolution (%.4gx): no lower "
-                     "resolution step would fit the game's rate (%.1f ms of vertex work by the fit "
-                     "+ %.1f ms that scales with the pixels: %.1f + %.1f x (1/%.4g)^2 = %.1f ms at "
-                     "1x against %.1f ms, 0.9 of the %.1f ms step at %.1f game fps)",
-                     gpuMs, scale, v, p, v, p, scale, v + p / (scale * scale), budget, period,
+                     "resolution step would fit the game's rate (%.1f ms of vertex work %s + %.1f "
+                     "ms that scales with the pixels: %.1f + %.1f x (1/%.4g)^2 = %.1f ms at 1x "
+                     "against %.1f ms, 0.9 of the %.1f ms step at %.1f game fps)",
+                     gpuMs, scale, v, by, p, v, p, scale, v + p / (scale * scale), budget, period,
                      gameFps);
     } else if (!row) {
-        w = snprintf(
-            out, cap,
-            "; the GPU takes %.1f ms a picture at this render scale (%.4gx, not a "
-            "Resolution row's: Window, Auto or an upscaler): a lower Resolution (or "
-            "Upscaling quality) would fit the game's rate at a render scale of %dx or "
-            "under (%.1f ms = %.1f ms of vertex work by the fit + %.1f ms that scales with "
-            "the pixels: %.1f + %.1f x (%d/%.4g)^2 = %.1f ms, under %.1f ms, 0.9 of the "
-            "%.1f ms step at %.1f game fps; a hint: nothing changes by itself)",
-            gpuMs, scale, k, gpuMs, v, p, v, p, k, scale,
-            v + p * ((double)k / scale) * ((double)k / scale), budget, period, gameFps);
+        w = snprintf(out, cap,
+                     "; the GPU takes %.1f ms a picture at this render scale (%.4gx, not a "
+                     "Resolution row's: Window, Auto or an upscaler): a lower Resolution (or "
+                     "Upscaling quality) would fit the game's rate at a render scale of %dx or "
+                     "under (%.1f ms = %.1f ms of vertex work %s + %.1f ms that scales with "
+                     "the pixels: %.1f + %.1f x (%d/%.4g)^2 = %.1f ms, under %.1f ms, 0.9 of the "
+                     "%.1f ms step at %.1f game fps; a hint: nothing changes by itself)",
+                     gpuMs, scale, k, gpuMs, v, by, p, v, p, k, scale,
+                     v + p * ((double)k / scale) * ((double)k / scale), budget, period, gameFps);
     } else {
         w = snprintf(out, cap,
                      "; the GPU takes %.1f ms a picture at this resolution (%.4gx): %dx would fit "
-                     "the game's rate (%.1f ms = %.1f ms of vertex work by the fit + %.1f ms that "
+                     "the game's rate (%.1f ms = %.1f ms of vertex work %s + %.1f ms that "
                      "scales with the pixels: %.1f + %.1f x (%d/%.4g)^2 = %.1f ms, under %.1f ms, "
                      "0.9 of the %.1f ms step at %.1f game fps; a hint: nothing changes by itself)",
-                     gpuMs, scale, k, gpuMs, v, p, v, p, k, scale,
+                     gpuMs, scale, k, gpuMs, v, by, p, v, p, k, scale,
                      v + p * ((double)k / scale) * ((double)k / scale), budget, period, gameFps);
     }
     if (w < 0) {

@@ -1344,6 +1344,23 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   empty one else the oldest; and a recycle run over a fake history (the GPU a frame or two behind
   with no copy, then stuck at frame 129 with the wait stalled: the lost frame survives the ring
   moving on, at most four copies are ever held, a GPU that finishes everything frees them all).
+  A frame no picture of which was handed to a replay (`RdFrame.sent`) is never needed, decided
+  after the stall's test and before the throttle (no attempt counted; under the pause still "not
+  sent"); the Mali reporter's 8 copies (each frame newer than the newest submission) are 8 "not
+  sent" with the flag off and the same 8 taken with it on. The loss report's choice is unchanged by
+  a copy of a never-sent frame when the lost frame and the one before are held, the stalled
+  history's copies are the same when only frames up to the stalled one were sent, and over a stall
+  longer than the throttle's window the lost frame is still held where copies of never-sent frames
+  had pushed it out.
+- `rd_dump_reads_test.c` (ctest `rd_dump_reads`): the game thread's dumps that wait for the reads
+  alone (`rd_dump.c` `dumpFrame`'s reads-only mode, `rd_thread_reads_wait`), on frames recorded
+  without a device and a host of the test's own whose render thread is a thread per picture handed
+  over. With no picture handed over the slow-scene dump's three calls
+  (`rd_dump_retained_frame_bytes`, `_into`, `_mem_reads`) make no drain and the drained dump's
+  bytes (`rd_dump_retained_frame_mem` still drains: the control); with a picture handed over whose
+  job starts 150 ms after the call is asked for, each call waits for its reads (the read waits
+  grow, the job ran) and makes no drain, with the same bytes; `RdFrame.sent` is 0 for a frame never
+  handed over, 1 once one is, 0 again after its slot is recycled. The order is checked, not a time.
 - `rd_passring_test.c`: the pass ring the device-loss report prints: order, wrap, the replay table, the
   replays printed (the last three, whole at 430 passes a replay), the line format (the VU
   vertex pre-pass's entry among them, `testVuPre`) and the loss bisect's line; the pipeline
@@ -1747,7 +1764,7 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   composited level not constant over level texels i0 - 2 to i0 + 3, the kernels' joint support and
   a tie: N = 3 level texels), some texels differing; the |d| histogram printed (`checkEdges2x`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#the-shadow-edges-above-1x)).
-- `rd_state_test.c`: the recording half of rd without a GPU: the retained-frame lookup of the slow-scene dump (`rd__retained_frame` and `rd_frame_retained`: the last closed and the one before by number, other numbers none; `rd_dump_retained_frame` writes nothing for a number outside the ring; the slow-scene dump's two steps of `rd_dump_mem.h`: the frame measured with nothing copied is the memory dump's size, copied into a block of exactly that size it is the memory dump byte for byte, a block one byte short refused, a frame outside the ring neither measured nor copied), the payload arena's alignment gap
+- `rd_state_test.c`: the recording half of rd without a GPU: the retained-frame lookup of the slow-scene dump (`rd__retained_frame` and `rd_frame_retained`: the last closed and the one before by number, other numbers none; `rd_dump_retained_frame` writes nothing for a number outside the ring; the slow-scene dump's two steps of `rd_dump_mem.h`: the frame measured with nothing copied is the memory dump's size, copied into a block of exactly that size it is the memory dump byte for byte, a block one byte short refused, a frame outside the ring neither measured nor copied; the reads-only dump, `rd_dump_retained_frame_mem_reads`, the drained dump byte for byte), the payload arena's alignment gap
   zeroed over a reused buffer's bytes (`testPayloadPad`), the sheet shader's keys in the set
   (`testSheetSet`, issue 188: no `font_sheet_ps` key on a tile-based profile at 1x and 2x with a
   1008-line output, the frame's 8 at a 3x scene, the overlay's 4 at 1080 lines, 10 with `[dev]

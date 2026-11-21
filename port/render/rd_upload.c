@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_diag_notes.h" /* the grow line's words */
 #include "rd_layer.h"
 #include "rd_velocity.h"
 #include "rd_vu_skin_check.h"
@@ -198,6 +199,10 @@ uint64_t rd__texture_ring_bytes(void)
 
 uint64_t g_rdRingFailOver; /* rd_internal.h: a test's refusal of larger rings */
 
+/* each slot's ring: when it was made, when last asked for (the grow
+   line's words, rd_diag_notes.h) */
+static RdRingNote s_ringNote[RHI_FRAMES_IN_FLIGHT];
+
 static bool newRing(uint64_t cap)
 {
     if (g_rdRingFailOver && cap > g_rdRingFailOver) {
@@ -221,6 +226,7 @@ static bool newRing(uint64_t cap)
     g_rd.ring[rd__ring_slot()] = b;
     g_rd.ringMap[rd__ring_slot()] = map;
     g_rd.ringCap[rd__ring_slot()] = cap;
+    rd_ring_note_made(&s_ringNote[rd__ring_slot()], rd__now_ms());
     return true;
 }
 
@@ -239,6 +245,7 @@ bool rd__ensure_ring(uint64_t need)
            in a row of this slot needing under a quarter of it, it is
            remade at half (newRing's deferred destroy covers the old one's
            frames in flight) */
+        rd_ring_note_use(&s_ringNote[slot], rd__now_ms(), need); /* two stores a replay */
         if (need >= have / 4u) {
             g_rd.ringSmall[slot] = 0;
         } else if (++g_rd.ringSmall[slot] >= RD_RING_SHRINK_REPLAYS) {
@@ -262,7 +269,9 @@ bool rd__ensure_ring(uint64_t need)
        named in the log, and the ring shrinks again when the need stays low
        (above) */
     const uint64_t exact = (need + (1u << 20) - 1) & ~(uint64_t)((1u << 20) - 1);
+    const RdRingNote old = s_ringNote[slot]; /* the ring it replaces (rd_diag_notes.h) */
     if (!newRing(cap) && !(exact < cap && newRing(exact))) {
+        rd_ring_note_use(&s_ringNote[slot], rd__now_ms(), need);
         rd__log("the upload ring of frame slot %d could not grow to %llu MB (this frame needs "
                 "%llu MB; it keeps %llu MB)",
                 (int)rd__ring_slot(), (unsigned long long)(cap >> 20),
@@ -271,10 +280,13 @@ bool rd__ensure_ring(uint64_t need)
         return false;
     }
     if (g_rd.ringCap[rd__ring_slot()] >= (64ull << 20)) {
-        rd__log("the upload ring of frame slot %d grows to %llu MB (this frame needs %llu MB)",
+        char was[128];
+        (void)rd_ring_note_text(&old, have, rd__now_ms(), was, sizeof was);
+        rd__log("the upload ring of frame slot %d grows to %llu MB (this frame needs %llu MB%s)",
                 (int)rd__ring_slot(), (unsigned long long)(g_rd.ringCap[rd__ring_slot()] >> 20),
-                (unsigned long long)(need >> 20));
+                (unsigned long long)(need >> 20), was);
     }
+    rd_ring_note_use(&s_ringNote[slot], rd__now_ms(), need);
     return true;
 }
 

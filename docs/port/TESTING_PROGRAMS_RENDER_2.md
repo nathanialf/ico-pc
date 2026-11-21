@@ -399,10 +399,13 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   a kick of its batch. No list for three separate triangles, a kick twice, a corner outside its
   batch, corners out of order, batches not back to back, or a sheet. A draw's verdict: shared with
   its saved count; kept on the original list for the form, a chain plane, the later mark, the hide
-  mark, a probe draw and a range off the batches; no candidate for a skinned command, a draw the
-  pre-pass did not record, and rule modes region and scissor; the joined and flip marks change
-  nothing. The device bytes are the original list, then the shared one. The run's stats line word
-  for word, the block's text and its return to zero, cut in a short buffer. The list only where a draw can take it: none
+  mark, a probe draw, a range off the batches, rule modes region and scissor (named first) and a
+  draw the pre-pass did not record; no candidate for a skinned command; the joined and flip marks
+  change nothing. The device bytes are the original list, then the shared one. The run's stats
+  line word for word (its draws by every reason), the block's text and its return to zero, the
+  block's kept triangles a picture by reason word for word (each verdict's own triangles, the
+  compaction's after a shared verdict that draw's, none after a command that is no mesh, in
+  thousands past 10 000) and their return to zero, cut in a short buffer. The list only where a draw can take it: none
   for a lit or a skinned mesh, none made for a command that is no candidate (skinned, lit, prelit
   at codes 32 and 36, a chain plane) or for a scratch mesh, made once for a candidate with its
   device copy marked for upload. The marks are decided once: 1000 draws scan none. The ring's
@@ -1196,6 +1199,13 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   every count's line, each fixture's declared `prepass_vertices` under `mali` and `desktop`, the
   two-pass blend's draws over the list under `mali`; SKIP without a device.
 
+- `rd_diag_notes_test.c` (`rd_diag_notes`; `rd_diag_notes.cmake`, CPU): the display line's width
+  note and the upload ring's grow words (`rd_diag_notes.c`, issue 179): the line at the start, the
+  frame's width changed alone written once more with ` (written again: the frame's width changed
+  from 512)`, later changes alone not, a change with another reason written without the words;
+  the ring's words with no ring before, made and never used, made and used (`; the 32 MB ring it
+  replaces was made 41.2 s before, last used 0.08 s before for 31 MB`), a new ring's note; short
+  buffers cut and ended.
 - `rd_ledger_test.c` (`rd_ledger`; `rd_ledger.cmake`, CPU; [SCENE_LEDGER.md](SCENE_LEDGER.md)):
   the scene ledger's tally and text from synthetic scenes. A model left out by each reason in
   ten ticks, twice in each, five of them between ticks: its row reads `never drawn; left out by

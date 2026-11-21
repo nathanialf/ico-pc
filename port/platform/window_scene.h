@@ -236,13 +236,20 @@ bool window_scene_vu_fit(const SceneVuFit *f, double *a, double *b, double *r2);
    pixels, the passes).  The length written */
 size_t window_scene_vu_fit_text(char *out, size_t cap, const SceneVuFit *f);
 
+/* The hint's floor on the fit's R^2 (rd_perf_rank.h RD_PERF_RANK_VU_R2,
+   the ranked lines' vertex estimate's own): a line explaining less of the
+   work's variance names no step (issue 179's v0.11.13 log: R^2 0.79) */
+#define WINDOW_SCENE_HINT_R2 0.8
+
 /* The GPU-bound hint at the end of the 10 s presents line (issue 123: the
    Adreno 740 at Custom 3x made 25.7 presented fps against the game's 30,
    its GPU 36-38 ms a picture).  Only when the block presented fewer
    pictures than the game made (presentedFps under gameFps), skipped
    presents for lateness (skippedLate above 0) and the GPU's time a picture
-   (gpuMs: the present allowance's median span less the display wait, the
-   line's "GPU span") is over the game's step (1000 / gameFps ms); "" else.
+   is over the game's step (1000 / gameFps ms); "" else.  That time is the
+   block's mean GPU work (fit's, the VU line's "GPU work ... a replay")
+   where the block timed a replay, else gpuMs (the present allowance's
+   median span less the display wait, the line's "GPU span").
    The arithmetic: the fit's vertex part V = b x the block's mean
    invocations (window_scene_vu_fit; 0 with b not above 0, at most gpuMs)
    does not change with the resolution; the rest P =
@@ -251,7 +258,8 @@ size_t window_scene_vu_fit_text(char *out, size_t cap, const SceneVuFit *f);
    names the largest offered resolution step (1, 2, 3, 4, 6, 8, 12, 16)
    below scale whose V + P (K / scale)^2 is at most 0.9 of the step:
    "; the GPU takes 37.7 ms a picture at this resolution (3x): 2x would fit
-   the game's rate (37.7 ms = 3.8 ms of vertex work by the fit + 33.9 ms
+   the game's rate (37.7 ms = 3.8 ms of vertex work by the fit (R^2 1.00)
+   + 33.9 ms
    that scales with the pixels: 3.8 + 33.9 x (2/3)^2 = 18.8 ms, under 30.0
    ms, 0.9 of the 33.3 ms step at 30.0 game fps; a hint: nothing changes by
    itself)"; with none "...: no lower resolution step would fit the game's
@@ -259,10 +267,12 @@ size_t window_scene_vu_fit_text(char *out, size_t cap, const SceneVuFit *f);
    pixels: 3.8 + 33.9 x (1/3)^2 = 7.5 ms at 1x against 30.0 ms ...)" (or
    "at 1x already" for a scale of 1 or less).  Without a line (fit NULL,
    under 3 replays, or window_scene_vu_fit refusing: the invocations not
-   spread enough) no step is named, since a vertex-bound block would read
-   as pixels: "; GPU-bound at 3x (the GPU takes 37.7 ms a picture, the step
-   33.3 ms at 30.0 game fps): no resolution hint (fit: not enough spread)"
-   ("fit: under 3 timed replays").  A hint only: the resolution
+   spread enough, or its R^2 under WINDOW_SCENE_HINT_R2) no step is named,
+   since a vertex-bound block would read as pixels: "; GPU-bound at 3x (the
+   GPU takes 37.7 ms a picture, the step 33.3 ms at 30.0 game fps): no
+   resolution hint (fit: not enough spread)" ("fit: under 3 timed
+   replays", "fit: R^2 0.79, under 0.80"); a line whose work did not vary
+   reads "by the fit (the work flat)".  A hint only: the resolution
    never changes by itself (the v0.7.9 decision).  skippedLate: the block's
    frames not presented, the late skips and, at frame rate Original, those
    the render thread's busy picture left out (issue 179: a Mali-G52 phone
