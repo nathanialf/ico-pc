@@ -1,0 +1,28 @@
+# rd_vu_zero_ab, rd_vu_zero_gl and rd_vu_zero_fault (test/rd_vu_zero_ab.cmake):
+# a fixture, the profiles it is replayed under (corpus, mali, mali169: the
+# script's head says what each is; OpenGL replays every fixture at the corpus
+# settings alone), then the property the test checks
+# (rd_fixture_list_props.cmake), holding for each of its profiles over that
+# profile's ICO_RD_VU_ZERO=1 runs together:
+#   vu_zero_culled  the triangle slots the checks read back found culled
+#                   (rd_vu_zero.h: no sample point of the target in them)
+# One setting of a profile may find nothing to cull in a frame (the 2x
+# lattice samples twice as finely as 1x); the script also wants at least one
+# triangle culled at 2x over the whole list.
+# The Pixel's profile is not here: its Enhanced resolution is no whole
+# number of texels a GS pixel, so the cull is refused there (rd_vu_zero_test
+# t1).
+#
+# issue 179's Mali-G52 (moto g24 power, v0.11.5): the stage 42 slow-scene
+# capture at 21:9 (912 GS pixels wide).  A light frame: about 2,000 mesh
+# triangles on the target, 8 triangle slots culled at 1x (all in list 5) and
+# none at 2x (the merge check of 2026-11-21 09:02, and the same counts from
+# the dump's mesh triangles through the cull's own test)
+fx-mali-slow541 mali,mali169,corpus vu_zero_culled>=1
+#
+# issue 123's Adreno (v0.11.7), at 3:2 (576 GS pixels wide; the 16:9 setting
+# cannot show it, the Enhanced 4:3 one can): about 2,500 mesh triangles on
+# the target, of which about 160 cover no sample point at 1x and about 30 at
+# 2x (counted from the dump through the cull's own test, the corners
+# projected from the mesh stream: an estimate, not the replay's)
+fx-adreno corpus vu_zero_culled>=1
