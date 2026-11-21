@@ -753,6 +753,17 @@ void rd__texlock_wait(void)
     ulk();
 }
 
+uint64_t rd_thread_reads_wait(void)
+{
+    if (!s_on || t_onR || __atomic_load_n(&s_owned, __ATOMIC_ACQUIRE) == 0) {
+        return 0;
+    }
+    const double t0 = rd__now_ms();
+    rd__texlock_wait();
+    const double ms = rd__now_ms() - t0;
+    return ms > 0.0 ? (uint64_t)(ms * 1e6) : 1u;
+}
+
 void rd__thread_retire_kept(void)
 {
     if (t_retireKept && t_onR != 0) {
@@ -822,6 +833,30 @@ bool rd__render_call(void (*fn)(void *arg), void *arg)
 
 /* ---------------------------------------------------------- the replays */
 
+/* RdFrame.sent (rd_loss_pick.h rd_loss_keep_needed): the ring's closed
+ * frame of f's number (f itself, or a frame made from its head with its
+ * number: the reshow's, the paused hold's) has had a picture handed to a
+ * replay.  Called where a replay is asked for, before it runs: on the game
+ * thread, or on the render thread inside a call the game thread waits for
+ * or a picture's job before its reads end, so the slots' numbers and
+ * closed flags, which the game thread changes only after rd__texlock_wait,
+ * are read here as they stand; the flag is __atomic (the game thread and a
+ * job may mark the same frame).  A frame of another number (a self-test's,
+ * a dump loaded) marks nothing, or a ring frame of the same number: one
+ * more copy kept, as before the flag */
+static void noteSent(const RdFrame *f)
+{
+    if (f == NULL || f->number == 0) {
+        return;
+    }
+    for (int i = 0; i < RD_FRAME_RING; i++) {
+        RdFrame *r = &g_rd.frames[i];
+        if (r->closed && r->number == f->number) {
+            __atomic_store_n(&r->sent, 1u, __ATOMIC_RELAXED);
+        }
+    }
+}
+
 static void replayJob(void *arg)
 {
     ReplayArgs *r = arg;
@@ -833,6 +868,7 @@ static void replayJob(void *arg)
 
 bool rd__replay_frame(const RdFrame *f, int keep, bool present)
 {
+    noteSent(f);
     if (!s_on || t_onR) {
         return rd__replay_frame_here(f, keep, present);
     }
@@ -872,6 +908,7 @@ void rd__thread_picture_begin(void)
 
 bool rd__replay_frame_async(const RdFrame *f, int keep, bool present)
 {
+    noteSent(f);
     if (!s_on || t_onR) {
         return rd__replay_frame_here(f, keep, present);
     }
@@ -961,6 +998,7 @@ bool rd__replay_frame_post(const RdFrame *f, int keep, double *waitMs)
     if (!rd__replay_frame_post_ok()) {
         return false;
     }
+    noteSent(f);
     /* the picture before ended, its present too: a no-op unless the gate
        presented this frame while busy (a keep frame), or there is none */
     const double d0 = rd__now_ms();
@@ -1171,6 +1209,15 @@ static void presentDrain(bool fresh)
 
 bool rd_present_post(float alpha)
 {
+    {
+        /* the frame rd_present replays (blended or as it is), as its own
+           test says (rd_interp.c): sent */
+        const RdFrame *c = rd__last_frame();
+        if (rd_interpolation_active() && g_rd.hasDevice && !g_rd.videoShown && c != NULL &&
+            c->closed) {
+            noteSent(c);
+        }
+    }
     if (!s_on || t_onR) {
         return rd_present(alpha);
     }

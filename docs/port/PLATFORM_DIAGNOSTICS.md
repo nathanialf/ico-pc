@@ -1369,10 +1369,11 @@ lines added beside them for issues 179 and 123:
   `window_slow_scene_due`): the last of the three is kept for the first slow block of play (the
   play layout dominant: the player in control), at any work over the bound; cutscene blocks take
   at most two until a play block's capture is made. Its line reads `in play (the dump kept for
-  play): frame N ...`. The total and each capture's size are unchanged. The capture's copy still
-  waits for the render thread's work in flight: the copy reads the texture and target records the
-  render thread updates as it replays, and no hand-over that would let it copy at the end of its
-  own picture has been shown safe.
+  play): frame N ...`. The total and each capture's size are unchanged. The capture's copy waits
+  for the reads of the pictures handed over, not for the render and submit threads' work in
+  flight: the render thread reads and updates the texture and target records only inside a
+  picture's reads, and after them its job and the submit thread touch none of the records the copy
+  reads (`rd_dump.c` `dumpFrame` lists each record and who writes it when).
 - **A list's draws** (`port/render/rd_list_draws.c`, `rd_list_draws_live.c`): every pipeline
   look-up in a game list (a draw or a merged run of draws) counted by its list, fragment entry and
   the DATE mode its key carries; when the block's most expensive list (list 0 with the stretch

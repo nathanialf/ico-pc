@@ -76,6 +76,25 @@ void ico_dump_auto_forget(void)
     ico_mutex_unlock(g.mu);
 }
 
+void ico_dump_auto_game_text(const IcoDumpDone *d, char *out, size_t cap)
+{
+    if (cap == 0) {
+        return;
+    }
+    out[0] = '\0';
+    if (d->drainMs < 0.0) {
+        return;
+    }
+    const double rest = d->gameMs > d->drainMs ? d->gameMs - d->drainMs : 0.0;
+    if (d->readsOnly) {
+        snprintf(out, cap, " (copy %.1f ms, reads wait %.1f ms)", rest, d->drainMs);
+    } else {
+        snprintf(out, cap,
+                 " (the render thread's work in flight %.1f ms of it, the frame's bytes %.1f ms)",
+                 d->drainMs, rest);
+    }
+}
+
 /* the job, on the worker thread, no lock held */
 static void write_job(IcoDumpJob *j, IcoDumpDone *d)
 {
@@ -89,6 +108,7 @@ static void write_job(IcoDumpJob *j, IcoDumpDone *d)
     snprintf(d->text, sizeof(d->text), "%s", j->text);
     d->gameMs = j->gameMs;
     d->drainMs = j->drainMs;
+    d->readsOnly = j->readsOnly;
     d->prepMs = j->prepMs;
     d->measureMs = j->measureMs;
     d->copyMs = j->copyMs;

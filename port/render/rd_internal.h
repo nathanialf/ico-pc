@@ -370,6 +370,10 @@ typedef struct RdFrame {
     /* not dumped: the game paused when the frame closed (rd_end_frame,
      * rd_set_paused_source; the paused scene's hold, rd_hold.h) */
     uint32_t paused;
+    /* not dumped: a picture of this frame's number was handed to a replay
+     * (rd_thread.c noteSent; __atomic, 0 at rd__frame_reset): the loss
+     * keep copies only such a frame (rd_loss_pick.h rd_loss_keep_needed) */
+    uint32_t sent;
 } RdFrame;
 
 void rd__frame_reset(RdFrame *f);

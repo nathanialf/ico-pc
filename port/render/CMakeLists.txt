@@ -3516,6 +3516,7 @@ include(rd_subpass_probe.cmake) # the subpass read's first-start probe
 include(rd_bench.cmake) # the rc-only bench: kept frames measured part by part
 include(rd_shadowres.cmake) # the shadow's levels at the scene's scale above 1x
 include(rd_hold.cmake) # the paused scene held under the menu (issue 123)
+include(rd_dump_reads.cmake) # the game thread's dumps wait for the reads alone (issue 179)
 
 # the lavapipe driver's compile thread racing the exit (the leak described at
 # rd_blend_selftest above: 240 or 480 bytes, every frame in libasan, libc or an

@@ -40,9 +40,12 @@ typedef struct IcoDumpJob {
     int pruneSlow; /* keep ICO_SLOW_DUMP_KEEP slow-*.zip beside the zip */
     double gameMs; /* the game thread's cost of this job (the snapshot) */
     /* of it, the wait for the render and submit threads to finish what was
-       handed to them (rd_thread_drain), before the frame's bytes could be
-       read; -1 not measured apart */
+       handed to them (rd_thread_drain), or with readsOnly for the reads of
+       the pictures handed over alone (rd_thread_reads_wait: the slow-scene
+       dump), before the frame's bytes could be read; -1 not measured
+       apart */
     double drainMs;
+    int readsOnly;
     /* the worker's time making the job's block beforehand
        (ico_dump_auto_prepare), 0 none: added to the result's worker time */
     double prepMs;
@@ -62,12 +65,19 @@ typedef struct IcoDumpDone {
     int result; /* 0 both, 1 without the log, -1 not written */
     double gameMs, workerMs;
     double drainMs;           /* IcoDumpJob.drainMs */
+    int readsOnly;            /* IcoDumpJob.readsOnly */
     double prepMs;            /* IcoDumpJob.prepMs (part of workerMs, made before the job) */
     double measureMs, copyMs; /* IcoDumpJob's */
     char how[64];             /* IcoDumpJob.how */
     double workerEndMs;       /* the worker's end, ico_thread_now_ms */
     size_t bytes;             /* the dump's bytes */
 } IcoDumpDone;
+
+/* The result line's split of the game thread's time (window_dump_auto.c):
+   with readsOnly " (copy X ms, reads wait Y ms)", the copy the game
+   thread's time without the wait; else " (the render thread's work in
+   flight X ms of it, the frame's bytes Y ms)"; "" when drainMs < 0 */
+void ico_dump_auto_game_text(const IcoDumpDone *d, char *out, size_t cap);
 
 /* 1 when a job is being written or its result is not yet picked up: the
    caller skips the snapshot (and logs, ico_dump_auto_dropped) */
