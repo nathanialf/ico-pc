@@ -558,14 +558,8 @@ enum {
                               * are open (a grid): its drops drawn whatever way they face */
 };
 
-/* IcoVuCB.draw[2], past the enum's: the draw culls the triangles its
- * pre-pass entry's rule stage found to cover no sample point of the target
- * (vu_common.hlsli VU_F_ZERO_OK, VU_TF_ZERO; port/render/rd_vu_zero.h,
- * rd_replay_vu.c vuDraw) */
-#define ICO_VU_ZERO_OK 65536u
-
-/* The rule stage's lattice word (IcoVuCB.tri[3] of the rule stage's draw,
- * vu_tri.hlsl vu_tri_zero; port/render/rd_vu_zero.h): 0, no test; else a
+/* The rule stage's lattice word (IcoVuCB.tri[3] of the zero build's draw,
+ * vu_tri.hlsl vu_tri_zero with ICO_VU_ZERO=1; port/render/rd_vu_zero.h): a
  * corner's place in sixteenths of a texel of the bound target is
  * U = GS X (12.4) * sx + kx, V = GS Y * sy + ky, and the target's sample
  * points (its texel centres) are where U and V are both multiples of 16.

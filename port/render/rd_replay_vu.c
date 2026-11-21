@@ -253,6 +253,26 @@ static bool recEnsure(uint32_t rows)
     return s_recBuf[rd__ring_slot()].id != 0;
 }
 
+void rd__vu_rec_usage_changed(void)
+{
+    /* destroyed past the frames that read them and made again now at the
+       rows they held (the start-up preparation's included: play grows
+       nothing for it) with the usage now asked (rd_vu_zero.h); a slot that
+       cannot be made is made at the next replay's need */
+    uint32_t rows = 0;
+    for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
+        rows = s_recBufRows[i] > rows ? s_recBufRows[i] : rows;
+        if (s_recBuf[i].id) {
+            rhi_destroy_buffer(s_recBuf[i]);
+        }
+        s_recBuf[i] = (RhiBuffer){0};
+        s_recBufRows[i] = 0;
+    }
+    if (rows != 0u) {
+        (void)recEnsure(rows);
+    }
+}
+
 /* ---------------------------------- the record made at start-up
  * rd_vu_rec_early.h: every slot's buffer (and the targets) at rows rows
  * before play, through recEnsure as a replay would grow them; a slot that
@@ -1374,33 +1394,28 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
            program's own entry reads its corner from the value: the list) */
         rd__vu_share_kept(RD_VU_SHARE_ENTRY);
         ix = ix->plain;
+    } else if (ix->plain && s_zeroArmed && s_zeroWord != 0u && vs == RD_VS_VU_MAIN) {
+        /* an entry the zero-area cull marks (rd_vu_zero.h): a value of the
+           shared list is drawn for other triangles too, and a marked
+           triangle's corners are culled, so its draws keep the original
+           list (counted as the share's "other") */
+        rd__vu_share_kept(RD_VU_SHARE_OTHER);
+        rd__vu_zero_shared_given_up();
+        ix = ix->plain;
     }
     /* the record's draws counted for the share, the shared list's own */
     if (recorded && !own && vs == RD_VS_VU_MAIN) {
         rd__vu_share_note(count / 3u, ix->plain != NULL, ix->plain ? ix->saved : 0u);
         g_rdPerf.vuShareSaved += ix->plain ? ix->saved : 0u; /* the perf lines' invocations */
     }
-    /* the zero-area cull (rd_vu_zero.h): the record's main shader on the
-     * entry's own target (doVuDraw armed it), single-sampled, not on the
-     * shared vertices' list (a value there is drawn for other triangles
-     * too); the velocity pass's note above was made from vcb0, without it */
+    /* the zero-area cull (rd_vu_zero.h): an entry's triangles are marked
+     * in its slot A for every draw of it; a draw of a marked entry in a
+     * multisampled pass (not foreseen at the pre-pass) turns it off */
     if (s_zeroArmed && recorded && vs == RD_VS_VU_MAIN) {
-        int why = -1;
-        if (s_zeroWord == 0u) {
-            why = s_zeroWhy;
-        } else if (own || (vcbAt.draw[2] & ICO_VU_PROBE) != 0u || g_rdSkinArm || g_rdSkinTwin) {
-            /* a program's own entry, a probe, or the skin check's draw (its
-               twins and box take this VuCB on their own targets) */
-            why = RD_VU_ZERO_ENTRY;
-        } else if (ix->plain != NULL) {
-            why = RD_VU_ZERO_SHARED;
-        } else if (g_rd.passSamples > 1u) {
-            why = RD_VU_ZERO_MSAA;
+        if (s_zeroWord != 0u && g_rd.passSamples > 1u) {
+            rd__vu_zero_fault_msaa();
         }
-        if (why < 0) {
-            vcbAt.draw[2] |= ICO_VU_ZERO_OK;
-        }
-        rd__vu_zero_draw(why < 0, why, count / 3u);
+        rd__vu_zero_draw(s_zeroWord != 0u, s_zeroWord != 0u ? -1 : s_zeroWhy, count / 3u);
     }
     VuIdx sel; /* the shared list, held by value (the run copies it) without its plain */
     if (ix->plain) {
@@ -2122,7 +2137,7 @@ static uint32_t vuPreKeys(const VuPre *e, RdPipeKeyInt keys[5])
     }
     uint32_t n = 0;
     keys[n++] = rd__vu_pre_key(e->preVs);
-    keys[n++] = rd__vu_stage_key(RD_VS_VU_TRI_RULE_PRE, 0xF);
+    keys[n++] = rd__vu_stage_key(rd__vu_zero_rule_vs(e->zeroWord), 0xF); /* rd_vu_zero.h */
     if (e->ticks) {
         keys[n++] = rd__vu_stage_key(RD_VS_VU_TRI_TICK_PRE, 0x1);
         keys[n++] = rd__vu_stage_key(RD_VS_VU_TRI_TICK_PRE, 0x2);
@@ -3249,6 +3264,7 @@ static void vuPrepassRun(const RdFrame *f, int keep)
             e->zeroWhy = (int8_t)zeroWhy;
             memcpy(e->frameKey, fk, sizeof(fk));
             if (c->type == RDC_PARTICLES) {
+                e->zeroWord = 0; /* the sprites' own slots */
                 e->particle = 1;
                 e->count = e->src.p.vertsPerBatch;
             } else {
@@ -3276,6 +3292,13 @@ static void vuPrepassRun(const RdFrame *f, int keep)
                 }
                 /* the velocity's second record (vuVelWanted) */
                 e->vel = e->count && vuVelWanted(f, c, &st, l) ? 1u : 0u;
+                /* the zero-area cull's word kept where every reader of the
+                   slots is tested (rd_vu_zero.h) */
+                int keepWhy = zeroWhy;
+                e->zeroWord =
+                    rd__vu_zero_entry_keep(e->zeroWord, c->type == RDC_SKINNED, e->vel != 0u,
+                                           (e->src.vcb.draw[2] & ICO_VU_PROBE) != 0u, &keepWhy);
+                e->zeroWhy = (int8_t)keepWhy;
             }
             if (!e->frame.group.id) {
                 e->count = 0; /* no FrameCB for its target: the old way */
@@ -3579,7 +3602,7 @@ static void vuPrepassRun(const RdFrame *f, int keep)
             firstTri = false;
             PreItem it[4];
             uint32_t n = 0;
-            const RdPipeKeyInt kr = rd__vu_stage_key(RD_VS_VU_TRI_RULE_PRE, 0xF);
+            const RdPipeKeyInt kr = rd__vu_stage_key(rd__vu_zero_rule_vs(e->zeroWord), 0xF);
             /* vu_tri.w of the rule stage: the zero-area cull's word */
             bool ok = preItemsReserve(4) &&
                       preItem(e, &rule, &kr, rd__vu_zero_gpu_word(e->zeroWord), kicks, &it[n++]);
@@ -3629,7 +3652,7 @@ static void vuPrepassRun(const RdFrame *f, int keep)
                 rule.tri[0] += 1u; /* the self-test's sabotage: slot A written a slot on */
             }
             firstTri = false;
-            const RdPipeKeyInt kr = rd__vu_stage_key(RD_VS_VU_TRI_RULE_PRE, 0xF);
+            const RdPipeKeyInt kr = rd__vu_stage_key(rd__vu_zero_rule_vs(e->zeroWord), 0xF);
             bool ok = vuStageDraw(e, &rule, dOff, &kr, rd__vu_zero_gpu_word(e->zeroWord), kicks);
             if (ok && e->ticks) {
                 IcoVuCB tick = vcb;
@@ -3655,9 +3678,15 @@ static void vuPrepassRun(const RdFrame *f, int keep)
         }
         vuRecPassEnd(rowsV, usedT, muted || s_preSabotage == RD_VU_SABOTAGE_STALE);
         passes++;
-        /* the zero-area cull's checks (rd_vu_zero.h): the entries' slot A
-           and vertices copied for the readback, compared when the slot comes
-           round (not in a muted pass, nor the sabotage's sink) */
+        /* the zero-area cull (rd_vu_zero.h): the probation's count of the
+           pictures it marks, and the checks (the self-test's and the tests'
+           alone): the entries' slot A and vertices copied for the readback
+           (not in a muted pass, nor the sabotage's sink) */
+        bool zCulling = false;
+        for (uint32_t i = 0; i < s_preN && !zCulling; i++) {
+            zCulling = s_pre[i].rec && s_pre[i].zeroWord != 0u;
+        }
+        rd__vu_zero_picture(zCulling);
         bool zAll = false;
         if (!muted && s_preSabotage != RD_VU_SABOTAGE_STALE && rd__vu_zero_check_now(&zAll)) {
             const uint32_t slot = rd__ring_slot();

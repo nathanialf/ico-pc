@@ -80,9 +80,21 @@ endif()
 #                                     as diag_host.c exports it; lavapipe is
 #                                     no phone, so the pre-pass stays on): the
 #                                     cull off for this start, its self-test
-#                                     not run
+#                                     not run, no module of it made
+#   _zero_marked                      the install's mark (ICO_VU_ZERO_BLOCK, as
+#                                     port/platform/vu_zero_mark.c exports it
+#                                     after a run that ended while trying):
+#                                     off, logged, no module of it made
+#   _zero_never                       the cull off (ICO_RD_VU_ZERO=0): no
+#                                     module or pipeline of it made, so the
+#                                     modules made are the build's without it
+# Each run's start line ("VU zero-area cull: on|off, N modules of it made, P
+# of its pipelines alive") says what exists: 1 and 1 where it passed, 1 and 0
+# where its self-test released it, 0 and 0 where it was never tried.
 if(ICO_RUN_TESTS AND DEFINED _vst AND TARGET rd_vuprepass_selftest_test)
-    set(_zon "rd: VU zero-area cull: on \\(self-test: [1-9][0-9]* of [0-9]+ triangle slots culled as the CPU answers, code 34 and code 32, pictures byte for byte, lattice 0x[0-9A-F]+\\) on SCENE")
+    set(_zon "rd: VU zero-area cull: on \\(self-test: [1-9][0-9]* of [0-9]+ triangle slots culled as the CPU answers, code 34 and code 32, pictures byte for byte, lattice 0x[0-9A-F]+\\) on SCENE.*rd: VU zero-area cull: on, 1 modules of it made, 1 of its pipelines alive")
+    set(_zrel ".*rd: VU zero-area cull: its module and pipeline released.*rd: VU zero-area cull: off, 1 modules of it made, 0 of its pipelines alive")
+    set(_znone ".*rd: VU zero-area cull: off, 0 modules of it made, 0 of its pipelines alive")
     add_test(NAME rd_vuprepass_selftest_zero
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}" "-DEXTRA=${_zon}" -P "${_vst}")
@@ -95,21 +107,31 @@ if(ICO_RUN_TESTS AND DEFINED _vst AND TARGET rd_vuprepass_selftest_test)
     add_test(NAME rd_vuprepass_selftest_zero_lattice
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}"
-                     "-DEXTRA=rd: VU zero-area cull: off for the run \\(self-test: the GPU's answers differ from the CPU's in [1-9][0-9]* of [0-9]+ triangle slots: triangle slot [0-9]+: the GPU "
+                     "-DEXTRA=rd: VU zero-area cull: off for the run \\(self-test: the GPU's answers differ from the CPU's in [1-9][0-9]* of [0-9]+ triangle slots: triangle slot [0-9]+: the GPU ${_zrel}"
                      "-DNOT_=rd: VU zero-area cull: on" -P "${_vst}")
     add_test(NAME rd_vuprepass_selftest_zero_missing
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}"
-                     "-DEXTRA=rd: VU zero-area cull: off for the run \\(self-test: no answer read back from the GPU\\)"
+                     "-DEXTRA=rd: VU zero-area cull: off for the run \\(self-test: no answer read back from the GPU\\)${_zrel}"
                      "-DNOT_=rd: VU zero-area cull: on" -P "${_vst}")
     add_test(NAME rd_vuprepass_selftest_zero_lossrow
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}"
-                     "-DEXTRA=rd: VU zero-area cull: off for this start \\(the loss ladder: 1 start in a row before this one lost the graphics device or hung its driver, ICO_LOSS_ROW 1, nothing written to the settings\\)"
-                     "-DNOT_=rd: VU zero-area cull: on" -P "${_vst}")
+                     "-DEXTRA=rd: VU zero-area cull: off for this start \\(the loss ladder: 1 start in a row before this one lost the graphics device or hung its driver, ICO_LOSS_ROW 1, nothing written to the settings\\)${_znone}"
+                     "-DNOT_=rd: VU zero-area cull: (on|trying)" -P "${_vst}")
+    add_test(NAME rd_vuprepass_selftest_zero_marked
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
+                     "-DLINE=${_vst_on}"
+                     "-DEXTRA=rd: VU zero-area cull: off on this install \\(was being tried when it ended \\(a crash\\)\\)${_znone}"
+                     "-DNOT_=rd: VU zero-area cull: (on|trying)" -P "${_vst}")
+    add_test(NAME rd_vuprepass_selftest_zero_never
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
+                     "-DLINE=${_vst_on}" "-DEXTRA=${_znone}"
+                     "-DNOT_=rd: VU zero-area cull: (on|trying)" -P "${_vst}")
     set(_zst rd_vuprepass_selftest_zero rd_vuprepass_selftest_zero_plain
              rd_vuprepass_selftest_zero_mali rd_vuprepass_selftest_zero_lattice
-             rd_vuprepass_selftest_zero_missing rd_vuprepass_selftest_zero_lossrow)
+             rd_vuprepass_selftest_zero_missing rd_vuprepass_selftest_zero_lossrow
+             rd_vuprepass_selftest_zero_marked rd_vuprepass_selftest_zero_never)
     set_tests_properties(${_zst} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
     set_tests_properties(rd_vuprepass_selftest_zero rd_vuprepass_selftest_zero_plain
                          PROPERTIES ENVIRONMENT "${_env}")
@@ -121,4 +143,8 @@ if(ICO_RUN_TESTS AND DEFINED _vst AND TARGET rd_vuprepass_selftest_test)
                          PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_ZERO_SABOTAGE=missing")
     set_tests_properties(rd_vuprepass_selftest_zero_lossrow
                          PROPERTIES ENVIRONMENT "${_env};ICO_LOSS_ROW=1")
+    set_tests_properties(rd_vuprepass_selftest_zero_marked
+                         PROPERTIES ENVIRONMENT "${_env};ICO_VU_ZERO_BLOCK=was being tried when it ended (a crash)")
+    set_tests_properties(rd_vuprepass_selftest_zero_never
+                         PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_ZERO=0")
 endif()

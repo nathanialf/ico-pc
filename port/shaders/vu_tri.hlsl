@@ -47,6 +47,19 @@
 #define ICO_VU_EARLY 1
 #endif
 
+// ICO_VU_ZERO (the rule stage's zero-area builds alone,
+// vu_tri_rule_zero_*: port/shaders/CMakeLists.txt; port/render/rd_vu_zero.h):
+// 1 adds the zero-area test to vu_tri_rule_pre_vs; 0, every other module,
+// leaves the file's statements as they were, so those modules are the
+// builds without the cull byte for byte.  A triangle the test finds covering
+// no sample point is marked VU_TF_HIDDEN (every reader of slot A culls it
+// as a hidden triangle: vu_tri_verdict, vu_keep_position) and VU_TF_ZERO
+// (read by the CPU's checks alone)
+#ifndef ICO_VU_ZERO
+#define ICO_VU_ZERO 0
+#endif
+
+#if ICO_VU_ZERO
 // --------------------------------------------------- the zero-area test
 
 // shader_consts.h ICO_VU_ZERO_GROW, ICO_VU_ZERO_SPAN
@@ -133,6 +146,7 @@ uint vu_zero_range(VuVtx v)
 {
     return (v.gx & 65535) == v.gx && (v.gy & 65535) == v.gy ? 1u : 0u;
 }
+#endif
 
 // --------------------------------------------------- the record stages
 
@@ -208,13 +222,13 @@ VuPreOut vu_tri_rule_pre_vs(uint vid : SV_VertexID)
         f |= (at << VU_TF_AT_SHIFT) | (exact != 0u ? VU_TF_EXACT : 0u);
         f |= (fa | fb | fc) != 0u ? VU_TF_CUT : 0u;
     }
+#if ICO_VU_ZERO
     // the zero-area test (vu_tri_zero; port/render/rd_vu_zero.h): asked for
     // by the lattice word (vu_tri.w, the rule stage's alone), under the
     // exact viewport on the GS's grid without jitter, where every corner is
     // drawn at its GS position: clip mode none without the wrap, the region
     // rule's EXACT, the scissor mode's code 1.  Nothing else of the word
-    // changes; a draw culls the triangle only under VU_F_ZERO_OK
-    // (vu_tri_verdict)
+    // changes; every reader of the slot culls it as a hidden triangle
     uint at1 = mode == VU_CLIP_NONE     ? ((f & VU_TF_WRAP) != 0u ? 1u : 0u)
                : mode == VU_CLIP_REGION ? ((f & VU_TF_RULE_MASK) == VU_RULE_EXACT ? 1u : 0u)
                                         : (((f >> VU_TF_AT_SHIFT) & 3u) == 1u ? 1u : 0u);
@@ -224,9 +238,10 @@ VuPreOut vu_tri_rule_pre_vs(uint vid : SV_VertexID)
               vu_zero_range(c);
     if (zw != 0u) {
         f |= vu_tri_zero(int2(a.gx, a.gy), int2(b.gx, b.gy), int2(c.gx, c.gy), vu_tri.w) != 0u
-                 ? VU_TF_ZERO
+                 ? VU_TF_ZERO | VU_TF_HIDDEN
                  : 0u;
     }
+#endif
     // the planes as vu_mesh_out makes them (vu_attr_planes, vu_plane_out),
     // whether they hold or not (vu_main_vs says which)
     VuPlaneTri t = vu_plane_tri(a, b, c);
@@ -394,14 +409,6 @@ uint vu_tri_verdict(uint f, uint kick, uint drawZ, out uint exact, out uint besi
     culled = at == 0u ? 1u : 0u;
     if ((rule & VU_TRI_CHAIN) != 0u && vu_batch.z != 0u && (f & VU_TF_PAST) != 0u) {
         // vu_plane_out: every corner past the chain plane
-        culled = 1u;
-    }
-    if ((f & VU_TF_ZERO) != 0u && (drawZ & VU_F_ZERO_OK) != 0u) {
-        // the rule stage's zero-area test (vu_tri_zero): no sample point of
-        // the draw's target in it, culled as a drop is
-        at = 0u;
-        exact = 0u;
-        beside = 0u;
         culled = 1u;
     }
     return at;

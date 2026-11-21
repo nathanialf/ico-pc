@@ -934,7 +934,9 @@ rd_vuprepass_selftest_zero 1.67  # estimate: rd_vuprepass_selftest x 1.1 (two mo
 rd_vuprepass_selftest_zero_lattice 1.67  # estimate: rd_vuprepass_selftest x 1.1 (not run here)
 rd_vuprepass_selftest_zero_lossrow 1.52  # estimate: rd_vuprepass_selftest (the cull not tested; not run here)
 rd_vuprepass_selftest_zero_mali 1.67  # estimate: rd_vuprepass_selftest_mali x 1.1 (not run here)
+rd_vuprepass_selftest_zero_marked 1.52  # estimate: rd_vuprepass_selftest (the cull not tried; not run here)
 rd_vuprepass_selftest_zero_missing 1.67  # estimate: rd_vuprepass_selftest x 1.1 (not run here)
+rd_vuprepass_selftest_zero_never 1.52  # estimate: rd_vuprepass_selftest (the cull not tried; not run here)
 rd_vuprepass_selftest_zero_plain 1.62  # estimate: rd_vuprepass_selftest_plain x 1.1 (not run here)
 rd_vurecord_ab 52.14
 rd_vurecord_ab_compute 42.73
@@ -1244,6 +1246,7 @@ vu1_mali 61.83
 vu1_variant_diff 0.03
 vu1_variant_equiv 0.04
 vu1_variant_table 0.03
+vu_zero_mark 0.02  # estimate: a CPU unit test with a few files, like last_run (not run here)
 weapon_draw 0.01
 weapon_draw_aug6 0.00
 weapon_draw_cn 0.01

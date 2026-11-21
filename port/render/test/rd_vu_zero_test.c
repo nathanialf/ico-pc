@@ -28,8 +28,11 @@
  *   t6  the run's state and texts (rd_vu_zero_run.c): held until the
  *       self-test, on when it passes, ICO_RD_VU_ZERO=0 off, =1 on, the
  *       loss ladder (ICO_LOSS_ROW=1) off for this start over =1, the block
- *       clause and its reset, a failed self-test off for the run and still
- *       off at a renderer made again (over =1), the reasons' words */
+ *       clause and its reset (the checks' clause only where a check ran),
+ *       the words a velocity, skinned or probe entry gives up, no zero
+ *       module made without a try, a failed self-test off for the run and
+ *       still off at a renderer made again (over =1), the install's mark
+ *       (ICO_VU_ZERO_BLOCK) off over =1, the reasons' words */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -453,7 +456,8 @@ static void t6(void)
     putEnv("ICO_RD_VU_ZERO_SABOTAGE", NULL);
     /* held until the self-test, on when it passes */
     rd__vu_zero_init();
-    CHECK(!rd__vu_zero_on() && rd__vu_zero_copyable(), "held: on %d", rd__vu_zero_on());
+    CHECK(!rd__vu_zero_on() && !rd__vu_zero_copyable(), "held: on %d, the record copyable",
+          rd__vu_zero_on());
     (void)rd_vu_zero_text(buf, sizeof(buf), 1);
     CHECK(strcmp(buf, "; zero-area cull held (until its start-up self-test passes)") == 0,
           "held text: %s", buf);
@@ -471,17 +475,31 @@ static void t6(void)
     CHECK(rd__vu_zero_on(), "=1: off");
     rd__vu_zero_draw(true, -1, 100);
     rd__vu_zero_draw(true, -1, 50);
-    rd__vu_zero_draw(false, RD_VU_ZERO_SHARED, 30);
-    rd__vu_zero_draw(false, RD_VU_ZERO_SHARED, 30);
+    rd__vu_zero_draw(false, RD_VU_ZERO_VELOCITY, 30);
+    rd__vu_zero_draw(false, RD_VU_ZERO_VELOCITY, 30);
+    rd__vu_zero_shared_given_up();
+    rd__vu_zero_shared_given_up();
     (void)rd_vu_zero_text(buf, sizeof(buf), 2);
     CHECK(strcmp(buf, "; zero-area cull: 1 draws a picture culling, 75 triangles; refused a "
-                      "picture: shared list 1; checked 0 pictures: 0 of 0 triangle slots "
-                      "culled, 0 differ") == 0,
+                      "picture: velocity 1; shared lists given up a picture: 1") == 0,
           "=1 text: %s", buf);
     (void)rd_vu_zero_text(buf, sizeof(buf), 2);
-    CHECK(strcmp(buf, "; zero-area cull: 0 draws a picture culling, 0 triangles; checked 0 "
-                      "pictures: 0 of 0 triangle slots culled, 0 differ") == 0,
+    CHECK(strcmp(buf, "; zero-area cull: 0 draws a picture culling, 0 triangles") == 0,
           "the block reset: %s", buf);
+    /* no module made without a device (and none before a try) */
+    CHECK(rd__vu_zero_variants_made() == 0u, "%u zero-area modules made without a device",
+          rd__vu_zero_variants_made());
+    /* the words a velocity, skinned or probe entry gives up */
+    int kw = -1;
+    CHECK(rd__vu_zero_entry_keep(0x11100u, false, true, false, &kw) == 0u &&
+              kw == RD_VU_ZERO_VELOCITY,
+          "a velocity entry kept its word (why %d)", kw);
+    CHECK(rd__vu_zero_entry_keep(0x11100u, true, false, false, &kw) == 0u && kw == RD_VU_ZERO_ENTRY,
+          "a skinned entry kept its word");
+    CHECK(rd__vu_zero_entry_keep(0x11100u, false, false, false, &kw) == 0x11100u,
+          "a plain entry lost its word");
+    CHECK(rd__vu_zero_rule_vs(0u) != rd__vu_zero_rule_vs(0x11100u),
+          "the zero build's id is the rule stage's");
     char small[24];
     const size_t n = rd_vu_zero_text(small, sizeof(small), 1);
     CHECK(n == sizeof(small) - 1u && strlen(small) == sizeof(small) - 1u, "short buffer: %zu", n);
@@ -497,6 +515,15 @@ static void t6(void)
     rd__vu_zero_verdict(true, "");
     CHECK(!rd__vu_zero_on(), "the ladder: on after a passed self-test");
     putEnv("ICO_LOSS_ROW", NULL);
+    /* the install's mark (port/platform/vu_zero_mark.h) over =1 */
+    putEnv("ICO_VU_ZERO_BLOCK", "a run of v9.9.9 ended while it was tried");
+    rd__vu_zero_init();
+    (void)rd_vu_zero_text(buf, sizeof(buf), 1);
+    CHECK(!rd__vu_zero_on() && !rd__vu_zero_copyable() &&
+              strcmp(buf, "; zero-area cull off (on this install (a run of v9.9.9 ended while it "
+                          "was tried))") == 0,
+          "the install's mark: %s", buf);
+    putEnv("ICO_VU_ZERO_BLOCK", NULL);
     putEnv("ICO_RD_VU_ZERO", NULL);
     /* a failed self-test: off for the run, through a renderer made again */
     rd__vu_zero_init();

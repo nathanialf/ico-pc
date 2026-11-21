@@ -87,6 +87,7 @@
 #include "rd_device_rows.h" /* rd_device_rows_reason */
 #include "rd_list_draws.h"
 #include "rd_internal.h"
+#include "rd_vu_zero.h" /* rd__pipeline_drop_vs */
 #include "rd_passring.h"
 #include "rd_paste_spec.h"
 #include "rd_comp_spec.h"
@@ -797,6 +798,17 @@ static void shadowStencil(uint8_t mode, RhiDepthStencilState *ds)
 /* k's description into *d; layouts (4 entries) holds the bind group
  * layouts d points at.  false: the key's destination read has no shader or
  * layout here (it is not created) */
+
+/* a record stage's key drawn through its batch build: the pre-pass's
+   batches on and the stage's batch build made (the zero-area cull's rule
+   stage has its batch build in the record's own set alone, rd_vu_zero.h,
+   so the batches decide) */
+static bool keyBatched(const RdPipeKeyInt *k)
+{
+    return g_rd.vuPreBatch && k->vs < RD_VS_COUNT &&
+           (g_rd.vsBatch[k->vs].id || rd__vs_is_vu_zero(k->vs));
+}
+
 static bool pipelineDesc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroupLayout *layouts)
 {
     static const RhiVertexBinding vb = {0, sizeof(IcoSpriteVertex), false};
@@ -843,7 +855,7 @@ static bool pipelineDesc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroup
         {9, 0, RHI_VTX_F32x4, offsetof(IcoSpritePlaneVertex, sx)},
         {10, 0, RHI_VTX_F32x4, offsetof(IcoSpritePlaneVertex, sy)},
     };
-    if (rd__vs_is_vu_pre(k->vs) || rd__vs_is_vu_stage(k->vs)) {
+    if (rd__vs_is_vu_pre(k->vs) || rd__vs_is_vu_stage(k->vs) || rd__vs_is_vu_zero(k->vs)) {
         /* the vertex pre-pass and the record stages (rd_replay_vu.c
          * rd__vu_prepass): the entry reads group 1 as the VU programs do;
          * points into the record's three RGBA32_UINT targets through
@@ -860,7 +872,7 @@ static bool pipelineDesc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroup
              * compute builds read sets 0 and 1); the tick stage's two keys
              * the same pipeline twice, as under the stores */
             layouts[1] = g_rdRec.layoutVuPre;
-            d->compute = rd__vu_record_cs(k->vs, g_rd.vuPreBatch && g_rd.vsBatch[k->vs].id);
+            d->compute = rd__vu_record_cs(k->vs, keyBatched(k));
             if (!d->compute.id || !layouts[1].id) {
                 return false;
             }
@@ -881,7 +893,7 @@ static bool pipelineDesc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroup
              * pipeline matches the pass on both render pass paths; elsewhere
              * no target, as v0.11.2; the key is unchanged */
             layouts[1] = g_rdRec.layoutVuPre;
-            d->vertex = rd__vu_record_vs(k->vs, g_rd.vuPreBatch && g_rd.vsBatch[k->vs].id);
+            d->vertex = rd__vu_record_vs(k->vs, keyBatched(k));
             if (!d->vertex.id || !layouts[1].id) {
                 return false;
             }
@@ -903,8 +915,7 @@ static bool pipelineDesc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroup
         }
         /* the batch build under the pre-pass's batches (g_rd.vuPreBatch,
          * set once a run before any pipeline; rd_replay_vu.c vuPrepassRun) */
-        d->vertex =
-            g_rd.vuPreBatch && g_rd.vsBatch[k->vs].id ? g_rd.vsBatch[k->vs] : g_rd.vs[k->vs];
+        d->vertex = keyBatched(k) ? g_rd.vsBatch[k->vs] : g_rd.vs[k->vs];
         d->fragment = g_rd.fs[RD_FS_VU_PRE];
         if (!d->vertex.id || !d->fragment.id) {
             return false;
@@ -1232,7 +1243,7 @@ void rd__pipe_key_text(const RdPipeKeyInt *k, char *out, size_t size)
 static bool keyIsVu(const RdPipeKeyInt *k)
 {
     return (k->vs >= RD_VS_VU_FIRST && k->vs <= RD_VS_VU_LAST) || rd__vs_is_vu_main(k->vs) ||
-           rd__vs_is_vu_pre(k->vs) || rd__vs_is_vu_stage(k->vs);
+           rd__vs_is_vu_pre(k->vs) || rd__vs_is_vu_stage(k->vs) || rd__vs_is_vu_zero(k->vs);
 }
 
 /* the key's fields; a point key (the pre-pass's, a record stage's) " pre"
@@ -1241,7 +1252,9 @@ static void keyWords(const RdPipeKeyInt *k, char *out, size_t size)
 {
     snprintf(out, size, "program %u blend %u vs %u fs %u fmt %u/%u msaa %u dst %u%s", k->gs.program,
              k->gs.blend, k->vs, k->fs, k->colorFmt, k->depthFmt, k->gs.msaa, (unsigned)k->dst,
-             rd__vs_is_vu_pre(k->vs) || rd__vs_is_vu_stage(k->vs) ? " pre" : "");
+             rd__vs_is_vu_pre(k->vs) || rd__vs_is_vu_stage(k->vs) || rd__vs_is_vu_zero(k->vs)
+                 ? " pre"
+                 : "");
 }
 
 /* whether a program entry's key draws through the plain variant (the
@@ -1259,15 +1272,15 @@ static void keyVsName(const RdPipeKeyInt *k, char *out, size_t size)
 {
     const char *v = rd__vs_name(k->vs);
     const size_t n = strlen(v);
-    const bool batched = g_rd.vuPreBatch && k->vs < RD_VS_COUNT && g_rd.vsBatch[k->vs].id;
-    if ((rd__vs_is_vu_pre(k->vs) || rd__vs_is_vu_stage(k->vs)) && k->fs == RD_FS_VU_PRE_CS &&
-        n > 7) {
+    const bool batched = keyBatched(k);
+    if ((rd__vs_is_vu_pre(k->vs) || rd__vs_is_vu_stage(k->vs) || rd__vs_is_vu_zero(k->vs)) &&
+        k->fs == RD_FS_VU_PRE_CS && n > 7) {
         /* the record's compute build (pipelineDesc): vu_X_compute_pre_cs
          * or vu_X_batch_compute_pre_cs (rd_vu_record.c), so a crash's note
          * names it (startup_retry.h startup_retry_note_has_vu_store: the
          * restart takes the render targets' record) */
         snprintf(out, size, "%.*s%s_compute_pre_cs", (int)(n - 7), v, batched ? "_batch" : "");
-    } else if ((rd__vs_is_vu_pre(k->vs) || rd__vs_is_vu_stage(k->vs)) &&
+    } else if ((rd__vs_is_vu_pre(k->vs) || rd__vs_is_vu_stage(k->vs) || rd__vs_is_vu_zero(k->vs)) &&
                k->colorFmt == RHI_FMT_UNKNOWN && n > 7 && rd__vu_record_vs(k->vs, batched).id) {
         /* the record stored by the vertex shaders (pipelineDesc): the store
          * build it draws through, vu_X_store_pre_vs or
@@ -1446,7 +1459,7 @@ static const RdPipeKeyInt *drawKeyTurned(const RdPipeKeyInt *k, RdPipeKeyInt *tm
 
 uint32_t rd__key_dynamic_bits(const RdPipeKeyInt *k)
 {
-    if (rd__vs_is_vu_pre(k->vs) || rd__vs_is_vu_stage(k->vs)) {
+    if (rd__vs_is_vu_pre(k->vs) || rd__vs_is_vu_stage(k->vs) || rd__vs_is_vu_zero(k->vs)) {
         return 0; /* three targets, no depth: every state static */
     }
     uint32_t bits = 0;
@@ -2006,6 +2019,29 @@ void rd__pipeline_cache_clear(void)
     s_createStopped = false;
     s_fullLogged = false;
     memset(s_hash, 0, sizeof(s_hash));
+}
+
+uint32_t rd__pipeline_drop_vs(uint8_t vs)
+{
+    uint32_t n = 0;
+    for (uint32_t i = 0; i < s_used && g_rd.hasDevice; i++) {
+        if (s_cache[i].key.vs == vs && s_cache[i].pipe.id) {
+            rhi_destroy_pipeline(s_cache[i].pipe);
+            s_cache[i].pipe = (RhiPipeline){0};
+            s_count--;
+            n++;
+        }
+    }
+    return n;
+}
+
+uint32_t rd__pipeline_count_vs(uint8_t vs)
+{
+    uint32_t n = 0;
+    for (uint32_t i = 0; i < s_used; i++) {
+        n += s_cache[i].key.vs == vs && s_cache[i].pipe.id ? 1u : 0u;
+    }
+    return n;
 }
 
 static RdPipelineProgressFn s_progressFn;
@@ -3734,6 +3770,13 @@ int rd_pipeline_cache_file(char *out, size_t cap)
         RdCacheKey k;
         rd_cache_key_begin(&k, RD_PIPELINE_CACHE_FORMAT);
         for (unsigned i = 0; i < g_icoShaderCount; i++) {
+            /* the zero-area cull's rule-stage builds (rd_vu_zero.h) left out:
+               with them the file's name is the build's without them, so a
+               device keeps the cache it had (the driver's own cache checks
+               each module it holds) */
+            if (strncmp(g_icoShaders[i].name, "vu_tri_rule_zero_", 17) == 0) {
+                continue;
+            }
             rd_cache_key_module(&k, g_icoShaders[i].name, g_icoShaders[i].stage,
                                 g_icoShaders[i].spirv, g_icoShaders[i].spirv_len);
         }
@@ -4090,7 +4133,7 @@ RdKeyFamily rd__pipe_key_family(const RdPipeKeyInt *k)
     default:
         break;
     }
-    if (rd__vs_is_vu_pre(k->vs) || rd__vs_is_vu_stage(k->vs)) {
+    if (rd__vs_is_vu_pre(k->vs) || rd__vs_is_vu_stage(k->vs) || rd__vs_is_vu_zero(k->vs)) {
         return RD_KF_VU_POINT;
     }
     if (keyIsVu(k)) {

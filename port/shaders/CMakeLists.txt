@@ -243,6 +243,23 @@ foreach(_v prelit:prelit lit:lit lit_spec:lit reflect:lit skin:skin skin_spec:sk
     ico_add_shader(vu_${_e}_batch_compute_pre_cs vu_${_f}.hlsl vu_${_e}_pre_cs compute
                    DEFINES ICO_VU_PRE_BATCH=1 ICO_VU_REC_COMPUTE=1)
 endforeach()
+# The zero-area cull's rule stage (vu_tri.hlsl with ICO_VU_ZERO=1;
+# port/render/rd_vu_zero.h, docs/port/PIPELINES.md "The zero-area cull"): the
+# rule stage's six builds again with the test, under names of their own, so
+# every module above is the build without the cull byte for byte; the
+# renderer makes the one its record and batches take only once it tries the
+# cull (rd_vu_zero_run.c), never at its start
+ico_add_shader(vu_tri_rule_zero_pre_vs vu_tri.hlsl vu_tri_rule_pre_vs vertex DEFINES ICO_VU_ZERO=1)
+ico_add_shader(vu_tri_rule_zero_batch_pre_vs vu_tri.hlsl vu_tri_rule_pre_vs vertex
+               DEFINES ICO_VU_ZERO=1 ICO_VU_PRE_BATCH=1)
+ico_add_shader(vu_tri_rule_zero_store_pre_vs vu_tri.hlsl vu_tri_rule_pre_vs vertex
+               DEFINES ICO_VU_ZERO=1 ICO_VU_REC_STORES=1)
+ico_add_shader(vu_tri_rule_zero_batch_store_pre_vs vu_tri.hlsl vu_tri_rule_pre_vs vertex
+               DEFINES ICO_VU_ZERO=1 ICO_VU_PRE_BATCH=1 ICO_VU_REC_STORES=1)
+ico_add_shader(vu_tri_rule_zero_compute_pre_cs vu_tri.hlsl vu_tri_rule_pre_cs compute
+               DEFINES ICO_VU_ZERO=1 ICO_VU_REC_COMPUTE=1)
+ico_add_shader(vu_tri_rule_zero_batch_compute_pre_cs vu_tri.hlsl vu_tri_rule_pre_cs compute
+               DEFINES ICO_VU_ZERO=1 ICO_VU_PRE_BATCH=1 ICO_VU_REC_COMPUTE=1)
 # The index compaction's keep stage (vu_tri.hlsl vu_tri_keep_cs; port/render/
 # rd_vu_compact.c, docs/port/PIPELINES.md "The index compaction"): after the
 # compute record's pass T, a draw's index list written again into the

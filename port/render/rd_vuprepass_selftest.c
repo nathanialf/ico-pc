@@ -829,6 +829,7 @@ bool rd_vuprepass_selftest(void)
                  g_rd.vuPrepassWhy);
         rd__log("VU pre-pass: off (self-test not run)");
         rd__vu_zero_selftest_skip("the VU pre-pass is off"); /* rd_vu_zero.h */
+        rd__vu_zero_start_line();
         return true;
     }
     RdTargetRec *t = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
@@ -837,6 +838,7 @@ bool rd_vuprepass_selftest(void)
         rd__log("VU pre-pass: on (self-test not run: no SCENE target to run it on)");
         rd__vu_compact_selftest_not_run("no SCENE target"); /* off: never tried */
         rd__vu_zero_selftest_skip("no SCENE target to run it on");
+        rd__vu_zero_start_line();
         return true;
     }
     readSabotage();
@@ -931,5 +933,6 @@ bool rd_vuprepass_selftest(void)
     } else {
         rd__vu_zero_selftest_skip("the VU pre-pass failed its self-test");
     }
+    rd__vu_zero_start_line(); /* its state and the modules of it made */
     return v.on;
 }

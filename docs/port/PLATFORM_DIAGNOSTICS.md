@@ -873,6 +873,21 @@ an earlier run's, is kept` (the newest record there is). `last_run_parse` gives 
 (`LastRunFacts`: pid, seconds, phase with stage and tick, background, trim level, resets, free
 memory, the end, a crash's signal and the boot id) for the verdict of the next start.
 
+The zero-area cull's mark (`port/platform/vu_zero_mark.c`; [PIPELINES.md](PIPELINES.md#the-zero-area-cull))
+is read right after: `logs/vu-zero-mark.txt` holds `trying` (written and synced by the renderer
+before it makes the cull's one module), `failed` (its self-test refused it), `on` (250 pictures
+drawn with it) or `blocked <version>`. With the previous run's end it decides: `trying` and an end
+other than a clean one (a crash, a device loss, a GPU hang, the watchdog, none written), or
+`failed`, write `blocked <the running version>`; a block of the running version keeps the cull
+off (the renderer gets `ICO_VU_ZERO_BLOCK`), of another version is removed; `on` and the watchdog's end
+count the previous start as a lost one in the loss ladder. One line where there was a mark:
+`ico_pc: the previous run: zero-area cull: was being tried when it ended (a crash): off on this
+install until the version changes (blocked <version>)`, `... being tried when it was closed
+normally (tried again)`, `... refused by its self-test or a check: ...`, `... off on this install
+since a run of <version> ended while it was tried or it was refused ...`, `... blocked on <v>,
+this is <v>: tried again`, `... on when the watchdog ended it: counted as a lost start (the loss
+ladder)`, `... on (it ended: <end>)`. Nothing is written to the settings.
+
 On Android 11 and later each phase change also keeps at most 128 bytes (`ico-pc <phase> | resets
 47->66 | free 1911 MB, lowest 1897`; where the skin check runs, `| skin box <b> twin <t> made <p>`
 before the free figure, and a heartbeat that sees those three change keeps a new one, since a run
@@ -1084,6 +1099,7 @@ the newest file in logs that starts with report-" and name it (`port/platform/di
 | `ico-pc-previous.log` | the run before's |
 | `startup-activity.txt` | when there is one |
 | `last-run.txt`, `last-run-previous.txt` | where this run is and where the run before was, when there are ([the last-run file](#the-last-run-file)) |
+| `vu-zero-mark.txt` | the zero-area cull's mark on the install: trying, failed, on, or blocked for a version ([the last-run file](#the-last-run-file)) |
 | `exit-info.txt`, `exit-trace-<ms>.txt` or `.pb` | how the run before ended and Android's exit records read at this start; the newest trace Android kept with a record ([how the previous run ended](#how-the-previous-run-ended)) |
 | `config.toml`, `ico-pc.ini` | the settings |
 | `loss-<stamp>.zip` | this run's [loss dump](RENDER.md#the-loss-dump), else the one the previous run left, deflated |

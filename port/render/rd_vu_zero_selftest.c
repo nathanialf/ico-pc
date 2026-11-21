@@ -263,13 +263,18 @@ static uint32_t cpuCulled(const int32_t g[ZT_VERTS][2], uint32_t word)
 
 void rd__vu_zero_selftest(RdTargetRec *t)
 {
-    if (!rd__vu_zero_copyable() && !rd__vu_zero_on()) {
-        return; /* off before it (the environment, the loss ladder): said at the start */
+    if (strcmp(rd__vu_zero_state_text(), "off") == 0) {
+        /* off before it (the environment, the loss ladder, the install's
+           mark): said at the start; nothing of the cull made */
+        return;
     }
     const double t0 = rd__now_ms();
     char why[256] = "";
-    /* SCENE's word as the replay's pre-pass will give it */
+    /* the cull tried from here: the mark, then its one module
+       (rd__vu_zero_try_begin); SCENE's word as the replay's pre-pass will
+       give it */
     rd__vu_zero_hold(true);
+    const bool made = rd__vu_zero_try_begin();
     RdStateBlock st;
     rd__reset_state_block(&st);
     st.color = rd_target(RD_TARGET_SCENE).id;
@@ -287,7 +292,9 @@ void rd__vu_zero_selftest(RdTargetRec *t)
     memset(&took, 0, sizeof(took));
     uint32_t want = 0;
     bool pass = false;
-    if (word == 0u) {
+    if (!made) {
+        snprintf(why, sizeof(why), "its rule stage's zero build could not be made");
+    } else if (word == 0u) {
         snprintf(why, sizeof(why), "SCENE gives no lattice (%s)", rd_vu_zero_reason_name(wordWhy));
     } else {
         corners(t, word, g);

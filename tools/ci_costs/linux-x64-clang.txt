@@ -929,7 +929,9 @@ rd_vuprepass_selftest_zero 1.85  # estimate: rd_vuprepass_selftest x 1.1 (two mo
 rd_vuprepass_selftest_zero_lattice 1.85  # estimate: rd_vuprepass_selftest x 1.1 (not run here)
 rd_vuprepass_selftest_zero_lossrow 1.68  # estimate: rd_vuprepass_selftest (the cull not tested; not run here)
 rd_vuprepass_selftest_zero_mali 1.42  # estimate: rd_vuprepass_selftest_mali x 1.1 (not run here)
+rd_vuprepass_selftest_zero_marked 1.68  # estimate: rd_vuprepass_selftest (the cull not tried; not run here)
 rd_vuprepass_selftest_zero_missing 1.85  # estimate: rd_vuprepass_selftest x 1.1 (not run here)
+rd_vuprepass_selftest_zero_never 1.68  # estimate: rd_vuprepass_selftest (the cull not tried; not run here)
 rd_vuprepass_selftest_zero_plain 1.50  # estimate: rd_vuprepass_selftest_plain x 1.1 (not run here)
 rd_vurecord_ab 62.12  # estimate: 38.4 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 1.62
 rd_vurecord_ab_compute 59.98  # estimate: 37.1 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 1.62
@@ -1239,6 +1241,7 @@ vu1_mali 58.38
 vu1_variant_diff 0.12  # estimate: unmeasured, the table's median
 vu1_variant_equiv 0.12  # estimate: unmeasured, the table's median
 vu1_variant_table 0.08  # estimate: 0.1 s local (merge-wt_RECCOMP-20261109T223501Z.rest.log) x 1.59
+vu_zero_mark 0.02  # estimate: a CPU unit test with a few files, like last_run (not run here)
 weapon_draw 0.00
 weapon_draw_aug6 0.00
 weapon_draw_cn 0.00

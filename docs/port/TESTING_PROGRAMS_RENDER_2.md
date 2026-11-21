@@ -434,8 +434,10 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   culled triangle covers a sample point, some are culled, some kept by the margin; the self-test's
   cases at 1x and the half line; the record check (an agreeing record, a flipped flag, a flag
   without a word, a corner without its GS position, the region and scissor modes); `vu_ftoi4`'s
-  edges; the run's state (held until the self-test, `ICO_RD_VU_ZERO` 0 and 1, the loss ladder over
-  both) and the VU line's clause word for word, its reset and a short buffer.
+  edges; the run's state (held until the self-test, `ICO_RD_VU_ZERO` 0 and 1, the loss ladder and
+  the install's mark over both, a failed self-test kept at a renderer made again), the words a
+  velocity, skinned or probe entry gives up, and the VU line's clause word for word, its reset and a
+  short buffer.
 - `rd_vu_zero_ab.cmake` (`rd_vu_zero_ab`, `rd_vu_zero_gl`, `rd_vu_zero_fault`; `rd_vu_zero.cmake`):
   the zero-area cull on every fixture of `port/render/test/fixtures/lists/vu_zero.txt`
   (`fx-mali-slow541`; a listed fixture that is absent FAILS). `ICO_RD_VU_ZERO=1` (on, every entry
@@ -454,13 +456,16 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
     the stats line off.
   - No device: SKIP.
 - `rd_vuprepass_selftest_zero`, `_zero_plain`, `_zero_mali`, `_zero_lattice`, `_zero_missing`,
-  `_zero_lossrow` (`rd_vu_zero.cmake`, through `rd_vuprepass_selftest_test` and
-  `test/rd_vuprepass_selftest.cmake`): the zero-area cull's start-up self-test after the
-  pre-pass's (which must still be on): on in the extended variant (Enhanced 16:9 at 2x, Full
-  pixel), the plain one and under the Arm fakes with the record by compute, its line naming the
-  culled slots and the lattice; off for the run with the rule stage given a lattice half a texel
-  off (the answers differ) and with no record copied (no answer read back); off for this start
-  after a lost one (`ICO_LOSS_ROW=1`), its self-test not run.
+  `_zero_lossrow`, `_zero_marked`, `_zero_never` (`rd_vu_zero.cmake`, through
+  `rd_vuprepass_selftest_test` and `test/rd_vuprepass_selftest.cmake`): the zero-area cull's
+  start-up self-test after the pre-pass's (which must still be on), each run's start line saying
+  what of it exists: on in the extended variant (Enhanced 16:9 at 2x, Full pixel), the plain one
+  and under the Arm fakes with the record by compute, its line naming the culled slots and the
+  lattice, one module and one pipeline; off for the run with the zero build given a lattice half a
+  texel off (the answers differ) and with no record copied (no answer read back), the module and
+  pipeline released; off for this start after a lost one (`ICO_LOSS_ROW=1`), off on the install
+  (`ICO_VU_ZERO_BLOCK`, the mark the platform hands over) and off by `ICO_RD_VU_ZERO=0`, no
+  module or pipeline of it made and no try logged.
 - `rd_smallcuts_test.c` (`rd_smallcuts`; `rd_smallcuts.cmake`, CPU): the pure parts of the turn in
   the present's blit and the VU record by compute on the PowerVR class: `rd__turn_rect` for every
   quarter turn against `rd_prerotate.c`'s pixel table (every pixel of the rect lands inside the
