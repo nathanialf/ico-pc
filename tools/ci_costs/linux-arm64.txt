@@ -436,6 +436,7 @@ rd_draw_pattern_mali 17.03  # estimate: 13.2 s local (v0.11.11's int build, logs
 rd_draw_pattern_powervr 60.63  # estimate: 47.0 s local (v0.11.11's int build, logs/pattern-run4.log) x 1.29
 rd_dst_usage 1.04
 rd_dst_usage_gl 0.65
+rd_dump_reads 0.60  # estimate: not run here; its three pictures' jobs each start 0.15 s after the call (HITCH), the rest CPU only
 rd_early_plan 0.00
 rd_empty_skip_ab 184.89
 rd_empty_skip_ab_gl 41.39

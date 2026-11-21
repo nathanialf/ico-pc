@@ -2126,16 +2126,18 @@ counters in the hot path.
 
   A draw that is drawn rarely and hangs the GPU when it is shows as the rare pipeline common to
   every such line. CPU data only; vertex counts are not in it (they are the draw code's).
-- **The automatic captures' game-thread time split** (`port/platform/window_dump_auto.c`): the
-  slow-scene dump's and the skin check's capture line gives the wait for the render thread's work
-  in flight apart from the frame's own bytes: `window: slow-scene dump: 156.1 ms on the game thread
-  (the render thread's work in flight 120.4 ms of it, the frame's bytes 35.7 ms), 1017 ms on the
-  worker (...)`. The frame is serialised on the game thread because the ring frame names textures,
-  meshes and targets the game thread changes from its next call on (`rd_dump.c` `dumpFrame` drains
-  the render and submit threads first); the zip and the file writes were already the worker's. On a
-  GPU-bound phone the drain could be the render thread's own slot wait; issue 179's next log
-  measured it at 0.0 ms and the frame's bytes at 47.1-56.0 ms (8.6-10.3 MB), more than one 40 ms
-  tick.
+- **The automatic captures' game-thread time split** (`port/platform/window_dump_auto.c`,
+  `dump_auto.c` `ico_dump_auto_game_text`): the capture line gives the game thread's wait apart from
+  the frame's own bytes. The slow-scene dump waits only for the reads of the pictures handed over
+  (`rd_thread_reads_wait`; `rd_dump.c` `dumpFrame`'s reads-only mode): `window: slow-scene dump:
+  10.3 ms on the game thread (copy 5.8 ms, reads wait 4.5 ms), 2361 ms on the worker (...)`. The
+  skin check's capture still drains the render and submit threads: `window: skin-check capture:
+  156.1 ms on the game thread (the render thread's work in flight 120.4 ms of it, the frame's bytes
+  35.7 ms), ...`. The frame is serialised on the game thread because the ring frame names
+  textures, meshes and targets the game thread changes from its next call on; the zip and the file
+  writes are the worker's. Issue 179's reporter showed both costs: the frame's bytes at 47.1-56.0
+  ms (8.6-10.3 MB) once, and later the drain behind a stalled picture's GPU work (68.8 and 258.6
+  ms of 74.6 and 263.2 ms), which the reads' wait does not include.
 - **The slow-scene dump in two steps** (`port/render/rd_dump_mem.h`, `dump_auto.h`
   `ico_dump_auto_prepare`): the copy itself cannot leave the game thread (the frame's textures are
   written in place by its next calls, its meshes and targets freed, its ring slot reused), but the
@@ -2147,9 +2149,9 @@ counters in the hot path.
   (`rd_dump_retained_frame_into`: exactly the dump's bytes, no allocation of the block, no file,
   no compression) and hands the job back for the zip. The frame is the one picked while the ring
   still holds it, else the next replay at or above the block's mean (the pick's own rule); the
-  bytes are those of the old copy for the same frame. The line keeps its words: the game-thread
-  figure is now both steps (the measure and the copy, each with its drain), the worker figure the
-  block's making and the zip. Lines of their own: `window: slow-scene dump: frame F had grown past
+  bytes are those of the old copy for the same frame. The game-thread figure is both steps (the
+  measure and the copy, each with its wait for the reads), the worker figure the block's making
+  and the zip. Lines of their own: `window: slow-scene dump: frame F had grown past
   the worker's block of N bytes: copied into a block grown here instead` (the old way, once),
   `window: slow-scene dump: not written: the worker could not make a block of N bytes`, and
   `window: slow-scene dump: not written: no frame of the scene could be copied in 10000 ms (the

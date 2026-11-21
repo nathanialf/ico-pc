@@ -26,6 +26,14 @@
  * allocation of the block, nothing written to a file, nothing compressed.
  * The bytes are the same as rd_dump_retained_frame_mem's for the same
  * frame (rd_state_test).
+ *
+ * The three calls here are the game thread's and wait only for the reads of
+ * the pictures handed over (rd_thread.h rd_thread_reads_wait), not for the
+ * render and submit threads' work in flight (rd_thread_drain, which the
+ * dump made until v0.11.13: issue 179's 68.8 and 258.6 ms behind a
+ * stalled picture's GPU work; rd_dump.c dumpFrame says why the reads are
+ * enough).  The bytes are those of a drained dump (rd_state_test,
+ * rd_dump_reads_test).
  */
 #ifndef ICO_RD_DUMP_MEM_H
 #define ICO_RD_DUMP_MEM_H
@@ -35,8 +43,8 @@
 #include <stdint.h>
 
 /* The bytes rd_dump_retained_frame_mem would make of the retained frame
-   `number` (the same drain of the render thread and settle of the decode
-   pool first; nothing copied): false (0) when the ring does not hold it
+   `number` (the wait for the reads and the settle of the decode pool
+   first; nothing copied): false (0) when the ring does not hold it
    or the frame is over the memory dump's 192 MiB bound (logged, as
    rd_dump_retained_frame_mem's) */
 bool rd_dump_retained_frame_bytes(uint32_t number, size_t *bytes);
@@ -53,5 +61,10 @@ typedef enum RdDumpInto {
    into *dumped (0 unless OK) */
 RdDumpInto rd_dump_retained_frame_into(uint32_t number, void *block, size_t cap, size_t *len,
                                        uint32_t *dumped);
+
+/* rd_dump_retained_frame_mem (rd.h) waiting for the reads alone: the
+   slow-scene dump's copy grown here when the worker's block could not be
+   used */
+bool rd_dump_retained_frame_mem_reads(uint32_t number, void **buf, size_t *len, uint32_t *dumped);
 
 #endif /* ICO_RD_DUMP_MEM_H */

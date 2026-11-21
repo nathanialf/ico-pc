@@ -28,6 +28,10 @@
  *              making); a block given up while asked, once made, and once
  *              taken leaves the worker free; one made and never taken is
  *              freed at shutdown;
+ *   reads      the slow-scene dump's job waits for the reads alone
+ *              (readsOnly): the result carries it, the line's split reads
+ *              "copy X ms, reads wait Y ms"; a drained job keeps "work in
+ *              flight"; none measured, nothing;
  *   bundle     ico_dump_auto_bundle: of five recorded zips the newest three
  *              go into the report zip, stored, with a note naming each; a
  *              size cap leaves one out and the note says so; none recorded
@@ -163,7 +167,7 @@ static void test_job(const char *base)
     memset(&d, 0, sizeof(d));
     wait_done(&d);
     CHECK(d.result == 0 && d.workerMs >= 0.0 && d.gameMs == 2.5 && d.drainMs == 1.5 &&
-          d.bytes == sizeof(dump));
+          d.bytes == sizeof(dump) && d.readsOnly == 0);
     CHECK(strcmp(d.text, "text 20261110-100000") == 0 && strcmp(d.tag, "slow-scene dump") == 0);
     memset(&z, 0, sizeof(z));
     CHECK(mz_zip_reader_init_file(&z, d.zip, 0));
@@ -429,6 +433,40 @@ static void test_bundle(const char *base)
     }
 }
 
+/* the slow-scene dump waits for the reads alone (rd_dump_mem.h): its
+   result carries the flag, and the line says "copy, reads wait", never the
+   drain's "work in flight"; the skin check's (drained) keeps its words */
+static void test_reads(const char *base)
+{
+    char dir[400], text[160];
+    const char dump[] = "the slow frame";
+    IcoDumpJob j;
+    IcoDumpDone d;
+
+    snprintf(dir, sizeof(dir), "%s/dump-auto-reads", base);
+    ico_mkdir(dir);
+    fill(&j, dir, "20261121-013721", dump, sizeof(dump));
+    j.gameMs = 6.1;
+    j.drainMs = 0.3;
+    j.readsOnly = 1;
+    CHECK(ico_dump_auto_submit(&j) == 0);
+    memset(&d, 0, sizeof(d));
+    wait_done(&d);
+    CHECK(d.result >= 0 && d.readsOnly == 1 && d.drainMs == 0.3);
+    ico_dump_auto_game_text(&d, text, sizeof(text));
+    CHECK(strcmp(text, " (copy 5.8 ms, reads wait 0.3 ms)") == 0);
+    CHECK(strstr(text, "work in flight") == NULL);
+    d.readsOnly = 0;
+    d.gameMs = 74.6;
+    d.drainMs = 68.8;
+    ico_dump_auto_game_text(&d, text, sizeof(text));
+    CHECK(strcmp(text, " (the render thread's work in flight 68.8 ms of it, the frame's bytes "
+                       "5.8 ms)") == 0);
+    d.drainMs = -1.0;
+    ico_dump_auto_game_text(&d, text, sizeof(text));
+    CHECK(text[0] == '\0');
+}
+
 int main(int argc, char **argv)
 {
     const char *base = argc > 1 ? argv[1] : ".";
@@ -439,6 +477,7 @@ int main(int argc, char **argv)
     test_shutdown(base);
     test_prepare(base);
     test_bundle(base);
+    test_reads(base);
     printf("dump_auto_test: %s\n", fails ? "FAILED" : "ok");
     return fails ? 1 : 0;
 }
