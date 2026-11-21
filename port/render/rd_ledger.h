@@ -102,9 +102,10 @@ const char *rd_ledger_fx_words(int fx);
 
 typedef struct RdLedgerEntry {
     char name[RD_LEDGER_NAME];
-    uint32_t built;   /* meshes built under the name this stage */
-    uint32_t carried; /* built in the stage before and never drawn there */
-    uint32_t ticks;   /* ticks with a draw of it recorded */
+    uint32_t built;     /* meshes built under the name this stage */
+    uint64_t builtTris; /* the triangles of those meshes (the rows' rank) */
+    uint32_t carried;   /* built in the stage before and never drawn there */
+    uint32_t ticks;     /* ticks with a draw of it recorded */
     uint32_t draws;
     uint64_t tris;
     /* of tris, the triangles its draws carried marked hidden by the
@@ -204,6 +205,9 @@ int rd_ledger_cached_row(RdLedgerTable *t, RdLedgerRowCache *c, uint32_t id, uin
 /* the marked triangles of a draw added to the row */
 void rd_ledger_note_marks(RdLedgerTable *t, int slot, uint32_t hide, uint32_t later);
 void rd_ledger_note_built(RdLedgerTable *t, int slot);
+/* the triangles of a mesh built under the row's name: a row never drawn
+   ranks by them (the biggest missing model listed first) */
+void rd_ledger_note_built_tris(RdLedgerTable *t, int slot, uint32_t tris);
 /* a draw of the row recorded in tick (frame number), tris triangles */
 void rd_ledger_note_draw(RdLedgerTable *t, int slot, uint32_t tick, uint32_t tris);
 /* n draws, parts or objects of the row left out for reason in picture pic

@@ -56,6 +56,15 @@ filed under its model, also when the cut falls inside `" part "` (`rd_ledger_key
 Draws without a model name left out by photo mode's draw filter are rows of their own:
 `(a grid)` (`rd_draw_vu_grid`), `(particles)` (`rd_draw_vu_particles`), `(screen prims)`
 (`rd_screen_prims`), `(world prims)` and `(a shadow volume)` (`pushStub`, `rd_shadow_tris`).
+The `(a grid)` and `(particles)` rows also count their recorded draws (`rd__ledger_unnamed_draw`:
+a grid's strips times their length less two triangles, a particle's two), so such a row reads
+"drawn in N ticks" beside the port's frustum skips of the grids outside the picture (the cloth,
+water and light grids). Without that count every such row read "never drawn".
+
+The stage animation row the European build leaves out of `stage_DispAnimation`'s walk (row 66;
+row 62 on the Japanese, Korean and Chinese discs; none on the North American disc, whose row 66 is
+`deja_lightning.bga`, the dream's room) is the game's own choice and has no reason: its objects
+read "never drawn, no reason recorded".
 
 The game's packet box test (`RegistPacket.c` `reg_clipPacketBoundingBox`) drops nothing on the
 port: a box that fails picks the clipping program instead (its 0 results are remapped), so it has
@@ -97,8 +106,12 @@ At a stage's end (its number or name changes), `rd: scene ledger:` lines, each u
     port's frustum test in 56 pictures (28 between ticks), 56 draws or parts; ...
     rd: scene ledger: stage 40 (deja): 3 more models not listed (3 of them drawn and never left out)
 
-The rows come in this order: never drawn first, then those left out at times (most pictures left
-out first), then the drawn ones by draws; the first 48 are listed, the rest counted. A capture
+The rows come in this order, so the 48 listed are the ones that matter most (the rest are
+counted): the stage's own models never drawn and not hidden by the game (built in the stage;
+silent or left out by a test), the most triangles first (`rd_ledger_note_built_tris`, from the
+mesh's index count); then models drawn and left out at times, the biggest draws first; then the
+other rows never drawn (hidden by the game, built before the stage, or only named by a test),
+the most pictures left out first; then the drawn ones by draws. A capture
 (F12, Options > Save a picture for a bug report, the skin check's capture) writes the stage in
 play so far the same way ("so far, at this capture") before its zip takes the log, so the
 capture's log says what the scene held and left out up to that moment.

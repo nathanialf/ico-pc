@@ -1245,6 +1245,8 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   new id or epoch. A row hidden by the game's flag reads `hidden by the game's flag (its display
   flag off) in 3 ticks` and the header counts it apart from rows with no reason; a drawn row's
   triangles hidden by the content table and drawn over an overlap; an unnamed `(a grid)` row of
-  the draw filter. Textures: the counts line, the failed ones by name with why, the replaced ones
+  the draw filter. The rows listed (issue 221): past 60 rows the game hid, a model built in the
+  stage and never drawn (10790 triangles, then one of 12) and a model left out at times are
+  listed, in that order before the hidden ones, and 15 rows counted. Textures: the counts line, the failed ones by name with why, the replaced ones
   by name, the table bounded at 256. The cost of a busy tick (3000 draws of 300 meshes, 60 box
   drops, 100 skips) over 2000 ticks, printed and under 250 us.

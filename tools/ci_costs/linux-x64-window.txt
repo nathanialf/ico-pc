@@ -296,6 +296,7 @@ pit_dive_base_jun26 0.00
 pit_dive_base_kor 0.00
 pit_dive_base_ntsc 0.00
 poly_flat 0.00
+stage_disp 0.01  # estimate: a CPU-only walk of two rows on five discs (GRID221)
 present_fallback 0.00
 present_hist 0.00
 present_latency 0.00

@@ -21,6 +21,16 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   the packet box test cannot return 0; the texture reasons and their words agree. The self-test: the rule finds an unledgered early return in a synthetic
   function and passes a ledgered one.
 
+## port/game/test
+
+- `stage_disp_test.c`: `stage_DispAnimation`'s row skip (`StageAnimation.c` compiled in) on each disc
+  its main body serves: the European disc leaves row 66 out, the Japanese, Korean and Chinese discs
+  row 62, the North American disc none, so its row 66 (`deja_lightning.bga`, the dream's room) is
+  drawn; each walk ran to its end. `stage_PlayBgAnimation`'s next frame for a row of step 2 from
+  frame 10 at 60 Hz: 12 on every disc at the game's frame step 2; at a frame step of 1, 11 on the
+  Japanese and North American discs (the frame-rate formula their builds use) and 12 on the
+  European disc (`stage_disp`).
+
 ## port/input/test
 
 - `pad_kind_test.c`: the kind of controller pressed last (`port/input/pad_kind.c`,

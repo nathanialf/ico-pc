@@ -1792,7 +1792,10 @@ void stage_DispAnimation(void)
         signed char lv;
         int k;
 
-        if (entry1->no == PAL_JPNKORCN(0x42, 62)) {
+        /* upstream's block leaves out the North American disc (and the
+           August 2001 build, a twin above): that disc draws every row,
+           and its row 66 is deja_lightning.bga, the dream's room */
+        if (!ICO_NTSCAUG6 && entry1->no == PAL_JPNKORCN(0x42, 62)) {
             continue;
         }
         if ((e->flags.i >> 30) != 0) {
@@ -2146,7 +2149,9 @@ float stage_PlayBgAnimation(int key, float t, void *v, void *q)
         if (systemStatus[0x14 / 4] != 0) {
             break;
         }
-        if (ICO_JPNKORCN) {
+        /* upstream's block names the North American disc with these:
+           its step is the frame-rate formula, not the 50 Hz factor */
+        if (ICO_JPNKORNTSCCN) {
             r = t + e->entry2->step * (30.0f / ((60 - systemStatus[0] * 10) / systemStatus[1]));
         } else {
             f = e->entry2->step;
