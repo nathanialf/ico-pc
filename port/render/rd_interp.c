@@ -4216,12 +4216,16 @@ static RdMeshRec *scratchFor(const RdMeshRec *c, const float (*stream)[4])
         if (c->batchCount) {
             memcpy(m->batches, c->batches, (size_t)c->batchCount * sizeof(RdVuBatchRec));
         }
+        if (c->name[0]) { /* a reused scratch takes the name of the mesh it copies now */
+            memcpy(m->name, c->name, sizeof(m->name));
+        }
     } else {
         if (m) {
             rd_destroy_vu_mesh((RdMesh){*id});
         }
-        *id = rd__vu_mesh_create_raw(stream, c->vertexCount, c->qwPerVertex, c->index,
-                                     c->indexCount, c->batches, c->batchCount, "interp");
+        *id =
+            rd__vu_mesh_create_raw(stream, c->vertexCount, c->qwPerVertex, c->index, c->indexCount,
+                                   c->batches, c->batchCount, c->name[0] ? c->name : "interp");
         m = rd__mesh_rec(*id);
         if (!m) {
             *id = 0;

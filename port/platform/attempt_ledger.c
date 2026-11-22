@@ -35,7 +35,7 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
        frame_dump) and are not counted (issue 123's v0.11.6 log: "0
        captures" beside two of those) */
     [ICO_ATT_CAPTURE_TWO_STEP] = {"slow-scene capture in two steps", "slow-scene captures",
-                                  "grown here"},
+                                  "made here"},
     [ICO_ATT_FLAT0] = {"flat outputs at the provoking corner", NULL, NULL},
     [ICO_ATT_DATE_ONE] = {"one DATE set-up", "shared", "retaken by the guard"},
     [ICO_ATT_EMPTY_SKIP] = {"empty composites skipped", "skipped", NULL},
