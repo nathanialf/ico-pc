@@ -12,6 +12,7 @@
 
 #ifdef ICO_RD
 #include "rd.h"
+#include "rd_ab_run.h" /* rd_ab_notice_take: the in-play judge's notice */
 #endif
 #ifdef ICO_UI_HAVE_SDL
 #include <SDL3/SDL.h>
@@ -24,6 +25,7 @@
 #include "settings_pads.h"
 #include "strings.h"
 #include "touch_ui.h"
+#include "tune_notice.h"
 #include "ui_fps.h"
 #include "ui_internal.h"
 #include "ui_mouse.h"
@@ -130,6 +132,11 @@ void ui_host_init(void)
 void ui_host_vsync(unsigned int mainTick)
 {
     ui_popup_dev_tick(mainTick);
+#ifdef ICO_RD
+    /* the in-play judge's first trial of the run (rd_ab_run.h): the
+       player's notice, once */
+    (void)ui_tune_notice(rd_ab_notice_take() ? 1 : 0);
+#endif
     ui_popup_vsync();
     ui_settings_vsync(); /* Graphics > Apply's countdown */
     /* the button pictures the next frame draws (Options > Controls > Button

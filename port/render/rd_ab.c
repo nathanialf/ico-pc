@@ -284,6 +284,9 @@ static void trialStart(RdAb *a, int id)
     t->histAt = a->histAt;
     a->trials++;
     a->subj[id].trials++;
+    if (!a->noticeGiven) {
+        a->noticeDue = true; /* the run's first trial: the player is told once */
+    }
 }
 
 static uint8_t verdictOff(const RdAb *a, int32_t stage)
@@ -452,6 +455,16 @@ void rd_ab_collect(RdAb *a, const RdAbIn *in)
     } else if (t->pairs == RD_AB_PAIRS) {
         trialEnd(a, NULL, false, true);
     }
+}
+
+bool rd_ab_take_notice(RdAb *a)
+{
+    if (!a->noticeDue) {
+        return false;
+    }
+    a->noticeDue = false;
+    a->noticeGiven = true;
+    return true;
 }
 
 void rd_ab_forget(RdAb *a, const char *why)

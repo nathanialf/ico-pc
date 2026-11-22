@@ -66,6 +66,7 @@
 #include "pad_glyphs.h"
 #include "sheet_ref.h"
 #include "popup.h"
+#include "tune_notice.h"
 #include "strings.h"
 #include "ui_internal.h"
 
@@ -608,6 +609,43 @@ static void testPopups(void)
     CHECK(ui_popup_push("x", "y") == -1, "the queue is bounded");
     ui_popup_reset();
     ui_popup_set_dev_test(0);
+
+    /* the in-play timing's notice (tune_notice.h): nothing without the
+       judge's word; queued with its title; in every language its body's
+       lines fit the panel's widest body (the panel's 576 units at the
+       body's size 21: popup.c MAX_W - 2 PAD_X) and the panel stays on the
+       picture; dropped, not queued, with the queue full */
+    CHECK(ui_tune_notice(0) == 0 && !ui_popup_active(), "the notice without the judge's word");
+    const UiLang langWas = ui_get_language();
+    for (int l = 0; l < UI_LANG_COUNT; l++) {
+        ui_set_language((UiLang)l);
+        ui_popup_reset();
+        CHECK(ui_tune_notice(1) == 1 && ui_popup_active(), "language %d: the notice not queued", l);
+        for (int i = 0; i < ui_popup_slide_vsyncs(); i++) {
+            ui_popup_vsync();
+        }
+        CHECK(strcmp(ui_popup_title(), ui_str_in((UiLang)l, UI_STR_TUNE_TITLE)) == 0,
+              "language %d: the notice's title \"%s\"", l, ui_popup_title());
+        CHECK(ui_popup_panel(r) && r[0] > 0.0f && r[2] <= UI_GRID_W && r[3] < 480.0f,
+              "language %d: the notice's panel %g,%g %g,%g", l, r[0], r[1], r[2], r[3]);
+        char body[UI_POPUP_TEXT];
+        snprintf(body, sizeof(body), "%s", ui_popup_body());
+        for (char *line = strtok(body, "\n"); line != NULL; line = strtok(NULL, "\n")) {
+            const float w = ui_measure_menu_text(21.0f, line);
+            CHECK(w <= UI_GRID_W - 2.0f * 18.0f - 2.0f * 14.0f,
+                  "language %d: the notice's line \"%s\" is %g units wide", l, line, w);
+        }
+    }
+    ui_set_language(UI_LANG_EN);
+    ui_popup_reset();
+    CHECK(ui_tune_notice(1) == 1 && strcmp(ui_popup_title(), "Finding the best settings") == 0,
+          "the English title \"%s\"", ui_popup_title());
+    for (int i = 1; i < UI_POPUP_QUEUE; i++) {
+        ui_popup_push("x", "y");
+    }
+    CHECK(ui_tune_notice(1) == -1, "the notice queued past a full queue");
+    ui_popup_reset();
+    ui_set_language(langWas);
 
     /* the timing in seconds: 0.3 s in, 4 s held, 0.3 s out at the default
        50 Hz and at 60 Hz (the Japanese disc, and the European one's 60 Hz

@@ -1710,6 +1710,13 @@ subjects: the cull is the first (`RD_AB_ZERO`); the registry takes more, one on 
   `abEpoch`). The trials already run still count toward the 12. Logged: `A/B: the renderer was
   made again (a Graphics API switch or the device made again): every verdict and the carried arm
   forgotten, each attempt with it until its stage's own trial on this renderer`.
+- **The player is told once a run**: when the judge starts its first trial (`rd_ab_take_notice`:
+  not for a later trial, a second subject, after a stop or a renderer made again; never when no
+  trial starts, under `ICO_RD_AB` or in the start-up self-tests, where nothing may be tried) the
+  glue sets a one-shot (`rd_ab_notice_take`, an atomic), and the game's thread, which owns the
+  popup queue, shows the popup "Finding the best settings" ("The game is timing two ways of
+  drawing on this device. You may see some stutter for a few seconds in each new area.";
+  `port/ui/tune_notice.c`, [UI.md](UI.md)). A full queue drops it; it is not retried.
 
 The rate requirement (`rd_ab` test, a GPU-bound stream at a 40 ms tick, 60 s; pictures of 33,
 37.5, 48 and 60 ms; the cull saving or costing 3, 5 or 10 %; one stage, four stages of one
