@@ -691,6 +691,10 @@ size_t rd_vu_share_text(char *out, size_t cap, unsigned n);
  * checked P pictures: C of S triangle slots culled, M differ", or
  * "; zero-area cull held|off (why)"; the block's counts back to zero */
 size_t rd_vu_zero_text(char *out, size_t cap, unsigned n);
+/* The buffer that clause needs at most (the window's VU line): every
+ * refusal reason, the shared lists and the self-test block's checked
+ * pictures, with seven-digit counts (rd_vu_zero_test) */
+#define RD_VU_ZERO_TEXT_MAX 480
 /* The record written without render targets (stores or compute: a device
  * loss takes the restart's losstargets step first, startup_retry.h
  * StartupRetryRun.storesWereOn) */

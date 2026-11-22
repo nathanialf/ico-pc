@@ -258,17 +258,20 @@ size_t stall_moment_text(const StallMoment *m, char *out, size_t cap);
      stall_pieces_judge; a piece's share: its GPU time over the GPU spans
      of the block's timed pictures, so the effects, inside their lists'
      times, and the lists do not add up to 100 %):
-       stalls against each piece's share of the GPU time (piece: stalls,
-       their share of the stalls naming a piece, its share of the GPU
-       time): 12 stalls, 10 naming a piece; list 0: 8, 80 %, 48 %; list 3:
-       1, 10 %, 12 %; aura: 0, 0 %, 9 %; ...; 2 naming none (240 timed
-       pictures, 9850.0 ms of GPU spans)
+       stalls against each piece's share of the GPU time (piece: stalled
+       replays, their share of the stalled replays naming a piece, its
+       share of the GPU time): 12 stalls in 11 replays, 10 of them naming
+       a piece; list 0: 8, 80 %, 48 %; list 3: 1, 10 %, 12 %; aura: 0, 0
+       %, 9 %; ...; 1 naming none (240 timed pictures, 9850.0 ms of GPU
+       spans)
+     (a replay whose present and one of its passes both stall is one
+     stalled replay here: counted twice it would weigh its piece twice)
    - every stall, none left out, STALL_TABLE_LINE rows a line:
        stall table (part 1 of 1; 12 stalls, 1 of them from the block
-       before): r553 s42 present 141 ms: list 0 88.1 ms x9.4; tris x1.02
-       of the median, x0.85 of the 2 s most; reduction 2.40/2.41/2.39,
-       present 2.70/2.66/2.71 ms; battery -812 mA | r560 s42 pass 120.3
-       ms x9.1: ...
+       before): r553 s42 present 141 ms: list 0 88.1 ms x9.4; tris 31475
+       x1.02 of the median, x0.85 of the 2 s most; reduction
+       2.40/2.41/2.39, present 2.70/2.66/2.71 ms; battery -812 mA | r560
+       s42 pass list 0 SCENE 120.3 ms x9.1: ...
      a row: the replay, the stage, the stall (a present over
      STALL_PRESENT_MS, or a pass over STALL_PASS_TIMES its median and its
      factor), the piece that grew most with its time and factor, the VU
@@ -298,6 +301,7 @@ typedef struct StallRow {
     float tris, trisMed, trisMax; /* trisMed, trisMax < 0: not known */
     float red[3], pres[3];        /* < 0: not timed */
     float batteryMa;
+    char pass[48]; /* a pass stall's pass (rd_perf_pass_label), "" none */
 } StallRow;
 
 typedef struct StallTable {
@@ -305,8 +309,13 @@ typedef struct StallTable {
     unsigned stalls;  /* rows added this block */
     unsigned carried; /* rows held from the block before */
     unsigned dropped; /* stalls past STALL_TABLE_MAX this block */
-    unsigned named;   /* the block's stalls naming a piece */
+    /* the block's stalled replays (a replay whose present and one of its
+       passes both stall counts once: the share line's unit), those naming
+       a piece and by piece; the last one counted and whether it named one */
+    unsigned replays, named;
     unsigned byPiece[STALL_SHARE_PIECES];
+    uint32_t lastReplay;
+    bool lastNamed;
     unsigned timed; /* the block's timed pictures */
     double gpuMs, pieceMs[STALL_SHARE_PIECES];
     StallRow row[STALL_TABLE_MAX];

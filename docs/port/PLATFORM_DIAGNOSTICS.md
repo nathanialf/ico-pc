@@ -1629,7 +1629,8 @@ longest 148.2 ms; over 2 ticks 31, over 3 ticks 12, over 4 ticks 5 (a tick 20.0 
 whole ticks, rounded)`
 
 Each second's medians are of its timed pictures (`-` where none was), the triangles of every
-picture. The reduction and the present pass are fixed work, so their times a second say whether the
+picture; a pass that did not run in a picture (0 ms: a replay not presented, a scene without the
+reduction) is left out of its median. A pause shows as one long interval. The reduction and the present pass are fixed work, so their times a second say whether the
 GPU slowed as a whole without a clock node ([Every stall in a
 table](ANDROID_DIAGNOSTICS_LEDGERS.md#every-stall-in-a-table-the-gpus-speed-the-battery-and-the-memory-events)).
 A present interval runs from one presented picture's present return to the next's, on the CPU's

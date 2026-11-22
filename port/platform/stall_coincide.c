@@ -589,9 +589,19 @@ void stall_table_timed(StallTable *t, uint32_t replay, double gpuMs, const int *
 void stall_table_add(StallTable *t, const StallRow *r)
 {
     t->stalls++;
-    if (r->piece >= 0 && r->piece < STALL_SHARE_PIECES) {
+    const bool named = r->piece >= 0 && r->piece < STALL_SHARE_PIECES;
+    const bool again = t->replays > 0 && r->replay == t->lastReplay;
+    if (!again) {
+        t->replays++;
+        t->lastReplay = r->replay;
+        t->lastNamed = false;
+    }
+    if (named && !t->lastNamed) {
+        /* once a replay: its present's and its pass's stalls judge the same
+           record's pieces */
         t->named++;
         t->byPiece[r->piece]++;
+        t->lastNamed = true;
     }
     if (t->n == STALL_TABLE_MAX) {
         t->dropped++;
@@ -648,16 +658,17 @@ size_t stall_share_text(const StallTable *t, const char *const *names, char *out
         order[j] = v;
     }
     put(&o,
-        "stalls against each piece's share of the GPU time (piece: stalls, their share of the "
-        "stalls naming a piece, its share of the GPU time): %u stall%s, %u naming a piece",
-        t->stalls, t->stalls == 1u ? "" : "s", t->named);
+        "stalls against each piece's share of the GPU time (piece: stalled replays, their share "
+        "of the stalled replays naming a piece, its share of the GPU time): %u stall%s in %u "
+        "replay%s, %u of them naming a piece",
+        t->stalls, t->stalls == 1u ? "" : "s", t->replays, t->replays == 1u ? "" : "s", t->named);
     for (unsigned i = 0; i < k; i++) {
         char tmp[24];
         const int p = order[i];
         put(&o, "; %s: %u, %.0f %%, %.0f %%", piece_of(names, p, tmp, sizeof tmp), t->byPiece[p],
             pct((double)t->byPiece[p], (double)t->named), pct(t->pieceMs[p], t->gpuMs));
     }
-    put(&o, "; %u naming none (%u timed pictures, %.1f ms of GPU spans)", t->stalls - t->named,
+    put(&o, "; %u naming none (%u timed pictures, %.1f ms of GPU spans)", t->replays - t->named,
         t->timed, t->gpuMs);
     return o.at;
 }
@@ -699,7 +710,8 @@ static void row_text(Out *o, const StallRow *r, const char *const *names)
     if (r->kind == 0) {
         put(o, "present %.0f ms: ", (double)r->ms);
     } else {
-        put(o, "pass %.1f ms x%.1f: ", (double)r->ms, (double)r->passFactor);
+        put(o, "pass %s%s%.1f ms x%.1f: ", r->pass, r->pass[0] ? " " : "", (double)r->ms,
+            (double)r->passFactor);
     }
     if (r->piece >= 0) {
         char tmp[24];
@@ -789,7 +801,9 @@ void stall_table_end(StallTable *t, bool all)
         }
     }
     /* the kept rows at the front, the sums emptied */
-    t->stalls = t->dropped = t->named = t->timed = 0;
+    t->stalls = t->dropped = t->named = t->timed = t->replays = 0;
+    t->lastReplay = 0;
+    t->lastNamed = false;
     t->gpuMs = 0.0;
     memset(t->byPiece, 0, sizeof(t->byPiece));
     memset(t->pieceMs, 0, sizeof(t->pieceMs));

@@ -150,6 +150,9 @@ struct RdTargetRec;
 /* rd__vu_prepass_init: the environment, the loss ladder (ICO_LOSS_ROW), the
    start state (off, or held until the self-test), its line when off; any
    read back buffer of a device before forgotten */
+/* One checked picture's counts into the block's and the run's (its read
+   back, and the tests: the 10 s clause's "checked" part) */
+void rd__vu_zero_checked(uint64_t slots, uint64_t culled, uint64_t mismatches);
 void rd__vu_zero_init(void);
 /* rd__vu_prepass_shutdown, with the device: the self-test's read back
    buffers destroyed and forgotten (a renderer made again, as after a
