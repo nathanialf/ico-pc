@@ -560,15 +560,19 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   OpenGL (llvmpipe), every fixture at 4:3 1x with `ICO_GL_FAKE_NO_DUAL=1`, above 0 over the list.
   Only clip mode none takes a twin, on every device ([PIPELINES.md](PIPELINES.md#the-discard-free-twins)),
   so these runs draw the phone's path; the run with them must have no draw of the clipper check's
-  class (no check without the self-test). `rd_nodiscard_clean`: the same with
-  `ICO_RD_VU_NODISCARD_CLIPPER=clean` on the run with them: the camera rule's passes through a
-  twin counted apart and above 0 over each fixture and Mali profile, the pictures compared and
-  reported but not required equal (lavapipe's clipper is not clean, and which draws cross the eye
-  plane is not known to the script). No device: SKIP.
-- `rd_vuprepass_selftest_nodiscard`, `_nodiscard_sabotage`, `_nodiscard_marked`, `_nodiscard_dual`,
-  `_nodiscard_clean` (the clipper check: `_nodiscard` requires lavapipe's verdict `not clean`
-  with the first differing case at code 32 or 36, the floor still on; `_nodiscard_clean` the
-  verdict faked clean with what was measured, not clean, in its line)
+  class (no check without the self-test). `rd_nodiscard_clean`: the shipping path, both runs
+  with `--game-selftests`, so the run with them measures the clipper (lavapipe: clean) and the
+  camera rule's passes take a twin: the verdict `clean` required, every target byte for byte, and
+  per fixture and profile at least its list line's `clean_min` of that class (the run of
+  2026-11-22 17:40: 749 such draws over the four fixtures, 0 targets differing). No device:
+  SKIP.
+- `rd_vuprepass_selftest_nodiscard`, `_nodiscard_clipper`, `_nodiscard_notclean`,
+  `_nodiscard_sabotage`, `_nodiscard_marked`, `_nodiscard_dual` (the clipper check:
+  `_nodiscard` requires lavapipe's measured verdict `clean` (13 cases, both entries);
+  `_nodiscard_clipper` its positive control, `ICO_RD_VU_NODISCARD_SABOTAGE=clipper` (the first
+  case's picture through the twins with one byte altered): `not clean` naming that case, clip mode
+  none alone, the mark `counting`, never `failed`; `_nodiscard_notclean` the verdict faked not
+  clean, `ICO_RD_VU_NODISCARD_CLIPPER=notclean`, with what was measured, clean, in its line)
   (`rd_nodiscard.cmake`, through `rd_vuprepass_selftest_test` and
   `test/rd_vuprepass_selftest.cmake`; the Arm fakes without dual-source blending): the twins'
   start-up self-test after the cull's (the pre-pass still on), each run's start line saying what

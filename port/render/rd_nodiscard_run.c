@@ -35,7 +35,7 @@
 enum { N_HELD, N_ON, N_OFF };
 
 /* ICO_RD_VU_NODISCARD_SABOTAGE (tests) */
-enum { NS_NONE, NS_ALPHA, NS_MODULE };
+enum { NS_NONE, NS_ALPHA, NS_MODULE, NS_CLIPPER };
 
 static struct {
     int state;
@@ -155,9 +155,9 @@ void rd__nd_init(void)
     s_n.clipWhy[0] = '\0';
     s_n.clipCheck = false;
     const char *cf = getenv("ICO_RD_VU_NODISCARD_CLIPPER");
-    s_n.clipFake = cf != NULL && strcmp(cf, "clean") == 0   ? RD_ND_CLIP_CLEAN
-                   : cf != NULL && strcmp(cf, "dirty") == 0 ? RD_ND_CLIP_DIRTY
-                                                            : -1;
+    s_n.clipFake = cf != NULL && strcmp(cf, "clean") == 0      ? RD_ND_CLIP_CLEAN
+                   : cf != NULL && strcmp(cf, "notclean") == 0 ? RD_ND_CLIP_DIRTY
+                                                               : -1;
     if (s_n.clipFake >= 0) {
         rd__log("discard-free twins: ICO_RD_VU_NODISCARD_CLIPPER=%s: the clipper check's verdict "
                 "taken as %s whatever it measures (tests)",
@@ -179,13 +179,18 @@ void rd__nd_init(void)
         s_n.sabotage = NS_ALPHA;
     } else if (sb != NULL && strcmp(sb, "module") == 0) {
         s_n.sabotage = NS_MODULE;
+    } else if (sb != NULL && strcmp(sb, "clipper") == 0) {
+        s_n.sabotage = NS_CLIPPER;
     }
     if (s_n.sabotage != NS_NONE) {
         rd__log("discard-free twins: ICO_RD_VU_NODISCARD_SABOTAGE: %s",
                 s_n.sabotage == NS_ALPHA
                     ? "the CPU's proof does not look at the alpha test (a twin draws where the "
                       "*_nodual build discards)"
-                    : "their modules not made");
+                : s_n.sabotage == NS_MODULE
+                    ? "their modules not made"
+                    : "the clipper check's picture through the twins changed in one byte "
+                      "for its first case (the check must say not clean)");
     }
     const char *env = getenv("ICO_RD_VU_NODISCARD");
     const char *row = getenv("ICO_LOSS_ROW");
@@ -452,6 +457,11 @@ void rd__nd_take(uint64_t *twin, uint64_t refused[RD_ND_REASONS])
 bool rd__nd_sabotage_alpha(void)
 {
     return s_n.sabotage == NS_ALPHA;
+}
+
+bool rd__nd_sabotage_clipper(void)
+{
+    return s_n.sabotage == NS_CLIPPER;
 }
 
 void rd__nd_take_entries(uint64_t out[2])

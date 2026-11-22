@@ -1808,8 +1808,12 @@ and 24 draws are refused. `port/render/rd_nodiscard.h` says it all.
   `failed`), the verdict kept on the mark's second line and said at the next start. It is evidence
   for these corners, not a proof for every triangle: geometry the cases miss, other states (MSAA,
   other targets), a driver's size thresholds and anything time-dependent are not covered, and the
-  in-play judge and the mark stay the way back. Lavapipe's verdict is `not clean`
-  (`rd_vuprepass_selftest_nodiscard` requires it: the cases find Mesa's NaN).
+  in-play judge and the mark stay the way back. What is known: Mesa's NaN band flag was seen on a
+  triangle drawn beside the picture under `[dev] region_rule = ps2` (fx-drops-4657); no draw
+  without a band has been seen to lose a pixel to it: lavapipe measures the check `clean` (13
+  cases, 52 passes), and `rd_nodiscard_clean` draws 749 camera rule passes through the twins on
+  four fixtures byte for byte. Neither is a proof for another GPU. The check's positive control
+  (`ICO_RD_VU_NODISCARD_SABOTAGE=clipper`) shows it says `not clean` when a case differs.
 - **Never waited for.** A pass whose twin's pipeline is not made draws through its *_nodual build
   and asks for the twin (`rd_pipeline.c` `rd__pipeline_twin`: queued once). Between pictures
   (`rd__pipe_finish_tick`, the background finisher's slot) the queue's next batch is begun on the

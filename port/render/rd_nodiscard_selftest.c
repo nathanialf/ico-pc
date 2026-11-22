@@ -341,8 +341,10 @@ typedef struct NcCase {
 } NcCase;
 
 static const NcCase kClip[] = {
-    /* Mesa's case: the in and out corners' divided x and y equal (the edge
-       on the centre view ray, x / z and y / z 0 at both ends) */
+    /* the trigger vu_common.hlsli's comment gives for Mesa's clipper: the
+       in and out corners' divided x and y equal (the edge on the centre view
+       ray, x / z and y / z 0 at both ends); lavapipe draws it clean (the
+       merge check of 2026-11-22 17:40) */
     {"an edge on the centre view ray", {{0, 0, 2}, {0, 0, -1}, {4, 3, 2}}},
     {"an edge on a view ray, divided x alike", {{0, 2, 2}, {0, 3, -1}, {4, -2, 2}}},
     {"an edge on a view ray, divided y alike", {{2, 0, 2}, {3, 0, -1}, {-2, 4, 2}}},
@@ -513,6 +515,9 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
         rd__nd_hold(false);
         const bool okB = okA && replayRead(&f, t, b, size);
         rd__frame_free(&f);
+        if (okA && k == 0 && rd__nd_sabotage_clipper()) {
+            a[size / 2u] ^= 0x40u; /* the tests' positive control: a difference */
+        }
         if (!okA || !okB) {
             snprintf(why, whySize, "the device failed in its replays (%s at code %u)",
                      kClip[NC_CASE(k)].name, (unsigned)kCodes[NC_CODE(k)]);

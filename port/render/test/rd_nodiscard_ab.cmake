@@ -92,28 +92,25 @@ set(nodual_gl 1)
 # the twins' run line (rd_nodiscard_run.c rd__nd_stats_text), matched in the
 # run's text with its ';' made ','
 set(ndRe "stats: discard-free twins (on|off|held)[^:]*: ([0-9]+) draws through them, ([0-9]+) of them by the clipper check \\(([a-z ]+)\\), refused: ([^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*), ([0-9]+) modules of them made")
-# MODE=clean (rd_nodiscard_clean): the run with them also under the tests'
-# ICO_RD_VU_NODISCARD_CLIPPER=clean, so the camera rule's passes take a twin
-# on lavapipe, whose clipper is not clean: the draw path of that class is
-# exercised and counted, the pictures compared and reported but not required
-# equal (where a triangle crosses the eye plane lavapipe's picture may
-# differ: which draws cross is not known to this script)
-set(extraOn "")
+# MODE=clean (rd_nodiscard_clean): the shipping path.  Both runs take the
+# game's start-up self-tests (--game-selftests), so the run with the twins
+# measures the device's clipper (rd_nodiscard_selftest.c) and, where it is
+# clean (lavapipe is: the merge check of 2026-11-22 17:40), the camera
+# rule's passes take a twin.  Required: the verdict "clean", every target
+# byte for byte, and per fixture and profile at least the clean_min=N of its
+# list line of that class's draws (a floor below what was measured).
+set(extraArgs "")
 if(MODE STREQUAL "clean")
-  set(extraOn ICO_RD_VU_NODISCARD_CLIPPER=clean)
+  set(extraArgs --game-selftests)
 endif()
 
 # a run of a frame: rc, its text flattened, the twins' draws and modules
 function(ndRun dump p s value dir)
   file(REMOVE_RECURSE "${dir}")
   file(MAKE_DIRECTORY "${dir}")
-  set(more "")
-  if(value EQUAL 1)
-    set(more ${extraOn})
-  endif()
-  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${env_${p}} ${more} ICO_RD_VU_NODISCARD=${value}
+  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${env_${p}} ICO_RD_VU_NODISCARD=${value}
                           "${TOOL}" "${dump}" /dev/null --pass-dump "${dir}" --stats --repeat 2
-                          ${args_${s}}
+                          ${extraArgs} ${args_${s}}
                   RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
   string(REPLACE ";" "," flat "${out}\n${err}")
   set(state "")
@@ -198,9 +195,9 @@ foreach(e IN LISTS entries)
             message(SEND_ERROR "${dump} ${p} ${s}: no twins' line:\n${r_flat}")
             math(EXPR failures "${failures} + 1")
           elseif(MODE STREQUAL "clean")
-            # the camera rule's class ran (the fake: no clipper check here)
+            # the camera rule's class ran on the measured verdict
             if(NOT r_clipper STREQUAL "clean")
-              message(SEND_ERROR "${dump} ${p} ${s}: the fake clipper verdict did not take (${r_clipper}):\n${r_flat}")
+              message(SEND_ERROR "${dump} ${p} ${s}: the clipper check did not measure clean (${r_clipper}):\n${r_flat}")
               math(EXPR failures "${failures} + 1")
             endif()
             math(EXPR fxTwins "${fxTwins} + ${r_clip}")
@@ -241,8 +238,9 @@ foreach(e IN LISTS entries)
         execute_process(COMMAND "${CMAKE_COMMAND}" -E compare_files "${dirOff}/${png}"
                                 "${dirOn}/${png}" RESULT_VARIABLE same)
         if(NOT same EQUAL 0 AND MODE STREQUAL "clean")
-          message(STATUS "${dump} ${p} ${s}: ${png} differs with the camera rule's passes through the twins (lavapipe's clipper: reported, not required)")
+          message(SEND_ERROR "${dump} ${p} ${s}: ${png} differs with the camera rule's passes through the twins")
           math(EXPR cleanDiffers "${cleanDiffers} + 1")
+          math(EXPR failures "${failures} + 1")
         elseif(NOT same EQUAL 0)
           message(SEND_ERROR "${dump} ${p} ${s}: ${png} differs with the twins")
           math(EXPR failures "${failures} + 1")
@@ -267,6 +265,14 @@ foreach(e IN LISTS entries)
       math(EXPR failures "${failures} + 1")
     endif()
     message(STATUS "${name} ${p}: ${fxTwins} draws through a twin")
+    # the clean run's floor for this fixture (clean_min=N on its list line)
+    if(MODE STREQUAL "clean" AND nodual_${p} AND "${RDFX_FIELDS_${name}}" MATCHES "clean_min=([0-9]+)")
+      set(floor "${CMAKE_MATCH_1}")
+      if(fxTwins LESS floor)
+        message(SEND_ERROR "${name} ${p}: ${fxTwins} camera rule draws through a twin, under its floor ${floor}")
+        math(EXPR failures "${failures} + 1")
+      endif()
+    endif()
     if(NOT DEFINED profTwins_${p})
       set(profTwins_${p} 0)
     endif()
@@ -290,8 +296,6 @@ endif()
 math(EXPR failures "${failures} + ${RDFX_FAILURES}")
 message(STATUS "rd_nodiscard_ab (${BACKEND}): ${compared} targets compared over ${nentries} frames, ${twinTotal} draws through a twin")
 if(MODE STREQUAL "clean")
-  # the experiment's answer (round 7): a target that differs here is a pixel a
-  # draw without a band lost to the NaN branch on lavapipe (or kept)
   message(STATUS "rd_nodiscard_clean: ${cleanDiffers} targets differ with the camera rule's passes through the twins")
 endif()
 if(failures GREATER 0)

@@ -73,10 +73,16 @@
  * near-depth planes, the far plane, the side planes through saturation, one
  * and two corners out, the factor's 0 / 0) for these corners only; geometry
  * the cases miss, other states (MSAA, other targets), a driver's size
- * thresholds and anything time-dependent are not covered.  Lavapipe is not
- * clean (rd_vuprepass_selftest_nodiscard requires it: the cases find
- * Mesa's NaN); ICO_RD_VU_NODISCARD_CLIPPER=clean|dirty fakes the verdict for
- * the tests.
+ * thresholds and anything time-dependent are not covered.  What is known (2026-11-22): Mesa's NaN band flag was seen on a
+ * triangle drawn beside the picture under [dev] region_rule = ps2 (commit
+ * e65012742, fx-drops-4657); no draw without a band has been seen to lose
+ * a pixel to it: lavapipe measures the check clean (13 cases, 52 passes),
+ * and rd_nodiscard_clean draws 749 camera rule passes through the twins on
+ * four fixtures byte for byte.  Neither is a proof for another GPU.
+ * ICO_RD_VU_NODISCARD_CLIPPER=clean|notclean fakes the verdict for the
+ * tests; ICO_RD_VU_NODISCARD_SABOTAGE=clipper changes the check's first
+ * case's picture through the twins in one byte (its positive control: the
+ * check must say not clean).
  * The twins' pipelines are made in the background between pictures
  * (rd_pipeline.c rd__pipeline_twin, rd__pipeline_twin_tick: a batch on the
  * workers at low priority, as the start-up set's background finisher, or
@@ -284,14 +290,16 @@ typedef struct RdNdUse {
 
 void rd_nd_use_note(RdNdUse *u, int verdict);
 bool rd_nd_use_counts(const RdNdUse *u);
-/* the tests' sabotage =alpha */
+/* the tests' sabotage =alpha, =clipper (the clipper check's first case's
+   picture through the twins changed in one byte: its positive control) */
 bool rd__nd_sabotage_alpha(void);
+bool rd__nd_sabotage_clipper(void);
 /* the self-test's draws through a twin of a clip mode other than none since
    the last call */
 uint64_t rd__nd_take_clip(void);
 /* the clipper check's frames running (their camera rule passes taken as a
    clean clipper's would be), and its verdict (clean, or the first differing
-   case's words; the tests' ICO_RD_VU_NODISCARD_CLIPPER=clean|dirty replaces
+   case's words; the tests' ICO_RD_VU_NODISCARD_CLIPPER=clean|notclean replaces
    it, saying what was measured); the verdict (RD_ND_CLIP_*) and its words */
 void rd__nd_clipper_check(bool on);
 void rd__nd_clipper_verdict(bool clean, const char *why);
