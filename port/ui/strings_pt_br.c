@@ -913,4 +913,7 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_VAL_ZOOM_TOGGLE] = NULL, /* "Toggle" */
     /* "Hold: the camera zooms in while you keep R2 held. Toggle: press R2 once to zoom in, press again to zoom out." */
     [UI_STR_ZOOM_TYPE_NOTE] = NULL,
+    [UI_STR_TUNE_TITLE] = NULL, /* "Finding the best settings" */
+    /* "The game is timing two ways\nof drawing on this device. You\nmay see some stutter for a few\nseconds in each new area." */
+    [UI_STR_TUNE_BODY] = NULL,
 };

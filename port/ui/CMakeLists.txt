@@ -96,6 +96,7 @@ set(_ui_sources
     menu_text.c
     pad_glyphs.c
     popup.c
+    tune_notice.c
     ${_ui_string_srcs}
     ${_ui_font_srcs}
     ${_ui_pad_glyph_data})

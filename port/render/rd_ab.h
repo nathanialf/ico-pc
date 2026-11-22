@@ -166,6 +166,7 @@ typedef struct RdAb {
     RdAbTrial t;
     uint32_t serial, trials;
     uint16_t epoch; /* rd_ab_forget's count: a record of an earlier renderer is not measured */
+    bool noticeDue, noticeGiven; /* the player's notice (rd_ab_take_notice) */
     bool capSaid;
     uint32_t altSeq;
     uint64_t offTrial; /* off-arm replays the trials made, the run */
@@ -202,6 +203,11 @@ void rd_ab_forget(RdAb *a, const char *why);
    present pass, so neither is work the subject can change), 0 when nothing
    is left */
 double rd_ab_scene_ms(double spanMs, double displayWaitMs, double presentMs);
+/* the player's notice ("finding the best settings", port/ui/tune_notice.h):
+   true once a run, at the first trial's start (not for a later trial, a
+   second subject, after a stop or a renderer made again; never when no
+   trial starts), then false */
+bool rd_ab_take_notice(RdAb *a);
 /* every trial stopped, every subject at its off arm for the run (why) */
 void rd_ab_stop(RdAb *a, const char *why);
 /* subject id's verdict for stage (RD_AB_V_*) */
