@@ -489,7 +489,8 @@ endif()
 
 # Zoom type (zoom_toggle.h): Hold is the game's R2 test tick for tick over
 # pseudo-random ticks; Toggle's press, release, second press and long hold;
-# every clear; both switches of the type; the June 2001 look-around's test;
+# every clear; both switches of the type; a copy of camera-root.c's step choice
+# (options_test finds its lines in the four arms); the June 2001 look-around's test;
 # the FRESH save-state block copied back. CPU only, no game sources.
 add_executable(zoom_toggle_test test/zoom_toggle_test.c ../platform/host_config.c)
 target_include_directories(zoom_toggle_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform")

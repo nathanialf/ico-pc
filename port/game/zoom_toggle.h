@@ -44,9 +44,12 @@
    the bit; source: ICO_ZOOM_SRC_*; mode: the camera's mode (cameraMode).
    Hold: returns held unchanged (records the level, source and mode; no
    latch).  Toggle: on an override, !live, a new source or a new mode the
-   latch clears and 0 is returned (the level is recorded, so a press held
-   through it does nothing afterwards); otherwise a press (held now, not the
-   tick before) flips the latch, which is returned. */
+   latch clears and 0 is returned, the level recorded (R2 held through a
+   script's zoom, a new source or a new mode does nothing afterwards; while
+   control is off the game hands the boy's pad a zero level, and the 2001
+   discs' camera pad too, so R2 still held when control returns is a press);
+   otherwise a press (held now, not the tick before) flips the latch, which is
+   returned. */
 int ico_zoom_held(int held, int override, int live, int source, int mode);
 /* The June 2001 demo's look-around test: Hold returns held, Toggle the
    latch (as camera-root.c's arm last set it). */
