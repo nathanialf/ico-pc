@@ -28,6 +28,24 @@
  *              making); a block given up while asked, once made, and once
  *              taken leaves the worker free; one made and never taken is
  *              freed at shutdown;
+ *   keep       the loss keep's block (port/render/rd_loss_keep_block.h):
+ *              a slot of its own, so a keep ask leaves the worker free for
+ *              the slow-scene dump and a slow-scene block asked meanwhile
+ *              does not refuse it; none asked gives -1, 0 bytes is refused,
+ *              one at a time, the block comes back at the size asked with
+ *              every page writable and is the caller's to free; given back
+ *              while asked or once made it is freed by the worker; the held
+ *              bytes count it until it is taken; one made and never taken
+ *              is freed at shutdown;
+ *   slow arm   which replay an armed slow-scene dump takes (slow_arm.h): a
+ *              replay at or above the mean that is held is taken at once,
+ *              one gone from the ring gets its line; an arm still on at
+ *              the block's end takes the heaviest held replay seen (the
+ *              first slow block whose next block is lighter, issue 179's
+ *              boat: a capture now) with its line; a stand-in whose frame
+ *              left the ring is replaced by a later held one; with none
+ *              held, or no replay at all, the arm is dropped with a line
+ *              naming why, counted;
  *   reads      the slow-scene dump's job waits for the reads alone
  *              (readsOnly): the result carries it, the line's split reads
  *              "copy X ms, reads wait Y ms"; a drained job keeps "work in
@@ -48,6 +66,7 @@
 #include "host_fs.h"
 #include "ico_thread.h"
 #include "miniz.h"
+#include "slow_arm.h"
 
 static int fails;
 
@@ -351,6 +370,128 @@ static void test_prepare(const char *base)
     CHECK(!ico_dump_auto_busy());
 }
 
+static int wait_keep(void **blk, size_t *size)
+{
+    int r = 0;
+
+    for (int i = 0; i < 5000 && (r = ico_dump_auto_keep_take(blk, size)) == 0; i++) {
+        for (volatile int k = 0; k < 200000; k++) {}
+    }
+    return r;
+}
+
+static void test_keep(void)
+{
+    const size_t asked = 5u * 4096u + 3u;
+    void *blk = NULL, *none = NULL, *slow = NULL;
+    size_t size = 0, noneSize = 9, slowSize = 0;
+    double ms = 0.0;
+
+    CHECK(!ico_dump_auto_busy());
+    CHECK(ico_dump_auto_keep_take(&none, &noneSize) == -1 && none == NULL && noneSize == 0);
+    CHECK(ico_dump_auto_keep_ask(0) == -1);
+    CHECK(ico_dump_auto_keep_ask(asked) == 0);
+    CHECK(ico_dump_auto_keep_ask(asked) == -1); /* one at a time */
+    CHECK(!ico_dump_auto_busy());               /* not the slow-scene dump's slot */
+    CHECK(ico_dump_auto_held_bytes() >= asked);
+    /* the slow-scene dump's block asked beside it: both made */
+    CHECK(ico_dump_auto_prepare(4096u) == 0);
+    CHECK(wait_keep(&blk, &size) == 1 && blk != NULL && size == asked);
+    CHECK(wait_block(&slow, &slowSize, &ms) == 1 && slow != NULL && slowSize == 4096u);
+    ico_dump_auto_unprepare(slow);
+    if (blk != NULL) {
+        memset(blk, 7, size); /* every byte the caller's */
+    }
+    free(blk);
+    blk = NULL;
+    CHECK(ico_dump_auto_held_bytes() == 0);
+    CHECK(ico_dump_auto_keep_take(&none, &noneSize) == -1 && none == NULL);
+    /* given back while asked (made or not yet): the worker frees it */
+    CHECK(ico_dump_auto_keep_ask(asked) == 0);
+    ico_dump_auto_keep_give_back(NULL);
+    for (int i = 0; i < 5000 && ico_dump_auto_held_bytes() != 0; i++) {
+        for (volatile int k = 0; k < 200000; k++) {}
+    }
+    CHECK(ico_dump_auto_held_bytes() == 0);
+    CHECK(ico_dump_auto_keep_ask(asked) == 0); /* the slot free again */
+    spin(50);
+    ico_dump_auto_keep_give_back(NULL); /* made by now most likely: freed here or by the worker */
+    for (int i = 0; i < 5000 && ico_dump_auto_held_bytes() != 0; i++) {
+        for (volatile int k = 0; k < 200000; k++) {}
+    }
+    CHECK(ico_dump_auto_held_bytes() == 0);
+    /* made and never taken: freed at shutdown */
+    CHECK(ico_dump_auto_keep_ask(asked) == 0);
+    spin(50);
+    ico_dump_auto_shutdown();
+    CHECK(ico_dump_auto_held_bytes() == 0);
+    CHECK(ico_dump_auto_keep_take(&none, &noneSize) == -1 && none == NULL);
+    CHECK(ico_dump_auto_keep_ask(asked) == 0); /* a new worker after the shutdown */
+    CHECK(wait_keep(&blk, &size) == 1 && blk != NULL);
+    free(blk);
+    ico_dump_auto_shutdown();
+}
+
+static void test_slow_arm(void)
+{
+    SlowArmPick a;
+    double work = -1.0;
+    const double mean = 115000.0;
+
+    /* a replay at or above the mean, held: taken at once */
+    slow_arm_begin(&a);
+    CHECK(slow_arm_see(&a, 10, 90000.0, 0, 1, 0) == SLOW_ARM_WAIT);
+    CHECK(slow_arm_see(&a, 11, 116000.0, 1, 1, 1) == SLOW_ARM_TAKE);
+    /* at or above it but gone: the line, counted, the arm waits */
+    slow_arm_begin(&a);
+    CHECK(slow_arm_see(&a, 20, 120000.0, 1, 0, 0) == SLOW_ARM_GONE);
+    CHECK(a.gone == 1 && strstr(slow_arm_last_line(), "frame 20 had left the renderer's ring"));
+
+    /* issue 179's first boat block: the next block lighter, no replay
+       reaches the mean; the heaviest held one seen is taken at its end */
+    slow_arm_begin(&a);
+    CHECK(slow_arm_see(&a, 30, 70000.0, 0, 1, 0) == SLOW_ARM_WAIT);
+    CHECK(a.bestFrame == 30);
+    CHECK(slow_arm_see(&a, 31, 80000.0, 0, 1, 1) == SLOW_ARM_WAIT);
+    CHECK(a.bestFrame == 31 && a.bestWork == 80000.0);
+    CHECK(slow_arm_see(&a, 32, 60000.0, 0, 1, 1) == SLOW_ARM_WAIT);
+    CHECK(a.bestFrame == 31); /* lighter, the stand-in still held: kept */
+    CHECK(slow_arm_end(&a, 1, mean, &work) == 31 && work == 80000.0);
+    CHECK(strstr(slow_arm_last_line(),
+                 "frame 31 (80.0 thousand), the heaviest seen that the "
+                 "renderer still holds, is taken at the block's end") != NULL);
+    CHECK(strstr(slow_arm_last_line(), "3 looked at, the heaviest 80.0 thousand against the "
+                                       "mean 115.0 thousand") != NULL);
+
+    /* the stand-in's frame gone: a later held replay, lighter, replaces it */
+    slow_arm_begin(&a);
+    CHECK(slow_arm_see(&a, 40, 90000.0, 0, 1, 0) == SLOW_ARM_WAIT);
+    CHECK(slow_arm_see(&a, 44, 50000.0, 0, 1, 0) == SLOW_ARM_WAIT);
+    CHECK(a.bestFrame == 44 && a.heaviestWork == 90000.0);
+    CHECK(slow_arm_end(&a, 1, mean, &work) == 44 && work == 50000.0);
+
+    /* none held at the end: dropped, with its line, counted */
+    const unsigned dropped = slow_arm_dropped();
+
+    slow_arm_begin(&a);
+    CHECK(slow_arm_see(&a, 50, 90000.0, 0, 0, 0) == SLOW_ARM_WAIT);
+    CHECK(a.bestFrame == 0);
+    CHECK(slow_arm_end(&a, 0, mean, &work) == 0 && work == 0.0);
+    CHECK(slow_arm_dropped() == dropped + 1);
+    CHECK(strstr(slow_arm_last_line(), "dropped at the block's end: no replay reached the slow "
+                                       "block's mean vertex work (1 looked at") != NULL);
+    /* the stand-in gone by the end: dropped */
+    slow_arm_begin(&a);
+    CHECK(slow_arm_see(&a, 60, 90000.0, 0, 1, 0) == SLOW_ARM_WAIT);
+    CHECK(slow_arm_end(&a, 0, mean, &work) == 0);
+    CHECK(slow_arm_dropped() == dropped + 2);
+    /* no replay at all while armed */
+    slow_arm_begin(&a);
+    CHECK(slow_arm_end(&a, 0, mean, &work) == 0);
+    CHECK(slow_arm_dropped() == dropped + 3);
+    CHECK(strstr(slow_arm_last_line(), "no replay finished while it was armed") != NULL);
+}
+
 static void test_bundle(const char *base)
 {
     char dir[400], rep[600], line[400], p[6][600];
@@ -476,6 +617,8 @@ int main(int argc, char **argv)
     test_busy(base);
     test_shutdown(base);
     test_prepare(base);
+    test_keep();
+    test_slow_arm();
     test_bundle(base);
     test_reads(base);
     printf("dump_auto_test: %s\n", fails ? "FAILED" : "ok");
