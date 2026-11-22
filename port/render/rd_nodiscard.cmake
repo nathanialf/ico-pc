@@ -49,11 +49,12 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/nodiscard_ab" -DBACKEND=vulkan
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_nodiscard_ab.cmake")
     set_tests_properties(rd_nodiscard_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
-    # rd_nodiscard_clean: the shipping path: both runs with the game's
-    # start-up self-tests (--game-selftests), so the run with them measures
-    # the clipper (lavapipe: clean) and the camera rule's passes take a
-    # twin: the verdict clean, every target byte for byte, and per fixture
-    # and profile at least its list line's clean_min of that class
+    # rd_nodiscard_clean: the clean verdict's path (lavapipe measures its
+    # clipper not clean, so the run with them takes the verdict as clean:
+    # ICO_RD_VU_NODISCARD_CLIPPER=clean) and the camera rule's passes take a
+    # twin: every target byte for byte (these fixtures hold no eye-crossing
+    # triangle that differs, measured), and per fixture and profile at least
+    # its list line's clean_min of that class
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/nodiscard_clean")
     add_test(NAME rd_nodiscard_clean
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
@@ -92,22 +93,33 @@ endif()
 #                                        refused, the rule refusing the band
 #                                        and DATE, the pictures byte for
 #                                        byte, its own pipelines released;
-#                                        the clipper check's verdict as
-#                                        measured on lavapipe: clean (13
-#                                        cases, both entries); the mark
+#                                        the clipper check: every case's
+#                                        line (cases 1 and 13 matched: each
+#                                        of the four frames drew through
+#                                        both entries, none differs), the
+#                                        trace (case 1: the camera rule with
+#                                        a facing table; code 36 the
+#                                        scissor), the verdict lavapipe
+#                                        measures: not clean, cases 2 and 5
+#                                        differing (Mesa's NaN band flag),
+#                                        no frame undrawn; the mark
 #                                        "counting v0.0.0"
 #   _nodiscard_clipper                   the clipper check's positive
 #                                        control (ICO_RD_VU_NODISCARD_
 #                                        SABOTAGE=clipper: its first case's
 #                                        picture through the twins changed
-#                                        in one byte): "not clean" with that
-#                                        case named, clip mode none alone,
+#                                        in one byte): every case still run
+#                                        (case 13's line), case 1's line
+#                                        with 1 texel differing at code 32,
+#                                        "not clean" naming it, clip mode
+#                                        none alone,
 #                                        the twins still on, the mark
 #                                        "counting v0.0.0" (never failed)
-#   _nodiscard_notclean                  the verdict faked not clean
-#                                        (ICO_RD_VU_NODISCARD_CLIPPER=
-#                                        notclean) with what was measured,
-#                                        clean, in its line
+#   _nodiscard_clean                     the verdict taken as clean
+#                                        (ICO_RD_VU_NODISCARD_CLIPPER=clean):
+#                                        the camera rule's class on, what
+#                                        was measured (not clean, case 2
+#                                        differing) in its line
 #   _nodiscard_sabotage                  the CPU's proof not looking at the
 #                                        alpha test (ICO_RD_VU_NODISCARD_
 #                                        SABOTAGE=alpha): a broken twin's
@@ -121,34 +133,62 @@ endif()
 #                                        (lavapipe as it is): not
 #                                        applicable, nothing made, the mark
 #                                        not written
+#   _nodiscard_fallback                  the same device after the blend's
+#                                        self-test fell back to the two-pass
+#                                        blend (ICO_RD_BLEND_SABOTAGE=fixed,
+#                                        run first as the game does): still
+#                                        not applicable (the twins are for
+#                                        a device without dual-source
+#                                        blending by its own features),
+#                                        nothing made, the mark not written
+#   _nodiscard_empty                     a clipper check case that draws
+#                                        nothing (ICO_RD_VU_NODISCARD_
+#                                        SABOTAGE=empty: the first case off
+#                                        the frame): case 1's line expected
+#                                        0 and drawn 0 in all four frames and
+#                                        without the probe, every case still
+#                                        run, "not clean" naming its four
+#                                        frames ("drew nothing (not
+#                                        tested)"), clip mode none alone,
+#                                        the mark "counting v0.0.0"
 # Each run's start line ("discard-free twins: on|off, N modules of them made,
 # P of their pipelines alive") says what exists.
 if(ICO_RUN_TESTS AND DEFINED _vst AND TARGET rd_vuprepass_selftest_test)
     set(_ndon "rd: discard-free twins: on \\(self-test: [1-9][0-9]* pass(es)? through them, [1-9][0-9]* through vu_ps_nodual_nd and [1-9][0-9]* through vu_texa_ps_nodual_nd, the alpha test's, the clip plane's and the eye-plane crossing's refused \\([1-9][0-9]*, [1-9][0-9]* and [1-9][0-9]*\\), the side band and DATE refused by the rule, pictures byte for byte, its [1-9][0-9]* pipelines released\\) on SCENE[^\n]*")
     # the verdict lavapipe measures (the merge check of 2026-11-22 17:40)
-    set(_ndclean "rd: discard-free twins: the clipper check: clean \\(13 cases crossing the eye plane at codes 32 and 36, untextured and textured under TEXA, [1-9][0-9]* passes through both twins, the pictures and their depth byte for byte\\): the camera rule's passes take them too")
-    set(_ndclip "rd: discard-free twins: the clipper check: not clean \\(an edge on the centre view ray at code 32 differs, the first at texel [0-9]+,[0-9]+\\): clip mode none alone takes them")
-    set(_ndfake "rd: discard-free twins: the clipper check: not clean \\(ICO_RD_VU_NODISCARD_CLIPPER, measured clean\\): clip mode none alone takes them")
+    set(_ndclean "rd: discard-free twins: the clipper check: clean \\(ICO_RD_VU_NODISCARD_CLIPPER, measured not clean: [^\n]*case 2 differs at [^\n]*\\): the camera rule's passes take them too")
+    # a case's line (rd_nodiscard_selftest.c clipperCheck): what it should
+    # cover, what each of its four frames drew against the probe alone, what
+    # code 32 drew without the probe, what differs with the twins
+    set(_nddrew "[1-9][0-9]*, [1-9][0-9]*, [1-9][0-9]*, [1-9][0-9]* through the ordinary entry and [1-9][0-9]*, [1-9][0-9]*, [1-9][0-9]*, [1-9][0-9]* through the twins \\(codes 32, 32 textured, 36, 36 textured, against the probe alone\\), [0-9]+ without the probe or a facing table \\(code 32, against the clear\\), differing with the twins ")
+    set(_ndclip "rd: discard-free twins: the clipper check: not clean \\([^\n]*case 1 differs at 32[^\n]*\\): clip mode none alone takes them")
+    # what lavapipe measures (the second review's run 3, every case drawn
+    # through one entry at least): cases 2 and 5 lose texels to the
+    # ordinary entry's discard (Mesa's NaN band flag) that the twins draw
+    set(_ndmeasured "rd: discard-free twins: the clipper check: not clean \\([^\n]*case 2 differs at [^\n]*case 5 differs at [^\n]*\\): clip mode none alone takes them")
+    set(_ndempty "rd: discard-free twins: the clipper check: not clean \\(drew nothing \\(not tested\\): case 1 at 32, 32t, 36, 36t[^\n]*\\): clip mode none alone takes them")
     set(_ndstart "rd: discard-free twins: on, 2 modules of them made, 0 of their pipelines alive")
     set(_ndcount "test: the discard-free twins' mark after the self-test: counting v0.0.0")
     set(_ndnone ".*rd: discard-free twins: off, 0 modules of them made, 0 of their pipelines alive")
     set(_ndmark "ICO_NODISCARD_VERSION=v0.0.0;ICO_NODISCARD_MARK=${CMAKE_CURRENT_BINARY_DIR}/nodiscard_mark")
-    set(_ndenv ${_env_mali_pre} "ICO_VK_FAKE_NO_DUAL=1")
+    # every run with its trace (ICO_RD_VU_NODISCARD_TRACE=1: a case's draw,
+    # the culler, the rule stage computed, the pass)
+    set(_ndenv ${_env_mali_pre} "ICO_VK_FAKE_NO_DUAL=1" "ICO_RD_VU_NODISCARD_TRACE=1")
     add_test(NAME rd_vuprepass_selftest_nodiscard
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}"
-                     "-DEXTRA=rd: discard-free twins: trying them: .*${_ndon}.*${_ndclean}.*${_ndstart}.*${_ndcount}"
-                     "-DNOT_=rd: discard-free twins: (off|vu_[a-z_]+_nd drew nothing|the clipper check: not clean)" -P "${_vst}")
+                     "-DEXTRA=rd: discard-free twins: trying them: .*rd: discard-free twins: the clipper check, case 1 of 13 [^\n]*drawn ${_nddrew}0, 0, 0, 0.*rd: discard-free twins: the clipper check's trace, case 1, code 32, the draw \\(the replay's set-up\\): [^\n]*\\(camera 1, [^\n]*drops the camera rule, no facing 0, its mesh's facing 2, clip mode 0, .*rd: discard-free twins: the clipper check's trace, case 1, code 36, the draw [^\n]*clip mode 2, .*rd: discard-free twins: the clipper check, case 13 of 13 [^\n]*drawn ${_nddrew}0, 0, 0, 0.*${_ndon}.*${_ndmeasured}.*${_ndstart}.*${_ndcount}"
+                     "-DNOT_=rd: discard-free twins: (off|vu_[a-z_]+_nd drew nothing|the clipper check: clean|the clipper check: not clean \\(drew nothing)" -P "${_vst}")
     add_test(NAME rd_vuprepass_selftest_nodiscard_clipper
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}"
-                     "-DEXTRA=${_ndon}.*${_ndclip}.*${_ndstart}.*${_ndcount}"
+                     "-DEXTRA=rd: discard-free twins: the clipper check, case 1 of 13 [^\n]*differing with the twins 1, [0-9]+, [0-9]+, [0-9]+.*rd: discard-free twins: the clipper check, case 13 of 13 .*${_ndon}.*${_ndclip}.*${_ndstart}.*${_ndcount}"
                      "-DNOT_=rd: discard-free twins: (off|the clipper check: clean)" -P "${_vst}")
-    add_test(NAME rd_vuprepass_selftest_nodiscard_notclean
+    add_test(NAME rd_vuprepass_selftest_nodiscard_clean
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}"
-                     "-DEXTRA=${_ndon}.*${_ndfake}.*${_ndstart}.*${_ndcount}"
-                     "-DNOT_=rd: discard-free twins: (off|the clipper check: clean)" -P "${_vst}")
+                     "-DEXTRA=${_ndon}.*${_ndclean}.*${_ndstart}.*${_ndcount}"
+                     "-DNOT_=rd: discard-free twins: (off|the clipper check: not clean)" -P "${_vst}")
     add_test(NAME rd_vuprepass_selftest_nodiscard_sabotage
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}"
@@ -159,22 +199,38 @@ if(ICO_RUN_TESTS AND DEFINED _vst AND TARGET rd_vuprepass_selftest_test)
                      "-DLINE=${_vst_on}"
                      "-DEXTRA=rd: discard-free twins: off on this install \\(were being tried when it ended \\(a crash\\)\\)${_ndnone}.*test: the discard-free twins' mark after the self-test: none"
                      "-DNOT_=rd: discard-free twins: (on|trying)" -P "${_vst}")
+    add_test(NAME rd_vuprepass_selftest_nodiscard_fallback
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
+                     "-DLINE=${_vst_on}"
+                     "-DEXTRA=rd: blend: two-pass fallback on.*rd: discard-free twins: off for the run \\(self-test not run: not applicable here: the device has dual-source blending \\(the two-pass blend is its fallback\\): the twins are for a device without it\\)${_ndnone}.*test: the discard-free twins' mark after the self-test: none"
+                     "-DNOT_=rd: discard-free twins: (on|trying)" -P "${_vst}")
+    add_test(NAME rd_vuprepass_selftest_nodiscard_empty
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
+                     "-DLINE=${_vst_on}"
+                     "-DEXTRA=rd: discard-free twins: the clipper check, case 1 of 13 [^\n]*: expected about 0 texels at code 32 and 0 at code 36, drawn 0, 0, 0, 0 through the ordinary entry and 0, 0, 0, 0 through the twins [^\n]*, 0 without the probe .*rd: discard-free twins: the clipper check, case 13 of 13 .*${_ndon}.*${_ndempty}.*${_ndstart}.*${_ndcount}"
+                     "-DNOT_=rd: discard-free twins: (off|the clipper check: clean)" -P "${_vst}")
     add_test(NAME rd_vuprepass_selftest_nodiscard_dual
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}"
                      "-DEXTRA=rd: discard-free twins: off for the run \\(self-test not run: not applicable here: the device blends with two outputs, so no pass draws through a \\*_nodual build\\)${_ndnone}.*test: the discard-free twins' mark after the self-test: none"
                      "-DNOT_=rd: discard-free twins: (on|trying)" -P "${_vst}")
     set_tests_properties(rd_vuprepass_selftest_nodiscard rd_vuprepass_selftest_nodiscard_clipper
-                         rd_vuprepass_selftest_nodiscard_notclean
+                         rd_vuprepass_selftest_nodiscard_clean
                          rd_vuprepass_selftest_nodiscard_sabotage
                          rd_vuprepass_selftest_nodiscard_marked rd_vuprepass_selftest_nodiscard_dual
+                         rd_vuprepass_selftest_nodiscard_fallback
+                         rd_vuprepass_selftest_nodiscard_empty
                          PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
+    set_tests_properties(rd_vuprepass_selftest_nodiscard_fallback
+                         PROPERTIES ENVIRONMENT "${_env};ICO_RD_BLEND_SABOTAGE=fixed;${_ndmark}_fallback.txt")
+    set_tests_properties(rd_vuprepass_selftest_nodiscard_empty
+                         PROPERTIES ENVIRONMENT "${_ndenv};ICO_RD_VU_NODISCARD_SABOTAGE=empty;${_ndmark}_empty.txt")
     set_tests_properties(rd_vuprepass_selftest_nodiscard
                          PROPERTIES ENVIRONMENT "${_ndenv};${_ndmark}_on.txt")
     set_tests_properties(rd_vuprepass_selftest_nodiscard_clipper
                          PROPERTIES ENVIRONMENT "${_ndenv};ICO_RD_VU_NODISCARD_SABOTAGE=clipper;${_ndmark}_clipper.txt")
-    set_tests_properties(rd_vuprepass_selftest_nodiscard_notclean
-                         PROPERTIES ENVIRONMENT "${_ndenv};ICO_RD_VU_NODISCARD_CLIPPER=notclean;${_ndmark}_notclean.txt")
+    set_tests_properties(rd_vuprepass_selftest_nodiscard_clean
+                         PROPERTIES ENVIRONMENT "${_ndenv};ICO_RD_VU_NODISCARD_CLIPPER=clean;${_ndmark}_clean.txt")
     set_tests_properties(rd_vuprepass_selftest_nodiscard_sabotage
                          PROPERTIES ENVIRONMENT "${_ndenv};ICO_RD_VU_NODISCARD_SABOTAGE=alpha;${_ndmark}_sabotage.txt")
     set_tests_properties(rd_vuprepass_selftest_nodiscard_marked

@@ -1684,6 +1684,31 @@ static int vuDropMode(const RdCmd *c, const RdMeshRec *m, uint8_t *noFacing)
     return camera ? RD_DROPS_CAMERA : RD_DROPS_BESIDE;
 }
 
+/* The discard-free twins' clipper check's trace (rd_nodiscard_selftest.c,
+ * its tests' ICO_RD_VU_NODISCARD_TRACE=1): the first VU draw of a replay
+ * as vuSource set it up (the draw word, the drops' mode, why without
+ * facing); off (one branch) everywhere else */
+static struct {
+    bool on, have;
+    RdVuTraceDraw d;
+} s_vuTrace;
+
+void rd__vu_trace(bool on)
+{
+    s_vuTrace.on = on;
+    s_vuTrace.have = false;
+}
+
+bool rd__vu_trace_take(RdVuTraceDraw *out)
+{
+    const bool have = s_vuTrace.have;
+    if (have) {
+        *out = s_vuTrace.d;
+    }
+    s_vuTrace.have = false;
+    return have;
+}
+
 static bool vuSource(const RdFrame *f, const RdCmd *c, VuSource *s)
 {
     memset(s, 0, sizeof(*s));
@@ -1867,6 +1892,20 @@ static bool vuSource(const RdFrame *f, const RdCmd *c, VuSource *s)
         }
         s->noFacing = noFacing;
         s->camera = cameraDrops ? 1u : 0u;
+        if (s_vuTrace.on && !s_vuTrace.have) {
+            /* (the draw word's camera flags are added just below: kept as
+               the drops' mode says) */
+            s_vuTrace.have = true;
+            s_vuTrace.d = (RdVuTraceDraw){
+                vcb.draw[2] | (cameraDrops ? (uint32_t)(ICO_VU_CAMERA | ICO_VU_NO_BESIDE)
+                               : drops == RD_DROPS_KEPT ? (uint32_t)ICO_VU_NO_BESIDE
+                                                        : 0u),
+                drops,
+                noFacing,
+                p.code,
+                p.clip,
+                m != NULL ? (int)m->facingFrom : -1};
+        }
         if (cameraDrops) {
             /* drawn clipped over the whole frame when they face the eye
              * (vu_drop_fate); no side bands */

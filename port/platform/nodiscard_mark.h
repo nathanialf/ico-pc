@@ -13,8 +13,10 @@
  *   counting <v>  written and synced when the self-test passed: the twins
  *                 on, their first RD_ND_PROBATION pictures not yet drawn
  *   on <v>        RD_ND_PROBATION pictures drawn with them (not synced)
- *   failed <v>    a module or a pipeline could not be made, or the
- *                 self-test refused them (synced)
+ *   failed <v>    their start-up self-test refused them: a module or one
+ *                 of its pipelines not made, or its pictures differed
+ *                 (synced; a pipeline not made in play only turns them off
+ *                 for the run, nothing written)
  *   blocked <v>   written here: the twins stay off on this install while
  *                 version v runs
  *
@@ -25,7 +27,10 @@
  * close blocks; while counting or on only a crash, an ANR, a signal other
  * than SIGKILL, a device loss, a GPU hang or the watchdog do (a clean
  * close, a close from the recent apps list, a kill by the system, an
- * update: tried again); failed and blocked always.  A block holds only
+ * update: tried again); failed and blocked always.  Each mark blocks only
+ * its own subject: at counting or on, an end while the cull's mark said
+ * trying (vu_zero_mark_stage_read: the cull's step read it first) is the
+ * cull's, and the twins are tried again.  A block holds only
  * while the version in the mark is the running one.  The line ("the
  * previous run: discard-free twins: ...") is logged when a mark was found;
  * ICO_NODISCARD_MARK (the file's path), ICO_NODISCARD_VERSION (the version
@@ -44,6 +49,11 @@
    twins stay off */
 void nodiscard_mark_decide(const char *mark, int endKind, const char *endWords, const char *version,
                            char *out, size_t outSize, char *line, size_t lineSize, int *block);
+/* the same with the cull's stage at that end (vu_zero_mark_blocks_beside:
+   an end while the cull was trying is the cull's) */
+void nodiscard_mark_decide_beside(const char *mark, int endKind, const char *endWords,
+                                  const char *version, int cullStage, char *out, size_t outSize,
+                                  char *line, size_t lineSize, int *block);
 
 /* The start's step on files with Android's record given (the tests): reads
    the mark beside activityPath and the previous run's last-run-previous.txt,

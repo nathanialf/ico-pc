@@ -41,6 +41,14 @@ static void clipperWords(const char *mark, char *out, size_t size)
 void nodiscard_mark_decide(const char *mark, int endKind, const char *endWords, const char *version,
                            char *out, size_t outSize, char *line, size_t lineSize, int *block)
 {
+    nodiscard_mark_decide_beside(mark, endKind, endWords, version, VU_ZERO_STAGE_NONE, out, outSize,
+                                 line, lineSize, block);
+}
+
+void nodiscard_mark_decide_beside(const char *mark, int endKind, const char *endWords,
+                                  const char *version, int cullStage, char *out, size_t outSize,
+                                  char *line, size_t lineSize, int *block)
+{
     const char *v = version != NULL && version[0] != '\0' ? version : "?";
     char ver[64], what[200];
     const int stage = vu_zero_mark_parse(mark, ver, sizeof ver);
@@ -63,7 +71,9 @@ void nodiscard_mark_decide(const char *mark, int endKind, const char *endWords, 
         snprintf(what, sizeof what, "were on when it ended (%s)", ends);
         break;
     case VU_ZERO_STAGE_FAILED:
-        snprintf(what, sizeof what, "were refused by their self-test or a pipeline not made");
+        snprintf(what, sizeof what,
+                 "were refused by their start-up self-test (a module or one of its pipelines not "
+                 "made, or its pictures differed)");
         break;
     case VU_ZERO_STAGE_BLOCKED:
         snprintf(what, sizeof what, "kept off by their mark");
@@ -73,10 +83,14 @@ void nodiscard_mark_decide(const char *mark, int endKind, const char *endWords, 
                  (int)strcspn(mark, "\r\n") > 40 ? 40 : (int)strcspn(mark, "\r\n"), mark, ends);
         break;
     }
-    const int bad = vu_zero_mark_blocks(stage, endKind);
+    const int bad = vu_zero_mark_blocks_beside(stage, endKind, cullStage);
     char clip[256];
     clipperWords(mark, clip, sizeof clip);
-    if (bad && strcmp(mv, v) == 0) {
+    if (!bad && vu_zero_mark_blocks(stage, endKind)) {
+        snprintf(line, lineSize,
+                 "%s%s: the zero-area cull was being tried then (its mark): tried again%s", kHead,
+                 what, clip);
+    } else if (bad && strcmp(mv, v) == 0) {
         snprintf(out, outSize, "blocked %s", v);
         snprintf(line, lineSize,
                  "%s%s: off on this install until the version changes (blocked %s)%s", kHead, what,
@@ -144,7 +158,10 @@ int nodiscard_mark_step(const char *activityPath, const char *version, int exitR
     char words[160], out[192], line[768];
     int block = 0;
     vu_zero_mark_end_words(kind, exitReason, exitStatus, words, sizeof words);
-    nodiscard_mark_decide(mark, kind, words, version, out, sizeof out, line, sizeof line, &block);
+    /* the cull's mark at that end as its step read it (diag_host.c runs it
+       first): an end while the cull was trying is the cull's */
+    nodiscard_mark_decide_beside(mark, kind, words, version, vu_zero_mark_stage_read(), out,
+                                 sizeof out, line, sizeof line, &block);
     mark[strcspn(mark, "\r\n")] = '\0';
     if (strcmp(mark, out) != 0) {
         if (out[0] == '\0') {

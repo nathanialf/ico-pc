@@ -113,6 +113,15 @@ int vu_zero_mark_blocks(int stage, int endKind)
     }
 }
 
+int vu_zero_mark_blocks_beside(int stage, int endKind, int otherStage)
+{
+    if ((stage == VU_ZERO_STAGE_COUNTING || stage == VU_ZERO_STAGE_ON) &&
+        otherStage == VU_ZERO_STAGE_TRYING) {
+        return 0; /* the other attempt was trying at that end: its end */
+    }
+    return vu_zero_mark_blocks(stage, endKind);
+}
+
 void vu_zero_mark_end_words(int endKind, int exitReason, int exitStatus, char *out, size_t size)
 {
     const char *name = exit_info_reason_name(exitReason);
@@ -198,6 +207,14 @@ int vu_zero_mark_parse(const char *mark, char *ver, size_t verSize)
 void vu_zero_mark_decide(const char *mark, int endKind, const char *endWords, const char *version,
                          char *out, size_t outSize, char *line, size_t lineSize, int *block)
 {
+    vu_zero_mark_decide_beside(mark, endKind, endWords, version, VU_ZERO_STAGE_NONE, out, outSize,
+                               line, lineSize, block);
+}
+
+void vu_zero_mark_decide_beside(const char *mark, int endKind, const char *endWords,
+                                const char *version, int otherStage, char *out, size_t outSize,
+                                char *line, size_t lineSize, int *block)
+{
     const char *v = version != NULL && version[0] != '\0' ? version : "?";
     char ver[64], what[200];
     const int stage = vu_zero_mark_parse(mark, ver, sizeof ver);
@@ -230,8 +247,13 @@ void vu_zero_mark_decide(const char *mark, int endKind, const char *endWords, co
                  (int)strcspn(mark, "\r\n") > 40 ? 40 : (int)strcspn(mark, "\r\n"), mark, ends);
         break;
     }
-    const int bad = vu_zero_mark_blocks(stage, endKind);
-    if (bad && strcmp(mv, v) == 0) {
+    const int bad = vu_zero_mark_blocks_beside(stage, endKind, otherStage);
+    if (!bad && vu_zero_mark_blocks(stage, endKind)) {
+        snprintf(line, lineSize,
+                 "the previous run: zero-area cull: %s: the discard-free twins were being tried "
+                 "then (their mark): tried again",
+                 what);
+    } else if (bad && strcmp(mv, v) == 0) {
         snprintf(out, outSize, "blocked %s", v);
         snprintf(line, lineSize,
                  "the previous run: zero-area cull: %s: off on this install until the version "
@@ -260,6 +282,13 @@ static void exportEnv(const char *name, const char *value)
         (void)unsetenv(name);
     }
 #endif
+}
+
+static int s_stageRead = VU_ZERO_STAGE_NONE;
+
+int vu_zero_mark_stage_read(void)
+{
+    return s_stageRead;
 }
 
 int vu_zero_mark_step(const char *activityPath, const char *version, int exitReason, int exitStatus,
@@ -302,8 +331,26 @@ int vu_zero_mark_step(const char *activityPath, const char *version, int exitRea
     const int kind = vu_zero_mark_end_kind(prevEnd, endText, exitReason, exitStatus);
     char words[160], out[192], line[512];
     int block = 0;
+    /* the twins' mark at that end, before their step rewrites it, and this
+       mark's own stage for their step (each blocks only its own subject) */
+    char twins[512] = "", tver[64];
+    char tpath[1024];
+    if (snprintf(tpath, sizeof tpath, "%.*snodiscard-mark.txt", (int)dir, activityPath) <
+        (int)sizeof tpath) {
+        FILE *t = ico_fopen(tpath, "rb");
+        if (t != NULL) {
+            const size_t k = fread(twins, 1, sizeof twins - 1, t);
+            twins[k] = '\0';
+            fclose(t);
+        }
+    }
+    const int twinStage =
+        twins[0] != '\0' ? vu_zero_mark_parse(twins, tver, sizeof tver) : VU_ZERO_STAGE_NONE;
+    s_stageRead =
+        mark[0] != '\0' ? vu_zero_mark_parse(mark, tver, sizeof tver) : VU_ZERO_STAGE_NONE;
     vu_zero_mark_end_words(kind, exitReason, exitStatus, words, sizeof words);
-    vu_zero_mark_decide(mark, kind, words, version, out, sizeof out, line, sizeof line, &block);
+    vu_zero_mark_decide_beside(mark, kind, words, version, twinStage, out, sizeof out, line,
+                               sizeof line, &block);
     mark[strcspn(mark, "\r\n")] = '\0';
     if (strcmp(mark, out) != 0) {
         if (out[0] == '\0') {

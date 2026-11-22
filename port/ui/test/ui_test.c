@@ -614,7 +614,7 @@ static void testPopups(void)
        judge's word; queued with its title; in every language its body's
        lines fit the panel's widest body (the panel's 576 units at the
        body's size 21: popup.c MAX_W - 2 PAD_X) and the panel stays on the
-       picture; dropped, not queued, with the queue full */
+       picture; kept with the queue full and queued at the next call */
     CHECK(ui_tune_notice(0) == 0 && !ui_popup_active(), "the notice without the judge's word");
     const UiLang langWas = ui_get_language();
     for (int l = 0; l < UI_LANG_COUNT; l++) {
@@ -644,6 +644,12 @@ static void testPopups(void)
         ui_popup_push("x", "y");
     }
     CHECK(ui_tune_notice(1) == -1, "the notice queued past a full queue");
+    CHECK(ui_tune_notice(0) == -1, "the notice not kept while the queue is full");
+    ui_popup_reset();
+    CHECK(ui_tune_notice(0) == 1 && ui_popup_active() &&
+              strcmp(ui_popup_title(), "Finding the best settings") == 0,
+          "the notice kept past a full queue not queued at the next call");
+    CHECK(ui_tune_notice(0) == 0, "the notice queued twice");
     ui_popup_reset();
     ui_set_language(langWas);
 

@@ -31,7 +31,9 @@
  *   - the alpha test off in the pass (DrawCB mode.z bit 8 clear: the test
  *     off in the state, ATST ALWAYS, the AFAIL merge's one draw, or the
  *     alpha plan's proof for the draw's As range, rd_alpha_plan.c);
- *   - clip mode none (code 34), on every device, not particles.
+ *   - clip mode none (code 34), on every device, not particles; another
+ *     clip mode only where this device's clipper check (below) came out
+ *     clean.
  * Why clip mode none (issue 179 round 2).  The *_nodual build discards a
  * pixel in the picture's columns whose interpolated band flag is not below
  * 0.5, a NaN included (vu_common.hlsli vu_pixel_tests; commit e65012742,
@@ -51,38 +53,80 @@
  * edge crossing a side of the frame is a finite fraction whatever form it
  * takes, and a flag 0 at every corner stays 0.  Every other clip mode can
  * hand the GPU homogeneous corners at or behind the eye (the camera rule's
- * clipped drops, code 36's flagged corners): refused as "clipped".  So the
- * one rule holds on every device, and the tests' lavapipe runs take the
- * path a phone takes.
+ * clipped drops, code 36's flagged corners): refused as "clipped" unless
+ * the device's clipper check came out clean.  So clip mode none holds on
+ * every device; the tests' runs without the self-test (rd_nodiscard_ab: no
+ * clipper check) take the path of a phone whose check was not clean,
+ * rd_nodiscard_clean the path of one whose check was clean.
  * The clipper check (issue 179 round 3: measure, never assume).  After the
  * code 34 cases pass, the self-test draws 13 camera rule cases whose
- * triangles cross the eye plane (rd_nodiscard_selftest.c kClip: an edge on
- * the centre view ray, on view rays with the divided x alike and the divided
- * y alike and off-centre, a corner at w = 0, just behind (w = -0.001) and
- * far behind (w = -1290, the dock's) the eye, two corners behind, every w
- * above 0 clipped at GS Z 0 with and without an edge on a view ray, a
- * corner saturated in X, a sliver, a large triangle across the frame), each
- * at code 32 and code 36, both windings, each a frame of its own with a
- * depth probe after it, through the twins and without them, the pictures
- * byte for byte.  All the same: "clean", and the camera rule's passes take
- * a twin too (counted apart: "of them by the clipper check").  Any
- * difference: "not clean", the first differing case logged, clip mode none
+ * triangles cross the eye plane (rd_nodiscard_selftest.c kClip: an edge
+ * nearly on the centre view ray, on view rays with the divided x alike and
+ * the divided y alike, nearly on an off-centre one, a corner at w = 0, just
+ * behind (w = -0.001) and far behind (w = -1290, the dock's) the eye, two
+ * corners behind, every w above 0 clipped at GS Z 0 with and without an
+ * edge nearly on a view ray, a corner saturated in X, a sliver, a large
+ * triangle across the frame), each at code 32 and code 36, untextured and
+ * textured, both windings, each a frame of its own with a depth probe after
+ * it, through the twins and without them, the pictures byte for byte.  The
+ * corners are sized to the frame at run time (a corner by its screen
+ * direction as a fraction of the frame's half-size and its depth,
+ * caseCorners).  A triangle with an edge on a view ray has its plane
+ * through the eye, so it draws nothing on any device; one with an edge
+ * near one draws a sliver as wide as the offset, a quarter of the
+ * half-size here.  Every frame runs, whatever an earlier one found, and
+ * each case logs one line: the texels it should cover (expectedTexels: the
+ * vertex stage's clip at GS Z 0 and projection, an estimate), the texels
+ * each of its four frames drew through the ordinary entry against the
+ * probe alone, the texels code 32 drew without the probe against the clear
+ * (whether the probe hid it), and the texels each frame differs by with
+ * the twins.  A frame that drew nothing tests nothing: "not clean (drew
+ * nothing (not tested): case N at 32, 32t, ...)", every such frame named;
+ * only a frame whose case drew counts its passes, and each twin entry must
+ * have drawn a case's own pass (the depth probe, code 34, does not count).
+ * All drawn and the same: "clean", and the camera rule's passes take a
+ * twin too (counted apart: "of them by the clipper check").  Any
+ * difference: "not clean", the first differing frame named, clip mode none
  * alone; never "failed" in the mark (a property of the device), the verdict
  * kept on the mark's second line with the version and logged at the next
  * start.  Evidence, not a proof: it covers the clipper's branches (the w and
  * near-depth planes, the far plane, the side planes through saturation, one
  * and two corners out, the factor's 0 / 0) for these corners only; geometry
  * the cases miss, other states (MSAA, other targets), a driver's size
- * thresholds and anything time-dependent are not covered.  What is known (2026-11-22): Mesa's NaN band flag was seen on a
- * triangle drawn beside the picture under [dev] region_rule = ps2 (commit
- * e65012742, fx-drops-4657); no draw without a band has been seen to lose
- * a pixel to it: lavapipe measures the check clean (13 cases, 52 passes),
- * and rd_nodiscard_clean draws 749 camera rule passes through the twins on
- * four fixtures byte for byte.  Neither is a proof for another GPU.
- * ICO_RD_VU_NODISCARD_CLIPPER=clean|notclean fakes the verdict for the
- * tests; ICO_RD_VU_NODISCARD_SABOTAGE=clipper changes the check's first
- * case's picture through the twins in one byte (its positive control: the
- * check must say not clean).
+ * thresholds and anything time-dependent are not covered.  What is known
+ * (2026-11-22): lavapipe is not clean.  Its clipper makes the band flag
+ * NaN on triangles crossing the eye plane without any side band: cases 2
+ * (an edge on a view ray, x / w alike) and 5 (a corner at w = 0) lose
+ * texels through the ordinary entry (case 5 all of them) that the twins
+ * draw.  At such a texel the twin's other noperspective varyings (col,
+ * stq) come from the same factor and are NaN too: a triangle with a
+ * corner behind the eye has no attribute planes (vu_pixel_attrs takes the
+ * interpolated ones), so the twin writes a colour made from NaN (0 under
+ * Vulkan's NaN-to-UNORM conversion, or what a clamp makes of it) at the
+ * triangle's depth (SV_Position is clipped by the plane distances, not that
+ * factor): garbage, not the triangle's picture, where the ordinary entry
+ * leaves a hole.  rd_nodiscard_clean's four fixtures hold no such triangle
+ * (0 targets differing with the verdict taken as clean).  History: the
+ * check measured "clean" until the second review's run 3 because no case
+ * had drawn a triangle crossing the eye plane (see below).
+ * ICO_RD_VU_NODISCARD_CLIPPER=clean takes the verdict as clean for the
+ * tests (rd_vuprepass_selftest_nodiscard_clean, rd_nodiscard_clean); ICO_RD_VU_NODISCARD_SABOTAGE=clipper changes the check's first
+ * case's picture through the twins in one byte, =empty moves its first
+ * case off the frame (its positive controls: the check must say not
+ * clean).  The "clean" lavapipe measured on 2026-11-22 was an earlier case
+ * set in model units, five of whose cases covered no pixel; the next set's
+ * first case, an edge 0.25 model units off the centre view ray, drew
+ * nothing on lavapipe at 912 x 512 where the CPU expected about 47 texels.
+ * The cause was the check's set-up: its prelit meshes had no facing table,
+ * so their draws kept the PS2's drops (rd_replay_vu.c vuDropMode) and the
+ * region rule dropped every triangle with a corner behind the eye that
+ * reaches the picture (vu_region_rule_cut) before any clipper; its code 36
+ * frames ran the region test.  Now each mesh has a table and code 36 the
+ * scissor; ICO_RD_VU_NODISCARD_TRACE=1 logs each case's stages.  A frame
+ * is "not tested" only when neither entry drew it (the ordinary entry can
+ * lose a whole case to the NaN).  Code 32's expectation is uncut where
+ * every corner passes the region test (it does not test Z: EXACT, as the
+ * PS2 draws it), code 36's cut at GS Z 0 (the scissor flags it).
  * The twins' pipelines are made in the background between pictures
  * (rd_pipeline.c rd__pipeline_twin, rd__pipeline_twin_tick: a batch on the
  * workers at low priority, as the start-up set's background finisher, or
@@ -276,6 +320,30 @@ void rd__nd_take(uint64_t *twin, uint64_t refused[RD_ND_REASONS]);
    vu_ps_nodual_nd, 1 vu_texa_ps_nodual_nd), and an entry marked tested
    (only a tested entry's twin is used in play) */
 void rd__nd_take_entries(uint64_t out[2]);
+/* the twins apply on this device: no dual-source blending by its own
+   features (not merely the two-pass fallback the blend's self-test chose);
+   else the "not applicable here: ..." words (NULL where they apply, or
+   without a device) */
+bool rd__nd_applicable(void);
+
+/* The clipper check's trace (its tests' ICO_RD_VU_NODISCARD_TRACE=1,
+   rd_replay_vu.c): the first VU draw of a replay as the replay set it up:
+   the draw word (ICO_VU_CAMERA, ICO_VU_NO_BESIDE, ICO_VU_MIRROR, ...), the
+   drops' mode (0 kept, the PS2's drop; 1 the side bands; 2 the camera
+   rule; 3 the camera rule two-sided), why the mesh has no facing (0 it
+   has, else RD_VU_NOFACE_* + 1), the code, the clip mode and the mesh's
+   facingFrom */
+typedef struct RdVuTraceDraw {
+    uint32_t word;
+    int drops, noFacing, code, clip, facingFrom;
+} RdVuTraceDraw;
+
+void rd__vu_trace(bool on);
+bool rd__vu_trace_take(RdVuTraceDraw *out);
+const char *rd__nd_not_applicable_text(void);
+/* the same for the draws of a clip mode other than none only (the clipper
+   check's class: its depth probe, a code 34 pass, not among them) */
+void rd__nd_take_entries_clip(uint64_t out[2]);
 void rd__nd_entry_tested(int entry, bool tested);
 /* the floor's cases passed: the mark says "counting" from here (the
    clipper check after it is a device property, like play) */
@@ -291,15 +359,18 @@ typedef struct RdNdUse {
 void rd_nd_use_note(RdNdUse *u, int verdict);
 bool rd_nd_use_counts(const RdNdUse *u);
 /* the tests' sabotage =alpha, =clipper (the clipper check's first case's
-   picture through the twins changed in one byte: its positive control) */
+   picture through the twins changed in one byte: its positive control),
+   =empty (the clipper check's first case moved off the frame: a case that
+   draws nothing must make the verdict not clean) */
 bool rd__nd_sabotage_alpha(void);
 bool rd__nd_sabotage_clipper(void);
+bool rd__nd_sabotage_empty(void);
 /* the self-test's draws through a twin of a clip mode other than none since
    the last call */
 uint64_t rd__nd_take_clip(void);
 /* the clipper check's frames running (their camera rule passes taken as a
    clean clipper's would be), and its verdict (clean, or the first differing
-   case's words; the tests' ICO_RD_VU_NODISCARD_CLIPPER=clean|notclean replaces
+   case's words; the tests' ICO_RD_VU_NODISCARD_CLIPPER=clean replaces
    it, saying what was measured); the verdict (RD_ND_CLIP_*) and its words */
 void rd__nd_clipper_check(bool on);
 void rd__nd_clipper_verdict(bool clean, const char *why);

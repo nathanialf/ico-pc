@@ -138,13 +138,18 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   (`port/platform/nodiscard_mark.c`, the cull's stages and table with its own file and words):
   every stage at a crash blocked for the version in the mark and tried again by the next version,
   the lines word for word; a clean close while counting not blocked; no mark nothing; a text not
-  known taken as `trying`; a mark without a version the running one's. Then the start's step on
+  known taken as `trying`; a mark without a version the running one's; each mark blocking only its
+  own subject (`vu_zero_mark_blocks_beside` over every stage and end: counting or on not blocked
+  while the other was trying, the rest as the table; `nodiscard_mark_decide_beside`'s line). Then
+  the start's step on
   files in a folder of its own: no mark, no line; closed from the recent apps list while counting:
   not blocked, the mark removed; a crash while on: `blocked <version>`, kept at that version's next
   start, removed at a later version's; no evidence while trying: blocked, a clean close: not; a
   SIGKILL while on: not, another signal: blocked; `ICO_NODISCARD_MARK`, `ICO_NODISCARD_VERSION` and
-  `ICO_NODISCARD_BLOCK` exported, the cull's `vu-zero-mark.txt` and environment untouched. CPU
-  only.
+  `ICO_NODISCARD_BLOCK` exported, the cull's `vu-zero-mark.txt` and environment untouched; then
+  the cull's step and the twins' in the start's order after a crash: the twins trying and the cull
+  counting blocks the twins only, the cull trying and the twins on the cull only, both counting
+  both. CPU only.
 - `last_run_test.c`, its skin case (`last_run`): `last_run_summary_text_with` with the skin check's
   figure between the resets and the free memory word for word, none or `""` as before, issue
   217's reporter's figures with the phase cut and the stage and tick whole, a long phase cut with
@@ -267,8 +272,9 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
 - `ui_test.c`, its popups block (`ui`, `ui_jpn`, `ui_kor`, `ui_cn`): the in-play timing's notice
   (`port/ui/tune_notice.c`): nothing queued without the judge's word; in each of the eight
   languages queued with that table's title, the panel on the picture and every body line within
-  the panel's 576 units at size 21; the English title word for word; dropped, not queued, with the
-  queue full; the language put back after.
+  the panel's 576 units at size 21; the English title word for word; with the queue full not queued
+  but kept (still kept at the next call while full), queued at the next call once there is room,
+  and only once; the language put back after.
 - `settings_test.c`, `settings_extra_test.c`, `settings_discs_test.c`, added: Controls' sixteen
   rows with Zoom type between Hold type and Stick fix, shown from the title and the pause menu;
   `testZoomType` steps it from both (Hold, Right to Toggle with the key set and its note on the

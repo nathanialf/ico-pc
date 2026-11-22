@@ -41,6 +41,11 @@
  *   failed        blocks
  *   blocked       blocks
  *
+ * Each mark blocks only its own subject: an end while the other attempt's
+ * mark said trying (the discard-free twins' logs/nodiscard-mark.txt, read
+ * here before either is rewritten) is that attempt's, so it does not block
+ * this one at counting or on (vu_zero_mark_blocks_beside).
+ *
  * A block holds only while the version in the mark is the running one: an
  * update clears it.  A mark without a version (none was handed over) is
  * taken as the running version's.  The line ("the previous run:
@@ -98,6 +103,12 @@ int vu_zero_mark_end_kind(int lastEnd, const char *lastEndText, int exitReason, 
 /* 1 when the end blocks the cull at that stage (the table above; the
    version is checked apart) */
 int vu_zero_mark_blocks(int stage, int endKind);
+/* vu_zero_mark_blocks with the other attempt's stage at that end (the
+   cull's for the twins' mark, the twins' for the cull's; VU_ZERO_STAGE_NONE
+   none): an end while the other was trying is the other's, so it does not
+   block a subject that was counting or on (its own trying, failed and
+   blocked stages are judged as before) */
+int vu_zero_mark_blocks_beside(int stage, int endKind, int otherStage);
 /* the end's words ("a crash", "Android: closed from the recent apps list or
    with Force stop (REASON_USER_REQUESTED)") */
 void vu_zero_mark_end_words(int endKind, int exitReason, int exitStatus, char *out, size_t size);
@@ -109,6 +120,14 @@ int vu_zero_mark_parse(const char *mark, char *ver, size_t verSize);
    the line's words into line, *block 1 when the cull stays off */
 void vu_zero_mark_decide(const char *mark, int endKind, const char *endWords, const char *version,
                          char *out, size_t outSize, char *line, size_t lineSize, int *block);
+/* the same with the twins' stage at that end (vu_zero_mark_blocks_beside) */
+void vu_zero_mark_decide_beside(const char *mark, int endKind, const char *endWords,
+                                const char *version, int otherStage, char *out, size_t outSize,
+                                char *line, size_t lineSize, int *block);
+/* the stage of the cull's mark as the last vu_zero_mark_step read it,
+   before it was rewritten (VU_ZERO_STAGE_NONE before any): the twins'
+   step judges by it (nodiscard_mark.c) */
+int vu_zero_mark_stage_read(void);
 
 /* The start's step on files with Android's record given (the tests): reads
    the mark beside activityPath and the previous run's

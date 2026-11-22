@@ -170,7 +170,7 @@ if(ICO_RUN_TESTS AND DEFINED _vst AND TARGET rd_vuprepass_selftest_test)
     add_test(NAME rd_vuprepass_selftest_zero_switch
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      -DVARIANT=switch "-DLINE=${_vst_on}.*rd: VU pre-pass: ${_vst_on}"
-                     "-DEXTRA=${_zon}.*test: the zero-area cull's mark after the self-test: counting v0.0.0.*rd: A/B: the renderer was made again \\(a Graphics API switch or the device made again\\): every verdict and the carried arm forgotten.*rd: VU zero-area cull: trying it: .*${_zon2}.*test: the renderer made again: the zero-area cull on before, on after, its read back buffers [1-9][0-9]* made before the switch, [1-9][0-9]* after, alive 0, 0, 0.*test: the zero-area cull's mark after the second self-test: counting v0.0.0"
+                     "-DEXTRA=${_zon}.*test: the zero-area cull's mark after the self-test: counting v0.0.0.*rd: A/B: the renderer was made again \\(a Graphics API switch\\): every verdict and the carried arm forgotten.*rd: VU zero-area cull: trying it: .*${_zon2}.*test: the renderer made again: the zero-area cull on before, on after, its read back buffers [1-9][0-9]* made before the switch, [1-9][0-9]* after, alive 0, 0, 0.*test: the zero-area cull's mark after the second self-test: counting v0.0.0"
                      -P "${_vst}")
     set(_zst rd_vuprepass_selftest_zero rd_vuprepass_selftest_zero_plain
              rd_vuprepass_selftest_zero_mali rd_vuprepass_selftest_zero_lattice
