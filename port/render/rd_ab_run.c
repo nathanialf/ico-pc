@@ -92,6 +92,7 @@ void rd__ab_begin(RdPerfRecord *r)
     r->abTrial = tag.trial;
     r->abSeq = tag.seq;
     r->abStage = tag.stage;
+    r->abEpoch = tag.epoch;
     r->abOff = s_off;
     s_open = true;
     drain();
@@ -111,10 +112,31 @@ void rd__ab_collect(const RdPerfRecord *r)
            came back from) */
         rd_ab_stop(&s_ab, "the GPU's own sign of a reset: a hang");
     }
-    const RdAbIn in = {
-        {r->abTrial, r->abSeq, r->abStage, r->abOff}, r->abUsed, r->keep != 0, r->gpuValid != 0,
-        (double)r->vuPreVertices + (double)r->vuTris, r->gpuMs};
+    /* the measure: the scene's GPU work alone (rd_ab.h rd_ab_scene_ms): the
+       present's pass and the display wait before it are left out on both
+       arms alike (the same stamps on either: the arm changes the pre-pass
+       and the lists' draws, never which stamps a replay writes) */
+    const double sceneMs = rd_ab_scene_ms(r->gpuMs, r->gpuDisplayWaitMs, r->gpuPresentMs);
+    const RdAbIn in = {{r->abTrial, r->abSeq, r->abStage, r->abOff, r->abEpoch},
+                       r->abUsed,
+                       r->keep != 0,
+                       r->gpuValid != 0 && sceneMs > 0.0,
+                       (double)r->vuPreVertices + (double)r->vuTris,
+                       sceneMs};
     rd_ab_collect(&s_ab, &in);
+    drain();
+    ledger();
+}
+
+void rd__ab_renderer(void)
+{
+    made();
+    static uint32_t s_renderers; /* the renderers made this process */
+    if (s_renderers++ == 0u) {
+        return; /* the first: nothing to forget */
+    }
+    s_open = false;
+    rd_ab_forget(&s_ab, "a Graphics API switch or the device made again");
     drain();
     ledger();
 }

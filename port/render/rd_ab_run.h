@@ -1,7 +1,12 @@
 /* rd_ab_run.h: the in-play A/B judge in the renderer (rd_ab.h the judge;
  * docs/port/PIPELINES.md, "The zero-area cull timed in play").
  *
- * The judge lives for the run (a renderer made again keeps its verdicts).
+ * The judge lives for the run, but a renderer made again (a Graphics API
+ * switch, the device made again: rd__ab_renderer from rd__vu_prepass_init)
+ * forgets every verdict and the carried arm and ends a trial unjudged, so
+ * no verdict of one backend or device decides another's (the trials run
+ * still count toward the cap).  The measure is the scene's GPU work: the
+ * span less the present's pass and the display wait (rd_ab_scene_ms).
  * A replay's arms are chosen at its record's start (rd__perf_begin:
  * rd__ab_begin) and kept in its record (RdPerfRecord abTrial, abSeq,
  * abStage, abOff), so its GPU span, read back RHI_FRAMES_IN_FLIGHT replays
@@ -34,6 +39,9 @@ void rd__ab_scene(int stage, uint32_t first);
 /* a replay's record begins (rd__perf_begin, r its record with replay,
    frame and keep set): its arms into r */
 void rd__ab_begin(struct RdPerfRecord *r);
+/* a renderer made (rd__vu_prepass_init): from the second on, everything
+   the judge learnt forgotten (rd_ab_forget), logged */
+void rd__ab_renderer(void);
 /* the replay's record ends (rd__perf_end): no arm read after it */
 void rd__ab_end(void);
 /* a record's GPU times read back (rd__perf_collect_gpu) */

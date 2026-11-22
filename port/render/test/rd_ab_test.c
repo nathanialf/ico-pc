@@ -676,8 +676,118 @@ static void testCarry(void)
     CHECK(tag.off == 0u && tag.trial == 0u, "stage 24 after no verdict: off %x", tag.off);
 }
 
+/* the measure: the scene's GPU work (rd_ab_scene_ms), not the span with
+   the present's pass and the display wait.  A stream held by the display
+   (every span 40 ms: the wait takes up what the scene saves) shows no
+   difference in the span, the 5 % saving in the scene's work */
+static void testMeasure(void)
+{
+    printf("the measure:\n");
+    CHECK(fabs(rd_ab_scene_ms(40.0, 6.0, 3.0) - 31.0) < 1e-9, "40 - 6 - 3");
+    CHECK(rd_ab_scene_ms(5.0, 6.0, 3.0) == 0.0, "nothing left");
+    CHECK(fabs(rd_ab_scene_ms(40.0, -1.0, 0.0) - 40.0) < 1e-9, "no wait, no present");
+    for (int whole = 0; whole < 2; whole++) {
+        rd_ab_init(&s_a, RD_AB_AUTO);
+        (void)rd_ab_subject(&s_a, "zero-area cull");
+        rd_ab_allow(&s_a, 0, true);
+        Pend q[4];
+        int qn = 0;
+        for (int i = 0; i < 400; i++) {
+            if (qn >= 2) {
+                const RdAbIn in = {q[0].tag, 1u, false, true, q[0].work, q[0].ms};
+                rd_ab_collect(&s_a, &in);
+                memmove(q, q + 1, (size_t)(qn - 1) * sizeof(q[0]));
+                qn--;
+            }
+            const RdAbTag tag = rd_ab_begin(&s_a, 50, 40.0 * i, false);
+            const double scene = 30.0 * ((tag.off & 1u) ? 1.0 : 0.95);
+            const double present = 3.0, span = 40.0;
+            const double wait = span - present - scene;
+            q[qn++] =
+                (Pend){tag, 50000.0, whole ? span : rd_ab_scene_ms(span, wait, present), false};
+            lines(&s_a);
+        }
+        const int v = rd_ab_verdict(&s_a, 0, 50);
+        if (whole) {
+            CHECK(v == RD_AB_V_OFF, "the whole span: the saving seen (%d)", v);
+        } else {
+            CHECK(v == RD_AB_V_ON, "the scene's work: the saving not seen (%d)", v);
+            CHECK(strstr(s_last, "ms of the scene's GPU work (the present and its display wait "
+                                 "left out) a thousand vertices and triangles") != NULL,
+                  "%s", s_last);
+        }
+    }
+}
+
+/* a renderer made again (rd_ab_forget): a trial running ends unjudged,
+   every verdict and the carried arm forgotten, the stage begins again, a
+   record of the earlier renderer not measured, the trials run still
+   counted */
+static void testForget(void)
+{
+    printf("a renderer made again:\n");
+    rd_ab_init(&s_a, RD_AB_AUTO);
+    (void)rd_ab_subject(&s_a, "zero-area cull");
+    rd_ab_allow(&s_a, 0, true);
+    Stream s = {0};
+    s.lag = 2;
+    s.replays = 200;
+    s.stepMs = 40.0;
+    s.stage = 30;
+    s.effect = 0.05;
+    double t = run(&s_a, &s, 0.0, 1u);
+    CHECK(rd_ab_verdict(&s_a, 0, 30) == RD_AB_V_OFF, "stage 30 not off");
+    /* a trial past 16 pairs in stage 31 (a 1 % difference: no early verdict) */
+    s.stage = 31;
+    s.effect = 0.01;
+    s.replays = 40 + 50; /* 2 s, then 25 pairs */
+    t = run(&s_a, &s, t, 1u);
+    CHECK(s_a.t.active && s_a.t.pairs >= RD_AB_PAIRS_MIN, "no trial past 16 pairs: %u",
+          (unsigned)s_a.t.pairs);
+    const RdAbTag old = rd_ab_begin(&s_a, 31, t, false);
+    const uint32_t trials = s_a.trials;
+    rd_ab_forget(&s_a, "a Graphics API switch");
+    char l[RD_AB_LINE], first[RD_AB_LINE] = "";
+    int n = 0;
+    while (rd_ab_take_line(&s_a, l, sizeof(l))) {
+        printf("  %s\n", l);
+        if (n++ == 0) {
+            snprintf(first, sizeof(first), "%s", l);
+        }
+        snprintf(s_last, sizeof(s_last), "%s", l);
+    }
+    CHECK(strstr(first, "stage 31: no verdict (the renderer was made again, ") != NULL, "%s",
+          first);
+    CHECK(strstr(s_last, "A/B: the renderer was made again (a Graphics API switch): every verdict "
+                         "and the carried arm forgotten") == s_last,
+          "%s", s_last);
+    CHECK(rd_ab_verdict(&s_a, 0, 30) == RD_AB_V_NONE && rd_ab_verdict(&s_a, 0, 31) == RD_AB_V_NONE,
+          "a verdict kept across the switch");
+    CHECK(s_a.trials == trials && !s_a.t.active, "the trials' count or the trial");
+    /* the earlier renderer's record read back now: not measured (no use
+       seen, no span kept) */
+    const RdAbIn in = {old, 1u, false, true, 50000.0, 40.0};
+    rd_ab_collect(&s_a, &in);
+    RdAbTag tag = rd_ab_begin(&s_a, 30, t + 1.0, false);
+    CHECK(tag.off == 0u && tag.trial == 0u, "stage 30 after the switch: off %x", tag.off);
+    rd_ab_collect(&s_a, &in);
+    tag = rd_ab_begin(&s_a, 30, t + 1.0 + RD_AB_START_MS + 1.0, false);
+    CHECK(tag.trial == 0u && s_a.usedNow == 0u, "the earlier renderer's record counted");
+    /* this renderer's own: stage 30 judged again */
+    s.stage = 30;
+    s.effect = 0.05;
+    s.replays = 200;
+    (void)run(&s_a, &s, t + 5000.0, 1u);
+    CHECK(rd_ab_verdict(&s_a, 0, 30) == RD_AB_V_OFF && s_a.trials == trials + 1u,
+          "stage 30 not judged again on the new renderer");
+    CHECK(strstr(s_last, "(it started with it, no verdict before it in the run)") != NULL, "%s",
+          s_last);
+}
+
 int main(void)
 {
+    testMeasure();
+    testForget();
     testVerdicts();
     testCost();
     testStages();

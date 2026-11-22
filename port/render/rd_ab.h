@@ -10,7 +10,7 @@
  * The judge, pure (no GPU, no clock, no renderer state: fed by
  * port/render/rd_ab_run.c, tested by port/render/test/rd_ab_test.c):
  *   - each replay asks its arms (rd_ab_begin) with its stage, the time and
- *     whether it is a keep frame; its GPU span, its work (the pre-pass's
+ *     whether it is a keep frame; its scene's GPU work (rd_ab_scene_ms), its work (the pre-pass's
  *     vertices and the VU triangles) and whether each subject changed
  *     anything in it come back when its GPU times are read (rd_ab_collect),
  *     with the tag it was recorded under, so a span is always the arm's it
@@ -48,7 +48,8 @@
  *     its off arm for the rest of the run.
  * The lines (rd_ab_take_line; "rd: " added by the renderer):
  *   A/B: zero-area cull, stage 42: 32 pairs, with it 1.62 ms, without 1.55
- *     ms a thousand vertices and triangles (the median pair 4.3 % dearer
+ *     ms of the scene's GPU work (the present and its display wait left
+ *     out) a thousand vertices and triangles (the median pair 4.3 % dearer
  *     with it, 25 of 32 cheaper without), 3 dropped by a long picture, 0
  *     by unequal work: off for this stage (it started with it, the arm
  *     stage 3's verdict left)
@@ -103,6 +104,7 @@ typedef struct RdAbTag {
     uint32_t seq;   /* its place in the trial (0, 1, ...) */
     int32_t stage;  /* its stage (-1 not known) */
     uint8_t off;    /* the subjects at their off arm (a bit a subject) */
+    uint16_t epoch; /* the renderer it was drawn by (rd_ab_forget moves it) */
 } RdAbTag;
 
 /* a replay's GPU times, read back */
@@ -112,7 +114,7 @@ typedef struct RdAbIn {
     bool keep;    /* a keep frame */
     bool valid;   /* its GPU span measured */
     double work;  /* the pre-pass's vertices and the VU triangles */
-    double gpuMs; /* its GPU span */
+    double gpuMs; /* its GPU work: the scene's alone (rd_ab_scene_ms) */
 } RdAbIn;
 
 typedef struct RdAbTrial {
@@ -163,6 +165,7 @@ typedef struct RdAb {
     int nMem;
     RdAbTrial t;
     uint32_t serial, trials;
+    uint16_t epoch; /* rd_ab_forget's count: a record of an earlier renderer is not measured */
     bool capSaid;
     uint32_t altSeq;
     uint64_t offTrial; /* off-arm replays the trials made, the run */
@@ -186,6 +189,19 @@ void rd_ab_allow(RdAb *a, int id, bool allowed);
 RdAbTag rd_ab_begin(RdAb *a, int32_t stage, double nowMs, bool keep);
 /* a replay's GPU times, read back under the tag it was begun with */
 void rd_ab_collect(RdAb *a, const RdAbIn *in);
+/* the renderer was made again (a Graphics API switch, the device made
+   again): a trial running ends unjudged, every verdict and the carried arm
+   are forgotten (each subject back on its default, with it), the stage
+   starts again (its trial 2 s from its next replay), and the records the
+   earlier renderer drew are not measured; the trials already run still
+   count toward RD_AB_TRIALS, a stop stays; its line (why) */
+void rd_ab_forget(RdAb *a, const char *why);
+/* the GPU work a replay's measure takes: its span less the present's own
+   pass and the display wait before it (rd.h RdPerfRecord gpuPresentMs,
+   gpuDisplayWaitMs: on a Mali the wait for the window's image shows in the
+   present pass, so neither is work the subject can change), 0 when nothing
+   is left */
+double rd_ab_scene_ms(double spanMs, double displayWaitMs, double presentMs);
 /* every trial stopped, every subject at its off arm for the run (why) */
 void rd_ab_stop(RdAb *a, const char *why);
 /* subject id's verdict for stage (RD_AB_V_*) */

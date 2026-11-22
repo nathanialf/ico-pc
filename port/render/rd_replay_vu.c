@@ -24,6 +24,7 @@
 #include "rd_vu_rec_sink.h"
 #include "rd_vu_skin_check.h"
 #include "rd_vu_share.h"
+#include "rd_ab_run.h"
 #include "rd_vu_zero.h"
 #include "shader_consts.h"
 #include "vu1_ref.h" /* vu1ref_region_mirror: ICO_VU_MIRROR */
@@ -4030,6 +4031,7 @@ void rd__vu_prepass_init(const RhiLimits *lim)
     g_rd.vuPrepassWhy[0] = '\0';
     rd__vu_record_init(lim); /* render targets or vertex stores (rd_vu_record.h) */
     rd__vu_zero_init();      /* the zero-area cull's state (rd_vu_zero.h) */
+    rd__ab_renderer();       /* the in-play judge: a renderer made again forgets (rd_ab_run.h) */
     const char *env = getenv("ICO_RD_VU_PREPASS");
     const uint32_t bytes = lim ? lim->colorBytesPerPixel : 0u;
     if (s_preHostWhy[0] != '\0') {

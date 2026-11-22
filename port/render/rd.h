@@ -3580,6 +3580,7 @@ typedef struct RdPerfRecord {
     uint32_t abTrial, abSeq;
     int32_t abStage;
     uint8_t abOff, abUsed;
+    uint16_t abEpoch; /* the renderer it was drawn by (rd_ab.h rd_ab_forget) */
 } RdPerfRecord;
 
 /* The oldest finished record not yet popped (a queue of 64; the oldest are
