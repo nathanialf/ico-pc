@@ -58,6 +58,11 @@
  *                                 "hold" keeps R1 held (the game's Hold type
  *                                 A); "toggle" takes it with one press and
  *                                 lets go with another (B)
+ *   [gameplay] zoom_type   "hold" the zoom button (R2): "hold" zooms in while
+ *                                 it is held (the game's own, every disc);
+ *                                 "toggle" zooms in with one press and out
+ *                                 with the next (zoom_toggle.h); a
+ *                                 pad-recording key
  *   [gameplay] developer_mode
  *                          false  the development build's debug menu and
  *                                 debug options
@@ -410,6 +415,19 @@ int ico_opt_hold_choice_store(void);
    318, reached only on a disc whose layout tables are not recognised): sets
    the type, writes the key and saves config.toml at once. */
 void ico_opt_hold_type_toggled(int type);
+/* [gameplay] zoom_type: how the zoom button (R2) zooms the camera
+   (port/game/zoom_toggle.h): ICO_ZOOM_HOLD ("hold", the default on every
+   disc: the game's own, zoomed in while R2 is held) or ICO_ZOOM_TOGGLE
+   ("toggle": one press zooms in, the next zooms out).  Another word reads
+   as hold, logged once.  A log line each time the type in force changes:
+   "options: zoom type <hold|toggle>".  Not on the memory card. */
+#define ICO_ZOOM_HOLD 0
+#define ICO_ZOOM_TOGGLE 1
+int ico_opt_zoom_type(void);
+/* sets the type for this run (another value reads as ICO_ZOOM_HOLD) */
+void ico_opt_set_zoom_type(int type);
+/* the key's word of a type: "hold" or "toggle" */
+const char *ico_opt_zoom_type_name(int type);
 /* [input] button_pictures: whose button pictures the menus, the prompts,
    photo mode and the touch screen draw (Options > Controls > Button
    pictures; port/ui/settings_pads.c resolves it once a frame).  "auto"

@@ -525,6 +525,12 @@ typedef enum UiStrId {
     UI_STR_VAL_HOLD_DISC_A, /* Hold type: the disc's own, A on this disc */
     UI_STR_VAL_HOLD_DISC_B, /* the disc's own, B */
     UI_STR_HOLD_TYPE_NOTE,
+    /* Controls > Zoom type ([gameplay] zoom_type), after Hold type: its
+       label, its two values and its note */
+    UI_STR_OPT_ZOOM_TYPE,
+    UI_STR_VAL_ZOOM_HOLD,
+    UI_STR_VAL_ZOOM_TOGGLE,
+    UI_STR_ZOOM_TYPE_NOTE,
     /* Controls > Button pictures and its note (the values are names, not
        translated: settings_pads.c) */
     UI_STR_OPT_BUTTON_PICTURES,

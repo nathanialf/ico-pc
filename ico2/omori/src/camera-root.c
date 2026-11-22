@@ -27,6 +27,16 @@ extern void ico_video_camera_cut(void);
 
 #define CAM_HOST_CUT_IF(c) ((c) ? ico_video_camera_cut() : (void)0)
 
+/* PC port: Zoom type
+   (port/game/zoom_toggle.h): the R2 test of each zoom block below, held
+   (the game's own) or toggled; the port's state, no game variable */
+extern int ico_zoom_held(int held, int override, int live, int source, int mode);
+extern void ico_zoom_reset(void);
+
+#define ICO_ZOOM_SRC_BOY 0  /* the boy's pad */
+#define ICO_ZOOM_SRC_PAD 1  /* no boy: the camera's own pad */
+#define ICO_ZOOM_SRC_LOOK 2 /* the cutscene look-around (useDemo) */
+
 static int InsertCamera_isEnable(void);
 
 union PendCopy { /* field names derived */
@@ -491,6 +501,7 @@ static void InitCamera_jun26(void)
     targetCameraSet.moving = 0;
     gamecamCutBack = 0;
     zoomRequest = 0;
+    ico_zoom_reset(); /* PC port: no toggled zoom at a stage start */
     lwsCutBack = 0;
     CameraCalclated_f = 0;
 }
@@ -513,6 +524,7 @@ void InitCamera(void)
     targetCameraSet.moving = 0;
     gamecamCutBack = 0;
     zoomRequest = 0;
+    ico_zoom_reset(); /* PC port: no toggled zoom at a stage start */
     lwsCutBack = 0;
     CameraCalclated_f = 0;
     if (ICO_AUG6JUN26) {
@@ -748,6 +760,7 @@ static void SetCameraMatrix_ntsc(GObj *self)
             {10, 200}, {10, 200}, {(int)_ACTGame_GetParamF(12), (int)_ACTGame_GetParamF(11)}};
         IosPadCtx padCtx;
         GObj *ply;
+        int held; /* PC port: the R2 test (zoom_toggle.h) */
 
         iosPadConnect(&padCtx, 0, 0, &iosPadConfDefault);
         if (zoomBaseInit != 0) {
@@ -761,10 +774,14 @@ static void SetCameraMatrix_ntsc(GObj *self)
         } else {
             p = &padCtx;
         }
+        /* PC port: R2 held, or toggled (zoom_toggle.h) */
+        held = ico_zoom_held(p->now & 2, zoomRequest != 0,
+                             ply != 0 ? IsAbleBoyControl() : iosPadEnableGet(),
+                             ply != 0 ? ICO_ZOOM_SRC_BOY : ICO_ZOOM_SRC_PAD, cameraMode);
         if (zoomRequest != 0) {
             step = 2;
             zoomRequest = 0;
-        } else if (p->now & 2) {
+        } else if (held) {
             step = 1;
         } else {
             step = 0;
@@ -917,6 +934,7 @@ static void SetCameraMatrix_jun26(GObj *self)
             {10, 200}, {10, 200}, {(int)_ACTGame_GetParamF(11), (int)_ACTGame_GetParamF(10)}};
         IosPadCtx padCtx;
         GObj *ply;
+        int held; /* PC port: the R2 test (zoom_toggle.h) */
 
         iosPadConnect(&padCtx, 0, 0, &iosPadConfDefault);
         if (zoomBaseInit != 0) {
@@ -930,10 +948,14 @@ static void SetCameraMatrix_jun26(GObj *self)
         } else {
             p = &padCtx;
         }
+        /* PC port: R2 held, or toggled (zoom_toggle.h) */
+        held = ico_zoom_held(p->now & 2, zoomRequest != 0,
+                             ply != 0 ? IsAbleBoyControl() : iosPadEnableGet(),
+                             ply != 0 ? ICO_ZOOM_SRC_BOY : ICO_ZOOM_SRC_PAD, cameraMode);
         if (zoomRequest != 0) {
             step = 2;
             zoomRequest = 0;
-        } else if (p->now & 2) {
+        } else if (held) {
             step = 1;
         } else {
             step = 0;
@@ -1092,6 +1114,7 @@ static void SetCameraMatrix_aug6(GObj *self)
             {10, 200}, {10, 200}, {(int)_ACTGame_GetParamF(12), (int)_ACTGame_GetParamF(11)}};
         IosPadCtx padCtx;
         GObj *ply;
+        int held; /* PC port: the R2 test (zoom_toggle.h) */
 
         iosPadConnect(&padCtx, 0, 0, &iosPadConfDefault);
         if (zoomBaseInit != 0) {
@@ -1105,10 +1128,14 @@ static void SetCameraMatrix_aug6(GObj *self)
         } else {
             p = &padCtx;
         }
+        /* PC port: R2 held, or toggled (zoom_toggle.h) */
+        held = ico_zoom_held(p->now & 2, zoomRequest != 0,
+                             ply != 0 ? IsAbleBoyControl() : iosPadEnableGet(),
+                             ply != 0 ? ICO_ZOOM_SRC_BOY : ICO_ZOOM_SRC_PAD, cameraMode);
         if (zoomRequest != 0) {
             step = 2;
             zoomRequest = 0;
-        } else if (p->now & 2) {
+        } else if (held) {
             step = 1;
         } else {
             step = 0;
@@ -1324,6 +1351,7 @@ void SetCameraMatrix(GObj *self)
             {10, 200}, {10, 200}, {(int)_ACTGame_GetParamF(12), (int)_ACTGame_GetParamF(11)}};
         IosPadCtx padCtx;
         GObj *ply;
+        int held; /* PC port: the R2 test (zoom_toggle.h) */
 
         if (useDemo != 0) {
             zoomMax = zoomMaxInDemo;
@@ -1342,9 +1370,18 @@ void SetCameraMatrix(GObj *self)
         } else {
             p = &padCtx;
         }
+        /* PC port: R2 held, or toggled (zoom_toggle.h); the look-around's
+           pad keeps R2 while the pad is off (iosPadRead) */
+        held = ico_zoom_held(p->now & 2, zoomRequest != 0,
+                             p != &padCtx ? IsAbleBoyControl()
+                                          : (iosPadEnableGet() || debug_hand_camera),
+                             useDemo != 0 ? ICO_ZOOM_SRC_LOOK
+                             : ply != 0   ? ICO_ZOOM_SRC_BOY
+                                          : ICO_ZOOM_SRC_PAD,
+                             cameraMode);
         if (zoomRequest != 0) {
             step = 2;
-        } else if (p->now & 2) {
+        } else if (held) {
             step = 1;
         } else {
             step = 0;

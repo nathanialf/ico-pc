@@ -118,6 +118,7 @@ int iosPadDevInit(void *desc);
 int iosPadDevRead(void);
 void iosPadDisable(void);
 void iosPadEnable(void);
+int iosPadEnableGet(void);
 
 
 /* out is an IosPadStick; way_tool hands it a 32-byte buffer (its .bss
