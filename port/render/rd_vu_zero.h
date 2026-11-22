@@ -52,6 +52,13 @@
  *   - the loss ladder (port/rhi/rhi_tile_rule.h, ICO_LOSS_ROW: a start
  *     after one that lost the graphics device or whose driver hung): off
  *     for this start.
+ * Once on, the cull is timed in play (rd_ab.h, rd_ab_run.h: a trial 2 s
+ * into each stage alternates replays with it and without it, a verdict
+ * kept for the stage): a replay at the judge's off arm gives no entry a
+ * word (RD_VU_ZERO_TRIAL) and takes the build without it for every entry,
+ * the path the device ran before the cull; such a picture is not one
+ * "drawn with it" for the mark's count, and a verdict "off" writes nothing
+ * to the mark.
  * ICO_RD_VU_ZERO (tests): 0 off; 1 on without the self-test (the replay
  * tool runs none by default), every entry of every replay checked. */
 #ifndef PORT_RENDER_RD_VU_ZERO_H
@@ -75,6 +82,7 @@ enum {
     RD_VU_ZERO_VELOCITY, /* the velocity pass reads the entry's slots (VELOCITY: not tested) */
     RD_VU_ZERO_ENTRY,    /* not through the record's main shader (a program's own entry, a
                            probe, a command the pre-pass did not record) */
+    RD_VU_ZERO_TRIAL,    /* the in-play judge's off arm for this replay (rd_ab_run.h) */
     RD_VU_ZERO_REASONS
 };
 
@@ -160,7 +168,8 @@ bool rd__vu_zero_try_begin(void);
 uint32_t rd__vu_zero_variants_made(void);
 /* the rule stage's vertex shader id: the zero build for every entry while
    the cull is on and its build made (an entry without a word skips the
-   test), else the build without the cull */
+   test), else (off, or the in-play judge's off arm for the replay) the
+   build without the cull */
 uint8_t rd__vu_zero_rule_vs(uint32_t word);
 /* an entry's word kept, or 0 with *why: skinned, read by the velocity
    pass, a probe */
@@ -180,7 +189,8 @@ uint32_t rd__pipeline_drop_vs(uint8_t vs);
 /* rd_pipeline.c: the made pipelines of vertex shader vs */
 uint32_t rd__pipeline_count_vs(uint8_t vs);
 /* the lattice word of a pre-pass entry drawn under st (its target, offset),
-   0 when off or refused (*why) */
+   0 when off or refused (*why; RD_VU_ZERO_TRIAL at the in-play judge's off
+   arm, where the cull also says it had work: rd__ab_used) */
 uint32_t rd__vu_zero_entry_word(const struct RdStateBlock *st, int *why);
 /* the same whatever the cull's state: the settings' answer for st's target
    alone (the self-test asks it before it tries anything) */
@@ -223,6 +233,9 @@ void rd__vu_zero_selftest_skip(const char *why);
    N modules of it made (P pipelines)" (the tests read the count: 0 where it
    was never tried) */
 void rd__vu_zero_start_line(void);
+/* the cull may be put on trial in play (rd_ab_run.h): on, its build made,
+   not the self-test's frames (a blocked, failed or held cull never is) */
+bool rd__vu_zero_triable(void);
 /* whether the cull is on for the run now; its state's words */
 bool rd__vu_zero_on(void);
 const char *rd__vu_zero_state_text(void);

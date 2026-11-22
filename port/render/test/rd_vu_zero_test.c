@@ -42,6 +42,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "rd_ab_run.h"
 #include "rd_vu_zero.h"
 #include "shader_consts.h"
 
@@ -574,6 +575,13 @@ static void t6(void)
         CHECK(strcmp(rd_vu_zero_reason_name(i), "?") != 0, "reason %d has no name", i);
     }
     CHECK(strcmp(rd_vu_zero_reason_name(RD_VU_ZERO_REASONS), "?") == 0, "past the reasons");
+    /* the in-play judge (rd_ab_run.h): its off arm's reason; outside a
+       replay no arm is off; the cull never put on trial off for the run
+       (the failed self-test above) */
+    CHECK(strcmp(rd_vu_zero_reason_name(RD_VU_ZERO_TRIAL), "trial") == 0, "the trial's reason: %s",
+          rd_vu_zero_reason_name(RD_VU_ZERO_TRIAL));
+    CHECK(!rd__ab_off(RD_AB_ZERO), "an off arm outside a replay");
+    CHECK(!rd__vu_zero_triable(), "triable without its build (or off for the run)");
 }
 
 int main(void)

@@ -19,6 +19,13 @@ typedef struct AttRow {
     const char *name, *unit, *unit2;
 } AttRow;
 
+/* A row's third count's words (NULL none) and whether its counts are the
+   run's totals rather than the block's (k_more, the few rows with either) */
+typedef struct AttMore {
+    const char *unit3;
+    int total;
+} AttMore;
+
 /* one row an attempt: add one here and one enum value in the header */
 static const AttRow k_rows[ICO_ATT_COUNT] = {
     [ICO_ATT_FEW_CORES] = {"few-cores rule", "threads moved", NULL},
@@ -77,6 +84,14 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
                             "drawn in full while paused"},
     [ICO_ATT_SKIN_PHONE] = {"the skin check's own pipelines left out on a phone",
                             "box checks not drawn", "twins not drawn"},
+    [ICO_ATT_AB_ZERO] = {"the zero-area cull timed in play", "stages kept with it so far",
+                         "without it"},
+};
+
+static const AttMore k_more[ICO_ATT_COUNT] = {
+    /* the run's totals: a verdict is once a stage, the block's would be 0
+       nearly always */
+    [ICO_ATT_AB_ZERO] = {"trials run", 1},
 };
 
 /* the rows' live values (__atomic), and the block text's last counts (the
@@ -84,12 +99,12 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
 static struct {
     int state;
     const char *why;
-    uint64_t n, n2;
-    uint64_t lastN, lastN2;
+    uint64_t n, n2, n3;
+    uint64_t lastN, lastN2, lastN3;
 } s_att[ICO_ATT_COUNT] = {
-    [ICO_ATT_ADRENO_B] = {ICO_ATT_REMOVED, ICO_ATT_QPRIO_REMOVED_WHY, 0, 0, 0, 0},
-    [ICO_ATT_BLEND_CONST] = {ICO_ATT_NOT_BUILT, NULL, 0, 0, 0, 0},
-    [ICO_ATT_CHAIN3] = {ICO_ATT_NOT_BUILT, NULL, 0, 0, 0, 0},
+    [ICO_ATT_ADRENO_B] = {ICO_ATT_REMOVED, ICO_ATT_QPRIO_REMOVED_WHY, 0, 0, 0, 0, 0, 0},
+    [ICO_ATT_BLEND_CONST] = {ICO_ATT_NOT_BUILT, NULL, 0, 0, 0, 0, 0, 0},
+    [ICO_ATT_CHAIN3] = {ICO_ATT_NOT_BUILT, NULL, 0, 0, 0, 0, 0, 0},
 };
 
 /* the shipped build's flat outputs or the tests' twins, as the renderer
@@ -139,6 +154,13 @@ void ico_attempt_fire2(int id, uint64_t n)
 {
     if (idOk(id)) {
         __atomic_fetch_add(&s_att[id].n2, n, __ATOMIC_RELAXED);
+    }
+}
+
+void ico_attempt_fire3(int id, uint64_t n)
+{
+    if (idOk(id)) {
+        __atomic_fetch_add(&s_att[id].n3, n, __ATOMIC_RELAXED);
     }
 }
 
@@ -282,9 +304,14 @@ size_t ico_attempt_block_text(char *out, size_t cap, int stalls)
         const IcoAttemptState st = ico_attempt_state_of(i);
         const uint64_t n = __atomic_load_n(&s_att[i].n, __ATOMIC_RELAXED);
         const uint64_t n2 = __atomic_load_n(&s_att[i].n2, __ATOMIC_RELAXED);
-        const uint64_t d = n - s_att[i].lastN, d2 = n2 - s_att[i].lastN2;
+        const uint64_t n3 = __atomic_load_n(&s_att[i].n3, __ATOMIC_RELAXED);
+        /* the block's counts, or the run's (k_rows total) */
+        const uint64_t d = k_more[i].total ? n : n - s_att[i].lastN;
+        const uint64_t d2 = k_more[i].total ? n2 : n2 - s_att[i].lastN2;
+        const uint64_t d3 = k_more[i].total ? n3 : n3 - s_att[i].lastN3;
         s_att[i].lastN = n;
         s_att[i].lastN2 = n2;
+        s_att[i].lastN3 = n3;
         if (st == ICO_ATT_NOT_SET || st == ICO_ATT_NOT_BUILT || st == ICO_ATT_REMOVED) {
             continue;
         }
@@ -300,7 +327,11 @@ size_t ico_attempt_block_text(char *out, size_t cap, int stalls)
                179's Mali: "not applicable here 0 passes (3 stalls in the
                block)" read as a third kind of stall) */
             if (k_rows[i].unit2 != NULL && !(i == ICO_ATT_ADRENO_A && st == ICO_ATT_NA)) {
-                put(&p, " (%llu %s)", (unsigned long long)d2, k_rows[i].unit2);
+                put(&p, " (%llu %s", (unsigned long long)d2, k_rows[i].unit2);
+                if (k_more[i].unit3 != NULL) {
+                    put(&p, "; %llu %s", (unsigned long long)d3, k_more[i].unit3);
+                }
+                put(&p, ")");
             }
         }
         shown++;
@@ -328,7 +359,8 @@ void ico_attempt_reset(void)
         __atomic_store_n(&s_att[i].why, startWhy(i), __ATOMIC_RELEASE);
         __atomic_store_n(&s_att[i].n, 0u, __ATOMIC_RELEASE);
         __atomic_store_n(&s_att[i].n2, 0u, __ATOMIC_RELEASE);
-        s_att[i].lastN = s_att[i].lastN2 = 0;
+        __atomic_store_n(&s_att[i].n3, 0u, __ATOMIC_RELEASE);
+        s_att[i].lastN = s_att[i].lastN2 = s_att[i].lastN3 = 0;
     }
     s_flat0On = -1;
 }
@@ -889,5 +921,26 @@ void ico_attempt_decide_scene_hold(const char *offWhy)
         ico_attempt_state(ICO_ATT_SCENE_HOLD, ICO_ATT_ON, "while paused");
     } else {
         ico_attempt_state(ICO_ATT_SCENE_HOLD, ICO_ATT_NA, offWhy);
+    }
+}
+
+void ico_attempt_decide_timed(int id, int mode, int allowed, int stopped)
+{
+    if (mode != 0) {
+        ico_attempt_state(id, ICO_ATT_OFF_DEFAULT,
+                          mode == 1 ? "ICO_RD_AB=on: the tests' switch, every picture with it"
+                          : mode == 2
+                              ? "ICO_RD_AB=off: the tests' switch, every picture without it"
+                              : "ICO_RD_AB=alt: the tests' switch, with and without in turn");
+    } else if (!allowed && !stopped) {
+        ico_attempt_state(id, ICO_ATT_NA, "the attempt is off here: nothing to time");
+    } else if (stopped) {
+        ico_attempt_state(id, ICO_ATT_OFF_DEFAULT,
+                          "every trial stopped for the run (a device loss or the GPU's own sign "
+                          "of a reset): without it from there");
+    } else {
+        ico_attempt_state(id, ICO_ATT_ON,
+                          "a trial in each stage, with it and without it in turn: the stage keeps "
+                          "the faster");
     }
 }

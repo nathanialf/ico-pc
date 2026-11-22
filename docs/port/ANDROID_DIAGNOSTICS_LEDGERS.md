@@ -41,7 +41,7 @@ counter is an increment in a hot path, and none of them reads anything from the 
 
 `port/platform/attempt_ledger.h`: one row per behaviour that this release changes on purpose for a
 device class. Each row has a name, its state on this device (on, off by default, refused by its
-self-test, not applicable here, not in this build, removed, or not reported) with a reason, and up to two counts. Two lines
+self-test, not applicable here, not in this build, removed, or not reported) with a reason, and up to three counts (the block's, or for a row that says so the run's totals). Two lines
 print it:
 
 - At the first 10 s block, and again whenever a state changes (the first 8 changes, then every
@@ -109,6 +109,8 @@ thread can make it, hot paths included. The rows and where their states are set:
 | the paused scene held under the menu | `rd_hold.c` at the first paused picture and when the device's verdict changes (`ico_attempt_decide_scene_hold`): `on (while paused)` on Vulkan where list 11's draws are not joined to the open pass, `not applicable here` with the reason (not Vulkan, the join, MSAA, the exact blend, a temporal upscaler, ...); `refused by its self-test` when the first held picture differed from the same picture in full ([RENDER.md](RENDER.md#the-paused-scenes-hold)) | the pictures held; second count those drawn in full while paused |
 | the old robust-access line taken off | `window_robust.c` `window_robust_start` at the window's first start (`ico_attempt_decide_robust_line`): `on ([dev] gpu_robust = true without the game's mark removed from config.toml: robust access off from this start)`, `refused by its self-test (config.toml could not be written: robust access stays on, the next start tries again)` (the refusal is the file's), `refused by its self-test (gpu_robust = true in config.toml is in a hand-written form the game cannot take out ...: delete the line by hand)` (the text without the lines the removal knows, `[dev]`'s two keys and the root's dotted `dev.gpu_robust` / `dev.gpu_robust_by`, parsed as config.toml is read, still says true: nothing is written and the start says `ico_pc: robust access stays on: gpu_robust = true in config.toml is written in a form the game does not write and could not take out ...`; a marked key's too), `not applicable here (no [dev] gpu_robust = true without the game's mark in config.toml)`; a later start of the window in the same run changes it only when it finds such a key | static |
 | the skin check's own pipelines left out on a phone | `rd_vu_skin_selftest.c` at the skin check's start line (`rd__vu_skin_rule_start`, `ico_attempt_decide_skin_phone`): `on (a tile-based phone GPU: none compiled, whatever the start-up set did, issue 217)` where the skin check runs on a tile-based phone GPU (the device table's `SKIN_AS_BEFORE`), `not applicable here (not a tile-based phone GPU: compiled under the memory rule)` where it runs elsewhere, `not applicable here (the skin check is off here)` where it is off or its start-up probe failed; not reported where the probe never ran (not Vulkan) ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md#what-it-checks)) | `rd_vu_skin_check.c`: the box checks not drawn for it (the second count: the twins not drawn for it); the drawn counts are in `last-run.txt` |
+
+| the zero-area cull timed in play | `rd_ab_run.c` at the in-play judge's start line (after the cull's own) and whenever the cull's state or the judge's stop changes (`ico_attempt_decide_timed`): `on (a trial in each stage, with it and without it in turn: the stage keeps the faster)`, `not applicable here (the attempt is off here: nothing to time)` where the cull is off or held, `off by default` under the tests' `ICO_RD_AB` or once every trial stopped (a device loss, the GPU's own sign of a reset) ([PIPELINES.md](PIPELINES.md#the-zero-area-cull-timed-in-play)) | `rd_ab_run.c` after each verdict: the run's totals in every block, not the block's (a verdict is once a stage): `on 2 stages kept with it so far (1 without it; 3 trials run)` |
 
 The shadow cuts' counts come from the replay's record where the window reads it
 (`window_perf_rank_record`), not from the cuts' hot paths.
@@ -291,7 +293,10 @@ invocations a picture: the pre-pass's 85k, the draws' 156k (3 a triangle; never 
 plans: none 91; robust access on, buffers (gpu_robust)`
 
 This is one line per block with the fields that compare two logs of the same scene. The scene key
-is `window_scene_key`'s, as the `perf scene` line uses. The GPU figures are the records' own,
+is `window_scene_key`'s, as the `perf scene` line uses. Where some of the block's pictures were
+drawn at the in-play judge's off arm, the count says how many: `91 pictures (0 keep frames; 31
+without an attempt, timed)` ([PIPELINES.md](PIPELINES.md#the-zero-area-cull-timed-in-play)); a
+block of a stage judged off draws all of its pictures that way. The GPU figures are the records' own,
 averaged over the pictures with GPU times. The earlier logs' lines stay word for word, so they
 line up with logs from before this line existed: `window: perf scene:` (with its new bracket
 after the vertex invocations), `window: perf classes`, `window: GPU ms per replay: lists 0-12`,

@@ -461,6 +461,11 @@ static void test_classes(void)
            device's fx plan), so on, as the reporter's Adreno 740 */
         ico_attempt_decide_scene_hold(NULL);
         CHECK(ico_attempt_state_of(ICO_ATT_SCENE_HOLD) == ICO_ATT_ON);
+        /* the zero-area cull timed in play (rd_ab_run.c): the judge, the
+           cull past its self-test (the classes are not told whether it
+           passed there: on, as on the reporter's Mali-G52) */
+        ico_attempt_decide_timed(ICO_ATT_AB_ZERO, 0, 1, 0);
+        CHECK(ico_attempt_state_of(ICO_ATT_AB_ZERO) == ICO_ATT_ON);
         /* the whole start line, its last row included, in the window's 4 KB
            parts (window_perf_rank.c ledger_lines, ico_attempt_start_part):
            one part, or two since the v0.11.7 rows, each whole rows */
@@ -1124,8 +1129,57 @@ static void test_pin_release(void)
     ico_attempt_reset();
 }
 
+/* the zero-area cull timed in play (rd_ab_run.c, v0.11.15): its states
+   with their words, and its three counts, the run's totals in every block
+   (not the block's) */
+static void test_timed(void)
+{
+    char b[4096];
+
+    ico_attempt_reset();
+    CHECK(ico_attempt_state_of(ICO_ATT_AB_ZERO) == ICO_ATT_NOT_SET);
+    ico_attempt_decide_timed(ICO_ATT_AB_ZERO, 0, 0, 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_AB_ZERO) == ICO_ATT_NA &&
+          strcmp(ico_attempt_why_of(ICO_ATT_AB_ZERO), "the attempt is off here: nothing to time") ==
+              0);
+    ico_attempt_decide_timed(ICO_ATT_AB_ZERO, 3, 1, 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_AB_ZERO) == ICO_ATT_OFF_DEFAULT &&
+          strcmp(ico_attempt_why_of(ICO_ATT_AB_ZERO),
+                 "ICO_RD_AB=alt: the tests' switch, with and without in turn") == 0);
+    ico_attempt_decide_timed(ICO_ATT_AB_ZERO, 0, 1, 0);
+    CHECK(ico_attempt_state_of(ICO_ATT_AB_ZERO) == ICO_ATT_ON);
+    (void)ico_attempt_start_text(b, sizeof b);
+    CHECK(strstr(b, "; the zero-area cull timed in play on (a trial in each stage, with it and "
+                    "without it in turn: the stage keeps the faster)") != NULL);
+    ico_attempt_fire(ICO_ATT_AB_ZERO, 1u);
+    ico_attempt_fire2(ICO_ATT_AB_ZERO, 2u);
+    ico_attempt_fire3(ICO_ATT_AB_ZERO, 3u);
+    (void)ico_attempt_block_text(b, sizeof b, -1);
+    CHECK(text_is(b, "attempts: the zero-area cull timed in play on 1 stages kept with it so far "
+                     "(2 without it; 3 trials run)"));
+    /* the next block: the same totals, not 0 */
+    ico_attempt_fire3(ICO_ATT_AB_ZERO, 1u);
+    (void)ico_attempt_block_text(b, sizeof b, -1);
+    CHECK(text_is(b, "attempts: the zero-area cull timed in play on 1 stages kept with it so far "
+                     "(2 without it; 4 trials run)"));
+    /* stopped (a device loss): without it for the run */
+    ico_attempt_decide_timed(ICO_ATT_AB_ZERO, 0, 1, 1);
+    CHECK(ico_attempt_state_of(ICO_ATT_AB_ZERO) == ICO_ATT_OFF_DEFAULT &&
+          strstr(ico_attempt_why_of(ICO_ATT_AB_ZERO), "every trial stopped for the run") != NULL);
+    /* a row with two counts keeps its words: no third clause */
+    ico_attempt_decide_skin_phone(1, 1);
+    ico_attempt_fire(ICO_ATT_SKIN_PHONE, 2u);
+    ico_attempt_fire2(ICO_ATT_SKIN_PHONE, 5u);
+    (void)ico_attempt_block_text(b, sizeof b, -1);
+    CHECK(strstr(b, "the skin check's own pipelines left out on a phone on 2 box checks not "
+                    "drawn (5 twins not drawn); ") != NULL);
+    ico_attempt_reset();
+    CHECK(ico_attempt_state_of(ICO_ATT_AB_ZERO) == ICO_ATT_NOT_SET);
+}
+
 int main(void)
 {
+    test_timed();
     test_pin_release();
     test_classes();
     test_robust_line();

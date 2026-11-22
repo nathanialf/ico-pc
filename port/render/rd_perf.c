@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "ico_thread.h"
+#include "rd_ab_run.h"
 #include "rd_even.h"
 #include "rd_glass.h"
 #include "rd_pace_gpu.h"
@@ -1181,6 +1182,9 @@ void rd__perf_begin(const RdFrame *f, int keep, bool present)
     g_rdPerf.frame = f ? f->number : 0;
     g_rdPerf.keep = (uint8_t)(keep != 0);
     g_rdPerf.presented = (uint8_t)present;
+    /* the in-play judge's arms for this replay, kept in its record so its
+       GPU span is judged as the arm it was recorded with (rd_ab_run.h) */
+    rd__ab_begin(&g_rdPerf);
     /* the submit thread's times set it again when they come */
     g_rdPerf.presentThread = rd__thread_in_step_now() ? RD_PRESENT_IN_STEP : RD_PRESENT_ELSEWHERE;
     g_rdPerf.interpolated = (uint8_t)(s_interpMs > 0.0);
@@ -1670,6 +1674,7 @@ void rd__perf_collect_gpu(void)
         rd__shadow_count_trial(s_passPending[slot].replay, s_passPending[slot].pass,
                                s_passPending[slot].count);
     }
+    rd__ab_collect(r); /* the in-play judge: its span under the arm it was recorded with */
     push(r);
 }
 
@@ -1753,6 +1758,7 @@ void rd__perf_end(void)
 {
     RdPerfRecord *r = &g_rdPerf;
     s_recOpen = false;
+    rd__ab_end();         /* no arm read after it (rd_ab_run.h) */
     rd__perf_hooks_end(); /* the last break's loads */
     workNote(r);          /* its CPU-side counts are final here, its GPU times come later */
     r->totalMs = rd__now_ms() - s_t0 + r->interpMs;

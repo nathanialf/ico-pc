@@ -3564,6 +3564,17 @@ typedef struct RdPerfRecord {
     uint16_t listBoxDraws[RD_LIST_COUNT], listBoxNone[RD_LIST_COUNT];
     uint32_t listBoxTargetPx[RD_LIST_COUNT];
     uint32_t vuListTris[RD_LIST_COUNT];
+    /* The in-play A/B judge (port/render/rd_ab.h, rd_ab_run.h): the arms
+     * the replay was recorded under, set at its start (rd__perf_begin), so
+     * its GPU span read back later is judged as theirs: abTrial the trial's
+     * serial (0 not a trial's replay), abSeq its place in the trial,
+     * abStage its stage (-1 not known), abOff the subjects at their off arm
+     * (a bit a subject, RD_AB_ZERO the zero-area cull; only subjects that
+     * may be tried), abUsed the subjects that had work in it (the cull: a
+     * target with a lattice word) */
+    uint32_t abTrial, abSeq;
+    int32_t abStage;
+    uint8_t abOff, abUsed;
 } RdPerfRecord;
 
 /* The oldest finished record not yet popped (a queue of 64; the oldest are

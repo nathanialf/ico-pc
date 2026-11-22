@@ -1641,7 +1641,86 @@ zero-area cull held|off (why)`. `rd_replay_tool --stats`: `stats: VU zero-area c
 triangles, G shared lists given up); refused: ...; zero-area modules made N`. The tests' switches:
 `ICO_RD_VU_ZERO` and `ICO_RD_VU_ZERO_SABOTAGE` ([TESTING.md](TESTING.md#environment-switches)).
 Whether a GPU spends time on triangles that cover no sample point depends on its tiler, which no
-test here measures.
+test here measures: the device measures it itself, below.
+
+#### The zero-area cull timed in play
+
+The cull is exact, but its cost is the device's: its rule-stage build is larger than the build
+without it, and a culling entry's draws give up the shared vertices' list. Once the cull is on
+(its self-test passed, its mark allows it), the game times it while it is played and keeps it on
+a stage only where it is faster there (`port/render/rd_ab.c` the judge, pure;
+`rd_ab_run.c` the renderer's side; `rd_ab.h` and `rd_ab_run.h` say it all). The judge takes
+subjects: the cull is the first (`RD_AB_ZERO`); the registry takes more, one on trial at a time.
+
+- **Two arms, both paths the device already runs.** With the cull (the arm "on", the default) or
+  without it ("off"): a replay at the off arm gives no entry a lattice word (refused for the
+  `trial`, counted in the 10 s VU line's refusals) and its rule stage takes the build without the
+  cull for every entry, so its draws keep the shared vertices' list. Nothing new reaches the
+  GPU: the build without the cull and its pipeline are the ones the pre-pass ran before the cull's
+  self-test, and the picture is the same on both arms (the cull is exact; `rd_ab_zero_ab` shows it
+  byte for byte).
+- **The arm is chosen when the replay's record starts** (`rd__perf_begin`) and kept in the
+  record (`RdPerfRecord` `abTrial`, `abSeq`, `abStage`, `abOff`, `abUsed`), so its GPU span, read
+  back frames later (`rd__perf_collect_gpu`), is judged as the arm it was recorded with however
+  many pictures are in flight.
+- **A trial** starts 2 s into a stage (the scene ledger's stage switch, from the switch's first
+  frame: past the fade and the stage's first pictures), once the cull had work in that stage (a
+  target with a lattice word) and when the stage has no verdict yet; at most 12 trials a run.
+  Its replays, keep frames left out, alternate with, without, without, with (a drift of the
+  content cancels).
+- **A pair** is the trial's replays 2k and 2k+1, both read back with GPU times, both with the
+  cull's work, their pre-pass vertices and VU triangles within 10 % of each other; a pair with a
+  span over twice the trial's running median (the last 64 spans, the stage's own before the trial
+  included, at least 8) is dropped and counted: the boat scene's stalls run at about half the
+  rate of the stretches between. Its measure is `ln` of the GPU time over the work with the cull,
+  against the same without it.
+- **The verdict**: at 8 pairs all one way with the median at least 2 % that way (the early
+  verdict: a clear difference costs at most 8 pictures on the worse arm); else at 32 pairs, on when
+  the median pair is 2 % or more cheaper with the cull and 22 of the 32 are cheaper with it, off
+  otherwise (no difference: off, the path without the cull). It is kept for that stage for the
+  run: a stage visited again takes it at once. No verdict: fewer than 16 pairs after 600 trial
+  replays (kept on for the stage), or the stage ended or the cull was turned off before a
+  verdict (not judged; tried again at the next visit while trials are left); with 16 to 31
+  pairs at either end, the verdict on those pairs (22 of 32 scaled).
+- **The cost of a trial** is bounded: at most 300 replays without the cull (half of 600), eight
+  with a clear difference. A picture at the off arm is not one drawn with the cull for the mark's
+  count, and a verdict "off" writes nothing to the mark.
+- **The ways back**: the cull's own self-test, mark and run-time checks still decide whether it
+  is used at all, and a cull that is held, blocked or off is never put on trial. A device lost
+  at a replay's start, or a record with the GPU's own sign of a reset (`rd_perf_clock.h`: a hang
+  the driver came back from), stops every trial and leaves every subject at its off arm for the
+  run, logged once. A hang or watchdog end ends the run; the next start's loss ladder and the
+  mark take it from there.
+
+The rate requirement (`rd_ab` test, a GPU-bound stream at a 40 ms tick): over 60 s the pictures
+with the judge are at least the better fixed arm's less 2 and at least the worse one's, for
+pictures of 33, 37.5, 48 and 60 ms and a cull that saves 5 % or costs 3 %. A cull that costs more
+loses more while the stage's first 2 s run with it: at 48 ms a 5 % cost gives up 3 pictures to the
+arm without it, a 10 % cost 5.
+
+The lines (`rd: ` before each):
+- At the start, after the cull's own line: `A/B: the in-play judge; may try: zero-area cull; a
+  trial 2.0 s into a stage, ...` with every constant, or `not tried (off here): zero-area cull`.
+- One a trial: `A/B: zero-area cull, stage 42: 32 pairs, with it 1.62 ms, without 1.55 ms a
+  thousand vertices and triangles (the median pair 4.3 % dearer with it, 25 of 32 cheaper
+  without), 3 dropped by a long picture, 0 by unequal work: off for this stage` (`8 pairs (all one
+  way: the early verdict)` for the early one), or `A/B: zero-area cull, stage 42: no verdict (600
+  replays, 11 pairs; 30 dropped by a long picture, 4 by unequal work, 120 replays not measured):
+  kept on for this stage` (`the stage ended`, `the attempt was turned off`: `kept on, not
+  judged`).
+- `A/B: every trial stopped for the run (the graphics device was lost): each attempt at its off
+  arm from here (zero-area cull)`; `A/B: 12 trials run, the most a run: a stage not judged keeps
+  each attempt on`.
+- The attempt ledger's row, the run's totals in every block: `the zero-area cull timed in play on
+  N stages kept with it so far (M without it; T trials run)`; the window's compare line counts the
+  block's pictures drawn at an off arm: `(K keep frames; J without an attempt, timed)`.
+- `rd_replay_tool --stats`: `stats: A/B (the judge|on|off|alt): zero-area cull: N replays with it,
+  M without (T trials, S stages on, F off)`.
+
+The tests' switches ([TESTING.md](TESTING.md#environment-switches)): `ICO_RD_AB` (`on` every
+replay with the cull, `off` every replay without it, `alt` every replay with, without, without,
+with from the first, no trial; unset the judge) and `ICO_RD_AB_FAKE_LOSS`. The replay tool has no
+stage, so without `ICO_RD_AB` it runs no trial and draws as before.
 
 #### The index compaction
 
