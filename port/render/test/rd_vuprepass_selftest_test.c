@@ -70,6 +70,7 @@
 #include <string.h>
 
 #include "rd_internal.h"
+#include "rd_nodiscard.h"
 #include "rd_vu_record.h"
 #include "rd_vu_zero.h"
 #include "vk/rhi_vk.h"
@@ -351,6 +352,13 @@ int main(int argc, char **argv)
     CHECK(kept == (wantOn || notRun), "the self-test returned %s", kept ? "true" : "false");
     zeroMarkLine("after the self-test");
     markLine("ICO_NODISCARD_MARK", "discard-free twins'", "after the self-test");
+    /* the clipper check's verdict and its consequence, from the run's own
+       state (rd__nd_class_on: a prelit code 32 camera rule pass as play's
+       rd__nd_pass judges it), whatever the device measured */
+    fprintf(stderr,
+            "test: the discard-free twins' clipper verdict after the self-test: %s, the camera "
+            "rule's class %s\n",
+            rd__nd_clipper_text(), rd__nd_class_on() ? "on" : "off");
     if (zswitch) {
         /* the Graphics API switch's path (window_host.c): the renderer made
            again in the process, the self-test run again on the new device */

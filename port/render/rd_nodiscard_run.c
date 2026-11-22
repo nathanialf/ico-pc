@@ -344,6 +344,19 @@ static void count(int why, bool byClipper, int entry)
     }
 }
 
+bool rd__nd_class_on(void)
+{
+    RdNdPass p;
+    memset(&p, 0, sizeof(p));
+    p.fs = RD_FS_VU;
+    p.nodual = RD_NODUAL_ON;
+    p.dst = RHI_DST_READ_NONE;
+    p.drawFlags = ICO_VU_CLIP_REGION | ICO_VU_CAMERA | ICO_VU_NO_BESIDE;
+    p.prelit = true;
+    p.clipperClean = s_n.clipCheck || s_n.clipper == RD_ND_CLIP_CLEAN; /* rd__nd_pass's */
+    return rd_nd_eligible(&p) == RD_ND_TWIN;
+}
+
 bool rd__nd_applicable(void)
 {
     /* the device has no dual-source blending by its own features: one that
@@ -364,7 +377,7 @@ const char *rd__nd_not_applicable_text(void)
 }
 
 void rd__nd_pass(RdPipeKeyInt *key, RhiPipeline *pipe, const RdDrawPass *p, uint32_t drawFlags,
-                 bool plane, bool particle, bool dateStencil)
+                 bool plane, bool particle, bool dateStencil, bool prelit)
 {
     if (s_n.state != N_ON || !rd__nd_applicable()) {
         return; /* held, off or not applicable here: nothing asked, nothing counted */
@@ -376,7 +389,7 @@ void rd__nd_pass(RdPipeKeyInt *key, RhiPipeline *pipe, const RdDrawPass *p, uint
     const bool clean = s_n.clipCheck || s_n.clipper == RD_ND_CLIP_CLEAN;
     const RdNdPass in = {key->fs,   key->gs.nodual, key->dst, p->flags,    p->modeZ,
                          drawFlags, plane,          particle, dateStencil, s_n.sabotage == NS_ALPHA,
-                         clean};
+                         clean,     prelit};
     const int v = rd_nd_eligible(&in);
     if (v < 0) {
         return;
@@ -471,6 +484,7 @@ void rd__nd_hold(bool on)
 void rd__nd_hold_end(void)
 {
     if (s_n.held) {
+        rd__pipeline_twin_forget_queued(); /* its frames' keys (R3-9) */
         s_n.state = s_n.heldState;
         s_block = s_heldBlock;
         s_run = s_heldRun;

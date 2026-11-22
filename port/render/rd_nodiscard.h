@@ -33,7 +33,10 @@
  *     alpha plan's proof for the draw's As range, rd_alpha_plan.c);
  *   - clip mode none (code 34), on every device, not particles; another
  *     clip mode only where this device's clipper check (below) came out
- *     clean.
+ *     clean, and then only in a form the check draws and compares
+ *     (rd_nd_checked_form: prelit code 32 or 36 under the camera rule,
+ *     one-sided, not mirrored, no free camera, no ticks); every other
+ *     form refused as "form" (lit, skinned, grids, drops kept, ...).
  * Why clip mode none (issue 179 round 2).  The *_nodual build discards a
  * pixel in the picture's columns whose interpolated band flag is not below
  * 0.5, a NaN included (vu_common.hlsli vu_pixel_tests; commit e65012742,
@@ -105,7 +108,8 @@
  * Vulkan's NaN-to-UNORM conversion, or what a clamp makes of it) at the
  * triangle's depth (SV_Position is clipped by the plane distances, not that
  * factor): garbage, not the triangle's picture, where the ordinary entry
- * leaves a hole.  rd_nodiscard_clean's four fixtures hold no such triangle
+ * leaves a hole.  That is inferred from the shader, not measured: the check
+ * logs both entries' RGBA at each differing case's first texel.  rd_nodiscard_clean's four fixtures hold no such triangle
  * (0 targets differing with the verdict taken as clean).  History: the
  * check measured "clean" until the second review's run 3 because no case
  * had drawn a triangle crossing the eye plane (see below).
@@ -202,6 +206,7 @@ enum {
     RD_ND_BAND,     /* a side band possible */
     RD_ND_ALPHA,    /* the alpha test in the pass */
     RD_ND_CLIPPED,  /* not clip mode none, or particles: a corner may be behind the eye */
+    RD_ND_FORM,     /* the clipper check clean, but not a form it draws (rd_nd_checked_form) */
     RD_ND_UNMADE,   /* its twin's pipeline not made yet (asked for in the background) */
     RD_ND_TRIAL,    /* the in-play judge's off arm */
     RD_ND_UNTESTED, /* its entry's twin drew nothing in the start-up self-test */
@@ -223,7 +228,19 @@ typedef struct RdNdPass {
     bool dateStencil;   /* DATE through the stencil bit for this draw (Replay.dateStNow) */
     bool skipAlpha;     /* the tests' sabotage: the alpha test not looked at */
     bool clipperClean;  /* the device's clipper check passed (RD_ND_CLIP_CLEAN), or its frames */
+    bool prelit;        /* the draw is the prelit program (RD_PROG_PRELIT, normal_c), the one
+                           the clipper check draws; false (the default) refuses the class */
 } RdNdPass;
+
+/* Whether a pass of a clip mode other than none is a form the clipper
+   check draws and compares, so that its clean verdict speaks for it: the
+   prelit program (p->prelit) at code 32 (ICO_VU_CLIP_REGION) or code 36
+   (ICO_VU_CLIP_SCISSOR, its cut and kick draws), under the camera rule
+   (ICO_VU_CAMERA: a facing table, the drops drawn), one-sided, not
+   mirrored, not photo mode's free camera, not seen through the ticks'
+   cameras.  A positive list: every other form (lit, skinned, grids,
+   kept drops, two-sided, mirrored, free camera, ticks) is RD_ND_FORM */
+bool rd_nd_checked_form(const RdNdPass *p);
 
 /* the device's clipper check (rd_nodiscard_selftest.c, "The clipper check") */
 enum { RD_ND_CLIP_UNKNOWN = 0, RD_ND_CLIP_CLEAN, RD_ND_CLIP_DIRTY };
@@ -258,9 +275,10 @@ RhiShader rd__nd_module(uint8_t fs);
    for in the replays before made now */
 void rd__nd_replay_begin(void);
 /* vuDraw: a planned pass of a VU draw (key and pipe as the draw has them)
-   takes its twin where it may and the twin's pipeline is made */
+   takes its twin where it may and the twin's pipeline is made; prelit: the
+   draw's program is RD_PROG_PRELIT (rd_nd_checked_form) */
 void rd__nd_pass(struct RdPipeKeyInt *key, RhiPipeline *pipe, const struct RdDrawPass *p,
-                 uint32_t drawFlags, bool plane, bool particle, bool dateStencil);
+                 uint32_t drawFlags, bool plane, bool particle, bool dateStencil, bool prelit);
 /* rd_pipeline.c: a twin pipeline the background could not make (off for
    the run) */
 void rd__nd_fault(const char *what);
@@ -274,6 +292,9 @@ RhiPipeline rd__pipeline_twin(const struct RdPipeKeyInt *k);
    workers at low priority (a backend without background creation: made
    here) */
 void rd__pipeline_twin_tick(bool wait);
+/* the queued twin keys not begun yet forgotten (the self-test's end: its
+   frames' keys, which play asks for again where it draws them) */
+void rd__pipeline_twin_forget_queued(void);
 /* every made pipeline of a twin destroyed and the queue emptied (the
    GPU idle); the count */
 uint32_t rd__pipeline_drop_twins(void);
@@ -325,6 +346,10 @@ void rd__nd_take_entries(uint64_t out[2]);
    else the "not applicable here: ..." words (NULL where they apply, or
    without a device) */
 bool rd__nd_applicable(void);
+/* the clipper check's consequence as play's rd__nd_pass would judge it: a
+   prelit code 32 camera rule pass (the checked form, every other reason
+   clear) takes its twin under the run's verdict (the tests print it) */
+bool rd__nd_class_on(void);
 
 /* The clipper check's trace (its tests' ICO_RD_VU_NODISCARD_TRACE=1,
    rd_replay_vu.c): the first VU draw of a replay as the replay set it up:

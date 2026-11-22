@@ -96,7 +96,7 @@ set(nodual_mali169 1)
 set(nodual_gl 1)
 # the twins' run line (rd_nodiscard_run.c rd__nd_stats_text), matched in the
 # run's text with its ';' made ','
-set(ndRe "stats: discard-free twins (on|off|held)[^:]*: ([0-9]+) draws through them, ([0-9]+) of them by the clipper check \\(([a-z ]+)\\), refused: ([^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*), ([0-9]+) modules of them made")
+set(ndRe "stats: discard-free twins (on|off|held)[^:]*: ([0-9]+) draws through them, ([0-9]+) of them by the clipper check \\(([a-z ]+)\\), refused: ([^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*), ([0-9]+) modules of them made")
 # MODE=clean (rd_nodiscard_clean): the clean verdict's path.  Lavapipe
 # measures its clipper not clean (rd_nodiscard_selftest.c: Mesa's NaN band
 # flag on triangles crossing the eye plane), so the run with the twins takes
@@ -203,8 +203,18 @@ foreach(e IN LISTS entries)
             math(EXPR failures "${failures} + 1")
           endif()
         elseif(nodual_${p})
+          # --repeat 2: the first replay asks for every pass's twin ("not
+          # made yet"), the second draws each through it (the waited path
+          # makes the whole queue between them), so the two counts are one
+          set(unmade -1)
+          if(r_refused MATCHES "not made yet ([0-9]+)")
+            set(unmade "${CMAKE_MATCH_1}")
+          endif()
           if(NOT r_state STREQUAL "on" OR r_draws LESS 0)
             message(SEND_ERROR "${dump} ${p} ${s}: no twins' line:\n${r_flat}")
+            math(EXPR failures "${failures} + 1")
+          elseif(NOT unmade EQUAL r_draws)
+            message(SEND_ERROR "${dump} ${p} ${s}: ${r_draws} draws through a twin but ${unmade} found it not made yet (the second replay did not draw every pass the first asked for):\n${r_flat}")
             math(EXPR failures "${failures} + 1")
           elseif(MODE STREQUAL "clean")
             # the camera rule's class ran on the verdict taken as clean

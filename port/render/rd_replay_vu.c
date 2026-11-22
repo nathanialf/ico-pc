@@ -1379,7 +1379,7 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
            never waited for); not the skin check's draws */
         if (!g_rdSkinArm && !g_rdSkinTwin) {
             rd__nd_pass(&keys[i], &pipes[i], &dp[i], vcb->draw[2], vcb->batch[2] != 0u,
-                        prog == RD_PROG_PARTICLE, r->dateStNow != 0);
+                        prog == RD_PROG_PARTICLE, r->dateStNow != 0, prog == RD_PROG_PRELIT);
         }
     }
     /* the index compaction's list (rd_vu_compact.h): every pass through
