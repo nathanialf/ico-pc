@@ -1611,7 +1611,17 @@ void rhi_set_submit_tag(uint32_t replay, uint32_t frame);
  *                 its batch), bgPipesLeft those begun and not returned
  *                 (0 when none is in progress, a set whose compiles have
  *                 all returned and is not ended yet included); 0 and 0 on
- *                 a backend with no background creation.
+ *                 a backend with no background creation;
+ *   headKnown, headNs
+ *                 with a wait in progress above `finished`: how long ago
+ *                 the submitting threads last saw the GPU finish a
+ *                 submission (the time `finished` last moved), so how long
+ *                 the GPU's current submission has been its current one at
+ *                 most (a finish seen late makes it shorter by that lag; a
+ *                 finish not seen at all longer).  0 with no wait in
+ *                 progress or one at or below `finished`.  headKnown false
+ *                 (headNs 0) when no finish has been seen since the device
+ *                 came up, and on every backend but Vulkan.
  * A wait in progress whose number is above finished is work the GPU has
  * not finished: while the wait has not returned, it is still running.
  * False (and *out zeroed) when the backend does not track it (Direct3D 12)
@@ -1622,6 +1632,8 @@ typedef struct RhiGpuProgress {
     uint32_t replay, frame;
     uint32_t openReplay, openFrame, lostReplay, lostFrame;
     uint32_t bgPipesDone, bgPipesLeft;
+    bool headKnown;
+    uint64_t headNs;
 } RhiGpuProgress;
 
 bool rhi_gpu_progress(RhiGpuProgress *out);

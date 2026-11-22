@@ -616,8 +616,9 @@ endif()
 # The automatic dumps' worker (dump_auto.c, issues 123 and 179): a job written
 # whole off the calling thread, a second job while one is written dropped
 # with its line, the join at shutdown, the zip from memory and the bug
-# report's bundle of the run's automatic zips (dump_zip.c)
-add_executable(dump_auto_test test/dump_auto_test.c dump_auto.c dump_zip.c)
+# report's bundle of the run's automatic zips (dump_zip.c), the loss keep's
+# block slot, and which replay an armed slow-scene dump takes (slow_arm.c)
+add_executable(dump_auto_test test/dump_auto_test.c dump_auto.c dump_zip.c slow_arm.c)
 target_include_directories(dump_auto_test PRIVATE "${ICO_COMPAT_DIR}")
 target_compile_options(dump_auto_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(dump_auto_test PRIVATE ico_host_fs ico_miniz ico_thread)

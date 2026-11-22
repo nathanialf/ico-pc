@@ -2,12 +2,13 @@
 # was last given to do), included from port/render/CMakeLists.txt beside
 # ico_bisect_plan, before the renderer's own targets (a file of its own:
 # port/render/CMakeLists.txt is at the 256 KiB cap, tools/check_no_rom.sh).
-# (rd_loss_pick.c, the loss dump's choice of frames, is in it too.)
+# (rd_loss_pick.c, the loss dump's choice of frames, and rd_loss_keep_block.c,
+# the block a loss-keep copy is made into, are in it too.)
 # Pure C, built in every configuration: the renderer (ico_render, which links
 # it) writes it, and the platform's crash report (port/platform/diag_host.c
 # report_gpu_passes) prints its last entries beside the render pass
 # breadcrumb (port/rhi/rhi_pass_crumb.h), so ico_platform links it too.
-add_library(ico_passring STATIC rd_passring.c rd_loss_pick.c)
+add_library(ico_passring STATIC rd_passring.c rd_loss_pick.c rd_loss_keep_block.c)
 target_include_directories(ico_passring PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(ico_passring PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(ico_platform PUBLIC ico_passring)
@@ -20,4 +21,17 @@ target_include_directories(rd_loss_pick_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR
 target_compile_options(rd_loss_pick_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 if(ICO_RUN_TESTS)
     add_test(NAME rd_loss_pick COMMAND rd_loss_pick_test)
+endif()
+
+# rd_loss_keep_block_test: the block a loss-keep copy is made into
+# (rd_loss_keep_block.h, issue 179) over a fake host: asked for only after a
+# copy, taken when made, used and asked for again, the measured allocation
+# while none is ready, given back under the memory floor and asked for
+# again above it (CPU only).
+add_executable(rd_loss_keep_block_test test/rd_loss_keep_block_test.c rd_loss_keep_block.c)
+target_include_directories(rd_loss_keep_block_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(rd_loss_keep_block_test PRIVATE ${ICO_SEMANTIC_OPTIONS}
+                                                       ${ICO_PORT_WARNINGS})
+if(ICO_RUN_TESTS)
+    add_test(NAME rd_loss_keep_block COMMAND rd_loss_keep_block_test)
 endif()

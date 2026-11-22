@@ -36,6 +36,12 @@ typedef struct Auto {
     size_t prepBytes;
     void *prepBlock;
     double prepMs;
+    /* the loss keep's block (ico_dump_auto_keep_ask): PREP_NONE, _ASKED,
+       _READY, _CANCEL or _FAILED (never _HELD: taken, it leaves) */
+    int kprep;
+    int kprepMaking;
+    size_t kprepBytes;
+    void *kprepBlock;
     IcoDumpJob job;
     IcoDumpDone done;
     unsigned dropped;
@@ -195,7 +201,8 @@ static void worker_main(void *arg)
     (void)arg;
     ico_mutex_lock(g.mu);
     for (;;) {
-        while (!g.quit && !(g.hasJob && !g.hasDone) && g.prep != PREP_ASKED) {
+        while (!g.quit && !(g.hasJob && !g.hasDone) && g.prep != PREP_ASKED &&
+               g.kprep != PREP_ASKED) {
             ico_cond_wait(g.cv, g.mu);
         }
         if (g.prep == PREP_ASKED) {
@@ -218,6 +225,30 @@ static void worker_main(void *arg)
                     g.prepBlock = b;
                     g.prepMs = ico_thread_now_ms() - t0;
                     g.prep = b != NULL ? PREP_READY : PREP_FAILED;
+                }
+                ico_cond_broadcast(g.cv);
+                continue;
+            }
+        }
+        if (g.kprep == PREP_ASKED) {
+            /* the loss keep's block, as the slow-scene dump's above */
+            if (g.quit) {
+                g.kprep = PREP_NONE;
+            } else {
+                const size_t n = g.kprepBytes;
+                void *b;
+
+                g.kprepMaking = 1;
+                ico_mutex_unlock(g.mu);
+                b = prep_make(n);
+                ico_mutex_lock(g.mu);
+                g.kprepMaking = 0;
+                if (g.kprep == PREP_CANCEL || g.quit) {
+                    free(b);
+                    g.kprep = PREP_NONE;
+                } else {
+                    g.kprepBlock = b;
+                    g.kprep = b != NULL ? PREP_READY : PREP_FAILED;
                 }
                 ico_cond_broadcast(g.cv);
                 continue;
@@ -259,6 +290,9 @@ size_t ico_dump_auto_held_bytes(void)
     ico_mutex_lock(g.mu);
     if (g.prep != PREP_NONE) {
         held += g.prepBytes; /* asked, being made, made or taken */
+    }
+    if (g.kprep == PREP_ASKED || g.kprep == PREP_READY || g.kprep == PREP_CANCEL) {
+        held += g.kprepBytes; /* asked, being made (or freed when made) or made */
     }
     if (g.hasJob) {
         held += g.job.dumpLen + g.job.prevLen;
@@ -396,6 +430,79 @@ void ico_dump_auto_unprepare(void *block)
     free(block);
 }
 
+int ico_dump_auto_keep_ask(size_t bytes)
+{
+    if (g.mu == NULL) {
+        g.mu = ico_mutex_create();
+        g.cv = ico_cond_create();
+    }
+    ico_mutex_lock(g.mu);
+    if (g.quit || g.kprep != PREP_NONE || bytes == 0) {
+        ico_mutex_unlock(g.mu);
+        return -1;
+    }
+    if (!g.started) {
+        g.thread = ico_thread_create(worker_main, NULL);
+        if (g.thread == NULL) {
+            ico_mutex_unlock(g.mu);
+            return -2;
+        }
+        g.started = 1;
+    }
+    g.kprep = PREP_ASKED;
+    g.kprepBytes = bytes;
+    g.kprepBlock = NULL;
+    ico_cond_broadcast(g.cv);
+    ico_mutex_unlock(g.mu);
+    return 0;
+}
+
+int ico_dump_auto_keep_take(void **block, size_t *size)
+{
+    int r = -1;
+
+    *block = NULL;
+    *size = 0;
+    if (g.mu == NULL) {
+        return -1;
+    }
+    ico_mutex_lock(g.mu);
+    if (g.kprep == PREP_READY) {
+        *block = g.kprepBlock;
+        *size = g.kprepBytes;
+        g.kprepBlock = NULL;
+        g.kprep = PREP_NONE;
+        r = 1;
+    } else if (g.kprep == PREP_ASKED) {
+        r = 0;
+    } else if (g.kprep == PREP_FAILED) {
+        g.kprep = PREP_NONE;
+    }
+    ico_mutex_unlock(g.mu);
+    return r;
+}
+
+void ico_dump_auto_keep_give_back(void *block)
+{
+    if (g.mu != NULL) {
+        ico_mutex_lock(g.mu);
+        if (g.kprep == PREP_READY) {
+            free(g.kprepBlock);
+            g.kprepBlock = NULL;
+            g.kprep = PREP_NONE;
+        } else if (g.kprep == PREP_ASKED) {
+            /* being made: the worker frees it when done; not taken up yet:
+               nothing to free */
+            g.kprep = g.kprepMaking ? PREP_CANCEL : PREP_NONE;
+        } else if (g.kprep == PREP_FAILED) {
+            g.kprep = PREP_NONE;
+        }
+        ico_cond_broadcast(g.cv);
+        ico_mutex_unlock(g.mu);
+    }
+    free(block);
+}
+
 int ico_dump_auto_poll(IcoDumpDone *out)
 {
     int r = 0;
@@ -440,6 +547,11 @@ void ico_dump_auto_shutdown(void)
     if (g.prep != PREP_HELD) {
         g.prep = PREP_NONE; /* a held block is still the caller's to hand back or give up */
     }
+    if (g.kprep == PREP_READY) {
+        free(g.kprepBlock); /* the loss keep's, made and never taken */
+        g.kprepBlock = NULL;
+    }
+    g.kprep = PREP_NONE;
     g.quit = 0; /* a later start (the tests) may begin again */
     ico_mutex_unlock(g.mu);
 }

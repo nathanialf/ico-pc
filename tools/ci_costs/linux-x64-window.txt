@@ -563,6 +563,7 @@ rd_local_probe_kept 8.80
 rd_local_probe_off 4.25
 rd_local_probe_rule 0.01
 rd_log_line 0.00
+rd_loss_keep_block 0.01  # estimate: 0.0 s local (KEEP2, by hand), CPU only like rd_loss_pick
 rd_loss_pick 0.01
 rd_made_outside 0.00
 rd_mesh.1of4 0.79

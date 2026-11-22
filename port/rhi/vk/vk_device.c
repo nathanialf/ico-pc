@@ -3669,6 +3669,21 @@ bool rhi_gpu_progress(RhiGpuProgress *out)
             out->waitingNs = now > since ? now - since : 0;
         }
     }
+    {
+        /* the time since a finish was last seen (vkr_progress_finished's
+           stamp), with a wait above it in progress: the GPU's current
+           submission's time as its current one at most (issue 179: a slot
+           wait with two pictures in flight spends its first part queued
+           behind the picture before) */
+        const uint64_t at = __atomic_load_n(&g_vkr.progFinishedNs, __ATOMIC_ACQUIRE);
+
+        if (at != 0) {
+            out->headKnown = true;
+            if (out->waitingFor > out->finished) {
+                out->headNs = now > at ? now - at : 0;
+            }
+        }
+    }
     if (out->submitted != 0) {
         const uint64_t at = __atomic_load_n(&g_vkr.progSubmitNs, __ATOMIC_RELAXED);
         out->submittedAgoNs = now > at ? now - at : 0;

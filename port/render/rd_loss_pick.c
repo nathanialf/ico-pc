@@ -121,14 +121,36 @@ bool rd_loss_keep_stalled(uint64_t waitingFor, uint64_t waitingNs)
     return waitingFor != 0 && waitingNs >= RD_LOSS_KEEP_STALL_NS;
 }
 
+uint64_t rd_loss_keep_counted_ns(uint64_t waitingNs, bool headKnown, uint64_t headNs)
+{
+    return headKnown && headNs < waitingNs ? headNs : waitingNs;
+}
+
+bool rd_loss_keep_stalled_head(uint64_t waitingFor, uint64_t waitingNs, bool headKnown,
+                               uint64_t headNs)
+{
+    return rd_loss_keep_stalled(waitingFor, rd_loss_keep_counted_ns(waitingNs, headKnown, headNs));
+}
+
 RdLossKeep rd_loss_keep_decide(RdLossThrottle *t, uint64_t seen, uint32_t frame, bool sent,
                                uint32_t openFrame, uint64_t waitingFor, uint64_t waitingNs)
+{
+    return rd_loss_keep_decide_head(t, seen, frame, sent, openFrame, waitingFor, waitingNs, false,
+                                    0);
+}
+
+RdLossKeep rd_loss_keep_decide_head(RdLossThrottle *t, uint64_t seen, uint32_t frame, bool sent,
+                                    uint32_t openFrame, uint64_t waitingFor, uint64_t waitingNs,
+                                    bool headKnown, uint64_t headNs)
 {
     if (!keepOpen(frame, openFrame)) {
         return RD_LOSS_KEEP_NOT_OPEN;
     }
     if (!rd_loss_keep_stalled(waitingFor, waitingNs)) {
         return RD_LOSS_KEEP_NO_STALL;
+    }
+    if (!rd_loss_keep_stalled_head(waitingFor, waitingNs, headKnown, headNs)) {
+        return RD_LOSS_KEEP_NOT_HEAD;
     }
     /* after the stall's test, so the count is of the copies v0.11.13 made
        or throttled, and before the throttle, which it does not use */

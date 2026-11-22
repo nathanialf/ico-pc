@@ -81,6 +81,8 @@
 #include "window_pause.h"
 #include "window_dump_auto.h"
 #include "dump_auto.h"
+#include "slow_arm.h"
+#include "window_keep_block.h"
 #include "window_sweep.h"
 #include "window_lifecycle.h"
 #include "window_pump_win.h"
@@ -2392,6 +2394,7 @@ open_window:
        StartupRetryRun.robustOffDefault; Direct3D 12: NULL, its own rules) */
     ico_diag_set_robust_off_default(rhi_limits() != NULL && rhi_limits()->robustDefaultOff);
     window_pipe_floor_driver(); /* the free-memory floor's rule (memory_floor.h) */
+    window_keep_block_start();  /* the loss keep's blocks from the dump worker */
     /* issue 123: after a stop for memory, the set resumed where it stopped
        (window_pipe_finish.h) */
     pipePolicy = window_pipe_floor_retry(pipePolicy);
@@ -4680,35 +4683,18 @@ static void present_blocked(const RdPerfRecord *r)
 }
 
 /* The slow-scene dump (docs/port/ANDROID_DIAGNOSTICS.md, issue 179): up to
-   three times a run, a frame the renderer holds, with a copy of the log, as
-   logs/slow-<date>-<time>.zip. The rule (window_slow_scene_due) runs at the
-   end of a 10 s block that spent its time in a scene layout, whose replays'
-   GPU work (the span less the display wait and the present pass) averaged
-   over [dev] slow_scene_dump_ms (default 40, the Original rate's period; 0
-   off), and the first dump needs no more; a later one needs 1.5 times the
-   work of the dump before, so a run of climbing blocks leaves the worst
-   one's file (ICO_SLOW_DUMP_KEEP newest zips are kept); the first slow
-   block of a stage other than the last dump's also arms one, at any work
-   over the bound (the cage after the boat, issue 179), the line naming the
-   stage. It is written in
-   releases too: a reporter's cutscene is the frame that explains the slow
-   picture, and F12 cannot be pressed in a scene. A due block ARMS the
-   dump with the block's mean CPU-side vertex work a replay (the VU line's
-   quantity, window_scene_vu_invocations: the pre-pass's vertices with it
-   on, the triangles times 9 with it off); the first replay after it whose
-   own vertex work is at or above that mean (window_slow_scene_pick,
-   slow_scene_poll) is the frame: the one the block's heavy part looks
-   like (the issue's boat blocks took 112 to 144 ms against a 45 ms first
-   dump). The renderer notes a replay's counts as it ends it
-   (rd_perf_last_replay_work), before its GPU times, which come two or
-   more replays later, after the ring of frames has dropped it; the
-   poll runs every vsync, so the frame the note names is still the last
-   closed or the one before, and one that is not (more frames closed
-   between two polls) is passed over for the next replay. An arm that
-   found no such replay before the next block's end is dropped there,
-   where the rule runs again. The block's dominant kind is s_blockKind,
-   taken where the layout share is written; a crash or hang report
-   carries the zip (ico_diag_note_slow_scene). */
+   three times a run (releases too), a frame the renderer holds and the
+   log, as logs/slow-<date>-<time>.zip. The rule (window_slow_scene_due:
+   a slow scene or play block, a later dump 1.5 times the work of the one
+   before or the first slow block of another stage) runs at the end of a
+   10 s block and ARMS the dump with the block's mean CPU-side vertex work
+   a replay (window_scene_vu_invocations); the first replay after it at or
+   above that mean whose frame is still held (rd_perf_last_replay_work,
+   polled every vsync) is the frame; an arm still on at the next block's
+   end takes its stand-in or is dropped there with a line (slow_arm.h). The
+   block's dominant kind is s_blockKind, taken where the layout share is
+   written; a crash or hang report carries the zip
+   (ico_diag_note_slow_scene). */
 static SceneKind s_blockKind = SCENE_OTHER;
 
 static struct {
@@ -4716,6 +4702,7 @@ static struct {
     SlowSceneBlock b; /* the due block's figures (count is the dumps before it) */
     double meanWork;  /* the block's vertex work a replay, in invocations */
     uint32_t seen;    /* the replay last looked at (the pick takes a later one) */
+    SlowArmPick pick; /* the arm's stand-in and its end (slow_arm.h) */
 } s_slowArm;
 
 static int s_slowCount;         /* the dumps this run has been made (written or not) */
@@ -4729,10 +4716,13 @@ static double slow_scene_vertex_work(uint64_t tris, uint64_t preVertices)
     return (double)window_scene_vu_invocations(tris, preVertices, rd_vu_prepass_on());
 }
 
+static void slow_scene_write(uint32_t frame, double work);
+
 static void slow_scene_check(void)
 {
     SlowSceneBlock b;
     RdReplayWork w;
+    double endWork;
 
     memset(&b, 0, sizeof(b));
     if (window_dump_auto_slow_lost(&b)) { /* a two-step dump given up: not made */
@@ -4741,6 +4731,14 @@ static void slow_scene_check(void)
         s_slowLastStage = b.lastStage;
         s_slowPlayDone = b.playDone;
         memset(&b, 0, sizeof(b));
+    }
+    if (s_slowArm.armed) { /* its end: the stand-in taken, or a line */
+        const uint32_t sf = s_slowArm.pick.bestFrame;
+        const uint32_t ef = slow_arm_end(&s_slowArm.pick, sf && rd_frame_retained(sf),
+                                         s_slowArm.meanWork, &endWork);
+        if (ef) {
+            slow_scene_write(ef, endWork);
+        }
     }
     b.dominant = s_blockKind;
     b.window = s_window != NULL;
@@ -4764,12 +4762,13 @@ static void slow_scene_check(void)
     s_slowArm.meanWork =
         s_perf.ph.n ? slow_scene_vertex_work(s_perf.vuTris, s_perf.vuPreVerts) / s_perf.ph.n : 0.0;
     s_slowArm.seen = rd_perf_last_replay_work(&w) ? w.replay : 0u;
+    slow_arm_begin(&s_slowArm.pick);
     s_slowArm.armed = 1;
 }
 
-/* The armed dump's frame has come: frame w's replay, whose vertex work
-   passed window_slow_scene_pick */
-static void slow_scene_write(const RdReplayWork *w, double work)
+/* The armed dump's frame has come: a replay whose vertex work passed
+   window_slow_scene_pick, or the stand-in at the block's end */
+static void slow_scene_write(uint32_t frame, double work)
 {
     const SlowSceneBlock b = s_slowArm.b;
     const double mean = s_slowArm.meanWork;
@@ -4783,7 +4782,7 @@ static void slow_scene_write(const RdReplayWork *w, double work)
     /* the frame is copied here and written by the dump worker
        (window_dump_auto.c): the old synchronous write and zip were a
        0.8-1.5 s hitch on the phone */
-    (void)window_dump_auto_slow(w->frame, &b, work, mean);
+    (void)window_dump_auto_slow(frame, &b, work, mean);
 }
 
 /* Every vsync while armed: the replay the renderer finished last, when it
@@ -4798,24 +4797,14 @@ static void slow_scene_poll(void)
     }
     s_slowArm.seen = w.replay;
     const double work = slow_scene_vertex_work(w.vuTris, w.vuPreVertices);
+    const uint32_t sf = s_slowArm.pick.bestFrame;
 
-    if (!window_slow_scene_pick(work, s_slowArm.meanWork)) {
-        return;
+    /* (a pick whose frame had left the ring: slow_arm.c's line) */
+    if (slow_arm_see(&s_slowArm.pick, w.frame, work,
+                     window_slow_scene_pick(work, s_slowArm.meanWork), rd_frame_retained(w.frame),
+                     sf && rd_frame_retained(sf)) == SLOW_ARM_TAKE) {
+        slow_scene_write(w.frame, work);
     }
-    if (!rd_frame_retained(w.frame)) {
-        static unsigned s_gone;
-        const unsigned n = ++s_gone;
-
-        if (n <= 8u || n % 100u == 0u) {
-            fprintf(stderr,
-                    "window: slow scene: frame %u had left the renderer's ring before it was "
-                    "looked at: the next replay at or above the mean is taken (%u times so "
-                    "far)\n",
-                    (unsigned)w.frame, n);
-        }
-        return;
-    }
-    slow_scene_write(&w, work);
 }
 
 /* The finished records into the block's sums and the CSV */

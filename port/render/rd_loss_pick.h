@@ -91,8 +91,10 @@ bool rd_loss_keep_release(uint32_t frame, uint32_t openFrame);
  * (rd_dump.c dumpFrame: the game thread waits for the reads of the
  * pictures handed over (until v0.11.13 it drained the render and submit
  * threads, the stalled picture's GPU work included), then serialises the
- * frame, about 7 MB at 2x, into a buffer that grows by realloc from 1 MiB,
- * four allocations and copies on the way, plus three 16 KB sets), and the
+ * frame, about 7 MB at 2x, into a block the dump worker made or one
+ * allocation of its measured size (rd_loss_keep_block.h; until v0.11.14 a
+ * buffer grown by realloc from 1 MiB, four allocations and copies on the
+ * way), plus three 16 KB sets), and the
  * Mali-G52's ordinary slot waits average 35-55 ms and
  * reach 60-250 ms in most 10 s blocks (issue 179's v0.11.4 log), so at
  * 50 ms copies would be made in steady play there (4 in every 64 frames,
@@ -101,6 +103,19 @@ bool rd_loss_keep_release(uint32_t frame, uint32_t openFrame);
  * steady play is kept */
 #define RD_LOSS_KEEP_STALL_NS 100000000ull
 bool rd_loss_keep_stalled(uint64_t waitingFor, uint64_t waitingNs);
+
+/* The stall with the head's time (RhiGpuProgress.headKnown / headNs): the
+ * time counted against RD_LOSS_KEEP_STALL_NS is the wait's own, at most
+ * the time since the GPU was last seen finishing a submission, so a wait
+ * that spent its first part queued behind the picture before (two pictures
+ * in flight: issue 179's v0.11.14 title and menus, slot waits of 100-110
+ * ms, every one copied at 27-49 ms on the game thread) counts only the time
+ * the GPU's current picture has run.  A picture that is itself stuck (a
+ * hang: nothing seen finished for 100 ms or more) still counts in full.
+ * headKnown false: rd_loss_keep_stalled's rule, unchanged */
+uint64_t rd_loss_keep_counted_ns(uint64_t waitingNs, bool headKnown, uint64_t headNs);
+bool rd_loss_keep_stalled_head(uint64_t waitingFor, uint64_t waitingNs, bool headKnown,
+                               uint64_t headNs);
 
 /* The throttle on copies, windowed: at most RD_LOSS_KEEP_PER_WINDOW
  * attempts in any RD_LOSS_KEEP_WINDOW recycled frames, every attempt
@@ -125,6 +140,10 @@ typedef struct RdLossThrottle {
 typedef enum RdLossKeep {
     RD_LOSS_KEEP_NOT_OPEN = 0, /* the GPU is past the frame: nothing to keep */
     RD_LOSS_KEEP_NO_STALL,     /* open, but no wait has stalled: not copied */
+    RD_LOSS_KEEP_NOT_HEAD,     /* open, the wait blocked RD_LOSS_KEEP_STALL_NS or more, but
+                                * the GPU's current picture has run less than that (the
+                                * wait was queued behind the picture before): not copied
+                                * (rd_loss_keep_decide_head only) */
     RD_LOSS_KEEP_NOT_SENT,     /* open and stalled, but no picture of the frame was handed
                                 * to a replay: nothing of it is on the GPU, not copied (no
                                 * attempt counted) */
@@ -135,6 +154,13 @@ typedef enum RdLossKeep {
 
 RdLossKeep rd_loss_keep_decide(RdLossThrottle *t, uint64_t seen, uint32_t frame, bool sent,
                                uint32_t openFrame, uint64_t waitingFor, uint64_t waitingNs);
+/* The same with the head's time (rd_loss_keep_stalled_head): a wait that
+ * stalled by rd_loss_keep_stalled's rule but not by the head's is
+ * RD_LOSS_KEEP_NOT_HEAD (no attempt counted); headKnown false decides as
+ * rd_loss_keep_decide */
+RdLossKeep rd_loss_keep_decide_head(RdLossThrottle *t, uint64_t seen, uint32_t frame, bool sent,
+                                    uint32_t openFrame, uint64_t waitingFor, uint64_t waitingNs,
+                                    bool headKnown, uint64_t headNs);
 /* The attempt's outcome: big (over the bound) pauses the attempts */
 void rd_loss_keep_big(RdLossThrottle *t, uint64_t seen);
 
