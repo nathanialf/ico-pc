@@ -13,16 +13,17 @@ screen recording the app's Java side reports. The window's lines that use them a
 | `port/platform/thread_stat.c`, `thread_stat.h` | a thread's time on a core and waiting for one from the kernel's `schedstat` (`thread_stat_test`; Linux and Android) |
 | `port/platform/cpu_place.c`, `cpu_place.h` | the game thread's CPU time (`cpu_place_thread_cpu_ns`) and the threads line (`cpu_place_threads_format`; `cpu_place_test`) |
 | `port/platform/thermal_text.c`, `thermal_text.h` | the thermal status names and the thermal and screen recording lines (`thermal_text_test`, every platform) |
-| `port/platform/android/host_android.c` | `ico_host_thermal` and the two native methods the Java listeners call |
+| `port/platform/android/host_android.c` | `ico_host_thermal`, `ico_android_battery` (the battery where its sysfs files are not readable) and the two native methods the Java listeners call |
 | `port/platform/window_stall.c`, `window_stall.h` | the window's side: the open line, the block lines, the around lines, the present stall lines |
 | `port/platform/present_stall_block.c`, `present_stall_block.h` | the present stalls per 10 s block and per run (`present_stall_block_test`, every platform) |
 | `port/render/rd_perf_clock.c`, `rd_perf_clock.h` | a replay's GPU clock against the CPU's and the `rd: GPU clock` line (`rd_perf_clock_test`, every platform; [Issue 123: what the GPU did during a stall](#issue-123-what-the-gpu-did-during-a-stall)) |
 | `port/rhi/vk/vk_tsclock.c`, `vk_range.c` | the slot's clock (submit times, calibrated timestamps, the polled wait's trace) and the ranges robust access does not cover (`rhi_vk`) |
-| `android/app/src/main/java/com/defnf/icopc/IcoActivity.java` | the thermal getters and the two listeners |
+| `android/app/src/main/java/com/defnf/icopc/IcoActivity.java` | the thermal getters, the battery getter (`batteryState`) and the two listeners |
 | `port/platform/attempt_ledger.c`, `attempt_ledger.h` | the attempt ledger's rows and lines, in `ico_thread` so the renderer and the window both count into it (`attempt_ledger_test`, every platform; [The attempt ledger](ANDROID_DIAGNOSTICS_LEDGERS.md#the-attempt-ledger)) |
 | `port/platform/present_latency.c`, `present_latency.h` | the present's latency in a block (`present_latency_test`, every platform; [The present latency line](ANDROID_DIAGNOSTICS_LEDGERS.md#the-present-latency-line)) |
 | `port/render/rd_perf_sub.h` | a replay's submissions as its record carries them (the per-stall line's, issue 123) |
 | `port/platform/stall_coincide.c`, `stall_coincide.h` | what a stall coincided with: the pass medians, the rule, the classes, the parsers of `/proc/pressure/memory` and `/proc/self/status`, the lines (`stall_coincide_test`, every platform; [What a stall coincided with](ANDROID_DIAGNOSTICS_LEDGERS.md#what-a-stall-coincided-with)) |
+| `port/platform/stall_coincide.c` (the table), `power_read.c`, `vmstat_read.c` | the stalls against the pieces' shares and every stall's row; the battery's and `/proc/vmstat`'s parsers and lines (`stall_coincide_test`, `power_read_test`, `vmstat_read_test`, every platform; [Every stall in a table](ANDROID_DIAGNOSTICS_LEDGERS.md#every-stall-in-a-table-the-gpus-speed-the-battery-and-the-memory-events)) |
 | `port/render/rd_perf_more.c`, `rd_perf_more.h` | the cost counters' block sums and the costs and compare lines (`rd_perf_more_test`, every platform; [The cost counters](ANDROID_DIAGNOSTICS_LEDGERS.md#the-cost-counters)) |
 | `port/render/rd_perf_hooks.c`, `rd_perf_hooks.h` | the cost counters' increments: SCENE's pass breaks, the two-pass blend, the screen boxes by list |
 

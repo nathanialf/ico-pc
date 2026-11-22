@@ -293,6 +293,7 @@ pit_dive_base_jun26 0.00
 pit_dive_base_kor 0.00
 pit_dive_base_ntsc 0.00
 poly_flat 0.00
+power_read 0.00  # estimate: a CPU unit test of one pure file, like perf_secs (run by hand here, well under 0.01 s; not run under CI yet)
 rd_diag_notes 0.00  # estimate: 0.0 s local (merge-wt_DIAG6-20261121T075234Z.lvp.log) x 1.66
 stage_disp 0.01  # estimate: a CPU-only walk of two rows on five discs (GRID221)
 present_fallback 0.00
@@ -1243,6 +1244,7 @@ vfs_disc_jpn_chd 0.00
 vfs_disc_jpn_cue 0.00
 vfs_disc_kor 0.00
 vfs_synthetic 0.01
+vmstat_read 0.00  # estimate: a CPU unit test of one pure file, like perf_secs (run by hand here, well under 0.01 s; not run under CI yet)
 volume 0.00
 vu1 73.77
 vu1_mali 58.38
@@ -1274,3 +1276,4 @@ yorda_trip_jpn 0.00
 yorda_trip_jun26 0.00
 yorda_trip_kor 0.00
 yorda_trip_ntsc 0.00
+zoom_toggle 0.01  # estimate: a CPU-only unit test of 2000 ticks, as door_grace (ZOOM)

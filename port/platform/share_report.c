@@ -171,6 +171,11 @@ int ico_share_report_collect_run(const char *logs_dir, const char *dumps_dir, lo
         add_newest(out, logs_dir, "slow-", ".zip");
         /* the rc bench's tables (window_bench.h) */
         add_newest(out, logs_dir, "bench-", ".csv");
+        /* issue 179's attempts' marks, as the crash report takes them
+           (report.c) */
+        add_named(out, logs_dir, "vu-zero-mark.txt");
+        add_named(out, logs_dir, "ahead-mark.txt");
+        add_named(out, logs_dir, "nodiscard-mark.txt");
     }
     return out->count;
 }

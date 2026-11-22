@@ -417,6 +417,11 @@ const char *const
             [UI_STR_VAL_HOLD_DISC_B] = "Celui du disque (B)",
             [UI_STR_HOLD_TYPE_NOTE] =
                 "A : maintenez R1 pour tenir la main de Yorda. B : appuyez une fois sur R1 pour prendre sa main, puis de nouveau pour la lâcher.",
+            [UI_STR_OPT_ZOOM_TYPE] = "Type de zoom",
+            [UI_STR_VAL_ZOOM_HOLD] = "Maintenir",
+            [UI_STR_VAL_ZOOM_TOGGLE] = "Bascule",
+            [UI_STR_ZOOM_TYPE_NOTE] =
+                "Maintenir : la caméra zoome tant que vous maintenez R2. Bascule : appuyez une fois sur R2 pour zoomer, puis de nouveau pour revenir.",
             [UI_STR_OPT_BUTTON_PICTURES] = "Images des boutons",
             [UI_STR_BUTTON_PICTURES_NOTE] =
                 "Les boutons des menus et du mode photo. Auto suit la dernière manette utilisée.",
@@ -775,8 +780,7 @@ const char *const
             [UI_STR_STATES_SAVE_FAILED] = "L'état n'a pas pu être enregistré",
             [UI_STR_STATES_XB_OLD] =
                 "Cet état a été créé par la version %s,\navant que les états sauvegardés puissent\npasser aux versions plus récentes.\nVos sauvegardes sur memory card fonctionnent toujours.",
-            [UI_STR_STATES_XB_CODE] =
-                "Cet état a été créé par la version %s.\nLa version %s a modifié la partie du jeu\noù il a été sauvegardé, il ne peut donc pas\nêtre repris.\nVos sauvegardes sur memory card fonctionnent toujours.",
+            [UI_STR_STATES_XB_CODE] = "Cet état a été créé par la version %s.\nLa version %s a modifié la partie du jeu\noù il a été sauvegardé, il ne peut donc pas\nêtre repris.\nVos sauvegardes sur memory card fonctionnent toujours.",
             [UI_STR_STATES_XB_DATA] =
                 "Cet état a été créé par la version %s.\nLa version %s a modifié la façon dont le jeu\ngarde sa progression en mémoire, il ne peut\ndonc pas être repris.\nVos sauvegardes sur memory card fonctionnent toujours.",
             [UI_STR_STATES_XB_PINNED] =

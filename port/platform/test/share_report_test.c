@@ -13,7 +13,8 @@
  * after it; with the run's start (ico_share_report_collect_run),
  * every zip of dumps modified since in place of the newest, the newest four
  * oldest first (the count at ICO_SHARE_REPORT_MAX), the newest zip when the
- * run has none.
+ * run has none; issue 179's three mark files last (the count at
+ * ICO_SHARE_REPORT_MAX with every kind).
  * argv[1]: a folder the test may write in (the build folder).
  */
 #include <stdio.h>
@@ -92,7 +93,10 @@ int main(int argc, char **argv)
                                        "slow-notes.txt",
                                        "bench-20261113-100000.csv",
                                        "bench-20261113-120000.csv",
-                                       "bench-notes.txt"};
+                                       "bench-notes.txt",
+                                       "vu-zero-mark.txt",
+                                       "ahead-mark.txt",
+                                       "nodiscard-mark.txt"};
     for (unsigned i = 0; i < sizeof(kOld) / sizeof(kOld[0]); i++) {
         char p[1200];
         snprintf(p, sizeof(p), "%s/%s", s_logs, kOld[i]);
@@ -190,9 +194,9 @@ int main(int argc, char **argv)
                                            "slow-20261106-120000.zip"};
         ico_share_report_collect(s_logs, s_dumps, &r);
         expect(&r, want, 7, "with the slow-scene zip");
-        /* every kind but the bench's tables, one zip */
-        CHECK(r.count == ICO_SHARE_REPORT_MAX - ICO_SHARE_REPORT_RUN_ZIPS,
-              "every kind but one fits (%d of %d)", r.count, ICO_SHARE_REPORT_MAX);
+        /* every kind but the bench's tables and the three marks, one zip */
+        CHECK(r.count == ICO_SHARE_REPORT_MAX - ICO_SHARE_REPORT_RUN_ZIPS - 3,
+              "every kind but four fits (%d of %d)", r.count, ICO_SHARE_REPORT_MAX);
     }
 
     /* no logs folder: the dumps alone; no dumps folder: the logs alone */
@@ -245,8 +249,8 @@ int main(int argc, char **argv)
                                            "slow-20261106-120000.zip"};
         ico_share_report_collect_run(s_logs, s_dumps, 2500, &r);
         expect(&r, want, 10, "the run's newest four zips");
-        CHECK(r.count == ICO_SHARE_REPORT_MAX - 1,
-              "every kind but the bench's and four zips fit (%d of %d)", r.count,
+        CHECK(r.count == ICO_SHARE_REPORT_MAX - 4,
+              "every kind but the bench's and the marks and four zips fit (%d of %d)", r.count,
               ICO_SHARE_REPORT_MAX);
     }
     /* the run's start at a zip's own second counts it; a run with none
@@ -307,6 +311,47 @@ int main(int argc, char **argv)
                                            "bench-20261113-120000.csv"};
         ico_share_report_collect_run(s_logs, s_dumps, 2500, &r);
         expect(&r, want, 11, "the run's newest four zips and the bench's tables");
+        CHECK(r.count == ICO_SHARE_REPORT_MAX - 3,
+              "every kind but the marks and four zips fit (%d of %d)", r.count,
+              ICO_SHARE_REPORT_MAX);
+    }
+
+    /* issue 179's mark files last, each when it is there (as report.c
+       takes them); with them every kind and four zips fill
+       ICO_SHARE_REPORT_MAX */
+    put(s_logs, "ahead-mark.txt", 7800);
+    {
+        static const char *const want[] = {"ico-pc.log",
+                                           "ico-pc-previous.log",
+                                           "frame-20261023-140000-v5.zip",
+                                           "frame-20261023-110000-present.png",
+                                           "report-20261021-101010.zip",
+                                           "vu-skin-fail-10-0-611.bin",
+                                           "slow-20261106-120000.zip",
+                                           "bench-20261113-120000.csv",
+                                           "ahead-mark.txt"};
+        ico_share_report_collect(s_logs, s_dumps, &r);
+        expect(&r, want, 9, "one mark file");
+    }
+    put(s_logs, "vu-zero-mark.txt", 7800);
+    put(s_logs, "nodiscard-mark.txt", 7800);
+    {
+        static const char *const want[] = {"ico-pc.log",
+                                           "ico-pc-previous.log",
+                                           "frame-20261023-120000-v3.zip",
+                                           "loss-20261023-103000.zip",
+                                           "frame-20261023-130000-v4.zip",
+                                           "frame-20261023-140000-v5.zip",
+                                           "frame-20261023-110000-present.png",
+                                           "report-20261021-101010.zip",
+                                           "vu-skin-fail-10-0-611.bin",
+                                           "slow-20261106-120000.zip",
+                                           "bench-20261113-120000.csv",
+                                           "vu-zero-mark.txt",
+                                           "ahead-mark.txt",
+                                           "nodiscard-mark.txt"};
+        ico_share_report_collect_run(s_logs, s_dumps, 2500, &r);
+        expect(&r, want, 14, "every kind, four zips and the three marks");
         CHECK(r.count == ICO_SHARE_REPORT_MAX, "every kind and four zips fit (%d of %d)", r.count,
               ICO_SHARE_REPORT_MAX);
     }

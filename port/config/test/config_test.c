@@ -595,6 +595,9 @@ static void test_first_run(void)
     CHECK(text != NULL && strstr(text, "second_memory_card = false") != NULL);
     CHECK_STR(ico_config_get_string("gameplay.hold_type", "?"), "disc"); /* the disc's own */
     CHECK(text != NULL && strstr(text, "hold_type = \"disc\"") != NULL);
+    /* Zoom type, Hold: the game's own zoom on every disc */
+    CHECK_STR(ico_config_get_string("gameplay.zoom_type", "?"), "hold");
+    CHECK(text != NULL && strstr(text, "zoom_type = \"hold\"") != NULL);
     /* the difficulty rows are each save's (port/game/difficulty.h): the first
        run writes none of their retired keys */
     CHECK(ico_config_get_string("gameplay.pit_time", NULL) == NULL);

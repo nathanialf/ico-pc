@@ -412,6 +412,11 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_VAL_HOLD_DISC_B] = "디스크 그대로 (B)",
     [UI_STR_HOLD_TYPE_NOTE] =
         "A: R1을 누르고 있는 동안 요르다의 손을 잡습니다. B: R1을 한 번 누르면 손을 잡고, 다시 누르면 놓습니다.",
+    [UI_STR_OPT_ZOOM_TYPE] = "줌 설정",
+    [UI_STR_VAL_ZOOM_HOLD] = "누르고 있기",
+    [UI_STR_VAL_ZOOM_TOGGLE] = "전환",
+    [UI_STR_ZOOM_TYPE_NOTE] =
+        "누르고 있기: R2를 누르고 있는 동안 줌합니다. 전환: R2를 한 번 누르면 줌하고, 다시 누르면 원래대로 돌아갑니다.",
     [UI_STR_OPT_BUTTON_PICTURES] = "버튼 그림",
     [UI_STR_BUTTON_PICTURES_NOTE] =
         "메뉴와 포토 모드에 표시되는 버튼 그림입니다. 자동은 마지막으로 사용한 컨트롤러에 맞게 바뀝니다.",
