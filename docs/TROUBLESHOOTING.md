@@ -412,6 +412,19 @@ with a [problem report](#send-a-problem-report), saying where you were and
 what should be there. On a phone, use **Save a picture for a bug report**
 ([how](ANDROID.md#send-a-problem-report)).
 
+## A piece of the scenery looks wrong or has stray dots
+
+On some phones the game draws some of the scenery in a simpler way that
+lets the graphics chip skip hidden parts sooner. It checks at start that
+the picture comes out the same, and it keeps this only where it makes the
+game faster. If a piece of the scenery looks wrong all the same, for example
+stray dots or small black or coloured specks on a wall, a dock or a boat
+close to the camera, save a picture of it while it shows
+([save a picture of a problem](#save-a-picture-of-a-problem)) and send it
+with a [problem report](#send-a-problem-report), saying where you were. On
+a phone, use **Save a picture for a bug report**
+([how](ANDROID.md#send-a-problem-report)).
+
 ## A program that adds frames or scales the game (Lossless Scaling) does not work
 
 Programs that scale the game's window, add frames to it or draw over it,
@@ -859,8 +872,8 @@ be loaded is greyed and the line under the cards gives the reason:
   game from the disc the state was saved on.
 - **A gameplay setting differs.** The message names the setting and the value
   it had when you saved. Put the setting back (a few, such as Analogue stick
-  fix, Skip the opening and the rows on the Gameplay pages, change how the
-  game plays),
+  fix, Hold type, Zoom type, Skip the opening and the rows on the Gameplay
+  pages, change how the game plays),
   and the state loads. The journey's difficulty is not one of them: a state
   carries its own.
 - **Save states are off on a Permadeath journey.** None can be saved or

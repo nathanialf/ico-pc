@@ -38,8 +38,10 @@ instead?**
 Yes. Open **Options > Controls > Zoom type** and choose **Toggle**. Then one
 press of R2 zooms the camera in and another press zooms it out. The camera
 also zooms back out by itself when a cutscene takes over or the game zooms
-the camera itself, and when you go into another room. **Hold** is the game's own way. The
-row shows from the title screen and the pause menu, on every disc.
+the camera itself, and when you go into another room. **Hold** is the
+game's own way. The row shows from the title screen and the pause menu, on
+every disc, and it is kept in your settings. A save state made with the
+other Zoom type will not load until you set it back, as with Hold type.
 
 ## The on-screen buttons are in my way
 
@@ -206,15 +208,6 @@ too slow stays at 30, and tries 60 again from time to time (every few
 seconds at first, then at most every 16 seconds); each try can show as one
 small stutter.
 
-## A message says "Finding the best settings"
-
-On some devices the game can draw the same picture two ways, and which is
-faster depends on the device. Once per session, when it first starts
-comparing them, it shows this message. For a few seconds in each new area
-it switches between the two ways and keeps the faster one there, so you may
-see some stutter while it does. The picture looks the same either way, and
-there is nothing to set.
-
 What to lower, in this order (Options):
 
 - **Anti-aliasing**: 2x supersampling draws four times the pixels and 4x
@@ -230,6 +223,21 @@ If the counter stays at 30 with these low, send `ico-pc.log` (the
 says where it is) after a minute of play. Every 10 seconds the log writes a
 line that starts with `window:` and says "presented fps"; that line, with the
 lines around it, shows how long the card takes for a picture.
+
+## A message says "Finding the best settings"
+
+On some phones and graphics cards the game has more than one way to draw
+the same picture, and which way is faster depends on the device. So while
+you play, the game tries them in turn for a few seconds when you reach a
+new area, measures which is faster there, and keeps that one for the area.
+An area it has not measured yet uses the way it kept last.
+
+The message appears once each time you start the game, when this
+measuring first begins. While it measures in a new area you may see a
+little stutter for a few seconds; that is expected and goes away once it
+has decided. The picture is meant to look the same either way, and there
+is nothing to set. If a piece of the scenery ever looks wrong, see
+[A piece of the scenery looks wrong](TROUBLESHOOTING.md#a-piece-of-the-scenery-looks-wrong-or-has-stray-dots).
 
 ## Why is there a thin black border around the picture?
 
@@ -582,17 +590,23 @@ keeps the newest three. If you are reporting that the game runs slowly, please a
 log. They are safe to delete. To stop the game writing them, set `slow_scene_dump_ms = 0` under
 `[dev]` in `config.toml`.
 
-## What are vu-zero-mark.txt and ahead-mark.txt?
+## What are vu-zero-mark.txt, ahead-mark.txt and nodiscard-mark.txt?
 
-They are small notes the game keeps in the `logs` folder about two ways it saves work for the
-graphics card or phone: leaving out pieces of scenery too small to cover a single pixel
-(`vu-zero-mark.txt`), and, on some Android phones, handing the next picture to the graphics chip
-while the one before is still finishing (`ahead-mark.txt`). If the game closes with a crash or a
-graphics problem while one of them is in use, if the game's check at start finds that the first one
-does not work, or if the game is stopped while it runs that check, the note keeps that way off on
-your computer or phone until you install a newer version of the game. Closing the game the usual
-way once it has started never turns either off. Leave the files where they are: the log's first lines say what each
-note decided, and a problem report needs only the log.
+They are small notes the game keeps in the `logs` folder about three ways it saves work for the
+graphics card or phone:
+
+- `vu-zero-mark.txt`: leaving out pieces of scenery too small to cover a single pixel;
+- `ahead-mark.txt`: on some Android phones, handing the next picture to the graphics chip while
+  the one before is still finishing;
+- `nodiscard-mark.txt`: on some phones, drawing some of the scenery in a simpler way that can let
+  the graphics chip skip the hidden parts sooner.
+
+If the game closes with a crash or a graphics problem while one of them is in use, if the game's
+check at start finds that the first or the third does not work, or if the game is stopped while it
+runs that check, the note keeps that way off on your computer or phone until you install a newer
+version of the game. Closing the game the usual way once it has started never turns any of them
+off. Leave the files where they are: the log's first lines say what each note decided, and the game
+puts the notes in a problem report by itself.
 
 ## Something went wrong. What now?
 

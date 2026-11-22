@@ -186,8 +186,9 @@ In that folder:
   reports. When the graphics driver stops responding, the game also saves
   a copy of the picture it was drawing there, a file whose name starts
   with `loss-` and ends in `.zip` (the three newest are kept). The small
-  notes `vu-zero-mark.txt` and `ahead-mark.txt` there are the game's own:
-  leave them in place ([what they are](FAQ.md#what-are-vu-zero-marktxt-and-ahead-marktxt)).
+  notes `vu-zero-mark.txt`, `ahead-mark.txt` and `nodiscard-mark.txt`
+  there are the game's own: leave them in place
+  ([what they are](FAQ.md#what-are-vu-zero-marktxt-ahead-marktxt-and-nodiscard-marktxt)).
 - `textures/SCES-50760/replacements` is where a
   [texture pack](TEXTURE_PACKS.md) for the European disc goes, and
   `textures/SCPS-11003/replacements` one for the Japanese disc,
@@ -299,6 +300,12 @@ processor cores and, on Android 13 and later, tells the phone how long each
 picture may take, so the phone can set its speed for the game. There is
 nothing to switch on. A speed gain has been measured only on a Pixel 10 Pro
 Fold; phones with Mali or Adreno graphics are not measured yet.
+
+On some phones a message, **Finding the best settings**, appears once
+after you start the game. The game then tries its ways of drawing for a
+few seconds in each new area and keeps the faster one there, so a little
+stutter for those few seconds is expected
+([more about it](FAQ.md#a-message-says-finding-the-best-settings)).
 
 If it still stutters, play for a minute and send `ico-pc.log` from `logs`
 with a problem report. The normal release is all that is needed, with no

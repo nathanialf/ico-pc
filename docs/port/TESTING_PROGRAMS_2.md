@@ -264,6 +264,11 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
 
 ## port/ui/test
 
+- `ui_test.c`, its popups block (`ui`, `ui_jpn`, `ui_kor`, `ui_cn`): the in-play timing's notice
+  (`port/ui/tune_notice.c`): nothing queued without the judge's word; in each of the eight
+  languages queued with that table's title, the panel on the picture and every body line within
+  the panel's 576 units at size 21; the English title word for word; dropped, not queued, with the
+  queue full; the language put back after.
 - `settings_test.c`, `settings_extra_test.c`, `settings_discs_test.c`, added: Controls' sixteen
   rows with Zoom type between Hold type and Stick fix, shown from the title and the pause menu;
   `testZoomType` steps it from both (Hold, Right to Toggle with the key set and its note on the
