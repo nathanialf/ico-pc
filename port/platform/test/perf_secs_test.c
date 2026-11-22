@@ -128,6 +128,21 @@ static void more_cases(void)
     CHECK(strstr(m, "; 52 records past the 2048 held") != NULL);
     CHECK(strstr(iv, "2099 in the block, p50 10.0 ms") != NULL);
     CHECK(strstr(iv, "; 51 past the 2048 held (in the count and the longest only)") != NULL);
+    /* a pass that did not run (0 ms: a replay not presented, a scene
+       without the reduction) is not a time of the fixed work: left out of
+       the medians */
+    perf_secs_reset(s);
+    perf_secs_step(s, 5, 0.0);
+    for (int i = 0; i < 3; i++) {
+        const PerfSecsRec z = {false, 0.0, true, 30.0, 0.0, 0.0, 800.0};
+        perf_secs_record(s, &z, 10.0 * i);
+    }
+    {
+        const PerfSecsRec one = {false, 0.0, true, 30.0, 2.4, 2.7, 800.0};
+        perf_secs_record(s, &one, 50.0);
+    }
+    (void)perf_secs_block_lines(s, 1000.0, 20.0, a, sizeof a, m, sizeof m, iv, sizeof iv);
+    CHECK(strstr(m, "): 5: 30.0/800/2.40/2.70/-") != NULL);
     /* the pictures line alone (perf_secs_block_text) is as before */
     perf_secs_reset(s);
     play(s, 42, 0, 2000, -1, -1);
