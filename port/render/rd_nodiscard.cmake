@@ -84,7 +84,7 @@ endif()
 # pre-pass's own line must still say on, LINE; EXTRA the twins' lines), the
 # Mali fakes without dual-source blending (ICO_VK_FAKE_NO_DUAL=1), the
 # install's mark in a file of each test's own under the build folder:
-#   rd_vuprepass_selftest_nodiscard           on: the plain case through a
+#   rd_vuprepass_selftest_nodiscard           on: the plain and textured cases through both twins, the plain case through a
 #                                             twin, the alpha test's and the
 #                                             clip plane's refused, the rule
 #                                             refusing the band and DATE, the
@@ -112,7 +112,7 @@ endif()
 # Each run's start line ("discard-free twins: on|off, N modules of them made,
 # P of their pipelines alive") says what exists.
 if(ICO_RUN_TESTS AND DEFINED _vst AND TARGET rd_vuprepass_selftest_test)
-    set(_ndon "rd: discard-free twins: on \\(self-test: [1-9][0-9]* pass(es)? through them, the alpha test's, the clip plane's and the eye-plane crossing's refused \\([1-9][0-9]*, [1-9][0-9]* and [1-9][0-9]*\\), the side band and DATE refused by the rule, pictures byte for byte, its [1-9][0-9]* pipelines released\\) on SCENE[^\n]*")
+    set(_ndon "rd: discard-free twins: on \\(self-test: [1-9][0-9]* pass(es)? through them, [1-9][0-9]* through vu_ps_nodual_nd and [1-9][0-9]* through vu_texa_ps_nodual_nd, the alpha test's, the clip plane's and the eye-plane crossing's refused \\([1-9][0-9]*, [1-9][0-9]* and [1-9][0-9]*\\), the side band and DATE refused by the rule, pictures byte for byte, its [1-9][0-9]* pipelines released\\) on SCENE[^\n]*")
     # lavapipe's clipper makes the band flag NaN at a corner it adds behind
     # the eye (vu_common.hlsli vu_pixel_tests): the check must find it
     set(_ndclip "rd: discard-free twins: the clipper check: not clean \\([^\n]* at code 3[26] differs, the first at texel [0-9]+,[0-9]+\\): clip mode none alone takes them")
@@ -125,7 +125,7 @@ if(ICO_RUN_TESTS AND DEFINED _vst AND TARGET rd_vuprepass_selftest_test)
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}"
                      "-DEXTRA=rd: discard-free twins: trying them: .*${_ndon}.*${_ndclip}.*${_ndstart}.*test: the discard-free twins' mark after the self-test: counting v0.0.0"
-                     "-DNOT_=rd: discard-free twins: off" -P "${_vst}")
+                     "-DNOT_=rd: discard-free twins: (off|vu_[a-z_]+_nd drew nothing)" -P "${_vst}")
     add_test(NAME rd_vuprepass_selftest_nodiscard_sabotage
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}"

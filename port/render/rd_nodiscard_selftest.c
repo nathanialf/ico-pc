@@ -8,7 +8,8 @@
  *
  * The frame (built here, never recorded; the zero-area cull's helpers'
  * form): SCENE cleared, Z GEQUAL with Z write, no blend, untextured,
- * Gouraud; four prelit meshes of two triangles each at model depth 2,
+ * Gouraud (the last two cases textured, below); six prelit meshes of two
+ * triangles each at model depth 2,
  * where the screen matrix puts a vertex at GS X = 2048 + 8 x, Y = 2048 + 8 y,
  * each drawn once, the first three at code 34 (clip mode none, the one
  * clip mode the twins take):
@@ -19,6 +20,14 @@
  *           refuse the twin
  *   plane   a chain plane through the middle of the mesh (the MESH
  *           command's b[5], f[0]): the pixels past it are discarded, refused
+ *   texa    a 4x4 RGB24 texture under TEXA 7F/81 with AEM and a linear
+ *           filter (so vu_texa_ps), the test off: through vu_texa_ps_nodual_nd
+ *   texa alpha the same under ATE GREATER 0x40 (the black texels' alpha 0):
+ *           refused as alpha
+ * Both twin entries must draw (each is used in play only if its own case
+ * drew through it here, rd__nd_entry_tested; logged per entry) and the mark
+ * says "counting" once these pass (rd__nd_floor_passed), before the clipper
+ * check.
  *   eye     at code 32 (the region test under the camera rule: the draw has
  *           ICO_VU_NO_BESIDE, the boat's form), a corner of each triangle
  *           behind the eye: a clipper may make the band flag non-finite
@@ -57,12 +66,53 @@
 #include "rd_nodiscard.h"
 #include "shader_consts.h"
 
-#define NT_CASES 4
+#define NT_CASES 6
 #define NT_VERTS 6 /* two triangles a mesh, three vertices each */
 #define NT_Z 2.0f  /* model depth: GS X = 2048 + 8 x */
 #define NT_HALF 12 /* a triangle's legs, GS pixels */
 
-enum { NT_PLAIN, NT_ALPHA, NT_PLANE, NT_EYE };
+enum { NT_PLAIN, NT_ALPHA, NT_PLANE, NT_EYE, NT_TEXA, NT_TEXA_ALPHA };
+
+/* the textured cases' texture: 4x4 RGB24 (its alpha byte the source's, TEXA
+   decides it: under 7F/81 with AEM a black texel's alpha is 0, every other
+   0x7F), half of it black, so the alpha test GREATER 0x40 can fail; a
+   linear filter, so the TEXA is per texel and the pass is vu_texa_ps's
+   (rd_pipeline.c rd__texa_per_texel) */
+static RdTex makeTexture(void)
+{
+    uint8_t px[4 * 4 * 4];
+    for (int i = 0; i < 16; i++) {
+        const bool black = ((i % 4) + (i / 4)) % 2 == 0;
+        px[i * 4 + 0] = black ? 0 : (uint8_t)(90 + 40 * (i % 4));
+        px[i * 4 + 1] = black ? 0 : (uint8_t)(200 - 30 * (i / 4));
+        px[i * 4 + 2] = black ? 0 : 120;
+        px[i * 4 + 3] = 0x80;
+    }
+    return rd_create_texture_src(4, 4, px, RD_TEXSRC_RGB24, "rd discard-free twins texa");
+}
+
+/* the textured state: the texture, MODULATE with TCC RGBA, TEXA 7F/81 AEM,
+   a linear filter */
+static bool pushTexa(RdFrame *f, RdTex tex)
+{
+    RdCmd *c = rd__st_push(f, 0, RDC_TEXA);
+    if (c) {
+        c->b[0] = RD_TEXA_7F_81_AEM;
+    }
+    c = c ? rd__st_push(f, 0, RDC_TEXTURE) : NULL;
+    if (c) {
+        c->u[0] = tex.id;
+        c->b[0] = RD_TEXFN_MODULATE;
+        c->b[1] = RD_TCC_RGBA;
+    }
+    c = c ? rd__st_push(f, 0, RDC_FILTER) : NULL;
+    if (c) {
+        c->b[0] = RD_FILTER_LINEAR;
+        c->b[1] = RD_FILTER_LINEAR;
+        c->u[0] = 0;
+    }
+    return c != NULL;
+}
 
 static float fbits(uint32_t u)
 {
@@ -82,7 +132,7 @@ static void qw(float *d, float x, float y, float z, float w)
 /* the case's cell centre, GS pixels */
 static float cellX(int c)
 {
-    return 2048.0f + 48.0f * (float)(c - 1);
+    return 2048.0f + 40.0f * ((float)c - 2.5f);
 }
 
 /* a case's mesh: two triangles about its cell (the prelit layout, rd_mesh.h
@@ -103,7 +153,9 @@ static RdMesh makeMesh(int c)
            the eye plane */
         const float z = c == NT_EYE && v % 3 == 2 ? -1.0f : NT_Z;
         qw(q[at++], (gx - 2048.0f) / 8.0f, (gy - 2048.0f) / 8.0f, z, 1.0f);
-        qw(q[at++], 0.0f, 0.0f, 1.0f, v % 3 == 0 ? 0.0f : 1.0f);
+        /* S and T over the texture (the textured cases read them) */
+        qw(q[at++], kCorner[v][0] > 0.0f ? 1.0f : 0.0f, kCorner[v][1] > 0.0f ? 1.0f : 0.0f, 1.0f,
+           v % 3 == 0 ? 0.0f : 1.0f);
         /* the alpha case's first corner of each triangle at 0: alphas from 0
            to 127 across it, the test failing below 0x40 */
         const float a = c == NT_ALPHA && v % 3 == 0 ? 0.0f : 127.0f;
@@ -188,7 +240,8 @@ static bool pushMesh(RdFrame *f, RdMesh mesh, uint8_t code, bool plane, float pl
     return true;
 }
 
-static bool buildFrame(RdFrame *f, uint32_t scene, uint32_t w, uint32_t h, const RdMesh *mesh)
+static bool buildFrame(RdFrame *f, uint32_t scene, uint32_t w, uint32_t h, const RdMesh *mesh,
+                       RdTex tex)
 {
     static const uint8_t kClear[4] = {0, 0, 0, 0x80};
     memset(f, 0, sizeof(*f));
@@ -219,6 +272,12 @@ static bool buildFrame(RdFrame *f, uint32_t scene, uint32_t w, uint32_t h, const
          pushMesh(f, mesh[NT_ALPHA], 34, false, 0.0f, 2u) && rd__st_test(f, 0, RD_TEST_Z_GEQUAL) &&
          pushMesh(f, mesh[NT_PLANE], 34, true, (cellX(NT_PLANE) - 2048.0f) / 8.0f, 3u) &&
          pushMesh(f, mesh[NT_EYE], 32, false, 0.0f, 4u);
+    /* the textured cases through vu_texa_ps: the test off (its twin), then
+       the alpha test on the texels' alphas 0 and 0x7F (refused) */
+    ok = ok && pushTexa(f, tex) && pushMesh(f, mesh[NT_TEXA], 34, false, 0.0f, 5u) &&
+         rd__st_test(f, 0, (uint64_t)RD_TEST_Z_GEQUAL | 0x40Du) &&
+         pushMesh(f, mesh[NT_TEXA_ALPHA], 34, false, 0.0f, 6u) &&
+         rd__st_test(f, 0, RD_TEST_Z_GEQUAL) && rd__st_push(f, 0, RDC_TEXTURE_OFF);
     return ok;
 }
 
@@ -292,6 +351,12 @@ static const NcCase kClip[] = {
     {"a large triangle across the frame and the eye", {{-60, -40, 2}, {60, -40, 2}, {0, 40, -3}}},
 };
 #define NC_CASES ((int)(sizeof(kClip) / sizeof(kClip[0])))
+/* the frames: every case at codes 32 and 36, untextured (vu_ps) and textured
+   under TEXA (vu_texa_ps) */
+#define NC_FRAMES (NC_CASES * 4)
+#define NC_CASE(k) ((k) / 4)
+#define NC_CODE(k) (((k) / 2) % 2)
+#define NC_TEXA(k) ((k) % 2)
 
 /* a mesh of the prelit layout from corners (NC_VERTS: a triangle in both
    windings, or the probe's two) */
@@ -302,7 +367,8 @@ static RdMesh clipMesh(const float (*c)[3], int n, float shade)
     uint32_t at = 1;
     for (int v = 0; v < n; v++) {
         qw(q[at++], c[v][0], c[v][1], c[v][2], 1.0f);
-        qw(q[at++], 0.0f, 0.0f, 1.0f, v % 3 == 0 ? 0.0f : 1.0f);
+        /* S and T over the texture (the textured frames read them) */
+        qw(q[at++], (float)(v % 2), (float)((v / 2) % 2), 1.0f, v % 3 == 0 ? 0.0f : 1.0f);
         qw(q[at++], shade + (float)(12 * v), 230.0f - shade, (float)(40 + 30 * v), 127.0f);
     }
     const RdVuBatchDesc batch = {0, 0, 0};
@@ -322,7 +388,7 @@ static RdMesh clipMesh(const float (*c)[3], int n, float shade)
 /* case k's frame: the clear, the state, the case at code (32 or 36), the
    probe */
 static bool clipFrame(RdFrame *f, uint32_t scene, uint32_t w, uint32_t h, RdMesh mesh, uint8_t code,
-                      RdMesh probe)
+                      RdMesh probe, RdTex tex)
 {
     static const uint8_t kClear[4] = {0, 0, 0, 0x80};
     memset(f, 0, sizeof(*f));
@@ -345,14 +411,18 @@ static bool clipFrame(RdFrame *f, uint32_t scene, uint32_t w, uint32_t h, RdMesh
          rd__st_push1(f, 0, RDC_ZWRITE, RD_ZWRITE_ON) && rd__st_push1(f, 0, RDC_FBA, 0) &&
          rd__st_push1(f, 0, RDC_PABE, 0) && rd__st_push1(f, 0, RDC_COLCLAMP, 1) &&
          rd__st_push1(f, 0, RDC_SHADE, 1);
-    ok = ok && pushMesh(f, mesh, code, false, 0.0f, 1u) &&
+    /* the textured form (tex): through vu_texa_ps; the probe untextured */
+    if (tex.id) {
+        ok = ok && pushTexa(f, tex);
+    }
+    ok = ok && pushMesh(f, mesh, code, false, 0.0f, 1u) && rd__st_push(f, 0, RDC_TEXTURE_OFF) &&
          rd__st_push1(f, 0, RDC_ZWRITE, RD_ZWRITE_OFF) && pushMesh(f, probe, 34, false, 0.0f, 2u);
     return ok;
 }
 
 /* the check on SCENE t (a, b: its two pictures' buffers): true when every
    case's pictures are the same; else *why the first differing case */
-static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, char *why,
+static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, RdTex tex, char *why,
                          size_t whySize, uint64_t *clipDraws)
 {
     static const uint8_t kCodes[2] = {32, 36};
@@ -385,9 +455,11 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, ch
     /* the pipelines first, every frame's, through the twins and not */
     rd__nd_hold(true);
     rd__nd_clipper_check(true);
-    for (int k = 0; ok && k < NC_CASES * 2; k++) {
+    static const RdTex kNone = {0};
+    for (int k = 0; ok && k < NC_FRAMES; k++) {
         RdFrame f;
-        if (clipFrame(&f, scene, t->w, t->h, mesh[k / 2], kCodes[k % 2], probe)) {
+        if (clipFrame(&f, scene, t->w, t->h, mesh[NC_CASE(k)], kCodes[NC_CODE(k)], probe,
+                      NC_TEXA(k) ? tex : kNone)) {
             rd__replay_set_window(UINT32_MAX, 0);
             rd__pipeline_gather(true);
             (void)rd__replay_frame(&f, 0, false);
@@ -405,11 +477,14 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, ch
     rd__nd_take(&tw, rf);
     (void)rd__nd_take_clip();
     *clipDraws = 0;
-    for (int k = 0; clean && k < NC_CASES * 2; k++) {
+    uint64_t ent[2] = {0, 0}, entAll[2] = {0, 0};
+    rd__nd_take_entries(ent);
+    for (int k = 0; clean && k < NC_FRAMES; k++) {
         RdFrame f;
-        if (!clipFrame(&f, scene, t->w, t->h, mesh[k / 2], kCodes[k % 2], probe)) {
+        if (!clipFrame(&f, scene, t->w, t->h, mesh[NC_CASE(k)], kCodes[NC_CODE(k)], probe,
+                       NC_TEXA(k) ? tex : kNone)) {
             rd__frame_free(&f);
-            snprintf(why, whySize, "its frame of %s could not be built", kClip[k / 2].name);
+            snprintf(why, whySize, "its frame of %s could not be built", kClip[NC_CASE(k)].name);
             clean = false;
             break;
         }
@@ -417,10 +492,13 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, ch
         rd__nd_clipper_check(true);
         const bool okA = replayRead(&f, t, a, size);
         *clipDraws += rd__nd_take_clip();
+        rd__nd_take_entries(ent);
+        entAll[0] += ent[0];
+        entAll[1] += ent[1];
         rd__nd_take(&tw, rf);
         if (rf[RD_ND_UNMADE] != 0u) {
-            snprintf(why, whySize, "%s at code %u: no pipeline of its twin", kClip[k / 2].name,
-                     (unsigned)kCodes[k % 2]);
+            snprintf(why, whySize, "%s at code %u: no pipeline of its twin", kClip[NC_CASE(k)].name,
+                     (unsigned)kCodes[NC_CODE(k)]);
             clean = false;
         }
         rd__nd_clipper_check(false);
@@ -429,7 +507,7 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, ch
         rd__frame_free(&f);
         if (!okA || !okB) {
             snprintf(why, whySize, "the device failed in its replays (%s at code %u)",
-                     kClip[k / 2].name, (unsigned)kCodes[k % 2]);
+                     kClip[NC_CASE(k)].name, (unsigned)kCodes[NC_CODE(k)]);
             clean = false;
         } else if (clean && memcmp(a, b, size) != 0) {
             size_t first = 0;
@@ -437,13 +515,17 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, ch
                 first++;
             }
             snprintf(why, whySize, "%s at code %u differs, the first at texel %u,%u",
-                     kClip[k / 2].name, (unsigned)kCodes[k % 2], (unsigned)((first / 4u) % t->tw),
-                     (unsigned)((first / 4u) / t->tw));
+                     kClip[NC_CASE(k)].name, (unsigned)kCodes[NC_CODE(k)],
+                     (unsigned)((first / 4u) % t->tw), (unsigned)((first / 4u) / t->tw));
             clean = false;
         }
     }
     if (clean && *clipDraws == 0u) {
         snprintf(why, whySize, "no camera rule pass of its frames drew through a twin");
+        clean = false;
+    } else if (clean && (entAll[0] == 0u || entAll[1] == 0u)) {
+        snprintf(why, whySize, "its frames drew nothing through %s",
+                 entAll[0] == 0u ? "vu_ps_nodual_nd" : "vu_texa_ps_nodual_nd");
         clean = false;
     }
     rd__nd_clipper_check(false);
@@ -492,11 +574,18 @@ void rd__nd_selftest(RdTargetRec *t)
     const uint32_t scene = rd_target(RD_TARGET_SCENE).id;
     const size_t size = (size_t)t->tw * t->th * 4u;
     uint8_t *a = malloc(size), *b = malloc(size);
-    if (!mesh[0].id || !mesh[1].id || !mesh[2].id || !mesh[3].id || !a || !b ||
-        !buildFrame(&f, scene, t->w, t->h, mesh)) {
+    const RdTex tex = makeTexture();
+    bool meshes = true;
+    for (int i = 0; i < NT_CASES; i++) {
+        meshes = meshes && mesh[i].id;
+    }
+    if (!meshes || !tex.id || !a || !b || !buildFrame(&f, scene, t->w, t->h, mesh, tex)) {
         /* nothing of the twins tried yet: not the device's verdict */
         rd__frame_free(&f);
         meshesFree(mesh);
+        if (tex.id) {
+            rd_destroy_texture(tex);
+        }
         free(a);
         free(b);
         rd__nd_selftest_skip("could not build its frame");
@@ -508,7 +597,7 @@ void rd__nd_selftest(RdTargetRec *t)
     const uint32_t pipeMark = rd__pipeline_mark();
     rd__nd_hold(true);
     const bool made = rd__nd_try_begin();
-    uint64_t twin = 0, refused[RD_ND_REASONS];
+    uint64_t twin = 0, refused[RD_ND_REASONS], entries[2] = {0, 0};
     memset(refused, 0, sizeof(refused));
     bool pass = false;
     if (!made) {
@@ -527,7 +616,9 @@ void rd__nd_selftest(RdTargetRec *t)
             (void)rd__pipeline_create_gathered(&stopped);
         }
         rd__nd_take(&twin, refused); /* nothing from the gathering replay */
+        rd__nd_take_entries(entries);
         const bool okA = replayRead(&f, t, a, size);
+        rd__nd_take_entries(entries);
         rd__nd_take(&twin, refused);
         rd__nd_hold(false); /* the same frame without them */
         uint64_t twinB = 0, refusedB[RD_ND_REASONS];
@@ -550,7 +641,7 @@ void rd__nd_selftest(RdTargetRec *t)
             }
             snprintf(why, sizeof(why), "the pictures differ with them, the first at texel %u,%u",
                      (unsigned)((first / 4u) % t->tw), (unsigned)((first / 4u) / t->tw));
-        } else if (refused[RD_ND_ALPHA] == 0u || refused[RD_ND_PLANE] == 0u ||
+        } else if (refused[RD_ND_ALPHA] < 2u || refused[RD_ND_PLANE] == 0u ||
                    refused[RD_ND_CLIPPED] == 0u) {
             snprintf(why, sizeof(why),
                      "a case the CPU must refuse was not refused (alpha %llu, plane %llu, "
@@ -570,31 +661,46 @@ void rd__nd_selftest(RdTargetRec *t)
     uint64_t clipDraws = 0;
     bool clipClean = false;
     if (pass) {
-        clipClean = clipperCheck(t, a, b, size, clipWhy, sizeof(clipWhy), &clipDraws);
+        /* each entry's twin is used in play only if its own case drew
+           through it here (vu_ps: the plain case, vu_texa_ps: the textured
+           one); the mark says "counting" from here */
+        for (int e = 0; e < 2; e++) {
+            rd__nd_entry_tested(e, entries[e] != 0u);
+            if (entries[e] == 0u) {
+                rd__log("discard-free twins: %s drew nothing in the self-test: not used in play",
+                        rd_nd_module_name(e == 0 ? (uint8_t)RD_FS_VU : (uint8_t)RD_FS_VU_TEXA));
+            }
+        }
+        rd__nd_floor_passed();
+        clipClean = clipperCheck(t, a, b, size, tex, clipWhy, sizeof(clipWhy), &clipDraws);
         rd__nd_clipper_verdict(clipClean, clipClean ? "" : clipWhy);
     }
     rd__nd_hold_end();
     const uint32_t released = rd__pipeline_forget_since(pipeMark);
     rd__frame_free(&f);
     meshesFree(mesh);
+    rd_destroy_texture(tex);
     free(a);
     free(b);
     t->clearPending = 1; /* the next replay starts SCENE from its clear */
     rd__nd_verdict(pass, why);
     if (pass) {
-        rd__log("discard-free twins: on (self-test: %llu pass%s through them, the alpha test's, "
+        rd__log("discard-free twins: on (self-test: %llu pass%s through them, %llu through "
+                "vu_ps_nodual_nd and %llu through vu_texa_ps_nodual_nd, the alpha test's, "
                 "the clip plane's and the eye-plane crossing's refused (%llu, %llu and %llu), "
                 "the side band and DATE refused by the rule, pictures byte for byte; its %u "
                 "pipelines released) on SCENE %ux%u at %ux%u texels in %.1f ms",
-                (unsigned long long)twin, twin == 1u ? "" : "es",
-                (unsigned long long)refused[RD_ND_ALPHA], (unsigned long long)refused[RD_ND_PLANE],
+                (unsigned long long)twin, twin == 1u ? "" : "es", (unsigned long long)entries[0],
+                (unsigned long long)entries[1], (unsigned long long)refused[RD_ND_ALPHA],
+                (unsigned long long)refused[RD_ND_PLANE],
                 (unsigned long long)refused[RD_ND_CLIPPED], (unsigned)released, t->w, t->h, t->tw,
                 t->th, rd__now_ms() - t0);
         const bool clean = rd__nd_clipper() == RD_ND_CLIP_CLEAN;
         if (clean && clipClean) {
             rd__log("discard-free twins: the clipper check: clean (%d cases crossing the eye "
-                    "plane at codes 32 and 36, %llu passes through them, the pictures and their "
-                    "depth byte for byte): the camera rule's passes take them too",
+                    "plane at codes 32 and 36, untextured and textured under TEXA, %llu passes "
+                    "through both twins, the pictures and their depth byte for byte): the camera "
+                    "rule's passes take them too",
                     NC_CASES, (unsigned long long)clipDraws);
         } else if (clean) {
             rd__log("discard-free twins: the clipper check: clean (ICO_RD_VU_NODISCARD_CLIPPER; "

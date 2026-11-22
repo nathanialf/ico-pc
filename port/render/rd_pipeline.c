@@ -3299,6 +3299,11 @@ void rd__pipe_finish_tick(double pictureMs)
  * between pictures.  A twin's pipeline the device could not make turns the
  * twins off for the run (rd__nd_fault). */
 #define RD_TWIN_QUEUE 256u
+/* the bounds of the twins' background set in play: at most RD_TWIN_BATCH
+   pipelines a batch, on at most RD_FINISH_THREADS workers at low priority,
+   one batch in flight and none begun under the finisher's hold or while it
+   runs; its cost in the 10 s line (rd__pipeline_twins_take) */
+#define RD_TWIN_BATCH 8u
 
 static struct {
     RdPipeKeyInt q[RD_TWIN_QUEUE]; /* asked for, not begun */
@@ -3310,7 +3315,20 @@ static struct {
     RhiBindGroupLayout bl[RD_FINISH_BATCH][4];
     RhiStats st0;
     uint32_t background; /* made by the background's workers or here, the run */
+    double t0;           /* the batch in flight's begin (rd__now_ms) */
+    /* the block's (the 10 s line's, __atomic): pipelines made, failed,
+       batches, and the batches' wall time in microseconds */
+    uint32_t blockMade, blockFailed, blockBatches;
+    uint64_t blockUs;
 } s_twin;
+
+void rd__pipeline_twins_take(uint32_t *made, uint32_t *failed, uint32_t *batches, double *ms)
+{
+    *made = __atomic_exchange_n(&s_twin.blockMade, 0u, __ATOMIC_RELAXED);
+    *failed = __atomic_exchange_n(&s_twin.blockFailed, 0u, __ATOMIC_RELAXED);
+    *batches = __atomic_exchange_n(&s_twin.blockBatches, 0u, __ATOMIC_RELAXED);
+    *ms = (double)__atomic_exchange_n(&s_twin.blockUs, 0u, __ATOMIC_RELAXED) / 1000.0;
+}
 
 static bool twinBusy(void)
 {
@@ -3376,6 +3394,7 @@ static void twinKeep(const RhiPipeline *bp)
                      "background (%.200s)",
                      s_twin.bk[j].gs.program, s_twin.bk[j].gs.blend, s_twin.bk[j].vs,
                      s_twin.bk[j].fs, why);
+            __atomic_add_fetch(&s_twin.blockFailed, 1u, __ATOMIC_RELAXED);
             rd__nd_fault(what);
             continue;
         }
@@ -3385,7 +3404,12 @@ static void twinKeep(const RhiPipeline *bp)
         }
         keepPipeline(&s_twin.bk[j], bp[j], at, "in the discard-free twins' set", "");
         s_twin.background++;
+        __atomic_add_fetch(&s_twin.blockMade, 1u, __ATOMIC_RELAXED);
     }
+    const double wall = rd__now_ms() - s_twin.t0;
+    __atomic_add_fetch(&s_twin.blockBatches, 1u, __ATOMIC_RELAXED);
+    __atomic_add_fetch(&s_twin.blockUs, (uint64_t)(wall > 0.0 ? wall * 1000.0 : 0.0),
+                       __ATOMIC_RELAXED);
     s_twin.nb = 0;
     s_batchNote[0] = '\0';
     activityDone();
@@ -3411,7 +3435,7 @@ static bool twinEnd(bool wait)
 static void twinBegin(void)
 {
     uint32_t nb = 0, used = 0;
-    for (; used < s_twin.n && nb < RD_FINISH_BATCH; used++) {
+    for (; used < s_twin.n && nb < RD_TWIN_BATCH; used++) {
         const RdPipeKeyInt *k = &s_twin.q[used];
         bool found;
         (void)probeKey(k, &found);
@@ -3449,6 +3473,7 @@ static void twinBegin(void)
     }
     rhiPipeCounts(&s_twin.st0);
     s_twin.nb = nb;
+    s_twin.t0 = rd__now_ms();
     s_twin.jobs = rhi_create_pipelines_begin(s_twin.bd, nb, RD_FINISH_THREADS, true);
     if (s_twin.jobs == NULL) {
         /* no background creation on this backend: made here, between

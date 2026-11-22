@@ -85,7 +85,7 @@ set(nodual_mali169 1)
 set(nodual_gl 1)
 # the twins' run line (rd_nodiscard_run.c rd__nd_stats_text), matched in the
 # run's text with its ';' made ','
-set(ndRe "stats: discard-free twins (on|off|held)[^:]*: ([0-9]+) draws through them, ([0-9]+) of them by the clipper check \\(([a-z ]+)\\), refused: ([^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*), ([0-9]+) modules of them made")
+set(ndRe "stats: discard-free twins (on|off|held)[^:]*: ([0-9]+) draws through them, ([0-9]+) of them by the clipper check \\(([a-z ]+)\\), refused: ([^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*), ([0-9]+) modules of them made")
 # MODE=clean (rd_nodiscard_clean): the run with them also under the tests'
 # ICO_RD_VU_NODISCARD_CLIPPER=clean, so the camera rule's passes take a twin
 # on lavapipe, whose clipper is not clean: the draw path of that class is

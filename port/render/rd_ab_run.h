@@ -47,6 +47,9 @@ void rd__ab_collect(const struct RdPerfRecord *r);
 bool rd__ab_off(int subject);
 /* subject changed something in the replay being made */
 void rd__ab_used(int subject);
+/* the replay being made is not one to time subject on after all (the
+   discard-free twins: a pass found its twin not made yet) */
+void rd__ab_unused(int subject);
 /* the judge's start line (after the self-tests: rd__vu_zero_start_line)
    and the attempt ledger's row */
 void rd__ab_start_line(void);

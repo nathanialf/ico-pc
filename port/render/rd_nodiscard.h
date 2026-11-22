@@ -89,9 +89,11 @@
  *     logs/nodiscard-mark.txt: ICO_NODISCARD_MARK, ICO_NODISCARD_VERSION,
  *     ICO_NODISCARD_BLOCK), the zero-area cull's stages: "trying" written
  *     and synced before the two modules are made, "counting" when the
- *     self-test passed, "on" after RD_ND_PROBATION pictures drawn with a
- *     twin, "failed" when a module or a pipeline could not be made or the
- *     self-test refused them; a bad end while trying, counting or on (a
+ *     self-test's floor cases passed (before the clipper check, which never
+ *     writes "failed"), "on" after RD_ND_PROBATION pictures drawn with a
+ *     twin, "failed" when a module could not be made or the self-test
+ *     refused them (a background pipeline that failed in play turns them
+ *     off for the run only: no write on the render thread); a bad end while trying, counting or on (a
  *     crash, an ANR, a signal other than 9, a device loss, a GPU hang, the
  *     watchdog; and while trying any end but a clean close) keeps them off
  *     until the version changes;
@@ -105,7 +107,13 @@
  *     pipelines released;
  *   - the loss ladder (ICO_LOSS_ROW: a start after one that lost the
  *     device or hung its driver): off for this start;
- *   - a twin pipeline the background could not make: off for the run;
+ *   - a twin pipeline the background could not make: off for the run,
+ *     the mark unchanged;
+ *   - per entry: a twin entry whose start-up case drew nothing through it
+ *     is not used in play ("entry not tested");
+ *   - the judge times only replays whose every eligible pass had its twin
+ *     (rd_nd_use_counts: one found "not made yet" takes the replay out), so
+ *     no verdict rests on a partial share;
  *   - the in-play judge (rd_ab_run.h RD_AB_NODISCARD): a stage judged
  *     without them draws through the *_nodual builds.
  * Until the self-test passes nothing of them exists on the device: with
@@ -146,6 +154,7 @@ enum {
     RD_ND_CLIPPED,  /* not clip mode none, or particles: a corner may be behind the eye */
     RD_ND_UNMADE,   /* its twin's pipeline not made yet (asked for in the background) */
     RD_ND_TRIAL,    /* the in-play judge's off arm */
+    RD_ND_UNTESTED, /* its entry's twin drew nothing in the start-up self-test */
     RD_ND_REASONS
 };
 
@@ -221,6 +230,9 @@ uint32_t rd__pipeline_drop_twins(void);
 /* the made pipelines of the twins; those made in the background so far */
 uint32_t rd__pipeline_count_twins(void);
 uint32_t rd__pipeline_twins_background(void);
+/* the twins' background set since the last call (the 10 s line): pipelines
+   made and failed, batches, their wall time from begin to taken */
+void rd__pipeline_twins_take(uint32_t *made, uint32_t *failed, uint32_t *batches, double *ms);
 /* the cache's entries now (a mark), and every entry made after a mark
    destroyed and forgotten, as if never asked for (the GPU idle; the self-
    test's own pipelines, so the run's set is the one it had before it); the
@@ -254,6 +266,24 @@ const char *rd__nd_state_text(void);
 /* the self-test's counts since the last call: draws through a twin, and
    the refusals by reason */
 void rd__nd_take(uint64_t *twin, uint64_t refused[RD_ND_REASONS]);
+/* the self-test's draws through each twin entry since the last call (0
+   vu_ps_nodual_nd, 1 vu_texa_ps_nodual_nd), and an entry marked tested
+   (only a tested entry's twin is used in play) */
+void rd__nd_take_entries(uint64_t out[2]);
+void rd__nd_entry_tested(int entry, bool tested);
+/* the floor's cases passed: the mark says "counting" from here (the
+   clipper check after it is a device property, like play) */
+void rd__nd_floor_passed(void);
+
+/* the in-play judge's use of a replay (pure): in use once a pass drew
+   through a twin, never once a pass of it found its twin not made yet (so
+   a trial times only replays with the stage's whole twin share) */
+typedef struct RdNdUse {
+    bool twin, unmade;
+} RdNdUse;
+
+void rd_nd_use_note(RdNdUse *u, int verdict);
+bool rd_nd_use_counts(const RdNdUse *u);
 /* the tests' sabotage =alpha */
 bool rd__nd_sabotage_alpha(void);
 /* the self-test's draws through a twin of a clip mode other than none since

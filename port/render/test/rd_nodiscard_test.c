@@ -21,6 +21,8 @@
  *            read by storage and by attachment): -1, never counted
  *   names    every reason's words, the two modules' names (none for
  *            another entry), the key bits
+ *   use      the in-play judge's use of a replay: in use only when a pass
+ *            drew through a twin and no pass found its twin not made yet
  *   state    the run's state without a device (rd_nodiscard_run.c): held
  *            until the self-test (no 10 s clause, the stats line's words), on
  *            once it passed (the clause with every reason at 0), =0 off and a
@@ -199,8 +201,8 @@ static void none(void)
 static void names(void)
 {
     static const char *const kWant[RD_ND_REASONS] = {
-        "through them", "plane",   "DATE",         "band",
-        "alpha",        "clipped", "not made yet", "timed without them"};
+        "through them",       "plane",           "DATE", "band", "alpha", "clipped", "not made yet",
+        "timed without them", "entry not tested"};
     for (int i = 0; i < RD_ND_REASONS; i++) {
         CHECK(strcmp(rd_nd_reason_name(i), kWant[i]) == 0);
     }
@@ -217,6 +219,36 @@ static void names(void)
     memset(&k, 0, sizeof(k));
     k.nodual = (uint8_t)(RD_NODUAL_ON | RD_NODUAL_NODISCARD);
     CHECK(k.nodual == 3u && sizeof(RdPipelineKey) == 16u);
+}
+
+/* the in-play judge's use of a replay: in use once a pass drew through a
+   twin (or would have, at the off arm), never once one found its twin not
+   made yet, in either order; nothing else changes it */
+static void use(void)
+{
+    RdNdUse u;
+    memset(&u, 0, sizeof(u));
+    CHECK(!rd_nd_use_counts(&u));
+    rd_nd_use_note(&u, RD_ND_ALPHA);
+    rd_nd_use_note(&u, RD_ND_CLIPPED);
+    CHECK(!rd_nd_use_counts(&u));
+    rd_nd_use_note(&u, RD_ND_TWIN);
+    CHECK(rd_nd_use_counts(&u));
+    rd_nd_use_note(&u, RD_ND_PLANE);
+    CHECK(rd_nd_use_counts(&u));
+    rd_nd_use_note(&u, RD_ND_UNMADE);
+    CHECK(!rd_nd_use_counts(&u));
+    rd_nd_use_note(&u, RD_ND_TWIN);
+    CHECK(!rd_nd_use_counts(&u)); /* a later pass's twin does not bring the share back */
+    memset(&u, 0, sizeof(u));
+    rd_nd_use_note(&u, RD_ND_UNMADE);
+    rd_nd_use_note(&u, RD_ND_TWIN);
+    CHECK(!rd_nd_use_counts(&u));
+    memset(&u, 0, sizeof(u));
+    rd_nd_use_note(&u, RD_ND_TRIAL);
+    CHECK(rd_nd_use_counts(&u)); /* the off arm with every twin made: timed */
+    rd_nd_use_note(&u, RD_ND_UNTESTED);
+    CHECK(rd_nd_use_counts(&u));
 }
 
 static void putEnv(const char *name, const char *value)
@@ -246,10 +278,11 @@ static void state(void)
     CHECK(!rd__nd_on() && strcmp(rd__nd_state_text(), "held") == 0 && !rd__nd_triable());
     CHECK(rd_nd_text(buf, sizeof(buf), 1) == 0u && buf[0] == '\0');
     (void)rd__nd_stats_text(st, sizeof(st));
-    CHECK(strcmp(st, "discard-free twins held (until their start-up self-test passes): 0 draws "
-                     "through them, 0 of them by the clipper check (not checked); refused: plane "
-                     "0, DATE 0, band 0, alpha 0, clipped 0, not made yet 0, timed without them "
-                     "0; 0 modules of them made, 0 of their pipelines alive") == 0);
+    CHECK(strcmp(st,
+                 "discard-free twins held (until their start-up self-test passes): 0 draws "
+                 "through them, 0 of them by the clipper check (not checked); refused: plane "
+                 "0, DATE 0, band 0, alpha 0, clipped 0, not made yet 0, timed without them "
+                 "0, entry not tested 0; 0 modules of them made, 0 of their pipelines alive") == 0);
     if (strstr(st, "held (until") == NULL) {
         printf("  stats: %s\n", st);
     }
@@ -259,7 +292,8 @@ static void state(void)
     (void)rd_nd_text(buf, sizeof(buf), 2);
     CHECK(strcmp(buf, "; discard-free twins: 0 draws a picture through them, 0 of them by the "
                       "clipper check (not checked) (0 refused a picture: plane 0, DATE 0, band 0, "
-                      "alpha 0, clipped 0, not made yet 0, timed without them 0)") == 0);
+                      "alpha 0, clipped 0, not made yet 0, timed without them 0, entry not tested "
+                      "0)") == 0);
     /* the clipper check's verdicts and the tests' fake */
     rd__nd_clipper_verdict(false, "an edge on the centre view ray at code 32 differs");
     CHECK(rd__nd_clipper() == RD_ND_CLIP_DIRTY && strcmp(rd__nd_clipper_text(), "not clean") == 0);
@@ -332,6 +366,7 @@ int main(void)
     table();
     none();
     names();
+    use();
     state();
     if (failures) {
         printf("rd_nodiscard_test: %d failures\n", failures);

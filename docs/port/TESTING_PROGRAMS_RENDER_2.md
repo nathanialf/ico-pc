@@ -537,7 +537,9 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   tests' sabotage letting the alpha
   test through), the passes no twin exists for (other entries, the planes' twins, no *_nodual
   build, a destination read by storage and by attachment), the reasons' and modules' names, the
-  key bits in the key's one byte; the run's state without a device: held
+  key bits in the key's one byte; the judge's use of a replay (in use only when a pass drew
+  through a twin and none found its twin not made yet, in either order; the off arm with every
+  twin made counts); the run's state without a device: held
   until the self-test (no 10 s clause; the stats line word for word), on after a passed one (the
   clause with every reason), `ICO_RD_VU_NODISCARD=0` and `=1`, the loss ladder and the install's
   mark over `=1`, a failed self-test kept off for the run through a renderer made again, a short
@@ -564,8 +566,10 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   (`rd_nodiscard.cmake`, through `rd_vuprepass_selftest_test` and
   `test/rd_vuprepass_selftest.cmake`; the Arm fakes without dual-source blending): the twins'
   start-up self-test after the cull's (the pre-pass still on), each run's start line saying what
-  of them exists: on (the plain case through a twin, the alpha test's, the clip plane's and a
-  code 32 eye-plane crossing's cases refused, the rule refusing the band and DATE, the pictures byte for byte; 2 modules, its own
+  of them exists: on (the plain case through vu_ps_nodual_nd and a textured TEXA case through
+  vu_texa_ps_nodual_nd, each counted, neither entry "drew nothing"; the alpha test's (untextured
+  and textured), the clip plane's and a code 32 eye-plane crossing's cases refused; the clipper
+  check's frames in both entries, the rule refusing the band and DATE, the pictures byte for byte; 2 modules, its own
   pipelines released after it, none of the twins' alive; the mark `counting <the test's
   version>`); with the CPU's proof not looking at the
   alpha test (`ICO_RD_VU_NODISCARD_SABOTAGE=alpha`) the broken twin's picture caught: off for the

@@ -55,6 +55,9 @@ static struct {
     char version[64];    /* ICO_NODISCARD_VERSION: the running version, "" none */
     uint64_t took, tookRefused[RD_ND_REASONS]; /* since rd__nd_take */
     uint64_t tookClip;                         /* of took, by the clipper check */
+    uint64_t tookEntry[2];                     /* of took, by entry (vu_ps, vu_texa_ps) */
+    bool entryOk[2]; /* the entry's twin drew in the self-test's floor (play uses it then) */
+    RdNdUse use;     /* the replay being made, for the in-play judge */
     /* the device's clipper (rd_nodiscard.h "The clipper check"): RD_ND_CLIP_*,
        its first differing case's words, the check running (its frames take
        the camera rule's passes as a clean clipper would), the tests' fake */
@@ -144,6 +147,9 @@ void rd__nd_init(void)
     s_n.drewNow = false;
     s_n.took = 0;
     s_n.tookClip = 0;
+    memset(s_n.tookEntry, 0, sizeof(s_n.tookEntry));
+    memset(s_n.entryOk, 0, sizeof(s_n.entryOk));
+    memset(&s_n.use, 0, sizeof(s_n.use));
     memset(s_n.tookRefused, 0, sizeof(s_n.tookRefused));
     s_n.clipper = RD_ND_CLIP_UNKNOWN;
     s_n.clipWhy[0] = '\0';
@@ -307,11 +313,12 @@ static bool ready(void)
     return s_n.mod[0].id != 0 && s_n.mod[1].id != 0;
 }
 
-static void count(int why, bool byClipper)
+static void count(int why, bool byClipper, int entry)
 {
     if (why == RD_ND_TWIN) {
         add(&s_block.draws, &s_run.draws, 1u);
         s_n.took++;
+        s_n.tookEntry[entry]++;
         if (byClipper) {
             add(&s_block.drawsClip, &s_run.drawsClip, 1u);
             s_n.tookClip++;
@@ -341,35 +348,48 @@ void rd__nd_pass(RdPipeKeyInt *key, RhiPipeline *pipe, const RdDrawPass *p, uint
         return;
     }
     if (v != RD_ND_TWIN) {
-        count(v, false);
+        count(v, false, 0);
+        return;
+    }
+    const int entry = key->fs == RD_FS_VU_TEXA ? 1 : 0;
+    if (!s_n.held && !s_n.forced && !s_n.entryOk[entry]) {
+        /* its start-up case did not draw through this entry's twin: never
+           used in play (logged at the self-test) */
+        count(RD_ND_UNTESTED, false, 0);
         return;
     }
     RdPipeKeyInt t = *key;
     t.gs.nodual = (uint8_t)(t.gs.nodual | RD_NODUAL_NODISCARD);
     const RhiPipeline tp = rd__pipeline_twin(&t); /* made, or asked for in the background */
-    if (!tp.id || gathering) {
-        count(RD_ND_UNMADE, false);
-        return;
-    }
+    const int w = !tp.id || gathering                        ? RD_ND_UNMADE
+                  : rd__ab_off(RD_AB_NODISCARD) && !s_n.held ? RD_ND_TRIAL
+                                                             : RD_ND_TWIN;
     if (!s_n.held) {
-        /* the in-play judge (rd_ab_run.h): the twins change this replay; at
-           their off arm the pass keeps the *_nodual build */
-        rd__ab_used(RD_AB_NODISCARD);
-        if (rd__ab_off(RD_AB_NODISCARD)) {
-            count(RD_ND_TRIAL, false);
-            return;
+        /* the in-play judge (rd_ab_run.h): a replay is timed for the twins
+           only when every eligible pass of it had its twin (one found not
+           made yet takes the replay out: the share would be partial) */
+        rd_nd_use_note(&s_n.use, w);
+        if (rd_nd_use_counts(&s_n.use)) {
+            rd__ab_used(RD_AB_NODISCARD);
+        } else {
+            rd__ab_unused(RD_AB_NODISCARD);
         }
+    }
+    if (w != RD_ND_TWIN) {
+        count(w, false, 0);
+        return;
     }
     *key = t;
     *pipe = tp;
     /* the class: clip mode none (proven on every device) or another, taken
        on the device's clipper check */
-    count(RD_ND_TWIN, (drawFlags & ICO_VU_CLIP_MASK) != ICO_VU_CLIP_NONE);
+    count(RD_ND_TWIN, (drawFlags & ICO_VU_CLIP_MASK) != ICO_VU_CLIP_NONE, entry);
     s_n.drewNow = true;
 }
 
 void rd__nd_replay_begin(void)
 {
+    memset(&s_n.use, 0, sizeof(s_n.use)); /* the judge's use: this replay's own */
     if (s_n.drewNow) {
         s_n.drewNow = false;
         if (s_n.state == N_ON && !s_n.held && !s_n.markedOn && ++s_n.pictures >= RD_ND_PROBATION) {
@@ -395,8 +415,9 @@ void rd__nd_fault(const char *what)
     char why[384];
     snprintf(why, sizeof(why), "for the run: %.360s", what);
     setRunOff(why);
-    rd__log("discard-free twins: off %s", s_n.why);
-    (void)writeMark("failed", true);
+    rd__log("discard-free twins: off %s (the mark is not changed: a background compile that "
+            "failed once is this run's; the next start tests them again)",
+            s_n.why);
 }
 
 /* --------------------------------------------------- the self-test's hold */
@@ -431,6 +452,29 @@ void rd__nd_take(uint64_t *twin, uint64_t refused[RD_ND_REASONS])
 bool rd__nd_sabotage_alpha(void)
 {
     return s_n.sabotage == NS_ALPHA;
+}
+
+void rd__nd_take_entries(uint64_t out[2])
+{
+    out[0] = s_n.tookEntry[0];
+    out[1] = s_n.tookEntry[1];
+    s_n.tookEntry[0] = s_n.tookEntry[1] = 0;
+}
+
+void rd__nd_entry_tested(int entry, bool tested)
+{
+    if (entry >= 0 && entry < 2) {
+        s_n.entryOk[entry] = tested;
+    }
+}
+
+void rd__nd_floor_passed(void)
+{
+    if (s_n.tried && !s_n.forced) {
+        /* past the compile and the floor's comparisons: the clipper check
+           after it never writes "failed", so it is judged as play is */
+        (void)writeMark("counting", true);
+    }
 }
 
 uint64_t rd__nd_take_clip(void)
@@ -572,6 +616,17 @@ size_t rd_nd_text(char *out, size_t cap, unsigned n)
     }
     if (at > 0 && (size_t)at < cap) {
         at += snprintf(out + at, cap - (size_t)at, ")");
+    }
+    /* the background set's cost in the block (new on a phone in play:
+       batches of 8 at most, low priority, one at a time between pictures) */
+    uint32_t made = 0, failed = 0, batches = 0;
+    double ms = 0.0;
+    rd__pipeline_twins_take(&made, &failed, &batches, &ms);
+    if (batches != 0u && at > 0 && (size_t)at < cap) {
+        at += snprintf(out + at, cap - (size_t)at,
+                       "; their pipelines made in the background: %u in %u batches, %.0f ms "
+                       "from begin to taken%s",
+                       (unsigned)made, (unsigned)batches, ms, failed ? ", some failed" : "");
     }
     return at < 0 ? 0u : ((size_t)at < cap ? (size_t)at : cap - 1u);
 }

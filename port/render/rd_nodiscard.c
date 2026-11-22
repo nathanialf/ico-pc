@@ -58,12 +58,26 @@ int rd_nd_eligible(const RdNdPass *p)
 const char *rd_nd_reason_name(int why)
 {
     static const char *const kNames[RD_ND_REASONS] = {
-        "through them", "plane",   "DATE",         "band",
-        "alpha",        "clipped", "not made yet", "timed without them"};
+        "through them",       "plane",           "DATE", "band", "alpha", "clipped", "not made yet",
+        "timed without them", "entry not tested"};
     return why >= 0 && why < RD_ND_REASONS ? kNames[why] : "?";
 }
 
 const char *rd_nd_module_name(uint8_t fs)
 {
     return fs == RD_FS_VU ? "vu_ps_nodual_nd" : fs == RD_FS_VU_TEXA ? "vu_texa_ps_nodual_nd" : NULL;
+}
+
+void rd_nd_use_note(RdNdUse *u, int verdict)
+{
+    if (verdict == RD_ND_TWIN || verdict == RD_ND_TRIAL) {
+        u->twin = true; /* the twin exists: at the off arm too, the same replay's share */
+    } else if (verdict == RD_ND_UNMADE) {
+        u->unmade = true;
+    }
+}
+
+bool rd_nd_use_counts(const RdNdUse *u)
+{
+    return u->twin && !u->unmade;
 }

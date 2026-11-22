@@ -1801,14 +1801,17 @@ and 24 draws are refused. `port/render/rd_nodiscard.h` says it all.
 - **The ways back** (each logged, none written to the settings):
   - the install's mark `logs/nodiscard-mark.txt` (`port/platform/nodiscard_mark.h`), the cull's
     stages and table: `trying` written and synced before the two modules are made, `counting` when
-    the self-test passed, `on` after 250 pictures drawn with a twin, `failed` when a module or a
-    pipeline could not be made or the self-test refused them; a bad end while trying (any end but
+    the self-test's floor cases passed (before the clipper check, which never writes `failed`),
+    `on` after 250 pictures drawn with a twin, `failed` when a module could not be made or the
+    self-test refused them; a bad end while trying (any end but
     a clean close), counting or on (a crash, an ANR, a signal other than 9, a device loss, a GPU
     hang, the watchdog) keeps them off until the version changes;
   - the start-up self-test (`rd_nodiscard_selftest.c`, after the cull's on the pre-pass that
-    passed): a plain code 34 mesh (given its twin), one under an alpha test that can fail, one under
-    a chain plane and a code 32 mesh under the camera rule with a corner of each triangle behind
-    the eye (all three refused); the side band and DATE, which the camera
+    passed): a plain code 34 mesh and a textured one under TEXA 7F/81 AEM with a linear filter
+    (given vu_ps_nodual_nd and vu_texa_ps_nodual_nd), one under an alpha test that can fail, the
+    textured one under the same test, one under a chain plane and a code 32 mesh under the camera
+    rule with a corner of each triangle behind the eye (all refused); each entry's twin is used in
+    play only if its own case drew through it here ("entry not tested" otherwise, logged); the side band and DATE, which the camera
     rule's frame cannot draw, are checked on the rule itself. Drawn with the twins and without:
     the pictures byte for byte, a pass through a twin counted, both refusal cases refused, no twin
     pipeline missing, else off for the run with the modules and pipelines released. Either way every
@@ -1816,9 +1819,17 @@ and 24 draws are refused. `port/render/rd_nodiscard.h` says it all.
     the one it had before (the draw pattern gate's counts unchanged), and the twins' pipelines are
     made in the background as play asks for them;
   - the loss ladder (`ICO_LOSS_ROW`): off for this start; a twin pipeline the background could not
-    make: off for the run;
+    make: off for the run, the mark unchanged (nothing written on the render thread);
   - the in-play judge (`RD_AB_NODISCARD`, the second subject): its off arm is the *_nodual build,
-    the path the device ran before; a stage judged off draws without the twins.
+    the path the device ran before; a stage judged off draws without the twins. A replay is timed
+    for the twins only when every eligible pass of it had its twin made (one "not made yet" takes
+    the replay out, `rd_nd_use_counts`), so no trial starts and no pair counts while a stage's twin
+    pipelines are still being made, and no verdict rests on a partial share.
+  - **The background set's bounds:** at most 8 pipelines a batch on at most 4 workers at low
+    priority, one batch in flight (the finisher's or the twins'), none begun under the finisher's
+    hold (a late game step, a slow picture) or while the finisher runs; the free-memory floor is
+    not asked. Its cost goes in the 10 s clause: `; their pipelines made in the background: P in B
+    batches, M ms from begin to taken`.
   Until the self-test passes nothing of the twins exists on the device, and on a device with
   dual-source blending they are never tried: every shader and pipeline is the build's without
   them.

@@ -145,6 +145,13 @@ void rd__ab_used(int subject)
     }
 }
 
+void rd__ab_unused(int subject)
+{
+    if (s_open && subject >= 0 && subject < RD_AB_SUBJECTS) {
+        g_rdPerf.abUsed &= (uint8_t)~(1u << subject);
+    }
+}
+
 void rd__ab_start_line(void)
 {
     made();
