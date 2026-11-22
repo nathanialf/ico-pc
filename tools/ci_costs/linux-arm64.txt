@@ -302,9 +302,9 @@ poly_flat 0.00
 power_read 0.00  # estimate: a CPU unit test of one pure file, like perf_secs (run by hand here, well under 0.01 s; not run under CI yet)
 rd_diag_notes 0.00  # estimate: 0.0 s local (merge-wt_DIAG6-20261121T075234Z.lvp.log) x 1.32
 rd_nodiscard 0.01  # estimate: a CPU unit test of the eligibility table, like rd_ab (not run here)
-rd_nodiscard_ab 21.35  # estimate: rd_vu_zero_ab x 0.3 (8 runs of 2 replays to its 40 of one; not run here)
-rd_nodiscard_ab_gl 23.30  # estimate: rd_vu_zero_gl x 0.5 (4 runs of 2 replays at one setting to its three; not run here)
-rd_nodiscard_clean 21.35  # estimate: rd_nodiscard_ab (the same runs; not run here)
+rd_nodiscard_ab 42.70  # estimate: the round-1 estimate x 2 (four fixtures to two; not run here)
+rd_nodiscard_ab_gl 46.60  # estimate: the round-1 estimate x 2 (four fixtures to two; not run here)
+rd_nodiscard_clean 42.70  # estimate: the round-1 estimate x 2 (four fixtures to two; not run here)
 rd_vuprepass_selftest_nodiscard 5.01  # estimate: rd_vuprepass_selftest_zero_mali x 3 (the clipper check: 52 frames of 3 small replays, both twin entries; not run here)
 rd_vuprepass_selftest_nodiscard_clean 5.01  # estimate: rd_vuprepass_selftest_zero_mali x 3 (the clipper check: 52 frames of 3 small replays, both twin entries; not run here)
 rd_vuprepass_selftest_nodiscard_dual 1.52  # estimate: rd_vuprepass_selftest_zero_marked (the twins not tried; not run here)

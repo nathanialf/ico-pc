@@ -1,18 +1,27 @@
 # rd_nodiscard_ab, rd_nodiscard_ab_gl and rd_nodiscard_clean (test/rd_nodiscard_ab.cmake):
-# a fixture, then the profiles it is replayed under (corpus, mali, mali169:
-# the script's head says what each is; OpenGL replays every fixture at the
-# corpus setting without dual-source blending).  The Mali profiles must draw
-# some pass through a twin over the whole list: only clip mode none (code
-# 34) takes one on lavapipe, and only where the alpha plan leaves no test in
-# the pass, which a fixture's blank-rule textures (alpha 00..ff) rarely allow
-# (the merge check of 2026-11-22: fx-mali-slow541's code 34 passes were all
-# refused for the alpha test under both Mali profiles).
+# a fixture, then the profiles it is replayed under (corpus, mali, mali169,
+# own: the script's head says what each is; OpenGL replays every fixture at
+# the corpus setting without dual-source blending).  The Mali profiles must
+# draw some pass through a twin over the whole list: on lavapipe only clip
+# mode none (code 34) takes one, and only where the alpha plan leaves no test
+# in the pass, which a fixture's blank-rule textures (alpha 00..ff) almost
+# never allow (2026-11-22: fx-mali-slow541's passes were all refused for the
+# alpha test); the vu_opaque.rules.txt fixtures below have opaque textures,
+# so their code 34 draws' tests are decided by the alpha plan.  The Mali
+# profiles need a frame at least 16:9 wide (a 4:3 dump cannot show 16:9).
 #
-# issue 179's Mali-G52 (v0.11.5): the stage 42 slow-scene capture, five
-# code 34 draws
+# issue 179's Mali-G52 (v0.11.5): the stage 42 slow-scene capture, 912 wide
 fx-mali-slow541 mali,mali169,corpus
-# issue 95's loss frame: 28 code 34 draws over opaque textures (80..80: the
-# vertex alpha alone decides the test)
-fx-loss95 mali,mali169,corpus
-# issue 179's Mali-G52 frame with vu_alpha_half.rules.txt: 76 code 34 draws
-fx-pattern-mali-frame mali,mali169
+# issue 179's Mali-G52 (v0.11.7) loss capture, 912 wide, opaque textures:
+# 181 code 34 draws (step 0's alpha-plan mirror finds every one eligible)
+fx-mali-loss-before mali,mali169,corpus
+# issue 179's Mali-G52 (v0.11.4) loss capture, 912 wide, opaque textures:
+# 70 code 34 draws (all eligible by the same mirror)
+fx-scope-179-before mali,mali169,corpus
+# The known reproduction of Mesa's NaN band flag (commit e65012742: a floor
+# triangle cut behind the eye drew colour 0 in the band, under the PS2 rule's
+# side bands), here under the camera rule at its own aspect without
+# dual-source blending (own): rd_nodiscard_clean's run with the camera rule's
+# passes through the twins shows whether a draw without a band (flag 0 at
+# every corner) loses pixels to the NaN branch on lavapipe
+fx-drops-4657 own
