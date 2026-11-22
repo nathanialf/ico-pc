@@ -24,6 +24,9 @@
  *   startup-activity.txt     when there is one (diag_host.h);
  *   last-run.txt,            where this run is and where the run before
  *   last-run-previous.txt    was, when there are (last_run.h);
+ *   vu-zero-mark.txt,        issue 179's attempts' marks on the install,
+ *   ahead-mark.txt,          each when there is one (vu_zero_mark.h,
+ *   nodiscard-mark.txt       ahead_mark.h, the discard-free twins');
  *   exit-info.txt            how the run before ended, Android's exit
  *                            records read at this start (exit_info.h);
  *   exit-trace-<ms>.txt|.pb  the newest trace Android kept with one (an

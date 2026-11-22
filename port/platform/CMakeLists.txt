@@ -33,6 +33,7 @@ target_sources(ico_platform PRIVATE
     pace_policy.c
     perf_hint.c
     perf_secs.c
+    power_read.c
     memory_floor.c
     display_rate.c
     present_hist.c
@@ -61,6 +62,7 @@ target_sources(ico_platform PRIVATE
     sys_cell.c
     symmap.c
     vm_reserve.c
+    vmstat_read.c
     vsync_hooks.c
     window_lifecycle.c
     window_scene.c)
@@ -527,12 +529,37 @@ endif()
 # stall_coincide_test: what a stall coincided with (stall_coincide.h, issue
 # 179): the block's pass medians, the spike rule, a moment's classes, the
 # tally and moment lines word for word, the pressure and status parsers, the
-# driver's thread names (CPU only)
+# driver's thread names, the block's stalls against the pieces' shares and
+# every stall's table row (the two timed replays after, a row carried to the
+# next block, parts of 12 rows, the rows past 256 counted), the 2 s
+# triangles' most (CPU only)
 add_executable(stall_coincide_test test/stall_coincide_test.c stall_coincide.c)
 target_include_directories(stall_coincide_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(stall_coincide_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 if(ICO_RUN_TESTS)
     add_test(NAME stall_coincide COMMAND stall_coincide_test)
+endif()
+
+# power_read_test: the battery for the log (power_read.h, issue 179): the
+# sysfs numbers and words, the Java side's four ints, a block's currents,
+# voltages, level and status, the once and block lines word for word, from
+# strings in the test (CPU only)
+add_executable(power_read_test test/power_read_test.c power_read.c)
+target_include_directories(power_read_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(power_read_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+if(ICO_RUN_TESTS)
+    add_test(NAME power_read COMMAND power_read_test)
+endif()
+
+# vmstat_read_test: the kernel's memory events a block (vmstat_read.h, issue
+# 179): the counts from a /proc/vmstat text (old and new kernels' names, the
+# zones' and the refaults' sums), a count missing, a count gone back, the
+# line word for word (CPU only)
+add_executable(vmstat_read_test test/vmstat_read_test.c vmstat_read.c)
+target_include_directories(vmstat_read_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(vmstat_read_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+if(ICO_RUN_TESTS)
+    add_test(NAME vmstat_read COMMAND vmstat_read_test)
 endif()
 
 # present_latency_test: the present's latency in a 10 s block

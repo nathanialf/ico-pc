@@ -20,10 +20,32 @@
  * presented picture adds one to its second (a division and an add, on the
  * game thread where the records are drained); no lock, no system call.
  *
+ * Issue 179's v0.11.14 log: the boat scene's stretches at 7-12 pictures a
+ * second against 16-22 between, and whether the GPU slowed as a whole (its
+ * clock is not readable on that phone).  Two more lines a block, after
+ * that one, from every drained record (window_stall.c window_stall_after):
+ *   per second (the timed pictures' medians: GPU span ms, VU triangles,
+ *     reduction ms, present pass ms; then the longest present interval
+ *     ms): 42: 45.1/61.2k/2.40/2.68/81 46.0/62.0k/2.41/2.66/120 | 40: ...
+ *   present intervals (the CPU's present returns): 208 in the block, p50
+ *     40.1 ms, p90 80.3 ms, longest 148.2 ms; over 2 ticks 31, over 3
+ *     ticks 12, over 4 ticks 5 (a tick 20.0 ms; an interval in whole
+ *     ticks, rounded)
+ * The reduction and the present pass are the same work every picture at
+ * one size: their times a second are a measure of the GPU's speed that
+ * needs no clock node (where the present pass also holds the wait for the
+ * display's image, a Mali's, its time grows with that wait: the reduction
+ * is the cleaner one).  A present interval: from one presented picture's
+ * present return to the next's, on the CPU's clock (not the display's
+ * timing); the percentiles by nearest rank; "-" a value no picture of the
+ * second had.  The tick is the game's pace (WindowPerfBlock.paceHz: 50 Hz
+ * PAL, so Original's 25 a second is 2 ticks a picture); with none known
+ * the ticks are left out.
+ *
  * Pure (port/platform/test/perf_secs_test.c); the window's instance is
  * fed by window_perf_rank.c (the steps), window_clock_trap.c (the
- * presented pictures) and writes its line at the block's end
- * (window_perf_rank_block).
+ * presented pictures), window_stall.c (every record) and writes its lines
+ * at the block's end (window_perf_rank_block).
  */
 #ifndef ICO_PLATFORM_PERF_SECS_H
 #define ICO_PLATFORM_PERF_SECS_H
@@ -35,6 +57,23 @@
 /* the seconds a block holds (a 10 s block's, with room for a block the
    pump held long: a pause, the app away); later ones are counted apart */
 #define PERF_SECS_MAX 64u
+/* the records and present intervals a block holds (past them counted) */
+#define PERF_SECS_RECS 2048u
+#define PERF_SECS_IVS 2048u
+
+/* a drained record's part (window_stall.c): gpuValid its GPU times known */
+typedef struct PerfSecsRec {
+    bool presented;
+    double presentEndMs; /* its present's return (0 not known) */
+    bool gpuValid;
+    double gpuMs, reductionMs, presentPassMs;
+    double tris; /* the VU triangles */
+} PerfSecsRec;
+
+typedef struct PerfSecsVal {
+    uint8_t sec;
+    float gpu, tris, red, pres; /* gpu, red, pres < 0: not timed */
+} PerfSecsVal;
 
 typedef struct PerfSecs {
     double t0Ms;    /* the block's start (below 0: none yet) */
@@ -45,6 +84,15 @@ typedef struct PerfSecs {
     int sec[PERF_SECS_MAX];
     unsigned pics[PERF_SECS_MAX];
     bool stageSet[PERF_SECS_MAX]; /* a step named the second's stage */
+    /* the block's records (their second, their times) and present
+       intervals; the longest interval of each second; the last present's
+       return, kept across blocks (0 none) */
+    unsigned recN, recOver;
+    PerfSecsVal rec[PERF_SECS_RECS];
+    float longest[PERF_SECS_MAX];
+    unsigned ivN, ivOver;
+    float iv[PERF_SECS_IVS];
+    double ivMax, lastEndMs;
 } PerfSecs;
 
 #define PERF_SECS_NO_STAGE (-2147483647 - 1)
@@ -59,10 +107,21 @@ void perf_secs_picture(PerfSecs *s, double nowMs);
    second begun.  The next block starts at nowMs in the stage now.  The
    length written. */
 size_t perf_secs_block_text(PerfSecs *s, double nowMs, char *out, size_t cap);
+/* A drained record at nowMs (every one: its triangles; a timed one its
+   GPU times; a presented one its present interval) */
+void perf_secs_record(PerfSecs *s, const PerfSecsRec *r, double nowMs);
+/* perf_secs_block_text's line into out and the two more into more and
+   intervals ("" each with nothing to say; NULL or 0 leaves one out), the
+   tick tickMs (<= 0 not known); the first line's length */
+size_t perf_secs_block_lines(PerfSecs *s, double nowMs, double tickMs, char *out, size_t cap,
+                             char *more, size_t moreCap, char *intervals, size_t ivCap);
 
 /* The window's instance (the game thread's) */
 void perf_secs_window_step(int stage, double nowMs);
 void perf_secs_window_picture(double nowMs);
+void perf_secs_window_record(const PerfSecsRec *r, double nowMs);
 size_t perf_secs_window_block_text(double nowMs, char *out, size_t cap);
+size_t perf_secs_window_block_lines(double nowMs, double tickMs, char *out, size_t cap, char *more,
+                                    size_t moreCap, char *intervals, size_t ivCap);
 
 #endif

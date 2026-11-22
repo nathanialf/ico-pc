@@ -1132,6 +1132,7 @@ the newest file in logs that starts with report-" and name it (`port/platform/di
 | `ico-pc-previous.log` | the run before's |
 | `startup-activity.txt` | when there is one |
 | `last-run.txt`, `last-run-previous.txt` | where this run is and where the run before was, when there are ([the last-run file](#the-last-run-file)) |
+| `vu-zero-mark.txt`, `ahead-mark.txt`, `nodiscard-mark.txt` | issue 179's attempts' marks on the install, each when there is one (an rc build's Share a bug report sends them too, `share_report.c`) |
 | `scene-ledger.txt` | what the last stages held and left out of their pictures, when there is one ([SCENE_LEDGER.md](SCENE_LEDGER.md)) |
 | `exit-info.txt`, `exit-trace-<ms>.txt` or `.pb` | how the run before ended and Android's exit records read at this start; the newest trace Android kept with a record ([how the previous run ended](#how-the-previous-run-ended)) |
 | `config.toml`, `ico-pc.ini` | the settings |
@@ -1616,6 +1617,26 @@ not say whether 17.4 fps was 17 a second throughout or 25 with a hitch. A second
 step); seconds past the 64 a block holds are counted at the end (`; 6 seconds past the 64 held, 6
 pictures in them`). Its cost: a step compares the stage, a picture adds one to its second (game
 thread, no lock).
+
+Two more lines follow it, from every drained record (`window_stall.c` `window_stall_after`):
+
+`window: per second (the timed pictures' medians: GPU span ms, VU triangles, reduction ms, present
+pass ms; then the longest present interval ms): 42: 45.1/61.2k/2.40/2.68/81 46.0/62.0k/2.41/2.66/120
+| 40: ...`
+
+`window: present intervals (the CPU's present returns): 208 in the block, p50 40.1 ms, p90 80.3 ms,
+longest 148.2 ms; over 2 ticks 31, over 3 ticks 12, over 4 ticks 5 (a tick 20.0 ms; an interval in
+whole ticks, rounded)`
+
+Each second's medians are of its timed pictures (`-` where none was), the triangles of every
+picture. The reduction and the present pass are fixed work, so their times a second say whether the
+GPU slowed as a whole without a clock node ([Every stall in a
+table](ANDROID_DIAGNOSTICS_LEDGERS.md#every-stall-in-a-table-the-gpus-speed-the-battery-and-the-memory-events)).
+A present interval runs from one presented picture's present return to the next's, on the CPU's
+clock, across the block's start too; p50 and p90 by nearest rank; an interval counts over N ticks
+when, rounded to whole ticks of the game's pace, it is more than N (no tick clause before the pace
+is known). A block holds 2048 records and 2048 intervals; more are counted (`; N records past the
+2048 held`, `; N past the 2048 held (in the count and the longest only)`).
 
 ### Words the 10 s lines use
 

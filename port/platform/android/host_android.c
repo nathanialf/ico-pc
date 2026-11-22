@@ -812,6 +812,64 @@ int ico_android_game_mode(void)
     return mode;
 }
 
+/* IcoActivity.batteryState ()[I (host_android.h ico_android_battery): the
+   same call rules as ico_android_display_modes */
+int ico_android_battery(int out[4])
+{
+    static jmethodID s_mid;
+    static int s_failed;
+    JNIEnv *env;
+    jobject act;
+    jclass cls;
+    int got = 0;
+
+    if (s_failed) {
+        return 0;
+    }
+    env = (JNIEnv *)SDL_GetAndroidJNIEnv();
+    act = env != NULL ? (jobject)SDL_GetAndroidActivity() : NULL;
+    if (env == NULL || act == NULL) {
+        return 0;
+    }
+    cls = (*env)->GetObjectClass(env, act);
+    if (cls != NULL) {
+        if (s_mid == NULL) {
+            s_mid = (*env)->GetStaticMethodID(env, cls, "batteryState", "()[I");
+            if (s_mid == NULL) {
+                s_failed = 1;
+            }
+        }
+        if (s_mid != NULL) {
+            jintArray arr = (jintArray)(*env)->CallStaticObjectMethod(env, cls, s_mid);
+
+            if (!(*env)->ExceptionCheck(env) && arr != NULL &&
+                (*env)->GetArrayLength(env, arr) >= 4) {
+                jint v[4];
+
+                (*env)->GetIntArrayRegion(env, arr, 0, 4, v);
+                if (!(*env)->ExceptionCheck(env)) {
+                    for (int i = 0; i < 4; i++) {
+                        out[i] = (int)v[i];
+                    }
+                    got = 1;
+                }
+            }
+            if (arr != NULL) {
+                (*env)->DeleteLocalRef(env, arr);
+            }
+        }
+        if ((*env)->ExceptionCheck(env)) {
+            (*env)->ExceptionClear(env);
+            got = 0;
+        }
+        (*env)->DeleteLocalRef(env, cls);
+    } else if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionClear(env);
+    }
+    (*env)->DeleteLocalRef(env, act);
+    return got;
+}
+
 /* --- the display's modes and rate (the frame rate pin) -------------------- */
 
 /* IcoActivity.displayModes ()[F, called as ico_host_vibrate calls its

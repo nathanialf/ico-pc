@@ -1635,8 +1635,9 @@ The ways back, each logged, none written to the settings:
   zero build where the build without it ran.
 
 The 10 s VU line's clause (`rd_vu_zero_text`): `; zero-area cull: D draws a picture culling, T
-triangles; refused a picture: velocity a, ...; shared lists given up a picture: g`, or `;
-zero-area cull held|off (why)`. `rd_replay_tool --stats`: `stats: VU zero-area cull on|held|off
+triangles in culling draws (how many it removed is not measured); refused a picture: velocity a,
+...; shared lists given up a picture: g`, or `; zero-area cull held|off (why)`: T counts the
+triangles the culling draws carry, not the ones the cull removed. `rd_replay_tool --stats`: `stats: VU zero-area cull on|held|off
 (why): C of S triangle slots culled over P pictures checked, M differ; D draws culling (T
 triangles, G shared lists given up); refused: ...; zero-area modules made N`. The tests' switches:
 `ICO_RD_VU_ZERO` and `ICO_RD_VU_ZERO_SABOTAGE` ([TESTING.md](TESTING.md#environment-switches)).

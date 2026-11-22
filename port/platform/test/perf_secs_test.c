@@ -7,8 +7,14 @@
  * block's start in the stage then, the part second at the end,
  * pictures before any step ("?"), a quiet end (zeros to the end), seconds
  * past the 64 held counted apart, no second begun (no line) and a short
- * buffer cut, the lines word for word.
+ * buffer cut, the lines word for word; each second's timed pictures'
+ * medians (GPU span, VU triangles, reduction, present pass) and longest
+ * present interval, the block's present intervals (p50, p90, the longest,
+ * those over 2, 3 and 4 ticks of the game's pace, rounded to whole ticks;
+ * none with no tick), the interval across a block's end, a block with no
+ * present, records and intervals past the 2048 held counted, word for word.
  */
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -42,6 +48,91 @@ static void play(PerfSecs *s, int stage, int t0, int t1, int gap0, int gap1)
             perf_secs_picture(s, (double)t);
         }
     }
+}
+
+static PerfSecs s_m; /* 50 KB: not on the stack */
+
+/* a record at t: presented (its present's return at t + 5), timed when
+   gpu >= 0 */
+static void rec(PerfSecs *s, double t, bool presented, double gpu, double tris)
+{
+    const PerfSecsRec r = {presented, presented ? t + 5.0 : 0.0, gpu >= 0.0, gpu, 2.4, 2.7, tris};
+    perf_secs_record(s, &r, t);
+    if (presented) {
+        perf_secs_picture(s, t);
+    }
+}
+
+static void more_cases(void)
+{
+    PerfSecs *s = &s_m;
+    char a[1024], m[4096], iv[512];
+
+    /* 3 s at 25 a second, a 0.2 s hitch in the second second (its one
+       interval of 240 ms); the GPU span 40, 50, 60 ms by second; the
+       triangles 60000 then 30000 */
+    perf_secs_reset(s);
+    for (int t = 0; t < 3000; t += 40) {
+        perf_secs_step(s, 42, (double)t);
+        if (!(t >= 1000 && t < 1200)) {
+            rec(s, (double)t, true,
+                t < 1000   ? 40.0
+                : t < 2000 ? 50.0
+                           : 60.0,
+                t < 1000 ? 60000.0 : 30000.0);
+        }
+    }
+    CHECK(perf_secs_block_lines(s, 3000.0, 20.0, a, sizeof a, m, sizeof m, iv, sizeof iv) ==
+          strlen(a));
+    CHECK(text_is(a, "pictures a second: 42: 25 20 25"));
+    CHECK(text_is(m, "per second (the timed pictures' medians: GPU span ms, VU triangles, "
+                     "reduction ms, present pass ms; then the longest present interval ms): 42: "
+                     "40.0/60.0k/2.40/2.70/40 50.0/30.0k/2.40/2.70/240 60.0/30.0k/2.40/2.70/40"));
+    CHECK(text_is(iv, "present intervals (the CPU's present returns): 69 in the block, p50 40.0 "
+                      "ms, p90 40.0 ms, longest 240.0 ms; over 2 ticks 1, over 3 ticks 1, over 4 "
+                      "ticks 1 (a tick 20.0 ms; an interval in whole ticks, rounded)"));
+    /* the next block: its first interval from the block before's last
+       present; an untimed record; no tick known */
+    CHECK(s->lastEndMs == 2965.0 && s->t0Ms == 3000.0);
+    rec(s, 3000.0, true, -1.0, 30000.0);
+    (void)perf_secs_block_lines(s, 4000.0, 0.0, a, sizeof a, m, sizeof m, iv, sizeof iv);
+    CHECK(text_is(a, "pictures a second: 42: 1"));
+    CHECK(strstr(m, "): 42: -/30.0k/-/-/40") != NULL);
+    CHECK(text_is(iv, "present intervals (the CPU's present returns): 1 in the block, p50 40.0 "
+                      "ms, p90 40.0 ms, longest 40.0 ms"));
+    /* intervals of 50 and 70 ms at a 20 ms tick: 2.5 rounds to 3 (over 2),
+       3.5 to 4 (over 2 and 3); under 1000 triangles said whole */
+    perf_secs_reset(s);
+    perf_secs_step(s, 3, 0.0);
+    rec(s, 0.0, true, 10.0, 900.0);
+    rec(s, 50.0, true, 10.0, 900.0);
+    rec(s, 120.0, true, 10.0, 900.0);
+    (void)perf_secs_block_lines(s, 1000.0, 20.0, a, sizeof a, m, sizeof m, iv, sizeof iv);
+    CHECK(strstr(m, "): 3: 10.0/900/2.40/2.70/70") != NULL);
+    CHECK(strstr(iv, "2 in the block, p50 50.0 ms, p90 70.0 ms, longest 70.0 ms; over 2 ticks 2, "
+                     "over 3 ticks 1, over 4 ticks 0 (") != NULL);
+    /* no picture presented: no interval */
+    perf_secs_reset(s);
+    perf_secs_step(s, 3, 0.0);
+    rec(s, 10.0, false, 10.0, 900.0);
+    (void)perf_secs_block_lines(s, 1000.0, 20.0, a, sizeof a, m, sizeof m, iv, sizeof iv);
+    CHECK(text_is(iv, "present intervals (the CPU's present returns): none in the block"));
+    CHECK(strstr(m, "): 3: 10.0/900/2.40/2.70/-") != NULL);
+    /* past the 2048 records and intervals held: counted */
+    perf_secs_reset(s);
+    perf_secs_step(s, 1, 0.0);
+    for (int i = 0; i < 2100; i++) {
+        rec(s, 10.0 * i, true, 5.0, 100.0);
+    }
+    (void)perf_secs_block_lines(s, 21000.0, 20.0, a, sizeof a, m, sizeof m, iv, sizeof iv);
+    CHECK(strstr(m, "; 52 records past the 2048 held") != NULL);
+    CHECK(strstr(iv, "2099 in the block, p50 10.0 ms") != NULL);
+    CHECK(strstr(iv, "; 51 past the 2048 held (in the count and the longest only)") != NULL);
+    /* the pictures line alone (perf_secs_block_text) is as before */
+    perf_secs_reset(s);
+    play(s, 42, 0, 2000, -1, -1);
+    (void)perf_secs_block_text(s, 2000.0, a, sizeof a);
+    CHECK(text_is(a, "pictures a second: 42: 25 25"));
 }
 
 int main(void)
@@ -107,6 +198,8 @@ int main(void)
         const size_t n = perf_secs_block_text(&s, 5000.0, t, sizeof(t));
         CHECK(n == sizeof(t) - 1u && strlen(t) == n);
     }
+
+    more_cases();
 
     if (fails) {
         printf("perf_secs_test: %d failures\n", fails);
