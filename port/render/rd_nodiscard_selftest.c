@@ -60,6 +60,7 @@
  * ICO_RD_VU_NODISCARD_SABOTAGE (tests, rd_nodiscard_run.c): alpha, the
  * CPU's proof does not look at the alpha test (the alpha case then draws
  * through a twin and the pictures differ); module, the modules not made. */
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -335,39 +336,62 @@ static bool ruleRefuses(void)
  * clear's, so a depth the twin wrote and the build did not shows in the
  * colour.  Each case is a frame of its own (a later case drawn over an
  * earlier one could hide a difference), replayed through the twins and
- * without them.  Corners in model space; the screen matrix (sceneBlock)
- * makes h = (16 x + 2048 z, 16 y + 2048 z, 3145728 (z - 1), z): h.w = z, GS
- * X = 2048 + 16 x / z, GS Z below 0 for 0 < z < 1. */
+ * without them.  Every frame runs whatever an earlier one found; each case
+ * logs what it should cover and what it drew.  Corners sized to the frame
+ * (caseCorners); the screen matrix (sceneBlock) makes h = (16 x + 2048 z,
+ * 16 y + 2048 z, 3145728 (z - 1), z): h.w = z, GS X = 2048 + 16 x / z, GS
+ * Z below 0 for 0 < z < 1. */
 #define NC_VERTS 6
+
+/* A corner: in front of or behind the eye by its screen direction (u, v,
+   fractions of R, the frame's half-size in GS pixels: min(w, h) / 2) and
+   its model depth z, model x = u R z / 16 and y = v R z / 16, so it lands
+   (or, behind the eye, projects through it) at (u, v) R from the frame's
+   centre whatever the frame's size; or (NC_M) model space as given.  The
+   cases are sized to the frame at run time (issue 179, the second review's
+   run: SCENE 912x512, where constants made for 512x448 drew nothing) */
+#define NC_M 1.0f
+#define NC_R 0.0f
 
 typedef struct NcCase {
     const char *name;
-    float c[3][3];
+    float c[3][4]; /* u or x, v or y, z, NC_R or NC_M */
 } NcCase;
 
+/* the "nearly" offset, a fraction of R: a triangle with an edge on a view
+   ray has its plane through the eye, so it covers no pixel on any device,
+   and one with an edge near one covers a sliver as wide as the offset; at
+   a quarter of R every case covers 57 texel centres or more at 320x224 and
+   313 or more at 912x512 (worked out on the CPU with the clip and the
+   projection below) */
+#define NC_D 0.25f
+
 static const NcCase kClip[] = {
-    /* an edge exactly on a view ray puts the triangle's plane through the
-       eye, so it projects to a line and draws nothing on any device (and
-       a check whose case draws nothing tests nothing): the cases near a
-       view ray are a quarter unit off it, their in and out corners' divided
-       x and y nearly equal (the trigger vu_common.hlsli's comment gives for
-       Mesa's clipper: their factor near 0 / 0).  Every case covers pixel
-       centres at 320 x 224 and up, clipped at GS Z 0 (worked on the CPU:
-       14 for the sliver, 37 and up for the rest) */
-    {"an edge nearly on the centre view ray", {{0, 0, 2}, {0, 0.25f, -1}, {4, 3, 2}}},
-    {"an edge on a view ray, divided x alike", {{0, 2, 2}, {0, 3, -1}, {4, -2, 2}}},
-    {"an edge on a view ray, divided y alike", {{2, 0, 2}, {3, 0, -1}, {-2, 4, 2}}},
-    {"an edge nearly on an off-centre view ray", {{2, 2, 2}, {-1, -1.25f, -1}, {-3, 4, 2}}},
-    {"a corner at w = 0", {{0, 0, 2}, {3, 2, 0}, {-3, 2, 2}}},
-    {"a corner just behind the eye (w = -0.001)", {{-3, -3, 2}, {3, -3, 2}, {0, 2, -0.001f}}},
-    {"a corner far behind the eye (w = -1290)", {{-3, -3, 2}, {3, -3, 2}, {100, 50, -1290}}},
-    {"two corners behind the eye", {{0, 0, 2}, {3, -1, -1}, {-2, 3, -0.5f}}},
-    {"every w above 0, clipped at GS Z 0", {{-4, -4, 0.5f}, {4, -4, 2}, {0, 4, 2}}},
+    {"an edge nearly on the centre view ray",
+     {{0, 0, 2, NC_R}, {NC_D, NC_D, -1, NC_R}, {0.7f, 0.5f, 2, NC_R}}},
+    {"an edge on a view ray, divided x alike",
+     {{0, 0.3f, 2, NC_R}, {0, 0.6f, -1, NC_R}, {0.6f, -0.3f, 2, NC_R}}},
+    {"an edge on a view ray, divided y alike",
+     {{0.3f, 0, 2, NC_R}, {0.6f, 0, -1, NC_R}, {-0.3f, 0.6f, 2, NC_R}}},
+    {"an edge nearly on an off-centre view ray",
+     {{0.3f, 0.3f, 2, NC_R}, {0.3f + NC_D, 0.3f - NC_D, -1, NC_R}, {-0.4f, 0.6f, 2, NC_R}}},
+    {"a corner at w = 0", {{0, 0, 2, NC_R}, {3, 2, 0, NC_M}, {-0.4f, 0.3f, 2, NC_R}}},
+    {"a corner just behind the eye (w = -0.001)",
+     {{-0.4f, -0.4f, 2, NC_R}, {0.4f, -0.4f, 2, NC_R}, {0, 2, -0.001f, NC_M}}},
+    {"a corner far behind the eye (w = -1290)",
+     {{-0.4f, -0.4f, 2, NC_R}, {0.4f, -0.4f, 2, NC_R}, {100, 50, -1290, NC_M}}},
+    {"two corners behind the eye",
+     {{0, 0, 2, NC_R}, {0.8f, -0.4f, -1, NC_R}, {-0.6f, 0.8f, -0.5f, NC_R}}},
+    {"every w above 0, clipped at GS Z 0",
+     {{-0.5f, -0.5f, 0.5f, NC_R}, {0.5f, -0.5f, 2, NC_R}, {0, 0.5f, 2, NC_R}}},
     {"every w above 0, an edge nearly on a view ray clipped at GS Z 0",
-     {{0, 0.125f, 0.25f}, {0, 0, 2}, {4, 3, 2}}},
-    {"a corner off the GS range in X (ftoi4 saturated)", {{-3, -3, 2}, {1.0e6f, 0, 2}, {0, 3, 2}}},
-    {"a sliver nearly on the centre view ray", {{0, 0, 2}, {0, 0.5f, -1}, {0.5f, 0, 2}}},
-    {"a large triangle across the frame and the eye", {{-60, -12, 2}, {60, -12, 2}, {0, 40, -3}}},
+     {{NC_D, 0, 0.25f, NC_R}, {0, 0, 2, NC_R}, {0.6f, 0.4f, 2, NC_R}}},
+    {"a corner off the GS range in X (ftoi4 saturated)",
+     {{-0.4f, -0.4f, 2, NC_R}, {1.0e6f, 0, 2, NC_M}, {0, 0.4f, 2, NC_R}}},
+    {"a sliver nearly on the centre view ray",
+     {{0, 0, 2, NC_R}, {NC_D / 4, NC_D, -1, NC_R}, {0.05f, 0, 2, NC_R}}},
+    {"a large triangle across the frame and the eye",
+     {{-1.5f, -0.3f, 2, NC_R}, {1.5f, -0.3f, 2, NC_R}, {0, 0.6f, -3, NC_R}}},
 };
 #define NC_CASES ((int)(sizeof(kClip) / sizeof(kClip[0])))
 /* the frames: every case at codes 32 and 36, untextured (vu_ps) and textured
@@ -376,9 +400,96 @@ static const NcCase kClip[] = {
 #define NC_CASE(k) ((k) / 4)
 #define NC_CODE(k) (((k) / 2) % 2)
 #define NC_TEXA(k) ((k) % 2)
+static const char *const kFormWords[4] = {"32", "32t", "36", "36t"};
+
+/* case k's three corners in model space on a frame w x h GS pixels (the
+   tests' sabotage =empty: case 1 moved off the frame) */
+static void caseCorners(int k, uint32_t w, uint32_t h, float out[3][3])
+{
+    const float r = (float)(w < h ? w : h) * 0.5f;
+    for (int v = 0; v < 3; v++) {
+        const float *c = kClip[k].c[v];
+        if (c[3] == NC_M) {
+            out[v][0] = c[0];
+            out[v][1] = c[1];
+        } else {
+            out[v][0] = c[0] * r * c[2] / 16.0f;
+            out[v][1] = c[1] * r * c[2] / 16.0f;
+        }
+        out[v][2] = c[2];
+        if (k == 0 && rd__nd_sabotage_empty()) {
+            out[v][1] += 1000.0f; /* the tests' case off the frame */
+        }
+    }
+}
+
+/* The texel centres case corners c should cover on SCENE t, by the vertex
+   stage's maths: h = (16 x + 2048 z, 16 y + 2048 z, 3145728 (z - 1), z)
+   (sceneBlock), clipped where the depth is below GS Z 0 (h.z < 0: the
+   GPU's near plane; h.w = z >= 1 > 0 there), projected GS X = h.x / h.w
+   and mapped to texels about the frame's centre (GS 2048, the draw offset
+   2048 - w / 2: rd_replay.c).  Not the rasteriser's own rules (its grid,
+   its tie-breaking, a back-facing winding's drop): an estimate, logged
+   beside what was drawn so a mismatch shows itself */
+static uint64_t expectedTexels(const float c[3][3], const RdTargetRec *t)
+{
+    float p[4][2];
+    int n = 0;
+    for (int i = 0; i < 3; i++) {
+        const float *a = c[i], *b = c[(i + 1) % 3];
+        const bool ain = a[2] >= 1.0f, bin = b[2] >= 1.0f;
+        if (ain && n < 4) {
+            p[n][0] = 16.0f * a[0] / a[2];
+            p[n][1] = 16.0f * a[1] / a[2];
+            n++;
+        }
+        if (ain != bin && n < 4) {
+            const float s = (1.0f - a[2]) / (b[2] - a[2]);
+            p[n][0] = 16.0f * (a[0] + s * (b[0] - a[0]));
+            p[n][1] = 16.0f * (a[1] + s * (b[1] - a[1]));
+            n++;
+        }
+    }
+    if (n < 3 || t->w == 0 || t->h == 0) {
+        return 0;
+    }
+    const double sx = (double)t->tw / t->w, sy = (double)t->th / t->h;
+    double lo[2] = {1e30, 1e30}, hi[2] = {-1e30, -1e30};
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < 2; j++) {
+            const double g = (double)p[i][j] + (j ? t->h : t->w) * 0.5;
+            lo[j] = g < lo[j] ? g : lo[j];
+            hi[j] = g > hi[j] ? g : hi[j];
+        }
+    }
+    const double x0 = lo[0] * sx < 0.0 ? 0.0 : lo[0] * sx, y0 = lo[1] * sy < 0.0 ? 0.0 : lo[1] * sy;
+    const double x1 = hi[0] * sx > t->tw ? t->tw : hi[0] * sx;
+    const double y1 = hi[1] * sy > t->th ? t->th : hi[1] * sy;
+    uint64_t count = 0;
+    for (uint32_t ty = (uint32_t)y0; (double)ty < y1; ty++) {
+        const double gy = ((double)ty + 0.5) / sy - t->h * 0.5;
+        for (uint32_t tx = (uint32_t)x0; (double)tx < x1; tx++) {
+            const double gx = ((double)tx + 0.5) / sx - t->w * 0.5;
+            int sign = 0;
+            bool in = true;
+            for (int i = 0; i < n && in; i++) {
+                const float *a = p[i], *b = p[(i + 1) % n];
+                const double e =
+                    ((double)b[0] - a[0]) * (gy - a[1]) - ((double)b[1] - a[1]) * (gx - a[0]);
+                const int s = e > 0.0 ? 1 : e < 0.0 ? -1 : 0;
+                if (s != 0 && sign != 0 && s != sign) {
+                    in = false;
+                }
+                sign = sign != 0 ? sign : s;
+            }
+            count += in && sign != 0;
+        }
+    }
+    return count;
+}
 
 /* a mesh of the prelit layout from corners (NC_VERTS: a triangle in both
-   windings, or the probe's two) */
+   windings, two strips of one triangle each, or the probe's two) */
 static RdMesh clipMesh(const float (*c)[3], int n, float shade)
 {
     static float q[1 + NC_VERTS * RD_VU_QW_PRELIT][4];
@@ -405,9 +516,9 @@ static RdMesh clipMesh(const float (*c)[3], int n, float shade)
 }
 
 /* case k's frame: the clear, the state, the case at code (32 or 36), the
-   probe; mesh.id 0: the probe alone */
+   probe; mesh.id 0: no case; withProbe false: no probe */
 static bool clipFrame(RdFrame *f, uint32_t scene, uint32_t w, uint32_t h, RdMesh mesh, uint8_t code,
-                      RdMesh probe, RdTex tex)
+                      RdMesh probe, RdTex tex, bool withProbe)
 {
     static const uint8_t kClear[4] = {0, 0, 0, 0x80};
     memset(f, 0, sizeof(*f));
@@ -434,46 +545,94 @@ static bool clipFrame(RdFrame *f, uint32_t scene, uint32_t w, uint32_t h, RdMesh
     if (tex.id) {
         ok = ok && pushTexa(f, tex);
     }
-    /* no case (mesh.id 0): the probe alone, what a case that drew nothing
-       leaves */
     ok = ok && (mesh.id == 0 || pushMesh(f, mesh, code, false, 0.0f, 1u)) &&
-         rd__st_push(f, 0, RDC_TEXTURE_OFF) && rd__st_push1(f, 0, RDC_ZWRITE, RD_ZWRITE_OFF) &&
-         pushMesh(f, probe, 34, false, 0.0f, 2u);
+         rd__st_push(f, 0, RDC_TEXTURE_OFF);
+    if (withProbe) {
+        ok = ok && rd__st_push1(f, 0, RDC_ZWRITE, RD_ZWRITE_OFF) &&
+             pushMesh(f, probe, 34, false, 0.0f, 2u);
+    }
     return ok;
 }
 
-/* the texels of two pictures that differ */
-static uint64_t texelsDiffer(const uint8_t *a, const uint8_t *b, size_t size)
+/* the texels of two pictures that differ, and the first (its byte offset
+   into *first when not NULL and none was set) */
+static uint64_t texelsDiffer(const uint8_t *a, const uint8_t *b, size_t size, size_t *first)
 {
     uint64_t n = 0;
     for (size_t i = 0; i + 4u <= size; i += 4u) {
-        n += memcmp(a + i, b + i, 4u) != 0;
+        if (memcmp(a + i, b + i, 4u) != 0) {
+            if (n == 0u && first != NULL) {
+                *first = i;
+            }
+            n++;
+        }
     }
     return n;
 }
 
-/* the check on SCENE t (a, b: its two pictures' buffers): true when every
-   case drew (its picture without the twins not the probe's alone) and its
-   pictures are the same; else *why the first case that differs or drew
-   nothing.  Only the frames whose case drew count their passes. */
+/* the texels of a picture that are not the colour at px (the clear's) */
+static uint64_t texelsNot(const uint8_t *a, size_t size, const uint8_t px[4])
+{
+    uint64_t n = 0;
+    for (size_t i = 0; i + 4u <= size; i += 4u) {
+        n += memcmp(a + i, px, 4u) != 0;
+    }
+    return n;
+}
+
+/* text appended at at (kept below size), the new end */
+static size_t appendf(char *out, size_t size, size_t at, const char *fmt, ...)
+{
+    if (at + 1u >= size) {
+        return at;
+    }
+    va_list ap;
+    va_start(ap, fmt);
+    const int n = vsnprintf(out + at, size - at, fmt, ap);
+    va_end(ap);
+    if (n < 0) {
+        return at;
+    }
+    return at + (size_t)n < size ? at + (size_t)n : size - 1u;
+}
+
+/* a frame replayed without the twins, read into px */
+static bool plainRead(RdFrame *f, RdTargetRec *t, uint8_t *px, size_t size)
+{
+    rd__nd_hold(false);
+    const bool ok = replayRead(f, t, px, size);
+    rd__frame_free(f);
+    return ok;
+}
+
+/* The check on SCENE t (a, b: its two pictures' buffers): every frame (13
+   cases x codes 32 and 36 x untextured and textured, each case's triangle
+   in both windings) is drawn, whatever an earlier one found.  Per case one
+   line: the texels it should cover (expectedTexels), the texels each frame
+   drew through the ordinary entry (its picture without the twins against
+   the probe's alone), the texels drawn at code 32 without the probe
+   (against the clear: whether the probe hid the case), and the texels each
+   frame's pictures differ by with the twins.  True when every frame drew
+   and none differs; else *why names every frame that drew nothing ("not
+   tested") and the first that differs.  Only a frame whose case drew
+   counts its passes. */
 static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, RdTex tex, char *why,
                          size_t whySize, uint64_t *clipDraws)
 {
     static const uint8_t kCodes[2] = {32, 36};
+    static const RdTex kNone = {0};
+    static const RdMesh kNoCase = {0};
     RdMesh mesh[NC_CASES];
+    uint64_t expect[NC_CASES];
     bool ok = true;
     for (int k = 0; k < NC_CASES; k++) {
         float c[NC_VERTS][3];
-        for (int v = 0; v < 3; v++) {
-            memcpy(c[v], kClip[k].c[v], sizeof(c[v]));
-            if (k == 0 && rd__nd_sabotage_empty()) {
-                c[v][1] += 1000.0f; /* the tests' case off the frame */
-            }
-        }
-        /* the other winding: corners 0, 2, 1 */
-        memcpy(c[3], kClip[k].c[0], sizeof(c[3]));
-        memcpy(c[4], kClip[k].c[2], sizeof(c[4]));
-        memcpy(c[5], kClip[k].c[1], sizeof(c[5]));
+        caseCorners(k, t->w, t->h, c);
+        expect[k] = expectedTexels((const float (*)[3])c, t);
+        /* the other winding, a strip of its own: corners 0, 2, 1 */
+        memcpy(c[3], c[0], sizeof(c[3]));
+        memcpy(c[4], c[2], sizeof(c[4]));
+        memcpy(c[5], c[1], sizeof(c[5]));
         mesh[k] = clipMesh((const float (*)[3])c, NC_VERTS, (float)(30 + 9 * k));
         ok = ok && mesh[k].id;
     }
@@ -485,18 +644,18 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
     const RdMesh probe = clipMesh(pc, NC_VERTS, 200.0f);
     ok = ok && probe.id;
     const uint32_t scene = rd_target(RD_TARGET_SCENE).id;
-    bool clean = ok;
-    if (!ok) {
+    uint8_t *alone = malloc(size), *aloneTex = NULL;
+    bool clean = ok && alone != NULL;
+    if (!clean) {
         snprintf(why, whySize, "its frames could not be built");
     }
     /* the pipelines first, every frame's, through the twins and not */
     rd__nd_hold(true);
     rd__nd_clipper_check(true);
-    static const RdTex kNone = {0};
-    for (int k = 0; ok && k < NC_FRAMES; k++) {
+    for (int k = 0; clean && k < NC_FRAMES; k++) {
         RdFrame f;
         if (clipFrame(&f, scene, t->w, t->h, mesh[NC_CASE(k)], kCodes[NC_CODE(k)], probe,
-                      NC_TEXA(k) ? tex : kNone)) {
+                      NC_TEXA(k) ? tex : kNone, true)) {
             rd__replay_set_window(UINT32_MAX, 0);
             rd__pipeline_gather(true);
             (void)rd__replay_frame(&f, 0, false);
@@ -506,45 +665,61 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
         rd__frame_free(&f);
     }
     rhi_wait_idle();
-    if (ok && !rhi_device_lost()) {
+    if (clean && !rhi_device_lost()) {
         bool stopped = false;
         (void)rd__pipeline_create_gathered(&stopped);
     }
     uint64_t tw = 0, rf[RD_ND_REASONS];
-    rd__nd_take(&tw, rf);
-    (void)rd__nd_take_clip();
-    *clipDraws = 0;
     uint64_t ent[2] = {0, 0}, entAll[2] = {0, 0};
-    rd__nd_take_entries_clip(ent);
-    /* the probe alone, untextured and textured form, without the twins: a
-       case's picture equal to it drew nothing */
-    static const RdMesh kNoCase = {0};
-    uint8_t *alone[2] = {malloc(size), malloc(size)};
-    for (int x = 0; clean && x < 2; x++) {
+    /* the probe alone, untextured and textured form (the same picture: the
+       probe is drawn untextured), and the clear alone (its colour), without
+       the twins */
+    uint8_t clearPx[4] = {0, 0, 0, 0};
+    for (int x = 0; clean && x < 3; x++) {
         RdFrame f;
-        const bool built = alone[x] != NULL && clipFrame(&f, scene, t->w, t->h, kNoCase, kCodes[0],
-                                                         probe, x ? tex : kNone);
-        rd__nd_hold(false);
-        if (!built || !replayRead(&f, t, alone[x], size)) {
-            snprintf(why, whySize, "its frame of the probe alone could not be %s",
-                     built ? "drawn" : "built");
-            clean = false;
+        uint8_t *dst = x == 0 ? alone : x == 1 ? b : a;
+        const bool built = clipFrame(&f, scene, t->w, t->h, kNoCase, kCodes[0], probe,
+                                     x == 1 ? tex : kNone, x < 2);
+        if (!built) {
+            rd__frame_free(&f);
         }
-        rd__frame_free(&f);
+        if (!built || !plainRead(&f, t, dst, size)) {
+            snprintf(why, whySize, "its frame of the %s could not be %s",
+                     x < 2 ? "probe alone" : "clear alone", built ? "drawn" : "built");
+            clean = false;
+        } else if (x == 1 && memcmp(alone, b, size) != 0) {
+            /* the textured form's own (the probe is untextured in both:
+               not expected, kept and said) */
+            aloneTex = malloc(size);
+            if (aloneTex == NULL) {
+                snprintf(why, whySize, "no memory for the probe's textured picture");
+                clean = false;
+            } else {
+                memcpy(aloneTex, b, size);
+                rd__log("discard-free twins: the clipper check's probe alone draws differently "
+                        "in the textured form (%llu texels): each form compared with its own",
+                        (unsigned long long)texelsDiffer(alone, b, size, NULL));
+            }
+        } else if (x == 2) {
+            memcpy(clearPx, a, 4);
+        }
     }
     (void)rd__nd_take_clip();
     rd__nd_take_entries_clip(ent);
     rd__nd_take(&tw, rf);
-    uint64_t drawn[NC_CASES];
+    uint64_t drawn[NC_FRAMES], differ[NC_FRAMES], bare[NC_CASES];
     memset(drawn, 0, sizeof(drawn));
-    int reached = 0;
-    for (int k = 0; clean && k < NC_FRAMES; k++) {
+    memset(differ, 0, sizeof(differ));
+    memset(bare, 0, sizeof(bare));
+    bool device = clean, empty = false, differs = false, unmade = false;
+    char diffWhy[96] = "", unmadeWhy[64] = "";
+    for (int k = 0; device && k < NC_FRAMES; k++) {
         RdFrame f;
         if (!clipFrame(&f, scene, t->w, t->h, mesh[NC_CASE(k)], kCodes[NC_CODE(k)], probe,
-                       NC_TEXA(k) ? tex : kNone)) {
+                       NC_TEXA(k) ? tex : kNone, true)) {
             rd__frame_free(&f);
-            snprintf(why, whySize, "its frame of %s could not be built", kClip[NC_CASE(k)].name);
-            clean = false;
+            snprintf(why, whySize, "its frame of case %d could not be built", NC_CASE(k) + 1);
+            device = false;
             break;
         }
         rd__nd_hold(true);
@@ -553,68 +728,97 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
         const uint64_t frameClip = rd__nd_take_clip();
         rd__nd_take_entries_clip(ent);
         rd__nd_take(&tw, rf);
-        if (rf[RD_ND_UNMADE] != 0u) {
-            snprintf(why, whySize, "%s at code %u: no pipeline of its twin", kClip[NC_CASE(k)].name,
-                     (unsigned)kCodes[NC_CODE(k)]);
-            clean = false;
+        if (rf[RD_ND_UNMADE] != 0u && !unmade) {
+            snprintf(unmadeWhy, sizeof(unmadeWhy), "case %d at %s: no pipeline of its twin",
+                     NC_CASE(k) + 1, kFormWords[k % 4]);
+            unmade = true;
         }
         rd__nd_clipper_check(false);
-        rd__nd_hold(false);
-        const bool okB = okA && replayRead(&f, t, b, size);
-        rd__frame_free(&f);
+        const bool okB = okA && plainRead(&f, t, b, size);
+        rd__frame_free(&f); /* (plainRead freed it when it ran) */
         if (okA && k == 0 && rd__nd_sabotage_clipper()) {
             a[size / 2u] ^= 0x40u; /* the tests' positive control: a difference */
         }
-        /* the texels the case drew (its picture without the twins against
-           the probe's alone), the fewest of its frames kept for the log */
-        const uint64_t texels = okB ? texelsDiffer(b, alone[NC_TEXA(k)], size) : 0u;
-        if (k % 4 == 0 || texels < drawn[NC_CASE(k)]) {
-            drawn[NC_CASE(k)] = texels;
-        }
-        reached = NC_CASE(k) + 1;
         if (!okA || !okB) {
-            snprintf(why, whySize, "the device failed in its replays (%s at code %u)",
-                     kClip[NC_CASE(k)].name, (unsigned)kCodes[NC_CODE(k)]);
-            clean = false;
-        } else if (clean && texels == 0u) {
-            snprintf(why, whySize, "%s at code %u%s drew nothing: not tested",
-                     kClip[NC_CASE(k)].name, (unsigned)kCodes[NC_CODE(k)],
-                     NC_TEXA(k) ? " textured" : "");
-            clean = false;
-        } else if (clean && memcmp(a, b, size) != 0) {
-            size_t first = 0;
-            while (first < size && a[first] == b[first]) {
-                first++;
-            }
-            snprintf(why, whySize, "%s at code %u differs, the first at texel %u,%u",
-                     kClip[NC_CASE(k)].name, (unsigned)kCodes[NC_CODE(k)],
-                     (unsigned)((first / 4u) % t->tw), (unsigned)((first / 4u) / t->tw));
-            clean = false;
+            snprintf(why, whySize, "the device failed in its replays (case %d at %s)",
+                     NC_CASE(k) + 1, kFormWords[k % 4]);
+            device = false;
+            break;
         }
-        if (texels != 0u) {
+        size_t first = 0;
+        drawn[k] = texelsDiffer(b, NC_TEXA(k) && aloneTex != NULL ? aloneTex : alone, size, NULL);
+        differ[k] = texelsDiffer(a, b, size, &first);
+        empty = empty || drawn[k] == 0u;
+        if (differ[k] != 0u && !differs) {
+            snprintf(diffWhy, sizeof(diffWhy), "case %d at %s differs, the first at texel %u,%u",
+                     NC_CASE(k) + 1, kFormWords[k % 4], (unsigned)((first / 4u) % t->tw),
+                     (unsigned)((first / 4u) / t->tw));
+            differs = true;
+        }
+        if (drawn[k] != 0u) {
             /* the passes of a frame whose case drew (the probe, code 34,
                is not of this class) */
             *clipDraws += frameClip;
             entAll[0] += ent[0];
             entAll[1] += ent[1];
         }
-    }
-    if (reached > 0) {
-        /* which cases the device really drew, in its log once */
-        char line[256];
-        size_t at = 0;
-        line[0] = '\0';
-        for (int c = 0; c < reached && at < sizeof(line); c++) {
-            const int n = snprintf(line + at, sizeof(line) - at, "%s%llu", c ? ", " : "",
-                                   (unsigned long long)drawn[c]);
-            at += n > 0 ? (size_t)n : 0u;
+        if (k % 4 == 3) {
+            /* the case at code 32 without the probe, against the clear:
+               whether the case reached the target at all */
+            RdFrame g;
+            const int c = NC_CASE(k);
+            if (clipFrame(&g, scene, t->w, t->h, mesh[c], kCodes[0], probe, kNone, false) &&
+                plainRead(&g, t, b, size)) {
+                bare[c] = texelsNot(b, size, clearPx);
+            } else {
+                rd__frame_free(&g);
+            }
+            rd__log("discard-free twins: the clipper check, case %d of %d (%s) on SCENE %ux%u at "
+                    "%ux%u texels: expected about %llu texels; drawn %llu, %llu, %llu, %llu "
+                    "(codes 32, 32 textured, 36, 36 textured, against the probe alone), %llu "
+                    "without the probe (code 32, against the clear); differing with the twins "
+                    "%llu, %llu, %llu, %llu",
+                    c + 1, NC_CASES, kClip[c].name, t->w, t->h, t->tw, t->th,
+                    (unsigned long long)expect[c], (unsigned long long)drawn[k - 3],
+                    (unsigned long long)drawn[k - 2], (unsigned long long)drawn[k - 1],
+                    (unsigned long long)drawn[k], (unsigned long long)bare[c],
+                    (unsigned long long)differ[k - 3], (unsigned long long)differ[k - 2],
+                    (unsigned long long)differ[k - 1], (unsigned long long)differ[k]);
         }
-        rd__log("discard-free twins: the clipper check's texels drawn by each case (the fewest "
-                "of its frames, %d of %d cases reached): %s",
-                reached, NC_CASES, line);
     }
-    free(alone[0]);
-    free(alone[1]);
+    if (device && (empty || differs || unmade)) {
+        /* every frame that drew nothing, then the first difference */
+        size_t at = 0;
+        why[0] = '\0';
+        if (empty) {
+            at = appendf(why, whySize, at, "drew nothing (not tested):");
+            bool any = false;
+            for (int c = 0; c < NC_CASES; c++) {
+                bool named = false;
+                for (int x = 0; x < 4; x++) {
+                    if (drawn[c * 4 + x] != 0u) {
+                        continue;
+                    }
+                    if (!named) {
+                        at = appendf(why, whySize, at, "%scase %d at %s", any ? "; " : " ", c + 1,
+                                     kFormWords[x]);
+                    } else {
+                        at = appendf(why, whySize, at, ", %s", kFormWords[x]);
+                    }
+                    named = any = true;
+                }
+            }
+        }
+        if (differs) {
+            at = appendf(why, whySize, at, "%s%s", at ? "; " : "", diffWhy);
+        }
+        if (unmade) {
+            at = appendf(why, whySize, at, "%s%s", at ? "; " : "", unmadeWhy);
+        }
+        clean = false;
+    } else if (!device) {
+        clean = false;
+    }
     if (clean && *clipDraws == 0u) {
         snprintf(why, whySize, "no camera rule pass of its frames drew through a twin");
         clean = false;
@@ -624,6 +828,8 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
         clean = false;
     }
     rd__nd_clipper_check(false);
+    free(alone);
+    free(aloneTex);
     for (int k = 0; k < NC_CASES; k++) {
         if (mesh[k].id) {
             rd_destroy_vu_mesh(mesh[k]);
@@ -771,7 +977,7 @@ void rd__nd_selftest(RdTargetRec *t)
     }
     /* the floor passed: the device's clipper measured (a property of the
        device, never a fault: "not clean" keeps the floor alone) */
-    char clipWhy[200] = "";
+    char clipWhy[400] = "";
     uint64_t clipDraws = 0;
     bool clipClean = false;
     if (pass) {

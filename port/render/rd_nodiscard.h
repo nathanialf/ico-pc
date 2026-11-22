@@ -68,17 +68,25 @@
  * edge nearly on a view ray, a corner saturated in X, a sliver, a large
  * triangle across the frame), each at code 32 and code 36, untextured and
  * textured, both windings, each a frame of its own with a depth probe after
- * it, through the twins and without them, the pictures byte for byte.  An
- * edge exactly on a view ray would put its triangle's plane through the
- * eye, so it would draw nothing on any device: every case covers pixels
- * (worked out on the CPU), and every case's picture without the twins must
- * differ from the probe's alone (a case that drew nothing tests nothing:
- * "not clean (... drew nothing: not tested)"); only a frame whose case drew
- * counts its passes, and each twin entry must have drawn a case's own pass
- * (its depth probe, code 34, does not count).  The texels each case drew
- * are logged once.  All the same: "clean", and the camera rule's passes
- * take a twin too (counted apart: "of them by the clipper check").  Any
- * difference: "not clean", the first differing case logged, clip mode none
+ * it, through the twins and without them, the pictures byte for byte.  The
+ * corners are sized to the frame at run time (a corner by its screen
+ * direction as a fraction of the frame's half-size and its depth,
+ * caseCorners).  A triangle with an edge on a view ray has its plane
+ * through the eye, so it draws nothing on any device; one with an edge
+ * near one draws a sliver as wide as the offset, a quarter of the
+ * half-size here.  Every frame runs, whatever an earlier one found, and
+ * each case logs one line: the texels it should cover (expectedTexels: the
+ * vertex stage's clip at GS Z 0 and projection, an estimate), the texels
+ * each of its four frames drew through the ordinary entry against the
+ * probe alone, the texels code 32 drew without the probe against the clear
+ * (whether the probe hid it), and the texels each frame differs by with
+ * the twins.  A frame that drew nothing tests nothing: "not clean (drew
+ * nothing (not tested): case N at 32, 32t, ...)", every such frame named;
+ * only a frame whose case drew counts its passes, and each twin entry must
+ * have drawn a case's own pass (the depth probe, code 34, does not count).
+ * All drawn and the same: "clean", and the camera rule's passes take a
+ * twin too (counted apart: "of them by the clipper check").  Any
+ * difference: "not clean", the first differing frame named, clip mode none
  * alone; never "failed" in the mark (a property of the device), the verdict
  * kept on the mark's second line with the version and logged at the next
  * start.  Evidence, not a proof: it covers the clipper's branches (the w and
@@ -95,11 +103,12 @@
  * tests; ICO_RD_VU_NODISCARD_SABOTAGE=clipper changes the check's first
  * case's picture through the twins in one byte, =empty moves its first
  * case off the frame (its positive controls: the check must say not
- * clean).  The "clean" lavapipe measured on 2026-11-22 was the case set
- * before this one: five of its 13 cases drew nothing at 512 x 448 (the
- * three edges exactly on a view ray, the sliver on one, the large triangle
- * below the frame), so it rested on eight; the merge check measures this
- * set.
+ * clean).  The "clean" lavapipe measured on 2026-11-22 was an earlier case
+ * set in model units, five of whose cases covered no pixel; the next set's
+ * first case, an edge 0.25 model units off the centre view ray, drew
+ * nothing on lavapipe at 912 x 512 where the CPU expected about 47 texels.
+ * This set is sized to the frame and logs expected against drawn per case
+ * so a mismatch explains itself.
  * The twins' pipelines are made in the background between pictures
  * (rd_pipeline.c rd__pipeline_twin, rd__pipeline_twin_tick: a batch on the
  * workers at low priority, as the start-up set's background finisher, or

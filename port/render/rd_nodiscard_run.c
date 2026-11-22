@@ -63,7 +63,7 @@ static struct {
        its first differing case's words, the check running (its frames take
        the camera rule's passes as a clean clipper would), the tests' fake */
     int clipper;
-    char clipWhy[160];
+    char clipWhy[320];
     bool clipCheck;
     int clipFake; /* ICO_RD_VU_NODISCARD_CLIPPER: -1 none, else RD_ND_CLIP_* */
 } s_n;
@@ -552,11 +552,11 @@ void rd__nd_clipper_verdict(bool clean, const char *why)
     s_n.clipper = clean ? RD_ND_CLIP_CLEAN : RD_ND_CLIP_DIRTY;
     snprintf(s_n.clipWhy, sizeof(s_n.clipWhy), "%s", why != NULL ? why : "");
     if (s_n.clipFake >= 0 && s_n.clipFake != s_n.clipper) {
-        char measured[160];
+        char measured[320];
         snprintf(measured, sizeof(measured), "%s", s_n.clipWhy);
         s_n.clipper = s_n.clipFake;
         snprintf(s_n.clipWhy, sizeof(s_n.clipWhy),
-                 "ICO_RD_VU_NODISCARD_CLIPPER; measured %s%s%.100s", clean ? "clean" : "not clean",
+                 "ICO_RD_VU_NODISCARD_CLIPPER; measured %s%s%.200s", clean ? "clean" : "not clean",
                  measured[0] ? ": " : "", measured);
     }
 }

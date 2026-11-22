@@ -572,14 +572,16 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   SKIP.
 - `rd_vuprepass_selftest_nodiscard`, `_nodiscard_clipper`, `_nodiscard_empty`,
   `_nodiscard_notclean`, `_nodiscard_sabotage`, `_nodiscard_marked`, `_nodiscard_dual`,
-  `_nodiscard_fallback` (the clipper check: `_nodiscard` requires the verdict `clean` (13 cases,
-  each entry through a case's own pass) and the texels-drawn line with every one of the 13 cases
-  above 0; `_nodiscard_empty` its other positive control, `ICO_RD_VU_NODISCARD_SABOTAGE=empty`
-  (the first case off the frame): `not clean (... drew nothing: not tested)`, that case's texels
-  0, clip mode none alone, the mark `counting`;
-  `_nodiscard_clipper` its positive control, `ICO_RD_VU_NODISCARD_SABOTAGE=clipper` (the first
-  case's picture through the twins with one byte altered): `not clean` naming that case, clip mode
-  none alone, the mark `counting`, never `failed`; `_nodiscard_notclean` the verdict faked not
+  `_nodiscard_fallback` (the clipper check: `_nodiscard` requires the verdict `clean` (every
+  frame of the 13 cases drew, each entry through a case's own pass), and cases 1 and 13's lines
+  with all four frames drawn and none differing; `_nodiscard_empty` its other positive control,
+  `ICO_RD_VU_NODISCARD_SABOTAGE=empty` (the first case off the frame): case 1's line expected 0 and
+  drawn 0 in all four frames and without the probe, every case still run (case 13's line), `not
+  clean (drew nothing (not tested): case 1 at 32, 32t, 36, 36t...)`, clip mode none alone, the
+  mark `counting`; `_nodiscard_clipper` its positive control, `ICO_RD_VU_NODISCARD_SABOTAGE=clipper`
+  (the first case's picture through the twins with one byte altered): every case still run, case
+  1's line with 1 texel differing at code 32, `not clean (... case 1 at 32 differs ...)`, clip
+  mode none alone, the mark `counting`, never `failed`; `_nodiscard_notclean` the verdict faked not
   clean, `ICO_RD_VU_NODISCARD_CLIPPER=notclean`, with what was measured, clean, in its line)
   (`rd_nodiscard.cmake`, through `rd_vuprepass_selftest_test` and
   `test/rd_vuprepass_selftest.cmake`; the Arm fakes without dual-source blending): the twins'

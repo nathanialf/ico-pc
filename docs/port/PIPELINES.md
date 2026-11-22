@@ -1813,15 +1813,19 @@ raise the share to at most 90 % and 93 %. `port/render/rd_nodiscard.h` says it a
   in both windings, untextured
   (vu_ps_nodual_nd) and textured under TEXA (vu_texa_ps_nodual_nd), each a frame of its own with
   a depth probe after it (a code 34 quad at GS Z 0, Z write off: a depth the twin wrote and the
-  build did not shows in the colour), through the twins and without them. Every case must have
-  drawn: its picture without the twins differs from the probe's alone (a case that drew nothing
-  compares equal and tests nothing: `not clean (... drew nothing: not tested)`). An edge exactly on
-  a view ray would put its triangle's plane through the eye, so it would draw nothing on any
-  device: the cases near a view ray are a little off it, and every case covers pixels (worked out
-  on the CPU). Only a frame whose case drew counts its passes, and each entry must have drawn a
-  case's own pass through its twin (the depth probe, code 34, does not count). The texels each
-  case drew are logged once (`the clipper check's texels drawn by each case ...`). All byte for
-  byte: `clean`, and the camera rule's passes (no plane, no DATE,
+  build did not shows in the colour), through the twins and without them. The corners are sized
+  to the frame at run time: each by its screen direction, a fraction of the frame's half-size, and
+  its depth (`caseCorners`). A triangle with an edge on a view ray has its plane through the eye
+  and draws nothing on any device; one with an edge near one draws a sliver as wide as the offset
+  (a quarter of the half-size). Every frame runs whatever an earlier one found, and each case logs
+  a line: the texels it should cover (`expectedTexels`: the vertex stage's clip at GS Z 0 and
+  projection, an estimate), the texels each of its four frames drew through the ordinary entry
+  against the probe alone, the texels code 32 drew without the probe against the clear (whether
+  the probe hid it), and the texels each frame differs by with the twins. A frame that drew
+  nothing tests nothing: `not clean (drew nothing (not tested): case N at 32, 32t, ...)`, every
+  such frame named. Only a frame whose case drew counts its passes, and each entry must have drawn
+  a case's own pass through its twin (the depth probe, code 34, does not count). All drawn and
+  byte for byte: `clean`, and the camera rule's passes (no plane, no DATE,
   `ICO_VU_NO_BESIDE`, the alpha test off, not particles) take a twin too, counted apart. Any difference: `not
   clean`, the first differing case logged, clip mode none alone; not a fault (the mark is not
   `failed`), the verdict kept on the mark's second line and said at the next start. It is evidence
@@ -1834,8 +1838,9 @@ raise the share to at most 90 % and 93 %. `port/render/rd_nodiscard.h` says it a
   without a band has been seen to lose a pixel to it: lavapipe measures the check `clean` (13
   cases, 52 passes), and `rd_nodiscard_clean` draws 749 camera rule passes through the twins on
   four fixtures byte for byte. Neither is a proof for another GPU, and that `clean` was measured on
-  the case set before this one, five of whose cases drew nothing at 512 x 448 (three edges exactly
-  on a view ray, the sliver on one, the large triangle below the frame). The check's positive
+  an earlier case set in model units, five of whose cases covered no pixel; the next set's first
+  case (an edge 0.25 model units off the centre view ray) drew nothing on lavapipe at 912 x 512
+  where the CPU expected about 47 texels, which the per-case lines now show directly. The check's positive
   controls show it says `not clean` when a case differs (`ICO_RD_VU_NODISCARD_SABOTAGE=clipper`)
   and when a case draws nothing (`=empty`). The floor's two cases through a twin (plain,
   textured) are shown to draw the same way: the frame without each must differ.
@@ -1901,13 +1906,15 @@ The lines (`rd: ` before each):
   its fallback): the twins are for a device without it)`.
 - `discard-free twins: the clipper check: clean (13 cases crossing the eye plane at codes 32 and
   36, untextured and textured under TEXA, N passes through both twins, the pictures and their
-  depth byte for byte): the camera rule's passes take them too`, or `... not clean (an edge nearly on the centre view ray at code 32 differs, the
-  first at texel X,Y): clip mode none alone takes them (a property of this device, not a fault:
-  nothing written as failed)` (`not clean (an edge nearly on the centre view ray at code 32 drew
-  nothing: not tested)` when a case drew nothing, `not clean (no case of its frames drew through
-  vu_texa_ps_nodual_nd)` when an entry drew none; before it `discard-free twins: the clipper
-  check's texels drawn by each case (the fewest of its frames, 13 of 13 cases reached): 47, 816,
-  ...`; under `ICO_RD_VU_NODISCARD_CLIPPER` the forced verdict with what was
+  depth byte for byte): the camera rule's passes take them too`, or `... not clean (case 1 at 32
+  differs, the first at texel X,Y): clip mode none alone takes them (a property of this device,
+  not a fault: nothing written as failed)` (`not clean (drew nothing (not tested): case 1 at 32,
+  32t, 36, 36t; case 4 at 36)` when frames drew nothing, a difference after it; `not clean (no
+  case of its frames drew through vu_texa_ps_nodual_nd)` when an entry drew none); before it one
+  line a case, `discard-free twins: the clipper check, case K of 13 (<name>) on SCENE WxH at
+  TWxTH texels: expected about E texels; drawn D32, D32t, D36, D36t (codes 32, 32 textured, 36,
+  36 textured, against the probe alone), B without the probe (code 32, against the clear);
+  differing with the twins F32, F32t, F36, F36t`; under `ICO_RD_VU_NODISCARD_CLIPPER` the forced verdict with what was
   measured: `clean (ICO_RD_VU_NODISCARD_CLIPPER; measured not clean: ...)`, `not clean
   (ICO_RD_VU_NODISCARD_CLIPPER; measured clean)`).
 - The 10 s VU line's clause: `; discard-free twins: D draws a picture through them, C of them by
