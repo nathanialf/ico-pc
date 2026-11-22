@@ -483,6 +483,10 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   - the measure: the scene's GPU work (the span less the present's pass and the display wait,
     `rd_ab_scene_ms`): a stream held by the display (every span 40 ms, the wait taking up what
     the scene saves) judged on with it, off with the whole span; the verdict line's words;
+  - the player's notice (`rd_ab_take_notice`): none before a trial, exactly once at the run's
+    first trial, none for the rest of that stage (both subjects' trials), the four later stages,
+    after a renderer made again and its trials, or after a stop; none with nothing allowed, with no
+    stage, in the fixed and alternating modes, or after a stop before any trial;
   - a renderer made again (`rd_ab_forget`): a trial past 16 pairs ended unjudged, every verdict
     and the carried arm forgotten, a record of the earlier renderer not measured, the trials run
     still counted, the stage judged again on the new renderer;
@@ -558,9 +562,9 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   with its draws through them printed and above 0 over the list under each Arm profile (they ran),
   and under corpus 0 draws and "not applicable here" (dual-source blending). `rd_nodiscard_ab_gl`:
   OpenGL (llvmpipe), every fixture at 4:3 1x with `ICO_GL_FAKE_NO_DUAL=1`, above 0 over the list.
-  Only clip mode none takes a twin, on every device ([PIPELINES.md](PIPELINES.md#the-discard-free-twins)),
-  so these runs draw the phone's path; the run with them must have no draw of the clipper check's
-  class (no check without the self-test). `rd_nodiscard_clean`: the shipping path, both runs
+  Without the self-test no clipper check runs, so only clip mode none takes a twin there
+  ([PIPELINES.md](PIPELINES.md#the-discard-free-twins), the floor a `not clean` device keeps); the
+  run with them must have no draw of the clipper check's class. `rd_nodiscard_clean`: the shipping path, both runs
   with `--game-selftests`, so the run with them measures the clipper (lavapipe: clean) and the
   camera rule's passes take a twin: the verdict `clean` required, every target byte for byte, and
   per fixture and profile at least its list line's `clean_min` of that class (the run of

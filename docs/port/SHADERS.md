@@ -136,8 +136,10 @@ take from either ([RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)).
   (`rd__expand_no_dual`)).
 - `_nodual_nd` (`ICO_NO_DUAL=1 ICO_VU_NODISCARD=1`): `vu_ps` and `vu_texa_ps` without the second
   output and with no discard at all (the clip plane's, the side bands', DATE's and the alpha
-  test's left out), the discard-free twins: made only once they are tried, for the passes the
-  renderer proved none of those discards can fire for ([PIPELINES.md](PIPELINES.md#the-discard-free-twins)).
+  test's left out), the discard-free twins: made only once they are tried, for the passes where
+  none of those discards can fire, by the renderer's rule for clip mode none and, on a device
+  whose start-up clipper check measured clean, for the camera rule's passes too
+  ([PIPELINES.md](PIPELINES.md#the-discard-free-twins)).
   Without the define every module is the same byte for byte.
 - `_dstrov` (`ICO_DST_READ=1`) and `_dstatt` (`ICO_DST_READ=2`): the exact blend computed from the
   destination (`port/render/rd_dst_read.c`), for the sprite entries, `fog_lut_ps`,
@@ -1006,7 +1008,8 @@ executable): `tools/spirv_to_glsl.py` runs
 `SKIP_SPIRV_CROSS=1`; [THIRD_PARTY.md](../THIRD_PARTY.md)); nothing of it is linked or shipped.
 `embed_shaders.py` deflates each file (zlib) into the table's `glsl` column, with the text length in
 `glsl_text_len`; the backend inflates it with `rhi_gl_inflate_glsl` (`port/rhi/gl/gl_glsl.c`, miniz)
-when it creates the shader. The deflated GLSL of the 127 translatable modules is about 1.2 MB.
+when it creates the shader. The deflated GLSL of the 220 translatable modules (270 entries, less the 19 below and the 31
+compute builds) is about 2.0 MB.
 
 **The binding map** (observed on the compiled modules; the SPIR-V numbers carry over unchanged):
 
@@ -1033,7 +1036,7 @@ A backend without fragment-shader interlock has no blend path from these modules
 extensions below).
 
 **The extensions** the GLSL asks for (`#extension` lines): `GL_EXT_control_flow_attributes` behind an
-`#if defined` guard (optional) in 38 modules; in the 13 `_dstrov` modules
+`#if defined` guard (optional) in 46 modules; in the 14 `_dstrov` modules
 `GL_ARB_fragment_shader_interlock` or `GL_INTEL_fragment_shader_ordering` behind a guard that ends in
 `#error` (one of the two is required: Mesa's llvmpipe has neither); `GL_ARB_texture_query_samples`
 (required) in `depth_resolve_ps`. No module needs `GL_ARB_enhanced_layouts` (no `layout(offset`).
@@ -1052,7 +1055,7 @@ the same way into `rhi_test_glsl.h`.
 
 | test | checks |
 | --- | --- |
-| `shaders_table` (`port/shaders/test/shaders_table_test.c`) | every embedded entry: SPIR-V with its magic, DXIL a signed DXBC container (none with `ICO_SHADERS_DXIL=OFF`), a known stage and entry, unique names, the expected names present, and with GLSL on a zlib stream for every entry but the 17 of `expectedNoGlsl` |
+| `shaders_table` (`port/shaders/test/shaders_table_test.c`) | every embedded entry: SPIR-V with its magic, DXIL a signed DXBC container (none with `ICO_SHADERS_DXIL=OFF`), a known stage and entry, unique names, the expected names present, and with GLSL on a zlib stream for every entry but the 19 of `expectedNoGlsl` and the compute builds; the table's count (270 entries, 31 of them compute) from its lists |
 | `gs_math` (`gs_math_test.c`) | `gs_math.hlsli` as C against `port/test/gs_blend_test.c`'s formulas and the GS rules for TEXA, the alpha test and the Z mapping: exhaustive where the domain is small; the shared constants pinned; the [integer forms](#integer-forms) against the operators they replace |
 | `shaders_pixel` (`shaders_pixel_test.c`) | `sprite.hlsl`, `blit.hlsl` and `blend_int.hlsl` through the Vulkan RHI, texel by texel against `gs_math.hlsli` as C: untextured, modulate, the alpha test, dual-source lerps, additive with `DF_PREMUL`, PABE, FBA, tinted blits, three integer blends, `blit_vs`'s quarter turns against hand-written corners (`checkTurns`, the pre-rotated present's direction); `shaders_pixel_nodual` (`--nodual`, `ICO_VK_FAKE_NO_DUAL=1`) the two-pass fallback; `shaders_pixel_mali` under `ICO_VK_FAKE_LIMITS=mali` |
 | `spirv_check` (`tools/check_spirv.py --sizes`) | every compiled SPIR-V module under the build's `shaders/`: a vertex shader without a vector of booleans, `OpAny`/`OpAll` or a boolean select, its opcodes inside the envelope's set (`OpLoopMerge`, `OpDot`, `OpLogicalNotEqual`, `OpUndef` named), every module within its size budget (a VU vertex shader's plain variant, a pre-pass entry or record stage `_pre_vs` and a main shader `_main_vs` within the plain one, the sheet text entries `font_sheet_*` within `SHEET_BUDGET`), every mesh program's entry with its `vu_X_plain_vs` (`PROGRAM_ENTRIES`), the largest module of each budget class printed last, no array-typed value (OpLoad, OpStore, OpCompositeConstruct, OpCompositeInsert, OpPhi, OpSelect, OpCopyObject, OpCopyLogical of an array type) and no local array in a vertex shader ([The envelope](#the-envelope)); the sizes and the shape census printed; the module's binary form decoded in Python, no SPIR-V tool needed |

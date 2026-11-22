@@ -1105,7 +1105,7 @@ what each owner registers and why):
 | `port/game/zoom_toggle.c` | `zoom_toggle.state` (Zoom type's latch: zoomed in, the last R2 level, its source and the camera mode; [GAME_FEATURES.md](GAME_FEATURES.md#zoom-type)) | FRESH |
 | `sce/libsndn2/sound.c` (`ico_sound_state_register`) | the EE sequencer's .bss: `sound.vab`, `sound.slot`, `sound.seq`, `sound.com`, `sound.packet`, `sound.iop2ee`, `sound.iop2ee_p`, `sound.se`, `sound.head`, `sound.client`, `sound.vab_hd`, `sound.seq_body`, `sound.hd_rel` (compiled into the sound library, so outside the game's data ranges) | AUDIO; SCAN on the pointer blocks |
 
-Over 4 MB in all (the count is `ico_state_registry_count()`, named in the log when a block is refused), most of it IOP RAM and the SPU2's RAM (2 MB each). SCAN marks a block that may hold host addresses (the
+Over 4 MB in all (the count is `ico_state_registry_count()`, which `state_port.c` logs when the port's blocks are not all registered: `state: the port's blocks are not all registered (N of them are)`), most of it IOP RAM and the SPU2's RAM (2 MB each). SCAN marks a block that may hold host addresses (the
 relocation scans it); AUDIO one copied under the audio lock; CLOCK a counter a load rewinds with
 the game (the Main tick count, and with it the pad script's position); FRESH
 (`ICO_STATE_FRESH`) one that starts from its initial value: a state saved before the block existed

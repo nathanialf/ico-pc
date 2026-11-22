@@ -900,8 +900,9 @@ The discard-free twins' mark (`port/platform/nodiscard_mark.c`;
 [PIPELINES.md](PIPELINES.md#the-discard-free-twins)) is read right after the cull's, by the same
 rules and table (`vu_zero_mark.c`'s pure functions): `logs/nodiscard-mark.txt` holds `trying <v>`
 (before the twins' two modules are made), `counting <v>` (their self-test passed), `on <v>` (250
-pictures drawn with them), `failed <v>` (a module or a pipeline not made, or the self-test refused
-them) or `blocked <v>`; the renderer gets `ICO_NODISCARD_BLOCK`, `ICO_NODISCARD_MARK` and
+pictures drawn with them), `failed <v>` (a module not made, or the self-test refused them, a twin
+pipeline it needed and could not make included; a pipeline the background could not make in play
+writes nothing) or `blocked <v>`; the renderer gets `ICO_NODISCARD_BLOCK`, `ICO_NODISCARD_MARK` and
 `ICO_NODISCARD_VERSION`. One line where there was a mark: `ico_pc: the previous run: discard-free
 twins: were on when it ended (a crash): off on this install until the version changes (blocked
 <version>)`, `... were being tried when it ended (...)`, `... were on, their first pictures being
@@ -932,8 +933,10 @@ off on this install since a run of <version> ended badly with it in effect (bloc
 mark cleared)`, `... blocked on <v>, this is <v>: tried again (the mark cleared)`; and at the
 write `ico_pc: the next picture submitted ahead: in effect on this install from here
 (<logs>/ahead-mark.txt: on <version>; a device loss, GPU hang, watchdog end or crash of this run
-keeps it off until the version changes)`. Neither mark file is in the [report
-file](#the-report-file); their lines are in the log it holds.
+keeps it off until the version changes)`. The three mark files go into the [report
+file](#the-report-file) when they are there (`report.c`), and an rc build's Share a bug report
+sends them too (`share_report.c`); an F12 zip (`dump_zip.c`) does not hold them, but the log
+in it has their lines.
 
 On Android 11 and later each phase change also keeps at most 128 bytes (`ico-pc <phase> | resets
 47->66 | free 1911 MB, lowest 1897`; where the skin check runs, `| skin box <b> twin <t> made <p>`
@@ -1644,8 +1647,10 @@ whole ticks, rounded)`
 
 Each second's medians are of its timed pictures (`-` where none was), the triangles of every
 picture; a pass that did not run in a picture (0 ms: a replay not presented, a scene without the
-reduction) is left out of its median. A pause shows as one long interval. The reduction and the present pass are fixed work, so their times a second say whether the
-GPU slowed as a whole without a clock node ([Every stall in a
+reduction) is left out of its median. A pause shows as one long interval. The reduction and the
+present pass are fixed work, so their times a second say whether the GPU slowed as a whole without
+a clock node (on a Mali the present pass also holds the wait for the display's image, `rd.h`
+`gpuDisplayWaitMs`: there the reduction is the cleaner of the two) ([Every stall in a
 table](ANDROID_DIAGNOSTICS_LEDGERS.md#every-stall-in-a-table-the-gpus-speed-the-battery-and-the-memory-events)).
 A present interval runs from one presented picture's present return to the next's, on the CPU's
 clock, across the block's start too; p50 and p90 by nearest rank; an interval counts over N ticks

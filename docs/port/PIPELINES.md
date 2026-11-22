@@ -1699,8 +1699,9 @@ verdict or carried arm.
 - **The cost of a trial** is bounded: at most 300 replays without the cull (half of 600), eight
   with a clear difference. A picture at the off arm is not one drawn with the cull for the mark's
   count, and a verdict "off" writes nothing to the mark.
-- **The ways back**: the cull's own self-test, mark and run-time checks still decide whether it
-  is used at all, and a cull that is held, blocked or off is never put on trial. A device lost
+- **The ways back**: the cull's own self-test and mark, and in play its one fault (a culling
+  entry's draw in a multisampled pass, `rd__vu_zero_fault_msaa`; nothing is read back in play),
+  still decide whether it is used at all, and a cull that is held, blocked or off is never put on trial. A device lost
   at a replay's start, or a record with the GPU's own sign of a reset (`rd_perf_clock.h`: a hang
   the driver came back from), stops every trial and leaves every subject at its off arm for the
   run, logged once. A hang or watchdog end ends the run; the next start's loss ladder and the
@@ -1734,8 +1735,8 @@ The lines (`rd: ` before each):
 - At the start, after the cull's own line: `A/B: the in-play judge; may try: zero-area cull; a
   trial 2.0 s into a stage, ...` with every constant, or `not tried (off here): zero-area cull`.
 - One a trial: `A/B: zero-area cull, stage 42: 32 pairs, with it 1.62 ms, without 1.55 ms of
-  the scene's GPU work (the present and its display wait left out) a thousand vertices and triangles (the median pair 4.3 % dearer with it, 25 of 32 cheaper
-  without), 3 dropped by a long picture, 0 by unequal work: off for this stage (it started with
+  the scene's GPU work (the present and its display wait left out) a thousand vertices and
+  triangles (the median pair 4.3 % dearer with it, 25 of 32 cheaper without), 3 dropped by a long picture, 0 by unequal work: off for this stage (it started with
   it, the arm stage 41's verdict left)` (`8 pairs (all one way: the early verdict)` for the early
   one; `it started with it, no verdict before it in the run` for the run's first), or `A/B:
   zero-area cull, stage 42: no verdict (600 replays, 11 pairs; 30 dropped by a long picture, 4 by
@@ -1764,9 +1765,10 @@ side bands', DATE's and the alpha test's (`vu_common.hlsli` `vu_pixel_tests`, `v
 `vu_pixel_texa`). Arm's published guidance for its GPUs says a fragment shader that may discard
 updates the depth late and loses the hidden-pixel kill; whether that costs anything on issue 179's
 Mali-G52 is not known, so the twins are timed in play as the cull is and kept only where they are
-faster. Under the one rule below (clip mode none alone), 2 % and 6 % of the triangles of lists 0-2
-in that phone's two boat captures are in passes a twin may serve; the camera rule's code 32, 36
-and 24 draws are refused. `port/render/rd_nodiscard.h` says it all.
+faster. Under the floor rule below (clip mode none alone), 2 % and 6 % of the triangles of lists
+0-2 in that phone's two boat captures are in passes a twin may serve; the camera rule's code 32, 36
+and 24 passes take one only where the device's clipper check (below) measured clean, which would
+raise the share to at most 90 % and 93 %. `port/render/rd_nodiscard.h` says it all.
 
 - **The twins** `vu_ps_nodual_nd` and `vu_texa_ps_nodual_nd` are the same entries built with
   `ICO_VU_NODISCARD=1`: no discard, every other statement the same
@@ -1780,8 +1782,12 @@ and 24 draws are refused. `port/render/rd_nodiscard.h` says it all.
   `ICO_DF_DATE`, nor the stencil bit's); no side band (the draw has `ICO_VU_NO_BESIDE`, or is clip
   mode none, or particles; under `[dev] region_rule = ps2` on a frame wider than 4:3 almost nothing
   is eligible); the alpha test off in the pass (DrawCB mode.z bit 8 clear: the test off in the
-  state, ATST ALWAYS, the AFAIL merge's one draw, or the alpha plan's proof); and clip mode none
-  (code 34), not particles, on every device.
+  state, ATST ALWAYS, the AFAIL merge's one draw, or the alpha plan's proof); not particles; and
+  clip mode none (code 34) on every device, or any clip mode once the device's clipper check
+  measured clean (the camera rule's passes, counted apart as "by the clipper check"); else
+  `clipped`. At draw time three more reasons are counted: `not made yet` (the twin's pipeline),
+  `timed without them` (the judge's off arm) and `entry not tested` (the entry's own self-test case
+  drew nothing through it).
 - **Why clip mode none.** The *_nodual build discards a pixel in the picture's columns whose band
   flag is not below 0.5, a NaN included (added for Mesa's clipper: its noperspective factor at a
   corner it adds behind the eye comes from the corners' divided x or y and is not finite where
@@ -1793,22 +1799,26 @@ and 24 draws are refused. `port/render/rd_nodiscard.h` says it all.
   clipper's factor for an edge crossing a side of the frame is finite and a flag of 0 stays 0, so
   the *_nodual build's band test cannot fire and a twin writes what it writes. Every other clip
   mode can hand the GPU corners at or behind the eye (the camera rule's clipped drops, code 36's
-  flagged corners): refused, on every device, so the lavapipe tests take the phone's path.
+  flagged corners): no proof covers them, so they take a twin only on the clipper check's
+  measurement (below); without a check (the tests' `=1`, a `not clean` device) they are refused.
 - **The clipper check: measured on the device, not assumed.** After the code 34 cases pass, the
   self-test draws 13 camera rule cases whose triangles cross the eye plane (an edge on the centre
   view ray, on view rays with the divided x alike, the divided y alike and off-centre; a corner at
   w = 0, at w = -0.001 and at w = -1290, the dock's depth; two corners behind; every w above 0
   clipped at GS Z 0, with and without an edge on a view ray; a corner saturated in X; a sliver; a
-  large triangle across the frame), each at code 32 and code 36 in both windings, each a frame of
-  its own with a depth probe after it (a code 34 quad at GS Z 0, Z write off: a depth the twin
-  wrote and the build did not shows in the colour), through the twins and without them. All
-  byte for byte: `clean`, and the camera rule's passes (round 1's rule: no plane, no DATE,
-  `ICO_VU_NO_BESIDE`, the alpha test off) take a twin too, counted apart. Any difference: `not
+  large triangle across the frame), each at code 32 and code 36 in both windings, untextured
+  (vu_ps_nodual_nd) and textured under TEXA (vu_texa_ps_nodual_nd), each a frame of its own with
+  a depth probe after it (a code 34 quad at GS Z 0, Z write off: a depth the twin wrote and the
+  build did not shows in the colour), through the twins and without them. All byte for byte, and
+  both entries drew through their twin: `clean`, and the camera rule's passes (no plane, no DATE,
+  `ICO_VU_NO_BESIDE`, the alpha test off, not particles) take a twin too, counted apart. Any difference: `not
   clean`, the first differing case logged, clip mode none alone; not a fault (the mark is not
   `failed`), the verdict kept on the mark's second line and said at the next start. It is evidence
   for these corners, not a proof for every triangle: geometry the cases miss, other states (MSAA,
   other targets), a driver's size thresholds and anything time-dependent are not covered, and the
-  in-play judge and the mark stay the way back. What is known: Mesa's NaN band flag was seen on a
+  in-play judge and the mark stay the way back; a wrong pixel would show as specks on geometry that
+  crosses the camera's plane, which neither the judge (time only) nor the mark (crashes and losses
+  only) sees. What is known: Mesa's NaN band flag was seen on a
   triangle drawn beside the picture under `[dev] region_rule = ps2` (fx-drops-4657); no draw
   without a band has been seen to lose a pixel to it: lavapipe measures the check `clean` (13
   cases, 52 passes), and `rd_nodiscard_clean` draws 749 camera rule passes through the twins on
@@ -1834,11 +1844,14 @@ and 24 draws are refused. `port/render/rd_nodiscard.h` says it all.
     passed): a plain code 34 mesh and a textured one under TEXA 7F/81 AEM with a linear filter
     (given vu_ps_nodual_nd and vu_texa_ps_nodual_nd), one under an alpha test that can fail, the
     textured one under the same test, one under a chain plane and a code 32 mesh under the camera
-    rule with a corner of each triangle behind the eye (all refused); each entry's twin is used in
-    play only if its own case drew through it here ("entry not tested" otherwise, logged); the side band and DATE, which the camera
-    rule's frame cannot draw, are checked on the rule itself. Drawn with the twins and without:
-    the pictures byte for byte, a pass through a twin counted, both refusal cases refused, no twin
-    pipeline missing, else off for the run with the modules and pipelines released. Either way every
+    rule with a corner of each triangle behind the eye (all refused: the clipper is not measured
+    yet); each entry's twin is used in play only if its own case drew through it here (`entry not
+    tested` otherwise, logged `discard-free twins: vu_texa_ps_nodual_nd drew nothing in the
+    self-test: not used in play`); the side band and DATE, which the camera rule's frame cannot
+    draw, are checked on the rule itself. Drawn with the twins and without: the pictures byte for
+    byte, a pass through a twin counted, the alpha, plane and eye-plane cases refused, no twin
+    pipeline missing, else off for the run with the modules and pipelines released and the mark
+    `failed`; then the clipper check (above). Either way every
     pipeline the self-test made is released after it (`rd__pipeline_forget_since`): the run's set is
     the one it had before (the draw pattern gate's counts unchanged), and the twins' pipelines are
     made in the background as play asks for them;
@@ -1860,31 +1873,36 @@ and 24 draws are refused. `port/render/rd_nodiscard.h` says it all.
 
 The lines (`rd: ` before each):
 - `discard-free twins: trying them: vu_ps_nodual_nd and vu_texa_ps_nodual_nd made (2 modules;
-  ...)`, then `discard-free twins: on (self-test: 1 pass through them, the alpha test's, the
-  clip plane's and the eye-plane crossing's refused (1, 1 and 1), the side band and DATE refused
-  by the rule, pictures byte for byte; its 2 pipelines released) on SCENE WxH at TWxTH texels in
-  T ms` or `discard-free twins: off for the run (self-test: <why>; its N pipelines released)
+  ...)`, then `discard-free twins: on (self-test: 2 passes through them, 1 through
+  vu_ps_nodual_nd and 1 through vu_texa_ps_nodual_nd, the alpha test's, the clip plane's and the
+  eye-plane crossing's refused (2, 1 and 1), the side band and DATE refused by the rule, pictures
+  byte for byte; its N pipelines released) on SCENE WxH at TWxTH texels in T ms` or `discard-free twins: off for the run (self-test: <why>; its N pipelines released)
   ...`, then the start line `discard-free twins: on|held|off, N modules of them made, P of their
   pipelines alive`; `off on this install (...)`, `off for this start (the loss ladder: ...)`,
   `off for the run (self-test not run: not applicable here: the device blends with two outputs,
   ...)`.
 - `discard-free twins: the clipper check: clean (13 cases crossing the eye plane at codes 32 and
-  36, N passes through them, the pictures and their depth byte for byte): the camera rule's passes
-  take them too`, or `... not clean (an edge on the centre view ray at code 32 differs, the first
+  36, untextured and textured under TEXA, N passes through both twins, the pictures and their
+  depth byte for byte): the camera rule's passes take them too`, or `... not clean (an edge on the centre view ray at code 32 differs, the first
   at texel X,Y): clip mode none alone takes them (a property of this device, not a fault: nothing
-  written as failed)`.
+  written as failed)` (`not clean (its frames drew nothing through vu_texa_ps_nodual_nd)` when an
+  entry drew nothing; under `ICO_RD_VU_NODISCARD_CLIPPER` the forced verdict with what was
+  measured: `clean (ICO_RD_VU_NODISCARD_CLIPPER; measured not clean: ...)`, `not clean
+  (ICO_RD_VU_NODISCARD_CLIPPER; measured clean)`).
 - The 10 s VU line's clause: `; discard-free twins: D draws a picture through them, C of them by
   the clipper check (clean|not clean|not checked) (R refused a picture: plane p, DATE d, band b,
-  alpha a, clipped c, not made yet u, timed without them t)`;
-  nothing while held or off from the start, `; discard-free twins off (why)` once they were on.
+  alpha a, clipped c, not made yet u, timed without them t, entry not tested e)`, then `; their
+  pipelines made in the background: P in B batches, M ms from begin to taken` in a block that took
+  a batch (`, some failed`); nothing while held or off from the start, `; discard-free twins off (why)` once they were on.
 - `discard-free twins: 250 pictures drawn with them since their self-test: their mark says on`;
-  `discard-free twins: off for the run: a twin's pipeline (...) could not be made in the
-  background (...)`.
+  `discard-free twins: off for the run: a twin's pipeline (program P blend B vs V fs F) could not
+  be made in the background (...) (the mark is not changed: a background compile that failed once
+  is this run's; the next start tests them again)`.
 - The judge's lines and the attempt ledger's row `the discard-free twins timed in play` as the
   cull's (above); at the next start `the previous run: discard-free twins: ...`.
 - `rd_replay_tool --stats`: `stats: discard-free twins on|held|off (why): N draws through them, C
-  of them by the clipper check (verdict); refused: plane p, DATE d, band b, alpha a, clipped c, not made yet u, timed without them t; M
-  modules of them made, P of their pipelines alive` (with `(not applicable here: ...)` on a device
+  of them by the clipper check (verdict); refused: plane p, DATE d, band b, alpha a, clipped c,
+  not made yet u, timed without them t, entry not tested e; M modules of them made, P of their pipelines alive` (with `(not applicable here: ...)` on a device
   with dual-source blending). The self-test's own draws (the floor's and the clipper check's) are
   not counted: the hold's end puts the counts back (`rd__nd_hold_end`).
 
