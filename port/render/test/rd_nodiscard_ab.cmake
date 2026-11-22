@@ -22,9 +22,9 @@
 #            1x, 21:9
 #   mali169  the same at 16:9 (the reporter's v0.11.14 setting)
 # With BACKEND opengl (rd_nodiscard_ab_gl) every frame at the corpus setting
-# with no dual-source blending (ICO_GL_FAKE_NO_DUAL=1).  On lavapipe and
-# llvmpipe (Mesa's software rasteriser) only clip mode none takes a twin
-# (rd_nodiscard.h): the runs say so.  Every target's PNG of on and off must
+# with no dual-source blending (ICO_GL_FAKE_NO_DUAL=1).  Only clip mode
+# none takes a twin, on every device (rd_nodiscard.h, "Why clip mode none"),
+# so these runs take the path a phone takes.  Every target's PNG of on and off must
 # be equal byte for byte, each run's stats line read: off says "discard-free
 # twins off (ICO_RD_VU_NODISCARD=0): 0 draws through them" and "0 modules of
 # them made"; on under a profile without dual-source blending "discard-free

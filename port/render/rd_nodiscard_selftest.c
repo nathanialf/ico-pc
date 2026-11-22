@@ -8,10 +8,10 @@
  *
  * The frame (built here, never recorded; the zero-area cull's helpers'
  * form): SCENE cleared, Z GEQUAL with Z write, no blend, untextured,
- * Gouraud; three prelit meshes of two triangles each at model depth 2,
+ * Gouraud; four prelit meshes of two triangles each at model depth 2,
  * where the screen matrix puts a vertex at GS X = 2048 + 8 x, Y = 2048 + 8 y,
- * each drawn once at code 34 (clip mode none, the one the twins take on
- * every device, Mesa's software rasteriser included):
+ * each drawn once, the first three at code 34 (clip mode none, the one
+ * clip mode the twins take):
  *   plain   the alpha test off: the CPU gives the pass its twin
  *   alpha   ATE GREATER 0x40, AFAIL KEEP, the corners' alphas 0, 127 and
  *           127 (the alpha plan cannot decide it): its pixels below the
@@ -19,13 +19,18 @@
  *           refuse the twin
  *   plane   a chain plane through the middle of the mesh (the MESH
  *           command's b[5], f[0]): the pixels past it are discarded, refused
+ *   eye     at code 32 (the region test under the camera rule: the draw has
+ *           ICO_VU_NO_BESIDE, the boat's form), a corner of each triangle
+ *           behind the eye: a clipper may make the band flag non-finite
+ *           there (rd_nodiscard.h, "Why clip mode none"), so the CPU must
+ *           refuse it ("clipped") and the pictures stay byte for byte
  * The side band and DATE cannot be drawn under the camera rule's frame
  * here: the rule itself (rd_nd_eligible) must refuse a region test's pass
  * without ICO_VU_NO_BESIDE and a pass with DATE.  The frame is replayed
  * with the twins (the pipelines of both gathered and made first on the
  * workers) and without them; the twins pass when the pictures are the
- * same byte for byte, the plain case drew through a twin, the alpha and
- * plane cases were refused for those reasons, no twin pipeline was missing
+ * same byte for byte, the plain case drew through a twin, the alpha, plane
+ * and eye cases were refused for those reasons, no twin pipeline was missing
  * and the rule refused the band and DATE.  Anything else (a module or a
  * pipeline not made, a device error) leaves them off for the run, releases
  * their modules and pipelines and writes "failed" to the install's mark.
@@ -35,9 +40,9 @@
  * again in the background as passes ask for them.
  *
  *   rd: discard-free twins: on (self-test: 1 pass through them, the alpha
- *     test's and the clip plane's refused (1 and 1), the side band and DATE
- *     refused by the rule, pictures byte for byte; its 2 pipelines released)
- *     on SCENE WxH at TWxTH texels in T ms
+ *     test's, the clip plane's and the eye-plane crossing's refused (1, 1
+ *     and 1), the side band and DATE refused by the rule, pictures byte for
+ *     byte; its 2 pipelines released) on SCENE WxH at TWxTH texels in T ms
  *   rd: discard-free twins: off for the run (self-test: <reason>) ...
  *
  * ICO_RD_VU_NODISCARD_SABOTAGE (tests, rd_nodiscard_run.c): alpha, the
@@ -52,12 +57,12 @@
 #include "rd_nodiscard.h"
 #include "shader_consts.h"
 
-#define NT_CASES 3
+#define NT_CASES 4
 #define NT_VERTS 6 /* two triangles a mesh, three vertices each */
 #define NT_Z 2.0f  /* model depth: GS X = 2048 + 8 x */
 #define NT_HALF 12 /* a triangle's legs, GS pixels */
 
-enum { NT_PLAIN, NT_ALPHA, NT_PLANE };
+enum { NT_PLAIN, NT_ALPHA, NT_PLANE, NT_EYE };
 
 static float fbits(uint32_t u)
 {
@@ -93,7 +98,11 @@ static RdMesh makeMesh(int c)
         /* GS X = 2048 + 8 x at depth 2 */
         const float gx = cellX(c) + (float)NT_HALF * kCorner[v][0];
         const float gy = 2048.0f + (float)NT_HALF * kCorner[v][1];
-        qw(q[at++], (gx - 2048.0f) / 8.0f, (gy - 2048.0f) / 8.0f, NT_Z, 1.0f);
+        /* the eye case's last corner of each triangle behind the eye (model
+           depth -1: h.w = z for this screen matrix), the triangle crossing
+           the eye plane */
+        const float z = c == NT_EYE && v % 3 == 2 ? -1.0f : NT_Z;
+        qw(q[at++], (gx - 2048.0f) / 8.0f, (gy - 2048.0f) / 8.0f, z, 1.0f);
         qw(q[at++], 0.0f, 0.0f, 1.0f, v % 3 == 0 ? 0.0f : 1.0f);
         /* the alpha case's first corner of each triangle at 0: alphas from 0
            to 127 across it, the test failing below 0x40 */
@@ -141,16 +150,18 @@ static void sceneBlock(RdVuBlock *b)
     qw(m[23], 0, 0, -3, 0);
 }
 
-/* a code 34 MESH command of mesh; plane: the chain plane x >= the cell's
-   middle (rd_chain.h: axis x + 1, the plus side; the offset in f[0]) */
-static bool pushMesh(RdFrame *f, RdMesh mesh, bool plane, float planeAt, uint32_t key)
+/* a MESH command of mesh at code 34 (clip mode none) or 32 (the region
+   test: the camera rule's, ICO_VU_NO_BESIDE); plane: the chain plane x >=
+   the cell's middle (rd_chain.h: axis x + 1, the plus side; the offset in
+   f[0]) */
+static bool pushMesh(RdFrame *f, RdMesh mesh, uint8_t code, bool plane, float planeAt, uint32_t key)
 {
     uint8_t buf[sizeof(RdVuPayload) + sizeof(RdVuBlock)];
     RdVuPayload p;
     RdVuBlock vu;
     memset(&p, 0, sizeof(p));
-    p.code = 34;
-    p.clip = RD_VU_CLIP_NONE;
+    p.code = code;
+    p.clip = code == 34 ? RD_VU_CLIP_NONE : RD_VU_CLIP_REGION;
     p.prog = RD_PROG_PRELIT;
     p.batchCount = 1;
     p.qwPerVertex = RD_VU_QW_PRELIT;
@@ -201,11 +212,13 @@ static bool buildFrame(RdFrame *f, uint32_t scene, uint32_t w, uint32_t h, const
          rd__st_push1(f, 0, RDC_PABE, 0) && rd__st_push1(f, 0, RDC_COLCLAMP, 1) &&
          rd__st_push1(f, 0, RDC_SHADE, 1);
     /* plain, then the alpha test (ATE GREATER 0x40, AFAIL KEEP, Z GEQUAL),
-       then the plane with the test off again */
-    ok = ok && pushMesh(f, mesh[NT_PLAIN], false, 0.0f, 1u) &&
+       then the plane with the test off again, then the eye-plane crossing
+       at code 32 */
+    ok = ok && pushMesh(f, mesh[NT_PLAIN], 34, false, 0.0f, 1u) &&
          rd__st_test(f, 0, (uint64_t)RD_TEST_Z_GEQUAL | 0x40Du) &&
-         pushMesh(f, mesh[NT_ALPHA], false, 0.0f, 2u) && rd__st_test(f, 0, RD_TEST_Z_GEQUAL) &&
-         pushMesh(f, mesh[NT_PLANE], true, (cellX(NT_PLANE) - 2048.0f) / 8.0f, 3u);
+         pushMesh(f, mesh[NT_ALPHA], 34, false, 0.0f, 2u) && rd__st_test(f, 0, RD_TEST_Z_GEQUAL) &&
+         pushMesh(f, mesh[NT_PLANE], 34, true, (cellX(NT_PLANE) - 2048.0f) / 8.0f, 3u) &&
+         pushMesh(f, mesh[NT_EYE], 32, false, 0.0f, 4u);
     return ok;
 }
 
@@ -272,7 +285,7 @@ void rd__nd_selftest(RdTargetRec *t)
     const uint32_t scene = rd_target(RD_TARGET_SCENE).id;
     const size_t size = (size_t)t->tw * t->th * 4u;
     uint8_t *a = malloc(size), *b = malloc(size);
-    if (!mesh[0].id || !mesh[1].id || !mesh[2].id || !a || !b ||
+    if (!mesh[0].id || !mesh[1].id || !mesh[2].id || !mesh[3].id || !a || !b ||
         !buildFrame(&f, scene, t->w, t->h, mesh)) {
         /* nothing of the twins tried yet: not the device's verdict */
         rd__frame_free(&f);
@@ -330,11 +343,14 @@ void rd__nd_selftest(RdTargetRec *t)
             }
             snprintf(why, sizeof(why), "the pictures differ with them, the first at texel %u,%u",
                      (unsigned)((first / 4u) % t->tw), (unsigned)((first / 4u) / t->tw));
-        } else if (refused[RD_ND_ALPHA] == 0u || refused[RD_ND_PLANE] == 0u) {
+        } else if (refused[RD_ND_ALPHA] == 0u || refused[RD_ND_PLANE] == 0u ||
+                   refused[RD_ND_CLIPPED] == 0u) {
             snprintf(why, sizeof(why),
-                     "a case the CPU must refuse was not refused (alpha %llu, plane %llu)",
+                     "a case the CPU must refuse was not refused (alpha %llu, plane %llu, "
+                     "clipped %llu)",
                      (unsigned long long)refused[RD_ND_ALPHA],
-                     (unsigned long long)refused[RD_ND_PLANE]);
+                     (unsigned long long)refused[RD_ND_PLANE],
+                     (unsigned long long)refused[RD_ND_CLIPPED]);
         } else if (!rule) {
             snprintf(why, sizeof(why), "the rule gave a side band's or DATE's pass a twin");
         } else {
@@ -350,13 +366,14 @@ void rd__nd_selftest(RdTargetRec *t)
     t->clearPending = 1; /* the next replay starts SCENE from its clear */
     rd__nd_verdict(pass, why);
     if (pass) {
-        rd__log("discard-free twins: on (self-test: %llu pass%s through them, the alpha test's and "
-                "the clip plane's refused (%llu and %llu), the side band and DATE refused by the "
-                "rule, pictures byte for byte; its %u pipelines released) on SCENE %ux%u at "
-                "%ux%u texels in %.1f ms",
+        rd__log("discard-free twins: on (self-test: %llu pass%s through them, the alpha test's, "
+                "the clip plane's and the eye-plane crossing's refused (%llu, %llu and %llu), "
+                "the side band and DATE refused by the rule, pictures byte for byte; its %u "
+                "pipelines released) on SCENE %ux%u at %ux%u texels in %.1f ms",
                 (unsigned long long)twin, twin == 1u ? "" : "es",
                 (unsigned long long)refused[RD_ND_ALPHA], (unsigned long long)refused[RD_ND_PLANE],
-                (unsigned)released, t->w, t->h, t->tw, t->th, rd__now_ms() - t0);
+                (unsigned long long)refused[RD_ND_CLIPPED], (unsigned)released, t->w, t->h, t->tw,
+                t->th, rd__now_ms() - t0);
     } else {
         rd__log("discard-free twins: off for the run (self-test: %s; its %u pipelines released) "
                 "on SCENE %ux%u at %ux%u texels in %.1f ms",

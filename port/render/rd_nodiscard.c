@@ -1,10 +1,7 @@
 /* rd_nodiscard.c: the discard-free twins' pure part (rd_nodiscard.h): the
- * eligibility of a pass, the reasons' and modules' names, the software
- * rasteriser's test.  No renderer state: port/render/test/rd_nodiscard_test.c
- * calls it alone. */
+ * eligibility of a pass, the reasons' and modules' names.  No renderer
+ * state: port/render/test/rd_nodiscard_test.c calls it alone. */
 #include "rd_nodiscard.h"
-
-#include <string.h>
 
 #include "rd_internal.h" /* RD_FS_VU, RD_FS_VU_TEXA */
 #include "shader_consts.h"
@@ -41,9 +38,15 @@ int rd_nd_eligible(const RdNdPass *p)
     if (!p->skipAlpha && (p->modeZ & 0x100u) != 0u) {
         return RD_ND_ALPHA;
     }
-    /* Mesa's software clipper: a NaN band flag at the corners it adds
-       behind the eye (rd_nodiscard.h); clip mode none adds none */
-    if (p->softClip && (p->particle || clip != ICO_VU_CLIP_NONE)) {
+    /* clip mode none alone, on every device (rd_nodiscard.h, "Why clip mode
+       none"): its corners are GS positions with w 1 and a depth in 0..1
+       (vu_tri.hlsl vu_tri_verdict at 1 or 3, vu_common.hlsli
+       vu_corner_position, vu_vtx_position, vu_gs_position; gs_math.hlsli
+       gs_z_to_depth), so any clipper's new corner is a finite blend of
+       corners whose side band flag is 0, and the *_nodual build's band
+       test cannot fire; any other clip mode or particles may put a corner
+       behind the eye, where a clipper may make the flag non-finite */
+    if (p->particle || clip != ICO_VU_CLIP_NONE) {
         return RD_ND_CLIPPED;
     }
     return RD_ND_TWIN;
@@ -60,9 +63,4 @@ const char *rd_nd_reason_name(int why)
 const char *rd_nd_module_name(uint8_t fs)
 {
     return fs == RD_FS_VU ? "vu_ps_nodual_nd" : fs == RD_FS_VU_TEXA ? "vu_texa_ps_nodual_nd" : NULL;
-}
-
-bool rd_nd_soft_raster(uint32_t driverId, const char *adapter)
-{
-    return driverId == 13u || (adapter != NULL && strstr(adapter, "llvmpipe") != NULL);
 }

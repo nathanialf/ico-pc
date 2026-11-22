@@ -10,9 +10,10 @@
  * and loses the hidden-pixel kill; that it costs anything on the issue 179
  * reporter's Mali-G52 is not known (nothing here could measure it), so the
  * twins are timed in play (rd_ab_run.h) and kept only where they are
- * faster.  The boat scene's capture (v0.11.14, stage 42) has about 90 % of
- * its lists 0-2 triangles in passes none of those discards can fire for
- * (build-host's step-0 count).
+ * faster.  Under the rule below, the boat scene's captures (v0.11.14,
+ * stage 42) have 2 % and 6 % of their lists 0-2 triangles in passes a twin
+ * may serve (clip mode none alone; the camera rule's code 32, 36 and 24
+ * draws, which put corners behind the eye, are refused).
  *
  * What.  The twins vu_ps_nodual_nd and vu_texa_ps_nodual_nd are the same
  * entries built with ICO_VU_NODISCARD=1: no discard at all, every other
@@ -30,15 +31,29 @@
  *   - the alpha test off in the pass (DrawCB mode.z bit 8 clear: the test
  *     off in the state, ATST ALWAYS, the AFAIL merge's one draw, or the
  *     alpha plan's proof for the draw's As range, rd_alpha_plan.c);
- *   - on Mesa's software rasteriser (llvmpipe, lavapipe: the tests' and
- *     the replay tool's device) clip mode none alone: its clipper can make
- *     every varying NaN at the corners it adds to a triangle behind the
- *     eye, and the *_nodual build takes a NaN side band flag as a band
- *     (vu_common.hlsli vu_pixel_tests), discarding those pixels in the
- *     picture where the twin would draw them; a clip mode none corner is
- *     always at its GS position (w 1), so no corner is ever added behind
- *     the eye there.  A GPU whose interpolation keeps a constant has no
- *     such NaN.
+ *   - clip mode none (code 34), on every device, not particles.
+ * Why clip mode none (issue 179 round 2).  The *_nodual build discards a
+ * pixel in the picture's columns whose interpolated band flag is not below
+ * 0.5, a NaN included (vu_common.hlsli vu_pixel_tests; commit e65012742,
+ * for Mesa's clipper).  The vertex stage writes the flag as the literal 0.0
+ * or 1.0 at every corner (vu_tri.hlsl vu_main_vs "o.plane.y = beside ...",
+ * vu_common.hlsli vu_mesh_out, vu_out_init), so it is finite where it is
+ * written: a non-finite flag at a pixel can only come from the clipper's
+ * arithmetic at a corner it adds.  Mesa's (llvmpipe, lavapipe) takes a
+ * noperspective varying's factor from the corners' divided x or y, not
+ * finite where those coincide, which a corner behind the eye makes
+ * possible; what another GPU's clipper does across w = 0 is not known here
+ * and is not assumed.  A clip mode none corner is always a GS position:
+ * w = 1, a depth in 0..1 (vu_tri.hlsl vu_tri_verdict: at 1, or 3 for the
+ * wrap; vu_common.hlsli vu_corner_position, vu_vtx_position,
+ * vu_gs_position; gs_math.hlsli gs_z_to_depth clamps), so no clip against
+ * the depth range and every corner equal in w: a clipper's factor for an
+ * edge crossing a side of the frame is a finite fraction whatever form it
+ * takes, and a flag 0 at every corner stays 0.  Every other clip mode can
+ * hand the GPU homogeneous corners at or behind the eye (the camera rule's
+ * clipped drops, code 36's flagged corners): refused as "clipped".  So the
+ * one rule holds on every device, and the tests' lavapipe runs take the
+ * path a phone takes.
  * The twins' pipelines are made in the background between pictures
  * (rd_pipeline.c rd__pipeline_twin, rd__pipeline_twin_tick: a batch on the
  * workers at low priority, as the start-up set's background finisher, or
@@ -105,7 +120,7 @@ enum {
     RD_ND_DATE,     /* DATE (the snapshot or the stencil bit) */
     RD_ND_BAND,     /* a side band possible */
     RD_ND_ALPHA,    /* the alpha test in the pass */
-    RD_ND_CLIPPED,  /* Mesa's software rasteriser: not clip mode none */
+    RD_ND_CLIPPED,  /* not clip mode none, or particles: a corner may be behind the eye */
     RD_ND_UNMADE,   /* its twin's pipeline not made yet (asked for in the background) */
     RD_ND_TRIAL,    /* the in-play judge's off arm */
     RD_ND_REASONS
@@ -124,7 +139,6 @@ typedef struct RdNdPass {
     bool plane;         /* IcoVuCB batch[2] != 0: a chain plane */
     bool particle;      /* a particles command */
     bool dateStencil;   /* DATE through the stencil bit for this draw (Replay.dateStNow) */
-    bool softClip;      /* Mesa's software rasteriser */
     bool skipAlpha;     /* the tests' sabotage: the alpha test not looked at */
 } RdNdPass;
 
@@ -138,10 +152,6 @@ const char *rd_nd_reason_name(int why);
 /* the twin's module name of fragment entry fs ("vu_ps_nodual_nd"), NULL
    for an entry without one */
 const char *rd_nd_module_name(uint8_t fs);
-/* Mesa's software rasteriser by the device's own words: Vulkan driver id 13
-   (VK_DRIVER_ID_MESA_LLVMPIPE) or "llvmpipe" in the adapter's name (OpenGL's
-   GL_RENDERER, lavapipe's device name) */
-bool rd_nd_soft_raster(uint32_t driverId, const char *adapter);
 
 /* ------------------------------------------------ the renderer's part */
 

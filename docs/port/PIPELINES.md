@@ -1744,9 +1744,9 @@ side bands', DATE's and the alpha test's (`vu_common.hlsli` `vu_pixel_tests`, `v
 `vu_pixel_texa`). Arm's published guidance for its GPUs says a fragment shader that may discard
 updates the depth late and loses the hidden-pixel kill; whether that costs anything on issue 179's
 Mali-G52 is not known, so the twins are timed in play as the cull is and kept only where they are
-faster. On that phone's boat capture about 90 % of list 0-2's triangles are in passes none of the
-four discards can fire for (the camera rule gives every mesh draw `ICO_VU_NO_BESIDE`; the alpha
-plan proves most of the alpha tests). `port/render/rd_nodiscard.h` says it all.
+faster. Under the one rule below (clip mode none alone), 2 % and 6 % of the triangles of lists 0-2
+in that phone's two boat captures are in passes a twin may serve; the camera rule's code 32, 36
+and 24 draws are refused. `port/render/rd_nodiscard.h` says it all.
 
 - **The twins** `vu_ps_nodual_nd` and `vu_texa_ps_nodual_nd` are the same entries built with
   `ICO_VU_NODISCARD=1`: no discard, every other statement the same
@@ -1760,12 +1760,20 @@ plan proves most of the alpha tests). `port/render/rd_nodiscard.h` says it all.
   `ICO_DF_DATE`, nor the stencil bit's); no side band (the draw has `ICO_VU_NO_BESIDE`, or is clip
   mode none, or particles; under `[dev] region_rule = ps2` on a frame wider than 4:3 almost nothing
   is eligible); the alpha test off in the pass (DrawCB mode.z bit 8 clear: the test off in the
-  state, ATST ALWAYS, the AFAIL merge's one draw, or the alpha plan's proof). On Mesa's software
-  rasteriser (llvmpipe, lavapipe: driver id 13 or "llvmpipe" in the adapter's name) clip mode none
-  alone: its clipper can make every varying NaN at the corners it adds behind the eye, and the
-  *_nodual build takes a NaN band flag as a band, discarding those pixels where a twin would draw
-  them. A clip mode none corner is always at its GS position, so the clipper adds none behind the
-  eye there.
+  state, ATST ALWAYS, the AFAIL merge's one draw, or the alpha plan's proof); and clip mode none
+  (code 34), not particles, on every device.
+- **Why clip mode none.** The *_nodual build discards a pixel in the picture's columns whose band
+  flag is not below 0.5, a NaN included (added for Mesa's clipper: its noperspective factor at a
+  corner it adds behind the eye comes from the corners' divided x or y and is not finite where
+  they coincide). The vertex stage writes the flag as the literal 0.0 or 1.0 at every corner, so a
+  non-finite flag can only come from a clipper's arithmetic; what a phone's clipper does across
+  w = 0 is not known and is not assumed. A clip mode none corner is always a GS position: w = 1
+  and a depth in 0..1 (`vu_tri_verdict`, `vu_corner_position`, `vu_gs_position`,
+  `gs_z_to_depth`'s clamp), so no clip against the depth range and every corner equal in w: any
+  clipper's factor for an edge crossing a side of the frame is finite and a flag of 0 stays 0, so
+  the *_nodual build's band test cannot fire and a twin writes what it writes. Every other clip
+  mode can hand the GPU corners at or behind the eye (the camera rule's clipped drops, code 36's
+  flagged corners): refused, on every device, so the lavapipe tests take the phone's path.
 - **Never waited for.** A pass whose twin's pipeline is not made draws through its *_nodual build
   and asks for the twin (`rd_pipeline.c` `rd__pipeline_twin`: queued once). Between pictures
   (`rd__pipe_finish_tick`, the background finisher's slot) the queue's next batch is begun on the
@@ -1782,8 +1790,9 @@ plan proves most of the alpha tests). `port/render/rd_nodiscard.h` says it all.
     a clean close), counting or on (a crash, an ANR, a signal other than 9, a device loss, a GPU
     hang, the watchdog) keeps them off until the version changes;
   - the start-up self-test (`rd_nodiscard_selftest.c`, after the cull's on the pre-pass that
-    passed): a code 34 frame with a plain mesh (given its twin), one under an alpha test that can
-    fail and one under a chain plane (both refused); the side band and DATE, which the camera
+    passed): a plain code 34 mesh (given its twin), one under an alpha test that can fail, one under
+    a chain plane and a code 32 mesh under the camera rule with a corner of each triangle behind
+    the eye (all three refused); the side band and DATE, which the camera
     rule's frame cannot draw, are checked on the rule itself. Drawn with the twins and without:
     the pictures byte for byte, a pass through a twin counted, both refusal cases refused, no twin
     pipeline missing, else off for the run with the modules and pipelines released. Either way every
@@ -1800,11 +1809,12 @@ plan proves most of the alpha tests). `port/render/rd_nodiscard.h` says it all.
 
 The lines (`rd: ` before each):
 - `discard-free twins: trying them: vu_ps_nodual_nd and vu_texa_ps_nodual_nd made (2 modules;
-  ...)`, then `discard-free twins: on (self-test: 1 pass through them, the alpha test's and the
-  clip plane's refused (1 and 1), the side band and DATE refused by the rule, pictures byte for
-  byte; its 2 pipelines released) on SCENE WxH at TWxTH texels in T ms` or `discard-free twins: off
-  for the run (self-test: <why>; its N pipelines released) ...`, then the start line `discard-free twins: on|held|off, N modules of them made, P of
-  their pipelines alive`; `off on this install (...)`, `off for this start (the loss ladder: ...)`,
+  ...)`, then `discard-free twins: on (self-test: 1 pass through them, the alpha test's, the
+  clip plane's and the eye-plane crossing's refused (1, 1 and 1), the side band and DATE refused
+  by the rule, pictures byte for byte; its 2 pipelines released) on SCENE WxH at TWxTH texels in
+  T ms` or `discard-free twins: off for the run (self-test: <why>; its N pipelines released)
+  ...`, then the start line `discard-free twins: on|held|off, N modules of them made, P of their
+  pipelines alive`; `off on this install (...)`, `off for this start (the loss ladder: ...)`,
   `off for the run (self-test not run: not applicable here: the device blends with two outputs,
   ...)`.
 - The 10 s VU line's clause: `; discard-free twins: D draws a picture through them (R refused a

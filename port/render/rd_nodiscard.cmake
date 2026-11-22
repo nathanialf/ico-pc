@@ -11,10 +11,10 @@ target_sources(ico_render PRIVATE rd_nodiscard.c rd_nodiscard_run.c rd_nodiscard
 # by the snapshot and by the stencil bit, band, alpha, clipped; the side
 # band impossible under ICO_VU_NO_BESIDE, clip mode none and particles; the
 # alpha test off, ALWAYS and the AFAIL merge's one draw against a test that
-# can fail; Mesa's software rasteriser: clip mode none alone, a NaN band
-# flag possible elsewhere), the passes without a twin (other entries, no
-# *_nodual build, a destination read), the reasons' and modules' names, the
-# software rasteriser by driver id and adapter name; and the run's state
+# can fail; clip mode none alone on every device, the camera rule's region
+# test, the scissor and particles refused as clipped), the passes without a
+# twin (other entries, no *_nodual build, a destination read), the reasons'
+# and modules' names; and the run's state
 # without a device (held, on after a passed self-test, =0, =1, the loss
 # ladder, the install's mark, a failed self-test kept off for the run): the
 # 10 s clause's and the stats line's words
@@ -97,7 +97,7 @@ endif()
 # Each run's start line ("discard-free twins: on|off, N modules of them made,
 # P of their pipelines alive") says what exists.
 if(ICO_RUN_TESTS AND DEFINED _vst AND TARGET rd_vuprepass_selftest_test)
-    set(_ndon "rd: discard-free twins: on \\(self-test: [1-9][0-9]* pass(es)? through them, the alpha test's and the clip plane's refused \\([1-9][0-9]* and [1-9][0-9]*\\), the side band and DATE refused by the rule, pictures byte for byte, its [1-9][0-9]* pipelines released\\) on SCENE.*rd: discard-free twins: on, 2 modules of them made, 0 of their pipelines alive")
+    set(_ndon "rd: discard-free twins: on \\(self-test: [1-9][0-9]* pass(es)? through them, the alpha test's, the clip plane's and the eye-plane crossing's refused \\([1-9][0-9]*, [1-9][0-9]* and [1-9][0-9]*\\), the side band and DATE refused by the rule, pictures byte for byte, its [1-9][0-9]* pipelines released\\) on SCENE.*rd: discard-free twins: on, 2 modules of them made, 0 of their pipelines alive")
     set(_ndnone ".*rd: discard-free twins: off, 0 modules of them made, 0 of their pipelines alive")
     set(_ndmark "ICO_NODISCARD_VERSION=v0.0.0;ICO_NODISCARD_MARK=${CMAKE_CURRENT_BINARY_DIR}/nodiscard_mark")
     set(_ndenv ${_env_mali_pre} "ICO_VK_FAKE_NO_DUAL=1")

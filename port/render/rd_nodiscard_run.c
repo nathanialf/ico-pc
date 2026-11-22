@@ -50,7 +50,6 @@ static struct {
     bool markedOn;       /* "on" written */
     bool wasOn;          /* on at some point of the run (the 10 s clause when off) */
     bool drewNow;        /* the replay being made drew through a twin */
-    int soft;            /* Mesa's software rasteriser: -1 not asked yet */
     char markPath[1024]; /* ICO_NODISCARD_MARK: the platform's mark file, "" none */
     char version[64];    /* ICO_NODISCARD_VERSION: the running version, "" none */
     uint64_t took, tookRefused[RD_ND_REASONS]; /* since rd__nd_take */
@@ -125,7 +124,6 @@ void rd__nd_init(void)
     s_n.markedOn = false;
     s_n.wasOn = false;
     s_n.drewNow = false;
-    s_n.soft = -1;
     s_n.took = 0;
     memset(s_n.tookRefused, 0, sizeof(s_n.tookRefused));
     const char *mark = getenv("ICO_NODISCARD_MARK");
@@ -272,21 +270,6 @@ static bool ready(void)
     return s_n.mod[0].id != 0 && s_n.mod[1].id != 0;
 }
 
-static bool softRaster(void)
-{
-    if (s_n.soft < 0) {
-        const RhiLimits *lim = g_rd.hasDevice ? rhi_limits() : NULL;
-        s_n.soft = rd_nd_soft_raster(lim ? lim->driverId : 0u, rhi_adapter_name()) ? 1 : 0;
-        if (s_n.soft) {
-            rd__log("discard-free twins: Mesa's software rasteriser (%s): only clip mode none "
-                    "takes them (its clipper can make the side band's flag NaN at the corners it "
-                    "adds behind the eye, which the *_nodual builds discard as a band)",
-                    rhi_adapter_name());
-        }
-    }
-    return s_n.soft == 1;
-}
-
 static void count(int why)
 {
     if (why == RD_ND_TWIN) {
@@ -308,17 +291,9 @@ void rd__nd_pass(RdPipeKeyInt *key, RhiPipeline *pipe, const RdDrawPass *p, uint
     if ((!pipe->id && !gathering) || !ready()) {
         return;
     }
-    const RdNdPass in = {key->fs,
-                         key->gs.nodual,
-                         key->dst,
-                         p->flags,
-                         p->modeZ,
-                         drawFlags,
-                         plane,
-                         particle,
-                         dateStencil,
-                         softRaster(),
-                         s_n.sabotage == NS_ALPHA};
+    const RdNdPass in = {
+        key->fs,   key->gs.nodual, key->dst, p->flags,    p->modeZ,
+        drawFlags, plane,          particle, dateStencil, s_n.sabotage == NS_ALPHA};
     const int v = rd_nd_eligible(&in);
     if (v < 0) {
         return;

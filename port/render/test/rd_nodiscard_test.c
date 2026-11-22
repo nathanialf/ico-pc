@@ -11,18 +11,16 @@
  *            by the stencil bit; the alpha test off (mode.z bit 8 clear:
  *            the test off in the state, ATST ALWAYS, the AFAIL merge's one
  *            draw, the alpha plan's proof) against a test that can fail
- *            (AFAIL KEEP, the split's two passes); Mesa's software
- *            rasteriser: clip mode none alone (the region test, the scissor
- *            and particles refused as clipped); the tests' sabotage letting
- *            the alpha test through
+ *            (AFAIL KEEP, the split's two passes); clip mode none alone on
+ *            every device (the camera rule's region test with
+ *            ICO_VU_NO_BESIDE, the scissor and particles refused as
+ *            clipped: a corner may be behind the eye); the tests' sabotage
+ *            letting the alpha test through
  *   none     the passes no twin exists for (another entry, the planes'
  *            twins at a fractional scale, no *_nodual build, a destination
  *            read by storage and by attachment): -1, never counted
  *   names    every reason's words, the two modules' names (none for
  *            another entry), the key bits
- *   soft     the software rasteriser by Vulkan's driver id (13,
- *            VK_DRIVER_ID_MESA_LLVMPIPE) and by the adapter's name
- *            (llvmpipe), not Arm's, Qualcomm's, Turnip or a NULL name
  *   state    the run's state without a device (rd_nodiscard_run.c): held
  *            until the self-test (no 10 s clause, the stats line's words), on
  *            once it passed (the clause with every reason at 0), =0 off and a
@@ -48,8 +46,8 @@ static int failures;
         }                                                                                          \
     } while (0)
 
-/* a pass the twins exist for, eligible: vu_ps's *_nodual build, the camera
-   rule's flag, the test off */
+/* a pass the twins exist for, eligible: vu_ps's *_nodual build, clip mode
+   none (code 34), the test off */
 static RdNdPass base(void)
 {
     RdNdPass p;
@@ -57,7 +55,7 @@ static RdNdPass base(void)
     p.fs = RD_FS_VU;
     p.nodual = RD_NODUAL_ON;
     p.dst = RHI_DST_READ_NONE;
-    p.drawFlags = ICO_VU_CLIP_REGION | ICO_VU_CAMERA | ICO_VU_NO_BESIDE;
+    p.drawFlags = ICO_VU_CLIP_NONE;
     return p;
 }
 
@@ -94,12 +92,12 @@ static void table(void)
     p.drawFlags = ICO_VU_CLIP_SCISSOR | ICO_VU_EXTENDED;
     CHECK(rd_nd_eligible(&p) == RD_ND_BAND);
     p.drawFlags = ICO_VU_CLIP_SCISSOR | ICO_VU_NO_BESIDE;
-    CHECK(rd_nd_eligible(&p) == RD_ND_TWIN);
+    CHECK(rd_nd_eligible(&p) == RD_ND_CLIPPED);
     p.drawFlags = ICO_VU_CLIP_NONE;
     CHECK(rd_nd_eligible(&p) == RD_ND_TWIN);
     p.drawFlags = ICO_VU_CLIP_REGION;
     p.particle = true;
-    CHECK(rd_nd_eligible(&p) == RD_ND_TWIN);
+    CHECK(rd_nd_eligible(&p) == RD_ND_CLIPPED);
 
     /* the alpha test: the ate bit (rd_pipeline.c: atst | 1 << 8 | split <<
        16) in the pass; without it (the test off, ALWAYS, the AFAIL merge,
@@ -120,13 +118,17 @@ static void table(void)
     p.skipAlpha = true;
     CHECK(rd_nd_eligible(&p) == RD_ND_TWIN);
 
-    /* Mesa's software rasteriser: clip mode none alone */
+    /* clip mode none alone, on every device: the camera rule's draws (the
+       region test with ICO_VU_CAMERA and ICO_VU_NO_BESIDE, the boat's
+       code 32 and 24), the scissor (code 36), the wrap's own flags kept */
     p = base();
-    p.softClip = true;
+    p.drawFlags = ICO_VU_CLIP_REGION | ICO_VU_CAMERA | ICO_VU_NO_BESIDE;
     CHECK(rd_nd_eligible(&p) == RD_ND_CLIPPED);
-    p.drawFlags = ICO_VU_CLIP_SCISSOR | ICO_VU_NO_BESIDE;
+    p.drawFlags = ICO_VU_CLIP_REGION | ICO_VU_NO_BESIDE | ICO_VU_EXTENDED;
     CHECK(rd_nd_eligible(&p) == RD_ND_CLIPPED);
-    p.drawFlags = ICO_VU_CLIP_NONE;
+    p.drawFlags = ICO_VU_CLIP_SCISSOR | ICO_VU_CAMERA | ICO_VU_NO_BESIDE;
+    CHECK(rd_nd_eligible(&p) == RD_ND_CLIPPED);
+    p.drawFlags = ICO_VU_CLIP_NONE | ICO_VU_MIRROR | ICO_VU_BEHIND_EYE;
     CHECK(rd_nd_eligible(&p) == RD_ND_TWIN);
     p.particle = true;
     CHECK(rd_nd_eligible(&p) == RD_ND_CLIPPED);
@@ -137,7 +139,6 @@ static void table(void)
     p.flags = ICO_DF_DATE;
     p.drawFlags = ICO_VU_CLIP_REGION;
     p.modeZ = 1u << 8;
-    p.softClip = true;
     CHECK(rd_nd_eligible(&p) == RD_ND_PLANE);
     p.plane = false;
     CHECK(rd_nd_eligible(&p) == RD_ND_DATE);
@@ -147,7 +148,7 @@ static void table(void)
     CHECK(rd_nd_eligible(&p) == RD_ND_ALPHA);
     p.modeZ = 0;
     CHECK(rd_nd_eligible(&p) == RD_ND_CLIPPED);
-    p.softClip = false;
+    p.drawFlags = ICO_VU_CLIP_NONE;
     CHECK(rd_nd_eligible(&p) == RD_ND_TWIN);
 }
 
@@ -195,18 +196,6 @@ static void names(void)
     memset(&k, 0, sizeof(k));
     k.nodual = (uint8_t)(RD_NODUAL_ON | RD_NODUAL_NODISCARD);
     CHECK(k.nodual == 3u && sizeof(RdPipelineKey) == 16u);
-}
-
-static void soft(void)
-{
-    CHECK(rd_nd_soft_raster(13u, "anything"));
-    CHECK(rd_nd_soft_raster(0u, "llvmpipe (LLVM 19.1.7, 256 bits)"));
-    CHECK(rd_nd_soft_raster(0u, "Mesa llvmpipe"));
-    CHECK(!rd_nd_soft_raster(0u, NULL));
-    CHECK(!rd_nd_soft_raster(9u, "Mali-G52 MC2"));        /* VK_DRIVER_ID_ARM_PROPRIETARY */
-    CHECK(!rd_nd_soft_raster(8u, "Adreno (TM) 740"));     /* VK_DRIVER_ID_QUALCOMM_PROPRIETARY */
-    CHECK(!rd_nd_soft_raster(18u, "Turnip Adreno (TM)")); /* VK_DRIVER_ID_MESA_TURNIP */
-    CHECK(!rd_nd_soft_raster(0u, ""));
 }
 
 static void putEnv(const char *name, const char *value)
@@ -304,7 +293,6 @@ int main(void)
     table();
     none();
     names();
-    soft();
     state();
     if (failures) {
         printf("rd_nodiscard_test: %d failures\n", failures);
