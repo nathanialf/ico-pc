@@ -26,6 +26,7 @@
 #include "rd_vu_share.h"
 #include "rd_ab_run.h"
 #include "rd_vu_zero.h"
+#include "rd_nodiscard.h"
 #include "shader_consts.h"
 #include "vu1_ref.h" /* vu1ref_region_mirror: ICO_VU_MIRROR */
 
@@ -1372,6 +1373,14 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
             g_rdPerf.vuPreFallbacks++;
             own = true;
         }
+        /* the discard-free twin (rd_nodiscard.h): a pass the CPU proved
+           none of the *_nodual build's discards can fire for takes its
+           twin's pipeline once that is made (asked for in the background,
+           never waited for); not the skin check's draws */
+        if (!g_rdSkinArm && !g_rdSkinTwin) {
+            rd__nd_pass(&keys[i], &pipes[i], &dp[i], vcb->draw[2], vcb->batch[2] != 0u,
+                        prog == RD_PROG_PARTICLE, r->dateStNow != 0);
+        }
     }
     /* the index compaction's list (rd_vu_compact.h): every pass through
      * the main shader, a merge build wherever its values are raised (the
@@ -2182,7 +2191,8 @@ void rd__vu_prepass(const RdFrame *f, int keep)
     s_preN = s_preAt = 0;
     s_preReplay = 0;
     s_preEntryDraws = 0;
-    vuVelBegin(); /* the velocity pass's replay (rd_velocity.h) */
+    vuVelBegin();          /* the velocity pass's replay (rd_velocity.h) */
+    rd__nd_replay_begin(); /* the discard-free twins' picture count (rd_nodiscard.h) */
     if (!g_rd.vuPrepass) {
         return;
     }
@@ -3735,6 +3745,7 @@ void rd__vu_prepass_shutdown(void)
     rd__vu_compact_shutdown(); /* its pipeline before the store layout (rd_vu_compact.h) */
     rd__vu_record_shutdown();  /* the store builds and their layout */
     rd__vu_zero_shutdown();    /* the zero-area cull's read back buffers (rd_vu_zero.h) */
+    rd__nd_shutdown();         /* the discard-free twins' modules (rd_nodiscard.h) */
     for (int v = 0; v < RD_VS_COUNT; v++) {
         if (g_rd.vsBatch[v].id) {
             rhi_destroy_shader(g_rd.vsBatch[v]);
@@ -4031,6 +4042,7 @@ void rd__vu_prepass_init(const RhiLimits *lim)
     g_rd.vuPrepassWhy[0] = '\0';
     rd__vu_record_init(lim); /* render targets or vertex stores (rd_vu_record.h) */
     rd__vu_zero_init();      /* the zero-area cull's state (rd_vu_zero.h) */
+    rd__nd_init();           /* the discard-free twins' (rd_nodiscard.h) */
     rd__ab_renderer();       /* the in-play judge: a renderer made again forgets (rd_ab_run.h) */
     const char *env = getenv("ICO_RD_VU_PREPASS");
     const uint32_t bytes = lim ? lim->colorBytesPerPixel : 0u;

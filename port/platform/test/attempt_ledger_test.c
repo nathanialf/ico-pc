@@ -466,6 +466,14 @@ static void test_classes(void)
            passed there: on, as on the reporter's Mali-G52) */
         ico_attempt_decide_timed(ICO_ATT_AB_ZERO, 0, 1, 0);
         CHECK(ico_attempt_state_of(ICO_ATT_AB_ZERO) == ICO_ATT_ON);
+        /* the discard-free twins timed in play (rd_ab_run.c): the judge, the
+           twins past their self-test where the device has no dual-source
+           blending (the classes are not told: on, as on the reporter's
+           Mali-G52), and not applicable where they are off */
+        ico_attempt_decide_timed(ICO_ATT_AB_NODISCARD, 0, 0, 0);
+        CHECK(ico_attempt_state_of(ICO_ATT_AB_NODISCARD) == ICO_ATT_NA);
+        ico_attempt_decide_timed(ICO_ATT_AB_NODISCARD, 0, 1, 0);
+        CHECK(ico_attempt_state_of(ICO_ATT_AB_NODISCARD) == ICO_ATT_ON);
         /* the whole start line, its last row included, in the window's 4 KB
            parts (window_perf_rank.c ledger_lines, ico_attempt_start_part):
            one part, or two since the v0.11.7 rows, each whole rows */

@@ -61,7 +61,9 @@
  * Graphics API switch makes it (rd_suspend, rd_resume) and the self-test
  * run again: the cull must be on after both, no read back buffer of it
  * alive after either and more made after the second (made again at each
- * try, never a handle of the device before), its line on stderr.
+ * try, never a handle of the device before), its line on stderr.  The
+ * discard-free twins (rd_nodiscard.h): their mark ICO_NODISCARD_MARK the
+ * same way ("test: the discard-free twins' mark after the self-test: ...").
  * The log lines are matched by test/rd_vuprepass_selftest.cmake. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -263,11 +265,12 @@ static void checkLossRung(RhiLimits *lim)
           "without the rung the pre-pass is off by the loss ladder: %s", g_rd.vuPrepassWhy);
 }
 
-/* the zero-area cull's mark file's first line (ICO_VU_ZERO_MARK), on stderr
-   for the script */
-static void zeroMarkLine(const char *when)
+/* an attempt's mark file's first line (its environment variable: the
+   zero-area cull's ICO_VU_ZERO_MARK, the discard-free twins'
+   ICO_NODISCARD_MARK), on stderr for the script */
+static void markLine(const char *env, const char *whose, const char *when)
 {
-    const char *path = getenv("ICO_VU_ZERO_MARK");
+    const char *path = getenv(env);
     if (path == NULL || path[0] == '\0') {
         return;
     }
@@ -279,8 +282,12 @@ static void zeroMarkLine(const char *when)
         fclose(f);
     }
     text[strcspn(text, "\r\n")] = '\0';
-    fprintf(stderr, "test: the zero-area cull's mark %s: %s\n", when,
-            text[0] != '\0' ? text : "none");
+    fprintf(stderr, "test: the %s mark %s: %s\n", whose, when, text[0] != '\0' ? text : "none");
+}
+
+static void zeroMarkLine(const char *when)
+{
+    markLine("ICO_VU_ZERO_MARK", "zero-area cull's", when);
 }
 
 int main(int argc, char **argv)
@@ -300,6 +307,10 @@ int main(int argc, char **argv)
         const char *mark = getenv("ICO_VU_ZERO_MARK");
         if (mark != NULL && mark[0] != '\0') {
             (void)remove(mark); /* a fresh install */
+        }
+        const char *nd = getenv("ICO_NODISCARD_MARK");
+        if (nd != NULL && nd[0] != '\0') {
+            (void)remove(nd); /* the discard-free twins' (rd_nodiscard.h) */
         }
     }
     RdSettings st;
@@ -327,6 +338,7 @@ int main(int argc, char **argv)
           g_rd.vuPrepass ? "on" : "off", wantOn ? "on" : "off");
     CHECK(kept == (wantOn || notRun), "the self-test returned %s", kept ? "true" : "false");
     zeroMarkLine("after the self-test");
+    markLine("ICO_NODISCARD_MARK", "discard-free twins'", "after the self-test");
     if (zswitch) {
         /* the Graphics API switch's path (window_host.c): the renderer made
            again in the process, the self-test run again on the new device */

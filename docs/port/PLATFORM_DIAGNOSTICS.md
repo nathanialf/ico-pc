@@ -896,6 +896,20 @@ counted, when it ended (Android: closed from the recent apps list or with Force 
 in <version>, this is <another>: tried again`, `... was refused by its self-test or a check: ...`,
 `... kept off by its mark: ...`. Nothing is written to the settings.
 
+The discard-free twins' mark (`port/platform/nodiscard_mark.c`;
+[PIPELINES.md](PIPELINES.md#the-discard-free-twins)) is read right after the cull's, by the same
+rules and table (`vu_zero_mark.c`'s pure functions): `logs/nodiscard-mark.txt` holds `trying <v>`
+(before the twins' two modules are made), `counting <v>` (their self-test passed), `on <v>` (250
+pictures drawn with them), `failed <v>` (a module or a pipeline not made, or the self-test refused
+them) or `blocked <v>`; the renderer gets `ICO_NODISCARD_BLOCK`, `ICO_NODISCARD_MARK` and
+`ICO_NODISCARD_VERSION`. One line where there was a mark: `ico_pc: the previous run: discard-free
+twins: were on when it ended (a crash): off on this install until the version changes (blocked
+<version>)`, `... were being tried when it ended (...)`, `... were on, their first pictures being
+counted, when it ended (...): no sign of a bad end: tried again`, `... were refused by their
+self-test or a pipeline not made: ...`, `... kept off by their mark: ...`. The renderer's second
+line, `clipper clean|not clean <v> (...)` (the twins' clipper check), is added to that line as `;
+their clipper check: ...`: said, never a reason to block.
+
 The next picture submitted ahead has a mark of its own (`port/platform/ahead_mark.c`, read once a
 process as the render thread starts, before the submit thread): `logs/ahead-mark.txt` holds `on
 <version>` (written once a process on the submit thread as the order first takes effect, before

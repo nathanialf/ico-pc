@@ -262,6 +262,7 @@ no_shadows_disc_jpn 0.00
 no_shadows_disc_jun26 0.00
 no_shadows_disc_kor 0.01
 no_shadows_disc_ntsc 0.00
+nodiscard_mark 0.02  # estimate: a CPU unit test with a few files, like vu_zero_mark (not run here)
 null_devices 0.01
 offset_audit 87.08
 options 0.14
@@ -295,6 +296,16 @@ pit_dive_base_ntsc 0.00
 poly_flat 0.00
 power_read 0.00  # estimate: a CPU unit test of one pure file, like perf_secs (run by hand here, well under 0.01 s; not run under CI yet)
 rd_diag_notes 0.00  # estimate: 0.0 s local (merge-wt_DIAG6-20261121T075234Z.lvp.log) x 1.39
+rd_nodiscard 0.01  # estimate: a CPU unit test of the eligibility table, like rd_ab (not run here)
+rd_nodiscard_ab 41.74  # estimate: the round-1 estimate x 2 (four fixtures to two; not run here)
+rd_nodiscard_ab_gl 72.10  # estimate: the round-1 estimate x 2 (four fixtures to two; not run here)
+rd_nodiscard_clean 62.61  # estimate: rd_nodiscard_ab x 1.5 (the game self-tests in each run; not run here)
+rd_vuprepass_selftest_nodiscard 4.20  # estimate: rd_vuprepass_selftest_zero_mali x 3 (the clipper check: 52 frames of 3 small replays, both twin entries; not run here)
+rd_vuprepass_selftest_nodiscard_clipper 4.20  # estimate: rd_vuprepass_selftest_nodiscard (the same self-test; not run here)
+rd_vuprepass_selftest_nodiscard_notclean 4.20  # estimate: rd_vuprepass_selftest_zero_mali x 3 (the clipper check: 52 frames of 3 small replays, both twin entries; not run here)
+rd_vuprepass_selftest_nodiscard_dual 1.41  # estimate: rd_vuprepass_selftest_zero_marked (the twins not tried; not run here)
+rd_vuprepass_selftest_nodiscard_marked 1.41  # estimate: rd_vuprepass_selftest_zero_marked (the twins not tried; not run here)
+rd_vuprepass_selftest_nodiscard_sabotage 1.54  # estimate: rd_vuprepass_selftest_zero_mali x 1.1 (three more replays; not run here)
 stage_disp 0.01  # estimate: a CPU-only walk of two rows on five discs (GRID221)
 present_fallback 0.01
 present_hist 0.00

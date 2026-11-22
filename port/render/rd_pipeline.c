@@ -87,7 +87,8 @@
 #include "rd_device_rows.h" /* rd_device_rows_reason */
 #include "rd_list_draws.h"
 #include "rd_internal.h"
-#include "rd_vu_zero.h" /* rd__pipeline_drop_vs */
+#include "rd_vu_zero.h"   /* rd__pipeline_drop_vs */
+#include "rd_nodiscard.h" /* the discard-free twins' modules and pipelines */
 #include "rd_passring.h"
 #include "rd_paste_spec.h"
 #include "rd_comp_spec.h"
@@ -961,8 +962,13 @@ static bool pipelineDesc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroup
     if (!d->vertex.id) {
         return false;
     }
-    /* no dual-source blending: the *_nodual twin (c0 alone) */
+    /* no dual-source blending: the *_nodual twin (c0 alone); its
+     * discard-free twin with RD_NODUAL_NODISCARD (rd_nodiscard.h: made only
+     * once the twins are tried, else no description) */
     d->fragment = k->gs.nodual && g_rd.fsNoDual[k->fs].id ? g_rd.fsNoDual[k->fs] : g_rd.fs[k->fs];
+    if (k->gs.nodual & RD_NODUAL_NODISCARD) {
+        d->fragment = rd__nd_module(k->fs);
+    }
     if (!d->fragment.id) {
         return false; /* a module this build does not have (rd__gpu_init's fence) */
     }
@@ -1310,6 +1316,8 @@ static void keyFsName(const RdPipeKeyInt *k, char *out, size_t size)
         snprintf(out, size, "%s_dstrov", f);
     } else if (k->dst == RHI_DST_READ_ATTACHMENT) {
         snprintf(out, size, "%s_dstatt", f);
+    } else if ((k->gs.nodual & RD_NODUAL_NODISCARD) && rd_nd_module_name(k->fs)) {
+        snprintf(out, size, "%s", rd_nd_module_name(k->fs)); /* rd_nodiscard.h */
     } else if (k->gs.nodual && k->fs < RD_FS_COUNT && g_rd.fsNoDual[k->fs].id) {
         snprintf(out, size, "%s_nodual", f);
     } else {
@@ -2002,9 +2010,12 @@ RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k)
 
 static void finClear(void);
 
+static void twinClear(void);
+
 void rd__pipeline_cache_clear(void)
 {
-    finClear(); /* the background set's batch in flight, and the set itself */
+    finClear();  /* the background set's batch in flight, and the set itself */
+    twinClear(); /* the discard-free twins' (rd_nodiscard.h) */
     if (g_rd.hasDevice) {
         for (uint32_t i = 0; i < s_used; i++) {
             if (s_cache[i].pipe.id) {
@@ -3199,9 +3210,14 @@ static bool finWaitLine(uint32_t n)
     return n <= 8u || n % 100u == 0u;
 }
 
+static bool twinBusy(void);
+
 void rd__pipe_finish_tick(double pictureMs)
 {
-    if (!s_fin.on || !g_rd.hasDevice || s_gatherOn) {
+    /* the discard-free twins' queue first (below): one background batch in
+       flight at a time, its or the finisher's */
+    rd__pipeline_twin_tick(false);
+    if (!s_fin.on || !g_rd.hasDevice || s_gatherOn || twinBusy()) {
         return;
     }
     const double now = rd__now_ms();
@@ -3267,6 +3283,315 @@ void rd__pipe_finish_tick(double pictureMs)
     default:
         break;
     }
+}
+
+/* --------------------------------------------- the discard-free twins' set
+ * (rd_nodiscard.h).  A pass whose twin's pipeline is not made draws through
+ * its *_nodual build and asks for the twin here (rd__pipeline_twin: queued
+ * once, never made in the draw).  Between pictures (rd__pipe_finish_tick)
+ * the queue's next batch is begun on the workers at low priority, as the
+ * background finisher's are, and taken once its compiles have ended: never
+ * waited for in play, none begun while the finisher's hold is in force (a
+ * late game step, a slow picture) or while the finisher runs, and one
+ * background set in flight at a time (RhiGpuProgress.bgPipesLeft counts the
+ * one set in flight).  A backend without background creation
+ * (rhi_create_pipelines_begin NULL: Direct3D, OpenGL) makes the batch there,
+ * between pictures.  A twin's pipeline the device could not make turns the
+ * twins off for the run (rd__nd_fault). */
+#define RD_TWIN_QUEUE 256u
+/* the bounds of the twins' background set in play: at most RD_TWIN_BATCH
+   pipelines a batch, on at most RD_FINISH_THREADS workers at low priority,
+   one batch in flight and none begun under the finisher's hold or while it
+   runs; its cost in the 10 s line (rd__pipeline_twins_take) */
+#define RD_TWIN_BATCH 8u
+
+static struct {
+    RdPipeKeyInt q[RD_TWIN_QUEUE]; /* asked for, not begun */
+    uint32_t n;
+    RhiPipelineJobs *jobs; /* the batch in flight */
+    uint32_t nb;
+    RdPipeKeyInt bk[RD_FINISH_BATCH];
+    RhiPipelineDesc bd[RD_FINISH_BATCH];
+    RhiBindGroupLayout bl[RD_FINISH_BATCH][4];
+    RhiStats st0;
+    uint32_t background; /* made by the background's workers or here, the run */
+    double t0;           /* the batch in flight's begin (rd__now_ms) */
+    /* the block's (the 10 s line's, __atomic): pipelines made, failed,
+       batches, and the batches' wall time in microseconds */
+    uint32_t blockMade, blockFailed, blockBatches;
+    uint64_t blockUs;
+} s_twin;
+
+void rd__pipeline_twins_take(uint32_t *made, uint32_t *failed, uint32_t *batches, double *ms)
+{
+    *made = __atomic_exchange_n(&s_twin.blockMade, 0u, __ATOMIC_RELAXED);
+    *failed = __atomic_exchange_n(&s_twin.blockFailed, 0u, __ATOMIC_RELAXED);
+    *batches = __atomic_exchange_n(&s_twin.blockBatches, 0u, __ATOMIC_RELAXED);
+    *ms = (double)__atomic_exchange_n(&s_twin.blockUs, 0u, __ATOMIC_RELAXED) / 1000.0;
+}
+
+static bool twinBusy(void)
+{
+    return s_twin.jobs != NULL;
+}
+
+RhiPipeline rd__pipeline_twin(const RdPipeKeyInt *k)
+{
+    RdPipeKeyInt tmp;
+    bool found;
+    k = drawKey(k, &tmp);
+    const uint32_t at = probeKey(k, &found);
+    g_rdCpu.pipeLookups++; /* the CPU phases' count (rd_cpu_phase.c) */
+    if (found) {
+        g_rdCpu.pipeHits++;
+        const RhiPipeline p = s_cache[s_hash[at] - 1].pipe; /* a failed entry: none */
+        if (p.id) {
+            rd__passring_pipeline(p.id, k->vs, k->fs, k->dst);
+            rd__list_draws_note(k->fs, k->gs.stencil); /* rd_list_draws.h */
+        }
+        return p;
+    }
+    if (s_gatherOn) {
+        gatherKey(k); /* the self-test's: made with its other keys, on the workers */
+        return (RhiPipeline){0};
+    }
+    if (!g_rd.hasDevice || s_createStopped) {
+        return (RhiPipeline){0};
+    }
+    for (uint32_t i = 0; i < s_twin.n; i++) {
+        if (keyEqual(&s_twin.q[i], k)) {
+            return (RhiPipeline){0};
+        }
+    }
+    for (uint32_t i = 0; s_twin.jobs != NULL && i < s_twin.nb; i++) {
+        if (keyEqual(&s_twin.bk[i], k)) {
+            return (RhiPipeline){0};
+        }
+    }
+    if (s_twin.n < RD_TWIN_QUEUE) {
+        s_twin.q[s_twin.n++] = *k;
+    }
+    return (RhiPipeline){0};
+}
+
+/* the batch's pipelines kept (a failed one: the twins off for the run) */
+static void twinKeep(const RhiPipeline *bp)
+{
+    RhiStats st1;
+    char why[224];
+    rhiPipeCounts(&st1);
+    failReason(&s_twin.st0, &st1, why, sizeof(why));
+    for (uint32_t j = 0; j < s_twin.nb; j++) {
+        bool found;
+        const uint32_t at = probeKey(&s_twin.bk[j], &found);
+        if (!bp[j].id) {
+            if (!found) {
+                keepPipeline(&s_twin.bk[j], bp[j], at, "in the discard-free twins' set", why);
+            }
+            char what[320];
+            snprintf(what, sizeof(what),
+                     "a twin's pipeline (program %u blend %u vs %u fs %u) could not be made in the "
+                     "background (%.200s)",
+                     s_twin.bk[j].gs.program, s_twin.bk[j].gs.blend, s_twin.bk[j].vs,
+                     s_twin.bk[j].fs, why);
+            __atomic_add_fetch(&s_twin.blockFailed, 1u, __ATOMIC_RELAXED);
+            rd__nd_fault(what);
+            continue;
+        }
+        if (found || s_used >= RD_PIPELINE_CACHE_MAX) {
+            rhi_destroy_pipeline(bp[j]); /* made meanwhile (the self-test's), or no room */
+            continue;
+        }
+        keepPipeline(&s_twin.bk[j], bp[j], at, "in the discard-free twins' set", "");
+        s_twin.background++;
+        __atomic_add_fetch(&s_twin.blockMade, 1u, __ATOMIC_RELAXED);
+    }
+    const double wall = rd__now_ms() - s_twin.t0;
+    __atomic_add_fetch(&s_twin.blockBatches, 1u, __ATOMIC_RELAXED);
+    __atomic_add_fetch(&s_twin.blockUs, (uint64_t)(wall > 0.0 ? wall * 1000.0 : 0.0),
+                       __ATOMIC_RELAXED);
+    s_twin.nb = 0;
+    s_batchNote[0] = '\0';
+    activityDone();
+}
+
+/* the batch in flight taken (wait: until its compiles end); false when it
+   goes on */
+static bool twinEnd(bool wait)
+{
+    RhiPipeline bp[RD_FINISH_BATCH];
+    if (s_twin.jobs == NULL) {
+        return true;
+    }
+    if (!rhi_create_pipelines_end(s_twin.jobs, wait, bp, NULL, NULL)) {
+        return false;
+    }
+    s_twin.jobs = NULL;
+    twinKeep(bp);
+    return true;
+}
+
+/* the queue's next keys begun (or made here without background creation) */
+static void twinBegin(void)
+{
+    uint32_t nb = 0, used = 0;
+    for (; used < s_twin.n && nb < RD_TWIN_BATCH; used++) {
+        const RdPipeKeyInt *k = &s_twin.q[used];
+        bool found;
+        (void)probeKey(k, &found);
+        if (found || s_createStopped || cacheFull(k) ||
+            s_used + nb + RD_PIPE_BATCH >= RD_PIPELINE_CACHE_MAX) {
+            continue; /* made meanwhile, or no room: drawn through the *_nodual build */
+        }
+        if (!pipelineDesc(k, &s_twin.bd[nb], s_twin.bl[nb])) {
+            bool f2;
+            const uint32_t at = probeKey(k, &f2);
+            keepPipeline(k, (RhiPipeline){0}, at, "in the discard-free twins' set",
+                         "its description was not made (a twin's module not made)");
+            continue;
+        }
+        s_twin.bk[nb++] = *k;
+    }
+    memmove(s_twin.q, s_twin.q + used, (size_t)(s_twin.n - used) * sizeof(s_twin.q[0]));
+    s_twin.n -= used;
+    if (nb == 0) {
+        return;
+    }
+    {
+        char mods[320];
+        batchModules(s_twin.bk, nb, mods, sizeof(mods));
+        /* the crash report's note while the batch compiles (as the
+           finisher's: " in the background: " for the watchdog's pipeline
+           limit, port/platform/gpu_hang.c ico_pipe_note_creating) */
+        int w = snprintf(s_batchNote, sizeof(s_batchNote),
+                         "creating %u pipelines of the discard-free twins in the background: %s",
+                         nb, mods);
+        (void)w;
+        if (s_activityFn != NULL) {
+            s_activityFn(s_batchNote);
+        }
+    }
+    rhiPipeCounts(&s_twin.st0);
+    s_twin.nb = nb;
+    s_twin.t0 = rd__now_ms();
+    s_twin.jobs = rhi_create_pipelines_begin(s_twin.bd, nb, RD_FINISH_THREADS, true);
+    if (s_twin.jobs == NULL) {
+        /* no background creation on this backend: made here, between
+           pictures */
+        RhiPipeline bp[RD_FINISH_BATCH];
+        for (uint32_t j = 0; j < nb; j++) {
+            bp[j] = rhi_create_pipeline(&s_twin.bd[j]);
+        }
+        twinKeep(bp);
+    }
+}
+
+void rd__pipeline_twin_tick(bool wait)
+{
+    if (!g_rd.hasDevice || s_gatherOn) {
+        return;
+    }
+    if (s_twin.jobs != NULL) {
+        if (!wait) {
+            /* taken once its compiles have returned, without a call that
+               waits for the submit thread (the finisher's rule) */
+            RhiGpuProgress gp;
+            if (rhi_gpu_progress(&gp) && gp.bgPipesLeft > 0) {
+                return;
+            }
+        }
+        if (!twinEnd(wait) || !wait) {
+            return; /* one step a picture in play */
+        }
+    }
+    if (s_twin.n == 0 || s_fin.on || s_fin.jobs != NULL || !rd__nd_on()) {
+        return;
+    }
+    if (!wait && (double)__atomic_load_n(&s_finHoldUs, __ATOMIC_ACQUIRE) / 1000.0 > rd__now_ms()) {
+        return; /* the finisher's hold: a late game step or a slow picture */
+    }
+    twinBegin();
+    if (wait) {
+        (void)twinEnd(true);
+    }
+}
+
+/* the batch in flight ended (its pipelines destroyed), the queue emptied */
+static void twinClear(void)
+{
+    if (s_twin.jobs != NULL && g_rd.hasDevice) {
+        (void)rhi_create_pipelines_end(s_twin.jobs, true, NULL, NULL, NULL);
+        s_batchNote[0] = '\0';
+    }
+    s_twin.jobs = NULL;
+    s_twin.nb = 0;
+    s_twin.n = 0;
+}
+
+uint32_t rd__pipeline_drop_twins(void)
+{
+    twinClear();
+    uint32_t n = 0;
+    for (uint32_t i = 0; i < s_used && g_rd.hasDevice; i++) {
+        if ((s_cache[i].key.gs.nodual & RD_NODUAL_NODISCARD) && s_cache[i].pipe.id) {
+            rhi_destroy_pipeline(s_cache[i].pipe);
+            s_cache[i].pipe = (RhiPipeline){0}; /* a failed entry: never asked for again */
+            s_count--;
+            n++;
+        }
+    }
+    return n;
+}
+
+uint32_t rd__pipeline_count_twins(void)
+{
+    uint32_t n = 0;
+    for (uint32_t i = 0; i < s_used; i++) {
+        n += (s_cache[i].key.gs.nodual & RD_NODUAL_NODISCARD) && s_cache[i].pipe.id ? 1u : 0u;
+    }
+    return n;
+}
+
+uint32_t rd__pipeline_twins_background(void)
+{
+    return s_twin.background;
+}
+
+uint32_t rd__pipeline_mark(void)
+{
+    return s_used;
+}
+
+uint32_t rd__pipeline_forget_since(uint32_t mark)
+{
+    if (mark >= s_used) {
+        return 0;
+    }
+    if (g_rd.hasDevice) {
+        rhi_wait_idle(); /* none of them in flight */
+    }
+    uint32_t n = 0;
+    for (uint32_t i = mark; i < s_used; i++) {
+        if (s_cache[i].pipe.id) {
+            if (g_rd.hasDevice) {
+                rhi_destroy_pipeline(s_cache[i].pipe);
+            }
+            s_count--;
+            n++;
+        } else if (s_failedCount > 0u) {
+            s_failedCount--;
+        }
+    }
+    /* the entries after the mark gone (made again when a draw asks), the
+       index over the rest rebuilt */
+    s_used = mark;
+    memset(s_hash, 0, sizeof(s_hash));
+    for (uint32_t i = 0; i < s_used; i++) {
+        bool found;
+        const uint32_t at = probeKey(&s_cache[i].key, &found);
+        s_hash[at] = (uint16_t)(i + 1u);
+    }
+    return n;
 }
 
 /* the pipelines line's words for the dynamic state in force
@@ -3770,11 +4095,14 @@ int rd_pipeline_cache_file(char *out, size_t cap)
         RdCacheKey k;
         rd_cache_key_begin(&k, RD_PIPELINE_CACHE_FORMAT);
         for (unsigned i = 0; i < g_icoShaderCount; i++) {
-            /* the zero-area cull's rule-stage builds (rd_vu_zero.h) left out:
+            /* the zero-area cull's rule-stage builds (rd_vu_zero.h) and the
+               discard-free twins (rd_nodiscard.h, "_nodual_nd") left out:
                with them the file's name is the build's without them, so a
                device keeps the cache it had (the driver's own cache checks
                each module it holds) */
-            if (strncmp(g_icoShaders[i].name, "vu_tri_rule_zero_", 17) == 0) {
+            const size_t nl = strlen(g_icoShaders[i].name);
+            if (strncmp(g_icoShaders[i].name, "vu_tri_rule_zero_", 17) == 0 ||
+                (nl > 10 && strcmp(g_icoShaders[i].name + nl - 10, "_nodual_nd") == 0)) {
                 continue;
             }
             rd_cache_key_module(&k, g_icoShaders[i].name, g_icoShaders[i].stage,

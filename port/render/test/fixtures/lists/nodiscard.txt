@@ -1,0 +1,28 @@
+# rd_nodiscard_ab, rd_nodiscard_ab_gl and rd_nodiscard_clean (test/rd_nodiscard_ab.cmake):
+# a fixture, then the profiles it is replayed under (corpus, mali, mali169,
+# own: the script's head says what each is; OpenGL replays every fixture at
+# the corpus setting without dual-source blending).  The Mali profiles must
+# draw some pass through a twin over the whole list: on lavapipe only clip
+# mode none (code 34) takes one, and only where the alpha plan leaves no test
+# in the pass, which a fixture's blank-rule textures (alpha 00..ff) almost
+# never allow (2026-11-22: fx-mali-slow541's passes were all refused for the
+# alpha test); clean_min=N: rd_nodiscard_clean's floor of camera rule draws
+# through a twin under each of the fixture's profiles without dual-source
+# blending (about a third of what the run of 2026-11-22 17:40 measured); the vu_opaque.rules.txt fixtures below have opaque textures,
+# so their code 34 draws' tests are decided by the alpha plan.  The Mali
+# profiles need a frame at least 16:9 wide (a 4:3 dump cannot show 16:9).
+#
+# issue 179's Mali-G52 (v0.11.5): the stage 42 slow-scene capture, 912 wide
+fx-mali-slow541 mali,mali169,corpus clean_min=2
+# issue 179's Mali-G52 (v0.11.7) loss capture, 912 wide, opaque textures:
+# 181 code 34 draws (step 0's alpha-plan mirror finds every one eligible)
+fx-mali-loss-before mali,mali169,corpus clean_min=25
+# issue 179's Mali-G52 (v0.11.4) loss capture, 912 wide, opaque textures:
+# 70 code 34 draws (all eligible by the same mirror)
+fx-scope-179-before mali,mali169,corpus clean_min=200
+# The frame of commit e65012742 (Mesa's NaN band flag, seen on a triangle
+# drawn beside the picture under the PS2 rule's side bands), here under the
+# camera rule at its own aspect without dual-source blending (own): its
+# camera rule draws through the twins byte for byte (the 17:40 run: 0
+# targets differ)
+fx-drops-4657 own clean_min=9

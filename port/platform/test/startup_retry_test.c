@@ -523,6 +523,13 @@ static void test_note_vu_pre(void)
         "pre to program 0 blend 12 vs 41 fs 5 fmt 1/8 msaa 0 dst 0; vertex "
         "vu_tri_rule_zero_batch_compute_pre_cs 20311 words (4000 instructions), vu_main_vs "
         "7133 words (1500 instructions)",
+        /* a discard-free twin (rd_nodiscard.h: its own self-test, its own
+           mark), alone and in a gathered batch whose largest fragment it is */
+        "creating pipeline program 0 blend 6 vs 35 fs 20 fmt 1/8 msaa 0 dst 0 "
+        "(vu_merge_main_vs 7469 words + vu_texa_ps_nodual_nd 11178 words)",
+        "creating pipelines 1-2 of 2: program 0 blend 6 vs 35 fs 5 fmt 1/8 msaa 0 dst 0 to "
+        "program 0 blend 6 vs 35 fs 20 fmt 1/8 msaa 0 dst 0; vertex vu_merge_main_vs 7469 words "
+        "(1700 instructions); largest fragment vu_texa_ps_nodual_nd 11178 words",
     };
     for (size_t i = 0; i < sizeof zeros / sizeof zeros[0]; i++) {
         CHECK(!startup_retry_note_has_vu_pre(zeros[i]), "\"%s\"", zeros[i]);

@@ -2657,9 +2657,16 @@ bool vu_pixel_in_picture(float4 pos)
     return x >= 2048.0 - h && x < 2048.0 + h;
 }
 
-// The clip plane's, the side bands' and DATE's discards
+// The clip plane's, the side bands' and DATE's discards.  The discard-free
+// twins (ICO_VU_NODISCARD: vu_ps_nodual_nd, vu_texa_ps_nodual_nd, the
+// *_nodual builds with no discard at all; port/render/rd_nodiscard.h) have
+// none of these nor the alpha test's below: the renderer gives them only a
+// pass it proved none of them can fire for (no clip plane, no DATE, no side
+// band, the alpha test off in the pass), so a draw through a twin writes
+// what the *_nodual build writes, pixel for pixel
 void vu_pixel_tests(VuPSIn i)
 {
+#ifndef ICO_VU_NODISCARD
     if ((g_mode.x & DF_PLANE) != 0u && i.plane.x < 0.0) {
         GS_DISCARD;
     }
@@ -2682,6 +2689,7 @@ void vu_pixel_tests(VuPSIn i)
             GS_DISCARD;
         }
     }
+#endif
 }
 
 // sprite_ps with STQ: the texel at S/Q, T/Q (the texture is padded to
@@ -2700,9 +2708,11 @@ float4 vu_pixel(VuPSIn i)
         t = vu_texa_expand_f(t, g_mode.y & 0xFFu, g_mode.y >> 8);
         col = vu_texture_function_f(t, col, g_mode.x);
     }
+#ifndef ICO_VU_NODISCARD
     if (gs_alpha_discard(g_mode.z, g_mode.w, uint(col.a))) {
         GS_DISCARD;
     }
+#endif
     return col;
 }
 
@@ -2721,9 +2731,11 @@ float4 vu_pixel_texa(VuPSIn i)
                       : gs_texa_texture(g_texture, g_sampler, uv, g_mode.x);
         col = vu_texture_function_f(float4(t), col, g_mode.x);
     }
+#ifndef ICO_VU_NODISCARD
     if (gs_alpha_discard(g_mode.z, g_mode.w, uint(col.a))) {
         GS_DISCARD;
     }
+#endif
     return col;
 }
 

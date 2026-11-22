@@ -143,6 +143,15 @@ ico_add_shader(font_sheet_baked_ps font.hlsl font_sheet_baked_ps fragment DEFINE
                SUFFIX _nodual)
 ico_add_shader(vu_ps vu_prelit.hlsl vu_ps fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)
 ico_add_shader(vu_texa_ps vu_prelit.hlsl vu_texa_ps fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)
+# the same two with no discard at all (ICO_VU_NODISCARD: the clip plane's,
+# the side bands', DATE's and the alpha test's left out), for the passes the
+# renderer proved none of those can fire for (port/render/rd_nodiscard.h:
+# made only once the discard-free twins are tried, on a device without
+# dual-source blending)
+ico_add_shader(vu_ps vu_prelit.hlsl vu_ps fragment DEFINES ICO_NO_DUAL=1 ICO_VU_NODISCARD=1
+               SUFFIX _nodual_nd)
+ico_add_shader(vu_texa_ps vu_prelit.hlsl vu_texa_ps fragment DEFINES ICO_NO_DUAL=1
+               ICO_VU_NODISCARD=1 SUFFIX _nodual_nd)
 
 # the same entries computing the GS blend from the destination (the exact
 # blend, port/render/rd_dst_read.c): _dstrov reads and writes the target
