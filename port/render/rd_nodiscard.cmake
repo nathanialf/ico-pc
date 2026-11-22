@@ -49,6 +49,21 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/nodiscard_ab" -DBACKEND=vulkan
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_nodiscard_ab.cmake")
     set_tests_properties(rd_nodiscard_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
+    # rd_nodiscard_clean: the same list with the run with them also under
+    # ICO_RD_VU_NODISCARD_CLIPPER=clean (the tests' fake of a clean clipper
+    # check): the camera rule's passes take a twin, counted apart and above 0
+    # over each fixture and Mali profile; the pictures compared and reported,
+    # not required equal (lavapipe's clipper is not clean)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/nodiscard_clean")
+    add_test(NAME rd_nodiscard_clean
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                     "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/vu_zero.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/nodiscard_clean" -DBACKEND=vulkan
+                     -DMODE=clean -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_nodiscard_ab.cmake")
+    set_tests_properties(rd_nodiscard_clean PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                         TIMEOUT 3600)
     if(ICO_RHI_OPENGL AND ICO_SHADERS_GLSL AND TARGET ico_rhi_opengl)
         file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/gl/nodiscard_ab")
         add_test(NAME rd_nodiscard_ab_gl
@@ -97,14 +112,19 @@ endif()
 # Each run's start line ("discard-free twins: on|off, N modules of them made,
 # P of their pipelines alive") says what exists.
 if(ICO_RUN_TESTS AND DEFINED _vst AND TARGET rd_vuprepass_selftest_test)
-    set(_ndon "rd: discard-free twins: on \\(self-test: [1-9][0-9]* pass(es)? through them, the alpha test's, the clip plane's and the eye-plane crossing's refused \\([1-9][0-9]*, [1-9][0-9]* and [1-9][0-9]*\\), the side band and DATE refused by the rule, pictures byte for byte, its [1-9][0-9]* pipelines released\\) on SCENE.*rd: discard-free twins: on, 2 modules of them made, 0 of their pipelines alive")
+    set(_ndon "rd: discard-free twins: on \\(self-test: [1-9][0-9]* pass(es)? through them, the alpha test's, the clip plane's and the eye-plane crossing's refused \\([1-9][0-9]*, [1-9][0-9]* and [1-9][0-9]*\\), the side band and DATE refused by the rule, pictures byte for byte, its [1-9][0-9]* pipelines released\\) on SCENE[^\n]*")
+    # lavapipe's clipper makes the band flag NaN at a corner it adds behind
+    # the eye (vu_common.hlsli vu_pixel_tests): the check must find it
+    set(_ndclip "rd: discard-free twins: the clipper check: not clean \\([^\n]* at code 3[26] differs, the first at texel [0-9]+,[0-9]+\\): clip mode none alone takes them")
+    set(_ndclean "rd: discard-free twins: the clipper check: clean \\(ICO_RD_VU_NODISCARD_CLIPPER, measured not clean: [^\n]* at code 3[26] differs[^\n]*\\): the camera rule's passes take them too")
+    set(_ndstart "rd: discard-free twins: on, 2 modules of them made, 0 of their pipelines alive")
     set(_ndnone ".*rd: discard-free twins: off, 0 modules of them made, 0 of their pipelines alive")
     set(_ndmark "ICO_NODISCARD_VERSION=v0.0.0;ICO_NODISCARD_MARK=${CMAKE_CURRENT_BINARY_DIR}/nodiscard_mark")
     set(_ndenv ${_env_mali_pre} "ICO_VK_FAKE_NO_DUAL=1")
     add_test(NAME rd_vuprepass_selftest_nodiscard
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}"
-                     "-DEXTRA=rd: discard-free twins: trying them: .*${_ndon}.*test: the discard-free twins' mark after the self-test: counting v0.0.0"
+                     "-DEXTRA=rd: discard-free twins: trying them: .*${_ndon}.*${_ndclip}.*${_ndstart}.*test: the discard-free twins' mark after the self-test: counting v0.0.0"
                      "-DNOT_=rd: discard-free twins: off" -P "${_vst}")
     add_test(NAME rd_vuprepass_selftest_nodiscard_sabotage
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
@@ -116,6 +136,11 @@ if(ICO_RUN_TESTS AND DEFINED _vst AND TARGET rd_vuprepass_selftest_test)
                      "-DLINE=${_vst_on}"
                      "-DEXTRA=rd: discard-free twins: off on this install \\(were being tried when it ended \\(a crash\\)\\)${_ndnone}.*test: the discard-free twins' mark after the self-test: none"
                      "-DNOT_=rd: discard-free twins: (on|trying)" -P "${_vst}")
+    add_test(NAME rd_vuprepass_selftest_nodiscard_clean
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
+                     "-DLINE=${_vst_on}"
+                     "-DEXTRA=${_ndon}.*${_ndclean}.*${_ndstart}"
+                     "-DNOT_=rd: discard-free twins: (off|the clipper check: not clean)" -P "${_vst}")
     add_test(NAME rd_vuprepass_selftest_nodiscard_dual
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}"
@@ -123,7 +148,10 @@ if(ICO_RUN_TESTS AND DEFINED _vst AND TARGET rd_vuprepass_selftest_test)
                      "-DNOT_=rd: discard-free twins: (on|trying)" -P "${_vst}")
     set_tests_properties(rd_vuprepass_selftest_nodiscard rd_vuprepass_selftest_nodiscard_sabotage
                          rd_vuprepass_selftest_nodiscard_marked rd_vuprepass_selftest_nodiscard_dual
+                         rd_vuprepass_selftest_nodiscard_clean
                          PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
+    set_tests_properties(rd_vuprepass_selftest_nodiscard_clean
+                         PROPERTIES ENVIRONMENT "${_ndenv};ICO_RD_VU_NODISCARD_CLIPPER=clean;${_ndmark}_clean.txt")
     set_tests_properties(rd_vuprepass_selftest_nodiscard
                          PROPERTIES ENVIRONMENT "${_ndenv};${_ndmark}_on.txt")
     set_tests_properties(rd_vuprepass_selftest_nodiscard_sabotage

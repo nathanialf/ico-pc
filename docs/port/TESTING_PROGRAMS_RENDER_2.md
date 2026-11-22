@@ -551,9 +551,16 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   and under corpus 0 draws and "not applicable here" (dual-source blending). `rd_nodiscard_ab_gl`:
   OpenGL (llvmpipe), every fixture at 4:3 1x with `ICO_GL_FAKE_NO_DUAL=1`, above 0 over the list.
   Only clip mode none takes a twin, on every device ([PIPELINES.md](PIPELINES.md#the-discard-free-twins)),
-  so these runs draw the phone's path.
-  No device: SKIP.
-- `rd_vuprepass_selftest_nodiscard`, `_nodiscard_sabotage`, `_nodiscard_marked`, `_nodiscard_dual`
+  so these runs draw the phone's path; the run with them must have no draw of the clipper check's
+  class (no check without the self-test). `rd_nodiscard_clean`: the same with
+  `ICO_RD_VU_NODISCARD_CLIPPER=clean` on the run with them: the camera rule's passes through a
+  twin counted apart and above 0 over each fixture and Mali profile, the pictures compared and
+  reported but not required equal (lavapipe's clipper is not clean, and which draws cross the eye
+  plane is not known to the script). No device: SKIP.
+- `rd_vuprepass_selftest_nodiscard`, `_nodiscard_sabotage`, `_nodiscard_marked`, `_nodiscard_dual`,
+  `_nodiscard_clean` (the clipper check: `_nodiscard` requires lavapipe's verdict `not clean`
+  with the first differing case at code 32 or 36, the floor still on; `_nodiscard_clean` the
+  verdict faked clean with what was measured, not clean, in its line)
   (`rd_nodiscard.cmake`, through `rd_vuprepass_selftest_test` and
   `test/rd_vuprepass_selftest.cmake`; the Arm fakes without dual-source blending): the twins'
   start-up self-test after the cull's (the pre-pass still on), each run's start line saying what

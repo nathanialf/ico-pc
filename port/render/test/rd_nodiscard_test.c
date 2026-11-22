@@ -132,6 +132,27 @@ static void table(void)
     CHECK(rd_nd_eligible(&p) == RD_ND_TWIN);
     p.particle = true;
     CHECK(rd_nd_eligible(&p) == RD_ND_CLIPPED);
+    /* a device whose clipper check passed: the camera rule's region test and
+       the scissor with ICO_VU_NO_BESIDE take the twin; particles never, a
+       draw without the flag still has its band, and every other reason
+       still holds */
+    p = base();
+    p.clipperClean = true;
+    p.drawFlags = ICO_VU_CLIP_REGION | ICO_VU_CAMERA | ICO_VU_NO_BESIDE;
+    CHECK(rd_nd_eligible(&p) == RD_ND_TWIN);
+    p.drawFlags = ICO_VU_CLIP_SCISSOR | ICO_VU_CAMERA | ICO_VU_NO_BESIDE;
+    CHECK(rd_nd_eligible(&p) == RD_ND_TWIN);
+    p.particle = true;
+    CHECK(rd_nd_eligible(&p) == RD_ND_CLIPPED);
+    p.particle = false;
+    p.drawFlags = ICO_VU_CLIP_REGION | ICO_VU_EXTENDED;
+    CHECK(rd_nd_eligible(&p) == RD_ND_BAND);
+    p.drawFlags = ICO_VU_CLIP_REGION | ICO_VU_NO_BESIDE;
+    p.modeZ = RD_ATST_GREATER | (1u << 8);
+    CHECK(rd_nd_eligible(&p) == RD_ND_ALPHA);
+    p.modeZ = 0;
+    p.plane = true;
+    CHECK(rd_nd_eligible(&p) == RD_ND_PLANE);
 
     /* the order: the first reason that applies */
     p = base();
@@ -219,15 +240,16 @@ static void state(void)
     putEnv("ICO_LOSS_ROW", NULL);
     putEnv("ICO_NODISCARD_BLOCK", NULL);
     putEnv("ICO_NODISCARD_MARK", NULL);
+    putEnv("ICO_RD_VU_NODISCARD_CLIPPER", NULL);
     /* held until the self-test: nothing in the 10 s line */
     rd__nd_init();
     CHECK(!rd__nd_on() && strcmp(rd__nd_state_text(), "held") == 0 && !rd__nd_triable());
     CHECK(rd_nd_text(buf, sizeof(buf), 1) == 0u && buf[0] == '\0');
     (void)rd__nd_stats_text(st, sizeof(st));
     CHECK(strcmp(st, "discard-free twins held (until their start-up self-test passes): 0 draws "
-                     "through them; refused: plane 0, DATE 0, band 0, alpha 0, clipped 0, not "
-                     "made yet 0, timed without them 0; 0 modules of them made, 0 of their "
-                     "pipelines alive") == 0);
+                     "through them, 0 of them by the clipper check (not checked); refused: plane "
+                     "0, DATE 0, band 0, alpha 0, clipped 0, not made yet 0, timed without them "
+                     "0; 0 modules of them made, 0 of their pipelines alive") == 0);
     if (strstr(st, "held (until") == NULL) {
         printf("  stats: %s\n", st);
     }
@@ -235,9 +257,22 @@ static void state(void)
     rd__nd_verdict(true, "");
     CHECK(rd__nd_on() && !rd__nd_triable());
     (void)rd_nd_text(buf, sizeof(buf), 2);
-    CHECK(strcmp(buf, "; discard-free twins: 0 draws a picture through them (0 refused a "
-                      "picture: plane 0, DATE 0, band 0, alpha 0, clipped 0, not made yet 0, "
-                      "timed without them 0)") == 0);
+    CHECK(strcmp(buf, "; discard-free twins: 0 draws a picture through them, 0 of them by the "
+                      "clipper check (not checked) (0 refused a picture: plane 0, DATE 0, band 0, "
+                      "alpha 0, clipped 0, not made yet 0, timed without them 0)") == 0);
+    /* the clipper check's verdicts and the tests' fake */
+    rd__nd_clipper_verdict(false, "an edge on the centre view ray at code 32 differs");
+    CHECK(rd__nd_clipper() == RD_ND_CLIP_DIRTY && strcmp(rd__nd_clipper_text(), "not clean") == 0);
+    rd__nd_clipper_verdict(true, "");
+    CHECK(rd__nd_clipper() == RD_ND_CLIP_CLEAN && strcmp(rd__nd_clipper_text(), "clean") == 0);
+    putEnv("ICO_RD_VU_NODISCARD_CLIPPER", "clean");
+    rd__nd_init();
+    rd__nd_clipper_verdict(false, "x");
+    CHECK(rd__nd_clipper() == RD_ND_CLIP_CLEAN);
+    putEnv("ICO_RD_VU_NODISCARD_CLIPPER", NULL);
+    rd__nd_init();
+    CHECK(rd__nd_clipper() == RD_ND_CLIP_UNKNOWN);
+    rd__nd_verdict(true, "");
     char small[24];
     const size_t n = rd_nd_text(small, sizeof(small), 1);
     CHECK(n == sizeof(small) - 1u && strlen(small) == sizeof(small) - 1u);
@@ -254,8 +289,12 @@ static void state(void)
     CHECK(rd__nd_on() && strcmp(rd__nd_state_text(), "on") == 0);
     (void)rd__nd_stats_text(st, sizeof(st));
     static const char kOn[] = "discard-free twins on (ICO_RD_VU_NODISCARD=1): 0 draws through "
-                              "them; ";
+                              "them, 0 of them by the clipper check (not checked); ";
     CHECK(strncmp(st, kOn, sizeof(kOn) - 1u) == 0);
+    putEnv("ICO_RD_VU_NODISCARD_CLIPPER", "clean");
+    rd__nd_init();
+    CHECK(rd__nd_on() && rd__nd_clipper() == RD_ND_CLIP_CLEAN);
+    putEnv("ICO_RD_VU_NODISCARD_CLIPPER", NULL);
     /* the loss ladder over =1: off for this start, said in the clause once
        they were on */
     putEnv("ICO_LOSS_ROW", "1");

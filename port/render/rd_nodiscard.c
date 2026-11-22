@@ -46,7 +46,10 @@ int rd_nd_eligible(const RdNdPass *p)
        corners whose side band flag is 0, and the *_nodual build's band
        test cannot fire; any other clip mode or particles may put a corner
        behind the eye, where a clipper may make the flag non-finite */
-    if (p->particle || clip != ICO_VU_CLIP_NONE) {
+    /* ...unless the device's clipper check passed (rd_nodiscard.h, "The
+       clipper check"): then the camera rule's passes too; particles never
+       (the check draws none) */
+    if (p->particle || (clip != ICO_VU_CLIP_NONE && !p->clipperClean)) {
         return RD_ND_CLIPPED;
     }
     return RD_ND_TWIN;

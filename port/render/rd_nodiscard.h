@@ -54,6 +54,29 @@
  * clipped drops, code 36's flagged corners): refused as "clipped".  So the
  * one rule holds on every device, and the tests' lavapipe runs take the
  * path a phone takes.
+ * The clipper check (issue 179 round 3: measure, never assume).  After the
+ * code 34 cases pass, the self-test draws 13 camera rule cases whose
+ * triangles cross the eye plane (rd_nodiscard_selftest.c kClip: an edge on
+ * the centre view ray, on view rays with the divided x alike and the divided
+ * y alike and off-centre, a corner at w = 0, just behind (w = -0.001) and
+ * far behind (w = -1290, the dock's) the eye, two corners behind, every w
+ * above 0 clipped at GS Z 0 with and without an edge on a view ray, a
+ * corner saturated in X, a sliver, a large triangle across the frame), each
+ * at code 32 and code 36, both windings, each a frame of its own with a
+ * depth probe after it, through the twins and without them, the pictures
+ * byte for byte.  All the same: "clean", and the camera rule's passes take
+ * a twin too (counted apart: "of them by the clipper check").  Any
+ * difference: "not clean", the first differing case logged, clip mode none
+ * alone; never "failed" in the mark (a property of the device), the verdict
+ * kept on the mark's second line with the version and logged at the next
+ * start.  Evidence, not a proof: it covers the clipper's branches (the w and
+ * near-depth planes, the far plane, the side planes through saturation, one
+ * and two corners out, the factor's 0 / 0) for these corners only; geometry
+ * the cases miss, other states (MSAA, other targets), a driver's size
+ * thresholds and anything time-dependent are not covered.  Lavapipe is not
+ * clean (rd_vuprepass_selftest_nodiscard requires it: the cases find
+ * Mesa's NaN); ICO_RD_VU_NODISCARD_CLIPPER=clean|dirty fakes the verdict for
+ * the tests.
  * The twins' pipelines are made in the background between pictures
  * (rd_pipeline.c rd__pipeline_twin, rd__pipeline_twin_tick: a batch on the
  * workers at low priority, as the start-up set's background finisher, or
@@ -140,7 +163,11 @@ typedef struct RdNdPass {
     bool particle;      /* a particles command */
     bool dateStencil;   /* DATE through the stencil bit for this draw (Replay.dateStNow) */
     bool skipAlpha;     /* the tests' sabotage: the alpha test not looked at */
+    bool clipperClean;  /* the device's clipper check passed (RD_ND_CLIP_CLEAN), or its frames */
 } RdNdPass;
+
+/* the device's clipper check (rd_nodiscard_selftest.c, "The clipper check") */
+enum { RD_ND_CLIP_UNKNOWN = 0, RD_ND_CLIP_CLEAN, RD_ND_CLIP_DIRTY };
 
 /* -1: not a pass a twin exists for (not vu_ps / vu_texa_ps, no *_nodual
    build, a destination read); else RD_ND_TWIN or the first reason that
@@ -229,6 +256,17 @@ const char *rd__nd_state_text(void);
 void rd__nd_take(uint64_t *twin, uint64_t refused[RD_ND_REASONS]);
 /* the tests' sabotage =alpha */
 bool rd__nd_sabotage_alpha(void);
+/* the self-test's draws through a twin of a clip mode other than none since
+   the last call */
+uint64_t rd__nd_take_clip(void);
+/* the clipper check's frames running (their camera rule passes taken as a
+   clean clipper's would be), and its verdict (clean, or the first differing
+   case's words; the tests' ICO_RD_VU_NODISCARD_CLIPPER=clean|dirty replaces
+   it, saying what was measured); the verdict (RD_ND_CLIP_*) and its words */
+void rd__nd_clipper_check(bool on);
+void rd__nd_clipper_verdict(bool clean, const char *why);
+int rd__nd_clipper(void);
+const char *rd__nd_clipper_text(void);
 
 /* The 10 s VU line's clause (port/platform/window_host.c, after the
    zero-area cull's), the block's n replays: "; discard-free twins: D draws

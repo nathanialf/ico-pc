@@ -24,6 +24,20 @@
 
 static const char kHead[] = "the previous run: discard-free twins: ";
 
+/* the renderer's second line, "clipper clean|not clean <v> (...)" (its
+   start-up clipper check, port/render/rd_nodiscard.h), as "; their clipper
+   check: ..." for the line (said, never a reason to block) */
+static void clipperWords(const char *mark, char *out, size_t size)
+{
+    const char *c = mark != NULL ? strstr(mark, "\nclipper ") : NULL;
+    out[0] = '\0';
+    if (c != NULL) {
+        c += 9;
+        const int n = (int)strcspn(c, "\r\n");
+        snprintf(out, size, "; their clipper check: %.*s", n > 200 ? 200 : n, c);
+    }
+}
+
 void nodiscard_mark_decide(const char *mark, int endKind, const char *endWords, const char *version,
                            char *out, size_t outSize, char *line, size_t lineSize, int *block)
 {
@@ -60,16 +74,19 @@ void nodiscard_mark_decide(const char *mark, int endKind, const char *endWords, 
         break;
     }
     const int bad = vu_zero_mark_blocks(stage, endKind);
+    char clip[256];
+    clipperWords(mark, clip, sizeof clip);
     if (bad && strcmp(mv, v) == 0) {
         snprintf(out, outSize, "blocked %s", v);
-        snprintf(line, lineSize, "%s%s: off on this install until the version changes (blocked %s)",
-                 kHead, what, v);
+        snprintf(line, lineSize,
+                 "%s%s: off on this install until the version changes (blocked %s)%s", kHead, what,
+                 v, clip);
         *block = 1;
     } else if (bad) {
         /* an update since: the block was the version that ran then */
-        snprintf(line, lineSize, "%s%s in %s, this is %s: tried again", kHead, what, mv, v);
+        snprintf(line, lineSize, "%s%s in %s, this is %s: tried again%s", kHead, what, mv, v, clip);
     } else {
-        snprintf(line, lineSize, "%s%s: no sign of a bad end: tried again", kHead, what);
+        snprintf(line, lineSize, "%s%s: no sign of a bad end: tried again%s", kHead, what, clip);
     }
 }
 
@@ -98,7 +115,7 @@ int nodiscard_mark_step(const char *activityPath, const char *version, int exitR
                                          activityPath) >= (int)sizeof path) {
         return 0;
     }
-    char mark[192] = "";
+    char mark[512] = "";
     FILE *f = ico_fopen(path, "rb");
     if (f != NULL) {
         const size_t k = fread(mark, 1, sizeof mark - 1, f);
@@ -124,7 +141,7 @@ int nodiscard_mark_step(const char *activityPath, const char *version, int exitR
         }
     }
     const int kind = vu_zero_mark_end_kind(prevEnd, endText, exitReason, exitStatus);
-    char words[160], out[192], line[512];
+    char words[160], out[192], line[768];
     int block = 0;
     vu_zero_mark_end_words(kind, exitReason, exitStatus, words, sizeof words);
     nodiscard_mark_decide(mark, kind, words, version, out, sizeof out, line, sizeof line, &block);

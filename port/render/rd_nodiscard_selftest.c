@@ -252,6 +252,213 @@ static bool ruleRefuses(void)
     return band && twin && date;
 }
 
+/* ------------------------------------------------- the clipper check
+ * (rd_nodiscard.h, "The clipper check"): camera rule meshes whose
+ * triangles cross the eye plane, each drawn at code 32 (the region test with
+ * ICO_VU_NO_BESIDE under the camera rule: a dropped triangle facing the eye
+ * drawn clipped) and at code 36 (the scissor: its flagged corners in the
+ * homogeneous form), every triangle in both windings (the rule draws the
+ * one facing the eye), then a depth probe: a code 34 quad over the whole
+ * target at GS Z 0 with Z write off, drawn where the depth is still the
+ * clear's, so a depth the twin wrote and the build did not shows in the
+ * colour.  Each case is a frame of its own (a later case drawn over an
+ * earlier one could hide a difference), replayed through the twins and
+ * without them.  Corners in model space; the screen matrix (sceneBlock)
+ * makes h = (16 x + 2048 z, 16 y + 2048 z, 3145728 (z - 1), z): h.w = z, GS
+ * X = 2048 + 16 x / z, GS Z below 0 for 0 < z < 1. */
+#define NC_VERTS 6
+
+typedef struct NcCase {
+    const char *name;
+    float c[3][3];
+} NcCase;
+
+static const NcCase kClip[] = {
+    /* Mesa's case: the in and out corners' divided x and y equal (the edge
+       on the centre view ray, x / z and y / z 0 at both ends) */
+    {"an edge on the centre view ray", {{0, 0, 2}, {0, 0, -1}, {4, 3, 2}}},
+    {"an edge on a view ray, divided x alike", {{0, 2, 2}, {0, 3, -1}, {4, -2, 2}}},
+    {"an edge on a view ray, divided y alike", {{2, 0, 2}, {3, 0, -1}, {-2, 4, 2}}},
+    {"an edge on an off-centre view ray", {{2, 2, 2}, {-1, -1, -1}, {-3, 4, 2}}},
+    {"a corner at w = 0", {{0, 0, 2}, {3, 2, 0}, {-3, 2, 2}}},
+    {"a corner just behind the eye (w = -0.001)", {{-3, -3, 2}, {3, -3, 2}, {0, 2, -0.001f}}},
+    {"a corner far behind the eye (w = -1290)", {{-3, -3, 2}, {3, -3, 2}, {100, 50, -1290}}},
+    {"two corners behind the eye", {{0, 0, 2}, {3, -1, -1}, {-2, 3, -0.5f}}},
+    {"every w above 0, clipped at GS Z 0", {{-4, -4, 0.5f}, {4, -4, 2}, {0, 4, 2}}},
+    {"every w above 0, an edge on a view ray clipped at GS Z 0",
+     {{0, 0, 0.25f}, {0, 0, 2}, {4, 3, 2}}},
+    {"a corner off the GS range in X (ftoi4 saturated)", {{-3, -3, 2}, {1.0e6f, 0, 2}, {0, 3, 2}}},
+    {"a sliver on the centre view ray", {{0, 0, 2}, {0, 0, -1}, {0.02f, 0, 2}}},
+    {"a large triangle across the frame and the eye", {{-60, -40, 2}, {60, -40, 2}, {0, 40, -3}}},
+};
+#define NC_CASES ((int)(sizeof(kClip) / sizeof(kClip[0])))
+
+/* a mesh of the prelit layout from corners (NC_VERTS: a triangle in both
+   windings, or the probe's two) */
+static RdMesh clipMesh(const float (*c)[3], int n, float shade)
+{
+    static float q[1 + NC_VERTS * RD_VU_QW_PRELIT][4];
+    qw(q[0], fbits(0x8000u | (uint32_t)n), fbits(0x30064000u), fbits(0x512u), 0);
+    uint32_t at = 1;
+    for (int v = 0; v < n; v++) {
+        qw(q[at++], c[v][0], c[v][1], c[v][2], 1.0f);
+        qw(q[at++], 0.0f, 0.0f, 1.0f, v % 3 == 0 ? 0.0f : 1.0f);
+        qw(q[at++], shade + (float)(12 * v), 230.0f - shade, (float)(40 + 30 * v), 127.0f);
+    }
+    const RdVuBatchDesc batch = {0, 0, 0};
+    const RdVuMeshDesc d = {(const float (*)[4])q,
+                            at,
+                            RD_VU_QW_PRELIT,
+                            1,
+                            &batch,
+                            0,
+                            "rd discard-free twins clipper check",
+                            NULL,
+                            0,
+                            0};
+    return rd_create_vu_mesh(&d);
+}
+
+/* case k's frame: the clear, the state, the case at code (32 or 36), the
+   probe */
+static bool clipFrame(RdFrame *f, uint32_t scene, uint32_t w, uint32_t h, RdMesh mesh, uint8_t code,
+                      RdMesh probe)
+{
+    static const uint8_t kClear[4] = {0, 0, 0, 0x80};
+    memset(f, 0, sizeof(*f));
+    rd__reset_state_block(&f->startState);
+    f->gsW = w;
+    f->gsH = h;
+    bool ok = rd__st_target(f, 0, scene, w, h);
+    RdCmd *c = rd__st_push(f, 0, RDC_CLEAR);
+    if (c) {
+        c->u[0] = scene;
+        memcpy(c->b, kClear, 4);
+        c->b[4] = 1;
+        c->u[1] = 0;
+    }
+    RdCmd *b = ok && c ? rd__st_push(f, 0, RDC_BLEND) : NULL;
+    if (b) {
+        b->b[1] = 0x80; /* ABE off */
+    }
+    ok = ok && b && rd__st_push(f, 0, RDC_TEXTURE_OFF) && rd__st_test(f, 0, RD_TEST_Z_GEQUAL) &&
+         rd__st_push1(f, 0, RDC_ZWRITE, RD_ZWRITE_ON) && rd__st_push1(f, 0, RDC_FBA, 0) &&
+         rd__st_push1(f, 0, RDC_PABE, 0) && rd__st_push1(f, 0, RDC_COLCLAMP, 1) &&
+         rd__st_push1(f, 0, RDC_SHADE, 1);
+    ok = ok && pushMesh(f, mesh, code, false, 0.0f, 1u) &&
+         rd__st_push1(f, 0, RDC_ZWRITE, RD_ZWRITE_OFF) && pushMesh(f, probe, 34, false, 0.0f, 2u);
+    return ok;
+}
+
+/* the check on SCENE t (a, b: its two pictures' buffers): true when every
+   case's pictures are the same; else *why the first differing case */
+static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, char *why,
+                         size_t whySize, uint64_t *clipDraws)
+{
+    static const uint8_t kCodes[2] = {32, 36};
+    RdMesh mesh[NC_CASES];
+    bool ok = true;
+    for (int k = 0; k < NC_CASES; k++) {
+        float c[NC_VERTS][3];
+        for (int v = 0; v < 3; v++) {
+            memcpy(c[v], kClip[k].c[v], sizeof(c[v]));
+        }
+        /* the other winding: corners 0, 2, 1 */
+        memcpy(c[3], kClip[k].c[0], sizeof(c[3]));
+        memcpy(c[4], kClip[k].c[2], sizeof(c[4]));
+        memcpy(c[5], kClip[k].c[1], sizeof(c[5]));
+        mesh[k] = clipMesh((const float (*)[3])c, NC_VERTS, (float)(30 + 9 * k));
+        ok = ok && mesh[k].id;
+    }
+    /* the probe: the whole target at model depth 1 (GS Z 0), GS X = 2048 +
+       16 x there */
+    const float hx = (float)(t->w / 2u + 8u) / 16.0f, hy = (float)(t->h / 2u + 8u) / 16.0f;
+    const float pc[NC_VERTS][3] = {{-hx, -hy, 1}, {hx, -hy, 1}, {-hx, hy, 1},
+                                   {hx, -hy, 1},  {hx, hy, 1},  {-hx, hy, 1}};
+    const RdMesh probe = clipMesh(pc, NC_VERTS, 200.0f);
+    ok = ok && probe.id;
+    const uint32_t scene = rd_target(RD_TARGET_SCENE).id;
+    bool clean = ok;
+    if (!ok) {
+        snprintf(why, whySize, "its frames could not be built");
+    }
+    /* the pipelines first, every frame's, through the twins and not */
+    rd__nd_hold(true);
+    rd__nd_clipper_check(true);
+    for (int k = 0; ok && k < NC_CASES * 2; k++) {
+        RdFrame f;
+        if (clipFrame(&f, scene, t->w, t->h, mesh[k / 2], kCodes[k % 2], probe)) {
+            rd__replay_set_window(UINT32_MAX, 0);
+            rd__pipeline_gather(true);
+            (void)rd__replay_frame(&f, 0, false);
+            rd__pipeline_gather(false);
+            rd__replay_set_window(0, 0);
+        }
+        rd__frame_free(&f);
+    }
+    rhi_wait_idle();
+    if (ok && !rhi_device_lost()) {
+        bool stopped = false;
+        (void)rd__pipeline_create_gathered(&stopped);
+    }
+    uint64_t tw = 0, rf[RD_ND_REASONS];
+    rd__nd_take(&tw, rf);
+    (void)rd__nd_take_clip();
+    *clipDraws = 0;
+    for (int k = 0; clean && k < NC_CASES * 2; k++) {
+        RdFrame f;
+        if (!clipFrame(&f, scene, t->w, t->h, mesh[k / 2], kCodes[k % 2], probe)) {
+            rd__frame_free(&f);
+            snprintf(why, whySize, "its frame of %s could not be built", kClip[k / 2].name);
+            clean = false;
+            break;
+        }
+        rd__nd_hold(true);
+        rd__nd_clipper_check(true);
+        const bool okA = replayRead(&f, t, a, size);
+        *clipDraws += rd__nd_take_clip();
+        rd__nd_take(&tw, rf);
+        if (rf[RD_ND_UNMADE] != 0u) {
+            snprintf(why, whySize, "%s at code %u: no pipeline of its twin", kClip[k / 2].name,
+                     (unsigned)kCodes[k % 2]);
+            clean = false;
+        }
+        rd__nd_clipper_check(false);
+        rd__nd_hold(false);
+        const bool okB = okA && replayRead(&f, t, b, size);
+        rd__frame_free(&f);
+        if (!okA || !okB) {
+            snprintf(why, whySize, "the device failed in its replays (%s at code %u)",
+                     kClip[k / 2].name, (unsigned)kCodes[k % 2]);
+            clean = false;
+        } else if (clean && memcmp(a, b, size) != 0) {
+            size_t first = 0;
+            while (first < size && a[first] == b[first]) {
+                first++;
+            }
+            snprintf(why, whySize, "%s at code %u differs, the first at texel %u,%u",
+                     kClip[k / 2].name, (unsigned)kCodes[k % 2], (unsigned)((first / 4u) % t->tw),
+                     (unsigned)((first / 4u) / t->tw));
+            clean = false;
+        }
+    }
+    if (clean && *clipDraws == 0u) {
+        snprintf(why, whySize, "no camera rule pass of its frames drew through a twin");
+        clean = false;
+    }
+    rd__nd_clipper_check(false);
+    for (int k = 0; k < NC_CASES; k++) {
+        if (mesh[k].id) {
+            rd_destroy_vu_mesh(mesh[k]);
+        }
+    }
+    if (probe.id) {
+        rd_destroy_vu_mesh(probe);
+    }
+    t->clearPending = 1;
+    return clean;
+}
+
 static void meshesFree(RdMesh *mesh)
 {
     for (int i = 0; i < NT_CASES; i++) {
@@ -357,6 +564,15 @@ void rd__nd_selftest(RdTargetRec *t)
             pass = true;
         }
     }
+    /* the floor passed: the device's clipper measured (a property of the
+       device, never a fault: "not clean" keeps the floor alone) */
+    char clipWhy[200] = "";
+    uint64_t clipDraws = 0;
+    bool clipClean = false;
+    if (pass) {
+        clipClean = clipperCheck(t, a, b, size, clipWhy, sizeof(clipWhy), &clipDraws);
+        rd__nd_clipper_verdict(clipClean, clipClean ? "" : clipWhy);
+    }
     rd__nd_hold_end();
     const uint32_t released = rd__pipeline_forget_since(pipeMark);
     rd__frame_free(&f);
@@ -374,6 +590,22 @@ void rd__nd_selftest(RdTargetRec *t)
                 (unsigned long long)refused[RD_ND_ALPHA], (unsigned long long)refused[RD_ND_PLANE],
                 (unsigned long long)refused[RD_ND_CLIPPED], (unsigned)released, t->w, t->h, t->tw,
                 t->th, rd__now_ms() - t0);
+        const bool clean = rd__nd_clipper() == RD_ND_CLIP_CLEAN;
+        if (clean && clipClean) {
+            rd__log("discard-free twins: the clipper check: clean (%d cases crossing the eye "
+                    "plane at codes 32 and 36, %llu passes through them, the pictures and their "
+                    "depth byte for byte): the camera rule's passes take them too",
+                    NC_CASES, (unsigned long long)clipDraws);
+        } else if (clean) {
+            rd__log("discard-free twins: the clipper check: clean (ICO_RD_VU_NODISCARD_CLIPPER; "
+                    "measured not clean: %s): the camera rule's passes take them too",
+                    clipWhy);
+        } else {
+            rd__log("discard-free twins: the clipper check: not clean (%s): clip mode none alone "
+                    "takes them (a property of this device, not a fault: nothing written as "
+                    "failed)",
+                    clipClean ? "ICO_RD_VU_NODISCARD_CLIPPER; measured clean" : clipWhy);
+        }
     } else {
         rd__log("discard-free twins: off for the run (self-test: %s; its %u pipelines released) "
                 "on SCENE %ux%u at %ux%u texels in %.1f ms",

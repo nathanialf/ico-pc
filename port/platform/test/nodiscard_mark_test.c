@@ -100,6 +100,21 @@ static void decide(void)
                           sizeof line, &block);
     CHECK(strcmp(out, "blocked v0.11.15") == 0 && block == 1);
     CHECK(strstr(line, "their mark unread (\"onward\")") != NULL);
+    /* the renderer's clipper check on the second line: said, never a reason
+       to block (a clean close while counting: tried again) */
+    nodiscard_mark_decide("counting v0.11.15\nclipper not clean v0.11.15 (an edge on the centre "
+                          "view ray at code 32 differs, the first at texel 340,256)\n",
+                          VU_ZERO_END_CLEAN, "closed normally", "v0.11.15", out, sizeof out, line,
+                          sizeof line, &block);
+    CHECK(out[0] == '\0' && block == 0);
+    CHECK(strcmp(line, "the previous run: discard-free twins: were on, their first pictures "
+                       "being counted, when it ended (closed normally): no sign of a bad end: "
+                       "tried again; their clipper check: not clean v0.11.15 (an edge on the "
+                       "centre view ray at code 32 differs, the first at texel 340,256)") == 0);
+    nodiscard_mark_decide("on v0.11.15\nclipper clean v0.11.15\n", VU_ZERO_END_CRASH, "a crash",
+                          "v0.11.15", out, sizeof out, line, sizeof line, &block);
+    CHECK(strcmp(out, "blocked v0.11.15") == 0 && block == 1);
+    CHECK(strstr(line, "(blocked v0.11.15); their clipper check: clean v0.11.15") != NULL);
     /* a mark without a version: the running one's */
     nodiscard_mark_decide("on", VU_ZERO_END_LOSS, "a lost graphics device", "v0.11.15", out,
                           sizeof out, line, sizeof line, &block);

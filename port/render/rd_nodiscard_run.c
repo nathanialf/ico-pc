@@ -30,6 +30,7 @@
 #include "rd_ab_run.h"
 #include "rd_internal.h"
 #include "rd_nodiscard.h"
+#include "shader_consts.h"
 
 enum { N_HELD, N_ON, N_OFF };
 
@@ -53,6 +54,14 @@ static struct {
     char markPath[1024]; /* ICO_NODISCARD_MARK: the platform's mark file, "" none */
     char version[64];    /* ICO_NODISCARD_VERSION: the running version, "" none */
     uint64_t took, tookRefused[RD_ND_REASONS]; /* since rd__nd_take */
+    uint64_t tookClip;                         /* of took, by the clipper check */
+    /* the device's clipper (rd_nodiscard.h "The clipper check"): RD_ND_CLIP_*,
+       its first differing case's words, the check running (its frames take
+       the camera rule's passes as a clean clipper would), the tests' fake */
+    int clipper;
+    char clipWhy[160];
+    bool clipCheck;
+    int clipFake; /* ICO_RD_VU_NODISCARD_CLIPPER: -1 none, else RD_ND_CLIP_* */
 } s_n;
 
 /* off for the run (a failed self-test, a pipeline not made): kept through a
@@ -64,6 +73,7 @@ static char s_runOff[384];
    from the window's (atomics) */
 typedef struct NCounts {
     uint64_t draws, refused[RD_ND_REASONS];
+    uint64_t drawsClip; /* of draws, a clip mode other than none (the clipper check's class) */
 } NCounts;
 
 static NCounts s_block, s_run;
@@ -102,6 +112,14 @@ static bool writeMark(const char *word, bool sync)
     }
     bool ok = (s_n.version[0] != '\0' ? fprintf(f, "%s %s\n", word, s_n.version)
                                       : fprintf(f, "%s\n", word)) > 0;
+    /* the clipper check's verdict with the version it was measured in, the
+       second line (port/platform/nodiscard_mark.c logs it at the next start;
+       a device property, never a reason to block) */
+    if (ok && s_n.clipper != RD_ND_CLIP_UNKNOWN) {
+        ok = fprintf(f, "clipper %s %s%s%s%s\n", rd__nd_clipper_text(),
+                     s_n.version[0] != '\0' ? s_n.version : "?", s_n.clipWhy[0] ? " (" : "",
+                     s_n.clipWhy, s_n.clipWhy[0] ? ")" : "") > 0;
+    }
     ok = fflush(f) == 0 && ok;
     if (sync) {
 #ifdef _WIN32
@@ -125,7 +143,20 @@ void rd__nd_init(void)
     s_n.wasOn = false;
     s_n.drewNow = false;
     s_n.took = 0;
+    s_n.tookClip = 0;
     memset(s_n.tookRefused, 0, sizeof(s_n.tookRefused));
+    s_n.clipper = RD_ND_CLIP_UNKNOWN;
+    s_n.clipWhy[0] = '\0';
+    s_n.clipCheck = false;
+    const char *cf = getenv("ICO_RD_VU_NODISCARD_CLIPPER");
+    s_n.clipFake = cf != NULL && strcmp(cf, "clean") == 0   ? RD_ND_CLIP_CLEAN
+                   : cf != NULL && strcmp(cf, "dirty") == 0 ? RD_ND_CLIP_DIRTY
+                                                            : -1;
+    if (s_n.clipFake >= 0) {
+        rd__log("discard-free twins: ICO_RD_VU_NODISCARD_CLIPPER=%s: the clipper check's verdict "
+                "taken as %s whatever it measures (tests)",
+                cf, s_n.clipFake == RD_ND_CLIP_CLEAN ? "clean" : "not clean");
+    }
     const char *mark = getenv("ICO_NODISCARD_MARK");
     snprintf(s_n.markPath, sizeof(s_n.markPath), "%s", mark != NULL ? mark : "");
     const char *ver = getenv("ICO_NODISCARD_VERSION");
@@ -183,6 +214,12 @@ void rd__nd_init(void)
         snprintf(s_n.why, sizeof(s_n.why), "ICO_RD_VU_NODISCARD=1");
         rd__log("discard-free twins: on without their self-test (ICO_RD_VU_NODISCARD=1): their "
                 "pipelines made at the start of the replay after the one that asked for them");
+        /* no clipper check without the self-test: the floor (clip mode none)
+           unless the tests fake a verdict */
+        if (s_n.clipFake >= 0) {
+            s_n.clipper = s_n.clipFake;
+            snprintf(s_n.clipWhy, sizeof(s_n.clipWhy), "ICO_RD_VU_NODISCARD_CLIPPER, no check run");
+        }
     }
 }
 
@@ -270,11 +307,15 @@ static bool ready(void)
     return s_n.mod[0].id != 0 && s_n.mod[1].id != 0;
 }
 
-static void count(int why)
+static void count(int why, bool byClipper)
 {
     if (why == RD_ND_TWIN) {
         add(&s_block.draws, &s_run.draws, 1u);
         s_n.took++;
+        if (byClipper) {
+            add(&s_block.drawsClip, &s_run.drawsClip, 1u);
+            s_n.tookClip++;
+        }
     } else if (why > 0 && why < RD_ND_REASONS) {
         add(&s_block.refused[why], &s_run.refused[why], 1u);
         s_n.tookRefused[why]++;
@@ -291,22 +332,23 @@ void rd__nd_pass(RdPipeKeyInt *key, RhiPipeline *pipe, const RdDrawPass *p, uint
     if ((!pipe->id && !gathering) || !ready()) {
         return;
     }
-    const RdNdPass in = {
-        key->fs,   key->gs.nodual, key->dst, p->flags,    p->modeZ,
-        drawFlags, plane,          particle, dateStencil, s_n.sabotage == NS_ALPHA};
+    const bool clean = s_n.clipCheck || s_n.clipper == RD_ND_CLIP_CLEAN;
+    const RdNdPass in = {key->fs,   key->gs.nodual, key->dst, p->flags,    p->modeZ,
+                         drawFlags, plane,          particle, dateStencil, s_n.sabotage == NS_ALPHA,
+                         clean};
     const int v = rd_nd_eligible(&in);
     if (v < 0) {
         return;
     }
     if (v != RD_ND_TWIN) {
-        count(v);
+        count(v, false);
         return;
     }
     RdPipeKeyInt t = *key;
     t.gs.nodual = (uint8_t)(t.gs.nodual | RD_NODUAL_NODISCARD);
     const RhiPipeline tp = rd__pipeline_twin(&t); /* made, or asked for in the background */
     if (!tp.id || gathering) {
-        count(RD_ND_UNMADE);
+        count(RD_ND_UNMADE, false);
         return;
     }
     if (!s_n.held) {
@@ -314,13 +356,15 @@ void rd__nd_pass(RdPipeKeyInt *key, RhiPipeline *pipe, const RdDrawPass *p, uint
            their off arm the pass keeps the *_nodual build */
         rd__ab_used(RD_AB_NODISCARD);
         if (rd__ab_off(RD_AB_NODISCARD)) {
-            count(RD_ND_TRIAL);
+            count(RD_ND_TRIAL, false);
             return;
         }
     }
     *key = t;
     *pipe = tp;
-    count(RD_ND_TWIN);
+    /* the class: clip mode none (proven on every device) or another, taken
+       on the device's clipper check */
+    count(RD_ND_TWIN, (drawFlags & ICO_VU_CLIP_MASK) != ICO_VU_CLIP_NONE);
     s_n.drewNow = true;
 }
 
@@ -380,12 +424,51 @@ void rd__nd_take(uint64_t *twin, uint64_t refused[RD_ND_REASONS])
     *twin = s_n.took;
     memcpy(refused, s_n.tookRefused, sizeof(s_n.tookRefused));
     s_n.took = 0;
+    s_n.tookClip = 0;
     memset(s_n.tookRefused, 0, sizeof(s_n.tookRefused));
 }
 
 bool rd__nd_sabotage_alpha(void)
 {
     return s_n.sabotage == NS_ALPHA;
+}
+
+uint64_t rd__nd_take_clip(void)
+{
+    const uint64_t n = s_n.tookClip;
+    s_n.tookClip = 0;
+    return n;
+}
+
+void rd__nd_clipper_check(bool on)
+{
+    s_n.clipCheck = on;
+}
+
+void rd__nd_clipper_verdict(bool clean, const char *why)
+{
+    s_n.clipper = clean ? RD_ND_CLIP_CLEAN : RD_ND_CLIP_DIRTY;
+    snprintf(s_n.clipWhy, sizeof(s_n.clipWhy), "%s", why != NULL ? why : "");
+    if (s_n.clipFake >= 0 && s_n.clipFake != s_n.clipper) {
+        char measured[160];
+        snprintf(measured, sizeof(measured), "%s", s_n.clipWhy);
+        s_n.clipper = s_n.clipFake;
+        snprintf(s_n.clipWhy, sizeof(s_n.clipWhy),
+                 "ICO_RD_VU_NODISCARD_CLIPPER; measured %s%s%.100s", clean ? "clean" : "not clean",
+                 measured[0] ? ": " : "", measured);
+    }
+}
+
+int rd__nd_clipper(void)
+{
+    return s_n.clipper;
+}
+
+const char *rd__nd_clipper_text(void)
+{
+    return s_n.clipper == RD_ND_CLIP_CLEAN   ? "clean"
+           : s_n.clipper == RD_ND_CLIP_DIRTY ? "not clean"
+                                             : "not checked";
 }
 
 void rd__nd_verdict(bool pass, const char *why)
@@ -460,6 +543,7 @@ size_t rd_nd_text(char *out, size_t cap, unsigned n)
     }
     NCounts c;
     c.draws = takeN(&s_block.draws);
+    c.drawsClip = takeN(&s_block.drawsClip);
     uint64_t refused = 0;
     for (int i = 0; i < RD_ND_REASONS; i++) {
         c.refused[i] = takeN(&s_block.refused[i]);
@@ -478,9 +562,10 @@ size_t rd_nd_text(char *out, size_t cap, unsigned n)
     }
     const double d = n ? (double)n : 1.0;
     int at = snprintf(out, cap,
-                      "; discard-free twins: %.0f draws a picture through them (%.0f "
-                      "refused a picture:",
-                      (double)c.draws / d, (double)refused / d);
+                      "; discard-free twins: %.0f draws a picture through them, %.0f of them by "
+                      "the clipper check (%s) (%.0f refused a picture:",
+                      (double)c.draws / d, (double)c.drawsClip / d, rd__nd_clipper_text(),
+                      (double)refused / d);
     for (int i = 1; i < RD_ND_REASONS && at > 0 && (size_t)at < cap; i++) {
         at += snprintf(out + at, cap - (size_t)at, "%s %s %.0f", i > 1 ? "," : "",
                        rd_nd_reason_name(i), (double)c.refused[i] / d);
@@ -502,10 +587,12 @@ int rd__nd_stats_text(char *out, size_t cap)
                        rd_nd_reason_name(i), (unsigned long long)c->refused[i]);
     }
     return snprintf(out, cap,
-                    "discard-free twins %s%s%s%s: %llu draws through them; refused: %s; %u modules "
-                    "of them made, %u of their pipelines alive%s",
+                    "discard-free twins %s%s%s%s: %llu draws through them, %llu of them by the "
+                    "clipper check (%s); refused: %s; %u modules of them made, %u of their "
+                    "pipelines alive%s",
                     rd__nd_state_text(), s_n.why[0] ? " (" : "", s_n.why, s_n.why[0] ? ")" : "",
-                    (unsigned long long)c->draws, refused, (unsigned)s_n.made,
+                    (unsigned long long)c->draws, (unsigned long long)c->drawsClip,
+                    rd__nd_clipper_text(), refused, (unsigned)s_n.made,
                     (unsigned)rd__pipeline_count_twins(),
                     g_rd.hasDevice && !g_rd.noDual
                         ? " (not applicable here: the device blends with two outputs, no pass "

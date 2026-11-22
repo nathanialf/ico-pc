@@ -906,7 +906,9 @@ them) or `blocked <v>`; the renderer gets `ICO_NODISCARD_BLOCK`, `ICO_NODISCARD_
 twins: were on when it ended (a crash): off on this install until the version changes (blocked
 <version>)`, `... were being tried when it ended (...)`, `... were on, their first pictures being
 counted, when it ended (...): no sign of a bad end: tried again`, `... were refused by their
-self-test or a pipeline not made: ...`, `... kept off by their mark: ...`.
+self-test or a pipeline not made: ...`, `... kept off by their mark: ...`. The renderer's second
+line, `clipper clean|not clean <v> (...)` (the twins' clipper check), is added to that line as `;
+their clipper check: ...`: said, never a reason to block.
 
 The next picture submitted ahead has a mark of its own (`port/platform/ahead_mark.c`, read once a
 process as the render thread starts, before the submit thread): `logs/ahead-mark.txt` holds `on

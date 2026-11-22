@@ -1774,6 +1774,22 @@ and 24 draws are refused. `port/render/rd_nodiscard.h` says it all.
   the *_nodual build's band test cannot fire and a twin writes what it writes. Every other clip
   mode can hand the GPU corners at or behind the eye (the camera rule's clipped drops, code 36's
   flagged corners): refused, on every device, so the lavapipe tests take the phone's path.
+- **The clipper check: measured on the device, not assumed.** After the code 34 cases pass, the
+  self-test draws 13 camera rule cases whose triangles cross the eye plane (an edge on the centre
+  view ray, on view rays with the divided x alike, the divided y alike and off-centre; a corner at
+  w = 0, at w = -0.001 and at w = -1290, the dock's depth; two corners behind; every w above 0
+  clipped at GS Z 0, with and without an edge on a view ray; a corner saturated in X; a sliver; a
+  large triangle across the frame), each at code 32 and code 36 in both windings, each a frame of
+  its own with a depth probe after it (a code 34 quad at GS Z 0, Z write off: a depth the twin
+  wrote and the build did not shows in the colour), through the twins and without them. All
+  byte for byte: `clean`, and the camera rule's passes (round 1's rule: no plane, no DATE,
+  `ICO_VU_NO_BESIDE`, the alpha test off) take a twin too, counted apart. Any difference: `not
+  clean`, the first differing case logged, clip mode none alone; not a fault (the mark is not
+  `failed`), the verdict kept on the mark's second line and said at the next start. It is evidence
+  for these corners, not a proof for every triangle: geometry the cases miss, other states (MSAA,
+  other targets), a driver's size thresholds and anything time-dependent are not covered, and the
+  in-play judge and the mark stay the way back. Lavapipe's verdict is `not clean`
+  (`rd_vuprepass_selftest_nodiscard` requires it: the cases find Mesa's NaN).
 - **Never waited for.** A pass whose twin's pipeline is not made draws through its *_nodual build
   and asks for the twin (`rd_pipeline.c` `rd__pipeline_twin`: queued once). Between pictures
   (`rd__pipe_finish_tick`, the background finisher's slot) the queue's next batch is begun on the
@@ -1817,21 +1833,28 @@ The lines (`rd: ` before each):
   pipelines alive`; `off on this install (...)`, `off for this start (the loss ladder: ...)`,
   `off for the run (self-test not run: not applicable here: the device blends with two outputs,
   ...)`.
-- The 10 s VU line's clause: `; discard-free twins: D draws a picture through them (R refused a
-  picture: plane p, DATE d, band b, alpha a, clipped c, not made yet u, timed without them t)`;
+- `discard-free twins: the clipper check: clean (13 cases crossing the eye plane at codes 32 and
+  36, N passes through them, the pictures and their depth byte for byte): the camera rule's passes
+  take them too`, or `... not clean (an edge on the centre view ray at code 32 differs, the first
+  at texel X,Y): clip mode none alone takes them (a property of this device, not a fault: nothing
+  written as failed)`.
+- The 10 s VU line's clause: `; discard-free twins: D draws a picture through them, C of them by
+  the clipper check (clean|not clean|not checked) (R refused a picture: plane p, DATE d, band b,
+  alpha a, clipped c, not made yet u, timed without them t)`;
   nothing while held or off from the start, `; discard-free twins off (why)` once they were on.
 - `discard-free twins: 250 pictures drawn with them since their self-test: their mark says on`;
   `discard-free twins: off for the run: a twin's pipeline (...) could not be made in the
   background (...)`.
 - The judge's lines and the attempt ledger's row `the discard-free twins timed in play` as the
   cull's (above); at the next start `the previous run: discard-free twins: ...`.
-- `rd_replay_tool --stats`: `stats: discard-free twins on|held|off (why): N draws through them;
-  refused: plane p, DATE d, band b, alpha a, clipped c, not made yet u, timed without them t; M
+- `rd_replay_tool --stats`: `stats: discard-free twins on|held|off (why): N draws through them, C
+  of them by the clipper check (verdict); refused: plane p, DATE d, band b, alpha a, clipped c, not made yet u, timed without them t; M
   modules of them made, P of their pipelines alive` (with `(not applicable here: ...)` on a device
   with dual-source blending).
 
-The tests' switches ([TESTING.md](TESTING.md#environment-switches)): `ICO_RD_VU_NODISCARD` and
-`ICO_RD_VU_NODISCARD_SABOTAGE`. What they gain on a phone is measured there alone.
+The tests' switches ([TESTING.md](TESTING.md#environment-switches)): `ICO_RD_VU_NODISCARD`,
+`ICO_RD_VU_NODISCARD_SABOTAGE` and `ICO_RD_VU_NODISCARD_CLIPPER`. What they gain on a phone is
+measured there alone.
 
 #### The index compaction
 
