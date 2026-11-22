@@ -63,8 +63,10 @@ RdDumpInto rd_dump_retained_frame_into(uint32_t number, void *block, size_t cap,
                                        uint32_t *dumped);
 
 /* rd_dump_retained_frame_mem (rd.h) waiting for the reads alone: the
-   slow-scene dump's copy grown here when the worker's block could not be
-   used */
+   slow-scene dump's copy made here when the worker's block could not be
+   used (since issue 179's v0.11.14 log: the frame measured, then written
+   into ONE allocation of exactly its size, as every memory dump is; no
+   block grown by doubling) */
 bool rd_dump_retained_frame_mem_reads(uint32_t number, void **buf, size_t *len, uint32_t *dumped);
 
 #endif /* ICO_RD_DUMP_MEM_H */

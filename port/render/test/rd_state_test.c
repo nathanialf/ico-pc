@@ -24,7 +24,12 @@
  *              and fail pair otherwise; the toggle restores the split
  *   dump       a frame with textures and a temp target survives dump/load;
  *              the reads-only dump (rd_dump_retained_frame_mem_reads) is
- *              the drained dump's bytes;
+ *              the drained dump's bytes; the loss keep's copy (issue 179,
+ *              rd_loss_keep.h rd__loss_keep_test_copy) is the file's bytes
+ *              by every way it is made: no host (measured and allocated
+ *              once), a fake host's block once asked for and made (into
+ *              it, sized from the copy before), a block too small (given
+ *              back, measured instead); the end gives the ask back;
  *              an image's GS levels and TEX1's mipmap fields (tex1Lod)
  *              round-trip; version 8 and older dumps (no tex1Lod, no level
  *              words) still load; RDC_AA1 and RdStateBlock.aa1 round-trip, and a
@@ -144,7 +149,9 @@
 #include "../../core/region.h" /* the dump's region (version 12) */
 #include "rd_dump_mem.h"
 #include "rd_internal.h"
+#include "rd_loss_keep.h"
 #include "rd_mesh.h"
+#include "rd_vu_rec_early.h" /* rd_loss_keep_held_bytes */
 #include "shader_consts.h"
 
 static int failures;
@@ -817,6 +824,101 @@ static void testDumpOldTemps(const RdFrame *f, const char *path, const char *dir
     remove(pathOld);
 }
 
+/* the loss keep's fake host (rd_loss_keep_block.h): a block made at once
+   when asked, of the size asked (or of 16 bytes with shrink set) */
+static struct {
+    int asked, shrink, given, withdrawn;
+    size_t bytes;
+} s_kh;
+
+static int khAsk(size_t bytes)
+{
+    if (s_kh.asked) {
+        return -1;
+    }
+    s_kh.asked = 1;
+    s_kh.bytes = bytes;
+    return 0;
+}
+
+static int khTake(void **block, size_t *size)
+{
+    *block = NULL;
+    *size = 0;
+    if (!s_kh.asked) {
+        return -1;
+    }
+    s_kh.asked = 0;
+    *size = s_kh.shrink ? 16u : s_kh.bytes;
+    *block = malloc(*size);
+    return *block != NULL ? 1 : -1;
+}
+
+static void khGiveBack(void *block)
+{
+    if (s_kh.asked) {
+        s_kh.asked = 0;
+        s_kh.withdrawn++;
+    }
+    if (block != NULL) {
+        free(block);
+        s_kh.given++;
+    }
+}
+
+static int khMemory(char *why, size_t size)
+{
+    if (why != NULL && size > 0) {
+        why[0] = '\0';
+    }
+    return 0;
+}
+
+static const RdLossKeepHost s_khHost = {khAsk, khTake, khGiveBack, khMemory};
+
+/* the loss keep's copy of f by each way it is made, against the file's
+   bytes (mem, n) */
+static void testLossKeepCopy(const RdFrame *f, const void *mem, size_t n)
+{
+    RdLossKeepTestCopy c;
+
+    rd__loss_keep_shutdown(); /* a clean start: no copy, no block state */
+    memset(&s_kh, 0, sizeof(s_kh));
+    rd_loss_keep_set_host(NULL);
+    CHECK(rd__loss_keep_test_copy(f, &c) && !c.intoBlock && c.len == n && c.cap == n &&
+              memcmp(c.bytes, mem, n) == 0,
+          "loss keep, no host: measured and allocated once, the file's bytes (%zu, %zu)", c.len, n);
+    rd_loss_keep_set_host(&s_khHost);
+    /* the copy before asks for a block at the next tick: this copy's own
+       tick asks, the copy is measured meanwhile */
+    CHECK(rd__loss_keep_test_copy(f, &c) && !c.intoBlock && c.asks == 1 && c.made == 0 &&
+              s_kh.asked && s_kh.bytes == rd_keep_block_want(n) && memcmp(c.bytes, mem, n) == 0,
+          "loss keep: a block asked for after the run's first copy (asks %llu, %zu bytes)",
+          (unsigned long long)c.asks, s_kh.bytes);
+    /* made: the next copy goes into it, byte for byte the file's */
+    CHECK(rd__loss_keep_test_copy(f, &c) && c.intoBlock && c.made == 1 && c.used == 1 &&
+              c.len == n && c.cap == rd_keep_block_want(n) && memcmp(c.bytes, mem, n) == 0,
+          "loss keep: the copy in the host's block is the file's bytes (%zu of a block of %zu)",
+          c.len, c.cap);
+    CHECK(c.held >= c.cap, "loss keep: the held bytes count the block (%llu)",
+          (unsigned long long)c.held);
+    /* a block too small: given back, the copy measured instead */
+    rd__loss_keep_test_tick(); /* the next block asked for */
+    CHECK(s_kh.asked, "loss keep: the next block asked for after a copy into one");
+    s_kh.shrink = 1;
+    CHECK(rd__loss_keep_test_copy(f, &c) && !c.intoBlock && c.small == 1 && s_kh.given == 1 &&
+              c.len == n && memcmp(c.bytes, mem, n) == 0,
+          "loss keep: a block too small given back, the copy measured (small %llu, given %d)",
+          (unsigned long long)c.small, s_kh.given);
+    s_kh.shrink = 0;
+    rd__loss_keep_test_tick(); /* asked again */
+    CHECK(s_kh.asked, "loss keep: asked again after the measured copy");
+    rd__loss_keep_shutdown();
+    CHECK(!s_kh.asked && s_kh.withdrawn == 1 && rd_loss_keep_held_bytes() == 0,
+          "loss keep: the end withdraws the ask and frees every copy");
+    rd_loss_keep_set_host(NULL);
+}
+
 static void testDump(const char *dir)
 {
     uint8_t px[4 * 4 * 4];
@@ -932,6 +1034,7 @@ static void testDump(const char *dir)
             free(blk);
             free(shortBlk);
         }
+        testLossKeepCopy(f, mem, memLen);
         free(mem);
         free(none);
         free(fileBytes);

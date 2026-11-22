@@ -6,7 +6,9 @@
  * render thread is a thread the test starts for each picture handed over:
  *
  *   none open  with no picture handed over the slow-scene dump's three
- *              calls (rd_dump_retained_frame_bytes, _into, _mem_reads)
+ *              calls (rd_dump_retained_frame_bytes, _into, _mem_reads: the
+ *              last measures the frame and allocates it once, its two
+ *              passes each waiting for the reads alone)
  *              make no drain (the host's drain never called) and their
  *              bytes are the drained dump's (rd_dump_retained_frame_mem,
  *              which still drains: the host's drain called, the control);
@@ -189,7 +191,7 @@ int main(void)
               "none open: the copy into a block is the drained dump");
         CHECK(rd_dump_retained_frame_mem_reads(number, &mem, &memLen, NULL) &&
                   sameBytes(mem, memLen, ref, refLen),
-              "none open: the copy grown here is the drained dump");
+              "none open: the copy measured and allocated here is the drained dump");
         CHECK(s_drains == d0, "none open: no drain (%u)", s_drains - d0);
         free(blk);
         free(mem);
@@ -203,7 +205,7 @@ int main(void)
     /* reads open: each call waits for the picture's reads, no drain */
     for (int call = 0; call < 3; call++) {
         static const char *const names[3] = {"the measure", "the copy into a block",
-                                             "the copy grown here"};
+                                             "the copy allocated here"};
         if (!handOver(f)) {
             CHECK(0, "reads open: a picture handed over (%s)", names[call]);
             break;
