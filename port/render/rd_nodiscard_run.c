@@ -80,6 +80,9 @@ typedef struct NCounts {
 } NCounts;
 
 static NCounts s_block, s_run;
+/* the counts when the self-test's hold began: its own draws (the floor's
+   and the clipper check's) are not play, so the hold's end puts them back */
+static NCounts s_heldBlock, s_heldRun;
 
 static void add(uint64_t *a, uint64_t *b, uint64_t v)
 {
@@ -431,6 +434,8 @@ void rd__nd_hold(bool on)
 {
     if (!s_n.held) {
         s_n.heldState = s_n.state;
+        s_heldBlock = s_block;
+        s_heldRun = s_run;
     }
     s_n.held = true;
     s_n.state = on ? N_ON : N_HELD;
@@ -440,6 +445,8 @@ void rd__nd_hold_end(void)
 {
     if (s_n.held) {
         s_n.state = s_n.heldState;
+        s_block = s_heldBlock;
+        s_run = s_heldRun;
     }
     s_n.held = false;
     s_n.drewNow = false; /* the self-test's pictures are not the probation's */

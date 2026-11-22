@@ -1885,7 +1885,8 @@ The lines (`rd: ` before each):
 - `rd_replay_tool --stats`: `stats: discard-free twins on|held|off (why): N draws through them, C
   of them by the clipper check (verdict); refused: plane p, DATE d, band b, alpha a, clipped c, not made yet u, timed without them t; M
   modules of them made, P of their pipelines alive` (with `(not applicable here: ...)` on a device
-  with dual-source blending).
+  with dual-source blending). The self-test's own draws (the floor's and the clipper check's) are
+  not counted: the hold's end puts the counts back (`rd__nd_hold_end`).
 
 The tests' switches ([TESTING.md](TESTING.md#environment-switches)): `ICO_RD_VU_NODISCARD`,
 `ICO_RD_VU_NODISCARD_SABOTAGE` and `ICO_RD_VU_NODISCARD_CLIPPER`. What they gain on a phone is
