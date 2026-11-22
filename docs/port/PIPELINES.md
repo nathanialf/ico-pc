@@ -1611,7 +1611,9 @@ The ways back, each logged, none written to the settings:
   `REASON_CRASH_NATIVE`), an ANR, a signal other than SIGKILL, a device loss, a GPU hang or the
   watchdog does; a close from the recent apps list, Force stop, a kill by the system, an update, the
   app ending itself, a clean close or no evidence at all (no exit record: Android before 11, a desktop `kill -9`) do not,
-  and the cull runs its self-test again; "failed" keeps it off. Off means `blocked <the version in
+  and the cull runs its self-test again; "failed" keeps it off. An end while the discard-free
+  twins' mark said "trying" is theirs and does not block the cull at "counting" or "on" (each mark
+  blocks only its own subject, [PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md)). Off means `blocked <the version in
   the mark>`, handed to the renderer as `ICO_VU_ZERO_BLOCK` while that version runs: an update
   tries again. One line each start that had a mark: `ico_pc: the previous run: zero-area cull:
   ...`.
@@ -1706,12 +1708,13 @@ verdict or carried arm.
   the driver came back from), stops every trial and leaves every subject at its off arm for the
   run, logged once. A hang or watchdog end ends the run; the next start's loss ladder and the
   mark take it from there.
-- **A renderer made again** (a Graphics API switch, the device made again: `rd__ab_renderer`
-  from `rd__vu_prepass_init`, the second renderer of the process on): a trial running ends
+- **A renderer made again** (a Graphics API switch, the one path that makes it again: `rd_resume`
+  from `ico_window_reopen`; `rd__ab_renderer` from `rd__vu_prepass_init`, the second renderer of
+  the process on; Android's background does not make it again): a trial running ends
   unjudged, every verdict and the carried arm are forgotten, each stage begins again (its trial 2 s
   from its next picture), and a record the earlier renderer drew is not measured (the record's
   `abEpoch`). The trials already run still count toward the 12. Logged: `A/B: the renderer was
-  made again (a Graphics API switch or the device made again): every verdict and the carried arm
+  made again (a Graphics API switch): every verdict and the carried arm
   forgotten, each attempt with it until its stage's own trial on this renderer`.
 - **The player is told once a run**: when the judge starts its first trial (`rd_ab_take_notice`:
   not for a later trial, a second subject, after a stop or a renderer made again; never when no
@@ -1719,7 +1722,7 @@ verdict or carried arm.
   glue sets a one-shot (`rd_ab_notice_take`, an atomic), and the game's thread, which owns the
   popup queue, shows the popup "Finding the best settings" ("The game is timing two ways of
   drawing on this device. You may see some stutter for a few seconds in each new area.";
-  `port/ui/tune_notice.c`, [UI.md](UI.md)). A full queue drops it; it is not retried.
+  `port/ui/tune_notice.c`, [UI.md](UI.md)). A full queue keeps it, tried again at each vsync until it is queued.
 
 The rate requirement (`rd_ab` test, a GPU-bound stream at a 40 ms tick, 60 s; pictures of 33,
 37.5, 48 and 60 ms; the cull saving or costing 3, 5 or 10 %; one stage, four stages of one
@@ -1802,15 +1805,23 @@ raise the share to at most 90 % and 93 %. `port/render/rd_nodiscard.h` says it a
   flagged corners): no proof covers them, so they take a twin only on the clipper check's
   measurement (below); without a check (the tests' `=1`, a `not clean` device) they are refused.
 - **The clipper check: measured on the device, not assumed.** After the code 34 cases pass, the
-  self-test draws 13 camera rule cases whose triangles cross the eye plane (an edge on the centre
-  view ray, on view rays with the divided x alike, the divided y alike and off-centre; a corner at
-  w = 0, at w = -0.001 and at w = -1290, the dock's depth; two corners behind; every w above 0
-  clipped at GS Z 0, with and without an edge on a view ray; a corner saturated in X; a sliver; a
-  large triangle across the frame), each at code 32 and code 36 in both windings, untextured
+  self-test draws 13 camera rule cases whose triangles cross the eye plane (an edge nearly on the
+  centre view ray; on view rays with the divided x alike and the divided y alike; nearly on an
+  off-centre one; a corner at w = 0, at w = -0.001 and at w = -1290, the dock's depth; two corners
+  behind; every w above 0 clipped at GS Z 0, with and without an edge nearly on a view ray; a
+  corner saturated in X; a sliver; a large triangle across the frame), each at code 32 and code 36
+  in both windings, untextured
   (vu_ps_nodual_nd) and textured under TEXA (vu_texa_ps_nodual_nd), each a frame of its own with
   a depth probe after it (a code 34 quad at GS Z 0, Z write off: a depth the twin wrote and the
-  build did not shows in the colour), through the twins and without them. All byte for byte, and
-  both entries drew through their twin: `clean`, and the camera rule's passes (no plane, no DATE,
+  build did not shows in the colour), through the twins and without them. Every case must have
+  drawn: its picture without the twins differs from the probe's alone (a case that drew nothing
+  compares equal and tests nothing: `not clean (... drew nothing: not tested)`). An edge exactly on
+  a view ray would put its triangle's plane through the eye, so it would draw nothing on any
+  device: the cases near a view ray are a little off it, and every case covers pixels (worked out
+  on the CPU). Only a frame whose case drew counts its passes, and each entry must have drawn a
+  case's own pass through its twin (the depth probe, code 34, does not count). The texels each
+  case drew are logged once (`the clipper check's texels drawn by each case ...`). All byte for
+  byte: `clean`, and the camera rule's passes (no plane, no DATE,
   `ICO_VU_NO_BESIDE`, the alpha test off, not particles) take a twin too, counted apart. Any difference: `not
   clean`, the first differing case logged, clip mode none alone; not a fault (the mark is not
   `failed`), the verdict kept on the mark's second line and said at the next start. It is evidence
@@ -1822,16 +1833,20 @@ raise the share to at most 90 % and 93 %. `port/render/rd_nodiscard.h` says it a
   triangle drawn beside the picture under `[dev] region_rule = ps2` (fx-drops-4657); no draw
   without a band has been seen to lose a pixel to it: lavapipe measures the check `clean` (13
   cases, 52 passes), and `rd_nodiscard_clean` draws 749 camera rule passes through the twins on
-  four fixtures byte for byte. Neither is a proof for another GPU. The check's positive control
-  (`ICO_RD_VU_NODISCARD_SABOTAGE=clipper`) shows it says `not clean` when a case differs.
+  four fixtures byte for byte. Neither is a proof for another GPU, and that `clean` was measured on
+  the case set before this one, five of whose cases drew nothing at 512 x 448 (three edges exactly
+  on a view ray, the sliver on one, the large triangle below the frame). The check's positive
+  controls show it says `not clean` when a case differs (`ICO_RD_VU_NODISCARD_SABOTAGE=clipper`)
+  and when a case draws nothing (`=empty`). The floor's two cases through a twin (plain,
+  textured) are shown to draw the same way: the frame without each must differ.
 - **Never waited for.** A pass whose twin's pipeline is not made draws through its *_nodual build
   and asks for the twin (`rd_pipeline.c` `rd__pipeline_twin`: queued once). Between pictures
   (`rd__pipe_finish_tick`, the background finisher's slot) the queue's next batch is begun on the
   workers at low priority and taken once its compiles have ended; none is begun while the
   finisher's hold is in force (a late game step, a slow picture) or while the finisher runs, and
   one background set is in flight at a time. A backend without background creation makes the batch
-  there, between pictures. The tests' `ICO_RD_VU_NODISCARD=1` makes them at the next replay's
-  start and waits.
+  there, between pictures. The tests' `ICO_RD_VU_NODISCARD=1` makes the whole queue at the next
+  replay's start, a batch at a time, and waits (play: one batch between pictures).
 - **The ways back** (each logged, none written to the settings):
   - the install's mark `logs/nodiscard-mark.txt` (`port/platform/nodiscard_mark.h`), the cull's
     stages and table: `trying` written and synced before the two modules are made, `counting` when
@@ -1839,7 +1854,8 @@ raise the share to at most 90 % and 93 %. `port/render/rd_nodiscard.h` says it a
     `on` after 250 pictures drawn with a twin, `failed` when a module could not be made or the
     self-test refused them; a bad end while trying (any end but
     a clean close), counting or on (a crash, an ANR, a signal other than 9, a device loss, a GPU
-    hang, the watchdog) keeps them off until the version changes;
+    hang, the watchdog) keeps them off until the version changes, except an end while the cull's
+    mark said "trying" (the cull's: each mark blocks only its own subject);
   - the start-up self-test (`rd_nodiscard_selftest.c`, after the cull's on the pre-pass that
     passed): a plain code 34 mesh and a textured one under TEXA 7F/81 AEM with a linear filter
     (given vu_ps_nodual_nd and vu_texa_ps_nodual_nd), one under an alpha test that can fail, the
@@ -1868,8 +1884,9 @@ raise the share to at most 90 % and 93 %. `port/render/rd_nodiscard.h` says it a
     not asked. Its cost goes in the 10 s clause: `; their pipelines made in the background: P in B
     batches, M ms from begin to taken`.
   Until the self-test passes nothing of the twins exists on the device, and on a device with
-  dual-source blending they are never tried: every shader and pipeline is the build's without
-  them.
+  dual-source blending they are never tried (`rd__nd_applicable`), also where the blend's
+  self-test fell back to the two-pass blend there (`rd_blend_selftest.c`): every shader and
+  pipeline is the build's without them.
 
 The lines (`rd: ` before each):
 - `discard-free twins: trying them: vu_ps_nodual_nd and vu_texa_ps_nodual_nd made (2 modules;
@@ -1880,13 +1897,17 @@ The lines (`rd: ` before each):
   ...`, then the start line `discard-free twins: on|held|off, N modules of them made, P of their
   pipelines alive`; `off on this install (...)`, `off for this start (the loss ladder: ...)`,
   `off for the run (self-test not run: not applicable here: the device blends with two outputs,
-  ...)`.
+  ...)` or `(... not applicable here: the device has dual-source blending (the two-pass blend is
+  its fallback): the twins are for a device without it)`.
 - `discard-free twins: the clipper check: clean (13 cases crossing the eye plane at codes 32 and
   36, untextured and textured under TEXA, N passes through both twins, the pictures and their
-  depth byte for byte): the camera rule's passes take them too`, or `... not clean (an edge on the centre view ray at code 32 differs, the first
-  at texel X,Y): clip mode none alone takes them (a property of this device, not a fault: nothing
-  written as failed)` (`not clean (its frames drew nothing through vu_texa_ps_nodual_nd)` when an
-  entry drew nothing; under `ICO_RD_VU_NODISCARD_CLIPPER` the forced verdict with what was
+  depth byte for byte): the camera rule's passes take them too`, or `... not clean (an edge nearly on the centre view ray at code 32 differs, the
+  first at texel X,Y): clip mode none alone takes them (a property of this device, not a fault:
+  nothing written as failed)` (`not clean (an edge nearly on the centre view ray at code 32 drew
+  nothing: not tested)` when a case drew nothing, `not clean (no case of its frames drew through
+  vu_texa_ps_nodual_nd)` when an entry drew none; before it `discard-free twins: the clipper
+  check's texels drawn by each case (the fewest of its frames, 13 of 13 cases reached): 47, 816,
+  ...`; under `ICO_RD_VU_NODISCARD_CLIPPER` the forced verdict with what was
   measured: `clean (ICO_RD_VU_NODISCARD_CLIPPER; measured not clean: ...)`, `not clean
   (ICO_RD_VU_NODISCARD_CLIPPER; measured clean)`).
 - The 10 s VU line's clause: `; discard-free twins: D draws a picture through them, C of them by

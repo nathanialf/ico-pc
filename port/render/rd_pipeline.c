@@ -3513,6 +3513,13 @@ void rd__pipeline_twin_tick(bool wait)
     twinBegin();
     if (wait) {
         (void)twinEnd(true);
+        /* the tests' waited path (ICO_RD_VU_NODISCARD=1, rd__nd_replay_begin):
+           the whole queue, a batch at a time, so the next replay draws every
+           pass the CPU gives a twin through it (play: one batch a picture) */
+        while (s_twin.n > 0 && s_twin.jobs == NULL && rd__nd_on() && !s_createStopped) {
+            twinBegin();
+            (void)twinEnd(true);
+        }
     }
 }
 

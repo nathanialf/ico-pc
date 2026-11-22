@@ -328,6 +328,18 @@ int main(int argc, char **argv)
     rd__set_not_implemented_fatal(true);
     printf("  the VU shaders' %s variant\n", rd__vu_extended() ? "extended" : "plain");
 
+    /* the game's order (window_host.c): the blend's self-test first where a
+       test fakes its result (ICO_RD_BLEND_SABOTAGE=fixed: the two-pass
+       fallback on a device that has dual-source blending, which the
+       discard-free twins must leave untouched: rd_nodiscard.cmake) */
+    const char *blendSab = getenv("ICO_RD_BLEND_SABOTAGE");
+    if (blendSab != NULL && blendSab[0] != '\0') {
+        (void)rd_blend_selftest();
+        printf("  the blend's self-test first (ICO_RD_BLEND_SABOTAGE=%s): the two-pass fallback "
+               "%s\n",
+               blendSab, rd_no_dual() ? "on" : "off");
+    }
+
     /* 1. */
     const bool before = g_rd.vuPrepass;
     const bool kept = rd_vuprepass_selftest();

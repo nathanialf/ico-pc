@@ -35,7 +35,7 @@
 enum { N_HELD, N_ON, N_OFF };
 
 /* ICO_RD_VU_NODISCARD_SABOTAGE (tests) */
-enum { NS_NONE, NS_ALPHA, NS_MODULE, NS_CLIPPER };
+enum { NS_NONE, NS_ALPHA, NS_MODULE, NS_CLIPPER, NS_EMPTY };
 
 static struct {
     int state;
@@ -56,6 +56,7 @@ static struct {
     uint64_t took, tookRefused[RD_ND_REASONS]; /* since rd__nd_take */
     uint64_t tookClip;                         /* of took, by the clipper check */
     uint64_t tookEntry[2];                     /* of took, by entry (vu_ps, vu_texa_ps) */
+    uint64_t tookEntryClip[2];                 /* of tookClip, by entry */
     bool entryOk[2]; /* the entry's twin drew in the self-test's floor (play uses it then) */
     RdNdUse use;     /* the replay being made, for the in-play judge */
     /* the device's clipper (rd_nodiscard.h "The clipper check"): RD_ND_CLIP_*,
@@ -151,6 +152,7 @@ void rd__nd_init(void)
     s_n.took = 0;
     s_n.tookClip = 0;
     memset(s_n.tookEntry, 0, sizeof(s_n.tookEntry));
+    memset(s_n.tookEntryClip, 0, sizeof(s_n.tookEntryClip));
     memset(s_n.entryOk, 0, sizeof(s_n.entryOk));
     memset(&s_n.use, 0, sizeof(s_n.use));
     memset(s_n.tookRefused, 0, sizeof(s_n.tookRefused));
@@ -184,16 +186,20 @@ void rd__nd_init(void)
         s_n.sabotage = NS_MODULE;
     } else if (sb != NULL && strcmp(sb, "clipper") == 0) {
         s_n.sabotage = NS_CLIPPER;
+    } else if (sb != NULL && strcmp(sb, "empty") == 0) {
+        s_n.sabotage = NS_EMPTY;
     }
     if (s_n.sabotage != NS_NONE) {
         rd__log("discard-free twins: ICO_RD_VU_NODISCARD_SABOTAGE: %s",
                 s_n.sabotage == NS_ALPHA
                     ? "the CPU's proof does not look at the alpha test (a twin draws where the "
                       "*_nodual build discards)"
-                : s_n.sabotage == NS_MODULE
-                    ? "their modules not made"
-                    : "the clipper check's picture through the twins changed in one byte "
-                      "for its first case (the check must say not clean)");
+                : s_n.sabotage == NS_MODULE ? "their modules not made"
+                : s_n.sabotage == NS_CLIPPER
+                    ? "the clipper check's picture through the twins changed in one byte for "
+                      "its first case (the check must say not clean)"
+                    : "the clipper check's first case moved off the frame, so it draws "
+                      "nothing (the check must say not clean: not tested)");
     }
     const char *env = getenv("ICO_RD_VU_NODISCARD");
     const char *row = getenv("ICO_LOSS_ROW");
@@ -226,8 +232,10 @@ void rd__nd_init(void)
         s_n.forced = true;
         s_n.wasOn = true;
         snprintf(s_n.why, sizeof(s_n.why), "ICO_RD_VU_NODISCARD=1");
-        rd__log("discard-free twins: on without their self-test (ICO_RD_VU_NODISCARD=1): their "
-                "pipelines made at the start of the replay after the one that asked for them");
+        rd__log(
+            "discard-free twins: on without their self-test (ICO_RD_VU_NODISCARD=1): their "
+            "pipelines made at the start of the replay after the one that asked for them, every "
+            "one asked for, waited for");
         /* no clipper check without the self-test: the floor (clip mode none)
            unless the tests fake a verdict */
         if (s_n.clipFake >= 0) {
@@ -330,6 +338,7 @@ static void count(int why, bool byClipper, int entry)
         if (byClipper) {
             add(&s_block.drawsClip, &s_run.drawsClip, 1u);
             s_n.tookClip++;
+            s_n.tookEntryClip[entry]++;
         }
     } else if (why > 0 && why < RD_ND_REASONS) {
         add(&s_block.refused[why], &s_run.refused[why], 1u);
@@ -337,11 +346,30 @@ static void count(int why, bool byClipper, int entry)
     }
 }
 
+bool rd__nd_applicable(void)
+{
+    /* the device has no dual-source blending by its own features: one that
+       has it and fell back to the two-pass blend after the blend's
+       self-test (rd_blend_selftest.c, rd_set_no_dual) stays untouched */
+    return g_rd.noDual && (!g_rd.hasDevice || !rhi_limits()->dualSourceBlend);
+}
+
+const char *rd__nd_not_applicable_text(void)
+{
+    if (!g_rd.hasDevice || rd__nd_applicable()) {
+        return NULL;
+    }
+    return g_rd.noDual ? "not applicable here: the device has dual-source blending (the two-pass "
+                         "blend is its fallback): the twins are for a device without it"
+                       : "not applicable here: the device blends with two outputs, so no pass "
+                         "draws through a *_nodual build";
+}
+
 void rd__nd_pass(RdPipeKeyInt *key, RhiPipeline *pipe, const RdDrawPass *p, uint32_t drawFlags,
                  bool plane, bool particle, bool dateStencil)
 {
-    if (s_n.state != N_ON) {
-        return; /* held or off: nothing asked, nothing counted */
+    if (s_n.state != N_ON || !rd__nd_applicable()) {
+        return; /* held, off or not applicable here: nothing asked, nothing counted */
     }
     const bool gathering = rd__pipeline_gathering();
     if ((!pipe->id && !gathering) || !ready()) {
@@ -409,8 +437,9 @@ void rd__nd_replay_begin(void)
         }
     }
     if (s_n.forced && s_n.state == N_ON && g_rd.hasDevice) {
-        /* the tests' =1: the pipelines the replays before asked for, made
-           now and waited for (in play: rd__pipe_finish_tick, never waited) */
+        /* the tests' =1: every pipeline the replays before asked for, made
+           now, a batch at a time, and waited for (in play:
+           rd__pipe_finish_tick, one batch a picture, never waited) */
         rd__pipeline_twin_tick(true);
     }
 }
@@ -471,11 +500,23 @@ bool rd__nd_sabotage_clipper(void)
     return s_n.sabotage == NS_CLIPPER;
 }
 
+bool rd__nd_sabotage_empty(void)
+{
+    return s_n.sabotage == NS_EMPTY;
+}
+
 void rd__nd_take_entries(uint64_t out[2])
 {
     out[0] = s_n.tookEntry[0];
     out[1] = s_n.tookEntry[1];
     s_n.tookEntry[0] = s_n.tookEntry[1] = 0;
+}
+
+void rd__nd_take_entries_clip(uint64_t out[2])
+{
+    out[0] = s_n.tookEntryClip[0];
+    out[1] = s_n.tookEntryClip[1];
+    s_n.tookEntryClip[0] = s_n.tookEntryClip[1] = 0;
 }
 
 void rd__nd_entry_tested(int entry, bool tested)
@@ -561,8 +602,8 @@ void rd__nd_verdict(bool pass, const char *why)
 void rd__nd_selftest_skip(const char *why)
 {
     if (s_n.state == N_HELD) {
-        char w[200];
-        snprintf(w, sizeof(w), "for the run (self-test not run: %.140s)", why);
+        char w[240];
+        snprintf(w, sizeof(w), "for the run (self-test not run: %.190s)", why);
         setOff(w); /* not a fault: a renderer made again tests them */
         rd__log("discard-free twins: off %s", s_n.why);
     }
@@ -661,13 +702,12 @@ int rd__nd_stats_text(char *out, size_t cap)
     return snprintf(out, cap,
                     "discard-free twins %s%s%s%s: %llu draws through them, %llu of them by the "
                     "clipper check (%s); refused: %s; %u modules of them made, %u of their "
-                    "pipelines alive%s",
+                    "pipelines alive%s%s%s",
                     rd__nd_state_text(), s_n.why[0] ? " (" : "", s_n.why, s_n.why[0] ? ")" : "",
                     (unsigned long long)c->draws, (unsigned long long)c->drawsClip,
                     rd__nd_clipper_text(), refused, (unsigned)s_n.made,
                     (unsigned)rd__pipeline_count_twins(),
-                    g_rd.hasDevice && !g_rd.noDual
-                        ? " (not applicable here: the device blends with two outputs, no pass "
-                          "draws through a *_nodual build)"
-                        : "");
+                    rd__nd_not_applicable_text() != NULL ? " (" : "",
+                    rd__nd_not_applicable_text() != NULL ? rd__nd_not_applicable_text() : "",
+                    rd__nd_not_applicable_text() != NULL ? ")" : "");
 }

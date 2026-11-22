@@ -907,7 +907,17 @@ writes nothing) or `blocked <v>`; the renderer gets `ICO_NODISCARD_BLOCK`, `ICO_
 twins: were on when it ended (a crash): off on this install until the version changes (blocked
 <version>)`, `... were being tried when it ended (...)`, `... were on, their first pictures being
 counted, when it ended (...): no sign of a bad end: tried again`, `... were refused by their
-self-test or a pipeline not made: ...`, `... kept off by their mark: ...`. The renderer's second
+start-up self-test (a module or one of its pipelines not made, or its pictures differed): ...`,
+`... kept off by their mark: ...`.
+
+Each mark blocks only its own subject (`vu_zero_mark_blocks_beside`): the cull's step reads both
+marks before either is rewritten, so a bad end while the other attempt's mark said `trying` is that
+attempt's, and a subject at `counting` or `on` is tried again with `...: the discard-free twins were
+being tried then (their mark): tried again` or `...: the zero-area cull was being tried then (its
+mark): tried again` (the twins' step takes the cull's stage as the cull's step read it,
+`vu_zero_mark_stage_read`). A crash in the twins' start-up check, theirs `trying` and the cull's
+`counting`, blocks the twins only. With both at `counting` or `on` (play, the twins' clipper check
+or a background compile) the end is not attributed and both block. The renderer's second
 line, `clipper clean|not clean <v> (...)` (the twins' clipper check), is added to that line as `;
 their clipper check: ...`: said, never a reason to block.
 

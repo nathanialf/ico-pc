@@ -8,9 +8,12 @@
 # of its profiles, rd_replay_tool --pass-dump --stats --repeat 2 twice:
 #   off  ICO_RD_VU_NODISCARD=0: every pass through its *_nodual build
 #   on   ICO_RD_VU_NODISCARD=1: on without the self-test; the first replay
-#        asks for the twins' pipelines, the second replay's start makes them
-#        (rd__nd_replay_begin), so the second, whose targets are written,
-#        draws every pass the CPU gives a twin through it
+#        asks for the twins' pipelines, the second replay's start makes the
+#        whole queue, a batch at a time, and waits (rd__nd_replay_begin,
+#        rd_pipeline.c rd__pipeline_twin_tick), so the second, whose targets
+#        are written, draws through a twin every pass the CPU gives one whose
+#        pipeline could be made (the run's line prints "not made yet": the
+#        first replay's asks)
 # The profiles (Vulkan):
 #   corpus   the device as it is (lavapipe blends with two outputs: no pass
 #            draws through a *_nodual build, so none through a twin; the run
@@ -22,9 +25,11 @@
 #            1x, 21:9
 #   mali169  the same at 16:9 (the reporter's v0.11.14 setting)
 # With BACKEND opengl (rd_nodiscard_ab_gl) every frame at the corpus setting
-# with no dual-source blending (ICO_GL_FAKE_NO_DUAL=1).  Only clip mode
-# none takes a twin, on every device (rd_nodiscard.h, "Why clip mode none"),
-# so these runs take the path a phone takes.  Every target's PNG of on and off must
+# with no dual-source blending (ICO_GL_FAKE_NO_DUAL=1).  Without the
+# self-test no clipper check runs, so only clip mode none takes a twin
+# (rd_nodiscard.h, "Why clip mode none"): these runs take the path of a
+# phone whose clipper check was not clean; MODE=clean (below) the path of
+# one whose check was clean.  Every target's PNG of on and off must
 # be equal byte for byte, each run's stats line read: off says "discard-free
 # twins off (ICO_RD_VU_NODISCARD=0): 0 draws through them" and "0 modules of
 # them made"; on under a profile without dual-source blending "discard-free

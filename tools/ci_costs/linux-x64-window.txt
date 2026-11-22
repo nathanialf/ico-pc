@@ -307,6 +307,8 @@ rd_nodiscard_ab_gl 79.60  # estimate: the round-1 estimate x 2 (four fixtures to
 rd_nodiscard_clean 124.71  # estimate: rd_nodiscard_ab x 1.5 (the game self-tests in each run; not run here)
 rd_vuprepass_selftest_nodiscard 7.62  # estimate: rd_vuprepass_selftest_zero_mali x 3 (the clipper check: 52 frames of 3 small replays, both twin entries; not run here)
 rd_vuprepass_selftest_nodiscard_clipper 7.62  # estimate: rd_vuprepass_selftest_nodiscard (the same self-test; not run here)
+rd_vuprepass_selftest_nodiscard_empty 7.62  # estimate: rd_vuprepass_selftest_nodiscard_clipper (the check stops at its first case; not run here)
+rd_vuprepass_selftest_nodiscard_fallback 4.65  # estimate: rd_vuprepass_selftest_nodiscard_dual plus the blend self-test (rd_blend_selftest_sabotage; not run here)
 rd_vuprepass_selftest_nodiscard_notclean 7.62  # estimate: rd_vuprepass_selftest_zero_mali x 3 (the clipper check: 52 frames of 3 small replays, both twin entries; not run here)
 rd_vuprepass_selftest_nodiscard_dual 2.30  # estimate: rd_vuprepass_selftest_zero_marked (the twins not tried; not run here)
 rd_vuprepass_selftest_nodiscard_marked 2.30  # estimate: rd_vuprepass_selftest_zero_marked (the twins not tried; not run here)

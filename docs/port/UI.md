@@ -43,7 +43,7 @@ draws, navigates, fades and sounds it; the port supplies the rows, their words a
 | `port/assets/fonts/NotoSansTC-Regular-subset.ttf`, `NotoSansTC-OFL.txt` | the fourth font (the Chinese table's ideographs) and its licence |
 | `tools/subset_font_zh.py` | makes and checks the fourth font's subset |
 | `port/ui/popup.h`, `popup.c` | the notification popups |
-| `port/ui/tune_notice.h`, `tune_notice.c` | the popup "Finding the best settings" (`UI_STR_TUNE_TITLE`, `UI_STR_TUNE_BODY`), once a run when the renderer's in-play timing starts its first trial: `ui_host_vsync` takes the renderer's one-shot (`rd_ab_notice_take`) on the game's thread, which owns the popup queue; behind another popup it waits its turn, a full queue drops it; the line `ui: pop-up "Finding the best settings": ...` when queued ([PIPELINES.md](PIPELINES.md#the-zero-area-cull-timed-in-play)) |
+| `port/ui/tune_notice.h`, `tune_notice.c` | the popup "Finding the best settings" (`UI_STR_TUNE_TITLE`, `UI_STR_TUNE_BODY`), once a run when the renderer's in-play timing starts its first trial: `ui_host_vsync` takes the renderer's one-shot (`rd_ab_notice_take`) on the game's thread, which owns the popup queue; behind another popup it waits its turn, a full queue keeps it for the next vsync (`ui_tune_notice`); the line `ui: pop-up "Finding the best settings": ...` when queued ([PIPELINES.md](PIPELINES.md#the-zero-area-cull-timed-in-play)) |
 | `port/ui/touch_ui.h`, `touch_ui.c` | the touch overlay's drawing |
 | `port/ui/ui_fps.h`, `ui_fps.c` | the Frame rate counter: its text on the top layer and the calls that feed its number (`port/platform/fps_counter.h`) |
 | `port/ui/ui_mouse.h`, `ui_mouse.c`, `ui_mouse_geom.h`, `ui_mouse_geom.c` | the mouse pointer in menus: the glue and the arithmetic |

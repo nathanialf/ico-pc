@@ -570,9 +570,13 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   per fixture and profile at least its list line's `clean_min` of that class (the run of
   2026-11-22 17:40: 749 such draws over the four fixtures, 0 targets differing). No device:
   SKIP.
-- `rd_vuprepass_selftest_nodiscard`, `_nodiscard_clipper`, `_nodiscard_notclean`,
-  `_nodiscard_sabotage`, `_nodiscard_marked`, `_nodiscard_dual` (the clipper check:
-  `_nodiscard` requires lavapipe's measured verdict `clean` (13 cases, both entries);
+- `rd_vuprepass_selftest_nodiscard`, `_nodiscard_clipper`, `_nodiscard_empty`,
+  `_nodiscard_notclean`, `_nodiscard_sabotage`, `_nodiscard_marked`, `_nodiscard_dual`,
+  `_nodiscard_fallback` (the clipper check: `_nodiscard` requires the verdict `clean` (13 cases,
+  each entry through a case's own pass) and the texels-drawn line with every one of the 13 cases
+  above 0; `_nodiscard_empty` its other positive control, `ICO_RD_VU_NODISCARD_SABOTAGE=empty`
+  (the first case off the frame): `not clean (... drew nothing: not tested)`, that case's texels
+  0, clip mode none alone, the mark `counting`;
   `_nodiscard_clipper` its positive control, `ICO_RD_VU_NODISCARD_SABOTAGE=clipper` (the first
   case's picture through the twins with one byte altered): `not clean` naming that case, clip mode
   none alone, the mark `counting`, never `failed`; `_nodiscard_notclean` the verdict faked not
@@ -581,7 +585,8 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   `test/rd_vuprepass_selftest.cmake`; the Arm fakes without dual-source blending): the twins'
   start-up self-test after the cull's (the pre-pass still on), each run's start line saying what
   of them exists: on (the plain case through vu_ps_nodual_nd and a textured TEXA case through
-  vu_texa_ps_nodual_nd, each counted, neither entry "drew nothing"; the alpha test's (untextured
+  vu_texa_ps_nodual_nd, each counted, neither entry "drew nothing", each shown to draw by the frame
+  without it differing; the alpha test's (untextured
   and textured), the clip plane's and a code 32 eye-plane crossing's cases refused; the clipper
   check's frames in both entries, the rule refusing the band and DATE, the pictures byte for byte; 2 modules, its own
   pipelines released after it, none of the twins' alive; the mark `counting <the test's
@@ -590,7 +595,11 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   run, the modules and pipelines released, the mark `failed <the test's version>`; off on the
   install (`ICO_NODISCARD_BLOCK`, the mark the platform hands over): no module made, no try
   logged; a device with dual-source blending (lavapipe as it is): not applicable, nothing tried
-  or made, the mark not written.
+  or made, the mark not written; the same device after the blend's self-test fell back to the
+  two-pass blend (`_nodiscard_fallback`: `ICO_RD_BLEND_SABOTAGE=fixed`, under which
+  `rd_vuprepass_selftest_test` runs `rd_blend_selftest` first as the game does): still not
+  applicable, `the device has dual-source blending (the two-pass blend is its fallback)`, nothing
+  tried or made, the mark not written.
 - `rd_smallcuts_test.c` (`rd_smallcuts`; `rd_smallcuts.cmake`, CPU): the pure parts of the turn in
   the present's blit and the VU record by compute on the PowerVR class: `rd__turn_rect` for every
   quarter turn against `rd_prerotate.c`'s pixel table (every pixel of the rect lands inside the

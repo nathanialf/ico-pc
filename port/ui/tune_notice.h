@@ -8,8 +8,9 @@
  * starts its first trial, and the window's vsync (ui_host.c
  * ui_host_vsync, the thread the popup queue belongs to) shows it: title
  * UI_STR_TUNE_TITLE ("Finding the best settings"), body UI_STR_TUNE_BODY.
- * Behind a popup already showing it waits its turn; a full queue drops it,
- * not retried.  One log line when it is queued.
+ * Behind a popup already showing it waits its turn; a full queue keeps it,
+ * tried again at each vsync until it is queued (the judge gives its word
+ * once a run).  One log line when it is queued.
  */
 #ifndef PORT_UI_TUNE_NOTICE_H
 #define PORT_UI_TUNE_NOTICE_H
@@ -19,7 +20,8 @@ extern "C" {
 #endif
 
 /* due: the judge's notice taken this vsync.  0 nothing to show, 1 queued
-   (and logged), -1 the queue was full (dropped) */
+   (and logged), -1 the queue was full (kept: the next call tries again,
+   due or not) */
 int ui_tune_notice(int due);
 
 #ifdef __cplusplus

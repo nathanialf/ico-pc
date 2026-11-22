@@ -60,7 +60,8 @@ static void decide(void)
         {"counting v0.11.15", "were on, their first pictures being counted, when it ended (a "
                               "crash)"},
         {"on v0.11.15", "were on when it ended (a crash)"},
-        {"failed v0.11.15", "were refused by their self-test or a pipeline not made"},
+        {"failed v0.11.15", "were refused by their start-up self-test (a module or one of its "
+                            "pipelines not made, or its pictures differed)"},
         {"blocked v0.11.15", "kept off by their mark"},
     };
 
@@ -115,6 +116,38 @@ static void decide(void)
                           "v0.11.15", out, sizeof out, line, sizeof line, &block);
     CHECK(strcmp(out, "blocked v0.11.15") == 0 && block == 1);
     CHECK(strstr(line, "(blocked v0.11.15); their clipper check: clean v0.11.15") != NULL);
+    /* each mark blocks only its own subject: a crash while the cull's mark
+       said trying is the cull's, so counting or on is tried again; trying
+       still blocks, and the cull counting or on changes nothing */
+    nodiscard_mark_decide_beside("counting v0.11.15", VU_ZERO_END_CRASH, "a crash", "v0.11.15",
+                                 VU_ZERO_STAGE_TRYING, out, sizeof out, line, sizeof line, &block);
+    CHECK(out[0] == '\0' && block == 0);
+    CHECK(strcmp(line, "the previous run: discard-free twins: were on, their first pictures "
+                       "being counted, when it ended (a crash): the zero-area cull was being "
+                       "tried then (its mark): tried again") == 0);
+    nodiscard_mark_decide_beside("on v0.11.15", VU_ZERO_END_LOSS, "a lost graphics device",
+                                 "v0.11.15", VU_ZERO_STAGE_TRYING, out, sizeof out, line,
+                                 sizeof line, &block);
+    CHECK(out[0] == '\0' && block == 0);
+    nodiscard_mark_decide_beside("trying v0.11.15", VU_ZERO_END_CRASH, "a crash", "v0.11.15",
+                                 VU_ZERO_STAGE_TRYING, out, sizeof out, line, sizeof line, &block);
+    CHECK(strcmp(out, "blocked v0.11.15") == 0 && block == 1);
+    nodiscard_mark_decide_beside("counting v0.11.15", VU_ZERO_END_CRASH, "a crash", "v0.11.15",
+                                 VU_ZERO_STAGE_COUNTING, out, sizeof out, line, sizeof line,
+                                 &block);
+    CHECK(strcmp(out, "blocked v0.11.15") == 0 && block == 1);
+    for (int st = VU_ZERO_STAGE_NONE; st <= VU_ZERO_STAGE_UNREAD; st++) {
+        for (int e = VU_ZERO_END_CLEAN; e <= VU_ZERO_END_NONE; e++) {
+            const int want = (st == VU_ZERO_STAGE_COUNTING || st == VU_ZERO_STAGE_ON)
+                                 ? 0
+                                 : vu_zero_mark_blocks(st, e);
+            CHECK(vu_zero_mark_blocks_beside(st, e, VU_ZERO_STAGE_TRYING) == want);
+            CHECK(vu_zero_mark_blocks_beside(st, e, VU_ZERO_STAGE_COUNTING) ==
+                  vu_zero_mark_blocks(st, e));
+            CHECK(vu_zero_mark_blocks_beside(st, e, VU_ZERO_STAGE_NONE) ==
+                  vu_zero_mark_blocks(st, e));
+        }
+    }
     /* a mark without a version: the running one's */
     nodiscard_mark_decide("on", VU_ZERO_END_LOSS, "a lost graphics device", "v0.11.15", out,
                           sizeof out, line, sizeof line, &block);
@@ -240,6 +273,41 @@ static void step(const char *dir)
     readText(zero, got, sizeof got);
     CHECK(got[0] == '\0');
     CHECK(getenv("ICO_VU_ZERO_BLOCK") == NULL);
+
+    /* the two steps in the start's order (diag_host.c: the cull's, then
+       the twins'), each mark blocking only its own subject: a crash in the
+       twins' start-up check (theirs trying, the cull's counting) blocks the
+       twins, not the cull; a crash in the cull's (the cull trying, the
+       twins on from before) blocks the cull, not the twins */
+    prevRun(prev, "crash (signal 11)");
+    writeText(zero, "counting v0.11.15\n");
+    writeText(mark, "trying v0.11.15\n");
+    s_lines[0] = '\0';
+    CHECK(vu_zero_mark_step(act, "v0.11.15", -1, 0, logLine) == 0);
+    CHECK(nodiscard_mark_step(act, "v0.11.15", -1, 0, logLine) == 1);
+    CHECK(strstr(s_lines, "zero-area cull: was on, its first pictures being counted, when it "
+                          "ended (a crash): the discard-free twins were being tried then (their "
+                          "mark): tried again") != NULL);
+    readText(zero, got, sizeof got);
+    CHECK(got[0] == '\0');
+    readText(mark, got, sizeof got);
+    CHECK(strcmp(got, "blocked v0.11.15\n") == 0);
+    writeText(zero, "trying v0.11.15\n");
+    writeText(mark, "on v0.11.15\n");
+    CHECK(vu_zero_mark_step(act, "v0.11.15", -1, 0, logLine) == 1);
+    CHECK(nodiscard_mark_step(act, "v0.11.15", -1, 0, logLine) == 0);
+    CHECK(strstr(s_lines, "discard-free twins: were on when it ended (a crash): the zero-area "
+                          "cull was being tried then (its mark): tried again") != NULL);
+    readText(zero, got, sizeof got);
+    CHECK(strcmp(got, "blocked v0.11.15\n") == 0);
+    readText(mark, got, sizeof got);
+    CHECK(got[0] == '\0');
+    /* both counting: the end is not attributed, both blocked */
+    writeText(zero, "counting v0.11.15\n");
+    writeText(mark, "counting v0.11.15\n");
+    CHECK(vu_zero_mark_step(act, "v0.11.15", -1, 0, logLine) == 1);
+    CHECK(nodiscard_mark_step(act, "v0.11.15", -1, 0, logLine) == 1);
+    (void)ico_remove(zero);
 
     /* the start's own step reads Android's record from exit_info (none
        read in this process: -1), so trying with no end written blocks */

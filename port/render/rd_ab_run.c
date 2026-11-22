@@ -154,7 +154,7 @@ void rd__ab_renderer(void)
         return; /* the first: nothing to forget */
     }
     s_open = false;
-    rd_ab_forget(&s_ab, "a Graphics API switch or the device made again");
+    rd_ab_forget(&s_ab, "a Graphics API switch");
     drain();
     ledger();
 }
