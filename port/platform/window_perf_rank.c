@@ -260,11 +260,23 @@ void window_perf_rank_block(const WindowPerfBlock *in)
     window_log_cost_mark("the display and slow scene lines"); /* before it (log_cost.h) */
     window_perf_rank_block_lines(in);
     {
-        /* the block's pictures a second by stage (perf_secs.h); the
-           records before the first block dropped (in NULL) */
-        char secs[1024];
-        if (perf_secs_window_block_text(ico_thread_now_ms(), secs, sizeof secs) > 0 && in != NULL) {
+        /* the block's pictures a second by stage, then each second's GPU
+           span, triangles, fixed-work passes and longest present interval,
+           and the block's present intervals against the game's tick
+           (perf_secs.h); the records before the first block dropped (in
+           NULL) */
+        static char secs[1024], more[2048], iv[512];
+        const double tickMs = in != NULL && in->paceHz > 0 ? 1000.0 / (double)in->paceHz : 0.0;
+        if (perf_secs_window_block_lines(ico_thread_now_ms(), tickMs, secs, sizeof secs, more,
+                                         sizeof more, iv, sizeof iv) > 0 &&
+            in != NULL) {
             fprintf(stderr, "window: %s\n", secs);
+            if (more[0] != '\0') {
+                fprintf(stderr, "window: %s\n", more);
+            }
+            if (iv[0] != '\0') {
+                fprintf(stderr, "window: %s\n", iv);
+            }
         }
     }
     if (in != NULL) {

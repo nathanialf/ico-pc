@@ -12,7 +12,9 @@
  * so do exit-info.txt and the newest exit trace (exit_info.h, issue 215),
  * with the verdict line in report.txt's head; the scene ledger's text
  * (ico_report_set_ledger, issue 221) goes in as scene-ledger.txt byte for
- * byte, and a report with no ledger set has no such entry.
+ * byte, and a report with no ledger set has no such entry; issue 179's
+ * mark files (vu-zero-mark.txt, ahead-mark.txt, nodiscard-mark.txt) go in
+ * byte for byte when they are there, and one not there has no entry.
  * argv[1]: a folder the test may write in (the build folder).
  */
 #include <stdio.h>
@@ -28,6 +30,9 @@ static int fails;
 static const char kExitInfo[] = "ico-pc exit info: read at the start of 2026-11-16 20:56:01 UTC\n"
                                 "the previous run ended: it was killed (signal 9, SIGKILL) ...\n";
 static const char kTrace[] = "\x08\x01\x12\x04tomb"; /* a tombstone's protobuf bytes */
+/* two of issue 179's marks on the install (vu_zero_mark.h, ahead_mark.h) */
+static const char kZeroMark[] = "ico-pc vu-zero mark: stage on\n";
+static const char kAheadMark[] = "ico-pc ahead mark: on\n";
 static const char kVerdict[] = "the previous run ended: it was killed (signal 9, SIGKILL) (...)";
 
 #define CHECK(cond)                                                                                \
@@ -119,6 +124,13 @@ int main(int argc, char **argv)
         CHECK(put(p, kExitInfo, sizeof kExitInfo - 1) == 0);
         snprintf(p, sizeof p, "%s/exit-trace-1794862215000.pb", dir);
         CHECK(put(p, kTrace, sizeof kTrace - 1) == 0);
+        /* two of issue 179's three marks (no nodiscard-mark.txt) */
+        snprintf(p, sizeof p, "%s/vu-zero-mark.txt", dir);
+        CHECK(put(p, kZeroMark, sizeof kZeroMark - 1) == 0);
+        snprintf(p, sizeof p, "%s/ahead-mark.txt", dir);
+        CHECK(put(p, kAheadMark, sizeof kAheadMark - 1) == 0);
+        snprintf(p, sizeof p, "%s/nodiscard-mark.txt", dir);
+        (void)ico_remove(p);
     }
     ico_report_set_exit_info(kVerdict, "exit-trace-1794862215000.pb");
 
@@ -169,6 +181,12 @@ int main(int argc, char **argv)
         /* the scene ledger's text, byte for byte */
         CHECK(
             entry(&z, "scene-ledger.txt", (const unsigned char *)kLedger, sizeof kLedger - 1, &st));
+        /* the marks there, byte for byte; the one not there, no entry */
+        CHECK(entry(&z, "vu-zero-mark.txt", (const unsigned char *)kZeroMark, sizeof kZeroMark - 1,
+                    &st));
+        CHECK(entry(&z, "ahead-mark.txt", (const unsigned char *)kAheadMark, sizeof kAheadMark - 1,
+                    &st));
+        CHECK(mz_zip_reader_locate_file(&z, "nodiscard-mark.txt", NULL, 0) < 0);
     }
     {
         /* the verdict in report.txt's head, after the memory line */
@@ -197,6 +215,10 @@ int main(int argc, char **argv)
         snprintf(p, sizeof p, "%s/last-run-previous.txt", dir);
         (void)ico_remove(p);
         snprintf(p, sizeof p, "%s/exit-info.txt", dir);
+        (void)ico_remove(p);
+        snprintf(p, sizeof p, "%s/vu-zero-mark.txt", dir);
+        (void)ico_remove(p);
+        snprintf(p, sizeof p, "%s/ahead-mark.txt", dir);
         (void)ico_remove(p);
         /* the trace stays on disc: the report takes it only when named */
     }
@@ -232,6 +254,8 @@ int main(int argc, char **argv)
         CHECK(mz_zip_reader_locate_file(&z, "exit-info.txt", NULL, 0) < 0);
         CHECK(mz_zip_reader_locate_file(&z, "exit-trace-1794862215000.pb", NULL, 0) < 0);
         CHECK(mz_zip_reader_locate_file(&z, "scene-ledger.txt", NULL, 0) < 0);
+        CHECK(mz_zip_reader_locate_file(&z, "vu-zero-mark.txt", NULL, 0) < 0);
+        CHECK(mz_zip_reader_locate_file(&z, "ahead-mark.txt", NULL, 0) < 0);
         size_t got = 0;
         char *txt = mz_zip_reader_extract_file_to_heap(&z, "report.txt", &got, 0);
         CHECK(txt != NULL);
