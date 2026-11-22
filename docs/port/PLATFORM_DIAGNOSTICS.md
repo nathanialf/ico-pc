@@ -1585,7 +1585,7 @@ lines added beside them for issues 179 and 123:
   on the GPU at a time (each picture's GPU work waited for before its present, the next submitted
   after that present), the pictures already submitted presented first` (the others: `a wait for
   a picture's GPU work failed (result 1)`, `a picture's submit failed (the submission counter
-  still at 812 after it)`, `the graphics device was lost`, `its waiting thread could not be
+  at 812 after it, short of its submits)`, `the graphics device was lost`, `its waiting thread could not be
   made`). In the 10 s line's submit thread part, where it ran in the block or is off for the run:
   `; the next picture submitted ahead: 236 of 248 submitted before the picture before's GPU end;
   the GPU idle 12 times (3.4 ms a time: wake-up 0.2, present call 1.1, finish 0.1, waiting for

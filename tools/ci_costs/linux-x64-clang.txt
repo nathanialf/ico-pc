@@ -871,9 +871,9 @@ rd_vu_skin_check_twin_c 1.55
 rd_vu_skin_check_twin_nan 1.36
 rd_vu_skin_check_twin_record 2.28
 rd_vu_zero 0.01  # estimate: a CPU unit test with a brute-force rasteriser, like rd_vu_share (not run here)
-rd_vu_zero_ab 114.00  # estimate: rd_vu_share_ab x 10 / 6 (ten pairs a fixture to its six; not run here)
+rd_vu_zero_ab 131.10  # estimate: rd_vu_share_ab x 10 / 6 (ten pairs a fixture to its six; not run here; x 1.15 for the Full pixel setting added to the corpus profile)
 rd_vu_zero_fault 11.40  # estimate: rd_vu_share_ab / 6 (one run a fixture; not run here)
-rd_vu_zero_gl 65.47  # estimate: rd_vu_share_gl x 1.5 (three corpus settings to its two; not run here)
+rd_vu_zero_gl 81.84  # estimate: rd_vu_share_gl x 1.5 (three corpus settings to its two; not run here; x 1.25 for the Full pixel setting added to the corpus profile)
 rd_vubatch_ab 113.02  # estimate: 69.9 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 1.62
 rd_vufuse_ab 514.36  # estimate: 318.3 s local (merge-wt_FIX-P4a-20261115T182242Z.lvp.log) x 1.62
 rd_vufuse_ab_pixel 12.12

@@ -2173,12 +2173,12 @@ counters in the hot path.
   bytes are those of the old copy for the same frame. The game-thread figure is both steps (the
   measure and the copy, each with its wait for the reads), the worker figure the block's making
   and the zip. Lines of their own: `window: slow-scene dump: frame F had grown past
-  the worker's block of N bytes: copied into a block grown here instead` (the old way, once: the
+  the worker's block of N bytes: copied into a block made here instead` (the old way, once: the
   frame measured and written into one allocation of its size since the loss keep's change; the
   line's words are older),
   `window: slow-scene dump: not written: the worker could not make a block of N bytes`, and
   `window: slow-scene dump: not written: no frame of the scene could be copied in 10000 ms (the
-  worker's block of N bytes given up)`, each ending `; not counted, the next slow block arms one again` (the dump is not counted as made, the dump before's work and stage restored, `window_dump_auto_slow_lost`; at most three such re-arms a run, after which `; counted (the run's re-arms used up)`), and `... not written: frame F could not be copied; ...` when the copy into a block grown here failed too. The skin check's capture is unchanged.
+  worker's block of N bytes given up)`, each ending `; not counted, the next slow block arms one again` (the dump is not counted as made, the dump before's work and stage restored, `window_dump_auto_slow_lost`; at most three such re-arms a run, after which `; counted (the run's re-arms used up)`), and `... not written: frame F could not be copied; ...` when the copy into a block made here failed too. The skin check's capture is unchanged.
 - **The logging's own cost** (`port/platform/log_cost.c`, `window_lines.c`, the log thread's
   counts in `port/platform/android/host_android.c`), once a 10 s block:
 
