@@ -464,10 +464,15 @@ returns the bit unchanged, tick for tick. Under Toggle a press, the level agains
 tick's (not the pad's `trg`: the boy's loop skips its pad read on its `noStick` paths and a stale
 `trg` would flip every tick there), flips a latch, and the latch is the test; it clears on a
 script's zoom, on `!live` (the boy's control off, as a script's `scpBoyControlReadDisable` sets it, a game over's
-among them; the pad off),
+among them; the pad off, on the 2001 discs: on the other discs the camera pad's `live` includes
+`debug_hand_camera`, which is 1 there),
 on a new source (boy, camera pad, look-around) or a new `cameraMode` (a path camera starting or
-ending), and at every stage start (`ico_zoom_reset` in `InitCamera` and `InitCamera_jun26`); a
-level held through a clear is not a press after it. A pause keeps it (no object ticks while
+ending), and at every stage start (`ico_zoom_reset` in `InitCamera` and `InitCamera_jun26`); R2 held through a
+script's zoom or a source or mode change is not a press after it, but the game zeroes the boy's pad
+while his control is off (`boyact.c`, the four boy loops; the 2001 discs' `iosPadRead` with the pad
+off), so R2 still held when control returns is a press and zooms in. The June 2001 insert shot
+(`insertCamera.zoom` without a `zoomRequest`) and `Camctrl_SetTarget`'s focus changes keep the
+mode and the source, so they do not clear a toggled zoom: Toggle there does what a held R2 does. A pause keeps it (no object ticks while
 `systemStatus[5]` is set, `ico2/fumi/isys/obj_manager.c`, and nothing sets the camera's
 `pauseExempt`). The June 2001 demo's look-around (`SetCameraMatrix_Ico2_jun26` in
 `ico2/omori/src/camera-ico2.c`, which stops the stick look while R2 is held) reads

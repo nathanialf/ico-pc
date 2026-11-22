@@ -296,15 +296,16 @@ static void table_cases(void)
     /* a pass stall of replay 6, no piece judged, the stage not known */
     StallRow p = row_of(6, 1, 120.3);
     p.passFactor = 9.1f;
+    snprintf(p.pass, sizeof p.pass, "list 0 SCENE");
     p.stage = STALL_NO_STAGE;
     stall_table_add(&s_t, &p);
     CHECK(stall_table_ready(&s_t, false) == 1);
     CHECK(stall_share_text(&s_t, names, b, sizeof b) == strlen(b));
     text_is(b,
-            "stalls against each piece's share of the GPU time (piece: stalls, their share of the "
-            "stalls naming a piece, its share of the GPU time): 2 stalls, 1 naming a piece; list "
-            "0: 1, 100 %, 67 %; list 3: 0, 0 %, 17 %; 1 naming none (6 timed pictures, 180.0 ms "
-            "of GPU spans)",
+            "stalls against each piece's share of the GPU time (piece: stalled replays, their "
+            "share of the stalled replays naming a piece, its share of the GPU time): 2 stalls in "
+            "2 replays, 1 of them naming a piece; list 0: 1, 100 %, 67 %; list 3: 0, 0 %, 17 %; 1 "
+            "naming none (6 timed pictures, 180.0 ms of GPU spans)",
             __LINE__);
     CHECK(stall_table_text(&s_t, names, false, 0, b, sizeof b) == strlen(b));
     text_is(b,
@@ -321,11 +322,12 @@ static void table_cases(void)
     timed(7, 2.2, 2.9);
     CHECK(stall_table_ready(&s_t, false) == 1);
     (void)stall_table_text(&s_t, names, false, 0, b, sizeof b);
-    text_is(b,
-            "stall table (part 1 of 1; 1 stall, 1 of them from the block before): r6 s? pass "
-            "120.3 ms x9.1: no piece judged; tris not known; reduction -/2.20/-, present "
-            "-/2.90/- ms",
-            __LINE__);
+    text_is(
+        b,
+        "stall table (part 1 of 1; 1 stall, 1 of them from the block before): r6 s? pass "
+        "list 0 SCENE 120.3 ms x9.1: no piece judged; tris not known; reduction -/2.20/-, present "
+        "-/2.90/- ms",
+        __LINE__);
     stall_table_end(&s_t, false);
     CHECK(s_t.n == 0);
 
@@ -369,8 +371,8 @@ static void table_cases(void)
     CHECK(strstr(b, "stall table (part 1 of 22; 256 stalls, 0 of them from the block before, 4 "
                     "more past the 256 held): ") == b);
     (void)stall_share_text(&s_t, names, b, sizeof b);
-    CHECK(strstr(b, ": 260 stalls, 260 naming a piece; list 3: 260, 100 %, 0 %; 0 naming none (0 "
-                    "timed pictures, 0.0 ms of GPU spans)") != NULL);
+    CHECK(strstr(b, ": 260 stalls in 260 replays, 260 of them naming a piece; list 3: 260, 100 %, "
+                    "0 %; 0 naming none (0 timed pictures, 0.0 ms of GPU spans)") != NULL);
     /* an unnamed piece */
     stall_table_end(&s_t, true);
     {
@@ -379,6 +381,38 @@ static void table_cases(void)
         stall_table_add(&s_t, &q);
         (void)stall_share_text(&s_t, names, b, sizeof b);
         CHECK(strstr(b, "; piece 5: 1, 100 %, 0 %;") != NULL);
+    }
+    /* a replay whose present and one of its passes both stall (the
+       reporter's replay 177, both naming list 0) is one stalled replay in
+       the share line: two rows, list 0 counted once; a replay whose first
+       stall named no piece and whose second names one counts that one */
+    stall_table_end(&s_t, true);
+    {
+        StallRow q = row_of(177, 0, 109.0);
+        q.piece = 0;
+        stall_table_add(&s_t, &q);
+        q = row_of(177, 1, 99.0);
+        q.piece = 0;
+        stall_table_add(&s_t, &q);
+        q = row_of(178, 0, 120.0); /* no piece */
+        stall_table_add(&s_t, &q);
+        q = row_of(178, 1, 101.0);
+        q.piece = 3;
+        stall_table_add(&s_t, &q);
+        q = row_of(178, 1, 102.0); /* the same replay again: not counted */
+        q.piece = 3;
+        stall_table_add(&s_t, &q);
+        CHECK(s_t.n == 5u && s_t.stalls == 5u && s_t.replays == 2u && s_t.named == 2u);
+        CHECK(s_t.byPiece[0] == 1u && s_t.byPiece[3] == 1u);
+        (void)stall_share_text(&s_t, names, b, sizeof b);
+        CHECK(strstr(b, "): 5 stalls in 2 replays, 2 of them naming a piece; list 0: 1, 50 %, 0 "
+                        "%; list 3: 1, 50 %, 0 %; 0 naming none (") != NULL);
+        /* a replay counted in one block starts again in the next */
+        stall_table_end(&s_t, true);
+        q = row_of(178, 0, 130.0);
+        q.piece = 3;
+        stall_table_add(&s_t, &q);
+        CHECK(s_t.replays == 1u && s_t.named == 1u && s_t.byPiece[3] == 1u);
     }
 
     /* the 2 s triangles' most */

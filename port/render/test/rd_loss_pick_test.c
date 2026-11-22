@@ -64,7 +64,12 @@
  *              unknown decides as v0.11.14 did; a picture stuck on the GPU
  *              (nothing seen finished for 100 ms or more, a hang) still
  *              takes its copy, and over a hang after the title the lost
- *              frame is held */
+ *              frame is held; the frame that is the GPU's current one
+ *              counts the whole wait, so a wait queued behind the picture
+ *              before whose head then hangs (wait 130 ms, head 70 ms at
+ *              that frame's one recycle) still copies it (review K1); a
+ *              wait seen by several recycles counts once in the 10 s line
+ *              (review K2) */
 #include "rd_loss_pick.h"
 #include <stdio.h>
 #include <string.h>
@@ -598,10 +603,17 @@ static void head(void)
     {
         RdLossThrottle t = {0};
 
-        /* queued behind the picture before: not copied, no attempt */
-        CHECK(rd_loss_keep_decide_head(&t, 1, 129, true, 129, wait, 105 * ms, true, 50 * ms) ==
+        /* queued behind the picture before (frame 130 behind the first
+           open one, 129): not copied, no attempt */
+        CHECK(rd_loss_keep_decide_head(&t, 1, 130, true, 129, wait, 105 * ms, true, 50 * ms) ==
               RD_LOSS_KEEP_NOT_HEAD);
         CHECK(t.attempts == 0);
+        /* the frame that is itself the GPU's current picture (130 the first
+           open one) counts the whole wait, the head's time ignored: it may
+           be the hung one (review K1) */
+        RdLossThrottle k1 = {0};
+        CHECK(rd_loss_keep_decide_head(&k1, 1, 130, true, 130, wait, 105 * ms, true, 50 * ms) ==
+              RD_LOSS_KEEP_TAKE);
         /* a wait under 100 ms is no stall by either rule */
         CHECK(rd_loss_keep_decide_head(&t, 2, 129, true, 129, wait, 90 * ms, true, 90 * ms) ==
               RD_LOSS_KEEP_NO_STALL);
@@ -624,15 +636,18 @@ static void head(void)
               RD_LOSS_KEEP_NOT_OPEN);
         CHECK(rd_loss_keep_decide_head(&u, 2, 129, false, 129, wait, 150 * ms, true, 150 * ms) ==
               RD_LOSS_KEEP_NOT_SENT);
-        CHECK(rd_loss_keep_decide_head(&u, 3, 129, false, 129, wait, 150 * ms, true, 50 * ms) ==
+        CHECK(rd_loss_keep_decide_head(&u, 3, 130, false, 129, wait, 150 * ms, true, 50 * ms) ==
               RD_LOSS_KEEP_NOT_HEAD);
+        CHECK(rd_loss_keep_decide_head(&u, 4, 129, false, 129, wait, 150 * ms, true, 50 * ms) ==
+              RD_LOSS_KEEP_NOT_SENT);
         CHECK(u.attempts == 0);
     }
     /* the title and menus (issue 179's v0.11.14 log, lines 555-765): two
        pictures in flight, each about 55 ms on the GPU, so a slot wait for
        the newer blocks 105-110 ms of which its own picture has run at most
-       55 ms.  v0.11.14's rule took 4 copies in every 64 recycles there; the
-       head's takes none.  Then the GPU hangs on frame 300: nothing is seen
+       55 ms; the frame recycled is behind the first open one (the log's 8
+       copies: frame 156 with 155 open, 318 with 316, ...).  v0.11.14's rule
+       took 4 copies in every 64 recycles there; the head's takes none.  Then the GPU hangs on frame 300: nothing is seen
        finished, the head's time grows with the wait, the copies come and
        the hung frame is held */
     {
@@ -646,10 +661,10 @@ static void head(void)
             const uint64_t waitNs = (105 + seen % 6) * ms;
             const uint64_t headNs = (40 + seen % 16) * ms;
 
-            oldTaken += rd_loss_keep_decide(&oldT, seen, frame, true, frame, wait, waitNs) ==
+            oldTaken += rd_loss_keep_decide(&oldT, seen, frame, true, frame - 1u, wait, waitNs) ==
                         RD_LOSS_KEEP_TAKE;
-            const RdLossKeep k = rd_loss_keep_decide_head(&headT, seen, frame, true, frame, wait,
-                                                          waitNs, true, headNs);
+            const RdLossKeep k = rd_loss_keep_decide_head(&headT, seen, frame, true, frame - 1u,
+                                                          wait, waitNs, true, headNs);
 
             headTaken += k == RD_LOSS_KEEP_TAKE;
             notHead += k == RD_LOSS_KEEP_NOT_HEAD;
@@ -679,6 +694,57 @@ static void head(void)
             hungHeld = hungHeld || copies[i] == 300;
         }
         CHECK(headTaken > 0 && hungHeld);
+    }
+    /* review K1, the brief's case: a wait queued behind the picture before,
+       then the head itself hangs.  The title stream as above (frame n
+       recycled behind the open n - 1); then frame 499 finishes and 500
+       hangs at once.  The slot wait began while 499 ran, so at frame 500's
+       one recycle (it is the first open frame now) the wait is 60 ms past
+       the head's time: 130 ms of wait, 70 ms since 499 was seen finished.
+       The head's time alone would leave 500 uncopied; the whole wait
+       counts for the GPU's current frame, so it is copied and held for the
+       loss report.  The recycles after it (frames behind the hung 500, the
+       head's time now over 100 ms) copy too, as before */
+    {
+        RdLossThrottle t = {0};
+        uint32_t copies[4] = {0}, taken = 0;
+        bool hungHeld = false;
+
+        for (uint32_t n = 401; n < 500; n++) {
+            taken += rd_loss_keep_decide_head(&t, n, n, true, n - 1u, wait, 107 * ms, true,
+                                              50 * ms) == RD_LOSS_KEEP_TAKE;
+        }
+        CHECK(taken == 0);
+        CHECK(
+            !rd_loss_keep_stalled_head(wait, 130 * ms, true, 70 * ms)); /* the head's time alone */
+        if (rd_loss_keep_decide_head(&t, 500, 500, true, 500, wait, 130 * ms, true, 70 * ms) ==
+            RD_LOSS_KEEP_TAKE) {
+            copies[rd_loss_keep_slot(copies, 4)] = 500;
+        }
+        for (uint32_t n = 501; n <= 503; n++) {
+            const uint64_t h = (70 + (n - 500) * 40) * ms;
+
+            if (rd_loss_keep_decide_head(&t, n, n, true, 500, wait, 60 * ms + h, true, h) ==
+                RD_LOSS_KEEP_TAKE) {
+                copies[rd_loss_keep_slot(copies, 4)] = n;
+            }
+        }
+        for (int i = 0; i < 4; i++) {
+            hungHeld = hungHeld || copies[i] == 500;
+        }
+        CHECK(hungHeld && copies[1] == 501);
+    }
+    /* review K2: a wait seen by several recycles counts once (the 10 s
+       line's "slot waits ... not counted as stalled") */
+    {
+        uint64_t last = 0;
+        unsigned n = 0;
+        static const uint64_t seenWaits[] = {41, 41, 41, 42, 42, 0, 43, 41};
+
+        for (unsigned i = 0; i < sizeof(seenWaits) / sizeof(seenWaits[0]); i++) {
+            n += rd_loss_keep_wait_new(&last, seenWaits[i]);
+        }
+        CHECK(n == 4); /* 41, 42, 43 and 41 again after 43; 0 never */
     }
 }
 

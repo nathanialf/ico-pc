@@ -55,8 +55,8 @@ every way of playing.
 The camera zooms in while you keep R2 held, on every disc. To zoom with one
 press instead, choose **Toggle** under **Options > Controls > Zoom type**:
 press R2 once to zoom in and again to zoom out. The camera also zooms back
-out by itself when a cutscene or a scripted camera takes over and when you
-go into another room. **Hold** is the game's own way. It shows from the
+out by itself when a cutscene takes over or the game zooms the camera
+itself, and when you go into another room. **Hold** is the game's own way. It shows from the
 title screen and the pause menu, and works the same with a controller, the
 keyboard and the touch screen, on whichever button the game's **Button
 configuration** gives the zoom.

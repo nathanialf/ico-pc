@@ -79,6 +79,19 @@ int main(void)
         CHECK(power_status_from_android(1) == POWER_STATUS_UNKNOWN);
     }
 
+    /* the source: the one that gives a current first (sysfs with the
+       level but current_now denied: BatteryManager's current) */
+    CHECK(power_pick(true, true, true, true) == POWER_SOURCE_SYSFS);
+    CHECK(power_pick(true, false, true, true) == POWER_SOURCE_ANDROID);
+    CHECK(power_pick(true, false, true, false) == POWER_SOURCE_SYSFS);
+    CHECK(power_pick(true, false, false, false) == POWER_SOURCE_SYSFS);
+    CHECK(power_pick(false, false, true, false) == POWER_SOURCE_ANDROID);
+    CHECK(power_pick(false, false, false, false) == POWER_SOURCE_NONE);
+    /* a stall row's current: the last reading only while it is fresh */
+    CHECK(power_fresh(1000.0, 1000.0 + POWER_FRESH_MS));
+    CHECK(!power_fresh(1000.0, 1000.1 + POWER_FRESH_MS));
+    CHECK(!power_fresh(1000.0, 999.0));
+
     char b[512];
     PowerBlock pb;
     power_block_reset(&pb);

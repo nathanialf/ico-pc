@@ -1360,8 +1360,11 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   time counted is the wait's, at most the head's; the same 100 ms; a wait queued behind the picture
   before is `RD_LOSS_KEEP_NOT_HEAD` with no attempt counted; the head unknown decides as before; a
   stuck head (and one stuck since before the wait) copies; the title and menus' two pictures in
-  flight (waits of 105-110 ms, heads of 40-55 ms) copy none of 256 where the old rule took 16, and a
-  hang after them still holds the hung frame.
+  flight (waits of 105-110 ms, heads of 40-55 ms, each frame behind the open one) copy none of 256
+  where the old rule took 16, and a hang after them still holds the hung frame; the frame that is
+  the first open one counts the whole wait: a wait queued behind the picture before whose head
+  then hangs (130 ms of wait, 70 ms of head at that frame's one recycle) is copied and held; a
+  wait seen by several recycles counts once (`rd_loss_keep_wait_new`).
 - `rd_loss_keep_block_test.c` (ctest `rd_loss_keep_block`): the block a loss-keep copy is made into
   (`rd_loss_keep_block.c`), pure, over a fake host: the size asked (the last copy, an eighth and 1
   MiB, at most 16 MiB); steady play asks nothing and reads no memory; the first copy measured, a

@@ -37,8 +37,8 @@ instead?**
 
 Yes. Open **Options > Controls > Zoom type** and choose **Toggle**. Then one
 press of R2 zooms the camera in and another press zooms it out. The camera
-also zooms back out by itself when a cutscene or a scripted camera takes
-over and when you go into another room. **Hold** is the game's own way. The
+also zooms back out by itself when a cutscene takes over or the game zooms
+the camera itself, and when you go into another room. **Hold** is the game's own way. The
 row shows from the title screen and the pause menu, on every disc.
 
 ## The on-screen buttons are in my way
