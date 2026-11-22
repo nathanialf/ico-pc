@@ -545,7 +545,10 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   AFAIL KEEP and of both split passes but not the ATST byte alone, clipped on every device for
   every clip mode but none (the camera rule's region test, the scissor) and for particles; the
   tests' sabotage letting the alpha
-  test through), the passes no twin exists for (other entries, the planes' twins, no *_nodual
+  test through; on a clean clipper verdict the forms table: prelit 32 and 36 under the camera
+  rule, extended or not, the cut and the fused kick draws take the twin, and lit, skinned 24,
+  lit 36, the drops kept, two-sided, mirrored, photo mode's free camera and the ticks' cameras are
+  refused as `form`, every one `clipped` when not clean and given the twin at clip mode none), the passes no twin exists for (other entries, the planes' twins, no *_nodual
   build, a destination read by storage and by attachment), the reasons' and modules' names, the
   key bits in the key's one byte; the judge's use of a replay (in use only when a pass drew
   through a twin and none found its twin not made yet, in either order; the off arm with every
@@ -560,22 +563,27 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   at 1x 21:9 and 16:9), `ICO_RD_VU_NODISCARD=0` and `=1` at `--repeat 2`: every target's PNG the
   same bytes; the run without them says off with 0 draws and 0 modules; the run with them says on
   with its draws through them printed and above 0 over the list under each Arm profile (they ran),
+  and equal to its `not made yet` count (the first replay asks for every pass's twin, the second
+  draws each through it: none found its twin not made there),
   and under corpus 0 draws and "not applicable here" (dual-source blending). `rd_nodiscard_ab_gl`:
   OpenGL (llvmpipe), every fixture at 4:3 1x with `ICO_GL_FAKE_NO_DUAL=1`, above 0 over the list.
   Without the self-test no clipper check runs, so only clip mode none takes a twin there
   ([PIPELINES.md](PIPELINES.md#the-discard-free-twins), the floor a `not clean` device keeps); the
   run with them must have no draw of the clipper check's class. `rd_nodiscard_clean`: the clean verdict's path,
   the run with them under `ICO_RD_VU_NODISCARD_CLIPPER=clean` (lavapipe measures its clipper not
-  clean), so the camera rule's passes take a twin: every target byte for byte (these fixtures hold
-  no eye-crossing triangle whose pixels differ, measured), and per fixture and profile at least
-  its list line's `clean_min` of that class. No device: SKIP.
+  clean), so the camera rule's passes of the checked forms take a twin: every target byte for byte (these
+  fixtures hold no eye-crossing triangle whose pixels differ under Mesa 25.0.7, measured; another
+  rasteriser may differ, and the test then names the target), and per fixture and profile at
+  least its list line's `clean_min` of that class. No device: SKIP.
 - `rd_vuprepass_selftest_nodiscard`, `_nodiscard_clipper`, `_nodiscard_empty`,
   `_nodiscard_clean`, `_nodiscard_sabotage`, `_nodiscard_marked`, `_nodiscard_dual`,
-  `_nodiscard_fallback` (the clipper check: `_nodiscard` requires what lavapipe measures, `not
-  clean` with cases 2 and 5 differing (Mesa's NaN band flag) and no frame undrawn (a frame counts
-  as drawn through either entry), cases 1 and 13's lines with all four frames drawn through both
-  entries and none differing, and the trace: case 1's code 32 draw under the camera rule with a
-  facing table, its code 36 draw the scissor; `_nodiscard_empty` its other positive control,
+  `_nodiscard_fallback` (the clipper check: `_nodiscard` requires that it ran (cases 1 and 13's
+  lines, its cost line), no frame undrawn (a frame counts as drawn through either entry), the
+  trace (case 1's code 32 draw under the camera rule with a facing table, its code 36 draw the
+  scissor), and either well-formed verdict with its consequence in the run's state (`clean`: the
+  camera rule's class on; `not clean` naming the differing cases: off); whichever the
+  rasteriser measures (Mesa 25.0.7: not clean at cases 2 and 5), the verdict and the cost are
+  printed in the test's output; `_nodiscard_empty` its other positive control,
   `ICO_RD_VU_NODISCARD_SABOTAGE=empty` (the first case off the frame): case 1's line expected 0 and
   drawn 0 in all four frames and without the probe, every case still run (case 13's line), `not
   clean (drew nothing (not tested): case 1 at 32, 32t, 36, 36t...)`, clip mode none alone, the
@@ -583,8 +591,8 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   (the first case's picture through the twins with one byte altered): every case still run, case
   1's line with 1 texel differing at code 32, `not clean (... case 1 differs at 32 ...)`, clip
   mode none alone, the mark `counting`, never `failed`; `_nodiscard_clean` the verdict taken as
-  clean, `ICO_RD_VU_NODISCARD_CLIPPER=clean`: the camera rule's class on, what was measured (not
-  clean, case 2 differing) in its line)
+  clean, `ICO_RD_VU_NODISCARD_CLIPPER=clean`, logged as the tests' fake: the camera rule's class
+  on, whatever was measured)
   (`rd_nodiscard.cmake`, through `rd_vuprepass_selftest_test` and
   `test/rd_vuprepass_selftest.cmake`; the Arm fakes without dual-source blending): the twins'
   start-up self-test after the cull's (the pre-pass still on), each run's start line saying what

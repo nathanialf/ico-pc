@@ -52,14 +52,35 @@ int rd_nd_eligible(const RdNdPass *p)
     if (p->particle || (clip != ICO_VU_CLIP_NONE && !p->clipperClean)) {
         return RD_ND_CLIPPED;
     }
+    /* ...and then only the forms it draws (the third review, R3-1) */
+    if (clip != ICO_VU_CLIP_NONE && !rd_nd_checked_form(p)) {
+        return RD_ND_FORM;
+    }
     return RD_ND_TWIN;
+}
+
+bool rd_nd_checked_form(const RdNdPass *p)
+{
+    const uint32_t f = p->drawFlags;
+    const uint32_t clip = f & ICO_VU_CLIP_MASK;
+    const uint32_t off = ICO_VU_TWO_SIDED | ICO_VU_MIRROR | ICO_VU_BEHIND_EYE | ICO_VU_TICKS;
+    return p->prelit && !p->particle &&
+           (clip == ICO_VU_CLIP_REGION || clip == ICO_VU_CLIP_SCISSOR) &&
+           (f & ICO_VU_CAMERA) != 0u && (f & ICO_VU_NO_BESIDE) != 0u && (f & off) == 0u;
 }
 
 const char *rd_nd_reason_name(int why)
 {
-    static const char *const kNames[RD_ND_REASONS] = {
-        "through them",       "plane",           "DATE", "band", "alpha", "clipped", "not made yet",
-        "timed without them", "entry not tested"};
+    static const char *const kNames[RD_ND_REASONS] = {"through them",
+                                                      "plane",
+                                                      "DATE",
+                                                      "band",
+                                                      "alpha",
+                                                      "clipped",
+                                                      "form",
+                                                      "not made yet",
+                                                      "timed without them",
+                                                      "entry not tested"};
     return why >= 0 && why < RD_ND_REASONS ? kNames[why] : "?";
 }
 

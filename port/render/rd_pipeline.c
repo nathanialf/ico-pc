@@ -3524,6 +3524,11 @@ void rd__pipeline_twin_tick(bool wait)
 }
 
 /* the batch in flight ended (its pipelines destroyed), the queue emptied */
+void rd__pipeline_twin_forget_queued(void)
+{
+    s_twin.n = 0; /* the batch in flight, if any, is taken as before */
+}
+
 static void twinClear(void)
 {
     if (s_twin.jobs != NULL && g_rd.hasDevice) {

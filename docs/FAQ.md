@@ -233,7 +233,8 @@ new area, measures which is faster there, and keeps that one for the area.
 An area it has not measured yet uses the way it kept last.
 
 The message appears once each time you start the game, when this
-measuring first begins. While it measures in a new area you may see a
+measuring first begins; if other messages are showing then, it waits for
+them and can come up to about half a minute later. While it measures in a new area you may see a
 little stutter for a few seconds; that is expected and goes away once it
 has decided. The picture is meant to look the same either way, and there
 is nothing to set. If a piece of the scenery ever looks wrong, see
@@ -603,7 +604,7 @@ graphics card or phone:
 
 If the game closes with a crash or a graphics problem while one of them is in use, if the game's
 check at start finds that the first or the third does not work, or if the game is stopped while it
-runs that check, the note keeps that way off on your computer or phone until you install a newer
+starts using one of them, the note keeps that way off on your computer or phone until you install a newer
 version of the game. Closing the game the usual way once it has started never turns any of them
 off. Leave the files where they are: the log's first lines say what each note decided, and the game
 puts the notes in a problem report by itself.

@@ -31,11 +31,12 @@
  * drew through it here, rd__nd_entry_tested; logged per entry) and the mark
  * says "counting" once these pass (rd__nd_floor_passed), before the clipper
  * check.
- *   eye     at code 32 (the region test under the camera rule: the draw has
- *           ICO_VU_NO_BESIDE, the boat's form), a corner of each triangle
- *           behind the eye: a clipper may make the band flag non-finite
- *           there (rd_nodiscard.h, "Why clip mode none"), so the CPU must
- *           refuse it ("clipped") and the pictures stay byte for byte
+ *   eye     at code 32 (the region test with ICO_VU_NO_BESIDE; its mesh has
+ *           no facing table, so the drops are kept and its triangles
+ *           behind the eye are never drawn: the case shows the CPU's
+ *           refusal, not a clipper's), a corner of each triangle behind
+ *           the eye: before the clipper check every such pass must be
+ *           refused ("clipped") and the pictures stay byte for byte
  * The side band and DATE cannot be drawn under the camera rule's frame
  * here: the rule itself (rd_nd_eligible) must refuse a region test's pass
  * without ICO_VU_NO_BESIDE and a pass with DATE.  The frame is replayed
@@ -51,10 +52,11 @@
  * draw pattern gate's counts unchanged), and the twins' pipelines are made
  * again in the background as passes ask for them.
  *
- *   rd: discard-free twins: on (self-test: 1 pass through them, the alpha
- *     test's, the clip plane's and the eye-plane crossing's refused (1, 1
+ *   rd: discard-free twins: on (self-test: 2 passes through them, 1
+ *     through vu_ps_nodual_nd and 1 through vu_texa_ps_nodual_nd, the alpha
+ *     test's, the clip plane's and the eye-plane crossing's refused (2, 1
  *     and 1), the side band and DATE refused by the rule, pictures byte for
- *     byte; its 2 pipelines released) on SCENE WxH at TWxTH texels in T ms
+ *     byte; its N pipelines released) on SCENE WxH at TWxTH texels in T ms
  *   rd: discard-free twins: off for the run (self-test: <reason>) ...
  *
  * ICO_RD_VU_NODISCARD_SABOTAGE (tests, rd_nodiscard_run.c): alpha, the
@@ -317,15 +319,19 @@ static bool ruleRefuses(void)
     /* not vacuous: the same pass with the flag takes the twin on a clean
        clipper, is refused as clipped on any other, and clip mode none takes
        it either way */
-    p.drawFlags = ICO_VU_CLIP_REGION | ICO_VU_NO_BESIDE;
+    p.drawFlags = ICO_VU_CLIP_REGION | ICO_VU_NO_BESIDE | ICO_VU_CAMERA;
+    p.prelit = true; /* the form the clipper check draws (rd_nd_checked_form) */
     const bool twin = rd_nd_eligible(&p) == RD_ND_TWIN;
+    p.prelit = false; /* any other program: refused as "form" on a clean verdict */
+    const bool form = rd_nd_eligible(&p) == RD_ND_FORM;
+    p.prelit = true;
     p.clipperClean = false;
     const bool clipped = rd_nd_eligible(&p) == RD_ND_CLIPPED;
     p.drawFlags = ICO_VU_CLIP_NONE;
     const bool none = rd_nd_eligible(&p) == RD_ND_TWIN;
     p.flags = ICO_DF_DATE;
     const bool date = rd_nd_eligible(&p) == RD_ND_DATE;
-    return band && twin && clipped && none && date;
+    return band && twin && form && clipped && none && date;
 }
 
 /* ------------------------------------------------- the clipper check
@@ -740,6 +746,8 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
     static const uint8_t kCodes[2] = {32, 36};
     static const RdTex kNone = {0};
     static const RdMesh kNoCase = {0};
+    const double t0 = rd__now_ms();
+    uint32_t replays = 0; /* its cost: the replays it made, logged at its end */
     RdMesh mesh[NC_CASES], untabled[NC_CASES];
     uint64_t expect[NC_CASES][2]; /* at codes 32 and 36 */
     float corner[NC_CASES][NC_VERTS][3];
@@ -801,6 +809,7 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
                       NC_TEXA(k) ? tex : kNone, true)) {
             rd__replay_set_window(UINT32_MAX, 0);
             rd__pipeline_gather(true);
+            replays++;
             (void)rd__replay_frame(&f, 0, false);
             rd__pipeline_gather(false);
             rd__replay_set_window(0, 0);
@@ -826,6 +835,7 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
         if (!built) {
             rd__frame_free(&f);
         }
+        replays++;
         if (!built || !plainRead(&f, t, dst, size)) {
             snprintf(why, whySize, "its frame of the %s could not be %s",
                      x < 2 ? "probe alone" : "clear alone", built ? "drawn" : "built");
@@ -872,6 +882,7 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
         }
         rd__nd_hold(true);
         rd__nd_clipper_check(true);
+        replays += 2u; /* with the twins, then without */
         const bool okA = replayRead(&f, t, a, size);
         const uint64_t frameClip = rd__nd_take_clip();
         rd__nd_take_entries_clip(ent);
@@ -906,6 +917,16 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
         drawnTwin[k] = texelsDiffer(a, only, size, NULL);
         differ[k] = texelsDiffer(a, b, size, &first);
         firstAt[k] = (uint32_t)(first / 4u);
+        if (differ[k] != 0u && (k % 4 == 0 || differ[k - 1] == 0u) &&
+            (k % 4 < 2 || differ[k - 2] == 0u) && (k % 4 < 3 || differ[k - 3] == 0u)) {
+            /* what each entry wrote there, the case's first differing frame
+               (the third review's R3-8: measured, not inferred) */
+            rd__log("discard-free twins: the clipper check, case %d at %s, the first differing "
+                    "texel %u,%u: the ordinary entry %u %u %u %u, the twins %u %u %u %u (RGBA)",
+                    NC_CASE(k) + 1, kFormWords[k % 4], (unsigned)(firstAt[k] % t->tw),
+                    (unsigned)(firstAt[k] / t->tw), b[first], b[first + 1], b[first + 2],
+                    b[first + 3], a[first], a[first + 1], a[first + 2], a[first + 3]);
+        }
         empty = empty || (drawn[k] == 0u && drawnTwin[k] == 0u);
         differs = differs || differ[k] != 0u;
         if (drawn[k] != 0u || drawnTwin[k] != 0u) {
@@ -920,6 +941,7 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
                whether the case reached the target at all */
             RdFrame g;
             const int c = NC_CASE(k);
+            replays++;
             if (clipFrame(&g, scene, t->w, t->h, untabled[c], kCodes[0], probe, kNone, false) &&
                 plainRead(&g, t, b, size)) {
                 bare[c] = texelsNot(b, size, clearPx);
@@ -1008,6 +1030,10 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
     }
     rd__nd_clipper_check(false);
     rd__vu_trace(false);
+    rd__log("discard-free twins: the clipper check's cost: %u replays (%d frames gathered, each "
+            "through the twins and without them, each case's without the probe, the probe's and "
+            "the clear's alone) on SCENE %ux%u at %ux%u texels in %.1f ms",
+            (unsigned)replays, NC_FRAMES, t->w, t->h, t->tw, t->th, rd__now_ms() - t0);
     free(alone);
     free(aloneTex);
     for (int k = 0; k < NC_CASES; k++) {
@@ -1133,7 +1159,8 @@ void rd__nd_selftest(RdTargetRec *t)
                      (unsigned long long)refused[RD_ND_PLANE],
                      (unsigned long long)refused[RD_ND_CLIPPED]);
         } else if (!rule) {
-            snprintf(why, sizeof(why), "the rule gave a side band's or DATE's pass a twin");
+            snprintf(why, sizeof(why),
+                     "the rule gave a side band's, DATE's or an unchecked form's pass a twin");
         } else {
             pass = true;
         }
@@ -1202,8 +1229,9 @@ void rd__nd_selftest(RdTargetRec *t)
         if (clean && clipClean) {
             rd__log("discard-free twins: the clipper check: clean (%d cases crossing the eye "
                     "plane at codes 32 and 36, untextured and textured under TEXA, %llu passes "
-                    "through both twins, the pictures and their depth byte for byte): the camera "
-                    "rule's passes take them too",
+                    "through both twins, the colours byte for byte, a depth written by one entry "
+                    "and not the other shown through the probe): the camera rule's passes take "
+                    "them too",
                     NC_CASES, (unsigned long long)clipDraws);
         } else if (clean) {
             rd__log("discard-free twins: the clipper check: clean (ICO_RD_VU_NODISCARD_CLIPPER; "

@@ -8,25 +8,31 @@
 # never allow (2026-11-22: fx-mali-slow541's passes were all refused for the
 # alpha test); clean_min=N: rd_nodiscard_clean's floor of camera rule draws
 # through a twin under each of the fixture's profiles without dual-source
-# blending, the verdict taken as clean (about a third of the 2026-11-22
-# 17:40 run's 6, 75, 641 and 27, scope-179's lowered to 50 until a run
-# with every twin pipeline made prints its count); these fixtures hold no
-# eye-crossing triangle whose pixels differ (measured), so a verdict taken
-# as clean is byte for byte on them; the vu_opaque.rules.txt fixtures below have opaque textures,
+# blending, the verdict taken as clean, of the forms the clipper check
+# draws (rd_nd_checked_form: prelit 32 and 36): about a third of what the
+# run with every twin pipeline made printed (75 and 641, the REV2ND merge
+# check, before the form gate) times the share of those draws that are
+# prelit (step 0 on the fixtures: 98 of 127 and 109 of 138); slow541 and
+# drops-4657 have no floor until a run with the gate prints theirs (their
+# camera rule draws may all be lit or skinned: the boat is lit code 32);
+# these fixtures hold no eye-crossing triangle whose pixels differ under
+# Mesa 25.0.7 (measured), so a verdict taken as clean is byte for byte on
+# them there (another rasteriser may differ: the test then says which);
+# the vu_opaque.rules.txt fixtures below have opaque textures,
 # so their code 34 draws' tests are decided by the alpha plan.  The Mali
 # profiles need a frame at least 16:9 wide (a 4:3 dump cannot show 16:9).
 #
 # issue 179's Mali-G52 (v0.11.5): the stage 42 slow-scene capture, 912 wide
-fx-mali-slow541 mali,mali169,corpus clean_min=2
+fx-mali-slow541 mali,mali169,corpus
 # issue 179's Mali-G52 (v0.11.7) loss capture, 912 wide, opaque textures:
 # 181 code 34 draws (step 0's alpha-plan mirror finds every one eligible)
-fx-mali-loss-before mali,mali169,corpus clean_min=25
+fx-mali-loss-before mali,mali169,corpus clean_min=19
 # issue 179's Mali-G52 (v0.11.4) loss capture, 912 wide, opaque textures:
 # 70 code 34 draws (all eligible by the same mirror)
-fx-scope-179-before mali,mali169,corpus clean_min=50
+fx-scope-179-before mali,mali169,corpus clean_min=170
 # The frame of commit e65012742 (Mesa's NaN band flag, seen on a triangle
 # drawn beside the picture under the PS2 rule's side bands), here under the
 # camera rule at its own aspect without dual-source blending (own): its
 # camera rule draws through the twins byte for byte (every run so far: 0
 # targets differ)
-fx-drops-4657 own clean_min=9
+fx-drops-4657 own

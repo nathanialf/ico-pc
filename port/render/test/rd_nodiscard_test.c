@@ -140,6 +140,7 @@ static void table(void)
        still holds */
     p = base();
     p.clipperClean = true;
+    p.prelit = true;
     p.drawFlags = ICO_VU_CLIP_REGION | ICO_VU_CAMERA | ICO_VU_NO_BESIDE;
     CHECK(rd_nd_eligible(&p) == RD_ND_TWIN);
     p.drawFlags = ICO_VU_CLIP_SCISSOR | ICO_VU_CAMERA | ICO_VU_NO_BESIDE;
@@ -175,6 +176,74 @@ static void table(void)
     CHECK(rd_nd_eligible(&p) == RD_ND_TWIN);
 }
 
+/* the forms a clean clipper check speaks for (rd_nd_checked_form, the
+   third review's R3-1): the prelit program at codes 32 and 36 under the
+   camera rule, its cut and kick draws, in an extended state or not; every
+   other form refused as "form", whatever else it is; not clean, all of
+   them "clipped"; clip mode none takes the twin in every form */
+static void forms(void)
+{
+    static const struct {
+        const char *name;
+        bool prelit;
+        uint32_t flags;
+        bool checked;
+    } kForm[] = {
+        {"prelit 32, the camera rule", true, ICO_VU_CLIP_REGION | ICO_VU_CAMERA | ICO_VU_NO_BESIDE,
+         true},
+        {"prelit 32, extended", true,
+         ICO_VU_CLIP_REGION | ICO_VU_CAMERA | ICO_VU_NO_BESIDE | ICO_VU_EXTENDED, true},
+        {"prelit 36", true, ICO_VU_CLIP_SCISSOR | ICO_VU_CAMERA | ICO_VU_NO_BESIDE, true},
+        {"prelit 36, the cut draw", true,
+         ICO_VU_CLIP_SCISSOR | ICO_VU_CAMERA | ICO_VU_NO_BESIDE | ICO_VU_CUT_ONLY, true},
+        {"prelit 36, the fused kick draw", true,
+         ICO_VU_CLIP_SCISSOR | ICO_VU_CAMERA | ICO_VU_NO_BESIDE | ICO_VU_KICK_ONLY | ICO_VU_FUSED,
+         true},
+        {"lit, skinned or grid 32 (not prelit)", false,
+         ICO_VU_CLIP_REGION | ICO_VU_CAMERA | ICO_VU_NO_BESIDE, false},
+        {"skinned 24 (not prelit)", false, ICO_VU_CLIP_REGION | ICO_VU_CAMERA | ICO_VU_NO_BESIDE,
+         false},
+        {"lit 36 (not prelit)", false, ICO_VU_CLIP_SCISSOR | ICO_VU_CAMERA | ICO_VU_NO_BESIDE,
+         false},
+        {"prelit, the drops kept (no facing table)", true, ICO_VU_CLIP_REGION | ICO_VU_NO_BESIDE,
+         false},
+        {"prelit, two-sided", true,
+         ICO_VU_CLIP_REGION | ICO_VU_CAMERA | ICO_VU_NO_BESIDE | ICO_VU_TWO_SIDED, false},
+        {"prelit, mirrored", true,
+         ICO_VU_CLIP_REGION | ICO_VU_CAMERA | ICO_VU_NO_BESIDE | ICO_VU_MIRROR, false},
+        {"prelit, photo mode's free camera", true,
+         ICO_VU_CLIP_REGION | ICO_VU_CAMERA | ICO_VU_NO_BESIDE | ICO_VU_BEHIND_EYE, false},
+        {"prelit, the ticks' cameras", true,
+         ICO_VU_CLIP_REGION | ICO_VU_CAMERA | ICO_VU_NO_BESIDE | ICO_VU_TICKS, false},
+    };
+
+    for (size_t i = 0; i < sizeof(kForm) / sizeof(kForm[0]); i++) {
+        RdNdPass p = base();
+        p.prelit = kForm[i].prelit;
+        p.drawFlags = kForm[i].flags;
+        p.clipperClean = true;
+        const int clean = rd_nd_eligible(&p);
+        CHECK(rd_nd_checked_form(&p) == kForm[i].checked);
+        CHECK(clean == (kForm[i].checked ? RD_ND_TWIN : RD_ND_FORM));
+        p.clipperClean = false;
+        CHECK(rd_nd_eligible(&p) == RD_ND_CLIPPED);
+        /* clip mode none: the proof's, every form */
+        p.drawFlags = (kForm[i].flags & ~(uint32_t)ICO_VU_CLIP_MASK) | ICO_VU_CLIP_NONE;
+        CHECK(rd_nd_eligible(&p) == RD_ND_TWIN);
+        if (clean != (kForm[i].checked ? RD_ND_TWIN : RD_ND_FORM)) {
+            printf("  form %s: %d\n", kForm[i].name, clean);
+        }
+    }
+    /* particles: clipped before the form is asked */
+    RdNdPass p = base();
+    p.prelit = true;
+    p.clipperClean = true;
+    p.particle = true;
+    p.drawFlags = ICO_VU_CLIP_REGION | ICO_VU_CAMERA | ICO_VU_NO_BESIDE;
+    CHECK(rd_nd_eligible(&p) == RD_ND_CLIPPED);
+    CHECK(strcmp(rd_nd_reason_name(RD_ND_FORM), "form") == 0);
+}
+
 static void none(void)
 {
     RdNdPass p = base();
@@ -200,9 +269,16 @@ static void none(void)
 
 static void names(void)
 {
-    static const char *const kWant[RD_ND_REASONS] = {
-        "through them",       "plane",           "DATE", "band", "alpha", "clipped", "not made yet",
-        "timed without them", "entry not tested"};
+    static const char *const kWant[RD_ND_REASONS] = {"through them",
+                                                     "plane",
+                                                     "DATE",
+                                                     "band",
+                                                     "alpha",
+                                                     "clipped",
+                                                     "form",
+                                                     "not made yet",
+                                                     "timed without them",
+                                                     "entry not tested"};
     for (int i = 0; i < RD_ND_REASONS; i++) {
         CHECK(strcmp(rd_nd_reason_name(i), kWant[i]) == 0);
     }
@@ -278,11 +354,14 @@ static void state(void)
     CHECK(!rd__nd_on() && strcmp(rd__nd_state_text(), "held") == 0 && !rd__nd_triable());
     CHECK(rd_nd_text(buf, sizeof(buf), 1) == 0u && buf[0] == '\0');
     (void)rd__nd_stats_text(st, sizeof(st));
-    CHECK(strcmp(st,
-                 "discard-free twins held (until their start-up self-test passes): 0 draws "
-                 "through them, 0 of them by the clipper check (not checked); refused: plane "
-                 "0, DATE 0, band 0, alpha 0, clipped 0, not made yet 0, timed without them "
-                 "0, entry not tested 0; 0 modules of them made, 0 of their pipelines alive") == 0);
+    CHECK(
+        strcmp(
+            st,
+            "discard-free twins held (until their start-up self-test passes): 0 draws "
+            "through them, 0 of them by the clipper check (not checked); refused: plane "
+            "0, DATE 0, band 0, alpha 0, clipped 0, form 0, not made yet 0, timed "
+            "without them 0, entry not tested 0; 0 modules of them made, 0 of their pipelines alive") ==
+        0);
     if (strstr(st, "held (until") == NULL) {
         printf("  stats: %s\n", st);
     }
@@ -292,8 +371,8 @@ static void state(void)
     (void)rd_nd_text(buf, sizeof(buf), 2);
     CHECK(strcmp(buf, "; discard-free twins: 0 draws a picture through them, 0 of them by the "
                       "clipper check (not checked) (0 refused a picture: plane 0, DATE 0, band 0, "
-                      "alpha 0, clipped 0, not made yet 0, timed without them 0, entry not tested "
-                      "0)") == 0);
+                      "alpha 0, clipped 0, form 0, not made yet 0, timed without them 0, entry "
+                      "not tested 0)") == 0);
     /* the clipper check's verdicts and the tests' fake */
     rd__nd_clipper_verdict(false, "an edge on the centre view ray at code 32 differs");
     CHECK(rd__nd_clipper() == RD_ND_CLIP_DIRTY && strcmp(rd__nd_clipper_text(), "not clean") == 0);
@@ -364,6 +443,7 @@ static void state(void)
 int main(void)
 {
     table();
+    forms();
     none();
     names();
     use();

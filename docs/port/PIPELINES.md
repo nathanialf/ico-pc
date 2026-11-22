@@ -1769,9 +1769,12 @@ side bands', DATE's and the alpha test's (`vu_common.hlsli` `vu_pixel_tests`, `v
 updates the depth late and loses the hidden-pixel kill; whether that costs anything on issue 179's
 Mali-G52 is not known, so the twins are timed in play as the cull is and kept only where they are
 faster. Under the floor rule below (clip mode none alone), 2 % and 6 % of the triangles of lists
-0-2 in that phone's two boat captures are in passes a twin may serve; the camera rule's code 32, 36
-and 24 passes take one only where the device's clipper check (below) measured clean, which would
-raise the share to at most 90 % and 93 %. `port/render/rd_nodiscard.h` says it all.
+0-2 in that phone's two boat captures are in passes a twin may serve. Where the device's clipper
+check (below) measured clean, the camera rule's passes of the forms the check draws (prelit code
+32 and 36) take one too: at most 63 % and 73 % there (step 0 on the two captures; the skinned code
+24 passes, 24 % and 17 %, the lit code 32 ones, 3 %, and the lit grids are not drawn by the check
+and keep the floor). The captures do not show which draws are mirrored or seen between two ticks,
+which are refused too, so both are upper bounds. `port/render/rd_nodiscard.h` says it all.
 
 - **The twins** `vu_ps_nodual_nd` and `vu_texa_ps_nodual_nd` are the same entries built with
   `ICO_VU_NODISCARD=1`: no discard, every other statement the same
@@ -1786,9 +1789,13 @@ raise the share to at most 90 % and 93 %. `port/render/rd_nodiscard.h` says it a
   mode none, or particles; under `[dev] region_rule = ps2` on a frame wider than 4:3 almost nothing
   is eligible); the alpha test off in the pass (DrawCB mode.z bit 8 clear: the test off in the
   state, ATST ALWAYS, the AFAIL merge's one draw, or the alpha plan's proof); not particles; and
-  clip mode none (code 34) on every device, or any clip mode once the device's clipper check
-  measured clean (the camera rule's passes, counted apart as "by the clipper check"); else
-  `clipped`. At draw time three more reasons are counted: `not made yet` (the twin's pipeline),
+  clip mode none (code 34) on every device, or, once the device's clipper check measured clean,
+  a form the check draws and compares (`rd_nd_checked_form`, a positive list: the prelit program
+  at code 32 or 36, under the camera rule with a facing table (`ICO_VU_CAMERA`), one-sided, not
+  mirrored, not photo mode's free camera, not seen through the ticks' cameras; counted apart as
+  "by the clipper check"); else `clipped`, or `form` for every other form on a clean device (lit,
+  skinned, grids, drops kept, two-sided, mirrored, free camera, ticks). At draw time three more
+  reasons are counted: `not made yet` (the twin's pipeline),
   `timed without them` (the judge's off arm) and `entry not tested` (the entry's own self-test case
   drew nothing through it).
 - **Why clip mode none.** The *_nodual build discards a pixel in the picture's columns whose band
@@ -1839,10 +1846,12 @@ raise the share to at most 90 % and 93 %. `port/render/rd_nodiscard.h` says it a
   them) that the twins draw; the other eleven cases are byte for byte. At such a texel the
   twin's other noperspective varyings (`col`, `stq`) come from the same factor and are NaN too
   (a triangle with a corner behind the eye has no attribute planes, so `vu_pixel_attrs` takes the
-  interpolated ones): the twin writes a colour made from NaN (0 under Vulkan's NaN-to-UNORM
-  conversion, or what a clamp makes of it) at the triangle's depth (the position is clipped by
-  the plane distances, not that factor). That is garbage, not the triangle's picture, where the
-  ordinary entry leaves a hole; so on a `not clean` device the camera rule's class stays off.
+  interpolated ones): by the shader the twin writes a colour made from NaN (0 under Vulkan's
+  NaN-to-UNORM conversion, or what a clamp makes of it) at the triangle's depth (the position is
+  clipped by the plane distances, not that factor). That is inferred, not measured: the check
+  logs both entries' RGBA at each differing case's first texel (`the clipper check, case K at F,
+  the first differing texel X,Y: the ordinary entry R G B A, the twins R G B A`), which shows it.
+  Either way it is not the triangle's picture, where the ordinary entry leaves a hole; so on a `not clean` device the camera rule's class stays off.
   `rd_nodiscard_clean`'s four fixtures hold no such triangle: with the verdict taken as clean
   their camera rule draws through the twins are byte for byte. History: the check said `clean`
   on lavapipe until the second review's run 3 because no case had drawn a triangle crossing the
@@ -1926,8 +1935,9 @@ The lines (`rd: ` before each):
   ...)` or `(... not applicable here: the device has dual-source blending (the two-pass blend is
   its fallback): the twins are for a device without it)`.
 - `discard-free twins: the clipper check: clean (13 cases crossing the eye plane at codes 32 and
-  36, untextured and textured under TEXA, N passes through both twins, the pictures and their
-  depth byte for byte): the camera rule's passes take them too`, or `... not clean (case 1 differs
+  36, untextured and textured under TEXA, N passes through both twins, the colours byte for byte,
+  a depth written by one entry and not the other shown through the probe): the camera rule's
+  passes take them too`, or `... not clean (case 1 differs
   at 32, the first at texel X,Y): clip mode none alone takes them (a property of this device,
   not a fault: nothing written as failed)` (`not clean (drew nothing (not tested): case 1 at 32,
   32t, 36, 36t; case 4 at 36)` when frames drew nothing through either entry, the differing
@@ -1940,10 +1950,15 @@ The lines (`rd: ` before each):
   (code 32, against the clear); differing with the twins F32, F32t, F36, F36t`; on lavapipe
   `not clean (case 2 differs at 32, 32t, 36, 36t, the first at texel X,Y; case 5 differs at ...)`;
   under `ICO_RD_VU_NODISCARD_CLIPPER=clean` the verdict taken as clean with what was measured:
-  `clean (ICO_RD_VU_NODISCARD_CLIPPER; measured not clean: ...)`).
+  `clean (ICO_RD_VU_NODISCARD_CLIPPER; measured not clean: ...)`). After the case lines, its
+  cost: `discard-free twins: the clipper check's cost: N replays (52 frames gathered, each
+  through the twins and without them, each case's without the probe, the probe's and the clear's
+  alone) on SCENE WxH at TWxTH texels in T ms`; the whole self-test's time is on the `on
+  (self-test: ...) ... in T ms` line. The queued twin keys of the self-test's frames are
+  forgotten at its end (`rd__pipeline_twin_forget_queued`).
 - The 10 s VU line's clause: `; discard-free twins: D draws a picture through them, C of them by
   the clipper check (clean|not clean|not checked) (R refused a picture: plane p, DATE d, band b,
-  alpha a, clipped c, not made yet u, timed without them t, entry not tested e)`, then `; their
+  alpha a, clipped c, form f, not made yet u, timed without them t, entry not tested e)`, then `; their
   pipelines made in the background: P in B batches, M ms from begin to taken` in a block that took
   a batch (`, some failed`); nothing while held or off from the start, `; discard-free twins off (why)` once they were on.
 - `discard-free twins: 250 pictures drawn with them since their self-test: their mark says on`;
@@ -1954,7 +1969,7 @@ The lines (`rd: ` before each):
   cull's (above); at the next start `the previous run: discard-free twins: ...`.
 - `rd_replay_tool --stats`: `stats: discard-free twins on|held|off (why): N draws through them, C
   of them by the clipper check (verdict); refused: plane p, DATE d, band b, alpha a, clipped c,
-  not made yet u, timed without them t, entry not tested e; M modules of them made, P of their pipelines alive` (with `(not applicable here: ...)` on a device
+  form f, not made yet u, timed without them t, entry not tested e; M modules of them made, P of their pipelines alive` (with `(not applicable here: ...)` on a device
   with dual-source blending). The self-test's own draws (the floor's and the clipper check's) are
   not counted: the hold's end puts the counts back (`rd__nd_hold_end`).
 
