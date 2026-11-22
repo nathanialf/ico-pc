@@ -857,6 +857,41 @@ void ico_opt_hold_type_toggled(int type)
     }
 }
 
+/* [gameplay] zoom_type (options.h): -1 not read yet, else ICO_ZOOM_HOLD or
+   ICO_ZOOM_TOGGLE */
+static int s_zoom_type = -1;
+
+int ico_opt_zoom_type(void)
+{
+    /* the type last logged */
+    static int logged = -1;
+
+    if (s_zoom_type < 0) {
+        const char *v = ico_config_get_string("gameplay.zoom_type", "hold");
+
+        s_zoom_type = v != NULL && strcmp(v, "toggle") == 0 ? ICO_ZOOM_TOGGLE : ICO_ZOOM_HOLD;
+        if (v != NULL && strcmp(v, "toggle") != 0 && strcmp(v, "hold") != 0) {
+            fprintf(stderr,
+                    "options: [gameplay] zoom_type = \"%s\" is not one of hold, toggle: hold\n", v);
+        }
+    }
+    if (s_zoom_type != logged) {
+        logged = s_zoom_type;
+        fprintf(stderr, "options: zoom type %s\n", ico_opt_zoom_type_name(s_zoom_type));
+    }
+    return s_zoom_type;
+}
+
+void ico_opt_set_zoom_type(int type)
+{
+    s_zoom_type = type == ICO_ZOOM_TOGGLE ? ICO_ZOOM_TOGGLE : ICO_ZOOM_HOLD;
+}
+
+const char *ico_opt_zoom_type_name(int type)
+{
+    return type == ICO_ZOOM_TOGGLE ? "toggle" : "hold";
+}
+
 /* [input] button_pictures (options.h): -2 not read yet, else
    ICO_BUTTON_PICTURES_* */
 static int s_button_pictures = -2;
@@ -915,6 +950,7 @@ void ico_opt_reload(void)
     s_ui_language = -2;
     s_text_language = -2;
     s_hold_choice = -1;
+    s_zoom_type = -1;
     s_button_pictures = -2;
     /* the characters' colours ([characters], appearance.h) */
     ico_appearance_reload();

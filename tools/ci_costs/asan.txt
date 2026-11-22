@@ -1274,3 +1274,4 @@ yorda_trip_jpn 0.02
 yorda_trip_jun26 0.02
 yorda_trip_kor 0.02
 yorda_trip_ntsc 0.02
+zoom_toggle 0.01  # estimate: a CPU-only unit test of 2000 ticks, as door_grace (ZOOM)

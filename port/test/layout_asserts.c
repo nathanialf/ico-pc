@@ -1686,7 +1686,7 @@ OFF(PadAct, tick, 0x12);
 OFF(PadAct, volume, 0x14);
 #endif
 
-/* PadActDef: overlay, ico2/fumi/include/pad.h:140 */
+/* PadActDef: overlay, ico2/fumi/include/pad.h:141 */
 OFF(PadActDef, word0, 0x0);
 OFF(PadActDef, voice, 0x4);
 OFF(PadActDef, life, 0x6);

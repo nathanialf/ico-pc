@@ -30,6 +30,17 @@ held on those discs too. The row shows from the title screen as well as the
 pause menu, on every disc, and it is kept in your settings, so it stays as
 you set it for every save.
 
+## Do I have to hold R2 to zoom?
+
+**The camera only zooms in while I keep R2 down. Can I press it once
+instead?**
+
+Yes. Open **Options > Controls > Zoom type** and choose **Toggle**. Then one
+press of R2 zooms the camera in and another press zooms it out. The camera
+also zooms back out by itself when a cutscene or a scripted camera takes
+over and when you go into another room. **Hold** is the game's own way. The
+row shows from the title screen and the pause menu, on every disc.
+
 ## The on-screen buttons are in my way
 
 **Can I move them, make them smaller or hide some?**

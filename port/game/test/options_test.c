@@ -20,6 +20,7 @@
    directories hold the game's own region.h) */
 #include "../../core/region.h"
 #include "video_options.h"
+#include "zoom_toggle.h"
 /* the enemy brain, as the game's own source; stubs below satisfy it */
 #include "../../../ico2/omori/src/ebrain.c"
 
@@ -2691,6 +2692,89 @@ static void test_button_pictures(const char *dir)
     ico_opt_reload();
 }
 
+/* [gameplay] zoom_type (options.h, zoom_toggle.h): Hold on every disc by
+   default, "toggle" read, any other word Hold, the setter, the reload; the
+   camera's hooks (text scans of camera-root.c and camera-ico2.c: four R2
+   tests asked of the latch and none of the game's own left, the reset in
+   both InitCamera bodies, the June 2001 look-around's test, the sources'
+   numbers the header's) and the simulation key */
+static void test_zoom_type(const char *dir)
+{
+    static const char *const words[4] = {"hold", "toggle", "Toggle", "press"};
+    char path[512];
+    char text[96];
+    char *src;
+    FILE *f;
+
+    ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
+    ico_opt_reload();
+    CHECK(ico_opt_zoom_type() == ICO_ZOOM_HOLD); /* every disc's default */
+    CHECK(strcmp(ico_opt_zoom_type_name(ICO_ZOOM_HOLD), "hold") == 0 &&
+          strcmp(ico_opt_zoom_type_name(ICO_ZOOM_TOGGLE), "toggle") == 0 &&
+          strcmp(ico_opt_zoom_type_name(7), "hold") == 0);
+    snprintf(path, sizeof(path), "%s/options_test.toml", dir);
+    for (int i = 0; i < 4; i++) {
+        f = fopen(path, "wb");
+        if (f == NULL) {
+            fprintf(stderr, "cannot write %s\n", path);
+            failures++;
+            return;
+        }
+        snprintf(text, sizeof(text), "[gameplay]\nzoom_type = \"%s\"\n", words[i]);
+        fputs(text, f);
+        fclose(f);
+        ico_config_reset(path, "/nonexistent/options_test.ini");
+        ico_opt_reload();
+        CHECK(ico_opt_zoom_type() == (i == 1 ? ICO_ZOOM_TOGGLE : ICO_ZOOM_HOLD));
+    }
+    /* the setter, then a reload reads the file's word again */
+    ico_opt_set_zoom_type(ICO_ZOOM_TOGGLE);
+    CHECK(ico_opt_zoom_type() == ICO_ZOOM_TOGGLE);
+    ico_opt_set_zoom_type(5);
+    CHECK(ico_opt_zoom_type() == ICO_ZOOM_HOLD);
+    ico_opt_set_zoom_type(ICO_ZOOM_TOGGLE);
+    ico_opt_reload();
+    CHECK(ico_opt_zoom_type() == ICO_ZOOM_HOLD); /* the file says "press" */
+    remove(path);
+    ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
+    ico_opt_reload();
+    CHECK(ico_opt_zoom_type() == ICO_ZOOM_HOLD);
+
+    src = read_source(ICO_CAMERA_ROOT_SRC);
+    CHECK(src != NULL);
+    if (src != NULL) {
+        CHECK(count_of(src, "ico_zoom_held(") == 4 + 1 /* the declaration */);
+        CHECK(count_of(src, "held = ico_zoom_held(p->now & 2, zoomRequest != 0,") == 4);
+        CHECK(count_of(src, "} else if (held) {") == 4);
+        CHECK(count_of(src, "else if (p->now & 2)") == 0);
+        CHECK(count_of(src, "    zoomRequest = 0;\n    ico_zoom_reset();") == 2);
+        CHECK(count_of(src, "ico_zoom_reset(") == 2 + 1 /* the declaration */);
+        /* the European body's look-around source and its live test */
+        CHECK(count_of(src, "useDemo != 0 ? ICO_ZOOM_SRC_LOOK") == 1);
+        CHECK(count_of(src, "(iosPadEnableGet() || debug_hand_camera)") == 1);
+        CHECK(count_of(src, "ply != 0 ? IsAbleBoyControl() : iosPadEnableGet(),") == 3);
+        /* the sources' numbers are zoom_toggle.h's */
+        CHECK(count_of(src, "#define ICO_ZOOM_SRC_BOY 0 ") == 1 && ICO_ZOOM_SRC_BOY == 0);
+        CHECK(count_of(src, "#define ICO_ZOOM_SRC_PAD 1 ") == 1 && ICO_ZOOM_SRC_PAD == 1);
+        CHECK(count_of(src, "#define ICO_ZOOM_SRC_LOOK 2 ") == 1 && ICO_ZOOM_SRC_LOOK == 2);
+        free(src);
+    }
+    src = read_source(ICO_CAMERA_ICO2_SRC);
+    CHECK(src != NULL);
+    if (src != NULL) {
+        CHECK(count_of(src, "if (ico_zoom_wanted(pad[0].now & 2)) {") == 1);
+        CHECK(count_of(src, "if (pad[0].now & 2) {") == 0);
+        free(src);
+    }
+    src = read_source(ICO_SIM_KEYS_SRC);
+    CHECK(src != NULL);
+    if (src != NULL) {
+        CHECK(count_of(src, "\"gameplay.zoom_type\",") == 1);
+        CHECK(count_of(src, "\"hold\",     /* gameplay.zoom_type */") == 1);
+        free(src);
+    }
+}
+
 int main(int argc, char **argv)
 {
     if (argc > 2 && ico_region_select(argv[2]) != 0) {
@@ -2713,6 +2797,7 @@ int main(int argc, char **argv)
     test_ui_language(argc > 1 ? argv[1] : ".");
     test_text_language(argc > 1 ? argv[1] : ".");
     test_button_pictures(argc > 1 ? argv[1] : ".");
+    test_zoom_type(argc > 1 ? argv[1] : ".");
     test_video_effects(argc > 1 ? argv[1] : ".");
     test_video_effects_depth(argc > 1 ? argv[1] : ".");
     test_video_full_pixel(argc > 1 ? argv[1] : ".");

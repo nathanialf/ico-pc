@@ -37,7 +37,7 @@ pictures picks a set yourself (also the Wii Classic Controller's).
 | Square | left face button | Q | |
 | Triangle (back) | top face button | R | |
 | L1 / R1 (R1 holds Yorda's hand; in Options > Picture they change a colour row by 10) | shoulder buttons | Tab or the ` key (left of 1) / F | middle button (R1) |
-| L2 / R2 | triggers | Z / X | |
+| L2 / R2 (R2 zooms the camera in) | triggers | Z / X | |
 | L3 / R3 (press a stick in) | press a stick in | V / B | |
 | Start / Select | start / back (or view) | Enter / Backspace | |
 | D-pad (menus) | d-pad (hold Left or Right on a slider row in Options to keep changing it) | arrow keys | |
@@ -51,6 +51,15 @@ play the other way, choose **A (hold)** or **B (toggle)** under
 **Options > Controls > Hold type**, from the title screen or the pause
 menu; **Disc's own** goes back to the disc's way. It works the same with
 every way of playing.
+
+The camera zooms in while you keep R2 held, on every disc. To zoom with one
+press instead, choose **Toggle** under **Options > Controls > Zoom type**:
+press R2 once to zoom in and again to zoom out. The camera also zooms back
+out by itself when a cutscene or a scripted camera takes over and when you
+go into another room. **Hold** is the game's own way. It shows from the
+title screen and the pause menu, and works the same with a controller, the
+keyboard and the touch screen, on whichever button the game's **Button
+configuration** gives the zoom.
 
 A few more keys on a computer:
 
@@ -324,7 +333,9 @@ pictures:
   finger on it, or, with **Hold type** on **B (toggle)** (the North
   American disc's and the 2001 previews' own way), tap it once to take her
   hand and tap it again to let go.
-- **R2** is in the top right corner.
+- **R2** is in the top right corner. It zooms the camera in while you hold
+  it, or, with **Zoom type** on **Toggle**, tap it once to zoom in and tap
+  it again to zoom out.
 - **Start and Select** are at the top in the middle.
 - **The look pad** is the rest of the upper right part of the screen.
   Slide a finger there to look around, as you would with the right stick.

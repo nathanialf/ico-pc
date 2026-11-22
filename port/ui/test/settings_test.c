@@ -132,16 +132,18 @@ static void testBuild(void)
     static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_OPT_MUSIC_VOL, UI_STR_OPT_EFFECTS_VOL,
                                     UI_STR_OPT_OUTPUT, UI_STR_OPT_DEVICE,    UI_STR_BACK};
     static const int ctlOpts[] = {
-        UI_OPT_LINK,         UI_OPT_BUTTON_CONFIG, UI_OPT_VIBRATION,    UI_OPT_BUTTON_PICTURES,
-        UI_OPT_HOLD_TYPE,    UI_OPT_STICK_FIX,     UI_OPT_MOUSE_CAMERA, UI_OPT_MOUSE_SENS,
-        UI_OPT_MOUSE_INVERT, UI_OPT_MOUSE_SPEED,   UI_OPT_MOUSE_RANGE,  UI_OPT_MOUSE_RETURN,
-        UI_OPT_CIRCLE_BACK,  UI_OPT_LINK,          UI_OPT_BACK};
-    static const int ctlStrs[] = {
-        UI_STR_OPT_REMAP,           UI_STR_OPT_BUTTON_CONFIG, UI_STR_OPT_VIBRATION,
-        UI_STR_OPT_BUTTON_PICTURES, UI_STR_OPT_HOLD_TYPE,     UI_STR_OPT_STICK_FIX,
-        UI_STR_OPT_MOUSE_CAMERA,    UI_STR_OPT_MOUSE_SENS,    UI_STR_OPT_MOUSE_INVERT,
-        UI_STR_OPT_MOUSE_SPEED,     UI_STR_OPT_MOUSE_RANGE,   UI_STR_OPT_MOUSE_RETURN,
-        UI_STR_OPT_CIRCLE_BACK,     UI_STR_SECTION_TOUCH,     UI_STR_BACK};
+        UI_OPT_LINK,         UI_OPT_BUTTON_CONFIG, UI_OPT_VIBRATION,   UI_OPT_BUTTON_PICTURES,
+        UI_OPT_HOLD_TYPE,    UI_OPT_ZOOM_TYPE,     UI_OPT_STICK_FIX,   UI_OPT_MOUSE_CAMERA,
+        UI_OPT_MOUSE_SENS,   UI_OPT_MOUSE_INVERT,  UI_OPT_MOUSE_SPEED, UI_OPT_MOUSE_RANGE,
+        UI_OPT_MOUSE_RETURN, UI_OPT_CIRCLE_BACK,   UI_OPT_LINK,        UI_OPT_BACK};
+    static const int ctlStrs[] = {UI_STR_OPT_REMAP,        UI_STR_OPT_BUTTON_CONFIG,
+                                  UI_STR_OPT_VIBRATION,    UI_STR_OPT_BUTTON_PICTURES,
+                                  UI_STR_OPT_HOLD_TYPE,    UI_STR_OPT_ZOOM_TYPE,
+                                  UI_STR_OPT_STICK_FIX,    UI_STR_OPT_MOUSE_CAMERA,
+                                  UI_STR_OPT_MOUSE_SENS,   UI_STR_OPT_MOUSE_INVERT,
+                                  UI_STR_OPT_MOUSE_SPEED,  UI_STR_OPT_MOUSE_RANGE,
+                                  UI_STR_OPT_MOUSE_RETURN, UI_STR_OPT_CIRCLE_BACK,
+                                  UI_STR_SECTION_TOUCH,    UI_STR_BACK};
     static const int touchOpts[] = {
         UI_OPT_TOUCH_MODE,  UI_OPT_TOUCH_SIZE,      UI_OPT_TOUCH_OPACITY,
         UI_OPT_TOUCH_EDIT,  UI_OPT_TOUCH_SNAP,      UI_OPT_TOUCH_GRID,
@@ -259,7 +261,7 @@ static void testBuild(void)
     CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 9),
           "display rows (Frame rate without a framerate key)");
     CHECK(labelsAre(UI_PAGE_AUDIO, audioOpts, audioStrs, 6), "audio rows");
-    CHECK(labelsAre(UI_PAGE_CONTROLS, ctlOpts, ctlStrs, 15), "controls rows");
+    CHECK(labelsAre(UI_PAGE_CONTROLS, ctlOpts, ctlStrs, 16), "controls rows");
     CHECK(labelsAre(UI_PAGE_TOUCH, touchOpts, touchStrs, 9), "touch screen rows");
     CHECK(ui_settings_page_rows(UI_PAGE_TOUCH_LAYOUT, NULL, NULL, NULL, 16) == 0,
           "the Edit layout page has no rows");
@@ -267,8 +269,8 @@ static void testBuild(void)
         /* Touch screen opens its page, Edit layout the editor's */
         int cl[16], co[16];
         const int cn = ui_settings_page_rows(UI_PAGE_CONTROLS, cl, co, NULL, 16);
-        CHECK(cn == 15 && co[13] == UI_OPT_LINK &&
-                  lt_ext_prop(cl[13])->right == ui_settings_page_layout(UI_PAGE_TOUCH),
+        CHECK(cn == 16 && co[14] == UI_OPT_LINK &&
+                  lt_ext_prop(cl[14])->right == ui_settings_page_layout(UI_PAGE_TOUCH),
               "Touch screen opens its page");
     }
     CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 11), "gameplay rows");
@@ -3430,9 +3432,11 @@ static void testGameOptions(void)
         CHECK(rowShown(UI_PAGE_CONTROLS, UI_OPT_BUTTON_CONFIG) == !title &&
                   rowShown(UI_PAGE_CONTROLS, UI_OPT_VIBRATION) == !title &&
                   rowShown(UI_PAGE_CONTROLS, UI_OPT_HOLD_TYPE) &&
+                  rowShown(UI_PAGE_CONTROLS, UI_OPT_ZOOM_TYPE) &&
                   rowShown(UI_PAGE_CONTROLS, UI_OPT_BUTTON_PICTURES),
-              "title %d: the game's controls %s; Button pictures and Hold type always shown", title,
-              title ? "hidden" : "shown");
+              "title %d: the game's controls %s; Button pictures, Hold type and Zoom type always "
+              "shown",
+              title, title ? "hidden" : "shown");
         checkPageFits(UI_PAGE_CONTROLS, title ? "Controls (title)" : "Controls (pause)");
         press(0x4000);
         CHECK(lt_ext_layout(ctlL)->curItem ==

@@ -21,7 +21,28 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   the packet box test cannot return 0; the texture reasons and their words agree. The self-test: the rule finds an unledgered early return in a synthetic
   function and passes a ledgered one.
 
+## port/config/test
+
+- `config_test.c`, added: the first-run template's `zoom_type = "hold"` (`config`).
+- `sim_keys_test.c`, added: `gameplay.zoom_type` listed with the default `"hold"` (17 keys of one
+  default text); a state saved before the key existed loads under Hold and is refused under Toggle
+  (`sim_keys`).
+
 ## port/game/test
+
+- `zoom_toggle_test.c`: Zoom type's latch (`port/game/zoom_toggle.h`,
+  [GAME_FEATURES.md](GAME_FEATURES.md#zoom-type)), CPU only: Hold returns the game's R2 test over
+  2000 pseudo-random ticks of the bit, a script's zoom, the source's liveness, the source and the
+  camera mode; Toggle's press and release (in, and stays in), the second press (out), a level held
+  50 ticks (one flip); the clears (a script's zoom, a press held through it doing nothing after,
+  the source not live, a new source, a new camera mode, a stage start, R2 held into a new stage);
+  Toggle to Hold while zoomed (cleared), Hold to Toggle while held (no flip); the June 2001
+  look-around's test; `zoom_toggle.state` one FRESH block whose bytes copied back resume the latch
+  (`zoom_toggle`).
+- `options_test.c`, added: `zoom_type`'s default, words, setter and reload; the text scans of
+  `camera-root.c` (four `ico_zoom_held(` tests, no `else if (p->now & 2)` left, the two resets,
+  the source numbers) and `camera-ico2.c` (the June 2001 look-around's `ico_zoom_wanted`), and the
+  simulation key (`options` and its six disc runs).
 
 - `stage_disp_test.c`: `stage_DispAnimation`'s row skip (`StageAnimation.c` compiled in) on each disc
   its main body serves: the European disc leaves row 66 out, the Japanese, Korean and Chinese discs
@@ -220,6 +241,11 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
 
 ## port/ui/test
 
+- `settings_test.c`, `settings_extra_test.c`, `settings_discs_test.c`, added: Controls' sixteen
+  rows with Zoom type between Hold type and Stick fix, shown from the title and the pause menu;
+  `testZoomType` steps it from both (Hold, Right to Toggle with the key set and its note on the
+  cursor, leaving the page saves `zoom_type = "toggle"`, Left back to Hold); every disc shows it on
+  the title reading Hold (`settings`, `settings_extra`, `settings_discs` and their disc runs).
 - `pad_glyphs_test.c`: the button pictures' core (`port/ui/pad_glyphs.c`,
   [UI.md](UI.md#button-pictures)), CPU only: the 24 embedded files read, each set complete, each
   piece's aspect, fill colour and black stroke present at 96 rows, the alpha never past 0x80; the
