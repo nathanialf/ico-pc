@@ -207,18 +207,25 @@ void vkr_progress_reset(void)
     __atomic_store_n(&g_vkr.progWaitingFor, 0, __ATOMIC_RELEASE);
     __atomic_store_n(&g_vkr.progPresentFor, 0, __ATOMIC_RELEASE);
     __atomic_store_n(&g_vkr.progFinished, 0, __ATOMIC_RELEASE);
+    __atomic_store_n(&g_vkr.progFinishedNs, 0, __ATOMIC_RELEASE);
     __atomic_store_n(&g_vkr.progSubmitted, 0, __ATOMIC_RELEASE);
 }
 
 /* value seen finished (a wait that returned, a counter read): raised only,
  * by compare and swap (the submit thread's wait before its present,
  * rhi_wait_submitted, and the recording thread's fence waits may store it
- * at once) */
+ * at once).  A raise stamps progFinishedNs after it (rhi_gpu_progress's
+ * headNs): a reader between the two sees the new value with the older
+ * time, a head time too long for a moment, never one too short */
 static void vkr_progress_finished(uint64_t value)
 {
     uint64_t was = __atomic_load_n(&g_vkr.progFinished, __ATOMIC_RELAXED);
-    while (value > was && !__atomic_compare_exchange_n(&g_vkr.progFinished, &was, value, true,
-                                                       __ATOMIC_RELEASE, __ATOMIC_RELAXED)) {
+    while (value > was) {
+        if (__atomic_compare_exchange_n(&g_vkr.progFinished, &was, value, true, __ATOMIC_RELEASE,
+                                        __ATOMIC_RELAXED)) {
+            __atomic_store_n(&g_vkr.progFinishedNs, vkr_now_ns(), __ATOMIC_RELEASE);
+            return;
+        }
         /* was holds the value another thread stored: compare again */
     }
 }

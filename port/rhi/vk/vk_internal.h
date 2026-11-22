@@ -666,6 +666,9 @@ typedef struct VkrState {
      * pair of its own: the recording thread's fence waits beside it store
      * the pair above, and rhi_gpu_progress gives the older of the two */
     uint64_t progPresentFor, progPresentSinceNs;
+    /* when progFinished last moved (vkr_now_ns; 0: not since the device
+     * came up): rhi_gpu_progress's headNs */
+    uint64_t progFinishedNs;
     uint32_t progReplay, progFrame;
     /* the last VKR_SUBMIT_HISTORY submissions' values and tags
      * (replay << 32 | frame) as atomic words, and the count made: what

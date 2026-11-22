@@ -54,7 +54,17 @@
  *              that answers the wait for 299 with the loss although 299 had
  *              finished and 300 faulted (Vulkan allows either answer after
  *              a loss) names 299, one picture early; 300 is then held but
- *              not written (pinned here, rd_loss_pick.c unchanged) */
+ *              not written (pinned here, rd_loss_pick.c unchanged)
+ *   head       the stall counted from the head's time (RhiGpuProgress
+ *              headNs, rd_loss_keep_decide_head): issue 179's v0.11.14
+ *              title and menus, two pictures in flight of about 55 ms GPU
+ *              work each and slot waits of 100-110 ms (every one copied
+ *              there), copy none (RD_LOSS_KEEP_NOT_HEAD, no attempt
+ *              counted) where v0.11.14's rule took 4 in every 64; the head
+ *              unknown decides as v0.11.14 did; a picture stuck on the GPU
+ *              (nothing seen finished for 100 ms or more, a hang) still
+ *              takes its copy, and over a hang after the title the lost
+ *              frame is held */
 #include "rd_loss_pick.h"
 #include <stdio.h>
 #include <string.h>
@@ -568,6 +578,110 @@ static void twoInFlight(void)
           c.writeBefore != 300);
 }
 
+static void head(void)
+{
+    const uint64_t ms = 1000000ull;
+    const uint64_t wait = 7;
+
+    /* the time counted: the wait's, at most the head's when known */
+    CHECK(rd_loss_keep_counted_ns(105 * ms, false, 0) == 105 * ms);
+    CHECK(rd_loss_keep_counted_ns(105 * ms, false, 50 * ms) == 105 * ms);
+    CHECK(rd_loss_keep_counted_ns(105 * ms, true, 50 * ms) == 50 * ms);
+    CHECK(rd_loss_keep_counted_ns(105 * ms, true, 300 * ms) == 105 * ms);
+    CHECK(rd_loss_keep_counted_ns(105 * ms, true, 0) == 0);
+    /* the same 100 ms: no new limit */
+    CHECK(rd_loss_keep_stalled_head(wait, 105 * ms, false, 0));
+    CHECK(!rd_loss_keep_stalled_head(wait, 105 * ms, true, 50 * ms));
+    CHECK(!rd_loss_keep_stalled_head(wait, 105 * ms, true, RD_LOSS_KEEP_STALL_NS - 1));
+    CHECK(rd_loss_keep_stalled_head(wait, 105 * ms, true, RD_LOSS_KEEP_STALL_NS));
+    CHECK(!rd_loss_keep_stalled_head(0, 500 * ms, true, 500 * ms));
+    {
+        RdLossThrottle t = {0};
+
+        /* queued behind the picture before: not copied, no attempt */
+        CHECK(rd_loss_keep_decide_head(&t, 1, 129, true, 129, wait, 105 * ms, true, 50 * ms) ==
+              RD_LOSS_KEEP_NOT_HEAD);
+        CHECK(t.attempts == 0);
+        /* a wait under 100 ms is no stall by either rule */
+        CHECK(rd_loss_keep_decide_head(&t, 2, 129, true, 129, wait, 90 * ms, true, 90 * ms) ==
+              RD_LOSS_KEEP_NO_STALL);
+        /* the head unknown: v0.11.14's rule, unchanged */
+        CHECK(rd_loss_keep_decide_head(&t, 3, 129, true, 129, wait, 105 * ms, false, 0) ==
+              RD_LOSS_KEEP_TAKE);
+        CHECK(rd_loss_keep_decide(&t, 4, 129, true, 129, wait, 105 * ms) == RD_LOSS_KEEP_TAKE);
+        /* a stuck head (nothing seen finished for 150 ms, the wait as long):
+           copied */
+        CHECK(rd_loss_keep_decide_head(&t, 5, 129, true, 129, wait, 150 * ms, true, 150 * ms) ==
+              RD_LOSS_KEEP_TAKE);
+        /* the head stuck since before the wait began: the wait's 105 ms count */
+        CHECK(rd_loss_keep_decide_head(&t, 6, 129, true, 129, wait, 105 * ms, true, 400 * ms) ==
+              RD_LOSS_KEEP_TAKE);
+        CHECK(t.attempts == 4);
+        /* the not-sent and open rules come as before */
+        RdLossThrottle u = {0};
+
+        CHECK(rd_loss_keep_decide_head(&u, 1, 128, true, 129, wait, 150 * ms, true, 150 * ms) ==
+              RD_LOSS_KEEP_NOT_OPEN);
+        CHECK(rd_loss_keep_decide_head(&u, 2, 129, false, 129, wait, 150 * ms, true, 150 * ms) ==
+              RD_LOSS_KEEP_NOT_SENT);
+        CHECK(rd_loss_keep_decide_head(&u, 3, 129, false, 129, wait, 150 * ms, true, 50 * ms) ==
+              RD_LOSS_KEEP_NOT_HEAD);
+        CHECK(u.attempts == 0);
+    }
+    /* the title and menus (issue 179's v0.11.14 log, lines 555-765): two
+       pictures in flight, each about 55 ms on the GPU, so a slot wait for
+       the newer blocks 105-110 ms of which its own picture has run at most
+       55 ms.  v0.11.14's rule took 4 copies in every 64 recycles there; the
+       head's takes none.  Then the GPU hangs on frame 300: nothing is seen
+       finished, the head's time grows with the wait, the copies come and
+       the hung frame is held */
+    {
+        RdLossThrottle oldT = {0}, headT = {0};
+        uint32_t oldTaken = 0, headTaken = 0, notHead = 0;
+        uint32_t copies[4] = {0};
+        bool hungHeld = false;
+
+        for (uint64_t seen = 1; seen <= 256; seen++) {
+            const uint32_t frame = 100u + (uint32_t)seen;
+            const uint64_t waitNs = (105 + seen % 6) * ms;
+            const uint64_t headNs = (40 + seen % 16) * ms;
+
+            oldTaken += rd_loss_keep_decide(&oldT, seen, frame, true, frame, wait, waitNs) ==
+                        RD_LOSS_KEEP_TAKE;
+            const RdLossKeep k = rd_loss_keep_decide_head(&headT, seen, frame, true, frame, wait,
+                                                          waitNs, true, headNs);
+
+            headTaken += k == RD_LOSS_KEEP_TAKE;
+            notHead += k == RD_LOSS_KEEP_NOT_HEAD;
+        }
+        CHECK(oldTaken == 256 / RD_LOSS_KEEP_WINDOW * RD_LOSS_KEEP_PER_WINDOW);
+        CHECK(headTaken == 0 && notHead == 256 && headT.attempts == 0);
+        /* the hang: frame 300 the first open one from recycle 300 on; its
+           wait and the head's time both grow by 40 ms a recycle, and the
+           recycle reuses the slot of the frame three before (the ring's
+           three), so frame 300's comes at recycle 303, 160 ms in */
+        for (uint64_t seen = 300; seen <= 320; seen++) {
+            const uint32_t frame = (uint32_t)seen - 3u;
+            const uint64_t stuck = (seen - 299) * 40 * ms;
+
+            for (int i = 0; i < 4; i++) {
+                if (copies[i] && rd_loss_keep_release(copies[i], 300)) {
+                    copies[i] = 0;
+                }
+            }
+            if (rd_loss_keep_decide_head(&headT, seen, frame, true, 300, wait, stuck, true,
+                                         stuck) == RD_LOSS_KEEP_TAKE) {
+                copies[rd_loss_keep_slot(copies, 4)] = frame;
+                headTaken++;
+            }
+        }
+        for (int i = 0; i < 4; i++) {
+            hungHeld = hungHeld || copies[i] == 300;
+        }
+        CHECK(headTaken > 0 && hungHeld);
+    }
+}
+
 int main(void)
 {
     issue179();
@@ -578,6 +692,7 @@ int main(void)
     notSent();
     unchanged();
     twoInFlight();
+    head();
     if (failures == 0) {
         printf("rd_loss_pick_test: ok\n");
     }
