@@ -42,6 +42,17 @@ void sys_cell_put(SysCell *c, double atMs, double tookMs, const double *v, uint3
     __atomic_store_n(&c->seq, s + 2u, __ATOMIC_RELEASE);
 }
 
+uint32_t sys_cell_get_new(const SysCell *c, double *v, uint32_t n, double *seenAtMs)
+{
+    double at = 0.0;
+    const uint32_t got = sys_cell_get(c, v, n, &at, NULL);
+    if (got == 0 || at == *seenAtMs) {
+        return 0;
+    }
+    *seenAtMs = at;
+    return got;
+}
+
 uint32_t sys_cell_get(const SysCell *c, double *v, uint32_t n, double *atMs, double *tookMs)
 {
     for (int tries = 0; tries < 4; tries++) {

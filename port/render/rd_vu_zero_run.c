@@ -566,6 +566,14 @@ void rd__vu_zero_fault_msaa(void)
     fault("a draw of a culling entry in a multisampled pass");
 }
 
+void rd__vu_zero_checked(uint64_t slots, uint64_t culled, uint64_t mismatches)
+{
+    add(&s_block.pictures, &s_run.pictures, 1u);
+    add(&s_block.slots, &s_run.slots, slots);
+    add(&s_block.culled, &s_run.culled, culled);
+    add(&s_block.mismatches, &s_run.mismatches, mismatches);
+}
+
 /* the slot's copies read (their frame done) */
 static void slotRead(uint32_t slot)
 {
@@ -588,10 +596,7 @@ static void slotRead(uint32_t slot)
     }
     rhi_unmap_buffer(z->rb);
     z->n = 0;
-    add(&s_block.pictures, &s_run.pictures, 1u);
-    add(&s_block.slots, &s_run.slots, c.slots);
-    add(&s_block.culled, &s_run.culled, c.culled);
-    add(&s_block.mismatches, &s_run.mismatches, c.mismatches);
+    rd__vu_zero_checked(c.slots, c.culled, c.mismatches);
     s_z.took.slots += c.slots;
     s_z.took.eligible += c.eligible;
     s_z.took.culled += c.culled;

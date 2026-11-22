@@ -160,6 +160,22 @@ bool power_from_android(const int v[4], PowerSample *out)
            out->status != POWER_STATUS_UNKNOWN;
 }
 
+int power_pick(bool sysfsAny, bool sysfsCurrent, bool androidAny, bool androidCurrent)
+{
+    if (sysfsAny && sysfsCurrent) {
+        return POWER_SOURCE_SYSFS;
+    }
+    if (androidAny && androidCurrent) {
+        return POWER_SOURCE_ANDROID;
+    }
+    return sysfsAny ? POWER_SOURCE_SYSFS : androidAny ? POWER_SOURCE_ANDROID : POWER_SOURCE_NONE;
+}
+
+bool power_fresh(double atMs, double nowMs)
+{
+    return nowMs >= atMs && nowMs - atMs <= POWER_FRESH_MS;
+}
+
 void power_block_reset(PowerBlock *b)
 {
     memset(b, 0, sizeof(*b));

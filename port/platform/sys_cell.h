@@ -38,5 +38,10 @@ void sys_cell_put(SysCell *c, double atMs, double tookMs, const double *v, uint3
 /* any thread: the values (n of them), when and what they took; 0 when
    nothing was written yet or no consistent copy was had */
 uint32_t sys_cell_get(const SysCell *c, double *v, uint32_t n, double *atMs, double *tookMs);
+/* sys_cell_get only when the cell was written since the copy whose time
+   is *seenAtMs (that time updated): 0 when nothing new.  A reader's block
+   line from a writer that stopped writing (a read that failed after
+   working) is then not the last block's again */
+uint32_t sys_cell_get_new(const SysCell *c, double *v, uint32_t n, double *seenAtMs);
 
 #endif /* ICO_PLATFORM_SYS_CELL_H */
