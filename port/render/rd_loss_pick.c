@@ -132,6 +132,15 @@ bool rd_loss_keep_stalled_head(uint64_t waitingFor, uint64_t waitingNs, bool hea
     return rd_loss_keep_stalled(waitingFor, rd_loss_keep_counted_ns(waitingNs, headKnown, headNs));
 }
 
+bool rd_loss_keep_wait_new(uint64_t *last, uint64_t waitingFor)
+{
+    if (waitingFor == 0 || waitingFor == *last) {
+        return false;
+    }
+    *last = waitingFor;
+    return true;
+}
+
 RdLossKeep rd_loss_keep_decide(RdLossThrottle *t, uint64_t seen, uint32_t frame, bool sent,
                                uint32_t openFrame, uint64_t waitingFor, uint64_t waitingNs)
 {
@@ -149,7 +158,13 @@ RdLossKeep rd_loss_keep_decide_head(RdLossThrottle *t, uint64_t seen, uint32_t f
     if (!rd_loss_keep_stalled(waitingFor, waitingNs)) {
         return RD_LOSS_KEEP_NO_STALL;
     }
-    if (!rd_loss_keep_stalled_head(waitingFor, waitingNs, headKnown, headNs)) {
+    /* the head's time only for a frame queued behind an older unfinished
+       one (frame above openFrame): the GPU's current picture is not this
+       frame's, and the wait's first part was that one's.  The frame that
+       IS the GPU's current one (frame == openFrame) counts the whole wait,
+       as before: it may be the hung one, and its one recycle may come
+       less than 100 ms after it became current (review K1) */
+    if (frame > openFrame && !rd_loss_keep_stalled_head(waitingFor, waitingNs, headKnown, headNs)) {
         return RD_LOSS_KEEP_NOT_HEAD;
     }
     /* after the stall's test, so the count is of the copies v0.11.13 made
