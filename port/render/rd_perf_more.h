@@ -24,7 +24,9 @@
  *     access on, buffers (gpu_robust)
  * The first is the costs a device's next change would cut; the second the
  * fields two logs of the same scene (v0.11.5 against v0.11.6, two devices)
- * are compared by.  Pure (port/render/test/rd_perf_more_test.c). */
+ * are compared by.  Where some of the block's pictures were drawn at the
+ * in-play judge's off arm (rd_ab.h) the count says so: "(0 keep frames;
+ * 31 without an attempt, timed)".  Pure (port/render/test/rd_perf_more_test.c). */
 #ifndef RD_PERF_MORE_H
 #define RD_PERF_MORE_H
 
@@ -53,6 +55,7 @@ double rd_perf_box_area(const float (*m)[4], const float *lo, const float *hi, b
 /* A block's sums (the window's; rd_perf_more_reset empties it) */
 typedef struct RdPerfMore {
     uint32_t n, keep, gpuN;
+    uint32_t abOff;    /* the records drawn with an attempt at its off arm (rd_ab.h) */
     uint32_t prepassN; /* the records added with the pre-pass on */
     double tris, draws, passes;
     double noDualPairs, noDualColour, noDualTris;

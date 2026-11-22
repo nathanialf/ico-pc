@@ -45,6 +45,7 @@
 #include <unistd.h> /* fsync */
 #endif
 
+#include "rd_ab_run.h"
 #include "rd_internal.h"
 #include "rd_jitter.h"
 #include "rd_vu_record.h"
@@ -396,6 +397,7 @@ void rd__vu_zero_start_line(void)
     rd__log("VU zero-area cull: %s, %u modules of it made, %u of its pipelines alive",
             rd__vu_zero_state_text(), (unsigned)s_z.variants,
             (unsigned)rd__pipeline_count_vs(RD_VS_VU_TRI_RULE_ZERO));
+    rd__ab_start_line(); /* the in-play judge's, now that the cull's state is known */
 }
 
 uint32_t rd__vu_zero_variants_made(void)
@@ -403,15 +405,28 @@ uint32_t rd__vu_zero_variants_made(void)
     return s_z.variants;
 }
 
+/* the replay being made is at the in-play judge's off arm for the cull
+   (rd_ab_run.h; never in the self-test's frames) */
+static bool trialOff(void)
+{
+    return !s_z.held && rd__ab_off(RD_AB_ZERO);
+}
+
+bool rd__vu_zero_triable(void)
+{
+    return s_z.state == Z_ON && !s_z.held && zeroReady();
+}
+
 uint8_t rd__vu_zero_rule_vs(uint32_t word)
 {
     /* with the cull on every entry takes the zero build (an entry without a
        word skips the test: its slots are the build's without it), so the
        pre-pass's batches are the ones it had: one rule stage key, the same
-       draws and dispatches; else the build without it */
+       draws and dispatches; else (off, or the in-play judge's off arm for
+       this replay: every entry of it) the build without it */
     (void)word;
-    return s_z.state == Z_ON && zeroReady() ? (uint8_t)RD_VS_VU_TRI_RULE_ZERO
-                                            : (uint8_t)RD_VS_VU_TRI_RULE_PRE;
+    return s_z.state == Z_ON && zeroReady() && !trialOff() ? (uint8_t)RD_VS_VU_TRI_RULE_ZERO
+                                                           : (uint8_t)RD_VS_VU_TRI_RULE_PRE;
 }
 
 uint32_t rd__vu_zero_entry_keep(uint32_t word, bool skinned, bool velocity, bool probe, int *why)
@@ -452,7 +467,19 @@ uint32_t rd__vu_zero_entry_word(const RdStateBlock *st, int *why)
     if (s_z.state != Z_ON || !zeroReady()) {
         return 0;
     }
-    return rd__vu_zero_target_word(st, why);
+    const uint32_t word = rd__vu_zero_target_word(st, why);
+    if (word != 0u && !s_z.held) {
+        /* the in-play judge (rd_ab_run.h): the cull has work in this
+           replay; at its off arm no entry gets the word (so its draws keep
+           the shared vertices' list) and the rule stage takes the build
+           without it (rd__vu_zero_rule_vs) */
+        rd__ab_used(RD_AB_ZERO);
+        if (rd__ab_off(RD_AB_ZERO)) {
+            *why = RD_VU_ZERO_TRIAL;
+            return 0;
+        }
+    }
+    return word;
 }
 
 uint32_t rd__vu_zero_target_word(const RdStateBlock *st, int *why)

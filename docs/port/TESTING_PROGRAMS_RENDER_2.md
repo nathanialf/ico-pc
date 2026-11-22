@@ -460,6 +460,54 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
     `rd: VU zero-area cull: off for the run: the GPU's answer differs from the CPU's` logged and
     the stats line off.
   - No device: SKIP.
+- `rd_ab_test.c` (`rd_ab`; `rd_ab.cmake`, CPU): the in-play judge
+  ([PIPELINES.md](PIPELINES.md#the-zero-area-cull-timed-in-play)) over made-up streams of replays
+  whose GPU times come back two or three replays later, each span from its arm:
+  - the verdicts: 5 % cheaper with the attempt on (the early verdict line word for word), 3 %
+    dearer off, no difference off at 32 pairs, 40 % of the pictures 3 to 5 times as long with a
+    5 % saving still on (pairs dropped by a long picture), the work rising 1 % a picture with a
+    fixed part no false on (and a 5 % saving still found), three pictures in flight;
+  - the trial's cost: the early verdict's eight replays without the attempt (and the two begun
+    before it came back); with no pair to make (the work swinging 30 %) the trial ends at 600
+    replays, at most 300 of them without it, no verdict, no more trials in the stage;
+  - the stages: no trial before 2 s into a stage or before the subject had work there, a keep
+    frame left out of the trial at the on arm, the arms with, without, without, with, a stage that
+    ends mid-trial not judged, a judged stage visited again taking its verdict at once with no new
+    trial, the 12-trial cap and its line;
+  - a fake second subject: one trial at a time (the other at its default or its verdict), each its
+    own verdict; a subject not allowed or never in use never tried;
+  - the way back: `rd_ab_stop` mid-trial: every later replay at every subject's off arm, keep frames
+    too, no trial, its line word for word, once;
+  - the modes `on`, `off` and `alt` (with, without, without, with) with no stage, their stats line;
+    the judge with no stage never trying; the start line; the registry's bound; a short buffer;
+  - the carried arm: the run's first stage with the attempt; a stage with no verdict of its own
+    (its keep frames too) on the arm the run's last verdict left at once, its trial still run;
+    one where the carried arm is the wrong one corrected by its trial (the verdict line says the
+    arm it started on), the next stage on the corrected arm; a judged stage keeping its own; a
+    stage with no verdict after its trial staying on the carried arm;
+  - the rate requirement, 72 cases: a GPU-bound stream at a 40 ms tick for 60 s, pictures of 33,
+    37.5, 48 and 60 ms, the attempt saving or costing 3, 5 and 10 %, in one stage, in four stages
+    of that effect and in four stages whose effect changes sign each stage; each case beside its
+    two fixed-arm runs: the judge at least the worse one's; at least the best per stage less the
+    pictures the worse arm loses during the time the judge was allowed on it (the stage's time
+    before its own verdict on the wrong arm, the wrong arm's trial replays: each picture's time
+    at the two runs' rates), less 1; after the last verdict, the better arm's pictures over the
+    same span within 1. Each case's numbers and bound are printed.
+- `rd_ab_zero_ab.cmake` (`rd_ab_zero_ab`, `rd_ab_zero_stop`; `rd_ab.cmake`): the judge's two arms
+  of the zero-area cull on every fixture of `port/render/test/fixtures/lists/vu_zero.txt` under its
+  profiles (corpus at 4:3 1x and Enhanced 4:3 2x; the Arm fakes with the record by compute at 1x
+  21:9 and at 16:9), `ICO_RD_VU_ZERO=1` and `ICO_RD_AB=on`, `off` and `alt` at `--repeat 2`, `on`
+  and `alt` at `--repeat 4`:
+  - every target's PNG the same bytes across the three at 2 and the two at 4;
+  - both arms ran: the judge's stats line (`stats: A/B (alt): zero-area cull: N replays with it, M
+    without`) with N above 0 for `on` and `alt`, M above 0 for `off` and `alt`, 0 for the arm the
+    mode leaves out; the cull's draws refused for the `trial` above 0 on `off` and `alt`, 0 on
+    `on`, no slot culled on `off`; every check 0 differ; the alternating runs of each fixture and
+    profile culled at least one slot;
+  - `rd_ab_zero_stop`: each fixture once at its first profile's first setting with `ICO_RD_AB=alt`
+    and `ICO_RD_AB_FAKE_LOSS=1`, `--repeat 4`: `rd: A/B: every trial stopped for the run
+    (ICO_RD_AB_FAKE_LOSS` logged, every replay without the cull, its trial refusals, no slot culled;
+  - No device: SKIP.
 - `rd_vuprepass_selftest_zero`, `_zero_plain`, `_zero_mali`, `_zero_lattice`, `_zero_missing`,
   `_zero_lossrow`, `_zero_marked`, `_zero_never`, `_zero_refused`, `_zero_picture`, `_zero_switch`
   (`rd_vu_zero.cmake`, through

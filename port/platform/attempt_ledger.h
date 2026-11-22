@@ -221,6 +221,13 @@ enum {
        at the check's start line (rd_vu_skin_selftest.c), count the box
        checks not drawn for it, second count the twins not drawn */
     ICO_ATT_SKIN_PHONE,
+    /* rd_ab_run.c (issue 179, v0.11.15): the zero-area cull timed in play
+       (port/render/rd_ab.h): a trial in each stage alternates replays with
+       it and without it, and the stage keeps the faster; state from
+       ico_attempt_decide_timed, its counts the run's totals (not the
+       block's): the stages kept with it, those without it (second), the
+       trials run (third) */
+    ICO_ATT_AB_ZERO,
     ICO_ATT_COUNT
 };
 
@@ -230,6 +237,8 @@ void ico_attempt_state(int id, IcoAttemptState state, const char *why);
 /* the row's counts (any thread; a relaxed atomic add each) */
 void ico_attempt_fire(int id, uint64_t n);
 void ico_attempt_fire2(int id, uint64_t n);
+/* the third count (a row with three: "(N2 unit2; N3 unit3)") */
+void ico_attempt_fire3(int id, uint64_t n);
 
 /* the row's state now (ICO_ATT_NOT_SET for an id out of range) */
 IcoAttemptState ico_attempt_state_of(int id);
@@ -482,5 +491,14 @@ void ico_attempt_decide_plain_camera(int plainRow, int camera);
    applicable with offWhy (a static string: not Vulkan, list 11's passes
    joined, MSAA, the exact blend, a temporal upscaler, ...) */
 void ico_attempt_decide_scene_hold(const char *offWhy);
+/* an attempt timed in play (port/render/rd_ab_run.c, at the judge's start
+   line and when one of these changes): mode the judge's (rd_ab.h: 0 the
+   judge, 1 ICO_RD_AB=on, 2 =off, 3 =alt), allowed the attempt may be
+   tried (its own self-test passed, not off for the run), stopped every
+   trial stopped for the run (a device loss, the GPU's own sign of a
+   reset).  On with the judge, the attempt allowed and nothing stopped;
+   off by default under the tests' switch or once stopped (the attempt at
+   its off arm); not applicable where the attempt is off */
+void ico_attempt_decide_timed(int id, int mode, int allowed, int stopped);
 
 #endif

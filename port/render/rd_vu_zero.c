@@ -21,8 +21,9 @@
 
 const char *rd_vu_zero_reason_name(int why)
 {
-    static const char *const kName[RD_VU_ZERO_REASONS] = {
-        "off", "mapping", "scale", "jitter", "off grid", "multisampled", "velocity", "own entry"};
+    static const char *const kName[RD_VU_ZERO_REASONS] = {"off",      "mapping",   "scale",
+                                                          "jitter",   "off grid",  "multisampled",
+                                                          "velocity", "own entry", "trial"};
     return why >= 0 && why < RD_VU_ZERO_REASONS ? kName[why] : "?";
 }
 

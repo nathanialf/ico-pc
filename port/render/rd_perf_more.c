@@ -118,6 +118,7 @@ void rd_perf_more_add(RdPerfMore *b, const RdPerfRecord *r, bool prepass)
 {
     b->n++;
     b->keep += r->keep ? 1u : 0u;
+    b->abOff += r->abOff != 0u ? 1u : 0u;
     b->prepassN += prepass ? 1u : 0u;
     b->tris += (double)r->vuTris;
     b->draws += (double)r->draws;
@@ -298,10 +299,14 @@ size_t rd_perf_more_compare_text(const RdPerfMore *b, const char *scene, bool ti
     for (int k = 0; k < RD_BREAK_COUNT; k++) {
         breaks += b->breakN[k];
     }
-    put(&o,
-        "compare: %s: %u pictures (%u keep frames); a picture %s triangles, %.0f draws, %.1f "
-        "passes, %.1f breaks",
-        scene != NULL && scene[0] != '\0' ? scene : "no scene", b->n, b->keep,
+    put(&o, "compare: %s: %u pictures (%u keep frames",
+        scene != NULL && scene[0] != '\0' ? scene : "no scene", b->n, b->keep);
+    if (b->abOff) {
+        /* the in-play judge's off arm (rd_ab.h): those pictures drew
+           without an attempt the others drew with */
+        put(&o, "; %u without an attempt, timed", b->abOff);
+    }
+    put(&o, "); a picture %s triangles, %.0f draws, %.1f passes, %.1f breaks",
         count(b->tris / n, c1, sizeof c1), b->draws / n, b->passes / n, breaks / n);
     if (b->gpuN) {
         const double g = (double)b->gpuN;

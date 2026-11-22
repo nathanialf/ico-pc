@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "rd_ab_run.h"
 #include "rd_vis.h"
 #include "shader_consts.h" /* ICO_VU_MARK_HIDE, ICO_VU_MARK_LATER */
 
@@ -345,6 +346,7 @@ void rd_ledger_scene(int stage, const char *name)
     const uint32_t first = tickNow() + 1u;
     /* the replay counts from the new stage's first frame on */
     __atomic_store_n(&s_repFirst, first, __ATOMIC_RELEASE);
+    rd__ab_scene(stage, first); /* the in-play judge's stage (rd_ab_run.h) */
     if (s_open) {
         (void)stageNow(&s_scratch, 1, 1);
         if (stageHasContent(&s_scratch)) {

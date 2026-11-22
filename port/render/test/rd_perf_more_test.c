@@ -152,6 +152,25 @@ static void test_lines(void)
             "the draws' 156k (3 a triangle; never summed); glow plans: none 2; robust access on, "
             "buffers (gpu_robust)",
             __LINE__);
+    /* a picture at the in-play judge's off arm (rd_ab.h, RdPerfRecord
+       abOff): counted beside the keep frames */
+    {
+        RdPerfMore c = b;
+        c.abOff = 1;
+        (void)rd_perf_more_compare_text(&c, "stage 42 scene (24a4demo)", true, NULL, t, sizeof t);
+        static const char kHead[] = "compare: stage 42 scene (24a4demo): 2 pictures (1 keep "
+                                    "frames; 1 without an attempt, timed); a picture 52k "
+                                    "triangles, ";
+        CHECK(strncmp(t, kHead, sizeof kHead - 1u) == 0);
+        RdPerfMore d;
+        rd_perf_more_reset(&d);
+        RdPerfRecord o = r;
+        o.abOff = 1;
+        rd_perf_more_add(&d, &o, true);
+        o.abOff = 0;
+        rd_perf_more_add(&d, &o, true);
+        CHECK(d.abOff == 1u && d.n == 2u);
+    }
     /* a dual-source device: no two-pass clause; no pre-pass: 9 a triangle */
     rd_perf_more_reset(&b);
     record(&r, 20.0);
