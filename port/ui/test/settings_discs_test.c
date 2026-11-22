@@ -227,6 +227,11 @@ static void checkTitleRows(const Expect *e)
           "%s title: Circle goes back %d, want %d", e->slug,
           ui_settings_opt_shown(UI_OPT_CIRCLE_BACK), e->circleBack);
     CHECK(ui_settings_opt_shown(UI_OPT_HOLD_TYPE), "%s title: Hold type", e->slug);
+    /* Controls > Zoom type on every disc, Hold (the game's own) by default */
+    CHECK(ui_settings_opt_shown(UI_OPT_ZOOM_TYPE) &&
+              ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_ZOOM_TYPE) >= 0 &&
+              strcmp(ui_settings_value_text(UI_OPT_ZOOM_TYPE), "Hold") == 0,
+          "%s title: Zoom type on Controls, %s", e->slug, ui_settings_value_text(UI_OPT_ZOOM_TYPE));
     /* Controls > Button pictures on every disc, Auto (no pad pressed yet:
        PlayStation's, the disc's own) */
     CHECK(ui_settings_opt_shown(UI_OPT_BUTTON_PICTURES) &&
@@ -319,7 +324,7 @@ static void checkPauseRows(const Expect *e)
               !ui_settings_opt_shown(UI_OPT_EXTRAS_MUSIC) &&
               !ui_settings_opt_shown(UI_OPT_EXTRAS_CREDITS),
           "%s pause: no 50 Hz, Music or Credits (the title's)", e->slug);
-    CHECK(ui_settings_opt_shown(UI_OPT_HOLD_TYPE) &&
+    CHECK(ui_settings_opt_shown(UI_OPT_HOLD_TYPE) && ui_settings_opt_shown(UI_OPT_ZOOM_TYPE) &&
               ui_settings_opt_shown(UI_OPT_FILM_EFFECT) == e->film &&
               ui_settings_opt_shown(UI_OPT_PLAYERS),
           "%s pause, cleared: Hold type %d (want 1), Film effect %d (want %d), Players %d (want 1)",

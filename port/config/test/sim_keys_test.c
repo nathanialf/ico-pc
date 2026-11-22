@@ -93,6 +93,9 @@ static void test_list(void)
           strcmp(ico_sim_key_default("variants.weapon"), "original") == 0);
     CHECK(listed("developer.free_movement") &&
           strcmp(ico_sim_key_default("developer.free_movement"), "false") == 0);
+    /* Controls > Zoom type changes when the camera zooms: the game's own Hold */
+    CHECK(listed("gameplay.zoom_type") &&
+          strcmp(ico_sim_key_default("gameplay.zoom_type"), "hold") == 0);
     CHECK(listed("video.video_mode"));
 }
 
@@ -254,6 +257,18 @@ static void test_defaults(const char *dir)
     CHECK(k != NULL && strcmp(k, "developer.free_movement") == 0 &&
           strcmp(out, "developer.free_movement=(absent) (now true)") == 0);
     CHECK(ico_config_set_string("developer.free_movement", "") == 0);
+    /* a state saved before gameplay.zoom_type existed: loads under Hold (the
+       game's own zoom), is refused under Toggle */
+    drop_line(t, "gameplay.zoom_type", older, sizeof older);
+    CHECK(strstr(older, "gameplay.zoom_type=") == NULL && strlen(older) < strlen(t));
+    CHECK(ico_sim_keys_first_diff(older, out, sizeof out) == NULL);
+    CHECK(ico_config_set_string("gameplay.zoom_type", "hold") == 0);
+    CHECK(ico_sim_keys_first_diff(older, out, sizeof out) == NULL);
+    CHECK(ico_config_set_string("gameplay.zoom_type", "toggle") == 0);
+    k = ico_sim_keys_first_diff(older, out, sizeof out);
+    CHECK(k != NULL && strcmp(k, "gameplay.zoom_type") == 0 &&
+          strcmp(out, "gameplay.zoom_type=(absent) (now toggle)") == 0);
+    CHECK(ico_config_set_string("gameplay.zoom_type", "") == 0);
     /* a key without one fixed default, absent, set now: differs */
     drop_line(t, "dev.start_stage", older, sizeof older);
     CHECK(ico_sim_keys_first_diff(older, out, sizeof out) == NULL);
@@ -458,7 +473,7 @@ static void test_unset_is_default(void)
         }
         CHECK(ico_config_set_string(ICO_SIM_KEYS[i], "") == 0);
     }
-    CHECK(n_fixed == 16); /* the list's 18 keys less the two without one text */
+    CHECK(n_fixed == 17); /* the list's 19 keys less the two without one text */
 
     /* a key without one default text: unset is the disc's own choice, so
        unset and a value still differ */

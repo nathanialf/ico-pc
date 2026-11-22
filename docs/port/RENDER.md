@@ -64,7 +64,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_vis_hiz_fast.c` | what the occlusion test's collect keeps: the occluder triangles of a draw read as before (the collect cache) and a pending texture's alpha scan once a picture ([Culling](RENDER_PERF.md#culling)) |
 | `port/render/rd_occlusion.c` | every GPU draw of a replay (`rd__replay_draw`, `rd__replay_draw_indexed`: the pass window's take) and the hidden-draw measurement around them ([Culling](RENDER_PERF.md#culling)) |
 | `port/render/rd_passring.h`, `rd_passring.c` | the pass ring: the last passes recorded, for the device-loss report |
-| `port/render/rd_loss_pick.h`, `rd_loss_pick.c`, `rd_loss_keep.h` | which frame the loss dump writes and the memory copies of frames the GPU may not have finished ([The loss dump](#the-loss-dump)) |
+| `port/render/rd_loss_pick.h`, `rd_loss_pick.c`, `rd_loss_keep.h`, `rd_loss_keep_block.h`, `rd_loss_keep_block.c` | which frame the loss dump writes, the memory copies of frames the GPU may not have finished and the blocks they go into ([The loss dump](#the-loss-dump)) |
 | `port/render/rd_vu_rec_early.c`, `rd_vu_rec_early.h`, `rd_early_plan.c`, `rd_early_plan.h` | the first 3D pictures' allocations made at start-up, and their memory bound ([Made at start-up](#made-at-start-up)) |
 | `port/render/rd_dump.c`, `rd_dump_mem.h`, `rd_png.c` | frame dumps (the slow-scene dump's measure and copy into the worker's block: [ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-stall-and-logging-lines-issues-123-and-179)); a minimal PNG writer |
 | `port/render/tools/rd_replay_tool.c` | [the replay tool](ARCHITECTURE.md#terms) |
@@ -1193,22 +1193,46 @@ lists after the newest numbered submission when there is one, else the newest nu
 failed submit was none of a picture's: a capture, a readback or a check). The frame before it is the previous replay's in the pass ring's table. To have
 the lost frame, `rd_begin_frame` copies a frame to memory before the ring reuses its slot when the
 backend still has a submission open at or after that frame and a slot wait has blocked 100 ms or
-more (`RhiGpuProgress.waitingNs`; `rd__loss_keep_recycle`, an ordinary dump held as bytes) and a
+more (`RhiGpuProgress.waitingNs`; `rd__loss_keep_recycle`, an ordinary dump held as bytes), counting
+on Vulkan only the part of the wait the GPU's current picture has run (`RhiGpuProgress.headNs`, the
+time since the submitting threads last saw the GPU finish a submission; `rd_loss_keep_stalled_head`:
+with two pictures in flight a wait spends its first part queued behind the picture before, counted
+as `RD_LOSS_KEEP_NOT_HEAD` and not copied; a picture stuck on the GPU for 100 ms, a hang, still
+counts in full; with the time unknown, the other backends and before the first finish, the whole
+wait counts) and a
 picture of that frame was handed to a replay (`rd__frame_sent`, set where the replay is asked for in
 `rd_thread.c`; with Frame rate Original a picture the gate left out was never on the GPU and is
-not copied, counted as `not copied: never handed to the GPU`). The copy waits only for the reads
+not copied, counted as `not copied: never handed to the GPU`). The copy goes into a block the dump
+worker made with its pages touched (`rd_loss_keep_block.h`, the window's host
+`port/platform/window_keep_block.c` over `dump_auto.h` `ico_dump_auto_keep_*`, a slot of its own
+beside the slow-scene dump's): asked for only after the run's first copy, sized from the last copy
+(an eighth more and 1 MiB, at most 16 MiB), asked again after each copy into it, given back while
+the device's memory is under the free-memory floor or after the system's low-memory signal (read
+at most once a second while a block is held, asked or wanted). With none ready the frame is
+measured and written into ONE allocation of exactly its size (`dumpFrameMemMax`, as every memory
+dump now is): no buffer is grown by doubling on the game thread (until then 27-49 ms a copy on a
+Mali-G52). The copy waits only for the reads
 of the pictures handed over (`dumpFrame`'s reads-only mode, `rd_thread_reads_wait`; `rd_dump.c`
 lists each record it reads and who writes it when), not for the render and submit threads' work
 in flight, so a stalled picture's GPU work does not hold the game step. In steady play no wait
 blocks that long, so nothing is copied, even with frames in flight; the lost frame is held only when a stall preceded the loss (both reports
 stalled first), otherwise the pick falls back to the ring's frames as before. The bounds: at most 4
-copies of at most 16 MiB (the build stops there; a dump is about 7 MB), freed once the first open
+copies of at most 16 MiB and one block not used yet (a frame over it is measured and not copied; a
+dump is about 7 MB), freed once the first open
 submission is two frames past them, at most 4 attempts in any 64 recycled frames (every attempt
 counted), none for 600 after one too big, none on a backend that does not track its submissions.
 The loss dump stops the copies (a copy in progress waited for up to 3 s, else the copies are not
 used). The log names what it did: `rd: loss keep: frame N copied to memory ...; 1 kept (13299 KB),
-copy 1 of 619 recycled frames (0 not copied: never handed to the GPU); copy 5.1 ms, reads wait
-0.0 ms` (the first eight copies, then every hundredth), `rd: loss keep: frame N not copied: the
+copy 1 of 619 recycled frames (0 not copied: never handed to the GPU); copy 5.1 ms (into the dump
+worker's block of 15360 KB), reads wait 0.0 ms` (or `measured and allocated here`; the line also
+names the GPU's current picture's time; the first eight copies, then every hundredth), one line a
+10 s window with anything in it, `rd: loss keep: in 10.0 s: 3 copies (mean 4.2 ms, longest 5.1
+ms; 2 into a block the dump worker made, 1 measured and allocated here), 0 frames not copied as
+never handed to the GPU, 41 slot waits of 100 ms or more not counted as stalled (the GPU's current
+picture had run less: the wait was queued behind the picture before)`, a block given back under
+the floor (`rd: loss keep: the dump worker's block for the next copy given back (N MB available of
+T MB, floor F MB): ...`) or not made (`rd: loss keep: the dump worker could not make a block of N
+KB ...`), the first eight then every hundredth, `rd: loss keep: frame N not copied: the
 slot wait had blocked 105 ms and the backend's first open submission is frame O (newest tag replay
 R frame T), but no picture of frame N was handed to the GPU (a picture left out); n not copied so,
 c copies, of s recycled frames` (the first eight, then every hundredth) and, at the loss,

@@ -686,7 +686,8 @@ const char *rd_vu_record_mode(void);
  * it takes back to zero; the length written */
 size_t rd_vu_share_text(char *out, size_t cap, unsigned n);
 /* The same line's clause of the zero-area cull (rd_vu_zero.h): "; zero-area
- * cull: D draws a picture culling, T triangles; refused a picture: ...;
+ * cull: D draws a picture culling, T triangles in culling draws (how many
+ * it removed is not measured); refused a picture: ...;
  * checked P pictures: C of S triangle slots culled, M differ", or
  * "; zero-area cull held|off (why)"; the block's counts back to zero */
 size_t rd_vu_zero_text(char *out, size_t cap, unsigned n);

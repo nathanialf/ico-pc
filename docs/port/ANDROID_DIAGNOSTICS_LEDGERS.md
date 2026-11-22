@@ -241,6 +241,101 @@ poll apart, and the replay's GPU span. How long the present held past that span 
   submission of its replay `signalled at or before +T ms (its replay's last's; not seen apart)`),
   all from the stall's start; then `in flight at the stall's start: S seen, U not known`.
 
+### Every stall in a table, the GPU's speed, the battery and the memory events
+
+A log of the Mali-G52 phone had 156 stalls in the boat scene. The 109 that named the piece that
+grew most named it in about each piece's share of the GPU time (list 0 79, list 3 11, the present
+6, aura 5, before list 0 4, the reduction 3, list 5 1), so the pauses looked like the whole GPU
+slowing; its clock and load nodes are not readable there, its performance hints were refused and it
+offers no pipeline statistics, and the per-stall lines' rule left 15 and 25 stalls out in its two
+worst blocks. These lines answer from the log alone. None of them changes what the GPU or its
+driver is given: they read the records the renderer already makes (`RdPerfRecord`) and, on the log
+thread, files and one Java call.
+
+**The stalls against each piece's share** (`stall_coincide.h` `stall_share_text`, `window_stall.c`
+`stall_table_lines`, each 10 s block with a stall, after the present latency line). The piece a
+stall names is the one that grew most against its block median (`stall_pieces_judge`); a piece's
+share is its GPU time over the GPU spans of the block's timed pictures (the effects sit inside their
+lists' times, so the shares do not add up to 100 %). Pieces with a stall or 1 % of the GPU time,
+largest share first:
+
+`window: stalls against each piece's share of the GPU time (piece: stalls, their share of the
+stalls naming a piece, its share of the GPU time): 12 stalls, 10 naming a piece; list 0: 8, 80 %,
+48 %; list 3: 1, 10 %, 12 %; aura: 0, 0 %, 9 %; 2 naming none (240 timed pictures, 9850.0 ms of GPU
+spans)`
+
+Question: does a piece stall out of proportion to its work (its stall share well over its GPU share
+across blocks), or do the stalls follow the work (the shares alike: the GPU slows as a whole)?
+
+**The stall table** (`stall_table_text`, after the share line, 12 rows a line, `part k of n`): every
+stall of the block, none left out (the detailed `window: stall:` lines keep their rule). A row:
+
+`r553 s42 present 141 ms: list 0 88.1 ms x9.4; tris 31475 x1.05 of the median, x0.90 of the 2 s
+most; reduction 2.40/2.50/2.30, present 2.70/2.60/2.80 ms; battery -812 mA`
+
+the replay, the stage (`s?` not known), the stall (`present N ms`, or `pass N ms xF` against the
+pass's median), the piece that grew most with its time and factor (`no piece judged` where the
+replay was not timed or no piece had a median), the VU triangles against the block's median and
+against the most of any picture of the stage in the 2 s before it (`(no median)`, `none in the 2
+s before`), the reduction's and the present pass's GPU times in the stalled replay and the next two
+timed replays (`-` not timed), and the battery current of the last second where it is read. A row
+waits for its two timed replays after it; one still waiting at the block's end goes in the next
+block's table (`N of them from the block before`) and is written there with what it has. Past 256
+stalls a block the rest are counted (`N more past the 256 held`); at the run's end every row is
+written.
+
+Questions: was the stalled picture larger than its neighbours (the triangles against the 2 s
+most), and did the fixed work slow with it (below)?
+
+**The GPU's speed without its clock.** The reduction and the present pass are the same work every
+picture at one size, so their GPU times are a speed measure that needs no clock node. Per stall the
+table gives them in the stalled replay and the next two timed ones; per second the pictures line
+gains a second line ([Pictures a second](PLATFORM_DIAGNOSTICS.md#pictures-a-second)) with each
+second's medians: `per second (...): 42: 45.1/61.2k/2.40/2.68/81 ...`. Where the present pass also
+holds the wait for the display's image (a Mali's, the performance line's note), its time grows with
+that wait: the reduction is the cleaner one. Reading: a stall whose reduction is several times its
+usual time, and the next one's too, is the chip slow as a whole; a stall with the reduction at its
+usual time is that picture's own work.
+
+**The present intervals** (the third pictures line): `present intervals (the CPU's present returns):
+208 in the block, p50 40.1 ms, p90 80.3 ms, longest 148.2 ms; over 2 ticks 31, over 3 ticks 12,
+over 4 ticks 5 (a tick 20.0 ms; an interval in whole ticks, rounded)`, from one presented picture's
+present return to the next's on the CPU (not the display's timing: nothing is chained into the
+driver's present). The tick is the game's pace (20 ms at 50 Hz, so the game's 25 a second is 2
+ticks a picture).
+
+**The battery** (`power_read.h`, `window_stall.c` `power_tick`; Android, read only, once a second on
+the log thread). Readable or not is said once:
+
+`window: battery: read once a second on the log thread from /sys/class/power_supply/battery
+(current, voltage, level, status)`, or `window: battery: /sys/class/power_supply not readable
+(errno 13): read once a second on the log thread from Android's BatteryManager` (the app's Java side,
+`IcoActivity.batteryState`), or `window: battery: not readable (...): no battery lines`.
+
+Each block: `window: battery each second: current -812 -790 -805 mA, voltage 3850-3862 mV, level 67
+%, discharging (sysfs; the current's sign as the device gives it)`. The kernel gives microamps and
+BatteryManager says microamps too, but some phones give milliamps in the same field, and the sign
+convention varies by phone: read the changes, not the absolute value. A failed read later is
+silent (no sample that second).
+
+**The memory events** (`vmstat_read.h`, `/proc/vmstat` read once a second on the log thread). Once:
+`window: memory events: /proc/vmstat read once a second on the log thread (a block's line from the
+second block on)` or `... not readable (errno 13): no memory events lines`. Each block after the
+first: `window: memory events in the block (/proc/vmstat): direct reclaim stalls 0, compaction
+stalls 0, major page faults 123, swap-ins 0, swap-outs 0, refaults 45` (`allocstall*` summed over
+the zones, `compact_stall`, `pgmajfault`, `pswpin`, `pswpout`, `workingset_refault*` summed; `not in
+the file` for a count the kernel does not have).
+
+The stalls' causes and the line that confirms or rejects each:
+
+| Hypothesis | Confirmed by | Rejected by |
+| --- | --- | --- |
+| The GPU slows after idle (its clock drops between pictures) | Stall rows whose stalled replay's reduction is several times its usual and the next two back to usual, after a picture with a long idle before it (the `window: stall:` line's `the GPU idle ... before its work`) | The reduction at its usual time in the stalled replay |
+| The tiler's memory grows (a larger picture spills) | Stall rows with the triangles over 1 of the 2 s most, and the stall share following list 0 above its GPU share | The triangles at or under the 2 s most in the stalled pictures |
+| Memory or swap pressure | A block with stalls has direct reclaim or compaction stalls, swap-ins or major faults far above the quiet blocks' | The memory events at the quiet blocks' level in the stall blocks |
+| A power limit or the vendor's frame governor | The battery current falls (a smaller draw) in the stall stretches while the reduction grows; the stalls follow the GPU shares | The current steady across the stretches while the reduction grows |
+| Another program on the GPU | The reduction and the present pass grow in the stalled replay with no change in the triangles, no memory events, and the current up | The fixed-work passes at their usual time in the stalls |
+
 ### The present latency line
 
 `port/platform/present_latency.h`, every block after the present stalls' line, on every platform

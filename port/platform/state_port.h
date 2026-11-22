@@ -45,6 +45,9 @@
  *   difficulty.c    the journey's difficulty record (FRESH: a state made
  *                   before it existed builds the record from its own keys
  *                   text, ico_difficulty_state_loaded)
+ *   zoom_toggle.c   Zoom type's latch: zoomed in, the last level, source
+ *                   and camera mode (FRESH: a state made before it existed
+ *                   keeps this run's words)
  *
  * Not registered: the scheduler's tables (ico_sched_state_save/restore
  * move their pointers themselves: a scan of them here would move them
@@ -83,5 +86,6 @@ int ico_host_loop_state_register(void);    /* host_loop.c */
 int ico_audio_state_register(void);
 int ico_sound_state_register(void);      /* sce/libsndn2/sound.c: the EE sequencer's .bss */
 int ico_difficulty_state_register(void); /* port/game/difficulty.c: "difficulty.record" */
+int ico_zoom_state_register(void);       /* port/game/zoom_toggle.c: "zoom_toggle.state" */
 
 #endif /* ICO_PLATFORM_STATE_PORT_H */

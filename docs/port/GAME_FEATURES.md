@@ -13,6 +13,7 @@ them are [UI.md](UI.md)'s; the picture options are [DISPLAY.md](DISPLAY.md)'s.
 | `port/game/options.h`, `options.c` | the gameplay options, their config keys and defaults, the mirror flag per save slot, the stereo/mono choice |
 | [HARD_MODE.md](HARD_MODE.md) | the difficulty's levers and presets: every row by Customize page, the knock-down limit, Permadeath, the presets as shipped and the mechanisms not exposed |
 | `port/game/door_grace.h`, `door_grace.c` | the doorway fix's arm and arrival grace |
+| `port/game/zoom_toggle.h`, `zoom_toggle.c` | Zoom type's latch and its save-state block ([Zoom type](#zoom-type)) |
 | `port/game/no_shadows.h`, `no_shadows.c` | No Shadows' counters and log lines for its game-side hooks ([No Shadows](#no-shadows)) |
 | `port/game/ico_rows.h`, `ico_rows.c` | Developer > Free movement and the Ask Yorda for a hint binding: the row's value (Developer mode ANDed in), the hint button's press latch |
 | `port/game/yorda_trip.h`, `yorda_trip.c`, `yorda_trip_live.c`, `yorda_trip_source.c` | Yorda trips: the rule (the main gate scene's 3 s count), the game's side (the stage load's motions, the run-pulled tick), her fall's motions read from the disc |
@@ -70,6 +71,7 @@ defaults are [CONFIG.md](CONFIG.md#gameplay)'s; the differences from the PS2 are
 | `[gameplay] natural_chains` | `BgAnimation.c` (window build) |
 | `[gameplay] skip_opening` | `kanbanBoot.c`, `op.c`, `main_host.c` (its log line) |
 | `[gameplay] hold_type` | `mcard.c`, `layout_action.c`, `settings.c` |
+| `[gameplay] zoom_type` | `zoom_toggle.c`, from `camera-root.c` and `camera-ico2.c` |
 | `[variants] *` (Gameplay, Gameplay > Chains, Gameplay > Cutscenes, the Debug menu; the ten difficulty rows are the journey's record, read through `variants.c`) | `port/game/variants.c`; the game hooks in `debug.c`, `enemy.c`, `enemy_act.c`, `queen.c`, `lws_kyomi.c`, `girl.c`, `commonact.c`, `boyact.c`, `weapon.c` ([Game variants](#game-variants)); `settings.c` (the Debug menu row); `gamestate.c` (the achievements rule) |
 | `[gameplay] mirror` | `pad_host.c`, `audio_host.c`, rd, `photo_ui.c` |
 | `[developer] free_movement` | `boyact.c` (the four boy control loops), `gamestate.c` |
@@ -354,7 +356,8 @@ rd_chain_find(p->group)` and `bgaHostNatural = bgaHostChain != 0 && ico_opt_natu
 `bga_CalcObject` reads them at the Null and at its children. The plane travels from
 `RegistPacket.c`'s `regHostMesh` to `rd_draw_vu_mesh`. Being a draw-only change, the key is not
 among the keys a pad recording's header records (`port/platform/sim_keys.c` (`ICO_SIM_KEYS`);
-`port/game/options.h`, header comment). `hold_type` is recorded, as R1's meaning changes the simulation.
+`port/game/options.h`, header comment). `hold_type` is recorded, as R1's meaning changes the simulation,
+and `zoom_type` is too, as R2's does.
 
 ### Mirror
 
@@ -443,6 +446,37 @@ reached only on a disc whose layout tables are not recognised, calls `ico_opt_ho
 which writes the key and saves at once (`ico2/common/src/layout_action.c` (`la_game_option`, case
 318); `port/game/options.c`). The row shows on every disc ([Options on each
 disc](#options-on-each-disc)).
+
+### Zoom type
+
+`[gameplay] zoom_type` is `"hold"` (the default on every disc: the game's own, the camera zooms in
+while R2 is held) or `"toggle"` (a press of R2 zooms in, the next zooms out); another word reads as
+`"hold"`, logged once, and the type in force is logged when it changes (`options: zoom type
+<hold|toggle>`). Each copy of `SetCameraMatrix` (`ico2/omori/src/camera-root.c`: the European body
+and `_ntsc`, `_aug6`, `_jun26`) ends in a zoom block that tests a script's zoom request
+(`zoomRequest`, a step of its own) and then the pad's R2 bit (`p->now & 2`: the boy's pad, or the
+camera's own `iosPadRead` pad with no boy or, on the European body, during a cutscene's
+look-around, `useDemo`). The port replaces that test with `held = ico_zoom_held(p->now & 2,
+zoomRequest != 0, live, source, cameraMode)` (`port/game/zoom_toggle.c`). `live` is
+`IsAbleBoyControl()` for the boy's pad and `iosPadEnableGet()` for the camera's own (the European
+body: `|| debug_hand_camera`, as its `iosPadRead` keeps R2 while the pad is off). Under Hold it
+returns the bit unchanged, tick for tick. Under Toggle a press, the level against the previous
+tick's (not the pad's `trg`: the boy's loop skips its pad read on its `noStick` paths and a stale
+`trg` would flip every tick there), flips a latch, and the latch is the test; it clears on a
+script's zoom, on `!live` (the boy's control off, as a script's `scpBoyControlReadDisable` sets it, a game over's
+among them; the pad off),
+on a new source (boy, camera pad, look-around) or a new `cameraMode` (a path camera starting or
+ending), and at every stage start (`ico_zoom_reset` in `InitCamera` and `InitCamera_jun26`); a
+level held through a clear is not a press after it. A pause keeps it (no object ticks while
+`systemStatus[5]` is set, `ico2/fumi/isys/obj_manager.c`, and nothing sets the camera's
+`pauseExempt`). The June 2001 demo's look-around (`SetCameraMatrix_Ico2_jun26` in
+`ico2/omori/src/camera-ico2.c`, which stops the stick look while R2 is held) reads
+`ico_zoom_wanted(pad[0].now & 2)`: the bit under Hold, the latch under Toggle. The latch is the
+port's, not a game variable (a new game global would change the game data's layout and refuse every
+older save state): one FRESH save-state block, `zoom_toggle.state`. The row is Options > Controls >
+Zoom type, after Hold type, on the title and the pause menu, every disc (`port/ui/settings.c`).
+`zoom_toggle` (`port/game/test/zoom_toggle_test.c`) holds the rules; `options_<slug>` the hooks (a
+text scan).
 
 ### Game variants
 
@@ -641,6 +675,7 @@ hold the rest.
 | Main: Game language's community entries (Русский (bob-ttz), Русский (cobra838), Português (Brasil) (ichagas7)) | W | H | H | H | H | H | H | the row's own rule (`has_game_language`); in force only there with the game in English (`ui_settings_text_language`), so `[game] text_language` changes nothing on the other discs ([Community translations](#community-translations)); `subtitles_ru`, `subtitles_ru_<slug>` (jpn, kor, cn), `subtitles_ru_cobra838`, `subtitles_ru_cobra838_<slug>`, `subtitles_pt_br`, `subtitles_pt_br_<slug>`, `jimaku_text` |
 | Main: Menu language | W | W | W | W | W | W | W | Auto is `ui_lang_default`, the sheets `menu_sheet`; `settings_<slug>`, `settings_render_<slug>` |
 | Controls: Hold type | W | W | W | W | W | W | W | `hold_type_own`, the default `"disc"`: A on pal/jpn/kor/cn, B on ntsc/aug6/jun26 (the 2001 arms `_ACTCommonMailTest_<disc>` read `optionControlType` in the port); `settings_discs`, `options_<slug>`, `save` (per disc) |
+| Controls: Zoom type | W | W | W | W | W | W | W | the four `SetCameraMatrix` copies' zoom blocks (`camera-root.c`) and the June 2001 demo's look-around (`camera-ico2.c`), default `"hold"` on every disc; `settings_discs`, `options_<slug>`, `zoom_toggle` |
 | Controls: Circle goes back | W | H | H | W | W | W | H | `pad_back` is Triangle (`lt_ext_has_circle_back`); the 2001 arms cancel through `LA_BACK` too; `settings_discs`, `settings_<slug>` |
 | Picture: Brightness; Controls: Vibration, Button configuration (pause) | W | W | W | W | W | W | W | `systemStatus[11]`, `iosPadActRequestEnable`, `layout_key_config` (`la_key_config` and its 2001 arms go back to Settings); `settings_discs` |
 | Picture: Downsampling | W | W | W | W | W | W | W | the port's own renderer option (`[video] downsample`, `ico_video_downsample`), no game hook; `options`, `settings` |

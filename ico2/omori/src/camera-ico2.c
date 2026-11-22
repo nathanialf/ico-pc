@@ -25,6 +25,10 @@
    camera, a hard cut for the presenter's interpolation
    (port/game/video_options.c; a counter no game state reads) */
 extern void ico_video_camera_cut(void);
+/* PC port: Zoom type
+   (port/game/zoom_toggle.h): the June 2001 demo's look-around stops while
+   the camera is zoomed in, R2 held or toggled */
+extern int ico_zoom_wanted(int held);
 static void *ReadCameraSet(struct CamSetFile *f, int stage);
 
 /* a loaded camera set: the file header, then the group records */
@@ -1692,7 +1696,7 @@ static void SetCameraMatrix_Ico2_jun26(int flag)
            the bodies' two temporaries and the shared -0.4f), and the clamp
            (its label puts the dead zone's first 0.0f in $f0). aug6's TRFILE
            has no code on the lines of the clamp and of the response. */
-        if (pad[0].now & 2) {
+        if (ico_zoom_wanted(pad[0].now & 2)) { /* PC port: R2 held or toggled */
             mode = 0;
         }
         if (mode) {

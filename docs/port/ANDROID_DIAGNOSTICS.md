@@ -13,16 +13,17 @@ screen recording the app's Java side reports. The window's lines that use them a
 | `port/platform/thread_stat.c`, `thread_stat.h` | a thread's time on a core and waiting for one from the kernel's `schedstat` (`thread_stat_test`; Linux and Android) |
 | `port/platform/cpu_place.c`, `cpu_place.h` | the game thread's CPU time (`cpu_place_thread_cpu_ns`) and the threads line (`cpu_place_threads_format`; `cpu_place_test`) |
 | `port/platform/thermal_text.c`, `thermal_text.h` | the thermal status names and the thermal and screen recording lines (`thermal_text_test`, every platform) |
-| `port/platform/android/host_android.c` | `ico_host_thermal` and the two native methods the Java listeners call |
+| `port/platform/android/host_android.c` | `ico_host_thermal`, `ico_android_battery` (the battery where its sysfs files are not readable) and the two native methods the Java listeners call |
 | `port/platform/window_stall.c`, `window_stall.h` | the window's side: the open line, the block lines, the around lines, the present stall lines |
 | `port/platform/present_stall_block.c`, `present_stall_block.h` | the present stalls per 10 s block and per run (`present_stall_block_test`, every platform) |
 | `port/render/rd_perf_clock.c`, `rd_perf_clock.h` | a replay's GPU clock against the CPU's and the `rd: GPU clock` line (`rd_perf_clock_test`, every platform; [Issue 123: what the GPU did during a stall](#issue-123-what-the-gpu-did-during-a-stall)) |
 | `port/rhi/vk/vk_tsclock.c`, `vk_range.c` | the slot's clock (submit times, calibrated timestamps, the polled wait's trace) and the ranges robust access does not cover (`rhi_vk`) |
-| `android/app/src/main/java/com/defnf/icopc/IcoActivity.java` | the thermal getters and the two listeners |
+| `android/app/src/main/java/com/defnf/icopc/IcoActivity.java` | the thermal getters, the battery getter (`batteryState`) and the two listeners |
 | `port/platform/attempt_ledger.c`, `attempt_ledger.h` | the attempt ledger's rows and lines, in `ico_thread` so the renderer and the window both count into it (`attempt_ledger_test`, every platform; [The attempt ledger](ANDROID_DIAGNOSTICS_LEDGERS.md#the-attempt-ledger)) |
 | `port/platform/present_latency.c`, `present_latency.h` | the present's latency in a block (`present_latency_test`, every platform; [The present latency line](ANDROID_DIAGNOSTICS_LEDGERS.md#the-present-latency-line)) |
 | `port/render/rd_perf_sub.h` | a replay's submissions as its record carries them (the per-stall line's, issue 123) |
 | `port/platform/stall_coincide.c`, `stall_coincide.h` | what a stall coincided with: the pass medians, the rule, the classes, the parsers of `/proc/pressure/memory` and `/proc/self/status`, the lines (`stall_coincide_test`, every platform; [What a stall coincided with](ANDROID_DIAGNOSTICS_LEDGERS.md#what-a-stall-coincided-with)) |
+| `port/platform/stall_coincide.c` (the table), `power_read.c`, `vmstat_read.c` | the stalls against the pieces' shares and every stall's row; the battery's and `/proc/vmstat`'s parsers and lines (`stall_coincide_test`, `power_read_test`, `vmstat_read_test`, every platform; [Every stall in a table](ANDROID_DIAGNOSTICS_LEDGERS.md#every-stall-in-a-table-the-gpus-speed-the-battery-and-the-memory-events)) |
 | `port/render/rd_perf_more.c`, `rd_perf_more.h` | the cost counters' block sums and the costs and compare lines (`rd_perf_more_test`, every platform; [The cost counters](ANDROID_DIAGNOSTICS_LEDGERS.md#the-cost-counters)) |
 | `port/render/rd_perf_hooks.c`, `rd_perf_hooks.h` | the cost counters' increments: SCENE's pass breaks, the two-pass blend, the screen boxes by list |
 
@@ -344,8 +345,18 @@ question it decides:
   it, as a replay's timestamps come two or more replays later, after the ring has dropped its
   frame. A replay whose frame has left the ring by the next look is passed over for the next one
   (`window: slow scene: frame F had left the renderer's ring before it was looked at: ...`, the
-  first 8 times and every 100th); an arm that finds no such replay is dropped at the next block's
-  end, where the rule runs again. The file is that one frame and a copy of the log,
+  first 8 times and every 100th). While armed, the heaviest replay seen whose frame the renderer
+  held is kept as a stand-in (a heavier one replaces it, and any held one does once its frame has
+  left the ring; `port/platform/slow_arm.c`), so an arm still on at the next block's end (the
+  next block lighter than the slow one, as after issue 179's first boat block) takes the stand-in
+  when the ring still holds it: `window: slow scene: no replay after the slow block reached its
+  mean vertex work (N looked at, the heaviest X thousand against the mean Y thousand): frame F
+  (Z thousand), the heaviest seen that the renderer still holds, is taken at the block's end`, a
+  dump counted as every other. Otherwise it is dropped there with its reason, the first 8 and
+  every 100th: `window: slow scene: the armed dump is dropped at the block's end: no replay
+  reached the slow block's mean vertex work (...) and none seen is still held (n dropped so far)`
+  or `... no replay finished while it was armed (...)`; the rule runs again there. A frame that
+  has left the ring cannot be taken (the renderer keeps the last three). The file is that one frame and a copy of the log,
   `logs/slow-<date>-<time>.zip`, pruned to the newest three, and the newest goes into a crash or
   hang report and the rc share menu's set. Written in releases. What to send: the log and the
   zips; replay one with `rd_replay_tool` as a loss dump (the frame is the zip's first
@@ -1016,7 +1027,11 @@ begins, so the last line says which one a hang of the handler itself is in:
   the last three frames only; a frame the GPU had not finished when the ring reused its slot is
   copied to memory first while a slot wait has blocked 100 ms or more (`rd: loss keep: frame N
   copied to memory ...`, the first eight and every hundredth), at most 4 copies of at most 16 MiB,
-  at most 4 tries in any 64 frames, nothing in steady play. So the lost frame is held only when a
+  at most 4 tries in any 64 frames, nothing in steady play. On Vulkan only the part of the wait
+  the GPU's current picture has run counts (a wait queued behind the picture before is counted
+  in the 10 s line `rd: loss keep: in 10.0 s: ...` as `slot waits of 100 ms or more not counted
+  as stalled`, not copied; a picture stuck on the GPU still is), and the copy goes into a block
+  the dump worker made, else into one allocation of the frame's measured size ([RENDER.md](RENDER.md#the-loss-dump)). So the lost frame is held only when a
   stall came before the loss (as in both reports); otherwise the frames the ring holds are written,
   as before. `copies in memory: not used` says a copy in progress did not finish in time. A dump taken from the ring alone, for a loss at frame 129, held frames 132 and 131 and
   so replayed the wrong frame in the next start's bisect; a line `the lost frame F is not held any more ... writing
@@ -2158,7 +2173,9 @@ counters in the hot path.
   bytes are those of the old copy for the same frame. The game-thread figure is both steps (the
   measure and the copy, each with its wait for the reads), the worker figure the block's making
   and the zip. Lines of their own: `window: slow-scene dump: frame F had grown past
-  the worker's block of N bytes: copied into a block grown here instead` (the old way, once),
+  the worker's block of N bytes: copied into a block grown here instead` (the old way, once: the
+  frame measured and written into one allocation of its size since the loss keep's change; the
+  line's words are older),
   `window: slow-scene dump: not written: the worker could not make a block of N bytes`, and
   `window: slow-scene dump: not written: no frame of the scene could be copied in 10000 ms (the
   worker's block of N bytes given up)`, each ending `; not counted, the next slow block arms one again` (the dump is not counted as made, the dump before's work and stage restored, `window_dump_auto_slow_lost`; at most three such re-arms a run, after which `; counted (the run's re-arms used up)`), and `... not written: frame F could not be copied; ...` when the copy into a block grown here failed too. The skin check's capture is unchanged.

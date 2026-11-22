@@ -409,6 +409,11 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_VAL_HOLD_DISC_B] = "ディスクのまま（B）",
     [UI_STR_HOLD_TYPE_NOTE] =
         "A：R1を押している間、ヨルダと手をつなぎます。B：R1を1回押すと手をつなぎ、もう一度押すと手を離します。",
+    [UI_STR_OPT_ZOOM_TYPE] = "ズーム設定",
+    [UI_STR_VAL_ZOOM_HOLD] = "押し続ける",
+    [UI_STR_VAL_ZOOM_TOGGLE] = "切り替え",
+    [UI_STR_ZOOM_TYPE_NOTE] =
+        "押し続ける：R2を押している間、ズームします。切り替え：R2を1回押すとズームし、もう一度押すと元に戻ります。",
     [UI_STR_OPT_BUTTON_PICTURES] = "ボタン表示",
     [UI_STR_BUTTON_PICTURES_NOTE] =
         "メニューとフォトモードに表示するボタンです。自動は最後に使ったコントローラーに合わせます。",

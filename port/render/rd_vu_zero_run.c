@@ -815,7 +815,9 @@ size_t rd_vu_zero_text(char *out, size_t cap, unsigned n)
         return k < 0 ? 0u : ((size_t)k < cap ? (size_t)k : cap - 1u); /* what was written */
     }
     const double d = n ? (double)n : 1.0;
-    int at = snprintf(out, cap, "; zero-area cull: %.0f draws a picture culling, %.0f triangles",
+    int at = snprintf(out, cap,
+                      "; zero-area cull: %.0f draws a picture culling, %.0f triangles in culling "
+                      "draws (how many it removed is not measured)",
                       (double)c.draws / d, (double)c.tris / d);
     bool any = false;
     for (int i = 0; i < RD_VU_ZERO_REASONS && at > 0 && (size_t)at < cap; i++) {

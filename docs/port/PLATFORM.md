@@ -55,7 +55,7 @@ run explain itself. [ARCHITECTURE.md](ARCHITECTURE.md) places this layer among t
 | `port/platform/startup_retry.c`, `startup_retry.h` | the steps the relaunch takes after a graphics driver crash or a lost graphics device |
 | `port/platform/hotkeys.c`, `hotkeys.h` | F11 and F12 |
 | `port/platform/dump_zip.c`, `dump_zip.h` | F12's zip and the aspect sweep's zip |
-| `port/platform/dump_auto.c`, `window_dump_auto.c` | the automatic dumps' worker, and the block it makes before a slow-scene dump's copy ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md)) |
+| `port/platform/dump_auto.c`, `window_dump_auto.c`, `window_keep_block.c`, `slow_arm.c` | the automatic dumps' worker, the blocks it makes before a slow-scene dump's copy and for the renderer's loss-keep copies, and which replay an armed slow-scene dump takes ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md)) |
 | `port/platform/backup.c`, `backup.h` | Options > Extras > Back up your data and Restore from a backup: the zip of the user folder's data, its manifest and checks, the unpacking and the start's swap ([Backups](#backups); pure C, tested everywhere) |
 | `port/platform/backup_host.c`, `backup_host.h` | the two rows' host in the window build: the file dialogs, the work on its own thread, the end of the run after a restore (not on iOS) |
 | `port/platform/steam_shortcut.c`, `steam_shortcut.h` | Settings > Extras > Add to Steam (Windows and Linux; not offered on macOS) |
@@ -1100,6 +1100,7 @@ what each owner registers and why):
 | `host_loop.c` | `host_loop.vsyncs`, `host_loop.field` | |
 | `port/audio/audio_host.c` (`ico_audio_state_register`) | `spu2.state` (the SPU2: RAM, cores, register shadow, time, event queue, DMA channels and their callbacks, the IRQ callback, the reverb presets; not the render's scratch or the statistics), `spu2_sd.time`, `spu2_sd.effect_attr`, `mix_gain.tag`, `mix_gain.cache`, `mix_gain.ready` (the gains themselves are the player's settings), `sndn2.host` (the driver's pages, counters, reply and pitch table), `sndn2.carry`, `sndn2.staging`, `sndn2.adpcm`, `sndn2.queue`, `sndn2.q_write`, `sndn2.q_read`, `sndn2.pending`, `sndn2.pcm`, `audio.vsync_index` (which vsyncs render 801 frames at 59.94 Hz) | AUDIO; SCAN on `spu2.state` and `sndn2.host` |
 | `port/game/difficulty.c` | `difficulty.record` (the journey's difficulty) | FRESH |
+| `port/game/zoom_toggle.c` | `zoom_toggle.state` (Zoom type's latch: zoomed in, the last R2 level, its source and the camera mode; [GAME_FEATURES.md](GAME_FEATURES.md#zoom-type)) | FRESH |
 | `sce/libsndn2/sound.c` (`ico_sound_state_register`) | the EE sequencer's .bss: `sound.vab`, `sound.slot`, `sound.seq`, `sound.com`, `sound.packet`, `sound.iop2ee`, `sound.iop2ee_p`, `sound.se`, `sound.head`, `sound.client`, `sound.vab_hd`, `sound.seq_body`, `sound.hd_rel` (compiled into the sound library, so outside the game's data ranges) | AUDIO; SCAN on the pointer blocks |
 
 73 blocks, over 4 MB, most of it IOP RAM and the SPU2's RAM (2 MB each). SCAN marks a block that may hold host addresses (the

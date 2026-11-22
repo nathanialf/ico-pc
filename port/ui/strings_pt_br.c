@@ -907,4 +907,10 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_OPT_BUTTON_PICTURES] = NULL, /* "Button pictures" */
     /* "The buttons shown in menus and photo mode. Auto follows the controller you used last." */
     [UI_STR_BUTTON_PICTURES_NOTE] = NULL,
+    /* ---- new since v0.11.14: English until translated ---- */
+    [UI_STR_OPT_ZOOM_TYPE] = NULL,   /* "Zoom type" */
+    [UI_STR_VAL_ZOOM_HOLD] = NULL,   /* "Hold" */
+    [UI_STR_VAL_ZOOM_TOGGLE] = NULL, /* "Toggle" */
+    /* "Hold: the camera zooms in while you keep R2 held. Toggle: press R2 once to zoom in, press again to zoom out." */
+    [UI_STR_ZOOM_TYPE_NOTE] = NULL,
 };

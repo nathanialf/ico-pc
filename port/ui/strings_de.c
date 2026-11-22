@@ -417,6 +417,11 @@ const char *const
             [UI_STR_VAL_HOLD_DISC_B] = "Wie die Disc (B)",
             [UI_STR_HOLD_TYPE_NOTE] =
                 "A: R1 gedrückt halten, um Yordas Hand zu halten. B: R1 einmal drücken, um ihre Hand zu nehmen, erneut drücken zum Loslassen.",
+            [UI_STR_OPT_ZOOM_TYPE] = "Zoom-Typ",
+            [UI_STR_VAL_ZOOM_HOLD] = "Halten",
+            [UI_STR_VAL_ZOOM_TOGGLE] = "Umschalten",
+            [UI_STR_ZOOM_TYPE_NOTE] =
+                "Halten: Die Kamera zoomt, solange R2 gedrückt bleibt. Umschalten: R2 einmal drücken zum Heranzoomen, erneut drücken zum Herauszoomen.",
             [UI_STR_OPT_BUTTON_PICTURES] = "Tastenbilder",
             [UI_STR_BUTTON_PICTURES_NOTE] =
                 "Die Tasten in Menüs und im Fotomodus. Automatisch folgt dem zuletzt benutzten Controller.",

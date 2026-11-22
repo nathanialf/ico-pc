@@ -485,11 +485,13 @@ static void t6(void)
     rd__vu_zero_shared_given_up();
     rd__vu_zero_shared_given_up();
     (void)rd_vu_zero_text(buf, sizeof(buf), 2);
-    CHECK(strcmp(buf, "; zero-area cull: 1 draws a picture culling, 75 triangles; refused a "
-                      "picture: velocity 1; shared lists given up a picture: 1") == 0,
+    CHECK(strcmp(buf, "; zero-area cull: 1 draws a picture culling, 75 triangles in culling draws "
+                      "(how many it removed is not measured); refused a picture: velocity 1; "
+                      "shared lists given up a picture: 1") == 0,
           "=1 text: %s", buf);
     (void)rd_vu_zero_text(buf, sizeof(buf), 2);
-    CHECK(strcmp(buf, "; zero-area cull: 0 draws a picture culling, 0 triangles") == 0,
+    CHECK(strcmp(buf, "; zero-area cull: 0 draws a picture culling, 0 triangles in culling draws "
+                      "(how many it removed is not measured)") == 0,
           "the block reset: %s", buf);
     /* no module made without a device (and none before a try) */
     CHECK(rd__vu_zero_variants_made() == 0u, "%u zero-area modules made without a device",

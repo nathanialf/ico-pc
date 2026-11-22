@@ -12,6 +12,9 @@
 # for its constants and CLUT order only (nothing of rd is linked)
 # door_grace.c: the doorway fix's arm and arrival grace ([gameplay] door_fix),
 # called by the exit check in ico2/fumi/src/boyact.c
+# zoom_toggle.c: Zoom type's latch ([gameplay] zoom_type, zoom_toggle.h) and its
+# save-state block, called by the camera's zoom blocks in
+# ico2/omori/src/camera-root.c and camera-ico2.c
 # variants.c: the game variants' values ([variants]), their achievements rule,
 # the debug switches and debug-menu opener the game binds, the hint rule and the
 # enemy row reader (variants.h); it names no game symbol (the game library is
@@ -25,7 +28,8 @@
 # sidecar, difficulty.toml.  Neither names a game symbol.  no_shadows.c: No
 # Shadows' counters and log lines for its game-side hooks (no_shadows.h).
 add_library(ico_options STATIC options.c video_options.c photo_mode.c appearance.c door_grace.c
-            variants.c yorda_trip.c ico_rows.c difficulty.c difficulty_file.c no_shadows.c)
+            variants.c yorda_trip.c ico_rows.c difficulty.c difficulty_file.c no_shadows.c
+            zoom_toggle.c)
 target_include_directories(ico_options PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
                            "${CMAKE_SOURCE_DIR}/port/render")
 target_compile_options(ico_options PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
@@ -42,7 +46,8 @@ endif()
 # main_host.c (text scans), and yorda_trips' four hooks in girl_act.c (this disc's mail
 # among them), its two in icoMisc.c and its simulation key (text scans), and shadows_together's
 # answer, count and log lines, its hook and eleven callers in enemy_act.c and its simulation key
-# (text scans).
+# (text scans), and zoom_type's key and the camera's four R2 tests, two resets and the June
+# 2001 look-around's test in camera-root.c and camera-ico2.c (text scans).
 add_executable(options_test test/options_test.c ../platform/host_config.c)
 ico_include_dirs(omori _ico_options_incs)
 target_include_directories(options_test PRIVATE ${_ico_options_incs}
@@ -54,7 +59,9 @@ target_compile_definitions(options_test PRIVATE ${ICO_GAME_DEFINITIONS}
     ICO_MAIN_HOST_SRC="${CMAKE_SOURCE_DIR}/port/platform/main_host.c"
     ICO_SIM_KEYS_SRC="${CMAKE_SOURCE_DIR}/port/platform/sim_keys.c"
     ICO_GIRL_ACT_SRC="${CMAKE_SOURCE_DIR}/ico2/fumi/src/girl_act.c"
-    ICO_ICOMISC_SRC="${CMAKE_SOURCE_DIR}/ico2/common/src/icoMisc.c")
+    ICO_ICOMISC_SRC="${CMAKE_SOURCE_DIR}/ico2/common/src/icoMisc.c"
+    ICO_CAMERA_ROOT_SRC="${CMAKE_SOURCE_DIR}/ico2/omori/src/camera-root.c"
+    ICO_CAMERA_ICO2_SRC="${CMAKE_SOURCE_DIR}/ico2/omori/src/camera-ico2.c")
 target_compile_options(options_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS} -Wno-unused-parameter -Wno-unused-variable
                        -Wno-unused-function)
@@ -478,6 +485,18 @@ target_compile_options(door_grace_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_POR
 target_link_libraries(door_grace_test PRIVATE ico_options)
 if(ICO_RUN_TESTS)
     add_test(NAME door_grace COMMAND door_grace_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
+# Zoom type (zoom_toggle.h): Hold is the game's R2 test tick for tick over
+# pseudo-random ticks; Toggle's press, release, second press and long hold;
+# every clear; both switches of the type; the June 2001 look-around's test;
+# the FRESH save-state block copied back. CPU only, no game sources.
+add_executable(zoom_toggle_test test/zoom_toggle_test.c ../platform/host_config.c)
+target_include_directories(zoom_toggle_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_options(zoom_toggle_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(zoom_toggle_test PRIVATE ico_options)
+if(ICO_RUN_TESTS)
+    add_test(NAME zoom_toggle COMMAND zoom_toggle_test)
 endif()
 
 # Free movement and Ask Yorda for a hint (ico_rows.h): the row's key and its

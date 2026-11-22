@@ -754,22 +754,19 @@ without the probe: row 1 as before), a relaunch counting nothing in the row but 
 - `pin_release_test.c` (ctest `pin_release`): the render and game threads' single-core pins let go at one picture a tick (`port/platform/pin_release.h`), with the owner's second release candidate's seconds (stuck: 30 pictures for 30 frames, 35 of 46 held, 21.3 ms against the blocks' median 8.5; good: 58 for 30, 18 of 86 held, 6.1 ms): stuck at its edges (one a tick at 9.0 ms not, 10.625 ms (1.25 x 8.5) yes, any CPU with one block of level, two a tick never, no CPU known never); good seconds nothing; a stuck one let go and traced pinned, its line word for word (and without a level); three stuck let go, nine good, a pause second counting neither way, the tenth good taking them again (let go for 14 s, 3 at one a tick) with its line; five seconds traced after, then none; 20 trace lines; the block's counts word for word and taken; a stuck second inside the count starting it again (taken again after 20 s), let go again, taken again at once when the rule stops allowing it; not allowed: stuck seconds traced, never let go, the block's words for the few-cores rule; the trace's 300 lines then its end once, then nothing; the threads' cores a second (29 on 7, 1 on 6, one not known: one core change), the trace line word for word without a ring and with one (each core run on with its own samples, the render thread's first), nothing sampled, the block's residency with the cores' clocks (7 78 %, 6 22 %, 6 60 %, 5 40 %) word for word, a short buffer. CPU only.
 - `log_cost_test.c` (ctest `log_cost`): the logging's own cost a block (`port/platform/log_cost.h`): the overlaps (touching spans do not overlap), a phone's block with the log thread (the window thread's print, 42 writes with one slow write during a present that blocked and one during a late step, the pipe never full, a capture whose worker overlapped a late step) word for word, a full pipe, a desktop block with no log thread and the bytes not known, spans past the table counted and not kept, a short buffer.
 - `dump_auto_test.c` (ctest `dump_auto`): the automatic dumps' worker (`dump_auto.h`, issues 123 and
-  179) and the zip from memory (`ico_zip_mem_files`, `ico_zip_add_bundle`): the entries and the log
-  read back, a missing log leaving the entries alone, nothing deleted; a job written whole (the
-  frame, the tick before, the log byte for byte, the sidecar, both costs and the drain's part in the result, the slow
-  zips pruned to three); a reads-only job's flag and line (`copy, reads wait`, not `work in flight`); a second job while one is written dropped with its line and counted, never
-  queued, its block the caller's, the first finishing whole, a new job taken after the result is
-  polled; a zip that cannot be written keeping the frame loose; the join at shutdown with a job in
-  flight, twice safe, a later job starting a new worker; the report's bundle (the newest three of
-  five recorded zips stored with `automatic-captures.txt` naming each and why one is left out, the
-  report zip's own entries kept, a zip gone from the disk not listed, none recorded adding nothing;
-  a zip that cannot be read as the report is rebuilt left out and named `left out: gone` in the
-  note, the other still in); the slow-scene dump's block made by the worker before the job
-  (`ico_dump_auto_prepare`, `_prepared`, `_unprepare`: none asked, a size of 0 refused, the block
-  at the size asked with the worker's time, busy from the ask to the submit so a second ask and a
-  job offered meanwhile are refused, the filled block written whole with the making in the worker
-  time, a block given up while asked, once made and once taken leaving the worker free, one made
-  and never taken freed at shutdown).
+  179), the zip from memory (`ico_zip_mem_files`, `ico_zip_add_bundle`): entries and log read back,
+  a missing log leaving the entries alone; a job written whole (frame, tick before, log, sidecar,
+  both costs, the drain's part, slow zips pruned to three); a reads-only job's line (`copy, reads
+  wait`); a second job while one is written dropped with its line, counted, its block the
+  caller's; an unwritable zip keeping the frame loose; the join at shutdown with a job in flight,
+  twice safe, a later job a new worker; the report's bundle (the newest three of five zips stored,
+  `automatic-captures.txt` naming each and why one is out, the report's own entries kept, a zip
+  gone `left out: gone`); the slow-scene block (`ico_dump_auto_prepare`, `_prepared`,
+  `_unprepare`: none asked, 0 refused, the size asked, busy from ask to submit, the filled block
+  written whole, given up asked, made or taken, never taken freed at shutdown); the loss keep's
+  block (`ico_dump_auto_keep_*`, a slot of its own: not busy, made beside a slow-scene block, held
+  bytes, given back asked or made, freed at shutdown); `slow_arm.c` (a held pick taken, a gone one's
+  line, the heaviest held stand-in taken at the block's end, a dropped arm's line and count).
   Run under the asan and thread presets as well.
 - `game_data_range_test.c`: the game data ranges ([PLATFORM.md](PLATFORM.md#game-data-ranges))
   on this toolchain's compiler and linker, over a stand-in game library (`game_data_fixture.c`)
