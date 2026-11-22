@@ -1820,8 +1820,8 @@ raise the share to at most 90 % and 93 %. `port/render/rd_nodiscard.h` says it a
   (a quarter of the half-size). Every frame runs whatever an earlier one found, and each case logs
   a line: the texels it should cover (`expectedTexels`: the vertex stage's clip at GS Z 0 and
   projection, an estimate), the texels each of its four frames drew through the ordinary entry
-  against the probe alone, the texels code 32 drew without the probe against the clear (whether
-  the probe hid it), and the texels each frame differs by with the twins. A frame that drew
+  against the probe alone, the texels code 32 drew without the probe and without the facing table
+  against the clear, and the texels each frame differs by with the twins. A frame that drew
   nothing tests nothing: `not clean (drew nothing (not tested): case N at 32, 32t, ...)`, every
   such frame named. Only a frame whose case drew counts its passes, and each entry must have drawn
   a case's own pass through its twin (the depth probe, code 34, does not count). All drawn and
@@ -1840,7 +1840,17 @@ raise the share to at most 90 % and 93 %. `port/render/rd_nodiscard.h` says it a
   four fixtures byte for byte. Neither is a proof for another GPU, and that `clean` was measured on
   an earlier case set in model units, five of whose cases covered no pixel; the next set's first
   case (an edge 0.25 model units off the centre view ray) drew nothing on lavapipe at 912 x 512
-  where the CPU expected about 47 texels, which the per-case lines now show directly. The check's positive
+  where the CPU expected about 47 texels. The cause was the check's own set-up, not the GPU: its
+  prelit meshes had no facing table, so their draws kept the PS2's drops (`rd_replay_vu.c`
+  `vuDropMode`, `RD_DROPS_KEPT`), and a triangle with a corner behind the eye that reaches the
+  picture was dropped by the region rule (`vu_region_rule_cut`) before any clipper saw it; its
+  "code 36" frames were drawn under the region test, not the scissor. Every triangle with a
+  corner at w <= 0 drew nothing, every one wholly in front drew (the second review's run 2). The
+  check's meshes now carry a facing table (`rd__mesh_set_facing`, none against its normals, as the
+  disc's prelit parts do) and code 36 is the scissor; the frame without the probe uses a copy
+  without the table, so the log shows the drop. `ICO_RD_VU_NODISCARD_TRACE=1` (its tests) adds
+  per case the draw as the replay set it up, the culler's reasons and the rule stage computed on
+  the CPU. The check's positive
   controls show it says `not clean` when a case differs (`ICO_RD_VU_NODISCARD_SABOTAGE=clipper`)
   and when a case draws nothing (`=empty`). The floor's two cases through a twin (plain,
   textured) are shown to draw the same way: the frame without each must differ.
@@ -1913,7 +1923,7 @@ The lines (`rd: ` before each):
   case of its frames drew through vu_texa_ps_nodual_nd)` when an entry drew none); before it one
   line a case, `discard-free twins: the clipper check, case K of 13 (<name>) on SCENE WxH at
   TWxTH texels: expected about E texels; drawn D32, D32t, D36, D36t (codes 32, 32 textured, 36,
-  36 textured, against the probe alone), B without the probe (code 32, against the clear);
+  36 textured, against the probe alone), B without the probe or a facing table (code 32, against the clear);
   differing with the twins F32, F32t, F36, F36t`; under `ICO_RD_VU_NODISCARD_CLIPPER` the forced verdict with what was
   measured: `clean (ICO_RD_VU_NODISCARD_CLIPPER; measured not clean: ...)`, `not clean
   (ICO_RD_VU_NODISCARD_CLIPPER; measured clean)`).

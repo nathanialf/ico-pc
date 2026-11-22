@@ -68,7 +68,9 @@
 #include "rd_internal.h"
 #include "rd_mesh.h"
 #include "rd_nodiscard.h"
+#include "rd_vis.h"
 #include "shader_consts.h"
+#include "vu1_ref.h"
 
 #define NT_CASES 6
 #define NT_VERTS 6 /* two triangles a mesh, three vertices each */
@@ -217,7 +219,8 @@ static bool pushMesh(RdFrame *f, RdMesh mesh, uint8_t code, bool plane, float pl
     RdVuBlock vu;
     memset(&p, 0, sizeof(p));
     p.code = code;
-    p.clip = code == 34 ? RD_VU_CLIP_NONE : RD_VU_CLIP_REGION;
+    /* 36: the scissor (its corners' clip flags in mem[20..23]'s space) */
+    p.clip = code == 34 ? RD_VU_CLIP_NONE : code == 36 ? RD_VU_CLIP_SCISSOR : RD_VU_CLIP_REGION;
     p.prog = RD_PROG_PRELIT;
     p.batchCount = 1;
     p.qwPerVertex = RD_VU_QW_PRELIT;
@@ -596,6 +599,95 @@ static size_t appendf(char *out, size_t size, size_t at, const char *fmt, ...)
     return at + (size_t)n < size ? at + (size_t)n : size - 1u;
 }
 
+/* ------------------------------------------- the clipper check's trace */
+
+typedef struct NcTrace {
+    bool have;
+    RdVuTraceDraw d;
+    char vis[160]; /* the culler's reasons with a count, "name n" */
+} NcTrace;
+
+/* the replay just made: its first VU draw (the case's) and the culler's
+   reasons (rd__vis_why: the last walk's commands a reason) */
+static void traceFrame(NcTrace *o, int c)
+{
+    (void)c;
+    o->have = rd__vu_trace_take(&o->d);
+    uint32_t w[RD_VIS_WHY_COUNT];
+    rd__vis_why(w);
+    size_t at = 0;
+    o->vis[0] = '\0';
+    for (int i = 0; i < RD_VIS_WHY_COUNT; i++) {
+        if (w[i] != 0u) {
+            at = appendf(o->vis, sizeof(o->vis), at, "%s%s %u", at ? ", " : "", rd__vis_why_name(i),
+                         (unsigned)w[i]);
+        }
+    }
+    if (at == 0) {
+        appendf(o->vis, sizeof(o->vis), 0, "no walk (nothing counted)");
+    }
+}
+
+static const char *dropsName(int d)
+{
+    static const char *const kName[4] = {"kept (the PS2's drop)", "the side bands",
+                                         "the camera rule", "the camera rule, two-sided"};
+    return d >= 0 && d < 4 ? kName[d] : "?";
+}
+
+/* one case's trace lines: the draw (measured: the replay's set-up), the
+   culler (measured), the rule stage (computed on the CPU: h from the
+   block's matrix, vu1ref_region_facing, the fate the draw's flags give) */
+static void traceCase(int c, const float (*corner)[3], const NcTrace tr[2])
+{
+    for (int x = 0; x < 2; x++) {
+        const NcTrace *o = &tr[x];
+        rd__log("discard-free twins: the clipper check's trace, case %d, code %u, the draw (the "
+                "replay's set-up): %sword 0x%x (camera %u, no side bands %u, mirror %u, extended "
+                "%u), drops %s, no facing %d, its mesh's facing %d, clip mode %d; the culler: %s",
+                c + 1, x ? 36u : 32u, o->have ? "" : "not seen, ", o->have ? o->d.word : 0u,
+                o->have && (o->d.word & ICO_VU_CAMERA) ? 1u : 0u,
+                o->have && (o->d.word & ICO_VU_NO_BESIDE) ? 1u : 0u,
+                o->have && (o->d.word & ICO_VU_MIRROR) ? 1u : 0u,
+                o->have && (o->d.word & ICO_VU_EXTENDED) ? 1u : 0u, dropsName(o->d.drops),
+                o->d.noFacing, o->d.facingFrom, o->d.clip, o->vis);
+    }
+    RdVuBlock vu;
+    sceneBlock(&vu);
+    const float (*m)[4] = vu.mem;
+    const int mirror = tr[0].have && (tr[0].d.word & ICO_VU_MIRROR) ? 1 : 0;
+    const bool camera = tr[0].have && (tr[0].d.word & ICO_VU_CAMERA) != 0u;
+    for (int tri = 0; tri < 2; tri++) {
+        float h[3][4];
+        float minW = 1e30f;
+        for (int v = 0; v < 3; v++) {
+            const float *p = corner[tri * 3 + v];
+            for (int j = 0; j < 4; j++) {
+                h[v][j] = m[16][j] * p[0] + m[17][j] * p[1] + m[18][j] * p[2] + m[19][j];
+            }
+            minW = h[v][3] < minW ? h[v][3] : minW;
+        }
+        const int front = vu1ref_region_facing(h[0], h[1], h[2], mirror, 0);
+        const char *fate =
+            minW > 0.0f ? "every corner in front: drawn clipped in an extended state (not a card)"
+            : camera    ? (front ? "a corner at w <= 0, facing the eye: the camera rule draws it "
+                                   "clipped, its corners behind the eye homogeneous (the GPU's "
+                                   "clipper)"
+                                 : "a corner at w <= 0, facing away: dropped")
+                        : "a corner at w <= 0 with the drops kept: dropped where it reaches the "
+                          "picture (the PS2's rule), drawn only wholly beside it";
+        rd__log("discard-free twins: the clipper check's trace, case %d, triangle %d (computed on "
+                "the CPU: h = the block's matrix times the corner, vu1ref_region_facing): h "
+                "(%g, %g, %g, %g), (%g, %g, %g, %g), (%g, %g, %g, %g), front %d; at code 32 %s; "
+                "at code 36 %s",
+                c + 1, tri + 1, h[0][0], h[0][1], h[0][2], h[0][3], h[1][0], h[1][1], h[1][2],
+                h[1][3], h[2][0], h[2][1], h[2][2], h[2][3], front, fate,
+                minW > 0.0f ? "every corner in front: its clip flags decide (kicked, or cut)"
+                            : "a corner at w <= 0: to the GPU's clipper unless every corner "
+                              "shares a clip flag");
+    }
+}
+
 /* a frame replayed without the twins, read into px */
 static bool plainRead(RdFrame *f, RdTargetRec *t, uint8_t *px, size_t size)
 {
@@ -622,11 +714,12 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
     static const uint8_t kCodes[2] = {32, 36};
     static const RdTex kNone = {0};
     static const RdMesh kNoCase = {0};
-    RdMesh mesh[NC_CASES];
+    RdMesh mesh[NC_CASES], untabled[NC_CASES];
     uint64_t expect[NC_CASES];
+    float corner[NC_CASES][NC_VERTS][3];
     bool ok = true;
     for (int k = 0; k < NC_CASES; k++) {
-        float c[NC_VERTS][3];
+        float (*c)[3] = corner[k];
         caseCorners(k, t->w, t->h, c);
         expect[k] = expectedTexels((const float (*)[3])c, t);
         /* the other winding, a strip of its own: corners 0, 2, 1 */
@@ -634,7 +727,18 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
         memcpy(c[4], c[2], sizeof(c[4]));
         memcpy(c[5], c[1], sizeof(c[5]));
         mesh[k] = clipMesh((const float (*)[3])c, NC_VERTS, (float)(30 + 9 * k));
-        ok = ok && mesh[k].id;
+        untabled[k] = clipMesh((const float (*)[3])c, NC_VERTS, (float)(30 + 9 * k));
+        /* the facing table every prelit part has on the disc (the EE's
+           strip records, rd__mesh_set_facing; no triangle against its
+           normals): without one a mesh keeps the PS2's drops
+           (rd_replay_vu.c vuDropMode, RD_DROPS_KEPT), so a triangle with a
+           corner behind the eye that reaches the picture is dropped and
+           never reaches the clipper (the second review's run 2); the
+           untabled copy shows that, drawn without the probe */
+        static const uint8_t kNoFlip[(NC_VERTS + 7) / 8] = {0};
+        RdMeshRec *rec = mesh[k].id ? rd__mesh_rec(mesh[k].id) : NULL;
+        ok = ok && mesh[k].id && untabled[k].id && rec != NULL &&
+             rd__mesh_set_facing(rec, kNoFlip, NC_VERTS);
     }
     /* the probe: the whole target at model depth 1 (GS Z 0), GS X = 2048 +
        16 x there */
@@ -647,7 +751,19 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
     uint8_t *alone = malloc(size), *aloneTex = NULL;
     bool clean = ok && alone != NULL;
     if (!clean) {
-        snprintf(why, whySize, "its frames could not be built");
+        snprintf(why, whySize, "its frames could not be built (or given a facing table)");
+    }
+    /* the tests' trace (ICO_RD_VU_NODISCARD_TRACE=1): each case's draw as
+       the replay set it up, the culler's verdict, the rule stage computed
+       on the CPU, the pass's state */
+    const char *te = getenv("ICO_RD_VU_NODISCARD_TRACE");
+    const bool trace = te != NULL && te[0] == '1' && te[1] == '\0';
+    if (trace) {
+        rd__log("discard-free twins: the clipper check's trace: the pass: SCENE %ux%u at %ux%u "
+                "texels, viewport and scissor the whole target, cleared to colour 0 0 0 0x80 and "
+                "depth 0, Z GEQUAL with Z write on, ABE off (code 36's cut pass forces it on), "
+                "untextured or TEXA 7F/81 AEM, then the probe at GS Z 0 with Z write off",
+                t->w, t->h, t->tw, t->th);
     }
     /* the pipelines first, every frame's, through the twins and not */
     rd__nd_hold(true);
@@ -712,6 +828,8 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
     memset(differ, 0, sizeof(differ));
     memset(bare, 0, sizeof(bare));
     bool device = clean, empty = false, differs = false, unmade = false;
+    NcTrace tr[2]; /* codes 32 and 36, untextured: the case's draw and the culler */
+    memset(tr, 0, sizeof(tr));
     char diffWhy[96] = "", unmadeWhy[64] = "";
     for (int k = 0; device && k < NC_FRAMES; k++) {
         RdFrame f;
@@ -734,8 +852,12 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
             unmade = true;
         }
         rd__nd_clipper_check(false);
+        rd__vu_trace(trace);
         const bool okB = okA && plainRead(&f, t, b, size);
         rd__frame_free(&f); /* (plainRead freed it when it ran) */
+        if (trace && k % 2 == 0) {
+            traceFrame(&tr[NC_CODE(k)], NC_CASE(k));
+        }
         if (okA && k == 0 && rd__nd_sabotage_clipper()) {
             a[size / 2u] ^= 0x40u; /* the tests' positive control: a difference */
         }
@@ -767,7 +889,7 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
                whether the case reached the target at all */
             RdFrame g;
             const int c = NC_CASE(k);
-            if (clipFrame(&g, scene, t->w, t->h, mesh[c], kCodes[0], probe, kNone, false) &&
+            if (clipFrame(&g, scene, t->w, t->h, untabled[c], kCodes[0], probe, kNone, false) &&
                 plainRead(&g, t, b, size)) {
                 bare[c] = texelsNot(b, size, clearPx);
             } else {
@@ -776,7 +898,8 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
             rd__log("discard-free twins: the clipper check, case %d of %d (%s) on SCENE %ux%u at "
                     "%ux%u texels: expected about %llu texels; drawn %llu, %llu, %llu, %llu "
                     "(codes 32, 32 textured, 36, 36 textured, against the probe alone), %llu "
-                    "without the probe (code 32, against the clear); differing with the twins "
+                    "without the probe or a facing table (code 32, against the clear); differing "
+                    "with the twins "
                     "%llu, %llu, %llu, %llu",
                     c + 1, NC_CASES, kClip[c].name, t->w, t->h, t->tw, t->th,
                     (unsigned long long)expect[c], (unsigned long long)drawn[k - 3],
@@ -784,6 +907,9 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
                     (unsigned long long)drawn[k], (unsigned long long)bare[c],
                     (unsigned long long)differ[k - 3], (unsigned long long)differ[k - 2],
                     (unsigned long long)differ[k - 1], (unsigned long long)differ[k]);
+            if (trace) {
+                traceCase(c, (const float (*)[3])corner[c], tr);
+            }
         }
     }
     if (device && (empty || differs || unmade)) {
@@ -828,11 +954,15 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
         clean = false;
     }
     rd__nd_clipper_check(false);
+    rd__vu_trace(false);
     free(alone);
     free(aloneTex);
     for (int k = 0; k < NC_CASES; k++) {
         if (mesh[k].id) {
             rd_destroy_vu_mesh(mesh[k]);
+        }
+        if (untabled[k].id) {
+            rd_destroy_vu_mesh(untabled[k]);
         }
     }
     if (probe.id) {

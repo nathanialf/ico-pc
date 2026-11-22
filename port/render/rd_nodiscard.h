@@ -107,8 +107,12 @@
  * set in model units, five of whose cases covered no pixel; the next set's
  * first case, an edge 0.25 model units off the centre view ray, drew
  * nothing on lavapipe at 912 x 512 where the CPU expected about 47 texels.
- * This set is sized to the frame and logs expected against drawn per case
- * so a mismatch explains itself.
+ * The cause was the check's set-up: its prelit meshes had no facing table,
+ * so their draws kept the PS2's drops (rd_replay_vu.c vuDropMode) and the
+ * region rule dropped every triangle with a corner behind the eye that
+ * reaches the picture (vu_region_rule_cut) before any clipper; its code 36
+ * frames ran the region test.  Now each mesh has a table and code 36 the
+ * scissor; ICO_RD_VU_NODISCARD_TRACE=1 logs each case's stages.
  * The twins' pipelines are made in the background between pictures
  * (rd_pipeline.c rd__pipeline_twin, rd__pipeline_twin_tick: a batch on the
  * workers at low priority, as the start-up set's background finisher, or
@@ -307,6 +311,21 @@ void rd__nd_take_entries(uint64_t out[2]);
    else the "not applicable here: ..." words (NULL where they apply, or
    without a device) */
 bool rd__nd_applicable(void);
+
+/* The clipper check's trace (its tests' ICO_RD_VU_NODISCARD_TRACE=1,
+   rd_replay_vu.c): the first VU draw of a replay as the replay set it up:
+   the draw word (ICO_VU_CAMERA, ICO_VU_NO_BESIDE, ICO_VU_MIRROR, ...), the
+   drops' mode (0 kept, the PS2's drop; 1 the side bands; 2 the camera
+   rule; 3 the camera rule two-sided), why the mesh has no facing (0 it
+   has, else RD_VU_NOFACE_* + 1), the code, the clip mode and the mesh's
+   facingFrom */
+typedef struct RdVuTraceDraw {
+    uint32_t word;
+    int drops, noFacing, code, clip, facingFrom;
+} RdVuTraceDraw;
+
+void rd__vu_trace(bool on);
+bool rd__vu_trace_take(RdVuTraceDraw *out);
 const char *rd__nd_not_applicable_text(void);
 /* the same for the draws of a clip mode other than none only (the clipper
    check's class: its depth probe, a code 34 pass, not among them) */

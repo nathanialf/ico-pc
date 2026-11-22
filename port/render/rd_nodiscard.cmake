@@ -153,7 +153,7 @@ if(ICO_RUN_TESTS AND DEFINED _vst AND TARGET rd_vuprepass_selftest_test)
     # a case's line (rd_nodiscard_selftest.c clipperCheck): what it should
     # cover, what each of its four frames drew against the probe alone, what
     # code 32 drew without the probe, what differs with the twins
-    set(_nddrew "[1-9][0-9]*, [1-9][0-9]*, [1-9][0-9]*, [1-9][0-9]* \\(codes 32, 32 textured, 36, 36 textured, against the probe alone\\), [0-9]+ without the probe \\(code 32, against the clear\\), differing with the twins ")
+    set(_nddrew "[1-9][0-9]*, [1-9][0-9]*, [1-9][0-9]*, [1-9][0-9]* \\(codes 32, 32 textured, 36, 36 textured, against the probe alone\\), [0-9]+ without the probe or a facing table \\(code 32, against the clear\\), differing with the twins ")
     set(_ndclip "rd: discard-free twins: the clipper check: not clean \\(([^\n]*, )?case 1 at 32 differs, the first at texel [0-9]+,[0-9]+[^\n]*\\): clip mode none alone takes them")
     set(_ndempty "rd: discard-free twins: the clipper check: not clean \\(drew nothing \\(not tested\\): case 1 at 32, 32t, 36, 36t[^\n]*\\): clip mode none alone takes them")
     set(_ndfake "rd: discard-free twins: the clipper check: not clean \\(ICO_RD_VU_NODISCARD_CLIPPER, measured clean\\): clip mode none alone takes them")
@@ -161,11 +161,13 @@ if(ICO_RUN_TESTS AND DEFINED _vst AND TARGET rd_vuprepass_selftest_test)
     set(_ndcount "test: the discard-free twins' mark after the self-test: counting v0.0.0")
     set(_ndnone ".*rd: discard-free twins: off, 0 modules of them made, 0 of their pipelines alive")
     set(_ndmark "ICO_NODISCARD_VERSION=v0.0.0;ICO_NODISCARD_MARK=${CMAKE_CURRENT_BINARY_DIR}/nodiscard_mark")
-    set(_ndenv ${_env_mali_pre} "ICO_VK_FAKE_NO_DUAL=1")
+    # every run with its trace (ICO_RD_VU_NODISCARD_TRACE=1: a case's draw,
+    # the culler, the rule stage computed, the pass)
+    set(_ndenv ${_env_mali_pre} "ICO_VK_FAKE_NO_DUAL=1" "ICO_RD_VU_NODISCARD_TRACE=1")
     add_test(NAME rd_vuprepass_selftest_nodiscard
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}"
-                     "-DEXTRA=rd: discard-free twins: trying them: .*rd: discard-free twins: the clipper check, case 1 of 13 [^\n]*drawn ${_nddrew}0, 0, 0, 0.*rd: discard-free twins: the clipper check, case 13 of 13 [^\n]*drawn ${_nddrew}0, 0, 0, 0.*${_ndon}.*${_ndclean}.*${_ndstart}.*${_ndcount}"
+                     "-DEXTRA=rd: discard-free twins: trying them: .*rd: discard-free twins: the clipper check, case 1 of 13 [^\n]*drawn ${_nddrew}0, 0, 0, 0.*rd: discard-free twins: the clipper check's trace, case 1, code 32, the draw \\(the replay's set-up\\): [^\n]*\\(camera 1, [^\n]*drops the camera rule, no facing 0, its mesh's facing 2, clip mode 0, .*rd: discard-free twins: the clipper check's trace, case 1, code 36, the draw [^\n]*clip mode 2, .*rd: discard-free twins: the clipper check, case 13 of 13 [^\n]*drawn ${_nddrew}0, 0, 0, 0.*${_ndon}.*${_ndclean}.*${_ndstart}.*${_ndcount}"
                      "-DNOT_=rd: discard-free twins: (off|vu_[a-z_]+_nd drew nothing|the clipper check: not clean)" -P "${_vst}")
     add_test(NAME rd_vuprepass_selftest_nodiscard_clipper
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
