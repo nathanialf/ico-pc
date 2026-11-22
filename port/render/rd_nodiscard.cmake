@@ -29,11 +29,11 @@ if(ICO_RUN_TESTS)
 endif()
 
 # rd_nodiscard_ab (test/rd_nodiscard_ab.cmake): every fixture of
-# test/fixtures/lists/vu_zero.txt under its profiles (corpus, mali,
+# test/fixtures/lists/nodiscard.txt under its profiles (corpus, mali,
 # mali169; the Mali ones without dual-source blending, as the reporter's
 # phone) with the twins off (ICO_RD_VU_NODISCARD=0) and on without their
 # self-test (=1), --repeat 2: every target byte for byte, the twins' draws
-# counted on the run with them (above 0 over each fixture and Mali profile:
+# counted on the run with them (above 0 over the list under each Mali profile:
 # they ran), none and "not applicable here" on the corpus profile (dual-source
 # blending), nothing of them on the run without them.  rd_nodiscard_ab_gl:
 # the same on OpenGL (llvmpipe), every fixture at the corpus setting without
@@ -45,7 +45,7 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
                      "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
-                     "-DLIST=${ICO_FIXTURE_DIR}/lists/vu_zero.txt"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/nodiscard.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/nodiscard_ab" -DBACKEND=vulkan
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_nodiscard_ab.cmake")
     set_tests_properties(rd_nodiscard_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
@@ -59,7 +59,7 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
                      "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
-                     "-DLIST=${ICO_FIXTURE_DIR}/lists/vu_zero.txt"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/nodiscard.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/nodiscard_clean" -DBACKEND=vulkan
                      -DMODE=clean -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_nodiscard_ab.cmake")
     set_tests_properties(rd_nodiscard_clean PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
@@ -70,7 +70,7 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
                  COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                          -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
                          "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
-                         "-DLIST=${ICO_FIXTURE_DIR}/lists/vu_zero.txt"
+                         "-DLIST=${ICO_FIXTURE_DIR}/lists/nodiscard.txt"
                          "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/gl/nodiscard_ab" -DBACKEND=opengl
                          -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_nodiscard_ab.cmake")
         set_tests_properties(rd_nodiscard_ab_gl PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"

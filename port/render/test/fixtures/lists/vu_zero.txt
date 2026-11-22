@@ -1,7 +1,5 @@
-# rd_vu_zero_ab, rd_vu_zero_gl and rd_vu_zero_fault (test/rd_vu_zero_ab.cmake),
-# rd_ab_zero_ab and rd_ab_zero_stop (test/rd_ab_zero_ab.cmake: the profiles alone),
-# and rd_nodiscard_ab and rd_nodiscard_ab_gl (test/rd_nodiscard_ab.cmake: the
-# profiles alone, the Mali ones without dual-source blending):
+# rd_vu_zero_ab, rd_vu_zero_gl and rd_vu_zero_fault (test/rd_vu_zero_ab.cmake), and
+# rd_ab_zero_ab and rd_ab_zero_stop (test/rd_ab_zero_ab.cmake: the profiles alone):
 # a fixture, the profiles it is replayed under (corpus, mali, mali169: the
 # script's head says what each is; OpenGL replays every fixture at the corpus
 # settings alone), then the property the test checks

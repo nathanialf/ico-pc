@@ -303,12 +303,20 @@ static bool ruleRefuses(void)
     p.nodual = RD_NODUAL_ON;
     p.dst = RHI_DST_READ_NONE;
     p.drawFlags = ICO_VU_CLIP_REGION;
+    p.clipperClean = true; /* a band refused even where the clipper is clean */
     const bool band = rd_nd_eligible(&p) == RD_ND_BAND;
+    /* not vacuous: the same pass with the flag takes the twin on a clean
+       clipper, is refused as clipped on any other, and clip mode none takes
+       it either way */
     p.drawFlags = ICO_VU_CLIP_REGION | ICO_VU_NO_BESIDE;
     const bool twin = rd_nd_eligible(&p) == RD_ND_TWIN;
+    p.clipperClean = false;
+    const bool clipped = rd_nd_eligible(&p) == RD_ND_CLIPPED;
+    p.drawFlags = ICO_VU_CLIP_NONE;
+    const bool none = rd_nd_eligible(&p) == RD_ND_TWIN;
     p.flags = ICO_DF_DATE;
     const bool date = rd_nd_eligible(&p) == RD_ND_DATE;
-    return band && twin && date;
+    return band && twin && clipped && none && date;
 }
 
 /* ------------------------------------------------- the clipper check

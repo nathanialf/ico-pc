@@ -551,11 +551,11 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   mark over `=1`, a failed self-test kept off for the run through a renderer made again, a short
   buffer cut.
 - `rd_nodiscard_ab.cmake` (`rd_nodiscard_ab`, `rd_nodiscard_ab_gl`; `rd_nodiscard.cmake`): every
-  fixture of `port/render/test/fixtures/lists/vu_zero.txt` under its profiles (corpus at 4:3 1x;
+  fixture of `port/render/test/fixtures/lists/nodiscard.txt` under its profiles (corpus at 4:3 1x;
   the Arm fakes with the record by compute and no dual-source blending, `ICO_VK_FAKE_NO_DUAL=1`,
   at 1x 21:9 and 16:9), `ICO_RD_VU_NODISCARD=0` and `=1` at `--repeat 2`: every target's PNG the
   same bytes; the run without them says off with 0 draws and 0 modules; the run with them says on
-  with its draws through them printed and above 0 over each fixture and Arm profile (they ran),
+  with its draws through them printed and above 0 over the list under each Arm profile (they ran),
   and under corpus 0 draws and "not applicable here" (dual-source blending). `rd_nodiscard_ab_gl`:
   OpenGL (llvmpipe), every fixture at 4:3 1x with `ICO_GL_FAKE_NO_DUAL=1`, above 0 over the list.
   Only clip mode none takes a twin, on every device ([PIPELINES.md](PIPELINES.md#the-discard-free-twins)),

@@ -2,8 +2,8 @@
 # docs/port/PIPELINES.md, "The discard-free twins"; issue 179) give the same
 # picture byte for byte as the *_nodual builds they stand in for, and the
 # passes drew through them.  The frames: every fixture of LIST
-# (port/render/test/fixtures/lists/vu_zero.txt: a fixture and the profiles it
-# is replayed under), each expanded into ${OUT}/fixtures
+# (port/render/test/fixtures/lists/nodiscard.txt: a fixture and the profiles
+# it is replayed under), each expanded into ${OUT}/fixtures
 # (docs/port/TESTING_FIXTURES.md).  For every frame, at each setting of each
 # of its profiles, rd_replay_tool --pass-dump --stats --repeat 2 twice:
 #   off  ICO_RD_VU_NODISCARD=0: every pass through its *_nodual build
@@ -257,12 +257,23 @@ foreach(e IN LISTS entries)
     if(fxCompared EQUAL 0)
       message(SEND_ERROR "${name}: nothing compared under the ${p} profile")
       math(EXPR failures "${failures} + 1")
-    elseif(nodual_${p} AND BACKEND STREQUAL "vulkan" AND NOT fxTwins GREATER 0)
-      message(SEND_ERROR "${name} ${p}: no pass drew through a twin (MODE ${MODE}: the clipper check's class when clean): the twins did not run")
-      math(EXPR failures "${failures} + 1")
     endif()
+    message(STATUS "${name} ${p}: ${fxTwins} draws through a twin")
+    if(NOT DEFINED profTwins_${p})
+      set(profTwins_${p} 0)
+    endif()
+    math(EXPR profTwins_${p} "${profTwins_${p}} + ${fxTwins}")
     math(EXPR twinTotal "${twinTotal} + ${fxTwins}")
   endforeach()
+endforeach()
+# every profile without dual-source blending drew through a twin over the
+# list (the phone's path ran under each Mali profile; a fixture alone may
+# have no eligible pass: test/fixtures/lists/nodiscard.txt)
+foreach(p mali mali169)
+  if(BACKEND STREQUAL "vulkan" AND DEFINED profTwins_${p} AND NOT profTwins_${p} GREATER 0)
+    message(SEND_ERROR "rd_nodiscard_ab: no pass drew through a twin under the ${p} profile over the list (MODE ${MODE}): the twins did not run")
+    math(EXPR failures "${failures} + 1")
+  endif()
 endforeach()
 if(NOT twinTotal GREATER 0)
   message(SEND_ERROR "rd_nodiscard_ab (${BACKEND}): no pass drew through a twin over the list")

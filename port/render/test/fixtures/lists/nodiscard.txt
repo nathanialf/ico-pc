@@ -1,0 +1,18 @@
+# rd_nodiscard_ab, rd_nodiscard_ab_gl and rd_nodiscard_clean (test/rd_nodiscard_ab.cmake):
+# a fixture, then the profiles it is replayed under (corpus, mali, mali169:
+# the script's head says what each is; OpenGL replays every fixture at the
+# corpus setting without dual-source blending).  The Mali profiles must draw
+# some pass through a twin over the whole list: only clip mode none (code
+# 34) takes one on lavapipe, and only where the alpha plan leaves no test in
+# the pass, which a fixture's blank-rule textures (alpha 00..ff) rarely allow
+# (the merge check of 2026-11-22: fx-mali-slow541's code 34 passes were all
+# refused for the alpha test under both Mali profiles).
+#
+# issue 179's Mali-G52 (v0.11.5): the stage 42 slow-scene capture, five
+# code 34 draws
+fx-mali-slow541 mali,mali169,corpus
+# issue 95's loss frame: 28 code 34 draws over opaque textures (80..80: the
+# vertex alpha alone decides the test)
+fx-loss95 mali,mali169,corpus
+# issue 179's Mali-G52 frame with vu_alpha_half.rules.txt: 76 code 34 draws
+fx-pattern-mali-frame mali,mali169
