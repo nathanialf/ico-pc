@@ -1675,8 +1675,14 @@ verdict or carried arm.
   cull's work, their pre-pass vertices and VU triangles within 10 % of each other; a pair with a
   span over twice the trial's running median (the last 64 spans, the stage's own before the trial
   included, at least 8) is dropped and counted: the boat scene's stalls run at about half the
-  rate of the stretches between. Its measure is `ln` of the GPU time over the work with the cull,
-  against the same without it.
+  rate of the stretches between. Its measure is `ln` of the scene's GPU work over the work with
+  the cull, against the same without it. The scene's GPU work is the record's span less the
+  present's pass and the display wait before it (`rd_ab_scene_ms`: `gpuMs - gpuDisplayWaitMs -
+  gpuPresentMs`): on a Mali the wait for the window's image shows inside the present pass, so a
+  picture that finishes sooner would wait longer there and the saving would vanish from the whole
+  span. Both arms write the same stamps (the arm changes the pre-pass and the lists' draws, never
+  which stamps a replay writes), so the measure is the same quantity on either; a replay with no
+  scene work left is not measured.
 - **The verdict**: at 8 pairs all one way with the median at least 2 % that way (the early
   verdict: a clear difference costs at most 8 pictures on the worse arm); else at 32 pairs, on when
   the median pair is 2 % or more cheaper with the cull and 22 of the 32 are cheaper with it, off
@@ -1699,6 +1705,13 @@ verdict or carried arm.
   the driver came back from), stops every trial and leaves every subject at its off arm for the
   run, logged once. A hang or watchdog end ends the run; the next start's loss ladder and the
   mark take it from there.
+- **A renderer made again** (a Graphics API switch, the device made again: `rd__ab_renderer`
+  from `rd__vu_prepass_init`, the second renderer of the process on): a trial running ends
+  unjudged, every verdict and the carried arm are forgotten, each stage begins again (its trial 2 s
+  from its next picture), and a record the earlier renderer drew is not measured (the record's
+  `abEpoch`). The trials already run still count toward the 12. Logged: `A/B: the renderer was
+  made again (a Graphics API switch or the device made again): every verdict and the carried arm
+  forgotten, each attempt with it until its stage's own trial on this renderer`.
 
 The rate requirement (`rd_ab` test, a GPU-bound stream at a 40 ms tick, 60 s; pictures of 33,
 37.5, 48 and 60 ms; the cull saving or costing 3, 5 or 10 %; one stage, four stages of one
@@ -1713,8 +1726,8 @@ a cull that costs 10 % at 48 ms gives up 5 pictures in one stage, all of them in
 The lines (`rd: ` before each):
 - At the start, after the cull's own line: `A/B: the in-play judge; may try: zero-area cull; a
   trial 2.0 s into a stage, ...` with every constant, or `not tried (off here): zero-area cull`.
-- One a trial: `A/B: zero-area cull, stage 42: 32 pairs, with it 1.62 ms, without 1.55 ms a
-  thousand vertices and triangles (the median pair 4.3 % dearer with it, 25 of 32 cheaper
+- One a trial: `A/B: zero-area cull, stage 42: 32 pairs, with it 1.62 ms, without 1.55 ms of
+  the scene's GPU work (the present and its display wait left out) a thousand vertices and triangles (the median pair 4.3 % dearer with it, 25 of 32 cheaper
   without), 3 dropped by a long picture, 0 by unequal work: off for this stage (it started with
   it, the arm stage 41's verdict left)` (`8 pairs (all one way: the early verdict)` for the early
   one; `it started with it, no verdict before it in the run` for the run's first), or `A/B:

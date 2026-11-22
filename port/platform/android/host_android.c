@@ -813,7 +813,10 @@ int ico_android_game_mode(void)
 }
 
 /* IcoActivity.batteryState ()[I (host_android.h ico_android_battery): the
-   same call rules as ico_android_display_modes */
+   call rules of ico_android_display_modes (the method id once, a failed
+   lookup remembered, local references deleted, an exception cleared), but
+   called from the log thread, which SDL_GetAndroidJNIEnv attaches as it
+   does for the thermal asks */
 int ico_android_battery(int out[4])
 {
     static jmethodID s_mid;

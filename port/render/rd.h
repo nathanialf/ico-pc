@@ -691,6 +691,10 @@ size_t rd_vu_share_text(char *out, size_t cap, unsigned n);
  * checked P pictures: C of S triangle slots culled, M differ", or
  * "; zero-area cull held|off (why)"; the block's counts back to zero */
 size_t rd_vu_zero_text(char *out, size_t cap, unsigned n);
+/* The buffer that clause needs at most (the window's VU line): every
+ * refusal reason, the shared lists and the self-test block's checked
+ * pictures, with seven-digit counts (rd_vu_zero_test) */
+#define RD_VU_ZERO_TEXT_MAX 480
 /* And the discard-free twins' (rd_nodiscard.h): "; discard-free twins: D
  * draws a picture through them (R refused a picture: plane p, DATE d, band
  * b, alpha a, clipped c, not made yet u, timed without them t)", "" while
@@ -3581,6 +3585,7 @@ typedef struct RdPerfRecord {
     uint32_t abTrial, abSeq;
     int32_t abStage;
     uint8_t abOff, abUsed;
+    uint16_t abEpoch; /* the renderer it was drawn by (rd_ab.h rd_ab_forget) */
 } RdPerfRecord;
 
 /* The oldest finished record not yet popped (a queue of 64; the oldest are

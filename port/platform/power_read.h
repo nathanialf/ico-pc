@@ -14,8 +14,9 @@
  *     /sys/class/power_supply/battery (current, voltage, level, status)
  *   battery: /sys/class/power_supply not readable (errno 13): read once a
  *     second on the log thread from Android's BatteryManager
- *   battery: not readable (/sys/class/power_supply: errno 13;
- *     BatteryManager: no answer): no battery lines
+ *   battery: not readable (/sys/class/power_supply not readable (errno
+ *     13); BatteryManager: no answer from the app's Java side): no
+ *     battery lines
  * and each 10 s block with a reading:
  *   battery each second: current -812 -790 -805 mA, voltage 3850-3862 mV,
  *     level 67 %, discharging (sysfs; the current's sign as the device
@@ -69,6 +70,18 @@ bool power_from_sysfs(const char *current, const char *voltage, const char *capa
    (< 0 none), the level in % (< 0 none), BATTERY_STATUS_* (< 0 none).
    true when any value is there */
 bool power_from_android(const int v[4], PowerSample *out);
+
+/* Where to read from (the first tick's choice, POWER_SOURCE_*): the
+   battery's sysfs files when they give a current, else BatteryManager
+   when it gives one, else whichever gives anything (sysfs first): a phone
+   whose sysfs gives the level but denies current_now still gets a
+   current from BatteryManager */
+int power_pick(bool sysfsAny, bool sysfsCurrent, bool androidAny, bool androidCurrent);
+/* A stall row takes the last reading's current only when it is at most
+   POWER_FRESH_MS old at nowMs (one tick missed): a reading that stopped
+   is not carried on */
+#define POWER_FRESH_MS 2500.0
+bool power_fresh(double atMs, double nowMs);
 
 /* The block's readings (the first POWER_BLOCK_MAX currents kept) */
 #define POWER_BLOCK_MAX 12

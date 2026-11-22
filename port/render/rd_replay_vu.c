@@ -24,6 +24,7 @@
 #include "rd_vu_rec_sink.h"
 #include "rd_vu_skin_check.h"
 #include "rd_vu_share.h"
+#include "rd_ab_run.h"
 #include "rd_vu_zero.h"
 #include "rd_nodiscard.h"
 #include "shader_consts.h"
@@ -4042,6 +4043,7 @@ void rd__vu_prepass_init(const RhiLimits *lim)
     rd__vu_record_init(lim); /* render targets or vertex stores (rd_vu_record.h) */
     rd__vu_zero_init();      /* the zero-area cull's state (rd_vu_zero.h) */
     rd__nd_init();           /* the discard-free twins' (rd_nodiscard.h) */
+    rd__ab_renderer();       /* the in-play judge: a renderer made again forgets (rd_ab_run.h) */
     const char *env = getenv("ICO_RD_VU_PREPASS");
     const uint32_t bytes = lim ? lim->colorBytesPerPixel : 0u;
     if (s_preHostWhy[0] != '\0') {

@@ -35,7 +35,10 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   2000 pseudo-random ticks of the bit, a script's zoom, the source's liveness, the source and the
   camera mode; Toggle's press and release (in, and stays in), the second press (out), a level held
   50 ticks (one flip); the clears (a script's zoom, a press held through it doing nothing after,
-  the source not live, a new source, a new camera mode, a stage start, R2 held into a new stage);
+  the source not live and R2 still held when it is live again (a press), a new source, a new camera
+  mode, a stage start, R2 held into a new stage); a copy of the camera arm's step choice
+  (`camera-root.c`, whose lines `options_test` finds four times) giving the game's steps under
+  Hold over 2000 random ticks and Toggle's steps over a press;
   Toggle to Hold while zoomed (cleared), Hold to Toggle while held (no flip); the June 2001
   look-around's test; `zoom_toggle.state` one FRESH block whose bytes copied back resume the latch
   (`zoom_toggle`).
@@ -162,25 +165,34 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   interval, the block's intervals (p50, p90, the longest; over 2, 3 and 4 ticks of the game's pace
   rounded to whole ticks, 2.5 ticks counted as 3; no tick clause without a pace), the first interval
   of a block from the block before's last present, a block with no present, records and intervals
-  past the 2048 held counted, the pictures line alone as before; the lines word for word.
+  past the 2048 held counted, a pass of 0 ms left out of its median, the pictures line alone as
+  before; the lines word for word.
 - `stall_coincide_test.c`, its table (`stall_coincide`): the block's stalls against the pieces'
   shares (the largest share first, a piece with no name, the stalls naming none), a stall's row
   waiting for its two timed replays after, a row still waiting carried into the next block and
   written there with what it has, a block with only a carried row writing no share line, 13 rows in
   parts of 12 and 1, rows past 256 counted, the 2 s triangles' most (the span's edge, the ring's
-  last 256); the lines word for word.
+  last 256), a pass stall's row naming its pass, a replay whose present and pass both stall counted
+  once in the share line (and its piece once, the second stall's when the first named none), the
+  count starting again in the next block; the lines word for word.
 - `power_read_test.c` (ctest `power_read`, a program of its own; CPU only): the battery for the log
   (`port/platform/power_read.h`, issue 179) from strings in the test: the sysfs numbers (a sign,
   spaces, none, too long), the status and type words, a sample from the sysfs texts (uA and uV as mA
   and mV, a level over 100 refused, every file missing), a sample from the Java side's four ints
   (`INT_MIN` for no current, the status numbers), a block's currents (past 12 counted), voltages,
-  level and status, the once and block lines word for word, a short buffer cut.
+  level and status, the once and block lines word for word, a short buffer cut; the source picked
+  (`power_pick`: the one giving a current first) and a reading's freshness (`power_fresh`, 2.5 s).
 - `vmstat_read_test.c` (ctest `vmstat_read`, a program of its own; CPU only): the kernel's memory
   events a block (`port/platform/vmstat_read.h`, issue 179) from strings in the test: a newer
   kernel's text (allocstall by zone and the two refault counts summed, a count of a near name not
   taken), an older kernel's (one allocstall, one refault, no compaction or swap counts, no last
   newline), a text with none of the counts, the block's line (growth, not in the file, a count gone
   back) word for word, a short buffer cut.
+- `sys_cell_test.c`, its new-copy case (`sys_cell`): `sys_cell_get_new` gives nothing before a
+  write, the copy once, nothing again until the next write.
+- `rd_vu_zero_test.c`, its longest clause (`rd_vu_zero`): the 10 s clause with every refusal
+  reason, the shared lists and a checked picture at seven-digit counts fits `RD_VU_ZERO_TEXT_MAX`
+  whole (the window's buffer).
 - `report_test.c`, its marks case (`report`): issue 179's mark files (`vu-zero-mark.txt`,
   `ahead-mark.txt`, `nodiscard-mark.txt`) go in byte for byte when they are there; one not there,
   and all three once removed, have no entry.

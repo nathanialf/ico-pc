@@ -42,6 +42,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "rd.h" /* rd_vu_zero_text, RD_VU_ZERO_TEXT_MAX */
 #include "rd_ab_run.h"
 #include "rd_vu_zero.h"
 #include "shader_consts.h"
@@ -493,6 +494,28 @@ static void t6(void)
     CHECK(strcmp(buf, "; zero-area cull: 0 draws a picture culling, 0 triangles in culling draws "
                       "(how many it removed is not measured)") == 0,
           "the block reset: %s", buf);
+    /* the self-test block's clause at its longest (every refusal reason,
+       the shared lists, a checked picture, seven-digit counts) fits the
+       window's buffer whole (rd.h RD_VU_ZERO_TEXT_MAX; the 224 bytes it had
+       cut the reporter's self-test block's "checked" tail) */
+    {
+        char big[1024];
+        rd__vu_zero_draw(true, -1, 9999999u);
+        for (int i = 0; i < RD_VU_ZERO_REASONS; i++) {
+            for (int k = 0; k < 2; k++) {
+                rd__vu_zero_draw(false, i, 1u);
+            }
+        }
+        rd__vu_zero_shared_given_up();
+        rd__vu_zero_checked(9999999u, 9999999u, 9999999u);
+        const size_t len = rd_vu_zero_text(big, sizeof big, 1);
+        CHECK(len + 1u <= RD_VU_ZERO_TEXT_MAX, "the longest clause %zu bytes against %d", len + 1u,
+              RD_VU_ZERO_TEXT_MAX);
+        CHECK(strstr(big, "; checked 1 pictures: 9999999 of 9999999 triangle slots culled, "
+                          "9999999 differ") != NULL,
+              "the longest clause: %s", big);
+        printf("rd_vu_zero_test: the longest clause %zu bytes\n", len);
+    }
     /* no module made without a device (and none before a try) */
     CHECK(rd__vu_zero_variants_made() == 0u, "%u zero-area modules made without a device",
           rd__vu_zero_variants_made());

@@ -90,8 +90,10 @@ void perf_secs_record(PerfSecs *s, const PerfSecsRec *r, double nowMs)
     v->sec = (uint8_t)i;
     v->tris = (float)r->tris;
     v->gpu = r->gpuValid && r->gpuMs >= 0.0 ? (float)r->gpuMs : -1.0f;
-    v->red = r->gpuValid && r->reductionMs >= 0.0 ? (float)r->reductionMs : -1.0f;
-    v->pres = r->gpuValid && r->presentPassMs >= 0.0 ? (float)r->presentPassMs : -1.0f;
+    /* a pass not run in the picture (0: a replay not presented, a scene
+       without the reduction) is not a time of that fixed work */
+    v->red = r->gpuValid && r->reductionMs > 0.0 ? (float)r->reductionMs : -1.0f;
+    v->pres = r->gpuValid && r->presentPassMs > 0.0 ? (float)r->presentPassMs : -1.0f;
 }
 
 static int cmpf(const void *a, const void *b)

@@ -1027,10 +1027,11 @@ begins, so the last line says which one a hang of the handler itself is in:
   the last three frames only; a frame the GPU had not finished when the ring reused its slot is
   copied to memory first while a slot wait has blocked 100 ms or more (`rd: loss keep: frame N
   copied to memory ...`, the first eight and every hundredth), at most 4 copies of at most 16 MiB,
-  at most 4 tries in any 64 frames, nothing in steady play. On Vulkan only the part of the wait
-  the GPU's current picture has run counts (a wait queued behind the picture before is counted
-  in the 10 s line `rd: loss keep: in 10.0 s: ...` as `slot waits of 100 ms or more not counted
-  as stalled`, not copied; a picture stuck on the GPU still is), and the copy goes into a block
+  at most 4 tries in any 64 frames, nothing in steady play. On Vulkan, for a frame behind an
+  older unfinished one, only the part of the wait the GPU's current picture has run counts (a
+  wait queued behind the picture before is counted once in the 10 s line `rd: loss keep: in 10.0
+  s: ...` as `slot waits of 100 ms or more not counted as stalled`, not copied); the frame the
+  GPU is on counts the whole wait, so a hang of it is copied, and the copy goes into a block
   the dump worker made, else into one allocation of the frame's measured size ([RENDER.md](RENDER.md#the-loss-dump)). So the lost frame is held only when a
   stall came before the loss (as in both reports); otherwise the frames the ring holds are written,
   as before. `copies in memory: not used` says a copy in progress did not finish in time. A dump taken from the ring alone, for a loss at frame 129, held frames 132 and 131 and

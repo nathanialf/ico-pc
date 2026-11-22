@@ -480,6 +480,12 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
     too, no trial, its line word for word, once;
   - the modes `on`, `off` and `alt` (with, without, without, with) with no stage, their stats line;
     the judge with no stage never trying; the start line; the registry's bound; a short buffer;
+  - the measure: the scene's GPU work (the span less the present's pass and the display wait,
+    `rd_ab_scene_ms`): a stream held by the display (every span 40 ms, the wait taking up what
+    the scene saves) judged on with it, off with the whole span; the verdict line's words;
+  - a renderer made again (`rd_ab_forget`): a trial past 16 pairs ended unjudged, every verdict
+    and the carried arm forgotten, a record of the earlier renderer not measured, the trials run
+    still counted, the stage judged again on the new renderer;
   - the carried arm: the run's first stage with the attempt; a stage with no verdict of its own
     (its keep frames too) on the arm the run's last verdict left at once, its trial still run;
     one where the carried arm is the wrong one corrected by its trial (the verdict line says the

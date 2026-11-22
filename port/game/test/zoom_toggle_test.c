@@ -5,8 +5,9 @@
  * game's own R2 test tick for tick over pseudo-random ticks; Toggle's press
  * and release, the second press, a long hold, every clear (a script's zoom,
  * the source unable to deliver the bit, a new source, a new camera mode, a
- * stage start), both switches of the type, the June 2001 look-around's test,
- * and the save-state block (one FRESH block whose bytes copied back resume
+ * stage start), R2 still held when control returns (a press), both switches
+ * of the type, a copy of the camera arm's step choice (the game's steps under
+ * Hold), the June 2001 look-around's test, and the save-state block (one FRESH block whose bytes copied back resume
  * the latch).
  */
 #include <stdio.h>
@@ -121,11 +122,14 @@ static void test_toggle_clears(void)
     CHECK(ico_zoom_held(0, 0, 0, BOY, PLAY) == 0);
     CHECK(tick(0) == 0);
 
-    /* a press held while the source was not live is not a press after */
+    /* while control is off the game zeroes the boy's pad (boyact.c, the four
+       boy loops; the 2001 discs' iosPadRead with the pad off), so R2 still
+       held when control returns is a press: the camera zooms in */
     fresh(ICO_ZOOM_TOGGLE);
-    CHECK(ico_zoom_held(2, 0, 0, BOY, PLAY) == 0);
-    CHECK(tick(1) == 0);
-    CHECK(tick(0) == 0 && tick(1) == 1);
+    CHECK(ico_zoom_held(0, 0, 0, BOY, PLAY) == 0);
+    CHECK(ico_zoom_held(0, 0, 0, BOY, PLAY) == 0);
+    CHECK(tick(1) == 1);
+    CHECK(tick(1) == 1 && tick(0) == 1);
 
     /* a new source: the boy leaves (the camera's own pad) */
     fresh(ICO_ZOOM_TOGGLE);
@@ -181,6 +185,87 @@ static void test_switches(void)
     CHECK(tick(1) == 0);
     CHECK(tick(0) == 0);
     CHECK(tick(1) == 1);
+}
+
+/* A copy of the zoom block's step choice in camera-root.c's ntsc, aug6 and
+   jun26 arms (the European body differs only in clearing zoomRequest after
+   the chain).  The arms themselves need the whole game (GObj, the pads,
+   Camctrl, gsb) and are not built into a CPU test; options_test finds the
+   two lines below in camera-root.c four times each, so the copy is the
+   arm's test as written:
+       held = ico_zoom_held(p->now & 2, zoomRequest != 0,
+       } else if (held) { */
+static int arm_step(int now, int *zoomRequest, int boyControl, int ply)
+{
+    int step;
+    const int held = ico_zoom_held(now & 2, *zoomRequest != 0, ply != 0 ? boyControl : 1,
+                                   ply != 0 ? BOY : PAD, PLAY);
+
+    if (*zoomRequest != 0) {
+        step = 2;
+        *zoomRequest = 0;
+    } else if (held) {
+        step = 1;
+    } else {
+        step = 0;
+    }
+    return step;
+}
+
+/* the game's own choice, before the port's hook */
+static int game_step(int now, int *zoomRequest)
+{
+    int step;
+
+    if (*zoomRequest != 0) {
+        step = 2;
+        *zoomRequest = 0;
+    } else if (now & 2) {
+        step = 1;
+    } else {
+        step = 0;
+    }
+    return step;
+}
+
+static void test_arm(void)
+{
+    int i, same = 0, zr;
+
+    /* Hold: the arm's steps are the game's over random pads, script zooms,
+       boy control and boy presence */
+    ico_zoom_reset();
+    ico_opt_set_zoom_type(ICO_ZOOM_HOLD);
+    for (i = 0; i < 2000; i++) {
+        const int now = (int)(rnd() & 0xffff);
+        const int req = (rnd() % 9) == 0;
+        const int ctl = (rnd() % 5) != 0;
+        const int ply = (rnd() % 4) != 0;
+        int z1 = req, z2 = req;
+        const int a = arm_step(now, &z1, ctl, ply);
+        const int g = game_step(now, &z2);
+
+        same += a == g && z1 == z2;
+    }
+    CHECK(same == 2000);
+
+    /* Toggle: a press and release zoom in (step 1) and stay in; a script's
+       zoom is step 2 and zooms out after; the next press zooms in again */
+    ico_zoom_reset();
+    ico_opt_set_zoom_type(ICO_ZOOM_TOGGLE);
+    zr = 0;
+    CHECK(arm_step(0, &zr, 1, 1) == 0);
+    CHECK(arm_step(2, &zr, 1, 1) == 1);
+    CHECK(arm_step(0, &zr, 1, 1) == 1);
+    CHECK(arm_step(0, &zr, 1, 1) == 1);
+    zr = 1;
+    CHECK(arm_step(0, &zr, 1, 1) == 2 && zr == 0);
+    CHECK(arm_step(0, &zr, 1, 1) == 0);
+    CHECK(arm_step(2, &zr, 1, 1) == 1);
+    /* the second press: out */
+    CHECK(arm_step(0, &zr, 1, 1) == 1);
+    CHECK(arm_step(2, &zr, 1, 1) == 0);
+    CHECK(arm_step(0, &zr, 1, 1) == 0);
 }
 
 static void test_wanted(void)
@@ -244,6 +329,7 @@ int main(int argc, char **argv)
     test_toggle_press();
     test_toggle_clears();
     test_switches();
+    test_arm();
     test_wanted();
     test_block();
     if (failures != 0) {

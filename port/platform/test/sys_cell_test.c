@@ -55,6 +55,20 @@ int main(void)
         CHECK(sys_cell_get(&c, back, 16, NULL, NULL) == 16 && back[15] == 15.5 && back[0] == 0.5);
         sys_cell_put(&c, 1000.0, 1.5, w, 2);
     }
+    {
+        /* only what is new since the last copy's time: a writer that
+           stopped is not read again */
+        SysCell k;
+        memset(&k, 0, sizeof k);
+        double seen = 0.0, nv[2];
+        const double w2[2] = {7.0, 8.0};
+        CHECK(sys_cell_get_new(&k, nv, 2, &seen) == 0); /* nothing written */
+        sys_cell_put(&k, 500.0, 0.0, w2, 2);
+        CHECK(sys_cell_get_new(&k, nv, 2, &seen) == 2 && nv[1] == 8.0 && seen == 500.0);
+        CHECK(sys_cell_get_new(&k, nv, 2, &seen) == 0); /* the same copy again */
+        sys_cell_put(&k, 1500.0, 0.0, w2, 2);
+        CHECK(sys_cell_get_new(&k, nv, 2, &seen) == 2 && seen == 1500.0);
+    }
     c.seq |= 1u; /* a write in progress */
     CHECK(sys_cell_get(&c, v, 2, &at, &took) == 0);
 

@@ -1197,10 +1197,13 @@ backend still has a submission open at or after that frame and a slot wait has b
 more (`RhiGpuProgress.waitingNs`; `rd__loss_keep_recycle`, an ordinary dump held as bytes), counting
 on Vulkan only the part of the wait the GPU's current picture has run (`RhiGpuProgress.headNs`, the
 time since the submitting threads last saw the GPU finish a submission; `rd_loss_keep_stalled_head`:
-with two pictures in flight a wait spends its first part queued behind the picture before, counted
-as `RD_LOSS_KEEP_NOT_HEAD` and not copied; a picture stuck on the GPU for 100 ms, a hang, still
-counts in full; with the time unknown, the other backends and before the first finish, the whole
-wait counts) and a
+with two pictures in flight a wait spends its first part queued behind the picture before, so for
+a frame recycled behind an older open one (the first open submission's frame is older) the wait
+is counted as `RD_LOSS_KEEP_NOT_HEAD` and not copied; the frame that is itself the first open one,
+the GPU's current picture and so the one a hang holds, counts the whole wait as before, so a hang
+that begins once the picture before has finished still leaves its copy; a picture stuck on the
+GPU for 100 ms still counts in full; with the time unknown, the other backends and before the
+first finish, the whole wait counts) and a
 picture of that frame was handed to a replay (`rd__frame_sent`, set where the replay is asked for in
 `rd_thread.c`; with Frame rate Original a picture the gate left out was never on the GPU and is
 not copied, counted as `not copied: never handed to the GPU`). The copy goes into a block the dump
@@ -1230,7 +1233,8 @@ names the GPU's current picture's time; the first eight copies, then every hundr
 10 s window with anything in it, `rd: loss keep: in 10.0 s: 3 copies (mean 4.2 ms, longest 5.1
 ms; 2 into a block the dump worker made, 1 measured and allocated here), 0 frames not copied as
 never handed to the GPU, 41 slot waits of 100 ms or more not counted as stalled (the GPU's current
-picture had run less: the wait was queued behind the picture before)`, a block given back under
+picture had run less: the wait was queued behind the picture before)` (each wait counted once,
+by the submission number it blocks on, however many recycles see it), a block given back under
 the floor (`rd: loss keep: the dump worker's block for the next copy given back (N MB available of
 T MB, floor F MB): ...`) or not made (`rd: loss keep: the dump worker could not make a block of N
 KB ...`), the first eight then every hundredth, `rd: loss keep: frame N not copied: the

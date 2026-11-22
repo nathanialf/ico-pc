@@ -5068,7 +5068,7 @@ static void perf_log(void)
             (double)(cardTris - s_pres.cardTris) / steps, (cardMs - s_pres.cardMs) / steps);
     {
         /* the VU work of a replay: where the vertex shader's time goes */
-        char vu[256], fit[192], twins[96], sh[256], zc[480];
+        char vu[256], fit[192], twins[96], sh[256], zc[RD_VU_ZERO_TEXT_MAX + 384];
 
         (void)window_scene_vu_text(vu, sizeof(vu), s_perf.vuDraws, s_perf.vuTris, s_perf.vuPreVerts,
                                    b->n, rd_vu_prepass_on(), s_perf.vuLeftOut);

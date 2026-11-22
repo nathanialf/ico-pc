@@ -1097,6 +1097,7 @@ what each owner registers and why):
 | `pad_script.c` | `pad_script.tick` | CLOCK |
 | `door_grace.c` | `door_grace.armed`, `.arm_from`, `.arm_to`, `.arm_holding`, `.left`, `.from` | |
 | `yorda_trip.c` | `yorda_trip.run_ticks`, `yorda_trip.last_tick` (the run count and its tick stamp) | FRESH |
+| `no_shadows.c` | `no_shadows.fight_begun`, `no_shadows.fight_hold` (No Shadows' final-fight hold) | FRESH |
 | `gfx_null.c` | `dma.channels` | |
 | `host_loop.c` | `host_loop.vsyncs`, `host_loop.field` | |
 | `port/audio/audio_host.c` (`ico_audio_state_register`) | `spu2.state` (the SPU2: RAM, cores, register shadow, time, event queue, DMA channels and their callbacks, the IRQ callback, the reverb presets; not the render's scratch or the statistics), `spu2_sd.time`, `spu2_sd.effect_attr`, `mix_gain.tag`, `mix_gain.cache`, `mix_gain.ready` (the gains themselves are the player's settings), `sndn2.host` (the driver's pages, counters, reply and pitch table), `sndn2.carry`, `sndn2.staging`, `sndn2.adpcm`, `sndn2.queue`, `sndn2.q_write`, `sndn2.q_read`, `sndn2.pending`, `sndn2.pcm`, `audio.vsync_index` (which vsyncs render 801 frames at 59.94 Hz) | AUDIO; SCAN on `spu2.state` and `sndn2.host` |
@@ -1104,7 +1105,7 @@ what each owner registers and why):
 | `port/game/zoom_toggle.c` | `zoom_toggle.state` (Zoom type's latch: zoomed in, the last R2 level, its source and the camera mode; [GAME_FEATURES.md](GAME_FEATURES.md#zoom-type)) | FRESH |
 | `sce/libsndn2/sound.c` (`ico_sound_state_register`) | the EE sequencer's .bss: `sound.vab`, `sound.slot`, `sound.seq`, `sound.com`, `sound.packet`, `sound.iop2ee`, `sound.iop2ee_p`, `sound.se`, `sound.head`, `sound.client`, `sound.vab_hd`, `sound.seq_body`, `sound.hd_rel` (compiled into the sound library, so outside the game's data ranges) | AUDIO; SCAN on the pointer blocks |
 
-73 blocks, over 4 MB, most of it IOP RAM and the SPU2's RAM (2 MB each). SCAN marks a block that may hold host addresses (the
+Over 4 MB in all (the count is `ico_state_registry_count()`, named in the log when a block is refused), most of it IOP RAM and the SPU2's RAM (2 MB each). SCAN marks a block that may hold host addresses (the
 relocation scans it); AUDIO one copied under the audio lock; CLOCK a counter a load rewinds with
 the game (the Main tick count, and with it the pad script's position); FRESH
 (`ICO_STATE_FRESH`) one that starts from its initial value: a state saved before the block existed

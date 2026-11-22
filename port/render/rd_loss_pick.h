@@ -117,6 +117,12 @@ uint64_t rd_loss_keep_counted_ns(uint64_t waitingNs, bool headKnown, uint64_t he
 bool rd_loss_keep_stalled_head(uint64_t waitingFor, uint64_t waitingNs, bool headKnown,
                                uint64_t headNs);
 
+/* Whether a wait (RhiGpuProgress.waitingFor, the number it blocks on) is
+ * another than the one counted last (*last, updated): the 10 s line counts
+ * each wait once however many recycles see it (review K2); 0 (no wait)
+ * never */
+bool rd_loss_keep_wait_new(uint64_t *last, uint64_t waitingFor);
+
 /* The throttle on copies, windowed: at most RD_LOSS_KEEP_PER_WINDOW
  * attempts in any RD_LOSS_KEEP_WINDOW recycled frames, every attempt
  * counted (a copy kept, one too big, one that failed); after a copy too big
@@ -140,9 +146,10 @@ typedef struct RdLossThrottle {
 typedef enum RdLossKeep {
     RD_LOSS_KEEP_NOT_OPEN = 0, /* the GPU is past the frame: nothing to keep */
     RD_LOSS_KEEP_NO_STALL,     /* open, but no wait has stalled: not copied */
-    RD_LOSS_KEEP_NOT_HEAD,     /* open, the wait blocked RD_LOSS_KEEP_STALL_NS or more, but
-                                * the GPU's current picture has run less than that (the
-                                * wait was queued behind the picture before): not copied
+    RD_LOSS_KEEP_NOT_HEAD,     /* open behind an older open frame, the wait blocked
+                                * RD_LOSS_KEEP_STALL_NS or more, but the GPU's current
+                                * picture has run less than that (the wait was queued
+                                * behind the picture before): not copied
                                 * (rd_loss_keep_decide_head only) */
     RD_LOSS_KEEP_NOT_SENT,     /* open and stalled, but no picture of the frame was handed
                                 * to a replay: nothing of it is on the GPU, not copied (no
@@ -154,10 +161,16 @@ typedef enum RdLossKeep {
 
 RdLossKeep rd_loss_keep_decide(RdLossThrottle *t, uint64_t seen, uint32_t frame, bool sent,
                                uint32_t openFrame, uint64_t waitingFor, uint64_t waitingNs);
-/* The same with the head's time (rd_loss_keep_stalled_head): a wait that
- * stalled by rd_loss_keep_stalled's rule but not by the head's is
- * RD_LOSS_KEEP_NOT_HEAD (no attempt counted); headKnown false decides as
- * rd_loss_keep_decide */
+/* The same with the head's time (rd_loss_keep_stalled_head) for a frame
+ * queued behind an older unfinished one (frame above openFrame: issue 179's
+ * v0.11.14 title copies, each of a frame one to three after the first open
+ * one, its log lines 555-765): a wait that stalled by rd_loss_keep_stalled's
+ * rule but not by the head's is RD_LOSS_KEEP_NOT_HEAD (no attempt counted).
+ * The frame that is the first open one (frame == openFrame, the GPU's
+ * current picture, the one a hang holds) decides by the whole wait as
+ * rd_loss_keep_decide does, so a hang that begins once the picture before
+ * has finished, with the wait already past 100 ms, still leaves its copy.
+ * headKnown false decides as rd_loss_keep_decide */
 RdLossKeep rd_loss_keep_decide_head(RdLossThrottle *t, uint64_t seen, uint32_t frame, bool sent,
                                     uint32_t openFrame, uint64_t waitingFor, uint64_t waitingNs,
                                     bool headKnown, uint64_t headNs);

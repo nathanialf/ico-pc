@@ -308,6 +308,11 @@ typedef struct DumpOut {
        already handed over in place of the drain, and its ns (0 none) */
     bool readsOnly;
     uint64_t waitNs;
+    /* a memory dump's write pass (dumpFrameMemMax): the count pass on the
+       same thread just made the wait (drain or reads) and the decode
+       pool's settle, and nothing was handed over or queued since, so it is
+       not made again (review K3) */
+    bool waited;
 } DumpOut;
 
 #define RD_DUMP_MEM_MAX ((size_t)192u << 20)
@@ -407,12 +412,14 @@ static bool wRegion(DumpOut *fp)
  * loss dump on the watchdog's) and F12's keep the drain. */
 static bool dumpFrame(const RdFrame *f, DumpOut *out)
 {
-    if (out->readsOnly) {
-        out->waitNs = rd_thread_reads_wait();
-    } else {
-        (void)rd_thread_drain();
+    if (!out->waited) {
+        if (out->readsOnly) {
+            out->waitNs = rd_thread_reads_wait();
+        } else {
+            (void)rd_thread_drain();
+        }
+        rdtex_settle(); /* the texels the decode pool still owes (rd_tex_decode.h) */
     }
-    rdtex_settle(); /* the texels the decode pool still owes (rd_tex_decode.h) */
     /* the call's own sets (16 KB each): a loss dump on the watchdog's
        thread and a copy on the game thread's may build at once (rd_dump.c
        "the lost frame"), so nothing here is shared between calls */
@@ -605,10 +612,17 @@ static bool dumpFrameMemMax(const RdFrame *f, void **outBuf, size_t *outLen, siz
         w.buf = buf;
         w.cap = need;
         w.readsOnly = readsOnly;
+        w.waited = true; /* the count pass's wait and settle stand */
         /* the same thread between the two passes: nothing the frame names
-           changes, so the write takes exactly the measured bytes */
+           changes, so the write takes exactly the measured bytes; a length
+           that differs anyway is its own line, not "did not fit" */
         ok = buf != NULL && dumpFrame(f, &w) && !w.bad && w.len == need;
-        waited += w.waitNs;
+        if (buf != NULL && !ok && !w.big && w.len != need) {
+            rd__log("dump: the frame's write took %zu bytes where its count took %zu: not kept",
+                    w.len, need);
+            free(buf);
+            return false;
+        }
     }
     if (waitNs) {
         *waitNs = waited;
@@ -1488,10 +1502,13 @@ bool rd_dump_retained_frame(uint32_t number, const char *path, uint32_t *dumped)
  * Only while a slot wait has stalled (rd_loss_pick.h rd_loss_keep_stalled:
  * a wait in progress blocked 100 ms or more, RhiGpuProgress.waitingNs; no
  * driver call is made for it), and with the head's time known (Vulkan:
- * RhiGpuProgress.headKnown) only the part of the wait the GPU's current
- * picture has run counts (rd_loss_keep_stalled_head: a wait queued behind
- * the picture before is RD_LOSS_KEEP_NOT_HEAD, counted, not copied; a
- * picture stuck on the GPU for 100 ms still is): a copy serializes the
+ * RhiGpuProgress.headKnown), for a frame queued behind an older open one,
+ * only the part of the wait the GPU's current picture has run counts
+ * (rd_loss_keep_stalled_head: a wait queued behind the picture before is
+ * RD_LOSS_KEEP_NOT_HEAD, each wait counted once, not copied; the frame
+ * that is the GPU's current one counts the whole wait, so a hang of it
+ * leaves its copy; a picture stuck on the GPU for 100 ms still is): a
+ * copy serializes the
  * frame (about 7 MB at 2x; until v0.11.13 it drained the render and submit
  * threads first, the stalled picture's GPU work included), which must not
  * happen in steady play, where a GPU-bound phone still has the recycled
@@ -1535,7 +1552,9 @@ static struct {
     size_t cap[RD_LOSS_KEEP_SLOTS]; /* the allocation's bytes: a worker's block, else len */
     uint64_t seen, taken, big, failed, throttled, freed;
     uint64_t notSent; /* RD_LOSS_KEEP_NOT_SENT: not copied, never handed to the GPU */
-    uint64_t notHead; /* RD_LOSS_KEEP_NOT_HEAD: the wait queued behind the picture before */
+    uint64_t
+        notHead; /* RD_LOSS_KEEP_NOT_HEAD waits (each once): queued behind the picture before */
+    uint64_t notHeadWait; /* the last of them (RhiGpuProgress.waitingFor) */
     size_t maxBytes;
     RdLossThrottle throttle;
     RdKeepBlock blk; /* the worker's block (rd_loss_keep_block.h) */
@@ -1822,8 +1841,11 @@ void rd__loss_keep_recycle(const RdFrame *f)
                 keepNotSent(f, &p);
                 break;
             case RD_LOSS_KEEP_NOT_HEAD:
-                s_keep.notHead++;
-                s_keep.win.notHead++;
+                /* each wait once, however many recycles see it (review K2) */
+                if (rd_loss_keep_wait_new(&s_keep.notHeadWait, p.waitingFor)) {
+                    s_keep.notHead++;
+                    s_keep.win.notHead++;
+                }
                 break;
             case RD_LOSS_KEEP_THROTTLED:
             case RD_LOSS_KEEP_PAUSED:

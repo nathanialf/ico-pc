@@ -257,13 +257,15 @@ thread, files and one Java call.
 `stall_table_lines`, each 10 s block with a stall, after the present latency line). The piece a
 stall names is the one that grew most against its block median (`stall_pieces_judge`); a piece's
 share is its GPU time over the GPU spans of the block's timed pictures (the effects sit inside their
-lists' times, so the shares do not add up to 100 %). Pieces with a stall or 1 % of the GPU time,
+lists' times, so the shares do not add up to 100 %). The unit is the stalled replay: a replay whose
+present and one of its passes both stall judges the same record's pieces twice, so it counts once
+(counted twice it would weigh its piece twice). Pieces with a stall or 1 % of the GPU time,
 largest share first:
 
-`window: stalls against each piece's share of the GPU time (piece: stalls, their share of the
-stalls naming a piece, its share of the GPU time): 12 stalls, 10 naming a piece; list 0: 8, 80 %,
-48 %; list 3: 1, 10 %, 12 %; aura: 0, 0 %, 9 %; 2 naming none (240 timed pictures, 9850.0 ms of GPU
-spans)`
+`window: stalls against each piece's share of the GPU time (piece: stalled replays, their share of
+the stalled replays naming a piece, its share of the GPU time): 12 stalls in 11 replays, 10 of
+them naming a piece; list 0: 8, 80 %, 48 %; list 3: 1, 10 %, 12 %; aura: 0, 0 %, 9 %; 1 naming
+none (240 timed pictures, 9850.0 ms of GPU spans)`
 
 Question: does a piece stall out of proportion to its work (its stall share well over its GPU share
 across blocks), or do the stalls follow the work (the shares alike: the GPU slows as a whole)?
@@ -274,12 +276,13 @@ stall of the block, none left out (the detailed `window: stall:` lines keep thei
 `r553 s42 present 141 ms: list 0 88.1 ms x9.4; tris 31475 x1.05 of the median, x0.90 of the 2 s
 most; reduction 2.40/2.50/2.30, present 2.70/2.60/2.80 ms; battery -812 mA`
 
-the replay, the stage (`s?` not known), the stall (`present N ms`, or `pass N ms xF` against the
-pass's median), the piece that grew most with its time and factor (`no piece judged` where the
+the replay, the stage (`s?` not known), the stall (`present N ms`, or `pass list 0 SCENE N ms xF`:
+the pass and its time against the pass's median), the piece that grew most with its time and factor (`no piece judged` where the
 replay was not timed or no piece had a median), the VU triangles against the block's median and
 against the most of any picture of the stage in the 2 s before it (`(no median)`, `none in the 2
 s before`), the reduction's and the present pass's GPU times in the stalled replay and the next two
-timed replays (`-` not timed), and the battery current of the last second where it is read. A row
+timed replays (`-` not timed, or the pass not run in that picture), and the battery current where a reading is at most 2.5 s old (`POWER_FRESH_MS`: a reading that
+stopped is not carried on). A row
 waits for its two timed replays after it; one still waiting at the block's end goes in the next
 block's table (`N of them from the block before`) and is written there with what it has. Past 256
 stalls a block the rest are counted (`N more past the 256 held`); at the run's end every row is
@@ -311,17 +314,21 @@ the log thread). Readable or not is said once:
 `window: battery: read once a second on the log thread from /sys/class/power_supply/battery
 (current, voltage, level, status)`, or `window: battery: /sys/class/power_supply not readable
 (errno 13): read once a second on the log thread from Android's BatteryManager` (the app's Java side,
-`IcoActivity.batteryState`), or `window: battery: not readable (...): no battery lines`.
+`IcoActivity.batteryState`), or `window: battery: not readable (...): no battery lines`. The
+sysfs files are taken when they give a current; where they give the level but deny `current_now`
+BatteryManager is taken when it gives one (`power_pick`), else whichever gives anything.
 
 Each block: `window: battery each second: current -812 -790 -805 mA, voltage 3850-3862 mV, level 67
 %, discharging (sysfs; the current's sign as the device gives it)`. The kernel gives microamps and
 BatteryManager says microamps too, but some phones give milliamps in the same field, and the sign
 convention varies by phone: read the changes, not the absolute value. A failed read later is
-silent (no sample that second).
+silent (no sample that second); a block with no new reading has no battery line (not the block
+before's again). The run's last part block gets its line too.
 
 **The memory events** (`vmstat_read.h`, `/proc/vmstat` read once a second on the log thread). Once:
 `window: memory events: /proc/vmstat read once a second on the log thread (a block's line from the
-second block on)` or `... not readable (errno 13): no memory events lines`. Each block after the
+second block on)` or `... not readable (errno 13): no memory events lines`. A block with no new
+reading has no line (not zeros). Each block after the
 first: `window: memory events in the block (/proc/vmstat): direct reclaim stalls 0, compaction
 stalls 0, major page faults 123, swap-ins 0, swap-outs 0, refaults 45` (`allocstall*` summed over
 the zones, `compact_stall`, `pgmajfault`, `pswpin`, `pswpout`, `workingset_refault*` summed; `not in

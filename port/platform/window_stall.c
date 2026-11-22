@@ -234,8 +234,11 @@ static void pieces_take(const RdPerfRecord *r)
     s_pc.trisKnown = s_pc.trisMed >= 0.0;
     s_pc.trisMax = stall_tris_max(&s_tris, r->startMs, TRIS_SPAN_MS);
     stall_tris_add(&s_tris, r->startMs, (double)r->vuTris);
-    s_pc.red = r->gpuValid ? r->gpuPostMs[RD_PERF_POST_REDUCTION] : -1.0;
-    s_pc.pres = r->gpuValid ? r->gpuPresentMs : -1.0;
+    /* -1 where the pass did not run (0): not a time of the fixed work */
+    s_pc.red = r->gpuValid && r->gpuPostMs[RD_PERF_POST_REDUCTION] > 0.0
+                   ? r->gpuPostMs[RD_PERF_POST_REDUCTION]
+                   : -1.0;
+    s_pc.pres = r->gpuValid && r->gpuPresentMs > 0.0 ? r->gpuPresentMs : -1.0;
     if (!r->gpuValid) {
         return;
     }
@@ -345,11 +348,18 @@ void window_stall_stage(int stage)
     s_known = true;
 }
 
+#ifdef __ANDROID__
+static void power_block_lines(void); /* the battery and memory events lines, below */
+#endif
+
 void window_stall_run_summary(void)
 {
     char text[1536];
 
     stall_block_close(NULL, true); /* the last part block (its clock not read) */
+#ifdef __ANDROID__
+    power_block_lines(); /* and its battery and memory events */
+#endif
     if (stall_block_run_text(&s_stall, text, sizeof(text)) > 0) {
         fprintf(stderr, "window: %s\n", text);
     }
@@ -587,19 +597,23 @@ static void power_tick(double atMs)
     PowerSample ps;
     bool ok = false;
     if (s_source < 0) {
-        /* the first tick: where the battery can be read */
+        /* the first tick: where the battery can be read (power_pick: the
+           source that gives a current first) */
         int err = power_find();
-        if (err == 0 && s_batPath[0] != '\0' && power_sysfs(&ps, &err)) {
-            s_source = POWER_SOURCE_SYSFS;
+        PowerSample sys, and;
+        const bool sysAny = err == 0 && s_batPath[0] != '\0' && power_sysfs(&sys, &err);
+        const bool andAny = !(sysAny && sys.haveCurrent) && power_android(&and);
+        s_source = power_pick(sysAny, sysAny && sys.haveCurrent, andAny, andAny && and.haveCurrent);
+        if (s_source == POWER_SOURCE_SYSFS) {
+            ps = sys;
             ok = true;
         } else {
-            s_batSysErr = err;
+            s_batSysErr = sysAny ? 0 : err;
             s_batPath[0] = '\0';
-            if (power_android(&ps)) {
-                s_source = POWER_SOURCE_ANDROID;
+            if (s_source == POWER_SOURCE_ANDROID) {
+                ps = and;
                 ok = true;
             } else {
-                s_source = POWER_SOURCE_NONE;
                 s_batWhy = "no answer from the app's Java side";
             }
         }
@@ -759,8 +773,9 @@ static ThermalState thermal_now(const char **why, double *ageMs)
 static bool battery_now_ma(double *ma)
 {
     double v[7], at;
-    if (!s_asksOn || sys_cell_get(&s_batNowCell, v, 7, &at, NULL) != 7 || v[2] == 0.0) {
-        return false;
+    if (!s_asksOn || sys_cell_get(&s_batNowCell, v, 7, &at, NULL) != 7 || v[2] == 0.0 ||
+        !power_fresh(at, ico_thread_now_ms())) {
+        return false; /* none, or a reading that stopped (power_read.h) */
     }
     *ma = v[1];
     return true;
@@ -773,6 +788,10 @@ static void power_block_lines(void)
 {
     static bool s_batSaid, s_vmSaid, s_vmPrevHave;
     static VmStat s_vmPrev;
+    /* the cells' times at the last block's take: a cell not written since
+       (a read failing after it worked) gives no line, not the last
+       block's again (sys_cell_get_new) */
+    static double s_batSeen, s_vmSeen;
     char text[512];
     double v[16], at;
     if (!s_asksOn) {
@@ -784,7 +803,7 @@ static void power_block_lines(void)
         (void)power_source_text(source, s_batPath, s_batSysErr, s_batWhy, text, sizeof text);
         fprintf(stderr, "window: %s\n", text);
     }
-    if (source > 0 && sys_cell_get(&s_batBlockCell, v, 16, &at, NULL) == 16) {
+    if (source > 0 && sys_cell_get_new(&s_batBlockCell, v, 16, &s_batSeen) == 16) {
         __atomic_fetch_add(&s_batBlockGen, 1u, __ATOMIC_RELEASE); /* the next block from here */
         PowerBlock b;
         power_block_reset(&b);
@@ -804,8 +823,8 @@ static void power_block_lines(void)
             fprintf(stderr, "window: %s\n", text);
         }
     }
-    if (sys_cell_get(&s_vmCell, v, VMSTAT_FIELDS + 2, &at, NULL) != VMSTAT_FIELDS + 2) {
-        return; /* not read yet */
+    if (sys_cell_get_new(&s_vmCell, v, VMSTAT_FIELDS + 2, &s_vmSeen) != VMSTAT_FIELDS + 2) {
+        return; /* not read yet, or not since the last block */
     }
     if (v[VMSTAT_FIELDS + 1] <= 0.0) {
         if (!s_vmSaid) {
@@ -1032,7 +1051,8 @@ static bool battery_now_ma(double *ma); /* the last second's current (Android) *
 
 /* the stall's row in the block's table (stall_coincide.h StallRow): kind
    0 a present of ms, 1 a pass of ms at passFactor its median */
-static void stall_row(const StallMoment *m, uint32_t replay, int kind, double ms, double passFactor)
+static void stall_row(const StallMoment *m, uint32_t replay, int kind, double ms, double passFactor,
+                      const char *pass)
 {
     StallRow row;
     memset(&row, 0, sizeof(row));
@@ -1042,6 +1062,7 @@ static void stall_row(const StallMoment *m, uint32_t replay, int kind, double ms
     row.ms = (float)ms;
     row.passFactor = (float)passFactor;
     row.piece = -1;
+    snprintf(row.pass, sizeof row.pass, "%s", pass != NULL ? pass : "");
     row.tris = row.trisMed = row.trisMax = -1.0f;
     row.red[0] = row.pres[0] = -1.0f;
     if (s_pc.replay == replay && replay != 0) {
@@ -1065,7 +1086,7 @@ static void stall_row(const StallMoment *m, uint32_t replay, int kind, double ms
 }
 
 static void stall_event(const char *what, double t0Ms, double t1Ms, uint32_t replay, int kind,
-                        double ms, double passFactor)
+                        double ms, double passFactor, const char *pass)
 {
     /* every stall while they are rare, v0.11.6's rule past that
        (stall_coincide.h stall_line_due; the tally says how many were left
@@ -1075,7 +1096,7 @@ static void stall_event(const char *what, double t0Ms, double t1Ms, uint32_t rep
     static char text[4096];
     moment_now(&m, t0Ms, t1Ms, replay);
     stall_tally_add(&s_tally, &m);
-    stall_row(&m, replay, kind, ms, passFactor);
+    stall_row(&m, replay, kind, ms, passFactor, pass);
     if (!stall_line_due(&s_tally, &s_lines)) {
         return;
     }
@@ -1300,7 +1321,7 @@ void window_stall_blocked(const RdPerfRecord *r)
             r->presentMs, r->replay, r->acquireMs, r->presentLockMs, r->presentCallMs,
             r->presentPollMs, r->gpuValid ? r->gpuMs : 0.0, r->gpuValid ? "" : ", not timed yet");
         const double t1 = r->presentEndMs > 0.0 ? r->presentEndMs : ico_thread_now_ms();
-        stall_event(what, t1 - r->presentMs, t1, r->replay, 0, r->presentMs, 0.0);
+        stall_event(what, t1 - r->presentMs, t1, r->replay, 0, r->presentMs, 0.0, NULL);
     }
     if (r->presentEndMs > 0.0) {
         window_log_cost_present(r->presentEndMs - r->presentMs, r->presentEndMs);
@@ -1462,7 +1483,7 @@ void window_stall_passes(const RdPerfRecord *r, const RdPerfPassAgg *agg, const 
                      label, (unsigned)p[best].w, (unsigned)p[best].h, bestMs, bestMed, r->replay,
                      r->gpuValid ? r->gpuMs : 0.0);
             stall_event(what, r->startMs, r->startMs + r->totalMs + (r->gpuValid ? r->gpuMs : 0.0),
-                        r->replay, 1, bestMs, bestMs / bestMed);
+                        r->replay, 1, bestMs, bestMs / bestMed, label);
         }
     }
 

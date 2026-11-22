@@ -207,7 +207,7 @@ static void carryWords(const RdAbSubject *s, char *out, size_t n)
 }
 
 /* the trial ended: judged (verdict, early or on its n pairs) or not (why) */
-static void trialEnd(RdAb *a, const char *why, bool keptOn)
+static void trialEnd(RdAb *a, const char *why, bool keptOn, bool judgeable)
 {
     RdAbTrial *t = &a->t;
     if (!t->active) {
@@ -225,7 +225,7 @@ static void trialEnd(RdAb *a, const char *why, bool keptOn)
        began: the carried one) */
     char started[96];
     carryWords(s, started, sizeof(started));
-    if (why == NULL || n >= RD_AB_PAIRS_MIN) {
+    if (judgeable && (why == NULL || n >= RD_AB_PAIRS_MIN)) {
         v = judge(t, n, early, &med, &favOn, &favOff);
     }
     if (v == RD_AB_V_ON || v == RD_AB_V_OFF) {
@@ -243,14 +243,15 @@ static void trialEnd(RdAb *a, const char *why, bool keptOn)
         } else if (early) {
             snprintf(ended, sizeof(ended), " (all one way: the early verdict)");
         }
-        line(a,
-             "A/B: %s, %s: %u pairs%s, with it %.2f ms, without %.2f ms a thousand vertices and "
-             "triangles (the median pair %.1f %% %s with it, %u of %u cheaper %s), %u dropped by "
-             "a long picture, %u by unequal work: %s for this stage (it started %s)",
-             s->name, st, (unsigned)n, ended, onK, offK, pct, med <= 0.0 ? "cheaper" : "dearer",
-             (unsigned)(v == RD_AB_V_ON ? favOn : favOff), (unsigned)n,
-             v == RD_AB_V_ON ? "with it" : "without", (unsigned)t->dropLong, (unsigned)t->dropWork,
-             v == RD_AB_V_ON ? "on" : "off", started);
+        line(
+            a,
+            "A/B: %s, %s: %u pairs%s, with it %.2f ms, without %.2f ms of the scene's GPU work (the "
+            "present and its display wait left out) a thousand vertices and triangles (the median pair %.1f %% %s with it, %u of %u cheaper %s), %u dropped by "
+            "a long picture, %u by unequal work: %s for this stage (it started %s)",
+            s->name, st, (unsigned)n, ended, onK, offK, pct, med <= 0.0 ? "cheaper" : "dearer",
+            (unsigned)(v == RD_AB_V_ON ? favOn : favOff), (unsigned)n,
+            v == RD_AB_V_ON ? "with it" : "without", (unsigned)t->dropLong, (unsigned)t->dropWork,
+            v == RD_AB_V_ON ? "on" : "off", started);
         /* the next stages without a verdict of their own start on it */
         s->carry = (int8_t)v;
         s->carryStage = t->stage;
@@ -320,7 +321,7 @@ static void countArms(RdAb *a, uint8_t off)
 
 RdAbTag rd_ab_begin(RdAb *a, int32_t stage, double nowMs, bool keep)
 {
-    RdAbTag tag = {0, 0, stage, 0};
+    RdAbTag tag = {0, 0, stage, 0, a->epoch};
     if (a->stopped) {
         tag.off = allMask(a);
         countArms(a, tag.off);
@@ -341,7 +342,7 @@ RdAbTag rd_ab_begin(RdAb *a, int32_t stage, double nowMs, bool keep)
         return tag;
     }
     if (stage != a->stage) {
-        trialEnd(a, "the stage ended", false);
+        trialEnd(a, "the stage ended", false, true);
         a->stage = stage;
         a->stageMs = nowMs;
         a->usedNow = 0;
@@ -349,12 +350,12 @@ RdAbTag rd_ab_begin(RdAb *a, int32_t stage, double nowMs, bool keep)
     }
     RdAbTrial *t = &a->t;
     if (t->active && !a->subj[t->subject].allowed) {
-        trialEnd(a, "the attempt was turned off", false);
+        trialEnd(a, "the attempt was turned off", false, true);
     }
     if (t->active && t->seq >= RD_AB_GIVE_UP) {
         char why[64];
         snprintf(why, sizeof(why), "%u replays", (unsigned)RD_AB_GIVE_UP);
-        trialEnd(a, why, true);
+        trialEnd(a, why, true, true);
     }
     if (!t->active && stage >= 0 && a->trials < RD_AB_TRIALS &&
         nowMs - a->stageMs >= RD_AB_START_MS) {
@@ -384,7 +385,8 @@ RdAbTag rd_ab_begin(RdAb *a, int32_t stage, double nowMs, bool keep)
 
 void rd_ab_collect(RdAb *a, const RdAbIn *in)
 {
-    if (a->mode != RD_AB_AUTO || a->stopped || in->tag.stage != a->stage) {
+    if (a->mode != RD_AB_AUTO || a->stopped || in->tag.stage != a->stage ||
+        in->tag.epoch != a->epoch) {
         return;
     }
     const bool measurable = in->valid && !in->keep && in->work > 0.0 && in->gpuMs > 0.0;
@@ -445,11 +447,36 @@ void rd_ab_collect(RdAb *a, const RdAbIn *in)
         double m;
         uint32_t fOn, fOff;
         if (judge(t, t->pairs, true, &m, &fOn, &fOff) != RD_AB_V_NONE) {
-            trialEnd(a, NULL, false);
+            trialEnd(a, NULL, false, true);
         }
     } else if (t->pairs == RD_AB_PAIRS) {
-        trialEnd(a, NULL, false);
+        trialEnd(a, NULL, false, true);
     }
+}
+
+void rd_ab_forget(RdAb *a, const char *why)
+{
+    trialEnd(a, "the renderer was made again", false, false);
+    a->nMem = 0;
+    for (int i = 0; i < a->nSubj; i++) {
+        a->subj[i].carry = RD_AB_V_NONE;
+        a->subj[i].carryStage = 0;
+    }
+    a->stage = -1; /* the next replay's stage begins again */
+    a->usedNow = 0;
+    a->histN = a->histAt = 0;
+    a->epoch++;
+    line(a,
+         "A/B: the renderer was made again (%s): every verdict and the carried arm forgotten, "
+         "each attempt with it until its stage's own trial on this renderer",
+         why != NULL ? why : "?");
+}
+
+double rd_ab_scene_ms(double spanMs, double displayWaitMs, double presentMs)
+{
+    const double ms =
+        spanMs - (displayWaitMs > 0.0 ? displayWaitMs : 0.0) - (presentMs > 0.0 ? presentMs : 0.0);
+    return ms > 0.0 ? ms : 0.0;
 }
 
 void rd_ab_stop(RdAb *a, const char *why)
@@ -515,7 +542,7 @@ size_t rd_ab_start_text(const RdAb *a, char *out, size_t cap)
         put(out, cap, &at,
             "; a trial %.1f s into a stage, one attempt at a time, at most %u a run, its "
             "replays with, without, without, with; a pair two replays in a row whose vertices "
-            "and triangles are within %.0f %%, measured as GPU time over them, dropped with a "
+            "and triangles are within %.0f %%, measured as the scene's GPU time (the present and its display wait left out) over them, dropped with a "
             "picture over %.1f times the running median (of %u at least); verdict at %u pairs "
             "all one way by %.0f %% or more, else at %u: on with a median %.0f %% or more cheaper "
             "with it and %u of %u cheaper with it, else off; no verdict under %u pairs in %u "
