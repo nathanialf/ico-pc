@@ -893,7 +893,8 @@ static bool aheadStep(Ahead *a)
             __atomic_add_fetch(&s_aheadSubmits, 1u, __ATOMIC_RELEASE);
             if (check != RD_AHEAD_OFF_NONE) {
                 char what[96];
-                snprintf(what, sizeof(what), "the submission counter still at %llu after it",
+                snprintf(what, sizeof(what),
+                         "the submission counter at %llu after it, short of its submits",
                          (unsigned long long)value);
                 aheadOffSet(check, check == RD_AHEAD_OFF_SUBMIT ? what : NULL);
             }

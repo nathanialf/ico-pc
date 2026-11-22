@@ -11,6 +11,8 @@
 # of each of its profiles, each with the draw merge and without it
 # (ICO_RD_VU_MERGE=0):
 #   corpus   the device as it is: the Original preset at 4:3 and 1x, the
+#            same with Full pixel on (--full-pixel: the reduction draws the
+#            whole frame, no border crop), the
 #            Enhanced preset at 16:9 and at 4:3, both 2x (the lattice of
 #            two samples a GS pixel each way; the 4:3 one for the frames
 #            narrower than 16:9), and the Original preset with the motion
@@ -41,7 +43,8 @@
 # committed list, at least one triangle culled at the 2x lattice (the
 # enh169 and enh43 runs together).  A fixture with no pair compared under
 # one of its profiles fails.
-# MODE=fault (rd_vu_zero_fault): the run-time check's way back instead: each
+# MODE=fault (rd_vu_zero_fault): the tests' check's way back instead (the
+# ICO_RD_VU_ZERO=1 check; there is none in play): each
 # frame once under the mali profile (a frame not listed for it: the corpus
 # profile's Original 4:3 setting) with ICO_RD_VU_ZERO=1 and
 # ICO_RD_VU_ZERO_SABOTAGE=check (the CPU's answers from no lattice, so every
@@ -137,10 +140,11 @@ endif()
 set(env_corpus "")
 set(env_mali ICO_VK_FAKE_LIMITS=mali ICO_VK_FAKE_VENDOR=0x13B5 ICO_RD_VU_RECORD=compute)
 set(env_mali169 ${env_mali})
-set(settings_corpus orig enh169 enh43 vel)
+set(settings_corpus orig origfp enh169 enh43 vel)
 set(settings_mali mali)
 set(settings_mali169 m169)
 set(args_orig --aspect 4:3)
+set(args_origfp --aspect 4:3 --full-pixel)
 set(args_enh169 --enhanced --aspect 16:9 --resolution 2x)
 set(args_enh43 --enhanced --aspect 4:3 --resolution 2x)
 set(args_vel --aspect 4:3 --velocity)

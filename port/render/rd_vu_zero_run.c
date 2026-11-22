@@ -33,8 +33,8 @@
  *     start lost the graphics device, ICO_LOSS_ROW 1; nothing written to
  *     the settings)
  *   rd: VU zero-area cull: off for the run: the GPU's answer differs from
- *     the CPU's in a check of replay N (triangle slot j: the GPU culled it,
- *     the CPU keeps it (...))
+ *     the CPU's in X of Y triangle slots of replay N (triangle slot j: the
+ *     GPU culled it, the CPU keeps it (...))
  */
 #include <stdio.h>
 #include <stdlib.h>

@@ -983,7 +983,7 @@ static void testDump(const char *dir)
               "a frame the ring does not hold is not dumped");
         {
             /* the reads-only mode (rd_dump.c dumpFrame: the slow-scene
-               dump's copy grown here, the loss keep's) is the drained
+               dump's copy made here, the loss keep's) is the drained
                dump byte for byte.  No host here: the drain and the wait
                for the reads both return at once, so this shows only that
                the mode serialises the frame the same way; that it waits

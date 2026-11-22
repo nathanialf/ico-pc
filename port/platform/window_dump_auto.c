@@ -283,7 +283,7 @@ int window_dump_auto_slow(uint32_t frame, const SlowSceneBlock *b, double work, 
     const double measured = ms_since(t0) - j->drainMs;
     if (ico_dump_auto_prepare(want) != 0) {
         /* no worker thread (or busy since the check): the old way, the
-           copy grown here; the submit says why when it fails too */
+           copy made here; the submit says why when it fails too */
         const Uint64 t1 = SDL_GetTicksNS();
         if (!rd_dump_retained_frame_mem_reads(frame, &j->dump, &j->dumpLen, &got)) {
             fprintf(stderr, "window: slow scene: frame %u not written\n", (unsigned)frame);
@@ -291,7 +291,7 @@ int window_dump_auto_slow(uint32_t frame, const SlowSceneBlock *b, double work, 
         }
         j->measureMs = measured;
         j->copyMs = ms_since(t1);
-        snprintf(j->how, sizeof(j->how), "grown here: the worker could not be asked");
+        snprintf(j->how, sizeof(j->how), "made here: the worker could not be asked");
         ico_attempt_fire2(ICO_ATT_CAPTURE_TWO_STEP, 1);
         return slow_submit(j, b, got, work, meanWork, stamp, ms_since(t0));
     }
@@ -401,7 +401,7 @@ static void slow_pump(void)
         ico_dump_auto_unprepare(block);
         fprintf(stderr,
                 "window: slow-scene dump: frame %u %s the worker's block of %zu bytes: copied "
-                "into a block grown here instead\n",
+                "into a block made here instead\n",
                 (unsigned)frame,
                 into == RD_DUMP_INTO_SMALL ? "had grown past" : "could not be written into", size);
         if (!rd_dump_retained_frame_mem_reads(frame, &j->dump, &j->dumpLen, &got)) {
@@ -411,7 +411,7 @@ static void slow_pump(void)
             return;
         }
         j->copyMs = ms_since(t1) - drain;
-        snprintf(j->how, sizeof(j->how), "grown here: frame %u %s the worker's block",
+        snprintf(j->how, sizeof(j->how), "made here: frame %u %s the worker's block",
                  (unsigned)frame, into == RD_DUMP_INTO_SMALL ? "had grown past" : "missed");
         ico_attempt_fire2(ICO_ATT_CAPTURE_TWO_STEP, 1);
     }

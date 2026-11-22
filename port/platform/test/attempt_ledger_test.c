@@ -1017,7 +1017,7 @@ static void test_flat0_capture(void)
     ico_attempt_fire(ICO_ATT_CAPTURE_TWO_STEP, 1);
     (void)ico_attempt_block_text(b, sizeof b, -1);
     CHECK(text_is(b, "attempts: slow-scene capture in two steps on 1 slow-scene captures (0 "
-                     "grown here)"));
+                     "made here)"));
     ico_attempt_reset();
 }
 
@@ -1246,13 +1246,13 @@ int main(void)
     ico_attempt_fire(ICO_ATT_DATE_ONE, 9); /* counted, not printed: not reported */
     (void)ico_attempt_block_text(b, sizeof(b), -1);
     CHECK(text_is(b, "attempts: few-cores rule on 3 threads moved; slow-scene capture in two "
-                     "steps on 1 slow-scene captures (0 grown here); flat outputs at the provoking "
+                     "steps on 1 slow-scene captures (0 made here); flat outputs at the provoking "
                      "corner on (static); no-volume break off by default 0 pictures"));
     /* the next block starts from 0 */
     ico_attempt_fire(ICO_ATT_FEW_CORES, 2);
     (void)ico_attempt_block_text(b, sizeof(b), 4);
     CHECK(starts(b, "attempts: few-cores rule on 2 threads moved; slow-scene capture in two "
-                    "steps on 0 slow-scene captures (0 grown here); "));
+                    "steps on 0 slow-scene captures (0 made here); "));
     CHECK(strstr(b, "; stalls 4 in the block") != NULL && strstr(b, "(the Adreno attempt") == NULL);
     /* reported late: counts since the last block (9 before, 1 since) */
     ico_attempt_state(ICO_ATT_DATE_ONE, ICO_ATT_ON, "every device");

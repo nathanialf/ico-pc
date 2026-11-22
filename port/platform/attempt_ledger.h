@@ -12,7 +12,7 @@
  *     on (a dump worker); flat outputs at the provoking corner on (every
  *     device); one DATE set-up not reported; ...
  *   attempts: few-cores rule on 3 threads moved; capture in two steps on 1
- *     captures (0 grown here); flat outputs at the provoking corner on
+ *     captures (0 made here); flat outputs at the provoking corner on
  *     (static); one DATE set-up on 270 shared (0 retaken by the guard);
  *     ...; stalls 3 in the block (the Adreno attempt on)
  * The first once a run at the first 10 s block (and again when a state
