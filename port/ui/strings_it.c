@@ -927,4 +927,7 @@ const char *const ui_strings_it[UI_STR_COUNT] =
         [UI_STR_DIFF_WORD_PERMADEATH] = "Morte permanente",
         [UI_STR_DIFF_STATES_SAVE_LOCKED] =
             "Gli stati salvati non si possono creare in un viaggio con morte permanente.",
+        [UI_STR_TUNE_TITLE] = "Ricerca delle impostazioni migliori",
+        [UI_STR_TUNE_BODY] =
+            "Il gioco sta misurando due modi\ndi disegnare su questo\ndispositivo. In ogni nuova area\npotrebbero esserci scatti per\nqualche secondo.",
 };

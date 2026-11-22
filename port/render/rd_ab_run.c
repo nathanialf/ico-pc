@@ -26,6 +26,7 @@ static int s_ledAllowed = -1, s_ledStopped = -1;
 static uint32_t s_ledOn, s_ledOff, s_ledTrials; /* fired into the ledger so far */
 static long s_fakeLoss;                         /* ICO_RD_AB_FAKE_LOSS: the replay N */
 static uint32_t s_replays;                      /* begun this run */
+static int s_notice; /* __atomic: the player's notice due (rd_ab_notice_take) */
 
 static void made(void)
 {
@@ -93,6 +94,9 @@ void rd__ab_begin(RdPerfRecord *r)
     r->abSeq = tag.seq;
     r->abStage = tag.stage;
     r->abEpoch = tag.epoch;
+    if (rd_ab_take_notice(&s_ab)) {
+        __atomic_store_n(&s_notice, 1, __ATOMIC_RELEASE); /* the UI's thread shows it */
+    }
     r->abOff = s_off;
     s_open = true;
     drain();
@@ -139,6 +143,11 @@ void rd__ab_renderer(void)
     rd_ab_forget(&s_ab, "a Graphics API switch or the device made again");
     drain();
     ledger();
+}
+
+bool rd_ab_notice_take(void)
+{
+    return __atomic_exchange_n(&s_notice, 0, __ATOMIC_ACQ_REL) != 0;
 }
 
 bool rd__ab_off(int subject)

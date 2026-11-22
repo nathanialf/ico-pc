@@ -206,6 +206,15 @@ too slow stays at 30, and tries 60 again from time to time (every few
 seconds at first, then at most every 16 seconds); each try can show as one
 small stutter.
 
+## A message says "Finding the best settings"
+
+On some devices the game can draw the same picture two ways, and which is
+faster depends on the device. Once per session, when it first starts
+comparing them, it shows this message. For a few seconds in each new area
+it switches between the two ways and keeps the faster one there, so you may
+see some stutter while it does. The picture looks the same either way, and
+there is nothing to set.
+
 What to lower, in this order (Options):
 
 - **Anti-aliasing**: 2x supersampling draws four times the pixels and 4x

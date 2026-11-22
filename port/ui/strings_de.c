@@ -948,4 +948,7 @@ const char *const
             [UI_STR_DIFF_WORD_PERMADEATH] = "Permadeath",
             [UI_STR_DIFF_STATES_SAVE_LOCKED] =
                 "Auf einer Permadeath-Reise lassen sich keine Spielzustände speichern.",
+            [UI_STR_TUNE_TITLE] = "Beste Einstellungen werden gesucht",
+            [UI_STR_TUNE_BODY] =
+                "Das Spiel misst auf diesem Gerät\nzwei Arten zu zeichnen. In jedem\nneuen Bereich kann es ein paar\nSekunden lang ruckeln.",
 };

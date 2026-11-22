@@ -784,8 +784,79 @@ static void testForget(void)
           s_last);
 }
 
+/* the player's notice (rd_ab_take_notice): once a run at the first
+   trial's start; not for a later trial, a second subject, after a stop or a
+   renderer made again; never without a trial (nothing allowed, no stage,
+   the tests' fixed and alternating modes) */
+static void testNotice(void)
+{
+    printf("the player's notice:\n");
+    Stream s = {0};
+    s.lag = 2;
+    s.replays = 40;
+    s.stepMs = 40.0;
+    s.stage = 60;
+    /* no trial yet (the first 2 s): none */
+    rd_ab_init(&s_a, RD_AB_AUTO);
+    (void)rd_ab_subject(&s_a, "zero-area cull");
+    (void)rd_ab_subject(&s_a, "fake");
+    rd_ab_allow(&s_a, 0, true);
+    rd_ab_allow(&s_a, 1, true);
+    double t = run(&s_a, &s, 0.0, 3u);
+    CHECK(s_a.trials == 0u && !rd_ab_take_notice(&s_a), "a notice before any trial");
+    /* the first trial's start: once */
+    s.replays = 1;
+    t = run(&s_a, &s, t + RD_AB_START_MS, 3u);
+    CHECK(s_a.trials == 1u, "no trial began: %u", (unsigned)s_a.trials);
+    CHECK(rd_ab_take_notice(&s_a), "no notice at the first trial");
+    CHECK(!rd_ab_take_notice(&s_a), "the notice twice");
+    /* the rest of the stage (both subjects' trials), later stages, a
+       renderer made again and its trials, a stop: none again */
+    s.replays = 400;
+    s.effect = 0.05;
+    for (int k = 0; k < 4; k++) {
+        s.stage = 61 + k;
+        t = run(&s_a, &s, t + 1.0, 3u);
+        CHECK(!rd_ab_take_notice(&s_a), "a notice at stage %d", s.stage);
+    }
+    rd_ab_forget(&s_a, "a Graphics API switch");
+    s.stage = 61;
+    t = run(&s_a, &s, t + 1.0, 3u);
+    CHECK(s_a.trials > 2u && !rd_ab_take_notice(&s_a),
+          "a notice after the renderer was made again");
+    rd_ab_stop(&s_a, "the graphics device was lost");
+    (void)run(&s_a, &s, t + 1.0, 3u);
+    CHECK(!rd_ab_take_notice(&s_a), "a notice after the stop");
+    /* never without a trial: nothing allowed, no stage, the tests' modes */
+    rd_ab_init(&s_a, RD_AB_AUTO);
+    (void)rd_ab_subject(&s_a, "zero-area cull");
+    s.stage = 70;
+    (void)run(&s_a, &s, 0.0, 1u);
+    CHECK(s_a.trials == 0u && !rd_ab_take_notice(&s_a), "a notice with nothing allowed");
+    rd_ab_allow(&s_a, 0, true);
+    s.stage = -1;
+    (void)run(&s_a, &s, 1e6, 1u);
+    CHECK(!rd_ab_take_notice(&s_a), "a notice with no stage");
+    for (int m = RD_AB_FIXED_ON; m <= RD_AB_ALT; m++) {
+        rd_ab_init(&s_a, m);
+        (void)rd_ab_subject(&s_a, "zero-area cull");
+        rd_ab_allow(&s_a, 0, true);
+        s.stage = 71;
+        (void)run(&s_a, &s, 0.0, 1u);
+        CHECK(!rd_ab_take_notice(&s_a), "a notice in mode %d", m);
+    }
+    /* a stop before any trial: none */
+    rd_ab_init(&s_a, RD_AB_AUTO);
+    (void)rd_ab_subject(&s_a, "zero-area cull");
+    rd_ab_allow(&s_a, 0, true);
+    rd_ab_stop(&s_a, "the graphics device was lost");
+    (void)run(&s_a, &s, 0.0, 1u);
+    CHECK(!rd_ab_take_notice(&s_a), "a notice after a stop before any trial");
+}
+
 int main(void)
 {
+    testNotice();
     testMeasure();
     testForget();
     testVerdicts();
