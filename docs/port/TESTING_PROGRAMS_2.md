@@ -35,7 +35,10 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   2000 pseudo-random ticks of the bit, a script's zoom, the source's liveness, the source and the
   camera mode; Toggle's press and release (in, and stays in), the second press (out), a level held
   50 ticks (one flip); the clears (a script's zoom, a press held through it doing nothing after,
-  the source not live, a new source, a new camera mode, a stage start, R2 held into a new stage);
+  the source not live and R2 still held when it is live again (a press), a new source, a new camera
+  mode, a stage start, R2 held into a new stage); a copy of the camera arm's step choice
+  (`camera-root.c`, whose lines `options_test` finds four times) giving the game's steps under
+  Hold over 2000 random ticks and Toggle's steps over a press;
   Toggle to Hold while zoomed (cleared), Hold to Toggle while held (no flip); the June 2001
   look-around's test; `zoom_toggle.state` one FRESH block whose bytes copied back resume the latch
   (`zoom_toggle`).

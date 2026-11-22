@@ -464,8 +464,8 @@ A change takes effect the next time you start the game.
 - **Zoom type** is **Hold**, where the camera zooms in while you keep R2
   held (the game's own way, on every disc), or **Toggle**, where you press
   R2 once to zoom in and again to zoom out. With Toggle the camera also
-  zooms back out by itself when a cutscene or a scripted camera takes over
-  and when you go into another room. It follows the game's **Button
+  zooms back out by itself when a cutscene takes over or the game zooms the
+  camera itself, and when you go into another room. It follows the game's **Button
   configuration**, shows from the title screen and the pause menu, on every
   disc, and is kept in the settings file for every save.
 - **Analogue stick fix** is the same switch as the one on the Gameplay
