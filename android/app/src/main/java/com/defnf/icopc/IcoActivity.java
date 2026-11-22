@@ -186,6 +186,55 @@ public class IcoActivity extends SDLActivity {
                 descMax);
     }
 
+    // The battery for the log (issue 179: whether a power limit slows the
+    // GPU), asked once a second from the log thread (host_android.c
+    // ico_android_battery, port/platform/power_read.h) only where
+    // /sys/class/power_supply cannot be read. Read only: BatteryManager's
+    // current (uA, Integer.MIN_VALUE where the phone gives none) and level,
+    // and the sticky battery broadcast's voltage (mV) and status
+    // (BatteryManager.BATTERY_STATUS_*); -1 for a value not given; null with
+    // no activity. registerReceiver with no receiver only returns the last
+    // broadcast.
+    public static int[] batteryState() {
+        if (sInstance == null) {
+            return null;
+        }
+        int[] out = {Integer.MIN_VALUE, -1, -1, -1};
+        try {
+            android.os.BatteryManager bm = (android.os.BatteryManager)
+                    sInstance.getSystemService(Context.BATTERY_SERVICE);
+            if (bm != null) {
+                out[0] = bm.getIntProperty(
+                        android.os.BatteryManager.BATTERY_PROPERTY_CURRENT_NOW);
+                int level = bm.getIntProperty(
+                        android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY);
+                if (level >= 0 && level <= 100) {
+                    out[2] = level;
+                }
+            }
+        } catch (RuntimeException e) {
+            // no answer is the answer
+        }
+        try {
+            Intent i = sInstance.registerReceiver(null,
+                    new android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+            if (i != null) {
+                out[1] = i.getIntExtra(android.os.BatteryManager.EXTRA_VOLTAGE, -1);
+                out[3] = i.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1);
+                if (out[2] < 0) {
+                    int l = i.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1);
+                    int sc = i.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1);
+                    if (l >= 0 && sc > 0) {
+                        out[2] = l * 100 / sc;
+                    }
+                }
+            }
+        } catch (RuntimeException e) {
+            // no answer is the answer
+        }
+        return out;
+    }
+
     // GameManager.getGameMode: 0 unsupported, 1 standard, 2 performance, 3
     // battery, 4 custom; -1 before Android 12 (API 31), -2 when the system
     // gives none. Asked once at the window's open, for the performance

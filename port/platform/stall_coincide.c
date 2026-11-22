@@ -558,3 +558,265 @@ bool stall_driver_name(const char *name)
     }
     return false;
 }
+
+/* --- the block's stalls: their pieces' shares and their table ----------- */
+
+void stall_table_reset(StallTable *t)
+{
+    memset(t, 0, sizeof(*t));
+}
+
+void stall_table_timed(StallTable *t, uint32_t replay, double gpuMs, const int *what,
+                       const double *ms, unsigned n, double redMs, double presMs)
+{
+    t->timed++;
+    t->gpuMs += gpuMs > 0.0 ? gpuMs : 0.0;
+    for (unsigned i = 0; i < n; i++) {
+        if (what[i] >= 0 && what[i] < STALL_SHARE_PIECES && ms[i] > 0.0) {
+            t->pieceMs[what[i]] += ms[i];
+        }
+    }
+    for (unsigned i = 0; i < t->n; i++) {
+        StallRow *r = &t->row[i];
+        if (r->after < 2u && r->replay < replay) {
+            r->red[1u + r->after] = (float)redMs;
+            r->pres[1u + r->after] = (float)presMs;
+            r->after++;
+        }
+    }
+}
+
+void stall_table_add(StallTable *t, const StallRow *r)
+{
+    t->stalls++;
+    if (r->piece >= 0 && r->piece < STALL_SHARE_PIECES) {
+        t->named++;
+        t->byPiece[r->piece]++;
+    }
+    if (t->n == STALL_TABLE_MAX) {
+        t->dropped++;
+        return;
+    }
+    StallRow *o = &t->row[t->n++];
+    *o = *r;
+    o->after = 0;
+    o->carried = 0;
+    o->red[1] = o->red[2] = o->pres[1] = o->pres[2] = -1.0f;
+}
+
+static const char *piece_of(const char *const *names, int i, char *tmp, size_t cap)
+{
+    if (names != NULL && i >= 0 && i < STALL_SHARE_PIECES && names[i] != NULL &&
+        names[i][0] != '\0') {
+        return names[i];
+    }
+    snprintf(tmp, cap, "piece %d", i);
+    return tmp;
+}
+
+static double pct(double a, double b)
+{
+    return b > 0.0 ? 100.0 * a / b : 0.0;
+}
+
+size_t stall_share_text(const StallTable *t, const char *const *names, char *out, size_t cap)
+{
+    Out o = {out, cap, 0};
+    if (cap > 0) {
+        out[0] = '\0';
+    }
+    if (t->stalls == 0) {
+        return 0;
+    }
+    /* the pieces with a stall or 1 % of the GPU time, the largest share
+       first */
+    int order[STALL_SHARE_PIECES];
+    unsigned k = 0;
+    for (int i = 0; i < STALL_SHARE_PIECES; i++) {
+        if (t->byPiece[i] > 0u || pct(t->pieceMs[i], t->gpuMs) >= 1.0) {
+            order[k++] = i;
+        }
+    }
+    for (unsigned i = 1; i < k; i++) {
+        const int v = order[i];
+        unsigned j = i;
+        while (j > 0 && (t->pieceMs[order[j - 1]] < t->pieceMs[v] ||
+                         (t->pieceMs[order[j - 1]] == t->pieceMs[v] && order[j - 1] > v))) {
+            order[j] = order[j - 1];
+            j--;
+        }
+        order[j] = v;
+    }
+    put(&o,
+        "stalls against each piece's share of the GPU time (piece: stalls, their share of the "
+        "stalls naming a piece, its share of the GPU time): %u stall%s, %u naming a piece",
+        t->stalls, t->stalls == 1u ? "" : "s", t->named);
+    for (unsigned i = 0; i < k; i++) {
+        char tmp[24];
+        const int p = order[i];
+        put(&o, "; %s: %u, %.0f %%, %.0f %%", piece_of(names, p, tmp, sizeof tmp), t->byPiece[p],
+            pct((double)t->byPiece[p], (double)t->named), pct(t->pieceMs[p], t->gpuMs));
+    }
+    put(&o, "; %u naming none (%u timed pictures, %.1f ms of GPU spans)", t->stalls - t->named,
+        t->timed, t->gpuMs);
+    return o.at;
+}
+
+static bool row_ready(const StallRow *r, bool all)
+{
+    return all || r->carried || r->after >= 2u;
+}
+
+unsigned stall_table_ready(const StallTable *t, bool all)
+{
+    unsigned k = 0;
+    for (unsigned i = 0; i < t->n; i++) {
+        k += row_ready(&t->row[i], all) ? 1u : 0u;
+    }
+    return k;
+}
+
+static void put_ms3(Out *o, const char *what, const float *v)
+{
+    put(o, "%s ", what);
+    for (int i = 0; i < 3; i++) {
+        if (v[i] >= 0.0f) {
+            put(o, "%s%.2f", i ? "/" : "", (double)v[i]);
+        } else {
+            put(o, "%s-", i ? "/" : "");
+        }
+    }
+}
+
+static void row_text(Out *o, const StallRow *r, const char *const *names)
+{
+    put(o, "r%u ", r->replay);
+    if (r->stage == STALL_NO_STAGE) {
+        put(o, "s? ");
+    } else {
+        put(o, "s%d ", r->stage);
+    }
+    if (r->kind == 0) {
+        put(o, "present %.0f ms: ", (double)r->ms);
+    } else {
+        put(o, "pass %.1f ms x%.1f: ", (double)r->ms, (double)r->passFactor);
+    }
+    if (r->piece >= 0) {
+        char tmp[24];
+        put(o, "%s %.1f ms x%.1f", piece_of(names, r->piece, tmp, sizeof tmp), (double)r->pieceMs,
+            (double)r->pieceFactor);
+    } else {
+        put(o, "no piece judged");
+    }
+    if (r->tris < 0.0f) {
+        put(o, "; tris not known");
+    } else {
+        put(o, "; tris %.0f", (double)r->tris);
+    }
+    if (r->tris < 0.0f) {
+        /* nothing to compare */
+    } else if (r->trisMed >= (float)STALL_RATIO_MIN_TRIS) {
+        put(o, " x%.2f of the median", (double)(r->tris / r->trisMed));
+    } else {
+        put(o, " (no median)");
+    }
+    if (r->tris < 0.0f) {
+        /* nothing to compare */
+    } else if (r->trisMax >= (float)STALL_RATIO_MIN_TRIS) {
+        put(o, ", x%.2f of the 2 s most", (double)(r->tris / r->trisMax));
+    } else {
+        put(o, ", none in the 2 s before");
+    }
+    put(o, "; ");
+    put_ms3(o, "reduction", r->red);
+    put(o, ", ");
+    put_ms3(o, "present", r->pres);
+    put(o, " ms");
+    if (r->batteryKnown) {
+        put(o, "; battery %.0f mA", (double)r->batteryMa);
+    }
+}
+
+size_t stall_table_text(const StallTable *t, const char *const *names, bool all, unsigned part,
+                        char *out, size_t cap)
+{
+    Out o = {out, cap, 0};
+    if (cap > 0) {
+        out[0] = '\0';
+    }
+    const unsigned ready = stall_table_ready(t, all);
+    const unsigned parts = (ready + STALL_TABLE_LINE - 1u) / STALL_TABLE_LINE;
+    if (part >= parts) {
+        return 0;
+    }
+    unsigned carried = 0;
+    for (unsigned i = 0; i < t->n; i++) {
+        carried += t->row[i].carried ? 1u : 0u;
+    }
+    put(&o, "stall table (part %u of %u; %u stall%s, %u of them from the block before", part + 1u,
+        parts, ready, ready == 1u ? "" : "s", carried);
+    if (ready < t->n) {
+        put(&o, ", %u waiting for their next timed replays", t->n - ready);
+    }
+    if (t->dropped > 0) {
+        put(&o, ", %u more past the %u held", t->dropped, STALL_TABLE_MAX);
+    }
+    put(&o, "): ");
+    unsigned seen = 0, wrote = 0;
+    for (unsigned i = 0; i < t->n && wrote < STALL_TABLE_LINE; i++) {
+        if (!row_ready(&t->row[i], all)) {
+            continue;
+        }
+        if (seen++ < part * STALL_TABLE_LINE) {
+            continue;
+        }
+        if (wrote++ > 0) {
+            put(&o, " | ");
+        }
+        row_text(&o, &t->row[i], names);
+    }
+    return o.at;
+}
+
+void stall_table_end(StallTable *t, bool all)
+{
+    unsigned keep = 0;
+    for (unsigned i = 0; i < t->n; i++) {
+        if (!row_ready(&t->row[i], all)) {
+            t->row[keep] = t->row[i];
+            t->row[keep].carried = 1;
+            keep++;
+        }
+    }
+    /* the kept rows at the front, the sums emptied */
+    t->stalls = t->dropped = t->named = t->timed = 0;
+    t->gpuMs = 0.0;
+    memset(t->byPiece, 0, sizeof(t->byPiece));
+    memset(t->pieceMs, 0, sizeof(t->pieceMs));
+    t->n = keep;
+    t->carried = keep;
+}
+
+void stall_tris_reset(StallTris *w)
+{
+    memset(w, 0, sizeof(*w));
+}
+
+void stall_tris_add(StallTris *w, double atMs, double tris)
+{
+    w->ms[w->at] = atMs;
+    w->tris[w->at] = (float)tris;
+    w->at = (w->at + 1u) % STALL_TRIS_RING;
+    w->n += w->n < STALL_TRIS_RING ? 1u : 0u;
+}
+
+double stall_tris_max(const StallTris *w, double nowMs, double spanMs)
+{
+    double best = -1.0;
+    for (unsigned i = 0; i < w->n; i++) {
+        if (w->ms[i] >= nowMs - spanMs && (double)w->tris[i] > best) {
+            best = (double)w->tris[i];
+        }
+    }
+    return best;
+}

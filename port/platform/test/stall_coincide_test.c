@@ -8,7 +8,8 @@
  * the GPU slow as a whole from the pieces against their medians; no ratio
  * against a median under 0.1 ms or 1 triangle), the tally and
  * moment texts word for word, the pressure and status parsers, the
- * driver's thread names (CPU only).
+ * driver's thread names, the block's stalls against the pieces' shares
+ * and every stall's table row, the 2 s triangles' most (CPU only).
  */
 #include <stdio.h>
 #include <string.h>
@@ -232,6 +233,169 @@ static void pieces_cases(void)
         CHECK(stall_medians_add(&md, 3, 1.0) == 12.0);
         CHECK(stall_medians_peek(&md, 4) < 0.0);
     }
+}
+
+/* the block's stalls against the pieces' shares and their table
+   (StallTable): a stall's row waits for its two timed replays after, one
+   still waiting at the block's end is carried into the next block's and
+   written there with what it has, a block with none carried writes no
+   share line, 13 rows in two parts of 12 and 1, the rows past 256
+   counted; the 2 s triangles' most (StallTris) */
+static StallTable s_t; /* 30 KB: not on the stack */
+
+static void timed(uint32_t replay, double red, double pres)
+{
+    static const int what[2] = {0, 3};
+    static const double ms[2] = {20.0, 5.0};
+    stall_table_timed(&s_t, replay, 30.0, what, ms, 2, red, pres);
+}
+
+static StallRow row_of(uint32_t replay, int kind, double ms)
+{
+    StallRow r;
+    memset(&r, 0, sizeof(r));
+    r.replay = replay;
+    r.stage = 42;
+    r.kind = (uint8_t)kind;
+    r.ms = (float)ms;
+    r.piece = -1;
+    r.tris = r.trisMed = r.trisMax = -1.0f;
+    r.red[0] = r.pres[0] = -1.0f;
+    return r;
+}
+
+static void table_cases(void)
+{
+    static const char *names[STALL_SHARE_PIECES];
+    names[0] = "list 0";
+    names[3] = "list 3";
+    char b[4096];
+
+    stall_table_reset(&s_t);
+    CHECK(stall_share_text(&s_t, names, b, sizeof b) == 0 && b[0] == '\0');
+    CHECK(stall_table_text(&s_t, names, false, 0, b, sizeof b) == 0);
+    for (uint32_t r = 1; r <= 4; r++) {
+        timed(r, 2.4, 2.7);
+    }
+    /* a present stall of replay 4: list 0 grew most */
+    StallRow a = row_of(4, 0, 141.0);
+    a.piece = 0;
+    a.pieceMs = 88.1f;
+    a.pieceFactor = 9.4f;
+    a.tris = 31475.0f;
+    a.trisMed = 30000.0f;
+    a.trisMax = 35000.0f;
+    a.red[0] = 2.4f;
+    a.pres[0] = 2.7f;
+    a.batteryKnown = 1;
+    a.batteryMa = -812.0f;
+    stall_table_add(&s_t, &a);
+    timed(5, 2.5, 2.6);
+    CHECK(stall_table_ready(&s_t, false) == 0); /* one timed replay after it so far */
+    timed(6, 2.3, 2.8);
+    /* a pass stall of replay 6, no piece judged, the stage not known */
+    StallRow p = row_of(6, 1, 120.3);
+    p.passFactor = 9.1f;
+    p.stage = STALL_NO_STAGE;
+    stall_table_add(&s_t, &p);
+    CHECK(stall_table_ready(&s_t, false) == 1);
+    CHECK(stall_share_text(&s_t, names, b, sizeof b) == strlen(b));
+    text_is(b,
+            "stalls against each piece's share of the GPU time (piece: stalls, their share of the "
+            "stalls naming a piece, its share of the GPU time): 2 stalls, 1 naming a piece; list "
+            "0: 1, 100 %, 67 %; list 3: 0, 0 %, 17 %; 1 naming none (6 timed pictures, 180.0 ms "
+            "of GPU spans)",
+            __LINE__);
+    CHECK(stall_table_text(&s_t, names, false, 0, b, sizeof b) == strlen(b));
+    text_is(b,
+            "stall table (part 1 of 1; 1 stall, 0 of them from the block before, 1 waiting for "
+            "their next timed replays): r4 s42 present 141 ms: list 0 88.1 ms x9.4; tris 31475 "
+            "x1.05 of the median, x0.90 of the 2 s most; reduction 2.40/2.50/2.30, present "
+            "2.70/2.60/2.80 ms; battery -812 mA",
+            __LINE__);
+    CHECK(stall_table_text(&s_t, names, false, 1, b, sizeof b) == 0);
+    stall_table_end(&s_t, false);
+    /* the next block: the pass stall carried, written with what it has */
+    CHECK(s_t.n == 1 && s_t.carried == 1 && s_t.stalls == 0 && s_t.timed == 0);
+    CHECK(stall_share_text(&s_t, names, b, sizeof b) == 0);
+    timed(7, 2.2, 2.9);
+    CHECK(stall_table_ready(&s_t, false) == 1);
+    (void)stall_table_text(&s_t, names, false, 0, b, sizeof b);
+    text_is(b,
+            "stall table (part 1 of 1; 1 stall, 1 of them from the block before): r6 s? pass "
+            "120.3 ms x9.1: no piece judged; tris not known; reduction -/2.20/-, present "
+            "-/2.90/- ms",
+            __LINE__);
+    stall_table_end(&s_t, false);
+    CHECK(s_t.n == 0);
+
+    /* 13 stalls at the run's end (all): two parts; a row with no median
+       and none in the 2 s before */
+    for (uint32_t r = 10; r < 23; r++) {
+        StallRow q = row_of(r, 0, 110.0);
+        q.tris = 500.0f;
+        q.trisMed = 0.0f;
+        q.trisMax = 0.0f;
+        stall_table_add(&s_t, &q);
+    }
+    CHECK(stall_table_ready(&s_t, false) == 0 && stall_table_ready(&s_t, true) == 13);
+    (void)stall_table_text(&s_t, names, true, 0, b, sizeof b);
+    {
+        unsigned bars = 0;
+        for (const char *c = b; (c = strstr(c, " | ")) != NULL; c += 3) {
+            bars++;
+        }
+        CHECK(bars == 11u);
+        CHECK(strstr(b, "stall table (part 1 of 2; 13 stalls, 0 of them from the block before): "
+                        "r10 s42 present 110 ms: no piece judged; tris 500 (no median), none in "
+                        "the 2 s before; reduction -/-/-, present -/-/- ms | r11 ") == b);
+    }
+    (void)stall_table_text(&s_t, names, true, 1, b, sizeof b);
+    CHECK(strstr(b, "stall table (part 2 of 2; 13 stalls, 0 of them from the block before): r22 "
+                    "s42 ") == b &&
+          strstr(b, " | ") == NULL);
+    CHECK(stall_table_text(&s_t, names, true, 2, b, sizeof b) == 0);
+    stall_table_end(&s_t, true);
+    CHECK(s_t.n == 0);
+
+    /* past the 256 held: counted and said; the share line counts them all */
+    for (uint32_t r = 1; r <= STALL_TABLE_MAX + 4u; r++) {
+        StallRow q = row_of(r, 0, 105.0);
+        q.piece = 3;
+        stall_table_add(&s_t, &q);
+    }
+    CHECK(s_t.n == STALL_TABLE_MAX && s_t.dropped == 4u && s_t.stalls == STALL_TABLE_MAX + 4u);
+    (void)stall_table_text(&s_t, names, true, 0, b, sizeof b);
+    CHECK(strstr(b, "stall table (part 1 of 22; 256 stalls, 0 of them from the block before, 4 "
+                    "more past the 256 held): ") == b);
+    (void)stall_share_text(&s_t, names, b, sizeof b);
+    CHECK(strstr(b, ": 260 stalls, 260 naming a piece; list 3: 260, 100 %, 0 %; 0 naming none (0 "
+                    "timed pictures, 0.0 ms of GPU spans)") != NULL);
+    /* an unnamed piece */
+    stall_table_end(&s_t, true);
+    {
+        StallRow q = row_of(1, 0, 105.0);
+        q.piece = 5;
+        stall_table_add(&s_t, &q);
+        (void)stall_share_text(&s_t, names, b, sizeof b);
+        CHECK(strstr(b, "; piece 5: 1, 100 %, 0 %;") != NULL);
+    }
+
+    /* the 2 s triangles' most */
+    StallTris w;
+    stall_tris_reset(&w);
+    CHECK(stall_tris_max(&w, 1000.0, 2000.0) == -1.0);
+    stall_tris_add(&w, 0.0, 100.0);
+    stall_tris_add(&w, 500.0, 300.0);
+    stall_tris_add(&w, 2600.0, 200.0);
+    CHECK(stall_tris_max(&w, 2600.0, 2000.0) == 200.0); /* the 300 at 0.5 s is past the 2 s */
+    CHECK(stall_tris_max(&w, 1000.0, 2000.0) == 300.0);
+    stall_tris_reset(&w);
+    for (int i = 0; i < 300; i++) {
+        stall_tris_add(&w, (double)i, (double)i);
+    }
+    CHECK(w.n == STALL_TRIS_RING && stall_tris_max(&w, 299.0, 2000.0) == 299.0);
+    CHECK(stall_tris_max(&w, 299.0, 10.0) == 299.0);
 }
 
 int main(void)
@@ -507,6 +671,8 @@ int main(void)
     CHECK(!stall_driver_name("ico-gpu-sysfs"));
     CHECK(!stall_driver_name("SDLAudioP15"));
     CHECK(!stall_driver_name("ico render"));
+
+    table_cases();
 
     if (failures) {
         printf("stall_coincide_test: %d failures\n", failures);

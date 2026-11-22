@@ -1022,6 +1022,18 @@ int ico_report_write(const IcoReportInputs *in, char *name, size_t name_size)
     if (join(path, sizeof path, s_logs, "last-run-previous.txt") == 0) {
         (void)zip_add_file("last-run-previous.txt", path, 0);
     }
+    {
+        /* issue 179's attempts' marks on the install, each when there is
+           one: the zero-area cull's (vu_zero_mark.h), the submit ahead's
+           (ahead_mark.h) and the discard-free twins' */
+        static const char *const k_marks[] = {"vu-zero-mark.txt", "ahead-mark.txt",
+                                              "nodiscard-mark.txt"};
+        for (size_t i = 0; i < sizeof k_marks / sizeof k_marks[0]; i++) {
+            if (join(path, sizeof path, s_logs, k_marks[i]) == 0) {
+                (void)zip_add_file(k_marks[i], path, 0);
+            }
+        }
+    }
     /* how the run before ended, and the newest trace Android kept
        (exit_info.h, issue 215) */
     if (join(path, sizeof path, s_logs, "exit-info.txt") == 0) {

@@ -248,6 +248,109 @@ size_t stall_tally_text(const StallTally *t, char *out, size_t cap);
    written */
 size_t stall_moment_text(const StallMoment *m, char *out, size_t cap);
 
+/* Issue 179's v0.11.14 log: 156 stalls, the 109 that named a piece in
+   about each piece's share of the GPU time (list 0 79, list 3 11, the
+   present 6, aura 5, ...), and the detailed lines' rule left 15 and 25 of
+   them out in its two worst blocks.  Two lines a 10 s block with a stall
+   (window_stall.c stall_block_close), from every stall:
+   - the stalls against each piece's share of the GPU time (the piece a
+     stall names: the one that grew most against its block median,
+     stall_pieces_judge; a piece's share: its GPU time over the GPU spans
+     of the block's timed pictures, so the effects, inside their lists'
+     times, and the lists do not add up to 100 %):
+       stalls against each piece's share of the GPU time (piece: stalls,
+       their share of the stalls naming a piece, its share of the GPU
+       time): 12 stalls, 10 naming a piece; list 0: 8, 80 %, 48 %; list 3:
+       1, 10 %, 12 %; aura: 0, 0 %, 9 %; ...; 2 naming none (240 timed
+       pictures, 9850.0 ms of GPU spans)
+   - every stall, none left out, STALL_TABLE_LINE rows a line:
+       stall table (part 1 of 1; 12 stalls, 1 of them from the block
+       before): r553 s42 present 141 ms: list 0 88.1 ms x9.4; tris x1.02
+       of the median, x0.85 of the 2 s most; reduction 2.40/2.41/2.39,
+       present 2.70/2.66/2.71 ms; battery -812 mA | r560 s42 pass 120.3
+       ms x9.1: ...
+     a row: the replay, the stage, the stall (a present over
+     STALL_PRESENT_MS, or a pass over STALL_PASS_TIMES its median and its
+     factor), the piece that grew most with its time and factor, the VU
+     triangles over the block's median and over the most of any picture
+     in the stage's 2 s before it, the fixed-work passes' GPU times (the
+     reduction, the present pass) in the stalled replay and the next two
+     timed replays ("-": not timed), the battery current of the last
+     second where read.  A row waits for its two timed replays after: one
+     still waiting at the block's end goes in the next block's table
+     ("from the block before"), and from there out whatever it has */
+#define STALL_SHARE_PIECES 32 /* the pieces' indexes (window_stall.c PIECES) */
+#define STALL_TABLE_MAX 256   /* rows a block (past it counted, said) */
+#define STALL_TABLE_LINE 12   /* rows a line */
+#define STALL_NO_STAGE (-2147483647 - 1)
+
+typedef struct StallRow {
+    uint32_t replay;
+    int stage;       /* STALL_NO_STAGE: not known */
+    uint8_t kind;    /* 0 a present over STALL_PRESENT_MS, 1 a pass spike */
+    uint8_t after;   /* the timed replays after it seen (to 2) */
+    uint8_t carried; /* from the block before */
+    uint8_t batteryKnown;
+    int8_t piece;     /* the piece that grew most, -1 none judged */
+    float ms;         /* the present's, or the pass's */
+    float passFactor; /* the pass's time over its median (kind 1) */
+    float pieceMs, pieceFactor;
+    float tris, trisMed, trisMax; /* trisMed, trisMax < 0: not known */
+    float red[3], pres[3];        /* < 0: not timed */
+    float batteryMa;
+} StallRow;
+
+typedef struct StallTable {
+    unsigned n;       /* rows held */
+    unsigned stalls;  /* rows added this block */
+    unsigned carried; /* rows held from the block before */
+    unsigned dropped; /* stalls past STALL_TABLE_MAX this block */
+    unsigned named;   /* the block's stalls naming a piece */
+    unsigned byPiece[STALL_SHARE_PIECES];
+    unsigned timed; /* the block's timed pictures */
+    double gpuMs, pieceMs[STALL_SHARE_PIECES];
+    StallRow row[STALL_TABLE_MAX];
+} StallTable;
+
+void stall_table_reset(StallTable *t);
+/* A timed picture (replay): its GPU span, its pieces' times ms[] at the
+   indexes what[] (n), its reduction and present pass times (< 0 none);
+   the rows of earlier replays still waiting take it as one of their two
+   after */
+void stall_table_timed(StallTable *t, uint32_t replay, double gpuMs, const int *what,
+                       const double *ms, unsigned n, double redMs, double presMs);
+/* A stall's row (after 0, carried 0; red[0], pres[0] the stalled
+   replay's) */
+void stall_table_add(StallTable *t, const StallRow *r);
+/* The share line (after "window: "), "" (0) with no stall in the block;
+   names[i] the piece at index i ("" or NULL: "piece i").  The length */
+size_t stall_share_text(const StallTable *t, const char *const *names, char *out, size_t cap);
+/* The rows written now: those with their two timed replays after, those
+   from the block before, and with all every one */
+unsigned stall_table_ready(const StallTable *t, bool all);
+/* Part `part` (0-based) of the table's lines (STALL_TABLE_LINE ready rows
+   each, after "window: "); 0 past the last part */
+size_t stall_table_text(const StallTable *t, const char *const *names, bool all, unsigned part,
+                        char *out, size_t cap);
+/* The block's end, after its lines: the rows not written kept (carried)
+   for the next block, the sums emptied */
+void stall_table_end(StallTable *t, bool all);
+
+/* The most VU triangles of the pictures in the last spanMs (the stage's:
+   emptied at a stage change), the ring's last STALL_TRIS_RING */
+#define STALL_TRIS_RING 256
+
+typedef struct StallTris {
+    unsigned n, at;
+    double ms[STALL_TRIS_RING];
+    float tris[STALL_TRIS_RING];
+} StallTris;
+
+void stall_tris_reset(StallTris *w);
+void stall_tris_add(StallTris *w, double atMs, double tris);
+/* the most since nowMs - spanMs (times after nowMs too), -1 with none */
+double stall_tris_max(const StallTris *w, double nowMs, double spanMs);
+
 /* /proc/pressure/memory: "some avg10=0.00 avg60=... \nfull avg10=..."
    (len bytes, no NUL needed): both avg10s; false unless both are there */
 bool stall_pressure_parse(const char *buf, size_t len, double *some10, double *full10);

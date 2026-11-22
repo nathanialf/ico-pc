@@ -21,14 +21,19 @@
 #include "thermal_text.h"
 #include "log_cost.h"
 #include "memory_floor.h"
+#include "perf_secs.h" /* each second's GPU times and present intervals */
+#include "power_read.h"
 #include "stall_coincide.h"
+#include "vmstat_read.h"
 #include "window_lines.h"   /* window_log_cost_present */
 #include "window_present.h" /* window_refresh_ns */
 #include "sys_cell.h"
 #include <errno.h>
 #include <stdlib.h>
 #ifdef __ANDROID__
+#include <dirent.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <malloc.h>
 #include <sys/system_properties.h>
 #include <unistd.h>
@@ -162,7 +167,21 @@ static struct {
     double idleMs;
     bool trisKnown;
     double tris, trisMed;
+    double trisMax;   /* the most of the stage's 2 s before it, -1 none */
+    double red, pres; /* the reduction's and the present pass's GPU ms, -1 not timed */
 } s_pc;
+
+/* the block's stalls against the pieces' shares of the GPU time and
+   their table (stall_coincide.h StallTable); the VU triangles of the
+   stage's last 2 s; the stage now; the piece the last moment judged grew
+   most (an index of s_pc's, -1 none) */
+static StallTable s_table;
+static StallTris s_tris;
+static int s_stageNow = STALL_NO_STAGE;
+static int s_lastPiece = -1;
+#define TRIS_SPAN_MS 2000.0
+
+_Static_assert(PIECES <= STALL_SHARE_PIECES, "the table's pieces");
 
 static void piece_name(int what, char *out, size_t cap)
 {
@@ -187,7 +206,23 @@ static void piece_add(int what, double ms)
     s_pc.n++;
 }
 
-/* a record's pieces, idle time and triangles (every record: the medians) */
+/* the pieces' names by index, for the share and table lines */
+static const char *const *piece_names(void)
+{
+    static char names[PIECES][32];
+    static const char *ptr[STALL_SHARE_PIECES];
+    if (ptr[0] == NULL) {
+        for (int i = 0; i < PIECES; i++) {
+            piece_name(i, names[i], sizeof names[i]);
+            ptr[i] = names[i];
+        }
+    }
+    return ptr;
+}
+
+/* a record's pieces, idle time and triangles (every record: the medians;
+   the triangles of the stage's 2 s before it; a timed one's pieces into
+   the block's shares and the waiting stall rows) */
 static void pieces_take(const RdPerfRecord *r)
 {
     s_pc.replay = r->replay;
@@ -197,6 +232,10 @@ static void pieces_take(const RdPerfRecord *r)
     s_pc.tris = (double)r->vuTris;
     s_pc.trisMed = stall_medians_add(&s_med, PIECE_TRIS, (double)r->vuTris);
     s_pc.trisKnown = s_pc.trisMed >= 0.0;
+    s_pc.trisMax = stall_tris_max(&s_tris, r->startMs, TRIS_SPAN_MS);
+    stall_tris_add(&s_tris, r->startMs, (double)r->vuTris);
+    s_pc.red = r->gpuValid ? r->gpuPostMs[RD_PERF_POST_REDUCTION] : -1.0;
+    s_pc.pres = r->gpuValid ? r->gpuPresentMs : -1.0;
     if (!r->gpuValid) {
         return;
     }
@@ -209,6 +248,8 @@ static void pieces_take(const RdPerfRecord *r)
     piece_add(RD_LIST_COUNT + RD_PERF_POST_COUNT, r->gpuPrepassMs);
     piece_add(RD_LIST_COUNT + RD_PERF_POST_COUNT + 1, r->gpuUploadMs);
     piece_add(RD_LIST_COUNT + RD_PERF_POST_COUNT + 2, r->gpuPresentMs);
+    stall_table_timed(&s_table, r->replay, r->gpuMs, s_pc.what, s_pc.ms, s_pc.n, s_pc.red,
+                      s_pc.pres);
 }
 
 /* the stalled replay's pieces into m (when the last record taken is it) */
@@ -220,6 +261,7 @@ static void moment_pieces(StallMoment *m, uint32_t replay)
     const int at = stall_pieces_judge(m, s_pc.ms, s_pc.med, s_pc.n);
     if (at >= 0) {
         piece_name(s_pc.what[at], m->pieceName, sizeof(m->pieceName));
+        s_lastPiece = at;
     }
     m->idleKnown = s_pc.idleKnown;
     m->idleBeforeMs = s_pc.idleMs;
@@ -248,9 +290,26 @@ static PresentLatency s_lat;
 
 static int s_gpuMaxMhz = -1;
 
+/* the block's stalls against the pieces' shares and every stall's row
+   (stall_coincide.h); all: the run's end, every row written */
+static void stall_table_lines(bool all)
+{
+    static char text[3072];
+    const char *const *names = piece_names();
+    if (stall_share_text(&s_table, names, text, sizeof text) > 0) {
+        fprintf(stderr, "window: %s\n", text);
+    }
+    for (unsigned part = 0; stall_table_text(&s_table, names, all, part, text, sizeof text) > 0;
+         part++) {
+        fprintf(stderr, "window: %s\n", text);
+    }
+    stall_table_end(&s_table, all);
+}
+
 /* the block's stall line and its join into the run's sums; clock the
-   kernel driver's GPU clock in the block, NULL when not read */
-static void stall_block_close(const StallBlockClock *clock)
+   kernel driver's GPU clock in the block, NULL when not read; all: the
+   run's end */
+static void stall_block_close(const StallBlockClock *clock, bool all)
 {
     const double now = ico_thread_now_ms();
     char text[2048];
@@ -266,6 +325,7 @@ static void stall_block_close(const StallBlockClock *clock)
         fprintf(stderr, "window: %s\n", text);
     }
     memset(&s_lat, 0, sizeof(s_lat));
+    stall_table_lines(all);
     s_stallT0 = now;
     rd_perf_rare_block_end(); /* a stalled replay's rare pipelines: counted per block */
     arm_block_end();
@@ -278,7 +338,9 @@ void window_stall_stage(int stage)
     static bool s_known;
     if (s_known && stage != s_stage) {
         stall_medians_reset(&s_med); /* the new stage's own medians */
+        stall_tris_reset(&s_tris);   /* and its own 2 s of triangles */
     }
+    s_stageNow = stage;
     s_stage = stage;
     s_known = true;
 }
@@ -287,7 +349,7 @@ void window_stall_run_summary(void)
 {
     char text[1536];
 
-    stall_block_close(NULL); /* the last part block (its clock not read) */
+    stall_block_close(NULL, true); /* the last part block (its clock not read) */
     if (stall_block_run_text(&s_stall, text, sizeof(text)) > 0) {
         fprintf(stderr, "window: %s\n", text);
     }
@@ -433,6 +495,206 @@ static void asks_more(long rssKb, long availKb, long totalKb, bool haveDev, doub
     sys_cell_put(&s_memBlockCell, atMs, 0.0, ext, 16);
 }
 
+/* The battery and the kernel's memory events (power_read.h,
+   vmstat_read.h), read once a second here on the log thread, read only:
+   the battery's sysfs folder found at the first tick, else Android's
+   BatteryManager, else nothing (decided once; a later failed read is
+   silent: no sample).  The game thread's block lines read the cells:
+   s_batNowCell {have, current mA, has current, voltage mV, has voltage,
+   level, status}, s_batBlockCell {the block's first POWER_BLOCK_MAX
+   currents, samples, currents, voltage least, most} from the read after
+   the window took the last block's (s_batBlockGen), s_vmCell {the
+   VMSTAT_FIELDS counts, the have bits, 1 or -errno} */
+static SysCell s_batNowCell, s_batBlockCell, s_vmCell;
+static uint32_t s_batBlockGen;    /* __atomic: the window took the block's readings */
+static int s_batSource = -1;      /* __atomic: POWER_SOURCE_*, -1 not decided yet */
+static char s_batPath[128];       /* written before s_batSource's release */
+static int s_batSysErr;           /* likewise: the sysfs errno (0 none: no battery folder) */
+static const char *s_batWhy = ""; /* likewise: why BatteryManager gave nothing */
+
+/* the battery's folder under /sys/class/power_supply into s_batPath (the
+   one named "battery" first, else the first whose type is Battery): 0
+   found, else the errno met (0 with no battery) */
+static int power_find(void)
+{
+    DIR *d = opendir("/sys/class/power_supply");
+    if (d == NULL) {
+        return errno != 0 ? errno : ENOENT;
+    }
+    const struct dirent *e;
+    int err = 0;
+    bool found = false;
+    char path[192], buf[64];
+    while ((e = readdir(d)) != NULL) {
+        if (e->d_name[0] == '.' || strlen(e->d_name) > 64) {
+            continue;
+        }
+        snprintf(path, sizeof path, "/sys/class/power_supply/%s/type", e->d_name);
+        const int n = read_small(path, buf, sizeof buf);
+        if (n < 0) {
+            err = -n;
+            continue;
+        }
+        if (!power_read_is_battery(buf, (size_t)n)) {
+            continue;
+        }
+        if (!found || strcmp(e->d_name, "battery") == 0) {
+            snprintf(s_batPath, sizeof s_batPath, "/sys/class/power_supply/%s", e->d_name);
+            found = true;
+        }
+    }
+    closedir(d);
+    return found ? 0 : err;
+}
+
+/* one sysfs file of the battery's folder into buf (NULL when not read;
+   *err its errno) */
+static const char *power_file(const char *name, char *buf, size_t cap, int *err)
+{
+    char path[192];
+    snprintf(path, sizeof path, "%s/%s", s_batPath, name);
+    const int n = read_small(path, buf, cap);
+    if (n < 0) {
+        *err = -n;
+        return NULL;
+    }
+    return buf;
+}
+
+static bool power_sysfs(PowerSample *ps, int *err)
+{
+    char c[32], v[32], l[32], st[32];
+    *err = 0;
+    const char *cp = power_file("current_now", c, sizeof c, err);
+    const char *vp = power_file("voltage_now", v, sizeof v, err);
+    const char *lp = power_file("capacity", l, sizeof l, err);
+    const char *sp = power_file("status", st, sizeof st, err);
+    return power_from_sysfs(cp, vp, lp, sp, ps);
+}
+
+static bool power_android(PowerSample *ps)
+{
+    int v[4] = {INT_MIN, -1, -1, -1};
+    return ico_android_battery(v) && power_from_android(v, ps);
+}
+
+static void power_tick(double atMs)
+{
+    static int s_source = -1;
+    static PowerBlock s_block;
+    static uint32_t s_gen;
+    static bool s_have;
+    PowerSample ps;
+    bool ok = false;
+    if (s_source < 0) {
+        /* the first tick: where the battery can be read */
+        int err = power_find();
+        if (err == 0 && s_batPath[0] != '\0' && power_sysfs(&ps, &err)) {
+            s_source = POWER_SOURCE_SYSFS;
+            ok = true;
+        } else {
+            s_batSysErr = err;
+            s_batPath[0] = '\0';
+            if (power_android(&ps)) {
+                s_source = POWER_SOURCE_ANDROID;
+                ok = true;
+            } else {
+                s_source = POWER_SOURCE_NONE;
+                s_batWhy = "no answer from the app's Java side";
+            }
+        }
+        __atomic_store_n(&s_batSource, s_source, __ATOMIC_RELEASE);
+    } else if (s_source == POWER_SOURCE_SYSFS) {
+        int err;
+        ok = power_sysfs(&ps, &err);
+    } else if (s_source == POWER_SOURCE_ANDROID) {
+        ok = power_android(&ps);
+    }
+    if (!ok) {
+        return; /* silent: no sample this second */
+    }
+    const double now[7] = {1.0,
+                           ps.currentMa,
+                           ps.haveCurrent ? 1.0 : 0.0,
+                           ps.voltageMv,
+                           ps.haveVoltage ? 1.0 : 0.0,
+                           (double)ps.level,
+                           (double)ps.status};
+    sys_cell_put(&s_batNowCell, atMs, 0.0, now, 7);
+    const uint32_t gen = __atomic_load_n(&s_batBlockGen, __ATOMIC_ACQUIRE);
+    if (!s_have || gen != s_gen) {
+        s_gen = gen;
+        s_have = true;
+        power_block_reset(&s_block);
+    }
+    power_block_add(&s_block, &ps);
+    double b[16];
+    for (int i = 0; i < POWER_BLOCK_MAX; i++) {
+        b[i] = s_block.currentMa[i];
+    }
+    b[12] = (double)s_block.n;
+    b[13] = (double)s_block.currents;
+    b[14] = s_block.vMinMv;
+    b[15] = s_block.vMaxMv;
+    sys_cell_put(&s_batBlockCell, atMs, 0.0, b, 16);
+}
+
+/* /proc/vmstat in full into buf (NUL-ended): its length, or -errno */
+static int read_full(const char *path, char *buf, size_t cap)
+{
+    const int fd = open(path, O_RDONLY | O_CLOEXEC);
+    if (fd < 0) {
+        return -errno;
+    }
+    size_t at = 0;
+    while (at + 1u < cap) {
+        const ssize_t n = read(fd, buf + at, cap - 1u - at);
+        if (n < 0) {
+            const int e = errno;
+            close(fd);
+            return -e;
+        }
+        if (n == 0) {
+            break;
+        }
+        at += (size_t)n;
+    }
+    close(fd);
+    buf[at] = '\0';
+    return (int)at;
+}
+
+static void vmstat_tick(double atMs)
+{
+    static char buf[16384]; /* the log thread's */
+    static bool s_off, s_read;
+    VmStat vs;
+    double v[VMSTAT_FIELDS + 2];
+    if (s_off) {
+        return; /* not readable: said once, silent after */
+    }
+    const int n = read_full("/proc/vmstat", buf, sizeof buf);
+    if (n <= 0 || !vmstat_read_parse(buf, (size_t)n, &vs)) {
+        if (s_read) {
+            return; /* a later failed read: silent, the last counts kept */
+        }
+        s_off = true;
+        memset(v, 0, sizeof v);
+        v[VMSTAT_FIELDS + 1] = n < 0 ? (double)n : -(double)EINVAL;
+        sys_cell_put(&s_vmCell, atMs, 0.0, v, VMSTAT_FIELDS + 2);
+        return;
+    }
+    unsigned bits = 0;
+    for (int f = 0; f < VMSTAT_FIELDS; f++) {
+        v[f] = (double)vs.v[f];
+        bits |= vs.have[f] ? 1u << f : 0u;
+    }
+    v[VMSTAT_FIELDS] = (double)bits;
+    v[VMSTAT_FIELDS + 1] = 1.0;
+    s_read = true;
+    sys_cell_put(&s_vmCell, atMs, 0.0, v, VMSTAT_FIELDS + 2);
+}
+
 static void asks_tick(void)
 {
     if (ico_diag_watchdog_paused()) {
@@ -453,6 +715,8 @@ static void asks_tick(void)
     const double mv[5] = {(double)rss, (double)peak, (double)avail, (double)total, dev};
     sys_cell_put(&s_memoryCell, t1, t1 - t0, mv, 5);
     asks_more(rss, avail, total, dev != 0.0, t1);
+    power_tick(t1);           /* the battery (power_read.h) */
+    vmstat_tick(t1);          /* the kernel's memory events (vmstat_read.h) */
     ico_render_thread_tick(); /* the threads' schedstat and list (render_thread.h) */
     __atomic_fetch_add(&s_asksN, 1u, __ATOMIC_RELAXED);
 }
@@ -488,6 +752,93 @@ static ThermalState thermal_now(const char **why, double *ageMs)
         *why = w != NULL ? w : "not asked yet";
     }
     return t;
+}
+#endif
+
+#ifdef __ANDROID__
+static bool battery_now_ma(double *ma)
+{
+    double v[7], at;
+    if (!s_asksOn || sys_cell_get(&s_batNowCell, v, 7, &at, NULL) != 7 || v[2] == 0.0) {
+        return false;
+    }
+    *ma = v[1];
+    return true;
+}
+
+/* The block's battery and memory events lines (the game thread's, at the
+   block's end; power_read.h, vmstat_read.h), each once said readable or
+   not first */
+static void power_block_lines(void)
+{
+    static bool s_batSaid, s_vmSaid, s_vmPrevHave;
+    static VmStat s_vmPrev;
+    char text[512];
+    double v[16], at;
+    if (!s_asksOn) {
+        return;
+    }
+    const int source = __atomic_load_n(&s_batSource, __ATOMIC_ACQUIRE);
+    if (source >= 0 && !s_batSaid) {
+        s_batSaid = true;
+        (void)power_source_text(source, s_batPath, s_batSysErr, s_batWhy, text, sizeof text);
+        fprintf(stderr, "window: %s\n", text);
+    }
+    if (source > 0 && sys_cell_get(&s_batBlockCell, v, 16, &at, NULL) == 16) {
+        __atomic_fetch_add(&s_batBlockGen, 1u, __ATOMIC_RELEASE); /* the next block from here */
+        PowerBlock b;
+        power_block_reset(&b);
+        for (int i = 0; i < POWER_BLOCK_MAX; i++) {
+            b.currentMa[i] = v[i];
+        }
+        b.n = (unsigned)v[12];
+        b.currents = (unsigned)v[13];
+        b.vMinMv = v[14];
+        b.vMaxMv = v[15];
+        double nv[7];
+        if (sys_cell_get(&s_batNowCell, nv, 7, &at, NULL) == 7) {
+            b.level = (int)nv[5];
+            b.status = (int)nv[6];
+        }
+        if (power_block_text(&b, source, text, sizeof text) > 0) {
+            fprintf(stderr, "window: %s\n", text);
+        }
+    }
+    if (sys_cell_get(&s_vmCell, v, VMSTAT_FIELDS + 2, &at, NULL) != VMSTAT_FIELDS + 2) {
+        return; /* not read yet */
+    }
+    if (v[VMSTAT_FIELDS + 1] <= 0.0) {
+        if (!s_vmSaid) {
+            s_vmSaid = true;
+            fprintf(stderr,
+                    "window: memory events: /proc/vmstat not readable (errno %d): no memory "
+                    "events lines\n",
+                    -(int)v[VMSTAT_FIELDS + 1]);
+        }
+        return;
+    }
+    if (!s_vmSaid) {
+        s_vmSaid = true;
+        fprintf(stderr, "window: memory events: /proc/vmstat read once a second on the log "
+                        "thread (a block's line from the second block on)\n");
+    }
+    VmStat now;
+    const unsigned bits = (unsigned)v[VMSTAT_FIELDS];
+    for (int f = 0; f < VMSTAT_FIELDS; f++) {
+        now.v[f] = (unsigned long long)v[f];
+        now.have[f] = (bits >> f) & 1u;
+    }
+    if (s_vmPrevHave && vmstat_delta_text(&s_vmPrev, &now, text, sizeof text) > 0) {
+        fprintf(stderr, "window: %s\n", text);
+    }
+    s_vmPrev = now;
+    s_vmPrevHave = true;
+}
+#else
+static bool battery_now_ma(double *ma)
+{
+    (void)ma;
+    return false; /* read on Android alone */
 }
 #endif
 
@@ -623,6 +974,7 @@ static void moment_subs(StallMoment *m, double t0Ms, uint32_t replay)
 static void moment_now(StallMoment *m, double t0Ms, double t1Ms, uint32_t replay)
 {
     memset(m, 0, sizeof(*m));
+    s_lastPiece = -1;
     if (s_hang.replay != 0 && replay >= s_hang.replay && replay - s_hang.replay <= 2u) {
         m->hangReplay = s_hang.replay;
         m->stampsMissing = s_hang.missing;
@@ -676,16 +1028,54 @@ static void moment_now(StallMoment *m, double t0Ms, double t1Ms, uint32_t replay
 #endif
 }
 
-static void stall_event(const char *what, double t0Ms, double t1Ms, uint32_t replay)
+static bool battery_now_ma(double *ma); /* the last second's current (Android) */
+
+/* the stall's row in the block's table (stall_coincide.h StallRow): kind
+   0 a present of ms, 1 a pass of ms at passFactor its median */
+static void stall_row(const StallMoment *m, uint32_t replay, int kind, double ms, double passFactor)
+{
+    StallRow row;
+    memset(&row, 0, sizeof(row));
+    row.replay = replay;
+    row.stage = s_stageNow;
+    row.kind = (uint8_t)kind;
+    row.ms = (float)ms;
+    row.passFactor = (float)passFactor;
+    row.piece = -1;
+    row.tris = row.trisMed = row.trisMax = -1.0f;
+    row.red[0] = row.pres[0] = -1.0f;
+    if (s_pc.replay == replay && replay != 0) {
+        if (s_lastPiece >= 0 && (unsigned)s_lastPiece < s_pc.n) {
+            row.piece = (int8_t)s_pc.what[s_lastPiece];
+            row.pieceMs = (float)s_pc.ms[s_lastPiece];
+            row.pieceFactor = (float)m->pieceFactor;
+        }
+        row.tris = (float)s_pc.tris;
+        row.trisMed = s_pc.trisKnown ? (float)s_pc.trisMed : -1.0f;
+        row.trisMax = (float)s_pc.trisMax;
+        row.red[0] = (float)s_pc.red;
+        row.pres[0] = (float)s_pc.pres;
+    }
+    double ma;
+    if (battery_now_ma(&ma)) {
+        row.batteryKnown = 1;
+        row.batteryMa = (float)ma;
+    }
+    stall_table_add(&s_table, &row);
+}
+
+static void stall_event(const char *what, double t0Ms, double t1Ms, uint32_t replay, int kind,
+                        double ms, double passFactor)
 {
     /* every stall while they are rare, v0.11.6's rule past that
        (stall_coincide.h stall_line_due; the tally says how many were left
        out): v0.11.6's run-wide cap of 8 left issue 123's stalls 9-13 with
-       the tallies alone */
+       the tallies alone; every one in the block's table */
     static StallMoment m;
     static char text[4096];
     moment_now(&m, t0Ms, t1Ms, replay);
     stall_tally_add(&s_tally, &m);
+    stall_row(&m, replay, kind, ms, passFactor);
     if (!stall_line_due(&s_tally, &s_lines)) {
         return;
     }
@@ -849,9 +1239,10 @@ void window_stall_gpu_block(void)
         }
         s_thermalSaid = 1;
     }
-    stall_block_close(&clock);
+    stall_block_close(&clock, false);
+    power_block_lines();
 #else
-    stall_block_close(NULL);
+    stall_block_close(NULL, false);
 #endif
     window_log_cost_part(LOG_COST_KERNEL);
 }
@@ -909,7 +1300,7 @@ void window_stall_blocked(const RdPerfRecord *r)
             r->presentMs, r->replay, r->acquireMs, r->presentLockMs, r->presentCallMs,
             r->presentPollMs, r->gpuValid ? r->gpuMs : 0.0, r->gpuValid ? "" : ", not timed yet");
         const double t1 = r->presentEndMs > 0.0 ? r->presentEndMs : ico_thread_now_ms();
-        stall_event(what, t1 - r->presentMs, t1, r->replay);
+        stall_event(what, t1 - r->presentMs, t1, r->replay, 0, r->presentMs, 0.0);
     }
     if (r->presentEndMs > 0.0) {
         window_log_cost_present(r->presentEndMs - r->presentMs, r->presentEndMs);
@@ -960,6 +1351,18 @@ void window_stall_after(const RdPerfRecord *r, PaceGpuGap *gap)
         s_stallT0 = ico_thread_now_ms(); /* the first block starts with the first record */
     }
     pieces_take(r); /* its pieces against the block's medians (a stall of it judges them) */
+    {
+        /* each second's GPU span, triangles, fixed-work passes and present
+           intervals (perf_secs.h) */
+        const PerfSecsRec pr = {r->presented != 0,
+                                r->presentEndMs,
+                                r->gpuValid != 0,
+                                r->gpuMs,
+                                r->gpuPostMs[RD_PERF_POST_REDUCTION],
+                                r->gpuPresentMs,
+                                (double)r->vuTris};
+        perf_secs_window_record(&pr, ico_thread_now_ms());
+    }
     switch (r->gpuResetSign) {
     case RD_RESET_HANG:
         s_hang.replay = r->replay;
@@ -1059,7 +1462,7 @@ void window_stall_passes(const RdPerfRecord *r, const RdPerfPassAgg *agg, const 
                      label, (unsigned)p[best].w, (unsigned)p[best].h, bestMs, bestMed, r->replay,
                      r->gpuValid ? r->gpuMs : 0.0);
             stall_event(what, r->startMs, r->startMs + r->totalMs + (r->gpuValid ? r->gpuMs : 0.0),
-                        r->replay);
+                        r->replay, 1, bestMs, bestMs / bestMed);
         }
     }
 

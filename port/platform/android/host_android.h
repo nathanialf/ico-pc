@@ -140,6 +140,15 @@ int ico_android_game_mode(void);
    list could not be read (before Android 11, no method, a Java exception,
    no display).  On SDL's main thread, as ico_host_vibrate. */
 int ico_android_display_modes(float *out, int cap);
+/* The battery (IcoActivity.batteryState: BatteryManager's current and
+   level, the sticky battery broadcast's voltage and status), read only,
+   for the log where /sys/class/power_supply is not readable (window_stall.c,
+   power_read.h power_from_android): out[0] the current in uA (INT_MIN
+   none), out[1] the voltage in mV, out[2] the level in %, out[3]
+   BATTERY_STATUS_* (each < 0 none).  1 when the call answered, 0 not (no
+   method, a Java exception, no activity).  From the log thread, as the
+   thermal asks. */
+int ico_android_battery(int out[4]);
 /* The refresh rate the activity's display listener last reported
    (IcoActivity.watchDisplay: at the start of each visible stretch and at
    every change of the display's rate or mode list), 0 before the first;

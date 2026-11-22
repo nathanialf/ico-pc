@@ -125,6 +125,35 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   end, pictures before any step (`?`), a quiet end, a block under 1 s, seconds past
   the 64 held counted apart, no second begun (no line) and a short buffer; the lines word for
   word.
+- `perf_secs_test.c`, its seconds' GPU times and present intervals (`perf_secs`): each second's
+  timed pictures' medians (GPU span, VU triangles, reduction, present pass) and longest present
+  interval, the block's intervals (p50, p90, the longest; over 2, 3 and 4 ticks of the game's pace
+  rounded to whole ticks, 2.5 ticks counted as 3; no tick clause without a pace), the first interval
+  of a block from the block before's last present, a block with no present, records and intervals
+  past the 2048 held counted, the pictures line alone as before; the lines word for word.
+- `stall_coincide_test.c`, its table (`stall_coincide`): the block's stalls against the pieces'
+  shares (the largest share first, a piece with no name, the stalls naming none), a stall's row
+  waiting for its two timed replays after, a row still waiting carried into the next block and
+  written there with what it has, a block with only a carried row writing no share line, 13 rows in
+  parts of 12 and 1, rows past 256 counted, the 2 s triangles' most (the span's edge, the ring's
+  last 256); the lines word for word.
+- `power_read_test.c` (ctest `power_read`, a program of its own; CPU only): the battery for the log
+  (`port/platform/power_read.h`, issue 179) from strings in the test: the sysfs numbers (a sign,
+  spaces, none, too long), the status and type words, a sample from the sysfs texts (uA and uV as mA
+  and mV, a level over 100 refused, every file missing), a sample from the Java side's four ints
+  (`INT_MIN` for no current, the status numbers), a block's currents (past 12 counted), voltages,
+  level and status, the once and block lines word for word, a short buffer cut.
+- `vmstat_read_test.c` (ctest `vmstat_read`, a program of its own; CPU only): the kernel's memory
+  events a block (`port/platform/vmstat_read.h`, issue 179) from strings in the test: a newer
+  kernel's text (allocstall by zone and the two refault counts summed, a count of a near name not
+  taken), an older kernel's (one allocstall, one refault, no compaction or swap counts, no last
+  newline), a text with none of the counts, the block's line (growth, not in the file, a count gone
+  back) word for word, a short buffer cut.
+- `report_test.c`, its marks case (`report`): issue 179's mark files (`vu-zero-mark.txt`,
+  `ahead-mark.txt`, `nodiscard-mark.txt`) go in byte for byte when they are there; one not there,
+  and all three once removed, have no entry.
+- `share_report_test.c`, its marks case (`share_report`): the three mark files last, each when it
+  is there; every kind, four zips and the marks fill `ICO_SHARE_REPORT_MAX`.
 - `hotkeys_test.c`, its stage case (`hotkeys`): a stage change in the block leaves the stats
   period at 10 s (the block is not cut), before and after the window's own seconds (a stage, then
   another) give their line, the line word for word.
