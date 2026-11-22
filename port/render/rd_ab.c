@@ -187,8 +187,22 @@ static void capCheck(RdAb *a)
 {
     if (a->trials >= RD_AB_TRIALS && !a->capSaid) {
         a->capSaid = true;
-        line(a, "A/B: %u trials run, the most a run: a stage not judged keeps each attempt on",
-             (unsigned)RD_AB_TRIALS);
+        line(
+            a,
+            "A/B: %u trials run, the most a run: a stage not judged keeps the arm of the run's last verdict",
+            (unsigned)RD_AB_TRIALS);
+    }
+}
+
+/* the arm a stage without a verdict of its own takes: the run's last
+   verdict's for the subject (none yet: on, today's path), in words */
+static void carryWords(const RdAbSubject *s, char *out, size_t n)
+{
+    if (s->carry == RD_AB_V_OFF || s->carry == RD_AB_V_ON) {
+        snprintf(out, n, "%s, the arm stage %ld's verdict left",
+                 s->carry == RD_AB_V_OFF ? "without it" : "with it", (long)s->carryStage);
+    } else {
+        snprintf(out, n, "with it, no verdict before it in the run");
     }
 }
 
@@ -207,6 +221,10 @@ static void trialEnd(RdAb *a, const char *why, bool keptOn)
     double med = 0.0;
     uint32_t favOn = 0, favOff = 0;
     const bool early = why == NULL && n == RD_AB_EARLY;
+    /* the arm the stage started on (no verdict of the subject since it
+       began: the carried one) */
+    char started[96];
+    carryWords(s, started, sizeof(started));
     if (why == NULL || n >= RD_AB_PAIRS_MIN) {
         v = judge(t, n, early, &med, &favOn, &favOff);
     }
@@ -228,21 +246,24 @@ static void trialEnd(RdAb *a, const char *why, bool keptOn)
         line(a,
              "A/B: %s, %s: %u pairs%s, with it %.2f ms, without %.2f ms a thousand vertices and "
              "triangles (the median pair %.1f %% %s with it, %u of %u cheaper %s), %u dropped by "
-             "a long picture, %u by unequal work: %s for this stage",
+             "a long picture, %u by unequal work: %s for this stage (it started %s)",
              s->name, st, (unsigned)n, ended, onK, offK, pct, med <= 0.0 ? "cheaper" : "dearer",
              (unsigned)(v == RD_AB_V_ON ? favOn : favOff), (unsigned)n,
              v == RD_AB_V_ON ? "with it" : "without", (unsigned)t->dropLong, (unsigned)t->dropWork,
-             v == RD_AB_V_ON ? "on" : "off");
+             v == RD_AB_V_ON ? "on" : "off", started);
+        /* the next stages without a verdict of their own start on it */
+        s->carry = (int8_t)v;
+        s->carryStage = t->stage;
     } else {
         if (keptOn) {
             memPut(a, t->subject, t->stage, RD_AB_V_KEPT);
         }
         line(a,
              "A/B: %s, %s: no verdict (%s, %u pairs; %u dropped by a long picture, %u by unequal "
-             "work, %u replays not measured): %s",
+             "work, %u replays not measured): %s %s",
              s->name, st, why != NULL ? why : "?", (unsigned)n, (unsigned)t->dropLong,
              (unsigned)t->dropWork, (unsigned)t->notMeasured,
-             keptOn ? "kept on for this stage" : "kept on, not judged");
+             keptOn ? "no more trials here, it stays" : "not judged, it stays", started);
     }
     t->active = false;
     capCheck(a);
@@ -268,7 +289,11 @@ static uint8_t verdictOff(const RdAb *a, int32_t stage)
 {
     uint8_t off = 0;
     for (int i = 0; i < a->nSubj; i++) {
-        if (rd_ab_verdict(a, i, stage) == RD_AB_V_OFF) {
+        const int v = rd_ab_verdict(a, i, stage);
+        /* its own verdict, else (none, or no verdict after a whole trial)
+           the run's last verdict's arm */
+        if (v == RD_AB_V_OFF ||
+            ((v == RD_AB_V_NONE || v == RD_AB_V_KEPT) && a->subj[i].carry == RD_AB_V_OFF)) {
             off |= (uint8_t)(1u << i);
         }
     }
@@ -494,7 +519,9 @@ size_t rd_ab_start_text(const RdAb *a, char *out, size_t cap)
             "picture over %.1f times the running median (of %u at least); verdict at %u pairs "
             "all one way by %.0f %% or more, else at %u: on with a median %.0f %% or more cheaper "
             "with it and %u of %u cheaper with it, else off; no verdict under %u pairs in %u "
-            "replays (kept on); kept for the stage for the run",
+            "replays (the stage stays on the carried arm); kept for the stage for the run; a stage "
+            "without a verdict of its own on the arm of the run's last verdict (none yet: with "
+            "it)",
             RD_AB_START_MS / 1000.0, (unsigned)RD_AB_TRIALS, RD_AB_WORK_TOL * 100.0, RD_AB_LONG,
             (unsigned)RD_AB_MEDIAN_MIN, (unsigned)RD_AB_EARLY, RD_AB_GAIN * 100.0,
             (unsigned)RD_AB_PAIRS, RD_AB_GAIN * 100.0, (unsigned)RD_AB_FAVOUR,

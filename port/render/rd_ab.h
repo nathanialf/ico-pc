@@ -33,8 +33,13 @@
  *     when the median is RD_AB_GAIN or more in favour of the attempt and
  *     RD_AB_FAVOUR of them favour it, off otherwise (no difference: off,
  *     the path without it); kept for the stage for the run;
+ *   - a stage without a verdict of its own (not judged yet, or judged
+ *     nothing) runs on the arm of the run's most recent verdict for the
+ *     subject (none yet in the run: on), its trial still 2 s in, and its
+ *     own verdict replaces the carried arm there and from then on;
  *   - no verdict: fewer than RD_AB_PAIRS_MIN pairs after RD_AB_GIVE_UP
- *     trial replays (kept on for the stage), the stage ended or the
+ *     trial replays (no more trials there, the carried arm kept), the
+ *     stage ended or the
  *     subject was turned off before (not judged; tried again at the next
  *     visit while trials are left); between RD_AB_PAIRS_MIN and
  *     RD_AB_PAIRS pairs at either end, the verdict on those pairs with
@@ -45,14 +50,16 @@
  *   A/B: zero-area cull, stage 42: 32 pairs, with it 1.62 ms, without 1.55
  *     ms a thousand vertices and triangles (the median pair 4.3 % dearer
  *     with it, 25 of 32 cheaper without), 3 dropped by a long picture, 0
- *     by unequal work: off for this stage
+ *     by unequal work: off for this stage (it started with it, the arm
+ *     stage 3's verdict left)
  *   A/B: zero-area cull, stage 42: no verdict (600 replays, 11 pairs; 30
  *     dropped by a long picture, 4 by unequal work, 120 replays not
- *     measured): kept on for this stage
+ *     measured): no more trials here, it stays without it, the arm stage
+ *     41's verdict left
  *   A/B: every trial stopped for the run (the graphics device was lost):
  *     each attempt at its off arm from here (zero-area cull)
- *   A/B: 12 trials run, the most a run: a stage not judged keeps each
- *     attempt on
+ *   A/B: 12 trials run, the most a run: a stage not judged keeps the arm
+ *     of the run's last verdict
  * The modes (ICO_RD_AB, the tests' switch): unset the judge; on every
  * replay at the on arm (today's path); off every replay at the off arm;
  * alt every replay alternating on, off, off, on from the first, no trial,
@@ -128,6 +135,11 @@ typedef struct RdAbSubject {
     bool allowed;
     uint32_t stagesOn, stagesOff, trials; /* verdicts and trials this run */
     uint64_t armOn, armOff;               /* replays at each arm while allowed */
+    /* the run's last verdict (RD_AB_V_ON, RD_AB_V_OFF; RD_AB_V_NONE none
+       yet) and its stage: the arm a stage without a verdict of its own
+       starts on and keeps until its own */
+    int8_t carry;
+    int32_t carryStage;
 } RdAbSubject;
 
 typedef struct RdAb {

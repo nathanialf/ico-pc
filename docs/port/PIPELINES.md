@@ -1679,9 +1679,14 @@ subjects: the cull is the first (`RD_AB_ZERO`); the registry takes more, one on 
   the median pair is 2 % or more cheaper with the cull and 22 of the 32 are cheaper with it, off
   otherwise (no difference: off, the path without the cull). It is kept for that stage for the
   run: a stage visited again takes it at once. No verdict: fewer than 16 pairs after 600 trial
-  replays (kept on for the stage), or the stage ended or the cull was turned off before a
+  replays (no more trials there), or the stage ended or the cull was turned off before a
   verdict (not judged; tried again at the next visit while trials are left); with 16 to 31
   pairs at either end, the verdict on those pairs (22 of 32 scaled).
+- **The carried arm**: a stage without a verdict of its own (not judged yet, or no verdict after
+  its trial) runs on the arm of the run's most recent verdict (none yet in the run: with the
+  cull). Its own trial still starts 2 s in, and its verdict replaces the carried arm there and
+  for the stages after it. So a run whose stages agree pays the first 2 s on the wrong arm once,
+  not in every stage.
 - **The cost of a trial** is bounded: at most 300 replays without the cull (half of 600), eight
   with a clear difference. A picture at the off arm is not one drawn with the cull for the mark's
   count, and a verdict "off" writes nothing to the mark.
@@ -1692,25 +1697,31 @@ subjects: the cull is the first (`RD_AB_ZERO`); the registry takes more, one on 
   run, logged once. A hang or watchdog end ends the run; the next start's loss ladder and the
   mark take it from there.
 
-The rate requirement (`rd_ab` test, a GPU-bound stream at a 40 ms tick): over 60 s the pictures
-with the judge are at least the better fixed arm's less 2 and at least the worse one's, for
-pictures of 33, 37.5, 48 and 60 ms and a cull that saves 5 % or costs 3 %. A cull that costs more
-loses more while the stage's first 2 s run with it: at 48 ms a 5 % cost gives up 3 pictures to the
-arm without it, a 10 % cost 5.
+The rate requirement (`rd_ab` test, a GPU-bound stream at a 40 ms tick, 60 s; pictures of 33,
+37.5, 48 and 60 ms; the cull saving or costing 3, 5 or 10 %; one stage, four stages of one
+effect, and four stages whose effect changes sign each stage): the judge's pictures are at least
+the worse fixed arm's; at least the best per stage (the better fixed arm's where the effect has
+one sign) less the pictures the worse arm loses against the better during the time the judge was
+allowed on it (a stage's time before its own verdict on the wrong arm, and the wrong arm's half
+of each trial), computed from the two fixed-arm runs of the same case, less 1; and after the last
+verdict the same as the better arm's over the same span, within 1. The bound is not a constant:
+a cull that costs 10 % at 48 ms gives up 5 pictures in one stage, all of them inside it.
 
 The lines (`rd: ` before each):
 - At the start, after the cull's own line: `A/B: the in-play judge; may try: zero-area cull; a
   trial 2.0 s into a stage, ...` with every constant, or `not tried (off here): zero-area cull`.
 - One a trial: `A/B: zero-area cull, stage 42: 32 pairs, with it 1.62 ms, without 1.55 ms a
   thousand vertices and triangles (the median pair 4.3 % dearer with it, 25 of 32 cheaper
-  without), 3 dropped by a long picture, 0 by unequal work: off for this stage` (`8 pairs (all one
-  way: the early verdict)` for the early one), or `A/B: zero-area cull, stage 42: no verdict (600
-  replays, 11 pairs; 30 dropped by a long picture, 4 by unequal work, 120 replays not measured):
-  kept on for this stage` (`the stage ended`, `the attempt was turned off`: `kept on, not
-  judged`).
+  without), 3 dropped by a long picture, 0 by unequal work: off for this stage (it started with
+  it, the arm stage 41's verdict left)` (`8 pairs (all one way: the early verdict)` for the early
+  one; `it started with it, no verdict before it in the run` for the run's first), or `A/B:
+  zero-area cull, stage 42: no verdict (600 replays, 11 pairs; 30 dropped by a long picture, 4 by
+  unequal work, 120 replays not measured): no more trials here, it stays without it, the arm stage
+  41's verdict left` (`the stage ended`, `the attempt was turned off`: `not judged, it stays
+  ...`).
 - `A/B: every trial stopped for the run (the graphics device was lost): each attempt at its off
   arm from here (zero-area cull)`; `A/B: 12 trials run, the most a run: a stage not judged keeps
-  each attempt on`.
+  the arm of the run's last verdict`.
 - The attempt ledger's row, the run's totals in every block: `the zero-area cull timed in play on
   N stages kept with it so far (M without it; T trials run)`; the window's compare line counts the
   block's pictures drawn at an off arm: `(K keep frames; J without an attempt, timed)`.

@@ -11,10 +11,14 @@ target_sources(ico_render PRIVATE rd_ab.c rd_ab_run.c)
 # work rising 1 % a picture no false on), the trial's cost bounded, the
 # trial 2 s into a stage once the subject had work, the verdict kept for
 # the stage, the 12-trial cap, a fake second subject (one trial at a time),
-# the stop's way back, the modes, and the rate requirement on a GPU-bound
-# stream (tick 40 ms; pictures of 33, 37.5, 48 and 60 ms; a subject saving
-# 5 % or costing 3 %): the judge's pictures in 60 s at least the better
-# fixed arm's less 2 and the worse one's
+# the stop's way back, the modes, the carried arm (a stage without a verdict
+# of its own on the run's last verdict's arm, corrected by its own trial),
+# and the rate requirement on a GPU-bound stream (tick 40 ms, 60 s;
+# pictures of 33, 37.5, 48 and 60 ms; a subject saving or costing 3, 5 and
+# 10 %; one stage, four stages, four stages flipping): the judge at least
+# the worse fixed arm, at least the best per stage less the pictures lost on
+# the worse arm while unjudged (from the two fixed-arm runs) less 1, and the
+# better arm's after the last verdict within 1
 add_executable(rd_ab_test test/rd_ab_test.c rd_ab.c)
 target_include_directories(rd_ab_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(rd_ab_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
