@@ -344,8 +344,18 @@ question it decides:
   it, as a replay's timestamps come two or more replays later, after the ring has dropped its
   frame. A replay whose frame has left the ring by the next look is passed over for the next one
   (`window: slow scene: frame F had left the renderer's ring before it was looked at: ...`, the
-  first 8 times and every 100th); an arm that finds no such replay is dropped at the next block's
-  end, where the rule runs again. The file is that one frame and a copy of the log,
+  first 8 times and every 100th). While armed, the heaviest replay seen whose frame the renderer
+  held is kept as a stand-in (a heavier one replaces it, and any held one does once its frame has
+  left the ring; `port/platform/slow_arm.c`), so an arm still on at the next block's end (the
+  next block lighter than the slow one, as after issue 179's first boat block) takes the stand-in
+  when the ring still holds it: `window: slow scene: no replay after the slow block reached its
+  mean vertex work (N looked at, the heaviest X thousand against the mean Y thousand): frame F
+  (Z thousand), the heaviest seen that the renderer still holds, is taken at the block's end`, a
+  dump counted as every other. Otherwise it is dropped there with its reason, the first 8 and
+  every 100th: `window: slow scene: the armed dump is dropped at the block's end: no replay
+  reached the slow block's mean vertex work (...) and none seen is still held (n dropped so far)`
+  or `... no replay finished while it was armed (...)`; the rule runs again there. A frame that
+  has left the ring cannot be taken (the renderer keeps the last three). The file is that one frame and a copy of the log,
   `logs/slow-<date>-<time>.zip`, pruned to the newest three, and the newest goes into a crash or
   hang report and the rc share menu's set. Written in releases. What to send: the log and the
   zips; replay one with `rd_replay_tool` as a loss dump (the frame is the zip's first
@@ -1016,7 +1026,11 @@ begins, so the last line says which one a hang of the handler itself is in:
   the last three frames only; a frame the GPU had not finished when the ring reused its slot is
   copied to memory first while a slot wait has blocked 100 ms or more (`rd: loss keep: frame N
   copied to memory ...`, the first eight and every hundredth), at most 4 copies of at most 16 MiB,
-  at most 4 tries in any 64 frames, nothing in steady play. So the lost frame is held only when a
+  at most 4 tries in any 64 frames, nothing in steady play. On Vulkan only the part of the wait
+  the GPU's current picture has run counts (a wait queued behind the picture before is counted
+  in the 10 s line `rd: loss keep: in 10.0 s: ...` as `slot waits of 100 ms or more not counted
+  as stalled`, not copied; a picture stuck on the GPU still is), and the copy goes into a block
+  the dump worker made, else into one allocation of the frame's measured size ([RENDER.md](RENDER.md#the-loss-dump)). So the lost frame is held only when a
   stall came before the loss (as in both reports); otherwise the frames the ring holds are written,
   as before. `copies in memory: not used` says a copy in progress did not finish in time. A dump taken from the ring alone, for a loss at frame 129, held frames 132 and 131 and
   so replayed the wrong frame in the next start's bisect; a line `the lost frame F is not held any more ... writing
@@ -2158,7 +2172,9 @@ counters in the hot path.
   bytes are those of the old copy for the same frame. The game-thread figure is both steps (the
   measure and the copy, each with its wait for the reads), the worker figure the block's making
   and the zip. Lines of their own: `window: slow-scene dump: frame F had grown past
-  the worker's block of N bytes: copied into a block grown here instead` (the old way, once),
+  the worker's block of N bytes: copied into a block grown here instead` (the old way, once: the
+  frame measured and written into one allocation of its size since the loss keep's change; the
+  line's words are older),
   `window: slow-scene dump: not written: the worker could not make a block of N bytes`, and
   `window: slow-scene dump: not written: no frame of the scene could be copied in 10000 ms (the
   worker's block of N bytes given up)`, each ending `; not counted, the next slow block arms one again` (the dump is not counted as made, the dump before's work and stage restored, `window_dump_auto_slow_lost`; at most three such re-arms a run, after which `; counted (the run's re-arms used up)`), and `... not written: frame F could not be copied; ...` when the copy into a block grown here failed too. The skin check's capture is unchanged.

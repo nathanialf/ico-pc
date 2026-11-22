@@ -1356,7 +1356,20 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   a copy of a never-sent frame when the lost frame and the one before are held, the stalled
   history's copies are the same when only frames up to the stalled one were sent, and over a stall
   longer than the throttle's window the lost frame is still held where copies of never-sent frames
-  had pushed it out.
+  had pushed it out. The head's time (`rd_loss_keep_decide_head`, `RhiGpuProgress.headNs`): the
+  time counted is the wait's, at most the head's; the same 100 ms; a wait queued behind the picture
+  before is `RD_LOSS_KEEP_NOT_HEAD` with no attempt counted; the head unknown decides as before; a
+  stuck head (and one stuck since before the wait) copies; the title and menus' two pictures in
+  flight (waits of 105-110 ms, heads of 40-55 ms) copy none of 256 where the old rule took 16, and a
+  hang after them still holds the hung frame.
+- `rd_loss_keep_block_test.c` (ctest `rd_loss_keep_block`): the block a loss-keep copy is made into
+  (`rd_loss_keep_block.c`), pure, over a fake host: the size asked (the last copy, an eighth and 1
+  MiB, at most 16 MiB); steady play asks nothing and reads no memory; the first copy measured, a
+  block asked for at the next tick, the measured copy again while it is made, taken once made, a
+  copy into it and the next asked at once of the new size; a block too small given back; one the
+  worker could not make asked again; under the floor (read at most once a second) the block given
+  back and an ask withdrawn, nothing asked while under, asked again above it, the signal the same;
+  the end giving everything back; every fake block freed.
 - `rd_dump_reads_test.c` (ctest `rd_dump_reads`): the game thread's dumps that wait for the reads
   alone (`rd_dump.c` `dumpFrame`'s reads-only mode, `rd_thread_reads_wait`), on frames recorded
   without a device and a host of the test's own whose render thread is a thread per picture handed
@@ -1770,7 +1783,7 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   composited level not constant over level texels i0 - 2 to i0 + 3, the kernels' joint support and
   a tie: N = 3 level texels), some texels differing; the |d| histogram printed (`checkEdges2x`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#the-shadow-edges-above-1x)).
-- `rd_state_test.c`: the recording half of rd without a GPU: the retained-frame lookup of the slow-scene dump (`rd__retained_frame` and `rd_frame_retained`: the last closed and the one before by number, other numbers none; `rd_dump_retained_frame` writes nothing for a number outside the ring; the slow-scene dump's two steps of `rd_dump_mem.h`: the frame measured with nothing copied is the memory dump's size, copied into a block of exactly that size it is the memory dump byte for byte, a block one byte short refused, a frame outside the ring neither measured nor copied; the reads-only dump, `rd_dump_retained_frame_mem_reads`, the drained dump byte for byte: with no host both waits return at once, so this shows only that the mode serialises the same frame the same way; that it waits for the reads alone beside a running render thread is `rd_dump_reads_test.c`'s), the payload arena's alignment gap
+- `rd_state_test.c`: the recording half of rd without a GPU: the retained-frame lookup of the slow-scene dump (`rd__retained_frame` and `rd_frame_retained`: the last closed and the one before by number, other numbers none; `rd_dump_retained_frame` writes nothing for a number outside the ring; the slow-scene dump's two steps of `rd_dump_mem.h`: the frame measured with nothing copied is the memory dump's size, copied into a block of exactly that size it is the memory dump byte for byte, a block one byte short refused, a frame outside the ring neither measured nor copied; the loss keep's copy (`rd__loss_keep_test_copy` over a fake host) the file's bytes with no host, into a block once asked and made, and with a block too small (given back), the end withdrawing the ask; the reads-only dump, `rd_dump_retained_frame_mem_reads`, the drained dump byte for byte: with no host both waits return at once, so this shows only that the mode serialises the same frame the same way; that it waits for the reads alone beside a running render thread is `rd_dump_reads_test.c`'s), the payload arena's alignment gap
   zeroed over a reused buffer's bytes (`testPayloadPad`), the sheet shader's keys in the set
   (`testSheetSet`, issue 188: no `font_sheet_ps` key on a tile-based profile at 1x and 2x with a
   1008-line output, the frame's 8 at a 3x scene, the overlay's 4 at 1080 lines, 10 with `[dev]

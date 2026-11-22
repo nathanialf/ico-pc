@@ -2527,7 +2527,12 @@ report the device lost. `rhi_gpu_progress` gives another thread the GPU's progre
 submitting thread last saw it, without a call into the driver: the newest submission's number
 (the counter's, on either sync path), when it was made and its `rhi_set_submit_tag` replay and frame, the newest value seen
 finished (a wait that returned, a counter read before one, `rhi_wait_idle`), and the value a wait
-in progress blocks on with how long it has blocked. The submitting thread stores them with
+in progress blocks on with how long it has blocked, and with a wait in progress above the newest
+seen finished, how long ago a finish was last seen (`headKnown`, `headNs`: the time
+`vkr_progress_finished` last raised the value, stamped after the raise so a reader between the two
+sees a head time too long, never too short; unknown before the first finish and on the other
+backends), which the renderer's loss keep counts instead of a wait queued behind the picture
+before ([RENDER.md](RENDER.md#the-loss-dump)). The submitting thread stores them with
 `__atomic` stores in `vkr_note_submit`, `vkr_wait_value` and `rhi_wait_idle`; a wait in progress
 for a value above the newest seen finished is work the GPU has not finished. The watchdog reads it
 to tell a GPU hang from a freeze ([PLATFORM.md](PLATFORM.md#diagnostics)). Three other
