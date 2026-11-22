@@ -1833,14 +1833,22 @@ raise the share to at most 90 % and 93 %. `port/render/rd_nodiscard.h` says it a
   other targets), a driver's size thresholds and anything time-dependent are not covered, and the
   in-play judge and the mark stay the way back; a wrong pixel would show as specks on geometry that
   crosses the camera's plane, which neither the judge (time only) nor the mark (crashes and losses
-  only) sees. What is known: Mesa's NaN band flag was seen on a
-  triangle drawn beside the picture under `[dev] region_rule = ps2` (fx-drops-4657); no draw
-  without a band has been seen to lose a pixel to it: lavapipe measures the check `clean` (13
-  cases, 52 passes), and `rd_nodiscard_clean` draws 749 camera rule passes through the twins on
-  four fixtures byte for byte. Neither is a proof for another GPU, and that `clean` was measured on
-  an earlier case set in model units, five of whose cases covered no pixel; the next set's first
-  case (an edge 0.25 model units off the centre view ray) drew nothing on lavapipe at 912 x 512
-  where the CPU expected about 47 texels. The cause was the check's own set-up, not the GPU: its
+  only) sees. What is known: lavapipe is `not clean`. Its clipper makes the band flag NaN on
+  triangles crossing the eye plane with no side band: case 2 (an edge on a view ray, x / w
+  alike) and case 5 (a corner at w = 0) lose texels through the ordinary entry (case 5 all of
+  them) that the twins draw; the other eleven cases are byte for byte. At such a texel the
+  twin's other noperspective varyings (`col`, `stq`) come from the same factor and are NaN too
+  (a triangle with a corner behind the eye has no attribute planes, so `vu_pixel_attrs` takes the
+  interpolated ones): the twin writes a colour made from NaN (0 under Vulkan's NaN-to-UNORM
+  conversion, or what a clamp makes of it) at the triangle's depth (the position is clipped by
+  the plane distances, not that factor). That is garbage, not the triangle's picture, where the
+  ordinary entry leaves a hole; so on a `not clean` device the camera rule's class stays off.
+  `rd_nodiscard_clean`'s four fixtures hold no such triangle: with the verdict taken as clean
+  their camera rule draws through the twins are byte for byte. History: the check said `clean`
+  on lavapipe until the second review's run 3 because no case had drawn a triangle crossing the
+  eye plane. An earlier case set in model units had five cases covering no pixel; the next set's
+  first case (an edge 0.25 model units off the centre view ray) drew nothing at 912 x 512 where
+  the CPU expected about 47 texels. The cause was the check's own set-up, not the GPU: its
   prelit meshes had no facing table, so their draws kept the PS2's drops (`rd_replay_vu.c`
   `vuDropMode`, `RD_DROPS_KEPT`), and a triangle with a corner behind the eye that reaches the
   picture was dropped by the region rule (`vu_region_rule_cut`) before any clipper saw it; its
@@ -1850,7 +1858,10 @@ raise the share to at most 90 % and 93 %. `port/render/rd_nodiscard.h` says it a
   disc's prelit parts do) and code 36 is the scissor; the frame without the probe uses a copy
   without the table, so the log shows the drop. `ICO_RD_VU_NODISCARD_TRACE=1` (its tests) adds
   per case the draw as the replay set it up, the culler's reasons and the rule stage computed on
-  the CPU. The check's positive
+  the CPU. A frame is `not tested` only when neither entry drew it (the ordinary entry can lose
+  a whole case to the NaN). Code 32's expected texels are the uncut triangle where every corner
+  passes the region test (it does not test Z: `EXACT`, drawn at the GS positions as the PS2 draws
+  it, cases 9 and 10), code 36's are cut at GS Z 0 (the scissor flags it). The check's positive
   controls show it says `not clean` when a case differs (`ICO_RD_VU_NODISCARD_SABOTAGE=clipper`)
   and when a case draws nothing (`=empty`). The floor's two cases through a twin (plain,
   textured) are shown to draw the same way: the frame without each must differ.
@@ -1916,17 +1927,20 @@ The lines (`rd: ` before each):
   its fallback): the twins are for a device without it)`.
 - `discard-free twins: the clipper check: clean (13 cases crossing the eye plane at codes 32 and
   36, untextured and textured under TEXA, N passes through both twins, the pictures and their
-  depth byte for byte): the camera rule's passes take them too`, or `... not clean (case 1 at 32
-  differs, the first at texel X,Y): clip mode none alone takes them (a property of this device,
+  depth byte for byte): the camera rule's passes take them too`, or `... not clean (case 1 differs
+  at 32, the first at texel X,Y): clip mode none alone takes them (a property of this device,
   not a fault: nothing written as failed)` (`not clean (drew nothing (not tested): case 1 at 32,
-  32t, 36, 36t; case 4 at 36)` when frames drew nothing, a difference after it; `not clean (no
+  32t, 36, 36t; case 4 at 36)` when frames drew nothing through either entry, the differing
+  cases after it; `not clean (no
   case of its frames drew through vu_texa_ps_nodual_nd)` when an entry drew none); before it one
   line a case, `discard-free twins: the clipper check, case K of 13 (<name>) on SCENE WxH at
-  TWxTH texels: expected about E texels; drawn D32, D32t, D36, D36t (codes 32, 32 textured, 36,
-  36 textured, against the probe alone), B without the probe or a facing table (code 32, against the clear);
-  differing with the twins F32, F32t, F36, F36t`; under `ICO_RD_VU_NODISCARD_CLIPPER` the forced verdict with what was
-  measured: `clean (ICO_RD_VU_NODISCARD_CLIPPER; measured not clean: ...)`, `not clean
-  (ICO_RD_VU_NODISCARD_CLIPPER; measured clean)`).
+  TWxTH texels: expected about E32 texels at code 32 and E36 at code 36; drawn D32, D32t, D36,
+  D36t through the ordinary entry and T32, T32t, T36, T36t through the twins (codes 32, 32
+  textured, 36, 36 textured, against the probe alone), B without the probe or a facing table
+  (code 32, against the clear); differing with the twins F32, F32t, F36, F36t`; on lavapipe
+  `not clean (case 2 differs at 32, 32t, 36, 36t, the first at texel X,Y; case 5 differs at ...)`;
+  under `ICO_RD_VU_NODISCARD_CLIPPER=clean` the verdict taken as clean with what was measured:
+  `clean (ICO_RD_VU_NODISCARD_CLIPPER; measured not clean: ...)`).
 - The 10 s VU line's clause: `; discard-free twins: D draws a picture through them, C of them by
   the clipper check (clean|not clean|not checked) (R refused a picture: plane p, DATE d, band b,
   alpha a, clipped c, not made yet u, timed without them t, entry not tested e)`, then `; their

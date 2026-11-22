@@ -93,14 +93,24 @@
  * near-depth planes, the far plane, the side planes through saturation, one
  * and two corners out, the factor's 0 / 0) for these corners only; geometry
  * the cases miss, other states (MSAA, other targets), a driver's size
- * thresholds and anything time-dependent are not covered.  What is known (2026-11-22): Mesa's NaN band flag was seen on a
- * triangle drawn beside the picture under [dev] region_rule = ps2 (commit
- * e65012742, fx-drops-4657); no draw without a band has been seen to lose
- * a pixel to it: lavapipe measures the check clean (13 cases, 52 passes),
- * and rd_nodiscard_clean draws 749 camera rule passes through the twins on
- * four fixtures byte for byte.  Neither is a proof for another GPU.
- * ICO_RD_VU_NODISCARD_CLIPPER=clean|notclean fakes the verdict for the
- * tests; ICO_RD_VU_NODISCARD_SABOTAGE=clipper changes the check's first
+ * thresholds and anything time-dependent are not covered.  What is known
+ * (2026-11-22): lavapipe is not clean.  Its clipper makes the band flag
+ * NaN on triangles crossing the eye plane without any side band: cases 2
+ * (an edge on a view ray, x / w alike) and 5 (a corner at w = 0) lose
+ * texels through the ordinary entry (case 5 all of them) that the twins
+ * draw.  At such a texel the twin's other noperspective varyings (col,
+ * stq) come from the same factor and are NaN too: a triangle with a
+ * corner behind the eye has no attribute planes (vu_pixel_attrs takes the
+ * interpolated ones), so the twin writes a colour made from NaN (0 under
+ * Vulkan's NaN-to-UNORM conversion, or what a clamp makes of it) at the
+ * triangle's depth (SV_Position is clipped by the plane distances, not that
+ * factor): garbage, not the triangle's picture, where the ordinary entry
+ * leaves a hole.  rd_nodiscard_clean's four fixtures hold no such triangle
+ * (0 targets differing with the verdict taken as clean).  History: the
+ * check measured "clean" until the second review's run 3 because no case
+ * had drawn a triangle crossing the eye plane (see below).
+ * ICO_RD_VU_NODISCARD_CLIPPER=clean takes the verdict as clean for the
+ * tests (rd_vuprepass_selftest_nodiscard_clean, rd_nodiscard_clean); ICO_RD_VU_NODISCARD_SABOTAGE=clipper changes the check's first
  * case's picture through the twins in one byte, =empty moves its first
  * case off the frame (its positive controls: the check must say not
  * clean).  The "clean" lavapipe measured on 2026-11-22 was an earlier case
@@ -112,7 +122,11 @@
  * region rule dropped every triangle with a corner behind the eye that
  * reaches the picture (vu_region_rule_cut) before any clipper; its code 36
  * frames ran the region test.  Now each mesh has a table and code 36 the
- * scissor; ICO_RD_VU_NODISCARD_TRACE=1 logs each case's stages.
+ * scissor; ICO_RD_VU_NODISCARD_TRACE=1 logs each case's stages.  A frame
+ * is "not tested" only when neither entry drew it (the ordinary entry can
+ * lose a whole case to the NaN).  Code 32's expectation is uncut where
+ * every corner passes the region test (it does not test Z: EXACT, as the
+ * PS2 draws it), code 36's cut at GS Z 0 (the scissor flags it).
  * The twins' pipelines are made in the background between pictures
  * (rd_pipeline.c rd__pipeline_twin, rd__pipeline_twin_tick: a batch on the
  * workers at low priority, as the start-up set's background finisher, or
@@ -356,7 +370,7 @@ bool rd__nd_sabotage_empty(void);
 uint64_t rd__nd_take_clip(void);
 /* the clipper check's frames running (their camera rule passes taken as a
    clean clipper's would be), and its verdict (clean, or the first differing
-   case's words; the tests' ICO_RD_VU_NODISCARD_CLIPPER=clean|notclean replaces
+   case's words; the tests' ICO_RD_VU_NODISCARD_CLIPPER=clean replaces
    it, saying what was measured); the verdict (RD_ND_CLIP_*) and its words */
 void rd__nd_clipper_check(bool on);
 void rd__nd_clipper_verdict(bool clean, const char *why);

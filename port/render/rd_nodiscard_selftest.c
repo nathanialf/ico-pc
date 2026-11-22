@@ -429,18 +429,19 @@ static void caseCorners(int k, uint32_t w, uint32_t h, float out[3][3])
 /* The texel centres case corners c should cover on SCENE t, by the vertex
    stage's maths: h = (16 x + 2048 z, 16 y + 2048 z, 3145728 (z - 1), z)
    (sceneBlock), clipped where the depth is below GS Z 0 (h.z < 0: the
-   GPU's near plane; h.w = z >= 1 > 0 there), projected GS X = h.x / h.w
-   and mapped to texels about the frame's centre (GS 2048, the draw offset
-   2048 - w / 2: rd_replay.c).  Not the rasteriser's own rules (its grid,
-   its tie-breaking, a back-facing winding's drop): an estimate, logged
-   beside what was drawn so a mismatch shows itself */
-static uint64_t expectedTexels(const float c[3][3], const RdTargetRec *t)
+   GPU's near plane; h.w = z >= 1 > 0 there) unless near is false,
+   projected GS X = h.x / h.w and mapped to texels about the frame's centre
+   (GS 2048, the draw offset 2048 - w / 2: rd_replay.c).  Not the
+   rasteriser's own rules (its grid, its tie-breaking, a back-facing
+   winding's drop): an estimate, logged beside what was drawn so a mismatch
+   shows itself */
+static uint64_t expectedTexels(const float c[3][3], const RdTargetRec *t, bool near)
 {
     float p[4][2];
     int n = 0;
     for (int i = 0; i < 3; i++) {
         const float *a = c[i], *b = c[(i + 1) % 3];
-        const bool ain = a[2] >= 1.0f, bin = b[2] >= 1.0f;
+        const bool ain = !near || a[2] >= 1.0f, bin = !near || b[2] >= 1.0f;
         if (ain && n < 4) {
             p[n][0] = 16.0f * a[0] / a[2];
             p[n][1] = 16.0f * a[1] / a[2];
@@ -455,6 +456,13 @@ static uint64_t expectedTexels(const float c[3][3], const RdTargetRec *t)
     }
     if (n < 3 || t->w == 0 || t->h == 0) {
         return 0;
+    }
+    if (!near) {
+        for (int i = 0; i < 3; i++) {
+            if (!(c[i][2] > 0.0f)) {
+                return 0; /* (only asked with every corner in front) */
+            }
+        }
     }
     const double sx = (double)t->tw / t->w, sy = (double)t->th / t->h;
     double lo[2] = {1e30, 1e30}, hi[2] = {-1e30, -1e30};
@@ -489,6 +497,24 @@ static uint64_t expectedTexels(const float c[3][3], const RdTargetRec *t)
         }
     }
     return count;
+}
+
+/* What code 32 draws of case corners c: the region test (vu_inside: GS X
+   and Y inside 0..4094 and 0 < w, VU_LO0 / VU_HI4094) does not test Z, so
+   a triangle with every corner inside and in front of the eye is EXACT,
+   drawn at its GS positions without the GPU's cut at GS Z 0 (as the PS2
+   draws it: its GS has no near plane); any other triangle is cut there.
+   Code 36's scissor flags GS Z, so it is always cut (cases 9 and 10: a
+   corner below GS Z 0, the whole triangle at code 32, the cut one at 36) */
+static uint64_t expectedAt(const float c[3][3], const RdTargetRec *t, bool code32)
+{
+    bool inside = code32;
+    for (int i = 0; i < 3 && inside; i++) {
+        const float w = c[i][2];
+        const float gx = 2048.0f + 16.0f * c[i][0] / w, gy = 2048.0f + 16.0f * c[i][1] / w;
+        inside = w > 0.0f && gx > 0.0f && gy > 0.0f && gx < 4094.0f && gy < 4094.0f;
+    }
+    return expectedTexels(c, t, !inside);
 }
 
 /* a mesh of the prelit layout from corners (NC_VERTS: a triangle in both
@@ -715,13 +741,14 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
     static const RdTex kNone = {0};
     static const RdMesh kNoCase = {0};
     RdMesh mesh[NC_CASES], untabled[NC_CASES];
-    uint64_t expect[NC_CASES];
+    uint64_t expect[NC_CASES][2]; /* at codes 32 and 36 */
     float corner[NC_CASES][NC_VERTS][3];
     bool ok = true;
     for (int k = 0; k < NC_CASES; k++) {
         float (*c)[3] = corner[k];
         caseCorners(k, t->w, t->h, c);
-        expect[k] = expectedTexels((const float (*)[3])c, t);
+        expect[k][0] = expectedAt((const float (*)[3])c, t, true);
+        expect[k][1] = expectedAt((const float (*)[3])c, t, false);
         /* the other winding, a strip of its own: corners 0, 2, 1 */
         memcpy(c[3], c[0], sizeof(c[3]));
         memcpy(c[4], c[2], sizeof(c[4]));
@@ -823,14 +850,17 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
     (void)rd__nd_take_clip();
     rd__nd_take_entries_clip(ent);
     rd__nd_take(&tw, rf);
-    uint64_t drawn[NC_FRAMES], differ[NC_FRAMES], bare[NC_CASES];
+    uint64_t drawn[NC_FRAMES], drawnTwin[NC_FRAMES], differ[NC_FRAMES], bare[NC_CASES];
+    uint32_t firstAt[NC_FRAMES];
+    memset(drawnTwin, 0, sizeof(drawnTwin));
+    memset(firstAt, 0, sizeof(firstAt));
     memset(drawn, 0, sizeof(drawn));
     memset(differ, 0, sizeof(differ));
     memset(bare, 0, sizeof(bare));
     bool device = clean, empty = false, differs = false, unmade = false;
     NcTrace tr[2]; /* codes 32 and 36, untextured: the case's draw and the culler */
     memset(tr, 0, sizeof(tr));
-    char diffWhy[96] = "", unmadeWhy[64] = "";
+    char unmadeWhy[64] = "";
     for (int k = 0; device && k < NC_FRAMES; k++) {
         RdFrame f;
         if (!clipFrame(&f, scene, t->w, t->h, mesh[NC_CASE(k)], kCodes[NC_CODE(k)], probe,
@@ -868,16 +898,17 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
             break;
         }
         size_t first = 0;
-        drawn[k] = texelsDiffer(b, NC_TEXA(k) && aloneTex != NULL ? aloneTex : alone, size, NULL);
+        /* drawn through either entry: the ordinary one can lose the whole
+           case to its discards (a NaN band flag) where the twin draws it;
+           nothing through both is not tested */
+        const uint8_t *only = NC_TEXA(k) && aloneTex != NULL ? aloneTex : alone;
+        drawn[k] = texelsDiffer(b, only, size, NULL);
+        drawnTwin[k] = texelsDiffer(a, only, size, NULL);
         differ[k] = texelsDiffer(a, b, size, &first);
-        empty = empty || drawn[k] == 0u;
-        if (differ[k] != 0u && !differs) {
-            snprintf(diffWhy, sizeof(diffWhy), "case %d at %s differs, the first at texel %u,%u",
-                     NC_CASE(k) + 1, kFormWords[k % 4], (unsigned)((first / 4u) % t->tw),
-                     (unsigned)((first / 4u) / t->tw));
-            differs = true;
-        }
-        if (drawn[k] != 0u) {
+        firstAt[k] = (uint32_t)(first / 4u);
+        empty = empty || (drawn[k] == 0u && drawnTwin[k] == 0u);
+        differs = differs || differ[k] != 0u;
+        if (drawn[k] != 0u || drawnTwin[k] != 0u) {
             /* the passes of a frame whose case drew (the probe, code 34,
                is not of this class) */
             *clipDraws += frameClip;
@@ -896,24 +927,28 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
                 rd__frame_free(&g);
             }
             rd__log("discard-free twins: the clipper check, case %d of %d (%s) on SCENE %ux%u at "
-                    "%ux%u texels: expected about %llu texels; drawn %llu, %llu, %llu, %llu "
-                    "(codes 32, 32 textured, 36, 36 textured, against the probe alone), %llu "
-                    "without the probe or a facing table (code 32, against the clear); differing "
-                    "with the twins "
-                    "%llu, %llu, %llu, %llu",
+                    "%ux%u texels: expected about %llu texels at code 32 and %llu at code 36; "
+                    "drawn %llu, %llu, %llu, %llu through the ordinary entry and %llu, %llu, "
+                    "%llu, %llu through the twins (codes 32, 32 textured, 36, 36 textured, "
+                    "against the probe alone), %llu without the probe or a facing table (code "
+                    "32, against the clear); differing with the twins %llu, %llu, %llu, %llu",
                     c + 1, NC_CASES, kClip[c].name, t->w, t->h, t->tw, t->th,
-                    (unsigned long long)expect[c], (unsigned long long)drawn[k - 3],
-                    (unsigned long long)drawn[k - 2], (unsigned long long)drawn[k - 1],
-                    (unsigned long long)drawn[k], (unsigned long long)bare[c],
-                    (unsigned long long)differ[k - 3], (unsigned long long)differ[k - 2],
-                    (unsigned long long)differ[k - 1], (unsigned long long)differ[k]);
+                    (unsigned long long)expect[c][0], (unsigned long long)expect[c][1],
+                    (unsigned long long)drawn[k - 3], (unsigned long long)drawn[k - 2],
+                    (unsigned long long)drawn[k - 1], (unsigned long long)drawn[k],
+                    (unsigned long long)drawnTwin[k - 3], (unsigned long long)drawnTwin[k - 2],
+                    (unsigned long long)drawnTwin[k - 1], (unsigned long long)drawnTwin[k],
+                    (unsigned long long)bare[c], (unsigned long long)differ[k - 3],
+                    (unsigned long long)differ[k - 2], (unsigned long long)differ[k - 1],
+                    (unsigned long long)differ[k]);
             if (trace) {
                 traceCase(c, (const float (*)[3])corner[c], tr);
             }
         }
     }
     if (device && (empty || differs || unmade)) {
-        /* every frame that drew nothing, then the first difference */
+        /* every frame that drew nothing through either entry, then every
+           case that differs (its forms, its first texel) */
         size_t at = 0;
         why[0] = '\0';
         if (empty) {
@@ -922,7 +957,7 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
             for (int c = 0; c < NC_CASES; c++) {
                 bool named = false;
                 for (int x = 0; x < 4; x++) {
-                    if (drawn[c * 4 + x] != 0u) {
+                    if (drawn[c * 4 + x] != 0u || drawnTwin[c * 4 + x] != 0u) {
                         continue;
                     }
                     if (!named) {
@@ -935,8 +970,26 @@ static bool clipperCheck(RdTargetRec *t, uint8_t *a, uint8_t *b, size_t size, Rd
                 }
             }
         }
-        if (differs) {
-            at = appendf(why, whySize, at, "%s%s", at ? "; " : "", diffWhy);
+        for (int c = 0; differs && c < NC_CASES; c++) {
+            int firstK = -1;
+            for (int x = 0; x < 4; x++) {
+                const int k = c * 4 + x;
+                if (differ[k] == 0u) {
+                    continue;
+                }
+                if (firstK < 0) {
+                    at = appendf(why, whySize, at, "%scase %d differs at %s", at ? "; " : "", c + 1,
+                                 kFormWords[x]);
+                    firstK = k;
+                } else {
+                    at = appendf(why, whySize, at, ", %s", kFormWords[x]);
+                }
+            }
+            if (firstK >= 0) {
+                at = appendf(why, whySize, at, ", the first at texel %u,%u",
+                             (unsigned)(firstAt[firstK] % t->tw),
+                             (unsigned)(firstAt[firstK] / t->tw));
+            }
         }
         if (unmade) {
             at = appendf(why, whySize, at, "%s%s", at ? "; " : "", unmadeWhy);

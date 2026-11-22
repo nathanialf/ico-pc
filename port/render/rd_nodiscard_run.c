@@ -160,13 +160,11 @@ void rd__nd_init(void)
     s_n.clipWhy[0] = '\0';
     s_n.clipCheck = false;
     const char *cf = getenv("ICO_RD_VU_NODISCARD_CLIPPER");
-    s_n.clipFake = cf != NULL && strcmp(cf, "clean") == 0      ? RD_ND_CLIP_CLEAN
-                   : cf != NULL && strcmp(cf, "notclean") == 0 ? RD_ND_CLIP_DIRTY
-                                                               : -1;
+    /* (lavapipe measures not clean: only the clean verdict needs a fake) */
+    s_n.clipFake = cf != NULL && strcmp(cf, "clean") == 0 ? RD_ND_CLIP_CLEAN : -1;
     if (s_n.clipFake >= 0) {
-        rd__log("discard-free twins: ICO_RD_VU_NODISCARD_CLIPPER=%s: the clipper check's verdict "
-                "taken as %s whatever it measures (tests)",
-                cf, s_n.clipFake == RD_ND_CLIP_CLEAN ? "clean" : "not clean");
+        rd__log("discard-free twins: ICO_RD_VU_NODISCARD_CLIPPER=clean: the clipper check's "
+                "verdict taken as clean whatever it measures (tests)");
     }
     const char *mark = getenv("ICO_NODISCARD_MARK");
     snprintf(s_n.markPath, sizeof(s_n.markPath), "%s", mark != NULL ? mark : "");

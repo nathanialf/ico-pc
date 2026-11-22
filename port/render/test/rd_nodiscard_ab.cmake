@@ -97,25 +97,32 @@ set(nodual_gl 1)
 # the twins' run line (rd_nodiscard_run.c rd__nd_stats_text), matched in the
 # run's text with its ';' made ','
 set(ndRe "stats: discard-free twins (on|off|held)[^:]*: ([0-9]+) draws through them, ([0-9]+) of them by the clipper check \\(([a-z ]+)\\), refused: ([^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*), ([0-9]+) modules of them made")
-# MODE=clean (rd_nodiscard_clean): the shipping path.  Both runs take the
-# game's start-up self-tests (--game-selftests), so the run with the twins
-# measures the device's clipper (rd_nodiscard_selftest.c) and, where it is
-# clean (lavapipe is: the merge check of 2026-11-22 17:40), the camera
-# rule's passes take a twin.  Required: the verdict "clean", every target
-# byte for byte, and per fixture and profile at least the clean_min=N of its
-# list line of that class's draws (a floor below what was measured).
-set(extraArgs "")
+# MODE=clean (rd_nodiscard_clean): the clean verdict's path.  Lavapipe
+# measures its clipper not clean (rd_nodiscard_selftest.c: Mesa's NaN band
+# flag on triangles crossing the eye plane), so the run with the twins takes
+# the verdict as clean (ICO_RD_VU_NODISCARD_CLIPPER=clean) and the camera
+# rule's passes take a twin.  These fixtures hold no eye-crossing triangle
+# whose pixels differ (measured: 0 targets differing in every run so far),
+# which is why a verdict taken as clean is byte for byte here.  Required:
+# the verdict "clean", every target byte for byte, and per fixture and
+# profile at least the clean_min=N of its list line of that class's draws
+# (a floor below what was measured).
+set(extraOn "")
 if(MODE STREQUAL "clean")
-  set(extraArgs --game-selftests)
+  set(extraOn ICO_RD_VU_NODISCARD_CLIPPER=clean)
 endif()
 
 # a run of a frame: rc, its text flattened, the twins' draws and modules
 function(ndRun dump p s value dir)
   file(REMOVE_RECURSE "${dir}")
   file(MAKE_DIRECTORY "${dir}")
-  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${env_${p}} ICO_RD_VU_NODISCARD=${value}
+  set(more "")
+  if(value EQUAL 1)
+    set(more ${extraOn})
+  endif()
+  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${env_${p}} ${more} ICO_RD_VU_NODISCARD=${value}
                           "${TOOL}" "${dump}" /dev/null --pass-dump "${dir}" --stats --repeat 2
-                          ${extraArgs} ${args_${s}}
+                          ${args_${s}}
                   RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
   string(REPLACE ";" "," flat "${out}\n${err}")
   set(state "")
@@ -200,9 +207,9 @@ foreach(e IN LISTS entries)
             message(SEND_ERROR "${dump} ${p} ${s}: no twins' line:\n${r_flat}")
             math(EXPR failures "${failures} + 1")
           elseif(MODE STREQUAL "clean")
-            # the camera rule's class ran on the measured verdict
+            # the camera rule's class ran on the verdict taken as clean
             if(NOT r_clipper STREQUAL "clean")
-              message(SEND_ERROR "${dump} ${p} ${s}: the clipper check did not measure clean (${r_clipper}):\n${r_flat}")
+              message(SEND_ERROR "${dump} ${p} ${s}: the verdict was not taken as clean (${r_clipper}):\n${r_flat}")
               math(EXPR failures "${failures} + 1")
             endif()
             math(EXPR fxTwins "${fxTwins} + ${r_clip}")
