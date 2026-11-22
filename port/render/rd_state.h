@@ -290,7 +290,9 @@ typedef struct RdPipelineKey {
     uint8_t aa1;       /* PRIM.AA1 on a line or triangle: sprite_aa1_*_vs / sprite_aa1_ps, edge
                     coverage */
     uint8_t nodual;    /* the *_nodual fragment entry and the two-pass blend
-                          state (rd_pipeline.c rd__expand_no_dual); 0 with dual-source blending */
+                          state (rd_pipeline.c rd__expand_no_dual); 0 with dual-source blending.
+                          Bit 1 with bit 0: its discard-free twin (rd_nodiscard.h
+                          RD_NODUAL_NODISCARD), the same blend state */
     /* the pass's sample count (rd_replay.c, the MSAA epoch): 0 single-sampled,
      * else 2, 4 or 8; rd__get_pipeline sets it from the pass being drawn */
     uint8_t msaa;

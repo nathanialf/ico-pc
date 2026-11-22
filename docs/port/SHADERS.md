@@ -134,6 +134,11 @@ take from either ([RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)).
   `vu_texa_ps`.
   [rd](ARCHITECTURE.md#terms) draws a lerp as two passes with them (`port/render/rd_pipeline.c`
   (`rd__expand_no_dual`)).
+- `_nodual_nd` (`ICO_NO_DUAL=1 ICO_VU_NODISCARD=1`): `vu_ps` and `vu_texa_ps` without the second
+  output and with no discard at all (the clip plane's, the side bands', DATE's and the alpha
+  test's left out), the discard-free twins: made only once they are tried, for the passes the
+  renderer proved none of those discards can fire for ([PIPELINES.md](PIPELINES.md#the-discard-free-twins)).
+  Without the define every module is the same byte for byte.
 - `_dstrov` (`ICO_DST_READ=1`) and `_dstatt` (`ICO_DST_READ=2`): the exact blend computed from the
   destination (`port/render/rd_dst_read.c`), for the sprite entries, `fog_lut_ps`,
   `fog_lut_buffer_ps`, the font entries and `vu_ps`, `vu_texa_ps`. `_dstrov` reads and writes the
@@ -200,7 +205,7 @@ The replay looks entries up by the names in `s_vsNames` and `s_fsNames` (`port/r
    (`rd__enumerate_reachable`)) so `rd_precreate_pipelines` creates them.
 4. Add the name to the expected lists of `port/shaders/test/shaders_table_test.c` (`expected`, or
    the list of its kind: `expectedPlanes`, `expectedAa`, `expectedVariants`, `expectedNoDual`,
-   `expectedDst`, `expectedPlain`, `expectedPrepass`).
+   `expectedNoDiscard`, `expectedDst`, `expectedPlain`, `expectedPrepass`).
 5. Run `shaders_table`, `gs_math`, `shaders_pixel*`, `vu1*` (a VU entry), `rhi_d3d12_plan` (every
    vertex shader's DXIL inputs against its SPIR-V locations) and `rhi_d3d11_shader_plan`, and build
    `shaders_d3d11_check` (the entry under `ICO_D3D11`), then the render tests

@@ -1651,7 +1651,9 @@ without it, and a culling entry's draws give up the shared vertices' list. Once 
 (its self-test passed, its mark allows it), the game times it while it is played and keeps it on
 a stage only where it is faster there (`port/render/rd_ab.c` the judge, pure;
 `rd_ab_run.c` the renderer's side; `rd_ab.h` and `rd_ab_run.h` say it all). The judge takes
-subjects: the cull is the first (`RD_AB_ZERO`); the registry takes more, one on trial at a time.
+subjects: the cull is the first (`RD_AB_ZERO`), the discard-free twins the second
+(`RD_AB_NODISCARD`, [below](#the-discard-free-twins)); one is on trial at a time, the other at its
+verdict or carried arm.
 
 - **Two arms, both paths the device already runs.** With the cull (the arm "on", the default) or
   without it ("off"): a replay at the off arm gives no entry a lattice word (refused for the
@@ -1733,6 +1735,93 @@ The tests' switches ([TESTING.md](TESTING.md#environment-switches)): `ICO_RD_AB`
 replay with the cull, `off` every replay without it, `alt` every replay with, without, without,
 with from the first, no trial; unset the judge) and `ICO_RD_AB_FAKE_LOSS`. The replay tool has no
 stage, so without `ICO_RD_AB` it runs no trial and draws as before.
+
+#### The discard-free twins
+
+On a device without dual-source blending every VU pass draws through `vu_ps_nodual` or
+`vu_texa_ps_nodual` (the two-pass blend, above), and both hold `discard`: the clip plane's, the
+side bands', DATE's and the alpha test's (`vu_common.hlsli` `vu_pixel_tests`, `vu_pixel`,
+`vu_pixel_texa`). Arm's published guidance for its GPUs says a fragment shader that may discard
+updates the depth late and loses the hidden-pixel kill; whether that costs anything on issue 179's
+Mali-G52 is not known, so the twins are timed in play as the cull is and kept only where they are
+faster. On that phone's boat capture about 90 % of list 0-2's triangles are in passes none of the
+four discards can fire for (the camera rule gives every mesh draw `ICO_VU_NO_BESIDE`; the alpha
+plan proves most of the alpha tests). `port/render/rd_nodiscard.h` says it all.
+
+- **The twins** `vu_ps_nodual_nd` and `vu_texa_ps_nodual_nd` are the same entries built with
+  `ICO_VU_NODISCARD=1`: no discard, every other statement the same
+  ([SHADERS.md](SHADERS.md#the-families)). The key carries them as a second bit of
+  `RdPipelineKey.nodual` (`RD_NODUAL_NODISCARD`, with `RD_NODUAL_ON`): the key's size and every
+  key without the bit are unchanged; `pipelineDesc` takes the twin's module (`rd__nd_module`) for
+  the bit.
+- **Eligible, at the draw's key** (`rd_nd_eligible`, `rd_replay_vu.c` `vuDraw` after its
+  pipelines are found; refusing when unsure): a vu_ps or vu_texa_ps pass through its *_nodual
+  build with no destination read; no chain plane (`ICO_DF_PLANE`); no DATE (the snapshot's
+  `ICO_DF_DATE`, nor the stencil bit's); no side band (the draw has `ICO_VU_NO_BESIDE`, or is clip
+  mode none, or particles; under `[dev] region_rule = ps2` on a frame wider than 4:3 almost nothing
+  is eligible); the alpha test off in the pass (DrawCB mode.z bit 8 clear: the test off in the
+  state, ATST ALWAYS, the AFAIL merge's one draw, or the alpha plan's proof). On Mesa's software
+  rasteriser (llvmpipe, lavapipe: driver id 13 or "llvmpipe" in the adapter's name) clip mode none
+  alone: its clipper can make every varying NaN at the corners it adds behind the eye, and the
+  *_nodual build takes a NaN band flag as a band, discarding those pixels where a twin would draw
+  them. A clip mode none corner is always at its GS position, so the clipper adds none behind the
+  eye there.
+- **Never waited for.** A pass whose twin's pipeline is not made draws through its *_nodual build
+  and asks for the twin (`rd_pipeline.c` `rd__pipeline_twin`: queued once). Between pictures
+  (`rd__pipe_finish_tick`, the background finisher's slot) the queue's next batch is begun on the
+  workers at low priority and taken once its compiles have ended; none is begun while the
+  finisher's hold is in force (a late game step, a slow picture) or while the finisher runs, and
+  one background set is in flight at a time. A backend without background creation makes the batch
+  there, between pictures. The tests' `ICO_RD_VU_NODISCARD=1` makes them at the next replay's
+  start and waits.
+- **The ways back** (each logged, none written to the settings):
+  - the install's mark `logs/nodiscard-mark.txt` (`port/platform/nodiscard_mark.h`), the cull's
+    stages and table: `trying` written and synced before the two modules are made, `counting` when
+    the self-test passed, `on` after 250 pictures drawn with a twin, `failed` when a module or a
+    pipeline could not be made or the self-test refused them; a bad end while trying (any end but
+    a clean close), counting or on (a crash, an ANR, a signal other than 9, a device loss, a GPU
+    hang, the watchdog) keeps them off until the version changes;
+  - the start-up self-test (`rd_nodiscard_selftest.c`, after the cull's on the pre-pass that
+    passed): a code 34 frame with a plain mesh (given its twin), one under an alpha test that can
+    fail and one under a chain plane (both refused); the side band and DATE, which the camera
+    rule's frame cannot draw, are checked on the rule itself. Drawn with the twins and without:
+    the pictures byte for byte, a pass through a twin counted, both refusal cases refused, no twin
+    pipeline missing, else off for the run with the modules and pipelines released. Either way every
+    pipeline the self-test made is released after it (`rd__pipeline_forget_since`): the run's set is
+    the one it had before (the draw pattern gate's counts unchanged), and the twins' pipelines are
+    made in the background as play asks for them;
+  - the loss ladder (`ICO_LOSS_ROW`): off for this start; a twin pipeline the background could not
+    make: off for the run;
+  - the in-play judge (`RD_AB_NODISCARD`, the second subject): its off arm is the *_nodual build,
+    the path the device ran before; a stage judged off draws without the twins.
+  Until the self-test passes nothing of the twins exists on the device, and on a device with
+  dual-source blending they are never tried: every shader and pipeline is the build's without
+  them.
+
+The lines (`rd: ` before each):
+- `discard-free twins: trying them: vu_ps_nodual_nd and vu_texa_ps_nodual_nd made (2 modules;
+  ...)`, then `discard-free twins: on (self-test: 1 pass through them, the alpha test's and the
+  clip plane's refused (1 and 1), the side band and DATE refused by the rule, pictures byte for
+  byte; its 2 pipelines released) on SCENE WxH at TWxTH texels in T ms` or `discard-free twins: off
+  for the run (self-test: <why>; its N pipelines released) ...`, then the start line `discard-free twins: on|held|off, N modules of them made, P of
+  their pipelines alive`; `off on this install (...)`, `off for this start (the loss ladder: ...)`,
+  `off for the run (self-test not run: not applicable here: the device blends with two outputs,
+  ...)`.
+- The 10 s VU line's clause: `; discard-free twins: D draws a picture through them (R refused a
+  picture: plane p, DATE d, band b, alpha a, clipped c, not made yet u, timed without them t)`;
+  nothing while held or off from the start, `; discard-free twins off (why)` once they were on.
+- `discard-free twins: 250 pictures drawn with them since their self-test: their mark says on`;
+  `discard-free twins: off for the run: a twin's pipeline (...) could not be made in the
+  background (...)`.
+- The judge's lines and the attempt ledger's row `the discard-free twins timed in play` as the
+  cull's (above); at the next start `the previous run: discard-free twins: ...`.
+- `rd_replay_tool --stats`: `stats: discard-free twins on|held|off (why): N draws through them;
+  refused: plane p, DATE d, band b, alpha a, clipped c, not made yet u, timed without them t; M
+  modules of them made, P of their pipelines alive` (with `(not applicable here: ...)` on a device
+  with dual-source blending).
+
+The tests' switches ([TESTING.md](TESTING.md#environment-switches)): `ICO_RD_VU_NODISCARD` and
+`ICO_RD_VU_NODISCARD_SABOTAGE`. What they gain on a phone is measured there alone.
 
 #### The index compaction
 

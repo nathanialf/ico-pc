@@ -104,8 +104,9 @@
  * vu_prepass_min is held off while the test runs.
  *
  * After a pass, the zero-area cull's own self-test (rd_vu_zero_selftest.c,
- * rd_vu_zero.h) runs on the same SCENE and logs its line; after a failure
- * or without a run the cull is off.
+ * rd_vu_zero.h) runs on the same SCENE and logs its line, then the
+ * discard-free twins' (rd_nodiscard_selftest.c, rd_nodiscard.h); after a
+ * failure or without a run both are off.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -119,6 +120,7 @@
 #include "rd_vu_rec_early.h"
 #include "rd_vu_record.h"
 #include "rd_vu_skin_check.h"
+#include "rd_nodiscard.h"
 #include "rd_vu_zero.h"
 #include "rd_velocity.h"
 #include "shader_consts.h" /* ICO_VU_REC_W */
@@ -829,6 +831,7 @@ bool rd_vuprepass_selftest(void)
                  g_rd.vuPrepassWhy);
         rd__log("VU pre-pass: off (self-test not run)");
         rd__vu_zero_selftest_skip("the VU pre-pass is off"); /* rd_vu_zero.h */
+        rd__nd_selftest_skip("the VU pre-pass is off");      /* rd_nodiscard.h */
         rd__vu_zero_start_line();
         return true;
     }
@@ -838,6 +841,7 @@ bool rd_vuprepass_selftest(void)
         rd__log("VU pre-pass: on (self-test not run: no SCENE target to run it on)");
         rd__vu_compact_selftest_not_run("no SCENE target"); /* off: never tried */
         rd__vu_zero_selftest_skip("no SCENE target to run it on");
+        rd__nd_selftest_skip("no SCENE target to run it on");
         rd__vu_zero_start_line();
         return true;
     }
@@ -930,9 +934,13 @@ bool rd_vuprepass_selftest(void)
        passed */
     if (v.on) {
         rd__vu_zero_selftest(t);
+        rd__nd_selftest(t); /* the discard-free twins' (rd_nodiscard_selftest.c) */
     } else {
         rd__vu_zero_selftest_skip("the VU pre-pass failed its self-test");
+        rd__nd_selftest_skip("the VU pre-pass failed its self-test");
     }
-    rd__vu_zero_start_line(); /* its state and the modules of it made */
+    /* its state and the modules of it made, then the in-play judge's line,
+       which knows both attempts' states */
+    rd__vu_zero_start_line();
     return v.on;
 }

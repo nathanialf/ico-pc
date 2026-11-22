@@ -26,6 +26,7 @@ target_sources(ico_platform PRIVATE
     last_run.c
     last_run_skin.c
     vu_zero_mark.c
+    nodiscard_mark.c
     ahead_mark.c
     log_cost.c
     mem_breakdown.c
@@ -411,6 +412,22 @@ if(ICO_RUN_TESTS)
     # a folder of its own: last-run-previous.txt is written by both mark tests
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vu_zero_mark_test_files")
     add_test(NAME vu_zero_mark COMMAND vu_zero_mark_test "${CMAKE_CURRENT_BINARY_DIR}/vu_zero_mark_test_files")
+endif()
+
+# The discard-free twins' mark on the install (nodiscard_mark.c, issue 179):
+# the zero-area cull's stages and table with its own file and words, every
+# stage at a crash (blocked for that version, the next one tries again), a
+# close from the recent apps while counting and on (not blocked), and the
+# start's step on files under the build folder (the file rewritten, the
+# environment exported, one line; nothing said without a mark)
+add_executable(nodiscard_mark_test test/nodiscard_mark_test.c)
+target_compile_options(nodiscard_mark_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(nodiscard_mark_test PRIVATE ico_platform ico_host_fs ico_miniz)
+if(ICO_RUN_TESTS)
+    # a folder of its own: last-run-previous.txt is written by every mark test
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/nodiscard_mark_test_files")
+    add_test(NAME nodiscard_mark COMMAND nodiscard_mark_test
+                                         "${CMAKE_CURRENT_BINARY_DIR}/nodiscard_mark_test_files")
 endif()
 
 # The next picture submitted ahead, its mark on the install (ahead_mark.c,

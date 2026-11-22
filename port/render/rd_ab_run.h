@@ -16,7 +16,8 @@
  * one with ICO_RD_AB_FAKE_LOSS=N, the loss found at replay N's start).
  * A subject's own self-test, mark and run-time checks still decide whether
  * it is used at all: one that is off is never put on trial (rd_ab_allow).
- * The attempt ledger's row (attempt_ledger.h ICO_ATT_AB_ZERO). */
+ * The attempt ledger's rows (attempt_ledger.h ICO_ATT_AB_ZERO,
+ * ICO_ATT_AB_NODISCARD). */
 #ifndef PORT_RENDER_RD_AB_RUN_H
 #define PORT_RENDER_RD_AB_RUN_H
 
@@ -25,7 +26,10 @@
 #include <stdint.h>
 
 /* the subjects, in their registration order (rd_ab_run.c) */
-enum { RD_AB_ZERO = 0 /* the zero-area cull (rd_vu_zero.h) */ };
+enum {
+    RD_AB_ZERO = 0,     /* the zero-area cull (rd_vu_zero.h) */
+    RD_AB_NODISCARD = 1 /* the discard-free twins (rd_nodiscard.h) */
+};
 
 struct RdPerfRecord;
 

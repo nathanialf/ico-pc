@@ -86,12 +86,15 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
                             "box checks not drawn", "twins not drawn"},
     [ICO_ATT_AB_ZERO] = {"the zero-area cull timed in play", "stages kept with it so far",
                          "without it"},
+    [ICO_ATT_AB_NODISCARD] = {"the discard-free twins timed in play",
+                              "stages kept with them so far", "without them"},
 };
 
 static const AttMore k_more[ICO_ATT_COUNT] = {
     /* the run's totals: a verdict is once a stage, the block's would be 0
        nearly always */
     [ICO_ATT_AB_ZERO] = {"trials run", 1},
+    [ICO_ATT_AB_NODISCARD] = {"trials run", 1},
 };
 
 /* the rows' live values (__atomic), and the block text's last counts (the

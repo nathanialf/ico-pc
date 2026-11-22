@@ -691,6 +691,11 @@ size_t rd_vu_share_text(char *out, size_t cap, unsigned n);
  * checked P pictures: C of S triangle slots culled, M differ", or
  * "; zero-area cull held|off (why)"; the block's counts back to zero */
 size_t rd_vu_zero_text(char *out, size_t cap, unsigned n);
+/* And the discard-free twins' (rd_nodiscard.h): "; discard-free twins: D
+ * draws a picture through them (R refused a picture: plane p, DATE d, band
+ * b, alpha a, clipped c, not made yet u, timed without them t)", "" while
+ * held or off from the start; the block's counts back to zero */
+size_t rd_nd_text(char *out, size_t cap, unsigned n);
 /* The record written without render targets (stores or compute: a device
  * loss takes the restart's losstargets step first, startup_retry.h
  * StartupRetryRun.storesWereOn) */

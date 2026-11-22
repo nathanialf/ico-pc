@@ -131,6 +131,17 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   version's next start, removed at a later version's; no evidence while trying: blocked, while counting:
   not; the watchdog and a cleanly closed device loss while on: blocked; a SIGKILL while on: not;
   `ICO_VU_ZERO_MARK` and `ICO_VU_ZERO_VERSION` exported. CPU only.
+- `nodiscard_mark_test.c` (`nodiscard_mark`): the discard-free twins' mark on the install
+  (`port/platform/nodiscard_mark.c`, the cull's stages and table with its own file and words):
+  every stage at a crash blocked for the version in the mark and tried again by the next version,
+  the lines word for word; a clean close while counting not blocked; no mark nothing; a text not
+  known taken as `trying`; a mark without a version the running one's. Then the start's step on
+  files in a folder of its own: no mark, no line; closed from the recent apps list while counting:
+  not blocked, the mark removed; a crash while on: `blocked <version>`, kept at that version's next
+  start, removed at a later version's; no evidence while trying: blocked, a clean close: not; a
+  SIGKILL while on: not, another signal: blocked; `ICO_NODISCARD_MARK`, `ICO_NODISCARD_VERSION` and
+  `ICO_NODISCARD_BLOCK` exported, the cull's `vu-zero-mark.txt` and environment untouched. CPU
+  only.
 - `last_run_test.c`, its skin case (`last_run`): `last_run_summary_text_with` with the skin check's
   figure between the resets and the free memory word for word, none or `""` as before, issue
   217's reporter's figures with the phase cut and the stage and tick whole, a long phase cut with

@@ -172,13 +172,15 @@ bool startup_retry_note_has_dst(const char *note)
 }
 
 /* a note naming the zero-area cull's rule stage build (vu_tri_rule_zero_*,
-   port/render/rd_vu_zero.h): made only in the cull's own start-up
-   self-test, after the pre-pass passed its own; an end there is the cull's
-   (its install mark, port/platform/vu_zero_mark.h, blocks it), not the
+   port/render/rd_vu_zero.h) or a discard-free twin (*_nodual_nd,
+   port/render/rd_nodiscard.h): made only in that attempt's own start-up
+   self-test, after the pre-pass passed its own, or in the twins' own
+   background set; an end there is the attempt's (its install mark,
+   port/platform/vu_zero_mark.h, nodiscard_mark.h, blocks it), not the
    pre-pass's or its record's */
 static bool note_is_vu_zero(const char *note)
 {
-    return strstr(note, "vu_tri_rule_zero_") != NULL;
+    return strstr(note, "vu_tri_rule_zero_") != NULL || strstr(note, "_nodual_nd") != NULL;
 }
 
 bool startup_retry_note_has_vu_pre(const char *note)

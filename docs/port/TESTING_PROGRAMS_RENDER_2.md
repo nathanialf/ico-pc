@@ -526,6 +526,45 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   switch makes it (`switch`: `rd_suspend`, `rd_resume`, the self-test again): on both times, its
   read back buffers made again for the second try and none alive after either, the mark `counting
   <the test's version>` after each.
+- `rd_nodiscard_test.c` (`rd_nodiscard`; `rd_nodiscard.cmake`, CPU): the discard-free twins' pure
+  part ([PIPELINES.md](PIPELINES.md#the-discard-free-twins)): the eligibility of a VU pass (a vu_ps
+  or vu_texa_ps pass through its *_nodual build given its twin; every refusal reason and the order
+  they are taken in: plane by the draw's chain plane and by the pass's flag, DATE by the snapshot
+  with either DATM and by the stencil bit, band at the region test and the scissor without
+  `ICO_VU_NO_BESIDE` but never at clip mode none or for particles, alpha with the ate bit of
+  AFAIL KEEP and of both split passes but not the ATST byte alone, clipped on Mesa's software
+  rasteriser for every clip mode but none and for particles; the tests' sabotage letting the alpha
+  test through), the passes no twin exists for (other entries, the planes' twins, no *_nodual
+  build, a destination read by storage and by attachment), the reasons' and modules' names, the
+  key bits in the key's one byte, and the software rasteriser by driver id 13 and by "llvmpipe"
+  in the adapter's name (not Arm's, Qualcomm's or Turnip); the run's state without a device: held
+  until the self-test (no 10 s clause; the stats line word for word), on after a passed one (the
+  clause with every reason), `ICO_RD_VU_NODISCARD=0` and `=1`, the loss ladder and the install's
+  mark over `=1`, a failed self-test kept off for the run through a renderer made again, a short
+  buffer cut.
+- `rd_nodiscard_ab.cmake` (`rd_nodiscard_ab`, `rd_nodiscard_ab_gl`; `rd_nodiscard.cmake`): every
+  fixture of `port/render/test/fixtures/lists/vu_zero.txt` under its profiles (corpus at 4:3 1x;
+  the Arm fakes with the record by compute and no dual-source blending, `ICO_VK_FAKE_NO_DUAL=1`,
+  at 1x 21:9 and 16:9), `ICO_RD_VU_NODISCARD=0` and `=1` at `--repeat 2`: every target's PNG the
+  same bytes; the run without them says off with 0 draws and 0 modules; the run with them says on
+  with its draws through them printed and above 0 over each fixture and Arm profile (they ran),
+  and under corpus 0 draws and "not applicable here" (dual-source blending). `rd_nodiscard_ab_gl`:
+  OpenGL (llvmpipe), every fixture at 4:3 1x with `ICO_GL_FAKE_NO_DUAL=1`, above 0 over the list.
+  On lavapipe and llvmpipe only clip mode none takes a twin (Mesa's clipper, [PIPELINES.md](PIPELINES.md#the-discard-free-twins)).
+  No device: SKIP.
+- `rd_vuprepass_selftest_nodiscard`, `_nodiscard_sabotage`, `_nodiscard_marked`, `_nodiscard_dual`
+  (`rd_nodiscard.cmake`, through `rd_vuprepass_selftest_test` and
+  `test/rd_vuprepass_selftest.cmake`; the Arm fakes without dual-source blending): the twins'
+  start-up self-test after the cull's (the pre-pass still on), each run's start line saying what
+  of them exists: on (the plain case through a twin, the alpha test's and the clip plane's cases
+  refused, the rule refusing the band and DATE, the pictures byte for byte; 2 modules, its own
+  pipelines released after it, none of the twins' alive; the mark `counting <the test's
+  version>`); with the CPU's proof not looking at the
+  alpha test (`ICO_RD_VU_NODISCARD_SABOTAGE=alpha`) the broken twin's picture caught: off for the
+  run, the modules and pipelines released, the mark `failed <the test's version>`; off on the
+  install (`ICO_NODISCARD_BLOCK`, the mark the platform hands over): no module made, no try
+  logged; a device with dual-source blending (lavapipe as it is): not applicable, nothing tried
+  or made, the mark not written.
 - `rd_smallcuts_test.c` (`rd_smallcuts`; `rd_smallcuts.cmake`, CPU): the pure parts of the turn in
   the present's blit and the VU record by compute on the PowerVR class: `rd__turn_rect` for every
   quarter turn against `rd_prerotate.c`'s pixel table (every pixel of the rect lands inside the
