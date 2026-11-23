@@ -17,8 +17,8 @@
  *   - the way back: rd_ab_stop mid-trial: every later replay without every
  *     subject, no trial, its line;
  *   - the modes on, off and alt (on, off, off, on from the first);
- *   - the carried arm (a stage without a verdict of its own starts on the
- *     run's last verdict's arm; a wrong one corrected by its trial);
+ *   - once a run, in scenery: no trial on the title or the logo, the first
+ *     scenery stage's trial, its verdict for every later stage;
  *   - the rate requirement: a GPU-bound stream at a 40 ms tick for 60 s,
  *     pictures of 33, 37.5, 48 and 60 ms, a subject saving or costing 3, 5
  *     and 10 %, in one stage, four, and four flipping the effect's sign:
@@ -738,7 +738,7 @@ static void testMeasure(void)
 }
 
 /* a renderer made again (rd_ab_forget): a trial running ends unjudged,
-   every verdict and the carried arm forgotten, the stage begins again, a
+   every verdict forgotten, the stage begins again, a
    record of the earlier renderer not measured, the trials run still
    counted */
 static void testForget(void)

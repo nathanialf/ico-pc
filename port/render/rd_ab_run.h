@@ -4,7 +4,7 @@
  * The judge lives for the run, but a renderer made again (a Graphics API
  * switch, the one path that makes it again: rd_resume from
  * window_host.c ico_window_reopen; rd__ab_renderer from rd__vu_prepass_init)
- * forgets every verdict and the carried arm and ends a trial unjudged, so
+ * forgets every verdict and ends a trial unjudged, so
  * no verdict of one backend or device decides another's (the trials run
  * still count toward the cap).  The measure is the scene's GPU work: the
  * span less the present's pass and the display wait (rd_ab_scene_ms).

@@ -191,8 +191,8 @@ RdAbTag rd_ab_begin(RdAb *a, int32_t stage, double nowMs, bool keep);
 /* a replay's GPU times, read back under the tag it was begun with */
 void rd_ab_collect(RdAb *a, const RdAbIn *in);
 /* the renderer was made again (a Graphics API switch, the device made
-   again): a trial running ends unjudged, every verdict and the carried arm
-   are forgotten (each subject back on its default, with it), the stage
+   again): a trial running ends unjudged, every verdict is forgotten
+   (each subject back on its default, with it, and timed once more), the stage
    starts again (its trial 2 s from its next replay), and the records the
    earlier renderer drew are not measured; the trials already run still
    count toward RD_AB_TRIALS, a stop stays; its line (why) */
