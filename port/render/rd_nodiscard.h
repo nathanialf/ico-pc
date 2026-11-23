@@ -36,7 +36,15 @@
  *     clean, and then only in a form the check draws and compares
  *     (rd_nd_checked_form: prelit code 32 or 36 under the camera rule,
  *     one-sided, not mirrored, no free camera, no ticks); every other
- *     form refused as "form" (lit, skinned, grids, drops kept, ...).
+ *     form refused as "form" (lit, skinned, grids, drops kept, ...);
+ *   - or, on every device, a draw of that form the CPU proved wholly in
+ *     front of the eye (EYEBOX: rd_vis.c rd__vis_gs_proof over the culler's
+ *     box of the mesh's whole stream under the draw's matrix: every vertex
+ *     keeps its GS position, w > 0, GS Z not negative, nothing saturated),
+ *     so every corner is drawn at w 1 and a depth in 0..1, clip mode
+ *     none's case below; without the proof and a clean verdict "box".
+ *   The twins' passes are counted by class: proven by clip mode none,
+ *   proven in front of the eye, by the clipper check.
  * Why clip mode none (issue 179 round 2).  The *_nodual build discards a
  * pixel in the picture's columns whose interpolated band flag is not below
  * 0.5, a NaN included (vu_common.hlsli vu_pixel_tests; commit e65012742,
@@ -207,6 +215,7 @@ enum {
     RD_ND_ALPHA,    /* the alpha test in the pass */
     RD_ND_CLIPPED,  /* not clip mode none, or particles: a corner may be behind the eye */
     RD_ND_FORM,     /* the clipper check clean, but not a form it draws (rd_nd_checked_form) */
+    RD_ND_BOX,      /* the checked form, neither proved in front of the eye nor clean */
     RD_ND_UNMADE,   /* its twin's pipeline not made yet (asked for in the background) */
     RD_ND_TRIAL,    /* the in-play judge's off arm */
     RD_ND_UNTESTED, /* its entry's twin drew nothing in the start-up self-test */
@@ -230,6 +239,9 @@ typedef struct RdNdPass {
     bool clipperClean;  /* the device's clipper check passed (RD_ND_CLIP_CLEAN), or its frames */
     bool prelit;        /* the draw is the prelit program (RD_PROG_PRELIT, normal_c), the one
                            the clipper check draws; false (the default) refuses the class */
+    bool inFront;       /* the CPU proved every vertex of the draw keeps its GS position
+                           (rd_vis.c rd__vis_gs_proof: wholly in front of the eye, at or
+                           past GS Z 0, nothing saturated); false (the default): no proof */
 } RdNdPass;
 
 /* Whether a pass of a clip mode other than none is a form the clipper
@@ -241,6 +253,13 @@ typedef struct RdNdPass {
    cameras.  A positive list: every other form (lit, skinned, grids,
    kept drops, two-sided, mirrored, free camera, ticks) is RD_ND_FORM */
 bool rd_nd_checked_form(const RdNdPass *p);
+
+/* the class of a pass rd_nd_eligible gives its twin, counted apart: proven
+   by clip mode none, proven in front of the eye (EYEBOX), or by the
+   device's clean clipper check */
+enum { RD_ND_BY_NONE = 0, RD_ND_BY_FRONT, RD_ND_BY_CLIPPER };
+
+int rd_nd_twin_class(const RdNdPass *p);
 
 /* the device's clipper check (rd_nodiscard_selftest.c, "The clipper check") */
 enum { RD_ND_CLIP_UNKNOWN = 0, RD_ND_CLIP_CLEAN, RD_ND_CLIP_DIRTY };
@@ -276,9 +295,11 @@ RhiShader rd__nd_module(uint8_t fs);
 void rd__nd_replay_begin(void);
 /* vuDraw: a planned pass of a VU draw (key and pipe as the draw has them)
    takes its twin where it may and the twin's pipeline is made; prelit: the
-   draw's program is RD_PROG_PRELIT (rd_nd_checked_form) */
+   draw's program is RD_PROG_PRELIT (rd_nd_checked_form); inFront: the
+   draw proved wholly in front of the eye (rd_vis.c rd__vis_mesh_gs_proof) */
 void rd__nd_pass(struct RdPipeKeyInt *key, RhiPipeline *pipe, const struct RdDrawPass *p,
-                 uint32_t drawFlags, bool plane, bool particle, bool dateStencil, bool prelit);
+                 uint32_t drawFlags, bool plane, bool particle, bool dateStencil, bool prelit,
+                 bool inFront);
 /* rd_pipeline.c: a twin pipeline the background could not make (off for
    the run) */
 void rd__nd_fault(const char *what);
@@ -393,6 +414,9 @@ bool rd__nd_sabotage_empty(void);
 /* the self-test's draws through a twin of a clip mode other than none since
    the last call */
 uint64_t rd__nd_take_clip(void);
+/* the self-test's draws through a twin proven in front of the eye (EYEBOX)
+   since the last call */
+uint64_t rd__nd_take_front(void);
 /* the clipper check's frames running (their camera rule passes taken as a
    clean clipper's would be), and its verdict (clean, or the first differing
    case's words; the tests' ICO_RD_VU_NODISCARD_CLIPPER=clean replaces

@@ -14,7 +14,9 @@ target_sources(ico_render PRIVATE rd_nodiscard.c rd_nodiscard_run.c rd_nodiscard
 # can fail; clip mode none alone on every device, the camera rule's region
 # test, the scissor and particles refused as clipped; on a clean clipper
 # verdict the forms table, rd_nd_checked_form: prelit 32 and 36 under the
-# camera rule take the twin, every other form "form"), the passes without a
+# camera rule take the twin, every other form "form"; proven in front of the
+# eye (EYEBOX) the checked forms take it whatever the verdict, "box"
+# without the proof; each twin's class), the passes without a
 # twin (other entries, no *_nodual build, a destination read), the reasons'
 # and modules' names; and the run's state
 # without a device (held, on after a passed self-test, =0, =1, the loss
@@ -158,7 +160,7 @@ endif()
 # Each run's start line ("discard-free twins: on|off, N modules of them made,
 # P of their pipelines alive") says what exists.
 if(ICO_RUN_TESTS AND DEFINED _vst AND TARGET rd_vuprepass_selftest_test)
-    set(_ndon "rd: discard-free twins: on \\(self-test: [1-9][0-9]* pass(es)? through them, [1-9][0-9]* through vu_ps_nodual_nd and [1-9][0-9]* through vu_texa_ps_nodual_nd, the alpha test's, the clip plane's and the eye-plane crossing's refused \\([1-9][0-9]*, [1-9][0-9]* and [1-9][0-9]*\\), the side band and DATE refused by the rule, pictures byte for byte, its [1-9][0-9]* pipelines released\\) on SCENE[^\n]*")
+    set(_ndon "rd: discard-free twins: on \\(self-test: [1-9][0-9]* pass(es)? through them \\([1-9][0-9]* proven in front of the eye\\), [1-9][0-9]* through vu_ps_nodual_nd and [1-9][0-9]* through vu_texa_ps_nodual_nd, the alpha test's, the clip plane's and the eye-plane crossing's refused \\([1-9][0-9]*, [1-9][0-9]* and [1-9][0-9]*\\), the side band and DATE refused by the rule, pictures byte for byte, its [1-9][0-9]* pipelines released\\) on SCENE[^\n]*")
     # the verdict taken as clean (the tests' fake, logged as one)
     set(_ndclean "rd: discard-free twins: ICO_RD_VU_NODISCARD_CLIPPER=clean: the clipper check's verdict taken as clean whatever it measures \\(tests\\)")
     set(_ndclip "rd: discard-free twins: the clipper check: not clean \\([^\n]*case 1 differs at 32[^\n]*\\): clip mode none alone takes them")

@@ -225,8 +225,22 @@ static void forms(void)
         const int clean = rd_nd_eligible(&p);
         CHECK(rd_nd_checked_form(&p) == kForm[i].checked);
         CHECK(clean == (kForm[i].checked ? RD_ND_TWIN : RD_ND_FORM));
+        CHECK(!kForm[i].checked || rd_nd_twin_class(&p) == RD_ND_BY_CLIPPER);
+        /* not clean: the checked forms "box" (no proof in front of the eye),
+           the others "clipped" */
         p.clipperClean = false;
-        CHECK(rd_nd_eligible(&p) == RD_ND_CLIPPED);
+        CHECK(rd_nd_eligible(&p) == (kForm[i].checked ? RD_ND_BOX : RD_ND_CLIPPED));
+        /* EYEBOX: proven in front of the eye, the checked forms take the twin
+           whatever the verdict (counted apart); the proof never takes another
+           form past its own refusal */
+        p.inFront = true;
+        CHECK(rd_nd_eligible(&p) == (kForm[i].checked ? RD_ND_TWIN : RD_ND_CLIPPED));
+        CHECK(!kForm[i].checked || rd_nd_twin_class(&p) == RD_ND_BY_FRONT);
+        p.clipperClean = true;
+        CHECK(rd_nd_eligible(&p) == (kForm[i].checked ? RD_ND_TWIN : RD_ND_FORM));
+        CHECK(!kForm[i].checked || rd_nd_twin_class(&p) == RD_ND_BY_FRONT);
+        p.inFront = false;
+        p.clipperClean = false;
         /* clip mode none: the proof's, every form */
         p.drawFlags = (kForm[i].flags & ~(uint32_t)ICO_VU_CLIP_MASK) | ICO_VU_CLIP_NONE;
         CHECK(rd_nd_eligible(&p) == RD_ND_TWIN);
@@ -241,7 +255,33 @@ static void forms(void)
     p.particle = true;
     p.drawFlags = ICO_VU_CLIP_REGION | ICO_VU_CAMERA | ICO_VU_NO_BESIDE;
     CHECK(rd_nd_eligible(&p) == RD_ND_CLIPPED);
+    p.inFront = true; /* the proof never takes particles */
+    p.clipperClean = false;
+    CHECK(rd_nd_eligible(&p) == RD_ND_CLIPPED);
+    /* every other reason still holds over the proof: plane, DATE, band,
+       alpha */
+    p = base();
+    p.prelit = true;
+    p.inFront = true;
+    p.drawFlags = ICO_VU_CLIP_REGION | ICO_VU_CAMERA | ICO_VU_NO_BESIDE;
+    CHECK(rd_nd_eligible(&p) == RD_ND_TWIN);
+    p.plane = true;
+    CHECK(rd_nd_eligible(&p) == RD_ND_PLANE);
+    p.plane = false;
+    p.flags = ICO_DF_DATE;
+    CHECK(rd_nd_eligible(&p) == RD_ND_DATE);
+    p.flags = 0;
+    p.modeZ = RD_ATST_GREATER | (1u << 8);
+    CHECK(rd_nd_eligible(&p) == RD_ND_ALPHA);
+    p.modeZ = 0;
+    p.drawFlags = ICO_VU_CLIP_REGION | ICO_VU_CAMERA;
+    CHECK(rd_nd_eligible(&p) == RD_ND_BAND);
+    /* clip mode none: its own class, proof or not */
+    p = base();
+    p.inFront = true;
+    CHECK(rd_nd_eligible(&p) == RD_ND_TWIN && rd_nd_twin_class(&p) == RD_ND_BY_NONE);
     CHECK(strcmp(rd_nd_reason_name(RD_ND_FORM), "form") == 0);
+    CHECK(strcmp(rd_nd_reason_name(RD_ND_BOX), "box") == 0);
 }
 
 static void none(void)
@@ -269,16 +309,10 @@ static void none(void)
 
 static void names(void)
 {
-    static const char *const kWant[RD_ND_REASONS] = {"through them",
-                                                     "plane",
-                                                     "DATE",
-                                                     "band",
-                                                     "alpha",
-                                                     "clipped",
-                                                     "form",
-                                                     "not made yet",
-                                                     "timed without them",
-                                                     "entry not tested"};
+    static const char *const kWant[RD_ND_REASONS] = {
+        "through them",    "plane", "DATE", "band",         "alpha",
+        "clipped",         "form",  "box",  "not made yet", "timed without them",
+        "entry not tested"};
     for (int i = 0; i < RD_ND_REASONS; i++) {
         CHECK(strcmp(rd_nd_reason_name(i), kWant[i]) == 0);
     }
@@ -354,14 +388,13 @@ static void state(void)
     CHECK(!rd__nd_on() && strcmp(rd__nd_state_text(), "held") == 0 && !rd__nd_triable());
     CHECK(rd_nd_text(buf, sizeof(buf), 1) == 0u && buf[0] == '\0');
     (void)rd__nd_stats_text(st, sizeof(st));
-    CHECK(
-        strcmp(
-            st,
-            "discard-free twins held (until their start-up self-test passes): 0 draws "
-            "through them, 0 of them by the clipper check (not checked); refused: plane "
-            "0, DATE 0, band 0, alpha 0, clipped 0, form 0, not made yet 0, timed "
-            "without them 0, entry not tested 0; 0 modules of them made, 0 of their pipelines alive") ==
-        0);
+    CHECK(strcmp(
+              st,
+              "discard-free twins held (until their start-up self-test passes): 0 draws "
+              "through them (0 proven by clip mode none, 0 proven in front of the eye, 0 by the "
+              "clipper check (not checked)); refused: plane 0, DATE 0, band 0, alpha 0, clipped 0, "
+              "form 0, box 0, not made yet 0, timed without them 0, entry not tested 0; 0 modules "
+              "of them made, 0 of their pipelines alive") == 0);
     if (strstr(st, "held (until") == NULL) {
         printf("  stats: %s\n", st);
     }
@@ -369,10 +402,11 @@ static void state(void)
     rd__nd_verdict(true, "");
     CHECK(rd__nd_on() && !rd__nd_triable());
     (void)rd_nd_text(buf, sizeof(buf), 2);
-    CHECK(strcmp(buf, "; discard-free twins: 0 draws a picture through them, 0 of them by the "
-                      "clipper check (not checked) (0 refused a picture: plane 0, DATE 0, band 0, "
-                      "alpha 0, clipped 0, form 0, not made yet 0, timed without them 0, entry "
-                      "not tested 0)") == 0);
+    CHECK(strcmp(buf, "; discard-free twins: 0 draws a picture through them (0 proven by clip "
+                      "mode none, 0 proven in front of the eye, 0 by the clipper check (not "
+                      "checked)) (0 refused a picture: plane 0, DATE 0, band 0, alpha 0, clipped "
+                      "0, form 0, box 0, not made yet 0, timed without them 0, entry not tested "
+                      "0)") == 0);
     /* the clipper check's verdicts and the tests' fake */
     rd__nd_clipper_verdict(false, "an edge on the centre view ray at code 32 differs");
     CHECK(rd__nd_clipper() == RD_ND_CLIP_DIRTY && strcmp(rd__nd_clipper_text(), "not clean") == 0);
@@ -402,7 +436,8 @@ static void state(void)
     CHECK(rd__nd_on() && strcmp(rd__nd_state_text(), "on") == 0);
     (void)rd__nd_stats_text(st, sizeof(st));
     static const char kOn[] = "discard-free twins on (ICO_RD_VU_NODISCARD=1): 0 draws through "
-                              "them, 0 of them by the clipper check (not checked); ";
+                              "them (0 proven by clip mode none, 0 proven in front of the eye, 0 "
+                              "by the clipper check (not checked)); ";
     CHECK(strncmp(st, kOn, sizeof(kOn) - 1u) == 0);
     putEnv("ICO_RD_VU_NODISCARD_CLIPPER", "clean");
     rd__nd_init();

@@ -26,10 +26,12 @@
 #   mali169  the same at 16:9 (the reporter's v0.11.14 setting)
 # With BACKEND opengl (rd_nodiscard_ab_gl) every frame at the corpus setting
 # with no dual-source blending (ICO_GL_FAKE_NO_DUAL=1).  Without the
-# self-test no clipper check runs, so only clip mode none takes a twin
-# (rd_nodiscard.h, "Why clip mode none"): these runs take the path of a
-# phone whose clipper check was not clean; MODE=clean (below) the path of
-# one whose check was clean.  Every target's PNG of on and off must
+# self-test no clipper check runs, so clip mode none and the camera rule's
+# passes the CPU proved wholly in front of the eye take a twin (rd_nodiscard.h,
+# "Why clip mode none", EYEBOX): these runs take the path of a phone whose
+# clipper check was not clean, on lavapipe, which is not clean (so a proven
+# draw that differed would show here); MODE=clean (below) the path of one
+# whose check was clean.  Every target's PNG of on and off must
 # be equal byte for byte, each run's stats line read: off says "discard-free
 # twins off (ICO_RD_VU_NODISCARD=0): 0 draws through them" and "0 modules of
 # them made"; on under a profile without dual-source blending "discard-free
@@ -96,7 +98,7 @@ set(nodual_mali169 1)
 set(nodual_gl 1)
 # the twins' run line (rd_nodiscard_run.c rd__nd_stats_text), matched in the
 # run's text with its ';' made ','
-set(ndRe "stats: discard-free twins (on|off|held)[^:]*: ([0-9]+) draws through them, ([0-9]+) of them by the clipper check \\(([a-z ]+)\\), refused: ([^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*), ([0-9]+) modules of them made")
+set(ndRe "stats: discard-free twins (on|off|held)[^:]*: ([0-9]+) draws through them \\(([0-9]+) proven by clip mode none, ([0-9]+) proven in front of the eye, ([0-9]+) by the clipper check \\(([a-z ]+)\\)\\), refused: ([^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*), ([0-9]+) modules of them made")
 # MODE=clean (rd_nodiscard_clean): the clean verdict's path.  Lavapipe
 # measures its clipper not clean (rd_nodiscard_selftest.c: Mesa's NaN band
 # flag on triangles crossing the eye plane), so the run with the twins takes
@@ -130,15 +132,23 @@ function(ndRun dump p s value dir)
   set(refused "")
   set(made -1)
   set(clipDraws -1)
+  set(frontDraws -1)
   set(clipper "")
   if(flat MATCHES "${ndRe}")
     set(state "${CMAKE_MATCH_1}")
     set(draws "${CMAKE_MATCH_2}")
-    set(clipDraws "${CMAKE_MATCH_3}")
-    set(clipper "${CMAKE_MATCH_4}")
-    set(refused "${CMAKE_MATCH_5}")
-    set(made "${CMAKE_MATCH_6}")
+    set(frontDraws "${CMAKE_MATCH_4}")
+    set(clipDraws "${CMAKE_MATCH_5}")
+    set(clipper "${CMAKE_MATCH_6}")
+    set(refused "${CMAKE_MATCH_7}")
+    set(made "${CMAKE_MATCH_8}")
   endif()
+  set(boxRefused 0)
+  if(refused MATCHES "box ([0-9]+)")
+    set(boxRefused "${CMAKE_MATCH_1}")
+  endif()
+  set(r_front "${frontDraws}" PARENT_SCOPE)
+  set(r_box "${boxRefused}" PARENT_SCOPE)
   set(r_clip "${clipDraws}" PARENT_SCOPE)
   set(r_clipper "${clipper}" PARENT_SCOPE)
   set(r_rc "${rc}" PARENT_SCOPE)
@@ -196,7 +206,7 @@ foreach(e IN LISTS entries)
           set(ok FALSE)
           break()
         endif()
-        message(STATUS "${dump} ${p} ${s} ICO_RD_VU_NODISCARD=${v}: twins ${r_state}, ${r_draws} draws through them, ${r_clip} by the clipper check (${r_clipper}) (refused: ${r_refused}), ${r_made} modules made")
+        message(STATUS "${dump} ${p} ${s} ICO_RD_VU_NODISCARD=${v}: twins ${r_state}, ${r_draws} draws through them, ${r_front} proven in front of the eye, ${r_clip} by the clipper check (${r_clipper}) (refused: ${r_refused}), ${r_made} modules made")
         if(v EQUAL 0)
           if(NOT r_state STREQUAL "off" OR NOT r_draws EQUAL 0 OR NOT r_made EQUAL 0)
             message(SEND_ERROR "${dump} ${p} ${s}: with the twins off something of them ran (${r_state}, ${r_draws} draws, ${r_made} modules):\n${r_flat}")
@@ -222,14 +232,26 @@ foreach(e IN LISTS entries)
               message(SEND_ERROR "${dump} ${p} ${s}: the verdict was not taken as clean (${r_clipper}):\n${r_flat}")
               math(EXPR failures "${failures} + 1")
             endif()
-            math(EXPR fxTwins "${fxTwins} + ${r_clip}")
+            # the camera rule's class: by the clipper check, or proven in
+            # front of the eye where the proof holds first (EYEBOX)
+            math(EXPR fxTwins "${fxTwins} + ${r_clip} + ${r_front}")
           else()
-            # the floor alone: no clipper check without the self-test
+            # no clipper check without the self-test ("not checked", as a
+            # device measured not clean): the camera rule's passes take a
+            # twin only where the CPU proved them in front of the eye
+            # (EYEBOX), the others refused as "box"; byte for byte all the
+            # same on lavapipe, which is not clean (below)
             if(NOT r_clip EQUAL 0 OR NOT r_clipper STREQUAL "not checked")
-              message(SEND_ERROR "${dump} ${p} ${s}: a camera rule pass took a twin without a clipper verdict (${r_clip}, ${r_clipper}):\n${r_flat}")
+              message(SEND_ERROR "${dump} ${p} ${s}: a camera rule pass took a twin by a clipper verdict without one (${r_clip}, ${r_clipper}):\n${r_flat}")
               math(EXPR failures "${failures} + 1")
             endif()
             math(EXPR fxTwins "${fxTwins} + ${r_draws}")
+            if(NOT DEFINED profFront_${p})
+              set(profFront_${p} 0)
+              set(profBox_${p} 0)
+            endif()
+            math(EXPR profFront_${p} "${profFront_${p}} + ${r_front}")
+            math(EXPR profBox_${p} "${profBox_${p}} + ${r_box}")
           endif()
         else()
           if(NOT r_draws EQUAL 0 OR NOT r_flat MATCHES "not applicable here")
@@ -311,6 +333,21 @@ foreach(p mali mali169)
     math(EXPR failures "${failures} + 1")
   endif()
 endforeach()
+# EYEBOX, without a clipper verdict (the default runs): under each Mali
+# profile over the list, camera rule passes proven in front of the eye took
+# their twin and others, not proven, were refused as "box" (both paths ran;
+# the pictures above byte for byte)
+if(NOT MODE STREQUAL "clean" AND BACKEND STREQUAL "vulkan")
+  foreach(p mali mali169)
+    if(DEFINED profFront_${p})
+      message(STATUS "rd_nodiscard_ab ${p}: ${profFront_${p}} draws proven in front of the eye through a twin, ${profBox_${p}} refused without the proof (box)")
+      if(NOT profFront_${p} GREATER 0 OR NOT profBox_${p} GREATER 0)
+        message(SEND_ERROR "rd_nodiscard_ab: under the ${p} profile ${profFront_${p}} draws proven in front of the eye and ${profBox_${p}} refused as box over the list (both above 0 expected)")
+        math(EXPR failures "${failures} + 1")
+      endif()
+    endif()
+  endforeach()
+endif()
 if(NOT twinTotal GREATER 0)
   message(SEND_ERROR "rd_nodiscard_ab (${BACKEND}): no pass drew through a twin over the list")
   math(EXPR failures "${failures} + 1")

@@ -1986,9 +1986,129 @@ static void checkProfileDefault(void)
     rd__vis_init();
 }
 
+/* ------------------------------------------- the twins' box proof (EYEBOX)
+ * rd__vis_gs_proof: every vertex of the box keeps its GS position
+ * (vu_common.hlsli vu_gs_ok) under the draw's matrix.  Fixed cases on the
+ * self-tests' screen matrix (h = (16 x + 2048 z, 16 y + 2048 z, 3145728
+ * (z - 1), z): rd_nodiscard_selftest.c sceneBlock), then random cameras and
+ * boxes: wherever the proof holds, 64 points of the box keep their GS
+ * position by the shader's float product (vuMat) in both rounding modes */
+static bool gsOkAt(const float (*m)[4], const float p[4], bool scissor)
+{
+    float h[4];
+    vuMat(m, p, scissor ? p[3] : 1.0f, h);
+    if (!(h[3] > 0.0f) || !(h[2] >= 0.0f)) {
+        return false;
+    }
+    const float q = 1.0f / h[3];
+    for (int c = 0; c < 3; c++) {
+        const float v = h[c] * q * 16.0f; /* ftoi4's sixteenths */
+        if (!(fabsf(v) < 2147483520.0f)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void checkGsProof(void)
+{
+    static const float kScene[4][4] = {
+        {16, 0, 0, 0}, {0, 16, 0, 0}, {2048, 2048, 3145728, 1}, {0, 0, -3145728, 0}};
+    const float (*m)[4] = kScene;
+    RdVisBox b;
+
+    struct {
+        const char *name;
+        float lo[4], hi[4];
+        bool scissor, want;
+    } kCase[] = {
+        {"in front", {-10, -10, 2, 1}, {10, 10, 3, 1}, false, true},
+        {"in front, the frame's side far past", {-50, 7, 2, 1}, {300, 10, 2, 1}, false, true},
+        {"straddling the eye plane", {-10, -10, -1, 1}, {10, 10, 2, 1}, false, false},
+        {"behind the eye", {-10, -10, -3, 1}, {10, 10, -2, 1}, false, false},
+        {"at w = 0", {-10, -10, 0, 1}, {10, 10, 2, 1}, false, false},
+        {"in front, below GS Z 0", {-10, -10, 0.5f, 1}, {10, 10, 2, 1}, false, false},
+        {"at GS Z 0 exactly", {-10, -10, 1, 1}, {10, 10, 2, 1}, false, false},
+        {"just past GS Z 0", {-10, -10, 1.001f, 1}, {10, 10, 2, 1}, false, true},
+        {"X saturating (1e7 at depth 1.5)", {-10, -10, 1.5f, 1}, {1.0e7f, 10, 2, 1}, false, false},
+        {"X large, not saturating (1e5)", {-10, -10, 1.5f, 1}, {1.0e5f, 10, 2, 1}, false, true},
+        {"code 36: pos.w up to 1", {-10, -10, 2, 0.5f}, {10, 10, 3, 1}, true, true},
+        {"code 36: pos.w 5 makes GS Z negative", {-10, -10, 2, 1}, {10, 10, 3, 5}, true, false},
+        {"the same box not under code 36 (w = 1)", {-10, -10, 2, 1}, {10, 10, 3, 5}, false, true},
+        {"an inverted box", {10, 10, 3, 1}, {-10, -10, 2, 1}, false, false},
+    };
+
+    for (size_t i = 0; i < sizeof(kCase) / sizeof(kCase[0]); i++) {
+        boxOf(&b, kCase[i].lo, kCase[i].hi);
+        const bool got = rd__vis_gs_proof(m, &b, kCase[i].scissor);
+        CHECK(got == kCase[i].want, "the box proof, %s: %s, %s expected", kCase[i].name,
+              got ? "proved" : "refused", kCase[i].want ? "proved" : "refused");
+        for (int k = 0; got && k < 16; k++) {
+            float pt[4];
+            boxPoint(&b, k, pt);
+            CHECK(gsOkAt(m, pt, kCase[i].scissor),
+                  "the box proof, %s: corner %d loses its GS "
+                  "position",
+                  kCase[i].name, k);
+        }
+    }
+    /* an empty box, a box or a matrix not finite: refused */
+    boxOf(&b, kCase[0].lo, kCase[0].hi);
+    b.n = 0;
+    CHECK(!rd__vis_gs_proof(m, &b, false), "the box proof: an empty box proved");
+    boxOf(&b, kCase[0].lo, kCase[0].hi);
+    b.hi[2] = NAN;
+    CHECK(!rd__vis_gs_proof(m, &b, false), "the box proof: a NaN box proved");
+    b.hi[2] = INFINITY;
+    CHECK(!rd__vis_gs_proof(m, &b, false), "the box proof: an infinite box proved");
+    boxOf(&b, kCase[0].lo, kCase[0].hi);
+    float bad[4][4];
+    memcpy(bad, kScene, sizeof(bad));
+    bad[2][3] = NAN;
+    CHECK(!rd__vis_gs_proof((const float (*)[4])bad, &b, false), "the box proof: a NaN matrix");
+    bad[2][3] = INFINITY;
+    CHECK(!rd__vis_gs_proof((const float (*)[4])bad, &b, false), "the box proof: an infinite "
+                                                                 "matrix");
+    CHECK(!rd__vis_gs_proof(m, NULL, false) && !rd__vis_gs_proof(NULL, &b, false),
+          "the box proof: no box or no matrix");
+    /* random cameras and boxes: every proof holds at 64 points of its box */
+    unsigned proved = 0, refused = 0, wrong = 0;
+    for (int mode = 0; mode < 2; mode++) {
+        setRound(mode);
+        for (int i = 0; i < 4000; i++) {
+            Cam c;
+            randomCam(&c, uni(0.0, 4096.0), uni(0.0, 4096.0), uni(-200.0, 4000.0));
+            float cm[4][4];
+            camMatrix(&c, cm);
+            const float e = (float)uni(0.5, 400.0);
+            const float lo[4] = {-e, -e, -e, 0.25f}, hi[4] = {e, (float)uni(0.0, e), e, 2.0f};
+            boxOf(&b, lo, hi);
+            const bool sc = (i & 1) != 0;
+            if (!rd__vis_gs_proof((const float (*)[4])cm, &b, sc)) {
+                refused++;
+                continue;
+            }
+            proved++;
+            for (int k = 0; k < 64; k++) {
+                float pt[4];
+                boxPoint(&b, k < 16 ? k : 16, pt);
+                wrong += !gsOkAt((const float (*)[4])cm, pt, sc);
+            }
+        }
+    }
+    setRound(0);
+    printf("  the box proof on random cameras: %u proved, %u refused, %u points losing their GS "
+           "position\n",
+           proved, refused, wrong);
+    CHECK(proved > 0u && refused > 0u, "the box proof: random cases all one way (%u, %u)", proved,
+          refused);
+    CHECK(wrong == 0u, "the box proof: %u points of proved boxes lose their GS position", wrong);
+}
+
 int main(void)
 {
     checkProfileDefault();
+    checkGsProof();
     checkBounds();
     checkMargins();
     checkPlanes();
