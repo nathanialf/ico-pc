@@ -941,5 +941,5 @@ const char *const
                 "Les états sauvegardés ne peuvent pas être créés pendant un voyage en mort définitive.",
             [UI_STR_TUNE_TITLE] = "Recherche des meilleurs réglages",
             [UI_STR_TUNE_BODY] = "Des saccades sont possibles.",
-            [UI_STR_TUNE_HIDE] = "masquer",
+            [UI_STR_TUNE_HIDE] = "Masquer",
 };

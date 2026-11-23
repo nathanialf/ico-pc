@@ -50,9 +50,12 @@ void rd__ab_renderer(void);
 /* the player's notice (any thread: port/ui/ui_host.c ui_host_vsync on the
    game's thread): rd_ab.h's RD_AB_NOTICE_* answer as of the last replay
    begun or read back (rd_ab_notice_state: none before the run's first
-   trial, due while timing may go on, done with its reason after); the
-   notice itself is the UI's (port/ui/tune_notice.h) */
+   trial, running during a trial, idle between trials, done with its reason
+   for the rest of the run); the notice itself is the UI's
+   (port/ui/tune_notice.h) */
 int rd_ab_notice(void);
+/* the running trial's stage (the notice's log line), -1 none */
+int rd_ab_notice_stage(void);
 /* the replay's record ends (rd__perf_end): no arm read after it */
 void rd__ab_end(void);
 /* a record's GPU times read back (rd__perf_collect_gpu) */

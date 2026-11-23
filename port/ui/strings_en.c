@@ -909,5 +909,5 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_DIFF_STATES_SAVE_LOCKED] = "Save states cannot be made on a Permadeath journey.",
     [UI_STR_TUNE_TITLE] = "Finding the best settings",
     [UI_STR_TUNE_BODY] = "You may see some stutter.",
-    [UI_STR_TUNE_HIDE] = "hide",
+    [UI_STR_TUNE_HIDE] = "Hide",
 };

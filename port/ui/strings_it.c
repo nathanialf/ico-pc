@@ -947,5 +947,5 @@ const char *const
                     "Gli stati salvati non si possono creare in un viaggio con morte permanente.",
                 [UI_STR_TUNE_TITLE] = "Ricerca delle impostazioni migliori",
                 [UI_STR_TUNE_BODY] = "Potresti notare qualche scatto.",
-                [UI_STR_TUNE_HIDE] = "nascondi",
+                [UI_STR_TUNE_HIDE] = "Nascondi",
 };

@@ -236,10 +236,13 @@ typedef struct Panel {
     float alpha;
 } Panel;
 
-/* the gaps of the notice's line, in body sizes: its text to the button,
-   the button to its word (photo mode's HUD's, photo_ui.c GAP_WORD) */
-#define NOTE_GAP_TEXT 1.0f
-#define NOTE_GAP_WORD 0.34f
+/* The notice's two parts: the text (title, line) on the left, and at the
+   panel's right side one stacked block, the Triangle button over its word
+   ("Hide"), centred on each other and on the panel's height, a thin
+   divider between the parts.  The gap each side of the divider, in body
+   sizes; the block's rows' gap in units */
+#define NOTE_GAP 0.8f
+#define NOTE_ROW_GAP 2.0f
 
 /* the button's width at the body's size: the drawer's (its picture or key)
    or else its word */
@@ -254,10 +257,22 @@ static float buttonWidth(void)
     return ui_measure_menu_text(BODY_SIZE, ui_str(UI_STR_BTN_TRIANGLE));
 }
 
-/* a panel at top whose body is lines of body (and, the notice, one more
-   width on its one line: the button and its word), slid in by k */
-static void layoutPanel(Panel *pn, const char *title, const char *body, float extraW, float top,
-                        float k)
+/* the stacked block's size: the wider of the button and its word; two body
+   rows and their gap */
+static void blockSize(float *w, float *h)
+{
+    float ba, bd;
+    ui_menu_font_metrics(BODY_SIZE, &ba, &bd, NULL);
+    const float bw = buttonWidth(), hw = ui_measure_menu_text(BODY_SIZE, s_note.hint);
+    *w = bw > hw ? bw : hw;
+    *h = 2.0f * (ba + bd) + NOTE_ROW_GAP;
+}
+
+/* a panel at top whose body is lines of body, slid in by k; extraW more
+   width to the right of the text and at least minH tall (the notice's
+   block) */
+static void layoutPanel(Panel *pn, const char *title, const char *body, float extraW, float minH,
+                        float top, float k)
 {
     float ta, td, ba, bd;
     /* the menus' text (menu_font.h), measured as its
@@ -265,23 +280,23 @@ static void layoutPanel(Panel *pn, const char *title, const char *body, float ex
     ui_menu_font_metrics(TITLE_SIZE, &ta, &td, NULL);
     ui_menu_font_metrics(BODY_SIZE, &ba, &bd, NULL);
     float w = ui_measure_menu_text(TITLE_SIZE, title);
-    float bw = ui_measure_menu_text(BODY_SIZE, body) + extraW;
+    const float bw = ui_measure_menu_text(BODY_SIZE, body);
     if (bw > w) {
         w = bw;
     }
-    w += 2.0f * PAD_X;
+    w += 2.0f * PAD_X + extraW;
     if (w < MIN_W) {
         w = MIN_W;
     }
     if (w > MAX_W) {
         w = MAX_W;
     }
-    int bodyLines = body[0] || extraW > 0.0f ? 1 : 0;
+    int bodyLines = body[0] ? 1 : 0;
     for (const char *c = body; *c; c++) {
         bodyLines += *c == '\n';
     }
-    const float h =
-        PAD_Y + ta + td + (bodyLines ? GAP_Y + (float)bodyLines * (ba + bd) : 0.0f) + PAD_Y;
+    float h = PAD_Y + ta + td + (bodyLines ? GAP_Y + (float)bodyLines * (ba + bd) : 0.0f) + PAD_Y;
+    h = h < minH ? minH : h;
     const float right = UI_GRID_W - MARGIN_X + (1.0f - k) * (w + MARGIN_X + 4.0f);
     pn->x1 = right;
     pn->x0 = right - w;
@@ -292,11 +307,32 @@ static void layoutPanel(Panel *pn, const char *title, const char *body, float ex
     pn->alpha = k;
 }
 
-/* the notice's line's extra width: the gap, the button, its word */
-static float noteExtra(void)
+/* the notice's panel at top, slid in by k */
+static void noteLayout(Panel *pn, float top, float k)
 {
-    return NOTE_GAP_TEXT * BODY_SIZE + buttonWidth() + NOTE_GAP_WORD * BODY_SIZE +
-           ui_measure_menu_text(BODY_SIZE, s_note.hint);
+    float bw, bh;
+    blockSize(&bw, &bh);
+    layoutPanel(pn, s_note.title, s_note.body, 2.0f * NOTE_GAP * BODY_SIZE + bw, bh + 2.0f * PAD_Y,
+                top, k);
+}
+
+/* the notice's parts in pn: the text's rectangle, the divider's x, the
+   block's rectangle */
+static void noteParts(const Panel *pn, float text[4], float *divider, float block[4])
+{
+    float bw, bh;
+    blockSize(&bw, &bh);
+    block[2] = pn->x1 - PAD_X;
+    block[0] = block[2] - bw;
+    block[1] = 0.5f * (pn->y0 + pn->y1) - 0.5f * bh;
+    block[3] = block[1] + bh;
+    *divider = block[0] - NOTE_GAP * BODY_SIZE;
+    const float tw = ui_measure_menu_text(TITLE_SIZE, s_note.title),
+                lw = ui_measure_menu_text(BODY_SIZE, s_note.body);
+    text[0] = pn->x0 + PAD_X;
+    text[2] = text[0] + (tw > lw ? tw : lw);
+    text[1] = pn->y0 + PAD_Y;
+    text[3] = pn->y1 - PAD_Y;
 }
 
 /* 0 .. 1: how far in the notice is (smoothstep in, held until hidden,
@@ -317,7 +353,7 @@ static int notePanel(Panel *pn)
     if (!s_note.on && !s_note.leaving) {
         return 0;
     }
-    layoutPanel(pn, s_note.title, s_note.body, noteExtra(), TOP_Y, noteShown());
+    noteLayout(pn, TOP_Y, noteShown());
     return 1;
 }
 
@@ -332,10 +368,10 @@ static int panel(Panel *pn)
     float top = TOP_Y;
     Panel note;
     if (s_note.on || s_note.leaving) {
-        layoutPanel(&note, s_note.title, s_note.body, noteExtra(), TOP_Y, 1.0f);
+        noteLayout(&note, TOP_Y, 1.0f);
         top = note.y1 + STACK_GAP;
     }
-    layoutPanel(pn, p->title, p->body, 0.0f, top, shown());
+    layoutPanel(pn, p->title, p->body, 0.0f, 0.0f, top, shown());
     return 1;
 }
 
@@ -422,16 +458,19 @@ const char *ui_popup_notice_title(void)
     return ui_popup_notice_active() ? s_note.title : "";
 }
 
-const char *ui_popup_notice_line(char *out, size_t n)
+const char *ui_popup_notice_line(void)
 {
-    if (n == 0) {
-        return out;
+    return ui_popup_notice_active() ? s_note.body : "";
+}
+
+int ui_popup_notice_parts(float text[4], float *divider, float block[4])
+{
+    Panel pn;
+    if (!notePanel(&pn)) {
+        return 0;
     }
-    out[0] = '\0';
-    if (ui_popup_notice_active()) {
-        snprintf(out, n, "%s %s %s", s_note.body, ui_str(UI_STR_BTN_TRIANGLE), s_note.hint);
-    }
-    return out;
+    noteParts(&pn, text, divider, block);
+    return 1;
 }
 
 #ifdef ICO_RD
@@ -443,8 +482,8 @@ static void scaled(uint8_t out[4], uint8_t r, uint8_t g, uint8_t b, uint8_t a, f
     out[3] = (uint8_t)((float)a * k + 0.5f);
 }
 
-/* a panel and its title and body (the notice: its button and word after
-   the body on its line) */
+/* a panel and its title and body (the notice: its divider and its block
+   at the side) */
 static void drawPanel(const Panel *pn, const char *title, const char *body, int notice)
 {
     uint8_t c[4];
@@ -467,21 +506,31 @@ static void drawPanel(const Panel *pn, const char *title, const char *body, int 
     if (!notice) {
         return;
     }
-    float ba, bd, cap;
-    ui_menu_font_metrics(BODY_SIZE, &ba, &bd, &cap);
-    const float mid = pn->bodyTop + ba - cap * 0.5f;
-    float x = pn->x0 + PAD_X + ui_measure_menu_text(BODY_SIZE, body) + NOTE_GAP_TEXT * BODY_SIZE;
+    /* the divider, a hairline as the top's, then the block: the button
+       centred over its word */
+    float text[4], dx, block[4];
+    noteParts(pn, text, &dx, block);
+    scaled(c, 0x5E, 0x58, 0x4C, 0x80, pn->alpha);
+    ui_draw_rect(dx, pn->y0 + PAD_Y, dx + 1.0f, pn->y1 - PAD_Y, c);
+    float ba, bd;
+    ui_menu_font_metrics(BODY_SIZE, &ba, &bd, NULL);
+    const float row = ba + bd, cx = 0.5f * (block[0] + block[2]);
+    const float mid1 = block[1] + 0.5f * row, mid2 = block[3] - 0.5f * row;
+    scaled(c, 0x66, 0x64, 0x5E, 0x80, pn->alpha);
     float bw = 0.0f;
     if (s_button != NULL) {
-        bw = s_button(x, mid, BODY_SIZE, 1); /* the picture or the key, where one is set */
+        bw = s_button(0.0f, 0.0f, BODY_SIZE, 0);
+        if (bw > 0.0f) {
+            (void)s_button(cx - 0.5f * bw, mid1, BODY_SIZE, 1); /* the picture or the key */
+        }
     }
     if (bw <= 0.0f) {
         const char *word = ui_str(UI_STR_BTN_TRIANGLE);
-        ui_draw_menu_text(x, mid, BODY_SIZE, c, word, UI_VALIGN_MIDDLE, UI_INK_LIGHT, NULL);
-        bw = ui_measure_menu_text(BODY_SIZE, word);
+        ui_draw_menu_text(cx - 0.5f * ui_measure_menu_text(BODY_SIZE, word), mid1, BODY_SIZE, c,
+                          word, UI_VALIGN_MIDDLE, UI_INK_LIGHT, NULL);
     }
-    x += bw + NOTE_GAP_WORD * BODY_SIZE;
-    ui_draw_menu_text(x, mid, BODY_SIZE, c, s_note.hint, UI_VALIGN_MIDDLE, UI_INK_LIGHT, NULL);
+    ui_draw_menu_text(cx - 0.5f * ui_measure_menu_text(BODY_SIZE, s_note.hint), mid2, BODY_SIZE, c,
+                      s_note.hint, UI_VALIGN_MIDDLE, UI_INK_LIGHT, NULL);
 }
 #endif
 

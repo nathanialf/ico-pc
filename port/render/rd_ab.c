@@ -477,7 +477,10 @@ int rd_ab_notice_state(const RdAb *a)
     for (int i = 0; i < a->nSubj; i++) {
         any = any || !a->subj[i].gone;
     }
-    return any ? RD_AB_NOTICE_DUE : RD_AB_NOTICE_DONE_GONE;
+    if (!any) {
+        return RD_AB_NOTICE_DONE_GONE;
+    }
+    return a->t.active ? RD_AB_NOTICE_RUNNING : RD_AB_NOTICE_IDLE;
 }
 
 void rd_ab_forget(RdAb *a, const char *why)

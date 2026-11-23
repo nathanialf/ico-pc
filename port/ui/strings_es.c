@@ -928,5 +928,5 @@ const char *const ui_strings_es[UI_STR_COUNT] =
             "Los estados guardados no se pueden crear en un viaje con muerte permanente.",
         [UI_STR_TUNE_TITLE] = "Buscando la mejor configuración",
         [UI_STR_TUNE_BODY] = "Puede haber algún tirón.",
-        [UI_STR_TUNE_HIDE] = "ocultar",
+        [UI_STR_TUNE_HIDE] = "Ocultar",
 };

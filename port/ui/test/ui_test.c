@@ -572,6 +572,24 @@ static void testLayoutExtension(void)
 
 /* --------------------------------------------------------------- popups */
 
+/* the notice's Triangle as a drawer gives it (popup.h UiPopupButtonFn):
+   a picture about a body line wide, and the widest key name in brackets */
+static float noticePicture(float x, float mid, float size, int draw)
+{
+    (void)x;
+    (void)mid;
+    (void)draw;
+    return 1.2f * size;
+}
+
+static float noticeKey(float x, float mid, float size, int draw)
+{
+    (void)x;
+    (void)mid;
+    (void)draw;
+    return ui_measure_menu_text(size, "[Backspace]");
+}
+
 static void testPopups(void)
 {
     ui_popup_reset();
@@ -610,31 +628,119 @@ static void testPopups(void)
     ui_popup_reset();
     ui_popup_set_dev_test(0);
 
-    /* the standing notice of the in-play timing (tune_notice.h, popup.h
-       ui_popup_notice_*): nothing before the judge's word; shown at it
-       without the queue; a queued popup beside it below, both on the
-       picture and not overlapping; in every language its title and its one
-       line fit (popup.h UI_POPUP_BODY_WIDTH at UI_POPUP_BODY_SIZE, the title
-       at UI_POPUP_TITLE_SIZE in the widest panel); a Triangle held from
-       before it came up, any other button and a Triangle while a menu owns
-       the pad do not hide it; a Triangle press in play does, for the run (the
-       judge's word again brings nothing back); the judge's done takes it
-       down, with each reason */
-    ui_tune_notice_reset();
-    ui_popup_reset();
-    CHECK(ui_tune_notice_step(UI_TUNE_JUDGE_NONE, 0u, 1) == UI_TUNE_NOTHING &&
-              !ui_popup_notice_active() && !ui_popup_active(),
-          "the notice before the judge's word");
+    /* the notice of the in-play timing (tune_notice.h, popup.h
+       ui_popup_notice_*), at the tests' 50 Hz: nothing before a timing
+       runs; shown when one runs, without the queue; it stays while the
+       timing runs, and after it stops until it has been fully shown for
+       UI_TUNE_MIN_SHOWN_MS (a short trial) and the timing has stopped for
+       UI_TUNE_GRACE_MS (two subjects back to back: no flicker), then slides
+       out by itself; back at the next timing; a Triangle held from before,
+       any other button and a menu's Triangle do not hide it, a Triangle
+       press in play does, for the run; the judge's done takes it down, each
+       reason; its parts: the text on the left, the block (the Triangle over
+       "Hide") at the right inside the panel, apart from the text, in every
+       language with the word, a picture and a key; the queue's panel below
+       it */
+    {
+        const int slide = ui_popup_slide_vsyncs(), hz = ui_popup_vsync_hz();
+        const int minV = slide + (hz * UI_TUNE_MIN_SHOWN_MS + 999) / 1000;
+        const int graceV = (hz * UI_TUNE_GRACE_MS + 999) / 1000;
+        ui_tune_notice_reset();
+        ui_popup_reset();
+        CHECK(ui_tune_notice_step(UI_TUNE_JUDGE_NONE, -1, 0u, 1) == UI_TUNE_NOTHING &&
+                  ui_tune_notice_step(UI_TUNE_JUDGE_IDLE, -1, 0u, 1) == UI_TUNE_NOTHING &&
+                  !ui_popup_notice_active() && !ui_popup_active(),
+              "the notice before a timing runs");
+        /* a short trial: running 10 vsyncs, then idle: it stays until its
+           minimum, then leaves by itself */
+        CHECK(ui_tune_notice_step(UI_TUNE_JUDGE_RUNNING, 3, 0u, 1) == UI_TUNE_SHOWN &&
+                  ui_popup_notice_shown() && !ui_popup_active(),
+              "the notice not shown at a running timing, or through the queue");
+        int left = -1;
+        for (int v = 1; v < minV + graceV + 10 && left < 0; v++) {
+            ui_popup_vsync();
+            const int j = v < 10 ? UI_TUNE_JUDGE_RUNNING : UI_TUNE_JUDGE_IDLE;
+            if (ui_tune_notice_step(j, 3, 0u, 1) == UI_TUNE_LEFT) {
+                left = v;
+            }
+        }
+        CHECK(left >= minV && left <= minV + 1, "a short trial: left at vsync %d (minimum %d)",
+              left, minV);
+        for (int v = 0; v < slide; v++) {
+            ui_popup_vsync();
+        }
+        CHECK(!ui_popup_notice_active(), "the notice still up after it left");
+        /* a long trial: no leaving while it runs; idle for less than the
+           grace (the next subject at once): stays; then idle: leaves after
+           the grace */
+        CHECK(ui_tune_notice_step(UI_TUNE_JUDGE_RUNNING, 11, 0u, 1) == UI_TUNE_SHOWN,
+              "the notice not back at the next timing");
+        int ev = 0;
+        for (int v = 1; v < 3 * minV; v++) {
+            ui_popup_vsync();
+            ev |= ui_tune_notice_step(UI_TUNE_JUDGE_RUNNING, 11, 0u, 1);
+        }
+        for (int v = 0; v < graceV - 1; v++) {
+            ui_popup_vsync();
+            ev |= ui_tune_notice_step(UI_TUNE_JUDGE_IDLE, -1, 0u, 1);
+        }
+        for (int v = 0; v < 5 * graceV; v++) {
+            ui_popup_vsync();
+            ev |= ui_tune_notice_step(UI_TUNE_JUDGE_RUNNING, 11, 0u, 1);
+        }
+        CHECK(ev == 0 && ui_tune_notice_up(), "left while a timing ran or in the grace (%d)", ev);
+        left = -1;
+        for (int v = 1; v <= graceV + 1 && left < 0; v++) {
+            ui_popup_vsync();
+            if (ui_tune_notice_step(UI_TUNE_JUDGE_IDLE, -1, 0u, 1) == UI_TUNE_LEFT) {
+                left = v;
+            }
+        }
+        CHECK(left == graceV, "a long trial: left %d vsyncs after it ended (grace %d)", left,
+              graceV);
+        for (int v = 0; v < slide; v++) {
+            ui_popup_vsync();
+        }
+        /* the judge's done takes it down for the run, each reason */
+        for (int done = UI_TUNE_JUDGE_DONE_CAP; done <= UI_TUNE_JUDGE_DONE_GONE; done++) {
+            ui_tune_notice_reset();
+            ui_popup_reset();
+            CHECK(ui_tune_notice_step(UI_TUNE_JUDGE_RUNNING, 5, 0u, 1) == UI_TUNE_SHOWN,
+                  "shown (%d)", done);
+            ev = 0;
+            for (int v = 1; v < minV; v++) {
+                ui_popup_vsync();
+                ev |= ui_tune_notice_step(done, -1, 0u, 1);
+            }
+            CHECK(ev == 0, "done %d: left before its minimum", done);
+            ui_popup_vsync();
+            CHECK(ui_tune_notice_step(done, -1, 0u, 1) == UI_TUNE_LEFT, "done %d: not taken down",
+                  done);
+            for (int v = 0; v < slide; v++) {
+                ui_popup_vsync();
+            }
+            CHECK(!ui_popup_notice_active() &&
+                      ui_tune_notice_step(UI_TUNE_JUDGE_RUNNING, 5, 0u, 1) == UI_TUNE_NOTHING,
+                  "done %d: up again", done);
+        }
+        /* done before it was shown: never shown */
+        ui_tune_notice_reset();
+        CHECK(ui_tune_notice_step(UI_TUNE_JUDGE_DONE_STOP, -1, 0u, 1) == UI_TUNE_NOTHING &&
+                  ui_tune_notice_step(UI_TUNE_JUDGE_RUNNING, 5, 0u, 1) == UI_TUNE_NOTHING &&
+                  !ui_popup_notice_active(),
+              "shown after the judge was done");
+    }
     const UiLang langWas = ui_get_language();
     for (int l = 0; l < UI_LANG_COUNT; l++) {
         ui_set_language((UiLang)l);
         ui_tune_notice_reset();
         ui_popup_reset();
         /* Triangle held as it comes up: no press */
-        CHECK(ui_tune_notice_step(UI_TUNE_JUDGE_DUE, UI_TUNE_TRIANGLE, 1) == UI_TUNE_SHOWN &&
+        CHECK(ui_tune_notice_step(UI_TUNE_JUDGE_RUNNING, 3, UI_TUNE_TRIANGLE, 1) == UI_TUNE_SHOWN &&
                   ui_popup_notice_shown() && !ui_popup_active(),
               "language %d: the notice not shown, or shown through the queue", l);
-        CHECK(ui_tune_notice_step(UI_TUNE_JUDGE_DUE, UI_TUNE_TRIANGLE, 1) == UI_TUNE_NOTHING &&
+        CHECK(ui_tune_notice_step(UI_TUNE_JUDGE_RUNNING, 3, UI_TUNE_TRIANGLE, 1) ==
+                      UI_TUNE_NOTHING &&
                   ui_tune_notice_up(),
               "language %d: a Triangle held from before hid it", l);
         for (int i = 0; i < ui_popup_slide_vsyncs(); i++) {
@@ -642,80 +748,72 @@ static void testPopups(void)
         }
         CHECK(strcmp(ui_popup_notice_title(), ui_str_in((UiLang)l, UI_STR_TUNE_TITLE)) == 0,
               "language %d: the notice's title \"%s\"", l, ui_popup_notice_title());
-        float n4[4];
-        CHECK(ui_popup_notice_panel(n4) && n4[0] > 0.0f && n4[2] <= UI_GRID_W && n4[3] < 240.0f,
-              "language %d: the notice's panel %g,%g %g,%g", l, n4[0], n4[1], n4[2], n4[3]);
-        const float tw = ui_measure_menu_text(UI_POPUP_TITLE_SIZE, ui_popup_notice_title());
-        CHECK(tw <= UI_POPUP_BODY_WIDTH, "language %d: the notice's title is %g units wide", l, tw);
-        char line[UI_POPUP_TEXT];
-        const float lw =
-            ui_measure_menu_text(UI_POPUP_BODY_SIZE, ui_popup_notice_line(line, sizeof(line))) +
-            UI_POPUP_BODY_SIZE; /* the gap after the text */
-        CHECK(lw <= UI_POPUP_BODY_WIDTH, "language %d: the notice's line \"%s\" is %g units wide",
-              l, line, lw);
         CHECK(strchr(ui_str_in((UiLang)l, UI_STR_TUNE_BODY), '\n') == NULL,
               "language %d: the notice's text is more than one line", l);
+        /* its parts with the word (no drawer), a picture's width and a key
+           in brackets (the widest form) */
+        for (int form = 0; form < 3; form++) {
+            ui_popup_set_button_drawer(form == 0 ? NULL : form == 1 ? noticePicture : noticeKey);
+            float n4[4], text[4], block[4], dx = 0.0f;
+            CHECK(ui_popup_notice_panel(n4) && ui_popup_notice_parts(text, &dx, block),
+                  "language %d form %d: no parts", l, form);
+            const float natural = (text[2] - text[0]) + (block[2] - block[0]) +
+                                  2.0f * 0.8f * UI_POPUP_BODY_SIZE + 2.0f * UI_POPUP_PAD_X;
+            CHECK(n4[0] > 0.0f && n4[2] <= UI_GRID_W && n4[3] < 240.0f &&
+                      natural <= UI_GRID_W - 2.0f * UI_POPUP_MARGIN_X + 0.01f && text[0] >= n4[0] &&
+                      text[2] < dx && dx < block[0] && block[2] <= n4[2] && block[1] >= n4[1] &&
+                      block[3] <= n4[3] && fabsf((block[1] + block[3]) - (n4[1] + n4[3])) < 0.01f,
+                  "language %d form %d: panel %g,%g %g,%g, text %g..%g, divider %g, block "
+                  "%g,%g %g,%g (natural %g)",
+                  l, form, n4[0], n4[1], n4[2], n4[3], text[0], text[2], dx, block[0], block[1],
+                  block[2], block[3], natural);
+            const float lw = ui_measure_menu_text(UI_POPUP_BODY_SIZE, ui_popup_notice_line());
+            CHECK(lw <= text[2] - text[0] + 0.01f, "language %d: the line wider than its part", l);
+        }
+        ui_popup_set_button_drawer(NULL);
         /* a queued popup while it is up: below it, both on the picture */
         CHECK(ui_popup_push("Achievement unlocked", "Body line") == 0, "a popup beside it");
         for (int i = 0; i < ui_popup_slide_vsyncs(); i++) {
             ui_popup_vsync();
         }
-        float q4[4];
+        float n4[4], q4[4];
         CHECK(ui_popup_panel(q4) && ui_popup_notice_panel(n4) && q4[1] >= n4[3] && q4[0] > 0.0f &&
                   q4[2] <= UI_GRID_W && q4[3] < 480.0f,
               "language %d: the queue's panel %g,%g %g,%g against the notice's %g,%g %g,%g", l,
               q4[0], q4[1], q4[2], q4[3], n4[0], n4[1], n4[2], n4[3]);
         /* other buttons, and Triangle while a menu owns the pad: still up */
-        CHECK(ui_tune_notice_step(UI_TUNE_JUDGE_DUE, 0u, 1) == UI_TUNE_NOTHING &&
-                  ui_tune_notice_step(UI_TUNE_JUDGE_DUE, 0xFFFFu & ~UI_TUNE_TRIANGLE, 1) ==
+        CHECK(ui_tune_notice_step(UI_TUNE_JUDGE_RUNNING, 3, 0u, 1) == UI_TUNE_NOTHING &&
+                  ui_tune_notice_step(UI_TUNE_JUDGE_RUNNING, 3, 0xFFFFu & ~UI_TUNE_TRIANGLE, 1) ==
                       UI_TUNE_NOTHING &&
-                  ui_tune_notice_step(UI_TUNE_JUDGE_DUE, 0u, 1) == UI_TUNE_NOTHING &&
-                  ui_tune_notice_step(UI_TUNE_JUDGE_DUE, UI_TUNE_TRIANGLE, 0) == UI_TUNE_NOTHING &&
+                  ui_tune_notice_step(UI_TUNE_JUDGE_RUNNING, 3, 0u, 1) == UI_TUNE_NOTHING &&
+                  ui_tune_notice_step(UI_TUNE_JUDGE_RUNNING, 3, UI_TUNE_TRIANGLE, 0) ==
+                      UI_TUNE_NOTHING &&
                   ui_tune_notice_up(),
               "language %d: hidden by another button or a menu's Triangle", l);
         /* a Triangle press in play: hidden; the caller's word as it was */
         const unsigned int word = UI_TUNE_TRIANGLE | 0x0040u;
-        CHECK(ui_tune_notice_step(UI_TUNE_JUDGE_DUE, 0u, 1) == UI_TUNE_NOTHING &&
-                  ui_tune_notice_step(UI_TUNE_JUDGE_DUE, word, 1) == UI_TUNE_HIDDEN &&
-                  word == (UI_TUNE_TRIANGLE | 0x0040u) && !ui_tune_notice_up(),
+        CHECK(ui_tune_notice_step(UI_TUNE_JUDGE_RUNNING, 3, 0u, 1) == UI_TUNE_NOTHING &&
+                  ui_tune_notice_step(UI_TUNE_JUDGE_RUNNING, 3, word, 1) == UI_TUNE_HIDDEN &&
+                  word == (UI_TUNE_TRIANGLE | 0x0040u) && !ui_tune_notice_up() &&
+                  ui_tune_notice_dismissed(),
               "language %d: a Triangle press did not hide it", l);
         for (int i = 0; i < ui_popup_slide_vsyncs(); i++) {
             ui_popup_vsync();
         }
         CHECK(!ui_popup_notice_active() && ui_popup_active(),
               "language %d: the notice not gone, or the queue's popup with it", l);
-        /* the judge due again, done: nothing for the rest of the run */
-        CHECK(ui_tune_notice_step(UI_TUNE_JUDGE_DUE, 0u, 1) == UI_TUNE_NOTHING &&
-                  ui_tune_notice_step(UI_TUNE_JUDGE_DONE_CAP, 0u, 1) == UI_TUNE_NOTHING &&
+        /* the next timings: nothing for the rest of the run */
+        CHECK(ui_tune_notice_step(UI_TUNE_JUDGE_IDLE, -1, 0u, 1) == UI_TUNE_NOTHING &&
+                  ui_tune_notice_step(UI_TUNE_JUDGE_RUNNING, 4, 0u, 1) == UI_TUNE_NOTHING &&
                   !ui_popup_notice_active(),
               "language %d: the notice back after it was hidden", l);
     }
-    /* the judge's done takes it down, each reason */
-    for (int done = UI_TUNE_JUDGE_DONE_CAP; done <= UI_TUNE_JUDGE_DONE_GONE; done++) {
-        ui_tune_notice_reset();
-        ui_popup_reset();
-        CHECK(ui_tune_notice_step(UI_TUNE_JUDGE_DUE, 0u, 1) == UI_TUNE_SHOWN, "shown (%d)", done);
-        CHECK(ui_tune_notice_step(done, 0u, 1) == UI_TUNE_DONE && !ui_popup_notice_shown() &&
-                  ui_popup_notice_active(),
-              "done %d: not taken down", done);
-        for (int i = 0; i < ui_popup_slide_vsyncs(); i++) {
-            ui_popup_vsync();
-        }
-        CHECK(!ui_popup_notice_active() &&
-                  ui_tune_notice_step(UI_TUNE_JUDGE_DUE, 0u, 1) == UI_TUNE_NOTHING,
-              "done %d: up again", done);
-    }
-    /* done before it was shown: never shown */
-    ui_tune_notice_reset();
-    CHECK(ui_tune_notice_step(UI_TUNE_JUDGE_DONE_STOP, 0u, 1) == UI_TUNE_NOTHING &&
-              ui_tune_notice_step(UI_TUNE_JUDGE_DUE, 0u, 1) == UI_TUNE_NOTHING &&
-              !ui_popup_notice_active(),
-          "shown after the judge was done");
     ui_tune_notice_reset();
     ui_popup_reset();
     ui_set_language(UI_LANG_EN);
-    CHECK(ui_tune_notice_step(UI_TUNE_JUDGE_DUE, 0u, 1) == UI_TUNE_SHOWN &&
-              strcmp(ui_popup_notice_title(), "Finding the best settings") == 0,
+    CHECK(ui_tune_notice_step(UI_TUNE_JUDGE_RUNNING, 3, 0u, 1) == UI_TUNE_SHOWN &&
+              strcmp(ui_popup_notice_title(), "Finding the best settings") == 0 &&
+              strcmp(ui_str(UI_STR_TUNE_HIDE), "Hide") == 0,
           "the English title \"%s\"", ui_popup_notice_title());
     ui_tune_notice_reset();
     ui_popup_reset();
