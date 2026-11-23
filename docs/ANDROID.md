@@ -301,10 +301,11 @@ picture may take, so the phone can set its speed for the game. There is
 nothing to switch on. A speed gain has been measured only on a Pixel 10 Pro
 Fold; phones with Mali or Adreno graphics are not measured yet.
 
-On some phones a message, **Finding the best settings**, appears once
-after you start the game. The game then tries its ways of drawing for a
-few seconds in each new area and keeps the faster one there, so a little
-stutter for those few seconds is expected
+On some phones a message, **Finding the best settings**, appears after
+you start the game and stays while the game tries its ways of drawing for
+a few seconds in each new area, keeping the faster one there; a little
+stutter for those few seconds is expected, and Triangle (or the touch
+Triangle button) hides the message
 ([more about it](FAQ.md#a-message-says-finding-the-best-settings)).
 
 If it still stutters, play for a minute and send `ico-pc.log` from `logs`
@@ -539,8 +540,8 @@ it. If you do not have a problem, you can skip this.
    driver** again and choose **Add from the drivers folder**. That row only
    shows while there is a zip in the folder; Left and Right pick between
    zips if there are several. The game deletes the zip once the driver has
-   been added. If it says the chosen file could not be read, copy the zip
-   onto the phone first and choose it again.
+   been added. If it says the file is unreadable, copy the zip onto the
+   phone first and choose it again.
 3. In the same page, set the **Driver** row to the driver you added. The
    note under the page starts with what the game last saw of that driver:
    its name, version and Vulkan version ("Qualcomm's driver 512.676.1,

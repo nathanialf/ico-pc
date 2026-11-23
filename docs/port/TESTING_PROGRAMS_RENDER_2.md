@@ -483,10 +483,12 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   - the measure: the scene's GPU work (the span less the present's pass and the display wait,
     `rd_ab_scene_ms`): a stream held by the display (every span 40 ms, the wait taking up what
     the scene saves) judged on with it, off with the whole span; the verdict line's words;
-  - the player's notice (`rd_ab_take_notice`): none before a trial, exactly once at the run's
-    first trial, none for the rest of that stage (both subjects' trials), the four later stages,
-    after a renderer made again and its trials, or after a stop; none with nothing allowed, with no
-    stage, in the fixed and alternating modes, or after a stop before any trial;
+  - the player's notice (`rd_ab_notice_state`): none before a trial; due from the run's first
+    trial through later stages (both subjects' trials), a renderer made again and while the 12th
+    trial runs; done at the cap when it ends, on a stop and once every subject is gone, none of
+    them undone by a renderer made again or a subject back; a gone subject never tried; none with
+    nothing allowed, with no stage, in the fixed and alternating modes, or after a stop before any
+    trial;
   - a renderer made again (`rd_ab_forget`): a trial past 16 pairs ended unjudged, every verdict
     and the carried arm forgotten, a record of the earlier renderer not measured, the trials run
     still counted, the stage judged again on the new renderer;

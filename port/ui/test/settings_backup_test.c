@@ -195,8 +195,7 @@ static void testBackup(void)
     s_st.state = UI_BACKUP_FAILED;
     s_st.why = UI_BACKUP_WHY_BUSY;
     ui_settings_vsync();
-    CHECK(popupIs("Could not back up your data",
-                  "Not now: the game is saving. Try again in a moment."),
+    CHECK(popupIs("Could not back up your data", "The game is saving. Try again in a moment."),
           "Back up: the failed popup \"%s\" / \"%s\"", ui_popup_title(), ui_popup_body());
     ui_popup_reset();
 
@@ -226,7 +225,8 @@ static void testRestore(void)
     CHECK(s_begins == 0, "Restore: the first press asks nothing of the host");
     CHECK(popupIs("Restore from a backup?", NULL) &&
               strncmp(ui_popup_body(),
-                      "The memory card, save states, settings and achievements here", 60) == 0,
+                      "Replaces the memory card, save states,\nsettings and achievements here",
+                      67) == 0,
           "Restore: what it replaces \"%s\" / \"%s\"", ui_popup_title(), ui_popup_body());
     ui_popup_reset();
     frame(0);
@@ -293,7 +293,7 @@ static void testRestore(void)
     s_st.state = UI_BACKUP_DONE;
     s_st.restarts = 1;
     ui_settings_vsync();
-    CHECK(popupIs("Restoring your data", "The game restarts now and puts the backup in place."),
+    CHECK(popupIs("Restoring your data", "Restarting to put the backup in place."),
           "Restore: the done popup \"%s\" / \"%s\"", ui_popup_title(), ui_popup_body());
     ui_popup_reset();
     press(lt_ext_confirm_button());
@@ -316,7 +316,7 @@ static void testRestore(void)
     s_st.restarts = 0;
     ui_settings_vsync();
     CHECK(popupIs("Restoring your data",
-                  "The game closes now. Start it again: it puts the backup in place as it starts."),
+                  "The game closes now. Start it again\nto put the backup in place."),
           "Restore: the closing popup \"%s\"", ui_popup_body());
 
     /* dropped: the cursor moves off, a minute passes */

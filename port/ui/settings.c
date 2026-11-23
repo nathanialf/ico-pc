@@ -795,7 +795,7 @@ static void gpuFolderPopup(UiStrId id)
 {
     char text[UI_POPUP_TEXT], body[UI_POPUP_TEXT];
     fmtText(id, "s", NULL, gpuFolderText(), text, sizeof(text));
-    wrapText(text, 21.0f, 540.0f, body, sizeof(body));
+    wrapText(text, UI_POPUP_BODY_SIZE, UI_POPUP_BODY_WIDTH, body, sizeof(body));
     ui_popup_push(ui_str(UI_STR_SECTION_GPU_DRIVER), body);
 }
 
@@ -825,8 +825,8 @@ static void gpuPoll(void)
         /* the host's own sentence (English, as the driver's names are) */
         char body[UI_POPUP_TEXT];
         const char *why = s_gpuHost.installWhy != NULL ? s_gpuHost.installWhy() : NULL;
-        wrapText(why != NULL && why[0] != '\0' ? why : ui_str(UI_STR_GPU_DRIVER_BAD), 21.0f, 540.0f,
-                 body, sizeof(body));
+        wrapText(why != NULL && why[0] != '\0' ? why : ui_str(UI_STR_GPU_DRIVER_BAD),
+                 UI_POPUP_BODY_SIZE, UI_POPUP_BODY_WIDTH, body, sizeof(body));
         ui_popup_push(ui_str(UI_STR_SECTION_GPU_DRIVER), body);
     } else {
         /* the picker closed without a file (some phones' pickers answer so

@@ -43,7 +43,7 @@ draws, navigates, fades and sounds it; the port supplies the rows, their words a
 | `port/assets/fonts/NotoSansTC-Regular-subset.ttf`, `NotoSansTC-OFL.txt` | the fourth font (the Chinese table's ideographs) and its licence |
 | `tools/subset_font_zh.py` | makes and checks the fourth font's subset |
 | `port/ui/popup.h`, `popup.c` | the notification popups |
-| `port/ui/tune_notice.h`, `tune_notice.c` | the popup "Finding the best settings" (`UI_STR_TUNE_TITLE`, `UI_STR_TUNE_BODY`), once a run when the renderer's in-play timing starts its first trial: `ui_host_vsync` takes the renderer's one-shot (`rd_ab_notice_take`) on the game's thread, which owns the popup queue; behind another popup it waits its turn, a full queue keeps it for the next vsync (`ui_tune_notice`), so behind eight queued pop-ups (popup.h) it can show up to about 37 s after the timing began (each 0.3 s in, 4 s held, 0.3 s out), possibly in a menu or after that first trial ended; the line `ui: pop-up "Finding the best settings": ...` when queued ([PIPELINES.md](PIPELINES.md#the-zero-area-cull-timed-in-play)) |
+| `port/ui/tune_notice.h`, `tune_notice.c` | the standing notice "Finding the best settings" (`UI_STR_TUNE_TITLE`, its line `UI_STR_TUNE_BODY`, the Triangle button and `UI_STR_TUNE_HIDE`) while the renderer's in-play timing goes on: `ui_host_vsync` passes the renderer's answer (`rd_ab_notice`), a copy of the game pad's word and whether the game owns the pad (no menu, no photo mode) once a vsync (`ui_tune_notice_step`); its own panel ([Popups](#popups)), up from the run's first trial until the timing is done or a Triangle press in play hides it for the run; the lines `ui: notice "Finding the best settings" shown`, `hidden by the player` and `leaves: the timing is done (...)` ([PIPELINES.md](PIPELINES.md#the-zero-area-cull-timed-in-play)) |
 | `port/ui/touch_ui.h`, `touch_ui.c` | the touch overlay's drawing |
 | `port/ui/ui_fps.h`, `ui_fps.c` | the Frame rate counter: its text on the top layer and the calls that feed its number (`port/platform/fps_counter.h`) |
 | `port/ui/ui_mouse.h`, `ui_mouse.c`, `ui_mouse_geom.h`, `ui_mouse_geom.c` | the mouse pointer in menus: the glue and the arithmetic |
@@ -1189,8 +1189,22 @@ Extras > Add to Steam, Add to the applications menu, Export textures and the bac
 presentation overlay (`rd_set_present_overlay`) at every [present](ARCHITECTURE.md#terms), after the
 box blit and at the output's resolution: outside the game's frame, so a frame the GS keeps never
 shows one twice, and never mirrored (`port/ui/popup.h`, header comment; `port/ui/ui_host.c`
-(`hostOverlay`)). The panel's text uses the menus' look with the full rim and room for it
-(`port/ui/popup.c` (`PAD_Y`)). A Japanese body wider than the panel takes line breaks
+(`hostOverlay`)). The panel's text uses the menus' look with the full rim and room for it. The
+sizes are `port/ui/popup.h`'s `UI_POPUP_*` in one place: the title at 22 and the body at 18 grid
+units, 10 units of padding left and right, 13 above and below (the text's dark halo needs it:
+11 let it spill), 2 between the title and the body, a panel at least 160 units wide and 18 in from
+the picture's right edge; a body line holds `UI_POPUP_BODY_WIDTH` (584 units), and the Graphics
+driver page wraps its long answers to it (`port/ui/settings.c` (`gpuFolderPopup`)).
+
+The standing notice (`ui_popup_notice_show`, `ui_popup_notice_hide`; `port/ui/tune_notice.c`
+drives it) is a second panel of the same look and sizes, never an entry of the queue: it slides
+in as a popup does, stays until hidden, then slides out, so the queue's popups neither wait for it
+nor hide it; while it is up the queue's panel is placed below it (6 units apart, at the notice's
+full height so it does not move while the notice slides). Its body is one line: the text, then the
+Triangle button as photo mode's panel draws it (`port/ui/photo_ui.c` (`ui__photo_triangle`),
+registered by `ui_host_init` through `ui_popup_set_button_drawer`: the bound key in brackets after
+a key or the mouse was pressed last, else the disc's picture or the button set's art; the word
+`UI_STR_BTN_TRIANGLE` without a drawer), then the hint word. A Japanese body wider than the panel takes line breaks
 ([Strings and languages](#strings-and-languages)); a title is one line. `[dev] popup_test` queues a test popup from Main tick 100 and every
 150 ticks after (`ui_popup_dev_tick`).
 
@@ -1787,15 +1801,13 @@ tick's shell (`statesProc`); `port/ui/settings_states.c` holds the host, the car
   can translate it ([PLATFORM.md](PLATFORM.md#across-versions)); when it cannot, the card is greyed
   with `UI_STR_STATES_REFUSED_BUILD` in the status line, and Load's popup says why in the player's
   words, from `ico_state_last_refusal` (`state.h` `IcoStateBlocker`, the two versions from the
-  commit texts without `-dirty`): `UI_STR_STATES_XB_OLD` for a format 1 state ("This save state was
-  made by version X, before save states could carry over to newer versions. Your memory-card saves
-  still work."), `UI_STR_STATES_XB_CODE` for a changed function a thread sits in ("This save state
-  was made by version X. Version Y changed the part of the game it was saved in, so it cannot be
-  resumed. Your memory-card saves still work."), `UI_STR_STATES_XB_DATA` for the game data layout, a
-  variable, a start-up value, a block or a section size ("... Version Y changed how the game keeps
-  its progress in memory, so it cannot be resumed. ..."), and `UI_STR_STATES_XB_PINNED` for a state
-  nothing translates ("This save state was made by version X, and only that version can resume
-  it. ..."). The Latin languages' texts carry their own line breaks (the popup keeps Latin lines as
+  commit texts without `-dirty`): `UI_STR_STATES_XB_OLD` for a format 1 state ("Made by version X, too old to
+  load. Your memory-card saves still work."), `UI_STR_STATES_XB_CODE` for a changed function a
+  thread sits in ("Made by version X; Y changed where it was saved, so it cannot load. Your
+  memory-card saves still work."), `UI_STR_STATES_XB_DATA` for the game data layout, a variable, a
+  start-up value, a block or a section size ("Made by version X; Y changed how progress is kept,
+  so it cannot load. ..."), and `UI_STR_STATES_XB_PINNED` for a state nothing translates ("Only
+  version X can load it. ..."). The Latin languages' texts carry their own line breaks (the popup keeps Latin lines as
   written); the log line names the function, the variable or the block.
 - **Listing and pictures**: `statesOpen` lists when the page opens, then every `ST_RELIST_TICKS`
   (30) ticks and at the tick after an accepted request (`list` is cheap and cached by the host; the

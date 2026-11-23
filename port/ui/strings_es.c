@@ -570,14 +570,13 @@ const char *const ui_strings_es[UI_STR_COUNT] =
             "El controlador elegido no se inició la última vez. Se usa el controlador del teléfono.",
         [UI_STR_GPU_DRIVER_NOSPACE] = "No hay espacio suficiente para este controlador.",
         [UI_STR_GPU_DRIVER_NO_PICKER] =
-            "No se pudo abrir el selector de archivos. Puedes copiar el archivo zip del controlador en la carpeta drivers del juego: %s",
+            "No se abrió el selector de archivos. Copia el zip del controlador en la carpeta drivers: %s",
         [UI_STR_GPU_DRIVER_NO_PICKER_APP] =
-            "Este dispositivo no tiene ninguna aplicación para elegir un archivo. Copia el archivo zip del controlador en la carpeta drivers del juego: %s",
-        [UI_STR_GPU_DRIVER_UNREADABLE] =
-            "No se pudo leer el archivo elegido. Cópialo primero a este dispositivo y vuelve a elegirlo.",
+            "Ninguna aplicación puede elegir un archivo. Copia el zip del controlador en la carpeta drivers: %s",
+        [UI_STR_GPU_DRIVER_UNREADABLE] = "Ilegible: cópialo antes al dispositivo",
         [UI_STR_GPU_DRIVER_ADD_FILE] = "Añadir desde la carpeta drivers",
         [UI_STR_GPU_DRIVER_CANCELLED] =
-            "No se eligió ningún archivo. Si el selector de archivos no aparece en este dispositivo, copia el archivo zip del controlador en la carpeta drivers del juego y usa Añadir desde la carpeta drivers: %s",
+            "Ningún archivo elegido. Si no aparece el selector, copia el zip del controlador en la carpeta drivers y usa Añadir desde la carpeta drivers: %s",
         [UI_STR_GPU_DRIVER_NOTE_LOST] =
             "Los gráficos dejaron de responder con el controlador Qualcomm de este dispositivo. Un controlador Turnip puede ayudar: añade uno aquí o copia su archivo zip en la carpeta drivers del juego (%s). Se aplica en el próximo inicio.",
         [UI_STR_QUIT_GAME] = "Salir del juego",
@@ -646,8 +645,7 @@ const char *const ui_strings_es[UI_STR_COUNT] =
         [UI_STR_STEAM_NO_USER] = "No se encontró ninguna cuenta de Steam",
         [UI_STR_STEAM_NO_USER_BODY] = "Iniciar sesión en Steam una vez,\ny volver a intentarlo.",
         [UI_STR_STEAM_FAILED] = "No se pudo añadir a Steam",
-        [UI_STR_STEAM_FAILED_BODY] =
-            "No se pudo cambiar la lista de accesos directos.\nEl README explica cómo añadirlo a mano.",
+        [UI_STR_STEAM_FAILED_BODY] = "El README explica cómo añadirlo a mano.",
         [UI_STR_EXTRAS_DESKTOP] = "Añadir al menú de aplicaciones",
         [UI_STR_DESKTOP_ADDED] = "Añadido al menú",
         [UI_STR_DESKTOP_ADDED_BODY] = "El juego está en el\nmenú de aplicaciones.",
@@ -675,7 +673,7 @@ const char *const ui_strings_es[UI_STR_COUNT] =
         [UI_STR_RESTORE_AGAIN] = "Pulsa otra vez para elegir",
         [UI_STR_RESTORE_CONFIRM_TITLE] = "¿Restaurar una copia?",
         [UI_STR_RESTORE_CONFIRM_BODY] =
-            "La memory card, los estados guardados, los ajustes y los logros de aquí se sustituirán por los de la copia, y el juego se reiniciará.\nPulsa otra vez para elegir la copia.",
+            "Sustituye la memory card, los estados guardados,\nlos ajustes y los logros de aquí, y reinicia.\nPulsa otra vez para elegir la copia.",
         [UI_STR_RESTORE_CHOOSING] = "Elige la copia que quieres restaurar.",
         [UI_STR_RESTORE_READING] = "Leyendo la copia…",
         [UI_STR_RESTORE_PROGRESS] = "Restaurando: %d de %d archivos",
@@ -691,22 +689,21 @@ const char *const ui_strings_es[UI_STR_COUNT] =
         [UI_STR_BACKUP_DONE_BODY] = "%d archivos guardados en\n%s",
         [UI_STR_BACKUP_FAILED] = "No se pudo hacer la copia de tus datos",
         [UI_STR_RESTORE_DONE] = "Restaurando tus datos",
-        [UI_STR_RESTORE_DONE_RESTART] = "El juego se reinicia ahora y pone la copia en su sitio.",
+        [UI_STR_RESTORE_DONE_RESTART] = "Reiniciando para poner la copia en su sitio.",
         [UI_STR_RESTORE_DONE_CLOSE] =
-            "El juego se cierra ahora. Ábrelo otra vez: al iniciarse pondrá la copia en su sitio.",
+            "El juego se cierra. Ábrelo otra vez\npara poner la copia en su sitio.",
         [UI_STR_RESTORE_FAILED] = "No se pudo restaurar la copia",
-        [UI_STR_BACKUP_WHY_BUSY] =
-            "Ahora no: el juego está guardando. Inténtalo de nuevo en un momento.",
+        [UI_STR_BACKUP_WHY_BUSY] = "El juego está guardando. Inténtalo en un momento.",
         [UI_STR_BACKUP_WHY_NOTHING] = "Todavía no hay nada que copiar.",
         [UI_STR_BACKUP_WHY_WRITE] =
-            "No se pudieron escribir los datos. Comprueba el espacio libre e inténtalo de nuevo.",
+            "No se pudieron escribir los datos.\nComprueba el espacio libre y reinténtalo.",
         [UI_STR_BACKUP_WHY_READ] = "No se pudo leer el archivo.",
         [UI_STR_BACKUP_WHY_NOT_BACKUP] = "Este archivo no es una copia hecha por este juego.",
         [UI_STR_BACKUP_WHY_NEWER] =
-            "Esta copia se hizo con una versión más nueva. Actualiza el juego para restaurarla.",
+            "Hecha con una versión más nueva.\nActualiza el juego para restaurarla.",
         [UI_STR_BACKUP_WHY_DAMAGED] = "Esta copia está dañada.",
         [UI_STR_BACKUP_WHY_UNSAFE] =
-            "Esta copia contiene archivos fuera de las carpetas del juego, así que no se usa.",
+            "Contiene archivos fuera de las carpetas\ndel juego, así que no se usa.",
         [UI_STR_BACKUP_WHY_TOO_BIG] = "Esta copia es más grande de lo que el juego admite.",
         [UI_STR_BACKUP_WHY_NO_DIALOG] = "No se pudo abrir ningún selector de archivos.",
         [UI_STR_BACKUP_WHY_NO_SPACE] = "No hay suficiente espacio libre en el dispositivo.",
@@ -812,24 +809,22 @@ const char *const ui_strings_es[UI_STR_COUNT] =
         [UI_STR_STATES_REFUSED_DISC] = "Guardado desde otro disco",
         [UI_STR_STATES_REFUSED_SETTINGS] = "Un ajuste de juego es distinto: %s",
         [UI_STR_STATES_REFUSED_BUSY] = "Ahora no: el juego está cargando o guardando",
-        [UI_STR_STATES_REFUSED_CHECK] = "No se pudo restaurar el estado; el juego continúa",
+        [UI_STR_STATES_REFUSED_CHECK] = "No se pudo cargar; el juego continúa",
         [UI_STR_STATES_OFF] = "Los estados guardados están desactivados en esta versión",
         [UI_STR_STATES_TITLE_HINT] = "Se guarda desde el menú de pausa",
         [UI_STR_STATES_SAVE_FAILED] = "No se pudo guardar el estado",
         [UI_STR_STATES_XB_OLD] =
-            "Este estado guardado se creó con la versión %s,\nantes de que los estados guardados pudieran\npasar a versiones nuevas.\nTus partidas de la memory card siguen funcionando.",
+            "Creado con la versión %s, demasiado antigua.\nTus partidas de la memory card\nsiguen funcionando.",
         [UI_STR_STATES_XB_CODE] =
-            "Este estado guardado se creó con la versión %s.\nLa versión %s cambió la parte del juego\nen la que se guardó, así que no se puede reanudar.\nTus partidas de la memory card siguen funcionando.",
-        [UI_STR_STATES_XB_DATA] = "Este estado guardado se creó con la versión %s.\nLa versión %s cambió cómo el juego guarda\nsu progreso en memoria, así que no se puede\nreanudar.\nTus partidas de la memory card siguen funcionando.",
+            "Creado con la versión %s; la versión %s cambió\nese punto del juego, así que no se puede cargar.\nTus partidas de la memory card\nsiguen funcionando.",
+        [UI_STR_STATES_XB_DATA] =
+            "Creado con la versión %s; la versión %s guarda\nel progreso de otra forma, así que no se puede\ncargar. Tus partidas de la memory card\nsiguen funcionando.",
         [UI_STR_STATES_XB_PINNED] =
-            "Este estado guardado se creó con la versión %s\ny solo esa versión puede reanudarlo.\nTus partidas de la memory card siguen funcionando.",
+            "Solo la versión %s puede cargarlo.\nTus partidas de la memory card\nsiguen funcionando.",
         [UI_STR_STATES_CKPT_ROW] = "Se carga desde su último punto de control",
-        [UI_STR_STATES_CKPT_LOADED] =
-            "Se continuó desde el último punto de control de este estado,\n"
-            "creado con la versión %s.",
-        [UI_STR_STATES_CKPT_NONE] = "Este estado guardado se creó con la versión %s.\n"
-                                    "No se puede reanudar donde se guardó\n"
-                                    "y no contiene ningún punto de control desde el que continuar.",
+        [UI_STR_STATES_CKPT_LOADED] = "Se continuó desde su último punto\nde control (versión %s).",
+        [UI_STR_STATES_CKPT_NONE] =
+            "Creado con la versión %s: no se puede\nreanudar y no tiene punto de control.",
         [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "Resplandor entre fotogramas",
         [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
             "Original conserva el resplandor del fotograma del juego entre fotogramas. Suave lo rehace en cada fotograma mostrado; cuesta más tiempo gráfico.",
@@ -879,8 +874,7 @@ const char *const ui_strings_es[UI_STR_COUNT] =
         [UI_STR_OPT_VAR_PEACEFUL_NOTE] =
             "Sí: las sombras se quedan donde aparecen y nunca van a por Ico ni Yorda.",
         [UI_STR_OPT_VAR_CHAIN_SPEED] = "Velocidad de la cadena",
-        [UI_STR_OPT_VAR_CHAIN_SPEED_NOTE] =
-            "Lo rápido que se balancea una cadena con Ico colgado. 1 es lo más lento, 10 lo más rápido y 4 como en el juego. Los logros siguen activos.",
+        [UI_STR_OPT_VAR_CHAIN_SPEED_NOTE] = "Lo rápido que se balancea una cadena con Ico colgado. 1 es lo más lento, 10 lo más rápido y 4 como en el juego. Los logros siguen activos.",
         [UI_STR_OPT_VAR_CHAIN_DAMPING] = "Freno de la cadena",
         [UI_STR_OPT_VAR_CHAIN_DAMPING_NOTE] =
             "Lo rápido que se apaga el balanceo mientras Ico no columpia la cadena. 1 es lo más lento, 10 lo más rápido y 4 el valor del juego. Los logros siguen activos.",
@@ -933,6 +927,6 @@ const char *const ui_strings_es[UI_STR_COUNT] =
         [UI_STR_DIFF_STATES_SAVE_LOCKED] =
             "Los estados guardados no se pueden crear en un viaje con muerte permanente.",
         [UI_STR_TUNE_TITLE] = "Buscando la mejor configuración",
-        [UI_STR_TUNE_BODY] =
-            "El juego está midiendo dos\nformas de dibujar en este\ndispositivo. En cada zona nueva\npuede haber tirones durante\nunos segundos.",
+        [UI_STR_TUNE_BODY] = "Puede haber algún tirón.",
+        [UI_STR_TUNE_HIDE] = "ocultar",
 };

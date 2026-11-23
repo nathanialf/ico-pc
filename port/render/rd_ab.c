@@ -284,9 +284,6 @@ static void trialStart(RdAb *a, int id)
     t->histAt = a->histAt;
     a->trials++;
     a->subj[id].trials++;
-    if (!a->noticeGiven) {
-        a->noticeDue = true; /* the run's first trial: the player is told once */
-    }
 }
 
 static uint8_t verdictOff(const RdAb *a, int32_t stage)
@@ -363,7 +360,8 @@ RdAbTag rd_ab_begin(RdAb *a, int32_t stage, double nowMs, bool keep)
     if (!t->active && stage >= 0 && a->trials < RD_AB_TRIALS &&
         nowMs - a->stageMs >= RD_AB_START_MS) {
         for (int i = 0; i < a->nSubj; i++) {
-            if (a->subj[i].allowed && (a->usedNow & (1u << i)) && memFind(a, i, stage) < 0) {
+            if (a->subj[i].allowed && !a->subj[i].gone && (a->usedNow & (1u << i)) &&
+                memFind(a, i, stage) < 0) {
                 trialStart(a, i);
                 break;
             }
@@ -457,14 +455,29 @@ void rd_ab_collect(RdAb *a, const RdAbIn *in)
     }
 }
 
-bool rd_ab_take_notice(RdAb *a)
+void rd_ab_gone(RdAb *a, int id, bool gone)
 {
-    if (!a->noticeDue) {
-        return false;
+    if (id >= 0 && id < a->nSubj) {
+        a->subj[id].gone = a->subj[id].gone || gone; /* for the run: it does not come back */
     }
-    a->noticeDue = false;
-    a->noticeGiven = true;
-    return true;
+}
+
+int rd_ab_notice_state(const RdAb *a)
+{
+    if (a->trials == 0u) {
+        return RD_AB_NOTICE_NONE; /* no timing began: nothing to tell */
+    }
+    if (a->stopped) {
+        return RD_AB_NOTICE_DONE_STOP;
+    }
+    if (a->trials >= RD_AB_TRIALS && !a->t.active) {
+        return RD_AB_NOTICE_DONE_CAP;
+    }
+    bool any = false;
+    for (int i = 0; i < a->nSubj; i++) {
+        any = any || !a->subj[i].gone;
+    }
+    return any ? RD_AB_NOTICE_DUE : RD_AB_NOTICE_DONE_GONE;
 }
 
 void rd_ab_forget(RdAb *a, const char *why)

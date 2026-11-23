@@ -657,7 +657,7 @@ attach the report file: its log says how many seconds after the first
 picture it happened, and which driver and version ran
 (`gpu driver: this start runs ...`).
 
-**"The file picker could not be opened."** (on a phone, after **Add a
+**"The file picker did not open."** (on a phone, after **Add a
 driver**) The phone would not open its file picker. Copy the driver's zip
 file into `Android/data/com.defnf.icopc/files/drivers` (the `drivers` folder
 in the game's folder; the message names the path) with the USB cable, then
@@ -667,13 +667,13 @@ If you report it, send `ico-pc.log` from right after you pressed **Add a
 driver**: the line that starts `gpu driver: the file picker` says what the
 phone answered.
 
-**"No app on this device can choose a file."** (on a phone) The phone has no
+**"No app here can choose a file."** (on a phone) The phone has no
 app that can offer a file to pick. Use the same way: copy the zip into the
 `drivers` folder and choose **Add from the drivers folder**. The
 `gpu driver: the file picker` line in `ico-pc.log` says what the phone
 answered.
 
-**"No file was chosen."** (on a phone, after **Add a driver**, or in the box
+**"No file chosen."** (on a phone, after **Add a driver**, or in the box
 at the start) The file picker closed without a file: either you backed out,
 or the phone's picker closes at once. The game names the folder to use
 instead, `Android/data/com.defnf.icopc/files/drivers`: copy the zip into it
@@ -864,8 +864,8 @@ be loaded is greyed and the line under the cards gives the reason:
   slot is not greyed: the game cannot resume this state where it was saved,
   so Load continues from the last checkpoint the state holds (the place a
   game over would have taken you back to), and a message says it continued from there.
-- **This save state was made by version ... It cannot be resumed where it was
-  saved, and it holds no checkpoint to continue from.** The state was saved in a new game before its first
+- **Made by version ...: it cannot be resumed and has no checkpoint.** The state
+  was saved in a new game before its first
   checkpoint, or its checkpoint could not be found. Go back to the version
   that saved it to resume it, or start from your memory card save.
 - **Saved from another disc.** Each disc has its own four slots. Start the
@@ -879,7 +879,7 @@ be loaded is greyed and the line under the cards gives the reason:
 - **Save states are off on a Permadeath journey.** None can be saved or
   loaded while the journey has Permadeath on, and a state made on such a
   journey never loads. The message says so.
-- **The state could not be restored; the game goes on.** The file is damaged,
+- **Could not load it; play goes on.** The file is damaged,
   or the game found something wrong in it. Your game carries on as it was.
   Try another slot.
 - **Pause the game to save a state.** Saving only works from the pause menu.
@@ -914,19 +914,18 @@ be read.
 Options > Extras > Back up your data and Restore from a backup say why in a
 message:
 
-- **Not now: the game is saving.** The memory card or a save state was being
+- **The game is saving.** The memory card or a save state was being
   written. Wait a moment and try again.
 - **There is nothing to back up yet.** The game has no memory card save, save
   state or settings file yet.
-- **The data could not be written.** The place you chose is full, read-only or
+- **Could not write the data.** The place you chose is full, read-only or
   gone (a USB stick taken out). Free some space or choose another place. When
   restoring, the device itself is short of space.
 - **This file is not a backup made by this game.** Choose the `.zip` that
   Back up your data saved. A zip you made yourself, or one that was unpacked
   and packed again, is not taken.
-- **This backup was made by a newer version.** Update the game, then restore
-  it.
-- **This backup is damaged** or **holds files outside the game's own
+- **Made by a newer version.** Update the game, then restore it.
+- **This backup is damaged** or **It holds files outside the game's
   folders.** The file changed after it was saved (a download that did not
   finish, or a program that edited it). Use another copy.
 - **The backup could not be put in place** (a box when the game starts after a

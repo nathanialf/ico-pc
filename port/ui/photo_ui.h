@@ -47,6 +47,12 @@ struct RdOverlayCtx;
 /* The HUD on the output (ui_host.c's overlay callback): nothing unless
    photo mode is on with its HUD shown. */
 void ui_photo_draw_overlay(const struct RdOverlayCtx *ctx);
+/* the Triangle on the standing notice's line, drawn as the HUD draws its
+   buttons (popup.h UiPopupButtonFn; ui_host.c registers it); without ICO_RD
+   it does not exist */
+#ifdef ICO_RD
+float ui__photo_triangle(float x, float mid, float size, int draw);
+#endif
 
 #ifdef ICO_RD
 /* The panel's make-up, split from the drawing so a test can read it.  The
