@@ -614,7 +614,12 @@ off, prelit code 34 meshes under the twins' self-test's screen matrix: the twins
 every pipeline it makes is one that start already made on this device (`vu_ps` or
 `vu_ps_nodual`, `vu_texa_ps` or `vu_texa_ps_nodual` under TEXA 7F/81 AEM with a linear filter, the
 twin `vu_ps_nodual_nd` where the twins are on, and the blended layer's LERP As pass, the two-pass
-blend on a device without dual-source blending); no new format, no read-back but the timestamps.
+blend on a device without dual-source blending: in the start-up set, `rd_mesh.c`
+`enumerateVuDraws`, Z GEQUAL with Z write off under LERP As); no new format, no read-back but
+the timestamps. The two layers of a frame are consecutive draws the VU merge draws as one through
+`vu_merge_main_vs`: its keys with `vu_texa_ps_nodual` and the twin are not in the start-up set and
+are made by the card on first use, as play makes them (seen in the Arm fakes' run on lavapipe),
+and released after it with the rest.
 `E` the clear alone; `L2` two full-target layers at one depth; `L2t` the same textured; `L1` one
 layer; `H2` a near layer then a far one, every fragment of which fails depth; `Bl` one blended
 layer (Z not written); `V` 8 draws of 2048 triangles 100 GS pixels wide left of the target (kept by
@@ -623,8 +628,9 @@ pixel square at the centre in 2x2 cells (2048 triangles) or in 2. The twins' fra
 `H2` again under the twins' hold (`rd__nd_hold`), the others with it off, checked by the twins'
 own counts (a twin frame drew through them, the others did not). Each frame once untimed (its
 pipelines gathered and made on the workers), then 5 timed replays; their GPU times from their
-timestamps (`rd__perf_gpu_ms_of`, first stamp to last), read once 2 more replays of `E` brought
-them in. Its pipelines are released after it (`rd__pipeline_forget_since`), its draws not counted
+timestamps (`rd__perf_gpu_ms_of`, first stamp to last), read right after each frame once 2 more
+replays of `E` brought them in (`rd_perf.c` keeps the last 64 records, fewer than a card's whole
+run: a frame whose time did not come in says so). Its pipelines are released after it (`rd__pipeline_forget_since`), its draws not counted
 as the twins', SCENE starts from its clear after it. Sized to SCENE: at the reporter's 688x512 and
 a chip that needs 25 ns a fragment, about 70 replays of at most 2 layers, under 1 s; a budget of
 1.5 s stops it (the items left say why); the head line prints the time it took.

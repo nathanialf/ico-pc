@@ -65,6 +65,18 @@
 
 enum { F_E, F_L2, F_L2T, F_L1, F_H2, F_BL, F_V, F_S, F_B, F_L2_TWIN, F_H2_TWIN, F_COUNT };
 
+static const char *const kFrameWords[F_COUNT] = {"the clear",
+                                                 "two layers",
+                                                 "two textured layers",
+                                                 "one layer",
+                                                 "near then far",
+                                                 "a blended layer",
+                                                 "off-target vertices",
+                                                 "small triangles",
+                                                 "large triangles",
+                                                 "two layers through the twin",
+                                                 "near then far through the twin"};
+
 static RdRateCard s_card;
 
 bool rd_rate_card_get(RdRateCard *out)
@@ -485,6 +497,11 @@ static void measure(RdRateCard *c, RdTargetRec *t, double t0, double budgetMs)
     bool twinOk[F_COUNT];
     memset(twinOk, 0, sizeof(twinOk));
     const char *stop = made ? NULL : "its meshes could not be made";
+    RdRcStat st[F_COUNT];
+    memset(st, 0, sizeof(st));
+    /* the clear's frame, replayed to bring each frame's stamps in */
+    RdFrame e;
+    const bool fe = made && buildFrame(&e, F_E, scene, t->w, t->h, &m);
     for (int k = 0; stop == NULL && k < F_COUNT; k++) {
         const bool twinFrame = k == F_L2_TWIN || k == F_H2_TWIN;
         if (twinFrame && !twins) {
@@ -527,20 +544,15 @@ static void measure(RdRateCard *c, RdTargetRec *t, double t0, double budgetMs)
             }
         }
         rd__frame_free(&f);
-    }
-    rd__nd_hold(false);
-    /* the last frame's stamps come in RHI_FRAMES_IN_FLIGHT replays later */
-    {
-        RdFrame f;
-        if (buildFrame(&f, F_E, scene, t->w, t->h, &m)) {
-            for (int k = 0; k < RHI_FRAMES_IN_FLIGHT && !rhi_device_lost(); k++) {
-                (void)rd__replay_frame(&f, 0, false);
+        /* this frame's stamps come in RHI_FRAMES_IN_FLIGHT replays later:
+           read them now, while their records are still queued (rd_perf.c
+           keeps the last RD_PERF_QUEUE, 64: a card's whole run is more) */
+        rd__nd_hold(false);
+        for (int r = 0; stop == NULL && fe && r < RHI_FRAMES_IN_FLIGHT; r++) {
+            if (!rd__replay_frame(&e, 0, false) || rhi_device_lost()) {
+                stop = "the device failed in its replays";
             }
         }
-        rd__frame_free(&f);
-    }
-    RdRcStat st[F_COUNT];
-    for (int k = 0; k < F_COUNT; k++) {
         uint32_t n = 0;
         for (uint32_t s = 0; s < got[k]; s++) {
             double v;
@@ -549,7 +561,13 @@ static void measure(RdRateCard *c, RdTargetRec *t, double t0, double budgetMs)
             }
         }
         st[k] = rd_rc_stat(ms[k], n);
+        if (n < got[k] && stop == NULL) {
+            rd__log("rate card: %u of %u replays of %s gave no GPU time", (unsigned)(got[k] - n),
+                    (unsigned)got[k], kFrameWords[k]);
+        }
     }
+    rd__frame_free(&e);
+    rd__nd_hold(false);
     rd__nd_hold_end();
     g_rd.msaaBlocked = wasBlocked;
     const uint32_t released = rd__pipeline_forget_since(pipeMark);
