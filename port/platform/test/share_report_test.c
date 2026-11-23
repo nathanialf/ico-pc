@@ -96,7 +96,8 @@ int main(int argc, char **argv)
                                        "bench-notes.txt",
                                        "vu-zero-mark.txt",
                                        "ahead-mark.txt",
-                                       "nodiscard-mark.txt"};
+                                       "nodiscard-mark.txt",
+                                       "fastps-mark.txt"};
     for (unsigned i = 0; i < sizeof(kOld) / sizeof(kOld[0]); i++) {
         char p[1200];
         snprintf(p, sizeof(p), "%s/%s", s_logs, kOld[i]);
@@ -194,8 +195,8 @@ int main(int argc, char **argv)
                                            "slow-20261106-120000.zip"};
         ico_share_report_collect(s_logs, s_dumps, &r);
         expect(&r, want, 7, "with the slow-scene zip");
-        /* every kind but the bench's tables and the three marks, one zip */
-        CHECK(r.count == ICO_SHARE_REPORT_MAX - ICO_SHARE_REPORT_RUN_ZIPS - 3,
+        /* every kind but the bench's tables and the four marks, one zip */
+        CHECK(r.count == ICO_SHARE_REPORT_MAX - ICO_SHARE_REPORT_RUN_ZIPS - 4,
               "every kind but four fits (%d of %d)", r.count, ICO_SHARE_REPORT_MAX);
     }
 
@@ -249,7 +250,7 @@ int main(int argc, char **argv)
                                            "slow-20261106-120000.zip"};
         ico_share_report_collect_run(s_logs, s_dumps, 2500, &r);
         expect(&r, want, 10, "the run's newest four zips");
-        CHECK(r.count == ICO_SHARE_REPORT_MAX - 4,
+        CHECK(r.count == ICO_SHARE_REPORT_MAX - 5,
               "every kind but the bench's and the marks and four zips fit (%d of %d)", r.count,
               ICO_SHARE_REPORT_MAX);
     }
@@ -311,7 +312,7 @@ int main(int argc, char **argv)
                                            "bench-20261113-120000.csv"};
         ico_share_report_collect_run(s_logs, s_dumps, 2500, &r);
         expect(&r, want, 11, "the run's newest four zips and the bench's tables");
-        CHECK(r.count == ICO_SHARE_REPORT_MAX - 3,
+        CHECK(r.count == ICO_SHARE_REPORT_MAX - 4,
               "every kind but the marks and four zips fit (%d of %d)", r.count,
               ICO_SHARE_REPORT_MAX);
     }
@@ -335,6 +336,7 @@ int main(int argc, char **argv)
     }
     put(s_logs, "vu-zero-mark.txt", 7800);
     put(s_logs, "nodiscard-mark.txt", 7800);
+    put(s_logs, "fastps-mark.txt", 7800);
     {
         static const char *const want[] = {"ico-pc.log",
                                            "ico-pc-previous.log",
@@ -349,9 +351,10 @@ int main(int argc, char **argv)
                                            "bench-20261113-120000.csv",
                                            "vu-zero-mark.txt",
                                            "ahead-mark.txt",
-                                           "nodiscard-mark.txt"};
+                                           "nodiscard-mark.txt",
+                                           "fastps-mark.txt"};
         ico_share_report_collect_run(s_logs, s_dumps, 2500, &r);
-        expect(&r, want, 14, "every kind, four zips and the three marks");
+        expect(&r, want, 15, "every kind, four zips and the four marks");
         CHECK(r.count == ICO_SHARE_REPORT_MAX, "every kind and four zips fit (%d of %d)", r.count,
               ICO_SHARE_REPORT_MAX);
     }

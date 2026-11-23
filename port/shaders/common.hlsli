@@ -307,6 +307,30 @@ cbuffer DrawCB : ICO_REG(b1, 1)
     uint4 g_aux1;
 };
 
+#ifdef ICO_VU_FAST
+// The fast-set build of vu_ps (vu_ps_nodual_fast; port/render/rd_fastps.h):
+// the DrawCB words the boat's VU passes hold (textured, MODULATE with TCC,
+// an RGBA32 texel, no GS levels, no nearest, no DATE, no clip plane, no
+// alpha test, no Full pixel crop) read as constants, every other bit and
+// word as the DrawCB has it.  The CPU binds it only for a pass whose DrawCB
+// holds exactly those values (rd_fps_eligible): there every word below is
+// the DrawCB's own, so the build computes what vu_ps_nodual computes, the
+// branches it never takes folded away.  The side band's discard stays (its
+// flag is an interpolated input, not a DrawCB word).  mode.y, z and w are
+// read as 0: with the texel RGBA32 (mode.y >> 8 == 0) TEXA's mode (mode.y's
+// low byte) is never read (vu_texa_expand_f), and with the alpha test's
+// enable bit clear (mode.z bit 8) gs_alpha_discard returns false whatever
+// the rest of mode.z and AREF (mode.w) hold, their only reader in vu_ps.
+uint4 vu_fast_mode() { return g_mode; }
+float4 vu_fast_scale() { return g_scale; }
+// TEXTURED DECAL TCC DATE DATM PLANE GS_LOD NEAREST GS_BILINEAR_GRID DATE_DST
+#define VU_FAST_FIXED_MASK                                                                         \
+    (1u | 2u | 4u | 128u | 256u | 8388608u | 262144u | 16777216u | 67108864u | 1073741824u)
+#define VU_FAST_FIXED (1u | 4u) // DF_TEXTURED | DF_TCC_RGBA
+#define g_mode uint4((vu_fast_mode().x & ~VU_FAST_FIXED_MASK) | VU_FAST_FIXED, 0u, 0u, 0u)
+#define g_scale float4(vu_fast_scale().x, vu_fast_scale().y, 0.0, vu_fast_scale().w)
+#endif
+
 #define DF_TEXTURED 1u    // PRIM.TME
 #define DF_DECAL 2u       // TFX DECAL (else MODULATE)
 #define DF_TCC_RGBA 4u    // TCC: texture alpha used (else vertex alpha)

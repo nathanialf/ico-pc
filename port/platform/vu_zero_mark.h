@@ -128,6 +128,15 @@ void vu_zero_mark_decide_beside(const char *mark, int endKind, const char *endWo
    before it was rewritten (VU_ZERO_STAGE_NONE before any): the twins'
    step judges by it (nodiscard_mark.c) */
 int vu_zero_mark_stage_read(void);
+/* the stage of the mark file name beside activityPath as it is now
+   (VU_ZERO_STAGE_NONE without one): a later step's mark read before that
+   step rewrites it (the fast pixel build's, fastps_mark.h) */
+int vu_zero_mark_stage_beside(const char *activityPath, const char *name);
+/* who the words of a step's "... was being tried then" name, set by the
+   step that called vu_zero_mark_decide_beside / nodiscard_mark_decide_beside
+   (NULL: that function's own words) */
+void vu_zero_mark_beside_words(const char *who);
+const char *vu_zero_mark_beside_who(const char *fallback);
 
 /* The start's step on files with Android's record given (the tests): reads
    the mark beside activityPath and the previous run's

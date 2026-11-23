@@ -53,6 +53,7 @@
 #include "symmap.h"
 #include "vu_zero_mark.h"   /* the zero-area cull's mark (issue 179) */
 #include "nodiscard_mark.h" /* the discard-free twins' */
+#include "fastps_mark.h"    /* the fast pixel build's */
 #include "ratecard_env.h"
 
 #ifdef _WIN32
@@ -2960,6 +2961,7 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
        the cull off, never the pre-pass (the loss count below is the rung's) */
     (void)vu_zero_mark_begin(act_path, act_version, last_run_log);
     (void)nodiscard_mark_begin(act_path, act_version, last_run_log); /* the twins' */
+    (void)fastps_mark_begin(act_path, act_version, last_run_log);    /* the fast build's */
     ratecard_env_begin(act_path, act_version); /* the rate card's file (ratecard_env.h) */
     act_sibling(act_ends_path, sizeof act_ends_path, "-ends.txt");
     act_sibling(act_bg_path, sizeof act_bg_path, "-background.txt");

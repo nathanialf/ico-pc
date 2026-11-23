@@ -353,6 +353,7 @@ int main(int argc, char **argv)
     CHECK(kept == (wantOn || notRun), "the self-test returned %s", kept ? "true" : "false");
     zeroMarkLine("after the self-test");
     markLine("ICO_NODISCARD_MARK", "discard-free twins'", "after the self-test");
+    markLine("ICO_FASTPS_MARK", "fast pixel build's", "after the self-test");
     /* the rate card after the self-tests, as the window runs it after the
        start-up's (rd_ratecard.h: under ICO_RD_RATECARD=1 or a results
        file, the tests' rd_ratecard_*) */

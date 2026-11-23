@@ -649,7 +649,7 @@ a chip that needs 25 ns a fragment, about 70 replays of at most 2 layers, under 
 | a pass with nothing drawn | `E`: a replay's whole span with one cleared SCENE pass | the passes a picture makes (the 10 s line's pass count) |
 | a MB loaded or stored | not measured: at one target size the load and store are not separable from the pass's own cost | |
 | a blended fragment, and over an opaque one | (`Bl` - `E`) / texels | the blended fragments (the two-pass blend's second pass included) |
-| a shaded fragment, the fast pixel build | not measured: no such build in this release (its place once it exists: its frame beside `L2`, its item `RD_RC_SHADE_FAST`) | |
+| a shaded fragment on the fast pixel build's form, through the ordinary build, the fast build and its discard-free form | (`L2r` - `E`) / (2 texels): `L2r` two full-target layers textured with an RGBA32 texture under MODULATE with TCC and a linear filter (the form the fast build takes, [PIPELINES.md](PIPELINES.md#the-fast-pixel-build)), with the fast build's hold off, on (`vu_ps_nodual_fast`), and on with the twins' hold too (`vu_ps_nodual_fast_nd`); the last two only where the build (and the twins) are on, each checked by the build's own counts | the fragments of that form a list shades (the boat: 98-100 % of the VU ones); the difference between the first two is what the build buys a fragment on this chip |
 
 A chip that kills overdrawn fragments itself (Arm's forward pixel kill) shows less for the layers
 drawn over: the card measures what the chip does, not a fragment's shader cost alone.

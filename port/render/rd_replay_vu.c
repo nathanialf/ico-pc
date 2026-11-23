@@ -26,6 +26,7 @@
 #include "rd_vu_share.h"
 #include "rd_ab_run.h"
 #include "rd_vu_zero.h"
+#include "rd_fastps.h"
 #include "rd_nodiscard.h"
 #include "rd_vis.h" /* rd__vis_mesh_gs_proof: the twins' proof in front of the eye */
 #include "shader_consts.h"
@@ -1465,6 +1466,10 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
         IcoDrawCB cb[2];
         for (uint32_t i = 0; i < mp; i++) {
             rd__replay_fill_draw_cb(r, &dp[i], ds, &cb[i]);
+            /* the fast pixel build (rd_fastps.h): a pass whose DrawCB is in
+               its set takes its pipeline once made (never waited for); not
+               the skin check's draws (none are held in the run) */
+            rd__fps_pass(&keys[i], &pipes[i], &cb[i], count / 3u);
             rd__replay_dst_pass_mode(r, &keys[i]); /* a storage pass ends first (its run drawn) */
         }
         if (vuRunTake(r, mp, keys, pipes, g1, g2, cb, vcb, bonesOff, ix, first, count)) {
@@ -1529,13 +1534,18 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
     }
     uint64_t dOff0 = ~0ull; /* the first pass's DrawCB (the skin check's) */
     for (int i = 0; i < np; i++) {
-        const RdPipeKeyInt key = keys[i];
-        const RhiPipeline p = pipes[i];
+        RdPipeKeyInt key = keys[i];
+        RhiPipeline p = pipes[i];
         if (!p.id) {
             continue;
         }
         IcoDrawCB cb;
         rd__replay_fill_draw_cb(r, &dp[i], ds, &cb);
+        /* the fast pixel build (rd_fastps.h), as in the run above; not the
+           skin check's draws (their twins and box check read keys[0]) */
+        if (!g_rdSkinArm && !g_rdSkinTwin) {
+            rd__fps_pass(&key, &p, &cb, count / 3u);
+        }
         /* PC port: through the 2D draws' content cache, so equal DrawCBs
          * (across draws and passes) share one ring copy and one b1 offset */
         const uint64_t dOff = rd__draw_cb_offset(&cb);
@@ -2236,8 +2246,9 @@ void rd__vu_prepass(const RdFrame *f, int keep)
     s_preN = s_preAt = 0;
     s_preReplay = 0;
     s_preEntryDraws = 0;
-    vuVelBegin();          /* the velocity pass's replay (rd_velocity.h) */
-    rd__nd_replay_begin(); /* the discard-free twins' picture count (rd_nodiscard.h) */
+    vuVelBegin();           /* the velocity pass's replay (rd_velocity.h) */
+    rd__nd_replay_begin();  /* the discard-free twins' picture count (rd_nodiscard.h) */
+    rd__fps_replay_begin(); /* the fast pixel build's (rd_fastps.h) */
     if (!g_rd.vuPrepass) {
         return;
     }
@@ -3791,6 +3802,7 @@ void rd__vu_prepass_shutdown(void)
     rd__vu_record_shutdown();  /* the store builds and their layout */
     rd__vu_zero_shutdown();    /* the zero-area cull's read back buffers (rd_vu_zero.h) */
     rd__nd_shutdown();         /* the discard-free twins' modules (rd_nodiscard.h) */
+    rd__fps_shutdown();        /* the fast pixel build's modules (rd_fastps.h) */
     for (int v = 0; v < RD_VS_COUNT; v++) {
         if (g_rd.vsBatch[v].id) {
             rhi_destroy_shader(g_rd.vsBatch[v]);
@@ -4088,6 +4100,7 @@ void rd__vu_prepass_init(const RhiLimits *lim)
     rd__vu_record_init(lim); /* render targets or vertex stores (rd_vu_record.h) */
     rd__vu_zero_init();      /* the zero-area cull's state (rd_vu_zero.h) */
     rd__nd_init();           /* the discard-free twins' (rd_nodiscard.h) */
+    rd__fps_init();          /* the fast pixel build's (rd_fastps.h) */
     rd__ab_renderer();       /* the in-play judge: a renderer made again forgets (rd_ab_run.h) */
     const char *env = getenv("ICO_RD_VU_PREPASS");
     const uint32_t bytes = lim ? lim->colorBytesPerPixel : 0u;

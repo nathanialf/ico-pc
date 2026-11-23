@@ -66,5 +66,9 @@ int nodiscard_mark_step(const char *activityPath, const char *version, int exitR
    before it, window_host.c) */
 int nodiscard_mark_begin(const char *activityPath, const char *version,
                          void (*log)(const char *line));
+/* the twins' mark's stage as the last nodiscard_mark_step read it, before
+   it was rewritten (VU_ZERO_STAGE_NONE before any): the fast pixel build's
+   step judges by it (fastps_mark.c) */
+int nodiscard_mark_stage_read(void);
 
 #endif

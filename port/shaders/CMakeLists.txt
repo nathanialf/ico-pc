@@ -152,6 +152,18 @@ ico_add_shader(vu_ps vu_prelit.hlsl vu_ps fragment DEFINES ICO_NO_DUAL=1 ICO_VU_
                SUFFIX _nodual_nd)
 ico_add_shader(vu_texa_ps vu_prelit.hlsl vu_texa_ps fragment DEFINES ICO_NO_DUAL=1
                ICO_VU_NODISCARD=1 SUFFIX _nodual_nd)
+# vu_ps_nodual's fast-set build (ICO_VU_FAST: textured, MODULATE with TCC,
+# RGBA32, no GS levels, nearest, DATE, clip plane or alpha test held as
+# constants, common.hlsli), for the passes whose DrawCB holds exactly those
+# (port/render/rd_fastps.h: made only once the build is tried, on a device
+# without dual-source blending); the side band's discard kept
+ico_add_shader(vu_ps vu_prelit.hlsl vu_ps fragment DEFINES ICO_NO_DUAL=1 ICO_VU_FAST=1
+               SUFFIX _nodual_fast)
+# and its discard-free form (ICO_VU_NODISCARD too), for a pass that took the
+# discard-free twin under that twin's own rule (port/render/rd_nodiscard.h)
+# and whose DrawCB is in the fast set
+ico_add_shader(vu_ps vu_prelit.hlsl vu_ps fragment DEFINES ICO_NO_DUAL=1 ICO_VU_FAST=1
+               ICO_VU_NODISCARD=1 SUFFIX _nodual_fast_nd)
 
 # the same entries computing the GS blend from the destination (the exact
 # blend, port/render/rd_dst_read.c): _dstrov reads and writes the target

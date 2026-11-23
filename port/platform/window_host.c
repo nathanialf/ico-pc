@@ -5075,7 +5075,7 @@ static void perf_log(void)
             (double)(cardTris - s_pres.cardTris) / steps, (cardMs - s_pres.cardMs) / steps);
     {
         /* the VU work of a replay: where the vertex shader's time goes */
-        char vu[256], fit[192], twins[96], sh[256], zc[RD_VU_ZERO_TEXT_MAX + 512];
+        char vu[256], fit[192], twins[96], sh[256], zc[RD_VU_ZERO_TEXT_MAX + 768];
 
         (void)window_scene_vu_text(vu, sizeof(vu), s_perf.vuDraws, s_perf.vuTris, s_perf.vuPreVerts,
                                    b->n, rd_vu_prepass_on(), s_perf.vuLeftOut);
@@ -5084,6 +5084,7 @@ static void perf_log(void)
         (void)rd_vu_share_text(sh, sizeof(sh), b->n); /* the shared vertices (issue 179) */
         (void)rd_vu_zero_text(zc, sizeof(zc), b->n);  /* the zero-area cull (rd.h) */
         (void)rd_nd_text(zc + strlen(zc), sizeof(zc) - strlen(zc), b->n); /* the twins' */
+        (void)rd_fps_text(zc + strlen(zc), sizeof(zc) - strlen(zc), b->n);
         /* and the GPU's work against the vertex invocations: what the vertex
            work costs this GPU (the VU pre-pass question, docs/port/
            ANDROID_DIAGNOSTICS.md) */

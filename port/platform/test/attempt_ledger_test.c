@@ -474,6 +474,11 @@ static void test_classes(void)
         CHECK(ico_attempt_state_of(ICO_ATT_AB_NODISCARD) == ICO_ATT_NA);
         ico_attempt_decide_timed(ICO_ATT_AB_NODISCARD, 0, 1, 0);
         CHECK(ico_attempt_state_of(ICO_ATT_AB_NODISCARD) == ICO_ATT_ON);
+        /* the fast pixel build timed in play (rd_ab_run.c), as the twins */
+        ico_attempt_decide_timed(ICO_ATT_AB_FASTPS, 0, 0, 0);
+        CHECK(ico_attempt_state_of(ICO_ATT_AB_FASTPS) == ICO_ATT_NA);
+        ico_attempt_decide_timed(ICO_ATT_AB_FASTPS, 0, 1, 0);
+        CHECK(ico_attempt_state_of(ICO_ATT_AB_FASTPS) == ICO_ATT_ON);
         /* the whole start line, its last row included, in the window's 4 KB
            parts (window_perf_rank.c ledger_lines, ico_attempt_start_part):
            one part, or two since the v0.11.7 rows, each whole rows */

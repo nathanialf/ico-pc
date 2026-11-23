@@ -910,6 +910,19 @@ counted, when it ended (...): no sign of a bad end: tried again`, `... were refu
 start-up self-test (a module or one of its pipelines not made, or its pictures differed): ...`,
 `... kept off by their mark: ...`.
 
+The fast pixel build's mark (`port/platform/fastps_mark.c`;
+[PIPELINES.md](PIPELINES.md#the-fast-pixel-build)) is read after the twins', by the same rules and
+table: `logs/fastps-mark.txt` holds `trying <v>` (before its two modules are made), `counting <v>`
+(its self-test passed), `on <v>` (250 pictures drawn with it), `failed <v>` or `blocked <v>`; the
+renderer gets `ICO_FASTPS_BLOCK`, `ICO_FASTPS_MARK` and `ICO_FASTPS_VERSION`. One line where there
+was a mark: `ico_pc: the previous run: fast pixel build: was on when it ended (a crash): off on
+this install until the version changes (blocked <version>)`, `... was being tried when it ended
+(...)`, `... was on, its first pictures being counted, when it ended (...): no sign of a bad end:
+tried again`. The cull's and the twins' steps read its mark too before it is rewritten: a bad end
+while it said `trying` is its own (`...: the fast pixel build was being tried then (its mark):
+tried again` on their lines), and its step takes the cull's and the twins' stages as their steps
+read them.
+
 Each mark blocks only its own subject (`vu_zero_mark_blocks_beside`): the cull's step reads both
 marks before either is rewritten, so a bad end while the other attempt's mark said `trying` is that
 attempt's, and a subject at `counting` or `on` is tried again with `...: the discard-free twins were
