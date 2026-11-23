@@ -27,6 +27,7 @@
 #include "rd_ab_run.h"
 #include "rd_vu_zero.h"
 #include "rd_nodiscard.h"
+#include "rd_vis.h" /* rd__vis_mesh_gs_proof: the twins' proof in front of the eye */
 #include "shader_consts.h"
 #include "vu1_ref.h" /* vu1ref_region_mirror: ICO_VU_MIRROR */
 
@@ -87,6 +88,10 @@ static void vuVelBegin(void);
 /* the zero-area cull (rd_vu_zero.h) of the command doVuDraw draws: armed
    when it is drawn through the record, with its pre-pass entry's lattice
    word (0: none) and the reason it has none */
+/* the discard-free twins' proof that the command being drawn lies wholly in
+   front of the eye (EYEBOX: rd__vis_mesh_gs_proof, set per command in
+   doVuDraw before its vuDraw calls) */
+static bool s_ndFront;
 static bool s_zeroArmed;
 static uint32_t s_zeroWord;
 static int s_zeroWhy;
@@ -1379,7 +1384,8 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
            never waited for); not the skin check's draws */
         if (!g_rdSkinArm && !g_rdSkinTwin) {
             rd__nd_pass(&keys[i], &pipes[i], &dp[i], vcb->draw[2], vcb->batch[2] != 0u,
-                        prog == RD_PROG_PARTICLE, r->dateStNow != 0, prog == RD_PROG_PRELIT);
+                        prog == RD_PROG_PARTICLE, r->dateStNow != 0, prog == RD_PROG_PRELIT,
+                        s_ndFront);
         }
     }
     /* the index compaction's list (rd_vu_compact.h): every pass through
@@ -4266,6 +4272,18 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     /* its velocity draws (vuVelNote), or a velocity left at 0 counted */
     s_velArm = pre && pre->rec && pre->vel ? pre : NULL;
+    /* the discard-free twins' proof for vuDraw (rd_nodiscard.h, EYEBOX): a
+       prelit mesh draw of a clip mode other than none whose every vertex
+       keeps its GS position (rd_vis.c rd__vis_mesh_gs_proof: the culler's
+       box of the whole stream under the draw's own matrix); asked only
+       where a twin could take it */
+    {
+        const uint32_t clip = vcb.draw[2] & ICO_VU_CLIP_MASK;
+        s_ndFront = c->type == RDC_MESH && p.prog == RD_PROG_PRELIT && clip != ICO_VU_CLIP_NONE &&
+                    rd__nd_on() &&
+                    rd__vis_mesh_gs_proof(c->u[0], m, (const float (*)[4])vcb.mem,
+                                          clip == ICO_VU_CLIP_SCISSOR);
+    }
     /* the zero-area cull's word for vuDraw (rd_vu_zero.h) */
     s_zeroArmed = pre && pre->rec && !pre->particle;
     s_zeroWord = s_zeroArmed ? pre->zeroWord : 0u;

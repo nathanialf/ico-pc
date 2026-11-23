@@ -1778,7 +1778,12 @@ check (below) measured clean, the camera rule's passes of the forms the check dr
 32 and 36) take one too: at most 63 % and 73 % there (step 0 on the two captures; the skinned code
 24 passes, 24 % and 17 %, the lit code 32 ones, 3 %, and the lit grids are not drawn by the check
 and keep the floor). The captures do not show which draws are mirrored or seen between two ticks,
-which are refused too, so both are upper bounds. `port/render/rd_nodiscard.h` says it all.
+which are refused too, so both are upper bounds. On any device, without the clipper check, a pass
+of those forms whose draw the CPU proves wholly in front of the eye takes one too (below,
+"Proven in front of the eye"): in the two captures 8 and 10 such draws, 22 % and 14 % of the
+class's triangles, 3.5 % and 6.1 % of lists 0-2's shaded fragments as the depth test's
+rejected ones (OVERDRAW's measurement; the floor's 1.1 % and 1.8 % besides).
+`port/render/rd_nodiscard.h` says it all.
 
 - **The twins** `vu_ps_nodual_nd` and `vu_texa_ps_nodual_nd` are the same entries built with
   `ICO_VU_NODISCARD=1`: no discard, every other statement the same
@@ -1793,15 +1798,32 @@ which are refused too, so both are upper bounds. `port/render/rd_nodiscard.h` sa
   mode none, or particles; under `[dev] region_rule = ps2` on a frame wider than 4:3 almost nothing
   is eligible); the alpha test off in the pass (DrawCB mode.z bit 8 clear: the test off in the
   state, ATST ALWAYS, the AFAIL merge's one draw, or the alpha plan's proof); not particles; and
-  clip mode none (code 34) on every device, or, once the device's clipper check measured clean,
-  a form the check draws and compares (`rd_nd_checked_form`, a positive list: the prelit program
-  at code 32 or 36, under the camera rule with a facing table (`ICO_VU_CAMERA`), one-sided, not
-  mirrored, not photo mode's free camera, not seen through the ticks' cameras; counted apart as
-  "by the clipper check"); else `clipped`, or `form` for every other form on a clean device (lit,
-  skinned, grids, drops kept, two-sided, mirrored, free camera, ticks). At draw time three more
-  reasons are counted: `not made yet` (the twin's pipeline),
+  clip mode none (code 34) on every device; or a form the check draws and compares
+  (`rd_nd_checked_form`, a positive list: the prelit program at code 32 or 36, under the camera
+  rule with a facing table (`ICO_VU_CAMERA`), one-sided, not mirrored, not photo mode's free
+  camera, not seen through the ticks' cameras) whose draw the CPU proved wholly in front of the
+  eye (on every device, counted apart as "proven in front of the eye") or, without that proof,
+  once the device's clipper check measured clean (counted apart as "by the clipper check");
+  else `box` for that form (no proof, no clean verdict), `clipped` for every other form, or
+  `form` for every other form on a clean device (lit, skinned, grids, drops kept, two-sided,
+  mirrored, free camera, ticks). At draw time three more reasons are counted: `not made yet` (the twin's pipeline),
   `timed without them` (the judge's off arm) and `entry not tested` (the entry's own self-test case
   drew nothing through it).
+- **Proven in front of the eye** (`rd_vis.c` `rd__vis_gs_proof`, `rd__vis_mesh_gs_proof`; asked
+  in `rd_replay_vu.c` per prelit mesh draw of a clip mode other than none while the twins are on).
+  The culler's box of the mesh's whole stream (every vertex any of its draws reads, kept per
+  stream version) goes through the draw's own matrix (VU memory 16..19; w = 1, or under code 36
+  the stream's pos.w range and 1): h is linear in the position, so the 8 (or 16) corners' extremes
+  bound every vertex. The proof holds when every vertex keeps its GS position (`vu_gs_ok`): w above
+  0 by twice the float tolerance (RD_VIS_TOL, 2^-18, of the sum of the absolute products, as the
+  culler's planes), h.z at least its tolerance over 0 (GS Z not negative, so no cut at GS Z 0),
+  and |h.xyz| / w below 2^26 (half of where ftoi4 saturates). w > 0 alone is not enough: a corner
+  below GS Z 0 is cut at the depth plane, where an edge along a view ray gives Mesa the same 0 / 0
+  with every w above 0. With every corner at its GS position each triangle is drawn at w 1 with a
+  depth in 0..1 (`vu_triangle_out_pos`: `vu_vtx_position`, or `vu_corner_cut_position` returning
+  it for a corner that has one), the case of clip mode none's proof below, so a twin draws what
+  the *_nodual build draws on any device, whatever the clipper check measured. Anything not
+  finite, an empty box, no mesh record or a skinned, grid or particle draw: no proof.
 - **Why clip mode none.** The *_nodual build discards a pixel in the picture's columns whose band
   flag is not below 0.5, a NaN included (added for Mesa's clipper: its noperspective factor at a
   corner it adds behind the eye comes from the corners' divided x or y and is not finite where
@@ -1900,11 +1922,14 @@ which are refused too, so both are upper bounds. `port/render/rd_nodiscard.h` sa
     (given vu_ps_nodual_nd and vu_texa_ps_nodual_nd), one under an alpha test that can fail, the
     textured one under the same test, one under a chain plane and a code 32 mesh under the camera
     rule with a corner of each triangle behind the eye (all refused: the clipper is not measured
-    yet); each entry's twin is used in play only if its own case drew through it here (`entry not
+    yet), and a prelit code 32 strip under the camera rule with a facing table, wholly in front of
+    the eye and past the region test's right edge (drawn clipped at its GS positions), which must
+    take its twin by the proof alone (`proven in front of the eye`, before any clipper verdict); each entry's twin is used in play only if its own case drew through it here (`entry not
     tested` otherwise, logged `discard-free twins: vu_texa_ps_nodual_nd drew nothing in the
     self-test: not used in play`); the side band and DATE, which the camera rule's frame cannot
     draw, are checked on the rule itself. Drawn with the twins and without: the pictures byte for
-    byte, a pass through a twin counted, the alpha, plane and eye-plane cases refused, no twin
+    byte, a pass through a twin counted, the pass in front of the eye through its twin by the
+    proof, the alpha, plane and eye-plane cases refused, no twin
     pipeline missing, else off for the run with the modules and pipelines released and the mark
     `failed`; then the clipper check (above). Either way every
     pipeline the self-test made is released after it (`rd__pipeline_forget_since`): the run's set is
@@ -1930,8 +1955,8 @@ which are refused too, so both are upper bounds. `port/render/rd_nodiscard.h` sa
 
 The lines (`rd: ` before each):
 - `discard-free twins: trying them: vu_ps_nodual_nd and vu_texa_ps_nodual_nd made (2 modules;
-  ...)`, then `discard-free twins: on (self-test: 2 passes through them, 1 through
-  vu_ps_nodual_nd and 1 through vu_texa_ps_nodual_nd, the alpha test's, the clip plane's and the
+  ...)`, then `discard-free twins: on (self-test: 3 passes through them (1 proven
+  in front of the eye), 2 through vu_ps_nodual_nd and 1 through vu_texa_ps_nodual_nd, the alpha test's, the clip plane's and the
   eye-plane crossing's refused (2, 1 and 1), the side band and DATE refused by the rule, pictures
   byte for byte; its N pipelines released) on SCENE WxH at TWxTH texels in T ms` or `discard-free twins: off for the run (self-test: <why>; its N pipelines released)
   ...`, then the start line `discard-free twins: on|held|off, N modules of them made, P of their
@@ -1961,9 +1986,10 @@ The lines (`rd: ` before each):
   alone) on SCENE WxH at TWxTH texels in T ms`; the whole self-test's time is on the `on
   (self-test: ...) ... in T ms` line. The queued twin keys of the self-test's frames are
   forgotten at its end (`rd__pipeline_twin_forget_queued`).
-- The 10 s VU line's clause: `; discard-free twins: D draws a picture through them, C of them by
-  the clipper check (clean|not clean|not checked) (R refused a picture: plane p, DATE d, band b,
-  alpha a, clipped c, form f, not made yet u, timed without them t, entry not tested e)`, then `; their
+- The 10 s VU line's clause: `; discard-free twins: D draws a picture through them (P proven by
+  clip mode none, F proven in front of the eye, C by the clipper check (clean|not clean|not
+  checked)) (R refused a picture: plane p, DATE d, band b, alpha a, clipped c, form f, box x, not
+  made yet u, timed without them t, entry not tested e)`, then `; their
   pipelines made in the background: P in B batches, M ms from begin to taken` in a block that took
   a batch (`, some failed`); nothing while held or off from the start, `; discard-free twins off (why)` once they were on.
 - `discard-free twins: 250 pictures drawn with them since their self-test: their mark says on`;
@@ -1972,9 +1998,9 @@ The lines (`rd: ` before each):
   is this run's; the next start tests them again)`.
 - The judge's lines and the attempt ledger's row `the discard-free twins timed in play` as the
   cull's (above); at the next start `the previous run: discard-free twins: ...`.
-- `rd_replay_tool --stats`: `stats: discard-free twins on|held|off (why): N draws through them, C
-  of them by the clipper check (verdict); refused: plane p, DATE d, band b, alpha a, clipped c,
-  form f, not made yet u, timed without them t, entry not tested e; M modules of them made, P of their pipelines alive` (with `(not applicable here: ...)` on a device
+- `rd_replay_tool --stats`: `stats: discard-free twins on|held|off (why): N draws through them (P
+  proven by clip mode none, F proven in front of the eye, C by the clipper check (verdict));
+  refused: plane p, DATE d, band b, alpha a, clipped c, form f, box x, not made yet u, timed without them t, entry not tested e; M modules of them made, P of their pipelines alive` (with `(not applicable here: ...)` on a device
   with dual-source blending). The self-test's own draws (the floor's and the clipper check's) are
   not counted: the hold's end puts the counts back (`rd__nd_hold_end`).
 

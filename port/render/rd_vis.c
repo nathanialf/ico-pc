@@ -401,6 +401,77 @@ int rd__vis_test(const float (*m)[4], const RdVisBox *b, bool scissor, const RdV
     return decide(&a, mag, scissor, 0.0, NULL);
 }
 
+bool rd__vis_gs_proof(const float (*m)[4], const RdVisBox *b, bool scissor)
+{
+    if (!m || !b || b->n == 0 || !finiteCols(m, 4)) {
+        return false;
+    }
+    for (int c = 0; c < 4; c++) {
+        if (!isfinite(b->lo[c]) || !isfinite(b->hi[c]) || b->lo[c] > b->hi[c]) {
+            return false;
+        }
+    }
+    /* w: 1, or under code 36 the stream's pos.w over its range and 1 (as
+       rd__vis_test) */
+    double ws[2] = {1.0, 1.0};
+    if (scissor) {
+        ws[0] = b->lo[3] < 1.0f ? (double)b->lo[3] : 1.0;
+        ws[1] = b->hi[3] > 1.0f ? (double)b->hi[3] : 1.0;
+    }
+    const double ax = absMax(b->lo[0], b->hi[0]), ay = absMax(b->lo[1], b->hi[1]);
+    const double az = absMax(b->lo[2], b->hi[2]);
+    const double aw = fabs(ws[0]) > fabs(ws[1]) ? fabs(ws[0]) : fabs(ws[1]);
+    /* each lane's tolerance: the shader's float h differs from the exact one
+       by a few roundings of the sum of the absolute products (RD_VIS_TOL of
+       it, as the culler's planes) */
+    double tol[4];
+    for (int c = 0; c < 4; c++) {
+        tol[c] = RD_VIS_TOL * (fabs((double)m[0][c]) * ax + fabs((double)m[1][c]) * ay +
+                               fabs((double)m[2][c]) * az + fabs((double)m[3][c]) * aw);
+    }
+    /* h is linear in the position: every vertex's h is a convex combination
+       of the box's corners' (8, or 16 over the w range), so the corners'
+       extremes bound every vertex */
+    double minW = 0.0, minZ = 0.0, maxA[3] = {0.0, 0.0, 0.0};
+    bool any = false;
+    const int nw = scissor ? 2 : 1;
+    for (int k = 0; k < 8; k++) {
+        const double x = (double)(k & 1 ? b->hi[0] : b->lo[0]);
+        const double y = (double)(k & 2 ? b->hi[1] : b->lo[1]);
+        const double z = (double)(k & 4 ? b->hi[2] : b->lo[2]);
+        for (int j = 0; j < nw; j++) {
+            double h[4];
+            hOf(m, x, y, z, ws[j], h);
+            if (!isfinite(h[0]) || !isfinite(h[1]) || !isfinite(h[2]) || !isfinite(h[3])) {
+                return false;
+            }
+            minW = !any || h[3] < minW ? h[3] : minW;
+            minZ = !any || h[2] < minZ ? h[2] : minZ;
+            for (int c = 0; c < 3; c++) {
+                maxA[c] = fabs(h[c]) > maxA[c] ? fabs(h[c]) : maxA[c];
+            }
+            any = true;
+        }
+    }
+    /* vu_common.hlsli vu_gs_ok, at every vertex: w > 0 (twice the
+       tolerance clear of it, so the float w and its reciprocal are
+       positive), GS Z not below 0 (h.z at least its tolerance over 0, so
+       the float h.z and p.z = h.z / w are not negative), and no ftoi4
+       saturated: |p| = |h| / w below 2^26, half of where X, Y or Z (in
+       sixteenths, int32) saturate at 2^27 (the float divide's and ftoi4's
+       roundings are far smaller than that factor) */
+    const double w = minW - tol[3];
+    if (!(minW > 2.0 * tol[3]) || !(w > 0.0) || !(minZ >= tol[2])) {
+        return false;
+    }
+    for (int c = 0; c < 3; c++) {
+        if (!((maxA[c] + tol[c]) / w < 67108864.0)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 int rd__vis_test_skin(const float (*mem)[4], const float (*bones)[4], uint32_t boneQw,
                       const RdVisSkin *s, const RdVisRect *r)
 {
@@ -797,6 +868,17 @@ static VisEntry *entryOf(uint32_t id, const RdMeshRec *m)
     e->laterMarks = NULL;
     e->laterCount = UINT32_MAX; /* not read yet */
     return e;
+}
+
+bool rd__vis_mesh_gs_proof(uint32_t id, const RdMeshRec *m, const float (*mem)[4], bool scissor)
+{
+    if (!m || !m->stream || !mem || m->vertexCount == 0) {
+        return false;
+    }
+    /* the whole stream's box: every vertex a draw of the mesh reads, its
+       batches' and a sheet's tiles' (the header above) */
+    VisEntry *e = entryOf(id, m);
+    return e != NULL && e->boxOk && rd__vis_gs_proof(&mem[16], &e->box, scissor);
 }
 
 /* the per-batch boxes on a kept entry (made once a stream version); false

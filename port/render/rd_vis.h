@@ -129,6 +129,24 @@ int rd__vis_test(const float (*m)[4], const RdVisBox *b, bool scissor, const RdV
 int rd__vis_test_skin(const float (*mem)[4], const float (*bones)[4], uint32_t boneQw,
                       const RdVisSkin *s, const RdVisRect *r);
 
+/* The discard-free twins' proof that a mesh draw lies wholly in front of
+ * the eye (EYEBOX, rd_nodiscard.h): true when every vertex of the box b
+ * under h = m[0] x + m[1] y + m[2] z + m[3] w (VU memory 16..19; w = 1, or
+ * under code 36 the box's w range and 1) keeps its GS position
+ * (vu_common.hlsli vu_gs_ok): w above 0 by twice the float tolerance, h.z
+ * not below its tolerance over 0 (GS Z not negative), and |h.xyz| / w
+ * below 2^26 (no ftoi4 saturated).  Then every corner of every triangle is
+ * drawn at its GS position, w 1 and a depth in 0..1, which is clip mode
+ * none's case.  False when anything is not finite, the box is empty or
+ * inverted. */
+bool rd__vis_gs_proof(const float (*m)[4], const RdVisBox *b, bool scissor);
+/* rd__vis_gs_proof over mesh m's (id) whole stream's box (kept per stream
+ * version, as the culler's) under VU memory mem (16..19); false without a
+ * box */
+struct RdMeshRec;
+bool rd__vis_mesh_gs_proof(uint32_t id, const struct RdMeshRec *m, const float (*mem)[4],
+                           bool scissor);
+
 /* The renderer's side (rd_vis.c): the mode at rd_init (the start line);
  * the mode and its name; a test's mode (rd__vis_set_mode, -1: the
  * environment's again) */

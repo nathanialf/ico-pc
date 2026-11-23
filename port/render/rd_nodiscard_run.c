@@ -55,6 +55,7 @@ static struct {
     char version[64];    /* ICO_NODISCARD_VERSION: the running version, "" none */
     uint64_t took, tookRefused[RD_ND_REASONS]; /* since rd__nd_take */
     uint64_t tookClip;                         /* of took, by the clipper check */
+    uint64_t tookFront;                        /* of took, proven in front of the eye */
     uint64_t tookEntry[2];                     /* of took, by entry (vu_ps, vu_texa_ps) */
     uint64_t tookEntryClip[2];                 /* of tookClip, by entry */
     bool entryOk[2]; /* the entry's twin drew in the self-test's floor (play uses it then) */
@@ -77,7 +78,8 @@ static char s_runOff[384];
    from the window's (atomics) */
 typedef struct NCounts {
     uint64_t draws, refused[RD_ND_REASONS];
-    uint64_t drawsClip; /* of draws, a clip mode other than none (the clipper check's class) */
+    uint64_t drawsClip;  /* of draws, by the device's clean clipper check */
+    uint64_t drawsFront; /* of draws, proven in front of the eye (EYEBOX) */
 } NCounts;
 
 static NCounts s_block, s_run;
@@ -151,6 +153,7 @@ void rd__nd_init(void)
     s_n.drewNow = false;
     s_n.took = 0;
     s_n.tookClip = 0;
+    s_n.tookFront = 0;
     memset(s_n.tookEntry, 0, sizeof(s_n.tookEntry));
     memset(s_n.tookEntryClip, 0, sizeof(s_n.tookEntryClip));
     memset(s_n.entryOk, 0, sizeof(s_n.entryOk));
@@ -327,16 +330,20 @@ static bool ready(void)
     return s_n.mod[0].id != 0 && s_n.mod[1].id != 0;
 }
 
-static void count(int why, bool byClipper, int entry)
+/* a pass counted: its twin by class (cls: RD_ND_BY_*), or a refusal */
+static void count(int why, int cls, int entry)
 {
     if (why == RD_ND_TWIN) {
         add(&s_block.draws, &s_run.draws, 1u);
         s_n.took++;
         s_n.tookEntry[entry]++;
-        if (byClipper) {
+        if (cls == RD_ND_BY_CLIPPER) {
             add(&s_block.drawsClip, &s_run.drawsClip, 1u);
             s_n.tookClip++;
             s_n.tookEntryClip[entry]++;
+        } else if (cls == RD_ND_BY_FRONT) {
+            add(&s_block.drawsFront, &s_run.drawsFront, 1u);
+            s_n.tookFront++;
         }
     } else if (why > 0 && why < RD_ND_REASONS) {
         add(&s_block.refused[why], &s_run.refused[why], 1u);
@@ -377,7 +384,7 @@ const char *rd__nd_not_applicable_text(void)
 }
 
 void rd__nd_pass(RdPipeKeyInt *key, RhiPipeline *pipe, const RdDrawPass *p, uint32_t drawFlags,
-                 bool plane, bool particle, bool dateStencil, bool prelit)
+                 bool plane, bool particle, bool dateStencil, bool prelit, bool inFront)
 {
     if (s_n.state != N_ON || !rd__nd_applicable()) {
         return; /* held, off or not applicable here: nothing asked, nothing counted */
@@ -389,20 +396,20 @@ void rd__nd_pass(RdPipeKeyInt *key, RhiPipeline *pipe, const RdDrawPass *p, uint
     const bool clean = s_n.clipCheck || s_n.clipper == RD_ND_CLIP_CLEAN;
     const RdNdPass in = {key->fs,   key->gs.nodual, key->dst, p->flags,    p->modeZ,
                          drawFlags, plane,          particle, dateStencil, s_n.sabotage == NS_ALPHA,
-                         clean,     prelit};
+                         clean,     prelit,         inFront};
     const int v = rd_nd_eligible(&in);
     if (v < 0) {
         return;
     }
     if (v != RD_ND_TWIN) {
-        count(v, false, 0);
+        count(v, RD_ND_BY_NONE, 0);
         return;
     }
     const int entry = key->fs == RD_FS_VU_TEXA ? 1 : 0;
     if (!s_n.held && !s_n.forced && !s_n.entryOk[entry]) {
         /* its start-up case did not draw through this entry's twin: never
            used in play (logged at the self-test) */
-        count(RD_ND_UNTESTED, false, 0);
+        count(RD_ND_UNTESTED, RD_ND_BY_NONE, 0);
         return;
     }
     RdPipeKeyInt t = *key;
@@ -423,14 +430,14 @@ void rd__nd_pass(RdPipeKeyInt *key, RhiPipeline *pipe, const RdDrawPass *p, uint
         }
     }
     if (w != RD_ND_TWIN) {
-        count(w, false, 0);
+        count(w, RD_ND_BY_NONE, 0);
         return;
     }
     *key = t;
     *pipe = tp;
     /* the class: clip mode none (proven on every device) or another, taken
        on the device's clipper check */
-    count(RD_ND_TWIN, (drawFlags & ICO_VU_CLIP_MASK) != ICO_VU_CLIP_NONE, entry);
+    count(RD_ND_TWIN, rd_nd_twin_class(&in), entry);
     s_n.drewNow = true;
 }
 
@@ -499,6 +506,7 @@ void rd__nd_take(uint64_t *twin, uint64_t refused[RD_ND_REASONS])
     memcpy(refused, s_n.tookRefused, sizeof(s_n.tookRefused));
     s_n.took = 0;
     s_n.tookClip = 0;
+    s_n.tookFront = 0;
     memset(s_n.tookRefused, 0, sizeof(s_n.tookRefused));
 }
 
@@ -551,6 +559,13 @@ uint64_t rd__nd_take_clip(void)
 {
     const uint64_t n = s_n.tookClip;
     s_n.tookClip = 0;
+    return n;
+}
+
+uint64_t rd__nd_take_front(void)
+{
+    const uint64_t n = s_n.tookFront;
+    s_n.tookFront = 0;
     return n;
 }
 
@@ -658,6 +673,7 @@ size_t rd_nd_text(char *out, size_t cap, unsigned n)
     NCounts c;
     c.draws = takeN(&s_block.draws);
     c.drawsClip = takeN(&s_block.drawsClip);
+    c.drawsFront = takeN(&s_block.drawsFront);
     uint64_t refused = 0;
     for (int i = 0; i < RD_ND_REASONS; i++) {
         c.refused[i] = takeN(&s_block.refused[i]);
@@ -676,9 +692,11 @@ size_t rd_nd_text(char *out, size_t cap, unsigned n)
     }
     const double d = n ? (double)n : 1.0;
     int at = snprintf(out, cap,
-                      "; discard-free twins: %.0f draws a picture through them, %.0f of them by "
-                      "the clipper check (%s) (%.0f refused a picture:",
-                      (double)c.draws / d, (double)c.drawsClip / d, rd__nd_clipper_text(),
+                      "; discard-free twins: %.0f draws a picture through them (%.0f proven by "
+                      "clip mode none, %.0f proven in front of the eye, %.0f by the clipper check "
+                      "(%s)) (%.0f refused a picture:",
+                      (double)c.draws / d, (double)(c.draws - c.drawsClip - c.drawsFront) / d,
+                      (double)c.drawsFront / d, (double)c.drawsClip / d, rd__nd_clipper_text(),
                       (double)refused / d);
     for (int i = 1; i < RD_ND_REASONS && at > 0 && (size_t)at < cap; i++) {
         at += snprintf(out + at, cap - (size_t)at, "%s %s %.0f", i > 1 ? "," : "",
@@ -711,15 +729,16 @@ int rd__nd_stats_text(char *out, size_t cap)
         at += snprintf(refused + at, sizeof(refused) - (size_t)at, "%s%s %llu", i > 1 ? ", " : "",
                        rd_nd_reason_name(i), (unsigned long long)c->refused[i]);
     }
-    return snprintf(out, cap,
-                    "discard-free twins %s%s%s%s: %llu draws through them, %llu of them by the "
-                    "clipper check (%s); refused: %s; %u modules of them made, %u of their "
-                    "pipelines alive%s%s%s",
-                    rd__nd_state_text(), s_n.why[0] ? " (" : "", s_n.why, s_n.why[0] ? ")" : "",
-                    (unsigned long long)c->draws, (unsigned long long)c->drawsClip,
-                    rd__nd_clipper_text(), refused, (unsigned)s_n.made,
-                    (unsigned)rd__pipeline_count_twins(),
-                    rd__nd_not_applicable_text() != NULL ? " (" : "",
-                    rd__nd_not_applicable_text() != NULL ? rd__nd_not_applicable_text() : "",
-                    rd__nd_not_applicable_text() != NULL ? ")" : "");
+    return snprintf(
+        out, cap,
+        "discard-free twins %s%s%s%s: %llu draws through them (%llu proven by clip "
+        "mode none, %llu proven in front of the eye, %llu by the clipper check (%s)); "
+        "refused: %s; %u modules of them made, %u of their pipelines alive%s%s%s",
+        rd__nd_state_text(), s_n.why[0] ? " (" : "", s_n.why, s_n.why[0] ? ")" : "",
+        (unsigned long long)c->draws, (unsigned long long)(c->draws - c->drawsClip - c->drawsFront),
+        (unsigned long long)c->drawsFront, (unsigned long long)c->drawsClip, rd__nd_clipper_text(),
+        refused, (unsigned)s_n.made, (unsigned)rd__pipeline_count_twins(),
+        rd__nd_not_applicable_text() != NULL ? " (" : "",
+        rd__nd_not_applicable_text() != NULL ? rd__nd_not_applicable_text() : "",
+        rd__nd_not_applicable_text() != NULL ? ")" : "");
 }

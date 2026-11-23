@@ -74,12 +74,12 @@
 #include "shader_consts.h"
 #include "vu1_ref.h"
 
-#define NT_CASES 6
+#define NT_CASES 7
 #define NT_VERTS 6 /* two triangles a mesh, three vertices each */
 #define NT_Z 2.0f  /* model depth: GS X = 2048 + 8 x */
 #define NT_HALF 12 /* a triangle's legs, GS pixels */
 
-enum { NT_PLAIN, NT_ALPHA, NT_PLANE, NT_EYE, NT_TEXA, NT_TEXA_ALPHA };
+enum { NT_PLAIN, NT_ALPHA, NT_PLANE, NT_EYE, NT_TEXA, NT_TEXA_ALPHA, NT_FRONT };
 
 /* the textured cases' texture: 4x4 RGB24 (its alpha byte the source's, TEXA
    decides it: under 7F/81 with AEM a black texel's alpha is 0, every other
@@ -154,8 +154,16 @@ static RdMesh makeMesh(int c)
     uint32_t at = 1;
     for (int v = 0; v < NT_VERTS; v++) {
         /* GS X = 2048 + 8 x at depth 2 */
-        const float gx = cellX(c) + (float)NT_HALF * kCorner[v][0];
-        const float gy = 2048.0f + (float)NT_HALF * kCorner[v][1];
+        float gx = cellX(c) + (float)NT_HALF * kCorner[v][0];
+        float gy = 2048.0f + (float)NT_HALF * kCorner[v][1];
+        if (c == NT_FRONT) {
+            /* the case in front of the eye: a strip below the cells from
+               GS X 1648 to 4448, past the region test's 4094 (so the camera
+               rule draws it clipped, at its GS positions), every corner at
+               depth 2 */
+            gx = kCorner[v][0] < 0.0f ? 1648.0f : 4448.0f;
+            gy = 2048.0f + 84.0f + (float)NT_HALF * kCorner[v][1];
+        }
         /* the eye case's last corner of each triangle behind the eye (model
            depth -1: h.w = z for this screen matrix), the triangle crossing
            the eye plane */
@@ -281,7 +289,8 @@ static bool buildFrame(RdFrame *f, uint32_t scene, uint32_t w, uint32_t h, const
          rd__st_test(f, 0, (uint64_t)RD_TEST_Z_GEQUAL | 0x40Du) &&
          pushMesh(f, mesh[NT_ALPHA], 34, false, 0.0f, 2u) && rd__st_test(f, 0, RD_TEST_Z_GEQUAL) &&
          pushMesh(f, mesh[NT_PLANE], 34, true, (cellX(NT_PLANE) - 2048.0f) / 8.0f, 3u) &&
-         pushMesh(f, mesh[NT_EYE], 32, false, 0.0f, 4u);
+         pushMesh(f, mesh[NT_EYE], 32, false, 0.0f, 4u) &&
+         pushMesh(f, mesh[NT_FRONT], 32, false, 0.0f, 7u);
     /* the textured cases through vu_texa_ps: the test off (its twin), then
        the alpha test on the texels' alphas 0 and 0x7F (refused) */
     ok = ok && pushTexa(f, tex) &&
@@ -325,13 +334,20 @@ static bool ruleRefuses(void)
     p.prelit = false; /* any other program: refused as "form" on a clean verdict */
     const bool form = rd_nd_eligible(&p) == RD_ND_FORM;
     p.prelit = true;
-    p.clipperClean = false;
-    const bool clipped = rd_nd_eligible(&p) == RD_ND_CLIPPED;
+    p.clipperClean = false; /* not clean: "box" without the proof in front of
+                               the eye, the twin with it (EYEBOX) */
+    const bool box = rd_nd_eligible(&p) == RD_ND_BOX;
+    p.inFront = true;
+    const bool front = rd_nd_eligible(&p) == RD_ND_TWIN;
+    p.prelit = false;
+    const bool clipped = rd_nd_eligible(&p) == RD_ND_CLIPPED; /* another form: clipped */
+    p.prelit = true;
+    p.inFront = false;
     p.drawFlags = ICO_VU_CLIP_NONE;
     const bool none = rd_nd_eligible(&p) == RD_ND_TWIN;
     p.flags = ICO_DF_DATE;
     const bool date = rd_nd_eligible(&p) == RD_ND_DATE;
-    return band && twin && form && clipped && none && date;
+    return band && twin && form && box && front && clipped && none && date;
 }
 
 /* ------------------------------------------------- the clipper check
@@ -1088,6 +1104,13 @@ void rd__nd_selftest(RdTargetRec *t)
     for (int i = 0; i < NT_CASES; i++) {
         meshes = meshes && mesh[i].id;
     }
+    {
+        /* the case in front of the eye under the camera rule: a facing table
+           (none against its normals), as the disc's prelit parts have */
+        static const uint8_t kNoFlip[(NT_VERTS + 7) / 8] = {0};
+        RdMeshRec *rec = meshes ? rd__mesh_rec(mesh[NT_FRONT].id) : NULL;
+        meshes = meshes && rec != NULL && rd__mesh_set_facing(rec, kNoFlip, NT_VERTS);
+    }
     if (!meshes || !tex.id || !a || !b || !buildFrame(&f, scene, t->w, t->h, mesh, tex, -1)) {
         /* nothing of the twins tried yet: not the device's verdict */
         rd__frame_free(&f);
@@ -1106,7 +1129,7 @@ void rd__nd_selftest(RdTargetRec *t)
     const uint32_t pipeMark = rd__pipeline_mark();
     rd__nd_hold(true);
     const bool made = rd__nd_try_begin();
-    uint64_t twin = 0, refused[RD_ND_REASONS], entries[2] = {0, 0};
+    uint64_t twin = 0, refused[RD_ND_REASONS], entries[2] = {0, 0}, front = 0;
     memset(refused, 0, sizeof(refused));
     bool pass = false;
     if (!made) {
@@ -1128,6 +1151,7 @@ void rd__nd_selftest(RdTargetRec *t)
         rd__nd_take_entries(entries);
         const bool okA = replayRead(&f, t, a, size);
         rd__nd_take_entries(entries);
+        front = rd__nd_take_front(); /* (rd__nd_take clears it) */
         rd__nd_take(&twin, refused);
         rd__nd_hold(false); /* the same frame without them */
         uint64_t twinB = 0, refusedB[RD_ND_REASONS];
@@ -1158,6 +1182,11 @@ void rd__nd_selftest(RdTargetRec *t)
                      (unsigned long long)refused[RD_ND_ALPHA],
                      (unsigned long long)refused[RD_ND_PLANE],
                      (unsigned long long)refused[RD_ND_CLIPPED]);
+        } else if (front == 0u) {
+            /* EYEBOX: the camera rule's pass proven in front of the eye takes
+               its twin before any clipper verdict */
+            snprintf(why, sizeof(why),
+                     "the case in front of the eye took no twin (its box proof did not hold)");
         } else if (!rule) {
             snprintf(why, sizeof(why),
                      "the rule gave a side band's, DATE's or an unchecked form's pass a twin");
@@ -1215,14 +1244,15 @@ void rd__nd_selftest(RdTargetRec *t)
     t->clearPending = 1; /* the next replay starts SCENE from its clear */
     rd__nd_verdict(pass, why);
     if (pass) {
-        rd__log("discard-free twins: on (self-test: %llu pass%s through them, %llu through "
-                "vu_ps_nodual_nd and %llu through vu_texa_ps_nodual_nd, the alpha test's, "
+        rd__log("discard-free twins: on (self-test: %llu pass%s through them (%llu proven in "
+                "front of the eye), %llu through vu_ps_nodual_nd and %llu through "
+                "vu_texa_ps_nodual_nd, the alpha test's, "
                 "the clip plane's and the eye-plane crossing's refused (%llu, %llu and %llu), "
                 "the side band and DATE refused by the rule, pictures byte for byte; its %u "
                 "pipelines released) on SCENE %ux%u at %ux%u texels in %.1f ms",
-                (unsigned long long)twin, twin == 1u ? "" : "es", (unsigned long long)entries[0],
-                (unsigned long long)entries[1], (unsigned long long)refused[RD_ND_ALPHA],
-                (unsigned long long)refused[RD_ND_PLANE],
+                (unsigned long long)twin, twin == 1u ? "" : "es", (unsigned long long)front,
+                (unsigned long long)entries[0], (unsigned long long)entries[1],
+                (unsigned long long)refused[RD_ND_ALPHA], (unsigned long long)refused[RD_ND_PLANE],
                 (unsigned long long)refused[RD_ND_CLIPPED], (unsigned)released, t->w, t->h, t->tw,
                 t->th, rd__now_ms() - t0);
         const bool clean = rd__nd_clipper() == RD_ND_CLIP_CLEAN;
