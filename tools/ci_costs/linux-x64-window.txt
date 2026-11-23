@@ -300,21 +300,6 @@ pit_dive_base_kor 0.00
 pit_dive_base_ntsc 0.00
 poly_flat 0.00
 power_read 0.00  # estimate: a CPU unit test of one pure file, like perf_secs (run by hand here, well under 0.01 s; not run under CI yet)
-rd_diag_notes 0.00  # estimate: 0.0 s local (merge-wt_DIAG6-20261121T075234Z.lvp.log) x 2.02
-rd_nodiscard 0.01  # estimate: a CPU unit test of the eligibility table, like rd_ab (not run here)
-rd_nodiscard_ab 83.14  # estimate: the round-1 estimate x 2 (four fixtures to two; not run here)
-rd_nodiscard_ab_gl 79.60  # estimate: the round-1 estimate x 2 (four fixtures to two; not run here)
-rd_nodiscard_clean 83.14  # estimate: rd_nodiscard_ab (the same runs, the verdict taken as clean; not run here)
-rd_perf_where 0.00  # estimate: a CPU unit test of one or two pure files, like perf_secs (run by hand here, well under 0.01 s; not run under CI yet)
-rd_vuprepass_selftest_nodiscard 7.62  # estimate: rd_vuprepass_selftest_zero_mali x 3 (the clipper check: 52 frames of 3 small replays, both twin entries; not run here)
-rd_vuprepass_selftest_nodiscard_clean 7.62  # estimate: rd_vuprepass_selftest_nodiscard (the same self-test, the verdict taken as clean; not run here)
-rd_vuprepass_selftest_nodiscard_clipper 7.62  # estimate: rd_vuprepass_selftest_nodiscard (the same self-test; not run here)
-rd_vuprepass_selftest_nodiscard_empty 7.62  # estimate: rd_vuprepass_selftest_nodiscard_clipper (every case run; not run here)
-rd_vuprepass_selftest_nodiscard_fallback 4.65  # estimate: rd_vuprepass_selftest_nodiscard_dual plus the blend self-test (rd_blend_selftest_sabotage; not run here)
-rd_vuprepass_selftest_nodiscard_dual 2.30  # estimate: rd_vuprepass_selftest_zero_marked (the twins not tried; not run here)
-rd_vuprepass_selftest_nodiscard_marked 2.30  # estimate: rd_vuprepass_selftest_zero_marked (the twins not tried; not run here)
-rd_vuprepass_selftest_nodiscard_sabotage 2.79  # estimate: rd_vuprepass_selftest_zero_mali x 1.1 (three more replays; not run here)
-stage_disp 0.01  # estimate: a CPU-only walk of two rows on five discs (GRID221)
 present_fallback 0.00
 present_hist 0.00
 present_latency 0.00
@@ -446,6 +431,7 @@ rd_debug_mali 30.78
 rd_debug_vk10 35.64
 rd_debug_vk11 35.28
 rd_debug_vk11s 33.63
+rd_diag_notes 0.00  # estimate: 0.0 s local (merge-wt_DIAG6-20261121T075234Z.lvp.log) x 2.02
 rd_display_change 2.88
 rd_display_change_2x 6.60
 rd_display_change_2x_legacy 5.95
@@ -639,6 +625,10 @@ rd_no_volume_ab 317.05  # estimate: 161.4 s local (merge-wt_FIX-P4a-20261115T182
 rd_no_volume_ab_gl 42.08  # estimate: 21.4 s local (merge-wt_FIX-P2a-20261115T053727Z.lvp.log) x 1.96
 rd_no_volume_break_ab 1287.74  # estimate: 655.5 s local (merge-wt_REVIEWFIX7-20261116T033201Z.lvp.log) x 1.96
 rd_no_volume_break_ab_gl 59.62  # estimate: 30.4 s local (merge-wt_FIX-P2a-20261115T053727Z.lvp.log) x 1.96
+rd_nodiscard 0.01  # estimate: a CPU unit test of the eligibility table, like rd_ab (not run here)
+rd_nodiscard_ab 83.14  # estimate: the round-1 estimate x 2 (four fixtures to two; not run here)
+rd_nodiscard_ab_gl 79.60  # estimate: the round-1 estimate x 2 (four fixtures to two; not run here)
+rd_nodiscard_clean 83.14  # estimate: rd_nodiscard_ab (the same runs, the verdict taken as clean; not run here)
 rd_noplanes_ab 32.75  # estimate: 16.7 s local (merge-wt_FIX-P5b-20261115T232657Z.lvp.log) x 1.96
 rd_occlusion_tool 15.26  # estimate: 7.8 s local (merge-wt_FIX-P5b2-20261116T020204Z.lvp.log) x 1.96
 rd_pace_gpu 0.02
@@ -666,6 +656,7 @@ rd_perf_rare 0.01
 rd_perf_vk10 78.04
 rd_perf_vk11 32.23
 rd_perf_vk11s 102.98
+rd_perf_where 0.00  # estimate: a CPU unit test of one or two pure files, like perf_secs (run by hand here, well under 0.01 s; not run under CI yet)
 rd_pipe_finish 0.00
 rd_pixel 250.92
 rd_pixel_attachment 222.93
@@ -714,6 +705,10 @@ rd_present_vk10_nod32f 162.37
 rd_present_vk11 213.84
 rd_present_vk11ext 205.51
 rd_present_vk11s 156.77
+rd_ratecard_end 22.86  # estimate: rd_vuprepass_selftest_nodiscard x 3 runs, the card not measured (not run here)
+rd_ratecard_lavapipe 26.67  # estimate: as rd_ratecard_mali without the twins (not run here)
+rd_ratecard_mali 30.48  # estimate: rd_vuprepass_selftest_nodiscard x 2 runs + the card on lavapipe (about 2x more; not run here)
+rd_ratecard_rule 0.01  # estimate: a CPU unit test, like rd_nodiscard (not run here)
 rd_raw 3.01
 rd_raw_gl 7.37
 rd_raw_mali 7.85
@@ -928,6 +923,14 @@ rd_vuprepass_selftest_mali 2.31
 rd_vuprepass_selftest_mali_sabotage_straddle 2.79
 rd_vuprepass_selftest_mali_vk11 2.12
 rd_vuprepass_selftest_nocompute_fallback 1.18
+rd_vuprepass_selftest_nodiscard 7.62  # estimate: rd_vuprepass_selftest_zero_mali x 3 (the clipper check: 52 frames of 3 small replays, both twin entries; not run here)
+rd_vuprepass_selftest_nodiscard_clean 7.62  # estimate: rd_vuprepass_selftest_nodiscard (the same self-test, the verdict taken as clean; not run here)
+rd_vuprepass_selftest_nodiscard_clipper 7.62  # estimate: rd_vuprepass_selftest_nodiscard (the same self-test; not run here)
+rd_vuprepass_selftest_nodiscard_dual 2.30  # estimate: rd_vuprepass_selftest_zero_marked (the twins not tried; not run here)
+rd_vuprepass_selftest_nodiscard_empty 7.62  # estimate: rd_vuprepass_selftest_nodiscard_clipper (every case run; not run here)
+rd_vuprepass_selftest_nodiscard_fallback 4.65  # estimate: rd_vuprepass_selftest_nodiscard_dual plus the blend self-test (rd_blend_selftest_sabotage; not run here)
+rd_vuprepass_selftest_nodiscard_marked 2.30  # estimate: rd_vuprepass_selftest_zero_marked (the twins not tried; not run here)
+rd_vuprepass_selftest_nodiscard_sabotage 2.79  # estimate: rd_vuprepass_selftest_zero_mali x 1.1 (three more replays; not run here)
 rd_vuprepass_selftest_nostores_fallback 1.44
 rd_vuprepass_selftest_off 0.38
 rd_vuprepass_selftest_off_gl 1.16
@@ -1147,6 +1150,7 @@ softdouble_gate 5.53
 spirv_check 0.75
 spu2 0.26
 spu2_render_crc 12.09
+stage_disp 0.01  # estimate: a CPU-only walk of two rows on five discs (GRID221)
 stall_coincide 0.01
 startup_retry 0.01
 state_carry_check 15.00  # estimate: unmeasured, assumed (STATEGUARD2 could not build or run it)
