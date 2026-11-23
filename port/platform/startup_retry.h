@@ -305,10 +305,11 @@ bool startup_retry_note_has_dst(const char *note);
  * draw without the pre-pass, and the second such end in a row every start
  * after it ([dev] vu_prepass = false, diag_host.h
  * ico_diag_startup_vu_prepass).  A note naming the zero-area cull's build
- * (vu_tri_rule_zero_*, made only in the cull's own self-test) or a
- * discard-free twin (*_nodual_nd, port/render/rd_nodiscard.h) is not one:
- * that attempt's install mark answers for it (port/platform/vu_zero_mark.h,
- * nodiscard_mark.h).
+ * (vu_tri_rule_zero_*, made only in the cull's own self-test), a
+ * discard-free twin (*_nodual_nd, port/render/rd_nodiscard.h) or the fast
+ * pixel build (*_nodual_fast, port/render/rd_fastps.h) is not one: that
+ * attempt's install mark answers for it (port/platform/vu_zero_mark.h,
+ * nodiscard_mark.h, fastps_mark.h).
  * Tolerant as startup_retry_note_has_dst. */
 bool startup_retry_note_has_vu_pre(const char *note);
 

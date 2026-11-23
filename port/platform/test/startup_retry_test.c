@@ -530,6 +530,9 @@ static void test_note_vu_pre(void)
         "creating pipelines 1-2 of 2: program 0 blend 6 vs 35 fs 5 fmt 1/8 msaa 0 dst 0 to "
         "program 0 blend 6 vs 35 fs 20 fmt 1/8 msaa 0 dst 0; vertex vu_merge_main_vs 7469 words "
         "(1700 instructions); largest fragment vu_texa_ps_nodual_nd 11178 words",
+        /* the fast pixel build (rd_fastps.h: its own self-test, its own mark) */
+        "creating pipeline program 0 blend 4 vs 35 fs 5 fmt 1/8 msaa 0 dst 0 "
+        "(vu_merge_main_vs 7469 words + vu_ps_nodual_fast 2298 words)",
     };
     for (size_t i = 0; i < sizeof zeros / sizeof zeros[0]; i++) {
         CHECK(!startup_retry_note_has_vu_pre(zeros[i]), "\"%s\"", zeros[i]);

@@ -250,9 +250,9 @@ void vu_zero_mark_decide_beside(const char *mark, int endKind, const char *endWo
     const int bad = vu_zero_mark_blocks_beside(stage, endKind, otherStage);
     if (!bad && vu_zero_mark_blocks(stage, endKind)) {
         snprintf(line, lineSize,
-                 "the previous run: zero-area cull: %s: the discard-free twins were being tried "
-                 "then (their mark): tried again",
-                 what);
+                 "the previous run: zero-area cull: %s: %s being tried then (%s): tried again",
+                 what, vu_zero_mark_beside_who("the discard-free twins were"),
+                 vu_zero_mark_beside_who(NULL) != NULL ? "its mark" : "their mark");
     } else if (bad && strcmp(mv, v) == 0) {
         snprintf(out, outSize, "blocked %s", v);
         snprintf(line, lineSize,
@@ -289,6 +289,39 @@ static int s_stageRead = VU_ZERO_STAGE_NONE;
 int vu_zero_mark_stage_read(void)
 {
     return s_stageRead;
+}
+
+static const char *s_besideWho;
+
+void vu_zero_mark_beside_words(const char *who)
+{
+    s_besideWho = who;
+}
+
+const char *vu_zero_mark_beside_who(const char *fallback)
+{
+    return s_besideWho != NULL ? s_besideWho : fallback;
+}
+
+int vu_zero_mark_stage_beside(const char *activityPath, const char *name)
+{
+    char path[1024], text[512] = "", ver[64];
+    size_t dir = activityPath != NULL ? strlen(activityPath) : 0;
+    while (dir > 0 && activityPath[dir - 1] != '/' && activityPath[dir - 1] != '\\') {
+        dir--;
+    }
+    if (activityPath == NULL ||
+        snprintf(path, sizeof path, "%.*s%s", (int)dir, activityPath, name) >= (int)sizeof path) {
+        return VU_ZERO_STAGE_NONE;
+    }
+    FILE *f = ico_fopen(path, "rb");
+    if (f == NULL) {
+        return VU_ZERO_STAGE_NONE;
+    }
+    const size_t k = fread(text, 1, sizeof text - 1, f);
+    text[k] = '\0';
+    fclose(f);
+    return text[0] != '\0' ? vu_zero_mark_parse(text, ver, sizeof ver) : VU_ZERO_STAGE_NONE;
 }
 
 int vu_zero_mark_step(const char *activityPath, const char *version, int exitReason, int exitStatus,
@@ -344,13 +377,22 @@ int vu_zero_mark_step(const char *activityPath, const char *version, int exitRea
             fclose(t);
         }
     }
-    const int twinStage =
+    int twinStage =
         twins[0] != '\0' ? vu_zero_mark_parse(twins, tver, sizeof tver) : VU_ZERO_STAGE_NONE;
+    /* the fast pixel build's too (fastps_mark.h): an end while it was being
+       tried is its own */
+    vu_zero_mark_beside_words(NULL);
+    if (twinStage != VU_ZERO_STAGE_TRYING &&
+        vu_zero_mark_stage_beside(activityPath, "fastps-mark.txt") == VU_ZERO_STAGE_TRYING) {
+        twinStage = VU_ZERO_STAGE_TRYING;
+        vu_zero_mark_beside_words("the fast pixel build was");
+    }
     s_stageRead =
         mark[0] != '\0' ? vu_zero_mark_parse(mark, tver, sizeof tver) : VU_ZERO_STAGE_NONE;
     vu_zero_mark_end_words(kind, exitReason, exitStatus, words, sizeof words);
     vu_zero_mark_decide_beside(mark, kind, words, version, twinStage, out, sizeof out, line,
                                sizeof line, &block);
+    vu_zero_mark_beside_words(NULL);
     mark[strcspn(mark, "\r\n")] = '\0';
     if (strcmp(mark, out) != 0) {
         if (out[0] == '\0') {

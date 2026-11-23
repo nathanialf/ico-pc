@@ -1,0 +1,19 @@
+# rd_fastps_ab and rd_fastps_ab_gl (test/rd_fastps_ab.cmake): a fixture, then
+# the profiles it is replayed under (corpus, mali, mali169, desktop: the
+# script's head says what each is; OpenGL replays every fixture at the corpus
+# setting without dual-source blending).  Every profile without dual-source
+# blending must draw some pass through the fast pixel build over the whole
+# list (the count printed per fixture): a pass takes it only where its
+# DrawCB is in the set (textured, MODULATE with TCC, an RGBA32 texel, no GS
+# levels, nearest, DATE, clip plane or alpha test; rd_fastps.h), which a
+# blank-rule texture's alpha (00..ff) under an alpha test does not allow; the
+# vu_opaque.rules.txt fixtures have opaque textures, so their passes' tests
+# are decided by the alpha plan.  The Mali profiles need a frame at least
+# 16:9 wide.
+#
+# issue 179's Mali-G52 (v0.11.5): the stage 42 slow-scene capture, 912 wide
+fx-mali-slow541 mali,mali169,desktop,corpus
+# issue 179's Mali-G52 (v0.11.7) loss capture, 912 wide, opaque textures
+fx-mali-loss-before mali,mali169,desktop,corpus
+# issue 179's Mali-G52 (v0.11.4) loss capture, 912 wide, opaque textures
+fx-scope-179-before mali,mali169,desktop,corpus

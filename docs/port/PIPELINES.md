@@ -1982,6 +1982,76 @@ The tests' switches ([TESTING.md](TESTING.md#environment-switches)): `ICO_RD_VU_
 `ICO_RD_VU_NODISCARD_SABOTAGE` and `ICO_RD_VU_NODISCARD_CLIPPER`. What they gain on a phone is
 measured there alone.
 
+#### The fast pixel build
+
+On a device without dual-source blending every VU pass of the vu_ps entry draws through one
+program, `vu_ps_nodual`, which tests the DrawCB's words at every pixel: the texture function,
+TEXA, the GS levels, the nearest filter, DATE, the clip plane and the alpha test. In issue 179's
+two boat captures one form holds 98.1 % and 99.6 % of the shaded fragments of lists 0-2 and
+98.5-100 % of list 5's: textured, MODULATE with TCC, an RGBA32 texel, no GS levels, no nearest
+filter, no DATE, no clip plane, no alpha test in the pass, no Full pixel crop. The fast pixel
+build is `vu_ps` with those words held as constants: Arm's Mali Offline Compiler (v2026.5.0,
+Mali-G52 r1p0) gives it 31 work registers (full occupancy) against `vu_ps_nodual`'s 54 (half
+occupancy) and a longest path of 3.53 arithmetic cycles against 15.87, the varying unit's 3.50
+against 3.88. What that buys on the phone is not known, so it is timed in play as the cull and the
+twins are and kept only where it is faster. `port/render/rd_fastps.h` says it all.
+
+- **The builds** `vu_ps_nodual_fast` (`ICO_NO_DUAL=1 ICO_VU_FAST=1`) and
+  `vu_ps_nodual_fast_nd` (the same with `ICO_VU_NODISCARD=1`): under `ICO_VU_FAST`
+  (`common.hlsli`) g_mode.x reads TEXTURED and TCC set and DECAL, DATE, DATM, DATE_DST, PLANE,
+  GS_LOD, NEAREST and GS_BILINEAR_GRID clear, every other bit as the DrawCB has it (FBA, PABE,
+  FIX, PREMUL, C1_DST and the two-pass blend's bits among them); g_mode.y, z, w and g_scale.z read
+  0 ([SHADERS.md](SHADERS.md#the-families)). The key carries them as a third bit of
+  `RdPipelineKey.nodual` (`RD_NODUAL_FAST`, with `RD_NODUAL_ON`; with `RD_NODUAL_NODISCARD` too
+  for the discard-free form); `pipelineDesc` takes `rd__fps_module`.
+- **Eligible, at the draw's DrawCB** (`rd_fps_eligible`, `rd_replay_vu.c` `vuDraw` where each
+  pass's DrawCB is filled, the run's and the draw's own path; not the skin check's draws): a
+  vu_ps pass through `vu_ps_nodual` or through the discard-free twin the twins' own rule gave it,
+  no destination read; mode.x's held bits at their values (refused as `texture`, `levels`, `DATE`
+  or `plane`), the texel RGBA32 (mode.y >> 8 = 0, else `texel`), the alpha test off in the pass
+  (mode.z bit 8 clear, else `alpha`), no crop (scale.z = 0, else `crop`). There every value the
+  build reads is the DrawCB's own: TEXA's mode is then never read, and with the test's bit clear
+  `gs_alpha_discard` returns false whatever the rest of mode.z and AREF hold. So it writes what
+  `vu_ps_nodual` writes, the same statements on the same values with the branches it never takes
+  folded away. `rd_fastps` checks the CPU's held bits against the shader's own lines.
+- **Not discard-free:** the side band's discard stays, so `vu_ps_nodual_fast` discards exactly
+  where `vu_ps_nodual` does (a NaN band flag included) and keeps its late depth update; no clip
+  mode or clipper condition is needed for it. The band's flag is an interpolated input, and a
+  clipper may make it NaN at a corner it adds behind the eye
+  ([the discard-free twins](#the-discard-free-twins)), so the discard cannot be dropped for every
+  pass of the set: `vu_ps_nodual_fast_nd` is given only to a pass the twins' own rule already gave
+  `vu_ps_nodual_nd`, whose proof it leaves untouched.
+- **Never waited for:** its pipelines go through the twins' background queue
+  (`rd__pipeline_twin`, `rd__pipeline_twin_tick`): a pass whose fast pipeline is not made yet draws
+  through its ordinary build.
+- **The ways back** (each logged, none in the settings): the install's mark
+  (`logs/fastps-mark.txt`, [PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md)); the start-up
+  self-test after the twins' (`rd_fastps_selftest.c`: eleven code 34 meshes, the set's forms
+  (opaque, the two-pass lerp's two passes, the additive and FIX premultiplied forms, FBA) and the
+  cases the CPU must refuse (DECAL, untextured twice, nearest, a kept alpha test, a clip plane),
+  then a depth probe at GS Z 0 with Z write off, drawn with the build and without it with the
+  twins held off and, where they are on, held on: every pair byte for byte, at least six passes
+  through each module that was tested, every refusal refused, no pipeline missing, the frame
+  without its opaque case different; else off for the run, released, the mark `failed`; a
+  module whose pair was not drawn is not used in play); the loss ladder; a fast pipeline the
+  background could not make (off for the run); the judge times only replays whose every eligible
+  pass had its fast pipeline; the in-play judge's third subject, "fast pixel build", one verdict
+  a run, tried after the cull and the twins (their order unchanged), the 2 % rule unchanged.
+- **Lines:** `rd: fast pixel build: on (self-test: 6 passes through vu_ps_nodual_fast and 6 through
+  vu_ps_nodual_fast_nd, the texture's, the nearest filter's, the alpha test's and the clip plane's
+  refused (4, 1, 1 and 1), the colours and the depth (through the probe) byte for byte; its N
+  pipelines released) on SCENE ...`, the start line `rd: fast pixel build: on, 2 modules of it
+  made, 0 of its pipelines alive`, the 10 s VU line's clause `; fast pixel build: P passes a picture
+  through it, T triangles (R refused a picture: texture t, texel x, levels l, DATE d, plane p,
+  alpha a, crop c, not made yet u, timed without it t, module not tested m)`, the judge's
+  `A/B: fast pixel build, stage N: ...` and the attempt ledger's row `the fast pixel build timed
+  in play`; `rd_replay_tool --stats`: `stats: fast pixel build on (ICO_RD_VU_FASTPS=1): N passes
+  through it, T triangles; refused: ...`.
+- **Not built:** a dual-source form (`vu_ps_fast`): the same define and proof, but its key has no
+  bit to carry it (`RdPipelineKey.nodual` is 0 there and every user reads it as a truth value), so
+  it needs a key field and a dual-source self-test; one more SPIR-V, DXIL and GLSL entry. Left for a
+  later release.
+
 #### The index compaction
 
 Of list 0's mesh triangles a picture draws, a large share draws nothing: the game's own drops

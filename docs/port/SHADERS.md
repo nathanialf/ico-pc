@@ -141,6 +141,12 @@ take from either ([RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)).
   whose start-up clipper check measured clean, for the camera rule's passes too
   ([PIPELINES.md](PIPELINES.md#the-discard-free-twins)).
   Without the define every module is the same byte for byte.
+- `_nodual_fast` (`ICO_NO_DUAL=1 ICO_VU_FAST=1`) and `_nodual_fast_nd` (with
+  `ICO_VU_NODISCARD=1` too): `vu_ps` with the DrawCB words of the boat's VU passes held as
+  constants (`common.hlsli`), the fast pixel build: made only once it is tried, for a pass whose
+  DrawCB holds exactly those words; the discard-free form only for a pass the twins' rule gave its
+  twin ([PIPELINES.md](PIPELINES.md#the-fast-pixel-build)). Without the define every module is the
+  same byte for byte.
 - `_dstrov` (`ICO_DST_READ=1`) and `_dstatt` (`ICO_DST_READ=2`): the exact blend computed from the
   destination (`port/render/rd_dst_read.c`), for the sprite entries, `fog_lut_ps`,
   `fog_lut_buffer_ps`, the font entries and `vu_ps`, `vu_texa_ps`. `_dstrov` reads and writes the
@@ -1008,7 +1014,7 @@ executable): `tools/spirv_to_glsl.py` runs
 `SKIP_SPIRV_CROSS=1`; [THIRD_PARTY.md](../THIRD_PARTY.md)); nothing of it is linked or shipped.
 `embed_shaders.py` deflates each file (zlib) into the table's `glsl` column, with the text length in
 `glsl_text_len`; the backend inflates it with `rhi_gl_inflate_glsl` (`port/rhi/gl/gl_glsl.c`, miniz)
-when it creates the shader. The deflated GLSL of the 220 translatable modules (270 entries, less the 19 below and the 31
+when it creates the shader. The deflated GLSL of the 222 translatable modules (272 entries, less the 19 below and the 31
 compute builds) is about 2.0 MB.
 
 **The binding map** (observed on the compiled modules; the SPIR-V numbers carry over unchanged):
@@ -1055,7 +1061,7 @@ the same way into `rhi_test_glsl.h`.
 
 | test | checks |
 | --- | --- |
-| `shaders_table` (`port/shaders/test/shaders_table_test.c`) | every embedded entry: SPIR-V with its magic, DXIL a signed DXBC container (none with `ICO_SHADERS_DXIL=OFF`), a known stage and entry, unique names, the expected names present, and with GLSL on a zlib stream for every entry but the 19 of `expectedNoGlsl` and the compute builds; the table's count (270 entries, 31 of them compute) from its lists |
+| `shaders_table` (`port/shaders/test/shaders_table_test.c`) | every embedded entry: SPIR-V with its magic, DXIL a signed DXBC container (none with `ICO_SHADERS_DXIL=OFF`), a known stage and entry, unique names, the expected names present, and with GLSL on a zlib stream for every entry but the 19 of `expectedNoGlsl` and the compute builds; the table's count (272 entries, 31 of them compute) from its lists |
 | `gs_math` (`gs_math_test.c`) | `gs_math.hlsli` as C against `port/test/gs_blend_test.c`'s formulas and the GS rules for TEXA, the alpha test and the Z mapping: exhaustive where the domain is small; the shared constants pinned; the [integer forms](#integer-forms) against the operators they replace |
 | `shaders_pixel` (`shaders_pixel_test.c`) | `sprite.hlsl`, `blit.hlsl` and `blend_int.hlsl` through the Vulkan RHI, texel by texel against `gs_math.hlsli` as C: untextured, modulate, the alpha test, dual-source lerps, additive with `DF_PREMUL`, PABE, FBA, tinted blits, three integer blends, `blit_vs`'s quarter turns against hand-written corners (`checkTurns`, the pre-rotated present's direction); `shaders_pixel_nodual` (`--nodual`, `ICO_VK_FAKE_NO_DUAL=1`) the two-pass fallback; `shaders_pixel_mali` under `ICO_VK_FAKE_LIMITS=mali` |
 | `spirv_check` (`tools/check_spirv.py --sizes`) | every compiled SPIR-V module under the build's `shaders/`: a vertex shader without a vector of booleans, `OpAny`/`OpAll` or a boolean select, its opcodes inside the envelope's set (`OpLoopMerge`, `OpDot`, `OpLogicalNotEqual`, `OpUndef` named), every module within its size budget (a VU vertex shader's plain variant, a pre-pass entry or record stage `_pre_vs` and a main shader `_main_vs` within the plain one, the sheet text entries `font_sheet_*` within `SHEET_BUDGET`), every mesh program's entry with its `vu_X_plain_vs` (`PROGRAM_ENTRIES`), the largest module of each budget class printed last, no array-typed value (OpLoad, OpStore, OpCompositeConstruct, OpCompositeInsert, OpPhi, OpSelect, OpCopyObject, OpCopyLogical of an array type) and no local array in a vertex shader ([The envelope](#the-envelope)); the sizes and the shape census printed; the module's binary form decoded in Python, no SPIR-V tool needed |

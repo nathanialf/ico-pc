@@ -352,6 +352,7 @@ int main(int argc, char **argv)
     CHECK(kept == (wantOn || notRun), "the self-test returned %s", kept ? "true" : "false");
     zeroMarkLine("after the self-test");
     markLine("ICO_NODISCARD_MARK", "discard-free twins'", "after the self-test");
+    markLine("ICO_FASTPS_MARK", "fast pixel build's", "after the self-test");
     /* the clipper check's verdict and its consequence, from the run's own
        state (rd__nd_class_on: a prelit code 32 camera rule pass as play's
        rd__nd_pass judges it), whatever the device measured */

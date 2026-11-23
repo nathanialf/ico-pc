@@ -134,6 +134,17 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   version's next start, removed at a later version's; no evidence while trying: blocked, while counting:
   not; the watchdog and a cleanly closed device loss while on: blocked; a SIGKILL while on: not;
   `ICO_VU_ZERO_MARK` and `ICO_VU_ZERO_VERSION` exported. CPU only.
+- `fastps_mark_test.c` (`fastps_mark`): the fast pixel build's mark on the install
+  (`port/platform/fastps_mark.c`, the cull's stages and table with its own file and words): every
+  stage at a crash blocked for the version in the mark and tried again by the next version, the
+  lines word for word; a clean close while counting not blocked; no mark nothing; a text not known
+  taken as `trying`; an end while another attempt's mark said trying (counting tried again,
+  trying blocked). Then the start's step on files in a folder of its own: no mark, no line; closed
+  from the recent apps list while counting: not blocked; a crash while on: `blocked <version>`,
+  kept, removed at a later version's start; no evidence while trying: blocked;
+  `ICO_FASTPS_MARK`, `ICO_FASTPS_VERSION`, `ICO_FASTPS_BLOCK` exported; then the three steps in the
+  start's order after a crash: the build trying and the cull and the twins counting blocks the
+  build only (their lines name it), the twins trying and the build on the twins only. CPU only.
 - `nodiscard_mark_test.c` (`nodiscard_mark`): the discard-free twins' mark on the install
   (`port/platform/nodiscard_mark.c`, the cull's stages and table with its own file and words):
   every stage at a crash blocked for the version in the mark and tried again by the next version,

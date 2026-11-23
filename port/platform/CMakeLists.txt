@@ -27,6 +27,7 @@ target_sources(ico_platform PRIVATE
     last_run_skin.c
     vu_zero_mark.c
     nodiscard_mark.c
+    fastps_mark.c
     ahead_mark.c
     log_cost.c
     mem_breakdown.c
@@ -428,6 +429,24 @@ if(ICO_RUN_TESTS)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/nodiscard_mark_test_files")
     add_test(NAME nodiscard_mark COMMAND nodiscard_mark_test
                                          "${CMAKE_CURRENT_BINARY_DIR}/nodiscard_mark_test_files")
+endif()
+
+# The fast pixel build's mark on the install (fastps_mark.c, issue 179):
+# the zero-area cull's stages and table with its own file and words, every
+# stage at a crash (blocked for that version, the next one tries again), a
+# close from the recent apps while counting (not blocked), an end while the
+# cull's or the twins' mark said trying (theirs, not blocked here), and the
+# start's step on files (the file rewritten, the environment exported, one
+# line; nothing said without a mark; the cull's and the twins' marks judge
+# an end while it was trying as its own)
+add_executable(fastps_mark_test test/fastps_mark_test.c)
+target_compile_options(fastps_mark_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(fastps_mark_test PRIVATE ico_platform ico_host_fs ico_miniz)
+if(ICO_RUN_TESTS)
+    # a folder of its own: last-run-previous.txt is written by every mark test
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/fastps_mark_test_files")
+    add_test(NAME fastps_mark COMMAND fastps_mark_test
+                                      "${CMAKE_CURRENT_BINARY_DIR}/fastps_mark_test_files")
 endif()
 
 # The next picture submitted ahead, its mark on the install (ahead_mark.c,

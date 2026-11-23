@@ -23,7 +23,9 @@
  * A subject's own self-test, mark and run-time checks still decide whether
  * it is used at all: one that is off is never put on trial (rd_ab_allow).
  * The attempt ledger's rows (attempt_ledger.h ICO_ATT_AB_ZERO,
- * ICO_ATT_AB_NODISCARD). */
+ * ICO_ATT_AB_NODISCARD, ICO_ATT_AB_FASTPS).  The judge tries one subject at a
+ * time in their registration order (the cull, the twins, the fast pixel
+ * build), each timed once a run. */
 #ifndef PORT_RENDER_RD_AB_RUN_H
 #define PORT_RENDER_RD_AB_RUN_H
 
@@ -33,8 +35,9 @@
 
 /* the subjects, in their registration order (rd_ab_run.c) */
 enum {
-    RD_AB_ZERO = 0,     /* the zero-area cull (rd_vu_zero.h) */
-    RD_AB_NODISCARD = 1 /* the discard-free twins (rd_nodiscard.h) */
+    RD_AB_ZERO = 0,      /* the zero-area cull (rd_vu_zero.h) */
+    RD_AB_NODISCARD = 1, /* the discard-free twins (rd_nodiscard.h) */
+    RD_AB_FASTPS = 2     /* the fast pixel build (rd_fastps.h) */
 };
 
 struct RdPerfRecord;

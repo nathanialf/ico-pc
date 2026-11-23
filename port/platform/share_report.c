@@ -176,6 +176,7 @@ int ico_share_report_collect_run(const char *logs_dir, const char *dumps_dir, lo
         add_named(out, logs_dir, "vu-zero-mark.txt");
         add_named(out, logs_dir, "ahead-mark.txt");
         add_named(out, logs_dir, "nodiscard-mark.txt");
+        add_named(out, logs_dir, "fastps-mark.txt");
     }
     return out->count;
 }

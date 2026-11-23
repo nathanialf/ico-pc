@@ -129,6 +129,7 @@ eye_trail_jpn 0.01
 eye_trail_jun26 0.01
 eye_trail_kor 0.01
 eye_trail_ntsc 0.02
+fastps_mark 0.02  # estimate: a CPU unit test with a few files, like nodiscard_mark (not run here)
 ffx_link_test 4.68
 fiber 0.11
 fiber_guard 0.15
@@ -296,10 +297,16 @@ pit_dive_base_ntsc 0.02
 poly_flat 0.01
 power_read 0.00  # estimate: a CPU unit test of one pure file, like perf_secs (run by hand here, well under 0.01 s; not run under CI yet)
 rd_diag_notes 0.00  # estimate: 0.0 s local (merge-wt_DIAG6-20261121T075234Z.lvp.log) x 2.09
+rd_fastps 0.01  # estimate: a CPU unit test of the eligibility table and a file read, like rd_nodiscard (not run here)
+rd_fastps_ab 66.56  # estimate: rd_nodiscard_ab x 1.3 (three fixtures under four profiles; not run here)
+rd_fastps_ab_gl 83.80  # estimate: rd_nodiscard_ab_gl (three fixtures; not run here)
 rd_nodiscard 0.01  # estimate: a CPU unit test of the eligibility table, like rd_ab (not run here)
 rd_nodiscard_ab 51.20  # estimate: the round-1 estimate x 2 (four fixtures to two; not run here)
 rd_nodiscard_ab_gl 83.80  # estimate: the round-1 estimate x 2 (four fixtures to two; not run here)
 rd_nodiscard_clean 51.20  # estimate: rd_nodiscard_ab (the same runs, the verdict taken as clean; not run here)
+rd_vuprepass_selftest_fastps 17.43  # estimate: the twins' self-test before it plus rd_vuprepass_selftest_nodiscard_sabotage x 1.5 (two pairs of small replays, two gathering rounds each; not run here)
+rd_vuprepass_selftest_fastps_marked 11.25  # estimate: the twins' self-test alone (the build not tried; not run here)
+rd_vuprepass_selftest_fastps_sabotage 15.37  # estimate: the twins' self-test plus one pair (it stops at the first; not run here)
 rd_vuprepass_selftest_nodiscard 11.25  # estimate: rd_vuprepass_selftest_zero_mali x 3 (the clipper check: 52 frames of 3 small replays, both twin entries; not run here)
 rd_vuprepass_selftest_nodiscard_clean 11.25  # estimate: rd_vuprepass_selftest_nodiscard (the same self-test, the verdict taken as clean; not run here)
 rd_vuprepass_selftest_nodiscard_clipper 11.25  # estimate: rd_vuprepass_selftest_nodiscard (the same self-test; not run here)

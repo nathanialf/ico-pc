@@ -536,6 +536,37 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   switch makes it (`switch`: `rd_suspend`, `rd_resume`, the self-test again): on both times, its
   read back buffers made again for the second try and none alive after either, the mark `counting
   <the test's version>` after each.
+- `rd_fastps_test.c` (`rd_fastps`; `rd_fastps.cmake`, CPU): the fast pixel build's pure part
+  ([PIPELINES.md](PIPELINES.md#the-fast-pixel-build)): the eligibility of a pass at its DrawCB (the
+  set's forms through it: opaque, the two-pass lerp's passes, the premultiplied forms, FIX, FBA,
+  PABE, C1_DST, bits vu_ps never reads, a discard-free twin's key, TEXA's mode with an RGBA32
+  texel, any atst, split and AREF with the test off, scale.z -0; every refusal in its order:
+  texture (untextured, DECAL, TCC off), texel, levels (GS levels, nearest, the grid), DATE (DATE,
+  DATM, DATE_DST), plane, alpha, crop; the tests' sabotage letting DECAL through), the passes it
+  does not exist for (vu_texa_ps, vu_np_ps, sprite_ps, destination reads, nodual 0, a fast key
+  already, the discard-free bit alone), the held bits against `common.hlsli`'s own
+  `VU_FAST_FIXED_MASK` and `VU_FAST_FIXED` lines (its argument) and each of the 32 bits flipped
+  alone, the reasons' and modules' names, the judge's use of a replay, and the run's state
+  without a device (held, on after a passed self-test, `ICO_RD_VU_FASTPS=0` and `=1`, the loss
+  ladder and the install's mark over `=1`, a failed self-test kept off for the run, a short buffer
+  cut).
+- `rd_fastps_ab.cmake` (`rd_fastps_ab`, `rd_fastps_ab_gl`; `rd_fastps.cmake`): every fixture of
+  `port/render/test/fixtures/lists/fastps.txt` under its profiles (corpus at 4:3 1x, mali at 21:9,
+  mali169 at 16:9, desktop: the corpus device at 4:3 without dual-source blending) replayed with
+  the build off (`ICO_RD_VU_FASTPS=0`) and on without its self-test (`=1`), `--pass-dump --stats
+  --repeat 2`: every target byte for byte, nothing of it on the run without it, on the run with it
+  the second replay drawing every pass the first asked for, above 0 passes through it over the list
+  under each profile without dual-source blending (each fixture's count printed), and under corpus
+  0 passes and "not applicable here". `rd_fastps_ab_gl`: the same on OpenGL at the corpus setting
+  without dual-source blending. No device: SKIP.
+- `rd_vuprepass_selftest_fastps`, `_fastps_sabotage`, `_fastps_marked` (`rd_fastps.cmake`, through
+  `rd_vuprepass_selftest_test` and `test/rd_vuprepass_selftest.cmake`, the Mali fakes without
+  dual-source blending, the mark in a file of each test's own): the self-test's on line (at least
+  six passes through `vu_ps_nodual_fast`, the refusals counted, the colours and the depth byte for
+  byte, its pipelines released), the start line and the mark `counting` with the test's version; the sabotage
+  (`ICO_RD_VU_FASTPS_SABOTAGE=decal`) caught: the pictures differ, off for the run, released, the
+  mark `failed`; the install's mark (`ICO_FASTPS_BLOCK`): off, no module made, the mark
+  not written.
 - `rd_nodiscard_test.c` (`rd_nodiscard`; `rd_nodiscard.cmake`, CPU): the discard-free twins' pure
   part ([PIPELINES.md](PIPELINES.md#the-discard-free-twins)): the eligibility of a VU pass (a vu_ps
   or vu_texa_ps pass through its *_nodual build given its twin; every refusal reason and the order
