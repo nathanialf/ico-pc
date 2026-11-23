@@ -53,6 +53,9 @@ press of R3 (click the right stick in, or keyboard B) puts the camera right
 back on Ico. If you are still pushing the stick, the camera waits on Ico
 until you let go, so it does not swing straight back out. You can move R3 to
 another button under **Remap controls**. The touch screen has no R3 button.
+A save state made with Camera reset set the other way, and every save state
+made before the row existed, will not load while it is on; turn it off to
+load those.
 
 ## The on-screen buttons are in my way
 

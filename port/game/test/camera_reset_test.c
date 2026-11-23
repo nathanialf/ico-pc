@@ -215,6 +215,66 @@ static void test_arm(void)
     CHECK(s_yaw > 1.0f);
 }
 
+/* the Main tick clock (ico_cam_reset_set_clock): R3 down at the first tick of
+   a stretch of control (after a cutscene, a pause or photo mode, when the
+   arm did not run) is held, not pressed */
+static unsigned s_tick;
+
+static unsigned fake_clock(void)
+{
+    return s_tick;
+}
+
+static void test_first_tick(void)
+{
+    const unsigned long n0 = ico_cam_reset_count();
+
+    fresh(1);
+    ico_cam_reset_set_clock(fake_clock);
+    s_tick = 100;
+    CHECK(tick(0, 0.0f, 0.0f, NULL, NULL) == 0);
+    s_tick = 101;
+    CHECK(tick(1, 0.0f, 0.0f, NULL, NULL) == 1); /* a press in play: a reset */
+    s_tick = 102;
+    CHECK(tick(0, 0.0f, 0.0f, NULL, NULL) == 0);
+    /* the arm does not run for 40 ticks (a cutscene); R3 pressed there and
+       still down at the first tick back: no reset */
+    s_tick = 143;
+    CHECK(tick(1, 0.0f, 0.0f, NULL, NULL) == 0);
+    s_tick = 144;
+    CHECK(tick(1, 0.0f, 0.0f, NULL, NULL) == 0);
+    s_tick = 145;
+    CHECK(tick(0, 0.0f, 0.0f, NULL, NULL) == 0);
+    s_tick = 146;
+    CHECK(tick(1, 0.0f, 0.0f, NULL, NULL) == 1); /* a new press */
+    CHECK(ico_cam_reset_count() == n0 + 2);
+    /* a second call in the same tick is not a new stretch */
+    CHECK(tick(1, 0.0f, 0.0f, NULL, NULL) == 0);
+    s_tick = 147;
+    CHECK(tick(0, 0.0f, 0.0f, NULL, NULL) == 0);
+    CHECK(tick(1, 0.0f, 0.0f, NULL, NULL) == 1);
+    /* a load rewinds the clock: the first tick after it is a new stretch */
+    s_tick = 90;
+    CHECK(tick(0, 0.0f, 0.0f, NULL, NULL) == 0);
+    s_tick = 91;
+    CHECK(tick(1, 0.0f, 0.0f, NULL, NULL) == 1);
+    s_tick = 50;
+    CHECK(tick(1, 0.0f, 0.0f, NULL, NULL) == 0);
+    /* a stick mute ends with the stretch */
+    s_tick = 51;
+    CHECK(tick(0, 0.0f, 0.0f, NULL, NULL) == 0);
+    s_tick = 52;
+    {
+        float sx, sz;
+
+        CHECK(tick(1, 0.9f, 0.0f, &sx, &sz) == 1 && sx == 0.0f);
+        s_tick = 80;
+        CHECK(tick(1, 0.9f, 0.0f, &sx, &sz) == 0 && sx == 0.9f);
+    }
+    ico_cam_reset_set_clock(NULL);
+    CHECK(ico_cam_reset_count() == n0 + 5);
+}
+
 static void test_block(void)
 {
     const IcoStateEntry *e = NULL;
@@ -259,6 +319,7 @@ int main(int argc, char **argv)
     test_not_live();
     test_zoom();
     test_arm();
+    test_first_tick();
     test_block();
     if (failures != 0) {
         fprintf(stderr, "camera_reset_test: %d failure(s)\n", failures);

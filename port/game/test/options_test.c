@@ -2823,7 +2823,10 @@ static void test_camera_reset(const char *dir)
         CHECK(count_of(src, "ico_cam_reset(") == 4 + 1 /* the declaration */);
         CHECK(count_of(src, "if (ico_cam_reset(pad[0].now & 0x400,\n") == 4);
         CHECK(count_of(src, "systemStatus[5] == 0 && IsAbleBoyControl() != 0 && mode != 0, &sx,") ==
-              4);
+              3);
+        /* the June 2001 demo's: live too while only the zoom stops the look-around */
+        CHECK(count_of(src, "(mode != 0 || zoomStop != 0),") == 1);
+        CHECK(count_of(src, "            zoomStop = mode != 0;\n            mode = 0;") == 1);
         CHECK(count_of(
                   src,
                   "            ClearHandCameraCorrect();\n        }\n        if (systemStatus[5] "

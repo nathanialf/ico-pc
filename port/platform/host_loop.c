@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include "../audio/audio_host.h"
 #include "../game/options.h"
+#include "../game/camera_reset.h"
 #include "../game/difficulty.h"
 #include "../data/cdvd_host.h"
 #include "../game/achievements.h"
@@ -96,6 +97,8 @@ void ico_host_init(void)
     /* the port's blocks in the save state registry, before the game runs
        (state_port.h; the result is kept for state_host.c) */
     (void)ico_state_register_port();
+    /* Camera reset's press edge: the Main tick count (camera_reset.h) */
+    ico_cam_reset_set_clock(ico_host_main_ticks);
     ico_sched_boot(boot_main, NULL, BOOT_PRIORITY);
     ico_sched_run();
 }

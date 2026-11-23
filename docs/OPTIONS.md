@@ -476,7 +476,8 @@ A change takes effect the next time you start the game.
   stays on Ico until you let go. You can give R3 to another key or button
   under **Remap controls**. It shows from the title screen and the pause
   menu, on every disc, and is kept in the settings file. A save state made
-  with it set the other way will not load until you set it back.
+  with it set the other way, or made before the row existed, will not load
+  until you set it back.
 - **Analogue stick fix** is the same switch as the one on the Gameplay
   page, shown here too so you find it with the other controls. Turn it on
   in either place and it is on in both.

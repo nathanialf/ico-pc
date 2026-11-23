@@ -23,6 +23,19 @@ typedef struct CamResetState {
 static CamResetState s_cr;
 static unsigned long s_count;
 
+/* the Main tick clock (camera_reset.h ico_cam_reset_set_clock) and the tick
+   of the last call: a call that does not follow the last one by one tick is
+   the first of a stretch of control */
+static unsigned (*s_clock)(void);
+static unsigned s_last;
+static int s_haveLast;
+
+void ico_cam_reset_set_clock(unsigned (*clock)(void))
+{
+    s_clock = clock;
+    s_haveLast = 0;
+}
+
 /* FRESH: a state saved before the block existed loads with no mute */
 int ico_cam_reset_state_register(void)
 {
@@ -33,9 +46,22 @@ int ico_cam_reset_state_register(void)
 int ico_cam_reset(int r3, int live, float *sx, float *sz)
 {
     const int level = r3 != 0;
-    const int press = level && !s_cr.prev;
+    int press;
     int fired = 0;
 
+    if (s_clock != NULL) {
+        const unsigned now = s_clock();
+
+        if (!s_haveLast || (now != s_last + 1u && now != s_last)) {
+            /* the first tick after a cutscene, a pause, photo mode or a
+               load: R3 already down is held, not pressed */
+            s_cr.prev = level;
+            s_cr.mute = 0;
+        }
+        s_last = now;
+        s_haveLast = 1;
+    }
+    press = level && !s_cr.prev;
     s_cr.prev = level;
     if (!ico_opt_camera_reset()) {
         s_cr.mute = 0;
@@ -70,6 +96,7 @@ void ico_cam_reset_clear(void)
 {
     s_cr.prev = 0;
     s_cr.mute = 0;
+    s_haveLast = 0;
 }
 
 unsigned long ico_cam_reset_count(void)
