@@ -57,19 +57,22 @@ RdRcUnit rd_rc_none(const char *why);
 
 /* the card's items, in the printed order */
 enum {
-    RD_RC_SHADE,       /* a shaded fragment, the ordinary build (vu_ps or its _nodual) */
-    RD_RC_SHADE_TEXA,  /* a shaded fragment, the textured build under TEXA */
-    RD_RC_SHADE_TWIN,  /* a shaded fragment through the discard-free twin */
-    RD_RC_SHADE_FAST,  /* a shaded fragment, the fast pixel build (FASTPS: none yet) */
-    RD_RC_HIDDEN,      /* a fragment hidden by depth, the ordinary build (with discard) */
-    RD_RC_HIDDEN_TWIN, /* a fragment hidden by depth, through the twin */
-    RD_RC_VERTEX,      /* a vertex: a corner drawn off the target */
-    RD_RC_TRIANGLE,    /* a triangle binned: small against large, the same coverage */
-    RD_RC_QUAD,        /* the 2x2-quad factor: the small layer's cost over the large's */
-    RD_RC_PASS,        /* a pass with nothing drawn */
-    RD_RC_PASS_MB,     /* a MB loaded or stored */
-    RD_RC_BLEND,       /* a blended fragment (the two-pass blend or dual-source) */
-    RD_RC_BLEND_RATIO, /* the blended fragment over the opaque one */
+    RD_RC_SHADE,         /* a shaded fragment, the ordinary build (vu_ps or its _nodual) */
+    RD_RC_SHADE_TEXA,    /* a shaded fragment, the textured build under TEXA */
+    RD_RC_SHADE_TWIN,    /* a shaded fragment through the discard-free twin */
+    RD_RC_SHADE_RGBA,    /* a shaded fragment, the ordinary build on the fast build's own form
+                          (textured RGBA32, MODULATE with TCC, a linear filter) */
+    RD_RC_SHADE_FAST,    /* the same through the fast pixel build (rd_fastps.h) */
+    RD_RC_SHADE_FAST_ND, /* the same through its discard-free form, the twins' hold on */
+    RD_RC_HIDDEN,        /* a fragment hidden by depth, the ordinary build (with discard) */
+    RD_RC_HIDDEN_TWIN,   /* a fragment hidden by depth, through the twin */
+    RD_RC_VERTEX,        /* a vertex: a corner drawn off the target */
+    RD_RC_TRIANGLE,      /* a triangle binned: small against large, the same coverage */
+    RD_RC_QUAD,          /* the 2x2-quad factor: the small layer's cost over the large's */
+    RD_RC_PASS,          /* a pass with nothing drawn */
+    RD_RC_PASS_MB,       /* a MB loaded or stored */
+    RD_RC_BLEND,         /* a blended fragment (the two-pass blend or dual-source) */
+    RD_RC_BLEND_RATIO,   /* the blended fragment over the opaque one */
     RD_RC_ITEMS
 };
 

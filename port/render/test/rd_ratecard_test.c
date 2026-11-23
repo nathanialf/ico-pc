@@ -68,7 +68,9 @@ static RdRateCard sample(void)
     static const char *const kLabel[RD_RC_ITEMS] = {"a shaded fragment, vu_ps_nodual",
                                                     "a shaded fragment, vu_texa_ps_nodual",
                                                     "a shaded fragment, the twin vu_ps_nodual_nd",
+                                                    "a shaded fragment, vu_ps_nodual (RGBA32)",
                                                     "a shaded fragment, the fast pixel build",
+                                                    "a shaded fragment, its discard-free form",
                                                     "a fragment hidden by depth, with discard",
                                                     "a fragment hidden by depth, through the twin",
                                                     "a vertex (a corner drawn off the target)",
@@ -78,8 +80,8 @@ static RdRateCard sample(void)
                                                     "a MB loaded or stored",
                                                     "a blended fragment, the two-pass blend",
                                                     "the blended fragment over the opaque one"};
-    static const char *const kUnit[RD_RC_ITEMS] = {"ns", "ns", "ns", "ns", "ns", "ns", "ns",
-                                                   "ns", "x",  "ms", "ms", "ns", "x"};
+    static const char *const kUnit[RD_RC_ITEMS] = {"ns", "ns", "ns", "ns", "ns", "ns", "ns", "ns",
+                                                   "ns", "ns", "x",  "ms", "ms", "ns", "x"};
     for (int i = 0; i < RD_RC_ITEMS; i++) {
         snprintf(c.item[i].label, sizeof(c.item[i].label), "%s", kLabel[i]);
         snprintf(c.item[i].unit, sizeof(c.item[i].unit), "%s", kUnit[i]);
@@ -88,7 +90,7 @@ static RdRateCard sample(void)
         c.item[i].u.lo = 9.5 + i;
         c.item[i].u.hi = 11.25 + i;
     }
-    c.item[RD_RC_SHADE_FAST].u = rd_rc_none("no such build in this release");
+    c.item[RD_RC_SHADE_FAST_ND].u = rd_rc_none("the twins off");
     c.item[RD_RC_PASS_MB].u = rd_rc_none("one target size: not separable from the pass");
     return c;
 }
@@ -99,23 +101,22 @@ static void text(void)
     char out[4096];
     const size_t n = rd_rc_text(&c, out, sizeof(out));
     static const char kWant[] =
-        "rate card: Mali-G52 (Mali 32.1, vulkan) on SCENE 688x512 at 688x512 texels, 2 full "
-        "layers; the median of 5 timed replays a frame (min, max beside it); 612.5 ms in all\n"
+        "rate card: Mali-G52 (Mali 32.1, vulkan) on SCENE 688x512 at 688x512 texels, 2 full layers; the median of 5 timed replays a frame (min, max beside it); 612.5 ms in all\n"
         "rate card: a shaded fragment, vu_ps_nodual: 10.00 ns (min 9.50, max 11.25)\n"
         "rate card: a shaded fragment, vu_texa_ps_nodual: 11.00 ns (min 10.50, max 12.25)\n"
         "rate card: a shaded fragment, the twin vu_ps_nodual_nd: 12.00 ns (min 11.50, max 13.25)\n"
-        "rate card: a shaded fragment, the fast pixel build: not measured (no such build in this "
-        "release)\n"
-        "rate card: a fragment hidden by depth, with discard: 14.00 ns (min 13.50, max 15.25)\n"
-        "rate card: a fragment hidden by depth, through the twin: 15.00 ns (min 14.50, max 16.25)\n"
-        "rate card: a vertex (a corner drawn off the target): 16.00 ns (min 15.50, max 17.25)\n"
-        "rate card: a triangle binned: 17.00 ns (min 16.50, max 18.25)\n"
-        "rate card: the 2x2-quad factor: 18.00 x (min 17.50, max 19.25)\n"
-        "rate card: a pass with nothing drawn: 19.000 ms (min 18.500, max 20.250)\n"
-        "rate card: a MB loaded or stored: not measured (one target size: not separable from the "
-        "pass)\n"
-        "rate card: a blended fragment, the two-pass blend: 21.00 ns (min 20.50, max 22.25)\n"
-        "rate card: the blended fragment over the opaque one: 22.00 x (min 21.50, max 23.25)\n";
+        "rate card: a shaded fragment, vu_ps_nodual (RGBA32): 13.00 ns (min 12.50, max 14.25)\n"
+        "rate card: a shaded fragment, the fast pixel build: 14.00 ns (min 13.50, max 15.25)\n"
+        "rate card: a shaded fragment, its discard-free form: not measured (the twins off)\n"
+        "rate card: a fragment hidden by depth, with discard: 16.00 ns (min 15.50, max 17.25)\n"
+        "rate card: a fragment hidden by depth, through the twin: 17.00 ns (min 16.50, max 18.25)\n"
+        "rate card: a vertex (a corner drawn off the target): 18.00 ns (min 17.50, max 19.25)\n"
+        "rate card: a triangle binned: 19.00 ns (min 18.50, max 20.25)\n"
+        "rate card: the 2x2-quad factor: 20.00 x (min 19.50, max 21.25)\n"
+        "rate card: a pass with nothing drawn: 21.000 ms (min 20.500, max 22.250)\n"
+        "rate card: a MB loaded or stored: not measured (one target size: not separable from the pass)\n"
+        "rate card: a blended fragment, the two-pass blend: 23.00 ns (min 22.50, max 24.25)\n"
+        "rate card: the blended fragment over the opaque one: 24.00 x (min 23.50, max 25.25)\n";
     CHECK(n == strlen(out) && strcmp(out, kWant) == 0, "the block:\n%s", out);
     /* read back, also with a reprint's suffix on each line */
     RdRateCard b;

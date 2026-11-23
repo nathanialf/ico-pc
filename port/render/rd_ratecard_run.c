@@ -47,6 +47,7 @@
 #include <unistd.h> /* fsync, _exit */
 #endif
 
+#include "rd_fastps.h"
 #include "rd_internal.h"
 #include "rd_mesh.h"
 #include "rd_nodiscard.h"
@@ -63,7 +64,23 @@
 #define RC_LAYER_Z_NEAR 3.0f
 #define RC_LAYER_Z_FAR 2.0f
 
-enum { F_E, F_L2, F_L2T, F_L1, F_H2, F_BL, F_V, F_S, F_B, F_L2_TWIN, F_H2_TWIN, F_COUNT };
+enum {
+    F_E,
+    F_L2,
+    F_L2T,
+    F_L1,
+    F_H2,
+    F_BL,
+    F_V,
+    F_S,
+    F_B,
+    F_L2_TWIN,
+    F_H2_TWIN,
+    F_L2R,        /* two layers on the fast build's form (RGBA32, MODULATE, TCC), its hold off */
+    F_L2R_FAST,   /* the same, the fast pixel build's hold on */
+    F_L2R_FASTND, /* the same, the twins' hold on too (vu_ps_nodual_fast_nd) */
+    F_COUNT
+};
 
 static const char *const kFrameWords[F_COUNT] = {"the clear",
                                                  "two layers",
@@ -75,7 +92,10 @@ static const char *const kFrameWords[F_COUNT] = {"the clear",
                                                  "small triangles",
                                                  "large triangles",
                                                  "two layers through the twin",
-                                                 "near then far through the twin"};
+                                                 "near then far through the twin",
+                                                 "two RGBA32 layers",
+                                                 "two RGBA32 layers through the fast build",
+                                                 "two RGBA32 layers through its discard-free form"};
 
 static RdRateCard s_card;
 
@@ -283,10 +303,41 @@ static RdTex makeTexture(void)
     return rd_create_texture_src(4, 4, px, RD_TEXSRC_RGB24, "rd rate card texa");
 }
 
+/* a 4x4 RGBA32 texture, alpha 0x80: the fast pixel build's own form */
+static RdTex makeTextureRgba(void)
+{
+    uint8_t px[4 * 4 * 4];
+    for (int i = 0; i < 16; i++) {
+        px[i * 4 + 0] = (uint8_t)(70 + 40 * (i % 4));
+        px[i * 4 + 1] = (uint8_t)(210 - 30 * (i / 4));
+        px[i * 4 + 2] = 100;
+        px[i * 4 + 3] = 0x80;
+    }
+    return rd_create_texture_src(4, 4, px, RD_TEXSRC_RGBA32, "rd rate card rgba");
+}
+
+/* the textured state of the fast build's form: MODULATE with TCC, linear */
+static bool pushRgba(RdFrame *f, RdTex tex)
+{
+    RdCmd *c = rd__st_push(f, 0, RDC_TEXTURE);
+    if (c) {
+        c->u[0] = tex.id;
+        c->b[0] = RD_TEXFN_MODULATE;
+        c->b[1] = RD_TCC_RGBA;
+    }
+    c = c ? rd__st_push(f, 0, RDC_FILTER) : NULL;
+    if (c) {
+        c->b[0] = RD_FILTER_LINEAR;
+        c->b[1] = RD_FILTER_LINEAR;
+        c->u[0] = 0;
+    }
+    return c != NULL;
+}
+
 typedef struct RcMeshes {
     RdMesh nearL, farL, vert, small, large;
     uint32_t vertBatches, smallBatches;
-    RdTex tex;
+    RdTex tex, texRgba;
 } RcMeshes;
 
 /* frame k (F_*) on SCENE (w x h GS pixels) */
@@ -326,6 +377,12 @@ static bool buildFrame(RdFrame *f, int k, uint32_t scene, uint32_t w, uint32_t h
         break;
     case F_L1:
         ok = ok && pushMesh(f, m->nearL, 1, 1u);
+        break;
+    case F_L2R:
+    case F_L2R_FAST:
+    case F_L2R_FASTND:
+        ok = ok && pushRgba(f, m->texRgba) && pushMesh(f, m->nearL, 1, 1u) &&
+             pushMesh(f, m->nearL, 1, 2u) && rd__st_push(f, 0, RDC_TEXTURE_OFF);
         break;
     case F_H2:
     case F_H2_TWIN:
@@ -442,9 +499,15 @@ static void measure(RdRateCard *c, RdTargetRec *t, double t0, double budgetMs)
     snprintf(text, sizeof(text), "a shaded fragment, vu_texa_ps%s (TEXA, a linear filter)", sfx);
     label(&c->item[RD_RC_SHADE_TEXA], text, "ns");
     label(&c->item[RD_RC_SHADE_TWIN], "a shaded fragment, the twin vu_ps_nodual_nd", "ns");
-    /* FASTPS's build, once it exists: its frame beside F_L2 and its item
-       here (RD_RC_SHADE_FAST) */
-    label(&c->item[RD_RC_SHADE_FAST], "a shaded fragment, the fast pixel build", "ns");
+    /* the fast pixel build (rd_fastps.h): its form through the ordinary
+       build, then through it, then through its discard-free form */
+    snprintf(text, sizeof(text), "a shaded fragment, vu_ps%s on the fast build's form (RGBA32)",
+             sfx);
+    label(&c->item[RD_RC_SHADE_RGBA], text, "ns");
+    label(&c->item[RD_RC_SHADE_FAST], "a shaded fragment, the fast pixel build vu_ps_nodual_fast",
+          "ns");
+    label(&c->item[RD_RC_SHADE_FAST_ND],
+          "a shaded fragment, its discard-free form vu_ps_nodual_fast_nd", "ns");
     snprintf(text, sizeof(text), "a fragment hidden by depth, vu_ps%s with its discard", sfx);
     label(&c->item[RD_RC_HIDDEN], text, "ns");
     label(&c->item[RD_RC_HIDDEN_TWIN], "a fragment hidden by depth, through the twin", "ns");
@@ -462,7 +525,6 @@ static void measure(RdRateCard *c, RdTargetRec *t, double t0, double budgetMs)
              noDual ? "the two-pass blend" : "the dual-source blend");
     label(&c->item[RD_RC_BLEND], text, "ns");
     label(&c->item[RD_RC_BLEND_RATIO], "the blended fragment over the opaque one", "x");
-    c->item[RD_RC_SHADE_FAST].u = rd_rc_none("no such build in this release");
     c->item[RD_RC_PASS_MB].u = rd_rc_none(
         "one target size: the load and store are not separable from the pass's own cost");
 
@@ -473,6 +535,13 @@ static void measure(RdRateCard *c, RdTargetRec *t, double t0, double budgetMs)
     char noTwin[120];
     snprintf(noTwin, sizeof(noTwin), "the twins %s%s%.80s", rd__nd_state_text(),
              twinWhy && twinWhy[0] ? ": " : "", twinWhy ? twinWhy : "");
+    /* the fast pixel build's frames only where it is on (its self-test
+       passed), its discard-free form's only where the twins are on too */
+    const bool fast = rd__fps_on();
+    const char *fastWhy = fast ? "" : rd__fps_not_applicable_text();
+    char noFast[120];
+    snprintf(noFast, sizeof(noFast), "the fast pixel build %s%s%.80s", rd__fps_state_text(),
+             fastWhy && fastWhy[0] ? ": " : "", fastWhy ? fastWhy : "");
 
     RcMeshes m;
     memset(&m, 0, sizeof(m));
@@ -484,12 +553,14 @@ static void measure(RdRateCard *c, RdTargetRec *t, double t0, double budgetMs)
     m.vertBatches = (RC_TRIS + RC_BATCH - 1u) / RC_BATCH;
     m.smallBatches = m.vertBatches;
     m.tex = makeTexture();
-    const bool made =
-        m.nearL.id && m.farL.id && m.vert.id && m.small.id && m.large.id && m.tex.id != 0;
+    m.texRgba = makeTextureRgba();
+    const bool made = m.nearL.id && m.farL.id && m.vert.id && m.small.id && m.large.id &&
+                      m.tex.id != 0 && m.texRgba.id != 0;
     const uint32_t pipeMark = rd__pipeline_mark();
     const bool wasBlocked = g_rd.msaaBlocked;
     g_rd.msaaBlocked = true;
     rd__nd_hold(false);
+    rd__fps_hold(false);
     double ms[F_COUNT][RD_RC_SAMPLES];
     uint32_t got[F_COUNT];
     uint32_t ids[F_COUNT][RD_RC_SAMPLES];
@@ -503,8 +574,9 @@ static void measure(RdRateCard *c, RdTargetRec *t, double t0, double budgetMs)
     RdFrame e;
     const bool fe = made && buildFrame(&e, F_E, scene, t->w, t->h, &m);
     for (int k = 0; stop == NULL && k < F_COUNT; k++) {
-        const bool twinFrame = k == F_L2_TWIN || k == F_H2_TWIN;
-        if (twinFrame && !twins) {
+        const bool fastFrame = k == F_L2R_FAST || k == F_L2R_FASTND;
+        const bool twinFrame = k == F_L2_TWIN || k == F_H2_TWIN || k == F_L2R_FASTND;
+        if ((twinFrame && !twins) || (fastFrame && !fast)) {
             continue;
         }
         if (rd__now_ms() - t0 > budgetMs) {
@@ -518,8 +590,11 @@ static void measure(RdRateCard *c, RdTargetRec *t, double t0, double budgetMs)
             break;
         }
         rd__nd_hold(twinFrame);
+        rd__fps_hold(fastFrame);
         /* untimed: the pipelines gathered and made on the workers (the
-           twins' with them under the hold) */
+           twins' and the fast build's with them under their holds); the
+           fast keys are asked for only at a pass's DrawCB, once its
+           ordinary pipeline exists: a second gathering round */
         rd__replay_set_window(UINT32_MAX, 0);
         rd__pipeline_gather(true);
         (void)rd__replay_frame(&f, 0, false);
@@ -528,8 +603,20 @@ static void measure(RdRateCard *c, RdTargetRec *t, double t0, double budgetMs)
         rhi_wait_idle();
         bool stopped = false;
         (void)rd__pipeline_create_gathered(&stopped);
+        if (fastFrame) {
+            rd__replay_set_window(UINT32_MAX, 0);
+            rd__pipeline_gather(true);
+            (void)rd__replay_frame(&f, 0, false);
+            rd__pipeline_gather(false);
+            rd__replay_set_window(0, 0);
+            rhi_wait_idle();
+            (void)rd__pipeline_create_gathered(&stopped);
+        }
         uint64_t tw = 0, rf[RD_ND_REASONS];
         rd__nd_take(&tw, rf);
+        uint64_t fw = 0, ff[RD_FPS_REASONS], fe2[2];
+        rd__fps_take(&fw, ff);
+        rd__fps_take_entries(fe2);
         twinOk[k] = true;
         for (uint32_t s = 0; s < RD_RC_SAMPLES; s++) {
             if (!rd__replay_frame(&f, 0, false) || rhi_device_lost()) {
@@ -538,12 +625,21 @@ static void measure(RdRateCard *c, RdTargetRec *t, double t0, double budgetMs)
             }
             ids[k][got[k]++] = g_rdPerf.replay;
             rd__nd_take(&tw, rf);
-            /* a twin frame drew through its twins, every other none */
+            rd__fps_take(&fw, ff);
+            rd__fps_take_entries(fe2);
+            /* a twin frame drew through its twins, every other none; a fast
+               frame through its module alone, every other through neither */
             if (twinFrame ? (tw == 0u || rf[RD_ND_UNMADE] != 0u) : tw != 0u) {
+                twinOk[k] = false;
+            }
+            const int fm = k == F_L2R_FASTND ? 1 : 0;
+            if (fastFrame ? (fe2[fm] == 0u || fe2[1 - fm] != 0u || ff[RD_FPS_UNMADE] != 0u)
+                          : fw != 0u) {
                 twinOk[k] = false;
             }
         }
         rd__frame_free(&f);
+        rd__fps_hold(false);
         /* this frame's stamps come in RHI_FRAMES_IN_FLIGHT replays later:
            read them now, while their records are still queued (rd_perf.c
            keeps the last RD_PERF_QUEUE, 64: a card's whole run is more) */
@@ -569,6 +665,7 @@ static void measure(RdRateCard *c, RdTargetRec *t, double t0, double budgetMs)
     rd__frame_free(&e);
     rd__nd_hold(false);
     rd__nd_hold_end();
+    rd__fps_hold_end(); /* the fast build's counts put back: the card's draws are not play */
     g_rd.msaaBlocked = wasBlocked;
     const uint32_t released = rd__pipeline_forget_since(pipeMark);
     if (m.nearL.id) {
@@ -589,6 +686,9 @@ static void measure(RdRateCard *c, RdTargetRec *t, double t0, double budgetMs)
     if (m.tex.id) {
         rd_destroy_texture(m.tex);
     }
+    if (m.texRgba.id) {
+        rd_destroy_texture(m.texRgba);
+    }
     t->clearPending = 1; /* the next replay starts SCENE from its clear */
 
     /* the units: fragments are SCENE's texels */
@@ -598,6 +698,21 @@ static void measure(RdRateCard *c, RdTargetRec *t, double t0, double budgetMs)
     it[RD_RC_SHADE].u = rd_rc_unit(st[F_L2], st[F_E], 2.0 * a, 1.0e6);
     it[RD_RC_SHADE_TEXA].u = rd_rc_unit(st[F_L2T], st[F_E], 2.0 * a, 1.0e6);
     it[RD_RC_HIDDEN].u = rd_rc_unit(st[F_H2], st[F_L1], a, 1.0e6);
+    it[RD_RC_SHADE_RGBA].u = twinOk[F_L2R] ? rd_rc_unit(st[F_L2R], st[F_E], 2.0 * a, 1.0e6)
+                                           : rd_rc_none("its layers drew through the fast build");
+    if (!fast) {
+        it[RD_RC_SHADE_FAST].u = rd_rc_none(noFast);
+        it[RD_RC_SHADE_FAST_ND].u = rd_rc_none(noFast);
+    } else {
+        it[RD_RC_SHADE_FAST].u =
+            twinOk[F_L2R_FAST] ? rd_rc_unit(st[F_L2R_FAST], st[F_E], 2.0 * a, 1.0e6)
+                               : rd_rc_none("its layers did not draw through vu_ps_nodual_fast");
+        it[RD_RC_SHADE_FAST_ND].u =
+            !twins ? rd_rc_none(noTwin)
+            : twinOk[F_L2R_FASTND]
+                ? rd_rc_unit(st[F_L2R_FASTND], st[F_E], 2.0 * a, 1.0e6)
+                : rd_rc_none("its layers did not draw through vu_ps_nodual_fast_nd");
+    }
     if (!twins) {
         it[RD_RC_SHADE_TWIN].u = rd_rc_none(noTwin);
         it[RD_RC_HIDDEN_TWIN].u = rd_rc_none(noTwin);

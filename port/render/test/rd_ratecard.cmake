@@ -3,14 +3,18 @@
 # 640x448 at 1x), which runs it after the VU self-tests, with
 # ICO_RD_RATECARD=1 (the tests' switch, the budget lifted) and its results
 # file FILE (ICO_RATECARD_FILE), removed first, version v0.0.0:
-#   measure  run 1: the block, a head line and 13 item lines, each a finite
+#   measure  run 1: the block, a head line and 15 item lines, each a finite
 #            number in its unit with its min and max, or "not measured
 #            (...)"; the items every device can time (a shaded fragment of
 #            both builds, a hidden one with discard, a vertex, a triangle,
 #            the quad factor, a pass, a blended fragment and its ratio)
 #            measured; the twins' two measured when TWINS is 1 (the Arm
 #            fakes without dual-source blending), "not measured (the twins
-#            ..." otherwise; FILE "done <date>" with the key and the block.
+#            ..." otherwise; the fast pixel build's form through the ordinary
+#            build measured everywhere, through the fast build and its
+#            discard-free form measured when TWINS is 1 (its self-test passed
+#            under the Arm fakes), "not measured (the fast pixel build ..."
+#            otherwise; FILE "done <date>" with the key and the block.
 #            Run 2: the block reprinted "(from the run of <date>)", nothing
 #            measured, FILE unchanged.
 #   end      run 1 under ICO_RD_RATECARD_SABOTAGE=end ends inside the card
@@ -66,8 +70,8 @@ if(MODE STREQUAL "measure")
   need("${t1}" "rd: rate card: [^\n]* on SCENE 640x448 at 640x448 texels, [^\n]*, ([0-9.]+) ms in all" "the head")
   string(REGEX MATCHALL "${item}" items "${t1}")
   list(LENGTH items n)
-  if(NOT n EQUAL 13)
-    message(FATAL_ERROR "measure run 1: ${n} item lines, 13 expected:\n${t1}")
+  if(NOT n EQUAL 15)
+    message(FATAL_ERROR "measure run 1: ${n} item lines, 15 expected:\n${t1}")
   endif()
   foreach(re
           "a shaded fragment, vu_ps(_nodual)?: ${num} ns"
@@ -79,15 +83,18 @@ if(MODE STREQUAL "measure")
           "a pass with nothing drawn \\([^\n]*\\): ${num} ms"
           "a blended fragment \\(LERP As, the (two-pass|dual-source) blend\\): ${num} ns"
           "the blended fragment over the opaque one: ${num} x"
-          "a shaded fragment, the fast pixel build: not measured \\(no such build in this release\\)"
+          "a shaded fragment, vu_ps(_nodual)? on the fast build's form \\(RGBA32\\): ${num} ns"
           "a MB loaded or stored: not measured \\(")
     need("${t1}" "rd: rate card: ${re}" "an item")
   endforeach()
   if(TWINS)
+    need("${t1}" "rd: rate card: a shaded fragment, the fast pixel build vu_ps_nodual_fast: ${num} ns" "the fast build")
+    need("${t1}" "rd: rate card: a shaded fragment, its discard-free form vu_ps_nodual_fast_nd: ${num} ns" "the fast build's discard-free form")
     need("${t1}" "rd: rate card: a shaded fragment, the twin vu_ps_nodual_nd: ${num} ns" "the twin")
     need("${t1}" "rd: rate card: a fragment hidden by depth, through the twin: ${num} ns" "the twin")
   else()
     need("${t1}" "rd: rate card: a shaded fragment, the twin vu_ps_nodual_nd: not measured \\(the twins " "no twin")
+    need("${t1}" "rd: rate card: a shaded fragment, the fast pixel build vu_ps_nodual_fast: not measured \\(the fast pixel build " "no fast build")
   endif()
   fileStarts("done" "after run 1")
   file(READ "${FILE}" f1)
