@@ -38,7 +38,7 @@ pictures picks a set yourself (also the Wii Classic Controller's).
 | Triangle (back) | top face button | R | |
 | L1 / R1 (R1 holds Yorda's hand; in Options > Picture they change a colour row by 10) | shoulder buttons | Tab or the ` key (left of 1) / F | middle button (R1) |
 | L2 / R2 (R2 zooms the camera in) | triggers | Z / X | |
-| L3 / R3 (press a stick in) | press a stick in | V / B | |
+| L3 / R3 (press a stick in; R3 brings the camera back to Ico with Camera reset on) | press a stick in | V / B | |
 | Start / Select | start / back (or view) | Enter / Backspace | |
 | D-pad (menus) | d-pad (hold Left or Right on a slider row in Options to keep changing it) | arrow keys | |
 | Left stick (move) | left stick | W A S D (hold Left Shift to walk) | |
@@ -60,6 +60,17 @@ itself, and when you go into another room. **Hold** is the game's own way.
 It shows from the title screen and the pause menu, and works the same with
 a controller, the keyboard and the touch screen, on whichever button the
 game's **Button configuration** gives the zoom.
+
+The right stick turns the camera to look around, and the camera drifts back
+to Ico slowly once you let go. To bring it back at once, turn on **Options >
+Controls > Camera reset** and press R3 (click the right stick in, or
+keyboard B): the camera is back on Ico straight away, and a zoom you turned
+on with Zoom type **Toggle** ends too. If you are still pushing the right
+stick, the camera stays on Ico until you let the stick go. R3 can be moved
+to any other key or button under **Remap controls**. It is off unless you
+turn it on, shows from the title screen and the pause menu, and works on
+every disc. The touch screen has no R3 button, so there it only works with a
+controller or keyboard.
 
 A few more keys on a computer:
 

@@ -56,6 +56,9 @@ int ico_zoom_held(int held, int override, int live, int source, int mode);
 int ico_zoom_wanted(int held);
 /* A stage start (InitCamera): no latch, nothing recorded. */
 void ico_zoom_reset(void);
+/* Camera reset (camera_reset.h): a toggled zoom ends (the latch only; the
+   level and the source stay recorded, so R2 still held is no press). */
+void ico_zoom_drop(void);
 /* The save-state block (state_port.h): 0, or -1 when refused. */
 int ico_zoom_state_register(void);
 

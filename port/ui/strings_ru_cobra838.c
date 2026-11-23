@@ -906,4 +906,7 @@ const char *const ui_strings_ru_cobra838[UI_STR_COUNT] = {
     [UI_STR_VAL_ZOOM_TOGGLE] = NULL, /* "Toggle" */
     /* "Hold: the camera zooms in while you keep R2 held. Toggle: press R2 once to zoom in, press again to zoom out." */
     [UI_STR_ZOOM_TYPE_NOTE] = NULL,
+    [UI_STR_OPT_CAMERA_RESET] = NULL, /* "Camera reset" */
+    /* "On: click the right stick (R3) to bring the camera straight back to Ico." */
+    [UI_STR_CAMERA_RESET_NOTE] = NULL,
 };

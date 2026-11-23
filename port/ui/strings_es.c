@@ -419,6 +419,9 @@ const char *const ui_strings_es[UI_STR_COUNT] =
         [UI_STR_VAL_ZOOM_TOGGLE] = "Alternar",
         [UI_STR_ZOOM_TYPE_NOTE] =
             "Mantener: la cámara se acerca mientras mantienes pulsado R2. Alternar: pulsa R2 una vez para acercarla y vuelve a pulsarlo para alejarla.",
+        [UI_STR_OPT_CAMERA_RESET] = "Restablecer cámara",
+        [UI_STR_CAMERA_RESET_NOTE] =
+            "Activado: pulsa el stick derecho (R3) para devolver la cámara a Ico al instante.",
         [UI_STR_OPT_BUTTON_PICTURES] = "Imágenes de los botones",
         [UI_STR_BUTTON_PICTURES_NOTE] =
             "Los botones que se muestran en los menús y el modo foto. Automático sigue al último mando usado.",

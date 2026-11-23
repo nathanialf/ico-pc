@@ -96,6 +96,9 @@ static void test_list(void)
     /* Controls > Zoom type changes when the camera zooms: the game's own Hold */
     CHECK(listed("gameplay.zoom_type") &&
           strcmp(ico_sim_key_default("gameplay.zoom_type"), "hold") == 0);
+    /* Controls > Camera reset changes the look-around: off, the game's own */
+    CHECK(listed("gameplay.camera_reset") &&
+          strcmp(ico_sim_key_default("gameplay.camera_reset"), "off") == 0);
     CHECK(listed("video.video_mode"));
 }
 
@@ -269,6 +272,18 @@ static void test_defaults(const char *dir)
     CHECK(k != NULL && strcmp(k, "gameplay.zoom_type") == 0 &&
           strcmp(out, "gameplay.zoom_type=(absent) (now toggle)") == 0);
     CHECK(ico_config_set_string("gameplay.zoom_type", "") == 0);
+    /* a state saved before gameplay.camera_reset existed: loads with it off,
+       is refused with it on */
+    drop_line(t, "gameplay.camera_reset", older, sizeof older);
+    CHECK(strstr(older, "gameplay.camera_reset=") == NULL && strlen(older) < strlen(t));
+    CHECK(ico_sim_keys_first_diff(older, out, sizeof out) == NULL);
+    CHECK(ico_config_set_string("gameplay.camera_reset", "off") == 0);
+    CHECK(ico_sim_keys_first_diff(older, out, sizeof out) == NULL);
+    CHECK(ico_config_set_string("gameplay.camera_reset", "on") == 0);
+    k = ico_sim_keys_first_diff(older, out, sizeof out);
+    CHECK(k != NULL && strcmp(k, "gameplay.camera_reset") == 0 &&
+          strcmp(out, "gameplay.camera_reset=(absent) (now on)") == 0);
+    CHECK(ico_config_set_string("gameplay.camera_reset", "") == 0);
     /* a key without one fixed default, absent, set now: differs */
     drop_line(t, "dev.start_stage", older, sizeof older);
     CHECK(ico_sim_keys_first_diff(older, out, sizeof out) == NULL);
@@ -473,7 +488,7 @@ static void test_unset_is_default(void)
         }
         CHECK(ico_config_set_string(ICO_SIM_KEYS[i], "") == 0);
     }
-    CHECK(n_fixed == 17); /* the list's 19 keys less the two without one text */
+    CHECK(n_fixed == 18); /* the list's 20 keys less the two without one text */
 
     /* a key without one default text: unset is the disc's own choice, so
        unset and a value still differ */

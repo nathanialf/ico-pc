@@ -43,6 +43,17 @@ game's own way. The row shows from the title screen and the pause menu, on
 every disc, and it is kept in your settings. A save state made with the
 other Zoom type will not load until you set it back, as with Hold type.
 
+## The camera is slow to come back to Ico
+
+**After I look around with the right stick, the camera takes a while to
+swing back. Can it come back at once?**
+
+Yes. Open **Options > Controls > Camera reset** and turn it **On**. Then a
+press of R3 (click the right stick in, or keyboard B) puts the camera right
+back on Ico. If you are still pushing the stick, the camera waits on Ico
+until you let go, so it does not swing straight back out. You can move R3 to
+another button under **Remap controls**. The touch screen has no R3 button.
+
 ## The on-screen buttons are in my way
 
 **Can I move them, make them smaller or hide some?**

@@ -23,13 +23,29 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
 
 ## port/config/test
 
-- `config_test.c`, added: the first-run template's `zoom_type = "hold"` (`config`).
+- `config_test.c`, added: the first-run template's `zoom_type = "hold"` and `camera_reset = "off"`
+  (`config`).
+- `sim_keys_test.c`, added: `gameplay.camera_reset` listed with the default `"off"` (18 keys of
+  one default text); a state saved before the key existed loads with it off and is refused with it
+  on (`sim_keys`).
 - `sim_keys_test.c`, added: `gameplay.zoom_type` listed with the default `"hold"` (17 keys of one
   default text); a state saved before the key existed loads under Hold and is refused under Toggle
   (`sim_keys`).
 
 ## port/game/test
 
+- `camera_reset_test.c`: Camera reset's press and stick mute (`port/game/camera_reset.h`,
+  [GAME_FEATURES.md](GAME_FEATURES.md#camera-reset)), CPU only: off passes the stick through tick
+  for tick over 2000 pseudo-random ticks (no reset, no cut); a press resets once with the cut
+  marked, a held press does not repeat, a new press resets again; a stick held at the press reads 0
+  until both its values are 0; no reset while not live, a press held from there is no press, and
+  not live ends a mute; a reset ends a Zoom type Toggle latch (R2 still held is no new press) and
+  leaves Hold's zoom; a copy of the arm's use (the two angles at rest in the press's tick, easing
+  back as the game does when off); `camera_reset.state` one FRESH block whose bytes copied back
+  resume the mute (`camera_reset`).
+- `options_test.c`, added: `camera_reset`'s default, words, setter and reload; a text scan of
+  `camera-ico2.c` (four `ico_cam_reset(` hooks, each right before the arm's own look-around test)
+  and the simulation key (`options` and its six disc runs).
 - `zoom_toggle_test.c`: Zoom type's latch (`port/game/zoom_toggle.h`,
   [GAME_FEATURES.md](GAME_FEATURES.md#zoom-type)), CPU only: Hold returns the game's R2 test over
   2000 pseudo-random ticks of the bit, a script's zoom, the source's liveness, the source and the
@@ -289,11 +305,13 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   messages (the save states' checkpoint and other-version messages, the refused check, the
   restore and backup answers, the Steam failure's body) in every language, each line within the
   panel at the body's size, and the Graphics driver's unreadable answer, a title, at the title's.
-- `settings_test.c`, `settings_extra_test.c`, `settings_discs_test.c`, added: Controls' sixteen
-  rows with Zoom type between Hold type and Stick fix, shown from the title and the pause menu;
+- `settings_test.c`, `settings_extra_test.c`, `settings_discs_test.c`, added: Controls' seventeen
+  rows with Zoom type and Camera reset between Hold type and Stick fix, shown from the title and the pause menu;
   `testZoomType` steps it from both (Hold, Right to Toggle with the key set and its note on the
   cursor, leaving the page saves `zoom_type = "toggle"`, Left back to Hold); every disc shows it on
-  the title reading Hold (`settings`, `settings_extra`, `settings_discs` and their disc runs).
+  the title reading Hold; `testCameraReset` steps Camera reset the same way (Off, Right to On with
+  `camera_reset = "on"` saved, Left back to Off), every disc shows it on the title reading Off
+  (`settings`, `settings_extra`, `settings_discs` and their disc runs).
 - `pad_glyphs_test.c`: the button pictures' core (`port/ui/pad_glyphs.c`,
   [UI.md](UI.md#button-pictures)), CPU only: the 24 embedded files read, each set complete, each
   piece's aspect, fill colour and black stroke present at 96 rows, the alpha never past 0x80; the

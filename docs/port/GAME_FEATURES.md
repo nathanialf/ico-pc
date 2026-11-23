@@ -14,6 +14,7 @@ them are [UI.md](UI.md)'s; the picture options are [DISPLAY.md](DISPLAY.md)'s.
 | [HARD_MODE.md](HARD_MODE.md) | the difficulty's levers and presets: every row by Customize page, the knock-down limit, Permadeath, the presets as shipped and the mechanisms not exposed |
 | `port/game/door_grace.h`, `door_grace.c` | the doorway fix's arm and arrival grace |
 | `port/game/zoom_toggle.h`, `zoom_toggle.c` | Zoom type's latch and its save-state block ([Zoom type](#zoom-type)) |
+| `port/game/camera_reset.h`, `camera_reset.c` | Camera reset's press, its stick mute and its save-state block ([Camera reset](#camera-reset)) |
 | `port/game/no_shadows.h`, `no_shadows.c` | No Shadows' counters and log lines for its game-side hooks ([No Shadows](#no-shadows)) |
 | `port/game/ico_rows.h`, `ico_rows.c` | Developer > Free movement and the Ask Yorda for a hint binding: the row's value (Developer mode ANDed in), the hint button's press latch |
 | `port/game/yorda_trip.h`, `yorda_trip.c`, `yorda_trip_live.c`, `yorda_trip_source.c` | Yorda trips: the rule (the main gate scene's 3 s count), the game's side (the stage load's motions, the run-pulled tick), her fall's motions read from the disc |
@@ -72,6 +73,7 @@ defaults are [CONFIG.md](CONFIG.md#gameplay)'s; the differences from the PS2 are
 | `[gameplay] skip_opening` | `kanbanBoot.c`, `op.c`, `main_host.c` (its log line) |
 | `[gameplay] hold_type` | `mcard.c`, `layout_action.c`, `settings.c` |
 | `[gameplay] zoom_type` | `zoom_toggle.c`, from `camera-root.c` and `camera-ico2.c` |
+| `[gameplay] camera_reset` | `camera_reset.c`, from `camera-ico2.c` |
 | `[variants] *` (Gameplay, Gameplay > Chains, Gameplay > Cutscenes, the Debug menu; the ten difficulty rows are the journey's record, read through `variants.c`) | `port/game/variants.c`; the game hooks in `debug.c`, `enemy.c`, `enemy_act.c`, `queen.c`, `lws_kyomi.c`, `girl.c`, `commonact.c`, `boyact.c`, `weapon.c` ([Game variants](#game-variants)); `settings.c` (the Debug menu row); `gamestate.c` (the achievements rule) |
 | `[gameplay] mirror` | `pad_host.c`, `audio_host.c`, rd, `photo_ui.c` |
 | `[developer] free_movement` | `boyact.c` (the four boy control loops), `gamestate.c` |
@@ -357,7 +359,7 @@ rd_chain_find(p->group)` and `bgaHostNatural = bgaHostChain != 0 && ico_opt_natu
 `RegistPacket.c`'s `regHostMesh` to `rd_draw_vu_mesh`. Being a draw-only change, the key is not
 among the keys a pad recording's header records (`port/platform/sim_keys.c` (`ICO_SIM_KEYS`);
 `port/game/options.h`, header comment). `hold_type` is recorded, as R1's meaning changes the simulation,
-and `zoom_type` is too, as R2's does.
+and `zoom_type` is too, as R2's does, and `camera_reset`, as R3 then moves the camera.
 
 ### Mirror
 
@@ -482,6 +484,40 @@ older save state): one FRESH save-state block, `zoom_toggle.state`. The row is O
 Zoom type, after Hold type, on the title and the pause menu, every disc (`port/ui/settings.c`).
 `zoom_toggle` (`port/game/test/zoom_toggle_test.c`) holds the rules; `options_<slug>` the hooks (a
 text scan).
+
+### Camera reset
+
+`[gameplay] camera_reset` is `"off"` (the default on every disc: the game as shipped) or `"on"`;
+another word reads as off, logged once, and the value in force is logged when it changes
+(`options: camera reset <off|on>`). In play the right stick's look-around is the hand camera
+(`ico2/omori/src/hand-camera.c`): `HandCameraCorrect` keeps two angles, `handCameraWork[0]` (pitch)
+and `[1]` (yaw), which move toward the stick's target (the deflection times the area's limits,
+`SetLimitHandCameraCorrect`) at most `handCameraRate` times a game parameter a tick and a tenth of
+the way once near it (`RotateAccordingToStick_PatternThree`), so with the stick let go they ease
+back to 0; `HandyCamera_TargetMoveType` turns the frame's eye-to-target by them, on a copy of the
+monitor camera's work (`SetCameraMatrix_Ico2` in `ico2/omori/src/camera-ico2.c`: the European body
+and `_ntsc`, `_aug6`, `_jun26`), so the follow camera (`monitorMonitorCamera`, `CameraMove`, the
+target smoothing) never sees the look-around and keeps its own lag. `ClearHandCameraCorrect` sets
+both angles to 0 at once; each arm calls it itself while the game is paused, the boy is not under
+control or a scripted shot holds the camera (`mode == 0`; on the June 2001 demo also while R2
+zooms). The port's hook sits just before that test in all four arms:
+`ico_cam_reset(pad[0].now & 0x400, live, &sx, &sz)` (`port/game/camera_reset.c`), `live` being the
+arm's own test inverted. With the option on, an R3 press (the level against the tick before, not
+`trg`) while live returns 1 and the arm calls `ClearHandCameraCorrect`; `HandCameraCorrect` then
+runs from 0 with the stick at 0, so the picture is the one with the stick never moved. The stick
+is muted (read as 0) until both its values come in 0, which is the game's own dead zone
+(`iosPadNormalizeStick`: a deflection of 48 or less is 0), so a stick still pushed does not swing
+the camera back out; leaving live ends the mute. The reset also marks a cut for the presenter
+(`ico_video_camera_cut`, no blend from the turned picture) and ends a Zoom type Toggle latch
+(`ico_zoom_drop`; the zoom then eases out at the game's own zoom step, as letting R2 go does under
+Hold). Off, the hook returns 0 and leaves the stick as it is, tick for tick. R3 (pad bit `0x400`)
+has no use in normal play on any disc (only debug tools read it: `debug_DispSEInfo`, `Light.c`'s
+tool, `moveColTest.c`, the camera editor on pad 2 and stage 99's spider test); it still reaches
+the game as before. Remap controls' R3 row moves it; the touch overlay has no R3. Not covered: the
+European discs' cutscene look-around (`camera-root.c`, the path camera with `debug_hand_camera`)
+uses the same two angles but is not reset. State: one FRESH save-state block, `camera_reset.state`
+(the last level and the mute). `camera_reset` (`port/game/test/camera_reset_test.c`) holds the
+rules; `options_<slug>` the hooks (a text scan).
 
 ### Game variants
 
@@ -680,6 +716,7 @@ hold the rest.
 | Main: Game language's community entries (Русский (bob-ttz), Русский (cobra838), Português (Brasil) (ichagas7)) | W | H | H | H | H | H | H | the row's own rule (`has_game_language`); in force only there with the game in English (`ui_settings_text_language`), so `[game] text_language` changes nothing on the other discs ([Community translations](#community-translations)); `subtitles_ru`, `subtitles_ru_<slug>` (jpn, kor, cn), `subtitles_ru_cobra838`, `subtitles_ru_cobra838_<slug>`, `subtitles_pt_br`, `subtitles_pt_br_<slug>`, `jimaku_text` |
 | Main: Menu language | W | W | W | W | W | W | W | Auto is `ui_lang_default`, the sheets `menu_sheet`; `settings_<slug>`, `settings_render_<slug>` |
 | Controls: Hold type | W | W | W | W | W | W | W | `hold_type_own`, the default `"disc"`: A on pal/jpn/kor/cn, B on ntsc/aug6/jun26 (the 2001 arms `_ACTCommonMailTest_<disc>` read `optionControlType` in the port); `settings_discs`, `options_<slug>`, `save` (per disc) |
+| Controls: Camera reset | W | W | W | W | W | W | W | the four `SetCameraMatrix_Ico2` copies (`camera-ico2.c`), default `"off"` on every disc; on the June 2001 demo a toggled zoom stops the look-around itself (`mode == 0`), so R3 then does nothing; `settings_discs`, `options_<slug>`, `camera_reset` |
 | Controls: Zoom type | W | W | W | W | W | W | W | the four `SetCameraMatrix` copies' zoom blocks (`camera-root.c`) and the June 2001 demo's look-around (`camera-ico2.c`), default `"hold"` on every disc; `settings_discs`, `options_<slug>`, `zoom_toggle` |
 | Controls: Circle goes back | W | H | H | W | W | W | H | `pad_back` is Triangle (`lt_ext_has_circle_back`); the 2001 arms cancel through `LA_BACK` too; `settings_discs`, `settings_<slug>` |
 | Picture: Brightness; Controls: Vibration, Button configuration (pause) | W | W | W | W | W | W | W | `systemStatus[11]`, `iosPadActRequestEnable`, `layout_key_config` (`la_key_config` and its 2001 arms go back to Settings); `settings_discs` |

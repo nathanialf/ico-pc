@@ -892,6 +892,40 @@ const char *ico_opt_zoom_type_name(int type)
     return type == ICO_ZOOM_TOGGLE ? "toggle" : "hold";
 }
 
+/* [gameplay] camera_reset (options.h): -1 not read yet, else 0 or 1 */
+static int s_camera_reset = -1;
+
+int ico_opt_camera_reset(void)
+{
+    /* the value last logged */
+    static int logged = -1;
+
+    if (s_camera_reset < 0) {
+        const char *v = ico_config_get_string("gameplay.camera_reset", "off");
+
+        s_camera_reset = v != NULL && strcmp(v, "on") == 0;
+        if (v != NULL && strcmp(v, "on") != 0 && strcmp(v, "off") != 0) {
+            fprintf(stderr,
+                    "options: [gameplay] camera_reset = \"%s\" is not one of off, on: off\n", v);
+        }
+    }
+    if (s_camera_reset != logged) {
+        logged = s_camera_reset;
+        fprintf(stderr, "options: camera reset %s\n", ico_opt_camera_reset_name(s_camera_reset));
+    }
+    return s_camera_reset;
+}
+
+void ico_opt_set_camera_reset(int on)
+{
+    s_camera_reset = on != 0;
+}
+
+const char *ico_opt_camera_reset_name(int on)
+{
+    return on != 0 ? "on" : "off";
+}
+
 /* [input] button_pictures (options.h): -2 not read yet, else
    ICO_BUTTON_PICTURES_* */
 static int s_button_pictures = -2;
@@ -951,6 +985,7 @@ void ico_opt_reload(void)
     s_text_language = -2;
     s_hold_choice = -1;
     s_zoom_type = -1;
+    s_camera_reset = -1;
     s_button_pictures = -2;
     /* the characters' colours ([characters], appearance.h) */
     ico_appearance_reload();

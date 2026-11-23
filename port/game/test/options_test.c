@@ -2775,6 +2775,73 @@ static void test_zoom_type(const char *dir)
     }
 }
 
+/* [gameplay] camera_reset (options.h, camera_reset.h): off on every disc by
+   default, "on" read, any other word off, the setter, the reload; the four
+   SetCameraMatrix_Ico2 copies' hook (a text scan of camera-ico2.c: each
+   before the game's own look-around test, ClearHandCameraCorrect on a
+   reset) and the simulation key */
+static void test_camera_reset(const char *dir)
+{
+    static const char *const words[4] = {"off", "on", "On", "true"};
+    char path[512];
+    char text[96];
+    char *src;
+    FILE *f;
+
+    ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
+    ico_opt_reload();
+    CHECK(ico_opt_camera_reset() == 0); /* every disc's default */
+    CHECK(strcmp(ico_opt_camera_reset_name(0), "off") == 0 &&
+          strcmp(ico_opt_camera_reset_name(1), "on") == 0);
+    snprintf(path, sizeof(path), "%s/options_test.toml", dir);
+    for (int i = 0; i < 4; i++) {
+        f = fopen(path, "wb");
+        if (f == NULL) {
+            fprintf(stderr, "cannot write %s\n", path);
+            failures++;
+            return;
+        }
+        snprintf(text, sizeof(text), "[gameplay]\ncamera_reset = \"%s\"\n", words[i]);
+        fputs(text, f);
+        fclose(f);
+        ico_config_reset(path, "/nonexistent/options_test.ini");
+        ico_opt_reload();
+        CHECK(ico_opt_camera_reset() == (i == 1));
+    }
+    ico_opt_set_camera_reset(1);
+    CHECK(ico_opt_camera_reset() == 1);
+    ico_opt_reload();
+    CHECK(ico_opt_camera_reset() == 0); /* the file says "true" */
+    remove(path);
+    ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
+    ico_opt_reload();
+    CHECK(ico_opt_camera_reset() == 0);
+
+    src = read_source(ICO_CAMERA_ICO2_SRC);
+    CHECK(src != NULL);
+    if (src != NULL) {
+        CHECK(count_of(src, "ico_cam_reset(") == 4 + 1 /* the declaration */);
+        CHECK(count_of(src, "if (ico_cam_reset(pad[0].now & 0x400,\n") == 4);
+        CHECK(count_of(src, "systemStatus[5] == 0 && IsAbleBoyControl() != 0 && mode != 0, &sx,") ==
+              4);
+        CHECK(count_of(
+                  src,
+                  "            ClearHandCameraCorrect();\n        }\n        if (systemStatus[5] "
+                  "!= 0 || IsAbleBoyControl() == 0 || mode == 0) {") == 3);
+        CHECK(count_of(src,
+                       "        ClearHandCameraCorrect();\n    }\n    if (systemStatus[5] != 0 || "
+                       "IsAbleBoyControl() == 0 || mode == 0) {") == 1);
+        free(src);
+    }
+    src = read_source(ICO_SIM_KEYS_SRC);
+    CHECK(src != NULL);
+    if (src != NULL) {
+        CHECK(count_of(src, "\"gameplay.camera_reset\",") == 1);
+        CHECK(count_of(src, "\"off\",      /* gameplay.camera_reset */") == 1);
+        free(src);
+    }
+}
+
 int main(int argc, char **argv)
 {
     if (argc > 2 && ico_region_select(argv[2]) != 0) {
@@ -2798,6 +2865,7 @@ int main(int argc, char **argv)
     test_text_language(argc > 1 ? argv[1] : ".");
     test_button_pictures(argc > 1 ? argv[1] : ".");
     test_zoom_type(argc > 1 ? argv[1] : ".");
+    test_camera_reset(argc > 1 ? argv[1] : ".");
     test_video_effects(argc > 1 ? argv[1] : ".");
     test_video_effects_depth(argc > 1 ? argv[1] : ".");
     test_video_full_pixel(argc > 1 ? argv[1] : ".");
