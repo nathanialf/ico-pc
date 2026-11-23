@@ -144,8 +144,9 @@ static void testVerdicts(void)
     CHECK(verdictOf(&s, &s_a) == RD_AB_V_ON, "5 %% cheaper: not on");
     CHECK(strstr(s_last, "A/B: zero-area cull, stage 42: 8 pairs (all one way: the early "
                          "verdict), with it ") == s_last &&
-              strstr(s_last, "cheaper with it, 8 of 8 cheaper with it), 0 dropped by a long "
-                             "picture, 0 by unequal work: on for this stage") != NULL,
+              strstr(s_last,
+                     "cheaper with it, 8 of 8 cheaper with it), 0 dropped by a long "
+                     "picture, 0 by unequal work: on for the rest of the run, every stage") != NULL,
           "the verdict line: %s", s_last);
     /* the cost: the early verdict's replays without it (8 pairs: 8) and the
        ones begun before it came back (the lag) */
@@ -155,7 +156,7 @@ static void testVerdicts(void)
     s.effect = 0.03;
     CHECK(verdictOf(&s, &s_a) == RD_AB_V_OFF, "3 %% dearer: not off");
     CHECK(strstr(s_last, "dearer with it, 8 of 8 cheaper without)") != NULL &&
-              strstr(s_last, ": off for this stage") != NULL,
+              strstr(s_last, ": off for the rest of the run, every stage") != NULL,
           "the verdict line: %s", s_last);
     printf("no difference:\n");
     s.effect = 0.0;
@@ -211,8 +212,7 @@ static void testCost(void)
     CHECK(strstr(s_last, "A/B: zero-area cull, stage 7: no verdict (600 replays, 0 pairs; 0 "
                          "dropped by a long picture, ") == s_last &&
               strstr(s_last, " by unequal work, ") != NULL && s_a.t.dropWork >= 290u &&
-              strstr(s_last, "no more trials here, it stays with it, no verdict before it in the "
-                             "run") != NULL,
+              strstr(s_last, "with it until it is timed again in another stage") != NULL,
           "%s", s_last);
     /* every later replay of the stage with it */
     const RdAbTag tag = rd_ab_begin(&s_a, 7, 1e9, false);
@@ -226,7 +226,7 @@ static void testStages(void)
     rd_ab_init(&s_a, RD_AB_AUTO);
     (void)rd_ab_subject(&s_a, "zero-area cull");
     rd_ab_allow(&s_a, 0, true);
-    /* no trial before 2 s into the stage, nor before the subject had work */
+    /* no trial before 2 s into a stage, nor before the subject had work */
     RdAbTag tag = rd_ab_begin(&s_a, 3, 0.0, false);
     CHECK(tag.trial == 0u && tag.off == 0u, "a trial at the stage's start");
     tag = rd_ab_begin(&s_a, 3, RD_AB_START_MS + 1.0, false);
@@ -245,15 +245,16 @@ static void testStages(void)
     CHECK(tag.seq == 2u && tag.off == 1u, "the trial's third without it");
     tag = rd_ab_begin(&s_a, 3, RD_AB_START_MS + 6.0, false);
     CHECK(tag.seq == 3u && tag.off == 0u, "the trial's fourth with it");
-    /* the stage ends mid-trial: no verdict, tried again at the next visit */
+    /* the stage ends mid-trial: no answer, timed again in the next stage */
     tag = rd_ab_begin(&s_a, 4, RD_AB_START_MS + 7.0, false);
     lines(&s_a);
     CHECK(strstr(s_last, "stage 3: no verdict (the stage ended, 0 pairs;") != NULL &&
-              strstr(s_last, "not judged, it stays with it, no verdict before it in the run") !=
-                  NULL,
+              strstr(s_last, "with it until it is timed again in the next stage of play") != NULL,
           "%s", s_last);
     CHECK(rd_ab_verdict(&s_a, 0, 3) == RD_AB_V_NONE, "the ended stage judged");
-    /* stage 5 judged off, stage 6 on, back to 5: off at once, no trial */
+    /* stage 5 gives the run's one verdict (off); stage 6, where it would
+       save, is not timed: the run's arm, at once and later; stage 5 again
+       the same */
     Stream s = {0};
     s.lag = 2;
     s.replays = 200;
@@ -262,34 +263,42 @@ static void testStages(void)
     s.effect = 0.04;
     double t = run(&s_a, &s, 100000.0, 1u);
     CHECK(rd_ab_verdict(&s_a, 0, 5) == RD_AB_V_OFF, "stage 5 not off");
+    CHECK(strstr(s_last, ": off for the rest of the run, every stage") != NULL, "%s", s_last);
+    const uint32_t trials = s_a.trials;
     s.stage = 6;
     s.effect = -0.04;
     t = run(&s_a, &s, t, 1u);
-    CHECK(rd_ab_verdict(&s_a, 0, 6) == RD_AB_V_ON, "stage 6 not on");
-    const uint32_t trials = s_a.trials;
-    tag = rd_ab_begin(&s_a, 5, t, false);
-    CHECK(tag.off == 1u && tag.trial == 0u, "stage 5 again: off %x trial %u", tag.off,
+    CHECK(s_a.trials == trials && rd_ab_verdict(&s_a, 0, 6) == RD_AB_V_OFF,
+          "stage 6 timed again (%u trials) or not on the run's arm", (unsigned)s_a.trials);
+    tag = rd_ab_begin(&s_a, 6, t, false);
+    CHECK(tag.off == 1u && tag.trial == 0u, "stage 6: off %x trial %u", tag.off,
           (unsigned)tag.trial);
     tag = rd_ab_begin(&s_a, 5, t + 10000.0, false);
     CHECK(tag.off == 1u && tag.trial == 0u && s_a.trials == trials, "stage 5 tried again");
-    tag = rd_ab_begin(&s_a, 6, t + 10001.0, false);
-    CHECK(tag.off == 0u && tag.trial == 0u, "stage 6 again: off %x", tag.off);
-    /* the cap: stages 100.. each judged until RD_AB_TRIALS trials ran */
+    /* the cap: a subject with no answer is tried in each next stage; every
+       trial here ends with its stage (no verdict), so stages 100.. take
+       trials until RD_AB_TRIALS ran, then none */
     printf("the cap:\n");
-    s_lines = 0;
+    rd_ab_init(&s_a, RD_AB_AUTO);
+    (void)rd_ab_subject(&s_a, "zero-area cull");
+    rd_ab_allow(&s_a, 0, true);
+    s.replays = 60; /* the 2 s and a few trial replays: the stage ends first */
+    s.effect = 0.04;
+    t = 0.0;
     for (int k = 0; k < 16; k++) {
         s.stage = 100 + k;
-        s.effect = 0.04;
         t = run(&s_a, &s, t + 1.0, 1u);
     }
+    (void)rd_ab_begin(&s_a, 200, t + 1.0, false); /* the last stage ends */
+    lines(&s_a);
     CHECK(s_a.trials == RD_AB_TRIALS, "%u trials", (unsigned)s_a.trials);
     int judged = 0;
     for (int k = 0; k < 16; k++) {
         judged += rd_ab_verdict(&s_a, 0, 100 + k) != RD_AB_V_NONE;
     }
-    /* the trials before: stage 3 (ended), 5 and 6 */
-    CHECK(judged == (int)RD_AB_TRIALS - 3, "%d stages judged past the cap's start", judged);
-    CHECK(s_a.capSaid, "the cap's line not said");
+    CHECK(judged == 0, "%d stages with an answer", judged);
+    CHECK(s_a.capSaid && strstr(s_last, "an attempt not timed yet stays with it") != NULL,
+          "the cap's line not said: %s", s_last);
 }
 
 static void testTwoSubjects(void)
@@ -424,8 +433,8 @@ static void testModes(void)
     char st[1024];
     (void)rd_ab_start_text(&s_a, st, sizeof(st));
     printf("  %s\n", st);
-    CHECK(strstr(st, "A/B: the in-play judge; may try: zero-area cull; a trial 2.0 s into a "
-                     "stage") == st,
+    CHECK(strstr(st, "A/B: the in-play judge; may try: zero-area cull; each attempt timed once a "
+                     "run, in the first stage of play or a cutscene") == st,
           "%s", st);
     /* the registry's bound */
     for (int i = 1; i < RD_AB_SUBJECTS; i++) {
@@ -458,7 +467,8 @@ typedef struct Pic {
 typedef struct RateRun {
     Pic p[RATE_MAX];
     int n;                /* pictures presented (ended within the 60 s) */
-    double lastVerdictMs; /* the first picture's start after the last stage's verdict, -1 none */
+    double lastVerdictMs; /* the first picture's start after the run's verdict, -1 none */
+    int verdict;          /* that verdict (RD_AB_V_ON, RD_AB_V_OFF) */
 } RateRun;
 
 static RateRun s_rr[3]; /* with it, without it, the judge */
@@ -492,9 +502,10 @@ static void rateRun(RateRun *rr, int mode, double baseMs, const double *eff, int
         k = k < nStages ? k : nStages - 1;
         const int stage = 10 + k;
         const int before = rd_ab_verdict(&s_a, 0, stage);
-        if (mode == RD_AB_AUTO && k == nStages - 1 && rr->lastVerdictMs < 0.0 &&
+        if (mode == RD_AB_AUTO && rr->lastVerdictMs < 0.0 &&
             (before == RD_AB_V_ON || before == RD_AB_V_OFF)) {
-            rr->lastVerdictMs = start;
+            rr->lastVerdictMs = start; /* the run's one verdict known */
+            rr->verdict = before;
         }
         const RdAbTag tag = rd_ab_begin(&s_a, stage, start, false);
         const bool off = (tag.off & 1u) != 0u;
@@ -524,69 +535,75 @@ static int countIn(const RateRun *rr, double from, double to)
 /* one case: the three runs, the bound from the two controls, the checks */
 static int s_rateCases, s_rateShort;
 
-static void rateCase(const char *kind, double baseMs, const double *eff, int nStages)
+static void rateCase(const char *kind, double baseMs, const double *eff, int nStages, int flips)
 {
     rateRun(&s_rr[0], RD_AB_FIXED_ON, baseMs, eff, nStages);
     rateRun(&s_rr[1], RD_AB_FIXED_OFF, baseMs, eff, nStages);
     rateRun(&s_rr[2], RD_AB_AUTO, baseMs, eff, nStages);
     const RateRun *on = &s_rr[0], *off = &s_rr[1], *j = &s_rr[2];
     const double len = RATE_MS / nStages;
-    /* per stage, from the controls: each arm's pictures a ms; the better
-       arm's count (its sum: the best a judge could do, the better fixed
-       arm's total where the effect is one sign) */
+    /* per stage, from the controls: each arm's pictures a ms */
     double rOn[8], rOff[8];
-    int best = 0;
     for (int k = 0; k < nStages; k++) {
-        const int cOn = countIn(on, k * len, (k + 1) * len),
-                  cOff = countIn(off, k * len, (k + 1) * len);
-        rOn[k] = cOn / len;
-        rOff[k] = cOff / len;
-        best += cOn > cOff ? cOn : cOff;
+        rOn[k] = countIn(on, k * len, (k + 1) * len) / len;
+        rOff[k] = countIn(off, k * len, (k + 1) * len) / len;
     }
+    /* the rule's target (one verdict a run, timed in the first stage): the
+       arm the controls show faster in the first stage, kept for every
+       stage; where both arms present alike there (a tick-bound stage) the
+       arm the judge chose, which the rule cannot tell from the other by
+       pictures.  Its pictures over the 60 s are "best": for a stream of one
+       sign the better fixed arm's total */
+    const int targetOff = rOff[0] > rOn[0] ? 1 : rOn[0] > rOff[0] ? 0 : j->verdict == RD_AB_V_OFF;
+    const RateRun *target = targetOff ? off : on;
+    const int best = target->n;
     const int worse = on->n < off->n ? on->n : off->n;
-    /* the pictures the worse arm loses against the better during the time
-       the judge was allowed on it: its pictures drawn on the arm the
-       controls show slower for their stage, while the stage had no verdict
-       of its own or in a trial, each for the time to the next picture */
+    CHECK(j->lastVerdictMs < 0.0 || (j->verdict == RD_AB_V_OFF) == (targetOff != 0),
+          "%s %.1f ms: the verdict %d is not the first stage's faster arm", kind, baseMs,
+          j->verdict);
+    /* the pictures the judge's undecided time cost against the target:
+       its pictures on the other arm while the run had no verdict or in a
+       trial, each for the time to the next picture, at the two controls'
+       rates for its stage */
     double lost = 0.0;
     for (int i = 0; i < j->n; i++) {
         const Pic *p = &j->p[i];
         const int k = p->stage - 10;
-        const double rBest = rOn[k] > rOff[k] ? rOn[k] : rOff[k];
+        const double rT = targetOff ? rOff[k] : rOn[k];
         const double rArm = p->off ? rOff[k] : rOn[k];
-        if (!p->unjudged || rArm >= rBest) {
+        if (!p->unjudged || (p->off != 0) == (targetOff != 0) || rArm >= rT) {
             continue;
         }
         const double span = (i + 1 < j->n ? j->p[i + 1].start : p->end) - p->start;
-        lost += span * (rBest - rArm);
+        lost += span * (rT - rArm);
     }
     const int bound = (int)floor(best - lost) - 1;
-    /* after the last verdict: the judge's pictures against the better arm's
-       of the last stage over the same span */
+    /* after the verdict: the judge's pictures against the target's over
+       the same span */
     int after = -1, afterBest = -1;
     if (j->lastVerdictMs >= 0.0) {
         after = countIn(j, j->lastVerdictMs, RATE_MS);
-        const int k = nStages - 1;
-        afterBest = countIn(rOn[k] > rOff[k] ? on : off, j->lastVerdictMs, RATE_MS);
-        if (rOn[k] == rOff[k]) {
-            const int a2 = countIn(on, j->lastVerdictMs, RATE_MS),
-                      b2 = countIn(off, j->lastVerdictMs, RATE_MS);
-            afterBest = a2 > b2 ? a2 : b2;
-        }
+        afterBest = countIn(target, j->lastVerdictMs, RATE_MS);
     }
     s_rateCases++;
     printf("  %-8s %4.1f ms, effects", kind, baseMs);
     for (int k = 0; k < nStages; k++) {
         printf(" %+.0f%%", eff[k] * 100.0);
     }
-    printf(": with it %d, without %d, the judge %d; best per stage %d, bound %d (%.2f pictures on "
-           "the worse arm while unjudged), short by %d; after the last verdict %d against %d\n",
-           on->n, off->n, j->n, best, bound, lost, best - j->n > 0 ? best - j->n : 0, after,
-           afterBest);
-    const bool ok = j->n >= worse && j->n >= bound && after >= 0 && after + 1 >= afterBest;
+    printf(
+        ": with it %d, without %d, the judge %d; the first stage's faster arm %d, bound %d (%.2f pictures on "
+        "the other arm while undecided), short by %d; after the verdict %d against %d\n",
+        on->n, off->n, j->n, best, bound, lost, best - j->n > 0 ? best - j->n : 0, after,
+        afterBest);
+    /* (a) at least the worse fixed arm: for streams of one sign.  A stream
+       whose effect changes sign between stages makes the two fixed arms all
+       but equal over the 60 s, and the one-verdict rule keeps the first
+       stage's faster arm everywhere, which there may be the worse fixed arm
+       less its own trial's cost: (b) against that arm holds it instead */
+    const bool aOk = flips || j->n >= worse;
+    const bool ok = aOk && j->n >= bound && after >= 0 && after + 1 >= afterBest;
     s_rateShort += !ok;
-    CHECK(j->n >= worse, "%s %.1f ms: the judge %d under the worse fixed arm %d", kind, baseMs,
-          j->n, worse);
+    CHECK(aOk, "%s %.1f ms: the judge %d under the worse fixed arm %d", kind, baseMs, j->n, worse);
     CHECK(j->n >= bound, "%s %.1f ms: the judge %d under its bound %d", kind, baseMs, j->n, bound);
     CHECK(after >= 0 && after + 1 >= afterBest && after <= afterBest + 1,
           "%s %.1f ms: after the last verdict %d against the better arm's %d", kind, baseMs, after,
@@ -602,84 +619,85 @@ static void testRate(void)
         for (int e = 0; e < 6; e++) {
             const double x = kEffect[e];
             const double one[1] = {x}, same[4] = {x, x, x, x}, flip[4] = {x, -x, x, -x};
-            rateCase("1 stage", kMs[i], one, 1);
-            rateCase("4 stages", kMs[i], same, 4);
-            rateCase("flipping", kMs[i], flip, 4);
+            rateCase("1 stage", kMs[i], one, 1, 0);
+            rateCase("4 stages", kMs[i], same, 4, 0);
+            rateCase("flipping", kMs[i], flip, 4, 1);
         }
     }
     printf("  %d cases, %d short of a bound\n", s_rateCases, s_rateShort);
 }
 
-/* the carried arm: a stage without a verdict of its own starts on the arm
-   of the run's last verdict, its own trial still 2 s in, its verdict
-   replacing it (a stage where the carried arm is the wrong one) */
-static void testCarry(void)
+/* the one-verdict rule over scenery: no trial while the replays are not
+   scenery (the title, the logo, a menu), however long; the 2 s counted from
+   the scenery's start; the trial at the first stage of scenery; its verdict
+   for every later stage; a second subject with work only later: its own
+   one trial there; done once both have theirs */
+static void testOnce(void)
 {
-    printf("the carried arm:\n");
+    printf("once a run, in scenery:\n");
     rd_ab_init(&s_a, RD_AB_AUTO);
     (void)rd_ab_subject(&s_a, "zero-area cull");
+    (void)rd_ab_subject(&s_a, "fake");
     rd_ab_allow(&s_a, 0, true);
+    rd_ab_allow(&s_a, 1, true);
     Stream s = {0};
     s.lag = 2;
-    s.replays = 200;
     s.stepMs = 40.0;
-    /* stage 20: no verdict before it: with it; judged off */
-    RdAbTag tag = rd_ab_begin(&s_a, 20, 0.0, false);
-    CHECK(tag.off == 0u, "the run's first stage started without it");
-    s.stage = 20;
     s.effect = 0.05;
-    double t = run(&s_a, &s, 1.0, 1u);
-    CHECK(rd_ab_verdict(&s_a, 0, 20) == RD_AB_V_OFF, "stage 20 not off");
-    CHECK(strstr(s_last, ": off for this stage (it started with it, no verdict before it in the "
-                         "run)") != NULL,
-          "%s", s_last);
-    /* stage 21, the same cost: starts without it at once, its trial still
-       runs and agrees */
-    tag = rd_ab_begin(&s_a, 21, t, false);
-    CHECK(tag.off == 1u && tag.trial == 0u, "stage 21 did not start without it: off %x", tag.off);
-    tag = rd_ab_begin(&s_a, 21, t + 1000.0, true);
-    CHECK(tag.off == 1u, "a keep frame in stage 21 not on the carried arm");
-    s.stage = 21;
-    t = run(&s_a, &s, t + 1001.0, 1u);
-    CHECK(rd_ab_verdict(&s_a, 0, 21) == RD_AB_V_OFF, "stage 21 not off");
-    CHECK(strstr(s_last, "(it started without it, the arm stage 20's verdict left)") != NULL, "%s",
-          s_last);
-    /* stage 22 saves: the carried arm (without it) is the wrong one; its
-       trial corrects it, and stage 23 starts with it */
-    tag = rd_ab_begin(&s_a, 22, t, false);
-    CHECK(tag.off == 1u, "stage 22 did not start on the carried arm");
-    s.stage = 22;
+    /* the logo and the title (stage 1): 20 s, not scenery */
+    rd_ab_set_scenery(&s_a, false);
+    s.stage = 1;
+    s.replays = 500;
+    double t = run(&s_a, &s, 0.0, 1u);
+    CHECK(s_a.trials == 0u && rd_ab_notice_state(&s_a) == RD_AB_NOTICE_NONE,
+          "a trial on the title: %u", (unsigned)s_a.trials);
+    /* the opening's cutscene (stage 41): scenery; no trial in its first
+       2 s of scenery, the cull's at them; the fake subject has no work here */
+    s.stage = 41;
+    s.replays = 10;
+    t = run(&s_a, &s, t + 1.0, 1u); /* the stage's first pictures, still the title's layout */
+    rd_ab_set_scenery(&s_a, true);
+    s.replays = 45; /* 1.8 s of scenery */
+    t = run(&s_a, &s, t + 1.0, 1u);
+    CHECK(s_a.trials == 0u, "a trial before 2 s of scenery (%u)", (unsigned)s_a.trials);
+    s.replays = 400;
+    t = run(&s_a, &s, t + 1.0, 1u);
+    CHECK(s_a.trials == 1u && rd_ab_verdict(&s_a, 0, 41) == RD_AB_V_OFF &&
+              rd_ab_verdict(&s_a, 1, 41) == RD_AB_V_NONE &&
+              rd_ab_notice_state(&s_a) == RD_AB_NOTICE_IDLE,
+          "the opening: %u trials, cull %d, fake %d, notice %d", (unsigned)s_a.trials,
+          rd_ab_verdict(&s_a, 0, 41), rd_ab_verdict(&s_a, 1, 41), rd_ab_notice_state(&s_a));
+    /* the boat (stage 42), where it would save: the run's arm, no trial */
+    s.stage = 42;
     s.effect = -0.05;
     t = run(&s_a, &s, t + 1.0, 1u);
-    CHECK(rd_ab_verdict(&s_a, 0, 22) == RD_AB_V_ON, "stage 22 not corrected to on");
-    CHECK(strstr(s_last, ": on for this stage (it started without it, the arm stage 21's verdict "
-                         "left)") != NULL,
-          "%s", s_last);
-    tag = rd_ab_begin(&s_a, 22, t, false);
-    CHECK(tag.off == 0u && tag.trial == 0u, "stage 22 after its verdict: off %x", tag.off);
-    tag = rd_ab_begin(&s_a, 23, t + 1.0, false);
-    CHECK(tag.off == 0u, "stage 23 did not start with it (stage 22's verdict)");
-    /* a judged stage keeps its own verdict whatever the carried arm says */
-    tag = rd_ab_begin(&s_a, 20, t + 2.0, false);
-    CHECK(tag.off == 1u && tag.trial == 0u, "stage 20 lost its own verdict");
-    /* a stage whose trial ends with no verdict stays on the carried arm */
-    s.stage = 24;
-    s.effect = 0.0;
-    s.workSwing = 0.15;
-    s.replays = 800;
-    t = run(&s_a, &s, t + 3.0, 1u);
-    CHECK(rd_ab_verdict(&s_a, 0, 24) == RD_AB_V_KEPT, "stage 24: %d", rd_ab_verdict(&s_a, 0, 24));
-    CHECK(strstr(s_last,
-                 "no more trials here, it stays with it, the arm stage 22's verdict left") != NULL,
-          "%s", s_last);
-    tag = rd_ab_begin(&s_a, 24, t, false);
-    CHECK(tag.off == 0u && tag.trial == 0u, "stage 24 after no verdict: off %x", tag.off);
+    const RdAbTag tag = rd_ab_begin(&s_a, 42, t, false);
+    CHECK(s_a.trials == 1u && (tag.off & 1u) && rd_ab_verdict(&s_a, 0, 42) == RD_AB_V_OFF,
+          "the boat timed again or not on the run's arm (%u trials, off %x)", (unsigned)s_a.trials,
+          tag.off);
+    /* a later stage where the fake subject has work: its one trial; then
+       both judged: done */
+    s.stage = 43;
+    s.effect = 0.05;
+    t = run(&s_a, &s, t + 1.0, 3u);
+    CHECK(s_a.trials == 2u && s_a.subj[1].trials == 1u &&
+              rd_ab_verdict(&s_a, 1, 43) == RD_AB_V_OFF &&
+              rd_ab_notice_state(&s_a) == RD_AB_NOTICE_DONE_JUDGED,
+          "the fake subject: %u trials, verdict %d, notice %d", (unsigned)s_a.trials,
+          rd_ab_verdict(&s_a, 1, 43), rd_ab_notice_state(&s_a));
+    s.stage = 44;
+    (void)run(&s_a, &s, t + 1.0, 3u);
+    CHECK(s_a.trials == 2u, "a trial after both were judged (%u)", (unsigned)s_a.trials);
+    /* a renderer made again: both forgotten, each timed once more */
+    rd_ab_forget(&s_a, "a Graphics API switch");
+    CHECK(rd_ab_notice_state(&s_a) == RD_AB_NOTICE_IDLE, "after the switch: %d",
+          rd_ab_notice_state(&s_a));
+    s.stage = 45;
+    (void)run(&s_a, &s, t + 100000.0, 3u);
+    CHECK(s_a.trials == 4u && rd_ab_notice_state(&s_a) == RD_AB_NOTICE_DONE_JUDGED,
+          "after the switch: %u trials, notice %d", (unsigned)s_a.trials, rd_ab_notice_state(&s_a));
 }
 
-/* the measure: the scene's GPU work (rd_ab_scene_ms), not the span with
-   the present's pass and the display wait.  A stream held by the display
-   (every span 40 ms: the wait takes up what the scene saves) shows no
-   difference in the span, the 5 % saving in the scene's work */
 static void testMeasure(void)
 {
     printf("the measure:\n");
@@ -728,7 +746,9 @@ static void testForget(void)
     printf("a renderer made again:\n");
     rd_ab_init(&s_a, RD_AB_AUTO);
     (void)rd_ab_subject(&s_a, "zero-area cull");
+    (void)rd_ab_subject(&s_a, "fake");
     rd_ab_allow(&s_a, 0, true);
+    rd_ab_allow(&s_a, 1, true);
     Stream s = {0};
     s.lag = 2;
     s.replays = 200;
@@ -737,11 +757,11 @@ static void testForget(void)
     s.effect = 0.05;
     double t = run(&s_a, &s, 0.0, 1u);
     CHECK(rd_ab_verdict(&s_a, 0, 30) == RD_AB_V_OFF, "stage 30 not off");
-    /* a trial past 16 pairs in stage 31 (a 1 % difference: no early verdict) */
+    /* the fake subject's trial (work in stage 31 alone; its arms change
+       nothing: no early verdict) past 16 pairs */
     s.stage = 31;
-    s.effect = 0.01;
     s.replays = 40 + 50; /* 2 s, then 25 pairs */
-    t = run(&s_a, &s, t, 1u);
+    t = run(&s_a, &s, t, 2u);
     CHECK(s_a.t.active && s_a.t.pairs >= RD_AB_PAIRS_MIN, "no trial past 16 pairs: %u",
           (unsigned)s_a.t.pairs);
     const RdAbTag old = rd_ab_begin(&s_a, 31, t, false);
@@ -759,7 +779,7 @@ static void testForget(void)
     CHECK(strstr(first, "stage 31: no verdict (the renderer was made again, ") != NULL, "%s",
           first);
     CHECK(strstr(s_last, "A/B: the renderer was made again (a Graphics API switch): every verdict "
-                         "and the carried arm forgotten") == s_last,
+                         "forgotten") == s_last,
           "%s", s_last);
     CHECK(rd_ab_verdict(&s_a, 0, 30) == RD_AB_V_NONE && rd_ab_verdict(&s_a, 0, 31) == RD_AB_V_NONE,
           "a verdict kept across the switch");
@@ -780,8 +800,7 @@ static void testForget(void)
     (void)run(&s_a, &s, t + 5000.0, 1u);
     CHECK(rd_ab_verdict(&s_a, 0, 30) == RD_AB_V_OFF && s_a.trials == trials + 1u,
           "stage 30 not judged again on the new renderer");
-    CHECK(strstr(s_last, "(it started with it, no verdict before it in the run)") != NULL, "%s",
-          s_last);
+    CHECK(strstr(s_last, ": off for the rest of the run, every stage") != NULL, "%s", s_last);
 }
 
 /* the player's notice (rd_ab_notice_state) over a run: none before a
@@ -825,45 +844,55 @@ static void testNotice(void)
         idleRun = s_a.trials == 1u && st == RD_AB_NOTICE_IDLE ? idleRun + 1 : 0;
         maxIdle = idleRun > maxIdle ? idleRun : maxIdle;
         sawSecond = sawSecond || s_a.trials == 2u;
-        if (sawSecond && st == RD_AB_NOTICE_IDLE) {
+        if (sawSecond && st != RD_AB_NOTICE_RUNNING) {
             break;
         }
     }
     /* each call here begins a replay, then reads the replays in flight
        back (as rd__perf_begin, then rd__perf_collect_gpu): idle for the one
        replay between a verdict and the next subject's trial */
-    CHECK(sawSecond && maxIdle <= 1 && rd_ab_notice_state(&s_a) == RD_AB_NOTICE_IDLE,
+    CHECK(sawSecond && maxIdle <= 1 && rd_ab_notice_state(&s_a) == RD_AB_NOTICE_DONE_JUDGED,
           "back to back: second %d, idle replays between %d, then %d", sawSecond, maxIdle,
           rd_ab_notice_state(&s_a));
-    /* later stages: running during each trial, idle after its verdict;
-       a renderer made again: idle */
+    /* later stages: no trial, still done */
     s.replays = 400;
-    for (int k = 0; k < 4; k++) {
+    for (int k = 0; k < 3; k++) {
         s.stage = 61 + k;
-        s.replays = 60; /* the start's 2 s and the trial's beginning */
         t = run(&s_a, &s, t + 1.0, 3u);
-        CHECK(rd_ab_notice_state(&s_a) == RD_AB_NOTICE_RUNNING, "stage %d: not running (%d)",
-              s.stage, rd_ab_notice_state(&s_a));
-        s.replays = 400;
-        t = run(&s_a, &s, t + 1.0, 3u);
-        CHECK(s_a.trials < RD_AB_TRIALS && rd_ab_notice_state(&s_a) == RD_AB_NOTICE_IDLE,
+        CHECK(s_a.trials == 2u && rd_ab_notice_state(&s_a) == RD_AB_NOTICE_DONE_JUDGED,
               "stage %d: %u trials, %d", s.stage, (unsigned)s_a.trials, rd_ab_notice_state(&s_a));
     }
+    /* a renderer made again: idle, then running at its trial, done again */
     rd_ab_forget(&s_a, "a Graphics API switch");
     CHECK(rd_ab_notice_state(&s_a) == RD_AB_NOTICE_IDLE, "the renderer made again: %d",
           rd_ab_notice_state(&s_a));
-    /* stages on until the 12th trial: running while it runs, done when it
+    s.stage = 65;
+    s.replays = 60;
+    t = run(&s_a, &s, t + 1.0, 3u);
+    CHECK(rd_ab_notice_state(&s_a) == RD_AB_NOTICE_RUNNING, "not running after the switch (%d)",
+          rd_ab_notice_state(&s_a));
+    s.replays = 400;
+    t = run(&s_a, &s, t + 1.0, 3u);
+    CHECK(s_a.trials == 4u && rd_ab_notice_state(&s_a) == RD_AB_NOTICE_DONE_JUDGED,
+          "after the switch: %u trials, %d", (unsigned)s_a.trials, rd_ab_notice_state(&s_a));
+    /* trials that give no answer (each stage ends 0.4 s into its trial):
+       running while each runs, idle between, done at the cap when the 12th
        ends */
+    rd_ab_init(&s_a, RD_AB_AUTO);
+    (void)rd_ab_subject(&s_a, "zero-area cull");
+    rd_ab_allow(&s_a, 0, true);
     int sawDueAtCap = 0;
-    for (int k = 0; k < 12 && rd_ab_notice_state(&s_a) == RD_AB_NOTICE_IDLE; k++) {
+    t = 0.0;
+    for (int k = 0; k < 16; k++) {
         s.stage = 70 + k;
         s.replays = 1;
-        for (int i = 0; i < 460; i++) {
-            t = run(&s_a, &s, t + 1.0, 3u);
+        for (int i = 0; i < 60; i++) {
+            t = run(&s_a, &s, t + 1.0, 1u);
             sawDueAtCap = sawDueAtCap || (s_a.trials == RD_AB_TRIALS && s_a.t.active &&
                                           rd_ab_notice_state(&s_a) == RD_AB_NOTICE_RUNNING);
         }
     }
+    (void)rd_ab_begin(&s_a, 99, t + 1.0, false);
     CHECK(sawDueAtCap, "not running while the 12th trial ran");
     CHECK(s_a.trials == RD_AB_TRIALS && rd_ab_notice_state(&s_a) == RD_AB_NOTICE_DONE_CAP,
           "done at the cap: %u trials, %d", (unsigned)s_a.trials, rd_ab_notice_state(&s_a));
@@ -951,7 +980,7 @@ int main(void)
     testTwoSubjects();
     testStop();
     testModes();
-    testCarry();
+    testOnce();
     testRate();
     if (failures) {
         printf("rd_ab: %d failures\n", failures);

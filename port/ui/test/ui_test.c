@@ -702,7 +702,7 @@ static void testPopups(void)
             ui_popup_vsync();
         }
         /* the judge's done takes it down for the run, each reason */
-        for (int done = UI_TUNE_JUDGE_DONE_CAP; done <= UI_TUNE_JUDGE_DONE_GONE; done++) {
+        for (int done = UI_TUNE_JUDGE_DONE_CAP; done <= UI_TUNE_JUDGE_DONE_JUDGED; done++) {
             ui_tune_notice_reset();
             ui_popup_reset();
             CHECK(ui_tune_notice_step(UI_TUNE_JUDGE_RUNNING, 5, 0u, 1) == UI_TUNE_SHOWN,

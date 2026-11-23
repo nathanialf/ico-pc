@@ -274,7 +274,7 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
   shown at a running timing without the queue; a short trial: it leaves by itself at its minimum
   fully shown (`UI_TUNE_MIN_SHOWN_MS`) and not before; back at the next timing; a long trial: no
   leaving while it runs nor in an idle shorter than `UI_TUNE_GRACE_MS` (the next subject at once),
-  then gone exactly the grace after; each of the judge's three done answers takes it down at its
+  then gone exactly the grace after; each of the judge's four done answers (the cap, a stop, every attempt gone, every attempt judged) takes it down at its
   minimum, for the run; done before it was shown: never shown. In each of the eight languages:
   that table's title; its one line; its parts with the word, a picture's width and the key form
   ("[Backspace]"): the text left of the divider, the block right of it inside the panel and

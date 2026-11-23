@@ -148,7 +148,8 @@ void ui_host_vsync(unsigned int mainTick)
                        (int)UI_TUNE_JUDGE_IDLE == (int)RD_AB_NOTICE_IDLE &&
                        (int)UI_TUNE_JUDGE_DONE_CAP == (int)RD_AB_NOTICE_DONE_CAP &&
                        (int)UI_TUNE_JUDGE_DONE_STOP == (int)RD_AB_NOTICE_DONE_STOP &&
-                       (int)UI_TUNE_JUDGE_DONE_GONE == (int)RD_AB_NOTICE_DONE_GONE,
+                       (int)UI_TUNE_JUDGE_DONE_GONE == (int)RD_AB_NOTICE_DONE_GONE &&
+                       (int)UI_TUNE_JUDGE_DONE_JUDGED == (int)RD_AB_NOTICE_DONE_JUDGED,
                    "tune_notice.h's judge words are rd_ab.h's");
     _Static_assert(UI_TUNE_TRIANGLE == ICO_PAD_TRIANGLE, "tune_notice.h's Triangle bit");
     {

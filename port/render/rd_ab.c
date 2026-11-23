@@ -46,6 +46,7 @@ void rd_ab_init(RdAb *a, int mode)
     memset(a, 0, sizeof(*a));
     a->mode = mode >= RD_AB_AUTO && mode <= RD_AB_ALT ? mode : RD_AB_AUTO;
     a->stage = -1;
+    a->scenery = true; /* the renderer says otherwise (rd_ab_set_scenery) */
 }
 
 int rd_ab_mode_of(const char *env)
@@ -109,6 +110,12 @@ static int memFind(const RdAb *a, int id, int32_t stage)
 
 int rd_ab_verdict(const RdAb *a, int id, int32_t stage)
 {
+    /* the run's verdict, whatever the stage; else the stage's mark of a
+       trial that gave none */
+    if (id >= 0 && id < a->nSubj &&
+        (a->subj[id].carry == RD_AB_V_ON || a->subj[id].carry == RD_AB_V_OFF)) {
+        return a->subj[id].carry;
+    }
     const int i = memFind(a, id, stage);
     return i < 0 ? RD_AB_V_NONE : a->mem[i].verdict;
 }
@@ -187,22 +194,8 @@ static void capCheck(RdAb *a)
 {
     if (a->trials >= RD_AB_TRIALS && !a->capSaid) {
         a->capSaid = true;
-        line(
-            a,
-            "A/B: %u trials run, the most a run: a stage not judged keeps the arm of the run's last verdict",
-            (unsigned)RD_AB_TRIALS);
-    }
-}
-
-/* the arm a stage without a verdict of its own takes: the run's last
-   verdict's for the subject (none yet: on, today's path), in words */
-static void carryWords(const RdAbSubject *s, char *out, size_t n)
-{
-    if (s->carry == RD_AB_V_OFF || s->carry == RD_AB_V_ON) {
-        snprintf(out, n, "%s, the arm stage %ld's verdict left",
-                 s->carry == RD_AB_V_OFF ? "without it" : "with it", (long)s->carryStage);
-    } else {
-        snprintf(out, n, "with it, no verdict before it in the run");
+        line(a, "A/B: %u trials run, the most a run: an attempt not timed yet stays with it",
+             (unsigned)RD_AB_TRIALS);
     }
 }
 
@@ -221,15 +214,10 @@ static void trialEnd(RdAb *a, const char *why, bool keptOn, bool judgeable)
     double med = 0.0;
     uint32_t favOn = 0, favOff = 0;
     const bool early = why == NULL && n == RD_AB_EARLY;
-    /* the arm the stage started on (no verdict of the subject since it
-       began: the carried one) */
-    char started[96];
-    carryWords(s, started, sizeof(started));
     if (judgeable && (why == NULL || n >= RD_AB_PAIRS_MIN)) {
         v = judge(t, n, early, &med, &favOn, &favOff);
     }
     if (v == RD_AB_V_ON || v == RD_AB_V_OFF) {
-        memPut(a, t->subject, t->stage, v);
         if (v == RD_AB_V_ON) {
             s->stagesOn++;
         } else {
@@ -247,12 +235,12 @@ static void trialEnd(RdAb *a, const char *why, bool keptOn, bool judgeable)
             a,
             "A/B: %s, %s: %u pairs%s, with it %.2f ms, without %.2f ms of the scene's GPU work (the "
             "present and its display wait left out) a thousand vertices and triangles (the median pair %.1f %% %s with it, %u of %u cheaper %s), %u dropped by "
-            "a long picture, %u by unequal work: %s for this stage (it started %s)",
+            "a long picture, %u by unequal work: %s for the rest of the run, every stage",
             s->name, st, (unsigned)n, ended, onK, offK, pct, med <= 0.0 ? "cheaper" : "dearer",
             (unsigned)(v == RD_AB_V_ON ? favOn : favOff), (unsigned)n,
             v == RD_AB_V_ON ? "with it" : "without", (unsigned)t->dropLong, (unsigned)t->dropWork,
-            v == RD_AB_V_ON ? "on" : "off", started);
-        /* the next stages without a verdict of their own start on it */
+            v == RD_AB_V_ON ? "on" : "off");
+        /* the run's one answer: every stage takes it, no trial again */
         s->carry = (int8_t)v;
         s->carryStage = t->stage;
     } else {
@@ -261,10 +249,10 @@ static void trialEnd(RdAb *a, const char *why, bool keptOn, bool judgeable)
         }
         line(a,
              "A/B: %s, %s: no verdict (%s, %u pairs; %u dropped by a long picture, %u by unequal "
-             "work, %u replays not measured): %s %s",
+             "work, %u replays not measured): with it until it is timed again in %s",
              s->name, st, why != NULL ? why : "?", (unsigned)n, (unsigned)t->dropLong,
              (unsigned)t->dropWork, (unsigned)t->notMeasured,
-             keptOn ? "no more trials here, it stays" : "not judged, it stays", started);
+             keptOn ? "another stage" : "the next stage of play");
     }
     t->active = false;
     capCheck(a);
@@ -290,11 +278,9 @@ static uint8_t verdictOff(const RdAb *a, int32_t stage)
 {
     uint8_t off = 0;
     for (int i = 0; i < a->nSubj; i++) {
-        const int v = rd_ab_verdict(a, i, stage);
-        /* its own verdict, else (none, or no verdict after a whole trial)
-           the run's last verdict's arm */
-        if (v == RD_AB_V_OFF ||
-            ((v == RD_AB_V_NONE || v == RD_AB_V_KEPT) && a->subj[i].carry == RD_AB_V_OFF)) {
+        (void)stage;
+        /* the run's one verdict; before it, with it */
+        if (a->subj[i].carry == RD_AB_V_OFF) {
             off |= (uint8_t)(1u << i);
         }
     }
@@ -357,11 +343,18 @@ RdAbTag rd_ab_begin(RdAb *a, int32_t stage, double nowMs, bool keep)
         snprintf(why, sizeof(why), "%u replays", (unsigned)RD_AB_GIVE_UP);
         trialEnd(a, why, true, true);
     }
-    if (!t->active && stage >= 0 && a->trials < RD_AB_TRIALS &&
+    if (!a->scenery) {
+        a->stageMs = nowMs; /* the 2 s count from the stage's scenery on */
+    }
+    /* a trial: game scenery (play or a cutscene, not the title, the logo,
+       a menu or a movie: rd_ab_set_scenery), 2 s of it into the stage, for a
+       subject with no verdict this run that had work in this stage and
+       gave no answer here before */
+    if (!t->active && stage >= 0 && a->scenery && a->trials < RD_AB_TRIALS &&
         nowMs - a->stageMs >= RD_AB_START_MS) {
         for (int i = 0; i < a->nSubj; i++) {
             if (a->subj[i].allowed && !a->subj[i].gone && (a->usedNow & (1u << i)) &&
-                memFind(a, i, stage) < 0) {
+                a->subj[i].carry == RD_AB_V_NONE && memFind(a, i, stage) < 0) {
                 trialStart(a, i);
                 break;
             }
@@ -455,6 +448,11 @@ void rd_ab_collect(RdAb *a, const RdAbIn *in)
     }
 }
 
+void rd_ab_set_scenery(RdAb *a, bool scenery)
+{
+    a->scenery = scenery;
+}
+
 void rd_ab_gone(RdAb *a, int id, bool gone)
 {
     if (id >= 0 && id < a->nSubj) {
@@ -480,6 +478,15 @@ int rd_ab_notice_state(const RdAb *a)
     if (!any) {
         return RD_AB_NOTICE_DONE_GONE;
     }
+    /* every subject still in the run has its one verdict */
+    bool open = a->t.active;
+    for (int i = 0; i < a->nSubj; i++) {
+        open = open || (!a->subj[i].gone && a->subj[i].carry != RD_AB_V_ON &&
+                        a->subj[i].carry != RD_AB_V_OFF);
+    }
+    if (!open) {
+        return RD_AB_NOTICE_DONE_JUDGED;
+    }
     return a->t.active ? RD_AB_NOTICE_RUNNING : RD_AB_NOTICE_IDLE;
 }
 
@@ -496,8 +503,8 @@ void rd_ab_forget(RdAb *a, const char *why)
     a->histN = a->histAt = 0;
     a->epoch++;
     line(a,
-         "A/B: the renderer was made again (%s): every verdict and the carried arm forgotten, "
-         "each attempt with it until its stage's own trial on this renderer",
+         "A/B: the renderer was made again (%s): every verdict forgotten, each attempt with it "
+         "until it is timed once again on this renderer",
          why != NULL ? why : "?");
 }
 
@@ -569,15 +576,16 @@ size_t rd_ab_start_text(const RdAb *a, char *out, size_t cap)
     }
     if (a->mode == RD_AB_AUTO) {
         put(out, cap, &at,
-            "; a trial %.1f s into a stage, one attempt at a time, at most %u a run, its "
+            "; each attempt timed once a run, in the first stage of play or a cutscene (not the "
+            "title, the logo, a menu or a movie) where it has work, %.1f s into it, one at a "
+            "time, at most %u trials a run, its "
             "replays with, without, without, with; a pair two replays in a row whose vertices "
             "and triangles are within %.0f %%, measured as the scene's GPU time (the present and its display wait left out) over them, dropped with a "
             "picture over %.1f times the running median (of %u at least); verdict at %u pairs "
             "all one way by %.0f %% or more, else at %u: on with a median %.0f %% or more cheaper "
             "with it and %u of %u cheaper with it, else off; no verdict under %u pairs in %u "
-            "replays (the stage stays on the carried arm); kept for the stage for the run; a stage "
-            "without a verdict of its own on the arm of the run's last verdict (none yet: with "
-            "it)",
+            "replays; the verdict kept for every stage for the rest of the run; with it until "
+            "then, and timed again in the next stage after a trial with no verdict",
             RD_AB_START_MS / 1000.0, (unsigned)RD_AB_TRIALS, RD_AB_WORK_TOL * 100.0, RD_AB_LONG,
             (unsigned)RD_AB_MEDIAN_MIN, (unsigned)RD_AB_EARLY, RD_AB_GAIN * 100.0,
             (unsigned)RD_AB_PAIRS, RD_AB_GAIN * 100.0, (unsigned)RD_AB_FAVOUR,

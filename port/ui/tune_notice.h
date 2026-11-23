@@ -34,12 +34,13 @@ extern "C" {
 /* the judge's answer (port/render/rd_ab.h RD_AB_NOTICE_*, the same
    numbers: ui_host.c checks them) */
 enum {
-    UI_TUNE_JUDGE_NONE = 0,  /* no timing began */
-    UI_TUNE_JUDGE_RUNNING,   /* a timing is running */
-    UI_TUNE_JUDGE_IDLE,      /* between timings */
-    UI_TUNE_JUDGE_DONE_CAP,  /* every trial of the run run */
-    UI_TUNE_JUDGE_DONE_STOP, /* every trial stopped (a device loss, a hang) */
-    UI_TUNE_JUDGE_DONE_GONE  /* every attempt off for the run */
+    UI_TUNE_JUDGE_NONE = 0,   /* no timing began */
+    UI_TUNE_JUDGE_RUNNING,    /* a timing is running */
+    UI_TUNE_JUDGE_IDLE,       /* between timings */
+    UI_TUNE_JUDGE_DONE_CAP,   /* every trial of the run run */
+    UI_TUNE_JUDGE_DONE_STOP,  /* every trial stopped (a device loss, a hang) */
+    UI_TUNE_JUDGE_DONE_GONE,  /* every attempt off for the run */
+    UI_TUNE_JUDGE_DONE_JUDGED /* every attempt timed: its answer kept for the run */
 };
 
 /* the time fully shown before it may slide out, and the time the timing

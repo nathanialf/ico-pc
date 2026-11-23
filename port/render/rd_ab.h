@@ -15,10 +15,12 @@
  *     anything in it come back when its GPU times are read (rd_ab_collect),
  *     with the tag it was recorded under, so a span is always the arm's it
  *     was recorded with however many pictures are in flight;
- *   - a trial starts RD_AB_START_MS into a stage, for one subject at a
- *     time that may be tried (rd_ab_allow), changed something in that
- *     stage's pictures and has no verdict there; at most RD_AB_TRIALS a
- *     run;
+ *   - each subject is timed once a run: a trial starts RD_AB_START_MS into
+ *     a stage of game scenery (play or a cutscene; not the title, the logo,
+ *     a menu or a movie: rd_ab_set_scenery, the renderer's word), for one
+ *     subject at a time that may be tried (rd_ab_allow), changed something
+ *     in that stage's pictures and has no verdict this run; at most
+ *     RD_AB_TRIALS trials a run;
  *   - the trial's replays (keep frames left out) alternate on, off, off,
  *     on (ABBA, which cancels a drift of the content); replays 2k and 2k+1
  *     of the trial, both collected, both with GPU times, both with the
@@ -32,16 +34,15 @@
  *     median at least RD_AB_GAIN that way; else at RD_AB_PAIRS pairs: on
  *     when the median is RD_AB_GAIN or more in favour of the attempt and
  *     RD_AB_FAVOUR of them favour it, off otherwise (no difference: off,
- *     the path without it); kept for the stage for the run;
- *   - a stage without a verdict of its own (not judged yet, or judged
- *     nothing) runs on the arm of the run's most recent verdict for the
- *     subject (none yet in the run: on), its trial still 2 s in, and its
- *     own verdict replaces the carried arm there and from then on;
+ *     the path without it); the run's one answer for the subject: every
+ *     stage takes that arm and the subject is not tried again (a renderer
+ *     made again forgets it, rd_ab_forget: one more trial there); before
+ *     it, the subject runs with it (today's path);
  *   - no verdict: fewer than RD_AB_PAIRS_MIN pairs after RD_AB_GIVE_UP
- *     trial replays (no more trials there, the carried arm kept), the
- *     stage ended or the
- *     subject was turned off before (not judged; tried again at the next
- *     visit while trials are left); between RD_AB_PAIRS_MIN and
+ *     trial replays (no more trials in that stage), the stage ended or the
+ *     subject was turned off before: not an answer, the subject is tried
+ *     again in the next stage of scenery while trials are left; between
+ *     RD_AB_PAIRS_MIN and
  *     RD_AB_PAIRS pairs at either end, the verdict on those pairs with
  *     RD_AB_FAVOUR scaled;
  *   - rd_ab_stop (a device loss): every trial stopped, every subject at
@@ -51,16 +52,14 @@
  *     ms of the scene's GPU work (the present and its display wait left
  *     out) a thousand vertices and triangles (the median pair 4.3 % dearer
  *     with it, 25 of 32 cheaper without), 3 dropped by a long picture, 0
- *     by unequal work: off for this stage (it started with it, the arm
- *     stage 3's verdict left)
+ *     by unequal work: off for the rest of the run, every stage
  *   A/B: zero-area cull, stage 42: no verdict (600 replays, 11 pairs; 30
  *     dropped by a long picture, 4 by unequal work, 120 replays not
- *     measured): no more trials here, it stays without it, the arm stage
- *     41's verdict left
+ *     measured): with it until it is timed again in another stage
  *   A/B: every trial stopped for the run (the graphics device was lost):
  *     each attempt at its off arm from here (zero-area cull)
- *   A/B: 12 trials run, the most a run: a stage not judged keeps the arm
- *     of the run's last verdict
+ *   A/B: 12 trials run, the most a run: an attempt not timed yet stays
+ *     with it
  * The modes (ICO_RD_AB, the tests' switch): unset the judge; on every
  * replay at the on arm (today's path); off every replay at the off arm;
  * alt every replay alternating on, off, off, on from the first, no trial,
@@ -141,8 +140,8 @@ typedef struct RdAbSubject {
        yet) and its stage: the arm a stage without a verdict of its own
        starts on and keeps until its own */
     int8_t carry;
-    int32_t carryStage;
-    bool gone; /* off for the rest of the run (rd_ab_gone): never tried again */
+    int32_t carryStage; /* the stage it was timed in */
+    bool gone;          /* off for the rest of the run (rd_ab_gone): never tried again */
 } RdAbSubject;
 
 typedef struct RdAb {
@@ -167,6 +166,7 @@ typedef struct RdAb {
     RdAbTrial t;
     uint32_t serial, trials;
     uint16_t epoch; /* rd_ab_forget's count: a record of an earlier renderer is not measured */
+    bool scenery;   /* the replays are game scenery (rd_ab_set_scenery) */
     bool capSaid;
     uint32_t altSeq;
     uint64_t offTrial; /* off-arm replays the trials made, the run */
@@ -203,6 +203,10 @@ void rd_ab_forget(RdAb *a, const char *why);
    present pass, so neither is work the subject can change), 0 when nothing
    is left */
 double rd_ab_scene_ms(double spanMs, double displayWaitMs, double presentMs);
+/* whether the replays now are game scenery (play or a cutscene; not the
+   title, the logo, a menu or a movie): only then may a trial start
+   (true from rd_ab_init: the tests' streams) */
+void rd_ab_set_scenery(RdAb *a, bool scenery);
 /* subject id is off for the rest of the run (its own failed self-test or
    run-time check, the install's mark, its switch: not a self-test merely
    not run, which a renderer made again runs): never tried again */
@@ -219,8 +223,11 @@ void rd_ab_gone(RdAb *a, int id, bool gone);
      RD_AB_NOTICE_DONE_STOP  every trial stopped (a device loss, the GPU's
                              own sign of a reset)
      RD_AB_NOTICE_DONE_GONE  every subject off for the rest of the run
-   The DONE answers do not go back (a renderer made again keeps the trials'
-   count, a stop and a gone subject stay).  Two subjects tried back to back
+     RD_AB_NOTICE_DONE_JUDGED every subject still in the run has its one
+                             verdict (a renderer made again forgets them:
+                             idle again until each is timed once more)
+   The DONE answers but JUDGED do not go back (a renderer made again keeps
+   the trials' count, a stop and a gone subject stay).  Two subjects tried back to back
    in one stage: the second trial starts at the replay after the first one's
    verdict was read back (rd_ab_begin), so IDLE lasts about one picture
    between them; the UI bridges that (tune_notice.h UI_TUNE_GRACE_MS). */
@@ -230,7 +237,8 @@ enum {
     RD_AB_NOTICE_IDLE,
     RD_AB_NOTICE_DONE_CAP,
     RD_AB_NOTICE_DONE_STOP,
-    RD_AB_NOTICE_DONE_GONE
+    RD_AB_NOTICE_DONE_GONE,
+    RD_AB_NOTICE_DONE_JUDGED
 };
 
 int rd_ab_notice_state(const RdAb *a);

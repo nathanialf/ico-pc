@@ -16,6 +16,7 @@
 #include "perf_secs.h" /* pictures a second by stage */
 #include "rd_perf_more.h"
 #include "rd.h"        /* rd_vu_prepass_on */
+#include "rd_ab_run.h" /* rd_ab_scenery: the in-play judge */
 #include "rd_ledger.h" /* the scene ledger: the stage in play */
 #include "rd_list_draws.h"
 #include "rd_perf_rank.h"
@@ -101,6 +102,9 @@ void window_perf_rank_step(SceneKind kind, int stage, uint64_t ns)
     /* the stage into the seconds (perf_secs.h: a change cuts the block)
        and the stall lines' medians (window_stall.h: a new stage's own) */
     perf_secs_window_step(stage, ico_thread_now_ms());
+    /* the in-play judge times its attempts in scenery alone: play or a
+       cutscene, never the title, the logo or a menu (rd_ab_run.h) */
+    rd_ab_scenery(kind == SCENE_PLAY || kind == SCENE_SCENE);
     window_stall_stage(stage);
     /* the scene ledger (rd_ledger.h) on the game's thread, the one that
        records the frames: a new stage writes the stage before's lines; the

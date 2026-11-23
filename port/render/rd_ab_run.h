@@ -56,6 +56,13 @@ void rd__ab_renderer(void);
 int rd_ab_notice(void);
 /* the running trial's stage (the notice's log line), -1 none */
 int rd_ab_notice_stage(void);
+/* whether the game shows scenery now (any thread: the window's step,
+   port/platform/window_perf_rank.c, from its layout's kind: play or a
+   cutscene's scene layout, not the title, the logo, a menu, the memory
+   card's pages; a movie has no work for any attempt): a trial starts only
+   then (rd_ab.h rd_ab_set_scenery); 0 until said (the replay tool, which
+   has no stage either) */
+void rd_ab_scenery(int scenery);
 /* the replay's record ends (rd__perf_end): no arm read after it */
 void rd__ab_end(void);
 /* a record's GPU times read back (rd__perf_collect_gpu) */
