@@ -40,6 +40,7 @@ int ico_state_register_port(void)
     result |= ico_sound_state_register();
     result |= ico_difficulty_state_register();
     result |= ico_zoom_state_register();
+    result |= ico_cam_reset_state_register();
     if (result != 0) {
         result = -1;
         fprintf(stderr, "state: the port's blocks are not all registered (%d of them are)\n",

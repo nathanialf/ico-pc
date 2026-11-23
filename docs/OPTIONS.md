@@ -468,6 +468,15 @@ A change takes effect the next time you start the game.
   camera itself, and when you go into another room. It follows the game's
   **Button configuration**, shows from the title screen and the pause menu,
   on every disc, and is kept in the settings file for every save.
+- **Camera reset** is **Off** (the game as it shipped) or **On**. With it
+  on, pressing R3 (clicking the right stick in) brings the camera straight
+  back to Ico after you have turned it with the right stick, instead of
+  letting it drift back slowly. A zoom you turned on with Zoom type
+  **Toggle** ends too, and while you keep pushing the right stick the camera
+  stays on Ico until you let go. You can give R3 to another key or button
+  under **Remap controls**. It shows from the title screen and the pause
+  menu, on every disc, and is kept in the settings file. A save state made
+  with it set the other way will not load until you set it back.
 - **Analogue stick fix** is the same switch as the one on the Gameplay
   page, shown here too so you find it with the other controls. Turn it on
   in either place and it is on in both.

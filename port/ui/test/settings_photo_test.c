@@ -1296,8 +1296,8 @@ static int render(void)
         press(0x40);
         const int ctlL = ui_settings_page_layout(UI_PAGE_CONTROLS);
         CHECK(settle(ctlL, 60), "Controls (touch)");
-        int cl[16];
-        const int cn = ui_settings_page_rows(UI_PAGE_CONTROLS, cl, NULL, NULL, 16);
+        int cl[24];
+        const int cn = ui_settings_page_rows(UI_PAGE_CONTROLS, cl, NULL, NULL, 24);
         for (int i = 0; i < cn; i++) {
             if (lt_ext_prop(cl[i])->right == ui_settings_page_layout(UI_PAGE_TOUCH)) {
                 lt_ext_layout(ctlL)->curItem = cl[i];

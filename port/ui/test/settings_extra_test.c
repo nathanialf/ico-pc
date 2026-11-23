@@ -2109,8 +2109,8 @@ static void testQuitGame(void)
    Off on the live table, saved as [input] mouse_camera and mouse_invert_y;
    Mouse camera speed, Mouse camera range and Camera swings back follow
    Invert (mouse_camera_speed, mouse_full_range, mouse_return, written only
-   when changed); the six mouse rows come after Hold type, Zoom type and
-   Stick fix, hidden on Android; sixteen rows (the pause menu with a touch screen: its Touch
+   when changed); the six mouse rows come after Hold type, Zoom type, Camera
+   reset and Stick fix, hidden on Android; seventeen rows (the pause menu with a touch screen: its Touch
    screen row) fit 11 lines apart */
 static int s_i17aTouch;
 
@@ -2243,9 +2243,12 @@ static void testMouseCamera(void)
                 const int zoom = ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_ZOOM_TYPE);
                 CHECK(lt_ext_prop(hold)->downItem == zoom, "title %d: Zoom type after Hold type",
                       title);
-                CHECK(zoom >= 0 && lt_ext_prop(zoom)->downItem ==
-                                       ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_STICK_FIX),
-                      "title %d: Stick fix after Zoom type", title);
+                const int cam = ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_CAMERA_RESET);
+                CHECK(zoom >= 0 && lt_ext_prop(zoom)->downItem == cam,
+                      "title %d: Camera reset after Zoom type", title);
+                CHECK(cam >= 0 && lt_ext_prop(cam)->downItem ==
+                                      ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_STICK_FIX),
+                      "title %d: Stick fix after Camera reset", title);
                 CHECK(
                     lt_ext_prop(ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_STICK_FIX))->downItem ==
                         ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_MOUSE_CAMERA),
@@ -2269,7 +2272,7 @@ static void testMouseCamera(void)
     }
     ico_video_set_android(0);
 
-    /* sixteen rows with a touch screen from the pause menu: the window's
+    /* seventeen rows with a touch screen from the pause menu: the window's
        slots full, the last box inside the 226 lines */
     s_i17aTouch = 1;
     ui_settings_set_touch_query(i17aTouch);
@@ -2279,10 +2282,10 @@ static void testMouseCamera(void)
         frame(0);
     }
     int n = 0, slots = 0;
-    CHECK(ui_settings_page_scroll(UI_PAGE_CONTROLS, &n, NULL, &slots) == 1 && n == 16 &&
+    CHECK(ui_settings_page_scroll(UI_PAGE_CONTROLS, &n, NULL, &slots) == 1 && n == 17 &&
               slots == WIN_SLOTS,
-          "sixteen rows shown, %d in view (%d)", slots, n);
-    checkPageFits(UI_PAGE_CONTROLS, "Controls, sixteen rows (touch screen)");
+          "seventeen rows shown, %d in view (%d)", slots, n);
+    checkPageFits(UI_PAGE_CONTROLS, "Controls, seventeen rows (touch screen)");
     press(0x10);
     CHECK(settle(mainL, 60), "Controls: back");
     ui_settings_set_touch_query(NULL);
@@ -2876,13 +2879,14 @@ static void testDuplicatedRows(void)
         const int sf = ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_STICK_FIX);
         CHECK(sf >= 0 && an22bShown(UI_PAGE_CONTROLS, UI_OPT_STICK_FIX),
               "title %d: stick fix is on Controls", title);
-        const int n = ui_settings_page_rows(UI_PAGE_CONTROLS, labels, opts, NULL, 16);
+        const int n = ui_settings_page_rows(UI_PAGE_CONTROLS, labels, opts, NULL, 20);
         int at = -1;
         for (int i = 0; i < n; i++) {
             at = opts[i] == UI_OPT_STICK_FIX ? i : at;
         }
-        CHECK(at > 1 && opts[at - 1] == UI_OPT_ZOOM_TYPE && opts[at - 2] == UI_OPT_HOLD_TYPE,
-              "title %d: stick fix follows Hold type and Zoom type", title);
+        CHECK(at > 2 && opts[at - 1] == UI_OPT_CAMERA_RESET && opts[at - 2] == UI_OPT_ZOOM_TYPE &&
+                  opts[at - 3] == UI_OPT_HOLD_TYPE,
+              "title %d: stick fix follows Hold type, Zoom type and Camera reset", title);
         CHECK(noteStarting(UI_PAGE_CONTROLS, "Also under Gameplay") >= 0,
               "title %d: the Controls row says it is also under Gameplay", title);
         lt_ext_layout(ctlL)->curItem = sf;
@@ -2964,7 +2968,7 @@ static void testDuplicatedRows(void)
               "row_of returns the first of several rows of one option");
     }
 
-    /* the fullest Controls page (pause menu, mouse and touch): sixteen rows
+    /* the fullest Controls page (pause menu, mouse and touch): seventeen rows
        fit in every language */
     useConfig("version = 1\n");
     ico_video_set_android(0);
@@ -2978,15 +2982,15 @@ static void testDuplicatedRows(void)
             frame(0);
         }
         int shown = 0;
-        const int n = ui_settings_page_rows(UI_PAGE_CONTROLS, labels, opts, NULL, 16);
+        const int n = ui_settings_page_rows(UI_PAGE_CONTROLS, labels, opts, NULL, 20);
         for (int j = 0; j < n; j++) {
             shown += ui_settings_row_shown(labels[j]);
         }
-        CHECK(shown == 16, "language %d: Controls shows sixteen rows (%d)", i, shown);
+        CHECK(shown == 17, "language %d: Controls shows seventeen rows (%d)", i, shown);
         CHECK(strcmp(lt_ext_row_text(ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_STICK_FIX)),
                      ui_str(UI_STR_OPT_STICK_FIX)) == 0,
               "language %d: the stick fix label", i);
-        checkPageFits(UI_PAGE_CONTROLS, "Controls, sixteen rows");
+        checkPageFits(UI_PAGE_CONTROLS, "Controls, seventeen rows");
         press(0x10);
         CHECK(settle(mainL, 60), "language %d: Controls: back", i);
     }
@@ -3597,6 +3601,58 @@ static void testZoomType(void)
                   strcmp(ui_settings_value_text(UI_OPT_ZOOM_TYPE), "Hold") == 0 &&
                   strcmp(ico_config_get_string("gameplay.zoom_type", ""), "hold") == 0,
               "title %d: Left: Hold again", title);
+        press(LT_PAD_TRIANGLE);
+        CHECK(settle(mainL, 60), "title %d: Controls: back again", title);
+    }
+    useConfig("version = 1\n");
+}
+
+/* Controls > Camera reset ([gameplay] camera_reset, port/game/camera_reset.h):
+   shown from the title and the pause menu, Off by default; Right turns it On
+   and sets the key, its note shows on the cursor, leaving the page saves
+   camera_reset = "on"; Left turns it Off again */
+static void testCameraReset(void)
+{
+    char p[1100];
+
+    gFlagGameClear = 0;
+    for (int title = 1; title >= 0; title--) {
+        stage_no = title ? 1 : 11;
+        useConfig("version = 1\n");
+        const int mainL = enterMain(title);
+        const int ctlL = openPage(mainL, 4, UI_PAGE_CONTROLS);
+        const int row = ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_CAMERA_RESET);
+        CHECK(row >= 0 && ui_settings_row_shown(row), "title %d: the Camera reset row is shown",
+              title);
+        CHECK(ico_opt_camera_reset() == 0 &&
+                  strcmp(ui_settings_value_text(UI_OPT_CAMERA_RESET), "Off") == 0,
+              "title %d: Off by default (%s)", title, ui_settings_value_text(UI_OPT_CAMERA_RESET));
+        lt_ext_layout(ctlL)->curItem = row;
+        press(LT_PAD_RIGHT);
+        CHECK(ico_opt_camera_reset() == 1 &&
+                  strcmp(ui_settings_value_text(UI_OPT_CAMERA_RESET), "On") == 0 &&
+                  strcmp(ico_config_get_string("gameplay.camera_reset", ""), "on") == 0,
+              "title %d: Right: On, the key set", title);
+        const int note = noteStarting(UI_PAGE_CONTROLS, "On: click the right stick");
+        CHECK(note >= 0 && !lt_ext_prop(note)->masked,
+              "title %d: the Camera reset note on the cursor", title);
+        press(LT_PAD_TRIANGLE);
+        CHECK(settle(mainL, 60), "title %d: Controls: back", title);
+        path(p, sizeof(p), "settings_test.toml");
+        IcoToml *t = ico_toml_load(p);
+        const char *saved = t != NULL ? ico_toml_get(t, "gameplay.camera_reset") : NULL;
+        CHECK(saved != NULL && strcmp(saved, "on") == 0,
+              "title %d: leaving Controls saved gameplay.camera_reset = \"on\"", title);
+        if (t != NULL) {
+            ico_toml_free(t);
+        }
+        openPage(mainL, 4, UI_PAGE_CONTROLS);
+        lt_ext_layout(ctlL)->curItem = row;
+        press(LT_PAD_LEFT);
+        CHECK(ico_opt_camera_reset() == 0 &&
+                  strcmp(ui_settings_value_text(UI_OPT_CAMERA_RESET), "Off") == 0 &&
+                  strcmp(ico_config_get_string("gameplay.camera_reset", ""), "off") == 0,
+              "title %d: Left: Off again", title);
         press(LT_PAD_TRIANGLE);
         CHECK(settle(mainL, 60), "title %d: Controls: back again", title);
     }
@@ -4229,7 +4285,7 @@ static void testOtherDiscPointer(const char *slug)
 }
 
 /* Controls > Touch screen (UI_PAGE_TOUCH): the link only with a touch
-   screen; Controls' sixteen rows and the page's nine fit from both
+   screen; Controls' seventeen rows and the page's nine fit from both
    entries; the overlay's three rows moved there (their values, steps, save
    and read back as [input] touch_mode, touch_size, touch_opacity); the
    overlay's note on Touch controls; Back to Controls on its Touch screen
@@ -4244,8 +4300,8 @@ static int tpTouch(void)
 /* Controls' Touch screen row, -1 */
 static int tpLink(void)
 {
-    int labels[16];
-    const int n = ui_settings_page_rows(UI_PAGE_CONTROLS, labels, NULL, NULL, 16);
+    int labels[24];
+    const int n = ui_settings_page_rows(UI_PAGE_CONTROLS, labels, NULL, NULL, 24);
     for (int i = 0; i < n; i++) {
         if (lt_ext_prop(labels[i])->right == ui_settings_page_layout(UI_PAGE_TOUCH)) {
             return labels[i];
@@ -5439,6 +5495,8 @@ int main(int argc, char **argv)
     testHoldType();
     /* Controls > Zoom type */
     testZoomType();
+    /* Controls > Camera reset */
+    testCameraReset();
     /* Controls > Touch screen, Edit layout */
     testTouchPage();
     testTouchEditorPage();

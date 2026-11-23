@@ -12,6 +12,9 @@
 # for its constants and CLUT order only (nothing of rd is linked)
 # door_grace.c: the doorway fix's arm and arrival grace ([gameplay] door_fix),
 # called by the exit check in ico2/fumi/src/boyact.c
+# camera_reset.c: Camera reset's press and stick mute ([gameplay] camera_reset,
+# camera_reset.h), called by the four SetCameraMatrix_Ico2 copies in
+# ico2/omori/src/camera-ico2.c
 # zoom_toggle.c: Zoom type's latch ([gameplay] zoom_type, zoom_toggle.h) and its
 # save-state block, called by the camera's zoom blocks in
 # ico2/omori/src/camera-root.c and camera-ico2.c
@@ -29,7 +32,7 @@
 # Shadows' counters and log lines for its game-side hooks (no_shadows.h).
 add_library(ico_options STATIC options.c video_options.c photo_mode.c appearance.c door_grace.c
             variants.c yorda_trip.c ico_rows.c difficulty.c difficulty_file.c no_shadows.c
-            zoom_toggle.c)
+            zoom_toggle.c camera_reset.c)
 target_include_directories(ico_options PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
                            "${CMAKE_SOURCE_DIR}/port/render")
 target_compile_options(ico_options PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
@@ -498,6 +501,19 @@ target_compile_options(zoom_toggle_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PO
 target_link_libraries(zoom_toggle_test PRIVATE ico_options)
 if(ICO_RUN_TESTS)
     add_test(NAME zoom_toggle COMMAND zoom_toggle_test)
+endif()
+
+# Camera reset (camera_reset.h): off passes the stick through tick for tick over
+# pseudo-random input; a press resets once, a held press does not repeat; a
+# stick held at the press is muted until its dead zone; no reset while the
+# look-around is not live; the toggled zoom ended; a copy of the arm's use; the
+# FRESH save-state block copied back. CPU only, no game sources.
+add_executable(camera_reset_test test/camera_reset_test.c ../platform/host_config.c)
+target_include_directories(camera_reset_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_options(camera_reset_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(camera_reset_test PRIVATE ico_options)
+if(ICO_RUN_TESTS)
+    add_test(NAME camera_reset COMMAND camera_reset_test)
 endif()
 
 # Free movement and Ask Yorda for a hint (ico_rows.h): the row's key and its

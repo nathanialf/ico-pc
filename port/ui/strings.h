@@ -531,6 +531,10 @@ typedef enum UiStrId {
     UI_STR_VAL_ZOOM_HOLD,
     UI_STR_VAL_ZOOM_TOGGLE,
     UI_STR_ZOOM_TYPE_NOTE,
+    /* Controls > Camera reset ([gameplay] camera_reset), after Zoom type: its
+       label and its note (the values are On and Off) */
+    UI_STR_OPT_CAMERA_RESET,
+    UI_STR_CAMERA_RESET_NOTE,
     /* Controls > Button pictures and its note (the values are names, not
        translated: settings_pads.c) */
     UI_STR_OPT_BUTTON_PICTURES,

@@ -63,6 +63,10 @@
  *                                 "toggle" zooms in with one press and out
  *                                 with the next (zoom_toggle.h); a
  *                                 pad-recording key
+ *   [gameplay] camera_reset
+ *                          "off"  "on": a press of R3 puts the player's
+ *                                 look-around back on the boy at once
+ *                                 (camera_reset.h); a pad-recording key
  *   [gameplay] developer_mode
  *                          false  the development build's debug menu and
  *                                 debug options
@@ -428,6 +432,16 @@ int ico_opt_zoom_type(void);
 void ico_opt_set_zoom_type(int type);
 /* the key's word of a type: "hold" or "toggle" */
 const char *ico_opt_zoom_type_name(int type);
+/* [gameplay] camera_reset: "off" (the default on every disc: the game as
+   shipped) or "on" (camera_reset.h: R3 puts the look-around back on the
+   boy at once).  Another word reads as off, logged once; the value in force
+   is logged when it changes ("options: camera reset <off|on>").  1 when
+   on. */
+int ico_opt_camera_reset(void);
+/* sets it for this run (non-zero: on) */
+void ico_opt_set_camera_reset(int on);
+/* the key's word: "on" or "off" */
+const char *ico_opt_camera_reset_name(int on);
 /* [input] button_pictures: whose button pictures the menus, the prompts,
    photo mode and the touch screen draw (Options > Controls > Button
    pictures; port/ui/settings_pads.c resolves it once a frame).  "auto"

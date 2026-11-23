@@ -46,6 +46,7 @@ backend_switch_window 0.00
 backup 0.12
 bench_plan 0.00
 bones_ladder 0.00
+camera_reset 0.01  # estimate: a CPU-only unit test of 2000 ticks, as zoom_toggle (CAMRESET)
 camera_wall 0.00
 camera_wall_stage 0.00
 capture_trigger 0.01
