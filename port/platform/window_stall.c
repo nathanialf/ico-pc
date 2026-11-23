@@ -25,6 +25,7 @@
 #include "power_read.h"
 #include "stall_coincide.h"
 #include "vmstat_read.h"
+#include "window_thermal.h" /* the phone's heat and clocks (thermal_read.h) */
 #include "window_lines.h"   /* window_log_cost_present */
 #include "window_present.h" /* window_refresh_ns */
 #include "sys_cell.h"
@@ -729,7 +730,10 @@ static void asks_tick(void)
     const double mv[5] = {(double)rss, (double)peak, (double)avail, (double)total, dev};
     sys_cell_put(&s_memoryCell, t1, t1 - t0, mv, 5);
     asks_more(rss, avail, total, dev != 0.0, t1);
-    power_tick(t1);           /* the battery (power_read.h) */
+    power_tick(t1); /* the battery (power_read.h) */
+    /* the heat and clocks: the thermal ask's headroom and status above
+       passed on, so the NDK's headroom is asked only where it had none */
+    window_thermal_tick(t1, t.headroom, t.status);
     vmstat_tick(t1);          /* the kernel's memory events (vmstat_read.h) */
     ico_render_thread_tick(); /* the threads' schedstat and list (render_thread.h) */
     __atomic_fetch_add(&s_asksN, 1u, __ATOMIC_RELAXED);
@@ -1082,6 +1086,10 @@ static void stall_row(const StallMoment *m, uint32_t replay, int kind, double ms
         row.batteryKnown = 1;
         row.batteryMa = (float)ma;
     }
+    ThermalSample ts;
+    if (window_thermal_now(&ts)) {
+        (void)thermal_token(&ts, row.phone, sizeof row.phone);
+    }
     stall_table_add(&s_table, &row);
 }
 
@@ -1103,6 +1111,77 @@ static void stall_event(const char *what, double t0Ms, double t1Ms, uint32_t rep
     (void)stall_moment_text(&m, text, sizeof text);
     fprintf(stderr, "window: stall: %s; at that moment: %s\n", what, text);
     ico_diag_log_sync_ask(); /* issue 215: on the disc from the watchdog's thread, not this one */
+}
+
+size_t window_stall_where_phone(char *out, size_t cap)
+{
+    if (cap == 0) {
+        return 0;
+    }
+    size_t at = 0;
+    out[0] = '\0';
+    char tok[96];
+    ThermalSample ts;
+    if (window_thermal_now(&ts)) {
+        (void)thermal_token(&ts, tok, sizeof tok);
+    } else {
+        snprintf(tok, sizeof tok, "not read");
+    }
+    int w = snprintf(out, cap,
+                     "thermal (status/headroom/hottest zone C/clusters' clock:allowed most MHz) %s",
+                     tok);
+    at = w > 0 ? ((size_t)w < cap ? (size_t)w : cap - 1u) : 0u;
+    double ma;
+    if (battery_now_ma(&ma)) {
+        w = snprintf(out + at, cap - at, "; battery %.0f mA", ma);
+    } else {
+        w = snprintf(out + at, cap - at, "; battery not read");
+    }
+    at = w > 0 && at + (size_t)w < cap ? at + (size_t)w : (w > 0 ? cap - 1u : at);
+    long rss, peak, avail = -1, total = -1;
+    double age;
+    if (at + 1u < cap && window_stall_memory(&rss, &peak, &avail, &total, &age) == 0 &&
+        avail >= 0) {
+        w = snprintf(out + at, cap - at, "; memory %ld MB available", avail / 1024);
+        at = w > 0 && at + (size_t)w < cap ? at + (size_t)w : (w > 0 ? cap - 1u : at);
+    }
+#ifdef __ANDROID__
+    double pv[4], pat;
+    if (at + 1u < cap && s_asksOn && sys_cell_get(&s_pressureCell, pv, 4, &pat, NULL) == 4) {
+        if (pv[3] > 0.0) {
+            w = snprintf(out + at, cap - at, ", pressure some %.1f %%", pv[0]);
+        } else {
+            w = snprintf(out + at, cap - at, ", pressure not readable");
+        }
+        at = w > 0 && at + (size_t)w < cap ? at + (size_t)w : (w > 0 ? cap - 1u : at);
+    }
+#endif
+    return at;
+}
+
+size_t window_stall_where_stalls(char *out, size_t cap)
+{
+    if (cap == 0) {
+        return 0;
+    }
+    int best = -1;
+    for (int i = 0; i < STALL_SHARE_PIECES; i++) {
+        if (s_table.byPiece[i] > 0u && (best < 0 || s_table.byPiece[i] > s_table.byPiece[best])) {
+            best = i;
+        }
+    }
+    const char *const *names = piece_names();
+    int w;
+    if (s_table.stalls == 0) {
+        w = snprintf(out, cap, "0");
+    } else if (best >= 0) {
+        w = snprintf(out, cap, "%u in %u replays, most in %s (%u)", s_table.stalls, s_table.replays,
+                     names[best] != NULL ? names[best] : "?", s_table.byPiece[best]);
+    } else {
+        w = snprintf(out, cap, "%u in %u replays, none naming a piece", s_table.stalls,
+                     s_table.replays);
+    }
+    return w > 0 ? ((size_t)w < cap ? (size_t)w : cap - 1u) : 0u;
 }
 
 int window_stall_tally_take(char *out, size_t cap)
@@ -1371,7 +1450,8 @@ void window_stall_after(const RdPerfRecord *r, PaceGpuGap *gap)
     if (s_stallT0 <= 0.0) {
         s_stallT0 = ico_thread_now_ms(); /* the first block starts with the first record */
     }
-    pieces_take(r); /* its pieces against the block's medians (a stall of it judges them) */
+    window_thermal_take(); /* the log thread's new reading of heat and clocks, if any */
+    pieces_take(r);        /* its pieces against the block's medians (a stall of it judges them) */
     {
         /* each second's GPU span, triangles, fixed-work passes and present
            intervals (perf_secs.h) */

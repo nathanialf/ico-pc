@@ -1657,7 +1657,9 @@ whole ticks, rounded)`
 
 Each second's medians are of its timed pictures (`-` where none was), the triangles of every
 picture; a pass that did not run in a picture (0 ms: a replay not presented, a scene without the
-reduction) is left out of its median. A pause shows as one long interval. The reduction and the
+reduction) is left out of its median. A pause shows as one long interval. On Android two more
+follow: the phone's heat and clocks a second and the block's thermal line ([The phone's heat and
+clocks](ANDROID_DIAGNOSTICS_LEDGERS.md#the-phones-heat-and-clocks)). The reduction and the
 present pass are fixed work, so their times a second say whether the GPU slowed as a whole without
 a clock node (on a Mali the present pass also holds the wait for the display's image, `rd.h`
 `gpuDisplayWaitMs`: there the reduction is the cleaner of the two) ([Every stall in a

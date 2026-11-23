@@ -637,6 +637,7 @@ if(TARGET ico_pc AND NOT ICO_HEADLESS)
                                   port/platform/window_display_rate.c
                                   port/platform/window_present_fallback.c
                                   port/platform/window_stall.c
+                                  port/platform/window_thermal.c
                                   port/platform/window_perf_rank.c
                                   port/platform/window_perf_hint.c
                                   port/platform/window_clock_trap.c

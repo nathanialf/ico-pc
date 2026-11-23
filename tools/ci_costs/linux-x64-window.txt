@@ -305,6 +305,7 @@ rd_nodiscard 0.01  # estimate: a CPU unit test of the eligibility table, like rd
 rd_nodiscard_ab 83.14  # estimate: the round-1 estimate x 2 (four fixtures to two; not run here)
 rd_nodiscard_ab_gl 79.60  # estimate: the round-1 estimate x 2 (four fixtures to two; not run here)
 rd_nodiscard_clean 83.14  # estimate: rd_nodiscard_ab (the same runs, the verdict taken as clean; not run here)
+rd_perf_where 0.00  # estimate: a CPU unit test of one or two pure files, like perf_secs (run by hand here, well under 0.01 s; not run under CI yet)
 rd_vuprepass_selftest_nodiscard 7.62  # estimate: rd_vuprepass_selftest_zero_mali x 3 (the clipper check: 52 frames of 3 small replays, both twin entries; not run here)
 rd_vuprepass_selftest_nodiscard_clean 7.62  # estimate: rd_vuprepass_selftest_nodiscard (the same self-test, the verdict taken as clean; not run here)
 rd_vuprepass_selftest_nodiscard_clipper 7.62  # estimate: rd_vuprepass_selftest_nodiscard (the same self-test; not run here)
@@ -1210,6 +1211,7 @@ texpack_load 0.01
 texpack_name 0.01
 texpack_pack_files 0.00
 texture_catalog 0.18
+thermal_read 0.00  # estimate: a CPU unit test of one or two pure files, like perf_secs (run by hand here, well under 0.01 s; not run under CI yet)
 thermal_text 0.00
 thread_stat 0.01
 title_logo 0.00

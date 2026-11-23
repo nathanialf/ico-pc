@@ -747,6 +747,9 @@ static void row_text(Out *o, const StallRow *r, const char *const *names)
     if (r->batteryKnown) {
         put(o, "; battery %.0f mA", (double)r->batteryMa);
     }
+    if (r->phone[0] != '\0') {
+        put(o, "; phone %s", r->phone);
+    }
 }
 
 size_t stall_table_text(const StallTable *t, const char *const *names, bool all, unsigned part,
