@@ -278,6 +278,12 @@ size_t ico_attempt_start_text(char *out, size_t cap);
    not in this build or removed are left out; "" when no row is reported
    and stalls < 0; the length written */
 size_t ico_attempt_block_text(char *out, size_t cap, int stalls);
+/* The where table's attempts (rd_perf_where.h): the rows on, each with its
+   counts so far as "N[/N2[/N3]]" (the block's, or the run's for the rows
+   that count the run's), and the in-play judge's two rows in any reported
+   state; "none on" with none.  Nothing taken (the block line still has its
+   counts); the length */
+size_t ico_attempt_on_text(char *out, size_t cap);
 
 /* every row back to its state at the start (NOT_SET, the rows not built
    NOT_BUILT, the removed rows REMOVED with their why) and 0 (the tests) */

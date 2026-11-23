@@ -38,6 +38,7 @@
 #include "photo_ui.h"
 #include "pointer.h"
 #include "pump_watch.h"
+#include "rd_ratecard.h" /* rd_rate_card: the device's unit costs at start-up */
 #include "rd.h"
 #include "rd_bisect_plan.h"
 #include "rd_passring.h"
@@ -2590,6 +2591,10 @@ open_window:
        GPU, tried on the real scene size; logged ("fog: depth path") */
     ico_diag_step("window: start: the fog self-test");
     rd_fog_selftest();
+    /* the device's unit costs, once per device, driver, size and version
+       (rd_ratecard.h: a diagnostic, nothing in play reads it) */
+    ico_diag_step("window: start: the rate card");
+    rd_rate_card();
     {
         IcoVideoOptions o;
         char res[32], fr[16];
@@ -2852,6 +2857,8 @@ int ico_window_reopen(const char *backend, bool backendExplicit)
     window_pipe_skin_check(-1);
     ico_diag_step("window: switch to %s: the fog self-test", backend);
     rd_fog_selftest();
+    ico_diag_step("window: switch to %s: the rate card", backend);
+    rd_rate_card(); /* its key holds the backend: a new one is measured */
     if (reopen_lost(backend)) {
         return 0;
     }
@@ -5068,7 +5075,7 @@ static void perf_log(void)
             (double)(cardTris - s_pres.cardTris) / steps, (cardMs - s_pres.cardMs) / steps);
     {
         /* the VU work of a replay: where the vertex shader's time goes */
-        char vu[256], fit[192], twins[96], sh[256], zc[RD_VU_ZERO_TEXT_MAX + 640];
+        char vu[256], fit[192], twins[96], sh[256], zc[RD_VU_ZERO_TEXT_MAX + 768];
 
         (void)window_scene_vu_text(vu, sizeof(vu), s_perf.vuDraws, s_perf.vuTris, s_perf.vuPreVerts,
                                    b->n, rd_vu_prepass_on(), s_perf.vuLeftOut);

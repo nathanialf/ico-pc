@@ -28,6 +28,7 @@ target_sources(ico_platform PRIVATE
     vu_zero_mark.c
     nodiscard_mark.c
     fastps_mark.c
+    ratecard_env.c
     ahead_mark.c
     log_cost.c
     mem_breakdown.c
@@ -62,6 +63,7 @@ target_sources(ico_platform PRIVATE
     state_legacy.c
     state_xbuild.c
     sys_cell.c
+    thermal_read.c
     symmap.c
     vm_reserve.c
     vmstat_read.c
@@ -585,6 +587,23 @@ target_include_directories(power_read_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
 target_compile_options(power_read_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 if(ICO_RUN_TESTS)
     add_test(NAME power_read COMMAND power_read_test)
+endif()
+
+# thermal_read_test: the phone's heat and clocks (thermal_read.h, issue 179)
+# over fixture trees it writes in the build folder: the parsers, the zones
+# chosen by type (garbage, unreadable, none of the types, two hundred), no
+# thermal folder, the CPU clusters from cpufreq's policies and from each
+# core's folder, a second's reading, the once, token and block lines word
+# for word (CPU only)
+# (not on Windows: the test makes a file unreadable with chmod)
+if(NOT WIN32)
+    add_executable(thermal_read_test test/thermal_read_test.c thermal_read.c)
+    target_include_directories(thermal_read_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+    target_compile_options(thermal_read_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+    target_link_libraries(thermal_read_test PRIVATE ico_host_fs)
+    if(ICO_RUN_TESTS)
+        add_test(NAME thermal_read COMMAND thermal_read_test "${CMAKE_CURRENT_BINARY_DIR}")
+    endif()
 endif()
 
 # vmstat_read_test: the kernel's memory events a block (vmstat_read.h, issue

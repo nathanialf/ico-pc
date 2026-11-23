@@ -20,12 +20,15 @@
 #include "rd_ledger.h" /* the scene ledger: the stage in play */
 #include "rd_list_draws.h"
 #include "rd_perf_rank.h"
-#include "dump_zip.h" /* the captures' scene-ledger.txt */
-#include "report.h"   /* the report's scene-ledger.txt */
+#include "rd_perf_where.h"    /* where the time went: one table a block */
+#include "rd_submit_thread.h" /* rd_thread_submit_ahead_now */
+#include "dump_zip.h"         /* the captures' scene-ledger.txt */
+#include "report.h"           /* the report's scene-ledger.txt */
 #include "rhi.h"
 #include "window_clock_trap.h" /* window_clock_trap_ranked */
 #include "window_lines.h"      /* window_log_cost_part */
-#include "window_stall.h"      /* window_stall_tally_take */
+#include "window_stall.h"      /* window_stall_tally_take, the where table's texts */
+#include "window_thermal.h"    /* the phone's heat and clocks */
 
 /* the window's thread and the lifecycle's (SDL's posting thread) both
    reach the block and the run: every entry point holds the lock */
@@ -269,8 +272,13 @@ void window_perf_rank_block(const WindowPerfBlock *in)
            and the block's present intervals against the game's tick
            (perf_secs.h); the records before the first block dropped (in
            NULL) */
-        static char secs[1024], more[2048], iv[512];
+        static char secs[1024], more[2048], iv[512], ph[2048], th[512];
         const double tickMs = in != NULL && in->paceHz > 0 ? 1000.0 / (double)in->paceHz : 0.0;
+        /* the phone's heat and clocks: once what is readable, then each
+           second's and the block's (perf_secs.h, before its block ends) */
+        window_thermal_open_line();
+        (void)perf_secs_window_phone_lines(ico_thread_now_ms(), window_thermal_cpus(), ph,
+                                           sizeof ph, th, sizeof th);
         if (perf_secs_window_block_lines(ico_thread_now_ms(), tickMs, secs, sizeof secs, more,
                                          sizeof more, iv, sizeof iv) > 0 &&
             in != NULL) {
@@ -281,12 +289,39 @@ void window_perf_rank_block(const WindowPerfBlock *in)
             if (iv[0] != '\0') {
                 fprintf(stderr, "window: %s\n", iv);
             }
+            if (ph[0] != '\0') {
+                fprintf(stderr, "window: %s\n", ph);
+            }
+            if (th[0] != '\0') {
+                fprintf(stderr, "window: %s\n", th);
+            }
         }
     }
     if (in != NULL) {
         ledger_lines();
     }
     window_log_cost_part(LOG_COST_RANK);
+}
+
+/* One table: where the block's time went (rd_perf_where.h), the
+   attempts', the phone's and the stalls' texts from their owners */
+static void where_lines(const RdPerfRankInfo *info, const RdPerfRankVerdict *v)
+{
+    static char attempts[1536], on[1400], phone[384], stalls[160], line[2048];
+    const char *aheadWhy = rd_thread_submit_ahead_off_why();
+    (void)ico_attempt_on_text(on, sizeof on);
+    snprintf(attempts, sizeof attempts, "submit ahead %s%s%s; %s",
+             rd_thread_submit_ahead_now() ? "on" : "off",
+             !rd_thread_submit_ahead_now() && aheadWhy != NULL ? " " : "",
+             !rd_thread_submit_ahead_now() && aheadWhy != NULL ? aheadWhy : "", on);
+    (void)window_stall_where_phone(phone, sizeof phone);
+    (void)window_stall_where_stalls(stalls, sizeof stalls);
+    const RdPerfWhereExtra x = {rd_perf_post_name, attempts, phone, stalls, NULL};
+    for (unsigned i = 0; i < RD_PERF_WHERE_LINES; i++) {
+        if (rd_perf_where_text(&s_block, info, v, &x, i, line, sizeof line) > 0) {
+            fprintf(stderr, "window: %s\n", line);
+        }
+    }
 }
 
 static void window_perf_rank_block_lines(const WindowPerfBlock *in)
@@ -355,6 +390,7 @@ static void window_perf_rank_block_lines(const WindowPerfBlock *in)
                                     sizeof line);
     fprintf(stderr, "window: %s\n", line);
     rd_perf_more_reset(&s_more);
+    where_lines(&info, &v);
     rd_perf_rank_run_add(&s_run, &s_block, &info, &v, in->seconds, ranked);
     s_lastInfo = info;
     s_lastInfo.scene = NULL; /* the block's own buffer */

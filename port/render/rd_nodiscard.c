@@ -49,14 +49,32 @@ int rd_nd_eligible(const RdNdPass *p)
     /* ...unless the device's clipper check passed (rd_nodiscard.h, "The
        clipper check"): then the camera rule's passes too; particles never
        (the check draws none) */
-    if (p->particle || (clip != ICO_VU_CLIP_NONE && !p->clipperClean)) {
+    /* ...unless the CPU proved the draw wholly in front of the eye
+       (EYEBOX, rd_vis.c rd__vis_gs_proof: every vertex keeps its GS
+       position, so every corner is drawn at w 1 and a depth in 0..1, the
+       clip mode none proof's case, on every device); and in either case only
+       the forms the clipper check draws (the third review, R3-1) */
+    if (p->particle) {
         return RD_ND_CLIPPED;
     }
-    /* ...and then only the forms it draws (the third review, R3-1) */
-    if (clip != ICO_VU_CLIP_NONE && !rd_nd_checked_form(p)) {
-        return RD_ND_FORM;
+    if (clip == ICO_VU_CLIP_NONE) {
+        return RD_ND_TWIN;
     }
-    return RD_ND_TWIN;
+    if (!rd_nd_checked_form(p)) {
+        return p->clipperClean ? RD_ND_FORM : RD_ND_CLIPPED;
+    }
+    if (p->inFront || p->clipperClean) {
+        return RD_ND_TWIN;
+    }
+    return RD_ND_BOX; /* the camera rule's form, no proof, no clean verdict */
+}
+
+int rd_nd_twin_class(const RdNdPass *p)
+{
+    if ((p->drawFlags & ICO_VU_CLIP_MASK) == ICO_VU_CLIP_NONE) {
+        return RD_ND_BY_NONE;
+    }
+    return p->inFront ? RD_ND_BY_FRONT : RD_ND_BY_CLIPPER;
 }
 
 bool rd_nd_checked_form(const RdNdPass *p)
@@ -71,16 +89,10 @@ bool rd_nd_checked_form(const RdNdPass *p)
 
 const char *rd_nd_reason_name(int why)
 {
-    static const char *const kNames[RD_ND_REASONS] = {"through them",
-                                                      "plane",
-                                                      "DATE",
-                                                      "band",
-                                                      "alpha",
-                                                      "clipped",
-                                                      "form",
-                                                      "not made yet",
-                                                      "timed without them",
-                                                      "entry not tested"};
+    static const char *const kNames[RD_ND_REASONS] = {
+        "through them",    "plane", "DATE", "band",         "alpha",
+        "clipped",         "form",  "box",  "not made yet", "timed without them",
+        "entry not tested"};
     return why >= 0 && why < RD_ND_REASONS ? kNames[why] : "?";
 }
 

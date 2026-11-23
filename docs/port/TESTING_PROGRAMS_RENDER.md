@@ -212,7 +212,15 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   the debt, a keep frame and the motion blur's held copy draw DISPLAY first, a frame drawing on
   SCENE alone draws it, the still re-present's empty keep frame keeps it) (`rd_present_scene`).
 - `rd_vis_test.c`: the scene draws' visibility test ([RENDER.md](RENDER_PERF.md#culling)) on the CPU,
-  without a device (the default mode per device class, `checkProfileDefault`: a tile-based profile takes `frustum`, every other `full`, `ICO_RD_CULL` rules on both, and the 10 s line says `(profile default)` or `([dev] cull)`; also the MSAA epoch, `checkMsaaEpoch`: `rd__vis_msaa_may_close` true for DATE,
+  without a device (the discard-free twins' box proof, `checkGsProof`
+  ([PIPELINES.md](PIPELINES.md#the-discard-free-twins)): on the self-tests' screen matrix boxes in
+  front of the eye and past the frame's side proved, straddling the eye plane, behind it, at w = 0,
+  below GS Z 0, at GS Z 0 exactly and saturating X refused, just past GS Z 0 and a large unsaturated
+  X proved, code 36's pos.w range taken (a w that makes GS Z negative refused, the same box at w 1
+  proved), an inverted, empty, NaN or infinite box and a NaN or infinite matrix refused, every
+  corner of a proved box keeping its GS position by the program's float product; 4000 random
+  cameras and boxes in both rounding modes, some proved, some refused, and every one of 64 points
+  of each proved box keeping its GS position; the default mode per device class, `checkProfileDefault`: a tile-based profile takes `frustum`, every other `full`, `ICO_RD_CULL` rules on both, and the 10 s line says `(profile default)` or `([dev] cull)`; also the MSAA epoch, `checkMsaaEpoch`: `rd__vis_msaa_may_close` true for DATE,
   a texture of SCENE's depth (texturing off too), SCENE's colour with another depth and SCENE's
   depth with another colour, false for SCENE's own pair, SCENE without a depth and another target's
   pair; on a recorded frame of off-screen draws under `rd__vis_set_msaa(1)` the four that may close

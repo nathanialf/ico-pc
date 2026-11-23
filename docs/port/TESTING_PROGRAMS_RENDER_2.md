@@ -579,7 +579,11 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   test through; on a clean clipper verdict the forms table: prelit 32 and 36 under the camera
   rule, extended or not, the cut and the fused kick draws take the twin, and lit, skinned 24,
   lit 36, the drops kept, two-sided, mirrored, photo mode's free camera and the ticks' cameras are
-  refused as `form`, every one `clipped` when not clean and given the twin at clip mode none), the passes no twin exists for (other entries, the planes' twins, no *_nodual
+  refused as `form`, every one `clipped` when not clean and given the twin at clip mode none;
+  proven in front of the eye (EYEBOX, `inFront`) the checked forms take the twin clean or not
+  (class "proven in front of the eye"), `box` without the proof when not clean, the other forms
+  never past their own refusal, particles never, and plane, DATE, band and alpha still refused
+  over the proof; each twin's class, `rd_nd_twin_class`), the passes no twin exists for (other entries, the planes' twins, no *_nodual
   build, a destination read by storage and by attachment), the reasons' and modules' names, the
   key bits in the key's one byte; the judge's use of a replay (in use only when a pass drew
   through a twin and none found its twin not made yet, in either order; the off arm with every
@@ -598,9 +602,12 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   draws each through it: none found its twin not made there),
   and under corpus 0 draws and "not applicable here" (dual-source blending). `rd_nodiscard_ab_gl`:
   OpenGL (llvmpipe), every fixture at 4:3 1x with `ICO_GL_FAKE_NO_DUAL=1`, above 0 over the list.
-  Without the self-test no clipper check runs, so only clip mode none takes a twin there
-  ([PIPELINES.md](PIPELINES.md#the-discard-free-twins), the floor a `not clean` device keeps); the
-  run with them must have no draw of the clipper check's class. `rd_nodiscard_clean`: the clean verdict's path,
+  Without the self-test no clipper check runs (`not checked`, as a device measured not clean), so
+  clip mode none and the camera rule's passes the CPU proved in front of the eye take a twin there
+  ([PIPELINES.md](PIPELINES.md#the-discard-free-twins)); the run with them must have no draw of the
+  clipper check's class, and under each Arm profile over the list draws proven in front of the eye
+  through a twin and draws refused as `box` (both above 0: the proof's two outcomes), the targets
+  byte for byte all the same on lavapipe, which is not clean. `rd_nodiscard_clean`: the clean verdict's path,
   the run with them under `ICO_RD_VU_NODISCARD_CLIPPER=clean` (lavapipe measures its clipper not
   clean), so the camera rule's passes of the checked forms take a twin: every target byte for byte (these
   fixtures hold no eye-crossing triangle whose pixels differ under Mesa 25.0.7, measured; another
@@ -629,7 +636,8 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   start-up self-test after the cull's (the pre-pass still on), each run's start line saying what
   of them exists: on (the plain case through vu_ps_nodual_nd and a textured TEXA case through
   vu_texa_ps_nodual_nd, each counted, neither entry "drew nothing", each shown to draw by the frame
-  without it differing; the alpha test's (untextured
+  without it differing; a prelit code 32 strip under the camera rule wholly in front of the eye
+  through its twin by the proof alone, counted "proven in front of the eye"; the alpha test's (untextured
   and textured), the clip plane's and a code 32 eye-plane crossing's cases refused; the clipper
   check's frames in both entries, the rule refusing the band and DATE, the pictures byte for byte; 2 modules, its own
   pipelines released after it, none of the twins' alive; the mark `counting <the test's
@@ -643,6 +651,27 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   `rd_vuprepass_selftest_test` runs `rd_blend_selftest` first as the game does): still not
   applicable, `the device has dual-source blending (the two-pass blend is its fallback)`, nothing
   tried or made, the mark not written.
+- `rd_ratecard_test.c` (`rd_ratecard_rule`; `rd_ratecard.cmake`, CPU): the rate card's pure part
+  ([RENDER_PERF.md](RENDER_PERF.md#the-rate-card)): the median, least and largest of synthetic
+  timings (0 and NaN left out, an even count), a unit as the medians' difference over a count with
+  its spread from the extremes, too few times and nothing to divide by refused with their words,
+  the ratio; the printed block word for word (a measured item in each unit, "not measured" with its
+  reason), read back (`rd_rc_parse`: every item's numbers, unit and reason), a short buffer; the
+  results file's decision: no file and another key measured, `done` reprinted with its lines and
+  date, `measuring` and `blocked` skipped, a text it does not know or without its key line measured.
+- `rd_ratecard.cmake` (`rd_ratecard_mali`, `rd_ratecard_lavapipe`, `rd_ratecard_end`;
+  `test/rd_ratecard.cmake`, through `rd_vuprepass_selftest_test` on its plain variant, SCENE
+  640x448 at 1x, `ICO_RD_RATECARD=1` and a results file of its own): `_mali` under the Arm fakes
+  without dual-source blending and `_lavapipe` as lavapipe is: the head line and 13 item lines, each
+  a finite number in its unit with its min and max or "not measured (...)"; the shaded fragments of
+  both builds, the hidden one with discard, a vertex, a triangle, the quad factor, a pass, the
+  blended fragment and its ratio measured; the twins' two measured under the Arm fakes and "not
+  measured (the twins ..." on lavapipe; the fast pixel build and the MB "not measured"; the file
+  `done` with its key and block; a second run reprints the block "(from the run of <date>)",
+  measures nothing and leaves the file as it was. Whether a hidden fragment costs less through the
+  twin is not asserted: lavapipe tests depth early either way. `_end`: the first run ends inside
+  the card (exit 87) with the file `measuring`, the next two say "rate card: skipped (the run of
+  ..." and the file `blocked`. No device: SKIP.
 - `rd_smallcuts_test.c` (`rd_smallcuts`; `rd_smallcuts.cmake`, CPU): the pure parts of the turn in
   the present's blit and the VU record by compute on the PowerVR class: `rd__turn_rect` for every
   quarter turn against `rd_prerotate.c`'s pixel table (every pixel of the rect lands inside the
