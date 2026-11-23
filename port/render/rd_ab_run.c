@@ -31,6 +31,7 @@ static long s_fakeLoss;        /* ICO_RD_AB_FAKE_LOSS: the replay N */
 static uint32_t s_replays;     /* begun this run */
 static int s_notice;           /* __atomic: the player's notice (rd_ab_notice, RD_AB_NOTICE_*) */
 static int s_noticeStage = -1; /* __atomic: the running trial's stage, -1 none */
+static int s_scenery;          /* __atomic: the game shows scenery now (rd_ab_scenery) */
 
 static void made(void)
 {
@@ -92,6 +93,7 @@ static void allow(void)
        subject is (rd_ab_notice_state) */
     rd_ab_gone(&s_ab, RD_AB_ZERO, rd__vu_zero_gone());
     rd_ab_gone(&s_ab, RD_AB_NODISCARD, rd__nd_gone());
+    rd_ab_set_scenery(&s_ab, __atomic_load_n(&s_scenery, __ATOMIC_ACQUIRE) != 0);
     s_allowed = (uint8_t)((zero ? 1u << RD_AB_ZERO : 0u) | (nd ? 1u << RD_AB_NODISCARD : 0u));
 }
 
@@ -167,6 +169,11 @@ void rd__ab_renderer(void)
     rd_ab_forget(&s_ab, "a Graphics API switch");
     drain();
     ledger();
+}
+
+void rd_ab_scenery(int scenery)
+{
+    __atomic_store_n(&s_scenery, scenery != 0, __ATOMIC_RELEASE);
 }
 
 int rd_ab_notice_stage(void)

@@ -9,10 +9,10 @@ target_sources(ico_render PRIVATE rd_ab.c rd_ab_run.c)
 # or three pictures in flight: the verdicts (5 % cheaper on, 3 % dearer off,
 # no difference off, 40 % outliers at 3-5x with a 5 % saving still on, the
 # work rising 1 % a picture no false on), the trial's cost bounded, the
-# trial 2 s into a stage once the subject had work, the verdict kept for
-# the stage, the 12-trial cap, a fake second subject (one trial at a time),
-# the stop's way back, the modes, the carried arm (a stage without a verdict
-# of its own on the run's last verdict's arm, corrected by its own trial),
+# trial 2 s into a stage once the subject had work, one verdict a subject a
+# run kept for every stage, the 12-trial cap, a fake second subject (one
+# trial at a time), the stop's way back, the modes, the trial only in
+# scenery (not the title, the logo or a menu) and the first scenery stage,
 # and the rate requirement on a GPU-bound stream (tick 40 ms, 60 s;
 # pictures of 33, 37.5, 48 and 60 ms; a subject saving or costing 3, 5 and
 # 10 %; one stage, four stages, four stages flipping): the judge at least

@@ -472,8 +472,9 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
     replays, at most 300 of them without it, no verdict, no more trials in the stage;
   - the stages: no trial before 2 s into a stage or before the subject had work there, a keep
     frame left out of the trial at the on arm, the arms with, without, without, with, a stage that
-    ends mid-trial not judged, a judged stage visited again taking its verdict at once with no new
-    trial, the 12-trial cap and its line;
+    ends mid-trial not judged (timed again in the next stage); the run's one verdict taken by a
+    later stage where the other arm would be faster, with no new trial, and by the judged stage
+    again; trials with no answer in each next stage up to the 12-trial cap and its line;
   - a fake second subject: one trial at a time (the other at its default or its verdict), each its
     own verdict; a subject not allowed or never in use never tried;
   - the way back: `rd_ab_stop` mid-trial: every later replay at every subject's off arm, keep frames
@@ -484,28 +485,32 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
     `rd_ab_scene_ms`): a stream held by the display (every span 40 ms, the wait taking up what
     the scene saves) judged on with it, off with the whole span; the verdict line's words;
   - the player's notice (`rd_ab_notice_state`): none before a trial; running at the first
-    trial; two subjects back to back idle for one replay at most between their trials, idle after;
-    running during each later stage's trial and idle after its verdict; idle after a renderer made
-    again; running while the 12th trial runs; done at the cap when it ends, on a stop and once every
+    trial; two subjects back to back idle for one replay at most between their trials, done
+    (judged) after both, later stages with no trial and still done; idle after a renderer made
+    again, running at its new trial, done again; running while the 12th of trials with no answer
+    runs; done at the cap when it ends, on a stop and once every
     subject is gone, none of them undone by a renderer made again or a subject back; a gone subject
     never tried; none with nothing allowed, with no stage, in the fixed and alternating modes, or
     after a stop before any trial;
-  - a renderer made again (`rd_ab_forget`): a trial past 16 pairs ended unjudged, every verdict
-    and the carried arm forgotten, a record of the earlier renderer not measured, the trials run
-    still counted, the stage judged again on the new renderer;
-  - the carried arm: the run's first stage with the attempt; a stage with no verdict of its own
-    (its keep frames too) on the arm the run's last verdict left at once, its trial still run;
-    one where the carried arm is the wrong one corrected by its trial (the verdict line says the
-    arm it started on), the next stage on the corrected arm; a judged stage keeping its own; a
-    stage with no verdict after its trial staying on the carried arm;
+  - a renderer made again (`rd_ab_forget`): a second subject's trial past 16 pairs ended
+    unjudged, every verdict forgotten, a record of the earlier renderer not measured, the trials
+    run still counted, the subject timed again on the new renderer;
+  - once a run, in scenery (`rd_ab_set_scenery`): no trial in 20 s of the title and the logo; in
+    the opening's stage none before 2 s of scenery (the stage's first pictures still the title's
+    count for nothing), the cull's trial at them and its verdict; the boat stage, where the other
+    arm would be faster, on the run's arm with no trial; a second subject with work only in a later
+    stage: its one trial there, then done (judged) and no trial after; a renderer made again: both
+    timed once more, done again;
   - the rate requirement, 72 cases: a GPU-bound stream at a 40 ms tick for 60 s, pictures of 33,
     37.5, 48 and 60 ms, the attempt saving or costing 3, 5 and 10 %, in one stage, in four stages
     of that effect and in four stages whose effect changes sign each stage; each case beside its
-    two fixed-arm runs: the judge at least the worse one's; at least the best per stage less the
-    pictures the worse arm loses during the time the judge was allowed on it (the stage's time
-    before its own verdict on the wrong arm, the wrong arm's trial replays: each picture's time
-    at the two runs' rates), less 1; after the last verdict, the better arm's pictures over the
-    same span within 1. Each case's numbers and bound are printed.
+    two fixed-arm runs, restated for one verdict a run: the target is the arm faster in the first
+    stage (where both present alike, the arm the judge chose), its run's pictures the target's
+    count; the verdict is that arm; the judge at least the target's less the pictures its
+    undecided time cost (its other-arm pictures before the verdict and in the trial, at the two
+    runs' rates), less 1; after the verdict, the target's pictures over the same span within 1;
+    for the streams of one sign also at least the worse fixed arm. Each case's numbers and bound
+    are printed.
 - `rd_ab_zero_ab.cmake` (`rd_ab_zero_ab`, `rd_ab_zero_stop`; `rd_ab.cmake`): the judge's two arms
   of the zero-area cull on every fixture of `port/render/test/fixtures/lists/vu_zero.txt` under its
   profiles (corpus at 4:3 1x and Enhanced 4:3 2x; the Arm fakes with the record by compute at 1x

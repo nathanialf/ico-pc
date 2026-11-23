@@ -43,8 +43,10 @@ static const char *doneWhy(int judge)
         return "every trial of the run was run";
     case UI_TUNE_JUDGE_DONE_STOP:
         return "every trial was stopped (a device loss or the GPU's own sign of a reset)";
-    default:
+    case UI_TUNE_JUDGE_DONE_GONE:
         return "every attempt is off for the rest of the run";
+    default:
+        return "every attempt was timed once, its answer kept for the run";
     }
 }
 

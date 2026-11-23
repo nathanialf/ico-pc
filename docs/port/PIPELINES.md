@@ -1650,12 +1650,12 @@ test here measures: the device measures it itself, below.
 
 The cull is exact, but its cost is the device's: its rule-stage build is larger than the build
 without it, and a culling entry's draws give up the shared vertices' list. Once the cull is on
-(its self-test passed, its mark allows it), the game times it while it is played and keeps it on
-a stage only where it is faster there (`port/render/rd_ab.c` the judge, pure;
+(its self-test passed, its mark allows it), the game times it once a session, early in play, and
+keeps the faster arm for the whole session (`port/render/rd_ab.c` the judge, pure;
 `rd_ab_run.c` the renderer's side; `rd_ab.h` and `rd_ab_run.h` say it all). The judge takes
 subjects: the cull is the first (`RD_AB_ZERO`), the discard-free twins the second
 (`RD_AB_NODISCARD`, [below](#the-discard-free-twins)); one is on trial at a time, the other at its
-verdict or carried arm.
+verdict (or with it, before its own).
 
 - **Two arms, both paths the device already runs.** With the cull (the arm "on", the default) or
   without it ("off"): a replay at the off arm gives no entry a lattice word (refused for the
@@ -1668,9 +1668,19 @@ verdict or carried arm.
   record (`RdPerfRecord` `abTrial`, `abSeq`, `abStage`, `abOff`, `abUsed`), so its GPU span, read
   back frames later (`rd__perf_collect_gpu`), is judged as the arm it was recorded with however
   many pictures are in flight.
-- **A trial** starts 2 s into a stage (the scene ledger's stage switch, from the switch's first
-  frame: past the fade and the stage's first pictures), once the cull had work in that stage (a
-  target with a lattice word) and when the stage has no verdict yet; at most 12 trials a run.
+- **One verdict a subject a run, timed in scenery.** A trial starts after 2 s of game scenery in a
+  stage (the scene ledger's stage switch gives the stage; the scenery's start, past the fade and
+  the stage's first pictures, starts the 2 s), once the subject had work in that stage (the cull: a
+  target with a lattice word) and only while it has no verdict this run; at most 12 trials a run.
+  Scenery is the window's layout kind (`port/platform/window_scene.h` `SceneKind`, the perf scene
+  line's words): `play` or `scene` (a cutscene's layout; a movie, also `scene`, has no work for
+  either subject), passed by `window_perf_rank_step` through `rd_ab_scenery` into the pure judge
+  (`rd_ab_set_scenery`); the title, the logo (`other`), the pause and options menus and the memory
+  card's pages never time. On a new game the first timed stage is the opening's cutscene (stage
+  41, `scene (op2)` in issue 179's report, about 46 s long), so the answer is in before the boat
+  (stage 42); on a loaded save it is the save's stage once it plays (stage 11 `play (st04a ...)`
+  in the owner's Pixel log). The twins have work only in some scenery: their one trial is
+  the first scenery stage where they have work, which may come later than the cull's.
   Its replays, keep frames left out, alternate with, without, without, with (a drift of the
   content cancels).
 - **A pair** is the trial's replays 2k and 2k+1, both read back with GPU times, both with the
@@ -1688,16 +1698,12 @@ verdict or carried arm.
 - **The verdict**: at 8 pairs all one way with the median at least 2 % that way (the early
   verdict: a clear difference costs at most 8 pictures on the worse arm); else at 32 pairs, on when
   the median pair is 2 % or more cheaper with the cull and 22 of the 32 are cheaper with it, off
-  otherwise (no difference: off, the path without the cull). It is kept for that stage for the
-  run: a stage visited again takes it at once. No verdict: fewer than 16 pairs after 600 trial
-  replays (no more trials there), or the stage ended or the cull was turned off before a
-  verdict (not judged; tried again at the next visit while trials are left); with 16 to 31
-  pairs at either end, the verdict on those pairs (22 of 32 scaled).
-- **The carried arm**: a stage without a verdict of its own (not judged yet, or no verdict after
-  its trial) runs on the arm of the run's most recent verdict (none yet in the run: with the
-  cull). Its own trial still starts 2 s in, and its verdict replaces the carried arm there and
-  for the stages after it. So a run whose stages agree pays the first 2 s on the wrong arm once,
-  not in every stage.
+  otherwise (no difference: off, the path without the cull). It is the run's one answer: every
+  stage after it takes that arm and the subject is never timed again in the session. Before it,
+  the subject runs with it. No verdict: fewer than 16 pairs after 600 trial replays (no more
+  trials in that stage), or the stage ended or the subject was turned off before a verdict: not
+  an answer, so the subject is timed again in the next stage of scenery while trials are left;
+  with 16 to 31 pairs at either end, the verdict on those pairs (22 of 32 scaled).
 - **The cost of a trial** is bounded: at most 300 replays without the cull (half of 600), eight
   with a clear difference. A picture at the off arm is not one drawn with the cull for the mark's
   count, and a verdict "off" writes nothing to the mark.
@@ -1711,11 +1717,11 @@ verdict or carried arm.
 - **A renderer made again** (a Graphics API switch, the one path that makes it again: `rd_resume`
   from `ico_window_reopen`; `rd__ab_renderer` from `rd__vu_prepass_init`, the second renderer of
   the process on; Android's background does not make it again): a trial running ends
-  unjudged, every verdict and the carried arm are forgotten, each stage begins again (its trial 2 s
-  from its next picture), and a record the earlier renderer drew is not measured (the record's
-  `abEpoch`). The trials already run still count toward the 12. Logged: `A/B: the renderer was
-  made again (a Graphics API switch): every verdict and the carried arm
-  forgotten, each attempt with it until its stage's own trial on this renderer`.
+  unjudged, every verdict is forgotten (another backend or device is another answer), each subject
+  is timed once more by the same rule, and a record the earlier renderer drew is not measured (the
+  record's `abEpoch`). The trials already run still count toward the 12. Logged: `A/B: the
+  renderer was made again (a Graphics API switch): every verdict forgotten, each attempt with it
+  until it is timed once again on this renderer`.
 - **The player is told while a timing runs**: the judge gives one answer for it
   (`rd_ab_notice_state`, kept in an atomic for the game's thread by `rd_ab_notice`, the running
   trial's stage by `rd_ab_notice_stage`): none before the run's first trial (never under
@@ -1723,7 +1729,10 @@ verdict or carried arm.
   between trials, and done once no timing is left: all 12 trials run with none running, every
   trial stopped (a device loss, the GPU's own sign of a reset), or every subject off for the rest
   of the run (`rd_ab_gone`, from `rd__vu_zero_gone` and `rd__nd_gone`: off for a reason a renderer
-  made again keeps, not a self-test merely not run). Done never turns back. Two subjects tried in
+  made again keeps, not a self-test merely not run), or every subject still in the run has its
+  one verdict (done "judged": the usual end, a few seconds into the first scenery, later where the
+  twins' first work comes later; a renderer made again forgets the verdicts and so turns it back to
+  idle). The other done answers never turn back. Two subjects tried in
   one stage follow each other at once: the second trial starts at the replay after the first
   one's verdict was read back, so the answer is idle for about one picture between them. The
   game's thread shows the notice "Finding the best settings" when a trial runs (its own panel,
@@ -1731,36 +1740,44 @@ verdict or carried arm.
   over "Hide"; `port/ui/tune_notice.c`, [UI.md](UI.md#popups)) and takes it down by itself once
   the answer has not been running for 0.5 s (`UI_TUNE_GRACE_MS`, which bridges the picture
   between two subjects) and it has been fully shown for 2 s (`UI_TUNE_MIN_SHOWN_MS`, so a short
-  trial is not a flash; the trial is never held up for it); it comes back at the next trial. A
+  trial is not a flash; the trial is never held up for it); it comes back at the next trial,
+  which with one verdict a subject is normally only the other subject's or a retry; once the
+  answer is done the notice is over for the run. So a session shows it once or twice near its
+  start. A
   Triangle press while the game owns the pad (no menu, no photo mode) hides it for the run; the
   press is read from a copy of the pad's word, so the game gets it too. A renderer made again
   does not bring it back once hidden.
 
 The rate requirement (`rd_ab` test, a GPU-bound stream at a 40 ms tick, 60 s; pictures of 33,
 37.5, 48 and 60 ms; the cull saving or costing 3, 5 or 10 %; one stage, four stages of one
-effect, and four stages whose effect changes sign each stage): the judge's pictures are at least
-the worse fixed arm's; at least the best per stage (the better fixed arm's where the effect has
-one sign) less the pictures the worse arm loses against the better during the time the judge was
-allowed on it (a stage's time before its own verdict on the wrong arm, and the wrong arm's half
-of each trial), computed from the two fixed-arm runs of the same case, less 1; and after the last
-verdict the same as the better arm's over the same span, within 1. The bound is not a constant:
-a cull that costs 10 % at 48 ms gives up 5 pictures in one stage, all of them inside it.
+effect, and four stages whose effect changes sign each stage), restated for one verdict a run:
+the rule's target is the arm the two fixed-arm runs show faster in the first stage (where both
+present alike there, the arm the judge chose), kept for every stage. The judge's pictures are at
+least the target's less the pictures its undecided time cost (its pictures on the other arm
+before the verdict and in the trial, at the two controls' rates), less 1; after the verdict the
+same as the target's over the same span, within 1; and, for the streams of one sign, at least
+the worse fixed arm's. A stream that flips sign makes the two fixed arms all but equal over the
+60 s, and the rule keeps the first stage's faster arm everywhere, which there can be the worse
+fixed arm less its own trial (48 ms, +10 % first: 1245 against the fixed arms' 1250 and 1262);
+the target bound holds it. The bound is not a constant: a cull that costs 10 % at 48 ms gives up
+5 pictures, all of them in the first timed stage.
 
 The lines (`rd: ` before each):
-- At the start, after the cull's own line: `A/B: the in-play judge; may try: zero-area cull; a
-  trial 2.0 s into a stage, ...` with every constant, or `not tried (off here): zero-area cull`.
+- At the start, after the cull's own line: `A/B: the in-play judge; may try: zero-area cull; each
+  attempt timed once a run, in the first stage of play or a cutscene (not the title, the logo, a
+  menu or a movie) where it has work, 2.0 s into it, ...` with every constant, or `not tried (off
+  here): zero-area cull`.
 - One a trial: `A/B: zero-area cull, stage 42: 32 pairs, with it 1.62 ms, without 1.55 ms of
   the scene's GPU work (the present and its display wait left out) a thousand vertices and
-  triangles (the median pair 4.3 % dearer with it, 25 of 32 cheaper without), 3 dropped by a long picture, 0 by unequal work: off for this stage (it started with
-  it, the arm stage 41's verdict left)` (`8 pairs (all one way: the early verdict)` for the early
-  one; `it started with it, no verdict before it in the run` for the run's first), or `A/B:
-  zero-area cull, stage 42: no verdict (600 replays, 11 pairs; 30 dropped by a long picture, 4 by
-  unequal work, 120 replays not measured): no more trials here, it stays without it, the arm stage
-  41's verdict left` (`the stage ended`, `the attempt was turned off`: `not judged, it stays
-  ...`).
+  triangles (the median pair 4.3 % dearer with it, 25 of 32 cheaper without), 3 dropped by a
+  long picture, 0 by unequal work: off for the rest of the run, every stage` (`8 pairs (all one
+  way: the early verdict)` for the early one), or `A/B: zero-area cull, stage 42: no verdict (600
+  replays, 11 pairs; 30 dropped by a long picture, 4 by unequal work, 120 replays not measured):
+  with it until it is timed again in another stage` (`the stage ended`, `the attempt was turned
+  off`: `... in the next stage of play`).
 - `A/B: every trial stopped for the run (the graphics device was lost): each attempt at its off
-  arm from here (zero-area cull)`; `A/B: 12 trials run, the most a run: a stage not judged keeps
-  the arm of the run's last verdict`.
+  arm from here (zero-area cull)`; `A/B: 12 trials run, the most a run: an attempt not timed yet
+  stays with it`.
 - The attempt ledger's row, the run's totals in every block: `the zero-area cull timed in play on
   N stages kept with it so far (M without it; T trials run)`; the window's compare line counts the
   block's pictures drawn at an off arm: `(K keep frames; J without an attempt, timed)`.
@@ -1921,7 +1938,8 @@ which are refused too, so both are upper bounds. `port/render/rd_nodiscard.h` sa
   - the loss ladder (`ICO_LOSS_ROW`): off for this start; a twin pipeline the background could not
     make: off for the run, the mark unchanged (nothing written on the render thread);
   - the in-play judge (`RD_AB_NODISCARD`, the second subject): its off arm is the *_nodual build,
-    the path the device ran before; a stage judged off draws without the twins. A replay is timed
+    the path the device ran before; once judged off for the run, every stage draws without the
+    twins. A replay is timed
     for the twins only when every eligible pass of it had its twin made (one "not made yet" takes
     the replay out, `rd_nd_use_counts`), so no trial starts and no pair counts while a stage's twin
     pipelines are still being made, and no verdict rests on a partial share.
