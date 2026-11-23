@@ -785,9 +785,10 @@ static void testForget(void)
 }
 
 /* the player's notice (rd_ab_notice_state) over a run: none before a
-   trial; due from the first trial's start through later trials, a second
-   subject and a renderer made again; done when the 12th trial ends, on a
-   stop, and once every subject is off for the run; never due without a
+   trial; running during each trial and idle between (two subjects back to
+   back: idle for one replay at most), a renderer made again idle; done when
+   the 12th trial ends, on a stop, and once every subject is off for the
+   run; never running without a
    trial (nothing allowed, no stage, the tests' fixed and alternating modes,
    a stop before any trial) */
 static void testNotice(void)
@@ -807,37 +808,63 @@ static void testNotice(void)
     double t = run(&s_a, &s, 0.0, 3u);
     CHECK(s_a.trials == 0u && rd_ab_notice_state(&s_a) == RD_AB_NOTICE_NONE,
           "a notice before any trial");
-    /* the first trial's start: due */
+    /* the first trial's start: running; both subjects back to back, one
+       replay at a time: running from the first trial's start to the
+       second's verdict with no idle between them (the second starts at the
+       same replay the first one's verdict is read at), idle after */
     s.replays = 1;
-    t = run(&s_a, &s, t + RD_AB_START_MS, 3u);
-    CHECK(s_a.trials == 1u && rd_ab_notice_state(&s_a) == RD_AB_NOTICE_DUE,
-          "not due at the first trial (%u trials, %d)", (unsigned)s_a.trials,
-          rd_ab_notice_state(&s_a));
-    /* later stages (both subjects' trials), a renderer made again: still due
-       while trials are left */
-    s.replays = 400;
     s.effect = 0.05;
+    t = run(&s_a, &s, t + RD_AB_START_MS, 3u);
+    CHECK(s_a.trials == 1u && rd_ab_notice_state(&s_a) == RD_AB_NOTICE_RUNNING,
+          "not running at the first trial (%u trials, %d)", (unsigned)s_a.trials,
+          rd_ab_notice_state(&s_a));
+    int idleRun = 0, maxIdle = 0, sawSecond = 0;
+    for (int i = 0; i < 800; i++) {
+        t = run(&s_a, &s, t + 1.0, 3u);
+        const int st = rd_ab_notice_state(&s_a);
+        idleRun = s_a.trials == 1u && st == RD_AB_NOTICE_IDLE ? idleRun + 1 : 0;
+        maxIdle = idleRun > maxIdle ? idleRun : maxIdle;
+        sawSecond = sawSecond || s_a.trials == 2u;
+        if (sawSecond && st == RD_AB_NOTICE_IDLE) {
+            break;
+        }
+    }
+    /* each call here begins a replay, then reads the replays in flight
+       back (as rd__perf_begin, then rd__perf_collect_gpu): idle for the one
+       replay between a verdict and the next subject's trial */
+    CHECK(sawSecond && maxIdle <= 1 && rd_ab_notice_state(&s_a) == RD_AB_NOTICE_IDLE,
+          "back to back: second %d, idle replays between %d, then %d", sawSecond, maxIdle,
+          rd_ab_notice_state(&s_a));
+    /* later stages: running during each trial, idle after its verdict;
+       a renderer made again: idle */
+    s.replays = 400;
     for (int k = 0; k < 4; k++) {
         s.stage = 61 + k;
+        s.replays = 60; /* the start's 2 s and the trial's beginning */
         t = run(&s_a, &s, t + 1.0, 3u);
-        CHECK(s_a.trials < RD_AB_TRIALS && rd_ab_notice_state(&s_a) == RD_AB_NOTICE_DUE,
+        CHECK(rd_ab_notice_state(&s_a) == RD_AB_NOTICE_RUNNING, "stage %d: not running (%d)",
+              s.stage, rd_ab_notice_state(&s_a));
+        s.replays = 400;
+        t = run(&s_a, &s, t + 1.0, 3u);
+        CHECK(s_a.trials < RD_AB_TRIALS && rd_ab_notice_state(&s_a) == RD_AB_NOTICE_IDLE,
               "stage %d: %u trials, %d", s.stage, (unsigned)s_a.trials, rd_ab_notice_state(&s_a));
     }
     rd_ab_forget(&s_a, "a Graphics API switch");
-    CHECK(rd_ab_notice_state(&s_a) == RD_AB_NOTICE_DUE, "the renderer made again: %d",
+    CHECK(rd_ab_notice_state(&s_a) == RD_AB_NOTICE_IDLE, "the renderer made again: %d",
           rd_ab_notice_state(&s_a));
-    /* stages on until the 12th trial: due while it runs, done when it ends */
+    /* stages on until the 12th trial: running while it runs, done when it
+       ends */
     int sawDueAtCap = 0;
-    for (int k = 0; k < 12 && rd_ab_notice_state(&s_a) == RD_AB_NOTICE_DUE; k++) {
+    for (int k = 0; k < 12 && rd_ab_notice_state(&s_a) == RD_AB_NOTICE_IDLE; k++) {
         s.stage = 70 + k;
-        s.replays = 60; /* the start's 2 s and the trial's beginning */
-        t = run(&s_a, &s, t + 1.0, 3u);
-        sawDueAtCap = sawDueAtCap || (s_a.trials == RD_AB_TRIALS && s_a.t.active &&
-                                      rd_ab_notice_state(&s_a) == RD_AB_NOTICE_DUE);
-        s.replays = 400;
-        t = run(&s_a, &s, t + 1.0, 3u);
+        s.replays = 1;
+        for (int i = 0; i < 460; i++) {
+            t = run(&s_a, &s, t + 1.0, 3u);
+            sawDueAtCap = sawDueAtCap || (s_a.trials == RD_AB_TRIALS && s_a.t.active &&
+                                          rd_ab_notice_state(&s_a) == RD_AB_NOTICE_RUNNING);
+        }
     }
-    CHECK(sawDueAtCap, "not due while the 12th trial ran");
+    CHECK(sawDueAtCap, "not running while the 12th trial ran");
     CHECK(s_a.trials == RD_AB_TRIALS && rd_ab_notice_state(&s_a) == RD_AB_NOTICE_DONE_CAP,
           "done at the cap: %u trials, %d", (unsigned)s_a.trials, rd_ab_notice_state(&s_a));
     rd_ab_forget(&s_a, "a Graphics API switch");
@@ -849,7 +876,7 @@ static void testNotice(void)
     s.stage = 80;
     s.replays = 60;
     t = run(&s_a, &s, 0.0, 1u);
-    CHECK(rd_ab_notice_state(&s_a) == RD_AB_NOTICE_DUE, "due before the stop");
+    CHECK(rd_ab_notice_state(&s_a) == RD_AB_NOTICE_RUNNING, "not running before the stop");
     rd_ab_stop(&s_a, "the graphics device was lost");
     CHECK(rd_ab_notice_state(&s_a) == RD_AB_NOTICE_DONE_STOP, "a stop: %d",
           rd_ab_notice_state(&s_a));
@@ -866,8 +893,9 @@ static void testNotice(void)
     t = run(&s_a, &s, 0.0, 3u);
     rd_ab_allow(&s_a, 0, false);
     rd_ab_gone(&s_a, 0, true);
-    CHECK(rd_ab_notice_state(&s_a) == RD_AB_NOTICE_DUE, "one subject gone: %d",
-          rd_ab_notice_state(&s_a));
+    CHECK(rd_ab_notice_state(&s_a) == RD_AB_NOTICE_RUNNING ||
+              rd_ab_notice_state(&s_a) == RD_AB_NOTICE_IDLE,
+          "one subject gone: %d", rd_ab_notice_state(&s_a));
     rd_ab_allow(&s_a, 1, false);
     rd_ab_gone(&s_a, 1, true);
     CHECK(rd_ab_notice_state(&s_a) == RD_AB_NOTICE_DONE_GONE, "both gone: %d",

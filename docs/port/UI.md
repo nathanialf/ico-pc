@@ -43,7 +43,7 @@ draws, navigates, fades and sounds it; the port supplies the rows, their words a
 | `port/assets/fonts/NotoSansTC-Regular-subset.ttf`, `NotoSansTC-OFL.txt` | the fourth font (the Chinese table's ideographs) and its licence |
 | `tools/subset_font_zh.py` | makes and checks the fourth font's subset |
 | `port/ui/popup.h`, `popup.c` | the notification popups |
-| `port/ui/tune_notice.h`, `tune_notice.c` | the standing notice "Finding the best settings" (`UI_STR_TUNE_TITLE`, its line `UI_STR_TUNE_BODY`, the Triangle button and `UI_STR_TUNE_HIDE`) while the renderer's in-play timing goes on: `ui_host_vsync` passes the renderer's answer (`rd_ab_notice`), a copy of the game pad's word and whether the game owns the pad (no menu, no photo mode) once a vsync (`ui_tune_notice_step`); its own panel ([Popups](#popups)), up from the run's first trial until the timing is done or a Triangle press in play hides it for the run; the lines `ui: notice "Finding the best settings" shown`, `hidden by the player` and `leaves: the timing is done (...)` ([PIPELINES.md](PIPELINES.md#the-zero-area-cull-timed-in-play)) |
+| `port/ui/tune_notice.h`, `tune_notice.c` | the notice "Finding the best settings" (`UI_STR_TUNE_TITLE`, its line `UI_STR_TUNE_BODY`, the side block's Triangle over `UI_STR_TUNE_HIDE`) while the renderer's in-play timing runs: `ui_host_vsync` passes the renderer's answer (`rd_ab_notice`), the running trial's stage (`rd_ab_notice_stage`), a copy of the game pad's word and whether the game owns the pad (no menu, no photo mode) once a vsync (`ui_tune_notice_step`); its own panel ([Popups](#popups)), shown when a trial runs, gone by itself 0.5 s after the timing stopped running once it was fully shown for 2 s (`UI_TUNE_GRACE_MS`, `UI_TUNE_MIN_SHOWN_MS`), back at the next trial, hidden for the run by a Triangle press in play; the lines `ui: notice "Finding the best settings" shown: the timing of stage N began`, `left: the timing of this area ended` (or `left: the timing is done for the run (...)`) and `hidden by the player` ([PIPELINES.md](PIPELINES.md#the-zero-area-cull-timed-in-play)) |
 | `port/ui/touch_ui.h`, `touch_ui.c` | the touch overlay's drawing |
 | `port/ui/ui_fps.h`, `ui_fps.c` | the Frame rate counter: its text on the top layer and the calls that feed its number (`port/platform/fps_counter.h`) |
 | `port/ui/ui_mouse.h`, `ui_mouse.c`, `ui_mouse_geom.h`, `ui_mouse_geom.c` | the mouse pointer in menus: the glue and the arithmetic |
@@ -1196,15 +1196,19 @@ units, 10 units of padding left and right, 13 above and below (the text's dark h
 the picture's right edge; a body line holds `UI_POPUP_BODY_WIDTH` (584 units), and the Graphics
 driver page wraps its long answers to it (`port/ui/settings.c` (`gpuFolderPopup`)).
 
-The standing notice (`ui_popup_notice_show`, `ui_popup_notice_hide`; `port/ui/tune_notice.c`
-drives it) is a second panel of the same look and sizes, never an entry of the queue: it slides
-in as a popup does, stays until hidden, then slides out, so the queue's popups neither wait for it
-nor hide it; while it is up the queue's panel is placed below it (6 units apart, at the notice's
-full height so it does not move while the notice slides). Its body is one line: the text, then the
-Triangle button as photo mode's panel draws it (`port/ui/photo_ui.c` (`ui__photo_triangle`),
-registered by `ui_host_init` through `ui_popup_set_button_drawer`: the bound key in brackets after
-a key or the mouse was pressed last, else the disc's picture or the button set's art; the word
-`UI_STR_BTN_TRIANGLE` without a drawer), then the hint word. A Japanese body wider than the panel takes line breaks
+The notice (`ui_popup_notice_show`, `ui_popup_notice_hide`; `port/ui/tune_notice.c` drives it)
+is a second panel of the same look and sizes, never an entry of the queue: it slides in as a popup
+does, stays until hidden, then slides out, so the queue's popups neither wait for it nor hide it;
+while it is up the queue's panel is placed below it (6 units apart, at the notice's full height so
+it does not move while the notice slides). It has two parts: the title and its one line of text on
+the left, and at the right side one stacked block, the Triangle button over the word "Hide",
+centred on each other and on the panel's height, with a hairline divider between the parts (the
+panel's top hairline's colour) and 0.8 body sizes each side of it (`ui_popup_notice_parts`). The
+button is drawn as photo mode's panel draws its buttons (`port/ui/photo_ui.c`
+(`ui__photo_triangle`), registered by `ui_host_init` through `ui_popup_set_button_drawer`: the
+bound key in brackets after a key or the mouse was pressed last, else the disc's picture or the
+button set's art; the word `UI_STR_BTN_TRIANGLE` without a drawer). No other block of the port
+stacks a button over a word; the button and word pair is photo mode's, stacked here. A Japanese body wider than the panel takes line breaks
 ([Strings and languages](#strings-and-languages)); a title is one line. `[dev] popup_test` queues a test popup from Main tick 100 and every
 150 ticks after (`ui_popup_dev_tick`).
 

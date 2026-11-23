@@ -209,20 +209,25 @@ double rd_ab_scene_ms(double spanMs, double displayWaitMs, double presentMs);
 void rd_ab_gone(RdAb *a, int id, bool gone);
 
 /* The player's notice ("Finding the best settings", port/ui/tune_notice.h):
-   whether timing is going on in this run, one answer for the UI:
+   whether a timing is running now, one answer for the UI:
      RD_AB_NOTICE_NONE       no trial has started this run (nothing to say:
                              never in the fixed and alternating modes, with
                              nothing allowed, before a stage is known)
-     RD_AB_NOTICE_DUE        a trial has started and more timing may come
+     RD_AB_NOTICE_RUNNING    a trial is running
+     RD_AB_NOTICE_IDLE       between trials: one ran, more may come
      RD_AB_NOTICE_DONE_CAP   all RD_AB_TRIALS trials run, none running
      RD_AB_NOTICE_DONE_STOP  every trial stopped (a device loss, the GPU's
                              own sign of a reset)
      RD_AB_NOTICE_DONE_GONE  every subject off for the rest of the run
-   The DONE answers do not go back to DUE (a renderer made again keeps the
-   trials' count, a stop and a gone subject stay). */
+   The DONE answers do not go back (a renderer made again keeps the trials'
+   count, a stop and a gone subject stay).  Two subjects tried back to back
+   in one stage: the second trial starts at the replay after the first one's
+   verdict was read back (rd_ab_begin), so IDLE lasts about one picture
+   between them; the UI bridges that (tune_notice.h UI_TUNE_GRACE_MS). */
 enum {
     RD_AB_NOTICE_NONE = 0,
-    RD_AB_NOTICE_DUE,
+    RD_AB_NOTICE_RUNNING,
+    RD_AB_NOTICE_IDLE,
     RD_AB_NOTICE_DONE_CAP,
     RD_AB_NOTICE_DONE_STOP,
     RD_AB_NOTICE_DONE_GONE

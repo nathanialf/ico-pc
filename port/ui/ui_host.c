@@ -140,11 +140,12 @@ void ui_host_vsync(unsigned int mainTick)
 {
     ui_popup_dev_tick(mainTick);
 #ifdef ICO_RD
-    /* the in-play judge's answer (rd_ab_run.h): the player's standing
-       notice while timing goes on, Triangle in play hides it; the pad's word
+    /* the in-play judge's answer (rd_ab_run.h): the player's notice while
+       a timing runs, Triangle in play hides it for the run; the pad's word
        is only read (the game gets every press), and not while a pad script
        plays (reading it steps the script) */
-    _Static_assert((int)UI_TUNE_JUDGE_DUE == (int)RD_AB_NOTICE_DUE &&
+    _Static_assert((int)UI_TUNE_JUDGE_RUNNING == (int)RD_AB_NOTICE_RUNNING &&
+                       (int)UI_TUNE_JUDGE_IDLE == (int)RD_AB_NOTICE_IDLE &&
                        (int)UI_TUNE_JUDGE_DONE_CAP == (int)RD_AB_NOTICE_DONE_CAP &&
                        (int)UI_TUNE_JUDGE_DONE_STOP == (int)RD_AB_NOTICE_DONE_STOP &&
                        (int)UI_TUNE_JUDGE_DONE_GONE == (int)RD_AB_NOTICE_DONE_GONE,
@@ -156,7 +157,7 @@ void ui_host_vsync(unsigned int mainTick)
         if (!ico_pad_script_active()) {
             ico_input_frame(&f);
         }
-        (void)ui_tune_notice_step(rd_ab_notice(), f.buttons,
+        (void)ui_tune_notice_step(rd_ab_notice(), rd_ab_notice_stage(), f.buttons,
                                   !ico_pointer_menu() && !ico_photo_active());
     }
 #endif

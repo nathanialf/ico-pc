@@ -951,5 +951,5 @@ const char *const ui_strings_ru_bobttz[UI_STR_COUNT] = {
     [UI_STR_ZOOM_TYPE_NOTE] = NULL,
     [UI_STR_TUNE_TITLE] = NULL, /* "Finding the best settings" */
     [UI_STR_TUNE_BODY] = NULL,  /* "You may see some stutter." */
-    [UI_STR_TUNE_HIDE] = NULL,  /* "hide" */
+    [UI_STR_TUNE_HIDE] = NULL,  /* "Hide" */
 };

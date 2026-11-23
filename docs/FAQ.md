@@ -232,13 +232,13 @@ you play, the game tries them in turn for a few seconds when you reach a
 new area, measures which is faster there, and keeps that one for the area.
 An area it has not measured yet uses the way it kept last.
 
-The message comes up when this measuring first begins after you start the
-game, and stays in the top corner while there is measuring left to do,
-which can be the whole session. Press Triangle while you play to hide it;
-it then stays away until you start the game again. Triangle still does what
-it always does in the game. Other messages show below it. While it measures
-in a new area you may see a little stutter for a few seconds; that is
-expected and goes away once it has decided. The picture is meant to look
+The message shows in the top corner while an area is being measured, a
+few seconds each time, and goes away by itself when that is done; it comes
+back for the next area that is measured. Press Triangle while you play to
+hide it for the rest of the session. Triangle still does what it always
+does in the game. Other messages show below it. While an area is measured
+you may see a little stutter; that is expected and goes away once it has
+decided. The picture is meant to look
 the same either way, and there is nothing to set. If a piece of the scenery
 ever looks wrong, see
 [A piece of the scenery looks wrong](TROUBLESHOOTING.md#a-piece-of-the-scenery-looks-wrong-or-has-stray-dots).

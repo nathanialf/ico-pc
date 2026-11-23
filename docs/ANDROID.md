@@ -301,11 +301,11 @@ picture may take, so the phone can set its speed for the game. There is
 nothing to switch on. A speed gain has been measured only on a Pixel 10 Pro
 Fold; phones with Mali or Adreno graphics are not measured yet.
 
-On some phones a message, **Finding the best settings**, appears after
-you start the game and stays while the game tries its ways of drawing for
-a few seconds in each new area, keeping the faster one there; a little
-stutter for those few seconds is expected, and Triangle (or the touch
-Triangle button) hides the message
+On some phones a message, **Finding the best settings**, shows while the
+game tries its ways of drawing for a few seconds in a new area, keeping
+the faster one there, and goes away by itself; a little stutter for those
+few seconds is expected, and Triangle (or the touch Triangle button) hides
+the message for the session
 ([more about it](FAQ.md#a-message-says-finding-the-best-settings)).
 
 If it still stutters, play for a minute and send `ico-pc.log` from `logs`

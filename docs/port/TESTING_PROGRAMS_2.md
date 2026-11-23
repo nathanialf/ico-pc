@@ -269,15 +269,19 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
 
 ## port/ui/test
 
-- `ui_test.c`, its popups block (`ui`, `ui_jpn`, `ui_kor`, `ui_cn`): the in-play timing's standing
-  notice (`port/ui/tune_notice.c`, `popup.h` `ui_popup_notice_*`): nothing before the judge's word;
-  in each of the eight languages shown at it without the queue, with that table's title, its
-  title and its one line within the panel (`UI_POPUP_BODY_WIDTH` at the popup's sizes), the panel
-  on the picture; a queued popup placed below it, both on the picture; a Triangle held from before
-  it came up, any other button and a Triangle while a menu owns the pad do not hide it, a Triangle
-  press in play does and the caller's pad word is left as it was; gone after its slide, not back
-  when the judge says due again; taken down by each of the judge's three done answers; never shown
-  when the judge was done first; the English title word for word. Then the shortened popup
+- `ui_test.c`, its popups block (`ui`, `ui_jpn`, `ui_kor`, `ui_cn`): the in-play timing's notice
+  (`port/ui/tune_notice.c`, `popup.h` `ui_popup_notice_*`) at 50 Hz: nothing before a timing runs;
+  shown at a running timing without the queue; a short trial: it leaves by itself at its minimum
+  fully shown (`UI_TUNE_MIN_SHOWN_MS`) and not before; back at the next timing; a long trial: no
+  leaving while it runs nor in an idle shorter than `UI_TUNE_GRACE_MS` (the next subject at once),
+  then gone exactly the grace after; each of the judge's three done answers takes it down at its
+  minimum, for the run; done before it was shown: never shown. In each of the eight languages:
+  that table's title; its one line; its parts with the word, a picture's width and the key form
+  ("[Backspace]"): the text left of the divider, the block right of it inside the panel and
+  centred on its height, the natural width inside the widest panel; a queued popup placed below it;
+  a Triangle held from before, any other button and a menu's Triangle do not hide it, a Triangle
+  press in play does and the caller's pad word is left as it was; not back at the next timings;
+  the English title and "Hide" word for word. Then the shortened popup
   messages (the save states' checkpoint and other-version messages, the refused check, the
   restore and backup answers, the Steam failure's body) in every language, each line within the
   panel at the body's size, and the Graphics driver's unreadable answer, a title, at the title's.

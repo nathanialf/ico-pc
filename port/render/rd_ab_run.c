@@ -27,9 +27,10 @@ static uint8_t s_allowed;    /* the subjects that may be tried now */
 static const int k_row[2] = {ICO_ATT_AB_ZERO, ICO_ATT_AB_NODISCARD};
 static int s_ledAllowed[2] = {-1, -1}, s_ledStopped[2] = {-1, -1};
 static uint32_t s_ledOn[2], s_ledOff[2], s_ledTrials[2];
-static long s_fakeLoss;    /* ICO_RD_AB_FAKE_LOSS: the replay N */
-static uint32_t s_replays; /* begun this run */
-static int s_notice;       /* __atomic: the player's notice (rd_ab_notice, RD_AB_NOTICE_*) */
+static long s_fakeLoss;        /* ICO_RD_AB_FAKE_LOSS: the replay N */
+static uint32_t s_replays;     /* begun this run */
+static int s_notice;           /* __atomic: the player's notice (rd_ab_notice, RD_AB_NOTICE_*) */
+static int s_noticeStage = -1; /* __atomic: the running trial's stage, -1 none */
 
 static void made(void)
 {
@@ -47,6 +48,7 @@ static void made(void)
 /* the player's notice's answer for the UI's thread (rd_ab_notice) */
 static void notice(void)
 {
+    __atomic_store_n(&s_noticeStage, s_ab.t.active ? (int)s_ab.t.stage : -1, __ATOMIC_RELEASE);
     __atomic_store_n(&s_notice, rd_ab_notice_state(&s_ab), __ATOMIC_RELEASE);
 }
 
@@ -165,6 +167,11 @@ void rd__ab_renderer(void)
     rd_ab_forget(&s_ab, "a Graphics API switch");
     drain();
     ledger();
+}
+
+int rd_ab_notice_stage(void)
+{
+    return __atomic_load_n(&s_noticeStage, __ATOMIC_ACQUIRE);
 }
 
 int rd_ab_notice(void)
