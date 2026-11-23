@@ -60,6 +60,11 @@ int ico_zoom_wanted(int held)
     return ico_opt_zoom_type() == ICO_ZOOM_TOGGLE ? s_zoom.latch : held;
 }
 
+void ico_zoom_drop(void)
+{
+    s_zoom.latch = 0;
+}
+
 void ico_zoom_reset(void)
 {
     s_zoom.latch = 0;

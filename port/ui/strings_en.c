@@ -412,6 +412,9 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_VAL_ZOOM_TOGGLE] = "Toggle",
     [UI_STR_ZOOM_TYPE_NOTE] =
         "Hold: the camera zooms in while you keep R2 held. Toggle: press R2 once to zoom in, press again to zoom out.",
+    [UI_STR_OPT_CAMERA_RESET] = "Camera reset",
+    [UI_STR_CAMERA_RESET_NOTE] =
+        "On: click the right stick (R3) to bring the camera straight back to Ico.",
     [UI_STR_OPT_BUTTON_PICTURES] = "Button pictures",
     [UI_STR_BUTTON_PICTURES_NOTE] =
         "The buttons shown in menus and photo mode. Auto follows the controller you used last.",

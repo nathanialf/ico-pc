@@ -412,6 +412,8 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_VAL_ZOOM_TOGGLE] = "切換",
     [UI_STR_ZOOM_TYPE_NOTE] =
         "按住：按住 R2 期間拉近鏡頭。切換：按一下 R2 拉近鏡頭，再按一下恢復。",
+    [UI_STR_OPT_CAMERA_RESET] = "視角重設",
+    [UI_STR_CAMERA_RESET_NOTE] = "開：按下右搖桿（R3）即可讓視角立刻回到 Ico 身上。",
     [UI_STR_OPT_BUTTON_PICTURES] = "按鈕圖示",
     [UI_STR_BUTTON_PICTURES_NOTE] = "選單與照相模式中顯示的按鈕圖示。自動會依照最後使用的控制器。",
     [UI_STR_STICK_FIX_ALSO_NOTE] = "「遊戲」中也有此項。",

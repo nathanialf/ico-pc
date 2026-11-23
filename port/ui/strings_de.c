@@ -418,6 +418,9 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_VAL_ZOOM_TOGGLE] = "Umschalten",
     [UI_STR_ZOOM_TYPE_NOTE] =
         "Halten: Die Kamera zoomt, solange R2 gedrückt bleibt. Umschalten: R2 einmal drücken zum Heranzoomen, erneut drücken zum Herauszoomen.",
+    [UI_STR_OPT_CAMERA_RESET] = "Kamera zurücksetzen",
+    [UI_STR_CAMERA_RESET_NOTE] =
+        "Ein: Den rechten Stick drücken (R3), um die Kamera sofort wieder auf Ico zu richten.",
     [UI_STR_OPT_BUTTON_PICTURES] = "Tastenbilder",
     [UI_STR_BUTTON_PICTURES_NOTE] =
         "Die Tasten in Menüs und im Fotomodus. Automatisch folgt dem zuletzt benutzten Controller.",

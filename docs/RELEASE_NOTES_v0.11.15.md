@@ -1,6 +1,7 @@
 ## New
 
 - Options > Controls > Zoom type: choose Toggle to press the zoom button (R2) once to zoom the camera in and again to zoom it out, instead of holding it.
+- Options > Controls > Camera reset: turn it on to bring the camera straight back to Ico with a press of R3 (click the right stick in) after looking around.
 - Pop-up messages are smaller, and several of them, the save state messages first, say the same in fewer words.
 - The log now also notes the phone's temperature, whether it is slowing the processor to cool down, the battery's draw, and a short summary of where each scene's time went, so a shared log shows more clearly what to improve next.
 

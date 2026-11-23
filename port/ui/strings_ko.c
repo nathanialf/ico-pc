@@ -417,6 +417,8 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_VAL_ZOOM_TOGGLE] = "전환",
     [UI_STR_ZOOM_TYPE_NOTE] =
         "누르고 있기: R2를 누르고 있는 동안 줌합니다. 전환: R2를 한 번 누르면 줌하고, 다시 누르면 원래대로 돌아갑니다.",
+    [UI_STR_OPT_CAMERA_RESET] = "카메라 리셋",
+    [UI_STR_CAMERA_RESET_NOTE] = "켬: 오른쪽 스틱을 누르면(R3) 카메라가 바로 이코에게 돌아옵니다.",
     [UI_STR_OPT_BUTTON_PICTURES] = "버튼 그림",
     [UI_STR_BUTTON_PICTURES_NOTE] =
         "메뉴와 포토 모드에 표시되는 버튼 그림입니다. 자동은 마지막으로 사용한 컨트롤러에 맞게 바뀝니다.",

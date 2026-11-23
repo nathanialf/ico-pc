@@ -598,6 +598,9 @@ static void test_first_run(void)
     /* Zoom type, Hold: the game's own zoom on every disc */
     CHECK_STR(ico_config_get_string("gameplay.zoom_type", "?"), "hold");
     CHECK(text != NULL && strstr(text, "zoom_type = \"hold\"") != NULL);
+    /* Camera reset, off: the game as shipped on every disc */
+    CHECK_STR(ico_config_get_string("gameplay.camera_reset", "?"), "off");
+    CHECK(text != NULL && strstr(text, "camera_reset = \"off\"") != NULL);
     /* the difficulty rows are each save's (port/game/difficulty.h): the first
        run writes none of their retired keys */
     CHECK(ico_config_get_string("gameplay.pit_time", NULL) == NULL);

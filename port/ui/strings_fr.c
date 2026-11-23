@@ -422,6 +422,9 @@ const char *const
             [UI_STR_VAL_ZOOM_TOGGLE] = "Bascule",
             [UI_STR_ZOOM_TYPE_NOTE] =
                 "Maintenir : la caméra zoome tant que vous maintenez R2. Bascule : appuyez une fois sur R2 pour zoomer, puis de nouveau pour revenir.",
+            [UI_STR_OPT_CAMERA_RESET] = "Recentrer la caméra",
+            [UI_STR_CAMERA_RESET_NOTE] =
+                "Activé : cliquez le stick droit (R3) pour ramener aussitôt la caméra sur Ico.",
             [UI_STR_OPT_BUTTON_PICTURES] = "Images des boutons",
             [UI_STR_BUTTON_PICTURES_NOTE] =
                 "Les boutons des menus et du mode photo. Auto suit la dernière manette utilisée.",

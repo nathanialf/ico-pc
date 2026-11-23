@@ -428,6 +428,9 @@ const char *const
                 [UI_STR_VAL_ZOOM_TOGGLE] = "Alterna",
                 [UI_STR_ZOOM_TYPE_NOTE] =
                     "Tieni premuto: la visuale si avvicina finché tieni premuto R2. Alterna: premi R2 una volta per avvicinarla, premilo di nuovo per allontanarla.",
+                [UI_STR_OPT_CAMERA_RESET] = "Ripristino visuale",
+                [UI_STR_CAMERA_RESET_NOTE] =
+                    "Attivato: premi la levetta destra (R3) per riportare subito la visuale su Ico.",
                 [UI_STR_OPT_BUTTON_PICTURES] = "Immagini dei tasti",
                 [UI_STR_BUTTON_PICTURES_NOTE] =
                     "I tasti mostrati nei menu e nella modalità foto. Automatico segue l’ultimo controller usato.",

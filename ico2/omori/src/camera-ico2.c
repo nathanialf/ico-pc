@@ -29,6 +29,11 @@ extern void ico_video_camera_cut(void);
    (port/game/zoom_toggle.h): the June 2001 demo's look-around stops while
    the camera is zoomed in, R2 held or toggled */
 extern int ico_zoom_wanted(int held);
+/* PC port: Camera reset
+   (port/game/camera_reset.h): with the option on, R3 (pad bit 0x400) puts
+   the look-around back to rest at once and holds the stick until it is
+   back in its dead zone; off, the stick passes through */
+extern int ico_cam_reset(int r3, int live, float *sx, float *sz);
 static void *ReadCameraSet(struct CamSetFile *f, int stage);
 
 /* a loaded camera set: the file header, then the group records */
@@ -1595,6 +1600,11 @@ static void SetCameraMatrix_Ico2_ntsc(int flag)
                 sz = dir.f[2] * mag;
             }
         }
+        /* PC port: Camera reset (camera_reset.h) */
+        if (ico_cam_reset(pad[0].now & 0x400,
+                          systemStatus[5] == 0 && IsAbleBoyControl() != 0 && mode != 0, &sx, &sz)) {
+            ClearHandCameraCorrect();
+        }
         if (systemStatus[5] != 0 || IsAbleBoyControl() == 0 || mode == 0) {
             ClearHandCameraCorrect();
         } else {
@@ -1739,6 +1749,11 @@ static void SetCameraMatrix_Ico2_jun26(int flag)
                 sx = dir.f[0] * mag;
                 sz = dir.f[2] * mag;
             }
+        }
+        /* PC port: Camera reset (camera_reset.h) */
+        if (ico_cam_reset(pad[0].now & 0x400,
+                          systemStatus[5] == 0 && IsAbleBoyControl() != 0 && mode != 0, &sx, &sz)) {
+            ClearHandCameraCorrect();
         }
         if (systemStatus[5] != 0 || IsAbleBoyControl() == 0 || mode == 0) {
             ClearHandCameraCorrect();
@@ -1893,6 +1908,11 @@ static void SetCameraMatrix_Ico2_aug6(int f8)
             sz = dir.f[2] * mag;
         }
     }
+    /* PC port: Camera reset (camera_reset.h) */
+    if (ico_cam_reset(pad[0].now & 0x400,
+                      systemStatus[5] == 0 && IsAbleBoyControl() != 0 && mode != 0, &sx, &sz)) {
+        ClearHandCameraCorrect();
+    }
     if (systemStatus[5] != 0 || IsAbleBoyControl() == 0 || mode == 0) {
         ClearHandCameraCorrect();
     } else {
@@ -1993,6 +2013,11 @@ void SetCameraMatrix_Ico2(int flag)
         float mag;
 
         GetHandCameraStickInfo(&sx, &sz, &mag);
+        /* PC port: Camera reset (camera_reset.h) */
+        if (ico_cam_reset(pad[0].now & 0x400,
+                          systemStatus[5] == 0 && IsAbleBoyControl() != 0 && mode != 0, &sx, &sz)) {
+            ClearHandCameraCorrect();
+        }
         if (systemStatus[5] != 0 || IsAbleBoyControl() == 0 || mode == 0) {
             ClearHandCameraCorrect();
         } else {
