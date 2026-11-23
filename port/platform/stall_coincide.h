@@ -279,7 +279,8 @@ size_t stall_moment_text(const StallMoment *m, char *out, size_t cap);
      in the stage's 2 s before it, the fixed-work passes' GPU times (the
      reduction, the present pass) in the stalled replay and the next two
      timed replays ("-": not timed), the battery current of the last
-     second where read.  A row waits for its two timed replays after: one
+     second where read, and the phone's heat and clocks at that second
+     ("; phone 1/0.67/46.5/1200:1800,2000:1500", thermal_read.h).  A row waits for its two timed replays after: one
      still waiting at the block's end goes in the next block's table
      ("from the block before"), and from there out whatever it has */
 #define STALL_SHARE_PIECES 32 /* the pieces' indexes (window_stall.c PIECES) */
@@ -302,6 +303,10 @@ typedef struct StallRow {
     float red[3], pres[3];        /* < 0: not timed */
     float batteryMa;
     char pass[48]; /* a pass stall's pass (rd_perf_pass_label), "" none */
+    /* the phone's heat and clocks at that second (thermal_read.h
+       thermal_token: status/headroom/hottest zone C/clusters'
+       clock:allowed most), "" not read */
+    char phone[64];
 } StallRow;
 
 typedef struct StallTable {

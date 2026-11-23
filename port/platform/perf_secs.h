@@ -54,6 +54,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "thermal_read.h" /* the phone's heat and clocks a second */
+
 /* the seconds a block holds (a 10 s block's, with room for a block the
    pump held long: a pause, the app away); later ones are counted apart */
 #define PERF_SECS_MAX 64u
@@ -93,6 +95,10 @@ typedef struct PerfSecs {
     unsigned ivN, ivOver;
     float iv[PERF_SECS_IVS];
     double ivMax, lastEndMs;
+    /* the phone's heat and clocks (thermal_read.h), the last reading in
+       each second */
+    ThermalSample phone[PERF_SECS_MAX];
+    bool phoneSet[PERF_SECS_MAX];
 } PerfSecs;
 
 #define PERF_SECS_NO_STAGE (-2147483647 - 1)
@@ -116,7 +122,24 @@ void perf_secs_record(PerfSecs *s, const PerfSecsRec *r, double nowMs);
 size_t perf_secs_block_lines(PerfSecs *s, double nowMs, double tickMs, char *out, size_t cap,
                              char *more, size_t moreCap, char *intervals, size_t ivCap);
 
+/* The phone's reading at nowMs (the log thread's, as the game thread saw
+   it): its second's (the last wins) */
+void perf_secs_phone(PerfSecs *s, const ThermalSample *t, double nowMs);
+/* Before perf_secs_block_lines (which empties the block): the phone's
+   line a second into perSec,
+     phone a second (thermal status/headroom/hottest zone C/each CPU
+       cluster's clock:allowed most MHz): 42: 1/0.67/46.5/1200:1800,2000:1500
+       - 1/0.68/46.9/... | 40: ...
+   ("-" a second with no reading) and the block's thermal line into block
+   (thermal_read.h thermal_read_block_text; c the clusters' cores, NULL
+   none); "" each with no reading in the block.  The length of perSec */
+size_t perf_secs_phone_lines(PerfSecs *s, double nowMs, const ThermalCpus *c, char *perSec,
+                             size_t cap, char *block, size_t blockCap);
+
 /* The window's instance (the game thread's) */
+void perf_secs_window_phone(const ThermalSample *t, double nowMs);
+size_t perf_secs_window_phone_lines(double nowMs, const ThermalCpus *c, char *perSec, size_t cap,
+                                    char *block, size_t blockCap);
 void perf_secs_window_step(int stage, double nowMs);
 void perf_secs_window_picture(double nowMs);
 void perf_secs_window_record(const PerfSecsRec *r, double nowMs);

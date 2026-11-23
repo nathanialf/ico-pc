@@ -343,6 +343,60 @@ The stalls' causes and the line that confirms or rejects each:
 | A power limit or the vendor's frame governor | The battery current falls (a smaller draw) in the stall stretches while the reduction grows; the stalls follow the GPU shares | The current steady across the stretches while the reduction grows |
 | Another program on the GPU | The reduction and the present pass grow in the stalled replay with no change in the triangles, no memory events, and the current up | The fixed-work passes at their usual time in the stalls |
 
+### The phone's heat and clocks
+
+`port/platform/thermal_read.h` (the readers and texts), `window_thermal.c` (the log thread's ask,
+the game thread's take). Once a second on Android's log thread beside the battery, read only:
+
+- the system's thermal status (`AThermal_getCurrentThermalStatus`, API 30: 0 none to 6 shutdown)
+  and headroom (`AThermal_getThermalHeadroom`, API 31: 1.0 is the SEVERE throttling threshold),
+  looked up in `libandroid.so` at run time as the performance hints are (the port's minimum is API
+  26). The NDK's `android/thermal.h` names a permission only for the listener calls; these two need
+  none. The headroom is PowerManager's answer that second where the thermal ask had one (the same
+  service: asked twice in a second it can answer NaN), else the NDK's;
+- up to 4 of `/sys/class/thermal/thermal_zone*` whose type names the GPU, the CPU, the SoC, the
+  battery or the skin (in that order of choice; a temperature of 1000 or more is millidegrees);
+- each CPU cluster's clock (`scaling_cur_freq`), its allowed most (`scaling_max_freq`) and its
+  hardware most (`cpuinfo_max_freq`), from cpufreq's policy folders, or each core's cpufreq folder
+  where there are none (cores in a row with the same hardware most taken as one cluster). An
+  allowed most below the hardware most is the throttle's signature.
+
+Readable or not, once: `window: thermal: status from the system, headroom from the system (API 31);
+zones read: 4 of 7 (gpu0-usr 43.2 C, cpu-1-0-usr 45.0 C, mtktscpu 46.5 C, battery 31.0 C; 6
+readable, the others' types not GPU, CPU, SoC, battery or skin, or past 4); CPU clusters read
+(cpufreq policies): cores 0-5 (most 1800 MHz), cores 6-7 (most 2000 MHz)` (or each part's reason:
+`not asked (API 29: the thermal API is API 30 and later)`, `zones not readable (errno 13, 42
+found)`, `CPU clocks not readable (errno 13)`). Elsewhere than Android: `window: thermal: not read
+here (...)`. A read that fails after working is silent.
+
+It shows in three places. Each second, after the pictures lines: `window: phone a second (thermal
+status/headroom/hottest zone C/each CPU cluster's clock:allowed most MHz): 42: 1/0.67/46.5/1200:1800,2000:1500
+- ...` (`-` a value or a second not read). Each stall row: `; phone 1/0.67/46.5/1200:1800,2000:1500`
+(the reading of the last 2.5 s). Each block: `window: thermal in the block: status 1-2 (changed),
+headroom 0.67-0.71, hottest zone 46.5-47.0 C; cores 0-5 1200-1200 MHz, allowed 1800-1800 MHz of 1800;
+cores 6-7 1100-2000 MHz, allowed 1200-1500 MHz of 2000; the allowed most changed: yes`.
+
+Questions: was the phone throttling in the slow stretches (the status up, the headroom near 1.0, an
+allowed most lowered), and did the stalls fall in those seconds?
+
+### Where the time went
+
+`port/render/rd_perf_where.h`, one table a perf scene block, after the block's other perf lines
+(which stay). The block's own numbers in one place, every line beginning `window: where:`:
+
+| Line | Holds |
+| --- | --- |
+| `where: <scene>: limit <bound>; P of T fps (the game G of R); GPU work W ms (S % of the D ms between presents); render thread C ms (S %); game step E ms (S % of its K ms tick)` | the limiting side (the perf scene line's verdict) and each side's share |
+| `where: GPU a picture S ms (work W ms): list 0 49.0 ms 47 % [283 draws, 1.2 MB loaded, 3.4 MB stored, 0.35 Mpx]; ...; pre-pass ...; before list 0 ...; present ...; effects (inside their lists): reduction ...; all: 70.1k triangles, 81.0k vertex invocations, 900 draws, 3.1 MB loaded, 6.2 MB stored, 12.0 Mpx` | each GPU piece a picture with its share of the span; a list's counts from the pictures timed pass by pass (`[...]` none); pieces of 0 ms left out |
+| `where: CPU a picture: render thread C ms (walk, uploads, binds, interpolation, submit); submit thread ...; present calls ...; GPU waits ...; game step ...` | the CPU's split |
+| `where: attempts: submit ahead on; <the rows on with their counts N/N2/N3>` | the attempts in the block (`ico_attempt_on_text`: nothing taken from the attempts line) |
+| `where: phone: thermal (...) 1/0.67/46.5/1200:1800; battery -812 mA; memory 1173 MB available, pressure not readable; stalls: 12 in 11 replays, most in list 0 (8)` | the phone's state and the block's stalls |
+| `where: largest: GPU list 0 49.0 ms (47 % of the GPU span); CPU walk 8.0 ms (8 % of the time between presents)` | the single largest GPU piece and CPU piece (the game step counts as one) |
+
+The rate card's hook: `rd_perf_where_explained_ms` takes a device's ns a fragment, a vertex and a
+triangle (`RdPerfWhereRates`); once it answers, the last line gains `; explained by the rate card: X
+of Y ms`. Here it answers -1 (no clause).
+
 ### The present latency line
 
 `port/platform/present_latency.h`, every block after the present stalls' line, on every platform

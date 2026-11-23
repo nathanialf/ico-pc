@@ -4,7 +4,7 @@
 # file of its own: port/render/CMakeLists.txt is at the 256 KiB cap,
 # tools/check_no_rom.sh).
 target_sources(ico_render PRIVATE rd_perf_clock.c rd_perf_rank.c rd_perf_rare.c rd_perf_more.c
-                                  rd_perf_hooks.c)
+                                  rd_perf_hooks.c rd_perf_where.c)
 
 # rd_perf_clock_test: the verdict and its line from made-up slot clocks: the
 # issue 123 stall (stale stamps at the wait's start, nothing for 250 ms, the
@@ -54,6 +54,22 @@ if(NOT WIN32)
 endif()
 if(ICO_RUN_TESTS)
     add_test(NAME rd_perf_rank COMMAND rd_perf_rank_test)
+endif()
+
+# rd_perf_where_test: where the time went, one table a block
+# (rd_perf_where.h, issue 179): the six lines word for word from a made-up
+# block of the boat scene's shape, a piece of 0 ms left out, a list not
+# timed pass by pass, an effect without a name, the window's texts absent,
+# no timed picture, the rate card's hook, a short buffer (CPU only)
+add_executable(rd_perf_where_test test/rd_perf_where_test.c rd_perf_where.c rd_perf_rank.c)
+target_include_directories(rd_perf_where_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+                                                      "${CMAKE_SOURCE_DIR}/port/rhi")
+target_compile_options(rd_perf_where_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+if(NOT WIN32)
+    target_link_libraries(rd_perf_where_test PRIVATE m)
+endif()
+if(ICO_RUN_TESTS)
+    add_test(NAME rd_perf_where COMMAND rd_perf_where_test)
 endif()
 
 # rd_perf_more_test: the cost counters' block sums and lines (rd_perf_more.h,

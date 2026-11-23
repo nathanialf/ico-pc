@@ -304,6 +304,7 @@ rd_ratecard_end 12.78  # estimate: rd_vuprepass_selftest_nodiscard x 3 runs, the
 rd_ratecard_lavapipe 14.91  # estimate: as rd_ratecard_mali without the twins (not run here)
 rd_ratecard_mali 17.04  # estimate: rd_vuprepass_selftest_nodiscard x 2 runs + the card on lavapipe (about 2x more; not run here)
 rd_ratecard_rule 0.01  # estimate: a CPU unit test, like rd_nodiscard (not run here)
+rd_perf_where 0.00  # estimate: a CPU unit test of one or two pure files, like perf_secs (run by hand here, well under 0.01 s; not run under CI yet)
 rd_vuprepass_selftest_nodiscard 4.26  # estimate: rd_vuprepass_selftest_zero_mali x 3 (the clipper check: 52 frames of 3 small replays, both twin entries; not run here)
 rd_vuprepass_selftest_nodiscard_clean 4.26  # estimate: rd_vuprepass_selftest_nodiscard (the same self-test, the verdict taken as clean; not run here)
 rd_vuprepass_selftest_nodiscard_clipper 4.26  # estimate: rd_vuprepass_selftest_nodiscard (the same self-test; not run here)
@@ -1209,6 +1210,7 @@ texpack_load 0.00
 texpack_name 0.00
 texpack_pack_files 0.00
 texture_catalog 0.18
+thermal_read 0.00  # estimate: a CPU unit test of one or two pure files, like perf_secs (run by hand here, well under 0.01 s; not run under CI yet)
 thermal_text 0.00
 thread_stat 0.00
 title_logo 0.00
