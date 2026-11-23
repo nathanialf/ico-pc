@@ -1094,12 +1094,6 @@ typedef enum UiStrId {
     UI_STR_DIFF_STATES_LOCKED,
     UI_STR_DIFF_WORD_PERMADEATH,
     UI_STR_DIFF_STATES_SAVE_LOCKED, /* a save state's save refused on a Permadeath journey */
-    /* the pop-up while the game times its drawing choices in play
-       (tune_notice.h): its title and body */
-    UI_STR_TUNE_TITLE,
-    UI_STR_TUNE_BODY,
-    /* the standing notice's word after its Triangle button (tune_notice.h) */
-    UI_STR_TUNE_HIDE,
     UI_STR_COUNT
 } UiStrId;
 

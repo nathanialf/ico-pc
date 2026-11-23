@@ -484,14 +484,6 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   - the measure: the scene's GPU work (the span less the present's pass and the display wait,
     `rd_ab_scene_ms`): a stream held by the display (every span 40 ms, the wait taking up what
     the scene saves) judged on with it, off with the whole span; the verdict line's words;
-  - the player's notice (`rd_ab_notice_state`): none before a trial; running at the first
-    trial; two subjects back to back idle for one replay at most between their trials, done
-    (judged) after both, later stages with no trial and still done; idle after a renderer made
-    again, running at its new trial, done again; running while the 12th of trials with no answer
-    runs; done at the cap when it ends, on a stop and once every
-    subject is gone, none of them undone by a renderer made again or a subject back; a gone subject
-    never tried; none with nothing allowed, with no stage, in the fixed and alternating modes, or
-    after a stop before any trial;
   - a renderer made again (`rd_ab_forget`): a second subject's trial past 16 pairs ended
     unjudged, every verdict forgotten, a record of the earlier renderer not measured, the trials
     run still counted, the subject timed again on the new renderer;
@@ -499,8 +491,8 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
     the opening's stage none before 2 s of scenery (the stage's first pictures still the title's
     count for nothing), the cull's trial at them and its verdict; the boat stage, where the other
     arm would be faster, on the run's arm with no trial; a second subject with work only in a later
-    stage: its one trial there, then done (judged) and no trial after; a renderer made again: both
-    timed once more, done again;
+    stage: its one trial there, then both judged, no trial running and none after; a renderer made
+    again: both verdicts forgotten, both timed once more and judged again;
   - the rate requirement, 72 cases: a GPU-bound stream at a 40 ms tick for 60 s, pictures of 33,
     37.5, 48 and 60 ms, the attempt saving or costing 3, 5 and 10 %, in one stage, in four stages
     of that effect and in four stages whose effect changes sign each stage; each case beside its

@@ -353,7 +353,7 @@ RdAbTag rd_ab_begin(RdAb *a, int32_t stage, double nowMs, bool keep)
     if (!t->active && stage >= 0 && a->scenery && a->trials < RD_AB_TRIALS &&
         nowMs - a->stageMs >= RD_AB_START_MS) {
         for (int i = 0; i < a->nSubj; i++) {
-            if (a->subj[i].allowed && !a->subj[i].gone && (a->usedNow & (1u << i)) &&
+            if (a->subj[i].allowed && (a->usedNow & (1u << i)) &&
                 a->subj[i].carry == RD_AB_V_NONE && memFind(a, i, stage) < 0) {
                 trialStart(a, i);
                 break;
@@ -451,43 +451,6 @@ void rd_ab_collect(RdAb *a, const RdAbIn *in)
 void rd_ab_set_scenery(RdAb *a, bool scenery)
 {
     a->scenery = scenery;
-}
-
-void rd_ab_gone(RdAb *a, int id, bool gone)
-{
-    if (id >= 0 && id < a->nSubj) {
-        a->subj[id].gone = a->subj[id].gone || gone; /* for the run: it does not come back */
-    }
-}
-
-int rd_ab_notice_state(const RdAb *a)
-{
-    if (a->trials == 0u) {
-        return RD_AB_NOTICE_NONE; /* no timing began: nothing to tell */
-    }
-    if (a->stopped) {
-        return RD_AB_NOTICE_DONE_STOP;
-    }
-    if (a->trials >= RD_AB_TRIALS && !a->t.active) {
-        return RD_AB_NOTICE_DONE_CAP;
-    }
-    bool any = false;
-    for (int i = 0; i < a->nSubj; i++) {
-        any = any || !a->subj[i].gone;
-    }
-    if (!any) {
-        return RD_AB_NOTICE_DONE_GONE;
-    }
-    /* every subject still in the run has its one verdict */
-    bool open = a->t.active;
-    for (int i = 0; i < a->nSubj; i++) {
-        open = open || (!a->subj[i].gone && a->subj[i].carry != RD_AB_V_ON &&
-                        a->subj[i].carry != RD_AB_V_OFF);
-    }
-    if (!open) {
-        return RD_AB_NOTICE_DONE_JUDGED;
-    }
-    return a->t.active ? RD_AB_NOTICE_RUNNING : RD_AB_NOTICE_IDLE;
 }
 
 void rd_ab_forget(RdAb *a, const char *why)

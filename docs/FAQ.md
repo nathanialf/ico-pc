@@ -224,24 +224,6 @@ says where it is) after a minute of play. Every 10 seconds the log writes a
 line that starts with `window:` and says "presented fps"; that line, with the
 lines around it, shows how long the card takes for a picture.
 
-## A message says "Finding the best settings"
-
-On some phones and graphics cards the game has two choices of how to draw
-the same picture, and which is faster depends on the device. So early in
-each session, in the first scene you play or watch (not the title screen),
-the game tries each choice for a few seconds, measures which is faster, and
-keeps the faster one for the rest of the session.
-
-The message shows in the top corner while it measures, once or twice near
-the start of a session, and goes away by itself; after that it does not
-come back until you start the game again. Press Triangle while you play to
-hide it sooner. Triangle still does what it always does in the game. Other
-messages show below it. While it measures you may see a little stutter for
-those few seconds; that is expected. The picture is meant to look the same
-either way, and there is nothing to set. If a piece of the scenery ever
-looks wrong, see
-[A piece of the scenery looks wrong](TROUBLESHOOTING.md#a-piece-of-the-scenery-looks-wrong-or-has-stray-dots).
-
 ## Why is there a thin black border around the picture?
 
 The PS2 itself drew a thin black border around the picture, a few dots wide

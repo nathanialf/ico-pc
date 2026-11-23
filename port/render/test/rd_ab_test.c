@@ -649,8 +649,7 @@ static void testOnce(void)
     s.stage = 1;
     s.replays = 500;
     double t = run(&s_a, &s, 0.0, 1u);
-    CHECK(s_a.trials == 0u && rd_ab_notice_state(&s_a) == RD_AB_NOTICE_NONE,
-          "a trial on the title: %u", (unsigned)s_a.trials);
+    CHECK(s_a.trials == 0u, "a trial on the title: %u", (unsigned)s_a.trials);
     /* the opening's cutscene (stage 41): scenery; no trial in its first
        2 s of scenery, the cull's at them; the fake subject has no work here */
     s.stage = 41;
@@ -663,10 +662,9 @@ static void testOnce(void)
     s.replays = 400;
     t = run(&s_a, &s, t + 1.0, 1u);
     CHECK(s_a.trials == 1u && rd_ab_verdict(&s_a, 0, 41) == RD_AB_V_OFF &&
-              rd_ab_verdict(&s_a, 1, 41) == RD_AB_V_NONE &&
-              rd_ab_notice_state(&s_a) == RD_AB_NOTICE_IDLE,
-          "the opening: %u trials, cull %d, fake %d, notice %d", (unsigned)s_a.trials,
-          rd_ab_verdict(&s_a, 0, 41), rd_ab_verdict(&s_a, 1, 41), rd_ab_notice_state(&s_a));
+              rd_ab_verdict(&s_a, 1, 41) == RD_AB_V_NONE && !s_a.t.active,
+          "the opening: %u trials, cull %d, fake %d, running %d", (unsigned)s_a.trials,
+          rd_ab_verdict(&s_a, 0, 41), rd_ab_verdict(&s_a, 1, 41), (int)s_a.t.active);
     /* the boat (stage 42), where it would save: the run's arm, no trial */
     s.stage = 42;
     s.effect = -0.05;
@@ -681,21 +679,22 @@ static void testOnce(void)
     s.effect = 0.05;
     t = run(&s_a, &s, t + 1.0, 3u);
     CHECK(s_a.trials == 2u && s_a.subj[1].trials == 1u &&
-              rd_ab_verdict(&s_a, 1, 43) == RD_AB_V_OFF &&
-              rd_ab_notice_state(&s_a) == RD_AB_NOTICE_DONE_JUDGED,
-          "the fake subject: %u trials, verdict %d, notice %d", (unsigned)s_a.trials,
-          rd_ab_verdict(&s_a, 1, 43), rd_ab_notice_state(&s_a));
+              rd_ab_verdict(&s_a, 1, 43) == RD_AB_V_OFF && !s_a.t.active,
+          "the fake subject: %u trials, verdict %d, running %d", (unsigned)s_a.trials,
+          rd_ab_verdict(&s_a, 1, 43), (int)s_a.t.active);
     s.stage = 44;
     (void)run(&s_a, &s, t + 1.0, 3u);
     CHECK(s_a.trials == 2u, "a trial after both were judged (%u)", (unsigned)s_a.trials);
     /* a renderer made again: both forgotten, each timed once more */
     rd_ab_forget(&s_a, "a Graphics API switch");
-    CHECK(rd_ab_notice_state(&s_a) == RD_AB_NOTICE_IDLE, "after the switch: %d",
-          rd_ab_notice_state(&s_a));
+    CHECK(!s_a.t.active && s_a.subj[0].carry == RD_AB_V_NONE && s_a.subj[1].carry == RD_AB_V_NONE,
+          "after the switch: running %d, carried %d %d", (int)s_a.t.active, s_a.subj[0].carry,
+          s_a.subj[1].carry);
     s.stage = 45;
     (void)run(&s_a, &s, t + 100000.0, 3u);
-    CHECK(s_a.trials == 4u && rd_ab_notice_state(&s_a) == RD_AB_NOTICE_DONE_JUDGED,
-          "after the switch: %u trials, notice %d", (unsigned)s_a.trials, rd_ab_notice_state(&s_a));
+    CHECK(s_a.trials == 4u && !s_a.t.active && s_a.subj[0].carry != RD_AB_V_NONE &&
+              s_a.subj[1].carry != RD_AB_V_NONE,
+          "after the switch: %u trials, running %d", (unsigned)s_a.trials, (int)s_a.t.active);
 }
 
 static void testMeasure(void)
@@ -803,175 +802,8 @@ static void testForget(void)
     CHECK(strstr(s_last, ": off for the rest of the run, every stage") != NULL, "%s", s_last);
 }
 
-/* the player's notice (rd_ab_notice_state) over a run: none before a
-   trial; running during each trial and idle between (two subjects back to
-   back: idle for one replay at most), a renderer made again idle; done when
-   the 12th trial ends, on a stop, and once every subject is off for the
-   run; never running without a
-   trial (nothing allowed, no stage, the tests' fixed and alternating modes,
-   a stop before any trial) */
-static void testNotice(void)
-{
-    printf("the player's notice:\n");
-    Stream s = {0};
-    s.lag = 2;
-    s.replays = 40;
-    s.stepMs = 40.0;
-    s.stage = 60;
-    rd_ab_init(&s_a, RD_AB_AUTO);
-    (void)rd_ab_subject(&s_a, "zero-area cull");
-    (void)rd_ab_subject(&s_a, "fake");
-    rd_ab_allow(&s_a, 0, true);
-    rd_ab_allow(&s_a, 1, true);
-    CHECK(rd_ab_notice_state(&s_a) == RD_AB_NOTICE_NONE, "a notice before anything");
-    double t = run(&s_a, &s, 0.0, 3u);
-    CHECK(s_a.trials == 0u && rd_ab_notice_state(&s_a) == RD_AB_NOTICE_NONE,
-          "a notice before any trial");
-    /* the first trial's start: running; both subjects back to back, one
-       replay at a time: running from the first trial's start to the
-       second's verdict with no idle between them (the second starts at the
-       same replay the first one's verdict is read at), idle after */
-    s.replays = 1;
-    s.effect = 0.05;
-    t = run(&s_a, &s, t + RD_AB_START_MS, 3u);
-    CHECK(s_a.trials == 1u && rd_ab_notice_state(&s_a) == RD_AB_NOTICE_RUNNING,
-          "not running at the first trial (%u trials, %d)", (unsigned)s_a.trials,
-          rd_ab_notice_state(&s_a));
-    int idleRun = 0, maxIdle = 0, sawSecond = 0;
-    for (int i = 0; i < 800; i++) {
-        t = run(&s_a, &s, t + 1.0, 3u);
-        const int st = rd_ab_notice_state(&s_a);
-        idleRun = s_a.trials == 1u && st == RD_AB_NOTICE_IDLE ? idleRun + 1 : 0;
-        maxIdle = idleRun > maxIdle ? idleRun : maxIdle;
-        sawSecond = sawSecond || s_a.trials == 2u;
-        if (sawSecond && st != RD_AB_NOTICE_RUNNING) {
-            break;
-        }
-    }
-    /* each call here begins a replay, then reads the replays in flight
-       back (as rd__perf_begin, then rd__perf_collect_gpu): idle for the one
-       replay between a verdict and the next subject's trial */
-    CHECK(sawSecond && maxIdle <= 1 && rd_ab_notice_state(&s_a) == RD_AB_NOTICE_DONE_JUDGED,
-          "back to back: second %d, idle replays between %d, then %d", sawSecond, maxIdle,
-          rd_ab_notice_state(&s_a));
-    /* later stages: no trial, still done */
-    s.replays = 400;
-    for (int k = 0; k < 3; k++) {
-        s.stage = 61 + k;
-        t = run(&s_a, &s, t + 1.0, 3u);
-        CHECK(s_a.trials == 2u && rd_ab_notice_state(&s_a) == RD_AB_NOTICE_DONE_JUDGED,
-              "stage %d: %u trials, %d", s.stage, (unsigned)s_a.trials, rd_ab_notice_state(&s_a));
-    }
-    /* a renderer made again: idle, then running at its trial, done again */
-    rd_ab_forget(&s_a, "a Graphics API switch");
-    CHECK(rd_ab_notice_state(&s_a) == RD_AB_NOTICE_IDLE, "the renderer made again: %d",
-          rd_ab_notice_state(&s_a));
-    s.stage = 65;
-    s.replays = 60;
-    t = run(&s_a, &s, t + 1.0, 3u);
-    CHECK(rd_ab_notice_state(&s_a) == RD_AB_NOTICE_RUNNING, "not running after the switch (%d)",
-          rd_ab_notice_state(&s_a));
-    s.replays = 400;
-    t = run(&s_a, &s, t + 1.0, 3u);
-    CHECK(s_a.trials == 4u && rd_ab_notice_state(&s_a) == RD_AB_NOTICE_DONE_JUDGED,
-          "after the switch: %u trials, %d", (unsigned)s_a.trials, rd_ab_notice_state(&s_a));
-    /* trials that give no answer (each stage ends 0.4 s into its trial):
-       running while each runs, idle between, done at the cap when the 12th
-       ends */
-    rd_ab_init(&s_a, RD_AB_AUTO);
-    (void)rd_ab_subject(&s_a, "zero-area cull");
-    rd_ab_allow(&s_a, 0, true);
-    int sawDueAtCap = 0;
-    t = 0.0;
-    for (int k = 0; k < 16; k++) {
-        s.stage = 70 + k;
-        s.replays = 1;
-        for (int i = 0; i < 60; i++) {
-            t = run(&s_a, &s, t + 1.0, 1u);
-            sawDueAtCap = sawDueAtCap || (s_a.trials == RD_AB_TRIALS && s_a.t.active &&
-                                          rd_ab_notice_state(&s_a) == RD_AB_NOTICE_RUNNING);
-        }
-    }
-    (void)rd_ab_begin(&s_a, 99, t + 1.0, false);
-    CHECK(sawDueAtCap, "not running while the 12th trial ran");
-    CHECK(s_a.trials == RD_AB_TRIALS && rd_ab_notice_state(&s_a) == RD_AB_NOTICE_DONE_CAP,
-          "done at the cap: %u trials, %d", (unsigned)s_a.trials, rd_ab_notice_state(&s_a));
-    rd_ab_forget(&s_a, "a Graphics API switch");
-    CHECK(rd_ab_notice_state(&s_a) == RD_AB_NOTICE_DONE_CAP, "the cap's done undone");
-    /* a stop mid-run: done, and stays */
-    rd_ab_init(&s_a, RD_AB_AUTO);
-    (void)rd_ab_subject(&s_a, "zero-area cull");
-    rd_ab_allow(&s_a, 0, true);
-    s.stage = 80;
-    s.replays = 60;
-    t = run(&s_a, &s, 0.0, 1u);
-    CHECK(rd_ab_notice_state(&s_a) == RD_AB_NOTICE_RUNNING, "not running before the stop");
-    rd_ab_stop(&s_a, "the graphics device was lost");
-    CHECK(rd_ab_notice_state(&s_a) == RD_AB_NOTICE_DONE_STOP, "a stop: %d",
-          rd_ab_notice_state(&s_a));
-    rd_ab_forget(&s_a, "a Graphics API switch");
-    (void)run(&s_a, &s, t + 1.0, 1u);
-    CHECK(rd_ab_notice_state(&s_a) == RD_AB_NOTICE_DONE_STOP, "the stop's done undone");
-    /* every subject off for the run: done; one of two: still due */
-    rd_ab_init(&s_a, RD_AB_AUTO);
-    (void)rd_ab_subject(&s_a, "zero-area cull");
-    (void)rd_ab_subject(&s_a, "fake");
-    rd_ab_allow(&s_a, 0, true);
-    rd_ab_allow(&s_a, 1, true);
-    s.stage = 81;
-    t = run(&s_a, &s, 0.0, 3u);
-    rd_ab_allow(&s_a, 0, false);
-    rd_ab_gone(&s_a, 0, true);
-    CHECK(rd_ab_notice_state(&s_a) == RD_AB_NOTICE_RUNNING ||
-              rd_ab_notice_state(&s_a) == RD_AB_NOTICE_IDLE,
-          "one subject gone: %d", rd_ab_notice_state(&s_a));
-    rd_ab_allow(&s_a, 1, false);
-    rd_ab_gone(&s_a, 1, true);
-    CHECK(rd_ab_notice_state(&s_a) == RD_AB_NOTICE_DONE_GONE, "both gone: %d",
-          rd_ab_notice_state(&s_a));
-    rd_ab_gone(&s_a, 1, false);
-    CHECK(rd_ab_notice_state(&s_a) == RD_AB_NOTICE_DONE_GONE, "a gone subject came back");
-    /* a gone subject is never tried */
-    rd_ab_init(&s_a, RD_AB_AUTO);
-    (void)rd_ab_subject(&s_a, "zero-area cull");
-    rd_ab_allow(&s_a, 0, true);
-    rd_ab_gone(&s_a, 0, true);
-    s.stage = 82;
-    s.replays = 200;
-    (void)run(&s_a, &s, 0.0, 1u);
-    CHECK(s_a.trials == 0u && rd_ab_notice_state(&s_a) == RD_AB_NOTICE_NONE,
-          "a gone subject tried (%u trials)", (unsigned)s_a.trials);
-    /* never without a trial: nothing allowed, no stage, the tests' modes, a
-       stop before any trial */
-    rd_ab_init(&s_a, RD_AB_AUTO);
-    (void)rd_ab_subject(&s_a, "zero-area cull");
-    s.stage = 83;
-    (void)run(&s_a, &s, 0.0, 1u);
-    CHECK(rd_ab_notice_state(&s_a) == RD_AB_NOTICE_NONE, "due with nothing allowed");
-    rd_ab_allow(&s_a, 0, true);
-    s.stage = -1;
-    (void)run(&s_a, &s, 1e6, 1u);
-    CHECK(rd_ab_notice_state(&s_a) == RD_AB_NOTICE_NONE, "due with no stage");
-    for (int m = RD_AB_FIXED_ON; m <= RD_AB_ALT; m++) {
-        rd_ab_init(&s_a, m);
-        (void)rd_ab_subject(&s_a, "zero-area cull");
-        rd_ab_allow(&s_a, 0, true);
-        s.stage = 84;
-        (void)run(&s_a, &s, 0.0, 1u);
-        CHECK(rd_ab_notice_state(&s_a) == RD_AB_NOTICE_NONE, "due in mode %d", m);
-    }
-    rd_ab_init(&s_a, RD_AB_AUTO);
-    (void)rd_ab_subject(&s_a, "zero-area cull");
-    rd_ab_allow(&s_a, 0, true);
-    rd_ab_stop(&s_a, "the graphics device was lost");
-    s.stage = 85;
-    (void)run(&s_a, &s, 0.0, 1u);
-    CHECK(rd_ab_notice_state(&s_a) == RD_AB_NOTICE_NONE, "due after a stop before any trial");
-}
-
 int main(void)
 {
-    testNotice();
     testMeasure();
     testForget();
     testVerdicts();

@@ -27,11 +27,9 @@ static uint8_t s_allowed;    /* the subjects that may be tried now */
 static const int k_row[2] = {ICO_ATT_AB_ZERO, ICO_ATT_AB_NODISCARD};
 static int s_ledAllowed[2] = {-1, -1}, s_ledStopped[2] = {-1, -1};
 static uint32_t s_ledOn[2], s_ledOff[2], s_ledTrials[2];
-static long s_fakeLoss;        /* ICO_RD_AB_FAKE_LOSS: the replay N */
-static uint32_t s_replays;     /* begun this run */
-static int s_notice;           /* __atomic: the player's notice (rd_ab_notice, RD_AB_NOTICE_*) */
-static int s_noticeStage = -1; /* __atomic: the running trial's stage, -1 none */
-static int s_scenery;          /* __atomic: the game shows scenery now (rd_ab_scenery) */
+static long s_fakeLoss;    /* ICO_RD_AB_FAKE_LOSS: the replay N */
+static uint32_t s_replays; /* begun this run */
+static int s_scenery;      /* __atomic: the game shows scenery now (rd_ab_scenery) */
 
 static void made(void)
 {
@@ -46,16 +44,8 @@ static void made(void)
     s_fakeLoss = fl != NULL ? strtol(fl, NULL, 10) : 0;
 }
 
-/* the player's notice's answer for the UI's thread (rd_ab_notice) */
-static void notice(void)
-{
-    __atomic_store_n(&s_noticeStage, s_ab.t.active ? (int)s_ab.t.stage : -1, __ATOMIC_RELEASE);
-    __atomic_store_n(&s_notice, rd_ab_notice_state(&s_ab), __ATOMIC_RELEASE);
-}
-
 static void drain(void)
 {
-    notice();
     char l[RD_AB_LINE];
     while (rd_ab_take_line(&s_ab, l, sizeof(l))) {
         rd__log("%s", l);
@@ -89,10 +79,6 @@ static void allow(void)
     const bool zero = rd__vu_zero_triable(), nd = rd__nd_triable();
     rd_ab_allow(&s_ab, RD_AB_ZERO, zero);
     rd_ab_allow(&s_ab, RD_AB_NODISCARD, nd);
-    /* off for the rest of the run: the player's notice can leave once every
-       subject is (rd_ab_notice_state) */
-    rd_ab_gone(&s_ab, RD_AB_ZERO, rd__vu_zero_gone());
-    rd_ab_gone(&s_ab, RD_AB_NODISCARD, rd__nd_gone());
     rd_ab_set_scenery(&s_ab, __atomic_load_n(&s_scenery, __ATOMIC_ACQUIRE) != 0);
     s_allowed = (uint8_t)((zero ? 1u << RD_AB_ZERO : 0u) | (nd ? 1u << RD_AB_NODISCARD : 0u));
 }
@@ -174,16 +160,6 @@ void rd__ab_renderer(void)
 void rd_ab_scenery(int scenery)
 {
     __atomic_store_n(&s_scenery, scenery != 0, __ATOMIC_RELEASE);
-}
-
-int rd_ab_notice_stage(void)
-{
-    return __atomic_load_n(&s_noticeStage, __ATOMIC_ACQUIRE);
-}
-
-int rd_ab_notice(void)
-{
-    return __atomic_load_n(&s_notice, __ATOMIC_ACQUIRE);
 }
 
 bool rd__ab_off(int subject)

@@ -915,7 +915,4 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_DIFF_STATES_LOCKED] = "パーマデスの旅では、セーブステートをロードできません。",
     [UI_STR_DIFF_WORD_PERMADEATH] = "パーマデス",
     [UI_STR_DIFF_STATES_SAVE_LOCKED] = "パーマデスの旅では、セーブステートを保存できません。",
-    [UI_STR_TUNE_TITLE] = "最適な設定を探しています",
-    [UI_STR_TUNE_BODY] = "カクつくことがあります。",
-    [UI_STR_TUNE_HIDE] = "隠す",
 };

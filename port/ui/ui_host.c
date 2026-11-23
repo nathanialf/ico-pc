@@ -12,24 +12,18 @@
 
 #ifdef ICO_RD
 #include "rd.h"
-#include "rd_ab.h"     /* RD_AB_NOTICE_*: the notice's answers */
-#include "rd_ab_run.h" /* rd_ab_notice: the in-play judge's answer */
 #endif
 #ifdef ICO_UI_HAVE_SDL
 #include <SDL3/SDL.h>
 #endif
 
 #include "font.h"
-#include "input.h"      /* ico_input_frame: the pad the game reads */
-#include "photo_mode.h" /* ico_photo_active */
-#include "pointer.h"    /* ico_pointer_menu: a menu owns the pad */
 #include "photo_ui.h"
 #include "popup.h"
 #include "settings.h"
 #include "settings_pads.h"
 #include "strings.h"
 #include "touch_ui.h"
-#include "tune_notice.h"
 #include "ui_fps.h"
 #include "ui_internal.h"
 #include "ui_mouse.h"
@@ -120,9 +114,6 @@ static void hostQuit(void)
 void ui_host_init(void)
 {
     ui_font_init();
-#ifdef ICO_RD
-    ui_popup_set_button_drawer(ui__photo_triangle); /* the notice's Triangle, as photo mode's */
-#endif
     ui__set_sync_hook(sync);
 #ifdef ICO_RD
     ui__set_record_hook(gif_HostFlush);
@@ -139,29 +130,6 @@ void ui_host_init(void)
 void ui_host_vsync(unsigned int mainTick)
 {
     ui_popup_dev_tick(mainTick);
-#ifdef ICO_RD
-    /* the in-play judge's answer (rd_ab_run.h): the player's notice while
-       a timing runs, Triangle in play hides it for the run; the pad's word
-       is only read (the game gets every press), and not while a pad script
-       plays (reading it steps the script) */
-    _Static_assert((int)UI_TUNE_JUDGE_RUNNING == (int)RD_AB_NOTICE_RUNNING &&
-                       (int)UI_TUNE_JUDGE_IDLE == (int)RD_AB_NOTICE_IDLE &&
-                       (int)UI_TUNE_JUDGE_DONE_CAP == (int)RD_AB_NOTICE_DONE_CAP &&
-                       (int)UI_TUNE_JUDGE_DONE_STOP == (int)RD_AB_NOTICE_DONE_STOP &&
-                       (int)UI_TUNE_JUDGE_DONE_GONE == (int)RD_AB_NOTICE_DONE_GONE &&
-                       (int)UI_TUNE_JUDGE_DONE_JUDGED == (int)RD_AB_NOTICE_DONE_JUDGED,
-                   "tune_notice.h's judge words are rd_ab.h's");
-    _Static_assert(UI_TUNE_TRIANGLE == ICO_PAD_TRIANGLE, "tune_notice.h's Triangle bit");
-    {
-        IcoPadFrame f; /* a copy: the game's own read is not touched */
-        memset(&f, 0, sizeof(f));
-        if (!ico_pad_script_active()) {
-            ico_input_frame(&f);
-        }
-        (void)ui_tune_notice_step(rd_ab_notice(), rd_ab_notice_stage(), f.buttons,
-                                  !ico_pointer_menu() && !ico_photo_active());
-    }
-#endif
     ui_popup_vsync();
     ui_settings_vsync(); /* Graphics > Apply's countdown */
     /* the button pictures the next frame draws (Options > Controls > Button

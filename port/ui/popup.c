@@ -6,7 +6,6 @@
 #include "popup.h"
 
 #include <stdint.h>
-#include <stdio.h>
 #include <string.h>
 
 #ifdef ICO_RD
@@ -27,8 +26,6 @@
 #define TOP_Y 30.0f
 #define MIN_W UI_POPUP_MIN_W
 #define MAX_W (UI_GRID_W - 2.0f * MARGIN_X)
-/* the queue's panel below the standing notice's while that is up */
-#define STACK_GAP 6.0f
 #define DEV_TEST_TICK 100u
 #define DEV_TEST_PERIOD 150u /* ticks: 6 s at 25 Hz, longer than one popup */
 
@@ -38,20 +35,6 @@ typedef struct Popup {
 } Popup;
 
 static Popup s_queue[UI_POPUP_QUEUE];
-
-/* the standing notice (ui_popup_notice_show): its own slot, never in the
-   queue; its line's text and the button word after it (the drawer's
-   picture or key in its place where one is set) */
-static struct {
-    int on;      /* shown (sliding in or held) */
-    int leaving; /* sliding out */
-    unsigned int age;
-    char title[UI_POPUP_TEXT];
-    char body[UI_POPUP_TEXT];
-    char hint[UI_POPUP_TEXT];
-} s_note;
-
-static UiPopupButtonFn s_button; /* the Triangle's picture or key (ui_popup_set_button_drawer) */
 static int s_head, s_count;
 static unsigned int s_age;             /* vsyncs the head popup has been shown */
 static int s_hz = UI_POPUP_DEFAULT_HZ; /* the rate ui_popup_vsync runs at */
@@ -146,7 +129,6 @@ int ui_popup_push(const char *title, const char *body)
 
 void ui_popup_reset(void)
 {
-    memset(&s_note, 0, sizeof(s_note));
     s_head = s_count = 0;
     s_age = 0;
     s_devNext = DEV_TEST_TICK;
@@ -179,12 +161,6 @@ int ui_popup_hold_vsyncs(void)
 
 void ui_popup_vsync(void)
 {
-    if (s_note.on || s_note.leaving) {
-        s_note.age++;
-        if (s_note.leaving && s_note.age >= (unsigned int)ui_popup_slide_vsyncs()) {
-            memset(&s_note, 0, sizeof(s_note)); /* slid out */
-        }
-    }
     if (s_count == 0) {
         return;
     }
@@ -236,142 +212,44 @@ typedef struct Panel {
     float alpha;
 } Panel;
 
-/* The notice's two parts: the text (title, line) on the left, and at the
-   panel's right side one stacked block, the Triangle button over its word
-   ("Hide"), centred on each other and on the panel's height, a thin
-   divider between the parts.  The gap each side of the divider, in body
-   sizes; the block's rows' gap in units */
-#define NOTE_GAP 0.8f
-#define NOTE_ROW_GAP 2.0f
-
-/* the button's width at the body's size: the drawer's (its picture or key)
-   or else its word */
-static float buttonWidth(void)
-{
-    if (s_button != NULL) {
-        const float w = s_button(0.0f, 0.0f, BODY_SIZE, 0);
-        if (w > 0.0f) {
-            return w;
-        }
-    }
-    return ui_measure_menu_text(BODY_SIZE, ui_str(UI_STR_BTN_TRIANGLE));
-}
-
-/* the stacked block's size: the wider of the button and its word; two body
-   rows and their gap */
-static void blockSize(float *w, float *h)
-{
-    float ba, bd;
-    ui_menu_font_metrics(BODY_SIZE, &ba, &bd, NULL);
-    const float bw = buttonWidth(), hw = ui_measure_menu_text(BODY_SIZE, s_note.hint);
-    *w = bw > hw ? bw : hw;
-    *h = 2.0f * (ba + bd) + NOTE_ROW_GAP;
-}
-
-/* a panel at top whose body is lines of body, slid in by k; extraW more
-   width to the right of the text and at least minH tall (the notice's
-   block) */
-static void layoutPanel(Panel *pn, const char *title, const char *body, float extraW, float minH,
-                        float top, float k)
-{
-    float ta, td, ba, bd;
-    /* the menus' text (menu_font.h), measured as its
-       strips lay it out */
-    ui_menu_font_metrics(TITLE_SIZE, &ta, &td, NULL);
-    ui_menu_font_metrics(BODY_SIZE, &ba, &bd, NULL);
-    float w = ui_measure_menu_text(TITLE_SIZE, title);
-    const float bw = ui_measure_menu_text(BODY_SIZE, body);
-    if (bw > w) {
-        w = bw;
-    }
-    w += 2.0f * PAD_X + extraW;
-    if (w < MIN_W) {
-        w = MIN_W;
-    }
-    if (w > MAX_W) {
-        w = MAX_W;
-    }
-    int bodyLines = body[0] ? 1 : 0;
-    for (const char *c = body; *c; c++) {
-        bodyLines += *c == '\n';
-    }
-    float h = PAD_Y + ta + td + (bodyLines ? GAP_Y + (float)bodyLines * (ba + bd) : 0.0f) + PAD_Y;
-    h = h < minH ? minH : h;
-    const float right = UI_GRID_W - MARGIN_X + (1.0f - k) * (w + MARGIN_X + 4.0f);
-    pn->x1 = right;
-    pn->x0 = right - w;
-    pn->y0 = top;
-    pn->y1 = top + h;
-    pn->titleBase = top + PAD_Y + ta;
-    pn->bodyTop = pn->titleBase + td + GAP_Y;
-    pn->alpha = k;
-}
-
-/* the notice's panel at top, slid in by k */
-static void noteLayout(Panel *pn, float top, float k)
-{
-    float bw, bh;
-    blockSize(&bw, &bh);
-    layoutPanel(pn, s_note.title, s_note.body, 2.0f * NOTE_GAP * BODY_SIZE + bw, bh + 2.0f * PAD_Y,
-                top, k);
-}
-
-/* the notice's parts in pn: the text's rectangle, the divider's x, the
-   block's rectangle */
-static void noteParts(const Panel *pn, float text[4], float *divider, float block[4])
-{
-    float bw, bh;
-    blockSize(&bw, &bh);
-    block[2] = pn->x1 - PAD_X;
-    block[0] = block[2] - bw;
-    block[1] = 0.5f * (pn->y0 + pn->y1) - 0.5f * bh;
-    block[3] = block[1] + bh;
-    *divider = block[0] - NOTE_GAP * BODY_SIZE;
-    const float tw = ui_measure_menu_text(TITLE_SIZE, s_note.title),
-                lw = ui_measure_menu_text(BODY_SIZE, s_note.body);
-    text[0] = pn->x0 + PAD_X;
-    text[2] = text[0] + (tw > lw ? tw : lw);
-    text[1] = pn->y0 + PAD_Y;
-    text[3] = pn->y1 - PAD_Y;
-}
-
-/* 0 .. 1: how far in the notice is (smoothstep in, held until hidden,
-   smoothstep out) */
-static float noteShown(void)
-{
-    const int slide = ui_popup_slide_vsyncs();
-    float t = (int)s_note.age < slide ? (float)s_note.age / (float)slide : 1.0f;
-    if (s_note.leaving) {
-        t = 1.0f - t;
-    }
-    t = t < 0.0f ? 0.0f : t;
-    return t * t * (3.0f - 2.0f * t);
-}
-
-static int notePanel(Panel *pn)
-{
-    if (!s_note.on && !s_note.leaving) {
-        return 0;
-    }
-    noteLayout(pn, TOP_Y, noteShown());
-    return 1;
-}
-
 static int panel(Panel *pn)
 {
     if (s_count == 0) {
         return 0;
     }
     const Popup *p = &s_queue[s_head];
-    /* below the standing notice while it is up (its full height, so the
-       queue's panel does not move while the notice slides) */
-    float top = TOP_Y;
-    Panel note;
-    if (s_note.on || s_note.leaving) {
-        noteLayout(&note, TOP_Y, 1.0f);
-        top = note.y1 + STACK_GAP;
+    float ta, td, ba, bd;
+    /* the menus' text (menu_font.h), measured as its
+       strips lay it out */
+    ui_menu_font_metrics(TITLE_SIZE, &ta, &td, NULL);
+    ui_menu_font_metrics(BODY_SIZE, &ba, &bd, NULL);
+    float w = ui_measure_menu_text(TITLE_SIZE, p->title);
+    float bw = ui_measure_menu_text(BODY_SIZE, p->body);
+    if (bw > w) {
+        w = bw;
     }
-    layoutPanel(pn, p->title, p->body, 0.0f, 0.0f, top, shown());
+    w += 2.0f * PAD_X;
+    if (w < MIN_W) {
+        w = MIN_W;
+    }
+    if (w > MAX_W) {
+        w = MAX_W;
+    }
+    int bodyLines = p->body[0] ? 1 : 0;
+    for (const char *c = p->body; *c; c++) {
+        bodyLines += *c == '\n';
+    }
+    const float h =
+        PAD_Y + ta + td + (bodyLines ? GAP_Y + (float)bodyLines * (ba + bd) : 0.0f) + PAD_Y;
+    const float k = shown();
+    const float right = UI_GRID_W - MARGIN_X + (1.0f - k) * (w + MARGIN_X + 4.0f);
+    pn->x1 = right;
+    pn->x0 = right - w;
+    pn->y0 = TOP_Y;
+    pn->y1 = TOP_Y + h;
+    pn->titleBase = TOP_Y + PAD_Y + ta;
+    pn->bodyTop = pn->titleBase + td + GAP_Y;
+    pn->alpha = k;
     return 1;
 }
 
@@ -398,81 +276,6 @@ int ui_popup_panel(float rect[4])
     return 1;
 }
 
-void ui_popup_set_button_drawer(UiPopupButtonFn fn)
-{
-    s_button = fn;
-}
-
-void ui_popup_notice_show(const char *title, const char *body, const char *hint)
-{
-    if (s_note.on) {
-        return; /* already up */
-    }
-    const unsigned int age = s_note.leaving ? (unsigned int)ui_popup_slide_vsyncs() - s_note.age
-                                            : 0u; /* back in from where it was */
-    copyText(s_note.title, title);
-    copyText(s_note.body, body);
-    copyText(s_note.hint, hint);
-    s_note.on = 1;
-    s_note.leaving = 0;
-    s_note.age = age;
-}
-
-void ui_popup_notice_hide(void)
-{
-    if (!s_note.on) {
-        return;
-    }
-    const int slide = ui_popup_slide_vsyncs();
-    s_note.on = 0;
-    s_note.leaving = 1;
-    /* out from where it is: a notice still sliding in turns back */
-    s_note.age = (int)s_note.age < slide ? (unsigned int)slide - s_note.age : 0u;
-}
-
-int ui_popup_notice_active(void)
-{
-    return s_note.on || s_note.leaving;
-}
-
-int ui_popup_notice_shown(void)
-{
-    return s_note.on;
-}
-
-int ui_popup_notice_panel(float rect[4])
-{
-    Panel pn;
-    if (!notePanel(&pn)) {
-        return 0;
-    }
-    rect[0] = pn.x0;
-    rect[1] = pn.y0;
-    rect[2] = pn.x1;
-    rect[3] = pn.y1;
-    return 1;
-}
-
-const char *ui_popup_notice_title(void)
-{
-    return ui_popup_notice_active() ? s_note.title : "";
-}
-
-const char *ui_popup_notice_line(void)
-{
-    return ui_popup_notice_active() ? s_note.body : "";
-}
-
-int ui_popup_notice_parts(float text[4], float *divider, float block[4])
-{
-    Panel pn;
-    if (!notePanel(&pn)) {
-        return 0;
-    }
-    noteParts(&pn, text, divider, block);
-    return 1;
-}
-
 #ifdef ICO_RD
 static void scaled(uint8_t out[4], uint8_t r, uint8_t g, uint8_t b, uint8_t a, float k)
 {
@@ -481,75 +284,37 @@ static void scaled(uint8_t out[4], uint8_t r, uint8_t g, uint8_t b, uint8_t a, f
     out[2] = b;
     out[3] = (uint8_t)((float)a * k + 0.5f);
 }
-
-/* a panel and its title and body (the notice: its divider and its block
-   at the side) */
-static void drawPanel(const Panel *pn, const char *title, const char *body, int notice)
-{
-    uint8_t c[4];
-    /* the panel: dark, translucent, a hairline in the menu's warm grey
-       on top */
-    scaled(c, 6, 6, 9, 0x5C, pn->alpha);
-    ui_draw_rect(pn->x0, pn->y0, pn->x1, pn->y1, c);
-    scaled(c, 0x5E, 0x58, 0x4C, 0x80, pn->alpha);
-    ui_draw_rect(pn->x0, pn->y0, pn->x1, pn->y0 + 1.5f, c);
-    /* in the menus' look, the same 1x strip as
-       the scene's text magnified onto the output */
-    scaled(c, 0x80, 0x7C, 0x70, 0x80, pn->alpha);
-    ui_draw_menu_text(pn->x0 + PAD_X, pn->titleBase, TITLE_SIZE, c, title, UI_VALIGN_BASELINE,
-                      UI_INK_LIGHT, NULL);
-    scaled(c, 0x66, 0x64, 0x5E, 0x80, pn->alpha);
-    if (body[0]) {
-        ui_draw_menu_text(pn->x0 + PAD_X, pn->bodyTop, BODY_SIZE, c, body, UI_VALIGN_TOP,
-                          UI_INK_LIGHT, NULL);
-    }
-    if (!notice) {
-        return;
-    }
-    /* the divider, a hairline as the top's, then the block: the button
-       centred over its word */
-    float text[4], dx, block[4];
-    noteParts(pn, text, &dx, block);
-    scaled(c, 0x5E, 0x58, 0x4C, 0x80, pn->alpha);
-    ui_draw_rect(dx, pn->y0 + PAD_Y, dx + 1.0f, pn->y1 - PAD_Y, c);
-    float ba, bd;
-    ui_menu_font_metrics(BODY_SIZE, &ba, &bd, NULL);
-    const float row = ba + bd, cx = 0.5f * (block[0] + block[2]);
-    const float mid1 = block[1] + 0.5f * row, mid2 = block[3] - 0.5f * row;
-    scaled(c, 0x66, 0x64, 0x5E, 0x80, pn->alpha);
-    float bw = 0.0f;
-    if (s_button != NULL) {
-        bw = s_button(0.0f, 0.0f, BODY_SIZE, 0);
-        if (bw > 0.0f) {
-            (void)s_button(cx - 0.5f * bw, mid1, BODY_SIZE, 1); /* the picture or the key */
-        }
-    }
-    if (bw <= 0.0f) {
-        const char *word = ui_str(UI_STR_BTN_TRIANGLE);
-        ui_draw_menu_text(cx - 0.5f * ui_measure_menu_text(BODY_SIZE, word), mid1, BODY_SIZE, c,
-                          word, UI_VALIGN_MIDDLE, UI_INK_LIGHT, NULL);
-    }
-    ui_draw_menu_text(cx - 0.5f * ui_measure_menu_text(BODY_SIZE, s_note.hint), mid2, BODY_SIZE, c,
-                      s_note.hint, UI_VALIGN_MIDDLE, UI_INK_LIGHT, NULL);
-}
 #endif
 
 void ui_popup_draw_overlay(const struct RdOverlayCtx *ctx)
 {
 #ifdef ICO_RD
-    if ((s_count == 0 && !ui_popup_notice_active()) || !ctx || !ui_font_init()) {
+    if (s_count == 0 || !ctx || !ui_font_init()) {
         return;
     }
     /* on the output (font.h ui_begin_overlay), at this present;
        measured at the overlay's scale, so the panel fits its text */
     ui_begin_overlay(ctx);
     Panel pn;
-    if (notePanel(&pn) && pn.alpha > 0.0f) {
-        drawPanel(&pn, s_note.title, s_note.body, 1);
-    }
     if (panel(&pn) && pn.alpha > 0.0f) {
         const Popup *p = &s_queue[s_head];
-        drawPanel(&pn, p->title, p->body, 0);
+        uint8_t c[4];
+        /* the panel: dark, translucent, a hairline in the menu's warm grey
+           on top */
+        scaled(c, 6, 6, 9, 0x5C, pn.alpha);
+        ui_draw_rect(pn.x0, pn.y0, pn.x1, pn.y1, c);
+        scaled(c, 0x5E, 0x58, 0x4C, 0x80, pn.alpha);
+        ui_draw_rect(pn.x0, pn.y0, pn.x1, pn.y0 + 1.5f, c);
+        /* in the menus' look, the same 1x strip as
+           the scene's text magnified onto the output */
+        scaled(c, 0x80, 0x7C, 0x70, 0x80, pn.alpha);
+        ui_draw_menu_text(pn.x0 + PAD_X, pn.titleBase, TITLE_SIZE, c, p->title, UI_VALIGN_BASELINE,
+                          UI_INK_LIGHT, NULL);
+        if (p->body[0]) {
+            scaled(c, 0x66, 0x64, 0x5E, 0x80, pn.alpha);
+            ui_draw_menu_text(pn.x0 + PAD_X, pn.bodyTop, BODY_SIZE, c, p->body, UI_VALIGN_TOP,
+                              UI_INK_LIGHT, NULL);
+        }
     }
     ui_end_overlay();
 #else

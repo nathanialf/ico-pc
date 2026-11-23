@@ -47,15 +47,6 @@ void rd__ab_begin(struct RdPerfRecord *r);
 /* a renderer made (rd__vu_prepass_init): from the second on, everything
    the judge learnt forgotten (rd_ab_forget), logged */
 void rd__ab_renderer(void);
-/* the player's notice (any thread: port/ui/ui_host.c ui_host_vsync on the
-   game's thread): rd_ab.h's RD_AB_NOTICE_* answer as of the last replay
-   begun or read back (rd_ab_notice_state: none before the run's first
-   trial, running during a trial, idle between trials, done with its reason
-   for the rest of the run); the notice itself is the UI's
-   (port/ui/tune_notice.h) */
-int rd_ab_notice(void);
-/* the running trial's stage (the notice's log line), -1 none */
-int rd_ab_notice_stage(void);
 /* whether the game shows scenery now (any thread: the window's step,
    port/platform/window_perf_rank.c, from its layout's kind: play or a
    cutscene's scene layout, not the title, the logo, a menu, the memory
