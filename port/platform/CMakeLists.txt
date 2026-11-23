@@ -27,6 +27,7 @@ target_sources(ico_platform PRIVATE
     last_run_skin.c
     vu_zero_mark.c
     nodiscard_mark.c
+    ratecard_env.c
     ahead_mark.c
     log_cost.c
     mem_breakdown.c

@@ -71,6 +71,7 @@
 
 #include "rd_internal.h"
 #include "rd_nodiscard.h"
+#include "rd_ratecard.h"
 #include "rd_vu_record.h"
 #include "rd_vu_zero.h"
 #include "vk/rhi_vk.h"
@@ -352,6 +353,10 @@ int main(int argc, char **argv)
     CHECK(kept == (wantOn || notRun), "the self-test returned %s", kept ? "true" : "false");
     zeroMarkLine("after the self-test");
     markLine("ICO_NODISCARD_MARK", "discard-free twins'", "after the self-test");
+    /* the rate card after the self-tests, as the window runs it after the
+       start-up's (rd_ratecard.h: under ICO_RD_RATECARD=1 or a results
+       file, the tests' rd_ratecard_*) */
+    rd_rate_card();
     /* the clipper check's verdict and its consequence, from the run's own
        state (rd__nd_class_on: a prelit code 32 camera rule pass as play's
        rd__nd_pass judges it), whatever the device measured */

@@ -601,6 +601,76 @@ What was tried for the issue 163 rooms' lamps (`port/render/rd_lamps.c`, [RENDER
 | the crack fill drawn in the paste's pass (`fillpaste`) | not measured | on on the PowerVR class under Vulkan where the 4-sample lamps form is on (`RD_LAMPS_FILLPASTE_DEFAULT` 1): under the lamps plan the fill's snapshot is taken where it lands, by the swap, so the fill, the paste and list 11's draws are one SCENE pass that loads nothing; exact |
 | a WORK2 pass that loads WORK2 drawn with 4 samples after a copy and a spread draw | not built | the next release: some pictures on the phone split the lamps over two WORK2 passes (a pass beginning at a lamp in 80 of 418 pictures of one 10 s block; cause not found, no dump); designed, not shipped: untested for the lamp case, and it costs every mask-begun pass |
 
+### The rate card
+
+`port/render/rd_ratecard.h`, `rd_ratecard.c` (the arithmetic, the block, the results file's
+decision), `rd_ratecard_run.c` (the frames). Issue 179's Mali-G52 exposes no clock or load, so at
+start-up, after the fog self-test (`window_host.c`, and again after a Graphics API switch: the
+backend is in its key), the device times small synthetic frames through the game's own builds and
+logs its unit costs once. A diagnostic: nothing in play reads it in this release.
+
+**The frames.** Each on SCENE at its real size and scale, cleared, Z GEQUAL with Z written, ABE
+off, prelit code 34 meshes under the twins' self-test's screen matrix: the twins' floor's state, so
+every pipeline it makes is one that start already made on this device (`vu_ps` or
+`vu_ps_nodual`, `vu_texa_ps` or `vu_texa_ps_nodual` under TEXA 7F/81 AEM with a linear filter, the
+twin `vu_ps_nodual_nd` where the twins are on, and the blended layer's LERP As pass, the two-pass
+blend on a device without dual-source blending: in the start-up set, `rd_mesh.c`
+`enumerateVuDraws`, Z GEQUAL with Z write off under LERP As); no new format, no read-back but
+the timestamps. The two layers of a frame are consecutive draws the VU merge draws as one through
+`vu_merge_main_vs`: its keys with `vu_texa_ps_nodual` and the twin are not in the start-up set and
+are made by the card on first use, as play makes them (seen in the Arm fakes' run on lavapipe),
+and released after it with the rest.
+`E` the clear alone; `L2` two full-target layers at one depth; `L2t` the same textured; `L1` one
+layer; `H2` a near layer then a far one, every fragment of which fails depth; `Bl` one blended
+layer (Z not written); `V` 8 draws of 2048 triangles 100 GS pixels wide left of the target (kept by
+the zero-area cull: their boxes are wider than its 4 samples); `S` and `B` 8 draws of a 64x64 GS
+pixel square at the centre in 2x2 cells (2048 triangles) or in 2. The twins' frames are `L2` and
+`H2` again under the twins' hold (`rd__nd_hold`), the others with it off, checked by the twins'
+own counts (a twin frame drew through them, the others did not). Each frame once untimed (its
+pipelines gathered and made on the workers), then 5 timed replays; their GPU times from their
+timestamps (`rd__perf_gpu_ms_of`, first stamp to last), read right after each frame once 2 more
+replays of `E` brought them in (`rd_perf.c` keeps the last 64 records, fewer than a card's whole
+run: a frame whose time did not come in says so). Its pipelines are released after it (`rd__pipeline_forget_since`), its draws not counted
+as the twins', SCENE starts from its clear after it. Sized to SCENE: at the reporter's 688x512 and
+a chip that needs 25 ns a fragment, about 70 replays of at most 2 layers, under 1 s; a budget of
+1.5 s stops it (the items left say why); the head line prints the time it took.
+
+**The rates** (each the median of 5 with the least and the largest beside it, "not measured
+(why)" where it cannot be isolated), and how to read a scene's GPU time with the 10 s line's counts:
+
+| rate | from | multiply by |
+|---|---|---|
+| a shaded fragment, the ordinary build and the textured one | (`L2` - `E`) / (2 texels) | the fragments a list shades (OVERDRAW: lists 0-2 shade 6-7 times the target) |
+| a shaded fragment through the twin | the same under the hold | the twins' share of them |
+| a fragment hidden by depth, with discard and through the twin | (`H2` - `L1`) / texels, the hold off and on | the fragments the depth test rejects (about half of lists 0-2 in the boat); the difference is what a twin buys a hidden fragment: whether discard costs this chip its early depth test |
+| a vertex | (`V` - `E`) / its corners (the VU pre-pass on or off, said) | the 10 s line's vertex invocations |
+| a triangle binned | (`S` - `B`) / (2046 x 8) | the triangles a list submits (most cover no pixel: OVERDRAW's 64-71 %) |
+| the 2x2-quad factor | (`S` - `E`) / (`B` - `E`): the small triangles' cost a covered texel over the large ones' | the lanes small triangles waste |
+| a pass with nothing drawn | `E`: a replay's whole span with one cleared SCENE pass | the passes a picture makes (the 10 s line's pass count) |
+| a MB loaded or stored | not measured: at one target size the load and store are not separable from the pass's own cost | |
+| a blended fragment, and over an opaque one | (`Bl` - `E`) / texels | the blended fragments (the two-pass blend's second pass included) |
+| a shaded fragment, the fast pixel build | not measured: no such build in this release (its place once it exists: its frame beside `L2`, its item `RD_RC_SHADE_FAST`) | |
+
+A chip that kills overdrawn fragments itself (Arm's forward pixel kill) shows less for the layers
+drawn over: the card measures what the chip does, not a fragment's shader cost alone.
+
+**Lines** (`rd: ` before each): `rate card: <adapter> (<driver> <version>, <backend>) on SCENE WxH
+at TWxTH texels, <what it was sized to>; the median of 5 timed replays a frame (min, max beside
+it); T ms in all`, then one line a rate, `rate card: <rate>: <median> <unit> (min <least>, max
+<largest>)` or `rate card: <rate>: not measured (<why>)`; at a later start `... (from the run of
+<date>)` after each; `rate card: skipped (the run of <date> ended while measuring it on this
+device: not measured again until the device, driver, backend, size or version changes)`; `rate
+card: not measured (no GPU timestamps ...)`.
+
+**Once a device.** The results file `logs/ratecard.txt` (`ICO_RATECARD_FILE` from `diag_host.c`,
+with `ICO_RATECARD_VERSION`): `measuring <date>` and `key <device, driver, backend> | <SCENE texels>
+| <version>` written and synced before it runs; `done <date>`, the key and the block after. A start
+with the same key reprints the block; one after a run that ended while it measured skips it and
+writes `blocked`, until the key changes. `rd_rate_card_get` gives the card of this start (measured
+or read back) to a later reader. No setting. The tests' switches: `ICO_RD_RATECARD=1` (run without
+a results file, the budget lifted: lavapipe draws on the CPU), `ICO_RD_RATECARD_SABOTAGE=end` (the
+start ends inside it, exit 87). The tests: [TESTING_PROGRAMS_RENDER_2.md](TESTING_PROGRAMS_RENDER_2.md).
+
 ### Culling
 
 **What the game culls.** Each object's box, then each part's box, goes through `gsb_ClipBox` against

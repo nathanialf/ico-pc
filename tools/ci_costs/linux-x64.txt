@@ -296,21 +296,6 @@ pit_dive_base_kor 0.00
 pit_dive_base_ntsc 0.00
 poly_flat 0.00
 power_read 0.00  # estimate: a CPU unit test of one pure file, like perf_secs (run by hand here, well under 0.01 s; not run under CI yet)
-rd_diag_notes 0.00  # estimate: 0.0 s local (merge-wt_DIAG6-20261121T075234Z.lvp.log) x 1.39
-rd_nodiscard 0.01  # estimate: a CPU unit test of the eligibility table, like rd_ab (not run here)
-rd_nodiscard_ab 41.74  # estimate: the round-1 estimate x 2 (four fixtures to two; not run here)
-rd_nodiscard_ab_gl 72.10  # estimate: the round-1 estimate x 2 (four fixtures to two; not run here)
-rd_nodiscard_clean 41.74  # estimate: rd_nodiscard_ab (the same runs, the verdict taken as clean; not run here)
-rd_perf_where 0.00  # estimate: a CPU unit test of one or two pure files, like perf_secs (run by hand here, well under 0.01 s; not run under CI yet)
-rd_vuprepass_selftest_nodiscard 4.20  # estimate: rd_vuprepass_selftest_zero_mali x 3 (the clipper check: 52 frames of 3 small replays, both twin entries; not run here)
-rd_vuprepass_selftest_nodiscard_clean 4.20  # estimate: rd_vuprepass_selftest_nodiscard (the same self-test, the verdict taken as clean; not run here)
-rd_vuprepass_selftest_nodiscard_clipper 4.20  # estimate: rd_vuprepass_selftest_nodiscard (the same self-test; not run here)
-rd_vuprepass_selftest_nodiscard_empty 4.20  # estimate: rd_vuprepass_selftest_nodiscard_clipper (every case run; not run here)
-rd_vuprepass_selftest_nodiscard_fallback 3.29  # estimate: rd_vuprepass_selftest_nodiscard_dual plus the blend self-test (rd_blend_selftest_sabotage; not run here)
-rd_vuprepass_selftest_nodiscard_dual 1.41  # estimate: rd_vuprepass_selftest_zero_marked (the twins not tried; not run here)
-rd_vuprepass_selftest_nodiscard_marked 1.41  # estimate: rd_vuprepass_selftest_zero_marked (the twins not tried; not run here)
-rd_vuprepass_selftest_nodiscard_sabotage 1.54  # estimate: rd_vuprepass_selftest_zero_mali x 1.1 (three more replays; not run here)
-stage_disp 0.01  # estimate: a CPU-only walk of two rows on five discs (GRID221)
 present_fallback 0.01
 present_hist 0.00
 present_latency 0.00
@@ -442,6 +427,7 @@ rd_debug_mali 31.49
 rd_debug_vk10 25.17
 rd_debug_vk11 28.01
 rd_debug_vk11s 21.25
+rd_diag_notes 0.00  # estimate: 0.0 s local (merge-wt_DIAG6-20261121T075234Z.lvp.log) x 1.39
 rd_display_change 3.08
 rd_display_change_2x 3.36
 rd_display_change_2x_legacy 4.23
@@ -635,6 +621,10 @@ rd_no_volume_ab 242.13
 rd_no_volume_ab_gl 35.18
 rd_no_volume_break_ab 620.68
 rd_no_volume_break_ab_gl 55.53
+rd_nodiscard 0.01  # estimate: a CPU unit test of the eligibility table, like rd_ab (not run here)
+rd_nodiscard_ab 41.74  # estimate: the round-1 estimate x 2 (four fixtures to two; not run here)
+rd_nodiscard_ab_gl 72.10  # estimate: the round-1 estimate x 2 (four fixtures to two; not run here)
+rd_nodiscard_clean 41.74  # estimate: rd_nodiscard_ab (the same runs, the verdict taken as clean; not run here)
 rd_noplanes_ab 11.63
 rd_occlusion_tool 7.81
 rd_pace_gpu 0.02
@@ -662,6 +652,7 @@ rd_perf_rare 0.00
 rd_perf_vk10 109.14
 rd_perf_vk11 45.65
 rd_perf_vk11s 65.18
+rd_perf_where 0.00  # estimate: a CPU unit test of one or two pure files, like perf_secs (run by hand here, well under 0.01 s; not run under CI yet)
 rd_pipe_finish 0.00
 rd_pixel 278.50
 rd_pixel_attachment 229.34
@@ -710,6 +701,10 @@ rd_present_vk10_nod32f 234.54
 rd_present_vk11 155.22
 rd_present_vk11ext 177.24
 rd_present_vk11s 264.86
+rd_ratecard_end 12.60  # estimate: rd_vuprepass_selftest_nodiscard x 3 runs, the card not measured (not run here)
+rd_ratecard_lavapipe 14.70  # estimate: as rd_ratecard_mali without the twins (not run here)
+rd_ratecard_mali 16.80  # estimate: rd_vuprepass_selftest_nodiscard x 2 runs + the card on lavapipe (about 2x more; not run here)
+rd_ratecard_rule 0.01  # estimate: a CPU unit test, like rd_nodiscard (not run here)
 rd_raw 1.40
 rd_raw_gl 13.88
 rd_raw_mali 5.21
@@ -924,6 +919,14 @@ rd_vuprepass_selftest_mali 1.27
 rd_vuprepass_selftest_mali_sabotage_straddle 4.77
 rd_vuprepass_selftest_mali_vk11 1.93
 rd_vuprepass_selftest_nocompute_fallback 1.47
+rd_vuprepass_selftest_nodiscard 4.20  # estimate: rd_vuprepass_selftest_zero_mali x 3 (the clipper check: 52 frames of 3 small replays, both twin entries; not run here)
+rd_vuprepass_selftest_nodiscard_clean 4.20  # estimate: rd_vuprepass_selftest_nodiscard (the same self-test, the verdict taken as clean; not run here)
+rd_vuprepass_selftest_nodiscard_clipper 4.20  # estimate: rd_vuprepass_selftest_nodiscard (the same self-test; not run here)
+rd_vuprepass_selftest_nodiscard_dual 1.41  # estimate: rd_vuprepass_selftest_zero_marked (the twins not tried; not run here)
+rd_vuprepass_selftest_nodiscard_empty 4.20  # estimate: rd_vuprepass_selftest_nodiscard_clipper (every case run; not run here)
+rd_vuprepass_selftest_nodiscard_fallback 3.29  # estimate: rd_vuprepass_selftest_nodiscard_dual plus the blend self-test (rd_blend_selftest_sabotage; not run here)
+rd_vuprepass_selftest_nodiscard_marked 1.41  # estimate: rd_vuprepass_selftest_zero_marked (the twins not tried; not run here)
+rd_vuprepass_selftest_nodiscard_sabotage 1.54  # estimate: rd_vuprepass_selftest_zero_mali x 1.1 (three more replays; not run here)
 rd_vuprepass_selftest_nostores_fallback 1.93
 rd_vuprepass_selftest_off 0.36
 rd_vuprepass_selftest_off_gl 1.16
@@ -1143,6 +1146,7 @@ softdouble_gate 3.47
 spirv_check 1.13
 spu2 0.33
 spu2_render_crc 16.40
+stage_disp 0.01  # estimate: a CPU-only walk of two rows on five discs (GRID221)
 stall_coincide 0.01
 startup_retry 0.01
 state_carry_check 15.00  # estimate: unmeasured, assumed (STATEGUARD2 could not build or run it)

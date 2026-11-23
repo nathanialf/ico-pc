@@ -620,6 +620,27 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   `rd_vuprepass_selftest_test` runs `rd_blend_selftest` first as the game does): still not
   applicable, `the device has dual-source blending (the two-pass blend is its fallback)`, nothing
   tried or made, the mark not written.
+- `rd_ratecard_test.c` (`rd_ratecard_rule`; `rd_ratecard.cmake`, CPU): the rate card's pure part
+  ([RENDER_PERF.md](RENDER_PERF.md#the-rate-card)): the median, least and largest of synthetic
+  timings (0 and NaN left out, an even count), a unit as the medians' difference over a count with
+  its spread from the extremes, too few times and nothing to divide by refused with their words,
+  the ratio; the printed block word for word (a measured item in each unit, "not measured" with its
+  reason), read back (`rd_rc_parse`: every item's numbers, unit and reason), a short buffer; the
+  results file's decision: no file and another key measured, `done` reprinted with its lines and
+  date, `measuring` and `blocked` skipped, a text it does not know or without its key line measured.
+- `rd_ratecard.cmake` (`rd_ratecard_mali`, `rd_ratecard_lavapipe`, `rd_ratecard_end`;
+  `test/rd_ratecard.cmake`, through `rd_vuprepass_selftest_test` on its plain variant, SCENE
+  640x448 at 1x, `ICO_RD_RATECARD=1` and a results file of its own): `_mali` under the Arm fakes
+  without dual-source blending and `_lavapipe` as lavapipe is: the head line and 13 item lines, each
+  a finite number in its unit with its min and max or "not measured (...)"; the shaded fragments of
+  both builds, the hidden one with discard, a vertex, a triangle, the quad factor, a pass, the
+  blended fragment and its ratio measured; the twins' two measured under the Arm fakes and "not
+  measured (the twins ..." on lavapipe; the fast pixel build and the MB "not measured"; the file
+  `done` with its key and block; a second run reprints the block "(from the run of <date>)",
+  measures nothing and leaves the file as it was. Whether a hidden fragment costs less through the
+  twin is not asserted: lavapipe tests depth early either way. `_end`: the first run ends inside
+  the card (exit 87) with the file `measuring`, the next two say "rate card: skipped (the run of
+  ..." and the file `blocked`. No device: SKIP.
 - `rd_smallcuts_test.c` (`rd_smallcuts`; `rd_smallcuts.cmake`, CPU): the pure parts of the turn in
   the present's blit and the VU record by compute on the PowerVR class: `rd__turn_rect` for every
   quarter turn against `rd_prerotate.c`'s pixel table (every pixel of the rect lands inside the

@@ -3519,6 +3519,7 @@ include(rd_ab.cmake) # the in-play A/B judge of the zero-area cull (issue 179)
 include(rd_nodiscard.cmake) # the discard-free twins (issue 179)
 include(rd_vu_audit.cmake) # the VU record path's bounds audit (issue 179, tests)
 include(rd_subpass_probe.cmake) # the subpass read's first-start probe
+include(rd_ratecard.cmake) # the rate card: the device's unit costs at start-up (issue 179)
 include(rd_bench.cmake) # the rc-only bench: kept frames measured part by part
 include(rd_shadowres.cmake) # the shadow's levels at the scene's scale above 1x
 include(rd_hold.cmake) # the paused scene held under the menu (issue 123)

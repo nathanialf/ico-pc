@@ -602,6 +602,7 @@
 #include "rd_vu_zero.h"          /* --stats: the zero-area cull */
 #include "rd_ab_run.h"           /* --stats: the in-play judge's arms */
 #include "rd_nodiscard.h"        /* --stats: the discard-free twins */
+#include "rd_ratecard.h"         /* --game-selftests: the rate card */
 #include "rd_shadow_box.h"       /* --stats: the shadows over the volumes' box */
 #include "rd_shadow_tile.h"      /* --stats: the shadow composites over the tile mask */
 #include "rd_replay_fine.h"      /* --fine-check */
@@ -2852,6 +2853,9 @@ int main(int argc, char **argv)
         if (getenv("ICO_RD_COMP_SPEC") != NULL) {
             (void)rd__comp_spec_selftest();
         }
+        /* the rate card, as the window runs it after the fog's self-test
+           (rd_ratecard.h: only under ICO_RD_RATECARD=1 or a results file) */
+        rd_rate_card();
     }
     if (!noDevice && getenv("ICO_RD_EARLY_PREPARE") != NULL &&
         strcmp(getenv("ICO_RD_EARLY_PREPARE"), "1") == 0) {
