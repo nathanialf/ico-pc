@@ -267,11 +267,15 @@ static void use(void)
 
 static void env(const char *name, const char *value)
 {
+#ifdef _WIN32
+    (void)_putenv_s(name, value ? value : "");
+#else
     if (value) {
         (void)setenv(name, value, 1);
     } else {
         (void)unsetenv(name);
     }
+#endif
 }
 
 static void state(void)

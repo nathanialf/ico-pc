@@ -54,7 +54,6 @@ static double rnd(void) /* 0 .. 1 */
 
 /* the lines so far, printed, the last kept */
 static char s_last[RD_AB_LINE];
-static int s_lines;
 
 static void lines(RdAb *a)
 {
@@ -62,7 +61,6 @@ static void lines(RdAb *a)
     while (rd_ab_take_line(a, l, sizeof(l))) {
         printf("  %s\n", l);
         snprintf(s_last, sizeof(s_last), "%s", l);
-        s_lines++;
     }
 }
 

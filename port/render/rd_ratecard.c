@@ -267,8 +267,8 @@ bool rd_rc_parse(const char *lines, RdRateCard *c)
             snprintf(it->u.why, sizeof(it->u.why), "%.*s", (int)(e ? e - w : (long)strlen(w)), w);
             continue;
         }
-        char unit[8] = "";
-        if (sscanf(colon, ": %lf %7s (min %lf, max %lf)", &it->u.med, unit, &it->u.lo, &it->u.hi) !=
+        char unit[4] = "";
+        if (sscanf(colon, ": %lf %3s (min %lf, max %lf)", &it->u.med, unit, &it->u.lo, &it->u.hi) !=
             4) {
             return false;
         }
