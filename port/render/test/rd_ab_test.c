@@ -435,6 +435,57 @@ static void testThree(void)
     CHECK(s_a.trials == 3u, "a trial after every subject was judged (%u)", (unsigned)s_a.trials);
 }
 
+/* a replay's use (rd_ab_use_note, REV4R S1): a pass that drew through a
+   build only because a pipeline was not made yet (any subject's) takes the
+   replay from every subject, on either arm, for the rest of the replay; the
+   old rule (each subject's own bit alone) would keep the twins' bit set when
+   the fast build's pipeline was not made on the twins' off arm */
+static void testUseNote(void)
+{
+    printf("a replay's use:\n");
+    bool tainted = false;
+    uint8_t u = 0;
+    u = rd_ab_use_note(u, &tainted, 0, RD_AB_NOTE_USED);
+    u = rd_ab_use_note(u, &tainted, 1, RD_AB_NOTE_USED);
+    CHECK(u == 3u && !tainted, "used 0 and 1: %x", u);
+    u = rd_ab_use_note(u, &tainted, 0, RD_AB_NOTE_UNUSED);
+    CHECK(u == 2u, "unused 0: %x", u);
+    /* the twins' off arm: the fast build's key not made yet */
+    u = rd_ab_use_note(u, &tainted, 2, RD_AB_NOTE_UNMADE);
+    CHECK(u == 0u && tainted, "after an unmade pipeline: %x", u);
+    /* a later pass of the same replay cannot put a subject back */
+    u = rd_ab_use_note(u, &tainted, 1, RD_AB_NOTE_USED);
+    u = rd_ab_use_note(u, &tainted, -1, RD_AB_NOTE_USED);
+    CHECK(u == 0u, "a subject in use again in a tainted replay: %x", u);
+    /* the next replay starts clean */
+    tainted = false;
+    u = rd_ab_use_note(0u, &tainted, 1, RD_AB_NOTE_USED);
+    CHECK(u == 2u, "the next replay: %x", u);
+    /* a tainted replay's record is timed for no subject: collected with
+       used 0 it adds no pair to a trial (rd_ab_collect's own rule) */
+    rd_ab_init(&s_a, RD_AB_AUTO);
+    (void)rd_ab_subject(&s_a, "discard-free twins");
+    rd_ab_allow(&s_a, 0, true);
+    rd_ab_set_scenery(&s_a, true);
+    bool ran = false;
+    for (int i = 0; i < 400; i++) {
+        const RdAbTag tag = rd_ab_begin(&s_a, 9, 40.0 * i, false);
+        ran = ran || s_a.t.active;
+        tainted = false;
+        uint8_t used = rd_ab_use_note(0u, &tainted, 0, RD_AB_NOTE_USED);
+        if (tag.off & 1u) {
+            /* the off arm 50 % slower, every one with an unmade pipeline */
+            used = rd_ab_use_note(used, &tainted, 2, RD_AB_NOTE_UNMADE);
+        }
+        const RdAbIn in = {tag, used, false, true, 50000.0, (tag.off & 1u) ? 60.0 : 40.0};
+        rd_ab_collect(&s_a, &in);
+        lines(&s_a);
+    }
+    CHECK(ran, "no trial ran");
+    CHECK(rd_ab_verdict(&s_a, 0, 9) == RD_AB_V_NONE,
+          "a verdict from off-arm replays with an unmade pipeline: %d", rd_ab_verdict(&s_a, 0, 9));
+}
+
 static void testStop(void)
 {
     printf("the way back:\n");
@@ -889,6 +940,7 @@ int main(void)
     testStages();
     testTwoSubjects();
     testThree();
+    testUseNote();
     testStop();
     testModes();
     testOnce();

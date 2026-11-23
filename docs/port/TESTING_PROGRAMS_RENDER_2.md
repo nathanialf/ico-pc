@@ -558,7 +558,11 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   the second replay drawing every pass the first asked for, above 0 passes through it over the list
   under each profile without dual-source blending (each fixture's count printed), and under corpus
   0 passes and "not applicable here". `rd_fastps_ab_gl`: the same on OpenGL at the corpus setting
-  without dual-source blending. No device: SKIP.
+  without dual-source blending. `rd_fastps_ab_nd`: the same frames with the discard-free twins on in
+  both runs (`ICO_RD_VU_NODISCARD=1`, `--repeat 3`), so `vu_ps_nodual_fast_nd` is compared against
+  `vu_ps_nodual_nd` byte for byte, above 0 passes through it over the list under each profile
+  without dual-source blending (the stats line counts them apart: `(N of them through
+  vu_ps_nodual_fast_nd)`). A profile that drew no frame fails. No device: SKIP.
 - `rd_vuprepass_selftest_fastps`, `_fastps_sabotage`, `_fastps_marked` (`rd_fastps.cmake`, through
   `rd_vuprepass_selftest_test` and `test/rd_vuprepass_selftest.cmake`, the Mali fakes without
   dual-source blending, the mark in a file of each test's own): the self-test's on line (at least

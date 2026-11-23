@@ -451,6 +451,7 @@ rd_fades_fold_ab 610.07  # estimate: 377.5 s local (merge-wt_FIX-P5b-20261115T23
 rd_fastps 0.01  # estimate: a CPU unit test of the eligibility table and a file read, like rd_nodiscard (not run here)
 rd_fastps_ab 88.92  # estimate: rd_nodiscard_ab x 1.3 (three fixtures under four profiles; not run here)
 rd_fastps_ab_gl 65.46  # estimate: rd_nodiscard_ab_gl (three fixtures; not run here)
+rd_fastps_ab_nd 133.38  # estimate: rd_fastps_ab x 1.5 (--repeat 3; not run here)
 rd_fill11_ab 393.74  # estimate: 243.7 s local (merge-wt_FIX-P5a-20261115T213934Z.lvp.log) x 1.62
 rd_fill11_gl 76.81  # estimate: 47.5 s local (merge-wt_FIX-P5a-20261115T213934Z.lvp.log) x 1.62
 rd_filter 0.00

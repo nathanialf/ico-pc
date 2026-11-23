@@ -626,14 +626,28 @@ layer (Z not written); `V` 8 draws of 2048 triangles 100 GS pixels wide left of 
 the zero-area cull: their boxes are wider than its 4 samples); `S` and `B` 8 draws of a 64x64 GS
 pixel square at the centre in 2x2 cells (2048 triangles) or in 2. The twins' frames are `L2` and
 `H2` again under the twins' hold (`rd__nd_hold`), the others with it off, checked by the twins'
-own counts (a twin frame drew through them, the others did not). Each frame once untimed (its
-pipelines gathered and made on the workers), then 5 timed replays; their GPU times from their
+own counts (a twin frame drew through them, the others did not). Every frame's pipelines are made
+first, untimed and outside the budget (gathered and made on the workers; the fast build's by a
+plain replay that asks for them and the twins' queue made at once), their time logged (`rate card:
+the pipelines of its N frames made in T ms before the timed frames ...`); then each frame's 5 timed
+replays; their GPU times from their
 timestamps (`rd__perf_gpu_ms_of`, first stamp to last), read right after each frame once 2 more
 replays of `E` brought them in (`rd_perf.c` keeps the last 64 records, fewer than a card's whole
 run: a frame whose time did not come in says so). Its pipelines are released after it (`rd__pipeline_forget_since`), its draws not counted
 as the twins', SCENE starts from its clear after it. Sized to SCENE: at the reporter's 688x512 and
-a chip that needs 25 ns a fragment, about 70 replays of at most 2 layers, under 1 s; a budget of
-1.5 s stops it (the items left say why); the head line prints the time it took.
+a chip that needs 25 ns a fragment, about 70 replays of at most 2 layers, under 1 s (an estimate).
+The budget, 1.5 s from the end of the pipelines' making, is checked before each timed frame: a
+frame begun under it runs to its end (5 timed replays and 2 more of `E`), so the card can run
+past it by one frame, about 0.15 s at those figures (an estimate; the pipelines' compiles are not
+in it); the items left say why it stopped; the head line prints the time it took. **No card on a
+start after a bad end or a device loss:** `ICO_RATECARD_SKIP` (from `ratecard_env.c`: the run
+before ended with a crash, an ANR, a signal other than 9, a device loss, a GPU hang or the
+watchdog, as the cull's mark step classed it) or `ICO_LOSS_ROW` above 0: `rate card: not measured
+this start (...)`. **A bad end inside the card is the card's:** the attempts' marks (the zero-area
+cull's, the twins', the fast build's) read `logs/ratecard.txt`'s `measuring` before the card's own
+start rewrites it, and an attempt that was counting or on is tried again (`...: the rate card was
+being tried then (its mark): tried again`); the card writes `blocked` and skips itself until its key
+changes.
 
 **The rates** (each the median of 5 with the least and the largest beside it, "not measured
 (why)" where it cannot be isolated), and how to read a scene's GPU time with the 10 s line's counts:

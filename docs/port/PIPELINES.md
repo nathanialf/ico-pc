@@ -1754,7 +1754,8 @@ The lines (`rd: ` before each):
   arm from here (zero-area cull)`; `A/B: 12 trials run, the most a run: an attempt not timed yet
   stays with it`.
 - The attempt ledger's row, the run's totals in every block: `the zero-area cull timed in play on
-  N stages kept with it so far (M without it; T trials run)`; the window's compare line counts the
+  N verdicts with it so far (M without it; T trials run)` (one verdict a run, so N and M are 0 or 1
+  but after a renderer made again); the window's compare line counts the
   block's pictures drawn at an off arm: `(K keep frames; J without an attempt, timed)`.
 - `rd_replay_tool --stats`: `stats: A/B (the judge|on|off|alt): zero-area cull: N replays with it,
   M without (T trials, S stages on, F off)`.
@@ -2071,7 +2072,10 @@ twins are and kept only where it is faster. `port/render/rd_fastps.h` says it al
   through it, T triangles (R refused a picture: texture t, texel x, levels l, DATE d, plane p,
   alpha a, crop c, not made yet u, timed without it t, module not tested m)`, the judge's
   `A/B: fast pixel build, stage N: ...` and the attempt ledger's row `the fast pixel build timed
-  in play`; `rd_replay_tool --stats`: `stats: fast pixel build on (ICO_RD_VU_FASTPS=1): N passes
+  in play`. A replay in which any pass drew through a build only because a pipeline was not made yet
+  (the twins' or the fast build's: on the twins' off arm a pass asks for the ON|FAST key play had
+  not asked for) is timed for no subject, on either arm (`rd_ab.c` `rd_ab_use_note`,
+  `rd__ab_unmade`); `rd_replay_tool --stats`: `stats: fast pixel build on (ICO_RD_VU_FASTPS=1): N passes
   through it, T triangles; refused: ...`.
 - **Not built:** a dual-source form (`vu_ps_fast`): the same define and proof, but its key has no
   bit to carry it (`RdPipelineKey.nodual` is 0 there and every user reads it as a truth value), so

@@ -1162,18 +1162,18 @@ static void test_timed(void)
     ico_attempt_decide_timed(ICO_ATT_AB_ZERO, 0, 1, 0);
     CHECK(ico_attempt_state_of(ICO_ATT_AB_ZERO) == ICO_ATT_ON);
     (void)ico_attempt_start_text(b, sizeof b);
-    CHECK(strstr(b, "; the zero-area cull timed in play on (a trial in each stage, with it and "
-                    "without it in turn: the stage keeps the faster)") != NULL);
+    CHECK(strstr(b, "; the zero-area cull timed in play on (timed once a run, with it and "
+                    "without it in turn: the faster kept for every stage)") != NULL);
     ico_attempt_fire(ICO_ATT_AB_ZERO, 1u);
     ico_attempt_fire2(ICO_ATT_AB_ZERO, 2u);
     ico_attempt_fire3(ICO_ATT_AB_ZERO, 3u);
     (void)ico_attempt_block_text(b, sizeof b, -1);
-    CHECK(text_is(b, "attempts: the zero-area cull timed in play on 1 stages kept with it so far "
+    CHECK(text_is(b, "attempts: the zero-area cull timed in play on 1 verdicts with it so far "
                      "(2 without it; 3 trials run)"));
     /* the next block: the same totals, not 0 */
     ico_attempt_fire3(ICO_ATT_AB_ZERO, 1u);
     (void)ico_attempt_block_text(b, sizeof b, -1);
-    CHECK(text_is(b, "attempts: the zero-area cull timed in play on 1 stages kept with it so far "
+    CHECK(text_is(b, "attempts: the zero-area cull timed in play on 1 verdicts with it so far "
                      "(2 without it; 4 trials run)"));
     /* stopped (a device loss): without it for the run */
     ico_attempt_decide_timed(ICO_ATT_AB_ZERO, 0, 1, 1);
@@ -1352,10 +1352,12 @@ int main(void)
         ico_attempt_fire(ICO_ATT_DATE_ONE, 5u);
         ico_attempt_fire2(ICO_ATT_DATE_ONE, 2u);
         ico_attempt_state(ICO_ATT_AB_ZERO, ICO_ATT_OFF_DEFAULT, "the test");
+        /* the third judged row too (REV4R S2: it was left out while not on) */
+        ico_attempt_state(ICO_ATT_AB_FASTPS, ICO_ATT_OFF_DEFAULT, "the test");
         ico_attempt_state(ICO_ATT_EMPTY_SKIP, ICO_ATT_OFF_DEFAULT, "the test"); /* not on: out */
         CHECK(ico_attempt_on_text(w, sizeof w) == strlen(w));
         if (strcmp(w, "one DATE set-up on 5/2; the zero-area cull timed in play off by default "
-                      "0/0/0") != 0) {
+                      "0/0/0; the fast pixel build timed in play off by default 0/0/0") != 0) {
             printf("on text: %s\n", w);
             failures++;
         }

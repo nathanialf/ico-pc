@@ -28,6 +28,7 @@
 #endif
 
 #include "rd_ab_run.h"
+#include "host_fs.h" /* ico_fopen: UTF-8 paths on Windows */
 #include "rd_internal.h"
 #include "rd_nodiscard.h"
 #include "shader_consts.h"
@@ -114,7 +115,7 @@ static bool writeMark(const char *word, bool sync)
     if (s_n.markPath[0] == '\0') {
         return true; /* no platform's mark (the replay tool, the tests) */
     }
-    FILE *f = fopen(s_n.markPath, "wb");
+    FILE *f = ico_fopen(s_n.markPath, "wb");
     if (f == NULL) {
         rd__log("discard-free twins: their mark %s could not be written (%s)", s_n.markPath, word);
         return false;
@@ -427,6 +428,9 @@ void rd__nd_pass(RdPipeKeyInt *key, RhiPipeline *pipe, const RdDrawPass *p, uint
             rd__ab_used(RD_AB_NODISCARD);
         } else {
             rd__ab_unused(RD_AB_NODISCARD);
+        }
+        if (w == RD_ND_UNMADE) {
+            rd__ab_unmade(); /* no subject is timed on this replay (REV4R S1) */
         }
     }
     if (w != RD_ND_TWIN) {

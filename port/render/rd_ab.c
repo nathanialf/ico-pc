@@ -478,6 +478,21 @@ double rd_ab_scene_ms(double spanMs, double displayWaitMs, double presentMs)
     return ms > 0.0 ? ms : 0.0;
 }
 
+uint8_t rd_ab_use_note(uint8_t used, bool *tainted, int subject, int note)
+{
+    if (note == RD_AB_NOTE_UNMADE) {
+        *tainted = true;
+    }
+    if (*tainted) {
+        return 0u; /* timed for no subject */
+    }
+    if (subject < 0 || subject >= RD_AB_SUBJECTS) {
+        return used;
+    }
+    const uint8_t bit = (uint8_t)(1u << subject);
+    return note == RD_AB_NOTE_USED ? (uint8_t)(used | bit) : (uint8_t)(used & ~bit);
+}
+
 void rd_ab_stop(RdAb *a, const char *why)
 {
     if (a->stopped) {

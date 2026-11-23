@@ -29,6 +29,7 @@
 
 #include "rd_ab_run.h"
 #include "rd_fastps.h"
+#include "host_fs.h" /* ico_fopen: UTF-8 paths on Windows */
 #include "rd_internal.h"
 #include "rd_nodiscard.h"
 #include "shader_consts.h"
@@ -68,6 +69,7 @@ static char s_runOff[384];
    window's (atomics) */
 typedef struct FCounts {
     uint64_t passes, tris, refused[RD_FPS_REASONS];
+    uint64_t passesNd; /* of passes, through vu_ps_nodual_fast_nd */
 } FCounts;
 
 static FCounts s_block, s_run, s_heldBlock, s_heldRun;
@@ -97,7 +99,7 @@ static bool writeMark(const char *word, bool sync)
     if (s_f.markPath[0] == '\0') {
         return true; /* no platform's mark (the replay tool, the tests) */
     }
-    FILE *f = fopen(s_f.markPath, "wb");
+    FILE *f = ico_fopen(s_f.markPath, "wb");
     if (f == NULL) {
         rd__log("fast pixel build: its mark %s could not be written (%s)", s_f.markPath, word);
         return false;
@@ -265,6 +267,9 @@ static void count(int why, uint32_t tris, int entry)
     if (why == RD_FPS_FAST) {
         add(&s_block.passes, &s_run.passes, 1u);
         add(&s_block.tris, &s_run.tris, tris);
+        if (entry == 1) {
+            add(&s_block.passesNd, &s_run.passesNd, 1u);
+        }
         s_f.took++;
         s_f.tookEntry[entry]++;
     } else if (why > 0 && why < RD_FPS_REASONS) {
@@ -328,6 +333,13 @@ void rd__fps_pass(RdPipeKeyInt *key, RhiPipeline *pipe, const IcoDrawCB *cb, uin
             rd__ab_used(RD_AB_FASTPS);
         } else {
             rd__ab_unused(RD_AB_FASTPS);
+        }
+        if (w == RD_FPS_UNMADE) {
+            /* a pass drew through vu_ps_nodual only because its fast pipeline
+               is not made yet (the twins' off arm asks for ON|FAST, which
+               play had never asked for): no subject is timed on this replay,
+               the twins' trial included (REV4R S1) */
+            rd__ab_unmade();
         }
     }
     if (w != RD_FPS_FAST) {
@@ -493,6 +505,7 @@ size_t rd_fps_text(char *out, size_t cap, unsigned n)
     }
     FCounts c;
     c.passes = takeN(&s_block.passes);
+    c.passesNd = takeN(&s_block.passesNd);
     c.tris = takeN(&s_block.tris);
     uint64_t refused = 0;
     for (int i = 0; i < RD_FPS_REASONS; i++) {
@@ -535,10 +548,12 @@ int rd__fps_stats_text(char *out, size_t cap)
     }
     const char *na = rd__fps_not_applicable_text();
     return snprintf(out, cap,
-                    "fast pixel build %s%s%s%s: %llu passes through it, %llu triangles; refused: "
-                    "%s; %u modules of it made, %u of its pipelines alive%s%s%s",
+                    "fast pixel build %s%s%s%s: %llu passes through it (%llu of them through "
+                    "vu_ps_nodual_fast_nd), %llu triangles; refused: %s; %u modules of it made, "
+                    "%u of its pipelines alive%s%s%s",
                     rd__fps_state_text(), s_f.why[0] ? " (" : "", s_f.why, s_f.why[0] ? ")" : "",
-                    (unsigned long long)c->passes, (unsigned long long)c->tris, refused,
-                    (unsigned)s_f.made, (unsigned)rd__pipeline_count_fast(), na ? " (" : "",
-                    na ? na : "", na ? ")" : "");
+                    (unsigned long long)c->passes, (unsigned long long)c->passesNd,
+                    (unsigned long long)c->tris, refused, (unsigned)s_f.made,
+                    (unsigned)rd__pipeline_count_fast(), na ? " (" : "", na ? na : "",
+                    na ? ")" : "");
 }

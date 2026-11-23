@@ -175,6 +175,9 @@ int nodiscard_mark_step(const char *activityPath, const char *version, int exitR
         vu_zero_mark_stage_beside(activityPath, "fastps-mark.txt") == VU_ZERO_STAGE_TRYING) {
         beside = VU_ZERO_STAGE_TRYING;
         vu_zero_mark_beside_words("the fast pixel build was");
+    } else if (beside != VU_ZERO_STAGE_TRYING && vu_zero_mark_ratecard_measuring(activityPath)) {
+        beside = VU_ZERO_STAGE_TRYING; /* the rate card's end (REV4R N3) */
+        vu_zero_mark_beside_words("the rate card was");
     }
     char mver[64];
     s_stageRead =

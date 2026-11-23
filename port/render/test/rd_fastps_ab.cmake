@@ -86,14 +86,29 @@ set(nodual_desktop 1)
 set(nodual_gl 1)
 # the build's run line (rd_fastps_run.c rd__fps_stats_text), matched in the
 # run's text with its ';' made ','
-set(ndRe "stats: fast pixel build (on|off|held)[^:]*: ([0-9]+) passes through it, ([0-9]+) triangles, refused: ([^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*), ([0-9]+) modules of it made")
+set(ndRe "stats: fast pixel build (on|off|held)[^:]*: ([0-9]+) passes through it \\(([0-9]+) of them through vu_ps_nodual_fast_nd\\), ([0-9]+) triangles, refused: ([^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*, [^,]*), ([0-9]+) modules of it made")
+# MODE=nd (rd_fastps_ab_nd, REV4R N4): both runs with the discard-free twins
+# on without their self-test (ICO_RD_VU_NODISCARD=1: clip mode none's floor,
+# the proven classes), so a pass of the set the twins take draws through
+# vu_ps_nodual_fast_nd on the run with the build and through
+# vu_ps_nodual_nd on the run without it: --repeat 3 (the first replay asks
+# for the twins' keys, the second for the fast build's discard-free ones,
+# the third draws through them); its floor: above 0 passes through
+# vu_ps_nodual_fast_nd over the list under each profile without dual-source
+# blending; the "not made yet" count is not one with the drawn count there
+set(extraEnv "")
+set(repeat 2)
+if(MODE STREQUAL "nd")
+  set(extraEnv ICO_RD_VU_NODISCARD=1)
+  set(repeat 3)
+endif()
 
 # a run of a frame: rc, its text flattened, the twins' draws and modules
 function(ndRun dump p s value dir)
   file(REMOVE_RECURSE "${dir}")
   file(MAKE_DIRECTORY "${dir}")
-  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${env_${p}} ICO_RD_VU_FASTPS=${value}
-                          "${TOOL}" "${dump}" /dev/null --pass-dump "${dir}" --stats --repeat 2
+  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${env_${p}} ${extraEnv} ICO_RD_VU_FASTPS=${value}
+                          "${TOOL}" "${dump}" /dev/null --pass-dump "${dir}" --stats --repeat ${repeat}
                           ${args_${s}}
                   RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
   string(REPLACE ";" "," flat "${out}\n${err}")
@@ -102,14 +117,17 @@ function(ndRun dump p s value dir)
   set(tris -1)
   set(refused "")
   set(made -1)
+  set(drawsNd -1)
   if(flat MATCHES "${ndRe}")
     set(state "${CMAKE_MATCH_1}")
     set(draws "${CMAKE_MATCH_2}")
-    set(tris "${CMAKE_MATCH_3}")
-    set(refused "${CMAKE_MATCH_4}")
-    set(made "${CMAKE_MATCH_5}")
+    set(drawsNd "${CMAKE_MATCH_3}")
+    set(tris "${CMAKE_MATCH_4}")
+    set(refused "${CMAKE_MATCH_5}")
+    set(made "${CMAKE_MATCH_6}")
   endif()
   set(r_tris "${tris}" PARENT_SCOPE)
+  set(r_drawsNd "${drawsNd}" PARENT_SCOPE)
   set(r_rc "${rc}" PARENT_SCOPE)
   set(r_flat "${flat}" PARENT_SCOPE)
   set(r_err "${err}" PARENT_SCOPE)
@@ -164,7 +182,7 @@ foreach(e IN LISTS entries)
           set(ok FALSE)
           break()
         endif()
-        message(STATUS "${dump} ${p} ${s} ICO_RD_VU_FASTPS=${v}: fast pixel build ${r_state}, ${r_draws} passes through it, ${r_tris} triangles (refused: ${r_refused}), ${r_made} modules made")
+        message(STATUS "${dump} ${p} ${s} ICO_RD_VU_FASTPS=${v}: fast pixel build ${r_state}, ${r_draws} passes through it (${r_drawsNd} through vu_ps_nodual_fast_nd), ${r_tris} triangles (refused: ${r_refused}), ${r_made} modules made")
         if(v EQUAL 0)
           if(NOT r_state STREQUAL "off" OR NOT r_draws EQUAL 0 OR NOT r_made EQUAL 0)
             message(SEND_ERROR "${dump} ${p} ${s}: with the build off something of it ran (${r_state}, ${r_draws} passes, ${r_made} modules):\n${r_flat}")
@@ -181,11 +199,15 @@ foreach(e IN LISTS entries)
           if(NOT r_state STREQUAL "on" OR r_draws LESS 0)
             message(SEND_ERROR "${dump} ${p} ${s}: no fast pixel build's line:\n${r_flat}")
             math(EXPR failures "${failures} + 1")
-          elseif(NOT unmade EQUAL r_draws)
+          elseif(NOT MODE STREQUAL "nd" AND NOT unmade EQUAL r_draws)
             message(SEND_ERROR "${dump} ${p} ${s}: ${r_draws} passes through the build but ${unmade} found it not made yet (the second replay did not draw every pass the first asked for):\n${r_flat}")
             math(EXPR failures "${failures} + 1")
           endif()
-          math(EXPR fxTwins "${fxTwins} + ${r_draws}")
+          if(MODE STREQUAL "nd")
+            math(EXPR fxTwins "${fxTwins} + ${r_drawsNd}")
+          else()
+            math(EXPR fxTwins "${fxTwins} + ${r_draws}")
+          endif()
         else()
           if(NOT r_draws EQUAL 0 OR NOT r_flat MATCHES "not applicable here")
             message(SEND_ERROR "${dump} ${p} ${s}: a device with dual-source blending drew through the build (${r_draws}) or did not say why not:\n${r_flat}")
@@ -237,7 +259,7 @@ foreach(e IN LISTS entries)
       message(SEND_ERROR "${name}: nothing compared under the ${p} profile")
       math(EXPR failures "${failures} + 1")
     endif()
-    message(STATUS "${name} ${p}: ${fxTwins} passes through the fast pixel build")
+    message(STATUS "${name} ${p}: ${fxTwins} passes through the fast pixel build (MODE ${MODE}: through vu_ps_nodual_fast_nd alone where nd)")
     if(NOT DEFINED profTwins_${p})
       set(profTwins_${p} 0)
     endif()

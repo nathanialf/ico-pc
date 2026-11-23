@@ -451,6 +451,7 @@ rd_fades_fold_ab 651.47
 rd_fastps 0.01  # estimate: a CPU unit test of the eligibility table and a file read, like rd_nodiscard (not run here)
 rd_fastps_ab 66.56  # estimate: rd_nodiscard_ab x 1.3 (three fixtures under four profiles; not run here)
 rd_fastps_ab_gl 83.80  # estimate: rd_nodiscard_ab_gl (three fixtures; not run here)
+rd_fastps_ab_nd 99.84  # estimate: rd_fastps_ab x 1.5 (--repeat 3; not run here)
 rd_fill11_ab 588.44
 rd_fill11_gl 147.09
 rd_filter 0.05

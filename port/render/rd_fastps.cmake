@@ -48,6 +48,19 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/fastps_ab" -DBACKEND=vulkan
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_fastps_ab.cmake")
     set_tests_properties(rd_fastps_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
+    # rd_fastps_ab_nd (REV4R N4): the same frames with the discard-free twins
+    # on in both runs (ICO_RD_VU_NODISCARD=1), so vu_ps_nodual_fast_nd is
+    # compared against vu_ps_nodual_nd byte for byte, above 0 of its passes
+    # over the list under each profile without dual-source blending
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/fastps_ab_nd")
+    add_test(NAME rd_fastps_ab_nd
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     -DFIXTURE_TOOL=$<TARGET_FILE:rd_fixture_tool>
+                     "-DFIXTURES=${ICO_FIXTURE_DIR}" "-DFIXTURE_HELPERS=${ICO_FIXTURE_HELPERS}"
+                     "-DLIST=${ICO_FIXTURE_DIR}/lists/fastps.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/fastps_ab_nd" -DBACKEND=vulkan -DMODE=nd
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_fastps_ab.cmake")
+    set_tests_properties(rd_fastps_ab_nd PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
     if(ICO_RHI_OPENGL AND ICO_SHADERS_GLSL AND TARGET ico_rhi_opengl)
         file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/gl/fastps_ab")
         add_test(NAME rd_fastps_ab_gl

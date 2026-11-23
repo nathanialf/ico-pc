@@ -303,6 +303,38 @@ const char *vu_zero_mark_beside_who(const char *fallback)
     return s_besideWho != NULL ? s_besideWho : fallback;
 }
 
+static int s_endRead = -1;
+static char s_endWordsRead[160];
+
+int vu_zero_mark_end_read(char *words, size_t size)
+{
+    if (words != NULL && size > 0) {
+        snprintf(words, size, "%s", s_endWordsRead);
+    }
+    return s_endRead;
+}
+
+int vu_zero_mark_ratecard_measuring(const char *activityPath)
+{
+    char path[1024], text[32] = "";
+    size_t dir = activityPath != NULL ? strlen(activityPath) : 0;
+    while (dir > 0 && activityPath[dir - 1] != '/' && activityPath[dir - 1] != '\\') {
+        dir--;
+    }
+    if (activityPath == NULL || snprintf(path, sizeof path, "%.*sratecard.txt", (int)dir,
+                                         activityPath) >= (int)sizeof path) {
+        return 0;
+    }
+    FILE *f = ico_fopen(path, "rb");
+    if (f == NULL) {
+        return 0;
+    }
+    const size_t k = fread(text, 1, sizeof text - 1, f);
+    text[k] = '\0';
+    fclose(f);
+    return strncmp(text, "measuring ", 10) == 0;
+}
+
 int vu_zero_mark_stage_beside(const char *activityPath, const char *name)
 {
     char path[1024], text[512] = "", ver[64];
@@ -386,10 +418,17 @@ int vu_zero_mark_step(const char *activityPath, const char *version, int exitRea
         vu_zero_mark_stage_beside(activityPath, "fastps-mark.txt") == VU_ZERO_STAGE_TRYING) {
         twinStage = VU_ZERO_STAGE_TRYING;
         vu_zero_mark_beside_words("the fast pixel build was");
+    } else if (twinStage != VU_ZERO_STAGE_TRYING && vu_zero_mark_ratecard_measuring(activityPath)) {
+        /* the rate card's measuring (it runs after every attempt's
+           self-test): the end is the card's */
+        twinStage = VU_ZERO_STAGE_TRYING;
+        vu_zero_mark_beside_words("the rate card was");
     }
     s_stageRead =
         mark[0] != '\0' ? vu_zero_mark_parse(mark, tver, sizeof tver) : VU_ZERO_STAGE_NONE;
     vu_zero_mark_end_words(kind, exitReason, exitStatus, words, sizeof words);
+    s_endRead = kind;
+    snprintf(s_endWordsRead, sizeof s_endWordsRead, "%s", words);
     vu_zero_mark_decide_beside(mark, kind, words, version, twinStage, out, sizeof out, line,
                                sizeof line, &block);
     vu_zero_mark_beside_words(NULL);
