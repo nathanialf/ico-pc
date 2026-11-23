@@ -131,6 +131,8 @@ int main(int argc, char **argv)
         CHECK(put(p, kAheadMark, sizeof kAheadMark - 1) == 0);
         snprintf(p, sizeof p, "%s/nodiscard-mark.txt", dir);
         (void)ico_remove(p);
+        snprintf(p, sizeof p, "%s/fastps-mark.txt", dir);
+        (void)ico_remove(p);
     }
     ico_report_set_exit_info(kVerdict, "exit-trace-1794862215000.pb");
 
@@ -187,6 +189,7 @@ int main(int argc, char **argv)
         CHECK(entry(&z, "ahead-mark.txt", (const unsigned char *)kAheadMark, sizeof kAheadMark - 1,
                     &st));
         CHECK(mz_zip_reader_locate_file(&z, "nodiscard-mark.txt", NULL, 0) < 0);
+        CHECK(mz_zip_reader_locate_file(&z, "fastps-mark.txt", NULL, 0) < 0);
     }
     {
         /* the verdict in report.txt's head, after the memory line */

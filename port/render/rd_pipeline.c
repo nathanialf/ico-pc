@@ -88,6 +88,7 @@
 #include "rd_list_draws.h"
 #include "rd_internal.h"
 #include "rd_vu_zero.h"   /* rd__pipeline_drop_vs */
+#include "rd_fastps.h"    /* the fast pixel build's modules and pipelines */
 #include "rd_nodiscard.h" /* the discard-free twins' modules and pipelines */
 #include "rd_passring.h"
 #include "rd_paste_spec.h"
@@ -969,6 +970,11 @@ static bool pipelineDesc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroup
     if (k->gs.nodual & RD_NODUAL_NODISCARD) {
         d->fragment = rd__nd_module(k->fs);
     }
+    /* the fast pixel build (rd_fastps.h: RD_NODUAL_FAST, its discard-free
+       form with RD_NODUAL_NODISCARD too; made only once it is tried) */
+    if (k->gs.nodual & RD_NODUAL_FAST) {
+        d->fragment = rd__fps_module((k->gs.nodual & RD_NODUAL_NODISCARD) != 0u);
+    }
     if (!d->fragment.id) {
         return false; /* a module this build does not have (rd__gpu_init's fence) */
     }
@@ -1316,6 +1322,10 @@ static void keyFsName(const RdPipeKeyInt *k, char *out, size_t size)
         snprintf(out, size, "%s_dstrov", f);
     } else if (k->dst == RHI_DST_READ_ATTACHMENT) {
         snprintf(out, size, "%s_dstatt", f);
+    } else if (k->gs.nodual & RD_NODUAL_FAST) {
+        snprintf(out, size, "%s",
+                 (k->gs.nodual & RD_NODUAL_NODISCARD) ? RD_FPS_MODULE_NAME_ND
+                                                      : RD_FPS_MODULE_NAME); /* rd_fastps.h */
     } else if ((k->gs.nodual & RD_NODUAL_NODISCARD) && rd_nd_module_name(k->fs)) {
         snprintf(out, size, "%s", rd_nd_module_name(k->fs)); /* rd_nodiscard.h */
     } else if (k->gs.nodual && k->fs < RD_FS_COUNT && g_rd.fsNoDual[k->fs].id) {
@@ -3395,7 +3405,11 @@ static void twinKeep(const RhiPipeline *bp)
                      s_twin.bk[j].gs.program, s_twin.bk[j].gs.blend, s_twin.bk[j].vs,
                      s_twin.bk[j].fs, why);
             __atomic_add_fetch(&s_twin.blockFailed, 1u, __ATOMIC_RELAXED);
-            rd__nd_fault(what);
+            if (s_twin.bk[j].gs.nodual & RD_NODUAL_FAST) {
+                rd__fps_fault(what); /* the fast pixel build's (rd_fastps.h) */
+            } else {
+                rd__nd_fault(what);
+            }
             continue;
         }
         if (found || s_used >= RD_PIPELINE_CACHE_MAX) {
@@ -3464,8 +3478,10 @@ static void twinBegin(void)
            finisher's: " in the background: " for the watchdog's pipeline
            limit, port/platform/gpu_hang.c ico_pipe_note_creating) */
         int w = snprintf(s_batchNote, sizeof(s_batchNote),
-                         "creating %u pipelines of the discard-free twins in the background: %s",
-                         nb, mods);
+                         "creating %u pipelines of the %s in the background: %s", nb,
+                         (s_twin.bk[0].gs.nodual & RD_NODUAL_FAST) ? "fast pixel build"
+                                                                   : "discard-free twins",
+                         mods);
         (void)w;
         if (s_activityFn != NULL) {
             s_activityFn(s_batchNote);
@@ -3504,7 +3520,7 @@ void rd__pipeline_twin_tick(bool wait)
             return; /* one step a picture in play */
         }
     }
-    if (s_twin.n == 0 || s_fin.on || s_fin.jobs != NULL || !rd__nd_on()) {
+    if (s_twin.n == 0 || s_fin.on || s_fin.jobs != NULL || !(rd__nd_on() || rd__fps_on())) {
         return;
     }
     if (!wait && (double)__atomic_load_n(&s_finHoldUs, __ATOMIC_ACQUIRE) / 1000.0 > rd__now_ms()) {
@@ -3516,7 +3532,8 @@ void rd__pipeline_twin_tick(bool wait)
         /* the tests' waited path (ICO_RD_VU_NODISCARD=1, rd__nd_replay_begin):
            the whole queue, a batch at a time, so the next replay draws every
            pass the CPU gives a twin through it (play: one batch a picture) */
-        while (s_twin.n > 0 && s_twin.jobs == NULL && rd__nd_on() && !s_createStopped) {
+        while (s_twin.n > 0 && s_twin.jobs == NULL && (rd__nd_on() || rd__fps_on()) &&
+               !s_createStopped) {
             twinBegin();
             (void)twinEnd(true);
         }
@@ -3540,12 +3557,14 @@ static void twinClear(void)
     s_twin.n = 0;
 }
 
-uint32_t rd__pipeline_drop_twins(void)
+/* every made pipeline whose key has a bit of mask destroyed (the queue
+   emptied first) */
+static uint32_t dropBits(uint8_t mask)
 {
     twinClear();
     uint32_t n = 0;
     for (uint32_t i = 0; i < s_used && g_rd.hasDevice; i++) {
-        if ((s_cache[i].key.gs.nodual & RD_NODUAL_NODISCARD) && s_cache[i].pipe.id) {
+        if ((s_cache[i].key.gs.nodual & mask) && s_cache[i].pipe.id) {
             rhi_destroy_pipeline(s_cache[i].pipe);
             s_cache[i].pipe = (RhiPipeline){0}; /* a failed entry: never asked for again */
             s_count--;
@@ -3555,13 +3574,35 @@ uint32_t rd__pipeline_drop_twins(void)
     return n;
 }
 
-uint32_t rd__pipeline_count_twins(void)
+uint32_t rd__pipeline_drop_twins(void)
+{
+    return dropBits(RD_NODUAL_NODISCARD); /* with the fast build's discard-free form */
+}
+
+uint32_t rd__pipeline_drop_fast(void)
+{
+    return dropBits(RD_NODUAL_FAST);
+}
+
+static uint32_t countBits(uint8_t want, uint8_t mask)
 {
     uint32_t n = 0;
     for (uint32_t i = 0; i < s_used; i++) {
-        n += (s_cache[i].key.gs.nodual & RD_NODUAL_NODISCARD) && s_cache[i].pipe.id ? 1u : 0u;
+        n += (s_cache[i].key.gs.nodual & mask) == want && s_cache[i].pipe.id ? 1u : 0u;
     }
     return n;
+}
+
+uint32_t rd__pipeline_count_twins(void)
+{
+    /* the discard-free twins' own, the fast build's discard-free form not
+       among them */
+    return countBits(RD_NODUAL_NODISCARD, RD_NODUAL_NODISCARD | RD_NODUAL_FAST);
+}
+
+uint32_t rd__pipeline_count_fast(void)
+{
+    return countBits(RD_NODUAL_FAST, RD_NODUAL_FAST);
 }
 
 uint32_t rd__pipeline_twins_background(void)
@@ -4108,13 +4149,16 @@ int rd_pipeline_cache_file(char *out, size_t cap)
         rd_cache_key_begin(&k, RD_PIPELINE_CACHE_FORMAT);
         for (unsigned i = 0; i < g_icoShaderCount; i++) {
             /* the zero-area cull's rule-stage builds (rd_vu_zero.h) and the
-               discard-free twins (rd_nodiscard.h, "_nodual_nd") left out:
+               discard-free twins (rd_nodiscard.h, "_nodual_nd") and the fast
+               pixel builds (rd_fastps.h, "_nodual_fast", "_nodual_fast_nd")
+               left out:
                with them the file's name is the build's without them, so a
                device keeps the cache it had (the driver's own cache checks
                each module it holds) */
             const size_t nl = strlen(g_icoShaders[i].name);
             if (strncmp(g_icoShaders[i].name, "vu_tri_rule_zero_", 17) == 0 ||
-                (nl > 10 && strcmp(g_icoShaders[i].name + nl - 10, "_nodual_nd") == 0)) {
+                (nl > 10 && strcmp(g_icoShaders[i].name + nl - 10, "_nodual_nd") == 0) ||
+                strstr(g_icoShaders[i].name, "_nodual_fast") != NULL) {
                 continue;
             }
             rd_cache_key_module(&k, g_icoShaders[i].name, g_icoShaders[i].stage,

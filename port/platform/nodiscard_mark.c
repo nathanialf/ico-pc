@@ -87,9 +87,8 @@ void nodiscard_mark_decide_beside(const char *mark, int endKind, const char *end
     char clip[256];
     clipperWords(mark, clip, sizeof clip);
     if (!bad && vu_zero_mark_blocks(stage, endKind)) {
-        snprintf(line, lineSize,
-                 "%s%s: the zero-area cull was being tried then (its mark): tried again%s", kHead,
-                 what, clip);
+        snprintf(line, lineSize, "%s%s: %s being tried then (its mark): tried again%s", kHead, what,
+                 vu_zero_mark_beside_who("the zero-area cull was"), clip);
     } else if (bad && strcmp(mv, v) == 0) {
         snprintf(out, outSize, "blocked %s", v);
         snprintf(line, lineSize,
@@ -102,6 +101,14 @@ void nodiscard_mark_decide_beside(const char *mark, int endKind, const char *end
     } else {
         snprintf(line, lineSize, "%s%s: no sign of a bad end: tried again%s", kHead, what, clip);
     }
+}
+
+/* the twins' stage as the last step read it (fastps_mark.c judges by it) */
+static int s_stageRead = VU_ZERO_STAGE_NONE;
+
+int nodiscard_mark_stage_read(void)
+{
+    return s_stageRead;
 }
 
 static void exportEnv(const char *name, const char *value)
@@ -160,8 +167,21 @@ int nodiscard_mark_step(const char *activityPath, const char *version, int exitR
     vu_zero_mark_end_words(kind, exitReason, exitStatus, words, sizeof words);
     /* the cull's mark at that end as its step read it (diag_host.c runs it
        first): an end while the cull was trying is the cull's */
-    nodiscard_mark_decide_beside(mark, kind, words, version, vu_zero_mark_stage_read(), out,
-                                 sizeof out, line, sizeof line, &block);
+    /* and the fast pixel build's, read before its step rewrites it
+       (fastps_mark.h): an end while it was being tried is its own */
+    int beside = vu_zero_mark_stage_read();
+    vu_zero_mark_beside_words(NULL);
+    if (beside != VU_ZERO_STAGE_TRYING &&
+        vu_zero_mark_stage_beside(activityPath, "fastps-mark.txt") == VU_ZERO_STAGE_TRYING) {
+        beside = VU_ZERO_STAGE_TRYING;
+        vu_zero_mark_beside_words("the fast pixel build was");
+    }
+    char mver[64];
+    s_stageRead =
+        mark[0] != '\0' ? vu_zero_mark_parse(mark, mver, sizeof mver) : VU_ZERO_STAGE_NONE;
+    nodiscard_mark_decide_beside(mark, kind, words, version, beside, out, sizeof out, line,
+                                 sizeof line, &block);
+    vu_zero_mark_beside_words(NULL);
     mark[strcspn(mark, "\r\n")] = '\0';
     if (strcmp(mark, out) != 0) {
         if (out[0] == '\0') {

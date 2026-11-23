@@ -120,6 +120,7 @@
 #include "rd_vu_rec_early.h"
 #include "rd_vu_record.h"
 #include "rd_vu_skin_check.h"
+#include "rd_fastps.h"
 #include "rd_nodiscard.h"
 #include "rd_vu_zero.h"
 #include "rd_velocity.h"
@@ -832,6 +833,7 @@ bool rd_vuprepass_selftest(void)
         rd__log("VU pre-pass: off (self-test not run)");
         rd__vu_zero_selftest_skip("the VU pre-pass is off"); /* rd_vu_zero.h */
         rd__nd_selftest_skip("the VU pre-pass is off");      /* rd_nodiscard.h */
+        rd__fps_selftest_skip("the VU pre-pass is off");     /* rd_fastps.h */
         rd__vu_zero_start_line();
         return true;
     }
@@ -842,6 +844,7 @@ bool rd_vuprepass_selftest(void)
         rd__vu_compact_selftest_not_run("no SCENE target"); /* off: never tried */
         rd__vu_zero_selftest_skip("no SCENE target to run it on");
         rd__nd_selftest_skip("no SCENE target to run it on");
+        rd__fps_selftest_skip("no SCENE target to run it on");
         rd__vu_zero_start_line();
         return true;
     }
@@ -934,10 +937,12 @@ bool rd_vuprepass_selftest(void)
        passed */
     if (v.on) {
         rd__vu_zero_selftest(t);
-        rd__nd_selftest(t); /* the discard-free twins' (rd_nodiscard_selftest.c) */
+        rd__nd_selftest(t);  /* the discard-free twins' (rd_nodiscard_selftest.c) */
+        rd__fps_selftest(t); /* the fast pixel build's (rd_fastps_selftest.c), after them */
     } else {
         rd__vu_zero_selftest_skip("the VU pre-pass failed its self-test");
         rd__nd_selftest_skip("the VU pre-pass failed its self-test");
+        rd__fps_selftest_skip("the VU pre-pass failed its self-test");
     }
     /* its state and the modules of it made, then the in-play judge's line,
        which knows both attempts' states */

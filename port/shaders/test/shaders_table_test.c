@@ -265,6 +265,10 @@ static const char *const expectedNoDual[] = {
  * port/render/rd_nodiscard.h makes them only once they are tried) */
 static const char *const expectedNoDiscard[] = {"vu_ps_nodual_nd", "vu_texa_ps_nodual_nd"};
 
+/* vu_ps_nodual's fast-set build (ICO_VU_FAST; port/render/rd_fastps.h makes
+ * it only once it is tried) */
+static const char *const expectedFast[] = {"vu_ps_nodual_fast", "vu_ps_nodual_fast_nd"};
+
 /* the gs_dual_out entries computing the GS blend from the destination
  * (ICO_DST_READ: rasterizer-ordered view, attachment read) */
 static const char *const expectedDst[] = {
@@ -495,6 +499,16 @@ int main(void)
             !strstr(d->defines, "ICO_VU_NODISCARD=1")) {
             printf("FAIL %s: not in the table, not a fragment build or without ICO_VU_NODISCARD\n",
                    expectedNoDiscard[i]);
+            failures++;
+        }
+    }
+    const size_t nFast = sizeof(expectedFast) / sizeof(expectedFast[0]);
+    for (size_t i = 0; i < nFast; i++) {
+        const IcoShaderBlob *d = ico_find_shader(expectedFast[i]);
+        if (!d || d->stage != ICO_SHADER_STAGE_FRAGMENT || !d->defines ||
+            !strstr(d->defines, "ICO_VU_FAST=1") || !strstr(d->defines, "ICO_NO_DUAL=1")) {
+            printf("FAIL %s: not in the table, not a fragment build or without ICO_VU_FAST\n",
+                   expectedFast[i]);
             failures++;
         }
     }
@@ -734,10 +748,11 @@ int main(void)
         }
     }
     const size_t nAll = sizeof(expected) / sizeof(expected[0]) + nAa + nNoDual + nNoDiscard +
-                        nVariants + nDst + nUint + nTiler + nDiet + nPlanes + nPlain + nPrepass +
-                        nBatch + nMerge + nSmooth + nCrack + nShadowLoad + nAuraBox + nBaked +
-                        nTone + nFsr1 + nVelocity + nStore + nCompute + nZero + nPresentScene +
-                        nShadowTile + sizeof(expectedShadowFine) / sizeof(expectedShadowFine[0]);
+                        nFast + nVariants + nDst + nUint + nTiler + nDiet + nPlanes + nPlain +
+                        nPrepass + nBatch + nMerge + nSmooth + nCrack + nShadowLoad + nAuraBox +
+                        nBaked + nTone + nFsr1 + nVelocity + nStore + nCompute + nZero +
+                        nPresentScene + nShadowTile +
+                        sizeof(expectedShadowFine) / sizeof(expectedShadowFine[0]);
     if (g_icoShaderCount != nAll) {
         printf("FAIL table has %u entries, expected %zu\n", g_icoShaderCount, nAll);
         failures++;

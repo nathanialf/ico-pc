@@ -357,6 +357,84 @@ static void testTwoSubjects(void)
     CHECK(s_a.trials == 0u, "a subject with no work was tried");
 }
 
+/* three subjects, as the renderer registers them (rd_ab_run.c: the cull,
+   the twins, the fast pixel build): one trial at a time in that order, one
+   verdict each for the run, the others at their default (with it) during a
+   trial, then no further trial: every subject judged */
+static void testThree(void)
+{
+    printf("three subjects:\n");
+    rd_ab_init(&s_a, RD_AB_AUTO);
+    CHECK(rd_ab_subject(&s_a, "zero-area cull") == 0, "id 0");
+    CHECK(rd_ab_subject(&s_a, "discard-free twins") == 1, "id 1");
+    CHECK(rd_ab_subject(&s_a, "fast pixel build") == 2, "id 2");
+    for (int i = 0; i < 3; i++) {
+        rd_ab_allow(&s_a, i, true);
+    }
+    rd_ab_set_scenery(&s_a, true);
+    /* the cull saves 5 %, the twins cost 5 %, the fast build saves 4 % */
+    static const double kEffect[3] = {-0.05, 0.05, -0.04};
+    double t = 0.0;
+    Pend q[4];
+    int qn = 0;
+    int order[8], no = 0;
+    bool others = true;
+    for (int i = 0; i < 1600; i++) {
+        if (qn >= 2) {
+            const RdAbIn in = {q[0].tag, 7u, false, true, q[0].work, q[0].ms};
+            rd_ab_collect(&s_a, &in);
+            memmove(q, q + 1, (size_t)(qn - 1) * sizeof(q[0]));
+            qn--;
+        }
+        const RdAbTag tag = rd_ab_begin(&s_a, 41, t, false);
+        if (s_a.t.active) {
+            const int sub = s_a.t.subject;
+            if (no == 0 || order[no - 1] != sub) {
+                if (no < 8) {
+                    order[no++] = sub;
+                }
+            }
+            /* a subject not on trial and not judged yet keeps its default */
+            for (int k = 0; k < 3; k++) {
+                if (k != sub && s_a.subj[k].carry == RD_AB_V_NONE && (tag.off & (1u << k))) {
+                    others = false;
+                }
+            }
+        }
+        double ms = 40.0;
+        for (int k = 0; k < 3; k++) {
+            ms *= (tag.off & (1u << k)) ? 1.0 : 1.0 + kEffect[k];
+        }
+        q[qn++] = (Pend){tag, 50000.0, ms, false};
+        t += 40.0;
+        lines(&s_a);
+    }
+    CHECK(no == 3 && order[0] == 0 && order[1] == 1 && order[2] == 2,
+          "the trials' order (%d trials: %d %d %d)", no, no > 0 ? order[0] : -1,
+          no > 1 ? order[1] : -1, no > 2 ? order[2] : -1);
+    CHECK(others, "a subject not on trial was off before its verdict");
+    CHECK(rd_ab_verdict(&s_a, 0, 41) == RD_AB_V_ON, "the cull not on");
+    CHECK(rd_ab_verdict(&s_a, 1, 41) == RD_AB_V_OFF, "the twins not off");
+    CHECK(rd_ab_verdict(&s_a, 2, 41) == RD_AB_V_ON, "the fast pixel build not on");
+    CHECK(s_a.trials == 3u && s_a.subj[2].trials == 1u && !s_a.t.active,
+          "%u trials, the fast build's %u, running %d", (unsigned)s_a.trials,
+          (unsigned)s_a.subj[2].trials, (int)s_a.t.active);
+    /* the next stage: every subject on the run's verdict, no trial */
+    t += 100000.0;
+    for (int i = 0; i < 300; i++) {
+        const RdAbTag tag = rd_ab_begin(&s_a, 42, t, false);
+        CHECK(tag.off == 2u && tag.trial == 0u, "stage 42: off %x trial %u", tag.off,
+              (unsigned)tag.trial);
+        if (tag.off != 2u || tag.trial != 0u) {
+            break;
+        }
+        const RdAbIn in = {tag, 7u, false, true, 50000.0, 40.0};
+        rd_ab_collect(&s_a, &in);
+        t += 40.0;
+    }
+    CHECK(s_a.trials == 3u, "a trial after every subject was judged (%u)", (unsigned)s_a.trials);
+}
+
 static void testStop(void)
 {
     printf("the way back:\n");
@@ -810,6 +888,7 @@ int main(void)
     testCost();
     testStages();
     testTwoSubjects();
+    testThree();
     testStop();
     testModes();
     testOnce();

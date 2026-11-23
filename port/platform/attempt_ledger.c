@@ -88,6 +88,8 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
                          "without it"},
     [ICO_ATT_AB_NODISCARD] = {"the discard-free twins timed in play",
                               "stages kept with them so far", "without them"},
+    [ICO_ATT_AB_FASTPS] = {"the fast pixel build timed in play", "stages kept with it so far",
+                           "without it"},
 };
 
 static const AttMore k_more[ICO_ATT_COUNT] = {
@@ -95,6 +97,7 @@ static const AttMore k_more[ICO_ATT_COUNT] = {
        nearly always */
     [ICO_ATT_AB_ZERO] = {"trials run", 1},
     [ICO_ATT_AB_NODISCARD] = {"trials run", 1},
+    [ICO_ATT_AB_FASTPS] = {"trials run", 1},
 };
 
 /* the rows' live values (__atomic), and the block text's last counts (the

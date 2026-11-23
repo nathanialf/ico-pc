@@ -130,6 +130,7 @@ eye_trail_jpn 0.01
 eye_trail_jun26 0.01
 eye_trail_kor 0.01
 eye_trail_ntsc 0.02
+fastps_mark 0.02  # estimate: a CPU unit test with a few files, like nodiscard_mark (not run here)
 ffx_link_test 4.68
 fiber 0.11
 fiber_guard 0.15
@@ -447,6 +448,9 @@ rd_empty_skip_ab_gl 57.71
 rd_even 0.02
 rd_fades_fold 0.92
 rd_fades_fold_ab 651.47
+rd_fastps 0.01  # estimate: a CPU unit test of the eligibility table and a file read, like rd_nodiscard (not run here)
+rd_fastps_ab 66.56  # estimate: rd_nodiscard_ab x 1.3 (three fixtures under four profiles; not run here)
+rd_fastps_ab_gl 83.80  # estimate: rd_nodiscard_ab_gl (three fixtures; not run here)
 rd_fill11_ab 588.44
 rd_fill11_gl 147.09
 rd_filter 0.05
@@ -912,6 +916,9 @@ rd_vuprepass_selftest_compute_sabotage_straddle 4.11
 rd_vuprepass_selftest_compute_vk11 3.17
 rd_vuprepass_selftest_devtable 0.67
 rd_vuprepass_selftest_devtable_on 3.35
+rd_vuprepass_selftest_fastps 17.43  # estimate: the twins' self-test before it plus rd_vuprepass_selftest_nodiscard_sabotage x 1.5 (two pairs of small replays, two gathering rounds each; not run here)
+rd_vuprepass_selftest_fastps_marked 11.25  # estimate: the twins' self-test alone (the build not tried; not run here)
+rd_vuprepass_selftest_fastps_sabotage 15.37  # estimate: the twins' self-test plus one pair (it stops at the first; not run here)
 rd_vuprepass_selftest_gl 4.71
 rd_vuprepass_selftest_lossrung 0.75
 rd_vuprepass_selftest_lossrung_desktop 3.69

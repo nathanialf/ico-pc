@@ -14,7 +14,7 @@
 
 /* this run's dump zips at most (ico_share_report_collect_run) */
 #define ICO_SHARE_REPORT_RUN_ZIPS 4
-#define ICO_SHARE_REPORT_MAX (10 + ICO_SHARE_REPORT_RUN_ZIPS)
+#define ICO_SHARE_REPORT_MAX (11 + ICO_SHARE_REPORT_RUN_ZIPS)
 #define ICO_SHARE_REPORT_PATH 1024
 
 typedef struct IcoShareReport {
@@ -42,7 +42,8 @@ typedef struct IcoShareReport {
                                     an rc build's alone writes it)
      logs_dir/vu-zero-mark.txt,     issue 179's attempts' marks on the
      ahead-mark.txt,                install, as the crash report takes them
-     nodiscard-mark.txt             (report.h)
+     nodiscard-mark.txt,            (report.h)
+     fastps-mark.txt
    "newest": the latest modification time, then the greatest name.  NULL or
    "" folders are skipped.  The count (out->count). */
 int ico_share_report_collect(const char *logs_dir, const char *dumps_dir, IcoShareReport *out);

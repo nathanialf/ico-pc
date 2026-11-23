@@ -9,6 +9,7 @@
 
 #include "attempt_ledger.h"
 #include "rd_ab.h"
+#include "rd_fastps.h"
 #include "rd_internal.h"
 #include "rd_nodiscard.h"
 #include "rd_perf_clock.h"
@@ -24,9 +25,10 @@ static bool s_open;          /* a replay's record is being made */
 static uint8_t s_off;        /* its subjects at their off arm */
 static uint8_t s_allowed;    /* the subjects that may be tried now */
 /* each subject's ledger row and what was fired into it so far */
-static const int k_row[2] = {ICO_ATT_AB_ZERO, ICO_ATT_AB_NODISCARD};
-static int s_ledAllowed[2] = {-1, -1}, s_ledStopped[2] = {-1, -1};
-static uint32_t s_ledOn[2], s_ledOff[2], s_ledTrials[2];
+#define N_SUBJ 3
+static const int k_row[N_SUBJ] = {ICO_ATT_AB_ZERO, ICO_ATT_AB_NODISCARD, ICO_ATT_AB_FASTPS};
+static int s_ledAllowed[N_SUBJ] = {-1, -1, -1}, s_ledStopped[N_SUBJ] = {-1, -1, -1};
+static uint32_t s_ledOn[N_SUBJ], s_ledOff[N_SUBJ], s_ledTrials[N_SUBJ];
 static long s_fakeLoss;    /* ICO_RD_AB_FAKE_LOSS: the replay N */
 static uint32_t s_replays; /* begun this run */
 static int s_scenery;      /* __atomic: the game shows scenery now (rd_ab_scenery) */
@@ -40,6 +42,7 @@ static void made(void)
     rd_ab_init(&s_ab, rd_ab_mode_of(getenv("ICO_RD_AB")));
     (void)rd_ab_subject(&s_ab, "zero-area cull");     /* RD_AB_ZERO */
     (void)rd_ab_subject(&s_ab, "discard-free twins"); /* RD_AB_NODISCARD */
+    (void)rd_ab_subject(&s_ab, "fast pixel build");   /* RD_AB_FASTPS */
     const char *fl = getenv("ICO_RD_AB_FAKE_LOSS");
     s_fakeLoss = fl != NULL ? strtol(fl, NULL, 10) : 0;
 }
@@ -55,7 +58,7 @@ static void drain(void)
 /* the ledger's rows: each state where it changed, its counts (totals) */
 static void ledger(void)
 {
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < N_SUBJ; i++) {
         const int allowed = (s_allowed & (1u << i)) != 0u;
         if (allowed != s_ledAllowed[i] || (int)s_ab.stopped != s_ledStopped[i]) {
             s_ledAllowed[i] = allowed;
@@ -73,14 +76,17 @@ static void ledger(void)
 }
 
 /* the subjects that may be tried now (their own self-tests, marks and
-   run-time checks: rd__vu_zero_triable, rd__nd_triable), told to the judge */
+   run-time checks: rd__vu_zero_triable, rd__nd_triable, rd__fps_triable),
+   told to the judge */
 static void allow(void)
 {
-    const bool zero = rd__vu_zero_triable(), nd = rd__nd_triable();
+    const bool zero = rd__vu_zero_triable(), nd = rd__nd_triable(), fps = rd__fps_triable();
     rd_ab_allow(&s_ab, RD_AB_ZERO, zero);
     rd_ab_allow(&s_ab, RD_AB_NODISCARD, nd);
+    rd_ab_allow(&s_ab, RD_AB_FASTPS, fps);
     rd_ab_set_scenery(&s_ab, __atomic_load_n(&s_scenery, __ATOMIC_ACQUIRE) != 0);
-    s_allowed = (uint8_t)((zero ? 1u << RD_AB_ZERO : 0u) | (nd ? 1u << RD_AB_NODISCARD : 0u));
+    s_allowed = (uint8_t)((zero ? 1u << RD_AB_ZERO : 0u) | (nd ? 1u << RD_AB_NODISCARD : 0u) |
+                          (fps ? 1u << RD_AB_FASTPS : 0u));
 }
 
 void rd__ab_scene(int stage, uint32_t first)

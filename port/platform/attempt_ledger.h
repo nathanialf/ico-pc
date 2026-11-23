@@ -235,6 +235,12 @@ enum {
        mark, the loss ladder), its counts the run's totals: the stages kept
        with them, those without them (second), the trials run (third) */
     ICO_ATT_AB_NODISCARD,
+    /* rd_ab_run.c, rd_fastps_run.c (issue 179, v0.11.15): the fast pixel
+       build (port/render/rd_fastps.h) timed in play as the twins are; state
+       from ico_attempt_decide_timed (not applicable where its self-test did
+       not pass), its counts the run's totals: the stages kept with it, those
+       without it (second), the trials run (third) */
+    ICO_ATT_AB_FASTPS,
     ICO_ATT_COUNT
 };
 
