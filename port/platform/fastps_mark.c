@@ -155,6 +155,9 @@ int fastps_mark_step(const char *activityPath, const char *version, int exitReas
     if (beside != VU_ZERO_STAGE_TRYING && nodiscard_mark_stage_read() == VU_ZERO_STAGE_TRYING) {
         beside = VU_ZERO_STAGE_TRYING;
         vu_zero_mark_beside_words("the discard-free twins were");
+    } else if (beside != VU_ZERO_STAGE_TRYING && vu_zero_mark_ratecard_measuring(activityPath)) {
+        beside = VU_ZERO_STAGE_TRYING; /* the rate card's end (REV4R N3) */
+        vu_zero_mark_beside_words("the rate card was");
     }
     fastps_mark_decide_beside(mark, kind, words, version, beside, out, sizeof out, line,
                               sizeof line, &block);

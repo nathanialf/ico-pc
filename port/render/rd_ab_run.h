@@ -69,6 +69,10 @@ void rd__ab_used(int subject);
 /* the replay being made is not one to time subject on after all (the
    discard-free twins: a pass found its twin not made yet) */
 void rd__ab_unused(int subject);
+/* a pass of the replay being made drew through a build only because a
+   pipeline was not made yet (the twins' or the fast pixel build's): the
+   replay is timed for no subject (rd_ab.h rd_ab_use_note) */
+void rd__ab_unmade(void);
 /* the judge's start line (after the self-tests: rd__vu_zero_start_line)
    and the attempt ledger's row */
 void rd__ab_start_line(void);

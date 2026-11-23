@@ -209,6 +209,20 @@ void rd_ab_set_scenery(RdAb *a, bool scenery);
 
 /* every trial stopped, every subject at its off arm for the run (why) */
 void rd_ab_stop(RdAb *a, const char *why);
+
+/* A replay's subjects in use (RdAbIn.used) after a note while it is made:
+   RD_AB_NOTE_USED subject changed something in it, RD_AB_NOTE_UNUSED it is
+   not one to time subject on (its own share partial), RD_AB_NOTE_UNMADE a
+   pass of it drew through a build only because a pipeline was not made yet
+   (any subject's: the fast pixel build asking for the key a twins' off arm
+   leaves, a twin's not made yet): the replay is then timed for no subject,
+   on either arm, and stays so (*tainted) whatever is noted after it; a
+   replay's start clears *tainted.  REV4R S1: the twins' off arm drew through
+   vu_ps_nodual while ON|FAST compiled, and those replays counted for the
+   twins. */
+enum { RD_AB_NOTE_UNUSED = 0, RD_AB_NOTE_USED = 1, RD_AB_NOTE_UNMADE = 2 };
+
+uint8_t rd_ab_use_note(uint8_t used, bool *tainted, int subject, int note);
 /* subject id's verdict for stage (RD_AB_V_*) */
 int rd_ab_verdict(const RdAb *a, int id, int32_t stage);
 /* the next line waiting, false none */

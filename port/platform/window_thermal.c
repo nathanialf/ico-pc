@@ -169,8 +169,7 @@ void window_thermal_tick(double atMs, double javaHeadroom, int javaStatus)
 #endif
 
 static double s_seen;
-static ThermalSample s_last;
-static double s_lastAt = -1.0;
+static ThermalSample s_last; /* the game thread's copy (window_thermal_take) */
 
 void window_thermal_take(void)
 {
@@ -179,16 +178,20 @@ void window_thermal_take(void)
         return;
     }
     unpack(v, &s_last);
-    s_lastAt = s_seen;
     perf_secs_window_phone(&s_last, ico_thread_now_ms());
 }
 
+/* any thread (the stall rows, the where lines, which the lifecycle thread
+   can reach too: REV4R N5): a consistent copy from the cell itself
+   (sys_cell's sequence), not window_thermal_take's game-thread copy */
 bool window_thermal_now(ThermalSample *out)
 {
-    if (s_lastAt < 0.0 || !power_fresh(s_lastAt, ico_thread_now_ms())) {
+    double v[PACKED], at = -1.0, took = 0.0;
+    if (sys_cell_get(&s_cell, v, PACKED, &at, &took) != PACKED || at < 0.0 ||
+        !power_fresh(at, ico_thread_now_ms())) {
         return false;
     }
-    *out = s_last;
+    unpack(v, out);
     return true;
 }
 
@@ -199,18 +202,22 @@ const ThermalCpus *window_thermal_cpus(void)
 
 void window_thermal_open_line(void)
 {
-    static bool s_said;
-    if (s_said) {
+    static int s_said; /* __atomic: the line once, whichever thread asks first */
+    if (__atomic_load_n(&s_said, __ATOMIC_ACQUIRE)) {
         return;
     }
 #ifdef __ANDROID__
     if (!__atomic_load_n(&s_ready, __ATOMIC_ACQUIRE)) {
         return; /* not read yet */
     }
-    s_said = true;
+    if (__atomic_exchange_n(&s_said, 1, __ATOMIC_ACQ_REL)) {
+        return;
+    }
     fprintf(stderr, "window: %s\n", s_open);
 #else
-    s_said = true;
+    if (__atomic_exchange_n(&s_said, 1, __ATOMIC_ACQ_REL)) {
+        return;
+    }
     fprintf(stderr, "window: thermal: not read here (the thermal API, the thermal zones and the "
                     "CPU clocks are read on Android alone)\n");
 #endif

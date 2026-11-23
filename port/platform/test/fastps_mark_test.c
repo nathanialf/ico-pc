@@ -30,6 +30,7 @@
 #include "host_fs.h"
 #include "last_run.h"
 #include "nodiscard_mark.h"
+#include "ratecard_env.h"
 #include "vu_zero_mark.h"
 
 static int fails;
@@ -234,6 +235,43 @@ static void step(const char *dir)
     CHECK(t == 1 && f == 0);
     CHECK(strstr(s_lines, "fast pixel build: was on when it ended (a crash): the discard-free "
                           "twins were being tried then (their mark): tried again") != NULL);
+    /* a crash inside the rate card (REV4R N3): its file says "measuring";
+       the three attempts were counting or on: none blocked, each line names
+       the card; then no card on the start after it */
+    char rc[1024];
+    snprintf(rc, sizeof rc, "%s/ratecard.txt", dir);
+    prevRun(prev, "crash (signal 11)");
+    writeText(rc, "measuring 2026-11-23 10:00\nkey Mali-G52 | 688x512 | v0.11.15\n");
+    writeText(zero, "on v0.11.15\n");
+    writeText(nd, "counting v0.11.15\n");
+    writeText(mark, "on v0.11.15\n");
+    s_lines[0] = '\0';
+    steps(act, &z, &t, &f);
+    CHECK(z == 0 && t == 0 && f == 0);
+    CHECK(strstr(s_lines, "zero-area cull: was on when it ended (a crash): the rate card was being "
+                          "tried then (its mark): tried again") != NULL);
+    CHECK(strstr(s_lines, "discard-free twins: were on, their first pictures being counted, when "
+                          "it ended (a crash): the rate card was being tried then (its mark): "
+                          "tried again") != NULL);
+    CHECK(strstr(s_lines, "fast pixel build: was on when it ended (a crash): the rate card was "
+                          "being tried then (its mark): tried again") != NULL);
+    ratecard_env_begin(act, "v0.11.15");
+    CHECK(getenv("ICO_RATECARD_SKIP") != NULL &&
+          strstr(getenv("ICO_RATECARD_SKIP"), "the run before ended badly (a crash") != NULL);
+    /* the same with a clean end: the card runs (no skip), nothing blocked */
+    prevRun(prev, "clean");
+    writeText(zero, "on v0.11.15\n");
+    steps(act, &z, &t, &f);
+    ratecard_env_begin(act, "v0.11.15");
+    CHECK(getenv("ICO_RATECARD_SKIP") == NULL);
+    /* without the card measuring, the same crash blocks every attempt on */
+    (void)ico_remove(rc);
+    prevRun(prev, "crash (signal 11)");
+    writeText(zero, "on v0.11.15\n");
+    writeText(nd, "on v0.11.15\n");
+    writeText(mark, "on v0.11.15\n");
+    steps(act, &z, &t, &f);
+    CHECK(z == 1 && t == 1 && f == 1);
     (void)ico_remove(zero);
     (void)ico_remove(nd);
     (void)ico_remove(mark);

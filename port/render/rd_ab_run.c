@@ -32,6 +32,7 @@ static uint32_t s_ledOn[N_SUBJ], s_ledOff[N_SUBJ], s_ledTrials[N_SUBJ];
 static long s_fakeLoss;    /* ICO_RD_AB_FAKE_LOSS: the replay N */
 static uint32_t s_replays; /* begun this run */
 static int s_scenery;      /* __atomic: the game shows scenery now (rd_ab_scenery) */
+static bool s_tainted;     /* the replay being made drew a build for an unmade pipeline */
 
 static void made(void)
 {
@@ -117,6 +118,7 @@ void rd__ab_begin(RdPerfRecord *r)
     r->abEpoch = tag.epoch;
     r->abOff = s_off;
     s_open = true;
+    s_tainted = false;
     drain();
     ledger();
 }
@@ -176,14 +178,21 @@ bool rd__ab_off(int subject)
 void rd__ab_used(int subject)
 {
     if (s_open && subject >= 0 && subject < RD_AB_SUBJECTS) {
-        g_rdPerf.abUsed |= (uint8_t)(1u << subject);
+        g_rdPerf.abUsed = rd_ab_use_note(g_rdPerf.abUsed, &s_tainted, subject, RD_AB_NOTE_USED);
     }
 }
 
 void rd__ab_unused(int subject)
 {
     if (s_open && subject >= 0 && subject < RD_AB_SUBJECTS) {
-        g_rdPerf.abUsed &= (uint8_t)~(1u << subject);
+        g_rdPerf.abUsed = rd_ab_use_note(g_rdPerf.abUsed, &s_tainted, subject, RD_AB_NOTE_UNUSED);
+    }
+}
+
+void rd__ab_unmade(void)
+{
+    if (s_open) {
+        g_rdPerf.abUsed = rd_ab_use_note(g_rdPerf.abUsed, &s_tainted, -1, RD_AB_NOTE_UNMADE);
     }
 }
 

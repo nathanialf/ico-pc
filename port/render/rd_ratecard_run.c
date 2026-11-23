@@ -48,6 +48,7 @@
 #endif
 
 #include "rd_fastps.h"
+#include "host_fs.h" /* ico_fopen: UTF-8 paths on Windows */
 #include "rd_internal.h"
 #include "rd_mesh.h"
 #include "rd_nodiscard.h"
@@ -420,7 +421,7 @@ static bool buildFrame(RdFrame *f, int k, uint32_t scene, uint32_t w, uint32_t h
 static bool readFile(const char *path, char *out, size_t cap)
 {
     out[0] = '\0';
-    FILE *f = path ? fopen(path, "rb") : NULL;
+    FILE *f = path ? ico_fopen(path, "rb") : NULL;
     if (f == NULL) {
         return false;
     }
@@ -432,7 +433,7 @@ static bool readFile(const char *path, char *out, size_t cap)
 
 static void writeFile(const char *path, const char *text)
 {
-    FILE *f = path ? fopen(path, "wb") : NULL;
+    FILE *f = path ? ico_fopen(path, "wb") : NULL;
     if (f == NULL) {
         if (path) {
             rd__log("rate card: its file %s could not be written", path);
@@ -488,7 +489,7 @@ static void label(RdRcItem *it, const char *text, const char *unit)
 }
 
 /* the card measured into c (an item that could not be timed says why) */
-static void measure(RdRateCard *c, RdTargetRec *t, double t0, double budgetMs)
+static void measure(RdRateCard *c, RdTargetRec *t, double budgetMs)
 {
     const uint32_t scene = rd_target(RD_TARGET_SCENE).id;
     const bool noDual = g_rd.noDual;
@@ -573,13 +574,63 @@ static void measure(RdRateCard *c, RdTargetRec *t, double t0, double budgetMs)
     /* the clear's frame, replayed to bring each frame's stamps in */
     RdFrame e;
     const bool fe = made && buildFrame(&e, F_E, scene, t->w, t->h, &m);
+    /* every frame's pipelines first, untimed and outside the budget (REV4R
+       N3): the ordinary ones gathered and made on the workers (the twins'
+       and the fast build's with them under their holds), then the fast
+       build's by play's own path (its keys are asked for at a pass's
+       DrawCB in the draw, which the gathering replay does not reach for
+       every pass: a plain replay asks, the queue is made at once,
+       rd__pipeline_twin_tick(true), twice) */
+    const double tm0 = rd__now_ms();
+    uint32_t madeFrames = 0;
     for (int k = 0; stop == NULL && k < F_COUNT; k++) {
         const bool fastFrame = k == F_L2R_FAST || k == F_L2R_FASTND;
         const bool twinFrame = k == F_L2_TWIN || k == F_H2_TWIN || k == F_L2R_FASTND;
         if ((twinFrame && !twins) || (fastFrame && !fast)) {
             continue;
         }
-        if (rd__now_ms() - t0 > budgetMs) {
+        RdFrame f;
+        if (!buildFrame(&f, k, scene, t->w, t->h, &m)) {
+            rd__frame_free(&f);
+            stop = "its frames could not be built";
+            break;
+        }
+        rd__nd_hold(twinFrame);
+        rd__fps_hold(fastFrame);
+        rd__replay_set_window(UINT32_MAX, 0);
+        rd__pipeline_gather(true);
+        (void)rd__replay_frame(&f, 0, false);
+        rd__pipeline_gather(false);
+        rd__replay_set_window(0, 0);
+        rhi_wait_idle();
+        bool stopped = false;
+        (void)rd__pipeline_create_gathered(&stopped);
+        for (int round = 0; fastFrame && round < 2 && !rhi_device_lost(); round++) {
+            (void)rd__replay_frame(&f, 0, false);
+            rhi_wait_idle();
+            rd__pipeline_twin_tick(true);
+        }
+        rd__frame_free(&f);
+        rd__fps_hold(false);
+        rd__nd_hold(false);
+        madeFrames++;
+        if (rhi_device_lost()) {
+            stop = "the device failed in its replays";
+        }
+    }
+    const double tb = rd__now_ms();
+    rd__log("rate card: the pipelines of its %u frames made in %.1f ms before the timed frames "
+            "(outside its budget of %.0f ms, which is checked before each timed frame: a frame "
+            "begun under it runs to its end, %u timed replays and %u more)",
+            (unsigned)madeFrames, tb - tm0, budgetMs, (unsigned)RD_RC_SAMPLES,
+            (unsigned)RHI_FRAMES_IN_FLIGHT);
+    for (int k = 0; stop == NULL && k < F_COUNT; k++) {
+        const bool fastFrame = k == F_L2R_FAST || k == F_L2R_FASTND;
+        const bool twinFrame = k == F_L2_TWIN || k == F_H2_TWIN || k == F_L2R_FASTND;
+        if ((twinFrame && !twins) || (fastFrame && !fast)) {
+            continue;
+        }
+        if (rd__now_ms() - tb > budgetMs) {
             stop = "the card's time budget ran out";
             break;
         }
@@ -591,27 +642,6 @@ static void measure(RdRateCard *c, RdTargetRec *t, double t0, double budgetMs)
         }
         rd__nd_hold(twinFrame);
         rd__fps_hold(fastFrame);
-        /* untimed: the pipelines gathered and made on the workers (the
-           twins' and the fast build's with them under their holds); the
-           fast keys are asked for only at a pass's DrawCB, once its
-           ordinary pipeline exists: a second gathering round */
-        rd__replay_set_window(UINT32_MAX, 0);
-        rd__pipeline_gather(true);
-        (void)rd__replay_frame(&f, 0, false);
-        rd__pipeline_gather(false);
-        rd__replay_set_window(0, 0);
-        rhi_wait_idle();
-        bool stopped = false;
-        (void)rd__pipeline_create_gathered(&stopped);
-        /* the fast build's keys are asked for at a pass's DrawCB in the
-           draw, which the gathering replay does not reach for every pass:
-           made as the fast build's self-test makes them (a plain replay asks,
-           the queue made at once, rd__pipeline_twin_tick(true)), twice */
-        for (int round = 0; fastFrame && round < 2 && !rhi_device_lost(); round++) {
-            (void)rd__replay_frame(&f, 0, false);
-            rhi_wait_idle();
-            rd__pipeline_twin_tick(true);
-        }
         uint64_t tw = 0, rf[RD_ND_REASONS];
         rd__nd_take(&tw, rf);
         uint64_t fw = 0, ff[RD_FPS_REASONS], fe2[2];
@@ -757,6 +787,20 @@ void rd_rate_card(void)
     if (!g_rd.inited || !g_rd.hasDevice) {
         return;
     }
+    /* not on a start after a bad end or a device loss (REV4R N3): a card
+       measured then is not this device's steady state, and a second bad end
+       inside it would be charged to it again */
+    const char *skipWhy = getenv("ICO_RATECARD_SKIP");
+    const char *row = getenv("ICO_LOSS_ROW");
+    const long lost = row != NULL ? strtol(row, NULL, 10) : 0;
+    if ((skipWhy != NULL && skipWhy[0] != '\0') || lost > 0) {
+        if (skipWhy != NULL && skipWhy[0] != '\0') {
+            rd__log("rate card: not measured this start (%.200s)", skipWhy);
+        } else {
+            rd__log("rate card: not measured this start (the loss ladder: ICO_LOSS_ROW %ld)", lost);
+        }
+        return;
+    }
     if (!rhi_timestamps_supported() || !rd__perf_list_stamps_on()) {
         rd__log("rate card: not measured (no GPU timestamps on this device or [dev] "
                 "perf_list_stamps = false)");
@@ -824,7 +868,7 @@ void rd_rate_card(void)
     c.th = t->th;
     snprintf(c.date, sizeof(c.date), "%s", now);
     /* the tests' switch lifts the budget (lavapipe draws on the CPU) */
-    measure(&c, t, t0, forced ? 60000.0 : RC_BUDGET_MS);
+    measure(&c, t, forced ? 60000.0 : RC_BUDGET_MS);
     c.totalMs = rd__now_ms() - t0;
     c.have = true;
     static char block[4096];

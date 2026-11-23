@@ -285,10 +285,13 @@ static void state(void)
     CHECK(strcmp(rd__fps_state_text(), "held") == 0);
     CHECK(rd_fps_text(buf, sizeof(buf), 1) == 0u && buf[0] == '\0');
     (void)rd__fps_stats_text(st, sizeof(st));
-    CHECK(strstr(st, "fast pixel build held (until its start-up self-test passes): 0 passes "
-                     "through it, 0 triangles; refused: texture 0, texel 0, levels 0, DATE 0, "
-                     "plane 0, alpha 0, crop 0, not made yet 0, timed without it 0, module not "
-                     "tested 0; 0 modules of it made, 0 of its pipelines alive") != NULL);
+    CHECK(
+        strstr(
+            st,
+            "fast pixel build held (until its start-up self-test passes): 0 passes "
+            "through it (0 of them through vu_ps_nodual_fast_nd), 0 triangles; refused: texture 0, texel 0, levels 0, DATE 0, "
+            "plane 0, alpha 0, crop 0, not made yet 0, timed without it 0, module not "
+            "tested 0; 0 modules of it made, 0 of its pipelines alive") != NULL);
     rd__fps_verdict(true, "");
     CHECK(rd__fps_on());
     CHECK(!rd__fps_triable()); /* no module without a device */

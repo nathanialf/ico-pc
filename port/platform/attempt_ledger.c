@@ -84,11 +84,14 @@ static const AttRow k_rows[ICO_ATT_COUNT] = {
                             "drawn in full while paused"},
     [ICO_ATT_SKIN_PHONE] = {"the skin check's own pipelines left out on a phone",
                             "box checks not drawn", "twins not drawn"},
-    [ICO_ATT_AB_ZERO] = {"the zero-area cull timed in play", "stages kept with it so far",
+    /* one verdict a run (rd_ab.c, JUDGEONCE): a verdict "with it" or
+       "without it", each kept for every stage after it; the counts restart
+       with a renderer made again */
+    [ICO_ATT_AB_ZERO] = {"the zero-area cull timed in play", "verdicts with it so far",
                          "without it"},
-    [ICO_ATT_AB_NODISCARD] = {"the discard-free twins timed in play",
-                              "stages kept with them so far", "without them"},
-    [ICO_ATT_AB_FASTPS] = {"the fast pixel build timed in play", "stages kept with it so far",
+    [ICO_ATT_AB_NODISCARD] = {"the discard-free twins timed in play", "verdicts with them so far",
+                              "without them"},
+    [ICO_ATT_AB_FASTPS] = {"the fast pixel build timed in play", "verdicts with it so far",
                            "without it"},
 };
 
@@ -302,7 +305,8 @@ size_t ico_attempt_on_text(char *out, size_t cap)
     int shown = 0;
     for (int i = 0; i < ICO_ATT_COUNT; i++) {
         const IcoAttemptState st = ico_attempt_state_of(i);
-        const bool judged = i == ICO_ATT_AB_ZERO || i == ICO_ATT_AB_NODISCARD;
+        const bool judged =
+            i == ICO_ATT_AB_ZERO || i == ICO_ATT_AB_NODISCARD || i == ICO_ATT_AB_FASTPS;
         if (st != ICO_ATT_ON && !(judged && st != ICO_ATT_NOT_SET && st != ICO_ATT_NOT_BUILT &&
                                   st != ICO_ATT_REMOVED)) {
             continue;
@@ -984,7 +988,7 @@ void ico_attempt_decide_timed(int id, int mode, int allowed, int stopped)
                           "of a reset): without it from there");
     } else {
         ico_attempt_state(id, ICO_ATT_ON,
-                          "a trial in each stage, with it and without it in turn: the stage keeps "
-                          "the faster");
+                          "timed once a run, with it and without it in turn: the faster kept "
+                          "for every stage");
     }
 }

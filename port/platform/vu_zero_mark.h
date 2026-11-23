@@ -136,6 +136,15 @@ int vu_zero_mark_stage_beside(const char *activityPath, const char *name);
    step that called vu_zero_mark_decide_beside / nodiscard_mark_decide_beside
    (NULL: that function's own words) */
 void vu_zero_mark_beside_words(const char *who);
+/* the rate card's results file beside activityPath (logs/ratecard.txt,
+   port/render/rd_ratecard.h) says "measuring": the run before ended inside
+   the card, which then answers for that end (REV4R N3: the attempts keep
+   their state; the card skips itself at its next start) */
+int vu_zero_mark_ratecard_measuring(const char *activityPath);
+/* the end of the run before as the cull's step classed it (VU_ZERO_END_*,
+   -1 before the step) and its words (the rate card's start rule:
+   ratecard_env.c) */
+int vu_zero_mark_end_read(char *words, size_t size);
 const char *vu_zero_mark_beside_who(const char *fallback);
 
 /* The start's step on files with Android's record given (the tests): reads
