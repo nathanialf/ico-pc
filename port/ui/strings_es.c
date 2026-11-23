@@ -817,7 +817,7 @@ const char *const ui_strings_es[UI_STR_COUNT] =
         [UI_STR_STATES_TITLE_HINT] = "Se guarda desde el menú de pausa",
         [UI_STR_STATES_SAVE_FAILED] = "No se pudo guardar el estado",
         [UI_STR_STATES_XB_OLD] =
-            "Creado con la versión %s, demasiado antigua.\nTus partidas de la memory card\nsiguen funcionando.",
+            "Versión %s demasiado antigua: no se puede\ncargar. Tus partidas de la memory card\nsiguen funcionando.",
         [UI_STR_STATES_XB_CODE] =
             "Creado con la versión %s; la versión %s cambió\nese punto del juego, así que no se puede cargar.\nTus partidas de la memory card\nsiguen funcionando.",
         [UI_STR_STATES_XB_DATA] =

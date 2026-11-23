@@ -1624,6 +1624,7 @@ static void SetCameraMatrix_Ico2_jun26(int flag)
     int cut;
     int enable;
     int mode = 1;
+    int zoomStop = 0; /* PC port: the look-around stopped by the zoom alone (Camera reset) */
     int changed = 0;
     unsigned char f8;
     int group;
@@ -1707,6 +1708,7 @@ static void SetCameraMatrix_Ico2_jun26(int flag)
            (its label puts the dead zone's first 0.0f in $f0). aug6's TRFILE
            has no code on the lines of the clamp and of the response. */
         if (ico_zoom_wanted(pad[0].now & 2)) { /* PC port: R2 held or toggled */
+            zoomStop = mode != 0;
             mode = 0;
         }
         if (mode) {
@@ -1750,9 +1752,12 @@ static void SetCameraMatrix_Ico2_jun26(int flag)
                 sz = dir.f[2] * mag;
             }
         }
-        /* PC port: Camera reset (camera_reset.h) */
+        /* PC port: Camera reset (camera_reset.h); live too while only the
+           zoom stops the look-around, so R3 ends a toggled zoom here as well */
         if (ico_cam_reset(pad[0].now & 0x400,
-                          systemStatus[5] == 0 && IsAbleBoyControl() != 0 && mode != 0, &sx, &sz)) {
+                          systemStatus[5] == 0 && IsAbleBoyControl() != 0 &&
+                              (mode != 0 || zoomStop != 0),
+                          &sx, &sz)) {
             ClearHandCameraCorrect();
         }
         if (systemStatus[5] != 0 || IsAbleBoyControl() == 0 || mode == 0) {

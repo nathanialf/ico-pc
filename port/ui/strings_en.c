@@ -804,9 +804,9 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_STATES_XB_OLD] =
         "Made by version %s, too old to load.\nYour memory-card saves still work.",
     [UI_STR_STATES_XB_CODE] =
-        "Made by version %s; %s changed where\nit was saved, so it cannot load.\nYour memory-card saves still work.",
+        "Made by version %s; version %s changed\nthat part of the game, so it cannot load.\nYour memory-card saves still work.",
     [UI_STR_STATES_XB_DATA] =
-        "Made by version %s; %s changed how\nprogress is kept, so it cannot load.\nYour memory-card saves still work.",
+        "Made by version %s; version %s changed\nhow progress is kept, so it cannot load.\nYour memory-card saves still work.",
     [UI_STR_STATES_XB_PINNED] = "Only version %s can load it.\nYour memory-card saves still work.",
     [UI_STR_STATES_CKPT_ROW] = "Loads from its last checkpoint",
     [UI_STR_STATES_CKPT_LOADED] = "Resumed at its last checkpoint\n(made by version %s).",
