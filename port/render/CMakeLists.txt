@@ -641,8 +641,11 @@ target_link_libraries(rd_perf_test PRIVATE ico_render)
 # the frames it leaves alone).  rd_vis_test: the scene draws' visibility test
 # (rd_vis.c, rd_vis_hiz.c), CPU only: the bounds of synthetic streams, the
 # plane test under random matrices, the VU references (vu1_ref) as its
-# oracle in both rounding modes, the shadow frame on recorded frames, and the
-# occlusion test's bounds, rasterisation and verdicts.  rd_vis_hiz_test: the
+# oracle in both rounding modes, the shadow frame on recorded frames, the
+# occlusion test's bounds, rasterisation and verdicts, and the discard-free
+# twins' box proof (rd__vis_gs_proof: fixed boxes in front, straddling,
+# behind, at GS Z 0, saturating, code 36's w range, empty, NaN and infinite;
+# random cameras: every proved box's points keep their GS position).  rd_vis_hiz_test: the
 # occlusion test's cheaper collect (rd_vis_hiz.c rd__vis_hiz_mesh_ex,
 # rd_vis_hiz_fast.c), CPU only: the batch screen box's bound, the fast vertex
 # pass against the full one on random meshes, random frames under the plain

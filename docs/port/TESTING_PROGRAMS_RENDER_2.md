@@ -548,7 +548,11 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   test through; on a clean clipper verdict the forms table: prelit 32 and 36 under the camera
   rule, extended or not, the cut and the fused kick draws take the twin, and lit, skinned 24,
   lit 36, the drops kept, two-sided, mirrored, photo mode's free camera and the ticks' cameras are
-  refused as `form`, every one `clipped` when not clean and given the twin at clip mode none), the passes no twin exists for (other entries, the planes' twins, no *_nodual
+  refused as `form`, every one `clipped` when not clean and given the twin at clip mode none;
+  proven in front of the eye (EYEBOX, `inFront`) the checked forms take the twin clean or not
+  (class "proven in front of the eye"), `box` without the proof when not clean, the other forms
+  never past their own refusal, particles never, and plane, DATE, band and alpha still refused
+  over the proof; each twin's class, `rd_nd_twin_class`), the passes no twin exists for (other entries, the planes' twins, no *_nodual
   build, a destination read by storage and by attachment), the reasons' and modules' names, the
   key bits in the key's one byte; the judge's use of a replay (in use only when a pass drew
   through a twin and none found its twin not made yet, in either order; the off arm with every
@@ -567,9 +571,12 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   draws each through it: none found its twin not made there),
   and under corpus 0 draws and "not applicable here" (dual-source blending). `rd_nodiscard_ab_gl`:
   OpenGL (llvmpipe), every fixture at 4:3 1x with `ICO_GL_FAKE_NO_DUAL=1`, above 0 over the list.
-  Without the self-test no clipper check runs, so only clip mode none takes a twin there
-  ([PIPELINES.md](PIPELINES.md#the-discard-free-twins), the floor a `not clean` device keeps); the
-  run with them must have no draw of the clipper check's class. `rd_nodiscard_clean`: the clean verdict's path,
+  Without the self-test no clipper check runs (`not checked`, as a device measured not clean), so
+  clip mode none and the camera rule's passes the CPU proved in front of the eye take a twin there
+  ([PIPELINES.md](PIPELINES.md#the-discard-free-twins)); the run with them must have no draw of the
+  clipper check's class, and under each Arm profile over the list draws proven in front of the eye
+  through a twin and draws refused as `box` (both above 0: the proof's two outcomes), the targets
+  byte for byte all the same on lavapipe, which is not clean. `rd_nodiscard_clean`: the clean verdict's path,
   the run with them under `ICO_RD_VU_NODISCARD_CLIPPER=clean` (lavapipe measures its clipper not
   clean), so the camera rule's passes of the checked forms take a twin: every target byte for byte (these
   fixtures hold no eye-crossing triangle whose pixels differ under Mesa 25.0.7, measured; another
@@ -598,7 +605,8 @@ tests, from `rd_store_plan_test.c` to `rd_glow_light_ab.cmake`. The entries read
   start-up self-test after the cull's (the pre-pass still on), each run's start line saying what
   of them exists: on (the plain case through vu_ps_nodual_nd and a textured TEXA case through
   vu_texa_ps_nodual_nd, each counted, neither entry "drew nothing", each shown to draw by the frame
-  without it differing; the alpha test's (untextured
+  without it differing; a prelit code 32 strip under the camera rule wholly in front of the eye
+  through its twin by the proof alone, counted "proven in front of the eye"; the alpha test's (untextured
   and textured), the clip plane's and a code 32 eye-plane crossing's cases refused; the clipper
   check's frames in both entries, the rule refusing the band and DATE, the pictures byte for byte; 2 modules, its own
   pipelines released after it, none of the twins' alive; the mark `counting <the test's
