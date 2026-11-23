@@ -415,6 +415,17 @@ static void table_cases(void)
         CHECK(s_t.replays == 1u && s_t.named == 1u && s_t.byPiece[3] == 1u);
     }
 
+    /* the phone's heat and clocks at the stall's second, at the row's end */
+    stall_table_end(&s_t, true);
+    {
+        StallRow q = row_of(300, 0, 150.0);
+        snprintf(q.phone, sizeof q.phone, "1/0.67/46.5/1200:1800,2000:1500");
+        stall_table_add(&s_t, &q);
+        (void)stall_table_text(&s_t, names, true, 0, b, sizeof b);
+        CHECK(strstr(b, "present -/-/- ms; phone 1/0.67/46.5/1200:1800,2000:1500") != NULL);
+        stall_table_end(&s_t, true);
+    }
+
     /* the 2 s triangles' most */
     StallTris w;
     stall_tris_reset(&w);

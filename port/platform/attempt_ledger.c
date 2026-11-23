@@ -289,6 +289,44 @@ size_t ico_attempt_start_part(char *out, size_t cap, int *row)
     return p.at;
 }
 
+size_t ico_attempt_on_text(char *out, size_t cap)
+{
+    if (cap == 0) {
+        return 0;
+    }
+    Put p = {out, cap, 0, 0};
+    out[0] = '\0';
+    int shown = 0;
+    for (int i = 0; i < ICO_ATT_COUNT; i++) {
+        const IcoAttemptState st = ico_attempt_state_of(i);
+        const bool judged = i == ICO_ATT_AB_ZERO || i == ICO_ATT_AB_NODISCARD;
+        if (st != ICO_ATT_ON && !(judged && st != ICO_ATT_NOT_SET && st != ICO_ATT_NOT_BUILT &&
+                                  st != ICO_ATT_REMOVED)) {
+            continue;
+        }
+        put(&p, "%s%s %s", shown ? "; " : "", k_rows[i].name, ico_attempt_state_word(st));
+        if (k_rows[i].unit != NULL) {
+            /* the counts so far (the block's since the last block line, or
+               the run's), not taken */
+            const uint64_t n = __atomic_load_n(&s_att[i].n, __ATOMIC_RELAXED);
+            const uint64_t n2 = __atomic_load_n(&s_att[i].n2, __ATOMIC_RELAXED);
+            const uint64_t n3 = __atomic_load_n(&s_att[i].n3, __ATOMIC_RELAXED);
+            put(&p, " %llu", (unsigned long long)(k_more[i].total ? n : n - s_att[i].lastN));
+            if (k_rows[i].unit2 != NULL) {
+                put(&p, "/%llu", (unsigned long long)(k_more[i].total ? n2 : n2 - s_att[i].lastN2));
+            }
+            if (k_more[i].unit3 != NULL) {
+                put(&p, "/%llu", (unsigned long long)(k_more[i].total ? n3 : n3 - s_att[i].lastN3));
+            }
+        }
+        shown++;
+    }
+    if (shown == 0) {
+        put(&p, "none on");
+    }
+    return p.at;
+}
+
 size_t ico_attempt_block_text(char *out, size_t cap, int stalls)
 {
     if (cap == 0) {

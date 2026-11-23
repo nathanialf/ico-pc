@@ -305,6 +305,63 @@ size_t perf_secs_block_lines(PerfSecs *s, double nowMs, double tickMs, char *out
     return at;
 }
 
+void perf_secs_phone(PerfSecs *s, const ThermalSample *t, double nowMs)
+{
+    const unsigned i = second_at(s, nowMs);
+    if (i < PERF_SECS_MAX) {
+        s->phone[i] = *t;
+        s->phoneSet[i] = true;
+    }
+}
+
+size_t perf_secs_phone_lines(PerfSecs *s, double nowMs, const ThermalCpus *c, char *perSec,
+                             size_t cap, char *block, size_t blockCap)
+{
+    size_t at = 0;
+    if (cap > 0) {
+        perSec[0] = '\0';
+    }
+    if (block != NULL && blockCap > 0) {
+        block[0] = '\0';
+    }
+    if (s->t0Ms >= 0.0 && nowMs >= s->t0Ms && (nowMs - s->t0Ms) / 1000.0 < PERF_SECS_MAX) {
+        (void)second_at(s, nowMs); /* the seconds to now begun, as the pictures line's */
+    }
+    if (s->t0Ms < 0.0 || s->n == 0 || cap == 0) {
+        return 0;
+    }
+    const double d = (nowMs - s->t0Ms) / 1000.0;
+    const unsigned whole = d >= 4e9 ? 4000000000u : (d > 0.0 ? (unsigned)d : 0u);
+    const unsigned shown = whole < s->n ? whole : s->n;
+    bool any = false;
+    for (unsigned i = 0; i < shown; i++) {
+        any = any || s->phoneSet[i];
+    }
+    if (!any) {
+        return 0;
+    }
+    put(perSec, cap, &at,
+        "phone a second (thermal status/headroom/hottest zone C/each CPU cluster's clock:allowed "
+        "most MHz):");
+    for (unsigned i = 0; i < shown; i++) {
+        if (i == 0 || s->sec[i] != s->sec[i - 1]) {
+            put(perSec, cap, &at, "%s", i ? " | " : " ");
+            put_stage(perSec, cap, &at, s->sec[i]);
+        }
+        if (s->phoneSet[i]) {
+            char tok[96];
+            (void)thermal_token(&s->phone[i], tok, sizeof tok);
+            put(perSec, cap, &at, " %s", tok);
+        } else {
+            put(perSec, cap, &at, " -");
+        }
+    }
+    if (block != NULL && blockCap > 0) {
+        (void)thermal_read_block_text(s->phone, s->phoneSet, shown, c, block, blockCap);
+    }
+    return at;
+}
+
 /* the window's (the game thread's: steps, drained records and the block's
    end all run there) */
 static PerfSecs s_win = {.t0Ms = -1.0, .stage = PERF_SECS_NO_STAGE};
@@ -322,6 +379,17 @@ void perf_secs_window_picture(double nowMs)
 void perf_secs_window_record(const PerfSecsRec *r, double nowMs)
 {
     perf_secs_record(&s_win, r, nowMs);
+}
+
+void perf_secs_window_phone(const ThermalSample *t, double nowMs)
+{
+    perf_secs_phone(&s_win, t, nowMs);
+}
+
+size_t perf_secs_window_phone_lines(double nowMs, const ThermalCpus *c, char *perSec, size_t cap,
+                                    char *block, size_t blockCap)
+{
+    return perf_secs_phone_lines(&s_win, nowMs, c, perSec, cap, block, blockCap);
 }
 
 size_t perf_secs_window_block_text(double nowMs, char *out, size_t cap)

@@ -198,6 +198,22 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
 - `rd_vu_zero_test.c`, its longest clause (`rd_vu_zero`): the 10 s clause with every refusal
   reason, the shared lists and a checked picture at seven-digit counts fits `RD_VU_ZERO_TEXT_MAX`
   whole (the window's buffer).
+- `thermal_read_test.c` (ctest `thermal_read`, a program of its own; CPU only, not on Windows):
+  the phone's heat and clocks (`port/platform/thermal_read.h`, issue 179) over fixture trees it
+  writes in the build folder: the parsers (millidegrees and degrees, kHz, cpu lists, garbage), the
+  zones chosen by type (a type of none of these, a garbage temperature, an unreadable one when not
+  root, two hundred zones: four chosen, the scan capped at 128), no thermal folder, the CPU
+  clusters from cpufreq's policies and from each core's folder, a second's reading, the once, token
+  and block lines word for word.
+- `rd_perf_where_test.c` (ctest `rd_perf_where`, a program of its own; CPU only): where the time
+  went (`port/render/rd_perf_where.h`, issue 179) from a made-up block of the boat scene's shape:
+  the six lines word for word, a piece of 0 ms left out, a list not timed pass by pass, an effect
+  without a name, the window's texts absent, no timed picture, the rate card's hook, a short buffer.
+- `perf_secs_test.c`, its phone case (`perf_secs`): the second's last reading, `-` a second with
+  none, the block's thermal line, nothing with no reading, the next block from nothing.
+- `stall_coincide_test.c`, its phone case (`stall_coincide`): the reading at the row's end.
+- `attempt_ledger_test.c`, its where case (`attempt_ledger`): the rows on with their counts, the
+  judge's row in any reported state, a row not on left out, nothing taken from the block line.
 - `report_test.c`, its marks case (`report`): issue 179's mark files (`vu-zero-mark.txt`,
   `ahead-mark.txt`, `nodiscard-mark.txt`) go in byte for byte when they are there; one not there,
   and all three once removed, have no entry.

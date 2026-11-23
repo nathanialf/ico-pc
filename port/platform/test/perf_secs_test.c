@@ -143,6 +143,42 @@ static void more_cases(void)
     }
     (void)perf_secs_block_lines(s, 1000.0, 20.0, a, sizeof a, m, sizeof m, iv, sizeof iv);
     CHECK(strstr(m, "): 5: 30.0/800/2.40/2.70/-") != NULL);
+    /* the phone's readings a second (thermal_read.h): the second's last,
+       "-" a second with none, the block's thermal line; nothing with no
+       reading */
+    {
+        char ph[1024], blk[512];
+        perf_secs_reset(s);
+        perf_secs_step(s, 42, 0.0);
+        CHECK(perf_secs_phone_lines(s, 500.0, NULL, ph, sizeof ph, blk, sizeof blk) == 0 &&
+              ph[0] == '\0' && blk[0] == '\0');
+        perf_secs_reset(s);
+        perf_secs_step(s, 42, 0.0);
+        ThermalSample t;
+        thermal_sample_none(&t);
+        t.status = 1;
+        t.headroom = 0.5;
+        t.clusters = 1;
+        t.curMhz[0] = 1000;
+        t.maxMhz[0] = 1800;
+        perf_secs_phone(s, &t, 100.0);
+        t.headroom = 0.67; /* the second's last wins */
+        perf_secs_phone(s, &t, 900.0);
+        t.status = 2;
+        t.curMhz[0] = 1200;
+        t.maxMhz[0] = 1500;
+        perf_secs_phone(s, &t, 2100.0);
+        perf_secs_step(s, 40, 2500.0);
+        (void)perf_secs_phone_lines(s, 3000.0, NULL, ph, sizeof ph, blk, sizeof blk);
+        CHECK(text_is(ph, "phone a second (thermal status/headroom/hottest zone C/each CPU "
+                          "cluster's clock:allowed most MHz): 42: 1/0.67/-/1000:1800 - | 40: "
+                          "2/0.67/-/1200:1500"));
+        CHECK(text_is(blk, "thermal in the block: status 1-2 (changed), headroom 0.67-0.67, no "
+                           "zone read; cluster 0 1000-1200 MHz, allowed 1500-1800 MHz; the "
+                           "allowed most changed: yes"));
+        (void)perf_secs_block_lines(s, 3000.0, 20.0, a, sizeof a, m, sizeof m, iv, sizeof iv);
+        CHECK(!s->phoneSet[0]); /* the next block from nothing */
+    }
     /* the pictures line alone (perf_secs_block_text) is as before */
     perf_secs_reset(s);
     play(s, 42, 0, 2000, -1, -1);

@@ -1336,6 +1336,31 @@ int main(void)
     CHECK(ico_attempt_state_of(ICO_ATT_FEW_CORES) == ICO_ATT_NOT_SET);
     CHECK(ico_attempt_block_text(b, sizeof(b), -1) == 0);
 
+    /* the where table's attempts (ico_attempt_on_text): the rows on with
+       their counts so far, the in-play judge's rows in any reported state,
+       nothing taken from the block line */
+    {
+        char w[1024];
+        (void)ico_attempt_on_text(w, sizeof w);
+        CHECK(strcmp(w, "none on") == 0);
+        ico_attempt_state(ICO_ATT_DATE_ONE, ICO_ATT_ON, "the test");
+        ico_attempt_fire(ICO_ATT_DATE_ONE, 5u);
+        ico_attempt_fire2(ICO_ATT_DATE_ONE, 2u);
+        ico_attempt_state(ICO_ATT_AB_ZERO, ICO_ATT_OFF_DEFAULT, "the test");
+        ico_attempt_state(ICO_ATT_EMPTY_SKIP, ICO_ATT_OFF_DEFAULT, "the test"); /* not on: out */
+        CHECK(ico_attempt_on_text(w, sizeof w) == strlen(w));
+        if (strcmp(w, "one DATE set-up on 5/2; the zero-area cull timed in play off by default "
+                      "0/0/0") != 0) {
+            printf("on text: %s\n", w);
+            failures++;
+        }
+        (void)ico_attempt_on_text(w, sizeof w); /* again: the same counts */
+        CHECK(strstr(w, "one DATE set-up on 5/2") == w);
+        (void)ico_attempt_block_text(b, sizeof(b), -1);
+        CHECK(strstr(b, "one DATE set-up on 5 shared (2 retaken by the guard)") != NULL);
+        ico_attempt_reset();
+    }
+
     if (failures) {
         printf("attempt_ledger_test: %d failures\n", failures);
         return 1;

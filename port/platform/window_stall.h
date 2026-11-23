@@ -139,6 +139,14 @@ bool window_stall_memory_block(WindowMemBlock *b);
    threads named like the graphics driver's, once a run when first known
    (render_thread.h), before it */
 int window_stall_tally_take(char *out, size_t cap);
+/* The where table's (rd_perf_where.h) phone and stalls texts, before the
+   block's stall lines empty the table: the heat and clocks of the last
+   reading, the battery current, the memory available and its pressure
+   ("thermal (...) 1/0.67/46.5/1200:1800; battery -812 mA; memory 1173 MB
+   available, pressure not readable"); the block's stalls so far with
+   their largest piece ("12 in 11 replays, most in list 0 (8)", "0") */
+size_t window_stall_where_phone(char *out, size_t cap);
+size_t window_stall_where_stalls(char *out, size_t cap);
 /* The log thread's asks since the last take (their count), and what the
    last thermal ask and memory read took on it, ms */
 uint32_t window_stall_asks_take(double *thermalMs, double *memoryMs);
