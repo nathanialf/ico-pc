@@ -610,48 +610,152 @@ static void testPopups(void)
     ui_popup_reset();
     ui_popup_set_dev_test(0);
 
-    /* the in-play timing's notice (tune_notice.h): nothing without the
-       judge's word; queued with its title; in every language its body's
-       lines fit the panel's widest body (the panel's 576 units at the
-       body's size 21: popup.c MAX_W - 2 PAD_X) and the panel stays on the
-       picture; kept with the queue full and queued at the next call */
-    CHECK(ui_tune_notice(0) == 0 && !ui_popup_active(), "the notice without the judge's word");
+    /* the standing notice of the in-play timing (tune_notice.h, popup.h
+       ui_popup_notice_*): nothing before the judge's word; shown at it
+       without the queue; a queued popup beside it below, both on the
+       picture and not overlapping; in every language its title and its one
+       line fit (popup.h UI_POPUP_BODY_WIDTH at UI_POPUP_BODY_SIZE, the title
+       at UI_POPUP_TITLE_SIZE in the widest panel); a Triangle held from
+       before it came up, any other button and a Triangle while a menu owns
+       the pad do not hide it; a Triangle press in play does, for the run (the
+       judge's word again brings nothing back); the judge's done takes it
+       down, with each reason */
+    ui_tune_notice_reset();
+    ui_popup_reset();
+    CHECK(ui_tune_notice_step(UI_TUNE_JUDGE_NONE, 0u, 1) == UI_TUNE_NOTHING &&
+              !ui_popup_notice_active() && !ui_popup_active(),
+          "the notice before the judge's word");
     const UiLang langWas = ui_get_language();
     for (int l = 0; l < UI_LANG_COUNT; l++) {
         ui_set_language((UiLang)l);
+        ui_tune_notice_reset();
         ui_popup_reset();
-        CHECK(ui_tune_notice(1) == 1 && ui_popup_active(), "language %d: the notice not queued", l);
+        /* Triangle held as it comes up: no press */
+        CHECK(ui_tune_notice_step(UI_TUNE_JUDGE_DUE, UI_TUNE_TRIANGLE, 1) == UI_TUNE_SHOWN &&
+                  ui_popup_notice_shown() && !ui_popup_active(),
+              "language %d: the notice not shown, or shown through the queue", l);
+        CHECK(ui_tune_notice_step(UI_TUNE_JUDGE_DUE, UI_TUNE_TRIANGLE, 1) == UI_TUNE_NOTHING &&
+                  ui_tune_notice_up(),
+              "language %d: a Triangle held from before hid it", l);
         for (int i = 0; i < ui_popup_slide_vsyncs(); i++) {
             ui_popup_vsync();
         }
-        CHECK(strcmp(ui_popup_title(), ui_str_in((UiLang)l, UI_STR_TUNE_TITLE)) == 0,
-              "language %d: the notice's title \"%s\"", l, ui_popup_title());
-        CHECK(ui_popup_panel(r) && r[0] > 0.0f && r[2] <= UI_GRID_W && r[3] < 480.0f,
-              "language %d: the notice's panel %g,%g %g,%g", l, r[0], r[1], r[2], r[3]);
-        char body[UI_POPUP_TEXT];
-        snprintf(body, sizeof(body), "%s", ui_popup_body());
-        for (char *line = strtok(body, "\n"); line != NULL; line = strtok(NULL, "\n")) {
-            const float w = ui_measure_menu_text(21.0f, line);
-            CHECK(w <= UI_GRID_W - 2.0f * 18.0f - 2.0f * 14.0f,
-                  "language %d: the notice's line \"%s\" is %g units wide", l, line, w);
+        CHECK(strcmp(ui_popup_notice_title(), ui_str_in((UiLang)l, UI_STR_TUNE_TITLE)) == 0,
+              "language %d: the notice's title \"%s\"", l, ui_popup_notice_title());
+        float n4[4];
+        CHECK(ui_popup_notice_panel(n4) && n4[0] > 0.0f && n4[2] <= UI_GRID_W && n4[3] < 240.0f,
+              "language %d: the notice's panel %g,%g %g,%g", l, n4[0], n4[1], n4[2], n4[3]);
+        const float tw = ui_measure_menu_text(UI_POPUP_TITLE_SIZE, ui_popup_notice_title());
+        CHECK(tw <= UI_POPUP_BODY_WIDTH, "language %d: the notice's title is %g units wide", l, tw);
+        char line[UI_POPUP_TEXT];
+        const float lw =
+            ui_measure_menu_text(UI_POPUP_BODY_SIZE, ui_popup_notice_line(line, sizeof(line))) +
+            UI_POPUP_BODY_SIZE; /* the gap after the text */
+        CHECK(lw <= UI_POPUP_BODY_WIDTH, "language %d: the notice's line \"%s\" is %g units wide",
+              l, line, lw);
+        CHECK(strchr(ui_str_in((UiLang)l, UI_STR_TUNE_BODY), '\n') == NULL,
+              "language %d: the notice's text is more than one line", l);
+        /* a queued popup while it is up: below it, both on the picture */
+        CHECK(ui_popup_push("Achievement unlocked", "Body line") == 0, "a popup beside it");
+        for (int i = 0; i < ui_popup_slide_vsyncs(); i++) {
+            ui_popup_vsync();
         }
+        float q4[4];
+        CHECK(ui_popup_panel(q4) && ui_popup_notice_panel(n4) && q4[1] >= n4[3] && q4[0] > 0.0f &&
+                  q4[2] <= UI_GRID_W && q4[3] < 480.0f,
+              "language %d: the queue's panel %g,%g %g,%g against the notice's %g,%g %g,%g", l,
+              q4[0], q4[1], q4[2], q4[3], n4[0], n4[1], n4[2], n4[3]);
+        /* other buttons, and Triangle while a menu owns the pad: still up */
+        CHECK(ui_tune_notice_step(UI_TUNE_JUDGE_DUE, 0u, 1) == UI_TUNE_NOTHING &&
+                  ui_tune_notice_step(UI_TUNE_JUDGE_DUE, 0xFFFFu & ~UI_TUNE_TRIANGLE, 1) ==
+                      UI_TUNE_NOTHING &&
+                  ui_tune_notice_step(UI_TUNE_JUDGE_DUE, 0u, 1) == UI_TUNE_NOTHING &&
+                  ui_tune_notice_step(UI_TUNE_JUDGE_DUE, UI_TUNE_TRIANGLE, 0) == UI_TUNE_NOTHING &&
+                  ui_tune_notice_up(),
+              "language %d: hidden by another button or a menu's Triangle", l);
+        /* a Triangle press in play: hidden; the caller's word as it was */
+        const unsigned int word = UI_TUNE_TRIANGLE | 0x0040u;
+        CHECK(ui_tune_notice_step(UI_TUNE_JUDGE_DUE, 0u, 1) == UI_TUNE_NOTHING &&
+                  ui_tune_notice_step(UI_TUNE_JUDGE_DUE, word, 1) == UI_TUNE_HIDDEN &&
+                  word == (UI_TUNE_TRIANGLE | 0x0040u) && !ui_tune_notice_up(),
+              "language %d: a Triangle press did not hide it", l);
+        for (int i = 0; i < ui_popup_slide_vsyncs(); i++) {
+            ui_popup_vsync();
+        }
+        CHECK(!ui_popup_notice_active() && ui_popup_active(),
+              "language %d: the notice not gone, or the queue's popup with it", l);
+        /* the judge due again, done: nothing for the rest of the run */
+        CHECK(ui_tune_notice_step(UI_TUNE_JUDGE_DUE, 0u, 1) == UI_TUNE_NOTHING &&
+                  ui_tune_notice_step(UI_TUNE_JUDGE_DONE_CAP, 0u, 1) == UI_TUNE_NOTHING &&
+                  !ui_popup_notice_active(),
+              "language %d: the notice back after it was hidden", l);
     }
+    /* the judge's done takes it down, each reason */
+    for (int done = UI_TUNE_JUDGE_DONE_CAP; done <= UI_TUNE_JUDGE_DONE_GONE; done++) {
+        ui_tune_notice_reset();
+        ui_popup_reset();
+        CHECK(ui_tune_notice_step(UI_TUNE_JUDGE_DUE, 0u, 1) == UI_TUNE_SHOWN, "shown (%d)", done);
+        CHECK(ui_tune_notice_step(done, 0u, 1) == UI_TUNE_DONE && !ui_popup_notice_shown() &&
+                  ui_popup_notice_active(),
+              "done %d: not taken down", done);
+        for (int i = 0; i < ui_popup_slide_vsyncs(); i++) {
+            ui_popup_vsync();
+        }
+        CHECK(!ui_popup_notice_active() &&
+                  ui_tune_notice_step(UI_TUNE_JUDGE_DUE, 0u, 1) == UI_TUNE_NOTHING,
+              "done %d: up again", done);
+    }
+    /* done before it was shown: never shown */
+    ui_tune_notice_reset();
+    CHECK(ui_tune_notice_step(UI_TUNE_JUDGE_DONE_STOP, 0u, 1) == UI_TUNE_NOTHING &&
+              ui_tune_notice_step(UI_TUNE_JUDGE_DUE, 0u, 1) == UI_TUNE_NOTHING &&
+              !ui_popup_notice_active(),
+          "shown after the judge was done");
+    ui_tune_notice_reset();
+    ui_popup_reset();
     ui_set_language(UI_LANG_EN);
-    ui_popup_reset();
-    CHECK(ui_tune_notice(1) == 1 && strcmp(ui_popup_title(), "Finding the best settings") == 0,
-          "the English title \"%s\"", ui_popup_title());
-    for (int i = 1; i < UI_POPUP_QUEUE; i++) {
-        ui_popup_push("x", "y");
-    }
-    CHECK(ui_tune_notice(1) == -1, "the notice queued past a full queue");
-    CHECK(ui_tune_notice(0) == -1, "the notice not kept while the queue is full");
-    ui_popup_reset();
-    CHECK(ui_tune_notice(0) == 1 && ui_popup_active() &&
-              strcmp(ui_popup_title(), "Finding the best settings") == 0,
-          "the notice kept past a full queue not queued at the next call");
-    CHECK(ui_tune_notice(0) == 0, "the notice queued twice");
+    CHECK(ui_tune_notice_step(UI_TUNE_JUDGE_DUE, 0u, 1) == UI_TUNE_SHOWN &&
+              strcmp(ui_popup_notice_title(), "Finding the best settings") == 0,
+          "the English title \"%s\"", ui_popup_notice_title());
+    ui_tune_notice_reset();
     ui_popup_reset();
     ui_set_language(langWas);
+
+    /* the shortened messages (the owner, 2026-11-23: less wordy) in every
+       language: each line of each fits the widest panel at the body's size
+       (the Latin texts keep their lines as written), the version numbers
+       put in as the host does; the driver's unreadable answer, a title, at
+       the title's size */
+    {
+        static const UiStrId kBodies[] = {
+            UI_STR_STATES_CKPT_LOADED,   UI_STR_STATES_CKPT_NONE,     UI_STR_STATES_XB_OLD,
+            UI_STR_STATES_XB_CODE,       UI_STR_STATES_XB_DATA,       UI_STR_STATES_XB_PINNED,
+            UI_STR_STATES_REFUSED_CHECK, UI_STR_RESTORE_DONE_RESTART, UI_STR_RESTORE_DONE_CLOSE,
+            UI_STR_RESTORE_CONFIRM_BODY, UI_STR_BACKUP_WHY_WRITE,     UI_STR_BACKUP_WHY_BUSY,
+            UI_STR_BACKUP_WHY_NEWER,     UI_STR_BACKUP_WHY_UNSAFE,    UI_STR_STEAM_FAILED_BODY};
+        for (int l = 0; l < UI_LANG_COUNT; l++) {
+            ui_set_language((UiLang)l);
+            for (unsigned k = 0; k < sizeof(kBodies) / sizeof(kBodies[0]); k++) {
+                char text[UI_POPUP_TEXT];
+                snprintf(text, sizeof(text), ui_str(kBodies[k]), "0.11.15", "0.11.16");
+                ui_popup_reset();
+                CHECK(ui_popup_push("Save states", text) == 0, "pushed");
+                char body[UI_POPUP_TEXT];
+                snprintf(body, sizeof(body), "%s", ui_popup_body());
+                for (char *ln = strtok(body, "\n"); ln != NULL; ln = strtok(NULL, "\n")) {
+                    const float w = ui_measure_menu_text(UI_POPUP_BODY_SIZE, ln);
+                    CHECK(w <= UI_POPUP_BODY_WIDTH,
+                          "language %d, string %d: the line \"%s\" is %g units wide", l,
+                          (int)kBodies[k], ln, w);
+                }
+            }
+            const float tw =
+                ui_measure_menu_text(UI_POPUP_TITLE_SIZE, ui_str(UI_STR_GPU_DRIVER_UNREADABLE));
+            CHECK(tw <= UI_POPUP_BODY_WIDTH, "language %d: the unreadable title is %g wide", l, tw);
+        }
+        ui_popup_reset();
+        ui_set_language(langWas);
+    }
 
     /* the timing in seconds: 0.3 s in, 4 s held, 0.3 s out at the default
        50 Hz and at 60 Hz (the Japanese disc, and the European one's 60 Hz

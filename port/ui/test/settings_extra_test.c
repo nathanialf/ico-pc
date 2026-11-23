@@ -753,19 +753,15 @@ static void testGpuDriver(void)
         /* the folder routes: the page's name, the sentence and the folder's
            path (this host's own) */
         {UI_GPU_INSTALL_NO_PICKER, "Graphics driver",
-         "The file picker could not be opened. You can copy the driver\xE2\x80\x99s zip "
-         "file into the game\xE2\x80\x99s drivers folder instead: Android/data/test/files/drivers"},
+         "The file picker did not open. Copy the driver\xE2\x80\x99s zip into the drivers "
+         "folder instead: Android/data/test/files/drivers"},
         {UI_GPU_INSTALL_NO_PICKER_APP, "Graphics driver",
-         "No app on this device can choose a file. Copy the driver\xE2\x80\x99s zip file "
-         "into the game\xE2\x80\x99s drivers folder instead: Android/data/test/files/drivers"},
-        {UI_GPU_INSTALL_UNREADABLE,
-         "The chosen file could not be read. Copy it onto this device first, then "
-         "choose it again.",
-         ""},
+         "No app here can choose a file. Copy the driver\xE2\x80\x99s zip into the drivers "
+         "folder instead: Android/data/test/files/drivers"},
+        {UI_GPU_INSTALL_UNREADABLE, "Unreadable: copy it to this device first", ""},
         {UI_GPU_INSTALL_CANCELLED, "Graphics driver",
-         "No file was chosen. If the file picker does not appear on this device, copy the "
-         "driver\xE2\x80\x99s zip file into the game\xE2\x80\x99s drivers folder and use "
-         "Add from the drivers folder: Android/data/test/files/drivers"}};
+         "No file chosen. If no file picker appears, copy the driver\xE2\x80\x99s zip into the "
+         "drivers folder and use Add from the drivers folder: Android/data/test/files/drivers"}};
 
     for (unsigned i = 0; i < sizeof(kAnswers) / sizeof(kAnswers[0]); i++) {
         ui_popup_reset();
@@ -824,8 +820,7 @@ static void testGpuDriver(void)
     for (int k = 0; k < 4; k++) {
         frame(0);
     }
-    CHECK(strcmp(ui_popup_title(), "The chosen file could not be read. Copy it onto this device "
-                                   "first, then choose it again.") == 0,
+    CHECK(strcmp(ui_popup_title(), "Unreadable: copy it to this device first") == 0,
           "unreadable: \"%s\"", ui_popup_title());
     s_gpuFiles = 0;
 

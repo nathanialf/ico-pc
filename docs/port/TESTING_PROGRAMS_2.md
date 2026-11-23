@@ -269,12 +269,18 @@ page's do ([Reading the entries](TESTING_PROGRAMS.md#reading-the-entries)).
 
 ## port/ui/test
 
-- `ui_test.c`, its popups block (`ui`, `ui_jpn`, `ui_kor`, `ui_cn`): the in-play timing's notice
-  (`port/ui/tune_notice.c`): nothing queued without the judge's word; in each of the eight
-  languages queued with that table's title, the panel on the picture and every body line within
-  the panel's 576 units at size 21; the English title word for word; with the queue full not queued
-  but kept (still kept at the next call while full), queued at the next call once there is room,
-  and only once; the language put back after.
+- `ui_test.c`, its popups block (`ui`, `ui_jpn`, `ui_kor`, `ui_cn`): the in-play timing's standing
+  notice (`port/ui/tune_notice.c`, `popup.h` `ui_popup_notice_*`): nothing before the judge's word;
+  in each of the eight languages shown at it without the queue, with that table's title, its
+  title and its one line within the panel (`UI_POPUP_BODY_WIDTH` at the popup's sizes), the panel
+  on the picture; a queued popup placed below it, both on the picture; a Triangle held from before
+  it came up, any other button and a Triangle while a menu owns the pad do not hide it, a Triangle
+  press in play does and the caller's pad word is left as it was; gone after its slide, not back
+  when the judge says due again; taken down by each of the judge's three done answers; never shown
+  when the judge was done first; the English title word for word. Then the shortened popup
+  messages (the save states' checkpoint and other-version messages, the refused check, the
+  restore and backup answers, the Steam failure's body) in every language, each line within the
+  panel at the body's size, and the Graphics driver's unreadable answer, a title, at the title's.
 - `settings_test.c`, `settings_extra_test.c`, `settings_discs_test.c`, added: Controls' sixteen
   rows with Zoom type between Hold type and Stick fix, shown from the title and the pause menu;
   `testZoomType` steps it from both (Hold, Right to Toggle with the key set and its note on the

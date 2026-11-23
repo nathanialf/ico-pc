@@ -142,6 +142,7 @@ typedef struct RdAbSubject {
        starts on and keeps until its own */
     int8_t carry;
     int32_t carryStage;
+    bool gone; /* off for the rest of the run (rd_ab_gone): never tried again */
 } RdAbSubject;
 
 typedef struct RdAb {
@@ -166,7 +167,6 @@ typedef struct RdAb {
     RdAbTrial t;
     uint32_t serial, trials;
     uint16_t epoch; /* rd_ab_forget's count: a record of an earlier renderer is not measured */
-    bool noticeDue, noticeGiven; /* the player's notice (rd_ab_take_notice) */
     bool capSaid;
     uint32_t altSeq;
     uint64_t offTrial; /* off-arm replays the trials made, the run */
@@ -203,11 +203,32 @@ void rd_ab_forget(RdAb *a, const char *why);
    present pass, so neither is work the subject can change), 0 when nothing
    is left */
 double rd_ab_scene_ms(double spanMs, double displayWaitMs, double presentMs);
-/* the player's notice ("finding the best settings", port/ui/tune_notice.h):
-   true once a run, at the first trial's start (not for a later trial, a
-   second subject, after a stop or a renderer made again; never when no
-   trial starts), then false */
-bool rd_ab_take_notice(RdAb *a);
+/* subject id is off for the rest of the run (its own failed self-test or
+   run-time check, the install's mark, its switch: not a self-test merely
+   not run, which a renderer made again runs): never tried again */
+void rd_ab_gone(RdAb *a, int id, bool gone);
+
+/* The player's notice ("Finding the best settings", port/ui/tune_notice.h):
+   whether timing is going on in this run, one answer for the UI:
+     RD_AB_NOTICE_NONE       no trial has started this run (nothing to say:
+                             never in the fixed and alternating modes, with
+                             nothing allowed, before a stage is known)
+     RD_AB_NOTICE_DUE        a trial has started and more timing may come
+     RD_AB_NOTICE_DONE_CAP   all RD_AB_TRIALS trials run, none running
+     RD_AB_NOTICE_DONE_STOP  every trial stopped (a device loss, the GPU's
+                             own sign of a reset)
+     RD_AB_NOTICE_DONE_GONE  every subject off for the rest of the run
+   The DONE answers do not go back to DUE (a renderer made again keeps the
+   trials' count, a stop and a gone subject stay). */
+enum {
+    RD_AB_NOTICE_NONE = 0,
+    RD_AB_NOTICE_DUE,
+    RD_AB_NOTICE_DONE_CAP,
+    RD_AB_NOTICE_DONE_STOP,
+    RD_AB_NOTICE_DONE_GONE
+};
+
+int rd_ab_notice_state(const RdAb *a);
 /* every trial stopped, every subject at its off arm for the run (why) */
 void rd_ab_stop(RdAb *a, const char *why);
 /* subject id's verdict for stage (RD_AB_V_*) */

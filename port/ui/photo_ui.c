@@ -549,6 +549,37 @@ static void hudGlyph(int glyph, float x, float mid, float size)
     static const uint8_t grey[4] = {0x80, 0x80, 0x80, 0x80};
     ui__draw_tex_quads(tex, &q, 1, grey, 0, NULL, 0);
 }
+
+/* The standing notice's Triangle (popup.h ui_popup_set_button_drawer), as
+   the HUD draws its buttons: the key bound to it in brackets once a key or
+   the mouse was pressed last, else the disc's picture or the button set's
+   art; its width at size, drawn with its left edge at x and its middle on
+   mid when draw; 0 with neither (the popup draws the word) */
+float ui__photo_triangle(float x, float mid, float size, int draw)
+{
+    int kind = ICO_SRC_NONE;
+    ico_input_last_press(&kind, NULL);
+    if (kind == ICO_SRC_KEY || kind == ICO_SRC_MOUSE) {
+        char name[48], word[56];
+        if (keyName(ICO_T_TRIANGLE, name, sizeof(name))) {
+            snprintf(word, sizeof(word), "[%s]", name);
+            if (draw) {
+                static const uint8_t pic[4] = {0x7A, 0x78, 0x70, 0x80};
+                ui_draw_menu_text(x, mid, size, pic, word, UI_VALIGN_MIDDLE, UI_INK_LIGHT, NULL);
+            }
+            return ui_measure_menu_text(size, word);
+        }
+    }
+    if (!lt_ext_glyph_available(LT_GLYPH_TRIANGLE)) {
+        return 0.0f;
+    }
+    int w = 0;
+    lt_ext_glyph_box(LT_GLYPH_TRIANGLE, size, &w, NULL);
+    if (draw && w > 0) {
+        hudGlyph(LT_GLYPH_TRIANGLE, x, mid, size);
+    }
+    return (float)w;
+}
 #endif
 
 void ui_photo_draw_overlay(const struct RdOverlayCtx *ctx)

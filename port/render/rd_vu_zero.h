@@ -239,6 +239,11 @@ void rd__vu_zero_start_line(void);
 /* the cull may be put on trial in play (rd_ab_run.h): on, its build made,
    not the self-test's frames (a blocked, failed or held cull never is) */
 bool rd__vu_zero_triable(void);
+/* the cull is off for the rest of the run (off for a reason a renderer made
+   again keeps: a failed self-test or check, the install's mark, the loss
+   ladder, ICO_RD_VU_ZERO=0; not a self-test merely not run): the in-play
+   judge's notice can leave (rd_ab.h rd_ab_gone) */
+bool rd__vu_zero_gone(void);
 /* whether the cull is on for the run now; its state's words */
 bool rd__vu_zero_on(void);
 const char *rd__vu_zero_state_text(void);

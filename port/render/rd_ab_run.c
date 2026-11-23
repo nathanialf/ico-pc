@@ -29,7 +29,7 @@ static int s_ledAllowed[2] = {-1, -1}, s_ledStopped[2] = {-1, -1};
 static uint32_t s_ledOn[2], s_ledOff[2], s_ledTrials[2];
 static long s_fakeLoss;    /* ICO_RD_AB_FAKE_LOSS: the replay N */
 static uint32_t s_replays; /* begun this run */
-static int s_notice;       /* __atomic: the player's notice due (rd_ab_notice_take) */
+static int s_notice;       /* __atomic: the player's notice (rd_ab_notice, RD_AB_NOTICE_*) */
 
 static void made(void)
 {
@@ -44,8 +44,15 @@ static void made(void)
     s_fakeLoss = fl != NULL ? strtol(fl, NULL, 10) : 0;
 }
 
+/* the player's notice's answer for the UI's thread (rd_ab_notice) */
+static void notice(void)
+{
+    __atomic_store_n(&s_notice, rd_ab_notice_state(&s_ab), __ATOMIC_RELEASE);
+}
+
 static void drain(void)
 {
+    notice();
     char l[RD_AB_LINE];
     while (rd_ab_take_line(&s_ab, l, sizeof(l))) {
         rd__log("%s", l);
@@ -79,6 +86,10 @@ static void allow(void)
     const bool zero = rd__vu_zero_triable(), nd = rd__nd_triable();
     rd_ab_allow(&s_ab, RD_AB_ZERO, zero);
     rd_ab_allow(&s_ab, RD_AB_NODISCARD, nd);
+    /* off for the rest of the run: the player's notice can leave once every
+       subject is (rd_ab_notice_state) */
+    rd_ab_gone(&s_ab, RD_AB_ZERO, rd__vu_zero_gone());
+    rd_ab_gone(&s_ab, RD_AB_NODISCARD, rd__nd_gone());
     s_allowed = (uint8_t)((zero ? 1u << RD_AB_ZERO : 0u) | (nd ? 1u << RD_AB_NODISCARD : 0u));
 }
 
@@ -108,9 +119,6 @@ void rd__ab_begin(RdPerfRecord *r)
     r->abSeq = tag.seq;
     r->abStage = tag.stage;
     r->abEpoch = tag.epoch;
-    if (rd_ab_take_notice(&s_ab)) {
-        __atomic_store_n(&s_notice, 1, __ATOMIC_RELEASE); /* the UI's thread shows it */
-    }
     r->abOff = s_off;
     s_open = true;
     drain();
@@ -159,9 +167,9 @@ void rd__ab_renderer(void)
     ledger();
 }
 
-bool rd_ab_notice_take(void)
+int rd_ab_notice(void)
 {
-    return __atomic_exchange_n(&s_notice, 0, __ATOMIC_ACQ_REL) != 0;
+    return __atomic_load_n(&s_notice, __ATOMIC_ACQUIRE);
 }
 
 bool rd__ab_off(int subject)

@@ -565,14 +565,13 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
         "選んだドライバーは前回起動しませんでした。端末内蔵のドライバーを使っています。",
     [UI_STR_GPU_DRIVER_NOSPACE] = "空き容量が足りず、追加できません",
     [UI_STR_GPU_DRIVER_NO_PICKER] =
-        "ファイル選択画面を開けませんでした。代わりにドライバーのzipファイルを次のフォルダーにコピーできます: %s",
+        "ファイル選択画面が開きませんでした。ドライバーのzipを次のフォルダーにコピーしてください: %s",
     [UI_STR_GPU_DRIVER_NO_PICKER_APP] =
-        "この端末にはファイルを選べるアプリがありません。ドライバーのzipファイルを次のフォルダーにコピーしてください: %s",
-    [UI_STR_GPU_DRIVER_UNREADABLE] =
-        "選んだファイルを読み込めませんでした。先にこの端末へコピーしてから、もう一度選んでください",
+        "ファイルを選べるアプリがありません。ドライバーのzipを次のフォルダーにコピーしてください: %s",
+    [UI_STR_GPU_DRIVER_UNREADABLE] = "読み込めません。先にこの端末へコピーしてください",
     [UI_STR_GPU_DRIVER_ADD_FILE] = "driversフォルダーから追加",
     [UI_STR_GPU_DRIVER_CANCELLED] =
-        "ファイルが選ばれませんでした。選択画面が開かない場合は、ドライバーのzipファイルを次のフォルダーにコピーして、driversフォルダーから追加を使ってください: %s",
+        "ファイルが選ばれませんでした。選択画面が開かない場合は、ドライバーのzipを次のフォルダーにコピーして、driversフォルダーから追加を使ってください: %s",
     [UI_STR_GPU_DRIVER_NOTE_LOST] =
         "この端末のQualcommドライバーで画面が止まりました。Turnipドライバーを追加するか、そのzipファイルを次のフォルダーにコピーしてください (%s)。次回の起動から使われます。",
     [UI_STR_QUIT_GAME] = "ゲームを終了",
@@ -641,8 +640,7 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_STEAM_NO_USER] = "Steamアカウントが見つかりません",
     [UI_STR_STEAM_NO_USER_BODY] = "一度Steamにサインインしてから、\nもう一度お試しください。",
     [UI_STR_STEAM_FAILED] = "Steamに追加できませんでした",
-    [UI_STR_STEAM_FAILED_BODY] =
-        "ショートカット一覧を変更できませんでした。\n手動で追加する方法はREADMEにあります。",
+    [UI_STR_STEAM_FAILED_BODY] = "手動で追加する方法はREADMEにあります。",
     [UI_STR_EXTRAS_DESKTOP] = "アプリケーションメニューに追加",
     [UI_STR_DESKTOP_ADDED] = "メニューに追加しました",
     [UI_STR_DESKTOP_ADDED_BODY] = "ゲームがアプリケーション\nメニューに入りました。",
@@ -670,7 +668,7 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_RESTORE_AGAIN] = "もう一度押して選ぶ",
     [UI_STR_RESTORE_CONFIRM_TITLE] = "バックアップから復元しますか？",
     [UI_STR_RESTORE_CONFIRM_BODY] =
-        "ここにあるメモリーカード、セーブステート、設定、実績がバックアップのものに置き換わり、ゲームが再起動します。\nもう一度押すとバックアップを選べます。",
+        "ここのメモリーカード、セーブステート、設定、実績をバックアップのものに置き換えて再起動します。\nもう一度押すとバックアップを選べます。",
     [UI_STR_RESTORE_CHOOSING] = "復元するバックアップを選んでください。",
     [UI_STR_RESTORE_READING] = "バックアップを読み込み中…",
     [UI_STR_RESTORE_PROGRESS] = "復元中：%d / %dファイル",
@@ -686,23 +684,21 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_BACKUP_DONE_BODY] = "%d個のファイルを\n%sに保存しました",
     [UI_STR_BACKUP_FAILED] = "データをバックアップできませんでした",
     [UI_STR_RESTORE_DONE] = "データを復元しています",
-    [UI_STR_RESTORE_DONE_RESTART] = "ゲームが再起動し、バックアップを元に戻します。",
+    [UI_STR_RESTORE_DONE_RESTART] = "再起動してバックアップを元に戻します。",
     [UI_STR_RESTORE_DONE_CLOSE] =
-        "ゲームを終了します。もう一度起動すると、起動時にバックアップを元に戻します。",
+        "ゲームを終了します。もう一度起動するとバックアップを元に戻します。",
     [UI_STR_RESTORE_FAILED] = "バックアップを復元できませんでした",
-    [UI_STR_BACKUP_WHY_BUSY] =
-        "今はできません：ゲームが保存中です。少し待ってからもう一度お試しください。",
+    [UI_STR_BACKUP_WHY_BUSY] = "ゲームが保存中です。少し待ってからお試しください。",
     [UI_STR_BACKUP_WHY_NOTHING] = "まだバックアップするものがありません。",
     [UI_STR_BACKUP_WHY_WRITE] =
-        "データを書き込めませんでした。空き容量を確認して、もう一度お試しください。",
+        "書き込めませんでした。空き容量を確認して、もう一度お試しください。",
     [UI_STR_BACKUP_WHY_READ] = "ファイルを読み込めませんでした。",
     [UI_STR_BACKUP_WHY_NOT_BACKUP] =
         "このファイルはこのゲームで作られたバックアップではありません。",
     [UI_STR_BACKUP_WHY_NEWER] =
-        "このバックアップは新しいバージョンで作られました。ゲームを更新してから復元してください。",
+        "新しいバージョンで作られました。ゲームを更新してから復元してください。",
     [UI_STR_BACKUP_WHY_DAMAGED] = "このバックアップは壊れています。",
-    [UI_STR_BACKUP_WHY_UNSAFE] =
-        "このバックアップにはゲームのフォルダー以外のファイルが含まれているため、使えません。",
+    [UI_STR_BACKUP_WHY_UNSAFE] = "ゲームのフォルダー以外のファイルを含むため、使えません。",
     [UI_STR_BACKUP_WHY_TOO_BIG] = "このバックアップはゲームが受け付ける大きさを超えています。",
     [UI_STR_BACKUP_WHY_NO_DIALOG] = "ファイルを選ぶ画面を開けませんでした。",
     [UI_STR_BACKUP_WHY_NO_SPACE] = "機器の空き容量が足りません。",
@@ -804,23 +800,22 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_STATES_REFUSED_DISC] = "別のディスクで保存されています",
     [UI_STR_STATES_REFUSED_SETTINGS] = "ゲームの設定が違います：%s",
     [UI_STR_STATES_REFUSED_BUSY] = "今はできません：ゲームを読み込み中か保存中です",
-    [UI_STR_STATES_REFUSED_CHECK] = "ステートを復元できませんでした。ゲームは続行します",
+    [UI_STR_STATES_REFUSED_CHECK] = "ロードできませんでした。ゲームは続きます",
     [UI_STR_STATES_OFF] = "このビルドではセーブステートは無効です",
     [UI_STR_STATES_TITLE_HINT] = "保存は一時停止メニューから行います",
     [UI_STR_STATES_SAVE_FAILED] = "ステートを保存できませんでした",
     [UI_STR_STATES_XB_OLD] =
-        "このセーブステートはバージョン%sで作られました。セーブステートを新しいバージョンに引き継げるようになる前のものです。メモリーカードのセーブデータはそのまま使えます。",
+        "バージョン%sで作られた古いステートのため、ロードできません。メモリーカードのセーブデータは使えます。",
     [UI_STR_STATES_XB_CODE] =
-        "このセーブステートはバージョン%sで作られました。バージョン%sでは保存した場面のゲームが変更されたため、再開できません。メモリーカードのセーブデータはそのまま使えます。",
+        "バージョン%sで作られました。バージョン%sで保存した場面が変わったため、ロードできません。メモリーカードのセーブデータは使えます。",
     [UI_STR_STATES_XB_DATA] =
-        "このセーブステートはバージョン%sで作られました。バージョン%sではゲームが進行状況をメモリーに保持する方法が変更されたため、再開できません。メモリーカードのセーブデータはそのまま使えます。",
+        "バージョン%sで作られました。バージョン%sで進行状況の持ち方が変わったため、ロードできません。メモリーカードのセーブデータは使えます。",
     [UI_STR_STATES_XB_PINNED] =
-        "このセーブステートはバージョン%sで作られ、そのバージョンでしか再開できません。メモリーカードのセーブデータはそのまま使えます。",
+        "バージョン%sでしかロードできません。メモリーカードのセーブデータは使えます。",
     [UI_STR_STATES_CKPT_ROW] = "最後のチェックポイントから読み込みます",
-    [UI_STR_STATES_CKPT_LOADED] =
-        "バージョン%sで作られたこのセーブステートの、最後のチェックポイントから続けました。",
+    [UI_STR_STATES_CKPT_LOADED] = "最後のチェックポイントから続けました（バージョン%s）。",
     [UI_STR_STATES_CKPT_NONE] =
-        "このセーブステートはバージョン%sで作られました。保存した場所から再開できず、続きを始められるチェックポイントもありません。",
+        "バージョン%sで作られたため再開できず、チェックポイントもありません。",
     [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "フレーム間の光のにじみ",
     [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
         "「オリジナル」はゲーム本来のフレームの光のにじみをその間も使います。「なめらか」は表示するフレームごとに作り直し、負荷が増えます。",
@@ -921,6 +916,6 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_DIFF_WORD_PERMADEATH] = "パーマデス",
     [UI_STR_DIFF_STATES_SAVE_LOCKED] = "パーマデスの旅では、セーブステートを保存できません。",
     [UI_STR_TUNE_TITLE] = "最適な設定を探しています",
-    [UI_STR_TUNE_BODY] =
-        "この端末で2通りの描画方法の\n速さを測っています。新しい場所\nでは数秒間、カクつくことが\nあります。",
+    [UI_STR_TUNE_BODY] = "カクつくことがあります。",
+    [UI_STR_TUNE_HIDE] = "隠す",
 };

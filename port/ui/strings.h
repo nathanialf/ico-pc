@@ -1098,6 +1098,8 @@ typedef enum UiStrId {
        (tune_notice.h): its title and body */
     UI_STR_TUNE_TITLE,
     UI_STR_TUNE_BODY,
+    /* the standing notice's word after its Triangle button (tune_notice.h) */
+    UI_STR_TUNE_HIDE,
     UI_STR_COUNT
 } UiStrId;
 

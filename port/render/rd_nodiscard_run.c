@@ -91,9 +91,14 @@ static void add(uint64_t *a, uint64_t *b, uint64_t v)
     __atomic_fetch_add(b, v, __ATOMIC_RELAXED);
 }
 
+/* off only until a renderer made again runs the self-test (its skip, not
+   a fault): not gone for the run (rd__nd_gone) */
+static bool s_retest;
+
 static void setOff(const char *why)
 {
     s_n.state = N_OFF;
+    s_retest = false;
     snprintf(s_n.why, sizeof(s_n.why), "%s", why);
 }
 
@@ -617,6 +622,7 @@ void rd__nd_selftest_skip(const char *why)
         char w[240];
         snprintf(w, sizeof(w), "for the run (self-test not run: %.190s)", why);
         setOff(w); /* not a fault: a renderer made again tests them */
+        s_retest = true;
         rd__log("discard-free twins: off %s", s_n.why);
     }
     rd__nd_start_line();
@@ -626,6 +632,13 @@ void rd__nd_start_line(void)
 {
     rd__log("discard-free twins: %s, %u modules of them made, %u of their pipelines alive",
             rd__nd_state_text(), (unsigned)s_n.made, (unsigned)rd__pipeline_count_twins());
+}
+
+bool rd__nd_gone(void)
+{
+    /* the run's state, not the self-test's frames' (rd__nd_hold) */
+    const int st = s_n.held ? s_n.heldState : s_n.state;
+    return st == N_OFF && !s_retest;
 }
 
 bool rd__nd_triable(void)

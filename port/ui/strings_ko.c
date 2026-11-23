@@ -565,14 +565,13 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
         "선택한 드라이버가 지난번에 시작되지 않았습니다. 기기 내장 드라이버를 사용하고 있습니다.",
     [UI_STR_GPU_DRIVER_NOSPACE] = "공간이 부족해서 추가할 수 없습니다",
     [UI_STR_GPU_DRIVER_NO_PICKER] =
-        "파일 선택 화면을 열 수 없습니다. 대신 드라이버 zip 파일을 게임의 drivers 폴더에 복사할 수 있습니다: %s",
+        "파일 선택 화면이 열리지 않았습니다. 드라이버 zip을 drivers 폴더에 복사하세요: %s",
     [UI_STR_GPU_DRIVER_NO_PICKER_APP] =
-        "이 기기에는 파일을 고를 수 있는 앱이 없습니다. 드라이버 zip 파일을 게임의 drivers 폴더에 복사하세요: %s",
-    [UI_STR_GPU_DRIVER_UNREADABLE] =
-        "선택한 파일을 읽을 수 없습니다. 먼저 이 기기로 복사한 뒤 다시 선택하세요",
+        "파일을 고를 수 있는 앱이 없습니다. 드라이버 zip을 drivers 폴더에 복사하세요: %s",
+    [UI_STR_GPU_DRIVER_UNREADABLE] = "읽을 수 없습니다. 먼저 이 기기로 복사하세요",
     [UI_STR_GPU_DRIVER_ADD_FILE] = "drivers 폴더에서 추가",
     [UI_STR_GPU_DRIVER_CANCELLED] =
-        "선택한 파일이 없습니다. 이 기기에서 파일 선택 화면이 열리지 않으면 드라이버 zip 파일을 게임의 drivers 폴더에 복사한 뒤 drivers 폴더에서 추가를 사용하세요: %s",
+        "선택한 파일이 없습니다. 파일 선택 화면이 열리지 않으면 드라이버 zip을 drivers 폴더에 복사한 뒤 drivers 폴더에서 추가를 사용하세요: %s",
     [UI_STR_GPU_DRIVER_NOTE_LOST] =
         "이 기기의 Qualcomm 드라이버에서 그래픽이 제대로 작동하지 않았습니다. Turnip 드라이버를 추가하거나 그 zip 파일을 게임의 drivers 폴더에 복사하세요 (%s). 다음 실행부터 적용됩니다.",
     [UI_STR_QUIT_GAME] = "게임 종료",
@@ -640,8 +639,7 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_STEAM_NO_USER] = "Steam 계정을 찾을 수 없습니다",
     [UI_STR_STEAM_NO_USER_BODY] = "Steam에 한 번 로그인한 뒤\n다시 시도해 주십시오.",
     [UI_STR_STEAM_FAILED] = "Steam에 추가하지 못했습니다",
-    [UI_STR_STEAM_FAILED_BODY] =
-        "바로 가기 목록을 바꾸지 못했습니다.\n직접 추가하는 방법은 README에 있습니다.",
+    [UI_STR_STEAM_FAILED_BODY] = "직접 추가하는 방법은 README에 있습니다.",
     [UI_STR_EXTRAS_DESKTOP] = "애플리케이션 메뉴에 추가",
     [UI_STR_DESKTOP_ADDED] = "메뉴에 추가했습니다",
     [UI_STR_DESKTOP_ADDED_BODY] = "게임이 애플리케이션 메뉴에\n들어갔습니다.",
@@ -669,7 +667,7 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_RESTORE_AGAIN] = "한 번 더 눌러 고르기",
     [UI_STR_RESTORE_CONFIRM_TITLE] = "백업에서 복원할까요?",
     [UI_STR_RESTORE_CONFIRM_BODY] =
-        "지금의 메모리 카드, 저장 상태, 설정, 업적이 백업의 것으로 바뀌고 게임이 다시 시작됩니다.\n백업을 고르려면 한 번 더 누르세요.",
+        "지금의 메모리 카드, 저장 상태, 설정, 업적을 백업으로 바꾸고 다시 시작합니다.\n백업을 고르려면 한 번 더 누르세요.",
     [UI_STR_RESTORE_CHOOSING] = "복원할 백업을 고르세요.",
     [UI_STR_RESTORE_READING] = "백업을 읽는 중…",
     [UI_STR_RESTORE_PROGRESS] = "복원 중: %d / %d개 파일",
@@ -685,19 +683,17 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_BACKUP_DONE_BODY] = "파일 %d개를\n%s에 저장했습니다",
     [UI_STR_BACKUP_FAILED] = "데이터를 백업하지 못했습니다",
     [UI_STR_RESTORE_DONE] = "데이터를 복원하는 중",
-    [UI_STR_RESTORE_DONE_RESTART] = "게임이 지금 다시 시작되며 백업을 제자리에 둡니다.",
-    [UI_STR_RESTORE_DONE_CLOSE] =
-        "게임이 지금 종료됩니다. 다시 실행하면 시작할 때 백업을 제자리에 둡니다.",
+    [UI_STR_RESTORE_DONE_RESTART] = "다시 시작해 백업을 제자리에 둡니다.",
+    [UI_STR_RESTORE_DONE_CLOSE] = "게임이 종료됩니다. 다시 실행하면 백업을 제자리에 둡니다.",
     [UI_STR_RESTORE_FAILED] = "백업을 복원하지 못했습니다",
-    [UI_STR_BACKUP_WHY_BUSY] = "지금은 안 됩니다: 게임이 저장 중입니다. 잠시 후 다시 해 보세요.",
+    [UI_STR_BACKUP_WHY_BUSY] = "게임이 저장 중입니다. 잠시 후 다시 해 보세요.",
     [UI_STR_BACKUP_WHY_NOTHING] = "아직 백업할 것이 없습니다.",
-    [UI_STR_BACKUP_WHY_WRITE] = "데이터를 쓰지 못했습니다. 남은 공간을 확인하고 다시 해 보세요.",
+    [UI_STR_BACKUP_WHY_WRITE] = "쓰지 못했습니다. 남은 공간을 확인하고 다시 해 보세요.",
     [UI_STR_BACKUP_WHY_READ] = "파일을 읽지 못했습니다.",
     [UI_STR_BACKUP_WHY_NOT_BACKUP] = "이 파일은 이 게임이 만든 백업이 아닙니다.",
-    [UI_STR_BACKUP_WHY_NEWER] =
-        "이 백업은 더 새로운 버전에서 만들었습니다. 게임을 업데이트한 뒤 복원하세요.",
+    [UI_STR_BACKUP_WHY_NEWER] = "더 새로운 버전에서 만들었습니다. 게임을 업데이트한 뒤 복원하세요.",
     [UI_STR_BACKUP_WHY_DAMAGED] = "이 백업은 손상되었습니다.",
-    [UI_STR_BACKUP_WHY_UNSAFE] = "이 백업에는 게임 폴더 밖의 파일이 들어 있어 쓰지 않습니다.",
+    [UI_STR_BACKUP_WHY_UNSAFE] = "게임 폴더 밖의 파일이 있어 쓰지 않습니다.",
     [UI_STR_BACKUP_WHY_TOO_BIG] = "이 백업은 게임이 받아들이는 크기보다 큽니다.",
     [UI_STR_BACKUP_WHY_NO_DIALOG] = "파일 선택 화면을 열지 못했습니다.",
     [UI_STR_BACKUP_WHY_NO_SPACE] = "기기의 남은 공간이 부족합니다.",
@@ -799,23 +795,21 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_STATES_REFUSED_DISC] = "다른 디스크에서 저장됨",
     [UI_STR_STATES_REFUSED_SETTINGS] = "게임 설정이 다릅니다: %s",
     [UI_STR_STATES_REFUSED_BUSY] = "지금은 할 수 없습니다: 게임이 불러오거나 저장하는 중입니다",
-    [UI_STR_STATES_REFUSED_CHECK] = "상태를 복원하지 못했습니다. 게임은 계속됩니다",
+    [UI_STR_STATES_REFUSED_CHECK] = "불러오지 못했습니다. 게임은 계속됩니다",
     [UI_STR_STATES_OFF] = "이 빌드에서는 저장 상태가 꺼져 있습니다",
     [UI_STR_STATES_TITLE_HINT] = "저장은 일시정지 메뉴에서 합니다",
     [UI_STR_STATES_SAVE_FAILED] = "상태를 저장하지 못했습니다",
     [UI_STR_STATES_XB_OLD] =
-        "이 저장 상태는 버전 %s에서 만들어졌습니다. 저장 상태를 새 버전으로 옮길 수 있게 되기 전의 것입니다. 메모리 카드의 저장 데이터는 그대로 쓸 수 있습니다.",
+        "버전 %s에서 만든 오래된 상태라 불러올 수 없습니다. 메모리 카드 저장 데이터는 쓸 수 있습니다.",
     [UI_STR_STATES_XB_CODE] =
-        "이 저장 상태는 버전 %s에서 만들어졌습니다. 버전 %s에서 저장한 부분의 게임이 바뀌어 이어서 할 수 없습니다. 메모리 카드의 저장 데이터는 그대로 쓸 수 있습니다.",
+        "버전 %s에서 만들어졌습니다. 버전 %s에서 저장한 부분이 바뀌어 불러올 수 없습니다. 메모리 카드 저장 데이터는 쓸 수 있습니다.",
     [UI_STR_STATES_XB_DATA] =
-        "이 저장 상태는 버전 %s에서 만들어졌습니다. 버전 %s에서 게임이 진행 상황을 메모리에 담는 방식이 바뀌어 이어서 할 수 없습니다. 메모리 카드의 저장 데이터는 그대로 쓸 수 있습니다.",
+        "버전 %s에서 만들어졌습니다. 버전 %s에서 진행 상황을 담는 방식이 바뀌어 불러올 수 없습니다. 메모리 카드 저장 데이터는 쓸 수 있습니다.",
     [UI_STR_STATES_XB_PINNED] =
-        "이 저장 상태는 버전 %s에서 만들어졌으며 그 버전에서만 이어서 할 수 있습니다. 메모리 카드의 저장 데이터는 그대로 쓸 수 있습니다.",
+        "버전 %s에서만 불러올 수 있습니다. 메모리 카드 저장 데이터는 쓸 수 있습니다.",
     [UI_STR_STATES_CKPT_ROW] = "마지막 체크포인트부터 불러옵니다",
-    [UI_STR_STATES_CKPT_LOADED] =
-        "버전 %s에서 만들어진 이 저장 상태의 마지막 체크포인트부터 이어서 시작했습니다.",
-    [UI_STR_STATES_CKPT_NONE] =
-        "이 저장 상태는 버전 %s에서 만들어졌습니다. 저장한 곳부터 이어서 할 수 없고, 이어서 할 체크포인트도 없습니다.",
+    [UI_STR_STATES_CKPT_LOADED] = "마지막 체크포인트부터 이어서 시작했습니다 (버전 %s).",
+    [UI_STR_STATES_CKPT_NONE] = "버전 %s에서 만들어져 이어서 할 수 없고, 체크포인트도 없습니다.",
     [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "프레임 사이의 빛 번짐",
     [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
         "‘오리지널’은 게임 본래 프레임의 빛 번짐을 그 사이에도 그대로 씁니다. ‘부드럽게’는 표시되는 프레임마다 다시 만들어 부담이 늘어납니다.",
@@ -918,6 +912,6 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_DIFF_WORD_PERMADEATH] = "영구 사망",
     [UI_STR_DIFF_STATES_SAVE_LOCKED] = "영구 사망 여정에서는 저장 상태를 만들 수 없습니다.",
     [UI_STR_TUNE_TITLE] = "최적의 설정을 찾는 중",
-    [UI_STR_TUNE_BODY] =
-        "이 기기에서 두 가지 그리기\n방식의 속도를 재고 있습니다.\n새 지역마다 몇 초 동안\n끊김이 있을 수 있습니다.",
+    [UI_STR_TUNE_BODY] = "끊김이 있을 수 있습니다.",
+    [UI_STR_TUNE_HIDE] = "숨기기",
 };

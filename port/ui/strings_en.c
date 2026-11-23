@@ -562,14 +562,13 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
         "The driver you chose did not start last time. The phone’s own driver is in use.",
     [UI_STR_GPU_DRIVER_NOSPACE] = "Not enough space to add this driver.",
     [UI_STR_GPU_DRIVER_NO_PICKER] =
-        "The file picker could not be opened. You can copy the driver’s zip file into the game’s drivers folder instead: %s",
+        "The file picker did not open. Copy the driver’s zip into the drivers folder instead: %s",
     [UI_STR_GPU_DRIVER_NO_PICKER_APP] =
-        "No app on this device can choose a file. Copy the driver’s zip file into the game’s drivers folder instead: %s",
-    [UI_STR_GPU_DRIVER_UNREADABLE] =
-        "The chosen file could not be read. Copy it onto this device first, then choose it again.",
+        "No app here can choose a file. Copy the driver’s zip into the drivers folder instead: %s",
+    [UI_STR_GPU_DRIVER_UNREADABLE] = "Unreadable: copy it to this device first",
     [UI_STR_GPU_DRIVER_ADD_FILE] = "Add from the drivers folder",
     [UI_STR_GPU_DRIVER_CANCELLED] =
-        "No file was chosen. If the file picker does not appear on this device, copy the driver’s zip file into the game’s drivers folder and use Add from the drivers folder: %s",
+        "No file chosen. If no file picker appears, copy the driver’s zip into the drivers folder and use Add from the drivers folder: %s",
     [UI_STR_GPU_DRIVER_NOTE_LOST] =
         "The graphics stopped responding on this device’s own Qualcomm driver. A Turnip driver package can help: add one here, or copy its zip file into the game’s drivers folder (%s). Used from the next start.",
     [UI_STR_QUIT_GAME] = "Quit game",
@@ -637,8 +636,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_STEAM_NO_USER] = "No Steam account found",
     [UI_STR_STEAM_NO_USER_BODY] = "Sign in to Steam once,\nthen try again.",
     [UI_STR_STEAM_FAILED] = "Could not add to Steam",
-    [UI_STR_STEAM_FAILED_BODY] =
-        "The shortcut list could not be changed.\nThe README shows how to add it by hand.",
+    [UI_STR_STEAM_FAILED_BODY] = "The README shows how to add it by hand.",
     [UI_STR_EXTRAS_DESKTOP] = "Add to the applications menu",
     [UI_STR_DESKTOP_ADDED] = "Added to the menu",
     [UI_STR_DESKTOP_ADDED_BODY] = "The game is in your\napplications menu.",
@@ -666,7 +664,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_RESTORE_AGAIN] = "Press again to choose a backup",
     [UI_STR_RESTORE_CONFIRM_TITLE] = "Restore from a backup?",
     [UI_STR_RESTORE_CONFIRM_BODY] =
-        "The memory card, save states, settings and achievements here are replaced by the backup’s, and the game restarts.\nPress again to choose the backup.",
+        "Replaces the memory card, save states,\nsettings and achievements here, then restarts.\nPress again to choose the backup.",
     [UI_STR_RESTORE_CHOOSING] = "Choose the backup to restore.",
     [UI_STR_RESTORE_READING] = "Reading the backup…",
     [UI_STR_RESTORE_PROGRESS] = "Restoring: %d of %d files",
@@ -682,21 +680,18 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_BACKUP_DONE_BODY] = "%d files saved to\n%s",
     [UI_STR_BACKUP_FAILED] = "Could not back up your data",
     [UI_STR_RESTORE_DONE] = "Restoring your data",
-    [UI_STR_RESTORE_DONE_RESTART] = "The game restarts now and puts the backup in place.",
+    [UI_STR_RESTORE_DONE_RESTART] = "Restarting to put the backup in place.",
     [UI_STR_RESTORE_DONE_CLOSE] =
-        "The game closes now. Start it again: it puts the backup in place as it starts.",
+        "The game closes now. Start it again\nto put the backup in place.",
     [UI_STR_RESTORE_FAILED] = "Could not restore the backup",
-    [UI_STR_BACKUP_WHY_BUSY] = "Not now: the game is saving. Try again in a moment.",
+    [UI_STR_BACKUP_WHY_BUSY] = "The game is saving. Try again in a moment.",
     [UI_STR_BACKUP_WHY_NOTHING] = "There is nothing to back up yet.",
-    [UI_STR_BACKUP_WHY_WRITE] =
-        "The data could not be written. Check the free space and try again.",
+    [UI_STR_BACKUP_WHY_WRITE] = "Could not write the data.\nCheck the free space and try again.",
     [UI_STR_BACKUP_WHY_READ] = "The file could not be read.",
     [UI_STR_BACKUP_WHY_NOT_BACKUP] = "This file is not a backup made by this game.",
-    [UI_STR_BACKUP_WHY_NEWER] =
-        "This backup was made by a newer version. Update the game to restore it.",
+    [UI_STR_BACKUP_WHY_NEWER] = "Made by a newer version.\nUpdate the game to restore it.",
     [UI_STR_BACKUP_WHY_DAMAGED] = "This backup is damaged.",
-    [UI_STR_BACKUP_WHY_UNSAFE] =
-        "This backup holds files outside the game’s own folders, so it is not used.",
+    [UI_STR_BACKUP_WHY_UNSAFE] = "It holds files outside the game’s\nfolders, so it is not used.",
     [UI_STR_BACKUP_WHY_TOO_BIG] = "This backup is larger than the game accepts.",
     [UI_STR_BACKUP_WHY_NO_DIALOG] = "No file chooser could be opened.",
     [UI_STR_BACKUP_WHY_NO_SPACE] = "There is not enough free space on the device.",
@@ -799,24 +794,20 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_STATES_REFUSED_DISC] = "Saved from another disc",
     [UI_STR_STATES_REFUSED_SETTINGS] = "A gameplay setting differs: %s",
     [UI_STR_STATES_REFUSED_BUSY] = "Not now: the game is loading or saving",
-    [UI_STR_STATES_REFUSED_CHECK] = "The state could not be restored; the game goes on",
+    [UI_STR_STATES_REFUSED_CHECK] = "Could not load it; play goes on",
     [UI_STR_STATES_OFF] = "Save states are off on this build",
     [UI_STR_STATES_TITLE_HINT] = "Saving is done from the pause menu",
     [UI_STR_STATES_SAVE_FAILED] = "The state could not be saved",
     [UI_STR_STATES_XB_OLD] =
-        "This save state was made by version %s,\nbefore save states could carry over\nto newer versions.\nYour memory-card saves still work.",
+        "Made by version %s, too old to load.\nYour memory-card saves still work.",
     [UI_STR_STATES_XB_CODE] =
-        "This save state was made by version %s.\nVersion %s changed the part of the game\nit was saved in, so it cannot be resumed.\nYour memory-card saves still work.",
+        "Made by version %s; %s changed where\nit was saved, so it cannot load.\nYour memory-card saves still work.",
     [UI_STR_STATES_XB_DATA] =
-        "This save state was made by version %s.\nVersion %s changed how the game keeps\nits progress in memory, so it cannot be resumed.\nYour memory-card saves still work.",
-    [UI_STR_STATES_XB_PINNED] =
-        "This save state was made by version %s,\nand only that version can resume it.\nYour memory-card saves still work.",
+        "Made by version %s; %s changed how\nprogress is kept, so it cannot load.\nYour memory-card saves still work.",
+    [UI_STR_STATES_XB_PINNED] = "Only version %s can load it.\nYour memory-card saves still work.",
     [UI_STR_STATES_CKPT_ROW] = "Loads from its last checkpoint",
-    [UI_STR_STATES_CKPT_LOADED] = "Continued from the last checkpoint of this save state,\n"
-                                  "which was made by version %s.",
-    [UI_STR_STATES_CKPT_NONE] = "This save state was made by version %s.\n"
-                                "It cannot be resumed where it was saved,\n"
-                                "and it holds no checkpoint to continue from.",
+    [UI_STR_STATES_CKPT_LOADED] = "Resumed at its last checkpoint\n(made by version %s).",
+    [UI_STR_STATES_CKPT_NONE] = "Made by version %s: it cannot be\nresumed and has no checkpoint.",
     [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "Glow between frames",
     [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
         "Original keeps the game’s own frame’s glow between frames. Smooth makes it again for every frame shown; it costs more graphics time.",
@@ -917,6 +908,6 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_DIFF_WORD_PERMADEATH] = "Permadeath",
     [UI_STR_DIFF_STATES_SAVE_LOCKED] = "Save states cannot be made on a Permadeath journey.",
     [UI_STR_TUNE_TITLE] = "Finding the best settings",
-    [UI_STR_TUNE_BODY] =
-        "The game is timing two ways\nof drawing on this device. You\nmay see some stutter for a few\nseconds in each new area.",
+    [UI_STR_TUNE_BODY] = "You may see some stutter.",
+    [UI_STR_TUNE_HIDE] = "hide",
 };

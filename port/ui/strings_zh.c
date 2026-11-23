@@ -555,13 +555,13 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_GPU_DRIVER_FAILED] = "您選擇的驅動程式上次未能啟動，目前使用手機本身的驅動程式。",
     [UI_STR_GPU_DRIVER_NOSPACE] = "空間不足，無法新增此驅動程式。",
     [UI_STR_GPU_DRIVER_NO_PICKER] =
-        "無法開啟檔案選擇器。您可以改為將驅動程式的 zip 檔複製到遊戲的 drivers 資料夾：%s",
+        "檔案選擇器未開啟。請將驅動程式的 zip 檔複製到 drivers 資料夾：%s",
     [UI_STR_GPU_DRIVER_NO_PICKER_APP] =
-        "此裝置上沒有可選擇檔案的應用程式。請改為將驅動程式的 zip 檔複製到遊戲的 drivers 資料夾：%s",
-    [UI_STR_GPU_DRIVER_UNREADABLE] = "無法讀取所選的檔案。請先將它複製到此裝置，再重新選擇。",
+        "沒有可選擇檔案的應用程式。請將驅動程式的 zip 檔複製到 drivers 資料夾：%s",
+    [UI_STR_GPU_DRIVER_UNREADABLE] = "無法讀取，請先複製到此裝置",
     [UI_STR_GPU_DRIVER_ADD_FILE] = "從 drivers 資料夾新增",
     [UI_STR_GPU_DRIVER_CANCELLED] =
-        "未選擇任何檔案。若此裝置上沒有出現檔案選擇器，請將驅動程式的 zip 檔複製到遊戲的 drivers 資料夾，再使用「從 drivers 資料夾新增」：%s",
+        "未選擇檔案。若沒有出現檔案選擇器，請將驅動程式的 zip 檔複製到 drivers 資料夾，再使用「從 drivers 資料夾新增」：%s",
     [UI_STR_GPU_DRIVER_NOTE_LOST] =
         "此裝置的 Qualcomm 驅動程式讓畫面停止回應。Turnip 驅動程式可能有用：在此新增，或將其 zip 檔複製到遊戲的 drivers 資料夾（%s）。下次啟動時生效。",
     [UI_STR_QUIT_GAME] = "結束遊戲",
@@ -627,7 +627,7 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_STEAM_NO_USER] = "找不到 Steam 帳號",
     [UI_STR_STEAM_NO_USER_BODY] = "請先登入 Steam 一次，\n然後再試一次。",
     [UI_STR_STEAM_FAILED] = "無法加入 Steam",
-    [UI_STR_STEAM_FAILED_BODY] = "無法變更捷徑清單。\nREADME 說明了如何手動加入。",
+    [UI_STR_STEAM_FAILED_BODY] = "README 說明了如何手動加入。",
     [UI_STR_EXTRAS_DESKTOP] = "加入應用程式選單",
     [UI_STR_DESKTOP_ADDED] = "已加入選單",
     [UI_STR_DESKTOP_ADDED_BODY] = "遊戲已在您的\n應用程式選單中。",
@@ -655,7 +655,7 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_RESTORE_AGAIN] = "再按一次以選擇",
     [UI_STR_RESTORE_CONFIRM_TITLE] = "要從備份還原嗎？",
     [UI_STR_RESTORE_CONFIRM_BODY] =
-        "這裡的記憶卡、存檔狀態、設定和成就會換成備份中的內容，遊戲也會重新啟動。\n再按一次以選擇備份。",
+        "以備份取代這裡的記憶卡、存檔狀態、設定和成就，並重新啟動。\n再按一次以選擇備份。",
     [UI_STR_RESTORE_CHOOSING] = "請選擇要還原的備份。",
     [UI_STR_RESTORE_READING] = "正在讀取備份…",
     [UI_STR_RESTORE_PROGRESS] = "還原中：%d / %d 個檔案",
@@ -671,17 +671,17 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_BACKUP_DONE_BODY] = "已將 %d 個檔案保存到\n%s",
     [UI_STR_BACKUP_FAILED] = "無法備份資料",
     [UI_STR_RESTORE_DONE] = "正在還原資料",
-    [UI_STR_RESTORE_DONE_RESTART] = "遊戲現在會重新啟動，並放回備份。",
-    [UI_STR_RESTORE_DONE_CLOSE] = "遊戲現在會關閉。請再次啟動，遊戲會在啟動時放回備份。",
+    [UI_STR_RESTORE_DONE_RESTART] = "重新啟動以放回備份。",
+    [UI_STR_RESTORE_DONE_CLOSE] = "遊戲即將關閉。再次啟動即可放回備份。",
     [UI_STR_RESTORE_FAILED] = "無法還原備份",
-    [UI_STR_BACKUP_WHY_BUSY] = "現在不行：遊戲正在存檔。請稍後再試。",
+    [UI_STR_BACKUP_WHY_BUSY] = "遊戲正在存檔，請稍後再試。",
     [UI_STR_BACKUP_WHY_NOTHING] = "還沒有可以備份的內容。",
-    [UI_STR_BACKUP_WHY_WRITE] = "無法寫入資料。請確認剩餘空間後再試一次。",
+    [UI_STR_BACKUP_WHY_WRITE] = "無法寫入。請確認剩餘空間後再試一次。",
     [UI_STR_BACKUP_WHY_READ] = "無法讀取檔案。",
     [UI_STR_BACKUP_WHY_NOT_BACKUP] = "這個檔案不是本遊戲建立的備份。",
-    [UI_STR_BACKUP_WHY_NEWER] = "這個備份是由較新的版本建立的。請先更新遊戲再還原。",
+    [UI_STR_BACKUP_WHY_NEWER] = "由較新的版本建立。請先更新遊戲再還原。",
     [UI_STR_BACKUP_WHY_DAMAGED] = "這個備份已損壞。",
-    [UI_STR_BACKUP_WHY_UNSAFE] = "這個備份含有遊戲資料夾以外的檔案，因此不會使用。",
+    [UI_STR_BACKUP_WHY_UNSAFE] = "含有遊戲資料夾以外的檔案，因此不使用。",
     [UI_STR_BACKUP_WHY_TOO_BIG] = "這個備份超過遊戲可接受的大小。",
     [UI_STR_BACKUP_WHY_NO_DIALOG] = "無法開啟檔案選擇畫面。",
     [UI_STR_BACKUP_WHY_NO_SPACE] = "裝置的剩餘空間不足。",
@@ -778,22 +778,19 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_STATES_REFUSED_DISC] = "從其他光碟儲存",
     [UI_STR_STATES_REFUSED_SETTINGS] = "有一項遊戲設定不同：%s",
     [UI_STR_STATES_REFUSED_BUSY] = "現在無法執行：遊戲正在讀取或儲存",
-    [UI_STR_STATES_REFUSED_CHECK] = "無法還原狀態，遊戲繼續進行",
+    [UI_STR_STATES_REFUSED_CHECK] = "無法讀取，遊戲繼續進行",
     [UI_STR_STATES_OFF] = "這個版本已關閉存檔狀態",
     [UI_STR_STATES_TITLE_HINT] = "請在暫停選單中儲存",
     [UI_STR_STATES_SAVE_FAILED] = "無法儲存狀態",
-    [UI_STR_STATES_XB_OLD] =
-        "這個存檔狀態是由版本 %s 建立的，當時存檔狀態還不能延續到新版本。記憶卡的存檔仍然可以使用。",
+    [UI_STR_STATES_XB_OLD] = "由舊版本 %s 建立，無法讀取。記憶卡的存檔仍可使用。",
     [UI_STR_STATES_XB_CODE] =
-        "這個存檔狀態是由版本 %s 建立的。版本 %s 更改了它儲存時所在的遊戲部分，因此無法繼續。記憶卡的存檔仍然可以使用。",
+        "由版本 %s 建立。版本 %s 更改了儲存時的遊戲部分，因此無法讀取。記憶卡的存檔仍可使用。",
     [UI_STR_STATES_XB_DATA] =
-        "這個存檔狀態是由版本 %s 建立的。版本 %s 更改了遊戲在記憶體中保存進度的方式，因此無法繼續。記憶卡的存檔仍然可以使用。",
-    [UI_STR_STATES_XB_PINNED] =
-        "這個存檔狀態是由版本 %s 建立的，只有該版本才能繼續。記憶卡的存檔仍然可以使用。",
+        "由版本 %s 建立。版本 %s 更改了保存進度的方式，因此無法讀取。記憶卡的存檔仍可使用。",
+    [UI_STR_STATES_XB_PINNED] = "只有版本 %s 可以讀取。記憶卡的存檔仍可使用。",
     [UI_STR_STATES_CKPT_ROW] = "從最後的中繼點讀取",
-    [UI_STR_STATES_CKPT_LOADED] = "已從這個存檔狀態的最後中繼點繼續（由版本 %s 建立）。",
-    [UI_STR_STATES_CKPT_NONE] =
-        "這個存檔狀態是由版本 %s 建立的，無法從儲存的位置繼續，而且其中沒有可以繼續的中繼點。",
+    [UI_STR_STATES_CKPT_LOADED] = "已從最後中繼點繼續（版本 %s）。",
+    [UI_STR_STATES_CKPT_NONE] = "由版本 %s 建立，無法繼續，也沒有中繼點。",
     [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "影格間的光暈",
     [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
         "「原版」讓遊戲本身影格的光暈沿用到其間顯示的影格；「平滑」則為顯示的每一格重新計算，能跟上快速的鏡頭轉動，但會多佔用顯示卡的時間。",
@@ -885,6 +882,6 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_DIFF_WORD_PERMADEATH] = "永久死亡",
     [UI_STR_DIFF_STATES_SAVE_LOCKED] = "永久死亡的旅程無法儲存存檔狀態。",
     [UI_STR_TUNE_TITLE] = "正在尋找最佳設定",
-    [UI_STR_TUNE_BODY] =
-        "遊戲正在測量此裝置上兩種\n繪製方式的速度。進入新區域\n時可能會有數秒的卡頓。",
+    [UI_STR_TUNE_BODY] = "可能會有些卡頓。",
+    [UI_STR_TUNE_HIDE] = "隱藏",
 };

@@ -891,9 +891,9 @@ const char *const ui_strings_ru_cobra838[UI_STR_COUNT] = {
     [UI_STR_DIFF_STATES_SAVE_LOCKED] = NULL,
     /* ---- new since v0.11.8: English until translated ---- */
     [UI_STR_STATES_CKPT_ROW] = NULL, /* "Loads from its last checkpoint" */
-    /* "Continued from the last checkpoint of this save state,\nwhich was made by version %s." */
+    /* "Resumed at its last checkpoint\n(made by version %s)." */
     [UI_STR_STATES_CKPT_LOADED] = NULL,
-    /* "This save state was made by version %s.\nIt cannot be resumed where it was saved,\nand it holds no checkpoint to continue from." */
+    /* "Made by version %s: it cannot be\nresumed and has no checkpoint." */
     [UI_STR_STATES_CKPT_NONE] = NULL,
     [UI_STR_STATES_PAUSE_FIRST_LOAD] = NULL, /* "Pause the game to load this state" */
     /* ---- new since v0.11.12: English until translated ---- */
@@ -907,6 +907,6 @@ const char *const ui_strings_ru_cobra838[UI_STR_COUNT] = {
     /* "Hold: the camera zooms in while you keep R2 held. Toggle: press R2 once to zoom in, press again to zoom out." */
     [UI_STR_ZOOM_TYPE_NOTE] = NULL,
     [UI_STR_TUNE_TITLE] = NULL, /* "Finding the best settings" */
-    /* "The game is timing two ways\nof drawing on this device. You\nmay see some stutter for a few\nseconds in each new area." */
-    [UI_STR_TUNE_BODY] = NULL,
+    [UI_STR_TUNE_BODY] = NULL,  /* "You may see some stutter." */
+    [UI_STR_TUNE_HIDE] = NULL,  /* "hide" */
 };

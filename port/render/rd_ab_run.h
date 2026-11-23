@@ -48,10 +48,11 @@ void rd__ab_begin(struct RdPerfRecord *r);
    the judge learnt forgotten (rd_ab_forget), logged */
 void rd__ab_renderer(void);
 /* the player's notice (any thread: port/ui/ui_host.c ui_host_vsync on the
-   game's thread): true once a run, when the judge has started its first
-   trial (rd_ab_take_notice), then false; the pop-up is the UI's
-   (port/ui/tune_notice.h) */
-bool rd_ab_notice_take(void);
+   game's thread): rd_ab.h's RD_AB_NOTICE_* answer as of the last replay
+   begun or read back (rd_ab_notice_state: none before the run's first
+   trial, due while timing may go on, done with its reason after); the
+   notice itself is the UI's (port/ui/tune_notice.h) */
+int rd_ab_notice(void);
 /* the replay's record ends (rd__perf_end): no arm read after it */
 void rd__ab_end(void);
 /* a record's GPU times read back (rd__perf_collect_gpu) */

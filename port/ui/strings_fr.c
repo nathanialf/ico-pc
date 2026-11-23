@@ -575,14 +575,13 @@ const char *const
                 "Le pilote choisi n’a pas démarré la dernière fois. Le pilote du téléphone est utilisé.",
             [UI_STR_GPU_DRIVER_NOSPACE] = "Pas assez d’espace pour ajouter ce pilote.",
             [UI_STR_GPU_DRIVER_NO_PICKER] =
-                "Le sélecteur de fichiers n’a pas pu s’ouvrir. Vous pouvez copier le fichier zip du pilote dans le dossier drivers du jeu : %s",
+                "Le sélecteur de fichiers ne s’est pas ouvert. Copiez le zip du pilote dans le dossier drivers : %s",
             [UI_STR_GPU_DRIVER_NO_PICKER_APP] =
-                "Aucune application de cet appareil ne permet de choisir un fichier. Copiez le fichier zip du pilote dans le dossier drivers du jeu : %s",
-            [UI_STR_GPU_DRIVER_UNREADABLE] =
-                "Le fichier choisi n’a pas pu être lu. Copiez-le d’abord sur cet appareil, puis choisissez-le à nouveau.",
+                "Aucune application ne peut choisir de fichier. Copiez le zip du pilote dans le dossier drivers : %s",
+            [UI_STR_GPU_DRIVER_UNREADABLE] = "Illisible : copiez-le d’abord sur l’appareil",
             [UI_STR_GPU_DRIVER_ADD_FILE] = "Ajouter depuis le dossier drivers",
             [UI_STR_GPU_DRIVER_CANCELLED] =
-                "Aucun fichier n’a été choisi. Si le sélecteur de fichiers ne s’affiche pas sur cet appareil, copiez le fichier zip du pilote dans le dossier drivers du jeu et utilisez Ajouter depuis le dossier drivers : %s",
+                "Aucun fichier choisi. Si le sélecteur ne s’affiche pas, copiez le zip du pilote dans le dossier drivers et utilisez Ajouter depuis le dossier drivers : %s",
             [UI_STR_GPU_DRIVER_NOTE_LOST] =
                 "Les graphismes ont cessé de répondre avec le pilote Qualcomm de cet appareil. Un pilote Turnip peut aider : ajoutez-en un ici, ou copiez son fichier zip dans le dossier drivers du jeu (%s). Appliqué au prochain démarrage.",
             [UI_STR_QUIT_GAME] = "Quitter le jeu",
@@ -651,8 +650,7 @@ const char *const
             [UI_STR_STEAM_NO_USER] = "Aucun compte Steam trouvé",
             [UI_STR_STEAM_NO_USER_BODY] = "Se connecter une fois à Steam,\npuis réessayer.",
             [UI_STR_STEAM_FAILED] = "Ajout à Steam impossible",
-            [UI_STR_STEAM_FAILED_BODY] =
-                "La liste des raccourcis n’a pas pu être modifiée.\nLe README explique l’ajout manuel.",
+            [UI_STR_STEAM_FAILED_BODY] = "Le README explique l’ajout manuel.",
             [UI_STR_EXTRAS_DESKTOP] = "Ajouter au menu des applications",
             [UI_STR_DESKTOP_ADDED] = "Ajouté au menu",
             [UI_STR_DESKTOP_ADDED_BODY] = "Le jeu est dans votre\nmenu des applications.",
@@ -774,24 +772,23 @@ const char *const
             [UI_STR_STATES_REFUSED_DISC] = "Enregistré depuis un autre disque",
             [UI_STR_STATES_REFUSED_SETTINGS] = "Un réglage de jeu diffère : %s",
             [UI_STR_STATES_REFUSED_BUSY] = "Pas maintenant : le jeu charge ou enregistre",
-            [UI_STR_STATES_REFUSED_CHECK] = "L'état n'a pas pu être restauré ; le jeu continue",
+            [UI_STR_STATES_REFUSED_CHECK] = "Chargement impossible ; le jeu continue",
             [UI_STR_STATES_OFF] = "Les états sauvegardés sont désactivés dans cette version",
             [UI_STR_STATES_TITLE_HINT] = "L'enregistrement se fait depuis le menu pause",
             [UI_STR_STATES_SAVE_FAILED] = "L'état n'a pas pu être enregistré",
             [UI_STR_STATES_XB_OLD] =
-                "Cet état a été créé par la version %s,\navant que les états sauvegardés puissent\npasser aux versions plus récentes.\nVos sauvegardes sur memory card fonctionnent toujours.",
-            [UI_STR_STATES_XB_CODE] = "Cet état a été créé par la version %s.\nLa version %s a modifié la partie du jeu\noù il a été sauvegardé, il ne peut donc pas\nêtre repris.\nVos sauvegardes sur memory card fonctionnent toujours.",
+                "Créé par la version %s, trop ancienne.\nVos sauvegardes sur memory card\nfonctionnent toujours.",
+            [UI_STR_STATES_XB_CODE] =
+                "Créé par la version %s ; la version %s a changé\nce passage du jeu, il ne peut pas être chargé.\nVos sauvegardes sur memory card\nfonctionnent toujours.",
             [UI_STR_STATES_XB_DATA] =
-                "Cet état a été créé par la version %s.\nLa version %s a modifié la façon dont le jeu\ngarde sa progression en mémoire, il ne peut\ndonc pas être repris.\nVos sauvegardes sur memory card fonctionnent toujours.",
+                "Créé par la version %s ; la version %s garde\nla progression autrement : il ne peut pas être\nchargé. Vos sauvegardes sur memory card\nfonctionnent toujours.",
             [UI_STR_STATES_XB_PINNED] =
-                "Cet état a été créé par la version %s\net seule cette version peut le reprendre.\nVos sauvegardes sur memory card fonctionnent toujours.",
+                "Seule la version %s peut le charger.\nVos sauvegardes sur memory card\nfonctionnent toujours.",
             [UI_STR_STATES_CKPT_ROW] = "Se charge depuis son dernier point de contrôle",
             [UI_STR_STATES_CKPT_LOADED] =
-                "Partie reprise au dernier point de contrôle de cet état,\n"
-                "créé par la version %s.",
-            [UI_STR_STATES_CKPT_NONE] = "Cet état a été créé par la version %s.\n"
-                                        "Il ne peut pas être repris là où il a été enregistré,\n"
-                                        "et il ne contient aucun point de contrôle d'où reprendre.",
+                "Reprise au dernier point de contrôle\n(créé par la version %s).",
+            [UI_STR_STATES_CKPT_NONE] =
+                "Créé par la version %s : il ne peut pas\nêtre repris et n'a aucun point de contrôle.",
             [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "Lueur entre les images",
             [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
                 "Original garde la lueur de l’image du jeu entre les images. Fluide la refait pour chaque image affichée ; cela coûte plus de temps graphique.",
@@ -807,8 +804,7 @@ const char *const
             [UI_STR_BACKUP_PROGRESS] = "Sauvegarde : %d fichiers sur %d",
             [UI_STR_RESTORE_AGAIN] = "Appuyez encore pour choisir",
             [UI_STR_RESTORE_CONFIRM_TITLE] = "Restaurer une sauvegarde ?",
-            [UI_STR_RESTORE_CONFIRM_BODY] =
-                "La memory card, les états sauvegardés, les réglages et les succès d’ici seront remplacés par ceux de la sauvegarde, puis le jeu redémarrera.\nAppuyez encore pour choisir la sauvegarde.",
+            [UI_STR_RESTORE_CONFIRM_BODY] = "Remplace la memory card, les états sauvegardés,\nles réglages et les succès d’ici, puis redémarre.\nAppuyez encore pour choisir la sauvegarde.",
             [UI_STR_RESTORE_CHOOSING] = "Choisissez la sauvegarde à restaurer.",
             [UI_STR_RESTORE_READING] = "Lecture de la sauvegarde…",
             [UI_STR_RESTORE_PROGRESS] = "Restauration : %d fichiers sur %d",
@@ -825,24 +821,22 @@ const char *const
             [UI_STR_BACKUP_DONE_BODY] = "%d fichiers enregistrés dans\n%s",
             [UI_STR_BACKUP_FAILED] = "Impossible de sauvegarder vos données",
             [UI_STR_RESTORE_DONE] = "Restauration de vos données",
-            [UI_STR_RESTORE_DONE_RESTART] =
-                "Le jeu redémarre maintenant et met la sauvegarde en place.",
+            [UI_STR_RESTORE_DONE_RESTART] = "Redémarrage pour mettre la sauvegarde en place.",
             [UI_STR_RESTORE_DONE_CLOSE] =
-                "Le jeu se ferme maintenant. Relancez-le : il mettra la sauvegarde en place au démarrage.",
+                "Le jeu se ferme. Relancez-le\npour mettre la sauvegarde en place.",
             [UI_STR_RESTORE_FAILED] = "Impossible de restaurer la sauvegarde",
-            [UI_STR_BACKUP_WHY_BUSY] =
-                "Pas maintenant : le jeu enregistre. Réessayez dans un instant.",
+            [UI_STR_BACKUP_WHY_BUSY] = "Le jeu enregistre. Réessayez dans un instant.",
             [UI_STR_BACKUP_WHY_NOTHING] = "Il n’y a encore rien à sauvegarder.",
             [UI_STR_BACKUP_WHY_WRITE] =
-                "Les données n’ont pas pu être écrites. Vérifiez l’espace libre et réessayez.",
+                "Écriture impossible.\nVérifiez l’espace libre et réessayez.",
             [UI_STR_BACKUP_WHY_READ] = "Le fichier n’a pas pu être lu.",
             [UI_STR_BACKUP_WHY_NOT_BACKUP] =
                 "Ce fichier n’est pas une sauvegarde créée par ce jeu.",
             [UI_STR_BACKUP_WHY_NEWER] =
-                "Cette sauvegarde a été créée par une version plus récente. Mettez le jeu à jour pour la restaurer.",
+                "Créée par une version plus récente.\nMettez le jeu à jour pour la restaurer.",
             [UI_STR_BACKUP_WHY_DAMAGED] = "Cette sauvegarde est endommagée.",
             [UI_STR_BACKUP_WHY_UNSAFE] =
-                "Cette sauvegarde contient des fichiers hors des dossiers du jeu ; elle n’est pas utilisée.",
+                "Elle contient des fichiers hors des\ndossiers du jeu : elle n’est pas utilisée.",
             [UI_STR_BACKUP_WHY_TOO_BIG] =
                 "Cette sauvegarde est plus grande que ce que le jeu accepte.",
             [UI_STR_BACKUP_WHY_NO_DIALOG] = "Aucun sélecteur de fichiers n’a pu s’ouvrir.",
@@ -946,6 +940,6 @@ const char *const
             [UI_STR_DIFF_STATES_SAVE_LOCKED] =
                 "Les états sauvegardés ne peuvent pas être créés pendant un voyage en mort définitive.",
             [UI_STR_TUNE_TITLE] = "Recherche des meilleurs réglages",
-            [UI_STR_TUNE_BODY] =
-                "Le jeu chronomètre deux façons\nde dessiner sur cet appareil.\nDes saccades sont possibles\nquelques secondes dans chaque\nnouvelle zone.",
+            [UI_STR_TUNE_BODY] = "Des saccades sont possibles.",
+            [UI_STR_TUNE_HIDE] = "masquer",
 };
