@@ -881,7 +881,4 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_DIFF_STATES_LOCKED] = "永久死亡的旅程無法讀取存檔狀態。",
     [UI_STR_DIFF_WORD_PERMADEATH] = "永久死亡",
     [UI_STR_DIFF_STATES_SAVE_LOCKED] = "永久死亡的旅程無法儲存存檔狀態。",
-    [UI_STR_TUNE_TITLE] = "正在尋找最佳設定",
-    [UI_STR_TUNE_BODY] = "可能會有些卡頓。",
-    [UI_STR_TUNE_HIDE] = "隱藏",
 };

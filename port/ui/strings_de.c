@@ -928,7 +928,4 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_DIFF_WORD_PERMADEATH] = "Permadeath",
     [UI_STR_DIFF_STATES_SAVE_LOCKED] =
         "Auf einer Permadeath-Reise lassen sich keine Spielzustände speichern.",
-    [UI_STR_TUNE_TITLE] = "Beste Einstellungen werden gesucht",
-    [UI_STR_TUNE_BODY] = "Es kann etwas ruckeln.",
-    [UI_STR_TUNE_HIDE] = "Ausblenden",
 };

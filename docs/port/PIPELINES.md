@@ -1722,31 +1722,6 @@ verdict (or with it, before its own).
   record's `abEpoch`). The trials already run still count toward the 12. Logged: `A/B: the
   renderer was made again (a Graphics API switch): every verdict forgotten, each attempt with it
   until it is timed once again on this renderer`.
-- **The player is told while a timing runs**: the judge gives one answer for it
-  (`rd_ab_notice_state`, kept in an atomic for the game's thread by `rd_ab_notice`, the running
-  trial's stage by `rd_ab_notice_stage`): none before the run's first trial (never under
-  `ICO_RD_AB`, with nothing allowed or before a stage is known), running while a trial runs, idle
-  between trials, and done once no timing is left: all 12 trials run with none running, every
-  trial stopped (a device loss, the GPU's own sign of a reset), or every subject off for the rest
-  of the run (`rd_ab_gone`, from `rd__vu_zero_gone` and `rd__nd_gone`: off for a reason a renderer
-  made again keeps, not a self-test merely not run), or every subject still in the run has its
-  one verdict (done "judged": the usual end, a few seconds into the first scenery, later where the
-  twins' first work comes later; a renderer made again forgets the verdicts and so turns it back to
-  idle). The other done answers never turn back. Two subjects tried in
-  one stage follow each other at once: the second trial starts at the replay after the first
-  one's verdict was read back, so the answer is idle for about one picture between them. The
-  game's thread shows the notice "Finding the best settings" when a trial runs (its own panel,
-  not the popup queue; "You may see some stutter." and, at the panel's side, the Triangle button
-  over "Hide"; `port/ui/tune_notice.c`, [UI.md](UI.md#popups)) and takes it down by itself once
-  the answer has not been running for 0.5 s (`UI_TUNE_GRACE_MS`, which bridges the picture
-  between two subjects) and it has been fully shown for 2 s (`UI_TUNE_MIN_SHOWN_MS`, so a short
-  trial is not a flash; the trial is never held up for it); it comes back at the next trial,
-  which with one verdict a subject is normally only the other subject's or a retry; once the
-  answer is done the notice is over for the run. So a session shows it once or twice near its
-  start. A
-  Triangle press while the game owns the pad (no menu, no photo mode) hides it for the run; the
-  press is read from a copy of the pad's word, so the game gets it too. A renderer made again
-  does not bring it back once hidden.
 
 The rate requirement (`rd_ab` test, a GPU-bound stream at a 40 ms tick, 60 s; pictures of 33,
 37.5, 48 and 60 ms; the cull saving or costing 3, 5 or 10 %; one stage, four stages of one

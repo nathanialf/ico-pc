@@ -911,7 +911,4 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_DIFF_STATES_LOCKED] = "영구 사망 여정에서는 저장 상태를 불러올 수 없습니다.",
     [UI_STR_DIFF_WORD_PERMADEATH] = "영구 사망",
     [UI_STR_DIFF_STATES_SAVE_LOCKED] = "영구 사망 여정에서는 저장 상태를 만들 수 없습니다.",
-    [UI_STR_TUNE_TITLE] = "최적의 설정을 찾는 중",
-    [UI_STR_TUNE_BODY] = "끊김이 있을 수 있습니다.",
-    [UI_STR_TUNE_HIDE] = "숨기기",
 };

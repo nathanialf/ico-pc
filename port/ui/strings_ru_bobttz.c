@@ -949,7 +949,4 @@ const char *const ui_strings_ru_bobttz[UI_STR_COUNT] = {
     [UI_STR_VAL_ZOOM_TOGGLE] = NULL, /* "Toggle" */
     /* "Hold: the camera zooms in while you keep R2 held. Toggle: press R2 once to zoom in, press again to zoom out." */
     [UI_STR_ZOOM_TYPE_NOTE] = NULL,
-    [UI_STR_TUNE_TITLE] = NULL, /* "Finding the best settings" */
-    [UI_STR_TUNE_BODY] = NULL,  /* "You may see some stutter." */
-    [UI_STR_TUNE_HIDE] = NULL,  /* "Hide" */
 };

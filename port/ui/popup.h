@@ -20,13 +20,11 @@
 extern "C" {
 #endif
 
-#include <stddef.h>
-
 #define UI_POPUP_QUEUE 8
 #define UI_POPUP_TEXT 384
 
 /* The panel's sizes, in the layout grid (font.h: 640 units across the 4:3
-   picture), every popup's and the standing notice's: the title's and the
+   picture), every popup's: the title's and the
    body's text sizes, the padding left and right and above and below, the
    gap between the title and the body, the narrowest panel and the margin
    from the picture's right edge.  The vertical padding holds the text's
@@ -76,40 +74,8 @@ void ui_popup_draw_overlay(const struct RdOverlayCtx *ctx);
    dumps catch one on any screen). */
 void ui_popup_set_dev_test(int on);
 void ui_popup_dev_tick(unsigned int mainTick);
-/* empties the queue and takes the standing notice down (tests) */
+/* empties the queue (tests) */
 void ui_popup_reset(void);
-
-/* The notice (port/ui/tune_notice.c "Finding the best settings"): one
-   panel of its own, never an entry of the queue, so the queue's popups
-   neither wait for it nor hide it (theirs is placed below it while it is
-   up).  It slides in as a popup does, stays until hidden, then slides out.
-   Two parts: its title and one line of text on the left, and at the
-   panel's right side one stacked block, the Triangle button (the drawer's
-   picture or key, ui_popup_set_button_drawer; without one the word
-   UI_STR_BTN_TRIANGLE) over the hint word, centred on each other and on
-   the panel's height, a thin divider between the parts.  Show while it is
-   up does nothing; hide while it is not does nothing. */
-void ui_popup_notice_show(const char *title, const char *body, const char *hint);
-void ui_popup_notice_hide(void);
-/* shown or sliding out; shown (not sliding out) */
-int ui_popup_notice_active(void);
-int ui_popup_notice_shown(void);
-/* its panel (tests), as ui_popup_panel; its title, "" when none; its one
-   line of text, "" when none */
-int ui_popup_notice_panel(float rect[4]);
-const char *ui_popup_notice_title(void);
-const char *ui_popup_notice_line(void);
-/* its parts (tests): the text's rectangle (x0, y0, x1, y1), the divider's
-   x and the block's rectangle; 0 when it is not up */
-int ui_popup_notice_parts(float text[4], float *divider, float block[4]);
-/* The Triangle button in the notice's block, as the port draws its buttons
-   elsewhere (photo_ui.c: the key bound to it in brackets after a key or the
-   mouse was pressed last, else the disc's picture or the button set's
-   art): fn(x, mid, size, draw) returns its width at size, drawn with its
-   left edge at x and its middle on mid when draw (inside the overlay), 0
-   when it has nothing (the word is drawn then).  NULL: the word. */
-typedef float (*UiPopupButtonFn)(float x, float mid, float size, int draw);
-void ui_popup_set_button_drawer(UiPopupButtonFn fn);
 
 /* The current popup's panel in the layout grid (font.h) at this vsync, for
    tests: x0, y0, x1, y1; 0 when none is showing. */

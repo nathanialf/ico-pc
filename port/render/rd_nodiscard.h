@@ -331,10 +331,6 @@ void rd__nd_start_line(void);
 /* the twins may be put on trial in play (rd_ab_run.h): on, both modules
    made, not the self-test's frames */
 bool rd__nd_triable(void);
-/* the twins are off for the rest of the run (a reason a renderer made again
-   keeps; not a self-test merely not run): the in-play judge's notice can
-   leave (rd_ab.h rd_ab_gone) */
-bool rd__nd_gone(void);
 /* on for the run now; the state's words; why (off, held) */
 bool rd__nd_on(void);
 const char *rd__nd_state_text(void);

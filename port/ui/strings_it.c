@@ -945,7 +945,4 @@ const char *const
                 [UI_STR_DIFF_WORD_PERMADEATH] = "Morte permanente",
                 [UI_STR_DIFF_STATES_SAVE_LOCKED] =
                     "Gli stati salvati non si possono creare in un viaggio con morte permanente.",
-                [UI_STR_TUNE_TITLE] = "Ricerca delle impostazioni migliori",
-                [UI_STR_TUNE_BODY] = "Potresti notare qualche scatto.",
-                [UI_STR_TUNE_HIDE] = "Nascondi",
 };
