@@ -249,7 +249,9 @@ endforeach()
 # the list (the phone's path under each Mali profile, the desktop limits'
 # under desktop)
 foreach(p mali mali169 desktop)
-  if(BACKEND STREQUAL "vulkan" AND DEFINED profTwins_${p} AND NOT profTwins_${p} GREATER 0)
+  # a profile that drew no frame at all (every fixture skipped) fails too:
+  # the test exists to compare the build, so it must have run under each
+  if(BACKEND STREQUAL "vulkan" AND (NOT DEFINED profTwins_${p} OR NOT profTwins_${p} GREATER 0))
     message(SEND_ERROR "rd_fastps_ab: no pass drew through the fast pixel build under the ${p} profile over the list: it did not run")
     math(EXPR failures "${failures} + 1")
   endif()

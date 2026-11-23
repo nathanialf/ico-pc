@@ -335,22 +335,33 @@ static bool replayRead(const RdFrame *f, RdTargetRec *t, uint8_t *px, size_t siz
            !rhi_device_lost();
 }
 
-/* the frame's pipelines gathered and made on the workers: twice, as a pass
-   reaches its DrawCB (where the fast build's key is asked for) only once its
-   ordinary pipeline is made */
+/* the frame's pipelines made before its timed replays.  The ordinary
+   ones gathered and made on the workers (the gathering replay); the fast
+   build's then by play's own path, waited for: a fast key is asked for at a
+   pass's filled DrawCB in the draw (rd__fps_pass, rd_replay_vu.c), which
+   the gathering replay does not reach for every pass (its first run on a
+   GPU, the merge check of 2026-11-23: 1 of the 6 keys gathered, the other 5
+   found "not made yet" in the replay after), so a plain replay asks for
+   every one (queued, rd__pipeline_twin) and the twins' queue is made at
+   once (rd__pipeline_twin_tick(true), the tests' ICO_RD_VU_FASTPS=1 path,
+   the one rd_fastps_ab runs): twice, a key asked for only once another is
+   made included */
 static void gatherAll(const RdFrame *f)
 {
+    rd__replay_set_window(UINT32_MAX, 0);
+    rd__pipeline_gather(true);
+    (void)rd__replay_frame(f, 0, false);
+    rd__pipeline_gather(false);
+    rd__replay_set_window(0, 0);
+    rhi_wait_idle();
+    if (!rhi_device_lost()) {
+        bool stopped = false;
+        (void)rd__pipeline_create_gathered(&stopped);
+    }
     for (int round = 0; round < 2 && !rhi_device_lost(); round++) {
-        rd__replay_set_window(UINT32_MAX, 0);
-        rd__pipeline_gather(true);
         (void)rd__replay_frame(f, 0, false);
-        rd__pipeline_gather(false);
-        rd__replay_set_window(0, 0);
         rhi_wait_idle();
-        if (!rhi_device_lost()) {
-            bool stopped = false;
-            (void)rd__pipeline_create_gathered(&stopped);
-        }
+        rd__pipeline_twin_tick(true);
     }
 }
 

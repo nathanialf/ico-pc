@@ -603,14 +603,14 @@ static void measure(RdRateCard *c, RdTargetRec *t, double t0, double budgetMs)
         rhi_wait_idle();
         bool stopped = false;
         (void)rd__pipeline_create_gathered(&stopped);
-        if (fastFrame) {
-            rd__replay_set_window(UINT32_MAX, 0);
-            rd__pipeline_gather(true);
+        /* the fast build's keys are asked for at a pass's DrawCB in the
+           draw, which the gathering replay does not reach for every pass:
+           made as the fast build's self-test makes them (a plain replay asks,
+           the queue made at once, rd__pipeline_twin_tick(true)), twice */
+        for (int round = 0; fastFrame && round < 2 && !rhi_device_lost(); round++) {
             (void)rd__replay_frame(&f, 0, false);
-            rd__pipeline_gather(false);
-            rd__replay_set_window(0, 0);
             rhi_wait_idle();
-            (void)rd__pipeline_create_gathered(&stopped);
+            rd__pipeline_twin_tick(true);
         }
         uint64_t tw = 0, rf[RD_ND_REASONS];
         rd__nd_take(&tw, rf);
