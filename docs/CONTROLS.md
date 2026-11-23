@@ -70,7 +70,8 @@ stick, the camera stays on Ico until you let the stick go. R3 can be moved
 to any other key or button under **Remap controls**. It is off unless you
 turn it on, shows from the title screen and the pause menu, and works on
 every disc. The touch screen has no R3 button, so there it only works with a
-controller or keyboard.
+controller or keyboard. While it is on, save states made with it off (and
+those made before the row existed) will not load; turn it off to load them.
 
 A few more keys on a computer:
 

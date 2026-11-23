@@ -1794,10 +1794,10 @@ tick's shell (`statesProc`); `port/ui/settings_states.c` holds the host, the car
   words, from `ico_state_last_refusal` (`state.h` `IcoStateBlocker`, the two versions from the
   commit texts without `-dirty`): `UI_STR_STATES_XB_OLD` for a format 1 state ("Made by version X, too old to
   load. Your memory-card saves still work."), `UI_STR_STATES_XB_CODE` for a changed function a
-  thread sits in ("Made by version X; Y changed where it was saved, so it cannot load. Your
-  memory-card saves still work."), `UI_STR_STATES_XB_DATA` for the game data layout, a variable, a
-  start-up value, a block or a section size ("Made by version X; Y changed how progress is kept,
-  so it cannot load. ..."), and `UI_STR_STATES_XB_PINNED` for a state nothing translates ("Only
+  thread sits in ("Made by version X; version Y changed that part of the game, so it cannot
+  load. Your memory-card saves still work."), `UI_STR_STATES_XB_DATA` for the game data layout, a
+  variable, a start-up value, a block or a section size ("Made by version X; version Y changed how
+  progress is kept, so it cannot load. ..."), and `UI_STR_STATES_XB_PINNED` for a state nothing translates ("Only
   version X can load it. ..."). The Latin languages' texts carry their own line breaks (the popup keeps Latin lines as
   written); the log line names the function, the variable or the block.
 - **Listing and pictures**: `statesOpen` lists when the page opens, then every `ST_RELIST_TICKS`

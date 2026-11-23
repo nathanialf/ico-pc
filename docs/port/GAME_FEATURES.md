@@ -502,12 +502,17 @@ both angles to 0 at once; each arm calls it itself while the game is paused, the
 control or a scripted shot holds the camera (`mode == 0`; on the June 2001 demo also while R2
 zooms). The port's hook sits just before that test in all four arms:
 `ico_cam_reset(pad[0].now & 0x400, live, &sx, &sz)` (`port/game/camera_reset.c`), `live` being the
-arm's own test inverted. With the option on, an R3 press (the level against the tick before, not
+arm's own test inverted; on the June 2001 demo `live` also holds while only the zoom set `mode` to
+0 (a local `zoomStop`, set where `ico_zoom_wanted` stops the look-around), so R3 ends a toggled
+zoom there too. With the option on, an R3 press (the level against the tick before, not
 `trg`) while live returns 1 and the arm calls `ClearHandCameraCorrect`; `HandCameraCorrect` then
 runs from 0 with the stick at 0, so the picture is the one with the stick never moved. The stick
 is muted (read as 0) until both its values come in 0, which is the game's own dead zone
 (`iosPadNormalizeStick`: a deflection of 48 or less is 0), so a stick still pushed does not swing
-the camera back out; leaving live ends the mute. The reset also marks a cut for the presenter
+the camera back out; leaving live ends the mute. The first call of a stretch of control (its Main
+tick, `ico_host_main_ticks` set as the module's clock by `host_loop.c`, not one after the last
+call's: after a cutscene, a pause, photo mode or a load) takes R3 as already held, so a press made
+there and held into play fires nothing, and ends any mute. The reset also marks a cut for the presenter
 (`ico_video_camera_cut`, no blend from the turned picture) and ends a Zoom type Toggle latch
 (`ico_zoom_drop`; the zoom then eases out at the game's own zoom step, as letting R2 go does under
 Hold). Off, the hook returns 0 and leaves the stick as it is, tick for tick. R3 (pad bit `0x400`)
@@ -716,7 +721,7 @@ hold the rest.
 | Main: Game language's community entries (Русский (bob-ttz), Русский (cobra838), Português (Brasil) (ichagas7)) | W | H | H | H | H | H | H | the row's own rule (`has_game_language`); in force only there with the game in English (`ui_settings_text_language`), so `[game] text_language` changes nothing on the other discs ([Community translations](#community-translations)); `subtitles_ru`, `subtitles_ru_<slug>` (jpn, kor, cn), `subtitles_ru_cobra838`, `subtitles_ru_cobra838_<slug>`, `subtitles_pt_br`, `subtitles_pt_br_<slug>`, `jimaku_text` |
 | Main: Menu language | W | W | W | W | W | W | W | Auto is `ui_lang_default`, the sheets `menu_sheet`; `settings_<slug>`, `settings_render_<slug>` |
 | Controls: Hold type | W | W | W | W | W | W | W | `hold_type_own`, the default `"disc"`: A on pal/jpn/kor/cn, B on ntsc/aug6/jun26 (the 2001 arms `_ACTCommonMailTest_<disc>` read `optionControlType` in the port); `settings_discs`, `options_<slug>`, `save` (per disc) |
-| Controls: Camera reset | W | W | W | W | W | W | W | the four `SetCameraMatrix_Ico2` copies (`camera-ico2.c`), default `"off"` on every disc; on the June 2001 demo a toggled zoom stops the look-around itself (`mode == 0`), so R3 then does nothing; `settings_discs`, `options_<slug>`, `camera_reset` |
+| Controls: Camera reset | W | W | W | W | W | W | W | the four `SetCameraMatrix_Ico2` copies (`camera-ico2.c`), default `"off"` on every disc; on the June 2001 demo the hook is live too while only the zoom stops the look-around (`zoomStop`), so R3 ends a toggled zoom there as on the other discs; `settings_discs`, `options_<slug>`, `camera_reset` |
 | Controls: Zoom type | W | W | W | W | W | W | W | the four `SetCameraMatrix` copies' zoom blocks (`camera-root.c`) and the June 2001 demo's look-around (`camera-ico2.c`), default `"hold"` on every disc; `settings_discs`, `options_<slug>`, `zoom_toggle` |
 | Controls: Circle goes back | W | H | H | W | W | W | H | `pad_back` is Triangle (`lt_ext_has_circle_back`); the 2001 arms cancel through `LA_BACK` too; `settings_discs`, `settings_<slug>` |
 | Picture: Brightness; Controls: Vibration, Button configuration (pause) | W | W | W | W | W | W | W | `systemStatus[11]`, `iosPadActRequestEnable`, `layout_key_config` (`la_key_config` and its 2001 arms go back to Settings); `settings_discs` |

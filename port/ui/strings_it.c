@@ -835,7 +835,7 @@ const char *const
                 [UI_STR_STATES_TITLE_HINT] = "Si salva dal menu di pausa",
                 [UI_STR_STATES_SAVE_FAILED] = "Impossibile salvare lo stato",
                 [UI_STR_STATES_XB_OLD] =
-                    "Creato dalla versione %s, troppo vecchia.\nI salvataggi sulla memory card\nfunzionano ancora.",
+                    "Versione %s troppo vecchia:\nnon si carica.\nI salvataggi sulla memory card\nfunzionano ancora.",
                 [UI_STR_STATES_XB_CODE] = "Creato dalla versione %s; la versione %s ha\ncambiato quel punto del gioco, quindi non si\npuò caricare. I salvataggi sulla memory card\nfunzionano ancora.",
                 [UI_STR_STATES_XB_DATA] =
                     "Creato dalla versione %s; la versione %s tiene\ni progressi in modo diverso, quindi non si\npuò caricare. I salvataggi sulla memory card\nfunzionano ancora.",

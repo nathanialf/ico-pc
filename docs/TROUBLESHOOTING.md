@@ -868,11 +868,17 @@ be loaded is greyed and the line under the cards gives the reason:
   was saved in a new game before its first
   checkpoint, or its checkpoint could not be found. Go back to the version
   that saved it to resume it, or start from your memory card save.
+- **Made by version ...; version ... changed that part of the game (or how
+  progress is kept), so it cannot load.** The version you play now cannot
+  continue that state where it was saved, and it has no checkpoint to fall
+  back on. Go back to the version that saved it, or use your memory card
+  save. **Made by version ..., too old to load** is the same for a state
+  made before save states could move to newer versions.
 - **Saved from another disc.** Each disc has its own four slots. Start the
   game from the disc the state was saved on.
 - **A gameplay setting differs.** The message names the setting and the value
   it had when you saved. Put the setting back (a few, such as Analogue stick
-  fix, Hold type, Zoom type, Skip the opening and the rows on the Gameplay
+  fix, Hold type, Zoom type, Camera reset, Skip the opening and the rows on the Gameplay
   pages, change how the game plays),
   and the state loads. The journey's difficulty is not one of them: a state
   carries its own.

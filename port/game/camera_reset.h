@@ -41,6 +41,13 @@
    mutes the stick; while muted sx and sz read 0 until both come in 0;
    !live ends the mute. */
 int ico_cam_reset(int r3, int live, float *sx, float *sz);
+/* The Main tick count (trace_host.h ico_host_main_ticks; the program sets
+   it at start-up, a test its fake; NULL: none).  The look-around arm runs
+   once a Main tick while the player has the game camera, so a call whose
+   tick does not follow the last call's is the first after a cutscene, a
+   pause, photo mode or a load: R3 already down then counts as held, not as a
+   press (and any mute ends). */
+void ico_cam_reset_set_clock(unsigned (*clock)(void));
 /* Nothing recorded, no mute (tests). */
 void ico_cam_reset_clear(void);
 /* The save-state block (state_port.h): 0, or -1 when refused. */

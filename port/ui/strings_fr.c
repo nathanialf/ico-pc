@@ -780,7 +780,7 @@ const char *const
             [UI_STR_STATES_TITLE_HINT] = "L'enregistrement se fait depuis le menu pause",
             [UI_STR_STATES_SAVE_FAILED] = "L'état n'a pas pu être enregistré",
             [UI_STR_STATES_XB_OLD] =
-                "Créé par la version %s, trop ancienne.\nVos sauvegardes sur memory card\nfonctionnent toujours.",
+                "Version %s trop ancienne :\nil ne peut être chargé.\nVos sauvegardes sur memory card\nfonctionnent toujours.",
             [UI_STR_STATES_XB_CODE] =
                 "Créé par la version %s ; la version %s a changé\nce passage du jeu, il ne peut pas être chargé.\nVos sauvegardes sur memory card\nfonctionnent toujours.",
             [UI_STR_STATES_XB_DATA] =
