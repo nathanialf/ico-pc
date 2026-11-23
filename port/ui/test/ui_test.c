@@ -793,16 +793,23 @@ static void testPopups(void)
        (strings.h ui_break_before) and the panel takes the second line; a
        Latin body keeps its one line; a Korean body breaks at a space
        (its lines no wider than the panel), and a Korean word alone wider
-       than the panel between two of its syllables (ui_hangul_char) */
+       than the panel between two of its syllables (ui_hangul_char).  The
+       wide inputs are sized for the body's UI_POPUP_BODY_SIZE (18), where
+       the Japanese achievement line and a 40-syllable word fit one line:
+       that line twice over, and a 60-syllable word */
     {
-        char longWord[40 * 3 + 1];
-        for (int i = 0; i < 40; i++) {
-            memcpy(longWord + 3 * i, "\xEA\xB0\x80", 3); /* U+AC00, 120 bytes of 128 */
+        char longWord[60 * 3 + 1];
+        for (int i = 0; i < 60; i++) {
+            memcpy(longWord + 3 * i, "\xEA\xB0\x80", 3); /* U+AC00, 180 bytes of UI_POPUP_TEXT */
         }
-        longWord[40 * 3] = '\0';
+        longWord[60 * 3] = '\0';
+        char jaTwice[UI_POPUP_TEXT];
+        snprintf(jaTwice, sizeof(jaTwice), "%s%s",
+                 ui_str_in(UI_LANG_JA, UI_STR_ACH_NO_CAPTURE_DESC),
+                 ui_str_in(UI_LANG_JA, UI_STR_ACH_NO_CAPTURE_DESC));
+        CHECK(strlen(jaTwice) + 8u < sizeof(jaTwice), "the Japanese body has room for its breaks");
         float h[5], w[5];
-        const char *bodies[5] = {"B", ui_str_in(UI_LANG_EN, UI_STR_ACH_NO_CAPTURE_DESC),
-                                 ui_str_in(UI_LANG_JA, UI_STR_ACH_NO_CAPTURE_DESC),
+        const char *bodies[5] = {"B", ui_str_in(UI_LANG_EN, UI_STR_ACH_NO_CAPTURE_DESC), jaTwice,
                                  /* the Korean achievement line fits one line; a note
                                     long enough to wrap at its spaces */
                                  ui_str_in(UI_LANG_KO, UI_STR_OPT_AA_NOTE), longWord};

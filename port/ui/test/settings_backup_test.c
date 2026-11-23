@@ -225,7 +225,8 @@ static void testRestore(void)
     CHECK(s_begins == 0, "Restore: the first press asks nothing of the host");
     CHECK(popupIs("Restore from a backup?", NULL) &&
               strncmp(ui_popup_body(),
-                      "The memory card, save states, settings and achievements here", 60) == 0,
+                      "Replaces the memory card, save states,\nsettings and achievements here",
+                      67) == 0,
           "Restore: what it replaces \"%s\" / \"%s\"", ui_popup_title(), ui_popup_body());
     ui_popup_reset();
     frame(0);
